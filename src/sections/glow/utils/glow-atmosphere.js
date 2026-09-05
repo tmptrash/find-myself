@@ -1,5 +1,4 @@
 import { CFG } from '../../../cfg.js'
-import * as BonusHero from '../../touch/components/bonus-hero.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
@@ -19,9 +18,16 @@ const CRACK_ZONE_W = Math.round(HERO_BODY_W * 3.4)
 const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 const PIT_WALL_W = 20
 //
-// Extra width on the cave floor collider so the hero cannot fall past the sides.
+// Asymmetric cave-floor padding — a wide right shelf blocked jumps under the
+// entrance lip; keep most of the width on the left wall only.
 //
-const PIT_FLOOR_EXTRA_W = 56
+const PIT_FLOOR_EXTRA_W_LEFT = 18
+const PIT_FLOOR_EXTRA_W_RIGHT = 6
+//
+// Main playfield floor stops this far before the cave mouth so the entrance
+// lip does not overhang the pit opening.
+//
+export const CAVE_MOUTH_MAIN_FLOOR_INSET = 36
 //
 // 2/3 field midges across the playfield, 1/3 clustered at the cave mouth
 //
@@ -65,6 +71,7 @@ const CAVE_WALL_ROCK_LAYERS = 3
 const CAVE_INTERIOR_SPRITE = 'glow0-cave-interior'
 const CAVE_BAKE_PAD = 40
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
+const KEY_EYES_COLLECTED = 'glow.eyesCollected'
 const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
@@ -78,6 +85,21 @@ export function getCrackZone(screenW, floorY) {
   const x2 = screenW - RIGHT_MARGIN
   const x1 = x2 - CRACK_ZONE_W
   return { x1, x2, floorY, width: CRACK_ZONE_W, depth: PIT_DEPTH }
+}
+/**
+ * True when the hero's feet stand on the sealed crack-lid collider.
+ * @param {Object} pit - Pit state
+ * @param {number} heroX - Hero X
+ * @param {number} footY - Hero feet Y
+ * @returns {boolean}
+ */
+export function isHeroOnCrackLid(pit, heroX, footY) {
+  if (!pit || footY == null) return false
+  const { zone } = pit
+  return heroX >= zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET &&
+    heroX <= zone.x2 &&
+    footY >= pit.floorY - CRACK_STOMP_FEET_MAX &&
+    footY <= pit.floorY + 8
 }
 /**
  * True when a grass blade X sits over the crack band (keep that strip bare).
@@ -139,9 +161,9 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
     treeX,
     floorY,
     screenW,
-    showPit: false,
-    showLeft: false,
-    showRight: false,
+    showPit: true,
+    showLeft: true,
+    showRight: true,
     spreadAfterPit: false,
     pit: {
       minX: pitCx - MIDGE_PIT_SPREAD_X,
@@ -186,16 +208,13 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
  */
 export function syncGlowMidgesZones(ctrl, zones, pitCollapsed) {
   if (!ctrl) return
-  const showLeft = Boolean(zones.groundDecorLeft || zones.water)
-  const rightOpen = zones.groundRightStripMax >= 0 || Boolean(zones.groundDecorRight)
-  const showRight = rightOpen
-  const showPit = Boolean(zones.groundDecorRight)
+  //
+  // Midges stay on for the whole level — only pit midges migrate after collapse.
+  //
+  ctrl.showLeft = true
+  ctrl.showRight = true
+  ctrl.showPit = true
   const spread = Boolean(pitCollapsed && !ctrl.spreadAfterPit)
-  if (!spread && ctrl.showLeft === showLeft && ctrl.showRight === showRight &&
-    ctrl.showPit === showPit) return
-  ctrl.showLeft = showLeft
-  ctrl.showRight = showRight
-  ctrl.showPit = showPit
   spread && spreadMidgesAfterPit(ctrl)
 }
 /**
@@ -249,9 +268,15 @@ export function createGlowPit(cfg) {
   } = cfg
   const zone = getCrackZone(screenW, floorY)
   bakePitMushroomSprite(k)
+  //
+  // Sealed crack lid bridges from the main-floor edge through the crack band
+  // until collapse — no gap the hero can fall through on the first jump in.
+  //
+  const lidX = zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const lidW = zone.x2 - lidX
   const crackFloor = k.add([
-    k.rect(zone.width, 20),
-    k.pos(zone.x1, floorY),
+    k.rect(lidW, 20),
+    k.pos(lidX, floorY),
     k.anchor('topleft'),
     k.area(),
     k.body({ isStatic: true }),
@@ -325,6 +350,7 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
     return
   }
   if (!pit.cracksVisible) return
+  if (pit.skipPitBonus && !pit.collapsed) return
   const { zone } = pit
   const heroX = char.pos.x
   const overCrack = heroX >= zone.x1 && heroX <= zone.x2
@@ -351,9 +377,7 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
     pit.leftBonusAirborne = true
     pit.collapseArmed = true
   }
-  const onCrackFloor = footY != null &&
-    footY >= pit.floorY - CRACK_STOMP_FEET_MAX &&
-    footY <= pit.floorY + 8
+  const onCrackFloor = isHeroOnCrackLid(pit, heroX, footY)
   if (justLanded && grounded && pit.cracksVisible && overCrack && onCrackFloor) {
     pit.onCrackLandingShake?.()
   }
@@ -386,8 +410,7 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   //
   const jumpLanding = Boolean(opts.jumpLanding)
   const footParticles = opts.footParticles
-  if (jumpLanding && overCrack && grounded && footY != null &&
-    footY >= pit.floorY - CRACK_STOMP_FEET_MAX && footY <= pit.floorY + 8) {
+  if (jumpLanding && overCrack && grounded && isHeroOnCrackLid(pit, heroX, footY)) {
     pit.crackStompCount = (pit.crackStompCount || 0) + 1
     footParticles && GlowFootParticles.spawnLanding(
       footParticles,
@@ -409,9 +432,17 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
 // Soft bounds inside the open cave (no invisible wall bodies)
 //
 function clampHeroInCave(pit, char) {
-  if (!char?.pos || char.pos.y < pit.floorY - 4) return
-  const minX = pit.zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W / 2 + 6
-  const maxX = pit.zone.x2 - PIT_WALL_W + PIT_FLOOR_EXTRA_W / 2 - 6
+  if (!char?.pos) return
+  const bottomY = pit.floorY + pit.zone.depth
+  const feetY = char.pos.y + 38
+  //
+  // Only clamp on the pit floor — not while the hero is still dropping through
+  // the mouth (that horizontal snap felt like tripping on an invisible lip).
+  //
+  if (feetY < bottomY - 20) return
+  const { innerX, innerW } = getGlowPitFloorCollider(pit.zone)
+  const minX = innerX + 6
+  const maxX = innerX + innerW - 6
   if (char.pos.x < minX) char.pos.x = minX
   if (char.pos.x > maxX) char.pos.x = maxX
 }
@@ -432,6 +463,10 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
   }
   if (!pit.collapsed) {
     pit.cracksVisible && drawSurfaceCracks(k, pit, groundC, flatDecor)
+    return
+  }
+  if (pit.outlineOnlyMode) {
+    drawGlowPitOutline(k, pit)
     return
   }
   drawCaveInteriorRockStyle(k, pit)
@@ -1061,7 +1096,30 @@ function caveSeed01(seed) {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453
   return x - Math.floor(x)
 }
+/**
+ * Pit cave mushroom is visible and bouncy only after the lying eyes are taken.
+ * @param {Object} pit - Pit state
+ * @returns {boolean}
+ */
+export function isGlowPitMushroomUnlocked(pit) {
+  if (!pit?.collapsed) return false
+  const inst = pit?.sceneRef
+  if (inst?.zones?.eyesCollected) return true
+  if (get(KEY_EYES_COLLECTED, false)) return true
+  const intro = inst?.eyeIntro
+  if (!intro) return false
+  return Boolean(intro.pickup?.collected) ||
+    intro.phase === 'runBack' ||
+    intro.phase === 'complete'
+}
+function isPitMushroomVisible(pit) {
+  return isGlowPitMushroomUnlocked(pit)
+}
+function isPitMushroomBouncy(pit) {
+  return isGlowPitMushroomUnlocked(pit)
+}
 function drawPitTrampoline(k, pit) {
+  if (!isPitMushroomVisible(pit)) return
   const x = pit.trampState.x
   const y = pit.floorY + pit.zone.depth - 2
   const squash = pit.trampState.squash
@@ -1081,6 +1139,40 @@ function drawPitTrampoline(k, pit) {
     color: k.rgb(255, 255, 255)
   })
 }
+//
+// Cave pit floor body — kept narrow on the right so it does not protrude
+// under the mouth lip where the hero jumps.
+//
+function getGlowPitFloorCollider(zone) {
+  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W_LEFT
+  const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 +
+    PIT_FLOOR_EXTRA_W_LEFT + PIT_FLOOR_EXTRA_W_RIGHT)
+  return { innerX, innerW }
+}
+export function ensureGlowPitOpenForEyesCollected(pit) {
+  if (!pit || !get(KEY_EYES_COLLECTED, false)) return
+  pit.outlineOnlyMode = false
+  pit.skipPitBonus = true
+  if (!pit.collapsed) {
+    collapsePit(pit)
+    pit.outlineOnlyMode = false
+    return
+  }
+  pit.crackFloor?.destroy?.()
+  pit.crackFloor = null
+  !pit.pitFloor && openPitPhysics(pit)
+}
+/**
+ * Hero body Y so feet rest on the cave pit floor collider top.
+ * @param {Object} pit - Pit state
+ * @returns {number} Kaplay character pos.y
+ */
+export function getGlowPitHeroStandY(pit) {
+  const bottomY = pit.floorY + pit.zone.depth
+  const heroFeetOffset = 38
+  const embed = 1
+  return bottomY - heroFeetOffset + embed
+}
 function collapsePit(pit) {
   if (pit.collapsed) return
   pit.collapsed = true
@@ -1090,11 +1182,66 @@ function collapsePit(pit) {
   openPitPhysics(pit)
   spawnPitBurst(pit)
 }
+/**
+ * Opens the cave for the eyeless intro — no pit bonus fragment, outline-only
+ * interior until the hero collects the lying eyes.
+ * @param {Object} pit - Pit state
+ */
+export function collapseGlowPitForEyeIntro(pit) {
+  if (!pit || pit.collapsed) return
+  pit.skipPitBonus = true
+  pit.outlineOnlyMode = true
+  collapsePit(pit)
+}
+/**
+ * World position where the cave bonus fragment (and eye pickup) sits.
+ * @param {Object} pit - Pit state
+ * @returns {{ x: number, y: number }|null}
+ */
+export function getGlowPitBonusPosition(pit) {
+  if (!pit?.zone) return null
+  const { zone, floorY } = pit
+  const bottomY = floorY + zone.depth
+  const { innerX, innerW } = getGlowPitFloorCollider(zone)
+  return {
+    x: innerX + innerW * 0.14,
+    y: bottomY - 18
+  }
+}
+/**
+ * Strokes the cave mouth polygon while the interior stays hidden (eye intro).
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ */
+export function drawGlowPitOutline(k, pit) {
+  if (!pit?.zone) return
+  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
+    pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
+  }
+  const mouth = pit.wallProfile?.mouth
+  if (!mouth) return
+  const pts = caveMouthPts(mouth)
+  if (pts.length < 3) return
+  const deep = glowRgb('void')
+  const lineC = k.rgb(deep.r, deep.g, deep.b)
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]
+    const b = pts[(i + 1) % pts.length]
+    k.drawLine({
+      p1: k.vec2(a.x, a.y),
+      p2: k.vec2(b.x, b.y),
+      width: 2.2,
+      color: lineC,
+      opacity: 0.92
+    })
+  }
+}
 function openPitPhysics(pit) {
   const { k, zone, floorY } = pit
   const bottomY = floorY + zone.depth
-  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W / 2
-  const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 + PIT_FLOOR_EXTRA_W)
+  const { innerX, innerW } = getGlowPitFloorCollider(zone)
+  pit.pitFloor?.destroy?.()
+  pit.pitFloor = null
   //
   // Floor only — side bounds are soft clamps (no invisible wall rects)
   //
@@ -1107,44 +1254,9 @@ function openPitPhysics(pit) {
     k.opacity(0),
     CFG.game.platformName
   ])
-  if (!get(KEY_PIT_BONUS, false) && pit.heroInst) {
-    //
-    // Fragment sits left in the widened cave — not under the fall line
-    //
-    const bonusX = innerX + innerW * 0.14
-    pit.pitBonus = BonusHero.create({
-      k,
-      x: bonusX,
-      y: bottomY - 8,
-      width: 40,
-      heroInst: pit.heroInst,
-      levelIndicator: pit.levelIndicator,
-      sfx: pit.sound,
-      approachFromAbove: false,
-      heroBodyColor: pit.heroBodyColor,
-      storageKey: KEY_PIT_BONUS,
-      persistStorageOnCollect: true,
-      platformCollisionYOffset: 6,
-      //
-      // No log / no solid platform body — only the small bonus fragment
-      //
-      disablePlatformBody: true,
-      customPlatformDraw: () => {},
-      collectHintText: 'Three fragments. The\nground keeps secrets.',
-      collectHintDuration: 5,
-      tooltipClampInset: pit.tooltipClampInset
-    })
-    if (pit.pitBonus?.miniHero?.character) {
-      pit.pitBonus.revealed = true
-      pit.pitBonus.platformOpacity = 0
-      pit.pitBonus.miniHero.character.opacity = 0.55
-      pit.pitBonus.miniHero.character.z = CFG.visual.zIndex.player + 5
-      pit.pitBonus.miniHero.character.pos.x = bonusX
-      pit.pitBonus.miniHero.character.pos.y = bottomY - 18
-    }
-  }
 }
 function updatePitTrampoline(pit, char) {
+  if (!isPitMushroomBouncy(pit)) return
   if (pit.trampState.cooldown > 0) return
   const x = pit.trampState.x
   const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
@@ -1153,6 +1265,10 @@ function updatePitTrampoline(pit, char) {
   const onCap = Math.abs(char.pos.x - x) < PIT_TRAMP_W * 0.55 &&
     feet >= capTop - 10 && feet <= capTop + 16
   if (onCap && (char.vel?.y ?? 0) >= -40) {
+    if (pit.onPitMushroomLaunch?.(pit, char)) {
+      pit.trampState.squash = 1
+      return
+    }
     char.vel.y = -PIT_TRAMP_FORCE
     pit.trampState.cooldown = PIT_TRAMP_COOLDOWN
     pit.trampState.squash = 1

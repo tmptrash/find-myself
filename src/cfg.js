@@ -124,6 +124,12 @@ export function deepMerge(target, source) {
 }
 
 export const CFG = {
+  //
+  // Global debug switches (data only — no game logic here).
+  //
+  debug: {
+    showPerformanceHud: true
+  },
   game: {
     moveSpeed: 300,
     jumpForce: 640,

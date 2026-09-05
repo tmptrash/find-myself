@@ -197,6 +197,29 @@ export function bindBackToMenuKeys(k, fn) {
     cancel: () => cancels.forEach(c => c.cancel?.())
   }
 }
+//
+// KeyboardEvent.code for each CFG.controls.startGame Kaplay key name.
+//
+const START_GAME_PHYSICAL_CODE = {
+  space: 'Space',
+  enter: 'Enter'
+}
+//
+// Registers Space/Enter on window (physical keydown) and on the live Kaplay
+// instance so menu start works before the canvas is focused.
+//
+export function bindStartGameKeys(k, fn) {
+  const cancels = []
+  CFG.controls.startGame.forEach(key => {
+    const code = START_GAME_PHYSICAL_CODE[key]
+    code && cancels.push(onPhysicalKeyPress(code, () => fn(key)))
+    const kaplayCancel = k.onKeyPress(key, () => fn(key))
+    kaplayCancel && cancels.push(kaplayCancel)
+  })
+  return {
+    cancel: () => cancels.forEach(c => c.cancel?.())
+  }
+}
 
 /**
  * Render a procedural image into a canvas and return the canvas itself.

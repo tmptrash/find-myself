@@ -32,6 +32,21 @@ export const GLOW_TEXT_SPRITE_PREFIX = 'glow-ui-text-'
  * @param {number} [seedOffset=0]
  * @param {number} [blurRadius=0]
  */
+//
+// Alpha fringe on life.png reads as a glasses shadow once the icon is
+// tinted gray — drop those pixels and skip grain for a flat silhouette.
+//
+const LIFE_DESAT_ALPHA_FRINGE = 48
+export function finishGlowLifeDesatCanvas(canvas) {
+  if (!canvas?.width || !canvas?.height) return
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const px = imageData.data
+  for (let i = 0; i < px.length; i += 4) {
+    px[i + 3] < LIFE_DESAT_ALPHA_FRINGE && (px[i + 3] = 0)
+  }
+  ctx.putImageData(imageData, 0, 0)
+}
 export function finishGlowUiCanvas(canvas, seedOffset = 0, blurRadius = 0) {
   if (!canvas?.width || !canvas?.height) return
   if (blurRadius > 0) {

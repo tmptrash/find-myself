@@ -428,59 +428,91 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   async function prepareNativePrelevelAssets() {
-    await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true, deferLoaderReveal: true })
-    if (inst.skipped) return
-    transitionInterval?.cancel?.()
-    overlay.exists() && transitionK.destroy(overlay)
-    transitionK._transitionOverlay = null
-    await ensureEngineForScene(nextLevel, { loaderDuringBoot: true })
-    if (inst.skipped) return
-    onEngineResolutionSwapped()
-    transitionK = getActiveEngine()
-    CanvasBackdrop.applyCanvasBackdrop(transitionK, transitionBgHex)
-    overlay = transitionK.add([
-      transitionK.rect(transitionK.width(), transitionK.height()),
-      transitionK.pos(0, 0),
-      transitionK.color(bgR, bgG, bgB),
-      transitionK.opacity(1),
-      transitionK.z(CFG.visual.zIndex.ui + 100),
-      transitionK.fixed()
-    ])
-    transitionK._transitionOverlay = overlay
-    bindTransitionEngine(transitionK)
-    if (nextLevel === GLOW_PRELEVEL_SCENE) {
-      BootLoader.setLoaderBarPct(55)
-      prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+    try {
+      await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true, deferLoaderReveal: true })
+      if (inst.skipped) return
+      transitionInterval?.cancel?.()
+      overlay.exists() && transitionK.destroy(overlay)
+      transitionK._transitionOverlay = null
+      await ensureEngineForScene(nextLevel, { loaderDuringBoot: true })
+      if (inst.skipped) return
+      onEngineResolutionSwapped()
+      transitionK = getActiveEngine()
+      CanvasBackdrop.applyCanvasBackdrop(transitionK, transitionBgHex)
+      overlay = transitionK.add([
+        transitionK.rect(transitionK.width(), transitionK.height()),
+        transitionK.pos(0, 0),
+        transitionK.color(bgR, bgG, bgB),
+        transitionK.opacity(1),
+        transitionK.z(CFG.visual.zIndex.ui + 100),
+        transitionK.fixed()
+      ])
+      transitionK._transitionOverlay = overlay
+      bindTransitionEngine(transitionK)
+      if (nextLevel === GLOW_PRELEVEL_SCENE) {
+        BootLoader.setLoaderBarPct(55)
+        prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+      }
+      BootLoader.setLoaderBarPct(100)
+    } finally {
+      !inst.skipped && (inst.assetPrepareDone = true)
     }
-    BootLoader.setLoaderBarPct(100)
-    inst.assetPrepareDone = true
+  }
+  
+  const destroyTransitionSubtitleText = (k) => {
+    stopTransitionVoiceover(inst)
+    if (inst.textObj) {
+      inst.textObj.exists() && k.destroy(inst.textObj)
+      inst.textObj = null
+    }
+    if (inst.outlineTexts) {
+      inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+      inst.outlineTexts = null
+    }
+    if (inst.hintTextObj) {
+      inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
+      inst.hintTextObj = null
+    }
+    if (inst.hintOutlineTexts) {
+      inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
+      inst.hintOutlineTexts = null
+    }
+    if (inst.preTextObj) {
+      inst.preTextObj.exists() && k.destroy(inst.preTextObj)
+      inst.preTextObj = null
+    }
+    if (inst.preTextOutlines) {
+      inst.preTextOutlines.forEach(o => o.exists() && k.destroy(o))
+      inst.preTextOutlines = null
+    }
   }
   
   const finalizeTransitionToLevel = (afterGo) => {
-    if (inst.entered) return
-    const enter = () => {
+    const enter = async () => {
       if (inst.entered) return
       inst.entered = true
-      //
-      // Re-enable tooltips now that we are entering the level
-      //
-      if (inst.tooltipSuppressed) {
-        Tooltip.unsuppressAll()
-        inst.tooltipSuppressed = false
-      }
-      //
-      // Re-enable hero idle vocalization for the new scene. The kill
-      // switch was flipped on at transition start so the menu hero's
-      // notes wouldn't bleed over the subtitle text.
-      //
+      cancelTransitionSkipInput(inst)
+      transitionInterval?.cancel?.()
+      transitionInterval = null
+      destroyTransitionSubtitleText(transitionK)
+      inst.tooltipSuppressed && Tooltip.unsuppressAll()
+      inst.tooltipSuppressed = false
       Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
-      //
-      // Drop transition skip listeners and any stuck menu keys before the
-      // level hero registers its own — keep the hold overlay until k.go.
-      //
-      endTransitionInput(transitionK, { keepOverlay: true })
-      enterPreparedScene(transitionK, nextLevel, afterGo)
+      transitionK.volume(inst.originalVolume)
+      Sound.unmuteProceduralSounds()
+      Sound.resumeGlobalAudio()
+      needsEarlyAssetLoad && BootLoader.showLoader() && BootLoader.setLoaderBarPct(100)
+      try {
+        await enterPreparedScene(transitionK, nextLevel, () => {
+          afterGo?.(transitionK)
+          overlay?.exists?.() && transitionK.destroy(overlay)
+          transitionK._transitionOverlay === overlay && (transitionK._transitionOverlay = null)
+          BootLoader.hideLoader()
+        })
+      } finally {
+        resetPhysicalInputLayer()
+      }
     }
     if (needsEarlyAssetLoad && inst.assetPreparePromise && !inst.assetPrepareDone) {
       inst.assetPreparePromise.then(enter)
@@ -933,7 +965,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
   }
   
-  bindTransitionEngine(transitionK)
+  if (!isNativePrelevel) {
+    bindTransitionEngine(transitionK)
+  }
   
   // Return cleanup function
   return () => {

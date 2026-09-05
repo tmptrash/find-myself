@@ -1,6 +1,6 @@
 import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
-import { getRGB, parseHex, bindBackToMenuKeys } from "../utils/helper.js"
+import { getRGB, parseHex, bindBackToMenuKeys, bindStartGameKeys } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
 import { normalizeSceneName } from "../utils/progress.js"
@@ -415,9 +415,7 @@ export function sceneMenu(k) {
       bodyColor: heroBodyColor,
       outlineColor: noSectionsComplete ? "#1A1A1A" : null,
       //
-      // Menu hero whistles softly when the player stops moving the mouse,
-      // emitting music notes from his mouth (handled by Hero.create's
-      // built-in idle vocalization once a sound instance is available).
+      // Menu hero always has eyes — including before the glow cave pickup.
       //
       sfx: sound
     })
@@ -592,12 +590,10 @@ export function sceneMenu(k) {
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
       //
-      if (isCompleted) {
+      if (isCompleted && config.section !== 'glow') {
         const completedPrefix = config.section === 'time'
           ? antiHeroInst.spritePrefixYellow
-          : config.section === 'glow'
-            ? antiHeroInst.spritePrefixGold
-            : antiHeroInst.spritePrefixColored
+          : antiHeroInst.spritePrefixColored
         completedPrefix && applyMenuAntiHeroSpritePrefix(antiHeroInst, completedPrefix)
       }
       //
@@ -881,7 +877,10 @@ export function sceneMenu(k) {
         //
         // Special handling for time section: use yellow when completed or current
         //
-        if (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isCurrentSection)) {
+        if (antiHeroInst.section === 'glow') {
+          targetColor = antiHeroInst.grayColor
+          desiredPrefix = antiHeroInst.spritePrefixGray
+        } else if (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isCurrentSection)) {
           targetColor = antiHeroInst.yellowColor
           desiredPrefix = antiHeroInst.spritePrefixYellow
         } else if (antiHeroInst.section === 'time' && isHovered) {
@@ -890,12 +889,6 @@ export function sceneMenu(k) {
           //
           targetColor = antiHeroInst.yellowColor
           desiredPrefix = antiHeroInst.spritePrefixYellow
-        } else if (antiHeroInst.section === 'glow' && (antiHeroInst.isCompleted || isCurrentSection)) {
-          targetColor = antiHeroInst.glowGoldColor
-          desiredPrefix = antiHeroInst.spritePrefixGold
-        } else if (antiHeroInst.section === 'glow' && isHovered) {
-          targetColor = antiHeroInst.glowGoldColor
-          desiredPrefix = antiHeroInst.spritePrefixGold
         } else if (shouldUseBlackOutline) {
           //
           // Hovered, completed, or current section: use section-colored sprite
@@ -1264,8 +1257,9 @@ export function sceneMenu(k) {
         showTransitionToLevel(k, 'lesson-glow.0')
       }
     }
-    k.onKeyPress("space", () => startGame(false))
-    k.onKeyPress("enter", () => startGame(true))
+    const startGameInputCancel = bindStartGameKeys(k, (key) => {
+      startGame(key === 'enter')
+    })
     inst.antiHeroClick = bindPointerActivate(k, () => {
       if (inst.isLeavingScene) return
       if (isMenuTransitionBlocking(k)) return
@@ -1295,6 +1289,7 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
+      startGameInputCancel.cancel()
       backToMenuCancel.cancel()
       inst.antiHeroClick?.cancel()
       CanvasBackdrop.clearCanvasBackdrop(k)

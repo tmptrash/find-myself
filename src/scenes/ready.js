@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor, parseHex, bindBackToMenuKeys } from '../utils/helper.js'
+import { getColor, parseHex, bindStartGameKeys } from '../utils/helper.js'
 import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
@@ -738,10 +738,9 @@ export function sceneReady(k) {
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     }
-    const backToMenuCancel = bindBackToMenuKeys(k, exitToMenu)
-    CFG.controls.startGame.forEach(key => k.onKeyPress(key, exitToMenu))
-    k.onSceneLeave(() => backToMenuCancel.cancel())
+    const startGameInputCancel = bindStartGameKeys(k, () => exitToMenu())
     k.onMousePress(exitToMenu)
+    k.onSceneLeave(() => startGameInputCancel.cancel())
   })
 }
 //

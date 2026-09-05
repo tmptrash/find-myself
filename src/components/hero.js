@@ -358,6 +358,7 @@ export function create(config) {
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
     eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
+    noEyes = false,        // Bake idle/run/jump without eye whites or pupils (glow eyeless intro)
     postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
     idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
     outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
@@ -396,6 +397,7 @@ export function create(config) {
       addWatch,
       outlineOnly,
       eyeWhiteColor,
+      noEyes,
       postBakeCanvas,
       outlineRimPx,
       character: null  // Marker to indicate this is an inst-like object
@@ -408,7 +410,7 @@ export function create(config) {
   //
   const effectiveEyeWhiteKey = eyeWhiteColor ? String(eyeWhiteColor).replace('#', '') : ''
   const rimSuffix = heroSpriteRimSuffix(outlineRimPx)
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}${rimSuffix}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}${noEyes ? '_noeyes' : ''}${rimSuffix}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -437,10 +439,11 @@ export function create(config) {
         addArms,
         addWatch,
         outlineOnly,
-      eyeWhiteColor,
-      postBakeCanvas,
-      outlineRimPx
-    })
+        eyeWhiteColor,
+        noEyes,
+        postBakeCanvas,
+        outlineRimPx
+      })
       //
       // Try to use the sprite (it should be loaded now)
       //
@@ -514,6 +517,7 @@ export function create(config) {
     postBakeCanvas,                       // Glow film grain on baked hero frames
     idleNotePostBake,                     // Glow film grain on baked mouth-note glyphs
     outlineRimPx,                         // Baked silhouette rim width (px)
+    noEyes,                               // Eyeless glow intro — no eye whites in baked frames
     spritePrefix,
     dustColor,
     suppressDust,
@@ -660,7 +664,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, postBakeCanvas, outlineRimPx, bakeSeed
+  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, noEyes, postBakeCanvas, outlineRimPx, bakeSeed
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -675,6 +679,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = inst.addWatch || false
     hollow = inst.outlineOnly || false
     eyeWhite = inst.eyeWhiteColor || null
+    noEyes = inst.noEyes || false
     postBakeCanvas = inst.postBakeCanvas || null
     outlineRimPx = inst.outlineRimPx || DEFAULT_OUTLINE_RIM
   } else {
@@ -690,6 +695,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = addWatch
     hollow = false
     eyeWhite = null
+    noEyes = false
     postBakeCanvas = null
     outlineRimPx = DEFAULT_OUTLINE_RIM
   }
@@ -718,12 +724,16 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // Generate unique prefix for this sprite variant
   //
   const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${heroSpriteRimSuffix(outlineRimPx)}`
+  const noEyesFlag = Boolean(noEyes)
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${noEyesFlag ? '_noeyes' : ''}${heroSpriteRimSuffix(outlineRimPx)}`
   //
   // Skip only when this exact k already finished baking the full bundle
   // (idle grid + closed frame + run/jump), not when a stale global name exists.
   //
-  if (isHeroSpritePrefixReadyOnK(k, prefix)) return
+  if (isHeroSpritePrefixReadyOnK(k, prefix)) {
+    inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
+    return
+  }
   //
   // Load all eye variants (9 positions) for idle animation
   //
@@ -731,7 +741,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx, noEyesFlag)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -749,7 +759,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite, outlineRimPx)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite, outlineRimPx, noEyesFlag)
     closedData && commitHeroBakedSprite(k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++)
   } catch (error) {
     //
@@ -761,7 +771,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx, noEyesFlag)
       spriteData && commitHeroBakedSprite(k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
@@ -774,7 +784,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx, noEyesFlag)
       spriteData && commitHeroBakedSprite(k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
@@ -783,6 +793,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     }
   }
   isHeroIdleGridPresentOnK(k, prefix) && markHeroSpritePrefixReadyOnK(k, prefix)
+  inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
 }
 /**
  * Death effect with particle explosion
@@ -1902,6 +1913,16 @@ function syncJumpCollision(inst) {
  * @param {Object} inst - Hero instance
  */
 function updateIdleAnimation(inst) {
+  //
+  // Eyeless intro: hold the neutral idle cell — no wander or tracking sprites.
+  //
+  if (inst.noEyes) {
+    inst.isRunning = false
+    inst.wasJumping = false
+    const prefix = inst.spritePrefix || inst.type
+    useHeroSprite(inst, `${prefix}_0_0`)
+    return
+  }
   //
   // Calm: hold the closed-eyes idle frame and skip all eye wander/tracking
   //
@@ -3330,7 +3351,7 @@ function startAnnihilationExplosion(inst, targetPos) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, noEyes = false) {
   //
   // Choose body color - custom or default
   //
@@ -3596,50 +3617,52 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, bodyH, HEAD_CORNER_RADIUS)
       }
       //
-      // Step 3: eyes + mouth on the torso
+      // Step 3: eyes + mouth on the torso (skipped for eyeless glow intro bake)
       //
-      const eyeY = headY + EYE_OFFSET_Y
-      ctx.fillStyle = OL
-      if (animation === 'run' || animation === 'jump') {
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-      } else {
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      if (!outlineOnly) {
-        ctx.fillStyle = eyesClosed ? BL : (eyeWhiteColor ? getHex(eyeWhiteColor) : getHex(CFG.visual.colors[type].eyeWhite))
-        if (animation === 'run' || animation === 'jump') {
-          ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-          ctx.fill()
-        } else {
-          ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      }
-      if (!eyesClosed) {
+      if (!noEyes) {
+        const eyeY = headY + EYE_OFFSET_Y
         ctx.fillStyle = OL
         if (animation === 'run' || animation === 'jump') {
           ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_RIGHT + PUPIL_SIDE_SHIFT, eyeY, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
           ctx.fill()
         } else {
           ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_LEFT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
           ctx.fill()
           ctx.beginPath()
-          ctx.arc(headX + EYE_OFFSET_X_RIGHT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
           ctx.fill()
+        }
+        if (!outlineOnly) {
+          ctx.fillStyle = eyesClosed ? BL : (eyeWhiteColor ? getHex(eyeWhiteColor) : getHex(CFG.visual.colors[type].eyeWhite))
+          if (animation === 'run' || animation === 'jump') {
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+          } else {
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+        if (!eyesClosed) {
+          ctx.fillStyle = OL
+          if (animation === 'run' || animation === 'jump') {
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_RIGHT + PUPIL_SIDE_SHIFT, eyeY, PUPIL_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+          } else {
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_LEFT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.beginPath()
+            ctx.arc(headX + EYE_OFFSET_X_RIGHT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+            ctx.fill()
+          }
         }
       }
       if (addMouth && animation === 'idle') {

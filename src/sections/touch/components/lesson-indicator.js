@@ -126,7 +126,9 @@ export function create(config) {
     heroOutlineColor = CFG.visual.colors.outline,
     heroEyeWhiteColor = null,
     heroPostBakeCanvas = null,
-    hudPostBakeCanvas = null
+    hudPostBakeCanvas = null,
+    lifeDesatPostBake = null,
+    hudScoreFlat = false
   } = config
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
@@ -298,7 +300,8 @@ export function create(config) {
   //
   const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8
   const wantGreyLife = greyLife || scoreboardGreyLife
-  hudPostBakeCanvas && (k._lifeDesatPostBake = hudPostBakeCanvas)
+  const lifePostBake = lifeDesatPostBake || hudPostBakeCanvas
+  lifePostBake && (k._lifeDesatPostBake = lifePostBake)
   ensureDesaturatedLifeSprite(k)
   const lifeSpriteName = wantGreyLife && k._lifeDesatReady === true ? 'life-desat' : 'life'
   const lifeTintHex = wantGreyLife
@@ -342,12 +345,12 @@ export function create(config) {
   // Hero score outlines (black) and main text (white)
   //
   const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas)
+  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat)
   //
   // Life score outlines (black) and main text (white)
   //
   const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas)
+  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat)
   //
   // Trap count badge with outline (bold red number right of life icon)
   //
@@ -523,6 +526,17 @@ export function syncLifeHudGrey(inst, greyLife = true) {
   inst.lifeRevealed && (sprite.hidden = false)
 }
 
+/**
+ * Rebakes a HUD score numeral with or without the drop shadow.
+ * @param {Object} textObj - Score text from create()
+ * @param {boolean} flat - True for a flat numeral (no shadow)
+ */
+export function setHudScoreFlatBake(textObj, flat) {
+  if (!textObj?._scoreBake) return
+  textObj._scoreBake.flat = !!flat
+  rebakeHudScoreSprite(textObj)
+}
+
 export function setSectionLabelLetterProgress(inst, completedLetters) {
   if (!inst?.letterObjects?.length) return
   const capped = Math.min(completedLetters, inst.letterObjects.length)
@@ -642,9 +656,9 @@ function createScoreOutlines(k, score, x, y, fontSize, offsets, hudPostBakeCanva
  * @param {number} fontSize - Font size in pixels
  * @returns {Object} Score text game object
  */
-function createScoreText(k, score, x, y, fontSize, hudPostBakeCanvas = null) {
+function createScoreText(k, score, x, y, fontSize, hudPostBakeCanvas = null, hudScoreFlat = false) {
   if (hudPostBakeCanvas) {
-    return addBakedHudScoreSprite(k, score, x, y, fontSize, hudPostBakeCanvas, 3100)
+    return addBakedHudScoreSprite(k, score, x, y, fontSize, hudPostBakeCanvas, 3100, hudScoreFlat)
   }
   return k.add([
     k.text(score.toString(), {
@@ -797,7 +811,7 @@ function rebakeHudLetterSprite(obj, colorHex) {
 //
 // Bakes a score numeral with drop shadow for the HUD scoreboard.
 //
-function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase) {
+function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase, flat = false) {
   const obj = k.add([
     k.pos(x, y),
     k.anchor('left'),
@@ -805,7 +819,7 @@ function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
-  obj._scoreBake = { k, score, x, y, fontSize, postBake, seedBase }
+  obj._scoreBake = { k, score, x, y, fontSize, postBake, seedBase, flat }
   rebakeHudScoreSprite(obj)
   return obj
 }
@@ -815,10 +829,10 @@ function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase) {
 function rebakeHudScoreSprite(obj) {
   const bake = obj._scoreBake
   if (!bake) return
-  const { k, score, fontSize, postBake, seedBase } = bake
+  const { k, score, fontSize, postBake, seedBase, flat } = bake
   const text = String(score)
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const canvas = bakeHudScoreCanvas(text, fontSize, font)
+  const canvas = bakeHudScoreCanvas(text, fontSize, font, flat)
   postBake?.(canvas, seedBase + text.length)
   const spriteName = `hud-score-${seedBase}-${text}`
   k.loadSprite(spriteName, canvas)
@@ -849,9 +863,9 @@ function bakeHudLetterCanvas(letter, fontSize, fontFamily, fillStyle) {
 //
 // Draws a score numeral with a single drop shadow on one canvas.
 //
-function bakeHudScoreCanvas(text, fontSize, fontFamily) {
+function bakeHudScoreCanvas(text, fontSize, fontFamily, flat = false) {
   const pad = 3
-  const off = SCORE_OUTLINE_THICKNESS
+  const off = flat ? 0 : SCORE_OUTLINE_THICKNESS
   const probe = document.createElement('canvas').getContext('2d')
   probe.font = `${fontSize}px ${fontFamily}`
   const w = Math.ceil(probe.measureText(text).width + pad * 2 + off)
@@ -864,8 +878,10 @@ function bakeHudScoreCanvas(text, fontSize, fontFamily) {
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   const cy = canvas.height / 2
-  ctx.fillStyle = '#000000'
-  ctx.fillText(text, pad + off, cy + off)
+  if (!flat) {
+    ctx.fillStyle = '#000000'
+    ctx.fillText(text, pad + off, cy + off)
+  }
   ctx.fillStyle = `rgb(${HUD_SCORE_ICON_GREY_R},${HUD_SCORE_ICON_GREY_G},${HUD_SCORE_ICON_GREY_B})`
   ctx.fillText(text, pad, cy)
   return canvas

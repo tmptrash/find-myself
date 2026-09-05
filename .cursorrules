@@ -770,7 +770,47 @@ for any future level that needs the same pixel-perfect rendering.
 
 ---
 
-## Example: Complete Module
+## 15. Kaplay Performance
+
+Follow the [Kaplay performance guide](https://github.com/kaplayjs/kaplay/wiki/Performance-guide) in every change. From slowest to fastest when drawing many sprites:
+
+1. **Game objects** (`k.add([k.sprite(...), k.pos(...)])`) — use only when an entity needs components, collision, tags, or per-instance behavior (hero, platforms, UI widgets).
+2. **`k.drawSprite()` / `k.drawUVQuad()` inside `onDraw` or a single draw callback** — preferred for particles, grass tufts, atmospheric midges, one-off VFX, and any effect that only needs position/opacity/scale each frame.
+3. **Meshes** (static batched geometry) — prefer for large static tilemaps or decor when available.
+4. **Shader-based rendering** — last resort for massive identical samples.
+
+### Prefer drawSprite over game objects
+
+```javascript
+// Bad: one Kaplay object per particle — heavy update/collision overhead
+for (const particle of particles) {
+  k.add([
+    k.sprite('particle'),
+    k.pos(particle.pos)
+  ])
+}
+
+// Good: batch in one draw pass — no object bookkeeping
+for (const particle of particles) {
+  k.drawSprite({
+    sprite: 'particle',
+    pos: particle.pos
+  })
+}
+```
+
+### Batching rules
+
+- Mixing **sprites and primitives** (rect, circle, polygon) in alternating order breaks batching — Kaplay flushes to the GPU on texture/blend/shader changes.
+- **Group draw calls**: all `drawSprite` passes together, then polygons, then other primitives.
+- Static canvas-baked sprites (backgrounds, HUD glyphs, hero frames) should be **generated once per live `k` instance** and reused — never rebake every frame.
+
+### When game objects are still correct
+
+- Hero, enemies, moving platforms, anything with `k.body()`, `k.area()`, tags, or `onCollide`.
+- Persistent UI anchored with `k.fixed()` when it needs Kaplay lifecycle (destroy/hide) rather than a single draw callback.
+
+---
 
 ```javascript
 import { cfg } from '../cfg.js'

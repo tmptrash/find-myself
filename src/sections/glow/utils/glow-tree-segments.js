@@ -16,7 +16,11 @@ import {
 //
 export const TREE_SEGMENT_HERO_BRANCH = 'heroBranch'
 //
-// Three equal reveal steps (trunk, roots, branches and leaves split by count).
+// Roots bake as their own segment — branch landings never reveal them.
+//
+export const TREE_SEGMENT_ROOTS = 'treeRoots'
+//
+// Three branch-landing steps for the upper tree (near branches, trunk, crown).
 //
 export const TREE_REVEAL_PART_COUNT = 3
 export const TREE_SEGMENT_PART_PREFIX = 'treePart-'
@@ -100,7 +104,7 @@ export function treeDataForSegment(treeData, segmentId) {
     base.trunkSegs = treeData.trunkSegs
     return base
   }
-  if (segmentId === LEGACY_ROOTS) {
+  if (segmentId === LEGACY_ROOTS || segmentId === TREE_SEGMENT_ROOTS) {
     base.rootSegs = treeData.rootSegs
     return base
   }
@@ -130,6 +134,10 @@ export function normalizePersistedTreeSegmentIds(savedIds, treeData, plan) {
     }
     if (id === TREE_SEGMENT_HERO_BRANCH) {
       out.add(`${TREE_SEGMENT_PART_PREFIX}${TREE_REVEAL_PART_COUNT - 1}`)
+      return
+    }
+    if (id === LEGACY_ROOTS) {
+      out.add(TREE_SEGMENT_ROOTS)
       return
     }
     const legacyPart = legacySegmentToRevealPart(id, treeData)
@@ -228,11 +236,16 @@ export function parkSegmentOffscreen(entry) {
  * @returns {string[]}
  */
 export function allGlowTreeSegmentIds(treeData, plan) {
-  return [...plan.pendingIds]
+  return [...plan.pendingIds, TREE_SEGMENT_ROOTS]
 }
 //
-// Story order across the three landings: neighbouring branches (and the
-// start branch itself), then the trunk, then roots and the remaining canopy.
+// True when id is the underground root mass (not part of branch jumps).
+//
+export function isGlowTreeRootsSegmentId(id) {
+  return id === TREE_SEGMENT_ROOTS || id === LEGACY_ROOTS
+}
+//
+// Branch landing order: neighbouring branches, trunk, then the far crown.
 //
 function applyTreeRevealPartGeometry(treeData, base, partIndex) {
   const heroFrom = treeData.heroBranchSegFrom ?? treeData.branchSegs.length
@@ -249,7 +262,6 @@ function applyTreeRevealPartGeometry(treeData, base, partIndex) {
     base.trunkSegs = treeData.trunkSegs
     return
   }
-  base.rootSegs = treeData.rootSegs
   base.branchSegs = farSegs
   const claimed = new Set(leavesForBranchGroup(treeData, [...nearSegs, ...heroSegs]).map(leaf => `${leaf.x}|${leaf.y}`))
   const farLeaves = treeData.leaves.filter(leaf => !claimed.has(`${leaf.x}|${leaf.y}`))

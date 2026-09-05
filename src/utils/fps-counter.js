@@ -40,6 +40,11 @@ export function create(config) {
     timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   }
   layoutHudRow(k, [fpsText, timerText])
+  if (CFG.debug?.showPerformanceHud) {
+    const numObjects = k.get('*').length
+    const drawCalls = countKaplayDrawCalls(k)
+    setOutlinedHudText(fpsText, `FPS: 30  obj: ${numObjects}  dc: ${drawCalls}`)
+  }
   const inst = {
     k,
     topY,
@@ -53,8 +58,12 @@ export function create(config) {
     updateTimer: 0,
     fpsSum: 0,
     fpsCount: 0,
-    levelTime: 0
+    levelTime: 0,
+    debugUpdateTimer: 0,
+    cachedObjCount: CFG.debug?.showPerformanceHud ? k.get('*').length : 0,
+    cachedDrawCalls: CFG.debug?.showPerformanceHud ? countKaplayDrawCalls(k) : 0
   }
+  CFG.debug?.showPerformanceHud && layoutAtScreenCenterX(inst, k.width() / 2)
   return inst
 }
 /**
@@ -86,13 +95,27 @@ export function onUpdate(inst) {
   //
   // Update display once per second
   //
+  if (CFG.debug?.showPerformanceHud) {
+    inst.debugUpdateTimer += frameDt
+    if (inst.debugUpdateTimer >= 0.25) {
+      inst.debugUpdateTimer = 0
+      inst.cachedObjCount = k.get('*').length
+      inst.cachedDrawCalls = countKaplayDrawCalls(k)
+    }
+  }
   if (inst.updateTimer >= 1.0) {
     const averageFps = Math.round(inst.fpsSum / inst.fpsCount)
-    setOutlinedHudText(fpsHud, `FPS: ${averageFps.toString().padStart(2, ' ')}`)
+    const fpsLabel = `FPS: ${averageFps.toString().padStart(2, ' ')}`
+    const hudText = CFG.debug?.showPerformanceHud
+      ? `${fpsLabel}  obj: ${inst.cachedObjCount}  dc: ${inst.cachedDrawCalls}`
+      : fpsLabel
+    setOutlinedHudText(fpsHud, hudText)
     inst.updateTimer = 0
     inst.fpsSum = 0
     inst.fpsCount = 0
   }
+  CFG.debug?.showPerformanceHud &&
+    layoutAtScreenCenterX(inst, inst.layoutCenterX ?? inst.k.width() / 2)
 }
 /**
  * Get current level time in seconds
@@ -138,6 +161,8 @@ export function pinScreenFixed(inst) {
  */
 export function layoutAtScreenCenterX(inst, centerX) {
   if (!inst?.fpsHud) return
+  inst.layoutCenterX = centerX
+  inst.fpsHud.layoutCenterX = centerX
   const topY = inst.topY
   const outlineOffsets = buildOutlineOffsets(HUD_OUTLINE_OFFSET)
   inst.fpsHud.main.pos.x = centerX
@@ -248,7 +273,8 @@ function createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, po
     outlineColor,
     topY,
     measuredW: 0,
-    lastText: null
+    lastText: null,
+    layoutCenterX: null
   }
   rebuildBakedHudTextNode(node, text, k.width() / 2)
   return node
@@ -258,13 +284,15 @@ function createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, po
 //
 function syncBakedHudText(node, text) {
   if (node.lastText === text) return
-  rebuildBakedHudTextNode(node, text, node.main?.pos?.x ?? node.k.width() / 2)
+  const centerX = node.layoutCenterX ?? node.k.width() / 2
+  rebuildBakedHudTextNode(node, text, centerX)
 }
 //
 // Draws outlined HUD text to a canvas and loads it as a Kaplay sprite.
 //
 function rebuildBakedHudTextNode(node, text, centerX) {
   const { k, font, color, outlineColor, topY, postBakeCanvas } = node
+  node.layoutCenterX = centerX
   node.lastText = text
   const canvas = bakeFpsHudTextCanvas(text, font, color, outlineColor)
   postBakeCanvas?.(canvas, fpsHudTextHash(text))
@@ -296,8 +324,13 @@ function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor) {
   const off = HUD_OUTLINE_OFFSET
   const probe = document.createElement('canvas').getContext('2d')
   probe.font = `${HUD_FONT_SIZE}px ${fontFamily}`
-  const w = Math.ceil(probe.measureText(text).width + pad * 2 + off)
-  const h = Math.ceil(HUD_FONT_SIZE * 1.2 + pad * 2 + off)
+  const textW = probe.measureText(text).width
+  //
+  // Symmetric padding so the drop shadow does not pull the baked label right
+  // when the sprite is anchored at the canvas centre.
+  //
+  const w = Math.ceil(textW + pad * 2 + off * 2)
+  const h = Math.ceil(HUD_FONT_SIZE * 1.2 + pad * 2 + off * 2)
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, w)
   canvas.height = Math.max(1, h)
@@ -305,8 +338,8 @@ function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor) {
   ctx.font = `${HUD_FONT_SIZE}px ${fontFamily}`
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'center'
-  const cx = canvas.width / 2
-  const cy = canvas.height / 2
+  const cx = canvas.width / 2 - off / 2
+  const cy = canvas.height / 2 - off / 2
   ctx.fillStyle = rgbToCss(outlineColor)
   ctx.fillText(text, cx + off, cy + off)
   ctx.fillStyle = rgbToCss(fillColor)
@@ -331,4 +364,14 @@ function rgbToCss(rgb) {
   const g = rgb.g ?? rgb[1] ?? 0
   const b = rgb.b ?? rgb[2] ?? 0
   return `rgb(${r | 0},${g | 0},${b | 0})`
+}
+//
+// Approximate draw-call count: visible Kaplay objects with a draw() hook.
+//
+function countKaplayDrawCalls(k) {
+  let drawCalls = 0
+  k.get('*').forEach(obj => {
+    !obj.hidden && typeof obj.draw === 'function' && drawCalls++
+  })
+  return drawCalls
 }

@@ -12,6 +12,7 @@ import * as BootLoader from './boot-loader.js'
 import { prewarmGlowLevel0HeavyAssets } from '../sections/glow/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
+import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
 import { bindPointerActivate } from './pointer-activate.js'
 
 /**
@@ -97,7 +98,7 @@ const HINT_CHAR_WIDTH_RATIO = 0.55
 //
 const TIME_SUBTITLE_COLOR = '#FF8C00'
 const SECTION_SUBTITLE_COLORS = {
-  glow: CFG.visual.colors.sections.glow.body,
+  glow: GLOW_PAL.heroBodyGray,
   time: TIME_SUBTITLE_COLOR,
   word: CFG.visual.colors.sections.word.body,
   touch: CFG.visual.colors.sections.touch.body,

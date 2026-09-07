@@ -28,6 +28,7 @@ import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
 import { installLevelFadeIn } from "./transition.js"
 import { resetPhysicalInputLayer } from "./helper.js"
+import { unlockWaterStepsAudio } from "./sound.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -204,7 +205,40 @@ export async function bootEngine(resolutionMode) {
   })
   await prepareDesaturatedLifeSprite(k)
   k.canvas && !BootLoader.isLoaderVisible() && (k.canvas.style.visibility = 'visible')
+  unlockKaplayAudioOnFirstGesture(k)
   return k
+}
+//
+// Kaplay owns its own internal AudioContext, entirely separate from the
+// game's procedural Web Audio API context (see sound.js's resumeGlobalAudio).
+// That context boots suspended and only resumes inside a real k.play() call —
+// every earlier sound in the game happens to be either procedural or started
+// paused (e.g. birds.mp3), so the very first unpaused k.play() (typically
+// glow's water-steps.mp3 on the first drowning) can race the async
+// AudioContext.resume() and play silently. Firing a silent, immediately
+// stopped k.play() inside the user's very first keyboard/pointer gesture on
+// the page resumes it synchronously within a trusted gesture handler, well
+// before any real sound needs it.
+//
+function unlockKaplayAudioOnFirstGesture(k) {
+  const unlock = () => {
+    window.removeEventListener('keydown', unlock)
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('touchstart', unlock)
+    try {
+      const handle = k.play('water-steps', { volume: 0.0001, paused: false })
+      handle?.stop?.()
+    } catch (error) {
+      //
+      // Asset not loaded yet on this engine — harmless, later real playback
+      // still triggers Kaplay's own internal resume on its own.
+      //
+    }
+    unlockWaterStepsAudio()
+  }
+  window.addEventListener('keydown', unlock, { once: true })
+  window.addEventListener('pointerdown', unlock, { once: true })
+  window.addEventListener('touchstart', unlock, { once: true })
 }
 
 /**

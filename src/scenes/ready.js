@@ -22,6 +22,7 @@ import {
   MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
 import * as Grass from '../components/grass.js'
+import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
 
 //
 // Hint flicker — pinned at the very bottom of the screen so the
@@ -115,6 +116,7 @@ const Z_SPIDER = 50
 //
 const Z_GRASS = Z_SPIDER + 5
 const Z_HINT = 100
+const Z_FILM_GRAIN = Z_HINT + 5
 //
 // Blinking stars (sky overlay above the menu-bg sprite). Each star is a
 // tiny dot whose alpha (and, for the largest ones, a faint 4-point cross
@@ -731,6 +733,10 @@ export function sceneReady(k) {
     // Spider draw layer — rendered above all text and title (Z_SPIDER)
     //
     k.add([k.pos(0, 0), k.z(Z_SPIDER), { draw() { onDrawSpidersLayer(k, spiders, spiderState) } }])
+    //
+    // Glow film grain — same look as lesson-glow.0, drawn over the whole scene.
+    //
+    addGlowFilmGrainOverlayLayer(k, Z_FILM_GRAIN)
     //
     // Controls
     //

@@ -122,6 +122,10 @@ export function revealGlowHeroEyes(inst, heroInst) {
   Hero.loadHeroSprites(heroInst)
   beginGlowEyeAttachFreeze(inst, heroInst)
   Hero.setEyesClosed(heroInst, true)
+  //
+  // Force a closed-eyes sprite swap — the eyeless prefix may still be active.
+  //
+  heroInst.currentEyeSprite = null
   Hero.applyCalmIdleSprite(heroInst)
   snapGlowHeroToPitFloor(inst, heroInst)
   heroInst.controlsDisabled = true
@@ -284,6 +288,7 @@ function finishGlowEyeAttachSequence(inst, heroInst) {
   if (!heroInst) return
   snapGlowHeroToPitFloor(inst, heroInst)
   Hero.setEyesClosed(heroInst, false)
+  heroInst.currentEyeSprite = null
   endGlowEyeAttachFreeze(inst, heroInst)
   snapGlowHeroToPitFloor(inst, heroInst)
   heroInst.controlsDisabled = false

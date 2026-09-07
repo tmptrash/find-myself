@@ -864,11 +864,21 @@ const GLOW_LETTER_TILT = 12
 const GLOW_LETTER_GAP = 70
 const GLOW_LETTER_PICKUP_RADIUS = 52
 //
-// Hero — value 6 body and eye whites, value 1 pupils.
+// Hero body / outline tones for lesson-glow.0.
 //
 const HERO_OUTLINE_COLOR = GLOW_PAL.heroOutline
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
-const HERO_EYE_WHITE = GLOW_PAL.heroBodyGray
+const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
+//
+// Hollow/filled glow eyes: white body-outline ring + matching pupil, clear socket.
+//
+function getGlowHeroEyeBakeColors(outlineOnly) {
+  const outline = outlineOnly ? HERO_HOLLOW_OUTLINE_COLOR : HERO_OUTLINE_COLOR
+  return {
+    pupilColor: outline,
+    transparentEyeInterior: true
+  }
+}
 const GLOW_HERO_SCALE = 1.2
 const GLOW_HERO_OUTLINE_RIM = 2
 //
@@ -1531,24 +1541,25 @@ export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   const undergroundSpec = loadUndergroundSprites(k)
   buildParallaxSprites(k, undergroundSpec)
   //
-  // Gray and gold hero frames bake here so spawn / colour-world fade
+  // Gray hero frames (outline + filled) bake here so spawn / body-fill fade
   // never hitch the main thread mid-gameplay.
   //
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
+    ...getGlowHeroEyeBakeColors(true),
     bodyColor: HERO_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
-    eyeWhiteColor: HERO_EYE_WHITE,
+    outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineRimPx: GLOW_HERO_OUTLINE_RIM,
+    outlineOnly: true,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
-    bodyColor: GLOW_GOLD_HEX,
+    ...getGlowHeroEyeBakeColors(false),
+    bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
-    eyeWhiteColor: HERO_EYE_WHITE,
     outlineRimPx: GLOW_HERO_OUTLINE_RIM,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
@@ -1765,6 +1776,8 @@ function initGlowLevel0Scene(k) {
       Sound.stopAmbient(sound)
       k.camScale(1)
     })
+    const heroStartFilled = zones.colorWorld
+    const heroEyes = getGlowHeroEyeBakeColors(!heroStartFilled)
     const heroInst = Hero.create({
       k,
       x: heroSpawnX,
@@ -1774,9 +1787,10 @@ function initGlowLevel0Scene(k) {
       sfx: sound,
       scale: GLOW_HERO_SCALE,
       bodyColor: HERO_BODY_COLOR,
-      outlineColor: HERO_OUTLINE_COLOR,
-      eyeWhiteColor: HERO_EYE_WHITE,
+      outlineColor: heroStartFilled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
+      ...heroEyes,
       outlineRimPx: GLOW_HERO_OUTLINE_RIM,
+      outlineOnly: !heroStartFilled,
       currentLevel: 'lesson-glow.0',
       noEyes: !zones.eyesCollected,
       suppressDust: true,
@@ -1823,7 +1837,7 @@ function initGlowLevel0Scene(k) {
     })
     const gLetterX = horizBranch.x2 + G_LETTER_RIGHT_OF_BRANCH_GAP + GLOW_LETTER_SIZE / 2
     const gLetterY = horizBranch.physY - GLOW_LETTER_SIZE * 0.15 - G_LETTER_RAISE_Y
-    const gLetter = zones.gCollected ? null : createGlowLetter(k, 'G', gLetterX, gLetterY, GLOW_LETTER_TILT, GLOW_GOLD_HEX)
+    const gLetter = zones.gCollected ? null : createGlowLetter(k, 'G', gLetterX, gLetterY, GLOW_LETTER_TILT, HERO_BODY_COLOR)
     //
     // G sits right against the big tree's canopy — createGlowLetter's
     // default z is below the tree's monolithic sprite (trunk+branches+
@@ -1833,13 +1847,13 @@ function initGlowLevel0Scene(k) {
     gLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lLetterX = lPlatX - L_LETTER_LEFT_OF_PLAT_GAP - GLOW_LETTER_SIZE / 2
     const lLetterY = rightPlatY - GLOW_LETTER_SIZE * 0.15 - L_LETTER_RAISE_Y
-    const lLetter = zones.lCollected ? null : createGlowLetter(k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, GLOW_GOLD_HEX)
+    const lLetter = zones.lCollected ? null : createGlowLetter(k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, HERO_BODY_COLOR)
     const wLetterX = wPlatX + LOG_W / 2
     const wLetterY = wPlatY - GLOW_LETTER_SIZE * 0.15 - W_LETTER_RAISE_Y
-    const wLetter = zones.wCollected ? null : createGlowLetter(k, 'W', wLetterX, wLetterY, GLOW_LETTER_TILT * 0.7, GLOW_GOLD_HEX)
+    const wLetter = zones.wCollected ? null : createGlowLetter(k, 'W', wLetterX, wLetterY, GLOW_LETTER_TILT * 0.7, HERO_BODY_COLOR)
     const oLetterX = oPlatX + LOG_W / 2
     const oLetterY = oPlatY - GLOW_LETTER_SIZE * 0.15 - O_LETTER_RAISE_Y
-    const oLetter = zones.oCollected ? null : createGlowLetter(k, 'O', oLetterX, oLetterY, GLOW_LETTER_TILT * 0.5, GLOW_GOLD_HEX)
+    const oLetter = zones.oCollected ? null : createGlowLetter(k, 'O', oLetterX, oLetterY, GLOW_LETTER_TILT * 0.5, HERO_BODY_COLOR)
     oLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
@@ -2119,10 +2133,9 @@ function initGlowLevel0Scene(k) {
       goldRgb,
       wTrigger: { x1: wPlatX - PLAT_LAND_TRIGGER_PAD, x2: wPlatX + LOG_W + PLAT_LAND_TRIGGER_PAD, y: wPlatY - 60, y2: wPlatY + LOG_H + 20 },
       //
-      // Always false at scene start — the colorWorld branch below rebakes the
-      // gold hero even on reload (the hero object itself spawns whitish).
+      // Tracks whether the playable hero has left outline-only mode.
       //
-      heroGoldApplied: false,
+      heroBodyFillApplied: heroStartFilled,
       fpsCounter: null,
       pendingDialogAction: null,
       treeRevealFade: zones.tree ? 1 : 0,
@@ -2190,7 +2203,6 @@ function initGlowLevel0Scene(k) {
     updateGlowCamera(inst)
     updatePlayfieldBorderColors(inst)
     inst.zones._sceneRef = inst
-    zones.colorWorld && applyColorWorldHero(inst)
     zones.wCollected && revealPostWHud(inst)
     inst.pit = createGlowPit({
       k,
@@ -2239,6 +2251,7 @@ function initGlowLevel0Scene(k) {
     zones.lCollected && ensureGlowTreeRootsSegment(inst)
     registerGlowNativeTeardown(() => {
       persistGlowOnLeave(inst)
+      clearHeroFillPreview(inst)
       stopGlowLoopAudio()
     })
     const backToMenuCancel = bindBackToMenuKeys(k, () => {
@@ -2247,6 +2260,7 @@ function initGlowLevel0Scene(k) {
     })
     k.onSceneLeave(() => {
       backToMenuCancel.cancel()
+      clearHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
       inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
@@ -2878,19 +2892,19 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
   k._lifeDesatReady = false
   k._lifeDesatPromise = null
   //
-  // The HUD small hero mirrors the playable hero exactly: whitish body with
-  // grey eye whites before O, gold inside once the world colours.
+  // The HUD small hero and GLOW label mirror the playable hero: whitish body
+  // with grey eye whites — they stay white even once the world colours.
   //
   const indicator = LevelIndicator.create({
     k,
     levelNumber: -1,
     sectionLabel: 'GLOW',
-    activeColor: GLOW_GOLD_HEX,
+    activeColor: HERO_BODY_COLOR,
     inactiveColor: GLOW_PAL.decorGray,
-    completedColor: GLOW_GOLD_HEX,
-    heroBodyColor: colorWorld ? GLOW_GOLD_HEX : HERO_BODY_COLOR,
+    completedColor: HERO_BODY_COLOR,
+    heroBodyColor: HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
-    heroEyeWhiteColor: HERO_EYE_WHITE,
+    heroEyeWhiteColor: HERO_BODY_COLOR,
     heroPostBakeCanvas: applyGlowFilmGrainToCanvas,
     hudPostBakeCanvas: applyGlowFilmGrainToCanvas,
     lifeDesatPostBake: finishGlowLifeDesatCanvas,
@@ -3060,7 +3074,7 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
     ch,
     GLOW_HUD_LABEL_FONT_SIZE,
     GLOW_HUD_LABEL_FONT,
-    GLOW_GOLD_HEX,
+    HERO_BODY_COLOR,
     applyGlowFilmGrainToCanvas
   )
   k.drawMasked(() => {
@@ -3080,7 +3094,7 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   })
 }
 //
-// Rebakes every GLOW HUD glyph — collected letters gold, the rest gray.
+// Rebakes every GLOW HUD glyph — collected letters white, the rest gray.
 //
 function syncGlowHudLetterColors(inst) {
   const letters = inst.levelIndicator?.letterObjects
@@ -3091,8 +3105,8 @@ function syncGlowHudLetterColors(inst) {
   const gHudReady = !z.gCollected &&
     (isGlowGLetterUnveiled(inst) || gParts >= GLOW_HUD_G_FILL_PARTS)
   letters.forEach((letter, i) => {
-    let colorHex = collected[i] ? GLOW_GOLD_HEX : GLOW_PAL.decorGray
-    i === 0 && gHudReady && (colorHex = GLOW_GOLD_HEX)
+    let colorHex = collected[i] ? HERO_BODY_COLOR : GLOW_PAL.decorGray
+    i === 0 && gHudReady && (colorHex = HERO_BODY_COLOR)
     LevelIndicator.setHudLetterColor(letter, colorHex)
   })
 }
@@ -3502,7 +3516,7 @@ function glowTreeColorFade(inst) {
 function isGlowMeditationColorPreview(inst) {
   const z = inst?.zones
   if (!z) return false
-  return false
+  return z.lCollected && !z.oZone && !z.oCollected && inst.meditation?.countdown != null
 }
 //
 // True while any decor/backdrop layer is still lerping toward full colour.
@@ -3880,7 +3894,7 @@ function setLetterVisible(letterEntry, visible, burst = false) {
       letterEntry.k,
       letterEntry.x,
       letterEntry.y,
-      letterEntry.colorHex || GLOW_GOLD_HEX
+      letterEntry.colorHex || HERO_BODY_COLOR
     )
   }
 }
@@ -6746,7 +6760,7 @@ function onDraw(inst) {
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   drawGlowPit(k, inst.pit, groundC, flatExplore && !innerGray)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
-  onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_EYE_WHITE)
+  onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
   !isGlowEyeIntroBareWorld(inst) && fade < 1 && drawExploredGroundLip(inst)
   !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst, groundC)
 }
@@ -7286,15 +7300,15 @@ function startColorWorldFade(inst) {
   !inst.zones.water && revealWaterZone(inst, false)
   applyZoneVisibility(inst)
   //
-  // Defer gold recolour — immediate sprite/hitbox swap on the O log restarts
+  // Defer body fill — immediate sprite/hitbox swap on the O log restarts
   // the crouch→land loop right after the dialog Space release.
   //
   inst.k.wait(GOLD_RECOLOR_DELAY, () => {
-    applyColorWorldHero(inst)
+    applyGlowHeroBodyFill(inst)
     const hero = inst.heroInst
     if (hero) {
       //
-      // Gold bake briefly ungrounds on wood — keep idle + Space gate so the
+      // Sprite bake briefly ungrounds on wood — keep idle + Space gate so the
       // crouch→jump loop cannot restart after the sprite swap.
       //
       forceHeroIdleOnLog(inst)
@@ -7308,32 +7322,28 @@ function startColorWorldFade(inst) {
   })
 }
 //
-// Turns the hero gold when the forest gains colour (menu glow anti-hero tone).
-// The HUD small hero (top-right scoreboard) is recoloured in sync so both
-// always show the same variant: whitish before O, gold inside after.
+// Fills the hero body once the world gains full colour (after O).
+// The hero stays whitish — never turns gold when the world colours.
 //
-function applyColorWorldHero(inst) {
-  if (inst.heroGoldApplied) return
-  inst.heroGoldApplied = true
-  recolorHeroToGold(inst.k, inst.heroInst)
-}
-//
-// Rebakes a hero instance in the glow gold body colour and swaps the sprite.
-// The sprite prefix MUST be rebuilt with the same formula hero.js uses
-// (including the eye-white and leg-strip suffixes) — otherwise `use()` keeps
-// pointing at the old whitish sprites and the hero never turns gold.
-//
-function recolorHeroToGold(k, hero) {
+function applyGlowHeroBodyFill(inst) {
+  clearHeroFillPreview(inst)
+  if (inst.heroBodyFillApplied) return
+  const hero = inst.heroInst
   if (!hero?.character?.exists?.()) return
-  hero.bodyColor = GLOW_GOLD_HEX.replace('#', '')
+  if (!hero.outlineOnly) {
+    inst.heroBodyFillApplied = true
+    return
+  }
+  inst.heroBodyFillApplied = true
+  hero.outlineOnly = false
+  hero.bodyColor = String(HERO_BODY_COLOR).replace('#', '')
+  hero.outlineColor = String(HERO_OUTLINE_COLOR).replace('#', '')
+  hero.pupilColor = String(HERO_OUTLINE_COLOR).replace('#', '')
+  hero.transparentEyeInterior = true
   hero.spritePrefix = buildHeroSpritePrefix(hero)
   Hero.loadHeroSprites(hero)
   Hero.syncPlatformLanding(hero)
-  //
-  // Sprite/hitbox swap briefly ungrounds on wood — lock out jump/land crouch
-  //
-  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
-  hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.25)
+  const k = inst.k
   k.wait(GOLD_SWAP_DELAY, () => {
     if (!hero.character?.exists?.()) return
     if (hero.character.vel) {
@@ -7344,22 +7354,158 @@ function recolorHeroToGold(k, hero) {
       Hero.syncPlatformLanding(hero)
       hero.character.use(k.sprite(`${hero.spritePrefix}_0_0`))
       hero.currentEyeSprite = `${hero.spritePrefix}_0_0`
-      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, 0.9)
+      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+      hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.25)
       Hero.armJumpKeyReleaseGate(hero)
       hero.wasJumping = false
       hero.jumpPhase = 'none'
       hero.canJump = false
     } catch (error) {
-      //
-      // Sprite bake may lag one frame — tint still snaps via bodyColor on next load
-      //
+      void error
     }
-    //
-    // Neutral tint — the sprite is baked in the menu anti-hero gold already;
-    // any grey multiply here would dull the gold to a washed-out white.
-    //
+    hero.character.opacity = 1
     hero.character.color = k.rgb(255, 255, 255)
   })
+}
+//
+// 0→1 while the post-L stillness countdown (or colour-world fade) whitens
+// the hollow hero in lockstep with the world around him.
+//
+function glowHeroFillFade(inst) {
+  if (inst.heroBodyFillApplied) return 1
+  const z = inst.zones
+  const fade = inst.colorFade ?? 0
+  if (z.colorWorld) return fade
+  if (z.oCollected) return 1
+  if (!z.lCollected || z.colorWorld) return 0
+  if (inst.meditation?.countdown != null) return meditationCountdownFade(inst)
+  if (z.oZone || fade >= 1 - COLOR_CROSSFADE_EPS) return Math.max(fade, 1)
+  if (inst._meditationPreviewFadingOut) return fade
+  return 0
+}
+//
+// Bakes the filled-body sprite set used by the preview overlay.
+//
+function preloadGlowHeroFilledSprites(inst) {
+  const hero = inst.heroInst
+  if (!hero) return
+  const bakedNoEyes = Boolean(hero.noEyes)
+  if (inst._glowHeroFilledSpritesPreloaded && inst._glowHeroFilledNoEyes === bakedNoEyes) return
+  Hero.loadHeroSprites({
+    k: inst.k,
+    type: hero.type,
+    ...getGlowHeroEyeBakeColors(false),
+    bodyColor: HERO_BODY_COLOR,
+    outlineColor: HERO_OUTLINE_COLOR,
+    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
+    outlineOnly: false,
+    noEyes: bakedNoEyes,
+    addMouth: hero.addMouth,
+    addArms: hero.addArms,
+    addWatch: hero.addWatch,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
+  })
+  inst._glowHeroFilledSpritesPreloaded = true
+  inst._glowHeroFilledNoEyes = bakedNoEyes
+}
+//
+// Sprite prefix for the filled hero — same flags as the live inst, no outline.
+//
+function buildFilledHeroSpritePrefix(hero) {
+  return buildHeroSpritePrefix({
+    ...hero,
+    outlineOnly: false,
+    bodyColor: String(HERO_BODY_COLOR).replace('#', ''),
+    outlineColor: String(HERO_OUTLINE_COLOR).replace('#', '')
+  })
+}
+//
+// Maps the live outline sprite key to its filled-body twin.
+//
+function mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix) {
+  if (outlineKey && outlinePrefix && filledPrefix && outlineKey.startsWith(outlinePrefix)) {
+    return filledPrefix + outlineKey.slice(outlinePrefix.length)
+  }
+  return `${filledPrefix}_0_0`
+}
+//
+// Destroys the filled-body preview layer and restores outline opacity.
+//
+function clearHeroFillPreview(inst) {
+  inst.heroFillPreview?.exists?.() && inst.heroFillPreview.destroy()
+  inst.heroFillPreview = null
+  const char = inst.heroInst?.character
+  char?.exists?.() && (char.opacity = 1)
+}
+//
+// Spawns the filled-body preview layer once the colour fade begins.
+//
+function ensureHeroFillPreview(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.exists?.() || inst.heroBodyFillApplied) return
+  preloadGlowHeroFilledSprites(inst)
+  if (inst.heroFillPreview?.exists?.()) return
+  const filledPrefix = buildFilledHeroSpritePrefix(hero)
+  inst.heroFillFilledPrefix = filledPrefix
+  inst.heroFillPreview = inst.k.add([
+    inst.k.sprite(`${filledPrefix}_0_0`),
+    inst.k.pos(char.pos.x, char.pos.y),
+    inst.k.anchor('center'),
+    inst.k.scale(char.scale),
+    inst.k.z(char.z + 0.01),
+    inst.k.opacity(0),
+    'heroFillPreview'
+  ])
+}
+//
+// Keeps the preview layer on the same frame / transform as the outline hero.
+//
+function syncHeroFillPreviewSprite(inst) {
+  const hero = inst.heroInst
+  const preview = inst.heroFillPreview
+  const char = hero?.character
+  if (!preview?.exists?.() || !char?.exists?.()) return
+  const outlineKey = Hero.getActiveSpriteKey(hero)
+  const filledKey = mapOutlineSpriteToFilled(
+    outlineKey,
+    hero.spritePrefix,
+    inst.heroFillFilledPrefix
+  )
+  inst.k.getSprite(filledKey) && preview.use(inst.k.sprite(filledKey))
+  preview.pos.x = char.pos.x
+  preview.pos.y = char.pos.y
+  preview.scale = char.scale
+  preview.flipX = char.flipX
+  preview.angle = char.angle ?? 0
+  preview.z = char.z + 0.01
+}
+//
+// Crossfades the hollow hero into a white filled body while the world colours.
+//
+function syncGlowHeroBodyFill(inst) {
+  const fade = glowHeroFillFade(inst)
+  if (inst.heroBodyFillApplied) {
+    clearHeroFillPreview(inst)
+    return
+  }
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.exists?.()) return
+  if (fade <= 0.001) {
+    clearHeroFillPreview(inst)
+    return
+  }
+  if (inst.zones.colorWorld && fade >= 1 - COLOR_CROSSFADE_EPS) {
+    applyGlowHeroBodyFill(inst)
+    return
+  }
+  ensureHeroFillPreview(inst)
+  syncHeroFillPreviewSprite(inst)
+  const preview = inst.heroFillPreview
+  if (!preview?.exists?.()) return
+  char.opacity = 1 - fade
+  preview.opacity = fade
 }
 //
 // Mirrors the sprite prefix formula from hero.js create()/loadHeroSprites().
@@ -7368,10 +7514,13 @@ function buildHeroSpritePrefix(hero) {
   const body = String(hero.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
   const outline = String(hero.outlineColor || CFG.visual.colors.outline).replace('#', '')
   const eyeWhite = hero.eyeWhiteColor ? String(hero.eyeWhiteColor).replace('#', '') : ''
+  const pupil = hero.pupilColor ? String(hero.pupilColor).replace('#', '') : ''
+  const teiSuffix = hero.transparentEyeInterior ? '_tei' : ''
   const rimSuffix = (hero.outlineRimPx || 1) > 1 ? `_or${hero.outlineRimPx}` : ''
   return `${hero.type}_${body}_${outline}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
-    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${rimSuffix}`
+    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${pupil ? '_pu' + pupil : ''}${teiSuffix}`
+    + `${hero.noEyes ? '_noeyes' : ''}${rimSuffix}`
 }
 //
 // Persists the post-L lit-ground beat once the stillness countdown starts.
@@ -7528,7 +7677,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
   const captionTextRgb = glowCaptionTextRgb()
-  const goldCaptionRgb = glowRgb('gold')
+  const letterFillRgb = getRGB(k, HERO_BODY_COLOR)
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
   const afterLines = after.split('\n')
@@ -7582,7 +7731,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   pieces.forEach(piece => {
     const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
-    const textRgb = piece.letterFill ? goldCaptionRgb : captionTextRgb
+    const textRgb = piece.letterFill ? letterFillRgb : captionTextRgb
     const shadowOffset = rotateGlowOffset(
       piece.localX + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
       piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
@@ -7777,24 +7926,19 @@ function playGlowLetterDialogMusic(inst, soundName) {
   birds && (birds.volume = 0)
   Sound.duckBackgroundMusic(birds, CFG.audio.backgroundMusic.dialogMusicDuck)
   const vol = CFG.audio.backgroundMusic.glowLetterDialog
-  const voice = Sound.playInScene(inst.k, soundName, vol)
-  if (voice) {
-    voice.paused = false
-    inst.letterDialogMusic = voice
-    return
-  }
   //
-  // Kaplay asset missing — fall back to HTML5 Audio (same public path as loadSound).
+  // Kaplay k.play() can return null while assets are still loading — play the
+  // glow dialog clips directly via HTML5 Audio (same path as loadSound).
   //
-  const fallback = new Audio(`./sounds/${soundName}.mp3`)
-  fallback.volume = Math.min(1, vol)
+  const voice = new Audio(`./sounds/${soundName}.mp3`)
+  voice.volume = Math.min(1, vol)
   inst.letterDialogMusic = {
     stop() {
-      fallback.pause()
-      fallback.currentTime = 0
+      voice.pause()
+      voice.currentTime = 0
     }
   }
-  fallback.play().catch(() => {})
+  voice.play().catch(() => {})
 }
 //
 // Stops the active letter dialog voice-over, if any.
@@ -8142,9 +8286,13 @@ function startDrowning(inst) {
   Hero.enterCalmPose(inst.heroInst)
   Hero.applyCalmIdleSprite(inst.heroInst)
   //
-  // One water splash take marks the fall into the lake.
+  // One water-steps take marks the fall into the lake (no loop while sinking).
   //
-  Sound.playWaterStepsFootstepKaplay(inst.k, WATER_STEPS_VOLUME, inst.sound)
+  Sound.unmuteProceduralSounds()
+  Sound.resumeGlobalAudio()
+  inst.sound && Sound.resumeAudioContext(inst.sound)
+  Sound.stopWaterStepsLoop(inst.sound)
+  Sound.playWaterStepsOnce(inst.sound, WATER_STEPS_VOLUME)
   revealWaterZone(inst)
   forceWaterEdgeRocksVisible(inst)
   inst.footParticles && GlowFootParticles.clear(inst.footParticles)
@@ -8195,6 +8343,7 @@ function startDrowning(inst) {
 function finishDrowning(inst) {
   if (inst.deathHandled) return
   inst.deathHandled = true
+  inst.sound && Sound.stopWaterStepsLoop(inst.sound)
   inst.drownSinkTween?.cancel?.()
   inst.drownSinkTween = null
   inst.drownLateSink?.cancel?.()
@@ -8821,7 +8970,7 @@ function onUpdate(inst) {
   updatePlatformRevealFade(inst.lPlat, k.dt())
   updatePlatformRevealFade(inst.oPlat, k.dt())
   updatePlatformRevealFade(inst.wPlat, k.dt())
-  inst.colorFade >= 0.5 && !inst.heroGoldApplied && inst.zones.colorWorld && applyColorWorldHero(inst)
+  syncGlowHeroBodyFill(inst)
   updatePlayfieldBorderColors(inst)
   syncGlowPitLevelIndicator(inst)
   //

@@ -128,7 +128,8 @@ export const CFG = {
   // Global debug switches (data only — no game logic here).
   //
   debug: {
-    showPerformanceHud: true
+    showPerformanceHud: true,
+    showGlowHeroAnimDebug: false
   },
   game: {
     moveSpeed: 300,

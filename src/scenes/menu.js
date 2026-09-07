@@ -23,6 +23,8 @@ import {
   MENU_BG_CANVAS_H,
   MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
+import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
+import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -124,6 +126,20 @@ const CHECKMARK_PULSE_SPEED = 1.8
 // Scene-leave cover — sits above menu sprites so anti-heroes do not flash during load
 //
 const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
+const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
+const MENU_ARROW_START_OFFSET = 42
+const MENU_ARROW_END_OFFSET = 42
+const MENU_ARROW_ARC_RADIUS_INSET = 8
+//
+// Glow anti-hero on the menu — same whitish body + dark outline as the
+// playable hero in lesson-glow.0 before the world turns colourful.
+//
+const GLOW_MENU_HERO_BODY = GLOW_PAL.heroBodyGray
+const GLOW_MENU_HERO_OUTLINE = GLOW_PAL.heroOutline
+//
+// Every menu hero (centre + section icons) shares the same white outline.
+//
+const MENU_HERO_OUTLINE_COLOR = GLOW_MENU_HERO_BODY
 const MENU_LEAVE_BG_R = 26
 const MENU_LEAVE_BG_G = 26
 const MENU_LEAVE_BG_B = 26
@@ -402,7 +418,78 @@ export function sceneMenu(k) {
     // Color progression: gray → gold (glow) → teal (touch) → orange (time) → red (word)
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.glow?.completed
-    const heroBodyColor = progress.word?.completed ? "#E74C3C" : progress.time?.completed ? "#FF8C00" : progress.touch?.completed ? CFG.visual.colors.sections.touch.body : progress.glow?.completed ? CFG.visual.colors.sections.glow.body : "#656565"
+    const inGlowPlay = lastLevel && lastLevel.startsWith('lesson-glow')
+    const glowHeroFilled = inGlowPlay && get('glow.collectedO', false)
+    const menuHeroWhite = !progress.touch?.completed || inGlowPlay
+    const grayColor = '#656565'
+    const grayOutlineColor = MENU_HERO_OUTLINE_COLOR
+    const menuOutlineNoHash = MENU_HERO_OUTLINE_COLOR.replace('#', '')
+    const heroBodyColor = menuHeroWhite
+      ? GLOW_MENU_HERO_BODY
+      : progress.word?.completed
+        ? "#E74C3C"
+        : progress.time?.completed
+          ? "#FF8C00"
+          : progress.touch?.completed
+            ? CFG.visual.colors.sections.touch.body
+            : progress.glow?.completed
+              ? CFG.visual.colors.sections.glow.body
+              : "#656565"
+    const menuHeroFilled = inGlowPlay ? glowHeroFilled : menuHeroWhite
+    const menuHeroHasMouth = Boolean(progress.word?.completed) && !inGlowPlay
+    //
+    // Filled glow menu hero uses the dark body outline; hollow keeps the white shell.
+    // Eyes: body-outline ring + matching pupil, transparent socket (same as glow).
+    //
+    const menuHeroOutlineColor = menuHeroWhite && menuHeroFilled
+      ? GLOW_MENU_HERO_OUTLINE
+      : MENU_HERO_OUTLINE_COLOR
+    const menuHeroTransparentEyes = Boolean(menuHeroWhite)
+    const menuHeroPupilColor = menuHeroWhite ? menuHeroOutlineColor : undefined
+    Hero.loadHeroSprites({
+      k,
+      type: Hero.HEROES.HERO,
+      bodyColor: heroBodyColor,
+      outlineColor: menuHeroOutlineColor,
+      outlineOnly: !menuHeroFilled,
+      addMouth: menuHeroHasMouth,
+      addArms: Boolean(progress.touch?.completed),
+      pupilColor: menuHeroPupilColor,
+      transparentEyeInterior: menuHeroTransparentEyes
+    })
+    if (menuHeroWhite) {
+      Hero.loadHeroSprites({
+        k,
+        type: Hero.HEROES.HERO,
+        bodyColor: GLOW_MENU_HERO_BODY,
+        outlineColor: GLOW_MENU_HERO_OUTLINE,
+        pupilColor: GLOW_MENU_HERO_OUTLINE,
+        transparentEyeInterior: true,
+        outlineOnly: false
+      })
+    }
+    menuHeroWhite && !menuHeroFilled && Hero.loadHeroSprites({
+      k,
+      type: Hero.HEROES.HERO,
+      bodyColor: GLOW_MENU_HERO_BODY,
+      outlineColor: MENU_HERO_OUTLINE_COLOR,
+      pupilColor: MENU_HERO_OUTLINE_COLOR,
+      transparentEyeInterior: true,
+      outlineOnly: true,
+      addMouth: menuHeroHasMouth,
+      addArms: Boolean(progress.touch?.completed)
+    })
+    inGlowPlay && !glowHeroFilled && Hero.loadHeroSprites({
+      k,
+      type: Hero.HEROES.HERO,
+      bodyColor: GLOW_MENU_HERO_BODY,
+      outlineColor: MENU_HERO_OUTLINE_COLOR,
+      pupilColor: MENU_HERO_OUTLINE_COLOR,
+      transparentEyeInterior: true,
+      outlineOnly: true,
+      addMouth: menuHeroHasMouth,
+      addArms: Boolean(progress.touch?.completed)
+    })
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -410,10 +497,14 @@ export function sceneMenu(k) {
       type: Hero.HEROES.HERO,
       scale: 5 / 3,
       controllable: false,
-      addMouth: Boolean(progress.word?.completed),
+      addMouth: menuHeroHasMouth,
       addArms: Boolean(progress.touch?.completed),
       bodyColor: heroBodyColor,
-      outlineColor: noSectionsComplete ? "#1A1A1A" : null,
+      outlineOnly: !menuHeroFilled,
+      outlineColor: menuHeroOutlineColor,
+      pupilColor: menuHeroPupilColor,
+      transparentEyeInterior: menuHeroTransparentEyes,
+      idleVocalization: inGlowPlay ? null : undefined,
       //
       // Menu hero always has eyes — including before the glow cave pickup.
       //
@@ -428,6 +519,22 @@ export function sceneMenu(k) {
     if (noSectionsComplete) {
       hero.color = k.rgb(255, 255, 255)
     }
+    if (noSectionsComplete || menuHeroWhite) {
+      hero.color = k.rgb(255, 255, 255)
+    }
+    //
+    // Hollow outline-only anti-hero used for every section icon on the menu.
+    //
+    Hero.loadHeroSprites({
+      k,
+      type: Hero.HEROES.ANTIHERO,
+      bodyColor: grayColor,
+      outlineColor: grayOutlineColor,
+      outlineOnly: true,
+      noEyes: true
+    })
+    const hollowSuffixes = '_outline_noeyes'
+    const spritePrefixHollow = `${Hero.HEROES.ANTIHERO}_${grayColor.replace('#', '')}_${grayOutlineColor.replace('#', '')}${hollowSuffixes}`
     //
     // Create 6 anti-heroes around the main hero (sections)
     //
@@ -449,11 +556,13 @@ export function sceneMenu(k) {
       // For time section when completed, use yellow color
       //
       const grayColor = '#656565'
-      const grayOutlineColor = '#1A1A1A'
+      const grayOutlineColor = MENU_HERO_OUTLINE_COLOR
       const yellowColor = '#FF8C00'  // Anti-hero orange/yellow color (same as hero color in time-complete)
-      const glowGoldColor = CFG.visual.colors.sections.glow.body
       const bodyColor = grayColor  // Always gray for sprite
-      const outlineColor = isCompleted ? CFG.visual.colors.outline : grayOutlineColor
+      const outlineColor = grayOutlineColor
+      const hasMouth = isCompleted && (config.section === 'word' || config.section === 'time')
+      const hasArms = isCompleted && (config.section === 'touch' || config.section === 'word' || config.section === 'time')
+      const hasWatch = isCompleted && config.section === 'time'
       //
       // Create anti-hero for this section
       //
@@ -467,9 +576,11 @@ export function sceneMenu(k) {
         isStatic: true,
         bodyColor,
         outlineColor,
-        addMouth: config.section === 'word' || config.section === 'time',
-        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time',
+        outlineOnly: true,
+        noEyes: !isCompleted,
+        addMouth: hasMouth,
+        addArms: hasArms,
+        addWatch: hasWatch,
         hitboxPadding: 5,
         //
         // Section icon anti-heroes are purely decorative; suppress the
@@ -484,10 +595,11 @@ export function sceneMenu(k) {
         k,
         type: Hero.HEROES.ANTIHERO,
         bodyColor: grayColor,
-        outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word' || config.section === 'time',
-        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time'
+        outlineColor: MENU_HERO_OUTLINE_COLOR,
+        addMouth: hasMouth,
+        addArms: hasArms,
+        addWatch: hasWatch,
+        outlineOnly: true
       })
       //
       // For time section, also preload yellow variant (with mouth, as time now has mouth)
@@ -497,21 +609,23 @@ export function sceneMenu(k) {
           k,
           type: Hero.HEROES.ANTIHERO,
           bodyColor: yellowColor,
-          outlineColor: CFG.visual.colors.outline,
+          outlineColor: MENU_HERO_OUTLINE_COLOR,
           addMouth: true,
           addArms: true,
-          addWatch: true
+          addWatch: true,
+          outlineOnly: true
         })
       }
       if (config.section === 'glow') {
         Hero.loadHeroSprites({
           k,
           type: Hero.HEROES.ANTIHERO,
-          bodyColor: glowGoldColor,
-          outlineColor: CFG.visual.colors.outline,
-          addMouth: false,
-          addArms: false,
-          addWatch: false
+          bodyColor: GLOW_MENU_HERO_BODY,
+          outlineColor: GLOW_MENU_HERO_OUTLINE,
+          addMouth: hasMouth,
+          addArms: hasArms,
+          addWatch: hasWatch,
+          outlineOnly: false
         })
       }
       //
@@ -522,79 +636,107 @@ export function sceneMenu(k) {
         k,
         type: Hero.HEROES.ANTIHERO,
         bodyColor: config.color.body,
-        outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word' || config.section === 'time',
-        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time'
+        outlineColor: MENU_HERO_OUTLINE_COLOR,
+        addMouth: hasMouth,
+        addArms: hasArms,
+        addWatch: hasWatch,
+        outlineOnly: true
       })
       //
       // Cache sprite prefixes for outline switching
       // Remove # from colors to match loadHeroSprites prefix format
       //
       const grayColorNoHash = grayColor.replace('#', '')
-      const grayOutlineColorNoHash = grayOutlineColor.replace('#', '')
-      const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
+      const grayOutlineColorNoHash = menuOutlineNoHash
+      const outlineColorNoHash = menuOutlineNoHash
       const yellowColorNoHash = yellowColor.replace('#', '')
-      const glowGoldColorNoHash = glowGoldColor.replace('#', '')
       const sectionColorNoHash = config.color.body.replace('#', '')
-      const hasMouth = config.section === 'word' || config.section === 'time'
-      const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
-      const hasWatch = config.section === 'time'
-      const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
-      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
-      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch` : null
-      antiHeroInst.spritePrefixGold = config.section === 'glow'
-        ? `${Hero.HEROES.ANTIHERO}_${glowGoldColorNoHash}_${outlineColorNoHash}${suffixes}`
+      const hasMouthSuffix = hasMouth
+      const hasArmsSuffix = hasArms
+      const hasWatchSuffix = hasWatch
+      const featureSuffix = `${hasMouthSuffix ? '_mouth' : ''}${hasArmsSuffix ? '_arms' : ''}${hasWatchSuffix ? '_watch' : ''}`
+      const outlineSuffix = `${featureSuffix}_outline`
+      const glowMenuBodyNoHash = GLOW_MENU_HERO_BODY.replace('#', '')
+      const glowMenuOutlineNoHash = GLOW_MENU_HERO_OUTLINE.replace('#', '')
+      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${outlineSuffix}`
+      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${outlineSuffix}`
+      antiHeroInst.spritePrefixYellow = config.section === 'time'
+        ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch_outline`
         : null
-      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.currentPrefix = antiHeroInst.spritePrefixGray
+      antiHeroInst.spritePrefixGlow = config.section === 'glow'
+        ? `${Hero.HEROES.ANTIHERO}_${glowMenuBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
+        : null
+      antiHeroInst.spritePrefixHollow = spritePrefixHollow
+      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${outlineSuffix}`
+      antiHeroInst.currentPrefix = isCompleted
+        ? (config.section === 'glow' && antiHeroInst.spritePrefixGlow
+          ? antiHeroInst.spritePrefixGlow
+          : antiHeroInst.spritePrefixColored)
+        : spritePrefixHollow
       antiHeroInst.bakeByPrefix = {
         [antiHeroInst.spritePrefixGray]: {
           bodyColor: grayColor,
           outlineColor: grayOutlineColor,
           addMouth: hasMouth,
           addArms: hasArms,
-          addWatch: hasWatch
+          addWatch: hasWatch,
+          outlineOnly: true
         },
         [antiHeroInst.spritePrefixBlack]: {
           bodyColor: grayColor,
-          outlineColor: CFG.visual.colors.outline,
+          outlineColor: MENU_HERO_OUTLINE_COLOR,
           addMouth: hasMouth,
           addArms: hasArms,
-          addWatch: hasWatch
+          addWatch: hasWatch,
+          outlineOnly: true
         },
         [antiHeroInst.spritePrefixColored]: {
           bodyColor: config.color.body,
-          outlineColor: CFG.visual.colors.outline,
-          addMouth: hasMouth,
-          addArms: hasArms,
-          addWatch: hasWatch
+          outlineColor: MENU_HERO_OUTLINE_COLOR,
+          addMouth: hasMouthSuffix,
+          addArms: hasArmsSuffix,
+          addWatch: hasWatchSuffix,
+          outlineOnly: true
         }
       }
       antiHeroInst.spritePrefixYellow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixYellow] = {
         bodyColor: yellowColor,
-        outlineColor: CFG.visual.colors.outline,
+        outlineColor: MENU_HERO_OUTLINE_COLOR,
         addMouth: true,
         addArms: true,
-        addWatch: true
+        addWatch: true,
+        outlineOnly: true
       })
-      antiHeroInst.spritePrefixGold && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGold] = {
-        bodyColor: glowGoldColor,
-        outlineColor: CFG.visual.colors.outline,
+      antiHeroInst.spritePrefixGlow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGlow] = {
+        bodyColor: GLOW_MENU_HERO_BODY,
+        outlineColor: GLOW_MENU_HERO_OUTLINE,
         addMouth: hasMouth,
         addArms: hasArms,
-        addWatch: hasWatch
+        addWatch: hasWatch,
+        outlineOnly: false
       })
+      antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixHollow] = {
+        bodyColor: grayColor,
+        outlineColor: grayOutlineColor,
+        outlineOnly: true,
+        noEyes: true,
+        addMouth: false,
+        addArms: false,
+        addWatch: false
+      }
       //
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
       //
-      if (isCompleted && config.section !== 'glow') {
+      if (config.section === 'glow' && antiHeroInst.spritePrefixGlow) {
+        applyMenuAntiHeroSpritePrefix(antiHeroInst, antiHeroInst.spritePrefixGlow)
+      } else if (isCompleted) {
         const completedPrefix = config.section === 'time'
           ? antiHeroInst.spritePrefixYellow
           : antiHeroInst.spritePrefixColored
         completedPrefix && applyMenuAntiHeroSpritePrefix(antiHeroInst, completedPrefix)
+      } else {
+        applyMenuAntiHeroSpritePrefix(antiHeroInst, spritePrefixHollow)
       }
       //
       // Store base position and phase offsets for floating animation
@@ -613,7 +755,6 @@ export function sceneMenu(k) {
       antiHeroInst.isCompleted = isCompleted
       antiHeroInst.grayColor = grayColor
       antiHeroInst.yellowColor = yellowColor
-      antiHeroInst.glowGoldColor = glowGoldColor
       antiHeroInst.originalBodyColor = bodyColor
       antiHeroInst.baseScale = 1
       
@@ -877,9 +1018,15 @@ export function sceneMenu(k) {
         //
         // Special handling for time section: use yellow when completed or current
         //
-        if (antiHeroInst.section === 'glow') {
-          targetColor = antiHeroInst.grayColor
-          desiredPrefix = antiHeroInst.spritePrefixGray
+        if (!antiHeroInst.isCompleted) {
+          if (antiHeroInst.section === 'glow') {
+            desiredPrefix = antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixColored
+          } else {
+            targetColor = antiHeroInst.grayColor
+            desiredPrefix = antiHeroInst.spritePrefixHollow
+          }
+        } else if (antiHeroInst.section === 'glow') {
+          desiredPrefix = antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixColored
         } else if (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isCurrentSection)) {
           targetColor = antiHeroInst.yellowColor
           desiredPrefix = antiHeroInst.spritePrefixYellow
@@ -1169,6 +1316,10 @@ export function sceneMenu(k) {
         }
       }
     ])
+    //
+    // Glow film grain — same look as lesson-glow.0, drawn over the whole menu.
+    //
+    addGlowFilmGrainOverlayLayer(k, MENU_FILM_GRAIN_Z)
     //
     // Check if there's a saved game
     //
@@ -1507,7 +1658,9 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     //
     const sectionHex = hoveredAntiHero.section === 'time'
       ? '#FF8C00'
-      : hoveredAntiHero.sectionColor
+      : hoveredAntiHero.section === 'glow'
+        ? GLOW_MENU_HERO_BODY
+        : hoveredAntiHero.sectionColor
     const sectionRgb = getRGB(k, sectionHex)
     titleInst.colorR += (sectionRgb.r - titleInst.colorR) * 5 * dt
     titleInst.colorG += (sectionRgb.g - titleInst.colorG) * 5 * dt
@@ -1685,10 +1838,10 @@ function drawScene(inst) {
     const ARROW_OPACITY = 0.78
     const ARROW_WIDTH = 9
     const ARROW_OUTLINE_WIDTH = 2
-    const ARROW_START_OFFSET = 120  // Distance from anti-hero where arrow starts (increased for shorter arrows)
-    const ARROW_END_OFFSET = 120  // Distance to anti-hero where arrow ends (increased for shorter arrows)
+    const ARROW_START_OFFSET = MENU_ARROW_START_OFFSET
+    const ARROW_END_OFFSET = MENU_ARROW_END_OFFSET
     const ARROWHEAD_SIZE = 22  // Arrowhead size
-    const ARC_RADIUS_OFFSET = 5  // How far the arc curves outward (reduced to bring arrows closer to center)
+    const ARC_RADIUS_OFFSET = MENU_ARROW_ARC_RADIUS_INSET
     const ARC_SEGMENTS = 30  // Number of segments for smooth arc
     
     arrows.forEach(({ fromAntiHero, toAntiHero }) => {
@@ -1783,17 +1936,17 @@ function drawScene(inst) {
         arrowAngleSpan = Math.abs(arrowAngleSpan)
       }
       //
-      // Ensure arrow doesn't span more than the space between anti-heroes
+      // Ensure arrow spans most of the arc between the two anti-heroes
       //
-      const maxSpan = Math.PI / 3  // 60 degrees for 6 anti-heroes
+      const maxSpan = Math.abs(angleDiff) * 0.92
       if (arrowAngleSpan > maxSpan) {
         arrowAngleSpan = maxSpan
       }
       
       //
-      // Calculate arc radius (closer to center than anti-heroes)
+      // Arc follows the same ring the anti-heroes sit on
       //
-      const arcRadius = avgDist - 40 + ARC_RADIUS_OFFSET  // Subtract more offset to bring arrows closer to center
+      const arcRadius = avgDist - MENU_ARROW_ARC_RADIUS_INSET + ARC_RADIUS_OFFSET
       
       //
       // Draw arc using multiple line segments
@@ -2062,6 +2215,8 @@ function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
     antiHeroInst.addMouth = bake.addMouth
     antiHeroInst.addArms = bake.addArms
     antiHeroInst.addWatch = bake.addWatch
+    antiHeroInst.outlineOnly = bake.outlineOnly ?? true
+    antiHeroInst.noEyes = bake.noEyes ?? false
     Hero.loadHeroSprites({
       k,
       type: antiHeroInst.type,
@@ -2070,7 +2225,8 @@ function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
       addMouth: bake.addMouth,
       addArms: bake.addArms,
       addWatch: bake.addWatch,
-      outlineOnly: bake.outlineOnly
+      outlineOnly: bake.outlineOnly ?? true,
+      noEyes: bake.noEyes ?? false
     })
   }
   const idleName = `${desiredPrefix}_0_0`
@@ -2262,7 +2418,11 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
   //
   // Time section always uses the anti-hero's orange/yellow, matching the in-game HUD indicator
   //
-  const sectionColor = section === 'time' ? '#FF8C00' : config.color.body
+  const sectionColor = section === 'time'
+    ? '#FF8C00'
+    : section === 'glow'
+      ? GLOW_MENU_HERO_BODY
+      : config.color.body
   //
   // Layout: center the word at (config.x, config.y + 55)
   //
@@ -2285,8 +2445,16 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
   const allObjects = []
   letters.forEach((letter, i) => {
     const isFalling = section === 'touch' && i === TOUCH_H_INDEX
-    const isActive = allLettersActive || (activeLetterIndex >= 0 && i <= activeLetterIndex)
-    const colorHex = isFalling && !isActive ? grayColor : (isActive ? sectionColor : grayColor)
+    let colorHex
+    if (section === 'glow') {
+      //
+      // Only letters actually collected in lesson-glow.0 light up white.
+      //
+      colorHex = get(GLOW_LETTER_KEYS[i], false) ? GLOW_MENU_HERO_BODY : grayColor
+    } else {
+      const isActive = allLettersActive || (activeLetterIndex >= 0 && i <= activeLetterIndex)
+      colorHex = isFalling && !isActive ? grayColor : (isActive ? sectionColor : grayColor)
+    }
     const { r, g, b } = getRGB(k, colorHex)
     const lx = baseX + i * letterStep
     const ly = isFalling ? baseY + fallingExtraY : baseY

@@ -3977,23 +3977,12 @@ export function playSplashSound(instance, volume = 0.3) {
   hissNoise.start(now)
   hissNoise.stop(now + 0.14)
 }
-/**
- * Footsteps / wading in shallow water: prefers Kaplay-loaded water-steps.mp3.
- *
- * @param {Object} k - Kaplay instance
- * @param {number} [volume=0.4] - Playback volume 0..1
- */
-export function playWaterStepsFootstepKaplay(k, volume = 0.4, soundInst = null) {
-  if (soundInst?._glowSfxMuted) return
-  if (globalMuteProceduralSounds) return
-  k?.play?.('water-steps', { volume: Math.min(1, Math.max(0.05, volume)) })
-}
 //
 // Glow shallow water — replay water-steps.mp3 while wading until hero leaves water.
 // Each take gets a random playback speed and volume so the chained loop never
 // sounds mechanical.
 //
-const WATER_STEPS_LOOP_DURATION = 2.1
+const WATER_STEPS_LOOP_DURATION = 1
 const WATER_STEPS_SPEED_MIN = 0.88
 const WATER_STEPS_SPEED_RANGE = 0.24
 const WATER_STEPS_VOLUME_JITTER = 0.3
@@ -4022,6 +4011,18 @@ export function startWaterStepsLoop(instance, volume = 0.42) {
   updateWaterStepsPlayback(instance, true, volume)
 }
 /**
+ * Plays a single water-steps take (no chained replay) — used when the hero
+ * first falls into the glow lake.
+ * @param {Object} instance - Sound instance
+ * @param {number} [volume=0.42] - Playback volume 0..1
+ */
+export function playWaterStepsOnce(instance, volume = 0.42) {
+  if (!instance) return
+  const jitter = 1 + (Math.random() - 0.5) * WATER_STEPS_VOLUME_JITTER
+  const vol = Math.min(1, Math.max(0.05, volume * jitter))
+  playWaterStepsHtml5(vol, 1)
+}
+/**
  * Stops glow water-steps loop playback.
  * @param {Object} instance - Sound instance
  */
@@ -4036,6 +4037,70 @@ export function stopWaterStepsLoop(instance) {
   }
   instance._waterStepsHandle = null
   instance._waterStepsLoopActive = false
+}
+//
+// Plain HTML5 Audio pool for water-steps.mp3 — deliberately bypasses
+// Kaplay's own sound system. Kaplay resolves a named sound through its own
+// asset registry and its own internal AudioContext (both independent from
+// this module and from each other's load timing) and can silently no-op a
+// lookup made while any unrelated background asset is still loading instead
+// of throwing, so a k.play() call here could produce nothing at all with no
+// error to fall back on. A bare <audio> element sidesteps all of that and,
+// once unlocked by any prior user gesture on the page (see
+// unlockWaterStepsAudio below), plays reliably every time.
+//
+const WATER_STEPS_URL = './sounds/water-steps.mp3'
+const WATER_STEPS_POOL_SIZE = 2
+let waterStepsPool = null
+let waterStepsPoolIndex = 0
+//
+// Lazily builds a small rotating pool so back-to-back chained takes never
+// fight over the same element's playback state.
+//
+function getWaterStepsPool() {
+  if (waterStepsPool) return waterStepsPool
+  waterStepsPool = Array.from({ length: WATER_STEPS_POOL_SIZE }, () => {
+    const audio = new Audio(WATER_STEPS_URL)
+    audio.preload = 'auto'
+    return audio
+  })
+  return waterStepsPool
+}
+/**
+ * Unlocks the water-steps HTML5 audio pool. Call once from a real user
+ * gesture (keydown/pointerdown/touchstart) so the drowning sequence's first
+ * chained take is never the very first play() attempt on these elements.
+ */
+export function unlockWaterStepsAudio() {
+  getWaterStepsPool().forEach(audio => {
+    const restoreVolume = audio.volume
+    audio.volume = 0
+    audio.play().then(() => {
+      audio.pause()
+      audio.currentTime = 0
+      audio.volume = restoreVolume
+    }).catch(() => {})
+  })
+}
+//
+// Plays one water-steps take from the pool at the given volume/speed.
+//
+function playWaterStepsHtml5(volume, speed) {
+  const pool = getWaterStepsPool()
+  const audio = pool[waterStepsPoolIndex]
+  waterStepsPoolIndex = (waterStepsPoolIndex + 1) % pool.length
+  audio.pause()
+  audio.currentTime = 0
+  audio.volume = Math.min(1, Math.max(0.05, volume))
+  audio.playbackRate = speed
+  audio.play().catch(() => {})
+  return {
+    duration: WATER_STEPS_LOOP_DURATION,
+    stop() {
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }
 }
 //
 // Glow trampoline lake wading: the clip is 1 s; chain with a short pause
@@ -4104,7 +4169,7 @@ function playTrampWaterStepsOnce(instance) {
 // Plays one water-steps track and schedules the next if still wading.
 //
 function playWaterStepsLoopOnce(instance, volume) {
-  if (!instance._waterStepsWanted || globalMuteProceduralSounds || !instance._k) return
+  if (!instance._waterStepsWanted || !instance._k) return
   if (instance._waterStepsHandle) return
   const k = instance._k
   //
@@ -4114,14 +4179,17 @@ function playWaterStepsLoopOnce(instance, volume) {
   const speed = WATER_STEPS_SPEED_MIN + Math.random() * WATER_STEPS_SPEED_RANGE
   const jitter = 1 + (Math.random() - 0.5) * WATER_STEPS_VOLUME_JITTER
   const vol = Math.min(1, Math.max(0.05, volume * jitter))
-  const handle = k.play('water-steps', { loop: false, volume: vol, speed })
+  const handle = playWaterStepsHtml5(vol, speed)
   if (!handle) return
   instance._waterStepsHandle = handle
   instance._waterStepsLoopActive = true
   //
   // A faster take finishes earlier — scale the chain delay by the speed.
   //
-  k.wait(WATER_STEPS_LOOP_DURATION / speed, () => {
+  const chainDelay = handle.duration
+    ? handle.duration / speed
+    : WATER_STEPS_LOOP_DURATION / speed
+  k.wait(chainDelay, () => {
     if (instance._waterStepsHandle !== handle) return
     instance._waterStepsHandle = null
     instance._waterStepsLoopActive = false

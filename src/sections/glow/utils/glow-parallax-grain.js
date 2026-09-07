@@ -129,3 +129,83 @@ function grainNoise(seed, bx, by) {
 function clamp255(v) {
   return v < 0 ? 0 : v > 255 ? 255 : v | 0
 }
+//
+// Full-screen film-grain overlay for non-baked scenes (menu, ready) — tiles
+// the same luminance noise as the glow bake pass across the whole viewport.
+//
+const GRAIN_OVERLAY_TILE = 256
+const GRAIN_OVERLAY_SPRITE = 'glow-film-grain-tile'
+const GRAIN_OVERLAY_OPACITY = 0.28
+let grainOverlayTileCanvas = null
+//
+// Bakes one repeatable grain tile for the runtime overlay.
+//
+function buildGrainOverlayTile() {
+  if (grainOverlayTileCanvas) return grainOverlayTileCanvas
+  const size = GRAIN_OVERLAY_TILE
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const imageData = ctx.createImageData(size, size)
+  const px = imageData.data
+  const { strength, seed, blockSize } = GLOW_FILM_GRAIN
+  const block = Math.max(1, blockSize | 0)
+  for (let y = 0; y < size; y++) {
+    const by = (y / block) | 0
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4
+      const bx = (x / block) | 0
+      const n = grainNoise(seed, bx, by) * strength
+      const v = clamp255(128 + n * 2.2)
+      px[i] = v
+      px[i + 1] = v
+      px[i + 2] = v
+      px[i + 3] = 255
+    }
+  }
+  ctx.putImageData(imageData, 0, 0)
+  grainOverlayTileCanvas = canvas
+  return canvas
+}
+//
+// Loads the grain tile sprite once per Kaplay instance.
+//
+export function ensureGlowFilmGrainOverlaySprite(k) {
+  if (k.getSprite(GRAIN_OVERLAY_SPRITE)) return
+  k.loadSprite(GRAIN_OVERLAY_SPRITE, buildGrainOverlayTile())
+}
+//
+// Draws the grain tile across the full viewport (call from a fixed draw layer).
+//
+export function drawGlowFilmGrainOverlay(k) {
+  ensureGlowFilmGrainOverlaySprite(k)
+  const w = k.width()
+  const h = k.height()
+  const tile = GRAIN_OVERLAY_TILE
+  for (let y = 0; y < h; y += tile) {
+    for (let x = 0; x < w; x += tile) {
+      k.drawSprite({
+        sprite: GRAIN_OVERLAY_SPRITE,
+        pos: k.vec2(x, y),
+        width: tile,
+        height: tile,
+        opacity: GRAIN_OVERLAY_OPACITY,
+        fixed: true
+      })
+    }
+  }
+}
+/**
+ * Adds a fixed full-screen film-grain layer on top of the scene.
+ * @param {Object} k - Kaplay instance
+ * @param {number} zIndex - Draw order (above gameplay/UI, below leave covers)
+ */
+export function addGlowFilmGrainOverlayLayer(k, zIndex) {
+  ensureGlowFilmGrainOverlaySprite(k)
+  k.add([
+    k.fixed(),
+    k.z(zIndex),
+    { draw() { drawGlowFilmGrainOverlay(k) } }
+  ])
+}

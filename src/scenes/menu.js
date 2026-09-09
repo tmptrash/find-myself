@@ -419,7 +419,7 @@ export function sceneMenu(k) {
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.glow?.completed
     const inGlowPlay = lastLevel && lastLevel.startsWith('lesson-glow')
-    const glowHeroFilled = inGlowPlay && get('glow.collectedO', false)
+    const glowHeroFilled = inGlowPlay && (get('glow.revealedO', false) || get('glow.collectedO', false))
     const menuHeroWhite = !progress.touch?.completed || inGlowPlay
     const grayColor = '#656565'
     const grayOutlineColor = MENU_HERO_OUTLINE_COLOR
@@ -438,14 +438,17 @@ export function sceneMenu(k) {
     const menuHeroFilled = inGlowPlay ? glowHeroFilled : menuHeroWhite
     const menuHeroHasMouth = Boolean(progress.word?.completed) && !inGlowPlay
     //
-    // Filled glow menu hero uses the dark body outline; hollow keeps the white shell.
-    // Eyes: body-outline ring + matching pupil, transparent socket (same as glow).
+    // Filled glow menu hero uses the dark body outline and standard white eyes
+    // with black pupils; hollow keeps the white shell with transparent sockets.
     //
     const menuHeroOutlineColor = menuHeroWhite && menuHeroFilled
       ? GLOW_MENU_HERO_OUTLINE
       : MENU_HERO_OUTLINE_COLOR
-    const menuHeroTransparentEyes = Boolean(menuHeroWhite)
-    const menuHeroPupilColor = menuHeroWhite ? menuHeroOutlineColor : undefined
+    const menuHeroTransparentEyes = menuHeroWhite && !menuHeroFilled
+    const menuHeroEyeWhite = menuHeroFilled ? CFG.visual.colors.hero.eyeWhite : undefined
+    const menuHeroPupilColor = menuHeroFilled
+      ? CFG.visual.colors.hero.eyePupil
+      : (menuHeroWhite ? menuHeroOutlineColor : undefined)
     Hero.loadHeroSprites({
       k,
       type: Hero.HEROES.HERO,
@@ -454,6 +457,7 @@ export function sceneMenu(k) {
       outlineOnly: !menuHeroFilled,
       addMouth: menuHeroHasMouth,
       addArms: Boolean(progress.touch?.completed),
+      eyeWhiteColor: menuHeroEyeWhite,
       pupilColor: menuHeroPupilColor,
       transparentEyeInterior: menuHeroTransparentEyes
     })
@@ -463,8 +467,9 @@ export function sceneMenu(k) {
         type: Hero.HEROES.HERO,
         bodyColor: GLOW_MENU_HERO_BODY,
         outlineColor: GLOW_MENU_HERO_OUTLINE,
-        pupilColor: GLOW_MENU_HERO_OUTLINE,
-        transparentEyeInterior: true,
+        eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
+        pupilColor: CFG.visual.colors.hero.eyePupil,
+        transparentEyeInterior: false,
         outlineOnly: false
       })
     }
@@ -502,6 +507,7 @@ export function sceneMenu(k) {
       bodyColor: heroBodyColor,
       outlineOnly: !menuHeroFilled,
       outlineColor: menuHeroOutlineColor,
+      eyeWhiteColor: menuHeroEyeWhite,
       pupilColor: menuHeroPupilColor,
       transparentEyeInterior: menuHeroTransparentEyes,
       idleVocalization: inGlowPlay ? null : undefined,

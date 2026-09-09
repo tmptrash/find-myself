@@ -6,6 +6,7 @@ import { initTouchInput } from '../../../utils/touch-input.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerGlowNativeTeardown } from '../../../utils/engine-switch.js'
+import { yieldForGpu } from '../../../utils/boot-loader.js'
 import { MENU_BG_FRONT_LEAF_RGB } from '../../../utils/menu-bg-generator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
@@ -870,17 +871,22 @@ const HERO_OUTLINE_COLOR = GLOW_PAL.heroOutline
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
 //
-// Hollow/filled glow eyes: white body-outline ring + matching pupil, clear socket.
+// Hollow glow eyes: outline ring + matching pupil, clear socket.
+// Filled glow eyes: white sclera + black pupils (standard hero bake).
 //
 function getGlowHeroEyeBakeColors(outlineOnly) {
-  const outline = outlineOnly ? HERO_HOLLOW_OUTLINE_COLOR : HERO_OUTLINE_COLOR
+  if (outlineOnly) {
+    return {
+      pupilColor: HERO_HOLLOW_OUTLINE_COLOR,
+      transparentEyeInterior: true
+    }
+  }
   return {
-    pupilColor: outline,
-    transparentEyeInterior: true
+    eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
+    pupilColor: CFG.visual.colors.hero.eyePupil,
+    transparentEyeInterior: false
   }
 }
-const GLOW_HERO_SCALE = 1.2
-const GLOW_HERO_OUTLINE_RIM = 2
 //
 // Zone persistence keys (glow.* prefix).
 //
@@ -1523,23 +1529,33 @@ export function sceneGlowLevel0(k) {
  * @param {Object} k - Kaplay instance
  * @param {Function} [onProgress] - 0–100 bake progress
  */
-export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
+export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   recomputeGlowScreenLayout(k)
+  onProgress?.(5)
+  await yieldForGpu(1)
   const zones = loadGlowZones()
   const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, ROOT_MAX_Y, TREE_ROOT_START_Y)
   const prewarmSegmentSave = get(KEY_TREE_SEGMENTS_REVEALED, [])
   const prewarmMonolith = zones.tree && !(Array.isArray(prewarmSegmentSave) && prewarmSegmentSave.length > 0)
+  onProgress?.(12)
+  await yieldForGpu(1)
   if (prewarmMonolith) {
     bakeMonolithicGlowTreeSprites(k, treeData)
-    onProgress?.(50)
+    onProgress?.(42)
   } else {
     const plan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
     const ids = TreeSegments.allGlowTreeSegmentIds(treeData, plan)
     TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, ids)
-    onProgress?.(70)
+    onProgress?.(48)
   }
+  await yieldForGpu(1)
+  onProgress?.(55)
   const undergroundSpec = loadUndergroundSprites(k)
+  onProgress?.(68)
+  await yieldForGpu(1)
   buildParallaxSprites(k, undergroundSpec)
+  onProgress?.(78)
+  await yieldForGpu(1)
   //
   // Gray hero frames (outline + filled) bake here so spawn / body-fill fade
   // never hitch the main thread mid-gameplay.
@@ -1550,17 +1566,17 @@ export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     ...getGlowHeroEyeBakeColors(true),
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
-    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
     outlineOnly: true,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
+  onProgress?.(90)
+  await yieldForGpu(1)
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
     ...getGlowHeroEyeBakeColors(false),
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
-    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
   onProgress?.(100)
@@ -1776,7 +1792,7 @@ function initGlowLevel0Scene(k) {
       Sound.stopAmbient(sound)
       k.camScale(1)
     })
-    const heroStartFilled = zones.colorWorld
+    const heroStartFilled = zones.colorWorld || zones.oZone
     const heroEyes = getGlowHeroEyeBakeColors(!heroStartFilled)
     const heroInst = Hero.create({
       k,
@@ -1785,11 +1801,9 @@ function initGlowLevel0Scene(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      scale: GLOW_HERO_SCALE,
       bodyColor: HERO_BODY_COLOR,
       outlineColor: heroStartFilled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
       ...heroEyes,
-      outlineRimPx: GLOW_HERO_OUTLINE_RIM,
       outlineOnly: !heroStartFilled,
       currentLevel: 'lesson-glow.0',
       noEyes: !zones.eyesCollected,
@@ -2608,7 +2622,8 @@ function createSmallHeroTooltip(inst) {
       height: MUD_TOOLTIP_SIZE,
       text: MUD_TOOLTIP_TEXT,
       offsetY: MUD_TOOLTIP_Y_OFFSET,
-      visible: () => isGlowEyesGameplayUnlocked(inst.zones) &&
+      visible: () => inst.zones.gCollected &&
+        isGlowEyesGameplayUnlocked(inst.zones) &&
         inst.mudZoneX1 != null &&
         !inst.dialogOpen
     }, {
@@ -7338,8 +7353,9 @@ function applyGlowHeroBodyFill(inst) {
   hero.outlineOnly = false
   hero.bodyColor = String(HERO_BODY_COLOR).replace('#', '')
   hero.outlineColor = String(HERO_OUTLINE_COLOR).replace('#', '')
-  hero.pupilColor = String(HERO_OUTLINE_COLOR).replace('#', '')
-  hero.transparentEyeInterior = true
+  hero.eyeWhiteColor = CFG.visual.colors.hero.eyeWhite
+  hero.pupilColor = String(CFG.visual.colors.hero.eyePupil).replace('#', '')
+  hero.transparentEyeInterior = false
   hero.spritePrefix = buildHeroSpritePrefix(hero)
   Hero.loadHeroSprites(hero)
   Hero.syncPlatformLanding(hero)
@@ -7397,7 +7413,6 @@ function preloadGlowHeroFilledSprites(inst) {
     ...getGlowHeroEyeBakeColors(false),
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
-    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
     outlineOnly: false,
     noEyes: bakedNoEyes,
     addMouth: hero.addMouth,
@@ -7412,21 +7427,27 @@ function preloadGlowHeroFilledSprites(inst) {
 // Sprite prefix for the filled hero — same flags as the live inst, no outline.
 //
 function buildFilledHeroSpritePrefix(hero) {
+  const eyeColors = getGlowHeroEyeBakeColors(false)
   return buildHeroSpritePrefix({
     ...hero,
+    ...eyeColors,
     outlineOnly: false,
     bodyColor: String(HERO_BODY_COLOR).replace('#', ''),
     outlineColor: String(HERO_OUTLINE_COLOR).replace('#', '')
   })
 }
 //
-// Maps the live outline sprite key to its filled-body twin.
+// Maps the live outline sprite key to its filled-body twin. Returns null on
+// any mismatch instead of guessing a fallback pose — showing the filled
+// preview in the wrong pose (e.g. a static frame while the hollow hero
+// keeps running) exposes the hollow layer's own light-coloured outline as a
+// stray limb-shaped fringe next to the solid body.
 //
 function mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix) {
   if (outlineKey && outlinePrefix && filledPrefix && outlineKey.startsWith(outlinePrefix)) {
     return filledPrefix + outlineKey.slice(outlinePrefix.length)
   }
-  return `${filledPrefix}_0_0`
+  return null
 }
 //
 // Destroys the filled-body preview layer and restores outline opacity.
@@ -7460,25 +7481,30 @@ function ensureHeroFillPreview(inst) {
 }
 //
 // Keeps the preview layer on the same frame / transform as the outline hero.
+// Returns true only when the preview now shows the exact same pose as the
+// live hollow hero this frame — the caller must not fade this layer in on a
+// mismatch, or the frozen/wrong pose reads as a stray limb next to the body.
 //
 function syncHeroFillPreviewSprite(inst) {
   const hero = inst.heroInst
   const preview = inst.heroFillPreview
   const char = hero?.character
-  if (!preview?.exists?.() || !char?.exists?.()) return
+  if (!preview?.exists?.() || !char?.exists?.()) return false
   const outlineKey = Hero.getActiveSpriteKey(hero)
   const filledKey = mapOutlineSpriteToFilled(
     outlineKey,
     hero.spritePrefix,
     inst.heroFillFilledPrefix
   )
-  inst.k.getSprite(filledKey) && preview.use(inst.k.sprite(filledKey))
+  const matched = Boolean(filledKey && inst.k.getSprite(filledKey))
+  matched && preview.use(inst.k.sprite(filledKey))
   preview.pos.x = char.pos.x
   preview.pos.y = char.pos.y
   preview.scale = char.scale
   preview.flipX = char.flipX
   preview.angle = char.angle ?? 0
   preview.z = char.z + 0.01
+  return matched
 }
 //
 // Crossfades the hollow hero into a white filled body while the world colours.
@@ -7501,11 +7527,16 @@ function syncGlowHeroBodyFill(inst) {
     return
   }
   ensureHeroFillPreview(inst)
-  syncHeroFillPreviewSprite(inst)
+  const poseMatched = syncHeroFillPreviewSprite(inst)
   const preview = inst.heroFillPreview
   if (!preview?.exists?.()) return
-  char.opacity = 1 - fade
-  preview.opacity = fade
+  //
+  // Only cross-fade when the preview mirrors the hollow hero's exact pose —
+  // otherwise keep the hollow hero fully visible and the preview hidden so a
+  // stale/mismatched frame never blends in as a stray limb.
+  //
+  char.opacity = poseMatched ? 1 - fade : 1
+  preview.opacity = poseMatched ? fade : 0
 }
 //
 // Mirrors the sprite prefix formula from hero.js create()/loadHeroSprites().
@@ -7516,7 +7547,7 @@ function buildHeroSpritePrefix(hero) {
   const eyeWhite = hero.eyeWhiteColor ? String(hero.eyeWhiteColor).replace('#', '') : ''
   const pupil = hero.pupilColor ? String(hero.pupilColor).replace('#', '') : ''
   const teiSuffix = hero.transparentEyeInterior ? '_tei' : ''
-  const rimSuffix = (hero.outlineRimPx || 1) > 1 ? `_or${hero.outlineRimPx}` : ''
+  const rimSuffix = (hero.outlineRimPx || 2) > 2 ? `_or${hero.outlineRimPx}` : ''
   return `${hero.type}_${body}_${outline}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
     + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${pupil ? '_pu' + pupil : ''}${teiSuffix}`
@@ -8790,10 +8821,7 @@ function updateGlowCamera(inst) {
   if (updateCameraLetterPeek(inst, ch)) return
   GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y)
   !inst.heroInst?.isSubmerging &&
-    GlowCamera.alignHeroToScreenPixels(inst.camera, inst.heroInst, {
-      playfieldCenterX: LEFT_MARGIN + VIEW_W / 2,
-      playfieldCenterY: inst.camera.fixedCamY
-    })
+    GlowCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
 //
 // First visit with no explored zones: ease the camera from a tight view to full width.
@@ -9155,7 +9183,14 @@ function onUpdate(inst) {
   inst.wasHeroRunning = hero.isRunning
   syncBranchPlatHome(inst)
   if (char.hidden) char.hidden = false
-  if (typeof char.opacity === 'number' && char.opacity < 1 && inst.heroSpawnFade <= 0) {
+  //
+  // Never override opacity while the body-fill crossfade is running — it
+  // deliberately holds the hollow layer below 1 so the filled preview can
+  // show through. Stomping it back to 1 here doubled-exposed both layers
+  // at once, which read as a stray light-coloured contour beside the body.
+  //
+  if (typeof char.opacity === 'number' && char.opacity < 1 && inst.heroSpawnFade <= 0 &&
+    !inst.heroFillPreview?.exists?.()) {
     char.opacity = 1
   }
   !(inst.dialogInputGrace > 0) && !(inst.dialogPostSettle > 0) &&
@@ -11107,7 +11142,10 @@ function updateCameraLetterPeek(inst, ch) {
     const eased = 1 - (1 - t) * (1 - t)
     const fromX = clampCamX(peek.returnX)
     const toX = clampCamX(peek.targetX)
-    k.camPos(Math.round(fromX + (toX - fromX) * eased), cam.fixedCamY)
+    GlowCamera.setCamPosForPixelAlignedSubjectX(
+      k, ch.pos.x, fromX + (toX - fromX) * eased, cam.fixedCamY
+    )
+    GlowCamera.snapHeroScreenY(k, inst.heroInst, k.camPos().y)
     if (t >= 1) {
       peek.phase = 'hold'
       peek.elapsed = 0
@@ -11115,7 +11153,8 @@ function updateCameraLetterPeek(inst, ch) {
     return true
   }
   if (peek.phase === 'hold') {
-    k.camPos(Math.round(clampCamX(peek.targetX)), cam.fixedCamY)
+    GlowCamera.setCamPosForPixelAlignedSubjectX(k, ch.pos.x, clampCamX(peek.targetX), cam.fixedCamY)
+    GlowCamera.snapHeroScreenY(k, inst.heroInst, k.camPos().y)
     if (peek.elapsed >= L_LETTER_PEEK_HOLD) {
       peek.phase = 'return'
       peek.elapsed = 0
@@ -11126,7 +11165,10 @@ function updateCameraLetterPeek(inst, ch) {
   const eased = 1 - (1 - t) * (1 - t)
   const fromX = clampCamX(peek.targetX)
   const toX = clampCamX(peek.returnX)
-  k.camPos(Math.round(fromX + (toX - fromX) * eased), cam.fixedCamY)
+  GlowCamera.setCamPosForPixelAlignedSubjectX(
+    k, ch.pos.x, fromX + (toX - fromX) * eased, cam.fixedCamY
+  )
+  GlowCamera.snapHeroScreenY(k, inst.heroInst, k.camPos().y)
   if (t >= 1) {
     inst.cameraLetterPeek = null
     GlowCamera.followHero(cam, ch.pos.x, ch.pos.y)

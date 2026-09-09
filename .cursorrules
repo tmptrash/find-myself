@@ -900,6 +900,29 @@ function onUpdate(inst) {
 
 ---
 
+## 16. Film grain (baked sprites)
+
+Every canvas-baked sprite or texture in the game must carry the same film-grain look used in the glow section — never ship a flat, grain-free bake when the surrounding art is grained.
+
+### Bake-time grain (preferred)
+
+- Import `applyGlowFilmGrainToCanvas` from `src/sections/glow/utils/glow-parallax-grain.js`.
+- Run it **once per baked canvas** before `k.loadSprite()` — either call it directly after drawing, or pass it as `postBakeCanvas` / `heroPostBakeCanvas` / `hudPostBakeCanvas` so `commitHeroBakedSprite` applies it automatically.
+- Use a **unique `seedOffset` per sprite** (name hash, index, world position) so grain tiles do not align across instances.
+- Constants live in `GLOW_FILM_GRAIN` in the same module; caption-sized text may use `applyGlowCaptionGrainToCanvas` / `GLOW_CAPTION_FILM_GRAIN`.
+
+### Scene overlay grain
+
+- For full-screen grain on top of live rendering (menu, ready, glow HUD), use `addGlowFilmGrainOverlayLayer(k, zIndex)` from the same module.
+
+### Rules
+
+- Do not add a second, ad-hoc noise pass — reuse `applyGlowFilmGrainToCanvas` or the overlay layer.
+- Procedural / Kaplay primitive draws that are not baked must still sit under the scene overlay when the scene uses one.
+- Hero and decor: only **body color**, **outline color**, and glow-specific eye bake flags may differ between sections; silhouette bake (`outlineRimPx`, hip shelves, run lean) stays shared via `hero.js` — do not fork drawing logic per section.
+
+---
+
 ## Notes
 
 - Follow these patterns consistently across the codebase

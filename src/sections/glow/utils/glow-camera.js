@@ -146,20 +146,68 @@ export function followHero(inst, heroX, heroY) {
   const halfViewW = inst.viewW / (2 * zoom)
   const minCamX = inst.leftMargin + halfViewW
   const maxCamX = inst.worldW - inst.rightMargin - halfViewW
-  const camX = Math.max(minCamX, Math.min(maxCamX, heroX))
-  let camY = inst.fixedCamY
+  const desiredCamX = Math.max(minCamX, Math.min(maxCamX, heroX))
+  let desiredCamY = inst.fixedCamY
   if (inst.introZoomActive && heroY != null) {
     if (inst.introPhase === 'hold') {
-      camY = heroY
+      desiredCamY = heroY
     } else {
       const t = Math.min(1, inst.introZoomElapsed / inst.introZoomDuration)
       const eased = 1 - (1 - t) * (1 - t)
-      camY = heroY + (inst.fixedCamY - heroY) * eased
+      desiredCamY = heroY + (inst.fixedCamY - heroY) * eased
     }
   }
   const shakeX = inst.shakeOffsetX ?? 0
   const shakeY = inst.shakeOffsetY ?? 0
-  inst.k.camPos(Math.round(camX + shakeX), Math.round(camY + shakeY))
+  const k = inst.k
+  let camX = alignCamXForSubject(k, heroX, desiredCamX + shakeX)
+  let camY = desiredCamY + shakeY
+  if (inst.introZoomActive && heroY != null) {
+    camY = alignCamYForSubject(k, heroY, desiredCamY + shakeY)
+  }
+  k.camPos(camX, camY)
+}
+/**
+ * Sets camera position so a world subject lands on an integer screen pixel.
+ * Use during scripted pans (letter peek) while the hero must stay crisp.
+ * @param {Object} k - Kaplay instance
+ * @param {number} subjectX - World X of the subject to pixel-align (hero)
+ * @param {number} subjectY - World Y of the subject to pixel-align (hero)
+ * @param {number} desiredCamX - Target camera X before alignment
+ * @param {number} desiredCamY - Target camera Y before alignment
+ */
+export function setCamPosForPixelAlignedSubject(k, subjectX, subjectY, desiredCamX, desiredCamY) {
+  k.camPos(
+    alignCamXForSubject(k, subjectX, desiredCamX),
+    alignCamYForSubject(k, subjectY, desiredCamY)
+  )
+}
+/**
+ * Pixel-aligns only camera X so a subject stays crisp during scripted pans
+ * while camera Y remains fixed (letter peek, intro hold).
+ * @param {Object} k - Kaplay instance
+ * @param {number} subjectX - World X of the subject to pixel-align
+ * @param {number} desiredCamX - Target camera X before alignment
+ * @param {number} camY - Camera Y to keep unchanged
+ */
+export function setCamPosForPixelAlignedSubjectX(k, subjectX, desiredCamX, camY) {
+  k.camPos(alignCamXForSubject(k, subjectX, desiredCamX), camY)
+}
+/**
+ * Nudges the hero onto the vertical screen-pixel grid without moving the
+ * camera — keeps the map from bobbing vertically during jumps.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {number} camY - Current camera world Y
+ */
+export function snapHeroScreenY(k, heroInst, camY) {
+  const ch = heroInst?.character
+  if (!ch?.pos || heroInst?.isSubmerging) return
+  const halfH = k.height() / 2
+  const screenY = ch.pos.y - camY + halfH
+  const target = Math.round(screenY)
+  const delta = target - screenY
+  delta !== 0 && (ch.pos.y += delta)
 }
 export function getParallaxLayerPad(inst, speed, horizBleed = 0) {
   const maxScroll = inst.maxCamX - inst.minCamX
@@ -175,25 +223,17 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
   return -pad + scroll * (1 - speed)
 }
 //
-// Nudges the hero onto the screen pixel grid so the 1 px outline stays crisp
-// while idle (camera + body rounding alone can leave a sub-pixel screen offset).
+// Kaplay maps world to screen as (subject - camPos) + screenSize/2. When the
+// window is an odd width the screen centre is fractional (e.g. 960.5), so
+// camPos === subject still lands the hero on a half-pixel column and the 1 px
+// outline shimmers — most visible while running. Offset camPos so the subject
+// renders on an integer screen coordinate instead.
 //
-export function alignHeroToScreenPixels(inst, heroInst, screenCfg) {
-  const ch = heroInst?.character
-  if (!ch?.pos) return
-  const k = inst.k
-  const cam = k.camPos()
-  const zoom = inst.zoom || 1
+function alignCamXForSubject(k, subjectX, desiredCamX) {
   const halfW = k.width() / 2
+  return subjectX + halfW - Math.round(subjectX - desiredCamX + halfW)
+}
+function alignCamYForSubject(k, subjectY, desiredCamY) {
   const halfH = k.height() / 2
-  const centerX = screenCfg?.playfieldCenterX ?? halfW
-  const centerY = screenCfg?.playfieldCenterY ?? halfH
-  const screenX = (ch.pos.x - cam.x) * zoom + centerX
-  const screenY = (ch.pos.y - cam.y) * zoom + centerY
-  const targetScreenX = Math.round(screenX)
-  const targetScreenY = Math.round(screenY)
-  ch.pos.y = cam.y + (targetScreenY - centerY) / zoom
-  if (!heroInst.isRunning) {
-    ch.pos.x = cam.x + (targetScreenX - centerX) / zoom
-  }
+  return subjectY + halfH - Math.round(subjectY - desiredCamY + halfH)
 }

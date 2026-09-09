@@ -149,9 +149,7 @@ export async function ensureEngineForScene(sceneName, opts = {}) {
   activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
   staleEngine && teardownEngine(staleEngine)
   const freshEngine = await bootEngine(neededMode)
-  if (loaderDuringBoot) {
-    BootLoader.setLoaderBarPct(100)
-  } else {
+  if (!loaderDuringBoot) {
     loaderTimer && clearTimeout(loaderTimer)
     loaderShown && BootLoader.hideLoader()
   }

@@ -5,6 +5,13 @@
 //
 const GRAIN_ALPHA_MIN = 8
 //
+// Film grain must not brighten the outline rim — noise on dark ink pixels
+// reads as a grey fringe between the light body and the outer contour.
+// Perceptual luminance (not a flat per-channel cap) so hued dark outlines
+// like glow's bluish-gray rim (#2f3b3d, luminance ~56) are still protected.
+//
+const GRAIN_OUTLINE_LUM_MAX = 90
+//
 // Shared film-grain look for every glow bake (matches the near parallax row).
 //
 export const GLOW_FILM_GRAIN = {
@@ -95,6 +102,8 @@ function applyFilmGrainToContext(ctx, width, height, cfg) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4
       if (px[i + 3] < inkAlphaMin) continue
+      const luminance = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+      if (luminance < GRAIN_OUTLINE_LUM_MAX) continue
       const bx = (x / block) | 0
       const n = grainNoise(seed, bx, by) * strength
       px[i] = clamp255(px[i] + n)

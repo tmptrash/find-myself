@@ -154,8 +154,9 @@ async function applyPack(k, packKey, sceneName) {
     return
   }
   if (packKey === 'glow') {
-    BootLoader.setLoaderBarPct(85)
-    await BootLoader.yieldForGpu(2)
+    //
+    // Glow GPU work runs in prewarmGlowLevel0HeavyAssets — no bar jump here.
+    //
     return
   }
   if (packKey === 'word') {

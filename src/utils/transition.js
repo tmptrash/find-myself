@@ -429,13 +429,22 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   async function prepareNativePrelevelAssets() {
+    const reportLoad = (pct) => BootLoader.setLoaderBarPct(pct)
     try {
+      reportLoad(5)
       await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true, deferLoaderReveal: true })
+      if (inst.skipped) return
+      reportLoad(12)
+      await BootLoader.yieldForGpu(1)
       if (inst.skipped) return
       transitionInterval?.cancel?.()
       overlay.exists() && transitionK.destroy(overlay)
       transitionK._transitionOverlay = null
+      reportLoad(18)
       await ensureEngineForScene(nextLevel, { loaderDuringBoot: true })
+      if (inst.skipped) return
+      reportLoad(28)
+      await BootLoader.yieldForGpu(1)
       if (inst.skipped) return
       onEngineResolutionSwapped()
       transitionK = getActiveEngine()
@@ -451,10 +460,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       transitionK._transitionOverlay = overlay
       bindTransitionEngine(transitionK)
       if (nextLevel === GLOW_PRELEVEL_SCENE) {
-        BootLoader.setLoaderBarPct(55)
-        prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+        reportLoad(32)
+        await prewarmGlowLevel0HeavyAssets(transitionK, bakedPct => {
+          reportLoad(32 + Math.round(bakedPct * 0.63))
+        })
       }
-      BootLoader.setLoaderBarPct(100)
+      reportLoad(100)
     } finally {
       !inst.skipped && (inst.assetPrepareDone = true)
     }

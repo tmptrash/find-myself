@@ -780,7 +780,7 @@ export function sceneLesson0(k) {
     })
     k.setBackground(k.rgb(L0_PLAYFIELD_BG_R, L0_PLAYFIELD_BG_G, L0_PLAYFIELD_BG_B))
     k.camScale(1)
-    k.camPos(Math.round(camera.minCamX), camera.fixedCamY)
+    GlowCamera.setCamPosForPixelAlignedSubjectX(k, HERO_SPAWN_X, camera.minCamX, camera.fixedCamY)
     createScrollingCloudBand(k, {
       areaLeft: LEFT_MARGIN,
       areaRight: WORLD_W - RIGHT_MARGIN,
@@ -6136,16 +6136,14 @@ function drawClippedParallaxSprite(k, spriteName, drawX, canvasW) {
   })
 }
 //
-// Horizontal camera follow + idle pixel snap so the 1 px hero outline stays crisp.
+// Horizontal camera follow — followHero snaps the camera to the screen-pixel
+// grid so the 1 px hero outline stays crisp in every state.
 //
 function updateTouchLesson0Camera(camera, heroInst) {
   const ch = heroInst?.character
   if (!ch?.pos || !camera) return
   GlowCamera.followHero(camera, ch.pos.x, ch.pos.y)
-  GlowCamera.alignHeroToScreenPixels(camera, heroInst, {
-    playfieldCenterX: LEFT_MARGIN + VIEW_W / 2,
-    playfieldCenterY: camera.fixedCamY
-  })
+  GlowCamera.snapHeroScreenY(camera.k, heroInst, camera.k.camPos().y)
 }
 function onUpdateLesson0Frame(k, camera, heroInst, ctx) {
   updateTouchLesson0Camera(camera, heroInst)

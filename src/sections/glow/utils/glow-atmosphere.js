@@ -1237,6 +1237,26 @@ export function collapseGlowPitForEyeIntro(pit) {
   collapsePit(pit)
 }
 /**
+ * Re-opens the cave pit after a level reload when it was collapsed before
+ * leave but the persisted flag was missing.
+ * @param {Object} pit - Pit state
+ * @param {boolean} [forEyeIntro=false] - Eyeless intro outline-only collapse
+ */
+export function ensureGlowPitCollapsedOnReload(pit, forEyeIntro = false) {
+  if (!pit || pit.collapsed) return
+  forEyeIntro ? collapseGlowPitForEyeIntro(pit) : collapsePit(pit)
+}
+/**
+ * Restores outline-only cave rendering during the eyeless intro arc.
+ * @param {Object} pit - Pit state
+ */
+export function restoreGlowPitEyeIntroInterior(pit) {
+  if (!pit?.collapsed) return
+  pit.outlineOnlyMode = true
+  pit.skipPitBonus = true
+  pit.cracksVisible = true
+}
+/**
  * World position where the cave bonus fragment (and eye pickup) sits.
  * @param {Object} pit - Pit state
  * @returns {{ x: number, y: number }|null}

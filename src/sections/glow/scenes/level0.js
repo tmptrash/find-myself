@@ -62,7 +62,10 @@ import {
   getCrackZone,
   CAVE_MOUTH_MAIN_FLOOR_INSET,
   KEY_PIT_COLLAPSED,
-  ensureGlowPitOpenForEyesCollected
+  ensureGlowPitOpenForEyesCollected,
+  ensureGlowPitCollapsedOnReload,
+  restoreGlowPitEyeIntroInterior,
+  getGlowPitHeroStandY
 } from '../utils/glow-atmosphere.js'
 import {
   KEY_EYES_COLLECTED,
@@ -1750,6 +1753,7 @@ function initGlowLevel0Scene(k) {
     //
     const rightZoneBaseX = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
+    const rightPlatY = horizBranch.physY
     const treeGroundSpawnX = branchTrampX + HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
@@ -1757,6 +1761,7 @@ function initGlowLevel0Scene(k) {
     const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
     const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
+    const ambushHedgehogRevealedEarly = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
     const clampBranchSpawnX = (x) => Math.max(
       horizBranch.x1 + LOG_SNAP_X_SLACK,
       Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
@@ -1774,9 +1779,19 @@ function initGlowLevel0Scene(k) {
       heroSpawnX = treeGroundSpawnX
       heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     } else if (hasSavedPose) {
-      heroSpawnX = lastSpawnMode === SPAWN_MODE_BRANCH ? clampBranchSpawnX(lastSpawnX) : lastSpawnX
-      heroSpawnY = lastSpawnY
-      spawnOnBranch = lastSpawnMode === SPAWN_MODE_BRANCH
+      if (lastSpawnMode === SPAWN_MODE_CAVE) {
+        heroSpawnX = lastSpawnX
+        heroSpawnY = lastSpawnY
+        spawnOnBranch = false
+      } else if (lastSpawnMode === SPAWN_MODE_BRANCH) {
+        heroSpawnX = clampBranchSpawnX(lastSpawnX)
+        heroSpawnY = lastSpawnY
+        spawnOnBranch = true
+      } else {
+        heroSpawnX = lastSpawnX
+        heroSpawnY = lastSpawnY
+        spawnOnBranch = false
+      }
     } else if (zones.groundDecorRight) {
       heroSpawnX = treeGroundSpawnX
       heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
@@ -1792,27 +1807,17 @@ function initGlowLevel0Scene(k) {
     // before the trigger instead whenever that would happen — landing past
     // the whole zone (already-explored ground further right) is left as is.
     //
-    if (!spawnOnBranch) {
-      const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
-      if (heroSpawnX >= hedgehogAmbushTriggerX && heroSpawnX <= dangerEndX) {
-        heroSpawnX = hedgehogAmbushTriggerX - HERO_HEDGEHOG_SPAWN_CLEARANCE
-      }
-    }
-    //
-    // Second check: the right (L-log) ambush hedgehog. Once L has already
-    // been collected in an earlier session it starts already popped and
-    // wandering the ground across the log's own footprint (see its
-    // minX/maxX below) instead of waiting hidden — landing right on top of
-    // it at level load would be an instant, unavoidable death. Same pull-
-    // back treatment as the left hedgehog's danger zone above.
-    //
-    if (!spawnOnBranch && zones.lCollected) {
-      const rHogDangerStartX = lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN
-      const rHogDangerEndX = lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
-      if (heroSpawnX >= rHogDangerStartX && heroSpawnX <= rHogDangerEndX) {
-        heroSpawnX = rHogDangerEndX + HERO_HEDGEHOG_SPAWN_CLEARANCE
-      }
-    }
+    heroSpawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
+      spawnX: heroSpawnX,
+      spawnY: heroSpawnY,
+      spawnOnBranch,
+      hedgehogAmbushTriggerX,
+      hedgehogAmbushPopX,
+      lPlatX,
+      rightPlatY,
+      lCollected: zones.lCollected,
+      ambushHedgehogRevealed: ambushHedgehogRevealedEarly
+    })
     //
     // Glow SFX only from the first frame; birds.mp3 waits for the O countdown.
     //
@@ -1872,7 +1877,6 @@ function initGlowLevel0Scene(k) {
     tagWoodPlatform(branchPlat, sound, heroInst)
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
-    const rightPlatY = horizBranch.physY
     const wPlatY = Math.min(horizBranch.physY + W_PLAT_Y_BELOW, FLOOR_Y - 50)
     const wPlatX = W_PLAT_X_BASE
     const clusterCenterX = horizBranch.x1 + 40
@@ -2262,6 +2266,8 @@ function initGlowLevel0Scene(k) {
     updatePlayfieldBorderColors(inst)
     inst.zones._sceneRef = inst
     zones.wCollected && revealPostWHud(inst)
+    const wasInCaveSpawn = lastSpawnMode === SPAWN_MODE_CAVE
+    const pitShouldBeOpen = get(KEY_PIT_COLLAPSED, false) || wasInCaveSpawn
     inst.pit = createGlowPit({
       k,
       floorY: FLOOR_Y,
@@ -2271,12 +2277,21 @@ function initGlowLevel0Scene(k) {
       levelIndicator,
       heroBodyColor: HERO_BODY_COLOR,
       groundColor: GROUND_DARK,
-      alreadyCollapsed: get(KEY_PIT_COLLAPSED, false),
+      alreadyCollapsed: pitShouldBeOpen,
       cracksVisible: isGlowCaveCracksVisible(zones),
       tooltipClampInset: glowTooltipClampInset()
     })
     inst.pit.sceneRef = inst
     k._glowSceneInst = inst
+    pitShouldBeOpen && !inst.pit.collapsed &&
+      ensureGlowPitCollapsedOnReload(
+        inst.pit,
+        isGlowEyeIntroPending(zones) && !zones.eyesCollected
+      )
+    wasInCaveSpawn && isGlowEyeIntroPending(zones) && !zones.eyesCollected &&
+      restoreGlowPitEyeIntroInterior(inst.pit)
+    wasInCaveSpawn && inst.pit?.collapsed &&
+      (heroInst.character.pos.y = getGlowPitHeroStandY(inst.pit))
     restoreGlowEyeIntroFromPersistedState(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
     inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
@@ -2912,7 +2927,7 @@ function persistTrampWalk(inst) {
 //
 function persistGlowLastSpawn(inst) {
   const char = inst.heroInst?.character
-  if (!char?.pos || inst.drowning) return
+  if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled) return
   const heroX = char.pos.x
   const heroY = char.pos.y
   const footY = heroY + SURFACE_DETECT_Y
@@ -2924,8 +2939,9 @@ function persistGlowLastSpawn(inst) {
     pit.zone &&
     footY >= pit.floorY + pit.zone.depth - 32
   )
-  if (inCave && !inst.zones?.eyesCollected) {
+  if (inCave) {
     set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_CAVE)
+    set(KEY_PIT_COLLAPSED, true)
     return
   }
   if (isHeroOverStartBranchX(inst, heroX) &&
@@ -8661,7 +8677,7 @@ function finishHedgehogDeath(inst, isAmbush) {
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
-  markSafeGroundRespawnAwayFromHedgehog(inst)
+  markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush)
   startGlowHedgehogDeathCountdown(inst)
 }
 //
@@ -8669,12 +8685,67 @@ function finishHedgehogDeath(inst, isAmbush) {
 // past the main wandering hedgehog's leash — otherwise a ground respawn
 // could land right back in its path and kill the hero again immediately.
 //
-function markSafeGroundRespawnAwayFromHedgehog(inst) {
-  const safeX = (inst.hedgehog?.maxX ?? inst.lastHeroX ?? 0) + HEDGEHOG_DEATH_RESPAWN_MARGIN
+function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush) {
   set(KEY_RESPAWN_NEAR_TREE, false)
   set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
+  if (isAmbush && inst.lPlatHome && !inst.zones?.lCollected) {
+    const home = inst.lPlatHome
+    const hogX = inst.ambushHedgehog?.x ?? home.x + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP
+    const safeX = hogX <= home.x + LOG_W * 0.5
+      ? home.x - HEDGEHOG_WANDER_RIGHT_MARGIN - HERO_HEDGEHOG_SPAWN_CLEARANCE
+      : home.x + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN + HERO_HEDGEHOG_SPAWN_CLEARANCE
+    set(KEY_LAST_SPAWN_X, safeX)
+    set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+    return
+  }
+  const safeX = (inst.hedgehog?.maxX ?? inst.lastHeroX ?? 0) + HEDGEHOG_DEATH_RESPAWN_MARGIN
   set(KEY_LAST_SPAWN_X, safeX)
   set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+}
+//
+// Pulls a saved spawn X away from hedgehog danger bands so a reload cannot
+// drop the hero straight onto a wandering or ambush hog.
+//
+function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
+  const {
+    spawnX,
+    spawnY,
+    spawnOnBranch,
+    hedgehogAmbushTriggerX,
+    hedgehogAmbushPopX,
+    lPlatX,
+    rightPlatY,
+    lCollected,
+    ambushHedgehogRevealed
+  } = cfg
+  let x = spawnX
+  if (!spawnOnBranch) {
+    const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
+    x >= hedgehogAmbushTriggerX && x <= dangerEndX &&
+      (x = hedgehogAmbushTriggerX - HERO_HEDGEHOG_SPAWN_CLEARANCE)
+  }
+  if (!spawnOnBranch && (lCollected || ambushHedgehogRevealed)) {
+    const rHogDangerStartX = lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN
+    const rHogDangerEndX = lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
+    x >= rHogDangerStartX && x <= rHogDangerEndX &&
+      (x = rHogDangerEndX + HERO_HEDGEHOG_SPAWN_CLEARANCE)
+  }
+  if (ambushHedgehogRevealed && !lCollected) {
+    const platLeft = lPlatX + LOG_SNAP_X_SLACK
+    const platRight = lPlatX + LOG_W - LOG_SNAP_X_SLACK
+    const platHeroY = rightPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    const onLPlat = Math.abs(spawnY - platHeroY) <= LOG_SNAP_STANDING_MAX
+    if (onLPlat && x >= platLeft && x <= platRight) {
+      const ambushX = lPlatX + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP
+      const touchPad = HEDGEHOG_AMBUSH_SCALE * 25 + HERO_HEDGEHOG_SPAWN_CLEARANCE
+      Math.abs(x - ambushX) < touchPad &&
+        (x = ambushX > (platLeft + platRight) * 0.5
+          ? platLeft + HERO_HEDGEHOG_SPAWN_CLEARANCE
+          : platRight - HERO_HEDGEHOG_SPAWN_CLEARANCE)
+      x = Math.max(platLeft, Math.min(platRight, x))
+    }
+  }
+  return x
 }
 //
 // Standard press-any-key countdown reload, same UX as the touch-lesson

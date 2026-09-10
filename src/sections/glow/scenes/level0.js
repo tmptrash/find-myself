@@ -4743,7 +4743,7 @@ function drawExploredGroundLip(inst) {
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
   const crack = getCrackZone(WORLD_W, FLOOR_Y)
-  const caveKeepL = crack.x1 - 36
+  const caveKeepL = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
   const caveKeepR = crack.x2 + 8
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step

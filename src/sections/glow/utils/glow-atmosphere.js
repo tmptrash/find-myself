@@ -24,10 +24,10 @@ const PIT_WALL_W = 20
 const PIT_FLOOR_EXTRA_W_LEFT = 18
 const PIT_FLOOR_EXTRA_W_RIGHT = 6
 //
-// Main playfield floor stops this far before the cave mouth so the entrance
-// lip does not overhang the pit opening.
+// Main playfield floor and sealed crack lid start this far left of the cave
+// mouth — smaller values shift the overhang lip right above the pit opening.
 //
-export const CAVE_MOUTH_MAIN_FLOOR_INSET = 36
+export const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
 //
 // 2/3 field midges across the playfield, 1/3 clustered at the cave mouth
 //
@@ -131,7 +131,7 @@ export function isCrackGrassExcluded(x, screenW) {
  */
 export function isCrackDecorExcluded(x, screenW) {
   const zone = getCrackZone(screenW, 0)
-  return x >= zone.x1 - 36 && x <= zone.x2 + 8
+  return x >= zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET && x <= zone.x2 + 8
 }
 /**
  * Creates midges: 1/3 at the cave mouth, 2/3 spread across the playfield.

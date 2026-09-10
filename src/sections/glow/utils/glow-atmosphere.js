@@ -82,6 +82,8 @@ const CAVE_INTERIOR_SPRITE = 'glow0-cave-interior'
 const CAVE_BAKE_PAD = 40
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_EYES_COLLECTED = 'glow.eyesCollected'
+const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
+const SPAWN_MODE_CAVE = 'cave'
 const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
@@ -265,6 +267,30 @@ export function updateGlowMidges(ctrl, dt, worldLife = 0) {
   }
 }
 /**
+ * True when the cave mouth should start open on level load. Closed only while
+ * the hero is still eyeless and has not entered the pit yet.
+ * @param {Object} [zones] - Glow zone flags
+ * @param {string|null} [lastSpawnMode] - Persisted spawn mode
+ * @param {Object} [heroInst] - Playable hero inst
+ * @returns {boolean}
+ */
+export function shouldGlowPitBeOpenForZones(zones, lastSpawnMode = null, heroInst = null) {
+  if (glowHeroHasCollectedEyes(zones, heroInst)) return true
+  if (get(KEY_PIT_COLLAPSED, false)) return true
+  const mode = lastSpawnMode ?? get(KEY_LAST_SPAWN_MODE, null)
+  return mode === SPAWN_MODE_CAVE
+}
+/**
+ * Whether the playable hero already has eyes in the glow section.
+ * @param {Object} [zones] - Glow zone flags
+ * @param {Object} [heroInst] - Playable hero inst
+ * @returns {boolean}
+ */
+export function glowHeroHasCollectedEyes(zones, heroInst = null) {
+  if (heroInst?.noEyes === false) return true
+  return Boolean(zones?.eyesCollected || get(KEY_EYES_COLLECTED, false))
+}
+/**
  * Sets up the crack floor lid + optional already-collapsed pit.
  * @param {Object} cfg - Setup config
  * @param {Object} [cfg.tooltipClampInset] - Playfield inset for pit collect hints
@@ -274,17 +300,22 @@ export function createGlowPit(cfg) {
   const {
     k, floorY, screenW, heroInst, sound, levelIndicator,
     heroBodyColor, groundColor, alreadyCollapsed, cracksVisible = false,
-    tooltipClampInset = null
+    tooltipClampInset = null, zones = null, lastSpawnMode = null
   } = cfg
   const zone = getCrackZone(screenW, floorY)
   bakePitMushroomSprite(k)
+  const startOpen = Boolean(
+    alreadyCollapsed ||
+    shouldGlowPitBeOpenForZones(zones, lastSpawnMode, heroInst)
+  )
   //
   // Sealed crack lid bridges from the main-floor edge through the crack band
   // until collapse — no gap the hero can fall through on the first jump in.
   //
   const lidX = zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
   const lidW = zone.x2 - lidX
-  const crackFloor = k.add([
+  let crackFloor = null
+  !startOpen && (crackFloor = k.add([
     k.rect(lidW, 20),
     k.pos(lidX, floorY),
     k.anchor('topleft'),
@@ -292,7 +323,7 @@ export function createGlowPit(cfg) {
     k.body({ isStatic: true }),
     k.opacity(0),
     CFG.game.platformName
-  ])
+  ]))
   const pit = {
     k,
     zone,
@@ -306,7 +337,7 @@ export function createGlowPit(cfg) {
     crackFloor,
     cracksVisible: Boolean(cracksVisible),
     crackSegs: buildFractalCrackSegs(zone),
-    collapsed: Boolean(alreadyCollapsed || get(KEY_PIT_COLLAPSED, false)),
+    collapsed: startOpen,
     particles: [],
     trampState: { cooldown: 0, squash: 0, x: zone.x1 + zone.width * 0.55 },
     pitFloor: null,
@@ -323,7 +354,7 @@ export function createGlowPit(cfg) {
     wallProfile: null
   }
   if (pit.collapsed) {
-    crackFloor.destroy?.()
+    crackFloor?.destroy?.()
     pit.crackFloor = null
     openPitPhysics(pit)
   }
@@ -350,6 +381,7 @@ export function setGlowPitCracksVisible(pit, visible) {
  */
 export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, opts = {}) {
   if (!pit || !char?.pos) return
+  syncGlowPitOpenState(pit)
   const dt = pit.k.dt()
   updatePitParticles(pit, dt)
   if (pit.trampState.cooldown > 0) pit.trampState.cooldown -= dt
@@ -1193,17 +1225,39 @@ function getGlowPitFloorCollider(zone) {
   return { innerX, innerW }
 }
 export function ensureGlowPitOpenForEyesCollected(pit) {
-  if (!pit || !get(KEY_EYES_COLLECTED, false)) return
-  pit.outlineOnlyMode = false
-  pit.skipPitBonus = true
+  syncGlowPitOpenState(pit)
+}
+/**
+ * Keeps the cave open whenever the hero already has eyes; closed only while
+ * eyeless and the pit has not been entered yet.
+ * @param {Object} pit - Pit state
+ */
+export function syncGlowPitOpenState(pit) {
+  if (!pit) return
+  const zones = pit.sceneRef?.zones
+  const heroInst = pit.heroInst || pit.sceneRef?.heroInst
+  if (!shouldGlowPitBeOpenForZones(zones, null, heroInst)) return
+  const hasEyes = glowHeroHasCollectedEyes(zones, heroInst)
+  hasEyes && persistGlowEyesFromHeroState(pit)
+  hasEyes && (pit.outlineOnlyMode = false)
+  hasEyes && (pit.skipPitBonus = true)
   if (!pit.collapsed) {
-    collapsePit(pit)
-    pit.outlineOnlyMode = false
+    hasEyes ? collapsePit(pit) : collapseGlowPitForEyeIntro(pit)
+    hasEyes && (pit.outlineOnlyMode = false)
     return
   }
   pit.crackFloor?.destroy?.()
   pit.crackFloor = null
+  hasEyes && (pit.outlineOnlyMode = false)
   !pit.pitFloor && openPitPhysics(pit)
+}
+function persistGlowEyesFromHeroState(pit) {
+  const zones = pit.sceneRef?.zones
+  const heroInst = pit.heroInst || pit.sceneRef?.heroInst
+  if (!zones || heroInst?.noEyes !== false || zones.eyesCollected) return
+  zones.eyesCollected = true
+  set(KEY_EYES_COLLECTED, true)
+  set(KEY_PIT_COLLAPSED, true)
 }
 /**
  * Hero body Y so feet rest on the cave pit floor collider top.
@@ -1377,10 +1431,18 @@ function spawnPitBurst(pit) {
   ])
 }
 //
-// Interior draw waits until the hero has cleared the mouth lip.
+// Eyeless intro: interior reveals only after the hero clears the mouth lip.
+// With eyes collected the interior stays visible from the surface too.
 //
 function isCaveInteriorVisible(pit) {
   if (!pit?.collapsed || pit.outlineOnlyMode) return false
+  const zones = pit.sceneRef?.zones
+  const heroInst = pit.heroInst || pit.sceneRef?.heroInst
+  //
+  // With eyes collected the cave mouth stays open on the surface too — the
+  // hero may return from the branch without re-entering through the crack lip.
+  //
+  if (glowHeroHasCollectedEyes(zones, heroInst)) return true
   const char = pit.heroInst?.character
   if (!char?.pos) return true
   const feetY = char.pos.y + 38

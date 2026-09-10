@@ -8,8 +8,10 @@ import {
   getGlowPitBonusPosition,
   getGlowPitHeroStandY,
   ensureGlowPitOpenForEyesCollected,
+  glowHeroHasCollectedEyes,
   isGlowPitMushroomUnlocked as isPitMushroomUnlockedForPit,
-  isHeroOnCrackLid
+  isHeroOnCrackLid,
+  KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
 
 //
@@ -219,7 +221,9 @@ export function onDrawGlowEyeIntro(inst, k, heroBodyHex, heroEyeWhiteHex) {
   if (!inst?.eyeIntro) return
   const intro = inst.eyeIntro
   const pit = inst.pit
-  pit && pit.collapsed && pit.outlineOnlyMode && drawGlowPitOutline(k, pit)
+  pit && pit.collapsed && pit.outlineOnlyMode &&
+    !glowHeroHasCollectedEyes(inst.zones, inst.heroInst) &&
+    drawGlowPitOutline(k, pit)
   intro.pickup && drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
   intro.revealFx > 0 && drawGlowEyeRevealFx(k, inst.heroInst, intro.revealFx)
 }
@@ -278,6 +282,7 @@ function persistGlowEyesCollected(inst) {
   if (!inst?.zones || inst.zones.eyesCollected) return
   inst.zones.eyesCollected = true
   set(KEY_EYES_COLLECTED, true)
+  set(KEY_PIT_COLLAPSED, true)
 }
 function didGlowEyeAttachHeroMove(intro, char, heroInst) {
   if (!char?.pos || !intro) return false
@@ -299,13 +304,19 @@ function completeGlowEyeIntro(inst) {
   inst.eyeIntro.phase = 'complete'
   persistGlowEyesCollected(inst)
   inst.eyeIntro.pickup = null
+  inst.pit && ensureGlowPitOpenForEyesCollected(inst.pit)
 }
 /**
  * Restores cave eyes and intro phase after a reload when the pit stayed open.
  * @param {Object} inst - Glow scene inst
  */
 export function restoreGlowEyeIntroFromPersistedState(inst) {
-  if (!inst?.eyeIntro || inst.zones?.eyesCollected || !inst.pit?.collapsed) return
+  if (!inst?.eyeIntro || !inst.pit?.collapsed) return
+  if (glowHeroHasCollectedEyes(inst.zones, inst.heroInst)) {
+    inst.pit.outlineOnlyMode = false
+    ensureGlowPitOpenForEyesCollected(inst.pit)
+    return
+  }
   const pit = inst.pit
   pit.outlineOnlyMode = true
   pit.skipPitBonus = true

@@ -65,7 +65,9 @@ import {
   ensureGlowPitOpenForEyesCollected,
   ensureGlowPitCollapsedOnReload,
   restoreGlowPitEyeIntroInterior,
-  getGlowPitHeroStandY
+  getGlowPitHeroStandY,
+  shouldGlowPitBeOpenForZones,
+  glowHeroHasCollectedEyes
 } from '../utils/glow-atmosphere.js'
 import {
   KEY_EYES_COLLECTED,
@@ -2267,7 +2269,7 @@ function initGlowLevel0Scene(k) {
     inst.zones._sceneRef = inst
     zones.wCollected && revealPostWHud(inst)
     const wasInCaveSpawn = lastSpawnMode === SPAWN_MODE_CAVE
-    const pitShouldBeOpen = get(KEY_PIT_COLLAPSED, false) || wasInCaveSpawn
+    const pitShouldBeOpen = shouldGlowPitBeOpenForZones(zones, lastSpawnMode, heroInst)
     inst.pit = createGlowPit({
       k,
       floorY: FLOOR_Y,
@@ -2277,6 +2279,8 @@ function initGlowLevel0Scene(k) {
       levelIndicator,
       heroBodyColor: HERO_BODY_COLOR,
       groundColor: GROUND_DARK,
+      zones,
+      lastSpawnMode,
       alreadyCollapsed: pitShouldBeOpen,
       cracksVisible: isGlowCaveCracksVisible(zones),
       tooltipClampInset: glowTooltipClampInset()
@@ -2286,9 +2290,9 @@ function initGlowLevel0Scene(k) {
     pitShouldBeOpen && !inst.pit.collapsed &&
       ensureGlowPitCollapsedOnReload(
         inst.pit,
-        isGlowEyeIntroPending(zones) && !zones.eyesCollected
+        isGlowEyeIntroPending(zones) && !glowHeroHasCollectedEyes(zones, heroInst)
       )
-    wasInCaveSpawn && isGlowEyeIntroPending(zones) && !zones.eyesCollected &&
+    wasInCaveSpawn && isGlowEyeIntroPending(zones) && !glowHeroHasCollectedEyes(zones, heroInst) &&
       restoreGlowPitEyeIntroInterior(inst.pit)
     wasInCaveSpawn && inst.pit?.collapsed &&
       (heroInst.character.pos.y = getGlowPitHeroStandY(inst.pit))
@@ -2331,6 +2335,7 @@ function initGlowLevel0Scene(k) {
     if ((zones.oZone || zones.oCollected) && !inst.heroBodyFillApplied) {
       applyGlowHeroBodyFill(inst)
     }
+    ensureGlowPitOpenForEyesCollected(inst.pit)
     registerGlowNativeTeardown(() => {
       persistGlowOnLeave(inst)
       clearHeroFillPreview(inst)
@@ -2851,7 +2856,10 @@ function loadGlowZones() {
   const lPlatRevealed = get(KEY_REVEALED_L_PLAT, false) || lCollected
   const wZone = gCollected && lCollected && oCollected && (get(KEY_REVEALED_W, false) || wCollected)
   const colorWorld = oCollected
-  const eyesCollected = get(KEY_EYES_COLLECTED, false)
+  const eyesCollectedSaved = get(KEY_EYES_COLLECTED, false)
+  const eyesCollected = eyesCollectedSaved ||
+    gCollected || lCollected || oCollected || wCollected
+  eyesCollected && !eyesCollectedSaved && (set(KEY_EYES_COLLECTED, true), set(KEY_PIT_COLLAPSED, true))
   return {
     gCollected,
     lCollected,
@@ -11480,6 +11488,7 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   inst.pit.trampState.squash = 1
   inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
   unlockGlowEyesGameplayFromBranchLaunch(inst)
+  inst.pit && ensureGlowPitOpenForEyesCollected(inst.pit)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   maybeBootstrapGlowPostEyes(inst)

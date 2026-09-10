@@ -1583,6 +1583,25 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineOnly: true,
+    noEyes: true,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
+  })
+  Hero.loadHeroSprites({
+    k,
+    type: Hero.HEROES.HERO,
+    ...getGlowHeroEyeBakeColors(true),
+    bodyColor: HERO_BODY_COLOR,
+    outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
+    outlineOnly: true,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
+  })
+  Hero.loadHeroSprites({
+    k,
+    type: Hero.HEROES.HERO,
+    ...getGlowHeroEyeBakeColors(false),
+    bodyColor: HERO_FILLED_BODY_COLOR,
+    outlineColor: HERO_OUTLINE_COLOR,
+    outlineOnly: false,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
   onProgress?.(90)
@@ -7413,8 +7432,8 @@ function applyGlowHeroBodyFill(inst) {
   preloadGlowHeroFilledSprites(inst)
   const filledPrefix = buildFilledHeroSpritePrefix(hero)
   const filledKey = mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix)
-  const spriteKey = filledKey && k.getSprite(filledKey) ? filledKey : `${filledPrefix}_0_0`
-  if (!k.getSprite(spriteKey)) return
+  const spriteKey = glowHeroSpriteReady(k, filledKey) ? filledKey : `${filledPrefix}_0_0`
+  if (!glowHeroSpriteReady(k, spriteKey)) return
   hero.outlineOnly = false
   char.opacity = 1
   hero.bodyColor = HERO_FILLED_BODY_COLOR
@@ -7450,10 +7469,16 @@ function preloadGlowHeroFilledSprites(inst) {
   const hero = inst.heroInst
   if (!hero) return
   const bakedNoEyes = Boolean(hero.noEyes)
-  if (inst._glowHeroFilledSpritesPreloaded && inst._glowHeroFilledNoEyes === bakedNoEyes) return
+  const filledPrefix = buildFilledHeroSpritePrefix(hero)
+  const idleKey = `${filledPrefix}_0_0`
+  if (inst._glowHeroFilledSpritesPreloaded &&
+    inst._glowHeroFilledNoEyes === bakedNoEyes &&
+    inst.k.getSprite(idleKey)) {
+    return
+  }
   Hero.loadHeroSprites({
     k: inst.k,
-    type: hero.type,
+    type: Hero.HEROES.HERO,
     ...getGlowHeroEyeBakeColors(false),
     bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
@@ -7464,6 +7489,7 @@ function preloadGlowHeroFilledSprites(inst) {
     addWatch: hero.addWatch,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
+  if (!inst.k.getSprite(idleKey)) return
   inst._glowHeroFilledSpritesPreloaded = true
   inst._glowHeroFilledNoEyes = bakedNoEyes
 }
@@ -7473,12 +7499,28 @@ function preloadGlowHeroFilledSprites(inst) {
 function buildFilledHeroSpritePrefix(hero) {
   const eyeColors = getGlowHeroEyeBakeColors(false)
   return buildHeroSpritePrefix({
-    ...hero,
+    type: Hero.HEROES.HERO,
+    addMouth: hero.addMouth,
+    addArms: hero.addArms,
+    addWatch: hero.addWatch,
+    noEyes: hero.noEyes,
+    outlineRimPx: hero.outlineRimPx,
     ...eyeColors,
     outlineOnly: false,
     bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: String(HERO_OUTLINE_COLOR).replace('#', '')
   })
+}
+//
+// True when a baked hero sprite name is registered on the live Kaplay instance.
+//
+function glowHeroSpriteReady(k, spriteKey) {
+  if (!spriteKey) return false
+  try {
+    return Boolean(k.getSprite(spriteKey))
+  } catch (_) {
+    return false
+  }
 }
 //
 // Maps the live outline sprite key to its filled-body twin. Returns null on
@@ -7510,11 +7552,17 @@ function ensureHeroFillPreview(inst) {
   const char = hero?.character
   if (!char?.exists?.() || inst.heroBodyFillApplied) return
   preloadGlowHeroFilledSprites(inst)
-  if (inst.heroFillPreview?.exists?.()) return
   const filledPrefix = buildFilledHeroSpritePrefix(hero)
+  const idleKey = `${filledPrefix}_0_0`
+  if (!glowHeroSpriteReady(inst.k, idleKey)) return
+  if (inst.heroFillFilledPrefix !== filledPrefix && inst.heroFillPreview?.exists?.()) {
+    inst.heroFillPreview.destroy()
+    inst.heroFillPreview = null
+  }
   inst.heroFillFilledPrefix = filledPrefix
+  if (inst.heroFillPreview?.exists?.()) return
   inst.heroFillPreview = inst.k.add([
-    inst.k.sprite(`${filledPrefix}_0_0`),
+    inst.k.sprite(idleKey),
     inst.k.pos(char.pos.x, char.pos.y),
     inst.k.anchor('center'),
     inst.k.scale(char.scale),
@@ -7540,7 +7588,7 @@ function syncHeroFillPreviewSprite(inst) {
     hero.spritePrefix,
     inst.heroFillFilledPrefix
   )
-  const matched = Boolean(filledKey && inst.k.getSprite(filledKey))
+  const matched = glowHeroSpriteReady(inst.k, filledKey)
   matched && preview.use(inst.k.sprite(filledKey))
   preview.pos.x = char.pos.x
   preview.pos.y = char.pos.y

@@ -4097,20 +4097,17 @@ function useHeroSprite(inst, spriteName) {
   ensureHeroSpriteOnK(inst, spriteName)
   const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
   const fallback = `${prefix}_0_0`
-  try {
-    inst.character.use(inst.k.sprite(spriteName))
-    inst.currentEyeSprite = spriteName
-  } catch (_) {
-    heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
-    loadHeroSprites(inst)
-    try {
-      inst.character.use(inst.k.sprite(spriteName))
-      inst.currentEyeSprite = spriteName
-    } catch (_) {
-      inst.character.use(inst.k.sprite(fallback))
-      inst.currentEyeSprite = fallback
-    }
+  const applySprite = (name) => {
+    if (!heroSpriteExistsOnK(inst.k, name)) return false
+    inst.character.use(inst.k.sprite(name))
+    inst.currentEyeSprite = name
+    return true
   }
+  if (applySprite(spriteName)) return
+  heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
+  loadHeroSprites(inst)
+  if (applySprite(spriteName)) return
+  applySprite(fallback)
 }
 //
 // Loads one baked hero frame, optionally running a scene post-bake pass first.

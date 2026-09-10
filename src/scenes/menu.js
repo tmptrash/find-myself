@@ -2237,6 +2237,7 @@ function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
     })
   }
   const idleName = `${desiredPrefix}_0_0`
+  if (!k.getSprite(idleName)) return
   antiHeroInst.character.use(k.sprite(idleName))
   antiHeroInst.currentEyeSprite = idleName
   antiHeroInst.character.color = k.rgb(255, 255, 255)

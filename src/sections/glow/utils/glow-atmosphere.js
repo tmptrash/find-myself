@@ -455,14 +455,28 @@ function clampHeroInCave(pit, char) {
     Math.abs(char.pos.x - pit.trampState.x) < PIT_TRAMP_W * 0.55 &&
     feetY >= capTop - 10 && feetY <= capTop + 16
   if (onMushCap) return
+  const hero = pit.heroInst
+  //
+  // Never pin the floor during jump wind-up or launch — that cancelled jumps
+  // and froze the sprite on the landing pose every frame.
+  //
+  if (hero?.isSquashing || hero?.jumpPhase === 'jumping') return
+  const vy = char.vel?.y ?? 0
+  if (vy < -20) return
   //
   // Pull the hero up only after the static floor collider was tunneled — never
   // while the fall is still in progress (that froze the jump animation mid-air).
   //
   const standY = getGlowPitHeroStandY(pit)
-  if (char.pos.y > standY) {
+  //
+  // Only correct a deep tunnel while falling fast — micro snaps every frame
+  // re-fired landing and played a second land crouch on the pit floor.
+  //
+  const PIT_FLOOR_TUNNEL_MIN = 2
+  const PIT_FLOOR_SNAP_MIN_VY = 80
+  if (char.pos.y > standY + PIT_FLOOR_TUNNEL_MIN && vy >= PIT_FLOOR_SNAP_MIN_VY) {
     char.pos.y = standY
-    char.vel && char.vel.y > 0 && (char.vel.y = 0)
+    char.vel && (char.vel.y = 0)
   }
 }
 /**
@@ -1189,7 +1203,7 @@ export function ensureGlowPitOpenForEyesCollected(pit) {
 export function getGlowPitHeroStandY(pit) {
   const bottomY = pit.floorY + pit.zone.depth
   const heroFeetOffset = 38
-  const embed = 1
+  const embed = 0
   return bottomY - heroFeetOffset + embed
 }
 function collapsePit(pit) {

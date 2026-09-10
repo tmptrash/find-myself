@@ -746,14 +746,13 @@ export function sceneLesson2(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: null,
       dustColor: snowColor,
       //
       // Cold breath puffs occupy the mouth in this winter scene, so the
       // default idle hum + music notes are disabled to avoid layering.
       //
       idleVocalization: null,
-      currentLevel: 'lesson-touch.2',
+      stepSoundScene: 'lesson-touch.2',
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
       addArms: isTouchComplete,

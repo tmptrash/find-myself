@@ -299,6 +299,21 @@ function completeGlowEyeIntro(inst) {
   persistGlowEyesCollected(inst)
   inst.eyeIntro.pickup = null
 }
+/**
+ * Restores cave eyes and intro phase after a reload when the pit stayed open.
+ * @param {Object} inst - Glow scene inst
+ */
+export function restoreGlowEyeIntroFromPersistedState(inst) {
+  if (!inst?.eyeIntro || inst.zones?.eyesCollected || !inst.pit?.collapsed) return
+  const pit = inst.pit
+  pit.outlineOnlyMode = true
+  pit.skipPitBonus = true
+  pit.cracksVisible = true
+  if (inst.eyeIntro.phase !== 'runBack' && inst.eyeIntro.phase !== 'complete') {
+    inst.eyeIntro.phase = 'collectEyes'
+  }
+  !inst.eyeIntro.pickup && (inst.eyeIntro.pickup = spawnGlowCavePickupEyes(inst, pit))
+}
 export function snapGlowHeroToPitFloor(inst, heroInst) {
   const pit = inst?.pit
   const char = heroInst?.character

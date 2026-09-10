@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { getColor, bindBackToMenuKeys } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
+import { bindHeroAnnihilation } from '../../../utils/hero-annihilation.js'
 import * as LevelIndicator from '../components/lesson-indicator.js'
 import { get, set } from '../../../utils/progress.js'
 import * as DayNight from '../utils/time-day-night.js'
@@ -511,16 +512,17 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     type: Hero.HEROES.HERO,
     controllable: true,
     sfx: sound,
-    antiHero: antiHeroInst,
-    onAnnihilation: onAnnihilation || (() => k.go(levelName)),
-    currentLevel: levelName,
+    stepSoundScene: levelName,
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.hero.outline,
-    addMouth: isWordComplete,  // Add mouth if word section is complete
-    addArms: isTouchComplete,  // Add arms if touch section is complete
+    addMouth: isWordComplete,
+    addArms: isTouchComplete,
     dustColor: heroDustColor
   })
-  
+  bindHeroAnnihilation(heroInst, antiHeroInst, {
+    currentLevel: levelName,
+    onAnnihilation: onAnnihilation || (() => k.go(levelName))
+  })
   return {
     hero: heroInst,
     antiHero: antiHeroInst

@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
+import { bindHeroAnnihilation } from '../../../utils/hero-annihilation.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -810,7 +811,6 @@ export function sceneLesson3(k) {
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: sound,
-      antiHero: null,
       addArms: true,
       //
       // Steel teal — the touch section's identity colour and the direct
@@ -831,18 +831,17 @@ export function sceneLesson3(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
-      onAnnihilation: () => {
-        //
-        // Stop creature and transition after completing touch section
-        //
-        creatureInst.stopped = true
-        createLevelTransition(k, 'lesson-touch.3')
-      },
-      currentLevel: 'lesson-touch.3',
+      stepSoundScene: 'lesson-touch.3',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
+    })
+    bindHeroAnnihilation(heroInst, antiHeroInst, {
+      currentLevel: 'lesson-touch.3',
+      onAnnihilation: () => {
+        creatureInst.stopped = true
+        createLevelTransition(k, 'lesson-touch.3')
+      }
     })
     //
     // Spawn hero and anti-hero, render above darkness overlay

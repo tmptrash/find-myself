@@ -2,10 +2,15 @@ import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
-import { createLevelTransition, getNextLevel } from '../utils/transition.js'
-import * as TouchHandHold from '../sections/touch/utils/touch-hand-hold.js'
-import { set } from '../utils/progress.js'
 import { isAnyPanelOpen } from '../utils/lesson-help.js'
+import { createColorChangeSparkles } from '../utils/hero-particles.js'
+import {
+  bindDefaultHeroFootFx,
+  updateHeroFootprints,
+  drawHeroFootprints,
+  playHeroRunStepFx,
+  playHeroLandFx
+} from '../utils/hero-foot-fx.js'
 //
 // Sprite rendering: 96x96 at scale 1 for crisp 1px outlines
 //
@@ -39,14 +44,6 @@ const HERO_BAKE_SUFFIX_BODY_ONLY = '_bodyonly'
 const HERO_BAKE_SUFFIX_NONE = '_nobake'
 const RUN_ANIM_SPEED = 0.03333
 const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
-//
-// Annihilation explosion uses filled circles so the burst feels organic
-//
-const ANNIHILATION_PARTICLE_SHAPE = 'circle'
-//
-// Assembly (spawn) also uses circles — character materialises from round sparks
-//
-const SPAWN_PARTICLE_SHAPE = 'circle'
 //
 // Run cycle — 8 frames like the reference sheet. Each leg loops around the
 // same stride circle half a cycle apart: it plants at the front, sweeps
@@ -192,36 +189,6 @@ const POST_LAND_AIR_LOCK = 0.18
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
-const ANTIHERO_TAG = 'annihilation'
-//
-// Touch section completion tint — steel teal matching the anti-hero
-// body colour used across touch levels (`#5A8898`).
-//
-const TOUCH_SECTION_HERO_COLOR = CFG.visual.colors.sections.touch.body
-//
-// Time section completion tint — orange/yellow anti-hero accent (`#FF8C00`), not global antiHero brown
-//
-const TIME_SECTION_HERO_COLOR = '#FF8C00'
-//
-// Landing dust particles
-//
-
-const DUST_PARTICLE_COUNT = 6
-const DUST_PARTICLE_SIZE = 6
-const DUST_PARTICLE_SPEED = 80
-const DUST_PARTICLE_LIFETIME = 0.4
-//
-// Footprint trail: small fading marks left where the hero steps
-//
-const FOOTPRINT_LIFETIME = 2.0
-const FOOTPRINT_RADIUS_X = 5
-const FOOTPRINT_RADIUS_Y = 2
-const FOOTPRINT_OFFSET_X = 4
-const FOOTPRINT_OFFSET_Y = -1
-const FOOTPRINT_COLOR_R = 35
-const FOOTPRINT_COLOR_G = 25
-const FOOTPRINT_COLOR_B = 18
-const FOOTPRINT_OPACITY_START = 0.55
 const FOOTPRINT_Z = 9
 //
 // Idle vocalization: notes drift from the hero's mouth while standing still
@@ -288,7 +255,6 @@ let idleVocalizationSuppressed = false
 // Death animation timing
 //
 const DEATH_ANIMATION_DURATION = 0.4
-const DEATH_PARTICLE_POINTS = 20
 //
 // Corner radii for rounded body parts — tuned for smooth cartoon look at 96px
 //
@@ -400,9 +366,10 @@ const heroSpritePrefixesReadyFor = new WeakMap()
  * @param {string} [config.type='hero'] - Character type ('hero' or 'antiHero')
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
- * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
- * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
- * @param {string} [config.currentLevel] - Current level name for transition
+ * @param {boolean} [config.footFx=true] - Built-in landing dust, footprints and step sounds
+ * @param {string|null} [config.stepSoundScene=null] - Scene id for step/land SFX routing
+ * @param {boolean} [config.airAnimDuringFlicker=false] - Keep jump anim through brief ungrounded flicker
+ * @param {boolean} [config.runDuringFlicker=false] - Keep run cycle through brief ungrounded flicker
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @param {boolean} [config.suppressDust=false] - Disable landing and run-start dust
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
@@ -423,9 +390,10 @@ export function create(config) {
     controllable = type === HEROES.HERO,
     sfx = null,
     scale = HERO_SCALE,
-    antiHero = null,
-    onAnnihilation = null,
-    currentLevel = null,
+    footFx = true,
+    stepSoundScene = null,
+    airAnimDuringFlicker = false,
+    runDuringFlicker = false,
     bodyColor = null,      // Custom body color (hex string)
     outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
@@ -601,8 +569,6 @@ export function create(config) {
     k.scale(scale),
     k.z(CFG.visual.zIndex.player),
   ])
-  type === HEROES.ANTIHERO && !ambient && character.tag(ANTIHERO_TAG)
-
   const inst = {
     character,
     k,
@@ -611,9 +577,11 @@ export function create(config) {
     isStatic,
     fixed,
     sfx,
-    antiHero,
-    onAnnihilation,
-    currentLevel,
+    footFx,
+    footEffectsEnabled: footFx !== false,
+    stepSoundScene,
+    airAnimDuringFlicker,
+    runDuringFlicker,
     bodyColor: effectiveBodyColor,        // Store effective body color (not null)
     outlineColor: effectiveOutlineColor,  // Store effective outline color for re-baking
     addMouth,                             // Feature flags persisted for runtime recolour
@@ -725,7 +693,7 @@ export function create(config) {
   character.onCollide?.(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
-  antiHero && character.onCollide?.(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
+  bindDefaultHeroFootFx(inst, config)
   //
   // Footprint renderer: a single fixed entity that draws and ages footprints
   // for this hero. Drawn behind the player so prints sit on the ground.
@@ -734,10 +702,10 @@ export function create(config) {
     k.z(FOOTPRINT_Z),
     {
       update() {
-        onUpdateFootprints(inst)
+        updateHeroFootprints(inst)
       },
       draw() {
-        drawFootprints(k, inst)
+        drawHeroFootprints(k, inst)
       }
     }
   ])
@@ -1179,277 +1147,20 @@ export function crouch(inst, duration = 0.4) {
   inst.isCrouching = true
 }
 /**
- * Spawn hero with assembly effect from particles
+ * Reveals the hero at the spawn point with invulnerability and clean jump state.
  * @param {Object} inst - Hero instance
- * @param {Object} [opts] - Options
- * @param {boolean} [opts.instant=false] - Skip the particle assembly effect
- *   and reveal the hero immediately (e.g. glow's camera-intro moment)
+ * @param {Object} [_opts] - Reserved for API compatibility (assembly effect removed)
  */
-export function spawn(inst, opts = {}) {
-  const { instant = false } = opts
-  const { k, character, type, sfx, bodyColor } = inst
-  const x = character.pos.x
-  const y = character.pos.y
-  //
-  // Instant spawn: skip the particle assembly entirely and just reveal the
-  // hero already standing there, ready to play.
-  //
-  if (instant) {
-    character.hidden = false
-    character.vel.x = 0
-    character.vel.y = 0
-    resetAirborneState(inst)
-    inst.isSpawned = true
-    inst.isInvulnerable = true
-    inst.invulnerabilityTimer = 3.0
-    inst.spawnLandGrace = 0.35
-    return
-  }
-  //
-  // Hide character initially
-  //
-  character.hidden = true
-  //
-  // Freeze physics during assembly — otherwise the hidden body falls, lands,
-  // and leaves jump/land state that stuck the hero until the first real jump.
-  //
-  const prevGravityScale = character.gravityScale
-  character.gravityScale = 0
+export function spawn(inst, _opts = {}) {
+  const { character } = inst
+  character.hidden = false
   character.vel.x = 0
   character.vel.y = 0
-  character.pos.x = x
-  character.pos.y = y
   resetAirborneState(inst)
-  //
-  // Determine particle color based on type
-  //
-  // Use custom bodyColor if provided, otherwise use default from config
-  //
-  const colors = CFG.visual.colors
-  const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
-  //
-  // Generate target points along character outline
-  //
-  // Character is approximately SPRITE_SIZE x RENDER_SCALE pixels
-  //
-  const charSize = SPRITE_SIZE * RENDER_SCALE
-  const targetPoints = []
-  //
-  // Generate points around the perimeter of the character
-  //
-  for (let i = 0; i < DEATH_PARTICLE_POINTS; i++) {
-    const angle = (i / DEATH_PARTICLE_POINTS) * Math.PI * 2
-    const radius = charSize / 2 * 0.5  // Reduce radius by 50% (smaller outline)
-    const offsetX = Math.cos(angle) * radius * k.rand(0.5, 1)
-    const offsetY = Math.sin(angle) * radius * k.rand(0.5, 1)
-
-    targetPoints.push({
-      x: x + offsetX,
-      y: y + offsetY
-    })
-  }
-  //
-  // Create particles for assembly effect
-  //
-  const particles = []
-  //
-  // Scale and particle size
-  //
-  const scale = 2
-  const particleSize = 4
-  const outlineSize = particleSize + 1
-  //
-  // Create particles
-  //
-  for (let i = 0; i < DEATH_PARTICLE_POINTS; i++) {
-    const startX = x + k.rand(-100, 100)
-    const startY = y + k.rand(-100, 100)
-    //
-    // Assembly uses circles — rotation is irrelevant for a circle
-    //
-    const particle = createParticleWithOutline(k, startX, startY, particleColor, SPAWN_PARTICLE_SHAPE, 0, particleSize, scale)
-    particle.tag("assemblyParticle")
-    //
-    // Assign target point from the outline (cycle through points)
-    //
-    const targetPoint = targetPoints[i % targetPoints.length]
-    particle.targetX = targetPoint.x
-    particle.targetY = targetPoint.y
-    particle.speed = k.rand(200, 400)
-
-    particles.push(particle)
-  }
-  //
-  // Play sweep sound at the start of assembly effect
-  //
-  sfx && Sound.playSpawnSweep(sfx)
-  //
-  // Animate particles to center
-  //
-  let particlesGathered = false
-  let soundPlayed = false
-
-  const updateHandler = k.onUpdate(() => {
-    //
-    // Keep the body pinned while hidden so gravity can't start a land loop
-    //
-    character.pos.x = x
-    character.pos.y = y
-    character.vel.x = 0
-    character.vel.y = 0
-    if (!particlesGathered) {
-      let allGathered = true
-      let allNearTarget = true
-
-      particles.forEach(particle => {
-        if (!particle.exists()) return
-
-        const dx = particle.targetX - particle.pos.x
-        const dy = particle.targetY - particle.pos.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-
-        if (dist > 5) {
-          allGathered = false
-          const moveSpeed = particle.speed * k.dt()
-          particle.moveBy((dx / dist) * moveSpeed, (dy / dist) * moveSpeed)
-        }
-        //
-        // Check if particles are close to target (for early sound trigger)
-        //
-        if (dist > 20) {
-          allNearTarget = false
-        }
-      })
-      //
-      // Play click sound when particles are close but not yet fully assembled
-      //
-      if (!soundPlayed && allNearTarget && sfx) {
-        Sound.playSpawnClick(sfx)
-        soundPlayed = true
-      }
-
-      if (allGathered) {
-        particlesGathered = true
-        //
-        // Remove particles
-        //
-        particles.forEach(p => {
-          if (p.exists()) k.destroy(p)
-        })
-        //
-        // Reveal at the spawn point with a clean grounded jump state
-        //
-        character.pos.x = x
-        character.pos.y = y
-        character.vel.x = 0
-        character.vel.y = 0
-        character.gravityScale = prevGravityScale ?? 1
-        character.hidden = false
-        resetAirborneState(inst)
-        //
-        // Mark hero as spawned (allow controls) and invulnerable
-        //
-        inst.isSpawned = true
-        inst.isInvulnerable = true
-        inst.invulnerabilityTimer = 3.0  // 3 seconds of invulnerability
-        //
-        // Spawn Y sits slightly above the floor — ignore the short settle
-        // fall so it can't start the jump/land crouch hang.
-        //
-        inst.spawnLandGrace = 0.35
-        //
-        // Cancel update
-        //
-        updateHandler.cancel()
-      }
-    }
-  })
-}
-
-/**
- * Create particles around hero when a new body part is added
- * @param {Object} inst - Hero instance
- */
-function createBodyPartParticles(inst) {
-  const k = inst.k
-  const heroX = inst.character.pos.x
-  const heroY = inst.character.pos.y
-  const particleCount = 12
-  const bodyColor = inst.bodyColor || CFG.visual.colors.hero.body
-  //
-  // Create heart particles flying outward (hero body color with black outline)
-  //
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 80 + Math.random() * 40
-    const lifetime = 0.6 + Math.random() * 0.4
-    const heartSize = 20 + Math.random() * 10
-    //
-    // Create black outline hearts (8 directions)
-    //
-    const outlineOffset = 1.5
-    const outlineOffsets = [
-      [-outlineOffset, -outlineOffset],
-      [0, -outlineOffset],
-      [outlineOffset, -outlineOffset],
-      [-outlineOffset, 0],
-      [outlineOffset, 0],
-      [-outlineOffset, outlineOffset],
-      [0, outlineOffset],
-      [outlineOffset, outlineOffset]
-    ]
-    
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outlineParticle = k.add([
-        k.text('♥', { size: heartSize }),
-        k.pos(heroX + dx, heroY + dy),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(50)
-      ])
-      //
-      // Animate outline particle
-      //
-      const startTime = k.time()
-      outlineParticle.onUpdate(() => {
-        const elapsed = k.time() - startTime
-        if (elapsed > lifetime) {
-          k.destroy(outlineParticle)
-          return
-        }
-        outlineParticle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
-        outlineParticle.opacity = 1 - (elapsed / lifetime)
-      })
-    })
-    //
-    // Create main colored heart
-    //
-    const colorClean = String(bodyColor).replace('#', '')
-    const r = parseInt(colorClean.substring(0, 2), 16)
-    const g = parseInt(colorClean.substring(2, 4), 16)
-    const b = parseInt(colorClean.substring(4, 6), 16)
-    
-    const particle = k.add([
-      k.text('♥', { size: heartSize }),
-      k.pos(heroX, heroY),
-      k.color(r, g, b),
-      k.opacity(1),
-      k.z(51)
-    ])
-    //
-    // Animate particle outward with fade
-    //
-    const startTime = k.time()
-    particle.onUpdate(() => {
-      const elapsed = k.time() - startTime
-      if (elapsed > lifetime) {
-        k.destroy(particle)
-        return
-      }
-      particle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
-      particle.opacity = 1 - (elapsed / lifetime)
-    })
-  }
+  inst.isSpawned = true
+  inst.isInvulnerable = true
+  inst.invulnerabilityTimer = 3.0
+  inst.spawnLandGrace = 0.35
 }
 
 /**
@@ -1786,8 +1497,7 @@ function onUpdate(inst) {
         // instead of freezing on a single run frame (used to return here even
         // when isMoving).
         //
-        const isGlowWalkFlicker = inst.currentLevel?.startsWith('lesson-glow.')
-        if (!isGlowWalkFlicker) {
+        if (!inst.runDuringFlicker) {
           inst.character.flipX = inst.direction === -1
           return
         }
@@ -1807,8 +1517,7 @@ function onUpdate(inst) {
     // or walking on the branch. wasJumping / jumpPhase alone only turn true
     // once a real jump has already been recognised, so they can't misfire.
     //
-    const isGlow = inst.currentLevel?.startsWith('lesson-glow.')
-    const glowAirAnim = isGlow && (inst.wasJumping || inst.jumpPhase === 'jumping')
+    const glowAirAnim = inst.airAnimDuringFlicker && (inst.wasJumping || inst.jumpPhase === 'jumping')
     if (inst.isSpawned && (!groundFlicker || glowAirAnim)) {
       //
       // Cancel any squash that was accidentally started while airborne (e.g. when
@@ -1957,7 +1666,7 @@ function onUpdate(inst) {
       //
       // Create dust particles when starting to run (skip in water)
       //
-      !inst.suppressDust && createRunStartDust(inst, inst.direction)
+      !inst.suppressDust && inst.onSpawnRunStartDust?.(inst, inst.direction)
     } else if (inst.wasJumping) {
       //
       // Just landed - continue with current frame, just update sprite
@@ -1978,10 +1687,7 @@ function onUpdate(inst) {
       // Step sound + footprint on the contact frames (a foot plants on the
       // ground twice per 8-frame cycle — frames 0 and 4)
       //
-      if (inst.runFrame % (RUN_FRAME_COUNT / 2) === 0) {
-        inst.sfx && Sound.playStepSound(inst.sfx, inst.currentLevel)
-        spawnFootprint(inst)
-      }
+      inst.runFrame % (RUN_FRAME_COUNT / 2) === 0 && playHeroRunStepFx(inst, inst.runFrame)
     }
   } else {
     //
@@ -2179,226 +1885,6 @@ function setupControls(inst) {
   // Virtual jump button always jumps (touch controls are never confused)
   //
   TouchControls.registerVirtualJumpHandler(() => attemptHeroJump(inst))
-}
-
-/**
- * Create landing dust particles
- * @param {Object} inst - Hero instance
- */
-function createLandingDust(inst) {
-  //
-  // Glow level uses its own foot-burst system on the main ground only.
-  //
-  if (inst.currentLevel?.startsWith('lesson-glow.')) return
-  const { k, character } = inst
-  //
-  // Calculate foot position (bottom of collision box)
-  //
-  const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
-  const footX = character.pos.x
-
-  createDustParticles(inst, footX, footY, 'splash')
-}
-
-/**
- * Create run start dust particles
- * @param {Object} inst - Hero instance
- * @param {number} direction - Movement direction (-1 = left, 1 = right)
- */
-function createRunStartDust(inst, direction) {
-  //
-  // Glow level uses its own foot-burst system on the main ground only.
-  //
-  if (inst.currentLevel?.startsWith('lesson-glow.')) return
-  const { k, character } = inst
-  //
-  // Calculate foot position (bottom of collision box)
-  //
-  const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
-  const footX = character.pos.x
-
-  createDustParticles(inst, footX, footY, 'run', direction)
-}
-
-/**
- * Create dust particles (shared logic for landing and run start)
- * @param {Object} inst - Hero instance
- * @param {number} footX - X position of foot
- * @param {number} footY - Y position of foot
- * @param {string} type - 'splash' (both sides) or 'run' (backward direction)
- * @param {number} direction - Movement direction (for run type)
- */
-function createDustParticles(inst, footX, footY, type = 'splash', direction = 1) {
-  //
-  // Glow level never uses hero.js dust — foot bursts are scene-owned.
-  //
-  if (inst.currentLevel?.startsWith('lesson-glow.')) return
-  const { k } = inst
-  //
-  // Create dust particles at feet position
-  //
-  if (import.meta.env.DEV) {
-    window.__heroDustSpawns = (window.__heroDustSpawns || 0) + 1
-  }
-  for (let i = 0; i < DUST_PARTICLE_COUNT; i++) {
-    //
-    // Determine particle direction based on type
-    //
-    let side
-    if (type === 'splash') {
-      //
-      // Splash: particles spread to both sides
-      //
-      side = i < DUST_PARTICLE_COUNT / 2 ? -1 : 1
-    } else {
-      //
-      // Run: particles go backward (opposite to movement direction)
-      //
-      side = -direction
-    }
-    //
-    // Angle: mostly horizontal with slight upward direction (like splash)
-    //
-    // Range: 5-30 degrees from horizontal (flatter splash)
-    //
-    const angle = k.rand(5, 30) * (Math.PI / 180)
-    const speed = k.rand(DUST_PARTICLE_SPEED * 0.8, DUST_PARTICLE_SPEED * 1.5)
-    const vx = Math.cos(angle) * speed * side
-    const vy = -Math.sin(angle) * speed  // Negative = upward
-    //
-    // Start from foot position, spread horizontally to sides
-    //
-    const offsetX = side * k.rand(5, 15)
-
-    //
-    // Create particle with custom or default color
-    //
-    const outlineColor = getRGB(k, CFG.visual.colors.outline)
-    let particleR, particleG, particleB
-    if (inst.dustColor) {
-      //
-      // Use custom dust color (hex string) - parse directly to get RGB values
-      // Keep blue tint by varying channels differently
-      //
-      const [baseR, baseG, baseB] = parseHex(inst.dustColor)
-      //
-      // Vary channels to keep blue tint: less variation for red (keep it darker),
-      // more variation for green and blue (but keep blue dominant)
-      //
-      const variationR = k.rand(-5, 5)  // Less variation for red
-      const variationG = k.rand(-8, 8)  // Medium variation for green
-      const variationB = k.rand(-10, 5)  // More variation for blue, but don't go too bright
-      particleR = Math.max(0, Math.min(255, baseR + variationR))
-      particleG = Math.max(0, Math.min(255, baseG + variationG))
-      particleB = Math.max(0, Math.min(255, baseB + variationB))
-    } else {
-      //
-      // Default gray color
-      //
-      particleR = 150
-      particleG = 150
-      particleB = 150
-    }
-    
-    const particle = k.add([
-      k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
-      k.pos(footX + offsetX, footY - 2),  // Slightly above ground
-      k.color(particleR, particleG, particleB),
-      k.outline(1.5, k.rgb(outlineColor.r, outlineColor.g, outlineColor.b)),
-      k.opacity(0.9),
-      k.anchor("center"),
-      k.z(50),
-    ])
-    //
-    // Store particle velocity and lifetime
-    //
-    particle.vx = vx
-    particle.vy = vy
-    particle.lifetime = 0
-    particle.maxLifetime = DUST_PARTICLE_LIFETIME
-    //
-    // Update particle position and fade out
-    //
-    particle.onUpdate(() => {
-      particle.lifetime += k.dt()
-      //
-      // Move particle
-      //
-      particle.moveBy(particle.vx * k.dt(), particle.vy * k.dt())
-      //
-      // Apply gravity (particles fall down after initial splash)
-      //
-      particle.vy += 600 * k.dt()
-      //
-      // Apply friction (horizontal slowdown)
-      //
-      particle.vx *= 0.97
-      //
-      // Fade out based on lifetime
-      //
-      const progress = particle.lifetime / particle.maxLifetime
-      particle.opacity = 0.9 * (1 - progress)
-      //
-      // Destroy when lifetime expires
-      //
-      if (particle.lifetime >= particle.maxLifetime) {
-        k.destroy(particle)
-      }
-    })
-  }
-}
-
-/**
- * Spawns a small footprint at the hero's current foot position.
- * Footprints alternate left/right and fade out over FOOTPRINT_LIFETIME.
- * @param {Object} inst - Hero instance
- */
-function spawnFootprint(inst) {
-  //
-  // Levels can disable the footprint trail entirely (e.g. glow section).
-  //
-  if (inst.suppressFootprints) return
-  if (!inst.character?.pos) return
-  const footY = inst.character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y + FOOTPRINT_OFFSET_Y
-  //
-  // Alternate left/right foot offset so footprints zigzag slightly
-  //
-  inst.lastFootprintFoot = -inst.lastFootprintFoot
-  const footX = inst.character.pos.x + inst.lastFootprintFoot * FOOTPRINT_OFFSET_X
-  inst.footprints.push({
-    x: footX,
-    y: footY,
-    life: FOOTPRINT_LIFETIME
-  })
-}
-/**
- * Ages footprints over time and removes expired entries.
- * @param {Object} inst - Hero instance
- */
-function onUpdateFootprints(inst) {
-  const dt = inst.k.dt()
-  const arr = inst.footprints
-  for (let i = arr.length - 1; i >= 0; i--) {
-    arr[i].life -= dt
-    if (arr[i].life <= 0) arr.splice(i, 1)
-  }
-}
-/**
- * Draws all live footprints for this hero as small fading dark ovals.
- * @param {Object} k - Kaplay instance
- * @param {Object} inst - Hero instance
- */
-function drawFootprints(k, inst) {
-  for (const fp of inst.footprints) {
-    const alpha = (fp.life / FOOTPRINT_LIFETIME) * FOOTPRINT_OPACITY_START
-    k.drawEllipse({
-      pos: k.vec2(fp.x, fp.y),
-      radiusX: FOOTPRINT_RADIUS_X,
-      radiusY: FOOTPRINT_RADIUS_Y,
-      color: k.rgb(FOOTPRINT_COLOR_R, FOOTPRINT_COLOR_G, FOOTPRINT_COLOR_B),
-      opacity: alpha
-    })
-  }
 }
 
 //
@@ -2604,27 +2090,20 @@ function onCollisionPlatform(inst) {
   //
   // Play landing sound and create dust if was in air (once per cooldown)
   //
-  const isGlow = inst.currentLevel?.startsWith('lesson-glow.')
+  const noBuiltInFootFx = inst.footFx === false || !inst.footEffectsEnabled
   //
-  // Glow: real air time can still land-SFX if wasJumping was cleared by wood
-  // flicker — never treat gold-swap micro-ungrounds as landings.
+  // Scenes without built-in foot FX: real air time can still land-SFX if
+  // wasJumping was cleared by wood flicker — never treat micro-ungrounds as landings.
   //
   const mayLandFx = inst.wasJumping ||
-    (isGlow && inst.airTime >= MIN_AIR_TIME_FOR_JUMP)
+    (noBuiltInFootFx && inst.airAnimDuringFlicker && inst.airTime >= MIN_AIR_TIME_FOR_JUMP)
   if (wasInAir && mayLandFx && inst.landFxCooldown <= 0 && inst.spawnLandGrace <= 0) {
     inst.landFxCooldown = LAND_FX_COOLDOWN
     //
     // Prefer the surface stamped by the platform collide tag this frame
     //
-    if (isGlow && inst.sfx && !inst.sfx._glowSurface) {
-      inst.sfx._glowSurface = 'ground'
-    }
-    inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
-    !isGlow && inst.wasJumping && inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
-    //
-    // Skip dust particles when suppressDust is set (e.g. landing in water)
-    //
-    !inst.suppressDust && createLandingDust(inst)
+    noBuiltInFootFx && inst.sfx && !inst.sfx._glowSurface && (inst.sfx._glowSurface = 'ground')
+    playHeroLandFx(inst, inst.wasJumping)
   }
 }
 
@@ -2720,778 +2199,6 @@ export function forceIdleFacingPartner(inst, partnerX) {
   ch.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
 }
 
-/**
- * Handle annihilation collision between hero and anti-hero
- * Both characters dissolve into particles and merge
- * @param {Object} inst - Hero instance
- */
-export function onAnnihilationCollide(inst) {
-  if (inst.isAnnihilating) return
-  //
-  // Annihilation can be temporarily locked (e.g. word level 4 keeps the grey
-  // anti-hero inert until the hero calms it). While locked, touching does nothing.
-  //
-  if (inst.annihilationLocked) return
-
-  inst.isAnnihilating = true
-  const { k } = inst
-  if (inst.currentLevel === 'lesson-touch.3' && inst.antiHero?.character?.exists?.()) {
-    TouchHandHold.begin(inst, (targetPos) => startAnnihilationExplosion(inst, targetPos))
-    return
-  }
-  const target = inst.antiHero.character
-  target.paused = true
-  const targetPos = k.vec2(target.pos.x, target.pos.y)
-  k.destroy(target)
-  startAnnihilationExplosion(inst, targetPos)
-}
-//
-// Particle scatter / absorption sequence after anti-hero is removed.
-//
-function startAnnihilationExplosion(inst, targetPos) {
-  const { k, character: player, sfx } = inst
-  inst.isRunning = false
-  inst.runFrame = 0
-  inst.runTimer = 0
-  inst.wasJumping = false  // Reset jump flag
-  //
-  // Force idle sprite (not jump!) using current eye position
-  //
-  player.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
-  //
-  // Stop horizontal movement but keep vertical (gravity)
-  //
-  if (player.vel) {
-    player.vel.x = 0
-  }
-  //
-  // Create explosion particles immediately (all at once)
-  //
-  const particles = []
-  const particleCount = 80  // Create many particles at once
-  //
-  // Get anti-hero colors (use custom bodyColor if provided, otherwise use default)
-  //
-  // Anti-hero colors
-  //
-  const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.visual.colors.antiHero.body
-  const antiHeroOutlineColor = CFG.visual.colors.outline
-
-  const scale = 2
-  const particleSize = 4
-  const outlineSize = particleSize + 1  // Reduced from +2 to +1 (thinner outline)
-
-  for (let i = 0; i < particleCount; i++) {
-    //
-    // Randomly choose body or outline color (80% body, 20% outline for more red)
-    //
-    const useBodyColor = k.rand(0, 1) > 0.2
-    const particleColorHex = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
-
-    const particleX = targetPos.x + k.rand(-20, 20)
-    const particleY = targetPos.y + k.rand(-20, 20)
-    //
-    // Annihilation uses circles — rotation is irrelevant for a circle
-    //
-    const particle = createParticleWithOutline(k, particleX, particleY, particleColorHex, ANNIHILATION_PARTICLE_SHAPE, 0, particleSize, scale)
-    //
-    // Random direction for explosion (scatter in all directions)
-    //
-    const angle = k.rand(0, Math.PI * 2)
-    const speed = k.rand(250, 500)
-
-    particle.vx = Math.cos(angle) * speed
-    particle.vy = Math.sin(angle) * speed
-    particle.lifetime = 0
-    particle.phase = 'scatter'
-    //
-    // Target will be set AFTER scatter phase
-    //
-    particle.targetX = null
-    particle.targetY = null
-
-    particles.push(particle)
-  }
-  //
-  // Play scatter + deep boom immediately after particles are created, before they
-  // start moving. AnnihilationSound routes to the master output so it stays audible
-  // even when glitch gain is muted (e.g. word level 4 after the calm platform).
-  //
-  sfx && Sound.playScatterSound(sfx)
-  sfx && Sound.playAnnihilationSound(sfx)
-  //
-  // PHASE 1: Particles scatter outward (0.4 sec)
-  //
-  const scatterDuration = 0.4
-  let scatterTime = 0
-  let absorptionSoundStarted = false
-  // let shakeStarted = false  // Temporarily disabled
-  // const originalCamPos = k.camPos()  // Temporarily disabled
-  // const shakeIntensity = 20  // Temporarily disabled
-
-  const scatterInterval = k.onUpdate(() => {
-    scatterTime += k.dt()
-    const progress = Math.min(scatterTime / scatterDuration, 1)
-    
-    //
-    // Start absorption sound near the end of scatter phase (at 95% progress)
-    //
-    if (!absorptionSoundStarted && progress >= 0.95) {
-      sfx && Sound.playAbsorptionSound(sfx)
-      absorptionSoundStarted = true
-    }
-    
-    // if (!shakeStarted && scatterTime > 0) {
-    //   shakeStarted = true
-    // }
-    
-    //
-    // Screen shake during scatter phase (temporarily disabled)
-    //
-    // if (shakeStarted) {
-    //   const shakeX = k.rand(-shakeIntensity, shakeIntensity)
-    //   const shakeY = k.rand(-shakeIntensity, shakeIntensity)
-    //   k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
-    // }
-    //
-    // Animate particles - scatter outward
-    //
-    particles.forEach(p => {
-      if (!p.exists()) return
-
-      p.lifetime += k.dt()
-      //
-      // Move outward (all particles are in scatter phase)
-      //
-      p.moveBy(p.vx * k.dt(), p.vy * k.dt())
-      //
-      // Update outline position
-      //
-      if (p.outline && p.outline.exists()) {
-        p.outline.pos.x = p.pos.x
-        p.outline.pos.y = p.pos.y
-      }
-      //
-      // Slow down
-      //
-      p.vx *= 0.96
-      p.vy *= 0.96
-    })
-
-    if (progress >= 1) {
-      scatterInterval.cancel()
-      //
-      // STEP 5: Small pause before absorption (0.2 sec)
-      // Sound already started earlier during scatter phase
-      //
-      k.wait(0.2, () => {
-        //
-        // PHASE 2: Particles absorbed into hero with screen shake
-        //
-        let absorbTime = 0
-        const maxAbsorbDuration = 5.0  // Longer duration for particles to converge into hero
-        let heroFlickerTimer = 0
-        const heroFlickerInterval = 0.08
-        //
-        // STEP 6: Screen shake starts immediately with absorption
-        //
-        const originalCamPos = k.camPos()
-        const shakeIntensity = 20
-        //
-        // Update all particle targets to hero's current position AFTER scatter
-        //
-        particles.forEach(p => {
-          if (p.exists()) {
-            //
-            // Set target to center of hero (all particles converge to one point)
-            //
-            p.targetX = player.pos.x
-            p.targetY = player.pos.y
-            //
-            // Reset velocity slightly toward hero to ensure movement starts
-            //
-            const dx = p.targetX - p.pos.x
-            const dy = p.targetY - p.pos.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
-
-            if (dist > 0) {
-              //
-              // Give initial push toward hero
-              //
-              const initialSpeed = 100
-              p.vx = (dx / dist) * initialSpeed
-              p.vy = (dy / dist) * initialSpeed
-            }
-          }
-        })
-
-        const absorbInterval = k.onUpdate(() => {
-          absorbTime += k.dt()
-          heroFlickerTimer += k.dt()
-          //
-          // Hero flickers during absorption
-          //
-          if (heroFlickerTimer >= heroFlickerInterval) {
-            player.opacity = player.opacity === 1 ? 0.3 : 1
-            heroFlickerTimer = 0
-          }
-          //
-          // Continue screen shake during absorption (temporarily disabled)
-          //
-          // const shakeX = k.rand(-shakeIntensity, shakeIntensity)
-          // const shakeY = k.rand(-shakeIntensity, shakeIntensity)
-          // k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
-          //
-          // Count remaining particles
-          //
-          let activeParticles = 0
-          //
-          // Animate particles - accelerate toward hero
-          //
-          particles.forEach(p => {
-            if (!p.exists()) return
-
-            activeParticles++
-
-            const dx = p.targetX - p.pos.x
-            const dy = p.targetY - p.pos.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            //
-            // Particle reached target - destroy it (small threshold for center convergence)
-            //
-            if (dist <= 8) {
-              if (p.outline && p.outline.exists()) k.destroy(p.outline)
-              k.destroy(p)
-              return
-            }
-            //
-            // Strong acceleration with progressive time boost
-            //
-            // Higher initial acceleration for faster absorption
-            //
-            const timeBoost = 1 + (absorbTime / maxAbsorbDuration) * 5  // Up to 6x boost
-            const baseAcceleration = 1200 / Math.max(dist, 3)  // Higher base, lower min distance
-            const acceleration = baseAcceleration * timeBoost
-            //
-            // Apply acceleration toward target
-            //
-            p.vx += (dx / dist) * acceleration * k.dt() * 60
-            p.vy += (dy / dist) * acceleration * k.dt() * 60
-            //
-            // Move particle
-            //
-            p.moveBy(p.vx * k.dt(), p.vy * k.dt())
-            //
-            // Update outline position
-            //
-            if (p.outline && p.outline.exists()) {
-              p.outline.pos.x = p.pos.x
-              p.outline.pos.y = p.pos.y
-            }
-            //
-            // Check if overshot target
-            //
-            const newDist = Math.sqrt(
-              Math.pow(p.targetX - p.pos.x, 2) +
-              Math.pow(p.targetY - p.pos.y, 2)
-            )
-
-            if (newDist > dist) {
-              //
-              // Overshot - destroy particle
-              //
-              if (p.outline && p.outline.exists()) k.destroy(p.outline)
-              k.destroy(p)
-              return
-            }
-
-            p.opacity = 1.0
-          })
-          //
-          // All particles absorbed
-          //
-          if (activeParticles === 0 || absorbTime >= maxAbsorbDuration) {
-            absorbInterval.cancel()
-            //
-            // Clean up particles and outlines
-            //
-            particles.forEach(p => {
-              if (p.outline && p.outline.exists()) k.destroy(p.outline)
-              if (p.exists()) k.destroy(p)
-            })
-            //
-            // Stop hero flickering
-            //
-            player.opacity = 1
-            //
-            // Restore camera
-            //
-            k.camPos(originalCamPos)
-            //
-            // STEP 7: Check if this is the last level of word, touch or time section
-            //
-            const nextLevel = getNextLevel(inst.currentLevel)
-            const isLastWordLevel = inst.currentLevel === 'lesson-word.4' && nextLevel === 'word-complete'
-            const isLastTimeLevel = inst.currentLevel === 'lesson-time.3' && nextLevel === 'time-complete'
-            
-            if (isLastWordLevel && (!inst.addMouth || inst.bodyColor !== '#DC143C')) {
-              //
-              // Special sequence for completing word section: add mouth and red color before transition
-              //
-              k.wait(0.4, () => {
-                //
-                // Store original volumes
-                //
-                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
-                //
-                // Fade out music and blade sounds to very quiet, increase glitch volume
-                //
-                let fadeTimer = 0
-                const FADE_DURATION = 0.5
-                const TARGET_MUSIC_VOLUME = 0.005  // Even quieter music (was 0.02)
-                const TARGET_BLADE_VOLUME = 0.003  // Even quieter blade sounds (was 0.01)
-                const TARGET_GLITCH_VOLUME = 3.5  // Make glitch sound even louder
-                
-                const fadeInterval = k.onUpdate(() => {
-                  fadeTimer += k.dt()
-                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
-                  //
-                  // Fade music down
-                  //
-                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
-                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                  //
-                  // Fade blade sounds down
-                  //
-                  Sound.setBladeSoundVolume(sfx, 1.0 - progress * (1.0 - TARGET_BLADE_VOLUME))
-                  //
-                  // Fade glitch sounds up
-                  //
-                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
-                  
-                  if (progress >= 1) {
-                    fadeInterval.cancel()
-                  }
-                })
-                //
-                // Play pre-mouth sound (louder glitch) - wait 1.3 seconds after fade completes
-                //
-                k.wait(0.35, () => {
-                  sfx && Sound.playMouthSound(sfx)
-                  //
-                  // Add mouth to hero sprite
-                  //
-                  k.wait(0.2, () => {
-                  //
-                  // Update inst: add mouth, arms, watch and red color (DC143C) before loading sprites
-                  //
-                  inst.addMouth = true
-                  inst.addArms = true
-                  inst.addWatch = true
-                  const redColor = '#DC143C'
-                  inst.bodyColor = redColor
-                  const bodyColorClean = String(redColor).replace('#', '')
-                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth_arms_watch`
-                    //
-                    // Create visual effect (particles around hero)
-                    //
-                    createBodyPartParticles(inst)
-                    //
-                    // Reload sprites with mouth, arms and watch
-                    //
-                    loadHeroSprites({
-                      k: inst.k,
-                      type: inst.type,
-                      bodyColor: redColor,
-                      outlineColor: CFG.visual.colors.outline,
-                      addMouth: true,
-                      addArms: true,
-                      addWatch: true,
-                      character: null
-                    })
-                    //
-                    // Wait a frame to ensure sprites are loaded, then update character sprite
-                    //
-                    k.wait(0.05, () => {
-                      //
-                      // Use getSpriteName to get the correct sprite with mouth
-                      //
-                      const newSpriteName = getSpriteName(inst, 0, 0)
-                      //
-                      // Update character sprite to show mouth
-                      //
-                      try {
-                        player.use(k.sprite(newSpriteName))
-                      } catch (error) {
-                        console.error(`Failed to load sprite ${newSpriteName}:`, error)
-                      }
-                      //
-                      // Play mouth appearance sound (louder transformation sound)
-                      //
-                      sfx && Sound.playMouthSound(sfx)
-                      //
-                      // Create sparkle particles around mouth
-                      //
-                      createMouthSparkles(inst)
-                      //
-                      // Pause to show the mouth longer
-                      //
-                      k.wait(1.0, () => {
-                        //
-                        // Fade volumes back to normal
-                        //
-                        let restoreTimer = 0
-                        const RESTORE_DURATION = 0.8
-                        
-                        const restoreInterval = k.onUpdate(() => {
-                          restoreTimer += k.dt()
-                          const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
-                          //
-                          // Restore music volume
-                          //
-                          const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
-                          Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                          //
-                          // Restore blade sound volume
-                          //
-                          Sound.setBladeSoundVolume(sfx, TARGET_BLADE_VOLUME + (1.0 - TARGET_BLADE_VOLUME) * progress)
-                          //
-                          // Restore glitch sound volume
-                          //
-                          Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
-                          
-                          if (progress >= 1) {
-                            restoreInterval.cancel()
-                          }
-                        })
-                        //
-                        // Save progress and show transition
-                        //
-                        if (nextLevel && nextLevel !== 'menu') {
-                          set('lastLesson', nextLevel)
-                        }
-                        inst.character.hidden = true
-                        createLevelTransition(k, inst.currentLevel)
-                      })
-                    })
-                  })
-                })
-              })
-            } else if (inst.currentLevel === 'lesson-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== TOUCH_SECTION_HERO_COLOR)) {
-              //
-              // Special sequence for completing touch section: change hero color to touch anti-hero teal and add arms
-              //
-              k.wait(1.5, () => {
-                //
-                // Store original volumes
-                //
-                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
-                //
-                // Fade out music to quiet, increase glitch volume
-                //
-                let fadeTimer = 0
-                const FADE_DURATION = 1.0
-                const TARGET_MUSIC_VOLUME = 0.005
-                const TARGET_GLITCH_VOLUME = 3.5
-
-                const fadeInterval = k.onUpdate(() => {
-                  fadeTimer += k.dt()
-                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
-                  //
-                  // Fade music down
-                  //
-                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
-                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                  //
-                  // Fade glitch sounds up
-                  //
-                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
-
-                  if (progress >= 1) {
-                    fadeInterval.cancel()
-                  }
-                })
-                //
-                // Play transformation sound after fade completes
-                //
-                k.wait(1.0, () => {
-                  sfx && Sound.playMouthSound(sfx)
-                  //
-                  // Update inst: change to touch section color and add arms
-                  //
-                  const touchColor = TOUCH_SECTION_HERO_COLOR
-                  inst.bodyColor = touchColor
-                  inst.addArms = true
-                  const touchColorClean = String(touchColor).replace('#', '')
-                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                  const hasMouth = inst.addMouth
-                  inst.spritePrefix = `${inst.type}_${touchColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
-                  //
-                  // Create visual effect (particles around hero)
-                  //
-                  createBodyPartParticles(inst)
-                  //
-                  // Reload sprites with touch section color and arms
-                  //
-                  loadHeroSprites({
-                    k: inst.k,
-                    type: inst.type,
-                    bodyColor: touchColor,
-                    outlineColor: CFG.visual.colors.outline,
-                    addMouth: hasMouth,
-                    addArms: true,
-                    character: null
-                  })
-                  //
-                  // Wait a frame to ensure sprites are loaded, then update character sprite
-                  //
-                  k.wait(0.05, () => {
-                    //
-                    // Use getSpriteName to get the correct sprite with pink color and arms
-                    //
-                    const newSpriteName = getSpriteName(inst, 0, 0)
-                    //
-                    // Update character sprite to show pink color with arms
-                    //
-                    try {
-                      player.use(k.sprite(newSpriteName))
-                    } catch (error) {
-                      // Sprite load failed, continue with transition
-                    }
-                    //
-                    // Play transformation sound
-                    //
-                    sfx && Sound.playMouthSound(sfx)
-                    //
-                    // Create sparkle particles around hero (pink particles)
-                    //
-                    createColorChangeSparkles(inst, touchColor)
-                    //
-                    // Pause to show the transformed hero
-                    //
-                    k.wait(2.5, () => {
-                      //
-                      // Fade volumes back to normal
-                      //
-                      let restoreTimer = 0
-                      const RESTORE_DURATION = 0.8
-
-                      const restoreInterval = k.onUpdate(() => {
-                        restoreTimer += k.dt()
-                        const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
-                        //
-                        // Restore music volume
-                        //
-                        const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
-                        Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                        //
-                        // Restore glitch sound volume
-                        //
-                        Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
-
-                        if (progress >= 1) {
-                          restoreInterval.cancel()
-                        }
-                      })
-                      //
-                      // Save progress and show transition
-                      //
-                      if (nextLevel && nextLevel !== 'menu') {
-                        set('lastLesson', nextLevel)
-                      }
-                      inst.character.hidden = true
-                      //
-                      // Small pause before transitioning to touch-complete
-                      //
-                      k.wait(0.5, () => {
-                        createLevelTransition(k, inst.currentLevel)
-                      })
-                    })
-                  })
-                })
-              })
-            } else if (isLastTimeLevel && (inst.bodyColor !== TIME_SECTION_HERO_COLOR || !inst.addArms || !inst.addWatch)) {
-              //
-              // Special sequence for completing time section: orange anti-hero color with arms and watch
-              //
-              k.wait(1.5, () => {
-                //
-                // Store original volumes
-                //
-                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
-                //
-                // Fade out music to quiet, increase glitch volume
-                //
-                let fadeTimer = 0
-                const FADE_DURATION = 1.0  // 1 second fade
-                const TARGET_MUSIC_VOLUME = 0.005
-                const TARGET_GLITCH_VOLUME = 3.5
-                
-                const fadeInterval = k.onUpdate(() => {
-                  fadeTimer += k.dt()
-                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
-                  //
-                  // Fade music down
-                  //
-                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
-                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                  //
-                  // Fade glitch sounds up
-                  //
-                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
-                  
-                  if (progress >= 1) {
-                    fadeInterval.cancel()
-                  }
-                })
-                //
-                // Play color change sound right after fade completes (color change happens in 1 second)
-                //
-                k.wait(1.0, () => {
-                  sfx && Sound.playMouthSound(sfx)
-                  //
-                  // Update inst: orange anti-hero color with arms and watch BEFORE loading sprites
-                  //
-                  const timeColor = TIME_SECTION_HERO_COLOR
-                  inst.bodyColor = timeColor
-                  inst.addArms = true
-                  inst.addWatch = true
-                  const timeColorClean = String(timeColor).replace('#', '')
-                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                  const hasMouth = inst.addMouth
-                  inst.spritePrefix = `${inst.type}_${timeColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms_watch`
-                  //
-                  // Reload sprites with orange color, arms and watch
-                  //
-                  loadHeroSprites({
-                    k: inst.k,
-                    type: inst.type,
-                    bodyColor: timeColor,
-                    outlineColor: CFG.visual.colors.outline,
-                    addMouth: hasMouth,
-                    addArms: true,
-                    addWatch: true,
-                    character: null
-                  })
-                  //
-                  // Wait a frame to ensure sprites are loaded, then update character sprite
-                  //
-                  k.wait(0.05, () => {
-                    //
-                    // Use getSpriteName to get the correct sprite with orange color, arms and watch
-                    //
-                    const newSpriteName = getSpriteName(inst, 0, 0)
-                    //
-                    // Update character sprite to show orange hero with arms and watch
-                    //
-                    try {
-                      player.use(k.sprite(newSpriteName))
-                    } catch (error) {
-                      // Sprite load failed, continue with transition
-                    }
-                    //
-                    // Play color transformation sound
-                    //
-                    sfx && Sound.playMouthSound(sfx)
-                    //
-                    // Create sparkle particles around hero (orange particles)
-                    //
-                    createColorChangeSparkles(inst, timeColor)
-                    //
-                    // Pause to show the transformed hero longer
-                    //
-                    k.wait(2.5, () => {
-                      //
-                      // Fade volumes back to normal
-                      //
-                      let restoreTimer = 0
-                      const RESTORE_DURATION = 0.8
-                      
-                      const restoreInterval = k.onUpdate(() => {
-                        restoreTimer += k.dt()
-                        const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
-                        //
-                        // Restore music volume
-                        //
-                        const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
-                        Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
-                        //
-                        // Restore glitch sound volume
-                        //
-                        Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
-                        
-                        if (progress >= 1) {
-                          restoreInterval.cancel()
-                        }
-                      })
-                      //
-                      // Save progress and show transition
-                      //
-                      if (nextLevel && nextLevel !== 'menu') {
-                        set('lastLesson', nextLevel)
-                      }
-                      inst.character.hidden = true
-                      //
-                      // Small pause after annihilation before transitioning to next level
-                      //
-                      k.wait(0.5, () => {
-                      createLevelTransition(k, inst.currentLevel)
-                      })
-                    })
-                  })
-                })
-              })
-            } else if (isLastTimeLevel) {
-              //
-              // Time section finale when hero already has orange body, arms and watch
-              //
-              k.wait(0.6, () => {
-                if (nextLevel && nextLevel !== 'menu') {
-                  set('lastLesson', nextLevel)
-                }
-                inst.character.hidden = true
-                k.wait(0.5, () => {
-                  createLevelTransition(k, inst.currentLevel)
-                })
-              })
-            } else {
-              //
-              // Normal sequence: pause after absorption and shake, then fade and show text
-              //
-              k.wait(0.6, () => {
-                if (inst.currentLevel) {
-                  //
-                  // Save NEXT level progress to localStorage before transition
-                  //
-                  // (so player continues from the next level, not the current one)
-                  //
-                  if (nextLevel && nextLevel !== 'menu') {
-                    set('lastLesson', nextLevel)
-                  }
-                  inst.character.hidden = true
-                  //
-                  // Small pause after annihilation before transitioning to next level
-                  //
-                  k.wait(0.5, () => {
-                  //
-                  // Call onAnnihilation callback if provided, otherwise use default transition
-                  //
-                  if (inst.onAnnihilation) {
-                    inst.onAnnihilation()
-                  } else {
-                    createLevelTransition(k, inst.currentLevel)
-                  }
-                  })
-                }
-              })
-            }
-          }
-        })
-      })
-    }
-  })
-}
 
 //
 // Cuts a transparent socket through baked pixels so hollow eyes read as see-through.
@@ -4288,7 +2995,7 @@ function refreshHeroSpriteForArms(inst) {
  * @param {number} eyeY - Eye Y offset (-1, 0, 1)
  * @returns {string} Sprite name
  */
-function getSpriteName(inst, eyeX = 0, eyeY = 0) {
+export function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   //
   // Always round eye coordinates to ensure sprite names are clean integers
   //
@@ -4325,7 +3032,7 @@ function getParticleColors(inst) {
   //
   // Death shards stay filled with body hues plus thin outline only — never solid outline blobs.
   //
-  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('lesson-time.')
+  const isTimeSection = inst.stepSoundScene && inst.stepSoundScene.startsWith('lesson-time.')
   if (isTimeSection) {
     const { type } = inst
     return type === HEROES.HERO
@@ -4357,197 +3064,6 @@ function deathParticlePaletteFromHex(hex) {
 }
 
 /**
- * Create sparkle particles around hero's mouth
- * @param {Object} inst - Hero instance
- */
-function createMouthSparkles(inst) {
-  const { k, character } = inst
-  const centerX = character.pos.x
-  const centerY = character.pos.y
-  //
-  // Create small sparkle particles
-  //
-  const sparkleCount = 12
-  const sparkles = []
-  
-  for (let i = 0; i < sparkleCount; i++) {
-    //
-    // Position sparkles in a small area around the mouth (lower part of face)
-    //
-    const angle = (Math.PI * 2 * i) / sparkleCount
-    const distance = 15 + Math.random() * 10
-    const offsetX = Math.cos(angle) * distance
-    const offsetY = 5 + Math.sin(angle) * distance * 0.5  // Biased downward (mouth area)
-    //
-    // Sparkle colors (bright yellow/white)
-    //
-    const colors = [
-      k.rgb(255, 255, 200),  // Pale yellow
-      k.rgb(255, 255, 255),  // White
-      k.rgb(255, 240, 150),  // Light gold
-      k.rgb(200, 255, 255)   // Light cyan
-    ]
-    const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
-    //
-    // Create sparkle particle (small circle)
-    //
-    const size = 2 + Math.random() * 3
-    const sparkle = k.add([
-      k.circle(size),
-      k.pos(centerX + offsetX, centerY + offsetY),
-      k.color(sparkleColor),
-      k.opacity(0.8),
-      k.z(CFG.visual.zIndex.player + 1)
-    ])
-    //
-    // Store sparkle data
-    //
-    sparkle.vx = (Math.random() - 0.5) * 40
-    sparkle.vy = -20 - Math.random() * 30  // Move up
-    sparkle.lifetime = 0
-    sparkle.maxLifetime = 0.8 + Math.random() * 0.4
-    sparkle.originalSize = size
-    
-    sparkles.push(sparkle)
-  }
-  //
-  // Animate sparkles
-  //
-  const sparkleInterval = k.onUpdate(() => {
-    sparkles.forEach((sparkle, index) => {
-      if (!sparkle.exists()) return
-      
-      sparkle.lifetime += k.dt()
-      //
-      // Move sparkle
-      //
-      sparkle.moveBy(sparkle.vx * k.dt(), sparkle.vy * k.dt())
-      //
-      // Apply upward drift and slow down
-      //
-      sparkle.vy -= 80 * k.dt()  // Upward acceleration
-      sparkle.vx *= 0.95
-      //
-      // Fade out and shrink based on lifetime
-      //
-      const progress = sparkle.lifetime / sparkle.maxLifetime
-      sparkle.opacity = 0.8 * (1 - progress)
-      //
-      // Twinkle effect (size pulsing)
-      //
-      const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
-      //
-      // Destroy when lifetime expires
-      //
-      if (sparkle.lifetime >= sparkle.maxLifetime) {
-        k.destroy(sparkle)
-      }
-    })
-    //
-    // Clean up when all sparkles are done
-    //
-    if (sparkles.every(s => !s.exists())) {
-      sparkleInterval.cancel()
-    }
-  })
-}
-
-/**
- * Create sparkle particles around hero for color change effect
- * @param {Object} inst - Hero instance
- * @param {string} color - New color (hex string)
- */
-/**
- * Create color change sparkle particles around hero
- * Similar to particles when small hero completes a level
- * @param {Object} inst - Hero instance
- * @param {string} color - New body color (hex)
- */
-function createColorChangeSparkles(inst, color) {
-  const { k, character } = inst
-  const centerX = character.pos.x
-  const centerY = character.pos.y
-  //
-  // Parse hex color to RGB
-  //
-  const colorValue = parseInt(color.replace('#', ''), 16)
-  const r = (colorValue >> 16) & 0xFF
-  const g = (colorValue >> 8) & 0xFF
-  const b = colorValue & 0xFF
-  //
-  // Create circle particles flying outward (similar to heart particles for small hero)
-  //
-  const particleCount = 12
-  
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 80 + Math.random() * 40
-    const lifetime = 0.6 + Math.random() * 0.4
-    const circleSize = 8 + Math.random() * 6
-    //
-    // Create black outline circles (8 directions)
-    //
-    const outlineOffset = 1.5
-    const outlineOffsets = [
-      [-outlineOffset, -outlineOffset],
-      [0, -outlineOffset],
-      [outlineOffset, -outlineOffset],
-      [-outlineOffset, 0],
-      [outlineOffset, 0],
-      [-outlineOffset, outlineOffset],
-      [0, outlineOffset],
-      [outlineOffset, outlineOffset]
-    ]
-    
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outlineParticle = k.add([
-        k.circle(circleSize),
-        k.pos(centerX + dx, centerY + dy),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(50)
-      ])
-      //
-      // Animate outline particle
-      //
-      const startTime = k.time()
-      outlineParticle.onUpdate(() => {
-        const elapsed = k.time() - startTime
-        if (elapsed > lifetime) {
-          k.destroy(outlineParticle)
-          return
-        }
-        outlineParticle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
-        outlineParticle.opacity = 1 - (elapsed / lifetime)
-      })
-    })
-    //
-    // Create main colored circle
-    //
-    const particle = k.add([
-      k.circle(circleSize),
-      k.pos(centerX, centerY),
-      k.color(r, g, b),
-      k.opacity(1),
-      k.z(51)
-    ])
-    //
-    // Animate particle outward with fade
-    //
-    const startTime = k.time()
-    particle.onUpdate(() => {
-      const elapsed = k.time() - startTime
-      if (elapsed > lifetime) {
-        k.destroy(particle)
-        return
-      }
-      particle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
-      particle.opacity = 1 - (elapsed / lifetime)
-    })
-  }
-}
-
-/**
  * Create body particles for death explosion
  * @param {Object} inst - Hero instance
  * @param {number} centerX - Center X position
@@ -4574,7 +3090,7 @@ function createBodyParticles(inst, centerX, centerY) {
     const body = k.add([
       k.rect(pSize, pSize),
       k.pos(centerX, centerY),
-      k.anchor("center"),
+      k.anchor('center'),
       k.rotate(rotation),
       k.z(CFG.visual.zIndex.playerShadow),
       k.area(),
@@ -4586,7 +3102,7 @@ function createBodyParticles(inst, centerX, centerY) {
     //
     const particle = k.add([
       k.pos(centerX, centerY),
-      k.anchor("center"),
+      k.anchor('center'),
       k.rotate(rotation),
       k.z(particleZ),
       k.opacity(1),
@@ -4599,7 +3115,7 @@ function createBodyParticles(inst, centerX, centerY) {
             width: oSize,
             height: oSize,
             pos: k.vec2(0, 0),
-            anchor: "center",
+            anchor: 'center',
             color: getRGB(k, CFG.visual.colors.outline)
           })
           //
@@ -4609,7 +3125,7 @@ function createBodyParticles(inst, centerX, centerY) {
             width: pSize,
             height: pSize,
             pos: k.vec2(0, 0),
-            anchor: "center",
+            anchor: 'center',
             color: k.rgb(r, g, b)
           })
         }
@@ -4627,28 +3143,7 @@ function createBodyParticles(inst, centerX, centerY) {
     //
     // Update particle
     //
-    particle.onUpdate(() => {
-      particle.lifetime += k.dt()
-      particle.pos = particle.body.pos
-      particle.angle = particle.body.angle
-      particle.body.vel.x *= 0.98
-      particle.body.angle += particle.rotSpeed * k.dt()
-      //
-      // Fade out over lifetime
-      //
-      const fadeStartTime = 1.0
-      if (particle.lifetime > fadeStartTime) {
-        const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
-        particle.opacity = Math.max(0, 1 - fadeProgress)
-      }
-      //
-      // Destroy when max lifetime reached or falls off screen
-      //
-      if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
-        k.destroy(particle.body)
-        k.destroy(particle)
-      }
-    })
+    particle.onUpdate(() => onUpdateDeathBodyParticle(particle, k))
     particles.push(particle)
   }
   return particles
@@ -4670,10 +3165,9 @@ function createEyeParticles(inst, centerX, centerY) {
   //
   // Check if we're in time section for grayscale eyes
   //
-  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('lesson-time.')
-  const eyeWhiteColor = isTimeSection ? [200, 200, 200] : [255, 255, 255]  // Light gray or white
-  const pupilColor = isTimeSection ? [100, 100, 100] : [0, 0, 0]  // Dark gray or black
-  
+  const isTimeSection = inst.stepSoundScene && inst.stepSoundScene.startsWith('lesson-time.')
+  const eyeWhiteColor = isTimeSection ? [200, 200, 200] : [255, 255, 255]
+  const pupilColor = isTimeSection ? [100, 100, 100] : [0, 0, 0]
   for (let i = 0; i < 2; i++) {
     const angle = eyeAngles[i]
     const speed = k.rand(150, 350)
@@ -4685,7 +3179,7 @@ function createEyeParticles(inst, centerX, centerY) {
       k.rect(eyeWhiteSize, eyeWhiteSize),
       k.pos(centerX, centerY),
       k.color(eyeWhiteColor[0], eyeWhiteColor[1], eyeWhiteColor[2]),
-      k.anchor("center"),
+      k.anchor('center'),
       k.z(eyeZ),
       k.area(),
       k.body()
@@ -4697,11 +3191,7 @@ function createEyeParticles(inst, centerX, centerY) {
       k.rect(pupilSize, pupilSize),
       k.pos(0, 0),
       k.color(pupilColor[0], pupilColor[1], pupilColor[2]),
-      k.anchor("center"),
-      //
-      // z() sorts globally in Kaplay 4000 (not relative to the parent anymore),
-      // so the pupil must sit just above the eye's own z, not a fixed constant.
-      //
+      k.anchor('center'),
       k.z(eyeZ + CFG.visual.zIndex.eyePupil)
     ])
     //
@@ -4714,115 +3204,12 @@ function createEyeParticles(inst, centerX, centerY) {
     //
     // Update eye
     //
-    eyeWhite.onUpdate(() => {
-      eyeWhite.lifetime += k.dt()
-      eyeWhite.vel.x *= 0.98
-      pupil.opacity = eyeWhite.opacity
-      //
-      // Fade out over lifetime
-      //
-      const fadeStartTime = 1.0
-      if (eyeWhite.lifetime > fadeStartTime) {
-        const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
-        eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
-      }
-      //
-      // Destroy when max lifetime reached or falls off screen
-      //
-      if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
-        k.destroy(eyeWhite)
-      }
-    })
+    eyeWhite.onUpdate(() => onUpdateDeathEyeParticle(eyeWhite, pupil, k))
     particles.push(eyeWhite)
   }
   return particles
 }
-//
-// Helper function to calculate particle dimensions based on shape type
-//
-function getParticleDimensions(k, shapeType, particleSize, scale) {
-  const outlineSize = particleSize + 1
-  let pWidth, pHeight, oWidth, oHeight
 
-  if (shapeType === 'square') {
-    pWidth = pHeight = particleSize * scale
-    oWidth = oHeight = outlineSize * scale
-  } else if (shapeType === 'rect_h') {
-    pWidth = particleSize * scale * k.rand(1.3, 1.8)
-    pHeight = particleSize * scale * k.rand(0.6, 0.8)
-    oWidth = pWidth + 1 * scale
-    oHeight = pHeight + 1 * scale
-  } else if (shapeType === 'rect_v') {
-    pWidth = particleSize * scale * k.rand(0.6, 0.8)
-    pHeight = particleSize * scale * k.rand(1.3, 1.8)
-    oWidth = pWidth + 1 * scale
-    oHeight = pHeight + 1 * scale
-  } else if (shapeType === 'circle') {
-    //
-    // For circles pWidth/pHeight store the diameter; radius = pWidth / 2
-    //
-    const diameter = particleSize * scale * k.rand(0.7, 1.1)
-    pWidth = pHeight = diameter
-    oWidth = oHeight = diameter + 2 * scale
-  } else {
-    pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
-    oWidth = oHeight = pWidth + 1 * scale
-  }
-
-  return { pWidth, pHeight, oWidth, oHeight }
-}
-//
-// Helper function to create a particle with outline
-//
-function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, particleSize, scale) {
-  const [r, g, b] = parseHex(colorHex)
-  const { pWidth, pHeight, oWidth, oHeight } = getParticleDimensions(k, shapeType, particleSize, scale)
-  const isCircle = shapeType === 'circle'
-
-  return k.add([
-    k.pos(x, y),
-    k.anchor("center"),
-    k.rotate(rotation),
-    k.z(CFG.visual.zIndex.assemblyParticles),
-    {
-      draw() {
-        if (isCircle) {
-          //
-          // Draw outline circle behind, colored circle on top
-          //
-          k.drawCircle({
-            radius: oWidth / 2,
-            pos: k.vec2(0, 0),
-            color: getRGB(k, CFG.visual.colors.outline)
-          })
-          k.drawCircle({
-            radius: pWidth / 2,
-            pos: k.vec2(0, 0),
-            color: k.rgb(r, g, b)
-          })
-        } else {
-          //
-          // Draw outline rect behind, colored rect on top
-          //
-          k.drawRect({
-            width: oWidth,
-            height: oHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: getRGB(k, CFG.visual.colors.outline)
-          })
-          k.drawRect({
-            width: pWidth,
-            height: pHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: k.rgb(r, g, b)
-          })
-        }
-      }
-    }
-  ])
-}
 //
 // Draws a filled rectangle with only the two bottom corners rounded.
 // One leg pose on the 8-frame run cycle: x sweeps between the front and
@@ -5533,7 +3920,7 @@ function isHeadAgainstCeiling(inst, airborneOk = false) {
   const platforms = [...inst.k.get(CFG.game.platformName), ...inst.k.get('platform')]
   for (const obj of platforms) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
-    if (obj.is?.(ANTIHERO_TAG)) continue
+    if (obj.is?.('annihilation')) continue
     if (obj.is?.('startBranch')) continue
     //
     // Hidden/off-screen pads must not count as ceilings
@@ -5824,4 +4211,36 @@ function bakeIdleNoteGlyphCanvas(glyph, fontFamily) {
   ctx.fillStyle = '#ffffff'
   ctx.fillText(glyph, canvas.width / 2, canvas.height / 2)
   return canvas
+}
+//
+// Private death-particle update helpers
+//
+function onUpdateDeathBodyParticle(particle, k) {
+  particle.lifetime += k.dt()
+  particle.pos = particle.body.pos
+  particle.angle = particle.body.angle
+  particle.body.vel.x *= 0.98
+  particle.body.angle += particle.rotSpeed * k.dt()
+  const fadeStartTime = 1.0
+  if (particle.lifetime > fadeStartTime) {
+    const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
+    particle.opacity = Math.max(0, 1 - fadeProgress)
+  }
+  if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
+    k.destroy(particle.body)
+    k.destroy(particle)
+  }
+}
+function onUpdateDeathEyeParticle(eyeWhite, pupil, k) {
+  eyeWhite.lifetime += k.dt()
+  eyeWhite.vel.x *= 0.98
+  pupil.opacity = eyeWhite.opacity
+  const fadeStartTime = 1.0
+  if (eyeWhite.lifetime > fadeStartTime) {
+    const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
+    eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
+  }
+  if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
+    k.destroy(eyeWhite)
+  }
 }

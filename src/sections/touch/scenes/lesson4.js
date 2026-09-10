@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
+import { bindHeroAnnihilation } from '../../../utils/hero-annihilation.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -372,7 +373,6 @@ export function sceneLesson4(k) {
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: sound,
-      antiHero: null,
       addArms: true
     })
     //
@@ -389,19 +389,18 @@ export function sceneLesson4(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
-      onAnnihilation: () => {
-        //
-        // Transition after annihilation to menu
-        //
-        createLevelTransition(k, 'lesson-touch.4', () => {
-          goToMenuAfterAssets(k)
-        })
-      },
-      currentLevel: 'lesson-touch.4',
+      stepSoundScene: 'lesson-touch.4',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
+    })
+    bindHeroAnnihilation(heroInst, antiHeroInst, {
+      currentLevel: 'lesson-touch.4',
+      onAnnihilation: () => {
+        createLevelTransition(k, 'lesson-touch.4', () => {
+          goToMenuAfterAssets(k)
+        })
+      }
     })
     //
     // Store original jump force for hero (use hero's actual jumpForce)

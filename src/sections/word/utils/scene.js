@@ -3,6 +3,7 @@ import { getColor, getRGB, parseHex, toCanvas, bindBackToMenuKeys } from '../../
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
+import { bindHeroAnnihilation } from '../../../utils/hero-annihilation.js'
 import * as LevelIndicator from '../components/lesson-indicator.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
@@ -770,9 +771,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     y: heroY,
     type: Hero.HEROES.HERO,
     sfx: sound,
-    antiHero,
-    currentLevel,
-    onAnnihilation: onAnnihilation || null,
+    stepSoundScene: currentLevel,
     dustColor,
     addMouth: isWordComplete,
     bodyColor: heroBodyColor,
@@ -784,7 +783,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     //
     idleVocalization: null
   })
-  
+  bindHeroAnnihilation(hero, antiHero, { currentLevel, onAnnihilation: onAnnihilation || null })
   hero.character.tag("player")
   Hero.spawn(hero)
   

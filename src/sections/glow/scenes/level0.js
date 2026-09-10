@@ -80,7 +80,8 @@ import {
   onUpdateGlowEyeIntro,
   onDrawGlowEyeIntro,
   unlockGlowEyesGameplayFromBranchLaunch,
-  snapGlowHeroToPitFloor
+  snapGlowHeroToPitFloor,
+  restoreGlowEyeIntroFromPersistedState
 } from '../utils/glow-eye-intro.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as GlowCamera from '../utils/glow-camera.js'
@@ -445,6 +446,7 @@ const HORIZ_PLATFORM_H = 16
 const BRANCH_PLAT_COLLISION_DROP_Y = 2
 const SPAWN_MODE_BRANCH = 'branch'
 const SPAWN_MODE_GROUND = 'ground'
+const SPAWN_MODE_CAVE = 'cave'
 //
 // Anti-tunnel band below the start branch — catches falls before lake-floor snap
 //
@@ -462,6 +464,10 @@ const LOG_H = 28
 // hero visually stands ON the wood instead of hovering above it.
 //
 const LOG_COLLISION_DROP_Y = 2
+//
+// L-letter log collision top sits 2 px higher than other letter logs.
+//
+const L_PLAT_COLLISION_DROP_Y = LOG_COLLISION_DROP_Y - 2
 //
 // Letter-log platforms mirror the main tree wood: warm sand tones in the lit
 // gray world (after L) and the tree's browns once the world gains colour.
@@ -871,6 +877,10 @@ const HERO_OUTLINE_COLOR = GLOW_PAL.heroOutline
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
 //
+// Filled glow hero body after the post-L colour reveal — white inside, dark rim.
+//
+const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
+//
 // Hollow glow eyes: outline ring + matching pupil, clear socket.
 // Filled glow eyes: white sclera + black pupils (standard hero bake).
 //
@@ -944,6 +954,7 @@ const KEY_CAMERA_INTRO_DONE = 'glow.cameraIntroDone'
 const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
+const KEY_LAST_SPAWN_Y = 'glow.lastSpawnY'
 const KEY_BRANCH_TRAMP_REVEALED = 'glow.branchTrampRevealed'
 const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
@@ -987,7 +998,7 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
-const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see. I should jump\nto the big mushroom.'
+const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see. I should speak\nto the big mushroom.'
 //
 // Voice-overs played while the matching letter dialog is open
 //
@@ -1323,10 +1334,11 @@ const BRANCH_LOOK_LEFT_DURATION = 2
 const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
 //
-// After O: five jumps on the right trampoline cap move it left — three walks
-// reach the lake. W appears after the first walk.
+// After O: stand still near the trampoline → countdown → mushroom walks left.
+// Three sings: two land steps, then the lake. W appears after the first sing.
 //
-const TRAMP_WALK_JUMPS_PER_MOVE = 5
+const TRAMP_WALK_STILL = 3
+const TRAMP_WALK_COUNTDOWN = 10
 const TRAMP_ENDURE_SHAKE_SPEED = 38
 const TRAMP_ENDURE_SHAKE_AMP = 0.7
 const TRAMP_ENDURE_SQUASH_MAX = 0.3
@@ -1488,6 +1500,10 @@ const LOG_SNAP_BELOW = LOG_H + 24
 //
 const LOG_SNAP_EMBED = 1
 //
+// Wood logs sit 2 px above the collision top so the hero is not buried in the plank.
+//
+const WOOD_LOG_SNAP_EMBED = LOG_SNAP_EMBED - 2
+//
 // After snapping onto a log, lock out a second jump/land crouch briefly
 //
 const POST_LAND_AIR_LOCK_GLOW = 0.28
@@ -1571,14 +1587,6 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   })
   onProgress?.(90)
   await yieldForGpu(1)
-  Hero.loadHeroSprites({
-    k,
-    type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(false),
-    bodyColor: HERO_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
-    postBakeCanvas: applyGlowFilmGrainToCanvas
-  })
   onProgress?.(100)
 }
 //
@@ -1726,6 +1734,7 @@ function initGlowLevel0Scene(k) {
     const branchSpawnX = horizBranch.x1 + Math.round((horizBranch.x2 - horizBranch.x1) * HERO_BRANCH_FRACTION)
     const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
+    const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
     const clampBranchSpawnX = (x) => Math.max(
       horizBranch.x1 + LOG_SNAP_X_SLACK,
       Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
@@ -1733,26 +1742,27 @@ function initGlowLevel0Scene(k) {
     //
     // Ground spawn: right of the branch trampoline (never on its cap). After a
     // drowning death or any revisit with explored right ground — same spot.
-    // Menu exit / death on branch or ground restores the last saved pose.
+    // Menu exit / level reload restores the last saved pose (X + Y).
     //
     let spawnOnBranch = false
     let heroSpawnX = branchSpawnX
+    let heroSpawnY = branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    const hasSavedPose = lastSpawnX != null && lastSpawnY != null && lastSpawnMode
     if (respawnNearTree) {
       heroSpawnX = treeGroundSpawnX
-    } else if (lastSpawnMode === SPAWN_MODE_BRANCH && lastSpawnX != null) {
-      spawnOnBranch = true
-      heroSpawnX = clampBranchSpawnX(lastSpawnX)
-    } else if (lastSpawnMode === SPAWN_MODE_GROUND && lastSpawnX != null) {
-      heroSpawnX = lastSpawnX
+      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    } else if (hasSavedPose) {
+      heroSpawnX = lastSpawnMode === SPAWN_MODE_BRANCH ? clampBranchSpawnX(lastSpawnX) : lastSpawnX
+      heroSpawnY = lastSpawnY
+      spawnOnBranch = lastSpawnMode === SPAWN_MODE_BRANCH
     } else if (zones.groundDecorRight) {
       heroSpawnX = treeGroundSpawnX
+      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     } else {
       spawnOnBranch = true
       heroSpawnX = branchSpawnX
+      heroSpawnY = branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     }
-    const heroSpawnY = spawnOnBranch
-      ? branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-      : FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     //
     // A saved/derived ground spawn landing inside the left hedgehog's
     // ambush danger zone (trigger..pop, plus its touch radius) would pop
@@ -1805,7 +1815,10 @@ function initGlowLevel0Scene(k) {
       outlineColor: heroStartFilled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
       ...heroEyes,
       outlineOnly: !heroStartFilled,
-      currentLevel: 'lesson-glow.0',
+      footFx: false,
+      stepSoundScene: 'lesson-glow.0',
+      airAnimDuringFlicker: true,
+      runDuringFlicker: true,
       noEyes: !zones.eyesCollected,
       suppressDust: true,
       postBakeCanvas: applyGlowFilmGrainToCanvas,
@@ -1838,7 +1851,10 @@ function initGlowLevel0Scene(k) {
     const oPlatX = rightZoneBaseX + LOG_W + O_PLAT_OFFSET_X
     const oPlatY = rightPlatY - O_PLAT_OFFSET_Y
     const logAtlas = createLogAtlasCollector()
-    const lPlat = createGrayLogPlatform(k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
+    const lPlat = createGrayLogPlatform(
+      k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas,
+      L_PLAT_COLLISION_DROP_Y
+    )
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
     const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
     const trampX = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
@@ -2090,7 +2106,6 @@ function initGlowLevel0Scene(k) {
         walking: false,
         walked: savedTrampWalked,
         singCount: savedTrampSingCount,
-        jumpCount: 0,
         walkTargetX: trampDockX,
         dockX: trampDockX,
         bounceCount: 0,
@@ -2118,7 +2133,7 @@ function initGlowLevel0Scene(k) {
       lPlat,
       wPlat,
       oPlat,
-      lPlatHome: { x: lPlatX, y: rightPlatY },
+      lPlatHome: { x: lPlatX, y: rightPlatY, dropY: L_PLAT_COLLISION_DROP_Y },
       wPlatHome: { x: wPlatX, y: wPlatY },
       oPlatHome: { x: oPlatX, y: oPlatY },
       lLetter,
@@ -2232,6 +2247,7 @@ function initGlowLevel0Scene(k) {
       tooltipClampInset: glowTooltipClampInset()
     })
     inst.pit.sceneRef = inst
+    restoreGlowEyeIntroFromPersistedState(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
     inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
     inst.pit.onPitMushroomLaunch = (_pit, char) => launchHeroFromPitMushroomToBranch(inst, char)
@@ -2239,6 +2255,7 @@ function initGlowLevel0Scene(k) {
     inst.footParticles = GlowFootParticles.create({ k })
     syncGlowAtmosphereZones(inst)
     inst.midges.worldLife = 1
+    inst.k.wait(0, () => preloadGlowHeroFilledSprites(inst))
     maybeShowGLetter(inst)
     zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
       maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
@@ -2263,6 +2280,12 @@ function initGlowLevel0Scene(k) {
     zones.lCollected && !zones.oZone && applyGlowPostLLitState(inst)
     zones.lZoneLit && applyGlowPostLStillnessReveal(inst)
     zones.lCollected && ensureGlowTreeRootsSegment(inst)
+    if (zones.oZone) {
+      enableGlowHeroIdleVocalization(inst)
+    }
+    if ((zones.oZone || zones.oCollected) && !inst.heroBodyFillApplied) {
+      applyGlowHeroBodyFill(inst)
+    }
     registerGlowNativeTeardown(() => {
       persistGlowOnLeave(inst)
       clearHeroFillPreview(inst)
@@ -2411,7 +2434,11 @@ function startGlowIntro(inst) {
     }
     const replayKeys = ['space', ...CFG.controls.backToMenu]
       .map(key => inst.k.onKeyPress(key, dismissReplay))
-    const replayClick = bindPointerActivate(inst.k, dismissReplay)
+    const replayClick = bindPointerActivate(inst.k, () => {
+      if (replayHintDismissed) return false
+      dismissReplay()
+      return true
+    })
     return
   }
   inst.introLock = true
@@ -2442,7 +2469,11 @@ function startGlowIntro(inst) {
     INTRO_ADVANCE_KEY_NAMES.includes(key) && advanceGlowIntro(inst, { cancel: cancelIntroInput })
   }
   introCancels.push(bindStartGameKeys(inst.k, advance))
-  introCancels.push(bindPointerActivate(inst.k, () => advance('space')))
+  introCancels.push(bindPointerActivate(inst.k, () => {
+    if (!inst.introLock) return false
+    advance('space')
+    return true
+  }))
 }
 //
 // Clears the post-death goal reminder as soon as the player starts moving
@@ -2855,17 +2886,26 @@ function persistGlowLastSpawn(inst) {
   const char = inst.heroInst?.character
   if (!char?.pos || inst.drowning) return
   const heroX = char.pos.x
-  const footY = char.pos.y + SURFACE_DETECT_Y
+  const heroY = char.pos.y
+  const footY = heroY + SURFACE_DETECT_Y
+  set(KEY_LAST_SPAWN_X, heroX)
+  set(KEY_LAST_SPAWN_Y, heroY)
+  const pit = inst.pit
+  const inCave = Boolean(
+    pit?.collapsed &&
+    pit.zone &&
+    footY >= pit.floorY + pit.zone.depth - 32
+  )
+  if (inCave && !inst.zones?.eyesCollected) {
+    set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_CAVE)
+    return
+  }
   if (isHeroOverStartBranchX(inst, heroX) &&
     footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX) {
     set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
-    set(KEY_LAST_SPAWN_X, heroX)
     return
   }
-  if (footY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) {
-    set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
-    set(KEY_LAST_SPAWN_X, heroX)
-  }
+  set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
 }
 //
 // Pins the GLOW HUD letters to screen space so they stay under the top bar
@@ -5223,7 +5263,10 @@ function makeRoundedCornerCanvas(radius, color) {
 //
 // Log-style platform — value 5 environment silhouette (same shape as touch logs).
 //
-function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineStyle = false, logAtlas) {
+function createGrayLogPlatform(
+  k, x, y, w, h, sound, heroInst, zones, outlineStyle = false, logAtlas,
+  collisionDropY = LOG_COLLISION_DROP_Y
+) {
   //
   // Log platforms match the main tree's gray trunk tone before L; after L
   // they switch to the fully detailed wood barrel. The L platform itself
@@ -5251,7 +5294,7 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
     // Collision box dropped a couple of pixels below the sprite (see
     // LOG_COLLISION_DROP_Y) so the hero's feet meet the visible wood top.
     //
-    k.area({ offset: k.vec2(0, LOG_COLLISION_DROP_Y) }),
+    k.area({ offset: k.vec2(0, collisionDropY) }),
     k.body({ isStatic: true }),
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName,
@@ -5259,6 +5302,7 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
       _ghostDraw: false,
       _homeX: x,
       _homeY: y,
+      _collisionDropY: collisionDropY,
       _logDetail: logDetail,
       draw() {
         if (this.hidden) return
@@ -6495,7 +6539,6 @@ function detectGlowSurface(inst) {
 //
 function isHeroInMudZone(inst, footX) {
   if (!inst.zones.gCollected) return false
-  if (!isGlowFlatSingleDecorColor(inst)) return false
   if (inst.mudZoneX1 == null || inst.mudZoneX2 == null) return false
   return footX >= inst.mudZoneX1 && footX <= inst.mudZoneX2
 }
@@ -7337,51 +7380,53 @@ function startColorWorldFade(inst) {
   })
 }
 //
+// Restores humming + floating notes after the post-L stillness countdown.
+//
+function enableGlowHeroIdleVocalization(inst) {
+  const hero = inst.heroInst
+  if (!hero) return
+  hero.idleVocalization = 'humming'
+  Hero.unsuppressIdleVocalization()
+}
+//
 // Fills the hero body once the world gains full colour (after O).
 // The hero stays whitish — never turns gold when the world colours.
 //
 function applyGlowHeroBodyFill(inst) {
   clearHeroFillPreview(inst)
-  if (inst.heroBodyFillApplied) return
-  const hero = inst.heroInst
-  if (!hero?.character?.exists?.()) return
-  if (!hero.outlineOnly) {
-    inst.heroBodyFillApplied = true
+  if (inst.heroBodyFillApplied) {
+    const filledChar = inst.heroInst?.character
+    filledChar?.exists?.() && (filledChar.opacity = 1)
     return
   }
-  inst.heroBodyFillApplied = true
-  hero.outlineOnly = false
-  hero.bodyColor = String(HERO_BODY_COLOR).replace('#', '')
-  hero.outlineColor = String(HERO_OUTLINE_COLOR).replace('#', '')
-  hero.eyeWhiteColor = CFG.visual.colors.hero.eyeWhite
-  hero.pupilColor = String(CFG.visual.colors.hero.eyePupil).replace('#', '')
-  hero.transparentEyeInterior = false
-  hero.spritePrefix = buildHeroSpritePrefix(hero)
-  Hero.loadHeroSprites(hero)
-  Hero.syncPlatformLanding(hero)
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.exists?.()) return
+  if (!hero.outlineOnly) {
+    inst.heroBodyFillApplied = true
+    char.opacity = 1
+    return
+  }
   const k = inst.k
-  k.wait(GOLD_SWAP_DELAY, () => {
-    if (!hero.character?.exists?.()) return
-    if (hero.character.vel) {
-      hero.character.vel.x = 0
-      hero.character.vel.y = 0
-    }
-    try {
-      Hero.syncPlatformLanding(hero)
-      hero.character.use(k.sprite(`${hero.spritePrefix}_0_0`))
-      hero.currentEyeSprite = `${hero.spritePrefix}_0_0`
-      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
-      hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.25)
-      Hero.armJumpKeyReleaseGate(hero)
-      hero.wasJumping = false
-      hero.jumpPhase = 'none'
-      hero.canJump = false
-    } catch (error) {
-      void error
-    }
-    hero.character.opacity = 1
-    hero.character.color = k.rgb(255, 255, 255)
-  })
+  const outlinePrefix = hero.spritePrefix
+  const outlineKey = Hero.getActiveSpriteKey(hero)
+  preloadGlowHeroFilledSprites(inst)
+  const filledPrefix = buildFilledHeroSpritePrefix(hero)
+  const filledKey = mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix)
+  const spriteKey = filledKey && k.getSprite(filledKey) ? filledKey : `${filledPrefix}_0_0`
+  if (!k.getSprite(spriteKey)) return
+  hero.outlineOnly = false
+  char.opacity = 1
+  hero.bodyColor = HERO_FILLED_BODY_COLOR
+  hero.outlineColor = String(HERO_OUTLINE_COLOR).replace('#', '')
+  Object.assign(hero, getGlowHeroEyeBakeColors(false))
+  hero.spritePrefix = filledPrefix
+  inst.heroBodyFillApplied = true
+  char.use(k.sprite(spriteKey))
+  hero.currentEyeSprite = spriteKey
+  char.color = k.rgb(255, 255, 255)
+  hero.canJump = true
+  hero.jumpDisabled = false
 }
 //
 // 0→1 while the post-L stillness countdown (or colour-world fade) whitens
@@ -7392,7 +7437,6 @@ function glowHeroFillFade(inst) {
   const z = inst.zones
   const fade = inst.colorFade ?? 0
   if (z.colorWorld) return fade
-  if (z.oCollected) return 1
   if (!z.lCollected || z.colorWorld) return 0
   if (inst.meditation?.countdown != null) return meditationCountdownFade(inst)
   if (z.oZone || fade >= 1 - COLOR_CROSSFADE_EPS) return Math.max(fade, 1)
@@ -7411,7 +7455,7 @@ function preloadGlowHeroFilledSprites(inst) {
     k: inst.k,
     type: hero.type,
     ...getGlowHeroEyeBakeColors(false),
-    bodyColor: HERO_BODY_COLOR,
+    bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
     outlineOnly: false,
     noEyes: bakedNoEyes,
@@ -7432,7 +7476,7 @@ function buildFilledHeroSpritePrefix(hero) {
     ...hero,
     ...eyeColors,
     outlineOnly: false,
-    bodyColor: String(HERO_BODY_COLOR).replace('#', ''),
+    bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: String(HERO_OUTLINE_COLOR).replace('#', '')
   })
 }
@@ -7510,33 +7554,32 @@ function syncHeroFillPreviewSprite(inst) {
 // Crossfades the hollow hero into a white filled body while the world colours.
 //
 function syncGlowHeroBodyFill(inst) {
-  const fade = glowHeroFillFade(inst)
+  const char = inst.heroInst?.character
+  if (!char?.exists?.()) return
   if (inst.heroBodyFillApplied) {
     clearHeroFillPreview(inst)
+    char.opacity = 1
     return
   }
-  const hero = inst.heroInst
-  const char = hero?.character
-  if (!char?.exists?.()) return
+  const fade = glowHeroFillFade(inst)
   if (fade <= 0.001) {
     clearHeroFillPreview(inst)
+    char.opacity = 1
     return
   }
-  if (inst.zones.colorWorld && fade >= 1 - COLOR_CROSSFADE_EPS) {
+  if (fade >= 0.98 - COLOR_CROSSFADE_EPS) {
     applyGlowHeroBodyFill(inst)
     return
   }
+  //
+  // White fill preview tracks the world's colour fade; the hollow body stays
+  // fully opaque underneath so only the interior appears to fill in.
+  //
   ensureHeroFillPreview(inst)
   const poseMatched = syncHeroFillPreviewSprite(inst)
+  char.opacity = 1
   const preview = inst.heroFillPreview
-  if (!preview?.exists?.()) return
-  //
-  // Only cross-fade when the preview mirrors the hollow hero's exact pose —
-  // otherwise keep the hollow hero fully visible and the preview hidden so a
-  // stale/mismatched frame never blends in as a stray limb.
-  //
-  char.opacity = poseMatched ? 1 - fade : 1
-  preview.opacity = poseMatched ? fade : 0
+  preview?.exists?.() && (preview.opacity = poseMatched ? fade : 0)
 }
 //
 // Mirrors the sprite prefix formula from hero.js create()/loadHeroSprites().
@@ -7707,8 +7750,13 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
-  const captionTextRgb = glowCaptionTextRgb()
-  const letterFillRgb = getRGB(k, HERO_BODY_COLOR)
+  const gCaptionGray = getRGB(k, GLOW_PAL.midGray)
+  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L'
+  const grayCaptionWithShadow = letterEntry?.char === 'O'
+  const isGrayCaption = grayCaptionNoShadow || grayCaptionWithShadow
+  const captionTextRgb = isGrayCaption ? gCaptionGray : glowCaptionTextRgb()
+  const letterFillRgb = isGrayCaption ? gCaptionGray : getRGB(k, HERO_BODY_COLOR)
+  const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
   const afterLines = after.split('\n')
@@ -7768,7 +7816,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
       tiltDeg
     )
-    shadowObjs.push(k.add([
+    captionUseShadow && shadowObjs.push(k.add([
       k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
       k.pos(originX + shadowOffset.x, originY + shadowOffset.y),
       k.anchor(piece.anchor),
@@ -7912,7 +7960,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && homes.push({ ...inst.lPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
+  z.lPlatRevealed && homes.push({ ...inst.lPlatHome, w: LOG_W })
   z.oZone && z.lCollected && homes.push({ ...inst.oPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.wZone && z.oCollected && homes.push({ ...inst.wPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   //
@@ -7935,7 +7983,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
   // Same 1 px embed as settleHeroOnLog — exact surface placement leaves the
   // hero ungrounded so gravity ejects him through the thin wood hitbox.
   //
-  char.pos.y = best - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  char.pos.y = best - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
   if (char.vel) {
     char.vel.x = 0
     char.vel.y = 0
@@ -8396,6 +8444,7 @@ function finishDrowning(inst) {
     set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
     resumeBranch && set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
     resumeBranch && set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
+    resumeBranch && set(KEY_LAST_SPAWN_Y, inst.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
     inst.k.go('lesson-glow.0')
   })
 }
@@ -8527,6 +8576,7 @@ function markSafeGroundRespawnAwayFromHedgehog(inst) {
   set(KEY_RESPAWN_NEAR_TREE, false)
   set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
   set(KEY_LAST_SPAWN_X, safeX)
+  set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
 }
 //
 // Standard press-any-key countdown reload, same UX as the touch-lesson
@@ -8792,6 +8842,8 @@ function revealOZone(inst) {
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
+  applyGlowHeroBodyFill(inst)
+  enableGlowHeroIdleVocalization(inst)
 }
 //
 // Opens the W platform zone (first sing at the big mushroom, or a landing).
@@ -8810,6 +8862,28 @@ function revealWZone(inst) {
 function syncGlowPitLevelIndicator(inst) {
   if (!inst.pit || !inst.levelIndicator) return
   inst.pit.levelIndicator = inst.levelIndicator
+}
+//
+// True when the hero's feet are on the open cave pit floor collider.
+//
+function isHeroOnGlowPitFloor(inst, char, grounded, footY) {
+  const pit = inst.pit
+  if (!pit?.collapsed || !char?.pos) return false
+  const bottomY = pit.floorY + pit.zone.depth
+  return grounded && footY >= bottomY - 28 && footY <= bottomY + 10
+}
+//
+// Keeps jump input alive on the cave pit floor — Kaplay grounded flicker
+// there used to leave canJump false between frames.
+//
+function refreshGlowPitFloorJumpState(inst, char, grounded, footY) {
+  if (!isHeroOnGlowPitFloor(inst, char, grounded, footY)) return
+  const hero = inst.heroInst
+  if (!hero || hero.isSquashing || hero.jumpPhase === 'jumping') return
+  hero.canJump = true
+  hero.jumpDisabled = false
+  hero.controllable = true
+  hero.controlsDisabled = false
 }
 //
 // Per-frame camera follow — horizontal scroll only.
@@ -9190,9 +9264,10 @@ function onUpdate(inst) {
   // at once, which read as a stray light-coloured contour beside the body.
   //
   if (typeof char.opacity === 'number' && char.opacity < 1 && inst.heroSpawnFade <= 0 &&
-    !inst.heroFillPreview?.exists?.()) {
+    !inst.heroFillPreview?.exists?.() && !inst.heroBodyFillApplied) {
     char.opacity = 1
   }
+  inst.heroBodyFillApplied && char.opacity < 1 && (char.opacity = 1)
   !(inst.dialogInputGrace > 0) && !(inst.dialogPostSettle > 0) &&
     snapHeroToLogPlatforms(inst, char)
   snapHeroToStartBranch(inst, char, heroX, footY)
@@ -9243,6 +9318,7 @@ function onUpdate(inst) {
     footY,
     footParticles: inst.footParticles
   })
+  refreshGlowPitFloorJumpState(inst, char, grounded, footY)
   inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
   syncGlowAtmosphereZones(inst)
   //
@@ -9491,35 +9567,20 @@ function canSpawnGlowFootBurst(inst, char) {
   return isOnGlowMainGroundFoot(footY)
 }
 //
-// After O: five jumps on the right cap move the walk-trampoline left once.
-//
-function triggerTrampWalkMove(inst) {
-  const tw = inst.trampWalk
-  if (!tw || tw.walked || tw.walking) return
-  tw.singCount = (tw.singCount || 0) + 1
-  const line = TRAMP_BAD_SING_TEXTS[Math.min(tw.singCount, TRAMP_BAD_SING_TEXTS.length) - 1]
-  tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
-  tw.walking = true
-  inst.trampState.hasLegs = true
-  inst.trampState.walkDir = -1
-  persistTrampWalk(inst)
-  syncGlowHudLetterFills(inst)
-  showTrampBadSingHint(inst, line)
-  tw.singCount === 1 && revealWZone(inst)
-  tw.singCount === 1 && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
-}
-//
-// After O: five jumps on the right cap move the mushroom left — three walks
-// reach the lake. Once a walk starts it always finishes.
+// After O: stand still near the trampoline → countdown → mushroom walks
+// left. The first two sings stay on land; the third docks in the lake.
+// Once a walk starts it always finishes — chasing the hero cannot interrupt it.
 //
 function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   const tw = inst.trampWalk
   const z = inst.zones
   if (!tw || !z.oCollected || tw.walked) {
-    tw && (tw.stillTimer = 0, tw.countdown = null)
+    if (tw && (tw.countdown != null || tw.stillTimer > 0) && (tw.walked || !z.oCollected)) {
+      tw.stillTimer = 0
+      tw.countdown = null
+    }
     return
   }
-  if (!tw.walking) return
   const dt = inst.k.dt()
   //
   // In-progress walk always continues to the current stop (dialog / chase
@@ -9553,16 +9614,64 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     }
     return
   }
+  if (inst.dialogOpen) return
+  const nearRadius = tw.countdown != null ? TRAMP_WALK_NEAR_SINGING : TRAMP_WALK_NEAR
+  const near = Math.abs(char.pos.x - inst.trampState.x) < nearRadius &&
+    grounded &&
+    Math.abs(char.pos.y + SURFACE_DETECT_Y - FLOOR_Y) < 28
+  const still = near && !heroMoving && Math.abs(char.vel?.y ?? 0) < 1
+  if (!still) {
+    tw.stillTimer = 0
+    tw.countdown = null
+    return
+  }
+  if (tw.countdown == null) {
+    tw.stillTimer += dt
+    if (tw.stillTimer >= TRAMP_WALK_STILL) {
+      tw.countdown = TRAMP_WALK_COUNTDOWN
+      dismissTalkToMushroomHint(inst)
+    }
+    return
+  }
+  tw.countdown -= dt
+  if (tw.countdown <= 0) {
+    tw.countdown = null
+    tw.singCount = (tw.singCount || 0) + 1
+    const line = TRAMP_BAD_SING_TEXTS[Math.min(tw.singCount, TRAMP_BAD_SING_TEXTS.length) - 1]
+    tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
+    tw.walking = true
+    inst.trampState.hasLegs = true
+    inst.trampState.walkDir = -1
+    persistTrampWalk(inst)
+    syncGlowHudLetterFills(inst)
+    showTrampBadSingHint(inst, line)
+    tw.singCount === 1 && revealWZone(inst)
+    tw.singCount === 1 && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
+  }
 }
 //
-// Right trampoline no longer endures a sing countdown — jumps drive the walk.
+// During the post-O sing countdown the right mushroom shuts its eyes,
+// shrinks and trembles instead of dancing with the whistle.
 //
 function updateTrampEndure(inst) {
+  const tw = inst.trampWalk
   const state = inst.trampState
   if (!state) return
-  state.enduring = false
-  state.endureShakeX = 0
-  state.endureScaleY = 1
+  const enduring = Boolean(tw && !tw.walked && !tw.walking && tw.countdown != null)
+  state.enduring = enduring
+  if (!enduring) {
+    state.endureShakeX = 0
+    state.endureScaleY = 1
+    return
+  }
+  const t = 1 - Math.max(0, tw.countdown) / TRAMP_WALK_COUNTDOWN
+  const time = inst.k.time()
+  const pulse = Math.sin(time * TRAMP_ENDURE_PULSE_SPEED) * TRAMP_ENDURE_PULSE_AMP
+  state.endureScaleY = 1 - t * TRAMP_ENDURE_SQUASH_MAX + pulse
+  state.endureShakeX = Math.sin(time * TRAMP_ENDURE_SHAKE_SPEED) *
+    (TRAMP_ENDURE_SHAKE_AMP + t * 0.4)
+  state.blinking = true
+  state.leanAngle = 0
 }
 //
 // Wading loop while the walking mushroom is inside the lake.
@@ -9586,16 +9695,6 @@ function onTrampolineBounce(inst) {
   inst.trampToLApproach = true
   const tw = inst.trampWalk
   if (!tw) return
-  const z = inst.zones
-  const char = inst.heroInst?.character
-  if (z.oCollected && !tw.walked && !tw.walking && char &&
-    isOnTrampolineCap(inst, char, inst.trampState)) {
-    tw.jumpCount = (tw.jumpCount || 0) + 1
-    if (tw.jumpCount >= TRAMP_WALK_JUMPS_PER_MOVE) {
-      tw.jumpCount = 0
-      triggerTrampWalkMove(inst)
-    }
-  }
   tw.bounceCount = (tw.bounceCount || 0) + 1
   if (tw.bounceCount % TRAMP_CHEEKY_EVERY !== 0) return
   tw.cheekyTimer = TRAMP_CHEEKY_DURATION
@@ -10609,7 +10708,7 @@ function settleHeroOnLog(inst, char, platTop, skipPostLandLock = false) {
   // hovering / twitching on wood while controls are locked.
   //
   if (hero?.isSquashing && !inst.dialogOpen) return
-  char.pos.y = platTop - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  char.pos.y = platTop - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
   if (char.vel) char.vel.y = 0
   if (!hero) return
   !skipPostLandLock && (hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW))
@@ -10640,7 +10739,7 @@ function checkPlatformRevealOnDescent(inst, char, grounded, justLanded) {
     // Embed 1 px into the fresh platform and let Kaplay resolve the contact —
     // the regular physics path grounds the hero and plays the normal landing.
     //
-    char.pos.y = inst.wPlatHome.y + LOG_COLLISION_DROP_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    char.pos.y = inst.wPlatHome.y + LOG_COLLISION_DROP_Y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
   }
 }
 //
@@ -11186,7 +11285,7 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   if (!branch || !char?.pos || !hero) return false
   const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
   char.pos.x = teleportX
-  char.pos.y = branch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  char.pos.y = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
   char.vel.x = 0
   char.vel.y = -Math.round(CFG.game.jumpForce * BRANCH_TRAMP_BOOST_MULT)
   hero.wasJumping = true

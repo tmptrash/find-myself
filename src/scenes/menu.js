@@ -127,9 +127,10 @@ const CHECKMARK_PULSE_SPEED = 1.8
 //
 const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
 const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
-const MENU_ARROW_START_OFFSET = 42
-const MENU_ARROW_END_OFFSET = 42
+const MENU_ARROW_START_OFFSET = 96
+const MENU_ARROW_END_OFFSET = 96
 const MENU_ARROW_ARC_RADIUS_INSET = 8
+const MENU_ARROW_MAX_SPAN_RATIO = 0.38
 //
 // Glow anti-hero on the menu — same whitish body + dark outline as the
 // playable hero in lesson-glow.0 before the world turns colourful.
@@ -1944,7 +1945,7 @@ function drawScene(inst) {
       //
       // Ensure arrow spans most of the arc between the two anti-heroes
       //
-      const maxSpan = Math.abs(angleDiff) * 0.92
+      const maxSpan = Math.abs(angleDiff) * MENU_ARROW_MAX_SPAN_RATIO
       if (arrowAngleSpan > maxSpan) {
         arrowAngleSpan = maxSpan
       }

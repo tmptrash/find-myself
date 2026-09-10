@@ -1489,7 +1489,7 @@ export function sceneLesson1(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      currentLevel: 'lesson-touch.1',
+      stepSoundScene: 'lesson-touch.1',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor

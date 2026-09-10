@@ -308,6 +308,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     // mouse-up from the menu button cannot dismiss the phrase immediately.
     //
     subtitleClickOpen: false,
+    subtitlePointerGrace: 0,
     textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
     soundName: null,
     textSound: null,
@@ -600,6 +601,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
     
     timer += k.dt()
+    inst.subtitlePointerGrace > 0 &&
+      (inst.subtitlePointerGrace = Math.max(0, inst.subtitlePointerGrace - k.dt()))
     
     if (phase === 'fade_to_black') {
       //
@@ -850,6 +853,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             }
           }
           inst.subtitleSkipOpen = true
+          inst.subtitleClickOpen = true
+          inst.subtitlePointerGrace = 0.35
           releasePhysicalKeys(['Space', 'Enter'])
         } else {
           // No subtitle, go to next level immediately
@@ -1185,8 +1190,9 @@ function installTransitionSkipInput(k, inst, onSkip, onEscape) {
     onSkip()
   }
   const trySkipClick = () => {
-    if (!inst.subtitleClickOpen || inst.skipped) return
+    if (!inst.subtitleClickOpen || inst.skipped || inst.subtitlePointerGrace > 0) return false
     onSkip()
+    return true
   }
   const tryEscape = () => {
     onEscape()

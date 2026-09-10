@@ -17,8 +17,12 @@ export function bindPointerActivate(k, fn) {
   const fire = () => {
     const now = k.time()
     if (now - lastAt < DEBOUNCE_SEC) return
+    //
+    // Only debounce successful activations — a no-op click (e.g. subtitle
+    // skip gated off during fade-in) must not consume the debounce slot.
+    //
+    if (fn() === false) return
     lastAt = now
-    fn()
   }
   const catcher = k.add([
     k.rect(k.width(), k.height()),

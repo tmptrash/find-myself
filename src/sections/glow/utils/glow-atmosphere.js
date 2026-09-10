@@ -48,6 +48,16 @@ const MIDGE_PIT_SPREAD_Y = 26
 const PIT_TRAMP_FORCE = 920
 const PIT_TRAMP_COOLDOWN = 0.55
 const PIT_TRAMP_W = 36
+//
+// Wider invisible cap than the painted mushroom — forgiving landings still
+// trigger the pit bounce without pixel-perfect centre hits.
+//
+const PIT_TRAMP_CAP_HALF_W = PIT_TRAMP_W * 0.88
+//
+// Cave interior waits until the hero has dropped past the mouth lip — avoids
+// a flat horizontal bar flashing across the opening on the collapse frame.
+//
+const CAVE_INTERIOR_REVEAL_FEET_PAST = 14
 const PIT_DRAW_CULL_MARGIN = 80
 const PIT_PARTICLE_COUNT = 28
 //
@@ -452,7 +462,7 @@ function clampHeroInCave(pit, char) {
   const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
   const capTop = bottomY - mushH
   const onMushCap = isPitMushroomBouncy(pit) &&
-    Math.abs(char.pos.x - pit.trampState.x) < PIT_TRAMP_W * 0.55 &&
+    Math.abs(char.pos.x - pit.trampState.x) < PIT_TRAMP_CAP_HALF_W &&
     feetY >= capTop - 10 && feetY <= capTop + 16
   if (onMushCap) return
   const hero = pit.heroInst
@@ -502,8 +512,8 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
     drawGlowPitOutline(k, pit)
     return
   }
-  drawCaveInteriorRockStyle(k, pit)
-  drawPitTrampoline(k, pit)
+  isCaveInteriorVisible(pit) && drawCaveInteriorRockStyle(k, pit)
+  isCaveInteriorVisible(pit) && drawPitTrampoline(k, pit)
 }
 //
 // Private helpers
@@ -1295,7 +1305,7 @@ function updatePitTrampoline(pit, char) {
   const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
   const capTop = pit.floorY + pit.zone.depth - mushH
   const feet = char.pos.y + 38
-  const onCap = Math.abs(char.pos.x - x) < PIT_TRAMP_W * 0.55 &&
+  const onCap = Math.abs(char.pos.x - x) < PIT_TRAMP_CAP_HALF_W &&
     feet >= capTop - 10 && feet <= capTop + 16
   if (onCap && (char.vel?.y ?? 0) >= -40) {
     if (pit.onPitMushroomLaunch?.(pit, char)) {
@@ -1345,6 +1355,16 @@ function spawnPitBurst(pit) {
       }
     }
   ])
+}
+//
+// Interior draw waits until the hero has cleared the mouth lip.
+//
+function isCaveInteriorVisible(pit) {
+  if (!pit?.collapsed || pit.outlineOnlyMode) return false
+  const char = pit.heroInst?.character
+  if (!char?.pos) return true
+  const feetY = char.pos.y + 38
+  return feetY > pit.floorY + CAVE_INTERIOR_REVEAL_FEET_PAST
 }
 function updatePitParticles(pit, dt) {
   for (let i = pit.particles.length - 1; i >= 0; i--) {

@@ -25,6 +25,8 @@ const EYE_INTRO_EYE_GAP = 14
 const EYE_INTRO_REVEAL_FX_DURATION = 0.55
 const EYE_INTRO_REVEAL_FLASH_R = 42
 const EYE_INTRO_ATTACH_CLOSED_DURATION = 1
+const EYE_INTRO_ATTACH_MOVE_THRESHOLD = 3
+const EYE_INTRO_ATTACH_JUMP_VEL_Y = 40
 const EYE_INTRO_PIT_FEET_Y = 38
 const EYE_INTRO_PIT_FLOOR_BAND = 18
 //
@@ -36,7 +38,8 @@ export function createGlowEyeIntroState() {
     pickup: null,
     revealFx: 0,
     revealFxDone: false,
-    eyesOpeningTimer: 0
+    eyesOpeningTimer: 0,
+    attachClosedApplied: false
   }
 }
 //
@@ -114,24 +117,22 @@ export function initGlowHeroWithoutEyes(heroInst) {
   heroInst.currentEyeSprite = spriteName
 }
 //
-// Attaches eyes closed, locks controls, then opens them after a short beat.
+// Attaches eyes; if the hero stands still they stay closed for one second,
+// otherwise run/jump skips the closed-eyes beat entirely.
 //
 export function revealGlowHeroEyes(inst, heroInst) {
   if (!heroInst || !inst?.eyeIntro) return
+  const char = heroInst.character
   heroInst.noEyes = false
   Hero.loadHeroSprites(heroInst)
-  beginGlowEyeAttachFreeze(inst, heroInst)
-  Hero.setEyesClosed(heroInst, true)
   //
-  // Force a closed-eyes sprite swap — the eyeless prefix may still be active.
+  // Closed eyes apply on the first still frame — immediate run/jump skips them.
   //
   heroInst.currentEyeSprite = null
-  Hero.applyCalmIdleSprite(heroInst)
-  snapGlowHeroToPitFloor(inst, heroInst)
-  heroInst.controlsDisabled = true
-  heroInst.controllable = false
-  heroInst.character?.vel && (heroInst.character.vel.x = 0, heroInst.character.vel.y = 0)
+  inst.eyeIntro.attachClosedApplied = false
   inst.eyeIntro.eyesOpeningTimer = EYE_INTRO_ATTACH_CLOSED_DURATION
+  inst.eyeIntro.attachHeroX = char?.pos?.x ?? 0
+  inst.eyeIntro.attachHeroGrounded = char?.isGrounded?.() ?? true
   inst.eyeIntro.revealFx = EYE_INTRO_REVEAL_FX_DURATION
   inst.eyeIntro.revealFxDone = false
 }
@@ -152,15 +153,20 @@ export function onUpdateGlowEyeIntro(inst, char, heroInst, floorY, worldW, treeX
   const intro = inst.eyeIntro
   const dt = inst.k.dt()
   //
-  // Reveal FX timer after picking up eyes (runs during the attach freeze).
+  // Reveal FX timer after picking up eyes.
   //
   intro.revealFx > 0 && (intro.revealFx = Math.max(0, intro.revealFx - dt))
   //
-  // Closed eyes for one second after pickup — hero stands still.
+  // Closed eyes for one second after pickup while the hero stands still.
   //
   if (intro.eyesOpeningTimer > 0) {
+    if (didGlowEyeAttachHeroMove(intro, char, heroInst)) {
+      finishGlowEyeAttachSequence(inst, heroInst)
+      return
+    }
+    !intro.attachClosedApplied &&
+      (Hero.setEyesClosed(heroInst, true, { idleOnly: true }), intro.attachClosedApplied = true)
     intro.eyesOpeningTimer = Math.max(0, intro.eyesOpeningTimer - dt)
-    sustainGlowEyeAttachPose(inst, heroInst)
     intro.eyesOpeningTimer <= 0 && finishGlowEyeAttachSequence(inst, heroInst)
     return
   }
@@ -273,26 +279,21 @@ function persistGlowEyesCollected(inst) {
   inst.zones.eyesCollected = true
   set(KEY_EYES_COLLECTED, true)
 }
-function sustainGlowEyeAttachPose(inst, heroInst) {
-  if (!heroInst) return
-  heroInst.controlsDisabled = true
-  heroInst.controllable = false
-  heroInst.noEyes = false
-  heroInst.eyesClosed = true
-  const char = heroInst.character
-  char?.vel && (char.vel.x = 0, char.vel.y = 0)
-  Hero.applyCalmIdleSprite(heroInst)
-  snapGlowHeroToPitFloor(inst, heroInst)
+function didGlowEyeAttachHeroMove(intro, char, heroInst) {
+  if (!char?.pos || !intro) return false
+  const dx = Math.abs(char.pos.x - (intro.attachHeroX ?? char.pos.x))
+  const jumped = intro.attachHeroGrounded &&
+    (!(char.isGrounded?.() ?? true) || (char.vel?.y ?? 0) < -EYE_INTRO_ATTACH_JUMP_VEL_Y)
+  const running = heroInst?.jumpPhase && heroInst.jumpPhase !== 'none'
+  const inputMoving = heroInst?._effectivelyMoving === true || heroInst?.isRunning
+  return dx > EYE_INTRO_ATTACH_MOVE_THRESHOLD || jumped || running || inputMoving
 }
 function finishGlowEyeAttachSequence(inst, heroInst) {
-  if (!heroInst) return
-  snapGlowHeroToPitFloor(inst, heroInst)
+  if (!heroInst || !inst?.eyeIntro) return
+  inst.eyeIntro.eyesOpeningTimer = 0
+  inst.eyeIntro.attachClosedApplied = false
   Hero.setEyesClosed(heroInst, false)
   heroInst.currentEyeSprite = null
-  endGlowEyeAttachFreeze(inst, heroInst)
-  snapGlowHeroToPitFloor(inst, heroInst)
-  heroInst.controlsDisabled = false
-  heroInst.controllable = true
 }
 function completeGlowEyeIntro(inst) {
   inst.eyeIntro.phase = 'complete'
@@ -320,19 +321,6 @@ export function snapGlowHeroToPitFloor(inst, heroInst) {
   if (!pit?.collapsed || !char?.pos) return
   char.pos.y = getGlowPitHeroStandY(pit)
   char.vel && (char.vel.x = 0, char.vel.y = 0)
-}
-function beginGlowEyeAttachFreeze(inst, heroInst) {
-  const char = heroInst?.character
-  if (!char) return
-  inst._eyeAttachSavedGravity === undefined &&
-    (inst._eyeAttachSavedGravity = char.gravityScale ?? 1)
-  char.gravityScale = 0
-}
-function endGlowEyeAttachFreeze(inst, heroInst) {
-  const char = heroInst?.character
-  if (!char || inst._eyeAttachSavedGravity === undefined) return
-  char.gravityScale = inst._eyeAttachSavedGravity
-  inst._eyeAttachSavedGravity = undefined
 }
 //
 // Finishes the eyeless arc when the hero launches from the cave mushroom

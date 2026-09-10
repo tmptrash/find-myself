@@ -71,7 +71,6 @@ import {
   isGlowEyeIntroPending,
   isGlowEyesGameplayUnlocked,
   isGlowPitMushroomUnlocked,
-  isGlowEyeIntroAttachActive,
   isGlowEyeIntroBareWorld,
   shouldGlowSuppressFootDetails,
   shouldGlowBlockWorldReveal,
@@ -861,6 +860,10 @@ const GLOW_LETTER_FONT = 'JetBrains Mono'
 // every letter (G, L, O, W) throughout its whole lifetime.
 //
 const GLOW_LETTER_SIZE = 54
+//
+// Pickup captions use a slightly smaller size — world letters keep GLOW_LETTER_SIZE.
+//
+const GLOW_LETTER_CAPTION_FONT_SIZE = 46
 //
 // Pure black drop shadow behind pickup letters in the colour world.
 //
@@ -1836,6 +1839,7 @@ function initGlowLevel0Scene(k) {
       outlineOnly: !heroStartFilled,
       footFx: false,
       stepSoundScene: 'lesson-glow.0',
+      suppressFootprints: true,
       airAnimDuringFlicker: true,
       runDuringFlicker: true,
       noEyes: !zones.eyesCollected,
@@ -1851,11 +1855,17 @@ function initGlowLevel0Scene(k) {
     //
     // No footprint trail in the glow level — the ground stays clean.
     //
-    heroInst.suppressFootprints = true
     //
     // Glow level: no particle assembly on spawn (first visit or reload).
     //
     Hero.spawn(heroInst, { instant: true })
+    //
+    // footFx stays off (no dust) but run-step sounds still route through glow
+    // ground/wood/mud detection via sound._glowSurface.
+    //
+    heroInst.onPlayStepSound = (h) => {
+      h.sfx && !sound._glowSfxMuted && Sound.playStepSound(h.sfx, h.stepSoundScene)
+    }
     !zones.eyesCollected && initGlowHeroWithoutEyes(heroInst)
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
@@ -2266,6 +2276,7 @@ function initGlowLevel0Scene(k) {
       tooltipClampInset: glowTooltipClampInset()
     })
     inst.pit.sceneRef = inst
+    k._glowSceneInst = inst
     restoreGlowEyeIntroFromPersistedState(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
     inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
@@ -2562,11 +2573,9 @@ function finishGlowIntro(inst) {
   inst.introHintPhase = null
   inst.introHintPause = 0
   inst.introHintOnComplete = null
-  if (!isGlowEyeIntroAttachActive(inst)) {
-    inst.heroInst.controlsDisabled = false
-    inst.heroInst.jumpDisabled = false
-    inst.heroInst.controllable = true
-  }
+  inst.heroInst.controlsDisabled = false
+  inst.heroInst.jumpDisabled = false
+  inst.heroInst.controllable = true
   //
   // G letter appears only after the three gray world parts were explored.
   //
@@ -3867,6 +3876,7 @@ function applyZoneVisibility(inst) {
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
+  maybeShowGLetter(inst)
 }
 function isGlowGrassLayerVisible(inst) {
   const z = inst.zones
@@ -3959,9 +3969,23 @@ function setLetterVisible(letterEntry, visible, burst = false) {
   if (!letterEntry || letterEntry.forceVisible) return
   const wasHidden = letterEntry.main?.hidden !== false
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
-  if (visible && wasHidden) {
+  if (!visible) {
+    letterEntry._popFade = null
+    return
+  }
+  const sc = letterEntry.k?._glowSceneInst
+  const instantReveal = sc?.drowning || sc?.deathHandled
+  if (instantReveal) {
+    letterEntry._popFade = null
+    letterEntry.allObjects.forEach(obj => { obj.opacity = 1 })
+  } else if (wasHidden) {
     letterEntry._popFade = 0
     letterEntry.allObjects.forEach(obj => { obj.opacity = 0 })
+  } else if (letterEntry._popFade == null) {
+    const minOp = Math.min(...letterEntry.allObjects.map(obj =>
+      typeof obj.opacity === 'number' ? obj.opacity : 1
+    ))
+    minOp < 0.99 && (letterEntry._popFade = minOp)
   }
   if (visible && wasHidden && burst) {
     LevelIndicator.flashWorldLetterBurst(
@@ -3976,9 +4000,24 @@ function setLetterVisible(letterEntry, visible, burst = false) {
 // Steps a freshly revealed pickup letter's fade-in (see setLetterVisible).
 //
 function updateLetterPopFade(letterEntry, dt) {
-  if (!letterEntry || letterEntry._popFade == null || letterEntry._popFade >= 1) return
+  if (!letterEntry || letterEntry.main?.hidden) return
+  const sc = letterEntry.k?._glowSceneInst
+  if (sc?.drowning || sc?.deathHandled) {
+    letterEntry._popFade = null
+    letterEntry.allObjects.forEach(obj => { obj.opacity = 1 })
+    return
+  }
+  if (letterEntry._popFade == null) {
+    const minOp = Math.min(...letterEntry.allObjects.map(obj =>
+      typeof obj.opacity === 'number' ? obj.opacity : 1
+    ))
+    if (minOp >= 0.99) return
+    letterEntry._popFade = minOp
+  }
+  if (letterEntry._popFade >= 1) return
   letterEntry._popFade = Math.min(1, letterEntry._popFade + dt / POP_REVEAL_FADE_DURATION)
   letterEntry.allObjects.forEach(obj => { obj.opacity = letterEntry._popFade })
+  letterEntry._popFade >= 1 && (letterEntry._popFade = null)
 }
 //
 // Steps every glow pickup letter's pop-in fade.
@@ -5345,7 +5384,18 @@ function createGrayLogPlatform(
           // playfield backdrop during this phase is painted that exact
           // colour, so an outline that dark would vanish into it.
           //
-          const outlineRgb = k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
+          const sc = zones._sceneRef
+          const meditationFade = sc?.zones?.lCollected && sc.meditation?.countdown != null
+            ? meditationCountdownFade(sc)
+            : 0
+          const outlineBase = meditationFade > 0
+            ? {
+              r: Math.round(DECOR_OUTLINE_RGB.r + (getRGB(k, glowLogColors(zones).bark).r - DECOR_OUTLINE_RGB.r) * meditationFade),
+              g: Math.round(DECOR_OUTLINE_RGB.g + (getRGB(k, glowLogColors(zones).bark).g - DECOR_OUTLINE_RGB.g) * meditationFade),
+              b: Math.round(DECOR_OUTLINE_RGB.b + (getRGB(k, glowLogColors(zones).bark).b - DECOR_OUTLINE_RGB.b) * meditationFade)
+            }
+            : DECOR_OUTLINE_RGB
+          const outlineRgb = k.rgb(outlineBase.r, outlineBase.g, outlineBase.b)
           //
           // Stays true neutral gray while the world is still flat, same as
           // the other log platforms below — glowLogColors() returns the
@@ -7803,7 +7853,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const grayCaptionWithShadow = letterEntry?.char === 'O'
   const isGrayCaption = grayCaptionNoShadow || grayCaptionWithShadow
   const captionTextRgb = isGrayCaption ? gCaptionGray : glowCaptionTextRgb()
-  const letterFillRgb = isGrayCaption ? gCaptionGray : getRGB(k, HERO_BODY_COLOR)
+  const letterFillRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
@@ -7814,7 +7864,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   // Caption text matches the letter's own size (unchanged from before pickup)
   // so it reads as one continuous, uniformly sized piece of text.
   //
-  const fontSize = GLOW_LETTER_SIZE
+  const fontSize = GLOW_LETTER_CAPTION_FONT_SIZE
   const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: fontSize, font })
   const letterHalfW = letterMeasure.width / 2
   const beforeWidth = before ? k.formatText({ text: before, size: fontSize, font }).width : 0
@@ -8934,6 +8984,21 @@ function refreshGlowPitFloorJumpState(inst, char, grounded, footY) {
   hero.controlsDisabled = false
 }
 //
+// Kaplay grounded flicker on the thin start-branch collider can leave
+// canJump false — refresh every frame while the hero stands on the branch.
+//
+function refreshGlowBranchJumpState(inst, char) {
+  if (!char?.pos || !isHeroOnStartBranch(inst, char)) return
+  const hero = inst.heroInst
+  if (!hero || hero.isSquashing || hero.jumpPhase === 'jumping') return
+  const velY = char.vel?.y ?? 0
+  if (velY < -20) return
+  hero.canJump = true
+  hero.jumpDisabled = false
+  hero.controllable = true
+  hero.controlsDisabled = false
+}
+//
 // Per-frame camera follow — horizontal scroll only.
 //
 function updateGlowCamera(inst) {
@@ -9021,6 +9086,7 @@ function onUpdate(inst) {
   const k = inst.k
   inst.zones._sceneRef = inst
   if (inst.drowning) {
+    updateGlowLetterPopFades(inst, k.dt())
     updateGlowCamera(inst)
     return
   }
@@ -9041,6 +9107,7 @@ function onUpdate(inst) {
     const u = 1 - Math.max(0, inst.heroSpawnFade) / HERO_SPAWN_FADE_DURATION
     inst.heroInst.character.opacity = Math.min(1, u)
     inst.heroSpawnFade <= 0 && (inst.heroInst.character.opacity = 1)
+    refreshGlowBranchJumpState(inst, inst.heroInst.character)
   }
   if (inst.pendingGlowIntro && inst.heroSpawnFade <= 0) {
     inst.introHintDelayRemaining += k.dt()
@@ -9182,8 +9249,7 @@ function onUpdate(inst) {
   }
   if (!(inst.dialogInputGrace > 0) &&
     !(inst.dialogPostSettle > 0) &&
-    !inst.heroLockedAfterW &&
-    !isGlowEyeIntroAttachActive(inst)) {
+    !inst.heroLockedAfterW) {
     hero.controllable = true
     hero.controlsDisabled = false
     hero.jumpDisabled = false
@@ -9204,6 +9270,7 @@ function onUpdate(inst) {
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char)
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
+  refreshGlowBranchJumpState(inst, char)
   onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
   const inStartBranchBand = isHeroOverStartBranchX(inst, heroX) &&
     footY >= inst.startBranch.y - LOG_HOVER_BAND &&
@@ -9388,7 +9455,6 @@ function onUpdate(inst) {
   updatePitCaveMushroomHint(inst, char, k.dt())
   updateOLetterStuckHint(inst, k.dt())
   syncHeroTrampDrawOrder(inst)
-  isGlowEyeIntroAttachActive(inst) && snapGlowHeroToPitFloor(inst, inst.heroInst)
   updateGlowCamera(inst)
   inst.lastHeroX = char.pos.x
   //
@@ -10583,11 +10649,7 @@ function snapHeroToStartBranch(inst, char, heroX, footY) {
     inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
   if (!isHeroOverStartBranchX(inst, heroX)) return
   const hero = inst.heroInst
-  if (hero?.isSquashing) return
-  //
-  // Never pin mid-air during a real branch jump (caused apex hang / dead jump)
-  //
-  if (hero?.jumpPhase === 'jumping' && !(char.isGrounded?.() ?? false)) return
+  if (hero?.isSquashing || hero?.jumpPhase === 'jumping') return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
   const platTop = inst.startBranch.y

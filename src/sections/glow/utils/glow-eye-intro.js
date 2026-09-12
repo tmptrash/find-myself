@@ -1,10 +1,10 @@
 import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
+import * as HeroHint from '../../../utils/hero-hint.js'
 import {
   getCrackZone,
   collapseGlowPitForEyeIntro,
-  drawGlowPitOutline,
   getGlowPitBonusPosition,
   getGlowPitHeroStandY,
   ensureGlowPitOpenForEyesCollected,
@@ -31,6 +31,9 @@ const EYE_INTRO_ATTACH_MOVE_THRESHOLD = 3
 const EYE_INTRO_ATTACH_JUMP_VEL_Y = 40
 const EYE_INTRO_PIT_FEET_Y = 38
 const EYE_INTRO_PIT_FLOOR_BAND = 18
+const EYE_COLLECTED_HINT_TEXT = 'вау! столько деталей!'
+const EYE_COLLECTED_HINT_DURATION = 5
+const EYE_COLLECTED_HINT_DISMISS = 80
 //
 // Creates runtime state for the pre-G eyeless intro (only when eyes not saved).
 //
@@ -221,9 +224,6 @@ export function onDrawGlowEyeIntro(inst, k, heroBodyHex, heroEyeWhiteHex) {
   if (!inst?.eyeIntro) return
   const intro = inst.eyeIntro
   const pit = inst.pit
-  pit && pit.collapsed && pit.outlineOnlyMode &&
-    !glowHeroHasCollectedEyes(inst.zones, inst.heroInst) &&
-    drawGlowPitOutline(k, pit)
   intro.pickup && drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
   intro.revealFx > 0 && drawGlowEyeRevealFx(k, inst.heroInst, intro.revealFx)
 }
@@ -277,6 +277,14 @@ function tryCollectGlowCaveEyes(inst, heroInst, char) {
   if (inst.pit) {
     inst.pit.outlineOnlyMode = false
   }
+  showGlowEyesCollectedHint(inst)
+}
+function showGlowEyesCollectedHint(inst) {
+  inst?.heroHint && HeroHint.show(inst.heroHint, EYE_COLLECTED_HINT_TEXT, EYE_COLLECTED_HINT_DURATION, {
+    dismissOnJump: false,
+    dismissDistance: EYE_COLLECTED_HINT_DISMISS,
+    dismissHorizontalOnly: true
+  })
 }
 function persistGlowEyesCollected(inst) {
   if (!inst?.zones || inst.zones.eyesCollected) return

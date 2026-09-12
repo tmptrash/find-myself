@@ -87,6 +87,13 @@ import {
   snapGlowHeroToPitFloor,
   restoreGlowEyeIntroFromPersistedState
 } from '../utils/glow-eye-intro.js'
+import {
+  getGlowHeroFillProgress,
+  syncGlowHeroFillVisual,
+  updateGlowHeroFillBurst,
+  drawGlowHeroFillBurst,
+  clearGlowHeroFillPreview
+} from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as GlowCamera from '../utils/glow-camera.js'
 import { applyParallaxPostFxToContext, applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
@@ -328,7 +335,7 @@ const HEDGEHOG_AMBUSH_FALL_EDGE_PAD = 14
 //
 const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
 const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
-const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens'
+const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
 const HEDGEHOG_DEATH_HINT_RAISE = 46
 const HEDGEHOG_DEATH_COUNTDOWN_SECONDS = 7
 const HEDGEHOG_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
@@ -2304,7 +2311,11 @@ function initGlowLevel0Scene(k) {
     inst.footParticles = GlowFootParticles.create({ k })
     syncGlowAtmosphereZones(inst)
     inst.midges.worldLife = 1
-    inst.k.wait(0, () => preloadGlowHeroFilledSprites(inst))
+    inst.k.wait(0, () => syncGlowHeroFillVisual(inst, {
+      filledBodyColor: HERO_FILLED_BODY_COLOR,
+      filledOutlineColor: HERO_OUTLINE_COLOR,
+      postBakeCanvas: applyGlowFilmGrainToCanvas
+    }, glowHeroFillOpts(inst)))
     maybeShowGLetter(inst)
     zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
       maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
@@ -2338,7 +2349,7 @@ function initGlowLevel0Scene(k) {
     ensureGlowPitOpenForEyesCollected(inst.pit)
     registerGlowNativeTeardown(() => {
       persistGlowOnLeave(inst)
-      clearHeroFillPreview(inst)
+      clearGlowHeroFillPreview(inst)
       stopGlowLoopAudio()
     })
     const backToMenuCancel = bindBackToMenuKeys(k, () => {
@@ -2347,7 +2358,7 @@ function initGlowLevel0Scene(k) {
     })
     k.onSceneLeave(() => {
       backToMenuCancel.cancel()
-      clearHeroFillPreview(inst)
+      clearGlowHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
       inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
@@ -2357,6 +2368,17 @@ function initGlowLevel0Scene(k) {
     k.onDraw(() => onDraw(inst))
     k.onUpdate(() => onUpdate(inst))
     createPlayfieldFrameOverlay(k, inst)
+    //
+    // Letter-fill burst halo — drawn just above the hero sprite.
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.player + 0.5),
+      {
+        draw() {
+          drawGlowHeroFillBurst(k, inst.heroInst, inst)
+        }
+      }
+    ])
     //
     // Dev-only hook for automated wood-foot-particle verification.
     //
@@ -2811,7 +2833,13 @@ function updateMeditationCounter(inst) {
   const char = inst.heroInst?.character
   if (remaining == null || !char?.pos) {
     inst.meditationCounter && HeroCounter.hide(inst.meditationCounter)
+    inst._heroCountdownTickSecond = null
     return
+  }
+  const displaySecond = Math.ceil(remaining)
+  if (inst._heroCountdownTickSecond !== displaySecond) {
+    inst._heroCountdownTickSecond = displaySecond
+    inst.sound && Sound.playTimerTickSound(inst.sound)
   }
   if (!inst.meditationCounter) {
     inst.meditationCounter = HeroCounter.create({
@@ -6787,6 +6815,42 @@ function isGlowFullParallaxStable(inst) {
   )
 }
 //
+// Paints the earth band below FLOOR_Y, leaving a mouth hole while the pit is open.
+//
+function drawGlowEarthBand(k, inst, color, opacity = 1) {
+  const y = FLOOR_Y
+  const h = WORLD_H - FLOOR_Y
+  const crack = inst.pit?.collapsed ? getCrackZone(WORLD_W, FLOOR_Y) : null
+  if (!crack) {
+    k.drawRect({
+      pos: k.vec2(LEFT_MARGIN, y),
+      width: GAME_W,
+      height: h,
+      color,
+      opacity
+    })
+    return
+  }
+  const mouthL = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const leftW = Math.max(0, mouthL - LEFT_MARGIN)
+  leftW > 0 && k.drawRect({
+    pos: k.vec2(LEFT_MARGIN, y),
+    width: leftW,
+    height: h,
+    color,
+    opacity
+  })
+  const rightX = crack.x2
+  const rightW = Math.max(0, LEFT_MARGIN + GAME_W - rightX)
+  rightW > 0 && k.drawRect({
+    pos: k.vec2(rightX, y),
+    width: rightW,
+    height: h,
+    color,
+    opacity
+  })
+}
+//
 // Main draw — void until G opens the outer frame; inner gray after L/O.
 //
 function onDraw(inst) {
@@ -6837,13 +6901,9 @@ function onDraw(inst) {
     // sprite (drawn below) fully repaints this exact band on top — this fill
     // would be immediately hidden and is a wasted full-width draw every frame.
     //
-    fallbackOp > COLOR_CROSSFADE_EPS && k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
-      width: GAME_W,
-      height: WORLD_H - FLOOR_Y,
-      color: k.rgb(groundC.r, groundC.g, groundC.b),
-      opacity: fallbackOp
-    })
+    fallbackOp > COLOR_CROSSFADE_EPS && drawGlowEarthBand(
+      k, inst, k.rgb(groundC.r, groundC.g, groundC.b), fallbackOp
+    )
   }
   if (inst.zones.lZoneParallax) {
     //
@@ -6874,13 +6934,9 @@ function onDraw(inst) {
   if (zones.lZoneParallax) {
     const pf = inst.parallaxFade ?? 0
     const groundFallbackOp = parallaxStable ? 0 : Math.max(0, 1 - pf)
-    groundFallbackOp > COLOR_CROSSFADE_EPS && groundFillC && k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
-      width: GAME_W,
-      height: WORLD_H - FLOOR_Y,
-      color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b),
-      opacity: groundFallbackOp
-    })
+    groundFallbackOp > COLOR_CROSSFADE_EPS && groundFillC && drawGlowEarthBand(
+      k, inst, k.rgb(groundFillC.r, groundFillC.g, groundFillC.b), groundFallbackOp
+    )
     const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
     if (parallaxStable) {
       drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
@@ -6893,12 +6949,7 @@ function onDraw(inst) {
     }
     maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC)
   } else if (groundFillC) {
-    k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
-      width: GAME_W,
-      height: WORLD_H - FLOOR_Y,
-      color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
-    })
+    drawGlowEarthBand(k, inst, k.rgb(groundFillC.r, groundFillC.g, groundFillC.b))
     !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
   } else {
     !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
@@ -7486,7 +7537,7 @@ function enableGlowHeroIdleVocalization(inst) {
 // The hero stays whitish — never turns gold when the world colours.
 //
 function applyGlowHeroBodyFill(inst) {
-  clearHeroFillPreview(inst)
+  clearGlowHeroFillPreview(inst)
   if (inst.heroBodyFillApplied) {
     const filledChar = inst.heroInst?.character
     filledChar?.exists?.() && (filledChar.opacity = 1)
@@ -7503,11 +7554,29 @@ function applyGlowHeroBodyFill(inst) {
   const k = inst.k
   const outlinePrefix = hero.spritePrefix
   const outlineKey = Hero.getActiveSpriteKey(hero)
-  preloadGlowHeroFilledSprites(inst)
-  const filledPrefix = buildFilledHeroSpritePrefix(hero)
-  const filledKey = mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix)
-  const spriteKey = glowHeroSpriteReady(k, filledKey) ? filledKey : `${filledPrefix}_0_0`
-  if (!glowHeroSpriteReady(k, spriteKey)) return
+  Hero.loadHeroSprites({
+    k: inst.k,
+    type: Hero.HEROES.HERO,
+    ...getGlowHeroEyeBakeColors(false),
+    bodyColor: HERO_FILLED_BODY_COLOR,
+    outlineColor: HERO_OUTLINE_COLOR,
+    outlineOnly: false,
+    noEyes: hero.noEyes,
+    addMouth: hero.addMouth,
+    addArms: hero.addArms,
+    addWatch: hero.addWatch,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
+  })
+  const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_OUTLINE_COLOR).replace('#', '')}`
+    + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
+    + `_ew${String(CFG.visual.colors.hero.eyeWhite).replace('#', '')}`
+    + `_pu${String(CFG.visual.colors.hero.eyePupil).replace('#', '')}`
+    + `${hero.noEyes ? '_noeyes' : ''}`
+  const filledKey = outlineKey?.startsWith(outlinePrefix)
+    ? filledPrefix + outlineKey.slice(outlinePrefix.length)
+    : `${filledPrefix}_0_0`
+  const spriteKey = k.getSprite(filledKey) ? filledKey : `${filledPrefix}_0_0`
+  if (!k.getSprite(spriteKey)) return
   hero.outlineOnly = false
   char.opacity = 1
   hero.bodyColor = HERO_FILLED_BODY_COLOR
@@ -7522,201 +7591,39 @@ function applyGlowHeroBodyFill(inst) {
   hero.jumpDisabled = false
 }
 //
-// 0→1 while the post-L stillness countdown (or colour-world fade) whitens
-// the hollow hero in lockstep with the world around him.
+// Zone flags for the shared letter-by-letter hero fill curve.
+//
+function glowHeroFillOpts(inst) {
+  const z = inst.zones
+  return {
+    gCollected: z.gCollected,
+    lCollected: z.lCollected,
+    lZoneLit: z.lZoneLit,
+    oCollected: z.oCollected,
+    wCollected: z.wCollected,
+    meditationCountdown: inst.meditation?.countdown
+  }
+}
+const GLOW_LEVEL_FILL_CFG = {
+  filledBodyColor: HERO_FILLED_BODY_COLOR,
+  filledOutlineColor: HERO_OUTLINE_COLOR,
+  postBakeCanvas: applyGlowFilmGrainToCanvas,
+  onFullFill: applyGlowHeroBodyFill
+}
+//
+// 0→1 while letters unlock and the post-L stillness countdown whitens the hero.
 //
 function glowHeroFillFade(inst) {
   if (inst.heroBodyFillApplied) return 1
-  const z = inst.zones
-  const fade = inst.colorFade ?? 0
-  if (z.colorWorld) return fade
-  if (!z.lCollected || z.colorWorld) return 0
-  if (inst.meditation?.countdown != null) return meditationCountdownFade(inst)
-  if (z.oZone || fade >= 1 - COLOR_CROSSFADE_EPS) return Math.max(fade, 1)
-  if (inst._meditationPreviewFadingOut) return fade
-  return 0
+  if (inst.zones.colorWorld) return inst.colorFade ?? 0
+  return getGlowHeroFillProgress(glowHeroFillOpts(inst))
 }
 //
-// Bakes the filled-body sprite set used by the preview overlay.
-//
-function preloadGlowHeroFilledSprites(inst) {
-  const hero = inst.heroInst
-  if (!hero) return
-  const bakedNoEyes = Boolean(hero.noEyes)
-  const filledPrefix = buildFilledHeroSpritePrefix(hero)
-  const idleKey = `${filledPrefix}_0_0`
-  if (inst._glowHeroFilledSpritesPreloaded &&
-    inst._glowHeroFilledNoEyes === bakedNoEyes &&
-    inst.k.getSprite(idleKey)) {
-    return
-  }
-  Hero.loadHeroSprites({
-    k: inst.k,
-    type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(false),
-    bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
-    outlineOnly: false,
-    noEyes: bakedNoEyes,
-    addMouth: hero.addMouth,
-    addArms: hero.addArms,
-    addWatch: hero.addWatch,
-    postBakeCanvas: applyGlowFilmGrainToCanvas
-  })
-  if (!inst.k.getSprite(idleKey)) return
-  inst._glowHeroFilledSpritesPreloaded = true
-  inst._glowHeroFilledNoEyes = bakedNoEyes
-}
-//
-// Sprite prefix for the filled hero — same flags as the live inst, no outline.
-//
-function buildFilledHeroSpritePrefix(hero) {
-  const eyeColors = getGlowHeroEyeBakeColors(false)
-  return buildHeroSpritePrefix({
-    type: Hero.HEROES.HERO,
-    addMouth: hero.addMouth,
-    addArms: hero.addArms,
-    addWatch: hero.addWatch,
-    noEyes: hero.noEyes,
-    outlineRimPx: hero.outlineRimPx,
-    ...eyeColors,
-    outlineOnly: false,
-    bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: String(HERO_OUTLINE_COLOR).replace('#', '')
-  })
-}
-//
-// True when a baked hero sprite name is registered on the live Kaplay instance.
-//
-function glowHeroSpriteReady(k, spriteKey) {
-  if (!spriteKey) return false
-  try {
-    return Boolean(k.getSprite(spriteKey))
-  } catch (_) {
-    return false
-  }
-}
-//
-// Maps the live outline sprite key to its filled-body twin. Returns null on
-// any mismatch instead of guessing a fallback pose — showing the filled
-// preview in the wrong pose (e.g. a static frame while the hollow hero
-// keeps running) exposes the hollow layer's own light-coloured outline as a
-// stray limb-shaped fringe next to the solid body.
-//
-function mapOutlineSpriteToFilled(outlineKey, outlinePrefix, filledPrefix) {
-  if (outlineKey && outlinePrefix && filledPrefix && outlineKey.startsWith(outlinePrefix)) {
-    return filledPrefix + outlineKey.slice(outlinePrefix.length)
-  }
-  return null
-}
-//
-// Destroys the filled-body preview layer and restores outline opacity.
-//
-function clearHeroFillPreview(inst) {
-  inst.heroFillPreview?.exists?.() && inst.heroFillPreview.destroy()
-  inst.heroFillPreview = null
-  const char = inst.heroInst?.character
-  char?.exists?.() && (char.opacity = 1)
-}
-//
-// Spawns the filled-body preview layer once the colour fade begins.
-//
-function ensureHeroFillPreview(inst) {
-  const hero = inst.heroInst
-  const char = hero?.character
-  if (!char?.exists?.() || inst.heroBodyFillApplied) return
-  preloadGlowHeroFilledSprites(inst)
-  const filledPrefix = buildFilledHeroSpritePrefix(hero)
-  const idleKey = `${filledPrefix}_0_0`
-  if (!glowHeroSpriteReady(inst.k, idleKey)) return
-  if (inst.heroFillFilledPrefix !== filledPrefix && inst.heroFillPreview?.exists?.()) {
-    inst.heroFillPreview.destroy()
-    inst.heroFillPreview = null
-  }
-  inst.heroFillFilledPrefix = filledPrefix
-  if (inst.heroFillPreview?.exists?.()) return
-  inst.heroFillPreview = inst.k.add([
-    inst.k.sprite(idleKey),
-    inst.k.pos(char.pos.x, char.pos.y),
-    inst.k.anchor('center'),
-    inst.k.scale(char.scale),
-    inst.k.z(char.z + 0.01),
-    inst.k.opacity(0),
-    'heroFillPreview'
-  ])
-}
-//
-// Keeps the preview layer on the same frame / transform as the outline hero.
-// Returns true only when the preview now shows the exact same pose as the
-// live hollow hero this frame — the caller must not fade this layer in on a
-// mismatch, or the frozen/wrong pose reads as a stray limb next to the body.
-//
-function syncHeroFillPreviewSprite(inst) {
-  const hero = inst.heroInst
-  const preview = inst.heroFillPreview
-  const char = hero?.character
-  if (!preview?.exists?.() || !char?.exists?.()) return false
-  const outlineKey = Hero.getActiveSpriteKey(hero)
-  const filledKey = mapOutlineSpriteToFilled(
-    outlineKey,
-    hero.spritePrefix,
-    inst.heroFillFilledPrefix
-  )
-  const matched = glowHeroSpriteReady(inst.k, filledKey)
-  matched && preview.use(inst.k.sprite(filledKey))
-  preview.pos.x = char.pos.x
-  preview.pos.y = char.pos.y
-  preview.scale = char.scale
-  preview.flipX = char.flipX
-  preview.angle = char.angle ?? 0
-  preview.z = char.z + 0.01
-  return matched
-}
-//
-// Crossfades the hollow hero into a white filled body while the world colours.
+// Crossfades the hollow hero into a white filled body while letters unlock.
 //
 function syncGlowHeroBodyFill(inst) {
-  const char = inst.heroInst?.character
-  if (!char?.exists?.()) return
-  if (inst.heroBodyFillApplied) {
-    clearHeroFillPreview(inst)
-    char.opacity = 1
-    return
-  }
-  const fade = glowHeroFillFade(inst)
-  if (fade <= 0.001) {
-    clearHeroFillPreview(inst)
-    char.opacity = 1
-    return
-  }
-  if (fade >= 0.98 - COLOR_CROSSFADE_EPS) {
-    applyGlowHeroBodyFill(inst)
-    return
-  }
-  //
-  // White fill preview tracks the world's colour fade; the hollow body stays
-  // fully opaque underneath so only the interior appears to fill in.
-  //
-  ensureHeroFillPreview(inst)
-  const poseMatched = syncHeroFillPreviewSprite(inst)
-  char.opacity = 1
-  const preview = inst.heroFillPreview
-  preview?.exists?.() && (preview.opacity = poseMatched ? fade : 0)
-}
-//
-// Mirrors the sprite prefix formula from hero.js create()/loadHeroSprites().
-//
-function buildHeroSpritePrefix(hero) {
-  const body = String(hero.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
-  const outline = String(hero.outlineColor || CFG.visual.colors.outline).replace('#', '')
-  const eyeWhite = hero.eyeWhiteColor ? String(hero.eyeWhiteColor).replace('#', '') : ''
-  const pupil = hero.pupilColor ? String(hero.pupilColor).replace('#', '') : ''
-  const teiSuffix = hero.transparentEyeInterior ? '_tei' : ''
-  const rimSuffix = (hero.outlineRimPx || 2) > 2 ? `_or${hero.outlineRimPx}` : ''
-  return `${hero.type}_${body}_${outline}`
-    + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
-    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${pupil ? '_pu' + pupil : ''}${teiSuffix}`
-    + `${hero.noEyes ? '_noeyes' : ''}${rimSuffix}`
+  syncGlowHeroFillVisual(inst, GLOW_LEVEL_FILL_CFG, glowHeroFillOpts(inst))
+  updateGlowHeroFillBurst(inst, inst.k.dt())
 }
 //
 // Persists the post-L lit-ground beat once the stillness countdown starts.

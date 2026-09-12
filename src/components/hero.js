@@ -267,6 +267,10 @@ const LEG_CORNER_RADIUS = 4
 //
 const CROTCH_SEAM_FILLET_R = 3
 //
+// Idle-only crotch fillet — wider rounding at the inner leg junctions.
+//
+const IDLE_CROTCH_SEAM_FILLET_R = 5
+//
 // Airborne jump frames: knees tuck slightly forward while the feet stay
 // under the body (human jump tuck). Positive bend = knee forward in sprite
 // px; foot ends near the hip so heels read as pulled under the butt.
@@ -2346,10 +2350,46 @@ function needsRunBakeBodyGlue(drawBakeOutline, drawBakeBody, animation) {
 // Paints optional bake layers — contour rim, body fill, then shared finish.
 //
 function paintHeroBakeLayers(ctx, bake) {
-  const { drawBakeOutline, bakeBodyForPipeline } = bake
+  const { drawBakeOutline, drawBakeBody, bakeBodyForPipeline } = bake
+  if (drawBakeBody && !drawBakeOutline) {
+    paintBodyOnlyBakeInterior(ctx, bake)
+    return
+  }
   drawBakeOutline && drawHeroBakeContour(ctx, bake)
   bakeBodyForPipeline && drawHeroBakeBodyFill(ctx, bake)
   finalizeHeroBakeFrame(ctx, bake)
+}
+//
+// Body-only bakes mirror the hollow glue pipeline, then keep only the eroded
+// interior fill so the overlay matches the outline shell at every opacity.
+//
+function paintBodyOnlyBakeInterior(ctx, bake) {
+  const glueBake = {
+    ...bake,
+    drawBakeOutline: true,
+    drawBakeBody: false,
+    bakeBodyForPipeline: true,
+    bodyOnlyExtract: true
+  }
+  drawHeroBakeContour(ctx, glueBake)
+  drawHeroBakeBodyFill(ctx, glueBake)
+  finalizeHeroBakeFrame(ctx, glueBake)
+  extractBakeInteriorBodyFill(ctx, bake.rim)
+}
+//
+// Strips the outer rim band from a glue bake, leaving only interior body fill.
+//
+function extractBakeInteriorBodyFill(ctx, rim) {
+  const w = SPRITE_SIZE
+  const h = SPRITE_SIZE
+  const img = ctx.getImageData(0, 0, w, h)
+  const px = img.data
+  const opaque = buildBakeOpaqueMask(px, w, h, SMOOTH_RUN_FRAME0_ALPHA_MIN)
+  const interior = erodeBakeMaskChebyshev(opaque, w, h, rim)
+  for (let idx = 0; idx < interior.length; idx++) {
+    !interior[idx] && (px[idx * 4 + 3] = 0)
+  }
+  ctx.putImageData(img, 0, 0)
 }
 //
 // Hero bake contour — silhouette rim (legs, torso shell, arms, hip shelves).
@@ -2423,7 +2463,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
     headX, headY, bodyH, headHeight, bodyHeight, bodyBottom,
     leftArmY, rightArmY, leanRad, leanPivotX, leanPivotY,
     jumpLegBend, leftLegX, rightLegX, leftLegY, rightLegY,
-    leftLegHeight, rightLegHeight,
+    leftLegHeight, rightLegHeight, leftLegOutlineTop,
     jumpBackHipX, jumpFrontHipX, jumpHipTop, jumpBackH, jumpFrontH,
     jumpBackBend, jumpFrontBend
   } = bake
@@ -2433,6 +2473,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
   showArms && fillHalfPillLeft(ctx, headX - ARM_HALF_W, leftArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
   showArms && fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
   fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, bodyH, HEAD_CORNER_RADIUS)
+  animation === 'idle' && carveIdleTorsoCrotchGap(ctx, leftLegX, rightLegX, bodyBottom, rim)
   leanRad && ctx.restore()
   ctx.fillStyle = BL
   if (jumpLegBend !== 0) {
@@ -2450,6 +2491,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
     const sealRightW = Math.max(LEG_FILL_WIDTH, headX + CHAR_WIDTH - Math.max(leftLegX, rightLegX) - LEG_FILL_WIDTH)
     ctx.fillRect(headX, sealTop, sealLeftW, sealH)
     ctx.fillRect(headX + CHAR_WIDTH - sealRightW, sealTop, sealRightW, sealH)
+    animation === 'idle' && fillIdleCrotchBodyGap(ctx, leftLegX, rightLegX, leftLegOutlineTop, bodyBottom, rim)
   }
   addWatch && animation === 'idle' && (ctx.fillStyle = '#FFFFFF', ctx.fillRect(headX + CHAR_WIDTH + 1, rightArmY + ARM_H - 6, 3, 3))
 }
@@ -2458,7 +2500,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
 //
 function finalizeHeroBakeFrame(ctx, bake) {
   const {
-    drawBakeOutline, drawBakeBody, bakeBodyForPipeline, colors, rim, legOlW, animation, frame, noEyes,
+    drawBakeOutline, drawBakeBody, bakeBodyForPipeline, bodyOnlyExtract, colors, rim, legOlW, animation, frame, noEyes,
     eyeOffsetX, eyeOffsetY, eyesClosed, transparentEyeInterior, addMouth,
     headX, headY, bodyBottom, bodyH, showArms, leftArmY, rightArmY,
     leanRad, leanPivotX, leanPivotY, jumpLegBend,
@@ -2503,10 +2545,11 @@ function finalizeHeroBakeFrame(ctx, bake) {
     runLegsMerged,
     frame
   })
-  const runHollowFromGlue = drawBakeOutline && !drawBakeBody && bakeBodyForPipeline && animation === 'run'
+  const runHollowFromGlue = drawBakeOutline && !drawBakeBody && bakeBodyForPipeline &&
+    animation === 'run' && !bodyOnlyExtract
   drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame) && applySmoothRunFrame0Contour(ctx, { OL, BL, rim })
   runHollowFromGlue && clearBakeInteriorByErosion(ctx, rim)
-  !runHollowFromGlue && drawBakeOutline && !drawBakeBody && punchOutlineOnlyInterior(ctx, {
+  !runHollowFromGlue && !bodyOnlyExtract && drawBakeOutline && !drawBakeBody && punchOutlineOnlyInterior(ctx, {
     headX,
     headY,
     bodyH,
@@ -2537,9 +2580,10 @@ function finalizeHeroBakeFrame(ctx, bake) {
     bodyBottom,
     rim
   })
-  drawBakeOutline && !drawBakeBody && bakeBodyForPipeline && !bakeColorsMatch(OL, BL) && stripBakeBodyFillFromCanvas(ctx, BL, BAKE_BODY_STRIP_TOLERANCE)
-  drawBakeOutline && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
-  !noEyes && paintHeroEyesAtFrame(ctx, {
+  drawBakeOutline && !drawBakeBody && bakeBodyForPipeline && !bodyOnlyExtract &&
+    !bakeColorsMatch(OL, BL) && stripBakeBodyFillFromCanvas(ctx, BL, BAKE_BODY_STRIP_TOLERANCE)
+  drawBakeOutline && !bodyOnlyExtract && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
+  !bodyOnlyExtract && !noEyes && paintHeroEyesAtFrame(ctx, {
     headX,
     headY,
     bodyBottom,
@@ -3285,6 +3329,52 @@ function drawCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, bodyBottom, rim 
   drawSeamBetweenLegs(ctx, outlineColor, innerL, innerR, bodyBottom, innerL + rim, innerR - rim, rim)
 }
 //
+// Idle crotch outline — horizontal seam at the top inner leg corners where the
+// vertical inner walls begin (first vertical-to-horizontal transition on the
+// inside of each leg), with fillets into the legs below.
+//
+function drawIdleCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, leftLegOutlineTop, rim = DEFAULT_OUTLINE_RIM) {
+  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
+  const innerR = Math.max(leftLegX, rightLegX)
+  const filletL = innerL + rim
+  const filletR = innerR - rim
+  if (filletR <= filletL) return
+  const seamY = leftLegOutlineTop
+  ctx.fillStyle = outlineColor
+  ctx.fillRect(filletL, seamY, filletR - filletL, rim)
+  const r = Math.min(IDLE_CROTCH_SEAM_FILLET_R, Math.max(0, (filletR - filletL) / 2))
+  fillConcaveCorner(ctx, filletL, seamY + rim, r, 1, 1)
+  fillConcaveCorner(ctx, filletR, seamY + rim, r, -1, 1)
+}
+//
+// Body fill between idle legs — same shallow band as run crotch patches, from
+// the torso seal down to the inner top leg corners.
+//
+function fillIdleCrotchBodyGap(ctx, leftLegX, rightLegX, leftLegOutlineTop, bodyBottom, rim) {
+  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
+  const innerR = Math.max(leftLegX, rightLegX)
+  if (innerR <= innerL) return
+  const sealTop = bodyBottom - LEG_INTO_BODY
+  const h = leftLegOutlineTop + rim - sealTop
+  h > 0 && ctx.fillRect(innerL, sealTop, innerR - innerL, h)
+}
+//
+// Removes the torso body-fill row that would otherwise sit above the idle
+// crotch seam inside the leg gap (reads as a dark fringe over the outline).
+//
+function carveIdleTorsoCrotchGap(ctx, leftLegX, rightLegX, bodyBottom, rim) {
+  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
+  const innerR = Math.max(leftLegX, rightLegX)
+  const filletL = innerL + rim
+  const filletR = innerR - rim
+  if (filletR <= filletL) return
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(filletL, bodyBottom - rim, filletR - filletL, rim * 2 + 1)
+  ctx.restore()
+}
+//
 // Horizontal seam between the two legs plus a fillet at each end, so the seam
 // curves into the vertical inner leg outlines instead of meeting them at a
 // hard right angle.
@@ -3432,8 +3522,8 @@ function clipBentLegBox(ctx, headX, bodyBottom, rim, boxedToBodySides) {
 function drawHeroCrotchOutline(ctx, cfg) {
   const {
     OL, jumpLegBend, jumpBackBottomX, jumpFrontBottomX, bodyBottom,
-    animation, leftLegX, rightLegX, rim, runLegsMerged, leftLegOutlineTop, legOlW,
-    runCrotchSeamY
+    animation, leftLegX, rightLegX, rim, runLegsMerged,
+    leftLegOutlineTop, legOlW, runCrotchSeamY
   } = cfg
   ctx.fillStyle = OL
   if (jumpLegBend !== 0) {
@@ -3448,7 +3538,9 @@ function drawHeroCrotchOutline(ctx, cfg) {
       rim,
       false
     )
-  } else if (animation === 'idle' || animation === 'jump') {
+  } else if (animation === 'idle') {
+    drawIdleCrotchSeam(ctx, OL, leftLegX, rightLegX, leftLegOutlineTop, rim)
+  } else if (animation === 'jump') {
     drawCrotchSeam(ctx, OL, leftLegX, rightLegX, bodyBottom, rim)
   } else if (animation === 'run' && !runLegsMerged) {
     const backX = Math.min(leftLegX, rightLegX)
@@ -4235,7 +4327,7 @@ function onUpdateDeathEyeParticle(eyeWhite, pupil, k) {
   const fadeStartTime = 1.0
   if (eyeWhite.lifetime > fadeStartTime) {
     const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
-    eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
+    eyeWhite.opacity = Math.min(1, Math.max(0, 1 - fadeProgress))
   }
   if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
     k.destroy(eyeWhite)

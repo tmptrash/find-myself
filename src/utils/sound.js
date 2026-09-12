@@ -3847,6 +3847,14 @@ export function resumeGlobalAudio() {
   audioContext?.state === 'suspended' && audioContext.resume()
 }
 /**
+ * Single mechanical tick for hero countdown timers (meditation, etc.).
+ * @param {Object} instance - Sound instance
+ */
+export function playTimerTickSound(instance) {
+  if (globalMuteProceduralSounds || instance?._glowSfxMuted) return
+  playClockTickSound(instance)
+}
+/**
  * Play a descending tick sound for score deduction countdown
  * @param {Object} instance - Sound instance
  * @param {number} progress - Countdown progress 0..1 (pitch descends as progress increases)

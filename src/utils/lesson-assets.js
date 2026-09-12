@@ -301,6 +301,11 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   //
   switched && onEngineResolutionSwapped()
   //
+  // Pack prep may have run on the outgoing engine (e.g. menu native → time fixed).
+  // Reload on the live instance so scene sprites like city-background exist.
+  //
+  switched && await prepareSceneAssets(liveK, sceneName, { deferLoaderReveal: true })
+  //
   // Paint canvas immediately so the previous scene (menu) does not flash for a frame
   //
   if (sceneName.startsWith('lesson-touch')) {

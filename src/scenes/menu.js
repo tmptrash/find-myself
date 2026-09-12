@@ -25,6 +25,15 @@ import {
 } from '../utils/menu-bg-generator.js'
 import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
 import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
+import {
+  getGlowHeroFillProgress,
+  usesGlowHeroFillProgress,
+  syncGlowHeroFillVisual,
+  updateGlowHeroFillBurst,
+  drawGlowHeroFillBurst,
+  GLOW_MENU_HERO_FILL_CFG,
+  KEY_EYES_COLLECTED
+} from '../sections/glow/utils/glow-hero-fill.js'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -424,7 +433,8 @@ export function sceneMenu(k) {
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.glow?.completed
     const inGlowPlay = lastLevel && lastLevel.startsWith('lesson-glow')
-    const glowHeroFilled = isGlowMenuHeroFilled(currentSection)
+    const usesGlowHeroFill = usesGlowHeroFillProgress(progress, inGlowPlay)
+    const glowHeroFillAmount = usesGlowHeroFill ? getGlowHeroFillProgress() : 1
     const menuHeroWhite = !progress.touch?.completed || inGlowPlay
     const grayColor = '#656565'
     const uncompletedHollowOutline = MENU_ANTIHERO_HOLLOW_OUTLINE
@@ -441,7 +451,10 @@ export function sceneMenu(k) {
             : progress.glow?.completed
               ? CFG.visual.colors.sections.glow.body
               : "#656565"
-    const menuHeroFilled = inGlowPlay ? glowHeroFilled : menuHeroWhite
+    const menuHeroFilled = usesGlowHeroFill
+      ? glowHeroFillAmount >= 0.98
+      : menuHeroWhite
+    const menuHeroNoEyes = usesGlowHeroFill && !get(KEY_EYES_COLLECTED, false)
     const menuHeroHasMouth = Boolean(progress.word?.completed) && !inGlowPlay
     //
     // Filled glow menu hero uses the dark body outline and standard white eyes
@@ -465,7 +478,8 @@ export function sceneMenu(k) {
       addArms: Boolean(progress.touch?.completed),
       eyeWhiteColor: menuHeroEyeWhite,
       pupilColor: menuHeroPupilColor,
-      transparentEyeInterior: menuHeroTransparentEyes
+      transparentEyeInterior: menuHeroTransparentEyes,
+      noEyes: menuHeroNoEyes
     })
     if (menuHeroWhite) {
       Hero.loadHeroSprites({
@@ -476,7 +490,8 @@ export function sceneMenu(k) {
         eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
         pupilColor: CFG.visual.colors.hero.eyePupil,
         transparentEyeInterior: false,
-        outlineOnly: false
+        outlineOnly: false,
+        noEyes: menuHeroNoEyes
       })
     }
     menuHeroWhite && !menuHeroFilled && Hero.loadHeroSprites({
@@ -488,7 +503,8 @@ export function sceneMenu(k) {
       transparentEyeInterior: true,
       outlineOnly: true,
       addMouth: menuHeroHasMouth,
-      addArms: Boolean(progress.touch?.completed)
+      addArms: Boolean(progress.touch?.completed),
+      noEyes: menuHeroNoEyes
     })
     const heroInst = Hero.create({
       k,
@@ -505,10 +521,8 @@ export function sceneMenu(k) {
       eyeWhiteColor: menuHeroEyeWhite,
       pupilColor: menuHeroPupilColor,
       transparentEyeInterior: menuHeroTransparentEyes,
+      noEyes: menuHeroNoEyes,
       idleVocalization: inGlowPlay ? null : undefined,
-      //
-      // Menu hero always has eyes — including before the glow cave pickup.
-      //
       sfx: sound
     })
     
@@ -973,6 +987,7 @@ export function sceneMenu(k) {
       floatSpeedY: FLOAT_SPEED_Y,
       hoveredAntiHero: null,
       heroInst,
+      usesGlowHeroFill,
       isLeavingScene: false,
       heartbeatPhase: 0,
       lastHeartbeatTime: 0,
@@ -1031,7 +1046,8 @@ export function sceneMenu(k) {
       Hero.setLookAtPos(heroInst, hoveredInst
         ? { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y }
         : null)
-      
+      inst.usesGlowHeroFill && syncGlowHeroFillVisual(inst, GLOW_MENU_HERO_FILL_CFG)
+      inst.usesGlowHeroFill && updateGlowHeroFillBurst(inst, k.dt())
       //
       // Update colors for all anti-heroes based on hover state
       //
@@ -1304,6 +1320,7 @@ export function sceneMenu(k) {
       {
         draw() {
           if (inst.isLeavingScene) return
+          inst.usesGlowHeroFill && drawGlowHeroFillBurst(k, inst.heroInst, inst)
           drawProhibitedSlashFront(k, inst)
           drawCompletedCheckmarkFront(k, inst)
         }
@@ -2179,13 +2196,6 @@ function activateMenuAntiHeroAtPointer(inst) {
     }
   })
   best?.onMenuSelect?.()
-}
-//
-// True while the glow lesson is the active menu section and O was revealed.
-//
-function isGlowMenuHeroFilled(currentSection) {
-  return isMenuSectionInPlay('glow', currentSection) &&
-    (get('glow.revealedO', false) || get('glow.collectedO', false))
 }
 //
 // True when the player's saved lesson belongs to this menu section.

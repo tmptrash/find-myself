@@ -75,7 +75,9 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const CAVE_LAYOUT_VERSION = 10
+const CAVE_LAYOUT_VERSION = 11
+const CAVE_MOUTH_LIP_Y_OFFSET = 4
+const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
 const CAVE_INTERIOR_SPRITE = 'glow0-cave-interior'
@@ -540,10 +542,7 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
     pit.cracksVisible && drawSurfaceCracks(k, pit, groundC, flatDecor)
     return
   }
-  if (pit.outlineOnlyMode) {
-    drawGlowPitOutline(k, pit)
-    return
-  }
+  if (pit.outlineOnlyMode) return
   isCaveInteriorVisible(pit) && drawCaveInteriorRockStyle(k, pit)
   isCaveInteriorVisible(pit) && drawPitTrampoline(k, pit)
 }
@@ -750,15 +749,18 @@ function bakeCaveInteriorSprite(k, pit) {
 function caveMouthPts(mouth) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
   const pts = []
-  pts.push({ x: mouth.left[0].x, y: mouth.floorY })
-  pts.push({ x: mouth.right[0].x, y: mouth.floorY })
-  for (let i = 1; i < mouth.right.length; i++) {
-    pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
+  const lipY = mouth.floorY + CAVE_MOUTH_LIP_Y_OFFSET
+  //
+  // Start below the surface lip — avoids a flat gray bar across the opening.
+  //
+  pts.push({ x: mouth.left[0].x, y: lipY })
+  for (let i = 1; i < mouth.left.length; i++) {
+    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
   }
   pts.push({ x: mouth.right[mouth.right.length - 1].x, y: mouth.bottomY })
   pts.push({ x: mouth.left[mouth.left.length - 1].x, y: mouth.bottomY })
-  for (let i = mouth.left.length - 1; i >= 1; i--) {
-    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
+  for (let i = mouth.right.length - 1; i >= 0; i--) {
+    pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
   }
   return pts
 }
@@ -1276,6 +1278,8 @@ function collapsePit(pit) {
   set(KEY_PIT_COLLAPSED, true)
   pit.crackFloor?.destroy?.()
   pit.crackFloor = null
+  pit.interiorRevealHoldoff = pit.k.time() + CAVE_INTERIOR_REVEAL_HOLDOFF
+  pit._caveSpriteReady = false
   openPitPhysics(pit)
   spawnPitBurst(pit)
 }
@@ -1436,6 +1440,7 @@ function spawnPitBurst(pit) {
 //
 function isCaveInteriorVisible(pit) {
   if (!pit?.collapsed || pit.outlineOnlyMode) return false
+  if (pit.interiorRevealHoldoff != null && pit.k.time() < pit.interiorRevealHoldoff) return false
   const zones = pit.sceneRef?.zones
   const heroInst = pit.heroInst || pit.sceneRef?.heroInst
   //

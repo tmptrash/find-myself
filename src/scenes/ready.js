@@ -332,7 +332,9 @@ const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
 //
 // Sprite prefix for the title hero variant (body colour = title colour)
 //
-const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000000`
+const HERO_N_TITLE_BODY_NO_HASH = HERO_TITLE_BODY_COLOR.replace('#', '')
+const HERO_N_SPRITE_PREFIX = `hero_${HERO_N_TITLE_BODY_NO_HASH}_000000`
+const HERO_N_SPRITE_PREFIX_NO_EYES = `${HERO_N_SPRITE_PREFIX}_noeyes`
 //
 // Hero-n departure sequence. Once the letters start growing legs AND the
 // mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, the title hero
@@ -511,6 +513,16 @@ export function sceneReady(k) {
     // the hero-n and the upside-down hero-u inside "find yourself".
     //
     loadHeroSprites(k, HEROES.HERO, HERO_TITLE_BODY_COLOR, null, false, false, false)
+    //
+    // Eyeless title variant — heroes in the word stay faceless until hero-n
+    // lands on the ground and the departure sequence begins.
+    //
+    loadHeroSprites({
+      k,
+      type: HEROES.HERO,
+      bodyColor: HERO_TITLE_BODY_COLOR,
+      noEyes: true
+    })
     //
     // Richer hero variant for the CENTRAL illustration — adds mouth,
     // both arms and a wrist watch on top of the plain body. Loaded
@@ -1682,16 +1694,16 @@ function drawTitleHero(k, spider) {
   const cx = inTitle ? spider.x + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X) : spider.heroX
   const cy = inTitle ? spider.y + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y) : spider.heroY
   //
-  // Sprite per phase: run frames while bursting, closed eyes while idling or
-  // waking with one eye (the open eye is overlaid manually), open eyes
-  // otherwise (title, fall, pause, both-eyes wake step).
+  // Title letters use the eyeless bake; once hero-n leaves the word the
+  // grounded run/fall sprites regain eyes (closed while idle / waking).
   //
+  const spritePrefix = inTitle ? HERO_N_SPRITE_PREFIX_NO_EYES : HERO_N_SPRITE_PREFIX
   const closedEyes = spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye'
   const sprite = spider.heroPhase === 'run'
-    ? `${HERO_N_SPRITE_PREFIX}-run-${spider.heroRunFrame}`
+    ? `${spritePrefix}-run-${spider.heroRunFrame}`
     : closedEyes
-      ? `${HERO_N_SPRITE_PREFIX}_closed`
-      : `${HERO_N_SPRITE_PREFIX}_0_0`
+      ? `${spritePrefix}_closed`
+      : `${spritePrefix}_0_0`
   k.drawSprite({
     sprite,
     pos: k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2),

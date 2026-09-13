@@ -62,9 +62,28 @@ export function applyGlowCaptionGrainToCanvas(canvas, seedOffset = 0) {
  * @param {number} [cfg.blurRadius] - Gaussian blur radius in px (0 = skip)
  * @param {number} [cfg.grainSeedOffset] - Extra seed offset for this layer
  */
+export const GLOW_LAYER_GRADE = {
+  far: { contrast: 0.25, saturation: 0.35 },
+  mid: { contrast: 0.45, saturation: 0.5 },
+  near: { contrast: 0.75, saturation: 0.7 },
+  foreground: { contrast: 0.9, saturation: 0.9 }
+}
+/**
+ * Applies depth contrast/saturation plus optional film grain to a baked canvas.
+ * @param {HTMLCanvasElement} canvas
+ * @param {{ contrast: number, saturation: number }} grade
+ * @param {number} [seedOffset=0]
+ */
+export function applyGlowLayerGradeToCanvas(canvas, grade, seedOffset = 0) {
+  if (!canvas?.width || !canvas?.height || !grade) return
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  applyContrastSaturationToContext(ctx, canvas.width, canvas.height, grade.contrast, grade.saturation)
+  applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(seedOffset))
+}
 export function applyParallaxPostFxToContext(ctx, width, height, cfg) {
   if (!cfg) return
   cfg.blurRadius > 0 && applyBlurToContext(ctx, width, height, cfg.blurRadius)
+  cfg.grade && applyContrastSaturationToContext(ctx, width, height, cfg.grade.contrast, cfg.grade.saturation)
   applyFilmGrainToContext(ctx, width, height, grainCfg(cfg.grainSeedOffset ?? 0))
 }
 //
@@ -87,6 +106,31 @@ function applyBlurToContext(ctx, width, height, radiusPx) {
   ctx.restore()
   scratch.width = 0
   scratch.height = 0
+}
+//
+// Shifts pixel contrast around mid-grey and lerps colour toward luminance.
+//
+function applyContrastSaturationToContext(ctx, width, height, contrast, saturation) {
+  if (contrast >= 0.999 && saturation >= 0.999) return
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const px = imageData.data
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < GRAIN_ALPHA_MIN) continue
+    const r = px[i]
+    const g = px[i + 1]
+    const b = px[i + 2]
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b
+    let nr = lum + (r - lum) * saturation
+    let ng = lum + (g - lum) * saturation
+    let nb = lum + (b - lum) * saturation
+    nr = (nr - 128) * contrast + 128
+    ng = (ng - 128) * contrast + 128
+    nb = (nb - 128) * contrast + 128
+    px[i] = clamp255(nr)
+    px[i + 1] = clamp255(ng)
+    px[i + 2] = clamp255(nb)
+  }
+  ctx.putImageData(imageData, 0, 0)
 }
 //
 // Adds luminance film grain to every opaque pixel on a baked canvas.

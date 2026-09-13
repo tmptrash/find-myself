@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB, toCanvas } from '../../../utils/helper.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
-import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
+import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from '../utils/glow-parallax-grain.js'
 
 //
 // Pixel-art hedgehog colours. Kept local to this component (not routed
@@ -12,9 +12,11 @@ import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
 // tree/mushroom decor elsewhere in this level.
 //
 const MANE_HEX = GLOW_PAL.hedgehogMane
+const MANE_DARK_HEX = GLOW_PAL.hedgehogManeDark
 const MANE_GRAY_HEX = GLOW_PAL.decorGray
 const FACE_HEX = GLOW_PAL.hedgehogFace
 const FACE_GRAY_HEX = GLOW_PAL.lightGray
+const CHEEK_HEX = GLOW_PAL.hedgehogCheek
 const EYE_HEX = GLOW_PAL.void
 //
 // Black silhouette rim, same convention as every other character in the
@@ -28,10 +30,10 @@ const OUTLINE_PAD = 1.6
 // itself is a plain ellipse — the roundness the hero-style rim needs —
 // while the spikes are a separate jagged layer fanned across its top arc.
 //
-const MANE_CX = -3
-const MANE_CY = -12
-const MANE_RX = 16
-const MANE_RY = 12
+const MANE_CX = -4
+const MANE_CY = -11
+const MANE_RX = 17
+const MANE_RY = 13
 //
 // Light belly patch — same tan as the face/head, painted over the lower
 // slice of the mane's own silhouette (clipped to its exact ellipse, no
@@ -50,11 +52,11 @@ const BELLY_BACK_OVERSHOOT_FRAC = 1.4
 // ends (sin bell curve) so the low back spikes shrink away naturally
 // instead of poking down past the ground line.
 //
-const SPIKE_COUNT = 13
-const SPIKE_ARC_START = 100
-const SPIKE_ARC_END = 345
-const SPIKE_LEN = 12
-const SPIKE_LEN_SHORT_FACTOR = 0.7
+const SPIKE_COUNT = 14
+const SPIKE_ARC_START = 145
+const SPIKE_ARC_END = 255
+const SPIKE_LEN = 10
+const SPIKE_LEN_SHORT_FACTOR = 0.75
 const SPIKE_SWAY_PHASE_STEP = 0.6
 const SPIKE_SWAY_AMP_DEG = 5
 //
@@ -62,21 +64,25 @@ const SPIKE_SWAY_AMP_DEG = 5
 // mane, tapering to one sharp point at the front (the reference's long
 // pointed nose) instead of a boxy wedge.
 //
-const SNOUT_CX = 13
-const SNOUT_CY = -6
-const SNOUT_RX = 8
-const SNOUT_RY = 6
-const SNOUT_NOSE_LEN = 4
-const SNOUT_ARC_STEPS = 10
-const SNOUT_ARC_START = 40
-const SNOUT_ARC_END = 320
+const FACE_PATCH_CX = 7
+const FACE_PATCH_CY = -4
+const FACE_PATCH_RX = 12
+const FACE_PATCH_RY = 10
+const SNOUT_CX = 15
+const SNOUT_CY = -4
+const SNOUT_RX = 5.5
+const SNOUT_RY = 4.5
+const SNOUT_NOSE_LEN = 3.5
+const SNOUT_ARC_STEPS = 8
+const SNOUT_ARC_START = 55
+const SNOUT_ARC_END = 300
 //
 // Small round black nose at the snout tip — same footprint as before, just
 // an oval instead of a rectangle, with a thin outline so it stays neat.
 //
-const NOSE_TIP_X = SNOUT_CX + SNOUT_RX + SNOUT_NOSE_LEN - 0.4
-const NOSE_TIP_RX = 0.8
-const NOSE_TIP_RY = 0.55
+const NOSE_TIP_X = SNOUT_CX + SNOUT_RX + SNOUT_NOSE_LEN - 0.2
+const NOSE_TIP_RX = 1.85
+const NOSE_TIP_RY = 1.45
 const NOSE_TIP_Y = SNOUT_CY + 0.15
 const NOSE_OUTLINE_PAD = 0.35
 //
@@ -85,33 +91,41 @@ const NOSE_OUTLINE_PAD = 0.35
 // (cheap — 3 small ellipses) on top of the baked body so it can track the
 // hero; the body itself never needs a live redraw.
 //
+const EYE_CX = 14.5
+const EYE_CY = -6.2
+const EYE_R = 2.4
+const PUPIL_R = 1.15
+const PUPIL_OFFSET_X = 0.35
+const PUPIL_OFFSET_Y = 0
+const EYE_GAZE_TRAVEL = 0.75
 const EYE_WHITE_HEX = GLOW_PAL.brightLight
-const EYE_CX = 16
-const EYE_CY = -8
-const EYE_WHITE_R = 4.4
-const PUPIL_R = 2.3
-const PUPIL_OFFSET_X = 1
-const PUPIL_OFFSET_Y = 0.35
-const EYE_PUPIL_TRAVEL = EYE_WHITE_R - PUPIL_R - 0.35
+const CHEEK_CX = 18
+const CHEEK_CY = -3.5
+const CHEEK_R = 1.8
+const EAR_L = { x: 0, y: -17, rx: 2.6, ry: 3 }
+const EAR_R = { x: 5, y: -18, rx: 2.4, ry: 2.8 }
 //
 // Small closed-mouth line on the underside of the snout, just behind the
 // nose tip.
 //
-const MOUTH_P1 = [15, -2]
-const MOUTH_CTRL = [18.7, -0.5]
-const MOUTH_P2 = [24.8, -4.9]
-const MOUTH_WIDTH = 0.9
+const MOUTH_P1 = [15.5, -1.5]
+const MOUTH_CTRL = [17.8, -0.2]
+const MOUTH_P2 = [20.5, -2.8]
+const MOUTH_WIDTH = 0.75
 //
 // Stub legs peeking out from under the body. Drawn live (cheap — a
 // handful of ellipses) rather than baked, so they can lift and alternate
 // while walking and stay planted while idle/turning.
 //
 const LEGS = [
-  { x: -9, y: 1 },
-  { x: 5, y: 1 }
+  { x: -8, y: 1.5 },
+  { x: 6, y: 1.5 }
 ]
-const LEG_RX = 2.2
-const LEG_RY = 1.8
+const LEG_RX = 2.5
+const LEG_RY = 2
+const TOE_OFFSETS = [-1.6, 0, 1.6]
+const TOE_RX = 0.75
+const TOE_RY = 0.55
 const LEG_STEP_LIFT = 1.6
 const LEG_STEP_FORWARD = 2.4
 const LEG_STEP_SPEED = 7
@@ -153,11 +167,15 @@ const BREATH_AMP = 0.5
 // the facing flips while it's fully curled, so reappearing on the other
 // side reads as a natural "uncurl", not a paper-thin flip.
 //
-const CURL_CX = -3
-const CURL_CY = -13
-const CURL_R = 13
-const CURL_SPIKE_COUNT = 16
-const CURL_SPIKE_LEN = 8
+const CURL_CX = -4
+const CURL_CY = -12
+const CURL_R = 14
+const CURL_FACE_RX = 8
+const CURL_FACE_RY = 7
+const CURL_PAW_L = { x: -5, y: -2 }
+const CURL_PAW_R = { x: 3, y: -2 }
+const CURL_SPIKE_COUNT = 18
+const CURL_SPIKE_LEN = 7
 const CURL_SPIKE_LEN_SHORT_FACTOR = 0.75
 const CURL_SCALE = 0.62
 //
@@ -437,8 +455,7 @@ function colorFadeOf(inst) {
 //
 function drawEye(inst, frameIdx, dir, fade) {
   const k = inst.k
-  const outline = getRGB(k, CFG.visual.colors.outline)
-  const eyeWhite = getRGB(k, EYE_WHITE_HEX)
+  const sclera = getRGB(k, EYE_WHITE_HEX)
   const pupil = getRGB(k, EYE_HEX)
   const eyeAlpha = inst.turnScale
   if (eyeAlpha <= 0.02) return
@@ -446,10 +463,21 @@ function drawEye(inst, frameIdx, dir, fade) {
   const eyeCy = EYE_CY + breathe
   const s = inst.scale * inst.turnScale
   const toWorld = (localX, localY) => k.vec2(inst.x + dir * s * localX, inst.y + s * localY)
-  k.drawEllipse({ pos: toWorld(EYE_CX, eyeCy), radiusX: (EYE_WHITE_R + OUTLINE_PAD * 0.5) * s, radiusY: (EYE_WHITE_R + OUTLINE_PAD * 0.5) * s, color: outline, opacity: eyeAlpha })
-  k.drawEllipse({ pos: toWorld(EYE_CX, eyeCy), radiusX: EYE_WHITE_R * s, radiusY: EYE_WHITE_R * s, color: eyeWhite, opacity: eyeAlpha })
-  k.drawEllipse({ pos: toWorld(EYE_CX + inst.pupilX, eyeCy + inst.pupilY), radiusX: PUPIL_R * s, radiusY: PUPIL_R * s, color: pupil, opacity: eyeAlpha })
-  void fade
+  const eyePos = toWorld(EYE_CX + inst.pupilX, eyeCy + inst.pupilY)
+  k.drawEllipse({
+    pos: eyePos,
+    radiusX: EYE_R * s,
+    radiusY: EYE_R * s,
+    color: sclera,
+    opacity: eyeAlpha
+  })
+  k.drawEllipse({
+    pos: toWorld(EYE_CX + inst.pupilX + PUPIL_OFFSET_X, eyeCy + inst.pupilY + PUPIL_OFFSET_Y),
+    radiusX: PUPIL_R * s,
+    radiusY: PUPIL_R * s,
+    color: pupil,
+    opacity: eyeAlpha * (fade > 0.02 ? fade : 1)
+  })
 }
 //
 // Live stub legs — planted while idle, alternating a small step-lift while
@@ -458,8 +486,8 @@ function drawEye(inst, frameIdx, dir, fade) {
 function drawLegs(inst, dir, fade) {
   const k = inst.k
   const outline = getRGB(k, CFG.visual.colors.outline)
-  const faceGray = getRGB(k, FACE_GRAY_HEX)
-  const faceColor = getRGB(k, FACE_HEX)
+  const maneGray = getRGB(k, MANE_GRAY_HEX)
+  const maneColor = getRGB(k, MANE_HEX)
   const legAlpha = inst.turnScale
   if (legAlpha <= 0.02) return
   const s = inst.scale * inst.turnScale
@@ -475,8 +503,13 @@ function drawLegs(inst, dir, fade) {
     const forward = swing * LEG_STEP_FORWARD
     const pos = k.vec2(inst.x + dir * s * (leg.x + forward), inst.y + s * (leg.y - lift))
     k.drawEllipse({ pos, radiusX: (LEG_RX + OUTLINE_PAD) * s, radiusY: (LEG_RY + OUTLINE_PAD) * s, color: outline, opacity: legAlpha })
-    k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: faceGray, opacity: legAlpha })
-    fade > 0.02 && k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: faceColor, opacity: legAlpha * fade })
+    k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: maneGray, opacity: legAlpha })
+    fade > 0.02 && k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: maneColor, opacity: legAlpha * fade })
+    const toeColor = fade > 0.02 ? maneColor : maneGray
+    TOE_OFFSETS.forEach((toeX) => {
+      const toePos = k.vec2(pos.x + dir * s * toeX, pos.y + s * 0.8)
+      k.drawEllipse({ pos: toePos, radiusX: TOE_RX * s, radiusY: TOE_RY * s, color: toeColor, opacity: legAlpha * (fade > 0.02 ? fade : 1) })
+    })
   })
 }
 //
@@ -606,8 +639,8 @@ function updateFrozenGaze(inst, dt) {
     const localDx = dir * (heroPos.x - inst.x)
     const dy = heroPos.y - inst.y
     const len = Math.hypot(localDx, dy) || 1
-    targetX = (localDx / len) * EYE_PUPIL_TRAVEL
-    targetY = (dy / len) * EYE_PUPIL_TRAVEL
+    targetX = (localDx / len) * EYE_GAZE_TRAVEL
+    targetY = (dy / len) * EYE_GAZE_TRAVEL
   }
   const lerp = Math.min(1, GAZE_LERP_SPEED * dt)
   inst.pupilX += (targetX - inst.pupilX) * lerp
@@ -632,15 +665,15 @@ function updateGaze(inst, dt) {
     if (heroInFront) {
       const localDx = dir * dx
       const len = Math.hypot(localDx, dy) || 1
-      targetX = (localDx / len) * EYE_PUPIL_TRAVEL
-      targetY = (dy / len) * EYE_PUPIL_TRAVEL
+      targetX = (localDx / len) * EYE_GAZE_TRAVEL
+      targetY = (dy / len) * EYE_GAZE_TRAVEL
     }
   }
   if (!heroInFront) {
     if (inst.gazeWanderTimer <= 0) {
       inst.gazeWanderTimer = randRange(GAZE_WANDER_INTERVAL_MIN, GAZE_WANDER_INTERVAL_MAX)
-      inst.gazeWanderX = EYE_PUPIL_TRAVEL * (0.2 + Math.random() * 0.65)
-      inst.gazeWanderY = EYE_PUPIL_TRAVEL * (0.15 + Math.random() * 0.7)
+      inst.gazeWanderX = EYE_GAZE_TRAVEL * (0.2 + Math.random() * 0.65)
+      inst.gazeWanderY = EYE_GAZE_TRAVEL * (0.15 + Math.random() * 0.7)
     }
     targetX = inst.gazeWanderX
     targetY = inst.gazeWanderY
@@ -665,10 +698,10 @@ function bakeHedgehogSprites(k, scale) {
     const name = BODY_SPRITE_PREFIX + f
     const breathe = Math.sin(f / IDLE_FRAME_COUNT * 2 * Math.PI) * BREATH_AMP
     const swayPhase = f / IDLE_FRAME_COUNT * 2 * Math.PI
-    bakeVariant(k, name, pixelRatio, (ctx, maneHex, faceHex) => drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, faceHex))
+    bakeVariant(k, name, pixelRatio, (ctx, maneHex, maneDarkHex, faceHex, cheekHex) => drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHex, cheekHex))
     names.push(name)
   }
-  bakeVariant(k, CURLED_SPRITE_NAME, pixelRatio, (ctx, maneHex) => drawCurledFrame(ctx, maneHex))
+  bakeVariant(k, CURLED_SPRITE_NAME, pixelRatio, (ctx, maneHex, maneDarkHex, faceHex) => drawCurledFrame(ctx, maneHex, maneDarkHex, faceHex))
   return names
 }
 //
@@ -678,38 +711,38 @@ function bakeHedgehogSprites(k, scale) {
 function bakeVariant(k, baseName, pixelRatio, drawFn) {
   const grayCanvas = toCanvas({ width: BAKE_W, height: BAKE_H, pixelRatio }, (ctx) => {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
-    drawFn(ctx, MANE_GRAY_HEX, FACE_GRAY_HEX)
+    drawFn(ctx, MANE_GRAY_HEX, MANE_GRAY_HEX, FACE_GRAY_HEX, FACE_GRAY_HEX)
   })
-  applyGlowFilmGrainToCanvas(grayCanvas, baseName.length * 17)
+  applyGlowLayerGradeToCanvas(grayCanvas, GLOW_LAYER_GRADE.foreground, baseName.length * 17)
   k.loadSprite(baseName + GRAY_SUFFIX, grayCanvas)
   const colorCanvas = toCanvas({ width: BAKE_W, height: BAKE_H, pixelRatio }, (ctx) => {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
-    drawFn(ctx, MANE_HEX, FACE_HEX)
+    drawFn(ctx, MANE_HEX, MANE_DARK_HEX, FACE_HEX, CHEEK_HEX)
   })
-  applyGlowFilmGrainToCanvas(colorCanvas, baseName.length * 17 + 1)
+  applyGlowLayerGradeToCanvas(colorCanvas, GLOW_LAYER_GRADE.foreground, baseName.length * 17 + 1)
   k.loadSprite(baseName + COLOR_SUFFIX, colorCanvas)
 }
 //
 // Draws one baked idle body frame onto a raw 2D canvas context (already
 // translated so local (0, 0) sits at the ground line, screen space).
 //
-function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, faceHex) {
+function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHex, cheekHex) {
   const maneCy = MANE_CY + breathe
-  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, CFG.visual.colors.outline)
-  fillPolyCtx(ctx, buildSpikeCrownPoints(MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, OUTLINE_PAD, swayPhase), CFG.visual.colors.outline)
-  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, maneHex)
-  fillPolyCtx(ctx, buildSpikeCrownPoints(MANE_CX, maneCy, MANE_RX, MANE_RY, 0, swayPhase), maneHex)
+  const faceCy = FACE_PATCH_CY + breathe
   const snoutCy = SNOUT_CY + breathe
-  fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX + OUTLINE_PAD, SNOUT_RY + OUTLINE_PAD, SNOUT_NOSE_LEN + OUTLINE_PAD), CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, maneHex)
+  drawSpikeCrown(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD * 0.35, MANE_RY + OUTLINE_PAD * 0.35, OUTLINE_PAD * 0.4, swayPhase, maneDarkHex, maneHex)
+  drawSpikeCrown(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, 0, swayPhase, maneHex, maneDarkHex)
+  drawEar(ctx, EAR_L, maneCy, maneDarkHex)
+  drawEar(ctx, EAR_R, maneCy, maneDarkHex)
+  fillEllipseCtx(ctx, FACE_PATCH_CX, faceCy, FACE_PATCH_RX + OUTLINE_PAD * 0.25, FACE_PATCH_RY + OUTLINE_PAD * 0.25, CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, FACE_PATCH_CX, faceCy, FACE_PATCH_RX, FACE_PATCH_RY, faceHex)
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX, SNOUT_RY, SNOUT_NOSE_LEN), faceHex)
-  drawSnoutNoseTip(ctx, snoutCy)
-  //
-  // Belly patch painted last (on top of the snout's own back outline) so
-  // it erases any seam between head and body instead of being covered by
-  // it — clipped strictly to the mane's plain ellipse, so it never spills
-  // past the real silhouette or below the legs.
-  //
   drawBellyPatch(ctx, maneCy, faceHex)
+  drawSnoutNoseTip(ctx, snoutCy)
+  drawBakedEye(ctx, snoutCy)
+  drawCheek(ctx, snoutCy, cheekHex)
   strokeQuadCtx(
     ctx,
     MOUTH_P1[0], MOUTH_P1[1] + breathe,
@@ -751,11 +784,14 @@ function drawBellyPatch(ctx, maneCy, faceHex) {
 // Draws the curled-ball defensive pose onto a raw 2D canvas context — a
 // round spiky sphere with no visible snout/eye/legs.
 //
-function drawCurledFrame(ctx, maneHex) {
+function drawCurledFrame(ctx, maneHex, maneDarkHex, faceHex) {
   fillEllipseCtx(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, CURL_R + OUTLINE_PAD, CFG.visual.colors.outline)
-  fillPolyCtx(ctx, buildFullSpikeBallPoints(CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, OUTLINE_PAD), CFG.visual.colors.outline)
+  drawCurlSpikeBall(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, OUTLINE_PAD, CFG.visual.colors.outline, CFG.visual.colors.outline)
   fillEllipseCtx(ctx, CURL_CX, CURL_CY, CURL_R, CURL_R, maneHex)
-  fillPolyCtx(ctx, buildFullSpikeBallPoints(CURL_CX, CURL_CY, CURL_R, 0), maneHex)
+  drawCurlSpikeBall(ctx, CURL_CX, CURL_CY, CURL_R, 0, maneHex, maneDarkHex)
+  fillEllipseCtx(ctx, CURL_CX + 1, CURL_CY + 1, CURL_FACE_RX, CURL_FACE_RY, faceHex)
+  fillEllipseCtx(ctx, CURL_PAW_L.x, CURL_PAW_L.y, 2.4, 2, maneDarkHex)
+  fillEllipseCtx(ctx, CURL_PAW_R.x, CURL_PAW_R.y, 2.4, 2, maneDarkHex)
 }
 //
 // One point on an ellipse at the given angle (degrees, 0 = +x/right,
@@ -780,35 +816,49 @@ function buildSpikeCrownPoints(cx, cy, rx, ry, pad, swayPhase) {
   for (let i = 0; i <= SPIKE_COUNT; i++) {
     angles.push(SPIKE_ARC_START + (SPIKE_ARC_END - SPIKE_ARC_START) * (i / SPIKE_COUNT))
   }
-  const pts = []
+  const spikes = []
   for (let i = 0; i < SPIKE_COUNT; i++) {
-    pts.push(ellipsePoint(cx, cy, rx, ry, angles[i]))
+    const baseA = angles[i]
+    const nextA = angles[i + 1]
     const sway = Math.sin(swayPhase + i * SPIKE_SWAY_PHASE_STEP) * SPIKE_SWAY_AMP_DEG
-    const mid = (angles[i] + angles[i + 1]) / 2 + sway
+    const mid = (baseA + nextA) / 2 + sway
     const t = (mid - SPIKE_ARC_START) / (SPIKE_ARC_END - SPIKE_ARC_START)
     const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, t)))
     const len = pad + SPIKE_LEN * taper * (i % 2 === 0 ? 1 : SPIKE_LEN_SHORT_FACTOR)
-    pts.push(ellipsePoint(cx, cy, rx + len, ry + len, mid))
+    spikes.push({
+      baseL: ellipsePoint(cx, cy, rx, ry, baseA),
+      baseR: ellipsePoint(cx, cy, rx, ry, nextA),
+      tip: ellipsePoint(cx, cy, rx + len, ry + len, mid),
+      alt: i % 2 === 1
+    })
   }
-  pts.push(ellipsePoint(cx, cy, rx, ry, angles[SPIKE_COUNT]))
-  return pts
+  return spikes
+}
+//
+// Draws individual triangular quills across the back arc.
+//
+function drawSpikeCrown(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
+  const spikes = buildSpikeCrownPoints(cx, cy, rx, ry, pad, swayPhase)
+  spikes.forEach((spike) => {
+    fillPolyCtx(ctx, [spike.baseL, spike.tip, spike.baseR], spike.alt ? darkHex : mainHex)
+  })
 }
 //
 // Builds a full 360° ring of spikes for the curled-ball pose — same
 // zigzag rim/tip construction as the crown, just wrapped all the way
 // around with no taper (every spike full length).
 //
-function buildFullSpikeBallPoints(cx, cy, r, pad) {
-  const pts = []
+function drawCurlSpikeBall(ctx, cx, cy, r, pad, mainHex, darkHex) {
   for (let i = 0; i < CURL_SPIKE_COUNT; i++) {
     const a0 = (360 / CURL_SPIKE_COUNT) * i
     const a1 = (360 / CURL_SPIKE_COUNT) * (i + 1)
-    pts.push(ellipsePoint(cx, cy, r, r, a0))
+    const baseL = ellipsePoint(cx, cy, r, r, a0)
+    const baseR = ellipsePoint(cx, cy, r, r, a1)
     const mid = (a0 + a1) / 2
     const len = pad + CURL_SPIKE_LEN * (i % 2 === 0 ? 1 : CURL_SPIKE_LEN_SHORT_FACTOR)
-    pts.push(ellipsePoint(cx, cy, r + len, r + len, mid))
+    const tip = ellipsePoint(cx, cy, r + len, r + len, mid)
+    fillPolyCtx(ctx, [baseL, tip, baseR], i % 2 === 1 ? darkHex : mainHex)
   }
-  return pts
 }
 //
 // Builds the tapered snout wedge: a smooth ellipse arc for the back/top/
@@ -825,12 +875,37 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
   return pts
 }
 //
+// Baked eye on the cream snout — white sclera + dark pupil (live gaze
+// overlay tracks the hero on top each frame).
+//
+function drawBakedEye(ctx, snoutCy) {
+  const eyeY = EYE_CY + (snoutCy - SNOUT_CY)
+  fillEllipseCtx(ctx, EYE_CX, eyeY, EYE_R + OUTLINE_PAD * 0.2, EYE_R + OUTLINE_PAD * 0.2, CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, EYE_CX, eyeY, EYE_R, EYE_R, EYE_WHITE_HEX)
+  fillEllipseCtx(ctx, EYE_CX + PUPIL_OFFSET_X, eyeY + PUPIL_OFFSET_Y, PUPIL_R, PUPIL_R, EYE_HEX)
+}
+//
 // Small round black nose at the snout tip.
 //
 function drawSnoutNoseTip(ctx, snoutCy) {
   const tipY = NOSE_TIP_Y + (snoutCy - SNOUT_CY)
   fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX + NOSE_OUTLINE_PAD, NOSE_TIP_RY + NOSE_OUTLINE_PAD, CFG.visual.colors.outline)
   fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX, NOSE_TIP_RY, EYE_HEX)
+}
+//
+// Small rounded ear poking out from the quill dome.
+//
+function drawEar(ctx, ear, maneCy, maneHex) {
+  const cy = ear.y + (maneCy - MANE_CY)
+  fillEllipseCtx(ctx, ear.x, cy, ear.rx + OUTLINE_PAD * 0.4, ear.ry + OUTLINE_PAD * 0.4, CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, ear.x, cy, ear.rx, ear.ry, maneHex)
+}
+//
+// Soft pink cheek blush on the snout.
+//
+function drawCheek(ctx, snoutCy, cheekHex) {
+  const cheekY = CHEEK_CY + (snoutCy - SNOUT_CY)
+  fillEllipseCtx(ctx, CHEEK_CX, cheekY, CHEEK_R, CHEEK_R, cheekHex)
 }
 //
 // Fills an ellipse directly on a raw 2D canvas context (bake pass only).

@@ -4,7 +4,7 @@ import {
   getTreePaletteColor,
   getTreePaletteFlatDecor
 } from './glow-palette.js'
-import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from './glow-parallax-grain.js'
 import {
   measureCanvasContentBounds,
   cropCanvasToBounds,
@@ -380,7 +380,7 @@ function storeSegmentBakeOffset(k, id, bounds) {
 function loadGlowTreeSegmentSprite(k, name, canvas, bounds, seedOffset) {
   const cropped = bounds ? cropCanvasToBounds(canvas, bounds) : canvas
   bounds && releaseCanvas(canvas)
-  applyGlowFilmGrainToCanvas(cropped, name.length * 31 + seedOffset)
+  applyGlowLayerGradeToCanvas(cropped, GLOW_LAYER_GRADE.foreground, name.length * 31 + seedOffset)
   k.loadSprite(name, cropped)
   releaseCanvas(cropped)
 }

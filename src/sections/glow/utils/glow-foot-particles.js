@@ -1,4 +1,4 @@
-import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from './glow-parallax-grain.js'
 import { glowRgb } from './glow-palette.js'
 //
 // Foot burst particles for glow level landings
@@ -386,7 +386,7 @@ function ensureGlowLeafSprite(k, size, r, g, b) {
   })
   ctx.closePath()
   ctx.fill()
-  applyGlowFilmGrainToCanvas(canvas, 7500 + (sizeKey * 10) + (r * 3 + g * 5 + b * 7) | 0)
+  applyGlowLayerGradeToCanvas(canvas, GLOW_LAYER_GRADE.foreground, 7500 + (sizeKey * 10) + (r * 3 + g * 5 + b * 7) | 0)
   k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0

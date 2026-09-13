@@ -235,11 +235,13 @@ export const CFG = {
         //
         warmCream: PALETTE.sand5,
         //
-        // Glow hedgehog creature — warm dark mane/quills and a lighter warm
-        // tan snout/leg tone, kept distinct from the tree/decor hues.
+        // Glow hedgehog creature — medium-brown quills, cream face/belly and
+        // pink cheek blush (reference art).
         //
-        hedgehogMane: PALETTE.sand0,
-        hedgehogFace: PALETTE.orange4,
+        hedgehogMane: PALETTE.brown2,
+        hedgehogManeDark: PALETTE.brown0,
+        hedgehogFace: PALETTE.sand5,
+        hedgehogCheek: PALETTE.pink4,
         //
         // Foreground grass blades — warm straw gold, a different hue family
         // from the near bush layer's leaf green (treeColor.leaf), so the

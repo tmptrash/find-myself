@@ -196,9 +196,11 @@ export function createRng(seed) {
  * @param {number} rootMaxY - Furthest Y down roots are allowed to reach
  * @param {number} [rootStartY] - Y where roots start (defaults to trunk base)
  * @param {Object} [opts] - { includeRoots, includeHeroBranch, branchFracMin,
- *   branchFracMax, branchUpward } — background parallax trees skip roots and
- *   the hero platform branch, push branches to the top of the trunk and grow
- *   them upward instead of sideways.
+ *   branchFracMax, branchUpward, includeCrownClusters, skipTopExtraBranches,
+ *   trunkProfile, branchThicknessScale, branchLengthScale, branchCount }
+ *   — background parallax trees skip roots and the hero platform branch;
+ *   branchFracMin/Max limit sprout height; branchUpward=false matches the
+ *   main tree's sideways fractal canopy.
  * @returns {Object} { seed, trunkSegs, rootSegs, branchSegs, leaves, horizBranch }
  */
 export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, rootStartY, opts = {}) {
@@ -207,13 +209,20 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     includeHeroBranch = true,
     branchFracMin = BRANCH_FRAC_MIN,
     branchFracMax = BRANCH_FRAC_MAX,
-    branchUpward = false
+    branchUpward = false,
+    includeCrownClusters = true,
+    skipTopExtraBranches = false,
+    trunkProfile = null,
+    branchThicknessScale = 1,
+    branchLengthScale = 1,
+    branchCount = null,
+    denseBranchCanopyLeaves = false
   } = opts
   const rng = createRng(seed)
   const treeH = trunkBottomY - trunkTopY
   const rootBaseY = rootStartY !== undefined ? rootStartY : trunkBottomY
   const maxRootY = rootMaxY !== undefined ? rootMaxY : rootBaseY + 80
-  const trunkSegs = buildTrunk(rng, trunkX, trunkBottomY, trunkTopY)
+  const trunkSegs = buildTrunk(rng, trunkX, trunkBottomY, trunkTopY, trunkProfile)
   const groundClipY = rootBaseY + ROOT_CLIP_BELOW_GROUND
   const trunkBase = computeTrunkBaseAtClip(trunkSegs, groundClipY)
   const rootSegs = includeRoots ? buildRoots(rng, trunkBase, trunkBottomY, treeH, maxRootY) : []
@@ -222,23 +231,29 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   //
   // Seeded branches sprout from random heights along the configured trunk band.
   //
-  buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, branchFracMin, branchFracMax, branchUpward)
+  buildBranchesFromTrunk(
+    rng, trunkSegs, branchSegs, leafEndpoints,
+    branchFracMin, branchFracMax, branchUpward, skipTopExtraBranches,
+    branchThicknessScale, branchLengthScale, branchCount, denseBranchCanopyLeaves
+  )
   //
   // Top crown — three clusters grow from the trunk apex for a full canopy.
   //
-  const trunkTop = trunkSegs[trunkSegs.length - 1]
-  const crownAngles = [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55]
-  crownAngles.forEach(angle => {
-    const len = 28 + rng() * 22
-    growBranch(rng, trunkTop.ex, trunkTop.ey, angle, Math.round(len), 10, branchSegs, leafEndpoints, 0)
-  })
+  if (includeCrownClusters) {
+    const trunkTop = trunkSegs[trunkSegs.length - 1]
+    const crownAngles = [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55]
+    crownAngles.forEach(angle => {
+      const len = 28 + rng() * 22
+      growBranch(rng, trunkTop.ex, trunkTop.ey, angle, Math.round(len), 10, branchSegs, leafEndpoints, 0, denseBranchCanopyLeaves)
+    })
+  }
   const heroBranchSegFrom = branchSegs.length
   //
   // Special horizontal branch in the lower-left: starts horizontal then turns organic.
   // This branch has a physics collision box — the hero starts here.
   //
   const horizBranch = includeHeroBranch ? buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) : null
-  const leaves = buildLeaves(rng, leafEndpoints)
+  const leaves = buildLeaves(rng, leafEndpoints, 3, denseBranchCanopyLeaves)
   return {
     seed,
     trunkSegs,
@@ -358,50 +373,55 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // internal seams appear at branch/trunk junctions.
   //
   if (palette.flatSilhouette) {
+    fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     treeData.branchSegs.forEach(seg => {
       drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
     })
-    fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     ctx.globalAlpha = 1
-    treeData.leaves.forEach(leaf => {
+    !palette.skipLeaves && treeData.leaves.forEach(leaf => {
       const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
       drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, leafR, leafG, leafB, opacity, null)
     })
     return
   }
+  const treeSeed = treeData.seed ?? TREE_SEED
+  const branchesOverTrunk = palette.branchesOverTrunk ?? false
   if (palette.woodOutline) {
     const ol = palette.woodOutline
-    treeData.branchSegs.forEach(seg => {
-      drawFilledWoodSegment(ctx, { ...seg, w: seg.w + WOOD_OUTLINE_PX * 2 }, ol, trunkClipY)
-    })
+    if (!branchesOverTrunk) {
+      treeData.branchSegs.forEach(seg => {
+        drawFilledWoodSegment(ctx, { ...seg, w: seg.w + WOOD_OUTLINE_PX * 2 }, ol, trunkClipY)
+      })
+    }
     fillWoodChain(ctx, expandChainWidths(treeData.trunkSegs, WOOD_OUTLINE_PX * 2), ol, trunkClipY)
   }
-  treeData.branchSegs.forEach(seg => {
-    drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
-  })
-  const treeSeed = treeData.seed ?? TREE_SEED
-  drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
-  //
-  // Plate ridges on the thick branch runs — the same stacked-bark elements
-  // the trunk carries, scaled down to the branch width.
-  //
-  drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
-  //
-  // Trunk — one smooth silhouette (per-joint averaged normals, continuous
-  // width taper) topped with a full bark pass: sun-side shading (dark left,
-  // highlight right — the sun is top-right), wavy bark lines that follow the
-  // centreline, notches, knots and fractal cracks.
-  //
-  fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-  const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
-  drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
-  drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
-  //
-  // Sun-side shading on branches — soft dark band along the lower-left of
-  // every branch. The band follows each segment so the wobbly silhouette
-  // never shows a straight screen-space seam.
-  //
-  drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+  if (branchesOverTrunk) {
+    //
+    // Parallax trees: trunk first, branches on top so sideways wood stays visible
+    // even when branch and trunk share one flat tone.
+    //
+    fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
+    const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
+    drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+    drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
+    treeData.branchSegs.forEach(seg => {
+      drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
+    })
+    drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
+    drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
+    drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+  } else {
+    treeData.branchSegs.forEach(seg => {
+      drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
+    })
+    drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
+    drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
+    fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
+    const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
+    drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+    drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
+    drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+  }
   //
   // Leaves — note-tree style teardrop leaves with a centre vein.
   //
@@ -425,33 +445,89 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
  * continuous leaf mass from the left edge to the right edge instead of
  * separate episodic crowns. Fully deterministic per seed.
  * @param {CanvasRenderingContext2D} ctx - Target context
- * @param {Object} opts - { seed, x1, x2, yTop, yBottom, count, palette }
+ * @param {Object} opts - { seed, x1, x2, yTop, yBottom, count, palette,
+ *   organicScatter, edgeWanderPx, vertSpreadFrac }
  */
 export function renderGlowLeafBandIntoContext(ctx, opts) {
-  const { seed, x1, x2, yTop, yBottom, count, palette } = opts
+  const {
+    seed, x1, x2, yTop, yBottom, count, palette, organicScatter = false,
+    edgeWanderPx = 0, vertSpreadFrac = 0.38, brokenRim = false, rimGapChance = 0.5,
+    centerDensityPower = 1.8, topRimExtra = 0
+  } = opts
   const rng = createRng(seed)
   const leafShades = palette.leafShades ?? [{ r: palette.leafR, g: palette.leafG, b: palette.leafB }]
   const vein = palette.noLeafDetails ? null : (palette.leafVein ?? null)
-  for (let i = 0; i < count; i++) {
+  const bandH = Math.max(1, yBottom - yTop)
+  const bandCenterY = (yTop + yBottom) * 0.5
+  const vertSpread = bandH * vertSpreadFrac
+  const wanderPhase = seed * 0.00017
+  const rimZone = bandH * 0.34
+  const halfBand = bandH * 0.5
+  const topEdgeH = Math.min(22, bandH * 0.15)
+  const topEdgeCount = Math.round(count * 0.32)
+  let placed = 0
+  let guard = 0
+  while (placed < count && guard < count * 10) {
+    guard++
     const x = x1 + rng() * (x2 - x1)
     //
-    // Two-sample average biases the leaves toward the band middle, so the
-    // band core stays dense while both rims fray organically.
+    // Center-heavy vertical density plus a wandering baseline so the canopy
+    // rim jumps up and down instead of reading as one flat line; the flat mode
+    // keeps a dense rim along the top for non-parallax bakes.
     //
-    const y = yTop + ((rng() + rng()) * 0.5) * (yBottom - yTop)
+    let y
+    if (organicScatter) {
+      const smoothWander = edgeWanderPx > 0
+        ? Math.sin(x * 0.006 + wanderPhase) * edgeWanderPx * 0.4
+          + Math.sin(x * 0.017 + wanderPhase * 1.55) * edgeWanderPx * 0.32
+          + Math.sin(x * 0.031 + wanderPhase * 2.3) * edgeWanderPx * 0.22
+          + (rng() - 0.5) * edgeWanderPx * 0.55
+        : 0
+      const colCenter = bandCenterY + smoothWander
+      const yOffset = ((rng() + rng() + rng()) / 3 - 0.5) * vertSpread * 2
+      y = colCenter + yOffset
+      if (y < yTop || y > yBottom) continue
+      const distFromCenter = Math.abs(y - bandCenterY)
+      const normDist = Math.min(1, distFromCenter / halfBand)
+      const keepChance = Math.max(0.04, 1 - Math.pow(normDist, centerDensityPower))
+      if (rng() > keepChance) continue
+      //
+      // Symmetric rim gaps — extra rejection near the top so the upper edge
+      // breaks as much as the lower one.
+      //
+      if (brokenRim) {
+        const edgeDist = Math.min(y - yTop, yBottom - y)
+        const rimT = 1 - edgeDist / rimZone
+        if (rimT > 0) {
+          const topBias = y - yTop < yBottom - y ? topRimExtra : 0
+          if (rng() < rimGapChance * Math.pow(rimT, 1.35) + topBias) continue
+        }
+      }
+    } else {
+      y = placed < topEdgeCount
+        ? yTop + rng() * topEdgeH
+        : yTop + topEdgeH + ((rng() + rng()) * 0.5) * Math.max(1, bandH - topEdgeH)
+    }
     const size = CANOPY_LEAF_SIZE_MIN + rng() * CANOPY_LEAF_SIZE_RANGE
     const shade = leafShades[Math.min(leafShades.length - 1, Math.floor(rng() * leafShades.length + rng() * 0.4))]
-    const opacity = CANOPY_LEAF_OPACITY_MIN + rng() * CANOPY_LEAF_OPACITY_RANGE
+    const distFromCenter = Math.abs(y - bandCenterY)
+    const edgeFade = organicScatter
+      ? Math.max(0.12, 1 - Math.pow(Math.min(1, distFromCenter / halfBand), 1.35))
+      : 1
+    const opacity = (CANOPY_LEAF_OPACITY_MIN + rng() * CANOPY_LEAF_OPACITY_RANGE) * (0.28 + edgeFade * 0.72)
     drawLeafToCanvas(ctx, x, y, size, (rng() - 0.5) * 2, shade.r, shade.g, shade.b, opacity, vein)
+    placed++
   }
 }
 //
 // Builds the trunk as tapered segments drifting organically from base to apex.
 //
-function buildTrunk(rng, trunkX, bottomY, topY) {
-  const STEPS = 18
-  const TRUNK_W_BASE = 74
-  const TRUNK_W_TOP = 10
+function buildTrunk(rng, trunkX, bottomY, topY, profile = null) {
+  const STEPS = profile?.steps ?? 18
+  const TRUNK_W_BASE = profile?.wBase ?? 74
+  const TRUNK_W_TOP = profile?.wTop ?? 10
+  const WOBBLE = profile?.wobble ?? 9
+  const TAPER_POWER = profile?.taperPower ?? 1
   const segs = []
   const stepH = (bottomY - topY) / STEPS
   let cx = trunkX
@@ -459,15 +535,16 @@ function buildTrunk(rng, trunkX, bottomY, topY) {
   for (let i = 0; i < STEPS; i++) {
     const prevX = cx
     const prevY = cy
-    cx += (rng() - 0.5) * 9
+    cx += (rng() - 0.5) * WOBBLE
     cy -= stepH
     //
-    // Width is interpolated continuously along the segment (w at the start,
-    // w2 at the end) so the trunk outline tapers smoothly instead of stepping
-    // down once per segment — no visible joints between segments.
+    // Width tapers along the segment; taperPower > 1 keeps the base wide
+    // longer and pinches the crown faster (parallax rows).
     //
-    const w = TRUNK_W_BASE + (TRUNK_W_TOP - TRUNK_W_BASE) * (i / STEPS)
-    const w2 = TRUNK_W_BASE + (TRUNK_W_TOP - TRUNK_W_BASE) * ((i + 1) / STEPS)
+    const t0 = Math.pow(i / STEPS, TAPER_POWER)
+    const t1 = Math.pow((i + 1) / STEPS, TAPER_POWER)
+    const w = TRUNK_W_BASE + (TRUNK_W_TOP - TRUNK_W_BASE) * t0
+    const w2 = TRUNK_W_BASE + (TRUNK_W_TOP - TRUNK_W_BASE) * t1
     segs.push({ sx: prevX, sy: prevY, ex: cx, ey: cy, w, w2 })
   }
   return segs
@@ -494,6 +571,27 @@ function clampSegmentToMaxY(seg, maxY) {
   return { sx, sy, ex, ey, w: seg.w, w2: seg.w2 }
 }
 //
+// Clamps a segment so nothing draws above a sky / canopy ceiling line.
+//
+function clampSegmentToMinY(seg, minY) {
+  let sx = seg.sx
+  let sy = seg.sy
+  let ex = seg.ex
+  let ey = seg.ey
+  if (Math.max(sy, ey) < minY - 0.5) return null
+  if (sy < minY - 0.5) {
+    const t = (minY - ey) / (sy - ey)
+    sx = ex + (sx - ex) * t
+    sy = minY
+  }
+  if (ey < minY - 0.5) {
+    const t = (minY - sy) / (ey - sy)
+    ex = sx + (ex - sx) * t
+    ey = minY
+  }
+  return { sx, sy, ex, ey, w: seg.w, w2: seg.w2 }
+}
+//
 // Fills one wood segment as a capsule (tapered quad + round end caps) —
 // joints between segments and branch bases read rounded, not rectangular.
 //
@@ -501,26 +599,28 @@ function drawFilledWoodSegment(ctx, seg, rgb, maxY) {
   const clipped = clampSegmentToMaxY(seg, maxY)
   if (!clipped) return
   const { sx, sy, ex, ey, w } = clipped
+  const wEnd = clipped.w2 ?? w
   const dx = ex - sx
   const dy = ey - sy
   const len = Math.hypot(dx, dy) || 1
   const nx = -dy / len
   const ny = dx / len
-  const hw = w * 0.5
+  const hw0 = w * 0.5
+  const hw1 = wEnd * 0.5
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
-  ctx.moveTo(sx + nx * hw, sy + ny * hw)
-  ctx.lineTo(ex + nx * hw, ey + ny * hw)
-  ctx.lineTo(ex - nx * hw, ey - ny * hw)
-  ctx.lineTo(sx - nx * hw, sy - ny * hw)
+  ctx.moveTo(sx + nx * hw0, sy + ny * hw0)
+  ctx.lineTo(ex + nx * hw1, ey + ny * hw1)
+  ctx.lineTo(ex - nx * hw1, ey - ny * hw1)
+  ctx.lineTo(sx - nx * hw0, sy - ny * hw0)
   ctx.closePath()
   ctx.fill()
   //
   // Round caps at both segment ends soften every junction.
   //
   ctx.beginPath()
-  ctx.arc(sx, sy, hw, 0, Math.PI * 2)
-  ctx.arc(ex, ey, hw, 0, Math.PI * 2)
+  ctx.arc(sx, sy, hw0, 0, Math.PI * 2)
+  ctx.arc(ex, ey, hw1, 0, Math.PI * 2)
   ctx.fill()
 }
 //
@@ -1177,14 +1277,14 @@ function glowHexToRgb(hex) {
 //
 function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
   const ROOT_COUNT = 5 + Math.floor(rng() * 3)
-  const ROOT_W_BASE = 26
-  const ROOT_SEGMENTS = 22
+  const ROOT_W_BASE = 15
+  const ROOT_SEGMENTS = 16
   //
   // Roots start slightly above the trunk base line, spread across the trunk
   // base width, so the trunk fill painted after them hides every junction.
   //
   const ROOT_START_LIFT = 6
-  const baseSpread = (trunkBase?.w ?? 74) * 0.32
+  const baseSpread = (trunkBase?.w ?? 74) * 0.52
   //
   // Inject seeded random so the main root directions are deterministic.
   // growTreeRootSegments branching calls use Math.random for micro-details.
@@ -1203,7 +1303,7 @@ function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
     //
     // Positive bias curves LEFT (angle → π), negative bias curves RIGHT (angle → 0).
     //
-    const lateralBias = side * 0.014
+    const lateralBias = side * 0.028
     //
     // Left-side roots start deeper and must not climb back toward the water line
     //
@@ -1242,8 +1342,12 @@ function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
 // of every branch on the trunk is seeded-random. Each branch then splits
 // fractally into smaller leafy branches inside growBranch().
 //
-function buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, fracMin = BRANCH_FRAC_MIN, fracMax = BRANCH_FRAC_MAX, upward = false) {
-  const BRANCH_COUNT = 7 + Math.floor(rng() * 3)
+function buildBranchesFromTrunk(
+  rng, trunkSegs, branchSegs, leafEndpoints,
+  fracMin = BRANCH_FRAC_MIN, fracMax = BRANCH_FRAC_MAX, upward = false, skipTopExtra = false,
+  thicknessScale = 1, lengthScale = 1, branchCountOverride = null, denseCanopyLeaves = false
+) {
+  const BRANCH_COUNT = branchCountOverride ?? (7 + Math.floor(rng() * 3))
   for (let i = 0; i < BRANCH_COUNT; i++) {
     const frac = fracMin + rng() * (fracMax - fracMin)
     const segIdx = Math.min(Math.floor(frac * trunkSegs.length), trunkSegs.length - 1)
@@ -1256,55 +1360,100 @@ function buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, fracM
     const angleBase = upward
       ? -Math.PI / 2 + side * (BRANCH_UP_SPREAD_MIN + rng() * BRANCH_UP_SPREAD_RANGE)
       : (side < 0 ? -Math.PI + 0.3 + rng() * 0.55 : -0.3 - rng() * 0.55)
-    const len = 14 + rng() * 20 - frac * 5
-    const w = 8 + (1 - frac) * 16
-    growBranch(rng, seg.ex, seg.ey, angleBase, Math.max(7, Math.round(len)), w, branchSegs, leafEndpoints, 0)
+    const len = (14 + rng() * 20 - frac * 5) * lengthScale
+    const w = (8 + (1 - frac) * 16) * thicknessScale
+    growBranch(rng, seg.ex, seg.ey, angleBase, Math.max(7, Math.round(len)), w, branchSegs, leafEndpoints, 0, denseCanopyLeaves)
   }
   //
   // Extra near-vertical branches in the top band of the trunk: they thicken
   // the crown with upward growth on every tree (foreground and parallax).
   //
-  for (let i = 0; i < BRANCH_TOP_EXTRA_COUNT; i++) {
-    const frac = BRANCH_TOP_FRAC_MIN + rng() * BRANCH_TOP_FRAC_RANGE
-    const segIdx = Math.min(Math.floor(frac * trunkSegs.length), trunkSegs.length - 1)
-    const seg = trunkSegs[segIdx]
-    const side = i % 2 === 0 ? -1 : 1
-    const angle = -Math.PI / 2 + side * (BRANCH_UP_SPREAD_MIN + rng() * BRANCH_UP_SPREAD_RANGE)
-    const len = 16 + rng() * 18
-    const w = 7 + (1 - frac) * 10
-    growBranch(rng, seg.ex, seg.ey, angle, Math.max(8, Math.round(len)), w, branchSegs, leafEndpoints, 0)
+  if (!skipTopExtra) {
+    for (let i = 0; i < BRANCH_TOP_EXTRA_COUNT; i++) {
+      const frac = BRANCH_TOP_FRAC_MIN + rng() * BRANCH_TOP_FRAC_RANGE
+      const segIdx = Math.min(Math.floor(frac * trunkSegs.length), trunkSegs.length - 1)
+      const seg = trunkSegs[segIdx]
+      const side = i % 2 === 0 ? -1 : 1
+      const angle = -Math.PI / 2 + side * (BRANCH_UP_SPREAD_MIN + rng() * BRANCH_UP_SPREAD_RANGE)
+      const len = 16 + rng() * 18
+      const w = 7 + (1 - frac) * 10
+      growBranch(rng, seg.ex, seg.ey, angle, Math.max(8, Math.round(len)), w, branchSegs, leafEndpoints, 0, denseCanopyLeaves)
+    }
   }
+}
+/**
+ * Keeps branch-attached leaves with center-heavy vertical density inside a band.
+ * @param {Array} leaves - Leaf cluster list from buildGlowTree()
+ * @param {number} bandTop - Top Y of the canopy band (world)
+ * @param {number} bandBottom - Bottom Y of the canopy band (world)
+ * @param {number} [power=2.65] - Falloff exponent (higher = denser core)
+ * @param {number} [seed=0] - Stable hash seed per tree row
+ * @returns {Array} Filtered leaf list
+ */
+export function filterGlowTreeLeavesByVerticalDensity(leaves, bandTop, bandBottom, power = 2.65, seed = 0) {
+  const centerY = (bandTop + bandBottom) * 0.5
+  const halfH = Math.max(1, (bandBottom - bandTop) * 0.5)
+  return leaves.filter(leaf => {
+    if (leaf.y < bandTop || leaf.y > bandBottom) return false
+    const normDist = Math.min(1, Math.abs(leaf.y - centerY) / halfH)
+    const keepChance = Math.max(0.06, 1 - Math.pow(normDist, power))
+    return leafDensityHash(leaf.x, leaf.y, seed) < keepChance
+  })
+}
+/**
+ * Clips parallax branches only above the canopy strip — the full tapered
+ * trunk and sideways branch structure stay visible like the main tree.
+ * @param {Object} treeData - buildGlowTree() output (mutated in place)
+ * @param {number} bandTop - Top of the row leaf band (world Y)
+ * @param {number} bandBottom - Bottom of the row leaf band (world Y)
+ */
+export function trimGlowTreeWoodToCanopyBand(treeData, bandTop, _bandBottom) {
+  const skyClipY = bandTop - 2
+  const clippedBranches = []
+  for (const seg of treeData.branchSegs) {
+    const trimmed = clampSegmentToMinY(seg, skyClipY)
+    trimmed && clippedBranches.push(trimmed)
+  }
+  treeData.branchSegs = clippedBranches
 }
 //
 // Recursively grows a branch segment, spawning sub-branches and leaf endpoints.
 //
-function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints, depth) {
+function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints, depth, denseCanopyLeaves = false) {
   if (length <= 2 || thickness < 0.45 || depth > 7) {
     leafEndpoints.push({ x, y, r: 32 + depth * 6 })
     return
   }
   const STEP = 5 + rng() * 4
-  const TIP_TAPER = 0.88
+  const TIP_TAPER = 0.93
   let cx = x
   let cy = y
   for (let i = 0; i < length; i++) {
     const px = cx
     const py = cy
     const t = length <= 1 ? 0 : i / (length - 1)
+    const nextT = length <= 1 ? 1 : Math.min(1, (i + 1) / (length - 1))
     const segW = thickness * (1 - t * TIP_TAPER)
+    const nextSegW = thickness * (1 - nextT * TIP_TAPER)
     angle += (rng() - 0.5) * 0.28
     cx += Math.cos(angle) * STEP
     cy += Math.sin(angle) * STEP
-    branchSegs.push({ sx: px, sy: py, ex: cx, ey: cy, w: Math.max(1.2, segW) })
-    if (depth >= 1 && i > 0 && i % 2 === 0 && rng() < 0.5) {
+    branchSegs.push({
+      sx: px, sy: py, ex: cx, ey: cy,
+      w: Math.max(1.2, segW),
+      w2: Math.max(1, nextSegW)
+    })
+    denseCanopyLeaves && depth <= 2 && i > 0 && i % 2 === 0 && rng() < (0.52 - depth * 0.08) &&
+      leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 4 + rng() * 18 })
+    if (depth >= 1 && i > 0 && i % 2 === 0 && rng() < (denseCanopyLeaves ? 0.62 : 0.5)) {
       leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 5 + rng() * 14 })
     }
   }
   if (rng() < 0.82) {
-    growBranch(rng, cx, cy, angle - 0.35 - rng() * 0.2, Math.round(length * 0.65), thickness * 0.72, branchSegs, leafEndpoints, depth + 1)
+    growBranch(rng, cx, cy, angle - 0.35 - rng() * 0.2, Math.round(length * 0.65), thickness * 0.66, branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves)
   }
   if (rng() < 0.65) {
-    growBranch(rng, cx, cy, angle + 0.35 + rng() * 0.2, Math.round(length * 0.55), thickness * 0.66, branchSegs, leafEndpoints, depth + 1)
+    growBranch(rng, cx, cy, angle + 0.35 + rng() * 0.2, Math.round(length * 0.55), thickness * 0.56, branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves)
   }
 }
 //
@@ -1316,13 +1465,13 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) {
   //
   // Position: fraction 0.32 from bottom, well below the seeded branches.
   //
-  const HORIZ_FRAC = 0.32
+  const HORIZ_FRAC = 0.42
   const segIdx = Math.min(Math.floor(HORIZ_FRAC * trunkSegs.length), trunkSegs.length - 1)
   const seg = trunkSegs[segIdx]
   const startX = seg.ex
   const startY = seg.ey
   const endX = startX - HORIZ_BRANCH_LENGTH
-  const HORIZ_W = 22
+  const HORIZ_W = 18
   const N_SEGS = 7
   const xStep = (endX - startX) / N_SEGS
   let hcx = startX
@@ -1374,10 +1523,10 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) {
 // Converts leaf endpoint data into note-tree style clusters:
 // 18–30 leaves scattered up to 70 px around the endpoint (flattened vertically).
 //
-function buildLeaves(rng, endpoints, shadeCount = 3) {
+function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false) {
   const out = []
   endpoints.forEach(ep => {
-    const count = 18 + Math.floor(rng() * 12)
+    const count = denseCanopy ? 22 + Math.floor(rng() * 14) : 18 + Math.floor(rng() * 12)
     const spread = Math.min(70, ep.r * 1.05)
     for (let i = 0; i < count; i++) {
       const a = rng() * Math.PI * 2 - Math.PI
@@ -1422,4 +1571,11 @@ function drawLeafToCanvas(ctx, x, y, size, angle, r, g, b, opacity, vein) {
     ctx.stroke()
   }
   ctx.restore()
+}
+//
+// Stable 0..1 hash for deterministic leaf-density rejection sampling.
+//
+function leafDensityHash(x, y, seed) {
+  const n = Math.sin((x * 12.9898 + y * 78.233 + seed * 0.137) * 43758.5453)
+  return n - Math.floor(n)
 }

@@ -539,7 +539,17 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
     if (pit.zone.x2 < camX - half || pit.zone.x1 > camX + half) return
   }
   if (!pit.collapsed) {
-    pit.cracksVisible && drawSurfaceCracks(k, pit, groundC, flatDecor)
+    //
+    // Hide crack strokes once the hero drops past the mouth lip — otherwise a
+    // horizontal segment at floorY reads as a bar in front of him on the way down.
+    //
+    let showCracks = pit.cracksVisible
+    if (showCracks) {
+      const char = pit.sceneRef?.heroInst?.character
+      const feetY = char?.pos ? char.pos.y + 38 : 0
+      showCracks = feetY <= pit.floorY + 8
+    }
+    showCracks && drawSurfaceCracks(k, pit, groundC, flatDecor)
     return
   }
   if (pit.outlineOnlyMode) return

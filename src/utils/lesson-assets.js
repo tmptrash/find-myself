@@ -4,6 +4,7 @@ import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
+import { waitForGlowLevel0Bootstrap } from '../sections/glow/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
 
 //
@@ -318,6 +319,7 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   drainTrackedTouchSpriteNames()
   setActiveSceneName(sceneName)
   liveK.go(sceneName)
+  sceneName === 'lesson-glow.0' && await waitForGlowLevel0Bootstrap()
   afterGo?.(liveK)
 }
 

@@ -9,7 +9,10 @@ import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.j
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce, onEngineResolutionSwapped } from './lesson-assets.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
 import * as BootLoader from './boot-loader.js'
-import { prewarmGlowLevel0HeavyAssets } from '../sections/glow/scenes/level0.js'
+import {
+  prewarmGlowLevel0HeavyAssets,
+  setGlowLevel0BootstrapReporter
+} from '../sections/glow/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
 import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
@@ -75,6 +78,10 @@ const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level t
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
+const GLOW_PREWARM_BAR_START = 5
+const GLOW_PREWARM_BAR_END = 38
+const GLOW_BOOTSTRAP_BAR_START = GLOW_PREWARM_BAR_END
+const GLOW_BOOTSTRAP_BAR_END = 99
 const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
 //
 // Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)
@@ -461,12 +468,19 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       transitionK._transitionOverlay = overlay
       bindTransitionEngine(transitionK)
       if (nextLevel === GLOW_PRELEVEL_SCENE) {
-        reportLoad(32)
-        await prewarmGlowLevel0HeavyAssets(transitionK, bakedPct => {
-          reportLoad(32 + Math.round(bakedPct * 0.63))
+        setGlowLevel0BootstrapReporter(reportLoad, {
+          start: GLOW_BOOTSTRAP_BAR_START,
+          end: GLOW_BOOTSTRAP_BAR_END
         })
+        reportLoad(GLOW_PREWARM_BAR_START + 7)
+        await prewarmGlowLevel0HeavyAssets(transitionK, bakedPct => {
+          const t = Math.min(100, Math.max(0, bakedPct)) / 100
+          reportLoad(GLOW_PREWARM_BAR_START + Math.round(
+            (GLOW_PREWARM_BAR_END - GLOW_PREWARM_BAR_START) * t
+          ))
+        })
+        reportLoad(GLOW_PREWARM_BAR_END)
       }
-      reportLoad(100)
     } finally {
       !inst.skipped && (inst.assetPrepareDone = true)
     }
@@ -515,9 +529,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       transitionK.volume(inst.originalVolume)
       Sound.unmuteProceduralSounds()
       Sound.resumeGlobalAudio()
-      needsEarlyAssetLoad && BootLoader.showLoader() && BootLoader.setLoaderBarPct(100)
+      needsEarlyAssetLoad && BootLoader.showLoader()
+      !isGlowPrelevel && needsEarlyAssetLoad && BootLoader.setLoaderBarPct(100)
       try {
         await enterPreparedScene(transitionK, nextLevel, () => {
+          isGlowPrelevel && BootLoader.setLoaderBarPct(100)
           afterGo?.(transitionK)
           overlay?.exists?.() && transitionK.destroy(overlay)
           transitionK._transitionOverlay === overlay && (transitionK._transitionOverlay = null)

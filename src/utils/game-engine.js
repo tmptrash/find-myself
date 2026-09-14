@@ -109,6 +109,17 @@ const RESET_KEY_EVENTS = [
 let completedTasks = 0
 let totalTasks = 0
 //
+// setupTasks/soundTasks mostly just queue k.loadSprite/loadSound/loadFont
+// calls rather than waiting for the actual network fetch + decode — that
+// real work happens later, inside the k.onLoad() flush wait in bootEngine.
+// Without this split, the bar would race to 100% almost immediately (the
+// queueing loop is fast) and then sit frozen at 100% for the whole real
+// loading time, which reads as "hung, then a long pause". Task queueing
+// gets this small early share; the k.onLoad flush (tracked live via
+// k.loadProgress()) gets the rest, where the real time is actually spent.
+//
+const TASK_QUEUE_BAR_SHARE = 0.12
+//
 // True once any engine has finished its first full load — used to pace WebGL
 // loss reload (a loss right after boot needs a longer VRAM-settle delay).
 //
@@ -193,12 +204,22 @@ export async function bootEngine(resolutionMode) {
   //
   // Core assets queued — wait for Kaplay's own loader to flush before handing
   // the instance back (guards against a scene reading a still-loading sprite).
+  // This is normally the slowest part of boot, so poll k.loadProgress() every
+  // frame to keep the bar moving with real progress instead of sitting
+  // frozen at whatever the task-queueing phase left it at.
   //
   await new Promise(resolve => {
     let loadDone = false
+    const pollProgress = () => {
+      if (loadDone) return
+      updateLoaderBarFromKaplayProgress(k)
+      requestAnimationFrame(pollProgress)
+    }
+    pollProgress()
     k.onLoad(() => {
       if (loadDone) return
       loadDone = true
+      updateLoaderBarFromKaplayProgress(k)
       kaplayBootReachedOnLoad = true
       resolve()
     })
@@ -502,8 +523,8 @@ async function runWithConcurrency(tasks, limit, onDone) {
 function updateLoaderBar() {
   const loaderBar = document.getElementById('loader-bar')
   if (!loaderBar || totalTasks === 0) return
-  const pct = Math.min(100, Math.round((completedTasks / totalTasks) * 100))
-  loaderBar.style.width = `${pct}%`
+  const frac = Math.min(1, completedTasks / totalTasks) * TASK_QUEUE_BAR_SHARE
+  loaderBar.style.width = `${Math.round(frac * 100)}%`
 }
 //
 // Increment task counter and refresh the loader bar (used by async batches)
@@ -511,6 +532,20 @@ function updateLoaderBar() {
 function onTaskFinished() {
   completedTasks++
   updateLoaderBar()
+}
+//
+// Reflects Kaplay's own live asset-loading fraction (k.loadProgress(), 0..1)
+// into the remaining share of the bar, on top of what the task-queueing
+// phase already filled — called every animation frame during the k.onLoad
+// flush wait so the bar keeps moving for the real duration of that wait
+// instead of sitting frozen.
+//
+function updateLoaderBarFromKaplayProgress(k) {
+  const loaderBar = document.getElementById('loader-bar')
+  if (!loaderBar) return
+  const kaplayFrac = typeof k.loadProgress === 'function' ? k.loadProgress() : 1
+  const frac = TASK_QUEUE_BAR_SHARE + (1 - TASK_QUEUE_BAR_SHARE) * Math.min(1, Math.max(0, kaplayFrac))
+  loaderBar.style.width = `${Math.round(frac * 100)}%`
 }
 /**
  * Remove any leftover canvas elements (used between failed kaplay init attempts

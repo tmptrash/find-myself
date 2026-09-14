@@ -282,5 +282,5 @@ export const GLOW_MENU_HERO_FILL_CFG = {
 }
 export const GLOW_LEVEL_HERO_FILL_CFG = {
   filledBodyColor: String(CFG.visual.colors.hero.eyeWhite).replace('#', ''),
-  filledOutlineColor: GLOW_PAL.heroOutline
+  filledOutlineColor: GLOW_PAL.glowOutlineLight
 }

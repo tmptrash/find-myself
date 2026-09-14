@@ -2520,36 +2520,67 @@ function playClockTickSound(instance) {
   const { audioContext, clockTickGain } = instance
   const now = audioContext.currentTime
   //
-  // Muffled mechanical "tok" — bandpass noise at a low-mid frequency (~200 Hz).
-  // White noise through a tight bandpass at this frequency produces a dull thud
-  // with no ringing or brightness, like a padded clock escapement.
-  // No oscillator is used because sine/sawtooth waveforms ring and sound
-  // like a heel tap; shaped noise stays muffled and organic.
+  // Soft muffled "tok" underneath the chime — bandpass noise at a low-mid
+  // frequency, softened attack so there's no sharp click, just body.
   //
-  const DUR = 0.010
+  const DUR = 0.022
   const bufSize = Math.ceil(audioContext.sampleRate * DUR)
   const buf = audioContext.createBuffer(1, bufSize, audioContext.sampleRate)
   const data = buf.getChannelData(0)
   for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1
   const src = audioContext.createBufferSource()
   src.buffer = buf
-  //
-  // Bandpass centered at 180-240 Hz — low enough to sound heavy and padded,
-  // tight Q to suppress both high-frequency click and sub-bass rumble.
-  //
   const bpf = audioContext.createBiquadFilter()
   bpf.type = 'bandpass'
-  bpf.frequency.value = 180 + Math.random() * 60
-  bpf.Q.value = 3.0
+  bpf.frequency.value = 160 + Math.random() * 40
+  bpf.Q.value = 3.2
   const env = audioContext.createGain()
   env.gain.setValueAtTime(0.0001, now)
-  env.gain.linearRampToValueAtTime(0.95, now + 0.0012)
+  env.gain.linearRampToValueAtTime(0.62, now + 0.008)
   env.gain.exponentialRampToValueAtTime(0.0001, now + DUR)
   src.connect(bpf)
   bpf.connect(env)
   env.connect(clockTickGain)
   src.start(now)
   src.stop(now + DUR + 0.001)
+  //
+  // Bell chime layer — two sines a fifth apart with a soft attack and a
+  // natural decaying ring, giving the tick a brighter, more resonant
+  // character on top of the muffled thud instead of being purely percussive.
+  //
+  const BELL_DUR = 0.22
+  const bellFreqs = [880, 1320]
+  bellFreqs.forEach((freq, i) => {
+    const bell = audioContext.createOscillator()
+    const bellGain = audioContext.createGain()
+    bell.type = 'sine'
+    bell.frequency.setValueAtTime(freq, now)
+    const peak = i === 0 ? 0.34 : 0.2
+    bellGain.gain.setValueAtTime(0.0001, now)
+    bellGain.gain.linearRampToValueAtTime(peak, now + 0.012)
+    bellGain.gain.exponentialRampToValueAtTime(0.0001, now + BELL_DUR)
+    bell.connect(bellGain)
+    bellGain.connect(clockTickGain)
+    bell.start(now)
+    bell.stop(now + BELL_DUR + 0.001)
+  })
+  //
+  // Sub-thump underneath everything for a bit of low-end weight — louder
+  // than before but still short enough to decay well before the next tick.
+  //
+  const THUMP_DUR = 0.05
+  const thump = audioContext.createOscillator()
+  const thumpGain = audioContext.createGain()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(95, now)
+  thump.frequency.exponentialRampToValueAtTime(55, now + THUMP_DUR)
+  thumpGain.gain.setValueAtTime(0.0001, now)
+  thumpGain.gain.linearRampToValueAtTime(0.3, now + 0.008)
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + THUMP_DUR)
+  thump.connect(thumpGain)
+  thumpGain.connect(clockTickGain)
+  thump.start(now)
+  thump.stop(now + THUMP_DUR + 0.001)
 }
 //
 // Private functions
@@ -3852,7 +3883,12 @@ export function resumeGlobalAudio() {
  */
 export function playTimerTickSound(instance) {
   if (globalMuteProceduralSounds || instance?._glowSfxMuted) return
-  playClockTickSound(instance)
+  //
+  // Same chime as a pickup-ready letter appearing (playLetterPickupSoft) —
+  // requested so each second of the countdown reads as the same sound cue
+  // as a letter becoming available, instead of its own separate tick design.
+  //
+  playLetterPickupSoft(instance)
 }
 /**
  * Play a descending tick sound for score deduction countdown

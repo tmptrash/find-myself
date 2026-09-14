@@ -223,6 +223,13 @@ export const CFG = {
         heroOutline: PALETTE.gray0,
         letterFill: PALETTE.gray6,
         letterOutline: PALETTE.gray0,
+        //
+        // Lighter outline used across the Glow level's own hero/decor/rock
+        // silhouettes in place of the harsher, near-black heroOutline/void —
+        // menu.js still reads heroOutline/decorOutline directly so it keeps
+        // its original darker rim.
+        //
+        glowOutlineLight: PALETTE.gray3,
         decorGray: PALETTE.gray3,
         dialogFill: PALETTE.gray1,
         dialogText: PALETTE.gray6,
@@ -293,8 +300,13 @@ export const CFG = {
           root: PALETTE.brown0,
           trunk: PALETTE.brown1,
           branch: PALETTE.brown2,
-          leaf: PALETTE.green3,
-          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4, PALETTE.green5]
+          //
+          // Pulled back from the brighter green3-5 swatches (read as acid/neon
+          // against the warm bark and haze) toward the darker greens plus a
+          // couple of muted sage teals for shading variety, without them.
+          //
+          leaf: PALETTE.green2,
+          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.teal2, PALETTE.teal3]
         },
         //
         // Colour-world background forest: warm amber wood dissolving into a
@@ -332,6 +344,33 @@ export const CFG = {
           cap: PALETTE.orange3,
           capDark: PALETTE.orange0,
           capLight: PALETTE.orange5,
+          spot: PALETTE.gray7,
+          outline: PALETTE.brown0,
+          face: PALETTE.brown0,
+          blush: PALETTE.red3
+        },
+        //
+        // Same cute mushroom, different cap families — one per trampoline
+        // character (branch / right / pit) so they read as distinct little
+        // guys rather than three copies of the same orange cap.
+        //
+        cuteMushroomRed: {
+          body: PALETTE.sand5,
+          bodyShade: PALETTE.sand3,
+          cap: PALETTE.red3,
+          capDark: PALETTE.red0,
+          capLight: PALETTE.red5,
+          spot: PALETTE.gray7,
+          outline: PALETTE.brown0,
+          face: PALETTE.brown0,
+          blush: PALETTE.red3
+        },
+        cuteMushroomPurple: {
+          body: PALETTE.sand5,
+          bodyShade: PALETTE.sand3,
+          cap: PALETTE.purple3,
+          capDark: PALETTE.purple0,
+          capLight: PALETTE.purple5,
           spot: PALETTE.gray7,
           outline: PALETTE.brown0,
           face: PALETTE.brown0,

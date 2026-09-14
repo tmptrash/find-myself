@@ -75,12 +75,20 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const CAVE_LAYOUT_VERSION = 11
-const CAVE_MOUTH_LIP_Y_OFFSET = 4
+const CAVE_LAYOUT_VERSION = 12
 const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
-const CAVE_INTERIOR_SPRITE = 'glow0-cave-interior'
+//
+// Versioned so a CAVE_LAYOUT_VERSION bump (any change to the cave geometry
+// generator) always forces a fresh bake. Glow and menu share one native
+// Kaplay instance (see engine-switch.js's NATIVE_RESOLUTION_SCENE_PREFIXES),
+// so leaving the level and coming back without a full page reload reuses
+// the same k — a fixed unversioned sprite name would keep whatever was
+// baked on the very first visit to the cave that session, silently
+// outliving any later code fix to the geometry it was baked from.
+//
+const CAVE_INTERIOR_SPRITE = `glow0-cave-interior-v${CAVE_LAYOUT_VERSION}`
 const CAVE_BAKE_PAD = 40
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_EYES_COLLECTED = 'glow.eyesCollected'
@@ -133,7 +141,13 @@ export function isCrackGrassExcluded(x, screenW) {
  */
 export function isCrackDecorExcluded(x, screenW) {
   const zone = getCrackZone(screenW, 0)
-  return x >= zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET && x <= zone.x2 + 8
+  //
+  // Symmetric buffer — the cave wall wobbles by the same amplitude on
+  // either side (buildCaveMouthEdge), so a decor piece placed just past an
+  // asymmetric +8 buffer on the right could still end up sitting on top of
+  // the wall when it swings outward that frame.
+  //
+  return x >= zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET && x <= zone.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
 }
 /**
  * Creates midges: 1/3 at the cave mouth, 2/3 spread across the playfield.
@@ -549,12 +563,51 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
       const feetY = char?.pos ? char.pos.y + 38 : 0
       showCracks = feetY <= pit.floorY + 8
     }
-    showCracks && drawSurfaceCracks(k, pit, groundC, flatDecor)
+    if (showCracks) {
+      drawSurfaceCracks(k, pit, groundC, flatDecor)
+      return
+    }
+    //
+    // Cracks are hidden here for any reason (hero past the lip mid-fall,
+    // cracksVisible not on yet, collapsePit not fired this exact frame —
+    // it's checked once per frame in updateGlowPit, so there's a brief gap)
+    // — as long as the hero is actually standing/falling inside the crack
+    // zone's X span, the opening must not stay blank: the solid static
+    // ground bake painted behind everything would show through as a flat
+    // grey bar right in front of him. Anywhere else in the zone (nobody
+    // there) is left alone so an unrevealed crack strip stays untouched.
+    //
+    const char = pit.sceneRef?.heroInst?.character
+    const heroInZone = Boolean(char?.pos && char.pos.x >= pit.zone.x1 && char.pos.x <= pit.zone.x2)
+    heroInZone && drawGlowPitMouthVoidFill(k, pit)
     return
   }
   if (pit.outlineOnlyMode) return
-  isCaveInteriorVisible(pit) && drawCaveInteriorRockStyle(k, pit)
-  isCaveInteriorVisible(pit) && drawPitTrampoline(k, pit)
+  if (isCaveInteriorVisible(pit)) {
+    drawCaveInteriorRockStyle(k, pit)
+    drawPitTrampoline(k, pit)
+    return
+  }
+  //
+  // Detailed wall rocks/pebbles still wait for isCaveInteriorVisible (see its
+  // own comment), but the mouth opening itself must go dark the instant the
+  // pit collapses — otherwise the solid ground-colour earth band drawn behind
+  // everything (drawGlowEarthBand, painted before this call) shows through
+  // as a flat grey bar right where the hero is falling.
+  //
+  drawGlowPitMouthVoidFill(k, pit)
+}
+//
+// Cheap stand-in for the full cave bake — just the mouth-shaped dark opening,
+// so the entrance reads as "gone" immediately instead of leaving the ground
+// fill exposed during the short holdoff before the detailed interior bakes.
+//
+function drawGlowPitMouthVoidFill(k, pit) {
+  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
+    pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
+  }
+  const pal = buildCavePaletteFlat(glowRgb('decorGray'))
+  drawCaveVoidFill(k, pit.wallProfile.mouth, pal)
 }
 //
 // Private helpers
@@ -598,12 +651,19 @@ function spreadMidgesAfterPit(ctrl) {
   }
 }
 function bakePitMushroomSprite(k) {
-  if (!k.getSprite?.(PIT_MUSH_SPRITE)) {
-    bakeOnePitMushroomSprite(k, PIT_MUSH_SPRITE, getPitMushroomBakeColors())
-  }
-  if (!k.getSprite?.(PIT_MUSH_OUTLINE_SPRITE)) {
-    bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroom)
-  }
+  //
+  // Always rebaked (no k.getSprite skip) — glow and menu share one native
+  // Kaplay instance, so a "skip if this name is already loaded" check would
+  // keep showing whatever colours/shape were baked on the very first pit
+  // created that session even after a code change, across every later
+  // level re-entry until a full page reload.
+  //
+  bakeOnePitMushroomSprite(k, PIT_MUSH_SPRITE, getPitMushroomBakeColors())
+  //
+  // Purple cap — distinct from the branch (orange) and right (red)
+  // trampoline mushrooms so all three read as different little guys.
+  //
+  bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroomPurple)
 }
 function bakeOnePitMushroomSprite(k, name, colors) {
   const mushW = PIT_TRAMP_W
@@ -758,19 +818,27 @@ function bakeCaveInteriorSprite(k, pit) {
 }
 function caveMouthPts(mouth) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
+  //
+  // This is the shape that ends up PERMANENTLY baked into CAVE_INTERIOR_SPRITE
+  // (bakeCaveInteriorSprite caches it and reuses it for the rest of the
+  // playthrough) — its old straight top/bottom edges (a flat lipY-offset
+  // line left-to-right, same again at bottomY) were exactly the "one crisp
+  // horizontal line" the cave read as in screenshots, unlike the live
+  // drawCaveVoidFill path which already got a jagged edge. Same
+  // buildJaggedHorizontalEdge treatment here, same winding order.
+  //
   const pts = []
-  const lipY = mouth.floorY + CAVE_MOUTH_LIP_Y_OFFSET
-  //
-  // Start below the surface lip — avoids a flat gray bar across the opening.
-  //
-  pts.push({ x: mouth.left[0].x, y: lipY })
-  for (let i = 1; i < mouth.left.length; i++) {
-    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
-  }
-  pts.push({ x: mouth.right[mouth.right.length - 1].x, y: mouth.bottomY })
-  pts.push({ x: mouth.left[mouth.left.length - 1].x, y: mouth.bottomY })
-  for (let i = mouth.right.length - 1; i >= 0; i--) {
+  const seed = mouth.left[0].x * 0.037
+  buildJaggedHorizontalEdge(mouth.left[0].x, mouth.right[0].x, mouth.floorY, seed)
+    .forEach(p => pts.push(p))
+  for (let i = 1; i < mouth.right.length; i++) {
     pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
+  }
+  buildJaggedHorizontalEdge(
+    mouth.right[mouth.right.length - 1].x, mouth.left[mouth.left.length - 1].x, mouth.bottomY, seed + 500
+  ).forEach(p => pts.push(p))
+  for (let i = mouth.left.length - 1; i >= 1; i--) {
+    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
   }
   return pts
 }
@@ -877,13 +945,21 @@ function drawCaveFloorPebbles(k, layout, pal) {
 function drawCaveVoidFill(k, mouth, pal) {
   if (!mouth?.left?.length || !mouth?.right?.length) return
   const pts = []
-  pts.push(k.vec2(mouth.left[0].x, mouth.floorY))
-  pts.push(k.vec2(mouth.right[0].x, mouth.floorY))
+  //
+  // Top/bottom edges used to be two dead-straight points each — the one
+  // "crisp horizontal line" the cave floor/mouth line read as. Jag them the
+  // same way the left/right walls already are so the whole silhouette looks
+  // equally chaotic and rocks placed near it visibly straddle the boundary.
+  //
+  const seed = mouth.left[0].x * 0.037
+  buildJaggedHorizontalEdge(mouth.left[0].x, mouth.right[0].x, mouth.floorY, seed)
+    .forEach(p => pts.push(k.vec2(p.x, p.y)))
   for (let i = 1; i < mouth.right.length; i++) {
     pts.push(k.vec2(mouth.right[i].x, mouth.right[i].y))
   }
-  pts.push(k.vec2(mouth.right[mouth.right.length - 1].x, mouth.bottomY))
-  pts.push(k.vec2(mouth.left[mouth.left.length - 1].x, mouth.bottomY))
+  buildJaggedHorizontalEdge(
+    mouth.right[mouth.right.length - 1].x, mouth.left[mouth.left.length - 1].x, mouth.bottomY, seed + 500
+  ).forEach(p => pts.push(k.vec2(p.x, p.y)))
   for (let i = mouth.left.length - 1; i >= 1; i--) {
     pts.push(k.vec2(mouth.left[i].x, mouth.left[i].y))
   }
@@ -891,6 +967,21 @@ function drawCaveVoidFill(k, mouth, pal) {
     pts,
     color: k.rgb(pal.void.r, pal.void.g, pal.void.b)
   })
+}
+//
+// A few jittered points along an otherwise straight horizontal run.
+//
+const CAVE_MOUTH_LIP_JAG = 10
+function buildJaggedHorizontalEdge(xFrom, xTo, baseY, seed) {
+  const steps = 6
+  const pts = []
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const x = xFrom + (xTo - xFrom) * t
+    const jag = (caveSeed01(seed + i * 3.7) - 0.5) * CAVE_MOUTH_LIP_JAG * 2
+    pts.push({ x, y: baseY + jag })
+  }
+  return pts
 }
 //
 // Soft daylight glow bleeding through the cave mouth — a few overlapping,
@@ -1019,7 +1110,13 @@ function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY
     for (let i = 0; i < edge.length; i += CAVE_WALL_ROCK_STEP) {
       const p = edge[i]
       const radius = 5 + caveSeed01(layerSeed + i * 3.17) * 12
-      const depth = 8 + layer * 9 + caveSeed01(layerSeed + i * 7.9) * 20
+      //
+      // Allowed to go slightly negative (rock drifts inward, straddling the
+      // wall line into the void) instead of always sitting outward — a
+      // uniformly positive depth made the wall read as one crisp edge with
+      // rocks stacked neatly behind it.
+      //
+      const depth = -6 + layer * 9 + caveSeed01(layerSeed + i * 7.9) * 26
       const yJ = (caveSeed01(layerSeed + i * 11.3) - 0.5) * 14
       const y = Math.min(bottomY - radius - 2, Math.max(floorY + 2, p.y + yJ))
       wallRocks.push({

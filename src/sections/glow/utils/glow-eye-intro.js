@@ -31,7 +31,7 @@ const EYE_INTRO_ATTACH_MOVE_THRESHOLD = 3
 const EYE_INTRO_ATTACH_JUMP_VEL_Y = 40
 const EYE_INTRO_PIT_FEET_Y = 38
 const EYE_INTRO_PIT_FLOOR_BAND = 18
-const EYE_COLLECTED_HINT_TEXT = 'вау! столько деталей!'
+const EYE_COLLECTED_HINT_TEXT = 'Whoa. Everything looks so much clearer now.'
 const EYE_COLLECTED_HINT_DURATION = 5
 const EYE_COLLECTED_HINT_DISMISS = 80
 //

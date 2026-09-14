@@ -1,12 +1,27 @@
 # Find Yourself - Coding Rules
 
 ## Project Overview
-This is a Kaplay.js-based 2D platformer game with procedural graphics and audio. Follow these architectural patterns and conventions when contributing to the codebase.
+This is a Kaplay.js-based 2D platformer game with procedural graphics and audio, built with Vite and packaged as a standalone app via Electron. Follow these architectural patterns and conventions when contributing to the codebase.
+
+---
+
+## 0. Tooling & Commands
+
+- **Package manager**: npm. Install with `npm install` (runs `patch-package` via `postinstall` — see below, never skip it).
+- **Dev server**: `npm run dev` (Vite, hot reload) — use this to manually verify gameplay changes in a browser.
+- **Production build**: `npm run build` → outputs to `dist/`. `npm run preview` serves that build locally.
+- **Electron desktop build**: `npm run electron` runs the app in Electron against the current build; `npm run bin` builds and packages via `electron-builder` (dmg/nsis/AppImage per `package.json`'s `build` config).
+- **Zip release**: `npm run zip` builds and zips `dist/` into `dist/game.zip`.
+- **No linter, no formatter, no test suite** are configured in this project (no `.eslintrc`/`.prettierrc`, no `test` script). The rules in this document are the only enforced style — there is no automated check to lean on, so apply them manually and verify behavior by running `npm run dev`.
+- **Language**: plain JavaScript (ES modules), no TypeScript. `@types/node` is a devDependency only for editor tooling — do not add `.ts` files or type annotations.
+- **Kaplay.js version is pinned to an alpha** (`kaplay@4000.0.0-alpha.27.1` in `package.json`). Its API can differ from released-version docs/examples found online or in training data — always check actual usage in this codebase before trusting outside Kaplay examples.
+- **`patches/` + `patch-package`**: dependencies (Kaplay) are patched post-install. Never `npm install` in a way that skips `postinstall`, and never hand-edit `node_modules` directly — edit the source under `patches/` instead so the patch survives a clean install.
 
 ---
 
 ## 1. Module Organization
-Entire application should be splitted into the modules - files with import/export keywords inside, which incapsulate some logic by hidding it in a functions and local variables. These functions and vars have no export keywords, so they are available only within a module. Folders structure may be different except high level structure. On a root level it's an "assets" folder for game assets. "dist" - for compiled version of the game. "electron" - for compiled standalone version of the game. In a "src" folder this structure should be: index.js, cfg.js - files with game entry point and global configuration. Folders "components" - for global game components, "scenes" - for global game scenes, "sections" - for game sections (big game parts), "utils" - for global game utilities. Folder "sections" consists of sub-folders for every section with similar structure inside - "components", "scenes", "utils". "scenes" folder in this list contains concrete levels in format "levelX.js".
+
+The app is split into modules — files using `import`/`export`, where anything without `export` is private to that file. See section 11 for the concrete folder layout.
 
 ### Structure
 - All constants at the top of the file (before any functions)
@@ -15,67 +30,20 @@ Entire application should be splitted into the modules - files with import/expor
 - All private functions at the bottom of the file
 - Use `export function name()` syntax (not `export default`)
 
-### Example
-```javascript
-import { cfg } from '../cfg.js'
-//
-// Module constants
-//
-const SOME_CONSTANT = 42
-//
-// Exported constants (if needed)
-//
-export const TYPES = {
-  TYPE_A: 'a',
-  TYPE_B: 'b'
-}
-//
-// Creates an instance of some entity
-//
-export function create(cfg) {
-  const inst = {}
-  // Implementation
-  return inst
-}
-//
-// inst must be passed as a first parameter to all public & private
-// functions. Otherwise they are static functions
-//
-export function loadSprites(inst) {
-  // Implementation
-}
-//
-// No export, so this is a private function of the module
-//
-function privateHelper(inst) {
-  // Implementation
-}
-//
-// No export, so this is a private function of the module
-//
-function anotherPrivateHelper(inst) {
-  // Implementation
-}
-```
-
 ---
 
 ## 2. Factory Function Pattern
 
 ### Core Principle
-All modules export a `create()` function that returns an instance object (`inst`).
-
-### Instance Object Pattern
-- Contains all related state and references
-- Private and other exported functions accept `inst` as first parameter returned from `create()` function
+All modules export a `create()` function that returns an instance object (`inst`), which holds all related state and is passed as the first parameter to every other public/private function in the module. Functions that don't take `inst` are static utilities.
 
 ### Example from hero.js
 ```javascript
 export function create(cfg) {
   const { k, x, y, type } = cfg
-  
+
   const character = k.add([...])
-  
+
   const inst = {
     character,    // Kaplay game object
     k,           // Kaplay inst
@@ -84,11 +52,11 @@ export function create(cfg) {
     canJump: true,
     // ... all state goes here
   }
-  
+
   // Setup using private functions
   character.onUpdate(() => onUpdate(inst))
   setupControls(inst)
-  
+
   return inst
 }
 
@@ -103,6 +71,19 @@ function setupControls(inst) {
   })
 }
 ```
+
+### Usage
+```javascript
+// Good: create inst, pass it to every subsequent call
+const heroInst = Hero.create({ k, x: 100, y: 200 })
+Hero.spawn(heroInst)
+
+// Bad: manipulating Kaplay objects directly, no inst wrapper
+const hero = k.add([...])
+hero.x = 100
+```
+
+Components with no config (e.g. `Sound.create()`) and components that return sub-elements (e.g. a button's `inst.button` / `inst.text`) follow the exact same shape — only the fields inside `inst` differ.
 
 ---
 
@@ -228,71 +209,6 @@ export function sceneLevel1(k) {
 - Add tags with `character.use("tagName")`
 - Listen with `character.onCollide("tagName", callback)`
 
-### Instance-Based Design
-```javascript
-// Good: Create inst, pass to functions
-const heroInst = Hero.create({ k, x: 100, y: 200 })
-Hero.spawn(heroInst)
-
-// Bad: Manipulating objects directly without inst pattern
-const hero = k.add([...])
-hero.x = 100
-```
-
----
-
-## 5. Component Patterns
-
-### Hero Component
-```javascript
-// Create hero inst
-const heroInst = Hero.create({
-  k,
-  x: 250,
-  y: 800,
-  type: Hero.HEROES.HERO,
-  controllable: true,
-  sfx: sound,
-  antiHero: antiHeroInst,
-  onAnnihilation: () => k.go("level-word.2")
-})
-
-// Access Kaplay character
-heroInst.character.pos.x = 100
-
-// Call inst methods
-Hero.spawn(heroInst)
-```
-
-### Sound Component
-```javascript
-// Create sound inst once
-const sound = Sound.create()
-
-// Pass inst as first parameter
-Sound.startAudioContext(sound)
-Sound.startAmbient(sound)
-Sound.playLandSound(sound)
-Sound.setAmbientVolume(sound, 0.5)
-```
-
-### Button Component
-```javascript
-// Create returns complete button inst
-const buttonInst = Button.create({
-  k,
-  text: "START GAME",
-  x: centerX,
-  y: centerY,
-  width: 360,
-  onClick: () => k.go("level-word.1")
-})
-
-// Access elements
-buttonInst.button.opacity = 0.5
-buttonInst.text.color = k.rgb(255, 0, 0)
-```
-
 ### Export Constants When Needed
 ```javascript
 export const HEROES = {
@@ -306,7 +222,7 @@ Hero.create({ type: Hero.HEROES.HERO })
 
 ---
 
-## 6. Naming Conventions
+## 5. Naming Conventions
 
 ### Functions
 - **Scene functions**: `sceneMenu()`, `sceneReady()`, `sceneLevel1()`
@@ -324,13 +240,13 @@ Hero.create({ type: Hero.HEROES.HERO })
 - **Scenes**: `menu.js`, `ready.js`, `level-word.1.js`
 - **Components**: `hero.js`, `button.js`
 - **Utilities**: `helper.js`, `sound.js`, `scene.js`
-- **Config**: `cfg.js`, `index.js`
+- File names should be in singular form
 
 ---
 
-## 7. Code Organization
+## 6. Code Organization
 
-### Do not use magic (hard-coded) numbers snd strings. Use constants instead
+### Do not use magic (hard-coded) numbers and strings. Use constants instead
 ```javascript
 // Bad
 k.wait(3, () => Hero.spawn(hero))
@@ -368,7 +284,7 @@ export function sceneMenu(k) {
   k.scene("menu", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
-    
+
     // Centralize all scene state
     const inst = {
       centerX,
@@ -380,7 +296,7 @@ export function sceneMenu(k) {
       targetBgShift: 0,
       currentBgShift: 0
     }
-    
+
     k.onDraw(() => drawScene(inst))
     k.onUpdate(() => updateEffects(inst))
   })
@@ -406,41 +322,42 @@ const h = Hero.HEROES
 
 ---
 
-## 8. Sound Management
+## 7. Sound Management
 
 ### Web Audio API
 - All sounds procedurally generated (no audio files)
 - Use `OscillatorNode`, `GainNode`, `BiquadFilterNode`
+- Never create more than one `AudioContext` — one instance is created in `Sound.create()` and reused
 
 ### Instance Pattern
 ```javascript
 // sound.js
 export function create() {
   const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-  
+
   const inst = {
     audioContext,
     landGain: audioContext.createGain(),
     stepGain: audioContext.createGain(),
     // ... other nodes
   }
-  
+
   return inst
 }
 
 export function playLandSound(inst) {
   const { audioContext, landGain } = inst
   const now = audioContext.currentTime
-  
+
   const oscillator = audioContext.createOscillator()
   const envelope = audioContext.createGain()
-  
+
   oscillator.frequency.setValueAtTime(cfg.audio.sfx.landFreqStart, now)
   // ... configure sound
-  
+
   oscillator.connect(envelope)
   envelope.connect(landGain)
-  
+
   oscillator.start(now)
   oscillator.stop(now + cfg.audio.sfx.landDuration)
 }
@@ -448,15 +365,16 @@ export function playLandSound(inst) {
 
 ---
 
-## 9. Comments
+## 8. Comments
 
 ### Comments and empty lines
-- **NO empty line** should be placed directly before a comment block that describes code below it
-- **NO empty line** should be placed between a comment and the code it describes
-- Every multi-line comment block should start and end with an empty comment line (`//`)
+- **NO empty line** should be placed directly before a comment block that describes code below it, or between the comment and the code it describes
+- Every multi-line `//` comment block should start and end with an empty comment line (`//`)
 - For JSDoc comments (`/** ... */`), no empty line is needed between the comment and the code
 - Inline comments (on the same line as code) are allowed for brief clarifications
-- Every code block should be described by comment
+- Every code block should be described by a comment
+- **English only** for all comments
+- Explain *why*, not *what* — state the obvious and you've written a bad comment
 
 ```javascript
 // Bad: empty line before comment, and missing // wrapper lines
@@ -471,22 +389,7 @@ const x = 10
 // This is a comment
 //
 let a = 123
-
-// Also good: JSDoc comment (no empty line before function)
-/**
- * Function description
- */
-function myFunc() {
-  //
-  // Internal comment with proper wrapping
-  //
-  const value = 42
-  return value
-}
 ```
-
-### Language
-- **English only** for all comments
 
 ### JSDoc for Exported Functions
 ```javascript
@@ -506,60 +409,30 @@ export function create(cfg) {
 }
 ```
 
-### Inline Comments
-If a line uses comments above, upper line (above this comment) should not empty one.
-```javascript
-// Good: Explain why, not what
-//
-// Use short-circuit evaluation to avoid null checks
-//
-sfx && Sound.playLandSound(sfx)
-//
-// Calculate center between characters for annihilation effect
-//
-const centerX = (player.pos.x + target.pos.x) / 2
-
-// Bad: State the obvious
-//
-// Set x to 100
-//
-x = 100
-```
-
 ---
 
-## 10. Conditional Logic
+## 9. Conditional Logic
 
 ### Short-Circuit Evaluation
 ```javascript
 // Good: Concise and clear
 sfx && Sound.playSound(sfx)
-antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
-type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
+doSomething?.(inst)
 
 // Bad: Unnecessary if statement
 if (sfx) {
   Sound.playSound(sfx)
 }
+if (doSomething) doSomething(inst)
 ```
 
 ### Ternary Operators
 ```javascript
 // Good: Simple conditionals
 const particleColor = type === HEROES.HERO ? colors.hero.body : colors.antiHero.body
-const controllable = type === HEROES.HERO
 
 // Bad: Complex nested ternaries (use if/else instead)
 const value = a ? b ? c : d : e ? f : g
-```
-
-### Function calling
-```javascript
-// Good: call the function with embedded check
-doSomething?.(inst)
-
-// Bad: Do additional function check
-if (doSomething) doSomething(inst)
 ```
 
 ### Early Returns
@@ -567,7 +440,7 @@ if (doSomething) doSomething(inst)
 // Good: Guard clauses
 function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
-  
+
   inst.isAnnihilating = true
   // ... rest of logic
 }
@@ -576,17 +449,16 @@ function onAnnihilationCollide(inst) {
 function onAnnihilationCollide(inst) {
   if (!inst.isAnnihilating) {
     inst.isAnnihilating = true
-    //
     // ... deep nested logic
-    //
   }
 }
 ```
 
 ---
 
-## 11. File Structure
-- File names should be in singular form
+## 10. File Structure
+
+Sections currently in the game: `feel`, `glow`, `memory`, `stress`, `time`, `touch`, `word`. Each follows the same internal layout shown below for `word/`.
 
 ```
 src/
@@ -613,6 +485,8 @@ src/
 │   │   │   └── word-complete.js      # Section completion scene
 │   │   └── utils/                    # Word section utilities
 │   │       └── scene.js              # Level initialization helper
+│   ├── touch/, time/, glow/,
+│   │   feel/, stress/, memory/       # Same components/scenes/utils layout
 └── utils/                            # Global utility functions
     ├── helper.js                     # Color helpers, key checks
     ├── sound.js                      # Audio (Web Audio API + background music)
@@ -632,7 +506,7 @@ assets/
 
 ---
 
-## 12. localStorage Keys
+## 11. localStorage Keys
 
 ### Naming Convention
 All localStorage keys must be prefixed by section name, separated by dots:
@@ -658,7 +532,7 @@ set('level0BonusCollected', true)  // ❌ Missing section prefix
 
 ---
 
-## 13. Anti-Patterns to Avoid
+## 12. Anti-Patterns to Avoid
 
 ### Don't
 - ❌ Put a ; symbol at the end of the line
@@ -675,12 +549,10 @@ set('level0BonusCollected', true)  // ❌ Missing section prefix
 - ❌ Write comments in languages other than English
 - ❌ Put exported functions at the bottom of files
 - ❌ Put comments separated by many = symbol
-- ❌ Put function inside other function. Make it private
+- ❌ Nest a function definition inside another function — make it a private module-level function instead
 - ❌ Use console.log() function
-- ❌ Put magic (hard-coded) numbers and strings.
-- ❌ Write functions inside other functions
+- ❌ Put magic (hard-coded) numbers and strings
 - ❌ Use inline arrow functions in onUpdate/onDraw/onCollide callbacks (extract them to separate private functions)
-
 
 ### Do
 - ✅ Remove unused variable, function or comment
@@ -693,17 +565,56 @@ set('level0BonusCollected', true)  // ❌ Missing section prefix
 - ✅ Pass instances to functions
 - ✅ Extract complex logic to private functions
 - ✅ Use centralized configuration
-- ✅ Use hex strings for colors
-- ✅ Write descriptive JSDoc comments with detailed explanation
+- ✅ Use hex color strings like `"#xxxxxx"`
+- ✅ Write descriptive JSDoc comments with detailed explanation on exported functions
 - ✅ Use short-circuit evaluation
 - ✅ Keep callbacks minimal
-- ✅ Put exported functions at the top
-- ✅ For the one line arrow function use one line short function version without {} symbols
+- ✅ Put exported functions at the top, private functions at the bottom
+- ✅ For a one-line arrow function, use the short form without `{}`
 - ✅ Comment all code you write
-- ✅ Put all private functions at the bottom
-- ✅ Use hex color strings like "#xxxxxx"
 - ✅ In scene files, all helper functions must come after the main scene function sceneLevelX()
-- ✅ Always extract inline functions from onUpdate/onDraw/onCollide callbacks into separate private functions
+
+---
+
+## 13. Kaplay Performance
+
+Follow the [Kaplay performance guide](https://github.com/kaplayjs/kaplay/wiki/Performance-guide) in every change. From slowest to fastest when drawing many sprites:
+
+1. **Game objects** (`k.add([k.sprite(...), k.pos(...)])`) — use only when an entity needs components, collision, tags, or per-instance behavior (hero, platforms, UI widgets).
+2. **`k.drawSprite()` / `k.drawUVQuad()` inside `onDraw` or a single draw callback** — preferred for particles, grass tufts, atmospheric midges, one-off VFX, and any effect that only needs position/opacity/scale each frame.
+3. **Meshes** (static batched geometry) — prefer for large static tilemaps or decor when available.
+4. **Shader-based rendering** — last resort for massive identical samples.
+
+### Prefer drawSprite over game objects
+
+```javascript
+// Bad: one Kaplay object per particle — heavy update/collision overhead
+for (const particle of particles) {
+  k.add([
+    k.sprite('particle'),
+    k.pos(particle.pos)
+  ])
+}
+
+// Good: batch in one draw pass — no object bookkeeping
+for (const particle of particles) {
+  k.drawSprite({
+    sprite: 'particle',
+    pos: particle.pos
+  })
+}
+```
+
+### Batching rules
+
+- Mixing **sprites and primitives** (rect, circle, polygon) in alternating order breaks batching — Kaplay flushes to the GPU on texture/blend/shader changes.
+- **Group draw calls**: all `drawSprite` passes together, then polygons, then other primitives.
+- Static canvas-baked sprites (backgrounds, HUD glyphs, hero frames) should be **generated once per live `k` instance** and reused — never rebake every frame.
+
+### When game objects are still correct
+
+- Hero, enemies, moving platforms, anything with `k.body()`, `k.area()`, tags, or `onCollide`.
+- Persistent UI anchored with `k.fixed()` when it needs Kaplay lifecycle (destroy/hide) rather than a single draw callback.
 
 ---
 
@@ -770,137 +681,7 @@ for any future level that needs the same pixel-perfect rendering.
 
 ---
 
-## 15. Kaplay Performance
-
-Follow the [Kaplay performance guide](https://github.com/kaplayjs/kaplay/wiki/Performance-guide) in every change. From slowest to fastest when drawing many sprites:
-
-1. **Game objects** (`k.add([k.sprite(...), k.pos(...)])`) — use only when an entity needs components, collision, tags, or per-instance behavior (hero, platforms, UI widgets).
-2. **`k.drawSprite()` / `k.drawUVQuad()` inside `onDraw` or a single draw callback** — preferred for particles, grass tufts, atmospheric midges, one-off VFX, and any effect that only needs position/opacity/scale each frame.
-3. **Meshes** (static batched geometry) — prefer for large static tilemaps or decor when available.
-4. **Shader-based rendering** — last resort for massive identical samples.
-
-### Prefer drawSprite over game objects
-
-```javascript
-// Bad: one Kaplay object per particle — heavy update/collision overhead
-for (const particle of particles) {
-  k.add([
-    k.sprite('particle'),
-    k.pos(particle.pos)
-  ])
-}
-
-// Good: batch in one draw pass — no object bookkeeping
-for (const particle of particles) {
-  k.drawSprite({
-    sprite: 'particle',
-    pos: particle.pos
-  })
-}
-```
-
-### Batching rules
-
-- Mixing **sprites and primitives** (rect, circle, polygon) in alternating order breaks batching — Kaplay flushes to the GPU on texture/blend/shader changes.
-- **Group draw calls**: all `drawSprite` passes together, then polygons, then other primitives.
-- Static canvas-baked sprites (backgrounds, HUD glyphs, hero frames) should be **generated once per live `k` instance** and reused — never rebake every frame.
-
-### When game objects are still correct
-
-- Hero, enemies, moving platforms, anything with `k.body()`, `k.area()`, tags, or `onCollide`.
-- Persistent UI anchored with `k.fixed()` when it needs Kaplay lifecycle (destroy/hide) rather than a single draw callback.
-
----
-
-```javascript
-import { cfg } from '../cfg.js'
-import * as Sound from '../utils/sound.js'
-
-// Module constants
-const ANIMATION_SPEED = 0.04
-const FRAME_COUNT = 6
-
-export const TYPES = {
-  TYPE_A: 'typeA',
-  TYPE_B: 'typeB'
-}
-
-/**
- * Creates a game component
- * @param {Object} cfg - Configuration
- * @param {Object} cfg.k - Kaplay inst
- * @param {number} cfg.x - X position
- * @returns {Object} Component inst
- */
-export function create(cfg) {
-  const { k, x, y, type = TYPES.TYPE_A } = cfg
-  
-  const gameObject = k.add([
-    k.sprite('sprite'),
-    k.pos(x, y),
-    k.area(),
-    k.body()
-  ])
-  
-  const inst = {
-    gameObject,
-    k,
-    type,
-    frame: 0,
-    timer: 0
-  }
-  
-  gameObject.onUpdate(() => onUpdate(inst))
-  
-  return inst
-}
-
-export function loadSprites(inst) {
-  inst.k.loadSprite('sprite', 'path/to/sprite.png')
-}
-//
-// Private update function
-//
-function onUpdate(inst) {
-  inst.timer += inst.k.dt()
-  
-  if (inst.timer > ANIMATION_SPEED) {
-    inst.frame = (inst.frame + 1) % FRAME_COUNT
-    inst.timer = 0
-  }
-}
-```
-
-**BAD Example (inline arrow function):**
-```javascript
-gameObject.onUpdate(() => {
-  inst.timer += inst.k.dt()
-  
-  if (inst.timer > ANIMATION_SPEED) {
-    inst.frame = (inst.frame + 1) % FRAME_COUNT
-    inst.timer = 0
-  }
-})
-```
-
-**GOOD Example (extracted private function):**
-```javascript
-gameObject.onUpdate(() => onUpdate(inst))
-
-// ... at bottom of file
-function onUpdate(inst) {
-  inst.timer += inst.k.dt()
-  
-  if (inst.timer > ANIMATION_SPEED) {
-    inst.frame = (inst.frame + 1) % FRAME_COUNT
-    inst.timer = 0
-  }
-}
-```
-
----
-
-## 16. Film grain (baked sprites)
+## 15. Film Grain (baked sprites)
 
 Every canvas-baked sprite or texture in the game must carry the same film-grain look used in the glow section — never ship a flat, grain-free bake when the surrounding art is grained.
 
@@ -935,5 +716,5 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 
 - **All responses and reports to the user must be written in Russian**
 - **All intermediate model reasoning (thinking, planning steps, internal analysis) must also be written in Russian**
-- Code comments and JSDoc remain in English (as required by rule 9)
+- Code comments and JSDoc remain in English (as required by section 8)
 - Keep it simple: don't over-engineer solutions

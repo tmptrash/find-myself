@@ -128,8 +128,13 @@ export function create(config) {
     heroPostBakeCanvas = null,
     hudPostBakeCanvas = null,
     lifeDesatPostBake = null,
-    hudScoreFlat = false
+    hudScoreFlat = false,
+    scoreColorHex = null
   } = config
+  const scoreFillCss = scoreColorHex ? (() => {
+    const c = getRGB(k, scoreColorHex)
+    return `rgb(${c.r},${c.g},${c.b})`
+  })() : null
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
   const letterSpacing = sectionLabelLetterSpacing ?? -5
@@ -345,12 +350,12 @@ export function create(config) {
   // Hero score outlines (black) and main text (white)
   //
   const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat)
+  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
   //
   // Life score outlines (black) and main text (white)
   //
   const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat)
+  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
   //
   // Trap count badge with outline (bold red number right of life icon)
   //
@@ -656,9 +661,9 @@ function createScoreOutlines(k, score, x, y, fontSize, offsets, hudPostBakeCanva
  * @param {number} fontSize - Font size in pixels
  * @returns {Object} Score text game object
  */
-function createScoreText(k, score, x, y, fontSize, hudPostBakeCanvas = null, hudScoreFlat = false) {
+function createScoreText(k, score, x, y, fontSize, hudPostBakeCanvas = null, hudScoreFlat = false, scoreFillCss = null) {
   if (hudPostBakeCanvas) {
-    return addBakedHudScoreSprite(k, score, x, y, fontSize, hudPostBakeCanvas, 3100, hudScoreFlat)
+    return addBakedHudScoreSprite(k, score, x, y, fontSize, hudPostBakeCanvas, 3100, hudScoreFlat, scoreFillCss)
   }
   return k.add([
     k.text(score.toString(), {
@@ -811,7 +816,7 @@ function rebakeHudLetterSprite(obj, colorHex) {
 //
 // Bakes a score numeral with drop shadow for the HUD scoreboard.
 //
-function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase, flat = false) {
+function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase, flat = false, fillCss = null) {
   const obj = k.add([
     k.pos(x, y),
     k.anchor('left'),
@@ -819,7 +824,7 @@ function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase, fl
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
-  obj._scoreBake = { k, score, x, y, fontSize, postBake, seedBase, flat }
+  obj._scoreBake = { k, score, x, y, fontSize, postBake, seedBase, flat, fillCss }
   rebakeHudScoreSprite(obj)
   return obj
 }
@@ -829,10 +834,10 @@ function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase, fl
 function rebakeHudScoreSprite(obj) {
   const bake = obj._scoreBake
   if (!bake) return
-  const { k, score, fontSize, postBake, seedBase, flat } = bake
+  const { k, score, fontSize, postBake, seedBase, flat, fillCss } = bake
   const text = String(score)
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const canvas = bakeHudScoreCanvas(text, fontSize, font, flat)
+  const canvas = bakeHudScoreCanvas(text, fontSize, font, flat, fillCss)
   postBake?.(canvas, seedBase + text.length)
   const spriteName = `hud-score-${seedBase}-${text}`
   k.loadSprite(spriteName, canvas)
@@ -863,7 +868,7 @@ function bakeHudLetterCanvas(letter, fontSize, fontFamily, fillStyle) {
 //
 // Draws a score numeral with a single drop shadow on one canvas.
 //
-function bakeHudScoreCanvas(text, fontSize, fontFamily, flat = false) {
+function bakeHudScoreCanvas(text, fontSize, fontFamily, flat = false, fillCss = null) {
   const pad = 3
   const off = flat ? 0 : SCORE_OUTLINE_THICKNESS
   const probe = document.createElement('canvas').getContext('2d')
@@ -882,7 +887,7 @@ function bakeHudScoreCanvas(text, fontSize, fontFamily, flat = false) {
     ctx.fillStyle = '#000000'
     ctx.fillText(text, pad + off, cy + off)
   }
-  ctx.fillStyle = `rgb(${HUD_SCORE_ICON_GREY_R},${HUD_SCORE_ICON_GREY_G},${HUD_SCORE_ICON_GREY_B})`
+  ctx.fillStyle = fillCss || `rgb(${HUD_SCORE_ICON_GREY_R},${HUD_SCORE_ICON_GREY_G},${HUD_SCORE_ICON_GREY_B})`
   ctx.fillText(text, pad, cy)
   return canvas
 }

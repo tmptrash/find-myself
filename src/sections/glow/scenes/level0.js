@@ -143,9 +143,10 @@ const GROUND_DARK = glowRgb('groundDark')
 //
 const WARM_HAZE = glowRgb('warmHaze')
 //
-// Dark rim tone for gray decor (rocks, trampoline) in the colour world.
+// Rim tone for gray decor (rocks, trampoline) in the colour world — a
+// lighter gray than the old near-black decorOutline (see glowOutlineLight).
 //
-const DECOR_OUTLINE_RGB = glowRgb('decorOutline')
+const DECOR_OUTLINE_RGB = glowRgb('glowOutlineLight')
 //
 // Cap colour families for the cute decor mushrooms (palette hex sets): the
 // cap tone, its dark counterpart (shading) and a lighter highlight tone.
@@ -228,7 +229,16 @@ let glowPlayfieldCornerObjs = null
 //
 const RIGHT_ZONE_SHIFT_X = WORLD_W - 1920
 const CORNER_RADIUS = 20
-const CORNER_SPRITE = 'glow0-corner-mask'
+//
+// Both colour variants are baked once at scene setup (see
+// loadPlayfieldCornerSprites) and kept loaded for the whole level, so the
+// void <-> outer-frame switch (e.g. on L collection) only ever swaps which
+// already-resident sprite a corner object uses — reloading a sprite here
+// instead would leave the old-colour mask on screen for a stray frame while
+// the backdrop already switched, flashing a visibly mismatched corner.
+//
+const CORNER_SPRITE_VOID = 'glow0-corner-mask-void'
+const CORNER_SPRITE_OUTER = 'glow0-corner-mask-outer'
 const PLAYFIELD_BOTTOM_CORNER_Z = CFG.visual.zIndex.ui + 2500
 const PLATFORM_HIDE_Y = 9999
 //
@@ -325,6 +335,13 @@ const HEDGEHOG_GROUND_RAISE = 4
 const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
 const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
 //
+// Extra margin kept past the mushroom's bounce-trigger band (see
+// isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
+// ground spawn clear of a trampoline — landing on the cap launches the hero
+// immediately on level load.
+//
+const HERO_TRAMPOLINE_SPAWN_CLEARANCE = 20
+//
 // A second, ambush hedgehog waits hidden at the far edge of the L-log
 // platform and pops out just before the hero actually lands there (see
 // maybeSpawnHedgehogAmbushPreLand), so the reveal reads as a sudden ambush
@@ -388,10 +405,10 @@ let HEDGEHOG_DEATH_PROMPT_Y = Math.round(DESIGN_SCREEN_H * PAR_LEAF_MAX_Y_FRACTI
 const MEDITATION_WORLD_WAKE_SPEED = 1.1
 const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
-// Dark rim on glow floor rocks so they read clearly against the ground
-// without a heavy outline stroke.
+// Light rim on glow floor rocks so they read clearly against the ground
+// without a heavy black outline stroke.
 //
-const ROCK_OUTLINE_RGB = glowRgb('void')
+const ROCK_OUTLINE_RGB = glowRgb('glowOutlineLight')
 const ROCK_OUTLINE_WIDTH = 1
 //
 // Ground respawn after a hedgehog kill lands just past the wandering
@@ -611,11 +628,16 @@ const PAR_MID_BAND_BOTTOM = PAR_MID_BAND_TOP + PAR_LEAF_BAND_H_MID
 const PAR_FAR_BAND_TOP = PAR_MID_BAND_BOTTOM - PAR_LEAF_TIER_OVERLAP
 const PAR_FAR_BAND_BOTTOM = PAR_FAR_BAND_TOP + PAR_LEAF_BAND_H_FAR
 //
-// Trunk apex sits above each row's canopy so branches sprout inside the band.
+// Trunk apex sits above each row's canopy so branches sprout inside the
+// band. The margin has to clear the crown clusters buildGlowTree grows from
+// the trunk apex (three stubs 28-50px long, see glow-tree.js) — the old
+// 42/35/28 margins were smaller than that reach, so at unlucky random rolls
+// a tree's own crown (not just the safety clip) could already poke past its
+// row's intended band, including the near row punching into the sky gap.
 //
-const PAR_BIG_TOP_MIN_Y = PAR_NEAR_BAND_TOP - 42
+const PAR_BIG_TOP_MIN_Y = PAR_NEAR_BAND_TOP - 85
 const PAR_BIG_TOP_RANGE = 22
-const PAR_FAR_TOP_MIN_Y = PAR_MID_BAND_TOP - 35
+const PAR_FAR_TOP_MIN_Y = PAR_MID_BAND_TOP - 70
 const PAR_FAR_TOP_RANGE = 18
 const PAR_BIG_WIDTH_SCALE_MIN = 0.48
 const PAR_BIG_WIDTH_SCALE_RANGE = 0.1
@@ -670,7 +692,7 @@ const BUSH_FAR_HEIGHT_SCALE = 1.18
 const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
 const PAR_FARTHEST_BAND_BOTTOM = PAR_FAR_BAND_BOTTOM
-const PAR_FARTHEST_TOP_MIN_Y = PAR_FAR_BAND_TOP - 28
+const PAR_FARTHEST_TOP_MIN_Y = PAR_FAR_BAND_TOP - 55
 const PAR_FARTHEST_TOP_RANGE = 16
 //
 // Hard foliage floor: no background leaf (branch cluster or band leaf) may
@@ -678,6 +700,57 @@ const PAR_FARTHEST_TOP_RANGE = 16
 // stays trunk-only in every row and every mode.
 //
 const PAR_LEAF_MAX_Y = PAR_FAR_BAND_BOTTOM + 8
+//
+// Headroom kept above each row's own band top when clipping its canopy
+// ceiling (see clipParallaxCanopyCeiling). The PAR_*_TOP_MIN_Y margins
+// (near/mid/far) now already keep each row's own tree crowns (28-50px
+// clusters off the trunk apex, see buildGlowTree) naturally inside their
+// band — a real hedgehog... er, tree, not a shape with its top sliced off —
+// so this clip is a rare backstop for an unlucky outlier, not the everyday
+// shaping mechanism. Sized to sit above where those margins already put the
+// crowns so it essentially never engages in normal play.
+//
+const PAR_CANOPY_CEILING_HEADROOM = 100
+//
+// Amplitude of the layered-sine wobble on the canopy ceiling clip line.
+//
+const PAR_CANOPY_CEILING_JAG = 28
+const PAR_CLIP_PAD = 4000
+//
+// Clips away anything drawn above ceilingWorldY on this baked-layer canvas
+// (world-space Y — the context is already translated so this lines up).
+// Callers must ctx.save() before calling this and ctx.restore() once the
+// tree/bush drawing is done, BEFORE bakeParallaxLayerPair's post-bake blur
+// pass (applyParallaxPostFxToContext) runs on the whole canvas — the blur
+// needs the clip lifted so it can spread pixels upward across the hard
+// clip line, which is what turns it into the fuzzy top edge the parallax
+// bands want instead of a razor-straight one.
+//
+function clipParallaxCanopyCeiling(ctx, bandTop) {
+  const ceilingWorldY = bandTop - PAR_CANOPY_CEILING_HEADROOM
+  const steps = 48
+  const spanX = WORLD_W + PAR_CLIP_PAD * 2
+  const bottomY = ceilingWorldY + PAR_CLIP_PAD + WORLD_H
+  ctx.beginPath()
+  ctx.moveTo(-PAR_CLIP_PAD, bottomY)
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const x = -PAR_CLIP_PAD + t * spanX
+    //
+    // Layered sines instead of a flat cut — a straight rect here read as one
+    // crisp line where the treetops met the sky, unlike the naturally
+    // ragged silhouette everywhere else in the canopy (branches, leaf
+    // clusters lower down).
+    //
+    const jag = Math.sin(t * 27.3) * PAR_CANOPY_CEILING_JAG * 0.5 +
+      Math.sin(t * 61.7 + 1.4) * PAR_CANOPY_CEILING_JAG * 0.3 +
+      Math.sin(t * 11.2 + 3.1) * PAR_CANOPY_CEILING_JAG * 0.2
+    ctx.lineTo(x, ceilingWorldY + jag)
+  }
+  ctx.lineTo(-PAR_CLIP_PAD + spanX, bottomY)
+  ctx.closePath()
+  ctx.clip()
+}
 //
 // World-Y crop for one parallax tree row (crowns + trunks down to ground).
 //
@@ -884,9 +957,10 @@ const GLOW_LETTER_TILT = 12
 const GLOW_LETTER_GAP = 70
 const GLOW_LETTER_PICKUP_RADIUS = 52
 //
-// Hero body / outline tones for lesson-glow.0.
+// Hero body / outline tones for lesson-glow.0 — lighter than the shared
+// heroOutline (menu.js still uses that one directly for its own hero).
 //
-const HERO_OUTLINE_COLOR = GLOW_PAL.heroOutline
+const HERO_OUTLINE_COLOR = GLOW_PAL.glowOutlineLight
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
 //
@@ -1061,7 +1135,7 @@ const HINT_INTRO_2_PAUSE = 1.5
 const INTRO_HINT_PHASE_ONE = 'one'
 const INTRO_HINT_PHASE_PAUSE = 'pause'
 const INTRO_HINT_PHASE_TWO = 'two'
-const HINT_GROUND_RIGHT_TEXT = 'Curiosity lights the\nway. Keep walking'
+const HINT_GROUND_RIGHT_TEXT = 'Oh. So much better.'
 const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
 const HINT_ZONE_DURATION = 5
 //
@@ -1081,6 +1155,18 @@ const GLOW_PROXIMITY_SOUND_RADIUS = 120
 const GLOW_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
+const HERO_CONFIDENT_HINT_TEXT = 'I feel more confident now'
+const HERO_CONFIDENT_HINT_DURATION = 4
+//
+// Confidence-themed hints shown once the hero lands after picking up each
+// letter (see markPendingConfidenceHint / maybeShowPendingConfidenceHint).
+// O keeps its own dedicated text/flow above since it pairs with the body
+// fill reveal, not just a hint.
+//
+const GLOW_CONFIDENCE_HINT_G = 'I did it. That wasn\'t so scary after all.'
+const GLOW_CONFIDENCE_HINT_L = 'I can handle more than I thought I could.'
+const GLOW_CONFIDENCE_HINT_W = 'Look how far I\'ve come.'
+const GLOW_CONFIDENCE_PARTICLE_COUNT_MULT = 1.8
 //
 // Repeat drownings get a random self-ironic joke over the sinking hero.
 //
@@ -1204,6 +1290,13 @@ const DROWN_DESCEND_SPEED = 340
 //
 const DROWN_UNIFIED_SINK_SPEED = 48
 const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
+//
+// Hero opacity reaches 0 this many px below the water surface (see
+// applyDrownSinkPose) — a plain fade instead of a separate cover-mask
+// polygon, so there's no shape to keep matched to the lake's own (uneven,
+// shallower toward the right) bed profile.
+//
+const DROWN_OPACITY_FADE_DEPTH = 50
 const DROWN_RESTART_DELAY = 1.1
 const WATER_STEPS_VOLUME = 0.42
 //
@@ -1439,10 +1532,9 @@ const LAKE_BAKE_SPRITE_PREFIX = 'glow0-lake-bake-'
 const LAKE_BAKE_FRAME_COUNT = 24
 const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 //
-// Drowning draw order (back → front): hero, below-surface cover, lake fill.
+// Drowning draw order (back → front): fading hero, then the lake fill on top.
 //
 const DROWN_HERO_DRAW_Z = LAKE_Z - 2
-const DROWN_COVER_Z = LAKE_Z - 1
 //
 // Blocks every bootstrap yield frame until zone visibility and camera are ready.
 //
@@ -1526,7 +1618,6 @@ const WOOD_LOG_SNAP_EMBED = LOG_SNAP_EMBED - 2
 // After snapping onto a log, lock out a second jump/land crouch briefly
 //
 const POST_LAND_AIR_LOCK_GLOW = 0.28
-const GOLD_RECOLOR_DELAY = 0.55
 const DIALOG_INPUT_GRACE = 0
 //
 // After dialog pin release, keep gravity off and Y pinned briefly so L/O
@@ -1833,6 +1924,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
     const rightPlatY = horizBranch.physY
     const lPlatY = rightPlatY - L_PLAT_RAISE_Y
+    //
+    // Right mushroom trampoline's X — computed early (same reason as
+    // rightZoneBaseX above) so the spawn-clearance check right after can see
+    // it; createMushroomTrampoline() reuses this same value further below.
+    //
+    const trampX = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const treeGroundSpawnX = branchTrampX + HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
@@ -1879,6 +1976,20 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       heroSpawnX = branchSpawnX
       heroSpawnY = branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     }
+    //
+    // A saved/derived ground spawn landing right on a mushroom's bounce cap
+    // (branch tramp near the tree, or the far right tramp) would launch the
+    // hero into the air the instant the level loads — pull it clear to
+    // whichever side is closer before the hedgehog check below.
+    //
+    heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
+      spawnX: heroSpawnX,
+      spawnOnBranch,
+      branchTrampX,
+      trampX,
+      branchTrampVisible: isBranchTrampolineVisible(zones),
+      trampVisible: isRightTrampolineVisible(zones)
+    })
     //
     // A saved/derived ground spawn landing inside the left hedgehog's
     // ambush danger zone (trigger..pop, plus its touch radius) would pop
@@ -1974,9 +2085,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     )
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
     const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
-    const trampX = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
-      drawZ: CFG.visual.zIndex.player + 1
+      drawZ: CFG.visual.zIndex.player + 1,
+      colors: GLOW_PAL.cuteMushroomRed,
+      spriteKey: 'right'
     })
     const branchTrampBundle = createMushroomTrampoline(k, branchTrampX, FLOOR_Y, zones, {
       gateBranchTramp: true,
@@ -2001,7 +2113,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const wLetter = zones.wCollected ? null : createGlowLetter(k, 'W', wLetterX, wLetterY, GLOW_LETTER_TILT * 0.7, HERO_BODY_COLOR)
     const oLetterX = oPlatX + LOG_W / 2
     const oLetterY = oPlatY - GLOW_LETTER_SIZE * 0.15 - O_LETTER_RAISE_Y
-    const oLetter = zones.oCollected ? null : createGlowLetter(k, 'O', oLetterX, oLetterY, GLOW_LETTER_TILT * 0.5, HERO_BODY_COLOR)
+    const oLetter = zones.oCollected ? null : createGlowLetter(
+      k, 'O', oLetterX, oLetterY, GLOW_LETTER_TILT * 0.5, GLOW_PAL.lightGray, { noShadow: true }
+    )
     oLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
@@ -2056,7 +2170,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const ambushHedgehog = Hedgehog.create({
       k,
       x: zones.lCollected ? lPlatX + LOG_W / 2 : lPlatX + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP,
-      y: (zones.lCollected ? FLOOR_Y : rightPlatY) - HEDGEHOG_AMBUSH_GROUND_RAISE,
+      //
+      // The L-log sits L_PLAT_RAISE_Y above rightPlatY (see lPlatY above) —
+      // using rightPlatY directly here put the hedgehog ~54px below the
+      // log's actual surface, popping out underneath it instead of standing
+      // on top of its right end.
+      //
+      y: (zones.lCollected ? FLOOR_Y : lPlatY) - HEDGEHOG_AMBUSH_GROUND_RAISE,
       scale: HEDGEHOG_AMBUSH_SCALE,
       facing: 'left',
       hero: heroInst,
@@ -2067,7 +2187,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     })
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
-    createDrownMask(k, lakeX1, lakeX2, zones)
     initTouchInput(k)
     TouchControls.create(k)
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
@@ -3142,7 +3261,12 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     heroPostBakeCanvas: applyGlowForegroundBake,
     hudPostBakeCanvas: applyGlowForegroundBake,
     lifeDesatPostBake: finishGlowLifeDesatCanvas,
-    hudScoreFlat: !colorWorld,
+    //
+    // Same white-with-black-shadow look as the GLOW HUD letters, always on —
+    // the score numerals no longer drop their shadow before colour world.
+    //
+    scoreColorHex: HERO_BODY_COLOR,
+    hudScoreFlat: false,
     topPlatformHeight: TOP_MARGIN,
     sideWallWidth: LEFT_MARGIN,
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
@@ -3155,7 +3279,6 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
   })
   pinGlowHudFixed(indicator)
   LevelIndicator.syncLifeHudGrey(indicator, !colorWorld)
-  tintGlowHudScoreGrey(indicator, !colorWorld)
   return indicator
 }
 //
@@ -3186,18 +3309,6 @@ function glowHudLetterCenterX(index) {
   return GLOW_HUD_LABEL_START_X +
     index * (GLOW_HUD_LABEL_FONT_SIZE + GLOW_HUD_LABEL_LETTER_SPACING) +
     GLOW_HUD_LABEL_FONT_SIZE / 2
-}
-//
-// Score numerals match the monochrome world gray until colour arrives.
-//
-function tintGlowHudScoreGrey(indicator, grey) {
-  if (!indicator) return
-  const c = grey ? DECOR_GRAY : HUD_SCORE_COLOR_SETTLED
-  const rgb = indicator.k.rgb(c.r, c.g, c.b)
-  indicator.heroScoreText && (indicator.heroScoreText.color = rgb)
-  indicator.lifeScoreText && (indicator.lifeScoreText.color = rgb)
-  LevelIndicator.setHudScoreFlatBake(indicator.lifeScoreText, grey)
-  LevelIndicator.setHudScoreFlatBake(indicator.heroScoreText, grey)
 }
 //
 // How many of the five gray-world map parts are open (3 tree landings,
@@ -3643,12 +3754,13 @@ function glowPostLRevealFade(inst) {
   return inst.meditation?.countdown != null ? meditationCountdownFade(inst) : 0
 }
 //
-// Post-L ground darkening toward the root-zone earth tone — tied to the
-// stillness countdown, not the moment the L caption closes.
+// Post-L ground darkening toward the root-zone earth tone — applied at full
+// strength the instant L is collected, independent of the later stillness
+// countdown (that countdown still gates the separate roots/decor reveal via
+// glowPostLRevealFade).
 //
 function glowGroundDarkenAmount(inst) {
-  if (!inst?.zones?.lCollected) return 0
-  return GROUND_L_DARKEN * glowPostLRevealFade(inst)
+  return inst?.zones?.lCollected ? GROUND_L_DARKEN : 0
 }
 //
 // Gray-phase ground colour before the colour-world fade lerps in.
@@ -4222,7 +4334,6 @@ function maybeSyncGlowLifeHudGrey(inst) {
   if (inst._lifeHudGrey === wantGrey && !needsDesat) return
   inst._lifeHudGrey = wantGrey
   LevelIndicator.syncLifeHudGrey(inst.levelIndicator, wantGrey)
-  tintGlowHudScoreGrey(inst.levelIndicator, wantGrey)
 }
 //
 // Flat single decor gray until L — no per-object shades before then.
@@ -4344,6 +4455,10 @@ function buildParallaxSprites(k, undergroundSpec) {
     })
   bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_TREE3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_FARTHEST_BAND_TOP), parTreeRowWorldH(PAR_FARTHEST_BAND_TOP), (grayCtx, colorCtx, pad) => {
+      grayCtx.save()
+      colorCtx.save()
+      clipParallaxCanopyCeiling(grayCtx, PAR_FARTHEST_BAND_TOP)
+      clipParallaxCanopyCeiling(colorCtx, PAR_FARTHEST_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_FARTHEST_TREE_COUNT,
         seedBase: PAR_FARTHEST_SEED_BASE,
@@ -4363,9 +4478,15 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: true,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
+      grayCtx.restore()
+      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_FAR, grade: GLOW_LAYER_GRADE.far })
   bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (grayCtx, colorCtx, pad) => {
+      grayCtx.save()
+      colorCtx.save()
+      clipParallaxCanopyCeiling(grayCtx, PAR_MID_BAND_TOP)
+      clipParallaxCanopyCeiling(colorCtx, PAR_MID_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_FAR_TREE_COUNT,
         seedBase: PAR_FAR_SEED_BASE,
@@ -4385,9 +4506,15 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: true,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
+      grayCtx.restore()
+      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_MID, grade: GLOW_LAYER_GRADE.mid })
   bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (grayCtx, colorCtx, pad) => {
+      grayCtx.save()
+      colorCtx.save()
+      clipParallaxCanopyCeiling(grayCtx, PAR_BIG_BAND_TOP)
+      clipParallaxCanopyCeiling(colorCtx, PAR_BIG_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_BIG_TREE_COUNT,
         seedBase: PAR_BIG_SEED_BASE,
@@ -4409,6 +4536,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: false,
         heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
+      grayCtx.restore()
+      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_NEAR, grade: GLOW_LAYER_GRADE.near })
   const staticGray = document.createElement('canvas')
   staticGray.width = WORLD_W
@@ -4861,8 +4990,14 @@ function drawExploredGroundLip(inst) {
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
   const crack = getCrackZone(WORLD_W, FLOOR_Y)
+  //
+  // Symmetric buffer on both sides (was +8 on the right vs -22 on the left) —
+  // the cave's wavy wall can swing outward on either side by more than 8px,
+  // and the lip decoration butting up flush against it left a stray tapered
+  // sliver of lip poking past the cave's actual silhouette.
+  //
   const caveKeepL = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
-  const caveKeepR = crack.x2 + 8
+  const caveKeepR = crack.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
@@ -5253,13 +5388,18 @@ function maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC) {
   if (reveal >= 1 - COLOR_CROSSFADE_EPS) return
   const cover = 1 - reveal
   if (cover <= COLOR_CROSSFADE_EPS) return
-  k.drawRect({
-    pos: k.vec2(LEFT_MARGIN, FLOOR_Y + UNDERGROUND_DETAIL_MASK_Y),
-    width: GAME_W,
-    height: CAVE_BAND_H - UNDERGROUND_DETAIL_MASK_Y,
-    color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b),
-    opacity: cover
-  })
+  //
+  // Routed through drawGlowHorizontalBand (cutCaveMouth: true) instead of a
+  // raw full-width k.drawRect — this mask used to paint straight across the
+  // whole ground band with no awareness of the crack/cave-mouth cutout,
+  // covering drawGlowPit's own void-fill/cracks with a flat grey rect
+  // whenever this reveal-fade mask was active (post-L, pre-O) right where
+  // the hero could be falling into the cave.
+  //
+  drawGlowHorizontalBand(
+    k, inst, FLOOR_Y + UNDERGROUND_DETAIL_MASK_Y, CAVE_BAND_H - UNDERGROUND_DETAIL_MASK_Y,
+    k.rgb(groundFillC.r, groundFillC.g, groundFillC.b), cover, true
+  )
 }
 //
 // Hides monolithic-tree roots until the post-L stillness countdown reveals them.
@@ -5405,20 +5545,26 @@ function createLevelBounds(k) {
 // Rounded corners — one baked mask sprite per corner, rotated like lesson-time.2.
 //
 function createRoundedCorners(k, zones) {
-  const hex = isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.void
-  loadPlayfieldCornerSprites(k, hex)
+  loadPlayfieldCornerSprites(k)
+  const spriteName = cornerSpriteNameForZones(zones)
   const TOP_CORNER_Z = CFG.visual.zIndex.ui + 30
   const { topY, bottomY, leftX, rightX } = playfieldCornerPositions()
   const corners = [
-    k.add([k.sprite(CORNER_SPRITE), k.pos(leftX, topY), k.anchor('topleft'), k.z(TOP_CORNER_Z), { fixed: true }]),
-    k.add([k.sprite(CORNER_SPRITE), k.pos(rightX, topY), k.rotate(90), k.anchor('topleft'), k.z(TOP_CORNER_Z), { fixed: true }]),
-    k.add([k.sprite(CORNER_SPRITE), k.pos(leftX, bottomY), k.rotate(270), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }]),
-    k.add([k.sprite(CORNER_SPRITE), k.pos(rightX, bottomY), k.rotate(180), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }])
+    k.add([k.sprite(spriteName), k.pos(leftX, topY), k.anchor('topleft'), k.z(TOP_CORNER_Z), { fixed: true }]),
+    k.add([k.sprite(spriteName), k.pos(rightX, topY), k.rotate(90), k.anchor('topleft'), k.z(TOP_CORNER_Z), { fixed: true }]),
+    k.add([k.sprite(spriteName), k.pos(leftX, bottomY), k.rotate(270), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }]),
+    k.add([k.sprite(spriteName), k.pos(rightX, bottomY), k.rotate(180), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }])
   ]
   corners.forEach(obj => { obj.hidden = false })
   glowPlayfieldCornerObjs = corners
   updatePlayfieldCornerPositions()
   return corners
+}
+//
+// Which pre-baked corner sprite matches the current outer-frame state.
+//
+function cornerSpriteNameForZones(zones) {
+  return isOuterFrameVisible(zones) ? CORNER_SPRITE_OUTER : CORNER_SPRITE_VOID
 }
 //
 // Screen-space anchor for each playfield corner mask (matches time lesson2 layout).
@@ -5446,25 +5592,33 @@ function updatePlayfieldCornerPositions() {
   glowPlayfieldCornerObjs[3].pos.y = bottomY
 }
 //
-// Reloads the corner mask sprite when the playfield chrome switches void → outer.
+// Swaps the corner objects to the other pre-baked sprite when the playfield
+// chrome switches void → outer. Both variants are already loaded (see
+// loadPlayfieldCornerSprites), so this is an instant sprite-name swap with no
+// reload gap that could flash a stale-colour corner for a frame.
 //
 function refreshPlayfieldCornerSprites(inst) {
   const hex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.void
   if (inst.cornerColorHex === hex) return
   inst.cornerColorHex = hex
-  loadPlayfieldCornerSprites(inst.k, hex)
+  const spriteName = cornerSpriteNameForZones(inst.zones)
   inst.cornerObjs?.forEach(obj => {
-    obj?.exists?.() && obj.use(inst.k.sprite(CORNER_SPRITE))
+    obj?.exists?.() && obj.use(inst.k.sprite(spriteName))
   })
 }
 //
-// Bakes the shared playfield corner mask (outer fill + inner quarter-circle cut).
+// Bakes both playfield corner mask variants (void fill + outer-frame fill,
+// each with the inner quarter-circle cut) once per scene entry.
 //
-function loadPlayfieldCornerSprites(k, hex) {
-  const canvas = makeRoundedCornerCanvas(CORNER_RADIUS, hex)
-  k.loadSprite(CORNER_SPRITE, canvas)
-  canvas.width = 0
-  canvas.height = 0
+function loadPlayfieldCornerSprites(k) {
+  const voidCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, GLOW_PAL.void)
+  k.loadSprite(CORNER_SPRITE_VOID, voidCanvas)
+  voidCanvas.width = 0
+  voidCanvas.height = 0
+  const outerCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, OUTER_BG_HEX)
+  k.loadSprite(CORNER_SPRITE_OUTER, outerCanvas)
+  outerCanvas.width = 0
+  outerCanvas.height = 0
 }
 //
 // Quarter-circle cut-out corner canvas — same geometry as time lesson2.
@@ -5492,7 +5646,7 @@ function makeRoundedCornerCanvas(radius, colorHex) {
 function drawPlayfieldCornerMask(k, x, y, angleDeg) {
   const size = CORNER_RADIUS * 2
   k.drawSprite({
-    sprite: CORNER_SPRITE,
+    sprite: CORNER_SPRITE_OUTER,
     pos: k.vec2(x, y),
     anchor: 'topleft',
     angle: angleDeg,
@@ -5884,7 +6038,8 @@ function syncGlowPickupLetterVisuals(inst) {
 // Blinking letter — optional gold fill for G, void outline in gray world
 // and a drop shadow in the colour world (same rules as the caption).
 //
-function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill) {
+function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill, opts = {}) {
+  const noShadow = Boolean(opts.noShadow)
   const fill = getRGB(k, fillHex)
   const outlineObjs = GLOW_LETTER_CAPTION_OUTLINE_OFFSETS.map(([odx, ody]) => {
     const pos = glowLetterLayerPos(
@@ -5906,24 +6061,27 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill)
     obj.hidden = true
     return obj
   })
-  const shadowPos = glowLetterLayerPos(
-    x,
-    y,
-    GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-    GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-    tiltDeg
-  )
-  const shadowObj = k.add([
-    k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
-    k.pos(shadowPos.x, shadowPos.y),
-    k.anchor('center'),
-    k.rotate(tiltDeg),
-    k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
-    k.opacity(1),
-    k.z(CFG.visual.zIndex.player - 2)
-  ])
-  shadowObj.hidden = true
-  const shadowObjs = [shadowObj]
+  const shadowObjs = []
+  if (!noShadow) {
+    const shadowPos = glowLetterLayerPos(
+      x,
+      y,
+      GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      tiltDeg
+    )
+    const shadowObj = k.add([
+      k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
+      k.pos(shadowPos.x, shadowPos.y),
+      k.anchor('center'),
+      k.rotate(tiltDeg),
+      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.player - 2)
+    ])
+    shadowObj.hidden = true
+    shadowObjs.push(shadowObj)
+  }
   const main = k.add([
     k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
     k.pos(x, y),
@@ -6399,10 +6557,18 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
   const trampGrayColors = zones.lCollected
     ? CUTE_MUSH_GRAY_COLORS
     : getCuteMushroomFlatWaterColors()
+  //
+  // Each trampoline mushroom gets its own cap-colour family (opts.colors,
+  // opts.spriteKey) so the branch/right/pit characters read as distinct
+  // little guys instead of three identical orange caps — the gray phase
+  // stays shared since it's the same neutral tone for every decor object.
+  //
+  const colorColors = opts.colors ?? CUTE_MUSH_COLORS
+  const colorSpriteBase = TRAMP_OUTLINE_SPRITE + (opts.spriteKey ? `-${opts.spriteKey}` : '')
   bakeTrampolineVariant(k, TRAMP_SPRITE, trampGrayColors, true)
   bakeTrampolineVariant(k, TRAMP_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, trampGrayColors, false)
-  bakeTrampolineVariant(k, TRAMP_OUTLINE_SPRITE, CUTE_MUSH_COLORS, true)
-  bakeTrampolineVariant(k, TRAMP_OUTLINE_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, CUTE_MUSH_COLORS, false)
+  bakeTrampolineVariant(k, colorSpriteBase, colorColors, true)
+  bakeTrampolineVariant(k, colorSpriteBase + TRAMP_BLINK_SPRITE_SUFFIX, colorColors, false)
   const state = {
     squash: 0,
     cooldown: 0,
@@ -6431,7 +6597,7 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
         //
         const previewFade = zones.colorWorld ? 1 : glowDecorFade(zones._sceneRef)
         const graySprite = TRAMP_SPRITE
-        const colorSprite = TRAMP_OUTLINE_SPRITE
+        const colorSprite = colorSpriteBase
         const sc = zones._sceneRef
         const flatDecor = sc && isGlowFlatSingleDecorColor(sc)
         const grayTint = grayDecorTint(sc)
@@ -6667,30 +6833,6 @@ function createLakeShoreRockLayer(k, zones) {
   ])
 }
 //
-// Below-surface cover during drowning — same surface-to-bed silhouette as the
-// lake fill, drawn at DROWN_COVER_Z so it stays behind LAKE_Z.
-//
-function createDrownMask(k, x1, x2, zones) {
-  const waterY = WATER_SURFACE_Y
-  const maskPts = Array.from({ length: (LAKE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
-  return k.add([
-    k.z(DROWN_COVER_Z),
-    {
-      draw() {
-        const sc = zones._sceneRef
-        if (!sc?.drowning) return
-        const fade = sc.colorFade ?? 0
-        const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-        const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
-        const c = lerpRgb(gray, tint, fade)
-        const color = k.rgb(c.r, c.g, c.b)
-        fillLakeSurfaceAndBed(maskPts, x1, x2, waterY, k.time())
-        k.drawPolygon({ pts: maskPts, color })
-      }
-    }
-  ])
-}
-//
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
 //
 function waterBedDepthAt(t) {
@@ -6920,7 +7062,13 @@ function drawGlowHorizontalBand(k, inst, y, height, color, opacity = 1, cutCaveM
     color,
     opacity
   })
-  const rightX = crack.x2
+  //
+  // Same buffer as the left side (mouthL above) — the cave's wavy right wall
+  // (buildCaveMouthEdge's wobble) can swing well past crack.x2, and without
+  // this margin the flat earth band butts flush against crack.x2, poking a
+  // jagged gray sliver through wherever the wall retreats inward that frame.
+  //
+  const rightX = crack.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
   const rightW = Math.max(0, LEFT_MARGIN + GAME_W - rightX)
   rightW > 0 && k.drawRect({
     pos: k.vec2(rightX, y),
@@ -7612,26 +7760,99 @@ function startColorWorldFade(inst) {
   !inst.zones.water && revealWaterZone(inst, false)
   applyZoneVisibility(inst)
   //
-  // Defer body fill — immediate sprite/hitbox swap on the O log restarts
-  // the crouch→land loop right after the dialog Space release.
+  // Defer body fill until the hero actually lands (maybeApplyPendingHeroFillOnLand)
+  // instead of a fixed timer — an immediate sprite/hitbox swap mid-air or
+  // mid-crouch restarts the crouch→land loop right after the dialog Space
+  // release.
   //
-  inst.k.wait(GOLD_RECOLOR_DELAY, () => {
-    applyGlowHeroBodyFill(inst)
-    const hero = inst.heroInst
-    if (hero) {
-      //
-      // Sprite bake briefly ungrounds on wood — keep idle + Space gate so the
-      // crouch→jump loop cannot restart after the sprite swap.
-      //
-      forceHeroIdleOnLog(inst)
-      Hero.armJumpKeyReleaseGate(hero)
-      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, 0.9)
-      hero.canJump = false
-      hero.wasJumping = false
-      hero.jumpPhase = 'none'
-      hero.jumpCeilingBonk = false
-    }
+  inst.pendingHeroFillOnLand = true
+}
+//
+// Fires once the hero is grounded after collecting O — fills the hero body,
+// plays a confirming chime and shows an English hint. See startColorWorldFade.
+//
+function maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded) {
+  if (!inst.pendingHeroFillOnLand) return
+  //
+  // grounded alone, not justLanded — the O caption very often closes while
+  // the hero is already standing still on the log (not mid-jump), so a
+  // justLanded-only check could wait for the next unrelated jump before
+  // firing, arriving long after and disconnected from the actual pickup.
+  //
+  if (!grounded) return
+  inst.pendingHeroFillOnLand = false
+  applyGlowHeroBodyFill(inst)
+  const hero = inst.heroInst
+  if (hero) {
+    //
+    // Sprite bake briefly ungrounds on wood — keep idle + Space gate so the
+    // crouch→jump loop cannot restart after the sprite swap.
+    //
+    forceHeroIdleOnLog(inst)
+    Hero.armJumpKeyReleaseGate(hero)
+    hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, 0.9)
+    hero.canJump = false
+    hero.wasJumping = false
+    hero.jumpPhase = 'none'
+    hero.jumpCeilingBonk = false
+  }
+  Sound.playLetterPickupSoft(inst.sound)
+  HeroHint.show(inst.heroHint, HERO_CONFIDENT_HINT_TEXT, HERO_CONFIDENT_HINT_DURATION, {
+    followHero: true,
+    anchorX: hero?.character?.pos?.x ?? 0,
+    anchorY: hero?.character?.pos?.y ?? 0,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
+}
+//
+// Arms a confidence hint (+ sparkle burst + chime) for the next time the
+// hero is grounded — a letter taken mid-air shows nothing until he lands.
+//
+function markPendingConfidenceHint(inst, text) {
+  inst.pendingConfidenceHint = text
+}
+//
+// Fires the armed confidence hint once the hero is actually on the ground —
+// same landing-gated pattern as O's body fill (maybeApplyPendingHeroFillOnLand),
+// just a lighter sparkle burst instead of a full body-colour reveal.
+//
+function maybeShowPendingConfidenceHint(inst, grounded, justLanded) {
+  if (!inst.pendingConfidenceHint) return
+  //
+  // grounded alone — same reasoning as maybeApplyPendingHeroFillOnLand: a
+  // letter is very often taken while already standing still, and a
+  // justLanded-only check would then wait for the next unrelated jump.
+  //
+  if (!grounded) return
+  const text = inst.pendingConfidenceHint
+  inst.pendingConfidenceHint = null
+  const char = inst.heroInst?.character
+  const x = char?.pos?.x ?? 0
+  const y = char?.pos?.y ?? 0
+  spawnGlowConfidenceBurst(inst, x, y)
+  Sound.playLetterPickupSoft(inst.sound)
+  HeroHint.show(inst.heroHint, text, HERO_CONFIDENT_HINT_DURATION, {
+    followHero: true,
+    anchorX: x,
+    anchorY: y,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
+}
+//
+// Warm gold sparkle burst around the hero — the lightweight "confidence
+// grew" visual for G/L/W (reuses the same leaf-burst particle system as the
+// hedgehog death burst, just with a gold/warm palette instead of leaf greens).
+//
+function spawnGlowConfidenceBurst(inst, x, y) {
+  if (!inst.footParticles) return
+  //
+  // spawnLanding (small footstep-dust puff), not spawnLeafBurst — that one's
+  // wide tumbling-leaf arc is the same visual language as the hedgehog death
+  // burst (spawnHedgehogDeathBurst below), just recoloured gold. A player
+  // landing near a hedgehog right after a letter pickup could easily read
+  // that as "the hedgehog nearly killed me" instead of "I feel confident".
+  //
+  GlowFootParticles.spawnLanding(inst.footParticles, x, y, inst.goldRgb || glowRgb(GLOW_GOLD_HEX), GLOW_CONFIDENCE_PARTICLE_COUNT_MULT)
 }
 //
 // Restores humming + floating notes after the post-L stillness countdown.
@@ -8141,8 +8362,15 @@ function playGlowLetterDialogMusic(inst, soundName) {
   if (!soundName) return
   inst.sound && Sound.resumeAudioContext(inst.sound)
   const birds = inst.birdsMusic
-  birds && (birds.volume = 0)
+  //
+  // Duck BEFORE forcing volume to 0 — duckBackgroundMusic saves the current
+  // volume to restore later, but bails out without saving whenever it's
+  // called on an already-silent track (current <= 0). Zeroing first made
+  // every duck here a no-op, so unduckBackgroundMusic on dialog close could
+  // never restore anything and birds stayed silent for good afterwards.
+  //
   Sound.duckBackgroundMusic(birds, CFG.audio.backgroundMusic.dialogMusicDuck)
+  birds && (birds.volume = 0)
   const vol = CFG.audio.backgroundMusic.glowLetterDialog
   //
   // Kaplay k.play() can return null while assets are still loading — play the
@@ -8202,6 +8430,7 @@ function collectLetterG(inst) {
     // Tree waits until the hero lands on the starting branch.
     //
     inst.pendingTreeReveal = !inst.zones.tree
+    markPendingConfidenceHint(inst, GLOW_CONFIDENCE_HINT_G)
   }, GLOW_DIALOG_SOUND_G)
 }
 //
@@ -8251,6 +8480,7 @@ function collectLetterL(inst) {
     inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
     inst.lPlatCaptionHiding = false
     applyZoneVisibility(inst)
+    markPendingConfidenceHint(inst, GLOW_CONFIDENCE_HINT_L)
   }, GLOW_DIALOG_SOUND_L)
   revealGlowFpsCounter(inst)
 }
@@ -8449,6 +8679,17 @@ function applyDrownSinkPose(inst) {
   char.moveTo(sinkX, inst.drownSinkY)
   char.vel && (char.vel.x = 0, char.vel.y = 0)
   updateDrownHeroDrawLayer(inst, char)
+  //
+  // Fades the hero out by depth instead of a separate cover-mask polygon —
+  // that mask had to reach deeper than the lake's own (much shallower at
+  // the right/shallow end) bed to fully hide him, and being a flat solid
+  // colour with no awareness of the lake's real silhouette, that extra
+  // depth showed up as a plain blue rectangle poking out below the visible
+  // water. A simple opacity fade needs no shape-matching at all.
+  //
+  const feetY = inst.drownSinkY + SURFACE_DETECT_Y
+  const depthBelowSurface = feetY - WATER_SURFACE_Y
+  char.opacity = 1 - Math.min(1, Math.max(0, depthBelowSurface / DROWN_OPACITY_FADE_DEPTH))
 }
 //
 // World Y where the hero's feet rest on the main floor in the lake band.
@@ -8693,6 +8934,7 @@ function triggerHedgehogDeath(inst, isAmbush) {
   hero.controlsDisabled = true
   destroyStrayGlowHeroBody(inst.k, char)
   char.hidden = true
+  char.opacity = 0
   char.paused = true
   triggerGlowCameraShake(inst)
   spawnHedgehogDeathBurst(inst, deathX, deathY)
@@ -8775,6 +9017,25 @@ function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush) {
   const safeX = (inst.hedgehog?.maxX ?? inst.lastHeroX ?? 0) + HEDGEHOG_DEATH_RESPAWN_MARGIN
   set(KEY_LAST_SPAWN_X, safeX)
   set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+}
+//
+// Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
+// (same horizontal band as isHeroAtTrampolineCap) — landing on it would fire
+// the automatic bounce the instant the level loads. Branch spawns are left
+// alone: the branch sits well above floor Y, outside either cap's Y band.
+//
+function nudgeGlowHeroSpawnAwayFromTrampolines(cfg) {
+  const { spawnX, spawnOnBranch, branchTrampX, trampX, branchTrampVisible, trampVisible } = cfg
+  if (spawnOnBranch) return spawnX
+  let x = spawnX
+  const clearHalf = TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
+  const clearOf = (capX) => {
+    if (Math.abs(x - capX) >= clearHalf) return
+    x = x >= capX ? capX + clearHalf : capX - clearHalf
+  }
+  branchTrampVisible && clearOf(branchTrampX)
+  trampVisible && clearOf(trampX)
+  return x
 }
 //
 // Pulls a saved spawn X away from hedgehog danger bands so a reload cannot
@@ -9086,7 +9347,11 @@ function revealOZone(inst) {
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
-  applyGlowHeroBodyFill(inst)
+  //
+  // Body fill itself waits for the O letter to actually be collected and the
+  // hero to land afterward (see maybeApplyPendingHeroFillOnLand) — the zone
+  // just being reachable isn't "I feel more confident now" yet.
+  //
   enableGlowHeroIdleVocalization(inst)
 }
 //
@@ -9610,6 +9875,8 @@ function onUpdate(inst) {
   updateLetterOffscreenArrow(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
+  maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
+  maybeShowPendingConfidenceHint(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   updateGlowMidges(inst.midges, k.dt(), 1)
@@ -10811,6 +11078,14 @@ function syncTreeSegmentsVisibility(inst) {
       return
     }
     TreeSegments.restoreSegmentHomePos(entry)
+    //
+    // A segment mid reveal-fade owns its own opacity via updateTreeRevealFade
+    // (entry.fade ramping 0->1) — forcing it to 1 here every time this runs
+    // (applyZoneVisibility fires from many unrelated events) snapped it fully
+    // visible immediately, then the very next fade tick pulled it back down
+    // toward 0 and back up again: the segment visibly flashed on, off, on.
+    //
+    if (entry.fadeActive) return
     if (fade < 0.02) {
       entry.grayObj.hidden = false
       entry.colorObj.hidden = true

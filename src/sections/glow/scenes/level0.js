@@ -635,12 +635,12 @@ const PAR_FAR_BAND_BOTTOM = PAR_FAR_BAND_TOP + PAR_LEAF_BAND_H_FAR
 // a tree's own crown (not just the safety clip) could already poke past its
 // row's intended band, including the near row punching into the sky gap.
 //
-const PAR_BIG_TOP_MIN_Y = PAR_NEAR_BAND_TOP - 85
-const PAR_BIG_TOP_RANGE = 22
+const PAR_BIG_TOP_MIN_Y = PAR_NEAR_BAND_TOP - 120
+const PAR_BIG_TOP_RANGE = 28
 const PAR_FAR_TOP_MIN_Y = PAR_MID_BAND_TOP - 70
 const PAR_FAR_TOP_RANGE = 18
-const PAR_BIG_WIDTH_SCALE_MIN = 0.48
-const PAR_BIG_WIDTH_SCALE_RANGE = 0.1
+const PAR_BIG_WIDTH_SCALE_MIN = 0.96
+const PAR_BIG_WIDTH_SCALE_RANGE = 0.06
 //
 // Pull parallax trunks toward the main tree; nearer rows hug the centre more.
 //
@@ -728,27 +728,8 @@ const PAR_CLIP_PAD = 4000
 //
 function clipParallaxCanopyCeiling(ctx, bandTop) {
   const ceilingWorldY = bandTop - PAR_CANOPY_CEILING_HEADROOM
-  const steps = 48
-  const spanX = WORLD_W + PAR_CLIP_PAD * 2
-  const bottomY = ceilingWorldY + PAR_CLIP_PAD + WORLD_H
   ctx.beginPath()
-  ctx.moveTo(-PAR_CLIP_PAD, bottomY)
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const x = -PAR_CLIP_PAD + t * spanX
-    //
-    // Layered sines instead of a flat cut — a straight rect here read as one
-    // crisp line where the treetops met the sky, unlike the naturally
-    // ragged silhouette everywhere else in the canopy (branches, leaf
-    // clusters lower down).
-    //
-    const jag = Math.sin(t * 27.3) * PAR_CANOPY_CEILING_JAG * 0.5 +
-      Math.sin(t * 61.7 + 1.4) * PAR_CANOPY_CEILING_JAG * 0.3 +
-      Math.sin(t * 11.2 + 3.1) * PAR_CANOPY_CEILING_JAG * 0.2
-    ctx.lineTo(x, ceilingWorldY + jag)
-  }
-  ctx.lineTo(-PAR_CLIP_PAD + spanX, bottomY)
-  ctx.closePath()
+  ctx.rect(-PAR_CLIP_PAD, ceilingWorldY, WORLD_W + PAR_CLIP_PAD * 2, PAR_CLIP_PAD + WORLD_H)
   ctx.clip()
 }
 //
@@ -1535,6 +1516,10 @@ const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 // Drowning draw order (back → front): fading hero, then the lake fill on top.
 //
 const DROWN_HERO_DRAW_Z = LAKE_Z - 2
+const GLOW_PIT_DRAW_Z = CFG.visual.zIndex.platforms - 6
+const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
+const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
+const PAR_TRUNK_WIDTH_SCALE_FAR = 0.84
 //
 // Blocks every bootstrap yield frame until zone visibility and camera are ready.
 //
@@ -2333,6 +2318,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
       waterLayer,
+      pitDrawLayer: null,
+      pendingLetterPickup: null,
       atmosphereMotes: createAtmosphereMotes(),
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
       trampBundle,
@@ -2568,6 +2555,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     if (await glowBootstrapPause(bootstrap, 94, session)) return
     if (glowInitStale(session)) return
     destroyGlowBootstrapCurtain(bootstrapCurtain)
+    ensureGlowPitDrawLayer(inst)
     k.onDraw(() => onDraw(inst))
     k.onUpdate(() => onUpdate(inst))
     registerGlowTrampolineLateBounce(inst)
@@ -3311,6 +3299,29 @@ function glowHudLetterCenterX(index) {
     GLOW_HUD_LABEL_FONT_SIZE / 2
 }
 //
+// Burst centred on a baked GLOW HUD glyph (pos is already the sprite centre).
+//
+function flashGlowHudLetterBurst(inst, letterIndex) {
+  const letter = inst.levelIndicator?.letterObjects?.[letterIndex - 1]
+  if (!letter?.exists?.() || !inst.k) return
+  const colorHex = inst.levelIndicator?.sectionLabelActiveColor || HERO_BODY_COLOR
+  LevelIndicator.flashWorldLetterBurst(inst.k, letter.pos.x, letter.pos.y, colorHex, true)
+}
+//
+// World pickup burst + soft chime on the letter glyph (not the hero fill FX).
+//
+function playGlowLetterWorldPickupFx(inst, entry) {
+  if (!entry) return
+  Sound.playLetterPickupSoft(inst.sound)
+  LevelIndicator.flashWorldLetterBurst(
+    inst.k,
+    entry.x,
+    entry.y,
+    entry.colorHex || HERO_BODY_COLOR,
+    false
+  )
+}
+//
 // How many of the five gray-world map parts are open (3 tree landings,
 // left ground, right ground). Caps at GLOW_HUD_G_FILL_PARTS.
 //
@@ -3551,7 +3562,7 @@ function syncGlowHudOFill(inst, burst = true) {
   inst._hudOFillParts = oParts
   tintGlowHudLoaderLetters(inst)
   burst && prevO != null && oParts > prevO &&
-    LevelIndicator.flashLetterBurst(indicator, 3)
+    flashGlowHudLetterBurst({ levelIndicator: indicator, k: inst.k }, 3)
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
@@ -3599,11 +3610,11 @@ function syncGlowHudLetterFills(inst, burst = true) {
   syncGlowHudGLetterShadow(inst)
   syncGlowHudLabelVisibility(inst)
   burst && prevG != null && gParts > prevG &&
-    LevelIndicator.flashLetterBurst(indicator, 1)
+    flashGlowHudLetterBurst(inst, 1)
   burst && prevL != null && lParts > prevL &&
-    LevelIndicator.flashLetterBurst(indicator, 2)
+    flashGlowHudLetterBurst(inst, 2)
   burst && prevW != null && wParts > prevW &&
-    LevelIndicator.flashLetterBurst(indicator, 4)
+    flashGlowHudLetterBurst(inst, 4)
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
@@ -4447,7 +4458,6 @@ function buildParallaxSprites(k, undergroundSpec) {
   const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
   const colorMidPal = getTreePaletteSolid('parallaxColorMid')
   const colorFarPal = getTreePaletteSolid('parallaxColorFar')
-  const colorNearBush = glowRgb(GLOW_PAL.treeColor.leaf)
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
   bakeParallaxLayerPair(k, BG_PAR_SKY_GRAY, BG_PAR_SKY_COLOR, PAR_SKY_SPEED, maxScroll, 0,
     PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx) => {
@@ -4455,10 +4465,6 @@ function buildParallaxSprites(k, undergroundSpec) {
     })
   bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_TREE3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_FARTHEST_BAND_TOP), parTreeRowWorldH(PAR_FARTHEST_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      grayCtx.save()
-      colorCtx.save()
-      clipParallaxCanopyCeiling(grayCtx, PAR_FARTHEST_BAND_TOP)
-      clipParallaxCanopyCeiling(colorCtx, PAR_FARTHEST_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_FARTHEST_TREE_COUNT,
         seedBase: PAR_FARTHEST_SEED_BASE,
@@ -4469,7 +4475,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         flatLeaves: true,
         leafDarken: 0,
         uniformWood: true,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_FAR
+        treeFocusBias: PAR_TREE_FOCUS_BIAS_FAR,
+        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_FAR
       })
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
@@ -4478,15 +4485,9 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: true,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
-      grayCtx.restore()
-      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_FAR, grade: GLOW_LAYER_GRADE.far })
   bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      grayCtx.save()
-      colorCtx.save()
-      clipParallaxCanopyCeiling(grayCtx, PAR_MID_BAND_TOP)
-      clipParallaxCanopyCeiling(colorCtx, PAR_MID_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_FAR_TREE_COUNT,
         seedBase: PAR_FAR_SEED_BASE,
@@ -4497,7 +4498,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         flatLeaves: true,
         leafDarken: 0,
         uniformWood: true,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_MID
+        treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
+        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
       })
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
@@ -4506,15 +4508,9 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: true,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
-      grayCtx.restore()
-      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_MID, grade: GLOW_LAYER_GRADE.mid })
   bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      grayCtx.save()
-      colorCtx.save()
-      clipParallaxCanopyCeiling(grayCtx, PAR_BIG_BAND_TOP)
-      clipParallaxCanopyCeiling(colorCtx, PAR_BIG_BAND_TOP)
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
         count: PAR_BIG_TREE_COUNT,
         seedBase: PAR_BIG_SEED_BASE,
@@ -4527,8 +4523,10 @@ function buildParallaxSprites(k, undergroundSpec) {
         leafDarken: 0,
         uniformWood: false,
         leafWarmBlend: PAR_L1_LEAF_WARM_BLEND,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_NEAR
+        treeFocusBias: PAR_TREE_FOCUS_BIAS_NEAR,
+        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_NEAR
       })
+      const colorNearBush = glowRgb(GLOW_PAL.treeColor.leaf)
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
         colorRgb: colorNearBush,
@@ -4536,8 +4534,6 @@ function buildParallaxSprites(k, undergroundSpec) {
         grayFlat: false,
         heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
-      grayCtx.restore()
-      colorCtx.restore()
     }, { blurRadius: PAR_BLUR_RADIUS_NEAR, grade: GLOW_LAYER_GRADE.near })
   const staticGray = document.createElement('canvas')
   staticGray.width = WORLD_W
@@ -4651,7 +4647,8 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     colorPal: colorPalOverride,
     treeX1 = LEFT_MARGIN,
     treeX2 = WORLD_W - RIGHT_MARGIN,
-    treeFocusBias = 0
+    treeFocusBias = 0,
+    trunkWidthScale = 1
   } = planeCfg
   //
   // A ready-made palette skips the haze blend so a row can sit on its own
@@ -4677,6 +4674,7 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     //
     const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
     scaleGlowTreeWidths(treeData, widthScale)
+    trunkWidthScale < 1 && scaleGlowTreeTrunkWidths(treeData, trunkWidthScale)
     renderGlowTreeIntoContext(grayCtx, treeData, grayPal, WORLD_W, WORLD_H)
     renderGlowTreeIntoContext(colorCtx, treeData, colorPal, WORLD_W, WORLD_H)
   })
@@ -5396,9 +5394,11 @@ function maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC) {
   // whenever this reveal-fade mask was active (post-L, pre-O) right where
   // the hero could be falling into the cave.
   //
+  const innerGray = isPlayfieldInnerGrayVisible(inst.zones, inst.colorFade ?? 0)
+  const maskRgb = innerGray ? glowGrayGroundRgb(inst, true) : INNER_GRAY
   drawGlowHorizontalBand(
     k, inst, FLOOR_Y + UNDERGROUND_DETAIL_MASK_Y, CAVE_BAND_H - UNDERGROUND_DETAIL_MASK_Y,
-    k.rgb(groundFillC.r, groundFillC.g, groundFillC.b), cover, true
+    k.rgb(maskRgb.r, maskRgb.g, maskRgb.b), cover, true
   )
 }
 //
@@ -6522,6 +6522,10 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
             drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, fade, this.color, white)
             return
           }
+          if (sc?.zones?.lCollected && this._bakedOutline) {
+            drawDecorAtlasSprite(k, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
+            return
+          }
           if (sc?.zones?.lCollected) {
             drawPostLGrayDecorBaked(k, sc, this._bakedFlat, this._bakedGray, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
             return
@@ -7042,7 +7046,8 @@ function isGlowFullParallaxStable(inst) {
 // Full-width horizontal band with a cave-mouth gap once the pit is open.
 //
 function drawGlowHorizontalBand(k, inst, y, height, color, opacity = 1, cutCaveMouth = false) {
-  const crack = cutCaveMouth && inst.pit?.collapsed ? getCrackZone(WORLD_W, FLOOR_Y) : null
+  const pitOpen = inst.pit && (inst.pit.collapsed || inst.pit.cracksVisible)
+  const crack = cutCaveMouth && pitOpen ? getCrackZone(WORLD_W, FLOOR_Y) : null
   if (!crack) {
     k.drawRect({
       pos: k.vec2(LEFT_MARGIN, y),
@@ -7085,6 +7090,53 @@ function drawGlowEarthBand(k, inst, color, opacity = 1) {
   drawGlowHorizontalBand(k, inst, FLOOR_Y, CAVE_BAND_H, color, opacity, true)
 }
 //
+// Cave + pit draw behind the hero (onDrawWorld would paint over the character).
+//
+function ensureGlowPitDrawLayer(inst) {
+  if (inst.pitDrawLayer) return
+  inst.pitDrawLayer = inst.k.add([
+    inst.k.z(GLOW_PIT_DRAW_Z),
+    {
+      draw() {
+        drawGlowPitPass(inst)
+      }
+    }
+  ])
+}
+//
+// Paints the open cave and interior rocks at a low z-index.
+//
+function drawGlowPitPass(inst) {
+  if (!inst.pit || isGlowEyeIntroBareWorld(inst)) return
+  const k = inst.k
+  const fade = inst.colorFade ?? 0
+  const zones = inst.zones
+  const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
+  const flatExplore = isGlowFlatSingleDecorColor(inst)
+  const groundC = flatExplore && !innerGray
+    ? DECOR_GRAY
+    : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
+  paintGlowCaveMouthGroundPatch(inst, k, innerGray)
+  drawGlowPit(k, inst.pit, groundC, flatExplore && !innerGray)
+}
+//
+// Replaces the dark static-ground bake visible through the cave mouth with the
+// same light gray as the rest of the inner playfield underground.
+//
+function paintGlowCaveMouthGroundPatch(inst, k, innerGray) {
+  if (!innerGray || !inst.pit?.collapsed) return
+  const crack = getCrackZone(WORLD_W, FLOOR_Y)
+  const rgb = glowGrayGroundRgb(inst, true)
+  const x1 = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const w = crack.x2 - crack.x1 + CAVE_MOUTH_MAIN_FLOOR_INSET * 2
+  k.drawRect({
+    pos: k.vec2(x1, FLOOR_Y),
+    width: w,
+    height: CAVE_BAND_H,
+    color: k.rgb(rgb.r, rgb.g, rgb.b)
+  })
+}
+//
 // Main draw — void until G opens the outer frame; inner gray after L/O.
 //
 function onDraw(inst) {
@@ -7123,6 +7175,7 @@ function onDrawWorld(inst) {
     const skyC = flatExplore && !innerGray ? DECOR_GRAY : lerpRgb(inner, WARM_HAZE, fade)
     const groundC = flatExplore && !innerGray ? DECOR_GRAY : lerpRgb(grayGround, GROUND_DARK, fade)
     groundFillC = groundC
+    inst._surfaceEarthRgb = innerGray ? glowGrayGroundRgb(inst, true) : groundC
     //
     // Sky scrolls on its own parallax layer once the forest is revealed.
     // Crossfade flat rects out as parallaxFade rises so the preview never pops.
@@ -7142,7 +7195,7 @@ function onDrawWorld(inst) {
     // would be immediately hidden and is a wasted full-width draw every frame.
     //
     fallbackOp > COLOR_CROSSFADE_EPS && drawGlowEarthBand(
-      k, inst, k.rgb(groundC.r, groundC.g, groundC.b), fallbackOp
+      k, inst, k.rgb(inst._surfaceEarthRgb.r, inst._surfaceEarthRgb.g, inst._surfaceEarthRgb.b), fallbackOp
     )
   }
   if (inst.zones.lZoneParallax) {
@@ -7174,8 +7227,8 @@ function onDrawWorld(inst) {
   if (zones.lZoneParallax) {
     const pf = inst.parallaxFade ?? 0
     const groundFallbackOp = parallaxStable ? 0 : Math.max(0, 1 - pf)
-    groundFallbackOp > COLOR_CROSSFADE_EPS && groundFillC && drawGlowEarthBand(
-      k, inst, k.rgb(groundFillC.r, groundFillC.g, groundFillC.b), groundFallbackOp
+    groundFallbackOp > COLOR_CROSSFADE_EPS && inst._surfaceEarthRgb && drawGlowEarthBand(
+      k, inst, k.rgb(inst._surfaceEarthRgb.r, inst._surfaceEarthRgb.g, inst._surfaceEarthRgb.b), groundFallbackOp
     )
     const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
     if (parallaxStable) {
@@ -7189,18 +7242,18 @@ function onDrawWorld(inst) {
     }
     maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC)
   } else if (groundFillC) {
-    drawGlowEarthBand(k, inst, k.rgb(groundFillC.r, groundFillC.g, groundFillC.b))
+    const earthRgb = inst._surfaceEarthRgb || groundFillC
+    drawGlowEarthBand(k, inst, k.rgb(earthRgb.r, earthRgb.g, earthRgb.b))
     !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
   } else {
     !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
   }
   //
-  // Surface cracks / open cave on the far-right ground strip
+  // Cave mouth ground tint + surface decor (pit interior draws on pitDrawLayer).
   //
   const groundC = flatExplore && !innerGray
     ? DECOR_GRAY
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
-  drawGlowPit(k, inst.pit, groundC, flatExplore && !innerGray)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
   onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
   !isGlowEyeIntroBareWorld(inst) && fade < 1 && drawExploredGroundLip(inst)
@@ -8111,10 +8164,12 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
   const gCaptionGray = getRGB(k, GLOW_PAL.midGray)
-  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L'
-  const grayCaptionWithShadow = letterEntry?.char === 'O'
-  const isGrayCaption = grayCaptionNoShadow || grayCaptionWithShadow
-  const captionTextRgb = isGrayCaption ? gCaptionGray : glowCaptionTextRgb()
+  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L' || letterEntry?.char === 'O'
+  const isGrayCaption = grayCaptionNoShadow
+  const captionWhiteRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
+  const captionTextRgb = letterEntry?.char === 'O'
+    ? captionWhiteRgb
+    : (isGrayCaption ? gCaptionGray : glowCaptionTextRgb())
   const letterFillRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
@@ -8410,7 +8465,7 @@ function collectLetterG(inst) {
   markLetterCollectedForProgressHint(inst)
   const entry = inst.gLetter
   entry && (entry.forceVisible = true)
-  Sound.playLetterPickupSoft(inst.sound)
+  playGlowLetterWorldPickupFx(inst, entry)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 1, inst.zones.colorWorld)
   } else {
@@ -8423,7 +8478,7 @@ function collectLetterG(inst) {
   }
   syncGlowHudLetterFills(inst, false)
   syncGlowFpsHudVisibility(inst)
-  LevelIndicator.flashLetterBurst(inst.levelIndicator, 1)
+  flashGlowHudLetterBurst(inst, 1)
   openGlowLetterCaption(inst, entry, GLOW_DIALOG_G, GLOW_LETTER_CAPTION_DURATION_G, () => {
     inst.gLetter = null
     //
@@ -8451,13 +8506,13 @@ function collectLetterL(inst) {
   const entry = inst.lLetter
   entry && (entry.forceVisible = true)
   inst.letterOffscreenArrow = null
-  Sound.playLetterPickupSoft(inst.sound)
+  playGlowLetterWorldPickupFx(inst, entry)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 2, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 2)
   }
-  LevelIndicator.flashLetterBurst(inst.levelIndicator, 2)
+  flashGlowHudLetterBurst(inst, 2)
   syncGlowHudLetterFills(inst, false)
   inst.meditationWorldLife = 0
   syncGlowBirdsAfterL(inst)
@@ -8499,13 +8554,14 @@ function collectLetterO(inst) {
   entry && (entry.forceVisible = true)
   inst.letterOffscreenArrow = null
   dismissOLetterStuckHint(inst)
+  playGlowLetterWorldPickupFx(inst, entry)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 3, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 3)
   }
   syncGlowHudLetterFills(inst, false)
-  LevelIndicator.flashLetterBurst(inst.levelIndicator, 3)
+  flashGlowHudLetterBurst(inst, 3)
   //
   // The log the hero just collected O from vanishes for the length of the
   // caption only, same as L — he keeps falling/moving normally through
@@ -8537,16 +8593,16 @@ function collectLetterW(inst) {
   inst.zones.wCollected = true
   set(KEY_COLLECTED_W, true)
   const entry = inst.wLetter
+  playGlowLetterWorldPickupFx(inst, entry)
   inst.wLetter = null
   entry?.allObjects?.forEach(obj => obj.destroy?.())
   inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
-  Sound.playLetterPickupSoft(inst.sound)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 4, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 4)
   }
-  LevelIndicator.flashLetterBurst(inst.levelIndicator, 4)
+  flashGlowHudLetterBurst(inst, 4)
   syncGlowHudLetterFills(inst, false)
   revealPostWHud(inst)
   applyZoneVisibility(inst)
@@ -8647,18 +8703,45 @@ function revealPostWHud(inst) {
   layoutGlowFpsHud(inst)
 }
 //
+// Defers letter pickup until the hero is grounded on a landing (sound, burst
+// and caption all wait for that moment).
+//
+function queueGlowLetterPickup(inst, kind, grounded) {
+  if (inst.pendingLetterPickup || inst.letterCaptionActive) return
+  inst.pendingLetterPickup = { kind, pickedOnGround: grounded }
+  grounded && flushPendingGlowLetterPickup(inst, true, true)
+}
+//
+// Runs a queued letter pickup once the hero has landed.
+//
+function flushPendingGlowLetterPickup(inst, grounded, justLanded) {
+  const pending = inst.pendingLetterPickup
+  if (!pending || !grounded) return
+  if (!justLanded && !pending.pickedOnGround) return
+  inst.pendingLetterPickup = null
+  pending.kind === 'g' && collectLetterG(inst)
+  pending.kind === 'l' && collectLetterL(inst)
+  pending.kind === 'o' && collectLetterO(inst)
+  pending.kind === 'w' && collectLetterW(inst)
+}
+//
 // Proximity pickup for L/O/W letters on their platforms.
 //
-function tryCollectGlowLetters(inst, char) {
+function tryCollectGlowLetters(inst, char, grounded, justLanded) {
+  flushPendingGlowLetterPickup(inst, grounded, justLanded)
+  if (inst.pendingLetterPickup || inst.letterCaptionActive) return
   const heroX = char.pos.x
   const heroY = char.pos.y
   const near = (entry) => {
     if (!entry || entry.main.hidden) return false
     return Math.hypot(heroX - entry.x, heroY - entry.y) < GLOW_LETTER_PICKUP_RADIUS
   }
-  inst.zones.lPlatRevealed && inst.zones.lLetterUnveiled && !inst.zones.lCollected && inst.zones.gCollected && near(inst.lLetter) && collectLetterL(inst)
-  inst.zones.oZone && !inst.zones.oCollected && inst.zones.lCollected && near(inst.oLetter) && collectLetterO(inst)
-  inst.zones.wZone && !inst.zones.wCollected && inst.zones.oCollected && near(inst.wLetter) && collectLetterW(inst)
+  inst.zones.lPlatRevealed && inst.zones.lLetterUnveiled && !inst.zones.lCollected && inst.zones.gCollected &&
+    near(inst.lLetter) && queueGlowLetterPickup(inst, 'l', grounded)
+  inst.zones.oZone && !inst.zones.oCollected && inst.zones.lCollected &&
+    near(inst.oLetter) && queueGlowLetterPickup(inst, 'o', grounded)
+  inst.zones.wZone && !inst.zones.wCollected && inst.zones.oCollected &&
+    near(inst.wLetter) && queueGlowLetterPickup(inst, 'w', grounded)
 }
 //
 // Pins the hero to the manual sink tween (body is removed for the sequence).
@@ -8687,9 +8770,7 @@ function applyDrownSinkPose(inst) {
   // depth showed up as a plain blue rectangle poking out below the visible
   // water. A simple opacity fade needs no shape-matching at all.
   //
-  const feetY = inst.drownSinkY + SURFACE_DETECT_Y
-  const depthBelowSurface = feetY - WATER_SURFACE_Y
-  char.opacity = 1 - Math.min(1, Math.max(0, depthBelowSurface / DROWN_OPACITY_FADE_DEPTH))
+  char.opacity = 1
 }
 //
 // World Y where the hero's feet rest on the main floor in the lake band.
@@ -8923,23 +9004,26 @@ function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
 //
 function triggerHedgehogDeath(inst, isAmbush) {
   if (inst.deathHandled) return
-  inst.deathHandled = true
-  inst.hedgehogDeathHandled = true
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
+  inst.deathHandled = true
+  inst.hedgehogDeathHandled = true
   const deathX = char.pos.x
   const deathY = char.pos.y
+  hero.isDying = true
   hero.controllable = false
   hero.controlsDisabled = true
   destroyStrayGlowHeroBody(inst.k, char)
-  char.hidden = true
-  char.opacity = 0
-  char.paused = true
+  clearGlowHeroFillPreview(inst)
+  inst.heroFillBurst = 0
+  char.exists() && inst.k.destroy(char)
+  glowLevel0LiveHeroChar = null
+  hero.character = null
   triggerGlowCameraShake(inst)
   spawnHedgehogDeathBurst(inst, deathX, deathY)
   isAmbush && Hedgehog.fallAndCrawlAway(inst.ambushHedgehog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
-  Hero.death(hero, () => finishHedgehogDeath(inst, isAmbush), { suppressParticles: true, skipSlowMotion: true })
+  finishHedgehogDeath(inst, isAmbush)
 }
 //
 // The edge the ambush hedgehog should walk to before dropping off the
@@ -9724,17 +9808,17 @@ function onUpdate(inst) {
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   updateBranchSpawnLook(inst, hero, heroMoving)
+  const grounded = char.isGrounded?.() ?? false
+  const justLanded = grounded && !inst.wasGrounded
   //
-  // G letter pickup on branch.
+  // G letter pickup on branch — FX waits for a grounded landing.
   //
   if (isGLetterCollectable(inst)) {
     const dx = heroX - inst.gLetter.x
     const dy = char.pos.y - inst.gLetter.y
-    Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && collectLetterG(inst)
+    Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && queueGlowLetterPickup(inst, 'g', grounded)
   }
-  !inst.letterCaptionActive && tryCollectGlowLetters(inst, char)
-  const grounded = char.isGrounded?.() ?? false
-  const justLanded = grounded && !inst.wasGrounded
+  !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
   inst._trampWasGroundedAtFrameStart = inst.wasGrounded
   refreshGlowBranchJumpState(inst, char)
   onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
@@ -9907,6 +9991,7 @@ function onUpdate(inst) {
   updatePitCaveMushroomHint(inst, char, k.dt())
   updateOLetterStuckHint(inst, k.dt())
   syncHeroTrampDrawOrder(inst)
+  syncGlowPitHeroDrawOrder(inst, char, footY)
   updateGlowCamera(inst)
   inst.lastHeroX = char.pos.x
   //
@@ -11804,11 +11889,27 @@ function markLPlatStepped(inst) {
   syncGlowHudLetterFills(inst)
 }
 //
+// Lifts the hero above the cave mouth lip drawn in onDrawWorld.
+//
+function syncGlowPitHeroDrawOrder(inst, char, footY) {
+  if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled) return
+  const pit = inst.pit
+  if (!pit?.zone || !pit.collapsed) return
+  const inMouthX = char.pos.x >= pit.zone.x1 && char.pos.x <= pit.zone.x2
+  const pastLip = footY > pit.floorY + 3
+  inMouthX && pastLip && (char.z = CFG.visual.zIndex.player + 8)
+}
+//
 // Draw the hero above log platforms while bouncing on a trampoline.
 //
 function syncHeroTrampDrawOrder(inst) {
   const ch = inst.heroInst?.character
   if (!ch) return
+  if (inst.drowning) {
+    const drownZ = inst.heroInst.drownHeroDrawZ ?? DROWN_HERO_DRAW_Z
+    ch.z !== drownZ && (ch.z = drownZ)
+    return
+  }
   const onBranch = isHeroOnStartBranch(inst, ch)
   const onBranchCap = isOnBranchTrampolineCap(inst, ch)
   onBranch && !onBranchCap && inst.branchTrampBounceAir &&

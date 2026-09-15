@@ -704,6 +704,49 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 
 ---
 
+## 16. Level art direction (reference rules)
+
+These rules complement sections 3, 13, 14, and 15. They describe **how levels should look** (palette usage, light, composition) from agreed reference games — not engine or config mechanics already covered above. Primary target: **Glow** (`lesson-glow`), reusable for other procedural levels.
+
+### Palette & readability
+
+- Per screen: **1–2 hue families** in decor plus **one rare pop color** for the player, goal, or hazard; keep everything else muted.
+- Player and **walkable surfaces** must read by **value/contrast**, not hue alone.
+- **Top edge** of ground/platforms: lighter rim or “living” strip (moss, grass, lit stone); support mass stays darker.
+
+### Light & atmosphere
+
+- **Depth**: background **lighter or cooler, lower contrast and detail**; optional **near-black silhouettes** at the bottom/sides — use sparingly.
+- **One lighting model per room** — pick one: hazy dim, dark void + luminous edges, or moon/beams; do not combine all three in the same space.
+
+### Silhouette & texture
+
+- **Ground/platform bottoms**: broken or wavy, not perfect rectangles.
+- **Hard geometry + organic overlay**: stone, metal, and walls get moss, roots, vines, or irregular edges.
+- **Volume and shadows**: **clusters and dithering**, not smooth off-palette gradients; large flat areas rely on grain, not micro-noise.
+
+### Composition
+
+- **One vertical anchor** on key shots (tree, trunk, stem, large machine).
+- **Play path** reads as a **distinct value band** separate from walls and ruins.
+- **Parallax**: at least three layers; each layer has its own tone; **far layer stays silhouette-level**, never competing with the player.
+- **Edge framing**: darker corners or overhead foliage/vines — moderate; do not mask the whole level with a permanent peephole vignette.
+
+### Cave, water, special looks
+
+- **Water**: dark fill, **simple striped/distorted reflection** (not a sharp mirror).
+- **Cave/pit void**: near-black interior, **no gray seam** at the lip; large rocks **do not float** above the ground line.
+- **Heavy CRT / scanlines / chromatic aberration**: only for **dedicated modes**, not the default forest look.
+- **Moon shafts / vertical light bands**: rare, semi-transparent palette swatches; do not cover the player or HUD.
+
+### What not to copy wholesale
+
+- **Animal Well**: full-neon outline style — only for specific beats (cave, lake), not the whole forest.
+- **Hyper Light Drifter**: borrow **cool base / hot accent** and occasional beams — not top-down layout or all-pink foliage.
+- **Owlboy-level saturation**: reserve for the hero, signature tree, and key props; **parallax forest stays restrained** (muted gray-green).
+
+---
+
 ## Notes
 
 - Follow these patterns consistently across the codebase

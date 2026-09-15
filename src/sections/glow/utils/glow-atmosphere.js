@@ -75,7 +75,7 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const CAVE_LAYOUT_VERSION = 12
+const CAVE_LAYOUT_VERSION = 15
 const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
@@ -579,7 +579,9 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
     //
     const char = pit.sceneRef?.heroInst?.character
     const heroInZone = Boolean(char?.pos && char.pos.x >= pit.zone.x1 && char.pos.x <= pit.zone.x2)
-    heroInZone && drawGlowPitMouthVoidFill(k, pit)
+    const feetY = char?.pos ? char.pos.y + 38 : 0
+    const heroPastLip = heroInZone && feetY > pit.floorY + 6
+    heroInZone && !heroPastLip && drawGlowPitMouthVoidFill(k, pit)
     return
   }
   if (pit.outlineOnlyMode) return
@@ -769,10 +771,7 @@ function drawCaveInteriorRockStyle(k, pit) {
   }
   bakeCaveInteriorSprite(k, pit)
   if (pit._caveSpriteReady) {
-    k.drawSprite({
-      sprite: CAVE_INTERIOR_SPRITE,
-      pos: k.vec2(pit._caveSpriteX, pit._caveSpriteY)
-    })
+    drawCaveInteriorBakedSprite(k, pit)
     return
   }
   const layout = pit.wallProfile
@@ -809,8 +808,8 @@ function bakeCaveInteriorSprite(k, pit) {
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
   fillCanvasPoly(ctx, caveMouthPts(layout.mouth), pal.void)
-  paintCanvasRocks(ctx, layout.wallRocks, pal)
-  paintCanvasRocks(ctx, layout.pebbles, pal)
+  paintCanvasRocks(ctx, layout.wallRocks, pal, pit.floorY)
+  paintCanvasRocks(ctx, layout.pebbles, pal, pit.floorY)
   k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -842,13 +841,29 @@ function caveMouthPts(mouth) {
   }
   return pts
 }
-function paintCanvasRocks(ctx, rocks, pal) {
+function drawCaveInteriorBakedSprite(k, pit) {
+  const zone = pit.zone
+  const topPad = Math.max(0, pit.floorY - pit._caveSpriteY)
+  const fullH = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
+  const fullW = Math.ceil(zone.width + CAVE_BAKE_PAD * 2)
+  const drawH = Math.max(1, fullH - topPad)
+  k.drawSprite({
+    sprite: CAVE_INTERIOR_SPRITE,
+    pos: k.vec2(pit._caveSpriteX, pit.floorY),
+    width: fullW,
+    height: drawH,
+    anchor: 'topleft',
+    quad: { x: 0, y: topPad / fullH, w: 1, h: drawH / fullH }
+  })
+}
+function paintCanvasRocks(ctx, rocks, pal, floorY = null) {
   if (!rocks?.length) return
   const tone = caveRockPalette(pal.void)
   const fill = { r: tone.fillR, g: tone.fillG, b: tone.fillB }
   const shade = { r: tone.darkR, g: tone.darkG, b: tone.darkB }
   rocks.forEach((rock, idx) => {
     if (!rock.verts?.length) return
+    if (floorY != null && rock.y + rock.radius > floorY + 0.5) return
     const pts = rock.verts.map(v => ({ x: rock.x + v.x, y: rock.y + v.y }))
     fillCanvasPoly(ctx, pts, idx % 2 === 0 ? fill : shade)
   })
@@ -1116,9 +1131,9 @@ function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY
       // uniformly positive depth made the wall read as one crisp edge with
       // rocks stacked neatly behind it.
       //
-      const depth = -6 + layer * 9 + caveSeed01(layerSeed + i * 7.9) * 26
+      const depth = -22 + layer * 10 + caveSeed01(layerSeed + i * 7.9) * 30
       const yJ = (caveSeed01(layerSeed + i * 11.3) - 0.5) * 14
-      const y = Math.min(bottomY - radius - 2, Math.max(floorY + 2, p.y + yJ))
+      const y = Math.min(bottomY - radius - 2, Math.min(p.y + yJ, floorY - radius))
       wallRocks.push({
         x: p.x + outwardSign * depth,
         y,

@@ -81,7 +81,7 @@ const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
 const GLOW_PREWARM_BAR_START = 5
 const GLOW_PREWARM_BAR_END = 38
 const GLOW_BOOTSTRAP_BAR_START = GLOW_PREWARM_BAR_END
-const GLOW_BOOTSTRAP_BAR_END = 99
+const GLOW_BOOTSTRAP_BAR_END = 100
 const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
 //
 // Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)

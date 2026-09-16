@@ -236,20 +236,29 @@ const GAZE_SIDE_SLACK = 28
 const GAZE_WANDER_INTERVAL_MIN = 1.2
 const GAZE_WANDER_INTERVAL_MAX = 2.6
 //
-// Touch-death hitbox — a plain AABB roughly matching the mane/snout/leg
-// silhouette, scaled by the instance's own scale. Sized to the spike crown's
-// actual reach (mane radius + spike length) rather than just the body core,
-// so it reads as touching the hedgehog itself and not some smaller box
-// floating inside it — but pulled back in from the full spike-tip reach so
-// a hero jump can still clear it.
+// Touch-death hitbox — AABB in art local space (ground at inst.x / y = 0),
+// sized to mane + spikes + snout, then shrunk slightly inside that silhouette.
+// Centre X is offset from inst.x because the body sits mostly behind the anchor.
 //
-const TOUCH_HALF_W = 25
+const TOUCH_HITBOX_SHRINK = 0.76
 //
-// Raised along with the body (see MANE_CY) — was 28, just short of where the
-// ears/spike crown now sit.
+// Pull the rear edge (mane / back spikes) inward so the box does not hang
+// past the visible quills.
 //
-const TOUCH_HALF_H_TOP = 34
-const TOUCH_HALF_H_BOTTOM = 7
+const TOUCH_BACK_INSET = 7
+const TOUCH_LOCAL_MIN_X = MANE_CX - MANE_RX - SPIKE_LEN - OUTLINE_PAD + TOUCH_BACK_INSET
+const TOUCH_LOCAL_MAX_X = NOSE_TIP_X + NOSE_TIP_RX + NOSE_OUTLINE_PAD
+const TOUCH_LOCAL_TOP_Y = MANE_CY - MANE_RY - SPIKE_LEN - OUTLINE_PAD
+const TOUCH_LOCAL_BOTTOM_Y = 3
+const TOUCH_CENTER_LOCAL_X = (TOUCH_LOCAL_MIN_X + TOUCH_LOCAL_MAX_X) / 2
+const TOUCH_HALF_W = ((TOUCH_LOCAL_MAX_X - TOUCH_LOCAL_MIN_X) / 2) * TOUCH_HITBOX_SHRINK
+const TOUCH_HALF_H_TOP = (-TOUCH_LOCAL_TOP_Y) * TOUCH_HITBOX_SHRINK
+const TOUCH_HALF_H_BOTTOM = TOUCH_LOCAL_BOTTOM_Y * TOUCH_HITBOX_SHRINK
+//
+// Temporary — wireframe of the touch AABB in world space while tuning.
+//
+const TOUCH_HITBOX_DEBUG = false
+const TOUCH_HITBOX_DEBUG_LINE_WIDTH = 2
 //
 // Falling off a platform after an ambush death — simple gravity drop until
 // the target ground line, then the normal wander state machine resumes.
@@ -329,10 +338,9 @@ export function create(cfg) {
 export function isTouchingHero(inst, heroX, heroFootY) {
   if (!inst?.popped || inst.falling || inst.walkingToEdge) return false
   if (inst.wanderState === 'turn' && inst.turnPhase === 'curled') return false
-  const s = inst.scale * inst.turnScale
-  const dx = Math.abs(heroX - inst.x)
-  const dy = heroFootY - inst.y
-  return dx < TOUCH_HALF_W * s && dy > -TOUCH_HALF_H_TOP * s && dy < TOUCH_HALF_H_BOTTOM * s
+  const box = touchHitboxWorldAabb(inst)
+  return heroX >= box.left && heroX <= box.right &&
+    heroFootY >= box.top && heroFootY <= box.bottom
 }
 //
 // Reveals a hidden ambush hedgehog at (x, y), facing the given direction,
@@ -451,11 +459,13 @@ function drawHedgehog(inst) {
   const fade = colorFadeOf(inst)
   if (inst.wanderState === 'turn' && inst.turnPhase === 'curled') {
     drawBakedSprite(inst, CURLED_SPRITE_NAME, dir, CURL_SCALE, fade)
+    TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
     return
   }
   const frameIdx = currentIdleFrameIndex(inst)
   drawBakedSprite(inst, BODY_SPRITE_PREFIX + frameIdx, dir, inst.turnScale, fade)
   drawLegs(inst, dir, fade)
+  TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
 }
 //
 // Blits the gray variant of a baked sprite, then the colour variant on top
@@ -1077,6 +1087,40 @@ function strokeQuadCtx(ctx, x1, y1, cx, cy, x2, y2, width, colorHex) {
   ctx.lineCap = 'round'
   ctx.strokeStyle = colorHex
   ctx.stroke()
+}
+//
+// World-space AABB for touch death — matches art local space and facing flip.
+//
+function touchHitboxWorldAabb(inst) {
+  const s = inst.scale * inst.turnScale
+  const dir = inst.facing === 'left' ? -1 : 1
+  const centerX = inst.x + dir * s * TOUCH_CENTER_LOCAL_X
+  const halfW = TOUCH_HALF_W * s
+  return {
+    left: centerX - halfW,
+    right: centerX + halfW,
+    top: inst.y - TOUCH_HALF_H_TOP * s,
+    bottom: inst.y + TOUCH_HALF_H_BOTTOM * s
+  }
+}
+//
+// Debug overlay — outline only, same box as isTouchingHero() (remove when done).
+//
+function drawTouchHitboxDebug(inst) {
+  const k = inst.k
+  const { left, right, top, bottom } = touchHitboxWorldAabb(inst)
+  const debugColor = getRGB(k, GLOW_PAL.mushrooms[0])
+  k.drawLines({
+    pts: [
+      k.vec2(left, top),
+      k.vec2(right, top),
+      k.vec2(right, bottom),
+      k.vec2(left, bottom),
+      k.vec2(left, top)
+    ],
+    width: TOUCH_HITBOX_DEBUG_LINE_WIDTH,
+    color: debugColor
+  })
 }
 //
 // Uniform random float in [min, max).

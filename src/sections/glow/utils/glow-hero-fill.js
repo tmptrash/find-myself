@@ -249,9 +249,11 @@ function applyGlowHeroBodyFill(inst, cfg) {
 export function syncGlowHeroFillVisual(inst, cfg, fillOpts = {}) {
   const char = inst.heroInst?.character
   if (!char?.exists?.()) return
-  const fade = getGlowHeroFillProgress(fillOpts)
+  const fade = fillOpts.fillOverride != null
+    ? fillOpts.fillOverride
+    : getGlowHeroFillProgress(fillOpts)
   const prev = inst._lastHeroFillAmount ?? 0
-  if (fade > prev + FILL_STEP_BURST_THRESHOLD) {
+  if (!fillOpts.holdAutoBurst && fade > prev + FILL_STEP_BURST_THRESHOLD) {
     triggerGlowHeroFillBurst(inst)
   }
   inst._lastHeroFillAmount = fade

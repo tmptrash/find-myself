@@ -147,6 +147,10 @@ const MENU_ARROW_MAX_SPAN_RATIO = 0.38
 const GLOW_MENU_HERO_BODY = GLOW_PAL.heroBodyGray
 const GLOW_MENU_HERO_OUTLINE = GLOW_PAL.heroOutline
 //
+// Glow section icon on the ring — white body like the filled lesson hero.
+//
+const GLOW_MENU_SECTION_HERO_BODY = CFG.visual.colors.hero.eyeWhite
+//
 // Centre hero hollow rim before glow play — soft gray body tone.
 //
 const MENU_HERO_OUTLINE_COLOR = GLOW_MENU_HERO_BODY
@@ -647,7 +651,7 @@ export function sceneMenu(k) {
         Hero.loadHeroSprites({
           k,
           type: Hero.HEROES.ANTIHERO,
-          bodyColor: GLOW_MENU_HERO_BODY,
+          bodyColor: GLOW_MENU_SECTION_HERO_BODY,
           outlineColor: GLOW_MENU_HERO_OUTLINE,
           addMouth: hasMouth,
           addArms: hasArms,
@@ -690,10 +694,14 @@ export function sceneMenu(k) {
       antiHeroInst.spritePrefixYellow = config.section === 'time'
         ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch_outline`
         : null
+      const glowSectionBodyNoHash = GLOW_MENU_SECTION_HERO_BODY.replace('#', '')
       antiHeroInst.spritePrefixGlow = config.section === 'glow'
-        ? `${Hero.HEROES.ANTIHERO}_${glowMenuBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
+        ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
         : null
-      antiHeroInst.spritePrefixGlowHollow = config.section === 'glow' ? spritePrefixGlowHollow : null
+      const spritePrefixGlowSectionHollow = config.section === 'glow'
+        ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${hollowSuffixes}`
+        : null
+      antiHeroInst.spritePrefixGlowHollow = spritePrefixGlowSectionHollow
       antiHeroInst.spritePrefixHollow = spritePrefixHollow
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${outlineSuffix}`
       antiHeroInst.currentPrefix = isCompleted
@@ -736,7 +744,7 @@ export function sceneMenu(k) {
         outlineOnly: true
       })
       antiHeroInst.spritePrefixGlow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGlow] = {
-        bodyColor: GLOW_MENU_HERO_BODY,
+        bodyColor: GLOW_MENU_SECTION_HERO_BODY,
         outlineColor: GLOW_MENU_HERO_OUTLINE,
         addMouth: hasMouth,
         addArms: hasArms,
@@ -754,7 +762,7 @@ export function sceneMenu(k) {
         addWatch: false
       }
       antiHeroInst.spritePrefixGlowHollow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGlowHollow] = {
-        bodyColor: GLOW_MENU_HERO_BODY,
+        bodyColor: GLOW_MENU_SECTION_HERO_BODY,
         outlineColor: GLOW_MENU_HERO_OUTLINE,
         outlineOnly: true,
         noEyes: true,
@@ -766,6 +774,7 @@ export function sceneMenu(k) {
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
       //
+      const isFirstPlayGlowIcon = !lastLevel && config.section === 'glow'
       if (isCompleted) {
         const completedPrefix = config.section === 'time'
           ? antiHeroInst.spritePrefixYellow
@@ -773,6 +782,8 @@ export function sceneMenu(k) {
             ? antiHeroInst.spritePrefixGlow
             : antiHeroInst.spritePrefixColored)
         completedPrefix && applyMenuAntiHeroSpritePrefix(antiHeroInst, completedPrefix)
+      } else if (isFirstPlayGlowIcon && antiHeroInst.spritePrefixGlow) {
+        applyMenuAntiHeroSpritePrefix(antiHeroInst, antiHeroInst.spritePrefixGlow)
       } else if (currentSection === config.section) {
         applyMenuAntiHeroSpritePrefix(
           antiHeroInst,
@@ -2236,6 +2247,9 @@ function resolveMenuAntiHeroSpritePrefix(antiHeroInst, currentSection, isHovered
       return antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixColored
     }
     return antiHeroInst.spritePrefixColored
+  }
+  if (section === 'glow' && !antiHeroInst.isCompleted) {
+    return antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixGlowHollow || antiHeroInst.spritePrefixHollow
   }
   return antiHeroInst.spritePrefixHollow
 }

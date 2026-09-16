@@ -521,10 +521,9 @@ async function runWithConcurrency(tasks, limit, onDone) {
  * Update the loader progress bar based on completed task count.
  */
 function updateLoaderBar() {
-  const loaderBar = document.getElementById('loader-bar')
-  if (!loaderBar || totalTasks === 0) return
+  if (totalTasks === 0) return
   const frac = Math.min(1, completedTasks / totalTasks) * TASK_QUEUE_BAR_SHARE
-  loaderBar.style.width = `${Math.round(frac * 100)}%`
+  BootLoader.setLoaderBarPct(Math.round(frac * 100))
 }
 //
 // Increment task counter and refresh the loader bar (used by async batches)
@@ -541,11 +540,9 @@ function onTaskFinished() {
 // instead of sitting frozen.
 //
 function updateLoaderBarFromKaplayProgress(k) {
-  const loaderBar = document.getElementById('loader-bar')
-  if (!loaderBar) return
   const kaplayFrac = typeof k.loadProgress === 'function' ? k.loadProgress() : 1
   const frac = TASK_QUEUE_BAR_SHARE + (1 - TASK_QUEUE_BAR_SHARE) * Math.min(1, Math.max(0, kaplayFrac))
-  loaderBar.style.width = `${Math.round(frac * 100)}%`
+  BootLoader.setLoaderBarPct(Math.round(frac * 100))
 }
 /**
  * Remove any leftover canvas elements (used between failed kaplay init attempts

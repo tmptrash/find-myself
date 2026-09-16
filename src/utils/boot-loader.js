@@ -5,6 +5,10 @@
 const LOADER_INNER_HTML = `<div style="color: #888; font-size: 24px; margin-bottom: 20px;">Loading. Please wait...</div><div style="width: 325px; height: 4px; background: #333; border-radius: 2px; overflow: hidden;"><div id="loader-bar" style="width: 0%; height: 100%; background: #DC143C; transition: width 0.1s;"></div></div>`
 
 export const DEFAULT_GPU_YIELD_FRAMES = 2
+//
+// DOM bar never moves backward within one loader session (explicit 0 resets).
+//
+let loaderBarMaxPct = 0
 
 export function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
@@ -19,6 +23,9 @@ export function showLoader() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   loaderEl.style.display = 'flex'
+  loaderBarMaxPct = 0
+  const bar = document.getElementById('loader-bar')
+  bar && (bar.style.width = '0%')
   document.querySelectorAll('canvas').forEach(canvas => {
     canvas.style.visibility = 'hidden'
   })
@@ -41,7 +48,15 @@ export function hideLoader() {
 export function setLoaderBarPct(pct) {
   const bar = document.getElementById('loader-bar')
   if (!bar) return
-  bar.style.width = `${Math.min(100, Math.max(0, pct))}%`
+  const clamped = Math.min(100, Math.max(0, pct))
+  if (clamped === 0) {
+    loaderBarMaxPct = 0
+    bar.style.width = '0%'
+    return
+  }
+  if (clamped <= loaderBarMaxPct) return
+  loaderBarMaxPct = clamped
+  bar.style.width = `${loaderBarMaxPct}%`
 }
 
 export function yieldForGpu(frames = DEFAULT_GPU_YIELD_FRAMES) {

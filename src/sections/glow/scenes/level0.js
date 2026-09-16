@@ -390,11 +390,11 @@ const HEDGEHOG_DEATH_PROMPT_LEAF_RISE = 118
 const HEDGEHOG_DEATH_PROMPT_TEXT_GRAY = glowRgb('lightGray')
 const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = glowRgb('void')
 //
-// Dark void text + warm cream shadow reads clearly over the orange haze and
-// amber parallax foliage in the colour world.
+// White text + void shadow reads over the orange haze and amber parallax
+// once the world is no longer flat gray.
 //
-const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = VOID
-const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = glowRgb('warmCream')
+const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = glowRgb('#FFFFFF')
+const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = glowRgb('void')
 const PAR_LEAF_MAX_Y_FRACTION = 463 / DESIGN_SCREEN_H
 //
 // Screen-space HUD/prompt Y — starts at the design value and gets
@@ -1524,28 +1524,30 @@ const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE)
 // the shore rock instead of poking past it.
 //
 const WATER_RIGHT_TRIM = 10
+//
+// Bake extends past the gameplay shore line so water tapers under the cap
+// rocks instead of ending in a vertical sprite edge.
+//
+const LAKE_SHORE_EXTEND_PX = 64
+const LAKE_Z = 12
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
 const LAKE_WAVE_PHASE_SCALE = 4
 const LAKE_WAVE_SECOND_AMP = 1.2
 const LAKE_WAVE_SECOND_FREQ = 1.6
-const LAKE_Z = 12
 //
 // Baked lake surface frames (white mask + grain) — tinted at draw time.
 //
-const LAKE_BAKE_SPRITE_PREFIX = 'glow0-lake-bake-'
+const LAKE_BAKE_GEOMETRY_VERSION = 2
+const LAKE_BAKE_SPRITE_PREFIX = `glow0-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
 const LAKE_BAKE_FRAME_COUNT = 24
 const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 //
-// Drowning draw order: hero behind the lake fill — submerged pixels are
-// hidden by the baked water polygon (no extra geometry at sink time).
+// Drowning: default hero sprite hidden; clipped draw shows only above the wave.
 //
 const DROWN_HERO_DRAW_Z = CFG.visual.zIndex.playerShadow
-//
-// Drown lake mask sits above the hero but below swaying grass decor.
-//
-const DROWN_LAKE_OCCLUDER_Z = GRASS_Z - 3
+const GLOW_DROWN_HERO_CLIP_Z = CFG.visual.zIndex.player + 0.2
 const GLOW_PIT_DRAW_Z = CFG.visual.zIndex.platforms - 6
 const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
 const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
@@ -1677,6 +1679,7 @@ const glowLevel0SceneRegisteredFor = new WeakSet()
 export function setGlowLevel0BootstrapReporter(reporter, slice = { start: 38, end: 99 }) {
   glowLevel0BootstrapReporter = reporter
   glowLevel0BootstrapSlice = slice
+  glowLevel0BootstrapLocalMax = 0
 }
 export function clearGlowLevel0BootstrapReporter() {
   glowLevel0BootstrapReporter = null
@@ -1684,11 +1687,15 @@ export function clearGlowLevel0BootstrapReporter() {
 export function waitForGlowLevel0Bootstrap() {
   return glowLevel0BootstrapPromise || Promise.resolve()
 }
+let glowLevel0BootstrapLocalMax = 0
 function reportGlowLevel0Bootstrap(localPct) {
   if (!glowLevel0BootstrapReporter) return
+  const clamped = Math.min(100, Math.max(0, localPct))
+  if (clamped <= glowLevel0BootstrapLocalMax) return
+  glowLevel0BootstrapLocalMax = clamped
   const start = glowLevel0BootstrapSlice.start
   const end = glowLevel0BootstrapSlice.end
-  const t = Math.min(100, Math.max(0, localPct)) / 100
+  const t = glowLevel0BootstrapLocalMax / 100
   glowLevel0BootstrapReporter(start + (end - start) * t)
 }
 function glowInitStale(session) {
@@ -1705,6 +1712,7 @@ function beginGlowLevel0Scene(k) {
   glowLevel0BootstrapPromise = runGlowLevel0SceneInit(k, session)
 }
 async function runGlowLevel0SceneInit(k, session) {
+  glowLevel0BootstrapLocalMax = 0
   const bootstrap = glowLevel0BootstrapReporter ? {
     report: reportGlowLevel0Bootstrap,
     yieldStep: () => yieldForGpu(1)
@@ -2208,7 +2216,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
       maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
     })
-    const { waterLayer, drownWaterOccluder } = createWater(k, lakeX1, waterX2, zones)
+    const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     initTouchInput(k)
     TouchControls.create(k)
@@ -2227,7 +2235,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       levelIndicator.updateLifeScore?.(get('lifeScore', 0))
     }
     logAtlas.build(k)
-    if (await glowBootstrapPause(bootstrap, 86, session)) return
+    if (await glowBootstrapPause(bootstrap, 80, session)) return
     //
     // Dock target is mid-lake so the last walk always crosses open water.
     // Walk progress (x, sing count, docked) is restored from storage.
@@ -2270,7 +2278,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k.opacity(0),
       CFG.game.platformName
     ])
-    if (await glowBootstrapPause(bootstrap, 80, session)) return
+    if (await glowBootstrapPause(bootstrap, 86, session)) return
     const camera = GlowCamera.create({
       k,
       viewW: VIEW_W,
@@ -2356,7 +2364,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
       waterLayer,
-      drownWaterOccluder,
       pitDrawLayer: null,
       pendingLetterPickup: null,
       atmosphereMotes: createAtmosphereMotes(),
@@ -2420,6 +2427,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       wasHeroRunning: false,
       drowning: false,
       drownTimer: 0,
+      glowDrownHeroClipLock: false,
       deathHandled: false,
       wasOnStartBranch: false,
       drownFromStartBranch: false,
@@ -2608,6 +2616,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       {
         draw() {
           drawGlowHeroFillBurst(k, inst.heroInst, inst)
+        }
+      }
+    ])
+    //
+    // Drowning — clipped hero blit (no extra water geometry on screen).
+    //
+    k.add([
+      k.z(GLOW_DROWN_HERO_CLIP_Z),
+      {
+        draw() {
+          drawGlowDrownHeroClipped(inst)
         }
       }
     ])
@@ -4197,7 +4216,6 @@ function applyZoneVisibility(inst) {
   })
   inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
-  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = !z.water || !inst.drowning)
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
@@ -4235,7 +4253,6 @@ function applyGlowEyeIntroZoneVisibility(inst) {
   inst.mushObjs.forEach(o => setDecorObjVisible(o, false))
   inst.grassLayer.layer.hidden = true
   inst.waterLayer && (inst.waterLayer.hidden = true)
-  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = true)
   inst.treeObj && (inst.treeObj.hidden = true)
   inst.treeColorObj && (inst.treeColorObj.hidden = true)
   inst.treeSegmentIds?.forEach(id => {
@@ -6846,9 +6863,17 @@ function onUpdateTrampolineBlink(k, state) {
 //
 // Water — value 5 fill bounded by wave polygon.
 //
-function bakeLakeWaterSprites(k, x1, x2) {
-  const span = x2 - x1
-  const canvasW = Math.ceil(span)
+function lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan) {
+  if (localX <= coreSpan) return 1
+  if (bakeSpan <= coreSpan) return 0
+  const u = (localX - coreSpan) / (bakeSpan - coreSpan)
+  return Math.max(0, 1 - u)
+}
+//
+function bakeLakeWaterSprites(k, x1, x2Core) {
+  const coreSpan = x2Core - x1
+  const bakeSpan = coreSpan + LAKE_SHORE_EXTEND_PX
+  const canvasW = Math.ceil(bakeSpan)
   const topMargin = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 2
   const maxDepth = WATER_DEPTH_LEFT + WATER_BED_CHAOS_AMP_A + WATER_BED_CHAOS_AMP_B + LAKE_BED_BAKE_PAD + 2
   const canvasH = Math.ceil(maxDepth + topMargin)
@@ -6862,16 +6887,19 @@ function bakeLakeWaterSprites(k, x1, x2) {
     const pts = []
     for (let i = 0; i <= LAKE_SEGMENTS; i++) {
       const t = i / LAKE_SEGMENTS
-      const x = t * span
-      const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
-      const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
-      const wave = wavePrimary + waveSecondary
-      pts.push([x, topMargin + wave])
+      const localX = t * bakeSpan
+      const coreT = Math.min(1, localX / coreSpan)
+      const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
+      const wave = lakeWaveOffsetAt(coreT, time) * shoreFade
+      pts.push([localX, topMargin + wave])
     }
     for (let i = LAKE_SEGMENTS; i >= 0; i--) {
       const t = i / LAKE_SEGMENTS
-      const x = t * span
-      pts.push([x, topMargin + waterBedDepthAt(t) + LAKE_BED_BAKE_PAD])
+      const localX = t * bakeSpan
+      const coreT = Math.min(1, localX / coreSpan)
+      const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
+      const bed = (waterBedDepthAt(coreT) + LAKE_BED_BAKE_PAD) * shoreFade
+      pts.push([localX, topMargin + bed])
     }
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
@@ -6886,17 +6914,18 @@ function bakeLakeWaterSprites(k, x1, x2) {
     canvas.width = 0
     canvas.height = 0
   }
-  return { x1, originY, canvasW, canvasH }
+  return { x1, x2Core, originY, canvasW, canvasH, bakeSpan }
 }
 //
 // Water — value 5 fill bounded by wave polygon.
 //
-function createWater(k, x1, x2, zones) {
-  const lakeBake = bakeLakeWaterSprites(k, x1, x2)
+function createWater(k, x1, x2Core, zones) {
+  const lakeBake = bakeLakeWaterSprites(k, x1, x2Core)
+  const x2Bake = x1 + lakeBake.bakeSpan
   const drawLakeFill = () => {
     if (!zones.water) return
     const sc = zones._sceneRef
-    if (!isLakeFillInCameraView(k, sc, x1, x2)) return
+    if (!isLakeFillInCameraView(k, sc, x1, x2Bake)) return
     const lakeRgb = resolveGlowLakeDrawRgb(k, sc)
     const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
     k.drawSprite({
@@ -6904,17 +6933,6 @@ function createWater(k, x1, x2, zones) {
       pos: k.vec2(lakeBake.x1, lakeBake.originY),
       width: lakeBake.canvasW,
       height: lakeBake.canvasH,
-      color: lakeRgb
-    })
-  }
-  const drawLakeDrownMask = () => {
-    const sc = zones._sceneRef
-    if (!zones.water || !sc?.drowning) return
-    if (!isLakeFillInCameraView(k, sc, x1, x2)) return
-    const time = k.time() % LAKE_BAKE_CYCLE
-    const lakeRgb = resolveGlowLakeDrawRgb(k, sc)
-    k.drawPolygon({
-      pts: buildLakeWaterWorldPolygon(k, x1, x2, time),
       color: lakeRgb
     })
   }
@@ -6926,20 +6944,11 @@ function createWater(k, x1, x2, zones) {
       }
     }
   ])
-  const drownOccluder = k.add([
-    k.z(DROWN_LAKE_OCCLUDER_Z),
-    {
-      draw() {
-        drawLakeDrownMask()
-      }
-    }
-  ])
   //
   // Stay off the draw list until the left-of-tree water zone opens.
   //
   layer.hidden = !zones.water
-  drownOccluder.hidden = true
-  return { waterLayer: layer, drownWaterOccluder: drownOccluder }
+  return layer
 }
 //
 // Draws lake cap rocks above grass and the water fill (sprites stay off-screen).
@@ -6967,7 +6976,7 @@ function isLakeFillInCameraView(k, sc, x1, x2) {
   return !(x2 < camX - halfW || x1 > camX + halfW)
 }
 //
-// Lake tint at draw time (shared by the baked sprite and the drown mask).
+// Lake tint at draw time (shared by the baked sprite).
 //
 function resolveGlowLakeDrawRgb(k, sc) {
   const twoTone = sc && isGlowFlatSingleDecorColor(sc)
@@ -6996,38 +7005,63 @@ function lakeWaveOffsetAt(t, time) {
   return wavePrimary + waveSecondary
 }
 //
-// World-space lake polygon (surface wave down to wavy bed) for opaque drown masking.
+// Lake surface world Y at hero X (same wave as the baked lake animation).
 //
-function buildLakeWaterWorldPolygon(k, x1, x2, time) {
-  const span = x2 - x1
-  const pts = []
-  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-    const t = i / LAKE_SEGMENTS
-    const x = x1 + t * span
-    pts.push(k.vec2(x, WATER_SURFACE_Y + lakeWaveOffsetAt(t, time)))
+function lakeSurfaceWorldYAt(inst, worldX) {
+  const x1 = inst.lakeX1 ?? inst.zones?._lakeX1
+  const x2Core = inst.lakeX2 ?? inst.zones?._lakeX2
+  if (x1 == null || x2Core == null || worldX < x1 || worldX > x2Core) {
+    return WATER_SURFACE_Y
   }
-  for (let i = LAKE_SEGMENTS; i >= 0; i--) {
-    const t = i / LAKE_SEGMENTS
-    const x = x1 + t * span
-    pts.push(k.vec2(x, WATER_SURFACE_Y + waterBedDepthAt(t) + LAKE_BED_BAKE_PAD))
-  }
-  return pts
+  const t = (worldX - x1) / (x2Core - x1)
+  const time = inst.k.time() % LAKE_BAKE_CYCLE
+  return WATER_SURFACE_Y + lakeWaveOffsetAt(t, time)
 }
 //
-// Repaints lake over the sinking hero after the earth band (onDraw runs late).
+// Draws only the hero pixels above the lake surface (default sprite stays hidden).
 //
-function drawDrownLakeWaterOverlay(inst) {
+function drawGlowDrownHeroClipped(inst) {
+  if (!inst.glowDrownHeroClipLock) return
+  const hero = inst.heroInst
+  const char = hero.character
+  if (!char?.pos) return
   const k = inst.k
-  const x1 = inst.lakeX1 ?? inst.zones._lakeX1
-  const x2 = inst.lakeX2 ?? inst.zones._lakeX2
-  if (x1 == null || x2 == null) return
-  if (!isLakeFillInCameraView(k, inst, x1, x2)) return
-  const time = k.time() % LAKE_BAKE_CYCLE
-  const lakeRgb = resolveGlowLakeDrawRgb(k, inst)
-  k.drawPolygon({
-    pts: buildLakeWaterWorldPolygon(k, x1, x2, time),
-    color: lakeRgb
-  })
+  const surfaceY = lakeSurfaceWorldYAt(inst, char.pos.x)
+  const prefix = hero.spritePrefix || hero.type
+  const spriteName = `${prefix}_closed`
+  if (!k.getSprite(spriteName)) return
+  const scale = char.scale?.x ?? 1
+  const fullH = Hero.HERO_BAKE_SPRITE_SIZE * scale
+  const fullW = fullH
+  const halfH = fullH * 0.5
+  const topY = char.pos.y - halfH
+  const bottomY = char.pos.y + halfH
+  //
+  // Fully submerged — nothing should draw below the wave (avoid painting the
+  // whole hidden sprite once the sink tween has passed the surface).
+  //
+  if (topY >= surfaceY - 0.25) return
+  if (surfaceY >= bottomY) return
+  let visibleH = fullH
+  let drawY = char.pos.y
+  let quad = null
+  if (surfaceY > topY) {
+    visibleH = surfaceY - topY
+    if (visibleH <= 0) return
+    quad = { x: 0, y: 0, w: 1, h: visibleH / fullH }
+    drawY = topY + visibleH * 0.5
+  }
+  const opts = {
+    sprite: spriteName,
+    pos: k.vec2(char.pos.x, drawY),
+    anchor: 'center',
+    width: fullW,
+    height: visibleH,
+    flipX: char.flipX,
+    opacity: char.opacity ?? 1
+  }
+  quad && (opts.quad = quad)
+  k.drawSprite(opts)
 }
 //
 function waterBedDepthAt(t) {
@@ -7457,7 +7491,6 @@ function onDrawWorld(inst) {
   onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
   !isGlowEyeIntroBareWorld(inst) && drawExploredGroundLip(inst)
   !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst, groundC)
-  inst.drowning && inst.zones.water && drawDrownLakeWaterOverlay(inst)
 }
 //
 // Bottom corners — redrawn after world onDraw and from the ui+2500 fixed layer.
@@ -8965,6 +8998,7 @@ function applyDrownSinkPose(inst) {
   char.moveTo(sinkX, inst.drownSinkY)
   char.vel && (char.vel.x = 0, char.vel.y = 0)
   updateDrownHeroDrawLayer(inst, char)
+  char.hidden = true
   char.opacity = 1
 }
 //
@@ -9039,10 +9073,15 @@ function registerDrownLateSink(inst) {
   // after its normal update so the sink tween wins over floor collision.
   //
   inst.drownLateSink = inst.k.onUpdate(() => {
-    inst.drowning && applyDrownSinkPose(inst)
+    if (!inst.glowDrownHeroClipLock) return
+    const ch = inst.heroInst?.character
+    ch && (ch.hidden = true)
+    inst.drowning && !inst.deathHandled && applyDrownSinkPose(inst)
   })
   inst.drownCharSink = char?.onUpdate(() => {
-    inst.drowning && applyDrownSinkPose(inst)
+    if (!inst.glowDrownHeroClipLock) return
+    char.hidden = true
+    inst.drowning && !inst.deathHandled && applyDrownSinkPose(inst)
   })
 }
 //
@@ -9052,6 +9091,7 @@ function startDrowning(inst) {
   if (inst.drowning) return
   inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
+  inst.glowDrownHeroClipLock = true
   inst.drownTimer = 0
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
@@ -9079,7 +9119,6 @@ function startDrowning(inst) {
   Sound.stopWaterStepsLoop(inst.sound)
   Sound.playWaterStepsOnce(inst.sound, WATER_STEPS_VOLUME)
   revealWaterZone(inst)
-  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = false)
   forceWaterEdgeRocksVisible(inst)
   inst.footParticles && GlowFootParticles.clear(inst.footParticles)
   const char = inst.heroInst.character
@@ -9090,6 +9129,7 @@ function startDrowning(inst) {
   //
   char.has('body') && char.unuse('body')
   char.gravityScale = 0
+  char.hidden = true
   //
   // Sink tween starts at the hero's current pose; feet settle on the lake floor.
   //
@@ -9124,14 +9164,9 @@ function startDrowning(inst) {
 function finishDrowning(inst) {
   if (inst.deathHandled) return
   inst.deathHandled = true
-  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = true)
   inst.sound && Sound.stopWaterStepsLoop(inst.sound)
   inst.drownSinkTween?.cancel?.()
   inst.drownSinkTween = null
-  inst.drownLateSink?.cancel?.()
-  inst.drownLateSink = null
-  inst.drownCharSink?.cancel?.()
-  inst.drownCharSink = null
   const char = inst.heroInst?.character
   char && (char.hidden = true)
   bumpGlowLifeHudOnDeath(inst)
@@ -9375,10 +9410,10 @@ function startGlowHedgehogDeathCountdown(inst) {
   const cx = k.width() / 2
   const promptY = HEDGEHOG_DEATH_PROMPT_Y
   const initText = HEDGEHOG_DEATH_PROMPT_BASE + HEDGEHOG_DEATH_COUNTDOWN_SECONDS
-  const colorWorld = inst.zones.colorWorld
-  const textRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_TEXT_GRAY
-  const shadowRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY
-  const shadowOpacity = colorWorld ? 0.72 : 0.85
+  const colorWorldPrompt = !isGlowFlatSingleDecorColor(inst)
+  const textRgb = colorWorldPrompt ? HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_TEXT_GRAY
+  const shadowRgb = colorWorldPrompt ? HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY
+  const shadowOpacity = 0.85
   const fillHex = `rgb(${textRgb.r},${textRgb.g},${textRgb.b})`
   const shadowHex = `rgb(${shadowRgb.r},${shadowRgb.g},${shadowRgb.b})`
   const deathPromptHolder = createGlowBakedTextHolder(k, {
@@ -9829,6 +9864,8 @@ function onUpdate(inst) {
   const k = inst.k
   inst.zones._sceneRef = inst
   if (inst.drowning) {
+    const drownChar = inst.heroInst?.character
+    inst.glowDrownHeroClipLock && drownChar && (drownChar.hidden = true)
     updateGlowLetterPopFades(inst, k.dt())
     updateGlowCamera(inst)
     return
@@ -10102,7 +10139,7 @@ function onUpdate(inst) {
   const startedRunning = grounded && hero.isRunning && !inst.wasHeroRunning
   inst.wasHeroRunning = hero.isRunning
   syncBranchPlatHome(inst)
-  if (char.hidden) char.hidden = false
+  char.hidden && !inst.glowDrownHeroClipLock && (char.hidden = false)
   //
   // Never override opacity while the body-fill crossfade is running — it
   // deliberately holds the hollow layer below 1 so the filled preview can

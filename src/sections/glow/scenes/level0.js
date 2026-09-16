@@ -10403,16 +10403,16 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
   //
   // The mechanic runs only between the L pickup and the O zone reveal.
   //
-  if (!z.lCollected || z.oZone || inst.dialogOpen) {
+  if (!z.lCollected || z.oZone || m.stillnessCompleted || inst.dialogOpen ||
+    inst.letterCaptionActive) {
     cancelMeditation(inst, false)
-    return
-  }
-  if (z.lZoneLit && m.countdown == null) {
-    updateMeditationBirds(inst)
     return
   }
   const still = grounded && !heroMoving && Math.abs(char.vel?.y ?? 0) < 1
   if (!still) {
+    if (m.countdown == null && m.idleTimer > 0) {
+      m.requiredIdle += MEDITATION_IDLE_PENALTY
+    }
     m.postLRingArmAt = null
     cancelMeditation(inst, true)
     return
@@ -10430,6 +10430,12 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
       updateMeditationBirds(inst)
       return
     }
+    m.idleTimer += inst.k.dt()
+    if (m.idleTimer < m.requiredIdle) {
+      updateMeditationBirds(inst)
+      return
+    }
+    m.idleTimer = 0
     m.postLRingArmAt = null
     m.countdown = MEDITATION_COUNTDOWN
     Hero.setEyesClosed(inst.heroInst, true)

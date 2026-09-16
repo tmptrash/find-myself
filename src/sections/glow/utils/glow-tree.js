@@ -9,7 +9,6 @@
 
 import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 import { getTreeBarkPalette } from './glow-palette.js'
-
 //
 // Default seed — modify this value to reshape the entire tree.
 //
@@ -378,10 +377,12 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
     })
     ctx.globalAlpha = 1
-    !palette.skipLeaves && treeData.leaves.forEach(leaf => {
-      const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
-      drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, leafR, leafG, leafB, opacity, null)
-    })
+    if (!palette.skipLeaves) {
+      treeData.leaves.forEach(leaf => {
+        const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
+        drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, leafR, leafG, leafB, opacity, null)
+      })
+    }
     return
   }
   const treeSeed = treeData.seed ?? TREE_SEED

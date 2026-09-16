@@ -99,6 +99,7 @@ import * as GlowCamera from '../utils/glow-camera.js'
 import {
   applyParallaxPostFxToContext,
   applyGlowLayerGradeToCanvas,
+  drawGlowHiResFoliageCluster,
   GLOW_LAYER_GRADE
 } from '../utils/glow-parallax-grain.js'
 import { finishGlowLifeDesatCanvas } from '../utils/glow-ui-bake.js'
@@ -331,7 +332,12 @@ const MUD_PEBBLE_COUNT = 28
 //
 const GLOW_DIALOG_AUDIO_FADE_SEC = 0.55
 const HEDGEHOG_SCALE = 1.4
-const HEDGEHOG_GROUND_RAISE = 4
+//
+// Positive sink drops the hedgehog anchor below FLOOR_Y so the baked body
+// and live legs sit flush on the ground strip instead of hovering above it.
+//
+const HEDGEHOG_GROUND_SINK = 6
+const HEDGEHOG_GROUND_RAISE = -HEDGEHOG_GROUND_SINK
 const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
 const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
 //
@@ -586,12 +592,12 @@ const L_LETTER_LEFT_OF_PLAT_GAP = 56
 // palette swatches (one step darker than the sky), the near colour-world
 // row keeps green foliage with a light haze blend.
 //
-const PAR_L1_COLOR_BLEND = 0.36
+const PAR_L1_COLOR_BLEND = 0.28
 //
-// Near-row foliage leans extra toward the warm orange haze (leaf-only blend)
-// while green stays the leading colour.
+// Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
+// while green stays the leading colour — kept low so parallax stays muted.
 //
-const PAR_L1_LEAF_WARM_BLEND = 0.4
+const PAR_L1_LEAF_WARM_BLEND = 0.22
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -679,6 +685,7 @@ const BUSH_LEAF_SIZE_RANGE = 8
 const BUSH_LEAF_DENSITY = 0.014
 const BUSH_RIM_LEAF_SPACING = 14
 const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
+const BUSH_HIRES_CLUSTER_DENSITY = 0.3
 //
 // Colour-world bush tones: the near strip uses the tree-leaf green; the 2nd
 // and 3rd strips reuse the flat orange of their tree row so trees and bushes
@@ -1271,13 +1278,6 @@ const DROWN_DESCEND_SPEED = 340
 //
 const DROWN_UNIFIED_SINK_SPEED = 48
 const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
-//
-// Hero opacity reaches 0 this many px below the water surface (see
-// applyDrownSinkPose) — a plain fade instead of a separate cover-mask
-// polygon, so there's no shape to keep matched to the lake's own (uneven,
-// shallower toward the right) bed profile.
-//
-const DROWN_OPACITY_FADE_DEPTH = 50
 const DROWN_RESTART_DELAY = 1.1
 const WATER_STEPS_VOLUME = 0.42
 //
@@ -1320,10 +1320,34 @@ const MOTE_OPACITY_RANGE = 0.18
 //
 // Visual ground lip — height variation only, collision stays on FLOOR_Y.
 //
-const GROUND_LIP_AMP = 4
+const GROUND_LIP_AMP = 6
 const GROUND_LIP_STEPS = 36
 const GROUND_LIP_FREQ_A = 0.012
 const GROUND_LIP_FREQ_B = 0.031
+//
+// Bright “living” strip along the walkable ground line (§16 top edge).
+//
+const GROUND_TOP_RIM_H = 3
+const GROUND_TOP_RIM_OPACITY = 0.62
+//
+// Wavy bottom of the baked earth band (organic silhouette, not a flat rect).
+//
+const GROUND_BOTTOM_WAVE_AMP = 7
+const GROUND_BOTTOM_WAVE_STEPS = 40
+const GROUND_BOTTOM_WAVE_FREQ_A = 0.018
+const GROUND_BOTTOM_WAVE_FREQ_B = 0.041
+//
+// Sky bake uses stacked palette bands instead of a smooth CSS gradient.
+//
+const SKY_DITHER_BAND_COUNT = 7
+//
+// Lake bake — horizontal reflection ripples in the mask (tinted at draw time).
+//
+//
+// Suppress orange forest haze when the camera sits over lake or cave beats.
+//
+const HAZE_LAKE_CAM_MARGIN = 96
+const HAZE_CAVE_CAM_MARGIN = 140
 //
 // Rocks.
 //
@@ -1408,6 +1432,11 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 const BRANCH_TRAMP_OFFSET_X = 145
 const BRANCH_TRAMP_BOOST_MULT = 1.68
+//
+// Ignore crack collapse right after a branch-trampoline bounce (prevents
+// accidental cave opens while farming hops on the left mushroom).
+//
+const BRANCH_TRAMP_PIT_GUARD_SEC = 5
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
 // Opening camera: hero width fills the playfield width at intro hold.
@@ -1495,10 +1524,6 @@ const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE)
 // the shore rock instead of poking past it.
 //
 const WATER_RIGHT_TRIM = 10
-//
-// Extra width of the below-surface drown cover past the lake's right edge.
-//
-const DROWN_MASK_RIGHT_PAD = 120
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -1513,9 +1538,14 @@ const LAKE_BAKE_SPRITE_PREFIX = 'glow0-lake-bake-'
 const LAKE_BAKE_FRAME_COUNT = 24
 const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 //
-// Drowning draw order (back → front): fading hero, then the lake fill on top.
+// Drowning draw order: hero behind the lake fill — submerged pixels are
+// hidden by the baked water polygon (no extra geometry at sink time).
 //
-const DROWN_HERO_DRAW_Z = LAKE_Z - 2
+const DROWN_HERO_DRAW_Z = CFG.visual.zIndex.playerShadow
+//
+// Drown lake mask sits above the hero but below swaying grass decor.
+//
+const DROWN_LAKE_OCCLUDER_Z = GRASS_Z - 3
 const GLOW_PIT_DRAW_Z = CFG.visual.zIndex.platforms - 6
 const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
 const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
@@ -1542,6 +1572,14 @@ const WATER_BED_CHAOS_B = 19.1
 const WATER_BED_CHAOS_AMP_A = 9
 const WATER_BED_CHAOS_AMP_B = 5
 const WATER_BED_DEPTH_POWER = 0.62
+//
+// Baked lake bed is shifted down so the full drown sink stays inside the
+// water mask without spawning any runtime fill under the lake.
+//
+const LAKE_BED_BAKE_PAD = Math.max(
+  0,
+  DROWN_FULL_SINK_FEET_Y - WATER_SURFACE_Y - WATER_DEPTH_LEFT - WATER_BED_CHAOS_AMP_A - WATER_BED_CHAOS_AMP_B - 6
+)
 //
 // Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
 //
@@ -2170,7 +2208,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
       maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
     })
-    const waterLayer = createWater(k, lakeX1, waterX2, zones)
+    const { waterLayer, drownWaterOccluder } = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     initTouchInput(k)
     TouchControls.create(k)
@@ -2318,6 +2356,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
       waterLayer,
+      drownWaterOccluder,
       pitDrawLayer: null,
       pendingLetterPickup: null,
       atmosphereMotes: createAtmosphereMotes(),
@@ -2327,6 +2366,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
+      branchTrampPitGuardTimer: 0,
       treeRevealFromBranchTramp: false,
       trampWalk: {
         stillTimer: 0,
@@ -4157,6 +4197,7 @@ function applyZoneVisibility(inst) {
   })
   inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
+  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = !z.water || !inst.drowning)
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
@@ -4194,6 +4235,7 @@ function applyGlowEyeIntroZoneVisibility(inst) {
   inst.mushObjs.forEach(o => setDecorObjVisible(o, false))
   inst.grassLayer.layer.hidden = true
   inst.waterLayer && (inst.waterLayer.hidden = true)
+  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = true)
   inst.treeObj && (inst.treeObj.hidden = true)
   inst.treeColorObj && (inst.treeColorObj.hidden = true)
   inst.treeSegmentIds?.forEach(id => {
@@ -4449,8 +4491,8 @@ function grayDecorTint(sc) {
 //
 // Bakes three forest planes (each one's trees AND bushes on a single shared
 // canvas) plus the haze backdrop and the static ground band. Depth comes from
-// scroll speed and palette steps: gray3/orange3 farthest, gray2/orange2 mid,
-// gray1 + green nearest.
+// scroll speed and palette steps: gray3 / muted green0 farthest, teal2 mid,
+// gray1 + green nearest; warm haze lives in the sky band only.
 //
 function buildParallaxSprites(k, undergroundSpec) {
   const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
@@ -4472,8 +4514,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         topRange: PAR_FARTHEST_TOP_RANGE,
         grayPal: grayFarPal,
         colorPal: colorFarPal,
-        flatLeaves: true,
-        leafDarken: 0,
+        flatLeaves: false,
+        leafDarken: 0.14,
         uniformWood: true,
         treeFocusBias: PAR_TREE_FOCUS_BIAS_FAR,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_FAR
@@ -4495,8 +4537,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         topRange: PAR_FAR_TOP_RANGE,
         grayPal: grayMidPal,
         colorPal: colorMidPal,
-        flatLeaves: true,
-        leafDarken: 0,
+        flatLeaves: false,
+        leafDarken: 0.08,
         uniformWood: true,
         treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
@@ -4532,7 +4574,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         colorRgb: colorNearBush,
         colorFlat: false,
         grayFlat: false,
-        heightScale: BUSH_NEAR_HEIGHT_SCALE
+        heightScale: BUSH_NEAR_HEIGHT_SCALE,
+        hiResClusters: true
       })
     }, { blurRadius: PAR_BLUR_RADIUS_NEAR, grade: GLOW_LAYER_GRADE.near })
   const staticGray = document.createElement('canvas')
@@ -4563,15 +4606,25 @@ function buildParallaxSprites(k, undergroundSpec) {
 //
 function renderSkyBand(grayCtx, colorCtx, grayRgb, colorRgb) {
   const h = FLOOR_Y - TOP_MARGIN
-  paintSkyGradient(grayCtx, grayRgb, SKY_TOP_GRAY, h)
-  paintSkyGradient(colorCtx, colorRgb, SKY_TOP_COLOR, h)
+  paintSkyGradient(grayCtx, grayRgb, grayRgb, h)
+  paintSkyGradient(colorCtx, colorRgb, colorRgb, h)
 }
 function paintSkyGradient(ctx, horizonRgb, topRgb, h) {
-  const grad = ctx.createLinearGradient(0, TOP_MARGIN, 0, FLOOR_Y)
-  grad.addColorStop(0, `rgb(${topRgb.r}, ${topRgb.g}, ${topRgb.b})`)
-  grad.addColorStop(1, `rgb(${horizonRgb.r}, ${horizonRgb.g}, ${horizonRgb.b})`)
-  ctx.fillStyle = grad
-  ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, h)
+  const bands = SKY_DITHER_BAND_COUNT
+  for (let b = 0; b < bands; b++) {
+    const t0 = b / bands
+    const t1 = (b + 1) / bands
+    const mix = (t0 + t1) * 0.5
+    const c = snapToPalette({
+      r: Math.round(topRgb.r + (horizonRgb.r - topRgb.r) * mix),
+      g: Math.round(topRgb.g + (horizonRgb.g - topRgb.g) * mix),
+      b: Math.round(topRgb.b + (horizonRgb.b - topRgb.b) * mix)
+    })
+    ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
+    const y = TOP_MARGIN + t0 * h
+    const bandH = Math.ceil(t1 * h - t0 * h) + 1
+    ctx.fillRect(LEFT_MARGIN, y, GAME_W, bandH)
+  }
 }
 //
 // Renders one tree row into a parallax canvas with horizontal bleed.
@@ -4624,12 +4677,30 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   return pad
 }
 //
+// Fills the earth band with a wavy lower edge (organic ground silhouette).
+//
+function paintWavyEarthBandFill(ctx, bandRgb, x0, y0, width, height) {
+  const bottomY = y0 + height
+  ctx.fillStyle = `rgb(${bandRgb.r}, ${bandRgb.g}, ${bandRgb.b})`
+  ctx.beginPath()
+  ctx.moveTo(x0, y0)
+  ctx.lineTo(x0 + width, y0)
+  for (let i = GROUND_BOTTOM_WAVE_STEPS; i >= 0; i--) {
+    const t = i / GROUND_BOTTOM_WAVE_STEPS
+    const x = x0 + t * width
+    const wave = (Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_A) +
+      Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_B) * 0.55) * GROUND_BOTTOM_WAVE_AMP
+    ctx.lineTo(x, bottomY + wave)
+  }
+  ctx.closePath()
+  ctx.fill()
+}
+//
 // Paints the root-zone part of a combined background canvas: the flat earth
 // band inside the playfield margins topped with the underground decor.
 //
 function renderCombinedGroundBand(ctx, bandRgb, undergroundSpec, ugEntry) {
-  ctx.fillStyle = `rgb(${bandRgb.r}, ${bandRgb.g}, ${bandRgb.b})`
-  ctx.fillRect(LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
+  paintWavyEarthBandFill(ctx, bandRgb, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
   renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
 }
 //
@@ -4718,7 +4789,7 @@ function applyGlowForegroundBake(canvas, seedOffset = 0) {
 //
 function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   const {
-    grayRgb, colorRgb, colorFlat, grayFlat, heightScale,
+    grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters = false,
     x1 = LEFT_MARGIN,
     x2 = WORLD_W - RIGHT_MARGIN
   } = stripCfg
@@ -4729,6 +4800,7 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
     const mound = buildLeafyBushMoundSpec(x, radius)
     drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
     drawLeafyBushMound(colorCtx, mound, colorRgb, colorFlat)
+    hiResClusters && drawHiResBushClusters(colorCtx, mound, colorRgb)
     //
     // Advance less than a radius so each mound overlaps the next one.
     //
@@ -4804,6 +4876,24 @@ function drawBushLeaf(ctx, x, y, size, angle, rgb) {
   ctx.ellipse(0, 0, size * 0.55, size * 0.32, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
+}
+//
+// Clustered pixel-style foliage on the nearest parallax bush row (puffy
+// clumps with a darker shadow base and a highlight rim), scattered evenly
+// across the whole dome — sqrt(random()) for the radial sample keeps the
+// density uniform per unit area (same trick buildLeafyBushMoundSpec uses
+// for its inner leaves) instead of bunching everything near the base.
+//
+function drawHiResBushClusters(ctx, mound, baseRgb) {
+  const clusterCount = Math.max(10, Math.round(mound.radius * BUSH_HIRES_CLUSTER_DENSITY))
+  for (let i = 0; i < clusterCount; i++) {
+    const a = Math.PI + Math.random() * Math.PI
+    const dist = mound.radius * Math.sqrt(Math.random())
+    const cx = mound.x + Math.cos(a) * dist
+    const cy = FLOOR_Y + Math.sin(a) * dist
+    const r = 5 + Math.random() * 9
+    drawGlowHiResFoliageCluster(ctx, cx, cy, r, baseRgb, mound.x * 17 + i * 991)
+  }
 }
 //
 // Creates the background bird flock — each bird gets its own lane, flight
@@ -4892,10 +4982,26 @@ function drawBackgroundBirds(inst) {
   })
 }
 //
+// True when the camera centres on lake or cave beats — forest haze stays off.
+//
+function isForestHazeSuppressedAtCam(inst) {
+  const camX = inst.k.camPos().x
+  const lakeX1 = inst.lakeX1
+  const lakeX2 = inst.lakeX2
+  if (lakeX1 != null && lakeX2 != null && inst.zones.water) {
+    if (camX >= lakeX1 - HAZE_LAKE_CAM_MARGIN && camX <= lakeX2 + HAZE_LAKE_CAM_MARGIN) {
+      return true
+    }
+  }
+  const crack = getCrackZone(WORLD_W, FLOOR_Y)
+  return camX >= crack.x1 - HAZE_CAVE_CAM_MARGIN
+}
+//
 // Sky-coloured veil over a forest row so farther planes lose contrast.
 //
 function drawAtmosphereHaze(inst, opacity) {
   if (opacity < 0.01) return
+  if (isForestHazeSuppressedAtCam(inst)) return
   const k = inst.k
   const c = lerpRgb(INNER_GRAY, WARM_HAZE, inst.colorFade ?? 0)
   k.drawRect({
@@ -4950,6 +5056,7 @@ function updateAtmosphereMotes(inst, dt) {
 function drawAtmosphereMotes(inst) {
   if (!inst.zones.lZoneParallax) return
   if (isGlowFlatSingleDecorColor(inst)) return
+  if (isForestHazeSuppressedAtCam(inst)) return
   const k = inst.k
   const colorFade = glowDecorFade(inst)
   const gray = HUD_SCORE_COLOR_SETTLED
@@ -4980,38 +5087,40 @@ function drawExploredGroundLip(inst) {
   const z = inst.zones
   if (!z.groundDecorLeft && z.groundRightStripMax < 0 && !z.water) return
   const k = inst.k
-  const c = DECOR_OUTLINE_RGB
-  const color = k.rgb(c.r, c.g, c.b)
+  const fade = inst.colorFade ?? 0
+  const bodyC = DECOR_OUTLINE_RGB
+  const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
+  const rimRgb = fade > COLOR_CROSSFADE_EPS
+    ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
+    : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
+  const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
   const x0 = LEFT_MARGIN
   const x1 = WORLD_W - RIGHT_MARGIN
   const step = (x1 - x0) / GROUND_LIP_STEPS
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
-  const crack = getCrackZone(WORLD_W, FLOOR_Y)
-  //
-  // Symmetric buffer on both sides (was +8 on the right vs -22 on the left) —
-  // the cave's wavy wall can swing outward on either side by more than 8px,
-  // and the lip decoration butting up flush against it left a stray tapered
-  // sliver of lip poking past the cave's actual silhouette.
-  //
-  const caveKeepL = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
-  const caveKeepR = crack.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
-    if (x + step > caveKeepL && x < caveKeepR) continue
     const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
       ? glowRightWorldOpacity(inst, x, 'large')
       : (z.groundDecorLeft ? (inst.leftDecorFade ?? 1) : 0)
     if (op < 0.12) continue
     const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    const h = Math.max(2, 3 + lip)
+    const h = Math.max(2, 4 + lip)
     k.drawRect({
       pos: k.vec2(x, FLOOR_Y - h + 2),
       width: step + 1,
       height: h,
-      color,
-      opacity: 0.4 * op
+      color: bodyColor,
+      opacity: 0.48 * op
+    })
+    k.drawRect({
+      pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
+      width: step + 1,
+      height: GROUND_TOP_RIM_H,
+      color: rimColor,
+      opacity: GROUND_TOP_RIM_OPACITY * op
     })
   }
 }
@@ -5555,7 +5664,14 @@ function createRoundedCorners(k, zones) {
     k.add([k.sprite(spriteName), k.pos(leftX, bottomY), k.rotate(270), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }]),
     k.add([k.sprite(spriteName), k.pos(rightX, bottomY), k.rotate(180), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }])
   ]
-  corners.forEach(obj => { obj.hidden = false })
+  //
+  // Stay hidden until applyZoneVisibility()/applyGlowEyeIntroZoneVisibility()
+  // run — async bootstrap can yield several frames before either fires, and
+  // a visible corner here (picked from whatever zones.outerFrame reads at
+  // this exact instant) flashes a mismatched void/outer colour at the
+  // bottom corners for a moment on a colour-phase load.
+  //
+  corners.forEach(obj => { obj.hidden = true })
   glowPlayfieldCornerObjs = corners
   updatePlayfieldCornerPositions()
   return corners
@@ -6734,7 +6850,7 @@ function bakeLakeWaterSprites(k, x1, x2) {
   const span = x2 - x1
   const canvasW = Math.ceil(span)
   const topMargin = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 2
-  const maxDepth = WATER_DEPTH_LEFT + WATER_BED_CHAOS_AMP_A + WATER_BED_CHAOS_AMP_B + 2
+  const maxDepth = WATER_DEPTH_LEFT + WATER_BED_CHAOS_AMP_A + WATER_BED_CHAOS_AMP_B + LAKE_BED_BAKE_PAD + 2
   const canvasH = Math.ceil(maxDepth + topMargin)
   const originY = WATER_SURFACE_Y - topMargin
   for (let f = 0; f < LAKE_BAKE_FRAME_COUNT; f++) {
@@ -6755,7 +6871,7 @@ function bakeLakeWaterSprites(k, x1, x2) {
     for (let i = LAKE_SEGMENTS; i >= 0; i--) {
       const t = i / LAKE_SEGMENTS
       const x = t * span
-      pts.push([x, topMargin + waterBedDepthAt(t)])
+      pts.push([x, topMargin + waterBedDepthAt(t) + LAKE_BED_BAKE_PAD])
     }
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
@@ -6777,42 +6893,44 @@ function bakeLakeWaterSprites(k, x1, x2) {
 //
 function createWater(k, x1, x2, zones) {
   const lakeBake = bakeLakeWaterSprites(k, x1, x2)
+  const drawLakeFill = () => {
+    if (!zones.water) return
+    const sc = zones._sceneRef
+    if (!isLakeFillInCameraView(k, sc, x1, x2)) return
+    const lakeRgb = resolveGlowLakeDrawRgb(k, sc)
+    const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
+    k.drawSprite({
+      sprite: LAKE_BAKE_SPRITE_PREFIX + frame,
+      pos: k.vec2(lakeBake.x1, lakeBake.originY),
+      width: lakeBake.canvasW,
+      height: lakeBake.canvasH,
+      color: lakeRgb
+    })
+  }
+  const drawLakeDrownMask = () => {
+    const sc = zones._sceneRef
+    if (!zones.water || !sc?.drowning) return
+    if (!isLakeFillInCameraView(k, sc, x1, x2)) return
+    const time = k.time() % LAKE_BAKE_CYCLE
+    const lakeRgb = resolveGlowLakeDrawRgb(k, sc)
+    k.drawPolygon({
+      pts: buildLakeWaterWorldPolygon(k, x1, x2, time),
+      color: lakeRgb
+    })
+  }
   const layer = k.add([
     k.z(LAKE_Z),
     {
       draw() {
-        if (!zones.water) return
-        const sc = zones._sceneRef
-        const cam = sc?.camera
-        if (cam) {
-          const zoom = cam.zoom || 1
-          const halfW = cam.viewW / (2 * zoom) + LAKE_SURFACE_CULL_MARGIN
-          const camX = k.camPos().x
-          if (x2 < camX - halfW || x1 > camX + halfW) return
-        }
-        const twoTone = sc && isGlowFlatSingleDecorColor(sc)
-        const fade = sc?.colorFade ?? 0
-        let c
-        if (fade >= 1 && sc?._lakeColorSettled) {
-          c = sc._lakeColorSettled
-        } else {
-          const gray = twoTone ? DECOR_GRAY : lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-          const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
-          c = twoTone ? DECOR_GRAY : lerpRgb(gray, tint, fade)
-          fade >= 1 && sc && (sc._lakeColorSettled = c)
-        }
-        const rgb = sc?._lakeDrawRgb
-        if (!rgb || rgb.r !== c.r || rgb.g !== c.g || rgb.b !== c.b) {
-          sc && (sc._lakeDrawRgb = k.rgb(c.r, c.g, c.b))
-        }
-        const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
-        k.drawSprite({
-          sprite: LAKE_BAKE_SPRITE_PREFIX + frame,
-          pos: k.vec2(lakeBake.x1, lakeBake.originY),
-          width: lakeBake.canvasW,
-          height: lakeBake.canvasH,
-          color: (sc && sc._lakeDrawRgb) || k.rgb(c.r, c.g, c.b)
-        })
+        drawLakeFill()
+      }
+    }
+  ])
+  const drownOccluder = k.add([
+    k.z(DROWN_LAKE_OCCLUDER_Z),
+    {
+      draw() {
+        drawLakeDrownMask()
       }
     }
   ])
@@ -6820,7 +6938,8 @@ function createWater(k, x1, x2, zones) {
   // Stay off the draw list until the left-of-tree water zone opens.
   //
   layer.hidden = !zones.water
-  return layer
+  drownOccluder.hidden = true
+  return { waterLayer: layer, drownWaterOccluder: drownOccluder }
 }
 //
 // Draws lake cap rocks above grass and the water fill (sprites stay off-screen).
@@ -6838,6 +6957,78 @@ function createLakeShoreRockLayer(k, zones) {
 }
 //
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
+//
+function isLakeFillInCameraView(k, sc, x1, x2) {
+  const cam = sc?.camera
+  if (!cam) return true
+  const zoom = cam.zoom || 1
+  const halfW = cam.viewW / (2 * zoom) + LAKE_SURFACE_CULL_MARGIN
+  const camX = k.camPos().x
+  return !(x2 < camX - halfW || x1 > camX + halfW)
+}
+//
+// Lake tint at draw time (shared by the baked sprite and the drown mask).
+//
+function resolveGlowLakeDrawRgb(k, sc) {
+  const twoTone = sc && isGlowFlatSingleDecorColor(sc)
+  const fade = sc?.colorFade ?? 0
+  let c
+  if (fade >= 1 && sc?._lakeColorSettled) {
+    c = sc._lakeColorSettled
+  } else {
+    const gray = twoTone ? DECOR_GRAY : lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+    const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
+    c = twoTone ? DECOR_GRAY : lerpRgb(gray, tint, fade)
+    fade >= 1 && sc && (sc._lakeColorSettled = c)
+  }
+  const rgb = sc?._lakeDrawRgb
+  if (!rgb || rgb.r !== c.r || rgb.g !== c.g || rgb.b !== c.b) {
+    sc && (sc._lakeDrawRgb = k.rgb(c.r, c.g, c.b))
+  }
+  return (sc && sc._lakeDrawRgb) || k.rgb(c.r, c.g, c.b)
+}
+//
+// Animated lake surface height at normalized shore span (0 = left).
+//
+function lakeWaveOffsetAt(t, time) {
+  const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
+  const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
+  return wavePrimary + waveSecondary
+}
+//
+// World-space lake polygon (surface wave down to wavy bed) for opaque drown masking.
+//
+function buildLakeWaterWorldPolygon(k, x1, x2, time) {
+  const span = x2 - x1
+  const pts = []
+  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
+    const t = i / LAKE_SEGMENTS
+    const x = x1 + t * span
+    pts.push(k.vec2(x, WATER_SURFACE_Y + lakeWaveOffsetAt(t, time)))
+  }
+  for (let i = LAKE_SEGMENTS; i >= 0; i--) {
+    const t = i / LAKE_SEGMENTS
+    const x = x1 + t * span
+    pts.push(k.vec2(x, WATER_SURFACE_Y + waterBedDepthAt(t) + LAKE_BED_BAKE_PAD))
+  }
+  return pts
+}
+//
+// Repaints lake over the sinking hero after the earth band (onDraw runs late).
+//
+function drawDrownLakeWaterOverlay(inst) {
+  const k = inst.k
+  const x1 = inst.lakeX1 ?? inst.zones._lakeX1
+  const x2 = inst.lakeX2 ?? inst.zones._lakeX2
+  if (x1 == null || x2 == null) return
+  if (!isLakeFillInCameraView(k, inst, x1, x2)) return
+  const time = k.time() % LAKE_BAKE_CYCLE
+  const lakeRgb = resolveGlowLakeDrawRgb(k, inst)
+  k.drawPolygon({
+    pts: buildLakeWaterWorldPolygon(k, x1, x2, time),
+    color: lakeRgb
+  })
+}
 //
 function waterBedDepthAt(t) {
   const u = Math.pow(t, WATER_BED_DEPTH_POWER)
@@ -7058,27 +7249,33 @@ function drawGlowHorizontalBand(k, inst, y, height, color, opacity = 1, cutCaveM
     })
     return
   }
+  const pitDepth = inst.pit?.zone?.depth ?? 0
+  const caveVoidH = Math.min(height, Math.max(0, pitDepth))
+  const earthBelowH = height - caveVoidH
   const mouthL = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
-  const leftW = Math.max(0, mouthL - LEFT_MARGIN)
-  leftW > 0 && k.drawRect({
-    pos: k.vec2(LEFT_MARGIN, y),
-    width: leftW,
-    height,
-    color,
-    opacity
-  })
-  //
-  // Same buffer as the left side (mouthL above) — the cave's wavy right wall
-  // (buildCaveMouthEdge's wobble) can swing well past crack.x2, and without
-  // this margin the flat earth band butts flush against crack.x2, poking a
-  // jagged gray sliver through wherever the wall retreats inward that frame.
-  //
   const rightX = crack.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
-  const rightW = Math.max(0, LEFT_MARGIN + GAME_W - rightX)
-  rightW > 0 && k.drawRect({
-    pos: k.vec2(rightX, y),
-    width: rightW,
-    height,
+  if (caveVoidH > 0) {
+    const leftW = Math.max(0, mouthL - LEFT_MARGIN)
+    leftW > 0 && k.drawRect({
+      pos: k.vec2(LEFT_MARGIN, y),
+      width: leftW,
+      height: caveVoidH,
+      color,
+      opacity
+    })
+    const rightW = Math.max(0, LEFT_MARGIN + GAME_W - rightX)
+    rightW > 0 && k.drawRect({
+      pos: k.vec2(rightX, y),
+      width: rightW,
+      height: caveVoidH,
+      color,
+      opacity
+    })
+  }
+  earthBelowH > 0 && k.drawRect({
+    pos: k.vec2(LEFT_MARGIN, y + caveVoidH),
+    width: GAME_W,
+    height: earthBelowH,
     color,
     opacity
   })
@@ -7129,10 +7326,12 @@ function paintGlowCaveMouthGroundPatch(inst, k, innerGray) {
   const rgb = glowGrayGroundRgb(inst, true)
   const x1 = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
   const w = crack.x2 - crack.x1 + CAVE_MOUTH_MAIN_FLOOR_INSET * 2
-  k.drawRect({
+  const pitDepth = inst.pit?.zone?.depth ?? 0
+  const patchH = Math.min(CAVE_BAND_H, Math.max(0, pitDepth))
+  patchH > 0 && k.drawRect({
     pos: k.vec2(x1, FLOOR_Y),
     width: w,
-    height: CAVE_BAND_H,
+    height: patchH,
     color: k.rgb(rgb.r, rgb.g, rgb.b)
   })
 }
@@ -7256,8 +7455,9 @@ function onDrawWorld(inst) {
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
   onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
-  !isGlowEyeIntroBareWorld(inst) && fade < 1 && drawExploredGroundLip(inst)
+  !isGlowEyeIntroBareWorld(inst) && drawExploredGroundLip(inst)
   !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst, groundC)
+  inst.drowning && inst.zones.water && drawDrownLakeWaterOverlay(inst)
 }
 //
 // Bottom corners — redrawn after world onDraw and from the ui+2500 fixed layer.
@@ -7679,10 +7879,13 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
   const onCap = isHeroAtTrampolineCap(inst, heroX, heroFeet, state)
   if (!wantsTrampolineCapLaunch(inst, char, onCap, state)) return false
   if ((char.vel?.y ?? 0) < -40) return false
+  const branchPad = state === inst.branchTrampState
+  char.vel.x = 0
   char.vel.y = -Math.round(CFG.game.jumpForce * boostMult)
   state.cooldown = TRAMP_COOLDOWN
   state.squash = TRAMP_SQUASH_MAX
   inst[bounceAirKey] = true
+  branchPad && (inst.branchTrampPitGuardTimer = BRANCH_TRAMP_PIT_GUARD_SEC)
   hero.wasJumping = true
   hero.jumpPhase = 'jumping'
   hero.jumpCeilingBonk = false
@@ -8762,14 +8965,6 @@ function applyDrownSinkPose(inst) {
   char.moveTo(sinkX, inst.drownSinkY)
   char.vel && (char.vel.x = 0, char.vel.y = 0)
   updateDrownHeroDrawLayer(inst, char)
-  //
-  // Fades the hero out by depth instead of a separate cover-mask polygon —
-  // that mask had to reach deeper than the lake's own (much shallower at
-  // the right/shallow end) bed to fully hide him, and being a flat solid
-  // colour with no awareness of the lake's real silhouette, that extra
-  // depth showed up as a plain blue rectangle poking out below the visible
-  // water. A simple opacity fade needs no shape-matching at all.
-  //
   char.opacity = 1
 }
 //
@@ -8884,6 +9079,7 @@ function startDrowning(inst) {
   Sound.stopWaterStepsLoop(inst.sound)
   Sound.playWaterStepsOnce(inst.sound, WATER_STEPS_VOLUME)
   revealWaterZone(inst)
+  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = false)
   forceWaterEdgeRocksVisible(inst)
   inst.footParticles && GlowFootParticles.clear(inst.footParticles)
   const char = inst.heroInst.character
@@ -8928,6 +9124,7 @@ function startDrowning(inst) {
 function finishDrowning(inst) {
   if (inst.deathHandled) return
   inst.deathHandled = true
+  inst.drownWaterOccluder && (inst.drownWaterOccluder.hidden = true)
   inst.sound && Sound.stopWaterStepsLoop(inst.sound)
   inst.drownSinkTween?.cancel?.()
   inst.drownSinkTween = null
@@ -9964,10 +10161,13 @@ function onUpdate(inst) {
   maybeBootstrapGlowPostEyes(inst)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   updateGlowMidges(inst.midges, k.dt(), 1)
+  inst.branchTrampPitGuardTimer > 0 &&
+    (inst.branchTrampPitGuardTimer = Math.max(0, inst.branchTrampPitGuardTimer - k.dt()))
   updateGlowPit(inst.pit, char, grounded, justLanded, null, {
     jumpLanding: justLanded && hero.wasJumping,
     footY,
-    footParticles: inst.footParticles
+    footParticles: inst.footParticles,
+    skipCrackCollapse: inst.branchTrampPitGuardTimer > 0
   })
   refreshGlowPitFloorJumpState(inst, char, grounded, footY)
   inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())

@@ -30,25 +30,16 @@ const OUTLINE_PAD = 1.6
 // itself is a plain ellipse — the roundness the hero-style rim needs —
 // while the spikes are a separate jagged layer fanned across its top arc.
 //
-const MANE_CX = -10
+const MANE_CX = -12
 //
-// Raised well clear of the ground line (y=0 is where the feet rest) —
-// thicker lower body blending into the head, stretched horizontally.
+// y=0 is the ground line (feet). Body stretches back-left from the face.
+// Kept a few units clear of 0 (bottom = MANE_CY + MANE_RY) so the stub legs
+// below always keep a bit of visible length instead of the body's own
+// silhouette sinking past the ground line.
 //
-const MANE_CY = -22
-const MANE_RX = 23
-const MANE_RY = 15
-//
-// Light belly patch — same tan as the face/head, painted over the lower
-// slice of the mane's own silhouette (clipped to its exact ellipse, no
-// separate outline) so it never pokes out past the legs and never adds a
-// seam of its own. The dividing line sits low near the front (close to
-// the front legs) and curves down further still toward the back, so it
-// hugs the body's own curve down to the hind legs instead of running flat.
-//
-const BELLY_FRONT_FRAC = 0.45
-const BELLY_CURVE_CONTROL_X_FRAC = 0.15
-const BELLY_BACK_OVERSHOOT_FRAC = 1.4
+const MANE_CY = -21
+const MANE_RX = 24
+const MANE_RY = 17
 //
 // Spikes fan almost all the way around the dome — from low on the back,
 // up over the crown, to just short of the face — so only the front/snout
@@ -61,11 +52,11 @@ const BELLY_BACK_OVERSHOOT_FRAC = 1.4
 // before — the reference photo reads as many fine, similarly-sized quills
 // rather than a few big jagged triangles.
 //
-const SPIKE_COUNT = 38
+const SPIKE_COUNT = 44
 const SPIKE_ARC_START = 95
 const SPIKE_ARC_END = 305
-const SPIKE_LEN = 8
-const SPIKE_LEN_SHORT_FACTOR = 0.88
+const SPIKE_LEN = 11
+const SPIKE_LEN_SHORT_FACTOR = 0.9
 const SPIKE_SWAY_PHASE_STEP = 0.6
 const SPIKE_SWAY_AMP_DEG = 5
 //
@@ -74,11 +65,21 @@ const SPIKE_SWAY_AMP_DEG = 5
 // pointed nose) instead of a boxy wedge.
 //
 const FACE_PATCH_CX = 8
-const FACE_PATCH_CY = -13
+const FACE_PATCH_CY = -15
 const FACE_PATCH_RX = 10
 const FACE_PATCH_RY = 9
+//
+// Belly divider (facing right): from the head-circle crown, left-down-back
+// to the upper rear spine, then along the mane rim to the front underside.
+//
+const BELLY_HEAD_TOP_ANGLE = -90
+const BELLY_BACK_SPINE_ANGLE = 202
+const BELLY_FRONT_TOP_ANGLE = 30
+const BELLY_DIVIDER_CTRL_X_OFFSET = -16
+const BELLY_DIVIDER_CTRL_Y_OFFSET = 10
+const BELLY_MANE_ARC_STEP_DEG = 8
 const SNOUT_CX = 15
-const SNOUT_CY = -12
+const SNOUT_CY = -14
 const SNOUT_RX = 5
 const SNOUT_RY = 4
 const SNOUT_NOSE_LEN = 3.5
@@ -101,7 +102,7 @@ const NOSE_OUTLINE_PAD = 0.35
 // hero; the body itself never needs a live redraw.
 //
 const EYE_CX = 14.5
-const EYE_CY = -14.2
+const EYE_CY = -16.2
 const EYE_R = 2.4
 const PUPIL_R = 1.15
 const PUPIL_OFFSET_X = 0.35
@@ -109,17 +110,17 @@ const PUPIL_OFFSET_Y = 0
 const EYE_GAZE_TRAVEL = 0.75
 const EYE_WHITE_HEX = GLOW_PAL.brightLight
 const CHEEK_CX = 18
-const CHEEK_CY = -11.5
+const CHEEK_CY = -13.5
 const CHEEK_R = 1.8
-const EAR_L = { x: 0, y: -25, rx: 2.6, ry: 3 }
-const EAR_R = { x: 5, y: -26, rx: 2.4, ry: 2.8 }
+const EAR_L = { x: 0, y: -27, rx: 2.6, ry: 3 }
+const EAR_R = { x: 5, y: -28, rx: 2.4, ry: 2.8 }
 //
 // Small closed-mouth line on the underside of the snout, just behind the
 // nose tip.
 //
-const MOUTH_P1 = [15.5, -9.5]
-const MOUTH_CTRL = [17.8, -8.2]
-const MOUTH_P2 = [20.5, -10.8]
+const MOUTH_P1 = [15.5, -11.5]
+const MOUTH_CTRL = [17.8, -10.2]
+const MOUTH_P2 = [20.5, -12.8]
 const MOUTH_WIDTH = 0.75
 //
 // Stub legs peeking out from under the body, tall enough to actually plant
@@ -128,11 +129,13 @@ const MOUTH_WIDTH = 0.75
 //
 const LEG_BODY_BOTTOM_Y = MANE_CY + MANE_RY
 const LEGS = [
-  { x: 6, y: LEG_BODY_BOTTOM_Y, hind: false },
-  { x: -20, y: LEG_BODY_BOTTOM_Y + 0.5, hind: true }
+  { x: 0, bodyY: LEG_BODY_BOTTOM_Y, hind: false },
+  { x: -20, bodyY: LEG_BODY_BOTTOM_Y, hind: true }
 ]
-const LEG_RX = 2.2
-const LEG_RY = 3.2
+const LEG_RX = 2
+const LEG_RY = 2.6
+const FRONT_THIGH_LEN = 4
+const FRONT_SHANK_LEN = 5.5
 const HIND_THIGH_LEN = 4.5
 const HIND_SHANK_LEN = 5
 const HIND_KNEE_BEND = 2.8
@@ -156,17 +159,23 @@ const LEG_STEP_SPEED = 7
 //
 const IDLE_FRAME_COUNT = 28
 const IDLE_LOOP_DURATION = 3.2
-const BODY_SPRITE_PREFIX = 'glow0-hedgehog-body-'
-const CURLED_SPRITE_NAME = 'glow0-hedgehog-curled'
+const HEDGEHOG_BAKE_VERSION = 'v10'
+const BODY_SPRITE_PREFIX = `glow0-hedgehog-${HEDGEHOG_BAKE_VERSION}-body-`
+const CURLED_SPRITE_NAME = `glow0-hedgehog-${HEDGEHOG_BAKE_VERSION}-curled`
 const GRAY_SUFFIX = '-gray'
 const COLOR_SUFFIX = '-color'
-const BAKE_HALF_W = 40
+const BAKE_HALF_W = 58
 //
-// Raised further (ears/spike crown now reach higher, see MANE_CY) — was -40,
-// which clipped the spike tips off the top of the bake.
+// Wide enough for the back arc (mane + spikes) and tall enough for
+// ears/spikes. BAKE_Y_MAX is only a few px past 0 (ground) — just enough
+// slack for the curled-ball pose's own bottom overshoot (see CURL_CY +
+// CURL_R) — because anchor:'bot' places local y = BAKE_Y_MAX at inst.y on
+// screen, not local y = 0; every live draw below (legs) that shares this
+// coordinate space must offset by -BAKE_Y_MAX to land on the same ground
+// line as the baked body instead of drifting apart from it.
 //
-const BAKE_Y_MIN = -60
-const BAKE_Y_MAX = 14
+const BAKE_Y_MIN = -62
+const BAKE_Y_MAX = 4
 const BAKE_W = BAKE_HALF_W * 2
 const BAKE_H = BAKE_Y_MAX - BAKE_Y_MIN
 const BAKE_CENTER_Y = (BAKE_Y_MIN + BAKE_Y_MAX) / 2
@@ -446,7 +455,6 @@ function drawHedgehog(inst) {
   }
   const frameIdx = currentIdleFrameIndex(inst)
   drawBakedSprite(inst, BODY_SPRITE_PREFIX + frameIdx, dir, inst.turnScale, fade)
-  drawEye(inst, frameIdx, dir, fade)
   drawLegs(inst, dir, fade)
 }
 //
@@ -522,33 +530,76 @@ function drawLegs(inst, dir, fade) {
     const swing = inst.wanderState === 'walk' ? Math.sin(theta) : 0
     const lift = Math.max(0, swing) * LEG_STEP_LIFT
     const forward = swing * LEG_STEP_FORWARD
-    const anchorX = inst.x + dir * s * (leg.x + forward)
-    const anchorY = inst.y + s * (leg.y - lift)
+    const hipX = inst.x + dir * s * (leg.x + forward)
+    //
+    // Offset by -BAKE_Y_MAX to land on the exact same ground line the baked
+    // body sprite anchors to (see the BAKE_Y_MAX comment above) — without
+    // this the legs and the body silhouette drift apart vertically.
+    //
+    const hipY = inst.y + s * (leg.bodyY - lift - BAKE_Y_MAX)
+    const groundY = inst.y - s * BAKE_Y_MAX
+    drawLegHip(k, hipX, hipY, s, fade > 0.02 ? maneColor : maneGray, outline, legAlpha, fade > 0.02 ? fade : 1)
     if (leg.hind) {
-      drawHindLeg(k, dir, s, anchorX, anchorY, outline, maneGray, maneColor, fade, legAlpha)
+      drawHindLeg(k, dir, s, hipX, hipY, groundY, outline, maneGray, maneColor, fade, legAlpha)
       return
     }
-    const pos = k.vec2(anchorX, anchorY)
-    k.drawEllipse({ pos, radiusX: (LEG_RX + OUTLINE_PAD) * s, radiusY: (LEG_RY + OUTLINE_PAD) * s, color: outline, opacity: legAlpha })
-    k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: maneGray, opacity: legAlpha })
-    fade > 0.02 && k.drawEllipse({ pos, radiusX: LEG_RX * s, radiusY: LEG_RY * s, color: maneColor, opacity: legAlpha * fade })
-    const toeColor = fade > 0.02 ? maneColor : maneGray
-    TOE_OFFSETS.forEach((toeX) => {
-      const toePos = k.vec2(pos.x + dir * s * toeX, pos.y + s * 0.8)
-      k.drawEllipse({ pos: toePos, radiusX: TOE_RX * s, radiusY: TOE_RY * s, color: toeColor, opacity: legAlpha * (fade > 0.02 ? fade : 1) })
+    drawFrontLeg(k, dir, s, hipX, hipY, groundY, outline, maneGray, maneColor, fade, legAlpha)
+  })
+}
+//
+// Front leg — thigh and shank down to the ground line (y = inst.y).
+//
+function drawFrontLeg(k, dir, s, hipX, hipY, groundY, outline, maneGray, maneColor, fade, legAlpha) {
+  const footY = groundY
+  const kneeX = hipX + dir * s * 1.6
+  const kneeY = hipY + (footY - hipY) * 0.42
+  const footX = hipX + dir * s * 2.4
+  const fill = fade > 0.02 ? maneColor : maneGray
+  const strokeSeg = (x1, y1, x2, y2, pad) => {
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const len = Math.hypot(dx, dy) || 1
+    const nx = -dy / len * pad * s
+    const ny = dx / len * pad * s
+    k.drawPolygon({
+      pts: [
+        k.vec2(x1 + nx, y1 + ny),
+        k.vec2(x2 + nx, y2 + ny),
+        k.vec2(x2 - nx, y2 - ny),
+        k.vec2(x1 - nx, y1 - ny)
+      ],
+      color: outline,
+      opacity: legAlpha
     })
+    k.drawPolygon({
+      pts: [
+        k.vec2(x1 + nx * 0.55, y1 + ny * 0.55),
+        k.vec2(x2 + nx * 0.55, y2 + ny * 0.55),
+        k.vec2(x2 - nx * 0.55, y2 - ny * 0.55),
+        k.vec2(x1 - nx * 0.55, y1 - ny * 0.55)
+      ],
+      color: fill,
+      opacity: legAlpha * (fade > 0.02 ? fade : 1)
+    })
+  }
+  strokeSeg(hipX, hipY, kneeX, kneeY, LEG_RX + OUTLINE_PAD)
+  strokeSeg(kneeX, kneeY, footX, footY, LEG_RX)
+  const toeColor = fade > 0.02 ? maneColor : maneGray
+  TOE_OFFSETS.forEach((toeX) => {
+    const toePos = k.vec2(footX + dir * s * toeX, footY - TOE_RY * s * 0.35)
+    k.drawEllipse({ pos: toePos, radiusX: TOE_RX * s, radiusY: TOE_RY * s, color: toeColor, opacity: legAlpha * (fade > 0.02 ? fade : 1) })
   })
 }
 //
 // Hind leg with a visible hock — thigh down, knee back, shank forward to toes.
 //
-function drawHindLeg(k, dir, s, anchorX, anchorY, outline, maneGray, maneColor, fade, legAlpha) {
+function drawHindLeg(k, dir, s, anchorX, anchorY, groundY, outline, maneGray, maneColor, fade, legAlpha) {
   const thighEndX = anchorX + dir * s * 0.2
   const thighEndY = anchorY + s * (HIND_THIGH_LEN * 0.55)
   const kneeX = thighEndX - dir * s * HIND_KNEE_BEND
   const kneeY = thighEndY + s * 1.4
-  const footX = kneeX + dir * s * 2.4
-  const footY = anchorY + s * (HIND_SHANK_LEN + 1.2)
+  const footX = kneeX + dir * s * 2.2
+  const footY = groundY
   const fill = fade > 0.02 ? maneColor : maneGray
   const strokeSeg = (x1, y1, x2, y2, pad) => {
     const dx = x2 - x1
@@ -581,7 +632,7 @@ function drawHindLeg(k, dir, s, anchorX, anchorY, outline, maneGray, maneColor, 
   strokeSeg(kneeX, kneeY, footX, footY, LEG_RX)
   const toeColor = fade > 0.02 ? maneColor : maneGray
   TOE_OFFSETS.forEach((toeX) => {
-    const toePos = k.vec2(footX + dir * s * toeX, footY + s * 0.35)
+    const toePos = k.vec2(footX + dir * s * toeX, footY - TOE_RY * s * 0.35)
     k.drawEllipse({ pos: toePos, radiusX: TOE_RX * s, radiusY: TOE_RY * s, color: toeColor, opacity: legAlpha * (fade > 0.02 ? fade : 1) })
   })
 }
@@ -804,11 +855,11 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
   const faceCy = FACE_PATCH_CY + breathe
   const snoutCy = SNOUT_CY + breathe
   fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, GLOW_PAL.glowOutlineLight)
-  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, maneHex)
+  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, faceHex)
+  drawBrownBackPatch(ctx, maneCy, faceCy, maneHex)
   drawSpikeCrown(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD * 0.35, MANE_RY + OUTLINE_PAD * 0.35, OUTLINE_PAD * 0.4, swayPhase, maneDarkHex, maneHex)
   drawSpikeCrown(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, 0, swayPhase, maneHex, maneDarkHex)
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX, SNOUT_RY, SNOUT_NOSE_LEN), faceHex)
-  drawBellyPatch(ctx, maneCy, faceHex)
   fillEllipseCtx(ctx, FACE_PATCH_CX, faceCy, FACE_PATCH_RX, FACE_PATCH_RY, faceHex)
   drawSnoutNoseTip(ctx, snoutCy)
   drawBakedEye(ctx, snoutCy)
@@ -821,33 +872,51 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
   )
 }
 //
-// Fills the lower slice of the mane's own ellipse with the light face
-// colour, clipped so it can never draw outside that exact silhouette. The
-// dividing line starts low near the front leg, stays close to that height
-// through the middle, then curves down past the mane's own bottom edge
-// near the back — the ellipse clip then naturally traces that curve down
-// along the body's own silhouette to the hind legs.
+// Brown mane/spine above the torso divider (head crown → rear spine); the
+// light belly stays as the full-ellipse underpaint drawn before this patch.
 //
-function drawBellyPatch(ctx, maneCy, faceHex) {
-  const frontX = MANE_CX + MANE_RX + 1
-  const backX = MANE_CX - MANE_RX - 1
-  const frontY = maneCy + MANE_RY * BELLY_FRONT_FRAC
-  const controlX = MANE_CX + MANE_RX * BELLY_CURVE_CONTROL_X_FRAC
-  const backOvershootY = maneCy + MANE_RY * BELLY_BACK_OVERSHOOT_FRAC
-  const bottomY = maneCy + MANE_RY + 1
+function drawBrownBackPatch(ctx, maneCy, faceCy, maneHex) {
+  const headTop = ellipsePoint(FACE_PATCH_CX, faceCy, FACE_PATCH_RX, FACE_PATCH_RY, BELLY_HEAD_TOP_ANGLE)
+  const backSpine = ellipsePoint(MANE_CX, maneCy, MANE_RX, MANE_RY, BELLY_BACK_SPINE_ANGLE)
+  const ctrlX = headTop[0] + BELLY_DIVIDER_CTRL_X_OFFSET
+  const ctrlY = headTop[1] + BELLY_DIVIDER_CTRL_Y_OFFSET
+  const arcEndDeg = 360 + BELLY_FRONT_TOP_ANGLE
   ctx.save()
   ctx.beginPath()
   ctx.ellipse(MANE_CX, maneCy, MANE_RX, MANE_RY, 0, 0, Math.PI * 2)
   ctx.clip()
   ctx.beginPath()
-  ctx.moveTo(frontX, frontY)
-  ctx.quadraticCurveTo(controlX, frontY, backX, backOvershootY)
-  ctx.lineTo(backX, bottomY)
-  ctx.lineTo(frontX, bottomY)
+  ctx.moveTo(headTop[0], headTop[1])
+  ctx.quadraticCurveTo(ctrlX, ctrlY, backSpine[0], backSpine[1])
+  for (let deg = BELLY_BACK_SPINE_ANGLE; deg <= arcEndDeg; deg += BELLY_MANE_ARC_STEP_DEG) {
+    const norm = deg >= 360 ? deg - 360 : deg
+    const p = ellipsePoint(MANE_CX, maneCy, MANE_RX, MANE_RY, norm)
+    ctx.lineTo(p[0], p[1])
+  }
+  ctx.lineTo(headTop[0], headTop[1])
   ctx.closePath()
-  ctx.fillStyle = faceHex
+  ctx.fillStyle = maneHex
   ctx.fill()
   ctx.restore()
+}
+//
+// Rounded hip socket where each leg meets the body.
+//
+function drawLegHip(k, hipX, hipY, s, fill, outline, legAlpha, fillFade) {
+  k.drawEllipse({
+    pos: k.vec2(hipX, hipY),
+    radiusX: (LEG_RX + OUTLINE_PAD * 0.35) * s,
+    radiusY: (LEG_RY + OUTLINE_PAD * 0.35) * s,
+    color: outline,
+    opacity: legAlpha
+  })
+  k.drawEllipse({
+    pos: k.vec2(hipX, hipY),
+    radiusX: LEG_RX * s,
+    radiusY: LEG_RY * s,
+    color: fill,
+    opacity: legAlpha * fillFade
+  })
 }
 //
 // Draws the curled-ball defensive pose onto a raw 2D canvas context — a
@@ -880,24 +949,25 @@ function ellipsePoint(cx, cy, rx, ry, deg) {
 // height near the middle/top) so the low spikes on the back shrink away
 // instead of shooting straight down past the ground line.
 //
-function buildSpikeCrownPoints(cx, cy, rx, ry, pad, swayPhase) {
+function buildArcSpikePoints(cx, cy, rx, ry, pad, swayPhase, arcStart, arcEnd, count, spikeLen) {
   const angles = []
-  for (let i = 0; i <= SPIKE_COUNT; i++) {
-    angles.push(SPIKE_ARC_START + (SPIKE_ARC_END - SPIKE_ARC_START) * (i / SPIKE_COUNT))
+  for (let i = 0; i <= count; i++) {
+    angles.push(arcStart + (arcEnd - arcStart) * (i / count))
   }
   const spikes = []
-  for (let i = 0; i < SPIKE_COUNT; i++) {
+  const span = arcEnd - arcStart || 1
+  for (let i = 0; i < count; i++) {
     const baseA = angles[i]
     const nextA = angles[i + 1]
     const sway = Math.sin(swayPhase + i * SPIKE_SWAY_PHASE_STEP) * SPIKE_SWAY_AMP_DEG
     const mid = (baseA + nextA) / 2 + sway
-    const t = (mid - SPIKE_ARC_START) / (SPIKE_ARC_END - SPIKE_ARC_START)
+    const t = (mid - arcStart) / span
     const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, t)))
-    const len = pad + SPIKE_LEN * taper * (i % 2 === 0 ? 1 : SPIKE_LEN_SHORT_FACTOR)
+    const len = pad + spikeLen * taper * (i % 2 === 0 ? 1 : SPIKE_LEN_SHORT_FACTOR)
     spikes.push({
       baseL: ellipsePoint(cx, cy, rx, ry, baseA),
       baseR: ellipsePoint(cx, cy, rx, ry, nextA),
-      tip: ellipsePoint(cx, cy, rx + len, ry + len, mid),
+      tip: ellipsePoint(cx, cy, rx + len, ry + len * 0.85, mid),
       alt: i % 2 === 1
     })
   }
@@ -907,7 +977,7 @@ function buildSpikeCrownPoints(cx, cy, rx, ry, pad, swayPhase) {
 // Draws individual triangular quills across the back arc.
 //
 function drawSpikeCrown(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
-  const spikes = buildSpikeCrownPoints(cx, cy, rx, ry, pad, swayPhase)
+  const spikes = buildArcSpikePoints(cx, cy, rx, ry, pad, swayPhase, SPIKE_ARC_START, SPIKE_ARC_END, SPIKE_COUNT, SPIKE_LEN)
   spikes.forEach((spike) => {
     fillPolyCtx(ctx, [spike.baseL, spike.tip, spike.baseR], spike.alt ? darkHex : mainHex)
   })

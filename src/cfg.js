@@ -326,14 +326,15 @@ export const CFG = {
         parallaxSkyTopGray: PALETTE.gray5,
         parallaxSkyTopColor: PALETTE.orange5,
         //
-        // Parallax forest depths — one palette step per row so the farthest
-        // trees stay a different swatch from the sky (gray4 / orange4).
+        // Parallax forest depths — gray steps in flat mode; in colour mode the
+        // far/mid rows stay muted sage/teal silhouettes (not orange) so only
+        // the sky haze and main lit tree carry warm pop (§16 art direction).
         //
         parallaxGrayNear: PALETTE.gray1,
         parallaxGrayMid: PALETTE.gray2,
         parallaxGrayFar: PALETTE.gray3,
-        parallaxColorMid: PALETTE.orange2,
-        parallaxColorFar: PALETTE.orange3,
+        parallaxColorMid: PALETTE.green2,
+        parallaxColorFar: PALETTE.green0,
         //
         // Cute chubby mushroom (glow trampoline + decor): cream body, warm
         // orange spotted cap; the gray set mirrors it inside the gray family.

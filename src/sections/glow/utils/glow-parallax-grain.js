@@ -1,3 +1,5 @@
+import { GLOW_PAL, glowRgb } from './glow-palette.js'
+
 //
 // Baked blur + film-grain passes for glow sprites (parallax forest, decor,
 // hero, tree, water frames). Applied once at bake time so runtime draw
@@ -63,8 +65,8 @@ export function applyGlowCaptionGrainToCanvas(canvas, seedOffset = 0) {
  * @param {number} [cfg.grainSeedOffset] - Extra seed offset for this layer
  */
 export const GLOW_LAYER_GRADE = {
-  far: { contrast: 0.25, saturation: 0.35 },
-  mid: { contrast: 0.45, saturation: 0.5 },
+  far: { contrast: 0.2, saturation: 0.28 },
+  mid: { contrast: 0.4, saturation: 0.42 },
   near: { contrast: 0.75, saturation: 0.7 },
   foreground: { contrast: 0.9, saturation: 0.9 }
 }
@@ -261,4 +263,38 @@ export function addGlowFilmGrainOverlayLayer(k, zIndex) {
     k.z(zIndex),
     { draw() { drawGlowFilmGrainOverlay(k) } }
   ])
+}
+/**
+ * One puffy foliage clump — shadow base, mid fill, highlight rim (nearest
+ * parallax bush row and tree crowns share this bake-time look).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cx - Centre X
+ * @param {number} cy - Centre Y
+ * @param {number} radius - Clump radius
+ * @param {{ r: number, g: number, b: number }} baseRgb - Fallback mid tone
+ * @param {number} [seed=0] - Per-clump seed
+ */
+export function drawGlowHiResFoliageCluster(ctx, cx, cy, radius, baseRgb, seed = 0) {
+  const shades = GLOW_PAL.treeColor.leafShades.map(h => glowRgb(h))
+  const shadow = shades[0] || baseRgb
+  const mid = shades[2] || baseRgb
+  const highlight = shades[Math.min(3, shades.length - 1)] || baseRgb
+  let state = (seed * 1103515245 + 12345) >>> 0
+  const rnd = () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 4294967296
+  }
+  const r = radius * (0.85 + rnd() * 0.2)
+  ctx.fillStyle = `rgb(${shadow.r}, ${shadow.g}, ${shadow.b})`
+  ctx.beginPath()
+  ctx.ellipse(cx + 1.5, cy + 2, r * 1.05, r * 0.72, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = `rgb(${mid.r}, ${mid.g}, ${mid.b})`
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, r, r * 0.68, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = `rgb(${highlight.r}, ${highlight.g}, ${highlight.b})`
+  ctx.beginPath()
+  ctx.ellipse(cx - r * 0.22, cy - r * 0.28, r * 0.42, r * 0.28, 0, 0, Math.PI * 2)
+  ctx.fill()
 }

@@ -2861,8 +2861,16 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
       const OL = getHex(outlineColor)
       const BL = getHex(bodyColor)
-      const PL = getHex(pupilColor ? String(pupilColor).replace('#', '') : outlineColor)
-      const EW = eyeWhiteColor ? getHex(eyeWhiteColor) : BL
+      const PL = getHex(
+        pupilColor
+          ? String(pupilColor).replace('#', '')
+          : CFG.visual.colors.hero.eyePupil.replace('#', '')
+      )
+      const EW = getHex(
+        eyeWhiteColor
+          ? String(eyeWhiteColor).replace('#', '')
+          : CFG.visual.colors.hero.eyeWhite.replace('#', '')
+      )
       const rim = outlineRimPx
       const legOlW = LEG_FILL_WIDTH + rim * 2
       //

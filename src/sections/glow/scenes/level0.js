@@ -12154,11 +12154,12 @@ function buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf
   ]
 }
 //
-// After a right-tramp bounce, landing on the L log unveils the letter.
+// First landing on the L log (with the ambush hedgehog) unveils the letter —
+// any route counts (tramp arc, spike platform hop, reload revisit).
 //
 function tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded) {
   if (!inst.zones.gCollected || inst.zones.lLetterUnveiled || !inst.zones.lPlatRevealed) return
-  if (!justLanded || !grounded || !inst.trampToLApproach) return
+  if (!justLanded || !grounded) return
   const home = inst.lPlatHome
   if (!home) return
   const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK &&

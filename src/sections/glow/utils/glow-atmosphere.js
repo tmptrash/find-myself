@@ -6,6 +6,7 @@ import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } 
 import { GLOW_PAL, glowRgb, snapToPalette, getCuteMushroomFlatDecorColors } from './glow-palette.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
+import { drawPitCaveSkeleton, caveSkeletonTones } from './glow-cave-skeleton.js'
 //
 // Midges + right-edge crack pit for the glow level
 //
@@ -367,7 +368,8 @@ export function createGlowPit(cfg) {
     pitCaveHintShown: false,
     pitCaveHintTooltip: null,
     tooltipClampInset,
-    wallProfile: null
+    wallProfile: null,
+    caveFloorRevealed: false
   }
   if (pit.collapsed) {
     crackFloor?.destroy?.()
@@ -588,9 +590,14 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
     heroInZone && drawGlowPitMouthVoidFill(k, pit)
     return
   }
-  if (pit.outlineOnlyMode) return
+  if (pit.outlineOnlyMode) {
+    isCaveInteriorVisible(pit)
+      ? drawCaveInteriorRockStyle(k, pit, flatDecor)
+      : drawGlowPitMouthVoidFill(k, pit)
+    return
+  }
   if (isCaveInteriorVisible(pit)) {
-    drawCaveInteriorRockStyle(k, pit)
+    drawCaveInteriorRockStyle(k, pit, flatDecor)
     drawPitTrampoline(k, pit)
     return
   }
@@ -602,6 +609,85 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
   // as a flat grey bar right where the hero is falling.
   //
   drawGlowPitMouthVoidFill(k, pit)
+}
+/**
+ * Eyeless bare world: dark mouth void only (skeleton draws separately).
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ */
+export function drawGlowPitBareCave(k, pit) {
+  if (!pit) return
+  pit.collapsed && drawGlowPitMouthVoidFill(k, pit)
+}
+/**
+ * Eyeless intro pit pass — interior void + skeleton on the floor, mouth void while falling.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ */
+export function drawGlowPitEyeIntroInterior(k, pit) {
+  if (!pit) return
+  if (!pit.collapsed) {
+    drawGlowPitBareCave(k, pit)
+    return
+  }
+  if (isCaveInteriorVisible(pit)) {
+    drawCaveInteriorRockStyle(k, pit, true)
+    return
+  }
+  drawGlowPitBareCave(k, pit)
+  drawGlowPitCaveSkeletonScene(k, pit, true)
+}
+/**
+ * Draws the cave skeleton without pit camera culling (visible whenever the pit is open).
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ * @param {boolean} flatDecor - Single-tone decor mode
+ */
+export function drawGlowPitCaveSkeletonScene(k, pit, flatDecor = false) {
+  if (!shouldShowPitCaveSkeleton(pit)) return
+  //
+  // Interior pass draws the skeleton when the hero is inside the collapsed pit.
+  //
+  if (pit.collapsed && isCaveInteriorVisible(pit)) return
+  drawPitCaveSkeleton(k, pit, caveSkeletonTones(flatDecor), {
+    opacity: 0.85,
+    embedded: false
+  })
+}
+//
+// Hero feet on the cave pit floor (same band as the lying-eye reveal).
+//
+export function isHeroOnPitCaveFloor(pit, charOverride = null) {
+  const char = charOverride || pit.heroInst?.character || pit.sceneRef?.heroInst?.character
+  if (!char?.pos) return false
+  const bottomY = pit.floorY + pit.zone.depth
+  const feetY = char.pos.y + PIT_CAVE_FLOOR_FEET_Y
+  const inBand = feetY >= bottomY - PIT_CAVE_FLOOR_FEET_BAND - 14 &&
+    feetY <= bottomY + 20
+  if (!inBand) return false
+  const grounded = char.isGrounded?.() ?? false
+  const vy = char.vel?.y ?? 0
+  return grounded || Math.abs(vy) < 160
+}
+const PIT_CAVE_FLOOR_FEET_Y = 38
+const PIT_CAVE_FLOOR_FEET_BAND = 18
+/**
+ * Skeleton + lying eyes only after the hero lands on the pit floor (or while
+ * eyes are still on the ground). Hidden while approaching the cracked surface.
+ * @param {Object} pit - Pit state
+ * @returns {boolean}
+ */
+export function shouldShowPitCaveSkeleton(pit) {
+  if (!pit?.collapsed) return false
+  const zones = pit.sceneRef?.zones
+  const heroInst = pit.heroInst || pit.sceneRef?.heroInst
+  if (glowHeroHasCollectedEyes(zones, heroInst)) {
+    return isCaveInteriorVisible(pit)
+  }
+  const intro = pit.sceneRef?.eyeIntro
+  if (intro?.pickup && !intro.pickup.collected) return true
+  if (pit.caveFloorRevealed) return true
+  return isHeroOnPitCaveFloor(pit)
 }
 //
 // Cheap stand-in for the full cave bake — just the mouth-shaped dark opening,
@@ -767,40 +853,56 @@ function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
     })
   }
 }
-function drawCaveInteriorRockStyle(k, pit) {
+function shouldDrawPitCaveRocks(pit) {
+  const zones = pit.sceneRef?.zones
+  const heroInst = pit.heroInst || pit.sceneRef?.heroInst
+  return glowHeroHasCollectedEyes(zones, heroInst)
+}
+function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
   const { zone, floorY } = pit
   if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
     pit.wallProfile = buildCaveSceneLayout(zone, floorY)
     pit._caveSpriteReady = false
   }
-  bakeCaveInteriorSprite(k, pit)
+  const showRocks = shouldDrawPitCaveRocks(pit)
+  bakeCaveInteriorSprite(k, pit, showRocks)
+  const skTones = caveSkeletonTones(flatDecor)
+  const skOpts = { opacity: 0.92, embedded: false }
+  const showSkeleton = shouldShowPitCaveSkeleton(pit)
   if (pit._caveSpriteReady) {
     drawCaveInteriorBakedSprite(k, pit)
-    const pal = buildCavePalette(glowRgb('decorGray'))
-    const layout = pit.wallProfile
-    drawCaveLayoutRocks(k, layout.backgroundRocks, pal, floorY)
-    drawCaveLayoutRocks(k, layout.contourRocks, pal, floorY)
+    showSkeleton && drawPitCaveSkeleton(k, pit, skTones, skOpts)
+    if (showRocks) {
+      const pal = buildCavePalette(glowRgb('decorGray'))
+      const layout = pit.wallProfile
+      drawCaveLayoutRocks(k, layout.backgroundRocks, pal, floorY)
+      drawCaveLayoutRocks(k, layout.contourRocks, pal, floorY)
+    }
     return
   }
   const layout = pit.wallProfile
   const mouth = layout.mouth
   const pal = buildCavePalette(glowRgb('decorGray'))
   drawCaveVoidFill(k, mouth, pal)
-  drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
-  drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
+  showSkeleton && drawPitCaveSkeleton(k, pit, skTones, skOpts)
+  if (showRocks) {
+    drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
+    drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
+  }
 }
 //
 // Bakes the static cave interior once — wall rocks are dozens of polygons
 // per frame otherwise, and the palette is a fixed decor gray.
 //
-function bakeCaveInteriorSprite(k, pit) {
+function bakeCaveInteriorSprite(k, pit, showRocks) {
   const zone = pit.zone
   const ox = zone.x1 - CAVE_BAKE_PAD
   const oy = pit.floorY - 8
   pit._caveSpriteX = ox
   pit._caveSpriteY = oy
-  if (pit._caveSpriteReady) return
-  if (k.getSprite?.(CAVE_INTERIOR_SPRITE)) {
+  const bakeKey = showRocks ? 'rocks' : 'void'
+  if (pit._caveSpriteReady && pit._caveBakeRocksKey === bakeKey) return
+  if (showRocks && k.getSprite?.(CAVE_INTERIOR_SPRITE) && pit._caveBakeRocksKey === 'rocks') {
     pit._caveSpriteReady = true
     return
   }
@@ -816,14 +918,15 @@ function bakeCaveInteriorSprite(k, pit) {
   ctx.translate(-ox, -oy)
   fillCanvasPoly(ctx, caveMouthPts(layout.mouth), pal.void)
   const groundY = layout.mouth.floorY
-  paintCanvasRocks(ctx, layout.backgroundRocks, pal, groundY)
-  paintCanvasRocks(ctx, layout.wallRocks, pal, groundY)
-  paintCanvasRocks(ctx, layout.pebbles, pal, groundY)
-  paintCanvasRocks(ctx, layout.contourRocks, pal, groundY)
+  showRocks && paintCanvasRocks(ctx, layout.backgroundRocks, pal, groundY)
+  showRocks && paintCanvasRocks(ctx, layout.wallRocks, pal, groundY)
+  showRocks && paintCanvasRocks(ctx, layout.pebbles, pal, groundY)
+  showRocks && paintCanvasRocks(ctx, layout.contourRocks, pal, groundY)
   k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
   pit._caveSpriteReady = true
+  pit._caveBakeRocksKey = bakeKey
 }
 function caveMouthPts(mouth) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
@@ -1466,6 +1569,8 @@ export function syncGlowPitOpenState(pit) {
   pit.crackFloor?.destroy?.()
   pit.crackFloor = null
   hasEyes && (pit.outlineOnlyMode = false)
+  hasEyes && (pit._caveSpriteReady = false)
+  hasEyes && (pit._caveBakeRocksKey = null)
   !pit.pitFloor && openPitPhysics(pit)
 }
 function persistGlowEyesFromHeroState(pit) {
@@ -1654,18 +1759,19 @@ function spawnPitBurst(pit) {
 // With eyes collected the interior stays visible from the surface too.
 //
 function isCaveInteriorVisible(pit) {
-  if (!pit?.collapsed || pit.outlineOnlyMode) return false
+  if (!pit?.collapsed) return false
+  const char = pit.heroInst?.character || pit.sceneRef?.heroInst?.character
+  //
+  // Eyeless intro: show the void interior as soon as the hero hits the pit
+  // floor (lying eyes + skeleton), even during the post-collapse holdoff.
+  //
+  if (pit.outlineOnlyMode && isHeroOnPitCaveFloor(pit, char)) return true
   if (pit.interiorRevealHoldoff != null && pit.k.time() < pit.interiorRevealHoldoff) return false
   const zones = pit.sceneRef?.zones
   const heroInst = pit.heroInst || pit.sceneRef?.heroInst
-  //
-  // With eyes collected the cave mouth stays open on the surface too — the
-  // hero may return from the branch without re-entering through the crack lip.
-  //
   if (glowHeroHasCollectedEyes(zones, heroInst)) return true
-  const char = pit.heroInst?.character
-  if (!char?.pos) return true
-  const feetY = char.pos.y + 38
+  if (!char?.pos) return false
+  const feetY = char.pos.y + PIT_CAVE_FLOOR_FEET_Y
   return feetY > pit.floorY + CAVE_INTERIOR_REVEAL_FEET_PAST
 }
 function updatePitParticles(pit, dt) {

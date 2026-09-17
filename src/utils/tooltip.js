@@ -177,6 +177,9 @@ function getTargetX(target) {
 function getTargetY(target) {
   return typeof target.y === 'function' ? target.y() : target.y
 }
+function getTargetDim(value) {
+  return typeof value === 'function' ? value() : value
+}
 //
 // Measure text dimensions using Kaplay's formatText for precise sizing
 //
@@ -434,8 +437,8 @@ function onUpdate(inst) {
     //
     if (typeof target.visible === 'function' && !target.visible()) continue
     if (target.visible === false) continue
-    const halfW = target.width / 2
-    const halfH = target.height / 2
+    const halfW = getTargetDim(target.width) / 2
+    const halfH = getTargetDim(target.height) / 2
     for (const pointerPos of pointers) {
       const worldPointer = pointerForTarget(k, pointerPos, target)
       if (

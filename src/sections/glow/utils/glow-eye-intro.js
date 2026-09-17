@@ -2,15 +2,16 @@ import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
+import { getPitCaveSkullEyeLine } from './glow-cave-skeleton.js'
 import {
   getCrackZone,
   collapseGlowPitForEyeIntro,
-  getGlowPitBonusPosition,
   getGlowPitHeroStandY,
   ensureGlowPitOpenForEyesCollected,
   glowHeroHasCollectedEyes,
   isGlowPitMushroomUnlocked as isPitMushroomUnlockedForPit,
   isHeroOnCrackLid,
+  isHeroOnPitCaveFloor,
   KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
 
@@ -29,8 +30,6 @@ const EYE_INTRO_REVEAL_FLASH_R = 42
 const EYE_INTRO_ATTACH_CLOSED_DURATION = 1
 const EYE_INTRO_ATTACH_MOVE_THRESHOLD = 3
 const EYE_INTRO_ATTACH_JUMP_VEL_Y = 40
-const EYE_INTRO_PIT_FEET_Y = 38
-const EYE_INTRO_PIT_FLOOR_BAND = 18
 const EYE_COLLECTED_HINT_TEXT = 'Whoa. Everything looks so much clearer now.'
 const EYE_COLLECTED_HINT_DURATION = 5
 const EYE_COLLECTED_HINT_DISMISS = 80
@@ -197,19 +196,13 @@ export function onUpdateGlowEyeIntro(inst, char, heroInst, floorY, worldW, treeX
     return
   }
   //
-  // Lying eyes appear only after the hero lands on the pit floor.
-  //
-  if (intro.phase === 'inCave' && pit?.collapsed) {
-    tryRevealGlowCaveFloorEyes(inst, char, pit)
-    return
-  }
-  //
   // Touch both lying eyes to attach them to the hero.
   //
   if (intro.phase === 'collectEyes' && intro.pickup && heroInst) {
     tryCollectGlowCaveEyes(inst, heroInst, char)
     return
   }
+  if (intro.phase === 'inCave' || intro.phase === 'awaitJump') return
   //
   // After eyes: return to the tree to unlock normal exploration.
   //
@@ -220,12 +213,37 @@ export function onUpdateGlowEyeIntro(inst, char, heroInst, floorY, worldW, treeX
 //
 // Draws cave pickup eyes, outline-only interior helpers, hint anchor, reveal FX.
 //
+//
+// Spawns lying eyes after pit physics pins the hero on the cave floor
+// (called from level0 after updateGlowPit).
+//
+export function updateGlowCaveFloorEyeReveal(inst, char) {
+  if (!inst?.eyeIntro || inst.eyeIntro.phase === 'complete' || !char?.pos) return
+  const pit = inst.pit
+  const heroInst = inst.heroInst
+  if (!pit?.collapsed || glowHeroHasCollectedEyes(inst.zones, heroInst)) return
+  tryRevealGlowCaveFloorEyes(inst, char, pit)
+}
 export function onDrawGlowEyeIntro(inst, k, heroBodyHex, heroEyeWhiteHex) {
   if (!inst?.eyeIntro) return
   const intro = inst.eyeIntro
   const pit = inst.pit
-  intro.pickup && drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
+  const eyesOnPitLayer = pit?.collapsed && intro.pickup && !intro.pickup.collected
+  !eyesOnPitLayer && intro.pickup &&
+    drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
   intro.revealFx > 0 && drawGlowEyeRevealFx(k, inst.heroInst, intro.revealFx)
+}
+/**
+ * Lying eyes on the pit draw layer (above the skeleton sprite).
+ * @param {Object} inst - Glow scene inst
+ * @param {Object} k - Kaplay instance
+ * @param {string} heroBodyHex - Hero body colour
+ * @param {string} heroEyeWhiteHex - Eye white colour
+ */
+export function drawGlowCavePickupEyesOnPitLayer(inst, k, heroBodyHex, heroEyeWhiteHex) {
+  const pickup = inst?.eyeIntro?.pickup
+  if (!pickup || pickup.collected || !inst.pit?.collapsed) return
+  drawGlowCavePickupEyes(k, pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
 }
 //
 // Private helpers
@@ -242,25 +260,19 @@ function tryOpenGlowEyeIntroCave(inst, char, zone, pit, grounded, justLanded, fo
 }
 function tryRevealGlowCaveFloorEyes(inst, char, pit) {
   if (inst.eyeIntro.pickup) return
-  const bottomY = pit.floorY + pit.zone.depth
-  const feetY = char.pos.y + EYE_INTRO_PIT_FEET_Y
-  const grounded = char.isGrounded?.() ?? false
-  const onPitFloor = feetY >= bottomY - EYE_INTRO_PIT_FLOOR_BAND &&
-    feetY <= bottomY + 8
-  if (!grounded || !onPitFloor) return
+  if (!isHeroOnPitCaveFloor(pit, char)) return
+  pit.caveFloorRevealed = true
   inst.eyeIntro.pickup = spawnGlowCavePickupEyes(inst, pit)
   inst.eyeIntro.phase = 'collectEyes'
 }
 function spawnGlowCavePickupEyes(inst, pit) {
-  const bonusPos = getGlowPitBonusPosition(pit)
-  const cx = bonusPos?.x ?? pit.zone.x1 + pit.zone.width * 0.52
-  const cy = bonusPos?.y ?? pit.floorY + pit.zone.depth - 28
+  const eyes = getPitCaveSkullEyeLine(pit)
   return {
-    cx,
-    cy,
-    leftX: cx - EYE_INTRO_EYE_GAP * 0.5,
-    rightX: cx + EYE_INTRO_EYE_GAP * 0.5,
-    y: cy,
+    cx: eyes.cx,
+    cy: eyes.cy,
+    leftX: eyes.leftX,
+    rightX: eyes.rightX,
+    y: eyes.y,
     collected: false
   }
 }
@@ -276,6 +288,8 @@ function tryCollectGlowCaveEyes(inst, heroInst, char) {
   inst.eyeIntro.phase = 'runBack'
   if (inst.pit) {
     inst.pit.outlineOnlyMode = false
+    inst.pit._caveSpriteReady = false
+    inst.pit._caveBakeRocksKey = null
   }
   showGlowEyesCollectedHint(inst)
 }
@@ -332,6 +346,7 @@ export function restoreGlowEyeIntroFromPersistedState(inst) {
   if (inst.eyeIntro.phase !== 'runBack' && inst.eyeIntro.phase !== 'complete') {
     inst.eyeIntro.phase = 'collectEyes'
   }
+  pit.caveFloorRevealed = true
   !inst.eyeIntro.pickup && (inst.eyeIntro.pickup = spawnGlowCavePickupEyes(inst, pit))
 }
 export function snapGlowHeroToPitFloor(inst, heroInst) {

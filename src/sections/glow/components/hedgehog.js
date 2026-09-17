@@ -103,8 +103,8 @@ const NOSE_OUTLINE_PAD = 0.35
 //
 const EYE_CX = 14.5
 const EYE_CY = -16.2
-const EYE_R = 2.4
-const PUPIL_R = 1.15
+const EYE_R = 2.85
+const PUPIL_R = 1.38
 const PUPIL_OFFSET_X = 0.35
 const PUPIL_OFFSET_Y = 0
 const EYE_GAZE_TRAVEL = 0.75
@@ -236,6 +236,17 @@ const GAZE_SIDE_SLACK = 28
 const GAZE_WANDER_INTERVAL_MIN = 1.2
 const GAZE_WANDER_INTERVAL_MAX = 2.6
 //
+// Forward gaze spots (normalized) — cycled when the hero is behind the face.
+//
+const GAZE_FORWARD_SPOTS = [
+  { x: 0.52, y: -0.38 },
+  { x: 0.84, y: -0.12 },
+  { x: 0.38, y: 0.44 },
+  { x: 0.76, y: 0.36 },
+  { x: 0.22, y: 0.08 }
+]
+const MUD_SNEAK_PREVIEW_OPACITY = 0.075
+//
 // Touch-death hitbox — AABB in art local space (ground at inst.x / y = 0),
 // sized to mane + spikes + snout, then shrunk slightly inside that silhouette.
 // Centre X is offset from inst.x because the body sits mostly behind the anchor.
@@ -315,6 +326,8 @@ export function create(cfg) {
     gazeWanderTimer: 0,
     gazeWanderX: PUPIL_OFFSET_X,
     gazeWanderY: PUPIL_OFFSET_Y,
+    gazeSpotIndex: 0,
+    mudSneakPreview: false,
     popped: !hiddenUntilPopOut,
     falling: false,
     walkingToEdge: false,
@@ -352,6 +365,7 @@ export function popOut(inst, x, y, facing) {
   y != null && (inst.y = y)
   facing && (inst.facing = facing)
   inst.popped = true
+  inst.mudSneakPreview = false
   inst.falling = false
   inst.turnScale = 1
   inst.wanderState = 'idle'
@@ -387,11 +401,14 @@ export function fallAndCrawlAway(inst, groundY, edgeX) {
 // (not yet popped out) hedgehogs skip everything, including drawing.
 //
 function onUpdate(inst) {
-  if (!inst.popped) return
+  const dt = inst.k.dt()
+  if (!inst.popped) {
+    inst.mudSneakPreview && updateFrozenGaze(inst, dt)
+    return
+  }
   const scene = inst.zones?._sceneRef
   const frozen = !scene?.zones?.oZone && !scene?.zones?.oCollected &&
     (scene?.meditation?.countdown == null || (scene?.meditationWorldLife ?? 0) < 0.02)
-  const dt = inst.k.dt()
   //
   // Stillness freezes wander/gaze, but a platform vanishing mid-ambush must
   // keep gravity + walk-to-edge so the hedgehog tumbles off the L-log. The
@@ -453,18 +470,20 @@ function updateFall(inst, dt) {
 // eye and legs on top. Inactive (not yet popped out) hedgehogs draw nothing.
 //
 function drawHedgehog(inst) {
-  if (!inst.popped) return
+  const sneak = !inst.popped && inst.mudSneakPreview
+  if (!inst.popped && !sneak) return
   const k = inst.k
   const dir = inst.facing === 'left' ? -1 : 1
   const fade = colorFadeOf(inst)
-  if (inst.wanderState === 'turn' && inst.turnPhase === 'curled') {
-    drawBakedSprite(inst, CURLED_SPRITE_NAME, dir, CURL_SCALE, fade)
+  const alphaMul = sneak ? MUD_SNEAK_PREVIEW_OPACITY : 1
+  if (!sneak && inst.wanderState === 'turn' && inst.turnPhase === 'curled') {
+    drawBakedSprite(inst, CURLED_SPRITE_NAME, dir, CURL_SCALE, fade, alphaMul)
     TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
     return
   }
-  const frameIdx = currentIdleFrameIndex(inst)
-  drawBakedSprite(inst, BODY_SPRITE_PREFIX + frameIdx, dir, inst.turnScale, fade)
-  drawLegs(inst, dir, fade)
+  const frameIdx = sneak ? 0 : currentIdleFrameIndex(inst)
+  drawBakedSprite(inst, BODY_SPRITE_PREFIX + frameIdx, dir, sneak ? 1 : inst.turnScale, fade, alphaMul)
+  !sneak && drawLegs(inst, dir, fade)
   TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
 }
 //
@@ -472,13 +491,29 @@ function drawHedgehog(inst) {
 // with opacity = fade — a plain alpha crossfade between the two baked
 // palettes, the same technique the level's parallax layers use.
 //
-function drawBakedSprite(inst, baseName, dir, scale, fade) {
+function drawBakedSprite(inst, baseName, dir, scale, fade, alphaMul = 1) {
   const k = inst.k
   const pos = k.vec2(inst.x, inst.y)
   const width = BAKE_W * inst.scale * scale
   const height = BAKE_H * inst.scale * scale
-  fade < 0.98 && k.drawSprite({ sprite: baseName + GRAY_SUFFIX, pos, anchor: 'bot', width, height, flipX: dir === -1 })
-  fade > 0.02 && k.drawSprite({ sprite: baseName + COLOR_SUFFIX, pos, anchor: 'bot', width, height, flipX: dir === -1, opacity: fade })
+  fade < 0.98 && k.drawSprite({
+    sprite: baseName + GRAY_SUFFIX,
+    pos,
+    anchor: 'bot',
+    width,
+    height,
+    flipX: dir === -1,
+    opacity: alphaMul
+  })
+  fade > 0.02 && k.drawSprite({
+    sprite: baseName + COLOR_SUFFIX,
+    pos,
+    anchor: 'bot',
+    width,
+    height,
+    flipX: dir === -1,
+    opacity: fade * alphaMul
+  })
 }
 //
 // Current gray→colour fade for the level (0 = fully gray, 1 = fully
@@ -486,37 +521,6 @@ function drawBakedSprite(inst, baseName, dir, scale, fade) {
 //
 function colorFadeOf(inst) {
   return inst.zones?._sceneRef?.colorFade ?? (inst.zones?.colorWorld ? 1 : 0)
-}
-//
-// Live eye overlay — white sclera + dark pupil, offset by the current gaze
-// target and glued to the snout's baked breathing bob for this exact
-// frame. Hidden while curled up (tucked away, out of sight).
-//
-function drawEye(inst, frameIdx, dir, fade) {
-  const k = inst.k
-  const sclera = getRGB(k, EYE_WHITE_HEX)
-  const pupil = getRGB(k, EYE_HEX)
-  const eyeAlpha = inst.turnScale
-  if (eyeAlpha <= 0.02) return
-  const breathe = Math.sin(frameIdx / IDLE_FRAME_COUNT * 2 * Math.PI) * BREATH_AMP
-  const eyeCy = EYE_CY + breathe
-  const s = inst.scale * inst.turnScale
-  const toWorld = (localX, localY) => k.vec2(inst.x + dir * s * localX, inst.y + s * localY)
-  const eyePos = toWorld(EYE_CX + inst.pupilX, eyeCy + inst.pupilY)
-  k.drawEllipse({
-    pos: eyePos,
-    radiusX: EYE_R * s,
-    radiusY: EYE_R * s,
-    color: sclera,
-    opacity: eyeAlpha
-  })
-  k.drawEllipse({
-    pos: toWorld(EYE_CX + inst.pupilX + PUPIL_OFFSET_X, eyeCy + inst.pupilY + PUPIL_OFFSET_Y),
-    radiusX: PUPIL_R * s,
-    radiusY: PUPIL_R * s,
-    color: pupil,
-    opacity: eyeAlpha * (fade > 0.02 ? fade : 1)
-  })
 }
 //
 // Live stub legs — planted while idle, alternating a small step-lift while
@@ -764,17 +768,55 @@ function startWanderTurn(inst, pendingDir) {
 // facing-side/distance gate the normal wander gaze uses (see updateGaze) —
 // looks wherever he actually is, even from behind.
 //
-function updateFrozenGaze(inst, dt) {
+function hedgehogHeroInFront(inst) {
   const dir = inst.facing === 'left' ? -1 : 1
   const heroPos = inst.hero?.character?.pos
+  if (!heroPos) return false
+  const dx = heroPos.x - inst.x
+  const dy = heroPos.y - inst.y
+  const dist = Math.hypot(dx, dy)
+  return dist < GAZE_MAX_HERO_DIST && dx * dir > -GAZE_SIDE_SLACK
+}
+//
+// Pupil offset toward the hero in local snout space.
+//
+function hedgehogGazeTowardHero(inst) {
+  const dir = inst.facing === 'left' ? -1 : 1
+  const heroPos = inst.hero?.character?.pos
+  if (!heroPos) return null
+  const localDx = dir * (heroPos.x - inst.x)
+  const dy = heroPos.y - inst.y
+  const len = Math.hypot(localDx, dy) || 1
+  return {
+    x: (localDx / len) * EYE_GAZE_TRAVEL,
+    y: (dy / len) * EYE_GAZE_TRAVEL
+  }
+}
+//
+// Steps the forward gaze spot when the hero is not in front.
+//
+function stepHedgehogGazeWander(inst, dt) {
+  inst.gazeWanderTimer -= dt
+  if (inst.gazeWanderTimer > 0) return
+  inst.gazeWanderTimer = randRange(GAZE_WANDER_INTERVAL_MIN, GAZE_WANDER_INTERVAL_MAX)
+  inst.gazeSpotIndex = (inst.gazeSpotIndex + 1) % GAZE_FORWARD_SPOTS.length
+  const spot = GAZE_FORWARD_SPOTS[inst.gazeSpotIndex]
+  inst.gazeWanderX = spot.x * EYE_GAZE_TRAVEL
+  inst.gazeWanderY = spot.y * EYE_GAZE_TRAVEL
+}
+function updateFrozenGaze(inst, dt) {
   let targetX = inst.pupilX
   let targetY = inst.pupilY
-  if (heroPos) {
-    const localDx = dir * (heroPos.x - inst.x)
-    const dy = heroPos.y - inst.y
-    const len = Math.hypot(localDx, dy) || 1
-    targetX = (localDx / len) * EYE_GAZE_TRAVEL
-    targetY = (dy / len) * EYE_GAZE_TRAVEL
+  if (hedgehogHeroInFront(inst)) {
+    const toward = hedgehogGazeTowardHero(inst)
+    if (toward) {
+      targetX = toward.x
+      targetY = toward.y
+    }
+  } else {
+    stepHedgehogGazeWander(inst, dt)
+    targetX = inst.gazeWanderX
+    targetY = inst.gazeWanderY
   }
   const lerp = Math.min(1, GAZE_LERP_SPEED * dt)
   inst.pupilX += (targetX - inst.pupilX) * lerp
@@ -785,30 +827,16 @@ function updateFrozenGaze(inst, dt) {
 // enough) or toward a slowly-changing random forward-and-down point.
 //
 function updateGaze(inst, dt) {
-  inst.gazeWanderTimer -= dt
-  const dir = inst.facing === 'left' ? -1 : 1
-  const heroPos = inst.hero?.character?.pos
-  let heroInFront = false
   let targetX = inst.gazeWanderX
   let targetY = inst.gazeWanderY
-  if (heroPos) {
-    const dx = heroPos.x - inst.x
-    const dy = heroPos.y - inst.y
-    const dist = Math.hypot(dx, dy)
-    heroInFront = dist < GAZE_MAX_HERO_DIST && dx * dir > -GAZE_SIDE_SLACK
-    if (heroInFront) {
-      const localDx = dir * dx
-      const len = Math.hypot(localDx, dy) || 1
-      targetX = (localDx / len) * EYE_GAZE_TRAVEL
-      targetY = (dy / len) * EYE_GAZE_TRAVEL
+  if (hedgehogHeroInFront(inst)) {
+    const toward = hedgehogGazeTowardHero(inst)
+    if (toward) {
+      targetX = toward.x
+      targetY = toward.y
     }
-  }
-  if (!heroInFront) {
-    if (inst.gazeWanderTimer <= 0) {
-      inst.gazeWanderTimer = randRange(GAZE_WANDER_INTERVAL_MIN, GAZE_WANDER_INTERVAL_MAX)
-      inst.gazeWanderX = EYE_GAZE_TRAVEL * (0.2 + Math.random() * 0.65)
-      inst.gazeWanderY = EYE_GAZE_TRAVEL * (0.15 + Math.random() * 0.7)
-    }
+  } else {
+    stepHedgehogGazeWander(inst, dt)
     targetX = inst.gazeWanderX
     targetY = inst.gazeWanderY
   }
@@ -1024,8 +1052,7 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
   return pts
 }
 //
-// Baked eye on the cream snout — white sclera + dark pupil (live gaze
-// overlay tracks the hero on top each frame).
+// Baked eye on the cream snout (live overlay removed — avoids double eyes).
 //
 function drawBakedEye(ctx, snoutCy) {
   const eyeY = EYE_CY + (snoutCy - SNOUT_CY)

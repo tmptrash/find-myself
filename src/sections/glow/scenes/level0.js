@@ -49,6 +49,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as HeroCounter from '../../../utils/hero-counter.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { generateLogDetail, drawLogPlatform, bakeLogPlatformCanvas, packLogPlatformAtlas } from '../../touch/utils/log-platform.js'
+import { ensurePitCaveSkeletonLayout } from '../utils/glow-cave-skeleton.js'
 import {
   createGlowMidges,
   updateGlowMidges,
@@ -56,6 +57,10 @@ import {
   createGlowPit,
   updateGlowPit,
   drawGlowPit,
+  drawGlowPitBareCave,
+  drawGlowPitCaveSkeletonScene,
+  drawGlowPitEyeIntroInterior,
+  shouldShowPitCaveSkeleton,
   setGlowPitCracksVisible,
   isCrackGrassExcluded,
   isCrackDecorExcluded,
@@ -82,7 +87,9 @@ import {
   isGlowEyeIntroCaveActive,
   syncGlowEyeIntroMidges,
   onUpdateGlowEyeIntro,
+  updateGlowCaveFloorEyeReveal,
   onDrawGlowEyeIntro,
+  drawGlowCavePickupEyesOnPitLayer,
   unlockGlowEyesGameplayFromBranchLaunch,
   snapGlowHeroToPitFloor,
   restoreGlowEyeIntroFromPersistedState
@@ -1273,8 +1280,9 @@ const LIFE_TOOLTIP_Y_OFFSET = 50
 const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Explore'
 const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Learn to see the nuances'
 const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
+const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Walk forward'
 const GLOW_INDICATOR_TOOLTIP_HEIGHT = 50
-const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
 // After picking up the final W letter the hero shares a closing line for a
 // few seconds, then a full-screen fade-out leads back to the menu.
@@ -2340,7 +2348,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       sound,
       birdsMusic,
       letterDialogMusic: null,
-      undergroundSkeleton: undergroundSpec.skeleton,
       dialogHeroPinned: false,
       dialogPinY: 0,
       dialogInputGrace: 0,
@@ -3051,44 +3058,52 @@ function createSmallHeroTooltip(inst) {
     }, {
       x: () => glowHudLetterHoverPos(inst, 0).x,
       y: () => glowHudLetterHoverPos(inst, 0).y,
-      width: GLOW_HUD_LABEL_FONT_SIZE,
-      height: GLOW_INDICATOR_TOOLTIP_HEIGHT,
-      text: GLOW_INDICATOR_TOOLTIP_AFTER_G,
+      width: () => glowHudLetterHoverSize(inst, 0).w,
+      height: () => glowHudLetterHoverSize(inst, 0).h,
+      text: () => glowHudLetterTooltipText(inst, 0),
       offsetY: GLOW_INDICATOR_TOOLTIP_Y_OFFSET,
-      visible: () => Boolean(inst.levelIndicator) && inst.zones.gCollected,
+      forceBelow: true,
+      visible: () => glowHudLetterTooltipVisible(inst, 0),
       screenSpace: true
     }, {
       x: () => glowHudLetterHoverPos(inst, 1).x,
       y: () => glowHudLetterHoverPos(inst, 1).y,
-      width: GLOW_HUD_LABEL_FONT_SIZE,
-      height: GLOW_INDICATOR_TOOLTIP_HEIGHT,
-      text: GLOW_INDICATOR_TOOLTIP_AFTER_L,
+      width: () => glowHudLetterHoverSize(inst, 1).w,
+      height: () => glowHudLetterHoverSize(inst, 1).h,
+      text: () => glowHudLetterTooltipText(inst, 1),
       offsetY: GLOW_INDICATOR_TOOLTIP_Y_OFFSET,
-      visible: () => Boolean(inst.levelIndicator) && inst.zones.lCollected,
+      forceBelow: true,
+      visible: () => glowHudLetterTooltipVisible(inst, 1),
       screenSpace: true
     }, {
       x: () => glowHudLetterHoverPos(inst, 2).x,
       y: () => glowHudLetterHoverPos(inst, 2).y,
-      width: GLOW_HUD_LABEL_FONT_SIZE,
-      height: GLOW_INDICATOR_TOOLTIP_HEIGHT,
-      text: GLOW_INDICATOR_TOOLTIP_AFTER_O,
+      width: () => glowHudLetterHoverSize(inst, 2).w,
+      height: () => glowHudLetterHoverSize(inst, 2).h,
+      text: () => glowHudLetterTooltipText(inst, 2),
       offsetY: GLOW_INDICATOR_TOOLTIP_Y_OFFSET,
-      visible: () => Boolean(inst.levelIndicator) && inst.zones.oCollected,
+      forceBelow: true,
+      visible: () => glowHudLetterTooltipVisible(inst, 2),
       screenSpace: true
     }, {
-      x: () => inst.undergroundSkeleton?.x ?? -1000,
-      y: () => skeletonTooltipBodyCenterY(inst),
+      x: () => glowHudLetterHoverPos(inst, 3).x,
+      y: () => glowHudLetterHoverPos(inst, 3).y,
+      width: () => glowHudLetterHoverSize(inst, 3).w,
+      height: () => glowHudLetterHoverSize(inst, 3).h,
+      text: () => glowHudLetterTooltipText(inst, 3),
+      offsetY: GLOW_INDICATOR_TOOLTIP_Y_OFFSET,
+      forceBelow: true,
+      visible: () => glowHudLetterTooltipVisible(inst, 3),
+      screenSpace: true
+    }, {
+      x: () => pitCaveSkeletonTooltipPos(inst).x,
+      y: () => pitCaveSkeletonTooltipPos(inst).y,
       width: SKELETON_TOOLTIP_WIDTH,
       height: SKELETON_TOOLTIP_HEIGHT,
       text: SKELETON_TOOLTIP_TEXT,
       offsetY: SKELETON_TOOLTIP_Y_OFFSET,
-      //
-      // Skeleton sits in the left underground band, which opens with the
-      // left ground — not only after the L parallax / letter.
-      //
-      visible: () => Boolean(inst.undergroundSkeleton) &&
-        isGlowWorldSurfaceDecorUnlocked(inst) &&
-        !inst.dialogOpen
+      visible: () => pitCaveSkeletonTooltipVisible(inst),
+      screenSpace: false
     }, {
       x: () => inst.gLetter?.x ?? -1000,
       y: () => inst.gLetter?.y ?? -1000,
@@ -3386,19 +3401,144 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
 function glowHudLetterHoverPos(inst, index) {
   const letter = inst.levelIndicator?.letterObjects?.[index]
   if (letter?.exists?.()) {
-    const measuredW = letter.width || 0
-    const w = measuredW > 0 && measuredW < GLOW_HUD_LABEL_FONT_SIZE
-      ? measuredW
-      : GLOW_HUD_LABEL_FONT_SIZE * 0.6
-    return {
-      x: letter.pos.x + w / 2,
-      y: letter.pos.y + GLOW_HUD_LABEL_FONT_SIZE / 2
-    }
+    return { x: letter.pos.x, y: letter.pos.y }
   }
   return {
     x: glowHudLetterCenterX(index),
     y: GLOW_HUD_FPS_TOP_Y
   }
+}
+//
+// Screen-space hit box for one baked GLOW HUD glyph (sprite anchor is center).
+//
+function glowHudLetterHoverSize(inst, index) {
+  const letter = inst.levelIndicator?.letterObjects?.[index]
+  const fallbackW = GLOW_HUD_LABEL_FONT_SIZE * 0.65
+  const fallbackH = GLOW_HUD_LABEL_FONT_SIZE * 1.2
+  if (!letter?.exists?.()) {
+    return { w: fallbackW, h: fallbackH }
+  }
+  const w = letter.width > 0 ? letter.width : fallbackW
+  const h = letter.height > 0 ? letter.height : fallbackH
+  return { w, h }
+}
+//
+// Base HUD letter tooltip lines plus partial fill progress (e.g. "Explore — 2/5").
+//
+const GLOW_HUD_FILL_PROGRESS_SEP = ' — '
+const GLOW_HUD_LETTER_TOOLTIP_BASE = [
+  GLOW_INDICATOR_TOOLTIP_AFTER_G,
+  GLOW_INDICATOR_TOOLTIP_AFTER_L,
+  GLOW_INDICATOR_TOOLTIP_AFTER_O,
+  GLOW_INDICATOR_TOOLTIP_AFTER_W
+]
+function glowHudLetterFillProgress(inst, index) {
+  const z = inst.zones
+  if (index === 0) {
+    return {
+      parts: inst._hudGFillParts || 0,
+      total: GLOW_HUD_G_FILL_PARTS,
+      collected: z.gCollected,
+      blocked: isGlowGLetterUnveiled(inst)
+    }
+  }
+  if (index === 1) {
+    return {
+      parts: inst._hudLFillParts || 0,
+      total: GLOW_HUD_L_FILL_PARTS,
+      collected: z.lCollected,
+      blocked: false
+    }
+  }
+  if (index === 2) {
+    return {
+      parts: inst._hudOFillParts || 0,
+      total: GLOW_HUD_O_FILL_PARTS,
+      collected: z.oCollected,
+      blocked: false
+    }
+  }
+  return {
+    parts: inst._hudWFillParts || 0,
+    total: GLOW_HUD_W_FILL_PARTS,
+    collected: z.wCollected,
+    blocked: false
+  }
+}
+function glowHudLetterTooltipVisible(inst, index) {
+  const letter = inst.levelIndicator?.letterObjects?.[index]
+  if (!letter?.exists?.() || letter.hidden) return false
+  return isGlowEyesGameplayUnlocked(inst.zones)
+}
+function formatGlowHudFillProgress(parts, total) {
+  return `${parts}/${total}`
+}
+function glowHudLetterTooltipText(inst, index) {
+  const base = GLOW_HUD_LETTER_TOOLTIP_BASE[index] || ''
+  const p = glowHudLetterFillProgress(inst, index)
+  if (p.collected || p.parts <= 0) return base
+  return `${base}${GLOW_HUD_FILL_PROGRESS_SEP}${formatGlowHudFillProgress(p.parts, p.total)}`
+}
+//
+// Active partial HUD letter fill for the hero-attached counter (one at a time).
+//
+function activeGlowHudLetterFillForHero(inst) {
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) return null
+  for (let i = 0; i < GLOW_HUD_LETTER_COUNT; i++) {
+    const p = glowHudLetterFillProgress(inst, i)
+    if (p.blocked || p.collected) continue
+    if (p.parts > 0 && p.parts < p.total) return p
+  }
+  return null
+}
+//
+// Shows "n / total" beside the hero while a HUD letter is partially filled.
+//
+function hideGlowHudLetterFillCounter(inst) {
+  inst.hudLetterFillCounter && HeroCounter.hide(inst.hudLetterFillCounter)
+}
+function updateGlowHudLetterFillCounter(inst) {
+  if (inst.deathHandled || inst.hedgehogDeathHandled) {
+    hideGlowHudLetterFillCounter(inst)
+    return
+  }
+  const char = inst.heroInst?.character
+  const fill = activeGlowHudLetterFillForHero(inst)
+  if (!fill || !char?.pos) {
+    hideGlowHudLetterFillCounter(inst)
+    return
+  }
+  const label = formatGlowHudFillProgress(fill.parts, fill.total)
+  const useGold = inst.zones.colorWorld
+  const color = useGold
+    ? inst.goldRgb
+    : getRGB(inst.k, CFG.visual.colors.hero.eyeWhite)
+  const outline = useGold ? VOID : getRGB(inst.k, GLOW_PAL.void)
+  if (!inst.hudLetterFillCounter) {
+    inst.hudLetterFillCounter = HeroCounter.create({
+      k: inst.k,
+      size: MEDITATION_TIMER_FONT,
+      font: GLOW_LETTER_FONT,
+      color,
+      outlineColor: outline
+    })
+  }
+  const ctr = inst.hudLetterFillCounter
+  ctr.color = color
+  ctr.outlineColor = outline
+  HeroCounter.update(ctr, label, char.pos.x, char.pos.y)
+  syncHeroCounterPalette(ctr, color, outline)
+}
+//
+// Re-applies counter colours when the world toggles gray ↔ gold.
+//
+function syncHeroCounterPalette(ctr, color, outline) {
+  if (!ctr?.textObj?.exists?.()) return
+  const k = ctr.k
+  ctr.textObj.color = k.rgb(color.r, color.g, color.b)
+  ctr.outlineObjs.forEach(obj => {
+    obj.exists?.() && (obj.color = k.rgb(outline.r, outline.g, outline.b))
+  })
 }
 //
 // Screen-space centre of one GLOW HUD letter cell (G=0, L=1, O=2, W=3).
@@ -3795,9 +3935,21 @@ function appendGlowProximityTarget(targetXs, x) {
 //
 // Returns the visual centre of the buried skeleton body, not the skull pivot.
 //
-function skeletonTooltipBodyCenterY(inst) {
-  const skeleton = inst.undergroundSkeleton
-  return skeleton ? skeleton.y + skeleton.skullR * SKELETON_TOOLTIP_BODY_CENTER_R : -1000
+function pitCaveSkeletonTooltipPos(inst) {
+  const pit = inst.pit
+  if (!pit) return { x: -1000, y: -1000 }
+  const sk = ensurePitCaveSkeletonLayout(pit)
+  return {
+    x: sk.x,
+    y: sk.y + sk.skullR * SKELETON_TOOLTIP_BODY_CENTER_R
+  }
+}
+//
+// Cave skeleton tooltip: visible once the pit mouth or cracks can be seen.
+//
+function pitCaveSkeletonTooltipVisible(inst) {
+  if (!inst.pit || inst.dialogOpen) return false
+  return shouldShowPitCaveSkeleton(inst.pit)
 }
 //
 // Soft birds swell with the post-L meditation world-life fade (0 → full while
@@ -3813,7 +3965,7 @@ function updateMeditationBirds(inst) {
 function syncGlowWorldBirdsVolume(inst) {
   const birds = inst.birdsMusic
   if (!birds) return
-  const life = glowMeditationWorldLife(inst)
+  const life = glowBirdsMusicLife(inst)
   if (life < 0.02) {
     birds.volume = 0
     birds.paused = true
@@ -5340,13 +5492,7 @@ function buildUndergroundSpec() {
   //
   // Buried skeleton — always in the lower-left underground band
   //
-  const skeleton = {
-    x: LEFT_MARGIN + 100 + Math.random() * 120,
-    y: areaY1 + (areaY2 - areaY1) * (0.54 + Math.random() * 0.26),
-    angle: (Math.random() - 0.5) * 0.16,
-    skullR: 13 + Math.random() * 3
-  }
-  return { rocks, cracks, pebbles, rootlets, fossil, skeleton }
+  return { rocks, cracks, pebbles, rootlets, fossil, skeleton: null }
 }
 //
 // Renders the shared underground layout with one mode's tones.
@@ -5420,137 +5566,6 @@ function renderUndergroundSpec(ctx, spec, tones) {
   }
   ctx.stroke()
   ctx.globalAlpha = 1
-  //
-  // Buried skeleton lying among the roots.
-  //
-  drawUndergroundSkeleton(ctx, spec.skeleton, tones)
-}
-//
-// Draws the buried skeleton in the reference-picture pose: sitting upright
-// and facing the viewer. A filled front-view skull with big dark eye
-// sockets, a nasal hole and a toothy jaw; below it a vertical spine of
-// vertebra ticks, a clavicle line, a wide front-view ribcage (paired rib
-// arcs curving out and down from the spine) and two arm bones hanging along
-// the sides. Light bone tone on the dark earth.
-//
-function drawUndergroundSkeleton(ctx, sk, tones) {
-  const boneCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
-  const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
-  const r = sk.skullR
-  ctx.save()
-  ctx.translate(sk.x, sk.y)
-  ctx.rotate(sk.angle)
-  ctx.globalAlpha = 0.85
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  //
-  // Skull — filled cranium dome plus a narrower jaw block below it, so the
-  // head reads as one solid bone mass facing the viewer.
-  //
-  ctx.fillStyle = boneCss
-  ctx.beginPath()
-  ctx.arc(0, 0, r, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(-r * 0.62, r * 0.4)
-  ctx.lineTo(r * 0.62, r * 0.4)
-  ctx.lineTo(r * 0.5, r * 1.35)
-  ctx.lineTo(-r * 0.5, r * 1.35)
-  ctx.closePath()
-  ctx.fill()
-  //
-  // Face — two big round eye sockets, the triangular nasal hole and the
-  // mouth: a dark band across the jaw split by vertical bone teeth.
-  //
-  ctx.fillStyle = deepCss
-  ctx.beginPath()
-  ctx.arc(-r * 0.42, -r * 0.08, r * 0.3, 0, Math.PI * 2)
-  ctx.arc(r * 0.42, -r * 0.08, r * 0.3, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(0, r * 0.28)
-  ctx.lineTo(-r * 0.14, r * 0.62)
-  ctx.lineTo(r * 0.14, r * 0.62)
-  ctx.closePath()
-  ctx.fill()
-  ctx.fillRect(-r * 0.48, r * 0.88, r * 0.96, r * 0.34)
-  ctx.strokeStyle = boneCss
-  ctx.lineWidth = 1.4
-  for (let t = -1; t <= 1; t++) {
-    ctx.beginPath()
-    ctx.moveTo(t * r * 0.26, r * 0.84)
-    ctx.lineTo(t * r * 0.26, r * 1.26)
-    ctx.stroke()
-  }
-  //
-  // Spine — a vertical run of vertebra ticks from the jaw down through the
-  // chest, each tick a short horizontal bar so the column reads segmented.
-  //
-  const spineTopY = r * 1.5
-  const spineBottomY = r * 5.6
-  ctx.strokeStyle = boneCss
-  ctx.lineWidth = r * 0.16
-  ctx.beginPath()
-  ctx.moveTo(0, spineTopY)
-  ctx.lineTo(0, spineBottomY)
-  ctx.stroke()
-  ctx.lineWidth = r * 0.13
-  for (let v = 0; v < 7; v++) {
-    const vy = spineTopY + (spineBottomY - spineTopY) * (v / 6)
-    ctx.beginPath()
-    ctx.moveTo(-r * 0.24, vy)
-    ctx.lineTo(r * 0.24, vy)
-    ctx.stroke()
-  }
-  //
-  // Clavicles — a shallow V from the spine top out to both shoulders.
-  //
-  const shoulderX = r * 1.9
-  const shoulderY = r * 1.75
-  ctx.lineWidth = r * 0.16
-  ctx.beginPath()
-  ctx.moveTo(-shoulderX, shoulderY)
-  ctx.quadraticCurveTo(0, r * 2.05, shoulderX, shoulderY)
-  ctx.stroke()
-  //
-  // Ribcage — four rib pairs curving out and down from the spine, the upper
-  // pairs the widest, so the chest reads wide and rounded from the front.
-  //
-  ctx.lineWidth = r * 0.18
-  for (let rib = 0; rib < 4; rib++) {
-    const ribY = r * (2.35 + rib * 0.78)
-    const ribW = r * (2.15 - rib * 0.22)
-    const ribDrop = r * (0.85 - rib * 0.08)
-    for (const side of [-1, 1]) {
-      ctx.beginPath()
-      ctx.moveTo(0, ribY)
-      ctx.quadraticCurveTo(side * ribW, ribY + ribDrop * 0.2, side * ribW * 0.82, ribY + ribDrop)
-      ctx.stroke()
-    }
-  }
-  //
-  // Arms — humerus bones hanging from the shoulders slightly outward, with
-  // knobbed joints, like the arms rest at the skeleton's sides.
-  //
-  drawSkeletonBone(ctx, boneCss, -shoulderX, shoulderY, -shoulderX - r * 0.45, shoulderY + r * 2.6)
-  drawSkeletonBone(ctx, boneCss, shoulderX, shoulderY, shoulderX + r * 0.45, shoulderY + r * 2.6)
-  ctx.globalAlpha = 1
-  ctx.restore()
-}
-//
-// One bone: a line with small knob circles at both ends.
-//
-function drawSkeletonBone(ctx, boneCss, x1, y1, x2, y2) {
-  ctx.strokeStyle = boneCss
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.arc(x1, y1, 1.7, 0, Math.PI * 2)
-  ctx.arc(x2, y2, 1.7, 0, Math.PI * 2)
-  ctx.stroke()
 }
 //
 // Strokes an open polyline through the given points.
@@ -6462,6 +6477,17 @@ function glowMeditationWorldLife(inst) {
   if (isGlowEyeIntroPending(z)) return 1
   if (z.oZone || z.oCollected) return 1
   if (inst.meditation?.countdown != null) return inst.meditationWorldLife ?? 0
+  return 0
+}
+//
+// birds.mp3 only during the post-L stillness countdown (and after O opens).
+//
+function glowBirdsMusicLife(inst) {
+  const z = inst.zones
+  if (z.oZone || z.oCollected) return 1
+  if (z.lCollected && inst.meditation?.countdown != null) {
+    return inst.meditationWorldLife ?? 0
+  }
   return 0
 }
 //
@@ -7396,8 +7422,13 @@ function ensureGlowPitDrawLayer(inst) {
 // Paints the open cave and interior rocks at a low z-index.
 //
 function drawGlowPitPass(inst) {
-  if (!inst.pit || isGlowEyeIntroBareWorld(inst)) return
+  if (!inst.pit) return
   const k = inst.k
+  if (isGlowEyeIntroBareWorld(inst)) {
+    drawGlowPitEyeIntroInterior(k, inst.pit)
+    drawGlowPitCaveLyingEyes(inst, k)
+    return
+  }
   const fade = inst.colorFade ?? 0
   const zones = inst.zones
   const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
@@ -7406,7 +7437,16 @@ function drawGlowPitPass(inst) {
     ? DECOR_GRAY
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   paintGlowCaveMouthGroundPatch(inst, k, innerGray)
-  drawGlowPit(k, inst.pit, groundC, flatExplore && !innerGray)
+  const flatDecor = flatExplore && !innerGray
+  drawGlowPit(k, inst.pit, groundC, flatDecor)
+  drawGlowPitCaveSkeletonScene(k, inst.pit, flatDecor)
+  drawGlowPitCaveLyingEyes(inst, k)
+}
+//
+// Pickup eyes sit in the skull sockets — draw on the pit layer above the skeleton.
+//
+function drawGlowPitCaveLyingEyes(inst, k) {
+  drawGlowCavePickupEyesOnPitLayer(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
 }
 //
 // Replaces the dark static-ground bake visible through the cave mouth with the
@@ -9171,6 +9211,7 @@ function startDrowning(inst) {
   if (inst.drowning) return
   inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
+  hideGlowHudLetterFillCounter(inst)
   inst.glowDrownHeroClipLock = true
   inst.drownTimer = 0
   inst.trampBounceAir = false
@@ -9244,6 +9285,7 @@ function startDrowning(inst) {
 function finishDrowning(inst) {
   if (inst.deathHandled) return
   inst.deathHandled = true
+  hideGlowHudLetterFillCounter(inst)
   inst.sound && Sound.stopWaterStepsLoop(inst.sound)
   inst.drownSinkTween?.cancel?.()
   inst.drownSinkTween = null
@@ -9328,6 +9370,7 @@ function triggerHedgehogDeath(inst, isAmbush) {
   hero.controlsDisabled = true
   destroyStrayGlowHeroBody(inst.k, char)
   clearGlowHeroFillPreview(inst)
+  hideGlowHudLetterFillCounter(inst)
   inst.heroFillBurst = 0
   char.exists() && inst.k.destroy(char)
   glowLevel0LiveHeroChar = null
@@ -9335,7 +9378,7 @@ function triggerHedgehogDeath(inst, isAmbush) {
   triggerGlowCameraShake(inst)
   spawnHedgehogDeathBurst(inst, deathX, deathY)
   isAmbush && Hedgehog.fallAndCrawlAway(inst.ambushHedgehog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
-  finishHedgehogDeath(inst, isAmbush)
+  finishHedgehogDeath(inst, isAmbush, deathX)
 }
 //
 // The edge the ambush hedgehog should walk to before dropping off the
@@ -9375,7 +9418,7 @@ function hedgehogDeathLeafPalette(inst) {
 // instead of a silent timed reload. The ambush kill also leaves a hint
 // pinned on the culprit hedgehog once the hero is gone.
 //
-function finishHedgehogDeath(inst, isAmbush) {
+function finishHedgehogDeath(inst, isAmbush, deathX) {
   bumpGlowLifeHudOnDeath(inst)
   isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
     anchorX: inst.ambushHedgehog.x,
@@ -9389,7 +9432,7 @@ function finishHedgehogDeath(inst, isAmbush) {
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
-  markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush)
+  markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush, deathX)
   startGlowHedgehogDeathCountdown(inst)
 }
 //
@@ -9397,7 +9440,7 @@ function finishHedgehogDeath(inst, isAmbush) {
 // past the main wandering hedgehog's leash — otherwise a ground respawn
 // could land right back in its path and kill the hero again immediately.
 //
-function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush) {
+function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush, deathX) {
   set(KEY_RESPAWN_NEAR_TREE, false)
   set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
   if (isAmbush && inst.lPlatHome && !inst.zones?.lCollected) {
@@ -9410,7 +9453,11 @@ function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush) {
     set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
     return
   }
-  const safeX = (inst.hedgehog?.maxX ?? inst.lastHeroX ?? 0) + HEDGEHOG_DEATH_RESPAWN_MARGIN
+  const hog = inst.hedgehog
+  const hogX = hog?.x ?? 0
+  const safeX = deathX < hogX
+    ? (hog?.minX ?? hogX) - HEDGEHOG_DEATH_RESPAWN_MARGIN
+    : (hog?.maxX ?? hogX) + HEDGEHOG_DEATH_RESPAWN_MARGIN
   set(KEY_LAST_SPAWN_X, safeX)
   set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
 }
@@ -10284,6 +10331,8 @@ function onUpdate(inst) {
   syncGlowWorldBirdsVolume(inst)
   inst.zones.lCollected && !inst.zones.oCollected && syncGlowHudOFill(inst)
   updateMeditationCounter(inst)
+  updateGlowHudLetterFillCounter(inst)
+  syncLeftHedgehogMudSneak(inst)
   updateTrampCheekyHint(inst)
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
@@ -10304,6 +10353,7 @@ function onUpdate(inst) {
     footParticles: inst.footParticles,
     skipCrackCollapse: inst.branchTrampPitGuardTimer > 0
   })
+  updateGlowCaveFloorEyeReveal(inst, char)
   refreshGlowPitFloorJumpState(inst, char, grounded, footY)
   inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
   syncGlowAtmosphereZones(inst)
@@ -12162,6 +12212,14 @@ function markAmbushHedgehogRevealed() {
 // leaves a real gap between the pop and actual contact, long enough to
 // spot it and jump.
 //
+function syncLeftHedgehogMudSneak(inst) {
+  const hog = inst.hedgehog
+  if (!hog || hog.popped) {
+    hog && (hog.mudSneakPreview = false)
+    return
+  }
+  hog.mudSneakPreview = inst.zones.gCollected && isGlowEyesGameplayUnlocked(inst.zones)
+}
 function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
   if (!inst.zones.gCollected) return
   if (!inst.hedgehog || inst.hedgehog.popped) return
@@ -12366,6 +12424,7 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   const branch = inst.startBranch
   const hero = inst.heroInst
   if (!branch || !char?.pos || !hero) return false
+  dismissPitCaveMushroomHint(inst.pit)
   const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
   char.pos.x = teleportX
   char.pos.y = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
@@ -12388,6 +12447,13 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   syncGlowAtmosphereZones(inst)
   maybeBootstrapGlowPostEyes(inst)
   return true
+}
+function dismissPitCaveMushroomHint(pit) {
+  if (!pit) return
+  pit.pitCaveHintShown = true
+  pit.pitCaveIdleTime = 0
+  pit.pitCaveHintTooltip && Tooltip.destroy(pit.pitCaveHintTooltip)
+  pit.pitCaveHintTooltip = null
 }
 //
 // Pit mushroom hint after the hero stays in the open cave without using it.
@@ -12465,7 +12531,10 @@ function glowTooltipClampInset() {
   return {
     left: LEFT_MARGIN,
     right: RIGHT_MARGIN,
-    top: PLAYFIELD_TOP_Y + TOP_MARGIN,
+    //
+    // HUD letters sit in the top void strip above PLAYFIELD_TOP_Y + TOP_MARGIN.
+    //
+    top: PLAYFIELD_TOP_Y,
     bottom: SCREEN_H - PLAYFIELD_BOTTOM_Y
   }
 }

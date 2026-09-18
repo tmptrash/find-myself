@@ -32,6 +32,10 @@ const COLLISION_OFFSET_X = 0
 //
 const COLLISION_OFFSET_Y = 3
 //
+// Extra hover hit area to the left of the physics box (tooltip targeting).
+//
+const HERO_HOVER_HIT_PAD_LEFT = 10
+//
 // Hero parameters — scale 1 since sprites are already at display resolution
 //
 const HERO_SCALE = 1
@@ -1197,6 +1201,7 @@ function onUpdate(inst) {
       ch.moveTo(x, y)
     }
     inst.drownHeroDrawZ != null && (ch.z = inst.drownHeroDrawZ)
+    ch && (ch.hidden = true)
     //
     // Body is removed in glow drowning — only scene-driven Y applies.
     //
@@ -3040,6 +3045,100 @@ function refreshHeroSpriteForArms(inst) {
   loadHeroSprites(inst)
   inst.character?.use?.(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
 }
+//
+// Reads Kaplay's transformed area AABB (anchor-aware, jump tuck included).
+//
+function applyHeroHoverHitPad(aabb) {
+  const padLeft = HERO_HOVER_HIT_PAD_LEFT
+  const left = aabb.left - padLeft
+  const w = aabb.w + padLeft
+  return {
+    ...aabb,
+    left,
+    w,
+    x: left + w * 0.5
+  }
+}
+function heroWorldAreaAabb(ch) {
+  if (!ch?.worldArea || !ch?.pos) return null
+  try {
+    const shape = ch.worldArea()
+    const box = shape?.bbox?.() ?? shape
+    if (!box?.width || !box?.height) return null
+    const left = box.pos?.x ?? box.x ?? 0
+    const top = box.pos?.y ?? box.y ?? 0
+    const w = box.width
+    const h = box.height
+    return {
+      left,
+      top,
+      w,
+      h,
+      x: left + w * 0.5,
+      y: top + h * 0.5
+    }
+  } catch (_) {
+    return null
+  }
+}
+/**
+ * World-space hover zone matching Kaplay's live area() hitbox (worldArea()).
+ * @param {Object} heroInst - Hero inst
+ * @returns {{ x: number, y: number, w: number, h: number, left: number, top: number, pointerX: number, pointerY: number }}
+ */
+export function getHeroCollisionHoverZone(heroInst) {
+  const ch = heroInst?.character
+  if (!ch?.pos) {
+    return {
+      x: -1000,
+      y: -1000,
+      w: COLLISION_WIDTH,
+      h: COLLISION_HEIGHT,
+      left: -1000,
+      top: -1000,
+      pointerX: -1000,
+      pointerY: -1000
+    }
+  }
+  const fromWorldArea = heroWorldAreaAabb(ch)
+  if (fromWorldArea) {
+    return applyHeroHoverHitPad({
+      ...fromWorldArea,
+      pointerX: ch.pos.x,
+      pointerY: fromWorldArea.top
+    })
+  }
+  const sx = ch.scale?.x ?? 1
+  const sy = ch.scale?.y ?? 1
+  let ox = heroInst.collisionBaseOffsetX ?? COLLISION_OFFSET_X
+  let oy = heroInst.collisionBaseOffsetY ?? COLLISION_OFFSET_Y
+  let w = heroInst.collisionBaseWidth ?? COLLISION_WIDTH
+  let h = heroInst.collisionBaseHeight ?? COLLISION_HEIGHT
+  const shape = ch.area?.shape
+  if (shape?.width != null && shape?.height != null) {
+    w = shape.width
+    h = shape.height
+    ox = shape.pos?.x ?? ox
+    oy = shape.pos?.y ?? oy
+  }
+  w *= sx
+  h *= sy
+  ox *= sx
+  oy *= sy
+  const left = ch.pos.x + ox - w * 0.5
+  const top = ch.pos.y + oy - h * 0.5
+  return applyHeroHoverHitPad({
+    x: left + w * 0.5,
+    y: top + h * 0.5,
+    w,
+    h,
+    left,
+    top,
+    pointerX: ch.pos.x,
+    pointerY: top
+  })
+}
+
 /**
  * Get sprite name for character (supports custom colors)
  * @param {Object} inst - Hero instance

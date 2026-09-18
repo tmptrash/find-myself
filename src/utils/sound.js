@@ -1335,6 +1335,36 @@ function playGlowMudStep(instance) {
   noiseSource.stop(now + duration)
 }
 //
+// Glow left-hedgehog mud sneak — short dry scratch while the ghost crawls.
+//
+export function playGlowHedgehogMudSneak(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.11
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - t * 0.65)
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(480, now)
+  filter.frequency.linearRampToValueAtTime(260, now + duration)
+  filter.Q.value = 0.42
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.14, now + 0.012)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+//
 // Glow muddy band: wet squelch landing (same timbre as mud step, louder).
 //
 function playGlowMudLand(instance) {

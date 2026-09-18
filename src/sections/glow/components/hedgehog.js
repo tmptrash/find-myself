@@ -2,6 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { getRGB, toCanvas } from '../../../utils/helper.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
 import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from '../utils/glow-parallax-grain.js'
+import * as Sound from '../../../utils/sound.js'
 
 //
 // Pixel-art hedgehog colours. Kept local to this component (not routed
@@ -159,7 +160,7 @@ const LEG_STEP_SPEED = 7
 //
 const IDLE_FRAME_COUNT = 28
 const IDLE_LOOP_DURATION = 3.2
-const HEDGEHOG_BAKE_VERSION = 'v10'
+const HEDGEHOG_BAKE_VERSION = 'v12'
 const BODY_SPRITE_PREFIX = `glow0-hedgehog-${HEDGEHOG_BAKE_VERSION}-body-`
 const CURLED_SPRITE_NAME = `glow0-hedgehog-${HEDGEHOG_BAKE_VERSION}-curled`
 const GRAY_SUFFIX = '-gray'
@@ -224,15 +225,10 @@ const WANDER_TURN_IN_FRAC = 0.3
 const WANDER_BOUND_MARGIN = 6
 const WANDER_LEASH = 90
 //
-// Eye gaze — looks straight at the hero whenever he's within range and on
-// the side the face already points toward; otherwise drifts to a random
-// forward-and-down point (re-picked every couple of seconds) like it's
-// sniffing the ground. Always eased toward its target for a smooth,
-// slightly lagging, organic motion instead of snapping.
+// Eye gaze — pupils ease toward the hero whenever he's in the scene;
+// otherwise they drift to a random forward-and-down sniff point.
 //
-const GAZE_MAX_HERO_DIST = 480
 const GAZE_LERP_SPEED = 9
-const GAZE_SIDE_SLACK = 28
 const GAZE_WANDER_INTERVAL_MIN = 1.2
 const GAZE_WANDER_INTERVAL_MAX = 2.6
 //
@@ -246,30 +242,30 @@ const GAZE_FORWARD_SPOTS = [
   { x: 0.22, y: 0.08 }
 ]
 const MUD_SNEAK_PREVIEW_OPACITY = 0.075
+const MUD_SNEAK_WALK_SPEED = 5
+const MUD_SNEAK_FOOT_PLANT_THRESHOLD = 0.12
 //
 // Touch-death hitbox — AABB in art local space (ground at inst.x / y = 0),
 // sized to mane + spikes + snout, then shrunk slightly inside that silhouette.
 // Centre X is offset from inst.x because the body sits mostly behind the anchor.
 //
-const TOUCH_HITBOX_SHRINK = 0.76
+const TOUCH_HITBOX_WIDTH_SHRINK = 0.98
+const TOUCH_HITBOX_HEIGHT_SHRINK = 0.76
 //
-// Pull the rear edge (mane / back spikes) inward so the box does not hang
-// past the visible quills.
+// Rear edge on the white body outline; front edge through the eye (facing right).
 //
-const TOUCH_BACK_INSET = 7
-const TOUCH_LOCAL_MIN_X = MANE_CX - MANE_RX - SPIKE_LEN - OUTLINE_PAD + TOUCH_BACK_INSET
-const TOUCH_LOCAL_MAX_X = NOSE_TIP_X + NOSE_TIP_RX + NOSE_OUTLINE_PAD
+const TOUCH_LOCAL_MIN_X = MANE_CX - MANE_RX
+const TOUCH_LOCAL_MAX_X = EYE_CX
 const TOUCH_LOCAL_TOP_Y = MANE_CY - MANE_RY - SPIKE_LEN - OUTLINE_PAD
 const TOUCH_LOCAL_BOTTOM_Y = 3
 const TOUCH_CENTER_LOCAL_X = (TOUCH_LOCAL_MIN_X + TOUCH_LOCAL_MAX_X) / 2
-const TOUCH_HALF_W = ((TOUCH_LOCAL_MAX_X - TOUCH_LOCAL_MIN_X) / 2) * TOUCH_HITBOX_SHRINK
-const TOUCH_HALF_H_TOP = (-TOUCH_LOCAL_TOP_Y) * TOUCH_HITBOX_SHRINK
-const TOUCH_HALF_H_BOTTOM = TOUCH_LOCAL_BOTTOM_Y * TOUCH_HITBOX_SHRINK
+const TOUCH_HALF_W = ((TOUCH_LOCAL_MAX_X - TOUCH_LOCAL_MIN_X) / 2) * TOUCH_HITBOX_WIDTH_SHRINK
+const TOUCH_HALF_H_TOP = (-TOUCH_LOCAL_TOP_Y) * TOUCH_HITBOX_HEIGHT_SHRINK
+const TOUCH_HALF_H_BOTTOM = TOUCH_LOCAL_BOTTOM_Y * TOUCH_HITBOX_HEIGHT_SHRINK
 //
 // Temporary — wireframe of the touch AABB in world space while tuning.
 //
-const TOUCH_HITBOX_DEBUG = false
-const TOUCH_HITBOX_DEBUG_LINE_WIDTH = 2
+const HEDGEHOG_BODY_LINE_WIDTH = 2.2
 //
 // Falling off a platform after an ambush death — simple gravity drop until
 // the target ground line, then the normal wander state machine resumes.
@@ -328,6 +324,10 @@ export function create(cfg) {
     gazeWanderY: PUPIL_OFFSET_Y,
     gazeSpotIndex: 0,
     mudSneakPreview: false,
+    mudSneakScratchTimer: 0,
+    mudSneakDir: facing === 'left' ? -1 : 1,
+    lockWanderUntilPlat: Boolean(cfg.lockWanderUntilPlat),
+    wanderLocked: Boolean(cfg.wanderLocked),
     popped: !hiddenUntilPopOut,
     falling: false,
     walkingToEdge: false,
@@ -349,11 +349,49 @@ export function create(cfg) {
 // (snout/legs tucked away, no exposed danger zone to hit).
 //
 export function isTouchingHero(inst, heroX, heroFootY) {
-  if (!inst?.popped || inst.falling || inst.walkingToEdge) return false
+  if (!inst) return false
+  const lethal = inst.popped || inst.mudSneakPreview
+  if (!lethal || inst.falling || inst.walkingToEdge) return false
   if (inst.wanderState === 'turn' && inst.turnPhase === 'curled') return false
   const box = touchHitboxWorldAabb(inst)
   return heroX >= box.left && heroX <= box.right &&
     heroFootY >= box.top && heroFootY <= box.bottom
+}
+/**
+ * Minimal lethal hog pose for spawn nudge before Hedgehog.create() runs.
+ * @param {Object} cfg - x, y, scale, facing
+ * @returns {Object} Probe compatible with isTouchingHero()
+ */
+export function createLethalTouchProbe(cfg) {
+  return {
+    x: cfg.x,
+    y: cfg.y,
+    scale: cfg.scale,
+    facing: cfg.facing ?? 'left',
+    turnScale: 1,
+    popped: true,
+    mudSneakPreview: false,
+    falling: false,
+    walkingToEdge: false,
+    wanderState: 'walk',
+    turnPhase: 'open'
+  }
+}
+/**
+ * Moves hero X off a lethal touch box (same clearance rules as death respawn).
+ * @param {number} heroX
+ * @param {number} heroFootY
+ * @param {Object} probe - From createLethalTouchProbe()
+ * @param {number} clearance - World px gap outside the hitbox
+ * @param {{ minX?: number, maxX?: number }} [bounds] - Wander leash for side pick
+ * @returns {number}
+ */
+export function nudgeHeroXClearOfTouchProbe(heroX, heroFootY, probe, clearance, bounds) {
+  if (!probe || !isTouchingHero(probe, heroX, heroFootY)) return heroX
+  const hogX = probe.x
+  return heroX < hogX
+    ? (bounds?.minX ?? hogX) - clearance
+    : (bounds?.maxX ?? hogX) + clearance
 }
 //
 // Reveals a hidden ambush hedgehog at (x, y), facing the given direction,
@@ -366,6 +404,8 @@ export function popOut(inst, x, y, facing) {
   facing && (inst.facing = facing)
   inst.popped = true
   inst.mudSneakPreview = false
+  inst.mudSneakScratchTimer = 0
+  inst.lockWanderUntilPlat && (inst.wanderLocked = true)
   inst.falling = false
   inst.turnScale = 1
   inst.wanderState = 'idle'
@@ -403,10 +443,19 @@ export function fallAndCrawlAway(inst, groundY, edgeX) {
 function onUpdate(inst) {
   const dt = inst.k.dt()
   if (!inst.popped) {
-    inst.mudSneakPreview && updateFrozenGaze(inst, dt)
+    if (inst.mudSneakPreview) {
+      updateMudSneakWalk(inst, dt)
+      updateFrozenGaze(inst, dt)
+      tickMudSneakFootfalls(inst)
+    }
     return
   }
   const scene = inst.zones?._sceneRef
+  const ambushDeathHold = scene?.ambushHedgehogDeferFall && scene?.ambushHedgehog === inst
+  if (ambushDeathHold && !inst.falling && !inst.walkingToEdge) {
+    updateFrozenGaze(inst, dt)
+    return
+  }
   const frozen = !scene?.zones?.oZone && !scene?.zones?.oCollected &&
     (scene?.meditation?.countdown == null || (scene?.meditationWorldLife ?? 0) < 0.02)
   //
@@ -416,7 +465,7 @@ function onUpdate(inst) {
   // the only thing moving in a fully static world — the old distance/facing
   // -gated gaze (updateGaze) resumes the instant it starts wandering again.
   //
-  if (frozen && !inst.falling && !inst.walkingToEdge) {
+  if ((frozen || inst.wanderLocked) && !inst.falling && !inst.walkingToEdge) {
     updateFrozenGaze(inst, dt)
     return
   }
@@ -478,13 +527,55 @@ function drawHedgehog(inst) {
   const alphaMul = sneak ? MUD_SNEAK_PREVIEW_OPACITY : 1
   if (!sneak && inst.wanderState === 'turn' && inst.turnPhase === 'curled') {
     drawBakedSprite(inst, CURLED_SPRITE_NAME, dir, CURL_SCALE, fade, alphaMul)
-    TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
+    drawLiveEyes(inst, dir, alphaMul)
     return
   }
   const frameIdx = sneak ? 0 : currentIdleFrameIndex(inst)
   drawBakedSprite(inst, BODY_SPRITE_PREFIX + frameIdx, dir, sneak ? 1 : inst.turnScale, fade, alphaMul)
-  !sneak && drawLegs(inst, dir, fade)
-  TOUCH_HITBOX_DEBUG && drawTouchHitboxDebug(inst)
+  drawLegs(inst, dir, fade, alphaMul)
+  drawLiveEyes(inst, dir, alphaMul)
+}
+//
+// Eye drawn every frame on top of the baked hollow body so pupils can track
+// the hero (bake pass intentionally omits eyes).
+//
+function drawLiveEyes(inst, dir, alphaMul) {
+  const k = inst.k
+  const s = inst.scale * (inst.wanderState === 'turn' && inst.turnPhase === 'curled' ? CURL_SCALE : inst.turnScale)
+  const breathe = inst.popped && !inst.mudSneakPreview
+    ? Math.sin((inst.idleTime / IDLE_LOOP_DURATION) * 2 * Math.PI) * BREATH_AMP
+    : 0
+  const eyeLocalY = EYE_CY + breathe
+  const wx = inst.x + dir * s * EYE_CX
+  const wy = inst.y + s * (eyeLocalY - BAKE_Y_MAX)
+  const eyeR = EYE_R * s
+  const pupilR = PUPIL_R * s
+  const outline = getRGB(k, GLOW_PAL.glowOutlineLight)
+  const white = getRGB(k, EYE_WHITE_HEX)
+  const pupilColor = getRGB(k, EYE_HEX)
+  const px = wx + dir * s * (PUPIL_OFFSET_X + inst.pupilX)
+  const py = wy + s * (PUPIL_OFFSET_Y + inst.pupilY)
+  k.drawEllipse({
+    pos: k.vec2(wx, wy),
+    radiusX: eyeR + OUTLINE_PAD * 0.2 * s,
+    radiusY: eyeR + OUTLINE_PAD * 0.2 * s,
+    color: outline,
+    opacity: alphaMul
+  })
+  k.drawEllipse({
+    pos: k.vec2(wx, wy),
+    radiusX: eyeR,
+    radiusY: eyeR,
+    color: white,
+    opacity: alphaMul
+  })
+  k.drawEllipse({
+    pos: k.vec2(px, py),
+    radiusX: pupilR,
+    radiusY: pupilR,
+    color: pupilColor,
+    opacity: alphaMul
+  })
 }
 //
 // Blits the gray variant of a baked sprite, then the colour variant on top
@@ -520,18 +611,20 @@ function drawBakedSprite(inst, baseName, dir, scale, fade, alphaMul = 1) {
 // colourful), matching the convention the rest of the level's decor uses.
 //
 function colorFadeOf(inst) {
-  return inst.zones?._sceneRef?.colorFade ?? (inst.zones?.colorWorld ? 1 : 0)
+  const z = inst.zones
+  if (z?.lCollected || z?.colorWorld) return 1
+  return inst.zones?._sceneRef?.colorFade ?? 0
 }
 //
 // Live stub legs — planted while idle, alternating a small step-lift while
 // walking. Hidden while curled up.
 //
-function drawLegs(inst, dir, fade) {
+function drawLegs(inst, dir, fade, alphaMul = 1) {
   const k = inst.k
   const outline = getRGB(k, GLOW_PAL.glowOutlineLight)
   const maneGray = getRGB(k, MANE_GRAY_HEX)
   const maneColor = getRGB(k, MANE_HEX)
-  const legAlpha = inst.turnScale
+  const legAlpha = inst.turnScale * alphaMul
   if (legAlpha <= 0.02) return
   const s = inst.scale * inst.turnScale
   LEGS.forEach((leg, i) => {
@@ -541,7 +634,8 @@ function drawLegs(inst, dir, fade) {
     // (sin < 0) keeps it planted while it slides back under the body.
     //
     const theta = inst.legPhase + i * Math.PI
-    const swing = inst.wanderState === 'walk' ? Math.sin(theta) : 0
+    const walking = inst.wanderState === 'walk' || (!inst.popped && inst.mudSneakPreview)
+    const swing = walking ? Math.sin(theta) : 0
     const lift = Math.max(0, swing) * LEG_STEP_LIFT
     const forward = swing * LEG_STEP_FORWARD
     const hipX = inst.x + dir * s * (leg.x + forward)
@@ -763,21 +857,6 @@ function startWanderTurn(inst, pendingDir) {
   inst.turnFlipped = false
 }
 //
-// While the world is fully static (frozen, pre-meditation) the hedgehog
-// stands still but its eyes keep tracking the hero directly, ignoring the
-// facing-side/distance gate the normal wander gaze uses (see updateGaze) —
-// looks wherever he actually is, even from behind.
-//
-function hedgehogHeroInFront(inst) {
-  const dir = inst.facing === 'left' ? -1 : 1
-  const heroPos = inst.hero?.character?.pos
-  if (!heroPos) return false
-  const dx = heroPos.x - inst.x
-  const dy = heroPos.y - inst.y
-  const dist = Math.hypot(dx, dy)
-  return dist < GAZE_MAX_HERO_DIST && dx * dir > -GAZE_SIDE_SLACK
-}
-//
 // Pupil offset toward the hero in local snout space.
 //
 function hedgehogGazeTowardHero(inst) {
@@ -804,15 +883,16 @@ function stepHedgehogGazeWander(inst, dt) {
   inst.gazeWanderX = spot.x * EYE_GAZE_TRAVEL
   inst.gazeWanderY = spot.y * EYE_GAZE_TRAVEL
 }
+function hedgehogShouldTrackHeroEyes(inst) {
+  return Boolean(inst.hero?.character?.pos)
+}
 function updateFrozenGaze(inst, dt) {
-  let targetX = inst.pupilX
-  let targetY = inst.pupilY
-  if (hedgehogHeroInFront(inst)) {
-    const toward = hedgehogGazeTowardHero(inst)
-    if (toward) {
-      targetX = toward.x
-      targetY = toward.y
-    }
+  let targetX = inst.gazeWanderX
+  let targetY = inst.gazeWanderY
+  const toward = hedgehogGazeTowardHero(inst)
+  if (toward && hedgehogShouldTrackHeroEyes(inst)) {
+    targetX = toward.x
+    targetY = toward.y
   } else {
     stepHedgehogGazeWander(inst, dt)
     targetX = inst.gazeWanderX
@@ -829,12 +909,10 @@ function updateFrozenGaze(inst, dt) {
 function updateGaze(inst, dt) {
   let targetX = inst.gazeWanderX
   let targetY = inst.gazeWanderY
-  if (hedgehogHeroInFront(inst)) {
-    const toward = hedgehogGazeTowardHero(inst)
-    if (toward) {
-      targetX = toward.x
-      targetY = toward.y
-    }
+  const toward = hedgehogGazeTowardHero(inst)
+  if (toward && hedgehogShouldTrackHeroEyes(inst)) {
+    targetX = toward.x
+    targetY = toward.y
   } else {
     stepHedgehogGazeWander(inst, dt)
     targetX = inst.gazeWanderX
@@ -900,7 +978,6 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX, SNOUT_RY, SNOUT_NOSE_LEN), faceHex)
   fillEllipseCtx(ctx, FACE_PATCH_CX, faceCy, FACE_PATCH_RX, FACE_PATCH_RY, faceHex)
   drawSnoutNoseTip(ctx, snoutCy)
-  drawBakedEye(ctx, snoutCy)
   strokeQuadCtx(
     ctx,
     MOUTH_P1[0], MOUTH_P1[1] + breathe,
@@ -908,6 +985,7 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
     MOUTH_P2[0], MOUTH_P2[1] + breathe,
     MOUTH_WIDTH, GLOW_PAL.glowOutlineLight
   )
+  drawCheek(ctx, snoutCy, cheekHex)
 }
 //
 // Brown mane/spine above the torso divider (head crown → rear spine); the
@@ -1021,6 +1099,35 @@ function drawSpikeCrown(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
   })
 }
 //
+// Spike crown as open strokes (hollow body silhouette).
+//
+function drawSpikeCrownOutline(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
+  const spikes = buildArcSpikePoints(cx, cy, rx, ry, pad, swayPhase, SPIKE_ARC_START, SPIKE_ARC_END, SPIKE_COUNT, SPIKE_LEN)
+  spikes.forEach((spike) => {
+    const ink = spike.alt ? darkHex : mainHex
+    strokeLineCtx(ctx, spike.baseL[0], spike.baseL[1], spike.tip[0], spike.tip[1], 1.6, ink)
+    strokeLineCtx(ctx, spike.tip[0], spike.tip[1], spike.baseR[0], spike.baseR[1], 1.6, ink)
+  })
+}
+//
+// Curl ball spikes as strokes only.
+//
+function drawCurlSpikeBallOutline(ctx, cx, cy, r, mainHex, darkHex) {
+  const count = CURL_SPIKE_COUNT
+  for (let i = 0; i < count; i++) {
+    const a0 = (360 / count) * i
+    const a1 = (360 / count) * (i + 1)
+    const baseL = ellipsePoint(cx, cy, r, r, a0)
+    const baseR = ellipsePoint(cx, cy, r, r, a1)
+    const mid = (a0 + a1) / 2
+    const len = CURL_SPIKE_LEN * (i % 2 === 0 ? 1 : CURL_SPIKE_LEN_SHORT_FACTOR)
+    const tip = ellipsePoint(cx, cy, r + len, r + len, mid)
+    const ink = i % 2 === 1 ? darkHex : mainHex
+    strokeLineCtx(ctx, baseL[0], baseL[1], tip[0], tip[1], 1.5, ink)
+    strokeLineCtx(ctx, tip[0], tip[1], baseR[0], baseR[1], 1.5, ink)
+  }
+}
+//
 // Builds a full 360° ring of spikes for the curled-ball pose — same
 // zigzag rim/tip construction as the crown, just wrapped all the way
 // around with no taper (every spike full length).
@@ -1116,6 +1223,78 @@ function strokeQuadCtx(ctx, x1, y1, cx, cy, x2, y2, width, colorHex) {
   ctx.stroke()
 }
 //
+// Strokes an ellipse on a bake canvas (hollow body silhouette).
+//
+function strokeEllipseCtx(ctx, cx, cy, rx, ry, width, colorHex) {
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.lineWidth = width
+  ctx.strokeStyle = colorHex
+  ctx.stroke()
+}
+//
+// Strokes a closed polygon loop on a bake canvas.
+//
+function strokePolyLoopCtx(ctx, points, width, colorHex) {
+  ctx.beginPath()
+  points.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)))
+  ctx.closePath()
+  ctx.lineWidth = width
+  ctx.strokeStyle = colorHex
+  ctx.stroke()
+}
+//
+// Single stroke segment on a bake canvas.
+//
+function strokeLineCtx(ctx, x1, y1, x2, y2, width, colorHex) {
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.lineWidth = width
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = colorHex
+  ctx.stroke()
+}
+//
+// Slow pacing while the left hedgehog is still a mud-sneak ghost preview.
+//
+function updateMudSneakWalk(inst, dt) {
+  inst.wanderState = 'walk'
+  const dir = inst.mudSneakDir
+  inst.facing = dir < 0 ? 'left' : 'right'
+  inst.legPhase += dt * LEG_STEP_SPEED * 0.4
+  let nextX = inst.x + dir * MUD_SNEAK_WALK_SPEED * dt
+  if (nextX <= inst.minX) {
+    nextX = inst.minX
+    inst.mudSneakDir = 1
+  } else if (nextX >= inst.maxX) {
+    nextX = inst.maxX
+    inst.mudSneakDir = -1
+  }
+  inst.x = nextX
+}
+//
+// Scratch SFX on each foot plant while the sneak preview walks.
+//
+function tickMudSneakFootfalls(inst) {
+  const prev = inst._mudSneakPrevLegPhase ?? inst.legPhase
+  inst._mudSneakPrevLegPhase = inst.legPhase
+  let planted = false
+  for (let i = 0; i < 2; i++) {
+    const offset = i * Math.PI
+    const was = Math.sin(prev + offset)
+    const now = Math.sin(inst.legPhase + offset)
+    if (was > MUD_SNEAK_FOOT_PLANT_THRESHOLD && now <= MUD_SNEAK_FOOT_PLANT_THRESHOLD) {
+      planted = true
+      break
+    }
+  }
+  if (!planted) return
+  const sc = inst.zones?._sceneRef
+  const sound = sc?.sound
+  sound && !sound._glowSfxMuted && Sound.playGlowHedgehogMudSneak(sound)
+}
+//
 // World-space AABB for touch death — matches art local space and facing flip.
 //
 function touchHitboxWorldAabb(inst) {
@@ -1129,25 +1308,6 @@ function touchHitboxWorldAabb(inst) {
     top: inst.y - TOUCH_HALF_H_TOP * s,
     bottom: inst.y + TOUCH_HALF_H_BOTTOM * s
   }
-}
-//
-// Debug overlay — outline only, same box as isTouchingHero() (remove when done).
-//
-function drawTouchHitboxDebug(inst) {
-  const k = inst.k
-  const { left, right, top, bottom } = touchHitboxWorldAabb(inst)
-  const debugColor = getRGB(k, GLOW_PAL.mushrooms[0])
-  k.drawLines({
-    pts: [
-      k.vec2(left, top),
-      k.vec2(right, top),
-      k.vec2(right, bottom),
-      k.vec2(left, bottom),
-      k.vec2(left, top)
-    ],
-    width: TOUCH_HITBOX_DEBUG_LINE_WIDTH,
-    color: debugColor
-  })
 }
 //
 // Uniform random float in [min, max).

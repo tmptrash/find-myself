@@ -8,7 +8,7 @@ import { GLOW_PAL } from './glow-palette.js'
 //
 export const GLOW_HERO_FILL_G = 0.25
 export const GLOW_HERO_FILL_L = 0.5
-export const GLOW_MEDITATION_COUNTDOWN = 10
+export const GLOW_MEDITATION_COUNTDOWN = 5
 export const KEY_COLLECTED_G = 'glow.collectedG'
 export const KEY_COLLECTED_L = 'glow.collectedL'
 export const KEY_COLLECTED_O = 'glow.collectedO'

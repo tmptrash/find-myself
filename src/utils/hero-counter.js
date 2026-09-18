@@ -23,16 +23,25 @@ const COUNTER_Z = 10
  * @param {Object} cfg.color - Main text colour ({ r, g, b })
  * @param {string} [cfg.font] - Optional font family (Kaplay default if omitted)
  * @param {Object} [cfg.outlineColor] - Outline colour ({ r, g, b }), black by default
+ * @param {number} [cfg.yOffset] - Vertical screen offset from hero (default COUNTER_Y_OFFSET)
  * @returns {Object} Counter inst
  */
 export function create(cfg) {
-  const { k, size, color, font = null, outlineColor = { r: 0, g: 0, b: 0 } } = cfg
+  const {
+    k,
+    size,
+    color,
+    font = null,
+    outlineColor = { r: 0, g: 0, b: 0 },
+    yOffset = COUNTER_Y_OFFSET
+  } = cfg
   return {
     k,
     size,
     font,
     color,
     outlineColor,
+    yOffset,
     textObj: null,
     outlineObjs: []
   }
@@ -51,8 +60,9 @@ export function update(inst, text, heroX, heroY) {
   const cam = k.camPos()
   const halfW = k.width() / 2
   const halfH = k.height() / 2
-  const cx = heroX - cam.x + halfW + COUNTER_X_OFFSET
-  const cy = heroY - cam.y + halfH + COUNTER_Y_OFFSET
+  const yOff = inst.yOffset ?? COUNTER_Y_OFFSET
+  const cx = Math.round(heroX - cam.x + halfW + COUNTER_X_OFFSET)
+  const cy = Math.round(heroY - cam.y + halfH + yOff)
   !inst.textObj && createObjects(inst, text, cx, cy)
   inst.textObj.text = text
   inst.textObj.pos.x = cx

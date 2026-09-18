@@ -81,6 +81,8 @@ export function isActive(inst) {
  * @param {boolean} [opts.dismissHorizontalOnly=false] - Ignore vertical offset for walk dismiss
  * @param {number} [opts.movementDismissGrace=0] - Seconds after spawn before walk dismiss counts
  * @param {boolean} [opts.forceAbove=false] - Keep the bubble above the hero
+ * @param {number} [opts.offsetY] - Tooltip vertical offset from anchor (default HINT_OFFSET_Y)
+ * @param {boolean} [opts.forceBelow=false] - Prefer placing the bubble below the anchor
  */
 export function show(inst, text, duration, opts = {}) {
   inst.queue = []
@@ -95,6 +97,9 @@ export function show(inst, text, duration, opts = {}) {
   inst.anchorOverride = (opts.anchorX != null && opts.anchorY != null)
     ? { x: opts.anchorX, y: opts.anchorY }
     : null
+  inst.hintOffsetY = opts.offsetY ?? HINT_OFFSET_Y
+  inst.hintForceBelow = Boolean(opts.forceBelow)
+  inst.faceAnchorYOffset = opts.faceAnchorYOffset ?? null
   startHint(inst, text, duration)
 }
 
@@ -126,6 +131,9 @@ export function clear(inst) {
   inst.ignoreMovementDismiss = false
   inst.followHero = false
   inst.forceAbove = false
+  inst.hintOffsetY = HINT_OFFSET_Y
+  inst.hintForceBelow = false
+  inst.faceAnchorYOffset = null
   inst.dismissDistance = HINT_DISMISS_DISTANCE
   inst.dismissOnJump = true
   inst.dismissHorizontalOnly = false
@@ -135,6 +143,7 @@ export function clear(inst) {
 function applyQueueItemOpts(inst, item = {}) {
   inst.ignoreMovementDismiss = Boolean(item.ignoreMovementDismiss)
   inst.followHero = Boolean(item.followHero)
+  inst.faceAnchorYOffset = item.faceAnchorYOffset ?? null
   inst.dismissDistance = item.dismissDistance ?? HINT_DISMISS_DISTANCE
   inst.dismissOnJump = item.dismissOnJump !== false
   inst.dismissHorizontalOnly = Boolean(item.dismissHorizontalOnly)
@@ -157,8 +166,10 @@ function startHint(inst, text, duration) {
   inst.duration = duration
   inst.dismissDistance = inst.dismissDistance ?? HINT_DISMISS_DISTANCE
   inst.dismissOnJump = inst.dismissOnJump !== false
+  const faceOff = inst.faceAnchorYOffset ?? 0
   const hx = inst.anchorOverride?.x ?? heroInst.character?.pos?.x ?? 0
-  const hy = inst.anchorOverride?.y ?? heroInst.character?.pos?.y ?? 0
+  const hy = (inst.anchorOverride?.y ?? heroInst.character?.pos?.y ?? 0) +
+    (inst.anchorOverride ? 0 : faceOff)
   inst.spawnX = hx
   inst.spawnY = hy
   inst.anchorOverride = null
@@ -171,14 +182,19 @@ function startHint(inst, text, duration) {
     x: () => inst.followHero
       ? (inst.heroInst.character?.pos?.x ?? inst.spawnX)
       : inst.spawnX,
-    y: () => inst.followHero
-      ? (inst.heroInst.character?.pos?.y ?? inst.spawnY)
-      : inst.spawnY,
+    y: () => {
+      const baseY = inst.followHero
+        ? (inst.heroInst.character?.pos?.y ?? inst.spawnY)
+        : inst.spawnY
+      const off = inst.followHero && inst.faceAnchorYOffset != null ? inst.faceAnchorYOffset : 0
+      return baseY + off
+    },
     width: 1,
     height: 1,
     text,
-    offsetY: HINT_OFFSET_Y,
-    forceAbove: Boolean(inst.forceAbove)
+    offsetY: inst.hintOffsetY ?? HINT_OFFSET_Y,
+    forceAbove: Boolean(inst.forceAbove),
+    forceBelow: Boolean(inst.hintForceBelow)
   }
   inst.tooltip = Tooltip.create({
     k,

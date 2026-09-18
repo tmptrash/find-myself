@@ -161,6 +161,27 @@ function targetScreenPos(k, target) {
   return target.screenSpace ? { x: tx, y: ty } : worldToScreen(k, tx, ty)
 }
 //
+// Screen anchor for the bubble pointer (hero face / collision top, etc.).
+//
+function pointerAnchorScreen(k, target) {
+  if (target.pointerWorldX == null) return targetScreenPos(k, target)
+  const pwx = typeof target.pointerWorldX === 'function'
+    ? target.pointerWorldX()
+    : target.pointerWorldX
+  const pwy = target.pointerWorldY != null
+    ? (typeof target.pointerWorldY === 'function' ? target.pointerWorldY() : target.pointerWorldY)
+    : getTargetY(target)
+  return worldToScreen(k, pwx, pwy)
+}
+//
+// Pins bubble + pointer at hover start so branch settle does not jitter the cloud.
+//
+function freezeTooltipAnchor(inst, k, target) {
+  const screen = pointerAnchorScreen(k, target)
+  inst.frozenX = Math.round(screen.x)
+  inst.frozenY = Math.round(screen.y)
+}
+//
 // Keeps forced-visible bubbles pinned in screen space (moving world targets).
 //
 function syncFrozenScreenPos(inst, target) {
@@ -266,7 +287,24 @@ function refreshLayout(inst) {
   }
   const liveScreen = targetScreenPos(k, target)
   const liveX = liveScreen.x
-  const liveY = liveScreen.y
+  let pointerScreenX = liveX
+  let pointerScreenY = liveScreen.y
+  if (target.pinBubbleToPointer) {
+    pointerScreenX = inst.frozenX
+    pointerScreenY = inst.frozenY
+  } else if (target.pointerWorldX != null) {
+    const pwx = typeof target.pointerWorldX === 'function'
+      ? target.pointerWorldX()
+      : target.pointerWorldX
+    const pwy = target.pointerWorldY != null
+      ? (typeof target.pointerWorldY === 'function' ? target.pointerWorldY() : target.pointerWorldY)
+      : getTargetY(target)
+    const ps = worldToScreen(k, pwx, pwy)
+    pointerScreenX = ps.x
+    pointerScreenY = ps.y
+  }
+  const pointerAnchorOff = target.pointerAnchorYOffset ?? 0
+  const bubbleAnchorY = pointerScreenY + pointerAnchorOff
   const bubbleCenterX = inst.frozenX
   const offsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
   const labelText = resolveTargetText(target)
@@ -282,14 +320,14 @@ function refreshLayout(inst) {
   const insetRight = inset.right ?? 0
   const insetTop = inset.top ?? 0
   const insetBottom = inset.bottom ?? 0
-  const aboveY = inst.frozenY + offsetY - bubbleH
+  const aboveY = bubbleAnchorY + offsetY - bubbleH
   const belowThreshold = insetTop + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const showBelow = !target.forceAbove && (target.forceBelow || aboveY < belowThreshold)
   let bubbleX = Math.round(bubbleCenterX - bubbleW / 2)
   const minX = insetLeft + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const maxX = screenW - insetRight - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleW
   bubbleX = Math.max(minX, Math.min(maxX, bubbleX))
-  let bubbleY = showBelow ? inst.frozenY + Math.abs(offsetY) : aboveY
+  let bubbleY = showBelow ? bubbleAnchorY + Math.abs(offsetY) : aboveY
   const minY = (target.forceAbove ? 0 : insetTop) + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const maxY = screenH - insetBottom - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleH
   bubbleY = Math.max(minY, Math.min(maxY, bubbleY))
@@ -298,20 +336,20 @@ function refreshLayout(inst) {
   const bgColor = k.rgb(BUBBLE_BG_R, BUBBLE_BG_G, BUBBLE_BG_B)
   const clampedPointerX = Math.max(
     bubbleX + POINTER_WIDTH,
-    Math.min(bubbleX + bubbleW - POINTER_WIDTH, liveX)
+    Math.min(bubbleX + bubbleW - POINTER_WIDTH, pointerScreenX)
   )
   const liveOffsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
   let pointerTipY
   let pointerBaseEdge
   if (showBelow) {
     pointerTipY = Math.max(
-      liveY + Math.abs(liveOffsetY) - POINTER_HEIGHT,
+      bubbleAnchorY + Math.abs(liveOffsetY) - POINTER_HEIGHT,
       SCREEN_EDGE_MARGIN
     )
     pointerBaseEdge = bubbleY + BUBBLE_BORDER_WIDTH + 1
   } else {
     pointerTipY = Math.min(
-      liveY + liveOffsetY + POINTER_HEIGHT,
+      bubbleAnchorY + liveOffsetY + POINTER_HEIGHT,
       screenH - SCREEN_EDGE_MARGIN
     )
     pointerBaseEdge = bubbleY + bubbleH - BUBBLE_BORDER_WIDTH - 1
@@ -460,9 +498,7 @@ function onUpdate(inst) {
   if (hoveredTarget) {
     if (inst.activeTarget !== hoveredTarget) {
       inst.activeTarget = hoveredTarget
-      const screen = targetScreenPos(k, hoveredTarget)
-      inst.frozenX = Math.round(screen.x)
-      inst.frozenY = Math.round(screen.y)
+      freezeTooltipAnchor(inst, k, hoveredTarget)
       inst.opacity = touchInstant ? TOUCH_INSTANT_OPACITY : 0
     }
     inst.opacity = touchInstant

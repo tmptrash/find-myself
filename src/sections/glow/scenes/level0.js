@@ -95,6 +95,13 @@ import {
   restoreGlowEyeIntroFromPersistedState
 } from '../utils/glow-eye-intro.js'
 import {
+  createBranchPortalState,
+  updateBranchPortalState,
+  drawBranchPortal,
+  BRANCH_PORTAL_RX,
+  BRANCH_PORTAL_RY
+} from '../utils/glow-branch-portal.js'
+import {
   getGlowHeroFillProgress,
   GLOW_HERO_FILL_G,
   GLOW_HERO_FILL_L,
@@ -388,6 +395,8 @@ const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
 const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
 const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
 const HEDGEHOG_DEATH_HINT_RAISE = 96
+const HEDGEHOG_HINT_BODY_LIFT = 34
+const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -42
 const HEDGEHOG_DEATH_COUNTDOWN_SECONDS = 7
 const HEDGEHOG_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
 const HEDGEHOG_DEATH_PROMPT_FONT = 22
@@ -433,7 +442,6 @@ const ROCK_OUTLINE_WIDTH = 1
 // the right trampoline mushroom, so a bigger margin would spawn the hero
 // on top of it instead.
 //
-const HEDGEHOG_DEATH_RESPAWN_MARGIN = 12
 //
 // Parallax background — the warm haze backdrop plus 3 forest planes (each
 // scrolling at its own speed), then a static ground/underground strip at
@@ -857,6 +865,11 @@ const UG_CRACK_COUNT = 9
 const UG_PEBBLE_CLUSTER_COUNT = 6
 const UG_ROOTLET_COUNT = 10
 const UG_CAVE_ROOTLET_COUNT = 6
+const UG_SHELL_COUNT = 5
+const UG_BONE_COUNT = 3
+const UG_COIN_COUNT = 4
+const UG_BOTTLE_COUNT = 2
+const UG_WORM_COUNT = 4
 const OUTER_BG_R = OUTER.r
 const OUTER_BG_G = OUTER.g
 const OUTER_BG_B = OUTER.b
@@ -900,9 +913,9 @@ const GLOW_HUD_LETTER_COUNT = 4
 //
 // HUD G/L/O/W fill as loaders. Ink-box clip ignores empty font padding.
 //
-const GLOW_HUD_G_FILL_PARTS = 5
+const GLOW_HUD_G_FILL_PARTS = 6
 const GLOW_HUD_L_FILL_PARTS = 2
-const GLOW_HUD_O_FILL_PARTS = 10
+const GLOW_HUD_O_FILL_PARTS = 5
 const GLOW_HUD_W_FILL_PARTS = 3
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
 //
@@ -1058,19 +1071,16 @@ const HERO_SPAWN_FADE_DURATION = 0.75
 //
 const MEDITATION_ARM_AFTER_FILL_DELAY = 5
 //
-// Wooden trap platform above the right trampoline — spikes hang below it.
+// Semi-transparent branch teleport above the right trampoline (save key kept
+// from the old spike-gate reveal).
 //
 const KEY_SPIKE_GATE = 'glow.revealedSpikeGate'
-const SPIKE_GATE_PLAT_W = LOG_W / 2
-const SPIKE_GATE_PLAT_H = 16
-const SPIKE_GATE_EXTRA_RAISE = 56
-const SPIKE_GATE_PLAT_OFFSET_X = 26
-const SPIKE_GATE_SPIKE_H = 34
-const SPIKE_GATE_SPIKE_W = 11
-const SPIKE_GATE_SPIKE_GAP = 5
-const SPIKE_GATE_SPIKE_ROW_OFFSET_X = -26
-const SPIKE_GATE_SPIKE_ATTACH_FRAC = 0.42
-const SPIKE_GATE_PASS_MARGIN = 28
+const BRANCH_TELEPORT_RAISE = 56
+const BRANCH_TELEPORT_OFFSET_X = 4
+const BRANCH_TELEPORT_CAP_HALF_W = 20
+const BRANCH_TELEPORT_LAUNCH_COOLDOWN = 0.55
+const BRANCH_TELEPORT_HERO_HALF_W = 14
+const BRANCH_TELEPORT_HERO_TOP_OFFSET = 44
 const PIT_CAVE_HINT_IDLE = 10
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to step on me'
 const PIT_CAVE_HINT_DURATION = 5
@@ -1142,7 +1152,7 @@ const GLOW_LETTER_CAPTION_Z = CFG.visual.zIndex.player + 20
 //
 const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself in a\nworld I cannot fully perceive. To\nunderstand where I am and what\'s\nhappening to me, I need to learn\nto see it.'
 const HINT_INTRO_1_DURATION = 16
-const HINT_INTRO_2_TEXT = 'Use \'awd, ←, →, ↑, space\' keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
+const HINT_INTRO_2_TEXT = 'Use \'awd, ←, →, ↑, space\' keys to\nmove and jump. Use the Mouse to\ninteract with the world.'
 const HINT_INTRO_2_DURATION = 18
 //
 // Extra beat between the first and second intro speech bubbles.
@@ -1178,11 +1188,9 @@ const HERO_CONFIDENT_HINT_DURATION = 4
 // after each letter caption (G/L only — W/O use their own beats).
 //
 const GLOW_CONFIDENCE_HINT_G = 'I did it. That wasn\'t\nso scary after all.'
-const GLOW_CONFIDENCE_HINT_L = 'I can handle more than I thought I could.'
+const GLOW_CONFIDENCE_HINT_L = 'I can handle more than\nI thought I could.'
 const GLOW_CONFIDENCE_HINT_W = 'Look how far I\'ve come.'
 const GLOW_HERO_FILL_L_EPS = 0.02
-const SPIKE_GATE_HERO_HALF_W = 14
-const SPIKE_GATE_HERO_TOP_OFFSET = 44
 //
 // Repeat drownings get a random self-ironic joke over the sinking hero.
 //
@@ -1216,8 +1224,9 @@ const L_DECOR_DARKEN = 0.22
 //
 const MEDITATION_IDLE_BASE = 7
 const MEDITATION_IDLE_PENALTY = 2
-const MEDITATION_COUNTDOWN = 10
+const MEDITATION_COUNTDOWN = 5
 const MEDITATION_TIMER_FONT = 22
+const GLOW_HERO_COUNTER_Y_OFFSET = -44
 //
 // Hero hover tooltip — the line follows how much colour the hero can see:
 // plain gray world, gray shades after L, full colour after O.
@@ -1226,10 +1235,9 @@ const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange... It's very quiet\nhere. We shoul
 const HERO_TOOLTIP_EYELESS_TEXT = "I can't see anything"
 const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
-const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
+const HERO_TOOLTIP_AFTER_L = "I shouldn't rush.\nI just need to stop."
 const HERO_TOOLTIP_AFTER_O = 'I need to talk\nto big mushroom.'
-const HERO_TOOLTIP_HOVER_SIZE = 80
-const HERO_TOOLTIP_Y_OFFSET = -100
+const HERO_TOOLTIP_Y_OFFSET = -72
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
 const MUD_TOOLTIP_SIZE = 80
 const MUD_TOOLTIP_Y_OFFSET = -50
@@ -1488,8 +1496,12 @@ const GLOW_CAMERA_SHAKE_DURATION = 0.22
 // After O: stand still near the trampoline → countdown → mushroom walks left.
 // Three sings: two land steps, then the lake. W appears after the first sing.
 //
+const TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION = 1
 const TRAMP_WALK_STILL = 3
-const TRAMP_WALK_COUNTDOWN = 10
+const TRAMP_WALK_COUNTDOWN = 5
+const BRANCH_PORTAL_REVEAL_OPACITY = 0.075
+const TRAMP_WALK_SINGS_TO_WATER = 3
+const TRAMP_WALK_SING_TOTAL_SEC = TRAMP_WALK_COUNTDOWN * TRAMP_WALK_SINGS_TO_WATER
 const TRAMP_ENDURE_SHAKE_SPEED = 38
 const TRAMP_ENDURE_SHAKE_AMP = 0.7
 const TRAMP_ENDURE_SQUASH_MAX = 0.3
@@ -1507,7 +1519,6 @@ const TRAMP_BAD_SING_TEXT = 'I can\'t listen\nto this anymore'
 const TRAMP_BAD_SING_TEXT_2 = 'Oh come on.\nYou again'
 const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
 const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
-const TRAMP_WALK_SINGS_TO_WATER = 3
 const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
 const BRANCH_TRAMP_WRONG_SING_TEXT = "I'm not that mushroom!"
@@ -1559,6 +1570,7 @@ const WATER_RIGHT_TRIM = 10
 //
 const LAKE_SHORE_EXTEND_PX = 64
 const LAKE_Z = 12
+const BRANCH_PORTAL_DRAW_Z = LAKE_Z + 4
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -1576,7 +1588,7 @@ const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 // Drowning: default hero sprite hidden; clipped draw shows only above the wave.
 //
 const DROWN_HERO_DRAW_Z = CFG.visual.zIndex.playerShadow
-const GLOW_DROWN_HERO_CLIP_Z = CFG.visual.zIndex.player + 0.2
+const GLOW_DROWN_HERO_CLIP_Z = LAKE_Z + 1
 const GLOW_PIT_DRAW_Z = CFG.visual.zIndex.platforms - 6
 const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
 const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
@@ -1978,6 +1990,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const hedgehogAmbushTriggerX = branchTrampX + HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP
     const hedgehogAmbushPopX = hedgehogAmbushTriggerX + HEDGEHOG_LEFT_AMBUSH_POP_LEAD
+    const mudZoneX1 = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
+    const mudZoneX2 = hedgehogAmbushPopX + MUD_ZONE_RIGHT_EXTENT
+    const leftHedgehogRevealedEarly = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
+    const leftHogStartsVisible = zones.gCollected && leftHedgehogRevealedEarly
     //
     // Right ambush hedgehog's home spot on the L-log — computed early (it
     // only depends on TREE_X and fixed offsets, not on anything laid out
@@ -2069,7 +2085,35 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       lPlatX,
       rightPlatY,
       lCollected: zones.lCollected,
-      ambushHedgehogRevealed: ambushHedgehogRevealedEarly
+      ambushHedgehogRevealed: ambushHedgehogRevealedEarly,
+      floorHogProbe: leftHogStartsVisible
+        ? Hedgehog.createLethalTouchProbe({
+          x: hedgehogAmbushPopX,
+          y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
+          scale: HEDGEHOG_SCALE,
+          facing: 'left'
+        })
+        : null,
+      floorHogBounds: leftHogStartsVisible
+        ? {
+          minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
+          maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
+        }
+        : null,
+      ambushGroundHogProbe: zones.lCollected
+        ? Hedgehog.createLethalTouchProbe({
+          x: lPlatX + LOG_W / 2,
+          y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
+          scale: HEDGEHOG_AMBUSH_SCALE,
+          facing: 'left'
+        })
+        : null,
+      ambushGroundHogBounds: zones.lCollected
+        ? {
+          minX: lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
+          maxX: lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
+        }
+        : null
     })
     //
     // Glow SFX only from the first frame; birds.mp3 waits for the O countdown.
@@ -2143,13 +2187,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const oPlatY = rightPlatY - O_PLAT_OFFSET_Y
     const logAtlas = createLogAtlasCollector()
     const lPlat = createGrayLogPlatform(
-      k, lPlatX, lPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas,
+      k, lPlatX, lPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas,
       L_PLAT_COLLISION_DROP_Y
     )
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
-    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
-    const spikeGateLayout = computeGlowSpikeGateLayout(trampX, lPlatY)
-    const spikeGate = createGlowSpikeGate(k, spikeGateLayout, zones, sound, heroInst)
+    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
+    const branchTeleportLayout = computeGlowBranchTeleportLayout(trampX, lPlatY)
+    const branchTeleport = createGlowBranchTeleport(k, branchTeleportLayout, zones)
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
       colors: GLOW_PAL.cuteMushroomRed,
@@ -2198,15 +2242,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 54, session)) return
-    const leftHedgehogRevealed = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
+    const leftHedgehogRevealed = leftHedgehogRevealedEarly
     const ambushHedgehogRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
-    const mudZoneX1 = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
-    const mudZoneX2 = hedgehogAmbushPopX + MUD_ZONE_RIGHT_EXTENT
     //
     // Left hedgehog stays hidden until G is collected; returning saves keep
     // the ambush-revealed state once G was taken.
     //
-    const leftHogStartsVisible = zones.gCollected && leftHedgehogRevealed
     const hedgehog = Hedgehog.create({
       k,
       x: hedgehogAmbushPopX,
@@ -2247,6 +2288,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       hero: heroInst,
       zones,
       hiddenUntilPopOut: !(zones.lCollected || ambushHedgehogRevealed),
+      lockWanderUntilPlat: !zones.lCollected,
+      wanderLocked: !zones.lCollected,
       minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
       maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
     })
@@ -2397,6 +2440,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       lPlatCaptionHiding: false,
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
+      ambushHedgehogDeferFall: false,
       waterLayer,
       pitDrawLayer: null,
       pendingLetterPickup: null,
@@ -2423,7 +2467,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         cheekyTooltip: null,
         badSingTooltip: null,
         wrongSingCooldown: WRONG_TRAMP_SING_HINT_REPEAT,
-        waterHintStarted: savedTrampWalked
+        waterHintStarted: savedTrampWalked,
+        singAllowedAt: zones.oCollected ? 0 : null
       },
       branchTrampWalk: {
         bounceCount: 0,
@@ -2505,8 +2550,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         lFillRingPlayed: zones.lCollected,
         postLRingArmAt: null
       },
-      spikeGateLayout,
-      spikeGate,
+      branchTeleportLayout,
+      branchTeleport,
+      branchTeleportCooldown: 0,
+      branchPortalState: createBranchPortalState(),
       meditationBirdsActive: false,
       meditationWorldLife: zones.oZone || zones.oCollected ? 1 : 0,
       pendingTreeReveal: !treeDrawMonolith && treeSegmentRevealed.size < treeSegmentIds.length,
@@ -2963,6 +3010,8 @@ function heroTooltipText(inst) {
   if (inst.zones.lCollected) {
     if (inst.meditation?.countdown != null) return null
     if (inst.meditation?.stillnessCompleted) return null
+    if (inst.zones.oZone || inst.zones.oCollected) return null
+    if (inst.oLetter && !inst.oLetter.main.hidden) return null
     return HERO_TOOLTIP_AFTER_L
   }
   if (inst.zones.gCollected) return heroTooltipAfterG(inst)
@@ -2970,6 +3019,9 @@ function heroTooltipText(inst) {
     return HERO_TOOLTIP_TEXT_GRAY_QUIET
   }
   return HERO_TOOLTIP_TEXT_GRAY_QUIET
+}
+function glowHeroCollisionHoverZone(inst) {
+  return Hero.getHeroCollisionHoverZone(inst.heroInst)
 }
 //
 // Hero hover bubble stays off while any other hint is on the hero.
@@ -3015,7 +3067,9 @@ function updateLetterProgressHint(inst) {
   if (!text) return
   HeroHint.show(inst.heroHint, text, LETTER_PROGRESS_HINT_DURATION, {
     dismissOnJump: false,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
+    followHero: true,
+    faceAnchorYOffset: GLOW_HERO_COUNTER_Y_OFFSET
   })
 }
 //
@@ -3027,10 +3081,14 @@ function createSmallHeroTooltip(inst) {
   inst.worldHoverTooltip = createGlowTooltip({
     k: inst.k,
     targets: [{
-      x: () => inst.heroInst?.character?.pos?.x ?? -1000,
-      y: () => inst.heroInst?.character?.pos?.y ?? -1000,
-      width: HERO_TOOLTIP_HOVER_SIZE,
-      height: HERO_TOOLTIP_HOVER_SIZE,
+      x: () => glowHeroCollisionHoverZone(inst).x,
+      y: () => glowHeroCollisionHoverZone(inst).y,
+      width: () => glowHeroCollisionHoverZone(inst).w,
+      height: () => glowHeroCollisionHoverZone(inst).h,
+      pointerWorldX: () => glowHeroCollisionHoverZone(inst).pointerX,
+      pointerWorldY: () => glowHeroCollisionHoverZone(inst).pointerY,
+      pinBubbleToPointer: true,
+      forceAbove: true,
       text: () => heroTooltipText(inst),
       offsetY: HERO_TOOLTIP_Y_OFFSET,
       visible: () => isGlowHeroHoverTooltipVisible(inst)
@@ -3154,18 +3212,29 @@ function createSmallHeroTooltip(inst) {
 //
 // Shows/hides the meditation countdown via the shared hero counter component.
 //
+function isTrampSingHeroCounterActive(inst) {
+  const tw = inst.trampWalk
+  if (!tw || !inst.zones?.oCollected || tw.walked) return false
+  return tw.countdown != null || (tw.singCount || 0) > 0 || tw.walking
+}
 function updateMeditationCounter(inst) {
-  const remaining = inst.meditation?.countdown ?? inst.trampWalk?.countdown
+  const tw = inst.trampWalk
+  const trampSingUi = isTrampSingHeroCounterActive(inst)
+  const remaining = inst.meditation?.countdown ?? (trampSingUi ? tw.countdown : null)
   const char = inst.heroInst?.character
-  if (remaining == null || !char?.pos) {
+  if ((remaining == null && !trampSingUi) || !char?.pos) {
     inst.meditationCounter && HeroCounter.hide(inst.meditationCounter)
     inst._heroCountdownTickSecond = null
     return
   }
-  const displaySecond = Math.ceil(remaining)
-  if (inst._heroCountdownTickSecond !== displaySecond) {
-    inst._heroCountdownTickSecond = displaySecond
-    inst.sound && Sound.playTimerTickSound(inst.sound)
+  if (remaining != null) {
+    const displaySecond = Math.ceil(remaining)
+    if (inst._heroCountdownTickSecond !== displaySecond) {
+      inst._heroCountdownTickSecond = displaySecond
+      inst.sound && Sound.playTimerTickSound(inst.sound)
+    }
+  } else {
+    inst._heroCountdownTickSecond = null
   }
   if (!inst.meditationCounter) {
     inst.meditationCounter = HeroCounter.create({
@@ -3173,15 +3242,45 @@ function updateMeditationCounter(inst) {
       size: MEDITATION_TIMER_FONT,
       font: GLOW_LETTER_FONT,
       color: inst.goldRgb,
-      outlineColor: VOID
+      outlineColor: VOID,
+      yOffset: GLOW_HERO_COUNTER_Y_OFFSET
     })
   }
-  HeroCounter.update(
-    inst.meditationCounter,
-    String(Math.ceil(remaining)),
-    char.pos.x,
-    char.pos.y,
-  )
+  const hx = Math.round(char.pos.x)
+  const hy = Math.round(char.pos.y)
+  let label
+  if (inst.meditation?.countdown != null) {
+    label = formatGlowHudFillProgress(countGlowHudOFillParts(inst), GLOW_HUD_O_FILL_PARTS)
+  } else if (trampSingUi) {
+    label = formatGlowHudFillProgress(countTrampWalkSingProgressSec(inst), TRAMP_WALK_SING_TOTAL_SEC)
+  } else {
+    label = String(Math.ceil(remaining))
+  }
+  const useGold = isGlowHeroCounterGold(inst)
+  const color = useGold ? inst.goldRgb : getRGB(inst.k, CFG.visual.colors.hero.eyeWhite)
+  const outline = useGold ? VOID : getRGB(inst.k, GLOW_PAL.void)
+  inst.meditationCounter.color = color
+  inst.meditationCounter.outlineColor = outline
+  HeroCounter.update(inst.meditationCounter, label, hx, hy)
+  syncHeroCounterPalette(inst.meditationCounter, color, outline)
+}
+//
+// Tramp sing progress across three five-second countdowns (5 + 5 + 5 = 15 s total).
+//
+function countTrampWalkSingProgressSec(inst) {
+  const tw = inst.trampWalk
+  if (!tw || tw.countdown == null) {
+    return Math.min(TRAMP_WALK_SING_TOTAL_SEC, (tw?.singCount || 0) * TRAMP_WALK_COUNTDOWN)
+  }
+  const elapsed = (tw.singCount || 0) * TRAMP_WALK_COUNTDOWN + (TRAMP_WALK_COUNTDOWN - tw.countdown)
+  return Math.min(TRAMP_WALK_SING_TOTAL_SEC, Math.floor(elapsed + 1e-6))
+}
+//
+// Hero-attached counters use gold in the colour world (and after L lights decor).
+//
+function isGlowHeroCounterGold(inst) {
+  const z = inst.zones
+  return Boolean(z?.colorWorld || z?.lCollected || z?.oZone || z?.oCollected)
 }
 //
 // Reads persisted zone flags from localStorage.
@@ -3295,8 +3394,12 @@ function persistTrampWalk(inst) {
 function persistGlowLastSpawn(inst) {
   const char = inst.heroInst?.character
   if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled) return
-  const heroX = char.pos.x
-  const heroY = char.pos.y
+  writeGlowLastSpawnKeys(inst, char.pos.x, char.pos.y)
+}
+//
+// Stores spawn pose for the next reload (menu exit, death, or scene leave).
+//
+function writeGlowLastSpawnKeys(inst, heroX, heroY) {
   const footY = heroY + SURFACE_DETECT_Y
   set(KEY_LAST_SPAWN_X, heroX)
   set(KEY_LAST_SPAWN_Y, heroY)
@@ -3317,6 +3420,13 @@ function persistGlowLastSpawn(inst) {
     return
   }
   set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
+}
+//
+// Death reload: same pose as at the kill, then bootstrap nudges clear hazards.
+//
+function persistGlowDeathSpawn(inst, deathX, deathY) {
+  set(KEY_RESPAWN_NEAR_TREE, false)
+  writeGlowLastSpawnKeys(inst, deathX, deathY)
 }
 //
 // Pins the GLOW HUD letters to screen space so they stay under the top bar
@@ -3423,7 +3533,7 @@ function glowHudLetterHoverSize(inst, index) {
   return { w, h }
 }
 //
-// Base HUD letter tooltip lines plus partial fill progress (e.g. "Explore — 2/5").
+// Base HUD letter tooltip lines plus partial fill progress (e.g. "Explore — 2/6").
 //
 const GLOW_HUD_FILL_PROGRESS_SEP = ' — '
 const GLOW_HUD_LETTER_TOOLTIP_BASE = [
@@ -3458,8 +3568,9 @@ function glowHudLetterFillProgress(inst, index) {
       blocked: false
     }
   }
+  const wLive = inst._hudWFillParts || 0
   return {
-    parts: inst._hudWFillParts || 0,
+    parts: Math.min(GLOW_HUD_W_FILL_PARTS, Math.floor(wLive + 0.999)),
     total: GLOW_HUD_W_FILL_PARTS,
     collected: z.wCollected,
     blocked: false
@@ -3484,6 +3595,10 @@ function glowHudLetterTooltipText(inst, index) {
 //
 function activeGlowHudLetterFillForHero(inst) {
   if (!isGlowEyesGameplayUnlocked(inst.zones)) return null
+  const tw = inst.trampWalk
+  const trampSingOnHero = tw && inst.zones?.oCollected && !tw.walked &&
+    (tw.countdown != null || (tw.singCount || 0) < TRAMP_WALK_SINGS_TO_WATER)
+  if (trampSingOnHero) return null
   for (let i = 0; i < GLOW_HUD_LETTER_COUNT; i++) {
     const p = glowHudLetterFillProgress(inst, i)
     if (p.blocked || p.collected) continue
@@ -3509,10 +3624,8 @@ function updateGlowHudLetterFillCounter(inst) {
     return
   }
   const label = formatGlowHudFillProgress(fill.parts, fill.total)
-  const useGold = inst.zones.colorWorld
-  const color = useGold
-    ? inst.goldRgb
-    : getRGB(inst.k, CFG.visual.colors.hero.eyeWhite)
+  const useGold = isGlowHeroCounterGold(inst)
+  const color = useGold ? inst.goldRgb : getRGB(inst.k, CFG.visual.colors.hero.eyeWhite)
   const outline = useGold ? VOID : getRGB(inst.k, GLOW_PAL.void)
   if (!inst.hudLetterFillCounter) {
     inst.hudLetterFillCounter = HeroCounter.create({
@@ -3520,13 +3633,16 @@ function updateGlowHudLetterFillCounter(inst) {
       size: MEDITATION_TIMER_FONT,
       font: GLOW_LETTER_FONT,
       color,
-      outlineColor: outline
+      outlineColor: outline,
+      yOffset: GLOW_HERO_COUNTER_Y_OFFSET
     })
   }
   const ctr = inst.hudLetterFillCounter
   ctr.color = color
   ctr.outlineColor = outline
-  HeroCounter.update(ctr, label, char.pos.x, char.pos.y)
+  const hx = Math.round(char.pos.x)
+  const hy = Math.round(char.pos.y)
+  HeroCounter.update(ctr, label, hx, hy)
   syncHeroCounterPalette(ctr, color, outline)
 }
 //
@@ -3572,8 +3688,8 @@ function playGlowLetterWorldPickupFx(inst, entry) {
   )
 }
 //
-// How many of the five gray-world map parts are open (3 tree landings,
-// left ground, right ground). Caps at GLOW_HUD_G_FILL_PARTS.
+// How many gray-world map parts are open (3 tree landings, lake shore,
+// right ground strip, branch trampoline). Caps at GLOW_HUD_G_FILL_PARTS.
 //
 function isGlowGLetterUnveiled(inst) {
   if (!inst?.zones || inst.zones.gCollected) return false
@@ -3589,7 +3705,8 @@ function countGlowHudGFillParts(inst) {
     : Math.min(TreeSegments.TREE_REVEAL_PART_COUNT, countGlowBranchTreePartsRevealed(inst))
   const leftPart = z?.waterDiscovered ? 1 : 0
   const rightPart = (z?.groundRightStripMax ?? -1) >= 0 ? 1 : 0
-  return Math.min(GLOW_HUD_G_FILL_PARTS, treeParts + leftPart + rightPart)
+  const branchPart = z?.branchTrampRevealed ? 1 : 0
+  return Math.min(GLOW_HUD_G_FILL_PARTS, treeParts + leftPart + rightPart + branchPart)
 }
 //
 // L HUD fill: half when the right trampoline appears, full on the L log.
@@ -3617,7 +3734,16 @@ function countGlowHudOFillParts(inst) {
 function countGlowHudWFillParts(inst) {
   const z = inst.zones
   if (z?.wCollected || inst.trampWalk?.walked) return GLOW_HUD_W_FILL_PARTS
-  return Math.min(GLOW_HUD_W_FILL_PARTS, inst.trampWalk?.singCount || 0)
+  if (!z?.oCollected) return 0
+  const tw = inst.trampWalk
+  if (!tw) return 0
+  const completed = tw.singCount || 0
+  if (completed >= GLOW_HUD_W_FILL_PARTS) return GLOW_HUD_W_FILL_PARTS
+  let stage = 0
+  if (tw.countdown != null) {
+    stage = (TRAMP_WALK_COUNTDOWN - Math.max(0, tw.countdown)) / TRAMP_WALK_COUNTDOWN
+  }
+  return Math.min(GLOW_HUD_W_FILL_PARTS, completed + stage)
 }
 //
 // Opaque-pixel box of a HUD glyph, so gold bands follow the letter ink.
@@ -3753,8 +3879,14 @@ function drawGlowHudLetterFills(inst) {
     drawHudLetterGoldFill(k, letters?.[1], 'L', lParts, GLOW_HUD_L_FILL_PARTS)
   !inst.zones.oCollected && oParts > 0 && oParts < GLOW_HUD_O_FILL_PARTS &&
     drawHudLetterGoldFill(k, letters?.[2], 'O', oParts, GLOW_HUD_O_FILL_PARTS)
-  !inst.zones.wCollected && wParts > 0 && wParts < GLOW_HUD_W_FILL_PARTS &&
-    drawHudLetterGoldFill(k, letters?.[3], 'W', wParts, GLOW_HUD_W_FILL_PARTS)
+  !inst.zones.wCollected && wParts > 0 &&
+    drawHudLetterGoldFill(
+      k,
+      letters?.[3],
+      'W',
+      Math.min(wParts, GLOW_HUD_W_FILL_PARTS),
+      GLOW_HUD_W_FILL_PARTS
+    )
 }
 //
 // Hides the gold-band HUD drawer once every letter is fully filled or collected.
@@ -3768,7 +3900,7 @@ function syncGlowHudLetterFillDrawerHidden(inst) {
     !isGlowGLetterUnveiled(inst)
   const l = !z.lCollected && (inst._hudLFillParts || 0) > 0 && (inst._hudLFillParts || 0) < GLOW_HUD_L_FILL_PARTS
   const o = !z.oCollected && (inst._hudOFillParts || 0) > 0 && (inst._hudOFillParts || 0) < GLOW_HUD_O_FILL_PARTS
-  const w = !z.wCollected && (inst._hudWFillParts || 0) > 0 && (inst._hudWFillParts || 0) < GLOW_HUD_W_FILL_PARTS
+  const w = !z.wCollected && (inst._hudWFillParts || 0) > 0
   drawer.hidden = !(g || l || o || w)
 }
 //
@@ -3816,6 +3948,34 @@ function syncGlowHudOFill(inst, burst = true) {
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
+// W loader: one third per five-second sing (fills during each countdown).
+//
+function syncGlowHudWFill(inst, burst = true) {
+  const z = inst.zones
+  if (!z?.oCollected) {
+    inst._hudWFillParts = 0
+    return
+  }
+  const indicator = inst.levelIndicator
+  if (!indicator) return
+  ensureGlowHudLetterFillDrawer(inst)
+  const live = countGlowHudWFillParts(inst)
+  const saved = Math.min(
+    GLOW_HUD_W_FILL_PARTS,
+    Number(get(KEY_HUD_W_FILL, 0)) || 0
+  )
+  const wParts = Math.max(live, saved)
+  const prevBand = Math.floor(inst._hudWFillParts ?? 0)
+  const nextBand = Math.floor(wParts)
+  const prevW = inst._hudWFillParts
+  inst._hudWFillParts = wParts
+  set(KEY_HUD_W_FILL, Math.min(GLOW_HUD_W_FILL_PARTS, inst.trampWalk?.singCount || 0))
+  tintGlowHudLoaderLetters(inst)
+  burst && prevW != null && nextBand > prevBand &&
+    flashGlowHudLetterBurst({ levelIndicator: indicator, k: inst.k }, 4)
+  syncGlowHudLetterFillDrawerHidden(inst)
+}
+//
 // GLOW HUD word appears with the first yellow G fill, or once G is collected.
 //
 function syncGlowHudLabelVisibility(inst) {
@@ -3845,17 +4005,13 @@ function syncGlowHudLetterFills(inst, burst = true) {
   const lParts = resolvedHudFillParts(
     countGlowHudLFillParts(inst), KEY_HUD_L_FILL, GLOW_HUD_L_FILL_PARTS
   )
-  const wParts = resolvedHudFillParts(
-    countGlowHudWFillParts(inst), KEY_HUD_W_FILL, GLOW_HUD_W_FILL_PARTS
-  )
   const prevG = inst._hudGFillParts
   const prevL = inst._hudLFillParts
-  const prevW = inst._hudWFillParts
   inst._hudGFillParts = gParts
   inst._hudLFillParts = lParts
-  inst._hudWFillParts = wParts
   persistHudLetterFills(inst)
   syncGlowHudOFill(inst, burst)
+  syncGlowHudWFill(inst, burst)
   tintGlowHudLoaderLetters(inst)
   syncGlowHudGLetterShadow(inst)
   syncGlowHudLabelVisibility(inst)
@@ -3863,8 +4019,6 @@ function syncGlowHudLetterFills(inst, burst = true) {
     flashGlowHudLetterBurst(inst, 1)
   burst && prevL != null && lParts > prevL &&
     flashGlowHudLetterBurst(inst, 2)
-  burst && prevW != null && wParts > prevW &&
-    flashGlowHudLetterBurst(inst, 4)
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
@@ -4049,17 +4203,14 @@ function glowGrayGroundRgb(inst, innerGray) {
 function glowTreeRootRevealFade(inst) {
   const z = inst?.zones
   if (!z?.lCollected) return 0
-  if (z.oCollected) return 1
-  return glowPostLRevealFade(inst)
+  return 1
 }
 //
 // True once the post-L stillness countdown (or later beats) unlock surface decor.
 //
 function isGlowWorldSurfaceDecorUnlocked(inst) {
   const z = inst?.zones
-  if (!z?.lCollected) return false
-  if (z.oZone || z.oCollected) return true
-  return glowPostLRevealFade(inst) > 0.04
+  return Boolean(z?.lCollected)
 }
 //
 // True when world X lies in the soft-mud band (grass + baked pebbles stay after G).
@@ -4128,6 +4279,15 @@ function drawPostLGrayDecorBaked(k, sc, flatBaked, shadedBaked, pos, anchor, ang
 //
 function glowDecorFade(inst) {
   return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
+}
+//
+// Hedgehogs, lake, and trampolines go full colour as soon as L is taken —
+// not only when the stillness countdown finishes.
+//
+function glowLZoneDecorFade(inst) {
+  const z = inst?.zones
+  if (z?.lCollected || z?.colorWorld || z?.oCollected) return 1
+  return glowDecorFade(inst)
 }
 //
 // Tree colour crossfade is independent of parallax/grass — full green crown
@@ -4513,8 +4673,33 @@ function updatePlatformRevealFade(plat, dt) {
 //
 // Toggles pickup letter visibility.
 //
+function concealGlowLetterPickupVisual(entry) {
+  if (!entry) return
+  entry._pickupQueued = true
+  entry._popFade = null
+  entry.allObjects?.forEach(obj => {
+    obj.hidden = true
+    obj.opacity = 0
+  })
+}
+function glowLetterPickupNear(inst, entry, kind, heroX, heroY) {
+  if (!entry) return false
+  const queued = entry._pickupQueued || inst.pendingLetterPickup?.kind === kind
+  if (entry.main.hidden && !queued) return false
+  return Math.hypot(heroX - entry.x, heroY - entry.y) < GLOW_LETTER_PICKUP_RADIUS
+}
+function hideGlowLetterPickupInWorld(entry) {
+  if (!entry) return
+  entry.pickedUp = true
+  concealGlowLetterPickupVisual(entry)
+}
 function setLetterVisible(letterEntry, visible, burst = false) {
-  if (!letterEntry || letterEntry.forceVisible) return
+  if (!letterEntry) return
+  if (letterEntry.pickedUp) {
+    letterEntry.allObjects?.forEach(obj => { obj.hidden = true })
+    return
+  }
+  if (letterEntry.forceVisible) return
   const wasHidden = letterEntry.main?.hidden !== false
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
   if (!visible) {
@@ -4626,8 +4811,8 @@ function isGLetterCollectable(inst) {
   return Boolean(
     inst.gLetter &&
     !inst.zones.gCollected &&
-    !inst.gLetter.main.hidden &&
-    glowThreeZonesExplored(inst)
+    glowThreeZonesExplored(inst) &&
+    (!inst.gLetter.main.hidden || inst.gLetter._pickupQueued || inst.pendingLetterPickup?.kind === 'g')
   )
 }
 //
@@ -4638,12 +4823,6 @@ function rebuildWoodSurfaces(inst) {
   const list = branch ? [branch] : []
   const z = inst.zones
   z.lPlatRevealed && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
-  z.spikeGateRevealed && inst.spikeGateLayout && list.push({
-    x1: inst.spikeGateLayout.x1,
-    x2: inst.spikeGateLayout.x2,
-    y: inst.spikeGateLayout.platTopY,
-    h: SPIKE_GATE_PLAT_H
-  })
   z.oZone && z.lCollected && list.push({ x1: inst.oPlatHome.x, x2: inst.oPlatHome.x + LOG_W, y: inst.oPlatHome.y, h: LOG_H })
   z.wZone && z.oCollected && list.push({ x1: inst.wPlatHome.x, x2: inst.wPlatHome.x + LOG_W, y: inst.wPlatHome.y, h: LOG_H })
   inst.woodSurfaces = list
@@ -5490,9 +5669,45 @@ function buildUndergroundSpec() {
   //
   const fossil = { x: randX(), y: randY(), r: 9 + Math.random() * 5 }
   //
-  // Buried skeleton — always in the lower-left underground band
+  // Shells, bones, coins, bottles, worms — simple silhouettes for humour.
   //
-  return { rocks, cracks, pebbles, rootlets, fossil, skeleton: null }
+  const shells = []
+  for (let i = 0; i < UG_SHELL_COUNT; i++) {
+    shells.push({
+      x: randX(),
+      y: randY(),
+      w: 10 + Math.random() * 8,
+      h: 7 + Math.random() * 5,
+      flip: Math.random() < 0.5
+    })
+  }
+  const bones = []
+  for (let i = 0; i < UG_BONE_COUNT; i++) {
+    const x = randX()
+    const y = randY()
+    const angle = (Math.random() - 0.5) * 0.8
+    bones.push({ x, y, angle, len: 18 + Math.random() * 14 })
+  }
+  const coins = []
+  for (let i = 0; i < UG_COIN_COUNT; i++) {
+    coins.push({ x: randX(), y: randY(), r: 3 + Math.random() * 2 })
+  }
+  const bottles = []
+  for (let i = 0; i < UG_BOTTLE_COUNT; i++) {
+    bottles.push({ x: randX(), y: randY(), h: 14 + Math.random() * 6, tilt: (Math.random() - 0.5) * 0.5 })
+  }
+  const worms = []
+  for (let i = 0; i < UG_WORM_COUNT; i++) {
+    const x = randX()
+    const y = randY()
+    const pts = [{ x, y }]
+    for (let s = 0; s < 4; s++) {
+      const last = pts[pts.length - 1]
+      pts.push({ x: last.x + 6 + Math.random() * 8, y: last.y + (Math.random() - 0.5) * 6 })
+    }
+    worms.push(pts)
+  }
+  return { rocks, cracks, pebbles, rootlets, fossil, shells, bones, coins, bottles, worms, skeleton: null }
 }
 //
 // Renders the shared underground layout with one mode's tones.
@@ -5566,6 +5781,86 @@ function renderUndergroundSpec(ctx, spec, tones) {
   }
   ctx.stroke()
   ctx.globalAlpha = 1
+  //
+  // Buried shells — half-ovals with a split line.
+  //
+  spec.shells?.forEach(shell => {
+    ctx.save()
+    ctx.translate(shell.x, shell.y)
+    shell.flip && ctx.scale(-1, 1)
+    ctx.fillStyle = lightCss
+    ctx.globalAlpha = 0.8
+    ctx.beginPath()
+    ctx.ellipse(0, 0, shell.w * 0.5, shell.h * 0.45, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = deepCss
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(-shell.w * 0.35, 0)
+    ctx.lineTo(shell.w * 0.35, 0)
+    ctx.stroke()
+    ctx.restore()
+  })
+  ctx.globalAlpha = 1
+  //
+  // Bones — two short segments with knobs.
+  //
+  spec.bones?.forEach(bone => {
+    ctx.save()
+    ctx.translate(bone.x, bone.y)
+    ctx.rotate(bone.angle)
+    ctx.strokeStyle = lightCss
+    ctx.lineWidth = 2.2
+    ctx.lineCap = 'round'
+    ctx.globalAlpha = 0.85
+    ctx.beginPath()
+    ctx.moveTo(-bone.len * 0.5, 0)
+    ctx.lineTo(bone.len * 0.5, 0)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(-bone.len * 0.5, 0, 2.5, 0, Math.PI * 2)
+    ctx.arc(bone.len * 0.5, 0, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = lightCss
+    ctx.fill()
+    ctx.restore()
+  })
+  ctx.globalAlpha = 1
+  //
+  // Coins — tiny buried discs.
+  //
+  ctx.fillStyle = lightCss
+  spec.coins?.forEach(coin => {
+    ctx.globalAlpha = 0.75
+    ctx.beginPath()
+    ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  ctx.globalAlpha = 1
+  //
+  // Bottles — stuck at an angle (message in a bottle vibes).
+  //
+  spec.bottles?.forEach(bottle => {
+    ctx.save()
+    ctx.translate(bottle.x, bottle.y)
+    ctx.rotate(bottle.tilt)
+    ctx.fillStyle = lightCss
+    ctx.globalAlpha = 0.7
+    ctx.fillRect(-3, -bottle.h * 0.5, 6, bottle.h * 0.65)
+    ctx.fillRect(-2, -bottle.h * 0.5 - 4, 4, 4)
+    ctx.restore()
+  })
+  ctx.globalAlpha = 1
+  //
+  // Worms — wavy polylines.
+  //
+  ctx.strokeStyle = deepCss
+  ctx.lineWidth = 1.4
+  ctx.lineCap = 'round'
+  spec.worms?.forEach(pts => {
+    ctx.globalAlpha = 0.65
+    strokePolyline(ctx, pts)
+  })
+  ctx.globalAlpha = 1
 }
 //
 // Strokes an open polyline through the given points.
@@ -5581,6 +5876,7 @@ function strokePolyline(ctx, pts) {
 function maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC) {
   const z = inst.zones
   if (!z.lCollected || z.oZone || z.oCollected || !groundFillC) return
+  if (z.lCollected) return
   const reveal = glowPostLRevealFade(inst)
   if (reveal >= 1 - COLOR_CROSSFADE_EPS) return
   const cover = 1 - reveal
@@ -6816,7 +7112,7 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
         // applies the after-L darkening tint (white = untinted). A blink
         // swaps to the closed-eyes variant of the current set.
         //
-        const previewFade = zones.colorWorld ? 1 : glowDecorFade(zones._sceneRef)
+        const previewFade = zones.colorWorld ? 1 : glowLZoneDecorFade(zones._sceneRef)
         const graySprite = TRAMP_SPRITE
         const colorSprite = colorSpriteBase
         const sc = zones._sceneRef
@@ -7064,7 +7360,7 @@ function isLakeFillInCameraView(k, sc, x1, x2) {
 //
 function resolveGlowLakeDrawRgb(k, sc) {
   const twoTone = sc && isGlowFlatSingleDecorColor(sc)
-  const fade = sc?.colorFade ?? 0
+  const fade = glowLZoneDecorFade(sc)
   let c
   if (fade >= 1 && sc?._lakeColorSettled) {
     c = sc._lakeColorSettled
@@ -7125,6 +7421,7 @@ function drawGlowDrownHeroClipped(inst) {
   // whole hidden sprite once the sink tween has passed the surface).
   //
   if (topY >= surfaceY - 0.25) return
+  if (bottomY <= surfaceY + 0.25) return
   if (surfaceY >= bottomY) return
   let visibleH = fullH
   let drawY = char.pos.y
@@ -8335,15 +8632,26 @@ function fireGlowHeroFillReveal(inst, pending) {
   inst._lastHeroFillAmount = pending.to
   triggerGlowHeroFillBurst(inst)
   Sound.playLetterPickupSoft(inst.sound)
-  const char = inst.heroInst?.character
-  const x = char?.pos?.x ?? 0
-  const y = char?.pos?.y ?? 0
-  pending.hintText && HeroHint.show(inst.heroHint, pending.hintText, HERO_CONFIDENT_HINT_DURATION, {
+  const voiceHintOpts = {
     followHero: true,
-    anchorX: x,
-    anchorY: y,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
+    faceAnchorYOffset: GLOW_HERO_COUNTER_Y_OFFSET,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
+    dismissOnJump: false
+  }
+  if (pending.hintText) {
+    const isLFill = Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS
+    isLFill
+      ? HeroHint.queue(inst.heroHint, [
+        { text: pending.hintText, duration: HERO_CONFIDENT_HINT_DURATION, ...voiceHintOpts },
+        {
+          text: HERO_TOOLTIP_AFTER_L,
+          duration: LETTER_PROGRESS_HINT_DURATION,
+          pauseBefore: 0.45,
+          ...voiceHintOpts
+        }
+      ])
+      : HeroHint.show(inst.heroHint, pending.hintText, HERO_CONFIDENT_HINT_DURATION, voiceHintOpts)
+  }
   if (Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS) {
     const m = inst.meditation
     m.lFillRingPlayed = true
@@ -8422,11 +8730,15 @@ function splitGlowCaptionText(text) {
 // World systems skip updates via dialogOpen; hero keeps full movement.
 //
 function beginGlowWorldFreeze(inst) {
+  inst._letterCaptionGrainBoost = true
+  syncLeftHedgehogMudSneak(inst)
 }
 //
 // No hero state to restore — dialog freeze is world-only.
 //
 function endGlowWorldFreeze(inst) {
+  inst._letterCaptionGrainBoost = false
+  syncLeftHedgehogMudSneak(inst)
 }
 //
 // Snapshot of birds + proximity ambient volumes for dialog fade.
@@ -8494,6 +8806,7 @@ function closeGlowLetterCaption(inst, captionObjs, letterEntry, onCloseExtra, au
 function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExtra, dialogSoundName = null) {
   const k = inst.k
   inst.letterCaptionActive = true
+  beginGlowWorldFreeze(inst)
   const audioFade = createGlowDialogAudioFadeState(inst)
   playGlowLetterDialogMusic(inst, dialogSoundName)
   letterEntry && (letterEntry.forceVisible = true)
@@ -8806,7 +9119,10 @@ function collectLetterG(inst) {
   HeroHint.clear(inst.heroHint)
   markLetterCollectedForProgressHint(inst)
   const entry = inst.gLetter
-  entry && (entry.forceVisible = true)
+  hideGlowLetterPickupInWorld(entry)
+  syncGlowHudLetterFills(inst, false)
+  flashGlowHudLetterBurst(inst, 1)
+  syncLeftHedgehogMudSneak(inst)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 1, inst.zones.colorWorld)
   } else {
@@ -8817,9 +9133,7 @@ function collectLetterG(inst) {
     LevelIndicator.setSectionLabelHidden(inst.levelIndicator, false)
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 1)
   }
-  syncGlowHudLetterFills(inst, false)
   syncGlowFpsHudVisibility(inst)
-  flashGlowHudLetterBurst(inst, 1)
   openGlowLetterCaption(inst, entry, GLOW_DIALOG_G, GLOW_LETTER_CAPTION_DURATION_G, () => {
     inst.gLetter = null
     //
@@ -8837,6 +9151,8 @@ function collectLetterL(inst) {
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, GLOW_HERO_FILL_L)
   inst.zones.lCollected = true
+  inst._lakeColorSettled = null
+  inst._lakeDrawRgb = null
   set(KEY_COLLECTED_L, true)
   markLetterCollectedForProgressHint(inst)
   inst.zones.outerFrame = true
@@ -8846,15 +9162,15 @@ function collectLetterL(inst) {
   refreshPlayfieldCornerSprites(inst)
   updatePlayfieldBorderColors(inst)
   const entry = inst.lLetter
-  entry && (entry.forceVisible = true)
+  hideGlowLetterPickupInWorld(entry)
   inst.letterOffscreenArrow = null
+  syncGlowHudLetterFills(inst, false)
+  flashGlowHudLetterBurst(inst, 2)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 2, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 2)
   }
-  flashGlowHudLetterBurst(inst, 2)
-  syncGlowHudLetterFills(inst, false)
   inst.meditationWorldLife = 0
   syncGlowBirdsAfterL(inst)
   //
@@ -8871,6 +9187,7 @@ function collectLetterL(inst) {
   dropAmbushHedgehogIfStrandedOnLPlat(inst)
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
+  applyGlowPostLLitState(inst)
   openGlowLetterCaption(inst, entry, GLOW_DIALOG_L, GLOW_LETTER_CAPTION_DURATION_L, () => {
     inst.lLetter = null
     inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
@@ -8893,16 +9210,17 @@ function collectLetterO(inst) {
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
   const entry = inst.oLetter
-  entry && (entry.forceVisible = true)
+  hideGlowLetterPickupInWorld(entry)
   inst.letterOffscreenArrow = null
   dismissOLetterStuckHint(inst)
+  syncGlowHudLetterFills(inst, false)
+  flashGlowHudLetterBurst(inst, 3)
+  inst.trampWalk.singAllowedAt = Number.POSITIVE_INFINITY
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 3, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 3)
   }
-  syncGlowHudLetterFills(inst, false)
-  flashGlowHudLetterBurst(inst, 3)
   //
   // The log the hero just collected O from vanishes for the length of the
   // caption only, same as L — he keeps falling/moving normally through
@@ -8923,6 +9241,8 @@ function collectLetterO(inst) {
     startColorWorldFade(inst)
     inst.oPlatCaptionHiding = false
     applyZoneVisibility(inst)
+    const tw = inst.trampWalk
+    tw && (tw.singAllowedAt = inst.k.time() + TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION)
   }, GLOW_DIALOG_SOUND_O)
 }
 //
@@ -8936,7 +9256,10 @@ function collectLetterW(inst) {
   inst.zones.wCollected = true
   set(KEY_COLLECTED_W, true)
   const entry = inst.wLetter
+  hideGlowLetterPickupInWorld(entry)
   inst.wLetter = null
+  syncGlowHudLetterFills(inst, false)
+  flashGlowHudLetterBurst(inst, 4)
   entry?.allObjects?.forEach(obj => obj.destroy?.())
   inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
   if (!inst.levelIndicator) {
@@ -8944,8 +9267,6 @@ function collectLetterW(inst) {
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 4)
   }
-  flashGlowHudLetterBurst(inst, 4)
-  syncGlowHudLetterFills(inst, false)
   revealPostWHud(inst)
   applyZoneVisibility(inst)
   //
@@ -9063,6 +9384,7 @@ function queueGlowLetterPickup(inst, kind, grounded) {
   }
   if (inst.pendingLetterPickup) return
   const entry = glowLetterEntryByKind(inst, kind)
+  entry && concealGlowLetterPickupVisual(entry)
   entry && playGlowLetterWorldPickupFx(inst, entry)
   inst.pendingLetterPickup = { kind, pickedOnGround: grounded }
   grounded && flushPendingGlowLetterPickup(inst, true, true)
@@ -9088,16 +9410,12 @@ function tryCollectGlowLetters(inst, char, grounded, justLanded) {
   if (inst.pendingLetterPickup || inst.letterCaptionActive) return
   const heroX = char.pos.x
   const heroY = char.pos.y
-  const near = (entry) => {
-    if (!entry || entry.main.hidden) return false
-    return Math.hypot(heroX - entry.x, heroY - entry.y) < GLOW_LETTER_PICKUP_RADIUS
-  }
   inst.zones.lPlatRevealed && inst.zones.lLetterUnveiled && !inst.zones.lCollected && inst.zones.gCollected &&
-    near(inst.lLetter) && queueGlowLetterPickup(inst, 'l', grounded)
+    glowLetterPickupNear(inst, inst.lLetter, 'l', heroX, heroY) && queueGlowLetterPickup(inst, 'l', grounded)
   inst.zones.oZone && !inst.zones.oCollected && inst.zones.lCollected &&
-    near(inst.oLetter) && queueGlowLetterPickup(inst, 'o', grounded)
+    glowLetterPickupNear(inst, inst.oLetter, 'o', heroX, heroY) && queueGlowLetterPickup(inst, 'o', grounded)
   inst.zones.wZone && !inst.zones.wCollected && inst.zones.oCollected &&
-    near(inst.wLetter) && queueGlowLetterPickup(inst, 'w', grounded)
+    glowLetterPickupNear(inst, inst.wLetter, 'w', heroX, heroY) && queueGlowLetterPickup(inst, 'w', grounded)
 }
 //
 // Pins the hero to the manual sink tween (body is removed for the sequence).
@@ -9213,6 +9531,8 @@ function startDrowning(inst) {
   inst.drowning = true
   hideGlowHudLetterFillCounter(inst)
   inst.glowDrownHeroClipLock = true
+  inst.heroFillBurst = 0
+  clearGlowHeroFillPreview(inst)
   inst.drownTimer = 0
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
@@ -9302,9 +9622,13 @@ function finishDrowning(inst) {
     //
     const resumeBranch = inst.drownFromStartBranch
     set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
-    resumeBranch && set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
-    resumeBranch && set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
-    resumeBranch && set(KEY_LAST_SPAWN_Y, inst.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+    if (resumeBranch) {
+      set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
+      set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
+      set(KEY_LAST_SPAWN_Y, inst.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+    } else if (char?.pos) {
+      persistGlowDeathSpawn(inst, char.pos.x, char.pos.y)
+    }
     inst.k.go('lesson-glow.0')
   })
 }
@@ -9377,8 +9701,8 @@ function triggerHedgehogDeath(inst, isAmbush) {
   hero.character = null
   triggerGlowCameraShake(inst)
   spawnHedgehogDeathBurst(inst, deathX, deathY)
-  isAmbush && Hedgehog.fallAndCrawlAway(inst.ambushHedgehog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
-  finishHedgehogDeath(inst, isAmbush, deathX)
+  isAmbush && (inst.ambushHedgehogDeferFall = true)
+  finishHedgehogDeath(inst, isAmbush, deathX, deathY)
 }
 //
 // The edge the ambush hedgehog should walk to before dropping off the
@@ -9418,48 +9742,26 @@ function hedgehogDeathLeafPalette(inst) {
 // instead of a silent timed reload. The ambush kill also leaves a hint
 // pinned on the culprit hedgehog once the hero is gone.
 //
-function finishHedgehogDeath(inst, isAmbush, deathX) {
+function finishHedgehogDeath(inst, isAmbush, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
   isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
     anchorX: inst.ambushHedgehog.x,
-    anchorY: inst.ambushHedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+    anchorY: inst.ambushHedgehog.y - HEDGEHOG_HINT_BODY_LIFT,
+    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+    forceBelow: true,
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
   !isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
     anchorX: inst.hedgehog.x,
-    anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+    anchorY: inst.hedgehog.y - HEDGEHOG_HINT_BODY_LIFT,
+    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+    forceAbove: true,
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
-  markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush, deathX)
+  persistGlowDeathSpawn(inst, deathX, deathY)
   startGlowHedgehogDeathCountdown(inst)
-}
-//
-// Forces the next level reload to spawn the hero on dry ground clearly
-// past the main wandering hedgehog's leash — otherwise a ground respawn
-// could land right back in its path and kill the hero again immediately.
-//
-function markSafeGroundRespawnAwayFromHedgehog(inst, isAmbush, deathX) {
-  set(KEY_RESPAWN_NEAR_TREE, false)
-  set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
-  if (isAmbush && inst.lPlatHome && !inst.zones?.lCollected) {
-    const home = inst.lPlatHome
-    const hogX = inst.ambushHedgehog?.x ?? home.x + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP
-    const safeX = hogX <= home.x + LOG_W * 0.5
-      ? home.x - HEDGEHOG_WANDER_RIGHT_MARGIN - HERO_HEDGEHOG_SPAWN_CLEARANCE
-      : home.x + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN + HERO_HEDGEHOG_SPAWN_CLEARANCE
-    set(KEY_LAST_SPAWN_X, safeX)
-    set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
-    return
-  }
-  const hog = inst.hedgehog
-  const hogX = hog?.x ?? 0
-  const safeX = deathX < hogX
-    ? (hog?.minX ?? hogX) - HEDGEHOG_DEATH_RESPAWN_MARGIN
-    : (hog?.maxX ?? hogX) + HEDGEHOG_DEATH_RESPAWN_MARGIN
-  set(KEY_LAST_SPAWN_X, safeX)
-  set(KEY_LAST_SPAWN_Y, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
@@ -9494,9 +9796,30 @@ function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
     lPlatX,
     rightPlatY,
     lCollected,
-    ambushHedgehogRevealed
+    ambushHedgehogRevealed,
+    floorHogProbe,
+    floorHogBounds,
+    ambushGroundHogProbe,
+    ambushGroundHogBounds
   } = cfg
   let x = spawnX
+  const heroFootY = spawnY + SURFACE_DETECT_Y
+  if (!spawnOnBranch) {
+    x = Hedgehog.nudgeHeroXClearOfTouchProbe(
+      x,
+      heroFootY,
+      floorHogProbe,
+      HERO_HEDGEHOG_SPAWN_CLEARANCE,
+      floorHogBounds
+    )
+    x = Hedgehog.nudgeHeroXClearOfTouchProbe(
+      x,
+      heroFootY,
+      ambushGroundHogProbe,
+      HERO_HEDGEHOG_SPAWN_CLEARANCE,
+      ambushGroundHogBounds
+    )
+  }
   if (!spawnOnBranch) {
     const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
     x >= hedgehogAmbushTriggerX && x <= dangerEndX &&
@@ -9709,6 +10032,7 @@ function revealBranchTrampoline(inst) {
   Sound.stopAmbient(inst.sound)
   triggerGlowCameraShake(inst)
   applyZoneVisibility(inst)
+  syncGlowHudLetterFills(inst, false)
   showTrampolineRevealHint(inst)
 }
 //
@@ -9785,6 +10109,7 @@ function revealOZone(inst) {
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
+  HeroHint.clear(inst.heroHint)
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
   //
   // Body fill itself waits for the O letter to actually be collected and the
@@ -10330,6 +10655,7 @@ function onUpdate(inst) {
   syncGlowBirdsAfterL(inst)
   syncGlowWorldBirdsVolume(inst)
   inst.zones.lCollected && !inst.zones.oCollected && syncGlowHudOFill(inst)
+  inst.zones.oCollected && !inst.zones.wCollected && syncGlowHudWFill(inst)
   updateMeditationCounter(inst)
   updateGlowHudLetterFillCounter(inst)
   syncLeftHedgehogMudSneak(inst)
@@ -10382,8 +10708,31 @@ function onUpdate(inst) {
   // Hedgehog touch death — last check of the frame since it may destroy
   // the hero's character outright.
   //
-  !inst.deathHandled && checkGlowSpikeGateDeath(inst)
+  !inst.deathHandled && checkGlowBranchTeleportLaunch(inst, char)
+  maybeReleaseDeferredAmbushHedgehogFall(inst)
+  syncAmbushHedgehogWanderLock(inst, char, grounded)
   !inst.deathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
+}
+//
+// Ambush hedgehog waits on the L-log after a kill until the world animates again.
+//
+function isGlowWorldMotionUnlocked(inst) {
+  const z = inst.zones
+  if (z.colorWorld || z.oZone || z.oCollected) return true
+  if (inst.meditation?.countdown != null) return true
+  if ((inst.meditationWorldLife ?? 0) > 0.04) return true
+  if ((inst.parallaxFade ?? 0) > 0.05) return true
+  return false
+}
+function maybeReleaseDeferredAmbushHedgehogFall(inst) {
+  if (!inst.ambushHedgehogDeferFall || !inst.ambushHedgehog) return
+  if (!isGlowWorldMotionUnlocked(inst)) return
+  inst.ambushHedgehogDeferFall = false
+  Hedgehog.fallAndCrawlAway(
+    inst.ambushHedgehog,
+    FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
+    computeAmbushHedgehogFallEdgeX(inst)
+  )
 }
 //
 // Locks the hero's gaze on the G letter while he stands on the start branch
@@ -10672,7 +11021,8 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     }
     return
   }
-  if (inst.dialogOpen) return
+  if (inst.dialogOpen || inst.letterCaptionActive) return
+  if (tw.singAllowedAt != null && inst.k.time() < tw.singAllowedAt) return
   const nearRadius = tw.countdown != null ? TRAMP_WALK_NEAR_SINGING : TRAMP_WALK_NEAR
   const near = Math.abs(char.pos.x - inst.trampState.x) < nearRadius &&
     grounded &&
@@ -10701,7 +11051,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
     persistTrampWalk(inst)
-    syncGlowHudLetterFills(inst)
+    syncGlowHudWFill(inst)
     showTrampBadSingHint(inst, line)
     tw.singCount === 1 && revealWZone(inst)
     tw.singCount === 1 && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
@@ -12190,6 +12540,33 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
     footY <= home.y + LOG_SNAP_BELOW
   onLLog && markLPlatStepped(inst)
   onLLog && maybeSpawnHedgehogAmbush(inst)
+  syncAmbushHedgehogWanderLock(inst, char, grounded)
+}
+//
+// Ambush hedgehog only wanders after the hero has actually stood on the L-log.
+//
+function syncAmbushHedgehogWanderLock(inst, char, grounded) {
+  const hog = inst.ambushHedgehog
+  if (!hog?.popped || !hog.lockWanderUntilPlat || inst.zones.lCollected) {
+    hog && (hog.wanderLocked = false)
+    return
+  }
+  if (!grounded || !char?.pos) {
+    hog.wanderLocked = true
+    return
+  }
+  const home = inst.lPlatHome
+  if (!home || !inst.zones.lPlatRevealed) {
+    hog.wanderLocked = true
+    return
+  }
+  const heroX = char.pos.x
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK &&
+    heroX <= home.x + LOG_W + LOG_SNAP_X_SLACK &&
+    footY >= home.y - LOG_SNAP_STANDING_MAX &&
+    footY <= home.y + LOG_SNAP_BELOW
+  hog.wanderLocked = !onLLog
 }
 //
 // Persists that the left ambush hedgehog has already popped — the next
@@ -12227,7 +12604,11 @@ function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
   if (heroX < inst.hedgehogAmbushTriggerX) return
   const running = Math.abs(heroVelX) > HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD
   const popX = inst.hedgehogAmbushPopX + (running ? HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS : 0)
-  Hedgehog.popOut(inst.hedgehog, popX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
+  if (running) {
+    inst.hedgehog.x = popX
+    inst.hedgehog.y = FLOOR_Y - HEDGEHOG_GROUND_RAISE
+  }
+  Hedgehog.popOut(inst.hedgehog, null, null, 'left')
   markLeftHedgehogRevealed()
 }
 //
@@ -12266,6 +12647,7 @@ function maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded) {
 // drop it to the ground instead of leaving it stranded over empty air.
 //
 function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
+  if (inst.ambushHedgehogDeferFall) return
   const hog = inst.ambushHedgehog
   if (!hog?.popped || hog.falling) return
   //
@@ -12288,6 +12670,7 @@ function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
 // crawling off the nearest edge after a while unused.
 //
 function maybeAbandonStrandedAmbushHedgehog(inst) {
+  if (inst.ambushHedgehogDeferFall) return
   const hog = inst.ambushHedgehog
   if (!hog?.popped || hog.falling || hog.walkingToEdge || inst.zones.lCollected) {
     inst.ambushHedgehogIdleTimer = 0
@@ -12506,10 +12889,14 @@ function updateOLetterStuckHint(inst, dt) {
     k: inst.k,
     forceVisible: true,
     targets: [{
-      x: () => inst.heroInst?.character?.pos?.x ?? -1000,
-      y: () => inst.heroInst?.character?.pos?.y ?? -1000,
-      width: HERO_TOOLTIP_HOVER_SIZE,
-      height: HERO_TOOLTIP_HOVER_SIZE,
+      x: () => glowHeroCollisionHoverZone(inst).x,
+      y: () => glowHeroCollisionHoverZone(inst).y,
+      width: () => glowHeroCollisionHoverZone(inst).w,
+      height: () => glowHeroCollisionHoverZone(inst).h,
+      pointerWorldX: () => glowHeroCollisionHoverZone(inst).pointerX,
+      pointerWorldY: () => glowHeroCollisionHoverZone(inst).pointerY,
+      pinBubbleToPointer: true,
+      forceAbove: true,
       text: O_LETTER_STUCK_HINT_TEXT,
       offsetY: HERO_TOOLTIP_Y_OFFSET
     }]
@@ -12598,122 +12985,79 @@ function glowTooltipBakeBounds(layout) {
   return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 //
-// Layout for the wooden spike gate above the right trampoline.
+// Layout for the gray branch teleport above the right trampoline.
 //
-function computeGlowSpikeGateLayout(trampX, lPlatY) {
-  const w = SPIKE_GATE_PLAT_W
-  const x1 = trampX - w / 2 + SPIKE_GATE_PLAT_OFFSET_X
-  const x2 = trampX + w / 2 + SPIKE_GATE_PLAT_OFFSET_X
-  const platTopY = lPlatY - SPIKE_GATE_EXTRA_RAISE
-  const platBottomY = platTopY + SPIKE_GATE_PLAT_H
-  const spikeBaseY = platTopY + SPIKE_GATE_PLAT_H * SPIKE_GATE_SPIKE_ATTACH_FRAC
-  const logDetail = generateLogDetail(w, SPIKE_GATE_PLAT_H)
-  return {
-    x1,
-    x2,
-    w,
-    platTopY,
-    platBottomY,
-    spikeBaseY,
-    spikeBottom: spikeBaseY + SPIKE_GATE_SPIKE_H,
-    logDetail
-  }
+function computeGlowBranchTeleportLayout(trampX, lPlatY) {
+  const cx = trampX + BRANCH_TELEPORT_OFFSET_X
+  const cy = lPlatY - BRANCH_TELEPORT_RAISE
+  return { cx, cy, rx: BRANCH_PORTAL_RX, ry: BRANCH_PORTAL_RY }
 }
 //
-// Static plank + hanging spikes (drawn on a dedicated layer).
+// Draw-only semi-transparent portal (no collision — launch is overlap-tested).
 //
-function createGlowSpikeGate(k, layout, zones, sound, heroInst) {
-  const w = layout.w
-  const h = SPIKE_GATE_PLAT_H
-  const plat = k.add([
-    k.rect(w, h, { fill: false }),
-    k.pos(-500, PLATFORM_HIDE_Y),
-    k.anchor('center'),
-    //
-    // Rect area is laid out from local (0,0); without this offset the debug
-    // box sits with its top-left on pos (half a plank right and down of the art).
-    //
-    k.area({ offset: k.vec2(-w / 2, -h / 2) }),
-    k.body({ isStatic: true }),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    CFG.game.platformName,
-    { _homeX: layout.x1, _homeY: layout.platTopY }
-  ])
-  plat.hidden = true
-  tagWoodPlatform(plat, sound, heroInst)
+function createGlowBranchTeleport(k, layout, zones) {
   const drawRoot = k.add([
-    k.z(CFG.visual.zIndex.platforms),
-    { draw() { drawGlowSpikeGate(k, layout, zones) } }
+    k.z(BRANCH_PORTAL_DRAW_Z),
+    { draw() { drawGlowBranchTeleport(k, layout, zones) } }
   ])
   drawRoot.hidden = true
-  return { plat, drawRoot }
+  return { drawRoot }
 }
 //
-// Toggles spike gate visibility with zone flags.
+// Toggles branch teleport visibility with zone flags.
 //
 function syncGlowSpikeGateVisibility(inst) {
-  const gate = inst.spikeGate
-  const layout = inst.spikeGateLayout
-  if (!gate || !layout) return
-  const show = inst.zones.spikeGateRevealed && !shouldGlowBlockWorldReveal(inst)
-  gate.plat.hidden = !show
-  gate.drawRoot.hidden = !show
-  const w = layout.w
-  const cx = layout.x1 + w / 2
-  const cy = layout.platTopY + SPIKE_GATE_PLAT_H / 2
-  gate.plat.pos.x = show ? cx : -500
-  gate.plat.pos.y = show ? cy : PLATFORM_HIDE_Y
+  const gate = inst.branchTeleport
+  if (!gate) return
+  gate.drawRoot.hidden = !inst.zones.rightTrampRevealed
 }
 //
-// Draws the wooden plank and downward gray spikes.
+// Oval spiral portal above the right trampoline.
 //
-function drawGlowSpikeGate(k, layout, zones) {
-  const fade = zones._sceneRef?.colorFade ?? 0
-  const spikeRgb = getRGB(k, GLOW_PAL.treeGray.trunk)
-  const detailHex = (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.treeGray.trunk
-  const detailRgb = getRGB(k, detailHex)
-  const outlineRgb = k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
-  const w = layout.w
-  const h = SPIKE_GATE_PLAT_H
-  const detail = layout.logDetail
-  drawLOutlineLogPlatform(k, w, h, layout.x1, layout.platTopY, detail, outlineRgb, detailRgb, 1)
-  fade > COLOR_CROSSFADE_EPS &&
-    drawLogPlatform(k, w, h, layout.x1, layout.platTopY, fade, detail, glowLogColors(zones))
-  const innerW = layout.w - SPIKE_GATE_SPIKE_GAP * 2
-  let count = Math.max(1, Math.floor((innerW + SPIKE_GATE_SPIKE_GAP) / (SPIKE_GATE_SPIKE_W + SPIKE_GATE_SPIKE_GAP)))
-  const rowW = count * SPIKE_GATE_SPIKE_W + (count - 1) * SPIKE_GATE_SPIKE_GAP
-  const spikeBaseY = layout.spikeBaseY ?? layout.platBottomY
-  let x = layout.x1 + (layout.w - rowW) / 2 + SPIKE_GATE_SPIKE_ROW_OFFSET_X
-  for (let i = 0; i < count; i++) {
-    const tipX = x + SPIKE_GATE_SPIKE_W / 2
-    k.drawTriangle({
-      p1: k.vec2(tipX, layout.spikeBottom),
-      p2: k.vec2(x, spikeBaseY),
-      p3: k.vec2(x + SPIKE_GATE_SPIKE_W, spikeBaseY),
-      color: k.rgb(spikeRgb.r, spikeRgb.g, spikeRgb.b)
-    })
-    x += SPIKE_GATE_SPIKE_W + SPIKE_GATE_SPIKE_GAP
-  }
+function drawGlowBranchTeleport(k, layout, zones) {
+  if (!zones.rightTrampRevealed) return
+  const sc = zones._sceneRef
+  const char = sc?.heroInst?.character
+  const onCap = sc && char && isOnTrampolineCap(sc, char, sc.trampState)
+  const fullReveal = Boolean(onCap || zones.spikeGateRevealed)
+  const alphaMul = fullReveal ? 1 : BRANCH_PORTAL_REVEAL_OPACITY
+  const state = sc?.branchPortalState
+  state && updateBranchPortalState(state, k.dt())
+  const fade = sc?.colorFade ?? 0
+  drawBranchPortal(k, layout, state, fade, alphaMul)
 }
 //
-// Fatal when the hero rises into the hanging spikes (not when passing left).
+// Launches the hero to the big-tree branch when he drops into the portal.
 //
-function checkGlowSpikeGateDeath(inst) {
+function checkGlowBranchTeleportLaunch(inst, char) {
   if (!inst.zones.spikeGateRevealed || inst.deathHandled) return
-  const layout = inst.spikeGateLayout
-  const char = inst.heroInst?.character
+  const layout = inst.branchTeleportLayout
   if (!layout || !char?.pos) return
+  if (inst.branchTeleportCooldown > 0) {
+    inst.branchTeleportCooldown = Math.max(0, inst.branchTeleportCooldown - inst.k.dt())
+    return
+  }
   const hx = char.pos.x
   const hy = char.pos.y
-  const heroLeft = hx - SPIKE_GATE_HERO_HALF_W
-  const heroRight = hx + SPIKE_GATE_HERO_HALF_W
-  const heroTop = hy - SPIKE_GATE_HERO_TOP_OFFSET
-  const heroBottom = hy + 6
-  const spikeTop = layout.spikeBaseY ?? layout.platBottomY
-  if (heroBottom < spikeTop || heroTop > layout.spikeBottom) return
-  if (heroRight < layout.x1 - SPIKE_GATE_PASS_MARGIN) return
-  if (heroLeft > layout.x2) return
-  triggerHedgehogDeath(inst, false)
+  const feet = hy + SURFACE_DETECT_Y
+  const heroLeft = hx - BRANCH_TELEPORT_HERO_HALF_W
+  const heroRight = hx + BRANCH_TELEPORT_HERO_HALF_W
+  const heroTop = hy - BRANCH_TELEPORT_HERO_TOP_OFFSET
+  const portalLeft = layout.cx - BRANCH_TELEPORT_CAP_HALF_W
+  const portalRight = layout.cx + BRANCH_TELEPORT_CAP_HALF_W
+  const portalTop = layout.cy - (layout.ry ?? BRANCH_PORTAL_RY)
+  const portalBottom = layout.cy + (layout.ry ?? BRANCH_PORTAL_RY)
+  const overlapX = heroRight > portalLeft && heroLeft < portalRight
+  const overlapY = feet > portalTop && heroTop < portalBottom
+  overlapX && overlapY && launchHeroFromBranchTeleportToBranch(inst, char)
+}
+//
+// Same launch as the pit-cave mushroom — big branch bounce.
+//
+function launchHeroFromBranchTeleportToBranch(inst, char) {
+  const launched = launchHeroFromPitMushroomToBranch(inst, char)
+  launched && (inst.branchTeleportCooldown = BRANCH_TELEPORT_LAUNCH_COOLDOWN)
+  return launched
 }
 //
 // Land stops for the first two sings; the third walk docks in the lake.

@@ -184,6 +184,11 @@ export const CFG = {
       //
       ready: {
         background: "#1A2530",
+        //
+        // Menu ring anti-heroes for locked / uncompleted sections — rim
+        // close to the scene background so hollow silhouettes stay subtle.
+        //
+        uncompletedSectionOutline: PALETTE.gray0,
         fireflies: "#F4C040",
         hint: "#809AA8",
         text: "#9AB5C4",

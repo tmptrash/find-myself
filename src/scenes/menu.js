@@ -155,9 +155,9 @@ const GLOW_MENU_SECTION_HERO_BODY = CFG.visual.colors.hero.eyeWhite
 //
 const MENU_HERO_OUTLINE_COLOR = GLOW_MENU_HERO_BODY
 //
-// Uncompleted section anti-heroes use a darker gray rim than the body fill.
+// Uncompleted section anti-heroes — soft rim near the ready/menu backdrop.
 //
-const MENU_ANTIHERO_HOLLOW_OUTLINE = GLOW_PAL.decorOutline
+const MENU_ANTIHERO_HOLLOW_OUTLINE = CFG.visual.colors.ready.uncompletedSectionOutline
 const MENU_LEAVE_BG_R = 26
 const MENU_LEAVE_BG_G = 26
 const MENU_LEAVE_BG_B = 26
@@ -556,15 +556,14 @@ export function sceneMenu(k) {
       k,
       type: Hero.HEROES.ANTIHERO,
       bodyColor: GLOW_MENU_HERO_BODY,
-      outlineColor: GLOW_MENU_HERO_OUTLINE,
+      outlineColor: uncompletedHollowOutline,
       outlineOnly: true,
       noEyes: true
     })
     const hollowSuffixes = '_outline_noeyes'
     const spritePrefixHollow = `${Hero.HEROES.ANTIHERO}_${grayColor.replace('#', '')}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
     const glowMenuBodyNoHashEarly = GLOW_MENU_HERO_BODY.replace('#', '')
-    const glowMenuOutlineNoHashEarly = GLOW_MENU_HERO_OUTLINE.replace('#', '')
-    const spritePrefixGlowHollow = `${Hero.HEROES.ANTIHERO}_${glowMenuBodyNoHashEarly}_${glowMenuOutlineNoHashEarly}${hollowSuffixes}`
+    const spritePrefixGlowHollow = `${Hero.HEROES.ANTIHERO}_${glowMenuBodyNoHashEarly}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
     //
     // Create 6 anti-heroes around the main hero (sections)
     //
@@ -699,7 +698,7 @@ export function sceneMenu(k) {
         ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
         : null
       const spritePrefixGlowSectionHollow = config.section === 'glow'
-        ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${hollowSuffixes}`
+        ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
         : null
       antiHeroInst.spritePrefixGlowHollow = spritePrefixGlowSectionHollow
       antiHeroInst.spritePrefixHollow = spritePrefixHollow
@@ -763,7 +762,7 @@ export function sceneMenu(k) {
       }
       antiHeroInst.spritePrefixGlowHollow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGlowHollow] = {
         bodyColor: GLOW_MENU_SECTION_HERO_BODY,
-        outlineColor: GLOW_MENU_HERO_OUTLINE,
+        outlineColor: hollowOutlineColor,
         outlineOnly: true,
         noEyes: true,
         addMouth: false,

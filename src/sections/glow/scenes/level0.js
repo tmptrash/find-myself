@@ -395,33 +395,10 @@ const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
 const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
 const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
 const HEDGEHOG_DEATH_HINT_RAISE = 96
-const HEDGEHOG_HINT_BODY_LIFT = 34
-const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -42
-const HEDGEHOG_DEATH_COUNTDOWN_SECONDS = 7
-const HEDGEHOG_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
-const HEDGEHOG_DEATH_PROMPT_FONT = 22
-//
-// The prompt sits down on the amber foliage of the farthest (3rd) parallax
-// row rather than up in the empty sky: PAR_LEAF_MAX_Y is that band's hard
-// bottom edge, so backing off by this much lands the line inside the leaves.
-//
-const HEDGEHOG_DEATH_PROMPT_LEAF_RISE = 228
-const HEDGEHOG_DEATH_PROMPT_TEXT_GRAY = glowRgb('lightGray')
-const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = glowRgb('void')
-//
-// White text + void shadow reads over the orange haze and amber parallax
-// once the world is no longer flat gray.
-//
-const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = glowRgb('#FFFFFF')
-const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = glowRgb('void')
-const PAR_LEAF_MAX_Y_FRACTION = 463 / DESIGN_SCREEN_H
-//
-// Screen-space HUD/prompt Y — starts at the design value and gets
-// VOID_PAD_Y added in recomputeGlowScreenLayout so it stays visually
-// aligned with the (world-space, camera-shifted) leaf band it sits on.
-//
-let HEDGEHOG_DEATH_PROMPT_Y = Math.round(DESIGN_SCREEN_H * PAR_LEAF_MAX_Y_FRACTION) -
-  HEDGEHOG_DEATH_PROMPT_LEAF_RISE
+const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -58
+const HEDGEHOG_DEATH_HINT_DURATION = 5
+const HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET = 56
+const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
 //
 // How fast the post-L world wakes up (grass sway, hedgehog wander, birds,
 // mushroom whistle-lean) once the O-meditation countdown starts, and how
@@ -2130,10 +2107,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const heroEyes = getGlowHeroEyeBakeColors(!heroStartFilled)
     if (glowInitStale(session)) return
     destroyStrayGlowHeroBody(k)
-    const heroInst = Hero.create({
-      k,
-      x: heroSpawnX,
-      y: heroSpawnY,
+    const glowHeroCreateCfg = {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
@@ -2155,6 +2129,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       //
       idleVocalization: null,
       idleNotePostBake: applyGlowForegroundBake
+    }
+    const heroInst = Hero.create({
+      k,
+      x: heroSpawnX,
+      y: heroSpawnY,
+      ...glowHeroCreateCfg
     })
     //
     // No footprint trail in the glow level — the ground stays clean.
@@ -2440,6 +2420,18 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       lPlatCaptionHiding: false,
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
+      hedgehogRespawnWait: null,
+      glowHeroCreateCfg,
+      heroSpawnNudge: {
+        branchTrampX,
+        trampX,
+        hedgehogAmbushTriggerX,
+        hedgehogAmbushPopX,
+        lPlatX,
+        rightPlatY: lPlatY,
+        mudZoneX1,
+        mudZoneX2
+      },
       ambushHedgehogDeferFall: false,
       waterLayer,
       pitDrawLayer: null,
@@ -2689,6 +2681,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     })
     k.onSceneLeave(() => {
       backToMenuCancel.cancel()
+      inst.hedgehogRespawnWait?.cancel?.()
+      inst.hedgehogRespawnWait = null
       clearGlowHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
@@ -9455,7 +9449,8 @@ function updateDrownHeroDrawLayer(inst, char) {
 // Late-frame trampoline bounce — runs after hero.js land-squash.
 //
 function registerGlowTrampolineLateBounce(inst) {
-  if (inst.trampLateBounce) return
+  inst.trampLateBounce?.cancel?.()
+  inst.trampLateBounce = null
   const char = inst.heroInst?.character
   if (!char) return
   //
@@ -9678,7 +9673,7 @@ function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
 // other level (Hero.death), but with the level's own dusty ground-burst
 // (bigger, and spread upward too) instead of the generic body-square
 // explosion. The ambush hedgehog additionally tumbles off its platform and
-// keeps crawling while the death countdown runs.
+// keeps crawling while the hero respawns in-place.
 //
 function triggerHedgehogDeath(inst, isAmbush) {
   if (inst.deathHandled) return
@@ -9738,30 +9733,149 @@ function hedgehogDeathLeafPalette(inst) {
   return (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).map(hex => glowRgb(hex))
 }
 //
-// Same life-HUD bump as drowning, then a standard press-any-key countdown
-// instead of a silent timed reload. The ambush kill also leaves a hint
-// pinned on the culprit hedgehog once the hero is gone.
+// Life-HUD bump, optional hedgehog hint, then in-level respawn beside the kill.
 //
 function finishHedgehogDeath(inst, isAmbush, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
-  isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
+  isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
     anchorX: inst.ambushHedgehog.x,
-    anchorY: inst.ambushHedgehog.y - HEDGEHOG_HINT_BODY_LIFT,
-    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
-    forceBelow: true,
-    ignoreMovementDismiss: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
-  !isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
-    anchorX: inst.hedgehog.x,
-    anchorY: inst.hedgehog.y - HEDGEHOG_HINT_BODY_LIFT,
+    anchorY: inst.ambushHedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
     offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
     forceAbove: true,
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
-  persistGlowDeathSpawn(inst, deathX, deathY)
-  startGlowHedgehogDeathCountdown(inst)
+  !isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
+    anchorX: inst.hedgehog.x,
+    anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+    forceAbove: true,
+    ignoreMovementDismiss: true,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
+  inst.hedgehogRespawnWait?.cancel?.()
+  inst.hedgehogRespawnWait = inst.k.wait(HERO_HEDGEHOG_RESPAWN_DELAY, () => {
+    inst.hedgehogRespawnWait = null
+    inst.hedgehogDeathHandled && respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush)
+  })
+}
+//
+// Hog probes for spawn nudge (same rules as initial level bootstrap).
+//
+function getGlowHeroSpawnHogProbes(inst) {
+  const zones = inst.zones
+  const nudge = inst.heroSpawnNudge
+  if (!nudge) return {}
+  const leftHogVisible = zones.gCollected && get(KEY_LEFT_HEDGEHOG_REVEALED, false)
+  const ambushRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
+  return {
+    floorHogProbe: leftHogVisible
+      ? Hedgehog.createLethalTouchProbe({
+        x: nudge.hedgehogAmbushPopX,
+        y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
+        scale: HEDGEHOG_SCALE,
+        facing: 'left'
+      })
+      : null,
+    floorHogBounds: leftHogVisible
+      ? {
+        minX: nudge.mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
+        maxX: nudge.mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
+      }
+      : null,
+    ambushGroundHogProbe: zones.lCollected
+      ? Hedgehog.createLethalTouchProbe({
+        x: nudge.lPlatX + LOG_W / 2,
+        y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
+        scale: HEDGEHOG_AMBUSH_SCALE,
+        facing: 'left'
+      })
+      : null,
+    ambushGroundHogBounds: zones.lCollected
+      ? {
+        minX: nudge.lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
+        maxX: nudge.lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
+      }
+      : null,
+    ambushHedgehogRevealed: ambushRevealed
+  }
+}
+//
+// Respawn beside the death spot (offset away from the hog), with bootstrap nudges.
+//
+function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
+  const hog = isAmbush ? inst.ambushHedgehog : inst.hedgehog
+  const hogX = hog?.x ?? deathX
+  const away = deathX <= hogX ? -1 : 1
+  let spawnX = deathX + away * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
+  const spawnY = deathY
+  const footY = spawnY + SURFACE_DETECT_Y
+  const spawnOnBranch = isHeroOverStartBranchX(inst, spawnX) &&
+    footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX
+  const nudge = inst.heroSpawnNudge
+  const hogProbes = getGlowHeroSpawnHogProbes(inst)
+  spawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
+    spawnX,
+    spawnOnBranch,
+    branchTrampX: nudge.branchTrampX,
+    trampX: nudge.trampX,
+    branchTrampVisible: isBranchTrampolineVisible(inst.zones),
+    trampVisible: isRightTrampolineVisible(inst.zones)
+  })
+  spawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
+    spawnX,
+    spawnY,
+    spawnOnBranch,
+    hedgehogAmbushTriggerX: nudge.hedgehogAmbushTriggerX,
+    hedgehogAmbushPopX: nudge.hedgehogAmbushPopX,
+    lPlatX: nudge.lPlatX,
+    rightPlatY: nudge.rightPlatY,
+    lCollected: inst.zones.lCollected,
+    ...hogProbes
+  })
+  return { x: spawnX, y: spawnY }
+}
+//
+// Rebuilds the hero body in-place after a hedgehog kill (no scene reload).
+//
+function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
+  const k = inst.k
+  const cfg = inst.glowHeroCreateCfg
+  if (!cfg) return
+  releaseGamePhysicalKeys()
+  const pose = computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush)
+  const filled = inst.zones.colorWorld || inst.zones.oZone || inst.heroBodyFillApplied
+  const heroEyes = getGlowHeroEyeBakeColors(!filled)
+  const prev = inst.heroInst
+  const stepSound = prev?.onPlayStepSound
+  destroyStrayGlowHeroBody(k)
+  prev?.character?.exists?.() && k.destroy(prev.character)
+  const fresh = Hero.create({
+    ...cfg,
+    k,
+    x: pose.x,
+    y: pose.y,
+    outlineColor: filled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
+    ...heroEyes,
+    outlineOnly: !filled,
+    noEyes: !inst.zones.eyesCollected
+  })
+  Hero.spawn(fresh, { instant: true })
+  fresh.onPlayStepSound = stepSound
+  inst.heroInst = fresh
+  inst.heroHint && (inst.heroHint.heroInst = fresh)
+  inst.hedgehog && (inst.hedgehog.hero = fresh)
+  inst.ambushHedgehog && (inst.ambushHedgehog.hero = fresh)
+  glowLevel0LiveHeroChar = fresh.character
+  inst.deathHandled = false
+  inst.hedgehogDeathHandled = false
+  inst.lastHeroX = pose.x
+  inst.wasGrounded = false
+  inst.trampBounceAir = false
+  inst.branchTrampBounceAir = false
+  registerGlowTrampolineLateBounce(inst)
+  snapGlowCameraToHero(k, fresh)
+  !inst.zones.eyesCollected && initGlowHeroWithoutEyes(fresh)
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
@@ -9847,88 +9961,6 @@ function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
     }
   }
   return x
-}
-//
-// Standard press-any-key countdown reload, same UX as the touch-lesson
-// death screens: Space/Enter/click restarts immediately, otherwise it
-// auto-restarts once the countdown reaches zero.
-//
-function startGlowHedgehogDeathCountdown(inst) {
-  const k = inst.k
-  releaseGamePhysicalKeys()
-  const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
-  const cx = k.width() / 2
-  const promptY = HEDGEHOG_DEATH_PROMPT_Y
-  const initText = HEDGEHOG_DEATH_PROMPT_BASE + HEDGEHOG_DEATH_COUNTDOWN_SECONDS
-  const colorWorldPrompt = !isGlowFlatSingleDecorColor(inst)
-  const textRgb = colorWorldPrompt ? HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_TEXT_GRAY
-  const shadowRgb = colorWorldPrompt ? HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY
-  const shadowOpacity = 0.85
-  const fillHex = `rgb(${textRgb.r},${textRgb.g},${textRgb.b})`
-  const shadowHex = `rgb(${shadowRgb.r},${shadowRgb.g},${shadowRgb.b})`
-  const deathPromptHolder = createGlowBakedTextHolder(k, {
-    prefix: 'glow-death-prompt',
-    fontFamily: font,
-    fontSize: HEDGEHOG_DEATH_PROMPT_FONT,
-    fillStyle: fillHex,
-    shadowStyle: shadowHex,
-    shadowOffsetX: 1.5,
-    shadowOffsetY: 1.5,
-    align: 'center',
-    anchor: 'center',
-    z: CFG.visual.zIndex.ui + 60.1,
-    fixed: true,
-    seedBase: 7600
-  })
-  deathPromptHolder.shadowOpacity = shadowOpacity
-  syncGlowBakedTextHolder(deathPromptHolder, initText, cx, promptY, 1)
-  const destroyAll = () => {
-    destroyGlowBakedTextHolder(deathPromptHolder)
-  }
-  const doRestart = () => {
-    const dc = inst.deathCountdown
-    if (!dc || dc.done) return
-    dc.done = true
-    dc.spaceCancel?.cancel()
-    dc.enterCancel?.cancel()
-    dc.skipHandler?.cancel()
-    dc.clickHandler?.cancel()
-    destroyAll()
-    inst.deathCountdown = null
-    inst.k.go('lesson-glow.0')
-  }
-  inst.deathCountdown = {
-    elapsed: 0,
-    done: false,
-    promptHolder: deathPromptHolder,
-    cx,
-    promptY,
-    doRestart
-  }
-  inst.deathCountdown.spaceCancel = onPhysicalKeyPress('Space', doRestart)
-  inst.deathCountdown.enterCancel = onPhysicalKeyPress('Enter', doRestart)
-  inst.deathCountdown.skipHandler = k.onKeyPress((key) => {
-    (key === 'space' || key === 'enter') && doRestart()
-  })
-  inst.deathCountdown.clickHandler = k.onMousePress(() => doRestart())
-}
-//
-// Ticks the hedgehog death prompt countdown while the hero is gone.
-//
-function updateGlowHedgehogDeathCountdown(inst) {
-  const dc = inst.deathCountdown
-  if (!dc || dc.done) return
-  const k = inst.k
-  dc.elapsed += k.dt()
-  const remaining = Math.max(0, HEDGEHOG_DEATH_COUNTDOWN_SECONDS - dc.elapsed)
-  syncGlowBakedTextHolder(
-    dc.promptHolder,
-    HEDGEHOG_DEATH_PROMPT_BASE + Math.ceil(remaining),
-    dc.cx,
-    dc.promptY,
-    1
-  )
-  dc.elapsed >= HEDGEHOG_DEATH_COUNTDOWN_SECONDS && dc.doRestart()
 }
 function ensureLakeShoreRocksVisible(inst) {
   inst.zones.waterRocks = true
@@ -10333,7 +10365,6 @@ function onUpdate(inst) {
   }
   if (inst.hedgehogDeathHandled) {
     inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
-    updateGlowHedgehogDeathCountdown(inst)
     inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
     return
   }
@@ -13089,7 +13120,6 @@ function recomputeGlowScreenLayout(k) {
   GLOW_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
   GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
   LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
-  HEDGEHOG_DEATH_PROMPT_Y = PAR_LEAF_MAX_Y - HEDGEHOG_DEATH_PROMPT_LEAF_RISE + VOID_PAD_Y
   CAMERA_INTRO_ZOOM_START = VIEW_W / CAMERA_INTRO_HERO_WIDTH
   updatePlayfieldCornerPositions()
 }

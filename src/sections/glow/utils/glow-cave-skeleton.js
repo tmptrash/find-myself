@@ -1,4 +1,5 @@
 import { glowRgb } from './glow-palette.js'
+import { getGlowPitFloorCollider } from './glow-atmosphere.js'
 //
 // Must match EYE_INTRO_EYE_GAP in glow-eye-intro.js (pickup eye spacing).
 //
@@ -13,7 +14,11 @@ const PIT_CAVE_SKULL_R = PIT_CAVE_EYE_GAP / (PIT_CAVE_SKULL_SOCKET_X_FRAC * 2)
 
 const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
 const SKELETON_BAKE_PAD = 22
-const CAVE_SKELETON_LAYOUT_VERSION = 25
+const CAVE_SKELETON_LAYOUT_VERSION = 27
+//
+// Skull sits against the widened interior's left wall (not the mouth lip).
+//
+const PIT_CAVE_SKULL_FLOOR_PAD = 20
 const CAVE_RIB_FRACTURE_ECG_BEATS = 3
 const CAVE_RIB_FRACTURE_PEAK_FRAC = 0.62
 //
@@ -99,11 +104,9 @@ function pitCaveEyePickupCenter(pit) {
   if (!pit?.zone) return null
   const { zone, floorY } = pit
   const bottomY = floorY + zone.depth
-  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W_LEFT
-  const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 +
-    PIT_FLOOR_EXTRA_W_LEFT + PIT_FLOOR_EXTRA_W_RIGHT)
+  const { innerX } = getGlowPitFloorCollider(zone)
   return {
-    x: innerX + innerW * 0.14,
+    x: innerX + PIT_CAVE_SKULL_FLOOR_PAD + PIT_CAVE_SKULL_R,
     y: bottomY - 18
   }
 }

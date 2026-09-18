@@ -76,7 +76,16 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const CAVE_LAYOUT_VERSION = 20
+const CAVE_LAYOUT_VERSION = 23
+//
+// Extra interior floor width to the left of the mouth — entrance lip unchanged.
+//
+export const CAVE_INTERIOR_EXTEND_LEFT = 88
+const CAVE_LEFT_BLOCK_W = 12
+//
+// Interior left wall rocks stay below the playfield lip — never stack above floorY.
+//
+const CAVE_INTERIOR_LEFT_WALL_MIN_GROUND_Y = 14
 const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
@@ -365,8 +374,12 @@ export function createGlowPit(cfg) {
     leftBonusAirborne: false,
     crackStompCount: 0,
     pitCaveIdleTime: 0,
-    pitCaveHintShown: false,
+    pitCaveMushroomDone: false,
+    pitCaveMushroomMoveAccum: 0,
+    pitCaveMushroomHintShows: 0,
+    pitCaveMushroomHintPausedUntilExit: false,
     pitCaveHintTooltip: null,
+    pitLeftWall: null,
     tooltipClampInset,
     wallProfile: null,
     caveFloorRevealed: false
@@ -1057,8 +1070,8 @@ function drawCavePit(k, pit, groundC) {
   }
   const layout = pit.wallProfile
   drawCaveVoidFill(k, layout.mouth, pal)
-  drawRaggedCaveWall(k, layout.mouth.left, pal, -1)
-  drawRaggedCaveWall(k, layout.mouth.right, pal, 1)
+  drawRaggedCaveWall(k, layout.mouth.left, pal, -1, floorY)
+  drawRaggedCaveWall(k, layout.mouth.right, pal, 1, floorY)
   drawCaveWallRim(k, layout.mouth.left, pal)
   drawCaveWallRim(k, layout.mouth.right, pal)
   drawCaveFloorPebbles(k, layout, pal)
@@ -1145,7 +1158,7 @@ function drawCaveAmbientGlow(k, mouth, pal) {
 //
 const CAVE_WALL_SLAB_STEPS = 7
 const CAVE_WALL_DEPTH = 22
-function drawRaggedCaveWall(k, edge, pal, outwardSign) {
+function drawRaggedCaveWall(k, edge, pal, outwardSign, floorY = null) {
   if (!edge?.length) return
   const rock = k.rgb(pal.depthOuter.r, pal.depthOuter.g, pal.depthOuter.b)
   const shade = k.rgb(pal.depthMid.r, pal.depthMid.g, pal.depthMid.b)
@@ -1154,6 +1167,7 @@ function drawRaggedCaveWall(k, edge, pal, outwardSign) {
   for (let i = 0; i < n - 1; i += step) {
     const a = edge[i]
     const b = edge[Math.min(n - 1, i + step)]
+    if (floorY != null && Math.min(a.y, b.y) < floorY + 1) continue
     const midY = (a.y + b.y) * 0.5
     const depth = CAVE_WALL_DEPTH + caveSeed01(a.x * 0.13 + midY * 0.07) * 14
     const outerX = a.x + outwardSign * depth
@@ -1214,15 +1228,16 @@ function buildCaveSceneLayout(zone, floorY) {
   const seed = zone.x1 * 0.017 + floorY * 0.003
   const pebbles = []
   const mouth = buildCaveMouth(zone, floorY, bottomY, seed)
+  const interiorLeft = mouth.left[0].x - CAVE_INTERIOR_EXTEND_LEFT
   const floorTop = clampHorizProfile(
-    buildJaggedFloorTop(mouth.left[0].x, mouth.right[0].x, bottomY, seed),
+    buildJaggedFloorTop(interiorLeft, mouth.right[0].x, bottomY, seed),
     zone,
     floorY,
     bottomY
   )
   const pebbleCount = 28 + Math.floor(caveSeed01(seed + 400) * 14)
   for (let i = 0; i < pebbleCount; i++) {
-    const px = mouth.left[0].x + 4 + caveSeed01(seed + i * 3.1) * (mouth.right[0].x - mouth.left[0].x - 8)
+    const px = interiorLeft + 4 + caveSeed01(seed + i * 3.1) * (mouth.right[0].x - interiorLeft - 8)
     const surfaceY = sampleProfileY(floorTop, px)
     const radius = 2.5 + caveSeed01(seed + i * 7.3) * 6.5
     pebbles.push({
@@ -1233,9 +1248,18 @@ function buildCaveSceneLayout(zone, floorY) {
     })
   }
   const wallRocks = []
-  appendCaveWallRocks(wallRocks, mouth.left, -1, seed + 600, floorY, bottomY)
+  const interiorLeftEdge = buildCaveMouthEdge(interiorLeft, floorY, bottomY, seed + 550, 1)
+  appendCaveWallRocks(
+    wallRocks,
+    interiorLeftEdge,
+    -1,
+    seed + 600,
+    floorY,
+    bottomY,
+    floorY + CAVE_INTERIOR_LEFT_WALL_MIN_GROUND_Y
+  )
   appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
-  const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200)
+  const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
   const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500)
   return {
     version: CAVE_LAYOUT_VERSION,
@@ -1251,9 +1275,9 @@ function buildCaveSceneLayout(zone, floorY) {
 //
 // Scattered interior rocks on the void floor/walls so the pit is not a flat fill.
 //
-function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed) {
+function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed, interiorLeft = null) {
   const rocks = []
-  const x1 = mouth.left[0].x + 8
+  const x1 = (interiorLeft ?? mouth.left[0].x) + 8
   const x2 = mouth.right[0].x - 8
   const count = 34 + Math.floor(caveSeed01(seed) * 18)
   for (let i = 0; i < count; i++) {
@@ -1285,6 +1309,7 @@ function buildCaveContourRocks(mouth, floorY, bottomY, seed) {
   const edgeStride = 2
   mouth.left.forEach((p, i) => {
     if (i % edgeStride !== 0) return
+    if (p.y < floorY + 6) return
     const radius = 5 + caveSeed01(seed + 700 + i * 2.1) * 11
     rocks.push({
       x: p.x - radius * 0.55,
@@ -1308,7 +1333,7 @@ function buildCaveContourRocks(mouth, floorY, bottomY, seed) {
 //
 // Stacks ground-style rock silhouettes along a ragged cave wall edge.
 //
-function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY) {
+function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY, minGroundY = floorY) {
   if (!edge?.length) return
   for (let layer = 0; layer < CAVE_WALL_ROCK_LAYERS; layer++) {
     const layerSeed = seed + layer * 137
@@ -1329,7 +1354,7 @@ function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY
       // natural spread down the wall so rocks cover its full depth instead
       // of collapsing onto one band right at the ground line.
       //
-      const y = Math.max(floorY + radius, Math.min(bottomY - radius - 2, p.y + yJ))
+      const y = Math.max(minGroundY + radius, Math.min(bottomY - radius - 2, p.y + yJ))
       wallRocks.push({
         x: p.x + outwardSign * depth,
         y,
@@ -1538,10 +1563,10 @@ function drawPitTrampoline(k, pit) {
 // Cave pit floor body — kept narrow on the right so it does not protrude
 // under the mouth lip where the hero jumps.
 //
-function getGlowPitFloorCollider(zone) {
-  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W_LEFT
+export function getGlowPitFloorCollider(zone) {
+  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W_LEFT - CAVE_INTERIOR_EXTEND_LEFT
   const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 +
-    PIT_FLOOR_EXTRA_W_LEFT + PIT_FLOOR_EXTRA_W_RIGHT)
+    PIT_FLOOR_EXTRA_W_LEFT + PIT_FLOOR_EXTRA_W_RIGHT + CAVE_INTERIOR_EXTEND_LEFT)
   return { innerX, innerW }
 }
 export function ensureGlowPitOpenForEyesCollected(pit) {
@@ -1689,6 +1714,20 @@ function openPitPhysics(pit) {
   pit.pitFloor = k.add([
     k.rect(innerW, 16),
     k.pos(innerX, bottomY),
+    k.anchor('topleft'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName
+  ])
+  //
+  // Invisible left wall — pit floor up to the main ground lip (mouth unchanged).
+  //
+  pit.pitLeftWall?.destroy?.()
+  const wallH = bottomY - floorY
+  pit.pitLeftWall = k.add([
+    k.rect(CAVE_LEFT_BLOCK_W, wallH),
+    k.pos(innerX - CAVE_LEFT_BLOCK_W * 0.35, floorY),
     k.anchor('topleft'),
     k.area(),
     k.body({ isStatic: true }),

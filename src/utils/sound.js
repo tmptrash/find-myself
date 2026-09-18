@@ -1356,7 +1356,7 @@ export function playGlowHedgehogMudSneak(instance) {
   filter.Q.value = 0.42
   const envelope = instance.audioContext.createGain()
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.14, now + 0.012)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.28, now + 0.012)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)

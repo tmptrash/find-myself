@@ -83,6 +83,7 @@ export function isActive(inst) {
  * @param {boolean} [opts.forceAbove=false] - Keep the bubble above the hero
  * @param {number} [opts.offsetY] - Tooltip vertical offset from anchor (default HINT_OFFSET_Y)
  * @param {boolean} [opts.forceBelow=false] - Prefer placing the bubble below the anchor
+ * @param {boolean} [opts.anchorScreenSpace=false] - Anchor X/Y are fixed HUD screen coords
  */
 export function show(inst, text, duration, opts = {}) {
   inst.queue = []
@@ -100,6 +101,7 @@ export function show(inst, text, duration, opts = {}) {
   inst.hintOffsetY = opts.offsetY ?? HINT_OFFSET_Y
   inst.hintForceBelow = Boolean(opts.forceBelow)
   inst.faceAnchorYOffset = opts.faceAnchorYOffset ?? null
+  inst.anchorScreenSpace = Boolean(opts.anchorScreenSpace)
   startHint(inst, text, duration)
 }
 
@@ -138,6 +140,7 @@ export function clear(inst) {
   inst.dismissOnJump = true
   inst.dismissHorizontalOnly = false
   inst.movementDismissGrace = 0
+  inst.anchorScreenSpace = false
   destroyHint(inst)
 }
 function applyQueueItemOpts(inst, item = {}) {
@@ -194,7 +197,8 @@ function startHint(inst, text, duration) {
     text,
     offsetY: inst.hintOffsetY ?? HINT_OFFSET_Y,
     forceAbove: Boolean(inst.forceAbove),
-    forceBelow: Boolean(inst.hintForceBelow)
+    forceBelow: Boolean(inst.hintForceBelow),
+    screenSpace: Boolean(inst.anchorScreenSpace)
   }
   inst.tooltip = Tooltip.create({
     k,
@@ -317,6 +321,11 @@ function syncBubblePosition(inst) {
   const k = inst.k
   const wx = inst.target.x()
   const wy = inst.target.y()
+  if (inst.target.screenSpace) {
+    inst.tooltip.frozenX = Math.round(wx)
+    inst.tooltip.frozenY = Math.round(wy)
+    return
+  }
   const cam = k.camPos()
   const halfW = k.width() / 2
   const halfH = k.height() / 2

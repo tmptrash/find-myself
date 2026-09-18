@@ -75,6 +75,15 @@ import {
   glowHeroHasCollectedEyes
 } from '../utils/glow-atmosphere.js'
 import {
+  initGlowTeacherHintState,
+  showGlowTeacherHintNow,
+  tickGlowTeacherHintMovement,
+  onGlowTeacherLifeHudRevealed,
+  glowTeacherHudAnchor,
+  GLOW_TEACHER_HINT_MOVE_SEC,
+  GLOW_TEACHER_HINT_DURATION
+} from '../utils/glow-teacher-hint.js'
+import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
   initGlowHeroWithoutEyes,
@@ -349,6 +358,8 @@ const MUD_PEBBLE_COUNT = 28
 //
 const GLOW_DIALOG_AUDIO_FADE_SEC = 0.55
 const HEDGEHOG_SCALE = 1.4
+const HEDGEHOG_DRAW_Z = CFG.visual.zIndex.player - 1
+const HEDGEHOG_MUD_SNEAK_DRAW_Z = CFG.visual.zIndex.player + 2
 //
 // Positive sink drops the hedgehog anchor below FLOOR_Y so the baked body
 // and live legs sit flush on the ground strip instead of hovering above it.
@@ -1020,8 +1031,6 @@ const KEY_TRAMP_WALKED = 'glow.trampWalked'
 //
 const TRAMP_MUSH_LAND_REVEAL_DIST = 80
 const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
-const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big. Is that\nreally a mushroom?'
-const TRAMP_SECOND_REVEAL_HINT_TEXT = 'Oh, another one'
 const TRAMP_REVEAL_HINT_DURATION = 5
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
@@ -1040,7 +1049,6 @@ const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nIt\'s shallow here.'
 const TRAMP_SHALLOW_HINT_DURATION = 6
 const WRONG_TRAMP_SING_HINT_REPEAT = 20
 const LETTER_PROGRESS_HINT_INTERVAL = 30
-const LETTER_PROGRESS_HINT_DURATION = 6
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
 //
@@ -1058,12 +1066,14 @@ const BRANCH_TELEPORT_CAP_HALF_W = 20
 const BRANCH_TELEPORT_LAUNCH_COOLDOWN = 0.55
 const BRANCH_TELEPORT_HERO_HALF_W = 14
 const BRANCH_TELEPORT_HERO_TOP_OFFSET = 44
-const PIT_CAVE_HINT_IDLE = 10
-const PIT_CAVE_HINT_TEXT = 'Maybe you want to step on me'
-const PIT_CAVE_HINT_DURATION = 5
+const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom'
+const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
+//
+// Feet may rise above the mouth lip while jumping inside the collapsed pit.
+//
+const PIT_CAVE_AIR_ABOVE_LIP = 148
+const DROWN_RESPAWN_LAKE_CLEARANCE = 56
 const O_LETTER_STUCK_HINT_DELAY = 90
-const O_LETTER_STUCK_HINT_TEXT = 'In this chaos,\nsometimes I just\nneed to stop'
-const O_LETTER_STUCK_HINT_DURATION = 6
 const L_LETTER_PEEK_TRAVEL = 0.45
 const L_LETTER_PEEK_HOLD = 1
 const L_LETTER_PEEK_RETURN = 0.45
@@ -1138,9 +1148,6 @@ const HINT_INTRO_2_PAUSE = 1.5
 const INTRO_HINT_PHASE_ONE = 'one'
 const INTRO_HINT_PHASE_PAUSE = 'pause'
 const INTRO_HINT_PHASE_TWO = 'two'
-const HINT_GROUND_RIGHT_TEXT = 'Oh. So much better.'
-const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
-const HINT_ZONE_DURATION = 5
 //
 // Walking this far from a Glow speech bubble dismisses it early.
 //
@@ -1158,15 +1165,14 @@ const GLOW_PROXIMITY_SOUND_RADIUS = 120
 const GLOW_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
-const HERO_CONFIDENT_HINT_TEXT = 'I feel more confident now'
 const HERO_CONFIDENT_HINT_DURATION = 4
 //
-// Confidence-themed hints play with the body-fill ring once the hero lands
-// after each letter caption (G/L only — W/O use their own beats).
+// Self-growth lines on the hero after each letter fill step (less transparent body).
 //
-const GLOW_CONFIDENCE_HINT_G = 'I did it. That wasn\'t\nso scary after all.'
-const GLOW_CONFIDENCE_HINT_L = 'I can handle more than\nI thought I could.'
-const GLOW_CONFIDENCE_HINT_W = 'Look how far I\'ve come.'
+const GLOW_CONFIDENCE_HINT_G = 'Now I feel a little\nmore fulfilled.'
+const GLOW_CONFIDENCE_HINT_L = 'Now I feel more\nfulfilled inside.'
+const GLOW_CONFIDENCE_HINT_W = 'Now I feel ready\nfor what comes next.'
+const GLOW_CONFIDENCE_HINT_O = 'Now I feel more alive\nin every color.'
 const GLOW_HERO_FILL_L_EPS = 0.02
 //
 // Repeat drownings get a random self-ironic joke over the sinking hero.
@@ -1205,16 +1211,26 @@ const MEDITATION_COUNTDOWN = 5
 const MEDITATION_TIMER_FONT = 22
 const GLOW_HERO_COUNTER_Y_OFFSET = -44
 //
-// Hero hover tooltip — the line follows how much colour the hero can see:
-// plain gray world, gray shades after L, full colour after O.
+// Hero hover — only the eyeless beat; nudges live on the life-icon teacher.
 //
-const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange... It's very quiet\nhere. We should explore this\nworld first."
 const HERO_TOOLTIP_EYELESS_TEXT = "I can't see anything"
-const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
-const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
-const HERO_TOOLTIP_AFTER_L = "I shouldn't rush.\nI just need to stop."
-const HERO_TOOLTIP_AFTER_O = 'I need to talk\nto big mushroom.'
 const HERO_TOOLTIP_Y_OFFSET = -72
+//
+// Teacher (life HUD) hints — indirect nudges, not orders.
+//
+const GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS = 2
+const GLOW_TEACHER_HINT_GRAY_QUIET = "It's awfully quiet...\nthere must be more to find."
+const GLOW_TEACHER_HINT_AFTER_G_RIGHT = 'Something worth seeing\nmight lie to the right.'
+const GLOW_TEACHER_HINT_AFTER_G_LEFT = 'Worth glancing back\nleft once in a while.'
+const GLOW_TEACHER_HINT_AFTER_L = 'Some answers only show up\nwhen everything is still.'
+const GLOW_TEACHER_HINT_AFTER_O = 'That big mushroom seems\nawfully attentive.'
+const GLOW_TEACHER_HINT_WATER = 'The unknown isn\'t empty.\nIt simply waits to be found.'
+const GLOW_TEACHER_HINT_GROUND_RIGHT = 'The ground feels\ndifferent here.'
+const GLOW_TEACHER_HINT_TREE = 'A tree... was it\nalways there?'
+const GLOW_TEACHER_HINT_TRAMP_FIRST = 'That mushroom is enormous.\nCurious, isn\'t it?'
+const GLOW_TEACHER_HINT_TRAMP_SECOND = 'Another one — the forest\nlikes to repeat itself.'
+const GLOW_TEACHER_HINT_WRONG_TRAMP_SING = 'Not every mushroom\nwants a song.'
+const GLOW_TEACHER_HINT_O_STUCK = 'Even in all this noise,\nstillness can open a door.'
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
 const MUD_TOOLTIP_SIZE = 80
 const MUD_TOOLTIP_Y_OFFSET = -50
@@ -1243,7 +1259,8 @@ const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
 // Buried skeleton hover — visible once the left underground band is open
 //
-const SKELETON_TOOLTIP_TEXT = "I'm tired..."
+const SKELETON_TOOLTIP_TEXT = 'Time to get some sleep...'
+const SKELETON_TOOLTIP_NEED_EYES_TEXT = 'You need eyes, buddy?'
 const SKELETON_TOOLTIP_WIDTH = 72
 const SKELETON_TOOLTIP_HEIGHT = 104
 const SKELETON_TOOLTIP_BODY_CENTER_R = 2.3
@@ -1259,6 +1276,10 @@ const GAZE_BRANCH_Y_TOLERANCE = 60
 const LIFE_TOOLTIP_TEXT = 'Your experience'
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
+const LIFE_SCORE_TOOLTIP_SIZE = 44
+const LIFE_SCORE_TOOLTIP_Y_OFFSET = 50
+const PIT_CAVE_SKELETON_AUTO_HINT_SEC = 10
+const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
@@ -1498,7 +1519,6 @@ const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
 const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
 const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
-const BRANCH_TRAMP_WRONG_SING_TEXT = "I'm not that mushroom!"
 const BRANCH_TRAMP_WRONG_SING_DURATION = 5
 const LETTER_ARROW_CORNER_RADIUS = 3
 const LETTER_ARROW_STEM_HEAD_OVERLAP = 14
@@ -2038,14 +2058,15 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // hero into the air the instant the level loads — pull it clear to
     // whichever side is closer before the hedgehog check below.
     //
-    heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
-      spawnX: heroSpawnX,
-      spawnOnBranch,
-      branchTrampX,
-      trampX,
-      branchTrampVisible: isBranchTrampolineVisible(zones),
-      trampVisible: isRightTrampolineVisible(zones)
-    })
+    lastSpawnMode !== SPAWN_MODE_CAVE &&
+      (heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
+        spawnX: heroSpawnX,
+        spawnOnBranch,
+        branchTrampX,
+        trampX,
+        branchTrampVisible: isBranchTrampolineVisible(zones),
+        trampVisible: isRightTrampolineVisible(zones)
+      }))
     //
     // A saved/derived ground spawn landing inside the left hedgehog's
     // ambush danger zone (trigger..pop, plus its touch radius) would pop
@@ -2053,45 +2074,46 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // before the trigger instead whenever that would happen — landing past
     // the whole zone (already-explored ground further right) is left as is.
     //
-    heroSpawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
-      spawnX: heroSpawnX,
-      spawnY: heroSpawnY,
-      spawnOnBranch,
-      hedgehogAmbushTriggerX,
-      hedgehogAmbushPopX,
-      lPlatX,
-      rightPlatY,
-      lCollected: zones.lCollected,
-      ambushHedgehogRevealed: ambushHedgehogRevealedEarly,
-      floorHogProbe: leftHogStartsVisible
-        ? Hedgehog.createLethalTouchProbe({
-          x: hedgehogAmbushPopX,
-          y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
-          scale: HEDGEHOG_SCALE,
-          facing: 'left'
-        })
-        : null,
-      floorHogBounds: leftHogStartsVisible
-        ? {
-          minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
-          maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
-        }
-        : null,
-      ambushGroundHogProbe: zones.lCollected
-        ? Hedgehog.createLethalTouchProbe({
-          x: lPlatX + LOG_W / 2,
-          y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
-          scale: HEDGEHOG_AMBUSH_SCALE,
-          facing: 'left'
-        })
-        : null,
-      ambushGroundHogBounds: zones.lCollected
-        ? {
-          minX: lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
-          maxX: lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
-        }
-        : null
-    })
+    lastSpawnMode !== SPAWN_MODE_CAVE &&
+      (heroSpawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
+        spawnX: heroSpawnX,
+        spawnY: heroSpawnY,
+        spawnOnBranch,
+        hedgehogAmbushTriggerX,
+        hedgehogAmbushPopX,
+        lPlatX,
+        rightPlatY,
+        lCollected: zones.lCollected,
+        ambushHedgehogRevealed: ambushHedgehogRevealedEarly,
+        floorHogProbe: leftHogStartsVisible
+          ? Hedgehog.createLethalTouchProbe({
+            x: hedgehogAmbushPopX,
+            y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
+            scale: HEDGEHOG_SCALE,
+            facing: 'left'
+          })
+          : null,
+        floorHogBounds: leftHogStartsVisible
+          ? {
+            minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
+            maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
+          }
+          : null,
+        ambushGroundHogProbe: zones.lCollected
+          ? Hedgehog.createLethalTouchProbe({
+            x: lPlatX + LOG_W / 2,
+            y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
+            scale: HEDGEHOG_AMBUSH_SCALE,
+            facing: 'left'
+          })
+          : null,
+        ambushGroundHogBounds: zones.lCollected
+          ? {
+            minX: lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
+            maxX: lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
+          }
+          : null
+      }))
     //
     // Glow SFX only from the first frame; birds.mp3 waits for the O countdown.
     //
@@ -2196,7 +2218,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     gLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lLetterX = lPlatX - L_LETTER_LEFT_OF_PLAT_GAP - GLOW_LETTER_SIZE / 2
     const lLetterY = lPlatY - GLOW_LETTER_SIZE * 0.15 - L_LETTER_RAISE_Y
-    const lLetter = zones.lCollected ? null : createGlowLetter(k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, HERO_BODY_COLOR)
+    const lLetter = zones.lCollected ? null : createGlowLetter(
+      k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, GLOW_PAL.groundDark, { noShadow: true }
+    )
     const wLetterX = wPlatX + LOG_W / 2
     const wLetterY = wPlatY - GLOW_LETTER_SIZE * 0.15 - W_LETTER_RAISE_Y
     const wLetter = zones.wCollected ? null : createGlowLetter(k, 'W', wLetterX, wLetterY, GLOW_LETTER_TILT * 0.7, HERO_BODY_COLOR)
@@ -2244,6 +2268,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       Hedgehog.popOut(hedgehog, hedgehogAmbushPopX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
     if (await glowBootstrapPause(bootstrap, 62, session)) return
     const mudGroundBand = bakeGlowMudGroundBand(k, mudZoneX1, mudZoneX2, DECOR_GRAY)
+    if (await glowBootstrapPause(bootstrap, 66, session)) return
     //
     // Ambush hedgehog waits hidden at the far edge of the L-log platform and
     // pops into view the moment the hero first lands there (see
@@ -2275,22 +2300,19 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     })
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
+    if (await glowBootstrapPause(bootstrap, 72, session)) return
     initTouchInput(k)
     TouchControls.create(k)
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
     const completedLetterCount = countGlowLettersCollected(zones)
     //
     // GLOW stays hidden until the first yellow G fill (branch landing or
-    // a ground side opening). Returning visits restore it with saved fill.
+    // a ground side opening). The life icon (teacher) appears at the same time.
     //
-    const lifeShown = get(KEY_LIFE_SHOWN, false)
     const levelIndicator = createGlowLevelIndicator(k, goldRgb, completedLetterCount, zones.colorWorld)
     pinGlowHudFixed(levelIndicator)
     LevelIndicator.setSectionLabelHidden(levelIndicator, true)
-    if (levelIndicator && lifeShown) {
-      LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
-      levelIndicator.updateLifeScore?.(get('lifeScore', 0))
-    }
+    if (await glowBootstrapPause(bootstrap, 76, session)) return
     logAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 80, session)) return
     //
@@ -2367,7 +2389,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       letterOffscreenArrow: null,
       oZoneRevealTime: null,
       oStuckHintShown: false,
-      oStuckHintTooltip: null,
       sound,
       birdsMusic,
       letterDialogMusic: null,
@@ -2571,6 +2592,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _hudOFillParts: null,
       _hudWFillParts: null
     }
+    initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
     inst.eyeIntro = zones.eyesCollected ? null : createGlowEyeIntroState()
     if ((zones.gCollected || zones.lCollected || zones.oCollected) && !zones.wCollected) {
@@ -2622,8 +2644,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       )
     wasInCaveSpawn && isGlowEyeIntroPending(zones) && !glowHeroHasCollectedEyes(zones, heroInst) &&
       restoreGlowPitEyeIntroInterior(inst.pit)
-    wasInCaveSpawn && inst.pit?.collapsed &&
-      (heroInst.character.pos.y = getGlowPitHeroStandY(inst.pit))
+    applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     restoreGlowEyeIntroFromPersistedState(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
     inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
@@ -2979,40 +3000,45 @@ function finishGlowIntro(inst) {
   maybeShowGLetter(inst)
 }
 //
-// After G: left/right nudge toward the L letter or log platform.
+// After G: teacher nudge toward the L letter or log platform.
 //
-function heroTooltipAfterG(inst) {
+function teacherGlowHintAfterG(inst) {
   const targetX = inst.lLetter && !inst.lLetter.main.hidden
     ? inst.lLetter.x
     : (inst.lPlatHome ? inst.lPlatHome.x + LOG_W * 0.5 : null)
   const heroX = inst.heroInst?.character?.pos?.x
-  if (targetX == null || heroX == null) return HERO_TOOLTIP_AFTER_G_RIGHT
-  if (heroX < targetX) return HERO_TOOLTIP_AFTER_G_RIGHT
+  if (targetX == null || heroX == null) return GLOW_TEACHER_HINT_AFTER_G_RIGHT
+  if (heroX < targetX) return GLOW_TEACHER_HINT_AFTER_G_RIGHT
   //
   // Once the L letter is on screen the left nudge is no longer needed.
   //
   if (inst.zones.lLetterUnveiled) return null
-  return HERO_TOOLTIP_AFTER_G_LEFT
+  return GLOW_TEACHER_HINT_AFTER_G_LEFT
 }
 //
-// Picks the hero tooltip line matching how much colour the world shows.
+// Teacher line matching how much colour the world shows (indirect nudges only).
 //
-function heroTooltipText(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return HERO_TOOLTIP_EYELESS_TEXT
+function teacherGlowProgressHintText(inst) {
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) return null
   if (isTrampSingCountdownActive(inst)) return null
-  if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_AFTER_O
+  if (inst.zones.oCollected || inst.zones.colorWorld) return GLOW_TEACHER_HINT_AFTER_O
   if (inst.zones.lCollected) {
     if (inst.meditation?.countdown != null) return null
     if (inst.meditation?.stillnessCompleted) return null
     if (inst.zones.oZone || inst.zones.oCollected) return null
     if (inst.oLetter && !inst.oLetter.main.hidden) return null
-    return HERO_TOOLTIP_AFTER_L
+    return GLOW_TEACHER_HINT_AFTER_L
   }
-  if (inst.zones.gCollected) return heroTooltipAfterG(inst)
-  if (get(KEY_INTRO_SHOWN, false)) {
-    return HERO_TOOLTIP_TEXT_GRAY_QUIET
-  }
-  return HERO_TOOLTIP_TEXT_GRAY_QUIET
+  if (inst.zones.gCollected) return teacherGlowHintAfterG(inst)
+  if (get(KEY_INTRO_SHOWN, false)) return GLOW_TEACHER_HINT_GRAY_QUIET
+  return GLOW_TEACHER_HINT_GRAY_QUIET
+}
+//
+// Hero hover — eyeless intro only.
+//
+function heroTooltipText(inst) {
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) return HERO_TOOLTIP_EYELESS_TEXT
+  return null
 }
 function glowHeroCollisionHoverZone(inst) {
   return Hero.getHeroCollisionHoverZone(inst.heroInst)
@@ -3025,7 +3051,6 @@ function isGlowHeroHoverTooltipVisible(inst) {
   if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
   if (inst.introLock && isGlowEyesGameplayUnlocked(inst.zones)) return false
   if (HeroHint.isActive(inst.heroHint)) return false
-  if (inst.oStuckHintTooltip) return false
   if (!heroTooltipText(inst)) return false
   return true
 }
@@ -3044,27 +3069,9 @@ function markLetterCollectedForProgressHint(inst) {
   inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
 }
 //
-// Every 30 s after a letter pickup, bubble the same line as the hero hover
-// tooltip until the next letter is collected (then the line updates).
+// Every 30 s after a letter pickup, queue the matching teacher nudge.
 //
 function updateLetterProgressHint(inst) {
-  if (inst.drowning || inst.dialogOpen || inst.introLock) return
-  if (inst.pendingGlowIntro || inst.heroSpawnFade > 0) return
-  const z = inst.zones
-  if (!z.gCollected && !z.lCollected && !z.oCollected) return
-  if (z.wCollected || inst.lastLetterCollectTime == null) return
-  inst.letterProgressHintCooldown -= inst.k.dt()
-  if (inst.letterProgressHintCooldown > 0) return
-  inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
-  if (HeroHint.isActive(inst.heroHint)) return
-  const text = heroTooltipText(inst)
-  if (!text) return
-  HeroHint.show(inst.heroHint, text, LETTER_PROGRESS_HINT_DURATION, {
-    dismissOnJump: false,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
-    followHero: true,
-    faceAnchorYOffset: GLOW_HERO_COUNTER_Y_OFFSET
-  })
 }
 //
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the playable
@@ -3098,12 +3105,22 @@ function createSmallHeroTooltip(inst) {
         inst.mudZoneX1 != null &&
         !inst.dialogOpen
     }, {
-      x: () => inst.levelIndicator?.lifeImage?.sprite?.pos?.x ?? -1000,
-      y: () => inst.levelIndicator?.lifeImage?.sprite?.pos?.y ?? -1000,
+      x: () => glowTeacherHudHoverPos(inst).x,
+      y: () => glowTeacherHudHoverPos(inst).y,
       width: LIFE_TOOLTIP_SIZE,
       height: LIFE_TOOLTIP_SIZE,
-      text: LIFE_TOOLTIP_TEXT,
+      text: () => glowTeacherHudHoverText(inst),
       offsetY: LIFE_TOOLTIP_Y_OFFSET,
+      forceBelow: true,
+      visible: () => glowTeacherHudHoverVisible(inst),
+      screenSpace: true
+    }, {
+      x: () => inst.levelIndicator?.lifeScoreText?.pos?.x ?? -1000,
+      y: () => inst.levelIndicator?.lifeScoreText?.pos?.y ?? -1000,
+      width: LIFE_SCORE_TOOLTIP_SIZE,
+      height: LIFE_SCORE_TOOLTIP_SIZE,
+      text: LIFE_TOOLTIP_TEXT,
+      offsetY: LIFE_SCORE_TOOLTIP_Y_OFFSET,
       forceBelow: true,
       visible: () => Boolean(inst.levelIndicator?.lifeRevealed),
       screenSpace: true
@@ -3152,7 +3169,7 @@ function createSmallHeroTooltip(inst) {
       y: () => pitCaveSkeletonTooltipPos(inst).y,
       width: SKELETON_TOOLTIP_WIDTH,
       height: SKELETON_TOOLTIP_HEIGHT,
-      text: SKELETON_TOOLTIP_TEXT,
+      text: () => pitCaveSkeletonTooltipText(inst),
       offsetY: SKELETON_TOOLTIP_Y_OFFSET,
       visible: () => pitCaveSkeletonTooltipVisible(inst),
       screenSpace: false
@@ -3382,6 +3399,49 @@ function persistTrampWalk(inst) {
   set(KEY_TRAMP_WALKED, Boolean(tw.walked))
 }
 //
+// True while the hero stands inside the open pit cave (collapsed mouth).
+//
+function isHeroInsideGlowPitCave(inst, heroX, heroY, footY = heroY + SURFACE_DETECT_Y) {
+  const pit = inst.pit
+  if (pit?.zone && pit.collapsed) {
+    if (heroX < pit.zone.x1 + 8 || heroX > pit.zone.x2 - 8) return false
+    if (footY >= pit.floorY - 6) return true
+    return footY >= pit.floorY - PIT_CAVE_AIR_ABOVE_LIP
+  }
+  return isHeroInGlowCaveVolume(heroX, footY)
+}
+//
+// Keeps teacher-hint gating aligned with the hero pose (incl. mid-air jumps in the pit).
+//
+function syncGlowPitCaveFlagForTeacherHints(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) {
+    inst._inGlowPitCave = false
+    return
+  }
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  inst._inGlowPitCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
+}
+//
+// Crack-mouth volume before the pit inst exists (spawn persist on teardown).
+//
+function isHeroInGlowCaveVolume(heroX, footY, floorY = FLOOR_Y, screenW = WORLD_W) {
+  const zone = getCrackZone(screenW, floorY)
+  if (heroX < zone.x1 + 8 || heroX > zone.x2 - 8) return false
+  return footY >= floorY - 6
+}
+//
+// Restores a saved cave pose after the pit collider is ready.
+//
+function applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCave) {
+  if (!wasInCave) return
+  const ch = inst.heroInst?.character
+  if (!ch?.exists?.()) return
+  ch.pos.x = heroSpawnX
+  ch.pos.y = inst.pit?.collapsed ? getGlowPitHeroStandY(inst.pit) : heroSpawnY
+  snapGlowCameraToHero(inst.k, inst.heroInst)
+}
+//
 // Remembers whether the hero was on the start branch or the ground so the
 // next visit can resume at the same place (menu exit or level reload).
 //
@@ -3397,12 +3457,8 @@ function writeGlowLastSpawnKeys(inst, heroX, heroY) {
   const footY = heroY + SURFACE_DETECT_Y
   set(KEY_LAST_SPAWN_X, heroX)
   set(KEY_LAST_SPAWN_Y, heroY)
-  const pit = inst.pit
-  const inCave = Boolean(
-    pit?.collapsed &&
-    pit.zone &&
-    footY >= pit.floorY + pit.zone.depth - 32
-  )
+  const inCave = isHeroInsideGlowPitCave(inst, heroX, heroY, footY) ||
+    isHeroInGlowCaveVolume(heroX, footY)
   if (inCave) {
     set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_CAVE)
     set(KEY_PIT_COLLAPSED, true)
@@ -3573,7 +3629,7 @@ function glowHudLetterFillProgress(inst, index) {
 function glowHudLetterTooltipVisible(inst, index) {
   const letter = inst.levelIndicator?.letterObjects?.[index]
   if (!letter?.exists?.() || letter.hidden) return false
-  return isGlowEyesGameplayUnlocked(inst.zones)
+  return true
 }
 function formatGlowHudFillProgress(parts, total) {
   return `${parts}/${total}`
@@ -3581,7 +3637,7 @@ function formatGlowHudFillProgress(parts, total) {
 function glowHudLetterTooltipText(inst, index) {
   const base = GLOW_HUD_LETTER_TOOLTIP_BASE[index] || ''
   const p = glowHudLetterFillProgress(inst, index)
-  if (p.collected || p.parts <= 0) return base
+  if (p.collected || p.blocked) return base
   return `${base}${GLOW_HUD_FILL_PROGRESS_SEP}${formatGlowHudFillProgress(p.parts, p.total)}`
 }
 //
@@ -3977,6 +4033,74 @@ function syncGlowHudLabelVisibility(inst) {
   if (!indicator) return
   const show = inst.zones.gCollected || (inst._hudGFillParts || 0) > 0
   LevelIndicator.setSectionLabelHidden(indicator, !show)
+  show && revealGlowTeacherHudIfNeeded(inst)
+}
+//
+// Life icon appears together with the GLOW label — teacher hints anchor here.
+//
+function revealGlowTeacherHudIfNeeded(inst) {
+  const indicator = inst.levelIndicator
+  if (!indicator || indicator.lifeRevealed) return
+  LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
+  indicator.updateLifeScore?.(get('lifeScore', 0))
+  set(KEY_LIFE_SHOWN, true)
+  syncGlowPitCaveFlagForTeacherHints(inst)
+  onGlowTeacherLifeHudRevealed(inst)
+}
+//
+// Life HUD for pit-mushroom nudges — eyes can be collected before any G fill.
+//
+function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
+  const indicator = inst.levelIndicator
+  if (!indicator || indicator.lifeRevealed) return
+  const z = inst.zones
+  const gProgress =
+    isGlowEyesGameplayUnlocked(z) && !z.gCollected && !isGlowGLetterUnveiled(inst)
+  if (!gProgress && !isGlowPitMushroomUnlocked(inst)) return
+  LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
+  indicator.updateLifeScore?.(get('lifeScore', 0))
+  set(KEY_LIFE_SHOWN, true)
+  inst.teacherMoveAccum = 0
+}
+//
+// G HUD fill stuck: 10 s of run/jump without a new band → teacher nudge (twice total per stall).
+//
+function updateGlowGHudGFillStallHint(inst, char, dt, heroMoving) {
+  if (inst._inGlowPitCave || inst.drowning || inst.dialogOpen || inst.introLock) return
+  if (inst.pendingGlowIntro || inst.heroSpawnFade > 0) return
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) return
+  if (inst.zones.gCollected || isGlowGLetterUnveiled(inst)) return
+  revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
+  if (!inst.levelIndicator?.lifeRevealed || !char?.pos) return
+  const parts = countGlowHudGFillParts(inst)
+  if (parts >= GLOW_HUD_G_FILL_PARTS) return
+  if (inst._gHudStallWatchParts == null) {
+    inst._gHudStallWatchParts = parts
+    inst._gHudStallMoveAccum = 0
+    inst._gHudStallHintShows = 0
+  }
+  if (parts > inst._gHudStallWatchParts) {
+    inst._gHudStallWatchParts = parts
+    inst._gHudStallMoveAccum = 0
+    inst._gHudStallHintShows = 0
+    return
+  }
+  if ((inst._gHudStallHintShows || 0) >= GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS) return
+  const hero = inst.heroInst
+  const heroActive = isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving)
+  if (heroActive) {
+    inst._gHudStallMoveAccum = (inst._gHudStallMoveAccum || 0) + dt
+  }
+  if ((inst._gHudStallMoveAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
+  if (!showGlowTeacherHintNow(
+    inst,
+    GLOW_TEACHER_HINT_G_PART_TEXT,
+    GLOW_TEACHER_HINT_DURATION,
+    { gHudStall: true }
+  )) return
+  inst._gHudStallMoveAccum = 0
+  inst._gHudStallHintShows = (inst._gHudStallHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_G_PART_TEXT
 }
 //
 // Updates G/L/W fill counts and flashes a HUD letter when a new band opens.
@@ -4097,7 +4221,41 @@ function pitCaveSkeletonTooltipPos(inst) {
 //
 function pitCaveSkeletonTooltipVisible(inst) {
   if (!inst.pit || inst.dialogOpen) return false
+  if (inst.pit.pitCaveSkeletonAutoHintTooltip) return false
   return shouldShowPitCaveSkeleton(inst.pit)
+}
+//
+// Life-icon hover replays the latest teacher nudge (if any).
+//
+function glowTeacherHudHoverPos(inst) {
+  const anchor = glowTeacherHudAnchor(inst)
+  return anchor ?? { x: -1000, y: -1000 }
+}
+function glowTeacherHudHoverText(inst) {
+  if (glowTeacherCaveMushroomHoverEligible(inst)) return PIT_CAVE_HINT_TEXT
+  return inst.lastGlowTeacherHintText ?? ''
+}
+function glowTeacherHudHoverVisible(inst) {
+  if (!inst.levelIndicator?.lifeRevealed || inst.dialogOpen) return false
+  if (inst._glowTeacherHintActive && HeroHint.isActive(inst.heroHint)) return false
+  if (glowTeacherCaveMushroomHoverEligible(inst)) return true
+  return Boolean(inst.lastGlowTeacherHintText)
+}
+//
+// After two auto mushroom hints, hover on the teacher replays it while still in the cave.
+//
+function glowTeacherCaveMushroomHoverEligible(inst) {
+  const pit = inst.pit
+  if (!pit?.collapsed || !inst._inGlowPitCave) return false
+  if (!isGlowPitMushroomUnlocked(inst) || pit.pitCaveMushroomDone) return false
+  return Boolean(pit.pitCaveMushroomHintPausedUntilExit)
+}
+//
+// Skeleton hover copy — eyes request before pickup, tired line after.
+//
+function pitCaveSkeletonTooltipText(inst) {
+  const hasEyes = glowHeroHasCollectedEyes(inst.zones, inst.heroInst)
+  return hasEyes ? SKELETON_TOOLTIP_TEXT : SKELETON_TOOLTIP_NEED_EYES_TEXT
 }
 //
 // Soft birds swell with the post-L meditation world-life fade (0 → full while
@@ -8474,7 +8632,7 @@ function maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded) {
     hero.jumpCeilingBonk = false
   }
   Sound.playLetterPickupSoft(inst.sound)
-  HeroHint.show(inst.heroHint, HERO_CONFIDENT_HINT_TEXT, HERO_CONFIDENT_HINT_DURATION, {
+  HeroHint.show(inst.heroHint, GLOW_CONFIDENCE_HINT_O, HERO_CONFIDENT_HINT_DURATION, {
     followHero: true,
     anchorX: hero?.character?.pos?.x ?? 0,
     anchorY: hero?.character?.pos?.y ?? 0,
@@ -8632,20 +8790,9 @@ function fireGlowHeroFillReveal(inst, pending) {
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
     dismissOnJump: false
   }
-  if (pending.hintText) {
-    const isLFill = Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS
-    isLFill
-      ? HeroHint.queue(inst.heroHint, [
-        { text: pending.hintText, duration: HERO_CONFIDENT_HINT_DURATION, ...voiceHintOpts },
-        {
-          text: HERO_TOOLTIP_AFTER_L,
-          duration: LETTER_PROGRESS_HINT_DURATION,
-          pauseBefore: 0.45,
-          ...voiceHintOpts
-        }
-      ])
-      : HeroHint.show(inst.heroHint, pending.hintText, HERO_CONFIDENT_HINT_DURATION, voiceHintOpts)
-  }
+  pending.hintText &&
+    HeroHint.show(inst.heroHint, pending.hintText, HERO_CONFIDENT_HINT_DURATION, voiceHintOpts)
+  const isLFill = Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS
   if (Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS) {
     const m = inst.meditation
     m.lFillRingPlayed = true
@@ -9206,7 +9353,6 @@ function collectLetterO(inst) {
   const entry = inst.oLetter
   hideGlowLetterPickupInWorld(entry)
   inst.letterOffscreenArrow = null
-  dismissOLetterStuckHint(inst)
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 3)
   inst.trampWalk.singAllowedAt = Number.POSITIVE_INFINITY
@@ -9356,7 +9502,7 @@ function forceWaterEdgeRocksVisible(inst) {
 //
 function revealPostWHud(inst) {
   revealGlowFpsCounter(inst)
-  LevelIndicator.revealLifeHud(inst.levelIndicator, !inst.zones.colorWorld)
+  revealGlowTeacherHudIfNeeded(inst)
   layoutGlowFpsHud(inst)
 }
 //
@@ -9616,13 +9762,19 @@ function finishDrowning(inst) {
     // on scene leave), never for a drowning death.
     //
     const resumeBranch = inst.drownFromStartBranch
-    set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
+    set(KEY_RESPAWN_NEAR_TREE, false)
     if (resumeBranch) {
       set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
       set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
       set(KEY_LAST_SPAWN_Y, inst.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
     } else if (char?.pos) {
-      persistGlowDeathSpawn(inst, char.pos.x, char.pos.y)
+      const deathX = char.pos.x
+      const deathFootY = char.pos.y + SURFACE_DETECT_Y
+      const spawnX = isInWaterZone(inst, deathX, deathFootY)
+        ? inst.lakeX2 + DROWN_RESPAWN_LAKE_CLEARANCE
+        : deathX
+      const spawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      persistGlowDeathSpawn(inst, spawnX, spawnY)
     }
     inst.k.go('lesson-glow.0')
   })
@@ -9639,9 +9791,8 @@ function bumpGlowLifeHudOnDeath(inst) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, countGlowLettersCollected(inst.zones), inst.zones.colorWorld)
   }
   syncGlowHudLetterFills(inst, false)
-  LevelIndicator.revealLifeHud(inst.levelIndicator, !inst.zones.colorWorld)
   syncGlowFpsHudVisibility(inst)
-  set(KEY_LIFE_SHOWN, true)
+  if (!inst.levelIndicator?.lifeRevealed) return
   inst.levelIndicator.updateLifeScore?.(newLife)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
@@ -9656,6 +9807,8 @@ function bumpGlowLifeHudOnDeath(inst) {
     }
     createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator, greyLife)
   }
+  syncGlowPitCaveFlagForTeacherHints(inst)
+  onGlowTeacherLifeHudRevealed(inst)
 }
 //
 // True once either hedgehog's silhouette overlaps the hero's feet.
@@ -9979,10 +10132,6 @@ function showWaterZoneDiscoveryHint(inst) {
   showLakeShoreRocks(inst)
   forceWaterEdgeRocksVisible(inst)
   applyZoneVisibility(inst)
-  HeroHint.show(inst.heroHint, HINT_WATER_TEXT, HINT_ZONE_DURATION, {
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
-    dismissOnJump: false
-  })
 }
 //
 // Reveals the lake after the hero drowns in it (or when reloading a save that
@@ -10693,7 +10842,17 @@ function onUpdate(inst) {
   updateTrampCheekyHint(inst)
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
+  syncGlowPitCaveFlagForTeacherHints(inst)
   updateLetterProgressHint(inst)
+  tickGlowTeacherHintMovement(
+    inst,
+    heroMoving,
+    k.dt(),
+    inst.drowning || inst.dialogOpen || inst.introLock ||
+      inst.pendingGlowIntro || inst.heroSpawnFade > 0,
+    isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving)
+  )
+  updateGlowGHudGFillStallHint(inst, char, k.dt(), heroMoving)
   updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
@@ -10729,7 +10888,8 @@ function onUpdate(inst) {
   //
   // Camera tracks the hero after all movement (drowning may have started above).
   //
-  updatePitCaveMushroomHint(inst, char, k.dt())
+  updatePitCaveMushroomHint(inst, char, k.dt(), heroMoving)
+  updatePitCaveSkeletonAutoHint(inst, char, k.dt())
   updateOLetterStuckHint(inst, k.dt())
   syncHeroTrampDrawOrder(inst)
   syncGlowPitHeroDrawOrder(inst, char, footY)
@@ -11311,12 +11471,7 @@ function updateWrongTrampSingHint(inst) {
   }
   tw.wrongSingCooldown -= inst.k.dt()
   if (tw.wrongSingCooldown > 0) return
-  if (HeroHint.isActive(inst.heroHint)) return
   tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
-  HeroHint.show(inst.heroHint, BRANCH_TRAMP_WRONG_SING_TEXT, BRANCH_TRAMP_WRONG_SING_DURATION, {
-    dismissOnJump: false,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
 }
 //
 // First hint when the walk-trampoline mushroom reaches the lake; repeats every 30 s.
@@ -11387,7 +11542,7 @@ function showTrampBadSingHint(inst, line) {
 // Drops the "talk to the mushroom" line once the hero is already singing there.
 //
 function dismissTalkToMushroomHint(inst) {
-  inst.heroHint?.target?.text === HERO_TOOLTIP_AFTER_O && HeroHint.clear(inst.heroHint)
+  inst.heroHint?.target?.text === GLOW_TEACHER_HINT_AFTER_O && HeroHint.clear(inst.heroHint)
 }
 //
 // True when tree segment sprites were baked during the pre-level transition.
@@ -11647,10 +11802,6 @@ function updateGroundRightStripReveal(inst, heroX) {
     set(KEY_REVEALED_GROUND_DECOR, true)
   }
   firstStrip && playSegmentRevealSound(inst)
-  firstStrip && HeroHint.show(inst.heroHint, HINT_GROUND_RIGHT_TEXT, HINT_ZONE_DURATION, {
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
-    dismissOnJump: false
-  })
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   maybeShowGLetter(inst)
@@ -11777,14 +11928,6 @@ function clearTrampMissingHint(inst, slotKey) {
 // First mushroom: wonder at its size. Second: recognition that another exists.
 //
 function showTrampolineRevealHint(inst) {
-  if (inst.zones.colorWorld) return
-  const z = inst.zones
-  const n = (z.rightTrampRevealed ? 1 : 0) + (z.branchTrampRevealed ? 1 : 0)
-  const text = n >= 2 ? TRAMP_SECOND_REVEAL_HINT_TEXT : TRAMP_FIRST_REVEAL_HINT_TEXT
-  HeroHint.show(inst.heroHint, text, TRAMP_REVEAL_HINT_DURATION, {
-    dismissOnJump: false,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
 }
 //
 // Reveals trampoline mushrooms when the hero first touches their landing zone.
@@ -11892,10 +12035,6 @@ function finishTreeRevealIfComplete(inst) {
   set(KEY_REVEALED_TREE, true)
   applyZoneVisibility(inst)
   maybeShowGLetter(inst)
-  justOpened && HeroHint.show(inst.heroHint, HINT_TREE_REVEAL_TEXT, HINT_TREE_REVEAL_DURATION, {
-    dismissOnJump: false,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
   syncGlowHudLetterFills(inst)
 }
 //
@@ -12578,8 +12717,15 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
 //
 function syncAmbushHedgehogWanderLock(inst, char, grounded) {
   const hog = inst.ambushHedgehog
-  if (!hog?.popped || !hog.lockWanderUntilPlat || inst.zones.lCollected) {
-    hog && (hog.wanderLocked = false)
+  if (!hog?.popped) return
+  if (inst.zones.lCollected || inst.lPlatCaptionHiding) {
+    hog.lockWanderUntilPlat = false
+    hog.wanderLocked = false
+    isAmbushHedgehogOnLPlat(inst, hog) && dropAmbushHedgehogIfStrandedOnLPlat(inst)
+    return
+  }
+  if (!hog.lockWanderUntilPlat) {
+    hog.wanderLocked = false
     return
   }
   if (!grounded || !char?.pos) {
@@ -12623,11 +12769,25 @@ function markAmbushHedgehogRevealed() {
 //
 function syncLeftHedgehogMudSneak(inst) {
   const hog = inst.hedgehog
-  if (!hog || hog.popped) {
-    hog && (hog.mudSneakPreview = false)
+  if (!hog) return
+  if (hog.popped) {
+    hog.mudSneakPreview = false
+    hog.obj.z = HEDGEHOG_DRAW_Z
     return
   }
   hog.mudSneakPreview = inst.zones.gCollected && isGlowEyesGameplayUnlocked(inst.zones)
+  const band = inst.mudGroundBand
+  if (hog.mudSneakPreview && band) {
+    const pad = MUD_ZONE_HEDGEHOG_MARGIN + 4
+    const minX = band.drawX + pad
+    const maxX = band.drawX + band.width - pad
+    hog.minX = minX
+    hog.maxX = maxX
+    hog.x = Math.max(minX, Math.min(maxX, hog.x))
+    hog.obj.z = HEDGEHOG_MUD_SNEAK_DRAW_Z
+    return
+  }
+  hog.obj.z = HEDGEHOG_DRAW_Z
 }
 function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
   if (!inst.zones.gCollected) return
@@ -12673,6 +12833,16 @@ function maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded) {
   markAmbushHedgehogRevealed()
 }
 //
+// True while the ambush hedgehog still stands on the raised L-log Y band.
+//
+function isAmbushHedgehogOnLPlat(inst, hog) {
+  const home = inst.lPlatHome
+  if (!hog?.popped || !home) return false
+  const platStandY = home.y - HEDGEHOG_AMBUSH_GROUND_RAISE
+  return Math.abs(hog.y - platStandY) < 14 &&
+    hog.x >= home.x - 10 && hog.x <= home.x + LOG_W + 10
+}
+//
 // If the L-log disappears (letter collected) while the ambush hedgehog is
 // still standing on it and hasn't already been sent tumbling by a death,
 // drop it to the ground instead of leaving it stranded over empty air.
@@ -12681,6 +12851,7 @@ function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
   if (inst.ambushHedgehogDeferFall) return
   const hog = inst.ambushHedgehog
   if (!hog?.popped || hog.falling) return
+  if (!isAmbushHedgehogOnLPlat(inst, hog)) return
   //
   // The log vanishes instantly the moment the letter is collected (see
   // collectLetterL), so there is no edge left to walk to any more — even
@@ -12691,6 +12862,8 @@ function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
   // keep pacing across empty air above the spot the log used to occupy.
   //
   hog.walkingToEdge = false
+  hog.wanderLocked = false
+  hog.lockWanderUntilPlat = false
   Hedgehog.fallAndCrawlAway(hog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE)
 }
 //
@@ -12865,43 +13038,114 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
 }
 function dismissPitCaveMushroomHint(pit) {
   if (!pit) return
-  pit.pitCaveHintShown = true
-  pit.pitCaveIdleTime = 0
-  pit.pitCaveHintTooltip && Tooltip.destroy(pit.pitCaveHintTooltip)
-  pit.pitCaveHintTooltip = null
+  pit.pitCaveMushroomDone = true
+  pit.pitCaveMushroomMoveAccum = 0
+  pit.pitCaveMushroomHintShows = 2
+  pit.pitCaveMushroomHintPausedUntilExit = true
 }
 //
-// Pit mushroom hint after the hero stays in the open cave without using it.
+// In-cave teacher nudge toward the pit mushroom (10 s movement, max two shows).
 //
-function updatePitCaveMushroomHint(inst, char, dt) {
+function updatePitCaveMushroomHint(inst, char, dt, heroMoving) {
   const pit = inst.pit
   if (!isGlowPitMushroomUnlocked(inst)) return
-  if (!pit?.collapsed || pit.pitCaveHintShown || !char?.pos) return
-  const inCave = char.pos.y >= pit.floorY - 4 &&
-    char.pos.x >= pit.zone.x1 + 8 &&
-    char.pos.x <= pit.zone.x2 - 8
-  pit.pitCaveIdleTime = inCave ? (pit.pitCaveIdleTime || 0) + dt : 0
-  if (pit.pitCaveIdleTime < PIT_CAVE_HINT_IDLE) return
-  pit.pitCaveHintShown = true
-  const mushH = TRAMP_TOTAL_H
-  pit.pitCaveHintTooltip && Tooltip.destroy(pit.pitCaveHintTooltip)
-  pit.pitCaveHintTooltip = createGlowTooltip({
+  if (!pit?.collapsed || pit.pitCaveMushroomDone || !char?.pos) return
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const inCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
+  if (!inCave) {
+    pit.pitCaveMushroomMoveAccum = 0
+    return
+  }
+  if ((pit.pitCaveMushroomHintShows || 0) >= 2) {
+    pit.pitCaveMushroomHintPausedUntilExit = true
+    return
+  }
+  if (pit.pitCaveMushroomHintPausedUntilExit) return
+  revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
+  if (!inst.levelIndicator?.lifeRevealed) return
+  inst._inGlowPitCave = true
+  const hero = inst.heroInst
+  const heroActive = isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving)
+  if (heroActive) {
+    pit.pitCaveMushroomMoveAccum = (pit.pitCaveMushroomMoveAccum || 0) + dt
+  }
+  if ((pit.pitCaveMushroomMoveAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
+  const shown = showGlowTeacherHintNow(
+    inst,
+    PIT_CAVE_HINT_TEXT,
+    GLOW_TEACHER_HINT_DURATION,
+    { pitCaveMushroom: true }
+  )
+  if (!shown) return
+  pit.pitCaveMushroomMoveAccum = 0
+  pit.pitCaveMushroomHintShows = (pit.pitCaveMushroomHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = PIT_CAVE_HINT_TEXT
+  if (pit.pitCaveMushroomHintShows >= 2) {
+    pit.pitCaveMushroomHintPausedUntilExit = true
+  }
+}
+//
+// Running and jumping both count toward teacher-hint movement gates.
+//
+function isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving) {
+  if (heroMoving) return true
+  if (!hero || !char) return false
+  if (hero._effectivelyMoving || hero.isRunning) return true
+  const k = inst.k
+  if (k) {
+    const left = isAnyKeyDown(k, CFG.controls.moveLeft)
+    const right = isAnyKeyDown(k, CFG.controls.moveRight)
+    if (left || right) return true
+    if (isAnyKeyDown(k, CFG.controls.jump)) return true
+  }
+  if (hero.jumpPhase && hero.jumpPhase !== 'none') return true
+  if (hero.isSquashing || hero.wasJumping) return true
+  const vx = char.vel?.x ?? 0
+  const vy = char.vel?.y ?? 0
+  return Math.abs(vx) > 24 || Math.abs(vy) > 24
+}
+//
+// After 10 s in the cave without eyes, nudge the skeleton line once.
+//
+function updatePitCaveSkeletonAutoHint(inst, char, dt) {
+  const pit = inst.pit
+  if (!pit?.collapsed || glowHeroHasCollectedEyes(inst.zones, inst.heroInst)) return
+  if (pit.pitCaveSkeletonAutoHintShown || pit.pitCaveSkeletonAutoHintTooltip || !char?.pos) return
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const inCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
+  if (!inCave) {
+    pit.pitCaveSkeletonIdleTime = 0
+    return
+  }
+  pit.pitCaveSkeletonIdleTime = (pit.pitCaveSkeletonIdleTime || 0) + dt
+  if (pit.pitCaveSkeletonIdleTime < PIT_CAVE_SKELETON_AUTO_HINT_SEC) return
+  pit.pitCaveSkeletonAutoHintShown = true
+  showPitCaveSkeletonAutoHint(inst)
+}
+//
+// Forced skeleton bubble — hover stays off while this is visible.
+//
+function showPitCaveSkeletonAutoHint(inst) {
+  const pit = inst.pit
+  if (!pit || pit.pitCaveSkeletonAutoHintTooltip) return
+  pit.pitCaveSkeletonAutoHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
-      x: () => pit.trampState.x,
-      y: pit.floorY + pit.zone.depth - mushH / 2,
-      width: TRAMP_TOTAL_W,
-      height: mushH,
-      text: PIT_CAVE_HINT_TEXT,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET
+      x: () => pitCaveSkeletonTooltipPos(inst).x,
+      y: () => pitCaveSkeletonTooltipPos(inst).y,
+      width: SKELETON_TOOLTIP_WIDTH,
+      height: SKELETON_TOOLTIP_HEIGHT,
+      text: SKELETON_TOOLTIP_NEED_EYES_TEXT,
+      offsetY: SKELETON_TOOLTIP_Y_OFFSET,
+      forceAbove: true
     }]
   })
-  pit.pitCaveHintTooltip.activeTarget = pit.pitCaveHintTooltip.targets[0]
-  pit.pitCaveHintTooltip.opacity = 1
-  inst.k.wait(PIT_CAVE_HINT_DURATION, () => {
-    pit.pitCaveHintTooltip && Tooltip.destroy(pit.pitCaveHintTooltip)
-    pit.pitCaveHintTooltip = null
+  pit.pitCaveSkeletonAutoHintTooltip.activeTarget = pit.pitCaveSkeletonAutoHintTooltip.targets[0]
+  pit.pitCaveSkeletonAutoHintTooltip.opacity = 1
+  inst.k.wait(PIT_CAVE_SKELETON_AUTO_HINT_DURATION, () => {
+    pit.pitCaveSkeletonAutoHintTooltip && Tooltip.destroy(pit.pitCaveSkeletonAutoHintTooltip)
+    pit.pitCaveSkeletonAutoHintTooltip = null
   })
 }
 //
@@ -12913,35 +13157,6 @@ function updateOLetterStuckHint(inst, dt) {
   const elapsed = inst.k.time() - inst.oZoneRevealTime
   if (elapsed < O_LETTER_STUCK_HINT_DELAY) return
   inst.oStuckHintShown = true
-  inst.oStuckHintTooltip && Tooltip.destroy(inst.oStuckHintTooltip)
-  const char = inst.heroInst?.character
-  if (!char?.pos) return
-  inst.oStuckHintTooltip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: () => glowHeroCollisionHoverZone(inst).x,
-      y: () => glowHeroCollisionHoverZone(inst).y,
-      width: () => glowHeroCollisionHoverZone(inst).w,
-      height: () => glowHeroCollisionHoverZone(inst).h,
-      pointerWorldX: () => glowHeroCollisionHoverZone(inst).pointerX,
-      pointerWorldY: () => glowHeroCollisionHoverZone(inst).pointerY,
-      pinBubbleToPointer: true,
-      forceAbove: true,
-      text: O_LETTER_STUCK_HINT_TEXT,
-      offsetY: HERO_TOOLTIP_Y_OFFSET
-    }]
-  })
-  inst.oStuckHintTooltip.activeTarget = inst.oStuckHintTooltip.targets[0]
-  inst.oStuckHintTooltip.opacity = 1
-  inst.k.wait(O_LETTER_STUCK_HINT_DURATION, () => dismissOLetterStuckHint(inst))
-}
-//
-// Clears the long-idle O letter speech bubble.
-//
-function dismissOLetterStuckHint(inst) {
-  inst.oStuckHintTooltip && Tooltip.destroy(inst.oStuckHintTooltip)
-  inst.oStuckHintTooltip = null
 }
 //
 // Playfield chrome inset so Glow tooltips pin to the game window, not the void.

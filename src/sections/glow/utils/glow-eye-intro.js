@@ -2,6 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 import { getPitCaveSkullEyeLine } from './glow-cave-skeleton.js'
 import {
   getCrackZone,
@@ -30,9 +31,10 @@ const EYE_INTRO_REVEAL_FLASH_R = 42
 const EYE_INTRO_ATTACH_CLOSED_DURATION = 1
 const EYE_INTRO_ATTACH_MOVE_THRESHOLD = 3
 const EYE_INTRO_ATTACH_JUMP_VEL_Y = 40
-const EYE_COLLECTED_HINT_TEXT = 'Whoa. Everything looks so much clearer now.'
+const EYE_COLLECTED_HINT_TEXT = 'Whoa. Everything looks\nso much clearer now.'
 const EYE_COLLECTED_HINT_DURATION = 5
 const EYE_COLLECTED_HINT_DISMISS = 80
+const EYE_COLLECTED_HINT_OFFSET_Y = -82
 //
 // Creates runtime state for the pre-G eyeless intro (only when eyes not saved).
 //
@@ -283,6 +285,7 @@ function tryCollectGlowCaveEyes(inst, heroInst, char) {
   const dy = char.pos.y - pickup.cy
   if (Math.hypot(dx, dy) > EYE_INTRO_PICKUP_RADIUS) return
   pickup.collected = true
+  dismissGlowPitCaveSkeletonNeedEyesHint(inst)
   persistGlowEyesCollected(inst)
   revealGlowHeroEyes(inst, heroInst)
   inst.eyeIntro.phase = 'runBack'
@@ -297,7 +300,9 @@ function showGlowEyesCollectedHint(inst) {
   inst?.heroHint && HeroHint.show(inst.heroHint, EYE_COLLECTED_HINT_TEXT, EYE_COLLECTED_HINT_DURATION, {
     dismissOnJump: false,
     dismissDistance: EYE_COLLECTED_HINT_DISMISS,
-    dismissHorizontalOnly: true
+    dismissHorizontalOnly: true,
+    followHero: true,
+    offsetY: EYE_COLLECTED_HINT_OFFSET_Y
   })
 }
 function persistGlowEyesCollected(inst) {
@@ -408,6 +413,17 @@ function drawGlowEyeRevealFx(k, heroInst, revealFx) {
     color: k.rgb(255, 255, 255),
     opacity: op
   })
+}
+//
+// Auto / forced skeleton "need eyes" bubble must not linger after pickup.
+//
+function dismissGlowPitCaveSkeletonNeedEyesHint(inst) {
+  const pit = inst?.pit
+  if (!pit) return
+  pit.pitCaveSkeletonAutoHintShown = true
+  if (!pit.pitCaveSkeletonAutoHintTooltip) return
+  Tooltip.destroy(pit.pitCaveSkeletonAutoHintTooltip)
+  pit.pitCaveSkeletonAutoHintTooltip = null
 }
 function parseHexRgb(hex) {
   const h = String(hex).replace('#', '')

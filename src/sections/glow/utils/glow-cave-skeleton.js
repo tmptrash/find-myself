@@ -14,24 +14,13 @@ const PIT_CAVE_SKULL_R = PIT_CAVE_EYE_GAP / (PIT_CAVE_SKULL_SOCKET_X_FRAC * 2)
 
 const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
 const SKELETON_BAKE_PAD = 22
-const CAVE_SKELETON_LAYOUT_VERSION = 27
+const CAVE_SKELETON_LAYOUT_VERSION = 34
 //
 // Skull sits against the widened interior's left wall (not the mouth lip).
 //
 const PIT_CAVE_SKULL_FLOOR_PAD = 20
 const CAVE_RIB_FRACTURE_ECG_BEATS = 3
 const CAVE_RIB_FRACTURE_PEAK_FRAC = 0.62
-//
-// Skull crack segments in skull grid cells [x0, y0, x1, y1].
-//
-const CAVE_SKULL_CRACK_SEGS = [
-  [9, 5, 11, 9],
-  [13, 4, 10, 7],
-  [15, 8, 12, 11],
-  [7, 12, 9, 16],
-  [16, 13, 14, 17],
-  [11, 18, 13, 22]
-]
 //
 // Rib surface cracks: ribIndex, side, t along horizontal shaft, length factor.
 //
@@ -47,7 +36,9 @@ const CAVE_THORAX_RIB_COUNT = 6
 const CAVE_THORAX_RIB_BAR_THICK = 2.05
 const CAVE_THORAX_RIB_ROW_GAP = 2.75
 const CAVE_THORAX_RIB_HALF_LEN_CELLS = [7.2, 8.8, 10.2, 10.2, 8.6, 7.0]
-const CAVE_THORAX_RIB_SPINE_GAP_FRAC = 1.55
+const CAVE_THORAX_RIB_SPINE_GAP_FRAC = 2.05
+const CAVE_THORAX_SHEAR_STUB_LEN_FRAC = 0.22
+const CAVE_THORAX_SHEAR_SEED_SALT = 7919
 //
 // Ribs that no longer touch the spine (air gap at the root), per side.
 //
@@ -57,9 +48,6 @@ const CAVE_THORAX_RIB_DETACHED = [
   { ribIndex: 4, side: -1 },
   { ribIndex: 5, side: 1 }
 ]
-const CAVE_SKULL_MOUTH_GRID_Y = 20
-const CAVE_SKULL_MOUTH_GRID_X = 9
-const CAVE_SKULL_MOUTH_GRID_W = 7
 const CAVE_SKELETON_RIB_PAIRS = 11
 //
 // Front-view skull sampled from the user reference (white bg stripped).
@@ -78,13 +66,13 @@ const CAVE_REF_SKULL_GRID = [
   '.MBBMBBBBBBBBBBBBBBMBBM.',
   '.MBMBBBBBBBBBBBBBBBBMBM.',
   '.MMBBBBBBBBBBBBBBBBBBMM.',
-  '.MBBBMDDDMBBBBMDDDMBBBM.',
-  '.BMBMMMDDDMBBMDDDMMMBMB.',
-  '..BBMMMMDMBBHBMDMMMMBB..',
-  '..BBMMMMMBBBBBBMMMMMBB..',
-  '..BBBBBBBBBMMBBHBBBBBB..',
-  '.HMBBBBBBBMDDMBHHHHBBMH.',
-  '.HMBBBBBBBMMMMBBBBBBBMH.',
+  '.MBBBBBBBBBBBBBBBBBBBBMB.',
+  '.BBBBBBBBBBBBBBBBBBBBBBB.',
+  '..BBBBBBBBBBBBBBBBBBBBBB..',
+  '..BBBBBBBBBBBBBBBBBBBBBB..',
+  '..BBBBBBBBBBBBBBBBBBBBBB..',
+  '.HMBBBBBBBBBBBBBBBBBBBH.',
+  '.HMBBBBBBBBBBBBBBBBBBBH.',
   '.HMBBMMBBBBBBBBBBBMBBBH.',
   '..HBB.BBBBBBBBBBBB.BBH..',
   '......BBBBBBBHBBBB......',
@@ -199,7 +187,29 @@ function buildCaveSkeletonRibLayout(seed) {
   if (rand() > 0.55) {
     spineBreaks.push({ t: 0.35 + rand() * 0.45, gap: 0.06 + rand() * 0.1 })
   }
-  return { ribs, loose, spineBreaks }
+  const sheared = pickThoraxShearedRibRows(seed)
+  return { ribs, loose, spineBreaks, sheared }
+}
+//
+// One connected rib row per side removed entirely — only a short spine stub remains.
+//
+function pickThoraxShearedRibRows(seed) {
+  let s = (seed + CAVE_THORAX_SHEAR_SEED_SALT) >>> 0
+  const rand = () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 0xffffffff
+  }
+  const leftPool = []
+  const rightPool = []
+  for (let i = 0; i < CAVE_THORAX_RIB_COUNT; i++) {
+    !isCaveThoraxRibDetached(i, -1) && leftPool.push(i)
+    !isCaveThoraxRibDetached(i, 1) && rightPool.push(i)
+  }
+  const pick = (pool) => pool[Math.floor(rand() * pool.length)]
+  return {
+    left: leftPool.length ? pick(leftPool) : null,
+    right: rightPool.length ? pick(rightPool) : null
+  }
 }
 /**
  * Bone tones for the cave skeleton (flat gray or shaded earth band).
@@ -218,6 +228,28 @@ export function caveSkeletonTones(flatDecor) {
   }
 }
 /**
+ * Pit-floor skeleton — readable on flat gray cave decor (not one-tone mud).
+ * @returns {{ fill: Object, deep: Object, light: Object }}
+ */
+export function caveSkeletonPitFloorTones() {
+  return {
+    fill: glowRgb('midGray'),
+    deep: glowRgb('void'),
+    light: glowRgb('decorGray')
+  }
+}
+/**
+ * Eyeless intro pit — lighter bones on the flat void floor.
+ * @returns {{ fill: Object, deep: Object, light: Object }}
+ */
+export function caveSkeletonEyeIntroTones() {
+  return {
+    fill: glowRgb('lightGray'),
+    deep: glowRgb('void'),
+    light: glowRgb('decorGray')
+  }
+}
+/**
  * Draws the cave skeleton embedded in the back wall (does not touch baked rocks).
  * @param {Object} k - Kaplay instance
  * @param {Object} pit - Pit state
@@ -229,7 +261,8 @@ export function drawPitCaveSkeleton(k, pit, tones, opts = {}) {
   const sk = ensurePitCaveSkeletonLayout(pit)
   const opacity = opts.opacity ?? 0.85
   const embedded = Boolean(opts.embedded)
-  ensurePitCaveSkeletonSprite(k, pit, tones, embedded)
+  const bakeVariant = opts.bakeVariant ?? 'pit'
+  ensurePitCaveSkeletonSprite(k, pit, tones, embedded, bakeVariant)
   if (!pit._caveSkeletonSpriteReady) return
   const uniform = embedded ? 0.55 : 1
   const anchorOffY = (pit._caveSkeletonSkullOffsetY ?? 0) * uniform
@@ -245,8 +278,8 @@ export function drawPitCaveSkeleton(k, pit, tones, opts = {}) {
 //
 // Bakes the skeleton once per Kaplay instance (re-bake if embed mode changes).
 //
-function ensurePitCaveSkeletonSprite(k, pit, tones, embedded) {
-  const bakeKey = embedded ? 'embed' : 'free'
+function ensurePitCaveSkeletonSprite(k, pit, tones, embedded, bakeVariant = 'pit') {
+  const bakeKey = `${embedded ? 'embed' : 'free'}-${bakeVariant}`
   if (pit._caveSkeletonSpriteReady && pit._caveSkeletonBakeKey === bakeKey &&
     pit._caveSkeletonSkullOffsetY != null) return
   const sk = ensurePitCaveSkeletonLayout(pit)
@@ -341,18 +374,6 @@ function drawReferencePixelGrid(ctx, grid, u, palette, centerX, topY, scaleX = 1
   }
 }
 //
-// Horizontal mouth slit on the jaw (carved through the baked skull pixels).
-//
-function drawCaveSkullMouthSlit(ctx, u, topY, gridW, deepCss) {
-  const left = -gridW * u / 2 + CAVE_SKULL_MOUTH_GRID_X * u
-  const x0 = left
-  const x1 = left + CAVE_SKULL_MOUTH_GRID_W * u
-  const y0 = topY + CAVE_SKULL_MOUTH_GRID_Y * u + u * 0.42
-  const y1 = y0 + u * 0.92
-  ctx.fillStyle = deepCss
-  ctx.fillRect(Math.floor(x0), Math.floor(y0), Math.ceil(x1) - Math.floor(x0), Math.ceil(y1) - Math.floor(y0))
-}
-//
 // Reference skull — bitmap traced from the user art (scaled to skullR).
 //
 function drawCaveSkullFromReference(ctx, r, boneCss, deepCss) {
@@ -363,23 +384,17 @@ function drawCaveSkullFromReference(ctx, r, boneCss, deepCss) {
   const u = (r * 2.14) / gw
   const topY = -gh * u * 0.44
   drawReferencePixelGrid(ctx, grid, u, palette, 0, topY)
-  drawCaveSkullMouthSlit(ctx, u, topY, gw, deepCss)
-  drawCaveSkullWeathering(ctx, u, topY, gw, deepCss)
 }
 //
-// Hairline cracks on the baked skull (grid-space segments).
+// Draws one thorax rib side — full arc, detached gap, or spine-only shear stub.
 //
-function drawCaveSkullWeathering(ctx, u, topY, gridW, deepCss) {
-  const left = -gridW * u / 2
-  ctx.strokeStyle = deepCss
-  ctx.lineWidth = Math.max(1, u * 0.38)
-  ctx.lineCap = 'round'
-  CAVE_SKULL_CRACK_SEGS.forEach(([x0, y0, x1, y1]) => {
-    ctx.beginPath()
-    ctx.moveTo(left + x0 * u, topY + y0 * u)
-    ctx.lineTo(left + x1 * u, topY + y1 * u)
-    ctx.stroke()
-  })
+function drawCaveThoraxRibSide(ctx, boneCss, deepCss, side, barY, halfLen, spineHalf, thick, drop, hook, ribIndex, ribLayout) {
+  if (isCaveThoraxRibSheared(ribIndex, side, ribLayout)) {
+    drawCaveRibSpineShearStub(ctx, boneCss, deepCss, side, barY, spineHalf, thick, halfLen)
+    return
+  }
+  const detached = isCaveThoraxRibDetached(ribIndex, side)
+  drawCaveRibSideRounded(ctx, boneCss, deepCss, side, barY, halfLen, spineHalf, thick, drop, hook, detached, ribIndex)
 }
 //
 // One rib side: uniform stroke; mirrored L/R; detached ribs start after a spine gap.
@@ -392,6 +407,14 @@ function drawCaveRibSideRounded(ctx, boneCss, deepCss, side, barY, halfLen, spin
   const hookX = side < 0 ? outerX + hook : outerX - hook
   const gap = thick * CAVE_THORAX_RIB_SPINE_GAP_FRAC
   const startX = detached ? spineX + side * gap : spineX
+  detached && ctx.save()
+  if (detached) {
+    const jitter = caveDetachedRibJitter(ribIndex, side, thick)
+    ctx.translate(0, jitter.dy)
+    ctx.translate(startX, midY)
+    ctx.rotate(jitter.angle)
+    ctx.translate(-startX, -midY)
+  }
   ctx.strokeStyle = boneCss
   ctx.lineWidth = thick
   ctx.lineCap = detached ? 'butt' : 'round'
@@ -404,6 +427,16 @@ function drawCaveRibSideRounded(ctx, boneCss, deepCss, side, barY, halfLen, spin
   ctx.stroke()
   detached && drawCaveRibFractureEcg(ctx, deepCss, startX, midY, thick, side)
   drawCaveRibSurfaceCracks(ctx, deepCss, ribIndex, side, startX, midY, outerX, dropY, thick)
+  detached && ctx.restore()
+}
+//
+// Small vertical offset and tilt so detached ribs read as fallen fragments.
+//
+function caveDetachedRibJitter(ribIndex, side, thick) {
+  const seed = ribIndex * 19 + side * 41
+  const dy = ((seed % 5) - 2) * thick * 0.38
+  const angle = ((seed % 7) - 3) * 0.052
+  return { dy, angle }
 }
 //
 // Detached rib root: V-notches toward the spine only (no vertical seam on the bone).
@@ -481,14 +514,40 @@ function drawCaveSpineWeathering(ctx, deepCss, spineHalf, blockTop, blockH, thic
 // True when this rib row is broken off the spine on the given side.
 //
 function isCaveThoraxRibDetached(ribIndex, side) {
-  return CAVE_THORAX_RIB_DETACHED.some(
-    (entry) => entry.ribIndex === ribIndex && entry.side === side
-  )
+  const entry = CAVE_THORAX_RIB_DETACHED.find((row) => row.side === side)
+  return entry != null && entry.ribIndex === ribIndex
+}
+//
+// Rib row sheared off at the spine — full arc omitted, stub only.
+//
+function isCaveThoraxRibSheared(ribIndex, side, ribLayout) {
+  const sheared = ribLayout?.sheared
+  if (!sheared) return false
+  return side < 0 ? sheared.left === ribIndex : sheared.right === ribIndex
+}
+//
+// Short bone nub at the spine with a jagged fracture facing outward.
+//
+function drawCaveRibSpineShearStub(ctx, boneCss, deepCss, side, barY, spineHalf, thick, halfLen) {
+  const midY = barY + thick * 0.5
+  const spineX = side < 0 ? -spineHalf : spineHalf
+  const stubLen = Math.max(thick * 2.4, halfLen * CAVE_THORAX_SHEAR_STUB_LEN_FRAC)
+  const outerX = spineX + side * stubLen
+  const halfH = thick * 0.46
+  ctx.fillStyle = boneCss
+  ctx.beginPath()
+  ctx.moveTo(spineX, midY - halfH)
+  ctx.lineTo(outerX, midY - halfH)
+  ctx.lineTo(outerX, midY + halfH)
+  ctx.lineTo(spineX, midY + halfH)
+  ctx.closePath()
+  ctx.fill()
+  drawCaveRibFractureEcg(ctx, deepCss, outerX, midY, thick, -side)
 }
 //
 // Thoracic block — solid rib pairs with wide vertical gaps (no pixel checkerboard).
 //
-function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss) {
+function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss, ribLayout) {
   const u = r / 10.4
   const cellX = u * CAVE_THORAX_HORIZONTAL_SCALE
   const cellY = u * CAVE_THORAX_VERTICAL_SCALE
@@ -513,7 +572,7 @@ function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss) {
   for (let i = 0; i < CAVE_THORAX_RIB_COUNT; i++) {
     const halfLen = lens[i] * cellX
     const barY = y
-    drawCaveRibSideRounded(
+    drawCaveThoraxRibSide(
       ctx,
       boneCss,
       deepCss,
@@ -524,10 +583,10 @@ function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss) {
       ribThick,
       drop,
       hook,
-      isCaveThoraxRibDetached(i, -1),
-      i
+      i,
+      ribLayout
     )
-    drawCaveRibSideRounded(
+    drawCaveThoraxRibSide(
       ctx,
       boneCss,
       deepCss,
@@ -538,8 +597,8 @@ function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss) {
       ribThick,
       drop,
       hook,
-      isCaveThoraxRibDetached(i, 1),
-      i
+      i,
+      ribLayout
     )
     const gapTop = barY + ribThick
     bone(-spineHalf, gapTop, spineHalf * 2, ribGap)
@@ -568,7 +627,7 @@ function drawCaveSkeletonToCtx(ctx, sk, tones, ribLayout) {
   // Thoracic ribs sampled from the user torso reference.
   //
   const spineTopY = r * 1.42
-  drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss)
+  drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss, ribLayout)
   ctx.strokeStyle = boneCss
   ctx.lineWidth = 2
   ribLayout.loose.forEach((chip) => {

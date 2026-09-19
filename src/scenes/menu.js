@@ -658,6 +658,18 @@ export function sceneMenu(k) {
           outlineOnly: false
         })
       }
+      if (config.section === 'touch') {
+        Hero.loadHeroSprites({
+          k,
+          type: Hero.HEROES.ANTIHERO,
+          bodyColor: config.color.body,
+          outlineColor: MENU_HERO_OUTLINE_COLOR,
+          addMouth: hasMouth,
+          addArms: hasArms,
+          addWatch: hasWatch,
+          outlineOnly: false
+        })
+      }
       //
       // Preload section-colored variant for accurate hover/completed color
       // (avoids dark tinting that occurs when multiplying gray × section color)
@@ -696,6 +708,9 @@ export function sceneMenu(k) {
       const glowSectionBodyNoHash = GLOW_MENU_SECTION_HERO_BODY.replace('#', '')
       antiHeroInst.spritePrefixGlow = config.section === 'glow'
         ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
+        : null
+      antiHeroInst.spritePrefixTouchFilled = config.section === 'touch'
+        ? `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${featureSuffix}`
         : null
       const spritePrefixGlowSectionHollow = config.section === 'glow'
         ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
@@ -750,6 +765,14 @@ export function sceneMenu(k) {
         addWatch: hasWatch,
         outlineOnly: false,
         noEyes: false
+      })
+      antiHeroInst.spritePrefixTouchFilled && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixTouchFilled] = {
+        bodyColor: config.color.body,
+        outlineColor: MENU_HERO_OUTLINE_COLOR,
+        addMouth: hasMouth,
+        addArms: hasArms,
+        addWatch: hasWatch,
+        outlineOnly: false
       })
       antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixHollow] = {
         bodyColor: grayColor,
@@ -2232,6 +2255,9 @@ function resolveMenuAntiHeroSpritePrefix(antiHeroInst, currentSection, isHovered
   if (inPlay) {
     if (section === 'glow') {
       return antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixColored
+    }
+    if (section === 'touch') {
+      return antiHeroInst.spritePrefixTouchFilled || antiHeroInst.spritePrefixColored
     }
     if (section === 'time') {
       return antiHeroInst.spritePrefixYellow || antiHeroInst.spritePrefixColored

@@ -3,10 +3,20 @@ import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
-import { GLOW_PAL, glowRgb, snapToPalette, getCuteMushroomFlatDecorColors } from './glow-palette.js'
+import {
+  GLOW_PAL,
+  glowRgb,
+  snapToPalette,
+  getCuteMushroomFlatDecorColors,
+  getCuteMushroomFlatPitBakeColors
+} from './glow-palette.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
-import { drawPitCaveSkeleton, caveSkeletonTones } from './glow-cave-skeleton.js'
+import {
+  drawPitCaveSkeleton,
+  caveSkeletonPitFloorTones,
+  caveSkeletonEyeIntroTones
+} from './glow-cave-skeleton.js'
 //
 // Midges + right-edge crack pit for the glow level
 //
@@ -76,16 +86,35 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const CAVE_LAYOUT_VERSION = 23
+const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
+const CAVE_LAYOUT_VERSION = 46
+//
+// Nudge seam-cover boulders east so the interior wall line stays hidden.
+//
+const CAVE_SEAM_ROCK_SHIFT_EAST = 92
+const CAVE_SEAM_COLUMN_X_SPREAD = 6
+//
+// Void seam sits west of the skeleton sprite — skeleton + hero play east of it.
+//
+const CAVE_INTERIOR_WALL_LEFT_OF_SKELETON = 96
+//
+// Skull anchor X — must match pitCaveEyePickupCenter in glow-cave-skeleton.js.
+//
+const PIT_CAVE_SKULL_FLOOR_PAD = 20
+const PIT_CAVE_SKULL_R = 14 / (0.42 * 2)
+//
+// Keep in sync with SKELETON_BAKE_PAD in glow-cave-skeleton.js.
+//
+const CAVE_SKELETON_BAKE_PAD = 22
+//
+// Drawn half-width matches ensurePitCaveSkeletonSprite (skullR * 5.2 + bake pad) / 2.
+//
+const CAVE_SKELETON_SPRITE_HALF_W = PIT_CAVE_SKULL_R * 2.6 + CAVE_SKELETON_BAKE_PAD
 //
 // Extra interior floor width to the left of the mouth — entrance lip unchanged.
 //
-export const CAVE_INTERIOR_EXTEND_LEFT = 88
+export const CAVE_INTERIOR_EXTEND_LEFT = 132
 const CAVE_LEFT_BLOCK_W = 12
-//
-// Interior left wall rocks stay below the playfield lip — never stack above floorY.
-//
-const CAVE_INTERIOR_LEFT_WALL_MIN_GROUND_Y = 14
 const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
@@ -611,7 +640,6 @@ export function drawGlowPit(k, pit, groundC, flatDecor = false) {
   }
   if (isCaveInteriorVisible(pit)) {
     drawCaveInteriorRockStyle(k, pit, flatDecor)
-    drawPitTrampoline(k, pit)
     return
   }
   //
@@ -648,7 +676,6 @@ export function drawGlowPitEyeIntroInterior(k, pit) {
     return
   }
   drawGlowPitBareCave(k, pit)
-  drawGlowPitCaveSkeletonScene(k, pit, true)
 }
 /**
  * Draws the cave skeleton without pit camera culling (visible whenever the pit is open).
@@ -658,14 +685,40 @@ export function drawGlowPitEyeIntroInterior(k, pit) {
  */
 export function drawGlowPitCaveSkeletonScene(k, pit, flatDecor = false) {
   if (!shouldShowPitCaveSkeleton(pit)) return
-  //
-  // Interior pass draws the skeleton when the hero is inside the collapsed pit.
-  //
-  if (pit.collapsed && isCaveInteriorVisible(pit)) return
-  drawPitCaveSkeleton(k, pit, caveSkeletonTones(flatDecor), {
-    opacity: 0.85,
-    embedded: false
+  const eyeIntroBare = pit.sceneRef?.eyeIntro &&
+    pit.sceneRef.eyeIntro.phase !== 'complete' &&
+    !glowHeroHasCollectedEyes(pit.sceneRef?.zones, pit.heroInst || pit.sceneRef?.heroInst)
+  const tones = eyeIntroBare ? caveSkeletonEyeIntroTones() : caveSkeletonPitFloorTones()
+  drawPitCaveSkeleton(k, pit, tones, {
+    opacity: eyeIntroBare ? 1 : flatDecor ? 0.96 : 0.92,
+    embedded: false,
+    bakeVariant: eyeIntroBare ? 'intro' : 'pit'
   })
+}
+/**
+ * Pit mushroom, seam-cover rocks and scattered interior rocks — draw after
+ * onDraw earth/static so crisp bake edges do not clip them.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ * @param {boolean} flatDecor - Single-tone decor mode
+ */
+export function drawGlowPitCaveMushroom(k, pit) {
+  if (!pit?.collapsed) return
+  drawPitTrampoline(k, pit)
+}
+export function drawGlowPitCaveForegroundDecor(k, pit, flatDecor = false) {
+  if (!pit?.collapsed) return
+  if (!isCaveInteriorVisible(pit)) return
+  if (!pit.wallProfile?.mouth) return
+  const showRocks = shouldDrawPitCaveRocks(pit)
+  if (!showRocks) return
+  const pal = buildCavePalette(glowRgb('decorGray'))
+  const layout = pit.wallProfile
+  const { floorY } = pit
+  drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
+  drawCaveLayoutRocks(k, layout.backgroundRocks, pal, floorY)
+  drawCaveLayoutRocks(k, layout.contourRocks, pal, floorY)
+  drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
 }
 //
 // Hero feet on the cave pit floor (same band as the lying-eye reveal).
@@ -712,7 +765,8 @@ function drawGlowPitMouthVoidFill(k, pit) {
     pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
   }
   const pal = buildCavePalette(glowRgb('decorGray'))
-  drawCaveVoidFill(k, pit.wallProfile.mouth, pal)
+  const edge = pit.wallProfile.interiorWallEdge
+  drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge)
 }
 //
 // Private helpers
@@ -769,6 +823,10 @@ function bakePitMushroomSprite(k) {
   // trampoline mushrooms so all three read as different little guys.
   //
   bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroomPurple)
+  bakeOnePitMushroomFlatMonoSprites(k)
+}
+function bakeOnePitMushroomFlatMonoSprites(k) {
+  bakeOnePitMushroomSprite(k, PIT_MUSH_FLAT_FILL_SPRITE, getCuteMushroomFlatPitBakeColors())
 }
 function bakeOnePitMushroomSprite(k, name, colors) {
   const mushW = PIT_TRAMP_W
@@ -781,7 +839,8 @@ function bakeOnePitMushroomSprite(k, name, colors) {
       width: mushW,
       colors,
       withFace: true,
-      eyeScale: TRAMP_FACE_EYE_SCALE
+      eyeScale: TRAMP_FACE_EYE_SCALE,
+      simpleShade: true
     })
   })
   k.loadSprite(name, canvas)
@@ -879,25 +938,14 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
   }
   const showRocks = shouldDrawPitCaveRocks(pit)
   bakeCaveInteriorSprite(k, pit, showRocks)
-  const skTones = caveSkeletonTones(flatDecor)
-  const skOpts = { opacity: 0.92, embedded: false }
-  const showSkeleton = shouldShowPitCaveSkeleton(pit)
   if (pit._caveSpriteReady) {
     drawCaveInteriorBakedSprite(k, pit)
-    showSkeleton && drawPitCaveSkeleton(k, pit, skTones, skOpts)
-    if (showRocks) {
-      const pal = buildCavePalette(glowRgb('decorGray'))
-      const layout = pit.wallProfile
-      drawCaveLayoutRocks(k, layout.backgroundRocks, pal, floorY)
-      drawCaveLayoutRocks(k, layout.contourRocks, pal, floorY)
-    }
     return
   }
   const layout = pit.wallProfile
   const mouth = layout.mouth
   const pal = buildCavePalette(glowRgb('decorGray'))
-  drawCaveVoidFill(k, mouth, pal)
-  showSkeleton && drawPitCaveSkeleton(k, pit, skTones, skOpts)
+  drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge)
   if (showRocks) {
     drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
     drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
@@ -914,7 +962,11 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   pit._caveSpriteX = ox
   pit._caveSpriteY = oy
   const bakeKey = showRocks ? 'rocks' : 'void'
-  if (pit._caveSpriteReady && pit._caveBakeRocksKey === bakeKey) return
+  if (
+    pit._caveSpriteReady &&
+    pit._caveBakeRocksKey === bakeKey &&
+    pit._caveBakeLayoutVersion === CAVE_LAYOUT_VERSION
+  ) return
   if (showRocks && k.getSprite?.(CAVE_INTERIOR_SPRITE) && pit._caveBakeRocksKey === 'rocks') {
     pit._caveSpriteReady = true
     return
@@ -929,20 +981,24 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
-  fillCanvasPoly(ctx, caveMouthPts(layout.mouth), pal.void)
+  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge), pal.void)
   const groundY = layout.mouth.floorY
+  //
+  // Wall/contour rocks are drawn live on the foreground pass so bake void
+  // edges do not clip them at the interior seam.
+  //
   showRocks && paintCanvasRocks(ctx, layout.backgroundRocks, pal, groundY)
-  showRocks && paintCanvasRocks(ctx, layout.wallRocks, pal, groundY)
   showRocks && paintCanvasRocks(ctx, layout.pebbles, pal, groundY)
-  showRocks && paintCanvasRocks(ctx, layout.contourRocks, pal, groundY)
   k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
   pit._caveSpriteReady = true
   pit._caveBakeRocksKey = bakeKey
+  pit._caveBakeLayoutVersion = CAVE_LAYOUT_VERSION
 }
-function caveMouthPts(mouth) {
+function caveMouthPts(mouth, interiorWallEdge = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
+  const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   //
   // This is the shape that ends up PERMANENTLY baked into CAVE_INTERIOR_SPRITE
   // (bakeCaveInteriorSprite caches it and reuses it for the rest of the
@@ -953,17 +1009,16 @@ function caveMouthPts(mouth) {
   // buildJaggedHorizontalEdge treatment here, same winding order.
   //
   const pts = []
-  const seed = mouth.left[0].x * 0.037
-  buildJaggedHorizontalEdge(mouth.left[0].x, mouth.right[0].x, mouth.floorY, seed)
+  const seed = leftEdge[0].x * 0.037
+  buildJaggedHorizontalEdge(leftEdge[0].x, mouth.right[0].x, mouth.floorY, seed)
     .forEach(p => pts.push(p))
   for (let i = 1; i < mouth.right.length; i++) {
     pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
   }
-  buildJaggedHorizontalEdge(
-    mouth.right[mouth.right.length - 1].x, mouth.left[mouth.left.length - 1].x, mouth.bottomY, seed + 500
-  ).forEach(p => pts.push(p))
-  for (let i = mouth.left.length - 1; i >= 1; i--) {
-    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
+  pts.push({ x: mouth.right[mouth.right.length - 1].x, y: mouth.bottomY })
+  pts.push({ x: leftEdge[leftEdge.length - 1].x, y: mouth.bottomY })
+  for (let i = leftEdge.length - 1; i >= 1; i--) {
+    pts.push({ x: leftEdge[i].x, y: leftEdge[i].y })
   }
   return pts
 }
@@ -975,7 +1030,7 @@ function drawCaveInteriorBakedSprite(k, pit) {
   const drawH = Math.max(1, fullH - topPad)
   k.drawSprite({
     sprite: CAVE_INTERIOR_SPRITE,
-    pos: k.vec2(pit._caveSpriteX, pit.floorY),
+    pos: k.vec2(Math.round(pit._caveSpriteX), Math.round(pit.floorY)),
     width: fullW,
     height: drawH,
     anchor: 'topleft',
@@ -1058,7 +1113,9 @@ function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
   rocks.forEach((rock, idx) => {
     if (!rock.verts?.length) return
     if (floorY != null && !isCaveRockOnOrBelowGround(rock, floorY)) return
-    const pts = rock.verts.map(v => k.vec2(rock.x + v.x, rock.y + v.y))
+    const rx = Math.round(rock.x)
+    const ry = Math.round(rock.y)
+    const pts = rock.verts.map(v => k.vec2(rx + v.x, ry + v.y))
     k.drawPolygon({ pts, color: idx % 2 === 0 ? fill : shade })
   })
 }
@@ -1092,8 +1149,9 @@ function drawCaveFloorPebbles(k, layout, pal) {
 //
 // Solid dark void for the cave interior — single fill, no layered portals.
 //
-function drawCaveVoidFill(k, mouth, pal) {
+function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return
+  const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   const pts = []
   //
   // Top/bottom edges used to be two dead-straight points each — the one
@@ -1101,17 +1159,16 @@ function drawCaveVoidFill(k, mouth, pal) {
   // same way the left/right walls already are so the whole silhouette looks
   // equally chaotic and rocks placed near it visibly straddle the boundary.
   //
-  const seed = mouth.left[0].x * 0.037
-  buildJaggedHorizontalEdge(mouth.left[0].x, mouth.right[0].x, mouth.floorY, seed)
+  const seed = leftEdge[0].x * 0.037
+  buildJaggedHorizontalEdge(leftEdge[0].x, mouth.right[0].x, mouth.floorY, seed)
     .forEach(p => pts.push(k.vec2(p.x, p.y)))
   for (let i = 1; i < mouth.right.length; i++) {
     pts.push(k.vec2(mouth.right[i].x, mouth.right[i].y))
   }
-  buildJaggedHorizontalEdge(
-    mouth.right[mouth.right.length - 1].x, mouth.left[mouth.left.length - 1].x, mouth.bottomY, seed + 500
-  ).forEach(p => pts.push(k.vec2(p.x, p.y)))
-  for (let i = mouth.left.length - 1; i >= 1; i--) {
-    pts.push(k.vec2(mouth.left[i].x, mouth.left[i].y))
+  pts.push(k.vec2(mouth.right[mouth.right.length - 1].x, mouth.bottomY))
+  pts.push(k.vec2(leftEdge[leftEdge.length - 1].x, mouth.bottomY))
+  for (let i = leftEdge.length - 1; i >= 1; i--) {
+    pts.push(k.vec2(leftEdge[i].x, leftEdge[i].y))
   }
   pts.length >= 3 && k.drawPolygon({
     pts,
@@ -1228,7 +1285,14 @@ function buildCaveSceneLayout(zone, floorY) {
   const seed = zone.x1 * 0.017 + floorY * 0.003
   const pebbles = []
   const mouth = buildCaveMouth(zone, floorY, bottomY, seed)
-  const interiorLeft = mouth.left[0].x - CAVE_INTERIOR_EXTEND_LEFT
+  const cutLeft = getGlowPitEarthBandMouthCutout(zone).leftX
+  const skeletonAnchorX = getPitCaveSkeletonAnchorX(zone)
+  const skeletonSpriteLeft = skeletonAnchorX - CAVE_SKELETON_SPRITE_HALF_W - 8
+  const interiorWallX = Math.min(
+    skeletonSpriteLeft - CAVE_INTERIOR_WALL_LEFT_OF_SKELETON,
+    cutLeft + 10
+  )
+  const interiorLeft = interiorWallX + 10
   const floorTop = clampHorizProfile(
     buildJaggedFloorTop(interiorLeft, mouth.right[0].x, bottomY, seed),
     zone,
@@ -1248,19 +1312,18 @@ function buildCaveSceneLayout(zone, floorY) {
     })
   }
   const wallRocks = []
-  const interiorLeftEdge = buildCaveMouthEdge(interiorLeft, floorY, bottomY, seed + 550, 1)
-  appendCaveWallRocks(
-    wallRocks,
-    interiorLeftEdge,
-    -1,
-    seed + 600,
-    floorY,
-    bottomY,
-    floorY + CAVE_INTERIOR_LEFT_WALL_MIN_GROUND_Y
-  )
+  //
+  // inwardSign −1: wobble extends left into the rock cover, never right into
+  // the play space (sign +1 pushed the seam east and read as a bar in front
+  // of the hero/skeleton).
+  //
+  const interiorLeftEdge = buildCaveMouthEdge(interiorWallX, floorY, bottomY, seed + 550, -1)
   appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
   const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
-  const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500)
+  const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
+  appendCaveMouthCeilingLipRocks(contourRocks, mouth, interiorLeftEdge, floorY, seed + 1520)
+  appendCaveInteriorSeamColumnRocks(wallRocks, interiorWallX, floorY, bottomY, seed + 2105)
+  appendCaveInteriorSeamTopRocks(wallRocks, interiorWallX, floorY, seed + 2188)
   return {
     version: CAVE_LAYOUT_VERSION,
     pebbles,
@@ -1269,6 +1332,7 @@ function buildCaveSceneLayout(zone, floorY) {
     contourRocks,
     floorTop,
     mouth,
+    interiorWallEdge: interiorLeftEdge,
     bottomY
   }
 }
@@ -1291,7 +1355,62 @@ function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed, interiorLeft = n
 //
 // Lip rocks straddle the mouth polygon edges so straight bake/crop lines disappear.
 //
-function buildCaveContourRocks(mouth, floorY, bottomY, seed) {
+//
+// Tall stack east of the interior wall — hides the vertical seam (not a C along the lip).
+//
+//
+// Lip of the seam column — covers the vertical line at the ground line only.
+//
+function appendCaveInteriorSeamTopRocks(rocks, interiorWallX, floorY, seed) {
+  const columnX = interiorWallX + CAVE_SEAM_ROCK_SHIFT_EAST + 22
+  const count = 7 + Math.floor(caveSeed01(seed) * 3)
+  for (let i = 0; i < count; i++) {
+    const radius = 9 + caveSeed01(seed + i * 3.1) * 18
+    const y = floorY + radius
+    rocks.push({
+      x: columnX + (caveSeed01(seed + i * 5.7) - 0.5) * CAVE_SEAM_COLUMN_X_SPREAD,
+      y,
+      radius,
+      verts: buildRockVertices(radius)
+    })
+  }
+}
+function appendCaveInteriorSeamColumnRocks(rocks, interiorWallX, floorY, bottomY, seed) {
+  const columnX = interiorWallX + CAVE_SEAM_ROCK_SHIFT_EAST + 22
+  const count = 26 + Math.floor(caveSeed01(seed) * 5)
+  for (let i = 0; i < count; i++) {
+    const t = i / Math.max(1, count - 1)
+    const y = floorY + 4 + t * (bottomY - floorY - 16)
+    const radius = 17 + caveSeed01(seed + i * 4.7) * 24
+    const x = columnX + (caveSeed01(seed + i * 6.3) - 0.5) * CAVE_SEAM_COLUMN_X_SPREAD
+    rocks.push({
+      x,
+      y: y + (caveSeed01(seed + i * 8.1) - 0.5) * 4,
+      radius,
+      verts: buildRockVertices(radius)
+    })
+  }
+}
+function appendCaveMouthCeilingLipRocks(rocks, mouth, interiorLeftEdge, floorY, seed) {
+  if (!interiorLeftEdge?.length || !mouth?.right?.length) return
+  const lipSeed = interiorLeftEdge[0].x * 0.041 + floorY * 0.002
+  const topEdge = buildJaggedHorizontalEdge(
+    interiorLeftEdge[0].x - 6,
+    mouth.right[0].x + 4,
+    floorY,
+    lipSeed
+  )
+  topEdge.forEach((p, i) => {
+    const radius = 7 + caveSeed01(seed + i * 3.4) * 18
+    rocks.push({
+      x: p.x + (caveSeed01(seed + i * 5.9) - 0.5) * 10,
+      y: p.y + radius * 0.42,
+      radius,
+      verts: buildRockVertices(radius)
+    })
+  })
+}
+function buildCaveContourRocks(mouth, floorY, bottomY, seed, interiorWallX = null) {
   const rocks = []
   const lipSeed = mouth.left[0].x * 0.037
   const bottomEdge = buildJaggedHorizontalEdge(
@@ -1307,17 +1426,19 @@ function buildCaveContourRocks(mouth, floorY, bottomY, seed) {
     })
   })
   const edgeStride = 2
-  mouth.left.forEach((p, i) => {
-    if (i % edgeStride !== 0) return
-    if (p.y < floorY + 6) return
-    const radius = 5 + caveSeed01(seed + 700 + i * 2.1) * 11
-    rocks.push({
-      x: p.x - radius * 0.55,
-      y: p.y + (caveSeed01(seed + 800 + i) - 0.5) * 10,
-      radius,
-      verts: buildRockVertices(radius)
+  if (interiorWallX == null) {
+    mouth.left.forEach((p, i) => {
+      if (i % edgeStride !== 0) return
+      if (p.y < floorY + 6) return
+      const radius = 5 + caveSeed01(seed + 700 + i * 2.1) * 11
+      rocks.push({
+        x: p.x - radius * 0.55,
+        y: p.y + (caveSeed01(seed + 800 + i) - 0.5) * 10,
+        radius,
+        verts: buildRockVertices(radius)
+      })
     })
-  })
+  }
   mouth.right.forEach((p, i) => {
     if (i % edgeStride !== 0) return
     const radius = 5 + caveSeed01(seed + 900 + i * 2.4) * 11
@@ -1538,26 +1659,43 @@ function isPitMushroomVisible(pit) {
 function isPitMushroomBouncy(pit) {
   return isGlowPitMushroomUnlocked(pit)
 }
+function isGlowPitMushroomFlatMono(sc) {
+  if (!sc?.zones) return false
+  const z = sc.zones
+  if (z.lCollected || z.colorWorld) return false
+  if ((sc.colorFade ?? 0) >= 0.5) return false
+  return true
+}
 function drawPitTrampoline(k, pit) {
   if (!isPitMushroomVisible(pit)) return
   const x = pit.trampState.x
   const y = pit.floorY + pit.zone.depth - 2
   const squash = pit.trampState.squash
   const scaleY = 1 - squash * 0.35
-  const mushW = PIT_TRAMP_W
-  const mushH = mushW * CUTE_MUSHROOM_ASPECT
   const sc = pit.sceneRef
-  const outlined = sc?.zones?.oCollected || sc?.zones?.colorWorld || (sc?.colorFade ?? 0) >= 0.5
-  const sprite = outlined ? PIT_MUSH_OUTLINE_SPRITE : PIT_MUSH_SPRITE
+  const z = sc?.zones
+  const fade = sc?.colorFade ?? 0
+  const colorMush = z?.lCollected || z?.oCollected || z?.colorWorld || fade >= 0.5
+  const flatMono = isGlowPitMushroomFlatMono(sc)
+  const sprite = colorMush
+    ? PIT_MUSH_OUTLINE_SPRITE
+    : flatMono
+      ? PIT_MUSH_FLAT_FILL_SPRITE
+      : PIT_MUSH_SPRITE
   k.drawSprite({
     sprite,
     pos: k.vec2(x, y),
     anchor: 'bot',
     scale: k.vec2(1, scaleY),
-    width: mushW + 4,
-    height: mushH + 4,
     color: k.rgb(255, 255, 255)
   })
+}
+//
+// World X of the pit cave skull anchor (matches glow-cave-skeleton layout).
+//
+export function getPitCaveSkeletonAnchorX(zone) {
+  const { innerX } = getGlowPitFloorCollider(zone)
+  return innerX + PIT_CAVE_SKULL_FLOOR_PAD + PIT_CAVE_SKULL_R
 }
 //
 // Cave pit floor body — kept narrow on the right so it does not protrude
@@ -1568,6 +1706,19 @@ export function getGlowPitFloorCollider(zone) {
   const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 +
     PIT_FLOOR_EXTRA_W_LEFT + PIT_FLOOR_EXTRA_W_RIGHT + CAVE_INTERIOR_EXTEND_LEFT)
   return { innerX, innerW }
+}
+/**
+ * Horizontal span where onDraw earth/static bands must stay clear so the pit
+ * interior (extended floor west of the crack lip) is not painted over the hero.
+ * @param {Object} zone - Pit / crack zone from getCrackZone
+ * @returns {{ leftX: number, rightX: number }}
+ */
+export function getGlowPitEarthBandMouthCutout(zone) {
+  const lipLeft = zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const { innerX } = getGlowPitFloorCollider(zone)
+  const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * 2)
+  const rightX = zone.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
+  return { leftX, rightX }
 }
 export function ensureGlowPitOpenForEyesCollected(pit) {
   syncGlowPitOpenState(pit)

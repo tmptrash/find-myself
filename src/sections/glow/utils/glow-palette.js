@@ -137,6 +137,26 @@ export function getCuteMushroomFlatWaterColors() {
 }
 
 /**
+ * Pit trampoline in flat mono — light cap, dark stem, void outline on gray floor.
+ * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
+ */
+export function getCuteMushroomFlatPitBakeColors() {
+  const cap = GLOW_PAL.decorGray
+  const stem = GLOW_PAL.void
+  return {
+    body: stem,
+    bodyShade: stem,
+    cap,
+    capDark: cap,
+    capLight: cap,
+    spot: stem,
+    outline: stem,
+    face: stem,
+    blush: cap
+  }
+}
+
+/**
  * Warm "lit" main-tree palette shown after the L (light) letter is collected.
  * Sand tones make the main tree stand out against the gray parallax forest.
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()

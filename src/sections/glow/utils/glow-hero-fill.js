@@ -148,7 +148,7 @@ function preloadGlowHeroFullSprites(inst, cfg) {
 //
 // Maps the live hollow frame key to the matching colour-world filled sprite.
 //
-function resolveGlowHeroFilledSpriteKey(inst, cfg, frameKey) {
+export function resolveGlowHeroFilledSpriteKey(inst, cfg, frameKey) {
   const hero = inst.heroInst
   if (!hero) return null
   preloadGlowHeroFullSprites(inst, cfg)

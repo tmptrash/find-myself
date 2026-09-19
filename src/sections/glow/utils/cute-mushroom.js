@@ -59,14 +59,31 @@ export const CUTE_MUSHROOM_ASPECT = REF_HEIGHT / REF_WIDTH
  * @param {boolean} [opts.withFace=false] - Draw the eyes/smile/blush face
  * @param {boolean} [opts.eyesOpen=true] - Face variant: open pupils or closed-arc eyelids
  * @param {number} [opts.eyeScale=1] - Multiplier for trampoline eye size
+ * @param {boolean} [opts.fillsOnly=false] - Cap/body fill without outline stroke
+ * @param {boolean} [opts.strokesOnly=false] - Cap/body outline stroke without fill
+ * @param {boolean} [opts.simpleShade=false] - Skip internal cap/body shading ellipses (bake)
  */
 export function drawCuteMushroomToCanvas(ctx, opts) {
-  const { cx, baseY, width, colors, withFace = false, eyesOpen = true, eyeScale = 1 } = opts
+  const {
+    cx,
+    baseY,
+    width,
+    colors,
+    withFace = false,
+    eyesOpen = true,
+    eyeScale = 1,
+    fillsOnly = false,
+    strokesOnly = false,
+    simpleShade = false
+  } = opts
   const s = width / REF_WIDTH
   const inst = {
     ctx,
     s,
     eyeScale,
+    fillsOnly,
+    strokesOnly,
+    simpleShade,
     //
     // Reference-to-canvas coordinate mappers.
     //
@@ -77,6 +94,20 @@ export function drawCuteMushroomToCanvas(ctx, opts) {
   ctx.save()
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
+  if (strokesOnly) {
+    drawBody(inst)
+    drawCap(inst)
+    ctx.restore()
+    return
+  }
+  if (fillsOnly) {
+    drawBody(inst)
+    drawCap(inst)
+    drawSpots(inst)
+    withFace && drawFace(inst, eyesOpen)
+    ctx.restore()
+    return
+  }
   drawBody(inst)
   drawCap(inst)
   drawSpots(inst)
@@ -94,50 +125,62 @@ function css(hex, alpha = 1) {
 // Chubby cream body blob with a soft shade on the right side.
 //
 function drawBody(inst) {
-  const { ctx, s, x, y, colors } = inst
+  const { ctx, s, x, y, colors, strokesOnly, fillsOnly, simpleShade } = inst
   tracePath(inst, bodyPath)
-  ctx.fillStyle = css(colors.body)
-  ctx.fill()
-  ctx.lineWidth = Math.max(MIN_LINE_WIDTH, BODY_LINE_WIDTH * s)
-  ctx.strokeStyle = css(colors.outline)
-  ctx.stroke()
-  ctx.save()
-  tracePath(inst, bodyPath)
-  ctx.clip()
-  ctx.beginPath()
-  ctx.ellipse(x(REF_CX + 58), y(320), 48 * s, 70 * s, 0, 0, Math.PI * 2)
-  ctx.fillStyle = css(colors.bodyShade, BODY_SHADE_ALPHA)
-  ctx.fill()
-  ctx.restore()
+  if (!strokesOnly) {
+    ctx.fillStyle = css(colors.body)
+    ctx.fill()
+    if (!simpleShade) {
+      ctx.save()
+      tracePath(inst, bodyPath)
+      ctx.clip()
+      ctx.beginPath()
+      ctx.ellipse(x(REF_CX + 58), y(320), 48 * s, 70 * s, 0, 0, Math.PI * 2)
+      ctx.fillStyle = css(colors.bodyShade, BODY_SHADE_ALPHA)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+  if (!fillsOnly) {
+    ctx.lineWidth = Math.max(MIN_LINE_WIDTH, BODY_LINE_WIDTH * s)
+    ctx.strokeStyle = css(colors.outline)
+    ctx.stroke()
+  }
 }
 //
 // Rounded cap dome with a wavy bottom edge, shaded bottom/side and a soft
 // top-left highlight.
 //
 function drawCap(inst) {
-  const { ctx, s, x, y, colors } = inst
+  const { ctx, s, x, y, colors, strokesOnly, fillsOnly, simpleShade } = inst
   tracePath(inst, capPath)
-  ctx.fillStyle = css(colors.cap)
-  ctx.fill()
-  ctx.lineWidth = Math.max(MIN_LINE_WIDTH, CAP_LINE_WIDTH * s)
-  ctx.strokeStyle = css(colors.outline)
-  ctx.stroke()
-  ctx.save()
-  tracePath(inst, capPath)
-  ctx.clip()
-  ctx.beginPath()
-  ctx.ellipse(x(REF_CX), y(320), 140 * s, 46 * s, 0, 0, Math.PI * 2)
-  ctx.fillStyle = css(colors.capDark, CAP_BOTTOM_SHADE_ALPHA)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(x(REF_CX + 95), y(230), 70 * s, 110 * s, 0.3, 0, Math.PI * 2)
-  ctx.fillStyle = css(colors.capDark, CAP_SIDE_SHADE_ALPHA)
-  ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(x(REF_CX - 55), y(170), 70 * s, 48 * s, -0.3, 0, Math.PI * 2)
-  ctx.fillStyle = css(colors.capLight, CAP_HIGHLIGHT_ALPHA)
-  ctx.fill()
-  ctx.restore()
+  if (!strokesOnly) {
+    ctx.fillStyle = css(colors.cap)
+    ctx.fill()
+    if (!simpleShade) {
+      ctx.save()
+      tracePath(inst, capPath)
+      ctx.clip()
+      ctx.beginPath()
+      ctx.ellipse(x(REF_CX), y(320), 140 * s, 46 * s, 0, 0, Math.PI * 2)
+      ctx.fillStyle = css(colors.capDark, CAP_BOTTOM_SHADE_ALPHA)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.ellipse(x(REF_CX + 95), y(230), 70 * s, 110 * s, 0.3, 0, Math.PI * 2)
+      ctx.fillStyle = css(colors.capDark, CAP_SIDE_SHADE_ALPHA)
+      ctx.fill()
+      ctx.beginPath()
+      ctx.ellipse(x(REF_CX - 55), y(170), 70 * s, 48 * s, -0.3, 0, Math.PI * 2)
+      ctx.fillStyle = css(colors.capLight, CAP_HIGHLIGHT_ALPHA)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+  if (!fillsOnly) {
+    ctx.lineWidth = Math.max(MIN_LINE_WIDTH, CAP_LINE_WIDTH * s)
+    ctx.strokeStyle = css(colors.outline)
+    ctx.stroke()
+  }
 }
 //
 // Pale spots scattered on the cap, each clipped by the cap silhouette.

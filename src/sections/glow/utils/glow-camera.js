@@ -140,8 +140,9 @@ export function updateIntroZoom(inst, dt) {
  * @param {Object} inst - Camera instance from create()
  * @param {number} heroX - Hero world X (anchor centre)
  * @param {number} [heroY] - Hero world Y (used during intro zoom)
+ * @param {boolean} [pixelAlignX=true] - Snap cam X so the hero outline stays crisp
  */
-export function followHero(inst, heroX, heroY) {
+export function followHero(inst, heroX, heroY, pixelAlignX = true) {
   const zoom = inst.zoom || 1
   const halfViewW = inst.viewW / (2 * zoom)
   const minCamX = inst.leftMargin + halfViewW
@@ -160,7 +161,9 @@ export function followHero(inst, heroX, heroY) {
   const shakeX = inst.shakeOffsetX ?? 0
   const shakeY = inst.shakeOffsetY ?? 0
   const k = inst.k
-  let camX = alignCamXForSubject(k, heroX, desiredCamX + shakeX)
+  let camX = pixelAlignX
+    ? alignCamXForSubject(k, heroX, desiredCamX + shakeX)
+    : desiredCamX + shakeX
   let camY = desiredCamY + shakeY
   if (inst.introZoomActive && heroY != null) {
     camY = alignCamYForSubject(k, heroY, desiredCamY + shakeY)

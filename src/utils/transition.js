@@ -71,7 +71,11 @@ const LEVEL_SUBTITLES = {
   'lesson-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
 }
 
-const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
+//
+// Pre-level phrase must draw above the opaque transition overlay (see below).
+//
+const TRANSITION_OVERLAY_Z = CFG.visual.zIndex.ui + 2600
+const TRANSITION_SUBTITLE_Z = TRANSITION_OVERLAY_Z + 20
 const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level text
@@ -361,7 +365,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionK.pos(0, 0),
     transitionK.color(bgR, bgG, bgB),
     k.opacity(initialOverlayOpacity),
-    k.z(CFG.visual.zIndex.ui + 100),
+    k.z(TRANSITION_OVERLAY_Z),
     k.fixed()
   ])
   transitionK._transitionOverlay = overlay
@@ -462,11 +466,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         transitionK.pos(0, 0),
         transitionK.color(bgR, bgG, bgB),
         transitionK.opacity(1),
-        transitionK.z(CFG.visual.zIndex.ui + 100),
+        transitionK.z(TRANSITION_OVERLAY_Z),
         transitionK.fixed()
       ])
       transitionK._transitionOverlay = overlay
-      bindTransitionEngine(transitionK)
       if (nextLevel === GLOW_PRELEVEL_SCENE) {
         setGlowLevel0BootstrapReporter(reportLoad, {
           start: GLOW_BOOTSTRAP_BAR_START,
@@ -607,6 +610,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (inst.assetPrepareDone) {
         if (isNativePrelevel) {
           cancelNativePrelevelLoaderTimer()
+          isGlowPrelevel && BootLoader.hideLoader()
         } else {
           BootLoader.hideLoader()
         }
@@ -649,7 +653,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       }
     } else if (phase === 'black_pause') {
       // Pause with black screen before text appears
-      const pauseDur = nextLevel === GLOW_PRELEVEL_SCENE ? 0 : BLACK_PAUSE_DURATION
+      const pauseDur = BLACK_PAUSE_DURATION
       if (timer >= pauseDur) {
         phase = 'text_fade_in'
         timer = 0
@@ -998,7 +1002,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
   }
   
-  if (!isNativePrelevel) {
+  const ensureTransitionEngineBound = () => {
+    if (inst.skipped || transitionInterval) return
+    transitionK = getActiveEngine()
+    bindTransitionEngine(transitionK)
+  }
+  if (isNativePrelevel) {
+    const nativePrepare = inst.assetPreparePromise
+    inst.assetPreparePromise = nativePrepare?.finally?.(() => {
+      ensureTransitionEngineBound()
+    }) ?? Promise.resolve().then(ensureTransitionEngineBound)
+  } else {
     bindTransitionEngine(transitionK)
   }
   

@@ -1,10 +1,12 @@
 import * as HeroHint from '../../../utils/hero-hint.js'
 //
-// Seconds of hero movement (standing still does not count) before the next
-// queued teacher hint may appear.
+// Weighted seconds before a context teacher hint may fire (movement = 1:1,
+// standing still = 0.5:1 until idle exceeds GLOW_TEACHER_IDLE_CAP_SEC).
 //
 export const GLOW_TEACHER_HINT_MOVE_SEC = 10
 export const GLOW_TEACHER_HINT_DURATION = 5
+export const GLOW_TEACHER_IDLE_RATE = 0.5
+export const GLOW_TEACHER_IDLE_CAP_SEC = 5
 const GLOW_TEACHER_HINT_OFFSET_Y = 52
 const GLOW_TEACHER_HINT_DISMISS_DISTANCE = 9999
 //
@@ -12,43 +14,86 @@ const GLOW_TEACHER_HINT_DISMISS_DISTANCE = 9999
 //
 export function initGlowTeacherHintState(inst) {
   inst.teacherHintQueue = []
-  inst.teacherMoveAccum = 0
+  inst.teacherContextAccum = 0
+  inst.teacherIdleStreak = 0
+  inst._glowTeacherWasInCave = false
   inst._glowTeacherHintActive = false
   inst.lastGlowTeacherHintText = null
+  inst._postLStopHintShows = 0
 }
-//
-// Enqueues a life-icon hint; shown after enough movement and when the bubble is free.
-//
-export function queueGlowTeacherHint(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
-  if (!text || !inst) return
-  if (inst._inGlowPitCave && !opts.pitCaveMushroom) return
-  inst.teacherHintQueue = inst.teacherHintQueue || []
-  inst.teacherHintQueue.push({ text, duration, opts })
-}
-//
-// Running, jumping, or air drift counts toward the movement gate.
-//
-export function tickGlowTeacherHintMovement(inst, heroMoving, dt, blocked = false, heroActive = false) {
-  if (!inst?.heroHint || blocked) return
+/**
+ * Advances the shared context timer and invokes onCaveHint / onGHint at 10 s.
+ * @param {Object} inst - Glow level inst
+ * @param {Object} cfg
+ * @param {number} cfg.dt - Frame delta
+ * @param {boolean} cfg.blocked - Pause accumulation (intro, dialog, etc.)
+ * @param {boolean} cfg.heroMoving - Locomotion from scene
+ * @param {boolean} cfg.heroActive - Run/jump/air from hero state
+ * @param {boolean} cfg.inCave - Hero inside pit cave
+ * @param {boolean} cfg.caveEligible - Cave mushroom hint may run
+ * @param {boolean} cfg.gEligible - G-zone progress hint may run (outside cave)
+ * @param {boolean} cfg.lEligible - L-zone progress hint may run (outside cave)
+ * @param {boolean} cfg.postLStopEligible - Post-L stillness nudge (outside cave)
+ * @param {Function} [cfg.onCaveHint] - Called when cave context hits the gate
+ * @param {Function} [cfg.onGHint] - Called when G-zone context hits the gate
+ * @param {Function} [cfg.onLHint] - Called when L-zone context hits the gate
+ * @param {Function} [cfg.onPostLStopHint] - After L pickup, 10 s active movement
+ */
+export function tickGlowTeacherContextHints(inst, cfg) {
+  if (!inst || cfg.blocked) return
   if (!inst.levelIndicator?.lifeRevealed) return
-  if (HeroHint.isActive(inst.heroHint)) {
-    !inst._glowTeacherHintActive && (inst._glowTeacherHintActive = false)
+  if (HeroHint.isActive(inst.heroHint) && inst._glowTeacherHintActive) return
+  const inCave = Boolean(cfg.inCave)
+  if (inCave && !inst._glowTeacherWasInCave) {
+    inst.teacherContextAccum = 0
+    inst.teacherIdleStreak = 0
+    const pit = inst.pit
+    if (pit && !pit.pitCaveMushroomDone) {
+      pit.pitCaveMushroomHintPausedUntilExit = false
+      pit.pitCaveMushroomHintShows = 0
+    }
+  }
+  inst._glowTeacherWasInCave = inCave
+  const accumulating = inCave
+    ? Boolean(cfg.caveEligible)
+    : Boolean(cfg.gEligible || cfg.lEligible || cfg.postLStopEligible)
+  if (!accumulating) {
+    if (!inCave) {
+      inst.teacherContextAccum = 0
+      inst.teacherIdleStreak = 0
+    }
     return
   }
-  inst._glowTeacherHintActive = false
-  if (inst._inGlowPitCave) return
-  if (heroMoving || heroActive) {
-    inst.teacherMoveAccum = (inst.teacherMoveAccum || 0) + dt
+  const moving = Boolean(cfg.heroMoving || cfg.heroActive)
+  const dt = cfg.dt || 0
+  if (moving) {
+    inst.teacherIdleStreak = 0
+    inst.teacherContextAccum = (inst.teacherContextAccum || 0) + dt
+  } else {
+    inst.teacherIdleStreak = (inst.teacherIdleStreak || 0) + dt
+    inst.teacherIdleStreak <= GLOW_TEACHER_IDLE_CAP_SEC &&
+      (inst.teacherContextAccum = (inst.teacherContextAccum || 0) + dt * GLOW_TEACHER_IDLE_RATE)
   }
-  if ((inst.teacherMoveAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
-  tryDequeueGlowTeacherHint(inst)
+  if ((inst.teacherContextAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
+  inst.teacherContextAccum = 0
+  inst.teacherIdleStreak = 0
+  if (inCave) {
+    cfg.onCaveHint?.()
+    return
+  }
+  cfg.postLStopEligible
+    ? cfg.onPostLStopHint?.()
+    : cfg.lEligible
+      ? cfg.onLHint?.()
+      : cfg.onGHint?.()
 }
 //
 // Shows a teacher hint immediately (bypasses the queue).
 //
 export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
-  const forceTeacherHint = opts.pitCaveMushroom || opts.gHudStall
+  const forceTeacherHint = opts.pitCaveMushroom || opts.gHudStall || opts.lHudStall ||
+    opts.postLStop
   if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
   if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
     if (!forceTeacherHint) return false
@@ -59,17 +104,16 @@ export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_
     inst._glowTeacherHintActive = false
   }
   const shown = showGlowTeacherHint(inst, text, duration, opts)
-  shown && (inst.teacherMoveAccum = 0)
+  shown && (inst.teacherContextAccum = 0)
   return shown
 }
 //
-// Called when the life HUD first appears so movement gating restarts cleanly.
+// Called when the life HUD first appears so context gating restarts cleanly.
 //
 export function onGlowTeacherLifeHudRevealed(inst) {
   if (!inst) return
-  inst.teacherMoveAccum = 0
-  if (inst._inGlowPitCave) return
-  tryDequeueGlowTeacherHint(inst)
+  inst.teacherContextAccum = 0
+  inst.teacherIdleStreak = 0
 }
 //
 // Screen anchor for the life (teacher) HUD icon.
@@ -85,27 +129,13 @@ export function glowTeacherHudAnchor(inst) {
   }
 }
 //
-// Pops one queued hint onto the life icon when the movement gate is open.
-//
-function tryDequeueGlowTeacherHint(inst) {
-  if (!inst?.levelIndicator?.lifeRevealed) return
-  if (inst._inGlowPitCave) return
-  if (HeroHint.isActive(inst.heroHint)) return
-  const q = inst.teacherHintQueue
-  if (!q?.length) return
-  const next = q.shift()
-  showGlowTeacherHint(inst, next.text, next.duration, next.opts)
-  inst.teacherMoveAccum = 0
-}
-//
 // Shows a hint anchored below the life (teacher) HUD icon.
 //
 function showGlowTeacherHint(inst, text, duration, opts = {}) {
   const anchor = glowTeacherHudAnchor(inst)
   if (!anchor || !inst.levelIndicator?.lifeRevealed) {
     if (opts.pitCaveMushroom) return false
-    queueGlowTeacherHint(inst, text, duration, opts)
-    return true
+    return false
   }
   inst._glowTeacherHintActive = true
   inst.lastGlowTeacherHintText = text

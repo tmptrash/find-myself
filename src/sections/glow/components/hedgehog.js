@@ -345,13 +345,13 @@ export function create(cfg) {
 }
 //
 // True while the hero's feet overlap the hedgehog's rough silhouette box —
-// the touch-death hitbox. False while hidden, falling, or fully curled
+// the touch-death hitbox. False while hidden or fully curled mid-turn
 // (snout/legs tucked away, no exposed danger zone to hit).
 //
 export function isTouchingHero(inst, heroX, heroFootY) {
   if (!inst) return false
   const lethal = inst.popped || inst.mudSneakPreview
-  if (!lethal || inst.falling || inst.walkingToEdge) return false
+  if (!lethal) return false
   if (inst.wanderState === 'turn' && inst.turnPhase === 'curled') return false
   const box = touchHitboxWorldAabb(inst)
   return heroX >= box.left && heroX <= box.right &&
@@ -465,7 +465,7 @@ function onUpdate(inst) {
   // the only thing moving in a fully static world — the old distance/facing
   // -gated gaze (updateGaze) resumes the instant it starts wandering again.
   //
-  if ((frozen || inst.wanderLocked) && !inst.falling && !inst.walkingToEdge) {
+  if ((frozen || inst.wanderLocked) && !inst.falling && !inst.walkingToEdge && !inst.mustFallFromLPlat) {
     updateFrozenGaze(inst, dt)
     return
   }
@@ -509,6 +509,7 @@ function updateFall(inst, dt) {
   inst.y = inst.fallTargetY
   inst.falling = false
   inst.fallVelY = 0
+  inst.mustFallFromLPlat = false
   inst.wanderState = 'idle'
   inst.wanderTimer = randRange(WANDER_IDLE_MIN, WANDER_IDLE_MAX)
 }

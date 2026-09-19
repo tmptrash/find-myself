@@ -4341,12 +4341,20 @@ function meditationCountdownFade(inst) {
 }
 //
 // 0→1 while the post-L stillness countdown runs; 0 before it starts so grass,
-// rocks, roots, underground detail and birds ease in with the timer.
+// rocks and birds ease in with the timer (underground uses glowPostLUndergroundRevealFade).
 //
 function glowPostLRevealFade(inst) {
   const z = inst?.zones
   if (!z?.lCollected || z.oZone || z.oCollected) return 1
   return inst.meditation?.countdown != null ? meditationCountdownFade(inst) : 0
+}
+//
+// Underground bones, rocks and rootlets appear the instant L is collected.
+//
+function glowPostLUndergroundRevealFade(inst) {
+  const z = inst?.zones
+  if (!z?.lCollected || z.oZone || z.oCollected) return 1
+  return 1
 }
 //
 // Post-L ground darkening toward the root-zone earth tone — applied at full
@@ -6047,13 +6055,13 @@ function strokePolyline(ctx, pts) {
   ctx.stroke()
 }
 //
-// Hides baked underground detail until the post-L countdown reveals it.
+// Hides baked underground detail in the static parallax band until the live
+// layer or colour fade has caught up (post-L underground is immediate).
 //
 function maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC) {
   const z = inst.zones
   if (!z.lCollected || z.oZone || z.oCollected || !groundFillC) return
-  if (z.lCollected) return
-  const reveal = glowPostLRevealFade(inst)
+  const reveal = glowPostLUndergroundRevealFade(inst)
   if (reveal >= 1 - COLOR_CROSSFADE_EPS) return
   const cover = 1 - reveal
   if (cover <= COLOR_CROSSFADE_EPS) return
@@ -6092,38 +6100,57 @@ function maskGlowMonolithTreeRootsUntilReveal(inst, k, groundC) {
   })
 }
 //
+// True when the live underground sprites should paint (not fully replaced by
+// an opaque static parallax earth band).
+//
+function shouldDrawGlowLiveUnderground(inst) {
+  if (!isGlowWorldSurfaceDecorUnlocked(inst)) return false
+  if (isGlowEyeIntroBareWorld(inst)) return false
+  if (isGlowFullParallaxStable(inst)) return false
+  const z = inst.zones
+  if (!z.lZoneParallax) return true
+  return (inst.parallaxFade ?? 0) <= COLOR_CROSSFADE_EPS
+}
+//
 // Draws the baked underground decor with the gray↔colour crossfade.
 //
 function drawUndergroundLayer(inst) {
+  if (!shouldDrawGlowLiveUnderground(inst)) return
   const z = inst.zones
-  if (!isGlowWorldSurfaceDecorUnlocked(inst)) return
-  const leftOpen = Boolean(z?.groundDecorLeft)
-  const rightOpen = Boolean(z?.gCollected && (z?.groundRightStripMax ?? -1) >= 0)
-  if (!leftOpen && !rightOpen) return
-  const fade = inst.colorFade
+  const fade = inst.colorFade ?? 0
+  const ugLife = glowPostLUndergroundRevealFade(inst)
+  const playfieldX1 = LEFT_MARGIN
+  const playfieldX2 = WORLD_W - RIGHT_MARGIN
+  const drawBands = (sprite, opacity) => {
+    if (z.lCollected && !z.colorWorld) {
+      drawUndergroundSpriteBand(inst.k, sprite, opacity, playfieldX1, playfieldX2)
+      return
+    }
+    drawUndergroundSpriteClipped(inst, sprite, opacity)
+  }
   if (isGlowFlatSingleDecorColor(inst)) {
-    drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, 1)
+    drawBands(UNDERGROUND_GRAY_SPRITE, 1)
     return
   }
   //
   // Once fully faded, skip the now-invisible gray sprite entirely — drawing
   // a fully transparent full-screen sprite every frame forever after O still
   // costs a full draw call. In practice this function itself now only runs
-  // during the brief post-O fade window — see onDraw's parallaxStaticOpaque
-  // check, which skips calling it at all once BG_STATIC_COLOR already bakes
-  // in the same underground decor.
+  // during the brief post-O fade window — see shouldDrawGlowLiveUnderground,
+  // which skips calling it at all once BG_STATIC_COLOR already bakes in the
+  // same underground decor.
   //
-  if (fade >= 1) {
-    drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, 1)
+  if (fade >= 1 && z.colorWorld) {
+    drawBands(UNDERGROUND_COLOR_SPRITE, 1)
     return
   }
-  const grayOp = 1 - fade
-  grayOp > COLOR_CROSSFADE_EPS && drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, grayOp)
-  fade > COLOR_CROSSFADE_EPS && drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, fade)
+  const grayOp = (1 - fade) * ugLife
+  grayOp > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_GRAY_SPRITE, grayOp)
+  fade > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_COLOR_SPRITE, fade * ugLife)
 }
 //
-// Paints only the underground under opened ground: left shore, and the
-// explored right strips. Hidden on the start branch before either side opens.
+// Paints the underground under opened ground: left shore and explored right
+// strips before L; after L the full playfield band is painted in drawBands.
 //
 function drawUndergroundSpriteClipped(inst, sprite, opacity) {
   const z = inst.zones
@@ -8343,10 +8370,8 @@ function onDrawWorld(inst) {
   } else if (groundFillC) {
     const earthRgb = inst._surfaceEarthRgb || groundFillC
     drawGlowEarthBand(k, inst, k.rgb(earthRgb.r, earthRgb.g, earthRgb.b))
-    !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
-  } else {
-    !isGlowEyeIntroBareWorld(inst) && drawUndergroundLayer(inst)
   }
+  drawUndergroundLayer(inst)
   //
   // Cave mouth ground tint + surface decor (pit interior draws after parallax).
   //

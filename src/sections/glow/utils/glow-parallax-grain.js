@@ -66,9 +66,9 @@ export function applyGlowCaptionGrainToCanvas(canvas, seedOffset = 0) {
  */
 export const GLOW_LAYER_GRADE = {
   far: { contrast: 0.2, saturation: 0.28 },
-  mid: { contrast: 0.4, saturation: 0.42 },
-  near: { contrast: 0.75, saturation: 0.7 },
-  foreground: { contrast: 0.9, saturation: 0.9 }
+  mid: { contrast: 0.38, saturation: 0.38 },
+  near: { contrast: 0.55, saturation: 0.48 },
+  foreground: { contrast: 0.75, saturation: 0.65 }
 }
 /**
  * Applies depth contrast/saturation plus optional film grain to a baked canvas.

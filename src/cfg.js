@@ -219,9 +219,18 @@ export const CFG = {
       palette: {
         swatches: Object.values(PALETTE),
         void: PALETTE.gray0,
-        playfieldOuter: PALETTE.gray2,
+        //
+        // Post-L colour preview: light warm sky, dark frame — the frame must
+        // stay a clear step darker than the sky/HUD or the whole screen reads
+        // as one flat gray-beige field with nothing to anchor it. The sky
+        // itself stays only one swatch above the pre-L flat decorGray tone
+        // (gray3) so the reveal reads as a gentle lift, not a bright flash —
+        // the underground band (lerped darker from this same tone, see
+        // GROUND_L_DARKEN) lands almost back on gray3 for the same reason.
+        //
+        playfieldOuter: PALETTE.gray1,
         playfieldGray: PALETTE.gray4,
-        midGray: PALETTE.gray3,
+        midGray: PALETTE.gray4,
         lightGray: PALETTE.gray6,
         brightLight: PALETTE.gray7,
         heroBodyGray: PALETTE.gray6,
@@ -234,7 +243,7 @@ export const CFG = {
         // menu.js still reads heroOutline/decorOutline directly so it keeps
         // its original darker rim.
         //
-        glowOutlineLight: PALETTE.gray3,
+        glowOutlineLight: PALETTE.gray2,
         decorGray: PALETTE.gray3,
         dialogFill: PALETTE.gray1,
         dialogText: PALETTE.gray6,
@@ -266,13 +275,16 @@ export const CFG = {
         // Colour-world backdrop: the bright warm haze above the ground line
         // (warmHaze below) and a dark earth band under it (root zone).
         //
-        groundDark: PALETTE.gray0,
+        groundDark: PALETTE.gray2,
         gold: PALETTE.gold3,
-        mushrooms: [PALETTE.red1, PALETTE.orange2, PALETTE.purple1, PALETTE.blue2],
+        //
+        // Scatter caps after L — pastel families so red/orange do not punch on gray.
+        //
+        mushrooms: [PALETTE.red3, PALETTE.orange3, PALETTE.mauve3, PALETTE.blue3],
         //
         // Darkest tone of each mushroom cap family — used for cap outlines.
         //
-        mushroomsDark: [PALETTE.red0, PALETTE.orange0, PALETTE.purple0, PALETTE.blue0],
+        mushroomsDark: [PALETTE.red2, PALETTE.orange1, PALETTE.mauve1, PALETTE.blue1],
         //
         // Lighter tone of each mushroom cap family — cap highlights.
         //
@@ -285,7 +297,7 @@ export const CFG = {
           root: PALETTE.gray1,
           trunk: PALETTE.gray2,
           branch: PALETTE.gray3,
-          leaf: PALETTE.gray4
+          leaf: PALETTE.gray5
         },
         //
         // Warm sand tones for the main tree after the L (light) letter — makes
@@ -310,8 +322,8 @@ export const CFG = {
           // against the warm bark and haze) toward the darker greens plus a
           // couple of muted sage teals for shading variety, without them.
           //
-          leaf: PALETTE.green2,
-          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.teal2, PALETTE.teal3]
+          leaf: PALETTE.green1,
+          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.teal2]
         },
         //
         // Colour-world background forest: warm amber wood dissolving into a
@@ -323,7 +335,7 @@ export const CFG = {
           branch: PALETTE.orange2,
           leaf: PALETTE.green1
         },
-        warmHaze: PALETTE.orange4,
+        warmHaze: PALETTE.orange5,
         //
         // Upper sky band — one step lighter than the horizon haze so the
         // backdrop reads as atmospheric perspective, not a flat fill.
@@ -335,11 +347,11 @@ export const CFG = {
         // far/mid rows stay muted sage/teal silhouettes (not orange) so only
         // the sky haze and main lit tree carry warm pop (§16 art direction).
         //
-        parallaxGrayNear: PALETTE.gray1,
-        parallaxGrayMid: PALETTE.gray2,
-        parallaxGrayFar: PALETTE.gray3,
-        parallaxColorMid: PALETTE.green2,
-        parallaxColorFar: PALETTE.green0,
+        parallaxGrayNear: PALETTE.gray2,
+        parallaxGrayMid: PALETTE.gray3,
+        parallaxGrayFar: PALETTE.gray4,
+        parallaxColorMid: PALETTE.green1,
+        parallaxColorFar: PALETTE.teal3,
         //
         // Cute chubby mushroom (glow trampoline + decor): cream body, warm
         // orange spotted cap; the gray set mirrors it inside the gray family.

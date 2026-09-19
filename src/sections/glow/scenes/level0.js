@@ -4458,13 +4458,16 @@ function glowLZoneDecorFade(inst) {
   return glowDecorFade(inst)
 }
 //
-// Tree colour crossfade is independent of parallax/grass — full green crown
-// once L is collected (or O zone opens), while the rest of the world still
-// waits for the stillness countdown.
+// Tree colour crossfade: the tree switches to its warm lit (sand) palette
+// the instant L is collected (see syncMonolithicTreeGraySprite), but only
+// turns green once the post-L stillness countdown actually starts — an
+// immediate green crown on an otherwise flat gray world reads as a jarring
+// colour clash instead of a gradual "light reveals colour" beat.
 //
 function glowTreeColorFade(inst) {
   const z = inst?.zones
-  if (z?.lCollected || z?.oZone || z?.oCollected || z?.colorWorld) return 1
+  if (z?.oZone || z?.oCollected || z?.colorWorld) return 1
+  if (z?.lCollected && inst?.meditation?.countdown == null) return 0
   return glowDecorFade(inst)
 }
 //
@@ -7844,7 +7847,9 @@ function drawWorldSpriteSlice(k, x1, x2, sprite, opacity = 1) {
 //
 // Draws only the on-screen slice of one cropped parallax layer sprite.
 //
-function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opacity = 1, visRange = null, worldY = 0, worldH = WORLD_H) {
+function drawParallaxSpriteClipped(
+  k, inst, spriteName, speed, horizBleed, opacity = 1, visRange = null, worldY = 0, worldH = WORLD_H, rgbTint = null
+) {
   const camera = inst.camera
   const drawX = GlowCamera.getParallaxDrawX(camera, speed, horizBleed)
   const pad = GlowCamera.getParallaxLayerPad(camera, speed, horizBleed)
@@ -7864,7 +7869,64 @@ function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opaci
     anchor: 'topleft'
   }
   opacity < 0.999 && (opts.opacity = opacity)
+  rgbTint && (opts.color = k.rgb(rgbTint.r, rgbTint.g, rgbTint.b))
   k.drawSprite(opts)
+}
+//
+// True after L until the full parallax stack is fading in (stillness countdown
+// or colour world) — the nearest tree+bush row stays visible in gray.
+//
+function shouldDrawGlowPostLNearParallaxGray(inst) {
+  const z = inst?.zones
+  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) return false
+  const pf = inst.parallaxFade ?? 0
+  if (!z.lZoneParallax) return true
+  return pf <= COLOR_CROSSFADE_EPS
+}
+//
+// Nearest parallax row only (trees + first bush strip), gray bake — matches
+// the post-L sand/gray decor policy before the stillness countdown.
+//
+function drawGlowPostLNearParallaxGray(inst) {
+  const k = inst.k
+  const layer = PAR_LAYER_NEAR
+  const range = visibleWorldXRange(inst, layer.cullPad)
+  const tint = glowPostLNearParallaxGrayTint(inst)
+  drawParallaxSpriteClipped(
+    k, inst, layer.gray, layer.speed, layer.bleed, 1, range, layer.worldY, layer.worldH, tint
+  )
+}
+//
+// Matches the post-L inner ground band (INNER_GRAY → void) on the nearest
+// parallax bake so bushes and trunks sit in the same muted sand/gray world.
+//
+function glowPostLNearParallaxGrayTint(inst) {
+  const z = inst?.zones
+  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) return null
+  const fade = inst.colorFade ?? 0
+  let t = GROUND_L_DARKEN * (1 - fade)
+  const reveal = glowPostLRevealFade(inst)
+  reveal > 0 && (t = Math.max(t, L_DECOR_DARKEN * (1 - fade) * reveal))
+  if (t <= COLOR_CROSSFADE_EPS) return null
+  const target = lerpRgb(INNER_GRAY, VOID, t)
+  return {
+    r: Math.round(255 * target.r / INNER_GRAY.r),
+    g: Math.round(255 * target.g / INNER_GRAY.g),
+    b: Math.round(255 * target.b / INNER_GRAY.b)
+  }
+}
+//
+// Keeps the near row at full gray strength while farther rows ramp with
+// parallaxFade so collecting L does not flash away when the countdown starts.
+//
+function glowParallaxNearGrayOpacity(inst, layer, pf, fade, crossfade) {
+  const z = inst?.zones
+  if (layer !== PAR_LAYER_NEAR) return crossfade ? (1 - fade) * pf : pf
+  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) {
+    return crossfade ? (1 - fade) * pf : pf
+  }
+  if (crossfade) return Math.max((1 - fade) * pf, 1 - fade)
+  return Math.max(pf, 1)
 }
 //
 // Draws one parallax layer for the current world mode: a single opaque slice
@@ -7877,9 +7939,14 @@ function drawParallaxLayer(inst, layer) {
   const fade = inst.colorFade
   const pf = inst.parallaxFade
   const range = visibleWorldXRange(inst, layer.cullPad)
-  const drawSlice = (sprite, op) => drawParallaxSpriteClipped(
-    k, inst, sprite, layer.speed, layer.bleed, op, range, layer.worldY, layer.worldH
-  )
+  const drawSlice = (sprite, op) => {
+    const tint = layer === PAR_LAYER_NEAR && sprite === layer.gray
+      ? glowPostLNearParallaxGrayTint(inst)
+      : null
+    drawParallaxSpriteClipped(
+      k, inst, sprite, layer.speed, layer.bleed, op, range, layer.worldY, layer.worldH, tint
+    )
+  }
   if (isGlowFullParallaxStable(inst)) {
     drawSlice(layer.color, 1)
     return
@@ -7902,12 +7969,13 @@ function drawParallaxLayer(inst, layer) {
   //
   const colorForest = isGlowMeditationColorPreview(inst) || fade > COLOR_CROSSFADE_EPS
   if (colorForest) {
-    const grayOp = (1 - fade) * pf
+    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, true)
     grayOp > COLOR_CROSSFADE_EPS && drawSlice(layer.gray, grayOp)
     fade > COLOR_CROSSFADE_EPS && drawSlice(layer.color, fade * pf)
     return
   }
-  pf > COLOR_CROSSFADE_EPS && drawSlice(layer.gray, pf)
+  const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, false)
+  grayOp > COLOR_CROSSFADE_EPS && drawSlice(layer.gray, grayOp)
 }
 //
 // True when the colour forest and parallax stack are fully opaque.
@@ -8247,6 +8315,9 @@ function onDrawWorld(inst) {
   } else {
     drawBackgroundBirds(inst)
   }
+  shouldDrawGlowPostLNearParallaxGray(inst) &&
+    (inst.parallaxFade ?? 0) <= COLOR_CROSSFADE_EPS &&
+    drawGlowPostLNearParallaxGray(inst)
   //
   // Parallax tree sprites extend below the ground line. Cover that bleed
   // with the baked static earth+underground sprite (one draw) instead of a
@@ -9074,7 +9145,8 @@ function applyGlowPostLStillnessReveal(inst) {
   applyZoneVisibility(inst)
 }
 //
-// After L: tree stays in full colour; parallax, grass and ground shading
+// After L: monolith tree goes sand-lit; nearest parallax row (trees + bush
+// strip) appears in gray immediately; farther rows, grass and full colour
 // wait for the stillness countdown (see syncMeditationColorFade).
 //
 function applyGlowPostLLitState(inst) {
@@ -9218,13 +9290,15 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L' || letterEntry?.char === 'O'
   const isGrayCaption = grayCaptionNoShadow
   const captionWhiteRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
-  const captionVoidRgb = getRGB(k, GLOW_PAL.void)
+  const captionDialogRgb = getRGB(k, GLOW_PAL.dialogText)
   const captionTextRgb = letterEntry?.char === 'O'
     ? captionWhiteRgb
     : letterEntry?.char === 'L'
-      ? captionVoidRgb
+      ? captionDialogRgb
       : (isGrayCaption ? gCaptionGray : glowCaptionTextRgb())
-  const letterFillRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
+  const letterFillRgb = letterEntry?.char === 'L'
+    ? getRGB(k, GLOW_PAL.gold)
+    : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)

@@ -14,7 +14,7 @@ import {
 //
 // Segment ids persisted in localStorage under glow.treeSegmentsRevealed.
 //
-export const TREE_SEGMENT_HERO_BRANCH = 'heroBranch'
+const TREE_SEGMENT_HERO_BRANCH = 'heroBranch'
 //
 // Roots bake as their own segment — branch landings never reveal them.
 //
@@ -23,7 +23,7 @@ export const TREE_SEGMENT_ROOTS = 'treeRoots'
 // Three branch-landing steps for the upper tree (near branches, trunk, crown).
 //
 export const TREE_REVEAL_PART_COUNT = 3
-export const TREE_SEGMENT_PART_PREFIX = 'treePart-'
+const TREE_SEGMENT_PART_PREFIX = 'treePart-'
 //
 // Legacy ids from earlier builds (migrated on load).
 //
@@ -74,7 +74,7 @@ export function buildGlowTreeSegmentPlan(treeData) {
  * @param {string} segmentId - Segment id
  * @returns {Object} Shallow tree data for renderGlowTreeIntoContext
  */
-export function treeDataForSegment(treeData, segmentId) {
+function treeDataForSegment(treeData, segmentId) {
   const base = {
     seed: treeData.seed,
     trunkSegs: [],

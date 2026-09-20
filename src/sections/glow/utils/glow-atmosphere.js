@@ -113,7 +113,7 @@ const CAVE_SKELETON_SPRITE_HALF_W = PIT_CAVE_SKULL_R * 2.6 + CAVE_SKELETON_BAKE_
 //
 // Extra interior floor width to the left of the mouth — entrance lip unchanged.
 //
-export const CAVE_INTERIOR_EXTEND_LEFT = 132
+const CAVE_INTERIOR_EXTEND_LEFT = 132
 const CAVE_LEFT_BLOCK_W = 12
 const CAVE_INTERIOR_REVEAL_HOLDOFF = 0.35
 const CAVE_WALL_ROCK_STEP = 3
@@ -133,7 +133,6 @@ const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_EYES_COLLECTED = 'glow.eyesCollected'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const SPAWN_MODE_CAVE = 'cave'
-const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
 /**
@@ -283,15 +282,6 @@ export function syncGlowMidgesZones(ctrl, zones, pitCollapsed) {
   ctrl.showPit = true
   const spread = Boolean(pitCollapsed && !ctrl.spreadAfterPit)
   spread && spreadMidgesAfterPit(ctrl)
-}
-/**
- * @deprecated Use syncGlowMidgesZones
- */
-export function setGlowMidgesVisible(ctrl, visible) {
-  if (!ctrl) return
-  ctrl.showPit = Boolean(visible)
-  ctrl.showLeft = Boolean(visible)
-  ctrl.showRight = Boolean(visible)
 }
 /**
  * Advances midge wander inside each role's bounds.
@@ -1092,19 +1082,6 @@ function caveRockPalette(pal) {
     darkR: shade.r, darkG: shade.g, darkB: shade.b
   }
 }
-function buildCavePaletteFlat(groundC) {
-  const g = snapToPalette(groundC)
-  return {
-    void: g,
-    depthOuter: g,
-    depthMid: g,
-    depthInner: g,
-    floor: g,
-    pebble: g,
-    rim: g,
-    rimEdge: g
-  }
-}
 function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
   if (!rocks?.length) return
   const tone = caveRockPalette(pal)
@@ -1117,33 +1094,6 @@ function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
     const ry = Math.round(rock.y)
     const pts = rock.verts.map(v => k.vec2(rx + v.x, ry + v.y))
     k.drawPolygon({ pts, color: idx % 2 === 0 ? fill : shade })
-  })
-}
-function drawCavePit(k, pit, groundC) {
-  const { zone, floorY } = pit
-  const pal = buildCavePalette(groundC)
-  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
-    pit.wallProfile = buildCaveSceneLayout(zone, floorY)
-  }
-  const layout = pit.wallProfile
-  drawCaveVoidFill(k, layout.mouth, pal)
-  drawRaggedCaveWall(k, layout.mouth.left, pal, -1, floorY)
-  drawRaggedCaveWall(k, layout.mouth.right, pal, 1, floorY)
-  drawCaveWallRim(k, layout.mouth.left, pal)
-  drawCaveWallRim(k, layout.mouth.right, pal)
-  drawCaveFloorPebbles(k, layout, pal)
-}
-//
-// Scattered pebbles along the cave floor profile.
-//
-function drawCaveFloorPebbles(k, layout, pal) {
-  const pebbleC = k.rgb(pal.pebble.r, pal.pebble.g, pal.pebble.b)
-  layout.pebbles?.forEach(p => {
-    k.drawCircle({
-      pos: k.vec2(p.x, p.y),
-      radius: p.r,
-      color: pebbleC
-    })
   })
 }
 //
@@ -1195,73 +1145,6 @@ function buildJaggedHorizontalEdge(xFrom, xTo, baseY, seed) {
 // low-opacity circles centred on the opening so the entrance reads as lit
 // rock fading to black, not a flat cut-out.
 //
-const CAVE_GLOW_RADII = [76, 50, 26]
-function drawCaveAmbientGlow(k, mouth, pal) {
-  if (!mouth?.left?.length || !mouth?.right?.length) return
-  const cx = (mouth.left[0].x + mouth.right[0].x) * 0.5
-  const topY = mouth.floorY + 4
-  const glow = k.rgb(pal.rim.r, pal.rim.g, pal.rim.b)
-  CAVE_GLOW_RADII.forEach((r, i) => {
-    k.drawCircle({
-      pos: k.vec2(cx, topY + r * 0.35),
-      radius: r,
-      color: glow,
-      opacity: 0.1 + i * 0.06
-    })
-  })
-}
-//
-// Draws one jagged rock wall as stacked blocky slabs along a ragged edge.
-//
-const CAVE_WALL_SLAB_STEPS = 7
-const CAVE_WALL_DEPTH = 22
-function drawRaggedCaveWall(k, edge, pal, outwardSign, floorY = null) {
-  if (!edge?.length) return
-  const rock = k.rgb(pal.depthOuter.r, pal.depthOuter.g, pal.depthOuter.b)
-  const shade = k.rgb(pal.depthMid.r, pal.depthMid.g, pal.depthMid.b)
-  const n = edge.length
-  const step = Math.max(1, Math.floor(n / CAVE_WALL_SLAB_STEPS))
-  for (let i = 0; i < n - 1; i += step) {
-    const a = edge[i]
-    const b = edge[Math.min(n - 1, i + step)]
-    if (floorY != null && Math.min(a.y, b.y) < floorY + 1) continue
-    const midY = (a.y + b.y) * 0.5
-    const depth = CAVE_WALL_DEPTH + caveSeed01(a.x * 0.13 + midY * 0.07) * 14
-    const outerX = a.x + outwardSign * depth
-    const pts = [
-      k.vec2(a.x, a.y),
-      k.vec2(b.x, b.y),
-      k.vec2(b.x + outwardSign * depth * 0.85, b.y),
-      k.vec2(outerX, a.y)
-    ]
-    k.drawPolygon({
-      pts,
-      color: i % 2 === 0 ? rock : shade
-    })
-  }
-  //
-}
-//
-// Thin lit edge along a wall's inner (cave-facing) rim, fading toward the
-// bottom of the mouth — reads as daylight catching the carved rock facets.
-//
-function drawCaveWallRim(k, edge, pal) {
-  if (!edge?.length) return
-  const n = edge.length
-  const fadeEnd = Math.max(2, Math.floor(n * 0.4))
-  for (let i = 0; i < fadeEnd - 1; i++) {
-    const a = edge[i]
-    const b = edge[i + 1]
-    const opacity = 0.5 * (1 - i / fadeEnd)
-    k.drawLine({
-      p1: k.vec2(a.x, a.y),
-      p2: k.vec2(b.x, b.y),
-      width: 2,
-      color: k.rgb(pal.rimEdge.r, pal.rimEdge.g, pal.rimEdge.b),
-      opacity
-    })
-  }
-}
 //
 // Palette derived from the current ground tone (gray or colour world)
 //
@@ -1606,33 +1489,6 @@ function sampleProfileY(profile, x) {
   }
   return last.y
 }
-function drawJaggedFloorBand(k, floorTop, bottomY, pal) {
-  if (!floorTop?.length) return
-  const pts = []
-  for (const p of floorTop) pts.push(k.vec2(p.x, p.y))
-  pts.push(k.vec2(floorTop[floorTop.length - 1].x, bottomY))
-  pts.push(k.vec2(floorTop[0].x, bottomY))
-  k.drawPolygon({
-    pts,
-    color: k.rgb(pal.floor.r, pal.floor.g, pal.floor.b)
-  })
-}
-function drawJaggedPebbleBed(k, floorTop, bottomY, pal) {
-  if (!floorTop?.length) return
-  const bedTop = floorTop.map(p => ({
-    x: p.x,
-    y: p.y + 2 + caveSeed01(p.x * 0.07) * 3
-  }))
-  const pts = []
-  for (const p of bedTop) pts.push(k.vec2(p.x, p.y))
-  pts.push(k.vec2(bedTop[bedTop.length - 1].x, bottomY))
-  pts.push(k.vec2(bedTop[0].x, bottomY))
-  k.drawPolygon({
-    pts,
-    color: k.rgb(pal.pebble.r, pal.pebble.g, pal.pebble.b),
-    opacity: 0.55
-  })
-}
 function caveSeed01(seed) {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453
   return x - Math.floor(x)
@@ -1693,7 +1549,7 @@ function drawPitTrampoline(k, pit) {
 //
 // World X of the pit cave skull anchor (matches glow-cave-skeleton layout).
 //
-export function getPitCaveSkeletonAnchorX(zone) {
+function getPitCaveSkeletonAnchorX(zone) {
   const { innerX } = getGlowPitFloorCollider(zone)
   return innerX + PIT_CAVE_SKULL_FLOOR_PAD + PIT_CAVE_SKULL_R
 }
@@ -1825,34 +1681,6 @@ export function getGlowPitBonusPosition(pit) {
     y: bottomY - 18
   }
 }
-/**
- * Strokes the cave mouth polygon while the interior stays hidden (eye intro).
- * @param {Object} k - Kaplay instance
- * @param {Object} pit - Pit state
- */
-export function drawGlowPitOutline(k, pit) {
-  if (!pit?.zone) return
-  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
-    pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
-  }
-  const mouth = pit.wallProfile?.mouth
-  if (!mouth) return
-  const pts = caveMouthPts(mouth)
-  if (pts.length < 3) return
-  const deep = glowRgb('void')
-  const lineC = k.rgb(deep.r, deep.g, deep.b)
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i]
-    const b = pts[(i + 1) % pts.length]
-    k.drawLine({
-      p1: k.vec2(a.x, a.y),
-      p2: k.vec2(b.x, b.y),
-      width: 2.2,
-      color: lineC,
-      opacity: 0.92
-    })
-  }
-}
 function openPitPhysics(pit) {
   const { k, zone, floorY } = pit
   const bottomY = floorY + zone.depth
@@ -1975,4 +1803,4 @@ function updatePitParticles(pit, dt) {
   }
 }
 
-export { KEY_PIT_COLLAPSED, KEY_PIT_BONUS, CRACK_ZONE_W, PIT_DEPTH }
+export { KEY_PIT_COLLAPSED }

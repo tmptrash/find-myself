@@ -47,12 +47,6 @@ export function create(cfg) {
     // 1 = full playfield; higher values zoom in (Kaplay camScale).
     //
     zoom: 1,
-    introZoomActive: false,
-    introPhase: 'hold',
-    introZoomElapsed: 0,
-    introHoldDuration: 0,
-    introZoomDuration: 0,
-    introZoomFrom: 1,
     shakeAmp: 0,
     shakeDuration: 0,
     shakeElapsed: 0,
@@ -89,101 +83,28 @@ export function updateShake(inst, dt) {
   inst.shakeOffsetY = (Math.random() - 0.5) * 2 * amp
 }
 /**
- * Starts the opening camera intro: holds a tight hero close-up for
- * `holdDurationSec`, then snaps back out to the full playfield view over
- * `zoomOutDurationSec`.
- * @param {Object} inst - Camera instance
- * @param {number} fromScale - Starting camScale (e.g. 4 = zoomed in)
- * @param {number} holdDurationSec - Seconds to hold the zoomed-in view
- * @param {number} zoomOutDurationSec - Ease-out duration in seconds
- */
-export function beginIntroZoom(inst, fromScale, holdDurationSec, zoomOutDurationSec) {
-  inst.introZoomFrom = fromScale
-  inst.introHoldDuration = holdDurationSec
-  inst.introZoomDuration = zoomOutDurationSec
-  inst.introZoomElapsed = 0
-  inst.introPhase = 'hold'
-  inst.introZoomActive = true
-  inst.zoom = fromScale
-  inst.k.camScale(fromScale)
-}
-/**
- * Advances the intro zoom animation; call once per frame from the scene update.
- * Holds the tight zoom in place, then eases it out with a fast-start,
- * decelerating "jerk" back to the full playfield view.
- * @param {Object} inst - Camera instance
- * @param {number} dt - Delta time in seconds
- */
-export function updateIntroZoom(inst, dt) {
-  if (!inst.introZoomActive) return
-  inst.introZoomElapsed += dt
-  if (inst.introPhase === 'hold') {
-    if (inst.introZoomElapsed < inst.introHoldDuration) return
-    inst.introPhase = 'zoomOut'
-    inst.introZoomElapsed = 0
-  }
-  const t = Math.min(1, inst.introZoomElapsed / inst.introZoomDuration)
-  const eased = 1 - (1 - t) * (1 - t)
-  inst.zoom = inst.introZoomFrom + (1 - inst.introZoomFrom) * eased
-  inst.k.camScale(inst.zoom)
-  if (t >= 1) {
-    inst.introZoomActive = false
-    inst.zoom = 1
-    inst.k.camScale(1)
-  }
-}
-
-/**
  * Follows the hero horizontally only; vertical camera position stays fixed so
- * jumps never scroll the map up or down. During the intro zoom the camera
- * centres on the hero both axes, then eases toward the fixed playfield Y.
+ * jumps never scroll the map up or down.
  * @param {Object} inst - Camera instance from create()
  * @param {number} heroX - Hero world X (anchor centre)
- * @param {number} [heroY] - Hero world Y (used during intro zoom)
+ * @param {number} [_heroY] - Unused; kept for call-site compatibility
  * @param {boolean} [pixelAlignX=true] - Snap cam X so the hero outline stays crisp
  */
-export function followHero(inst, heroX, heroY, pixelAlignX = true) {
+export function followHero(inst, heroX, _heroY, pixelAlignX = true) {
   const zoom = inst.zoom || 1
   const halfViewW = inst.viewW / (2 * zoom)
   const minCamX = inst.leftMargin + halfViewW
   const maxCamX = inst.worldW - inst.rightMargin - halfViewW
   const desiredCamX = Math.max(minCamX, Math.min(maxCamX, heroX))
-  let desiredCamY = inst.fixedCamY
-  if (inst.introZoomActive && heroY != null) {
-    if (inst.introPhase === 'hold') {
-      desiredCamY = heroY
-    } else {
-      const t = Math.min(1, inst.introZoomElapsed / inst.introZoomDuration)
-      const eased = 1 - (1 - t) * (1 - t)
-      desiredCamY = heroY + (inst.fixedCamY - heroY) * eased
-    }
-  }
+  const desiredCamY = inst.fixedCamY
   const shakeX = inst.shakeOffsetX ?? 0
   const shakeY = inst.shakeOffsetY ?? 0
   const k = inst.k
-  let camX = pixelAlignX
+  const camX = pixelAlignX
     ? alignCamXForSubject(k, heroX, desiredCamX + shakeX)
     : desiredCamX + shakeX
-  let camY = desiredCamY + shakeY
-  if (inst.introZoomActive && heroY != null) {
-    camY = alignCamYForSubject(k, heroY, desiredCamY + shakeY)
-  }
+  const camY = desiredCamY + shakeY
   k.camPos(camX, camY)
-}
-/**
- * Sets camera position so a world subject lands on an integer screen pixel.
- * Use during scripted pans (letter peek) while the hero must stay crisp.
- * @param {Object} k - Kaplay instance
- * @param {number} subjectX - World X of the subject to pixel-align (hero)
- * @param {number} subjectY - World Y of the subject to pixel-align (hero)
- * @param {number} desiredCamX - Target camera X before alignment
- * @param {number} desiredCamY - Target camera Y before alignment
- */
-export function setCamPosForPixelAlignedSubject(k, subjectX, subjectY, desiredCamX, desiredCamY) {
-  k.camPos(
-    alignCamXForSubject(k, subjectX, desiredCamX),
-    alignCamYForSubject(k, subjectY, desiredCamY)
-  )
 }
 /**
  * Pixel-aligns only camera X so a subject stays crisp during scripted pans
@@ -235,8 +156,4 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 function alignCamXForSubject(k, subjectX, desiredCamX) {
   const halfW = k.width() / 2
   return subjectX + halfW - Math.round(subjectX - desiredCamX + halfW)
-}
-function alignCamYForSubject(k, subjectY, desiredCamY) {
-  const halfH = k.height() / 2
-  return subjectY + halfH - Math.round(subjectY - desiredCamY + halfH)
 }

@@ -113,8 +113,6 @@ const EYE_WHITE_HEX = GLOW_PAL.brightLight
 const CHEEK_CX = 18
 const CHEEK_CY = -13.5
 const CHEEK_R = 1.8
-const EAR_L = { x: 0, y: -27, rx: 2.6, ry: 3 }
-const EAR_R = { x: 5, y: -28, rx: 2.4, ry: 2.8 }
 //
 // Small closed-mouth line on the underside of the snout, just behind the
 // nose tip.
@@ -135,10 +133,7 @@ const LEGS = [
 ]
 const LEG_RX = 2
 const LEG_RY = 2.6
-const FRONT_THIGH_LEN = 4
-const FRONT_SHANK_LEN = 5.5
 const HIND_THIGH_LEN = 4.5
-const HIND_SHANK_LEN = 5
 const HIND_KNEE_BEND = 2.8
 const TOE_OFFSETS = [-1.6, 0, 1.6]
 const TOE_RX = 0.75
@@ -179,7 +174,6 @@ const BAKE_Y_MIN = -62
 const BAKE_Y_MAX = 4
 const BAKE_W = BAKE_HALF_W * 2
 const BAKE_H = BAKE_Y_MAX - BAKE_Y_MIN
-const BAKE_CENTER_Y = (BAKE_Y_MIN + BAKE_Y_MAX) / 2
 const BAKE_PIXEL_RATIO_FACTOR = 2
 //
 // Idle breathing bob (torso rises/falls, feet stay planted) plus a gentle
@@ -262,10 +256,6 @@ const TOUCH_CENTER_LOCAL_X = (TOUCH_LOCAL_MIN_X + TOUCH_LOCAL_MAX_X) / 2
 const TOUCH_HALF_W = ((TOUCH_LOCAL_MAX_X - TOUCH_LOCAL_MIN_X) / 2) * TOUCH_HITBOX_WIDTH_SHRINK
 const TOUCH_HALF_H_TOP = (-TOUCH_LOCAL_TOP_Y) * TOUCH_HITBOX_HEIGHT_SHRINK
 const TOUCH_HALF_H_BOTTOM = TOUCH_LOCAL_BOTTOM_Y * TOUCH_HITBOX_HEIGHT_SHRINK
-//
-// Temporary — wireframe of the touch AABB in world space while tuning.
-//
-const HEDGEHOG_BODY_LINE_WIDTH = 2.2
 //
 // Falling off a platform after an ambush death — simple gravity drop until
 // the target ground line, then the normal wander state machine resumes.
@@ -1100,35 +1090,6 @@ function drawSpikeCrown(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
   })
 }
 //
-// Spike crown as open strokes (hollow body silhouette).
-//
-function drawSpikeCrownOutline(ctx, cx, cy, rx, ry, pad, swayPhase, mainHex, darkHex) {
-  const spikes = buildArcSpikePoints(cx, cy, rx, ry, pad, swayPhase, SPIKE_ARC_START, SPIKE_ARC_END, SPIKE_COUNT, SPIKE_LEN)
-  spikes.forEach((spike) => {
-    const ink = spike.alt ? darkHex : mainHex
-    strokeLineCtx(ctx, spike.baseL[0], spike.baseL[1], spike.tip[0], spike.tip[1], 1.6, ink)
-    strokeLineCtx(ctx, spike.tip[0], spike.tip[1], spike.baseR[0], spike.baseR[1], 1.6, ink)
-  })
-}
-//
-// Curl ball spikes as strokes only.
-//
-function drawCurlSpikeBallOutline(ctx, cx, cy, r, mainHex, darkHex) {
-  const count = CURL_SPIKE_COUNT
-  for (let i = 0; i < count; i++) {
-    const a0 = (360 / count) * i
-    const a1 = (360 / count) * (i + 1)
-    const baseL = ellipsePoint(cx, cy, r, r, a0)
-    const baseR = ellipsePoint(cx, cy, r, r, a1)
-    const mid = (a0 + a1) / 2
-    const len = CURL_SPIKE_LEN * (i % 2 === 0 ? 1 : CURL_SPIKE_LEN_SHORT_FACTOR)
-    const tip = ellipsePoint(cx, cy, r + len, r + len, mid)
-    const ink = i % 2 === 1 ? darkHex : mainHex
-    strokeLineCtx(ctx, baseL[0], baseL[1], tip[0], tip[1], 1.5, ink)
-    strokeLineCtx(ctx, tip[0], tip[1], baseR[0], baseR[1], 1.5, ink)
-  }
-}
-//
 // Builds a full 360° ring of spikes for the curled-ball pose — same
 // zigzag rim/tip construction as the crown, just wrapped all the way
 // around with no taper (every spike full length).
@@ -1160,29 +1121,12 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
   return pts
 }
 //
-// Baked eye on the cream snout (live overlay removed — avoids double eyes).
-//
-function drawBakedEye(ctx, snoutCy) {
-  const eyeY = EYE_CY + (snoutCy - SNOUT_CY)
-  fillEllipseCtx(ctx, EYE_CX, eyeY, EYE_R + OUTLINE_PAD * 0.2, EYE_R + OUTLINE_PAD * 0.2, GLOW_PAL.glowOutlineLight)
-  fillEllipseCtx(ctx, EYE_CX, eyeY, EYE_R, EYE_R, EYE_WHITE_HEX)
-  fillEllipseCtx(ctx, EYE_CX + PUPIL_OFFSET_X, eyeY + PUPIL_OFFSET_Y, PUPIL_R, PUPIL_R, EYE_HEX)
-}
-//
 // Small round black nose at the snout tip.
 //
 function drawSnoutNoseTip(ctx, snoutCy) {
   const tipY = NOSE_TIP_Y + (snoutCy - SNOUT_CY)
   fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX + NOSE_OUTLINE_PAD, NOSE_TIP_RY + NOSE_OUTLINE_PAD, GLOW_PAL.glowOutlineLight)
   fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX, NOSE_TIP_RY, EYE_HEX)
-}
-//
-// Small rounded ear poking out from the quill dome.
-//
-function drawEar(ctx, ear, maneCy, maneHex) {
-  const cy = ear.y + (maneCy - MANE_CY)
-  fillEllipseCtx(ctx, ear.x, cy, ear.rx + OUTLINE_PAD * 0.4, ear.ry + OUTLINE_PAD * 0.4, GLOW_PAL.glowOutlineLight)
-  fillEllipseCtx(ctx, ear.x, cy, ear.rx, ear.ry, maneHex)
 }
 //
 // Soft pink cheek blush on the snout.
@@ -1218,39 +1162,6 @@ function strokeQuadCtx(ctx, x1, y1, cx, cy, x2, y2, width, colorHex) {
   ctx.beginPath()
   ctx.moveTo(x1, y1)
   ctx.quadraticCurveTo(cx, cy, x2, y2)
-  ctx.lineWidth = width
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = colorHex
-  ctx.stroke()
-}
-//
-// Strokes an ellipse on a bake canvas (hollow body silhouette).
-//
-function strokeEllipseCtx(ctx, cx, cy, rx, ry, width, colorHex) {
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-  ctx.lineWidth = width
-  ctx.strokeStyle = colorHex
-  ctx.stroke()
-}
-//
-// Strokes a closed polygon loop on a bake canvas.
-//
-function strokePolyLoopCtx(ctx, points, width, colorHex) {
-  ctx.beginPath()
-  points.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)))
-  ctx.closePath()
-  ctx.lineWidth = width
-  ctx.strokeStyle = colorHex
-  ctx.stroke()
-}
-//
-// Single stroke segment on a bake canvas.
-//
-function strokeLineCtx(ctx, x1, y1, x2, y2, width, colorHex) {
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
   ctx.lineWidth = width
   ctx.lineCap = 'round'
   ctx.strokeStyle = colorHex

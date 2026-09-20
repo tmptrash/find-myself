@@ -163,8 +163,6 @@ const DECOR_GRAY = glowRgb('decorGray')
 //
 const GRASS_GREEN = glowRgb(GLOW_PAL.treeColor.leafShades[0])
 const WATER_COLOR = glowRgb('water')
-const SKY_TOP_GRAY = glowRgb('parallaxSkyTopGray')
-const SKY_TOP_COLOR = glowRgb('parallaxSkyTopColor')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
 //
 // Colour-world backdrop split: sky above the ground line, dark earth below.
@@ -284,7 +282,6 @@ const TREE_X = Math.round(DESIGN_SCREEN_W * 0.5)
 // leave a gap above the floor line; rendering clips it at the roots' start
 // (ground level), so the trunk is cut exactly by the ground.
 //
-const TREE_TRUNK_SINK = 0
 const TREE_TRUNK_BOTTOM_Y = FLOOR_Y
 //
 // Roots and trunk clip share the visible ground line — the trunk ends flush
@@ -297,7 +294,6 @@ const TREE_TOP_Y = 430
 // separately in glow-tree.js (HORIZ_W).
 //
 const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
-const TREE_SPRITE_NAME = 'glow0-tree-sprite'
 const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-sprite'
 const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
 //
@@ -327,7 +323,6 @@ const TRUNK_EXCLUDE_HALF = 50
 //
 const HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP = 170
 const HEDGEHOG_LEFT_AMBUSH_POP_LEAD = 70
-const HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH = 100
 const HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN = 40
 //
 // Running covers the extra pop-lead distance in less real time than
@@ -420,7 +415,6 @@ const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
 // mushroom whistle-lean) once the O-meditation countdown starts, and how
 // quickly it freezes again when the hero breaks stillness.
 //
-const MEDITATION_WORLD_WAKE_SPEED = 1.1
 const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
 // Light rim on glow floor rocks so they read clearly against the ground
@@ -519,7 +513,6 @@ const HERO_BRANCH_FRACTION = 0.20
 // Respawn point at the lower-right ground — used after a death once the
 // hero has discovered the lower-right part of the level himself.
 //
-const GROUND_SPAWN_X = WORLD_W - RIGHT_MARGIN - 180
 const LOG_W = 110
 const LOG_H = 28
 //
@@ -669,7 +662,6 @@ const PAR_TREE_FOCUS_BIAS_NEAR = 0.46
 const PAR_TREE_FOCUS_BIAS_MID = 0.32
 const PAR_TREE_FOCUS_BIAS_FAR = 0.2
 const PAR_BIG_BAND_TOP = PAR_NEAR_BAND_TOP
-const PAR_BIG_BAND_BOTTOM = PAR_NEAR_BAND_BOTTOM
 //
 // Random tree spacing: each next trunk advances by a random fraction of the
 // average cell, so gaps between trees vary irregularly.
@@ -713,7 +705,6 @@ const BUSH_NEAR_HEIGHT_SCALE = 0.78
 const BUSH_FAR_HEIGHT_SCALE = 1.18
 const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
-const PAR_FARTHEST_BAND_BOTTOM = PAR_FAR_BAND_BOTTOM
 const PAR_FARTHEST_TOP_MIN_Y = PAR_FAR_BAND_TOP - 55
 const PAR_FARTHEST_TOP_RANGE = 16
 //
@@ -736,7 +727,6 @@ const PAR_CANOPY_CEILING_HEADROOM = 100
 //
 // Amplitude of the layered-sine wobble on the canopy ceiling clip line.
 //
-const PAR_CANOPY_CEILING_JAG = 28
 const PAR_CLIP_PAD = 4000
 //
 // Clips away anything drawn above ceilingWorldY on this baked-layer canvas
@@ -836,7 +826,6 @@ const BIRD_FLAP_SPEED_RANGE = 3
 const BIRD_PARALLAX_SPEED = PAR_SKY_SPEED
 const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
-const BIRD_LINE_WIDTH = 2
 const BIRD_HAZE_BLEND = 0.72
 const BIRD_VISIBLE_FADE_MIN = 0.02
 const BIRD_UPDATE_INTERVAL = 1 / 24
@@ -867,9 +856,6 @@ const UG_BONE_COUNT = 3
 const UG_COIN_COUNT = 4
 const UG_BOTTLE_COUNT = 2
 const UG_WORM_COUNT = 4
-const OUTER_BG_R = OUTER.r
-const OUTER_BG_G = OUTER.g
-const OUTER_BG_B = OUTER.b
 const OUTER_BG_HEX = GLOW_PAL.playfieldOuter
 const WALL_BORDER_R = OUTER.r
 const WALL_BORDER_G = OUTER.g
@@ -962,7 +948,6 @@ const GLOW_LETTER_SHADOW_R = 0
 const GLOW_LETTER_SHADOW_G = 0
 const GLOW_LETTER_SHADOW_B = 0
 const GLOW_LETTER_TILT = 12
-const GLOW_LETTER_GAP = 70
 const GLOW_LETTER_PICKUP_RADIUS = 52
 //
 // Hero body / outline tones for lesson-glow.0 — lighter than the shared
@@ -1001,7 +986,6 @@ const KEY_COLLECTED_O = 'glow.collectedO'
 const KEY_COLLECTED_W = 'glow.collectedW'
 const KEY_REVEALED_TREE = 'glow.revealedTree'
 const KEY_REVEALED_OUTER_FRAME = 'glow.revealedOuterFrame'
-const KEY_REVEALED_GROUND = 'glow.revealedGround'
 const KEY_REVEALED_WATER = 'glow.revealedWater'
 const KEY_REVEALED_L = 'glow.revealedL'
 const KEY_REVEALED_W = 'glow.revealedW'
@@ -1040,7 +1024,6 @@ const KEY_TRAMP_WALKED = 'glow.trampWalked'
 //
 const TRAMP_MUSH_LAND_REVEAL_DIST = 80
 const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
-const TRAMP_REVEAL_HINT_DURATION = 5
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
 const KEY_INTRO_SHOWN = 'glow.introShown'
@@ -1057,13 +1040,12 @@ const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
 const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nIt\'s shallow here.'
 const TRAMP_SHALLOW_HINT_DURATION = 6
 const WRONG_TRAMP_SING_HINT_REPEAT = 20
-const LETTER_PROGRESS_HINT_INTERVAL = 30
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
 //
 // Stillness countdown arms only after the post-L body-fill ring has played.
 //
-const MEDITATION_ARM_AFTER_FILL_DELAY = 5
+const MEDITATION_ARM_AFTER_FILL_DELAY = 2
 //
 // Semi-transparent branch teleport above the right trampoline (save key kept
 // from the old spike-gate reveal).
@@ -1217,7 +1199,7 @@ const L_DECOR_DARKEN = 0.22
 // MEDITATION_IDLE_PENALTY seconds to the required stillness. When the
 // countdown reaches zero the O platform and letter appear.
 //
-const MEDITATION_IDLE_BASE = 7
+const MEDITATION_IDLE_BASE = 4
 const MEDITATION_IDLE_PENALTY = 2
 const MEDITATION_COUNTDOWN = 5
 const MEDITATION_TIMER_FONT = 22
@@ -1231,19 +1213,9 @@ const HERO_TOOLTIP_Y_OFFSET = -72
 // Teacher (life HUD) hints — indirect nudges, not orders.
 //
 const GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS = 2
-const GLOW_TEACHER_HINT_GRAY_QUIET = "It's awfully quiet...\nthere must be more to find."
-const GLOW_TEACHER_HINT_AFTER_G_RIGHT = 'Something worth seeing\nmight lie to the right.'
-const GLOW_TEACHER_HINT_AFTER_G_LEFT = 'Worth glancing back\nleft once in a while.'
 const GLOW_TEACHER_HINT_AFTER_L = 'Don\'t rush. Just\nstop and think...'
 const GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_O = 'That big mushroom seems\nawfully attentive.'
-const GLOW_TEACHER_HINT_WATER = 'The unknown isn\'t empty.\nIt simply waits to be found.'
-const GLOW_TEACHER_HINT_GROUND_RIGHT = 'The ground feels\ndifferent here.'
-const GLOW_TEACHER_HINT_TREE = 'A tree... was it\nalways there?'
-const GLOW_TEACHER_HINT_TRAMP_FIRST = 'That mushroom is enormous.\nCurious, isn\'t it?'
-const GLOW_TEACHER_HINT_TRAMP_SECOND = 'Another one — the forest\nlikes to repeat itself.'
-const GLOW_TEACHER_HINT_WRONG_TRAMP_SING = 'Not every mushroom\nwants a song.'
-const GLOW_TEACHER_HINT_O_STUCK = 'Even in all this noise,\nstillness can open a door.'
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
 const MUD_TOOLTIP_SIZE = 80
 const MUD_TOOLTIP_Y_OFFSET = -50
@@ -1302,7 +1274,6 @@ const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Explore'
 const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Learn to see the nuances'
 const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
 const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Walk forward'
-const GLOW_INDICATOR_TOOLTIP_HEIGHT = 50
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
 // After picking up the final W letter the hero shares a closing line for a
@@ -1310,11 +1281,6 @@ const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
 const HINT_W_TEXT = 'Gradually I become a witness\nto how the world is made.\nLet\'s move on'
 const HINT_W_DURATION = 4
-//
-// Shown once when the third start-branch jump finishes revealing the tree.
-//
-const HINT_TREE_REVEAL_TEXT = 'Oh. There\'s\na tree here.'
-const HINT_TREE_REVEAL_DURATION = 3
 //
 // Drowning — land on the lake floor, then sink under the fill with the hint.
 //
@@ -1489,13 +1455,6 @@ const BRANCH_TRAMP_BOOST_MULT = 1.68
 const BRANCH_TRAMP_PIT_GUARD_SEC = 5
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
-// Opening camera: hero width fills the playfield width at intro hold.
-//
-const CAMERA_INTRO_HERO_WIDTH = 42
-let CAMERA_INTRO_ZOOM_START = VIEW_W / CAMERA_INTRO_HERO_WIDTH
-const CAMERA_INTRO_HOLD_DURATION = 0
-const CAMERA_INTRO_DURATION = 0.6
-//
 // After the opening zoom-out finishes, wait this long before the first hint.
 //
 const CAMERA_INTRO_HINT_DELAY = 1
@@ -1534,7 +1493,6 @@ const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
 const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
 const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
-const BRANCH_TRAMP_WRONG_SING_DURATION = 5
 const LETTER_ARROW_CORNER_RADIUS = 3
 const LETTER_ARROW_STEM_HEAD_OVERLAP = 14
 const CAVE_ENTRANCE_LANDING_PARTICLE_MULT = 2.4
@@ -1565,7 +1523,6 @@ const BRANCH_TRAMP_CHEEKY_LINES = [
 // from the object itself (dark palette neighbour of its fill colour).
 //
 const DECOR_OUTLINE_SUFFIX = '-o'
-const DECOR_OUTLINE_WIDTH = 1
 const TRAMP_OUTLINE_SPRITE = TRAMP_SPRITE + DECOR_OUTLINE_SUFFIX
 //
 // Sink the trampoline sprite 2 px into the ground so it does not float.
@@ -1695,7 +1652,6 @@ const WOOD_LOG_SNAP_EMBED = LOG_SNAP_EMBED - 2
 // After snapping onto a log, lock out a second jump/land crouch briefly
 //
 const POST_LAND_AIR_LOCK_GLOW = 0.28
-const DIALOG_INPUT_GRACE = 0
 //
 // After dialog pin release, keep gravity off and Y pinned briefly so L/O
 // wood hitboxes register before physics resume (prevents fall-through).
@@ -1713,11 +1669,6 @@ const LOG_HOVER_FRAMES = 3
 // Still falling through a jump arc — do not pin / idle-reset mid-air
 //
 const LOG_SNAP_FALL_VEL = 80
-//
-// Delay before swapping the freshly baked gold hero sprite in (one frame).
-//
-const GOLD_SWAP_DELAY = 0.05
-
 let glowLevel0BootstrapReporter = null
 let glowLevel0BootstrapSlice = { start: 38, end: 100 }
 let glowLevel0BootstrapPromise = null
@@ -2596,8 +2547,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
       ],
-      letterProgressHintCooldown: LETTER_PROGRESS_HINT_INTERVAL,
-      lastLetterCollectTime: null,
       spawnedOnBranch: spawnOnBranch,
       branchLookPhase: spawnOnBranch ? 'left' : null,
       branchLookTimer: spawnOnBranch ? BRANCH_LOOK_LEFT_DURATION : 0,
@@ -2611,10 +2560,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
     inst.eyeIntro = zones.eyesCollected ? null : createGlowEyeIntroState()
-    if ((zones.gCollected || zones.lCollected || zones.oCollected) && !zones.wCollected) {
-      inst.lastLetterCollectTime = k.time()
-      inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
-    }
     inst.oZoneRevealTime = zones.oZone ? k.time() : null
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
@@ -3017,40 +2962,6 @@ function finishGlowIntro(inst) {
   maybeShowGLetter(inst)
 }
 //
-// After G: teacher nudge toward the L letter or log platform.
-//
-function teacherGlowHintAfterG(inst) {
-  const targetX = inst.lLetter && !inst.lLetter.main.hidden
-    ? inst.lLetter.x
-    : (inst.lPlatHome ? inst.lPlatHome.x + LOG_W * 0.5 : null)
-  const heroX = inst.heroInst?.character?.pos?.x
-  if (targetX == null || heroX == null) return GLOW_TEACHER_HINT_AFTER_G_RIGHT
-  if (heroX < targetX) return GLOW_TEACHER_HINT_AFTER_G_RIGHT
-  //
-  // Once the L letter is on screen the left nudge is no longer needed.
-  //
-  if (inst.zones.lLetterUnveiled) return null
-  return GLOW_TEACHER_HINT_AFTER_G_LEFT
-}
-//
-// Teacher line matching how much colour the world shows (indirect nudges only).
-//
-function teacherGlowProgressHintText(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return null
-  if (isTrampSingCountdownActive(inst)) return null
-  if (inst.zones.oCollected || inst.zones.colorWorld) return GLOW_TEACHER_HINT_AFTER_O
-  if (inst.zones.lCollected) {
-    if (inst.meditation?.countdown != null) return null
-    if (inst.meditation?.stillnessCompleted) return null
-    if (inst.zones.oZone || inst.zones.oCollected) return null
-    if (inst.oLetter && !inst.oLetter.main.hidden) return null
-    return GLOW_TEACHER_HINT_AFTER_L
-  }
-  if (inst.zones.gCollected) return teacherGlowHintAfterG(inst)
-  if (get(KEY_INTRO_SHOWN, false)) return GLOW_TEACHER_HINT_GRAY_QUIET
-  return GLOW_TEACHER_HINT_GRAY_QUIET
-}
-//
 // Hero hover — eyeless intro only.
 //
 function heroTooltipText(inst) {
@@ -3070,25 +2981,6 @@ function isGlowHeroHoverTooltipVisible(inst) {
   if (HeroHint.isActive(inst.heroHint)) return false
   if (!heroTooltipText(inst)) return false
   return true
-}
-//
-// True while the hero is already singing at the big mushroom (visible countdown).
-//
-function isTrampSingCountdownActive(inst) {
-  const tw = inst.trampWalk
-  return Boolean(tw && !tw.walked && tw.countdown != null)
-}
-//
-// Resets the periodic post-letter hint timer when a letter is picked up.
-//
-function markLetterCollectedForProgressHint(inst) {
-  inst.lastLetterCollectTime = inst.k.time()
-  inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
-}
-//
-// Every 30 s after a letter pickup, queue the matching teacher nudge.
-//
-function updateLetterProgressHint(inst) {
 }
 //
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the playable
@@ -4967,11 +4859,19 @@ function maybeShowGLetter(inst) {
   show && syncGlowHudLetterFills(inst, false)
 }
 //
-// Applies the grayscale teacher tint only when the glow world mode changes.
+// Life HUD stays grey until the world colour preview (post-L countdown) or
+// full colour world has faded in far enough to read as the same beat.
+//
+function glowLifeHudWantGrey(inst) {
+  if (inst.zones.colorWorld) return false
+  return (inst.colorFade ?? 0) < 0.85
+}
+//
+// Applies the grayscale teacher tint when the glow colour fade changes.
 //
 function maybeSyncGlowLifeHudGrey(inst) {
   if (!inst.levelIndicator) return
-  const wantGrey = !inst.zones.colorWorld
+  const wantGrey = glowLifeHudWantGrey(inst)
   const needsDesat = wantGrey && inst.levelIndicator._lifeSpriteName !== 'life-desat'
   if (inst._lifeHudGrey === wantGrey && !needsDesat) return
   inst._lifeHudGrey = wantGrey
@@ -7740,24 +7640,6 @@ function waterBedDepthAt(t) {
   return Math.max(WATER_DEPTH_RIGHT, base + chaos * (1 - t))
 }
 //
-// Fills surface wave + bed samples into ptsCache (same layout as createWater)
-//
-function fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, time) {
-  const span = x2 - x1
-  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-    const t = i / LAKE_SEGMENTS
-    const x = x1 + t * span
-    const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
-    const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
-    const wave = wavePrimary + waveSecondary
-    ptsCache[i].x = x
-    ptsCache[i].y = waterY + wave
-    const bi = (LAKE_SEGMENTS + 1) * 2 - 1 - i
-    ptsCache[bi].x = x
-    ptsCache[bi].y = waterY + waterBedDepthAt(t)
-  }
-}
-//
 // Detects which surface the hero stands on.
 //
 function detectGlowSurface(inst) {
@@ -8577,25 +8459,6 @@ function drawLakeShoreRocksWorld(inst) {
   })
 }
 //
-// Draws the fixed HUD bar, bottom margin and side pillarbox strips in screen
-// space on top of the scrolling world layer.
-//
-function drawFixedPlayfieldChrome(inst, outerFrame) {
-  const k = inst.k
-  if (!outerFrame) {
-    k.drawRect({
-      pos: k.vec2(0, 0),
-      width: SCREEN_W,
-      height: SCREEN_H,
-      color: k.rgb(VOID.r, VOID.g, VOID.b),
-      fixed: true
-    })
-    return
-  }
-  drawPlayfieldTopBar(inst)
-  drawPlayfieldSideChrome(inst)
-}
-//
 // Top HUD platform strip — sits below HUD letters (z = ui - 1).
 //
 function drawPlayfieldTopBar(inst) {
@@ -9314,16 +9177,18 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const gCaptionGray = getRGB(k, GLOW_PAL.midGray)
   const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L' || letterEntry?.char === 'O'
   const isGrayCaption = grayCaptionNoShadow
-  const captionWhiteRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionDialogRgb = getRGB(k, GLOW_PAL.dialogText)
+  const captionWarmInkRgb = getRGB(k, GLOW_PAL.captionWarmInk)
   const captionTextRgb = letterEntry?.char === 'O'
-    ? captionWhiteRgb
+    ? captionWarmInkRgb
     : letterEntry?.char === 'L'
       ? captionDialogRgb
       : (isGrayCaption ? gCaptionGray : glowCaptionTextRgb())
   const letterFillRgb = letterEntry?.char === 'L'
     ? getRGB(k, GLOW_PAL.gold)
-    : getRGB(k, CFG.visual.colors.hero.eyeWhite)
+    : letterEntry?.char === 'O'
+      ? getRGB(k, GLOW_PAL.warmCream)
+      : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
@@ -9617,7 +9482,6 @@ function collectLetterG(inst) {
   // Intro hints end the moment the first letter is taken.
   //
   HeroHint.clear(inst.heroHint)
-  markLetterCollectedForProgressHint(inst)
   const entry = inst.gLetter
   hideGlowLetterPickupInWorld(entry)
   syncGlowHudLetterFills(inst, false)
@@ -9657,7 +9521,6 @@ function collectLetterL(inst) {
   inst._lakeColorSettled = null
   inst._lakeDrawRgb = null
   set(KEY_COLLECTED_L, true)
-  markLetterCollectedForProgressHint(inst)
   inst.zones.outerFrame = true
   set(KEY_REVEALED_OUTER_FRAME, true)
   recomputeGlowScreenLayout(inst.k)
@@ -9709,7 +9572,6 @@ function collectLetterO(inst) {
   queueGlowHeroFillReveal(inst, 1)
   inst.zones.oCollected = true
   set(KEY_COLLECTED_O, true)
-  markLetterCollectedForProgressHint(inst)
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
   const entry = inst.oLetter
@@ -9806,12 +9668,6 @@ function collectLetterW(inst) {
     //
     createLevelTransition(inst.k, 'menu-touch')
   })
-}
-//
-// Converts an { r, g, b } tone to the hex string the backdrop helper expects.
-//
-function rgbToHex(c) {
-  return `#${((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1)}`
 }
 //
 // Shows the top-centre FPS HUD when any top-bar element is visible.
@@ -10158,7 +10014,7 @@ function bumpGlowLifeHudOnDeath(inst) {
   inst.levelIndicator.updateLifeScore?.(newLife)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
-    const greyLife = !inst.zones.colorWorld
+    const greyLife = glowLifeHudWantGrey(inst)
     LevelIndicator.syncLifeHudGrey(inst.levelIndicator, greyLife)
     const desatReady = inst.levelIndicator._lifeSpriteName === 'life-desat'
     const canFlash = !greyLife || desatReady
@@ -11246,7 +11102,6 @@ function onUpdate(inst) {
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
   syncGlowPitCaveFlagForTeacherHints(inst)
-  updateLetterProgressHint(inst)
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
   updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
@@ -12093,12 +11948,6 @@ function applyPersistedTreeSegmentVisibility(entries, revealedSet) {
   })
 }
 //
-// True when at least one tree segment is visible.
-//
-function hasAnyTreeSegmentVisible(inst) {
-  return inst.treeSegmentIds?.some(id => inst.treeSegmentEntries?.[id]?.revealed)
-}
-//
 // True when every baked segment has been revealed.
 //
 function isAllTreeSegmentsRevealed(inst) {
@@ -12551,16 +12400,6 @@ function syncTreeSegmentsVisibility(inst) {
     }
   })
   syncTreeSegmentsColorCrossfade(inst, fade)
-}
-//
-// Catches tunneling onto the mushroom cap before lake-floor / ground snap.
-//
-function snapHeroToTrampolineCap(inst, char, heroX, footY) {
-  if (inst.drowning || inst.dialogPostSettle > 0) return
-  isRightTrampolineVisible(inst.zones) &&
-    snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.trampState)
-  isBranchTrampolineVisible(inst.zones) &&
-    snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.branchTrampState)
 }
 //
 // True when the hero should launch from a mushroom cap (not stroll past on the floor).
@@ -13469,22 +13308,6 @@ function syncHeroTrampDrawOrder(inst) {
   ch.z !== targetZ && (ch.z = targetZ)
 }
 //
-// Brief camera pan to the L letter when it appears off-screen, then back.
-//
-function maybeStartCameraPeekAtLLetter(inst) {
-  const letter = inst.lLetter
-  if (!letter || letter.main.hidden || inst.cameraLetterPeek) return
-  if (!isWorldPointOutsideCameraView(inst, letter.x)) return
-  const ch = inst.heroInst?.character
-  if (!ch?.pos) return
-  inst.cameraLetterPeek = {
-    returnX: ch.pos.x,
-    targetX: letter.x,
-    phase: 'toTarget',
-    elapsed: 0
-  }
-}
-//
 // Animates a one-shot camera peek; returns true while the peek owns the camera.
 //
 function updateCameraLetterPeek(inst, ch) {
@@ -13983,7 +13806,6 @@ function recomputeGlowScreenLayout(k) {
   GLOW_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
   GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
   LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
-  CAMERA_INTRO_ZOOM_START = VIEW_W / CAMERA_INTRO_HERO_WIDTH
   updatePlayfieldCornerPositions()
 }
 //

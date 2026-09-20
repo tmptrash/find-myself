@@ -164,21 +164,17 @@ const BRANCH_TOP_FRAC_RANGE = 0.16
 //
 // Leaf-band teardrops — size/opacity ranges of the dense row-foliage leaves.
 //
-const CANOPY_LEAF_SIZE_MIN = 13
-const CANOPY_LEAF_SIZE_RANGE = 11
-const CANOPY_LEAF_OPACITY_MIN = 0.85
-const CANOPY_LEAF_OPACITY_RANGE = 0.15
 //
 // Horizontal branch length (px) — the branch that extends left from the trunk.
 //
-export const HORIZ_BRANCH_LENGTH = 200
+const HORIZ_BRANCH_LENGTH = 200
 
 /**
  * Creates a seeded pseudo-random number generator.
  * @param {number} seed - Integer seed; different values produce different trees.
  * @returns {function(): number} Returns a float in [0, 1).
  */
-export function createRng(seed) {
+function createRng(seed) {
   let s = (seed >>> 0)
   return () => {
     s = ((s * 1664525 + 1013904223) >>> 0)
@@ -439,87 +435,6 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   })
 }
 
-/**
- * Paints a full-width horizontal band of teardrop leaves — scattered
- * uniformly from x1 to x2 with a vertical bias toward the band middle. Used
- * on top of the per-tree crowns so each parallax row reads as one solid,
- * continuous leaf mass from the left edge to the right edge instead of
- * separate episodic crowns. Fully deterministic per seed.
- * @param {CanvasRenderingContext2D} ctx - Target context
- * @param {Object} opts - { seed, x1, x2, yTop, yBottom, count, palette,
- *   organicScatter, edgeWanderPx, vertSpreadFrac }
- */
-export function renderGlowLeafBandIntoContext(ctx, opts) {
-  const {
-    seed, x1, x2, yTop, yBottom, count, palette, organicScatter = false,
-    edgeWanderPx = 0, vertSpreadFrac = 0.38, brokenRim = false, rimGapChance = 0.5,
-    centerDensityPower = 1.8, topRimExtra = 0
-  } = opts
-  const rng = createRng(seed)
-  const leafShades = palette.leafShades ?? [{ r: palette.leafR, g: palette.leafG, b: palette.leafB }]
-  const vein = palette.noLeafDetails ? null : (palette.leafVein ?? null)
-  const bandH = Math.max(1, yBottom - yTop)
-  const bandCenterY = (yTop + yBottom) * 0.5
-  const vertSpread = bandH * vertSpreadFrac
-  const wanderPhase = seed * 0.00017
-  const rimZone = bandH * 0.34
-  const halfBand = bandH * 0.5
-  const topEdgeH = Math.min(22, bandH * 0.15)
-  const topEdgeCount = Math.round(count * 0.32)
-  let placed = 0
-  let guard = 0
-  while (placed < count && guard < count * 10) {
-    guard++
-    const x = x1 + rng() * (x2 - x1)
-    //
-    // Center-heavy vertical density plus a wandering baseline so the canopy
-    // rim jumps up and down instead of reading as one flat line; the flat mode
-    // keeps a dense rim along the top for non-parallax bakes.
-    //
-    let y
-    if (organicScatter) {
-      const smoothWander = edgeWanderPx > 0
-        ? Math.sin(x * 0.006 + wanderPhase) * edgeWanderPx * 0.4
-          + Math.sin(x * 0.017 + wanderPhase * 1.55) * edgeWanderPx * 0.32
-          + Math.sin(x * 0.031 + wanderPhase * 2.3) * edgeWanderPx * 0.22
-          + (rng() - 0.5) * edgeWanderPx * 0.55
-        : 0
-      const colCenter = bandCenterY + smoothWander
-      const yOffset = ((rng() + rng() + rng()) / 3 - 0.5) * vertSpread * 2
-      y = colCenter + yOffset
-      if (y < yTop || y > yBottom) continue
-      const distFromCenter = Math.abs(y - bandCenterY)
-      const normDist = Math.min(1, distFromCenter / halfBand)
-      const keepChance = Math.max(0.04, 1 - Math.pow(normDist, centerDensityPower))
-      if (rng() > keepChance) continue
-      //
-      // Symmetric rim gaps — extra rejection near the top so the upper edge
-      // breaks as much as the lower one.
-      //
-      if (brokenRim) {
-        const edgeDist = Math.min(y - yTop, yBottom - y)
-        const rimT = 1 - edgeDist / rimZone
-        if (rimT > 0) {
-          const topBias = y - yTop < yBottom - y ? topRimExtra : 0
-          if (rng() < rimGapChance * Math.pow(rimT, 1.35) + topBias) continue
-        }
-      }
-    } else {
-      y = placed < topEdgeCount
-        ? yTop + rng() * topEdgeH
-        : yTop + topEdgeH + ((rng() + rng()) * 0.5) * Math.max(1, bandH - topEdgeH)
-    }
-    const size = CANOPY_LEAF_SIZE_MIN + rng() * CANOPY_LEAF_SIZE_RANGE
-    const shade = leafShades[Math.min(leafShades.length - 1, Math.floor(rng() * leafShades.length + rng() * 0.4))]
-    const distFromCenter = Math.abs(y - bandCenterY)
-    const edgeFade = organicScatter
-      ? Math.max(0.12, 1 - Math.pow(Math.min(1, distFromCenter / halfBand), 1.35))
-      : 1
-    const opacity = (CANOPY_LEAF_OPACITY_MIN + rng() * CANOPY_LEAF_OPACITY_RANGE) * (0.28 + edgeFade * 0.72)
-    drawLeafToCanvas(ctx, x, y, size, (rng() - 0.5) * 2, shade.r, shade.g, shade.b, opacity, vein)
-    placed++
-  }
-}
 //
 // Builds the trunk as tapered segments drifting organically from base to apex.
 //
@@ -568,27 +483,6 @@ function clampSegmentToMaxY(seg, maxY) {
     const t = (maxY - sy) / (ey - sy)
     ex = sx + (ex - sx) * t
     ey = maxY
-  }
-  return { sx, sy, ex, ey, w: seg.w, w2: seg.w2 }
-}
-//
-// Clamps a segment so nothing draws above a sky / canopy ceiling line.
-//
-function clampSegmentToMinY(seg, minY) {
-  let sx = seg.sx
-  let sy = seg.sy
-  let ex = seg.ex
-  let ey = seg.ey
-  if (Math.max(sy, ey) < minY - 0.5) return null
-  if (sy < minY - 0.5) {
-    const t = (minY - ey) / (sy - ey)
-    sx = ex + (sx - ex) * t
-    sy = minY
-  }
-  if (ey < minY - 0.5) {
-    const t = (minY - sy) / (ey - sy)
-    ex = sx + (ex - sx) * t
-    ey = minY
   }
   return { sx, sy, ex, ey, w: seg.w, w2: seg.w2 }
 }
@@ -1382,41 +1276,6 @@ function buildBranchesFromTrunk(
     }
   }
 }
-/**
- * Keeps branch-attached leaves with center-heavy vertical density inside a band.
- * @param {Array} leaves - Leaf cluster list from buildGlowTree()
- * @param {number} bandTop - Top Y of the canopy band (world)
- * @param {number} bandBottom - Bottom Y of the canopy band (world)
- * @param {number} [power=2.65] - Falloff exponent (higher = denser core)
- * @param {number} [seed=0] - Stable hash seed per tree row
- * @returns {Array} Filtered leaf list
- */
-export function filterGlowTreeLeavesByVerticalDensity(leaves, bandTop, bandBottom, power = 2.65, seed = 0) {
-  const centerY = (bandTop + bandBottom) * 0.5
-  const halfH = Math.max(1, (bandBottom - bandTop) * 0.5)
-  return leaves.filter(leaf => {
-    if (leaf.y < bandTop || leaf.y > bandBottom) return false
-    const normDist = Math.min(1, Math.abs(leaf.y - centerY) / halfH)
-    const keepChance = Math.max(0.06, 1 - Math.pow(normDist, power))
-    return leafDensityHash(leaf.x, leaf.y, seed) < keepChance
-  })
-}
-/**
- * Clips parallax branches only above the canopy strip — the full tapered
- * trunk and sideways branch structure stay visible like the main tree.
- * @param {Object} treeData - buildGlowTree() output (mutated in place)
- * @param {number} bandTop - Top of the row leaf band (world Y)
- * @param {number} bandBottom - Bottom of the row leaf band (world Y)
- */
-export function trimGlowTreeWoodToCanopyBand(treeData, bandTop, _bandBottom) {
-  const skyClipY = bandTop - 2
-  const clippedBranches = []
-  for (const seg of treeData.branchSegs) {
-    const trimmed = clampSegmentToMinY(seg, skyClipY)
-    trimmed && clippedBranches.push(trimmed)
-  }
-  treeData.branchSegs = clippedBranches
-}
 //
 // Recursively grows a branch segment, spawning sub-branches and leaf endpoints.
 //
@@ -1572,11 +1431,4 @@ function drawLeafToCanvas(ctx, x, y, size, angle, r, g, b, opacity, vein) {
     ctx.stroke()
   }
   ctx.restore()
-}
-//
-// Stable 0..1 hash for deterministic leaf-density rejection sampling.
-//
-function leafDensityHash(x, y, seed) {
-  const n = Math.sin((x * 12.9898 + y * 78.233 + seed * 0.137) * 43758.5453)
-  return n - Math.floor(n)
 }

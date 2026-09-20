@@ -217,38 +217,6 @@ export function getTreePaletteColor() {
 }
 
 /**
- * Warm amber background-forest palette for the colour world (after O):
- * orange-brown wood dissolving into a golden haze, green foliage kept deep
- * so the layers read like the reference forest picture.
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteAmber() {
-  const t = GLOW_PAL.treeAmber
-  const root = glowRgb(t.root)
-  const trunk = glowRgb(t.trunk)
-  const branch = glowRgb(t.branch)
-  const leaf = glowRgb(t.leaf)
-  return {
-    rootR: root.r, rootG: root.g, rootB: root.b,
-    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
-    branchR: branch.r, branchG: branch.g, branchB: branch.b,
-    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
-    leafOpacity: 1,
-    leafShades: [
-      glowRgb(t.trunk),
-      glowRgb(t.branch),
-      glowRgb(t.leaf)
-    ],
-    barkShades: {
-      dark: glowRgb(t.root),
-      highlight: glowRgb(GLOW_PAL.warmHaze)
-    },
-    leafVein: glowRgb(t.root),
-    woodOutline: glowRgb('void')
-  }
-}
-
-/**
  * One-tone silhouette palette for a parallax tree/bush row.
  * @param {string} keyOrHex - Palette key or '#rrggbb'
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()

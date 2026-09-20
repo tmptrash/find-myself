@@ -21,15 +21,6 @@ export const GLOW_FILM_GRAIN = {
   blockSize: 1,
   seed: 43011
 }
-//
-// Weaker film grain for large letter captions after pickup.
-//
-const CAPTION_GRAIN_INK_ALPHA_MIN = 200
-export const GLOW_CAPTION_FILM_GRAIN = {
-  strength: 4,
-  blockSize: 1,
-  seed: 43011
-}
 
 /**
  * Adds the standard glow film grain to a baked canvas.
@@ -40,19 +31,6 @@ export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0) {
   if (!canvas?.width || !canvas?.height) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(seedOffset))
-}
-//
-// Weaker film grain for large letter captions after pickup.
-//
-export function applyGlowCaptionGrainToCanvas(canvas, seedOffset = 0) {
-  if (!canvas?.width || !canvas?.height) return
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  applyFilmGrainToContext(ctx, canvas.width, canvas.height, {
-    strength: GLOW_CAPTION_FILM_GRAIN.strength,
-    blockSize: GLOW_CAPTION_FILM_GRAIN.blockSize,
-    seed: GLOW_CAPTION_FILM_GRAIN.seed + (seedOffset | 0),
-    inkAlphaMin: CAPTION_GRAIN_INK_ALPHA_MIN
-  })
 }
 
 /**
@@ -226,14 +204,14 @@ function buildGrainOverlayTile() {
 //
 // Loads the grain tile sprite once per Kaplay instance.
 //
-export function ensureGlowFilmGrainOverlaySprite(k) {
+function ensureGlowFilmGrainOverlaySprite(k) {
   if (k.getSprite(GRAIN_OVERLAY_SPRITE)) return
   k.loadSprite(GRAIN_OVERLAY_SPRITE, buildGrainOverlayTile())
 }
 //
 // Draws the grain tile across the full viewport (call from a fixed draw layer).
 //
-export function drawGlowFilmGrainOverlay(k) {
+function drawGlowFilmGrainOverlay(k) {
   ensureGlowFilmGrainOverlaySprite(k)
   const w = k.width()
   const h = k.height()

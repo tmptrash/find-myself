@@ -9,7 +9,6 @@ const PIT_CAVE_EYE_GAP = 14
 //
 const PIT_CAVE_SKULL_SOCKET_X_FRAC = 0.42
 const PIT_CAVE_SKULL_SOCKET_Y_FRAC = 0.08
-const PIT_CAVE_SKULL_SOCKET_R_FRAC = 0.3
 const PIT_CAVE_SKULL_R = PIT_CAVE_EYE_GAP / (PIT_CAVE_SKULL_SOCKET_X_FRAC * 2)
 
 const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
@@ -80,9 +79,6 @@ const CAVE_REF_SKULL_GRID = [
   '......HBBMBMMBMBBH......',
   '.......HBBBBBBBBH.......'
 ]
-const PIT_WALL_W = 20
-const PIT_FLOOR_EXTRA_W_LEFT = 18
-const PIT_FLOOR_EXTRA_W_RIGHT = 6
 /**
  * Same world centre as spawnGlowCavePickupEyes / getGlowPitBonusPosition.
  * @param {Object} pit - Pit state
@@ -209,22 +205,6 @@ function pickThoraxShearedRibRows(seed) {
   return {
     left: leftPool.length ? pick(leftPool) : null,
     right: rightPool.length ? pick(rightPool) : null
-  }
-}
-/**
- * Bone tones for the cave skeleton (flat gray or shaded earth band).
- * @param {boolean} flatDecor - Single-tone decor mode
- * @returns {{ fill: Object, deep: Object, light: Object }}
- */
-export function caveSkeletonTones(flatDecor) {
-  if (flatDecor) {
-    const g = glowRgb('decorGray')
-    return { fill: g, deep: g, light: g }
-  }
-  return {
-    fill: glowRgb('playfieldOuter'),
-    deep: glowRgb('void'),
-    light: glowRgb('midGray')
   }
 }
 /**

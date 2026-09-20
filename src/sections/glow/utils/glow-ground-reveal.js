@@ -14,21 +14,6 @@ export function groundRightStripIndexForX(x, stripStartX, stripEndX) {
   return Math.min(GROUND_RIGHT_STRIP_COUNT - 1, Math.max(0, idx))
 }
 //
-// World X range covered by one strip (for tagging decor at placement time).
-//
-export function groundRightStripXBounds(stripIndex, stripStartX, stripEndX) {
-  const span = stripEndX - stripStartX
-  const w = span / GROUND_RIGHT_STRIP_COUNT
-  const x1 = stripStartX + stripIndex * w
-  return { x1, x2: x1 + w }
-}
-//
-// True once the hero has opened at least one right-side ground strip.
-//
-export function isRightGroundStripExplored(zones) {
-  return zones.groundRightStripMax >= 0 || Boolean(zones.groundDecorRight)
-}
-//
 // World X of the rightmost fully opened strip edge (start of the unknown).
 //
 export function groundRightExploredEdgeX(stripMax, stripStartX, stripEndX) {

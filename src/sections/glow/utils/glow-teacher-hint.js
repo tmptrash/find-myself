@@ -5,8 +5,8 @@ import * as HeroHint from '../../../utils/hero-hint.js'
 //
 export const GLOW_TEACHER_HINT_MOVE_SEC = 10
 export const GLOW_TEACHER_HINT_DURATION = 5
-export const GLOW_TEACHER_IDLE_RATE = 0.5
-export const GLOW_TEACHER_IDLE_CAP_SEC = 5
+const GLOW_TEACHER_IDLE_RATE = 0.5
+const GLOW_TEACHER_IDLE_CAP_SEC = 5
 const GLOW_TEACHER_HINT_OFFSET_Y = 52
 const GLOW_TEACHER_HINT_DISMISS_DISTANCE = 9999
 //

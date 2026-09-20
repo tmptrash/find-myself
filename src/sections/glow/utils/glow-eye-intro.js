@@ -25,7 +25,6 @@ const EYE_INTRO_TREE_RETURN_X = 340
 const EYE_INTRO_PICKUP_RADIUS = 34
 const EYE_INTRO_EYE_WHITE_R = 5.5
 const EYE_INTRO_PUPIL_R = 2.4
-const EYE_INTRO_EYE_GAP = 14
 const EYE_INTRO_REVEAL_FX_DURATION = 0.55
 const EYE_INTRO_REVEAL_FLASH_R = 42
 const EYE_INTRO_ATTACH_CLOSED_DURATION = 1
@@ -65,12 +64,6 @@ export function isGlowEyesGameplayUnlocked(zones) {
 //
 export function isGlowPitMushroomUnlocked(inst) {
   return isPitMushroomUnlockedForPit(inst?.pit)
-}
-//
-// True while the hero wears newly attached eyes (closed, then open).
-//
-export function isGlowEyeIntroAttachActive(inst) {
-  return Boolean(inst?.eyeIntro?.eyesOpeningTimer > 0)
 }
 //
 // Bare world: flat ground + branch + midges only (no tree/decor/letters).

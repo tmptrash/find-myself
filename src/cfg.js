@@ -272,6 +272,21 @@ export const CFG = {
         grassGreen: PALETTE.teal4,
         water: PALETTE.cyan2,
         //
+        // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
+        // while gray ellipses stay for the monochrome reveal.
+        //
+        branchPortal: {
+          spiralBright: PALETTE.cyan3,
+          spiralMid: PALETTE.teal4,
+          haze: PALETTE.sand5,
+          depth: PALETTE.teal3
+        },
+        //
+        // Warm ink for the O pickup caption in the colour world (pure white
+        // clashes with the amber canopy).
+        //
+        captionWarmInk: PALETTE.brown1,
+        //
         // Colour-world backdrop: the bright warm haze above the ground line
         // (warmHaze below) and a dark earth band under it (root zone).
         //
@@ -324,16 +339,6 @@ export const CFG = {
           //
           leaf: PALETTE.green1,
           leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.teal2]
-        },
-        //
-        // Colour-world background forest: warm amber wood dissolving into a
-        // golden haze (the backdrop tone the layers are blended toward).
-        //
-        treeAmber: {
-          root: PALETTE.orange0,
-          trunk: PALETTE.orange1,
-          branch: PALETTE.orange2,
-          leaf: PALETTE.green1
         },
         warmHaze: PALETTE.orange5,
         //

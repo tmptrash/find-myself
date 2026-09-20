@@ -121,18 +121,8 @@ export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   }
 }
 //
-// Wide radial burst (e.g. a hedgehog-touch death) — more particles than a
-// footstep, spread through a much wider arc so a good share fly straight up.
-//
-export function spawnBurst(inst, x, y, color, count) {
-  if (!inst) return
-  for (let i = 0; i < count; i++) {
-    pushBurstParticle(inst, x, y, color)
-  }
-}
-//
-// Leaf-shaped radial burst (e.g. a hedgehog-touch death) — same wide arc as
-// spawnBurst, but tumbling teardrop leaves instead of squares. colors may
+// Leaf-shaped radial burst (e.g. a hedgehog-touch death) — wide arc with
+// tumbling teardrop leaves instead of squares. colors may
 // be a single colour or a palette array; each leaf picks one at random so
 // the burst reads as a scatter of individual leaves. groundY, if given, is
 // the line each leaf actually flutters down to and lands on (see
@@ -161,24 +151,6 @@ function pushParticle(inst, footX, footY, color, speedMin, speedRange, splash) {
     life: 0.35 + Math.random() * 0.45,
     age: 0,
     size: 2 + Math.random() * 4,
-    r: c.r,
-    g: c.g,
-    b: c.b
-  })
-}
-function pushBurstParticle(inst, x, y, color) {
-  const side = Math.random() < 0.5 ? -1 : 1
-  const angle = (BURST_ANGLE_MIN_DEG + Math.random() * BURST_ANGLE_RANGE_DEG) * (Math.PI / 180)
-  const speed = BURST_SPEED_MIN + Math.random() * BURST_SPEED_RANGE
-  const c = color || glowRgb('void')
-  inst.particles.push({
-    x: x + side * (2 + Math.random() * 10),
-    y: y - 4 + Math.random() * 8,
-    vx: Math.cos(angle) * speed * side,
-    vy: -Math.sin(angle) * speed,
-    life: 0.5 + Math.random() * 0.6,
-    age: 0,
-    size: 3 + Math.random() * 5,
     r: c.r,
     g: c.g,
     b: c.b

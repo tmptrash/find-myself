@@ -60,23 +60,28 @@ import {
   drawGlowPitBareCave,
   drawGlowPitCaveSkeletonScene,
   drawGlowPitCaveForegroundDecor,
+  drawGlowPitCaveSeamCoverRocks,
   drawGlowPitCaveMushroom,
   drawGlowPitEyeIntroInterior,
   shouldShowPitCaveSkeleton,
+  isHeroOnPitCaveFloor,
   setGlowPitCracksVisible,
   isCrackGrassExcluded,
   isCrackDecorExcluded,
   getCrackZone,
   CAVE_MOUTH_MAIN_FLOOR_INSET,
+  CAVE_MOUTH_ENTRANCE_EXPAND_LEFT,
   KEY_PIT_COLLAPSED,
   ensureGlowPitOpenForEyesCollected,
   ensureGlowPitCollapsedOnReload,
   restoreGlowPitEyeIntroInterior,
   getGlowPitHeroStandY,
   getGlowPitEarthBandMouthCutout,
+  isGlowOpenPitMouthWorldX,
   getGlowPitFloorCollider,
   shouldGlowPitBeOpenForZones,
-  glowHeroHasCollectedEyes
+  glowHeroHasCollectedEyes,
+  invalidateGlowPitCaveInteriorBake
 } from '../utils/glow-atmosphere.js'
 import {
   initGlowTeacherHintState,
@@ -1202,6 +1207,10 @@ const L_DECOR_DARKEN = 0.22
 const MEDITATION_IDLE_BASE = 4
 const MEDITATION_IDLE_PENALTY = 2
 const MEDITATION_COUNTDOWN = 5
+//
+// Keep in sync with the second thump delay in Sound.playHeartbeatSound().
+//
+const MEDITATION_HEARTBEAT_SECOND_BEAT_S = 0.2
 const MEDITATION_TIMER_FONT = 22
 const GLOW_HERO_COUNTER_Y_OFFSET = -44
 //
@@ -1265,7 +1274,7 @@ const LIFE_SCORE_TOOLTIP_SIZE = 44
 const LIFE_SCORE_TOOLTIP_Y_OFFSET = 50
 const LIFE_SCORE_TOOLTIP_CENTER_Y_OFFSET = -6
 const LIFE_SCORE_TOOLTIP_CENTER_Y_LIFT_FRAC = 0.5
-const PIT_CAVE_SKELETON_AUTO_HINT_SEC = 10
+const PIT_CAVE_SKELETON_AUTO_HINT_DELAY = 0.5
 const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
@@ -3701,16 +3710,15 @@ function countGlowHudLFillParts(inst) {
   return isRightTrampolineVisible(z) ? 1 : 0
 }
 //
-// O HUD fill: one tenth per second of the closed-eye meditation timer.
-// A broken countdown wipes the letter back to gray until it finishes.
+// O HUD fill: same stepped progress as meditationCountdownFade (2nd heartbeat
+// beat each second). A broken countdown wipes the letter back to gray.
 //
 function countGlowHudOFillParts(inst) {
   const z = inst.zones
   if (z?.oCollected || z?.oZone) return GLOW_HUD_O_FILL_PARTS
-  const countdown = inst.meditation?.countdown
-  if (countdown == null) return 0
-  const elapsed = MEDITATION_COUNTDOWN - Math.max(0, countdown)
-  return Math.min(GLOW_HUD_O_FILL_PARTS, Math.floor(elapsed + 1e-6))
+  if (inst.meditation?.countdown == null) return 0
+  const fade = meditationCountdownFade(inst)
+  return Math.min(GLOW_HUD_O_FILL_PARTS, Math.round(fade * GLOW_HUD_O_FILL_PARTS))
 }
 //
 // W HUD fill: one third per post-O sing that walks the right trampoline.
@@ -4225,11 +4233,18 @@ function meditationCountdownLinear(inst) {
   return 1 - Math.max(0, remaining) / MEDITATION_COUNTDOWN
 }
 //
-// Colour preview progress while the post-L stillness countdown runs (0 at
-// start, 1 when the timer hits zero).
+// Colour preview progress while the post-L stillness countdown runs — steps
+// on the second beat of each heartbeat pair (see playHeartbeatSound).
 //
 function meditationCountdownFade(inst) {
-  return smoothstep01(meditationCountdownLinear(inst))
+  const remaining = inst.meditation?.countdown
+  if (remaining == null) return 0
+  const elapsed = MEDITATION_COUNTDOWN - Math.max(0, remaining)
+  const fullSec = Math.floor(elapsed)
+  const frac = elapsed - fullSec
+  const stepsDone = fullSec + (frac >= MEDITATION_HEARTBEAT_SECOND_BEAT_S ? 1 : 0)
+  const step = Math.min(MEDITATION_COUNTDOWN, stepsDone) / MEDITATION_COUNTDOWN
+  return step
 }
 //
 // 0→1 while the post-L stillness countdown runs; 0 before it starts so grass,
@@ -4631,9 +4646,13 @@ function applyZoneVisibility(inst) {
       o.pos.y = PLATFORM_HIDE_Y
       return
     }
+    const wxRock = o._decorWorldX ?? o._homeX ?? 0
+    if (isGlowOpenPitMouthWorldX(inst.pit, wxRock)) {
+      setDecorObjVisible(o, false)
+      return
+    }
     if (o._side === 'left') {
-      const wx = o._decorWorldX ?? o._homeX ?? 0
-      const decorOp = glowSurfaceDecorFadeAt(inst, wx)
+      const decorOp = glowSurfaceDecorFadeAt(inst, wxRock)
       const showLeft = (o._waterCluster ? z.water : leftGroundOpen) && decorOp > 0.04
       setDecorObjVisible(o, showLeft, decorOp * (inst.leftDecorFade ?? 1))
       return
@@ -4643,6 +4662,10 @@ function applyZoneVisibility(inst) {
   })
   inst.mushObjs.forEach(o => {
     const wx = o._decorWorldX ?? o._homeX ?? 0
+    if (isGlowOpenPitMouthWorldX(inst.pit, wx)) {
+      setDecorObjVisible(o, false)
+      return
+    }
     const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
     const decorOp = glowSurfaceDecorFadeAt(inst, wx)
     if (o._side === 'left') {
@@ -4837,8 +4860,8 @@ function updateGlowLetterPopFades(inst, dt) {
   updateLetterPopFade(inst.wLetter, dt)
 }
 //
-// The G pickup appears once the full tree, the lake (first drowning), and at
-// least one right ground strip were revealed in the gray world.
+// The G pickup appears once every HUD exploration slice is open: tree (3),
+// lake shore, first right-ground strip, and the branch-trampoline mushroom.
 //
 function glowThreeZonesExplored(inst) {
   const z = inst.zones
@@ -4846,7 +4869,8 @@ function glowThreeZonesExplored(inst) {
   return Boolean(
     treeDone &&
     z.waterDiscovered &&
-    z.groundRightStripMax >= 0
+    z.groundRightStripMax >= 0 &&
+    z.branchTrampRevealed
   )
 }
 //
@@ -5589,9 +5613,13 @@ function drawExploredGroundLip(inst) {
   const step = (x1 - x0) / GROUND_LIP_STEPS
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
+  const pitMouthCut = inst.pit?.collapsed && inst.pit.zone
+    ? getGlowPitEarthBandMouthCutout(inst.pit.zone)
+    : null
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
+    if (pitMouthCut && x >= pitMouthCut.leftX && x <= pitMouthCut.rightX) continue
     const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
       ? glowRightWorldOpacity(inst, x, 'large')
       : (z.groundDecorLeft ? (inst.leftDecorFade ?? 1) : 0)
@@ -6110,7 +6138,7 @@ function createLevelBounds(k) {
   // Main floor stops before the right-edge crack band (lid is a separate body)
   //
   const crack = getCrackZone(WORLD_W, FLOOR_Y)
-  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
   const floorW = Math.max(40, floorEndX - LEFT_MARGIN)
   const floor = k.add([
     k.rect(floorW, FLOOR_PHYS_H),
@@ -6820,6 +6848,7 @@ function glowGrassTint(zones, blade) {
   if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
     return null
   }
+  if (sc && isGlowOpenPitMouthWorldX(sc.pit, blade.x)) return null
   const mudTint = sc && glowMudZoneGrassTint(sc, zones, blade)
   if (mudTint) return mudTint
   if (sc && !isGlowWorldSurfaceDecorUnlocked(sc)) {
@@ -7101,7 +7130,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
   //
   // Decor mushrooms stay left of the cave mouth (never above the entrance)
   //
-  const right = getCrackZone(WORLD_W, FLOOR_Y).x1 - 48
+  const right = getCrackZone(WORLD_W, FLOOR_Y).x1 - 88
   //
   // A random X is rejected while it falls inside the water band OR inside
   // the keep-out band around the trampoline mushroom (nothing may cover it).
@@ -8134,6 +8163,7 @@ function drawGlowPitCaveForegroundPass(inst) {
   const flatExplore = isGlowFlatSingleDecorColor(inst)
   const flatDecor = flatExplore && !innerGray
   drawGlowPitCaveForegroundDecor(k, pit, flatDecor)
+  drawGlowPitCaveSeamCoverRocks(k, pit)
   drawGlowPitCaveSkeletonScene(k, pit, flatDecor)
   drawGlowPitCaveMushroom(k, pit)
   drawGlowPitCaveLyingEyes(inst, k)
@@ -8816,6 +8846,7 @@ function startColorWorldFade(inst) {
   // release.
   //
   inst.pendingHeroFillOnLand = true
+  invalidateGlowPitCaveInteriorBake(inst.pit)
 }
 //
 // Fires once the hero is grounded after collecting O — fills the hero body,
@@ -9175,14 +9206,14 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
   const gCaptionGray = getRGB(k, GLOW_PAL.midGray)
-  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L' || letterEntry?.char === 'O'
-  const isGrayCaption = grayCaptionNoShadow
-  const captionDialogRgb = getRGB(k, GLOW_PAL.dialogText)
-  const captionWarmInkRgb = getRGB(k, GLOW_PAL.captionWarmInk)
+  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L'
+  const isGrayCaption = grayCaptionNoShadow || letterEntry?.char === 'O'
+  const captionObservationInkRgb = getRGB(k, GLOW_PAL.captionObservationInk)
+  const captionLetterLInkRgb = getRGB(k, GLOW_PAL.captionLetterLInk)
   const captionTextRgb = letterEntry?.char === 'O'
-    ? captionWarmInkRgb
+    ? captionObservationInkRgb
     : letterEntry?.char === 'L'
-      ? captionDialogRgb
+      ? captionLetterLInkRgb
       : (isGrayCaption ? gCaptionGray : glowCaptionTextRgb())
   const letterFillRgb = letterEntry?.char === 'L'
     ? getRGB(k, GLOW_PAL.gold)
@@ -10124,6 +10155,15 @@ function finishHedgehogDeath(inst, isAmbush, deathX, deathY) {
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
+  if (!isAmbush && inst.hedgehog) {
+    markLeftHedgehogRevealed()
+    Hedgehog.popOut(
+      inst.hedgehog,
+      inst.hedgehog.x,
+      inst.hedgehog.y,
+      inst.hedgehog.facing ?? 'left'
+    )
+  }
   inst.hedgehogRespawnWait?.cancel?.()
   inst.hedgehogRespawnWait = inst.k.wait(HERO_HEDGEHOG_RESPAWN_DELAY, () => {
     inst.hedgehogRespawnWait = null
@@ -10137,21 +10177,30 @@ function getGlowHeroSpawnHogProbes(inst) {
   const zones = inst.zones
   const nudge = inst.heroSpawnNudge
   if (!nudge) return {}
-  const leftHogVisible = zones.gCollected && get(KEY_LEFT_HEDGEHOG_REVEALED, false)
+  const leftHog = inst.hedgehog
+  const leftHogVisible = zones.gCollected &&
+    (leftHog?.popped || get(KEY_LEFT_HEDGEHOG_REVEALED, false))
   const ambushRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
   return {
-    floorHogProbe: leftHogVisible
+    floorHogProbe: leftHogVisible && leftHog
       ? Hedgehog.createLethalTouchProbe({
-        x: nudge.hedgehogAmbushPopX,
-        y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
-        scale: HEDGEHOG_SCALE,
-        facing: 'left'
+        x: leftHog.x,
+        y: leftHog.y,
+        scale: leftHog.scale ?? HEDGEHOG_SCALE,
+        facing: leftHog.facing ?? 'left'
       })
-      : null,
+      : leftHogVisible
+        ? Hedgehog.createLethalTouchProbe({
+          x: nudge.hedgehogAmbushPopX,
+          y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
+          scale: HEDGEHOG_SCALE,
+          facing: 'left'
+        })
+        : null,
     floorHogBounds: leftHogVisible
       ? {
-        minX: nudge.mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
-        maxX: nudge.mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
+        minX: leftHog?.minX ?? nudge.mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
+        maxX: leftHog?.maxX ?? nudge.mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
       }
       : null,
     ambushGroundHogProbe: zones.lCollected
@@ -10181,7 +10230,8 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
   let spawnX = deathX + away * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
   const spawnY = deathY
   const footY = spawnY + SURFACE_DETECT_Y
-  if (hog?.popped) {
+  const hogLethal = hog && (hog.popped || hog.mudSneakPreview)
+  if (hogLethal) {
     const liveProbe = Hedgehog.createLethalTouchProbe({
       x: hog.x,
       y: hog.y,
@@ -10189,7 +10239,11 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
       facing: hog.facing ?? 'left'
     })
     const hogProbes = getGlowHeroSpawnHogProbes(inst)
-    const bounds = isAmbush ? hogProbes.ambushGroundHogBounds : hogProbes.floorHogBounds
+    const bounds = isAmbush
+      ? hogProbes.ambushGroundHogBounds
+      : (hog.minX != null && hog.maxX != null
+        ? { minX: hog.minX, maxX: hog.maxX }
+        : hogProbes.floorHogBounds)
     const tryX = (side) => {
       let x = hogX + side * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
       x = Hedgehog.nudgeHeroXClearOfTouchProbe(
@@ -10236,6 +10290,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
   if (!cfg) return
   releaseGamePhysicalKeys()
   const pose = computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush)
+  writeGlowLastSpawnKeys(inst, pose.x, pose.y)
   const filled = inst.zones.colorWorld || inst.zones.oZone || inst.heroBodyFillApplied
   const heroEyes = getGlowHeroEyeBakeColors(!filled)
   const prev = inst.heroInst
@@ -10602,10 +10657,8 @@ function refreshGlowBranchJumpState(inst, char) {
   if (!char?.pos || !isHeroOnStartBranch(inst, char)) return
   const hero = inst.heroInst
   if (!hero || hero.isSquashing) return
-  const grounded = char.isGrounded?.() ?? false
-  if (!grounded) return
   const velY = char.vel?.y ?? 0
-  if (velY > 48) return
+  if (Math.abs(velY) > 64) return
   if (hero.jumpPhase === 'jumping' || hero.wasJumping) {
     Hero.syncPlatformLanding(hero)
     hero.jumpPhase = 'none'
@@ -10948,6 +11001,7 @@ function onUpdate(inst) {
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
   inst._trampWasGroundedAtFrameStart = inst.wasGrounded
   refreshGlowBranchJumpState(inst, char)
+  syncGlowBranchJumpReady(inst, char, grounded)
   onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
   const inStartBranchBand = isHeroOverStartBranchX(inst, heroX) &&
     footY >= inst.startBranch.y - LOG_HOVER_BAND &&
@@ -12482,7 +12536,7 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   //
   // Never snap over the crack mouth — the hero must fall through into the pit.
   //
-  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET
+  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
   if (heroX < LEFT_MARGIN + 8 || heroX >= floorEndX - 16) return
   if (isHeroOverOpenCaveMouth(inst, heroX)) return
   if (isHeroOverLetterLog(inst, heroX)) return
@@ -13096,8 +13150,6 @@ function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
     inst.hedgehog.x = popX
     inst.hedgehog.y = FLOOR_Y - HEDGEHOG_GROUND_RAISE
   }
-  Hedgehog.popOut(inst.hedgehog, null, null, 'left')
-  markLeftHedgehogRevealed()
 }
 //
 // Fallback: if the hero somehow reaches the L-log without tripping the
@@ -13266,12 +13318,15 @@ function syncGlowPitHeroDrawOrder(inst, char, footY) {
 // Start-branch collider is thin — keep jump armed whenever the hero stands on it.
 //
 function syncGlowBranchJumpReady(inst, char, grounded) {
-  if (!grounded || !char?.pos || inst.dialogOpen || inst.meditation?.countdown != null) return
+  if (!char?.pos || inst.dialogOpen || inst.meditation?.countdown != null) return
   if (!isHeroOnStartBranch(inst, char)) return
   const hero = inst.heroInst
   if (!hero || hero.isSquashing || hero.jumpPhase === 'jumping') return
+  const velY = char.vel?.y ?? 0
+  if (!grounded && Math.abs(velY) > 48) return
   hero.canJump = true
   hero.jumpKeyReleaseGate = false
+  hero.jumpDisabled = false
 }
 //
 // Draw the hero above log platforms while bouncing on a trampoline.
@@ -13576,20 +13631,19 @@ function isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving) {
   return Math.abs(vx) > 24 || Math.abs(vy) > 24
 }
 //
-// After 10 s in the cave without eyes, nudge the skeleton line once.
+// Once the hero stands on the pit floor, nudge the skeleton line after a
+// short beat (no long idle wait).
 //
 function updatePitCaveSkeletonAutoHint(inst, char, dt) {
   const pit = inst.pit
   if (!pit?.collapsed || glowHeroHasCollectedEyes(inst.zones, inst.heroInst)) return
   if (pit.pitCaveSkeletonAutoHintShown || pit.pitCaveSkeletonAutoHintTooltip || !char?.pos) return
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  const inCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
-  if (!inCave) {
-    pit.pitCaveSkeletonIdleTime = 0
+  if (!isHeroOnPitCaveFloor(pit, char)) {
+    pit.pitCaveSkeletonFloorHintTimer = 0
     return
   }
-  pit.pitCaveSkeletonIdleTime = (pit.pitCaveSkeletonIdleTime || 0) + dt
-  if (pit.pitCaveSkeletonIdleTime < PIT_CAVE_SKELETON_AUTO_HINT_SEC) return
+  pit.pitCaveSkeletonFloorHintTimer = (pit.pitCaveSkeletonFloorHintTimer || 0) + dt
+  if (pit.pitCaveSkeletonFloorHintTimer < PIT_CAVE_SKELETON_AUTO_HINT_DELAY) return
   pit.pitCaveSkeletonAutoHintShown = true
   showPitCaveSkeletonAutoHint(inst)
 }
@@ -13735,7 +13789,8 @@ function drawGlowBranchTeleport(k, layout, zones) {
   if (!zones.rightTrampRevealed) return
   const sc = zones._sceneRef
   const char = sc?.heroInst?.character
-  const onCap = sc && char && isOnTrampolineCap(sc, char, sc.trampState)
+  const grounded = char?.isGrounded?.() ?? false
+  const onCap = sc && char && grounded && isOnTrampolineCap(sc, char, sc.trampState)
   const fullReveal = Boolean(onCap || zones.spikeGateRevealed)
   const alphaMul = fullReveal ? 1 : BRANCH_PORTAL_REVEAL_OPACITY
   const state = sc?.branchPortalState

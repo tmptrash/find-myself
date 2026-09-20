@@ -154,6 +154,7 @@ const GLOW_MENU_SECTION_HERO_BODY = CFG.visual.colors.hero.eyeWhite
 // Centre hero hollow rim before glow play — soft gray body tone.
 //
 const MENU_HERO_OUTLINE_COLOR = GLOW_MENU_HERO_BODY
+const MENU_HERO_BLACK_OUTLINE = '#000000'
 //
 // Uncompleted section anti-heroes — soft rim near the ready/menu backdrop.
 //
@@ -243,7 +244,6 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
 // the orbiting title above — always fits inside the window at any
 // resolution.
 //
-const CIRCLE_DESIGN_CENTER_Y = 500
 const CIRCLE_DESIGN_RADIUS = 302
 const CIRCLE_OUTER_MARGIN = 170
 const CIRCLE_MIN_RADIUS = 150
@@ -254,7 +254,7 @@ const CIRCLE_MIN_RADIUS = 150
  */
 function computeMenuCircleLayout(k) {
   const centerX = k.width() / 2
-  const centerY = k.height() * (CIRCLE_DESIGN_CENTER_Y / CFG.visual.screen.height)
+  const centerY = k.height() / 2
   const scale = Math.min(k.width() / CFG.visual.screen.width, k.height() / CFG.visual.screen.height)
   const maxRadius = Math.min(centerX, k.width() - centerX, centerY, k.height() - centerY) - CIRCLE_OUTER_MARGIN
   const radius = Math.max(CIRCLE_MIN_RADIUS, Math.min(CIRCLE_DESIGN_RADIUS * scale, maxRadius))
@@ -663,7 +663,7 @@ export function sceneMenu(k) {
           k,
           type: Hero.HEROES.ANTIHERO,
           bodyColor: config.color.body,
-          outlineColor: MENU_HERO_OUTLINE_COLOR,
+          outlineColor: MENU_HERO_BLACK_OUTLINE,
           addMouth: hasMouth,
           addArms: hasArms,
           addWatch: hasWatch,
@@ -678,7 +678,7 @@ export function sceneMenu(k) {
         k,
         type: Hero.HEROES.ANTIHERO,
         bodyColor: config.color.body,
-        outlineColor: MENU_HERO_OUTLINE_COLOR,
+        outlineColor: config.section === 'touch' ? MENU_HERO_BLACK_OUTLINE : MENU_HERO_OUTLINE_COLOR,
         addMouth: hasMouth,
         addArms: hasArms,
         addWatch: hasWatch,
@@ -691,6 +691,10 @@ export function sceneMenu(k) {
       const grayColorNoHash = grayColor.replace('#', '')
       const grayOutlineColorNoHash = uncompletedHollowOutlineNoHash
       const outlineColorNoHash = menuHeroOutlineNoHash
+      const menuHeroBlackOutlineNoHash = MENU_HERO_BLACK_OUTLINE.replace('#', '')
+      const antiHeroOutlineNoHash = config.section === 'touch'
+        ? menuHeroBlackOutlineNoHash
+        : outlineColorNoHash
       const yellowColorNoHash = yellowColor.replace('#', '')
       const sectionColorNoHash = config.color.body.replace('#', '')
       const hasMouthSuffix = hasMouth
@@ -710,14 +714,26 @@ export function sceneMenu(k) {
         ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${glowMenuOutlineNoHash}${featureSuffix}`
         : null
       antiHeroInst.spritePrefixTouchFilled = config.section === 'touch'
-        ? `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${featureSuffix}`
+        ? `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${antiHeroOutlineNoHash}${featureSuffix}`
         : null
       const spritePrefixGlowSectionHollow = config.section === 'glow'
         ? `${Hero.HEROES.ANTIHERO}_${glowSectionBodyNoHash}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
         : null
       antiHeroInst.spritePrefixGlowHollow = spritePrefixGlowSectionHollow
       antiHeroInst.spritePrefixHollow = spritePrefixHollow
-      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${outlineSuffix}`
+      const lockedHoverOutlineHex = menuSectionHoverInkHex(config.section, config)
+      const lockedHoverOutlineNoHash = lockedHoverOutlineHex.replace('#', '')
+      antiHeroInst.spritePrefixLockedHover =
+        `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${lockedHoverOutlineNoHash}${hollowSuffixes}`
+      Hero.loadHeroSprites({
+        k,
+        type: Hero.HEROES.ANTIHERO,
+        bodyColor: grayColor,
+        outlineColor: lockedHoverOutlineHex,
+        outlineOnly: true,
+        noEyes: true
+      })
+      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${antiHeroOutlineNoHash}${outlineSuffix}`
       antiHeroInst.currentPrefix = isCompleted
         ? (config.section === 'glow' && antiHeroInst.spritePrefixGlow
           ? antiHeroInst.spritePrefixGlow
@@ -768,7 +784,7 @@ export function sceneMenu(k) {
       })
       antiHeroInst.spritePrefixTouchFilled && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixTouchFilled] = {
         bodyColor: config.color.body,
-        outlineColor: MENU_HERO_OUTLINE_COLOR,
+        outlineColor: MENU_HERO_BLACK_OUTLINE,
         addMouth: hasMouth,
         addArms: hasArms,
         addWatch: hasWatch,
@@ -792,6 +808,15 @@ export function sceneMenu(k) {
         addArms: false,
         addWatch: false
       })
+      antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixLockedHover] = {
+        bodyColor: grayColor,
+        outlineColor: lockedHoverOutlineHex,
+        outlineOnly: true,
+        noEyes: true,
+        addMouth: false,
+        addArms: false,
+        addWatch: false
+      }
       //
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
@@ -1009,6 +1034,7 @@ export function sceneMenu(k) {
       stars,
       grassField,
       title: createTitle(k, centerX, centerY, radius),
+      glowPerceptionRays: createGlowPerceptionRaysState(),
       antiHeroes,
       sectionLabels,
       arrows,  // Store arrows data in instance
@@ -1086,11 +1112,15 @@ export function sceneMenu(k) {
       //
       antiHeroes.forEach(antiHeroInst => {
         const isHovered = antiHeroInst === hoveredInst
-        const desiredPrefix = resolveMenuAntiHeroSpritePrefix(
+        const lockedHover = isHovered &&
+          isAntiHeroLocked(antiHeroInst, inst.progress, inst.currentSection)
+        let desiredPrefix = resolveMenuAntiHeroSpritePrefix(
           antiHeroInst,
           inst.currentSection,
           isHovered
         )
+        lockedHover && antiHeroInst.spritePrefixLockedHover &&
+          (desiredPrefix = antiHeroInst.spritePrefixLockedHover)
         //
         // White tint for all states since sprites now have correct colors baked in
         //
@@ -1281,6 +1311,7 @@ export function sceneMenu(k) {
         hideTitle(inst.title)
         } else {
         updateTitle(inst.title, k, hoveredInst)
+        updateGlowPerceptionRays(inst, k, hoveredInst)
       }
       
       //
@@ -1533,6 +1564,26 @@ const SECTION_DESCRIPTIONS = {
   feel: 'vulnerability',
   mind: 'overthinking'
 }
+//
+// Glow hover — phrases fan along radials from the title orbit centre through
+// the “perception” arc (same circle as the orbiting letters).
+//
+const GLOW_PERCEPTION_RAY_LINES = [
+  'I learned to:',
+  'explore',
+  'see nuances',
+  'stop and listen',
+  'walk forward'
+]
+const GLOW_PERCEPTION_RAY_SETTLE_DELAY = 0.1
+const GLOW_PERCEPTION_RAY_LINE_STAGGER = 0.08
+const GLOW_PERCEPTION_RAY_LINE_FADE_DUR = 0.32
+const GLOW_PERCEPTION_SNAP_ANGLE_EPS = 0.055
+const GLOW_PERCEPTION_RAY_FONT_SIZE = 18
+const GLOW_PERCEPTION_RAY_TEXT_OPACITY = 0.4
+const GLOW_PERCEPTION_RAY_PHRASE_GAP = 44
+const GLOW_PERCEPTION_RAY_REVEAL_SLIDE = 32
+const GLOW_PERCEPTION_RAY_CHAR_STEP = 0.56
 const TITLE_UNKNOWN_TEXT = 'unknown'
 const TITLE_TEXT_FADE_OUT_SPEED = 5.0
 const TITLE_TEXT_FADE_IN_SPEED = 4.0
@@ -1788,6 +1839,178 @@ function drawOrbitingTitle(k, titleInst) {
 //
 function hideTitle(titleInst) {
   titleInst.hidden = true
+}
+//
+// Per-line fade state for glow perception sun rays.
+//
+function createGlowPerceptionRaysState() {
+  return {
+    settle: 0,
+    lineReveal: GLOW_PERCEPTION_RAY_LINES.map(() => 0)
+  }
+}
+/**
+ * Advances ray reveal after the orbiting title has snapped to “perception”.
+ * @param {Object} inst - Menu scene instance
+ * @param {Object} k - Kaplay instance
+ * @param {Object|null} hoveredAntiHero - Hovered anti-hero
+ */
+function updateGlowPerceptionRays(inst, k, hoveredAntiHero) {
+  const rays = inst.glowPerceptionRays
+  if (!rays) return
+  const dt = k.dt()
+  const title = inst.title
+  const active = Boolean(
+    hoveredAntiHero?.section === 'glow' &&
+    !hoveredAntiHero.isUnknown &&
+    title.text === SECTION_DESCRIPTIONS.glow &&
+    title.textFadePhase >= 0.98 &&
+    !title.isTextChanging
+  )
+  if (!active) {
+    rays.settle = 0
+    rays.lineReveal.fill(0)
+    return
+  }
+  let angleDiff = title.hoverAngle - title.angle
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+  const snapped = title.isHovering && Math.abs(angleDiff) < GLOW_PERCEPTION_SNAP_ANGLE_EPS
+  if (snapped) {
+    rays.settle += dt
+  } else {
+    rays.settle = 0
+    rays.lineReveal.fill(0)
+    return
+  }
+  const phraseCount = glowPerceptionVisiblePhraseCount()
+  for (let i = 0; i < GLOW_PERCEPTION_RAY_LINES.length; i++) {
+    if (i >= phraseCount) {
+      rays.lineReveal[i] = 0
+      continue
+    }
+    const t = rays.settle - GLOW_PERCEPTION_RAY_SETTLE_DELAY - i * GLOW_PERCEPTION_RAY_LINE_STAGGER
+    rays.lineReveal[i] = clamp01(t / GLOW_PERCEPTION_RAY_LINE_FADE_DUR)
+  }
+}
+/**
+ * Draws lesson phrases along orbit radials through the “perception” arc.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} inst - Menu scene instance
+ */
+function drawGlowPerceptionRays(k, inst) {
+  const rays = inst.glowPerceptionRays
+  const title = inst.title
+  if (!rays || title.hidden) return
+  const text = SECTION_DESCRIPTIONS.glow
+  if (title.text !== text) return
+  const phraseCount = glowPerceptionVisiblePhraseCount()
+  if (phraseCount <= 0) return
+  const rayAngles = getGlowPerceptionRayAngles(title, text, phraseCount)
+  if (!rayAngles.length) return
+  const rayRgb = getRGB(k, GLOW_MENU_HERO_BODY)
+  const textColor = k.rgb(
+    Math.round(rayRgb.r * 0.72),
+    Math.round(rayRgb.g * 0.72),
+    Math.round(rayRgb.b * 0.72)
+  )
+  const cx = title.centerX
+  const cy = title.centerY
+  const baseR = title.circleRadius
+  const phraseInnerR = baseR + GLOW_PERCEPTION_RAY_PHRASE_GAP
+  //
+  // Same ray angles — map line 0 to the topmost radial (reverse index only).
+  //
+  const rayCount = rayAngles.length
+  for (let i = 0; i < phraseCount; i++) {
+    const reveal = rays.lineReveal[i]
+    if (reveal <= 0.01) continue
+    drawGlowPerceptionRayPhrase(k, {
+      cx,
+      cy,
+      rayAngle: rayAngles[rayCount - 1 - i],
+      lineText: GLOW_PERCEPTION_RAY_LINES[i],
+      reveal,
+      textColor,
+      fontSize: GLOW_PERCEPTION_RAY_FONT_SIZE,
+      phraseInnerR
+    })
+  }
+}
+//
+// One phrase — each glyph on the same radial from the orbit centre (own tilt).
+//
+function drawGlowPerceptionRayPhrase(k, cfg) {
+  const { cx, cy, rayAngle, lineText, reveal, textColor, fontSize, phraseInnerR } = cfg
+  const step = fontSize * GLOW_PERCEPTION_RAY_CHAR_STEP
+  const n = lineText.length
+  const slide = (1 - reveal) * GLOW_PERCEPTION_RAY_REVEAL_SLIDE
+  const rLastChar = phraseInnerR + slide
+  const drawAngle = rayAngle + Math.PI / 2 + Math.PI
+  const op = GLOW_PERCEPTION_RAY_TEXT_OPACITY * reveal
+  //
+  // Last glyph (reading end) shares one radial gap to the perception arc.
+  //
+  for (let c = 0; c < n; c++) {
+    const along = n - 1 - c
+    const r = rLastChar + along * step
+    const x = cx + Math.cos(rayAngle) * r
+    const y = cy + Math.sin(rayAngle) * r
+    k.pushTransform()
+    k.pushTranslate(k.vec2(x, y))
+    k.drawText({
+      text: lineText[c],
+      size: fontSize,
+      pos: k.vec2(0, 0),
+      anchor: 'center',
+      angle: drawAngle,
+      color: textColor,
+      opacity: op,
+      fixed: true
+    })
+    k.popTransform()
+  }
+}
+//
+// How many gray ray phrases to show (one more than collected GLOW letters).
+//
+function glowPerceptionVisiblePhraseCount() {
+  const collected = GLOW_LETTER_KEYS.filter(key => get(key, false)).length
+  return Math.min(GLOW_PERCEPTION_RAY_LINES.length, collected + 1)
+}
+//
+// Ray tilts — symmetric about the perception arc centre for the active count.
+//
+function getGlowPerceptionRayAngles(titleInst, text, count) {
+  const sorted = getGlowPerceptionLetterAngles(titleInst, text).sort((a, b) => a - b)
+  if (!sorted.length || count <= 0) return []
+  const minAngle = sorted[0]
+  const maxAngle = sorted[sorted.length - 1]
+  const centerAngle = (minAngle + maxAngle) * 0.5
+  if (count === 1) return [centerAngle]
+  const arcSpan = maxAngle - minAngle
+  const step = arcSpan / (GLOW_PERCEPTION_RAY_LINES.length + 1)
+  const out = []
+  for (let i = 0; i < count; i++) {
+    const offset = (i - (count - 1) / 2) * step
+    out.push(centerAngle + offset)
+  }
+  return out
+}
+//
+// Radial angles of visible “perception” glyphs (orbit centre → letter).
+//
+function getGlowPerceptionLetterAngles(titleInst, text) {
+  const angles = []
+  for (let i = 0; i < text.length; i++) {
+    const glyph = titleInst.glyphs[i]
+    if (glyph.opacity <= 0.01) continue
+    angles.push(glyph.angle - Math.PI / 2)
+  }
+  return angles
+}
+function clamp01(v) {
+  return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
 //
@@ -2178,6 +2401,7 @@ function drawScene(inst) {
     drawProhibitedSign(k, hoveredAntiHero.character.pos.x, hoveredAntiHero.character.pos.y)
   }
   drawOrbitingTitle(k, inst.title)
+  drawGlowPerceptionRays(k, inst)
 }
 //
 // True while a live pre-level transition overlay owns input. Clears a
@@ -2277,6 +2501,14 @@ function resolveMenuAntiHeroSpritePrefix(antiHeroInst, currentSection, isHovered
     return antiHeroInst.spritePrefixGlow || antiHeroInst.spritePrefixGlowHollow || antiHeroInst.spritePrefixHollow
   }
   return antiHeroInst.spritePrefixHollow
+}
+//
+// Ink colour for the orbiting hover title — same hues used for locked-hover rims.
+//
+function menuSectionHoverInkHex(section, config) {
+  if (section === 'time') return '#FF8C00'
+  if (section === 'glow') return GLOW_MENU_HERO_BODY
+  return config?.color?.body ?? '#656565'
 }
 //
 // Returns true when the given anti-hero's section cannot be accessed yet:

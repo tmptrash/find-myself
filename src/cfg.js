@@ -282,10 +282,13 @@ export const CFG = {
           depth: PALETTE.teal3
         },
         //
-        // Warm ink for the O pickup caption in the colour world (pure white
-        // clashes with the amber canopy).
+        // L pickup caption — same family as parallax near trees, one step darker.
         //
-        captionWarmInk: PALETTE.brown1,
+        captionLetterLInk: PALETTE.gray1,
+        //
+        // O pickup caption on the colour forest — light warm ink on haze/trees.
+        //
+        captionObservationInk: PALETTE.sand5,
         //
         // Colour-world backdrop: the bright warm haze above the ground line
         // (warmHaze below) and a dark earth band under it (root zone).

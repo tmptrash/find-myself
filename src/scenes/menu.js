@@ -1569,7 +1569,7 @@ const SECTION_DESCRIPTIONS = {
 // the “perception” arc (same circle as the orbiting letters).
 //
 const GLOW_PERCEPTION_RAY_LINES = [
-  'I learned to:',
+  'learned:',
   'explore',
   'see nuances',
   'stop and listen',

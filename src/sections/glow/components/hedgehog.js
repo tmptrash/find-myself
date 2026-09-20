@@ -239,6 +239,10 @@ const MUD_SNEAK_PREVIEW_OPACITY = 0.075
 const MUD_SNEAK_WALK_SPEED = 5
 const MUD_SNEAK_FOOT_PLANT_THRESHOLD = 0.12
 //
+// Ghost-preview footfalls only audible when the hero is close enough to notice.
+//
+const MUD_SNEAK_FOOTFALL_HEAR_RANGE = 220
+//
 // Touch-death hitbox — AABB in art local space (ground at inst.x / y = 0),
 // sized to mane + spikes + snout, then shrunk slightly inside that silhouette.
 // Centre X is offset from inst.x because the body sits mostly behind the anchor.
@@ -1202,9 +1206,20 @@ function tickMudSneakFootfalls(inst) {
     }
   }
   if (!planted) return
+  if (!isHeroNearMudSneakFootfalls(inst)) return
   const sc = inst.zones?._sceneRef
   const sound = sc?.sound
   sound && !sound._glowSfxMuted && Sound.playGlowHedgehogMudSneak(sound)
+}
+//
+// World distance below which mud-sneak scratch steps play for the left hog.
+//
+function isHeroNearMudSneakFootfalls(inst) {
+  const heroPos = inst.hero?.character?.pos
+  if (!heroPos) return false
+  const dx = heroPos.x - inst.x
+  const dy = heroPos.y - inst.y
+  return Math.hypot(dx, dy) <= MUD_SNEAK_FOOTFALL_HEAR_RANGE
 }
 //
 // World-space AABB for touch death — matches art local space and facing flip.

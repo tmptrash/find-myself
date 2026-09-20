@@ -104,12 +104,30 @@ const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
-const CAVE_LAYOUT_VERSION = 57
-const CAVE_SEAM_COLUMN_X_SPREAD = 6
+const CAVE_LAYOUT_VERSION = 62
+const CAVE_SEAM_COLUMN_X_SPREAD = 7
+const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
+const CAVE_SEAM_COLUMN_RADIUS_MAX = 14
+const CAVE_SEAM_TOP_RADIUS_MIN = 5
+const CAVE_SEAM_TOP_RADIUS_MAX = 11
 //
 // Slight east overlap so rock radius covers the void polygon west edge.
 //
 const CAVE_SEAM_COVER_X_BIAS = 4
+//
+// Whole seam column shifts west by half a typical column rock width (radius).
+//
+const CAVE_SEAM_COVER_X_LEFT_SHIFT =
+  (CAVE_SEAM_COLUMN_RADIUS_MIN + CAVE_SEAM_COLUMN_RADIUS_MAX) * 0.5
+const CAVE_SEAM_SCATTER_COUNT = 16
+const CAVE_SEAM_SCATTER_X_OFFSET_MIN = 10
+const CAVE_SEAM_SCATTER_X_OFFSET_MAX = 32
+const CAVE_SEAM_SCATTER_RADIUS_MIN = 4
+const CAVE_SEAM_SCATTER_RADIUS_MAX = 11
+const CAVE_SEAM_END_CAP_RADIUS_MIN = 7
+const CAVE_SEAM_END_CAP_RADIUS_MAX = 12
+const CAVE_SEAM_TOP_EXTRA_RIGHT_OFFSET = 15
+const CAVE_SEAM_BOTTOM_EXTRA_DROP = 12
 //
 // Void seam sits west of the skeleton sprite — skeleton + hero play east of it.
 //
@@ -1091,13 +1109,6 @@ function drawCaveInteriorBakedSprite(k, pit) {
 //
 function isCaveRockOnOrBelowGround(rock, floorY) {
   if (floorY == null) return true
-  //
-  // Seam-cover rocks straddle the mouth ground line — still drawable when
-  // their lower half sits in the pit (pure y−r ≥ floorY would cull them).
-  //
-  if (rock.straddleMouthGround) {
-    return rock.y + rock.radius >= floorY - 2
-  }
   return rock.y - rock.radius >= floorY - 0.5
 }
 function paintCanvasRocks(ctx, rocks, pal, floorY = null) {
@@ -1273,8 +1284,10 @@ function buildCaveSceneLayout(zone, floorY) {
   const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
   const mouthLipRightX = interiorWallX + 8
   appendCaveMouthCeilingLipRocks(contourRocks, mouth, interiorLeftEdge, floorY, seed + 1520, mouthLipRightX)
-  appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seed + 2105)
-  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, seed + 2188)
+  appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2105)
+  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, cutLeft, seed + 2188)
+  appendCaveInteriorSeamScatterRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2244)
+  appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2291)
   return {
     version: CAVE_LAYOUT_VERSION,
     pebbles,
@@ -1312,17 +1325,20 @@ function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed, interiorLeft = n
 //
 // Lip of the seam column — covers the vertical line at the ground line only.
 //
-function caveSeamCoverXAtY(interiorLeftEdge, y, fallbackX) {
+function caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX) {
+  let seamX = cutLeft
   const wallX = sampleProfileXAtY(interiorLeftEdge, y)
-  return (wallX ?? fallbackX) + CAVE_SEAM_COVER_X_BIAS
+  wallX != null && (seamX = Math.max(seamX, wallX))
+  return seamX + CAVE_SEAM_COVER_X_BIAS - CAVE_SEAM_COVER_X_LEFT_SHIFT
 }
-function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, seed) {
+function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, cutLeft, seed) {
   const count = 3 + Math.floor(caveSeed01(seed) * 2)
-  const fallbackX = interiorLeftEdge?.[0]?.x ?? 0
+  const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
   for (let i = 0; i < count; i++) {
-    const radius = 4 + caveSeed01(seed + i * 3.1) * 7
-    const y = floorY + radius * 0.85
-    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, fallbackX)
+    const radius = CAVE_SEAM_TOP_RADIUS_MIN +
+      caveSeed01(seed + i * 3.1) * (CAVE_SEAM_TOP_RADIUS_MAX - CAVE_SEAM_TOP_RADIUS_MIN)
+    const y = floorY + radius - 0.5
+    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX)
     rocks.push({
       x: seamX + (caveSeed01(seed + i * 5.7) - 0.5) * (CAVE_SEAM_COLUMN_X_SPREAD + 6),
       y,
@@ -1332,25 +1348,110 @@ function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, seed) {
     })
   }
 }
-function appendCaveInteriorSeamColumnRocks(rocks, interiorLeftEdge, floorY, bottomY, seed) {
-  const fallbackX = interiorLeftEdge?.[0]?.x ?? 0
+function appendCaveInteriorSeamColumnRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed) {
+  const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
   const count = 18 + Math.floor(caveSeed01(seed) * 4)
-  const yTop = floorY - 28
+  const yTop = floorY + CAVE_SEAM_COLUMN_RADIUS_MAX - 0.5
   const yBottom = bottomY - 12
   for (let i = 0; i < count; i++) {
     const t = i / Math.max(1, count - 1)
-    const y = yTop + t * (yBottom - yTop)
-    const radius = 5 + caveSeed01(seed + i * 4.7) * 9
-    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, fallbackX)
+    const radius = CAVE_SEAM_COLUMN_RADIUS_MIN +
+      caveSeed01(seed + i * 4.7) * (CAVE_SEAM_COLUMN_RADIUS_MAX - CAVE_SEAM_COLUMN_RADIUS_MIN)
+    let y = yTop + t * (yBottom - yTop)
+    y += (caveSeed01(seed + i * 8.1) - 0.5) * 3
+    y = Math.max(y, floorY + radius - 0.5)
+    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX)
     const x = seamX + (caveSeed01(seed + i * 6.3) - 0.5) * (CAVE_SEAM_COLUMN_X_SPREAD + 4)
     rocks.push({
       x,
-      y: y + (caveSeed01(seed + i * 8.1) - 0.5) * 3,
+      y,
       radius,
       straddleMouthGround: true,
       verts: buildRockVertices(radius)
     })
   }
+}
+//
+// Small rocks east/west of the seam column so the vertical stack reads less uniform.
+//
+function appendCaveInteriorSeamScatterRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed) {
+  const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
+  const yTop = floorY + CAVE_SEAM_COLUMN_RADIUS_MAX - 0.5
+  const yBottom = bottomY - 12
+  for (let i = 0; i < CAVE_SEAM_SCATTER_COUNT; i++) {
+    const radius = CAVE_SEAM_SCATTER_RADIUS_MIN +
+      caveSeed01(seed + i * 2.3) * (CAVE_SEAM_SCATTER_RADIUS_MAX - CAVE_SEAM_SCATTER_RADIUS_MIN)
+    let y = yTop + caveSeed01(seed + i * 4.1) * (yBottom - yTop)
+    y = Math.max(y, floorY + radius - 0.5)
+    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX)
+    const side = caveSeed01(seed + i * 6.7) < 0.5 ? -1 : 1
+    const off = CAVE_SEAM_SCATTER_X_OFFSET_MIN +
+      caveSeed01(seed + i * 7.9) * (CAVE_SEAM_SCATTER_X_OFFSET_MAX - CAVE_SEAM_SCATTER_X_OFFSET_MIN)
+    let yFinal = y + (caveSeed01(seed + i * 3.5) - 0.5) * 4
+    yFinal = Math.max(yFinal, floorY + radius - 0.5)
+    rocks.push({
+      x: seamX + side * off + (caveSeed01(seed + i * 9.2) - 0.5) * 6,
+      y: yFinal,
+      radius,
+      straddleMouthGround: true,
+      verts: buildRockVertices(radius)
+    })
+  }
+}
+//
+// One extra cap at the ground-line top and one at the column foot (still on/below floorY).
+//
+function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed) {
+  const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
+  const yBottom = bottomY - 12
+  const topRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
+    caveSeed01(seed) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
+  const topY = floorY + topRadius - 0.5
+  const topSeamX = caveSeamCoverXAtY(interiorLeftEdge, topY, cutLeft, fallbackX)
+  const topX = topSeamX + (caveSeed01(seed + 1.1) - 0.5) * 8
+  rocks.push({
+    x: topX,
+    y: topY,
+    radius: topRadius,
+    straddleMouthGround: true,
+    verts: buildRockVertices(topRadius)
+  })
+  const topExtraRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
+    caveSeed01(seed + 8.7) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
+  const topExtraY = floorY + topExtraRadius - 0.5
+  const topExtraSeamX = caveSeamCoverXAtY(interiorLeftEdge, topExtraY, cutLeft, fallbackX)
+  rocks.push({
+    x: topX + CAVE_SEAM_TOP_EXTRA_RIGHT_OFFSET + (caveSeed01(seed + 9.3) - 0.5) * 4,
+    y: topExtraY,
+    radius: topExtraRadius,
+    straddleMouthGround: true,
+    verts: buildRockVertices(topExtraRadius)
+  })
+  const botRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
+    caveSeed01(seed + 2.4) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
+  let botY = yBottom + (caveSeed01(seed + 3.8) - 0.5) * 6
+  botY = Math.max(botY, floorY + botRadius - 0.5)
+  const botSeamX = caveSeamCoverXAtY(interiorLeftEdge, botY, cutLeft, fallbackX)
+  rocks.push({
+    x: botSeamX + (caveSeed01(seed + 5.2) - 0.5) * 10,
+    y: botY,
+    radius: botRadius,
+    straddleMouthGround: true,
+    verts: buildRockVertices(botRadius)
+  })
+  const botExtraRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
+    caveSeed01(seed + 11.6) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
+  let botExtraY = botY + CAVE_SEAM_BOTTOM_EXTRA_DROP + (caveSeed01(seed + 12.2) - 0.5) * 5
+  botExtraY = Math.min(botExtraY, bottomY - botExtraRadius - 3)
+  botExtraY = Math.max(botExtraY, floorY + botExtraRadius - 0.5)
+  const botExtraSeamX = caveSeamCoverXAtY(interiorLeftEdge, botExtraY, cutLeft, fallbackX)
+  rocks.push({
+    x: botExtraSeamX + (caveSeed01(seed + 13.4) - 0.5) * 9,
+    y: botExtraY,
+    radius: botExtraRadius,
+    straddleMouthGround: true,
+    verts: buildRockVertices(botExtraRadius)
+  })
 }
 function appendCaveMouthCeilingLipRocks(rocks, mouth, interiorLeftEdge, floorY, seed, lipRightX) {
   if (!interiorLeftEdge?.length || !mouth?.right?.length) return

@@ -20,6 +20,7 @@ export function initGlowTeacherHintState(inst) {
   inst._glowTeacherHintActive = false
   inst.lastGlowTeacherHintText = null
   inst._postLStopHintShows = 0
+  inst._postOBigMushHintShows = 0
 }
 /**
  * Advances the shared context timer and invokes onCaveHint / onGHint at 10 s.
@@ -34,10 +35,12 @@ export function initGlowTeacherHintState(inst) {
  * @param {boolean} cfg.gEligible - G-zone progress hint may run (outside cave)
  * @param {boolean} cfg.lEligible - L-zone progress hint may run (outside cave)
  * @param {boolean} cfg.postLStopEligible - Post-L stillness nudge (outside cave)
+ * @param {boolean} cfg.postOBigMushEligible - Post-O big-mushroom nudge (outside cave)
  * @param {Function} [cfg.onCaveHint] - Called when cave context hits the gate
  * @param {Function} [cfg.onGHint] - Called when G-zone context hits the gate
  * @param {Function} [cfg.onLHint] - Called when L-zone context hits the gate
  * @param {Function} [cfg.onPostLStopHint] - After L pickup, 10 s active movement
+ * @param {Function} [cfg.onPostOBigMushHint] - After O pickup, 10 s active movement
  */
 export function tickGlowTeacherContextHints(inst, cfg) {
   if (!inst || cfg.blocked) return
@@ -56,7 +59,7 @@ export function tickGlowTeacherContextHints(inst, cfg) {
   inst._glowTeacherWasInCave = inCave
   const accumulating = inCave
     ? Boolean(cfg.caveEligible)
-    : Boolean(cfg.gEligible || cfg.lEligible || cfg.postLStopEligible)
+    : Boolean(cfg.gEligible || cfg.lEligible || cfg.postLStopEligible || cfg.postOBigMushEligible)
   if (!accumulating) {
     if (!inCave) {
       inst.teacherContextAccum = 0
@@ -81,11 +84,13 @@ export function tickGlowTeacherContextHints(inst, cfg) {
     cfg.onCaveHint?.()
     return
   }
-  cfg.postLStopEligible
-    ? cfg.onPostLStopHint?.()
-    : cfg.lEligible
-      ? cfg.onLHint?.()
-      : cfg.onGHint?.()
+  cfg.postOBigMushEligible
+    ? cfg.onPostOBigMushHint?.()
+    : cfg.postLStopEligible
+      ? cfg.onPostLStopHint?.()
+      : cfg.lEligible
+        ? cfg.onLHint?.()
+        : cfg.onGHint?.()
 }
 //
 // Shows a teacher hint immediately (bypasses the queue).
@@ -93,7 +98,7 @@ export function tickGlowTeacherContextHints(inst, cfg) {
 export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
   const forceTeacherHint = opts.pitCaveMushroom || opts.gHudStall || opts.lHudStall ||
-    opts.postLStop
+    opts.postLStop || opts.postOBigMush
   if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
   if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
     if (!forceTeacherHint) return false

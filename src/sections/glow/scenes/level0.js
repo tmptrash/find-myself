@@ -1232,6 +1232,7 @@ const GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_L = 'Don\'t rush. Just\nstop and think...'
 const GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_O = 'That big mushroom seems\nawfully attentive.'
+const GLOW_TEACHER_HINT_POST_O_MAX_SHOWS = 2
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
 const MUD_TOOLTIP_SIZE = 80
 const MUD_TOOLTIP_Y_OFFSET = -50
@@ -2161,9 +2162,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // footFx stays off (no dust) but run-step sounds still route through glow
     // ground/wood/mud detection via sound._glowSurface.
     //
-    heroInst.onPlayStepSound = (h) => {
-      h.sfx && !sound._glowSfxMuted && Sound.playStepSound(h.sfx, h.stepSoundScene)
-    }
+    bindGlowHeroFootSounds(heroInst, sound)
     !zones.eyesCollected && initGlowHeroWithoutEyes(heroInst)
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
@@ -4166,13 +4165,22 @@ function glowLifeScoreTooltipCenter(inst) {
 }
 function glowTeacherHudHoverText(inst) {
   if (glowTeacherCaveMushroomHoverEligible(inst)) return PIT_CAVE_HINT_TEXT
-  return inst.lastGlowTeacherHintText ?? ''
+  const text = inst.lastGlowTeacherHintText ?? ''
+  return glowTeacherHudHoverReplayAllowed(inst, text) ? text : ''
 }
 function glowTeacherHudHoverVisible(inst) {
   if (!inst.levelIndicator?.lifeRevealed || inst.dialogOpen) return false
   if (inst._glowTeacherHintActive && HeroHint.isActive(inst.heroHint)) return false
   if (glowTeacherCaveMushroomHoverEligible(inst)) return true
-  return Boolean(inst.lastGlowTeacherHintText)
+  return Boolean(glowTeacherHudHoverText(inst))
+}
+//
+// Stale post-L copy must not replay on the life icon once O exists or is taken.
+//
+function glowTeacherHudHoverReplayAllowed(inst, text) {
+  if (!text) return false
+  if (text === GLOW_TEACHER_HINT_AFTER_L && (inst.zones.oZone || inst.zones.oCollected)) return false
+  return true
 }
 //
 // After two auto mushroom hints, hover on the teacher replays it while still in the cave.
@@ -9605,6 +9613,7 @@ function collectLetterL(inst) {
   //
   inst.lPlatCaptionHiding = true
   applyZoneVisibility(inst)
+  unlockAmbushHedgehogAfterLPlatGone(inst)
   dropAmbushHedgehogIfStrandedOnLPlat(inst)
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
@@ -9627,6 +9636,10 @@ function collectLetterO(inst) {
   queueGlowHeroFillReveal(inst, 1)
   inst.zones.oCollected = true
   set(KEY_COLLECTED_O, true)
+  dismissGlowPostLStopTeacherHint(inst)
+  inst._postOBigMushHintShows = 0
+  inst.teacherContextAccum = 0
+  inst.teacherIdleStreak = 0
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
   const entry = inst.oLetter
@@ -10341,6 +10354,17 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
   return { x: spawnX, y: spawnY }
 }
 //
+// Glow routes landings through the same step timbre as running (footFx is off).
+//
+function bindGlowHeroFootSounds(heroInst, sound) {
+  heroInst.onPlayStepSound = (h) => {
+    h.sfx && !sound._glowSfxMuted && Sound.playStepSound(h.sfx, h.stepSoundScene)
+  }
+  heroInst.onPlayLandSound = (h) => {
+    h.sfx && !sound._glowSfxMuted && Sound.playStepSound(h.sfx, h.stepSoundScene)
+  }
+}
+//
 // Rebuilds the hero body in-place after a hedgehog kill (no scene reload).
 //
 function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
@@ -10354,6 +10378,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
   const heroEyes = getGlowHeroEyeBakeColors(!filled)
   const prev = inst.heroInst
   const stepSound = prev?.onPlayStepSound
+  const landSound = prev?.onPlayLandSound
   destroyStrayGlowHeroBody(k)
   prev?.character?.exists?.() && k.destroy(prev.character)
   const fresh = Hero.create({
@@ -10368,6 +10393,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
   })
   Hero.spawn(fresh, { instant: true })
   fresh.onPlayStepSound = stepSound
+  fresh.onPlayLandSound = landSound
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
   inst.hedgehog && (inst.hedgehog.hero = fresh)
@@ -11138,7 +11164,9 @@ function onUpdate(inst) {
     !inst.expectBranchWoodLandSound) {
     if ((hero.landFxCooldown || 0) <= 0) {
       hero.landFxCooldown = 0.2
-      Sound.playLandSound(inst.sound, 'lesson-glow.0')
+      surface === 'ground'
+        ? Sound.playStepSound(inst.sound, 'lesson-glow.0')
+        : Sound.playLandSound(inst.sound, 'lesson-glow.0')
     }
   }
   //
@@ -11537,10 +11565,21 @@ function canSpawnGlowFootBurst(inst, char) {
 function dismissGlowPostLStopTeacherHint(inst) {
   inst._postLStopHintShows = GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS
   if (inst.lastGlowTeacherHintText !== GLOW_TEACHER_HINT_AFTER_L) return
-  if (!HeroHint.isActive(inst.heroHint)) return
+  inst.lastGlowTeacherHintText = null
+  if (!HeroHint.isActive(inst.heroHint) || !inst._glowTeacherHintActive) return
   HeroHint.clear(inst.heroHint)
   inst._glowTeacherHintActive = false
+}
+//
+// Stops the post-O big-mushroom teacher line once the hero starts singing there.
+//
+function dismissGlowPostOBigMushTeacherHint(inst) {
+  inst._postOBigMushHintShows = GLOW_TEACHER_HINT_POST_O_MAX_SHOWS
+  if (inst.lastGlowTeacherHintText !== GLOW_TEACHER_HINT_AFTER_O) return
   inst.lastGlowTeacherHintText = null
+  if (!HeroHint.isActive(inst.heroHint) || !inst._glowTeacherHintActive) return
+  HeroHint.clear(inst.heroHint)
+  inst._glowTeacherHintActive = false
 }
 //
 // Forces idle humming while the post-O trampoline sing countdown ticks.
@@ -11621,7 +11660,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     tw.stillTimer += dt
     if (tw.stillTimer >= TRAMP_WALK_STILL) {
       tw.countdown = TRAMP_WALK_COUNTDOWN
-      dismissTalkToMushroomHint(inst)
+      dismissGlowPostOBigMushTeacherHint(inst)
     }
     return
   }
@@ -11938,12 +11977,6 @@ function showTrampBadSingHint(inst, line) {
     Tooltip.destroy(tip)
     tw.badSingTooltip = null
   })
-}
-//
-// Drops the "talk to the mushroom" line once the hero is already singing there.
-//
-function dismissTalkToMushroomHint(inst) {
-  inst.heroHint?.target?.text === GLOW_TEACHER_HINT_AFTER_O && HeroHint.clear(inst.heroHint)
 }
 //
 // True when tree segment sprites were baked during the pre-level transition.
@@ -13316,12 +13349,23 @@ function notifyAmbushHedgehogLPlatVanished(inst) {
 // still standing on it and hasn't already been sent tumbling by a death,
 // drop it to the ground instead of leaving it stranded over empty air.
 //
+function unlockAmbushHedgehogAfterLPlatGone(inst) {
+  const hog = inst.ambushHedgehog
+  if (!hog) return
+  hog.wanderLocked = false
+  hog.lockWanderUntilPlat = false
+}
 function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
   if (inst.ambushHedgehogDeferFall) return
   const hog = inst.ambushHedgehog
   if (!hog?.popped || hog.falling) return
-  if (!hog.mustFallFromLPlat && !isAmbushHedgehogOnLPlat(inst, hog)) return
+  const floorY = FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE
+  const strandedAboveGround = hog.y < floorY - 3
+  const needsDrop = hog.mustFallFromLPlat || isAmbushHedgehogOnLPlat(inst, hog) ||
+    (inst.zones.lCollected && strandedAboveGround)
+  if (!needsDrop) return
   hog.mustFallFromLPlat = true
+  unlockAmbushHedgehogAfterLPlatGone(inst)
   //
   // The log vanishes instantly the moment the letter is collected (see
   // collectLetterL), so there is no edge left to walk to any more — even
@@ -13560,7 +13604,8 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
   const gEligible = glowTeacherGZoneAutoHintEligible(inst, inCave)
   const lEligible = glowTeacherLZoneAutoHintEligible(inst, inCave)
   const postLStopEligible = glowTeacherPostLStopHintEligible(inst, inCave)
-  if (caveEligible || gEligible || lEligible || postLStopEligible) {
+  const postOBigMushEligible = glowTeacherPostOBigMushHintEligible(inst, inCave)
+  if (caveEligible || gEligible || lEligible || postLStopEligible || postOBigMushEligible) {
     revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
   }
   tickGlowTeacherContextHints(inst, {
@@ -13573,10 +13618,12 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
     gEligible,
     lEligible,
     postLStopEligible,
+    postOBigMushEligible,
     onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst),
     onGHint: () => fireGlowTeacherGZoneHint(inst),
     onLHint: () => fireGlowTeacherLZoneHint(inst),
-    onPostLStopHint: () => fireGlowTeacherPostLStopHint(inst)
+    onPostLStopHint: () => fireGlowTeacherPostLStopHint(inst),
+    onPostOBigMushHint: () => fireGlowTeacherPostOBigMushHint(inst)
   })
 }
 //
@@ -13698,6 +13745,28 @@ function fireGlowTeacherPostLStopHint(inst) {
   )) return
   inst._postLStopHintShows = (inst._postLStopHintShows || 0) + 1
   inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_AFTER_L
+}
+//
+// After O: 10 active seconds outside the cave → nudge to speak to the big mushroom.
+//
+function glowTeacherPostOBigMushHintEligible(inst, inCave) {
+  if (inCave || inst._inGlowPitCave) return false
+  if (!inst.zones.oCollected || inst.zones.wCollected) return false
+  const tw = inst.trampWalk
+  if (tw?.walked || (tw?.singCount || 0) > 0 || tw?.countdown != null) return false
+  if (inst.letterCaptionActive || inst.dialogOpen) return false
+  return (inst._postOBigMushHintShows || 0) < GLOW_TEACHER_HINT_POST_O_MAX_SHOWS
+}
+function fireGlowTeacherPostOBigMushHint(inst) {
+  if (!glowTeacherPostOBigMushHintEligible(inst, false)) return
+  if (!showGlowTeacherHintNow(
+    inst,
+    GLOW_TEACHER_HINT_AFTER_O,
+    GLOW_TEACHER_HINT_DURATION,
+    { postOBigMush: true }
+  )) return
+  inst._postOBigMushHintShows = (inst._postOBigMushHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_AFTER_O
 }
 //
 // Running and jumping both count toward teacher-hint movement gates.

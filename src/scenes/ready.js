@@ -23,6 +23,13 @@ import {
 } from '../utils/menu-bg-generator.js'
 import * as Grass from '../components/grass.js'
 import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
+import {
+  READY_EYE_DISPLAY_HEIGHT,
+  READY_EYE_DISPLAY_WIDTH,
+  createEyeHudBlinkState,
+  drawReadySceneEye,
+  tickReadySceneEyeBlink
+} from '../utils/eye-hud.js'
 
 //
 // Hint flicker — pinned at the very bottom of the screen so the
@@ -231,21 +238,20 @@ const OWL_INTERVAL_RANGE = 18.0
 const AMBIENT_FIRST_DELAY_MIN = 0.8
 const AMBIENT_FIRST_DELAY_RANGE = 2.0
 //
-// Central illustration (life-ready.png + hero sprite). Both are
-// horizontally centred around the canvas mid-line; the monster's
-// bottom edge sits on the black horizon strip and the hero stands
-// on the strip too.
+// Central illustration (eye_0/1/2 at 2× native, then −40%) — centred on horizon.
 //
-const LIFE_WIDTH = 767
-const LIFE_HEIGHT = 512
+const LIFE_WIDTH = READY_EYE_DISPLAY_WIDTH
+const LIFE_HEIGHT = READY_EYE_DISPLAY_HEIGHT
 let LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
 //
-// life-ready.png has transparent padding below the visible creature body.
-// LIFE_Y_SINK pushes the sprite down so the visible bottom rests on the
-// black horizon strip rather than floating above it.
+// Transparent padding below the visible eye — sink onto the horizon strip.
 //
-const LIFE_Y_SINK = 79
-let LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
+const LIFE_Y_SINK = 48
+//
+// Extra lift so the horizon eye sits higher on the ready illustration.
+//
+const READY_EYE_RAISE_PX = 50
+let LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK - READY_EYE_RAISE_PX
 const LIFE_OPACITY = 1.0
 //
 // Hero offset preserved from the original layout (hero stood ~83 px
@@ -475,7 +481,7 @@ function recomputeReadyLayout(k) {
   FIREFLY_MAX_X = MENU_BG_CANVAS_W - FIREFLY_EDGE_INSET
   GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
   LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
-  LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
+  LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK - READY_EYE_RAISE_PX
   HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
   CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
   TITLE_TEXT_X = CENTER_X
@@ -601,9 +607,12 @@ export function sceneReady(k) {
     }
     k.onUpdate(() => onUpdateAmbientSounds(k, ambient))
     //
-    // Central illustration: life-ready.png (teacher creature only)
+    // Central illustration: eye_big.png
     //
-    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k) } }])
+    const readyEyeBlink = createEyeHudBlinkState(k)
+    readyEyeBlink.frameIndex = 0
+    const readyEyeState = { blink: readyEyeBlink, spiders: null }
+    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, readyEyeState) } }])
     //
     // Title text (crawling letters detach from this). The title carries a
     // drop shadow (single black copy offset right+down) like the glow level.
@@ -705,6 +714,7 @@ export function sceneReady(k) {
       }
       spiders.push(spider)
     })
+    readyEyeState.spiders = spiders
     //
     // Shared input-stillness tracker driving the title-hero departure logic.
     // Both mouse motion and key presses count as player activity.
@@ -719,6 +729,7 @@ export function sceneReady(k) {
       spiderState.timer += dt
       spiders.forEach(spider => updateSpider(k, spider, dt, SPIDER_MAX_OPACITY, true))
       updateTitleHeroes(k, spiders, spiderState, heroLetterState, sound, dt)
+      tickReadySceneEyeBlink(readyEyeState.blink, k, dt)
       //
       // Hint flicker
       //
@@ -951,20 +962,50 @@ function onDrawMoon(k) {
 // no extra runtime glow pass is needed.
 //
 //
-// Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.
-// illAnim carries the current eye wander state for the hero sprite.
+// Draws the center illustration: eye_big.png centred on the horizon.
 //
-function onDrawIllustration(k) {
-  //
-  // life-ready.png: the teacher creature only, no hero sprite overlaid
-  //
-  k.drawSprite({
-    sprite: "life-ready",
-    pos: k.vec2(LIFE_X, LIFE_Y),
+function onDrawIllustration(k, readyEyeState) {
+  const target = resolveReadyEyeLookTarget(readyEyeState?.spiders)
+  const frameIndex = readyEyeState?.blink?.frameIndex ?? 0
+  const tx = target?.x ?? (LIFE_X + LIFE_WIDTH / 2)
+  const ty = target?.y ?? (LIFE_Y + LIFE_HEIGHT / 2)
+  drawReadySceneEye(k, {
+    left: LIFE_X,
+    top: LIFE_Y,
     width: LIFE_WIDTH,
     height: LIFE_HEIGHT,
+    frameIndex,
+    targetX: tx,
+    targetY: ty,
     opacity: LIFE_OPACITY
   })
+}
+//
+// Orange title hero (grounded hero-n or fading hero-u) — pupil tracks them.
+//
+function resolveReadyEyeLookTarget(spiders) {
+  if (!spiders?.length) return null
+  //
+  // Always track hero-n (left title hero) first — even during the title phase
+  // before it falls, so the eye does not stare at hero-u on the right.
+  //
+  for (const spider of spiders) {
+    if (spider.isHeroN && !spider.heroGone) {
+      const inTitle = spider.heroPhase === 'title'
+      return inTitle
+        ? { x: spider.x + HERO_N_OFFSET_X, y: spider.y + HERO_N_OFFSET_Y }
+        : { x: spider.heroX, y: spider.heroY }
+    }
+  }
+  for (const spider of spiders) {
+    if (spider.isHeroU && !spider.heroGone && spider.heroOpacity > 0.02) {
+      return {
+        x: spider.x + HERO_U_OFFSET_X,
+        y: spider.y + HERO_U_OFFSET_Y
+      }
+    }
+  }
+  return null
 }
 //
 // ────────── Spider / crawling letters system ──────────

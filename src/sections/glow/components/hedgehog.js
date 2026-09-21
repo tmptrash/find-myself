@@ -387,6 +387,50 @@ export function nudgeHeroXClearOfTouchProbe(heroX, heroFootY, probe, clearance, 
     ? (bounds?.minX ?? hogX) - clearance
     : (bounds?.maxX ?? hogX) + clearance
 }
+/**
+ * Picks a respawn X outside the hog touch AABB (hero half-width + clearance),
+ * preferring the side away from the kill.
+ * @param {number} heroX
+ * @param {number} heroFootY
+ * @param {Object} probe
+ * @param {number} clearance
+ * @param {number} heroHalfW
+ * @param {{ minX?: number, maxX?: number }} [bounds]
+ * @param {number} preferSign - −1 west, +1 east
+ * @returns {number}
+ */
+export function resolveHeroSpawnXClearOfTouchProbe(
+  heroX,
+  heroFootY,
+  probe,
+  clearance,
+  heroHalfW,
+  bounds,
+  preferSign
+) {
+  if (!probe) return heroX
+  const box = touchHitboxWorldAabb(probe)
+  const pad = clearance + heroHalfW
+  const leftX = box.left - pad
+  const rightX = box.right + pad
+  const touching = isTouchingHero(probe, heroX, heroFootY)
+  const nearBox = heroFootY >= box.top && heroFootY <= box.bottom &&
+    heroX >= box.left - pad && heroX <= box.right + pad
+  if (!touching && !nearBox) return heroX
+  const inBounds = (x) => !bounds || (x >= bounds.minX && x <= bounds.maxX)
+  let x = preferSign < 0 ? leftX : preferSign > 0 ? rightX : (
+    Math.abs(heroX - leftX) <= Math.abs(heroX - rightX) ? leftX : rightX
+  )
+  if (!inBounds(x)) {
+    const alt = x === leftX ? rightX : leftX
+    inBounds(alt) && (x = alt)
+  }
+  if (isTouchingHero(probe, x, heroFootY)) {
+    x = preferSign <= 0 ? leftX : rightX
+    isTouchingHero(probe, x, heroFootY) && (x = preferSign <= 0 ? rightX : leftX)
+  }
+  return x
+}
 //
 // Reveals a hidden ambush hedgehog at (x, y), facing the given direction,
 // and starts its normal idle/wander behaviour from a clean state.

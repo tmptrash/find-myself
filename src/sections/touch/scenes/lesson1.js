@@ -1494,6 +1494,7 @@ export function sceneLesson1(k) {
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     //
     // Lock hero controls while life deduction animation plays
     //

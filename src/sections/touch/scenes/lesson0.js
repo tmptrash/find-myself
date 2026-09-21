@@ -2166,6 +2166,7 @@ export function sceneLesson0(k) {
       bodyColor: heroBodyColor,
       idleVocalization: 'childSinging'
     })
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     const touchStartHint = HeroHint.create({
       k,
       heroInst,

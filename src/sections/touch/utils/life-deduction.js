@@ -210,7 +210,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   //
   const lifeIconX = hideScore ? centerX : centerX + LIFE_X_OFFSET
   const lifeIcon = k.add([
-    k.sprite('life'),
+    k.sprite('eye-hud-0'),
     k.pos(lifeIconX, centerY + SCORE_Y_OFFSET),
     k.anchor('center'),
     k.scale(LIFE_SCALE),

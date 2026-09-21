@@ -836,6 +836,7 @@ export function sceneLesson3(k) {
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     bindHeroAnnihilation(heroInst, antiHeroInst, {
       currentLevel: 'lesson-touch.3',
       onAnnihilation: () => {

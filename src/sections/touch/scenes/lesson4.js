@@ -114,7 +114,7 @@ export function sceneLesson4(k) {
     const isWordComplete = get('word.completed', false)
     const isTimeComplete = get('time.completed', false)
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
-    LevelIndicator.create({
+    const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 4,
       activeColor: '#8B5A50',
@@ -394,6 +394,7 @@ export function sceneLesson4(k) {
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     bindHeroAnnihilation(heroInst, antiHeroInst, {
       currentLevel: 'lesson-touch.4',
       onAnnihilation: () => {

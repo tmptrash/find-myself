@@ -1580,7 +1580,9 @@ const GLOW_PERCEPTION_RAY_LINE_STAGGER = 0.08
 const GLOW_PERCEPTION_RAY_LINE_FADE_DUR = 0.32
 const GLOW_PERCEPTION_SNAP_ANGLE_EPS = 0.055
 const GLOW_PERCEPTION_RAY_FONT_SIZE = 18
-const GLOW_PERCEPTION_RAY_TEXT_OPACITY = 0.4
+const GLOW_PERCEPTION_RAY_TEXT_OPACITY = 0.62
+const GLOW_PERCEPTION_RAY_DIM_RGB = { r: 120, g: 120, b: 120 }
+const GLOW_PERCEPTION_RAY_COLOR_LERP = 0.5
 const GLOW_PERCEPTION_RAY_PHRASE_GAP = 44
 const GLOW_PERCEPTION_RAY_REVEAL_SLIDE = 32
 const GLOW_PERCEPTION_RAY_CHAR_STEP = 0.56
@@ -1908,11 +1910,13 @@ function drawGlowPerceptionRays(k, inst) {
   if (phraseCount <= 0) return
   const rayAngles = getGlowPerceptionRayAngles(title, text, phraseCount)
   if (!rayAngles.length) return
-  const rayRgb = getRGB(k, GLOW_MENU_HERO_BODY)
+  const sectionRgb = getRGB(k, GLOW_MENU_HERO_BODY)
+  const lerp = GLOW_PERCEPTION_RAY_COLOR_LERP
+  const dim = GLOW_PERCEPTION_RAY_DIM_RGB
   const textColor = k.rgb(
-    Math.round(rayRgb.r * 0.72),
-    Math.round(rayRgb.g * 0.72),
-    Math.round(rayRgb.b * 0.72)
+    Math.round(dim.r + (sectionRgb.r - dim.r) * lerp),
+    Math.round(dim.g + (sectionRgb.g - dim.g) * lerp),
+    Math.round(dim.b + (sectionRgb.b - dim.b) * lerp)
   )
   const cx = title.centerX
   const cy = title.centerY

@@ -758,6 +758,7 @@ export function sceneLesson2(k) {
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     //
     // Raise hero z above lake/decor layer (L2_DECOR_ABOVE_PLATFORMS_Z = 17) so hero renders on top.
     //

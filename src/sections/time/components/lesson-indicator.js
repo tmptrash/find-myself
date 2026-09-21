@@ -2,6 +2,18 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
+import {
+  EYE_HUD_DISPLAY_SCALE_MUL,
+  EYE_HUD_FRAME_HEIGHT,
+  EYE_HUD_OPEN_SPRITE,
+  bindEyeHudLookAtHero,
+  createEyeHudBlinkState,
+  mountLifeHudPupilDrawer,
+  syncLifeHudEyeSprite,
+  tickEyeHudBlink
+} from '../../../utils/eye-hud.js'
+
+export { bindEyeHudLookAtHero }
 //
 // Unified gray for every HUD numeral/label in the time section.
 // Matches the neutral grey used by the FPS counter (fps-counter.js: #B0B0B0).
@@ -87,7 +99,7 @@ export function create(config) {
   const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
   const lifeImageHeight = 120
   const spacingBetween = 120
-  const lifeImageOriginalHeight = 1197
+  const lifeImageOriginalHeight = EYE_HUD_FRAME_HEIGHT
   const rightMargin = 70
   const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 10
   //
@@ -125,21 +137,35 @@ export function create(config) {
   //
   // Create life image (sprite pre-loaded in index.js)
   //
-  const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3
+  const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3 * EYE_HUD_DISPLAY_SCALE_MUL
   //
   // Lower the life icon a bit further below the small hero (UI polish)
   //
   const LIFE_IMAGE_Y_OFFSET = 8
+  const LIFE_IMAGE_Y_RAISE = 6
+  const lifeEyeY = smallHeroY + LIFE_IMAGE_Y_OFFSET - LIFE_IMAGE_Y_RAISE
+  const lifeEyeX = lifeImageX + 12
+  let indicatorInst = null
+  const lifeSprite = k.add([
+    k.sprite(EYE_HUD_OPEN_SPRITE),
+    k.pos(lifeEyeX, lifeEyeY),
+    k.scale(lifeImageScale),
+    k.anchor('center'),
+    k.fixed(),
+    k.color(255, 255, 255),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  const lifePupilLayer = mountLifeHudPupilDrawer(k, {
+    getInst: () => indicatorInst,
+    lifeSprite,
+    getEyeScreenPos: () => ({ x: lifeEyeX, y: lifeEyeY }),
+    zIndex: CFG.visual.zIndex.ui + 1
+  })
   const lifeImageData = {
-    sprite: k.add([
-      k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY + LIFE_IMAGE_Y_OFFSET),
-      k.scale(lifeImageScale),
-      k.anchor('center'),
-      k.fixed(),
-      k.z(CFG.visual.zIndex.ui)
-    ]),
-    pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
+    sprite: lifeSprite,
+    pupilLayer: lifePupilLayer,
+    pos: { x: lifeImageX, y: lifeEyeY }
   }
   //
   // Get score values from localStorage
@@ -247,10 +273,18 @@ export function create(config) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 1)
   ])
-  return {
+  const inst = {
     letterObjects,
     smallHero,
     lifeImage: lifeImageData,
+    eyeHudBlink: createEyeHudBlinkState(k),
+    _eyeHudGrey: false,
+    _eyeHudFrameIndex: 0,
+    _eyeHudDisplayScale: lifeImageScale,
+    _lifeSpriteName: EYE_HUD_OPEN_SPRITE,
+    _lifeFlashLock: false,
+    lifeRevealed: true,
+    k,
     heroScoreText,
     lifeScoreText,
     lifeScoreOutlines,
@@ -283,5 +317,9 @@ export function create(config) {
       trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
+  indicatorInst = inst
+  syncLifeHudEyeSprite(inst)
+  k.onUpdate(() => tickEyeHudBlink(inst, k.dt()))
+  return inst
 }
 

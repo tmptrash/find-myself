@@ -2,6 +2,24 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
+import {
+  EYE_HUD_BLINK_SEQUENCE,
+  EYE_HUD_DISPLAY_SCALE_MUL,
+  EYE_HUD_FRAME_HEIGHT,
+  EYE_HUD_OPEN_SPRITE,
+  applyEyeHudFrame,
+  bindEyeHudLookAtHero,
+  createEyeHudBlinkState,
+  eyeHudSpriteForFrame,
+  eyeHudSpriteIsDesat,
+  getEyeHudFrameIndex,
+  setLifeHudEyeHidden,
+  mountLifeHudPupilDrawer,
+  syncLifeHudEyeSprite,
+  tickEyeHudBlink
+} from '../../../utils/eye-hud.js'
+
+export { bindEyeHudLookAtHero }
 //
 // Small hero and life icon layout constants
 //
@@ -12,7 +30,7 @@ const LIFE_IMAGE_HEIGHT = 86
 // stays at its original position (UI_RIGHT_MARGIN unchanged).
 //
 const SPACING_BETWEEN = 120
-const LIFE_IMAGE_ORIGINAL_HEIGHT = 1197
+const LIFE_IMAGE_ORIGINAL_HEIGHT = EYE_HUD_FRAME_HEIGHT
 const UI_RIGHT_MARGIN = 70
 const TOP_OFFSET = 40
 const SMALL_HERO_Y_ADJUST = 10
@@ -29,6 +47,10 @@ const SCORE_OUTLINE_THICKNESS = 2
 // (raised further so the "teacher" reads higher in the HUD of every level)
 //
 const LIFE_IMAGE_Y_OFFSET = 3
+//
+// Nudge the HUD teacher eye upward relative to the small hero.
+//
+const LIFE_IMAGE_Y_RAISE = 6
 //
 // Trap count badge: small red number below-right of life icon
 //
@@ -303,31 +325,46 @@ export function create(config) {
   //
   // Create life image (sprite pre-loaded in index.js)
   //
-  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8
+  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8 *
+    EYE_HUD_DISPLAY_SCALE_MUL
   const wantGreyLife = greyLife || scoreboardGreyLife
   const lifePostBake = lifeDesatPostBake || hudPostBakeCanvas
   lifePostBake && (k._lifeDesatPostBake = lifePostBake)
   ensureDesaturatedLifeSprite(k)
-  const lifeSpriteName = wantGreyLife && k._lifeDesatReady === true ? 'life-desat' : 'life'
+  const lifeSpriteName = wantGreyLife && k._lifeDesatReady === true
+    ? eyeHudSpriteForFrame(0, true)
+    : EYE_HUD_OPEN_SPRITE
   const lifeTintHex = wantGreyLife
     ? (lifeGreyTintHex || CFG.visual.colors.palette.decorGray)
     : null
   const lifeTint = lifeTintHex
     ? getRGB(k, lifeTintHex)
     : { r: 255, g: 255, b: 255 }
+  const lifeEyeY = smallHeroY + LIFE_IMAGE_Y_OFFSET - LIFE_IMAGE_Y_RAISE
+  const lifeEyeX = lifeImageX - 5
+  let indicatorInst = null
+  const lifeSprite = k.add([
+    k.sprite(lifeSpriteName),
+    k.pos(lifeEyeX, lifeEyeY),
+    k.scale(lifeImageScale),
+    k.anchor('center'),
+    k.fixed(),
+    k.color(lifeTint.r, lifeTint.g, lifeTint.b),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  const lifePupilLayer = mountLifeHudPupilDrawer(k, {
+    getInst: () => indicatorInst,
+    lifeSprite,
+    getEyeScreenPos: () => ({ x: lifeEyeX, y: lifeEyeY }),
+    zIndex: CFG.visual.zIndex.ui + 1
+  })
   const lifeImageData = {
-    sprite: k.add([
-      k.sprite(lifeSpriteName),
-      k.pos(lifeImageX - 5, smallHeroY + LIFE_IMAGE_Y_OFFSET),
-      k.scale(lifeImageScale),
-      k.anchor('center'),
-      k.fixed(),
-      k.color(lifeTint.r, lifeTint.g, lifeTint.b),
-      k.z(CFG.visual.zIndex.ui)
-    ]),
-    pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
+    sprite: lifeSprite,
+    pupilLayer: lifePupilLayer,
+    pos: { x: lifeImageX, y: lifeEyeY }
   }
-  wantGreyLife && (lifeSpriteName !== 'life-desat') && (lifeImageData.sprite.hidden = true)
+  wantGreyLife && !eyeHudSpriteIsDesat(lifeSpriteName) && setLifeHudEyeHidden({ lifeImage: lifeImageData }, true)
   //
   // Get score values from localStorage
   //
@@ -387,6 +424,7 @@ export function create(config) {
   const scoreboardNodes = [
     smallHero.character,
     lifeImageData.sprite,
+    lifeImageData.pupilLayer,
     heroScoreText,
     lifeScoreText,
     ...heroScoreOutlines,
@@ -395,7 +433,7 @@ export function create(config) {
     ...trapBadgeOutlines
   ]
   hideScoreboard && scoreboardNodes.forEach(node => { node.hidden = true })
-  return {
+  const inst = {
     k,
     letterObjects,
     letterOutlineObjects,
@@ -416,6 +454,10 @@ export function create(config) {
     lifeGreyTintHex: lifeGreyTintHex || CFG.visual.colors.palette.decorGray,
     _lifeSpriteName: lifeSpriteName,
     _lifeFlashLock: false,
+    _eyeHudGrey: wantGreyLife,
+    _eyeHudFrameIndex: 0,
+    _eyeHudDisplayScale: lifeImageScale,
+    eyeHudBlink: createEyeHudBlinkState(k),
     //
     // Exposed so external flash routines (life-deduct red blink,
     // help-purchase / help-denied flashes) can reset the score numerals
@@ -451,6 +493,10 @@ export function create(config) {
       trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
+  indicatorInst = inst
+  syncLifeHudEyeSprite(inst)
+  k.onUpdate(() => tickEyeHudBlink(inst, k.dt()))
+  return inst
 }
 
 /**
@@ -507,28 +553,26 @@ export function syncLifeHudGrey(inst, greyLife = true) {
   if (!sprite || inst._lifeFlashLock) return
   const k = inst.k
   const useGrey = greyLife || inst.scoreboardGreyLife
+  inst._eyeHudGrey = useGrey
   if (useGrey) {
     ensureDesaturatedLifeSprite(k)
     if (k._lifeDesatReady !== true) {
-      inst.lifeRevealed && (sprite.hidden = true)
+      inst.lifeRevealed && setLifeHudEyeHidden(inst, true)
       return
     }
-    if (inst._lifeSpriteName !== 'life-desat') {
-      sprite.use(k.sprite('life-desat'))
-      inst._lifeSpriteName = 'life-desat'
-    }
+    const frame = inst.eyeHudBlink?.playing
+      ? (EYE_HUD_BLINK_SEQUENCE[inst.eyeHudBlink.seqStep] ?? 0)
+      : 0
+    applyEyeHudFrame(inst, frame)
     const tintHex = inst.lifeGreyTintHex || CFG.visual.colors.palette.decorGray
     const tintRgb = getRGB(k, tintHex)
     sprite.color = k.rgb(tintRgb.r, tintRgb.g, tintRgb.b)
-    inst.lifeRevealed && (sprite.hidden = false)
+    inst.lifeRevealed && setLifeHudEyeHidden(inst, false)
     return
   }
-  if (inst._lifeSpriteName === 'life-desat') {
-    sprite.use(k.sprite('life'))
-    inst._lifeSpriteName = 'life'
-  }
+  applyEyeHudFrame(inst, getEyeHudFrameIndex(inst))
   sprite.color = k.rgb(255, 255, 255)
-  inst.lifeRevealed && (sprite.hidden = false)
+  inst.lifeRevealed && setLifeHudEyeHidden(inst, false)
 }
 
 /**
@@ -709,9 +753,24 @@ function ensureDesaturatedLifeSprite(k) {
   if (k._lifeDesatReady === true || k._lifeDesatReady === 'pending') return
   k._lifeDesatReady = 'pending'
   const postBake = k._lifeDesatPostBake || null
-  k._lifeDesatPromise = fetch('./life.png')
+  const sources = ['./eye_0.png', './eye_1.png', './eye_2.png']
+  k._lifeDesatPromise = Promise.all(
+    sources.map((url, frameIndex) => bakeEyeHudDesatFrame(k, url, frameIndex, postBake))
+  )
+    .then(() => {
+      k._lifeDesatReady = true
+    })
+    .catch(() => {
+      k._lifeDesatReady = false
+    })
+}
+//
+// White silhouette bake for one HUD eye blink frame (grey-world tint).
+//
+function bakeEyeHudDesatFrame(k, url, frameIndex, postBake) {
+  return fetch(url)
     .then(res => {
-      if (!res.ok) throw new Error('life.png')
+      if (!res.ok) throw new Error(url)
       return res.blob()
     })
     .then(blob => createImageBitmap(blob))
@@ -724,14 +783,7 @@ function ensureDesaturatedLifeSprite(k) {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const px = imageData.data
       //
-      // RGB is forced to white on EVERY pixel, including fully transparent
-      // ones — not just the visible ones. life.png stores un-premultiplied
-      // colour in its fully-transparent regions (e.g. between the eye
-      // pupils and the surrounding fur), and the GPU's bilinear texture
-      // filtering blends that hidden colour into nearby semi-transparent
-      // edge texels regardless of its alpha. Leaving any non-white texel
-      // anywhere in the source leaked exactly that fringe — a stray hue
-      // showing through the middle of an otherwise grey icon.
+      // RGB forced to white on every texel — same fringe fix as the old life.png bake.
       //
       for (let i = 0; i < px.length; i += 4) {
         px[i] = 255
@@ -739,14 +791,9 @@ function ensureDesaturatedLifeSprite(k) {
         px[i + 2] = 255
       }
       ctx.putImageData(imageData, 0, 0)
-      postBake?.(canvas, 3200)
+      postBake?.(canvas, 3200 + frameIndex)
       bitmap.close?.()
-      k.loadSprite('life-desat', canvas)
-      k._lifeDesatCanvas = canvas
-      k._lifeDesatReady = true
-    })
-    .catch(() => {
-      k._lifeDesatReady = false
+      k.loadSprite(eyeHudSpriteForFrame(frameIndex, true), canvas)
     })
 }
 //

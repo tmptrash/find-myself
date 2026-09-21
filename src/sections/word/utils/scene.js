@@ -395,6 +395,7 @@ export function initScene(config) {
     const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor, onAnnihilation, antiHeroBodyColor, antiHeroSilent)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
+    hero && levelIndicator && LevelIndicator.bindEyeHudLookAtHero(levelIndicator, hero)
     hero && (heroSpeech = WordHeroIdleSpeech.create(k, hero))
     dreamingEyes = WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall }, hero)
     hero && WordBackgroundAntiheroes.create({
@@ -786,7 +787,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   bindHeroAnnihilation(hero, antiHero, { currentLevel, onAnnihilation: onAnnihilation || null })
   hero.character.tag("player")
   Hero.spawn(hero)
-  
+  //
   // Spawn anti-hero with delay
   k.wait(ANTIHERO_SPAWN_DELAY, () => {
     Hero.spawn(antiHero)

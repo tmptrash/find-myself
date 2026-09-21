@@ -6,6 +6,7 @@ import { initTouchInput } from '../../../utils/touch-input.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerGlowNativeTeardown } from '../../../utils/engine-switch.js'
+import { eyeHudSpriteIsDesat } from '../../../utils/eye-hud.js'
 import { yieldForGpu, setLoaderBarPct } from '../../../utils/boot-loader.js'
 import { MENU_BG_FRONT_LEAF_RGB } from '../../../utils/menu-bg-generator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
@@ -372,6 +373,12 @@ const HEDGEHOG_MUD_SNEAK_DRAW_Z = CFG.visual.zIndex.player + 2
 const HEDGEHOG_GROUND_SINK = 6
 const HEDGEHOG_GROUND_RAISE = -HEDGEHOG_GROUND_SINK
 const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
+//
+// Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
+//
+const GLOW_HERO_HITBOX_HALF_W = 15
+const HERO_HEDGEHOG_RESPAWN_CLEARANCE = 32
+const HEDGEHOG_RESPAWN_TOUCH_GRACE_SEC = 0.5
 const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
@@ -413,7 +420,7 @@ const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
 const HEDGEHOG_DEATH_HINT_RAISE = 96
 const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -58
 const HEDGEHOG_DEATH_HINT_DURATION = 5
-const HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET = 56
+const HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET = 80
 const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
 //
 // How fast the post-L world wakes up (grass sway, hedgehog wander, birds,
@@ -2284,6 +2291,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // a ground side opening). The life icon (teacher) appears at the same time.
     //
     const levelIndicator = createGlowLevelIndicator(k, goldRgb, completedLetterCount, zones.colorWorld)
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     pinGlowHudFixed(levelIndicator)
     LevelIndicator.setSectionLabelHidden(levelIndicator, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
@@ -2416,6 +2424,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _lPlatVisibleLastFrame: false,
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
+      hedgehogTouchGraceUntil: 0,
       hedgehogRespawnWait: null,
       glowHeroCreateCfg,
       heroSpawnNudge: {
@@ -4896,7 +4905,7 @@ function glowLifeHudWantGrey(inst) {
 function maybeSyncGlowLifeHudGrey(inst) {
   if (!inst.levelIndicator) return
   const wantGrey = glowLifeHudWantGrey(inst)
-  const needsDesat = wantGrey && inst.levelIndicator._lifeSpriteName !== 'life-desat'
+  const needsDesat = wantGrey && !eyeHudSpriteIsDesat(inst.levelIndicator._lifeSpriteName)
   if (inst._lifeHudGrey === wantGrey && !needsDesat) return
   inst._lifeHudGrey = wantGrey
   LevelIndicator.syncLifeHudGrey(inst.levelIndicator, wantGrey)
@@ -10047,7 +10056,7 @@ function bumpGlowLifeHudOnDeath(inst) {
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
     const greyLife = glowLifeHudWantGrey(inst)
     LevelIndicator.syncLifeHudGrey(inst.levelIndicator, greyLife)
-    const desatReady = inst.levelIndicator._lifeSpriteName === 'life-desat'
+    const desatReady = eyeHudSpriteIsDesat(inst.levelIndicator._lifeSpriteName)
     const canFlash = !greyLife || desatReady
     if (canFlash) {
       inst.levelIndicator._lifeFlashLock = true
@@ -10064,6 +10073,7 @@ function bumpGlowLifeHudOnDeath(inst) {
 //
 function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
   if (inst.deathHandled) return
+  if (inst.k.time() < (inst.hedgehogTouchGraceUntil ?? 0)) return
   if (Hedgehog.isTouchingHero(inst.hedgehog, heroX, heroFootY)) {
     triggerHedgehogDeath(inst, false)
     return
@@ -10244,17 +10254,28 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
       : (hog.minX != null && hog.maxX != null
         ? { minX: hog.minX, maxX: hog.maxX }
         : hogProbes.floorHogBounds)
-    const tryX = (side) => {
-      let x = hogX + side * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
-      x = Hedgehog.nudgeHeroXClearOfTouchProbe(
-        x, footY, liveProbe, HERO_HEDGEHOG_SPAWN_CLEARANCE, bounds
-      )
-      return Hedgehog.isTouchingHero(liveProbe, x, footY) ? null : x
-    }
-    const primary = tryX(away)
-    const fallback = tryX(-away)
-    primary != null && (spawnX = primary)
-    primary == null && fallback != null && (spawnX = fallback)
+    const preferSign = away
+    spawnX = hogX + preferSign * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
+    spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
+      spawnX,
+      footY,
+      liveProbe,
+      HERO_HEDGEHOG_RESPAWN_CLEARANCE,
+      GLOW_HERO_HITBOX_HALF_W,
+      bounds,
+      preferSign
+    )
+    const fallbackSign = -preferSign
+    Hedgehog.isTouchingHero(liveProbe, spawnX, footY) &&
+      (spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
+        hogX + fallbackSign * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET,
+        footY,
+        liveProbe,
+        HERO_HEDGEHOG_RESPAWN_CLEARANCE,
+        GLOW_HERO_HITBOX_HALF_W,
+        bounds,
+        fallbackSign
+      ))
   }
   const spawnOnBranch = isHeroOverStartBranchX(inst, spawnX) &&
     footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX
@@ -10279,6 +10300,29 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
     lCollected: inst.zones.lCollected,
     ...hogProbes
   })
+  if (hogLethal && hog) {
+    const liveProbe = Hedgehog.createLethalTouchProbe({
+      x: hog.x,
+      y: hog.y,
+      scale: hog.scale ?? (isAmbush ? HEDGEHOG_AMBUSH_SCALE : HEDGEHOG_SCALE),
+      facing: hog.facing ?? 'left'
+    })
+    const bounds = isAmbush
+      ? hogProbes.ambushGroundHogBounds
+      : (hog.minX != null && hog.maxX != null
+        ? { minX: hog.minX, maxX: hog.maxX }
+        : hogProbes.floorHogBounds)
+    const preferSign = deathX <= hog.x ? -1 : 1
+    spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
+      spawnX,
+      footY,
+      liveProbe,
+      HERO_HEDGEHOG_RESPAWN_CLEARANCE,
+      GLOW_HERO_HITBOX_HALF_W,
+      bounds,
+      preferSign
+    )
+  }
   return { x: spawnX, y: spawnY }
 }
 //
@@ -10316,6 +10360,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
   inst.hedgehogDeathHandled = false
+  inst.hedgehogTouchGraceUntil = inst.k.time() + HEDGEHOG_RESPAWN_TOUCH_GRACE_SEC
   restoreGlowRightTrampProgressAfterSpawn(inst)
   inst.lastHeroX = pose.x
   inst.wasGrounded = false

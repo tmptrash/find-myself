@@ -322,6 +322,7 @@ export function initScene(config) {
     const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation, heroDustColor)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
+    hero && levelIndicator && LevelIndicator.bindEyeHudLookAtHero(levelIndicator, hero)
   }
   
   //

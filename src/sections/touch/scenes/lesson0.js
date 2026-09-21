@@ -32,7 +32,11 @@ import * as BonusHero from '../components/bonus-hero.js'
 import * as LogPlatform from '../components/log-platform.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { getCameraCenterX, getDistanceThreshold, isWithinDistance } from '../utils/scene-perf.js'
-import { onUpdateLesson0GameLoop, drawL0Birds } from '../utils/lesson0-runtime.js'
+import {
+  drawL0Birds,
+  isTouchLesson0AmbientUnblocked,
+  onUpdateLesson0GameLoop
+} from '../utils/lesson0-runtime.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -753,13 +757,10 @@ export function sceneLesson0(k) {
     k.setGravity(CFG.game.gravity)
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    const touchMusic = k.play('touch', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.touch
-    })
+    let touchMusic = null
     const rainRef = { stop: null }
     const stopTouchLoopAudio = () => {
-      touchMusic.stop()
+      touchMusic?.stop()
       rainRef.stop?.()
     }
     k.onSceneLeave(() => {
@@ -2672,7 +2673,6 @@ export function sceneLesson0(k) {
         rainRef.stop = Sound.startRainSound(sound, 0.003)
       }
     }
-    startRainWhenReady()
     //
     // Rocks first so puddle placement can avoid their footprints.
     //
@@ -2905,7 +2905,17 @@ export function sceneLesson0(k) {
       heroBugCrouchDuration: HERO_BUG_CROUCH_DURATION,
       onUpdateThunder,
       sound,
-      touchLetterState
+      touchLetterState,
+      touchAmbientStarted: false,
+      startTouchAmbientLoops: () => {
+        if (touchMusic) return
+        touchMusic = k.play('touch', {
+          loop: true,
+          volume: CFG.audio.backgroundMusic.touch
+        })
+        lesson0LoopCtx.touchMusic = touchMusic
+        touchLetterState.touchMusic = touchMusic
+      }
     }
     k.onUpdate(() => onUpdateLesson0Frame(k, camera, heroInst, lesson0LoopCtx))
     //
@@ -6146,6 +6156,10 @@ function updateTouchLesson0Camera(camera, heroInst) {
   GlowCamera.snapHeroScreenY(camera.k, heroInst, camera.k.camPos().y)
 }
 function onUpdateLesson0Frame(k, camera, heroInst, ctx) {
+  if (!ctx.touchAmbientStarted && isTouchLesson0AmbientUnblocked(k)) {
+    ctx.touchAmbientStarted = true
+    ctx.startTouchAmbientLoops?.()
+  }
   updateTouchLesson0Camera(camera, heroInst)
   onUpdateLesson0GameLoop(k, ctx)
 }

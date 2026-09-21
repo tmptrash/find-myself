@@ -1501,6 +1501,14 @@ const TRAMP_WALK_NEAR = 220
 // Wider stand-still band while the O-meditation countdown ticks (hero sings)
 //
 const TRAMP_WALK_NEAR_SINGING = 370
+//
+// Matches hero.js IDLE_VOCALIZATION_DELAY — tramp sing arms idle notes once still.
+//
+const TRAMP_SING_VOCAL_IDLE_SEC = 2.05
+//
+// Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
+//
+const TRAMP_CAP_PAD_LATCH_SEC = 0.28
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'I can\'t listen\nto this anymore'
@@ -8800,13 +8808,20 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const bounceAir = Boolean(inst[bounceAirKey])
   const grounded = typeof char?.isGrounded === 'function' && char.isGrounded()
   const inCapBand = heroFeet >= capTop - 14 && heroFeet <= capTop + TRAMP_PAD_FEET_BELOW
+  const stickyCap = nearX && inCapBand && (onCap || bounceAir || grounded || velY > -160)
+  if (stickyCap || onCap || bounceAir) {
+    state._capPadLatch = TRAMP_CAP_PAD_LATCH_SEC
+  } else if (state._capPadLatch > 0) {
+    state._capPadLatch = Math.max(0, state._capPadLatch - inst.k.dt())
+  }
   //
   // Never yank the invisible pad off-screen while the hero rides the cap —
   // Kaplay carries static bodies with their platform (looks like he vanishes).
   //
   const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet)
   const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40
-  const needsPad = colliderActive && (onCap || bounceAir ||
+  const padLatch = (state._capPadLatch ?? 0) > 0
+  const needsPad = colliderActive && (onCap || bounceAir || padLatch || stickyCap ||
     !walkingPastOnFloor && nearX && inCapBand &&
     (grounded || velY > -80 || fallingOntoCap))
   if (!needsPad) {
@@ -10631,6 +10646,7 @@ function revealOZone(inst) {
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   HeroHint.clear(inst.heroHint)
+  dismissGlowPostLStopTeacherHint(inst)
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
   //
   // Body fill itself waits for the O letter to actually be collected and the
@@ -11378,6 +11394,7 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
     m.idleTimer = 0
     m.postLRingArmAt = null
     m.countdown = MEDITATION_COUNTDOWN
+    dismissGlowPostLStopTeacherHint(inst)
     Hero.setEyesClosed(inst.heroInst, true)
     applyGlowPostLStillnessReveal(inst)
     syncMeditationColorFade(inst)
@@ -11515,6 +11532,32 @@ function canSpawnGlowFootBurst(inst, char) {
   return isOnGlowMainGroundFoot(footY)
 }
 //
+// Clears the post-L "stop and think" teacher line once O is opening or visible.
+//
+function dismissGlowPostLStopTeacherHint(inst) {
+  inst._postLStopHintShows = GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS
+  if (inst.lastGlowTeacherHintText !== GLOW_TEACHER_HINT_AFTER_L) return
+  if (!HeroHint.isActive(inst.heroHint)) return
+  HeroHint.clear(inst.heroHint)
+  inst._glowTeacherHintActive = false
+  inst.lastGlowTeacherHintText = null
+}
+//
+// Forces idle humming while the post-O trampoline sing countdown ticks.
+//
+function syncGlowTrampSingHeroVocalization(inst, still) {
+  const tw = inst.trampWalk
+  if (!still || tw?.countdown == null) return
+  const hero = inst.heroInst
+  if (!hero) return
+  enableGlowHeroIdleVocalization(inst)
+  hero.wasJumping = false
+  hero.isRunning = false
+  hero._effectivelyMoving = false
+  hero.jumpPhase = 'none'
+  hero.idleStillTime = Math.max(hero.idleStillTime ?? 0, TRAMP_SING_VOCAL_IDLE_SEC)
+}
+//
 // After O: stand still near the trampoline → countdown → mushroom walks
 // left. The first two sings stay on land; the third docks in the lake.
 // Once a walk starts it always finishes — chasing the hero cannot interrupt it.
@@ -11582,6 +11625,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     }
     return
   }
+  syncGlowTrampSingHeroVocalization(inst, still)
   tw.countdown -= dt
   if (tw.countdown <= 0) {
     tw.countdown = null

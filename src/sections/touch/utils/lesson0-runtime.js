@@ -27,6 +27,12 @@ const L0_PLATFORM_FLY_SPEED = 160
 // platform height above the normal minY bound).
 //
 const L0_SOFT_CLAMP_SPEED = 220
+//
+// Pre-level subtitle overlay from createLevelTransition — jungle audio waits.
+//
+export function isTouchLesson0AmbientUnblocked(k) {
+  return !k._transitionOverlay?.exists?.()
+}
 
 /**
  * Single per-frame game loop for touch level 0 (preserves legacy call order).
@@ -59,21 +65,22 @@ export function onUpdateLesson0GameLoop(k, ctx) {
   // 5. FPS counter
   //
   FpsCounter.onUpdate(ctx.fpsCounter)
+  const ambientUnblocked = isTouchLesson0AmbientUnblocked(k)
   //
   // 6. Rain audio bootstrap
   //
-  ctx.startRainWhenReady()
+  ambientUnblocked && ctx.startRainWhenReady()
   //
   // 7. Atmospheric SFX (only near playfield anchor)
   //
-  atmosphereActive && ctx.onUpdateThunder?.(k, ctx.thunderState, ctx.sound)
-  atmosphereActive && onUpdateCricketTimer(k, ctx.cricketState, ctx.sound)
-  atmosphereActive && onUpdateFrogTimer(k, ctx.frogState)
-  atmosphereActive && onUpdateOwlTimer(k, ctx.owlState, ctx.sound)
+  ambientUnblocked && atmosphereActive && ctx.onUpdateThunder?.(k, ctx.thunderState, ctx.sound)
+  ambientUnblocked && atmosphereActive && onUpdateCricketTimer(k, ctx.cricketState, ctx.sound)
+  ambientUnblocked && atmosphereActive && onUpdateFrogTimer(k, ctx.frogState)
+  ambientUnblocked && atmosphereActive && onUpdateOwlTimer(k, ctx.owlState, ctx.sound)
   //
   // 8. Rain simulation
   //
-  atmosphereActive && ctx.rainInst && Rain.onUpdate(ctx.rainInst)
+  ambientUnblocked && atmosphereActive && ctx.rainInst && Rain.onUpdate(ctx.rainInst)
   //
   // 9. Trap spikes
   //

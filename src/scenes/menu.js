@@ -1571,7 +1571,7 @@ const SECTION_DESCRIPTIONS = {
 const GLOW_PERCEPTION_RAY_LINES = [
   'learned:',
   'ground',
-  'see nuances',
+  'look',
   'stop and listen',
   'walk forward'
 ]

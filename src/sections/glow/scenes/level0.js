@@ -398,10 +398,10 @@ const RIGHT_SPIKE_GRASS_TUFT_COUNT = 8
 //
 const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.55
 //
-// Right-edge tuft on the L-log spike patch — nudge after bake so it does not
-// hang past the wood lip.
+// Spike-patch grass must stay this many px inside the L-log's right wood edge
+// (blade anchor is centre — clamp by sprite half-width, not tuft centre X).
 //
-const RIGHT_SPIKE_GRASS_RIGHTMOST_NUDGE_LEFT = 3
+const RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET = 3
 //
 // Touching the hedgehog or falling on the spikes is fatal — same
 // disintegration flow as any other level's death, then a standard
@@ -1294,7 +1294,7 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
 const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Ground under my feet'
-const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Learn to see the nuances'
+const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Look closer'
 const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
 const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Walk forward'
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
@@ -6958,11 +6958,12 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
 // Small tuft patch hiding the right spikes on the L-log platform's edge.
 //
 function createGlowSpikeGrass(k, zones, x1, x2, y) {
+  const grassRight = x2 - RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET
   const grass = Grass.create({
     k,
     floorY: y,
     left: x1,
-    right: x2,
+    right: grassRight,
     tuftCount: RIGHT_SPIKE_GRASS_TUFT_COUNT,
     z: GRASS_Z,
     getScaleMult: () => RIGHT_SPIKE_GRASS_SCALE_MULT,
@@ -6970,21 +6971,22 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
     getSwayScale: () => glowGrassSwayScale(zones)
   })
-  nudgeGlowSpikeGrassRightmostBladeLeft(grass, RIGHT_SPIKE_GRASS_RIGHTMOST_NUDGE_LEFT)
+  clampGlowSpikeGrassInsidePlatformRight(grass, x2, RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET)
   grass.layer.hidden = true
   return grass
 }
 //
-// Shifts the rightmost spike-patch blade after procedural placement.
+// Keeps every spike-patch blade inside the log's right edge (draw uses bot
+// anchor at blade.x, so the painted silhouette extends width/2 past centre).
 //
-function nudgeGlowSpikeGrassRightmostBladeLeft(grass, nudgeLeft) {
+function clampGlowSpikeGrassInsidePlatformRight(grass, platRightX, insetLeft) {
   const blades = grass?.blades
-  if (!blades?.length || nudgeLeft <= 0) return
-  let maxIdx = 0
-  for (let i = 1; i < blades.length; i++) {
-    blades[i].x > blades[maxIdx].x && (maxIdx = i)
+  if (!blades?.length || insetLeft < 0) return
+  const limitX = platRightX - insetLeft
+  for (const blade of blades) {
+    const halfW = blade.width * 0.5
+    blade.x + halfW > limitX && (blade.x = limitX - halfW)
   }
-  blades[maxIdx].x -= nudgeLeft
   blades.sort((a, b) => a.x - b.x)
 }
 //
@@ -8301,70 +8303,6 @@ function drawGlowPitInteriorVoidBackdrop(inst, k) {
     color: k.rgb(VOID.r, VOID.g, VOID.b)
   })
 }
-//
-// Underground fill under the pit — match baked static earth (not inner gray).
-//
-function glowPitEarthBelowFloorRgb(inst) {
-  const fade = inst.colorFade ?? 0
-  const z = inst.zones
-  const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-  const flatExplore = isGlowFlatSingleDecorColor(inst)
-  if (flatExplore && !innerGray) return VOID
-  if (z.colorWorld || z.oCollected || fade >= 1 - COLOR_CROSSFADE_EPS) return GROUND_DARK
-  return lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
-}
-//
-// Below the pit floor the earth-band cutout should match the left playfield earth.
-//
-function resolveGlowPitBelowFloorSprite(inst, k) {
-  const fade = inst.colorFade ?? 0
-  const zones = inst.zones
-  const pf = inst.parallaxFade ?? 0
-  if (isGlowFullParallaxStable(inst) && k.getSprite(BG_STATIC_COLOR)) {
-    return { sprite: BG_STATIC_COLOR, opacity: 1 }
-  }
-  if (zones.oCollected && k.getSprite(BG_STATIC_COLOR)) {
-    return { sprite: BG_STATIC_COLOR, opacity: 1 }
-  }
-  const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
-  if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
-    if (fade > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_COLOR)) {
-      const op = fade * pf
-      if (op > COLOR_CROSSFADE_EPS) return { sprite: BG_STATIC_COLOR, opacity: op }
-    }
-    const grayOp = (1 - fade) * pf
-    if (grayOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
-      return { sprite: BG_STATIC_GRAY, opacity: grayOp }
-    }
-  }
-  if (pf > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
-    return { sprite: BG_STATIC_GRAY, opacity: pf }
-  }
-  return null
-}
-//
-// Slice of the baked underground band — same pixels as left of the cave cutout.
-//
-function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, sprite, opacity = 1) {
-  const w = x2 - x1
-  const h = y2 - y1
-  if (w <= 0 || h <= 0) return
-  const opts = {
-    sprite,
-    pos: k.vec2(x1, y1),
-    width: w,
-    height: h,
-    quad: {
-      x: x1 / WORLD_W,
-      y: (y1 - PAR_STATIC_WORLD_Y) / PAR_STATIC_WORLD_H,
-      w: w / WORLD_W,
-      h: h / PAR_STATIC_WORLD_H
-    },
-    anchor: 'topleft'
-  }
-  opacity < 0.999 && (opts.opacity = opacity)
-  k.drawSprite(opts)
-}
 function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
@@ -8372,27 +8310,15 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
-  if (isGlowFlatSingleDecorColor(inst)) {
-    const rgb = glowPitEarthBelowFloorRgb(inst)
-    k.drawRect({
-      pos: k.vec2(leftX, bottomY),
-      width: rightX - leftX,
-      height: bandEndY - bottomY,
-      color: k.rgb(rgb.r, rgb.g, rgb.b)
-    })
-    return
-  }
-  const slice = resolveGlowPitBelowFloorSprite(inst, k)
-  if (slice?.sprite) {
-    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, slice.sprite, slice.opacity)
-    return
-  }
-  const rgb = glowPitEarthBelowFloorRgb(inst)
+  //
+  // Never sample BG_STATIC_* here — the wavy gray bake reads as stripes inside
+  // the open pit column beside the dark cave interior.
+  //
   k.drawRect({
     pos: k.vec2(leftX, bottomY),
     width: rightX - leftX,
     height: bandEndY - bottomY,
-    color: k.rgb(rgb.r, rgb.g, rgb.b)
+    color: k.rgb(VOID.r, VOID.g, VOID.b)
   })
 }
 //

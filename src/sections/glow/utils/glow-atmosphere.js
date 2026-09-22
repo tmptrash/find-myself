@@ -1880,11 +1880,15 @@ export function getGlowPitMouthWalkShelfSpan(zone) {
   return { leftX: shelf.x, rightX: shelf.x + shelf.w }
 }
 //
-// Earth-band / void cutout for the live pit (tight = collapsed mouth shelf only).
+// Earth-band / static-band cutout for the open pit (full interior width).
 //
 export function getGlowPitEarthBandMouthCutoutForPit(pit) {
   if (!pit?.zone) return { leftX: 0, rightX: 0 }
-  return getGlowPitEarthBandMouthCutout(pit.zone, Boolean(pit.collapsed))
+  //
+  // Full interior span — never the tight mouth shelf only, or the static earth
+  // band bleeds gray stripes into the left cave volume after collapse.
+  //
+  return getGlowPitEarthBandMouthCutout(pit.zone, false)
 }
 //
 // Cave pit floor body — spans to the mouth's right wall for full walk room.

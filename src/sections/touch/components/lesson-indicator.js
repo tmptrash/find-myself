@@ -439,6 +439,7 @@ export function create(config) {
     letterOutlineObjects,
     sectionLabelActiveColor: activeColor,
     sectionLabelInactiveColor: inactiveColor,
+    sectionLabelCompletedColor: completedColor,
     smallHero,
     lifeImage: lifeImageData,
     heroScoreText,
@@ -591,7 +592,9 @@ export function setSectionLabelLetterProgress(inst, completedLetters) {
   const capped = Math.min(completedLetters, inst.letterObjects.length)
   inst.letterObjects.forEach((letter, i) => {
     if (!letter?.exists?.()) return
-    const colorHex = i < capped ? inst.sectionLabelActiveColor : inst.sectionLabelInactiveColor
+    const colorHex = i < capped
+      ? (inst.sectionLabelCompletedColor ?? inst.sectionLabelActiveColor)
+      : inst.sectionLabelInactiveColor
     setHudLetterColor(letter, colorHex)
   })
   inst.hideInactiveLetterShadow && inst.letterOutlineObjects?.forEach((outline, i) => {

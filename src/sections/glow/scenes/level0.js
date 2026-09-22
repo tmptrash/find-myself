@@ -21,7 +21,6 @@ import {
   buildGlowTree,
   renderGlowTreeToCanvas,
   renderGlowTreeIntoContext,
-  rootSegWidth,
   TREE_SEED
 } from '../utils/glow-tree.js'
 import * as TreeSegments from '../utils/glow-tree-segments.js'
@@ -72,16 +71,15 @@ import {
   isCrackGrassExcluded,
   isCrackDecorExcluded,
   getCrackZone,
-  CAVE_MOUTH_MAIN_FLOOR_INSET,
-  CAVE_MOUTH_ENTRANCE_EXPAND_LEFT,
   KEY_PIT_COLLAPSED,
   ensureGlowPitOpenForEyesCollected,
   ensureGlowPitCollapsedOnReload,
   restoreGlowPitEyeIntroInterior,
   getGlowPitHeroStandY,
-  getGlowPitEarthBandMouthCutout,
+  getGlowPitEarthBandMouthCutoutForPit,
   isGlowOpenPitMouthWorldX,
   getGlowPitFloorCollider,
+  getGlowCaveMouthFloorLeftX,
   shouldGlowPitBeOpenForZones,
   glowHeroHasCollectedEyes,
   invalidateGlowPitCaveInteriorBake
@@ -399,6 +397,11 @@ const RIGHT_SPIKE_GRASS_TUFT_COUNT = 8
 // through — full-height grass (see BLADE_H in grass.js) would bury them.
 //
 const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.55
+//
+// Right-edge tuft on the L-log spike patch — nudge after bake so it does not
+// hang past the wood lip.
+//
+const RIGHT_SPIKE_GRASS_RIGHTMOST_NUDGE_LEFT = 3
 //
 // Touching the hedgehog or falling on the spikes is fatal — same
 // disintegration flow as any other level's death, then a standard
@@ -967,6 +970,10 @@ const GLOW_LETTER_PICKUP_RADIUS = 52
 const HERO_OUTLINE_COLOR = GLOW_PAL.glowOutlineLight
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
+//
+// Collected GLOW HUD glyphs — pure white, not hero gray or gold loaders.
+//
+const GLOW_HUD_COLLECTED_LETTER_HEX = CFG.visual.colors.hero.eyeWhite
 //
 // Filled glow hero body after the post-L colour reveal — white inside, dark rim.
 //
@@ -2277,13 +2284,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const rightSpikes = createGlowRightSpikes(k, zones, rightSpikesX1, rightSpikesX2, lPlatY)
     const spikeGrass = createGlowSpikeGrass(k, zones, rightSpikesX1, rightSpikesX2, lPlatY)
-    //
-    // Big tree's own root geometry, drawn directly on top of the tree sprite
-    // (not baked into it) as an early G-triggered preview in a single tone —
-    // sidesteps the tree's own gray sprite variant switch entirely, which
-    // only otherwise changes at L.
-    //
-    const rootsPeekLayer = createGlowRootsPeekLayer(k, zones)
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     if (await glowBootstrapPause(bootstrap, 72, session)) return
@@ -2425,7 +2425,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       mudZoneX2,
       rightSpikes,
       spikeGrass,
-      rootsPeekLayer,
       lPlatCaptionHiding: false,
       _lPlatVisibleLastFrame: false,
       oPlatCaptionHiding: false,
@@ -3353,7 +3352,7 @@ function persistTrampWalk(inst) {
 function isHeroInsideGlowPitCave(inst, heroX, heroY, footY = heroY + SURFACE_DETECT_Y) {
   const pit = inst.pit
   if (pit?.zone && pit.collapsed) {
-    const { leftX, rightX } = getGlowPitEarthBandMouthCutout(pit.zone)
+    const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
     const { innerX, innerW } = getGlowPitFloorCollider(pit.zone)
     const minX = Math.min(leftX + 6, innerX + 6)
     const maxX = Math.max(rightX - 6, innerX + innerW - 6)
@@ -3480,7 +3479,7 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     sectionLabel: 'GLOW',
     activeColor: HERO_BODY_COLOR,
     inactiveColor: GLOW_PAL.decorGray,
-    completedColor: HERO_BODY_COLOR,
+    completedColor: GLOW_HUD_COLLECTED_LETTER_HEX,
     heroBodyColor: HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
     heroEyeWhiteColor: HERO_BODY_COLOR,
@@ -3509,7 +3508,10 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
   // G reads as the currently open, reachable letter — gold from the start
   // (unlike L/O/W which stay gray until unlocked), white once collected.
   //
-  LevelIndicator.setHudLetterColor(indicator.letterObjects?.[0], completedLetters >= 1 ? HERO_BODY_COLOR : GLOW_GOLD_HEX)
+  LevelIndicator.setHudLetterColor(
+    indicator.letterObjects?.[0],
+    completedLetters >= 1 ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_GOLD_HEX
+  )
   return indicator
 }
 //
@@ -3851,10 +3853,10 @@ function syncGlowHudLetterColors(inst) {
   const collected = [z.gCollected, z.lCollected, z.oCollected, z.wCollected]
   letters.forEach((letter, i) => {
     if (i === 0) {
-      LevelIndicator.setHudLetterColor(letter, z.gCollected ? HERO_BODY_COLOR : GLOW_GOLD_HEX)
+      LevelIndicator.setHudLetterColor(letter, z.gCollected ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_GOLD_HEX)
       return
     }
-    const colorHex = collected[i] ? HERO_BODY_COLOR : GLOW_PAL.decorGray
+    const colorHex = collected[i] ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_PAL.decorGray
     LevelIndicator.setHudLetterColor(letter, colorHex)
   })
 }
@@ -4336,19 +4338,13 @@ function isGlowDecorWorldXInMudZone(inst, worldX) {
   return worldX >= inst.mudZoneX1 && worldX <= inst.mudZoneX2
 }
 //
-// Clearance before the cave mouth for the right edge of the early
-// ground-peek band, so it reads as reaching right up to (not past, not
-// noticeably short of) the solid floor above the cave.
-//
-const GROUND_PEEK_CAVE_CLEAR = 66
-//
 // True when world X lies in the early ground-peek band after G — same
-// LEFT_MARGIN..cave-mouth span drawMudGroundZone previews underground,
+// LEFT_MARGIN..mouth-shelf span drawMudGroundZone previews underground,
 // mirrored here for the surface decor (rocks/mushrooms/grass) above it.
 //
 function isGlowWorldXInGroundPeekZone(inst, worldX) {
   if (worldX == null || !inst.zones?.gCollected) return false
-  const floorEndX = getCrackZone(WORLD_W, FLOOR_Y).x1 - GROUND_PEEK_CAVE_CLEAR
+  const floorEndX = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
   return worldX >= LEFT_MARGIN && worldX <= floorEndX
 }
 //
@@ -5668,7 +5664,7 @@ function drawExploredGroundLip(inst) {
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
   const pitMouthCut = inst.pit?.collapsed && inst.pit.zone
-    ? getGlowPitEarthBandMouthCutout(inst.pit.zone)
+    ? getGlowPitEarthBandMouthCutoutForPit(inst.pit)
     : null
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step
@@ -6248,7 +6244,7 @@ function createLevelBounds(k) {
   // Main floor stops before the right-edge crack band (lid is a separate body)
   //
   const crack = getCrackZone(WORLD_W, FLOOR_Y)
-  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
+  const floorEndX = getGlowCaveMouthFloorLeftX(crack)
   const floorW = Math.max(40, floorEndX - LEFT_MARGIN)
   const floor = k.add([
     k.rect(floorW, FLOOR_PHYS_H),
@@ -6974,8 +6970,22 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
     getSwayScale: () => glowGrassSwayScale(zones)
   })
+  nudgeGlowSpikeGrassRightmostBladeLeft(grass, RIGHT_SPIKE_GRASS_RIGHTMOST_NUDGE_LEFT)
   grass.layer.hidden = true
   return grass
+}
+//
+// Shifts the rightmost spike-patch blade after procedural placement.
+//
+function nudgeGlowSpikeGrassRightmostBladeLeft(grass, nudgeLeft) {
+  const blades = grass?.blades
+  if (!blades?.length || nudgeLeft <= 0) return
+  let maxIdx = 0
+  for (let i = 1; i < blades.length; i++) {
+    blades[i].x > blades[maxIdx].x && (maxIdx = i)
+  }
+  blades[maxIdx].x -= nudgeLeft
+  blades.sort((a, b) => a.x - b.x)
 }
 //
 // Grass tint hiding the right spikes — same gray/green crossfade as the mud
@@ -6988,74 +6998,6 @@ function glowSpikeGrassTint(sc, zones) {
   const fade = glowGrassGreenFade(sc, zones)
   if (fade >= 1) return GRASS_GREEN
   return lerpRgb(gray, GRASS_GREEN, fade)
-}
-//
-// Draws the big tree's own root geometry (treeData.rootSegs, world-space
-// line segments) directly on top of the tree sprite, in a single flat tone —
-// an early G-triggered preview that sidesteps the tree's own gray/lit
-// sprite-baking system entirely (which otherwise only shows roots from L).
-// A plain k.add + draw() object at a z above the tree sprite (rather than a
-// bare k.onDraw call, which renders behind every game object including the
-// tree) so it can never end up hidden underneath the tree's own silhouette.
-//
-function createGlowRootsPeekLayer(k, zones) {
-  return k.add([
-    k.pos(0, 0),
-    k.z(CFG.visual.zIndex.platforms - 1),
-    {
-      draw() {
-        drawGlowRootsPeek(zones)
-      }
-    }
-  ])
-}
-function drawGlowRootsPeek(zones) {
-  const sc = zones._sceneRef
-  if (!sc || !zones.gCollected || zones.lCollected) return
-  const treeData = sc.treeData
-  const segs = treeData?.rootSegs
-  if (!segs?.length) return
-  const k = sc.k
-  const h = WORLD_H
-  const groundY = treeData.groundClipY ?? treeData.rootStartY ?? (treeData.trunkSegs[0]?.sy ?? h)
-  const trunkBase = treeData.trunkBase ?? treeData.trunkSegs[0]
-  const trunkBaseX = trunkBase?.sx ?? 0
-  const trunkHalfW = (trunkBase?.w ?? 74) * 0.5
-  //
-  // Same shape/taper as the real canvas-baked roots, but flat — one tone
-  // matching the trunk (DECOR_GRAY) instead of the palette's separate
-  // contour/fill/highlight shades, with the same grain texture the trunk's
-  // own baked sprite carries painted on top instead, standing in for that
-  // shading.
-  //
-  const fillColor = k.rgb(DECOR_GRAY.r, DECOR_GRAY.g, DECOR_GRAY.b)
-  const widths = segs.map(seg => rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW))
-  const drawLines = () => segs.forEach((seg, i) => k.drawLine({
-    p1: k.vec2(seg.sx, seg.sy),
-    p2: k.vec2(seg.ex, seg.ey),
-    width: widths[i],
-    color: fillColor
-  }))
-  drawLines()
-  //
-  // Grain only on the root strokes themselves — masked to the same line
-  // shapes redrawn as the stencil, or the bounding-box version painted a
-  // visible mismatched-tone rectangle over the plain ground around them.
-  //
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  segs.forEach(seg => {
-    minX = Math.min(minX, seg.sx, seg.ex)
-    maxX = Math.max(maxX, seg.sx, seg.ex)
-    minY = Math.min(minY, seg.sy, seg.ey)
-    maxY = Math.max(maxY, seg.sy, seg.ey)
-  })
-  k.drawMasked(
-    () => drawGlowFilmGrainWorldPatch(k, minX - 4, minY - 4, maxX + 4, maxY + 4),
-    drawLines
-  )
 }
 //
 // Fixed wooden spikes on the L-log's right edge — a static hazard drawn
@@ -8241,7 +8183,7 @@ function glowPitEarthBandCutoutForInst(inst) {
   const pit = inst.pit
   if (!pit?.zone) return null
   if (!pit.collapsed && !pit.cracksVisible) return null
-  return getGlowPitEarthBandMouthCutout(pit.zone)
+  return getGlowPitEarthBandMouthCutoutForPit(pit)
 }
 //
 // Full-width horizontal band with a cave-mouth gap once the pit is open.
@@ -8249,7 +8191,7 @@ function glowPitEarthBandCutoutForInst(inst) {
 function drawGlowHorizontalBand(k, inst, y, height, color, opacity = 1, cutCaveMouth = false) {
   const pitOpen = inst.pit && (inst.pit.collapsed || inst.pit.cracksVisible)
   const cutout = cutCaveMouth && pitOpen && inst.pit?.zone
-    ? getGlowPitEarthBandMouthCutout(inst.pit.zone)
+    ? glowPitEarthBandCutoutForInst(inst)
     : null
   if (!cutout) {
     k.drawRect({
@@ -8350,7 +8292,7 @@ function drawGlowPitInteriorVoidBackdrop(inst, k) {
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
   if (pit._caveSpriteReady) return
-  const { leftX, rightX } = getGlowPitEarthBandMouthCutout(pit.zone)
+  const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   const depth = pit.zone.depth
   depth > 0 && k.drawRect({
     pos: k.vec2(leftX, pit.floorY),
@@ -8429,7 +8371,7 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const bottomY = pit.floorY + pit.zone.depth
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
-  const { leftX, rightX } = getGlowPitEarthBandMouthCutout(pit.zone)
+  const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   if (isGlowFlatSingleDecorColor(inst)) {
     const rgb = glowPitEarthBelowFloorRgb(inst)
     k.drawRect({
@@ -8645,12 +8587,12 @@ function drawMudGroundZone(inst) {
   // layer normally only shows once water is discovered — see
   // drawUndergroundSpriteClipped, previewed early here instead), stopping
   // the same clear distance before the cave mouth as the decor mushrooms
-  // (GROUND_PEEK_CAVE_CLEAR) — same right bound isGlowWorldXInGroundPeekZone
+  // mouth-shelf left edge — same right bound isGlowWorldXInGroundPeekZone
   // uses for the surface decor above this band, so nothing (line, texture,
   // rocks, grass) ever reads as reaching the cave.
   //
   const x1 = LEFT_MARGIN
-  const x2 = getCrackZone(WORLD_W, FLOOR_Y).x1 - GROUND_PEEK_CAVE_CLEAR
+  const x2 = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
   drawUndergroundSpriteBand(inst.k, UNDERGROUND_GRAY_SPRITE, 1, x1, x2)
   drawGlowMudZoneGroundLine(inst, x1, x2)
 }
@@ -9773,6 +9715,7 @@ function collectLetterG(inst) {
     //
     LevelIndicator.setSectionLabelHidden(inst.levelIndicator, false)
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 1)
+    syncGlowHudLetterColors(inst)
   }
   syncGlowFpsHudVisibility(inst)
   openGlowLetterCaption(inst, entry, GLOW_DIALOG_G, GLOW_LETTER_CAPTION_DURATION_G, () => {
@@ -9813,6 +9756,7 @@ function collectLetterL(inst) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 2, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 2)
+    syncGlowHudLetterColors(inst)
   }
   inst.meditationWorldLife = 0
   syncGlowBirdsAfterL(inst)
@@ -9861,6 +9805,7 @@ function collectLetterO(inst) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 3, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 3)
+    syncGlowHudLetterColors(inst)
   }
   //
   // The log the hero just collected O from vanishes for the length of the
@@ -9907,6 +9852,7 @@ function collectLetterW(inst) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 4, inst.zones.colorWorld)
   } else {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 4)
+    syncGlowHudLetterColors(inst)
   }
   revealPostWHud(inst)
   applyZoneVisibility(inst)
@@ -12887,7 +12833,7 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   //
   // Never snap over the crack mouth — the hero must fall through into the pit.
   //
-  const floorEndX = crack.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
+  const floorEndX = getGlowCaveMouthFloorLeftX(crack)
   if (heroX < LEFT_MARGIN + 8 || heroX >= floorEndX - 16) return
   if (isHeroOverOpenCaveMouth(inst, heroX)) return
   if (isHeroOverLetterLog(inst, heroX)) return

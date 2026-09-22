@@ -46,13 +46,18 @@ const CAVE_SEAM_TOP_SHELF_HALF_W = 12
 //
 const PIT_MOUTH_WALK_SHELF_W = 22
 //
+// Painted ground / earth-band mouth line sits this far right of the walk
+// shelf's left edge (shorter lip than the invisible stand collider).
+//
+const CAVE_MOUTH_GROUND_LINE_TRIM_LEFT = 12
+//
 // Shorten the mouth lip shelf from the left and widen the cave entrance by the
 // same amount (hero stand lip above the skull cross-section).
 //
 export const CAVE_MOUTH_ENTRANCE_EXPAND_LEFT = 42
 //
-// Main playfield floor and sealed crack lid start this far left of the cave
-// mouth — smaller values shift the overhang lip right above the pit opening.
+// Pre-collapse earth-band cutout extends this far past the crack zone on the
+// right — smaller values tuck the painted mouth gap toward the pit opening.
 //
 export const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
 //
@@ -121,7 +126,7 @@ const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
-const CAVE_LAYOUT_VERSION = 62
+const CAVE_LAYOUT_VERSION = 67
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
 const CAVE_SEAM_COLUMN_RADIUS_MAX = 14
@@ -208,7 +213,7 @@ export function getCrackZone(screenW, floorY) {
 export function isHeroOnCrackLid(pit, heroX, footY) {
   if (!pit || footY == null) return false
   const { zone } = pit
-  return heroX >= zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT &&
+  return heroX >= getGlowCaveMouthWalkShelfLeftX(zone) &&
     heroX <= zone.x2 &&
     footY >= pit.floorY - CRACK_STOMP_FEET_MAX &&
     footY <= pit.floorY + 8
@@ -439,7 +444,7 @@ export function createGlowPit(cfg) {
   // Sealed crack lid bridges from the main-floor edge through the crack band
   // until collapse — no gap the hero can fall through on the first jump in.
   //
-  const lidX = zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
+  const lidX = getGlowCaveMouthWalkShelfLeftX(zone)
   const lidW = zone.x2 - lidX
   let crackFloor = null
   !startOpen && (crackFloor = k.add([
@@ -867,7 +872,7 @@ function drawGlowPitMouthVoidFill(k, pit) {
   }
   const pal = buildCavePalette(glowRgb('decorGray'))
   const edge = pit.wallProfile.interiorWallEdge
-  drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge)
+  drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge, pit.zone)
 }
 //
 // Private helpers
@@ -1057,7 +1062,7 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
   const layout = pit.wallProfile
   const mouth = layout.mouth
   const pal = buildCavePalette(glowRgb('decorGray'))
-  drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge)
+  drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge, zone)
   if (showRocks) {
     drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
     drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
@@ -1089,7 +1094,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
-  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge), pal.void)
+  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge, zone), pal.void)
   const groundY = layout.mouth.floorY
   //
   // Wall/contour rocks are drawn live on the foreground pass so bake void
@@ -1116,7 +1121,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   pit._caveBakeRocksKey = bakeKey
   pit._caveBakeLayoutVersion = CAVE_LAYOUT_VERSION
 }
-function caveMouthPts(mouth, interiorWallEdge = null) {
+function caveMouthPts(mouth, interiorWallEdge = null, zone = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
   const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   //
@@ -1130,7 +1135,8 @@ function caveMouthPts(mouth, interiorWallEdge = null) {
   //
   const pts = []
   const seed = leftEdge[0].x * 0.037
-  buildJaggedHorizontalEdge(leftEdge[0].x, mouth.right[0].x, mouth.floorY, seed)
+  const topEdge = caveMouthGroundTopEdge(zone, mouth, leftEdge)
+  buildJaggedHorizontalEdge(topEdge.x1, topEdge.x2, mouth.floorY, seed)
     .forEach(p => pts.push(p))
   for (let i = 1; i < mouth.right.length; i++) {
     pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
@@ -1230,7 +1236,7 @@ function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
 //
 // Solid dark void for the cave interior — single fill, no layered portals.
 //
-function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null) {
+function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null, zone = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return
   const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   const pts = []
@@ -1241,7 +1247,8 @@ function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null) {
   // equally chaotic and rocks placed near it visibly straddle the boundary.
   //
   const seed = leftEdge[0].x * 0.037
-  buildJaggedHorizontalEdge(leftEdge[0].x, mouth.right[0].x, mouth.floorY, seed)
+  const topEdge = caveMouthGroundTopEdge(zone, mouth, leftEdge)
+  buildJaggedHorizontalEdge(topEdge.x1, topEdge.x2, mouth.floorY, seed)
     .forEach(p => pts.push(k.vec2(p.x, p.y)))
   for (let i = 1; i < mouth.right.length; i++) {
     pts.push(k.vec2(mouth.right[i].x, mouth.right[i].y))
@@ -1336,12 +1343,11 @@ function buildCaveSceneLayout(zone, floorY) {
   appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
   const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
   const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
-  const mouthLipRightX = interiorWallX + 8
-  appendCaveMouthCeilingLipRocks(contourRocks, mouth, interiorLeftEdge, floorY, seed + 1520, mouthLipRightX)
+  appendCaveMouthCeilingLipRocks(contourRocks, zone, floorY, seed + 1520)
   appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2105)
-  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, cutLeft, seed + 2188)
+  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, cutLeft, seed + 2188, zone)
   appendCaveInteriorSeamScatterRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2244)
-  appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2291)
+  appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2291, zone)
   return {
     version: CAVE_LAYOUT_VERSION,
     pebbles,
@@ -1385,7 +1391,7 @@ function caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX) {
   wallX != null && (seamX = Math.max(seamX, wallX))
   return seamX + CAVE_SEAM_COVER_X_BIAS - CAVE_SEAM_COVER_X_LEFT_SHIFT
 }
-function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, cutLeft, seed) {
+function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, cutLeft, seed, zone) {
   const count = 3 + Math.floor(caveSeed01(seed) * 2)
   const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
   for (let i = 0; i < count; i++) {
@@ -1393,8 +1399,13 @@ function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, cutLeft
       caveSeed01(seed + i * 3.1) * (CAVE_SEAM_TOP_RADIUS_MAX - CAVE_SEAM_TOP_RADIUS_MIN)
     const y = floorY + radius - 0.5
     const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX)
+    const x = clampRockXToMouthShelf(
+      seamX + (caveSeed01(seed + i * 5.7) - 0.5) * (CAVE_SEAM_COLUMN_X_SPREAD + 6),
+      radius,
+      zone
+    )
     rocks.push({
-      x: seamX + (caveSeed01(seed + i * 5.7) - 0.5) * (CAVE_SEAM_COLUMN_X_SPREAD + 6),
+      x,
       y,
       radius,
       straddleMouthGround: true,
@@ -1455,14 +1466,23 @@ function appendCaveInteriorSeamScatterRocks(rocks, interiorLeftEdge, floorY, bot
 //
 // One extra cap at the ground-line top and one at the column foot (still on/below floorY).
 //
-function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed) {
+function clampRockXToMouthShelf(x, radius, zone) {
+  const span = getGlowPitMouthGroundLineSpan(zone)
+  const pad = radius * 0.55
+  return Math.min(Math.max(x, span.leftX + pad), span.rightX - pad)
+}
+function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed, zone) {
   const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
   const yBottom = bottomY - 12
   const topRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
     caveSeed01(seed) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
   const topY = floorY + topRadius - 0.5
   const topSeamX = caveSeamCoverXAtY(interiorLeftEdge, topY, cutLeft, fallbackX)
-  const topX = topSeamX + (caveSeed01(seed + 1.1) - 0.5) * 8
+  const topX = clampRockXToMouthShelf(
+    topSeamX + (caveSeed01(seed + 1.1) - 0.5) * 8,
+    topRadius,
+    zone
+  )
   rocks.push({
     x: topX,
     y: topY,
@@ -1474,8 +1494,10 @@ function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bott
     caveSeed01(seed + 8.7) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
   const topExtraY = floorY + topExtraRadius - 0.5
   const topExtraSeamX = caveSeamCoverXAtY(interiorLeftEdge, topExtraY, cutLeft, fallbackX)
+  const topExtraXRaw = topX + CAVE_SEAM_TOP_EXTRA_RIGHT_OFFSET + (caveSeed01(seed + 9.3) - 0.5) * 4
+  const topExtraX = clampRockXToMouthShelf(topExtraXRaw, topExtraRadius, zone)
   rocks.push({
-    x: topX + CAVE_SEAM_TOP_EXTRA_RIGHT_OFFSET + (caveSeed01(seed + 9.3) - 0.5) * 4,
+    x: topExtraX,
     y: topExtraY,
     radius: topExtraRadius,
     straddleMouthGround: true,
@@ -1507,16 +1529,17 @@ function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bott
     verts: buildRockVertices(botExtraRadius)
   })
 }
-function appendCaveMouthCeilingLipRocks(rocks, mouth, interiorLeftEdge, floorY, seed, lipRightX) {
-  if (!interiorLeftEdge?.length || !mouth?.right?.length) return
-  const lipSeed = interiorLeftEdge[0].x * 0.041 + floorY * 0.002
-  const lipEndX = lipRightX ?? mouth.right[0].x + 4
-  const topEdge = buildJaggedHorizontalEdge(
-    interiorLeftEdge[0].x - 6,
-    lipEndX,
-    floorY,
-    lipSeed
-  )
+function caveMouthGroundTopEdge(zone, mouth, leftEdge) {
+  if (zone) {
+    const span = getGlowPitMouthGroundLineSpan(zone)
+    return { x1: span.leftX, x2: span.rightX }
+  }
+  return { x1: leftEdge[0].x, x2: mouth.right[0].x }
+}
+function appendCaveMouthCeilingLipRocks(rocks, zone, floorY, seed) {
+  const span = getGlowPitMouthGroundLineSpan(zone)
+  const lipSeed = span.leftX * 0.041 + floorY * 0.002
+  const topEdge = buildJaggedHorizontalEdge(span.leftX, span.rightX, floorY, lipSeed)
   topEdge.forEach((p, i) => {
     const radius = 7 + caveSeed01(seed + i * 3.4) * 18
     rocks.push({
@@ -1820,6 +1843,50 @@ function getGlowPitMouthWalkShelf(zone) {
   return { x, w }
 }
 //
+// Painted ground / baked cave mouth top edge — shorter on the left than the
+// invisible walk shelf so the lip line does not overshoot the stand collider.
+//
+export function getGlowPitMouthGroundLineSpan(zone) {
+  const shelf = getGlowPitMouthWalkShelf(zone)
+  const rightX = shelf.x + shelf.w
+  const minSpan = 6
+  const leftX = Math.min(rightX - minSpan, shelf.x + CAVE_MOUTH_GROUND_LINE_TRIM_LEFT)
+  return { leftX, rightX }
+}
+//
+// Left edge of the invisible mouth walk shelf and sealed crack lid collider.
+//
+export function getGlowCaveMouthWalkShelfLeftX(zone) {
+  return getGlowPitMouthWalkShelf(zone).x
+}
+//
+// Main playfield floor draw and mouth earth-band cutout (collapsed) — trimmed
+// ground line, not the full walk shelf span.
+//
+export function getGlowCaveMouthFloorLeftX(zone) {
+  return getGlowPitMouthGroundLineSpan(zone).leftX
+}
+//
+// Right edge of the painted mouth ground line (matches walk shelf right).
+//
+export function getGlowCaveMouthFloorRightX(zone) {
+  return getGlowPitMouthGroundLineSpan(zone).rightX
+}
+//
+// Walk shelf span at the cave mouth — matches the invisible lip collider.
+//
+export function getGlowPitMouthWalkShelfSpan(zone) {
+  const shelf = getGlowPitMouthWalkShelf(zone)
+  return { leftX: shelf.x, rightX: shelf.x + shelf.w }
+}
+//
+// Earth-band / void cutout for the live pit (tight = collapsed mouth shelf only).
+//
+export function getGlowPitEarthBandMouthCutoutForPit(pit) {
+  if (!pit?.zone) return { leftX: 0, rightX: 0 }
+  return getGlowPitEarthBandMouthCutout(pit.zone, Boolean(pit.collapsed))
+}
+//
 // Cave pit floor body — spans to the mouth's right wall for full walk room.
 //
 export function getGlowPitFloorCollider(zone) {
@@ -1834,8 +1901,9 @@ export function getGlowPitFloorCollider(zone) {
  * @param {Object} zone - Pit / crack zone from getCrackZone
  * @returns {{ leftX: number, rightX: number }}
  */
-export function getGlowPitEarthBandMouthCutout(zone) {
-  const lipLeft = zone.x1 - CAVE_MOUTH_MAIN_FLOOR_INSET - CAVE_MOUTH_ENTRANCE_EXPAND_LEFT
+export function getGlowPitEarthBandMouthCutout(zone, tightMouth = false) {
+  if (tightMouth) return getGlowPitMouthGroundLineSpan(zone)
+  const lipLeft = getGlowCaveMouthFloorLeftX(zone)
   const { innerX } = getGlowPitFloorCollider(zone)
   const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * 2)
   const rightX = zone.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
@@ -1849,7 +1917,7 @@ export function getGlowPitEarthBandMouthCutout(zone) {
  */
 export function isGlowOpenPitMouthWorldX(pit, x) {
   if (!pit?.collapsed || !pit.zone) return false
-  const { leftX, rightX } = getGlowPitEarthBandMouthCutout(pit.zone)
+  const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   return x >= leftX && x <= rightX
 }
 export function ensureGlowPitOpenForEyesCollected(pit) {

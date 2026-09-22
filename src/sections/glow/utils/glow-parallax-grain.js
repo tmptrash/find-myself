@@ -208,6 +208,33 @@ function ensureGlowFilmGrainOverlaySprite(k) {
   if (k.getSprite(GRAIN_OVERLAY_SPRITE)) return
   k.loadSprite(GRAIN_OVERLAY_SPRITE, buildGrainOverlayTile())
 }
+/**
+ * Draws the shared grain tile across one WORLD-space rect (scrolls with the
+ * camera, unlike addGlowFilmGrainOverlayLayer's fixed full-screen version) —
+ * for small live-drawn (not baked) shapes that need the same grain look as
+ * the game's baked sprites without baking their own canvas.
+ * @param {Object} k - Kaplay instance
+ * @param {number} x1
+ * @param {number} y1
+ * @param {number} x2
+ * @param {number} y2
+ * @param {number} [opacity] - Defaults to the standard overlay opacity
+ */
+export function drawGlowFilmGrainWorldPatch(k, x1, y1, x2, y2, opacity = GRAIN_OVERLAY_OPACITY) {
+  ensureGlowFilmGrainOverlaySprite(k)
+  const tile = GRAIN_OVERLAY_TILE
+  for (let y = y1; y < y2; y += tile) {
+    for (let x = x1; x < x2; x += tile) {
+      k.drawSprite({
+        sprite: GRAIN_OVERLAY_SPRITE,
+        pos: k.vec2(x, y),
+        width: tile,
+        height: tile,
+        opacity
+      })
+    }
+  }
+}
 //
 // Draws the grain tile across the full viewport (call from a fixed draw layer).
 //

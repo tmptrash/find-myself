@@ -650,7 +650,7 @@ function drawWoodShading(ctx, segs, rgb, maxY) {
 // wide as the trunk itself (no separate connector shape needed) and only
 // show their own thinner width once they clear the merge zone below ground.
 //
-function rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) {
+export function rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) {
   const segBottomY = Math.max(seg.sy, seg.ey)
   const segTopY = Math.min(seg.sy, seg.ey)
   const bottomTaper = Math.min(1, (h - segBottomY) / ROOT_BOTTOM_TAPER_ZONE)

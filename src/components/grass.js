@@ -69,6 +69,9 @@ let lastTintK = null
  * @param {Function} [cfg.excluded] - (x) => true to skip this X position
  * @param {Function} [cfg.density] - (x) => 0..1 acceptance weight; positions
  *   with a low weight grow fewer tufts (density gradient across the strip)
+ * @param {Function} [cfg.getScaleMult] - (x) => multiplier on top of the
+ *   normal random blade scale; lets one zone (e.g. a hiding spot) grow
+ *   taller/thicker blades without touching the rest of the field
  * @param {Function} cfg.getTint - (blade) => {r,g,b[,opacity]} tint or null
  *   to hide the blade this frame; opacity (0..1) fades the blade without
  *   darkening its colour
@@ -79,9 +82,9 @@ let lastTintK = null
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
-  const { k, floorY, left, right, tuftCount, z, excluded, density, getTint, getSwayScale, postBakeCanvas } = cfg
+  const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas } = cfg
   loadBladeSprites(k, postBakeCanvas)
-  const blades = buildBlades(left, right, tuftCount, excluded, density)
+  const blades = buildBlades(left, right, tuftCount, excluded, density, getScaleMult)
   const inst = {
     k,
     floorY,
@@ -115,7 +118,7 @@ export function draw(inst) {
 // optional density callback rejection-samples candidate positions, so the
 // tufts concentrate where the weight is high.
 //
-function buildBlades(left, right, tuftCount, excluded, density) {
+function buildBlades(left, right, tuftCount, excluded, density, getScaleMult) {
   const blades = []
   let tufts = 0
   let attempts = 0
@@ -131,7 +134,7 @@ function buildBlades(left, right, tuftCount, excluded, density) {
       if (excluded?.(x)) continue
       const variant = Math.floor(Math.random() * BLADE_VARIANTS)
       const flipX = Math.random() < 0.5
-      const scale = BLADE_SCALE_MIN + Math.random() * BLADE_SCALE_RANGE
+      const scale = (BLADE_SCALE_MIN + Math.random() * BLADE_SCALE_RANGE) * (getScaleMult?.(x) ?? 1)
       blades.push({
         x,
         quad: bladeAtlasQuad(variant, flipX),

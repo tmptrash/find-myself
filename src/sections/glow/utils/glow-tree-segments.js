@@ -2,7 +2,8 @@ import { renderGlowTreeToCanvas } from './glow-tree.js'
 import {
   getTreePaletteLit,
   getTreePaletteColor,
-  getTreePaletteFlatDecor
+  getTreePaletteFlatDecor,
+  getTreePaletteFlatDecorRootsVisible
 } from './glow-palette.js'
 import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from './glow-parallax-grain.js'
 import {
@@ -156,6 +157,7 @@ export function normalizePersistedTreeSegmentIds(savedIds, treeData, plan) {
 export function bakeGlowTreeSegmentSprites(k, treeData, w, h, segmentIds) {
   const palettes = {
     flat: getTreePaletteFlatDecor(),
+    flatRootsVisible: getTreePaletteFlatDecorRootsVisible(),
     lit: getTreePaletteLit(),
     color: getTreePaletteColor()
   }
@@ -170,7 +172,8 @@ export function bakeGlowTreeSegmentSprites(k, treeData, w, h, segmentIds) {
  * @param {number} z - Draw order z index
  * @returns {Object} Map segmentId -> { grayObj, colorObj, fade, revealed }
  */
-export function segmentGraySpriteName(segmentId, lit) {
+export function segmentGraySpriteName(segmentId, lit, rootsVisible = false) {
+  if (!lit && rootsVisible) return SEGMENT_SPRITE_PREFIX + segmentId + '-flat-roots'
   const suffix = lit ? '-lit' : '-flat'
   return SEGMENT_SPRITE_PREFIX + segmentId + suffix
 }
@@ -180,15 +183,17 @@ export function segmentGraySpriteName(segmentId, lit) {
  * @param {string[]} segmentIds - Segment ids
  * @param {number} z - Draw order z index
  * @param {boolean} litGray - Use warm lit gray sprites (after L)
+ * @param {boolean} rootsVisibleGray - Use the roots-visible flat variant for
+ *   the roots segment specifically (from G, before litGray/L)
  * @returns {Object} Map segmentId -> { grayObj, colorObj, fade, revealed }
  */
-export function createGlowTreeSegmentObjects(k, segmentIds, z, litGray = false) {
+export function createGlowTreeSegmentObjects(k, segmentIds, z, litGray = false, rootsVisibleGray = false) {
   const entries = {}
   const offsets = segmentBakeOffsets.get(k) || {}
   segmentIds.forEach(id => {
     const homeX = offsets[id]?.x ?? 0
     const homeY = offsets[id]?.y ?? 0
-    const grayName = segmentGraySpriteName(id, litGray)
+    const grayName = segmentGraySpriteName(id, litGray, rootsVisibleGray && isGlowTreeRootsSegmentId(id))
     const grayObj = k.add([
       k.sprite(grayName),
       k.pos(homeX, homeY),
@@ -348,8 +353,8 @@ function bakeOneGlowTreeSegment(k, treeData, w, h, id, palettes) {
   const litName = SEGMENT_SPRITE_PREFIX + id + '-lit'
   const colorName = SEGMENT_SPRITE_PREFIX + id + '-color'
   //
-  // All three palettes render the SAME geometry, so one measured bounding
-  // box crops every variant — that keeps the sprites pixel-aligned, which is
+  // All palettes render the SAME geometry, so one measured bounding box
+  // crops every variant — that keeps the sprites pixel-aligned, which is
   // what lets the flat/lit gray swap and the gray↔colour crossfade happen
   // without the segment shifting on screen.
   //
@@ -359,6 +364,16 @@ function bakeOneGlowTreeSegment(k, treeData, w, h, id, palettes) {
   loadGlowTreeSegmentSprite(k, flatName, flatCanvas, bounds, 0)
   loadGlowTreeSegmentSprite(k, litName, renderGlowTreeToCanvas(partial, palettes.lit, w, h), bounds, 1)
   loadGlowTreeSegmentSprite(k, colorName, renderGlowTreeToCanvas(partial, palettes.color, w, h), bounds, 2)
+  //
+  // Roots segment only: a 4th flat variant with a distinguishable root tone
+  // (see getTreePaletteFlatDecorRootsVisible) instead of the plain flat
+  // bake's roots-blend-into-everything-else tone, so the early G-triggered
+  // reveal has something to actually show before L's lit palette takes over.
+  //
+  if (isGlowTreeRootsSegmentId(id)) {
+    const rootsName = SEGMENT_SPRITE_PREFIX + id + '-flat-roots'
+    loadGlowTreeSegmentSprite(k, rootsName, renderGlowTreeToCanvas(partial, palettes.flatRootsVisible, w, h), bounds, 3)
+  }
 }
 //
 // Records where a cropped segment sprite has to be drawn to land back on its

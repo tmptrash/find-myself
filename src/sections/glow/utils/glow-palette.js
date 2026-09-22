@@ -69,6 +69,30 @@ export function getTreePaletteFlatDecor() {
 }
 
 /**
+ * Same flat single-tone tree as getTreePaletteFlatDecor(), except the roots
+ * get their own distinct (still single) tone instead of blending into the
+ * decorGray trunk/ground — used for the early G-triggered ground-peek,
+ * before L's full lit palette normally makes them stand out.
+ * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ */
+export function getTreePaletteFlatDecorRootsVisible() {
+  const c = glowRgb('decorGray')
+  const root = glowRgb('midGray')
+  return {
+    rootR: root.r, rootG: root.g, rootB: root.b,
+    trunkR: c.r, trunkG: c.g, trunkB: c.b,
+    branchR: c.r, branchG: c.g, branchB: c.b,
+    leafR: c.r, leafG: c.g, leafB: c.b,
+    leafOpacity: 1,
+    leafShades: [c, c, c],
+    barkShades: { dark: c, highlight: c },
+    leafVein: c,
+    woodOutline: c,
+    flatSilhouette: true
+  }
+}
+
+/**
  * Gray-phase foreground tree palette.
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */

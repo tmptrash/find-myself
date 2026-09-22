@@ -21,6 +21,7 @@ import {
   buildGlowTree,
   renderGlowTreeToCanvas,
   renderGlowTreeIntoContext,
+  rootSegWidth,
   TREE_SEED
 } from '../utils/glow-tree.js'
 import * as TreeSegments from '../utils/glow-tree-segments.js'
@@ -37,6 +38,7 @@ import {
   getTreePaletteGray,
   getTreePaletteLit,
   getTreePaletteFlatDecor,
+  getTreePaletteFlatDecorRootsVisible,
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatWaterColors,
   getTreePaletteColor,
@@ -137,6 +139,7 @@ import {
   applyParallaxPostFxToContext,
   applyGlowLayerGradeToCanvas,
   drawGlowHiResFoliageCluster,
+  drawGlowFilmGrainWorldPatch,
   GLOW_LAYER_GRADE
 } from '../utils/glow-parallax-grain.js'
 import { finishGlowLifeDesatCanvas } from '../utils/glow-ui-bake.js'
@@ -301,6 +304,7 @@ const TREE_TOP_Y = 430
 //
 const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
 const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-sprite'
+const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-sprite'
 const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
 //
 // The tree is painted in world space onto a full 3000x1080 canvas, but the
@@ -346,19 +350,11 @@ const HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS = 35
 const MUD_BRANCH_TRAMP_GAP = 42
 const MUD_ZONE_RIGHT_EXTENT = 170
 const MUD_ZONE_HEDGEHOG_MARGIN = 14
-const MUD_EDGE_FADE_RADIUS = 38
 const MUD_MAX_DEPTH = 22
 const MUD_MOVE_SPEED_MULT = 0.5
 const MUD_JUMP_FORCE_MULT = 0.68
 const MUD_GRAVITY_MULT = 1
 const MUD_JUMP_SQUASH_TIME_MULT = 1
-const MUD_GROUND_DARKEN = 0.68
-const MUD_SPRITE_NAME = 'glow0-mud-ground'
-const MUD_SPRITE_PAD = 2
-const MUD_SPRITE_H = MUD_MAX_DEPTH + 6
-const MUD_STONE_COUNT = 16
-const MUD_SWIRL_COUNT = 9
-const MUD_PEBBLE_COUNT = 28
 //
 // Letter-caption world freeze: birds + proximity ambient fade duration (sec).
 //
@@ -379,7 +375,6 @@ const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
 const GLOW_HERO_HITBOX_HALF_W = 15
 const HERO_HEDGEHOG_RESPAWN_CLEARANCE = 32
 const HEDGEHOG_RESPAWN_TOUCH_GRACE_SEC = 0.5
-const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -388,34 +383,29 @@ const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
 //
 const HERO_TRAMPOLINE_SPAWN_CLEARANCE = 20
 //
-// A second, ambush hedgehog waits hidden at the far edge of the L-log
-// platform and pops out just before the hero actually lands there (see
-// maybeSpawnHedgehogAmbushPreLand), so the reveal reads as a sudden ambush
-// instead of appearing only once the hero has already touched down.
+// Wooden spikes hide under a patch of grass at the far edge of the L-log
+// platform. Falling onto them from above is fatal — they blink once at the
+// moment of contact, then the hero shatters into leaves like any other
+// hedgehog death.
 //
-const HEDGEHOG_AMBUSH_SCALE = 1.4
-const HEDGEHOG_AMBUSH_GROUND_RAISE = HEDGEHOG_GROUND_RAISE
-const HEDGEHOG_AMBUSH_EDGE_GAP = 18
+const RIGHT_SPIKE_COUNT = 5
+const RIGHT_SPIKE_ZONE_W = 60
+const RIGHT_SPIKE_EDGE_GAP = 0
+const RIGHT_SPIKE_H = 22
+const RIGHT_SPIKE_BLINK_DURATION = 0.8
+const RIGHT_SPIKE_GRASS_TUFT_COUNT = 8
 //
-// If the ambush hedgehog pops out but the hero never lands on the L
-// platform to trigger it, it gives up and crawls off the edge on its own
-// after this many seconds of standing there unused.
+// Shorter-than-normal blades over the spikes so their tips still poke
+// through — full-height grass (see BLADE_H in grass.js) would bury them.
 //
-const HEDGEHOG_AMBUSH_ABANDON_TIMEOUT = 6
-const HEDGEHOG_AMBUSH_POP_LEAD_Y = 90
+const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.55
 //
-// Once dead (ambush kill or death while still standing on the log), the
-// hedgehog first walks to whichever platform edge is closer before it
-// actually drops, so the tumble reads as stepping off the end of the log
-// instead of sinking straight through its middle.
-//
-const HEDGEHOG_AMBUSH_FALL_EDGE_PAD = 14
-//
-// Touching either hedgehog is fatal — same disintegration flow as any
-// other level's death, then a standard press-any-key countdown reload.
+// Touching the hedgehog or falling on the spikes is fatal — same
+// disintegration flow as any other level's death, then a standard
+// press-any-key countdown reload.
 //
 const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
-const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
+const RIGHT_SPIKE_DEATH_HINT_TEXT = 'Life is a complicated thing'
 const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
 const HEDGEHOG_DEATH_HINT_RAISE = 96
 const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -58
@@ -868,6 +858,15 @@ const UG_BONE_COUNT = 3
 const UG_COIN_COUNT = 4
 const UG_BOTTLE_COUNT = 2
 const UG_WORM_COUNT = 4
+//
+// Guaranteed extra detail inside the mud zone specifically — the normal
+// counts above are spread across the whole world width, so that one narrow
+// band would otherwise get little to nothing by pure chance (see
+// drawMudGroundZone, which previews this same sprite there right after G).
+//
+const UG_MUD_ZONE_EXTRA_ROCK_COUNT = 5
+const UG_MUD_ZONE_EXTRA_ROOTLET_COUNT = 6
+const UG_MUD_ZONE_EXTRA_SHELL_COUNT = 2
 const OUTER_BG_HEX = GLOW_PAL.playfieldOuter
 const WALL_BORDER_R = OUTER.r
 const WALL_BORDER_G = OUTER.g
@@ -909,7 +908,7 @@ const GLOW_HUD_LETTER_COUNT = 4
 // HUD G/L/O/W fill as loaders. Ink-box clip ignores empty font padding.
 //
 const GLOW_HUD_G_FILL_PARTS = 6
-const GLOW_HUD_L_FILL_PARTS = 2
+const GLOW_HUD_L_FILL_PARTS = 3
 const GLOW_HUD_O_FILL_PARTS = 5
 const GLOW_HUD_W_FILL_PARTS = 3
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
@@ -1020,8 +1019,8 @@ const KEY_GROUND_RIGHT_STRIP_MAX = 'glow.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
 const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
 const KEY_L_PLAT_STEPPED = 'glow.lPlatStepped'
+const KEY_LEFT_HEDGEHOG_JUMPED_OVER = 'glow.leftHedgehogJumpedOver'
 const KEY_LEFT_HEDGEHOG_REVEALED = 'glow.leftHedgehogRevealed'
-const KEY_AMBUSH_HEDGEHOG_REVEALED = 'glow.ambushHedgehogRevealed'
 const KEY_HUD_G_FILL = 'glow.hudGFillParts'
 const KEY_HUD_L_FILL = 'glow.hudLFillParts'
 const KEY_HUD_W_FILL = 'glow.hudWFillParts'
@@ -1175,7 +1174,7 @@ const HERO_CONFIDENT_HINT_DURATION = 4
 //
 // Self-growth lines on the hero after each letter fill step (less transparent body).
 //
-const GLOW_CONFIDENCE_HINT_G = 'Now I feel a little\nmore fulfilled.'
+const GLOW_CONFIDENCE_HINT_G = 'I have weight.\nI stand.'
 const GLOW_CONFIDENCE_HINT_L = 'Now I feel more\nfulfilled inside.'
 const GLOW_CONFIDENCE_HINT_W = 'Now I feel ready\nfor what comes next.'
 const GLOW_CONFIDENCE_HINT_O = 'Now I feel more alive\nin every color.'
@@ -1287,7 +1286,7 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
-const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Explore'
+const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Ground under my feet'
 const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Learn to see the nuances'
 const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
 const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Walk forward'
@@ -1333,6 +1332,17 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 //
 const GRASS_Z = 20
 const GRASS_TUFT_COUNT = 22
+//
+// Blades in the mud zone grow this much bigger/taller than everywhere
+// else — the wandering hedgehog hides there and should be hard to spot
+// through the grass rather than standing out clearly.
+//
+const MUD_ZONE_GRASS_SCALE_MULT = 1.55
+//
+// Extra tuft count layered on top of the main field just inside the mud
+// zone — see createGlowMudExtraGrass.
+//
+const MUD_ZONE_EXTRA_GRASS_TUFT_COUNT = 20
 //
 // Right-ground discovery fades into the unknown instead of cutting on a strip.
 //
@@ -1794,6 +1804,14 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   }
   await yieldForGpu(1)
   onProgress?.(55)
+  //
+  // Every onProgress() above is followed by a yield before the next heavy
+  // synchronous bake — without it, the DOM never gets a chance to actually
+  // paint the updated percentage before the main thread blocks again, so
+  // the bar visually sits frozen at the previous number for the whole bake
+  // instead of advancing smoothly.
+  //
+  await yieldForGpu(1)
   const undergroundSpec = loadUndergroundSprites(k)
   onProgress?.(68)
   await yieldForGpu(1)
@@ -1802,7 +1820,9 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   await yieldForGpu(1)
   //
   // Gray hero frames (outline + filled) bake here so spawn / body-fill fade
-  // never hitch the main thread mid-gameplay.
+  // never hitch the main thread mid-gameplay. Three separate bakes — ticking
+  // and yielding between each keeps the bar moving instead of holding at
+  // 78% for all three back to back.
   //
   Hero.loadHeroSprites({
     k,
@@ -1814,6 +1834,8 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     noEyes: true,
     postBakeCanvas: applyGlowForegroundBake
   })
+  onProgress?.(82)
+  await yieldForGpu(1)
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
@@ -1823,6 +1845,8 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     outlineOnly: true,
     postBakeCanvas: applyGlowForegroundBake
   })
+  onProgress?.(86)
+  await yieldForGpu(1)
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
@@ -1894,7 +1918,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         k,
         treeSegmentIds,
         CFG.visual.zIndex.platforms - 2,
-        zones.lCollected
+        zones.lCollected,
+        zones.gCollected
       )
       applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
       treeSegmentRevealed.size >= treeSegmentIds.length && (zones.tree = true)
@@ -1909,7 +1934,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     // Main tree: one sprite pair when fully explored, else segment sprites.
     //
-    const initialGraySprite = zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME
+    const initialGraySprite = glowMonolithTreeGraySpriteName(zones)
     let treeObj
     let treeColorObj
     if (treeDrawMonolith) {
@@ -1982,14 +2007,20 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const leftHedgehogRevealedEarly = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
     const leftHogStartsVisible = zones.gCollected && leftHedgehogRevealedEarly
     //
-    // Right ambush hedgehog's home spot on the L-log — computed early (it
-    // only depends on TREE_X and fixed offsets, not on anything laid out
-    // further below) so the spawn-clearance check right after can see it.
+    // L-log platform's home spot — computed early (it only depends on
+    // TREE_X and fixed offsets, not on anything laid out further below) so
+    // the spawn-clearance check right after can see it.
     //
     const rightZoneBaseX = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
     const rightPlatY = horizBranch.physY
     const lPlatY = rightPlatY - L_PLAT_RAISE_Y
+    //
+    // Right spike zone's X range — computed early alongside lPlatX so the
+    // spawn-clearance check right after can see it too.
+    //
+    const rightSpikesX2 = lPlatX + LOG_W - RIGHT_SPIKE_EDGE_GAP
+    const rightSpikesX1 = rightSpikesX2 - RIGHT_SPIKE_ZONE_W
     //
     // Right mushroom trampoline's X — computed early (same reason as
     // rightZoneBaseX above) so the spawn-clearance check right after can see
@@ -2003,7 +2034,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
     const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
-    const ambushHedgehogRevealedEarly = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
     const clampBranchSpawnX = (x) => Math.max(
       horizBranch.x1 + LOG_SNAP_X_SLACK,
       Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
@@ -2073,8 +2103,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         hedgehogAmbushPopX,
         lPlatX,
         rightPlatY,
-        lCollected: zones.lCollected,
-        ambushHedgehogRevealed: ambushHedgehogRevealedEarly,
+        rightSpikes: { x1: rightSpikesX1, x2: rightSpikesX2 },
         floorHogProbe: leftHogStartsVisible
           ? Hedgehog.createLethalTouchProbe({
             x: hedgehogAmbushPopX,
@@ -2087,20 +2116,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
           ? {
             minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
             maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
-          }
-          : null,
-        ambushGroundHogProbe: zones.lCollected
-          ? Hedgehog.createLethalTouchProbe({
-            x: lPlatX + LOG_W / 2,
-            y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
-            scale: HEDGEHOG_AMBUSH_SCALE,
-            facing: 'left'
-          })
-          : null,
-        ambushGroundHogBounds: zones.lCollected
-          ? {
-            minX: lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
-            maxX: lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
           }
           : null
       }))
@@ -2220,7 +2235,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     oLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
-    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones)
+    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2)
+    const mudExtraGrass = createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
     //
     // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
     // instance (dozens of decor pieces total). Registering them all into one
@@ -2235,10 +2251,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     decorAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 54, session)) return
     const leftHedgehogRevealed = leftHedgehogRevealedEarly
-    const ambushHedgehogRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
     //
     // Left hedgehog stays hidden until G is collected; returning saves keep
-    // the ambush-revealed state once G was taken.
+    // the reveal state once G was taken.
     //
     const hedgehog = Hedgehog.create({
       k,
@@ -2255,37 +2270,20 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     leftHogStartsVisible && !leftHedgehogRevealed &&
       Hedgehog.popOut(hedgehog, hedgehogAmbushPopX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
     if (await glowBootstrapPause(bootstrap, 62, session)) return
-    const mudGroundBand = bakeGlowMudGroundBand(k, mudZoneX1, mudZoneX2, DECOR_GRAY)
-    if (await glowBootstrapPause(bootstrap, 66, session)) return
     //
-    // Ambush hedgehog waits hidden at the far edge of the L-log platform and
-    // pops into view the moment the hero first lands there (see
-    // maybeMarkLPlatStepped). Once L was already collected in an earlier
-    // life/session there's no ambush left to spring — it starts already
-    // popped and wandering the ground beside the log instead. If it already
-    // popped in a prior life (even before L was taken) it stays visible on
-    // reload too.
+    // Wooden spikes sit fixed on the right end of the L-log platform,
+    // concealed under their own patch of grass — no reveal/pop state, they
+    // are simply part of the platform's surface.
     //
-    const ambushHedgehog = Hedgehog.create({
-      k,
-      x: zones.lCollected ? lPlatX + LOG_W / 2 : lPlatX + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP,
-      //
-      // The L-log sits L_PLAT_RAISE_Y above rightPlatY (see lPlatY above) —
-      // using rightPlatY directly here put the hedgehog ~54px below the
-      // log's actual surface, popping out underneath it instead of standing
-      // on top of its right end.
-      //
-      y: (zones.lCollected ? FLOOR_Y : lPlatY) - HEDGEHOG_AMBUSH_GROUND_RAISE,
-      scale: HEDGEHOG_AMBUSH_SCALE,
-      facing: 'left',
-      hero: heroInst,
-      zones,
-      hiddenUntilPopOut: !(zones.lCollected || ambushHedgehogRevealed),
-      lockWanderUntilPlat: !zones.lCollected,
-      wanderLocked: !zones.lCollected,
-      minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
-      maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
-    })
+    const rightSpikes = createGlowRightSpikes(k, zones, rightSpikesX1, rightSpikesX2, lPlatY)
+    const spikeGrass = createGlowSpikeGrass(k, zones, rightSpikesX1, rightSpikesX2, lPlatY)
+    //
+    // Big tree's own root geometry, drawn directly on top of the tree sprite
+    // (not baked into it) as an early G-triggered preview in a single tone —
+    // sidesteps the tree's own gray sprite variant switch entirely, which
+    // only otherwise changes at L.
+    //
+    const rootsPeekLayer = createGlowRootsPeekLayer(k, zones)
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     if (await glowBootstrapPause(bootstrap, 72, session)) return
@@ -2399,7 +2397,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       treeSegmentRevealed,
       treeRevealLandingCount: 0,
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
-      treeGraySpriteName: zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME,
+      treeGraySpriteName: glowMonolithTreeGraySpriteName(zones),
       colorFade: zones.colorWorld || zones.oZone ? 1 : 0,
       colorFadeTarget: zones.lCollected || zones.colorWorld || zones.oZone ? 1 : 0,
       //
@@ -2417,6 +2415,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.void,
       wallObjs: floorBounds.walls,
       grassLayer,
+      mudExtraGrass,
       rockObjs,
       mushObjs,
       hedgehog,
@@ -2424,9 +2423,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       hedgehogAmbushPopX,
       mudZoneX1,
       mudZoneX2,
-      mudGroundBand,
-      ambushHedgehog,
-      ambushHedgehogIdleTimer: 0,
+      rightSpikes,
+      spikeGrass,
+      rootsPeekLayer,
       lPlatCaptionHiding: false,
       _lPlatVisibleLastFrame: false,
       oPlatCaptionHiding: false,
@@ -2444,7 +2443,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         mudZoneX1,
         mudZoneX2
       },
-      ambushHedgehogDeferFall: false,
       waterLayer,
       pitDrawLayer: null,
       pitCaveHeroForeground: false,
@@ -2567,7 +2565,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY },
       branchPlat,
       branchPlatHome,
-      midges: createGlowMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X }),
+      midges: createGlowMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, mudZoneX1, mudZoneX2 }),
       pit: null,
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
@@ -3300,6 +3298,7 @@ function loadGlowZones() {
     leftShoreRock,
     rightTrampRevealed,
     lPlatStepped: get(KEY_L_PLAT_STEPPED, false) || lCollected,
+    leftHedgehogJumpedOver: get(KEY_LEFT_HEDGEHOG_JUMPED_OVER, false) || lCollected,
     groundDecor: groundDecorRight || groundDecorLeft,
     groundBg: get(KEY_REVEALED_GROUND_BG, false) || colorWorld,
     water: false,
@@ -3506,6 +3505,11 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
   })
   pinGlowHudFixed(indicator)
   LevelIndicator.syncLifeHudGrey(indicator, !colorWorld)
+  //
+  // G reads as the currently open, reachable letter — gold from the start
+  // (unlike L/O/W which stay gray until unlocked), white once collected.
+  //
+  LevelIndicator.setHudLetterColor(indicator.letterObjects?.[0], completedLetters >= 1 ? HERO_BODY_COLOR : GLOW_GOLD_HEX)
   return indicator
 }
 //
@@ -3717,13 +3721,15 @@ function countGlowHudGFillParts(inst) {
   return Math.min(GLOW_HUD_G_FILL_PARTS, treeParts + leftPart + rightPart + branchPart)
 }
 //
-// L HUD fill: half when the right trampoline appears, full on the L log.
+// L HUD fill (x/3): one step for jumping clear over the left hedgehog, one
+// for the right trampoline appearing, full on the L log.
 //
 function countGlowHudLFillParts(inst) {
   const z = inst.zones
   if (z?.lCollected || z?.lPlatStepped) return GLOW_HUD_L_FILL_PARTS
-  if (z?.rightTrampRevealed) return 1
-  return isRightTrampolineVisible(z) ? 1 : 0
+  const jumpedOver = Boolean(z?.leftHedgehogJumpedOver) ? 1 : 0
+  const trampFound = (z?.rightTrampRevealed || isRightTrampolineVisible(z)) ? 1 : 0
+  return jumpedOver + trampFound
 }
 //
 // O HUD fill: same stepped progress as meditationCountdownFade (2nd heartbeat
@@ -3834,19 +3840,21 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   })
 }
 //
-// Rebakes every GLOW HUD glyph — collected letters white, the rest gray.
+// Rebakes every GLOW HUD glyph. G is special: gold while still uncollected
+// (the currently open, reachable letter, no unlocking needed), then white
+// once taken — same white the others turn once collected, gray until then.
 //
 function syncGlowHudLetterColors(inst) {
   const letters = inst.levelIndicator?.letterObjects
   if (!letters?.length) return
   const z = inst.zones
   const collected = [z.gCollected, z.lCollected, z.oCollected, z.wCollected]
-  const gParts = inst._hudGFillParts || 0
-  const gHudReady = !z.gCollected &&
-    (isGlowGLetterUnveiled(inst) || gParts >= GLOW_HUD_G_FILL_PARTS)
   letters.forEach((letter, i) => {
-    let colorHex = collected[i] ? HERO_BODY_COLOR : GLOW_PAL.decorGray
-    i === 0 && gHudReady && (colorHex = HERO_BODY_COLOR)
+    if (i === 0) {
+      LevelIndicator.setHudLetterColor(letter, z.gCollected ? HERO_BODY_COLOR : GLOW_GOLD_HEX)
+      return
+    }
+    const colorHex = collected[i] ? HERO_BODY_COLOR : GLOW_PAL.decorGray
     LevelIndicator.setHudLetterColor(letter, colorHex)
   })
 }
@@ -4310,7 +4318,7 @@ function glowGrayGroundRgb(inst, innerGray) {
 //
 function glowTreeRootRevealFade(inst) {
   const z = inst?.zones
-  if (!z?.lCollected) return 0
+  if (!z?.lCollected && !z?.gCollected) return 0
   return 1
 }
 //
@@ -4328,7 +4336,23 @@ function isGlowDecorWorldXInMudZone(inst, worldX) {
   return worldX >= inst.mudZoneX1 && worldX <= inst.mudZoneX2
 }
 //
-// 0 before the post-L countdown except the mud-zone strip after G.
+// Clearance before the cave mouth for the right edge of the early
+// ground-peek band, so it reads as reaching right up to (not past, not
+// noticeably short of) the solid floor above the cave.
+//
+const GROUND_PEEK_CAVE_CLEAR = 66
+//
+// True when world X lies in the early ground-peek band after G — same
+// LEFT_MARGIN..cave-mouth span drawMudGroundZone previews underground,
+// mirrored here for the surface decor (rocks/mushrooms/grass) above it.
+//
+function isGlowWorldXInGroundPeekZone(inst, worldX) {
+  if (worldX == null || !inst.zones?.gCollected) return false
+  const floorEndX = getCrackZone(WORLD_W, FLOOR_Y).x1 - GROUND_PEEK_CAVE_CLEAR
+  return worldX >= LEFT_MARGIN && worldX <= floorEndX
+}
+//
+// 0 before the post-L countdown except the ground-peek band after G.
 //
 function glowSurfaceDecorFadeAt(inst, worldX) {
   if (isGlowWorldSurfaceDecorUnlocked(inst)) {
@@ -4336,7 +4360,7 @@ function glowSurfaceDecorFadeAt(inst, worldX) {
     if (z.lCollected && !z.oZone && !z.oCollected) return glowPostLRevealFade(inst)
     return 1
   }
-  return inst.zones.gCollected && isGlowDecorWorldXInMudZone(inst, worldX) ? 1 : 0
+  return isGlowWorldXInGroundPeekZone(inst, worldX) ? 1 : 0
 }
 //
 // Platform / log decor switches to shaded silhouettes immediately on L.
@@ -4650,9 +4674,10 @@ function applyZoneVisibility(inst) {
   // the caption is still up.
   //
   const lPlatWantVisible = z.lPlatRevealed && !inst.lPlatCaptionHiding
-  inst._lPlatVisibleLastFrame && !lPlatWantVisible && notifyAmbushHedgehogLPlatVanished(inst)
   setPlatVisible(inst.lPlat, lPlatWantVisible, inst.lPlatHome)
   inst._lPlatVisibleLastFrame = lPlatWantVisible
+  inst.rightSpikes && (inst.rightSpikes.drawObj.hidden = !lPlatWantVisible)
+  inst.spikeGrass && (inst.spikeGrass.layer.hidden = !lPlatWantVisible)
   setPlatVisible(inst.oPlat, z.oZone && !inst.oPlatCaptionHiding, inst.oPlatHome, z.lCollected)
   const wZoneUnlocked = isGlowWZoneUnlocked(inst)
   setPlatVisible(inst.wPlat, z.wZone && wZoneUnlocked, inst.wPlatHome, z.oCollected)
@@ -4701,6 +4726,7 @@ function applyZoneVisibility(inst) {
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
   inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
+  inst.mudExtraGrass.layer.hidden = inst.grassLayer.layer.hidden
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   syncGlowSpikeGateVisibility(inst)
@@ -4728,6 +4754,8 @@ function applyGlowEyeIntroZoneVisibility(inst) {
   inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
   cornerObjsSetHidden(inst.cornerObjs, true)
   setPlatVisible(inst.lPlat, false, inst.lPlatHome)
+  inst.rightSpikes && (inst.rightSpikes.drawObj.hidden = true)
+  inst.spikeGrass && (inst.spikeGrass.layer.hidden = true)
   setPlatVisible(inst.oPlat, false, inst.oPlatHome, z.lCollected)
   setPlatVisible(inst.wPlat, false, inst.wPlatHome, z.oCollected)
   setLetterVisible(inst.lLetter, false, inst.letterAppearFxReady)
@@ -4739,6 +4767,7 @@ function applyGlowEyeIntroZoneVisibility(inst) {
   inst.rockObjs.forEach(o => setDecorObjVisible(o, false))
   inst.mushObjs.forEach(o => setDecorObjVisible(o, false))
   inst.grassLayer.layer.hidden = true
+  inst.mudExtraGrass.layer.hidden = true
   inst.waterLayer && (inst.waterLayer.hidden = true)
   inst.treeObj && (inst.treeObj.hidden = true)
   inst.treeColorObj && (inst.treeColorObj.hidden = true)
@@ -5714,6 +5743,19 @@ function undergroundPaletteEntries() {
   ]
 }
 //
+// Mud zone's X bounds — pure function of TREE_X and fixed offsets, so it can
+// be computed this early (before the scene layout that normally derives it).
+//
+function computeGlowMudZoneX() {
+  const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
+  const hedgehogAmbushTriggerX = branchTrampX + HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP
+  const hedgehogAmbushPopX = hedgehogAmbushTriggerX + HEDGEHOG_LEFT_AMBUSH_POP_LEAD
+  return {
+    x1: branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP,
+    x2: hedgehogAmbushPopX + MUD_ZONE_RIGHT_EXTENT
+  }
+}
+//
 // Generates the random layout of all underground features once, so both
 // colour variants can be rendered from identical geometry.
 //
@@ -5844,6 +5886,49 @@ function buildUndergroundSpec() {
     }
     worms.push(pts)
   }
+  //
+  // Guaranteed extra rocks/roots/shells inside the mud zone — see
+  // UG_MUD_ZONE_EXTRA_* above.
+  //
+  const mudZone = computeGlowMudZoneX()
+  const randMudX = () => mudZone.x1 + Math.random() * (mudZone.x2 - mudZone.x1)
+  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROCK_COUNT; i++) {
+    const radius = 10 + Math.random() * 16
+    rocks.push({ x: randMudX(), y: randY(), radius, verts: buildRockVertices(radius) })
+  }
+  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROOTLET_COUNT; i++) {
+    const rx = randMudX()
+    const pts = [{ x: rx, y: FLOOR_Y + 4 }]
+    let px = rx
+    let py = FLOOR_Y + 4
+    const segs = 2 + Math.floor(Math.random() * 2)
+    for (let s = 0; s < segs; s++) {
+      px += (Math.random() - 0.5) * 14
+      py += 10 + Math.random() * 16
+      pts.push({ x: px, y: py })
+    }
+    rootlets.push(pts)
+  }
+  for (let i = 0; i < UG_MUD_ZONE_EXTRA_SHELL_COUNT; i++) {
+    shells.push({
+      x: randMudX(),
+      y: randY(),
+      w: 10 + Math.random() * 8,
+      h: 7 + Math.random() * 5,
+      flip: Math.random() < 0.5
+    })
+  }
+  const mudPebbleStones = []
+  const mudPebbleCx = randMudX()
+  const mudPebbleCy = randY()
+  for (let s = 0; s < 4; s++) {
+    mudPebbleStones.push({
+      x: mudPebbleCx + (Math.random() - 0.5) * 26,
+      y: mudPebbleCy + (Math.random() - 0.5) * 14,
+      r: 2 + Math.random() * 3
+    })
+  }
+  pebbles.push(mudPebbleStones)
   return { rocks, cracks, pebbles, rootlets, fossil, shells, bones, coins, bottles, worms, skeleton: null }
 }
 //
@@ -6039,7 +6124,7 @@ function maskGlowUndergroundDecorUntilReveal(inst, k, groundFillC) {
 function maskGlowMonolithTreeRootsUntilReveal(inst, k, groundC) {
   if (!inst.treeDrawMonolith || inst.treeObj?.hidden) return
   const z = inst.zones
-  if (!z.lCollected || !groundC) return
+  if ((!z.lCollected && !z.gCollected) || !groundC) return
   const reveal = glowTreeRootRevealFade(inst)
   if (reveal >= 1 - COLOR_CROSSFADE_EPS) return
   const cover = 1 - reveal
@@ -6819,7 +6904,7 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill,
 // trampoline mushroom band (so no blade ever covers its face). The tint
 // callback also hides blades of unexplored ground sides.
 //
-function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
+function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2) {
   const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
   const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
   const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
@@ -6839,6 +6924,11 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
     tuftCount: GRASS_TUFT_COUNT,
     z: GRASS_Z,
     excluded,
+    //
+    // Bigger blades over the mud zone — the wandering hedgehog hides there
+    // and should stay hard to spot through the grass.
+    //
+    getScaleMult: (x) => x >= mudZoneX1 && x <= mudZoneX2 ? MUD_ZONE_GRASS_SCALE_MULT : 1,
     postBakeCanvas: applyGlowForegroundBake,
     getTint: (blade) => glowGrassTint(zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones)
@@ -6847,10 +6937,200 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
   return grass
 }
 //
+// Extra tuft density just for the mud band — the main field's tuftCount is
+// spread across the whole ground strip, so only a handful naturally land in
+// the (much narrower) mud zone. This overlay adds more blades on top of it,
+// same tint/sway as the main field's own mud-zone blades.
+//
+function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
+  const grass = Grass.create({
+    k,
+    floorY: FLOOR_Y,
+    left: mudZoneX1,
+    right: mudZoneX2,
+    tuftCount: MUD_ZONE_EXTRA_GRASS_TUFT_COUNT,
+    z: GRASS_Z,
+    getScaleMult: () => MUD_ZONE_GRASS_SCALE_MULT,
+    postBakeCanvas: applyGlowForegroundBake,
+    getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, zones, blade),
+    getSwayScale: () => glowGrassSwayScale(zones)
+  })
+  grass.layer.hidden = true
+  return grass
+}
+//
+// Small tuft patch hiding the right spikes on the L-log platform's edge.
+//
+function createGlowSpikeGrass(k, zones, x1, x2, y) {
+  const grass = Grass.create({
+    k,
+    floorY: y,
+    left: x1,
+    right: x2,
+    tuftCount: RIGHT_SPIKE_GRASS_TUFT_COUNT,
+    z: GRASS_Z,
+    getScaleMult: () => RIGHT_SPIKE_GRASS_SCALE_MULT,
+    postBakeCanvas: applyGlowForegroundBake,
+    getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
+    getSwayScale: () => glowGrassSwayScale(zones)
+  })
+  grass.layer.hidden = true
+  return grass
+}
+//
+// Grass tint hiding the right spikes — same gray/green crossfade as the mud
+// band, but only while the L-log platform itself is visible.
+//
+function glowSpikeGrassTint(sc, zones) {
+  if (!zones.lPlatRevealed) return null
+  if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+  const fade = glowGrassGreenFade(sc, zones)
+  if (fade >= 1) return GRASS_GREEN
+  return lerpRgb(gray, GRASS_GREEN, fade)
+}
+//
+// Draws the big tree's own root geometry (treeData.rootSegs, world-space
+// line segments) directly on top of the tree sprite, in a single flat tone —
+// an early G-triggered preview that sidesteps the tree's own gray/lit
+// sprite-baking system entirely (which otherwise only shows roots from L).
+// A plain k.add + draw() object at a z above the tree sprite (rather than a
+// bare k.onDraw call, which renders behind every game object including the
+// tree) so it can never end up hidden underneath the tree's own silhouette.
+//
+function createGlowRootsPeekLayer(k, zones) {
+  return k.add([
+    k.pos(0, 0),
+    k.z(CFG.visual.zIndex.platforms - 1),
+    {
+      draw() {
+        drawGlowRootsPeek(zones)
+      }
+    }
+  ])
+}
+function drawGlowRootsPeek(zones) {
+  const sc = zones._sceneRef
+  if (!sc || !zones.gCollected || zones.lCollected) return
+  const treeData = sc.treeData
+  const segs = treeData?.rootSegs
+  if (!segs?.length) return
+  const k = sc.k
+  const h = WORLD_H
+  const groundY = treeData.groundClipY ?? treeData.rootStartY ?? (treeData.trunkSegs[0]?.sy ?? h)
+  const trunkBase = treeData.trunkBase ?? treeData.trunkSegs[0]
+  const trunkBaseX = trunkBase?.sx ?? 0
+  const trunkHalfW = (trunkBase?.w ?? 74) * 0.5
+  //
+  // Same shape/taper as the real canvas-baked roots, but flat — one tone
+  // matching the trunk (DECOR_GRAY) instead of the palette's separate
+  // contour/fill/highlight shades, with the same grain texture the trunk's
+  // own baked sprite carries painted on top instead, standing in for that
+  // shading.
+  //
+  const fillColor = k.rgb(DECOR_GRAY.r, DECOR_GRAY.g, DECOR_GRAY.b)
+  const widths = segs.map(seg => rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW))
+  const drawLines = () => segs.forEach((seg, i) => k.drawLine({
+    p1: k.vec2(seg.sx, seg.sy),
+    p2: k.vec2(seg.ex, seg.ey),
+    width: widths[i],
+    color: fillColor
+  }))
+  drawLines()
+  //
+  // Grain only on the root strokes themselves — masked to the same line
+  // shapes redrawn as the stencil, or the bounding-box version painted a
+  // visible mismatched-tone rectangle over the plain ground around them.
+  //
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  segs.forEach(seg => {
+    minX = Math.min(minX, seg.sx, seg.ex)
+    maxX = Math.max(maxX, seg.sx, seg.ex)
+    minY = Math.min(minY, seg.sy, seg.ey)
+    maxY = Math.max(maxY, seg.sy, seg.ey)
+  })
+  k.drawMasked(
+    () => drawGlowFilmGrainWorldPatch(k, minX - 4, minY - 4, maxX + 4, maxY + 4),
+    drawLines
+  )
+}
+//
+// Fixed wooden spikes on the L-log's right edge — a static hazard drawn
+// directly (no baking; a handful of triangles redrawn every frame), same
+// gray-outline/wood-bark crossfade as the log platform itself. Blinks white
+// for RIGHT_SPIKE_BLINK_DURATION at the moment the hero lands on it (see
+// checkGlowRightSpikeDeath) before the fatal burst.
+//
+function createGlowRightSpikes(k, zones, x1, x2, y) {
+  const spikes = { x1, x2, y, triggered: false, blinkUntil: 0 }
+  spikes.drawObj = k.add([
+    k.pos(0, 0),
+    k.z(CFG.visual.zIndex.platforms),
+    {
+      draw() {
+        drawGlowRightSpikes(k, zones, spikes)
+      }
+    }
+  ])
+  spikes.drawObj.hidden = true
+  return spikes
+}
+function drawGlowRightSpikes(k, zones, spikes) {
+  if (spikes.drawObj.hidden) return
+  const blinking = k.time() < spikes.blinkUntil
+  const sc = zones._sceneRef
+  const fade = sc?.colorFade ?? (zones.colorWorld ? 1 : 0)
+  const fillHex = (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.void
+  const fillRgb = blinking ? k.rgb(255, 255, 255) : getRGB(k, fillHex)
+  const outlineRgb = blinking ? k.rgb(255, 255, 255) : DECOR_OUTLINE_RGB
+  const w = spikes.x2 - spikes.x1
+  const step = w / RIGHT_SPIKE_COUNT
+  const pad = 2
+  for (let i = 0; i < RIGHT_SPIKE_COUNT; i++) {
+    const baseX = spikes.x1 + step * (i + 0.5)
+    const halfW = step * 0.42
+    k.drawPolygon({
+      pts: [
+        k.vec2(baseX - halfW - pad, spikes.y + pad),
+        k.vec2(baseX, spikes.y - RIGHT_SPIKE_H - pad),
+        k.vec2(baseX + halfW + pad, spikes.y + pad)
+      ],
+      color: outlineRgb
+    })
+    k.drawPolygon({
+      pts: [
+        k.vec2(baseX - halfW, spikes.y),
+        k.vec2(baseX, spikes.y - RIGHT_SPIKE_H),
+        k.vec2(baseX + halfW, spikes.y)
+      ],
+      color: fillRgb
+    })
+  }
+}
+//
 // Grass tint for the mud band only — visible after G until the post-L countdown opens the rest.
 //
 function glowMudZoneGrassTint(sc, zones, blade) {
   if (!sc?.zones.gCollected || !isGlowDecorWorldXInMudZone(sc, blade.x)) return null
+  if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+  const fade = glowGrassGreenFade(sc, zones)
+  if (fade >= 1) {
+    sc._grassColorSettled ??= lerpRgb(gray, GRASS_GREEN, 1)
+    return sc._grassColorSettled
+  }
+  return lerpRgb(gray, GRASS_GREEN, fade)
+}
+//
+// Grass tint for the wider early ground-peek band (mud zone through the cave
+// mouth) — same gray/green crossfade as the mud band itself, just without
+// the taller mud-specific blade scale (see glowMudZoneGrassTint).
+//
+function glowGroundPeekGrassTint(sc, zones, blade) {
+  if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
   if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
   const fade = glowGrassGreenFade(sc, zones)
@@ -6876,6 +7156,8 @@ function glowGrassTint(zones, blade) {
   if (sc && isGlowOpenPitMouthWorldX(sc.pit, blade.x)) return null
   const mudTint = sc && glowMudZoneGrassTint(sc, zones, blade)
   if (mudTint) return mudTint
+  const peekTint = sc && glowGroundPeekGrassTint(sc, zones, blade)
+  if (peekTint) return peekTint
   if (sc && !isGlowWorldSurfaceDecorUnlocked(sc)) {
     return null
   }
@@ -8318,7 +8600,7 @@ function onDrawWorld(inst) {
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
   onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
   !isGlowEyeIntroBareWorld(inst) && drawExploredGroundLip(inst)
-  !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst, groundC)
+  !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst)
   //
   // Last in onDrawWorld — earth/static/parallax must not repaint over the pit;
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
@@ -8350,147 +8632,61 @@ function maybeBootstrapGlowPostEyes(inst) {
   finishGlowIntro(inst)
 }
 //
-// Bakes the muddy ground band once — dark stones, swirls and pebbles on a
-// wavy mud surface instead of flat column rects.
+// Ground-peek band on the soft-mud zone (flat gray explore, after G) — a
+// live slice of the SAME underground sprite (buried rocks, roots, cracks)
+// the full underground layer shows after water is discovered, clipped to
+// just the mud zone as an early preview, plus a ground-line rim on top.
 //
-function bakeGlowMudGroundBand(k, x1, x2, groundC) {
-  const fadeR = MUD_EDGE_FADE_RADIUS
-  const pad = MUD_SPRITE_PAD
-  const bandW = Math.ceil(x2 - x1) + pad * 2
-  const bandH = MUD_SPRITE_H
-  const floorY = bandH - 1
-  const base = groundC || DECOR_GRAY
-  const mudDark = {
-    r: Math.round(base.r * MUD_GROUND_DARKEN),
-    g: Math.round(base.g * MUD_GROUND_DARKEN),
-    b: Math.round(base.b * MUD_GROUND_DARKEN)
-  }
-  const mudMid = {
-    r: Math.round(base.r * (MUD_GROUND_DARKEN + 0.08)),
-    g: Math.round(base.g * (MUD_GROUND_DARKEN + 0.08)),
-    b: Math.round(base.b * (MUD_GROUND_DARKEN + 0.08))
-  }
-  const stoneDark = {
-    r: Math.round(base.r * 0.42),
-    g: Math.round(base.g * 0.42),
-    b: Math.round(base.b * 0.42)
-  }
-  const stoneLight = {
-    r: Math.round(base.r * 0.58),
-    g: Math.round(base.g * 0.58),
-    b: Math.round(base.b * 0.58)
-  }
-  const rand = mudSeedRand((x1 * 7 + x2 * 13) | 0)
+function drawMudGroundZone(inst) {
+  if (!inst.zones.gCollected) return
   //
-  // Semicircle edge profile: mud rises from the ground line at both ends.
+  // Not just the narrow mud band itself — the whole ground strip from the
+  // world's left edge (same LEFT_MARGIN..TREE_X span the full underground
+  // layer normally only shows once water is discovered — see
+  // drawUndergroundSpriteClipped, previewed early here instead), stopping
+  // the same clear distance before the cave mouth as the decor mushrooms
+  // (GROUND_PEEK_CAVE_CLEAR) — same right bound isGlowWorldXInGroundPeekZone
+  // uses for the surface decor above this band, so nothing (line, texture,
+  // rocks, grass) ever reads as reaching the cave.
   //
-  const mudTopY = (localX) => {
-    const worldX = x1 - pad + localX
-    let edge = 1
-    if (worldX < x1 + fadeR) {
-      const t = Math.max(0, (worldX - x1) / fadeR)
-      edge = Math.sqrt(t * (2 - t))
-    } else if (worldX > x2 - fadeR) {
-      const t = Math.max(0, (x2 - worldX) / fadeR)
-      edge = Math.sqrt(t * (2 - t))
-    }
-    const lip = Math.sin(worldX * 0.07) * 3 + Math.sin(worldX * 0.19) * 1.5
-    return floorY - edge * (MUD_MAX_DEPTH + lip)
-  }
-  const canvas = toCanvas({ width: bandW, height: bandH, pixelRatio: 1 }, (ctx) => {
-    ctx.fillStyle = `rgb(${mudDark.r}, ${mudDark.g}, ${mudDark.b})`
-    ctx.beginPath()
-    ctx.moveTo(0, floorY)
-    for (let x = 0; x <= bandW; x += 2) {
-      ctx.lineTo(x, mudTopY(x))
-    }
-    ctx.lineTo(bandW, floorY)
-    ctx.closePath()
-    ctx.fill()
-    //
-    // Shallow puddle streaks and curl marks (only in the solid band)
-    //
-    for (let i = 0; i < MUD_SWIRL_COUNT; i++) {
-      const sx = rand() * bandW
-      const worldX = x1 - pad + sx
-      if (worldX < x1 + fadeR * 0.45 || worldX > x2 - fadeR * 0.45) continue
-      const sy = mudTopY(sx) + 2 + rand() * 8
-      const len = 10 + rand() * 22
-      const curl = (rand() - 0.5) * 1.4
-      ctx.strokeStyle = `rgba(${mudMid.r}, ${mudMid.g}, ${mudMid.b}, ${0.35 + rand() * 0.25})`
-      ctx.lineWidth = 1 + rand() * 1.2
-      ctx.beginPath()
-      ctx.moveTo(sx, sy)
-      ctx.bezierCurveTo(
-        sx + len * 0.35, sy - curl * 8,
-        sx + len * 0.7, sy + curl * 6,
-        sx + len, sy + (rand() - 0.5) * 4
-      )
-      ctx.stroke()
-    }
-    //
-    // Dark stones — irregular polygons sitting on the ground line
-    //
-    for (let i = 0; i < MUD_STONE_COUNT; i++) {
-      const sx = rand() * bandW
-      const worldX = x1 - pad + sx
-      if (worldX < x1 + fadeR * 0.35 || worldX > x2 - fadeR * 0.35) continue
-      const cy = floorY - 1 - rand() * (MUD_MAX_DEPTH * 0.75)
-      const rx = 3 + rand() * 9
-      const ry = 2 + rand() * 5
-      const rot = rand() * Math.PI
-      const verts = 5 + (rand() * 3 | 0)
-      const tone = rand() > 0.45 ? stoneDark : stoneLight
-      ctx.fillStyle = `rgb(${tone.r}, ${tone.g}, ${tone.b})`
-      ctx.beginPath()
-      for (let v = 0; v < verts; v++) {
-        const ang = rot + (v / verts) * Math.PI * 2
-        const wobble = 0.72 + rand() * 0.38
-        const px = sx + Math.cos(ang) * rx * wobble
-        const py = cy + Math.sin(ang) * ry * wobble
-        v === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-      }
-      ctx.closePath()
-      ctx.fill()
-      ctx.strokeStyle = `rgba(${stoneDark.r}, ${stoneDark.g}, ${stoneDark.b}, 0.55)`
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-    }
-    //
-    // Tiny pebbles and grit on the surface
-    //
-    for (let i = 0; i < MUD_PEBBLE_COUNT; i++) {
-      const sx = rand() * bandW
-      const worldX = x1 - pad + sx
-      if (worldX < x1 + fadeR * 0.3 || worldX > x2 - fadeR * 0.3) continue
-      const py = floorY - 1 - rand() * (MUD_MAX_DEPTH * 0.55)
-      const r = 0.6 + rand() * 1.8
-      const tone = rand() > 0.5 ? stoneDark : mudMid
-      ctx.fillStyle = `rgba(${tone.r}, ${tone.g}, ${tone.b}, ${0.55 + rand() * 0.4})`
-      ctx.beginPath()
-      ctx.ellipse(sx, py, r * (0.8 + rand() * 0.5), r * (0.6 + rand() * 0.4), rand() * Math.PI, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  })
-  applyGlowForegroundBake(canvas, (x1 + x2) | 0)
-  k.loadSprite(MUD_SPRITE_NAME, canvas)
-  return { sprite: MUD_SPRITE_NAME, drawX: x1 - pad, width: bandW, height: bandH }
+  const x1 = LEFT_MARGIN
+  const x2 = getCrackZone(WORLD_W, FLOOR_Y).x1 - GROUND_PEEK_CAVE_CLEAR
+  drawUndergroundSpriteBand(inst.k, UNDERGROUND_GRAY_SPRITE, 1, x1, x2)
+  drawGlowMudZoneGroundLine(inst, x1, x2)
 }
 //
-// Darker organic mud band on the soft-mud zone (flat gray explore, after G).
+// Same rim look as drawExploredGroundLip (mono-safe outline + lighter top
+// strip), confined to the previewed left band.
 //
-function drawMudGroundZone(inst, groundC) {
-  if (!inst.zones.gCollected) return
-  const band = inst.mudGroundBand
-  if (!band) return
+function drawGlowMudZoneGroundLine(inst, x1, x2) {
   const k = inst.k
-  k.drawSprite({
-    sprite: band.sprite,
-    pos: k.vec2(band.drawX, FLOOR_Y + 1),
-    width: band.width,
-    height: band.height,
-    anchor: 'botleft'
-  })
+  const fade = inst.colorFade ?? 0
+  const bodyC = DECOR_OUTLINE_RGB
+  const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
+  const rimRgb = fade > COLOR_CROSSFADE_EPS
+    ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
+    : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
+  const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
+  const step = (x2 - x1) / GROUND_LIP_STEPS
+  if (step <= 0) return
+  for (let x = x1; x < x2; x += step) {
+    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
+    const h = Math.max(2, 4 + lip)
+    k.drawRect({
+      pos: k.vec2(x, FLOOR_Y - h + 2),
+      width: step + 1,
+      height: h,
+      color: bodyColor,
+      opacity: 0.48
+    })
+    k.drawRect({
+      pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
+      width: step + 1,
+      height: GROUND_TOP_RIM_H,
+      color: rimColor,
+      opacity: GROUND_TOP_RIM_OPACITY
+    })
+  }
 }
 //
 // Paints tree-side lake cap rocks when the water zone is open.
@@ -9550,6 +9746,24 @@ function collectLetterG(inst) {
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 1)
   syncLeftHedgehogMudSneak(inst)
+  //
+  // The big tree's roots normally wait for L — moved up to G here too (see
+  // glowTreeRootRevealFade), gray only since colour world is still far off.
+  // In monolith mode (the common case this early) the sprite swap in
+  // syncMonolithicTreeGraySprite alone already handles it; only call this
+  // (with its localStorage write) once segmented mode is already active —
+  // calling it from a fresh monolith session would flip the next reload
+  // into segmented mode with just the roots revealed and everything else
+  // still hidden, a worse regression than the roots simply waiting for L.
+  //
+  !inst.treeDrawMonolith && ensureGlowTreeRootsSegment(inst)
+  //
+  // Nothing above actually calls this — without it, the tree's roots-visible
+  // gray sprite swap and the surface decor (rocks/mushrooms) unlocked early
+  // by G never actually apply until some unrelated later event happens to
+  // trigger a visibility sync.
+  //
+  applyZoneVisibility(inst)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 1, inst.zones.colorWorld)
   } else {
@@ -9607,14 +9821,9 @@ function collectLetterL(inst) {
   // restored once the caption closes below. Gated by its own flag (rather
   // than a one-off setPlatVisible override) so it stays hidden even if some
   // other applyZoneVisibility() call fires while the caption is still up.
-  // If the ambush hedgehog is still standing on it and hasn't fallen/walked
-  // off yet, send it down now too, otherwise it would be left hovering over
-  // empty air where the platform used to be.
   //
   inst.lPlatCaptionHiding = true
   applyZoneVisibility(inst)
-  unlockAmbushHedgehogAfterLPlatGone(inst)
-  dropAmbushHedgehogIfStrandedOnLPlat(inst)
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
   applyGlowPostLLitState(inst)
@@ -10097,25 +10306,50 @@ function bumpGlowLifeHudOnDeath(inst) {
   onGlowTeacherLifeHudRevealed(inst)
 }
 //
-// True once either hedgehog's silhouette overlaps the hero's feet.
+// True once the hedgehog's silhouette overlaps the hero's feet, or the hero
+// has landed on the hidden spikes at the L-log's right edge.
 //
 function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
   if (inst.deathHandled) return
   if (inst.k.time() < (inst.hedgehogTouchGraceUntil ?? 0)) return
   if (Hedgehog.isTouchingHero(inst.hedgehog, heroX, heroFootY)) {
-    triggerHedgehogDeath(inst, false)
+    triggerHedgehogDeath(inst, 'leftHedgehog')
     return
   }
-  Hedgehog.isTouchingHero(inst.ambushHedgehog, heroX, heroFootY) && triggerHedgehogDeath(inst, true)
+  checkGlowRightSpikeDeath(inst, heroX, heroFootY)
 }
 //
-// Touching either hedgehog is fatal — the hero shatters exactly like in any
-// other level (Hero.death), but with the level's own dusty ground-burst
-// (bigger, and spread upward too) instead of the generic body-square
-// explosion. The ambush hedgehog additionally tumbles off its platform and
-// keeps crawling while the hero respawns in-place.
+// Landing on the spike zone arms a brief blink before the actual kill, so
+// the hazard reads as "spikes flash, then hero shatters" instead of an
+// instant, unreadable death.
 //
-function triggerHedgehogDeath(inst, isAmbush) {
+function checkGlowRightSpikeDeath(inst, heroX, heroFootY) {
+  const spikes = inst.rightSpikes
+  if (!spikes || spikes.triggered) return
+  const withinX = heroX >= spikes.x1 - LOG_SNAP_X_SLACK && heroX <= spikes.x2 + LOG_SNAP_X_SLACK
+  //
+  // Triggers as soon as the feet reach the visual spike tips (RIGHT_SPIKE_H
+  // above the platform surface), not only once fully landed/settled on the
+  // platform itself — the spikes stick up above the surface, so death has to
+  // arrive at that height, not at normal standing height.
+  //
+  const withinY = heroFootY >= spikes.y - RIGHT_SPIKE_H && heroFootY <= spikes.y + LOG_SNAP_BELOW
+  if (!withinX || !withinY) return
+  spikes.triggered = true
+  //
+  // The blink keeps drawing on its own timer (see drawGlowRightSpikes) well
+  // past this point — it doesn't need the death itself delayed to be seen.
+  //
+  spikes.blinkUntil = inst.k.time() + RIGHT_SPIKE_BLINK_DURATION
+  triggerHedgehogDeath(inst, 'spikes')
+}
+//
+// Touching the hedgehog or falling on the spikes is fatal — the hero
+// shatters exactly like in any other level (Hero.death), but with the
+// level's own dusty ground-burst (bigger, and spread upward too) instead of
+// the generic body-square explosion.
+//
+function triggerHedgehogDeath(inst, cause) {
   if (inst.deathHandled) return
   const hero = inst.heroInst
   const char = hero?.character
@@ -10136,22 +10370,7 @@ function triggerHedgehogDeath(inst, isAmbush) {
   hero.character = null
   triggerGlowCameraShake(inst)
   spawnHedgehogDeathBurst(inst, deathX, deathY)
-  isAmbush && (inst.ambushHedgehogDeferFall = true)
-  finishHedgehogDeath(inst, isAmbush, deathX, deathY)
-}
-//
-// The edge the ambush hedgehog should walk to before dropping off the
-// L-log — whichever end (left/right) it's already closer to — so it
-// visibly steps off the platform instead of sinking through its middle.
-//
-function computeAmbushHedgehogFallEdgeX(inst) {
-  const home = inst.lPlatHome
-  const hog = inst.ambushHedgehog
-  if (!home || !hog) return null
-  const platCenterX = home.x + LOG_W / 2
-  return hog.x >= platCenterX
-    ? home.x + LOG_W + HEDGEHOG_AMBUSH_FALL_EDGE_PAD
-    : home.x - HEDGEHOG_AMBUSH_FALL_EDGE_PAD
+  finishHedgehogDeath(inst, cause, deathX, deathY)
 }
 //
 // Leaf-shaped radial burst at the death spot — green leaf tones in the
@@ -10175,37 +10394,41 @@ function hedgehogDeathLeafPalette(inst) {
 //
 // Life-HUD bump, optional hedgehog hint, then in-level respawn beside the kill.
 //
-function finishHedgehogDeath(inst, isAmbush, deathX, deathY) {
+function finishHedgehogDeath(inst, cause, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
-  isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
-    anchorX: inst.ambushHedgehog.x,
-    anchorY: inst.ambushHedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
-    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
-    forceAbove: true,
-    ignoreMovementDismiss: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
-  !isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
-    anchorX: inst.hedgehog.x,
-    anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
-    offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
-    forceAbove: true,
-    ignoreMovementDismiss: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
-  if (!isAmbush && inst.hedgehog) {
-    markLeftHedgehogRevealed()
-    Hedgehog.popOut(
-      inst.hedgehog,
-      inst.hedgehog.x,
-      inst.hedgehog.y,
-      inst.hedgehog.facing ?? 'left'
-    )
+  if (cause === 'spikes') {
+    const spikes = inst.rightSpikes
+    HeroHint.show(inst.heroHint, RIGHT_SPIKE_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
+      anchorX: spikes ? (spikes.x1 + spikes.x2) / 2 : deathX,
+      anchorY: (spikes?.y ?? deathY) - HEDGEHOG_DEATH_HINT_RAISE,
+      offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+      forceAbove: true,
+      ignoreMovementDismiss: true,
+      dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+    })
+  } else {
+    HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
+      anchorX: inst.hedgehog.x,
+      anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+      offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+      forceAbove: true,
+      ignoreMovementDismiss: true,
+      dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+    })
+    if (inst.hedgehog) {
+      markLeftHedgehogRevealed()
+      Hedgehog.popOut(
+        inst.hedgehog,
+        inst.hedgehog.x,
+        inst.hedgehog.y,
+        inst.hedgehog.facing ?? 'left'
+      )
+    }
   }
   inst.hedgehogRespawnWait?.cancel?.()
   inst.hedgehogRespawnWait = inst.k.wait(HERO_HEDGEHOG_RESPAWN_DELAY, () => {
     inst.hedgehogRespawnWait = null
-    inst.hedgehogDeathHandled && respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush)
+    inst.hedgehogDeathHandled && respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause)
   })
 }
 //
@@ -10218,7 +10441,6 @@ function getGlowHeroSpawnHogProbes(inst) {
   const leftHog = inst.hedgehog
   const leftHogVisible = zones.gCollected &&
     (leftHog?.popped || get(KEY_LEFT_HEDGEHOG_REVEALED, false))
-  const ambushRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
   return {
     floorHogProbe: leftHogVisible && leftHog
       ? Hedgehog.createLethalTouchProbe({
@@ -10240,29 +10462,44 @@ function getGlowHeroSpawnHogProbes(inst) {
         minX: leftHog?.minX ?? nudge.mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
         maxX: leftHog?.maxX ?? nudge.mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
       }
-      : null,
-    ambushGroundHogProbe: zones.lCollected
-      ? Hedgehog.createLethalTouchProbe({
-        x: nudge.lPlatX + LOG_W / 2,
-        y: FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
-        scale: HEDGEHOG_AMBUSH_SCALE,
-        facing: 'left'
-      })
-      : null,
-    ambushGroundHogBounds: zones.lCollected
-      ? {
-        minX: nudge.lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN,
-        maxX: nudge.lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
-      }
-      : null,
-    ambushHedgehogRevealed: ambushRevealed
+      : null
   }
 }
 //
-// Respawn beside the death spot (offset away from the hog), with bootstrap nudges.
+// Spawn clear of the spike zone: offset away from its centre, then pushed
+// past its edge (plus clearance) if that offset still lands inside it.
 //
-function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
-  const hog = isAmbush ? inst.ambushHedgehog : inst.hedgehog
+function computeGlowSpikeRespawnX(inst, deathX) {
+  const spikes = inst.rightSpikes
+  if (!spikes) return deathX
+  //
+  // The spikes occupy nearly the whole right portion of the platform (see
+  // RIGHT_SPIKE_ZONE_W/RIGHT_SPIKE_EDGE_GAP) — there is no clearance left on
+  // their right within the log's own bounds, only on their left. Respawning
+  // "away from the death spot" there used to clamp straight back onto the
+  // spikes and re-trigger the same death every time (the reported loop).
+  //
+  let spawnX = spikes.x1 - HERO_HEDGEHOG_RESPAWN_CLEARANCE - GLOW_HERO_HITBOX_HALF_W
+  const home = inst.lPlatHome
+  home && (spawnX = Math.max(home.x + LOG_SNAP_X_SLACK, spawnX))
+  //
+  // Staying on the platform (clamp above) can still land inside
+  // checkGlowRightSpikeDeath's own trigger margin when the platform is
+  // narrow — always keep strictly clear of that boundary too, even if it
+  // means spawning past the platform's own left edge.
+  //
+  spawnX = Math.min(spawnX, spikes.x1 - LOG_SNAP_X_SLACK - GLOW_HERO_HITBOX_HALF_W)
+  return spawnX
+}
+//
+// Respawn beside the death spot (offset away from the hog, or clear of the
+// spike zone), with bootstrap nudges.
+//
+function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause) {
+  if (cause === 'spikes') {
+    return { x: computeGlowSpikeRespawnX(inst, deathX), y: deathY }
+  }
+  const hog = inst.hedgehog
   const hogX = hog?.x ?? deathX
   const away = deathX <= hogX ? -1 : 1
   let spawnX = deathX + away * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
@@ -10273,15 +10510,13 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
     const liveProbe = Hedgehog.createLethalTouchProbe({
       x: hog.x,
       y: hog.y,
-      scale: hog.scale ?? (isAmbush ? HEDGEHOG_AMBUSH_SCALE : HEDGEHOG_SCALE),
+      scale: hog.scale ?? HEDGEHOG_SCALE,
       facing: hog.facing ?? 'left'
     })
     const hogProbes = getGlowHeroSpawnHogProbes(inst)
-    const bounds = isAmbush
-      ? hogProbes.ambushGroundHogBounds
-      : (hog.minX != null && hog.maxX != null
-        ? { minX: hog.minX, maxX: hog.maxX }
-        : hogProbes.floorHogBounds)
+    const bounds = hog.minX != null && hog.maxX != null
+      ? { minX: hog.minX, maxX: hog.maxX }
+      : hogProbes.floorHogBounds
     const preferSign = away
     spawnX = hogX + preferSign * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
     spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
@@ -10325,21 +10560,19 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush) {
     hedgehogAmbushPopX: nudge.hedgehogAmbushPopX,
     lPlatX: nudge.lPlatX,
     rightPlatY: nudge.rightPlatY,
-    lCollected: inst.zones.lCollected,
+    rightSpikes: inst.rightSpikes,
     ...hogProbes
   })
   if (hogLethal && hog) {
     const liveProbe = Hedgehog.createLethalTouchProbe({
       x: hog.x,
       y: hog.y,
-      scale: hog.scale ?? (isAmbush ? HEDGEHOG_AMBUSH_SCALE : HEDGEHOG_SCALE),
+      scale: hog.scale ?? HEDGEHOG_SCALE,
       facing: hog.facing ?? 'left'
     })
-    const bounds = isAmbush
-      ? hogProbes.ambushGroundHogBounds
-      : (hog.minX != null && hog.maxX != null
-        ? { minX: hog.minX, maxX: hog.maxX }
-        : hogProbes.floorHogBounds)
+    const bounds = hog.minX != null && hog.maxX != null
+      ? { minX: hog.minX, maxX: hog.maxX }
+      : hogProbes.floorHogBounds
     const preferSign = deathX <= hog.x ? -1 : 1
     spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
       spawnX,
@@ -10367,12 +10600,12 @@ function bindGlowHeroFootSounds(heroInst, sound) {
 //
 // Rebuilds the hero body in-place after a hedgehog kill (no scene reload).
 //
-function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
+function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause) {
   const k = inst.k
   const cfg = inst.glowHeroCreateCfg
   if (!cfg) return
   releaseGamePhysicalKeys()
-  const pose = computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, isAmbush)
+  const pose = computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause)
   writeGlowLastSpawnKeys(inst, pose.x, pose.y)
   const filled = inst.zones.colorWorld || inst.zones.oZone || inst.heroBodyFillApplied
   const heroEyes = getGlowHeroEyeBakeColors(!filled)
@@ -10397,7 +10630,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, isAmbush) {
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
   inst.hedgehog && (inst.hedgehog.hero = fresh)
-  inst.ambushHedgehog && (inst.ambushHedgehog.hero = fresh)
+  inst.rightSpikes && (inst.rightSpikes.triggered = false)
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
   inst.hedgehogDeathHandled = false
@@ -10431,8 +10664,9 @@ function nudgeGlowHeroSpawnAwayFromTrampolines(cfg) {
   return x
 }
 //
-// Pulls a saved spawn X away from hedgehog danger bands so a reload cannot
-// drop the hero straight onto a wandering or ambush hog.
+// Pulls a saved spawn X away from hedgehog danger bands, and clear of the
+// L-log's right-edge spike zone, so a reload cannot drop the hero straight
+// onto either hazard.
 //
 function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
   const {
@@ -10443,12 +10677,9 @@ function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
     hedgehogAmbushPopX,
     lPlatX,
     rightPlatY,
-    lCollected,
-    ambushHedgehogRevealed,
+    rightSpikes,
     floorHogProbe,
-    floorHogBounds,
-    ambushGroundHogProbe,
-    ambushGroundHogBounds
+    floorHogBounds
   } = cfg
   let x = spawnX
   const heroFootY = spawnY + SURFACE_DETECT_Y
@@ -10460,38 +10691,30 @@ function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
       HERO_HEDGEHOG_SPAWN_CLEARANCE,
       floorHogBounds
     )
-    x = Hedgehog.nudgeHeroXClearOfTouchProbe(
-      x,
-      heroFootY,
-      ambushGroundHogProbe,
-      HERO_HEDGEHOG_SPAWN_CLEARANCE,
-      ambushGroundHogBounds
-    )
   }
   if (!spawnOnBranch) {
     const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
     x >= hedgehogAmbushTriggerX && x <= dangerEndX &&
       (x = hedgehogAmbushTriggerX - HERO_HEDGEHOG_SPAWN_CLEARANCE)
   }
-  if (!spawnOnBranch && (lCollected || ambushHedgehogRevealed)) {
-    const rHogDangerStartX = lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN
-    const rHogDangerEndX = lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
-    x >= rHogDangerStartX && x <= rHogDangerEndX &&
-      (x = rHogDangerEndX + HERO_HEDGEHOG_SPAWN_CLEARANCE)
-  }
-  if (ambushHedgehogRevealed && !lCollected) {
+  if (!spawnOnBranch && rightSpikes) {
     const platLeft = lPlatX + LOG_SNAP_X_SLACK
-    const platRight = lPlatX + LOG_W - LOG_SNAP_X_SLACK
     const platHeroY = rightPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    const onLPlat = Math.abs(spawnY - platHeroY) <= LOG_SNAP_STANDING_MAX
-    if (onLPlat && x >= platLeft && x <= platRight) {
-      const ambushX = lPlatX + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP
-      const touchPad = HEDGEHOG_AMBUSH_SCALE * 25 + HERO_HEDGEHOG_SPAWN_CLEARANCE
-      Math.abs(x - ambushX) < touchPad &&
-        (x = ambushX > (platLeft + platRight) * 0.5
-          ? platLeft + HERO_HEDGEHOG_SPAWN_CLEARANCE
-          : platRight - HERO_HEDGEHOG_SPAWN_CLEARANCE)
-      x = Math.max(platLeft, Math.min(platRight, x))
+    //
+    // Matches checkGlowRightSpikeDeath's own Y window (spike tip height down
+    // to below the log), so a saved pose anywhere in the death-trigger band
+    // gets nudged clear, not only one saved at normal standing height.
+    //
+    const onLPlat = spawnY >= platHeroY - RIGHT_SPIKE_H && spawnY <= platHeroY + LOG_SNAP_BELOW
+    if (onLPlat && x >= rightSpikes.x1 - HERO_HEDGEHOG_SPAWN_CLEARANCE && x <= rightSpikes.x2 + HERO_HEDGEHOG_SPAWN_CLEARANCE) {
+      //
+      // The spikes occupy nearly the whole right portion of the platform —
+      // there is no clearance on their right within the log's own bounds,
+      // only on their left (see computeGlowSpikeRespawnX for the same fix
+      // applied to the in-place respawn). Same clearance math as there too,
+      // so both land the same safe distance from the death-trigger boundary.
+      //
+      x = Math.max(platLeft, rightSpikes.x1 - LOG_SNAP_X_SLACK - GLOW_HERO_HITBOX_HALF_W)
     }
   }
   return x
@@ -10966,6 +11189,12 @@ function onUpdate(inst) {
     syncGlowMidgeDrawColor(inst)
   }
   inst.glowLetters?.length && syncGlowPickupLetterVisuals(inst)
+  //
+  // Cheap self-correcting check (early-exits on no change) so the tree's
+  // roots-visible-from-G gray sprite always reflects current zone state even
+  // if some specific event path forgets to call applyZoneVisibility.
+  //
+  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const meditating = inst.meditation?.countdown != null
   if (singing || meditating || inst._mushroomLeanActive) {
@@ -11226,9 +11455,8 @@ function onUpdate(inst) {
     spawnGlowFootLanding(inst.footParticles, snapHeroX, snapFootY, snapSurface, inst, char)
   }
   maybeSpawnLeftHedgehogAmbush(inst, heroX, char.vel?.x ?? 0)
-  maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded)
   maybeMarkLPlatStepped(inst, char, grounded)
-  maybeAbandonStrandedAmbushHedgehog(inst)
+  maybeMarkLeftHedgehogJumpedOver(inst, char, grounded)
   //
   // O-letter meditation: perfect stillness after L summons the countdown.
   //
@@ -11294,30 +11522,7 @@ function onUpdate(inst) {
   // the hero's character outright.
   //
   !inst.deathHandled && checkGlowBranchTeleportLaunch(inst, char)
-  maybeReleaseDeferredAmbushHedgehogFall(inst)
-  syncAmbushHedgehogWanderLock(inst, char, grounded)
   !inst.deathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
-}
-//
-// Ambush hedgehog waits on the L-log after a kill until the world animates again.
-//
-function isGlowWorldMotionUnlocked(inst) {
-  const z = inst.zones
-  if (z.colorWorld || z.oZone || z.oCollected) return true
-  if (inst.meditation?.countdown != null) return true
-  if ((inst.meditationWorldLife ?? 0) > 0.04) return true
-  if ((inst.parallaxFade ?? 0) > 0.05) return true
-  return false
-}
-function maybeReleaseDeferredAmbushHedgehogFall(inst) {
-  if (!inst.ambushHedgehogDeferFall || !inst.ambushHedgehog) return
-  if (!isGlowWorldMotionUnlocked(inst)) return
-  inst.ambushHedgehogDeferFall = false
-  Hedgehog.fallAndCrawlAway(
-    inst.ambushHedgehog,
-    FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE,
-    computeAmbushHedgehogFallEdgeX(inst)
-  )
 }
 //
 // Locks the hero's gaze on the G letter while he stands on the start branch
@@ -11982,10 +12187,21 @@ function showTrampBadSingHint(inst, line) {
 // True when tree segment sprites were baked during the pre-level transition.
 //
 function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
-  if (monolith) return Boolean(k.getSprite(TREE_FLAT_SPRITE_NAME))
+  //
+  // Also checks the roots-visible variant — a k instance that baked trees
+  // before that sprite existed (still live from an earlier visit this
+  // session, e.g. menu <-> glow without a full reload) would otherwise read
+  // as "already prewarmed" from the older TREE_FLAT_SPRITE_NAME alone and
+  // skip baking forever, silently keeping the roots invisible.
+  //
+  if (monolith) {
+    return Boolean(k.getSprite(TREE_FLAT_SPRITE_NAME)) && Boolean(k.getSprite(TREE_FLAT_ROOTS_SPRITE_NAME))
+  }
   const firstId = segmentIds[0]
   if (!firstId) return false
-  return Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(firstId, false)))
+  const rootsId = segmentIds.find(id => TreeSegments.isGlowTreeRootsSegmentId(id)) ?? firstId
+  return Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(firstId, false))) &&
+    Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(rootsId, false, true)))
 }
 //
 // True when parallax static layer exists from prewarm.
@@ -12009,6 +12225,8 @@ function bakeMonolithicGlowTreeSprites(k, treeData) {
     renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H), bounds, 6001)
   loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME,
     renderGlowTreeToCanvas(treeData, getTreePaletteColor(), WORLD_W, WORLD_H), bounds, 6002)
+  loadCroppedGlowTreeSprite(k, TREE_FLAT_ROOTS_SPRITE_NAME,
+    renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecorRootsVisible(), WORLD_W, WORLD_H), bounds, 6003)
 }
 //
 // Loads one monolithic tree canvas cropped to its artwork, with film grain
@@ -12029,11 +12247,20 @@ function monolithicTreeBakeOffset(k) {
   return monolithicTreeOffsets.get(k) || { x: 0, y: 0 }
 }
 //
-// Swaps the monolithic gray tree sprite after L.
+// Picks the monolith gray tree sprite for the current zone state: full lit
+// palette after L, roots-visible-only flat tone from G (see
+// getTreePaletteFlatDecorRootsVisible), plain flat before that.
+//
+function glowMonolithTreeGraySpriteName(zones) {
+  if (zones.lCollected) return TREE_LIT_SPRITE_NAME
+  if (zones.gCollected) return TREE_FLAT_ROOTS_SPRITE_NAME
+  return TREE_FLAT_SPRITE_NAME
+}
+//
+// Swaps the monolithic gray tree sprite after G (roots) / L (full lit).
 //
 function syncMonolithicTreeGraySprite(inst) {
-  const lit = Boolean(inst.zones.lCollected)
-  const graySpriteName = lit ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME
+  const graySpriteName = glowMonolithTreeGraySpriteName(inst.zones)
   if (inst.treeGraySpriteName === graySpriteName) return
   inst.treeGraySpriteName = graySpriteName
   inst.treeObj?.use(inst.k.sprite(graySpriteName))
@@ -12139,7 +12366,7 @@ function isAllTreeSegmentsRevealed(inst) {
 function glowRightWorldOpacity(sc, x, rank) {
   if (!sc?.zones) return 0
   if (!sc.zones.gCollected) return 0
-  if (!sc.zones.lCollected) return 0
+  if (!sc.zones.lCollected) return isGlowWorldXInGroundPeekZone(sc, x) ? 1 : 0
   if (sc.zones.lCollected && !sc.zones.oZone && !sc.zones.oCollected &&
     glowPostLRevealFade(sc) <= 0.04) {
     return 0
@@ -12180,6 +12407,7 @@ function updateExploreFades(inst, dt) {
   }
   if (inst.grassLayer?.layer) {
     inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
+    inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = inst.grassLayer.layer.hidden)
   }
   if (!exploreSettled && !z.groundDecorRight) {
     inst.rockObjs?.forEach(o => {
@@ -12444,7 +12672,7 @@ function countGlowBranchTreePartsRevealed(inst) {
 // Registers the root segment after L without a branch landing reveal.
 //
 function ensureGlowTreeRootsSegment(inst) {
-  if (!inst.zones.lCollected) return
+  if (!inst.zones.lCollected && !inst.zones.gCollected) return
   const id = TreeSegments.TREE_SEGMENT_ROOTS
   if (inst.treeSegmentRevealed.has(id)) {
     syncTreeColorCrossfade(inst)
@@ -12532,13 +12760,14 @@ function setTreeSegmentRevealedVisual(entry, opacity) {
 //
 function syncTreeSegmentGraySprites(inst) {
   const lit = Boolean(inst.zones.lCollected)
-  const want = lit ? 'lit' : 'flat'
+  const rootsVisible = !lit && Boolean(inst.zones.gCollected)
+  const want = `${lit}:${rootsVisible}`
   if (inst.treeSegmentGrayVariant === want) return
   inst.treeSegmentGrayVariant = want
   inst.treeSegmentIds?.forEach(id => {
     const entry = inst.treeSegmentEntries?.[id]
     if (!entry) return
-    const name = TreeSegments.segmentGraySpriteName(id, lit)
+    const name = TreeSegments.segmentGraySpriteName(id, lit, rootsVisible && TreeSegments.isGlowTreeRootsSegmentId(id))
     entry.grayObj.use(inst.k.sprite(name))
   })
 }
@@ -13172,51 +13401,32 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
     footY >= home.y - LOG_SNAP_STANDING_MAX &&
     footY <= home.y + LOG_SNAP_BELOW
   onLLog && markLPlatStepped(inst)
-  onLLog && maybeSpawnHedgehogAmbush(inst)
-  syncAmbushHedgehogWanderLock(inst, char, grounded)
 }
 //
-// Ambush hedgehog only wanders after the hero has actually stood on the L-log.
+// One HUD step for clearing the left hedgehog: hero was grounded on one side
+// of it, then crosses to the other side while airborne — a real jump-over,
+// not walking around it (touching it is handled separately as a death).
 //
-function syncAmbushHedgehogWanderLock(inst, char, grounded) {
-  const hog = inst.ambushHedgehog
-  if (!hog?.popped) return
-  if (!inst.zones.lCollected && !isGlowWorldColorful(inst)) {
-    hog.wanderLocked = true
-    if (!hog.mustFallFromLPlat && !hog.falling) {
-      hog.walkingToEdge = false
-      hog.falling = false
-      hog.fallVelY = 0
-    }
-    !hog.falling && !hog.walkingToEdge && clampAmbushHedgehogOnLPlat(inst, hog)
+function maybeMarkLeftHedgehogJumpedOver(inst, char, grounded) {
+  const hog = inst.hedgehog
+  if (!hog || !inst.zones.gCollected || !char?.pos || inst.zones.leftHedgehogJumpedOver) return
+  const side = char.pos.x < hog.x ? -1 : 1
+  if (grounded) {
+    inst._leftHedgehogGroundSide = side
     return
   }
-  if (inst.zones.lCollected || inst.lPlatCaptionHiding) {
-    hog.lockWanderUntilPlat = false
-    hog.wanderLocked = false
-    dropAmbushHedgehogIfStrandedOnLPlat(inst)
-    return
+  const groundSide = inst._leftHedgehogGroundSide
+  if (!groundSide || side === groundSide) return
+  markLeftHedgehogJumpedOver(inst)
+  //
+  // A hedgehog still hidden in its mud-sneak preview pops fully into view
+  // the moment it gets jumped over — the player should see what they just
+  // cleared, not keep sneaking past an invisible hazard.
+  //
+  if (!hog.popped) {
+    markLeftHedgehogRevealed()
+    Hedgehog.popOut(hog, hog.x, hog.y, hog.facing ?? 'left')
   }
-  if (!hog.lockWanderUntilPlat) {
-    hog.wanderLocked = false
-    return
-  }
-  if (!grounded || !char?.pos) {
-    hog.wanderLocked = true
-    return
-  }
-  const home = inst.lPlatHome
-  if (!home || !inst.zones.lPlatRevealed) {
-    hog.wanderLocked = true
-    return
-  }
-  const heroX = char.pos.x
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK &&
-    heroX <= home.x + LOG_W + LOG_SNAP_X_SLACK &&
-    footY >= home.y - LOG_SNAP_STANDING_MAX &&
-    footY <= home.y + LOG_SNAP_BELOW
-  hog.wanderLocked = !onLLog
 }
 //
 // Persists that the left ambush hedgehog has already popped — the next
@@ -13224,12 +13434,6 @@ function syncAmbushHedgehogWanderLock(inst, char, grounded) {
 //
 function markLeftHedgehogRevealed() {
   set(KEY_LEFT_HEDGEHOG_REVEALED, true)
-}
-//
-// Same for the L-log ambush hedgehog (independent of whether L was taken).
-//
-function markAmbushHedgehogRevealed() {
-  set(KEY_AMBUSH_HEDGEHOG_REVEALED, true)
 }
 //
 // Left hedgehog ambush: stays hidden until the hero has run a stretch past
@@ -13249,11 +13453,10 @@ function syncLeftHedgehogMudSneak(inst) {
     return
   }
   hog.mudSneakPreview = inst.zones.gCollected && isGlowEyesGameplayUnlocked(inst.zones)
-  const band = inst.mudGroundBand
-  if (hog.mudSneakPreview && band) {
+  if (hog.mudSneakPreview && inst.mudZoneX1 != null && inst.mudZoneX2 != null) {
     const pad = MUD_ZONE_HEDGEHOG_MARGIN + 4
-    const minX = band.drawX + pad
-    const maxX = band.drawX + band.width - pad
+    const minX = inst.mudZoneX1 + pad
+    const maxX = inst.mudZoneX2 - pad
     hog.minX = minX
     hog.maxX = maxX
     hog.x = Math.max(minX, Math.min(maxX, hog.x))
@@ -13274,141 +13477,22 @@ function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
   }
 }
 //
-// Fallback: if the hero somehow reaches the L-log without tripping the
-// pre-land pop below (e.g. walked onto it instead of bouncing there), the
-// hidden ambush hedgehog still pops out the moment he actually lands. Once
-// L has been collected the ambush no longer makes sense — landing on the
-// (now permanently revealed) log again should never surprise-pop it.
-//
-function maybeSpawnHedgehogAmbush(inst) {
-  if (!inst.ambushHedgehog || inst.ambushHedgehog.popped || inst.zones.lCollected) return
-  Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
-  markAmbushHedgehogRevealed()
-}
-//
-// Primary ambush trigger: while still airborne and falling toward the
-// L-log after a tramp bounce, the hidden hedgehog pops out an instant
-// before the hero's feet actually reach the wood, so it reads as a sudden
-// ambush rather than something that only appears after landing.
-//
-function maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded) {
-  if (grounded) return
-  if (!inst.ambushHedgehog || inst.ambushHedgehog.popped) return
-  if (!inst.trampToLApproach || inst.zones.lCollected) return
-  const home = inst.lPlatHome
-  if (!home || !inst.zones.lPlatRevealed) return
-  const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK && heroX <= home.x + LOG_W + LOG_SNAP_X_SLACK
-  const aboutToLand = footY >= home.y - HEDGEHOG_AMBUSH_POP_LEAD_Y && footY <= home.y + LOG_SNAP_BELOW
-  if (!onLLog || !aboutToLand) return
-  Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
-  markAmbushHedgehogRevealed()
-}
-//
-// True once the post-L colour crossfade (or O zone) has started.
-//
-function isGlowWorldColorful(inst) {
-  const z = inst.zones
-  if (z.colorWorld || z.oZone || z.oCollected || z.lZoneLit) return true
-  return (inst.colorFade ?? 0) > 0.04
-}
-//
-// Keeps the ambush hedgehog on the L-log while the world is still flat gray.
-//
-function clampAmbushHedgehogOnLPlat(inst, hog) {
-  const home = inst.lPlatHome
-  if (!home || !hog) return
-  const minX = home.x + HEDGEHOG_AMBUSH_EDGE_GAP
-  const maxX = home.x + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP
-  hog.x = Math.max(minX, Math.min(maxX, hog.x))
-  hog.y = home.y - HEDGEHOG_AMBUSH_GROUND_RAISE
-  hog.minX = home.x
-  hog.maxX = home.x + LOG_W
-}
-//
-// True while the ambush hedgehog still stands on the raised L-log Y band.
-//
-function isAmbushHedgehogOnLPlat(inst, hog) {
-  const home = inst.lPlatHome
-  if (!hog?.popped || !home) return false
-  const platStandY = home.y - HEDGEHOG_AMBUSH_GROUND_RAISE
-  const floorY = FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE
-  if (hog.y >= floorY - 6) return false
-  return Math.abs(hog.y - platStandY) < 22 &&
-    hog.x >= home.x - 16 && hog.x <= home.x + LOG_W + 16
-}
-//
-// L-log collider just went hidden — start the ambush hog drop on this frame.
-//
-function notifyAmbushHedgehogLPlatVanished(inst) {
-  const hog = inst.ambushHedgehog
-  hog && (hog.mustFallFromLPlat = true)
-  dropAmbushHedgehogIfStrandedOnLPlat(inst)
-}
-//
-// If the L-log disappears (letter collected) while the ambush hedgehog is
-// still standing on it and hasn't already been sent tumbling by a death,
-// drop it to the ground instead of leaving it stranded over empty air.
-//
-function unlockAmbushHedgehogAfterLPlatGone(inst) {
-  const hog = inst.ambushHedgehog
-  if (!hog) return
-  hog.wanderLocked = false
-  hog.lockWanderUntilPlat = false
-}
-function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
-  if (inst.ambushHedgehogDeferFall) return
-  const hog = inst.ambushHedgehog
-  if (!hog?.popped || hog.falling) return
-  const floorY = FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE
-  const strandedAboveGround = hog.y < floorY - 3
-  const needsDrop = hog.mustFallFromLPlat || isAmbushHedgehogOnLPlat(inst, hog) ||
-    (inst.zones.lCollected && strandedAboveGround)
-  if (!needsDrop) return
-  hog.mustFallFromLPlat = true
-  unlockAmbushHedgehogAfterLPlatGone(inst)
-  //
-  // The log vanishes instantly the moment the letter is collected (see
-  // collectLetterL), so there is no edge left to walk to any more — even
-  // if the hedgehog was already mid-walk toward one (e.g. the abandon
-  // timer in maybeAbandonStrandedAmbushHedgehog kicked in earlier while
-  // the hero lingered nearby without landing). Cancel any in-progress
-  // walk-to-edge and drop it straight down now, or it would otherwise
-  // keep pacing across empty air above the spot the log used to occupy.
-  //
-  hog.walkingToEdge = false
-  hog.wanderLocked = false
-  hog.lockWanderUntilPlat = false
-  Hedgehog.fallAndCrawlAway(hog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE)
-}
-//
-// The ambush only makes sense while the hero might still land on the log —
-// once L is collected the platform's own visibility handles it. If the hero
-// never lands at all, the popped hedgehog would otherwise just pace back
-// and forth on the log forever; this abandons the ambush and sends it
-// crawling off the nearest edge after a while unused.
-//
-function maybeAbandonStrandedAmbushHedgehog(inst) {
-  if (inst.ambushHedgehogDeferFall) return
-  const hog = inst.ambushHedgehog
-  if (!inst.zones.lCollected && !isGlowWorldColorful(inst)) {
-    inst.ambushHedgehogIdleTimer = 0
-    return
-  }
-  if (!hog?.popped || hog.falling || hog.walkingToEdge || inst.zones.lCollected) {
-    inst.ambushHedgehogIdleTimer = 0
-    return
-  }
-  inst.ambushHedgehogIdleTimer += inst.k.dt()
-  if (inst.ambushHedgehogIdleTimer < HEDGEHOG_AMBUSH_ABANDON_TIMEOUT) return
-  Hedgehog.fallAndCrawlAway(hog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
-}
-//
 // Persists the L-log step so the HUD letter stays fully gold after leaving.
 //
 function markLPlatStepped(inst) {
   if (inst.zones.lPlatStepped || inst.zones.lCollected) return
   inst.zones.lPlatStepped = true
   set(KEY_L_PLAT_STEPPED, true)
+  syncGlowHudLetterFills(inst)
+}
+//
+// Persists the left-hedgehog jump-over so the HUD L counter stays at 1/3+
+// after leaving.
+//
+function markLeftHedgehogJumpedOver(inst) {
+  if (inst.zones.leftHedgehogJumpedOver) return
+  inst.zones.leftHedgehogJumpedOver = true
+  set(KEY_LEFT_HEDGEHOG_JUMPED_OVER, true)
   syncGlowHudLetterFills(inst)
 }
 //
@@ -13697,6 +13781,12 @@ function fireGlowTeacherGZoneHint(inst) {
 function glowTeacherLZoneAutoHintEligible(inst, inCave) {
   if (inCave || inst._inGlowPitCave) return false
   if (!inst.zones.gCollected || inst.zones.lCollected) return false
+  //
+  // The hint references the L-log platform by name — showing it before the
+  // platform itself is even revealed (e.g. right after only the hedgehog
+  // jump-over step, the first of 3) reads as nonsense.
+  //
+  if (!inst.zones.lPlatRevealed) return false
   const parts = countGlowHudLFillParts(inst)
   if (parts < 1 || parts >= GLOW_HUD_L_FILL_PARTS) return false
   if (inst._lHudStallWatchParts == null) {
@@ -14020,14 +14110,4 @@ function recomputeGlowScreenLayout(k) {
   GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
   LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
   updatePlayfieldCornerPositions()
-}
-//
-// Deterministic PRNG for mud-ground baking (same layout every load).
-//
-function mudSeedRand(seed) {
-  let s = seed | 0
-  return () => {
-    s = (s * 1664525 + 1013904223) | 0
-    return (s >>> 0) / 4294967296
-  }
 }

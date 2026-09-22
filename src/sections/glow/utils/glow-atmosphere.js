@@ -61,10 +61,27 @@ export const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
 const MIDGE_TOTAL = 30
 const MIDGE_PIT_COUNT = Math.round(MIDGE_TOTAL / 3)
 const MIDGE_FIELD_COUNT = MIDGE_TOTAL - MIDGE_PIT_COUNT
+//
+// Right field midges mostly move to hover over the mud zone (tall grass
+// hides the wandering hedgehog there) — only a sparse handful stay spread
+// across the rest of the right side.
+//
+const MIDGE_RIGHT_SPARSE_COUNT = 3
+const MIDGE_MUD_ZONE_COUNT = Math.round(MIDGE_FIELD_COUNT / 2) + MIDGE_RIGHT_SPARSE_COUNT
 const MIDGE_SPEED_MIN = 8
 const MIDGE_SPEED_MAX = 22
 const MIDGE_RADIUS_MIN = 1.2
 const MIDGE_RADIUS_MAX = 2.4
+//
+// Per-midge oscillation frequencies — randomized around these bases so every
+// midge traces its own wander curve instead of a shared shape offset only by
+// phase (which reads as the same trajectory repeated with a time delay).
+//
+const MIDGE_FREQ_DRIFT_X_BASE = 2.1
+const MIDGE_FREQ_DRIFT_Y_BASE = 2.7
+const MIDGE_FREQ_WANDER_X_BASE = 3.2
+const MIDGE_FREQ_WANDER_Y_BASE = 2.4
+const MIDGE_FREQ_VARIANCE = 0.4
 const MIDGE_Z = 14
 //
 // Skip midge circles that sit well outside the current camera window.
@@ -239,6 +256,9 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
   const pitCy = floorY - 32
   const minY = floorY - 70
   const maxY = floorY - 14
+  const mudX1 = opts.mudZoneX1 ?? null
+  const mudX2 = opts.mudZoneX2 ?? null
+  const hasMudZone = mudX1 != null && mudX2 != null && mudX2 > mudX1
   const midges = []
   for (let i = 0; i < MIDGE_PIT_COUNT; i++) {
     midges.push(makeMidge(
@@ -247,16 +267,40 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
       'pit'
     ))
   }
-  for (let i = 0; i < MIDGE_FIELD_COUNT; i++) {
-    const onLeft = i < MIDGE_FIELD_COUNT / 2
-    const x0 = onLeft ? LEFT_MARGIN + 20 : treeX + 40
-    const x1 = onLeft ? treeX - 40 : zone.x1 - 20
+  for (let i = 0; i < MIDGE_FIELD_COUNT / 2; i++) {
+    const x0 = LEFT_MARGIN + 20
+    const x1 = treeX - 40
     const span = Math.max(40, x1 - x0)
     midges.push(makeMidge(
       x0 + Math.random() * span,
       minY + Math.random() * (maxY - minY),
-      onLeft ? 'fieldLeft' : 'fieldRight'
+      'fieldLeft'
     ))
+  }
+  //
+  // The right field used to hold half the swarm; most of it now hovers over
+  // the mud zone instead (grass hides the wandering hedgehog there), and
+  // only a sparse handful stay spread across the rest of the right side so
+  // it does not read as completely empty.
+  //
+  for (let i = 0; i < MIDGE_RIGHT_SPARSE_COUNT; i++) {
+    const x0 = treeX + 40
+    const x1 = zone.x1 - 20
+    const span = Math.max(40, x1 - x0)
+    midges.push(makeMidge(
+      x0 + (span / Math.max(1, MIDGE_RIGHT_SPARSE_COUNT - 1)) * i,
+      minY + Math.random() * (maxY - minY),
+      'fieldRight'
+    ))
+  }
+  if (hasMudZone) {
+    for (let i = 0; i < MIDGE_MUD_ZONE_COUNT; i++) {
+      midges.push(makeMidge(
+        mudX1 + Math.random() * (mudX2 - mudX1),
+        minY + Math.random() * (maxY - minY),
+        'mudZone'
+      ))
+    }
   }
   const ctrl = {
     midges,
@@ -266,6 +310,7 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
     showPit: true,
     showLeft: true,
     showRight: true,
+    showMudZone: true,
     spreadAfterPit: false,
     pit: {
       minX: pitCx - MIDGE_PIT_SPREAD_X,
@@ -285,6 +330,7 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
       minY,
       maxY
     },
+    mudZone: hasMudZone ? { minX: mudX1, maxX: mudX2, minY, maxY } : null,
     fieldAll: {
       minX: LEFT_MARGIN + 16,
       maxX: zone.x1 - 16,
@@ -334,13 +380,13 @@ export function updateGlowMidges(ctrl, dt, worldLife = 0) {
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
     const bounds = boundsForRole(ctrl, m.role)
-    m.driftVx += Math.sin(t * 2.1 + m.phase) * 18 * dt * move
-    m.driftVy += Math.cos(t * 2.7 + m.phase * 1.3) * 14 * dt * move
+    m.driftVx += Math.sin(t * m.freqDriftX + m.phase) * 18 * dt * move
+    m.driftVy += Math.cos(t * m.freqDriftY + m.phaseY) * 14 * dt * move
     m.driftVx *= 0.98
     m.driftVy *= 0.98
     const sp = m.speed * dt * move
-    m.x += m.driftVx * dt * move + Math.sin(t * 3.2 + m.phase) * sp
-    m.y += m.driftVy * dt * move + Math.cos(t * 2.4 + m.phase) * sp * 0.7
+    m.x += m.driftVx * dt * move + Math.sin(t * m.freqWanderX + m.phase) * sp
+    m.y += m.driftVy * dt * move + Math.cos(t * m.freqWanderY + m.phaseY) * sp * 0.7
     if (m.x < bounds.minX) { m.x = bounds.minX; m.driftVx = Math.abs(m.driftVx) }
     if (m.x > bounds.maxX) { m.x = bounds.maxX; m.driftVx = -Math.abs(m.driftVx) }
     if (m.y < bounds.minY) { m.y = bounds.minY; m.driftVy = Math.abs(m.driftVy) }
@@ -827,6 +873,7 @@ function drawGlowPitMouthVoidFill(k, pit) {
 // Private helpers
 //
 function makeMidge(x, y, role) {
+  const freqMul = () => 1 + (Math.random() - 0.5) * 2 * MIDGE_FREQ_VARIANCE
   return {
     x,
     y,
@@ -834,6 +881,11 @@ function makeMidge(x, y, role) {
     radius: MIDGE_RADIUS_MIN + Math.random() * (MIDGE_RADIUS_MAX - MIDGE_RADIUS_MIN),
     speed: MIDGE_SPEED_MIN + Math.random() * (MIDGE_SPEED_MAX - MIDGE_SPEED_MIN),
     phase: Math.random() * Math.PI * 2,
+    phaseY: Math.random() * Math.PI * 2,
+    freqDriftX: MIDGE_FREQ_DRIFT_X_BASE * freqMul(),
+    freqDriftY: MIDGE_FREQ_DRIFT_Y_BASE * freqMul(),
+    freqWanderX: MIDGE_FREQ_WANDER_X_BASE * freqMul(),
+    freqWanderY: MIDGE_FREQ_WANDER_Y_BASE * freqMul(),
     driftVx: (Math.random() - 0.5) * 14,
     driftVy: (Math.random() - 0.5) * 10
   }
@@ -842,6 +894,7 @@ function midgeRoleVisible(ctrl, role) {
   if (role === 'pit') return ctrl.showPit
   if (role === 'fieldLeft') return ctrl.showLeft
   if (role === 'fieldRight') return ctrl.showRight || ctrl.spreadAfterPit
+  if (role === 'mudZone') return ctrl.showMudZone !== false
   if (role === 'field') return ctrl.showLeft || ctrl.showRight
   return false
 }
@@ -849,6 +902,7 @@ function boundsForRole(ctrl, role) {
   if (role === 'pit') return ctrl.spreadAfterPit ? ctrl.fieldAll : ctrl.pit
   if (role === 'fieldLeft') return ctrl.fieldLeft
   if (role === 'fieldRight') return ctrl.fieldRight
+  if (role === 'mudZone') return ctrl.mudZone || ctrl.fieldAll
   return ctrl.fieldAll
 }
 //

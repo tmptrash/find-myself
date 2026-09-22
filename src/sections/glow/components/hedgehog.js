@@ -489,11 +489,6 @@ function onUpdate(inst) {
     return
   }
   const scene = inst.zones?._sceneRef
-  const ambushDeathHold = scene?.ambushHedgehogDeferFall && scene?.ambushHedgehog === inst
-  if (ambushDeathHold && !inst.falling && !inst.walkingToEdge) {
-    updateFrozenGaze(inst, dt)
-    return
-  }
   const frozen = !scene?.zones?.oZone && !scene?.zones?.oCollected &&
     (scene?.meditation?.countdown == null || (scene?.meditationWorldLife ?? 0) < 0.02)
   //

@@ -1572,8 +1572,8 @@ const GLOW_PERCEPTION_RAY_LINES = [
   'learned:',
   'Ground',
   'Look',
-  'stop and listen',
-  'walk forward'
+  'Observe',
+  'Witness'
 ]
 const GLOW_PERCEPTION_RAY_SETTLE_DELAY = 0.1
 const GLOW_PERCEPTION_RAY_LINE_STAGGER = 0.08

@@ -126,7 +126,10 @@ import {
   GLOW_HERO_FILL_L,
   syncGlowHeroFillVisual,
   updateGlowHeroFillBurst,
+  updateGlowHeroWitnessGlow,
   drawGlowHeroFillBurst,
+  drawGlowHeroWitnessGlow,
+  setGlowHeroWitnessGlow,
   clearGlowHeroFillPreview,
   triggerGlowHeroFillBurst,
   resolveGlowHeroFilledSpriteKey
@@ -1025,6 +1028,10 @@ const KEY_TREE_SEGMENTS_REVEALED = 'glow.treeSegmentsRevealed'
 const KEY_GROUND_RIGHT_STRIP_MAX = 'glow.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
 const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
+//
+// Right mushroom cap collider / bounce — only after a second landing on the spot.
+//
+const KEY_RIGHT_TRAMP_BOUNCE_LIVE = 'glow.rightTrampBounceLive'
 const KEY_L_PLAT_STEPPED = 'glow.lPlatStepped'
 const KEY_LEFT_HEDGEHOG_JUMPED_OVER = 'glow.leftHedgehogJumpedOver'
 const KEY_LEFT_HEDGEHOG_REVEALED = 'glow.leftHedgehogRevealed'
@@ -1110,8 +1117,8 @@ const MENU_ARROW_DRAW_OPACITY = 1
 // Dialog.
 //
 const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
-const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
-const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see. I should speak\nto the big mushroom.'
+const GLOW_DIALOG_L = '[hl]L[/hl]ook closer. The world\nis full of nuances.'
+const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see.'
 //
 // Voice-overs played while the matching letter dialog is open
 //
@@ -1183,7 +1190,7 @@ const HERO_CONFIDENT_HINT_DURATION = 4
 //
 const GLOW_CONFIDENCE_HINT_G = 'I have weight.\nI stand.'
 const GLOW_CONFIDENCE_HINT_L = 'Now I feel more\nfulfilled inside.'
-const GLOW_CONFIDENCE_HINT_W = 'Now I feel ready\nfor what comes next.'
+const GLOW_CONFIDENCE_HINT_W = 'I\'m a Witness now. What I see is mine —\neven if no one wants to hear it.'
 const GLOW_CONFIDENCE_HINT_O = 'Now I feel more alive\nin every color.'
 const GLOW_HERO_FILL_L_EPS = 0.02
 //
@@ -1295,15 +1302,15 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Ground under my feet'
 const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Look closer'
-const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
-const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Walk forward'
+const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Observe, stop & listen.'
+const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Witness to how the world is made'
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
 // After picking up the final W letter the hero shares a closing line for a
 // few seconds, then a full-screen fade-out leads back to the menu.
 //
-const HINT_W_TEXT = 'Gradually I become a witness\nto how the world is made.\nLet\'s move on'
-const HINT_W_DURATION = 4
+const HINT_W_TEXT = GLOW_CONFIDENCE_HINT_W
+const HINT_W_DURATION = 5.5
 //
 // Drowning — land on the lake floor, then sink under the fill with the hint.
 //
@@ -2600,6 +2607,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     updatePlayfieldBorderColors(inst)
     inst.zones._sceneRef = inst
     zones.wCollected && revealPostWHud(inst)
+    setGlowHeroWitnessGlow(inst, zones.wCollected)
     const wasInCaveSpawn = lastSpawnMode === SPAWN_MODE_CAVE
     const pitShouldBeOpen = shouldGlowPitBeOpenForZones(zones, lastSpawnMode, heroInst)
     if (await glowBootstrapPause(bootstrap, 91, session)) return
@@ -2714,6 +2722,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k.z(CFG.visual.zIndex.player + 0.5),
       {
         draw() {
+          drawGlowHeroWitnessGlow(k, inst.heroInst, inst)
           drawGlowHeroFillBurst(k, inst.heroInst, inst)
         }
       }
@@ -3265,6 +3274,17 @@ function loadGlowZones() {
   const leftShoreRock = waterDiscovered || get(KEY_LEFT_SHORE_ROCK, false)
   const branchTrampRevealed = get(KEY_BRANCH_TRAMP_REVEALED, false)
   const rightTrampRevealed = get(KEY_RIGHT_TRAMP_REVEALED, false)
+  let rightTrampBounceLive = get(KEY_RIGHT_TRAMP_BOUNCE_LIVE, false)
+  if (!rightTrampBounceLive && rightTrampRevealed) {
+    const trampAlreadyUsed = get(KEY_TRAMP_WALKED, false) ||
+      get(KEY_REVEALED_L_PLAT, false) ||
+      get(KEY_SPIKE_GATE, false) ||
+      lCollected
+    if (trampAlreadyUsed) {
+      rightTrampBounceLive = true
+      set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
+    }
+  }
   const lLetterUnveiled = get(KEY_L_LETTER_UNVEILED, false) || lCollected
   const oZone = gCollected && lCollected && (get(KEY_REVEALED_O, false) || oCollected)
   const lZoneParallax = get(KEY_REVEALED_L, false) || oZone
@@ -3298,6 +3318,7 @@ function loadGlowZones() {
     groundRightStripMax,
     leftShoreRock,
     rightTrampRevealed,
+    rightTrampBounceLive,
     lPlatStepped: get(KEY_L_PLAT_STEPPED, false) || lCollected,
     leftHedgehogJumpedOver: get(KEY_LEFT_HEDGEHOG_JUMPED_OVER, false) || lCollected,
     groundDecor: groundDecorRight || groundDecorLeft,
@@ -8335,7 +8356,12 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
-  const slice = resolveGlowPitBelowFloorSprite(inst, k)
+  //
+  // Flat gray phase — void under the cave, not the wavy static-earth slice.
+  //
+  const slice = isGlowFlatSingleDecorColor(inst)
+    ? null
+    : resolveGlowPitBelowFloorSprite(inst, k)
   if (slice?.sprite) {
     drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, slice.sprite, slice.opacity)
     return
@@ -8939,8 +8965,8 @@ function isHeroNearTrampolineX(inst, heroX, state = inst.trampState) {
   if (!state) return false
   const branchPad = state === inst.branchTrampState
   const active = branchPad
-    ? isBranchTrampolineVisible(inst.zones)
-    : isRightTrampolineVisible(inst.zones)
+    ? isBranchTrampolineColliderActive(inst.zones)
+    : isRightTrampolineColliderActive(inst.zones)
   if (!active) return false
   return Math.abs(heroX - state.x) < TRAMP_NEAR_X
 }
@@ -8954,8 +8980,8 @@ function isOnTrampolineCap(inst, char, state = inst.trampState) {
   if (!isHeroAtTrampolineCap(inst, heroX, heroFeet, state)) return false
   const branchPad = state === inst.branchTrampState
   return branchPad
-    ? isBranchTrampolineVisible(inst.zones)
-    : isRightTrampolineVisible(inst.zones)
+    ? isBranchTrampolineColliderActive(inst.zones)
+    : isRightTrampolineColliderActive(inst.zones)
 }
 //
 // True while the hero's feet sit on the branch trampoline cap (right of the tree).
@@ -9201,6 +9227,7 @@ function syncGlowHeroBodyFill(inst) {
     holdAutoBurst: Boolean(inst.pendingHeroFillReveal)
   })
   updateGlowHeroFillBurst(inst, inst.k.dt())
+  updateGlowHeroWitnessGlow(inst, inst.k.dt())
 }
 //
 // Fill amount shown on the hero — held at the pre-pickup level until the
@@ -9875,8 +9902,9 @@ function collectLetterW(inst) {
   if (inst.zones.wCollected || inst.letterCaptionActive || !inst.zones.oCollected) return
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, 1)
-  completeGlowHeroFillRevealAfterCaption(inst, GLOW_CONFIDENCE_HINT_W)
+  completeGlowHeroFillRevealAfterCaption(inst)
   inst.zones.wCollected = true
+  setGlowHeroWitnessGlow(inst, true)
   set(KEY_COLLECTED_W, true)
   const entry = inst.wLetter
   hideGlowLetterPickupInWorld(entry)
@@ -10097,7 +10125,7 @@ function runGlowTrampolineLatePass(inst) {
   const onRightTrampCap = isOnTrampolineCap(inst, char, inst.trampState)
   const onBranchTrampCap = isOnTrampolineCap(inst, char, inst.branchTrampState)
   let bounced = false
-  if (isRightTrampolineVisible(inst.zones) &&
+  if (isRightTrampolineColliderActive(inst.zones) &&
     wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState, wasGroundedRef)) {
     const walked = inst.trampWalk?.walked
     const mult = walked ? TRAMP_DOCKED_BOOST_MULT : TRAMP_BOOST_MULT
@@ -10811,7 +10839,8 @@ function settleHeroAfterTrampReveal(inst, char, heroX, footY, right, branch) {
   const hero = inst.heroInst
   if (!hero || !char?.pos) return
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
-  if (right && isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) {
+  if (right && inst.zones.rightTrampBounceLive &&
+    isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) {
     pinHeroOnTrampolineCap(inst, char, capTop)
   }
   if (branch && isHeroAtTrampolineCap(inst, heroX, footY, inst.branchTrampState)) {
@@ -11064,7 +11093,7 @@ function applyGlowHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded) 
 // letter captions) so the invisible cap moves off once the hero walks away.
 //
 function syncGlowHeroTrampolinePads(inst, char, heroX, footY) {
-  isRightTrampolineVisible(inst.zones) &&
+  isRightTrampolineColliderActive(inst.zones) &&
     snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.trampState)
   isBranchTrampolineVisible(inst.zones) &&
     snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.branchTrampState)
@@ -11914,12 +11943,6 @@ function updateTrampWaterSteps(inst) {
 // Counts trampoline bounces; every Nth bounce shows a cheeky bubble on the cap
 //
 function onTrampolineBounce(inst) {
-  const char = inst.heroInst?.character
-  char && isOnTrampolineCap(inst, char, inst.trampState) &&
-    !inst.zones.rightTrampRevealed &&
-    isGlowEyesGameplayUnlocked(inst.zones) &&
-    inst.zones.gCollected &&
-    revealRightTrampoline(inst)
   maybeRevealLPlatOnRightTrampBounce(inst)
   revealGlowSpikeGateZone(inst, true)
   const holdingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
@@ -12459,10 +12482,12 @@ function revealLeftShoreRock(inst) {
   maybeShowGLetter(inst)
 }
 //
-// Right trampoline collider — only after the mushroom is revealed (or colour world).
+// Right trampoline collider — visible mushroom plus second landing (or colour world).
 //
 function isRightTrampolineColliderActive(z) {
-  return isRightTrampolineVisible(z)
+  if (!isRightTrampolineVisible(z)) return false
+  if (z?.colorWorld) return true
+  return Boolean(z?.rightTrampBounceLive)
 }
 //
 // Branch trampoline collider — only after the mushroom is revealed (or colour world).
@@ -12575,16 +12600,6 @@ function showTrampolineRevealHint(inst) {
 //
 function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded) {
   const z = inst.zones
-  const char = inst.heroInst?.character
-  if (
-    grounded && char &&
-    isOnTrampolineCap(inst, char, inst.trampState) &&
-    !z.rightTrampRevealed &&
-    isGlowEyesGameplayUnlocked(z) &&
-    z.gCollected
-  ) {
-    revealRightTrampoline(inst)
-  }
   if (!grounded || !justLanded) return
   const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
   const nearRight = Boolean(
@@ -12593,6 +12608,11 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
   const nearBranch = isGlowEyesGameplayUnlocked(z) && near(inst.branchTrampState?.x ?? -9999)
   if (!z.rightTrampRevealed && nearRight) {
     revealRightTrampoline(inst)
+    return
+  }
+  if (z.rightTrampRevealed && !z.rightTrampBounceLive && nearRight) {
+    z.rightTrampBounceLive = true
+    set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
   }
   if (!z.branchTrampRevealed && nearBranch) {
     revealBranchTrampoline(inst)

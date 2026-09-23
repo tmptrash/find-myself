@@ -1,4 +1,5 @@
 import { CFG } from '../../../cfg.js'
+import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import { GLOW_PAL } from './glow-palette.js'
@@ -19,6 +20,15 @@ const COLOR_CROSSFADE_EPS = 0.02
 const FILL_BURST_DURATION = 0.65
 const FILL_BURST_RADIUS = 54
 const FILL_BURST_Y_OFFSET = 26
+//
+// Soft gold halo after the W letter — persists until the scene leaves.
+//
+const WITNESS_GLOW_RADIUS = 40
+const WITNESS_GLOW_INNER_RADIUS = 26
+const WITNESS_GLOW_Y_OFFSET = 28
+const WITNESS_GLOW_OPACITY = 0.2
+const WITNESS_GLOW_INNER_OPACITY = 0.14
+const WITNESS_GLOW_PULSE_SPEED = 2.1
 const FILL_STEP_BURST_THRESHOLD = 0.02
 //
 // True while the menu / glow hero should use hollow→filled progression.
@@ -81,6 +91,41 @@ export function drawGlowHeroFillBurst(k, heroInst, inst) {
     radius: r,
     color: k.rgb(255, 255, 255),
     opacity: op
+  })
+}
+/**
+ * Enables the persistent witness halo after W is collected.
+ * @param {Object} inst - Glow level instance
+ * @param {boolean} on - Whether the halo should draw
+ */
+export function setGlowHeroWitnessGlow(inst, on) {
+  if (!inst) return
+  inst.heroWitnessGlow = on
+  inst.heroWitnessGlowPhase = inst.heroWitnessGlowPhase ?? 0
+}
+export function updateGlowHeroWitnessGlow(inst, dt) {
+  if (!inst?.heroWitnessGlow) return
+  inst.heroWitnessGlowPhase = (inst.heroWitnessGlowPhase ?? 0) + dt * WITNESS_GLOW_PULSE_SPEED
+}
+export function drawGlowHeroWitnessGlow(k, heroInst, inst) {
+  if (!inst?.heroWitnessGlow) return
+  const char = heroInst?.character
+  if (!char?.pos || char.hidden) return
+  const pulse = 0.88 + Math.sin(inst.heroWitnessGlowPhase ?? 0) * 0.12
+  const rgb = getRGB(k, GLOW_PAL.gold)
+  const gold = k.rgb(rgb.r, rgb.g, rgb.b)
+  const pos = k.vec2(char.pos.x, char.pos.y - WITNESS_GLOW_Y_OFFSET)
+  k.drawCircle({
+    pos,
+    radius: WITNESS_GLOW_RADIUS * pulse,
+    color: gold,
+    opacity: WITNESS_GLOW_OPACITY * pulse
+  })
+  k.drawCircle({
+    pos,
+    radius: WITNESS_GLOW_INNER_RADIUS * pulse,
+    color: gold,
+    opacity: WITNESS_GLOW_INNER_OPACITY * pulse
   })
 }
 function glowHeroSpriteReady(k, spriteKey) {

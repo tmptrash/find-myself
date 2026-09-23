@@ -2630,7 +2630,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     restoreGlowEyeIntroFromPersistedState(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
-    inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
+    inst.pit.onCrackLandingShake = () => {
+      shouldGlowCrackLandingCameraShake(inst) && triggerGlowCameraShake(inst)
+    }
     inst.pit.onPitMushroomLaunch = (_pit, char) => launchHeroFromPitMushroomToBranch(inst, char)
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
@@ -3846,28 +3848,51 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
 // (the currently open, reachable letter, no unlocking needed), then white
 // once taken — same white the others turn once collected, gray until then.
 //
+function glowHudLetterFillPartsLive(inst, index) {
+  if (index === 0) return inst._hudGFillParts || 0
+  if (index === 1) return inst._hudLFillParts || 0
+  if (index === 2) return inst._hudOFillParts || 0
+  return inst._hudWFillParts || 0
+}
+function glowHudLetterFillTotal(index) {
+  if (index === 0) return GLOW_HUD_G_FILL_PARTS
+  if (index === 1) return GLOW_HUD_L_FILL_PARTS
+  if (index === 2) return GLOW_HUD_O_FILL_PARTS
+  return GLOW_HUD_W_FILL_PARTS
+}
 function syncGlowHudLetterColors(inst) {
   const letters = inst.levelIndicator?.letterObjects
   if (!letters?.length) return
   const z = inst.zones
   const collected = [z.gCollected, z.lCollected, z.oCollected, z.wCollected]
   letters.forEach((letter, i) => {
-    if (i === 0) {
-      LevelIndicator.setHudLetterColor(letter, z.gCollected ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_GOLD_HEX)
-      return
+    const parts = glowHudLetterFillPartsLive(inst, i)
+    const total = glowHudLetterFillTotal(i)
+    let colorHex = GLOW_PAL.decorGray
+    if (collected[i] || parts >= total) {
+      colorHex = GLOW_HUD_COLLECTED_LETTER_HEX
+    } else if (i === 0 && parts === 0 && !isGlowGLetterUnveiled(inst)) {
+      colorHex = GLOW_GOLD_HEX
     }
-    const colorHex = collected[i] ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_PAL.decorGray
     LevelIndicator.setHudLetterColor(letter, colorHex)
   })
 }
 //
-// G shadow appears only after pickup; unveiled G stays flat gold until then.
+// Drop shadow only after the letter is actually collected — not while the
+// loader is merely full.
 //
-function syncGlowHudGLetterShadow(inst) {
+function syncGlowHudLetterShadows(inst) {
   const indicator = inst.levelIndicator
-  const outline = indicator?.letterOutlineObjects?.[0]
-  if (!indicator?.hideInactiveLetterShadow || !outline?.exists?.()) return
-  outline.hidden = !inst.zones.gCollected
+  if (!indicator?.hideInactiveLetterShadow) return
+  const collected = [
+    inst.zones.gCollected,
+    inst.zones.lCollected,
+    inst.zones.oCollected,
+    inst.zones.wCollected
+  ]
+  indicator.letterOutlineObjects?.forEach((outline, i) => {
+    outline?.exists?.() && (outline.hidden = !collected[i])
+  })
 }
 //
 // Applies G/L/O/W loader tints during update, before the HUD letters draw.
@@ -4060,7 +4085,7 @@ function syncGlowHudLetterFills(inst, burst = true) {
   syncGlowHudOFill(inst, burst)
   syncGlowHudWFill(inst, burst)
   tintGlowHudLoaderLetters(inst)
-  syncGlowHudGLetterShadow(inst)
+  syncGlowHudLetterShadows(inst)
   syncGlowHudLabelVisibility(inst)
   burst && prevG != null && gParts > prevG &&
     flashGlowHudLetterBurst(inst, 1)
@@ -8310,16 +8335,102 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
-  //
-  // Never sample BG_STATIC_* here — the wavy gray bake reads as stripes inside
-  // the open pit column beside the dark cave interior.
-  //
+  const slice = resolveGlowPitBelowFloorSprite(inst, k)
+  if (slice?.sprite) {
+    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, slice.sprite, slice.opacity)
+    return
+  }
+  const rgb = glowPitBelowCaveEarthRgb(inst)
   k.drawRect({
     pos: k.vec2(leftX, bottomY),
     width: rightX - leftX,
     height: bandEndY - bottomY,
-    color: k.rgb(VOID.r, VOID.g, VOID.b)
+    color: k.rgb(rgb.r, rgb.g, rgb.b)
   })
+}
+//
+// Earth-band fill under the cave floor — same baked static band as left of
+// the crack (film grain included), not flat void fill.
+//
+function glowPitBelowCaveEarthRgb(inst) {
+  if (inst._surfaceEarthRgb) return inst._surfaceEarthRgb
+  const fade = inst.colorFade ?? 0
+  const z = inst.zones
+  const innerGray = isPlayfieldInnerGrayVisible(z, fade)
+  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return VOID
+  if (z.colorWorld || z.oCollected || fade >= 1 - COLOR_CROSSFADE_EPS) return GROUND_DARK
+  return lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
+}
+//
+// Picks the same static earth sprite slice the main playfield uses beside the pit.
+//
+function resolveGlowPitBelowFloorSprite(inst, k) {
+  const fade = inst.colorFade ?? 0
+  const zones = inst.zones
+  const pf = inst.parallaxFade ?? 0
+  if (isGlowFullParallaxStable(inst) && k.getSprite(BG_STATIC_COLOR)) {
+    return { sprite: BG_STATIC_COLOR, opacity: 1 }
+  }
+  if (zones.oCollected && k.getSprite(BG_STATIC_COLOR)) {
+    return { sprite: BG_STATIC_COLOR, opacity: 1 }
+  }
+  const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
+  if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
+    if (fade > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_COLOR)) {
+      const op = fade * pf
+      if (op > COLOR_CROSSFADE_EPS) return { sprite: BG_STATIC_COLOR, opacity: op }
+    }
+    const grayOp = (1 - fade) * pf
+    if (grayOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
+      return { sprite: BG_STATIC_GRAY, opacity: grayOp }
+    }
+  }
+  if (pf > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
+    return { sprite: BG_STATIC_GRAY, opacity: pf }
+  }
+  if (k.getSprite(BG_STATIC_GRAY)) {
+    return { sprite: BG_STATIC_GRAY, opacity: 1 }
+  }
+  return null
+}
+//
+// Horizontal slice of the baked underground band (wavy gray + grain).
+//
+function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, sprite, opacity = 1) {
+  const w = x2 - x1
+  const h = y2 - y1
+  if (w <= 0 || h <= 0) return
+  const opts = {
+    sprite,
+    pos: k.vec2(x1, y1),
+    width: w,
+    height: h,
+    quad: {
+      x: x1 / WORLD_W,
+      y: (y1 - PAR_STATIC_WORLD_Y) / PAR_STATIC_WORLD_H,
+      w: w / WORLD_W,
+      h: h / PAR_STATIC_WORLD_H
+    },
+    anchor: 'topleft'
+  }
+  opacity < 0.999 && (opts.opacity = opacity)
+  k.drawSprite(opts)
+}
+//
+// Crack-lid stomp shake — not while bouncing on or jumping over the mushrooms.
+//
+function shouldGlowCrackLandingCameraShake(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return false
+  const hero = inst.heroInst
+  if (hero?.jumpPhase === 'jumping' || hero?.wasJumping) return false
+  if (inst.trampBounceAir || inst.branchTrampBounceAir) return false
+  if (isOnTrampolineCap(inst, char, inst.trampState)) return false
+  if (isOnTrampolineCap(inst, char, inst.branchTrampState)) return false
+  const heroX = char.pos.x
+  if (isHeroNearTrampolineX(inst, heroX, inst.trampState)) return false
+  if (isHeroNearTrampolineX(inst, heroX, inst.branchTrampState)) return false
+  return true
 }
 //
 // Skeleton, mushroom and seam rocks — above earth/static, below the hero.
@@ -10862,7 +10973,9 @@ function updateGlowCamera(inst) {
   inst.camera && GlowCamera.updateShake(inst.camera, inst.k.dt())
   if (updateCameraLetterPeek(inst, ch)) return
   const inPitCave = Boolean(inst._inGlowPitCave)
-  GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y, !inPitCave)
+  const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
+  const pixelAlignCamX = !inPitCave && grounded
+  GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y, pixelAlignCamX)
   !inst.heroInst?.isSubmerging && !inPitCave &&
     GlowCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }

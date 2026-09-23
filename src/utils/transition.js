@@ -450,6 +450,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       await BootLoader.yieldForGpu(1)
       if (inst.skipped) return
       transitionInterval?.cancel?.()
+      transitionInterval = null
       overlay.exists() && transitionK.destroy(overlay)
       transitionK._transitionOverlay = null
       reportLoad(18)
@@ -1003,7 +1004,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   const ensureTransitionEngineBound = () => {
-    if (inst.skipped || transitionInterval) return
+    if (inst.skipped) return
+    transitionInterval?.cancel?.()
+    transitionInterval = null
     transitionK = getActiveEngine()
     bindTransitionEngine(transitionK)
   }

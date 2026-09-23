@@ -1570,8 +1570,8 @@ const SECTION_DESCRIPTIONS = {
 //
 const GLOW_PERCEPTION_RAY_LINES = [
   'learned:',
-  'ground',
-  'look',
+  'Ground',
+  'Look',
   'stop and listen',
   'walk forward'
 ]
@@ -1581,11 +1581,20 @@ const GLOW_PERCEPTION_RAY_LINE_FADE_DUR = 0.32
 const GLOW_PERCEPTION_SNAP_ANGLE_EPS = 0.055
 const GLOW_PERCEPTION_RAY_FONT_SIZE = 18
 const GLOW_PERCEPTION_RAY_TEXT_OPACITY = 0.62
-const GLOW_PERCEPTION_RAY_DIM_RGB = { r: 120, g: 120, b: 120 }
-const GLOW_PERCEPTION_RAY_COLOR_LERP = 0.5
+const GLOW_PERCEPTION_RAY_SHADOW_OFFSET_X = 1
+const GLOW_PERCEPTION_RAY_SHADOW_OFFSET_Y = 1
+const GLOW_PERCEPTION_RAY_SHADOW_OPACITY = 1
 const GLOW_PERCEPTION_RAY_PHRASE_GAP = 44
 const GLOW_PERCEPTION_RAY_REVEAL_SLIDE = 32
 const GLOW_PERCEPTION_RAY_CHAR_STEP = 0.56
+//
+// Which GLOW letter (G=0 … W=3) each perception-ray phrase represents; -1 = none.
+//
+const GLOW_PERCEPTION_RAY_LINE_LETTER_INDEX = [-1, 0, 1, 2, 3]
+//
+// Inactive ray glyphs — same gray as uncollected GLOW letters under the hero.
+//
+const GLOW_PERCEPTION_RAY_INACTIVE_HEX = '#656565'
 const TITLE_UNKNOWN_TEXT = 'unknown'
 const TITLE_TEXT_FADE_OUT_SPEED = 5.0
 const TITLE_TEXT_FADE_IN_SPEED = 4.0
@@ -1910,14 +1919,11 @@ function drawGlowPerceptionRays(k, inst) {
   if (phraseCount <= 0) return
   const rayAngles = getGlowPerceptionRayAngles(title, text, phraseCount)
   if (!rayAngles.length) return
-  const sectionRgb = getRGB(k, GLOW_MENU_HERO_BODY)
-  const lerp = GLOW_PERCEPTION_RAY_COLOR_LERP
-  const dim = GLOW_PERCEPTION_RAY_DIM_RGB
-  const textColor = k.rgb(
-    Math.round(dim.r + (sectionRgb.r - dim.r) * lerp),
-    Math.round(dim.g + (sectionRgb.g - dim.g) * lerp),
-    Math.round(dim.b + (sectionRgb.b - dim.b) * lerp)
-  )
+  const heroRgb = getRGB(k, GLOW_MENU_HERO_BODY)
+  const heroLetterColor = k.rgb(heroRgb.r, heroRgb.g, heroRgb.b)
+  const inactiveRgb = getRGB(k, GLOW_PERCEPTION_RAY_INACTIVE_HEX)
+  const inactiveLetterColor = k.rgb(inactiveRgb.r, inactiveRgb.g, inactiveRgb.b)
+  const shadowColor = k.rgb(0, 0, 0)
   const cx = title.centerX
   const cy = title.centerY
   const baseR = title.circleRadius
@@ -1934,41 +1940,75 @@ function drawGlowPerceptionRays(k, inst) {
       cy,
       rayAngle: rayAngles[rayCount - 1 - i],
       lineText: GLOW_PERCEPTION_RAY_LINES[i],
+      lineLetterIndex: GLOW_PERCEPTION_RAY_LINE_LETTER_INDEX[i],
       reveal,
-      textColor,
+      heroLetterColor,
+      inactiveLetterColor,
+      shadowColor,
       fontSize: GLOW_PERCEPTION_RAY_FONT_SIZE,
       phraseInnerR
     })
   }
 }
 //
-// One phrase — each glyph on the same radial from the orbit centre (own tilt).
+// One phrase — glyphs left-to-right along the radial from the orbit centre
+// (perpendicular to “perception”), all sharing one tangent angle.
 //
 function drawGlowPerceptionRayPhrase(k, cfg) {
-  const { cx, cy, rayAngle, lineText, reveal, textColor, fontSize, phraseInnerR } = cfg
+  const {
+    cx, cy, rayAngle, lineText, lineLetterIndex, reveal, heroLetterColor,
+    inactiveLetterColor, shadowColor, fontSize, phraseInnerR
+  } = cfg
   const step = fontSize * GLOW_PERCEPTION_RAY_CHAR_STEP
   const n = lineText.length
   const slide = (1 - reveal) * GLOW_PERCEPTION_RAY_REVEAL_SLIDE
   const rLastChar = phraseInnerR + slide
-  const drawAngle = rayAngle + Math.PI / 2 + Math.PI
-  const op = GLOW_PERCEPTION_RAY_TEXT_OPACITY * reveal
   //
-  // Last glyph (reading end) shares one radial gap to the perception arc.
+  // Same tangent as orbiting title glyphs — perpendicular to the radial
+  // (Kaplay drawText angle is radians, not degrees).
+  //
+  const phraseAngle = rayAngle + Math.PI / 2
+  const op = GLOW_PERCEPTION_RAY_TEXT_OPACITY * reveal
+  const shadowOp = GLOW_PERCEPTION_RAY_SHADOW_OPACITY * reveal
+  const glowLetter = lineLetterIndex >= 0 ? GLOW_LETTER_KEYS[lineLetterIndex] : null
+  const glowLetterCollected = glowLetter ? get(glowLetter, false) : false
+  const glowChar = glowLetterCollected && lineLetterIndex >= 0
+    ? 'GLOW'[lineLetterIndex]
+    : null
+  //
+  // Last glyph (reading end) sits closest to the perception arc; earlier
+  // letters step outward along the same radial.
   //
   for (let c = 0; c < n; c++) {
     const along = n - 1 - c
     const r = rLastChar + along * step
     const x = cx + Math.cos(rayAngle) * r
     const y = cy + Math.sin(rayAngle) * r
+    const ch = lineText[c]
+    const isSignature = glowChar && ch.toUpperCase() === glowChar
+    const ink = isSignature && glowLetterCollected ? heroLetterColor : inactiveLetterColor
     k.pushTransform()
     k.pushTranslate(k.vec2(x, y))
     k.drawText({
-      text: lineText[c],
+      text: ch,
+      size: fontSize,
+      pos: k.vec2(
+        GLOW_PERCEPTION_RAY_SHADOW_OFFSET_X,
+        GLOW_PERCEPTION_RAY_SHADOW_OFFSET_Y
+      ),
+      anchor: 'center',
+      angle: phraseAngle,
+      color: shadowColor,
+      opacity: shadowOp,
+      fixed: true
+    })
+    k.drawText({
+      text: ch,
       size: fontSize,
       pos: k.vec2(0, 0),
       anchor: 'center',
-      angle: drawAngle,
-      color: textColor,
+      angle: phraseAngle,
+      color: ink,
       opacity: op,
       fixed: true
     })

@@ -15,6 +15,7 @@ import {
   isHeroOnPitCaveFloor,
   KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
+import { markGlowHudGCaveEntered } from './glow-hud-g-progress.js'
 
 //
 // Persisted once the hero collects the cave eyes and returns to the tree.
@@ -251,6 +252,7 @@ function enterGlowEyeIntroCaveApproach(inst, zone) {
 function tryOpenGlowEyeIntroCave(inst, char, zone, pit, grounded, justLanded, footY) {
   if (!justLanded || !grounded || !isHeroOnCrackLid(pit, char.pos.x, footY)) return
   collapseGlowPitForEyeIntro(pit)
+  markGlowHudGCaveEntered()
   inst.eyeIntro.phase = 'inCave'
 }
 function tryRevealGlowCaveFloorEyes(inst, char, pit) {

@@ -2020,6 +2020,7 @@ function drawGlowPerceptionRayPhrase(k, cfg) {
 //
 function glowPerceptionVisiblePhraseCount() {
   const collected = GLOW_LETTER_KEYS.filter(key => get(key, false)).length
+  if (collected <= 0) return 0
   return Math.min(GLOW_PERCEPTION_RAY_LINES.length, collected + 1)
 }
 //

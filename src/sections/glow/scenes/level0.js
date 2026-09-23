@@ -114,6 +114,11 @@ import {
   restoreGlowEyeIntroFromPersistedState
 } from '../utils/glow-eye-intro.js'
 import {
+  markGlowHudGCaveEntered,
+  markGlowHudGPitMushLaunch,
+  countGlowHudGCaveIntroParts
+} from '../utils/glow-hud-g-progress.js'
+import {
   createBranchPortalState,
   updateBranchPortalState,
   drawBranchPortal,
@@ -369,6 +374,14 @@ const HEDGEHOG_MUD_SNEAK_DRAW_Z = CFG.visual.zIndex.player + 2
 //
 const HEDGEHOG_GROUND_SINK = 6
 const HEDGEHOG_GROUND_RAISE = -HEDGEHOG_GROUND_SINK
+//
+// Horizontal band for crediting a jump over the left hedgehog (HUD L step 1).
+//
+const HEDGEHOG_JUMP_OVER_CLEARANCE_X = 52
+//
+// Hero must clear this far past the hog's X before the L HUD step credits.
+//
+const HEDGEHOG_JUMP_OVER_PASS_MARGIN = 36
 const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
@@ -913,8 +926,8 @@ const GLOW_HUD_LETTER_COUNT = 4
 //
 // HUD G/L/O/W fill as loaders. Ink-box clip ignores empty font padding.
 //
-const GLOW_HUD_G_FILL_PARTS = 6
-const GLOW_HUD_L_FILL_PARTS = 3
+const GLOW_HUD_G_FILL_PARTS = 8
+const GLOW_HUD_L_FILL_PARTS = 4
 const GLOW_HUD_O_FILL_PARTS = 5
 const GLOW_HUD_W_FILL_PARTS = 3
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
@@ -1037,6 +1050,7 @@ const KEY_LEFT_HEDGEHOG_JUMPED_OVER = 'glow.leftHedgehogJumpedOver'
 const KEY_LEFT_HEDGEHOG_REVEALED = 'glow.leftHedgehogRevealed'
 const KEY_HUD_G_FILL = 'glow.hudGFillParts'
 const KEY_HUD_L_FILL = 'glow.hudLFillParts'
+const KEY_HUD_L_TRAMP_JUMPED = 'glow.hudLTrampJumped'
 const KEY_HUD_W_FILL = 'glow.hudWFillParts'
 //
 // Right trampoline walk progress — restored after reload / menu exit.
@@ -1083,7 +1097,7 @@ const BRANCH_TELEPORT_LAUNCH_COOLDOWN = 0.55
 const BRANCH_TELEPORT_HERO_HALF_W = 14
 const BRANCH_TELEPORT_HERO_TOP_OFFSET = 44
 const BRANCH_PORTAL_TOOLTIP_TEXT = 'Totally not a shortcut\nto the big tree. One nuance: trust me.'
-const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom'
+const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
 const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
 const GLOW_TEACHER_HINT_L_PLAT_TEXT = 'That platform isn\'t there\nfor nothing ;)'
 const GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS = 2
@@ -1246,6 +1260,16 @@ const GLOW_TEACHER_HINT_AFTER_L = 'Don\'t rush. Just\nstop and think...'
 const GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_O = 'That big mushroom seems\nawfully attentive.'
 const GLOW_TEACHER_HINT_POST_O_MAX_SHOWS = 2
+//
+// Eyeless intro: nudge toward the right-edge cave mouth (max two, 10 s active each).
+//
+const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different over there…'
+const GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS = 2
+//
+// Lake + right mushroom open but the big tree is still hidden (max two).
+//
+const GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT = 'Look for the big tree\nnear the mushroom.'
+const GLOW_TEACHER_HINT_TREE_NEAR_MUSH_MAX_SHOWS = 2
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
 const MUD_TOOLTIP_SIZE = 80
 const MUD_TOOLTIP_Y_OFFSET = -50
@@ -2637,6 +2661,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       restoreGlowPitEyeIntroInterior(inst.pit)
     applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     restoreGlowEyeIntroFromPersistedState(inst)
+    restoreGlowHudGCaveIntroFromPersisted(inst)
     ensureGlowPitOpenForEyesCollected(inst.pit)
     inst.pit.onCrackLandingShake = () => {
       shouldGlowCrackLandingCameraShake(inst) && triggerGlowCameraShake(inst)
@@ -3528,12 +3553,11 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
   pinGlowHudFixed(indicator)
   LevelIndicator.syncLifeHudGrey(indicator, !colorWorld)
   //
-  // G reads as the currently open, reachable letter — gold from the start
-  // (unlike L/O/W which stay gray until unlocked), white once collected.
+  // G stays gray until the x/8 loader fills or the letter is collected.
   //
   LevelIndicator.setHudLetterColor(
     indicator.letterObjects?.[0],
-    completedLetters >= 1 ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_GOLD_HEX
+    completedLetters >= 1 ? GLOW_HUD_COLLECTED_LETTER_HEX : GLOW_PAL.decorGray
   )
   return indicator
 }
@@ -3627,7 +3651,12 @@ function glowHudLetterTooltipText(inst, index) {
 // Active partial HUD letter fill for the hero-attached counter (one at a time).
 //
 function activeGlowHudLetterFillForHero(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return null
+  const eyesUnlocked = isGlowEyesGameplayUnlocked(inst.zones)
+  if (!eyesUnlocked) {
+    const gOnly = glowHudLetterFillProgress(inst, 0)
+    if (!gOnly.collected && gOnly.parts > 0 && gOnly.parts < gOnly.total) return gOnly
+    return null
+  }
   const tw = inst.trampWalk
   const trampSingOnHero = tw && inst.zones?.oCollected && !tw.walked &&
     (tw.countdown != null || (tw.singCount || 0) < TRAMP_WALK_SINGS_TO_WATER)
@@ -3725,15 +3754,26 @@ function playGlowLetterWorldPickupFx(inst, entry) {
   )
 }
 //
-// How many gray-world map parts are open (3 tree landings, lake shore,
-// right ground strip, branch trampoline). Caps at GLOW_HUD_G_FILL_PARTS.
+// Backfills G HUD cave steps after reload (pit open / branch launch).
+//
+function restoreGlowHudGCaveIntroFromPersisted(inst) {
+  const pit = inst.pit
+  if (pit?.collapsed) markGlowHudGCaveEntered()
+  if (pit?.pitCaveMushroomDone || inst.treeRevealFromBranchTramp) markGlowHudGPitMushLaunch()
+}
+//
+// How many gray-world map parts are open (cave intro, 3 tree landings, lake
+// shore, right ground strip, branch trampoline). Caps at GLOW_HUD_G_FILL_PARTS.
 //
 function isGlowGLetterUnveiled(inst) {
   if (!inst?.zones || inst.zones.gCollected) return false
   return glowThreeZonesExplored(inst)
 }
 function countGlowHudGFillParts(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return 0
+  const introParts = countGlowHudGCaveIntroParts()
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) {
+    return Math.min(GLOW_HUD_G_FILL_PARTS, introParts)
+  }
   const z = inst.zones
   if (z?.gCollected) return GLOW_HUD_G_FILL_PARTS
   if (isGlowGLetterUnveiled(inst)) return GLOW_HUD_G_FILL_PARTS
@@ -3743,18 +3783,30 @@ function countGlowHudGFillParts(inst) {
   const leftPart = z?.waterDiscovered ? 1 : 0
   const rightPart = (z?.groundRightStripMax ?? -1) >= 0 ? 1 : 0
   const branchPart = z?.branchTrampRevealed ? 1 : 0
-  return Math.min(GLOW_HUD_G_FILL_PARTS, treeParts + leftPart + rightPart + branchPart)
+  const worldParts = introParts + treeParts + leftPart + rightPart + branchPart
+  return Math.min(GLOW_HUD_G_FILL_PARTS, worldParts)
 }
 //
-// L HUD fill (x/3): one step for jumping clear over the left hedgehog, one
-// for the right trampoline appearing, full on the L log.
+// L HUD fill (x/4): hedgehog jump, right mushroom found, bounce on it, L log step.
 //
 function countGlowHudLFillParts(inst) {
   const z = inst.zones
-  if (z?.lCollected || z?.lPlatStepped) return GLOW_HUD_L_FILL_PARTS
-  const jumpedOver = Boolean(z?.leftHedgehogJumpedOver) ? 1 : 0
-  const trampFound = (z?.rightTrampRevealed || isRightTrampolineVisible(z)) ? 1 : 0
-  return jumpedOver + trampFound
+  if (z?.lCollected) return GLOW_HUD_L_FILL_PARTS
+  let n = 0
+  z?.leftHedgehogJumpedOver && n++
+  (z?.rightTrampRevealed || isRightTrampolineVisible(z)) && n++
+  glowHudLTrampJumped(z) && n++
+  z?.lPlatStepped && n++
+  return Math.min(GLOW_HUD_L_FILL_PARTS, n)
+}
+function glowHudLTrampJumped(z) {
+  if (get(KEY_HUD_L_TRAMP_JUMPED, false)) return true
+  if (!z?.rightTrampBounceLive) return false
+  if (z.lPlatRevealed || z.lPlatStepped || get(KEY_TRAMP_WALKED, false)) {
+    set(KEY_HUD_L_TRAMP_JUMPED, true)
+    return true
+  }
+  return false
 }
 //
 // O HUD fill: same stepped progress as meditationCountdownFade (2nd heartbeat
@@ -3831,7 +3883,7 @@ function hudLetterInkBox(ch) {
 // Bands are equal slices of the live glyph box so fill grows from the
 // visual foot of the letter upward — the last band is the top, not the base.
 //
-function drawHudLetterGoldFill(k, letter, ch, n, parts) {
+function drawHudLetterGoldFill(k, letter, ch, n, parts, fillHex = HERO_BODY_COLOR) {
   if (!letter?.exists?.() || n <= 0) return
   const bake = letter._hudLetterBake
   if (!bake) return
@@ -3845,7 +3897,7 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
     ch,
     GLOW_HUD_LABEL_FONT_SIZE,
     GLOW_HUD_LABEL_FONT,
-    HERO_BODY_COLOR,
+    fillHex,
     applyGlowForegroundBake
   )
   k.drawMasked(() => {
@@ -3865,9 +3917,8 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   })
 }
 //
-// Rebakes every GLOW HUD glyph. G is special: gold while still uncollected
-// (the currently open, reachable letter, no unlocking needed), then white
-// once taken — same white the others turn once collected, gray until then.
+// Rebakes every GLOW HUD glyph — gray until partial fill or collection, white
+// when a letter is complete (G: 8/8 loader or picked up).
 //
 function glowHudLetterFillPartsLive(inst, index) {
   if (index === 0) return inst._hudGFillParts || 0
@@ -3892,8 +3943,6 @@ function syncGlowHudLetterColors(inst) {
     let colorHex = GLOW_PAL.decorGray
     if (collected[i] || parts >= total) {
       colorHex = GLOW_HUD_COLLECTED_LETTER_HEX
-    } else if (i === 0 && parts === 0 && !isGlowGLetterUnveiled(inst)) {
-      colorHex = GLOW_GOLD_HEX
     }
     LevelIndicator.setHudLetterColor(letter, colorHex)
   })
@@ -3911,8 +3960,11 @@ function syncGlowHudLetterShadows(inst) {
     inst.zones.oCollected,
     inst.zones.wCollected
   ]
+  const gParts = inst._hudGFillParts || 0
+  const gLoaderComplete = !inst.zones.gCollected && gParts >= GLOW_HUD_G_FILL_PARTS
   indicator.letterOutlineObjects?.forEach((outline, i) => {
-    outline?.exists?.() && (outline.hidden = !collected[i])
+    const showShadow = collected[i] || (i === 0 && gLoaderComplete)
+    outline?.exists?.() && (outline.hidden = !showShadow)
   })
 }
 //
@@ -3935,10 +3987,15 @@ function drawGlowHudLetterFills(inst) {
   const lParts = inst._hudLFillParts || 0
   const oParts = inst._hudOFillParts || 0
   const wParts = inst._hudWFillParts || 0
-  !inst.zones.gCollected && gParts > 0 &&
-    gParts < GLOW_HUD_G_FILL_PARTS &&
-    !isGlowGLetterUnveiled(inst) &&
-    drawHudLetterGoldFill(k, letters?.[0], 'G', gParts, GLOW_HUD_G_FILL_PARTS)
+  !inst.zones.gCollected && gParts > 0 && gParts < GLOW_HUD_G_FILL_PARTS &&
+    drawHudLetterGoldFill(
+      k,
+      letters?.[0],
+      'G',
+      gParts,
+      GLOW_HUD_G_FILL_PARTS,
+      GLOW_HUD_COLLECTED_LETTER_HEX
+    )
   !inst.zones.lCollected && lParts > 0 && lParts < GLOW_HUD_L_FILL_PARTS &&
     drawHudLetterGoldFill(k, letters?.[1], 'L', lParts, GLOW_HUD_L_FILL_PARTS)
   !inst.zones.oCollected && oParts > 0 && oParts < GLOW_HUD_O_FILL_PARTS &&
@@ -3960,8 +4017,7 @@ function syncGlowHudLetterFillDrawerHidden(inst) {
   if (!drawer) return
   const z = inst.zones
   const gParts = inst._hudGFillParts || 0
-  const g = !z.gCollected && gParts > 0 && gParts < GLOW_HUD_G_FILL_PARTS &&
-    !isGlowGLetterUnveiled(inst)
+  const g = !z.gCollected && gParts > 0 && gParts < GLOW_HUD_G_FILL_PARTS
   const l = !z.lCollected && (inst._hudLFillParts || 0) > 0 && (inst._hudLFillParts || 0) < GLOW_HUD_L_FILL_PARTS
   const o = !z.oCollected && (inst._hudOFillParts || 0) > 0 && (inst._hudOFillParts || 0) < GLOW_HUD_O_FILL_PARTS
   const w = !z.wCollected && (inst._hudWFillParts || 0) > 0
@@ -4070,7 +4126,12 @@ function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
   const z = inst.zones
   const gProgress =
     isGlowEyesGameplayUnlocked(z) && !z.gCollected && !isGlowGLetterUnveiled(inst)
-  if (!gProgress && !isGlowPitMushroomUnlocked(inst)) return
+  const caveEntranceProgress = glowTeacherCaveEntranceAutoHintEligible(inst, false)
+  const postTreeMushProgress = glowTeacherPostTreeMushAutoHintEligible(inst, false)
+  if (!gProgress && !isGlowPitMushroomUnlocked(inst) && !caveEntranceProgress &&
+    !postTreeMushProgress) {
+    return
+  }
   LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
   indicator.updateLifeScore?.(get('lifeScore', 0))
   set(KEY_LIFE_SHOWN, true)
@@ -4084,11 +4145,19 @@ function syncGlowHudLetterFills(inst, burst = true) {
   const indicator = inst.levelIndicator
   if (!indicator) return
   if (!isGlowEyesGameplayUnlocked(inst.zones)) {
-    inst._hudGFillParts = 0
+    const gParts = resolvedHudFillParts(
+      countGlowHudGFillParts(inst), KEY_HUD_G_FILL, GLOW_HUD_G_FILL_PARTS
+    )
+    const prevG = inst._hudGFillParts
+    inst._hudGFillParts = gParts
     inst._hudLFillParts = 0
     inst._hudWFillParts = 0
+    gParts > 0 && persistHudLetterFills(inst)
+    ensureGlowHudLetterFillDrawer(inst)
     syncGlowHudLabelVisibility(inst)
     syncGlowHudLetterFillDrawerHidden(inst)
+    burst && prevG != null && gParts > prevG && flashGlowHudLetterBurst(inst, 1)
+    gParts > 0 && updateGlowHudLetterFillCounter(inst)
     return
   }
   ensureGlowHudLetterFillDrawer(inst)
@@ -4236,6 +4305,10 @@ function glowTeacherHudHoverVisible(inst) {
 function glowTeacherHudHoverReplayAllowed(inst, text) {
   if (!text) return false
   if (text === GLOW_TEACHER_HINT_AFTER_L && (inst.zones.oZone || inst.zones.oCollected)) return false
+  if (text === GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT &&
+    !glowTeacherCaveEntranceAutoHintEligible(inst, false)) {
+    return false
+  }
   return true
 }
 //
@@ -10979,13 +11052,15 @@ function refreshGlowBranchJumpState(inst, char) {
   if (!char?.pos || !isHeroOnStartBranch(inst, char)) return
   const hero = inst.heroInst
   if (!hero || hero.isSquashing) return
+  const grounded = char.isGrounded?.() ?? false
   const velY = char.vel?.y ?? 0
-  if (Math.abs(velY) > 64) return
-  if (hero.jumpPhase === 'jumping' || hero.wasJumping) {
+  if (!grounded && Math.abs(velY) > 64) return
+  if (grounded && (hero.jumpPhase === 'jumping' || hero.wasJumping || inst._pitMushroomBranchLaunchLatch)) {
     Hero.syncPlatformLanding(hero)
     hero.jumpPhase = 'none'
     hero.wasJumping = false
     hero.postLandAirLock = 0
+    inst._pitMushroomBranchLaunchLatch = false
   }
   hero.canJump = true
   hero.jumpKeyReleaseGate = false
@@ -11333,6 +11408,7 @@ function onUpdate(inst) {
   refreshGlowBranchJumpState(inst, char)
   syncGlowBranchJumpReady(inst, char, grounded)
   onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
+  isGlowEyeIntroPending(inst.zones) && syncGlowHudLetterFills(inst, false)
   const inStartBranchBand = isHeroOverStartBranchX(inst, heroX) &&
     footY >= inst.startBranch.y - LOG_HOVER_BAND &&
     footY <= inst.startBranch.y + BRANCH_SNAP_BELOW
@@ -11943,6 +12019,7 @@ function updateTrampWaterSteps(inst) {
 // Counts trampoline bounces; every Nth bounce shows a cheeky bubble on the cap
 //
 function onTrampolineBounce(inst) {
+  markGlowHudLTrampJumped(inst)
   maybeRevealLPlatOnRightTrampBounce(inst)
   revealGlowSpikeGateZone(inst, true)
   const holdingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
@@ -13415,19 +13492,38 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
 function maybeMarkLeftHedgehogJumpedOver(inst, char, grounded) {
   const hog = inst.hedgehog
   if (!hog || !inst.zones.gCollected || !char?.pos || inst.zones.leftHedgehogJumpedOver) return
-  const side = char.pos.x < hog.x ? -1 : 1
-  if (grounded) {
-    inst._leftHedgehogGroundSide = side
+  const heroX = char.pos.x
+  const hogX = hog.x
+  const side = heroX < hogX ? -1 : 1
+  //
+  // Mud jumps arc high — track west→east passage by X only (works for sneak
+  // preview hog before ambush pop and while wandering in the mud band).
+  //
+  heroX < hogX - HEDGEHOG_JUMP_OVER_PASS_MARGIN && (inst._leftHedgehogWasWest = true)
+  if (inst._leftHedgehogWasWest && heroX > hogX + HEDGEHOG_JUMP_OVER_PASS_MARGIN) {
+    finishLeftHedgehogJumpedOver(inst, hog)
     return
   }
-  const groundSide = inst._leftHedgehogGroundSide
-  if (!groundSide || side === groundSide) return
+  if (grounded) {
+    const prevSide = inst._leftHedgehogGroundSide
+    inst._leftHedgehogGroundSide = side
+    prevSide && prevSide !== side && finishLeftHedgehogJumpedOver(inst, hog)
+  } else {
+    const groundSide = inst._leftHedgehogGroundSide
+    const prevX = inst.lastHeroX
+    const crossedHog = prevX != null &&
+      ((prevX < hogX && heroX >= hogX) || (prevX > hogX && heroX <= hogX))
+    const nearHogX = Math.abs(heroX - hogX) <= HEDGEHOG_JUMP_OVER_CLEARANCE_X
+    const jumpedOver = Boolean(groundSide && side !== groundSide) ||
+      (crossedHog && nearHogX)
+    jumpedOver && finishLeftHedgehogJumpedOver(inst, hog)
+  }
+}
+//
+// Persists the hedgehog jump-over and reveals the hog if it was still hidden.
+//
+function finishLeftHedgehogJumpedOver(inst, hog) {
   markLeftHedgehogJumpedOver(inst)
-  //
-  // A hedgehog still hidden in its mud-sneak preview pops fully into view
-  // the moment it gets jumped over — the player should see what they just
-  // cleared, not keep sneaking past an invisible hazard.
-  //
   if (!hog.popped) {
     markLeftHedgehogRevealed()
     Hedgehog.popOut(hog, hog.x, hog.y, hog.facing ?? 'left')
@@ -13491,7 +13587,15 @@ function markLPlatStepped(inst) {
   syncGlowHudLetterFills(inst)
 }
 //
-// Persists the left-hedgehog jump-over so the HUD L counter stays at 1/3+
+// Persists a right-trampoline bounce for the L HUD loader (3/4).
+//
+function markGlowHudLTrampJumped(inst) {
+  if (get(KEY_HUD_L_TRAMP_JUMPED, false)) return
+  set(KEY_HUD_L_TRAMP_JUMPED, true)
+  syncGlowHudLetterFills(inst)
+}
+//
+// Persists the left-hedgehog jump-over so the HUD L counter stays at 1/4+
 // after leaving.
 //
 function markLeftHedgehogJumpedOver(inst) {
@@ -13543,9 +13647,15 @@ function syncGlowBranchJumpReady(inst, char, grounded) {
   if (!char?.pos || inst.dialogOpen || inst.meditation?.countdown != null) return
   if (!isHeroOnStartBranch(inst, char)) return
   const hero = inst.heroInst
-  if (!hero || hero.isSquashing || hero.jumpPhase === 'jumping') return
+  if (!hero || hero.isSquashing) return
   const velY = char.vel?.y ?? 0
   if (!grounded && Math.abs(velY) > 48) return
+  if (grounded && (hero.jumpPhase === 'jumping' || hero.wasJumping)) {
+    Hero.syncPlatformLanding(hero)
+    hero.jumpPhase = 'none'
+    hero.wasJumping = false
+    hero.postLandAirLock = 0
+  }
   hero.canJump = true
   hero.jumpKeyReleaseGate = false
   hero.jumpDisabled = false
@@ -13647,6 +13757,8 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   const hero = inst.heroInst
   if (!branch || !char?.pos || !hero) return false
   dismissPitCaveMushroomHint(inst.pit)
+  markGlowHudGPitMushLaunch()
+  syncGlowHudLetterFills(inst, true)
   const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
   char.pos.x = teleportX
   char.pos.y = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
@@ -13657,6 +13769,7 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   hero.jumpCeilingBonk = false
   hero.postLandAirLock = 0
   hero.canJump = false
+  inst._pitMushroomBranchLaunchLatch = true
   inst.wasOnStartBranch = true
   inst.treeRevealFromBranchTramp = true
   inst.expectBranchWoodLandSound = true
@@ -13694,7 +13807,10 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
   const lEligible = glowTeacherLZoneAutoHintEligible(inst, inCave)
   const postLStopEligible = glowTeacherPostLStopHintEligible(inst, inCave)
   const postOBigMushEligible = glowTeacherPostOBigMushHintEligible(inst, inCave)
-  if (caveEligible || gEligible || lEligible || postLStopEligible || postOBigMushEligible) {
+  const caveEntranceEligible = glowTeacherCaveEntranceAutoHintEligible(inst, inCave)
+  const postTreeMushEligible = glowTeacherPostTreeMushAutoHintEligible(inst, inCave)
+  if (caveEligible || gEligible || lEligible || postLStopEligible || postOBigMushEligible ||
+    caveEntranceEligible || postTreeMushEligible) {
     revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
   }
   tickGlowTeacherContextHints(inst, {
@@ -13708,12 +13824,67 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
     lEligible,
     postLStopEligible,
     postOBigMushEligible,
+    caveEntranceEligible,
+    postTreeMushEligible,
     onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst),
     onGHint: () => fireGlowTeacherGZoneHint(inst),
     onLHint: () => fireGlowTeacherLZoneHint(inst),
     onPostLStopHint: () => fireGlowTeacherPostLStopHint(inst),
-    onPostOBigMushHint: () => fireGlowTeacherPostOBigMushHint(inst)
+    onPostOBigMushHint: () => fireGlowTeacherPostOBigMushHint(inst),
+    onCaveEntranceHint: () => fireGlowTeacherCaveEntranceHint(inst),
+    onPostTreeMushHint: () => fireGlowTeacherPostTreeMushHint(inst)
   })
+}
+//
+// True while the eyeless intro cave-mouth nudge may auto-fire (run right, pre-cracks).
+//
+function glowTeacherCaveEntranceAutoHintEligible(inst, inCave) {
+  if (inCave || inst._inGlowPitCave) return false
+  if (inst.pit?.collapsed) return false
+  if (!isGlowEyeIntroPending(inst.zones)) return false
+  if (!inst.eyeIntro || inst.eyeIntro.phase !== 'runRight') return false
+  if (inst.letterCaptionActive || inst.dialogOpen) return false
+  return (inst._caveEntranceHintShows || 0) < GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS
+}
+//
+// Shows the cave-mouth teacher line (max two per intro, 10 s active movement each).
+//
+function fireGlowTeacherCaveEntranceHint(inst) {
+  if (!glowTeacherCaveEntranceAutoHintEligible(inst, false)) return
+  if (!showGlowTeacherHintNow(
+    inst,
+    GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT,
+    GLOW_TEACHER_HINT_DURATION,
+    { caveEntrance: true }
+  )) return
+  inst._caveEntranceHintShows = (inst._caveEntranceHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT
+}
+//
+// True while lake + right mushroom are open but the big tree is still hidden.
+//
+function glowTeacherPostTreeMushAutoHintEligible(inst, inCave) {
+  if (inCave || inst._inGlowPitCave) return false
+  if (!isGlowEyesGameplayUnlocked(inst.zones)) return false
+  if (inst.zones.gCollected) return false
+  if (!inst.zones.waterDiscovered || !inst.zones.rightTrampRevealed) return false
+  if (inst.zones.tree || inst.treeDrawMonolith) return false
+  if (inst.letterCaptionActive || inst.dialogOpen) return false
+  return (inst._postTreeMushHintShows || 0) < GLOW_TEACHER_HINT_TREE_NEAR_MUSH_MAX_SHOWS
+}
+//
+// Nudges toward the hidden big tree after the lake and right mushroom open.
+//
+function fireGlowTeacherPostTreeMushHint(inst) {
+  if (!glowTeacherPostTreeMushAutoHintEligible(inst, false)) return
+  if (!showGlowTeacherHintNow(
+    inst,
+    GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT,
+    GLOW_TEACHER_HINT_DURATION,
+    { postTreeMush: true }
+  )) return
+  inst._postTreeMushHintShows = (inst._postTreeMushHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT
 }
 //
 // True while the pit-mushroom teacher line may auto-fire in the cave.
@@ -13789,7 +13960,7 @@ function glowTeacherLZoneAutoHintEligible(inst, inCave) {
   //
   // The hint references the L-log platform by name — showing it before the
   // platform itself is even revealed (e.g. right after only the hedgehog
-  // jump-over step, the first of 3) reads as nonsense.
+  // jump-over step, the first of 4) reads as nonsense.
   //
   if (!inst.zones.lPlatRevealed) return false
   const parts = countGlowHudLFillParts(inst)

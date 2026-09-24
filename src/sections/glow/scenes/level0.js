@@ -140,6 +140,8 @@ import {
   resolveGlowHeroFilledSpriteKey
 } from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
+import * as ChainBuoy from '../utils/glow-chain-buoy.js'
+import * as EarTree from '../utils/glow-ear-tree.js'
 import * as GlowCamera from '../utils/glow-camera.js'
 import {
   applyParallaxPostFxToContext,
@@ -368,6 +370,8 @@ const GLOW_DIALOG_AUDIO_FADE_SEC = 0.55
 const HEDGEHOG_SCALE = 1.4
 const HEDGEHOG_DRAW_Z = CFG.visual.zIndex.player - 1
 const HEDGEHOG_MUD_SNEAK_DRAW_Z = CFG.visual.zIndex.player + 2
+const GLOW_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
+const GLOW_EAR_TREE_Z = CFG.visual.zIndex.player - 1
 //
 // Positive sink drops the hedgehog anchor below FLOOR_Y so the baked body
 // and live legs sit flush on the ground strip instead of hovering above it.
@@ -424,8 +428,13 @@ const RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET = 3
 // press-any-key countdown reload.
 //
 const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
-const RIGHT_SPIKE_DEATH_HINT_TEXT = 'Life is a complicated thing'
-const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens...'
+const RIGHT_SPIKE_DEATH_HINT_TEXT = 'Life is a complicated thing.\nNext time, be careful.'
+const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens. Next\ntime, be careful.'
+//
+// Every second hedgehog death (2nd, 4th, ...) swaps in this callback line
+// instead of the cause-specific text above, then alternates back.
+//
+const HEDGEHOG_DEATH_REPEAT_HINT_TEXT = "And here's 'next time'"
 const HEDGEHOG_DEATH_HINT_RAISE = 96
 const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -58
 const HEDGEHOG_DEATH_HINT_DURATION = 5
@@ -929,8 +938,19 @@ const GLOW_HUD_LETTER_COUNT = 4
 const GLOW_HUD_G_FILL_PARTS = 8
 const GLOW_HUD_L_FILL_PARTS = 4
 const GLOW_HUD_O_FILL_PARTS = 5
-const GLOW_HUD_W_FILL_PARTS = 3
+//
+// Matches TRAMP_WALK_SINGS_TO_WATER — one fill part per mushroom sing.
+//
+const GLOW_HUD_W_FILL_PARTS = 2
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
+//
+// Countdown of seconds left before the next context teacher hint, bottom-
+// right of the eye HUD icon.
+//
+const TEACHER_HINT_COUNTDOWN_OFFSET_X = 16
+const TEACHER_HINT_COUNTDOWN_OFFSET_Y = 26
+const TEACHER_HINT_COUNTDOWN_FONT_SIZE = 16
+const TEACHER_HINT_COUNTDOWN_OPACITY = 0.85
 //
 // Baked GLOW letters use the same canvas metrics as lesson-indicator's
 // bakeHudLetterCanvas (fontSize * 1.2 + pad * 2 tall).
@@ -1077,7 +1097,7 @@ const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
-const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nIt\'s shallow here.'
+const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nWho made this lake so shallow?!'
 const TRAMP_SHALLOW_HINT_DURATION = 6
 const WRONG_TRAMP_SING_HINT_REPEAT = 20
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
@@ -1097,7 +1117,7 @@ const BRANCH_TELEPORT_CAP_HALF_W = 20
 const BRANCH_TELEPORT_LAUNCH_COOLDOWN = 0.55
 const BRANCH_TELEPORT_HERO_HALF_W = 14
 const BRANCH_TELEPORT_HERO_TOP_OFFSET = 44
-const BRANCH_PORTAL_TOOLTIP_TEXT = 'Totally not a shortcut\nto the big tree. One nuance: trust me.'
+const BRANCH_PORTAL_TOOLTIP_TEXT = 'What is this for?'
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
 const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
 const GLOW_TEACHER_HINT_L_PLAT_TEXT = 'That platform isn\'t there\nfor nothing ;)'
@@ -1111,20 +1131,6 @@ const O_LETTER_STUCK_HINT_DELAY = 90
 const L_LETTER_PEEK_TRAVEL = 0.45
 const L_LETTER_PEEK_HOLD = 1
 const L_LETTER_PEEK_RETURN = 0.45
-const LETTER_OFFSCREEN_ARROW_SIZE = 22
-const LETTER_OFFSCREEN_ARROW_STEM_W = 8
-const LETTER_OFFSCREEN_ARROW_STEM_LEN = 30
-const LETTER_OFFSCREEN_ARROW_SWAY_AMP = 10
-const LETTER_OFFSCREEN_ARROW_SWAY_SPEED = 5.5
-const LETTER_OFFSCREEN_ARROW_EDGE_INSET = 52
-//
-// Screen-space HUD arrow — VOID_PAD_Y added in recomputeGlowScreenLayout.
-//
-let LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
-const MENU_ARROW_BODY_RGB = glowRgb('midGray')
-const MENU_ARROW_OUTLINE_RGB = glowRgb('void')
-const MENU_ARROW_OUTLINE_WIDTH = 2
-const MENU_ARROW_DRAW_OPACITY = 1
 //
 // Intro rain ambience volume (same quiet bed as touch lesson 0)
 //
@@ -1171,9 +1177,9 @@ const GLOW_LETTER_CAPTION_Z = CFG.visual.zIndex.player + 20
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself in a\nworld I cannot fully perceive. To\nunderstand where I am and what\'s\nhappening to me, I need to learn\nto see it.'
+const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself\nin a world I cannot fully see.\nTo understand where I am, I\nneed to learn to see it.'
 const HINT_INTRO_1_DURATION = 16
-const HINT_INTRO_2_TEXT = 'Use \'awd, ←, →, ↑, space\' keys to\nmove and jump. Use the Mouse to\ninteract with the world.'
+const HINT_INTRO_2_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
 const HINT_INTRO_2_DURATION = 18
 //
 // Extra beat between the first and second intro speech bubbles.
@@ -1262,7 +1268,7 @@ const GLOW_TEACHER_HINT_POST_O_MAX_SHOWS = 2
 //
 // Eyeless intro: nudge toward the right-edge cave mouth (max two, 10 s active each).
 //
-const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different over there…'
+const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different over there ⤵'
 const GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS = 2
 //
 // Lake + right mushroom open but the big tree is still hidden (max two).
@@ -1324,8 +1330,8 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
 const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Ground under my feet'
-const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Look closer'
-const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Observe, stop & listen.'
+const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Look closer to see the nuances'
+const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Observe, stop & listen'
 const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Witness to how the world is made'
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
@@ -1374,7 +1380,7 @@ const GRASS_TUFT_COUNT = 22
 // else — the wandering hedgehog hides there and should be hard to spot
 // through the grass rather than standing out clearly.
 //
-const MUD_ZONE_GRASS_SCALE_MULT = 1.55
+const MUD_ZONE_GRASS_SCALE_MULT = 2
 //
 // Mud grass stays darker than the peek band when the post-L colour fade starts.
 //
@@ -1493,13 +1499,22 @@ const TRAMP_RADIUS = Math.round(38 * TRAMP_SIZE_SCALE)
 //
 const TRAMP_ADJACENT_X = 22
 //
-// Invisible solid pad under the cap — top flush with capTopY
+// Invisible solid pad under the cap — top flush with capTopY. Matches the
+// same horizontal reach as isHeroAtTrampolineCap's onCap check
+// (TRAMP_RADIUS + TRAMP_ADJACENT_X) so a hero the game logically treats as
+// "on the cap" always has a real collider under their feet there too.
 //
+const TRAMP_PAD_W = (TRAMP_RADIUS + TRAMP_ADJACENT_X) * 2
 const TRAMP_PAD_H = Math.round(10 * TRAMP_SIZE_SCALE)
 //
 // Feet below this offset from capTop keep the pad hidden (walk through stem)
 //
 const TRAMP_PAD_FEET_BELOW = Math.round(20 * TRAMP_SIZE_SCALE)
+//
+// How far above capTop counts as "closing in on the cap" — used by the
+// predictive edge-catch in snapHeroToOneTrampolineCap (see its own comment).
+//
+const TRAMP_PAD_APPROACH_ABOVE = 90
 //
 // Horizontal reach for pad placement and fall-through guards
 //
@@ -1534,13 +1549,14 @@ const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
 //
 // After O: stand still near the trampoline → countdown → mushroom walks left.
-// Three sings: two land steps, then the lake. W appears after the first sing.
+// Two sings, five seconds each: the first is a land step, the second docks
+// it in the lake and reveals W.
 //
 const TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION = 1
 const TRAMP_WALK_STILL = 3
 const TRAMP_WALK_COUNTDOWN = 5
 const BRANCH_PORTAL_REVEAL_OPACITY = 0.075
-const TRAMP_WALK_SINGS_TO_WATER = 3
+const TRAMP_WALK_SINGS_TO_WATER = 2
 const TRAMP_WALK_SING_TOTAL_SEC = TRAMP_WALK_COUNTDOWN * TRAMP_WALK_SINGS_TO_WATER
 const TRAMP_ENDURE_SHAKE_SPEED = 38
 const TRAMP_ENDURE_SHAKE_AMP = 0.7
@@ -1564,13 +1580,14 @@ const TRAMP_CAP_PAD_LATCH_SEC = 0.28
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'I can\'t listen\nto this anymore'
-const TRAMP_BAD_SING_TEXT_2 = 'Oh come on.\nYou again'
-const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
-const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
+//
+// Shown on the final sing (TRAMP_WALK_SINGS_TO_WATER), the one that docks
+// the mushroom in the lake — the line has to land on that exact step.
+//
+const TRAMP_BAD_SING_TEXT_FINAL = 'I\'ll go drown myself'
+const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_FINAL]
 const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
-const LETTER_ARROW_CORNER_RADIUS = 3
-const LETTER_ARROW_STEM_HEAD_OVERLAP = 14
 const CAVE_ENTRANCE_LANDING_PARTICLE_MULT = 2.4
 //
 // Rotating quips when the hero keeps bouncing without a break
@@ -2361,7 +2378,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // through the lake while riding / bouncing on the cap)
     //
     const trampPad = k.add([
-      k.rect(TRAMP_CAP_W, TRAMP_PAD_H),
+      k.rect(TRAMP_PAD_W, TRAMP_PAD_H),
       k.pos(-500, PLATFORM_HIDE_Y),
       k.anchor('center'),
       k.area(),
@@ -2370,7 +2387,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       CFG.game.platformName
     ])
     const branchTrampPad = k.add([
-      k.rect(TRAMP_CAP_W, TRAMP_PAD_H),
+      k.rect(TRAMP_PAD_W, TRAMP_PAD_H),
       k.pos(-500, PLATFORM_HIDE_Y),
       k.anchor('center'),
       k.area(),
@@ -2407,7 +2424,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       heroSpawnFade: 0,
       pendingHeroFillReveal: null,
       cameraLetterPeek: null,
-      letterOffscreenArrow: null,
       oZoneRevealTime: null,
       oStuckHintShown: false,
       sound,
@@ -2463,6 +2479,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _lPlatVisibleLastFrame: false,
       oPlatCaptionHiding: false,
       hedgehogDeathHandled: false,
+      hedgehogDeathCount: 0,
       hedgehogTouchGraceUntil: 0,
       hedgehogRespawnWait: null,
       glowHeroCreateCfg,
@@ -2672,6 +2689,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pit.onPitMushroomLaunch = (_pit, char) => launchHeroFromPitMushroomToBranch(inst, char)
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
+    inst.chainBuoys = ChainBuoy.create({ k, spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2) })
+    inst.earTrees = EarTree.create({ k, spots: buildGlowEarTreeSpots() })
+    createGlowChainBuoyLayer(k, inst)
+    createGlowEarTreeLayer(k, inst)
     if (await glowBootstrapPause(bootstrap, 93, session)) return
     syncGlowAtmosphereZones(inst)
     inst.midges.worldLife = 1
@@ -2681,11 +2702,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       postBakeCanvas: applyGlowForegroundBake
     }, glowHeroFillOpts(inst)))
     maybeShowGLetter(inst)
-    zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
-      maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
-    zones.oZone && maybeStartLetterOffscreenArrow(inst, inst.oLetter)
-    zones.lLetterUnveiled && maybeStartLetterOffscreenArrow(inst, inst.lLetter)
-    zones.wZone && isGlowWZoneUnlocked(inst) && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
     //
     // First visit: hold hints until the camera intro zoom-out finishes and a
     // short beat passes so the player sees the full level first.
@@ -2819,16 +2835,6 @@ function createPlayfieldFrameOverlay(k, inst) {
         isOuterFrameVisible(inst.zones)
           ? drawPlayfieldSideChrome(inst)
           : drawPlayfieldVoidSideChrome(inst)
-      }
-    }
-  ])
-  k.add([
-    k.pos(0, 0),
-    k.z(CFG.visual.zIndex.ui + 15),
-    {
-      fixed: true,
-      draw() {
-        drawLetterOffscreenArrow(inst)
       }
     }
   ])
@@ -4857,7 +4863,7 @@ function applyZoneVisibility(inst) {
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
   inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
-  inst.mudExtraGrass.layer.hidden = inst.grassLayer.layer.hidden
+  inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst)
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   syncGlowSpikeGateVisibility(inst)
@@ -4874,6 +4880,21 @@ function isGlowGrassLayerVisible(inst) {
   // After G the layer stays on (mud-zone blades only until L countdown — tint culls the rest).
   //
   return z.gCollected
+}
+//
+// The mud zone's own tall-grass overlay (createGlowMudExtraGrass) stays tied
+// to gCollected alone, unlike the general grassLayer above — that layer's
+// visibility switches to groundDecorLeft (gated behind waterDiscovered, "the
+// left shore decor only opens after the first drowning" — see loadGlowZones)
+// once world surface decor unlocks (post-L), which has nothing to do with the
+// mud zone itself. A player who reaches full colour world without ever
+// drowning (entirely possible) hid mudExtraGrass along with the rest of the
+// left decor, making the mud patch invisible in colour mode — confirmed live
+// (same mud-zone camera position, gray vs colour screenshots: color showed
+// only thin ordinary grass, no tall mud tufts at all).
+//
+function isGlowMudExtraGrassVisible(inst) {
+  return Boolean(inst.zones?.gCollected)
 }
 //
 // Hides every world layer during the eyeless intro — only the start branch,
@@ -4991,6 +5012,7 @@ function setLetterVisible(letterEntry, visible, burst = false) {
   }
   const sc = letterEntry.k?._glowSceneInst
   const instantReveal = sc?.drowning || sc?.deathHandled
+  wasHidden && sc && dismissGlowTeacherHintForLetterAppear(sc)
   if (instantReveal) {
     letterEntry._popFade = null
     letterEntry.allObjects.forEach(obj => { obj.opacity = 1 })
@@ -5095,6 +5117,60 @@ function isGlowFlatSingleDecorColor(inst) {
   if (z.lCollected || z.colorWorld) return false
   if ((inst.colorFade ?? 0) >= 0.5) return false
   return true
+}
+//
+// Chain-buoy colors — the chain is solid black in every mode; only the eye
+// sclera shifts between gray decor and a bright highlight.
+//
+function glowChainBuoyColors(inst, k) {
+  const flat = isGlowFlatSingleDecorColor(inst)
+  const eyeWhite = flat ? LIGHT_GRAY : glowRgb('brightLight')
+  return {
+    chain: k.rgb(VOID.r, VOID.g, VOID.b),
+    eyeWhite: k.rgb(eyeWhite.r, eyeWhite.g, eyeWhite.b)
+  }
+}
+//
+// Ear-tree colors — dark outline always, gray decor fill before the color
+// world, wood bark + living green ears after.
+//
+function glowEarTreeColors(inst, k) {
+  const flat = isGlowFlatSingleDecorColor(inst)
+  const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
+  const ear = flat ? DECOR_GRAY : GRASS_GREEN
+  return {
+    outline: k.rgb(VOID.r, VOID.g, VOID.b),
+    bark: k.rgb(bark.r, bark.g, bark.b),
+    ear: k.rgb(ear.r, ear.g, ear.b)
+  }
+}
+//
+// World-layer draw hooks for the chain-buoy and ear-tree decor — created
+// once in bootstrap, colors resolved live each frame from the current mode.
+//
+function createGlowChainBuoyLayer(k, inst) {
+  return k.add([
+    k.z(GLOW_CHAIN_BUOY_Z),
+    {
+      draw() {
+        if (!inst.chainBuoys || !inst.zones.gCollected) return
+        const c = glowChainBuoyColors(inst, k)
+        ChainBuoy.onDraw(inst.chainBuoys, c.chain, c.eyeWhite)
+      }
+    }
+  ])
+}
+function createGlowEarTreeLayer(k, inst) {
+  return k.add([
+    k.z(GLOW_EAR_TREE_Z),
+    {
+      draw() {
+        if (!inst.earTrees || !inst.zones.gCollected) return
+        const c = glowEarTreeColors(inst, k)
+        EarTree.onDraw(inst.earTrees, c.bark, c.outline, c.ear)
+      }
+    }
+  ])
 }
 //
 // G is collectible only when visible after the three-zone gate.
@@ -5872,6 +5948,30 @@ function undergroundPaletteEntries() {
       light: glowRgb('playfieldOuter')
     }
   ]
+}
+//
+// Chain-buoy decor spots — spread across the level, skipping the band around
+// the big tree (which gets the ear-trees instead, see buildGlowEarTreeSpots).
+//
+const GLOW_CHAIN_BUOY_COUNT = 6
+const GLOW_CHAIN_BUOY_TREE_CLEAR_HALF = 260
+function buildGlowChainBuoySpots(lakeX1, lakeX2) {
+  const spots = []
+  const span = WORLD_W - LEFT_MARGIN * 2
+  for (let i = 0; i < GLOW_CHAIN_BUOY_COUNT; i++) {
+    const x = LEFT_MARGIN + span * ((i + 1) / (GLOW_CHAIN_BUOY_COUNT + 1))
+    if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) continue
+    if (x >= lakeX1 && x <= lakeX2) continue
+    spots.push({ x, groundY: FLOOR_Y })
+  }
+  return spots
+}
+//
+// Ear-tree decor spots — clustered to the right of the big tree.
+//
+const GLOW_EAR_TREE_OFFSETS = [220, 420, 620]
+function buildGlowEarTreeSpots() {
+  return GLOW_EAR_TREE_OFFSETS.map(offset => ({ x: TREE_X + offset, groundY: FLOOR_Y }))
 }
 //
 // Mud zone's X bounds — pure function of TREE_X and fixed offsets, so it can
@@ -9176,7 +9276,7 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   // Never yank the invisible pad off-screen while the hero rides the cap —
   // Kaplay carries static bodies with their platform (looks like he vanishes).
   //
-  const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet)
+  const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet, state)
   const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40
   const padLatch = (state._capPadLatch ?? 0) > 0
   const needsPad = colliderActive && (onCap || bounceAir || padLatch || stickyCap ||
@@ -9949,6 +10049,7 @@ function collectLetterL(inst) {
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, GLOW_HERO_FILL_L)
   inst.zones.lCollected = true
+  dismissGlowLPlatTeacherHint(inst)
   inst._postLStopHintShows = 0
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
@@ -9963,7 +10064,6 @@ function collectLetterL(inst) {
   updatePlayfieldBorderColors(inst)
   const entry = inst.lLetter
   hideGlowLetterPickupInWorld(entry)
-  inst.letterOffscreenArrow = null
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 2)
   if (!inst.levelIndicator) {
@@ -10011,7 +10111,6 @@ function collectLetterO(inst) {
   syncTreeColorCrossfade(inst)
   const entry = inst.oLetter
   hideGlowLetterPickupInWorld(entry)
-  inst.letterOffscreenArrow = null
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 3)
   inst.trampWalk.singAllowedAt = Number.POSITIVE_INFINITY
@@ -10270,20 +10369,21 @@ function runGlowTrampolineLatePass(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
+  clampHeroIntoTrampolineCapX(char, inst.trampState)
+  clampHeroIntoTrampolineCapX(char, inst.branchTrampState)
   const heroX = char.pos.x
-  const wasGroundedRef = inst._trampWasGroundedAtFrameStart
   const onRightTrampCap = isOnTrampolineCap(inst, char, inst.trampState)
   const onBranchTrampCap = isOnTrampolineCap(inst, char, inst.branchTrampState)
   let bounced = false
   if (isRightTrampolineColliderActive(inst.zones) &&
-    wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState, wasGroundedRef)) {
+    wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState)) {
     const walked = inst.trampWalk?.walked
     const mult = walked ? TRAMP_DOCKED_BOOST_MULT : TRAMP_BOOST_MULT
     bounced = tryMushroomTrampBounce(inst, inst.trampState, mult, hero, char, heroX,
       () => onTrampolineBounce(inst)) || bounced
   }
   if (isBranchTrampolineColliderActive(inst.zones) &&
-    wantsTrampolineCapLaunch(inst, char, onBranchTrampCap, inst.branchTrampState, wasGroundedRef)) {
+    wantsTrampolineCapLaunch(inst, char, onBranchTrampCap, inst.branchTrampState)) {
     bounced = tryMushroomTrampBounce(
       inst,
       inst.branchTrampState,
@@ -10557,25 +10657,37 @@ function hedgehogDeathLeafPalette(inst) {
 //
 function finishHedgehogDeath(inst, cause, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
+  inst.hedgehogDeathCount = (inst.hedgehogDeathCount || 0) + 1
+  const repeatBeat = inst.hedgehogDeathCount % 2 === 0
   if (cause === 'spikes') {
     const spikes = inst.rightSpikes
-    HeroHint.show(inst.heroHint, RIGHT_SPIKE_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
-      anchorX: spikes ? (spikes.x1 + spikes.x2) / 2 : deathX,
-      anchorY: (spikes?.y ?? deathY) - HEDGEHOG_DEATH_HINT_RAISE,
-      offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
-      forceAbove: true,
-      ignoreMovementDismiss: true,
-      dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-    })
+    HeroHint.show(
+      inst.heroHint,
+      repeatBeat ? HEDGEHOG_DEATH_REPEAT_HINT_TEXT : RIGHT_SPIKE_DEATH_HINT_TEXT,
+      HEDGEHOG_DEATH_HINT_DURATION,
+      {
+        anchorX: spikes ? (spikes.x1 + spikes.x2) / 2 : deathX,
+        anchorY: (spikes?.y ?? deathY) - HEDGEHOG_DEATH_HINT_RAISE,
+        offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+        forceAbove: true,
+        ignoreMovementDismiss: true,
+        dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+      }
+    )
   } else {
-    HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_HINT_DURATION, {
-      anchorX: inst.hedgehog.x,
-      anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
-      offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
-      forceAbove: true,
-      ignoreMovementDismiss: true,
-      dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-    })
+    HeroHint.show(
+      inst.heroHint,
+      repeatBeat ? HEDGEHOG_DEATH_REPEAT_HINT_TEXT : HEDGEHOG_LEFT_DEATH_HINT_TEXT,
+      HEDGEHOG_DEATH_HINT_DURATION,
+      {
+        anchorX: inst.hedgehog.x,
+        anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+        offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+        forceAbove: true,
+        ignoreMovementDismiss: true,
+        dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+      }
+    )
     if (inst.hedgehog) {
       markLeftHedgehogRevealed()
       Hedgehog.popOut(
@@ -10658,7 +10770,14 @@ function computeGlowSpikeRespawnX(inst, deathX) {
 //
 function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause) {
   if (cause === 'spikes') {
-    return { x: computeGlowSpikeRespawnX(inst, deathX), y: deathY }
+    const spawnX = computeGlowSpikeRespawnX(inst, deathX)
+    //
+    // A spike death here must never gently set the hero back down on the
+    // platform itself (a safe redo right past the hazard) — always drop him
+    // to the main floor below instead.
+    //
+    const spawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    return { x: spawnX, y: spawnY }
   }
   const hog = inst.hedgehog
   const hogX = hog?.x ?? deathX
@@ -10991,22 +11110,25 @@ function settleHeroAfterTrampReveal(inst, char, heroX, footY, right, branch) {
   const grounded = char.isGrounded?.() ?? false
   const landingPose = glowHeroInTrampLandingPose(hero)
   //
-  // Branch first reveal often lands on the same frame as the opening jump —
-  // only reset pads; pin/sync would cancel jump-6 mid-air.
+  // No branch-only shortcut here (there used to be one, skipping straight to
+  // a pad reset without ever repositioning the hero) — pinHeroToMainFloorOverTrampoline
+  // already bails on its own while landingPose is true (glowHeroInTrampLandingPose),
+  // and every call below is additionally gated by !landingPose, so mid-jump
+  // (the original concern: "pin/sync would cancel jump-6 mid-air") is already
+  // safe without a special case. Skipping the pin left the hero's collider
+  // reset (resetTrampolineCapPadState moves the pad off-screen) with nothing
+  // repositioning the hero onto solid ground, which is what actually froze
+  // the animation — landing on the branch mushroom (revealed or not) left
+  // the hero standing over empty space with an inconsistent grounded state
+  // every frame after.
   //
-  if (branch && !inst.zones.branchTrampBounceLive) {
-    resetTrampolineCapPadState(inst, inst.branchTrampState, 'branchTrampBounceAir', inst.branchTrampPad)
-    inst.branchTrampBounceAir = false
-    grounded && !landingPose && (hero.canJump = true)
-    return
-  }
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
   if (right) {
     resetTrampolineCapPadState(inst, inst.trampState, 'trampBounceAir', inst.trampPad)
     !landingPose &&
       inst.zones.rightTrampBounceLive &&
       isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState) &&
-      pinHeroOnTrampolineCap(inst, char, capTop)
+      pinHeroOnTrampolineCap(inst, char, capTop, inst.trampState)
     !landingPose &&
       !inst.zones.rightTrampBounceLive &&
       pinHeroToMainFloorOverTrampoline(inst, char, inst.trampState)
@@ -11016,7 +11138,7 @@ function settleHeroAfterTrampReveal(inst, char, heroX, footY, right, branch) {
     !landingPose &&
       inst.zones.branchTrampBounceLive &&
       isHeroAtTrampolineCap(inst, heroX, footY, inst.branchTrampState) &&
-      pinHeroOnTrampolineCap(inst, char, capTop)
+      pinHeroOnTrampolineCap(inst, char, capTop, inst.branchTrampState)
     !landingPose &&
       !inst.zones.branchTrampBounceLive &&
       pinHeroToMainFloorOverTrampoline(inst, char, inst.branchTrampState)
@@ -11034,7 +11156,6 @@ function revealLPlatZone(inst, silent = false) {
   set(KEY_REVEALED_L_PLAT, true)
   !silent && playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
-  maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
 }
 //
 // Wooden trap platform over the right trampoline — persists like the L log.
@@ -11081,7 +11202,6 @@ function revealOZone(inst) {
   syncGlowAtmosphereZones(inst)
   HeroHint.clear(inst.heroHint)
   dismissGlowPostLStopTeacherHint(inst)
-  maybeStartLetterOffscreenArrow(inst, inst.oLetter)
   //
   // Body fill itself waits for the O letter to actually be collected and the
   // hero to land afterward (see maybeApplyPendingHeroFillOnLand) — the zone
@@ -11113,7 +11233,6 @@ function revealWZone(inst) {
   set(KEY_REVEALED_W, true)
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
-  maybeStartLetterOffscreenArrow(inst, inst.wLetter)
 }
 //
 // Pit level indicator ref — keep the live HUD pointer on the pit state.
@@ -11513,6 +11632,8 @@ function onUpdate(inst) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
+  inst.zones.gCollected && inst.chainBuoys && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
+  inst.zones.gCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   updateBranchSpawnLook(inst, hero, heroMoving)
@@ -11527,7 +11648,6 @@ function onUpdate(inst) {
     Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && queueGlowLetterPickup(inst, 'g', grounded)
   }
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
-  inst._trampWasGroundedAtFrameStart = inst.wasGrounded
   refreshGlowBranchJumpState(inst, char)
   refreshGlowMainGroundJumpState(inst, char, grounded, footY)
   syncGlowBranchJumpReady(inst, char, grounded)
@@ -11578,10 +11698,8 @@ function onUpdate(inst) {
     // and clear branchTrampBounceAir, leaving the hero frozen on the mushroom.
     //
     const landedOnRevealedCap =
-      (rightRevealFrame && wantsTrampolineCapLaunch(
-        inst, char, onRightTrampCap, inst.trampState, inst._trampWasGroundedAtFrameStart)) ||
-      (branchRevealFrame && wantsTrampolineCapLaunch(
-        inst, char, onBranchTrampCap, inst.branchTrampState, inst._trampWasGroundedAtFrameStart))
+      (rightRevealFrame && wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState)) ||
+      (branchRevealFrame && wantsTrampolineCapLaunch(inst, char, onBranchTrampCap, inst.branchTrampState))
     !landedOnRevealedCap &&
       settleHeroAfterTrampReveal(inst, char, heroX, footY, rightRevealFrame, branchRevealFrame)
   }
@@ -11689,8 +11807,8 @@ function onUpdate(inst) {
   updateBranchTrampMarioHint(inst)
   syncGlowPitCaveFlagForTeacherHints(inst)
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
+  syncGlowTeacherHintCountdownHud(inst)
   updateWrongTrampSingHint(inst)
-  updateLetterOffscreenArrow(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
@@ -11975,26 +12093,113 @@ function canSpawnGlowFootBurst(inst, char) {
   return isOnGlowMainGroundFoot(footY)
 }
 //
-// Clears the post-L "stop and think" teacher line once O is opening or visible.
+// Clears the active teacher-hint bubble on the eye HUD if its text matches
+// (no-op otherwise) — shared by every "retire this specific hint early"
+// caller below, since a hint reaching its max show count only blocks FUTURE
+// fires and never touches a bubble already on screen.
 //
-function dismissGlowPostLStopTeacherHint(inst) {
-  inst._postLStopHintShows = GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS
-  if (inst.lastGlowTeacherHintText !== GLOW_TEACHER_HINT_AFTER_L) return
+function dismissGlowTeacherHintByText(inst, text) {
+  if (inst.lastGlowTeacherHintText !== text) return
   inst.lastGlowTeacherHintText = null
   if (!HeroHint.isActive(inst.heroHint) || !inst._glowTeacherHintActive) return
   HeroHint.clear(inst.heroHint)
   inst._glowTeacherHintActive = false
 }
 //
-// Stops the post-O big-mushroom teacher line once the hero starts singing there.
+// Clears the active teacher-hint bubble on the eye HUD outright, regardless
+// of which line is showing — a letter popping into view should always
+// retire whatever nudge was on screen for it.
 //
-function dismissGlowPostOBigMushTeacherHint(inst) {
-  inst._postOBigMushHintShows = GLOW_TEACHER_HINT_POST_O_MAX_SHOWS
-  if (inst.lastGlowTeacherHintText !== GLOW_TEACHER_HINT_AFTER_O) return
+function dismissGlowTeacherHintForLetterAppear(inst) {
   inst.lastGlowTeacherHintText = null
   if (!HeroHint.isActive(inst.heroHint) || !inst._glowTeacherHintActive) return
   HeroHint.clear(inst.heroHint)
   inst._glowTeacherHintActive = false
+}
+//
+// Clears the post-L "stop and think" teacher line once O is opening or visible.
+//
+function dismissGlowPostLStopTeacherHint(inst) {
+  inst._postLStopHintShows = GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS
+  dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_AFTER_L)
+}
+//
+// Stops the post-O big-mushroom teacher line once the hero starts singing there.
+//
+function dismissGlowPostOBigMushTeacherHint(inst) {
+  inst._postOBigMushHintShows = GLOW_TEACHER_HINT_POST_O_MAX_SHOWS
+  dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_AFTER_O)
+}
+//
+// Retires the L-platform nudge the moment L is actually collected.
+//
+function dismissGlowLPlatTeacherHint(inst) {
+  inst._lHudStallHintShows = GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+  dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_L_PLAT_TEXT)
+}
+//
+// Retires the "step on a mushroom?" cave nudge once the hero actually
+// launches off the pit mushroom (dismissPitCaveMushroomHint already blocks
+// it from firing again, but does not hide a bubble already on screen).
+//
+function dismissGlowCaveMushroomTeacherHint(inst) {
+  dismissGlowTeacherHintByText(inst, PIT_CAVE_HINT_TEXT)
+}
+//
+// Live "seconds until next hint" readout, bottom-right of the eye HUD icon —
+// mirrors teacherContextAccum against the same gate tickGlowTeacherContextHints
+// fires on. Lazily created once the eye HUD anchor first exists (the icon
+// itself is not built until G is collected).
+//
+function syncGlowTeacherHintCountdownHud(inst) {
+  const anchor = glowTeacherHudAnchor(inst)
+  if (!anchor || !inst.levelIndicator?.lifeRevealed) {
+    inst.teacherHintCountdownText && (inst.teacherHintCountdownText.opacity = 0)
+    inst.teacherHintCountdownOutline && (inst.teacherHintCountdownOutline.opacity = 0)
+    return
+  }
+  if (!inst.teacherHintCountdownText) {
+    createGlowTeacherHintCountdownHud(inst)
+  }
+  const remaining = Math.max(0, Math.ceil(GLOW_TEACHER_HINT_MOVE_SEC - (inst.teacherContextAccum || 0)))
+  const text = String(remaining)
+  const x = anchor.x + TEACHER_HINT_COUNTDOWN_OFFSET_X
+  const y = anchor.y + TEACHER_HINT_COUNTDOWN_OFFSET_Y
+  const tone = inst.zones.colorWorld ? glowRgb(GLOW_GOLD_HEX) : glowRgb('decorGray')
+  const k = inst.k
+  inst.teacherHintCountdownText.text = text
+  inst.teacherHintCountdownText.pos.x = x
+  inst.teacherHintCountdownText.pos.y = y
+  inst.teacherHintCountdownText.color = k.rgb(tone.r, tone.g, tone.b)
+  inst.teacherHintCountdownText.opacity = TEACHER_HINT_COUNTDOWN_OPACITY
+  inst.teacherHintCountdownOutline.text = text
+  inst.teacherHintCountdownOutline.pos.x = x + 1
+  inst.teacherHintCountdownOutline.pos.y = y + 1
+  inst.teacherHintCountdownOutline.opacity = TEACHER_HINT_COUNTDOWN_OPACITY * 0.8
+}
+//
+// Builds the countdown's outline + fill text nodes (screen-fixed HUD).
+//
+function createGlowTeacherHintCountdownHud(inst) {
+  const k = inst.k
+  inst.teacherHintCountdownOutline = k.add([
+    k.text('0', { size: TEACHER_HINT_COUNTDOWN_FONT_SIZE, font: GLOW_HUD_LABEL_FONT }),
+    k.pos(0, 0),
+    k.anchor('topleft'),
+    k.z(CFG.visual.zIndex.ui + 20),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.fixed()
+  ])
+  inst.teacherHintCountdownText = k.add([
+    k.text('0', { size: TEACHER_HINT_COUNTDOWN_FONT_SIZE, font: GLOW_HUD_LABEL_FONT }),
+    k.pos(0, 0),
+    k.anchor('topleft'),
+    k.z(CFG.visual.zIndex.ui + 21),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.fixed()
+  ])
 }
 //
 // Forces idle humming while the post-O trampoline sing countdown ticks.
@@ -12093,8 +12298,6 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     syncGlowHudWFill(inst)
     showTrampBadSingHint(inst, line)
     tw.singCount >= TRAMP_WALK_SINGS_TO_WATER && revealWZone(inst)
-    tw.singCount >= TRAMP_WALK_SINGS_TO_WATER &&
-      maybeStartLetterOffscreenArrow(inst, inst.wLetter)
   }
 }
 //
@@ -12612,7 +12815,7 @@ function updateExploreFades(inst, dt) {
   }
   if (inst.grassLayer?.layer) {
     inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
-    inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = inst.grassLayer.layer.hidden)
+    inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst))
   }
   if (!exploreSettled && !z.groundDecorRight) {
     inst.rockObjs?.forEach(o => {
@@ -13048,60 +13251,170 @@ function glowHeroInTrampLandingPose(hero) {
 }
 //
 // True when the hero should launch from a mushroom cap (not stroll past on the floor).
+// Landing on the cap always launches — no "already grounded last frame"
+// exception. That exception used to skip the bounce whenever the hero was
+// simply resting there before this frame's check ran (e.g. right after the
+// invisible pad activates under settled feet), which is exactly the "the
+// hero freezes on the mushroom instead of bouncing" bug: onCap stayed true
+// forever with nothing ever launching it again.
 //
-function wantsTrampolineCapLaunch(inst, char, onCap, state, wasGroundedRef = inst.wasGrounded) {
+function wantsTrampolineCapLaunch(inst, char, onCap, state) {
   if (!onCap || !state || state.cooldown > 0) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
-  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return false
+  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state)) return false
   if (state === inst.trampState && inst.trampWalk?.walking &&
     footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
-  const hero = inst.heroInst
-  if ((hero?.landSquashTimer ?? 0) > 0) return true
-  if (!wasGroundedRef) {
-    //
-    // First grounded frame after a jump — wait for hero.js to enter jump-6
-    // before the late bounce pass (same-frame launch looked like broken anim).
-    //
-    return hero?.jumpPhase !== 'jumping'
-  }
-  return false
+  return true
 }
 //
 // True while the hero strolls on the main floor lane (not a drop onto the cap).
+// Never true while the hero's X is actually inside a cap's own footprint —
+// without that carve-out this unconditionally exempted EVERY grounded main-
+// floor frame regardless of X, so a hero who reached a mushroom by walking
+// (rather than jumping) instead of falling onto it never got caught by
+// snapHeroToOneTrampolineCap / wantsTrampolineCapLaunch / syncOneTrampolinePad
+// at all: confirmed live (real arrow-key walks, both mushrooms, both
+// directions) — the hero always walked straight through the cap's entire
+// X-zone at a constant floor-level Y with zero bounce and zero pad, edges
+// included, exactly the "hero stands there instead of bouncing" report.
 //
-function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
+function isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state = null) {
   const grounded = char.isGrounded?.() ?? false
-  return grounded && inst.wasGrounded &&
-    footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
+  if (!grounded || !inst.wasGrounded || footY < FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
+  if (state && Math.abs(char.pos.x - state.x) < TRAMP_RADIUS + TRAMP_ADJACENT_X) return false
+  return true
 }
 //
 // Snaps the hero onto one mushroom cap when feet tunnel through the collider.
 //
 function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (!state) return
+  //
+  // Tracked unconditionally (before any early return below) so it always
+  // reflects the true previous-to-this-frame delta, not a stale gap left
+  // over from frames where this function bailed out early.
+  //
+  const actualDeltaX = heroX - (state._prevSnapX ?? heroX)
+  state._prevSnapX = heroX
   const branchPad = state === inst.branchTrampState
   const colliderActive = branchPad
     ? isBranchTrampolineColliderActive(inst.zones)
     : isRightTrampolineColliderActive(inst.zones)
   if (!colliderActive) return
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
-  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
+  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state)) return
   if (Math.abs(heroX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
+  const grounded = typeof char.isGrounded === 'function' && char.isGrounded()
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
-  const grounded = char.isGrounded?.() ?? false
-  if (grounded && footY <= capTop + LOG_SNAP_STANDING_MAX) return
-  if (footY >= capTop - LOG_HOVER_BAND && footY <= capTop + TRAMP_SNAP_BELOW) {
-    pinHeroOnTrampolineCap(inst, char, capTop)
-  }
+  //
+  // syncTrampolinePad already keeps a real static collider under the cap, so
+  // Kaplay resolves an ordinary landing there on its own — this only needs to
+  // rescue a genuine high-speed tunnel-through (feet clearly *below* the cap
+  // surface), not repin every frame the feet are merely hovering near it.
+  // Re-pinning every frame here used to fight Kaplay's own landing resolve
+  // exactly like the old pinHeroToMainFloorOverTrampoline bug: forcing pos.y
+  // / vel.y back every frame never gave isGrounded() a frame to settle true,
+  // so every grounded-gated follow-up (the late bounce pass, hero.js's own
+  // land-squash) never fired and the hero froze in mid-air above the cap —
+  // jumpPhase stuck on 'jumping' forever, most visible right after a bounce
+  // launches the hero back down onto its own still-cooling-down cap.
+  //
+  // Grounded-in-zone catch: a hero who reached this X-zone already grounded
+  // (walked in — on the main floor, or stepped over from a matching-height
+  // log/branch — rather than fell onto the cap) has real, sustained downward
+  // contact with SOME surface, so the high-speed tunnel-through check above
+  // (TRAMP_SNAP_BELOW, tuned for a fast fall) never trips: it requires feet
+  // clearly *below* the cap surface by a wide margin that a merely-standing
+  // hero barely misses. Once actually grounded and inside the zone but still
+  // below the cap's own surface, pin up immediately regardless of that
+  // margin — the previous isHeroWalkingPastTrampOnMainFloor exemption made
+  // this whole function (and the pad in syncOneTrampolinePad) a no-op for
+  // every grounded approach, so a hero could walk the cap's entire width
+  // with no interaction at all; see isHeroWalkingPastTrampOnMainFloor.
+  //
+  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW || (grounded && footY > capTop + 4)
+  //
+  // Edge dead-zone fix: a hero landing near the cap's edge almost always
+  // still carries horizontal speed from the jump arc (a dead-center drop
+  // with zero vx is the rare case). Kaplay only resolves the landing once
+  // the feet actually reach the thin pad's surface — but by then, a hero
+  // that started this fall already close to the edge can have drifted past
+  // TRAMP_RADIUS + TRAMP_ADJACENT_X in X before their feet ever get there,
+  // so the pad and the hero's feet are never in the same place at the same
+  // time and the hero just sails through to the main floor beside the
+  // mushroom (reported as "dead spots" that only fail near the edges — a
+  // dead-center drop has far more X slack before it would ever exit the
+  // zone, so it never showed this). Catch that: once the feet are close
+  // enough above the cap to be a genuine landing attempt (not a high jump
+  // merely passing over), predict one frame ahead — if that would carry the
+  // hero out of the zone before they actually touch down, snap them onto
+  // the cap now instead of letting them fly past. This is a one-shot
+  // correction (same shape as sunkPastCap above), not a per-frame
+  // force-write: pinHeroOnTrampolineCap zeroes vel.y, so the hero is
+  // grounded next frame and this condition stops re-triggering.
+  //
+  const closingIn = footY > capTop - TRAMP_PAD_APPROACH_ABOVE
+  //
+  // char.vel.x is NOT how horizontal movement works in this game — hero.js
+  // drives it entirely through character.move(dx, 0) each frame (and even
+  // forces vel.x to 0 elsewhere), so char.vel.x reads 0 in every real-play
+  // frame, grounded or airborne. The one-frame-ahead prediction below used
+  // to multiply that permanently-zero value by dt, so nextX always collapsed
+  // to the current heroX — which is always still inside the zone here (the
+  // outsideXZone guard above already returned otherwise) — making
+  // aboutToLeaveZone permanently false and this whole predictive catch a
+  // silent no-op in actual gameplay. A synthetic test that manually set
+  // char.vel.x to simulate motion never exercised this, which is why it
+  // looked fixed there but not in real play. actualDeltaX (tracked at the
+  // top of this function, unconditionally, so it survives early returns) is
+  // the hero's real observed frame-to-frame X motion instead — correct
+  // regardless of how it's produced (move(), mud slowdown, a future
+  // velocity-based change, etc).
+  //
+  const nextX = heroX + actualDeltaX
+  const aboutToLeaveZone = Math.abs(nextX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X
+  if (sunkPastCap || (closingIn && aboutToLeaveZone)) pinHeroOnTrampolineCap(inst, char, capTop, state)
 }
 //
-// Pins feet on the mushroom cap — bypasses land-squash guards in settleHeroOnLog.
+// Margin kept inside the existing cap X-zone when the late bounce pass
+// clamps X back in after an edge-catch pin (see clampHeroIntoTrampolineCapX
+// below) — not a zone widening, just slack so the clamped position reliably
+// still reads as "on cap" (a strict `<` compare against the same zone
+// half-width) on the check that follows.
 //
-function pinHeroOnTrampolineCap(inst, char, capTop) {
+const TRAMP_PIN_X_CLAMP_MARGIN = 4
+//
+// Pins feet on the mushroom cap — bypasses land-squash guards in settleHeroOnLog.
+// Flags state._edgeCatchPinned so runGlowTrampolineLatePass (which runs
+// later in the SAME frame, after hero.js's character.move() has already
+// applied this frame's horizontal step — horizontal movement never goes
+// through char.vel.x in this game, so it cannot be caught/clamped here) can
+// clamp X back into the zone before checking onCap. Without that, the Y-snap
+// alone left X free to keep sliding out of the zone via that same-frame
+// move() call, so a fast horizontal approach carried the hero back outside
+// the cap's X range before the bounce check ever saw him "on" it — he'd sink
+// onto the main floor beside the mushroom without ever bouncing, and sit
+// there motionless afterward.
+//
+function pinHeroOnTrampolineCap(inst, char, capTop, state = null) {
   char.pos.y = capTop - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
   char.vel && (char.vel.y = 0)
+  state && (state._edgeCatchPinned = true)
+}
+//
+// Clamps the hero's X back into a pad's cap zone after an edge-catch pin —
+// called from the late bounce pass, after this frame's character.move() has
+// already run, so it undoes exactly the drift described above. Only ever
+// pulls the hero toward the cap center, never past its existing radius —
+// not a zone widening.
+//
+function clampHeroIntoTrampolineCapX(char, state) {
+  if (!state?._edgeCatchPinned) return
+  state._edgeCatchPinned = false
+  const half = TRAMP_RADIUS + TRAMP_ADJACENT_X - TRAMP_PIN_X_CLAMP_MARGIN
+  char.pos.x = Math.min(state.x + half, Math.max(state.x - half, char.pos.x))
 }
 //
 // First mushroom reveal — collider off, hero passes through to FLOOR_Y.
@@ -13117,11 +13430,23 @@ function pinHeroToMainFloorOverTrampoline(inst, char, state) {
   if (glowHeroInTrampLandingPose(hero)) return
   const heroX = char.pos.x
   if (Math.abs(heroX - state.x) >= TRAMP_NEAR_X) return
+  //
+  // createLevelBounds's real "floor" body already spans this X with no gap,
+  // so an ordinary jump or fall near an inactive/unarmed trampoline lands on
+  // it exactly like anywhere else in the level — this only needs to catch a
+  // genuine tunnel-through-the-floor glitch (feet clearly *below* FLOOR_Y),
+  // not the whole "mushroom cap height down to the floor" band a normal
+  // jump's descent naturally passes through. This used to force-write pos.y
+  // / zero vel.y every single frame the feet were anywhere in that generous
+  // band — cancelling every takeoff outright (jumpPhase snapped back to
+  // 'none' next frame with the hero still glued to the ground) and, even
+  // once only guarded on the way up, still fighting Kaplay's own landing
+  // resolve on the way down (isGrounded stuck oscillating a few px above
+  // the floor forever, jumpPhase wedged on 'jumping').
+  //
   const footY = char.pos.y + SURFACE_DETECT_Y
-  const capTop = FLOOR_Y - TRAMP_TOTAL_H
-  const onMushCapHeight = footY >= capTop - 10 && footY <= capTop + TRAMP_SNAP_BELOW
   const sunkThroughFloor = footY > FLOOR_Y + LOG_SNAP_STANDING_MAX
-  if (!onMushCapHeight && !sunkThroughFloor) return
+  if (!sunkThroughFloor) return
   char.pos.y = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
   char.vel && (char.vel.y = 0)
 }
@@ -13140,20 +13465,52 @@ function resetTrampolineCapPadState(inst, state, bounceAirKey, pad) {
 //
 // Catches tunneling through the thin start-branch collider before lake-floor snap.
 //
+// The catch band (LOG_HOVER_BAND above .. BRANCH_SNAP_BELOW below platTop) is
+// intentionally wide so a single fast physics tick can't slip through the
+// branch's thin collider. That width is also wide enough to still contain the
+// hero right after settleHeroOnLog pins him there — so without the "armed"
+// latch below, this refired every single frame for as long as the hero
+// stayed in that X/Y band. Confirmed live: a branch-trampoline bounce with
+// sideways drift toward the tree arcs straight through this band (this is a
+// column of open air the hero is only ever passing through mid-flight, not
+// actually landing in), got caught mid-arc, and settleHeroOnLog re-pinned
+// him to the exact same Y every frame after — footY landed back inside the
+// same band each time (isGrounded() never resolved true at the branch's
+// ragged edge, so the grounded-only early exit above never released him) —
+// a permanent freeze, hero motionless and unresponsive to jump. The latch
+// makes the catch fire once per approach: it disarms on a successful catch
+// and only re-arms once the hero is genuinely outside the band again (or
+// truly grounded), so a hero who doesn't actually come to rest there falls
+// on through under normal gravity instead of being re-pinned forever.
+//
 function snapHeroToStartBranch(inst, char, heroX, footY) {
   if (!inst.startBranch || inst.drowning ||
     inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
-  if (!isHeroOverStartBranchX(inst, heroX)) return
+  if (!isHeroOverStartBranchX(inst, heroX)) {
+    inst._startBranchTunnelArmed = true
+    return
+  }
   const hero = inst.heroInst
   if (hero?.isSquashing || hero?.jumpPhase === 'jumping') return
   const velY = char.vel?.y ?? 0
-  if (velY < 0) return
+  if (velY < 0) {
+    inst._startBranchTunnelArmed = true
+    return
+  }
   const platTop = inst.startBranch.y
   const grounded = char.isGrounded?.() ?? false
-  if (grounded && footY <= platTop + LOG_SNAP_STANDING_MAX) return
-  if (footY >= platTop - LOG_HOVER_BAND && footY <= platTop + BRANCH_SNAP_BELOW) {
-    settleHeroOnLog(inst, char, platTop)
+  if (grounded && footY <= platTop + LOG_SNAP_STANDING_MAX) {
+    inst._startBranchTunnelArmed = true
+    return
   }
+  const inCatchBand = footY >= platTop - LOG_HOVER_BAND && footY <= platTop + BRANCH_SNAP_BELOW
+  if (!inCatchBand) {
+    inst._startBranchTunnelArmed = true
+    return
+  }
+  if (inst._startBranchTunnelArmed === false) return
+  inst._startBranchTunnelArmed = false
+  settleHeroOnLog(inst, char, platTop)
 }
 //
 // Prevents rare fall-through on the main floor (hero sinks below the floor line).
@@ -13499,151 +13856,6 @@ function footParticleColor(sceneInst, surface, footX = 0, footY = 0) {
   return lerpRgb(INNER_GRAY, GROUND_DARK, sceneInst?.colorFade || 0)
 }
 //
-// True when a world X lies outside the current horizontal camera view.
-//
-function isWorldPointOutsideCameraView(inst, worldX, margin = 48) {
-  const camX = inst.k.camPos().x
-  const zoom = inst.camera?.zoom || 1
-  const half = VIEW_W / (2 * zoom)
-  return worldX < camX - half + margin || worldX > camX + half - margin
-}
-//
-// World X the edge arrow should point at (W log, L log, O letter, or L platform after G).
-//
-function getLetterArrowTargetX(inst) {
-  if (inst.wLetter && !inst.wLetter.main.hidden && !inst.zones.wCollected && isGlowWZoneActive(inst)) {
-    return inst.wLetter.x
-  }
-  if (inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected) return inst.lLetter.x
-  if (inst.oLetter && !inst.oLetter.main.hidden && !inst.zones.oCollected && inst.zones.oZone) {
-    return inst.oLetter.x
-  }
-  if (inst.zones.gCollected && !inst.zones.lCollected && inst.zones.lPlatRevealed && inst.lPlatHome) {
-    return inst.lPlatHome.x + LOG_W * 0.5
-  }
-  return null
-}
-//
-// Center of the L log platform — arrow target right after G until L is taken.
-//
-function getLPlatformArrowTargetX(inst) {
-  if (!inst.zones.gCollected || inst.zones.lCollected || !inst.lPlatHome) return null
-  return inst.lPlatHome.x + LOG_W * 0.5
-}
-//
-// Points a menu-style edge arrow at an off-screen L or O letter.
-//
-function maybeStartLetterOffscreenArrow(inst, letter) {
-  if (!letter || letter.main.hidden) return
-  maybeStartLetterOffscreenArrowForTarget(inst, letter.x)
-}
-//
-// Arms the edge arrow when the target world X lies outside the camera view.
-//
-function maybeStartLetterOffscreenArrowForTarget(inst, worldX) {
-  if (worldX == null) return
-  if (!isWorldPointOutsideCameraView(inst, worldX)) return
-  const camX = inst.k.camPos().x
-  inst.letterOffscreenArrow = {
-    side: worldX < camX ? 'left' : 'right',
-    phase: 0
-  }
-}
-//
-// Keeps the edge arrow while the letter stays off-screen; clears when visible.
-//
-function updateLetterOffscreenArrow(inst, dt) {
-  const hint = inst.letterOffscreenArrow
-  if (!hint) return
-  const targetX = getLetterArrowTargetX(inst)
-  if (targetX == null || !isWorldPointOutsideCameraView(inst, targetX)) {
-    inst.letterOffscreenArrow = null
-    return
-  }
-  const camX = inst.k.camPos().x
-  hint.side = targetX < camX ? 'left' : 'right'
-  hint.phase += dt * LETTER_OFFSCREEN_ARROW_SWAY_SPEED
-}
-//
-// Draws the swaying off-screen letter hint in fixed screen space.
-//
-function drawLetterOffscreenArrow(inst) {
-  const hint = inst.letterOffscreenArrow
-  if (!hint || getLetterArrowTargetX(inst) == null) return
-  const k = inst.k
-  const sway = Math.sin(hint.phase) * LETTER_OFFSCREEN_ARROW_SWAY_AMP
-  const baseX = hint.side === 'left'
-    ? LEFT_MARGIN + LETTER_OFFSCREEN_ARROW_EDGE_INSET
-    : SCREEN_W - RIGHT_MARGIN - LETTER_OFFSCREEN_ARROW_EDGE_INSET
-  const cx = baseX + (hint.side === 'left' ? sway : -sway)
-  drawMenuStyleEdgeArrow(k, cx, LETTER_OFFSCREEN_ARROW_Y, hint.side, inst.zones.colorWorld)
-}
-//
-// Menu-style metal chevron (body + outline) pointing left or right.
-//
-function drawMenuStyleEdgeArrow(k, cx, cy, side, colorWorld = false) {
-  const s = LETTER_OFFSCREEN_ARROW_SIZE
-  const outline = k.rgb(MENU_ARROW_OUTLINE_RGB.r, MENU_ARROW_OUTLINE_RGB.g, MENU_ARROW_OUTLINE_RGB.b)
-  const bodyRgb = colorWorld ? glowRgb(GLOW_GOLD_HEX) : MENU_ARROW_BODY_RGB
-  const body = k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b)
-  const o = MENU_ARROW_OUTLINE_WIDTH
-  const op = MENU_ARROW_DRAW_OPACITY
-  const dir = side === 'left' ? -1 : 1
-  const stemHalf = LETTER_OFFSCREEN_ARROW_STEM_W * 0.5
-  const headHalf = s * 0.5
-  const tipX = cx + dir * s * 0.7
-  const headBackX = cx - dir * s * 0.3
-  const stemBackX = headBackX - dir * LETTER_OFFSCREEN_ARROW_STEM_LEN
-  const stemFrontX = headBackX + dir * LETTER_ARROW_STEM_HEAD_OVERLAP
-  const r = LETTER_ARROW_CORNER_RADIUS
-  const stemLeft = Math.min(stemBackX, stemFrontX)
-  const stemSpan = Math.abs(stemFrontX - stemBackX)
-  k.drawRect({
-    pos: k.vec2(stemLeft - o, cy - stemHalf - o),
-    width: stemSpan + o * 2,
-    height: stemHalf * 2 + o * 2,
-    radius: r + o,
-    color: outline,
-    opacity: op,
-    fixed: true
-  })
-  k.drawRect({
-    pos: k.vec2(stemLeft, cy - stemHalf),
-    width: stemSpan,
-    height: stemHalf * 2,
-    radius: r,
-    color: body,
-    opacity: op,
-    fixed: true
-  })
-  const headPts = buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, r, false)
-  const headOutlinePts = buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, r, true, o)
-  k.drawPolygon({ pts: headOutlinePts, color: outline, opacity: op, fixed: true, triangulate: true })
-  k.drawPolygon({ pts: headPts, color: body, opacity: op, fixed: true, triangulate: true })
-}
-//
-// Arrowhead polygon with slightly rounded shoulders and tip (chamfered corners).
-//
-function buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, cornerR, outline, outlinePad = 0) {
-  const pad = outline ? outlinePad : 0
-  const hb = headBackX
-  const tx = tipX + (outline ? dir * pad : 0)
-  const th = headHalf + pad
-  const sh = stemHalf + pad
-  const tipLeadX = tx - dir * cornerR
-  return [
-    k.vec2(hb, cy - sh),
-    k.vec2(hb, cy - th + cornerR),
-    k.vec2(hb + dir * cornerR, cy - th),
-    k.vec2(tipLeadX, cy - cornerR * 0.65),
-    k.vec2(tx, cy),
-    k.vec2(tipLeadX, cy + cornerR * 0.65),
-    k.vec2(hb + dir * cornerR, cy + th),
-    k.vec2(hb, cy + th - cornerR),
-    k.vec2(hb, cy + sh)
-  ]
-}
-//
 // First landing on the L log (with the ambush hedgehog) unveils the letter —
 // any route counts (tramp arc, spike platform hop, reload revisit).
 //
@@ -13668,7 +13880,6 @@ function tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded) {
     inst.lLetter.allObjects?.forEach(obj => { obj.opacity = 1 })
   }
   playSegmentRevealSound(inst)
-  maybeStartLetterOffscreenArrow(inst, inst.lLetter)
 }
 //
 // Half-to-full L HUD fill when the hero stands on the log left of the right tramp.
@@ -13981,6 +14192,7 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   const hero = inst.heroInst
   if (!branch || !char?.pos || !hero) return false
   dismissPitCaveMushroomHint(inst.pit)
+  dismissGlowCaveMushroomTeacherHint(inst)
   markGlowHudGPitMushLaunch()
   syncGlowHudLetterFills(inst, true)
   const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
@@ -14060,13 +14272,24 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
   })
 }
 //
-// True while the eyeless intro cave-mouth nudge may auto-fire (run right, pre-cracks).
+// True while the eyeless intro cave-mouth nudge may auto-fire — from level
+// start until the hero actually jumps through the cracks. 'runRight' is the
+// whole pre-approach phase; 'awaitJump' starts the moment heroX comes within
+// EYE_INTRO_CAVE_APPROACH_X of the crack zone (enterGlowEyeIntroCaveApproach
+// in glow-eye-intro.js), well before the hero visually finds the entrance —
+// excluding it here used to silently retire this hint for the rest of the
+// playthrough as soon as the hero explored anywhere near the right side of
+// the level, regardless of whether he'd actually found the cave, which read
+// as "hint never shows when running right". Both phases count as "hasn't
+// entered the cave yet"; pit.collapsed above already ends eligibility the
+// moment he actually jumps in.
 //
 function glowTeacherCaveEntranceAutoHintEligible(inst, inCave) {
   if (inCave || inst._inGlowPitCave) return false
   if (inst.pit?.collapsed) return false
   if (!isGlowEyeIntroPending(inst.zones)) return false
-  if (!inst.eyeIntro || inst.eyeIntro.phase !== 'runRight') return false
+  const phase = inst.eyeIntro?.phase
+  if (phase !== 'runRight' && phase !== 'awaitJump') return false
   if (inst.letterCaptionActive || inst.dialogOpen) return false
   return (inst._caveEntranceHintShows || 0) < GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS
 }
@@ -14543,6 +14766,5 @@ function recomputeGlowScreenLayout(k) {
   PLAYFIELD_BOTTOM_Y = VOID_PAD_Y + DESIGN_SCREEN_H - BOTTOM_MARGIN
   GLOW_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
   GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
-  LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
   updatePlayfieldCornerPositions()
 }

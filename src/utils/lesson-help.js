@@ -131,6 +131,22 @@ let _standaloneOpen = false
 export function isAnyPanelOpen() {
   return (activeInst?.panelOpen ?? false) || _standaloneOpen
 }
+/**
+ * Forces both panel-open flags clear regardless of any in-progress fade.
+ * Both normally clear themselves from a scene-scoped k.onUpdate once a
+ * closing fade finishes (see the panelPhase 'closing' branch below, and
+ * openStandalonePanel's onClose) — but if the underlying Kaplay engine is
+ * torn down first (e.g. a resolution-mode swap into a native-resolution
+ * level like glow), that onUpdate never runs its completion branch, and
+ * isAnyPanelOpen() — the only thing that reads these — stays stuck true for
+ * the rest of the session, silently blocking every future jump attempt
+ * (attemptHeroJump is its only caller) with no other symptom. Call this
+ * whenever the engine is torn down, not only on a panel's own natural close.
+ */
+export function resetLessonHelpPanelState() {
+  activeInst = null
+  _standaloneOpen = false
+}
 export const LESSON_HELP_TEXTS = {
   'lesson-touch.0': 'T — right of the tall bug. O — on\nthe monster head. U — platform\nin a center. C,H — platform after\nfinding U. Gather bugs near the\nplatform to jump!',
   'lesson-touch.1': 'Find T on the right, touch\nall 7 trees. Then listen\nto the crow for the melody.',

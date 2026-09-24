@@ -381,6 +381,28 @@ export function isAmbientPlaying(instance) {
 // ============================================
 // SOUND EFFECTS FUNCTIONS
 // ============================================
+//
+// A Web Audio AudioContext can drop from 'running' to 'suspended' mid-session
+// on its own (browser power-saving after a stretch of no audio activity, a
+// brief tab-focus loss that doesn't fully background the page, etc.) — with
+// no error and no console warning. Every procedural SFX call after that point
+// schedules its oscillators/gains exactly as before, but nothing is audible
+// until the context resumes, and nothing here ever resumed it again: confirmed
+// live by forcing audioContext.suspend() mid-session and repeating real
+// jump-and-land cycles — every single landing kept silently scheduling sound
+// on the still-suspended context forever, matching the reported "landing
+// sound sometimes just doesn't play, works other times" (this exact context
+// can go suspended on some play sessions and not others, hence the
+// intermittency, unlike a deterministic "always broken" bug). Call this first
+// in any procedural SFX entry point so a suspended context self-heals instead
+// of staying silently dead for the rest of the session.
+//
+// @param {Object} instance - Sound instance
+//
+function resumeAudioContextIfSuspended(instance) {
+  instance?.audioContext?.state === 'suspended' &&
+    instance.audioContext.resume().catch(() => {})
+}
 /**
  * Play landing sound
  * @param {Object} instance - Sound instance
@@ -391,6 +413,7 @@ export function isAmbientPlaying(instance) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playLandSound(instance, currentLevel = null) {
+  resumeAudioContextIfSuspended(instance)
   if (!instance?.audioContext || instance.audioContext.state !== 'running') return
   if (instance._glowSfxMuted) return
   const now = instance.audioContext.currentTime
@@ -827,6 +850,7 @@ export function playTextSlideSound(instance) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playJumpSound(instance, currentLevel = null) {
+  resumeAudioContextIfSuspended(instance)
   if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   //
@@ -935,6 +959,7 @@ export function playJumpSound(instance, currentLevel = null) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playStepSound(instance, currentLevel = null) {
+  resumeAudioContextIfSuspended(instance)
   if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   //

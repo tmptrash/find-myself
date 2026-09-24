@@ -10,6 +10,7 @@ import {
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatPitBakeColors
 } from './glow-palette.js'
+import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
 import {
@@ -1070,11 +1071,26 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
 }
 //
 // Bakes the static cave interior once — wall rocks are dozens of polygons
-// per frame otherwise, and the palette is a fixed decor gray.
+// per frame otherwise. Rebaked on a colour-world transition (see
+// invalidateGlowPitCaveInteriorBake) so the palette matches the current mode.
 //
 function bakeCaveInteriorSprite(k, pit, showRocks) {
   const zone = pit.zone
-  const ox = zone.x1 - CAVE_BAKE_PAD
+  const layout = pit.wallProfile
+  //
+  // The interior floor/void extends well west of the surface crack zone
+  // (interiorWallEdge, driven by the skeleton anchor / CAVE_INTERIOR_EXTEND_LEFT)
+  // — a canvas sized from zone.width/zone.x1 alone cropped that whole western
+  // span off silently (canvas fill outside 0..width is just clipped), leaving
+  // the plain gray earth band visible through the "missing" left portion of
+  // the cave with a hard seam where the crop line fell. Size and position the
+  // canvas from the actual polygon extent instead.
+  //
+  const leftEdgeXs = layout?.interiorWallEdge?.length ? layout.interiorWallEdge.map(p => p.x) : []
+  const rightEdgeXs = layout?.mouth?.right?.length ? layout.mouth.right.map(p => p.x) : []
+  const leftX = Math.min(zone.x1, ...(leftEdgeXs.length ? leftEdgeXs : [zone.x1]))
+  const rightX = Math.max(zone.x2, ...(rightEdgeXs.length ? rightEdgeXs : [zone.x2]))
+  const ox = leftX - CAVE_BAKE_PAD
   const oy = pit.floorY - 8
   pit._caveSpriteX = ox
   pit._caveSpriteY = oy
@@ -1084,10 +1100,11 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
     pit._caveBakeRocksKey === bakeKey &&
     pit._caveBakeLayoutVersion === CAVE_LAYOUT_VERSION
   ) return
-  const layout = pit.wallProfile
   if (!layout?.mouth) return
-  const w = Math.ceil(zone.width + CAVE_BAKE_PAD * 2)
+  const w = Math.ceil((rightX - leftX) + CAVE_BAKE_PAD * 2)
   const h = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
+  pit._caveSpriteW = w
+  pit._caveSpriteH = h
   const pal = buildCavePalette(glowRgb('decorGray'))
   const canvas = document.createElement('canvas')
   canvas.width = w
@@ -1114,6 +1131,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
     const seamContourRocks = layout.contourRocks.filter(rock => rock.straddleMouthGround)
     paintCanvasRocks(ctx, seamContourRocks, pal, groundY)
   }
+  applyGlowFilmGrainToCanvas(canvas, zone.x1)
   k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -1151,8 +1169,15 @@ function caveMouthPts(mouth, interiorWallEdge = null, zone = null) {
 function drawCaveInteriorBakedSprite(k, pit) {
   const zone = pit.zone
   const topPad = Math.max(0, pit.floorY - pit._caveSpriteY)
-  const fullH = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
-  const fullW = Math.ceil(zone.width + CAVE_BAKE_PAD * 2)
+  //
+  // Read the actual baked canvas size (stored by bakeCaveInteriorSprite) —
+  // recomputing it from zone.width/zone.depth here previously went stale the
+  // moment the bake grew wider than the crack zone to cover the interior's
+  // western extension, redrawing the sprite cropped back to the narrow zone
+  // width even though the underlying texture was baked wider.
+  //
+  const fullH = pit._caveSpriteH ?? Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
+  const fullW = pit._caveSpriteW ?? Math.ceil(zone.width + CAVE_BAKE_PAD * 2)
   const drawH = Math.max(1, fullH - topPad)
   k.drawSprite({
     sprite: CAVE_INTERIOR_SPRITE,
@@ -1284,7 +1309,16 @@ function buildJaggedHorizontalEdge(xFrom, xTo, baseY, seed) {
 // rock fading to black, not a flat cut-out.
 //
 //
-// Palette derived from the current ground tone (gray or colour world)
+// Palette derived from the current ground tone. Deliberately the SAME set in
+// gray and colour-world modes — per the cave/pit art-direction rule (see
+// CLAUDE.md section 16) a cave interior stays a near-black void with no gray
+// seam at the lip regardless of overworld colour state. An earlier pass
+// branched this on colorWorld (lightening the void to groundDark, the same
+// tone the sunlit surface earth band uses) so the cave would visibly tint
+// with the rest of the level, but that read as a two-tone seam against the
+// plain gray underground decor band right beside the pit mouth (which stays
+// gray by design — see drawGlowEarthBand/renderCombinedGroundBand, unrelated
+// to colour world). Kept mode-independent here instead.
 //
 function buildCavePalette(_groundC) {
   return {
@@ -1341,6 +1375,15 @@ function buildCaveSceneLayout(zone, floorY) {
   //
   const interiorLeftEdge = buildCaveMouthEdge(interiorWallX, floorY, bottomY, seed + 550, -1)
   appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
+  //
+  // Same treatment on the interior's own west wall (outwardSign -1, bulging
+  // toward the gray decor outside the cave) — this is the true vertical seam
+  // between the dark void and the plain gray earth band west of the cave
+  // (distinct from the mouth/ground-line seam the Interior*Seam* rocks below
+  // cover, which sits further east at cutLeft). Without this the west edge
+  // was a bare jagged fill line with nothing hiding the black/gray join.
+  //
+  appendCaveWallRocks(wallRocks, interiorLeftEdge, -1, seed + 2400, floorY, bottomY)
   const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
   const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
   appendCaveMouthCeilingLipRocks(contourRocks, zone, floorY, seed + 1520)
@@ -1949,8 +1992,23 @@ export function syncGlowPitOpenState(pit) {
   pit.crackFloor?.destroy?.()
   pit.crackFloor = null
   hasEyes && (pit.outlineOnlyMode = false)
-  hasEyes && (pit._caveSpriteReady = false)
-  hasEyes && (pit._caveBakeRocksKey = null)
+  //
+  // Force exactly one rebake when eyes are freshly collected (bare-void bake
+  // must switch to the full rocks bake) — this ran unconditionally every
+  // frame before (as long as hasEyes stayed true, which is forever once
+  // true), defeating the "bake once" cache in bakeCaveInteriorSprite and
+  // reloading the cave sprite texture 60 times a second for the rest of the
+  // playthrough. Confirmed live this thrashing was not itself the cause of
+  // the reported two-tone cave look (that traced to buildCavePalette's
+  // colour-world branch, see its comment) — still a genuine perf bug in its
+  // own right per the Kaplay performance guide (section 13), worth fixing
+  // regardless.
+  //
+  hasEyes && !pit._eyesCaveBakeInvalidated && (
+    pit._caveSpriteReady = false,
+    pit._caveBakeRocksKey = null,
+    pit._eyesCaveBakeInvalidated = true
+  )
   if (!pit.pitFloor) {
     openPitPhysics(pit)
   } else {

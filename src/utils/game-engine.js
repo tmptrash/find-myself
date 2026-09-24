@@ -29,6 +29,7 @@ import * as BootLoader from "./boot-loader.js"
 import { installLevelFadeIn } from "./transition.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio } from "./sound.js"
+import { resetLessonHelpPanelState } from "./lesson-help.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -271,6 +272,14 @@ function unlockKaplayAudioOnFirstGesture(k) {
 export function teardownEngine(k) {
   if (!k) return
   resetPhysicalInputLayer()
+  //
+  // A help/letter-dialog panel mid-fade (or still open) when this engine
+  // gets torn down never reaches the scene-scoped onUpdate branch that
+  // clears its open flag — leaving isAnyPanelOpen() stuck true and jump
+  // (its only caller, via attemptHeroJump) silently blocked everywhere for
+  // the rest of the session, including levels that never touch a panel.
+  //
+  resetLessonHelpPanelState()
   const canvas = k.canvas
   if (canvas) {
     canvas.removeEventListener('webglcontextlost', onWebGLContextLost, false)

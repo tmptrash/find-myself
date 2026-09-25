@@ -294,6 +294,12 @@ export const CFG = {
         // (warmHaze below) and a dark earth band under it (root zone).
         //
         groundDark: PALETTE.gray2,
+        //
+        // Wet mud patch under the mud-zone tall grass — a darker, warmer
+        // earth tone than plain groundDark so the soft-mud band reads as a
+        // distinct surface once the grass overlay lets it show through.
+        //
+        mudGround: PALETTE.brown0,
         gold: PALETTE.gold3,
         //
         // Scatter caps after L — pastel families so red/orange do not punch on gray.

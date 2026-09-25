@@ -119,13 +119,6 @@ import {
   countGlowHudGCaveIntroParts
 } from '../utils/glow-hud-g-progress.js'
 import {
-  createBranchPortalState,
-  updateBranchPortalState,
-  drawBranchPortal,
-  BRANCH_PORTAL_RX,
-  BRANCH_PORTAL_RY
-} from '../utils/glow-branch-portal.js'
-import {
   getGlowHeroFillProgress,
   GLOW_HERO_FILL_G,
   GLOW_HERO_FILL_L,
@@ -147,7 +140,6 @@ import {
   applyParallaxPostFxToContext,
   applyGlowLayerGradeToCanvas,
   drawGlowHiResFoliageCluster,
-  drawGlowFilmGrainWorldPatch,
   GLOW_LAYER_GRADE
 } from '../utils/glow-parallax-grain.js'
 import { finishGlowLifeDesatCanvas } from '../utils/glow-ui-bake.js'
@@ -185,6 +177,18 @@ const GLOW_GOLD_HEX = GLOW_PAL.gold
 // Colour-world backdrop split: sky above the ground line, dark earth below.
 //
 const GROUND_DARK = glowRgb('groundDark')
+//
+// Wet mud patch fill under the mud zone's tall grass — visible year-round
+// (gray and colour mode alike), a distinct darker/warmer tone than plain
+// groundDark so the soft-mud band reads as its own surface, not just taller
+// grass over the same ground everywhere else.
+//
+const MUD_GROUND_RGB = glowRgb('mudGround')
+//
+// Extra wave height blended into the mud zone's stretch of the ground-line
+// wave (see drawGlowMudZoneGroundLine) so mud reads taller than plain ground.
+//
+const MUD_GROUND_EXTRA_H = 6
 //
 // Golden haze the colour-world background forest dissolves into.
 //
@@ -1103,21 +1107,9 @@ const WRONG_TRAMP_SING_HINT_REPEAT = 20
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
 //
-// Stillness countdown arms only after the post-L body-fill ring has played.
+// Seconds of idle on the ground after L before the O countdown starts.
 //
-const MEDITATION_ARM_AFTER_FILL_DELAY = 2
-//
-// Semi-transparent branch teleport above the right trampoline (save key kept
-// from the old spike-gate reveal).
-//
-const KEY_SPIKE_GATE = 'glow.revealedSpikeGate'
-const BRANCH_TELEPORT_RAISE = 56
-const BRANCH_TELEPORT_OFFSET_X = 4
-const BRANCH_TELEPORT_CAP_HALF_W = 20
-const BRANCH_TELEPORT_LAUNCH_COOLDOWN = 0.55
-const BRANCH_TELEPORT_HERO_HALF_W = 14
-const BRANCH_TELEPORT_HERO_TOP_OFFSET = 44
-const BRANCH_PORTAL_TOOLTIP_TEXT = 'What is this for?'
+const MEDITATION_IDLE_BEFORE_COUNTDOWN = 5
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
 const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
 const GLOW_TEACHER_HINT_L_PLAT_TEXT = 'That platform isn\'t there\nfor nothing ;)'
@@ -1239,12 +1231,11 @@ const UNDERGROUND_DETAIL_MASK_Y = 10
 //
 const L_DECOR_DARKEN = 0.22
 //
-// O-letter meditation: once L is collected, standing still for
-// MEDITATION_ARM_AFTER_FILL_DELAY seconds starts the heartbeat countdown
-// near the hero's head (eyes closed). Movement cancels the countdown only —
-// the next stop always re-arms the same short delay.
+// O-letter meditation: after L, the hero must stand still for
+// MEDITATION_IDLE_BEFORE_COUNTDOWN seconds, then the heartbeat countdown runs.
+// Movement cancels the countdown and resets the idle wait.
 //
-const MEDITATION_IDLE_BASE = 0
+const MEDITATION_IDLE_BASE = MEDITATION_IDLE_BEFORE_COUNTDOWN
 const MEDITATION_COUNTDOWN = 5
 //
 // Keep in sync with the second thump delay in Sound.playHeartbeatSound().
@@ -1268,7 +1259,7 @@ const GLOW_TEACHER_HINT_POST_O_MAX_SHOWS = 2
 //
 // Eyeless intro: nudge toward the right-edge cave mouth (max two, 10 s active each).
 //
-const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different over there ⤵'
+const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different\nover there ⤵'
 const GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS = 2
 //
 // Lake + right mushroom open but the big tree is still hidden (max two).
@@ -1375,6 +1366,11 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 //
 const GRASS_Z = 20
 const GRASS_TUFT_COUNT = 22
+//
+// Right-spikes' warning-flash z — steps in front of the grass (GRASS_Z) for
+// the blink window only; see drawGlowRightSpikes.
+//
+const RIGHT_SPIKE_BLINK_Z = GRASS_Z + 1
 //
 // Blades in the mud zone grow this much bigger/taller than everywhere
 // else — the wandering hedgehog hides there and should be hard to spot
@@ -1555,7 +1551,6 @@ const GLOW_CAMERA_SHAKE_DURATION = 0.22
 const TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION = 1
 const TRAMP_WALK_STILL = 3
 const TRAMP_WALK_COUNTDOWN = 5
-const BRANCH_PORTAL_REVEAL_OPACITY = 0.075
 const TRAMP_WALK_SINGS_TO_WATER = 2
 const TRAMP_WALK_SING_TOTAL_SEC = TRAMP_WALK_COUNTDOWN * TRAMP_WALK_SINGS_TO_WATER
 const TRAMP_ENDURE_SHAKE_SPEED = 38
@@ -1632,7 +1627,6 @@ const WATER_RIGHT_TRIM = 10
 //
 const LAKE_SHORE_EXTEND_PX = 64
 const LAKE_Z = 12
-const BRANCH_PORTAL_DRAW_Z = LAKE_Z + 4
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -1937,6 +1931,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const birdsMusic = k.play('birds', { loop: true, volume: 0, paused: true })
     const stopGlowLoopAudio = () => {
       birdsMusic?.stop?.()
+      Sound.setEarTreeWhisperVolume(0)
       Sound.stopRainSound(sound)
       Sound.stopTrampWaterStepsLoop(sound)
       Sound.stopWaterStepsLoop(sound)
@@ -2255,8 +2250,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     )
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
     const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
-    const branchTeleportLayout = computeGlowBranchTeleportLayout(trampX, lPlatY)
-    const branchTeleport = createGlowBranchTeleport(k, branchTeleportLayout, zones)
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
       colors: GLOW_PAL.cuteMushroomRed,
@@ -2293,7 +2286,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     oLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
-    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2)
+    //
+    // Computed here (before grass) so the grass field can exclude the same
+    // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
+    //
+    const earTreeSpots = buildGlowEarTreeSpots(waterX2)
+    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots)
     const mudExtraGrass = createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
     //
     // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
@@ -2343,13 +2341,20 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
     const completedLetterCount = countGlowLettersCollected(zones)
     //
-    // GLOW stays hidden until the first yellow G fill (branch landing or
-    // a ground side opening). The life icon (teacher) appears at the same time.
+    // GLOW (the section label) stays hidden until the first yellow G fill —
+    // the life/eye icon is independent of that and shows from the very
+    // start of the level (see revealLifeHud below); only its death-count
+    // numeral stays hidden until the first death (syncGlowLifeScoreVisibility).
     //
     const levelIndicator = createGlowLevelIndicator(k, goldRgb, completedLetterCount, zones.colorWorld)
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     pinGlowHudFixed(levelIndicator)
     LevelIndicator.setSectionLabelHidden(levelIndicator, true)
+    LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
+    const startingLifeScore = get('lifeScore', 0)
+    levelIndicator.updateLifeScore?.(startingLifeScore)
+    syncGlowLifeScoreVisibility(levelIndicator, startingLifeScore)
+    set(KEY_LIFE_SHOWN, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
     logAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 80, session)) return
@@ -2600,13 +2605,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         requiredIdle: MEDITATION_IDLE_BASE,
         countdown: null,
         stillnessCompleted: false,
-        lFillRingPlayed: zones.lCollected,
-        postLRingArmAt: null
+        lFillRingPlayed: zones.lCollected
       },
-      branchTeleportLayout,
-      branchTeleport,
-      branchTeleportCooldown: 0,
-      branchPortalState: createBranchPortalState(),
       meditationBirdsActive: false,
       meditationWorldLife: zones.oZone || zones.oCollected ? 1 : 0,
       pendingTreeReveal: !treeDrawMonolith && treeSegmentRevealed.size < treeSegmentIds.length,
@@ -2690,7 +2690,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
     inst.chainBuoys = ChainBuoy.create({ k, spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2) })
-    inst.earTrees = EarTree.create({ k, spots: buildGlowEarTreeSpots() })
+    inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
     createGlowChainBuoyLayer(k, inst)
     createGlowEarTreeLayer(k, inst)
     if (await glowBootstrapPause(bootstrap, 93, session)) return
@@ -3101,14 +3101,6 @@ function createSmallHeroTooltip(inst) {
       visible: () => Boolean(inst.levelIndicator?.lifeRevealed),
       screenSpace: true
     }, {
-      x: () => inst.branchTeleportLayout?.cx ?? -1000,
-      y: () => inst.branchTeleportLayout?.cy ?? -1000,
-      width: BRANCH_PORTAL_RX * 2,
-      height: BRANCH_PORTAL_RY * 2,
-      text: BRANCH_PORTAL_TOOLTIP_TEXT,
-      offsetY: MUD_TOOLTIP_Y_OFFSET,
-      visible: () => inst.zones.rightTrampRevealed && !inst.dialogOpen
-    }, {
       x: () => glowHudLetterHoverPos(inst, 0).x,
       y: () => glowHudLetterHoverPos(inst, 0).y,
       width: () => glowHudLetterHoverSize(inst, 0).w,
@@ -3322,7 +3314,6 @@ function loadGlowZones() {
   if (!rightTrampBounceLive && rightTrampRevealed) {
     const trampAlreadyUsed = get(KEY_TRAMP_WALKED, false) ||
       get(KEY_REVEALED_L_PLAT, false) ||
-      get(KEY_SPIKE_GATE, false) ||
       lCollected
     if (trampAlreadyUsed) {
       rightTrampBounceLive = true
@@ -3334,7 +3325,6 @@ function loadGlowZones() {
   const lZoneParallax = get(KEY_REVEALED_L, false) || oZone
   const lZoneLit = gCollected && lCollected && get(KEY_REVEALED_L_LIT, false)
   const lPlatRevealed = get(KEY_REVEALED_L_PLAT, false) || lCollected
-  const spikeGateRevealed = get(KEY_SPIKE_GATE, false)
   const wZone = gCollected && lCollected && oCollected && (get(KEY_REVEALED_W, false) || wCollected)
   const colorWorld = oCollected
   const eyesCollectedSaved = get(KEY_EYES_COLLECTED, false)
@@ -3376,7 +3366,6 @@ function loadGlowZones() {
     lZoneParallax,
     lLetterUnveiled,
     lPlatRevealed,
-    spikeGateRevealed,
     lZone: lZoneLit || lZoneParallax,
     wZone,
     oZone,
@@ -4132,10 +4121,22 @@ function revealGlowTeacherHudIfNeeded(inst) {
   const indicator = inst.levelIndicator
   if (!indicator || indicator.lifeRevealed) return
   LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
-  indicator.updateLifeScore?.(get('lifeScore', 0))
+  const score = get('lifeScore', 0)
+  indicator.updateLifeScore?.(score)
+  syncGlowLifeScoreVisibility(indicator, score)
   set(KEY_LIFE_SHOWN, true)
   syncGlowPitCaveFlagForTeacherHints(inst)
   onGlowTeacherLifeHudRevealed(inst)
+}
+//
+// The death-count numeral next to the eye only makes sense once the hero has
+// actually died at least once — showing "0" from the start reads as noise.
+//
+function syncGlowLifeScoreVisibility(indicator, score) {
+  if (!indicator) return
+  const show = score > 0
+  indicator.lifeScoreText && (indicator.lifeScoreText.hidden = !show)
+  indicator.lifeScoreOutlines?.forEach(o => { o.hidden = !show })
 }
 //
 // Life HUD for pit-mushroom nudges — eyes can be collected before any G fill.
@@ -4154,7 +4155,9 @@ function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
     return
   }
   LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
-  indicator.updateLifeScore?.(get('lifeScore', 0))
+  const score = get('lifeScore', 0)
+  indicator.updateLifeScore?.(score)
+  syncGlowLifeScoreVisibility(indicator, score)
   set(KEY_LIFE_SHOWN, true)
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
@@ -4866,7 +4869,6 @@ function applyZoneVisibility(inst) {
   inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst)
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
-  syncGlowSpikeGateVisibility(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
   maybeShowGLetter(inst)
@@ -4929,7 +4931,6 @@ function applyGlowEyeIntroZoneVisibility(inst) {
     entry?.colorObj && (entry.colorObj.hidden = true)
   })
   rebuildWoodSurfaces(inst)
-  syncGlowSpikeGateVisibility(inst)
   syncGlowMidgeDrawColor(inst)
 }
 //
@@ -5153,7 +5154,7 @@ function createGlowChainBuoyLayer(k, inst) {
     k.z(GLOW_CHAIN_BUOY_Z),
     {
       draw() {
-        if (!inst.chainBuoys || !inst.zones.gCollected) return
+        if (!inst.chainBuoys || !inst.zones.lCollected) return
         const c = glowChainBuoyColors(inst, k)
         ChainBuoy.onDraw(inst.chainBuoys, c.chain, c.eyeWhite)
       }
@@ -5953,25 +5954,156 @@ function undergroundPaletteEntries() {
 // Chain-buoy decor spots — spread across the level, skipping the band around
 // the big tree (which gets the ear-trees instead, see buildGlowEarTreeSpots).
 //
-const GLOW_CHAIN_BUOY_COUNT = 6
+const GLOW_CHAIN_BUOY_COUNT_MIN = 5
+const GLOW_CHAIN_BUOY_COUNT_MAX = 7
 const GLOW_CHAIN_BUOY_TREE_CLEAR_HALF = 260
+const GLOW_CHAIN_BUOY_MIN_GAP = 150
+const GLOW_CHAIN_BUOY_PLACE_ATTEMPTS = 80
+const GLOW_EAR_TREE_RIGHT_COUNT = 2
+const GLOW_EAR_TREE_X_MIN = TREE_X + 200
+const GLOW_EAR_TREE_X_MAX = TREE_X + 720
+const GLOW_EAR_TREE_MIN_GAP = 160
+const GLOW_EAR_TREE_MUD_CLEAR = 36
+//
+// Left jitter for the 3rd (leftmost) ear-tree — kept small so it always
+// stays inside the dry strip between the shore rock and the trunk (see
+// pickGlowLeftEarTreeX below).
+//
+const GLOW_EAR_TREE_LEFT_JITTER = 8
+//
+// Keeps grass blades from spawning over an ear-tree's trunk footprint - the
+// trunk polygon (z = player - 1) sits BELOW the grass layer (GRASS_Z = 20),
+// so an unexcluded blade fully hides it, leaving only the branches (which
+// reach up and out past the grass silhouette) visible - looking exactly like
+// "floating branches" or "no trunk at all". Covers the widest possible trunk
+// base (EAR_TREE_TRUNK_W_BASE * max trunkWScale * base taper mult + wobble +
+// outline pad) plus a blade's own half-width.
+//
+const EAR_TREE_TRUNK_GRASS_CLEAR_HALF = 26
+const GLOW_EAR_TREE_WHISPER_RADIUS = 300
+const GLOW_EAR_TREE_WHISPER_MAX_VOLUME = 0.42
+//
+// Clearance kept around the cave crack zone for both decor kinds — neither
+// should ever spawn over the cave entrance.
+//
+const GLOW_CAVE_DECOR_CLEAR = 140
 function buildGlowChainBuoySpots(lakeX1, lakeX2) {
   const spots = []
+  const mud = computeGlowMudZoneX()
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
+  const target = GLOW_CHAIN_BUOY_COUNT_MIN +
+    Math.floor(Math.random() * (GLOW_CHAIN_BUOY_COUNT_MAX - GLOW_CHAIN_BUOY_COUNT_MIN + 1))
   const span = WORLD_W - LEFT_MARGIN * 2
-  for (let i = 0; i < GLOW_CHAIN_BUOY_COUNT; i++) {
-    const x = LEFT_MARGIN + span * ((i + 1) / (GLOW_CHAIN_BUOY_COUNT + 1))
+  let attempts = 0
+  while (spots.length < target && attempts < GLOW_CHAIN_BUOY_PLACE_ATTEMPTS) {
+    attempts += 1
+    const x = LEFT_MARGIN + 40 + Math.random() * (span - 80)
     if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) continue
     if (x >= lakeX1 && x <= lakeX2) continue
-    spots.push({ x, groundY: FLOOR_Y })
+    if (x >= mud.x1 - 24 && x <= mud.x2 + 24) continue
+    if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) continue
+    const tooClose = spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP)
+    if (tooClose) continue
+    spots.push({
+      x,
+      groundY: FLOOR_Y,
+      seed: Math.random() * Math.PI * 2,
+      segmentCount: (5 + Math.floor(Math.random() * 4)) * 2,
+      segmentLen: 22 + Math.random() * 10,
+      segmentWidth: 3.5 + Math.random() * 2.5,
+      swayAmp: 0.09 + Math.random() * 0.12,
+      swaySpeed: 0.75 + Math.random() * 0.65,
+      swayLag: 0.35 + Math.random() * 0.35,
+      ampGrowth: 1.2 + Math.random() * 0.35
+    })
   }
+  spots.sort((a, b) => a.x - b.x)
   return spots
 }
 //
-// Ear-tree decor spots — clustered to the right of the big tree.
+// Ear-tree decor spots — 2 clustered right of the big tree (never over mud),
+// plus 1 guaranteed spot to its left, nestled among the real shoreline
+// rocks (see pickGlowLeftEarTreeX) so there are always 3 trees, one of them
+// visibly flanked by rocks on the tree's left side.
 //
-const GLOW_EAR_TREE_OFFSETS = [220, 420, 620]
-function buildGlowEarTreeSpots() {
-  return GLOW_EAR_TREE_OFFSETS.map(offset => ({ x: TREE_X + offset, groundY: FLOOR_Y }))
+function buildGlowEarTreeSpots(waterX2) {
+  const mud = computeGlowMudZoneX()
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
+  //
+  // The branch (left) mushroom trampoline sits at TREE_X + a modest offset —
+  // well inside the right-side placement range below — and its own footprint
+  // was never excluded, so a spot could land right on top of it: the
+  // mushroom's cap/stem then visually covers the tree's thin trunk column
+  // while its wider branches remain visible above, reading as "no trunk".
+  //
+  const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
+  const spots = []
+  let attempts = 0
+  while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && attempts < 60) {
+    attempts += 1
+    const x = GLOW_EAR_TREE_X_MIN + Math.random() * (GLOW_EAR_TREE_X_MAX - GLOW_EAR_TREE_X_MIN)
+    if (x >= mud.x1 - GLOW_EAR_TREE_MUD_CLEAR && x <= mud.x2 + GLOW_EAR_TREE_MUD_CLEAR) continue
+    if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) continue
+    if (Math.abs(x - branchTrampX) < TRAMP_GRASS_CLEAR_HALF) continue
+    const tooClose = spots.some(s => Math.abs(s.x - x) < GLOW_EAR_TREE_MIN_GAP)
+    if (tooClose) continue
+    spots.push(buildGlowEarTreeSpot(x))
+  }
+  spots.push(buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)))
+  spots.sort((a, b) => a.x - b.x)
+  return spots
+}
+//
+// Deterministic left-side X: the center of the real 6-rock cluster placed
+// at the tree-side end of the lake (createGlowRocks' clusterCenterX, derived
+// the same way from waterX2 here — see the "Tree-side end of the lake"
+// comment there). Sitting at the cluster's own center, with a small jitter,
+// puts the tree visibly among those rocks rather than in the narrow strip
+// right against the trunk, which the big tree's own root/canopy bake
+// occludes (ear trees draw below the tree's z so they'd be fully hidden).
+//
+function pickGlowLeftEarTreeX(waterX2) {
+  const clusterCenterX = waterX2 - CLUSTER_ROCK_RADIUS_MAX - 10 + WATER_RIGHT_TRIM
+  const jitterMax = GLOW_EAR_TREE_LEFT_JITTER
+  return clusterCenterX + (Math.random() * 2 - 1) * jitterMax
+}
+//
+// Shared per-spot randomized trunk/branch variation.
+//
+function buildGlowEarTreeSpot(x) {
+  return {
+    x,
+    groundY: FLOOR_Y,
+    trunkScale: 0.92 + Math.random() * 0.28,
+    trunkWScale: 0.85 + Math.random() * 0.35,
+    branchScale: 0.9 + Math.random() * 0.25,
+    branchCount: 4 + Math.floor(Math.random() * 2),
+    seed: Math.random() * Math.PI * 2
+  }
+}
+//
+// Ear-tree whisper volume from hero distance to the nearest tree crown.
+//
+function updateGlowEarTreeWhisperSound(inst, char) {
+  if (!char?.pos || !inst.zones.gCollected || !inst.earTrees?.trees?.length) {
+    Sound.setEarTreeWhisperVolume(0)
+    return
+  }
+  if (inst.dialogOpen || inst.drowning || inst.sound?._glowSfxMuted) {
+    Sound.setEarTreeWhisperVolume(0)
+    return
+  }
+  const hx = char.pos.x
+  const hy = char.pos.y
+  let nearest = Infinity
+  for (const tree of inst.earTrees.trees) {
+    const crownY = tree.groundY - (tree.trunkH ?? 0)
+    nearest = Math.min(nearest, Math.hypot(hx - tree.x, hy - crownY))
+  }
+  const proximity = nearest >= GLOW_EAR_TREE_WHISPER_RADIUS
+    ? 0
+    : 1 - nearest / GLOW_EAR_TREE_WHISPER_RADIUS
+  Sound.setEarTreeWhisperVolume(GLOW_EAR_TREE_WHISPER_MAX_VOLUME * proximity)
 }
 //
 // Mud zone's X bounds — pure function of TREE_X and fixed offsets, so it can
@@ -7147,21 +7279,25 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill,
   }
 }
 //
-// Swaying grass — the shared Grass component, excluding water, trunk and the
-// trampoline mushroom band (so no blade ever covers its face). The tint
-// callback also hides blades of unexplored ground sides.
+// Swaying grass — the shared Grass component, excluding water, trunk, the
+// trampoline mushroom band and every ear-tree's trunk footprint (so no blade
+// ever covers its face). The tint callback also hides blades of unexplored
+// ground sides.
 //
-function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2) {
+function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots) {
   const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
   const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
   const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
   const trampR = trampX + TRAMP_GRASS_CLEAR_HALF
   const branchL = branchTrampX - TRAMP_GRASS_CLEAR_HALF
   const branchR = branchTrampX + TRAMP_GRASS_CLEAR_HALF
+  const earTreeExcluded = (x) => (earTreeSpots ?? []).some(spot =>
+    x >= spot.x - EAR_TREE_TRUNK_GRASS_CLEAR_HALF && x <= spot.x + EAR_TREE_TRUNK_GRASS_CLEAR_HALF)
   const excluded = (x) => (x >= waterX1 && x <= waterX2) ||
     (x >= trunkL && x <= trunkR) ||
     (x >= trampL && x <= trampR) ||
     (x >= branchL && x <= branchR) ||
+    earTreeExcluded(x) ||
     isCrackGrassExcluded(x, WORLD_W)
   const grass = Grass.create({
     k,
@@ -7276,6 +7412,12 @@ function createGlowRightSpikes(k, zones, x1, x2, y) {
 function drawGlowRightSpikes(k, zones, spikes) {
   if (spikes.drawObj.hidden) return
   const blinking = k.time() < spikes.blinkUntil
+  //
+  // Normally behind the grass (platforms z < GRASS_Z), same as any other
+  // ground hazard — but the warning flash needs to actually be seen, so it
+  // steps in front of the grass for exactly the blink window.
+  //
+  spikes.drawObj.z = blinking ? RIGHT_SPIKE_BLINK_Z : CFG.visual.zIndex.platforms
   const sc = zones._sceneRef
   const fade = sc?.colorFade ?? (zones.colorWorld ? 1 : 0)
   const fillHex = (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.void
@@ -8562,20 +8704,10 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
-  if (inst.zones.lCollected && !isGlowFlatSingleDecorColor(inst)) {
-    const fade = inst.colorFade ?? 0
-    const innerGray = isPlayfieldInnerGrayVisible(inst.zones, fade)
-    const rgb = inst._surfaceEarthRgb || glowGrayGroundRgb(inst, innerGray)
-    k.drawRect({
-      pos: k.vec2(leftX, bottomY),
-      width: rightX - leftX,
-      height: bandEndY - bottomY,
-      color: k.rgb(rgb.r, rgb.g, rgb.b)
-    })
-    return
-  }
   //
-  // Flat gray phase — void under the cave, not the wavy static-earth slice.
+  // Always prefer the same baked static-earth slice the strip left of the
+  // cave uses (film grain included) — only the flat gray phase (before any
+  // grain sprite exists yet) falls back to a flat void fill below.
   //
   const slice = isGlowFlatSingleDecorColor(inst)
     ? null
@@ -8914,23 +9046,43 @@ function drawGlowMudZoneGroundLine(inst, x1, x2) {
     ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
     : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
+  //
+  // The mud zone reuses this same wavy "jelly" rim rather than a separate
+  // flat patch — a flat rect here used to leave a hard rectangular seam
+  // against this band's own wave, and looked nothing like the rest of the
+  // ground. Blending the mud tone into the same wave keeps one continuous
+  // ground silhouette that just reads darker/taller over the mud band.
+  //
+  const mudX1 = inst.mudZoneX1
+  const mudX2 = inst.mudZoneX2
+  //
+  // Blended by the same colour-world fade as the rim above — at fade 0 (flat
+  // gray mode) this collapses to exactly bodyColor/rimColor, so the mud band
+  // reads as the same gray as everywhere else in mono mode, same as the
+  // user asked; it only tints brown as the world colours in.
+  //
+  const mudBodyRgb = lerpRgb(bodyC, MUD_GROUND_RGB, 0.8 * fade)
+  const mudBodyColor = k.rgb(mudBodyRgb.r, mudBodyRgb.g, mudBodyRgb.b)
+  const mudRimRgb = lerpRgb(rimRgb, MUD_GROUND_RGB, 0.55 * fade)
+  const mudRimColor = k.rgb(mudRimRgb.r, mudRimRgb.g, mudRimRgb.b)
   const step = (x2 - x1) / GROUND_LIP_STEPS
   if (step <= 0) return
   for (let x = x1; x < x2; x += step) {
+    const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
     const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    const h = Math.max(2, 4 + lip)
+    const h = Math.max(2, 4 + lip) + (inMud ? MUD_GROUND_EXTRA_H : 0)
     k.drawRect({
       pos: k.vec2(x, FLOOR_Y - h + 2),
       width: step + 1,
       height: h,
-      color: bodyColor,
-      opacity: 0.48
+      color: inMud ? mudBodyColor : bodyColor,
+      opacity: inMud ? 0.7 : 0.48
     })
     k.drawRect({
       pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
       width: step + 1,
       height: GROUND_TOP_RIM_H,
-      color: rimColor,
+      color: inMud ? mudRimColor : rimColor,
       opacity: GROUND_TOP_RIM_OPACITY
     })
   }
@@ -9523,9 +9675,7 @@ function fireGlowHeroFillReveal(inst, pending) {
     HeroHint.show(inst.heroHint, pending.hintText, HERO_CONFIDENT_HINT_DURATION, voiceHintOpts)
   const isLFill = Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS
   if (Math.abs(pending.to - GLOW_HERO_FILL_L) <= GLOW_HERO_FILL_L_EPS) {
-    const m = inst.meditation
-    m.lFillRingPlayed = true
-    m.postLRingArmAt = inst.k.time() + MEDITATION_ARM_AFTER_FILL_DELAY
+    inst.meditation.lFillRingPlayed = true
   }
   syncGlowHeroBodyFill(inst)
 }
@@ -10550,6 +10700,7 @@ function bumpGlowLifeHudOnDeath(inst) {
   syncGlowFpsHudVisibility(inst)
   if (!inst.levelIndicator?.lifeRevealed) return
   inst.levelIndicator.updateLifeScore?.(newLife)
+  syncGlowLifeScoreVisibility(inst.levelIndicator, newLife)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
     const greyLife = glowLifeHudWantGrey(inst)
@@ -11158,16 +11309,6 @@ function revealLPlatZone(inst, silent = false) {
   applyZoneVisibility(inst)
 }
 //
-// Wooden trap platform over the right trampoline — persists like the L log.
-//
-function revealGlowSpikeGateZone(inst, silent = false) {
-  if (inst.zones.spikeGateRevealed) return
-  inst.zones.spikeGateRevealed = true
-  set(KEY_SPIKE_GATE, true)
-  !silent && playSegmentRevealSound(inst)
-  syncGlowSpikeGateVisibility(inst)
-}
-//
 // Opens the L log after a bounce (or jump-land) on the right mushroom.
 //
 function maybeRevealLPlatOnRightTrampBounce(inst) {
@@ -11632,8 +11773,9 @@ function onUpdate(inst) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
-  inst.zones.gCollected && inst.chainBuoys && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
+  inst.zones.lCollected && inst.chainBuoys && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
   inst.zones.gCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
+  updateGlowEarTreeWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   updateBranchSpawnLook(inst, hero, heroMoving)
@@ -11719,10 +11861,13 @@ function onUpdate(inst) {
   //
   applyGlowHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded)
   //
-  // Landing SFX backup (collide path can miss on wood flicker / air-lock)
+  // Landing SFX backup (collide path can miss on wood flicker / air-lock).
+  // The start branch has its own dedicated wood-land trigger below — this
+  // backup must skip it, or the very first landing (and any later branch
+  // landing) fires both, smearing a single thump into an audible double-hit.
   //
   if (justLanded && (surface === 'wood' || surface === 'ground') && !inst.sound._glowSfxMuted &&
-    !inst.expectBranchWoodLandSound) {
+    !inst.expectBranchWoodLandSound && !isHeroOnStartBranch(inst, char)) {
     if ((hero.landFxCooldown || 0) <= 0) {
       hero.landFxCooldown = 0.2
       surface === 'ground'
@@ -11854,7 +11999,6 @@ function onUpdate(inst) {
   // Hedgehog touch death — last check of the frame since it may destroy
   // the hero's character outright.
   //
-  !inst.deathHandled && checkGlowBranchTeleportLaunch(inst, char)
   !inst.deathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
 }
 //
@@ -11931,7 +12075,6 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
   }
   const still = grounded && !heroMoving && Math.abs(char.vel?.y ?? 0) < 1
   if (!still) {
-    m.postLRingArmAt = null
     cancelMeditation(inst, true)
     return
   }
@@ -11941,22 +12084,22 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
     return
   }
   if (m.countdown == null) {
-    m.postLRingArmAt == null &&
-      (m.postLRingArmAt = inst.k.time() + MEDITATION_ARM_AFTER_FILL_DELAY)
-    if (inst.k.time() < m.postLRingArmAt) {
-      m.idleTimer = 0
-      updateMeditationBirds(inst)
-      return
-    }
     m.idleTimer += inst.k.dt()
     if (m.idleTimer < m.requiredIdle) {
       updateMeditationBirds(inst)
       return
     }
     m.idleTimer = 0
-    m.postLRingArmAt = null
     m.countdown = MEDITATION_COUNTDOWN
-    dismissGlowPostLStopTeacherHint(inst)
+    //
+    // Just clears the bubble on screen — does NOT permanently max out
+    // _postLStopHintShows the way dismissGlowPostLStopTeacherHint does.
+    // Starting the countdown doesn't guarantee it finishes (movement can
+    // still cancel it below), and permanently maxing the counter here used
+    // to silently disable this hint for the rest of the session on every
+    // cancelled attempt, even though the meditation itself never completed.
+    //
+    dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_AFTER_L)
     Hero.setEyesClosed(inst.heroInst, true)
     applyGlowPostLStillnessReveal(inst)
     syncMeditationColorFade(inst)
@@ -12344,7 +12487,6 @@ function updateTrampWaterSteps(inst) {
 function onTrampolineBounce(inst) {
   markGlowHudLTrampJumped(inst)
   maybeRevealLPlatOnRightTrampBounce(inst)
-  revealGlowSpikeGateZone(inst, true)
   const holdingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
     TouchControls.isMoveLeftHeld()
   holdingLeft && (inst.trampToLApproach = true)
@@ -13250,39 +13392,47 @@ function glowHeroInTrampLandingPose(hero) {
   return (hero.landSquashTimer ?? 0) > 0 || hero.isSquashing
 }
 //
-// True when the hero should launch from a mushroom cap (not stroll past on the floor).
-// Landing on the cap always launches — no "already grounded last frame"
-// exception. That exception used to skip the bounce whenever the hero was
-// simply resting there before this frame's check ran (e.g. right after the
-// invisible pad activates under settled feet), which is exactly the "the
-// hero freezes on the mushroom instead of bouncing" bug: onCap stayed true
-// forever with nothing ever launching it again.
+// True when the hero should launch from a mushroom cap (not stroll past on
+// the floor). Landing on the cap always launches — no "already grounded last
+// frame" / "hasn't jumped recently" exception. onCap itself already requires
+// footY within a tight band right at the cap surface (isHeroAtTrampolineCap),
+// which a main-floor walker's footY (~47px lower, at FLOOR_Y) can never
+// satisfy, and isHeroWalkingPastTrampOnMainFloor below excludes that lane by
+// height too — so nothing here needs an extra "was this a real air landing"
+// guard, and adding one (a wasGroundedRef / hero.jumpPhase check) only
+// re-introduces the "hero can stand motionless on part of the cap without
+// bouncing" bug: once landSquashTimer/jumpPhase reset a few frames after
+// settling, such a guard silently stops firing again for as long as the hero
+// stays there, exactly the "no dead zones — the whole cap must always work
+// as a trampoline" requirement this must not regress.
 //
 function wantsTrampolineCapLaunch(inst, char, onCap, state) {
   if (!onCap || !state || state.cooldown > 0) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
-  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state)) return false
+  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return false
   if (state === inst.trampState && inst.trampWalk?.walking &&
     footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
   return true
 }
 //
-// True while the hero strolls on the main floor lane (not a drop onto the cap).
-// Never true while the hero's X is actually inside a cap's own footprint —
-// without that carve-out this unconditionally exempted EVERY grounded main-
-// floor frame regardless of X, so a hero who reached a mushroom by walking
-// (rather than jumping) instead of falling onto it never got caught by
-// snapHeroToOneTrampolineCap / wantsTrampolineCapLaunch / syncOneTrampolinePad
-// at all: confirmed live (real arrow-key walks, both mushrooms, both
-// directions) — the hero always walked straight through the cap's entire
-// X-zone at a constant floor-level Y with zero bounce and zero pad, edges
-// included, exactly the "hero stands there instead of bouncing" report.
+// True while the hero strolls on the main floor lane (not a drop onto the
+// cap) — true for ANY main-floor-grounded walker regardless of X, including
+// directly under/beside a mushroom. The trampoline must only ever engage
+// once the hero's feet are actually up at cap height (onCap in
+// wantsTrampolineCapLaunch requires a tight footY band right at the cap
+// surface, which main-floor footY never reaches); walking through or past a
+// mushroom at floor level (scenario 2) must never snap the hero's Y up onto
+// the cap or launch a bounce, no matter how close he passes. A previous
+// round carved an exception out of this for hero X inside the cap's own
+// footprint, intending to fix "walking onto the cap doesn't bounce" — that
+// turned out to be a misdiagnosis: per the confirmed spec, walking near/into
+// a mushroom is supposed to do nothing at all, so that carve-out was itself
+// the bug (it let snapHeroToOneTrampolineCap's rescue logic run for plain
+// floor walkers and yank them up onto the cap mid-stride).
 //
-function isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state = null) {
+function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
   const grounded = char.isGrounded?.() ?? false
-  if (!grounded || !inst.wasGrounded || footY < FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
-  if (state && Math.abs(char.pos.x - state.x) < TRAMP_RADIUS + TRAMP_ADJACENT_X) return false
-  return true
+  return grounded && inst.wasGrounded && footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
 }
 //
 // Snaps the hero onto one mushroom cap when feet tunnel through the collider.
@@ -13302,11 +13452,10 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
     : isRightTrampolineColliderActive(inst.zones)
   if (!colliderActive) return
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
-  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY, state)) return
+  if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
   if (Math.abs(heroX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
-  const grounded = typeof char.isGrounded === 'function' && char.isGrounded()
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
   //
   // syncTrampolinePad already keeps a real static collider under the cap, so
@@ -13321,20 +13470,17 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   // jumpPhase stuck on 'jumping' forever, most visible right after a bounce
   // launches the hero back down onto its own still-cooling-down cap.
   //
-  // Grounded-in-zone catch: a hero who reached this X-zone already grounded
-  // (walked in — on the main floor, or stepped over from a matching-height
-  // log/branch — rather than fell onto the cap) has real, sustained downward
-  // contact with SOME surface, so the high-speed tunnel-through check above
-  // (TRAMP_SNAP_BELOW, tuned for a fast fall) never trips: it requires feet
-  // clearly *below* the cap surface by a wide margin that a merely-standing
-  // hero barely misses. Once actually grounded and inside the zone but still
-  // below the cap's own surface, pin up immediately regardless of that
-  // margin — the previous isHeroWalkingPastTrampOnMainFloor exemption made
-  // this whole function (and the pad in syncOneTrampolinePad) a no-op for
-  // every grounded approach, so a hero could walk the cap's entire width
-  // with no interaction at all; see isHeroWalkingPastTrampOnMainFloor.
+  // A previous round added a second, unbounded clause here ("grounded and
+  // below cap Y, pin regardless of margin") to catch a walking approach — but
+  // per the confirmed spec (see isHeroWalkingPastTrampOnMainFloor) walking
+  // near/onto a mushroom must never snap the hero onto the cap at all, and
+  // that clause was true for virtually any grounded hero in the X-zone
+  // (main-floor footY sits only ~1px under the TRAMP_SNAP_BELOW margin),
+  // which is exactly what made the hero appear to "walk onto the trampoline"
+  // instead of walking past it. Removed — this rescue only ever needs the
+  // narrow high-speed-tunnel margin below.
   //
-  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW || (grounded && footY > capTop + 4)
+  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW
   //
   // Edge dead-zone fix: a hero landing near the cap's edge almost always
   // still carries horizontal speed from the jump arc (a dead-center drop
@@ -14660,82 +14806,6 @@ function glowTooltipBakeBounds(layout) {
   let maxY = Math.max(by + layout.totalH, tipY, baseY)
   const pad = 4
   return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
-}
-//
-// Layout for the gray branch teleport above the right trampoline.
-//
-function computeGlowBranchTeleportLayout(trampX, lPlatY) {
-  const cx = trampX + BRANCH_TELEPORT_OFFSET_X
-  const cy = lPlatY - BRANCH_TELEPORT_RAISE
-  return { cx, cy, rx: BRANCH_PORTAL_RX, ry: BRANCH_PORTAL_RY }
-}
-//
-// Draw-only semi-transparent portal (no collision — launch is overlap-tested).
-//
-function createGlowBranchTeleport(k, layout, zones) {
-  const drawRoot = k.add([
-    k.z(BRANCH_PORTAL_DRAW_Z),
-    { draw() { drawGlowBranchTeleport(k, layout, zones) } }
-  ])
-  drawRoot.hidden = true
-  return { drawRoot }
-}
-//
-// Toggles branch teleport visibility with zone flags.
-//
-function syncGlowSpikeGateVisibility(inst) {
-  const gate = inst.branchTeleport
-  if (!gate) return
-  gate.drawRoot.hidden = !inst.zones.rightTrampRevealed
-}
-//
-// Oval spiral portal above the right trampoline.
-//
-function drawGlowBranchTeleport(k, layout, zones) {
-  if (!zones.rightTrampRevealed) return
-  const sc = zones._sceneRef
-  const char = sc?.heroInst?.character
-  const grounded = char?.isGrounded?.() ?? false
-  const onCap = sc && char && grounded && isOnTrampolineCap(sc, char, sc.trampState)
-  const fullReveal = Boolean(onCap || zones.spikeGateRevealed)
-  const alphaMul = fullReveal ? 1 : BRANCH_PORTAL_REVEAL_OPACITY
-  const state = sc?.branchPortalState
-  state && updateBranchPortalState(state, k.dt())
-  const fade = sc?.colorFade ?? 0
-  drawBranchPortal(k, layout, state, fade, alphaMul)
-}
-//
-// Launches the hero to the big-tree branch when he drops into the portal.
-//
-function checkGlowBranchTeleportLaunch(inst, char) {
-  if (!inst.zones.spikeGateRevealed || inst.deathHandled) return
-  const layout = inst.branchTeleportLayout
-  if (!layout || !char?.pos) return
-  if (inst.branchTeleportCooldown > 0) {
-    inst.branchTeleportCooldown = Math.max(0, inst.branchTeleportCooldown - inst.k.dt())
-    return
-  }
-  const hx = char.pos.x
-  const hy = char.pos.y
-  const feet = hy + SURFACE_DETECT_Y
-  const heroLeft = hx - BRANCH_TELEPORT_HERO_HALF_W
-  const heroRight = hx + BRANCH_TELEPORT_HERO_HALF_W
-  const heroTop = hy - BRANCH_TELEPORT_HERO_TOP_OFFSET
-  const portalLeft = layout.cx - BRANCH_TELEPORT_CAP_HALF_W
-  const portalRight = layout.cx + BRANCH_TELEPORT_CAP_HALF_W
-  const portalTop = layout.cy - (layout.ry ?? BRANCH_PORTAL_RY)
-  const portalBottom = layout.cy + (layout.ry ?? BRANCH_PORTAL_RY)
-  const overlapX = heroRight > portalLeft && heroLeft < portalRight
-  const overlapY = feet > portalTop && heroTop < portalBottom
-  overlapX && overlapY && launchHeroFromBranchTeleportToBranch(inst, char)
-}
-//
-// Same launch as the pit-cave mushroom — big branch bounce.
-//
-function launchHeroFromBranchTeleportToBranch(inst, char) {
-  const launched = launchHeroFromPitMushroomToBranch(inst, char)
-  launched && (inst.branchTeleportCooldown = BRANCH_TELEPORT_LAUNCH_COOLDOWN)
-  return launched
 }
 //
 // Land stops for the first two sings; the third walk docks in the lake.

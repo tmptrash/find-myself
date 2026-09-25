@@ -28,7 +28,7 @@ import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
 import { installLevelFadeIn } from "./transition.js"
 import { resetPhysicalInputLayer } from "./helper.js"
-import { unlockWaterStepsAudio } from "./sound.js"
+import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
 import { resetLessonHelpPanelState } from "./lesson-help.js"
 
 //
@@ -257,6 +257,7 @@ function unlockKaplayAudioOnFirstGesture(k) {
       //
     }
     unlockWaterStepsAudio()
+    unlockEarTreeWhisperAudio()
   }
   window.addEventListener('keydown', unlock, { once: true })
   window.addEventListener('pointerdown', unlock, { once: true })
@@ -499,7 +500,8 @@ function buildSoundTasks(k) {
     ['boss', './sounds/boss.mp3'],
     ['water', './sounds/water.mp3'],
     ['water-steps', './sounds/water-steps.mp3'],
-    ['birds', './sounds/birds.mp3']
+    ['birds', './sounds/birds.mp3'],
+    ['whisper', './sounds/whisper.mp3']
   ]
   return sounds.map(([name, path]) => () => k.loadSound(name, path))
 }

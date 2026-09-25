@@ -342,6 +342,61 @@ export function setAmbientVolume(instance, volume) {
   }
 }
 //
+// Plain HTML5 Audio for the glow ear-tree whisper.mp3 loop — deliberately
+// bypasses Kaplay's own sound system for the same reason as water-steps (see
+// that section below): a k.play() lookup made while any unrelated background
+// asset is still loading can silently no-op with no error, which is exactly
+// what made the ear-tree whisper never actually play. A single looping
+// <audio> element, unlocked by an early user gesture, plays reliably.
+//
+const EAR_TREE_WHISPER_URL = './sounds/whisper.mp3'
+let earTreeWhisperAudio = null
+function getEarTreeWhisperAudio() {
+  if (earTreeWhisperAudio) return earTreeWhisperAudio
+  earTreeWhisperAudio = new Audio(EAR_TREE_WHISPER_URL)
+  earTreeWhisperAudio.loop = true
+  earTreeWhisperAudio.volume = 0
+  earTreeWhisperAudio.preload = 'auto'
+  return earTreeWhisperAudio
+}
+/**
+ * Unlocks the ear-tree whisper HTML5 audio element. Call once from a real
+ * user gesture (keydown/pointerdown/touchstart) so the first real fade-in is
+ * never the very first play() attempt on this element.
+ */
+export function unlockEarTreeWhisperAudio() {
+  const audio = getEarTreeWhisperAudio()
+  const restoreVolume = audio.volume
+  audio.volume = 0
+  audio.play().then(() => {
+    audio.pause()
+    audio.currentTime = 0
+    audio.volume = restoreVolume
+  }).catch(() => {})
+}
+/**
+ * Fades the ear-tree whisper loop in or out by proximity.
+ * @param {number} volume - Target volume 0..1
+ */
+export function setEarTreeWhisperVolume(volume) {
+  const audio = getEarTreeWhisperAudio()
+  const v = globalMuteProceduralSounds ? 0 : Math.max(0, Math.min(1, volume))
+  audio.volume = v
+  if (v <= 0.001) {
+    audio.paused || audio.pause()
+    return
+  }
+  if (audio.paused) {
+    //
+    // Each fresh approach (leaving the trigger radius pauses it, see above)
+    // restarts the whisper from the top rather than resuming mid-loop where
+    // it happened to fade out last time.
+    //
+    audio.currentTime = 0
+    audio.play().catch(() => {})
+  }
+}
+//
 // Current proximity-ambient master gain (0 when not playing).
 //
 export function getAmbientVolume(instance) {

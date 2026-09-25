@@ -501,6 +501,7 @@ export const CFG = {
       word: MASTER_VOLUME * 0.3,
       breath: MASTER_VOLUME * 0.15, // breath.mp3 (parallel with word in word section)
       birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for glow level
+      whisper: MASTER_VOLUME * 0.38,  // whisper.mp3 near glow lip-trees
       //
       // Letter dialog voice-overs (glow-g / glow-l / glow-ow)
       //

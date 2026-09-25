@@ -1,35 +1,25 @@
 //
-// Small background trees whose sparse branches end in big ears instead of
-// leaves — the nearest branches lean and stretch toward the hero on approach.
+// Small background trees whose branches end in red lips — branches grow from
+// the tapered trunk surface and lean toward the hero like the old ear trees.
 //
 const EAR_TREE_TRUNK_H_BASE = 104
+const EAR_TREE_TRIGGER_RADIUS = 280
+const EAR_TREE_REACH_EASE = 4
 const EAR_TREE_TRUNK_W_BASE = 9
 const EAR_TREE_BRANCH_COUNT_DEFAULT = 5
 const EAR_TREE_BRANCH_LEN_BASE = 52
-const EAR_LEN = 34
-const EAR_W = 20
-const EAR_CANAL_RADIUS = 5
-const EAR_OUTLINE_PAD = 2
-const EAR_TREE_TRIGGER_RADIUS = 280
-const EAR_TREE_REACH_EASE = 4
 const EAR_TREE_TWIG_LEN = 18
 const EAR_TREE_TWIG_COUNT = 2
-//
-// Tapered trunk polygon — wide at the ground, narrow at the crown, with a
-// gentle sideways wobble so it reads as an organic trunk (same silhouette
-// idea as the big tree's trunk) instead of a straight-sided rectangle.
-//
 const EAR_TREE_TRUNK_STEPS = 6
 const EAR_TREE_TRUNK_BASE_MULT = 1.05
 const EAR_TREE_TRUNK_TOP_MULT = 0.32
 const EAR_TREE_TRUNK_WOBBLE = 0.12
 const EAR_TREE_TRUNK_OUTLINE_PAD = 2
-//
-// Branches attach at the trunk's own surface (offset from centerline by its
-// half-width at that height), not the centerline itself — otherwise they
-// read as floating in front of the trunk rather than growing out of it.
-//
 const EAR_TREE_BRANCH_ATTACH_MULT = 0.85
+const EAR_TREE_TRUNK_TOP_RIM_W = 3
+const MOUTH_LEN = 30
+const MOUTH_HALF_H = 9
+const MOUTH_GAP = 3
 
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
@@ -53,6 +43,7 @@ export function create(cfg) {
       branchLen,
       branchCount,
       seed: spot.seed ?? 0,
+      shoreLeft: Boolean(spot.shoreLeft),
       branches: []
     }
     tree.branches = buildEarTreeBranches(tree)
@@ -72,7 +63,7 @@ function branchAttachYOnTrunk(tree, index) {
 }
 function buildEarTreeBranches(tree) {
   const branches = []
-  const { groundY, trunkH, branchLen, branchCount, seed } = tree
+  const { branchLen, branchCount, seed } = tree
   for (let i = 0; i < branchCount; i++) {
     const side = i % 2 === 0 ? -1 : 1
     const lift = 0.28 + 0.52 * (i / Math.max(1, branchCount - 1))
@@ -94,13 +85,20 @@ function buildEarTreeBranches(tree) {
         baseY: forkBaseY,
         restAngle: forkAngle,
         len,
-        hasEar: true,
-        earMirror: side,
+        hasMouth: true,
         tipX: forkBaseX + Math.cos(forkAngle) * len,
         tipY: forkBaseY + Math.sin(forkAngle) * len
       })
     }
-    branches.push({ baseX, baseY, restAngle, tipX, tipY, twigs, hasEar: true, earMirror: side })
+    branches.push({
+      baseX,
+      baseY,
+      restAngle,
+      tipX,
+      tipY,
+      twigs,
+      hasMouth: true
+    })
   }
   return branches
 }
@@ -113,7 +111,7 @@ function trunkHalfWidthAt(tree, y) {
 }
 
 /**
- * Eases every branch tip toward (or back from) the hero's position.
+ * Eases branch and twig tips toward (or back from) the hero's position.
  * @param {Object} inst - Ear-tree inst
  * @param {number} heroX - Hero world X
  * @param {number} heroY - Hero world Y
@@ -124,14 +122,37 @@ export function onUpdate(inst, heroX, heroY, dt) {
 }
 
 /**
- * Draws every ear-tree's trunk, branches and ears.
+ * Draws every tree trunk under the grass layer.
  * @param {Object} inst - Ear-tree inst
- * @param {Object} barkColor - Kaplay rgb for trunk and branches
- * @param {Object} outlineColor - Kaplay rgb for outlines
- * @param {Object} earColor - Kaplay rgb for the ear fill
+ * @param {Object} barkColor - Kaplay rgb for trunk fill
+ * @param {Object} outlineColor - Kaplay rgb for trunk outline
  */
-export function onDraw(inst, barkColor, outlineColor, earColor) {
-  inst.trees.forEach(tree => drawEarTree(inst.k, tree, barkColor, outlineColor, earColor))
+export function onDrawTrunks(inst, barkColor, outlineColor) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+}
+
+/**
+ * Redraws every trunk above grass and shore decor (branches draw on a higher z).
+ * @param {Object} inst - Ear-tree inst
+ * @param {Object} barkColor - Kaplay rgb for trunk fill
+ * @param {Object} outlineColor - Kaplay rgb for trunk outline
+ */
+export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+}
+
+/**
+ * Draws branches and lip mouths only (trunks are on a lower overlay z).
+ * @param {Object} inst - Ear-tree inst
+ * @param {Object} barkColor - Kaplay rgb for branches
+ * @param {Object} outlineColor - Kaplay rgb for outlines
+ * @param {Object} lipColor - Kaplay rgb for lip fill
+ */
+export function onDrawBranches(inst, barkColor, outlineColor, lipColor) {
+  const k = inst.k
+  inst.trees.forEach(tree => {
+    tree.branches.forEach(branch => drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor))
+  })
 }
 function updateEarTree(tree, heroX, heroY, dt) {
   const ease = Math.min(1, dt * EAR_TREE_REACH_EASE)
@@ -149,15 +170,6 @@ function updateEarTree(tree, heroX, heroY, dt) {
     const targetY = restTipY + (towardY - restTipY) * reachT
     branch.tipX += (targetX - branch.tipX) * ease
     branch.tipY += (targetY - branch.tipY) * ease
-    //
-    // Twigs fork off the parent branch at a fixed fraction of its length
-    // (forkT) — re-anchoring baseX/baseY to the branch's CURRENT (already
-    // eased this frame) base→tip line every frame, instead of the fixed
-    // position they forked from at creation, is what keeps them attached as
-    // the parent branch reaches or eases back. Without this they stayed at
-    // their original creation-time spot while the parent moved out from
-    // under them, reading as a twig floating disconnected in mid-air.
-    //
     branch.twigs?.forEach(twig => {
       twig.baseX = branch.baseX + (branch.tipX - branch.baseX) * twig.forkT
       twig.baseY = branch.baseY + (branch.tipY - branch.baseY) * twig.forkT
@@ -177,124 +189,119 @@ function updateEarTree(tree, heroX, heroY, dt) {
     })
   })
 }
-function drawEarTree(k, tree, barkColor, outlineColor, earColor) {
-  k.drawPolygon({ pts: buildTrunkOutline(k, tree, EAR_TREE_TRUNK_OUTLINE_PAD), color: outlineColor, triangulate: true })
-  k.drawPolygon({ pts: buildTrunkOutline(k, tree, 0), color: barkColor, triangulate: true })
-  tree.branches.forEach(branch => drawEarBranch(k, tree, branch, barkColor, outlineColor, earColor))
+//
+// Kaplay's drawPolygon({triangulate: true}) ear-clips the whole 14-point
+// outline in one shot, and its ear-clipping loop gives up (returning zero
+// triangles, so nothing gets drawn — no error, no fallback) whenever it
+// can't find a valid ear within one full pass. Empirically this happens for
+// roughly 40% of the tapered/wobbled trunk shapes this generator produces,
+// which is why trunks appeared to render fine sometimes and be fully
+// invisible other times. Drawing the trunk as a strip of small convex
+// quads (one per taper step) sidesteps that ear-clipping path entirely:
+// each quad triangulates trivially and correctly via the untriangulated
+// vertex-fan default (see buildTrunkSegmentQuad).
+//
+function drawEarTreeTrunk(k, tree, barkColor, outlineColor) {
+  drawTrunkSegments(k, tree, EAR_TREE_TRUNK_OUTLINE_PAD, outlineColor)
+  drawTrunkSegments(k, tree, 0, barkColor)
+  drawTrunkTopRim(k, tree, outlineColor)
 }
-//
-// Trunk silhouette points, base to crown up one side and back down the
-// other, so it can be filled as a single tapered polygon.
-//
-function buildTrunkOutline(k, tree, pad) {
-  const left = []
-  const right = []
-  for (let i = 0; i <= EAR_TREE_TRUNK_STEPS; i++) {
-    const t = i / EAR_TREE_TRUNK_STEPS
-    const y = tree.groundY - tree.trunkH * t
-    const halfW = trunkHalfWidthAt(tree, y) + pad
-    const wobble = Math.sin(t * Math.PI * 1.4 + tree.seed * 3) * tree.trunkW * EAR_TREE_TRUNK_WOBBLE
-    left.push({ x: tree.x - halfW + wobble, y })
-    right.push({ x: tree.x + halfW + wobble, y })
+function drawTrunkSegments(k, tree, pad, color) {
+  for (let i = 0; i < EAR_TREE_TRUNK_STEPS; i++) {
+    k.drawPolygon({ pts: buildTrunkSegmentQuad(k, tree, pad, i), color })
   }
-  return [...left, ...right.reverse()].map(p => k.vec2(p.x, p.y))
 }
-function drawEarBranch(k, tree, branch, barkColor, outlineColor, earColor) {
+//
+// Black cap line along the crown — the tapered polygon alone left the top
+// edge without a readable outline.
+//
+function drawTrunkTopRim(k, tree, outlineColor) {
+  const topY = tree.groundY - tree.trunkH
+  const halfW = trunkHalfWidthAt(tree, topY) + EAR_TREE_TRUNK_OUTLINE_PAD
+  const wobble = Math.sin(tree.seed * 3) * tree.trunkW * EAR_TREE_TRUNK_WOBBLE
+  k.drawLine({
+    p1: k.vec2(tree.x - halfW + wobble, topY),
+    p2: k.vec2(tree.x + halfW + wobble, topY),
+    width: EAR_TREE_TRUNK_TOP_RIM_W,
+    color: outlineColor
+  })
+}
+//
+// Left/right taper edge at step i (0 = ground, EAR_TREE_TRUNK_STEPS = crown).
+//
+function trunkEdgeAtStep(tree, pad, i) {
+  const t = i / EAR_TREE_TRUNK_STEPS
+  const y = tree.groundY - tree.trunkH * t
+  const halfW = trunkHalfWidthAt(tree, y) + pad
+  const wobble = Math.sin(t * Math.PI * 1.4 + tree.seed * 3) * tree.trunkW * EAR_TREE_TRUNK_WOBBLE
+  return { left: tree.x - halfW + wobble, right: tree.x + halfW + wobble, y }
+}
+//
+// One taper segment as a convex quad (bottom-left, bottom-right, top-right,
+// top-left) — always triangulates correctly through the untriangulated
+// vertex-fan default, unlike the full wavy outline (see drawEarTreeTrunk).
+//
+function buildTrunkSegmentQuad(k, tree, pad, i) {
+  const bottom = trunkEdgeAtStep(tree, pad, i)
+  const top = trunkEdgeAtStep(tree, pad, i + 1)
+  return [
+    k.vec2(bottom.left, bottom.y),
+    k.vec2(bottom.right, bottom.y),
+    k.vec2(top.right, top.y),
+    k.vec2(top.left, top.y)
+  ]
+}
+function drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor) {
   const base = k.vec2(branch.baseX, branch.baseY)
   const tip = k.vec2(branch.tipX, branch.tipY)
   const limbW = Math.max(3, tree.trunkW * 0.42)
-  k.drawCircle({
-    pos: base,
-    radius: limbW * 0.55 + 1,
-    color: outlineColor
-  })
-  k.drawCircle({
-    pos: base,
-    radius: limbW * 0.45,
-    color: barkColor
-  })
+  k.drawCircle({ pos: base, radius: limbW * 0.55 + 1, color: outlineColor })
+  k.drawCircle({ pos: base, radius: limbW * 0.45, color: barkColor })
   k.drawLine({ p1: base, p2: tip, width: limbW + 2, color: outlineColor })
   k.drawLine({ p1: base, p2: tip, width: limbW, color: barkColor })
   branch.twigs?.forEach(twig => {
     const twigBase = k.vec2(twig.baseX, twig.baseY)
-    const twigTip = k.vec2(twig.tipX ?? twig.baseX, twig.tipY ?? twig.baseY)
+    const twigTip = k.vec2(twig.tipX, twig.tipY)
     k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.55 + 1, color: outlineColor })
     k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.5, color: barkColor })
-    twig.hasEar && drawEarAtTip(k, twigTip.x, twigTip.y, twig.restAngle, twig.earMirror, outlineColor, earColor)
+    twig.hasMouth && drawMouthAtTip(k, twigTip.x, twigTip.y,
+      Math.atan2(twigTip.y - twigBase.y, twigTip.x - twigBase.x), lipColor)
   })
-  branch.hasEar && drawEarAtTip(k, tip.x, tip.y,
-    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), branch.earMirror, outlineColor, earColor)
-}
-function drawEarAtTip(k, tipX, tipY, angle, mirror, outlineColor, earColor) {
-  drawEarShape(k, tipX, tipY, angle, mirror, outlineColor, earColor)
+  branch.hasMouth && drawMouthAtTip(k, tip.x, tip.y,
+    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), lipColor)
 }
 //
-// Local-space ear outline, modeled on a real ear's silhouette (base/lobe at
-// the origin, rounded crown along +x): a bulging outer helix curve up to a
-// rounded — not pointed — top, an inward notch on the return curve for the
-// antihelix/tragus, and a rounded lobe back at the base. Rotated to the
-// branch angle, drawn with an inner ridge line (antihelix) and canal circle
-// for the same detail a real ear reads by.
+// Upper and lower lip polygons in local mouth space (+x along the branch).
 //
-const EAR_LOCAL_POINTS = [
-  [0, -0.05],
-  [0.04, -0.35],
-  [0.18, -0.68],
-  [0.42, -0.92],
-  [0.68, -0.88],
-  [0.9, -0.6],
-  [1, -0.22],
-  [0.94, 0.14],
-  [0.74, 0.42],
-  [0.56, 0.28],
-  [0.66, 0.06],
-  [0.5, -0.02],
-  [0.3, 0.2],
-  [0.12, 0.28],
-  [0, 0.08]
+const MOUTH_UPPER_LIP = [
+  [-0.5, -0.15],
+  [-0.35, -0.55],
+  [-0.08, -0.72],
+  [0.2, -0.68],
+  [0.45, -0.42],
+  [0.5, -0.12],
+  [0.35, -0.05],
+  [-0.35, -0.05]
 ]
-//
-// Antihelix fold, drawn as a short inner ridge line from the upper curve
-// down toward the canal — same idea as the crease visible in a real ear.
-//
-const EAR_RIDGE_LOCAL_POINTS = [
-  [0.7, -0.5],
-  [0.5, -0.1],
-  [0.36, 0.14]
+const MOUTH_LOWER_LIP = [
+  [-0.42, 0.08],
+  [-0.2, 0.42],
+  [0.15, 0.55],
+  [0.42, 0.38],
+  [0.48, 0.12],
+  [0.2, 0.06],
+  [-0.25, 0.06]
 ]
-function drawEarShape(k, tipX, tipY, angle, mirror, outlineColor, earColor) {
+function drawMouthAtTip(k, tipX, tipY, angle, lipColor) {
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
-  //
-  // mirror flips the local Y axis before rotating — a real left ear and
-  // right ear are not rotations of each other, they're mirror images (the
-  // notch/lobe sit on opposite sides), so this is a separate transform from
-  // the branch-angle rotation above it.
-  //
-  const flip = mirror < 0 ? -1 : 1
-  const toWorld = (lx, ly, pad) => {
-    const py0 = ly * flip
-    const px = lx * (EAR_LEN + pad)
-    const py = py0 * (EAR_W / 2 + pad)
+  const toWorld = (lx, ly) => {
+    const px = lx * MOUTH_LEN
+    const py = ly * MOUTH_HALF_H
     return k.vec2(tipX + px * cos - py * sin, tipY + px * sin + py * cos)
   }
-  //
-  // Flipping ly reverses the polygon's winding order (CCW becomes CW) —
-  // reversing the point array right back undoes just that (order), leaving
-  // the mirrored shape but restoring the winding triangulate expects. Without
-  // this, mirrored ears silently failed to fill (only the canal circle,
-  // which doesn't care about winding, ever showed) — the polygon itself
-  // never rendered, reading as "ear not fully drawn, just a dark circle".
-  //
-  const orderedPoints = flip < 0 ? [...EAR_LOCAL_POINTS].reverse() : EAR_LOCAL_POINTS
-  const outlinePts = orderedPoints.map(([lx, ly]) => toWorld(lx, ly, EAR_OUTLINE_PAD))
-  const fillPts = orderedPoints.map(([lx, ly]) => toWorld(lx, ly, 0))
-  k.drawPolygon({ pts: outlinePts, color: outlineColor, triangulate: true })
-  k.drawPolygon({ pts: fillPts, color: earColor, triangulate: true })
-  const ridgePts = EAR_RIDGE_LOCAL_POINTS.map(([lx, ly]) => toWorld(lx, ly, 0))
-  for (let i = 0; i < ridgePts.length - 1; i++) {
-    k.drawLine({ p1: ridgePts[i], p2: ridgePts[i + 1], width: 1.6, color: outlineColor, opacity: 0.6 })
-  }
-  const canalCenter = toWorld(0.32, 0.12, 0)
-  k.drawCircle({ pos: canalCenter, radius: EAR_CANAL_RADIUS, color: outlineColor })
+  const upper = MOUTH_UPPER_LIP.map(([lx, ly]) => toWorld(lx, ly))
+  const lower = MOUTH_LOWER_LIP.map(([lx, ly]) => toWorld(lx, ly))
+  k.drawPolygon({ pts: upper, color: lipColor, triangulate: true })
+  k.drawPolygon({ pts: lower, color: lipColor, triangulate: true })
 }

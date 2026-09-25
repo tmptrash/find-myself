@@ -375,24 +375,26 @@ export function unlockEarTreeWhisperAudio() {
   }).catch(() => {})
 }
 /**
+ * Current ear-tree whisper loop volume (0..1).
+ * @returns {number}
+ */
+export function getEarTreeWhisperVolume() {
+  const audio = earTreeWhisperAudio
+  return audio ? audio.volume : 0
+}
+/**
  * Fades the ear-tree whisper loop in or out by proximity.
  * @param {number} volume - Target volume 0..1
  */
 export function setEarTreeWhisperVolume(volume) {
   const audio = getEarTreeWhisperAudio()
-  const v = globalMuteProceduralSounds ? 0 : Math.max(0, Math.min(1, volume))
+  const v = Math.max(0, Math.min(1, volume))
   audio.volume = v
   if (v <= 0.001) {
     audio.paused || audio.pause()
     return
   }
   if (audio.paused) {
-    //
-    // Each fresh approach (leaving the trigger radius pauses it, see above)
-    // restarts the whisper from the top rather than resuming mid-loop where
-    // it happened to fade out last time.
-    //
-    audio.currentTime = 0
     audio.play().catch(() => {})
   }
 }

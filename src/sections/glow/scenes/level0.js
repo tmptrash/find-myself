@@ -1365,6 +1365,9 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 // even spread across the ground.
 //
 const GRASS_Z = 20
+const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
+const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
+const GLOW_EAR_TREE_COUNT = 3
 const GRASS_TUFT_COUNT = 22
 //
 // Right-spikes' warning-flash z — steps in front of the grass (GRASS_Z) for
@@ -1929,8 +1932,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     Sound.startAudioContext(sound)
     sound._k = k
     const birdsMusic = k.play('birds', { loop: true, volume: 0, paused: true })
+    const earWhisperMusic = k.play('whisper', { loop: true, volume: 0, paused: true })
     const stopGlowLoopAudio = () => {
       birdsMusic?.stop?.()
+      earWhisperMusic?.stop?.()
       Sound.setEarTreeWhisperVolume(0)
       Sound.stopRainSound(sound)
       Sound.stopTrampWaterStepsLoop(sound)
@@ -2433,6 +2438,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oStuckHintShown: false,
       sound,
       birdsMusic,
+      earWhisperMusic,
       letterDialogMusic: null,
       dialogHeroPinned: false,
       dialogPinY: 0,
@@ -2689,7 +2695,18 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pit.onPitMushroomLaunch = (_pit, char) => launchHeroFromPitMushroomToBranch(inst, char)
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
-    inst.chainBuoys = ChainBuoy.create({ k, spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2) })
+    const chainBuoyWoodBands = buildGlowChainBuoyWoodBands({
+      horizBranch: treeData.horizBranch,
+      lPlatX,
+      wPlatX,
+      oPlatX
+    })
+    inst.chainBuoys = ChainBuoy.create({
+      k,
+      spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2, chainBuoyWoodBands, earTreeSpots),
+      woodPlatformBands: chainBuoyWoodBands,
+      platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
+    })
     inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
     createGlowChainBuoyLayer(k, inst)
     createGlowEarTreeLayer(k, inst)
@@ -5138,11 +5155,11 @@ function glowChainBuoyColors(inst, k) {
 function glowEarTreeColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
-  const ear = flat ? DECOR_GRAY : GRASS_GREEN
+  const lip = flat ? DECOR_GRAY : glowRgb('#cc6764')
   return {
     outline: k.rgb(VOID.r, VOID.g, VOID.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
-    ear: k.rgb(ear.r, ear.g, ear.b)
+    lip: k.rgb(lip.r, lip.g, lip.b)
   }
 }
 //
@@ -5162,13 +5179,33 @@ function createGlowChainBuoyLayer(k, inst) {
   ])
 }
 function createGlowEarTreeLayer(k, inst) {
-  return k.add([
+  k.add([
     k.z(GLOW_EAR_TREE_Z),
     {
       draw() {
         if (!inst.earTrees || !inst.zones.gCollected) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDraw(inst.earTrees, c.bark, c.outline, c.ear)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline)
+      }
+    }
+  ])
+  k.add([
+    k.z(GLOW_EAR_TREE_TRUNK_OVERLAY_Z),
+    {
+      draw() {
+        if (!inst.earTrees || !inst.zones.gCollected) return
+        const c = glowEarTreeColors(inst, k)
+        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline)
+      }
+    }
+  ])
+  k.add([
+    k.z(GLOW_EAR_TREE_BRANCHES_Z),
+    {
+      draw() {
+        if (!inst.earTrees || !inst.zones.gCollected) return
+        const c = glowEarTreeColors(inst, k)
+        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip)
       }
     }
   ])
@@ -5959,9 +5996,21 @@ const GLOW_CHAIN_BUOY_COUNT_MAX = 7
 const GLOW_CHAIN_BUOY_TREE_CLEAR_HALF = 260
 const GLOW_CHAIN_BUOY_MIN_GAP = 150
 const GLOW_CHAIN_BUOY_PLACE_ATTEMPTS = 80
+const GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF = 240
+//
+// A couple of buoys deliberately placed between the two right-side ear-trees
+// (see addGlowChainBuoysBetweenRightTrees) — the general clearance above
+// keeps ordinary random buoys away from ear-trees, but that same clearance
+// would also swallow the whole gap between two trees only GLOW_EAR_TREE_MIN_GAP
+// apart, so this placement bypasses it on purpose.
+//
+const GLOW_CHAIN_BUOY_BETWEEN_TREE_MARGIN = 40
+const GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN = 36
+const GLOW_CHAIN_BUOY_PLATFORM_SIDE_MIN = 88
+const GLOW_CHAIN_BUOY_PLATFORM_SIDE_JITTER = 56
 const GLOW_EAR_TREE_RIGHT_COUNT = 2
-const GLOW_EAR_TREE_X_MIN = TREE_X + 200
-const GLOW_EAR_TREE_X_MAX = TREE_X + 720
+const GLOW_EAR_TREE_MUD_RIGHT_GAP = 56
+const GLOW_EAR_TREE_RIGHT_CAVE_MARGIN = 48
 const GLOW_EAR_TREE_MIN_GAP = 160
 const GLOW_EAR_TREE_MUD_CLEAR = 36
 //
@@ -5982,43 +6031,103 @@ const GLOW_EAR_TREE_LEFT_JITTER = 8
 const EAR_TREE_TRUNK_GRASS_CLEAR_HALF = 26
 const GLOW_EAR_TREE_WHISPER_RADIUS = 300
 const GLOW_EAR_TREE_WHISPER_MAX_VOLUME = 0.42
+const GLOW_EARLY_LAND_FOOT_ABOVE = 26
 //
 // Clearance kept around the cave crack zone for both decor kinds — neither
 // should ever spawn over the cave entrance.
 //
 const GLOW_CAVE_DECOR_CLEAR = 140
-function buildGlowChainBuoySpots(lakeX1, lakeX2) {
+function buildGlowChainBuoyWoodBands(cfg) {
+  const { horizBranch, lPlatX, wPlatX, oPlatX } = cfg
+  const bands = []
+  horizBranch && bands.push({ x1: horizBranch.x1, x2: horizBranch.x2 })
+  lPlatX != null && bands.push({ x1: lPlatX, x2: lPlatX + LOG_W })
+  wPlatX != null && bands.push({ x1: wPlatX, x2: wPlatX + LOG_W })
+  oPlatX != null && bands.push({ x1: oPlatX, x2: oPlatX + LOG_W })
+  return bands
+}
+function glowChainBuoyXUnderWoodPlatform(x, woodBands) {
+  const margin = GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
+  return (woodBands ?? []).some(b => x >= b.x1 - margin && x <= b.x2 + margin)
+}
+function buildGlowChainBuoySpot(x) {
+  return {
+    x,
+    groundY: FLOOR_Y,
+    seed: Math.random() * Math.PI * 2,
+    segmentCount: 5 + Math.floor(Math.random() * 4),
+    segmentLen: 22 + Math.random() * 10,
+    segmentWidth: 3.5 + Math.random() * 2.5,
+    swayAmp: 0.09 + Math.random() * 0.12,
+    swaySpeed: 0.75 + Math.random() * 0.65,
+    swayLag: 0.35 + Math.random() * 0.35
+  }
+}
+function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots) {
+  if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) return false
+  if (glowChainBuoyXUnderWoodPlatform(x, woodBands)) return false
+  if ((earTreeSpots ?? []).some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF)) return false
+  if (x >= lakeX1 && x <= lakeX2) return false
+  if (x >= mud.x1 - 24 && x <= mud.x2 + 24) return false
+  if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) return false
+  if (spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP)) return false
+  spots.push(buildGlowChainBuoySpot(x))
+  return true
+}
+function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots) {
   const spots = []
   const mud = computeGlowMudZoneX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
   const target = GLOW_CHAIN_BUOY_COUNT_MIN +
     Math.floor(Math.random() * (GLOW_CHAIN_BUOY_COUNT_MAX - GLOW_CHAIN_BUOY_COUNT_MIN + 1))
+  const sideXs = []
+  for (const band of woodBands ?? []) {
+    const jitter = () => Math.random() * GLOW_CHAIN_BUOY_PLATFORM_SIDE_JITTER
+    sideXs.push(band.x1 - GLOW_CHAIN_BUOY_PLATFORM_SIDE_MIN - jitter())
+    sideXs.push(band.x2 + GLOW_CHAIN_BUOY_PLATFORM_SIDE_MIN + jitter())
+  }
+  for (let i = sideXs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = sideXs[i]
+    sideXs[i] = sideXs[j]
+    sideXs[j] = tmp
+  }
+  for (const x of sideXs) {
+    if (spots.length >= target) break
+    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
+  }
   const span = WORLD_W - LEFT_MARGIN * 2
   let attempts = 0
   while (spots.length < target && attempts < GLOW_CHAIN_BUOY_PLACE_ATTEMPTS) {
     attempts += 1
     const x = LEFT_MARGIN + 40 + Math.random() * (span - 80)
-    if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) continue
-    if (x >= lakeX1 && x <= lakeX2) continue
-    if (x >= mud.x1 - 24 && x <= mud.x2 + 24) continue
-    if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) continue
-    const tooClose = spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP)
-    if (tooClose) continue
-    spots.push({
-      x,
-      groundY: FLOOR_Y,
-      seed: Math.random() * Math.PI * 2,
-      segmentCount: (5 + Math.floor(Math.random() * 4)) * 2,
-      segmentLen: 22 + Math.random() * 10,
-      segmentWidth: 3.5 + Math.random() * 2.5,
-      swayAmp: 0.09 + Math.random() * 0.12,
-      swaySpeed: 0.75 + Math.random() * 0.65,
-      swayLag: 0.35 + Math.random() * 0.35,
-      ampGrowth: 1.2 + Math.random() * 0.35
-    })
+    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
   }
+  addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots)
   spots.sort((a, b) => a.x - b.x)
   return spots
+}
+//
+// A couple of chain-buoys nestled specifically between the two right-side
+// ear-trees — the ordinary random placement above always excludes this
+// exact band (see GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF), so it's added here
+// on purpose instead, clear of each trunk by only a small margin.
+//
+function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
+  const rightTrees = (earTreeSpots ?? []).filter(s => s.x > TREE_X).sort((a, b) => a.x - b.x)
+  if (rightTrees.length < 2) return
+  const [treeA, treeB] = rightTrees
+  const gapX1 = treeA.x + GLOW_CHAIN_BUOY_BETWEEN_TREE_MARGIN
+  const gapX2 = treeB.x - GLOW_CHAIN_BUOY_BETWEEN_TREE_MARGIN
+  const innerSpan = gapX2 - gapX1
+  if (innerSpan <= 0) return
+  const count = innerSpan >= GLOW_CHAIN_BUOY_MIN_GAP ? 2 : 1
+  for (let i = 0; i < count; i++) {
+    const t = (i + 1) / (count + 1)
+    const x = gapX1 + innerSpan * t
+    if (spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP * 0.6)) continue
+    spots.push(buildGlowChainBuoySpot(x))
+  }
 }
 //
 // Ear-tree decor spots — 2 clustered right of the big tree (never over mud),
@@ -6037,20 +6146,47 @@ function buildGlowEarTreeSpots(waterX2) {
   // while its wider branches remain visible above, reading as "no trunk".
   //
   const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
+  const rightXMin = mud.x2 + GLOW_EAR_TREE_MUD_RIGHT_GAP
+  const rightXMax = cave.x1 - GLOW_CAVE_DECOR_CLEAR - GLOW_EAR_TREE_RIGHT_CAVE_MARGIN
+  const rightHeightTiers = ['short', 'tall']
   const spots = []
   let attempts = 0
-  while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && attempts < 60) {
+  while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && attempts < 80) {
     attempts += 1
-    const x = GLOW_EAR_TREE_X_MIN + Math.random() * (GLOW_EAR_TREE_X_MAX - GLOW_EAR_TREE_X_MIN)
-    if (x >= mud.x1 - GLOW_EAR_TREE_MUD_CLEAR && x <= mud.x2 + GLOW_EAR_TREE_MUD_CLEAR) continue
-    if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) continue
+    if (rightXMax <= rightXMin + GLOW_EAR_TREE_MIN_GAP * 0.5) break
+    const x = rightXMin + Math.random() * (rightXMax - rightXMin)
     if (Math.abs(x - branchTrampX) < TRAMP_GRASS_CLEAR_HALF) continue
     const tooClose = spots.some(s => Math.abs(s.x - x) < GLOW_EAR_TREE_MIN_GAP)
     if (tooClose) continue
-    spots.push(buildGlowEarTreeSpot(x))
+    spots.push(buildGlowEarTreeSpot(x, rightHeightTiers[spots.length]))
   }
-  spots.push(buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)))
+  if (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && rightXMax > rightXMin + 40) {
+    const span = rightXMax - rightXMin
+    const fallbackXs = [
+      rightXMin + span * 0.22,
+      rightXMin + span * 0.74
+    ]
+    for (let i = spots.length; i < GLOW_EAR_TREE_RIGHT_COUNT; i++) {
+      spots.push(buildGlowEarTreeSpot(fallbackXs[i], rightHeightTiers[i]))
+    }
+  }
+  spots.push({
+    ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)),
+    shoreLeft: true
+  })
   spots.sort((a, b) => a.x - b.x)
+  if (spots.length < GLOW_EAR_TREE_COUNT) {
+    const span = Math.max(80, rightXMax - rightXMin)
+    while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && rightXMax > rightXMin) {
+      const t = spots.length / GLOW_EAR_TREE_RIGHT_COUNT
+      spots.push(buildGlowEarTreeSpot(rightXMin + span * (0.2 + t * 0.55), rightHeightTiers[spots.length]))
+    }
+    !spots.some(s => s.shoreLeft) && spots.push({
+      ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)),
+      shoreLeft: true
+    })
+    spots.sort((a, b) => a.x - b.x)
+  }
   return spots
 }
 //
@@ -6070,11 +6206,16 @@ function pickGlowLeftEarTreeX(waterX2) {
 //
 // Shared per-spot randomized trunk/branch variation.
 //
-function buildGlowEarTreeSpot(x) {
+function buildGlowEarTreeSpot(x, heightTier) {
+  const trunkScale = heightTier === 'short'
+    ? 0.8 + Math.random() * 0.12
+    : heightTier === 'tall'
+      ? 1.1 + Math.random() * 0.2
+      : 0.92 + Math.random() * 0.28
   return {
     x,
     groundY: FLOOR_Y,
-    trunkScale: 0.92 + Math.random() * 0.28,
+    trunkScale,
     trunkWScale: 0.85 + Math.random() * 0.35,
     branchScale: 0.9 + Math.random() * 0.25,
     branchCount: 4 + Math.floor(Math.random() * 2),
@@ -6082,28 +6223,64 @@ function buildGlowEarTreeSpot(x) {
   }
 }
 //
-// Ear-tree whisper volume from hero distance to the nearest tree crown.
+// Ear-tree whisper volume from hero distance to the nearest lip-tree.
 //
 function updateGlowEarTreeWhisperSound(inst, char) {
+  const fadeOut = () => Sound.setEarTreeWhisperVolume(0)
   if (!char?.pos || !inst.zones.gCollected || !inst.earTrees?.trees?.length) {
-    Sound.setEarTreeWhisperVolume(0)
+    fadeOut()
     return
   }
-  if (inst.dialogOpen || inst.drowning || inst.sound?._glowSfxMuted) {
-    Sound.setEarTreeWhisperVolume(0)
+  if (inst.dialogOpen || inst.drowning) {
+    fadeOut()
     return
   }
+  inst.sound && Sound.resumeAudioContext(inst.sound)
   const hx = char.pos.x
-  const hy = char.pos.y
-  let nearest = Infinity
+  let nearestX = Infinity
   for (const tree of inst.earTrees.trees) {
-    const crownY = tree.groundY - (tree.trunkH ?? 0)
-    nearest = Math.min(nearest, Math.hypot(hx - tree.x, hy - crownY))
+    nearestX = Math.min(nearestX, Math.abs(hx - tree.x))
   }
-  const proximity = nearest >= GLOW_EAR_TREE_WHISPER_RADIUS
+  const proximity = nearestX >= GLOW_EAR_TREE_WHISPER_RADIUS
     ? 0
-    : 1 - nearest / GLOW_EAR_TREE_WHISPER_RADIUS
-  Sound.setEarTreeWhisperVolume(GLOW_EAR_TREE_WHISPER_MAX_VOLUME * proximity)
+    : 1 - nearestX / GLOW_EAR_TREE_WHISPER_RADIUS
+  const whisperMax = CFG.audio.backgroundMusic.whisper ?? GLOW_EAR_TREE_WHISPER_MAX_VOLUME
+  const vol = whisperMax * proximity
+  if (vol <= 0.001) {
+    fadeOut()
+    return
+  }
+  Sound.setEarTreeWhisperVolume(vol)
+}
+//
+// Plays ground/wood land SFX a few pixels before isGrounded flips — Kaplay
+// collision often lags the visible foot plant by a frame.
+//
+function maybePlayGlowEarlyLandSfx(inst, char, hero, footY, grounded) {
+  if (inst.sound?._glowSfxMuted) return
+  if (grounded) {
+    inst._glowEarlyLandSfxDone = false
+    return
+  }
+  if (inst._glowEarlyLandSfxDone) return
+  const vy = char.vel?.y ?? 0
+  if (vy < 52 || !hero.wasJumping || (hero.landFxCooldown ?? 0) > 0) return
+  const onBranch = isHeroOnStartBranch(inst, char)
+  const overWood = isOverGlowWoodSurface(inst, char.pos.x, footY)
+  if (onBranch && overWood) {
+    inst._glowEarlyLandSfxDone = true
+    hero.landFxCooldown = 0.2
+    inst.sound._glowSurface = 'wood'
+    Sound.playLandSound(inst.sound, 'lesson-glow.0')
+    inst.expectBranchWoodLandSound = false
+    return
+  }
+  const nearGround = footY >= FLOOR_Y - GLOW_EARLY_LAND_FOOT_ABOVE && footY <= FLOOR_Y + 8
+  if (!onBranch && nearGround && !isInWaterZone(inst, char.pos.x, footY)) {
+    inst._glowEarlyLandSfxDone = true
+    hero.landFxCooldown = 0.2
+    Sound.playStepSound(inst.sound, 'lesson-glow.0')
+  }
 }
 //
 // Mud zone's X bounds — pure function of TREE_X and fixed offsets, so it can
@@ -9767,6 +9944,10 @@ function endGlowWorldFreeze(inst) {
 function createGlowDialogAudioFadeState(inst) {
   return {
     birdsVol: Sound.getKaplaySoundVolume(inst.birdsMusic),
+    whisperVol: Math.max(
+      Sound.getKaplaySoundVolume(inst.earWhisperMusic),
+      Sound.getEarTreeWhisperVolume()
+    ),
     ambientVol: Sound.getAmbientVolume(inst.sound)
   }
 }
@@ -9777,7 +9958,11 @@ function updateGlowDialogAudioFadeOut(inst, state, elapsedSec) {
   const fade = GLOW_DIALOG_AUDIO_FADE_SEC
   const t = Math.min(1, elapsedSec / fade)
   const birds = state.birdsVol * (1 - t)
+  const whisper = state.whisperVol * (1 - t)
   inst.birdsMusic && (inst.birdsMusic.volume = birds)
+  inst.earWhisperMusic && (inst.earWhisperMusic.volume = whisper)
+  whisper <= 0.001 && inst.earWhisperMusic && (inst.earWhisperMusic.paused = true)
+  Sound.setEarTreeWhisperVolume(whisper)
   inst.sound && Sound.setAmbientVolume(inst.sound, state.ambientVol * (1 - t))
 }
 //
@@ -9792,6 +9977,12 @@ function restoreGlowDialogAudioFadeIn(inst, state) {
     if (inst.birdsMusic) {
       inst.birdsMusic.paused = false
       inst.birdsMusic.volume = state.birdsVol * t
+    }
+    if (state.whisperVol > 0) {
+      const wVol = state.whisperVol * t
+      inst.earWhisperMusic && (inst.earWhisperMusic.paused = false)
+      inst.earWhisperMusic && (inst.earWhisperMusic.volume = wVol)
+      Sound.setEarTreeWhisperVolume(wVol)
     }
     inst.sound && Sound.setAmbientVolume(inst.sound, state.ambientVol * t)
     if (t < 1) {
@@ -11860,13 +12051,15 @@ function onUpdate(inst) {
   // the takeoff arc from a mushroom bounce or a mud launch already in flight.
   //
   applyGlowHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded)
+  maybePlayGlowEarlyLandSfx(inst, char, hero, footY, grounded)
   //
   // Landing SFX backup (collide path can miss on wood flicker / air-lock).
   // The start branch has its own dedicated wood-land trigger below — this
   // backup must skip it, or the very first landing (and any later branch
   // landing) fires both, smearing a single thump into an audible double-hit.
   //
-  if (justLanded && (surface === 'wood' || surface === 'ground') && !inst.sound._glowSfxMuted &&
+  if (justLanded && !inst._glowEarlyLandSfxDone && (surface === 'wood' || surface === 'ground') &&
+    !inst.sound._glowSfxMuted &&
     !inst.expectBranchWoodLandSound && !isHeroOnStartBranch(inst, char)) {
     if ((hero.landFxCooldown || 0) <= 0) {
       hero.landFxCooldown = 0.2
@@ -11905,7 +12098,7 @@ function onUpdate(inst) {
   const groundedOnBranch = (char.isGrounded?.() ?? false) && isHeroOnStartBranch(inst, char)
   const wantBranchWoodLand = groundedOnBranch &&
     (!inst.wasGroundedOnBranch || inst.expectBranchWoodLandSound)
-  if (wantBranchWoodLand && !inst.sound._glowSfxMuted) {
+  if (wantBranchWoodLand && !inst.sound._glowSfxMuted && !inst._glowEarlyLandSfxDone) {
     const branchHero = inst.heroInst
     if (branchHero) {
       branchHero.landFxCooldown = 0.2

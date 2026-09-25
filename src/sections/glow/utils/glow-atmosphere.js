@@ -873,7 +873,7 @@ function drawGlowPitMouthVoidFill(k, pit) {
   }
   const pal = buildCavePalette(glowRgb('decorGray'))
   const edge = pit.wallProfile.interiorWallEdge
-  drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge, pit.zone)
+  drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge)
 }
 //
 // Private helpers
@@ -1063,7 +1063,7 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
   const layout = pit.wallProfile
   const mouth = layout.mouth
   const pal = buildCavePalette(glowRgb('decorGray'))
-  drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge, zone)
+  drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge)
   if (showRocks) {
     drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
     drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
@@ -1111,7 +1111,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
-  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge, zone), pal.void)
+  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge), pal.void)
   const groundY = layout.mouth.floorY
   //
   // Wall/contour rocks are drawn live on the foreground pass so bake void
@@ -1139,7 +1139,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   pit._caveBakeRocksKey = bakeKey
   pit._caveBakeLayoutVersion = CAVE_LAYOUT_VERSION
 }
-function caveMouthPts(mouth, interiorWallEdge = null, zone = null) {
+function caveMouthPts(mouth, interiorWallEdge = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return []
   const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   //
@@ -1153,7 +1153,7 @@ function caveMouthPts(mouth, interiorWallEdge = null, zone = null) {
   //
   const pts = []
   const seed = leftEdge[0].x * 0.037
-  const topEdge = caveMouthGroundTopEdge(zone, mouth, leftEdge)
+  const topEdge = caveMouthGroundTopEdge(mouth, leftEdge)
   buildJaggedHorizontalEdge(topEdge.x1, topEdge.x2, mouth.floorY, seed)
     .forEach(p => pts.push(p))
   for (let i = 1; i < mouth.right.length; i++) {
@@ -1261,7 +1261,7 @@ function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
 //
 // Solid dark void for the cave interior — single fill, no layered portals.
 //
-function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null, zone = null) {
+function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null) {
   if (!mouth?.left?.length || !mouth?.right?.length) return
   const leftEdge = interiorWallEdge?.length ? interiorWallEdge : mouth.left
   const pts = []
@@ -1272,7 +1272,7 @@ function drawCaveVoidFill(k, mouth, pal, interiorWallEdge = null, zone = null) {
   // equally chaotic and rocks placed near it visibly straddle the boundary.
   //
   const seed = leftEdge[0].x * 0.037
-  const topEdge = caveMouthGroundTopEdge(zone, mouth, leftEdge)
+  const topEdge = caveMouthGroundTopEdge(mouth, leftEdge)
   buildJaggedHorizontalEdge(topEdge.x1, topEdge.x2, mouth.floorY, seed)
     .forEach(p => pts.push(k.vec2(p.x, p.y)))
   for (let i = 1; i < mouth.right.length; i++) {
@@ -1348,6 +1348,13 @@ function buildCaveSceneLayout(zone, floorY) {
     cutLeft + 10
   )
   const interiorLeft = interiorWallX + 10
+  //
+  // Real X of the invisible left-wall collider (openPitPhysics) — the west
+  // wall rock decoration must sit flush with it, never past it into the
+  // decorative void floor that has no collider (reads as floating rocks).
+  //
+  const { innerX: floorColliderInnerX } = getGlowPitFloorCollider(zone)
+  const wallColliderLeftX = floorColliderInnerX - CAVE_LEFT_BLOCK_W * 0.35
   const floorTopRightX = zone.x2 - CAVE_MOUTH_INSET
   const floorTop = clampHorizProfile(
     buildJaggedFloorTop(interiorLeft, floorTopRightX, bottomY, seed),
@@ -1373,7 +1380,16 @@ function buildCaveSceneLayout(zone, floorY) {
   // the play space (sign +1 pushed the seam east and read as a bar in front
   // of the hero/skeleton).
   //
-  const interiorLeftEdge = buildCaveMouthEdge(interiorWallX, floorY, bottomY, seed + 550, -1)
+  //
+  // buildCaveMouthEdge's own wobble can locally push a point past
+  // wallColliderLeftX (west of the real collider) even though the profile's
+  // base X is clamped — clamp every point here so the void fill polygon
+  // (caveMouthPts / drawCaveVoidFill, both built straight from this edge)
+  // never bleeds dark past the collider into the uncollided gray ground,
+  // matching the same boundary appendCaveWallRocks's minX already respects.
+  //
+  const interiorLeftEdge = buildCaveMouthEdge(wallColliderLeftX, floorY, bottomY, seed + 550, -1)
+    .map(p => ({ x: Math.max(p.x, wallColliderLeftX), y: p.y }))
   appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
   //
   // Same treatment on the interior's own west wall (outwardSign -1, bulging
@@ -1382,15 +1398,23 @@ function buildCaveSceneLayout(zone, floorY) {
   // (distinct from the mouth/ground-line seam the Interior*Seam* rocks below
   // cover, which sits further east at cutLeft). Without this the west edge
   // was a bare jagged fill line with nothing hiding the black/gray join.
+  // Clamped to wallColliderLeftX so the column never bulges past the real
+  // collider into the decorative, uncollided void floor to its left.
   //
-  appendCaveWallRocks(wallRocks, interiorLeftEdge, -1, seed + 2400, floorY, bottomY)
+  appendCaveWallRocks(wallRocks, interiorLeftEdge, -1, seed + 2400, floorY, bottomY, floorY, wallColliderLeftX)
   const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
   const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
   appendCaveMouthCeilingLipRocks(contourRocks, zone, floorY, seed + 1520)
-  appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2105)
-  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, cutLeft, seed + 2188, zone)
-  appendCaveInteriorSeamScatterRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2244)
-  appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed + 2291, zone)
+  //
+  // Seam cover rocks share the same west-wall clamp so their cover column
+  // (which otherwise floors at cutLeft, further west than the collider)
+  // also stays flush with the platform's real left edge.
+  //
+  const seamCutLeft = Math.max(cutLeft, wallColliderLeftX)
+  appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2105)
+  appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, seamCutLeft, seed + 2188, zone)
+  appendCaveInteriorSeamScatterRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2244)
+  appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2291, zone)
   return {
     version: CAVE_LAYOUT_VERSION,
     pebbles,
@@ -1572,11 +1596,16 @@ function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bott
     verts: buildRockVertices(botExtraRadius)
   })
 }
-function caveMouthGroundTopEdge(zone, mouth, leftEdge) {
-  if (zone) {
-    const span = getGlowPitMouthGroundLineSpan(zone)
-    return { x1: span.leftX, x2: span.rightX }
-  }
+function caveMouthGroundTopEdge(mouth, leftEdge) {
+  //
+  // Always the full mouth width (west wall to east wall) — this feeds the
+  // void polygon's own top boundary (caveMouthPts / drawCaveVoidFill), which
+  // must jag across the whole opening. Narrowing it to the invisible walk
+  // shelf's span (getGlowPitMouthGroundLineSpan) left the polygon's top edge
+  // as one long near-flat line outside that narrow shelf range, sitting a
+  // few px below the real ground line and exposing the earth-band gap-fill
+  // rect behind it as a lighter-gray rectangular strip at the cave mouth.
+  //
   return { x1: leftEdge[0].x, x2: mouth.right[0].x }
 }
 function appendCaveMouthCeilingLipRocks(rocks, zone, floorY, seed) {
@@ -1638,7 +1667,7 @@ function buildCaveContourRocks(mouth, floorY, bottomY, seed, interiorWallX = nul
 //
 // Stacks ground-style rock silhouettes along a ragged cave wall edge.
 //
-function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY, minGroundY = floorY) {
+function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY, minGroundY = floorY, minX = null) {
   if (!edge?.length) return
   for (let layer = 0; layer < CAVE_WALL_ROCK_LAYERS; layer++) {
     const layerSeed = seed + layer * 137
@@ -1661,8 +1690,14 @@ function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY
       //
       const y = Math.max(minGroundY + radius, Math.min(bottomY - radius - 2, p.y + yJ))
       const straddleMouthGround = p.y < floorY + radius
+      //
+      // minX (west wall only): never let a rock drift past the real
+      // collider edge into the uncollided decorative void floor.
+      //
+      let x = p.x + outwardSign * depth
+      minX != null && (x = Math.max(x, minX))
       wallRocks.push({
-        x: p.x + outwardSign * depth,
+        x,
         y,
         radius,
         straddleMouthGround,
@@ -1952,7 +1987,15 @@ export function getGlowPitEarthBandMouthCutout(zone, tightMouth = false) {
   if (tightMouth) return getGlowPitMouthGroundLineSpan(zone)
   const lipLeft = getGlowCaveMouthFloorLeftX(zone)
   const { innerX } = getGlowPitFloorCollider(zone)
-  const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * 2)
+  //
+  // Matches wallColliderLeftX (buildCaveSceneLayout / pitLeftWall) exactly —
+  // this cutout used to reach CAVE_LEFT_BLOCK_W * 2 further west than the
+  // real wall collider, leaving a strip between the two boundaries that no
+  // rock or void fill is ever allowed to cover (both are clamped to the
+  // collider), so the flat earth-gap fill showed through there as a bare
+  // untextured sliver next to the cave's west wall.
+  //
+  const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * 0.35)
   const rightX = zone.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
   return { leftX, rightX }
 }

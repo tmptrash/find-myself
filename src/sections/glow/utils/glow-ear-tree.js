@@ -20,6 +20,7 @@ const EAR_TREE_TRUNK_TOP_RIM_W = 3
 const MOUTH_LEN = 30
 const MOUTH_HALF_H = 9
 const MOUTH_GAP = 3
+const MOUTH_OUTLINE_PAD = 1
 
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
@@ -265,10 +266,10 @@ function drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor) {
     k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.55 + 1, color: outlineColor })
     k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.5, color: barkColor })
     twig.hasMouth && drawMouthAtTip(k, twigTip.x, twigTip.y,
-      Math.atan2(twigTip.y - twigBase.y, twigTip.x - twigBase.x), lipColor)
+      Math.atan2(twigTip.y - twigBase.y, twigTip.x - twigBase.x), outlineColor, lipColor)
   })
   branch.hasMouth && drawMouthAtTip(k, tip.x, tip.y,
-    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), lipColor)
+    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), outlineColor, lipColor)
 }
 //
 // Upper and lower lip polygons in local mouth space (+x along the branch).
@@ -292,16 +293,25 @@ const MOUTH_LOWER_LIP = [
   [0.2, 0.06],
   [-0.25, 0.06]
 ]
-function drawMouthAtTip(k, tipX, tipY, angle, lipColor) {
+function drawMouthAtTip(k, tipX, tipY, angle, outlineColor, lipColor) {
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
-  const toWorld = (lx, ly) => {
-    const px = lx * MOUTH_LEN
-    const py = ly * MOUTH_HALF_H
+  const toWorld = (lx, ly, pad = 0) => {
+    const px = lx * (MOUTH_LEN + pad)
+    const py = ly * (MOUTH_HALF_H + pad)
     return k.vec2(tipX + px * cos - py * sin, tipY + px * sin + py * cos)
   }
   const upper = MOUTH_UPPER_LIP.map(([lx, ly]) => toWorld(lx, ly))
   const lower = MOUTH_LOWER_LIP.map(([lx, ly]) => toWorld(lx, ly))
+  //
+  // Outline drawn first as the same shape scaled slightly outward from the
+  // attach point (same cheap technique the old ear silhouette used) — a
+  // uniform one-pixel-ish rim around each lip, no separate stroke pass needed.
+  //
+  const upperOutline = MOUTH_UPPER_LIP.map(([lx, ly]) => toWorld(lx, ly, MOUTH_OUTLINE_PAD))
+  const lowerOutline = MOUTH_LOWER_LIP.map(([lx, ly]) => toWorld(lx, ly, MOUTH_OUTLINE_PAD))
+  k.drawPolygon({ pts: upperOutline, color: outlineColor, triangulate: true })
+  k.drawPolygon({ pts: lowerOutline, color: outlineColor, triangulate: true })
   k.drawPolygon({ pts: upper, color: lipColor, triangulate: true })
   k.drawPolygon({ pts: lower, color: lipColor, triangulate: true })
 }

@@ -5996,7 +5996,22 @@ const GLOW_CHAIN_BUOY_COUNT_MAX = 7
 const GLOW_CHAIN_BUOY_TREE_CLEAR_HALF = 260
 const GLOW_CHAIN_BUOY_MIN_GAP = 150
 const GLOW_CHAIN_BUOY_PLACE_ATTEMPTS = 80
-const GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF = 240
+//
+// The two right-side ear-trees can sit as close as ~350-460px apart — at the
+// old 240px-per-side clearance their exclusion zones combined ate almost the
+// whole (now much narrower, right-of-mud-only) placement span, leaving too
+// little room to ever reach the 5-7 buoy target. A thin chain doesn't need
+// nearly as much clearance from a tree as it did when buoys could spawn
+// anywhere in the world; the dedicated between-right-trees placement (see
+// addGlowChainBuoysBetweenRightTrees) already handles the gap between the
+// two trees specifically with its own tighter 40px margin.
+//
+const GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF = 110
+//
+// All buoys stay right of the mud zone (the lake sits to the mud's own
+// left) — same gap the ear-trees use right of the mud.
+//
+const GLOW_CHAIN_BUOY_MUD_RIGHT_GAP = 56
 //
 // A couple of buoys deliberately placed between the two right-side ear-trees
 // (see addGlowChainBuoysBetweenRightTrees) — the general clearance above
@@ -6067,6 +6082,14 @@ function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands,
   if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) return false
   if (glowChainBuoyXUnderWoodPlatform(x, woodBands)) return false
   if ((earTreeSpots ?? []).some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF)) return false
+  //
+  // Every buoy stays right of the mud (which itself sits right of the lake),
+  // never in or near the water — a hard rule now, not just one exclusion
+  // among several, since the old whole-world random search let a spot land
+  // inside the lake whenever the passed lakeX1/lakeX2 didn't quite track the
+  // water's actual current extent.
+  //
+  if (x < mud.x2 + GLOW_CHAIN_BUOY_MUD_RIGHT_GAP) return false
   if (x >= lakeX1 && x <= lakeX2) return false
   if (x >= mud.x1 - 24 && x <= mud.x2 + 24) return false
   if (x >= cave.x1 - GLOW_CAVE_DECOR_CLEAR && x <= cave.x2 + GLOW_CAVE_DECOR_CLEAR) return false
@@ -6096,11 +6119,18 @@ function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots) {
     if (spots.length >= target) break
     tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
   }
-  const span = WORLD_W - LEFT_MARGIN * 2
+  //
+  // Random fill now only searches right of the mud through to the cave —
+  // matches the "all buoys right of the mud" rule above and, being a much
+  // smaller span than the whole world, reliably hits the 5-7 target instead
+  // of frequently running out of attempts against every exclusion combined.
+  //
+  const fillX1 = mud.x2 + GLOW_CHAIN_BUOY_MUD_RIGHT_GAP
+  const fillX2 = cave.x1 - GLOW_CAVE_DECOR_CLEAR
   let attempts = 0
-  while (spots.length < target && attempts < GLOW_CHAIN_BUOY_PLACE_ATTEMPTS) {
+  while (spots.length < target && attempts < GLOW_CHAIN_BUOY_PLACE_ATTEMPTS && fillX2 > fillX1) {
     attempts += 1
-    const x = LEFT_MARGIN + 40 + Math.random() * (span - 80)
+    const x = fillX1 + Math.random() * (fillX2 - fillX1)
     tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
   }
   addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots)
@@ -6231,7 +6261,17 @@ function updateGlowEarTreeWhisperSound(inst, char) {
     fadeOut()
     return
   }
-  if (inst.dialogOpen || inst.drowning) {
+  //
+  // inst.dialogOpen is legacy from the old modal letter dialog and is never
+  // set true by the current caption system (openGlowLetterCaption only sets
+  // letterCaptionActive) — checking it alone let this proximity update keep
+  // fighting the caption's own audio fade tick (updateGlowDialogAudioFadeOut)
+  // for the whole caption duration, both writing Sound.setEarTreeWhisperVolume
+  // on the same <audio> element every frame from two independent loops. The
+  // resulting dozens-per-second pause()/play() thrash is what made whisper.mp3
+  // sound sped up until the caption's fade tick stopped fighting back.
+  //
+  if (inst.dialogOpen || inst.letterCaptionActive || inst.drowning) {
     fadeOut()
     return
   }
@@ -7606,11 +7646,17 @@ function drawGlowRightSpikes(k, zones, spikes) {
   for (let i = 0; i < RIGHT_SPIKE_COUNT; i++) {
     const baseX = spikes.x1 + step * (i + 0.5)
     const halfW = step * 0.42
+    //
+    // Base corners sit flush with spikes.y (matching the fill triangle's own
+    // base below) instead of pad px lower — that extra dip below the
+    // platform surface used to poke a thin gray line through the gaps
+    // between grass tufts along the whole spike zone width.
+    //
     k.drawPolygon({
       pts: [
-        k.vec2(baseX - halfW - pad, spikes.y + pad),
+        k.vec2(baseX - halfW - pad, spikes.y),
         k.vec2(baseX, spikes.y - RIGHT_SPIKE_H - pad),
-        k.vec2(baseX + halfW + pad, spikes.y + pad)
+        k.vec2(baseX + halfW + pad, spikes.y)
       ],
       color: outlineRgb
     })
@@ -11433,7 +11479,6 @@ function checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded) {
 function revealBranchTrampoline(inst) {
   if (inst.zones.branchTrampRevealed) return
   inst.zones.branchTrampRevealed = true
-  inst.zones._branchTrampRevealSkipBounceArm = true
   set(KEY_BRANCH_TRAMP_REVEALED, true)
   clearTrampMissingHint(inst, 'branch')
   Sound.stopAmbient(inst.sound)
@@ -13362,11 +13407,15 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
     revealRightTrampoline(inst)
     return
   }
+  //
+  // The reveal branch above always returns before reaching here on the
+  // reveal frame itself (rightTrampRevealed only just became true), so this
+  // only ever runs on a later, genuinely separate justLanded event — the
+  // first real landing after the reveal. Arming bounceLive right here, still
+  // inside this frame's main onUpdate and before the late bounce pass runs,
+  // is what lets that same landing actually bounce.
+  //
   if (z.rightTrampRevealed && !z.rightTrampBounceLive && nearRight) {
-    if (z._rightTrampRevealSkipBounceArm) {
-      z._rightTrampRevealSkipBounceArm = false
-      return
-    }
     z.rightTrampBounceLive = true
     set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
   }
@@ -13375,10 +13424,6 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
     return
   }
   if (z.branchTrampRevealed && !z.branchTrampBounceLive && nearBranch) {
-    if (z._branchTrampRevealSkipBounceArm) {
-      z._branchTrampRevealSkipBounceArm = false
-      return
-    }
     z.branchTrampBounceLive = true
     set(KEY_BRANCH_TRAMP_BOUNCE_LIVE, true)
   }
@@ -13420,7 +13465,6 @@ function revealRightTrampoline(inst) {
   if (inst.zones.rightTrampRevealed) return
   if (!inst.zones.gCollected && !inst.zones.colorWorld) return
   inst.zones.rightTrampRevealed = true
-  inst.zones._rightTrampRevealSkipBounceArm = true
   set(KEY_RIGHT_TRAMP_REVEALED, true)
   clearTrampMissingHint(inst, 'right')
   Sound.stopAmbient(inst.sound)

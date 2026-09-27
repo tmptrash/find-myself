@@ -6,7 +6,7 @@ import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
-import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN } from '../components/hero.js'
+import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN, buildHeroSpritePrefix } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
@@ -55,7 +55,44 @@ let HINT_Y = CFG.visual.screen.height - HINT_BOTTOM_MARGIN
 //
 const INSTRUCTIONS_TITLE = 'find yourself'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
-const TITLE_FONT_SIZE = 76
+//
+// Scaled up from the original 76px so the hero-size:font-size ratio stays
+// exactly what it was before the title heroes moved to their native 96px
+// bake resolution (was 80px): 76 * (96 / 80) = 91.2.
+//
+const TITLE_FONT_SIZE = 91.2
+//
+// The title is a genuinely hollow white rim — transparent inside the
+// glyphs, like the hero's outline-only look — with a single 1px offset
+// copy as the drop shadow. Baked to a canvas (bakeReadyTitleSprite) instead
+// of live k.text() draws: the rim is built by stamping 8 one-pixel-offset
+// dilated copies then punching the original glyph shape back out with
+// `destination-out`, which is the only way to get a REAL transparent
+// interior (a live k.text() dilate-without-punch reads as bold/thick, and
+// there is no erase-style blend mode for live draw calls in Kaplay).
+//
+const TITLE_SHADOW_OFFSET = 1
+const TITLE_OUTLINE_COLOR = CFG.visual.colors.hero.eyeWhite
+const TITLE_OUTLINE_RIM_PX = 2
+const TITLE_OUTLINE_OFFSETS = [
+  [-TITLE_OUTLINE_RIM_PX, -TITLE_OUTLINE_RIM_PX], [0, -TITLE_OUTLINE_RIM_PX], [TITLE_OUTLINE_RIM_PX, -TITLE_OUTLINE_RIM_PX],
+  [-TITLE_OUTLINE_RIM_PX, 0], [TITLE_OUTLINE_RIM_PX, 0],
+  [-TITLE_OUTLINE_RIM_PX, TITLE_OUTLINE_RIM_PX], [0, TITLE_OUTLINE_RIM_PX], [TITLE_OUTLINE_RIM_PX, TITLE_OUTLINE_RIM_PX]
+]
+//
+// Sprite name for the baked title rim (rebaked whenever a letter blanks
+// out into a space as it detaches into a spider — see bakeReadyTitleSprite).
+//
+const READY_TITLE_SPRITE = 'ready-title'
+//
+// Once a letter detaches into a crawling spider it keeps the same 2px
+// hollow white contour as the title, baked once per unique glyph (shared
+// across repeats, e.g. the two 'f's) since none of them ever changes size
+// or colour — only position and rotation, handled via the transform stack
+// at draw time, same as the title text used to be.
+//
+const READY_LETTER_CANVAS_SIZE = Math.ceil(TITLE_FONT_SIZE * 1.5)
+const READY_LETTER_CANVAS_CENTER = READY_LETTER_CANVAS_SIZE / 2
 //
 // Spider configuration
 //
@@ -302,12 +339,6 @@ const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 //
 const ANTIHERO_READY_BODY_COLOR = '#E07020'
 //
-// Illustration hero eye wander (mirrors idle animation constants from hero.js)
-//
-const HERO_EYE_MIN_DELAY = 1.5
-const HERO_EYE_MAX_DELAY = 3.5
-const HERO_EYE_LERP_SPEED = 0.1
-//
 // Index of 'n' in "find yourself" — replaced by the hero sprite.
 //
 const HERO_N_CHAR_INDEX = 2
@@ -316,9 +347,11 @@ const HERO_N_CHAR_INDEX = 2
 //
 const HERO_U_CHAR_INDEX = 7
 //
-// Rendered size of the hero sprite standing in place of 'n'
+// Rendered size of the title heroes ('n' and 'u') — matches the hero's
+// native 96px bake resolution (HERO_SPRITE_CANVAS_SIZE further down) for a
+// true 1:1 pixel scale, no up/downscaling blur.
 //
-const HERO_N_SPRITE_SIZE = 80
+const HERO_N_SPRITE_SIZE = 96
 //
 // Offset applied to hero-n position so it sits visually inside the title word
 //
@@ -336,18 +369,65 @@ const HERO_U_OFFSET_Y = 6
 //
 const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
 //
-// Sprite prefix for the title hero variant (body colour = title colour)
+// Outline-only bake — hollow white rim, no body fill, no eyes, matching the
+// hero's outline-only look at the start of the glow level. Both title
+// heroes use this in the title cell; the stayer ('n') keeps it forever,
+// the runner ('u') keeps it for its first few steps after falling.
 //
-const HERO_N_TITLE_BODY_NO_HASH = HERO_TITLE_BODY_COLOR.replace('#', '')
-const HERO_N_SPRITE_PREFIX = `hero_${HERO_N_TITLE_BODY_NO_HASH}_000000`
-const HERO_N_SPRITE_PREFIX_NO_EYES = `${HERO_N_SPRITE_PREFIX}_noeyes`
+const HERO_TITLE_OUTLINE_COLOR = CFG.visual.colors.hero.eyeWhite
+const HERO_TITLE_OUTLINE_BAKE_OPTS = {
+  type: HEROES.HERO,
+  bodyColor: HERO_TITLE_BODY_COLOR,
+  outlineColor: HERO_TITLE_OUTLINE_COLOR,
+  outlineOnly: true,
+  transparentEyeInterior: true,
+  noEyes: true
+}
+const HERO_N_SPRITE_PREFIX_OUTLINE = buildHeroSpritePrefix(HERO_TITLE_OUTLINE_BAKE_OPTS)
 //
-// Hero-n departure sequence. Once the letters start growing legs AND the
-// mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, the title hero
-// falls to the black ground line, stands up and runs off-screen right in
-// short bursts (a RANDOM 4–8 steps each, then a stop). Any mouse movement
-// while he is on the ground freezes him in a closed-eyes idle until the
-// mouse rests again.
+// Tintable filled bake — plain white body fill + black outline + normal
+// (white/black) eyes. Drawn with a `color` tint (multiplies the sprite's
+// texture colour, so the white fill becomes the tint while the black
+// outline and pupils stay black) to smoothly recolour the runner's body
+// through the menu's section colours once it is revealed.
+//
+const HERO_TITLE_TINTABLE_BAKE_OPTS = {
+  type: HEROES.HERO,
+  bodyColor: HERO_TITLE_OUTLINE_COLOR
+}
+const HERO_N_SPRITE_PREFIX_TINTABLE = buildHeroSpritePrefix(HERO_TITLE_TINTABLE_BAKE_OPTS)
+//
+// Section colours the runner's body tints through once revealed, in the
+// same clockwise order the menu orbits them (see SECTION_COLORS / sectionOrder
+// in menu.js) — advances one step per running burst, holding at the last one.
+//
+const HERO_N_SECTION_COLOR_SEQUENCE = [
+  CFG.visual.colors.sections.glow.body,
+  CFG.visual.colors.sections.touch.body,
+  CFG.visual.colors.sections.word.body,
+  CFG.visual.colors.sections.time.body,
+  CFG.visual.colors.sections.feel.body,
+  CFG.visual.colors.sections.mind.body
+]
+const HERO_N_SECTION_COLOR_FADE_DURATION = 1.4
+//
+// Footsteps the runner takes, still hollow and eyeless, before its eyes and
+// first section colour start fading in.
+//
+const HERO_N_COLOR_REVEAL_STEP_COUNT = 2
+const HERO_N_BODY_REVEAL_DURATION = 1.2
+//
+// Title hero departure sequence. Once the letters start growing legs AND the
+// mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, BOTH title heroes
+// fall to the black ground line. The right-hand hero ('u') then stands up
+// and runs off-screen right in short bursts (a RANDOM 4–8 steps each, then a
+// stop) — any mouse movement while it is on the ground freezes it in a
+// closed-eyes idle until the mouse rests again. The left-hand hero ('n')
+// simply stays put and fades out in step with the runner's progress toward
+// the right edge (see computeDepartureFade). These constants keep the
+// historic "N" naming from when the left hero used to be the one that ran
+// away; updateTitleHeroes now routes them to whichever spider is flagged
+// isHeroU.
 //
 const HERO_N_MOUSE_STILL_DELAY = 10
 const HERO_N_FALL_GRAVITY = 1500
@@ -356,6 +436,12 @@ const HERO_N_RUN_FRAME_TIME = 0.09
 const HERO_N_RUN_FRAME_COUNT = 8
 const HERO_N_RUN_STEPS_MIN = 4
 const HERO_N_RUN_STEPS_RANGE = 5
+//
+// Passed as the "current level" to Sound.playStepSound so it takes the same
+// branch as an actual ground step in the glow level — no real scene change,
+// just routing into the same procedural ground-footstep sound.
+//
+const HERO_N_STEP_SOUND_LEVEL = 'lesson-glow.0'
 //
 // The 8-frame run cycle contains TWO foot contacts, so one visible step
 // lasts half a full sprite cycle.
@@ -376,6 +462,13 @@ const HERO_N_WAKE_BOTH_EYES_DURATION = 1
 const HERO_N_GONE_MENU_DELAY = 2
 const HERO_N_WAKE_PUPIL_FREQ = 0.7
 //
+// Final beat before the runner leaves for good: once it gets within this
+// margin of the right edge it stops, turns to face left, holds a hard-left
+// look for HERO_N_LOOK_LEFT_DURATION, then turns back and runs off-screen.
+//
+const HERO_N_LOOK_LEFT_TRIGGER_MARGIN = 220
+const HERO_N_LOOK_LEFT_DURATION = 4
+//
 // Geometry of the hero's eyes inside the 96 px sprite canvas (mirrors the
 // head/eye constants in components/hero.js), scaled to the 80 px title-hero
 // display size. Used to overlay a single open eye on the closed-eyes sprite
@@ -390,16 +483,14 @@ const HERO_EYE_WHITE_RADIUS = 4
 const HERO_EYE_PUPIL_RADIUS = 2
 const HERO_EYE_PUPIL_SHIFT = 2
 //
-// The 80 px hero frame keeps ~14 px of transparent padding below the feet
-// (the 96 px canvas padding scaled to the 80 px display size), so the sprite
-// centre must sink below the ground line for the feet to rest ON the strip.
+// Now drawn at the native 96px bake resolution (see HERO_N_SPRITE_SIZE),
+// the same scale as the central illustration hero, so the title heroes
+// reuse its HERO_FEET_PADDING for the same feet-on-the-ground-line fix.
+// Lifted an extra few pixels above that so both heroes stand a bit clear
+// of the ground line while walking/standing on it.
 //
-const HERO_N_FEET_PADDING = 14
-let HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
-//
-// Fade-out duration for the upside-down hero-u once the letters grow legs.
-//
-const HERO_U_FADE_DURATION = 1.0
+const HERO_N_GROUND_LIFT_PX = 3
+let HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING - HERO_N_SPRITE_SIZE / 2 - HERO_N_GROUND_LIFT_PX
 //
 // Idle notes for hero-n while he waits with closed eyes — the same melody
 // the in-game hero hums, with rising note glyphs above his head. Values
@@ -441,11 +532,9 @@ const TITLE_TEXT_Y = 130
 // New description: 5 lines of narrative text, no icons
 //
 const READY_DESC_LINES = [
-  'A psychological platformer where gameplay',
-  'is the lesson. Every obstacle teaches a',
-  'new way to interact with the world —',
-  'and every discovery brings you one step',
-  'closer to understanding yourself.'
+  'At the beginning, I move without',
+  'seeing. The journey begins when',
+  'I learn to look...'
 ]
 const BLOCK_LINE_COUNT = 5
 const TEXT_FONT_SIZE = 36
@@ -482,7 +571,7 @@ function recomputeReadyLayout(k) {
   GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
   LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
   LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK - READY_EYE_RAISE_PX
-  HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
+  HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING - HERO_N_SPRITE_SIZE / 2 - HERO_N_GROUND_LIFT_PX
   CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
   TITLE_TEXT_X = CENTER_X
   AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
@@ -515,20 +604,17 @@ export function sceneReady(k) {
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
     //
-    // Title hero variant — same body colour as the title letters, used by
-    // the hero-n and the upside-down hero-u inside "find yourself".
+    // Outline-only title hero bake — hollow, no eyes. Covers the stayer
+    // ('n') throughout, both heroes in the title cell, and the runner ('u')
+    // for its first few steps after falling, before it reveals its eyes and
+    // body colour (see HERO_N_SPRITE_PREFIX_TINTABLE below).
     //
-    loadHeroSprites(k, HEROES.HERO, HERO_TITLE_BODY_COLOR, null, false, false, false)
+    loadHeroSprites({ k, ...HERO_TITLE_OUTLINE_BAKE_OPTS })
     //
-    // Eyeless title variant — heroes in the word stay faceless until hero-n
-    // lands on the ground and the departure sequence begins.
+    // Tintable filled bake — plain white body, recoloured at draw time to
+    // the runner's current section colour once revealed.
     //
-    loadHeroSprites({
-      k,
-      type: HEROES.HERO,
-      bodyColor: HERO_TITLE_BODY_COLOR,
-      noEyes: true
-    })
+    loadHeroSprites({ k, ...HERO_TITLE_TINTABLE_BAKE_OPTS })
     //
     // Richer hero variant for the CENTRAL illustration — adds mouth,
     // both arms and a wrist watch on top of the plain body. Loaded
@@ -614,27 +700,17 @@ export function sceneReady(k) {
     const readyEyeState = { blink: readyEyeBlink, spiders: null }
     k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, readyEyeState) } }])
     //
-    // Title text (crawling letters detach from this). The title carries a
-    // drop shadow (single black copy offset right+down) like the glow level.
+    // Title text (crawling letters detach from this) — invisible source of
+    // truth for the live `.text` string (letters get blanked here as spiders
+    // detach) and for measuring letter positions. The actual pixels are a
+    // separate baked-canvas sprite (see bakeReadyTitleSprite), drawn below
+    // at Z_TITLE and rebaked every time this text changes.
     //
-    const outlineOffsets = [[2, 2]]
-    const titleOutlines = []
-    outlineOffsets.forEach(([dx, dy]) => {
-      titleOutlines.push(k.add([
-        k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
-        k.pos(TITLE_TEXT_X + dx, TITLE_TEXT_Y + dy),
-        k.anchor('center'),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(Z_TITLE)
-      ]))
-    })
     const titleText = k.add([
       k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
       k.pos(TITLE_TEXT_X, TITLE_TEXT_Y),
       k.anchor('center'),
-      getColor(k, CFG.visual.colors.ready.title),
-      k.opacity(1),
+      k.opacity(0),
       k.z(Z_TITLE)
     ])
     //
@@ -658,7 +734,7 @@ export function sceneReady(k) {
     //
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     const spiders = []
-    const spiderState = { timer: 0, titleFlicker: 1 }
+    const spiderState = { timer: 0, titleFlicker: 1, departureFade: 1 }
     //
     // "find yourself" has 13 non-space letters.
     // Five waves spread them so they appear far apart.
@@ -675,7 +751,6 @@ export function sceneReady(k) {
         }
       spider.legAppearDelay = SPIDER_LEGS_BASE_DELAY + waveIndex * WAVE_INTERVAL + Math.random() * 0.3
       spider.letterInfo = letterInfo
-      spider.titleOutlines = titleOutlines
       //
       // Hero letters are pre-activated: immediately hide the underlying
       // character in the title text so the hero sprites are visible from
@@ -686,14 +761,16 @@ export function sceneReady(k) {
         const chars = textObj.text.split('')
         chars[charIndex] = ' '
         textObj.text = chars.join('')
-        titleOutlines.forEach(outline => { outline.text = textObj.text })
         spider.charHidden = true
         spider.isActivated = true
         //
-        // Departure state machine fields (hero-n runs away, hero-u fades out)
+        // Departure state machine fields — both title heroes fall to the
+        // ground together; whichever spider is flagged isHeroU then runs
+        // off to the right (updateHeroN), while isHeroN stays put with
+        // wandering eyes and fades out as the runner nears the right edge
+        // (updateHeroStayer / computeDepartureFade).
         //
         spider.heroPhase = 'title'
-        spider.heroOpacity = 1
         spider.heroX = 0
         spider.heroY = 0
         spider.heroRunFrame = 0
@@ -704,8 +781,22 @@ export function sceneReady(k) {
         spider.heroWakeTimer = 0
         spider.heroFallVel = 0
         spider.heroGone = false
+        spider.heroDepartStartX = null
+        spider.heroLookLeftDone = false
+        spider.heroLookLeftTimer = 0
         //
-        // Idle singing state (notes + melody while eyes are closed)
+        // Runner appearance state — steps taken, hollow→filled reveal
+        // progress, and which section colour it currently tints toward
+        // (see updateHeroNAppearance / resolveHeroSectionTint). Unused by
+        // the stayer, which never leaves the outline-only look.
+        //
+        spider.heroStepCount = 0
+        spider.heroBodyRevealT = 0
+        spider.heroSectionIndex = 0
+        spider.heroSectionColorT = 0
+        //
+        // Idle singing state (notes + melody while eyes are closed) — only
+        // advanced for the runner (isHeroU) via updateHeroNNotes.
         //
         spider.heroNotes = []
         spider.heroNoteTimer = 0
@@ -715,6 +806,13 @@ export function sceneReady(k) {
       spiders.push(spider)
     })
     readyEyeState.spiders = spiders
+    //
+    // Initial bake (both title heroes are already blanked to spaces above)
+    // and the draw layer that shows it — opacity follows the same flicker
+    // spiderState.titleFlicker drives for the spider letters.
+    //
+    bakeReadyTitleSprite(k, titleText.text)
+    k.add([k.pos(0, 0), k.z(Z_TITLE), { draw() { onDrawTitle(k, spiderState) } }])
     //
     // Shared input-stillness tracker driving the title-hero departure logic.
     // Both mouse motion and key presses count as player activity.
@@ -748,8 +846,6 @@ export function sceneReady(k) {
       //
       titleFlickerPhase += dt * TITLE_FLICKER_SPEED
       const titleFlicker = TITLE_FLICKER_MIN + (TITLE_FLICKER_MAX - TITLE_FLICKER_MIN) * (0.5 + 0.5 * Math.sin(titleFlickerPhase))
-      titleText.opacity = titleFlicker
-      titleOutlines.forEach(o => o.opacity = titleFlicker)
       spiderState.titleFlicker = titleFlicker
     })
     //
@@ -814,7 +910,7 @@ function buildReadyStaticSprite(k) {
   ctx.font = `${TEXT_FONT_SIZE}px 'JetBrains Mono Thin', 'JetBrains Mono', monospace`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  let cursorY = DESCRIPTION_START_Y
+  let cursorY = DESCRIPTION_START_Y + 40
   for (const line of READY_DESC_LINES) {
     ctx.fillStyle = '#000000'
     ctx.fillText(line, CENTER_X + READY_TEXT_SHADOW_OFFSET, cursorY + READY_TEXT_SHADOW_OFFSET)
@@ -839,6 +935,77 @@ function buildReadyMoonSprite(k) {
   k.loadSprite(READY_MOON_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
+}
+//
+// Bakes the title as a hollow white rim over a hollow black drop shadow,
+// from the live text string (spaces where letters have detached into
+// spiders). Reloading the same sprite name updates the texture Kaplay
+// already drew with, so this can be called again every time a letter
+// blanks out.
+//
+// Both the rim and the shadow are built the same way, on their own canvas:
+// 8 one-pixel-offset dilated copies of the glyphs, then the original
+// (unshifted) glyph shape is punched back out with `destination-out`,
+// leaving only a thin ~1px ring with a genuinely transparent interior — the
+// shadow must be hollow too, or its solid interior would show through the
+// rim's punched-out hole as a solid black fill instead of true transparency.
+//
+function bakeReadyTitleHollowRing(w, h, text, x, y, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = color
+  TITLE_OUTLINE_OFFSETS.forEach(([dx, dy]) => ctx.fillText(text, x + dx, y + dy))
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.fillStyle = '#000000'
+  ctx.fillText(text, x, y)
+  return canvas
+}
+function bakeReadyTitleSprite(k, text) {
+  const w = MENU_BG_CANVAS_W
+  const h = MENU_BG_CANVAS_H
+  const shadowRing = bakeReadyTitleHollowRing(
+    w, h, text, TITLE_TEXT_X + TITLE_SHADOW_OFFSET, TITLE_TEXT_Y + TITLE_SHADOW_OFFSET, '#000000'
+  )
+  const outlineRing = bakeReadyTitleHollowRing(w, h, text, TITLE_TEXT_X, TITLE_TEXT_Y, TITLE_OUTLINE_COLOR)
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(shadowRing, 0, 0)
+  ctx.drawImage(outlineRing, 0, 0)
+  k.loadSprite(READY_TITLE_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  shadowRing.width = 0
+  shadowRing.height = 0
+  outlineRing.width = 0
+  outlineRing.height = 0
+}
+//
+// Sprite name for a crawling letter's baked hollow-contour glyph.
+//
+function readyLetterSpriteName(char) {
+  return `ready-letter-${char.charCodeAt(0)}`
+}
+//
+// Bakes a single glyph's 2px hollow white contour, centred in a small
+// square canvas — no shadow, since a detached letter is "only a contour"
+// from then on. Reloading the same sprite name is harmless when a repeated
+// glyph (e.g. the two 'f's) bakes it twice.
+//
+function bakeReadyLetterSprite(k, char) {
+  const ring = bakeReadyTitleHollowRing(
+    READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE, char,
+    READY_LETTER_CANVAS_CENTER, READY_LETTER_CANVAS_CENTER, TITLE_OUTLINE_COLOR
+  )
+  k.loadSprite(readyLetterSpriteName(char), ring)
+  ring.width = 0
+  ring.height = 0
 }
 //
 // Pre-computes the star field once per scene enter so the per-frame
@@ -962,6 +1129,21 @@ function onDrawMoon(k) {
 // no extra runtime glow pass is needed.
 //
 //
+// Draws the baked title rim, opacity following the same flicker the
+// crawling spider letters use.
+//
+function onDrawTitle(k, spiderState) {
+  const over = READY_BG_EDGE_OVERSCAN
+  k.drawSprite({
+    sprite: READY_TITLE_SPRITE,
+    pos: k.vec2(-over, -over),
+    width: MENU_BG_CANVAS_W + over * 2,
+    height: MENU_BG_CANVAS_H + over * 2,
+    opacity: spiderState.titleFlicker ?? 1
+  })
+}
+//
+//
 // Draws the center illustration: eye_big.png centred on the horizon.
 //
 function onDrawIllustration(k, readyEyeState) {
@@ -981,29 +1163,20 @@ function onDrawIllustration(k, readyEyeState) {
   })
 }
 //
-// Orange title hero (grounded hero-n or fading hero-u) — pupil tracks them.
+// The central eye tracks the runaway title hero (isHeroU) throughout its
+// departure. During the final "look left" beat it stops tracking and falls
+// back to null instead, which onDrawIllustration resolves to the eye's own
+// centre — i.e. looking straight at the player.
 //
 function resolveReadyEyeLookTarget(spiders) {
   if (!spiders?.length) return null
-  //
-  // Always track hero-n (left title hero) first — even during the title phase
-  // before it falls, so the eye does not stare at hero-u on the right.
-  //
   for (const spider of spiders) {
-    if (spider.isHeroN && !spider.heroGone) {
-      const inTitle = spider.heroPhase === 'title'
-      return inTitle
-        ? { x: spider.x + HERO_N_OFFSET_X, y: spider.y + HERO_N_OFFSET_Y }
-        : { x: spider.heroX, y: spider.heroY }
-    }
-  }
-  for (const spider of spiders) {
-    if (spider.isHeroU && !spider.heroGone && spider.heroOpacity > 0.02) {
-      return {
-        x: spider.x + HERO_U_OFFSET_X,
-        y: spider.y + HERO_U_OFFSET_Y
-      }
-    }
+    if (!spider.isHeroU || spider.heroGone) continue
+    if (spider.heroPhase === 'lookLeft') return null
+    const inTitle = spider.heroPhase === 'title'
+    return inTitle
+      ? { x: spider.x + HERO_U_OFFSET_X, y: spider.y + HERO_U_OFFSET_Y }
+      : { x: spider.heroX, y: spider.heroY }
   }
   return null
 }
@@ -1015,12 +1188,17 @@ function resolveReadyEyeLookTarget(spiders) {
  * Creates a spider from a specific letter in a text object
  * @param {Object} k - Kaplay instance
  * @param {number} index - Spider index
- * @param {Object} sourceInfo - Info about source letter {char, x, y, color, fontSize, fontFamily}
+ * @param {Object} sourceInfo - Info about source letter {char, x, y}
  * @returns {Object} Spider instance
  */
 function createSpider(k, index, sourceInfo) {
-  const { char, x, y, fontSize, fontFamily } = sourceInfo
-  const [letterColorR, letterColorG, letterColorB] = parseHex(CFG.visual.colors.ready.title)
+  const { char, x, y } = sourceInfo
+  //
+  // Crawling letters keep the same 2px hollow white contour as the title,
+  // all the way to full disappearance — no shadow, no fill, no reverting
+  // to the old title yellow/orange.
+  //
+  bakeReadyLetterSprite(k, char)
   const angle = Math.random() * Math.PI * 2
   const speed = SPIDER_SPEED * (0.5 + Math.random() * 0.5)
   const baseAngleOffset = Math.random() * Math.PI * 2
@@ -1059,21 +1237,17 @@ function createSpider(k, index, sourceInfo) {
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
     distanceTraveled: 0,
-    letterColorR,
-    letterColorG,
-    letterColorB,
     appearDelay: index * 0.15,
     legAppearDelay: 0,
     legAppearTimer: 0,
     letter: char,
-    letterSize: fontSize,
-    letterFont: fontFamily,
+    letterSpriteName: readyLetterSpriteName(char),
+    letterSpriteSize: READY_LETTER_CANVAS_SIZE,
     isActivated: false,
     legExtendT: 0,
     displayAngle: 0,
     charHidden: false,
     letterInfo: null,
-    titleOutlines: null,
     targetReturnX: undefined,
     targetReturnY: undefined,
     startReturnX: undefined,
@@ -1116,8 +1290,6 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
       x: centers[charIndex].x,
       y: centers[charIndex].y,
       color: titleColor,
-      fontSize,
-      fontFamily,
       isHeroN: charIndex === HERO_N_CHAR_INDEX,
       isHeroU: charIndex === HERO_U_CHAR_INDEX
     })
@@ -1172,9 +1344,7 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
     const chars = textObj.text.split('')
     chars[charIndex] = ' '
     textObj.text = chars.join('')
-    spider.titleOutlines && spider.titleOutlines.forEach(outline => {
-      outline.text = textObj.text
-    })
+    bakeReadyTitleSprite(k, textObj.text)
     spider.titleCharRemoved = true
     spider.charHidden = true
   }
@@ -1286,13 +1456,14 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
  */
 function onDrawSpidersLayer(k, spiders, spiderState) {
   const { timer } = spiderState
+  const departureFade = spiderState.departureFade ?? 1
   spiders.forEach(spider => {
     let spiderOpacity = 0
     const timeToAppear = SPIDER_APPEAR_DELAY + spider.appearDelay
     if (timer > timeToAppear) {
       spiderOpacity = Math.min(1, (timer - timeToAppear) / SPIDER_FADE_DURATION) * SPIDER_MAX_OPACITY
     }
-    drawSpider(k, spider, spiderOpacity, spiderState.titleFlicker ?? 1)
+    drawSpider(k, spider, spiderOpacity, spiderState.titleFlicker ?? 1, departureFade)
   })
 }
 /**
@@ -1300,24 +1471,27 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
  * @param {number} textOpacity - Opacity for the spider
+ * @param {number} titleFlicker - Shared title flicker multiplier
+ * @param {number} departureFade - Fades every crawling letter out as the
+ *   runaway title hero nears the right edge (see computeDepartureFade)
  */
-function drawSpider(k, spider, textOpacity, titleFlicker = 1) {
+function drawSpider(k, spider, textOpacity, titleFlicker = 1, departureFade = 1) {
   //
   // Hero letters: always draw as hero sprites regardless of activation state.
   // The underlying characters were already hidden in the title text at spider
-  // creation. Hero-u is flipped vertically (upside down).
+  // creation. Whichever hero is the runner (isHeroU) drives its own opacity.
   //
   if (spider.isHeroN || spider.isHeroU) {
-    drawTitleHero(k, spider)
+    drawTitleHero(k, spider, departureFade)
     return
   }
   const letterBodyActive = spider.letter && (spider.titleCharRemoved || spider.isActivated)
-  const letterBodyOpacity = letterBodyActive ? titleFlicker : 0
+  const letterBodyOpacity = letterBodyActive ? titleFlicker * departureFade : 0
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = k.rgb(12, 10, 14)
-    const legOpacity = letterBodyActive && spider.titleCharRemoved
+    const legOpacity = (letterBodyActive && spider.titleCharRemoved
       ? titleFlicker
-      : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
+      : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)) * departureFade
     if (legOpacity > 0) {
     spider.legs.forEach(leg => {
         const effFootX = spider.x + (leg.footX - spider.x) * spider.legExtendT
@@ -1335,44 +1509,32 @@ function drawSpider(k, spider, textOpacity, titleFlicker = 1) {
   if (letterBodyActive && letterBodyOpacity > 0) {
     const angleDeg = spider.displayAngle
     spider.currentRotation = angleDeg
-    const fillColor = k.rgb(spider.letterColorR, spider.letterColorG, spider.letterColorB)
     k.pushTransform()
     k.pushTranslate(k.vec2(spider.x, spider.y))
     k.pushRotate(angleDeg)
     //
-    // Drop shadow (single black copy offset right+down), glow-level style.
+    // Only the 2px hollow white contour from here on — no shadow, no fill.
     //
-    k.drawText({
-      text: spider.letter,
-      size: spider.letterSize,
-      pos: k.vec2(2, 2),
+    k.drawSprite({
+      sprite: spider.letterSpriteName,
       anchor: 'center',
-      color: k.rgb(0, 0, 0),
-      opacity: letterBodyOpacity,
-      font: spider.letterFont,
-      fixed: true
-    })
-    k.drawText({
-      text: spider.letter,
-      size: spider.letterSize,
       pos: k.vec2(0, 0),
-      anchor: 'center',
-      color: fillColor,
+      width: spider.letterSpriteSize,
+      height: spider.letterSpriteSize,
       opacity: letterBodyOpacity,
-      font: spider.letterFont,
       fixed: true
     })
-    drawSpiderEyes(k, spider, angleDeg)
+    drawSpiderEyes(k, spider, angleDeg, departureFade)
     k.popTransform()
   }
 }
 //
 // Draws two small eyes on the letter body, pupils tracking movement direction.
 //
-function drawSpiderEyes(k, spider, angleDeg) {
+function drawSpiderEyes(k, spider, angleDeg, departureFade = 1) {
   if (spider.settled) return
   if (spider.legExtendT < 0.3) return
-  const eyeOpacity = Math.min(1, (spider.legExtendT - 0.3) / 0.4)
+  const eyeOpacity = Math.min(1, (spider.legExtendT - 0.3) / 0.4) * departureFade
   const scleraColor = k.rgb(220, 220, 210)
   const pupilColor = k.rgb(15, 8, 8)
   const lx = -SPIDER_EYE_SPACING / 2
@@ -1537,9 +1699,10 @@ function onUpdateAmbientSounds(k, ambient) {
 }
 //
 // Tracks input stillness (mouse motion + key presses) and advances both
-// title heroes: hero-u fades out once the letters start growing legs;
-// hero-n leaves the title after the input has rested (see the HERO_N_*
-// constants for the full sequence).
+// title heroes: both fall to the ground together once the letters have
+// grown legs and the input has rested (see the HERO_N_* constants for the
+// full sequence); the runner ('u') then departs while the stayer ('n')
+// just stands there and fades out with it.
 //
 function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
   const mp = k.mousePos()
@@ -1555,14 +1718,16 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     state.mouseStillTime += dt
   }
   const legsStarted = spiderState.timer > SPIDER_LEGS_BASE_DELAY
+  let runner = null
   spiders.forEach(spider => {
-    spider.isHeroU && updateHeroU(spider, legsStarted, dt)
-    if (spider.isHeroN) {
-      updateHeroN(k, spider, state, legsStarted, dt)
+    spider.isHeroN && updateHeroStayer(spider, state, legsStarted, dt)
+    if (spider.isHeroU) {
+      runner = spider
+      updateHeroN(k, spider, state, legsStarted, sound, dt)
       updateHeroNNotes(spider, sound, dt)
       //
-      // Once hero-n has run past the right edge, the scene flows into the
-      // menu by itself after a short beat.
+      // Once the runner has run past the right edge, the scene flows into
+      // the menu by itself after a short beat.
       //
       if (spider.heroGone) {
         state.heroGoneTime += dt
@@ -1574,6 +1739,47 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
       }
     }
   })
+  spiderState.departureFade = computeDepartureFade(k, runner)
+}
+//
+// The stayer never leaves the ground once it lands — it just stands there
+// with its eyes wandering like the in-game hero's idle animation.
+//
+function updateHeroStayer(spider, state, legsStarted, dt) {
+  if (spider.heroPhase === 'title') {
+    if (legsStarted && state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
+      spider.heroPhase = 'fall'
+      spider.heroX = spider.x + HERO_N_OFFSET_X
+      spider.heroY = spider.y + HERO_N_OFFSET_Y
+      spider.heroFallVel = 0
+    }
+    return
+  }
+  if (spider.heroPhase === 'fall') {
+    spider.heroFallVel += HERO_N_FALL_GRAVITY * dt
+    spider.heroY += spider.heroFallVel * dt
+    if (spider.heroY >= HERO_N_GROUND_CENTER_Y) {
+      spider.heroY = HERO_N_GROUND_CENTER_Y
+      spider.heroPhase = 'stayIdle'
+    }
+    return
+  }
+  //
+  // 'stayIdle': the stayer has no eyes to animate — it just stands there
+  // (see computeDepartureFade for its fade-out).
+  //
+}
+//
+// Fades every crawling letter (the stayer hero included) toward zero as the
+// runner nears the right edge of the screen — full opacity until it starts
+// running, fully gone once it reaches the edge and disappears.
+//
+function computeDepartureFade(k, runner) {
+  if (!runner || runner.heroDepartStartX === null || runner.heroDepartStartX === undefined) return 1
+  const span = k.width() - runner.heroDepartStartX
+  if (span <= 0) return runner.heroGone ? 0 : 1
+  const progress = (runner.heroX - runner.heroDepartStartX) / span
+  return Math.max(0, Math.min(1, 1 - progress))
 }
 //
 // Idle singing for hero-n: while he stands with closed eyes the same melody
@@ -1621,19 +1827,13 @@ function updateHeroNNotes(spider, sound, dt) {
   spider.heroMelodyIndex = (spider.heroMelodyIndex + 1) % IDLE_MELODY.length
 }
 //
-// Hero-u simply fades away once the letters start growing legs.
+// Runner departure state machine: title → fall → run bursts / pauses, with
+// an interruptible closed-eyes idle whenever the mouse moves on the ground,
+// finishing with a "look left" beat right before it runs off-screen.
 //
-function updateHeroU(spider, legsStarted, dt) {
-  if (!legsStarted || spider.heroGone) return
-  spider.heroOpacity = Math.max(0, spider.heroOpacity - dt / HERO_U_FADE_DURATION)
-  spider.heroOpacity <= 0 && (spider.heroGone = true)
-}
-//
-// Hero-n departure state machine: title → fall → run bursts / pauses, with
-// an interruptible closed-eyes idle whenever the mouse moves on the ground.
-//
-function updateHeroN(k, spider, state, legsStarted, dt) {
+function updateHeroN(k, spider, state, legsStarted, sound, dt) {
   if (spider.heroGone) return
+  updateHeroNAppearance(spider, dt)
   if (spider.heroPhase === 'title') {
     if (legsStarted && state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
       //
@@ -1641,9 +1841,10 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
       // centre coordinates instead of the letter-cell offsets.
       //
       spider.heroPhase = 'fall'
-      spider.heroX = spider.x + HERO_N_OFFSET_X
-      spider.heroY = spider.y + HERO_N_OFFSET_Y
+      spider.heroX = spider.x + HERO_U_OFFSET_X
+      spider.heroY = spider.y + HERO_U_OFFSET_Y
       spider.heroFallVel = 0
+      spider.heroDepartStartX = spider.heroX
     }
     return
   }
@@ -1697,6 +1898,23 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
     if (spider.heroFrameTimer >= HERO_N_RUN_FRAME_TIME) {
       spider.heroFrameTimer = 0
       spider.heroRunFrame = (spider.heroRunFrame + 1) % HERO_N_RUN_FRAME_COUNT
+      //
+      // Two foot contacts per 8-frame cycle, same as the in-game hero.
+      //
+      if (spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0) {
+        spider.heroStepCount++
+        Sound.playStepSound(sound, HERO_N_STEP_SOUND_LEVEL)
+      }
+    }
+    //
+    // One-time beat right before the runner would leave: stop, turn to
+    // face left and hold a hard-left look for a few seconds.
+    //
+    if (!spider.heroLookLeftDone && spider.heroX >= k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN) {
+      spider.heroPhase = 'lookLeft'
+      spider.heroLookLeftDone = true
+      spider.heroLookLeftTimer = 0
+      return
     }
     if (spider.heroX - HERO_N_SPRITE_SIZE / 2 > k.width()) {
       spider.heroGone = true
@@ -1711,11 +1929,17 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
   if (spider.heroPhase === 'pause') {
     spider.heroPauseTimer += dt
     spider.heroPauseTimer >= HERO_N_RUN_PAUSE && startHeroNBurst(spider)
+    return
+  }
+  if (spider.heroPhase === 'lookLeft') {
+    spider.heroLookLeftTimer += dt
+    spider.heroLookLeftTimer >= HERO_N_LOOK_LEFT_DURATION && startHeroNBurst(spider)
   }
 }
 //
-// Resets the burst timers and switches hero-n into the running phase. Every
-// burst rolls its own length — a random 4–8 steps — so no two runs match.
+// Resets the burst timers and switches the runner into the running phase.
+// Every burst rolls its own length — a random 4–8 steps — so no two runs
+// match. Also used to resume running after the final "look left" beat.
 //
 function startHeroNBurst(spider) {
   spider.heroPhase = 'run'
@@ -1723,38 +1947,116 @@ function startHeroNBurst(spider) {
   spider.heroFrameTimer = 0
   spider.heroRunFrame = 0
   spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
+  //
+  // Once the body has fully revealed, every new burst also advances one
+  // step through the section-colour sequence (holding at the last one).
+  //
+  if (spider.heroBodyRevealT >= 1 && spider.heroSectionIndex < HERO_N_SECTION_COLOR_SEQUENCE.length - 1) {
+    spider.heroSectionIndex++
+    spider.heroSectionColorT = 0
+  }
 }
 //
-// Draws a title hero (hero-n or the flipped hero-u). Inside the title the
-// hero sits within its letter cell; after departure hero-n is positioned by
-// its own centre coordinates and picks a sprite matching the current phase.
+// Advances the hollow→filled reveal crossfade once enough steps have been
+// taken, then eases the body tint toward the next section colour.
 //
-function drawTitleHero(k, spider) {
+function updateHeroNAppearance(spider, dt) {
+  if (spider.heroBodyRevealT < 1) {
+    if (spider.heroStepCount >= HERO_N_COLOR_REVEAL_STEP_COUNT) {
+      spider.heroBodyRevealT = Math.min(1, spider.heroBodyRevealT + dt / HERO_N_BODY_REVEAL_DURATION)
+    }
+    return
+  }
+  if (spider.heroSectionIndex >= HERO_N_SECTION_COLOR_SEQUENCE.length - 1) return
+  spider.heroSectionColorT = Math.min(1, spider.heroSectionColorT + dt / HERO_N_SECTION_COLOR_FADE_DURATION)
+}
+//
+// Lerps between the runner's current and next section colour in the
+// sequence, holding on the last colour once reached.
+//
+function resolveHeroSectionTint(k, spider) {
+  const seq = HERO_N_SECTION_COLOR_SEQUENCE
+  const fromRgb = parseHex(seq[spider.heroSectionIndex])
+  const toIdx = Math.min(spider.heroSectionIndex + 1, seq.length - 1)
+  const toRgb = parseHex(seq[toIdx])
+  const t = spider.heroSectionColorT
+  return k.rgb(
+    fromRgb[0] + (toRgb[0] - fromRgb[0]) * t,
+    fromRgb[1] + (toRgb[1] - fromRgb[1]) * t,
+    fromRgb[2] + (toRgb[2] - fromRgb[2]) * t
+  )
+}
+//
+// Draws a title hero (the stayer 'n' or the runner 'u'). Inside the title
+// both sit within their letter cell using the hollow outline-only bake;
+// once they fall out, the stayer keeps standing with wandering eyes while
+// the runner cycles through its own fall/run/pause/lookLeft phases.
+//
+function drawTitleHero(k, spider, departureFade = 1) {
   if (spider.heroGone) return
-  const inTitle = spider.isHeroU || spider.heroPhase === 'title'
+  const inTitle = spider.heroPhase === 'title'
   const cx = inTitle ? spider.x + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X) : spider.heroX
   const cy = inTitle ? spider.y + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y) : spider.heroY
+  const facingLeft = spider.heroPhase === 'lookLeft'
+  const frameSuffix = resolveHeroFrameSuffix(spider)
+  const pos = k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2)
   //
-  // Title letters use the eyeless bake; once hero-n leaves the word the
-  // grounded run/fall sprites regain eyes (closed while idle / waking).
+  // Stayer ('n'), and both heroes while still in the title, stay a pure
+  // hollow white outline forever — no body fill, no eyes.
   //
-  const spritePrefix = inTitle ? HERO_N_SPRITE_PREFIX_NO_EYES : HERO_N_SPRITE_PREFIX
-  const closedEyes = spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye'
-  const sprite = spider.heroPhase === 'run'
-    ? `${spritePrefix}-run-${spider.heroRunFrame}`
-    : closedEyes
-      ? `${spritePrefix}_closed`
-      : `${spritePrefix}_0_0`
-  k.drawSprite({
-    sprite,
-    pos: k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2),
-    width: HERO_N_SPRITE_SIZE,
-    height: HERO_N_SPRITE_SIZE,
-    flipY: spider.isHeroU,
-    opacity: spider.isHeroU ? spider.heroOpacity : 1
-  })
-  spider.heroPhase === 'wakeOneEye' && drawHeroWakeEye(k, spider, cx, cy)
+  if (spider.isHeroN || inTitle) {
+    k.drawSprite({
+      sprite: `${HERO_N_SPRITE_PREFIX_OUTLINE}${frameSuffix}`,
+      pos,
+      width: HERO_N_SPRITE_SIZE,
+      height: HERO_N_SPRITE_SIZE,
+      flipX: facingLeft,
+      flipY: spider.isHeroU && inTitle,
+      opacity: spider.isHeroN ? departureFade : 1
+    })
+    spider.heroPhase === 'wakeOneEye' && drawHeroWakeEye(k, spider, cx, cy)
+    drawHeroNNotes(k, spider)
+    return
+  }
+  //
+  // Runner ('u'), grounded: crossfades from the hollow outline-only look
+  // into a filled body — white base tinted to the current section colour,
+  // black outline, normal eyes — once it has taken a couple of steps.
+  //
+  const revealT = spider.heroBodyRevealT
+  if (revealT < 1) {
+    k.drawSprite({
+      sprite: `${HERO_N_SPRITE_PREFIX_OUTLINE}${frameSuffix}`,
+      pos,
+      width: HERO_N_SPRITE_SIZE,
+      height: HERO_N_SPRITE_SIZE,
+      flipX: facingLeft,
+      opacity: 1 - revealT
+    })
+  }
+  if (revealT > 0) {
+    k.drawSprite({
+      sprite: `${HERO_N_SPRITE_PREFIX_TINTABLE}${frameSuffix}`,
+      pos,
+      width: HERO_N_SPRITE_SIZE,
+      height: HERO_N_SPRITE_SIZE,
+      flipX: facingLeft,
+      color: resolveHeroSectionTint(k, spider),
+      opacity: revealT
+    })
+  }
+  spider.heroPhase === 'wakeOneEye' && revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy)
   drawHeroNNotes(k, spider)
+}
+//
+// Frame-name suffix shared by every title-hero sprite variant, driven by
+// the current phase (lookLeft / run / closed-eyes idle / neutral default).
+//
+function resolveHeroFrameSuffix(spider) {
+  if (spider.heroPhase === 'lookLeft') return '_-1_0'
+  if (spider.heroPhase === 'run') return `-run-${spider.heroRunFrame}`
+  if (spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye') return '_closed'
+  return '_0_0'
 }
 //
 // Draws the rising melody note glyphs above the idle hero-n's head.

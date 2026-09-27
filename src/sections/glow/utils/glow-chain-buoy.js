@@ -1,3 +1,4 @@
+import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 //
 // Segmented stick-on-a-chain decor, planted upright — reads as a buoy
 // anchored to the seabed by its chain. A dark eye rides the topmost segment.
@@ -23,6 +24,15 @@ const BUOY_BLINK_DURATION = 0.14
 const BUOY_SIDE_ARM_LEN_MULT = 2.6
 const BUOY_SIDE_ARM_DROP = 0.35
 const BUOY_SIDE_BALL_RADIUS_MULT = 0.95
+//
+// Thin root fan at the seabed anchor, same growTreeRootSegments algorithm
+// the big glow tree uses — generated once per buoy at creation time and
+// redrawn as static geometry every frame.
+//
+const BUOY_ROOT_COUNT = 2
+const BUOY_ROOT_SEGMENTS = 4
+const BUOY_ROOT_WIDTH = 1.5
+const BUOY_ROOT_OUTLINE_PAD = 1
 
 /**
  * Creates the chain-buoy decor inst for a set of ground-anchored spots.
@@ -44,7 +54,8 @@ export function create(cfg) {
     swaySpeed: spot.swaySpeed ?? BUOY_SWAY_SPEED_DEFAULT,
     swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
     blinking: false,
-    blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL)
+    blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL),
+    rootSegs: buildBuoyRoots(spot.x, spot.groundY)
   }))
   return {
     k,
@@ -74,15 +85,51 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * @param {Object} inst - Chain-buoy inst
  * @param {Object} chainColor - Kaplay rgb for the segments and joints (solid black)
  * @param {Object} eyeWhiteColor - Kaplay rgb for the eye sclera
+ * @param {Object} rootColor - Kaplay rgb for the thin root fan, big-tree style
  */
-export function onDraw(inst, chainColor, eyeWhiteColor) {
+export function onDraw(inst, chainColor, eyeWhiteColor, rootColor) {
   inst.buoys.forEach(buoy => {
     if (chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)) return
+    drawBuoyRoots(inst.k, buoy, rootColor, chainColor)
     const points = buildBuoyChainPoints(buoy, inst.time)
     drawBuoySegments(inst.k, points, buoy.segmentWidth, chainColor)
     drawBuoySideArms(inst.k, buoy, points, buoy.segmentWidth, chainColor)
     drawBuoyJoints(inst.k, points, buoy.segmentWidth, chainColor)
     drawBuoyEye(inst.k, buoy, points, chainColor, eyeWhiteColor, inst.lookX, inst.lookY)
+  })
+}
+//
+// Grows a small root fan at the seabed anchor once, at creation time —
+// cached and redrawn as static geometry every frame (never regrown).
+//
+function buildBuoyRoots(x, groundY) {
+  const rand = (min, max) => min + Math.random() * (max - min)
+  const segs = []
+  for (let r = 0; r < BUOY_ROOT_COUNT; r++) {
+    const side = r % 2 === 0 ? 1 : -1
+    const startAngle = Math.PI / 2 + side * (0.2 + Math.random() * 0.3)
+    segs.push(...growTreeRootSegments({
+      x: x + side * Math.random() * 2,
+      y: groundY - 1,
+      angle: startAngle,
+      segments: BUOY_ROOT_SEGMENTS,
+      thickness: BUOY_ROOT_WIDTH,
+      lateralBiasPerSegment: side * 0.03,
+      rand
+    }))
+  }
+  return segs
+}
+//
+// Outline pass then fill pass per segment, same layering the chain itself
+// (a silhouette + nothing else) doesn't need, but roots read better with it.
+//
+function drawBuoyRoots(k, buoy, rootColor, outlineColor) {
+  buoy.rootSegs?.forEach(seg => {
+    const p1 = k.vec2(seg.startX, seg.startY)
+    const p2 = k.vec2(seg.endX, seg.endY)
+    k.drawLine({ p1, p2, width: seg.width + BUOY_ROOT_OUTLINE_PAD, color: outlineColor })
+    k.drawLine({ p1, p2, width: seg.width, color: rootColor })
   })
 }
 //

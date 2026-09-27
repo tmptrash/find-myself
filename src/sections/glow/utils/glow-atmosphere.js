@@ -934,10 +934,10 @@ function bakePitMushroomSprite(k) {
   //
   bakeOnePitMushroomSprite(k, PIT_MUSH_SPRITE, getPitMushroomBakeColors())
   //
-  // Purple cap — distinct from the branch (orange) and right (red)
-  // trampoline mushrooms so all three read as different little guys.
+  // Same red cap as the ground trampoline mushrooms — no longer a distinct
+  // purple, per design direction.
   //
-  bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroomPurple)
+  bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroomRed)
   bakeOnePitMushroomFlatMonoSprites(k)
 }
 function bakeOnePitMushroomFlatMonoSprites(k) {

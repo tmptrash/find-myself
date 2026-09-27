@@ -20,6 +20,16 @@ const TUFT_SPREAD = 14
 // candidate positions, so the sampler needs room to keep the tuft count.
 //
 const TUFT_PLACE_ATTEMPTS = 24
+//
+// Optional short static roots under each tuft (opt-in via cfg.roots) — a
+// couple of tiny straight ticks, not the full organic tree-root algorithm,
+// since these only need to read as "planted", not as a detailed root mass.
+//
+const TUFT_ROOT_COUNT = 2
+const TUFT_ROOT_LEN_MIN = 3
+const TUFT_ROOT_LEN_RANGE = 4
+const TUFT_ROOT_SPREAD = 4
+const TUFT_ROOT_WIDTH = 1
 const CULL_PAD = 48
 //
 // Every blade shape lives in ONE atlas sprite instead of a sprite per
@@ -79,18 +89,24 @@ let lastTintK = null
  *   sway; omit for full sway
  * @param {Function} [cfg.postBakeCanvas] - (canvas, seedOffset) => void on the
  *   finished blade atlas (e.g. a film-grain pass)
+ * @param {boolean} [cfg.roots] - Grow a couple of short static root ticks
+ *   under each tuft (needs cfg.getRootColor)
+ * @param {Function} [cfg.getRootColor] - () => {r,g,b} root tint, re-read
+ *   every frame same as getTint (e.g. the gray→colour-world transition)
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
-  const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas } = cfg
+  const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas, roots, getRootColor } = cfg
   loadBladeSprites(k, postBakeCanvas)
-  const blades = buildBlades(left, right, tuftCount, excluded, density, getScaleMult)
+  const { blades, tufts } = buildBlades(left, right, tuftCount, excluded, density, getScaleMult)
   const inst = {
     k,
     floorY,
     blades,
     getTint,
     getSwayScale,
+    tuftRoots: roots ? buildTuftRoots(tufts) : null,
+    getRootColor: roots ? getRootColor : null,
     layer: null
   }
   z !== undefined && (inst.layer = k.add([
@@ -120,14 +136,14 @@ export function draw(inst) {
 //
 function buildBlades(left, right, tuftCount, excluded, density, getScaleMult) {
   const blades = []
-  let tufts = 0
+  const tufts = []
   let attempts = 0
-  while (tufts < tuftCount && attempts < tuftCount * TUFT_PLACE_ATTEMPTS) {
+  while (tufts.length < tuftCount && attempts < tuftCount * TUFT_PLACE_ATTEMPTS) {
     attempts++
     const centerX = left + Math.random() * (right - left)
     if (excluded?.(centerX)) continue
     if (density && Math.random() > density(centerX)) continue
-    tufts++
+    tufts.push({ x: centerX })
     const count = TUFT_BLADES_MIN + Math.floor(Math.random() * (TUFT_BLADES_RANGE + 1))
     for (let b = 0; b < count; b++) {
       const x = centerX + (Math.random() - 0.5) * 2 * TUFT_SPREAD
@@ -146,7 +162,22 @@ function buildBlades(left, right, tuftCount, excluded, density, getScaleMult) {
     }
   }
   blades.sort((a, b) => a.x - b.x)
-  return blades
+  return { blades, tufts }
+}
+//
+// A couple of short straight ticks per tuft, growing straight down from the
+// tuft centre — static geometry, generated once and redrawn every frame.
+//
+function buildTuftRoots(tufts) {
+  const roots = []
+  tufts.forEach(tuft => {
+    for (let i = 0; i < TUFT_ROOT_COUNT; i++) {
+      const dx = (i - (TUFT_ROOT_COUNT - 1) / 2) * TUFT_ROOT_SPREAD + (Math.random() - 0.5) * 2
+      const len = TUFT_ROOT_LEN_MIN + Math.random() * TUFT_ROOT_LEN_RANGE
+      roots.push({ x: tuft.x + dx, dx: (Math.random() - 0.5) * 2, len })
+    }
+  })
+  return roots
 }
 //
 // Bakes the white grass-blade shapes (tapered curved silhouettes, some with a
@@ -269,6 +300,23 @@ function onDraw(inst) {
       color,
       opacity: tint.opacity ?? 1
     })
+  }
+  //
+  // Optional root ticks, grouped in their own pass after every blade sprite
+  // — mixing sprites and primitives in alternating order breaks batching.
+  //
+  const rootTint = inst.tuftRoots && inst.getRootColor?.()
+  if (rootTint) {
+    const rootColor = k.rgb(rootTint.r, rootTint.g, rootTint.b)
+    for (const root of inst.tuftRoots) {
+      if (root.x < minX || root.x > maxX) continue
+      k.drawLine({
+        p1: k.vec2(root.x, inst.floorY),
+        p2: k.vec2(root.x + root.dx, inst.floorY + root.len),
+        width: TUFT_ROOT_WIDTH,
+        color: rootColor
+      })
+    }
   }
 }
 //

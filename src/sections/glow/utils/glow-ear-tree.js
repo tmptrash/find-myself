@@ -1,3 +1,4 @@
+import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 //
 // Small background trees whose branches end in red lips — branches grow from
 // the tapered trunk surface and lean toward the hero like the old ear trees.
@@ -21,6 +22,15 @@ const MOUTH_LEN = 30
 const MOUTH_HALF_H = 9
 const MOUTH_GAP = 3
 const MOUTH_OUTLINE_PAD = 1
+//
+// Root fan at the base, same growTreeRootSegments algorithm the big glow
+// tree uses — generated once per tree at creation time and redrawn as
+// static geometry every frame (never regrown), same pattern as the trunk.
+//
+const EAR_TREE_ROOT_COUNT = 3
+const EAR_TREE_ROOT_SEGMENTS = 6
+const EAR_TREE_ROOT_WIDTH_RATIO = 0.35
+const EAR_TREE_ROOT_OUTLINE_PAD = 2
 
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
@@ -48,6 +58,7 @@ export function create(cfg) {
       branches: []
     }
     tree.branches = buildEarTreeBranches(tree)
+    tree.rootSegs = buildEarTreeRoots(tree)
     return tree
   })
   return { k, trees }
@@ -110,6 +121,43 @@ function trunkHalfWidthAt(tree, y) {
   const t = Math.min(1, Math.max(0, (tree.groundY - y) / tree.trunkH))
   return tree.trunkW * (EAR_TREE_TRUNK_BASE_MULT + (EAR_TREE_TRUNK_TOP_MULT - EAR_TREE_TRUNK_BASE_MULT) * t)
 }
+//
+// Grows a small root fan at the trunk base once, at creation time — the
+// same growTreeRootSegments algorithm the big glow tree uses, just fewer
+// and thinner roots. Cached on the tree and redrawn as static geometry
+// every frame (never regrown, unlike the trunk which is cheap to redo).
+//
+function buildEarTreeRoots(tree) {
+  const rand = (min, max) => min + Math.random() * (max - min)
+  const segs = []
+  for (let r = 0; r < EAR_TREE_ROOT_COUNT; r++) {
+    const side = r % 2 === 0 ? 1 : -1
+    const xJitter = side * Math.random() * tree.trunkW * 0.6
+    const startAngle = Math.PI / 2 + side * (0.15 + Math.random() * 0.25)
+    segs.push(...growTreeRootSegments({
+      x: tree.x + xJitter,
+      y: tree.groundY - 2,
+      angle: startAngle,
+      segments: EAR_TREE_ROOT_SEGMENTS,
+      thickness: tree.trunkW * EAR_TREE_ROOT_WIDTH_RATIO,
+      lateralBiasPerSegment: side * 0.03,
+      rand
+    }))
+  }
+  return segs
+}
+//
+// Outline pass then fill pass per segment, same layering the trunk and
+// branches already use.
+//
+function drawEarTreeRoots(k, tree, rootColor, outlineColor) {
+  tree.rootSegs?.forEach(seg => {
+    const p1 = k.vec2(seg.startX, seg.startY)
+    const p2 = k.vec2(seg.endX, seg.endY)
+    k.drawLine({ p1, p2, width: seg.width + EAR_TREE_ROOT_OUTLINE_PAD, color: outlineColor })
+    k.drawLine({ p1, p2, width: seg.width, color: rootColor })
+  })
+}
 
 /**
  * Eases branch and twig tips toward (or back from) the hero's position.
@@ -123,13 +171,17 @@ export function onUpdate(inst, heroX, heroY, dt) {
 }
 
 /**
- * Draws every tree trunk under the grass layer.
+ * Draws every tree trunk (plus its root fan, same z, under the grass layer).
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for trunk fill
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
+ * @param {Object} rootColor - Kaplay rgb for the root fan, big-tree style
  */
-export function onDrawTrunks(inst, barkColor, outlineColor) {
-  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+export function onDrawTrunks(inst, barkColor, outlineColor, rootColor) {
+  inst.trees.forEach(tree => {
+    drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor)
+    drawEarTreeRoots(inst.k, tree, rootColor, outlineColor)
+  })
 }
 
 /**

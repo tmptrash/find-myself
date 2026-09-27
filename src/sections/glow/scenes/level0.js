@@ -451,11 +451,10 @@ const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
 //
 const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
-// Light rim on glow floor rocks so they read clearly against the ground
-// without a heavy black outline stroke.
+// Light rim on glow floor rocks so they read clearly against the ground.
 //
 const ROCK_OUTLINE_RGB = glowRgb('glowOutlineLight')
-const ROCK_OUTLINE_WIDTH = 1
+const ROCK_OUTLINE_WIDTH = 2
 //
 // Ground respawn after a hedgehog kill lands just past the wandering
 // hedgehog's own leash, so reloading the level never drops the hero right
@@ -914,9 +913,14 @@ const WATER_END_ROCK_AFTER_X = 14
 //
 const SHORE_ROCK_WIDTH_SCALE = 2.2
 //
-// Scatter rocks across the lower-right part of the playfield.
+// Scatter rocks across the lower-right part of the playfield, grouped into
+// a few clusters rather than spread uniformly (same idea as the left
+// 6-rock cluster near the tree).
 //
 const RIGHT_ROCK_COUNT = 8
+const RIGHT_ROCK_CLUSTER_COUNT = 3
+const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 30
+const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 20
 const COLOR_FADE_DURATION = 0.5
 const TREE_REVEAL_FADE_DURATION = 0.85
 //
@@ -2295,7 +2299,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Computed here (before grass) so the grass field can exclude the same
     // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
     //
-    const earTreeSpots = buildGlowEarTreeSpots(waterX2)
+    const earTreeSpots = buildGlowEarTreeSpots(horizBranch.x1)
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots)
     const mudExtraGrass = createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
     //
@@ -5143,9 +5147,11 @@ function isGlowFlatSingleDecorColor(inst) {
 function glowChainBuoyColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const eyeWhite = flat ? LIGHT_GRAY : glowRgb('brightLight')
+  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
   return {
     chain: k.rgb(VOID.r, VOID.g, VOID.b),
-    eyeWhite: k.rgb(eyeWhite.r, eyeWhite.g, eyeWhite.b)
+    eyeWhite: k.rgb(eyeWhite.r, eyeWhite.g, eyeWhite.b),
+    root: k.rgb(root.r, root.g, root.b)
   }
 }
 //
@@ -5156,10 +5162,12 @@ function glowEarTreeColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
   const lip = flat ? DECOR_GRAY : glowRgb('#cc6764')
+  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
   return {
     outline: k.rgb(VOID.r, VOID.g, VOID.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
-    lip: k.rgb(lip.r, lip.g, lip.b)
+    lip: k.rgb(lip.r, lip.g, lip.b),
+    root: k.rgb(root.r, root.g, root.b)
   }
 }
 //
@@ -5173,7 +5181,7 @@ function createGlowChainBuoyLayer(k, inst) {
       draw() {
         if (!inst.chainBuoys || !inst.zones.lCollected) return
         const c = glowChainBuoyColors(inst, k)
-        ChainBuoy.onDraw(inst.chainBuoys, c.chain, c.eyeWhite)
+        ChainBuoy.onDraw(inst.chainBuoys, c.chain, c.eyeWhite, c.root)
       }
     }
   ])
@@ -5185,7 +5193,7 @@ function createGlowEarTreeLayer(k, inst) {
       draw() {
         if (!inst.earTrees || !inst.zones.gCollected) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, c.root)
       }
     }
   ])
@@ -6165,7 +6173,7 @@ function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
 // rocks (see pickGlowLeftEarTreeX) so there are always 3 trees, one of them
 // visibly flanked by rocks on the tree's left side.
 //
-function buildGlowEarTreeSpots(waterX2) {
+function buildGlowEarTreeSpots(treeBaseLeftX) {
   const mud = computeGlowMudZoneX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
   //
@@ -6201,7 +6209,7 @@ function buildGlowEarTreeSpots(waterX2) {
     }
   }
   spots.push({
-    ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)),
+    ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(treeBaseLeftX)),
     shoreLeft: true
   })
   spots.sort((a, b) => a.x - b.x)
@@ -6212,7 +6220,7 @@ function buildGlowEarTreeSpots(waterX2) {
       spots.push(buildGlowEarTreeSpot(rightXMin + span * (0.2 + t * 0.55), rightHeightTiers[spots.length]))
     }
     !spots.some(s => s.shoreLeft) && spots.push({
-      ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(waterX2)),
+      ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(treeBaseLeftX)),
       shoreLeft: true
     })
     spots.sort((a, b) => a.x - b.x)
@@ -6220,16 +6228,18 @@ function buildGlowEarTreeSpots(waterX2) {
   return spots
 }
 //
-// Deterministic left-side X: the center of the real 6-rock cluster placed
-// at the tree-side end of the lake (createGlowRocks' clusterCenterX, derived
-// the same way from waterX2 here — see the "Tree-side end of the lake"
-// comment there). Sitting at the cluster's own center, with a small jitter,
-// puts the tree visibly among those rocks rather than in the narrow strip
-// right against the trunk, which the big tree's own root/canopy bake
-// occludes (ear trees draw below the tree's z so they'd be fully hidden).
+// Deterministic left-side X: the exact centre of the real 6-rock cluster
+// placed at the tree-side end of the lake — see createGlowRocks'
+// `clusterCenterX = treeBaseLeftX + 40`, which this must match exactly
+// (it previously derived its own clusterCenterX from waterX2 with a
+// different formula, landing outside the actual cluster's spread). Sitting
+// at the cluster's own center, with a small jitter, puts the tree visibly
+// among those rocks rather than in the narrow strip right against the
+// trunk, which the big tree's own root/canopy bake occludes (ear trees
+// draw below the tree's z so they'd be fully hidden).
 //
-function pickGlowLeftEarTreeX(waterX2) {
-  const clusterCenterX = waterX2 - CLUSTER_ROCK_RADIUS_MAX - 10 + WATER_RIGHT_TRIM
+function pickGlowLeftEarTreeX(treeBaseLeftX) {
+  const clusterCenterX = treeBaseLeftX + 40
   const jitterMax = GLOW_EAR_TREE_LEFT_JITTER
   return clusterCenterX + (Math.random() * 2 - 1) * jitterMax
 }
@@ -7531,7 +7541,9 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     getScaleMult: (x) => x >= mudZoneX1 && x <= mudZoneX2 ? MUD_ZONE_GRASS_SCALE_MULT : 1,
     postBakeCanvas: applyGlowForegroundBake,
     getTint: (blade) => glowGrassTint(zones, blade),
-    getSwayScale: () => glowGrassSwayScale(zones)
+    getSwayScale: () => glowGrassSwayScale(zones),
+    roots: true,
+    getRootColor: () => glowGrassRootColor(zones)
   })
   grass.layer.hidden = true
   return grass
@@ -7553,7 +7565,9 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     getScaleMult: () => MUD_ZONE_GRASS_SCALE_MULT,
     postBakeCanvas: applyGlowForegroundBake,
     getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, zones, blade),
-    getSwayScale: () => glowGrassSwayScale(zones)
+    getSwayScale: () => glowGrassSwayScale(zones),
+    roots: true,
+    getRootColor: () => glowGrassRootColor(zones)
   })
   grass.layer.hidden = true
   return grass
@@ -7707,6 +7721,15 @@ function glowGroundPeekGrassTint(sc, zones, blade) {
 // decor gray before L, darkened toward void after L, cross-fading to green
 // in the colour world.
 //
+//
+// Short static root ticks under ground grass tufts — same gray/big-tree-root
+// color switch as the ear-tree and chain-buoy roots.
+//
+function glowGrassRootColor(zones) {
+  const flat = isGlowFlatSingleDecorColor(zones._sceneRef)
+  const c = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
+  return { r: c.r, g: c.g, b: c.b }
+}
 function glowGrassTint(zones, blade) {
   const sc = zones._sceneRef
   const lakeX1 = zones._lakeX1
@@ -7861,8 +7884,10 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   shoreRockAfter._lakeShoreEnd = true
   objs.push(shoreRockAfter)
   //
-  // Right side — scatter rocks spread across the whole lower-right ground,
-  // never in front of the trampoline mushroom (resampled out of its zone).
+  // Right side — a few small clusters spread across the whole lower-right
+  // ground (same jittered-around-a-center technique as the left 6-rock
+  // cluster above, just smaller groups), never in front of the trampoline
+  // mushroom (resampled out of its zone).
   //
   //
   // Scatter rocks stay left of the cave mouth (no stone above the entrance)
@@ -7872,13 +7897,20 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   const nearTramp = (x) => Math.abs(x - trampX) <= TRAMP_ROCK_CLEAR_HALF ||
     Math.abs(x - branchTrampX) <= TRAMP_ROCK_CLEAR_HALF
   const badRock = (x) => nearTramp(x) || isCrackDecorExcluded(x, WORLD_W)
+  const rightSpan = Math.max(40, rightEdge - TREE_X - 80)
+  const rightClusterCenters = []
+  for (let c = 0; c < RIGHT_ROCK_CLUSTER_COUNT; c++) {
+    const t = (c + 0.5) / RIGHT_ROCK_CLUSTER_COUNT
+    rightClusterCenters.push(TREE_X + 80 + rightSpan * t + (Math.random() * 2 - 1) * rightSpan * 0.08)
+  }
   for (let i = 0; i < RIGHT_ROCK_COUNT; i++) {
     const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
-    const span = Math.max(40, rightEdge - TREE_X - 80)
-    let cx = TREE_X + 80 + Math.random() * span
+    const clusterCenterX = rightClusterCenters[i % RIGHT_ROCK_CLUSTER_COUNT]
+    const clusterSpread = RIGHT_ROCK_CLUSTER_SPREAD_MIN + Math.random() * RIGHT_ROCK_CLUSTER_SPREAD_RANGE
+    let cx = clusterCenterX + (Math.random() * 2 - 1) * clusterSpread
     let safety = 0
     while (badRock(cx) && safety < 40) {
-      cx = TREE_X + 80 + Math.random() * span
+      cx = clusterCenterX + (Math.random() * 2 - 1) * clusterSpread
       safety++
     }
     if (badRock(cx)) continue

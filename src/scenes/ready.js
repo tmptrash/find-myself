@@ -112,6 +112,11 @@ const SPIDER_PUPIL_RADIUS = 1.2
 const SPIDER_EYE_SPACING = 10
 const SPIDER_EYE_Y_OFFSET = -8
 //
+// Legs are white, same as the hollow contour the letters and title share —
+// not the old near-black.
+//
+const SPIDER_LEG_COLOR_RGB = parseHex(TITLE_OUTLINE_COLOR)
+//
 // Minimum time before the first spider grows its legs after the scene loads.
 // Waves are staggered on top of this offset so letters never transform too early.
 //
@@ -161,6 +166,11 @@ const Z_SPIDER = 50
 const Z_GRASS = Z_SPIDER + 5
 const Z_HINT = 100
 const Z_FILM_GRAIN = Z_HINT + 5
+//
+// Topmost layer — the runner's final walk fades the whole screen to empty
+// underneath this flat overlay (see computeScreenFadeOpacity / onDrawScreenFade).
+//
+const Z_SCREEN_FADE = Z_FILM_GRAIN + 5
 //
 // Blinking stars (sky overlay above the menu-bg sprite). Each star is a
 // tiny dot whose alpha (and, for the largest ones, a faint 4-point cross
@@ -355,14 +365,18 @@ const HERO_N_SPRITE_SIZE = 96
 //
 // Offset applied to hero-n position so it sits visually inside the title word
 //
-const HERO_N_OFFSET_X = 0
+const HERO_N_OFFSET_X = 6
 const HERO_N_OFFSET_Y = 1
 //
-// Offsets for the flipped hero-u: shifted left of the char cell and mirrored
-// downwards vertically.
+// Offsets for the flipped hero-u: shifted left of the char cell. Y is
+// recomputed once fonts are ready (see measureReadyGlyphBottomFromCenter)
+// so the hero's bottom edge lines up with the bottom of the 'r' right
+// after it in "yourself", plus a small extra visual drop — the font
+// metric alone still reads a bit high against the actual letter baseline.
 //
 const HERO_U_OFFSET_X = 0
-const HERO_U_OFFSET_Y = 6
+const HERO_U_OFFSET_Y_VISUAL_DROP = 24
+let HERO_U_OFFSET_Y = 6
 //
 // Title heroes share the exact colour of the title letters so they read
 // as part of the word rather than separate characters.
@@ -463,11 +477,18 @@ const HERO_N_GONE_MENU_DELAY = 2
 const HERO_N_WAKE_PUPIL_FREQ = 0.7
 //
 // Final beat before the runner leaves for good: once it gets within this
-// margin of the right edge it stops, turns to face left, holds a hard-left
-// look for HERO_N_LOOK_LEFT_DURATION, then turns back and runs off-screen.
+// margin of the right edge it stops, turns to face left (a running pose,
+// mirrored, so both legs read clearly — not the neutral idle stance) and
+// holds that look at the stayer for HERO_N_LOOK_LEFT_DURATION. It then
+// turns back right and walks on, uninterruptible by mouse movement from
+// here on, to its final resting spot HERO_N_FINAL_STOP_MARGIN from the
+// right edge — never actually leaving the screen. The whole screen fades
+// to empty during that last walk (see computeScreenFadeOpacity).
 //
 const HERO_N_LOOK_LEFT_TRIGGER_MARGIN = 220
-const HERO_N_LOOK_LEFT_DURATION = 4
+const HERO_N_LOOK_LEFT_DURATION = 5
+const HERO_N_LOOK_LEFT_RUN_FRAME = 2
+const HERO_N_FINAL_STOP_MARGIN = 50
 //
 // Geometry of the hero's eyes inside the 96 px sprite canvas (mirrors the
 // head/eye constants in components/hero.js), scaled to the 80 px title-hero
@@ -507,7 +528,7 @@ const HERO_N_NOTE_OFFSET_Y = -23
 //
 // Notes emerge to the LEFT of the head so the stream never covers the face.
 //
-const HERO_N_NOTE_OFFSET_X = -16
+const HERO_N_NOTE_OFFSET_X = -14
 const HERO_N_VOCAL_DELAY = 2.0
 //
 // Centered description layout. All narrative + section labels live in
@@ -592,6 +613,13 @@ export function sceneReady(k) {
     if (document.fonts && document.fonts.ready) {
       try { await document.fonts.ready } catch {}
     }
+    //
+    // Right title hero's bottom edge lines up with the bottom of the 'r'
+    // right after it in "yourself" — a font metric, so only needs
+    // measuring once fonts are ready, not on every resize.
+    //
+    HERO_U_OFFSET_Y = measureReadyGlyphBottomFromCenter('r', HERO_N_SPRITE_SIZE / 2 + 6) - HERO_N_SPRITE_SIZE / 2 +
+      HERO_U_OFFSET_Y_VISUAL_DROP
     //
     // Hero illustration is steel teal (cool half of the complementary
     // pair); the anti-hero in the duality icon below is vibrant orange
@@ -734,7 +762,7 @@ export function sceneReady(k) {
     //
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     const spiders = []
-    const spiderState = { timer: 0, titleFlicker: 1, departureFade: 1 }
+    const spiderState = { timer: 0, titleFlicker: 1, departureFade: 1, screenFadeOpacity: 0 }
     //
     // "find yourself" has 13 non-space letters.
     // Five waves spread them so they appear far apart.
@@ -784,6 +812,7 @@ export function sceneReady(k) {
         spider.heroDepartStartX = null
         spider.heroLookLeftDone = false
         spider.heroLookLeftTimer = 0
+        spider.heroFinalWalkStartX = null
         //
         // Runner appearance state — steps taken, hollow→filled reveal
         // progress, and which section colour it currently tints toward
@@ -856,6 +885,12 @@ export function sceneReady(k) {
     // Glow film grain — same look as lesson-glow.0, drawn over the whole scene.
     //
     addGlowFilmGrainOverlayLayer(k, Z_FILM_GRAIN)
+    //
+    // Topmost screen-fade overlay — flat and transparent until the runner's
+    // final walk, then grows opaque, leaving the screen empty (stars too,
+    // since this sits above every other layer including them).
+    //
+    k.add([k.pos(0, 0), k.z(Z_SCREEN_FADE), { draw() { onDrawScreenFade(k, spiderState) } }])
     //
     // Controls
     //
@@ -950,6 +985,23 @@ function buildReadyMoonSprite(k) {
 // shadow must be hollow too, or its solid interior would show through the
 // rim's punched-out hole as a solid black fill instead of true transparency.
 //
+//
+// How far a glyph's bottom ink edge sits below the vertical centre point
+// canvas text is drawn from (textBaseline='middle' — the same convention
+// every title/letter bake in this file uses), so a hero can be aligned to
+// a specific letter's bottom instead of an eyeballed pixel offset. Falls
+// back to `fallback` if the browser lacks actualBoundingBoxDescent.
+//
+function measureReadyGlyphBottomFromCenter(char, fallback) {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
+  ctx.textBaseline = 'middle'
+  const metrics = ctx.measureText(char)
+  canvas.width = 0
+  canvas.height = 0
+  return typeof metrics.actualBoundingBoxDescent === 'number' ? metrics.actualBoundingBoxDescent : fallback
+}
 function bakeReadyTitleHollowRing(w, h, text, x, y, color) {
   const canvas = document.createElement('canvas')
   canvas.width = w
@@ -1140,6 +1192,22 @@ function onDrawTitle(k, spiderState) {
     width: MENU_BG_CANVAS_W + over * 2,
     height: MENU_BG_CANVAS_H + over * 2,
     opacity: spiderState.titleFlicker ?? 1
+  })
+}
+//
+// Flat rect in the scene's own background colour, opacity driven by
+// spiderState.screenFadeOpacity — invisible until the runner's final walk,
+// then grows to fully cover (and thus empty out) the whole screen.
+//
+function onDrawScreenFade(k, spiderState) {
+  const opacity = spiderState.screenFadeOpacity ?? 0
+  if (opacity <= 0) return
+  k.drawRect({
+    pos: k.vec2(0, 0),
+    width: k.width(),
+    height: k.height(),
+    color: getColor(k, CFG.visual.colors.ready.background),
+    opacity
   })
 }
 //
@@ -1488,7 +1556,7 @@ function drawSpider(k, spider, textOpacity, titleFlicker = 1, departureFade = 1)
   const letterBodyActive = spider.letter && (spider.titleCharRemoved || spider.isActivated)
   const letterBodyOpacity = letterBodyActive ? titleFlicker * departureFade : 0
   if (spider.legExtendT > 0 && !spider.legsHidden) {
-    const legColor = k.rgb(12, 10, 14)
+    const legColor = k.rgb(...SPIDER_LEG_COLOR_RGB)
     const legOpacity = (letterBodyActive && spider.titleCharRemoved
       ? titleFlicker
       : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)) * departureFade
@@ -1740,6 +1808,7 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     }
   })
   spiderState.departureFade = computeDepartureFade(k, runner)
+  spiderState.screenFadeOpacity = computeScreenFadeOpacity(k, runner)
 }
 //
 // The stayer never leaves the ground once it lands — it just stands there
@@ -1780,6 +1849,20 @@ function computeDepartureFade(k, runner) {
   if (span <= 0) return runner.heroGone ? 0 : 1
   const progress = (runner.heroX - runner.heroDepartStartX) / span
   return Math.max(0, Math.min(1, 1 - progress))
+}
+//
+// The whole screen fades to empty across the runner's very last walk (after
+// the "look left" hold, on its way to its final resting spot) — 0 before
+// that walk starts, 1 once it reaches its final spot and stays there.
+//
+function computeScreenFadeOpacity(k, runner) {
+  if (!runner) return 0
+  if (runner.heroGone) return 1
+  if (runner.heroPhase !== 'finalWalk' || runner.heroFinalWalkStartX === null) return 0
+  const finalStopX = k.width() - HERO_N_FINAL_STOP_MARGIN
+  const span = finalStopX - runner.heroFinalWalkStartX
+  if (span <= 0) return 1
+  return Math.max(0, Math.min(1, (runner.heroX - runner.heroFinalWalkStartX) / span))
 }
 //
 // Idle singing for hero-n: while he stands with closed eyes the same melody
@@ -1862,8 +1945,11 @@ function updateHeroN(k, spider, state, legsStarted, sound, dt) {
   }
   //
   // Ground phases — any mouse movement freezes the hero in closed-eyes idle.
+  // The ending beat (facing the stayer, then walking to its final resting
+  // spot) is no longer interruptible once it starts.
   //
-  state.mouseMoved && (spider.heroPhase = 'idle')
+  const endingStarted = spider.heroPhase === 'lookLeft' || spider.heroPhase === 'finalWalk'
+  !endingStarted && state.mouseMoved && (spider.heroPhase = 'idle')
   if (spider.heroPhase === 'idle') {
     //
     // After the mouse rests long enough the hero wakes up gradually: one eye
@@ -1916,10 +2002,6 @@ function updateHeroN(k, spider, state, legsStarted, sound, dt) {
       spider.heroLookLeftTimer = 0
       return
     }
-    if (spider.heroX - HERO_N_SPRITE_SIZE / 2 > k.width()) {
-      spider.heroGone = true
-      return
-    }
     if (spider.heroRunTimer >= spider.heroBurstDuration) {
       spider.heroPhase = 'pause'
       spider.heroPauseTimer = 0
@@ -1933,8 +2015,39 @@ function updateHeroN(k, spider, state, legsStarted, sound, dt) {
   }
   if (spider.heroPhase === 'lookLeft') {
     spider.heroLookLeftTimer += dt
-    spider.heroLookLeftTimer >= HERO_N_LOOK_LEFT_DURATION && startHeroNBurst(spider)
+    spider.heroLookLeftTimer >= HERO_N_LOOK_LEFT_DURATION && startHeroNFinalWalk(spider)
+    return
   }
+  if (spider.heroPhase === 'finalWalk') {
+    spider.heroX += HERO_N_RUN_SPEED * dt
+    spider.heroFrameTimer += dt
+    if (spider.heroFrameTimer >= HERO_N_RUN_FRAME_TIME) {
+      spider.heroFrameTimer = 0
+      spider.heroRunFrame = (spider.heroRunFrame + 1) % HERO_N_RUN_FRAME_COUNT
+      spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0 && Sound.playStepSound(sound, HERO_N_STEP_SOUND_LEVEL)
+    }
+    //
+    // Never actually leaves the screen — stops HERO_N_FINAL_STOP_MARGIN
+    // short of the right edge, screen fully faded to empty by then
+    // (see computeScreenFadeOpacity).
+    //
+    const finalStopX = k.width() - HERO_N_FINAL_STOP_MARGIN
+    if (spider.heroX >= finalStopX) {
+      spider.heroX = finalStopX
+      spider.heroGone = true
+    }
+  }
+}
+//
+// Turns the runner back to face right and sends it on its last, steady
+// walk toward its final resting spot — no more bursts/pauses, no more
+// mouse interrupts, just a straight walk while the screen fades away.
+//
+function startHeroNFinalWalk(spider) {
+  spider.heroPhase = 'finalWalk'
+  spider.heroFrameTimer = 0
+  spider.heroRunFrame = 0
+  spider.heroFinalWalkStartX = spider.heroX
 }
 //
 // Resets the burst timers and switches the runner into the running phase.
@@ -1958,9 +2071,12 @@ function startHeroNBurst(spider) {
 }
 //
 // Advances the hollow→filled reveal crossfade once enough steps have been
-// taken, then eases the body tint toward the next section colour.
+// taken, then eases the body tint toward the next section colour. Only
+// progresses while the runner is actually running — standing still (idle,
+// waking up, paused between bursts) freezes both the reveal and the tint.
 //
 function updateHeroNAppearance(spider, dt) {
+  if (spider.heroPhase !== 'run') return
   if (spider.heroBodyRevealT < 1) {
     if (spider.heroStepCount >= HERO_N_COLOR_REVEAL_STEP_COUNT) {
       spider.heroBodyRevealT = Math.min(1, spider.heroBodyRevealT + dt / HERO_N_BODY_REVEAL_DURATION)
@@ -2053,8 +2169,12 @@ function drawTitleHero(k, spider, departureFade = 1) {
 // the current phase (lookLeft / run / closed-eyes idle / neutral default).
 //
 function resolveHeroFrameSuffix(spider) {
-  if (spider.heroPhase === 'lookLeft') return '_-1_0'
-  if (spider.heroPhase === 'run') return `-run-${spider.heroRunFrame}`
+  //
+  // A mid-stride running pose (both legs clearly apart), held and mirrored
+  // to face left — not the neutral idle stance.
+  //
+  if (spider.heroPhase === 'lookLeft') return `-run-${HERO_N_LOOK_LEFT_RUN_FRAME}`
+  if (spider.heroPhase === 'run' || spider.heroPhase === 'finalWalk') return `-run-${spider.heroRunFrame}`
   if (spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye') return '_closed'
   return '_0_0'
 }

@@ -382,9 +382,10 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
-        // Same cute mushroom, different cap families — one per trampoline
-        // character (branch / right / pit) so they read as distinct little
-        // guys rather than three copies of the same orange cap.
+        // Same cute mushroom, a redder cap family — used by the right
+        // ground trampoline and the pit cave trampoline (both share it now,
+        // per design direction; only the branch one keeps the default
+        // orange "cuteMushroom" cap above).
         //
         cuteMushroomRed: {
           body: PALETTE.sand5,
@@ -392,17 +393,6 @@ export const CFG = {
           cap: PALETTE.red3,
           capDark: PALETTE.red0,
           capLight: PALETTE.red5,
-          spot: PALETTE.gray7,
-          outline: PALETTE.brown0,
-          face: PALETTE.brown0,
-          blush: PALETTE.red3
-        },
-        cuteMushroomPurple: {
-          body: PALETTE.sand5,
-          bodyShade: PALETTE.sand3,
-          cap: PALETTE.purple3,
-          capDark: PALETTE.purple0,
-          capLight: PALETTE.purple5,
           spot: PALETTE.gray7,
           outline: PALETTE.brown0,
           face: PALETTE.brown0,

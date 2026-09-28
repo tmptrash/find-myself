@@ -17,7 +17,7 @@ const GRAIN_OUTLINE_LUM_MAX = 90
 // Shared film-grain look for every glow bake (matches the near parallax row).
 //
 export const GLOW_FILM_GRAIN = {
-  strength: 10,
+  strength: 6,
   blockSize: 1,
   seed: 43011
 }
@@ -27,10 +27,39 @@ export const GLOW_FILM_GRAIN = {
  * @param {HTMLCanvasElement} canvas
  * @param {number} [seedOffset=0] - Per-sprite seed tweak so repeats do not align
  */
-export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0) {
+export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0, opts = {}) {
   if (!canvas?.width || !canvas?.height) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(seedOffset))
+  applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(
+    seedOffset,
+    opts.strengthScale ?? 1,
+    opts.blockSize
+  ))
+}
+
+/**
+ * Nearest-neighbour down/upscale — sharp foreground pixels after vector bakes.
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} cellPx - Block size in source pixels (2 = focal tier)
+ */
+export function applyGlowCanvasPixelate(canvas, cellPx) {
+  if (!canvas?.width || !cellPx || cellPx <= 1) return
+  const w = canvas.width
+  const h = canvas.height
+  const sw = Math.max(1, Math.ceil(w / cellPx))
+  const sh = Math.max(1, Math.ceil(h / cellPx))
+  const down = document.createElement('canvas')
+  down.width = sw
+  down.height = sh
+  const dctx = down.getContext('2d')
+  dctx.imageSmoothingEnabled = false
+  dctx.drawImage(canvas, 0, 0, sw, sh)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingEnabled = false
+  ctx.clearRect(0, 0, w, h)
+  ctx.drawImage(down, 0, 0, w, h)
+  down.width = 0
+  down.height = 0
 }
 
 /**
@@ -42,29 +71,43 @@ export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0) {
  * @param {number} [cfg.blurRadius] - Gaussian blur radius in px (0 = skip)
  * @param {number} [cfg.grainSeedOffset] - Extra seed offset for this layer
  */
+//
+// Depth = contrast + saturation + grain (detail). Far layers stay soft and muted;
+// foreground stays sharp and vivid — separation without stacking haze overlays.
+//
 export const GLOW_LAYER_GRADE = {
-  far: { contrast: 0.2, saturation: 0.28 },
-  mid: { contrast: 0.38, saturation: 0.38 },
-  near: { contrast: 0.55, saturation: 0.48 },
-  foreground: { contrast: 0.75, saturation: 0.65 }
+  far: { contrast: 0.15, saturation: 0.24, grain: 0, grainBlockSize: 10 },
+  mid: { contrast: 0.44, saturation: 0.52, grain: 0.08, grainBlockSize: 6 },
+  near: { contrast: 0.72, saturation: 0.8, grain: 0.32, grainBlockSize: 5 },
+  //
+  // Smooth decor (hero, mushrooms, water mask) — grade only, almost no grain.
+  //
+  decor: { contrast: 0.94, saturation: 0.96, grain: 0.12 },
+  //
+  // Material surfaces — earth, bark, stone (meaningful texture).
+  //
+  material: { contrast: 0.94, saturation: 0.96, grain: 0.88 },
+  foreground: { contrast: 0.94, saturation: 0.96, grain: 0.12 }
 }
 /**
  * Applies depth contrast/saturation plus optional film grain to a baked canvas.
  * @param {HTMLCanvasElement} canvas
- * @param {{ contrast: number, saturation: number }} grade
+ * @param {{ contrast: number, saturation: number, grain?: number }} grade
  * @param {number} [seedOffset=0]
  */
 export function applyGlowLayerGradeToCanvas(canvas, grade, seedOffset = 0) {
   if (!canvas?.width || !canvas?.height || !grade) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   applyContrastSaturationToContext(ctx, canvas.width, canvas.height, grade.contrast, grade.saturation)
-  applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(seedOffset))
+  const grain = grainCfg(seedOffset, grade.grain ?? 1, grade.grainBlockSize)
+  applyFilmGrainToContext(ctx, canvas.width, canvas.height, grain)
 }
 export function applyParallaxPostFxToContext(ctx, width, height, cfg) {
   if (!cfg) return
   cfg.blurRadius > 0 && applyBlurToContext(ctx, width, height, cfg.blurRadius)
   cfg.grade && applyContrastSaturationToContext(ctx, width, height, cfg.grade.contrast, cfg.grade.saturation)
-  applyFilmGrainToContext(ctx, width, height, grainCfg(cfg.grainSeedOffset ?? 0))
+  const grain = grainCfg(cfg.grainSeedOffset ?? 0, cfg.grade?.grain ?? 1, cfg.grade?.grainBlockSize)
+  applyFilmGrainToContext(ctx, width, height, grain)
 }
 //
 // Softens a baked layer via canvas filter blur. Resets any active transform
@@ -140,10 +183,10 @@ function applyFilmGrainToContext(ctx, width, height, cfg) {
 //
 // Builds a grain cfg from the shared glow preset plus an optional seed offset.
 //
-function grainCfg(seedOffset = 0) {
+function grainCfg(seedOffset = 0, strengthScale = 1, blockSize) {
   return {
-    strength: GLOW_FILM_GRAIN.strength,
-    blockSize: GLOW_FILM_GRAIN.blockSize,
+    strength: GLOW_FILM_GRAIN.strength * strengthScale,
+    blockSize: blockSize ?? GLOW_FILM_GRAIN.blockSize,
     seed: GLOW_FILM_GRAIN.seed + (seedOffset | 0)
   }
 }
@@ -168,7 +211,7 @@ function clamp255(v) {
 //
 const GRAIN_OVERLAY_TILE = 256
 const GRAIN_OVERLAY_SPRITE = 'glow-film-grain-tile'
-const GRAIN_OVERLAY_OPACITY = 0.28
+const GRAIN_OVERLAY_OPACITY = 0.14
 let grainOverlayTileCanvas = null
 //
 // Bakes one repeatable grain tile for the runtime overlay.

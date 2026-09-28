@@ -8,7 +8,6 @@
 const DEFAULT_OUTLINE_ALPHA = 0.82
 const STEM_LINE_WIDTH = 1.5
 const HIGHLIGHT_ALPHA = 0.15
-const DOT_FILL = 'rgba(255, 255, 240, 0.3)'
 const DOT_MAX_COUNT = 3
 
 /**
@@ -25,6 +24,8 @@ const DOT_MAX_COUNT = 3
  * @param {number} opts.stemWidth - Stem width at the base (px)
  * @param {number} opts.stemHeight - Stem height (px)
  * @param {number[]} opts.capColor - `[r, g, b]` cap fill in 0..255
+ * @param {number[]} [opts.capLight] - Highlight / stem lift tone (defaults to cap + offset)
+ * @param {number[]} [opts.capShadow] - Stem shadow + outline tint (defaults to cap - offset)
  * @param {number} [opts.outlineAlpha=0.82]
  * @param {string} [opts.outlineColor=null] - CSS colour for the outline stroke
  *   (null = default translucent black using outlineAlpha)
@@ -41,17 +42,30 @@ export function drawMushroomToCanvas(ctx, opts) {
     stemWidth,
     stemHeight,
     capColor,
+    capLight = null,
+    capShadow = null,
     outlineAlpha = DEFAULT_OUTLINE_ALPHA,
     outlineColor = null,
     outlineWidth = STEM_LINE_WIDTH,
     flat = false
   } = opts
+  const lightRgb = capLight ?? [
+    Math.min(255, capColor[0] + 40),
+    Math.min(255, capColor[1] + 50),
+    Math.min(255, capColor[2] + 30)
+  ]
+  const shadowRgb = capShadow ?? [
+    Math.max(0, capColor[0] - 35),
+    Math.max(0, capColor[1] - 28),
+    Math.max(0, capColor[2] - 22)
+  ]
   //
   // Stem top sits exactly under the cap base so the half-ellipse cap
   // covers the stem joint cleanly without an outline seam.
   //
   const stemTop = baseY - stemHeight
-  ctx.strokeStyle = outlineColor ?? `rgba(0, 0, 0, ${outlineAlpha})`
+  ctx.strokeStyle = outlineColor ??
+    `rgba(${shadowRgb[0]}, ${shadowRgb[1]}, ${shadowRgb[2]}, ${outlineAlpha})`
   ctx.lineWidth = outlineWidth
   ctx.lineJoin = 'round'
   //
@@ -61,7 +75,7 @@ export function drawMushroomToCanvas(ctx, opts) {
   //
   ctx.fillStyle = flat
     ? `rgb(${capColor[0]}, ${capColor[1]}, ${capColor[2]})`
-    : `rgb(${Math.min(255, capColor[0] + 40)}, ${Math.min(255, capColor[1] + 50)}, ${Math.min(255, capColor[2] + 30)})`
+    : `rgb(${lightRgb[0]}, ${lightRgb[1]}, ${lightRgb[2]})`
   ctx.beginPath()
   ctx.moveTo(cx - stemWidth / 2, baseY)
   ctx.lineTo(cx - stemWidth * 0.4, stemTop)
@@ -87,7 +101,7 @@ export function drawMushroomToCanvas(ctx, opts) {
   // Cap highlight: small lighter arc near the top-left gives a sense of
   // ambient light without needing a real light source.
   //
-  ctx.fillStyle = `rgba(255, 255, 255, ${HIGHLIGHT_ALPHA})`
+  ctx.fillStyle = `rgba(${lightRgb[0]}, ${lightRgb[1]}, ${lightRgb[2]}, ${HIGHLIGHT_ALPHA + 0.22})`
   ctx.beginPath()
   ctx.ellipse(cx - capWidth * 0.1, stemTop - capHeight * 0.3, capWidth * 0.25, capHeight * 0.3, 0, Math.PI, 0)
   ctx.closePath()
@@ -97,7 +111,7 @@ export function drawMushroomToCanvas(ctx, opts) {
   // bounded so caps never read as polka-dotted noise.
   //
   const dotCount = Math.floor(Math.random() * DOT_MAX_COUNT) + 1
-  ctx.fillStyle = DOT_FILL
+  ctx.fillStyle = `rgba(${lightRgb[0]}, ${lightRgb[1]}, ${lightRgb[2]}, 0.38)`
   for (let d = 0; d < dotCount; d++) {
     const dotX = cx + (Math.random() - 0.5) * capWidth * 0.6
     const dotY = stemTop - capHeight * (0.2 + Math.random() * 0.5)

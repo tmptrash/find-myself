@@ -32,7 +32,12 @@ import {
 } from '../utils/glow-ground-reveal.js'
 import {
   GLOW_PAL,
+  glowCaveEarthDeepRgb,
+  glowCaveEarthFloorRgb,
+  glowGroundEarthBottomLayerRgb,
   glowRgb,
+  glowRockShadedDrawPalette,
+  glowContourRgb,
   snapToPalette,
   getTreePaletteGray,
   getTreePaletteLit,
@@ -41,10 +46,28 @@ import {
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatWaterColors,
   getTreePaletteColor,
+  getTreePaletteLitForCorner,
+  getTreePaletteColorForCorner,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
-  getTreePaletteSolid
+  getTreePaletteSolid,
+  getGlowLightRgb
 } from '../utils/glow-palette.js'
+import {
+  applyFoliageDensityToPalette,
+  glowBushHiResClusterRadiusRangeForTier,
+  glowBushLeafDensityScaleForTier,
+  glowBushLeafSizeScaleForTier,
+  glowFilmGrainBlockPxForTier,
+  glowHiResBushClustersForTier,
+  glowTreeBuildOptsForDensity
+} from '../utils/glow-pixel-density.js'
+import {
+  applyGlowForegroundFocusBake,
+  applyGlowGameplaySharpBake,
+  applyGlowHudSharpBake,
+  glowDepthBlurRadiusPx
+} from '../utils/glow-focus-depth.js'
 import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
@@ -135,6 +158,7 @@ import {
 } from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
+import { glowEyeCreatureColors } from '../utils/glow-eye-creature.js'
 import * as EarTree from '../utils/glow-ear-tree.js'
 import * as GlowCamera from '../utils/glow-camera.js'
 import {
@@ -163,6 +187,7 @@ import {
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
 const VOID = glowRgb('void')
+const GLOW_SHADOW = glowRgb('glowShadow')
 const OUTER = glowRgb('playfieldOuter')
 const INNER_GRAY = glowRgb('playfieldGray')
 const MID_GRAY = glowRgb('midGray')
@@ -198,19 +223,23 @@ const MUD_GROUND_RGB = glowRgb('mudGround')
 //
 const MUD_GROUND_EXTRA_H = 6
 //
-// Golden haze the colour-world background forest dissolves into.
+// Cool forest air — parallax trees fade into teal/green sky, not gold (70/20/10).
 //
-const WARM_HAZE = glowRgb('warmHaze')
+const PARALLAX_FOLIAGE_HAZE = glowRgb(GLOW_PAL.glowForestLift)
+const GLOW_LIGHT_CORE = getGlowLightRgb('core')
+const GLOW_LIGHT_BRIGHT = getGlowLightRgb('bright')
 //
-// Rim tone for gray decor (rocks, trampoline) in the colour world — a
-// lighter gray than the old near-black decorOutline (see glowOutlineLight).
+// Forest contour ink for trees, mushrooms, rocks, letters (not pure black).
 //
-const DECOR_OUTLINE_RGB = glowRgb('glowOutlineLight')
+const DECOR_OUTLINE_RGB = glowContourRgb('forest')
+const PLATFORM_OUTLINE_RGB = glowContourRgb('platform')
 //
 // Cap colour families for the cute decor mushrooms (palette hex sets): the
 // cap tone, its dark counterpart (shading) and a lighter highlight tone.
 //
 const MUSHROOM_CAP_HEX = GLOW_PAL.mushrooms
+const MUSHROOM_CAP_SHADOW_HEX = GLOW_PAL.mushroomsDark
+const MUSHROOM_CAP_LIGHT_HEX = GLOW_PAL.mushroomsLight
 //
 // Cute mushroom palette sets: full colour and the gray-family mirror.
 //
@@ -323,9 +352,9 @@ const TREE_TOP_Y = 430
 // separately in glow-tree.js (HORIZ_W).
 //
 const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
-const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-sprite'
-const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-sprite'
-const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
+const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-v4'
+const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-v4'
+const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-v4'
 //
 // The tree is painted in world space onto a full 3000x1080 canvas, but the
 // trunk and canopy only cover a slice of it. Cropping the bake to that slice
@@ -459,10 +488,10 @@ const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
 //
 const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
-// Light rim on glow floor rocks so they read clearly against the ground.
+// Rock rim — green-brown shadow tone (not neutral gray).
 //
-const ROCK_OUTLINE_RGB = glowRgb('glowOutlineLight')
-const ROCK_OUTLINE_WIDTH = 2
+const ROCK_OUTLINE_RGB = DECOR_OUTLINE_RGB
+const ROCK_OUTLINE_WIDTH = 2.5
 //
 // Ground respawn after a hedgehog kill lands just past the wandering
 // hedgehog's own leash, so reloading the level never drops the hero right
@@ -512,8 +541,8 @@ const PAR_TREE1_SPEED = 0.40
 // Soft sky-coloured veils between forest rows — atmospheric perspective
 // without inventing new tones (opacity only).
 //
-const HAZE_FAR_OPACITY = 0.2
-const HAZE_MID_OPACITY = 0.1
+const HAZE_FAR_OPACITY = 0.055
+const HAZE_MID_OPACITY = 0.028
 //
 // Extra horizontal bleed baked into parallax canvases so trees extend past the
 // playfield edges and never run out on the right when the camera scrolls.
@@ -527,13 +556,10 @@ const PAR_TREE_HORIZ_BLEED = 200
 //
 const PARALLAX_DRAW_CULL_PAD = 48
 //
-// Depth blur baked into each parallax forest row at sprite creation time.
-// Film grain uses the shared GLOW_FILM_GRAIN preset on every row.
+// Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
+// Static ground / gameplay sprites stay sharp at bake time.
 //
-const PAR_BLUR_RADIUS_FAR = 3.5
-const PAR_BLUR_RADIUS_MID = 2.2
-const PAR_BLUR_RADIUS_NEAR = 1.2
-const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-sprite'
+const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v4'
 //
 // Horizontal branch platform.
 //
@@ -571,20 +597,20 @@ const L_PLAT_COLLISION_DROP_Y = LOG_COLLISION_DROP_Y - 2
 //
 const LOG_TREE_LIT_COLORS = {
   bark: GLOW_PAL.treeLit.branch,
-  barkLight: GLOW_PAL.treeLit.leaf,
+  barkLight: GLOW_PAL.treeLit.trunk,
   barkDark: GLOW_PAL.treeLit.root,
   ring: GLOW_PAL.treeLit.trunk,
-  ringDark: GLOW_PAL.treeLit.root,
-  core: GLOW_PAL.treeLit.leaf,
+  ringDark: GLOW_PAL.glowContour.platform,
+  core: GLOW_PAL.treeLit.branch,
   shadow: GLOW_PAL.void
 }
 const LOG_TREE_COLOR_COLORS = {
   bark: GLOW_PAL.treeColor.root,
-  barkLight: GLOW_PAL.treeLit.branch,
-  barkDark: GLOW_PAL.void,
-  ring: GLOW_PAL.treeLit.trunk,
-  ringDark: GLOW_PAL.treeColor.root,
-  core: GLOW_PAL.treeLit.leaf,
+  barkLight: GLOW_PAL.treeColor.branch,
+  barkDark: GLOW_PAL.treeColor.root,
+  ring: GLOW_PAL.treeColor.trunk,
+  ringDark: GLOW_PAL.glowContour.platform,
+  core: GLOW_PAL.treeColor.branch,
   shadow: GLOW_PAL.void
 }
 //
@@ -592,7 +618,7 @@ const LOG_TREE_COLOR_COLORS = {
 // silhouette with no fill, only its cracks, rounded end cap and grain
 // stripes painted in one single accent tone.
 //
-const L_PLAT_OUTLINE_WIDTH = 2
+const L_PLAT_OUTLINE_WIDTH = 2.5
 const L_PLAT_END_STEPS = 16
 const L_PLAT_END_SQUASH = 0.55
 const L_PLAT_STRIPE_COUNT = 5
@@ -641,14 +667,14 @@ const L_LETTER_LEFT_OF_PLAT_GAP = 56
 // palette swatches (one step darker than the sky), the near colour-world
 // row keeps green foliage with a light haze blend.
 //
-const PAR_L1_COLOR_BLEND = 0.28
-const PAR_MID_COLOR_BLEND = 0.34
-const PAR_FAR_COLOR_BLEND = 0.42
+const PAR_L1_COLOR_BLEND = 0.22
+const PAR_MID_COLOR_BLEND = 0.28
+const PAR_FAR_COLOR_BLEND = 0.34
 //
 // Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
 // while green stays the leading colour — kept low so parallax stays muted.
 //
-const PAR_L1_LEAF_WARM_BLEND = 0.22
+const PAR_L1_LEAF_WARM_BLEND = 0
 //
 // Reference corner tree families — left/right from playfield midline; top/bottom
 // from canopy row (far + mid = upper pair, near = lower pair on screen).
@@ -742,9 +768,9 @@ const BUSH_STEP_RANGE_FRAC = 0.5
 //
 const BUSH_LEAF_SIZE_MIN = 9
 const BUSH_LEAF_SIZE_RANGE = 8
-const BUSH_LEAF_DENSITY = 0.014
-const BUSH_RIM_LEAF_SPACING = 14
-const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
+const BUSH_LEAF_DENSITY = 0.009
+const BUSH_RIM_LEAF_SPACING = 18
+const BUSH_LEAF_DARKEN_STEPS = [0, 0.08]
 const BUSH_HIRES_CLUSTER_DENSITY = 0.3
 //
 // Colour-world bush tones follow the same corner quadrant as the trees in that
@@ -878,7 +904,7 @@ const BIRD_FLAP_SPEED_RANGE = 3
 const BIRD_PARALLAX_SPEED = PAR_SKY_SPEED
 const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
-const BIRD_HAZE_BLEND = 0.72
+const BIRD_HAZE_BLEND = 0.22
 const BIRD_VISIBLE_FADE_MIN = 0.02
 const BIRD_UPDATE_INTERVAL = 1 / 24
 //
@@ -1029,7 +1055,7 @@ const GLOW_LETTER_PICKUP_RADIUS = 52
 // Hero body / outline tones for lesson-glow.0 — lighter than the shared
 // heroOutline (menu.js still uses that one directly for its own hero).
 //
-const HERO_OUTLINE_COLOR = GLOW_PAL.glowOutlineLight
+const HERO_OUTLINE_COLOR = GLOW_PAL.glowContour.gameplay
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
 //
@@ -1422,18 +1448,19 @@ const LEFT_DECOR_FADE_DURATION = 0.7
 //
 // Quiet drifting motes — few, slow, never competing with the hero.
 //
-const MOTE_COUNT = 14
+const MOTE_COUNT = 7
 const MOTE_SPEED_MIN = 4
 const MOTE_SPEED_RANGE = 8
 const MOTE_SIZE_MIN = 1.2
-const MOTE_SIZE_RANGE = 1.6
-const MOTE_OPACITY_MIN = 0.12
-const MOTE_OPACITY_RANGE = 0.18
+const MOTE_SIZE_RANGE = 1.4
+const MOTE_OPACITY_MIN = 0.07
+const MOTE_OPACITY_RANGE = 0.1
 //
 // Visual ground lip — height variation only, collision stays on FLOOR_Y.
 //
 const GROUND_LIP_AMP = 6
 const GROUND_LIP_STEPS = 36
+const GROUND_LIP_STEPS_PARALLAX_STABLE = 22
 const GROUND_LIP_FREQ_A = 0.012
 const GROUND_LIP_FREQ_B = 0.031
 //
@@ -1449,25 +1476,29 @@ const GROUND_BOTTOM_WAVE_STEPS = 40
 const GROUND_BOTTOM_WAVE_FREQ_A = 0.018
 const GROUND_BOTTOM_WAVE_FREQ_B = 0.041
 //
-// Underground earth band split into 3 soil layers, top to bottom (chernozem
-// topsoil / clay / sand) — first two fractions of CAVE_BAND_H, the sand
-// layer fills whatever remains.
+// Underground earth band: two soil layers split at 50% depth (wavy seam at
+// mid-height of CAVE_BAND_H). Top = chernozem, bottom = deeper sand/clay.
 //
-const GROUND_LAYER_FRACS = [0.5, 0.25]
+const GROUND_LAYER_FRACS = [0.5]
 //
 // High-frequency jagged seams between soil layers (sample-and-hold noise, like
 // a dense irregular time series — not smooth sine waves).
 //
-const GROUND_LAYER_JAG_CELL_PX = 3
+const GROUND_LAYER_JAG_CELL_PX = glowFilmGrainBlockPxForTier('gameplay')
 const GROUND_LAYER_INTERIOR_BOUNDARY_AMP = 12
 //
 // Pull each soil swatch toward the layer average so strata read softer.
 //
-const GROUND_LAYER_CONTRAST_PULL = 0.74
+const GROUND_LAYER_CONTRAST_PULL = 0.52
 //
 // Sky bake uses stacked palette bands instead of a smooth CSS gradient.
 //
 const SKY_DITHER_BAND_COUNT = 7
+//
+// Lower sky fraction that picks up dawn gold (between the trunks, not zenith).
+//
+const SKY_DAWN_BOTTOM_FRAC = 0.28
+const SKY_DAWN_GLOW_STRENGTH = 0.34
 //
 // Lake bake — horizontal reflection ripples in the mask (tinted at draw time).
 //
@@ -1886,7 +1917,9 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   onProgress?.(5)
   await yieldForGpu(1)
   const zones = loadGlowZones()
-  const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y)
+  const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
+    ...glowTreeBuildOptsForDensity('nearground')
+  })
   scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
   const prewarmSegmentSave = get(KEY_TREE_SEGMENTS_REVEALED, [])
   const prewarmMonolith = zones.tree && !(Array.isArray(prewarmSegmentSave) && prewarmSegmentSave.length > 0)
@@ -1931,7 +1964,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineOnly: true,
     noEyes: true,
-    postBakeCanvas: applyGlowForegroundBake
+    postBakeCanvas: applyGlowForegroundFocusBake
   })
   onProgress?.(82)
   await yieldForGpu(1)
@@ -1942,7 +1975,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineOnly: true,
-    postBakeCanvas: applyGlowForegroundBake
+    postBakeCanvas: applyGlowForegroundFocusBake
   })
   onProgress?.(86)
   await yieldForGpu(1)
@@ -1953,7 +1986,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
     outlineOnly: false,
-    postBakeCanvas: applyGlowForegroundBake
+    postBakeCanvas: applyGlowForegroundFocusBake
   })
   onProgress?.(90)
   await yieldForGpu(1)
@@ -1995,7 +2028,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     zones._sceneRef = { zones, colorFade: colorFadeInit }
     zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
     !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
-    const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y)
+    const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
+    ...glowTreeBuildOptsForDensity('nearground')
+  })
     scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
     const savedTreeSegmentsRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
     const hasPersistedSegmentReveal = Array.isArray(savedTreeSegmentsRaw) && savedTreeSegmentsRaw.length > 0
@@ -2251,13 +2286,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       runDuringFlicker: true,
       noEyes: !zones.eyesCollected,
       suppressDust: true,
-      postBakeCanvas: applyGlowForegroundBake,
+      postBakeCanvas: applyGlowForegroundFocusBake,
       //
       // No idle humming until the level's late-game beats — keeps the early
       // world quiet while the hero learns to see.
       //
       idleVocalization: null,
-      idleNotePostBake: applyGlowForegroundBake
+      idleNotePostBake: applyGlowForegroundFocusBake
     }
     const heroInst = Hero.create({
       k,
@@ -2760,7 +2795,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.k.wait(0, () => syncGlowHeroFillVisual(inst, {
       filledBodyColor: HERO_FILLED_BODY_COLOR,
       filledOutlineColor: HERO_OUTLINE_COLOR,
-      postBakeCanvas: applyGlowForegroundBake
+      postBakeCanvas: applyGlowForegroundFocusBake
     }, glowHeroFillOpts(inst)))
     maybeShowGLetter(inst)
     //
@@ -3601,8 +3636,8 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     heroBodyColor: HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
     heroEyeWhiteColor: HERO_BODY_COLOR,
-    heroPostBakeCanvas: applyGlowForegroundBake,
-    hudPostBakeCanvas: applyGlowForegroundBake,
+    heroPostBakeCanvas: applyGlowHudSharpBake,
+    hudPostBakeCanvas: applyGlowHudSharpBake,
     lifeDesatPostBake: finishGlowLifeDesatCanvas,
     //
     // Same white-with-black-shadow look as the GLOW HUD letters, always on —
@@ -3968,7 +4003,7 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts, fillHex = HERO_BODY_COLO
     GLOW_HUD_LABEL_FONT_SIZE,
     GLOW_HUD_LABEL_FONT,
     fillHex,
-    applyGlowForegroundBake
+    applyGlowHudSharpBake
   )
   k.drawMasked(() => {
     k.drawSprite({
@@ -4802,11 +4837,7 @@ function rebakeTrampolineGraySprites(k) {
 //
 function rebakeGlowRockSpritesShaded(inst) {
   const k = inst.k
-  const palette = {
-    fillR: DECOR_GRAY.r, fillG: DECOR_GRAY.g, fillB: DECOR_GRAY.b,
-    lightR: INNER_GRAY.r, lightG: INNER_GRAY.g, lightB: INNER_GRAY.b,
-    darkR: VOID.r, darkG: VOID.g, darkB: VOID.b
-  }
+  const palette = glowRockShadedDrawPalette()
   //
   // Rebaked into a fresh shared atlas (same trick as the initial bake in
   // createGlowRocks) instead of one loadSprite per rock — otherwise every
@@ -4825,13 +4856,13 @@ function rebakeGlowRockSpritesShaded(inst) {
         ctx.scale(widthScale, 1)
         drawRockToCanvas(ctx, {
           cx, cy, radius, verts, palette,
-          skipShadow: true, skipTexture: true,
+          skipShadow: true, skipTexture: false,
           outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
           outlineWidth: ROCK_OUTLINE_WIDTH,
           outlineAlpha: 1
         })
       })
-      applyGlowForegroundBake(canvas, seedOffset)
+      applyGlowMaterialBake(canvas, seedOffset)
       return canvas
     }
     const bakedGray = rebakeAtlas.register(bakeShaded(obj._decorWorldX * 3 | 0))
@@ -5181,16 +5212,31 @@ function isGlowFlatSingleDecorColor(inst) {
   return true
 }
 //
-// Chain-buoy colors — the chain is solid black in every mode; only the eye
-// sclera shifts between gray decor and a bright highlight.
+// Stalk-eye colours — gray decor before colour world; warm sclera + green-black
+// body after L (see cfg eyeCreature).
 //
 function glowChainBuoyColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
-  const eyeWhite = flat ? LIGHT_GRAY : glowRgb('brightLight')
-  const root = flat ? DECOR_GRAY : glowRgb('groundSand')
+  if (flat) {
+    const body = glowRgb('decorGray')
+    const sclera = glowRgb('lightGray')
+    const pupil = glowRgb('void')
+    const highlight = glowRgb('lightGray')
+    const contour = glowRgb('void')
+    const root = glowRgb('decorGray')
+    return {
+      body: k.rgb(body.r, body.g, body.b),
+      sclera: k.rgb(sclera.r, sclera.g, sclera.b),
+      pupil: k.rgb(pupil.r, pupil.g, pupil.b),
+      highlight: k.rgb(highlight.r, highlight.g, highlight.b),
+      contour: k.rgb(contour.r, contour.g, contour.b),
+      root: k.rgb(root.r, root.g, root.b)
+    }
+  }
+  const eyes = glowEyeCreatureColors(k)
+  const root = glowRgb('groundSand')
   return {
-    chain: k.rgb(VOID.r, VOID.g, VOID.b),
-    eyeWhite: k.rgb(eyeWhite.r, eyeWhite.g, eyeWhite.b),
+    ...eyes,
     root: k.rgb(root.r, root.g, root.b)
   }
 }
@@ -5201,10 +5247,10 @@ function glowChainBuoyColors(inst, k) {
 function glowEarTreeColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
-  const lip = flat ? DECOR_GRAY : glowRgb('#cc6764')
+  const lip = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.glowAttention.lip)
   const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeColor.root)
   return {
-    outline: k.rgb(VOID.r, VOID.g, VOID.b),
+    outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
     lip: k.rgb(lip.r, lip.g, lip.b),
     root: k.rgb(root.r, root.g, root.b)
@@ -5221,7 +5267,7 @@ function createGlowChainBuoyLayer(k, inst) {
       draw() {
         if (!inst.chainBuoys || !inst.zones.lCollected) return
         const c = glowChainBuoyColors(inst, k)
-        ChainBuoy.onDraw(inst.chainBuoys, c.chain, c.eyeWhite, c.root)
+        ChainBuoy.onDraw(inst.chainBuoys, c)
       }
     }
   ])
@@ -5372,8 +5418,8 @@ function buildParallaxSprites(k, undergroundSpec) {
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
   bakeParallaxLayerPair(k, BG_PAR_SKY_GRAY, BG_PAR_SKY_COLOR, PAR_SKY_SPEED, maxScroll, 0,
     PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx) => {
-      renderSkyBand(grayCtx, colorCtx, INNER_GRAY, WARM_HAZE)
-    })
+      renderSkyBand(grayCtx, colorCtx)
+    }, { blurRadius: glowDepthBlurRadiusPx('background'), grade: GLOW_LAYER_GRADE.far })
   bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_TREE3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_FARTHEST_BAND_TOP), parTreeRowWorldH(PAR_FARTHEST_BAND_TOP), (grayCtx, colorCtx, pad) => {
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
@@ -5382,10 +5428,11 @@ function buildParallaxSprites(k, undergroundSpec) {
         topMinY: PAR_FARTHEST_TOP_MIN_Y,
         topRange: PAR_FARTHEST_TOP_RANGE,
         bandTop: PAR_FARTHEST_BAND_TOP,
+        foliageDensityTier: 'background',
         grayPal: grayFarPal,
         colorBlend: PAR_FAR_COLOR_BLEND,
-        flatLeaves: false,
-        leafDarken: 0.14,
+        flatLeaves: true,
+        leafDarken: 0.18,
         uniformWood: true,
         treeFocusBias: PAR_TREE_FOCUS_BIAS_FAR,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_FAR
@@ -5393,11 +5440,12 @@ function buildParallaxSprites(k, undergroundSpec) {
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
         cornerBandTop: PAR_FARTHEST_BAND_TOP,
+        foliageDensityTier: 'background',
         colorFlat: false,
         grayFlat: true,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
-    }, { blurRadius: PAR_BLUR_RADIUS_FAR, grade: GLOW_LAYER_GRADE.far })
+    }, { blurRadius: glowDepthBlurRadiusPx('background'), grade: GLOW_LAYER_GRADE.far })
   bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (grayCtx, colorCtx, pad) => {
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
@@ -5406,10 +5454,11 @@ function buildParallaxSprites(k, undergroundSpec) {
         topMinY: PAR_FAR_TOP_MIN_Y,
         topRange: PAR_FAR_TOP_RANGE,
         bandTop: PAR_MID_BAND_TOP,
+        foliageDensityTier: 'midground',
         grayPal: grayMidPal,
         colorBlend: PAR_MID_COLOR_BLEND,
-        flatLeaves: false,
-        leafDarken: 0.08,
+        flatLeaves: true,
+        leafDarken: 0.1,
         uniformWood: true,
         treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
@@ -5417,11 +5466,12 @@ function buildParallaxSprites(k, undergroundSpec) {
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
         cornerBandTop: PAR_MID_BAND_TOP,
+        foliageDensityTier: 'midground',
         colorFlat: false,
         grayFlat: true,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
-    }, { blurRadius: PAR_BLUR_RADIUS_MID, grade: GLOW_LAYER_GRADE.mid })
+    }, { blurRadius: glowDepthBlurRadiusPx('midground'), grade: GLOW_LAYER_GRADE.mid })
   bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (grayCtx, colorCtx, pad) => {
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
@@ -5430,6 +5480,7 @@ function buildParallaxSprites(k, undergroundSpec) {
         topMinY: PAR_BIG_TOP_MIN_Y,
         topRange: PAR_BIG_TOP_RANGE,
         bandTop: PAR_NEAR_BAND_TOP,
+        foliageDensityTier: 'nearground',
         grayPal: grayNearPal,
         colorBlend: PAR_L1_COLOR_BLEND,
         flatLeaves: false,
@@ -5442,12 +5493,12 @@ function buildParallaxSprites(k, undergroundSpec) {
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
         cornerBandTop: PAR_NEAR_BAND_TOP,
+        foliageDensityTier: 'nearground',
         colorFlat: false,
         grayFlat: false,
-        heightScale: BUSH_NEAR_HEIGHT_SCALE,
-        hiResClusters: true
+        heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
-    }, { blurRadius: PAR_BLUR_RADIUS_NEAR, grade: GLOW_LAYER_GRADE.near })
+    }, { blurRadius: glowDepthBlurRadiusPx('nearground'), grade: GLOW_LAYER_GRADE.near })
   const staticGray = document.createElement('canvas')
   staticGray.width = WORLD_W
   staticGray.height = PAR_STATIC_WORLD_H
@@ -5461,8 +5512,8 @@ function buildParallaxSprites(k, undergroundSpec) {
   const [ugGray, ugColor] = undergroundPaletteEntries()
   renderCombinedGroundBand(staticGrayCtx, groundEarthLayersGray(), undergroundSpec, ugGray)
   renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, ugColor)
-  applyGlowLayerGradeToCanvas(staticGray, GLOW_LAYER_GRADE.foreground, 9100)
-  applyGlowLayerGradeToCanvas(staticColor, GLOW_LAYER_GRADE.foreground, 9101)
+  applyGlowLayerGradeToCanvas(staticGray, GLOW_LAYER_GRADE.decor, 9100)
+  applyGlowMaterialBake(staticColor, 9101)
   k.loadSprite(BG_STATIC_GRAY, staticGray)
   k.loadSprite(BG_STATIC_COLOR, staticColor)
   staticGray.width = 0
@@ -5471,29 +5522,73 @@ function buildParallaxSprites(k, undergroundSpec) {
   staticColor.height = 0
 }
 //
-// Paints the sky band into both parallax canvases as a vertical gradient
-// (lighter zenith, horizon tone at the ground line).
+// Samples the dark teal sky gradient; optional dawn gold in the lower band.
 //
-function renderSkyBand(grayCtx, colorCtx, grayRgb, colorRgb) {
-  const h = FLOOR_Y - TOP_MARGIN
-  paintSkyGradient(grayCtx, grayRgb, grayRgb, h)
-  paintSkyGradient(colorCtx, colorRgb, colorRgb, h)
+function glowSkyBandRgb(mixT, colorFade, includeDawn) {
+  const zenith = glowRgb('glowSkyZenith')
+  const mid = glowRgb('glowSkyMid')
+  const horizon = glowRgb('glowSkyHorizon')
+  let c = mixT < 0.5
+    ? lerpRgb(zenith, mid, mixT * 2)
+    : lerpRgb(mid, horizon, (mixT - 0.5) * 2)
+  if (includeDawn && colorFade > COLOR_CROSSFADE_EPS) {
+    const dawnStart = 1 - SKY_DAWN_BOTTOM_FRAC
+    if (mixT > dawnStart) {
+      const u = (mixT - dawnStart) / (1 - dawnStart)
+      const dawn = GLOW_LIGHT_CORE
+      const strength = SKY_DAWN_GLOW_STRENGTH * colorFade * u
+      c = lerpRgb(c, dawn, strength)
+    }
+  }
+  return snapToPalette(c)
 }
-function paintSkyGradient(ctx, horizonRgb, topRgb, h) {
+//
+// Paints the sky band into both parallax canvases: same dark green-teal base;
+// colour bake adds golden dawn at the trunk line only.
+//
+function renderSkyBand(grayCtx, colorCtx) {
+  const h = FLOOR_Y - TOP_MARGIN
+  paintGlowSkyGradient(grayCtx, h, 0, false)
+  paintGlowSkyGradient(colorCtx, h, 1, true)
+}
+//
+// Shared vertical sky fill for baked canvases and live playfield fallback.
+//
+function paintGlowSkyGradient(ctx, skyHeight, colorFade, includeDawn) {
   const bands = SKY_DITHER_BAND_COUNT
   for (let b = 0; b < bands; b++) {
     const t0 = b / bands
     const t1 = (b + 1) / bands
     const mix = (t0 + t1) * 0.5
-    const c = snapToPalette({
-      r: Math.round(topRgb.r + (horizonRgb.r - topRgb.r) * mix),
-      g: Math.round(topRgb.g + (horizonRgb.g - topRgb.g) * mix),
-      b: Math.round(topRgb.b + (horizonRgb.b - topRgb.b) * mix)
-    })
+    const c = glowSkyBandRgb(mix, colorFade, includeDawn)
     ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
-    const y = TOP_MARGIN + t0 * h
-    const bandH = Math.ceil(t1 * h - t0 * h) + 1
+    const y = TOP_MARGIN + t0 * skyHeight
+    const bandH = Math.ceil(t1 * skyHeight - t0 * skyHeight) + 1
     ctx.fillRect(LEFT_MARGIN, y, GAME_W, bandH)
+  }
+}
+//
+// Live playfield sky before / between parallax crossfades.
+//
+function drawGlowPlayfieldSky(k, opacity, colorFade) {
+  if (opacity < COLOR_CROSSFADE_EPS) return
+  const skyH = FLOOR_Y - TOP_MARGIN
+  const bands = SKY_DITHER_BAND_COUNT
+  const includeDawn = colorFade > COLOR_CROSSFADE_EPS
+  for (let b = 0; b < bands; b++) {
+    const t0 = b / bands
+    const t1 = (b + 1) / bands
+    const mix = (t0 + t1) * 0.5
+    const c = glowSkyBandRgb(mix, colorFade, includeDawn)
+    const y = TOP_MARGIN + t0 * skyH
+    const bandH = Math.ceil(t1 * skyH - t0 * skyH) + 1
+    k.drawRect({
+      pos: k.vec2(LEFT_MARGIN, y),
+      width: GAME_W,
+      height: bandH,
+      color: k.rgb(c.r, c.g, c.b),
+      opacity
+    })
   }
 }
 //
@@ -5628,7 +5723,7 @@ function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
 }
 //
 // Paints the root-zone part of a combined background canvas: the layered
-// earth band (chernozem / clay / sand, see groundEarthLayers) inside the
+// earth band (two layers at 50% depth, see groundEarthLayers) inside the
 // playfield margins, topped with the underground decor.
 //
 function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
@@ -5652,9 +5747,8 @@ function paintFlatEarthGroundSeal(ctx, rgb, x0, y0, width) {
 //
 // Three soil layers for the underground earth band, top to bottom, each
 // { rgb, frac } (frac of the total band height; the last layer just fills
-// whatever remains so rounding never leaves a gap). Gray-world stays tonal
-// gray (darkening with depth, no hue); colour-world uses real soil tones —
-// chernozem topsoil, clay, then sand at the deepest.
+// whatever remains so rounding never leaves a gap). Both modes use brown soil
+// tones; shadows lean on glowShadow / void (green-teal), not neutral gray.
 //
 function softenGroundEarthLayers(layers) {
   const avg = layers.reduce((acc, layer) => ({
@@ -5672,16 +5766,16 @@ function softenGroundEarthLayers(layers) {
   }))
 }
 function groundEarthLayersGray() {
+  const topsoil = glowRgb('groundChernozem')
+  const deep = glowRgb('groundSand')
   return softenGroundEarthLayers([
-    { rgb: lerpRgb(INNER_GRAY, VOID, 0.12), frac: GROUND_LAYER_FRACS[0] },
-    { rgb: lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN), frac: GROUND_LAYER_FRACS[1] },
-    { rgb: lerpRgb(INNER_GRAY, VOID, 0.55) }
+    { rgb: lerpRgb(topsoil, GLOW_SHADOW, 0.1), frac: GROUND_LAYER_FRACS[0] },
+    { rgb: lerpRgb(deep, VOID, 0.28) }
   ])
 }
 function groundEarthLayersColor() {
   return softenGroundEarthLayers([
     { rgb: glowRgb('groundChernozem'), frac: GROUND_LAYER_FRACS[0] },
-    { rgb: glowRgb('groundClay'), frac: GROUND_LAYER_FRACS[1] },
     { rgb: glowRgb('groundSand') }
   ])
 }
@@ -5697,6 +5791,10 @@ function parallaxForestCornerKey(treeX, bandTop) {
   if (left && !top) return PAR_TREE_CORNER_KEYS[2]
   return PAR_TREE_CORNER_KEYS[3]
 }
+//
+// Main tree shares the nearest parallax row's corner foliage palette.
+//
+const MAIN_TREE_PARALLAX_FOLIAGE_CORNER = parallaxForestCornerKey(TREE_X, PAR_NEAR_BAND_TOP)
 //
 // Dominant leaf swatch for a quadrant (bushes and flat colour strips).
 //
@@ -5721,8 +5819,10 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     treeX1 = LEFT_MARGIN,
     treeX2 = WORLD_W - RIGHT_MARGIN,
     treeFocusBias = 0,
-    trunkWidthScale = 1
+    trunkWidthScale = 1,
+    foliageDensityTier = 'midground'
   } = planeCfg
+  const treeDensityOpts = glowTreeBuildOptsForDensity(foliageDensityTier)
   const treeXs = buildParallaxTreeXs(count, treeX1, treeX2, TREE_X, treeFocusBias)
   treeXs.forEach((treeX, i) => {
     //
@@ -5731,7 +5831,7 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     const grayPal = grayPalOverride || buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
     const colorPal = colorPalOverride || buildDimmedTreePalette(
       colorBase || getTreePaletteParallaxCorner(parallaxForestCornerKey(treeX, bandTop)),
-      WARM_HAZE,
+      PARALLAX_FOLIAGE_HAZE,
       colorBlend,
       flatLeaves,
       leafDarken,
@@ -5747,7 +5847,7 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
       Math.round(trunkTopY),
       PAR_TRUNK_BOTTOM_Y,
       PAR_TRUNK_BOTTOM_Y,
-      { includeRoots: false, includeHeroBranch: false }
+      { includeRoots: false, includeHeroBranch: false, ...treeDensityOpts }
     )
     //
     // Slight width scale so a row of main-style trees does not overpower the hero tree.
@@ -5755,8 +5855,10 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
     scaleGlowTreeWidths(treeData, widthScale)
     trunkWidthScale < 1 && scaleGlowTreeTrunkWidths(treeData, trunkWidthScale)
-    renderGlowTreeIntoContext(grayCtx, treeData, grayPal, WORLD_W, WORLD_H)
-    renderGlowTreeIntoContext(colorCtx, treeData, colorPal, WORLD_W, WORLD_H)
+    const grayPalDraw = applyFoliageDensityToPalette(grayPal, foliageDensityTier)
+    const colorPalDraw = applyFoliageDensityToPalette(colorPal, foliageDensityTier)
+    renderGlowTreeIntoContext(grayCtx, treeData, grayPalDraw, WORLD_W, WORLD_H)
+    renderGlowTreeIntoContext(colorCtx, treeData, colorPalDraw, WORLD_W, WORLD_H)
   })
 }
 //
@@ -5782,10 +5884,13 @@ function scaleGlowTreeTrunkWidths(treeData, scale) {
   })
 }
 //
-// Foreground bake: full contrast/saturation grade plus film grain.
+// Earth / bark / stone bakes — stronger film grain where texture is expected.
 //
-function applyGlowForegroundBake(canvas, seedOffset = 0) {
-  applyGlowLayerGradeToCanvas(canvas, GLOW_LAYER_GRADE.foreground, seedOffset)
+function applyGlowMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay') {
+  applyGlowLayerGradeToCanvas(canvas, {
+    ...GLOW_LAYER_GRADE.material,
+    grainBlockSize: glowFilmGrainBlockPxForTier(densityTier)
+  }, seedOffset)
 }
 //
 // Renders one bush strip into both combined canvases: leafy mounds of
@@ -5798,7 +5903,8 @@ function applyGlowForegroundBake(canvas, seedOffset = 0) {
 //
 function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   const {
-    grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters = false,
+    grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters,
+    foliageDensityTier = 'midground',
     cornerBandTop = null,
     x1 = LEFT_MARGIN,
     x2 = WORLD_W - RIGHT_MARGIN
@@ -5807,13 +5913,16 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   const right = x2
   while (x < right) {
     const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
-    const mound = buildLeafyBushMoundSpec(x, radius)
+    const leafSizeScale = glowBushLeafSizeScaleForTier(foliageDensityTier)
+    const leafDensityScale = glowBushLeafDensityScaleForTier(foliageDensityTier)
+    const mound = buildLeafyBushMoundSpec(x, radius, leafSizeScale, leafDensityScale)
     const moundColorRgb = cornerBandTop != null
       ? parallaxCornerLeafRgb(mound.x, cornerBandTop)
       : colorRgb
+    const useHiResClusters = hiResClusters ?? glowHiResBushClustersForTier(foliageDensityTier)
     drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
     drawLeafyBushMound(colorCtx, mound, moundColorRgb, colorFlat)
-    hiResClusters && drawHiResBushClusters(colorCtx, mound, moundColorRgb)
+    useHiResClusters && drawHiResBushClusters(colorCtx, mound, moundColorRgb, foliageDensityTier)
     //
     // Advance less than a radius so each mound overlaps the next one.
     //
@@ -5825,20 +5934,20 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
 // position, size, tilt and shade index of every inner and rim leaf, so the
 // same mound can be painted identically with different tones.
 //
-function buildLeafyBushMoundSpec(x, radius) {
+function buildLeafyBushMoundSpec(x, radius, leafSizeScale = 1, leafDensityScale = 1) {
   const leaves = []
   //
   // Inner leaves — density scales with the dome area; sqrt keeps the radial
   // distribution uniform so no thin spots appear near the rim.
   //
-  const innerCount = Math.round(radius * radius * BUSH_LEAF_DENSITY)
+  const innerCount = Math.round(radius * radius * BUSH_LEAF_DENSITY * leafDensityScale)
   for (let i = 0; i < innerCount; i++) {
     const a = Math.PI + Math.random() * Math.PI
     const dist = radius * Math.sqrt(Math.random())
     leaves.push({
       x: x + Math.cos(a) * dist,
       y: FLOOR_Y + Math.sin(a) * dist,
-      size: BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE,
+      size: (BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE) * leafSizeScale,
       angle: Math.random() * Math.PI * 2,
       shadeIdx: Math.floor(Math.random() * BUSH_LEAF_DARKEN_STEPS.length)
     })
@@ -5853,7 +5962,7 @@ function buildLeafyBushMoundSpec(x, radius) {
     leaves.push({
       x: x + Math.cos(a) * radius,
       y: FLOOR_Y + Math.sin(a) * radius,
-      size: BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE,
+      size: (BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE) * leafSizeScale,
       angle: a + Math.PI / 2 + (Math.random() - 0.5) * 0.6,
       shadeIdx: Math.floor(Math.random() * 2)
     })
@@ -5868,7 +5977,7 @@ function buildLeafyBushMoundSpec(x, radius) {
 // (the 2nd+ colour-world strips have no leaf details).
 //
 function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
-  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => flat ? rgb : lerpRgb(rgb, VOID, t))
+  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => flat ? rgb : lerpRgb(rgb, GLOW_SHADOW, t))
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
   ctx.arc(mound.x, FLOOR_Y, mound.radius, Math.PI, 0)
@@ -5897,14 +6006,15 @@ function drawBushLeaf(ctx, x, y, size, angle, rgb) {
 // density uniform per unit area (same trick buildLeafyBushMoundSpec uses
 // for its inner leaves) instead of bunching everything near the base.
 //
-function drawHiResBushClusters(ctx, mound, baseRgb) {
+function drawHiResBushClusters(ctx, mound, baseRgb, foliageDensityTier = 'nearground') {
+  const { minPx, maxPx } = glowBushHiResClusterRadiusRangeForTier(foliageDensityTier)
   const clusterCount = Math.max(10, Math.round(mound.radius * BUSH_HIRES_CLUSTER_DENSITY))
   for (let i = 0; i < clusterCount; i++) {
     const a = Math.PI + Math.random() * Math.PI
     const dist = mound.radius * Math.sqrt(Math.random())
     const cx = mound.x + Math.cos(a) * dist
     const cy = FLOOR_Y + Math.sin(a) * dist
-    const r = 5 + Math.random() * 9
+    const r = minPx + Math.random() * (maxPx - minPx)
     drawGlowHiResFoliageCluster(ctx, cx, cy, r, baseRgb, mound.x * 17 + i * 991)
   }
 }
@@ -5971,7 +6081,7 @@ function drawBackgroundBirds(inst) {
   const k = inst.k
   bakeGlowBirdFlapSprites(k)
   if (!inst._birdDrawColor) {
-    const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
+    const c = lerpRgb(VOID, GLOW_LIGHT_CORE, BIRD_HAZE_BLEND)
     inst._birdDrawColor = k.rgb(c.r, c.g, c.b)
   }
   const color = inst._birdDrawColor
@@ -6016,13 +6126,17 @@ function drawAtmosphereHaze(inst, opacity) {
   if (opacity < 0.01) return
   if (isForestHazeSuppressedAtCam(inst)) return
   const k = inst.k
-  const c = lerpRgb(INNER_GRAY, WARM_HAZE, inst.colorFade ?? 0)
+  const fade = inst.colorFade ?? 0
+  if (fade < COLOR_CROSSFADE_EPS) return
+  const c = GLOW_LIGHT_CORE
+  const skyH = FLOOR_Y - TOP_MARGIN
+  const bandH = skyH * SKY_DAWN_BOTTOM_FRAC
   k.drawRect({
-    pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
+    pos: k.vec2(LEFT_MARGIN, FLOOR_Y - bandH),
     width: GAME_W,
-    height: FLOOR_Y - TOP_MARGIN,
+    height: bandH,
     color: k.rgb(c.r, c.g, c.b),
-    opacity
+    opacity: opacity * fade * 0.1
   })
 }
 //
@@ -6073,8 +6187,10 @@ function drawAtmosphereMotes(inst) {
   const k = inst.k
   const colorFade = glowDecorFade(inst)
   const gray = HUD_SCORE_COLOR_SETTLED
-  const warm = lerpRgb(WARM_HAZE, LIGHT_GRAY, 0.35)
-  const c = inst.zones.colorWorld || colorFade > COLOR_CROSSFADE_EPS ? lerpRgb(gray, warm, colorFade) : gray
+  const warm = lerpRgb(GLOW_LIGHT_CORE, GLOW_LIGHT_BRIGHT, 0.55)
+  const c = inst.zones.colorWorld || colorFade > COLOR_CROSSFADE_EPS
+    ? lerpRgb(gray, warm, colorFade * colorFade)
+    : gray
   const color = k.rgb(c.r, c.g, c.b)
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
@@ -6109,13 +6225,14 @@ function drawExploredGroundLip(inst) {
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
   const x0 = LEFT_MARGIN
   const x1 = WORLD_W - RIGHT_MARGIN
-  const step = (x1 - x0) / GROUND_LIP_STEPS
+  const lipSteps = isGlowFullParallaxStable(inst) ? GROUND_LIP_STEPS_PARALLAX_STABLE : GROUND_LIP_STEPS
+  const step = (x1 - x0) / lipSteps
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
   const pitMouthCut = inst.pit?.collapsed && inst.pit.zone
     ? getGlowPitEarthBandMouthCutoutForPit(inst.pit)
     : null
-  for (let i = 0; i < GROUND_LIP_STEPS; i++) {
+  for (let i = 0; i < lipSteps; i++) {
     const x = x0 + i * step
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
     if (pitMouthCut && x >= pitMouthCut.leftX && x <= pitMouthCut.rightX) continue
@@ -6159,7 +6276,7 @@ function loadUndergroundSprites(k) {
     canvas.height = WORLD_H
     const ctx = canvas.getContext('2d')
     renderUndergroundSpec(ctx, spec, entry)
-    applyGlowForegroundBake(canvas, entry.name.length * 41)
+    applyGlowMaterialBake(canvas, entry.name.length * 41)
     k.loadSprite(entry.name, canvas)
     canvas.width = 0
     canvas.height = 0
@@ -6175,15 +6292,15 @@ function undergroundPaletteEntries() {
   return [
     {
       name: UNDERGROUND_GRAY_SPRITE,
-      fill: glowRgb('midGray'),
-      deep: glowRgb('playfieldOuter'),
-      light: glowRgb('lightGray')
+      fill: glowRgb('groundClay'),
+      deep: glowRgb('mudGround'),
+      light: glowRgb('groundSand')
     },
     {
       name: UNDERGROUND_COLOR_SPRITE,
-      fill: glowRgb('dialogFill'),
-      deep: glowRgb('void'),
-      light: glowRgb('playfieldOuter')
+      fill: glowRgb('groundChernozem'),
+      deep: glowRgb('mudGround'),
+      light: glowRgb('groundSand')
     }
   ]
 }
@@ -7332,13 +7449,14 @@ function createGrayLogPlatform(
           const meditationFade = sc?.zones?.lCollected && sc.meditation?.countdown != null
             ? meditationCountdownFade(sc)
             : 0
+          const contourDefault = fade > COLOR_CROSSFADE_EPS ? PLATFORM_OUTLINE_RGB : DECOR_OUTLINE_RGB
           const outlineBase = meditationFade > 0
             ? {
-              r: Math.round(DECOR_OUTLINE_RGB.r + (getRGB(k, glowLogColors(zones).bark).r - DECOR_OUTLINE_RGB.r) * meditationFade),
-              g: Math.round(DECOR_OUTLINE_RGB.g + (getRGB(k, glowLogColors(zones).bark).g - DECOR_OUTLINE_RGB.g) * meditationFade),
-              b: Math.round(DECOR_OUTLINE_RGB.b + (getRGB(k, glowLogColors(zones).bark).b - DECOR_OUTLINE_RGB.b) * meditationFade)
+              r: Math.round(contourDefault.r + (getRGB(k, glowLogColors(zones).bark).r - contourDefault.r) * meditationFade),
+              g: Math.round(contourDefault.g + (getRGB(k, glowLogColors(zones).bark).g - contourDefault.g) * meditationFade),
+              b: Math.round(contourDefault.b + (getRGB(k, glowLogColors(zones).bark).b - contourDefault.b) * meditationFade)
             }
-            : DECOR_OUTLINE_RGB
+            : contourDefault
           const outlineRgb = k.rgb(outlineBase.r, outlineBase.g, outlineBase.b)
           //
           // Stays true neutral gray while the world is still flat, same as
@@ -7418,7 +7536,7 @@ function createLogAtlasCollector() {
     if (!requests.length) return
     const baked = requests.map((r, i) => {
       const canvas = bakeLogPlatformCanvas(k, r.w, r.h, r.detail, r.colors)
-      applyGlowForegroundBake(canvas, 8000 + i)
+      applyGlowMaterialBake(canvas, 8000 + i)
       return canvas
     })
     const { canvas, tiles } = packLogPlatformAtlas(baked)
@@ -7797,7 +7915,7 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     // and should stay hard to spot through the grass.
     //
     getScaleMult: (x) => x >= mudZoneX1 && x <= mudZoneX2 ? MUD_ZONE_GRASS_SCALE_MULT : 1,
-    postBakeCanvas: applyGlowForegroundBake,
+    postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: (blade) => glowGrassTint(zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones),
     roots: true,
@@ -7824,7 +7942,7 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     tuftCount: MUD_ZONE_EXTRA_GRASS_TUFT_COUNT,
     z: GRASS_Z,
     getScaleMult: () => MUD_ZONE_GRASS_SCALE_MULT,
-    postBakeCanvas: applyGlowForegroundBake,
+    postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones),
     roots: true,
@@ -7849,7 +7967,7 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     tuftCount: RIGHT_SPIKE_GRASS_TUFT_COUNT,
     z: GRASS_Z,
     getScaleMult: () => RIGHT_SPIKE_GRASS_SCALE_MULT,
-    postBakeCanvas: applyGlowForegroundBake,
+    postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
     getSwayScale: () => glowGrassSwayScale(zones)
   })
@@ -7877,11 +7995,7 @@ function clampGlowSpikeGrassInsidePlatformRight(grass, platRightX, insetLeft) {
 //
 function glowSpikeGrassTint(sc, zones) {
   if (!zones.lPlatRevealed) return null
-  if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const fade = glowGrassGreenFade(sc, zones)
-  if (fade >= 1) return GRASS_GREEN
-  return lerpRgb(gray, GRASS_GREEN, fade)
+  return glowPeekStrawGrassTint(sc, zones)
 }
 //
 // Fixed wooden spikes on the L-log's right edge — a static hazard drawn
@@ -7956,7 +8070,7 @@ function glowMudZoneGrassTint(sc, zones, blade) {
   if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
   const fade = glowGrassGreenFade(sc, zones)
-  const mudGreen = lerpRgb(GRASS_GREEN, VOID, MUD_ZONE_GRASS_GREEN_VOID_LERP)
+  const mudGreen = lerpRgb(GRASS_GREEN, GLOW_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
   if (fade >= 1) {
     sc._grassMudColorSettled ??= lerpRgb(gray, mudGreen, 1)
     return sc._grassMudColorSettled
@@ -7968,16 +8082,17 @@ function glowMudZoneGrassTint(sc, zones, blade) {
 // mouth) — same gray/green crossfade as the mud band itself, just without
 // the taller mud-specific blade scale (see glowMudZoneGrassTint).
 //
-function glowGroundPeekGrassTint(sc, zones, blade) {
-  if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
+function glowPeekStrawGrassTint(sc, zones) {
   if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+  const straw = glowRgb(GLOW_GOLD_HEX)
   const fade = glowGrassGreenFade(sc, zones)
-  if (fade >= 1) {
-    sc._grassColorSettled ??= lerpRgb(gray, GRASS_GREEN, 1)
-    return sc._grassColorSettled
-  }
-  return lerpRgb(gray, GRASS_GREEN, fade)
+  if (fade >= 1) return straw
+  return lerpRgb(gray, straw, fade)
+}
+function glowGroundPeekGrassTint(sc, zones, blade) {
+  if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
+  return glowPeekStrawGrassTint(sc, zones)
 }
 //
 // Resolves the tint of one grass blade for the current frame: null while the
@@ -7990,8 +8105,7 @@ function glowGroundPeekGrassTint(sc, zones, blade) {
 // color switch as the ear-tree and chain-buoy roots.
 //
 function glowGrassRootColor(zones) {
-  const flat = isGlowFlatSingleDecorColor(zones._sceneRef)
-  const c = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
+  const c = glowRgb('mudGround')
   return { r: c.r, g: c.g, b: c.b }
 }
 //
@@ -8214,15 +8328,13 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   const posY = FLOOR_Y - croppedH
   const verts = buildRockVertices(radius)
   //
-  // Fill stays a single flat tone (the pre-L world is strictly one decor
-  // gray); the dark rim is what makes the silhouette read clearly against
-  // the ground — shading only arrives after L via
-  // rebakeGlowRockSpritesShaded.
+  // Flat mid stone before L; shaded glowRock tones after rebakeGlowRockSpritesShaded.
   //
+  const rockMid = glowRgb(GLOW_PAL.glowRock.mid)
   const flatPalette = {
-    fillR: DECOR_GRAY.r, fillG: DECOR_GRAY.g, fillB: DECOR_GRAY.b,
-    lightR: DECOR_GRAY.r, lightG: DECOR_GRAY.g, lightB: DECOR_GRAY.b,
-    darkR: DECOR_GRAY.r, darkG: DECOR_GRAY.g, darkB: DECOR_GRAY.b
+    fillR: rockMid.r, fillG: rockMid.g, fillB: rockMid.b,
+    lightR: rockMid.r, lightG: rockMid.g, lightB: rockMid.b,
+    darkR: rockMid.r, darkG: rockMid.g, darkB: rockMid.b
   }
   const bakeRock = (seedOffset) => {
     const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
@@ -8236,7 +8348,7 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
         outlineAlpha: 1
       })
     })
-    applyGlowForegroundBake(canvas, seedOffset)
+    applyGlowMaterialBake(canvas, seedOffset)
     return canvas
   }
   const bakedGray = decorAtlas.register(bakeRock(worldX * 3 | 0))
@@ -8301,6 +8413,14 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
     const c = glowRgb(hex)
     return [c.r, c.g, c.b]
   })
+  const capLightRgb = MUSHROOM_CAP_LIGHT_HEX.map(hex => {
+    const c = glowRgb(hex)
+    return [c.r, c.g, c.b]
+  })
+  const capShadowRgb = MUSHROOM_CAP_SHADOW_HEX.map(hex => {
+    const c = glowRgb(hex)
+    return [c.r, c.g, c.b]
+  })
   const shuffledCapIdx = capColorsRgb.map((_, i) => i)
   for (let i = shuffledCapIdx.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -8351,21 +8471,26 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
     const mushCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       drawMushroomToCanvas(ctx, { ...mushDrawOpts, capColor: decorGrayRgb, flat: true })
     })
-    applyGlowForegroundBake(mushCanvas, posX * 2 | 0)
+    applyGlowGameplaySharpBake(mushCanvas, posX * 2 | 0)
     const bakedGray = decorAtlas.register(mushCanvas)
     const mushFlatCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       drawMushroomToCanvas(ctx, { ...mushDrawOpts, capColor: decorGrayRgb, flat: true })
     })
-    applyGlowForegroundBake(mushFlatCanvas, posX * 2 + 1 | 0)
+    applyGlowGameplaySharpBake(mushFlatCanvas, posX * 2 + 1 | 0)
     const bakedFlat = decorAtlas.register(mushFlatCanvas)
     //
     // Colour-world variant — cap tones from this mushroom's palette family.
     //
     const capIdx = shuffledCapIdx[i % shuffledCapIdx.length]
     const mushColorCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, { ...mushDrawOpts, capColor: capColorsRgb[capIdx] })
+      drawMushroomToCanvas(ctx, {
+        ...mushDrawOpts,
+        capColor: capColorsRgb[capIdx],
+        capLight: capLightRgb[capIdx],
+        capShadow: capShadowRgb[capIdx]
+      })
     })
-    applyGlowForegroundBake(mushColorCanvas, posX * 2 + 2 | 0)
+    applyGlowGameplaySharpBake(mushColorCanvas, posX * 2 + 2 | 0)
     const bakedOutline = decorAtlas.register(mushColorCanvas)
     //
     // Anchor at the base so whistle lean rotates around the ground, not the cap
@@ -8574,7 +8699,7 @@ function bakeTrampolineVariant(k, name, colors, eyesOpen) {
       simpleShade: true
     })
   })
-  applyGlowForegroundBake(canvas, name.length * 13)
+  applyGlowGameplaySharpBake(canvas, name.length * 13)
   k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -8647,7 +8772,7 @@ function bakeLakeWaterSprites(k, x1, x2Core) {
     }
     ctx.closePath()
     ctx.fill()
-    applyGlowForegroundBake(canvas, 5000 + f)
+    applyGlowGameplaySharpBake(canvas, 5000 + f)
     k.loadSprite(LAKE_BAKE_SPRITE_PREFIX + f, canvas)
     canvas.width = 0
     canvas.height = 0
@@ -9214,7 +9339,7 @@ function drawGlowPitPass(inst) {
 // Pickup eyes sit in the skull sockets — draw on the pit layer above the skeleton.
 //
 function drawGlowPitCaveLyingEyes(inst, k) {
-  drawGlowCavePickupEyesOnPitLayer(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
+  drawGlowCavePickupEyesOnPitLayer(inst, k)
 }
 //
 // Fills the earth-band cutout with cave void — never light playfield gray inside
@@ -9223,14 +9348,15 @@ function drawGlowPitCaveLyingEyes(inst, k) {
 function drawGlowPitInteriorVoidBackdrop(inst, k) {
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
-  if (pit._caveSpriteReady) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
-  const depth = pit.zone.depth
-  depth > 0 && k.drawRect({
+  const w = rightX - leftX
+  const interiorH = pit.zone.depth
+  const voidRgb = glowCaveEarthDeepRgb()
+  interiorH > 0 && k.drawRect({
     pos: k.vec2(leftX, pit.floorY),
-    width: rightX - leftX,
-    height: depth,
-    color: k.rgb(VOID.r, VOID.g, VOID.b)
+    width: w,
+    height: interiorH,
+    color: k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
   })
 }
 function drawGlowPitCutoutBelowFloorFill(inst, k) {
@@ -9265,13 +9391,24 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
 // the crack (film grain included), not flat void fill.
 //
 function glowPitBelowCaveEarthRgb(inst) {
+  if (inst.pit?.collapsed) {
+    const fade = inst.colorFade ?? 0
+    const z = inst.zones
+    const innerGray = isPlayfieldInnerGrayVisible(z, fade)
+    if (isGlowFlatSingleDecorColor(inst) && !innerGray) return glowCaveEarthFloorRgb()
+    const colorBottom = glowGroundEarthBottomLayerRgb(false)
+    const grayBottom = glowGroundEarthBottomLayerRgb(true)
+    if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return colorBottom
+    return lerpRgb(grayBottom, colorBottom, fade)
+  }
   if (inst._surfaceEarthRgb) return inst._surfaceEarthRgb
   const fade = inst.colorFade ?? 0
   const z = inst.zones
   const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return VOID
-  if (z.colorWorld || z.oCollected || fade >= 1 - COLOR_CROSSFADE_EPS) return GROUND_DARK
-  return lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
+  const caveEarth = glowCaveEarthFloorRgb()
+  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return caveEarth
+  if (z.colorWorld || z.oCollected || fade >= 1 - COLOR_CROSSFADE_EPS) return caveEarth
+  return lerpRgb(glowGrayGroundRgb(inst, innerGray), caveEarth, fade)
 }
 //
 // Picks the same static earth sprite slice the main playfield uses beside the pit.
@@ -9345,6 +9482,21 @@ function shouldGlowCrackLandingCameraShake(inst) {
   return true
 }
 //
+// Cave rocks/pebbles/seams — last world pass so earth-band fills never clip them.
+//
+function drawGlowPitCaveRocksOverEarthBand(inst) {
+  const pit = inst.pit
+  if (!pit?.collapsed) return
+  const k = inst.k
+  if (isGlowEyeIntroBareWorld(inst)) return
+  const fade = inst.colorFade ?? 0
+  const innerGray = isPlayfieldInnerGrayVisible(inst.zones, fade)
+  const flatExplore = isGlowFlatSingleDecorColor(inst)
+  const flatDecor = flatExplore && !innerGray
+  drawGlowPitCaveForegroundDecor(k, pit, flatDecor)
+  drawGlowPitCaveSeamCoverRocks(k, pit)
+}
+//
 // Skeleton, mushroom and seam rocks — above earth/static, below the hero.
 //
 function drawGlowPitCaveForegroundPass(inst) {
@@ -9360,20 +9512,48 @@ function drawGlowPitCaveForegroundPass(inst) {
   const innerGray = isPlayfieldInnerGrayVisible(inst.zones, fade)
   const flatExplore = isGlowFlatSingleDecorColor(inst)
   const flatDecor = flatExplore && !innerGray
-  drawGlowPitCaveForegroundDecor(k, pit, flatDecor)
-  drawGlowPitCaveSeamCoverRocks(k, pit)
   drawGlowPitCaveSkeletonScene(k, pit, flatDecor)
   drawGlowPitCaveMushroom(k, pit)
   drawGlowPitCaveLyingEyes(inst, k)
+}
+//
+//
+// Hero foot Y for draw-time culling (matches gameplay surface probe).
+//
+function glowHeroFootYForDraw(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return null
+  return char.pos.y + SURFACE_DETECT_Y
+}
+//
+// Skip sky/far/mid parallax while the hero is deep inside the collapsed pit.
+//
+function shouldSkipGlowDistantParallaxDraw(inst) {
+  const pit = inst.pit
+  if (!pit?.collapsed || !pit.zone) return false
+  const footY = glowHeroFootYForDraw(inst)
+  if (footY == null || footY <= pit.floorY + 40) return false
+  const heroX = inst.heroInst?.character?.pos?.x
+  if (heroX == null || !isGlowOpenPitMouthWorldX(pit, heroX)) return false
+  return true
+}
+//
+// Skip the near parallax row too once the hero is well below the mouth lip.
+//
+function shouldSkipGlowNearParallaxDraw(inst) {
+  if (!shouldSkipGlowDistantParallaxDraw(inst)) return false
+  const pit = inst.pit
+  const footY = glowHeroFootYForDraw(inst)
+  return footY > pit.floorY + pit.zone.depth * 0.22
 }
 //
 // Main draw — void until G opens the outer frame; inner gray after L/O.
 //
 function onDraw(inst) {
   onDrawWorld(inst)
-  inst.k && drawGlowPitCutoutBelowFloorFill(inst, inst.k)
   drawGlowPitCaveForegroundPass(inst)
   drawGlowPitCaveHeroForeground(inst)
+  drawGlowPitCaveRocksOverEarthBand(inst)
 }
 //
 // World-layer draw pass (everything that scrolls with the camera).
@@ -9397,31 +9577,33 @@ function onDrawWorld(inst) {
       inner = DECOR_GRAY
     }
     //
-    // Colour world splits the playfield backdrop at the ground line: a
-    // bright warm orange haze above it (the glowing distance seen between
-    // the trunks at the screen centre), dark earth in the root zone below.
-    // Both lerp from the flat inner gray as the colour fade progresses.
+    // Colour world splits the playfield at the ground line: warm haze between
+    // the trunks above, dark forest earth below — both lerp up from the deep
+    // green inner base as the colour fade progresses.
     //
     const grayGround = flatExplore && !innerGray
       ? DECOR_GRAY
       : glowGrayGroundRgb(inst, innerGray)
-    const skyC = flatExplore && !innerGray ? DECOR_GRAY : lerpRgb(inner, WARM_HAZE, fade)
     const groundC = flatExplore && !innerGray ? DECOR_GRAY : lerpRgb(grayGround, GROUND_DARK, fade)
     groundFillC = groundC
     inst._surfaceEarthRgb = innerGray ? glowGrayGroundRgb(inst, true) : groundC
     //
     // Sky scrolls on its own parallax layer once the forest is revealed.
-    // Crossfade flat rects out as parallaxFade rises so the preview never pops.
+    // Crossfade the dark teal + dawn gradient out as parallaxFade rises.
     //
     const parallaxMix = zones.lZoneParallax ? (inst.parallaxFade ?? 0) : 0
     const fallbackOp = parallaxStable ? 0 : (zones.lZoneParallax ? Math.max(0, 1 - parallaxMix) : 1)
-    fallbackOp > COLOR_CROSSFADE_EPS && k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
-      width: GAME_W,
-      height: FLOOR_Y - TOP_MARGIN,
-      color: k.rgb(skyC.r, skyC.g, skyC.b),
-      opacity: fallbackOp
-    })
+    if (fallbackOp > COLOR_CROSSFADE_EPS) {
+      flatExplore && !innerGray
+        ? k.drawRect({
+          pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
+          width: GAME_W,
+          height: FLOOR_Y - TOP_MARGIN,
+          color: k.rgb(DECOR_GRAY.r, DECOR_GRAY.g, DECOR_GRAY.b),
+          opacity: fallbackOp
+        })
+        : drawGlowPlayfieldSky(k, fallbackOp, fade)
+    }
     //
     // Once the parallax stack is active, its opaque static ground+underground
     // sprite (drawn below) fully repaints this exact band on top — this fill
@@ -9437,18 +9619,22 @@ function onDrawWorld(inst) {
     // are baked onto its trees, so one draw covers both), then static
     // ground. Birds sit right after the opaque backdrop fill.
     //
-    drawParallaxLayer(inst, PAR_LAYER_SKY)
+    const skipDistantParallax = shouldSkipGlowDistantParallaxDraw(inst)
+    const skipNearParallax = shouldSkipGlowNearParallaxDraw(inst)
+    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_SKY)
     const decorLife = glowPostLRevealFade(inst)
-    const showBirds = decorLife > BIRD_VISIBLE_FADE_MIN &&
+    const showBirds = !skipDistantParallax && decorLife > BIRD_VISIBLE_FADE_MIN &&
       (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
     showBirds && drawBackgroundBirds(inst)
     const pf = inst.parallaxFade
-    drawParallaxLayer(inst, PAR_LAYER_FAR)
-    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
-    drawParallaxLayer(inst, PAR_LAYER_MID)
-    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
-    drawParallaxLayer(inst, PAR_LAYER_NEAR)
-    !parallaxStable && fade < 1 && drawAtmosphereMotes(inst)
+    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_FAR)
+    !skipDistantParallax && !parallaxStable && fade < 1 &&
+      drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
+    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_MID)
+    !skipDistantParallax && !parallaxStable && fade < 1 &&
+      drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    !skipNearParallax && drawParallaxLayer(inst, PAR_LAYER_NEAR)
+    !skipDistantParallax && !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
   } else {
     drawBackgroundBirds(inst)
   }
@@ -9489,10 +9675,11 @@ function onDrawWorld(inst) {
     ? DECOR_GRAY
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
-  onDrawGlowEyeIntro(inst, k, HERO_BODY_COLOR, HERO_BODY_COLOR)
+  onDrawGlowEyeIntro(inst, k)
   !isGlowEyeIntroBareWorld(inst) && drawExploredGroundLip(inst)
   !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst)
   drawGlowPitMouthEarthGapFill(inst, k)
+  inst.k && drawGlowPitCutoutBelowFloorFill(inst, k)
   //
   // Last in onDrawWorld — earth/static/parallax must not repaint over the pit;
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
@@ -9559,14 +9746,21 @@ function drawGlowPitMouthEarthGapFill(inst, k) {
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   const w = rightX - leftX
   if (w <= 0) return
-  const fade = inst.colorFade ?? 0
-  const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-  const rgb = inst._surfaceEarthRgb || glowGrayGroundRgb(inst, innerGray)
-  k.drawRect({
+  const interiorH = Math.min(pit.zone.depth, CAVE_BAND_H)
+  const belowH = CAVE_BAND_H - interiorH
+  const voidRgb = glowCaveEarthDeepRgb()
+  const bottomRgb = glowPitBelowCaveEarthRgb(inst)
+  interiorH > 0 && k.drawRect({
     pos: k.vec2(leftX, FLOOR_Y),
     width: w,
-    height: CAVE_BAND_H,
-    color: k.rgb(rgb.r, rgb.g, rgb.b)
+    height: interiorH,
+    color: k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
+  })
+  belowH > 0 && k.drawRect({
+    pos: k.vec2(leftX, FLOOR_Y + interiorH),
+    width: w,
+    height: belowH,
+    color: k.rgb(bottomRgb.r, bottomRgb.g, bottomRgb.b)
   })
 }
 //
@@ -10109,7 +10303,7 @@ function applyGlowHeroBodyFill(inst) {
     addMouth: hero.addMouth,
     addArms: hero.addArms,
     addWatch: hero.addWatch,
-    postBakeCanvas: applyGlowForegroundBake
+    postBakeCanvas: applyGlowForegroundFocusBake
   })
   const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_OUTLINE_COLOR).replace('#', '')}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
@@ -10151,7 +10345,7 @@ function glowHeroFillOpts(inst) {
 const GLOW_LEVEL_FILL_CFG = {
   filledBodyColor: HERO_FILLED_BODY_COLOR,
   filledOutlineColor: HERO_OUTLINE_COLOR,
-  postBakeCanvas: applyGlowForegroundBake,
+  postBakeCanvas: applyGlowForegroundFocusBake,
   onFullFill: applyGlowHeroBodyFill
 }
 //
@@ -10410,7 +10604,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const letterFillRgb = letterEntry?.char === 'L'
     ? getRGB(k, GLOW_PAL.gold)
     : letterEntry?.char === 'O'
-      ? getRGB(k, GLOW_PAL.warmCream)
+      ? getRGB(k, GLOW_PAL.glowLightBright)
       : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
@@ -10940,7 +11134,7 @@ function syncGlowFpsHudVisibility(inst) {
       topY: GLOW_HUD_FPS_TOP_Y,
       textColor: inst.k.rgb(HUD_SCORE_COLOR_SETTLED.r, HUD_SCORE_COLOR_SETTLED.g, HUD_SCORE_COLOR_SETTLED.b),
       outlineColor: inst.k.rgb(VOID.r, VOID.g, VOID.b),
-      postBakeCanvas: applyGlowForegroundBake
+      postBakeCanvas: applyGlowHudSharpBake
     })
   }
   FpsCounter.setVisible(inst.fpsCounter, true)
@@ -12224,7 +12418,9 @@ function onUpdate(inst) {
   // roots-visible-from-G gray sprite always reflects current zone state even
   // if some specific event path forgets to call applyZoneVisibility.
   //
-  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
+  if (!parallaxStable || inst.treeGraySpriteName !== glowMonolithTreeGraySpriteName(inst.zones)) {
+    inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
+  }
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const meditating = inst.meditation?.countdown != null
   if (singing || meditating || inst._mushroomLeanActive) {
@@ -12519,7 +12715,8 @@ function onUpdate(inst) {
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
-  updateGlowMidges(inst.midges, k.dt(), 1)
+  !shouldSkipGlowDistantParallaxDraw(inst) &&
+    updateGlowMidges(inst.midges, k.dt(), 1)
   inst.branchTrampPitGuardTimer > 0 &&
     (inst.branchTrampPitGuardTimer = Math.max(0, inst.branchTrampPitGuardTimer - k.dt()))
   updateGlowPit(inst.pit, char, grounded, justLanded, null, {
@@ -13331,10 +13528,11 @@ function bakeMonolithicGlowTreeSprites(k, treeData) {
   const bounds = measureCanvasContentBounds(flatCanvas, TREE_CROP_PAD)
   monolithicTreeOffsets.set(k, { x: bounds?.x ?? 0, y: bounds?.y ?? 0 })
   loadCroppedGlowTreeSprite(k, TREE_FLAT_SPRITE_NAME, flatCanvas, bounds, 6000)
+  const foliageCorner = MAIN_TREE_PARALLAX_FOLIAGE_CORNER
   loadCroppedGlowTreeSprite(k, TREE_LIT_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H), bounds, 6001)
+    renderGlowTreeToCanvas(treeData, getTreePaletteLitForCorner(foliageCorner), WORLD_W, WORLD_H), bounds, 6001)
   loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteColor(), WORLD_W, WORLD_H), bounds, 6002)
+    renderGlowTreeToCanvas(treeData, getTreePaletteColorForCorner(foliageCorner), WORLD_W, WORLD_H), bounds, 6002)
   loadCroppedGlowTreeSprite(k, TREE_FLAT_ROOTS_SPRITE_NAME,
     renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecorRootsVisible(), WORLD_W, WORLD_H), bounds, 6003)
 }
@@ -13346,7 +13544,7 @@ function bakeMonolithicGlowTreeSprites(k, treeData) {
 function loadCroppedGlowTreeSprite(k, name, canvas, bounds, grainSeed) {
   const cropped = bounds ? cropCanvasToBounds(canvas, bounds) : canvas
   bounds && releaseCanvas(canvas)
-  applyGlowForegroundBake(cropped, grainSeed)
+  applyGlowMaterialBake(cropped, grainSeed)
   k.loadSprite(name, cropped)
   releaseCanvas(cropped)
 }

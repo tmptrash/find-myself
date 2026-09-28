@@ -218,19 +218,53 @@ export const CFG = {
       //
       palette: {
         swatches: Object.values(PALETTE),
-        void: PALETTE.gray0,
         //
-        // Post-L colour preview: light warm sky, dark frame — the frame must
-        // stay a clear step darker than the sky/HUD or the whole screen reads
-        // as one flat gray-beige field with nothing to anchor it. The sky
-        // itself stays only one swatch above the pre-L flat decorGray tone
-        // (gray3) so the reveal reads as a gentle lift, not a bright flash —
-        // the underground band (lerped darker from this same tone, see
-        // GROUND_L_DARKEN) lands almost back on gray3 for the same reason.
+        // GLOW palette balance (~70 / 20 / 10) — perception level: most of the
+        // frame reads cool forest; earth is supporting; gold/orange are rare
+        // accents so any warm spark draws the eye. Do not sprinkle gold across
+        // parallax rows or ambient decor — reserve it for sky dawn, the lit
+        // main tree, HUD/letters, and glowAttention beats.
         //
-        playfieldOuter: PALETTE.gray1,
-        playfieldGray: PALETTE.gray4,
-        midGray: PALETTE.gray4,
+        // ~70% — dark / medium green & blue-green (void, sky, parallax, grass).
+        // ~20% — warm earth (ground, wood, rocks, terracotta mushrooms).
+        // ~10% — gold / orange (sparse; uneven placement is intentional).
+        //
+        // Glow void — near-black forest floor (green/teal, never pure black).
+        //
+        void: PALETTE.green0,
+        //
+        // Playfield frame + inner sky base: deep blue-green forest (reference
+        // #18352B / #214735 / #2B5740 mapped to Otterisk greens/teals). Warm
+        // haze and lit decor still pop against this dark foundation.
+        //
+        playfieldOuter: PALETTE.teal0,
+        playfieldGray: PALETTE.green1,
+        midGray: PALETTE.green1,
+        //
+        // Zenith lift for parallax sky gradients and colour-world canopy air.
+        //
+        glowForestLift: PALETTE.teal1,
+        //
+        // Glow sky — dark green-teal foundation (#18332F / #23483B / #2B5944 →
+        // Otterisk greens/teals). Stays darker than canopy foliage; dawn gold
+        // lives in glowSkyDawnGlow and the lower sky band only.
+        //
+        glowSkyZenith: PALETTE.green0,
+        glowSkyMid: PALETTE.teal0,
+        glowSkyHorizon: PALETTE.teal1,
+        //
+        // GLOW light — warm gold as colour (not gray brightness). Use sparingly:
+        // core in sky gaps / haze, mid on reveals & HUD, bright on letter peaks.
+        // Reference #DFAF58 / #E8C66F / #F0D58A → gold3 / gold4 / gold5.
+        //
+        glowLightCore: PALETTE.gold3,
+        glowLightMid: PALETTE.gold4,
+        glowLightBright: PALETTE.gold5,
+        glowSkyDawnGlow: PALETTE.gold3,
+        //
+        // Cold forest shadow (green-blue), not neutral gray — for foliage depth.
+        //
+        glowShadow: PALETTE.teal0,
         lightGray: PALETTE.gray6,
         brightLight: PALETTE.gray7,
         heroBodyGray: PALETTE.gray6,
@@ -242,6 +276,19 @@ export const CFG = {
         // silhouettes in place of the harsher, near-black heroOutline/void —
         // menu.js still reads heroOutline/decorOutline directly so it keeps
         // its original darker rim.
+        //
+        //
+        // Role-based contours (#172621 → gray0 forest ink) — not pure black and
+        // not one width everywhere. void stays fill/backdrop only.
+        //
+        glowContour: {
+          forest: PALETTE.gray0,
+          eye: PALETTE.green0,
+          platform: PALETTE.brown0,
+          gameplay: PALETTE.gray0
+        },
+        //
+        // Soft gray rim for low-priority decor (hedgehog pre-colour, captions).
         //
         glowOutlineLight: PALETTE.gray2,
         decorGray: PALETTE.gray3,
@@ -264,6 +311,18 @@ export const CFG = {
         hedgehogFace: PALETTE.sand5,
         hedgehogCheek: PALETTE.pink4,
         //
+        // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
+        // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
+        // Otterisk swatches; contour is green-black, not pure black.
+        //
+        eyeCreature: {
+          body: PALETTE.gray0,
+          sclera: PALETTE.gold5,
+          pupil: PALETTE.green0,
+          highlight: PALETTE.red5,
+          contour: PALETTE.green0
+        },
+        //
         // Foreground grass blades — warm straw gold, a different hue family
         // from the near bush layer's leaf green (treeColor.leaf), so the
         // blades never blend into the bushes standing right behind them and
@@ -278,13 +337,13 @@ export const CFG = {
         branchPortal: {
           spiralBright: PALETTE.cyan3,
           spiralMid: PALETTE.teal4,
-          haze: PALETTE.sand5,
+          haze: PALETTE.gold5,
           depth: PALETTE.teal3
         },
         //
         // L pickup caption — same family as parallax near trees, one step darker.
         //
-        captionLetterLInk: PALETTE.gray1,
+        captionLetterLInk: PALETTE.brown0,
         //
         // O pickup caption on the colour forest — was the exact same pale
         // sand5 as the highlighted "O" glyph fill (warmCream below), so the
@@ -295,56 +354,81 @@ export const CFG = {
         //
         captionObservationInk: PALETTE.sand0,
         //
-        // Colour-world backdrop: the bright warm haze above the ground line
-        // (warmHaze below) and a dark earth band under it (root zone).
+        // Colour-world earth band under the ground line stays in the green/teal
+        // void family; warmHaze is cool parallax air (gold dawn is sky-only).
         //
-        groundDark: PALETTE.gray2,
+        groundDark: PALETTE.teal0,
         //
         // Layered soil for the underground root-zone earth band (colour
         // world only — the gray-world variant stays tonal gray, no hue):
-        // chernozem topsoil, clay in the middle, sand deepest.
+        // Topsoil (upper half of earth band) and deep sand (lower half).
         //
-        groundChernozem: PALETTE.sand0,
+        groundChernozem: PALETTE.brown1,
         groundClay: PALETTE.brown2,
-        groundSand: PALETTE.sand3,
+        groundSand: PALETTE.brown0,
         //
         // Wet mud patch under the mud-zone tall grass — a darker, warmer
         // earth tone than plain groundDark so the soft-mud band reads as a
         // distinct surface once the grass overlay lets it show through.
         //
         mudGround: PALETTE.brown0,
-        gold: PALETTE.gold3,
+        gold: PALETTE.gold4,
         //
-        // Scatter caps after L — pastel families so red/orange do not punch on gray.
+        // Terracotta decor + cute mushrooms — refs #B86B4A / #D48A57 / #6D4038
+        // (nearest Otterisk orange2 / orange3 / brown0).
         //
-        mushrooms: [PALETTE.red3, PALETTE.orange3, PALETTE.mauve3, PALETTE.blue3],
+        glowMushroom: {
+          cap: PALETTE.orange2,
+          light: PALETTE.orange3,
+          shadow: PALETTE.brown0
+        },
         //
-        // Darkest tone of each mushroom cap family — used for cap outlines.
+        // Floor / cave rocks — green-brown stone (not neutral decor gray).
+        // Refs #4C5146 / #646657 / #77705A → gray1 / sand1 / sand2.
         //
-        mushroomsDark: [PALETTE.red2, PALETTE.orange1, PALETTE.mauve1, PALETTE.blue1],
+        glowRock: {
+          shadow: PALETTE.gray1,
+          mid: PALETTE.sand1,
+          light: PALETTE.sand2
+        },
         //
-        // Lighter tone of each mushroom cap family — cap highlights.
+        // Scatter caps — same family, slight hue steps (no cool rainbow caps).
         //
-        mushroomsLight: [PALETTE.red3, PALETTE.orange4, PALETTE.purple3, PALETTE.blue3],
+        mushrooms: [PALETTE.orange2, PALETTE.brown1, PALETTE.orange2, PALETTE.brown2],
+        mushroomsDark: [PALETTE.brown0, PALETTE.brown0, PALETTE.brown0, PALETTE.brown0],
+        mushroomsLight: [PALETTE.orange3, PALETTE.brown2, PALETTE.orange3, PALETTE.orange2],
+        //
+        // Visual grammar: life, hazard, oddity, "pay attention" — trampolines,
+        // ear-tree mouths. Slightly richer cap than glowMushroom, not neon.
+        //
+        glowAttention: {
+          lip: PALETTE.red2,
+          mushroomCap: PALETTE.red2,
+          mushroomCapDark: PALETTE.brown0,
+          mushroomCapLight: PALETTE.orange3,
+          blush: PALETTE.red3
+        },
         //
         // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
         //
         decorOutline: PALETTE.gray1,
+        //
+        // Pre-colour forest silhouettes — green value steps (not gray-green).
+        //
         treeGray: {
-          root: PALETTE.gray1,
-          trunk: PALETTE.gray2,
-          branch: PALETTE.gray3,
-          leaf: PALETTE.gray5
+          root: PALETTE.green0,
+          trunk: PALETTE.green0,
+          branch: PALETTE.green1,
+          leaf: PALETTE.green2
         },
         //
-        // Warm sand tones for the main tree after the L (light) letter — makes
-        // it stand out against the pure-gray parallax forest.
+        // Main tree after L — warm brown wood + gold leaf lift (not sand-gray).
         //
         treeLit: {
-          root: PALETTE.sand0,
-          trunk: PALETTE.sand1,
-          branch: PALETTE.sand2,
-          leaf: PALETTE.sand3
+          root: PALETTE.brown0,
+          trunk: PALETTE.brown1,
+          branch: PALETTE.brown2,
+          leaf: PALETTE.gold3
         },
         //
         // Colour-world main tree: dark brown wood with juicy green foliage —
@@ -360,85 +444,86 @@ export const CFG = {
           // couple of muted sage teals for shading variety, without them.
           //
           leaf: PALETTE.green1,
-          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.teal2]
+          //
+          // Foliage mass tones only: shadow / base / light (index 0..2).
+          //
+          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2]
         },
-        warmHaze: PALETTE.orange5,
         //
-        // Upper sky band — one step lighter than the horizon haze so the
-        // backdrop reads as atmospheric perspective, not a flat fill.
+        // Cool air target when parallax trees soften into the sky (not gold).
         //
-        parallaxSkyTopGray: PALETTE.gray5,
-        parallaxSkyTopColor: PALETTE.orange5,
+        warmHaze: PALETTE.teal2,
+        //
+        // Legacy aliases — sky bake uses glowSky* (see renderSkyBand).
+        //
+        parallaxSkyTopGray: PALETTE.green0,
+        parallaxSkyTopColor: PALETTE.teal0,
         //
         // Parallax forest depths — gray steps in flat mode; in colour mode the
         // far/mid rows stay muted sage/teal silhouettes (not orange) so only
         // the sky haze and main lit tree carry warm pop (§16 art direction).
         //
-        parallaxGrayNear: PALETTE.gray2,
-        parallaxGrayMid: PALETTE.gray3,
-        parallaxGrayFar: PALETTE.gray4,
+        parallaxGrayNear: PALETTE.green2,
+        parallaxGrayMid: PALETTE.green1,
+        parallaxGrayFar: PALETTE.teal0,
         //
-        // Parallax forest quadrants — corner tree colours from the reference
-        // layout (teal top-left, autumn orange top-right, crimson bottom-left,
-        // sage green bottom-right). X picks left/right; canopy row picks top/bottom.
+        // Parallax forest quadrants — cool/warm greens only (no red-pink rows).
+        // X picks left/right; canopy row picks top/bottom.
         //
         parallaxTreeCornerTL: {
           root: PALETTE.teal0,
           trunk: PALETTE.teal0,
           branch: PALETTE.teal1,
           leaf: PALETTE.teal2,
-          leafShades: [PALETTE.teal3, PALETTE.teal2, PALETTE.teal0]
+          leafShades: [PALETTE.teal0, PALETTE.teal1, PALETTE.teal2]
         },
         parallaxTreeCornerTR: {
-          root: PALETTE.orange0,
-          trunk: PALETTE.orange0,
-          branch: PALETTE.orange1,
-          leaf: PALETTE.orange3,
-          leafShades: [PALETTE.orange5, PALETTE.orange3, PALETTE.orange0]
+          root: PALETTE.green0,
+          trunk: PALETTE.green0,
+          branch: PALETTE.green1,
+          leaf: PALETTE.green2,
+          leafShades: [PALETTE.green0, PALETTE.green2, PALETTE.teal3]
         },
         parallaxTreeCornerBL: {
-          root: PALETTE.red0,
-          trunk: PALETTE.red0,
-          branch: PALETTE.red1,
-          leaf: PALETTE.red2,
-          leafShades: [PALETTE.red4, PALETTE.red2, PALETTE.red0]
+          root: PALETTE.green0,
+          trunk: PALETTE.green0,
+          branch: PALETTE.teal1,
+          leaf: PALETTE.teal3,
+          leafShades: [PALETTE.green0, PALETTE.teal2, PALETTE.teal4]
         },
         parallaxTreeCornerBR: {
           root: PALETTE.green0,
           trunk: PALETTE.green0,
           branch: PALETTE.green1,
           leaf: PALETTE.green2,
-          leafShades: [PALETTE.green3, PALETTE.green2, PALETTE.green0]
+          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2]
         },
         //
-        // Cute chubby mushroom (glow trampoline + decor): cream body, warm
-        // orange spotted cap; the gray set mirrors it inside the gray family.
+        // Branch trampoline — standard glowMushroom terracotta (unusual beat,
+        // same saturation as decor). Gray set mirrors inside the gray family.
         //
         cuteMushroom: {
           body: PALETTE.sand5,
           bodyShade: PALETTE.sand3,
-          cap: PALETTE.orange3,
-          capDark: PALETTE.orange0,
-          capLight: PALETTE.orange5,
-          spot: PALETTE.gray7,
-          outline: PALETTE.brown0,
+          cap: PALETTE.orange2,
+          capDark: PALETTE.brown0,
+          capLight: PALETTE.orange3,
+          spot: PALETTE.sand5,
+          outline: PALETTE.gray0,
           face: PALETTE.brown0,
-          blush: PALETTE.red3
+          blush: PALETTE.orange4
         },
         //
-        // Same cute mushroom, a redder cap family — used by the right
-        // ground trampoline and the pit cave trampoline (both share it now,
-        // per design direction; only the branch one keeps the default
-        // orange "cuteMushroom" cap above).
+        // Right ground + pit cave trampolines — glowAttention (richer, not brighter).
         //
         cuteMushroomRed: {
           body: PALETTE.sand5,
           bodyShade: PALETTE.sand3,
-          cap: PALETTE.red3,
-          capDark: PALETTE.red0,
-          capLight: PALETTE.red5,
-          spot: PALETTE.gray7,
-          outline: PALETTE.brown0,
+          cap: PALETTE.red2,
+          capDark: PALETTE.brown0,
+          capLight: PALETTE.orange3,
+          spot: PALETTE.sand5,
+          outline: PALETTE.gray0,
           face: PALETTE.brown0,
           blush: PALETTE.red3
         },
@@ -454,22 +539,21 @@ export const CFG = {
           blush: PALETTE.gray4
         },
         bark: {
-          dark: PALETTE.mauve0,
-          mid: PALETTE.sand2,
-          light: PALETTE.orange2,
-          highlight: PALETTE.orange5
+          dark: PALETTE.teal0,
+          mid: PALETTE.brown2,
+          light: PALETTE.brown3,
+          highlight: PALETTE.orange4
         },
         //
-        // Log platform wood — slightly lighter than the main tree with a
-        // warmer orange-brown tint; ring/core tones for the cut end.
+        // Log platform wood — brown family (no gray-mauve cast).
         //
         log: {
-          bark: PALETTE.rose2,
-          barkLight: PALETTE.rose3,
+          bark: PALETTE.brown2,
+          barkLight: PALETTE.brown3,
           barkDark: PALETTE.brown0,
-          ring: PALETTE.rose3,
+          ring: PALETTE.sand2,
           ringDark: PALETTE.brown1,
-          core: PALETTE.rose4
+          core: PALETTE.sand3
         }
       },
       sections: {

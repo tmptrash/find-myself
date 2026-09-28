@@ -1,9 +1,9 @@
 import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
+import { drawGlowEyeCreature } from './glow-eye-creature.js'
 //
-// Segmented stick-on-a-chain decor, planted upright — reads as a buoy
-// anchored to the seabed by its chain. A dark eye rides the topmost segment.
-// The chain itself is a flat solid-black silhouette — only the eye carries
-// a lighter fill. Each buoy sways at its own pace; pupils track the hero.
+// Segmented stick-on-a-chain eye creatures — dark green-black body, warm
+// luminous sclera on top. Each stalk sways on its own phase; pupils track
+// the hero.
 //
 const BUOY_SEGMENT_COUNT_DEFAULT = 7
 const BUOY_SEGMENT_LEN_DEFAULT = 26
@@ -82,21 +82,20 @@ export function onUpdate(inst, heroX, heroY, dt) {
 }
 
 /**
- * Draws every chain-buoy — solid-black chains batched first, then eyes.
+ * Draws every chain-buoy stalk-eye — body geometry first, then eyes.
  * @param {Object} inst - Chain-buoy inst
- * @param {Object} chainColor - Kaplay rgb for the segments and joints (solid black)
- * @param {Object} eyeWhiteColor - Kaplay rgb for the eye sclera
- * @param {Object} rootColor - Kaplay rgb for the thin root fan, big-tree style
+ * @param {Object} colors - { body, sclera, pupil, highlight, contour, root }
  */
-export function onDraw(inst, chainColor, eyeWhiteColor, rootColor) {
+export function onDraw(inst, colors) {
+  const body = colors.body
   inst.buoys.forEach(buoy => {
     if (chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)) return
-    drawBuoyRoots(inst.k, buoy, rootColor)
+    drawBuoyRoots(inst.k, buoy, colors.root)
     const points = buildBuoyChainPoints(buoy, inst.time)
-    drawBuoySegments(inst.k, points, buoy.segmentWidth, chainColor)
-    drawBuoySideArms(inst.k, buoy, points, buoy.segmentWidth, chainColor)
-    drawBuoyJoints(inst.k, points, buoy.segmentWidth, chainColor)
-    drawBuoyEye(inst.k, buoy, points, chainColor, eyeWhiteColor, inst.lookX, inst.lookY)
+    drawBuoySegments(inst.k, points, buoy.segmentWidth, body)
+    drawBuoySideArms(inst.k, buoy, points, buoy.segmentWidth, body)
+    drawBuoyJoints(inst.k, points, buoy.segmentWidth, body)
+    drawBuoyEye(inst.k, buoy, points, colors, inst.lookX, inst.lookY)
   })
 }
 //
@@ -202,33 +201,31 @@ function drawBuoyJoints(k, points, segmentWidth, color) {
     k.drawCircle({ pos: k.vec2(points[i].x, points[i].y), radius, color })
   }
 }
-function drawBuoyEye(k, buoy, points, outlineColor, eyeWhiteColor, heroX, heroY) {
+function drawBuoyEye(k, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]
   //
-  // Outline ring matches the pole's own width — same thickness reads as
-  // one continuous material from leg to eye.
+  // Contour ring matches the pole width so leg and eye read as one stalk.
   //
-  const outlineWidth = buoy.segmentWidth
-  k.drawCircle({
-    pos: k.vec2(eye.x, eye.y),
-    radius: BUOY_EYE_RADIUS + outlineWidth,
-    color: outlineColor
-  })
+  const contourExtra = buoy.segmentWidth
   if (!buoy.blinking) {
-    k.drawCircle({ pos: k.vec2(eye.x, eye.y), radius: BUOY_EYE_RADIUS, color: eyeWhiteColor })
     const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY)
-    k.drawCircle({
-      pos: k.vec2(pupil.x, pupil.y),
-      radius: BUOY_PUPIL_RADIUS,
-      color: outlineColor
+    drawGlowEyeCreature(k, eye.x, eye.y, pupil.x, pupil.y, colors, {
+      scleraR: BUOY_EYE_RADIUS,
+      pupilR: BUOY_PUPIL_RADIUS,
+      contourExtra
     })
     return
   }
+  k.drawCircle({
+    pos: k.vec2(eye.x, eye.y),
+    radius: BUOY_EYE_RADIUS + contourExtra,
+    color: colors.contour
+  })
   k.drawLine({
     p1: k.vec2(eye.x - BUOY_EYE_RADIUS * 0.85, eye.y),
     p2: k.vec2(eye.x + BUOY_EYE_RADIUS * 0.85, eye.y),
-    width: outlineWidth + 1,
-    color: outlineColor
+    width: contourExtra + 1,
+    color: colors.contour
   })
 }
 //

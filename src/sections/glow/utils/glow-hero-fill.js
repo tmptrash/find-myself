@@ -112,7 +112,7 @@ export function drawGlowHeroWitnessGlow(k, heroInst, inst) {
   const char = heroInst?.character
   if (!char?.pos || char.hidden) return
   const pulse = 0.88 + Math.sin(inst.heroWitnessGlowPhase ?? 0) * 0.12
-  const rgb = getRGB(k, GLOW_PAL.gold)
+  const rgb = getRGB(k, GLOW_PAL.glowLightMid)
   const gold = k.rgb(rgb.r, rgb.g, rgb.b)
   const pos = k.vec2(char.pos.x, char.pos.y - WITNESS_GLOW_Y_OFFSET)
   k.drawCircle({

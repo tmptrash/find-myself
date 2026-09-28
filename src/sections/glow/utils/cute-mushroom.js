@@ -25,8 +25,8 @@ const BLUSH_ALPHA = 0.55
 //
 // Stroke widths in reference pixels (scaled with the mushroom).
 //
-const BODY_LINE_WIDTH = 5
-const CAP_LINE_WIDTH = 6
+const BODY_LINE_WIDTH = 5.5
+const CAP_LINE_WIDTH = 7
 const MOUTH_LINE_WIDTH = 3.4
 const CLOSED_EYE_LINE_WIDTH = 3
 const MIN_LINE_WIDTH = 1

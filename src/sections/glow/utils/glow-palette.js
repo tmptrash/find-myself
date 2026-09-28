@@ -1,4 +1,5 @@
 import { CFG } from '../../../cfg.js'
+import { applyFoliageDensityToPalette } from './glow-pixel-density.js'
 
 //
 // Glow section palette — every colour on lesson-glow.0 must come from the
@@ -19,6 +20,124 @@ export function glowRgb(keyOrHex) {
     g: parseInt(h.slice(2, 4), 16),
     b: parseInt(h.slice(4, 6), 16)
   }
+}
+
+/**
+ * Cave pit floor — lower soil layer (groundSand), slightly lifted for readability.
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function glowCaveEarthFloorRgb() {
+  const mud = glowRgb('mudGround')
+  const clay = glowRgb('groundClay')
+  const sand = glowRgb('groundSand')
+  return {
+    r: Math.round(mud.r * 0.62 + clay.r * 0.28 + sand.r * 0.1),
+    g: Math.round(mud.g * 0.62 + clay.g * 0.28 + sand.g * 0.1),
+    b: Math.round(mud.b * 0.62 + clay.b * 0.28 + sand.b * 0.1)
+  }
+}
+
+/**
+ * Darker cave fill — deep brown (no green void in pit earth gaps).
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function glowCaveEarthDeepRgb() {
+  const mud = glowRgb('mudGround')
+  const clay = glowRgb('groundClay')
+  return {
+    r: Math.round(mud.r * 0.88 + clay.r * 0.12),
+    g: Math.round(mud.g * 0.88 + clay.g * 0.12),
+    b: Math.round(mud.b * 0.88 + clay.b * 0.12)
+  }
+}
+
+const GROUND_EARTH_LAYER_CONTRAST_PULL = 0.52
+const GROUND_EARTH_LAYER_FRAC_TOP = 0.5
+
+function lerpGlowRgb(a, b, t) {
+  const u = Math.max(0, Math.min(1, t))
+  return {
+    r: Math.round(a.r + (b.r - a.r) * u),
+    g: Math.round(a.g + (b.g - a.g) * u),
+    b: Math.round(a.b + (b.b - a.b) * u)
+  }
+}
+
+function softenGlowGroundEarthLayers(layers) {
+  const n = layers.length
+  const avg = layers.reduce((acc, layer) => ({
+    r: acc.r + layer.rgb.r,
+    g: acc.g + layer.rgb.g,
+    b: acc.b + layer.rgb.b
+  }), { r: 0, g: 0, b: 0 })
+  avg.r = Math.round(avg.r / n)
+  avg.g = Math.round(avg.g / n)
+  avg.b = Math.round(avg.b / n)
+  const pull = GROUND_EARTH_LAYER_CONTRAST_PULL
+  return layers.map(layer => ({
+    ...layer,
+    rgb: lerpGlowRgb(layer.rgb, avg, pull)
+  }))
+}
+
+/**
+ * Bottom stratum of the baked earth band (matches groundEarthLayersColor/Gray).
+ * @param {boolean} [grayPhase=false] - Gray underground band before colour fade
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function glowGroundEarthBottomLayerRgb(grayPhase = false) {
+  const topsoil = glowRgb('groundChernozem')
+  const sand = glowRgb('groundSand')
+  const voidRgb = glowRgb('void')
+  const shadow = glowRgb(GLOW_PAL.glowShadow)
+  const stack = grayPhase
+    ? softenGlowGroundEarthLayers([
+      { rgb: lerpGlowRgb(topsoil, shadow, 0.1), frac: GROUND_EARTH_LAYER_FRAC_TOP },
+      { rgb: lerpGlowRgb(sand, voidRgb, 0.28) }
+    ])
+    : softenGlowGroundEarthLayers([
+      { rgb: topsoil, frac: GROUND_EARTH_LAYER_FRAC_TOP },
+      { rgb: sand }
+    ])
+  return stack[stack.length - 1].rgb
+}
+
+/**
+ * Glow contour ink by role (forest / eye / platform / gameplay).
+ * @param {'forest'|'eye'|'platform'|'gameplay'} [role='forest']
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function glowContourRgb(role = 'forest') {
+  return glowRgb(GLOW_PAL.glowContour[role])
+}
+
+/**
+ * drawRockToCanvas palette for glow floor rocks (shadow / mid / light).
+ * @returns {{ fillR: number, fillG: number, fillB: number, lightR: number, lightG: number, lightB: number, darkR: number, darkG: number, darkB: number }}
+ */
+export function glowRockShadedDrawPalette() {
+  const shadow = glowRgb(GLOW_PAL.glowRock.shadow)
+  const mid = glowRgb(GLOW_PAL.glowRock.mid)
+  const light = glowRgb(GLOW_PAL.glowRock.light)
+  return {
+    fillR: mid.r, fillG: mid.g, fillB: mid.b,
+    lightR: light.r, lightG: light.g, lightB: light.b,
+    darkR: shadow.r, darkG: shadow.g, darkB: shadow.b
+  }
+}
+
+/**
+ * Warm golden GLOW light tiers (see cfg glowLightCore/Mid/Bright).
+ * @param {'core'|'mid'|'bright'} [tier='mid']
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function getGlowLightRgb(tier = 'mid') {
+  const key = tier === 'core'
+    ? 'glowLightCore'
+    : tier === 'bright'
+      ? 'glowLightBright'
+      : 'glowLightMid'
+  return glowRgb(key)
 }
 //
 // Parsed swatches for nearest-neighbour snaps so mixed/dimmed fills never
@@ -112,14 +231,16 @@ export function getTreePaletteGray() {
       glowRgb(t.leaf)
     ],
     //
-    // Bark crack tones stay grayscale in the gray phase (palette rule).
+    // Bark cracks: cold teal shadow, green highlight (monochrome forest phase).
     //
     barkShades: {
-      dark: glowRgb('void'),
+      dark: glowRgb('glowShadow'),
       highlight: glowRgb('playfieldGray')
     },
     leafVein: glowRgb('void'),
-    woodOutline: glowRgb('void')
+    woodOutline: glowContourRgb('forest'),
+    woodMassStyle: true,
+    noLeafDetails: true
   }
 }
 
@@ -144,8 +265,8 @@ export function getCuteMushroomFlatDecorColors() {
     // in the level, so this keeps the silhouette readable everywhere this
     // palette is used without introducing a new hue.
     //
-    outline: GLOW_PAL.void,
-    face: GLOW_PAL.void,
+    outline: GLOW_PAL.glowContour.forest,
+    face: GLOW_PAL.glowContour.forest,
     blush: g
   }
 }
@@ -172,7 +293,7 @@ export function getCuteMushroomFlatPitBakeColors() {
     capDark: cap,
     capLight: cap,
     spot: stem,
-    outline: stem,
+    outline: GLOW_PAL.glowContour.forest,
     face: stem,
     blush: cap
   }
@@ -184,6 +305,63 @@ export function getCuteMushroomFlatPitBakeColors() {
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
 export function getTreePaletteLit() {
+  return getTreePaletteLitForCorner('parallaxTreeCornerTL')
+}
+
+/**
+ * Lit main-tree palette with nearground parallax foliage for one screen corner.
+ * @param {string} parallaxCornerKey
+ * @returns {Object}
+ */
+export function getTreePaletteLitForCorner(parallaxCornerKey) {
+  return getTreePaletteWithNearParallaxFoliage(getTreePaletteLitBase(), parallaxCornerKey)
+}
+
+/**
+ * Main-tree colour palette with nearground parallax-matched foliage.
+ * @returns {Object}
+ */
+export function getTreePaletteColor() {
+  return getTreePaletteColorForCorner('parallaxTreeCornerTL')
+}
+
+/**
+ * Colour main-tree palette with nearground parallax foliage for one screen corner.
+ * @param {string} parallaxCornerKey
+ * @returns {Object}
+ */
+export function getTreePaletteColorForCorner(parallaxCornerKey) {
+  return getTreePaletteWithNearParallaxFoliage(
+    getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor),
+    parallaxCornerKey
+  )
+}
+
+/**
+ * Copies nearground parallax leaf tones onto a trunk palette (main tree).
+ * @param {Object} trunkPalette - Base tree palette (lit or colour trunk)
+ * @param {string} parallaxCornerKey - GLOW_PAL parallaxTreeCorner* key
+ * @returns {Object}
+ */
+export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCornerKey = 'parallaxTreeCornerTL') {
+  const lit = applyFoliageDensityToPalette(trunkPalette, 'nearground')
+  const near = applyFoliageDensityToPalette(
+    getTreePaletteFromGlowTreeEntry(GLOW_PAL[parallaxCornerKey]),
+    'nearground'
+  )
+  return {
+    ...lit,
+    leafR: near.leafR,
+    leafG: near.leafG,
+    leafB: near.leafB,
+    leafShades: near.leafShades,
+    leafVein: near.leafVein,
+    leafOpacity: near.leafOpacity,
+    noLeafDetails: near.noLeafDetails
+  }
+}
+
+function getTreePaletteLitBase() {
   const t = GLOW_PAL.treeLit
   const root = glowRgb(t.root)
   const trunk = glowRgb(t.trunk)
@@ -205,16 +383,10 @@ export function getTreePaletteLit() {
       highlight: glowRgb(GLOW_PAL.bark.highlight)
     },
     leafVein: glowRgb(t.root),
-    woodOutline: glowRgb('void')
+    woodOutline: glowContourRgb('forest'),
+    woodMassStyle: true,
+    noLeafDetails: true
   }
-}
-
-/**
- * Colour-phase foreground tree palette (after O is collected).
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteColor() {
-  return getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor)
 }
 
 /**
@@ -237,17 +409,27 @@ function getTreePaletteFromGlowTreeEntry(t) {
     branchR: branch.r, branchG: branch.g, branchB: branch.b,
     leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
     leafOpacity: 1,
-    leafShades: (t.leafShades || [t.leaf]).map(h => glowRgb(h)),
+    leafShades: massLeafShadesFromEntry(t),
     //
-    // Colour-phase bark crack tones come from the palette bark set.
+    // Wood uses trunk / branch / shadow only — no bark micro-texture pass.
     //
     barkShades: {
       dark: glowRgb(GLOW_PAL.bark.dark),
       highlight: glowRgb(GLOW_PAL.bark.highlight)
     },
     leafVein: glowRgb((t.leafShades && t.leafShades[0]) || t.leaf),
-    woodOutline: glowRgb('void')
+    woodOutline: glowContourRgb('forest'),
+    woodMassStyle: true,
+    noLeafDetails: true
   }
+}
+
+function massLeafShadesFromEntry(t) {
+  const hexes = t.leafShades || [t.leaf, t.leaf, t.leaf]
+  const shadow = hexes[0]
+  const base = hexes[Math.min(1, hexes.length - 1)]
+  const light = hexes[Math.min(2, hexes.length - 1)]
+  return [glowRgb(shadow), glowRgb(base), glowRgb(light)]
 }
 
 /**
@@ -285,9 +467,8 @@ export function getTreePaletteSolid(keyOrHex) {
  * @param {boolean} [uniformWood=false] - Collapse the WHOLE tree to the blended
  *   trunk tone: leaves, branches and bark all match the trunk exactly, so the
  *   tree reads as one flat silhouette (2nd+ background rows)
- * @param {number} [leafWarmBlend=0] - EXTRA blend of the foliage only toward
- *   the backdrop tone — with a warm haze backdrop the leaves lean orange
- *   while the wood keeps its base blend (near colour-world row)
+ * @param {number} [leafWarmBlend=0] - Extra leaf-only blend toward the backdrop
+ *   (keep 0 for GLOW 70/20/10 — gold/orange stay rare accents)
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
 export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false, leafWarmBlend = 0) {
@@ -333,7 +514,10 @@ export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leaf
     // Background trees stay clean: plain leaves (no vein) and no outline.
     //
     leafVein: mixRgb(base.leafVein ?? root),
-    noLeafDetails: true
+    noLeafDetails: base.noLeafDetails ?? true,
+    woodMassStyle: base.woodMassStyle ?? false,
+    woodOutline: base.woodOutline,
+    branchesOverTrunk: base.branchesOverTrunk
   }
 }
 
@@ -356,7 +540,7 @@ export function getTreeBarkPalette() {
 //
 function darkenRgb(c, t) {
   if (t <= 0) return c
-  const v = glowRgb('void')
+  const v = glowRgb('glowShadow')
   return snapToPalette({
     r: Math.round(c.r + (v.r - c.r) * t),
     g: Math.round(c.g + (v.g - c.g) * t),

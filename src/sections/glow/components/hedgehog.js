@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB, toCanvas } from '../../../utils/helper.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
-import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from '../utils/glow-parallax-grain.js'
+import { applyGlowForegroundFocusBake } from '../utils/glow-focus-depth.js'
 import * as Sound from '../../../utils/sound.js'
 
 //
@@ -14,13 +14,13 @@ import * as Sound from '../../../utils/sound.js'
 //
 const MANE_HEX = GLOW_PAL.hedgehogMane
 const MANE_DARK_HEX = GLOW_PAL.hedgehogManeDark
-const MANE_GRAY_HEX = GLOW_PAL.decorGray
+const MANE_GRAY_HEX = GLOW_PAL.hedgehogManeDark
 const FACE_HEX = GLOW_PAL.hedgehogFace
 const FACE_GRAY_HEX = GLOW_PAL.lightGray
 const CHEEK_HEX = GLOW_PAL.hedgehogCheek
 const EYE_HEX = GLOW_PAL.void
 //
-// Light gray silhouette rim (GLOW_PAL.glowOutlineLight) — drawn as a
+// Light gray silhouette rim (GLOW_PAL.glowContour.gameplay) — drawn as a
 // slightly larger copy of each shape behind its fill, the same "bigger
 // shape behind" trick used elsewhere in this level (see the arrowhead /
 // rock outline drawing).
@@ -584,7 +584,7 @@ function drawLiveEyes(inst, dir, alphaMul) {
   const wy = inst.y + s * (eyeLocalY - BAKE_Y_MAX)
   const eyeR = EYE_R * s
   const pupilR = PUPIL_R * s
-  const outline = getRGB(k, GLOW_PAL.glowOutlineLight)
+  const outline = getRGB(k, GLOW_PAL.glowContour.gameplay)
   const white = getRGB(k, EYE_WHITE_HEX)
   const pupilColor = getRGB(k, EYE_HEX)
   const px = wx + dir * s * (PUPIL_OFFSET_X + inst.pupilX)
@@ -655,7 +655,7 @@ function colorFadeOf(inst) {
 //
 function drawLegs(inst, dir, fade, alphaMul = 1) {
   const k = inst.k
-  const outline = getRGB(k, GLOW_PAL.glowOutlineLight)
+  const outline = getRGB(k, GLOW_PAL.glowContour.gameplay)
   const maneGray = getRGB(k, MANE_GRAY_HEX)
   const maneColor = getRGB(k, MANE_HEX)
   const legAlpha = inst.turnScale * alphaMul
@@ -987,13 +987,13 @@ function bakeVariant(k, baseName, pixelRatio, drawFn) {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
     drawFn(ctx, MANE_GRAY_HEX, MANE_GRAY_HEX, FACE_GRAY_HEX, FACE_GRAY_HEX)
   })
-  applyGlowLayerGradeToCanvas(grayCanvas, GLOW_LAYER_GRADE.foreground, baseName.length * 17)
+  applyGlowForegroundFocusBake(grayCanvas, baseName.length * 17)
   k.loadSprite(baseName + GRAY_SUFFIX, grayCanvas)
   const colorCanvas = toCanvas({ width: BAKE_W, height: BAKE_H, pixelRatio }, (ctx) => {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
     drawFn(ctx, MANE_HEX, MANE_DARK_HEX, FACE_HEX, CHEEK_HEX)
   })
-  applyGlowLayerGradeToCanvas(colorCanvas, GLOW_LAYER_GRADE.foreground, baseName.length * 17 + 1)
+  applyGlowForegroundFocusBake(colorCanvas, baseName.length * 17 + 1)
   k.loadSprite(baseName + COLOR_SUFFIX, colorCanvas)
 }
 //
@@ -1004,7 +1004,7 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
   const maneCy = MANE_CY + breathe
   const faceCy = FACE_PATCH_CY + breathe
   const snoutCy = SNOUT_CY + breathe
-  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, GLOW_PAL.glowOutlineLight)
+  fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD, MANE_RY + OUTLINE_PAD, GLOW_PAL.glowContour.gameplay)
   fillEllipseCtx(ctx, MANE_CX, maneCy, MANE_RX, MANE_RY, faceHex)
   drawBrownBackPatch(ctx, maneCy, faceCy, maneHex)
   drawSpikeCrown(ctx, MANE_CX, maneCy, MANE_RX + OUTLINE_PAD * 0.35, MANE_RY + OUTLINE_PAD * 0.35, OUTLINE_PAD * 0.4, swayPhase, maneDarkHex, maneHex)
@@ -1017,7 +1017,7 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, maneDarkHex, faceHe
     MOUTH_P1[0], MOUTH_P1[1] + breathe,
     MOUTH_CTRL[0], MOUTH_CTRL[1] + breathe,
     MOUTH_P2[0], MOUTH_P2[1] + breathe,
-    MOUTH_WIDTH, GLOW_PAL.glowOutlineLight
+    MOUTH_WIDTH, GLOW_PAL.glowContour.gameplay
   )
   drawCheek(ctx, snoutCy, cheekHex)
 }
@@ -1073,8 +1073,8 @@ function drawLegHip(k, hipX, hipY, s, fill, outline, legAlpha, fillFade) {
 // round spiky sphere with no visible snout/eye/legs.
 //
 function drawCurledFrame(ctx, maneHex, maneDarkHex, faceHex) {
-  fillEllipseCtx(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, CURL_R + OUTLINE_PAD, GLOW_PAL.glowOutlineLight)
-  drawCurlSpikeBall(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, OUTLINE_PAD, GLOW_PAL.glowOutlineLight, GLOW_PAL.glowOutlineLight)
+  fillEllipseCtx(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, CURL_R + OUTLINE_PAD, GLOW_PAL.glowContour.gameplay)
+  drawCurlSpikeBall(ctx, CURL_CX, CURL_CY, CURL_R + OUTLINE_PAD, OUTLINE_PAD, GLOW_PAL.glowContour.gameplay, GLOW_PAL.glowContour.gameplay)
   fillEllipseCtx(ctx, CURL_CX, CURL_CY, CURL_R, CURL_R, maneHex)
   drawCurlSpikeBall(ctx, CURL_CX, CURL_CY, CURL_R, 0, maneHex, maneDarkHex)
   fillEllipseCtx(ctx, CURL_CX + 1, CURL_CY + 1, CURL_FACE_RX, CURL_FACE_RY, faceHex)
@@ -1168,7 +1168,7 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
 //
 function drawSnoutNoseTip(ctx, snoutCy) {
   const tipY = NOSE_TIP_Y + (snoutCy - SNOUT_CY)
-  fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX + NOSE_OUTLINE_PAD, NOSE_TIP_RY + NOSE_OUTLINE_PAD, GLOW_PAL.glowOutlineLight)
+  fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX + NOSE_OUTLINE_PAD, NOSE_TIP_RY + NOSE_OUTLINE_PAD, GLOW_PAL.glowContour.gameplay)
   fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX, NOSE_TIP_RY, EYE_HEX)
 }
 //

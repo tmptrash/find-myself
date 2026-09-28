@@ -457,8 +457,11 @@ const HERO_N_LOOK_LEFT_RUN_FRAME = 2
 //
 const HERO_SPRITE_CANVAS_SIZE = 96
 const HERO_N_SPRITE_SCALE = HERO_N_SPRITE_SIZE / HERO_SPRITE_CANVAS_SIZE
-const HERO_EYE_RIGHT_X = 54            // headX (33) + EYE_OFFSET_X_RIGHT (21)
-const HERO_EYE_CANVAS_Y = 27           // headY (18) + EYE_OFFSET_Y (9)
+const HERO_HEAD_X = 33
+const HERO_HEAD_Y = 18
+const HERO_EYE_LEFT_X = HERO_HEAD_X + 9
+const HERO_EYE_RIGHT_X = HERO_HEAD_X + 21
+const HERO_EYE_CANVAS_Y = HERO_HEAD_Y + 9
 const HERO_EYE_RING_RADIUS = 5
 const HERO_EYE_WHITE_RADIUS = 4
 const HERO_EYE_PUPIL_RADIUS = 2
@@ -1433,20 +1436,29 @@ function updateReadyDepartureFade(k, runner, spiderState) {
       const progress = (runner.heroX - finalStopX) / span
       spiderState.eyeFinalFade = Math.max(0, Math.min(1, progress))
     }
-    spiderState.departureFade = 0
+    spiderState.departureFade = spiderState._departureFadeHold ?? 0
     return
   }
   if (runner.heroPhase === 'lookLeft') {
-    spiderState.departureFade = 0
+    spiderState.departureFade = spiderState._departureFadeHold ?? spiderState.departureFade
     spiderState.eyeFinalFade = 0
     return
   }
-  if (runner.heroPhase !== 'run') return
+  const fadesByRunProgress =
+    runner.heroPhase === 'run' ||
+    runner.heroPhase === 'pause'
+  if (!fadesByRunProgress) {
+    spiderState.departureFade = 1
+    spiderState.eyeFinalFade = 0
+    return
+  }
   const fadeEndX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
   const span = fadeEndX - runner.heroDepartStartX
   if (span <= 0) return
   const progress = (runner.heroX - runner.heroDepartStartX) / span
   spiderState.departureFade = Math.max(0, Math.min(1, 1 - progress))
+  spiderState._departureFadeHold = spiderState.departureFade
+  spiderState.eyeFinalFade = 0
 }
 //
 // Uniform scene fade — same multiplier on every letter, star, blade, etc.
@@ -1557,7 +1569,6 @@ function updateHeroN(k, spider, state, legsStarted, sound, dt) {
       spider.heroX = spider.x + HERO_U_OFFSET_X
       spider.heroY = spider.y + HERO_U_OFFSET_Y
       spider.heroFallVel = 0
-      spider.heroDepartStartX = spider.heroX
     }
     return
   }
@@ -1672,6 +1683,9 @@ function startHeroNFinalWalk(spider) {
 // match. Also used to resume running after each pause.
 //
 function startHeroNBurst(spider) {
+  if (spider.heroDepartStartX == null) {
+    spider.heroDepartStartX = spider.heroX
+  }
   spider.heroPhase = 'run'
   spider.heroRunTimer = 0
   spider.heroFrameTimer = 0
@@ -1779,7 +1793,47 @@ function drawTitleHero(k, spider, departureFade = 1) {
     })
   }
   spider.heroPhase === 'wakeOneEye' && revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy)
+  revealT >= 1 && drawHeroRunnerEyes(k, spider, cx, cy, departureFade)
   drawHeroNNotes(k, spider, departureFade)
+}
+//
+// Runner eyes while moving right — white sclera, black pupils (tintable bake
+// keeps section colour on the body only).
+//
+function drawHeroRunnerEyes(k, spider, cx, cy, departureFade = 1) {
+  const movingRight =
+    spider.heroPhase === 'run' ||
+    spider.heroPhase === 'pause' ||
+    spider.heroPhase === 'finalWalk'
+  if (!movingRight || departureFade <= 0.001) return
+  const s = HERO_N_SPRITE_SCALE
+  const baseX = cx - HERO_N_SPRITE_SIZE / 2
+  const baseY = cy - HERO_N_SPRITE_SIZE / 2
+  const eyeY = baseY + HERO_EYE_CANVAS_Y * s
+  const pupilDx = spider.heroPhase === 'lookLeft'
+    ? -HERO_EYE_PUPIL_SHIFT * s
+    : 0
+  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
+    const ex = baseX + eyeX * s
+    k.drawCircle({
+      pos: k.vec2(ex, eyeY),
+      radius: HERO_EYE_RING_RADIUS * s,
+      color: k.rgb(0, 0, 0),
+      opacity: departureFade
+    })
+    k.drawCircle({
+      pos: k.vec2(ex, eyeY),
+      radius: HERO_EYE_WHITE_RADIUS * s,
+      color: k.rgb(255, 255, 255),
+      opacity: departureFade
+    })
+    k.drawCircle({
+      pos: k.vec2(ex + pupilDx, eyeY),
+      radius: HERO_EYE_PUPIL_RADIUS * s,
+      color: k.rgb(0, 0, 0),
+      opacity: departureFade
+    })
+  }
 }
 //
 // Frame-name suffix shared by every title-hero sprite variant, driven by

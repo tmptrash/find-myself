@@ -5,6 +5,8 @@ import { toCanvas } from '../../../utils/helper.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
 import {
   GLOW_PAL,
+  glowCaveEarthDeepRgb,
+  glowCaveEarthFloorRgb,
   glowRgb,
   snapToPalette,
   getCuteMushroomFlatDecorColors,
@@ -127,7 +129,7 @@ const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
-const CAVE_LAYOUT_VERSION = 68
+const CAVE_LAYOUT_VERSION = 70
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
 const CAVE_SEAM_COLUMN_RADIUS_MAX = 14
@@ -1321,15 +1323,18 @@ function buildJaggedHorizontalEdge(xFrom, xTo, baseY, seed) {
 // to colour world). Kept mode-independent here instead.
 //
 function buildCavePalette(_groundC) {
+  const rock = GLOW_PAL.glowRock
+  const floor = glowCaveEarthFloorRgb()
+  const deep = glowCaveEarthDeepRgb()
   return {
-    void: glowRgb('void'),
-    depthOuter: glowRgb('playfieldOuter'),
-    depthMid: glowRgb('dialogFill'),
-    depthInner: glowRgb('void'),
-    floor: glowRgb('decorGray'),
-    pebble: glowRgb('midGray'),
-    rim: glowRgb('playfieldOuter'),
-    rimEdge: glowRgb('playfieldGray')
+    void: deep,
+    depthOuter: glowRgb(rock.shadow),
+    depthMid: floor,
+    depthInner: deep,
+    floor,
+    pebble: glowRgb('groundClay'),
+    rim: glowRgb(rock.light),
+    rimEdge: floor
   }
 }
 //

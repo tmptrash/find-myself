@@ -1,4 +1,3 @@
-import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
@@ -16,6 +15,7 @@ import {
   KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
 import { markGlowHudGCaveEntered } from './glow-hud-g-progress.js'
+import { drawGlowEyeCreature, glowEyeCreatureColors } from './glow-eye-creature.js'
 
 //
 // Persisted once the hero collects the cave eyes and returns to the tree.
@@ -220,26 +220,24 @@ export function updateGlowCaveFloorEyeReveal(inst, char) {
   if (!pit?.collapsed || glowHeroHasCollectedEyes(inst.zones, heroInst)) return
   tryRevealGlowCaveFloorEyes(inst, char, pit)
 }
-export function onDrawGlowEyeIntro(inst, k, heroBodyHex, heroEyeWhiteHex) {
+export function onDrawGlowEyeIntro(inst, k) {
   if (!inst?.eyeIntro) return
   const intro = inst.eyeIntro
   const pit = inst.pit
   const eyesOnPitLayer = pit?.collapsed && intro.pickup && !intro.pickup.collected
   !eyesOnPitLayer && intro.pickup &&
-    drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
+    drawGlowCavePickupEyes(k, intro.pickup, inst.heroInst)
   intro.revealFx > 0 && drawGlowEyeRevealFx(k, inst.heroInst, intro.revealFx)
 }
 /**
  * Lying eyes on the pit draw layer (above the skeleton sprite).
  * @param {Object} inst - Glow scene inst
  * @param {Object} k - Kaplay instance
- * @param {string} heroBodyHex - Hero body colour
- * @param {string} heroEyeWhiteHex - Eye white colour
  */
-export function drawGlowCavePickupEyesOnPitLayer(inst, k, heroBodyHex, heroEyeWhiteHex) {
+export function drawGlowCavePickupEyesOnPitLayer(inst, k) {
   const pickup = inst?.eyeIntro?.pickup
   if (!pickup || pickup.collected || !inst.pit?.collapsed) return
-  drawGlowCavePickupEyes(k, pickup, inst.heroInst, heroBodyHex, heroEyeWhiteHex)
+  drawGlowCavePickupEyes(k, pickup, inst.heroInst)
 }
 //
 // Private helpers
@@ -364,36 +362,26 @@ export function unlockGlowEyesGameplayFromBranchLaunch(inst) {
   if (!inst?.eyeIntro || inst.eyeIntro.phase === 'complete') return
   completeGlowEyeIntro(inst)
 }
-function drawGlowCavePickupEyes(k, pickup, heroInst, bodyHex, eyeWhiteHex) {
+function drawGlowCavePickupEyes(k, pickup, heroInst) {
   if (pickup.collected) return
   const heroPos = heroInst?.character?.pos
   const targetX = heroPos?.x ?? pickup.cx
   const targetY = (heroPos?.y ?? pickup.y) - 20
-  drawGlowTrackingEye(k, pickup.leftX, pickup.y, targetX, targetY, bodyHex, eyeWhiteHex)
-  drawGlowTrackingEye(k, pickup.rightX, pickup.y, targetX, targetY, bodyHex, eyeWhiteHex)
+  const colors = glowEyeCreatureColors(k)
+  drawGlowTrackingEye(k, pickup.leftX, pickup.y, targetX, targetY, colors)
+  drawGlowTrackingEye(k, pickup.rightX, pickup.y, targetX, targetY, colors)
 }
-function drawGlowTrackingEye(k, ex, ey, tx, ty, bodyHex, eyeWhiteHex) {
+function drawGlowTrackingEye(k, ex, ey, tx, ty, colors) {
   const dx = tx - ex
   const dy = ty - ey
   const dist = Math.hypot(dx, dy) || 1
   const travel = EYE_INTRO_EYE_WHITE_R - EYE_INTRO_PUPIL_R - 0.4
   const px = ex + (dx / dist) * travel
   const py = ey + (dy / dist) * travel
-  const outline = CFG.visual.colors.outline
-  k.drawCircle({
-    pos: k.vec2(ex, ey),
-    radius: EYE_INTRO_EYE_WHITE_R + 1,
-    color: k.rgb(...parseHexRgb(outline))
-  })
-  k.drawCircle({
-    pos: k.vec2(ex, ey),
-    radius: EYE_INTRO_EYE_WHITE_R,
-    color: k.rgb(...parseHexRgb(eyeWhiteHex))
-  })
-  k.drawCircle({
-    pos: k.vec2(px, py),
-    radius: EYE_INTRO_PUPIL_R,
-    color: k.rgb(...parseHexRgb(outline))
+  drawGlowEyeCreature(k, ex, ey, px, py, colors, {
+    scleraR: EYE_INTRO_EYE_WHITE_R,
+    pupilR: EYE_INTRO_PUPIL_R,
+    contourExtra: 1
   })
 }
 function drawGlowEyeRevealFx(k, heroInst, revealFx) {
@@ -419,12 +407,4 @@ function dismissGlowPitCaveSkeletonNeedEyesHint(inst) {
   if (!pit.pitCaveSkeletonAutoHintTooltip) return
   Tooltip.destroy(pit.pitCaveSkeletonAutoHintTooltip)
   pit.pitCaveSkeletonAutoHintTooltip = null
-}
-function parseHexRgb(hex) {
-  const h = String(hex).replace('#', '')
-  return [
-    parseInt(h.substring(0, 2), 16),
-    parseInt(h.substring(2, 4), 16),
-    parseInt(h.substring(4, 6), 16)
-  ]
 }

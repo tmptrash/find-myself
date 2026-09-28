@@ -45,6 +45,28 @@ const ROOT_HIGHLIGHT_OFFSET_X = -1.6
 const ROOT_HIGHLIGHT_OFFSET_Y = -1.6
 const ROOT_HIGHLIGHT_MIN_W = 3
 //
+// Foliage — large asymmetric pixel-cloud masses (not circles or teardrop fields).
+//
+const FOLIAGE_CLUSTER_CELL_PX_DEFAULT = 10
+const FOLIAGE_CLUSTER_LEAF_SIZE_FRAC = 1.55
+const FOLIAGE_CLOUD_CELLS_MIN = 34
+const FOLIAGE_CLOUD_CELLS_MAX = 54
+const FOLIAGE_CLOUD_LOBE_CELLS_MIN = 12
+const FOLIAGE_CLOUD_LOBE_CELLS_MAX = 22
+const FOLIAGE_CLOUD_EDGE_ERODE_FRAC = 0.14
+const FOLIAGE_CLOUD_GROWTH_SKIP = 0.1
+const FOLIAGE_CLUSTER_DETAIL_CELL_FRAC = 0.07
+const FOLIAGE_CLOUD_LOBE_CHANCE = 0.62
+const FOLIAGE_DETAIL_LEAVES_MIN = 1
+const FOLIAGE_DETAIL_LEAVES_MAX = 2
+const FOLIAGE_DENSE_CLOUD_CELL_BONUS = 10
+const FOLIAGE_DENSE_DETAIL_BONUS = 0
+const FOLIAGE_LUSH_CLOUD_CELL_BONUS = 32
+const FOLIAGE_LUSH_LOBE_CHANCE_BOOST = 0.35
+const FOLIAGE_LUSH_EXTRA_LOBE_CHANCE = 0.55
+const FOLIAGE_LUSH_CROWN_LEN_MIN = 34
+const FOLIAGE_LUSH_CROWN_LEN_RANGE = 28
+//
 // Side shading — the sun sits top-right, so trunk and branches carry a soft
 // dark band along their lower-left side. The band follows each segment (no
 // straight screen-space gradient), so the wobbly silhouette keeps its shape.
@@ -141,7 +163,7 @@ const BRANCH_RIDGE_HIGHLIGHT_ALPHA = 0.12
 // Implemented as an underdraw: the wood is painted first with widths grown by
 // this many px per side, then the normal fills cover everything but the rim.
 //
-const WOOD_OUTLINE_PX = 1
+const WOOD_OUTLINE_PX = 2
 //
 // Default trunk-height band (fractions of the trunk) branches sprout from.
 // Background trees pass a higher minimum so their foliage gathers at the top.
@@ -211,7 +233,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     branchThicknessScale = 1,
     branchLengthScale = 1,
     branchCount = null,
-    denseBranchCanopyLeaves = false
+    denseBranchCanopyLeaves = false,
+    lushCanopy = false
   } = opts
   const rng = createRng(seed)
   const treeH = trunkBottomY - trunkTopY
@@ -229,17 +252,21 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   buildBranchesFromTrunk(
     rng, trunkSegs, branchSegs, leafEndpoints,
     branchFracMin, branchFracMax, branchUpward, skipTopExtraBranches,
-    branchThicknessScale, branchLengthScale, branchCount, denseBranchCanopyLeaves
+    branchThicknessScale, branchLengthScale, branchCount, denseBranchCanopyLeaves || lushCanopy
   )
   //
   // Top crown — three clusters grow from the trunk apex for a full canopy.
   //
   if (includeCrownClusters) {
     const trunkTop = trunkSegs[trunkSegs.length - 1]
-    const crownAngles = [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55]
+    const crownAngles = lushCanopy
+      ? [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55, -Math.PI / 2 - 0.28, -Math.PI / 2 + 0.28]
+      : [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55]
     crownAngles.forEach(angle => {
-      const len = 28 + rng() * 22
-      growBranch(rng, trunkTop.ex, trunkTop.ey, angle, Math.round(len), 10, branchSegs, leafEndpoints, 0, denseBranchCanopyLeaves)
+      const len = lushCanopy
+        ? FOLIAGE_LUSH_CROWN_LEN_MIN + rng() * FOLIAGE_LUSH_CROWN_LEN_RANGE
+        : 28 + rng() * 22
+      growBranch(rng, trunkTop.ex, trunkTop.ey, angle, Math.round(len), 10, branchSegs, leafEndpoints, 0, denseBranchCanopyLeaves || lushCanopy)
     })
   }
   const heroBranchSegFrom = branchSegs.length
@@ -248,7 +275,13 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   // This branch has a physics collision box — the hero starts here.
   //
   const horizBranch = includeHeroBranch ? buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) : null
-  const leaves = buildLeaves(rng, leafEndpoints, 3, denseBranchCanopyLeaves)
+  const leaves = buildLeaves(rng, leafEndpoints, 3, denseBranchCanopyLeaves || lushCanopy, {
+    detailMin: opts.foliageDetailLeavesMin,
+    detailMax: opts.foliageDetailLeavesMax,
+    cloudCellBonus: lushCanopy ? FOLIAGE_LUSH_CLOUD_CELL_BONUS : 0,
+    lobeChanceBoost: lushCanopy ? FOLIAGE_LUSH_LOBE_CHANCE_BOOST : 0,
+    extraLobeChance: lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0
+  })
   return {
     seed,
     trunkSegs,
@@ -337,6 +370,8 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     const rootRgb = { r: rootR, g: rootG, b: rootB }
     if (palette.flatSilhouette) {
       drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
+    } else if (palette.woodMassStyle) {
+      drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
     } else {
       const rootContourRgb = scaleRgbBrightness(rootRgb, 1 - ROOT_CONTOUR_DARKEN)
       const rootHighlightRgb = lightenRgb(rootRgb, ROOT_HIGHLIGHT_LIGHTEN)
@@ -374,15 +409,16 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     })
     ctx.globalAlpha = 1
     if (!palette.skipLeaves) {
-      treeData.leaves.forEach(leaf => {
-        const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
-        drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, leafR, leafG, leafB, opacity, null)
+      const flatRgb = { r: leafR, g: leafG, b: leafB }
+      treeData.leaves.forEach(item => {
+        drawFoliageItemToCanvas(ctx, item, [flatRgb], null, palette.leafOpacity ?? 1)
       })
     }
     return
   }
   const treeSeed = treeData.seed ?? TREE_SEED
   const branchesOverTrunk = palette.branchesOverTrunk ?? false
+  const woodMass = palette.woodMassStyle ?? false
   if (palette.woodOutline) {
     const ol = palette.woodOutline
     if (!branchesOverTrunk) {
@@ -398,26 +434,30 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     // even when branch and trunk share one flat tone.
     //
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-    const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
-    drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
-    drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
     treeData.branchSegs.forEach(seg => {
       drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
     })
-    drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
-    drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
-    drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+    if (!woodMass) {
+      const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
+      drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+      drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
+      drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
+      drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
+      drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+    }
   } else {
     treeData.branchSegs.forEach(seg => {
       drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
     })
-    drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
-    drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-    const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
-    drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
-    drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
-    drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+    if (!woodMass) {
+      drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
+      drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
+      const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
+      drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+      drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
+      drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+    }
   }
   //
   // Leaves — note-tree style teardrop leaves with a centre vein.
@@ -428,10 +468,10 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // Background palettes disable leaf details — plain teardrops, no vein line.
   //
   const vein = palette.noLeafDetails ? null : (palette.leafVein ?? barkDark)
-  treeData.leaves.forEach(leaf => {
-    const shade = leafShades[leaf.shadeIdx ?? 0] ?? leafShades[0]
-    const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
-    drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shade.r, shade.g, shade.b, opacity, vein)
+  const leafOpacity = palette.leafOpacity ?? 1
+  const foliageCellPx = palette.foliageClusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
+  treeData.leaves.forEach(item => {
+    drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, foliageCellPx)
   })
 }
 
@@ -1380,29 +1420,217 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) {
   }
 }
 //
-// Converts leaf endpoint data into note-tree style clusters:
-// 18–30 leaves scattered up to 70 px around the endpoint (flattened vertically).
+// Builds foliage at each branch endpoint: one or two pixel-cloud masses plus
+// a few small teardrop accents inside the canopy volume.
 //
-function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false) {
+function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detailOpts = {}) {
+  const detailMin = detailOpts.detailMin ?? FOLIAGE_DETAIL_LEAVES_MIN
+  const detailMax = detailOpts.detailMax ?? FOLIAGE_DETAIL_LEAVES_MAX
+  const cloudBonus = detailOpts.cloudCellBonus ?? 0
+  const lobeChance = FOLIAGE_CLOUD_LOBE_CHANCE + (detailOpts.lobeChanceBoost ?? 0)
+  const extraLobeChance = detailOpts.extraLobeChance ?? 0
   const out = []
   endpoints.forEach(ep => {
-    const count = denseCanopy ? 22 + Math.floor(rng() * 14) : 18 + Math.floor(rng() * 12)
-    const spread = Math.min(70, ep.r * 1.05)
-    for (let i = 0; i < count; i++) {
-      const a = rng() * Math.PI * 2 - Math.PI
-      const dist = rng() * spread
-      const shadeIdx = Math.min(shadeCount - 1, Math.floor(rng() * shadeCount + rng() * 0.4))
+    const spread = Math.min(72, ep.r * 1.08)
+    const mainShade = pickLeafMassShadeIdx(rng, shadeCount)
+    const mainCells = buildAsymmetricPixelCloud(
+      rng,
+      FOLIAGE_CLOUD_CELLS_MIN + (denseCanopy ? FOLIAGE_DENSE_CLOUD_CELL_BONUS : 0) + cloudBonus,
+      FOLIAGE_CLOUD_CELLS_MAX + (denseCanopy ? FOLIAGE_DENSE_CLOUD_CELL_BONUS : 0) + cloudBonus
+    )
+    out.push({
+      type: 'cluster',
+      x: ep.x + (rng() - 0.5) * spread * 0.2,
+      y: ep.y + (rng() - 0.5) * spread * 0.12,
+      shadeIdx: mainShade,
+      cells: mainCells
+    })
+    const lobeRoll = rng()
+    if (lobeRoll < lobeChance) {
+      const a = (rng() - 0.5) * Math.PI * 0.9
+      const dist = spread * (0.35 + rng() * 0.35)
       out.push({
+        type: 'cluster',
         x: ep.x + Math.cos(a) * dist,
-        y: ep.y + Math.sin(a) * dist * 0.6,
-        size: 12 + rng() * 10,
-        angle: (rng() - 0.5) * 2,
-        opacity: 0.85 + rng() * 0.15,
+        y: ep.y + Math.sin(a) * dist * 0.5,
+        shadeIdx: pickLeafMassShadeIdx(rng, shadeCount),
+        cells: buildAsymmetricPixelCloud(rng, FOLIAGE_CLOUD_LOBE_CELLS_MIN, FOLIAGE_CLOUD_LOBE_CELLS_MAX)
+      })
+    }
+    extraLobeChance > 0 && rng() < extraLobeChance && out.push({
+      type: 'cluster',
+      x: ep.x + (rng() - 0.5) * spread * 0.5,
+      y: ep.y + (rng() - 0.5) * spread * 0.35,
+      shadeIdx: pickLeafMassShadeIdx(rng, shadeCount),
+      cells: buildAsymmetricPixelCloud(rng, FOLIAGE_CLOUD_LOBE_CELLS_MIN, FOLIAGE_CLOUD_LOBE_CELLS_MAX)
+    })
+    const detailSpan = Math.max(0, detailMax - detailMin + 1)
+    const detailCount = detailSpan > 0
+      ? detailMin + Math.floor(rng() * detailSpan) + (denseCanopy ? FOLIAGE_DENSE_DETAIL_BONUS : 0)
+      : 0
+    for (let i = 0; i < detailCount; i++) {
+      const a = rng() * Math.PI * 2 - Math.PI
+      const dist = rng() * spread * 0.75
+      const shadeIdx = pickLeafMassShadeIdx(rng, shadeCount)
+      out.push({
+        type: 'detail',
+        x: ep.x + Math.cos(a) * dist,
+        y: ep.y + Math.sin(a) * dist * 0.55,
+        size: 7 + rng() * 4,
+        angle: (rng() - 0.5) * 1.1,
+        opacity: 1,
         shadeIdx
       })
     }
   })
   return out
+}
+//
+// Eight-way drift-biased growth → jagged pixel cloud (asymmetric, not round).
+//
+function buildAsymmetricPixelCloud(rng, cellsMin, cellsMax) {
+  const target = cellsMin + Math.floor(rng() * (cellsMax - cellsMin + 1))
+  const driftX = (rng() - 0.5) * 2.4
+  const driftY = -0.25 - rng() * 1.1
+  const dirs = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [1, 1], [1, -1], [-1, 1], [-1, -1]
+  ]
+  const dirWeights = dirs.map(([nx, ny]) => {
+    const dot = nx * driftX + ny * driftY
+    return Math.max(0.12, 0.45 + dot * 0.38)
+  })
+  const key = (dx, dy) => `${dx},${dy}`
+  const cells = new Map()
+  const addCell = (dx, dy) => {
+    const k = key(dx, dy)
+    if (cells.has(k)) return false
+    const detail = rng() < FOLIAGE_CLUSTER_DETAIL_CELL_FRAC
+    cells.set(k, { dx, dy, detail })
+    return true
+  }
+  addCell(0, 0)
+  const frontier = [{ dx: 0, dy: 0 }]
+  let guard = 0
+  while (cells.size < target && frontier.length && guard < target * 40) {
+    guard++
+    const pick = frontier[Math.floor(rng() * frontier.length)]
+    const dirIdx = pickWeightedIndex(rng, dirWeights)
+    const [nx, ny] = dirs[dirIdx]
+    const dx = pick.dx + nx
+    const dy = pick.dy + ny
+    if (rng() < FOLIAGE_CLOUD_GROWTH_SKIP) continue
+    if (!addCell(dx, dy)) continue
+    frontier.push({ dx, dy })
+    if (frontier.length > target * 3) {
+      frontier.splice(0, Math.floor(frontier.length * 0.25))
+    }
+  }
+  return normalizeAndErodeCloudCells(cells, rng)
+}
+//
+// Centers the cloud on its anchor and bites random edge voxels for chaos.
+//
+function normalizeAndErodeCloudCells(cells, rng) {
+  const list = [...cells.values()]
+  if (!list.length) return list
+  let minX = list[0].dx
+  let maxX = list[0].dx
+  let minY = list[0].dy
+  let maxY = list[0].dy
+  list.forEach(c => {
+    minX = Math.min(minX, c.dx)
+    maxX = Math.max(maxX, c.dx)
+    minY = Math.min(minY, c.dy)
+    maxY = Math.max(maxY, c.dy)
+  })
+  const cx = Math.round((minX + maxX) * 0.5)
+  const cy = Math.round((minY + maxY) * 0.5)
+  const keyed = new Map()
+  list.forEach(c => {
+    const dx = c.dx - cx
+    const dy = c.dy - cy
+    keyed.set(`${dx},${dy}`, { dx, dy, detail: c.detail })
+  })
+  const edge = []
+  keyed.forEach((c, k) => {
+    const { dx, dy } = c
+    const touch =
+      !keyed.has(`${dx + 1},${dy}`) ||
+      !keyed.has(`${dx - 1},${dy}`) ||
+      !keyed.has(`${dx},${dy + 1}`) ||
+      !keyed.has(`${dx},${dy - 1}`)
+    touch && edge.push(k)
+  })
+  const removeN = Math.floor(edge.length * FOLIAGE_CLOUD_EDGE_ERODE_FRAC)
+  for (let i = 0; i < removeN && edge.length; i++) {
+    const idx = Math.floor(rng() * edge.length)
+    keyed.delete(edge[idx])
+    edge.splice(idx, 1)
+  }
+  return [...keyed.values()]
+}
+//
+// Picks an index from a weight table.
+//
+function pickWeightedIndex(rng, weights) {
+  let sum = 0
+  for (let i = 0; i < weights.length; i++) sum += weights[i]
+  let roll = rng() * sum
+  for (let i = 0; i < weights.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) return i
+  }
+  return weights.length - 1
+}
+//
+// Draws one foliage entry (pixel cluster or small detail leaf).
+//
+function drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, clusterCellPx) {
+  if (item.type === 'cluster') {
+    drawFoliageClusterToCanvas(ctx, item, leafShades, leafOpacity, clusterCellPx)
+    return
+  }
+  const shade = leafShades[item.shadeIdx ?? 0] ?? leafShades[0]
+  const opacity = (item.opacity ?? 1) * leafOpacity
+  drawLeafToCanvas(ctx, item.x, item.y, item.size, item.angle, shade.r, shade.g, shade.b, opacity, vein)
+}
+//
+// Paints a cluster as snapped pixel blocks; a few cells use the accent shade.
+//
+function drawFoliageClusterToCanvas(ctx, cluster, leafShades, leafOpacity, clusterCellPx) {
+  const base = leafShades[cluster.shadeIdx ?? 1] ?? leafShades[0]
+  const shadeIdx = cluster.shadeIdx ?? 1
+  const accentIdx = shadeIdx <= 0
+    ? Math.min(leafShades.length - 1, 1)
+    : Math.max(0, shadeIdx - 1)
+  const accent = leafShades[accentIdx] ?? base
+  const cell = clusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
+  const ox = Math.round(cluster.x)
+  const oy = Math.round(cluster.y)
+  cluster.cells.forEach(c => {
+    const rgb = c.detail ? accent : base
+    const px = ox + c.dx * cell
+    const py = oy + c.dy * cell
+    const cx = px + cell * 0.5
+    const cy = py + cell * 0.5
+    const hash = ((c.dx * 73856093) ^ (c.dy * 19349663)) | 0
+    const angle = ((hash % 628) / 100) - Math.PI
+    const leafSize = cell * FOLIAGE_CLUSTER_LEAF_SIZE_FRAC
+    drawLeafToCanvas(ctx, cx, cy, leafSize, angle, rgb.r, rgb.g, rgb.b, leafOpacity, null)
+  })
+}
+//
+// Three foliage masses per crown: mostly base, rare shadow/light accents.
+//
+function pickLeafMassShadeIdx(rng, shadeCount) {
+  const maxIdx = Math.max(0, Math.min(2, shadeCount - 1))
+  if (maxIdx === 0) return 0
+  const u = rng()
+  if (maxIdx === 1) return u < 0.72 ? 0 : 1
+  if (u < 0.18) return 0
+  if (u < 0.78) return 1
+  return maxIdx >= 2 ? 2 : 1
 }
 //
 // Draws a single leaf to a canvas2D context — same shape as the touch L1

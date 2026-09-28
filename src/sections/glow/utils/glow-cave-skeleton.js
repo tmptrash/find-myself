@@ -212,10 +212,11 @@ function pickThoraxShearedRibRows(seed) {
  * @returns {{ fill: Object, deep: Object, light: Object }}
  */
 export function caveSkeletonPitFloorTones() {
+  const bone = glowRgb('decorGray')
   return {
-    fill: glowRgb('midGray'),
-    deep: glowRgb('void'),
-    light: glowRgb('decorGray')
+    fill: bone,
+    deep: bone,
+    light: bone
   }
 }
 /**
@@ -223,10 +224,11 @@ export function caveSkeletonPitFloorTones() {
  * @returns {{ fill: Object, deep: Object, light: Object }}
  */
 export function caveSkeletonEyeIntroTones() {
+  const bone = glowRgb('lightGray')
   return {
-    fill: glowRgb('lightGray'),
-    deep: glowRgb('void'),
-    light: glowRgb('decorGray')
+    fill: bone,
+    deep: bone,
+    light: bone
   }
 }
 /**
@@ -619,6 +621,7 @@ function drawCaveSkeletonToCtx(ctx, sk, tones, ribLayout) {
     ctx.moveTo(cx, cy)
     ctx.lineTo(ex, ey)
     ctx.stroke()
+    ctx.fillStyle = boneCss
     ctx.beginPath()
     ctx.arc(ex, ey, 1.5, 0, Math.PI * 2)
     ctx.fill()

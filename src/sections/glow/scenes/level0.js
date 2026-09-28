@@ -6206,6 +6206,11 @@ const GLOW_EAR_TREE_MUD_CLEAR = 36
 const EAR_TREE_TRUNK_GRASS_CLEAR_HALF = 26
 const GLOW_EAR_TREE_WHISPER_RADIUS = 300
 const GLOW_EAR_TREE_WHISPER_MAX_VOLUME = 0.42
+//
+// Minimum change in proximity (0..1) per frame to count as moving toward or
+// away from the nearest lip-tree — ignores sub-pixel jitter.
+//
+const GLOW_EAR_TREE_WHISPER_PROX_DELTA = 0.002
 const GLOW_EARLY_LAND_FOOT_ABOVE = 26
 //
 // Clearance kept around the cave crack zone for both decor kinds — neither
@@ -6467,8 +6472,16 @@ function buildGlowEarTreeSpot(x, heightTier) {
 //
 // Ear-tree whisper volume from hero distance to the nearest lip-tree.
 //
+function resetGlowEarTreeWhisperProximityState(inst) {
+  if (!inst.earWhisperProximityState) return
+  inst.earWhisperProximityState.last = 0
+  inst.earWhisperProximityState.wasReceding = false
+}
 function updateGlowEarTreeWhisperSound(inst, char) {
-  const fadeOut = () => Sound.setEarTreeWhisperVolume(0)
+  const fadeOut = () => {
+    Sound.setEarTreeWhisperVolume(0)
+    resetGlowEarTreeWhisperProximityState(inst)
+  }
   if (!char?.pos || !inst.zones.gCollected || !inst.earTrees?.trees?.length) {
     fadeOut()
     return
@@ -6502,6 +6515,18 @@ function updateGlowEarTreeWhisperSound(inst, char) {
     fadeOut()
     return
   }
+  if (!inst.earWhisperProximityState) {
+    inst.earWhisperProximityState = { last: proximity, wasReceding: false }
+  }
+  const proxState = inst.earWhisperProximityState
+  const approaching = proximity > proxState.last + GLOW_EAR_TREE_WHISPER_PROX_DELTA
+  const receding = proximity < proxState.last - GLOW_EAR_TREE_WHISPER_PROX_DELTA
+  receding && (proxState.wasReceding = true)
+  if (approaching && proxState.wasReceding) {
+    Sound.rewindEarTreeWhisperToStart()
+    proxState.wasReceding = false
+  }
+  proxState.last = proximity
   Sound.setEarTreeWhisperVolume(vol)
 }
 //

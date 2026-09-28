@@ -405,6 +405,15 @@ export function setEarTreeWhisperVolume(volume) {
     audio.play().catch(() => {})
   }
 }
+/**
+ * Rewinds the ear-tree whisper loop to the start while it is audible.
+ * Used when the hero turns back toward a lip-tree after moving away.
+ */
+export function rewindEarTreeWhisperToStart() {
+  const audio = earTreeWhisperAudio
+  if (!audio || audio.paused || audio.volume <= 0.001) return
+  audio.currentTime = 0
+}
 //
 // Current proximity-ambient master gain (0 when not playing).
 //

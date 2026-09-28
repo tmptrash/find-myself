@@ -1,4 +1,4 @@
-import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
+import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 //
 // Segmented stick-on-a-chain decor, planted upright — reads as a buoy
 // anchored to the seabed by its chain. A dark eye rides the topmost segment.
@@ -15,7 +15,6 @@ const BUOY_SEGMENT_LAG_DEFAULT = 0.55
 const BUOY_SWAY_HORIZ_MULT = 14
 const BUOY_SWAY_HORIZ_GROWTH = 1.12
 const BUOY_EYE_RADIUS = 11
-const BUOY_EYE_OUTLINE_WIDTH = 2
 const BUOY_PUPIL_RADIUS = 4.5
 const BUOY_PUPIL_MARGIN = 0.75
 const BUOY_BLINK_MIN_INTERVAL = 10
@@ -27,12 +26,11 @@ const BUOY_SIDE_BALL_RADIUS_MULT = 0.95
 //
 // Thin root fan at the seabed anchor, same growTreeRootSegments algorithm
 // the big glow tree uses — generated once per buoy at creation time and
-// redrawn as static geometry every frame.
+// redrawn as static geometry every frame. Starts at the pole's own
+// segmentWidth (seamless join) and tapers down naturally from there.
 //
 const BUOY_ROOT_COUNT = 2
 const BUOY_ROOT_SEGMENTS = 4
-const BUOY_ROOT_WIDTH = 1.5
-const BUOY_ROOT_OUTLINE_PAD = 1
 
 /**
  * Creates the chain-buoy decor inst for a set of ground-anchored spots.
@@ -43,20 +41,23 @@ const BUOY_ROOT_OUTLINE_PAD = 1
  */
 export function create(cfg) {
   const { k, spots, woodPlatformBands, platformXMargin } = cfg
-  const buoys = spots.map((spot, i) => ({
-    x: spot.x,
-    groundY: spot.groundY,
-    seed: spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2),
-    segmentCount: spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT,
-    segmentLen: spot.segmentLen ?? BUOY_SEGMENT_LEN_DEFAULT,
-    segmentWidth: spot.segmentWidth ?? BUOY_SEGMENT_WIDTH_DEFAULT,
-    swayAmp: spot.swayAmp ?? BUOY_SWAY_AMP_DEFAULT,
-    swaySpeed: spot.swaySpeed ?? BUOY_SWAY_SPEED_DEFAULT,
-    swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
-    blinking: false,
-    blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL),
-    rootSegs: buildBuoyRoots(spot.x, spot.groundY)
-  }))
+  const buoys = spots.map((spot, i) => {
+    const segmentWidth = spot.segmentWidth ?? BUOY_SEGMENT_WIDTH_DEFAULT
+    return {
+      x: spot.x,
+      groundY: spot.groundY,
+      seed: spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2),
+      segmentCount: spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT,
+      segmentLen: spot.segmentLen ?? BUOY_SEGMENT_LEN_DEFAULT,
+      segmentWidth,
+      swayAmp: spot.swayAmp ?? BUOY_SWAY_AMP_DEFAULT,
+      swaySpeed: spot.swaySpeed ?? BUOY_SWAY_SPEED_DEFAULT,
+      swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
+      blinking: false,
+      blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL),
+      rootSegs: buildBuoyRoots(spot.x, spot.groundY, segmentWidth)
+    }
+  })
   return {
     k,
     buoys,
@@ -90,7 +91,7 @@ export function onUpdate(inst, heroX, heroY, dt) {
 export function onDraw(inst, chainColor, eyeWhiteColor, rootColor) {
   inst.buoys.forEach(buoy => {
     if (chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)) return
-    drawBuoyRoots(inst.k, buoy, rootColor, chainColor)
+    drawBuoyRoots(inst.k, buoy, rootColor)
     const points = buildBuoyChainPoints(buoy, inst.time)
     drawBuoySegments(inst.k, points, buoy.segmentWidth, chainColor)
     drawBuoySideArms(inst.k, buoy, points, buoy.segmentWidth, chainColor)
@@ -102,7 +103,7 @@ export function onDraw(inst, chainColor, eyeWhiteColor, rootColor) {
 // Grows a small root fan at the seabed anchor once, at creation time —
 // cached and redrawn as static geometry every frame (never regrown).
 //
-function buildBuoyRoots(x, groundY) {
+function buildBuoyRoots(x, groundY, segmentWidth) {
   const rand = (min, max) => min + Math.random() * (max - min)
   const segs = []
   for (let r = 0; r < BUOY_ROOT_COUNT; r++) {
@@ -113,23 +114,21 @@ function buildBuoyRoots(x, groundY) {
       y: groundY - 1,
       angle: startAngle,
       segments: BUOY_ROOT_SEGMENTS,
-      thickness: BUOY_ROOT_WIDTH,
+      thickness: segmentWidth,
       lateralBiasPerSegment: side * 0.03,
       rand
     }))
   }
-  return segs
+  return clampRootSegmentsBelowGroundLine(segs, groundY)
 }
 //
-// Outline pass then fill pass per segment, same layering the chain itself
-// (a silhouette + nothing else) doesn't need, but roots read better with it.
+// Fill-only root lines (no outline pass).
 //
-function drawBuoyRoots(k, buoy, rootColor, outlineColor) {
+function drawBuoyRoots(k, buoy, rootColor) {
   buoy.rootSegs?.forEach(seg => {
     const p1 = k.vec2(seg.startX, seg.startY)
     const p2 = k.vec2(seg.endX, seg.endY)
-    k.drawLine({ p1, p2, width: seg.width + BUOY_ROOT_OUTLINE_PAD, color: outlineColor })
-    k.drawLine({ p1, p2, width: seg.width, color: rootColor })
+    k.drawLine({ p1, p2, width: seg.width, color: rootColor, lineCap: 'round' })
   })
 }
 //
@@ -205,9 +204,14 @@ function drawBuoyJoints(k, points, segmentWidth, color) {
 }
 function drawBuoyEye(k, buoy, points, outlineColor, eyeWhiteColor, heroX, heroY) {
   const eye = points[points.length - 1]
+  //
+  // Outline ring matches the pole's own width — same thickness reads as
+  // one continuous material from leg to eye.
+  //
+  const outlineWidth = buoy.segmentWidth
   k.drawCircle({
     pos: k.vec2(eye.x, eye.y),
-    radius: BUOY_EYE_RADIUS + BUOY_EYE_OUTLINE_WIDTH,
+    radius: BUOY_EYE_RADIUS + outlineWidth,
     color: outlineColor
   })
   if (!buoy.blinking) {
@@ -223,7 +227,7 @@ function drawBuoyEye(k, buoy, points, outlineColor, eyeWhiteColor, heroX, heroY)
   k.drawLine({
     p1: k.vec2(eye.x - BUOY_EYE_RADIUS * 0.85, eye.y),
     p2: k.vec2(eye.x + BUOY_EYE_RADIUS * 0.85, eye.y),
-    width: BUOY_EYE_OUTLINE_WIDTH + 1,
+    width: outlineWidth + 1,
     color: outlineColor
   })
 }

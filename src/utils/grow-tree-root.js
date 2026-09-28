@@ -138,6 +138,42 @@ export function growTreeRootSegments(opts) {
  * @param {Array} segments - Output of `growTreeRootSegments`
  * @param {string} strokeStyle - CSS colour string (e.g. 'rgba(140, 78, 40, 0.92)')
  */
+/**
+ * Drops/clips root segments so nothing extends above the ground line (smaller Y).
+ * @param {Array} segments - Output of growTreeRootSegments
+ * @param {number} groundY - Walkable ground Y; roots may not go above this
+ * @returns {Array}
+ */
+export function clampRootSegmentsBelowGroundLine(segments, groundY) {
+  const out = []
+  for (const seg of segments) {
+    const clipped = clipRootSegmentMinY(seg, groundY)
+    clipped && out.push(clipped)
+  }
+  return out
+}
+function clipRootSegmentMinY(seg, minY) {
+  let { startX, startY, endX, endY, width, depth } = seg
+  if (startY < minY && endY < minY) return null
+  if (startY < minY) {
+    const dy = endY - startY
+    if (Math.abs(dy) < 1e-6) return null
+    const t = (minY - startY) / dy
+    if (t <= 0 || t >= 1) return null
+    startX = startX + (endX - startX) * t
+    startY = minY
+  }
+  if (endY < minY) {
+    const dy = endY - startY
+    if (Math.abs(dy) < 1e-6) return null
+    const t = (minY - startY) / dy
+    if (t <= 0 || t >= 1) return null
+    endX = startX + (endX - startX) * t
+    endY = minY
+  }
+  if (Math.hypot(endX - startX, endY - startY) < 0.4) return null
+  return { startX, startY, endX, endY, width, depth }
+}
 export function drawTreeRootSegmentsToCanvas(ctx, segments, strokeStyle) {
   ctx.lineCap = 'round'
   ctx.strokeStyle = strokeStyle

@@ -286,14 +286,27 @@ export const CFG = {
         //
         captionLetterLInk: PALETTE.gray1,
         //
-        // O pickup caption on the colour forest — light warm ink on haze/trees.
+        // O pickup caption on the colour forest — was the exact same pale
+        // sand5 as the highlighted "O" glyph fill (warmCream below), so the
+        // body text and the letter barely read as distinct and the whole
+        // caption looked washed out. Now a darker, richer soil tone (same
+        // family as the chernozem ground layer) for real contrast against
+        // both the pale letter and the forest backdrop.
         //
-        captionObservationInk: PALETTE.sand5,
+        captionObservationInk: PALETTE.sand0,
         //
         // Colour-world backdrop: the bright warm haze above the ground line
         // (warmHaze below) and a dark earth band under it (root zone).
         //
         groundDark: PALETTE.gray2,
+        //
+        // Layered soil for the underground root-zone earth band (colour
+        // world only — the gray-world variant stays tonal gray, no hue):
+        // chernozem topsoil, clay in the middle, sand deepest.
+        //
+        groundChernozem: PALETTE.sand0,
+        groundClay: PALETTE.brown2,
+        groundSand: PALETTE.sand3,
         //
         // Wet mud patch under the mud-zone tall grass — a darker, warmer
         // earth tone than plain groundDark so the soft-mud band reads as a

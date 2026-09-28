@@ -1,4 +1,4 @@
-import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
+import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 //
 // Small background trees whose branches end in red lips — branches grow from
 // the tapered trunk surface and lean toward the hero like the old ear trees.
@@ -26,11 +26,14 @@ const MOUTH_OUTLINE_PAD = 1
 // Root fan at the base, same growTreeRootSegments algorithm the big glow
 // tree uses — generated once per tree at creation time and redrawn as
 // static geometry every frame (never regrown), same pattern as the trunk.
+// Starting thickness matches the trunk's own local cross-section width at
+// ground level (see buildEarTreeRoots) so trunk and roots read as one
+// continuous seam instead of a sudden width jump.
 //
 const EAR_TREE_ROOT_COUNT = 3
-const EAR_TREE_ROOT_SEGMENTS = 6
-const EAR_TREE_ROOT_WIDTH_RATIO = 0.35
-const EAR_TREE_ROOT_OUTLINE_PAD = 2
+const EAR_TREE_ROOT_SEGMENTS = 10
+const EAR_TREE_ROOT_MIN_DRAW_WIDTH = 0.85
+const EAR_TREE_ROOT_TIP_RADIUS = 0.55
 
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
@@ -129,33 +132,56 @@ function trunkHalfWidthAt(tree, y) {
 //
 function buildEarTreeRoots(tree) {
   const rand = (min, max) => min + Math.random() * (max - min)
+  //
+  // Half-width of the trunk right at the ground line — a root starting at
+  // the trunk centre gets this full cross-section as its start thickness;
+  // one starting further off-centre gets only the remaining room to the
+  // trunk edge (mirrored), so no root ever reads wider than the trunk
+  // itself at the seam (same idea as rootSegWidth() for the big tree).
+  //
+  const halfW = trunkHalfWidthAt(tree, tree.groundY)
   const segs = []
   for (let r = 0; r < EAR_TREE_ROOT_COUNT; r++) {
     const side = r % 2 === 0 ? 1 : -1
-    const xJitter = side * Math.random() * tree.trunkW * 0.6
+    const xJitter = side * Math.random() * halfW * 0.6
+    const offset = Math.min(halfW, Math.abs(xJitter))
+    const startThickness = Math.max(1, 2 * (halfW - offset))
     const startAngle = Math.PI / 2 + side * (0.15 + Math.random() * 0.25)
     segs.push(...growTreeRootSegments({
       x: tree.x + xJitter,
       y: tree.groundY - 2,
       angle: startAngle,
       segments: EAR_TREE_ROOT_SEGMENTS,
-      thickness: tree.trunkW * EAR_TREE_ROOT_WIDTH_RATIO,
+      thickness: startThickness,
       lateralBiasPerSegment: side * 0.03,
       rand
     }))
   }
-  return segs
+  return clampRootSegmentsBelowGroundLine(segs, tree.groundY)
 }
 //
-// Outline pass then fill pass per segment, same layering the trunk and
-// branches already use.
+// Fill-only root lines — round caps plus a tip dot on every terminal end so
+// the taper never reads as chopped off before the point.
 //
-function drawEarTreeRoots(k, tree, rootColor, outlineColor) {
-  tree.rootSegs?.forEach(seg => {
-    const p1 = k.vec2(seg.startX, seg.startY)
-    const p2 = k.vec2(seg.endX, seg.endY)
-    k.drawLine({ p1, p2, width: seg.width + EAR_TREE_ROOT_OUTLINE_PAD, color: outlineColor })
-    k.drawLine({ p1, p2, width: seg.width, color: rootColor })
+function drawEarTreeRoots(k, tree, rootColor) {
+  const segs = tree.rootSegs
+  if (!segs?.length) return
+  const startKeys = new Set(segs.map(seg => `${seg.startX},${seg.startY}`))
+  segs.forEach(seg => {
+    const w = Math.max(EAR_TREE_ROOT_MIN_DRAW_WIDTH, seg.width)
+    k.drawLine({
+      p1: k.vec2(seg.startX, seg.startY),
+      p2: k.vec2(seg.endX, seg.endY),
+      width: w,
+      color: rootColor,
+      lineCap: 'round'
+    })
+  })
+  segs.forEach(seg => {
+    const key = `${seg.endX},${seg.endY}`
+    if (startKeys.has(key)) return
+    const tipR = Math.max(EAR_TREE_ROOT_TIP_RADIUS, seg.width * 0.45)
+    k.drawCircle({ pos: k.vec2(seg.endX, seg.endY), radius: tipR, color: rootColor })
   })
 }
 
@@ -177,11 +203,14 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
  * @param {Object} rootColor - Kaplay rgb for the root fan, big-tree style
  */
-export function onDrawTrunks(inst, barkColor, outlineColor, rootColor) {
-  inst.trees.forEach(tree => {
-    drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor)
-    drawEarTreeRoots(inst.k, tree, rootColor, outlineColor)
-  })
+export function onDrawTrunks(inst, barkColor, outlineColor) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+}
+//
+// Root fans sit above the grass layer so blade tufts do not crop taper tips.
+//
+export function onDrawRoots(inst, rootColor) {
+  inst.trees.forEach(tree => drawEarTreeRoots(inst.k, tree, rootColor))
 }
 
 /**
@@ -266,15 +295,17 @@ function drawTrunkSegments(k, tree, pad, color) {
 }
 //
 // Black cap line along the crown — the tapered polygon alone left the top
-// edge without a readable outline.
+// edge without a readable outline. Reuses trunkEdgeAtStep for the exact
+// same left/right/y the trunk polygon's own top edge uses (it used to
+// compute its own wobble with the wrong phase — t=0 instead of t=1 — so the
+// rim's ends didn't land on the polygon's actual top corners and poked out
+// past them).
 //
 function drawTrunkTopRim(k, tree, outlineColor) {
-  const topY = tree.groundY - tree.trunkH
-  const halfW = trunkHalfWidthAt(tree, topY) + EAR_TREE_TRUNK_OUTLINE_PAD
-  const wobble = Math.sin(tree.seed * 3) * tree.trunkW * EAR_TREE_TRUNK_WOBBLE
+  const edge = trunkEdgeAtStep(tree, EAR_TREE_TRUNK_OUTLINE_PAD, EAR_TREE_TRUNK_STEPS)
   k.drawLine({
-    p1: k.vec2(tree.x - halfW + wobble, topY),
-    p2: k.vec2(tree.x + halfW + wobble, topY),
+    p1: k.vec2(edge.left, edge.y),
+    p2: k.vec2(edge.right, edge.y),
     width: EAR_TREE_TRUNK_TOP_RIM_W,
     color: outlineColor
   })

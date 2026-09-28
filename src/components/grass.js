@@ -1,3 +1,4 @@
+import { growTreeRootSegments } from '../utils/grow-tree-root.js'
 //
 // Swaying grass — thick baked blade sprites growing in tufts (never an even
 // spread). Blades are baked white and tinted at draw time, so any scene can
@@ -24,13 +25,25 @@ const TUFT_PLACE_ATTEMPTS = 24
 // Optional short static roots under each tuft (opt-in via cfg.roots) — a
 // couple of tiny straight ticks, not the full organic tree-root algorithm,
 // since these only need to read as "planted", not as a detailed root mass.
+// Length is relative to that tuft's own average blade height (~80% of it),
+// not a flat constant, so taller tufts (e.g. the mud-zone scale bump) grow
+// proportionally longer roots.
 //
-const TUFT_ROOT_COUNT = 2
-const TUFT_ROOT_LEN_MIN = 3
-const TUFT_ROOT_LEN_RANGE = 4
-const TUFT_ROOT_SPREAD = 4
-const TUFT_ROOT_WIDTH = 1
+const GRASS_ROOT_LEN_RATIO = 0.8
+const GRASS_ROOT_FAN_COUNT = 2
+const GRASS_ROOT_SEGMENTS = 9
+const GRASS_ROOT_THICKNESS = 1.5
+const GRASS_ROOT_SPREAD = 6
 const CULL_PAD = 48
+//
+// Optional per-blade warm hue variation (opt-in via cfg.hueVaryMax) — most
+// blades stay whatever colour the scene's getTint resolved, a minority
+// shift toward a warm autumn tone, cubic-skewed so only a small fraction
+// ever reads noticeably warm. Breaks up a field that otherwise reads as one
+// uniform flat green.
+//
+const HUE_VARY_TARGET = { r: 196, g: 118, b: 46 }
+const HUE_VARY_SKEW = 3
 //
 // Every blade shape lives in ONE atlas sprite instead of a sprite per
 // variant. A dense field draws dozens of blades per frame, and with one
@@ -93,10 +106,18 @@ let lastTintK = null
  *   under each tuft (needs cfg.getRootColor)
  * @param {Function} [cfg.getRootColor] - () => {r,g,b} root tint, re-read
  *   every frame same as getTint (e.g. the gray→colour-world transition)
+ * @param {Function} [cfg.getRootVisible] - (worldX) => whether fractal roots
+ *   at this X should draw (independent of per-blade tint opacity fades)
+ * @param {number} [cfg.hueVaryMax] - 0..1 max per-blade blend toward a warm
+ *   autumn tone on top of getTint's resolved colour; cubic-skewed so only a
+ *   minority of blades shift noticeably (breaks up a flat uniform-green
+ *   field). Omit for no variation.
+ * @param {number} [cfg.hueVarySkew] - exponent on each blade's colorSeed
+ *   before hueVaryMax is applied; 1 = even green/orange mix, 3 = mostly green.
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
-  const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas, roots, getRootColor } = cfg
+  const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas, roots, getRootColor, getRootVisible, hueVaryMax, hueVarySkew } = cfg
   loadBladeSprites(k, postBakeCanvas)
   const { blades, tufts } = buildBlades(left, right, tuftCount, excluded, density, getScaleMult)
   const inst = {
@@ -105,8 +126,11 @@ export function create(cfg) {
     blades,
     getTint,
     getSwayScale,
-    tuftRoots: roots ? buildTuftRoots(tufts) : null,
+    tuftRoots: roots ? buildTuftFractalRoots(tufts) : null,
     getRootColor: roots ? getRootColor : null,
+    getRootVisible: roots ? getRootVisible : null,
+    hueVaryMax: hueVaryMax ?? 0,
+    hueVarySkew: hueVarySkew ?? HUE_VARY_SKEW,
     layer: null
   }
   z !== undefined && (inst.layer = k.add([
@@ -143,41 +167,65 @@ function buildBlades(left, right, tuftCount, excluded, density, getScaleMult) {
     const centerX = left + Math.random() * (right - left)
     if (excluded?.(centerX)) continue
     if (density && Math.random() > density(centerX)) continue
-    tufts.push({ x: centerX })
+    const tuft = { x: centerX, avgBladeHeight: BLADE_H, blades: [] }
+    tufts.push(tuft)
     const count = TUFT_BLADES_MIN + Math.floor(Math.random() * (TUFT_BLADES_RANGE + 1))
+    let heightSum = 0
+    let heightCount = 0
     for (let b = 0; b < count; b++) {
       const x = centerX + (Math.random() - 0.5) * 2 * TUFT_SPREAD
       if (excluded?.(x)) continue
       const variant = Math.floor(Math.random() * BLADE_VARIANTS)
       const flipX = Math.random() < 0.5
       const scale = (BLADE_SCALE_MIN + Math.random() * BLADE_SCALE_RANGE) * (getScaleMult?.(x) ?? 1)
-      blades.push({
+      const height = BLADE_H * scale
+      heightSum += height
+      heightCount++
+      const blade = {
         x,
         quad: bladeAtlasQuad(variant, flipX),
         width: BLADE_W * scale,
-        height: BLADE_H * scale,
+        height,
         swaySpeed: SWAY_SPEED_MIN + Math.random() * SWAY_SPEED_RANGE,
-        swayPhase: Math.random() * Math.PI * 2
-      })
+        swayPhase: Math.random() * Math.PI * 2,
+        colorSeed: Math.random()
+      }
+      blades.push(blade)
+      tuft.blades.push(blade)
     }
+    heightCount > 0 && (tuft.avgBladeHeight = heightSum / heightCount)
   }
   blades.sort((a, b) => a.x - b.x)
   return { blades, tufts }
 }
 //
-// A couple of short straight ticks per tuft, growing straight down from the
-// tuft centre — static geometry, generated once and redrawn every frame.
+// Fractal root fans under tufts that have several neighboring blades —
+// length scales to 80% of the tallest blade in that tuft cluster.
 //
-function buildTuftRoots(tufts) {
-  const roots = []
+function buildTuftFractalRoots(tufts) {
+  const fans = []
   tufts.forEach(tuft => {
-    for (let i = 0; i < TUFT_ROOT_COUNT; i++) {
-      const dx = (i - (TUFT_ROOT_COUNT - 1) / 2) * TUFT_ROOT_SPREAD + (Math.random() - 0.5) * 2
-      const len = TUFT_ROOT_LEN_MIN + Math.random() * TUFT_ROOT_LEN_RANGE
-      roots.push({ x: tuft.x + dx, dx: (Math.random() - 0.5) * 2, len })
+    if ((tuft.blades?.length ?? 0) < TUFT_BLADES_MIN) return
+    const rand = (min, max) => min + Math.random() * (max - min)
+    const tallest = tuft.blades.reduce((m, b) => Math.max(m, b.height), tuft.avgBladeHeight)
+    const maxLen = tallest * GRASS_ROOT_LEN_RATIO
+    for (let i = 0; i < GRASS_ROOT_FAN_COUNT; i++) {
+      const side = i % 2 === 0 ? 1 : -1
+      const anchorX = tuft.x + side * Math.random() * GRASS_ROOT_SPREAD
+      const segs = growTreeRootSegments({
+        x: 0,
+        y: 0,
+        angle: Math.PI / 2 + side * rand(0.14, 0.34),
+        segments: GRASS_ROOT_SEGMENTS,
+        thickness: GRASS_ROOT_THICKNESS,
+        lateralBiasPerSegment: side * 0.045,
+        rand
+      })
+      fans.push({ x: anchorX, segs, maxLen })
     }
   })
-  return roots
+  fans.sort((a, b) => a.x - b.x)
+  return fans
 }
 //
 // Bakes the white grass-blade shapes (tapered curved silhouettes, some with a
@@ -287,7 +335,9 @@ function onDraw(inst) {
     if (blade.x > maxX) break
     const tint = inst.getTint(blade)
     if (!tint) continue
-    const color = grassTintRgb(k, tint)
+    const color = inst.hueVaryMax > 0
+      ? hueVariedRgb(k, tint, blade, inst.hueVaryMax, inst.hueVarySkew)
+      : grassTintRgb(k, tint)
     const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG * swayScale
     k.drawSprite({
       sprite: BLADE_ATLAS_SPRITE,
@@ -308,14 +358,25 @@ function onDraw(inst) {
   const rootTint = inst.tuftRoots && inst.getRootColor?.()
   if (rootTint) {
     const rootColor = k.rgb(rootTint.r, rootTint.g, rootTint.b)
-    for (const root of inst.tuftRoots) {
-      if (root.x < minX || root.x > maxX) continue
-      k.drawLine({
-        p1: k.vec2(root.x, inst.floorY),
-        p2: k.vec2(root.x + root.dx, inst.floorY + root.len),
-        width: TUFT_ROOT_WIDTH,
-        color: rootColor
-      })
+    for (const fan of inst.tuftRoots) {
+      if (fan.x < minX - 16 || fan.x > maxX + 16) continue
+      if (inst.getRootVisible?.(fan.x) === false) continue
+      let used = 0
+      for (const seg of fan.segs) {
+        const dx = seg.endX - seg.startX
+        const dy = seg.endY - seg.startY
+        const segLen = Math.hypot(dx, dy)
+        if (used >= fan.maxLen || segLen < 0.01) break
+        const drawLen = Math.min(segLen, fan.maxLen - used)
+        const t = drawLen / segLen
+        k.drawLine({
+          p1: k.vec2(fan.x + seg.startX, inst.floorY + seg.startY),
+          p2: k.vec2(fan.x + seg.startX + dx * t, inst.floorY + seg.startY + dy * t),
+          width: Math.max(0.65, seg.width * 0.52),
+          color: rootColor
+        })
+        used += drawLen
+      }
     }
   }
 }
@@ -328,6 +389,21 @@ function grassTintRgb(k, tint) {
   lastTintRef = tint
   lastTintRgb = k.rgb(tint.r, tint.g, tint.b)
   return lastTintRgb
+}
+//
+// Blends the resolved tint toward a warm autumn tone by this blade's own
+// fixed colorSeed, cubed so only a minority of blades shift noticeably —
+// breaks up an otherwise flat uniform-green field. Can't reuse the single
+// cached grassTintRgb here since every blade now potentially ends up a
+// different final colour.
+//
+function hueVariedRgb(k, tint, blade, hueVaryMax, hueVarySkew = HUE_VARY_SKEW) {
+  const t = Math.pow(blade.colorSeed ?? 0, hueVarySkew) * hueVaryMax
+  return k.rgb(
+    tint.r + (HUE_VARY_TARGET.r - tint.r) * t,
+    tint.g + (HUE_VARY_TARGET.g - tint.g) * t,
+    tint.b + (HUE_VARY_TARGET.b - tint.b) * t
+  )
 }
 //
 // First blade whose x is >= minX in the sorted blade list.

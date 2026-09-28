@@ -171,6 +171,13 @@ const DECOR_GRAY = glowRgb('decorGray')
 // Warm orange grass — same half-brightness front-row foliage tone as menu.js
 //
 const GRASS_GREEN = glowRgb(GLOW_PAL.treeColor.leafShades[0])
+//
+// Foreground ground grass shifts a minority of blades toward a warm autumn
+// tone (see Grass.create's hueVaryMax) so the field doesn't read as one flat
+// unrealistic green.
+//
+const GLOW_GRASS_HUE_VARY_MAX = 1
+const GLOW_GRASS_HUE_VARY_SKEW = 1
 const WATER_COLOR = glowRgb('water')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
 //
@@ -883,7 +890,6 @@ const UG_ROCK_COUNT = 6
 const UG_CRACK_COUNT = 9
 const UG_PEBBLE_CLUSTER_COUNT = 6
 const UG_ROOTLET_COUNT = 10
-const UG_CAVE_ROOTLET_COUNT = 6
 const UG_SHELL_COUNT = 5
 const UG_BONE_COUNT = 3
 const UG_COIN_COUNT = 4
@@ -1369,9 +1375,10 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 // even spread across the ground.
 //
 const GRASS_Z = 20
+const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
 const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
-const GLOW_EAR_TREE_COUNT = 3
+const GLOW_EAR_TREE_COUNT = 2
 const GRASS_TUFT_COUNT = 22
 //
 // Right-spikes' warning-flash z — steps in front of the grass (GRASS_Z) for
@@ -1429,6 +1436,22 @@ const GROUND_BOTTOM_WAVE_AMP = 7
 const GROUND_BOTTOM_WAVE_STEPS = 40
 const GROUND_BOTTOM_WAVE_FREQ_A = 0.018
 const GROUND_BOTTOM_WAVE_FREQ_B = 0.041
+//
+// Underground earth band split into 3 soil layers, top to bottom (chernozem
+// topsoil / clay / sand) — first two fractions of CAVE_BAND_H, the sand
+// layer fills whatever remains.
+//
+const GROUND_LAYER_FRACS = [0.5, 0.25]
+//
+// High-frequency jagged seams between soil layers (sample-and-hold noise, like
+// a dense irregular time series — not smooth sine waves).
+//
+const GROUND_LAYER_JAG_CELL_PX = 3
+const GROUND_LAYER_INTERIOR_BOUNDARY_AMP = 12
+//
+// Pull each soil swatch toward the layer average so strata read softer.
+//
+const GROUND_LAYER_CONTRAST_PULL = 0.74
 //
 // Sky bake uses stacked palette bands instead of a smooth CSS gradient.
 //
@@ -1716,6 +1739,11 @@ const LOG_SNAP_TOLERANCE = 2
 // penetration — fighting it every frame caused constant twitch.
 //
 const LOG_SNAP_STANDING_MAX = 10
+//
+// Feet at or below this Y are on the main floor lane — never snap onto the
+// cap or keep the invisible pad active while strolling past the stem.
+//
+const TRAMP_MAIN_LANE_FEET_MIN = FLOOR_Y - LOG_SNAP_STANDING_MAX - 6
 //
 // Anti-tunnel only when feet are clearly inside the log body. Shallow
 // contact (landing / standing) stays pure Kaplay — same as the branch —
@@ -2707,7 +2735,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     })
     inst.chainBuoys = ChainBuoy.create({
       k,
-      spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2, chainBuoyWoodBands, earTreeSpots),
+      spots: buildGlowChainBuoySpots(inst.lakeX1, inst.lakeX2, chainBuoyWoodBands, earTreeSpots, trampX, branchTrampX),
       woodPlatformBands: chainBuoyWoodBands,
       platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
     })
@@ -5147,7 +5175,7 @@ function isGlowFlatSingleDecorColor(inst) {
 function glowChainBuoyColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const eyeWhite = flat ? LIGHT_GRAY : glowRgb('brightLight')
-  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
+  const root = flat ? DECOR_GRAY : glowRgb('groundSand')
   return {
     chain: k.rgb(VOID.r, VOID.g, VOID.b),
     eyeWhite: k.rgb(eyeWhite.r, eyeWhite.g, eyeWhite.b),
@@ -5162,7 +5190,7 @@ function glowEarTreeColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
   const lip = flat ? DECOR_GRAY : glowRgb('#cc6764')
-  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
+  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeColor.root)
   return {
     outline: k.rgb(VOID.r, VOID.g, VOID.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
@@ -5193,7 +5221,17 @@ function createGlowEarTreeLayer(k, inst) {
       draw() {
         if (!inst.earTrees || !inst.zones.gCollected) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, c.root)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline)
+      }
+    }
+  ])
+  k.add([
+    k.z(GLOW_EAR_TREE_ROOTS_Z),
+    {
+      draw() {
+        if (!inst.earTrees || !inst.zones.gCollected) return
+        const c = glowEarTreeColors(inst, k)
+        EarTree.onDrawRoots(inst.earTrees, c.root)
       }
     }
   ])
@@ -5410,8 +5448,8 @@ function buildParallaxSprites(k, undergroundSpec) {
   const staticColorCtx = staticColor.getContext('2d')
   staticColorCtx.translate(0, -PAR_STATIC_WORLD_Y)
   const [ugGray, ugColor] = undergroundPaletteEntries()
-  renderCombinedGroundBand(staticGrayCtx, lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN), undergroundSpec, ugGray)
-  renderCombinedGroundBand(staticColorCtx, GROUND_DARK, undergroundSpec, ugColor)
+  renderCombinedGroundBand(staticGrayCtx, groundEarthLayersGray(), undergroundSpec, ugGray)
+  renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, ugColor)
   applyGlowLayerGradeToCanvas(staticGray, GLOW_LAYER_GRADE.foreground, 9100)
   applyGlowLayerGradeToCanvas(staticColor, GLOW_LAYER_GRADE.foreground, 9101)
   k.loadSprite(BG_STATIC_GRAY, staticGray)
@@ -5498,31 +5536,143 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   return pad
 }
 //
-// Fills the earth band with a wavy lower edge (organic ground silhouette).
+// Fills one horizontal band across the full width, flat top edge — used for
+// every earth layer except the deepest, which gets the wavy silhouette.
 //
-function paintWavyEarthBandFill(ctx, bandRgb, x0, y0, width, height) {
-  const bottomY = y0 + height
-  ctx.fillStyle = `rgb(${bandRgb.r}, ${bandRgb.g}, ${bandRgb.b})`
+//
+// Deterministic hash for layer-boundary jitter (stable across bakes).
+//
+function groundLayerJagHash01(n) {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453
+  return s - Math.floor(s)
+}
+//
+// Per-column sample-and-hold offset — sharp vertical micro-spikes along X.
+//
+function groundLayerInteriorBoundaryWave(x, layerIndex) {
+  const seed = layerIndex * 97.13 + 3.7
+  const cell = GROUND_LAYER_JAG_CELL_PX
+  const bx = Math.floor(x / cell)
+  const h = groundLayerJagHash01(bx * 13.7 + seed * 100.3)
+  return (h * 2 - 1) * GROUND_LAYER_INTERIOR_BOUNDARY_AMP
+}
+function groundLayerBoundaryY(x, y0, height, cumFrac, layerIndex) {
+  //
+  // Top of the earth band is always a flat horizontal seam on FLOOR_Y.
+  //
+  if (cumFrac <= 0) return y0
+  return y0 + height * cumFrac + groundLayerInteriorBoundaryWave(x, layerIndex)
+}
+//
+// Fills one soil stratum between two wavy horizontal curves (top + bottom).
+//
+function paintWavyBoundedEarthLayer(ctx, rgb, x0, width, y0, height, topFrac, bottomFrac, topLayerIndex, bottomLayerIndex) {
+  const steps = Math.max(2, Math.ceil(width / GROUND_LAYER_JAG_CELL_PX))
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
-  ctx.moveTo(x0, y0)
-  ctx.lineTo(x0 + width, y0)
-  for (let i = GROUND_BOTTOM_WAVE_STEPS; i >= 0; i--) {
-    const t = i / GROUND_BOTTOM_WAVE_STEPS
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
     const x = x0 + t * width
-    const wave = (Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_A) +
-      Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_B) * 0.55) * GROUND_BOTTOM_WAVE_AMP
-    ctx.lineTo(x, bottomY + wave)
+    const y = groundLayerBoundaryY(x, y0, height, topFrac, topLayerIndex)
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps
+    const x = x0 + t * width
+    let y = groundLayerBoundaryY(x, y0, height, bottomFrac, bottomLayerIndex)
+    if (bottomLayerIndex < 0) {
+      const wave = (Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_A) +
+        Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_B) * 0.55) * GROUND_BOTTOM_WAVE_AMP
+      y = y0 + height + wave
+    }
+    ctx.lineTo(x, y)
   }
   ctx.closePath()
   ctx.fill()
 }
 //
-// Paints the root-zone part of a combined background canvas: the flat earth
-// band inside the playfield margins topped with the underground decor.
+// Stacks soil layers top to bottom — flat top on FLOOR_Y, wavy coastline
+// seams between strata; the deepest edge keeps the extra bottom swell.
 //
-function renderCombinedGroundBand(ctx, bandRgb, undergroundSpec, ugEntry) {
-  paintWavyEarthBandFill(ctx, bandRgb, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
+function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
+  let cumFrac = 0
+  for (let i = 0; i < layers.length; i++) {
+    const nextFrac = i < layers.length - 1
+      ? cumFrac + layers[i].frac
+      : 1
+    paintWavyBoundedEarthLayer(
+      ctx,
+      layers[i].rgb,
+      x0,
+      width,
+      y0,
+      height,
+      cumFrac,
+      nextFrac,
+      i,
+      i < layers.length - 1 ? i + 1 : -1
+    )
+    cumFrac = nextFrac
+  }
+}
+//
+// Paints the root-zone part of a combined background canvas: the layered
+// earth band (chernozem / clay / sand, see groundEarthLayers) inside the
+// playfield margins, topped with the underground decor.
+//
+function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
+  paintLayeredEarthBand(ctx, layers, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
+  //
+  // Flat seal along FLOOR_Y so the topsoil always meets the walkable ground
+  // line with no sub-pixel gaps from the wavy interior seams below.
+  //
+  const topRgb = layers[0]?.rgb
+  topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
   renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
+  topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
+}
+//
+// Flat strip flush with the walkable ground line (covers sub-pixel gaps).
+//
+function paintFlatEarthGroundSeal(ctx, rgb, x0, y0, width) {
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.fillRect(x0, y0, width, 4)
+}
+//
+// Three soil layers for the underground earth band, top to bottom, each
+// { rgb, frac } (frac of the total band height; the last layer just fills
+// whatever remains so rounding never leaves a gap). Gray-world stays tonal
+// gray (darkening with depth, no hue); colour-world uses real soil tones —
+// chernozem topsoil, clay, then sand at the deepest.
+//
+function softenGroundEarthLayers(layers) {
+  const avg = layers.reduce((acc, layer) => ({
+    r: acc.r + layer.rgb.r,
+    g: acc.g + layer.rgb.g,
+    b: acc.b + layer.rgb.b
+  }), { r: 0, g: 0, b: 0 })
+  avg.r = Math.round(avg.r / layers.length)
+  avg.g = Math.round(avg.g / layers.length)
+  avg.b = Math.round(avg.b / layers.length)
+  const pull = GROUND_LAYER_CONTRAST_PULL
+  return layers.map(layer => ({
+    ...layer,
+    rgb: lerpRgb(layer.rgb, avg, pull)
+  }))
+}
+function groundEarthLayersGray() {
+  return softenGroundEarthLayers([
+    { rgb: lerpRgb(INNER_GRAY, VOID, 0.12), frac: GROUND_LAYER_FRACS[0] },
+    { rgb: lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN), frac: GROUND_LAYER_FRACS[1] },
+    { rgb: lerpRgb(INNER_GRAY, VOID, 0.55) }
+  ])
+}
+function groundEarthLayersColor() {
+  return softenGroundEarthLayers([
+    { rgb: glowRgb('groundChernozem'), frac: GROUND_LAYER_FRACS[0] },
+    { rgb: glowRgb('groundClay'), frac: GROUND_LAYER_FRACS[1] },
+    { rgb: glowRgb('groundSand') }
+  ])
 }
 //
 // Renders one parallax plane into both combined canvases: each tree uses the
@@ -6014,7 +6164,15 @@ const GLOW_CHAIN_BUOY_PLACE_ATTEMPTS = 80
 // addGlowChainBuoysBetweenRightTrees) already handles the gap between the
 // two trees specifically with its own tighter 40px margin.
 //
-const GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF = 110
+//
+// Only block buoys directly in front of an ear-tree (west of the trunk —
+// hero walks left-to-right). Beside/behind the trunk stays valid.
+//
+const GLOW_CHAIN_BUOY_EAR_TREE_ON_TRUNK_HALF = 16
+const GLOW_CHAIN_BUOY_EAR_TREE_FRONT_DEPTH = 72
+const GLOW_CHAIN_BUOY_EAR_TREE_BEHIND_DEPTH = 72
+const GLOW_CHAIN_BUOY_EAR_TREE_FAR_CLEAR = 118
+const GLOW_CHAIN_BUOY_MUD_EAST_MIN = 4
 //
 // All buoys stay right of the mud zone (the lake sits to the mud's own
 // left) — same gap the ear-trees use right of the mud.
@@ -6036,12 +6194,6 @@ const GLOW_EAR_TREE_MUD_RIGHT_GAP = 56
 const GLOW_EAR_TREE_RIGHT_CAVE_MARGIN = 48
 const GLOW_EAR_TREE_MIN_GAP = 160
 const GLOW_EAR_TREE_MUD_CLEAR = 36
-//
-// Left jitter for the 3rd (leftmost) ear-tree — kept small so it always
-// stays inside the dry strip between the shore rock and the trunk (see
-// pickGlowLeftEarTreeX below).
-//
-const GLOW_EAR_TREE_LEFT_JITTER = 8
 //
 // Keeps grass blades from spawning over an ear-tree's trunk footprint - the
 // trunk polygon (z = player - 1) sits BELOW the grass layer (GRASS_Z = 20),
@@ -6086,10 +6238,16 @@ function buildGlowChainBuoySpot(x) {
     swayLag: 0.35 + Math.random() * 0.35
   }
 }
-function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots) {
+function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX) {
   if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) return false
   if (glowChainBuoyXUnderWoodPlatform(x, woodBands)) return false
-  if ((earTreeSpots ?? []).some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF)) return false
+  if ((earTreeSpots ?? []).some(s => glowChainBuoyXBlockedNearEarTree(x, s.x))) return false
+  //
+  // Never right on top of a mushroom trampoline — the random search just
+  // lands the buoy somewhere else nearby instead (left or right of it).
+  //
+  if (trampX != null && Math.abs(x - trampX) < TRAMP_ROCK_CLEAR_HALF) return false
+  if (branchTrampX != null && Math.abs(x - branchTrampX) < TRAMP_ROCK_CLEAR_HALF) return false
   //
   // Every buoy stays right of the mud (which itself sits right of the lake),
   // never in or near the water — a hard rule now, not just one exclusion
@@ -6105,7 +6263,7 @@ function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands,
   spots.push(buildGlowChainBuoySpot(x))
   return true
 }
-function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots) {
+function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots, trampX, branchTrampX) {
   const spots = []
   const mud = computeGlowMudZoneX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
@@ -6125,7 +6283,7 @@ function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots) {
   }
   for (const x of sideXs) {
     if (spots.length >= target) break
-    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
+    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX)
   }
   //
   // Random fill now only searches right of the mud through to the cave —
@@ -6139,16 +6297,86 @@ function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots) {
   while (spots.length < target && attempts < GLOW_CHAIN_BUOY_PLACE_ATTEMPTS && fillX2 > fillX1) {
     attempts += 1
     const x = fillX1 + Math.random() * (fillX2 - fillX1)
-    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots)
+    tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX)
   }
   addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots)
+  ensureGlowChainBuoysEastOfMud(
+    spots,
+    fillX1,
+    fillX2,
+    lakeX1,
+    lakeX2,
+    mud,
+    cave,
+    woodBands,
+    earTreeSpots,
+    trampX,
+    branchTrampX
+  )
   spots.sort((a, b) => a.x - b.x)
   return spots
 }
 //
+// Blocks buoys on the trunk, directly in front, or directly behind an
+// ear-tree — beside (left/right offset) or far away stays valid.
+//
+function glowChainBuoyXBlockedNearEarTree(x, treeX) {
+  const dx = x - treeX
+  if (Math.abs(dx) >= GLOW_CHAIN_BUOY_EAR_TREE_FAR_CLEAR) return false
+  if (Math.abs(dx) <= GLOW_CHAIN_BUOY_EAR_TREE_ON_TRUNK_HALF) return true
+  if (dx < 0 && dx > -GLOW_CHAIN_BUOY_EAR_TREE_FRONT_DEPTH) return true
+  if (dx > 0 && dx < GLOW_CHAIN_BUOY_EAR_TREE_BEHIND_DEPTH) return true
+  return false
+}
+//
+// Guarantees at least four buoys east of the mud — random fill often misses
+// targets once platform/trampoline exclusions eat the span.
+//
+function ensureGlowChainBuoysEastOfMud(
+  spots,
+  fillX1,
+  fillX2,
+  lakeX1,
+  lakeX2,
+  mud,
+  cave,
+  woodBands,
+  earTreeSpots,
+  trampX,
+  branchTrampX
+) {
+  const span = fillX2 - fillX1
+  if (span <= GLOW_CHAIN_BUOY_MIN_GAP) return
+  let eastCount = spots.filter(s => s.x >= fillX1).length
+  if (eastCount >= GLOW_CHAIN_BUOY_MUD_EAST_MIN) return
+  const slots = [0.14, 0.36, 0.58, 0.82]
+  for (const slot of slots) {
+    if (eastCount >= GLOW_CHAIN_BUOY_MUD_EAST_MIN) break
+    let x = fillX1 + span * slot
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (tryAddGlowChainBuoySpot(
+        spots,
+        x,
+        lakeX1,
+        lakeX2,
+        mud,
+        cave,
+        woodBands,
+        earTreeSpots,
+        trampX,
+        branchTrampX
+      )) {
+        eastCount += 1
+        break
+      }
+      x += (Math.random() - 0.5) * GLOW_CHAIN_BUOY_MIN_GAP * 0.45
+    }
+  }
+}
+//
 // A couple of chain-buoys nestled specifically between the two right-side
 // ear-trees — the ordinary random placement above always excludes this
-// exact band (see GLOW_CHAIN_BUOY_EAR_TREE_CLEAR_HALF), so it's added here
+// ear-tree trunk/front/behind clearance (see glowChainBuoyXBlockedNearEarTree), so it's added here
 // on purpose instead, clear of each trunk by only a small margin.
 //
 function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
@@ -6164,14 +6392,12 @@ function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
     const t = (i + 1) / (count + 1)
     const x = gapX1 + innerSpan * t
     if (spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP * 0.6)) continue
+    if (rightTrees.some(t => glowChainBuoyXBlockedNearEarTree(x, t.x))) continue
     spots.push(buildGlowChainBuoySpot(x))
   }
 }
 //
-// Ear-tree decor spots — 2 clustered right of the big tree (never over mud),
-// plus 1 guaranteed spot to its left, nestled among the real shoreline
-// rocks (see pickGlowLeftEarTreeX) so there are always 3 trees, one of them
-// visibly flanked by rocks on the tree's left side.
+// Ear-tree decor spots — two trees clustered right of the big tree (never over mud).
 //
 function buildGlowEarTreeSpots(treeBaseLeftX) {
   const mud = computeGlowMudZoneX()
@@ -6208,40 +6434,16 @@ function buildGlowEarTreeSpots(treeBaseLeftX) {
       spots.push(buildGlowEarTreeSpot(fallbackXs[i], rightHeightTiers[i]))
     }
   }
-  spots.push({
-    ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(treeBaseLeftX)),
-    shoreLeft: true
-  })
   spots.sort((a, b) => a.x - b.x)
-  if (spots.length < GLOW_EAR_TREE_COUNT) {
-    const span = Math.max(80, rightXMax - rightXMin)
-    while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && rightXMax > rightXMin) {
-      const t = spots.length / GLOW_EAR_TREE_RIGHT_COUNT
-      spots.push(buildGlowEarTreeSpot(rightXMin + span * (0.2 + t * 0.55), rightHeightTiers[spots.length]))
+  if (spots.length < GLOW_EAR_TREE_COUNT && rightXMax > rightXMin + 40) {
+    const span = rightXMax - rightXMin
+    while (spots.length < GLOW_EAR_TREE_COUNT) {
+      const t = (spots.length + 1) / (GLOW_EAR_TREE_COUNT + 1)
+      spots.push(buildGlowEarTreeSpot(rightXMin + span * t, rightHeightTiers[spots.length]))
     }
-    !spots.some(s => s.shoreLeft) && spots.push({
-      ...buildGlowEarTreeSpot(pickGlowLeftEarTreeX(treeBaseLeftX)),
-      shoreLeft: true
-    })
     spots.sort((a, b) => a.x - b.x)
   }
   return spots
-}
-//
-// Deterministic left-side X: the exact centre of the real 6-rock cluster
-// placed at the tree-side end of the lake — see createGlowRocks'
-// `clusterCenterX = treeBaseLeftX + 40`, which this must match exactly
-// (it previously derived its own clusterCenterX from waterX2 with a
-// different formula, landing outside the actual cluster's spread). Sitting
-// at the cluster's own center, with a small jitter, puts the tree visibly
-// among those rocks rather than in the narrow strip right against the
-// trunk, which the big tree's own root/canopy bake occludes (ear trees
-// draw below the tree's z so they'd be fully hidden).
-//
-function pickGlowLeftEarTreeX(treeBaseLeftX) {
-  const clusterCenterX = treeBaseLeftX + 40
-  const jitterMax = GLOW_EAR_TREE_LEFT_JITTER
-  return clusterCenterX + (Math.random() * 2 - 1) * jitterMax
 }
 //
 // Shared per-spot randomized trunk/branch variation.
@@ -6416,24 +6618,6 @@ function buildUndergroundSpec() {
     rootlets.push(pts)
   }
   //
-  // Extra hair-roots under the cave mouth so the entrance is dressed in
-  // both the flat gray world and the shaded/colour earth band.
-  //
-  const cave = getCrackZone(WORLD_W, FLOOR_Y)
-  for (let i = 0; i < UG_CAVE_ROOTLET_COUNT; i++) {
-    const rx = cave.x1 - 24 + Math.random() * (cave.width + 16)
-    const pts = [{ x: rx, y: FLOOR_Y + 4 }]
-    let px = rx
-    let py = FLOOR_Y + 4
-    const segs = 2 + Math.floor(Math.random() * 2)
-    for (let s = 0; s < segs; s++) {
-      px += (Math.random() - 0.5) * 14
-      py += 10 + Math.random() * 16
-      pts.push({ x: px, y: py })
-    }
-    rootlets.push(pts)
-  }
-  //
   // One fossil spiral — a small ammonite curled among the stones.
   //
   const fossil = { x: randX(), y: randY(), r: 9 + Math.random() * 5 }
@@ -6569,8 +6753,15 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.strokeStyle = deepCss
   ctx.globalAlpha = 0.6
   ctx.lineWidth = 1.6
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
   spec.rootlets.forEach(pts => {
-    if ((pts[0]?.x ?? 0) < TREE_X - TRUNK_EXCLUDE_HALF) return
+    const rx = pts[0]?.x ?? 0
+    if (rx < TREE_X - TRUNK_EXCLUDE_HALF) return
+    //
+    // No hanging hair-roots over the cave mouth / pit back wall — they read
+    // as stray sticks on the interior void edge.
+    //
+    if (rx >= cave.x1 - 32 && rx <= cave.x2 + 48) return
     strokePolyline(ctx, pts)
   })
   ctx.globalAlpha = 1
@@ -7543,7 +7734,10 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     getTint: (blade) => glowGrassTint(zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones),
     roots: true,
-    getRootColor: () => glowGrassRootColor(zones)
+    getRootColor: () => glowGrassRootColor(zones),
+    getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
+    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
+    hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
   return grass
@@ -7567,7 +7761,10 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones),
     roots: true,
-    getRootColor: () => glowGrassRootColor(zones)
+    getRootColor: () => glowGrassRootColor(zones),
+    getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
+    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
+    hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
   return grass
@@ -7729,6 +7926,23 @@ function glowGrassRootColor(zones) {
   const flat = isGlowFlatSingleDecorColor(zones._sceneRef)
   const c = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.root)
   return { r: c.r, g: c.g, b: c.b }
+}
+//
+// Grass roots stay visible for every explored ground strip — unlike blades,
+// they must not fade with glowRightWorldOpacity while the hero walks in.
+//
+function glowGrassRootVisible(zones, worldX) {
+  const sc = zones._sceneRef
+  if (!sc || !isGlowWorldSurfaceDecorUnlocked(sc)) return false
+  const lakeX1 = zones._lakeX1
+  const lakeX2 = zones._lakeX2
+  if (lakeX1 != null && lakeX2 != null && worldX >= lakeX1 && worldX <= lakeX2) return false
+  if (isGlowOpenPitMouthWorldX(sc.pit, worldX)) return false
+  if (isGlowDecorWorldXInMudZone(sc, worldX)) return zones.gCollected
+  if (isGlowWorldXInGroundPeekZone(sc, worldX)) return true
+  const side = worldX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
+  if (side === 'left') return zones.groundDecorLeft
+  return (zones.groundRightStripMax ?? -1) >= 0
 }
 function glowGrassTint(zones, blade) {
   const sc = zones._sceneRef
@@ -9604,8 +9818,15 @@ function isHeroAtTrampolineCap(inst, heroX, footY, state) {
   if (!state) return false
   const capTopY = FLOOR_Y - TRAMP_TOTAL_H
   const mDx = Math.abs(heroX - state.x)
+  //
+  // Below-cap tolerance widened to match TRAMP_SNAP_BELOW (the tunnel-through
+  // rescue's own margin) — it used to be much tighter (+22) than what the
+  // rescue considers "still on the cap" (+48), so a hero settling anywhere
+  // in that gap (most likely landing near the cap's edge, off dead-centre)
+  // read as "not on cap" here and never got a bounce, just stood there.
+  //
   return mDx < TRAMP_RADIUS + TRAMP_ADJACENT_X &&
-    footY >= capTopY - 10 && footY <= capTopY + 22
+    footY >= capTopY - 10 && footY <= capTopY + TRAMP_SNAP_BELOW
 }
 //
 // True when hero X is close enough that the trampoline pad should stay active
@@ -9673,7 +9894,9 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const bounceAir = Boolean(inst[bounceAirKey])
   const grounded = typeof char?.isGrounded === 'function' && char.isGrounded()
   const inCapBand = heroFeet >= capTop - 14 && heroFeet <= capTop + TRAMP_PAD_FEET_BELOW
-  const stickyCap = nearX && inCapBand && (onCap || bounceAir || grounded || velY > -160)
+  const onMainFloorLane = isHeroFeetOnMainFloorLane(heroFeet)
+  const stickyCap = !onMainFloorLane && nearX && inCapBand &&
+    (onCap || bounceAir || grounded || velY > -160)
   if (stickyCap || onCap || bounceAir) {
     state._capPadLatch = TRAMP_CAP_PAD_LATCH_SEC
   } else if (state._capPadLatch > 0) {
@@ -9683,10 +9906,10 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   // Never yank the invisible pad off-screen while the hero rides the cap —
   // Kaplay carries static bodies with their platform (looks like he vanishes).
   //
-  const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet, state)
-  const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40
+  const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet)
+  const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40 && !onMainFloorLane
   const padLatch = (state._capPadLatch ?? 0) > 0
-  const needsPad = colliderActive && (onCap || bounceAir || padLatch || stickyCap ||
+  const needsPad = colliderActive && !onMainFloorLane && (onCap || bounceAir || padLatch || stickyCap ||
     !walkingPastOnFloor && nearX && inCapBand &&
     (grounded || velY > -80 || fallingOntoCap))
   if (!needsPad) {
@@ -13679,6 +13902,7 @@ function wantsTrampolineCapLaunch(inst, char, onCap, state) {
   if (!onCap || !state || state.cooldown > 0) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return false
+  if ((char.isGrounded?.() ?? false) && isHeroFeetOnMainFloorLane(footY)) return false
   if (state === inst.trampState && inst.trampWalk?.walking &&
     footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
   return true
@@ -13699,9 +13923,12 @@ function wantsTrampolineCapLaunch(inst, char, onCap, state) {
 // the bug (it let snapHeroToOneTrampolineCap's rescue logic run for plain
 // floor walkers and yank them up onto the cap mid-stride).
 //
+function isHeroFeetOnMainFloorLane(footY) {
+  return footY >= TRAMP_MAIN_LANE_FEET_MIN
+}
 function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
   const grounded = char.isGrounded?.() ?? false
-  return grounded && inst.wasGrounded && footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
+  return grounded && isHeroFeetOnMainFloorLane(footY)
 }
 //
 // Snaps the hero onto one mushroom cap when feet tunnel through the collider.
@@ -13722,6 +13949,7 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (!colliderActive) return
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
+  if (isHeroFeetOnMainFloorLane(footY)) return
   if (Math.abs(heroX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return

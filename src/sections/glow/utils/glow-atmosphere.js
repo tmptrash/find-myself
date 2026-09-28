@@ -127,7 +127,7 @@ const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
-const CAVE_LAYOUT_VERSION = 67
+const CAVE_LAYOUT_VERSION = 68
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
 const CAVE_SEAM_COLUMN_RADIUS_MAX = 14
@@ -1411,7 +1411,6 @@ function buildCaveSceneLayout(zone, floorY) {
   // also stays flush with the platform's real left edge.
   //
   const seamCutLeft = Math.max(cutLeft, wallColliderLeftX)
-  appendCaveInteriorSeamColumnRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2105)
   appendCaveInteriorSeamTopRocks(wallRocks, interiorLeftEdge, floorY, seamCutLeft, seed + 2188, zone)
   appendCaveInteriorSeamScatterRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2244)
   appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2291, zone)

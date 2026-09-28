@@ -391,7 +391,14 @@ export function setEarTreeWhisperVolume(volume) {
   const v = Math.max(0, Math.min(1, volume))
   audio.volume = v
   if (v <= 0.001) {
-    audio.paused || audio.pause()
+    //
+    // Rewind on fade-out (not just pause) so walking away and back plays
+    // the whisper from the start every time, instead of resuming mid-loop.
+    //
+    if (!audio.paused) {
+      audio.pause()
+      audio.currentTime = 0
+    }
     return
   }
   if (audio.paused) {

@@ -41,6 +41,7 @@ import {
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatWaterColors,
   getTreePaletteColor,
+  getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
   getTreePaletteSolid
 } from '../utils/glow-palette.js'
@@ -641,11 +642,23 @@ const L_LETTER_LEFT_OF_PLAT_GAP = 56
 // row keeps green foliage with a light haze blend.
 //
 const PAR_L1_COLOR_BLEND = 0.28
+const PAR_MID_COLOR_BLEND = 0.34
+const PAR_FAR_COLOR_BLEND = 0.42
 //
 // Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
 // while green stays the leading colour — kept low so parallax stays muted.
 //
 const PAR_L1_LEAF_WARM_BLEND = 0.22
+//
+// Reference corner tree families — left/right from playfield midline; top/bottom
+// from canopy row (far + mid = upper pair, near = lower pair on screen).
+//
+const PAR_TREE_CORNER_KEYS = [
+  'parallaxTreeCornerTL',
+  'parallaxTreeCornerTR',
+  'parallaxTreeCornerBL',
+  'parallaxTreeCornerBR'
+]
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -734,9 +747,8 @@ const BUSH_RIM_LEAF_SPACING = 14
 const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 const BUSH_HIRES_CLUSTER_DENSITY = 0.3
 //
-// Colour-world bush tones: the near strip uses the tree-leaf green; the 2nd
-// and 3rd strips reuse the flat orange of their tree row so trees and bushes
-// of one depth always match. The gray world keeps every bush in the gray family.
+// Colour-world bush tones follow the same corner quadrant as the trees in that
+// row (leaf swatch per mound centre X). The gray world keeps every bush gray.
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is taller — three readable ground-level tiers.
@@ -5350,15 +5362,13 @@ function grayDecorTint(sc) {
 //
 // Bakes three forest planes (each one's trees AND bushes on a single shared
 // canvas) plus the haze backdrop and the static ground band. Depth comes from
-// scroll speed and palette steps: gray3 / muted green0 farthest, teal2 mid,
-// gray1 + green nearest; warm haze lives in the sky band only.
+// scroll speed and haze-blend steps; colour-world trees use the four reference
+// corner palettes by playfield quadrant and canopy row.
 //
 function buildParallaxSprites(k, undergroundSpec) {
   const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
   const grayMidPal = getTreePaletteSolid('parallaxGrayMid')
   const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
-  const colorMidPal = getTreePaletteSolid('parallaxColorMid')
-  const colorFarPal = getTreePaletteSolid('parallaxColorFar')
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
   bakeParallaxLayerPair(k, BG_PAR_SKY_GRAY, BG_PAR_SKY_COLOR, PAR_SKY_SPEED, maxScroll, 0,
     PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx) => {
@@ -5371,8 +5381,9 @@ function buildParallaxSprites(k, undergroundSpec) {
         seedBase: PAR_FARTHEST_SEED_BASE,
         topMinY: PAR_FARTHEST_TOP_MIN_Y,
         topRange: PAR_FARTHEST_TOP_RANGE,
+        bandTop: PAR_FARTHEST_BAND_TOP,
         grayPal: grayFarPal,
-        colorPal: colorFarPal,
+        colorBlend: PAR_FAR_COLOR_BLEND,
         flatLeaves: false,
         leafDarken: 0.14,
         uniformWood: true,
@@ -5381,8 +5392,8 @@ function buildParallaxSprites(k, undergroundSpec) {
       })
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
-        colorRgb: { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
-        colorFlat: true,
+        cornerBandTop: PAR_FARTHEST_BAND_TOP,
+        colorFlat: false,
         grayFlat: true,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
@@ -5394,8 +5405,9 @@ function buildParallaxSprites(k, undergroundSpec) {
         seedBase: PAR_FAR_SEED_BASE,
         topMinY: PAR_FAR_TOP_MIN_Y,
         topRange: PAR_FAR_TOP_RANGE,
+        bandTop: PAR_MID_BAND_TOP,
         grayPal: grayMidPal,
-        colorPal: colorMidPal,
+        colorBlend: PAR_MID_COLOR_BLEND,
         flatLeaves: false,
         leafDarken: 0.08,
         uniformWood: true,
@@ -5404,8 +5416,8 @@ function buildParallaxSprites(k, undergroundSpec) {
       })
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
-        colorRgb: { r: colorMidPal.trunkR, g: colorMidPal.trunkG, b: colorMidPal.trunkB },
-        colorFlat: true,
+        cornerBandTop: PAR_MID_BAND_TOP,
+        colorFlat: false,
         grayFlat: true,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
@@ -5417,8 +5429,8 @@ function buildParallaxSprites(k, undergroundSpec) {
         seedBase: PAR_BIG_SEED_BASE,
         topMinY: PAR_BIG_TOP_MIN_Y,
         topRange: PAR_BIG_TOP_RANGE,
+        bandTop: PAR_NEAR_BAND_TOP,
         grayPal: grayNearPal,
-        colorBase: getTreePaletteColor(),
         colorBlend: PAR_L1_COLOR_BLEND,
         flatLeaves: false,
         leafDarken: 0,
@@ -5427,10 +5439,9 @@ function buildParallaxSprites(k, undergroundSpec) {
         treeFocusBias: PAR_TREE_FOCUS_BIAS_NEAR,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_NEAR
       })
-      const colorNearBush = glowRgb(GLOW_PAL.treeColor.leaf)
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
-        colorRgb: colorNearBush,
+        cornerBandTop: PAR_NEAR_BAND_TOP,
         colorFlat: false,
         grayFlat: false,
         heightScale: BUSH_NEAR_HEIGHT_SCALE,
@@ -5675,6 +5686,25 @@ function groundEarthLayersColor() {
   ])
 }
 //
+// Picks one of the four reference corner tree palettes from world X and row.
+//
+function parallaxForestCornerKey(treeX, bandTop) {
+  const midX = (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5
+  const left = treeX < midX
+  const top = bandTop <= PAR_MID_BAND_TOP
+  if (left && top) return PAR_TREE_CORNER_KEYS[0]
+  if (!left && top) return PAR_TREE_CORNER_KEYS[1]
+  if (left && !top) return PAR_TREE_CORNER_KEYS[2]
+  return PAR_TREE_CORNER_KEYS[3]
+}
+//
+// Dominant leaf swatch for a quadrant (bushes and flat colour strips).
+//
+function parallaxCornerLeafRgb(treeX, bandTop) {
+  const corner = GLOW_PAL[parallaxForestCornerKey(treeX, bandTop)]
+  return glowRgb(corner.leaf)
+}
+//
 // Renders one parallax plane into both combined canvases: each tree uses the
 // same glow-tree generator as the main tree (default trunk taper, fractal
 // branches, crown clusters). Only trunk height and a light width scale differ
@@ -5687,19 +5717,27 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     leafWarmBlend = 0,
     grayPal: grayPalOverride,
     colorPal: colorPalOverride,
+    bandTop = PAR_NEAR_BAND_TOP,
     treeX1 = LEFT_MARGIN,
     treeX2 = WORLD_W - RIGHT_MARGIN,
     treeFocusBias = 0,
     trunkWidthScale = 1
   } = planeCfg
-  //
-  // A ready-made palette skips the haze blend so a row can sit on its own
-  // palette swatch instead of disappearing into the sky.
-  //
-  const grayPal = grayPalOverride || buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
-  const colorPal = colorPalOverride || buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformWood, leafWarmBlend)
   const treeXs = buildParallaxTreeXs(count, treeX1, treeX2, TREE_X, treeFocusBias)
   treeXs.forEach((treeX, i) => {
+    //
+    // Gray row tone is shared; colour row picks one of the four corner families.
+    //
+    const grayPal = grayPalOverride || buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
+    const colorPal = colorPalOverride || buildDimmedTreePalette(
+      colorBase || getTreePaletteParallaxCorner(parallaxForestCornerKey(treeX, bandTop)),
+      WARM_HAZE,
+      colorBlend,
+      flatLeaves,
+      leafDarken,
+      uniformWood,
+      leafWarmBlend
+    )
     const trunkTopY = topMinY + Math.random() * topRange
     const treeSeed = TREE_SEED + seedBase + i * PAR_BIG_SEED_STEP
     const treeData = buildGlowTree(
@@ -5761,6 +5799,7 @@ function applyGlowForegroundBake(canvas, seedOffset = 0) {
 function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   const {
     grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters = false,
+    cornerBandTop = null,
     x1 = LEFT_MARGIN,
     x2 = WORLD_W - RIGHT_MARGIN
   } = stripCfg
@@ -5769,9 +5808,12 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   while (x < right) {
     const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
     const mound = buildLeafyBushMoundSpec(x, radius)
+    const moundColorRgb = cornerBandTop != null
+      ? parallaxCornerLeafRgb(mound.x, cornerBandTop)
+      : colorRgb
     drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
-    drawLeafyBushMound(colorCtx, mound, colorRgb, colorFlat)
-    hiResClusters && drawHiResBushClusters(colorCtx, mound, colorRgb)
+    drawLeafyBushMound(colorCtx, mound, moundColorRgb, colorFlat)
+    hiResClusters && drawHiResBushClusters(colorCtx, mound, moundColorRgb)
     //
     // Advance less than a radius so each mound overlaps the next one.
     //

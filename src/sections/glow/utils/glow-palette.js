@@ -214,7 +214,19 @@ export function getTreePaletteLit() {
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
 export function getTreePaletteColor() {
-  const t = GLOW_PAL.treeColor
+  return getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor)
+}
+
+/**
+ * Parallax forest tree palette for one screen-corner quadrant (see cfg parallaxTreeCorner*).
+ * @param {string} cornerKey - One of parallaxTreeCornerTL/TR/BL/BR on GLOW_PAL
+ * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ */
+export function getTreePaletteParallaxCorner(cornerKey) {
+  return getTreePaletteFromGlowTreeEntry(GLOW_PAL[cornerKey])
+}
+
+function getTreePaletteFromGlowTreeEntry(t) {
   const root = glowRgb(t.root)
   const trunk = glowRgb(t.trunk)
   const branch = glowRgb(t.branch)

@@ -377,8 +377,39 @@ export const CFG = {
         parallaxGrayNear: PALETTE.gray2,
         parallaxGrayMid: PALETTE.gray3,
         parallaxGrayFar: PALETTE.gray4,
-        parallaxColorMid: PALETTE.green1,
-        parallaxColorFar: PALETTE.teal3,
+        //
+        // Parallax forest quadrants — corner tree colours from the reference
+        // layout (teal top-left, autumn orange top-right, crimson bottom-left,
+        // sage green bottom-right). X picks left/right; canopy row picks top/bottom.
+        //
+        parallaxTreeCornerTL: {
+          root: PALETTE.teal0,
+          trunk: PALETTE.teal0,
+          branch: PALETTE.teal1,
+          leaf: PALETTE.teal2,
+          leafShades: [PALETTE.teal3, PALETTE.teal2, PALETTE.teal0]
+        },
+        parallaxTreeCornerTR: {
+          root: PALETTE.orange0,
+          trunk: PALETTE.orange0,
+          branch: PALETTE.orange1,
+          leaf: PALETTE.orange3,
+          leafShades: [PALETTE.orange5, PALETTE.orange3, PALETTE.orange0]
+        },
+        parallaxTreeCornerBL: {
+          root: PALETTE.red0,
+          trunk: PALETTE.red0,
+          branch: PALETTE.red1,
+          leaf: PALETTE.red2,
+          leafShades: [PALETTE.red4, PALETTE.red2, PALETTE.red0]
+        },
+        parallaxTreeCornerBR: {
+          root: PALETTE.green0,
+          trunk: PALETTE.green0,
+          branch: PALETTE.green1,
+          leaf: PALETTE.green2,
+          leafShades: [PALETTE.green3, PALETTE.green2, PALETTE.green0]
+        },
         //
         // Cute chubby mushroom (glow trampoline + decor): cream body, warm
         // orange spotted cap; the gray set mirrors it inside the gray family.

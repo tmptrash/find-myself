@@ -1,3 +1,4 @@
+import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
@@ -15,7 +16,8 @@ import {
   KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
 import { markGlowHudGCaveEntered } from './glow-hud-g-progress.js'
-import { drawGlowEyeCreature, glowEyeCreatureColors } from './glow-eye-creature.js'
+import { applyGlowHeroEyesOpenedBake } from './glow-hero-fill.js'
+import { drawGlowEyeCreature, glowCaveHeroEyeColors } from './glow-eye-creature.js'
 
 //
 // Persisted once the hero collects the cave eyes and returns to the tree.
@@ -123,12 +125,13 @@ export function initGlowHeroWithoutEyes(heroInst) {
 export function revealGlowHeroEyes(inst, heroInst) {
   if (!heroInst || !inst?.eyeIntro) return
   const char = heroInst.character
-  heroInst.noEyes = false
-  Hero.loadHeroSprites(heroInst)
+  const k = inst.k
+  applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas)
+  const idleKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix || heroInst.type}_0_0`
   //
   // Closed eyes apply on the first still frame — immediate run/jump skips them.
   //
-  heroInst.currentEyeSprite = null
+  heroInst.currentEyeSprite = idleKey
   inst.eyeIntro.attachClosedApplied = false
   inst.eyeIntro.eyesOpeningTimer = EYE_INTRO_ATTACH_CLOSED_DURATION
   inst.eyeIntro.attachHeroX = char?.pos?.x ?? 0
@@ -318,7 +321,10 @@ function finishGlowEyeAttachSequence(inst, heroInst) {
   inst.eyeIntro.eyesOpeningTimer = 0
   inst.eyeIntro.attachClosedApplied = false
   Hero.setEyesClosed(heroInst, false)
-  heroInst.currentEyeSprite = null
+  applyGlowHeroEyesOpenedBake(inst.k, heroInst, heroInst.postBakeCanvas)
+  const openKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix}_0_0`
+  heroInst.character?.exists?.() && inst.k.getSprite(openKey) &&
+    heroInst.character.use(inst.k.sprite(openKey))
 }
 function completeGlowEyeIntro(inst) {
   inst.eyeIntro.phase = 'complete'
@@ -367,7 +373,7 @@ function drawGlowCavePickupEyes(k, pickup, heroInst) {
   const heroPos = heroInst?.character?.pos
   const targetX = heroPos?.x ?? pickup.cx
   const targetY = (heroPos?.y ?? pickup.y) - 20
-  const colors = glowEyeCreatureColors(k)
+  const colors = glowCaveHeroEyeColors(k)
   drawGlowTrackingEye(k, pickup.leftX, pickup.y, targetX, targetY, colors)
   drawGlowTrackingEye(k, pickup.rightX, pickup.y, targetX, targetY, colors)
 }

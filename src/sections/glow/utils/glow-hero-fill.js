@@ -210,6 +210,37 @@ export function clearGlowHeroFillPreview(inst) {
   const char = inst.heroInst?.character
   char?.exists?.() && (char.opacity = 1)
 }
+/**
+ * Rebakes the hollow gray hero with solid white sclera and black pupils.
+ * Outline-only bakes force a transparent eye socket, so eyes need a filled
+ * body bake while the silhouette stays the same flat gray.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero component inst
+ * @param {Function} [postBakeCanvas] - Glow sharp bake hook
+ */
+export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas) {
+  const char = heroInst?.character
+  if (!char?.exists?.() || !k) return
+  const grayBody = String(GLOW_PAL.heroBodyGray).replace('#', '')
+  heroInst.noEyes = false
+  heroInst.transparentEyeInterior = false
+  heroInst.eyeWhiteColor = CFG.visual.colors.hero.eyeWhite
+  heroInst.pupilColor = CFG.visual.colors.hero.eyePupil
+  heroInst.outlineOnly = true
+  heroInst.bodyColor = grayBody
+  //
+  // Same light gray rim as the pre-eye hollow hero — dark heroOutline made the
+  // silhouette vanish on the flat prelude backdrop.
+  //
+  heroInst.outlineColor = grayBody
+  postBakeCanvas && (heroInst.postBakeCanvas = postBakeCanvas)
+  Hero.loadHeroSprites(heroInst)
+  const spriteKey = `${heroInst.spritePrefix}_0_0`
+  if (!k.getSprite(spriteKey)) return
+  char.use(k.sprite(spriteKey))
+  heroInst.currentEyeSprite = spriteKey
+  char.color = k.rgb(255, 255, 255)
+}
 function ensureHeroFillPreview(inst, cfg) {
   const hero = inst.heroInst
   const char = hero?.character

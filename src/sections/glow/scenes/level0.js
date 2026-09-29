@@ -34,6 +34,7 @@ import {
   GLOW_PAL,
   glowCaveEarthDeepRgb,
   glowCaveEarthFloorRgb,
+  glowPreludeBackdropRgb,
   glowGroundEarthBottomLayerRgb,
   glowRgb,
   glowRockShadedDrawPalette,
@@ -46,12 +47,12 @@ import {
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatWaterColors,
   getTreePaletteColor,
-  getTreePaletteLitForCorner,
   getTreePaletteColorForCorner,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
   getTreePaletteSolid,
-  getGlowLightRgb
+  getGlowLightRgb,
+  isGlowGrayExploreBeforeL
 } from '../utils/glow-palette.js'
 import {
   applyFoliageDensityToPalette,
@@ -63,7 +64,6 @@ import {
   glowTreeBuildOptsForDensity
 } from '../utils/glow-pixel-density.js'
 import {
-  applyGlowForegroundFocusBake,
   applyGlowGameplaySharpBake,
   applyGlowHudSharpBake,
   glowDepthBlurRadiusPx
@@ -154,7 +154,8 @@ import {
   setGlowHeroWitnessGlow,
   clearGlowHeroFillPreview,
   triggerGlowHeroFillBurst,
-  resolveGlowHeroFilledSpriteKey
+  resolveGlowHeroFilledSpriteKey,
+  applyGlowHeroEyesOpenedBake
 } from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
@@ -187,6 +188,7 @@ import {
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
 const VOID = glowRgb('void')
+const PRELUDE_BACKDROP = glowPreludeBackdropRgb()
 const GLOW_SHADOW = glowRgb('glowShadow')
 const OUTER = glowRgb('playfieldOuter')
 const INNER_GRAY = glowRgb('playfieldGray')
@@ -352,9 +354,9 @@ const TREE_TOP_Y = 430
 // separately in glow-tree.js (HORIZ_W).
 //
 const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
-const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-v4'
-const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-v4'
-const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-v4'
+const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-v5'
+const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-v5'
+const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-v5'
 //
 // The tree is painted in world space onto a full 3000x1080 canvas, but the
 // trunk and canopy only cover a slice of it. Cropping the bake to that slice
@@ -399,7 +401,7 @@ const HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS = 35
 const MUD_BRANCH_TRAMP_GAP = 42
 const MUD_ZONE_RIGHT_EXTENT = 170
 const MUD_ZONE_HEDGEHOG_MARGIN = 14
-const MUD_MAX_DEPTH = 22
+const MUD_MAX_DEPTH = 42
 const MUD_MOVE_SPEED_MULT = 0.5
 const MUD_JUMP_FORCE_MULT = 0.68
 const MUD_GRAVITY_MULT = 1
@@ -507,7 +509,7 @@ const ROCK_OUTLINE_WIDTH = 2.5
 // inside the tree row's world-Y crop, so one sprite covers both and the
 // row costs a single draw call per frame instead of two.
 //
-const BG_PAR_SKY_GRAY = 'glow0-bg-par-sky-gray'
+const BG_PAR_SKY_GRAY = 'glow0-bg-par-sky-gray-v4'
 const BG_PAR_SKY_COLOR = 'glow0-bg-par-sky-color'
 const BG_PAR_TREE3_GRAY = 'glow0-bg-par-tree3-gray'
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
@@ -515,7 +517,7 @@ const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_GRAY = 'glow0-bg-static-gray'
+const BG_STATIC_GRAY = 'glow0-bg-static-gray-v2'
 const BG_STATIC_COLOR = 'glow0-bg-static-color'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
@@ -559,7 +561,7 @@ const PARALLAX_DRAW_CULL_PAD = 48
 // Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
 //
-const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v4'
+const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v5'
 //
 // Horizontal branch platform.
 //
@@ -618,7 +620,7 @@ const LOG_TREE_COLOR_COLORS = {
 // silhouette with no fill, only its cracks, rounded end cap and grain
 // stripes painted in one single accent tone.
 //
-const L_PLAT_OUTLINE_WIDTH = 2.5
+const L_PLAT_OUTLINE_WIDTH = 3
 const L_PLAT_END_STEPS = 16
 const L_PLAT_END_SQUASH = 0.55
 const L_PLAT_STRIPE_COUNT = 5
@@ -920,7 +922,7 @@ const COLOR_CROSSFADE_EPS = 0.001
 // hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
 // holes). Baked once per mode (gray backdrop / dark colour-world earth).
 //
-const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray'
+const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray-v4'
 const UNDERGROUND_COLOR_SPRITE = 'glow0-underground-color'
 const UG_TOP_PAD = 30
 const UG_BOTTOM_PAD = 2
@@ -1035,13 +1037,9 @@ const LAKE_SURFACE_CULL_MARGIN = 48
 //
 const GLOW_LETTER_FONT = 'JetBrains Mono'
 //
-// Same size before pickup and inside the pickup caption — one glyph size for
-// every letter (G, L, O, W) throughout its whole lifetime.
+// World pickup letters use the same metrics as the inline pickup caption.
 //
-const GLOW_LETTER_SIZE = 54
-//
-// Pickup captions use a slightly smaller size — world letters keep GLOW_LETTER_SIZE.
-//
+const GLOW_LETTER_SIZE = 46
 const GLOW_LETTER_CAPTION_FONT_SIZE = 46
 //
 // Pure black drop shadow behind pickup letters in the colour world.
@@ -1087,6 +1085,7 @@ function getGlowHeroEyeBakeColors(outlineOnly) {
 // Zone persistence keys (glow.* prefix).
 //
 const KEY_COLLECTED_G = 'glow.collectedG'
+const KEY_G_UNDERGROUND_LIVE = 'glow.gUndergroundLive'
 const KEY_COLLECTED_L = 'glow.collectedL'
 const KEY_COLLECTED_O = 'glow.collectedO'
 const KEY_COLLECTED_W = 'glow.collectedW'
@@ -1593,7 +1592,7 @@ const TRAMP_NEAR_X = TRAMP_RADIUS + 80
 //
 const TRAMP_SNAP_BELOW = 48
 const TRAMP_SQUASH_MAX = 0.35
-const TRAMP_SPRITE = 'glow0-trampoline'
+const TRAMP_SPRITE = 'glow0-trampoline-gray-v4'
 const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
@@ -1964,7 +1963,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineOnly: true,
     noEyes: true,
-    postBakeCanvas: applyGlowForegroundFocusBake
+    postBakeCanvas: applyGlowGameplaySharpBake
   })
   onProgress?.(82)
   await yieldForGpu(1)
@@ -1975,7 +1974,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     bodyColor: HERO_BODY_COLOR,
     outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
     outlineOnly: true,
-    postBakeCanvas: applyGlowForegroundFocusBake
+    postBakeCanvas: applyGlowGameplaySharpBake
   })
   onProgress?.(86)
   await yieldForGpu(1)
@@ -1986,7 +1985,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: HERO_OUTLINE_COLOR,
     outlineOnly: false,
-    postBakeCanvas: applyGlowForegroundFocusBake
+    postBakeCanvas: applyGlowGameplaySharpBake
   })
   onProgress?.(90)
   await yieldForGpu(1)
@@ -2002,7 +2001,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const bootstrapCurtain = createGlowBootstrapCurtain(k)
     set('lastLesson', 'lesson-glow.0')
     set('lastSection', 'glow')
-    CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
+    CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.glowPreludeBackdrop)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.setGravity(CFG.game.gravity)
     const sound = Sound.create()
@@ -2027,7 +2026,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     zones._sceneRef = { zones, colorFade: colorFadeInit }
     zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
-    !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
+    !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.glowPreludeBackdrop)
     const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground')
   })
@@ -2286,13 +2285,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       runDuringFlicker: true,
       noEyes: !zones.eyesCollected,
       suppressDust: true,
-      postBakeCanvas: applyGlowForegroundFocusBake,
+      postBakeCanvas: applyGlowGameplaySharpBake,
       //
       // No idle humming until the level's late-game beats — keeps the early
       // world quiet while the hero learns to see.
       //
       idleVocalization: null,
-      idleNotePostBake: applyGlowForegroundFocusBake
+      idleNotePostBake: applyGlowGameplaySharpBake
     }
     const heroInst = Hero.create({
       k,
@@ -2316,6 +2315,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     bindGlowHeroFootSounds(heroInst, sound)
     !zones.eyesCollected && initGlowHeroWithoutEyes(heroInst)
+    zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas)
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
     tagWoodPlatform(branchPlat, sound, heroInst)
@@ -2329,7 +2329,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const oPlatY = rightPlatY - O_PLAT_OFFSET_Y
     const logAtlas = createLogAtlasCollector()
     const lPlat = createGrayLogPlatform(
-      k, lPlatX, lPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas,
+      k, lPlatX, lPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas,
       L_PLAT_COLLISION_DROP_Y
     )
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
@@ -2346,7 +2346,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     if (await glowBootstrapPause(bootstrap, 44, session)) return
     const gLetterX = horizBranch.x2 + G_LETTER_RIGHT_OF_BRANCH_GAP + GLOW_LETTER_SIZE / 2
     const gLetterY = horizBranch.physY - GLOW_LETTER_SIZE * 0.15 - G_LETTER_RAISE_Y
-    const gLetter = zones.gCollected ? null : createGlowLetter(k, 'G', gLetterX, gLetterY, GLOW_LETTER_TILT, HERO_BODY_COLOR)
+    const gLetter = zones.gCollected ? null : createGlowLetter(
+      k, 'G', gLetterX, gLetterY, GLOW_LETTER_TILT, CFG.visual.colors.hero.eyeWhite
+    )
     //
     // G sits right against the big tree's canopy — createGlowLetter's
     // default z is below the tree's monolithic sprite (trunk+branches+
@@ -2552,7 +2554,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       birds: createBackgroundBirds(),
       birdTime: 0,
       cornerObjs,
-      cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.void,
+      cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop,
       wallObjs: floorBounds.walls,
       grassLayer,
       mudExtraGrass,
@@ -2587,6 +2589,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       pitDrawLayer: null,
       pitCaveHeroForeground: false,
       pendingLetterPickup: null,
+      earTreeRevealFade: zones.lCollected ? 1 : null,
       atmosphereMotes: createAtmosphereMotes(),
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
       trampBundle,
@@ -2795,7 +2798,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.k.wait(0, () => syncGlowHeroFillVisual(inst, {
       filledBodyColor: HERO_FILLED_BODY_COLOR,
       filledOutlineColor: HERO_OUTLINE_COLOR,
-      postBakeCanvas: applyGlowForegroundFocusBake
+      postBakeCanvas: applyGlowGameplaySharpBake
     }, glowHeroFillOpts(inst)))
     maybeShowGLetter(inst)
     //
@@ -2813,6 +2816,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     syncGlowHudLetterFills(inst, false)
     inst.letterAppearFxReady = true
     applyZoneVisibility(inst)
+    syncGlowPickupLetterVisuals(inst)
     restoreGlowRightTrampProgressAfterSpawn(inst)
     zones.lCollected && !zones.oZone && applyGlowPostLLitState(inst)
     zones.lZoneLit && applyGlowPostLStillnessReveal(inst)
@@ -2950,7 +2954,8 @@ function createPlayfieldFrameOverlay(k, inst) {
 //
 function drawPlayfieldVoidTopBar(inst) {
   const k = inst.k
-  const voidColor = k.rgb(VOID.r, VOID.g, VOID.b)
+  const backdrop = glowPlayfieldBackdropRgb(inst)
+  const voidColor = k.rgb(backdrop.r, backdrop.g, backdrop.b)
   k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: PLAYFIELD_TOP_Y + TOP_MARGIN, color: voidColor, fixed: true })
 }
 //
@@ -2960,7 +2965,8 @@ function drawPlayfieldVoidTopBar(inst) {
 //
 function drawPlayfieldVoidSideChrome(inst) {
   const k = inst.k
-  const voidColor = k.rgb(VOID.r, VOID.g, VOID.b)
+  const backdrop = glowPlayfieldBackdropRgb(inst)
+  const voidColor = k.rgb(backdrop.r, backdrop.g, backdrop.b)
   k.drawRect({ pos: k.vec2(0, PLAYFIELD_BOTTOM_Y), width: SCREEN_W, height: SCREEN_H - PLAYFIELD_BOTTOM_Y, color: voidColor, fixed: true })
   k.drawRect({ pos: k.vec2(0, PLAYFIELD_TOP_Y + TOP_MARGIN), width: LEFT_MARGIN, height: VIEW_H, color: voidColor, fixed: true })
   k.drawRect({
@@ -3378,6 +3384,7 @@ function isGlowHeroCounterGold(inst) {
 //
 function loadGlowZones() {
   const gCollected = get(KEY_COLLECTED_G, false)
+  const gUndergroundLive = get(KEY_G_UNDERGROUND_LIVE, false)
   const lCollected = get(KEY_COLLECTED_L, false)
   const oCollected = get(KEY_COLLECTED_O, false)
   const wCollected = get(KEY_COLLECTED_W, false)
@@ -3429,6 +3436,7 @@ function loadGlowZones() {
   eyesCollected && !eyesCollectedSaved && (set(KEY_EYES_COLLECTED, true), set(KEY_PIT_COLLAPSED, true))
   return {
     gCollected,
+    gUndergroundLive,
     lCollected,
     oCollected,
     wCollected,
@@ -3707,33 +3715,41 @@ const GLOW_HUD_LETTER_TOOLTIP_BASE = [
 function glowHudLetterFillProgress(inst, index) {
   const z = inst.zones
   if (index === 0) {
+    const total = GLOW_HUD_G_FILL_PARTS
+    const parts = z.gCollected ? total : (inst._hudGFillParts || 0)
     return {
-      parts: inst._hudGFillParts || 0,
-      total: GLOW_HUD_G_FILL_PARTS,
+      parts,
+      total,
       collected: z.gCollected,
       blocked: isGlowGLetterUnveiled(inst)
     }
   }
   if (index === 1) {
+    const total = GLOW_HUD_L_FILL_PARTS
+    const parts = z.lCollected ? total : (inst._hudLFillParts || 0)
     return {
-      parts: inst._hudLFillParts || 0,
-      total: GLOW_HUD_L_FILL_PARTS,
+      parts,
+      total,
       collected: z.lCollected,
       blocked: false
     }
   }
   if (index === 2) {
+    const total = GLOW_HUD_O_FILL_PARTS
+    const parts = z.oCollected ? total : (inst._hudOFillParts || 0)
     return {
-      parts: inst._hudOFillParts || 0,
-      total: GLOW_HUD_O_FILL_PARTS,
+      parts,
+      total,
       collected: z.oCollected,
       blocked: false
     }
   }
+  const total = GLOW_HUD_W_FILL_PARTS
   const wLive = inst._hudWFillParts || 0
+  const parts = z.wCollected ? total : Math.min(total, Math.floor(wLive + 0.999))
   return {
-    parts: Math.min(GLOW_HUD_W_FILL_PARTS, Math.floor(wLive + 0.999)),
-    total: GLOW_HUD_W_FILL_PARTS,
+    parts,
+    total,
     collected: z.wCollected,
     blocked: false
   }
@@ -3749,7 +3765,7 @@ function formatGlowHudFillProgress(parts, total) {
 function glowHudLetterTooltipText(inst, index) {
   const base = GLOW_HUD_LETTER_TOOLTIP_BASE[index] || ''
   const p = glowHudLetterFillProgress(inst, index)
-  if (p.collected || p.blocked) return base
+  if (p.total <= 0) return base
   return `${base}${GLOW_HUD_FILL_PROGRESS_SEP}${formatGlowHudFillProgress(p.parts, p.total)}`
 }
 //
@@ -4560,8 +4576,9 @@ function glowGrayGroundRgb(inst, innerGray) {
 //
 function glowTreeRootRevealFade(inst) {
   const z = inst?.zones
-  if (!z?.lCollected && !z?.gCollected) return 0
-  return 1
+  if (!z?.gCollected && !z?.lCollected) return 0
+  if (z.lCollected) return 1
+  return z.gUndergroundLive ? 1 : 0
 }
 //
 // True once the post-L stillness countdown (or later beats) unlock surface decor.
@@ -4569,6 +4586,29 @@ function glowTreeRootRevealFade(inst) {
 function isGlowWorldSurfaceDecorUnlocked(inst) {
   const z = inst?.zones
   return Boolean(z?.lCollected)
+}
+//
+// Underground roots/rocks preview after G (full strip once the hero is on the ground).
+//
+function isGlowUndergroundLayerVisible(inst) {
+  if (isGlowEyeIntroBareWorld(inst)) return false
+  const z = inst?.zones
+  if (!z?.gCollected) return false
+  if (isGlowWorldSurfaceDecorUnlocked(inst)) return true
+  return Boolean(z.gUndergroundLive)
+}
+//
+// First grounded landing after G reveals the underground decor band.
+//
+function maybeRevealGlowUndergroundAfterG(inst, grounded) {
+  const z = inst.zones
+  if (!z.gCollected || z.gUndergroundLive) return
+  if (!grounded) return
+  z.gUndergroundLive = true
+  set(KEY_G_UNDERGROUND_LIVE, true)
+  !inst.treeDrawMonolith && ensureGlowTreeRootsSegment(inst)
+  applyZoneVisibility(inst)
+  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
 }
 //
 // True when world X lies in the soft-mud band (grass + baked pebbles stay after G).
@@ -4620,6 +4660,7 @@ function glowGrassColorFade(sc, zones) {
 //
 function glowGrassGreenFade(sc, zones) {
   if (zones.colorWorld) return 1
+  if (sc && isGlowFlatSingleDecorColor(sc)) return 0
   const base = glowGrassColorFade(sc, zones)
   const sway = glowMeditationWorldLife(sc)
   return sway > 0 ? Math.max(base, sway) : base
@@ -5110,22 +5151,39 @@ function setLetterVisible(letterEntry, visible, burst = false) {
     letterEntry._popFade = null
     letterEntry.allObjects.forEach(obj => { obj.opacity = 1 })
   } else if (wasHidden) {
-    letterEntry._popFade = 0
-    letterEntry.allObjects.forEach(obj => { obj.opacity = 0 })
+    const flatGInstant = sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char)
+    if (flatGInstant) {
+      letterEntry._popFade = null
+      glowLetterPopFadeTargets(letterEntry, sc).forEach(obj => { obj.opacity = 1 })
+      letterEntry.outlineObjs?.forEach(obj => { obj.hidden = true, obj.opacity = 0 })
+    } else {
+      letterEntry._popFade = 0
+      const fadeTargets = glowLetterPopFadeTargets(letterEntry, sc)
+      fadeTargets.forEach(obj => { obj.opacity = 0 })
+      letterEntry.outlineObjs?.forEach(obj => { obj.hidden = true, obj.opacity = 0 })
+    }
   } else if (letterEntry._popFade == null) {
-    const minOp = Math.min(...letterEntry.allObjects.map(obj =>
+    const fadeTargets = glowLetterPopFadeTargets(letterEntry, sc)
+    const minOp = Math.min(...fadeTargets.map(obj =>
       typeof obj.opacity === 'number' ? obj.opacity : 1
     ))
     minOp < 0.99 && (letterEntry._popFade = minOp)
   }
+  if (visible && !wasHidden && sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char)) {
+    letterEntry._popFade = null
+    glowLetterPopFadeTargets(letterEntry, sc).forEach(obj => { obj.opacity = 1 })
+  }
   if (visible && wasHidden && burst) {
-    LevelIndicator.flashWorldLetterBurst(
+    const flatG = sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char)
+    !flatG && LevelIndicator.flashWorldLetterBurst(
       letterEntry.k,
       letterEntry.x,
       letterEntry.y,
       letterEntry.colorHex || HERO_BODY_COLOR
     )
   }
+  visible && sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char) &&
+    syncGlowPickupLetterVisual(letterEntry, glowLetterVisualStyle(sc), sc)
 }
 //
 // Steps a freshly revealed pickup letter's fade-in (see setLetterVisible).
@@ -5133,13 +5191,20 @@ function setLetterVisible(letterEntry, visible, burst = false) {
 function updateLetterPopFade(letterEntry, dt) {
   if (!letterEntry || letterEntry.main?.hidden) return
   const sc = letterEntry.k?._glowSceneInst
+  if (sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char)) {
+    letterEntry._popFade = null
+    glowLetterPopFadeTargets(letterEntry, sc).forEach(obj => { obj.opacity = 1 })
+    letterEntry.outlineObjs?.forEach(obj => { obj.hidden = true, obj.opacity = 0 })
+    return
+  }
   if (sc?.drowning || sc?.deathHandled) {
     letterEntry._popFade = null
     letterEntry.allObjects.forEach(obj => { obj.opacity = 1 })
     return
   }
   if (letterEntry._popFade == null) {
-    const minOp = Math.min(...letterEntry.allObjects.map(obj =>
+    const fadeTargets = glowLetterPopFadeTargets(letterEntry, sc)
+    const minOp = Math.min(...fadeTargets.map(obj =>
       typeof obj.opacity === 'number' ? obj.opacity : 1
     ))
     if (minOp >= 0.99) return
@@ -5147,8 +5212,19 @@ function updateLetterPopFade(letterEntry, dt) {
   }
   if (letterEntry._popFade >= 1) return
   letterEntry._popFade = Math.min(1, letterEntry._popFade + dt / POP_REVEAL_FADE_DURATION)
-  letterEntry.allObjects.forEach(obj => { obj.opacity = letterEntry._popFade })
+  const fadeTargets = glowLetterPopFadeTargets(letterEntry, sc)
+  fadeTargets.forEach(obj => { obj.opacity = letterEntry._popFade })
   letterEntry._popFade >= 1 && (letterEntry._popFade = null)
+}
+//
+// Flat G uses white fill + void shadow only — outline layers stay hidden
+// during the pop-in so they never stack on the main glyph.
+//
+function glowLetterPopFadeTargets(letterEntry, sc) {
+  if (sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry?.char)) {
+    return [letterEntry.main, ...(letterEntry.shadowObjs ?? [])].filter(Boolean)
+  }
+  return letterEntry.allObjects
 }
 //
 // Steps every glow pickup letter's pop-in fade.
@@ -5179,8 +5255,22 @@ function glowThreeZonesExplored(inst) {
 function maybeShowGLetter(inst) {
   if (!inst.gLetter || inst.zones.gCollected || !inst.zones.eyesCollected) return
   const show = glowThreeZonesExplored(inst)
-  setLetterVisible(inst.gLetter, show, inst.letterAppearFxReady)
-  show && syncGlowHudLetterFills(inst, false)
+  if (!show) {
+    setLetterVisible(inst.gLetter, false, inst.letterAppearFxReady)
+    inst.gLetter._glowRevealedStable = false
+    return
+  }
+  if (!inst.gLetter.main.hidden && inst.gLetter._glowRevealedStable) return
+  setLetterVisible(inst.gLetter, true, false)
+  inst.gLetter._glowRevealedStable = true
+  syncGlowHudLetterFills(inst, false)
+}
+//
+// World G stays flat white (no void-outline pop) until L unlocks colour decor.
+//
+function isGlowWorldLetterFlatBeforeL(sc, char) {
+  if (!sc?.zones || char !== 'G') return false
+  return !sc.zones.lCollected && !sc.zones.colorWorld
 }
 //
 // Life HUD stays grey until the world colour preview (post-L countdown) or
@@ -5205,11 +5295,23 @@ function maybeSyncGlowLifeHudGrey(inst) {
 // Flat single decor gray until L — no per-object shades before then.
 //
 function isGlowFlatSingleDecorColor(inst) {
-  if (!inst?.zones) return false
-  const z = inst.zones
-  if (z.lCollected || z.colorWorld) return false
-  if ((inst.colorFade ?? 0) >= 0.5) return false
-  return true
+  return isGlowGrayExploreBeforeL(inst?.zones, inst?.colorFade ?? 0)
+}
+//
+// Cave interior rocks/skeleton use flat gray before colour world and during
+// the eyeless intro (no green earth tones in the pit mouth).
+//
+function isGlowPitFlatDecorMode(inst) {
+  return isGlowFlatSingleDecorColor(inst) || isGlowEyeIntroBareWorld(inst)
+}
+//
+// Single neutral backdrop for sky + earth before the colour world opens.
+//
+function isGlowPreludeBackdropWorld(inst) {
+  return isGlowFlatSingleDecorColor(inst) || isGlowEyeIntroBareWorld(inst)
+}
+function glowPlayfieldBackdropRgb(inst) {
+  return isGlowPreludeBackdropWorld(inst) ? PRELUDE_BACKDROP : VOID
 }
 //
 // Stalk-eye colours — gray decor before colour world; warm sclera + green-black
@@ -5272,14 +5374,27 @@ function createGlowChainBuoyLayer(k, inst) {
     }
   ])
 }
+function glowEarTreeRevealOpacity(inst) {
+  if (!inst?.zones?.lCollected) return 0
+  return inst.earTreeRevealFade ?? 0
+}
+//
+// Fades lip-trees in after L is collected.
+//
+function updateEarTreeRevealFade(inst, dt) {
+  if (!inst.zones.lCollected) return
+  if (inst.earTreeRevealFade == null || inst.earTreeRevealFade >= 1) return
+  inst.earTreeRevealFade = Math.min(1, inst.earTreeRevealFade + dt / POP_REVEAL_FADE_DURATION)
+}
 function createGlowEarTreeLayer(k, inst) {
   k.add([
     k.z(GLOW_EAR_TREE_Z),
     {
       draw() {
-        if (!inst.earTrees || !inst.zones.gCollected) return
+        const op = glowEarTreeRevealOpacity(inst)
+        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, op)
       }
     }
   ])
@@ -5287,9 +5402,10 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_ROOTS_Z),
     {
       draw() {
-        if (!inst.earTrees || !inst.zones.gCollected) return
+        const op = glowEarTreeRevealOpacity(inst)
+        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawRoots(inst.earTrees, c.root)
+        EarTree.onDrawRoots(inst.earTrees, c.root, op)
       }
     }
   ])
@@ -5297,9 +5413,10 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_TRUNK_OVERLAY_Z),
     {
       draw() {
-        if (!inst.earTrees || !inst.zones.gCollected) return
+        const op = glowEarTreeRevealOpacity(inst)
+        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline)
+        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, op)
       }
     }
   ])
@@ -5307,9 +5424,10 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_BRANCHES_Z),
     {
       draw() {
-        if (!inst.earTrees || !inst.zones.gCollected) return
+        const op = glowEarTreeRevealOpacity(inst)
+        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip)
+        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip, op)
       }
     }
   ])
@@ -5522,9 +5640,18 @@ function buildParallaxSprites(k, undergroundSpec) {
   staticColor.height = 0
 }
 //
+// Flat explore phase sky — void to playfield gray (no green-teal forest air).
+//
+function glowGraySkyBandRgb(mixT) {
+  return glowPreludeBackdropRgb()
+}
+//
 // Samples the dark teal sky gradient; optional dawn gold in the lower band.
 //
 function glowSkyBandRgb(mixT, colorFade, includeDawn) {
+  if (colorFade <= COLOR_CROSSFADE_EPS && !includeDawn) {
+    return glowGraySkyBandRgb(mixT)
+  }
   const zenith = glowRgb('glowSkyZenith')
   const mid = glowRgb('glowSkyMid')
   const horizon = glowRgb('glowSkyHorizon')
@@ -6289,12 +6416,15 @@ function loadUndergroundSprites(k) {
 // features read as slightly lighter tones.
 //
 function undergroundPaletteEntries() {
+  const flatGray = glowRgb(GLOW_PAL.decorGray)
+  const flatDeep = glowRgb(GLOW_PAL.lightGray)
   return [
     {
       name: UNDERGROUND_GRAY_SPRITE,
-      fill: glowRgb('groundClay'),
-      deep: glowRgb('mudGround'),
-      light: glowRgb('groundSand')
+      fill: flatGray,
+      deep: flatDeep,
+      light: glowRgb(GLOW_PAL.brightLight),
+      monoStrokes: true
     },
     {
       name: UNDERGROUND_COLOR_SPRITE,
@@ -6641,7 +6771,7 @@ function updateGlowEarTreeWhisperSound(inst, char) {
     Sound.setEarTreeWhisperVolume(0)
     resetGlowEarTreeWhisperProximityState(inst)
   }
-  if (!char?.pos || !inst.zones.gCollected || !inst.earTrees?.trees?.length) {
+  if (!char?.pos || !inst.zones.lCollected || !inst.earTrees?.trees?.length) {
     fadeOut()
     return
   }
@@ -6912,7 +7042,8 @@ function renderUndergroundSpec(ctx, spec, tones) {
   //
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  ctx.strokeStyle = deepCss
+  const strokeCss = tones.monoStrokes ? fillCss : deepCss
+  ctx.strokeStyle = strokeCss
   ctx.globalAlpha = 0.7
   ctx.lineWidth = 1.4
   spec.cracks.forEach(crack => {
@@ -6934,7 +7065,7 @@ function renderUndergroundSpec(ctx, spec, tones) {
   //
   // Hair-roots hanging from the ground line.
   //
-  ctx.strokeStyle = deepCss
+  ctx.strokeStyle = strokeCss
   ctx.globalAlpha = 0.6
   ctx.lineWidth = 1.6
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
@@ -7107,8 +7238,7 @@ function maskGlowMonolithTreeRootsUntilReveal(inst, k, groundC) {
 // an opaque static parallax earth band).
 //
 function shouldDrawGlowLiveUnderground(inst) {
-  if (!isGlowWorldSurfaceDecorUnlocked(inst)) return false
-  if (isGlowEyeIntroBareWorld(inst)) return false
+  if (!isGlowUndergroundLayerVisible(inst)) return false
   if (isGlowFullParallaxStable(inst)) return false
   const z = inst.zones
   if (!z.lZoneParallax) return true
@@ -7131,7 +7261,7 @@ function drawUndergroundLayer(inst) {
     }
     drawUndergroundSpriteClipped(inst, sprite, opacity)
   }
-  if (isGlowFlatSingleDecorColor(inst)) {
+  if (isGlowFlatSingleDecorColor(inst) || isGlowGrayExploreBeforeL(z, inst.colorFade ?? 0) || !z.lCollected) {
     drawBands(UNDERGROUND_GRAY_SPRITE, 1)
     return
   }
@@ -7173,6 +7303,12 @@ function drawGlowUndergroundPlayfieldBands(inst, k, sprite, opacity, x1, x2) {
 }
 function drawUndergroundSpriteClipped(inst, sprite, opacity) {
   const z = inst.zones
+  if (z.gUndergroundLive && !z.lCollected) {
+    const x1 = LEFT_MARGIN
+    const x2 = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
+    x2 > x1 && drawUndergroundSpriteBand(inst.k, sprite, opacity, x1, x2)
+    return
+  }
   z.groundDecorLeft &&
     drawUndergroundSpriteBand(inst.k, sprite, opacity, LEFT_MARGIN, TREE_X)
   if (!z.gCollected || (z.groundRightStripMax ?? -1) < 0) return
@@ -7322,7 +7458,7 @@ function updatePlayfieldCornerPositions() {
 // reload gap that could flash a stale-colour corner for a frame.
 //
 function refreshPlayfieldCornerSprites(inst) {
-  const hex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.void
+  const hex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop
   if (inst.cornerColorHex === hex) return
   inst.cornerColorHex = hex
   const spriteName = cornerSpriteNameForZones(inst.zones)
@@ -7335,7 +7471,7 @@ function refreshPlayfieldCornerSprites(inst) {
 // each with the inner quarter-circle cut) once per scene entry.
 //
 function loadPlayfieldCornerSprites(k) {
-  const voidCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, GLOW_PAL.void)
+  const voidCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, GLOW_PAL.glowPreludeBackdrop)
   k.loadSprite(CORNER_SPRITE_VOID, voidCanvas)
   voidCanvas.width = 0
   voidCanvas.height = 0
@@ -7449,7 +7585,12 @@ function createGrayLogPlatform(
           const meditationFade = sc?.zones?.lCollected && sc.meditation?.countdown != null
             ? meditationCountdownFade(sc)
             : 0
-          const contourDefault = fade > COLOR_CROSSFADE_EPS ? PLATFORM_OUTLINE_RGB : DECOR_OUTLINE_RGB
+          const flatMonoLog = sc && (isGlowFlatSingleDecorColor(sc) || (!zones.lCollected && !zones.colorWorld))
+          const contourDefault = flatMonoLog
+            ? DECOR_GRAY
+            : fade > COLOR_CROSSFADE_EPS
+              ? PLATFORM_OUTLINE_RGB
+              : DECOR_OUTLINE_RGB
           const outlineBase = meditationFade > 0
             ? {
               r: Math.round(contourDefault.r + (getRGB(k, glowLogColors(zones).bark).r - contourDefault.r) * meditationFade),
@@ -7465,9 +7606,11 @@ function createGrayLogPlatform(
           // stray second colour on top of the black outline while
           // everything else on screen was still strict grayscale.
           //
-          const detailHex = (fade > 0.01 || zones.lCollected)
-            ? glowLogColors(zones).bark
-            : GLOW_PAL.void
+          const detailHex = flatMonoLog
+            ? GLOW_PAL.decorGray
+            : (fade > 0.01 || zones.lCollected)
+              ? glowLogColors(zones).bark
+              : GLOW_PAL.void
           const detailRgb = getRGB(k, detailHex)
           //
           // Crossfades from the bare outline+accent silhouette into a fully
@@ -7485,8 +7628,9 @@ function createGrayLogPlatform(
             drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy, reveal)
             return
           }
-          fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb, reveal)
-          fade > COLOR_CROSSFADE_EPS && drawLogPlatform(k, w, h, ox, oy, fade * reveal, this._logDetail, glowLogColors(zones))
+          fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb, reveal, flatMonoLog)
+          !flatMonoLog && fade > COLOR_CROSSFADE_EPS &&
+            drawLogPlatform(k, w, h, ox, oy, fade * reveal, this._logDetail, glowLogColors(zones))
           return
         }
         //
@@ -7683,7 +7827,7 @@ function drawFlatLog(k, ox, oy, w, h, color, opacity = 1) {
 // silhouette with no fill, while its cracks, rounded end cap and grain
 // stripes are all painted in one single accent tone.
 //
-function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailColor, opacity = 1) {
+function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailColor, opacity = 1, filledBody = false) {
   const halfW = w / 2
   const halfH = h / 2
   const endR = halfH
@@ -7697,6 +7841,11 @@ function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailCo
     const a = -Math.PI / 2 + Math.PI * i / L_PLAT_END_STEPS
     bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
   }
+  filledBody && bodyPts.length > 2 && k.drawPolygon({
+    pts: bodyPts,
+    color: detailColor,
+    opacity: 0.94 * opacity
+  })
   k.drawLines({ pts: [...bodyPts, bodyPts[0]], width: L_PLAT_OUTLINE_WIDTH, color: outlineColor, opacity })
   //
   // Rounded end-cap detail only on the right, same convention as the
@@ -7786,21 +7935,47 @@ function glowLetterVisualStyle(inst) {
 //
 // Toggles void-outline vs drop-shadow layers on a world pickup letter.
 //
-function syncGlowPickupLetterVisual(entry, style) {
+function syncGlowPickupLetterVisual(entry, style, inst) {
   if (!entry || entry.forceVisible) return
   const visible = !entry.main?.hidden
-  entry.outlineObjs?.forEach(obj => { obj.hidden = !visible || !style.withOutline })
+  const flatPickup = inst && (isGlowFlatSingleDecorColor(inst) || isGlowWorldLetterFlatBeforeL(inst, entry?.char))
+  const gFlatWhite = isGlowWorldLetterFlatBeforeL(inst, entry?.char) && visible
+  const skipOutline = flatPickup && (entry.char === 'G' || entry.char === 'L')
+  if (gFlatWhite) {
+    const white = getRGB(inst.k, CFG.visual.colors.hero.eyeWhite)
+    entry.main && (entry.main.color = inst.k.rgb(white.r, white.g, white.b))
+    entry.outlineObjs?.forEach(obj => { obj.hidden = true })
+    entry.shadowObjs?.forEach(obj => { obj.hidden = false })
+    return
+  }
+  entry.outlineObjs?.forEach(obj => { obj.hidden = !visible || !style.withOutline || skipOutline })
   entry.shadowObjs?.forEach(obj => { obj.hidden = !visible || !style.withShadow })
+}
+//
+// Void outline reads green in flat explore — use a neutral gray rim instead.
+//
+function glowPickupLetterOutlineColor(k, inst) {
+  if (inst && isGlowFlatSingleDecorColor(inst)) {
+    return getRGB(k, GLOW_PAL.lightGray)
+  }
+  return k.rgb(VOID.r, VOID.g, VOID.b)
+}
+function applyGlowPickupLetterOutlineColors(inst, entry) {
+  if (!entry?.outlineObjs?.length) return
+  if (entry.char === 'G' && isGlowWorldLetterFlatBeforeL(inst, 'G')) return
+  const c = glowPickupLetterOutlineColor(inst.k, inst)
+  entry.outlineObjs.forEach(obj => { obj.color = c })
 }
 //
 // Keeps every uncollected pickup letter styled like its caption text.
 //
 function syncGlowPickupLetterVisuals(inst) {
   const style = glowLetterVisualStyle(inst)
-  syncGlowPickupLetterVisual(inst.gLetter, style)
-  syncGlowPickupLetterVisual(inst.lLetter, style)
-  syncGlowPickupLetterVisual(inst.oLetter, style)
-  syncGlowPickupLetterVisual(inst.wLetter, style)
+  const entries = [inst.gLetter, inst.lLetter, inst.oLetter, inst.wLetter]
+  entries.forEach(entry => {
+    syncGlowPickupLetterVisual(entry, style, inst)
+    applyGlowPickupLetterOutlineColors(inst, entry)
+  })
 }
 //
 // Blinking letter — optional gold fill for G, void outline in gray world
@@ -7921,7 +8096,7 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     roots: true,
     getRootColor: () => glowGrassRootColor(zones),
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
+    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
@@ -7948,7 +8123,7 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     roots: true,
     getRootColor: () => glowGrassRootColor(zones),
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
+    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
@@ -7969,7 +8144,9 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     getScaleMult: () => RIGHT_SPIKE_GRASS_SCALE_MULT,
     postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
-    getSwayScale: () => glowGrassSwayScale(zones)
+    getSwayScale: () => glowGrassSwayScale(zones),
+    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   clampGlowSpikeGrassInsidePlatformRight(grass, x2, RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET)
   grass.layer.hidden = true
@@ -7995,6 +8172,7 @@ function clampGlowSpikeGrassInsidePlatformRight(grass, platRightX, insetLeft) {
 //
 function glowSpikeGrassTint(sc, zones) {
   if (!zones.lPlatRevealed) return null
+  if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   return glowPeekStrawGrassTint(sc, zones)
 }
 //
@@ -8029,7 +8207,10 @@ function drawGlowRightSpikes(k, zones, spikes) {
   spikes.drawObj.z = blinking ? RIGHT_SPIKE_BLINK_Z : CFG.visual.zIndex.platforms
   const sc = zones._sceneRef
   const fade = sc?.colorFade ?? (zones.colorWorld ? 1 : 0)
-  const fillHex = (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.void
+  const flatMono = sc && isGlowFlatSingleDecorColor(sc)
+  const fillHex = flatMono
+    ? GLOW_PAL.decorGray
+    : (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.void
   const fillRgb = blinking ? k.rgb(255, 255, 255) : getRGB(k, fillHex)
   const outlineRgb = blinking ? k.rgb(255, 255, 255) : DECOR_OUTLINE_RGB
   const w = spikes.x2 - spikes.x1
@@ -8105,6 +8286,9 @@ function glowGroundPeekGrassTint(sc, zones, blade) {
 // color switch as the ear-tree and chain-buoy roots.
 //
 function glowGrassRootColor(zones) {
+  if (!zones.lCollected) return DECOR_GRAY
+  const sc = zones._sceneRef
+  if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const c = glowRgb('mudGround')
   return { r: c.r, g: c.g, b: c.b }
 }
@@ -8133,6 +8317,20 @@ function glowGrassTint(zones, blade) {
     return null
   }
   if (sc && isGlowOpenPitMouthWorldX(sc.pit, blade.x)) return null
+  if (sc && isGlowFlatSingleDecorColor(sc)) {
+    const mudTint = glowMudZoneGrassTint(sc, zones, blade)
+    if (mudTint) return mudTint
+    const peekTint = glowGroundPeekGrassTint(sc, zones, blade)
+    if (peekTint) return peekTint
+    if (!isGlowWorldSurfaceDecorUnlocked(sc)) {
+      if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
+      return DECOR_GRAY
+    }
+    const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
+    if (side === 'left' && !zones.groundDecorLeft) return null
+    if (side === 'right' && (zones.groundRightStripMax ?? -1) < 0) return null
+    return DECOR_GRAY
+  }
   const mudTint = sc && glowMudZoneGrassTint(sc, zones, blade)
   if (mudTint) return mudTint
   const peekTint = sc && glowGroundPeekGrassTint(sc, zones, blade)
@@ -8330,11 +8528,11 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   //
   // Flat mid stone before L; shaded glowRock tones after rebakeGlowRockSpritesShaded.
   //
-  const rockMid = glowRgb(GLOW_PAL.glowRock.mid)
+  const decorFlat = glowRgb(GLOW_PAL.decorGray)
   const flatPalette = {
-    fillR: rockMid.r, fillG: rockMid.g, fillB: rockMid.b,
-    lightR: rockMid.r, lightG: rockMid.g, lightB: rockMid.b,
-    darkR: rockMid.r, darkG: rockMid.g, darkB: rockMid.b
+    fillR: decorFlat.r, fillG: decorFlat.g, fillB: decorFlat.b,
+    lightR: decorFlat.r, lightG: decorFlat.g, lightB: decorFlat.b,
+    darkR: decorFlat.r, darkG: decorFlat.g, darkB: decorFlat.b
   }
   const bakeRock = (seedOffset) => {
     const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
@@ -8348,7 +8546,6 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
         outlineAlpha: 1
       })
     })
-    applyGlowMaterialBake(canvas, seedOffset)
     return canvas
   }
   const bakedGray = decorAtlas.register(bakeRock(worldX * 3 | 0))
@@ -8370,6 +8567,10 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
         const white = k.rgb(255, 255, 255)
         if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
           drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'topleft', 0, fade, this.color, white)
+          return
+        }
+        if (sc && isGlowFlatSingleDecorColor(sc)) {
+          drawDecorAtlasSprite(k, this._bakedFlat, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
           return
         }
         if (sc?.zones?.lCollected && this._bakedFlat) {
@@ -9040,7 +9241,10 @@ function isPlayfieldInnerGrayVisible(zones, fade) {
 // Keeps Kaplay clear colour and page chrome aligned with the outer frame.
 //
 function syncGlowCanvasBackdrop(k, zones) {
-  CanvasBackdrop.applyCanvasBackdrop(k, isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.void)
+  CanvasBackdrop.applyCanvasBackdrop(
+    k,
+    isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop
+  )
 }
 //
 // Visible world X span for culling full-width baked layers to the viewport.
@@ -9182,6 +9386,15 @@ function drawParallaxLayer(inst, layer) {
   const zones = inst.zones
   const fade = inst.colorFade
   const pf = inst.parallaxFade
+  if (isGlowFlatSingleDecorColor(inst)) {
+    const range = visibleWorldXRange(inst, layer.cullPad)
+    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, false)
+    grayOp > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(
+      k, inst, layer.gray, layer.speed, layer.bleed, grayOp, range, layer.worldY, layer.worldH,
+      layer === PAR_LAYER_NEAR ? glowPostLNearParallaxGrayTint(inst) : null
+    )
+    return
+  }
   const range = visibleWorldXRange(inst, layer.cullPad)
   const drawSlice = (sprite, op) => {
     const tint = layer === PAR_LAYER_NEAR && sprite === layer.gray
@@ -9321,18 +9534,18 @@ function drawGlowPitPass(inst) {
   if (!inst.pit) return
   const k = inst.k
   if (isGlowEyeIntroBareWorld(inst)) {
-    drawGlowPitEyeIntroInterior(k, inst.pit)
+    drawGlowPitEyeIntroInterior(k, inst.pit, isGlowPitFlatDecorMode(inst))
     return
   }
   const fade = inst.colorFade ?? 0
   const zones = inst.zones
   const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
   const flatExplore = isGlowFlatSingleDecorColor(inst)
-  const groundC = flatExplore && !innerGray
+  const groundC = flatExplore
     ? DECOR_GRAY
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   drawGlowPitInteriorVoidBackdrop(inst, k)
-  const flatDecor = flatExplore && !innerGray
+  const flatDecor = isGlowPitFlatDecorMode(inst)
   drawGlowPit(k, inst.pit, groundC, flatDecor)
 }
 //
@@ -9351,7 +9564,7 @@ function drawGlowPitInteriorVoidBackdrop(inst, k) {
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   const w = rightX - leftX
   const interiorH = pit.zone.depth
-  const voidRgb = glowCaveEarthDeepRgb()
+  const voidRgb = isGlowPitFlatDecorMode(inst) ? PRELUDE_BACKDROP : glowCaveEarthDeepRgb()
   interiorH > 0 && k.drawRect({
     pos: k.vec2(leftX, pit.floorY),
     width: w,
@@ -9395,7 +9608,7 @@ function glowPitBelowCaveEarthRgb(inst) {
     const fade = inst.colorFade ?? 0
     const z = inst.zones
     const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-    if (isGlowFlatSingleDecorColor(inst) && !innerGray) return glowCaveEarthFloorRgb()
+    if (isGlowFlatSingleDecorColor(inst) && !innerGray) return PRELUDE_BACKDROP
     const colorBottom = glowGroundEarthBottomLayerRgb(false)
     const grayBottom = glowGroundEarthBottomLayerRgb(true)
     if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return colorBottom
@@ -9406,7 +9619,7 @@ function glowPitBelowCaveEarthRgb(inst) {
   const z = inst.zones
   const innerGray = isPlayfieldInnerGrayVisible(z, fade)
   const caveEarth = glowCaveEarthFloorRgb()
-  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return caveEarth
+  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return PRELUDE_BACKDROP
   if (z.colorWorld || z.oCollected || fade >= 1 - COLOR_CROSSFADE_EPS) return caveEarth
   return lerpRgb(glowGrayGroundRgb(inst, innerGray), caveEarth, fade)
 }
@@ -9417,6 +9630,9 @@ function resolveGlowPitBelowFloorSprite(inst, k) {
   const fade = inst.colorFade ?? 0
   const zones = inst.zones
   const pf = inst.parallaxFade ?? 0
+  if (!zones.lCollected && !zones.colorWorld && k.getSprite(BG_STATIC_GRAY)) {
+    return { sprite: BG_STATIC_GRAY, opacity: 1 }
+  }
   if (isGlowFullParallaxStable(inst) && k.getSprite(BG_STATIC_COLOR)) {
     return { sprite: BG_STATIC_COLOR, opacity: 1 }
   }
@@ -9489,12 +9705,9 @@ function drawGlowPitCaveRocksOverEarthBand(inst) {
   if (!pit?.collapsed) return
   const k = inst.k
   if (isGlowEyeIntroBareWorld(inst)) return
-  const fade = inst.colorFade ?? 0
-  const innerGray = isPlayfieldInnerGrayVisible(inst.zones, fade)
-  const flatExplore = isGlowFlatSingleDecorColor(inst)
-  const flatDecor = flatExplore && !innerGray
+  const flatDecor = isGlowPitFlatDecorMode(inst)
   drawGlowPitCaveForegroundDecor(k, pit, flatDecor)
-  drawGlowPitCaveSeamCoverRocks(k, pit)
+  drawGlowPitCaveSeamCoverRocks(k, pit, isGlowPitFlatDecorMode(inst))
 }
 //
 // Skeleton, mushroom and seam rocks — above earth/static, below the hero.
@@ -9508,43 +9721,10 @@ function drawGlowPitCaveForegroundPass(inst) {
     drawGlowPitCaveLyingEyes(inst, k)
     return
   }
-  const fade = inst.colorFade ?? 0
-  const innerGray = isPlayfieldInnerGrayVisible(inst.zones, fade)
-  const flatExplore = isGlowFlatSingleDecorColor(inst)
-  const flatDecor = flatExplore && !innerGray
+  const flatDecor = isGlowPitFlatDecorMode(inst)
   drawGlowPitCaveSkeletonScene(k, pit, flatDecor)
   drawGlowPitCaveMushroom(k, pit)
   drawGlowPitCaveLyingEyes(inst, k)
-}
-//
-//
-// Hero foot Y for draw-time culling (matches gameplay surface probe).
-//
-function glowHeroFootYForDraw(inst) {
-  const char = inst.heroInst?.character
-  if (!char?.pos) return null
-  return char.pos.y + SURFACE_DETECT_Y
-}
-//
-// Skip sky/far/mid parallax while the hero is deep inside the collapsed pit.
-//
-function shouldSkipGlowDistantParallaxDraw(inst) {
-  const pit = inst.pit
-  if (!pit?.collapsed || !pit.zone) return false
-  const footY = glowHeroFootYForDraw(inst)
-  if (footY == null || footY <= pit.floorY + 40) return false
-  const heroX = inst.heroInst?.character?.pos?.x
-  if (heroX == null || !isGlowOpenPitMouthWorldX(pit, heroX)) return false
-  return true
-}
-//
-// Skip the near parallax row too once the hero is well below the mouth lip.
-//
-function shouldSkipGlowNearParallaxDraw(inst) {
-  if (!shouldSkipGlowDistantParallaxDraw(inst)) return false
-  const pit = inst.pit
-  const footY = glowHeroFootYForDraw(inst)
-  return footY > pit.floorY + pit.zone.depth * 0.22
 }
 //
 // Main draw — void until G opens the outer frame; inner gray after L/O.
@@ -9571,10 +9751,26 @@ function onDrawWorld(inst) {
   // call site for why the fill must be reapplied after the tree/bush layers.
   //
   let groundFillC = null
+  //
+  // Before the outer frame opens (pre-L), still paint a dark sky band so
+  // parallax/tree gaps never flash the old green inner playfield through.
+  //
+  if (!outerFrame && flatExplore) {
+    const backdrop = PRELUDE_BACKDROP
+    k.drawRect({
+      pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
+      width: GAME_W,
+      height: FLOOR_Y - TOP_MARGIN,
+      color: k.rgb(backdrop.r, backdrop.g, backdrop.b)
+    })
+    groundFillC = backdrop
+    inst._surfaceEarthRgb = backdrop
+    drawGlowEarthBand(k, inst, k.rgb(backdrop.r, backdrop.g, backdrop.b), 1)
+  }
   if (outerFrame) {
     let inner = innerGray ? INNER_GRAY : VOID
     if (flatExplore && !innerGray) {
-      inner = DECOR_GRAY
+      inner = PRELUDE_BACKDROP
     }
     //
     // Colour world splits the playfield at the ground line: warm haze between
@@ -9582,9 +9778,9 @@ function onDrawWorld(inst) {
     // green inner base as the colour fade progresses.
     //
     const grayGround = flatExplore && !innerGray
-      ? DECOR_GRAY
+      ? PRELUDE_BACKDROP
       : glowGrayGroundRgb(inst, innerGray)
-    const groundC = flatExplore && !innerGray ? DECOR_GRAY : lerpRgb(grayGround, GROUND_DARK, fade)
+    const groundC = flatExplore && !innerGray ? PRELUDE_BACKDROP : lerpRgb(grayGround, GROUND_DARK, fade)
     groundFillC = groundC
     inst._surfaceEarthRgb = innerGray ? glowGrayGroundRgb(inst, true) : groundC
     //
@@ -9594,15 +9790,26 @@ function onDrawWorld(inst) {
     const parallaxMix = zones.lZoneParallax ? (inst.parallaxFade ?? 0) : 0
     const fallbackOp = parallaxStable ? 0 : (zones.lZoneParallax ? Math.max(0, 1 - parallaxMix) : 1)
     if (fallbackOp > COLOR_CROSSFADE_EPS) {
-      flatExplore && !innerGray
-        ? k.drawRect({
+      if (isGlowFlatSingleDecorColor(inst) || (!zones.colorWorld && fade <= COLOR_CROSSFADE_EPS)) {
+        const backdrop = isGlowFlatSingleDecorColor(inst) ? PRELUDE_BACKDROP : glowRgb('void')
+        k.drawRect({
           pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
           width: GAME_W,
           height: FLOOR_Y - TOP_MARGIN,
-          color: k.rgb(DECOR_GRAY.r, DECOR_GRAY.g, DECOR_GRAY.b),
+          color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
           opacity: fallbackOp
         })
-        : drawGlowPlayfieldSky(k, fallbackOp, fade)
+      } else if (flatExplore && !innerGray) {
+        k.drawRect({
+          pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
+          width: GAME_W,
+          height: FLOOR_Y - TOP_MARGIN,
+          color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b),
+          opacity: fallbackOp
+        })
+      } else {
+        drawGlowPlayfieldSky(k, fallbackOp, fade)
+      }
     }
     //
     // Once the parallax stack is active, its opaque static ground+underground
@@ -9619,22 +9826,18 @@ function onDrawWorld(inst) {
     // are baked onto its trees, so one draw covers both), then static
     // ground. Birds sit right after the opaque backdrop fill.
     //
-    const skipDistantParallax = shouldSkipGlowDistantParallaxDraw(inst)
-    const skipNearParallax = shouldSkipGlowNearParallaxDraw(inst)
-    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_SKY)
+    drawParallaxLayer(inst, PAR_LAYER_SKY)
     const decorLife = glowPostLRevealFade(inst)
-    const showBirds = !skipDistantParallax && decorLife > BIRD_VISIBLE_FADE_MIN &&
+    const showBirds = decorLife > BIRD_VISIBLE_FADE_MIN &&
       (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
     showBirds && drawBackgroundBirds(inst)
     const pf = inst.parallaxFade
-    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_FAR)
-    !skipDistantParallax && !parallaxStable && fade < 1 &&
-      drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
-    !skipDistantParallax && drawParallaxLayer(inst, PAR_LAYER_MID)
-    !skipDistantParallax && !parallaxStable && fade < 1 &&
-      drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
-    !skipNearParallax && drawParallaxLayer(inst, PAR_LAYER_NEAR)
-    !skipDistantParallax && !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
+    drawParallaxLayer(inst, PAR_LAYER_FAR)
+    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
+    drawParallaxLayer(inst, PAR_LAYER_MID)
+    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    drawParallaxLayer(inst, PAR_LAYER_NEAR)
+    !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
   } else {
     drawBackgroundBirds(inst)
   }
@@ -9653,7 +9856,9 @@ function onDrawWorld(inst) {
       k, inst, k.rgb(inst._surfaceEarthRgb.r, inst._surfaceEarthRgb.g, inst._surfaceEarthRgb.b), groundFallbackOp
     )
     const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
-    if (parallaxStable) {
+    if (isGlowFlatSingleDecorColor(inst) || (!zones.lCollected && !zones.colorWorld)) {
+      !parallaxStable && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, 1)
+    } else if (parallaxStable) {
       drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
     } else if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
       const grayOp = (1 - fade) * pf
@@ -9672,7 +9877,7 @@ function onDrawWorld(inst) {
   // Cave mouth ground tint + surface decor (pit interior draws after parallax).
   //
   const groundC = flatExplore && !innerGray
-    ? DECOR_GRAY
+    ? PRELUDE_BACKDROP
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
   onDrawGlowEyeIntro(inst, k)
@@ -9730,7 +9935,17 @@ function drawMudGroundZone(inst) {
   //
   const x1 = LEFT_MARGIN
   const x2 = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
-  drawUndergroundSpriteBand(inst.k, UNDERGROUND_GRAY_SPRITE, 1, x1, x2)
+  const k = inst.k
+  if (isGlowFlatSingleDecorColor(inst) && !inst.zones.gUndergroundLive) {
+    k.drawRect({
+      pos: k.vec2(x1, FLOOR_Y),
+      width: x2 - x1,
+      height: CAVE_BAND_H,
+      color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
+    })
+  } else {
+    drawUndergroundSpriteBand(k, UNDERGROUND_GRAY_SPRITE, 1, x1, x2)
+  }
   drawGlowMudZoneGroundLine(inst, x1, x2)
 }
 //
@@ -9770,11 +9985,14 @@ function drawGlowPitMouthEarthGapFill(inst, k) {
 function drawGlowMudZoneGroundLine(inst, x1, x2) {
   const k = inst.k
   const fade = inst.colorFade ?? 0
-  const bodyC = DECOR_OUTLINE_RGB
+  const flatMono = isGlowFlatSingleDecorColor(inst)
+  const bodyC = flatMono ? DECOR_GRAY : DECOR_OUTLINE_RGB
   const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
-  const rimRgb = fade > COLOR_CROSSFADE_EPS
-    ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
-    : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
+  const rimRgb = flatMono
+    ? lerpRgb(DECOR_GRAY, LIGHT_GRAY, 0.35)
+    : fade > COLOR_CROSSFADE_EPS
+      ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
+      : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
   //
   // The mud zone reuses this same wavy "jelly" rim rather than a separate
@@ -9883,7 +10101,8 @@ function drawPlayfieldSideChrome(inst) {
 function updatePlayfieldBorderColors(inst) {
   const fade = inst.colorFade
   if (!inst.wallObjs?.length) return
-  const dark = { r: VOID.r, g: VOID.g, b: VOID.b }
+  const backdrop = glowPlayfieldBackdropRgb(inst)
+  const dark = { r: backdrop.r, g: backdrop.g, b: backdrop.b }
   const border = { r: WALL_BORDER_R, g: WALL_BORDER_G, b: WALL_BORDER_B }
   const t = isOuterFrameVisible(inst.zones) ? 1 : fade
   if (inst._playfieldBorderT === t) return
@@ -10303,7 +10522,7 @@ function applyGlowHeroBodyFill(inst) {
     addMouth: hero.addMouth,
     addArms: hero.addArms,
     addWatch: hero.addWatch,
-    postBakeCanvas: applyGlowForegroundFocusBake
+    postBakeCanvas: applyGlowGameplaySharpBake
   })
   const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_OUTLINE_COLOR).replace('#', '')}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
@@ -10345,7 +10564,7 @@ function glowHeroFillOpts(inst) {
 const GLOW_LEVEL_FILL_CFG = {
   filledBodyColor: HERO_FILLED_BODY_COLOR,
   filledOutlineColor: HERO_OUTLINE_COLOR,
-  postBakeCanvas: applyGlowForegroundFocusBake,
+  postBakeCanvas: applyGlowGameplaySharpBake,
   onFullFill: applyGlowHeroBodyFill
 }
 //
@@ -10591,21 +10810,30 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
-  const gCaptionGray = getRGB(k, GLOW_PAL.midGray)
+  const flatMonoCaption = isGlowFlatSingleDecorColor(inst)
+  const decorCaptionRgb = getRGB(k, GLOW_PAL.decorGray)
+  const gCaptionTextRgb = getRGB(k, GLOW_PAL.captionLetterGInk)
+  const gCaptionLetterRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L'
   const isGrayCaption = grayCaptionNoShadow || letterEntry?.char === 'O'
   const captionObservationInkRgb = getRGB(k, GLOW_PAL.captionObservationInk)
   const captionLetterLInkRgb = getRGB(k, GLOW_PAL.captionLetterLInk)
-  const captionTextRgb = letterEntry?.char === 'O'
-    ? captionObservationInkRgb
-    : letterEntry?.char === 'L'
-      ? captionLetterLInkRgb
-      : (isGrayCaption ? gCaptionGray : glowCaptionTextRgb())
-  const letterFillRgb = letterEntry?.char === 'L'
-    ? getRGB(k, GLOW_PAL.gold)
+  const captionTextRgb = letterEntry?.char === 'G'
+    ? gCaptionTextRgb
     : letterEntry?.char === 'O'
-      ? getRGB(k, GLOW_PAL.glowLightBright)
-      : getRGB(k, CFG.visual.colors.hero.eyeWhite)
+      ? captionObservationInkRgb
+      : letterEntry?.char === 'L'
+        ? captionLetterLInkRgb
+        : (isGrayCaption ? gCaptionTextRgb : glowCaptionTextRgb())
+  const letterFillRgb = letterEntry?.char === 'G'
+    ? gCaptionLetterRgb
+    : flatMonoCaption && letterEntry?.char === 'L'
+      ? decorCaptionRgb
+      : letterEntry?.char === 'L'
+        ? getRGB(k, GLOW_PAL.gold)
+        : letterEntry?.char === 'O'
+          ? getRGB(k, GLOW_PAL.glowLightBright)
+          : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
@@ -10915,13 +11143,6 @@ function collectLetterG(inst) {
   // into segmented mode with just the roots revealed and everything else
   // still hidden, a worse regression than the roots simply waiting for L.
   //
-  !inst.treeDrawMonolith && ensureGlowTreeRootsSegment(inst)
-  //
-  // Nothing above actually calls this — without it, the tree's roots-visible
-  // gray sprite swap and the surface decor (rocks/mushrooms) unlocked early
-  // by G never actually apply until some unrelated later event happens to
-  // trigger a visibility sync.
-  //
   applyZoneVisibility(inst)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 1, inst.zones.colorWorld)
@@ -10952,6 +11173,7 @@ function collectLetterL(inst) {
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, GLOW_HERO_FILL_L)
   inst.zones.lCollected = true
+  inst.earTreeRevealFade = 0
   dismissGlowLPlatTeacherHint(inst)
   inst._postLStopHintShows = 0
   inst.teacherContextAccum = 0
@@ -11553,7 +11775,12 @@ function spawnHedgehogDeathBurst(inst, x, y) {
 // reads as real leaves rather than generic dust.
 //
 function hedgehogDeathLeafPalette(inst) {
-  if (isGlowFlatSingleDecorColor(inst)) return [DECOR_GRAY, MID_GRAY, LIGHT_GRAY]
+  if (!inst?.zones?.lCollected) {
+    return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
+  }
+  if (!inst?.zones?.colorWorld) {
+    return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
+  }
   return (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).map(hex => glowRgb(hex))
 }
 //
@@ -11827,6 +12054,7 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause) {
   registerGlowTrampolineLateBounce(inst)
   snapGlowCameraToHero(k, fresh)
   !inst.zones.eyesCollected && initGlowHeroWithoutEyes(fresh)
+  inst.zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, fresh, fresh.postBakeCanvas)
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
@@ -11961,7 +12189,7 @@ function revealGroundDecorLeft(inst, silent = false) {
   !silent && playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
-  syncGlowHudLetterFills(inst)
+  syncGlowHudLetterFills(inst, false)
 }
 //
 // Midges + cave cracks follow which sides of the ground the hero has opened
@@ -12064,15 +12292,30 @@ function revealLPlatZone(inst, silent = false) {
 // Opens the L log after a bounce (or jump-land) on the right mushroom.
 //
 function maybeRevealLPlatOnRightTrampBounce(inst) {
-  if (inst.zones.lPlatRevealed) return
+  const z = inst.zones
+  if (z.lPlatRevealed || z.lCollected) return
+  if (!z.gCollected || !z.rightTrampRevealed) return
   revealLPlatZone(inst)
+}
+//
+// Opens the L log when the hero's feet are on the right trampoline cap.
+//
+function maybeRevealLPlatIfOnRightTrampCap(inst, heroX, footY) {
+  if (!inst.zones.rightTrampRevealed) return
+  if (!isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) return
+  maybeRevealLPlatOnRightTrampBounce(inst)
 }
 //
 // Jump-landing on the right cap also opens the L log if the bounce path missed.
 //
 function maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded) {
-  if (!justLanded || !grounded) return
-  if (!isOnTrampolineCap(inst, inst.heroInst?.character, inst.trampState)) return
+  if (!grounded) return
+  if (!inst.zones.rightTrampRevealed) return
+  const char = inst.heroInst?.character
+  if (!char?.pos) return
+  const heroX = char.pos.x
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (!isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) return
   maybeRevealLPlatOnRightTrampBounce(inst)
 }
 //
@@ -12248,7 +12491,7 @@ function snapGlowCameraToHero(k, heroInst) {
 // k.add() calls, so without this the wrong colour phase can flash for a frame.
 //
 function createGlowBootstrapCurtain(k) {
-  const voidColor = k.rgb(VOID.r, VOID.g, VOID.b)
+  const voidColor = k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
   return k.add([
     k.fixed(),
     k.pos(0, 0),
@@ -12412,7 +12655,7 @@ function onUpdate(inst) {
     updateDecorOutlines(inst)
     syncGlowMidgeDrawColor(inst)
   }
-  inst.glowLetters?.length && syncGlowPickupLetterVisuals(inst)
+  syncGlowPickupLetterVisuals(inst)
   //
   // Cheap self-correcting check (early-exits on no change) so the tree's
   // roots-visible-from-G gray sprite always reflects current zone state even
@@ -12458,6 +12701,7 @@ function onUpdate(inst) {
   updatePlatformRevealFade(inst.lPlat, k.dt())
   updatePlatformRevealFade(inst.oPlat, k.dt())
   updatePlatformRevealFade(inst.wPlat, k.dt())
+  updateEarTreeRevealFade(inst, k.dt())
   syncGlowHeroBodyFill(inst)
   updatePlayfieldBorderColors(inst)
   syncGlowPitLevelIndicator(inst)
@@ -12528,7 +12772,7 @@ function onUpdate(inst) {
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.zones.lCollected && inst.chainBuoys && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
-  inst.zones.gCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
+  inst.zones.lCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
   updateGlowEarTreeWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
@@ -12544,6 +12788,7 @@ function onUpdate(inst) {
     Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && queueGlowLetterPickup(inst, 'g', grounded)
   }
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
+  maybeRevealGlowUndergroundAfterG(inst, grounded)
   refreshGlowBranchJumpState(inst, char)
   refreshGlowMainGroundJumpState(inst, char, grounded, footY)
   syncGlowBranchJumpReady(inst, char, grounded)
@@ -12579,7 +12824,8 @@ function onUpdate(inst) {
   maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded)
   const rightRevealFrame = !rightTrampWasVisible && inst.zones.rightTrampRevealed
   const branchRevealFrame = !branchTrampWasVisible && inst.zones.branchTrampRevealed
-  rightRevealFrame && syncGlowHudLetterFills(inst)
+  rightRevealFrame && syncGlowHudLetterFills(inst, false)
+  branchRevealFrame && syncGlowHudLetterFills(inst, false)
   //
   // Pad / snap / bounce only after the mushroom sprite is shown.
   //
@@ -12602,7 +12848,6 @@ function onUpdate(inst) {
   //
   // Bounce is the main L-log trigger; a jump-land on the cap is the backup.
   //
-  maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded)
   const surface = detectGlowSurface(inst)
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   if (surface === 'wood' || surface === 'ground' || surface === 'mud') {
@@ -12715,8 +12960,7 @@ function onUpdate(inst) {
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
-  !shouldSkipGlowDistantParallaxDraw(inst) &&
-    updateGlowMidges(inst.midges, k.dt(), 1)
+  updateGlowMidges(inst.midges, k.dt(), 1)
   inst.branchTrampPitGuardTimer > 0 &&
     (inst.branchTrampPitGuardTimer = Math.max(0, inst.branchTrampPitGuardTimer - k.dt()))
   updateGlowPit(inst.pit, char, grounded, justLanded, null, {
@@ -13530,7 +13774,7 @@ function bakeMonolithicGlowTreeSprites(k, treeData) {
   loadCroppedGlowTreeSprite(k, TREE_FLAT_SPRITE_NAME, flatCanvas, bounds, 6000)
   const foliageCorner = MAIN_TREE_PARALLAX_FOLIAGE_CORNER
   loadCroppedGlowTreeSprite(k, TREE_LIT_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteLitForCorner(foliageCorner), WORLD_W, WORLD_H), bounds, 6001)
+    renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H), bounds, 6001)
   loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME,
     renderGlowTreeToCanvas(treeData, getTreePaletteColorForCorner(foliageCorner), WORLD_W, WORLD_H), bounds, 6002)
   loadCroppedGlowTreeSprite(k, TREE_FLAT_ROOTS_SPRITE_NAME,
@@ -13674,6 +13918,11 @@ function isAllTreeSegmentsRevealed(inst) {
 function glowRightWorldOpacity(sc, x, rank) {
   if (!sc?.zones) return 0
   if (!sc.zones.gCollected) return 0
+  const lakeX1 = sc.zones._lakeX1
+  const lakeX2 = sc.zones._lakeX2
+  if (sc.zones.water && lakeX1 != null && lakeX2 != null && x >= lakeX1 - 48 && x <= lakeX2 + 120) {
+    return 1
+  }
   if (!sc.zones.lCollected) return isGlowWorldXInGroundPeekZone(sc, x) ? 1 : 0
   if (sc.zones.lCollected && !sc.zones.oZone && !sc.zones.oCollected &&
     glowPostLRevealFade(sc) <= 0.04) {
@@ -13925,6 +14174,8 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
   }
   if (!z.rightTrampRevealed && nearRight) {
     revealRightTrampoline(inst)
+    z.rightTrampBounceLive = true
+    set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
     return
   }
   //
@@ -13941,6 +14192,8 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
   }
   if (!z.branchTrampRevealed && nearBranch) {
     revealBranchTrampoline(inst)
+    z.branchTrampBounceLive = true
+    set(KEY_BRANCH_TRAMP_BOUNCE_LIVE, true)
     return
   }
   if (z.branchTrampRevealed && !z.branchTrampBounceLive && nearBranch) {

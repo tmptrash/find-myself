@@ -224,11 +224,11 @@ export function caveSkeletonPitFloorTones() {
  * @returns {{ fill: Object, deep: Object, light: Object }}
  */
 export function caveSkeletonEyeIntroTones() {
-  const bone = glowRgb('lightGray')
   return {
-    fill: bone,
-    deep: bone,
-    light: bone
+    fill: glowRgb('decorGray'),
+    deep: glowRgb('glowPreludeBackdrop'),
+    light: glowRgb('lightGray'),
+    socket: glowRgb('brightLight')
   }
 }
 /**
@@ -290,8 +290,8 @@ function ensurePitCaveSkeletonSprite(k, pit, tones, embedded, bakeVariant = 'pit
 //
 // Solid bone fill — only D reads as void; B/M/H share one bone tone (no dither dots).
 //
-function caveSkeletonSolidPalette(boneCss, deepCss) {
-  return { D: deepCss, M: boneCss, B: boneCss, H: boneCss }
+function caveSkeletonSolidPalette(boneCss, deepCss, socketCss = boneCss) {
+  return { D: deepCss, M: boneCss, B: boneCss, H: socketCss }
 }
 //
 // Fills '.' pockets trapped inside bone (jaw/cheek); border air and D voids stay open.
@@ -358,9 +358,9 @@ function drawReferencePixelGrid(ctx, grid, u, palette, centerX, topY, scaleX = 1
 //
 // Reference skull — bitmap traced from the user art (scaled to skullR).
 //
-function drawCaveSkullFromReference(ctx, r, boneCss, deepCss) {
+function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCss) {
   const grid = solidifyEnclosedDots(CAVE_REF_SKULL_GRID)
-  const palette = caveSkeletonSolidPalette(boneCss, deepCss)
+  const palette = caveSkeletonSolidPalette(boneCss, deepCss, socketCss)
   const gw = grid[0].length
   const gh = grid.length
   const u = (r * 2.14) / gw
@@ -598,13 +598,15 @@ function drawCaveThoraxSolid(ctx, r, spineTopY, boneCss, deepCss, ribLayout) {
 function drawCaveSkeletonToCtx(ctx, sk, tones, ribLayout) {
   const boneCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
   const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
+  const socketTone = tones.socket ?? tones.light
+  const socketCss = `rgb(${socketTone.r}, ${socketTone.g}, ${socketTone.b})`
   const r = sk.skullR
   ctx.save()
   ctx.rotate(sk.angle || 0)
   ctx.globalAlpha = 0.85
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  drawCaveSkullFromReference(ctx, r, boneCss, deepCss)
+  drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss)
   //
   // Thoracic ribs sampled from the user torso reference.
   //

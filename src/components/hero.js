@@ -2230,6 +2230,13 @@ function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, trans
     ctx.beginPath()
     ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
     ctx.fill()
+    if (eyesClosed) {
+      ctx.fillStyle = BL
+      ctx.beginPath()
+      ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+      return
+    }
     ctx.save()
     ctx.globalCompositeOperation = 'destination-out'
     ctx.fillStyle = '#000000'
@@ -2237,12 +2244,10 @@ function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, trans
     ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
-    if (!eyesClosed) {
-      ctx.fillStyle = PL
-      ctx.beginPath()
-      ctx.arc(cx + pupilDx, eyeY + pupilDy, PUPIL_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
-    }
+    ctx.fillStyle = PL
+    ctx.beginPath()
+    ctx.arc(cx + pupilDx, eyeY + pupilDy, PUPIL_RADIUS, 0, Math.PI * 2)
+    ctx.fill()
     return
   }
   ctx.fillStyle = OL
@@ -2600,7 +2605,8 @@ function finalizeHeroBakeFrame(ctx, bake) {
     PL,
     EW,
     BL,
-    transparentInterior: transparentEyeInterior || (drawBakeOutline && !drawBakeBody),
+    transparentInterior: transparentEyeInterior === true ||
+      (drawBakeOutline && !drawBakeBody && transparentEyeInterior !== false),
     punchSocket: drawBakeBody && transparentEyeInterior
   })
 }

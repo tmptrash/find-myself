@@ -584,9 +584,10 @@ function drawLiveEyes(inst, dir, alphaMul) {
   const wy = inst.y + s * (eyeLocalY - BAKE_Y_MAX)
   const eyeR = EYE_R * s
   const pupilR = PUPIL_R * s
+  const fade = colorFadeOf(inst)
   const outline = getRGB(k, GLOW_PAL.glowContour.gameplay)
-  const white = getRGB(k, EYE_WHITE_HEX)
-  const pupilColor = getRGB(k, EYE_HEX)
+  const white = fade < 0.98 ? getRGB(k, GLOW_PAL.lightGray) : getRGB(k, EYE_WHITE_HEX)
+  const pupilColor = fade < 0.98 ? getRGB(k, GLOW_PAL.decorGray) : getRGB(k, EYE_HEX)
   const px = wx + dir * s * (PUPIL_OFFSET_X + inst.pupilX)
   const py = wy + s * (PUPIL_OFFSET_Y + inst.pupilY)
   k.drawEllipse({
@@ -646,8 +647,10 @@ function drawBakedSprite(inst, baseName, dir, scale, fade, alphaMul = 1) {
 //
 function colorFadeOf(inst) {
   const z = inst.zones
-  if (z?.lCollected || z?.colorWorld) return 1
-  return inst.zones?._sceneRef?.colorFade ?? 0
+  if (!z?.lCollected) return 0
+  const sc = z?._sceneRef
+  if (!z?.colorWorld) return 0
+  return sc?.colorFade ?? 1
 }
 //
 // Live stub legs — planted while idle, alternating a small step-lift while
@@ -656,7 +659,7 @@ function colorFadeOf(inst) {
 function drawLegs(inst, dir, fade, alphaMul = 1) {
   const k = inst.k
   const outline = getRGB(k, GLOW_PAL.glowContour.gameplay)
-  const maneGray = getRGB(k, MANE_GRAY_HEX)
+  const legGray = getRGB(k, GLOW_PAL.decorGray)
   const maneColor = getRGB(k, MANE_HEX)
   const legAlpha = inst.turnScale * alphaMul
   if (legAlpha <= 0.02) return
@@ -680,12 +683,12 @@ function drawLegs(inst, dir, fade, alphaMul = 1) {
     //
     const hipY = inst.y + s * (leg.bodyY - lift - BAKE_Y_MAX)
     const groundY = inst.y - s * BAKE_Y_MAX
-    drawLegHip(k, hipX, hipY, s, fade > 0.02 ? maneColor : maneGray, outline, legAlpha, fade > 0.02 ? fade : 1)
+    drawLegHip(k, hipX, hipY, s, fade > 0.02 ? maneColor : legGray, outline, legAlpha, fade > 0.02 ? fade : 1)
     if (leg.hind) {
-      drawHindLeg(k, dir, s, hipX, hipY, groundY, outline, maneGray, maneColor, fade, legAlpha)
+      drawHindLeg(k, dir, s, hipX, hipY, groundY, outline, legGray, maneColor, fade, legAlpha)
       return
     }
-    drawFrontLeg(k, dir, s, hipX, hipY, groundY, outline, maneGray, maneColor, fade, legAlpha)
+    drawFrontLeg(k, dir, s, hipX, hipY, groundY, outline, legGray, maneColor, fade, legAlpha)
   })
 }
 //
@@ -985,7 +988,13 @@ function bakeHedgehogSprites(k, scale) {
 function bakeVariant(k, baseName, pixelRatio, drawFn) {
   const grayCanvas = toCanvas({ width: BAKE_W, height: BAKE_H, pixelRatio }, (ctx) => {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
-    drawFn(ctx, MANE_GRAY_HEX, MANE_GRAY_HEX, FACE_GRAY_HEX, FACE_GRAY_HEX)
+    drawFn(
+      ctx,
+      GLOW_PAL.decorGray,
+      GLOW_PAL.decorGray,
+      GLOW_PAL.lightGray,
+      GLOW_PAL.brightLight
+    )
   })
   applyGlowForegroundFocusBake(grayCanvas, baseName.length * 17)
   k.loadSprite(baseName + GRAY_SUFFIX, grayCanvas)

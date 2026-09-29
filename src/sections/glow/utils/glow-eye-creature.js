@@ -1,3 +1,4 @@
+import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { GLOW_PAL } from './glow-palette.js'
 
@@ -22,6 +23,24 @@ export function glowEyeCreatureColors(k) {
     pupil: getRGB(k, pal.pupil),
     highlight: getRGB(k, pal.highlight),
     contour: getRGB(k, pal.contour)
+  }
+}
+/**
+ * White sclera + black pupil for cave pickup eyes and post-pickup hero attach.
+ * @param {Object} k - Kaplay inst
+ * @returns {{ body: Object, sclera: Object, pupil: Object, highlight: Object, contour: Object }}
+ */
+export function glowCaveHeroEyeColors(k) {
+  const sclera = getRGB(k, CFG.visual.colors.hero.eyeWhite)
+  const pupil = getRGB(k, CFG.visual.colors.hero.eyePupil)
+  const contour = getRGB(k, GLOW_PAL.glowContour.gameplay)
+  const highlight = getRGB(k, GLOW_PAL.lightGray)
+  return {
+    body: contour,
+    sclera,
+    pupil,
+    highlight,
+    contour
   }
 }
 

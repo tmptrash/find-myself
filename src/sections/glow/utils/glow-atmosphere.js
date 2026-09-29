@@ -7,6 +7,7 @@ import {
   GLOW_PAL,
   glowCaveEarthDeepRgb,
   glowCaveEarthFloorRgb,
+  glowPreludeBackdropRgb,
   glowRgb,
   snapToPalette,
   getCuteMushroomFlatDecorColors,
@@ -128,7 +129,7 @@ const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill'
+const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill-v7'
 const CAVE_LAYOUT_VERSION = 70
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
@@ -746,14 +747,14 @@ export function drawGlowPitBareCave(k, pit) {
  * @param {Object} k - Kaplay instance
  * @param {Object} pit - Pit state
  */
-export function drawGlowPitEyeIntroInterior(k, pit) {
+export function drawGlowPitEyeIntroInterior(k, pit, flatDecor = true) {
   if (!pit) return
   if (!pit.collapsed) {
     drawGlowPitBareCave(k, pit)
     return
   }
   if (isCaveInteriorVisible(pit)) {
-    drawCaveInteriorRockStyle(k, pit, true)
+    drawCaveInteriorRockStyle(k, pit, flatDecor)
     return
   }
   drawGlowPitBareCave(k, pit)
@@ -793,7 +794,7 @@ export function drawGlowPitCaveForegroundDecor(k, pit, flatDecor = false) {
   if (!pit.wallProfile?.mouth) return
   const showRocks = shouldDrawPitCaveRocks(pit)
   if (!showRocks) return
-  const pal = buildCavePalette(glowRgb('decorGray'))
+  const pal = resolveCavePalette(flatDecor)
   const layout = pit.wallProfile
   const { floorY } = pit
   const wallRocks = layout.wallRocks?.filter(rock => !rock.straddleMouthGround)
@@ -817,11 +818,11 @@ export function invalidateGlowPitCaveInteriorBake(pit) {
   pit._caveSpriteReady = false
   pit._caveBakeRocksKey = null
 }
-export function drawGlowPitCaveSeamCoverRocks(k, pit) {
+export function drawGlowPitCaveSeamCoverRocks(k, pit, flatDecor = false) {
   if (!pit?.collapsed || !pit.wallProfile?.mouth) return
   if (!isCaveInteriorVisible(pit)) return
   if (!shouldDrawPitCaveRocks(pit)) return
-  const pal = buildCavePalette(glowRgb('decorGray'))
+  const pal = resolveCavePalette(flatDecor)
   const { floorY } = pit
   const layout = pit.wallProfile
   const seamWall = layout.wallRocks?.filter(rock => rock.straddleMouthGround)
@@ -873,7 +874,8 @@ function drawGlowPitMouthVoidFill(k, pit) {
   if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
     pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
   }
-  const pal = buildCavePalette(glowRgb('decorGray'))
+  const flatDecor = pitUsesFlatGrayCave(pit)
+  const pal = resolveCavePalette(flatDecor)
   const edge = pit.wallProfile.interiorWallEdge
   drawCaveVoidFill(k, pit.wallProfile.mouth, pal, edge)
 }
@@ -1029,7 +1031,7 @@ function growCrack(segs, x, y, angle, len, depth, width) {
   }
 }
 function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
-  const deepRgb = flatDecor ? glowRgb('playfieldOuter') : glowRgb('void')
+  const deepRgb = flatDecor ? glowPreludeBackdropRgb() : glowRgb('void')
   const deep = k.rgb(deepRgb.r, deepRgb.g, deepRgb.b)
   const opacity = 0.72
   for (const s of pit.crackSegs) {
@@ -1057,14 +1059,14 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
   }
   ensureGlowPitMouthWalkShelf(pit)
   const showRocks = shouldDrawPitCaveRocks(pit)
-  bakeCaveInteriorSprite(k, pit, showRocks)
+  bakeCaveInteriorSprite(k, pit, showRocks, flatDecor)
   if (pit._caveSpriteReady) {
     drawCaveInteriorBakedSprite(k, pit)
     return
   }
   const layout = pit.wallProfile
   const mouth = layout.mouth
-  const pal = buildCavePalette(glowRgb('decorGray'))
+  const pal = resolveCavePalette(flatDecor)
   drawCaveVoidFill(k, mouth, pal, layout.interiorWallEdge)
   if (showRocks) {
     drawCaveLayoutRocks(k, layout.wallRocks, pal, floorY)
@@ -1076,7 +1078,7 @@ function drawCaveInteriorRockStyle(k, pit, flatDecor = false) {
 // per frame otherwise. Rebaked on a colour-world transition (see
 // invalidateGlowPitCaveInteriorBake) so the palette matches the current mode.
 //
-function bakeCaveInteriorSprite(k, pit, showRocks) {
+function bakeCaveInteriorSprite(k, pit, showRocks, flatDecor = false) {
   const zone = pit.zone
   const layout = pit.wallProfile
   //
@@ -1096,7 +1098,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   const oy = pit.floorY - 8
   pit._caveSpriteX = ox
   pit._caveSpriteY = oy
-  const bakeKey = showRocks ? 'rocks' : 'void'
+  const bakeKey = `${flatDecor ? 'flat:' : ''}${showRocks ? 'rocks' : 'void'}`
   if (
     pit._caveSpriteReady &&
     pit._caveBakeRocksKey === bakeKey &&
@@ -1107,7 +1109,7 @@ function bakeCaveInteriorSprite(k, pit, showRocks) {
   const h = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
   pit._caveSpriteW = w
   pit._caveSpriteH = h
-  const pal = buildCavePalette(glowRgb('decorGray'))
+  const pal = resolveCavePalette(flatDecor)
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -1336,6 +1338,37 @@ function buildCavePalette(_groundC) {
     rim: glowRgb(rock.light),
     rimEdge: floor
   }
+}
+//
+// Gray-mode cave — layered neutral tones (not the brown colour-world earth).
+//
+function buildCavePaletteFlatGray() {
+  const deep = glowPreludeBackdropRgb()
+  const mid = glowRgb('dialogFill')
+  const rim = glowRgb('decorGray')
+  const pebble = glowRgb('glowOutlineLight')
+  const highlight = glowRgb('lightGray')
+  return {
+    void: deep,
+    depthOuter: deep,
+    depthMid: mid,
+    depthInner: deep,
+    floor: mid,
+    pebble,
+    rim,
+    rimEdge: highlight
+  }
+}
+function resolveCavePalette(flatDecor) {
+  return flatDecor ? buildCavePaletteFlatGray() : buildCavePalette(glowRgb('decorGray'))
+}
+function pitUsesFlatGrayCave(pit) {
+  const inst = pit?.sceneRef
+  if (!inst?.zones) return false
+  const z = inst.zones
+  if (z.lCollected || z.colorWorld) return false
+  if ((inst.colorFade ?? 0) >= 0.5) return false
+  return true
 }
 //
 // Builds ragged mouth edges and floor pebbles — no arch lip above ground.
@@ -1879,7 +1912,6 @@ function isGlowPitMushroomFlatMono(sc) {
   if (!sc?.zones) return false
   const z = sc.zones
   if (z.lCollected || z.colorWorld) return false
-  if ((sc.colorFade ?? 0) >= 0.5) return false
   return true
 }
 function drawPitTrampoline(k, pit) {
@@ -1891,8 +1923,9 @@ function drawPitTrampoline(k, pit) {
   const sc = pit.sceneRef
   const z = sc?.zones
   const fade = sc?.colorFade ?? 0
-  const colorMush = z?.lCollected || z?.oCollected || z?.colorWorld || fade >= 0.5
-  const flatMono = isGlowPitMushroomFlatMono(sc)
+  const flatMono = isGlowPitMushroomFlatMono(sc) || !z?.lCollected
+  const colorMush = !flatMono &&
+    (z?.lCollected || z?.oCollected || z?.colorWorld || fade >= 0.5)
   const sprite = colorMush
     ? PIT_MUSH_OUTLINE_SPRITE
     : flatMono
@@ -2220,8 +2253,8 @@ function updatePitTrampoline(pit, char) {
   }
 }
 function spawnPitBurst(pit) {
-  const { k, zone, floorY, groundColor } = pit
-  const c = groundColor || glowRgb('void')
+  const { k, zone, floorY } = pit
+  const c = pitCrackStompParticleColor(pit) || glowRgb(GLOW_PAL.decorGray)
   for (let i = 0; i < PIT_PARTICLE_COUNT; i++) {
     const angle = -Math.PI * 0.15 - Math.random() * Math.PI * 0.7
     const speed = 120 + Math.random() * 220

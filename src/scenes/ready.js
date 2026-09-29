@@ -332,7 +332,7 @@ const HERO_N_SPRITE_SIZE = 96
 //
 // Offset applied to hero-n position so it sits visually inside the title word
 //
-const HERO_N_OFFSET_X = 6
+const HERO_N_OFFSET_X = 1
 const HERO_N_OFFSET_Y = 1
 //
 // Offsets for the flipped hero-u: shifted left of the char cell. Y is
@@ -374,7 +374,9 @@ const HERO_N_SPRITE_PREFIX_OUTLINE = buildHeroSpritePrefix(HERO_TITLE_OUTLINE_BA
 //
 const HERO_TITLE_TINTABLE_BAKE_OPTS = {
   type: HEROES.HERO,
-  bodyColor: HERO_TITLE_OUTLINE_COLOR
+  bodyColor: HERO_TITLE_OUTLINE_COLOR,
+  outlineColor: CFG.visual.colors.outline,
+  noEyes: true
 }
 const HERO_N_SPRITE_PREFIX_TINTABLE = buildHeroSpritePrefix(HERO_TITLE_TINTABLE_BAKE_OPTS)
 //
@@ -1455,7 +1457,7 @@ function updateReadyDepartureFade(k, runner, spiderState) {
   const fadeEndX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
   const span = fadeEndX - runner.heroDepartStartX
   if (span <= 0) return
-  const progress = (runner.heroX - runner.heroDepartStartX) / span
+  const progress = Math.min(1, ((runner.heroX - runner.heroDepartStartX) / span) * 1.65)
   spiderState.departureFade = Math.max(0, Math.min(1, 1 - progress))
   spiderState._departureFadeHold = spiderState.departureFade
   spiderState.eyeFinalFade = 0
@@ -1792,44 +1794,122 @@ function drawTitleHero(k, spider, departureFade = 1) {
       opacity: revealT * departureFade
     })
   }
+  const closedIdleFace =
+    spider.heroPhase === 'idle' || spider.heroPhase === 'wakeBothEyes'
   spider.heroPhase === 'wakeOneEye' && revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy)
-  revealT >= 1 && drawHeroRunnerEyes(k, spider, cx, cy, departureFade)
+  closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade)
+  revealT >= 1 && !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade)
   drawHeroNNotes(k, spider, departureFade)
 }
 //
-// Runner eyes while moving right — white sclera, black pupils (tintable bake
-// keeps section colour on the body only).
+// Matches hero.js run-lean side-eye anchor in 96px sprite space.
 //
-function drawHeroRunnerEyes(k, spider, cx, cy, departureFade = 1) {
-  const movingRight =
+const HERO_CANVAS_HEAD_X = 33
+const HERO_CANVAS_HEAD_Y = 18
+const HERO_CANVAS_BODY_BOTTOM = HERO_CANVAS_HEAD_Y + 24 + 24
+const HERO_RUN_LEAN_RAD = 0.2
+const HERO_CHAR_WIDTH = 30
+const HERO_PUPIL_SIDE_SHIFT = 2
+const HERO_RUN_BODY_BOB = 4
+//
+// Vertical bob baked into each run frame (matches hero.js createFrame run bob).
+//
+function readyHeroRunFrameBobPx(frame) {
+  const phase = frame / HERO_N_RUN_FRAME_COUNT
+  return Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * HERO_RUN_BODY_BOB)
+}
+//
+// Side-view eye position for the title runner's run frames (mirrored when facing left).
+//
+function readyHeroSideEyeCanvasPos(facingLeft, runFrame = 0) {
+  const headX = HERO_CANVAS_HEAD_X
+  const headY = HERO_CANVAS_HEAD_Y + readyHeroRunFrameBobPx(runFrame)
+  const localX = headX + 21
+  const localY = headY + 9
+  const pivotX = headX + HERO_CHAR_WIDTH / 2
+  const dx = localX - pivotX
+  const dy = localY - HERO_CANVAS_BODY_BOTTOM
+  const cos = Math.cos(HERO_RUN_LEAN_RAD)
+  const sin = Math.sin(HERO_RUN_LEAN_RAD)
+  let x = pivotX + dx * cos - dy * sin
+  const y = HERO_CANVAS_BODY_BOTTOM + dx * sin + dy * cos
+  if (facingLeft) {
+    const center = HERO_SPRITE_CANVAS_SIZE / 2
+    x = 2 * center - x
+  }
+  return { x, y }
+}
+//
+// One white/black eye disc for the filled title runner (body is noEyes bake).
+//
+function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, scale, opacity) {
+  k.drawCircle({
+    pos: k.vec2(ex, ey),
+    radius: HERO_EYE_RING_RADIUS * scale,
+    color: k.rgb(0, 0, 0),
+    opacity
+  })
+  k.drawCircle({
+    pos: k.vec2(ex, ey),
+    radius: HERO_EYE_WHITE_RADIUS * scale,
+    color: k.rgb(255, 255, 255),
+    opacity
+  })
+  k.drawCircle({
+    pos: k.vec2(ex + pupilDx, ey),
+    radius: HERO_EYE_PUPIL_RADIUS * scale,
+    color: k.rgb(0, 0, 0),
+    opacity
+  })
+}
+//
+// Runner eyes — side profile while moving, front pair while paused idle.
+//
+function drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade = 1) {
+  if (departureFade <= 0.001) return
+  if (spider.heroPhase === 'wakeOneEye') return
+  const s = HERO_N_SPRITE_SCALE
+  const baseX = cx - HERO_N_SPRITE_SIZE / 2
+  const baseY = cy - HERO_N_SPRITE_SIZE / 2
+  const facingLeft = spider.heroPhase === 'lookLeft'
+  const sideView =
     spider.heroPhase === 'run' ||
-    spider.heroPhase === 'pause' ||
-    spider.heroPhase === 'finalWalk'
-  if (!movingRight || departureFade <= 0.001) return
+    spider.heroPhase === 'finalWalk' ||
+    spider.heroPhase === 'lookLeft'
+  if (sideView) {
+    const { x, y } = readyHeroSideEyeCanvasPos(facingLeft, spider.heroRunFrame ?? 0)
+    const pupilDx = (facingLeft ? -HERO_PUPIL_SIDE_SHIFT : HERO_PUPIL_SIDE_SHIFT) * s
+    drawHeroTitleEyeDisc(
+      k,
+      baseX + x * s,
+      baseY + y * s,
+      pupilDx,
+      s,
+      departureFade
+    )
+    return
+  }
+  if (spider.heroPhase !== 'pause') return
+  const eyeY = baseY + HERO_EYE_CANVAS_Y * s
+  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
+    drawHeroTitleEyeDisc(k, baseX + eyeX * s, eyeY, 0, s, departureFade)
+  }
+}
+//
+// Closed-eye rings while the runner idles and hums (noEyes body bake).
+//
+function drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade = 1) {
+  if (departureFade <= 0.001) return
+  const phase = spider.heroPhase
+  if (phase !== 'idle' && phase !== 'wakeBothEyes') return
   const s = HERO_N_SPRITE_SCALE
   const baseX = cx - HERO_N_SPRITE_SIZE / 2
   const baseY = cy - HERO_N_SPRITE_SIZE / 2
   const eyeY = baseY + HERO_EYE_CANVAS_Y * s
-  const pupilDx = spider.heroPhase === 'lookLeft'
-    ? -HERO_EYE_PUPIL_SHIFT * s
-    : 0
   for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
-    const ex = baseX + eyeX * s
     k.drawCircle({
-      pos: k.vec2(ex, eyeY),
+      pos: k.vec2(baseX + eyeX * s, eyeY),
       radius: HERO_EYE_RING_RADIUS * s,
-      color: k.rgb(0, 0, 0),
-      opacity: departureFade
-    })
-    k.drawCircle({
-      pos: k.vec2(ex, eyeY),
-      radius: HERO_EYE_WHITE_RADIUS * s,
-      color: k.rgb(255, 255, 255),
-      opacity: departureFade
-    })
-    k.drawCircle({
-      pos: k.vec2(ex + pupilDx, eyeY),
-      radius: HERO_EYE_PUPIL_RADIUS * s,
       color: k.rgb(0, 0, 0),
       opacity: departureFade
     })
@@ -1846,7 +1926,9 @@ function resolveHeroFrameSuffix(spider) {
   //
   if (spider.heroPhase === 'lookLeft') return `-run-${HERO_N_LOOK_LEFT_RUN_FRAME}`
   if (spider.heroPhase === 'run' || spider.heroPhase === 'finalWalk') return `-run-${spider.heroRunFrame}`
-  if (spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye') return '_closed'
+  if (spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye' || spider.heroPhase === 'wakeBothEyes') {
+    return '_closed'
+  }
   return '_0_0'
 }
 //

@@ -23,6 +23,14 @@ export function glowRgb(keyOrHex) {
 }
 
 /**
+ * Neutral dark playfield fill before the colour world (matches ready exit).
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function glowPreludeBackdropRgb() {
+  return glowRgb('glowPreludeBackdrop')
+}
+
+/**
  * Cave pit floor — lower soil layer (groundSand), slightly lifted for readability.
  * @returns {{ r: number, g: number, b: number }}
  */
@@ -249,25 +257,19 @@ export function getTreePaletteGray() {
  * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
  */
 export function getCuteMushroomFlatDecorColors() {
-  const g = GLOW_PAL.decorGray
+  const stem = GLOW_PAL.decorGray
+  const cap = GLOW_PAL.lightGray
+  const spot = GLOW_PAL.glowOutlineLight
   return {
-    body: g,
-    bodyShade: g,
-    cap: g,
-    capDark: g,
-    capLight: g,
-    spot: g,
-    //
-    // The pit cave floor/walls are also flat decorGray (see
-    // buildCavePaletteFlat in glow-atmosphere.js) — an outline in the same
-    // tone made the trampoline mushroom fully invisible there. `void` is
-    // the darkest palette swatch already used for every other dark outline
-    // in the level, so this keeps the silhouette readable everywhere this
-    // palette is used without introducing a new hue.
-    //
-    outline: GLOW_PAL.glowContour.forest,
-    face: GLOW_PAL.glowContour.forest,
-    blush: g
+    body: stem,
+    bodyShade: stem,
+    cap,
+    capDark: stem,
+    capLight: cap,
+    spot,
+    outline: GLOW_PAL.decorGray,
+    face: GLOW_PAL.lightGray,
+    blush: stem
   }
 }
 
@@ -284,19 +286,31 @@ export function getCuteMushroomFlatWaterColors() {
  * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
  */
 export function getCuteMushroomFlatPitBakeColors() {
-  const cap = GLOW_PAL.decorGray
-  const stem = GLOW_PAL.void
+  const cap = GLOW_PAL.lightGray
+  const stem = GLOW_PAL.decorGray
+  const spot = GLOW_PAL.glowOutlineLight
   return {
     body: stem,
     bodyShade: stem,
     cap,
-    capDark: cap,
+    capDark: stem,
     capLight: cap,
-    spot: stem,
-    outline: GLOW_PAL.glowContour.forest,
-    face: stem,
-    blush: cap
+    spot,
+    outline: GLOW_PAL.decorGray,
+    face: GLOW_PAL.lightGray,
+    blush: stem
   }
+}
+/**
+ * True while the level stays flat gray (before L / colour world).
+ * @param {Object} [z] - Glow zones object
+ * @param {number} [colorFade] - Scene colour fade 0..1
+ * @returns {boolean}
+ */
+export function isGlowGrayExploreBeforeL(z, colorFade = 0) {
+  if (!z) return false
+  if (z.lCollected || z.colorWorld) return false
+  return true
 }
 
 /**
@@ -305,7 +319,7 @@ export function getCuteMushroomFlatPitBakeColors() {
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
 export function getTreePaletteLit() {
-  return getTreePaletteLitForCorner('parallaxTreeCornerTL')
+  return applyFoliageDensityToPalette(getTreePaletteLitBase(), 'nearground')
 }
 
 /**

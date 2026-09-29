@@ -233,6 +233,11 @@ export const CFG = {
         //
         void: PALETTE.green0,
         //
+        // Pre-colour glow backdrop — neutral dark gray (ready exit tone), not
+        // the green void used once the forest colour world is active.
+        //
+        glowPreludeBackdrop: PALETTE.gray0,
+        //
         // Playfield frame + inner sky base: deep blue-green forest (reference
         // #18352B / #214735 / #2B5740 mapped to Otterisk greens/teals). Warm
         // haze and lit decor still pop against this dark foundation.
@@ -344,6 +349,11 @@ export const CFG = {
         // L pickup caption — same family as parallax near trees, one step darker.
         //
         captionLetterLInk: PALETTE.brown0,
+        //
+        // G pickup caption body — slightly lighter than decorGray so the phrase
+        // reads on the flat prelude without competing with the white G glyph.
+        //
+        captionLetterGInk: PALETTE.gray5,
         //
         // O pickup caption on the colour forest — was the exact same pale
         // sand5 as the highlighted "O" glyph fill (warmCream below), so the

@@ -163,9 +163,10 @@ function buildEarTreeRoots(tree) {
 // Fill-only root lines — round caps plus a tip dot on every terminal end so
 // the taper never reads as chopped off before the point.
 //
-function drawEarTreeRoots(k, tree, rootColor) {
+function drawEarTreeRoots(k, tree, rootColor, opacity = 1) {
   const segs = tree.rootSegs
   if (!segs?.length) return
+  const op = earDrawOpacity(opacity)
   const startKeys = new Set(segs.map(seg => `${seg.startX},${seg.startY}`))
   segs.forEach(seg => {
     const w = Math.max(EAR_TREE_ROOT_MIN_DRAW_WIDTH, seg.width)
@@ -174,14 +175,15 @@ function drawEarTreeRoots(k, tree, rootColor) {
       p2: k.vec2(seg.endX, seg.endY),
       width: w,
       color: rootColor,
-      lineCap: 'round'
+      lineCap: 'round',
+      ...op
     })
   })
   segs.forEach(seg => {
     const key = `${seg.endX},${seg.endY}`
     if (startKeys.has(key)) return
     const tipR = Math.max(EAR_TREE_ROOT_TIP_RADIUS, seg.width * 0.45)
-    k.drawCircle({ pos: k.vec2(seg.endX, seg.endY), radius: tipR, color: rootColor })
+    k.drawCircle({ pos: k.vec2(seg.endX, seg.endY), radius: tipR, color: rootColor, ...op })
   })
 }
 
@@ -203,14 +205,14 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
  * @param {Object} rootColor - Kaplay rgb for the root fan, big-tree style
  */
-export function onDrawTrunks(inst, barkColor, outlineColor) {
-  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+export function onDrawTrunks(inst, barkColor, outlineColor, opacity = 1) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor, opacity))
 }
 //
 // Root fans sit above the grass layer so blade tufts do not crop taper tips.
 //
-export function onDrawRoots(inst, rootColor) {
-  inst.trees.forEach(tree => drawEarTreeRoots(inst.k, tree, rootColor))
+export function onDrawRoots(inst, rootColor, opacity = 1) {
+  inst.trees.forEach(tree => drawEarTreeRoots(inst.k, tree, rootColor, opacity))
 }
 
 /**
@@ -219,8 +221,8 @@ export function onDrawRoots(inst, rootColor) {
  * @param {Object} barkColor - Kaplay rgb for trunk fill
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
  */
-export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor) {
-  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor))
+export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor, opacity = 1) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor, opacity))
 }
 
 /**
@@ -230,10 +232,10 @@ export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor) {
  * @param {Object} outlineColor - Kaplay rgb for outlines
  * @param {Object} lipColor - Kaplay rgb for lip fill
  */
-export function onDrawBranches(inst, barkColor, outlineColor, lipColor) {
+export function onDrawBranches(inst, barkColor, outlineColor, lipColor, opacity = 1) {
   const k = inst.k
   inst.trees.forEach(tree => {
-    tree.branches.forEach(branch => drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor))
+    tree.branches.forEach(branch => drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor, opacity))
   })
 }
 function updateEarTree(tree, heroX, heroY, dt) {
@@ -283,14 +285,17 @@ function updateEarTree(tree, heroX, heroY, dt) {
 // each quad triangulates trivially and correctly via the untriangulated
 // vertex-fan default (see buildTrunkSegmentQuad).
 //
-function drawEarTreeTrunk(k, tree, barkColor, outlineColor) {
-  drawTrunkSegments(k, tree, EAR_TREE_TRUNK_OUTLINE_PAD, outlineColor)
-  drawTrunkSegments(k, tree, 0, barkColor)
-  drawTrunkTopRim(k, tree, outlineColor)
+function earDrawOpacity(opacity) {
+  return opacity < 0.999 ? { opacity } : {}
 }
-function drawTrunkSegments(k, tree, pad, color) {
+function drawEarTreeTrunk(k, tree, barkColor, outlineColor, opacity = 1) {
+  drawTrunkSegments(k, tree, EAR_TREE_TRUNK_OUTLINE_PAD, outlineColor, opacity)
+  drawTrunkSegments(k, tree, 0, barkColor, opacity)
+  drawTrunkTopRim(k, tree, outlineColor, opacity)
+}
+function drawTrunkSegments(k, tree, pad, color, opacity = 1) {
   for (let i = 0; i < EAR_TREE_TRUNK_STEPS; i++) {
-    k.drawPolygon({ pts: buildTrunkSegmentQuad(k, tree, pad, i), color })
+    k.drawPolygon({ pts: buildTrunkSegmentQuad(k, tree, pad, i), color, ...earDrawOpacity(opacity) })
   }
 }
 //
@@ -301,13 +306,14 @@ function drawTrunkSegments(k, tree, pad, color) {
 // rim's ends didn't land on the polygon's actual top corners and poked out
 // past them).
 //
-function drawTrunkTopRim(k, tree, outlineColor) {
+function drawTrunkTopRim(k, tree, outlineColor, opacity = 1) {
   const edge = trunkEdgeAtStep(tree, EAR_TREE_TRUNK_OUTLINE_PAD, EAR_TREE_TRUNK_STEPS)
   k.drawLine({
     p1: k.vec2(edge.left, edge.y),
     p2: k.vec2(edge.right, edge.y),
     width: EAR_TREE_TRUNK_TOP_RIM_W,
-    color: outlineColor
+    color: outlineColor,
+    ...earDrawOpacity(opacity)
   })
 }
 //
@@ -335,24 +341,25 @@ function buildTrunkSegmentQuad(k, tree, pad, i) {
     k.vec2(top.left, top.y)
   ]
 }
-function drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor) {
+function drawEarBranch(k, tree, branch, barkColor, outlineColor, lipColor, opacity = 1) {
   const base = k.vec2(branch.baseX, branch.baseY)
   const tip = k.vec2(branch.tipX, branch.tipY)
   const limbW = Math.max(3, tree.trunkW * 0.42)
-  k.drawCircle({ pos: base, radius: limbW * 0.55 + 1, color: outlineColor })
-  k.drawCircle({ pos: base, radius: limbW * 0.45, color: barkColor })
-  k.drawLine({ p1: base, p2: tip, width: limbW + 2, color: outlineColor })
-  k.drawLine({ p1: base, p2: tip, width: limbW, color: barkColor })
+  const op = earDrawOpacity(opacity)
+  k.drawCircle({ pos: base, radius: limbW * 0.55 + 1, color: outlineColor, ...op })
+  k.drawCircle({ pos: base, radius: limbW * 0.45, color: barkColor, ...op })
+  k.drawLine({ p1: base, p2: tip, width: limbW + 2, color: outlineColor, ...op })
+  k.drawLine({ p1: base, p2: tip, width: limbW, color: barkColor, ...op })
   branch.twigs?.forEach(twig => {
     const twigBase = k.vec2(twig.baseX, twig.baseY)
     const twigTip = k.vec2(twig.tipX, twig.tipY)
-    k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.55 + 1, color: outlineColor })
-    k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.5, color: barkColor })
+    k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.55 + 1, color: outlineColor, ...op })
+    k.drawLine({ p1: twigBase, p2: twigTip, width: limbW * 0.5, color: barkColor, ...op })
     twig.hasMouth && drawMouthAtTip(k, twigTip.x, twigTip.y,
-      Math.atan2(twigTip.y - twigBase.y, twigTip.x - twigBase.x), outlineColor, lipColor)
+      Math.atan2(twigTip.y - twigBase.y, twigTip.x - twigBase.x), outlineColor, lipColor, opacity)
   })
   branch.hasMouth && drawMouthAtTip(k, tip.x, tip.y,
-    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), outlineColor, lipColor)
+    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), outlineColor, lipColor, opacity)
 }
 //
 // Upper and lower lip polygons in local mouth space (+x along the branch).
@@ -376,7 +383,7 @@ const MOUTH_LOWER_LIP = [
   [0.2, 0.06],
   [-0.25, 0.06]
 ]
-function drawMouthAtTip(k, tipX, tipY, angle, outlineColor, lipColor) {
+function drawMouthAtTip(k, tipX, tipY, angle, outlineColor, lipColor, opacity = 1) {
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
   const toWorld = (lx, ly, pad = 0) => {
@@ -393,8 +400,9 @@ function drawMouthAtTip(k, tipX, tipY, angle, outlineColor, lipColor) {
   //
   const upperOutline = MOUTH_UPPER_LIP.map(([lx, ly]) => toWorld(lx, ly, MOUTH_OUTLINE_PAD))
   const lowerOutline = MOUTH_LOWER_LIP.map(([lx, ly]) => toWorld(lx, ly, MOUTH_OUTLINE_PAD))
-  k.drawPolygon({ pts: upperOutline, color: outlineColor, triangulate: true })
-  k.drawPolygon({ pts: lowerOutline, color: outlineColor, triangulate: true })
-  k.drawPolygon({ pts: upper, color: lipColor, triangulate: true })
-  k.drawPolygon({ pts: lower, color: lipColor, triangulate: true })
+  const op = earDrawOpacity(opacity)
+  k.drawPolygon({ pts: upperOutline, color: outlineColor, triangulate: true, ...op })
+  k.drawPolygon({ pts: lowerOutline, color: outlineColor, triangulate: true, ...op })
+  k.drawPolygon({ pts: upper, color: lipColor, triangulate: true, ...op })
+  k.drawPolygon({ pts: lower, color: lipColor, triangulate: true, ...op })
 }

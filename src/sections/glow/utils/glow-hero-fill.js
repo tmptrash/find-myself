@@ -356,5 +356,5 @@ export function syncGlowHeroFillVisual(inst, cfg, fillOpts = {}) {
 }
 export const GLOW_MENU_HERO_FILL_CFG = {
   filledBodyColor: String(CFG.visual.colors.hero.eyeWhite).replace('#', ''),
-  filledOutlineColor: GLOW_PAL.heroOutline
+  filledOutlineColor: CFG.visual.colors.outline
 }

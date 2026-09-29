@@ -200,12 +200,18 @@ const DECOR_GRAY = glowRgb('decorGray')
 //
 const GRASS_GREEN = glowRgb(GLOW_PAL.treeColor.leafShades[0])
 //
-// Foreground ground grass shifts a minority of blades toward a warm autumn
-// tone (see Grass.create's hueVaryMax) so the field doesn't read as one flat
-// unrealistic green.
+// Yellow-brown foreground grass from L onward (same straw as the G peek band).
+//
+const GRASS_WARM = glowRgb(GLOW_PAL.gold)
+const GRASS_STRAW_LIGHT = glowRgb('glowLightBright')
+const GRASS_STRAW_MID = glowRgb('gold')
+const GRASS_STRAW_DARK = glowRgb('groundChernozem')
+//
+// Shifts blades toward a deeper autumn tone on top of the per-blade straw tint.
 //
 const GLOW_GRASS_HUE_VARY_MAX = 1
 const GLOW_GRASS_HUE_VARY_SKEW = 1
+const GRASS_WARM_BLADE_SKEW = 1.55
 const WATER_COLOR = glowRgb('water')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
 //
@@ -923,6 +929,7 @@ const COLOR_CROSSFADE_EPS = 0.001
 // holes). Baked once per mode (gray backdrop / dark colour-world earth).
 //
 const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray-v4'
+const UNDERGROUND_POST_L_BROWN_SPRITE = 'glow0-underground-postl-brown-v1'
 const UNDERGROUND_COLOR_SPRITE = 'glow0-underground-color'
 const UG_TOP_PAD = 30
 const UG_BOTTOM_PAD = 2
@@ -1064,6 +1071,7 @@ const GLOW_HUD_COLLECTED_LETTER_HEX = CFG.visual.colors.hero.eyeWhite
 // Filled glow hero body after the post-L colour reveal — white inside, dark rim.
 //
 const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
+const HERO_FILLED_OUTLINE_COLOR = CFG.visual.colors.outline
 //
 // Hollow glow eyes: outline ring + matching pupil, clear socket.
 // Filled glow eyes: white sclera + black pupils (standard hero bake).
@@ -2540,12 +2548,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       treeRevealLandingCount: 0,
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
       treeGraySpriteName: glowMonolithTreeGraySpriteName(zones),
-      colorFade: zones.colorWorld || zones.oZone ? 1 : 0,
+      colorFade: zones.colorWorld || zones.oZone || zones.lCollected ? 1 : 0,
       colorFadeTarget: zones.lCollected || zones.colorWorld || zones.oZone ? 1 : 0,
       //
-      // Parallax forest fades in during the post-L stillness countdown only.
+      // Post-L uses the same full colour beat as the reachable O zone (see
+      // applyGlowPostLLitState) — not a separate preview ramp on pickup.
       //
-      parallaxFade: zones.colorWorld || zones.oZone ? 1 : 0,
+      parallaxFade: zones.colorWorld || zones.oZone || zones.lCollected ? 1 : 0,
       _meditationParallaxPreview: false,
       _meditationPreviewFadingOut: false,
       //
@@ -2797,7 +2806,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.midges.worldLife = 1
     inst.k.wait(0, () => syncGlowHeroFillVisual(inst, {
       filledBodyColor: HERO_FILLED_BODY_COLOR,
-      filledOutlineColor: HERO_OUTLINE_COLOR,
+      filledOutlineColor: HERO_FILLED_OUTLINE_COLOR,
       postBakeCanvas: applyGlowGameplaySharpBake
     }, glowHeroFillOpts(inst)))
     maybeShowGLetter(inst)
@@ -4650,7 +4659,9 @@ function glowPostLPlatformShadeReveal(sc) {
 function glowGrassColorFade(sc, zones) {
   if (!sc) return 0
   const fade = sc.colorFade ?? 0
-  if (!zones.lCollected || zones.oZone || zones.oCollected) return fade
+  if (zones.colorWorld || zones.oZone || zones.oCollected) return fade
+  if (zones.lCollected && fade >= 1 - COLOR_CROSSFADE_EPS) return fade
+  if (!zones.lCollected) return fade
   if (sc.meditation?.countdown == null) return 0
   return fade
 }
@@ -4690,12 +4701,13 @@ function glowDecorFade(inst) {
   return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
 }
 //
-// Hedgehogs, lake, and trampolines go full colour as soon as L is taken —
-// not only when the stillness countdown finishes.
+// Hedgehogs, lake, and trampolines share the same colour fade as the O-beat
+// world (full once L is taken — see applyGlowPostLLitState / revealOZone).
 //
 function glowLZoneDecorFade(inst) {
   const z = inst?.zones
-  if (z?.lCollected || z?.colorWorld || z?.oCollected) return 1
+  if (z?.colorWorld || z?.oCollected || z?.oZone) return 1
+  if (z?.lCollected) return glowDecorFade(inst)
   return glowDecorFade(inst)
 }
 //
@@ -4708,6 +4720,7 @@ function glowLZoneDecorFade(inst) {
 function glowTreeColorFade(inst) {
   const z = inst?.zones
   if (z?.oZone || z?.oCollected || z?.colorWorld) return 1
+  if (z?.lCollected && glowDecorFade(inst) >= 1 - COLOR_CROSSFADE_EPS) return 1
   if (z?.lCollected && inst?.meditation?.countdown == null) return 0
   return glowDecorFade(inst)
 }
@@ -4738,12 +4751,12 @@ function syncMeditationColorFade(inst) {
   if (z.colorWorld || z.oCollected) return
   if (z.lCollected) {
     inst._meditationPreviewFadingOut = false
-    const fade = inst.meditation?.countdown != null ? meditationCountdownFade(inst) : 0
+    const held = glowDecorFade(inst)
+    const fade = z.oZone ? 1 : (held >= 1 - COLOR_CROSSFADE_EPS ? 1 : held)
     inst.colorFade = fade
     inst.parallaxFade = fade
     inst.colorFadeTarget = 1
-    fade > 0.001 && !z.lZoneParallax && revealLParallaxZone(inst)
-    fade <= 0.001 && (inst.parallaxFade = 0)
+    !z.lZoneParallax && revealLParallaxZone(inst)
     syncTreeColorCrossfade(inst)
     applyZoneVisibility(inst)
     return
@@ -4765,13 +4778,9 @@ function resetMeditationColorPreview(inst) {
   if (z.colorWorld || z.oCollected) return
   if (z.lCollected) {
     inst._meditationPreviewFadingOut = false
-    inst.meditationWorldLife = 0
-    inst.colorFade = 0
-    inst.parallaxFade = 0
-    inst.colorFadeTarget = 1
+    inst._meditationParallaxPreview = false
     stopMeditationBirds(inst)
-    syncTreeColorCrossfade(inst)
-    applyZoneVisibility(inst)
+    applyGlowPostLLitState(inst)
     return
   }
   if ((inst.colorFade ?? 0) <= 0.001 && (inst.parallaxFade ?? 0) <= 0.001) {
@@ -4789,13 +4798,8 @@ function finishMeditationColorPreviewReset(inst) {
   if (z.lCollected) {
     inst._meditationParallaxPreview = false
     inst._meditationPreviewFadingOut = false
-    inst.meditationWorldLife = 0
-    inst.colorFade = 0
-    inst.parallaxFade = 0
-    inst.colorFadeTarget = 1
     stopMeditationBirds(inst)
-    syncTreeColorCrossfade(inst)
-    applyZoneVisibility(inst)
+    applyGlowPostLLitState(inst)
     return
   }
   inst._meditationParallaxPreview = false
@@ -4818,7 +4822,7 @@ function updateMeditationPreviewFadeOut(inst, dt) {
   const z = inst.zones
   if (z.lCollected || z.colorWorld || z.oCollected || inst.meditation?.countdown != null) {
     inst._meditationPreviewFadingOut = false
-    z.lCollected && (inst.meditationWorldLife = 0, stopMeditationBirds(inst), applyZoneVisibility(inst))
+    z.lCollected && (stopMeditationBirds(inst), applyGlowPostLLitState(inst))
     return
   }
   const next = Math.max(0, (inst.colorFade ?? 0) - dt * MEDITATION_WORLD_SLEEP_SPEED)
@@ -4839,6 +4843,10 @@ function updateMeditationWorldLife(inst) {
   // O zone or the permanent colour world lock the world fully awake.
   //
   if (z.oZone || z.oCollected) {
+    inst.meditationWorldLife = 1
+    return
+  }
+  if (z.lCollected && (inst.colorFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS) {
     inst.meditationWorldLife = 1
     return
   }
@@ -5367,7 +5375,9 @@ function createGlowChainBuoyLayer(k, inst) {
     k.z(GLOW_CHAIN_BUOY_Z),
     {
       draw() {
-        if (!inst.chainBuoys || !inst.zones.lCollected) return
+        const z = inst.zones
+        if (!inst.chainBuoys || !z.lCollected) return
+        if (!z.oZone && !z.oCollected && !z.colorWorld) return
         const c = glowChainBuoyColors(inst, k)
         ChainBuoy.onDraw(inst.chainBuoys, c)
       }
@@ -6347,7 +6357,7 @@ function drawExploredGroundLip(inst) {
   const bodyC = DECOR_OUTLINE_RGB
   const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
   const rimRgb = fade > COLOR_CROSSFADE_EPS
-    ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
+    ? lerpRgb(bodyC, glowGrassColourTarget(inst.zones), 0.82)
     : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
   const x0 = LEFT_MARGIN
@@ -6415,15 +6425,30 @@ function loadUndergroundSprites(k) {
 // earth band; the colour world sits on the near-black earth, so its
 // features read as slightly lighter tones.
 //
+function undergroundEarthDecorSprite(z) {
+  if (!z?.lCollected) return UNDERGROUND_GRAY_SPRITE
+  if (z.colorWorld) return UNDERGROUND_COLOR_SPRITE
+  return UNDERGROUND_POST_L_BROWN_SPRITE
+}
 function undergroundPaletteEntries() {
   const flatGray = glowRgb(GLOW_PAL.decorGray)
   const flatDeep = glowRgb(GLOW_PAL.lightGray)
+  const brownFill = glowRgb('groundSand')
+  const brownDeep = glowRgb(GLOW_PAL.log.bark)
+  const brownLight = glowRgb(GLOW_PAL.log.barkLight)
   return [
     {
       name: UNDERGROUND_GRAY_SPRITE,
       fill: flatGray,
       deep: flatDeep,
       light: glowRgb(GLOW_PAL.brightLight),
+      monoStrokes: true
+    },
+    {
+      name: UNDERGROUND_POST_L_BROWN_SPRITE,
+      fill: brownFill,
+      deep: brownDeep,
+      light: brownLight,
       monoStrokes: true
     },
     {
@@ -7265,6 +7290,10 @@ function drawUndergroundLayer(inst) {
     drawBands(UNDERGROUND_GRAY_SPRITE, 1)
     return
   }
+  if (!z.colorWorld) {
+    drawBands(UNDERGROUND_POST_L_BROWN_SPRITE, 1)
+    return
+  }
   //
   // Once fully faded, skip the now-invisible gray sprite entirely — drawing
   // a fully transparent full-screen sprite every frame forever after O still
@@ -8096,7 +8125,7 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     roots: true,
     getRootColor: () => glowGrassRootColor(zones),
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVaryMax: zones.lCollected || zones.oCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
@@ -8123,7 +8152,7 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     roots: true,
     getRootColor: () => glowGrassRootColor(zones),
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVaryMax: zones.lCollected || zones.oCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
@@ -8145,7 +8174,7 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: () => glowSpikeGrassTint(zones._sceneRef, zones),
     getSwayScale: () => glowGrassSwayScale(zones),
-    hueVaryMax: zones.lCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVaryMax: zones.lCollected || zones.oCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   clampGlowSpikeGrassInsidePlatformRight(grass, x2, RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET)
@@ -8173,7 +8202,7 @@ function clampGlowSpikeGrassInsidePlatformRight(grass, platRightX, insetLeft) {
 function glowSpikeGrassTint(sc, zones) {
   if (!zones.lPlatRevealed) return null
   if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-  return glowPeekStrawGrassTint(sc, zones)
+  return glowPeekStrawGrassTint(sc, zones, null)
 }
 //
 // Fixed wooden spikes on the L-log's right edge — a static hazard drawn
@@ -8246,12 +8275,49 @@ function drawGlowRightSpikes(k, zones, spikes) {
 //
 // Grass tint for the mud band only — visible after G until the post-L countdown opens the rest.
 //
+function glowGrassColourTarget(zones) {
+  if (zones.colorWorld) return GRASS_GREEN
+  return zones.lCollected || zones.oCollected ? GRASS_WARM : GRASS_GREEN
+}
+//
+// Post-L straw field — gold tips, ochre mid, brown shadow blades (no gray wash).
+//
+function glowGrassWarmStrawActive(zones, sc) {
+  return Boolean(
+    (zones.lCollected || zones.oCollected) && !zones.colorWorld && sc && !isGlowFlatSingleDecorColor(sc)
+  )
+}
+function glowGrassWarmColourFade(sc, zones) {
+  if (!glowGrassWarmStrawActive(zones, sc)) return glowGrassGreenFade(sc, zones)
+  if ((sc.colorFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS) return 1
+  return Math.max(glowGrassGreenFade(sc, zones), sc.colorFade ?? 0)
+}
+function glowGrassBladeWarmTint(blade) {
+  const t = Math.pow(blade.colorSeed ?? 0, GRASS_WARM_BLADE_SKEW)
+  if (t < 0.34) return GRASS_STRAW_MID
+  if (t < 0.67) return lerpRgb(GRASS_STRAW_MID, GRASS_STRAW_LIGHT, (t - 0.34) / 0.33)
+  return lerpRgb(GRASS_STRAW_MID, GRASS_STRAW_DARK, (t - 0.67) / 0.33)
+}
+function glowGrassWarmTintFromGray(sc, zones, blade, fade) {
+  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+  const warm = glowGrassBladeWarmTint(blade)
+  return fade >= 1 - COLOR_CROSSFADE_EPS ? warm : lerpRgb(gray, warm, fade)
+}
 function glowMudZoneGrassTint(sc, zones, blade) {
   if (!sc?.zones.gCollected || !isGlowDecorWorldXInMudZone(sc, blade.x)) return null
   if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const fade = glowGrassGreenFade(sc, zones)
-  const mudGreen = lerpRgb(GRASS_GREEN, GLOW_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
+  const fade = glowGrassWarmColourFade(sc, zones)
+  if (glowGrassWarmStrawActive(zones, sc)) {
+    const mudWarm = lerpRgb(
+      glowGrassBladeWarmTint(blade),
+      GRASS_STRAW_DARK,
+      MUD_ZONE_GRASS_GREEN_VOID_LERP
+    )
+    return fade >= 1 - COLOR_CROSSFADE_EPS ? mudWarm : lerpRgb(gray, mudWarm, fade)
+  }
+  const grassTarget = glowGrassColourTarget(zones)
+  const mudGreen = lerpRgb(grassTarget, GLOW_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
   if (fade >= 1) {
     sc._grassMudColorSettled ??= lerpRgb(gray, mudGreen, 1)
     return sc._grassMudColorSettled
@@ -8263,17 +8329,22 @@ function glowMudZoneGrassTint(sc, zones, blade) {
 // mouth) — same gray/green crossfade as the mud band itself, just without
 // the taller mud-specific blade scale (see glowMudZoneGrassTint).
 //
-function glowPeekStrawGrassTint(sc, zones) {
+function glowPeekStrawGrassTint(sc, zones, blade) {
   if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+  const fade = glowGrassWarmColourFade(sc, zones)
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+  if (glowGrassWarmStrawActive(zones, sc)) {
+    return blade
+      ? glowGrassWarmTintFromGray(sc, zones, blade, fade)
+      : (fade >= 1 - COLOR_CROSSFADE_EPS ? GRASS_STRAW_MID : lerpRgb(gray, GRASS_STRAW_MID, fade))
+  }
   const straw = glowRgb(GLOW_GOLD_HEX)
-  const fade = glowGrassGreenFade(sc, zones)
   if (fade >= 1) return straw
   return lerpRgb(gray, straw, fade)
 }
 function glowGroundPeekGrassTint(sc, zones, blade) {
   if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
-  return glowPeekStrawGrassTint(sc, zones)
+  return glowPeekStrawGrassTint(sc, zones, blade)
 }
 //
 // Resolves the tint of one grass blade for the current frame: null while the
@@ -8354,7 +8425,7 @@ function glowGrassTint(zones, blade) {
   //
   if (sc && zones.colorWorld && (sc.colorFade ?? 0) >= 1) {
     if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), glowGrassColourTarget(zones), 1)
     if (sc.zones.groundDecorRight) return sc._grassColorSettled
     const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
     if (side === 'left') {
@@ -8374,7 +8445,8 @@ function glowGrassTint(zones, blade) {
   }
   if (sc && (sc.colorFade ?? 0) >= 1 && zones.groundDecorRight && (sc.leftDecorFade ?? 1) >= 1) {
     if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+    if (glowGrassWarmStrawActive(zones, sc)) return glowGrassBladeWarmTint(blade)
+    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), glowGrassColourTarget(zones), 1)
     return sc._grassColorSettled
   }
   const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
@@ -8383,26 +8455,38 @@ function glowGrassTint(zones, blade) {
     const leftFade = sc?.leftDecorFade ?? 1
     if (leftFade < 0.04) return null
     if (sc && isGlowFlatSingleDecorColor(sc)) return leftFade >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: leftFade }
+    if (glowGrassWarmStrawActive(zones, sc)) {
+      const fade = glowGrassWarmColourFade(sc, zones)
+      const rgb = glowGrassWarmTintFromGray(sc, zones, blade, fade)
+      return leftFade >= 1 ? rgb : { ...rgb, opacity: leftFade }
+    }
     const fade = glowGrassGreenFade(sc, zones)
+    const grassTarget = glowGrassColourTarget(zones)
     if (fade >= 1 && leftFade >= 1) {
-      sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+      sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), grassTarget, 1)
       return sc._grassColorSettled
     }
     const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
     const rgb = fade >= 1
-      ? (sc._grassColorSettled ??= lerpRgb(gray, GRASS_GREEN, 1))
-      : lerpRgb(gray, GRASS_GREEN, fade)
+      ? (sc._grassColorSettled ??= lerpRgb(gray, grassTarget, 1))
+      : lerpRgb(gray, grassTarget, fade)
     return { ...rgb, opacity: leftFade }
   }
   const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
   const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
   if (op < 0.04) return null
   if (sc && isGlowFlatSingleDecorColor(sc)) return op >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: op }
+  if (glowGrassWarmStrawActive(zones, sc)) {
+    const fade = glowGrassWarmColourFade(sc, zones)
+    const rgb = glowGrassWarmTintFromGray(sc, zones, blade, fade)
+    return op >= 1 ? rgb : { ...rgb, opacity: op }
+  }
   const fade = glowGrassGreenFade(sc, zones)
+  const grassTarget = glowGrassColourTarget(zones)
   if (fade >= 1) {
     sc._grassColorSettled ??= lerpRgb(
       lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)),
-      GRASS_GREEN,
+      grassTarget,
       1
     )
     if (op >= 1) return sc._grassColorSettled
@@ -8410,7 +8494,7 @@ function glowGrassTint(zones, blade) {
     return { r: settled.r, g: settled.g, b: settled.b, opacity: op }
   }
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const rgb = lerpRgb(gray, GRASS_GREEN, fade)
+  const rgb = lerpRgb(gray, grassTarget, fade)
   return op >= 1 ? rgb : { ...rgb, opacity: op }
 }
 //
@@ -8432,6 +8516,7 @@ function glowMeditationWorldLife(inst) {
   const z = inst.zones
   if (isGlowEyeIntroPending(z)) return 1
   if (z.oZone || z.oCollected) return 1
+  if (z.lCollected && (inst.colorFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS) return 1
   if (inst.meditation?.countdown != null) return inst.meditationWorldLife ?? 0
   return 0
 }
@@ -9377,11 +9462,20 @@ function glowParallaxNearGrayOpacity(inst, layer, pf, fade, crossfade) {
   return Math.max(pf, 1)
 }
 //
+// After L, only the nearest tree/bush row is visible until the O zone opens.
+//
+function shouldDrawGlowParallaxForestRow(inst, layer) {
+  const z = inst?.zones
+  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) return true
+  return layer === PAR_LAYER_NEAR
+}
+//
 // Draws one parallax layer for the current world mode: a single opaque slice
 // in the settled colour world, or a gray↔colour crossfade while the world is
 // still turning colourful (meditation preview or the post-O fade).
 //
 function drawParallaxLayer(inst, layer) {
+  if (!shouldDrawGlowParallaxForestRow(inst, layer)) return
   const k = inst.k
   const zones = inst.zones
   const fade = inst.colorFade
@@ -9944,7 +10038,7 @@ function drawMudGroundZone(inst) {
       color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
     })
   } else {
-    drawUndergroundSpriteBand(k, UNDERGROUND_GRAY_SPRITE, 1, x1, x2)
+    drawUndergroundSpriteBand(k, undergroundEarthDecorSprite(inst.zones), 1, x1, x2)
   }
   drawGlowMudZoneGroundLine(inst, x1, x2)
 }
@@ -9991,7 +10085,7 @@ function drawGlowMudZoneGroundLine(inst, x1, x2) {
   const rimRgb = flatMono
     ? lerpRgb(DECOR_GRAY, LIGHT_GRAY, 0.35)
     : fade > COLOR_CROSSFADE_EPS
-      ? lerpRgb(bodyC, GRASS_GREEN, 0.82)
+      ? lerpRgb(bodyC, glowGrassColourTarget(inst.zones), 0.82)
       : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
   //
@@ -10516,7 +10610,7 @@ function applyGlowHeroBodyFill(inst) {
     type: Hero.HEROES.HERO,
     ...getGlowHeroEyeBakeColors(false),
     bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
+    outlineColor: HERO_FILLED_OUTLINE_COLOR,
     outlineOnly: false,
     noEyes: hero.noEyes,
     addMouth: hero.addMouth,
@@ -10524,7 +10618,7 @@ function applyGlowHeroBodyFill(inst) {
     addWatch: hero.addWatch,
     postBakeCanvas: applyGlowGameplaySharpBake
   })
-  const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_OUTLINE_COLOR).replace('#', '')}`
+  const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_FILLED_OUTLINE_COLOR).replace('#', '')}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
     + `_ew${String(CFG.visual.colors.hero.eyeWhite).replace('#', '')}`
     + `_pu${String(CFG.visual.colors.hero.eyePupil).replace('#', '')}`
@@ -10537,7 +10631,7 @@ function applyGlowHeroBodyFill(inst) {
   hero.outlineOnly = false
   char.opacity = 1
   hero.bodyColor = HERO_FILLED_BODY_COLOR
-  hero.outlineColor = String(HERO_OUTLINE_COLOR).replace('#', '')
+  hero.outlineColor = String(HERO_FILLED_OUTLINE_COLOR).replace('#', '')
   Object.assign(hero, getGlowHeroEyeBakeColors(false))
   hero.spritePrefix = filledPrefix
   inst.heroBodyFillApplied = true
@@ -10563,7 +10657,7 @@ function glowHeroFillOpts(inst) {
 }
 const GLOW_LEVEL_FILL_CFG = {
   filledBodyColor: HERO_FILLED_BODY_COLOR,
-  filledOutlineColor: HERO_OUTLINE_COLOR,
+  filledOutlineColor: HERO_FILLED_OUTLINE_COLOR,
   postBakeCanvas: applyGlowGameplaySharpBake,
   onFullFill: applyGlowHeroBodyFill
 }
@@ -10652,17 +10746,31 @@ function applyGlowPostLStillnessReveal(inst) {
   rebakeTrampolineGraySprites(inst.k)
   rebakeGlowRockSpritesShaded(inst)
   persistLLitZoneProgress(inst)
+  if (!inst.zones.oZone) {
+    inst.colorFade = 1
+    inst.parallaxFade = 1
+    inst.meditationWorldLife = 1
+    syncTreeColorCrossfade(inst)
+  }
   applyZoneVisibility(inst)
 }
 //
-// After L: monolith tree goes sand-lit; nearest parallax row (trees + bush
-// strip) appears in gray immediately; farther rows, grass and full colour
-// wait for the stillness countdown (see syncMeditationColorFade).
+// After L: same full-colour world beat as when the O letter is reachable
+// (revealOZone) — stillness countdown only gates O platform + birds, not a
+// second palette on pickup.
 //
 function applyGlowPostLLitState(inst) {
+  const z = inst.zones
   inst.colorFadeTarget = 1
   inst._meditationParallaxPreview = false
   inst._meditationPreviewFadingOut = false
+  if (z.lCollected && !z.oCollected && !z.colorWorld) {
+    inst.colorFade = 1
+    inst.parallaxFade = 1
+    inst.meditationWorldLife = 1
+    inst.earTreeRevealFade = 1
+    !z.lZoneParallax && revealLParallaxZone(inst)
+  }
   syncTreeColorCrossfade(inst)
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   applyZoneVisibility(inst)
@@ -11173,13 +11281,14 @@ function collectLetterL(inst) {
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, GLOW_HERO_FILL_L)
   inst.zones.lCollected = true
-  inst.earTreeRevealFade = 0
   dismissGlowLPlatTeacherHint(inst)
   inst._postLStopHintShows = 0
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
   inst._lakeColorSettled = null
   inst._lakeDrawRgb = null
+  inst._grassColorSettled = null
+  inst._grassMudColorSettled = null
   set(KEY_COLLECTED_L, true)
   inst.zones.outerFrame = true
   set(KEY_REVEALED_OUTER_FRAME, true)
@@ -11228,6 +11337,8 @@ function collectLetterO(inst) {
   queueGlowHeroFillReveal(inst, 1)
   inst.zones.oCollected = true
   set(KEY_COLLECTED_O, true)
+  inst._grassColorSettled = null
+  inst._grassMudColorSettled = null
   dismissGlowPostLStopTeacherHint(inst)
   inst._postOBigMushHintShows = 0
   inst.teacherContextAccum = 0

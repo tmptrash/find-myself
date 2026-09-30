@@ -1,5 +1,24 @@
+import { CFG } from '../../../cfg.js'
 import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 import { drawGlowEyeCreature } from './glow-eye-creature.js'
+import { glowRgb } from './glow-palette.js'
+//
+// Stalk-eye pupil: gray decor before L, hero black after (colour world keeps
+// the same rule — only the stalk palette switches to eyeCreature).
+//
+const CHAIN_BUOY_PUPIL_PRE_L_PALETTE_KEY = 'decorGray'
+const CHAIN_BUOY_PUPIL_POST_L_HEX = CFG.visual.colors.hero.eyePupil
+/**
+ * Resolves stalk-eye pupil RGB from glow zone flags (plain {r,g,b}).
+ * @param {Object} [zones] - Glow zones object from the live scene
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function chainBuoyPupilRgb(zones) {
+  if (!zones?.lCollected) {
+    return glowRgb(CHAIN_BUOY_PUPIL_PRE_L_PALETTE_KEY)
+  }
+  return glowRgb(CHAIN_BUOY_PUPIL_POST_L_HEX)
+}
 //
 // Segmented stick-on-a-chain eye creatures — dark green-black body, warm
 // luminous sclera on top. Each stalk sways on its own phase; pupils track
@@ -85,17 +104,22 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * Draws every chain-buoy stalk-eye — body geometry first, then eyes.
  * @param {Object} inst - Chain-buoy inst
  * @param {Object} colors - { body, sclera, pupil, highlight, contour, root }
+ * @param {Object} [zones] - Live glow zones (pupil colour is resolved here)
  */
-export function onDraw(inst, colors) {
+export function onDraw(inst, colors, zones) {
   const body = colors.body
+  const k = inst.k
+  const pupilTriplet = chainBuoyPupilRgb(zones)
+  const pupilColor = k.rgb(pupilTriplet.r, pupilTriplet.g, pupilTriplet.b)
+  const eyeColors = { ...colors, pupil: pupilColor }
   inst.buoys.forEach(buoy => {
     if (chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)) return
-    drawBuoyRoots(inst.k, buoy, colors.root)
+    drawBuoyRoots(k, buoy, colors.root)
     const points = buildBuoyChainPoints(buoy, inst.time)
-    drawBuoySegments(inst.k, points, buoy.segmentWidth, body)
-    drawBuoySideArms(inst.k, buoy, points, buoy.segmentWidth, body)
-    drawBuoyJoints(inst.k, points, buoy.segmentWidth, body)
-    drawBuoyEye(inst.k, buoy, points, colors, inst.lookX, inst.lookY)
+    drawBuoySegments(k, points, buoy.segmentWidth, body)
+    drawBuoySideArms(k, buoy, points, buoy.segmentWidth, body)
+    drawBuoyJoints(k, points, buoy.segmentWidth, body)
+    drawBuoyEye(k, buoy, points, eyeColors, inst.lookX, inst.lookY)
   })
 }
 //
@@ -213,7 +237,7 @@ function drawBuoyEye(k, buoy, points, colors, heroX, heroY) {
       scleraR: BUOY_EYE_RADIUS,
       pupilR: BUOY_PUPIL_RADIUS,
       contourExtra
-    })
+    }, { skipHighlight: true })
     return
   }
   k.drawCircle({

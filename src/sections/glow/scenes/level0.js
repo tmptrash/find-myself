@@ -7,7 +7,7 @@ import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerGlowNativeTeardown } from '../../../utils/engine-switch.js'
 import { eyeHudSpriteIsDesat } from '../../../utils/eye-hud.js'
-import { yieldForGpu, setLoaderBarPct } from '../../../utils/boot-loader.js'
+import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
 import { MENU_BG_FRONT_LEAF_RGB } from '../../../utils/menu-bg-generator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
@@ -1071,6 +1071,10 @@ const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
 //
 const GLOW_HUD_COLLECTED_LETTER_HEX = CFG.visual.colors.hero.eyeWhite
 //
+// Life HUD eye pupil before L — dark gray so it reads with the gray world.
+//
+const GLOW_HUD_EYE_PUPIL_PRE_L_RGB = glowRgb(GLOW_PAL.dialogFill)
+//
 // Filled glow hero body after the post-L colour reveal — white inside, dark rim.
 //
 const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
@@ -1860,9 +1864,11 @@ export function setGlowLevel0BootstrapReporter(reporter, slice = { start: 38, en
   glowLevel0BootstrapReporter = reporter
   glowLevel0BootstrapSlice = slice
   glowLevel0BootstrapLocalMax = 0
+  setLoaderBarCreepBoost(true)
 }
 export function clearGlowLevel0BootstrapReporter() {
   glowLevel0BootstrapReporter = null
+  setLoaderBarCreepBoost(false)
 }
 export function waitForGlowLevel0Bootstrap() {
   return glowLevel0BootstrapPromise || Promise.resolve()
@@ -1884,6 +1890,7 @@ function glowInitStale(session) {
 async function glowBootstrapPause(bootstrap, localPct, session) {
   if (glowInitStale(session)) return true
   bootstrap?.report?.(localPct)
+  bootstrap?.yieldStep && await bootstrap.yieldStep()
   bootstrap?.yieldStep && await bootstrap.yieldStep()
   return glowInitStale(session)
 }
@@ -2435,6 +2442,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     if (await glowBootstrapPause(bootstrap, 72, session)) return
+    if (await glowBootstrapPause(bootstrap, 74, session)) return
     initTouchInput(k)
     TouchControls.create(k)
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
@@ -2455,8 +2463,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     syncGlowLifeScoreVisibility(levelIndicator, startingLifeScore)
     set(KEY_LIFE_SHOWN, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
+    if (await glowBootstrapPause(bootstrap, 78, session)) return
     logAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 80, session)) return
+    if (await glowBootstrapPause(bootstrap, 82, session)) return
     //
     // Dock target is mid-lake so the last walk always crosses open water.
     // Walk progress (x, sing count, docked) is restored from storage.
@@ -2518,6 +2528,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       //
       fixedCamY: Math.round(DESIGN_SCREEN_H / 2)
     })
+    if (await glowBootstrapPause(bootstrap, 86, session)) return
     const inst = {
       k,
       camera,
@@ -2745,6 +2756,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     }
     if (await glowBootstrapPause(bootstrap, 89, session)) return
     applyZoneVisibility(inst)
+    syncGlowLifeHudPupil(inst)
     restorePersistedGlowZoneVisuals(inst)
     zones.lCollected && rebakeGlowRockSpritesShaded(inst)
     syncGlowFpsHudVisibility(inst)
@@ -2804,7 +2816,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
     })
     inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
-    createGlowChainBuoyLayer(k, inst)
+    createGlowChainBuoyLayer(k, zones)
     createGlowEarTreeLayer(k, inst)
     if (await glowBootstrapPause(bootstrap, 93, session)) return
     syncGlowAtmosphereZones(inst)
@@ -4701,6 +4713,7 @@ function glowGrassColorFade(sc, zones) {
   if (!sc) return 0
   const fade = sc.colorFade ?? 0
   if (zones.colorWorld || zones.oZone || zones.oCollected) return fade
+  if (glowGrassPostLStrawFieldReady(zones, sc)) return 1
   if (zones.lCollected && fade >= 1 - COLOR_CROSSFADE_EPS) return fade
   if (!zones.lCollected) return fade
   if (sc.meditation?.countdown == null) return 0
@@ -5334,11 +5347,20 @@ function glowLifeHudWantGrey(inst) {
 //
 function maybeSyncGlowLifeHudGrey(inst) {
   if (!inst.levelIndicator) return
+  syncGlowLifeHudPupil(inst)
   const wantGrey = glowLifeHudWantGrey(inst)
   const needsDesat = wantGrey && !eyeHudSpriteIsDesat(inst.levelIndicator._lifeSpriteName)
   if (inst._lifeHudGrey === wantGrey && !needsDesat) return
   inst._lifeHudGrey = wantGrey
   LevelIndicator.syncLifeHudGrey(inst.levelIndicator, wantGrey)
+}
+//
+// HUD eye pupil stays dark gray in the gray world, black once L is taken.
+//
+function syncGlowLifeHudPupil(inst) {
+  const indicator = inst.levelIndicator
+  if (!indicator) return
+  indicator._eyeHudPupilRgb = inst.zones.lCollected ? null : GLOW_HUD_EYE_PUPIL_PRE_L_RGB
 }
 //
 // Flat single decor gray until L — no per-object shades before then.
@@ -5363,64 +5385,87 @@ function glowPlayfieldBackdropRgb(inst) {
   return isGlowPreludeBackdropWorld(inst) ? PRELUDE_BACKDROP : VOID
 }
 //
-// Stalk-eye colours — gray decor before colour world; warm sclera + green-black
-// body after L (see cfg eyeCreature).
+//
+// Stalk-eyes on the right shore — visible once G opens the east; pupil grey
+// until L, then black (see chainBuoyPupilRgb in glow-chain-buoy.js).
+//
+function isGlowChainBuoyLayerVisible(inst) {
+  if (!inst?.chainBuoys) return false
+  if (isGlowEyeIntroBareWorld(inst)) return false
+  const z = inst.zones
+  return Boolean(z.gCollected || z.lCollected || z.oZone || z.oCollected || z.colorWorld)
+}
+//
+// Stalk-eye colours — gray stalk + eye ring before L, black after L; roots use
+// the same palette as ear-tree roots (glowEarTreeRootKaplayRgb). Colour world:
+// warm sclera + green-black body (see cfg eyeCreature).
 //
 function glowChainBuoyColors(inst, k) {
-  const flat = isGlowFlatSingleDecorColor(inst)
-  if (flat) {
-    const body = glowRgb('decorGray')
-    const sclera = glowRgb('lightGray')
-    const pupil = glowRgb('void')
-    const highlight = glowRgb('lightGray')
-    const contour = glowRgb('void')
-    const root = glowRgb('decorGray')
-    return {
-      body: k.rgb(body.r, body.g, body.b),
-      sclera: k.rgb(sclera.r, sclera.g, sclera.b),
-      pupil: k.rgb(pupil.r, pupil.g, pupil.b),
-      highlight: k.rgb(highlight.r, highlight.g, highlight.b),
-      contour: k.rgb(contour.r, contour.g, contour.b),
-      root: k.rgb(root.r, root.g, root.b)
-    }
+  const zones = inst?.zones
+  const stalkTriplet = glowRgb(zones?.lCollected ? CFG.visual.colors.hero.eyePupil : GLOW_PAL.decorGray)
+  const stalk = k.rgb(stalkTriplet.r, stalkTriplet.g, stalkTriplet.b)
+  const root = glowEarTreeRootKaplayRgb(inst, k)
+  const sclera = glowRgb('lightGray')
+  const highlight = glowRgb('lightGray')
+  const grayStack = {
+    body: stalk,
+    sclera: k.rgb(sclera.r, sclera.g, sclera.b),
+    pupil: k.rgb(sclera.r, sclera.g, sclera.b),
+    highlight: k.rgb(highlight.r, highlight.g, highlight.b),
+    contour: stalk,
+    root
+  }
+  if (!zones?.colorWorld) {
+    return grayStack
   }
   const eyes = glowEyeCreatureColors(k)
-  const root = glowRgb('groundSand')
   return {
-    ...eyes,
-    root: k.rgb(root.r, root.g, root.b)
+    body: eyes.body,
+    sclera: eyes.sclera,
+    highlight: eyes.highlight,
+    contour: eyes.contour,
+    pupil: grayStack.pupil,
+    root
   }
 }
 //
 // Ear-tree colors — dark outline always, gray decor fill before the color
 // world, wood bark + living green ears after.
 //
+function glowEarTreeRootRgb(inst) {
+  const flat = isGlowFlatSingleDecorColor(inst)
+  return flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeColor.root)
+}
+function glowEarTreeRootKaplayRgb(inst, k) {
+  const c = glowEarTreeRootRgb(inst)
+  return k.rgb(c.r, c.g, c.b)
+}
 function glowEarTreeColors(inst, k) {
   const flat = isGlowFlatSingleDecorColor(inst)
   const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
   const lip = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.glowAttention.lip)
-  const root = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeColor.root)
+  const root = glowEarTreeRootKaplayRgb(inst, k)
   return {
     outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
     lip: k.rgb(lip.r, lip.g, lip.b),
-    root: k.rgb(root.r, root.g, root.b)
+    root
   }
 }
 //
 // World-layer draw hooks for the chain-buoy and ear-tree decor — created
 // once in bootstrap, colors resolved live each frame from the current mode.
 //
-function createGlowChainBuoyLayer(k, inst) {
+function createGlowChainBuoyLayer(k, zones) {
   return k.add([
     k.z(GLOW_CHAIN_BUOY_Z),
     {
       draw() {
-        const z = inst.zones
-        if (!inst.chainBuoys || !z.lCollected) return
-        if (!z.oZone && !z.oCollected && !z.colorWorld) return
-        const c = glowChainBuoyColors(inst, k)
-        ChainBuoy.onDraw(inst.chainBuoys, c)
+        const sc = zones._sceneRef
+        if (!sc || !isGlowChainBuoyLayerVisible(sc)) return
+        const c = glowChainBuoyColors(sc, k)
+        const pupilZones = sc.chainBuoys?.pupilZones ?? sc.zones
+        ChainBuoy.onDraw(sc.chainBuoys, c, pupilZones)
       }
     }
   ])
@@ -8320,6 +8365,19 @@ function glowGrassColourTarget(zones) {
   return zones.lCollected || zones.oCollected ? GRASS_WARM : GRASS_GREEN
 }
 //
+// Grass hue variation is baked into the layer inst at create() — refresh it
+// when L opens the warm straw field mid-session (reload already had it).
+//
+function syncGlowGrassHueVariation(inst) {
+  const max = inst.zones.lCollected || inst.zones.oCollected || inst.zones.colorWorld
+    ? GLOW_GRASS_HUE_VARY_MAX
+    : 0
+  const layers = [inst.grassLayer, inst.mudExtraGrass, inst.spikeGrass]
+  for (const layer of layers) {
+    layer && (layer.hueVaryMax = max)
+  }
+}
+//
 // Post-L straw field — gold tips, ochre mid, brown shadow blades (no gray wash).
 //
 function glowGrassWarmStrawActive(zones, sc) {
@@ -8327,8 +8385,19 @@ function glowGrassWarmStrawActive(zones, sc) {
     (zones.lCollected || zones.oCollected) && !zones.colorWorld && sc && !isGlowFlatSingleDecorColor(sc)
   )
 }
+//
+// Post-L straw colours match a fresh reload (full warm field, no gray wash).
+//
+function glowGrassPostLStrawFieldReady(zones, sc) {
+  if (!zones?.lCollected || zones.colorWorld || zones.oCollected) return false
+  if (!sc) return false
+  const fade = sc.colorFade ?? 0
+  const target = sc.colorFadeTarget ?? 0
+  return fade >= 1 - COLOR_CROSSFADE_EPS || target >= 1 - COLOR_CROSSFADE_EPS
+}
 function glowGrassWarmColourFade(sc, zones) {
   if (!glowGrassWarmStrawActive(zones, sc)) return glowGrassGreenFade(sc, zones)
+  if (glowGrassPostLStrawFieldReady(zones, sc)) return 1
   if ((sc.colorFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS) return 1
   return Math.max(glowGrassGreenFade(sc, zones), sc.colorFade ?? 0)
 }
@@ -8339,8 +8408,9 @@ function glowGrassBladeWarmTint(blade) {
   return lerpRgb(GRASS_STRAW_MID, GRASS_STRAW_DARK, (t - 0.67) / 0.33)
 }
 function glowGrassWarmTintFromGray(sc, zones, blade, fade) {
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
   const warm = glowGrassBladeWarmTint(blade)
+  if (glowGrassPostLStrawFieldReady(zones, sc)) return warm
+  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
   return fade >= 1 - COLOR_CROSSFADE_EPS ? warm : lerpRgb(gray, warm, fade)
 }
 function glowMudZoneGrassTint(sc, zones, blade) {
@@ -8354,6 +8424,7 @@ function glowMudZoneGrassTint(sc, zones, blade) {
       GRASS_STRAW_DARK,
       MUD_ZONE_GRASS_GREEN_VOID_LERP
     )
+    if (glowGrassPostLStrawFieldReady(zones, sc)) return mudWarm
     return fade >= 1 - COLOR_CROSSFADE_EPS ? mudWarm : lerpRgb(gray, mudWarm, fade)
   }
   const grassTarget = glowGrassColourTarget(zones)
@@ -10534,6 +10605,17 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
     pad.pos.y = PLATFORM_HIDE_Y
     return
   }
+  //
+  // Any walk march: mushroom art moves alone — no invisible pad under the
+  // hero or Kaplay carries him sideways with the cap.
+  //
+  const tw = inst.trampWalk
+  const trampMarching = state === inst.trampState && tw?.walking
+  if (trampMarching && onCap) {
+    pad.pos.x = -500
+    pad.pos.y = PLATFORM_HIDE_Y
+    return
+  }
   pad.pos.x = state.x
   pad.pos.y = capTop + TRAMP_PAD_H / 2
   if (bounceAir) {
@@ -10768,6 +10850,9 @@ function applyGlowPostLLitState(inst) {
     inst.earTreeRevealFade = 1
     !z.lZoneParallax && revealLParallaxZone(inst)
   }
+  inst._grassColorSettled = null
+  inst._grassMudColorSettled = null
+  syncGlowGrassHueVariation(inst)
   syncTreeColorCrossfade(inst)
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   applyZoneVisibility(inst)
@@ -11300,6 +11385,7 @@ function collectLetterL(inst) {
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 2)
     syncGlowHudLetterColors(inst)
   }
+  syncGlowLifeHudPupil(inst)
   inst.meditationWorldLife = 0
   syncGlowBirdsAfterL(inst)
   //
@@ -12880,7 +12966,9 @@ function onUpdate(inst) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
-  inst.zones.lCollected && inst.chainBuoys && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
+  isGlowChainBuoyLayerVisible(inst) &&
+    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
+  inst.chainBuoys && (inst.chainBuoys.pupilZones = inst.zones)
   inst.zones.lCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
   updateGlowEarTreeWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
@@ -13484,15 +13572,9 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   const dt = inst.k.dt()
   //
   // In-progress walk always continues to the current stop (dialog / chase
-  // ignored) — except while the hero is riding this same mushroom, either
-  // mid-flight from a bounce (trampBounceAir) or simply standing grounded
-  // on its cap (e.g. having jumped onto it normally rather than bouncing).
-  // Letting the solid invisible pad slide sideways under a body resting on
-  // top of it makes Kaplay shove him along/off unpredictably (looks like
-  // he vanishes), so the walk simply pauses until he's clear of the cap.
+  // and hero on the cap ignored) — see syncOneTrampolinePad for cap handling.
   //
   if (tw.walking) {
-    if (inst.trampBounceAir || (grounded && isOnTrampolineCap(inst, char, inst.trampState))) return
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
     inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9
@@ -13580,8 +13662,10 @@ function updateTrampEndure(inst) {
 function updateTrampWaterSteps(inst) {
   const tw = inst.trampWalk
   const state = inst.trampState
+  const dockMarch = (tw?.singCount || 0) >= TRAMP_WALK_SINGS_TO_WATER
   const inWater = Boolean(
     tw?.walking &&
+    dockMarch &&
     state &&
     state.x <= inst.lakeX2 &&
     state.x >= inst.lakeX1

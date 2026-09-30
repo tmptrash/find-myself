@@ -53,10 +53,12 @@ export function glowCaveHeroEyeColors(k) {
  * @param {number} pupilY - Pupil center Y
  * @param {Object} colors - Kaplay rgb from glowEyeCreatureColors()
  * @param {Object} radii - { scleraR, pupilR, contourExtra }
+ * @param {Object} [opts] - { skipHighlight }
  */
-export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii) {
+export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii, opts) {
   const { sclera, pupil, highlight, contour } = colors
   const { scleraR, pupilR, contourExtra } = radii
+  const skipHighlight = Boolean(opts?.skipHighlight)
   k.drawCircle({
     pos: k.vec2(cx, cy),
     radius: scleraR + contourExtra,
@@ -68,6 +70,7 @@ export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii) {
     radius: pupilR,
     color: pupil
   })
+  if (skipHighlight) return
   const hiR = scleraR * EYE_HIGHLIGHT_RADIUS_MULT
   k.drawCircle({
     pos: k.vec2(

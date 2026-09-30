@@ -4291,9 +4291,12 @@ const TRAMP_WATER_STEPS_VOLUME = 0.42
  * @param {boolean} inWater - Whether the mushroom is currently in the lake
  */
 export function updateTrampWaterStepsPlayback(instance, inWater) {
-  if (!instance?._k) return
-  instance._trampWaterStepsWanted = inWater
-  if (!inWater) return
+  if (!instance) return
+  if (!inWater) {
+    stopTrampWaterStepsLoop(instance)
+    return
+  }
+  instance._trampWaterStepsWanted = true
   if (instance._trampWaterStepsBusy) return
   playTrampWaterStepsOnce(instance)
 }
@@ -4319,9 +4322,11 @@ export function stopTrampWaterStepsLoop(instance) {
 // Plays one 1 s water-steps take and schedules the next with a pause or overlap.
 //
 function playTrampWaterStepsOnce(instance) {
-  if (!instance._trampWaterStepsWanted || globalMuteProceduralSounds || !instance._k) return
-  const k = instance._k
-  const handle = k.play('water-steps', { loop: false, volume: TRAMP_WATER_STEPS_VOLUME })
+  if (!instance._trampWaterStepsWanted || globalMuteProceduralSounds) return
+  const speed = WATER_STEPS_SPEED_MIN + Math.random() * WATER_STEPS_SPEED_RANGE
+  const jitter = 1 + (Math.random() - 0.5) * WATER_STEPS_VOLUME_JITTER
+  const vol = Math.min(1, Math.max(0.05, TRAMP_WATER_STEPS_VOLUME * jitter))
+  const handle = playWaterStepsHtml5(vol, speed)
   if (!handle) return
   instance._trampWaterStepsHandle = handle
   instance._trampWaterStepsBusy = true
@@ -4331,11 +4336,13 @@ function playTrampWaterStepsOnce(instance) {
     ? TRAMP_WATER_STEPS_DURATION -
       (TRAMP_WATER_STEPS_OVERLAP_MIN + Math.random() * TRAMP_WATER_STEPS_OVERLAP_RANGE)
     : TRAMP_WATER_STEPS_DURATION + Math.random() * TRAMP_WATER_STEPS_PAUSE_MAX
-  k.wait(delay, () => {
+  const finish = () => {
     if (instance._trampWaterStepsGen !== gen) return
     instance._trampWaterStepsBusy = false
     instance._trampWaterStepsWanted && playTrampWaterStepsOnce(instance)
-  })
+  }
+  const k = instance._k
+  k?.wait?.(delay, finish) ?? setTimeout(finish, delay * 1000)
 }
 //
 // Plays one water-steps track and schedules the next if still wading.

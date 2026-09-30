@@ -11,8 +11,24 @@ export const DEFAULT_GPU_YIELD_FRAMES = 2
 let loaderBarReportedPct = 0
 let loaderBarDisplayPct = 0
 let loaderBarAnimFrame = null
-const LOADER_BAR_CREEP_PER_SEC = 22
-const LOADER_BAR_CREEP_HEADROOM = 12
+let loaderBarCreepPerSec = 22
+let loaderBarCreepHeadroom = 12
+const LOADER_BAR_CREEP_PER_SEC_DEFAULT = 22
+const LOADER_BAR_CREEP_HEADROOM_DEFAULT = 12
+//
+// Glow bootstrap reports truth in bursts — faster creep keeps the bar moving
+// between those reports so the screen reads as loading, not frozen.
+//
+export function setLoaderBarCreepBoost(boosted) {
+  if (boosted) {
+    loaderBarCreepPerSec = 48
+    loaderBarCreepHeadroom = 22
+  } else {
+    loaderBarCreepPerSec = LOADER_BAR_CREEP_PER_SEC_DEFAULT
+    loaderBarCreepHeadroom = LOADER_BAR_CREEP_HEADROOM_DEFAULT
+  }
+  isLoaderVisible() && startLoaderBarAnimation()
+}
 
 export function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
@@ -44,6 +60,7 @@ export function isLoaderVisible() {
 
 export function hideLoader() {
   stopLoaderBarAnimation()
+  setLoaderBarCreepBoost(false)
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   loaderEl.style.display = 'none'
@@ -81,11 +98,11 @@ function startLoaderBarAnimation() {
     lastTs = ts
     const creepCeiling = loaderBarReportedPct >= 100
       ? 100
-      : Math.min(99, loaderBarReportedPct + LOADER_BAR_CREEP_HEADROOM)
+      : Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
     if (loaderBarDisplayPct < creepCeiling) {
       loaderBarDisplayPct = Math.min(
         creepCeiling,
-        loaderBarDisplayPct + LOADER_BAR_CREEP_PER_SEC * dt
+        loaderBarDisplayPct + loaderBarCreepPerSec * dt
       )
       bar.style.width = `${loaderBarDisplayPct}%`
     }

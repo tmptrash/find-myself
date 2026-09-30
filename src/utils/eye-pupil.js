@@ -16,6 +16,7 @@ const PUPIL_BOUNDS_RADIUS_Y_MUL = 0.40
 const PUPIL_HIGHLIGHT_OFFSET_X = 7
 const PUPIL_HIGHLIGHT_OFFSET_Y = -9
 const PUPIL_HIGHLIGHT_RADIUS = 5.5
+const PUPIL_DEFAULT_RGB = { r: 0, g: 0, b: 0 }
 //
 // Top lid coverage per blink frame (0 = open, 1 = shut).
 //
@@ -64,6 +65,7 @@ export function computeEyePupilWorldPos(eyeCenterX, eyeCenterY, targetX, targetY
  * @param {number} cfg.targetY
  * @param {number} [cfg.opacity=1]
  * @param {boolean} [cfg.fixed=false]
+ * @param {{r: number, g: number, b: number}} [cfg.pupilRgb] - Pupil colour; black when omitted
  */
 export function drawTrackingEyePupil(k, cfg) {
   const {
@@ -74,7 +76,8 @@ export function drawTrackingEyePupil(k, cfg) {
     targetX,
     targetY,
     opacity = 1,
-    fixed = false
+    fixed = false,
+    pupilRgb = PUPIL_DEFAULT_RGB
   } = cfg
   const cover = EYE_LID_COVER_BY_FRAME[frameIndex] ?? 0
   if (cover >= 0.995 || opacity <= 0.01) return
@@ -88,7 +91,7 @@ export function drawTrackingEyePupil(k, cfg) {
   const hx = pupil.x + PUPIL_HIGHLIGHT_OFFSET_X * displayScale
   const hy = pupil.y + PUPIL_HIGHLIGHT_OFFSET_Y * displayScale
   if (!pointVisibleBelowLid(pupil.x, pupil.y, pr, lidY)) return
-  drawCircleClippedBelowLid(k, pupil.x, pupil.y, pr, lidY, k.rgb(0, 0, 0), opacity, fixed)
+  drawCircleClippedBelowLid(k, pupil.x, pupil.y, pr, lidY, k.rgb(pupilRgb.r, pupilRgb.g, pupilRgb.b), opacity, fixed)
   pointVisibleBelowLid(hx, hy, hr, lidY) &&
     drawCircleClippedBelowLid(k, hx, hy, hr, lidY, k.rgb(255, 255, 255), opacity * 0.95, fixed)
 }

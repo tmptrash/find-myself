@@ -1196,6 +1196,8 @@ const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need t
 const GLOW_DIALOG_SOUND_G = 'glow-g'
 const GLOW_DIALOG_SOUND_L = 'glow-l'
 const GLOW_DIALOG_SOUND_O = 'glow-ow'
+const GLOW_BIRDS_AUDIO_SRC = './sounds/birds.mp3'
+let glowBirdsLoopHandle = null
 //
 // Inline letter pickup caption — the dialog phrase now grows straight down
 // from the picked-up letter (tilted to match it) instead of a modal panel.
@@ -2018,17 +2020,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     sound._k = k
-    const birdsMusic = k.play('birds', { loop: true, volume: 0, paused: true })
+    const birdsMusic = createGlowBirdsLoopAudio()
+    bindGlowBirdsLoopAudio(birdsMusic)
     const earWhisperMusic = k.play('whisper', { loop: true, volume: 0, paused: true })
     const stopGlowLoopAudio = () => {
-      birdsMusic?.stop?.()
+      leaveGlowBirdsLoopAudio()
       earWhisperMusic?.stop?.()
       Sound.setEarTreeWhisperVolume(0)
       Sound.stopRainSound(sound)
       Sound.stopTrampWaterStepsLoop(sound)
       Sound.stopWaterStepsLoop(sound)
     }
-    k.onSceneLeave(stopGlowLoopAudio)
     const zones = loadGlowZones()
     const colorFadeInit = zones.colorWorld ? 1 : 0
     //
@@ -2267,7 +2269,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
           : null
       }))
     //
-    // Glow SFX only from the first frame; birds.mp3 waits for the O countdown.
+    // Glow SFX only from the first frame; birds.mp3 waits for the post-L stillness countdown.
     //
     sound._glowSfxMuted = false
     sound.glowSfxGain && (sound.glowSfxGain.gain.value = 1)
@@ -2839,6 +2841,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     if ((zones.oZone || zones.oCollected) && !inst.heroBodyFillApplied) {
       applyGlowHeroBodyFill(inst)
     }
+    (zones.colorWorld || zones.oZone || zones.oCollected) && ensureGlowBirdsBackgroundPlaying(inst)
+    inst._glowBirdsBootstrapKick = zones.colorWorld || zones.oZone || zones.oCollected
     ensureGlowPitOpenForEyesCollected(inst.pit)
     registerGlowNativeTeardown(() => {
       glowLevel0LiveHeroChar = null
@@ -2857,6 +2861,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       clearGlowHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
+      stopGlowLoopAudio()
       inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
       inst._dialogAudioRestoreRaf && cancelAnimationFrame(inst._dialogAudioRestoreRaf)
       inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
@@ -4333,11 +4338,46 @@ function syncGlowHudLetterFills(inst, burst = true) {
   updateGlowHudLetterFillCounter(inst)
 }
 //
-// Starts birds.mp3 only after the post-L stillness countdown begins.
+// HTML5 loop for birds.mp3 — Kaplay k.play().stop() does not reliably restart
+// the same asset after lesson-glow.0 reloads.
+//
+function createGlowBirdsLoopAudio() {
+  const audio = new Audio(GLOW_BIRDS_AUDIO_SRC)
+  audio.loop = true
+  audio.volume = 0
+  return audio
+}
+function stopGlowBirdsLoopAudio(audio) {
+  if (!audio) return
+  audio._dialogDuckSaved = null
+  audio.pause()
+  audio.currentTime = 0
+}
+function bindGlowBirdsLoopAudio(audio) {
+  glowBirdsLoopHandle && stopGlowBirdsLoopAudio(glowBirdsLoopHandle)
+  glowBirdsLoopHandle = audio
+}
+function leaveGlowBirdsLoopAudio() {
+  stopGlowBirdsLoopAudio(glowBirdsLoopHandle)
+  glowBirdsLoopHandle = null
+}
+function setGlowBirdsLoopVolume(audio, volume) {
+  if (!audio) return
+  const vol = Math.max(0, Math.min(1, volume))
+  audio.volume = vol
+  vol >= 0.001 && audio.paused && audio.play().catch(() => {})
+}
+//
+// Resets birds.mp3 before the post-L stillness countdown swells them in.
 //
 function startBirdsMusic(birdsMusic) {
-  birdsMusic.paused = true
-  birdsMusic.volume = 0
+  birdsMusic && (birdsMusic.volume = 0)
+}
+//
+// Snaps birds.mp3 to the volume implied by glowBirdsMusicLife (reload / colour world).
+//
+function ensureGlowBirdsBackgroundPlaying(inst) {
+  syncGlowWorldBirdsVolume(inst)
 }
 //
 // Emits the same continuous background ambience the menu scene plays while
@@ -4493,12 +4533,11 @@ function syncGlowWorldBirdsVolume(inst) {
   const life = glowBirdsMusicLife(inst)
   if (life < 0.02) {
     birds.volume = 0
-    birds.paused = true
     inst.meditationBirdsActive = false
     return
   }
-  birds.paused = false
-  birds.volume = CFG.audio.backgroundMusic.birds * life
+  inst.sound && Sound.resumeAudioContext(inst.sound)
+  setGlowBirdsLoopVolume(birds, CFG.audio.backgroundMusic.birds * life)
   inst.meditationBirdsActive = true
 }
 //
@@ -4507,11 +4546,10 @@ function syncGlowWorldBirdsVolume(inst) {
 function stopMeditationBirds(inst) {
   if (!inst.meditationBirdsActive) return
   inst.meditationBirdsActive = false
-  if (inst.zones.oCollected) return
+  if (inst.zones.oCollected || inst.zones.oZone || inst.zones.colorWorld) return
   const birds = inst.birdsMusic
   if (!birds) return
   birds.volume = 0
-  birds.paused = true
 }
 //
 // True once the permanent colour world has finished fading in.
@@ -8523,13 +8561,16 @@ function glowMeditationWorldLife(inst) {
   return 0
 }
 //
-// birds.mp3 only during the post-L stillness countdown (and after O opens).
+// birds.mp3 swells with the post-L stillness countdown, stays on through the
+// O platform, and keeps playing in the permanent colour world.
 //
 function glowBirdsMusicLife(inst) {
   const z = inst.zones
-  if (z.oZone || z.oCollected) return 1
+  if (z.colorWorld || z.oZone || z.oCollected) return 1
   if (z.lCollected && inst.meditation?.countdown != null) {
-    return inst.meditationWorldLife ?? 0
+    const stepped = inst.meditationWorldLife ?? 0
+    const linear = meditationCountdownLinear(inst)
+    return Math.max(stepped, linear)
   }
   return 0
 }
@@ -10535,6 +10576,7 @@ function startColorWorldFade(inst) {
   //
   inst.pendingHeroFillOnLand = true
   invalidateGlowPitCaveInteriorBake(inst.pit)
+  ensureGlowBirdsBackgroundPlaying(inst)
 }
 //
 // Fires once the hero is grounded after collecting O — fills the hero body,
@@ -10818,10 +10860,7 @@ function restoreGlowDialogAudioFadeIn(inst, state) {
   const fadeMs = GLOW_DIALOG_AUDIO_FADE_SEC * 1000
   const tick = () => {
     const t = Math.min(1, (performance.now() - startMs) / fadeMs)
-    if (inst.birdsMusic) {
-      inst.birdsMusic.paused = false
-      inst.birdsMusic.volume = state.birdsVol * t
-    }
+    setGlowBirdsLoopVolume(inst.birdsMusic, state.birdsVol * t)
     if (state.whisperVol > 0) {
       const wVol = state.whisperVol * t
       inst.earWhisperMusic && (inst.earWhisperMusic.paused = false)
@@ -10877,7 +10916,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const decorCaptionRgb = getRGB(k, GLOW_PAL.decorGray)
   const gCaptionTextRgb = getRGB(k, GLOW_PAL.captionLetterGInk)
   const gCaptionLetterRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
-  const grayCaptionNoShadow = letterEntry?.char === 'G' || letterEntry?.char === 'L'
+  const grayCaptionNoShadow = letterEntry?.char === 'G'
   const isGrayCaption = grayCaptionNoShadow || letterEntry?.char === 'O'
   const captionObservationInkRgb = getRGB(k, GLOW_PAL.captionObservationInk)
   const captionLetterLInkRgb = getRGB(k, GLOW_PAL.captionLetterLInk)
@@ -12385,7 +12424,7 @@ function maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded) {
   maybeRevealLPlatOnRightTrampBounce(inst)
 }
 //
-// Opens the O platform zone and starts birds.mp3 on first landing from above.
+// Opens the O platform zone after the post-L stillness countdown completes.
 //
 function revealOZone(inst) {
   if (inst.zones.oZone) return
@@ -12653,6 +12692,10 @@ function updateGlowDialogHero(inst) {
 function onUpdate(inst) {
   const k = inst.k
   inst.zones._sceneRef = inst
+  if (inst._glowBirdsBootstrapKick) {
+    inst._glowBirdsBootstrapKick = false
+    ensureGlowBirdsBackgroundPlaying(inst)
+  }
   if (inst.drowning) {
     const drownChar = inst.heroInst?.character
     inst.glowDrownHeroClipLock && drownChar && (drownChar.hidden = true)
@@ -13182,13 +13225,10 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
     m.stillnessCompleted = true
     Hero.setEyesClosed(inst.heroInst, false)
     //
-    // Hold birds at full volume into the O reveal; dialog duck handles the rest
+    // Hold birds at full volume into the O reveal; letter-caption duck handles dips.
     //
-    if (inst.birdsMusic) {
-      inst.birdsMusic.paused = false
-      inst.birdsMusic.volume = CFG.audio.backgroundMusic.birds
-      inst.meditationBirdsActive = false
-    }
+    setGlowBirdsLoopVolume(inst.birdsMusic, CFG.audio.backgroundMusic.birds)
+    inst.meditationBirdsActive = false
     revealOZone(inst)
   }
 }

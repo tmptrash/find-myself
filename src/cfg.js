@@ -346,9 +346,10 @@ export const CFG = {
           depth: PALETTE.teal3
         },
         //
-        // L pickup caption — same family as parallax near trees, one step darker.
+        // L pickup caption body — warm pale sand on the post-L teal forest so
+        // the phrase stays readable once the ground and parallax colour in.
         //
-        captionLetterLInk: PALETTE.brown0,
+        captionLetterLInk: PALETTE.sand5,
         //
         // G pickup caption body — slightly lighter than decorGray so the phrase
         // reads on the flat prelude without competing with the white G glyph.

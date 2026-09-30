@@ -221,6 +221,11 @@ export function clearGlowHeroFillPreview(inst) {
 export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas) {
   const char = heroInst?.character
   if (!char?.exists?.() || !k) return
+  //
+  // Colour-world fill uses a black rim — rebaking hollow gray here would drop
+  // the idle outline while run frames still show rim glue.
+  //
+  if (!heroInst.outlineOnly) return
   const grayBody = String(GLOW_PAL.heroBodyGray).replace('#', '')
   heroInst.noEyes = false
   heroInst.transparentEyeInterior = false
@@ -283,7 +288,7 @@ function syncHeroFillPreviewSprite(inst, cfg) {
   preview.color = char.color
   return matched
 }
-function applyGlowHeroBodyFill(inst, cfg) {
+export function commitGlowHeroBodyFill(inst, cfg) {
   clearGlowHeroFillPreview(inst)
   if (inst.heroBodyFillApplied) {
     const filledChar = inst.heroInst?.character
@@ -344,7 +349,7 @@ export function syncGlowHeroFillVisual(inst, cfg, fillOpts = {}) {
     return
   }
   if (fade >= 0.98 - COLOR_CROSSFADE_EPS) {
-    cfg.onFullFill ? cfg.onFullFill(inst) : applyGlowHeroBodyFill(inst, cfg)
+    cfg.onFullFill ? cfg.onFullFill(inst) : commitGlowHeroBodyFill(inst, cfg)
     return
   }
   ensureHeroFillPreview(inst, cfg)

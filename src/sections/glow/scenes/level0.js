@@ -155,7 +155,8 @@ import {
   clearGlowHeroFillPreview,
   triggerGlowHeroFillBurst,
   resolveGlowHeroFilledSpriteKey,
-  applyGlowHeroEyesOpenedBake
+  applyGlowHeroEyesOpenedBake,
+  commitGlowHeroBodyFill
 } from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
@@ -890,9 +891,8 @@ const PAR_LAYER_NEAR = {
   worldH: parTreeRowWorldH(PAR_BIG_BAND_TOP)
 }
 //
-// Background birds — dim silhouettes gliding BEHIND the forest planes; they
-// appear with the colour world (after O). Their tone is blended almost all
-// the way into the warm haze backdrop so they read as faint specks.
+// Background birds — dark brown-gray silhouettes behind the forest planes;
+// they appear with the post-L colour preview and colour world.
 //
 const BIRD_COUNT = 6
 //
@@ -912,7 +912,10 @@ const BIRD_FLAP_SPEED_RANGE = 3
 const BIRD_PARALLAX_SPEED = PAR_SKY_SPEED
 const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
-const BIRD_HAZE_BLEND = 0.22
+//
+// Near-black warm silhouettes — never palette void (green0) or leaf greens.
+//
+const BIRD_SILHOUETTE = lerpRgb(glowRgb('decorGray'), glowRgb('hedgehogManeDark'), 0.68)
 const BIRD_VISIBLE_FADE_MIN = 0.02
 const BIRD_UPDATE_INTERVAL = 1 / 24
 //
@@ -1378,7 +1381,7 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Ground under my feet'
 const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Look closer to see the nuances'
 const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Observe, stop & listen'
-const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Witness to how the world is made'
+const GLOW_INDICATOR_TOOLTIP_AFTER_W = 'Witness of the world'
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = 36
 //
 // After picking up the final W letter the hero shares a closing line for a
@@ -6218,8 +6221,7 @@ function drawBackgroundBirds(inst) {
   const k = inst.k
   bakeGlowBirdFlapSprites(k)
   if (!inst._birdDrawColor) {
-    const c = lerpRgb(VOID, GLOW_LIGHT_CORE, BIRD_HAZE_BLEND)
-    inst._birdDrawColor = k.rgb(c.r, c.g, c.b)
+    inst._birdDrawColor = k.rgb(BIRD_SILHOUETTE.r, BIRD_SILHOUETTE.g, BIRD_SILHOUETTE.b)
   }
   const color = inst._birdDrawColor
   const birdOpacity = (fade >= 1 ? 1 : fade) * decorLife
@@ -10588,56 +10590,9 @@ function enableGlowHeroIdleVocalization(inst) {
 // The hero stays whitish — never turns gold when the world colours.
 //
 function applyGlowHeroBodyFill(inst) {
-  clearGlowHeroFillPreview(inst)
-  if (inst.heroBodyFillApplied) {
-    const filledChar = inst.heroInst?.character
-    filledChar?.exists?.() && (filledChar.opacity = 1)
-    return
-  }
+  commitGlowHeroBodyFill(inst, GLOW_LEVEL_FILL_CFG)
   const hero = inst.heroInst
-  const char = hero?.character
-  if (!char?.exists?.()) return
-  if (!hero.outlineOnly) {
-    inst.heroBodyFillApplied = true
-    char.opacity = 1
-    return
-  }
-  const k = inst.k
-  const outlinePrefix = hero.spritePrefix
-  const outlineKey = Hero.getActiveSpriteKey(hero)
-  Hero.loadHeroSprites({
-    k: inst.k,
-    type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(false),
-    bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: HERO_FILLED_OUTLINE_COLOR,
-    outlineOnly: false,
-    noEyes: hero.noEyes,
-    addMouth: hero.addMouth,
-    addArms: hero.addArms,
-    addWatch: hero.addWatch,
-    postBakeCanvas: applyGlowGameplaySharpBake
-  })
-  const filledPrefix = `${Hero.HEROES.HERO}_${HERO_FILLED_BODY_COLOR}_${String(HERO_FILLED_OUTLINE_COLOR).replace('#', '')}`
-    + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
-    + `_ew${String(CFG.visual.colors.hero.eyeWhite).replace('#', '')}`
-    + `_pu${String(CFG.visual.colors.hero.eyePupil).replace('#', '')}`
-    + `${hero.noEyes ? '_noeyes' : ''}`
-  const filledKey = outlineKey?.startsWith(outlinePrefix)
-    ? filledPrefix + outlineKey.slice(outlinePrefix.length)
-    : `${filledPrefix}_0_0`
-  const spriteKey = k.getSprite(filledKey) ? filledKey : `${filledPrefix}_0_0`
-  if (!k.getSprite(spriteKey)) return
-  hero.outlineOnly = false
-  char.opacity = 1
-  hero.bodyColor = HERO_FILLED_BODY_COLOR
-  hero.outlineColor = String(HERO_FILLED_OUTLINE_COLOR).replace('#', '')
-  Object.assign(hero, getGlowHeroEyeBakeColors(false))
-  hero.spritePrefix = filledPrefix
-  inst.heroBodyFillApplied = true
-  char.use(k.sprite(spriteKey))
-  hero.currentEyeSprite = spriteKey
-  char.color = k.rgb(255, 255, 255)
+  if (!hero) return
   hero.canJump = true
   hero.jumpDisabled = false
 }

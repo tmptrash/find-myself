@@ -645,9 +645,9 @@ const W_PLAT_Y_BELOW = 90
 const O_PLAT_OFFSET_X = 130 + LOG_W / 2
 const O_PLAT_OFFSET_Y = 105
 //
-// The O letter floats 11 px higher above its log than the default placement.
+// The O letter floats above its log — subtracted from default on-log placement.
 //
-const O_LETTER_RAISE_Y = 18
+const O_LETTER_RAISE_Y = 13
 //
 // The L letter floats 13 px higher above its log than the default placement.
 //

@@ -14,6 +14,7 @@ import {
   getCuteMushroomFlatPitBakeColors
 } from './glow-palette.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite } from './glow-static-bake.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
 import {
@@ -190,6 +191,17 @@ const CAVE_WALL_ROCK_LAYERS = 3
 //
 const CAVE_INTERIOR_SPRITE = `glow0-cave-interior-v${CAVE_LAYOUT_VERSION}`
 const CAVE_BAKE_PAD = 40
+//
+// Foreground / seam-cover rock passes (~190 polygons) are baked per layout
+// and decor mode — cached on the wallProfile object, so a layout rebuild
+// starts a fresh cache automatically.
+//
+const CAVE_FOREGROUND_BAKE_SLOT = 'caveForegroundRocks'
+const CAVE_SEAM_BAKE_SLOT = 'caveSeamRocks'
+const CAVE_ROCK_BAKE_KEY_FLAT = 'flat'
+const CAVE_ROCK_BAKE_KEY_TONE = 'tone'
+const CAVE_FOREGROUND_GRAIN_SEED = 0.29
+const CAVE_SEAM_GRAIN_SEED = 0.83
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_EYES_COLLECTED = 'glow.eyesCollected'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
@@ -794,15 +806,13 @@ export function drawGlowPitCaveForegroundDecor(k, pit, flatDecor = false) {
   if (!pit.wallProfile?.mouth) return
   const showRocks = shouldDrawPitCaveRocks(pit)
   if (!showRocks) return
-  const pal = resolveCavePalette(flatDecor)
   const layout = pit.wallProfile
-  const { floorY } = pit
-  const wallRocks = layout.wallRocks?.filter(rock => !rock.straddleMouthGround)
-  drawCaveLayoutRocks(k, wallRocks, pal, floorY)
-  drawCaveLayoutRocks(k, layout.backgroundRocks, pal, floorY)
-  const contourRocks = layout.contourRocks?.filter(rock => !rock.straddleMouthGround)
-  drawCaveLayoutRocks(k, contourRocks, pal, floorY)
-  drawCaveLayoutRocks(k, layout.pebbles, pal, floorY)
+  drawBakedCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, flatDecor, [
+    layout.wallRocks?.filter(rock => !rock.straddleMouthGround),
+    layout.backgroundRocks,
+    layout.contourRocks?.filter(rock => !rock.straddleMouthGround),
+    layout.pebbles
+  ])
 }
 /**
  * Seam-cover rocks — drawn last so colour-world earth/static cannot hide them.
@@ -822,13 +832,37 @@ export function drawGlowPitCaveSeamCoverRocks(k, pit, flatDecor = false) {
   if (!pit?.collapsed || !pit.wallProfile?.mouth) return
   if (!isCaveInteriorVisible(pit)) return
   if (!shouldDrawPitCaveRocks(pit)) return
-  const pal = resolveCavePalette(flatDecor)
-  const { floorY } = pit
   const layout = pit.wallProfile
-  const seamWall = layout.wallRocks?.filter(rock => rock.straddleMouthGround)
-  const seamContour = layout.contourRocks?.filter(rock => rock.straddleMouthGround)
-  drawCaveLayoutRocks(k, seamWall, pal, floorY)
-  drawCaveLayoutRocks(k, seamContour, pal, floorY)
+  drawBakedCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, flatDecor, [
+    layout.wallRocks?.filter(rock => rock.straddleMouthGround),
+    layout.contourRocks?.filter(rock => rock.straddleMouthGround)
+  ])
+}
+//
+// Bakes rock groups once per layout + decor mode and blits the result. Each
+// group keeps its own fill/shade alternation, same as drawCaveLayoutRocks.
+//
+function drawBakedCaveRockGroups(k, pit, slot, grainSeed, flatDecor, groups) {
+  const bounds = caveRockGroupsBounds(groups, pit.floorY)
+  if (!bounds) return
+  const pal = resolveCavePalette(flatDecor)
+  const key = flatDecor ? CAVE_ROCK_BAKE_KEY_FLAT : CAVE_ROCK_BAKE_KEY_TONE
+  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, pit.wallProfile, slot, key, bounds,
+    ctx => groups.forEach(rocks => paintCanvasRocks(ctx, rocks, pal, pit.floorY, true)),
+    pit.zone.x1 * grainSeed))
+}
+function caveRockGroupsBounds(groups, floorY) {
+  const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
+  groups.forEach(rocks => rocks?.forEach(rock => {
+    if (!rock.verts?.length || !isCaveRockOnOrBelowGround(rock, floorY)) return
+    rock.verts.forEach(v => {
+      bounds.x1 = Math.min(bounds.x1, Math.round(rock.x) + v.x)
+      bounds.y1 = Math.min(bounds.y1, Math.round(rock.y) + v.y)
+      bounds.x2 = Math.max(bounds.x2, Math.round(rock.x) + v.x)
+      bounds.y2 = Math.max(bounds.y2, Math.round(rock.y) + v.y)
+    })
+  }))
+  return Number.isFinite(bounds.x1) ? bounds : null
 }
 //
 // Hero feet on the cave pit floor (same band as the lying-eye reveal).
@@ -1200,7 +1234,11 @@ function isCaveRockOnOrBelowGround(rock, floorY) {
   if (floorY == null) return true
   return rock.y - rock.radius >= floorY - 0.5
 }
-function paintCanvasRocks(ctx, rocks, pal, floorY = null) {
+//
+// roundOrigin snaps each rock centre to whole pixels, matching the live
+// drawCaveLayoutRocks pass the foreground bakes replace.
+//
+function paintCanvasRocks(ctx, rocks, pal, floorY = null, roundOrigin = false) {
   if (!rocks?.length) return
   const tone = caveRockPalette(pal)
   const fill = { r: tone.fillR, g: tone.fillG, b: tone.fillB }
@@ -1208,7 +1246,9 @@ function paintCanvasRocks(ctx, rocks, pal, floorY = null) {
   rocks.forEach((rock, idx) => {
     if (!rock.verts?.length) return
     if (floorY != null && !isCaveRockOnOrBelowGround(rock, floorY)) return
-    const pts = rock.verts.map(v => ({ x: rock.x + v.x, y: rock.y + v.y }))
+    const rx = roundOrigin ? Math.round(rock.x) : rock.x
+    const ry = roundOrigin ? Math.round(rock.y) : rock.y
+    const pts = rock.verts.map(v => ({ x: rx + v.x, y: ry + v.y }))
     fillCanvasPoly(ctx, pts, idx % 2 === 0 ? fill : shade)
   })
 }

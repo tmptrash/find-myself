@@ -1,7 +1,20 @@
 import { CFG } from '../../../cfg.js'
-import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
-import { drawGlowEyeCreature } from './glow-eye-creature.js'
+import {
+  clampRootSegmentsBelowGroundLine,
+  drawTreeRootSegmentsToCanvas,
+  growTreeRootSegments
+} from '../../../utils/grow-tree-root.js'
+import * as PolyBatch from '../../../utils/poly-batch.js'
+import { addGlowEyeCreatureToBatch } from './glow-eye-creature.js'
 import { glowRgb } from './glow-palette.js'
+import {
+  colorKey,
+  cssRgb,
+  drawStaticDecorSprite,
+  ensureStaticDecorSprite,
+  isWorldSpanInView,
+  rootSegmentsBounds
+} from './glow-static-bake.js'
 //
 // Stalk-eye pupil: gray decor before L, hero black after (colour world keeps
 // the same rule — only the stalk palette switches to eyeCreature).
@@ -36,6 +49,7 @@ const BUOY_SWAY_HORIZ_GROWTH = 1.12
 const BUOY_EYE_RADIUS = 11
 const BUOY_PUPIL_RADIUS = 4.5
 const BUOY_PUPIL_MARGIN = 0.75
+const BUOY_BLINK_LID_SPAN = 0.85 // Closed-lid stroke half-length (× eye radius)
 const BUOY_BLINK_MIN_INTERVAL = 10
 const BUOY_BLINK_MAX_INTERVAL = 20
 const BUOY_BLINK_DURATION = 0.14
@@ -45,11 +59,17 @@ const BUOY_SIDE_BALL_RADIUS_MULT = 0.95
 //
 // Thin root fan at the seabed anchor, same growTreeRootSegments algorithm
 // the big glow tree uses — generated once per buoy at creation time and
-// redrawn as static geometry every frame. Starts at the pole's own
-// segmentWidth (seamless join) and tapers down naturally from there.
+// baked into a sprite. Starts at the pole's own segmentWidth (seamless join)
+// and tapers down naturally from there.
 //
 const BUOY_ROOT_COUNT = 2
 const BUOY_ROOT_SEGMENTS = 4
+const BUOY_ROOTS_BAKE_SLOT = 'buoyRoots'
+const BUOY_ROOTS_GRAIN_SEED = 0.53
+//
+// Sway, side arms and the eye ring reach past the anchor X (culling pad).
+//
+const BUOY_CULL_PAD = 60
 
 /**
  * Creates the chain-buoy decor inst for a set of ground-anchored spots.
@@ -82,7 +102,8 @@ export function create(cfg) {
     buoys,
     woodPlatformBands: woodPlatformBands ?? [],
     platformXMargin: platformXMargin ?? 36,
-    time: 0
+    time: 0,
+    bodyBatch: PolyBatch.create()
   }
 }
 
@@ -105,26 +126,34 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * @param {Object} inst - Chain-buoy inst
  * @param {Object} colors - { body, sclera, pupil, highlight, contour, root }
  * @param {Object} [zones] - Live glow zones (pupil colour is resolved here)
+ * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDraw(inst, colors, zones) {
+export function onDraw(inst, colors, zones, view = null) {
   const body = colors.body
   const k = inst.k
   const pupilTriplet = chainBuoyPupilRgb(zones)
   const pupilColor = k.rgb(pupilTriplet.r, pupilTriplet.g, pupilTriplet.b)
   const eyeColors = { ...colors, pupil: pupilColor }
-  inst.buoys.forEach(buoy => {
-    if (chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)) return
-    drawBuoyRoots(k, buoy, colors.root)
-    const points = buildBuoyChainPoints(buoy, inst.time)
-    drawBuoySegments(k, points, buoy.segmentWidth, body)
-    drawBuoySideArms(k, buoy, points, buoy.segmentWidth, body)
-    drawBuoyJoints(k, points, buoy.segmentWidth, body)
-    drawBuoyEye(k, buoy, points, eyeColors, inst.lookX, inst.lookY)
-  })
+  const visible = inst.buoys.filter(buoy =>
+    isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) &&
+    !chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin))
+  //
+  // All root sprites first, then every stalk body followed by every eye in
+  // one batched polygon — interleaving sprite blits with primitives would
+  // flush the GPU batch once per buoy, and per-limb draw calls cost more JS
+  // than the geometry itself.
+  //
+  visible.forEach(buoy => drawBuoyRoots(k, buoy, colors.root))
+  const chains = visible.map(buoy => buildBuoyChainPoints(buoy, inst.time))
+  const batch = inst.bodyBatch
+  PolyBatch.reset(batch)
+  visible.forEach((buoy, i) => addBuoyBody(batch, buoy, chains[i], body))
+  visible.forEach((buoy, i) => addBuoyEye(batch, buoy, chains[i], eyeColors, inst.lookX, inst.lookY))
+  PolyBatch.flush(batch, k)
 }
 //
 // Grows a small root fan at the seabed anchor once, at creation time —
-// cached and redrawn as static geometry every frame (never regrown).
+// cached and baked into a sprite on first draw (never regrown).
 //
 function buildBuoyRoots(x, groundY, segmentWidth) {
   const rand = (min, max) => min + Math.random() * (max - min)
@@ -145,14 +174,14 @@ function buildBuoyRoots(x, groundY, segmentWidth) {
   return clampRootSegmentsBelowGroundLine(segs, groundY)
 }
 //
-// Fill-only root lines (no outline pass).
+// Fill-only root lines (no outline pass), baked once per root colour.
 //
 function drawBuoyRoots(k, buoy, rootColor) {
-  buoy.rootSegs?.forEach(seg => {
-    const p1 = k.vec2(seg.startX, seg.startY)
-    const p2 = k.vec2(seg.endX, seg.endY)
-    k.drawLine({ p1, p2, width: seg.width, color: rootColor, lineCap: 'round' })
-  })
+  if (!buoy.rootSegs?.length) return
+  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, buoy, BUOY_ROOTS_BAKE_SLOT, colorKey(rootColor),
+    rootSegmentsBounds(buoy.rootSegs),
+    ctx => drawTreeRootSegmentsToCanvas(ctx, buoy.rootSegs, cssRgb(rootColor)),
+    buoy.x * BUOY_ROOTS_GRAIN_SEED))
 }
 //
 // Random blink cadence per buoy — eyes stay open most of the time.
@@ -186,20 +215,24 @@ function buildBuoyChainPoints(buoy, time) {
   }
   return points
 }
-function drawBuoySegments(k, points, segmentWidth, color) {
+//
+// Stalk segments, then side arms, then joint knots — same order the
+// separate draw calls used.
+//
+function addBuoyBody(batch, buoy, points, color) {
+  addBuoySegments(batch, points, buoy.segmentWidth, color)
+  addBuoySideArms(batch, buoy, points, buoy.segmentWidth, color)
+  addBuoyJoints(batch, points, buoy.segmentWidth, color)
+}
+function addBuoySegments(batch, points, segmentWidth, color) {
   for (let i = 0; i < points.length - 1; i++) {
-    k.drawLine({
-      p1: k.vec2(points[i].x, points[i].y),
-      p2: k.vec2(points[i + 1].x, points[i + 1].y),
-      width: segmentWidth,
-      color
-    })
+    PolyBatch.addLine(batch, points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, segmentWidth, color)
   }
 }
 //
 // Short lateral sticks with round tips on each chain joint (not the ground anchor).
 //
-function drawBuoySideArms(k, buoy, points, segmentWidth, color) {
+function addBuoySideArms(batch, buoy, points, segmentWidth, color) {
   const armLenBase = segmentWidth * BUOY_SIDE_ARM_LEN_MULT
   for (let i = 1; i < points.length - 1; i++) {
     const side = i % 2 === 0 ? -1 : 1
@@ -209,23 +242,17 @@ function drawBuoySideArms(k, buoy, points, segmentWidth, color) {
     const py = points[i].y
     const tipX = px + side * armLen
     const tipY = py + segmentWidth * BUOY_SIDE_ARM_DROP
-    const ballR = segmentWidth * BUOY_SIDE_BALL_RADIUS_MULT
-    k.drawLine({
-      p1: k.vec2(px, py),
-      p2: k.vec2(tipX, tipY),
-      width: segmentWidth * 0.72,
-      color
-    })
-    k.drawCircle({ pos: k.vec2(tipX, tipY), radius: ballR, color })
+    PolyBatch.addLine(batch, px, py, tipX, tipY, segmentWidth * 0.72, color)
+    PolyBatch.addDisc(batch, tipX, tipY, segmentWidth * BUOY_SIDE_BALL_RADIUS_MULT, color)
   }
 }
-function drawBuoyJoints(k, points, segmentWidth, color) {
+function addBuoyJoints(batch, points, segmentWidth, color) {
   const radius = segmentWidth * BUOY_JOINT_RADIUS_MULT
   for (let i = 1; i < points.length - 1; i++) {
-    k.drawCircle({ pos: k.vec2(points[i].x, points[i].y), radius, color })
+    PolyBatch.addDisc(batch, points[i].x, points[i].y, radius, color)
   }
 }
-function drawBuoyEye(k, buoy, points, colors, heroX, heroY) {
+function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]
   //
   // Contour ring matches the pole width so leg and eye read as one stalk.
@@ -233,24 +260,18 @@ function drawBuoyEye(k, buoy, points, colors, heroX, heroY) {
   const contourExtra = buoy.segmentWidth
   if (!buoy.blinking) {
     const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY)
-    drawGlowEyeCreature(k, eye.x, eye.y, pupil.x, pupil.y, colors, {
+    addGlowEyeCreatureToBatch(batch, eye.x, eye.y, pupil.x, pupil.y, colors, {
       scleraR: BUOY_EYE_RADIUS,
       pupilR: BUOY_PUPIL_RADIUS,
       contourExtra
     }, { skipHighlight: true })
     return
   }
-  k.drawCircle({
-    pos: k.vec2(eye.x, eye.y),
-    radius: BUOY_EYE_RADIUS + contourExtra,
-    color: colors.contour
-  })
-  k.drawLine({
-    p1: k.vec2(eye.x - BUOY_EYE_RADIUS * 0.85, eye.y),
-    p2: k.vec2(eye.x + BUOY_EYE_RADIUS * 0.85, eye.y),
-    width: contourExtra + 1,
-    color: colors.contour
-  })
+  PolyBatch.addDisc(batch, eye.x, eye.y, BUOY_EYE_RADIUS + contourExtra, colors.contour)
+  PolyBatch.addLine(batch,
+    eye.x - BUOY_EYE_RADIUS * BUOY_BLINK_LID_SPAN, eye.y,
+    eye.x + BUOY_EYE_RADIUS * BUOY_BLINK_LID_SPAN, eye.y,
+    contourExtra + 1, colors.contour)
 }
 //
 // Clamps the pupil inside the sclera so it always points at the hero.

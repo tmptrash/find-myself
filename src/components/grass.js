@@ -34,6 +34,20 @@ const GRASS_ROOT_FAN_COUNT = 2
 const GRASS_ROOT_SEGMENTS = 9
 const GRASS_ROOT_THICKNESS = 1.5
 const GRASS_ROOT_SPREAD = 6
+const GRASS_ROOT_WIDTH_MULT = 0.52
+const GRASS_ROOT_MIN_WIDTH = 0.65
+const GRASS_ROOT_CULL_PAD = 16
+//
+// Root fans are static, so they are baked white into one shelf-packed atlas
+// (tinted at draw time like the blades) — one sprite per fan instead of a
+// drawLine per segment. Canvas strokes are anti-aliased, so hairlines get a
+// 1px floor to stay as readable as the old aliased lines.
+//
+const GRASS_ROOT_ATLAS_SPRITE_PREFIX = 'grass-root-atlas'
+const GRASS_ROOT_ATLAS_MAX_W = 2048
+const GRASS_ROOT_ATLAS_PAD = 2
+const GRASS_ROOT_BAKE_MIN_WIDTH = 1
+const GRASS_ROOT_ATLAS_GRAIN_SEED = 3000
 const CULL_PAD = 48
 //
 // Optional per-blade warm hue variation (opt-in via cfg.hueVaryMax) — most
@@ -77,6 +91,11 @@ const bladeQuadCache = []
 let lastTintRef = null
 let lastTintRgb = null
 let lastTintK = null
+//
+// Root atlas sprite names must be unique per live Kaplay instance (several
+// grass fields with roots can coexist in one scene).
+//
+const rootAtlasSerialByK = new WeakMap()
 
 /**
  * Creates a swaying grass field along a ground line
@@ -120,13 +139,15 @@ export function create(cfg) {
   const { k, floorY, left, right, tuftCount, z, excluded, density, getScaleMult, getTint, getSwayScale, postBakeCanvas, roots, getRootColor, getRootVisible, hueVaryMax, hueVarySkew } = cfg
   loadBladeSprites(k, postBakeCanvas)
   const { blades, tufts } = buildBlades(left, right, tuftCount, excluded, density, getScaleMult)
+  const tuftRoots = roots ? buildTuftFractalRoots(tufts) : null
   const inst = {
     k,
     floorY,
     blades,
     getTint,
     getSwayScale,
-    tuftRoots: roots ? buildTuftFractalRoots(tufts) : null,
+    tuftRoots,
+    rootAtlasSprite: tuftRoots ? bakeRootAtlas(k, tuftRoots, floorY, postBakeCanvas) : null,
     getRootColor: roots ? getRootColor : null,
     getRootVisible: roots ? getRootVisible : null,
     hueVaryMax: hueVaryMax ?? 0,
@@ -221,11 +242,100 @@ function buildTuftFractalRoots(tufts) {
         lateralBiasPerSegment: side * 0.045,
         rand
       })
-      fans.push({ x: anchorX, segs, maxLen })
+      fans.push({ x: anchorX, lines: truncateRootFan(segs, maxLen) })
     }
   })
   fans.sort((a, b) => a.x - b.x)
   return fans
+}
+//
+// Walks the fan in growth order and clips it to maxLen of total drawn length
+// (relative to the fan anchor at the ground line).
+//
+function truncateRootFan(segs, maxLen) {
+  const lines = []
+  let used = 0
+  for (const seg of segs) {
+    const dx = seg.endX - seg.startX
+    const dy = seg.endY - seg.startY
+    const segLen = Math.hypot(dx, dy)
+    if (used >= maxLen || segLen < 0.01) break
+    const t = Math.min(segLen, maxLen - used) / segLen
+    lines.push({
+      x1: seg.startX,
+      y1: seg.startY,
+      x2: seg.startX + dx * t,
+      y2: seg.startY + dy * t,
+      width: Math.max(GRASS_ROOT_MIN_WIDTH, seg.width * GRASS_ROOT_WIDTH_MULT)
+    })
+    used += segLen * t
+  }
+  return lines
+}
+//
+// Shelf-packs every fan into one white atlas and stores each fan's cell UV
+// window plus its world draw rect on the fan itself.
+//
+function bakeRootAtlas(k, fans, floorY, postBakeCanvas) {
+  const pad = GRASS_ROOT_ATLAS_PAD
+  let cursorX = 0
+  let cursorY = 0
+  let rowH = 0
+  let atlasW = 0
+  fans.forEach(fan => {
+    const bounds = rootFanBounds(fan.lines)
+    const cellW = Math.ceil(bounds.x2 - bounds.x1) + pad * 2
+    const cellH = Math.ceil(bounds.y2 - bounds.y1) + pad * 2
+    if (cursorX + cellW > GRASS_ROOT_ATLAS_MAX_W) {
+      cursorX = 0
+      cursorY += rowH
+      rowH = 0
+    }
+    fan.cell = { x: cursorX, y: cursorY, w: cellW, h: cellH, ox: Math.floor(bounds.x1) - pad, oy: Math.floor(bounds.y1) - pad }
+    cursorX += cellW
+    rowH = Math.max(rowH, cellH)
+    atlasW = Math.max(atlasW, cursorX)
+  })
+  const atlasH = cursorY + rowH
+  if (!atlasW || !atlasH) return null
+  const atlas = document.createElement('canvas')
+  atlas.width = atlasW
+  atlas.height = atlasH
+  const ctx = atlas.getContext('2d')
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineCap = 'round'
+  fans.forEach(fan => {
+    const { cell } = fan
+    fan.lines.forEach(line => {
+      ctx.lineWidth = Math.max(GRASS_ROOT_BAKE_MIN_WIDTH, line.width)
+      ctx.beginPath()
+      ctx.moveTo(cell.x + line.x1 - cell.ox, cell.y + line.y1 - cell.oy)
+      ctx.lineTo(cell.x + line.x2 - cell.ox, cell.y + line.y2 - cell.oy)
+      ctx.stroke()
+    })
+    fan.quad = { x: cell.x / atlasW, y: cell.y / atlasH, w: cell.w / atlasW, h: cell.h / atlasH }
+    fan.drawX = fan.x + cell.ox
+    fan.drawY = floorY + cell.oy
+  })
+  postBakeCanvas?.(atlas, GRASS_ROOT_ATLAS_GRAIN_SEED)
+  const serial = (rootAtlasSerialByK.get(k) ?? 0) + 1
+  rootAtlasSerialByK.set(k, serial)
+  const sprite = `${GRASS_ROOT_ATLAS_SPRITE_PREFIX}-${serial}`
+  k.loadSprite(sprite, atlas)
+  atlas.width = 0
+  atlas.height = 0
+  return sprite
+}
+function rootFanBounds(lines) {
+  const bounds = { x1: 0, y1: 0, x2: 0, y2: 0 }
+  lines.forEach(line => {
+    const r = Math.max(GRASS_ROOT_BAKE_MIN_WIDTH, line.width)
+    bounds.x1 = Math.min(bounds.x1, line.x1 - r, line.x2 - r)
+    bounds.y1 = Math.min(bounds.y1, line.y1 - r, line.y2 - r)
+    bounds.x2 = Math.max(bounds.x2, line.x1 + r, line.x2 + r)
+    bounds.y2 = Math.max(bounds.y2, line.y1 + r, line.y2 + r)
+  })
+  return bounds
 }
 //
 // Bakes the white grass-blade shapes (tapered curved silhouettes, some with a
@@ -352,32 +462,26 @@ function onDraw(inst) {
     })
   }
   //
-  // Optional root ticks, grouped in their own pass after every blade sprite
-  // — mixing sprites and primitives in alternating order breaks batching.
+  // Optional baked root fans, in their own pass after every blade sprite.
   //
-  const rootTint = inst.tuftRoots && inst.getRootColor?.()
-  if (rootTint) {
-    const rootColor = k.rgb(rootTint.r, rootTint.g, rootTint.b)
-    for (const fan of inst.tuftRoots) {
-      if (fan.x < minX - 16 || fan.x > maxX + 16) continue
-      if (inst.getRootVisible?.(fan.x) === false) continue
-      let used = 0
-      for (const seg of fan.segs) {
-        const dx = seg.endX - seg.startX
-        const dy = seg.endY - seg.startY
-        const segLen = Math.hypot(dx, dy)
-        if (used >= fan.maxLen || segLen < 0.01) break
-        const drawLen = Math.min(segLen, fan.maxLen - used)
-        const t = drawLen / segLen
-        k.drawLine({
-          p1: k.vec2(fan.x + seg.startX, inst.floorY + seg.startY),
-          p2: k.vec2(fan.x + seg.startX + dx * t, inst.floorY + seg.startY + dy * t),
-          width: Math.max(0.65, seg.width * 0.52),
-          color: rootColor
-        })
-        used += drawLen
-      }
-    }
+  const rootTint = inst.rootAtlasSprite && inst.getRootColor?.()
+  if (rootTint) drawRootFans(inst, rootTint, minX - GRASS_ROOT_CULL_PAD, maxX + GRASS_ROOT_CULL_PAD)
+}
+function drawRootFans(inst, rootTint, minX, maxX) {
+  const k = inst.k
+  const color = grassTintRgb(k, rootTint)
+  for (const fan of inst.tuftRoots) {
+    if (fan.x < minX) continue
+    if (fan.x > maxX) break
+    if (inst.getRootVisible?.(fan.x) === false) continue
+    k.drawSprite({
+      sprite: inst.rootAtlasSprite,
+      pos: k.vec2(fan.drawX, fan.drawY),
+      width: fan.cell.w,
+      height: fan.cell.h,
+      quad: fan.quad,
+      color
+    })
   }
 }
 //

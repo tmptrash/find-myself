@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as PolyBatch from '../../../utils/poly-batch.js'
 import { GLOW_PAL } from './glow-palette.js'
 
 //
@@ -80,4 +81,30 @@ export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii, op
     radius: hiR,
     color: highlight
   })
+}
+
+/**
+ * Same eye stack as drawGlowEyeCreature, queued into a PolyBatch so many eyes
+ * (and the bodies they sit on) go out in one draw call.
+ * @param {Object} batch - PolyBatch inst
+ * @param {number} cx - Sclera center X
+ * @param {number} cy - Sclera center Y
+ * @param {number} pupilX - Pupil center X
+ * @param {number} pupilY - Pupil center Y
+ * @param {Object} colors - Kaplay rgb from glowEyeCreatureColors()
+ * @param {Object} radii - { scleraR, pupilR, contourExtra }
+ * @param {Object} [opts] - { skipHighlight }
+ */
+export function addGlowEyeCreatureToBatch(batch, cx, cy, pupilX, pupilY, colors, radii, opts) {
+  const { sclera, pupil, highlight, contour } = colors
+  const { scleraR, pupilR, contourExtra } = radii
+  PolyBatch.addDisc(batch, cx, cy, scleraR + contourExtra, contour)
+  PolyBatch.addDisc(batch, cx, cy, scleraR, sclera)
+  PolyBatch.addDisc(batch, pupilX, pupilY, pupilR, pupil)
+  if (opts?.skipHighlight) return
+  PolyBatch.addDisc(batch,
+    cx + scleraR * EYE_HIGHLIGHT_OFFSET_X_MULT,
+    cy + scleraR * EYE_HIGHLIGHT_OFFSET_Y_MULT,
+    scleraR * EYE_HIGHLIGHT_RADIUS_MULT,
+    highlight)
 }

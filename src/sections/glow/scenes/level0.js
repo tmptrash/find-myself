@@ -1043,6 +1043,10 @@ const HUD_SCORE_COLOR_SETTLED = glowRgb('hudScore')
 //
 const LAKE_SURFACE_CULL_MARGIN = 48
 //
+// Off-screen slack for world decor culling (ear-trees, chain-buoys).
+//
+const GLOW_DECOR_CULL_MARGIN = 64
+//
 // Blinking letters — value 6 fill (or gold for G), value 1 offset-outline.
 //
 const GLOW_LETTER_FONT = 'JetBrains Mono'
@@ -1194,6 +1198,11 @@ const L_LETTER_PEEK_RETURN = 0.45
 const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ook closer. The world\nis full of nuances.'
 const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see.'
+//
+// O pickup caption — warm gold on grass/earth (darker phrase, brighter [hl]O).
+//
+const GLOW_O_CAPTION_PHRASE_PAL = 'glowLightCore'
+const GLOW_O_CAPTION_LETTER_PAL = 'glowLightBright'
 //
 // Voice-overs played while the matching letter dialog is open
 //
@@ -2039,6 +2048,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       Sound.stopWaterStepsLoop(sound)
     }
     const zones = loadGlowZones()
+    if (await glowBootstrapPause(bootstrap, 6, session)) return
     const colorFadeInit = zones.colorWorld ? 1 : 0
     //
     // Draw callbacks on decor/tramps read zones._sceneRef before inst exists
@@ -2080,12 +2090,14 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
       treeSegmentRevealed.size >= treeSegmentIds.length && (zones.tree = true)
     }
+    if (await glowBootstrapPause(bootstrap, 14, session)) return
     //
     // Underground decor first: its generated spec is baked both into the
     // standalone sprites (visible before L) and into the combined background.
     //
     const undergroundSpec = loadUndergroundSprites(k)
     !glowParallaxSpritesPrewarmed(k) && buildParallaxSprites(k, undergroundSpec)
+    if (await glowBootstrapPause(bootstrap, 20, session)) return
     if (await glowBootstrapPause(bootstrap, 24, session)) return
     //
     // Main tree: one sprite pair when fully explored, else segment sprites.
@@ -2328,6 +2340,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     Hero.spawn(heroInst, { instant: true })
     glowLevel0LiveHeroChar = heroInst.character
     snapGlowCameraToHero(k, heroInst)
+    if (await glowBootstrapPause(bootstrap, 30, session)) return
     if (await glowBootstrapPause(bootstrap, 36, session)) return
     //
     // footFx stays off (no dust) but run-step sounds still route through glow
@@ -5465,7 +5478,7 @@ function createGlowChainBuoyLayer(k, zones) {
         if (!sc || !isGlowChainBuoyLayerVisible(sc)) return
         const c = glowChainBuoyColors(sc, k)
         const pupilZones = sc.chainBuoys?.pupilZones ?? sc.zones
-        ChainBuoy.onDraw(sc.chainBuoys, c, pupilZones)
+        ChainBuoy.onDraw(sc.chainBuoys, c, pupilZones, glowCameraViewXRange(k, sc, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -5490,7 +5503,7 @@ function createGlowEarTreeLayer(k, inst) {
         const op = glowEarTreeRevealOpacity(inst)
         if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, op)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, op, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -5501,7 +5514,7 @@ function createGlowEarTreeLayer(k, inst) {
         const op = glowEarTreeRevealOpacity(inst)
         if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawRoots(inst.earTrees, c.root, op)
+        EarTree.onDrawRoots(inst.earTrees, c.root, op, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -5512,7 +5525,8 @@ function createGlowEarTreeLayer(k, inst) {
         const op = glowEarTreeRevealOpacity(inst)
         if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, op)
+        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, op,
+          glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -5523,7 +5537,8 @@ function createGlowEarTreeLayer(k, inst) {
         const op = glowEarTreeRevealOpacity(inst)
         if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
         const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip, op)
+        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip, op,
+          glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -6454,8 +6469,10 @@ function drawExploredGroundLip(inst) {
   const pitMouthCut = inst.pit?.collapsed && inst.pit.zone
     ? getGlowPitEarthBandMouthCutoutForPit(inst.pit)
     : null
+  const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
   for (let i = 0; i < lipSteps; i++) {
     const x = x0 + i * step
+    if (view && (x + step < view.x1 || x > view.x2)) continue
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
     if (pitMouthCut && x >= pitMouthCut.leftX && x <= pitMouthCut.rightX) continue
     const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
@@ -6591,7 +6608,7 @@ const GLOW_CHAIN_BUOY_PLATFORM_SIDE_JITTER = 56
 const GLOW_EAR_TREE_RIGHT_COUNT = 2
 const GLOW_EAR_TREE_MUD_RIGHT_GAP = 56
 const GLOW_EAR_TREE_RIGHT_CAVE_MARGIN = 48
-const GLOW_EAR_TREE_MIN_GAP = 160
+const GLOW_EAR_TREE_MIN_GAP = 240
 const GLOW_EAR_TREE_MUD_CLEAR = 36
 //
 // Keeps grass blades from spawning over an ear-tree's trunk footprint - the
@@ -6610,6 +6627,11 @@ const GLOW_EAR_TREE_WHISPER_MAX_VOLUME = 0.42
 // away from the nearest lip-tree — ignores sub-pixel jitter.
 //
 const GLOW_EAR_TREE_WHISPER_PROX_DELTA = 0.002
+//
+// Lip-tree whispers only apply on the forest floor — below the lip (cave /
+// pit) horizontal nearness must not keep the loop audible.
+//
+const GLOW_EAR_TREE_WHISPER_SURFACE_FOOT_Y = FLOOR_Y - 10
 const GLOW_EARLY_LAND_FOOT_ABOVE = 26
 //
 // Clearance kept around the cave crack zone for both decor kinds — neither
@@ -6803,6 +6825,15 @@ function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
 //
 // Ear-tree decor spots — two trees clustered right of the big tree (never over mud).
 //
+function glowEarTreeSpotXAllowed(spots, x, branchTrampX) {
+  if (Math.abs(x - branchTrampX) < TRAMP_GRASS_CLEAR_HALF) return false
+  return !spots.some(s => Math.abs(s.x - x) < GLOW_EAR_TREE_MIN_GAP)
+}
+function tryAddGlowEarTreeSpot(spots, x, branchTrampX, heightTier) {
+  if (!glowEarTreeSpotXAllowed(spots, x, branchTrampX)) return false
+  spots.push(buildGlowEarTreeSpot(x, heightTier))
+  return true
+}
 function buildGlowEarTreeSpots(treeBaseLeftX) {
   const mud = computeGlowMudZoneX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
@@ -6817,33 +6848,33 @@ function buildGlowEarTreeSpots(treeBaseLeftX) {
   const rightXMin = mud.x2 + GLOW_EAR_TREE_MUD_RIGHT_GAP
   const rightXMax = cave.x1 - GLOW_CAVE_DECOR_CLEAR - GLOW_EAR_TREE_RIGHT_CAVE_MARGIN
   const rightHeightTiers = ['short', 'tall']
+  const minSpan = GLOW_EAR_TREE_MIN_GAP * (GLOW_EAR_TREE_RIGHT_COUNT - 1) + 48
   const spots = []
   let attempts = 0
   while (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && attempts < 80) {
     attempts += 1
-    if (rightXMax <= rightXMin + GLOW_EAR_TREE_MIN_GAP * 0.5) break
+    if (rightXMax <= rightXMin + minSpan) break
     const x = rightXMin + Math.random() * (rightXMax - rightXMin)
-    if (Math.abs(x - branchTrampX) < TRAMP_GRASS_CLEAR_HALF) continue
-    const tooClose = spots.some(s => Math.abs(s.x - x) < GLOW_EAR_TREE_MIN_GAP)
-    if (tooClose) continue
-    spots.push(buildGlowEarTreeSpot(x, rightHeightTiers[spots.length]))
+    tryAddGlowEarTreeSpot(spots, x, branchTrampX, rightHeightTiers[spots.length])
   }
-  if (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && rightXMax > rightXMin + 40) {
+  if (spots.length < GLOW_EAR_TREE_RIGHT_COUNT && rightXMax > rightXMin + minSpan) {
     const span = rightXMax - rightXMin
     const fallbackXs = [
-      rightXMin + span * 0.22,
-      rightXMin + span * 0.74
+      rightXMin + span * 0.2,
+      rightXMin + span * 0.8
     ]
     for (let i = spots.length; i < GLOW_EAR_TREE_RIGHT_COUNT; i++) {
-      spots.push(buildGlowEarTreeSpot(fallbackXs[i], rightHeightTiers[i]))
+      tryAddGlowEarTreeSpot(spots, fallbackXs[i], branchTrampX, rightHeightTiers[i])
     }
   }
   spots.sort((a, b) => a.x - b.x)
-  if (spots.length < GLOW_EAR_TREE_COUNT && rightXMax > rightXMin + 40) {
+  if (spots.length < GLOW_EAR_TREE_COUNT && rightXMax > rightXMin + minSpan) {
     const span = rightXMax - rightXMin
-    while (spots.length < GLOW_EAR_TREE_COUNT) {
-      const t = (spots.length + 1) / (GLOW_EAR_TREE_COUNT + 1)
-      spots.push(buildGlowEarTreeSpot(rightXMin + span * t, rightHeightTiers[spots.length]))
+    let tier = 0
+    for (let slot = 1; spots.length < GLOW_EAR_TREE_COUNT && slot <= GLOW_EAR_TREE_COUNT; slot++) {
+      const x = rightXMin + span * (slot / (GLOW_EAR_TREE_COUNT + 1))
+      tryAddGlowEarTreeSpot(spots, x, branchTrampX, rightHeightTiers[tier % rightHeightTiers.length]) &&
+        (tier += 1)
     }
     spots.sort((a, b) => a.x - b.x)
   }
@@ -6876,38 +6907,51 @@ function resetGlowEarTreeWhisperProximityState(inst) {
   inst.earWhisperProximityState.last = 0
   inst.earWhisperProximityState.wasReceding = false
 }
-function updateGlowEarTreeWhisperSound(inst, char) {
-  const fadeOut = () => {
-    Sound.setEarTreeWhisperVolume(0)
-    resetGlowEarTreeWhisperProximityState(inst)
+function fadeOutGlowEarTreeWhisper(inst) {
+  Sound.setEarTreeWhisperVolume(0)
+  const kaplayWhisper = inst.earWhisperMusic
+  kaplayWhisper && (kaplayWhisper.volume = 0, kaplayWhisper.paused = true)
+  resetGlowEarTreeWhisperProximityState(inst)
+}
+function setGlowEarTreeWhisperVolume(inst, volume) {
+  const vol = Math.max(0, Math.min(1, volume))
+  Sound.setEarTreeWhisperVolume(vol)
+  const kaplayWhisper = inst.earWhisperMusic
+  if (!kaplayWhisper) return
+  if (vol <= 0.001) {
+    kaplayWhisper.volume = 0
+    kaplayWhisper.paused = true
+    return
   }
+  kaplayWhisper.paused = false
+  kaplayWhisper.volume = vol
+}
+function updateGlowEarTreeWhisperSound(inst, char) {
+  const fadeOut = () => fadeOutGlowEarTreeWhisper(inst)
   if (!char?.pos || !inst.zones.lCollected || !inst.earTrees?.trees?.length) {
     fadeOut()
     return
   }
-  //
-  // inst.dialogOpen is legacy from the old modal letter dialog and is never
-  // set true by the current caption system (openGlowLetterCaption only sets
-  // letterCaptionActive) — checking it alone let this proximity update keep
-  // fighting the caption's own audio fade tick (updateGlowDialogAudioFadeOut)
-  // for the whole caption duration, both writing Sound.setEarTreeWhisperVolume
-  // on the same <audio> element every frame from two independent loops. The
-  // resulting dozens-per-second pause()/play() thrash is what made whisper.mp3
-  // sound sped up until the caption's fade tick stopped fighting back.
-  //
-  if (inst.dialogOpen || inst.letterCaptionActive || inst.drowning) {
+  if (inst.dialogOpen || inst.drowning) {
+    fadeOut()
+    return
+  }
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)) {
     fadeOut()
     return
   }
   inst.sound && Sound.resumeAudioContext(inst.sound)
   const hx = char.pos.x
-  let nearestX = Infinity
+  const surfaceDy = Math.max(0, footY - GLOW_EAR_TREE_WHISPER_SURFACE_FOOT_Y)
+  let nearestDist = Infinity
   for (const tree of inst.earTrees.trees) {
-    nearestX = Math.min(nearestX, Math.abs(hx - tree.x))
+    const dx = hx - tree.x
+    nearestDist = Math.min(nearestDist, Math.hypot(dx, surfaceDy))
   }
-  const proximity = nearestX >= GLOW_EAR_TREE_WHISPER_RADIUS
+  const proximity = nearestDist >= GLOW_EAR_TREE_WHISPER_RADIUS
     ? 0
-    : 1 - nearestX / GLOW_EAR_TREE_WHISPER_RADIUS
+    : 1 - nearestDist / GLOW_EAR_TREE_WHISPER_RADIUS
   const whisperMax = CFG.audio.backgroundMusic.whisper ?? GLOW_EAR_TREE_WHISPER_MAX_VOLUME
   const vol = whisperMax * proximity
   if (vol <= 0.001) {
@@ -6926,7 +6970,7 @@ function updateGlowEarTreeWhisperSound(inst, char) {
     proxState.wasReceding = false
   }
   proxState.last = proximity
-  Sound.setEarTreeWhisperVolume(vol)
+  setGlowEarTreeWhisperVolume(inst, vol)
 }
 //
 // Plays ground/wood land SFX a few pixels before isGrounded flips — Kaplay
@@ -9231,12 +9275,19 @@ function createLakeShoreRockLayer(k, zones) {
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
 //
 function isLakeFillInCameraView(k, sc, x1, x2) {
+  const view = glowCameraViewXRange(k, sc, LAKE_SURFACE_CULL_MARGIN)
+  return !view || !(x2 < view.x1 || x1 > view.x2)
+}
+//
+// Visible world X range of the glow camera (null before the camera exists,
+// which callers treat as "everything visible").
+//
+function glowCameraViewXRange(k, sc, margin) {
   const cam = sc?.camera
-  if (!cam) return true
-  const zoom = cam.zoom || 1
-  const halfW = cam.viewW / (2 * zoom) + LAKE_SURFACE_CULL_MARGIN
+  if (!cam) return null
+  const halfW = cam.viewW / (2 * (cam.zoom || 1)) + margin
   const camX = k.camPos().x
-  return !(x2 < camX - halfW || x1 > camX + halfW)
+  return { x1: camX - halfW, x2: camX + halfW }
 }
 //
 // Lake tint at draw time (shared by the baked sprite).
@@ -10223,7 +10274,9 @@ function drawGlowMudZoneGroundLine(inst, x1, x2) {
   const mudRimColor = k.rgb(mudRimRgb.r, mudRimRgb.g, mudRimRgb.b)
   const step = (x2 - x1) / GROUND_LIP_STEPS
   if (step <= 0) return
+  const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
   for (let x = x1; x < x2; x += step) {
+    if (view && (x + step < view.x1 || x > view.x2)) continue
     const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
     const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
     const h = Math.max(2, 4 + lip) + (inMud ? MUD_GROUND_EXTRA_H : 0)
@@ -10929,11 +10982,7 @@ function updateGlowDialogAudioFadeOut(inst, state, elapsedSec) {
   const fade = GLOW_DIALOG_AUDIO_FADE_SEC
   const t = Math.min(1, elapsedSec / fade)
   const birds = state.birdsVol * (1 - t)
-  const whisper = state.whisperVol * (1 - t)
   inst.birdsMusic && (inst.birdsMusic.volume = birds)
-  inst.earWhisperMusic && (inst.earWhisperMusic.volume = whisper)
-  whisper <= 0.001 && inst.earWhisperMusic && (inst.earWhisperMusic.paused = true)
-  Sound.setEarTreeWhisperVolume(whisper)
   inst.sound && Sound.setAmbientVolume(inst.sound, state.ambientVol * (1 - t))
 }
 //
@@ -10946,12 +10995,6 @@ function restoreGlowDialogAudioFadeIn(inst, state) {
   const tick = () => {
     const t = Math.min(1, (performance.now() - startMs) / fadeMs)
     setGlowBirdsLoopVolume(inst.birdsMusic, state.birdsVol * t)
-    if (state.whisperVol > 0) {
-      const wVol = state.whisperVol * t
-      inst.earWhisperMusic && (inst.earWhisperMusic.paused = false)
-      inst.earWhisperMusic && (inst.earWhisperMusic.volume = wVol)
-      Sound.setEarTreeWhisperVolume(wVol)
-    }
     inst.sound && Sound.setAmbientVolume(inst.sound, state.ambientVol * t)
     if (t < 1) {
       inst._dialogAudioRestoreRaf = requestAnimationFrame(tick)
@@ -11003,12 +11046,13 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const gCaptionLetterRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const grayCaptionNoShadow = letterEntry?.char === 'G'
   const isGrayCaption = grayCaptionNoShadow || letterEntry?.char === 'O'
-  const captionObservationInkRgb = getRGB(k, GLOW_PAL.captionObservationInk)
   const captionLetterLInkRgb = getRGB(k, GLOW_PAL.captionLetterLInk)
+  const captionLetterOInkRgb = getRGB(k, GLOW_PAL[GLOW_O_CAPTION_PHRASE_PAL])
+  const captionLetterOGlyphRgb = getRGB(k, GLOW_PAL[GLOW_O_CAPTION_LETTER_PAL])
   const captionTextRgb = letterEntry?.char === 'G'
     ? gCaptionTextRgb
     : letterEntry?.char === 'O'
-      ? captionObservationInkRgb
+      ? captionLetterOInkRgb
       : letterEntry?.char === 'L'
         ? captionLetterLInkRgb
         : (isGrayCaption ? gCaptionTextRgb : glowCaptionTextRgb())
@@ -11019,7 +11063,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       : letterEntry?.char === 'L'
         ? getRGB(k, GLOW_PAL.gold)
         : letterEntry?.char === 'O'
-          ? getRGB(k, GLOW_PAL.glowLightBright)
+          ? captionLetterOGlyphRgb
           : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
@@ -11590,7 +11634,8 @@ function glowLetterEntryByKind(inst, kind) {
 function queueGlowLetterPickup(inst, kind, grounded) {
   if (inst.letterCaptionActive) return
   if (inst.pendingLetterPickup?.kind === kind) {
-    grounded && flushPendingGlowLetterPickup(inst, true, true)
+    grounded && (inst.pendingLetterPickup.pickedOnGround = true)
+    flushPendingGlowLetterPickup(inst, grounded, true)
     return
   }
   if (inst.pendingLetterPickup) return
@@ -11606,7 +11651,8 @@ function queueGlowLetterPickup(inst, kind, grounded) {
 function flushPendingGlowLetterPickup(inst, grounded, justLanded) {
   const pending = inst.pendingLetterPickup
   if (!pending || !grounded) return
-  if (!justLanded && !pending.pickedOnGround) return
+  const lVisibleReady = pending.kind === 'l' && inst.zones.lLetterUnveiled
+  if (!justLanded && !pending.pickedOnGround && !lVisibleReady) return
   inst.pendingLetterPickup = null
   pending.kind === 'g' && collectLetterG(inst)
   pending.kind === 'l' && collectLetterL(inst)
@@ -12977,6 +13023,11 @@ function onUpdate(inst) {
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
   //
+  // refreshGlowMainGroundJumpState clears wasJumping before foot bursts run —
+  // latch landing dust here while jump state is still intact.
+  //
+  const landingFootBurst = justLanded && (hero.wasJumping || hero.jumpPhase === 'jumping')
+  //
   // G letter pickup on branch — FX waits for a grounded landing.
   //
   if (isGLetterCollectable(inst)) {
@@ -12984,6 +13035,7 @@ function onUpdate(inst) {
     const dy = char.pos.y - inst.gLetter.y
     Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && queueGlowLetterPickup(inst, 'g', grounded)
   }
+  tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
   maybeRevealGlowUndergroundAfterG(inst, grounded)
   refreshGlowBranchJumpState(inst, char)
@@ -13121,7 +13173,7 @@ function onUpdate(inst) {
   const snapFootY = char.pos.y + SURFACE_DETECT_Y
   const snapSurface = detectGlowSurface(inst)
   const allowFootBurst = canSpawnGlowFootBurst(inst, char)
-  if (justLanded && hero.wasJumping && allowFootBurst) {
+  if (landingFootBurst && allowFootBurst) {
     const lakeFloorLand = isInWaterZone(inst, snapHeroX, snapFootY) &&
       snapFootY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
     !lakeFloorLand &&
@@ -13130,6 +13182,14 @@ function onUpdate(inst) {
   if (startedRunning && allowFootBurst && !isInWaterZone(inst, snapHeroX, snapFootY)) {
     spawnGlowFootLanding(inst.footParticles, snapHeroX, snapFootY, snapSurface, inst, char)
   }
+  //
+  // L unveil + pickup after log snaps — isGrounded and feet Y match the
+  // platform collider so the letter can be taken the same frame it appears.
+  //
+  const snapGrounded = char.isGrounded?.() ?? false
+  tryUnveilLLetterAfterTramp(inst, snapHeroX, snapFootY, snapGrounded, landingFootBurst)
+  !inst.letterCaptionActive &&
+    tryCollectGlowLetters(inst, char, snapGrounded, landingFootBurst || justLanded)
   maybeSpawnLeftHedgehogAmbush(inst, heroX, char.vel?.x ?? 0)
   maybeMarkLPlatStepped(inst, char, grounded)
   maybeMarkLeftHedgehogJumpedOver(inst, char, grounded)
@@ -13156,7 +13216,6 @@ function onUpdate(inst) {
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
-  tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   updateGlowMidges(inst.midges, k.dt(), 1)
   inst.branchTrampPitGuardTimer > 0 &&
     (inst.branchTrampPitGuardTimer = Math.max(0, inst.branchTrampPitGuardTimer - k.dt()))

@@ -152,6 +152,13 @@ export function getGlowLightRgb(tier = 'mid') {
 // leave the game-wide palette.
 //
 const PALETTE_RGBS = GLOW_PAL.swatches.map(hex => glowRgb(hex))
+//
+// Integer RGB → nearest swatch memo. Per-frame colour lerps (grass tints,
+// fades, decor darkening) snap the same few hundred values every frame, and
+// each miss is a 96-swatch scan. Cleared when full so it stays bounded.
+//
+const SNAP_CACHE_MAX = 8192
+const snapCache = new Map()
 
 /**
  * Snaps an RGB triplet onto the nearest game-wide palette swatch.
@@ -159,18 +166,13 @@ const PALETTE_RGBS = GLOW_PAL.swatches.map(hex => glowRgb(hex))
  * @returns {{ r: number, g: number, b: number }}
  */
 export function snapToPalette(c) {
-  let best = PALETTE_RGBS[0]
-  let bestD = Infinity
-  for (let i = 0; i < PALETTE_RGBS.length; i++) {
-    const s = PALETTE_RGBS[i]
-    const dr = c.r - s.r
-    const dg = c.g - s.g
-    const db = c.b - s.b
-    const d = dr * dr + dg * dg + db * db
-    if (d < bestD) {
-      bestD = d
-      best = s
-    }
+  const cacheable = isByte(c.r) && isByte(c.g) && isByte(c.b)
+  const key = cacheable ? (c.r << 16) | (c.g << 8) | c.b : -1
+  const hit = cacheable ? snapCache.get(key) : undefined
+  const best = hit ?? nearestPaletteSwatch(c)
+  if (cacheable && !hit) {
+    snapCache.size >= SNAP_CACHE_MAX && snapCache.clear()
+    snapCache.set(key, best)
   }
   return { r: best.r, g: best.g, b: best.b }
 }
@@ -560,4 +562,23 @@ function darkenRgb(c, t) {
     g: Math.round(c.g + (v.g - c.g) * t),
     b: Math.round(c.b + (v.b - c.b) * t)
   })
+}
+function nearestPaletteSwatch(c) {
+  let best = PALETTE_RGBS[0]
+  let bestD = Infinity
+  for (let i = 0; i < PALETTE_RGBS.length; i++) {
+    const s = PALETTE_RGBS[i]
+    const dr = c.r - s.r
+    const dg = c.g - s.g
+    const db = c.b - s.b
+    const d = dr * dr + dg * dg + db * db
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  return best
+}
+function isByte(v) {
+  return Number.isInteger(v) && v >= 0 && v <= 255
 }

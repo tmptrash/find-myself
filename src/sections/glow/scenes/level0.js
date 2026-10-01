@@ -160,7 +160,6 @@ import {
 } from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
-import { glowEyeCreatureColors } from '../utils/glow-eye-creature.js'
 import * as EarTree from '../utils/glow-ear-tree.js'
 import * as GlowCamera from '../utils/glow-camera.js'
 import {
@@ -5411,7 +5410,7 @@ function isGlowChainBuoyLayerVisible(inst) {
 //
 // Stalk-eye colours — gray stalk + eye ring before L, black after L; roots use
 // the same palette as ear-tree roots (glowEarTreeRootKaplayRgb). Colour world:
-// warm sclera + green-black body (see cfg eyeCreature).
+// white sclera + black stalk and eye ring (hero eye white / pupil palette).
 //
 function glowChainBuoyColors(inst, k) {
   const zones = inst?.zones
@@ -5431,12 +5430,17 @@ function glowChainBuoyColors(inst, k) {
   if (!zones?.colorWorld) {
     return grayStack
   }
-  const eyes = glowEyeCreatureColors(k)
+  //
+  // Colour world: black stalk + ring (same as post-L grey stalk), white
+  // sclera — not the warm green-black eyeCreature stack used elsewhere.
+  //
+  const whiteTriplet = glowRgb(CFG.visual.colors.hero.eyeWhite)
+  const white = k.rgb(whiteTriplet.r, whiteTriplet.g, whiteTriplet.b)
   return {
-    body: eyes.body,
-    sclera: eyes.sclera,
-    highlight: eyes.highlight,
-    contour: eyes.contour,
+    body: stalk,
+    sclera: white,
+    highlight: white,
+    contour: stalk,
     pupil: grayStack.pupil,
     root
   }

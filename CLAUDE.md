@@ -706,44 +706,115 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 
 ## 16. Level art direction (reference rules)
 
-These rules complement sections 3, 13, 14, and 15. They describe **how levels should look** (palette usage, light, composition) from agreed reference games — not engine or config mechanics already covered above. Primary target: **Glow** (`lesson-glow`), reusable for other procedural levels.
+These rules complement sections 3, 13, 14, and 15. They describe **how procedural levels should look** (palette, light, composition, readability) — not engine mechanics. Apply them to every section unless a section’s own `cfg.js` documents a deliberate exception.
 
-### Palette & readability
+### Thematic colour grammar
 
-- Per screen: **1–2 hue families** in decor plus **one rare pop color** for the player, goal, or hazard; keep everything else muted.
-- Player and **walkable surfaces** must read by **value/contrast**, not hue alone.
-- **Top edge** of ground/platforms: lighter rim or “living” strip (moss, grass, lit stone); support mass stays darker.
+- Every hue should support the section’s theme; avoid random accent colours that do not mean anything.
+- **Warm gold / amber** — discovery, attention, something becoming visible.
+- **Orange** — unusual, important, potentially interactive; use rarely, never evenly scattered.
+- **Red / pink accents** — danger, life, or something breaking the normal order; never wallpaper-level distribution.
+- **Cream / warm off-white** — perception, eyes, readable highlights on dark bases.
+- When a level has progression (e.g. monochrome prelude → full colour), **every object class** must follow the same mode rules — background, underground, props, particles, captions, and death VFX. No stray green or full colour in a grey phase.
+- Caption text above the playfield stays **crisp vector/baked text**, never pixel-crunched like world decor. Pick caption greys/yellows that **contrast the backdrop** behind them, not the global palette name alone.
 
-### Light & atmosphere
+### Palette balance (~70 / 20 / 10)
 
-- **Depth**: background **lighter or cooler, lower contrast and detail**; optional **near-black silhouettes** at the bottom/sides — use sparingly.
-- **One lighting model per room** — pick one: hazy dim, dark void + luminous edges, or moon/beams; do not combine all three in the same space.
+- ~**70%** dominant hue family (often green/teal forest, or the section’s base).
+- ~**20%** warm earth / structural neutrals tied to materials (brown ground, bark, wood).
+- ~**10%** gold / orange / rare accents.
+- Accents stay **clustered and rare** so rarity creates focus — especially in levels about seeing or noticing.
 
-### Silhouette & texture
+### Reduce neutral grey
 
-- **Ground/platform bottoms**: broken or wavy, not perfect rectangles.
-- **Hard geometry + organic overlay**: stone, metal, and walls get moss, roots, vines, or irregular edges.
-- **Volume and shadows**: **clusters and dithering**, not smooth off-palette gradients; large flat areas rely on grain, not micro-noise.
+- Avoid grey-green, grey-brown, grey-violet, and grey-beige as the default look.
+- **Grey is for materials**: stone, some soil, metal, UI — not for “forest green” or “tree shadow.”
+- Shadows read as **cool hue** (green-blue, blue-violet) from the palette, not flat neutral grey.
+- Rocks and ruins: **tinted** stone (green/brown/warm grey from Otterisk), not pure neutral grey fills.
+- Deepest darks: **very dark hue** (green-black, blue-black), not `#000000`, unless a section explicitly needs void black.
+
+### Light
+
+- Light is a **colour**, not only higher brightness — warm gold/amber on cool bases reads better than beige haze.
+- Use strong light **sparingly**; it should feel like revelation or a path, not uniform fog.
+- Typical read: dark/cool base → midground hue → warm accent light where the player should look.
+
+### Depth (contrast + saturation + detail)
+
+- Do not rely on a single atmospheric fade; separate layers with **all three**:
+  - **Background**: lower contrast, lower saturation, fewer details, softer (optional blur), larger pixel clusters (~8–12 px).
+  - **Midground**: medium contrast/saturation/detail, mild softness (~4–8 px clusters).
+  - **Gameplay plane**: sharp, highest readability (~2–4 px details).
+  - **Foreground accents**: sharpest contours, slightly higher saturation, 1–2 px details where needed.
+- **Blur** is for depth only — gameplay plane and hero stay sharp.
+- Parallax: at least three layers; far layer **silhouette-level**, never competing with the player.
+
+### Foliage & organic decor
+
+- **2–3 tones per mass** (light / base / shadow) read as one shape — not many close shades plus noise and transparency.
+- Structure: **large form → 2–3 colour patches → a few small details**.
+- Foliage built from **large irregular pixel clusters** (“clouds”), not fields of tiny semi-transparent leaves; cut micro-leaf count ~30–50% vs. noisy fills.
+- Leaf shapes: **asymmetric**, egg/leaf-like or lumpy clusters — not perfect circles, squares, or symmetric blobs.
+- Individual trees and hero-scale props may carry **more saturation**; distant parallax stays **restrained** (muted green/teal, not grey-green soup).
+
+### Ground & platforms
+
+- Walkable ground reads as a **value band** separate from walls; top edge often has a lighter rim (grass, moss, lit stone); mass below stays darker.
+- Ground/platform **bottoms**: broken or wavy silhouettes, not perfect rectangles.
+- **Nothing “alive green” below the ground line** unless the design explicitly calls for it — roots and underfill match soil/rock tones.
+- Large flat ground strips should not **steal attention** from the play path (value and saturation controlled in section cfg).
+
+### Texture & noise
+
+- Rule: **noise only where the eye expects texture** — soil, bark, rock, selected foliage patches.
+- Do not apply uniform grain, speckle, or micro-detail across the whole frame.
+- Large flat areas use **grain + dither clusters**, not smooth off-palette gradients or endless micro-noise.
+
+### Outlines
+
+- Important gameplay and environment objects get **readable dark contours** from the palette (green-black, brown-black) — not necessarily pure black everywhere.
+- Player, hazards, platforms, and signature props: **stronger** contour than background decor.
+- Do not use one global thick outline on everything; match weight to gameplay importance.
+- Hero outline must stay **visible in idle and run** (including eye contours when eyes are open or closed-with-rim).
+
+### Eyes & readability
+
+- Eye props (stalk eyes, pickups, HUD-adjacent creatures) are among the **most readable** objects: light sclera on dark body, dark pupil, no extra inner dots besides the pupil when spec says so.
+- They should pop against the environment but **not look like UI widgets**.
+
+### Props consistency
+
+- Wood platforms: **brown** wear and detail, not green moss unless intentional.
+- Mushrooms, machines, and interactables share the **same pixel language** as terrain (palette, contour, cluster size) — not pasted stock assets.
+- Interactive springs / rare props may be **slightly more saturated** than ambient decor; never neon unless the beat calls for it.
 
 ### Composition
 
-- **One vertical anchor** on key shots (tree, trunk, stem, large machine).
-- **Play path** reads as a **distinct value band** separate from walls and ruins.
-- **Parallax**: at least three layers; each layer has its own tone; **far layer stays silhouette-level**, never competing with the player.
-- **Edge framing**: darker corners or overhead foliage/vines — moderate; do not mask the whole level with a permanent peephole vignette.
+- **One vertical anchor** on key shots (tree, tower, machine).
+- **Play path** reads as a distinct value/hue band.
+- **Edge framing**: darker corners or overhead vines/foliage — moderate; no permanent peephole vignette on the whole level.
 
 ### Cave, water, special looks
 
-- **Water**: dark fill, **simple striped/distorted reflection** (not a sharp mirror).
-- **Cave/pit void**: near-black interior, **no gray seam** at the lip; large rocks **do not float** above the ground line.
-- **Heavy CRT / scanlines / chromatic aberration**: only for **dedicated modes**, not the default forest look.
-- **Moon shafts / vertical light bands**: rare, semi-transparent palette swatches; do not cover the player or HUD.
+- **Water**: dark fill, simple striped or distorted reflection — not a sharp mirror.
+- **Cave/pit void**: near-black interior, no grey seam at the lip; large rocks do not float above the ground line.
+- Fill geometry must not **clip** foreground rocks or props — draw order and masks respect silhouettes.
+- **Heavy CRT / scanlines / chromatic aberration**: dedicated modes only, not the default outdoor look.
+- **Moon shafts / vertical light bands**: rare, semi-transparent palette swatches; do not cover player or HUD.
 
-### What not to copy wholesale
+### Reference games (borrow, do not clone)
 
-- **Animal Well**: full-neon outline style — only for specific beats (cave, lake), not the whole forest.
-- **Hyper Light Drifter**: borrow **cool base / hot accent** and occasional beams — not top-down layout or all-pink foliage.
-- **Owlboy-level saturation**: reserve for the hero, signature tree, and key props; **parallax forest stays restrained** (muted gray-green).
+- **Animal Well**: full-neon outline — specific beats only, not the whole level.
+- **Hyper Light Drifter**: cool base / hot accent and occasional beams — not layout or all-saturated foliage.
+- **Owlboy-level saturation**: hero, signature prop, and key goal — not the entire parallax stack.
+
+### Visual QA checklist (any level)
+
+- Dominant palette is **cohesive**; greys only where materials require them.
+- Background **darker/cooler/simpler**; gameplay plane **clearer and sharper**.
+- Foliage and rocks use **clusters** and 2–3 tones; detail size scales with depth.
+- Player, goals, hazards, and platforms **instantly readable**; decor does not mimic interactables.
+- If HUD and captions were removed, the scene still reads: **where to go, what is dangerous, what is special**.
 
 ---
 

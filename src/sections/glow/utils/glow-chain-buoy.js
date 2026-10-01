@@ -16,8 +16,8 @@ import {
   rootSegmentsBounds
 } from './glow-static-bake.js'
 //
-// Stalk-eye pupil: gray decor before L, hero black after (colour world keeps
-// the same rule — only the stalk palette switches to eyeCreature).
+// Stalk-eye pupil: gray decor before L, hero black after (colour world: white
+// sclera, black stalk and eye ring — same stalk RGB as body).
 //
 const CHAIN_BUOY_PUPIL_PRE_L_PALETTE_KEY = 'decorGray'
 const CHAIN_BUOY_PUPIL_POST_L_HEX = CFG.visual.colors.hero.eyePupil

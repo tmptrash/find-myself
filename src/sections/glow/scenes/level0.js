@@ -68,7 +68,6 @@ import {
   applyGlowHudSharpBake,
   glowDepthBlurRadiusPx
 } from '../utils/glow-focus-depth.js'
-import { createGlowHeroFramesStripHud } from '../utils/glow-hero-frames-strip.js'
 import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
@@ -2902,7 +2901,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     k.onUpdate(() => onUpdate(inst))
     registerGlowTrampolineLateBounce(inst)
     if (await glowBootstrapPause(bootstrap, 97, session)) return
-    createGlowHeroFramesStripHud(k, inst, k.height())
     createPlayfieldFrameOverlay(k, inst)
     //
     // Letter-fill burst halo — drawn just above the hero sprite.

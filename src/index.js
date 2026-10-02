@@ -28,5 +28,6 @@ async function boot() {
   }
   setActiveEngine(k, RESOLUTION_MODE.NATIVE)
   installWindowResizeReboot()
-  await prepareSceneAssetsThenEnterScene(k, 'ready')
+  const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
+  await prepareSceneAssetsThenEnterScene(k, startScene)
 }

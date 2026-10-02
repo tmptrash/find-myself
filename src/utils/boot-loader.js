@@ -17,19 +17,18 @@ let loaderBarSessionStartMs = 0
 const LOADER_BAR_CREEP_PER_SEC_DEFAULT = 22
 const LOADER_BAR_CREEP_HEADROOM_DEFAULT = 12
 //
-// While real progress stalls on long main-thread work, the bar still creeps
-// toward 99% from wall-clock time so the loader never looks frozen mid-way.
+// Displayed width may creep slightly ahead of the last reported value (headroom)
+// so short gaps between yields still show motion — never past reported + headroom.
 //
-const LOADER_BAR_MIN_DRIFT_PER_SEC = 5.5
-const LOADER_BAR_MIN_DRIFT_PER_SEC_BOOST = 9.5
+const LOADER_BAR_CREEP_HEADROOM_BOOST = 4
 //
 // Glow bootstrap reports truth in bursts — faster creep keeps the bar moving
 // between those reports so the screen reads as loading, not frozen.
 //
 export function setLoaderBarCreepBoost(boosted) {
   if (boosted) {
-    loaderBarCreepPerSec = 48
-    loaderBarCreepHeadroom = 22
+    loaderBarCreepPerSec = 36
+    loaderBarCreepHeadroom = LOADER_BAR_CREEP_HEADROOM_BOOST
   } else {
     loaderBarCreepPerSec = LOADER_BAR_CREEP_PER_SEC_DEFAULT
     loaderBarCreepHeadroom = LOADER_BAR_CREEP_HEADROOM_DEFAULT
@@ -99,18 +98,9 @@ export function setLoaderBarPct(pct) {
   }
   isLoaderVisible() && startLoaderBarAnimation()
 }
-function loaderBarTimeDriftTargetPct(ts) {
-  const minDrift = loaderBarCreepPerSec >= 40
-    ? LOADER_BAR_MIN_DRIFT_PER_SEC_BOOST
-    : LOADER_BAR_MIN_DRIFT_PER_SEC
-  const sessionSec = Math.max(0, (ts - loaderBarSessionStartMs) / 1000)
-  return Math.min(99, sessionSec * minDrift)
-}
-function loaderBarCreepCeilingPct(ts) {
+function loaderBarCreepCeilingPct() {
   if (loaderBarReportedPct >= 100) return 100
-  const headroomCap = Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
-  const timeCap = loaderBarTimeDriftTargetPct(ts)
-  return Math.max(headroomCap, timeCap)
+  return Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
 }
 function startLoaderBarAnimation() {
   if (loaderBarAnimFrame != null) return
@@ -123,7 +113,7 @@ function startLoaderBarAnimation() {
     }
     const dt = Math.min(0.05, (ts - lastTs) / 1000)
     lastTs = ts
-    const creepCeiling = loaderBarCreepCeilingPct(ts)
+    const creepCeiling = loaderBarCreepCeilingPct()
     if (loaderBarDisplayPct < creepCeiling) {
       loaderBarDisplayPct = Math.min(
         creepCeiling,

@@ -2231,10 +2231,6 @@ function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, trans
     ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
     ctx.fill()
     if (eyesClosed) {
-      ctx.fillStyle = BL
-      ctx.beginPath()
-      ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
       return
     }
     ctx.save()

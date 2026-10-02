@@ -68,6 +68,7 @@ import {
   applyGlowHudSharpBake,
   glowDepthBlurRadiusPx
 } from '../utils/glow-focus-depth.js'
+import { createGlowHeroFramesStripHud } from '../utils/glow-hero-frames-strip.js'
 import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
@@ -1868,7 +1869,7 @@ const glowLevel0SceneRegisteredFor = new WeakSet()
 // Maps scene-bootstrap local 0–100 progress onto the DOM loader bar slice
 // reserved for initGlowLevel0Scene (prewarm uses 5–38 %).
 //
-export function setGlowLevel0BootstrapReporter(reporter, slice = { start: 38, end: 99 }) {
+export function setGlowLevel0BootstrapReporter(reporter, slice = { start: 38, end: 100 }) {
   glowLevel0BootstrapReporter = reporter
   glowLevel0BootstrapSlice = slice
   glowLevel0BootstrapLocalMax = 0
@@ -2145,6 +2146,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       treeColorObj.hidden = true
     }
     const floorBounds = createLevelBounds(k)
+    if (await glowBootstrapPause(bootstrap, 27, session)) return
     const floorPlat = floorBounds.floor
     const cornerObjs = createRoundedCorners(k, zones)
     const { horizBranch } = treeData
@@ -2339,6 +2341,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     Hero.spawn(heroInst, { instant: true })
     glowLevel0LiveHeroChar = heroInst.character
     snapGlowCameraToHero(k, heroInst)
+    if (await glowBootstrapPause(bootstrap, 29, session)) return
     if (await glowBootstrapPause(bootstrap, 30, session)) return
     if (await glowBootstrapPause(bootstrap, 36, session)) return
     //
@@ -2899,6 +2902,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     k.onUpdate(() => onUpdate(inst))
     registerGlowTrampolineLateBounce(inst)
     if (await glowBootstrapPause(bootstrap, 97, session)) return
+    createGlowHeroFramesStripHud(k, inst, k.height())
     createPlayfieldFrameOverlay(k, inst)
     //
     // Letter-fill burst halo — drawn just above the hero sprite.

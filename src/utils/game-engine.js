@@ -1,6 +1,7 @@
 import kaplay from "kaplay"
 import { CFG } from "../cfg.js"
 import { sceneReady } from "../scenes/ready.js"
+import { sceneGlowHeroFramesPreview } from "../scenes/glow-hero-frames-preview.js"
 import { sceneMenu } from "../scenes/menu.js"
 import { sceneLesson0 } from "../sections/word/scenes/lesson0.js"
 import { sceneLesson1 } from "../sections/word/scenes/lesson1.js"
@@ -430,6 +431,7 @@ function buildSetupTasks(k) {
     () => loadHeroSprites(k, HEROES.HERO),
     () => loadHeroSprites(k, HEROES.ANTIHERO),
     () => sceneReady(k),
+    () => sceneGlowHeroFramesPreview(k),
     () => sceneMenu(k),
     () => sceneLesson0(k),
     () => sceneLesson1(k),

@@ -1115,7 +1115,7 @@ function onDrawTitle(k, spiderState, titleLetters) {
 // Draws the center illustration: eye_big.png centred on the horizon.
 //
 function onDrawIllustration(k, readyEyeState, spiderState) {
-  const eyeOp = LIFE_OPACITY * (1 - (spiderState?.eyeFinalFade ?? 0))
+  const eyeOp = LIFE_OPACITY * readyScenePersistentLeftOpacity()
   if (eyeOp <= 0.001) return
   const target = resolveReadyEyeLookTarget(readyEyeState?.spiders)
   const frameIndex = readyEyeState?.blink?.frameIndex ?? 0
@@ -1246,7 +1246,7 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
   spiders.forEach(spider => {
     const departureFade = spider.isHeroU
       ? 1
-      : readyLeftHeroOpacity(spiderState, spiders)
+      : readyLeftHeroOpacity()
     drawTitleHero(k, spider, departureFade)
   })
 }
@@ -1324,7 +1324,7 @@ function updateFireflyField(k, field) {
 }
 
 function drawFireflyField(k, field, spiderState) {
-  const sceneOp = spiderState?.departureFade ?? 1
+  const sceneOp = readyScenePersistentLeftOpacity()
   if (sceneOp <= 0.001) return
   const time = k.time()
   const color = k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B)
@@ -1343,13 +1343,13 @@ function drawFireflyField(k, field, spiderState) {
       pos: k.vec2(fly.x, fly.y),
       radius: fly.radius * FIREFLY_GLOW_RADIUS_MULT,
       color,
-      opacity: alpha * 0.18 * readySceneDepartureOpacity(spiderState)
+      opacity: alpha * 0.18 * sceneOp
     })
     k.drawCircle({
       pos: k.vec2(fly.x, fly.y),
       radius: fly.radius,
       color,
-      opacity: alpha * readySceneDepartureOpacity(spiderState)
+      opacity: alpha * sceneOp
     })
   }
 }
@@ -1446,6 +1446,19 @@ function updateReadyDepartureFade(k, runner, spiderState) {
     spiderState.eyeFinalFade = 0
     return
   }
+  //
+  // Closed-eyes idle / wake-up: keep the backdrop at whatever fade level the
+  // runner had reached — do not pop the scene back to full brightness.
+  //
+  const holdsDepartureFade =
+    runner.heroPhase === 'idle' ||
+    runner.heroPhase === 'wakeOneEye' ||
+    runner.heroPhase === 'wakeBothEyes'
+  if (holdsDepartureFade) {
+    spiderState.departureFade = spiderState._departureFadeHold ?? spiderState.departureFade
+    spiderState.eyeFinalFade = 0
+    return
+  }
   const fadesByRunProgress =
     runner.heroPhase === 'run' ||
     runner.heroPhase === 'pause'
@@ -1469,12 +1482,17 @@ function readySceneDepartureOpacity(spiderState) {
   return spiderState?.departureFade ?? 1
 }
 //
-// Left hero stays opaque until the final walk; then fades with the centre eye.
+// Left hero, horizon eye, and fireflies stay fully visible while the runner
+// moves right — only the shared backdrop/title fade with departureFade.
 //
-function readyLeftHeroOpacity(spiderState, spiders) {
-  const runner = spiders.find(s => s.isHeroU)
-  if (!runner || runner.heroPhase !== 'finalWalk') return 1
-  return 1 - (spiderState?.eyeFinalFade ?? 0)
+function readyScenePersistentLeftOpacity() {
+  return 1
+}
+//
+// Title stayer ('n') never dims during the runner's departure.
+//
+function readyLeftHeroOpacity() {
+  return readyScenePersistentLeftOpacity()
 }
 //
 // The stayer never leaves the ground once it lands — it just stands there
@@ -1796,7 +1814,10 @@ function drawTitleHero(k, spider, departureFade = 1) {
   }
   const closedIdleFace =
     spider.heroPhase === 'idle' || spider.heroPhase === 'wakeBothEyes'
-  spider.heroPhase === 'wakeOneEye' && revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy)
+  if (spider.heroPhase === 'wakeOneEye') {
+    drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_LEFT_X, departureFade)
+    revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy, departureFade)
+  }
   closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade)
   revealT >= 1 && !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade)
   drawHeroNNotes(k, spider, departureFade)
@@ -1902,16 +1923,57 @@ function drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade = 1) {
   if (departureFade <= 0.001) return
   const phase = spider.heroPhase
   if (phase !== 'idle' && phase !== 'wakeBothEyes') return
+  drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_LEFT_X, departureFade)
+  drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_RIGHT_X, departureFade)
+}
+//
+// One closed eye — hollow white ring while the runner is still outline-only;
+// black ring + body tint once the interior fill has fully appeared.
+//
+function drawHeroTitleSingleClosedEye(k, spider, cx, cy, eyeCanvasX, departureFade = 1) {
+  if (departureFade <= 0.001) return
   const s = HERO_N_SPRITE_SCALE
-  const baseX = cx - HERO_N_SPRITE_SIZE / 2
-  const baseY = cy - HERO_N_SPRITE_SIZE / 2
-  const eyeY = baseY + HERO_EYE_CANVAS_Y * s
-  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
-    k.drawCircle({
-      pos: k.vec2(baseX + eyeX * s, eyeY),
-      radius: HERO_EYE_RING_RADIUS * s,
-      color: k.rgb(0, 0, 0),
-      opacity: departureFade
+  const ex = cx - HERO_N_SPRITE_SIZE / 2 + eyeCanvasX * s
+  const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
+  if (spider.heroBodyRevealT < 1) {
+    drawHeroTitleHollowEyeRing(k, ex, ey, s, departureFade)
+    return
+  }
+  const contour = k.rgb(0, 0, 0)
+  const pos = k.vec2(ex, ey)
+  k.drawCircle({
+    pos,
+    radius: HERO_EYE_RING_RADIUS * s,
+    color: contour,
+    opacity: departureFade
+  })
+  k.drawCircle({
+    pos,
+    radius: HERO_EYE_WHITE_RADIUS * s,
+    color: resolveHeroSectionTint(k, spider),
+    opacity: departureFade
+  })
+}
+//
+// Closed-eye ring on the hollow title runner — outline colour only, no fill.
+//
+function drawHeroTitleHollowEyeRing(k, ex, ey, scale, opacity) {
+  const rgb = parseHex(HERO_TITLE_OUTLINE_COLOR)
+  const color = k.rgb(rgb[0], rgb[1], rgb[2])
+  const outer = HERO_EYE_RING_RADIUS * scale
+  const inner = HERO_EYE_WHITE_RADIUS * scale
+  const mid = (outer + inner) / 2
+  const ringWidth = Math.max(1, outer - inner)
+  const segments = 14
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2
+    const a1 = ((i + 1) / segments) * Math.PI * 2
+    k.drawLine({
+      p1: k.vec2(ex + Math.cos(a0) * mid, ey + Math.sin(a0) * mid),
+      p2: k.vec2(ex + Math.cos(a1) * mid, ey + Math.sin(a1) * mid),
+      width: ringWidth,
+      color,
+      opacity
     })
   }
 }
@@ -1955,12 +2017,11 @@ function drawHeroNNotes(k, spider, departureFade = 1) {
 // wake-up step: black ring, white eyeball and a pupil that wanders left and
 // right while the hero checks whether the coast is clear.
 //
-function drawHeroWakeEye(k, spider, cx, cy) {
+function drawHeroWakeEye(k, spider, cx, cy, departureFade = 1) {
+  if (departureFade <= 0.001) return
   const s = HERO_N_SPRITE_SCALE
   const ex = cx - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_RIGHT_X * s
   const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
   const pupilDx = Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2) * HERO_EYE_PUPIL_SHIFT * s
-  k.drawCircle({ pos: k.vec2(ex, ey), radius: HERO_EYE_RING_RADIUS * s, color: k.rgb(0, 0, 0) })
-  k.drawCircle({ pos: k.vec2(ex, ey), radius: HERO_EYE_WHITE_RADIUS * s, color: k.rgb(255, 255, 255) })
-  k.drawCircle({ pos: k.vec2(ex + pupilDx, ey), radius: HERO_EYE_PUPIL_RADIUS * s, color: k.rgb(0, 0, 0) })
+  drawHeroTitleEyeDisc(k, ex, ey, pupilDx, s, departureFade)
 }

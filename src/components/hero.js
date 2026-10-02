@@ -4,6 +4,7 @@ import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
 import { isAnyPanelOpen } from '../utils/lesson-help.js'
 import { createColorChangeSparkles } from '../utils/hero-particles.js'
+import { smoothHeroContourSteps } from '../utils/hero-contour-aa.js'
 import {
   bindDefaultHeroFootFx,
   updateHeroFootprints,
@@ -122,6 +123,14 @@ const RUN_SMOOTH_CONTOUR_FRAMES = new Set([
 ])
 const SMOOTH_RUN_FRAME0_ALPHA_MIN = 128
 const SMOOTH_RUN_FRAME0_AA_PX = 2
+//
+// Run hip dent fill: rows checked around the body bottom, max inward edge
+// step per row, and the deepest dent still treated as a burr.
+//
+const RUN_HIP_NOTCH_ABOVE_PX = 4
+const RUN_HIP_NOTCH_BELOW_PX = 8
+const RUN_HIP_NOTCH_TAPER = 0.5
+const RUN_HIP_NOTCH_MAX_DEPTH_PX = 3
 //
 // Hollow run bakes: peel body-fill colour within this RGB distance of BL.
 //
@@ -313,6 +322,33 @@ const BENT_LEG_KNEE_T = 0.42
 const BENT_LEG_FOOT_T = 0.12
 const BENT_LEG_SOLVE_EPS = 1e-6
 //
+// Hip notch fill under bent jump legs: rows scanned below the body bottom and
+// the smallest inset (px) that still counts as a notch.
+//
+const BENT_LEG_NOTCH_SCAN_PX = 12
+const BENT_LEG_NOTCH_MIN_PX = 0.25
+//
+// Back hip join repair on the final bent-jump pixels: rows around the body
+// bottom, rows looked at above/below when closing sub-pixel dents, how fast
+// the leg may step out past the torso line per row, and the alpha range
+// that counts as partial edge coverage.
+//
+const BACK_HIP_REPAIR_ABOVE_PX = 2
+const BACK_HIP_REPAIR_BELOW_PX = 8
+const BACK_HIP_CLOSE_ROWS = 4
+const BACK_HIP_OUT_TAPER_PX = 0.4
+const BACK_HIP_PARTIAL_ALPHA_MIN = 8
+const BACK_HIP_FULL_ALPHA_MIN = 250
+const BACK_HIP_INK_TOL_SQ = 60 * 60 * 3
+//
+// Bent-jump crotch corners: the torso rim band under the seam can poke past
+// the inner leg rim. At most this many px are cleared per side; the first
+// one keeps CROTCH_CORNER_AA_INK of its ink as rounding AA.
+//
+const CROTCH_CORNER_MAX_PX = 3
+const CROTCH_CORNER_AA_INK = 0.25
+const CROTCH_CORNER_MATCH_TOL_SQ = 16 * 16 * 3
+//
 // Character width (head + body have same width, no shoulder bulge in new design)
 //
 const CHAR_WIDTH = 30
@@ -365,6 +401,15 @@ export const HEROES = {
 // k.getSprite() alone must not skip loadHeroSprites on a fresh k.
 //
 const heroSpritePrefixesReadyFor = new WeakMap()
+//
+// Per-canvas bake metadata (rim width, eye discs) for the contour step pass
+// that runs in commitHeroBakedSprite after grain and rim repair.
+//
+const heroBakeFrameMeta = new WeakMap()
+//
+// Eye ring margin kept out of the contour step pass (px beyond the ring).
+//
+const CONTOUR_AA_EYE_MARGIN_PX = 1.5
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -2292,6 +2337,22 @@ function paintHeroEyesAtFrame(ctx, cfg) {
     eyeOffsetY * EYE_PUPIL_SHIFT
   )
 }
+//
+// Eye ring discs (same anchors as paintHeroEyesAtFrame) that the contour step
+// pass must leave alone.
+//
+function heroBakeEyeDiscs(headX, headY, bodyBottom, animation) {
+  const r = EYE_RING_RADIUS + CONTOUR_AA_EYE_MARGIN_PX
+  if (animation === 'run' || animation === 'jump') {
+    const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
+    return [{ x, y, r }]
+  }
+  const eyeY = headY + EYE_OFFSET_Y
+  return [
+    { x: headX + EYE_OFFSET_X_LEFT, y: eyeY, r },
+    { x: headX + EYE_OFFSET_X_RIGHT, y: eyeY, r }
+  ]
+}
 /**
  * Resolves which baked layers to paint from create()/loadHeroSprites options.
  * @param {Object} opts
@@ -2438,6 +2499,7 @@ function drawHeroBakeContour(ctx, bake) {
   jumpLegBend !== 0 && clipBentLegBox(ctx, headX, bodyBottom, rim, true)
   jumpLegBend !== 0 && (ctx.fillStyle = OL, strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW), strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW))
   jumpLegBend !== 0 && ctx.restore()
+  jumpLegBend !== 0 && (ctx.fillStyle = OL, fillBentLegHipNotches(ctx, bake, 'outline'))
   if (animation === 'run' || jumpLegBend !== 0) {
     const shelfL = jumpLegBend !== 0
       ? Math.min(jumpBackBottomX, jumpFrontBottomX) - legOlW / 2
@@ -2488,6 +2550,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
     strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, Math.max(1, jumpBackH - rim), jumpBackBend, LEG_FILL_WIDTH)
     strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
     ctx.restore()
+    fillBentLegHipNotches(ctx, bake, 'body')
   } else {
     fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
     fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
@@ -2553,6 +2616,7 @@ function finalizeHeroBakeFrame(ctx, bake) {
   })
   const runHollowFromGlue = drawBakeOutline && !drawBakeBody && bakeBodyForPipeline &&
     animation === 'run' && !bodyOnlyExtract
+  drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame) && fillRunHipNotches(ctx, bodyBottom, BL, rim)
   drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame) && applySmoothRunFrame0Contour(ctx, { OL, BL, rim })
   runHollowFromGlue && clearBakeInteriorByErosion(ctx, rim)
   !runHollowFromGlue && !bodyOnlyExtract && drawBakeOutline && !drawBakeBody && punchOutlineOnlyInterior(ctx, {
@@ -2584,11 +2648,26 @@ function finalizeHeroBakeFrame(ctx, bake) {
     jumpFrontH,
     jumpFrontBend,
     bodyBottom,
-    rim
+    rim,
+    legOlW
   })
   drawBakeOutline && !drawBakeBody && bakeBodyForPipeline && !bodyOnlyExtract &&
     !bakeColorsMatch(OL, BL) && stripBakeBodyFillFromCanvas(ctx, BL, BAKE_BODY_STRIP_TOLERANCE)
   drawBakeOutline && !bodyOnlyExtract && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
+  heroBakeFrameMeta.set(ctx.canvas, {
+    rim,
+    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation),
+    rebuiltRim: drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame),
+    backHip: drawBakeOutline && jumpLegBend !== 0
+      ? {
+          y0: bodyBottom - BACK_HIP_REPAIR_ABOVE_PX,
+          y1: Math.min(bodyBottom + BACK_HIP_REPAIR_BELOW_PX, Math.floor(jumpHipTop + jumpBackH - legOlW / 2) + 1) // one row into the foot cap
+        }
+      : null,
+    crotch: drawBakeOutline && jumpLegBend !== 0
+      ? { seamY: Math.round(bodyBottom), gapX: Math.round((jumpBackBottomX + jumpFrontBottomX) / 2) }
+      : null
+  })
   !bodyOnlyExtract && !noEyes && paintHeroEyesAtFrame(ctx, {
     headX,
     headY,
@@ -2658,6 +2737,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
     strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, Math.max(1, jumpBackH - rim), jumpBackBend, LEG_FILL_WIDTH)
     strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
     ctx.restore()
+    fillBentLegHipNotches(ctx, cfg, 'body')
   } else {
     fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
     fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
@@ -3843,6 +3923,74 @@ function applySmoothRunFrame0Contour(ctx, cfg) {
   ctx.putImageData(img, 0, 0)
 }
 //
+// Leaned run torsos end in a back corner that can sit outside the vertical
+// leg below it, so the silhouette dents inward right under the hip. Before
+// the rim is rebuilt, fill that dent with a wedge that lets the edge move
+// inward at most RUN_HIP_NOTCH_TAPER px per row. Deep dents (the bare torso
+// bottom on single-leg frames) are left alone.
+//
+function fillRunHipNotches(ctx, bodyBottom, bodyHex, rim) {
+  const w = SPRITE_SIZE
+  const img = ctx.getImageData(0, 0, w, SPRITE_SIZE)
+  const px = img.data
+  const y0 = Math.max(0, bodyBottom - RUN_HIP_NOTCH_ABOVE_PX)
+  const y1 = Math.min(SPRITE_SIZE - 1, bodyBottom + RUN_HIP_NOTCH_BELOW_PX)
+  const rgb = parseHex(String(bodyHex))
+  const lefts = []
+  for (let y = y0; y <= y1; y++) lefts.push(runSilhouetteEdgeX(px, w, y))
+  fillRunHipNotchLeft(px, w, y0, lefts, rgb, rim)
+  ctx.putImageData(img, 0, 0)
+}
+//
+// First opaque column from the left; -1 when the row is empty.
+//
+function runSilhouetteEdgeX(px, w, y) {
+  for (let x = 0; x < w; x++) {
+    if (px[(y * w + x) * 4 + 3] >= SMOOTH_RUN_FRAME0_ALPHA_MIN) return x
+  }
+  return -1
+}
+//
+// Applies the inward taper limit to the left edge and paints the wedge in
+// body colour when every dent stays within RUN_HIP_NOTCH_MAX_DEPTH_PX.
+//
+function fillRunHipNotchLeft(px, w, y0, edges, rgb, rim) {
+  const limits = []
+  let prev = null
+  let deepest = 0
+  for (let r = 0; r < edges.length; r++) {
+    const edge = edges[r]
+    if (edge < 0) {
+      limits.push(null)
+      prev = null
+      continue
+    }
+    const limit = prev === null ? edge : Math.min(edge, prev + RUN_HIP_NOTCH_TAPER)
+    limits.push(limit)
+    deepest = Math.max(deepest, edge - limit)
+    prev = limit
+  }
+  if (deepest > RUN_HIP_NOTCH_MAX_DEPTH_PX) return
+  for (let r = 0; r < edges.length; r++) {
+    if (limits[r] === null) continue
+    const from = Math.round(limits[r])
+    if (from === edges[r]) continue
+    //
+    // The old rim under the wedge becomes interior too — the rebuild only
+    // repaints pixels outside the eroded interior.
+    //
+    const to = edges[r] + Math.ceil(rim)
+    const y = y0 + r
+    for (let x = from; x < to; x++) {
+      const i = (y * w + x) * 4
+      px[i] = rgb[0]
+      px[i + 1] = rgb[1]
+      px[i + 2] = rgb[2]
+      px[i + 3] = 255
+    }
+  }
+}
+//
 // True for pixels whose alpha clears the bake silhouette threshold.
 //
 function buildBakeOpaqueMask(px, w, h, alphaMin) {
@@ -3957,6 +4105,252 @@ function drawHipShelves(ctx, outlineColor, headX, y, thickness, legLeftEdge, leg
   ctx.fillStyle = outlineColor
   drawLeft && legL > bodyL && ctx.fillRect(bodyL, y - HIP_SHELF_BODY_OVERLAP, legL - bodyL, thickness + HIP_SHELF_BODY_OVERLAP)
   drawRight && bodyR > legR && ctx.fillRect(legR, y - HIP_SHELF_BODY_OVERLAP, bodyR - legR, thickness + HIP_SHELF_BODY_OVERLAP)
+}
+//
+// Bent jump legs leave the torso a little inside the body side lines, which
+// carves a 1 px notch into the silhouette right under the hip. Fills that
+// notch row by row so the side line runs straight into the leg: `layer`
+// 'outline' paints the rim on the side line, 'body' paints the interior
+// between that rim and the leg fill (also used to punch hollow bakes).
+//
+function fillBentLegHipNotches(ctx, bake, layer) {
+  const {
+    headX, rim, bodyBottom, legOlW,
+    jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend,
+    jumpFrontHipX, jumpFrontH, jumpFrontBend
+  } = bake
+  const sideL = headX - rim
+  const sideR = headX + CHAR_WIDTH + rim
+  const half = legOlW / 2
+  const backIsLeft = jumpBackHipX <= jumpFrontHipX
+  const leftLeg = backIsLeft
+    ? [jumpBackHipX, jumpBackH, jumpBackBend]
+    : [jumpFrontHipX, jumpFrontH, jumpFrontBend]
+  const rightLeg = backIsLeft
+    ? [jumpFrontHipX, jumpFrontH, jumpFrontBend]
+    : [jumpBackHipX, jumpBackH, jumpBackBend]
+  //
+  // Stop above the rounded foot cap — below it the silhouette is meant to
+  // curve inward.
+  //
+  const leftEnd = Math.min(bodyBottom + BENT_LEG_NOTCH_SCAN_PX, jumpHipTop + leftLeg[1] - legOlW)
+  const rightEnd = Math.min(bodyBottom + BENT_LEG_NOTCH_SCAN_PX, jumpHipTop + rightLeg[1] - legOlW)
+  for (let y = bodyBottom; y < leftEnd; y++) {
+    const edge = bentLegCenterXAtY(leftLeg[0], jumpHipTop, leftLeg[1], leftLeg[2], legOlW, y + 0.5) - half
+    if (edge <= sideL + BENT_LEG_NOTCH_MIN_PX) break
+    const rimEnd = Math.ceil(edge + rim)
+    layer === 'outline'
+      ? ctx.fillRect(sideL, y, rimEnd - sideL, 1)
+      : ctx.fillRect(sideL + rim, y, rimEnd + 1 - (sideL + rim), 1)
+  }
+  for (let y = bodyBottom; y < rightEnd; y++) {
+    const edge = bentLegCenterXAtY(rightLeg[0], jumpHipTop, rightLeg[1], rightLeg[2], legOlW, y + 0.5) + half
+    if (edge >= sideR - BENT_LEG_NOTCH_MIN_PX) break
+    const rimStart = Math.floor(edge - rim)
+    layer === 'outline'
+      ? ctx.fillRect(rimStart, y, sideR - rimStart, 1)
+      : ctx.fillRect(rimStart - 1, y, sideR - rim - (rimStart - 1), 1)
+  }
+}
+//
+// The back bent leg crosses the torso side line at a sub-pixel offset, so
+// the final rim there dents in, bumps out and thins from 2 px to 1 px. On
+// the final pixels: close sub-pixel dents and trim single-row bumps in the
+// left edge profile, then lay exactly `rim` px of outline along that edge —
+// the old rim behind a closed dent goes back to body (or hollow interior).
+//
+function repairBentBackHipJoin(ctx, meta, colors) {
+  const { width: w, height: h } = ctx.canvas
+  const img = ctx.getImageData(0, 0, w, h)
+  const px = img.data
+  const { rim, backHip } = meta
+  const ink = parseHex(String(colors.outline))
+  const body = colors.hollow ? null : parseHex(String(colors.body))
+  const scanY0 = Math.max(0, backHip.y0 - BACK_HIP_CLOSE_ROWS)
+  const scanY1 = Math.min(h - 1, backHip.y1 + BACK_HIP_CLOSE_ROWS)
+  const edges = []
+  for (let y = scanY0; y <= scanY1; y++) edges.push(subpixelLeftEdge(px, w, y))
+  const opened = edges.map((edge, r) => openedBackHipEdge(edges, r))
+  let prev = null
+  for (let y = Math.max(0, backHip.y0); y <= Math.min(h - 1, backHip.y1); y++) {
+    const r = y - scanY0
+    if (edges[r] === null) {
+      prev = null
+      continue
+    }
+    const closed = Math.min(opened[r], closedBackHipEdge(opened, r))
+    const edge = prev === null ? closed : Math.max(closed, prev - BACK_HIP_OUT_TAPER_PX)
+    prev = edge
+    const inkEnd = rowInkEndX(px, w, y, Math.floor(edges[r]), ink)
+    edge > edges[r] && eraseRowCoverage(px, w, y, edges[r], edge)
+    paintInteriorCoverage(px, w, y, edge + rim, Math.min(Math.max(inkEnd, edges[r] + rim), edge + rim + 1), body)
+    paintRimCoverage(px, w, y, edge, edge + rim, ink)
+  }
+  ctx.putImageData(img, 0, 0)
+}
+//
+// First column at or after `x` (past any partial edge pixels) that is no
+// longer opaque outline colour.
+//
+function rowInkEndX(px, w, y, x, ink) {
+  let end = Math.max(0, x)
+  while (end < w && px[(y * w + end) * 4 + 3] < BACK_HIP_FULL_ALPHA_MIN) end++
+  while (end < w) {
+    const i = (y * w + end) * 4
+    const dr = px[i] - ink[0]
+    const dg = px[i + 1] - ink[1]
+    const db = px[i + 2] - ink[2]
+    if (px[i + 3] < BACK_HIP_FULL_ALPHA_MIN || dr * dr + dg * dg + db * db > BACK_HIP_INK_TOL_SQ) break
+    end++
+  }
+  return end
+}
+//
+// Left silhouette edge in sub-pixel units: the first fully opaque column
+// minus the coverage of the partial pixels in front of it; null when empty.
+//
+function subpixelLeftEdge(px, w, y) {
+  let partial = 0
+  for (let x = 0; x < w; x++) {
+    const a = px[(y * w + x) * 4 + 3]
+    if (a >= BACK_HIP_FULL_ALPHA_MIN) return x - partial / 255
+    a > BACK_HIP_PARTIAL_ALPHA_MIN && (partial += a)
+  }
+  return null
+}
+//
+// 1D closing of the edge profile: a row sitting inside the outermost edge
+// both just above and just below it may move out to the nearer of the two.
+//
+function closedBackHipEdge(edges, r) {
+  let above = Infinity
+  let below = Infinity
+  for (let d = 1; d <= BACK_HIP_CLOSE_ROWS; d++) {
+    edges[r - d] !== null && edges[r - d] !== undefined && (above = Math.min(above, edges[r - d]))
+    edges[r + d] !== null && edges[r + d] !== undefined && (below = Math.min(below, edges[r + d]))
+  }
+  return Math.max(above, below)
+}
+//
+// Single-row bumps that stick out past both neighbouring rows are pulled back
+// to the more outward neighbour.
+//
+function openedBackHipEdge(edges, r) {
+  const up = edges[r - 1]
+  const down = edges[r + 1]
+  if (edges[r] === null || up === null || up === undefined || down === null || down === undefined) return edges[r]
+  return Math.max(edges[r], Math.min(up, down))
+}
+//
+// Pulls the silhouette in from x0 to x1: alpha is capped at each pixel's
+// coverage to the right of the new edge.
+//
+function eraseRowCoverage(px, w, y, x0, x1) {
+  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
+    const cov = Math.max(0, Math.min(1, x + 1 - x1))
+    const i = (y * w + x) * 4 + 3
+    px[i] = Math.min(px[i], Math.round(cov * 255))
+  }
+}
+//
+// Turns surplus rim past the new inner edge back into interior: body colour
+// on filled bakes, transparency on hollow ones (`body` null).
+//
+function paintInteriorCoverage(px, w, y, x0, x1, body) {
+  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
+    const c = Math.min(x + 1, x1) - Math.max(x, x0)
+    if (c <= 0) continue
+    const i = (y * w + x) * 4
+    if (!body) {
+      px[i + 3] = Math.round(px[i + 3] * (1 - c))
+      continue
+    }
+    for (let ch = 0; ch < 3; ch++) px[i + ch] = Math.round(body[ch] * c + px[i + ch] * (1 - c))
+  }
+}
+//
+// Raises outline coverage over [x0, x1) of one row to the exact per-pixel
+// overlap. Alpha takes the max (the outer AA pixel already holds its share),
+// colour moves toward ink by the overlap, so both band ends stay soft.
+//
+function paintRimCoverage(px, w, y, x0, x1, ink) {
+  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
+    const c = Math.min(x + 1, x1) - Math.max(x, x0)
+    if (c <= 0) continue
+    const i = (y * w + x) * 4
+    const a = px[i + 3] / 255
+    const share = a > 0 ? c : 1
+    for (let ch = 0; ch < 3; ch++) {
+      px[i + ch] = Math.round(ink[ch] * share + px[i + ch] * (1 - share))
+    }
+    px[i + 3] = Math.round(Math.max(a, c) * 255)
+  }
+}
+//
+// Bent-jump legs leave the torso rim band (the row right above the leg gap)
+// poking past the inner leg rim into the body as a 1–3 px tooth. Replaces
+// that tooth with whatever sits one row lower (body, or hollow interior) and
+// keeps a faint ink tint on the first pixel so the corner reads rounded.
+//
+function repairBentCrotchCorners(ctx, meta, outlineHex) {
+  const { width: w, height: h } = ctx.canvas
+  const { seamY, gapX } = meta.crotch
+  const gapY = seamY + meta.rim
+  if (gapY >= h || gapX < 0 || gapX >= w) return
+  const img = ctx.getImageData(0, 0, w, h)
+  const px = img.data
+  if (px[(gapY * w + gapX) * 4 + 3] >= BACK_HIP_PARTIAL_ALPHA_MIN) return
+  const ink = parseHex(String(outlineHex))
+  clearCrotchCornerTooth(px, w, gapY, gapX, 1, ink)
+  clearCrotchCornerTooth(px, w, gapY, gapX, -1, ink)
+  ctx.putImageData(img, 0, 0)
+}
+//
+// Walks from the gap through the inner leg rim on row `gapY`, then clears the
+// tooth on the row above while the pixel below is clean interior.
+//
+function clearCrotchCornerTooth(px, w, gapY, gapX, dir, ink) {
+  const inside = x => x >= 0 && x < w
+  let x = gapX
+  while (inside(x) && px[(gapY * w + x) * 4 + 3] < BACK_HIP_FULL_ALPHA_MIN) x += dir
+  while (inside(x) && isOpaqueInk(px, (gapY * w + x) * 4, ink)) x += dir
+  for (let n = 0; n < CROTCH_CORNER_MAX_PX && inside(x); n++, x += dir) {
+    const i = ((gapY - 1) * w + x) * 4
+    const below = (gapY * w + x) * 4
+    const belowA = px[below + 3]
+    if (isOpaqueInk(px, below, ink) || (belowA >= BACK_HIP_PARTIAL_ALPHA_MIN && belowA < BACK_HIP_FULL_ALPHA_MIN)) return
+    if (pixelsMatch(px, i, below)) return
+    lerpPixelPremultiplied(px, i, below, n === 0 ? 1 - CROTCH_CORNER_AA_INK : 1)
+  }
+}
+
+function isOpaqueInk(px, i, ink) {
+  const dr = px[i] - ink[0]
+  const dg = px[i + 1] - ink[1]
+  const db = px[i + 2] - ink[2]
+  return px[i + 3] >= BACK_HIP_FULL_ALPHA_MIN && dr * dr + dg * dg + db * db <= BACK_HIP_INK_TOL_SQ
+}
+//
+// Both clear, or both opaque and close in colour.
+//
+function pixelsMatch(px, i, j) {
+  const ai = px[i + 3]
+  const aj = px[j + 3]
+  if (ai < BACK_HIP_PARTIAL_ALPHA_MIN && aj < BACK_HIP_PARTIAL_ALPHA_MIN) return true
+  if (ai < BACK_HIP_FULL_ALPHA_MIN || aj < BACK_HIP_FULL_ALPHA_MIN) return false
+  const dr = px[i] - px[j]
+  const dg = px[i + 1] - px[j + 1]
+  const db = px[i + 2] - px[j + 2]
+  return dr * dr + dg * dg + db * db <= CROTCH_CORNER_MATCH_TOL_SQ
+}
+
+function lerpPixelPremultiplied(px, i, j, t) {
+  const a = px[i + 3]
+  const aj = px[j + 3]
+  const na = a + (aj - a) * t
+  px[i + 3] = Math.round(na)
+  if (na <= 0) return
+  for (let c = 0; c < 3; c++) px[i + c] = Math.round((px[i + c] * a * (1 - t) + px[j + c] * aj * t) / na)
 }
 //
 // X centre of a bent jump leg stroke at a given Y — solves the same quadratic
@@ -4322,11 +4716,26 @@ function commitHeroBakedSprite(k, spriteName, canvas, postBake, seedOffset, cris
     // after grain while keeping a soft AA edge on the outer contour.
     //
     const skipRimAntialias = /-run-[01234567]$/.test(spriteName) && !crispRimColors?.hollow
+    const bakeCtx = canvas.getContext('2d')
     crispRimColors && !skipRimAntialias && antialiasBakeOutlineRim(
-      canvas.getContext('2d'),
+      bakeCtx,
       getHex(crispRimColors.outline),
       getHex(crispRimColors.body)
     )
+    const meta = heroBakeFrameMeta.get(canvas)
+    crispRimColors && meta?.backHip && repairBentBackHipJoin(bakeCtx, meta, {
+      outline: getHex(crispRimColors.outline),
+      body: getHex(crispRimColors.body),
+      hollow: crispRimColors.hollow
+    })
+    crispRimColors && meta?.crotch && repairBentCrotchCorners(bakeCtx, meta, getHex(crispRimColors.outline))
+    crispRimColors && meta && smoothHeroContourSteps(bakeCtx, {
+      outlineHex: getHex(crispRimColors.outline),
+      bodyHex: getHex(crispRimColors.body),
+      rim: meta.rim,
+      excludeDiscs: meta.eyeDiscs,
+      tolerant: meta.rebuiltRim
+    })
     k.loadSprite(spriteName, canvas)
     canvas.width = 0
     canvas.height = 0

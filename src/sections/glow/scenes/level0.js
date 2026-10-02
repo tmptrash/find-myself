@@ -14,7 +14,12 @@ import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
-import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from '../utils/cute-mushroom.js'
+import {
+  drawCuteMushroomToCanvas,
+  drawCuteMushroomPupilOverlay,
+  CUTE_MUSHROOM_ASPECT,
+  TRAMP_FACE_EYE_SCALE
+} from '../utils/cute-mushroom.js'
 import * as Hedgehog from '../components/hedgehog.js'
 import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, onPhysicalKeyPress, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
 import {
@@ -9076,15 +9081,31 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
             opacity
           })
         }
+        const drawTrampPupils = () => {
+          if (eyesClosed) return
+          const hero = sc?.heroInst?.character
+          drawCuteMushroomPupilOverlay(k, {
+            cx: drawX,
+            baseY: floorY + TRAMP_SINK_Y,
+            width: TRAMP_W,
+            eyeScale: TRAMP_FACE_EYE_SCALE,
+            angle,
+            scaleY,
+            lookX: hero?.pos?.x,
+            lookY: hero?.pos?.y
+          })
+        }
         if (!zones.colorWorld && isGlowColorTransitionActive(sc)) {
           const grayOp = 1 - previewFade
           grayOp > COLOR_CROSSFADE_EPS && drawTrampSprite(grayEyes, grayOp, grayColor)
           previewFade > COLOR_CROSSFADE_EPS && drawTrampSprite(colorEyes, previewFade, colorColor)
+          drawTrampPupils()
           return
         }
         const sprite = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorEyes : grayEyes
         const color = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorColor : grayColor
         drawTrampSprite(sprite, 1, color)
+        drawTrampPupils()
       }
     }
   ])
@@ -9146,6 +9167,7 @@ function bakeTrampolineVariant(k, name, colors, eyesOpen) {
       withFace: true,
       eyesOpen,
       eyeScale: TRAMP_FACE_EYE_SCALE,
+      dynamicPupils: eyesOpen,
       simpleShade: true
     })
   })
@@ -10481,6 +10503,11 @@ function syncGlowMidgeDrawColor(inst) {
   if (!inst.midges) return
   if (isGlowFlatSingleDecorColor(inst)) {
     inst.midges.midgeRgb = DECOR_GRAY
+    return
+  }
+  const colorFade = glowDecorFade(inst)
+  if (inst.zones?.colorWorld || colorFade > 0.45) {
+    inst.midges.midgeRgb = getGlowLightRgb('bright')
     return
   }
   inst.midges.midgeRgb = glowRgb('void')

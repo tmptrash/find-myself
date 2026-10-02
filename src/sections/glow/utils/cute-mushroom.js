@@ -1,3 +1,4 @@
+import { CFG } from '../../../cfg.js'
 import { glowRgb } from './glow-palette.js'
 
 //
@@ -33,7 +34,11 @@ const MIN_LINE_WIDTH = 1
 //
 // Trampoline mushrooms use larger eyes than the reference sketch.
 //
-export const TRAMP_FACE_EYE_SCALE = 1.55
+export const TRAMP_FACE_EYE_SCALE = 1.72
+const CUTE_MUSH_PUPIL_LOOK_RADIUS = 300
+const CUTE_MUSH_PUPIL_MAX_OFF_REF = 2.6
+const CUTE_MUSH_PUPIL_RX_REF = 2.4
+const CUTE_MUSH_PUPIL_RY_REF = 3.1
 //
 // White cap spots: [refX, refY, refRadius].
 //
@@ -59,10 +64,82 @@ export const CUTE_MUSHROOM_ASPECT = REF_HEIGHT / REF_WIDTH
  * @param {boolean} [opts.withFace=false] - Draw the eyes/smile/blush face
  * @param {boolean} [opts.eyesOpen=true] - Face variant: open pupils or closed-arc eyelids
  * @param {number} [opts.eyeScale=1] - Multiplier for trampoline eye size
+ * @param {boolean} [opts.dynamicPupils=false] - Sclera only on bake; pupils drawn live
  * @param {boolean} [opts.fillsOnly=false] - Cap/body fill without outline stroke
  * @param {boolean} [opts.strokesOnly=false] - Cap/body outline stroke without fill
  * @param {boolean} [opts.simpleShade=false] - Skip internal cap/body shading ellipses (bake)
  */
+/**
+ * Draws tracking pupils (and a small glint) over a baked cute mushroom face.
+ * @param {Object} k - Kaplay inst
+ * @param {Object} opts
+ * @param {number} opts.cx - Mushroom centre X (world)
+ * @param {number} opts.baseY - Mushroom base Y (world, bot anchor)
+ * @param {number} opts.width - Cap width (TRAMP_W)
+ * @param {string} opts.pupilHex - Otterisk hex for pupils
+ * @param {number} [opts.eyeScale=1]
+ * @param {number} [opts.angle=0] - Lean angle (degrees)
+ * @param {number} [opts.scaleY=1] - Vertical squash scale
+ * @param {number|null} [opts.lookX] - Hero X to gaze toward
+ * @param {number|null} [opts.lookY] - Hero Y to gaze toward
+ */
+export function drawCuteMushroomPupilOverlay(k, opts) {
+  const {
+    cx,
+    baseY,
+    width,
+    pupilHex,
+    eyeScale = 1,
+    angle = 0,
+    scaleY = 1,
+    lookX,
+    lookY
+  } = opts
+  const s = width / REF_WIDTH
+  const e = s * (eyeScale || 1)
+  const pupilRgb = glowRgb(pupilHex ?? CFG.visual.colors.hero.eyePupil)
+  const pupilC = k.rgb(pupilRgb.r, pupilRgb.g, pupilRgb.b)
+  const glintRgb = glowRgb(CFG.visual.colors.hero.eyeWhite)
+  const glintC = k.rgb(glintRgb.r, glintRgb.g, glintRgb.b)
+  const rad = (angle * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const mapLocal = (lx, ly) => {
+    const sx = lx * cos - ly * sin * scaleY
+    const sy = lx * sin + ly * cos * scaleY
+    return k.vec2(cx + sx, baseY + sy)
+  }
+  for (const ex of [REF_CX - 24, REF_CX + 24]) {
+    const lx = (ex - REF_CX) * s
+    const ly = (312 - REF_BASE_Y) * s
+    const eyePos = mapLocal(lx, ly)
+    let offX = 0
+    let offY = 0
+    if (lookX != null && lookY != null) {
+      const dx = lookX - eyePos.x
+      const dy = lookY - eyePos.y
+      const dist = Math.hypot(dx, dy) || 1
+      const reach = Math.max(0, 1 - dist / CUTE_MUSH_PUPIL_LOOK_RADIUS)
+      const maxOff = CUTE_MUSH_PUPIL_MAX_OFF_REF * e * reach
+      offX = (dx / dist) * maxOff
+      offY = (dy / dist) * maxOff
+    }
+    const pupilPos = mapLocal(lx + offX, ly + offY)
+    k.drawEllipse({
+      pos: pupilPos,
+      radiusX: CUTE_MUSH_PUPIL_RX_REF * e,
+      radiusY: CUTE_MUSH_PUPIL_RY_REF * e,
+      color: pupilC
+    })
+    k.drawCircle({
+      pos: mapLocal(lx + offX + 1.4 * e, ly - 2.2 * e),
+      radius: 1.5 * e,
+      color: glintC,
+      opacity: 0.85
+    })
+  }
+}
+
 export function drawCuteMushroomToCanvas(ctx, opts) {
   const {
     cx,
@@ -72,6 +149,7 @@ export function drawCuteMushroomToCanvas(ctx, opts) {
     withFace = false,
     eyesOpen = true,
     eyeScale = 1,
+    dynamicPupils = false,
     fillsOnly = false,
     strokesOnly = false,
     simpleShade = false
@@ -81,6 +159,7 @@ export function drawCuteMushroomToCanvas(ctx, opts) {
     ctx,
     s,
     eyeScale,
+    dynamicPupils,
     fillsOnly,
     strokesOnly,
     simpleShade,
@@ -203,18 +282,20 @@ function drawSpots(inst) {
 // smiling eyelid arcs), a small smile and blush cheeks.
 //
 function drawFace(inst, eyesOpen) {
-  const { ctx, s, x, y, colors, eyeScale } = inst
+  const { ctx, s, x, y, colors, eyeScale, dynamicPupils } = inst
   const e = s * (eyeScale || 1)
   for (const ex of [REF_CX - 24, REF_CX + 24]) {
     if (eyesOpen) {
       ctx.beginPath()
-      ctx.ellipse(x(ex), y(312), 5.5 * e, 7 * e, 0, 0, Math.PI * 2)
+      ctx.ellipse(x(ex), y(312), 6.4 * e, 8.2 * e, 0, 0, Math.PI * 2)
       ctx.fillStyle = css(colors.face)
       ctx.fill()
-      ctx.beginPath()
-      ctx.arc(x(ex + 1.6), y(309.5), 1.8 * e, 0, Math.PI * 2)
-      ctx.fillStyle = css(colors.spot)
-      ctx.fill()
+      if (!dynamicPupils) {
+        ctx.beginPath()
+        ctx.arc(x(ex + 1.6), y(309.5), 1.8 * e, 0, Math.PI * 2)
+        ctx.fillStyle = css(colors.spot)
+        ctx.fill()
+      }
     } else {
       //
       // Closed eye: a downward eyelid arc in the face tone.

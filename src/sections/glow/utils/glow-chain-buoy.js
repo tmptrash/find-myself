@@ -70,6 +70,14 @@ const BUOY_ROOTS_GRAIN_SEED = 0.53
 // Sway, side arms and the eye ring reach past the anchor X (culling pad).
 //
 const BUOY_CULL_PAD = 60
+//
+// Short radial ticks inside the sclera — read as fine lashes / cilia on the
+// stalk-eye ball without competing with the pupil.
+//
+const BUOY_SIDE_BALL_CILIA_COUNT = 5
+const BUOY_SIDE_BALL_CILIA_INNER_MULT = 1.05
+const BUOY_SIDE_BALL_CILIA_OUTER_MULT = 1.75
+const BUOY_SIDE_BALL_CILIA_WIDTH = 1.05
 
 /**
  * Creates the chain-buoy decor inst for a set of ground-anchored spots.
@@ -243,7 +251,9 @@ function addBuoySideArms(batch, buoy, points, segmentWidth, color) {
     const tipX = px + side * armLen
     const tipY = py + segmentWidth * BUOY_SIDE_ARM_DROP
     PolyBatch.addLine(batch, px, py, tipX, tipY, segmentWidth * 0.72, color)
-    PolyBatch.addDisc(batch, tipX, tipY, segmentWidth * BUOY_SIDE_BALL_RADIUS_MULT, color)
+    const ballR = segmentWidth * BUOY_SIDE_BALL_RADIUS_MULT
+    PolyBatch.addDisc(batch, tipX, tipY, ballR, color)
+    addBuoySideBallCilia(batch, tipX, tipY, ballR, buoy.seed + i * 2.17, color)
   }
 }
 function addBuoyJoints(batch, points, segmentWidth, color) {
@@ -278,6 +288,22 @@ function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
 //
 function chainBuoyXUnderWoodPlatform(x, bands, margin) {
   return (bands ?? []).some(b => x >= b.x1 - margin && x <= b.x2 + margin)
+}
+function addBuoySideBallCilia(batch, cx, cy, ballR, seed, color) {
+  const inner = ballR * BUOY_SIDE_BALL_CILIA_INNER_MULT
+  const outer = ballR * BUOY_SIDE_BALL_CILIA_OUTER_MULT
+  for (let i = 0; i < BUOY_SIDE_BALL_CILIA_COUNT; i++) {
+    const a = seed + i * (Math.PI * 2 / BUOY_SIDE_BALL_CILIA_COUNT)
+    PolyBatch.addLine(
+      batch,
+      cx + Math.cos(a) * inner,
+      cy + Math.sin(a) * inner,
+      cx + Math.cos(a) * outer,
+      cy + Math.sin(a) * outer,
+      BUOY_SIDE_BALL_CILIA_WIDTH,
+      color
+    )
+  }
 }
 function buoyPupilPos(eyeX, eyeY, heroX, heroY) {
   if (heroX == null || heroY == null) return { x: eyeX, y: eyeY }

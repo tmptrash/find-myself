@@ -1,4 +1,4 @@
-import { growTreeRootSegments } from '../utils/grow-tree-root.js'
+import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../utils/grow-tree-root.js'
 //
 // Swaying grass — thick baked blade sprites growing in tufts (never an even
 // spread). Blades are baked white and tinted at draw time, so any scene can
@@ -29,13 +29,18 @@ const TUFT_PLACE_ATTEMPTS = 24
 // not a flat constant, so taller tufts (e.g. the mud-zone scale bump) grow
 // proportionally longer roots.
 //
-const GRASS_ROOT_LEN_RATIO = 0.8
-const GRASS_ROOT_FAN_COUNT = 2
+const GRASS_ROOT_LEN_RATIO = 0.82
+const GRASS_ROOT_LEN_MIN_MULT = 0.42
+const GRASS_ROOT_LEN_MAX_MULT = 1.08
+const GRASS_ROOT_FAN_COUNT = 3
 const GRASS_ROOT_SEGMENTS = 9
-const GRASS_ROOT_THICKNESS = 1.5
-const GRASS_ROOT_SPREAD = 6
-const GRASS_ROOT_WIDTH_MULT = 0.52
-const GRASS_ROOT_MIN_WIDTH = 0.65
+const GRASS_ROOT_THICKNESS_MIN = 1.05
+const GRASS_ROOT_SPREAD = 7
+const GRASS_ROOT_WIDTH_MULT = 0.48
+const GRASS_ROOT_MIN_WIDTH = 0.55
+const GRASS_ROOT_TIP_RADIUS = 0.65
+const GRASS_ROOT_LATERAL_BIAS = 0.03
+const GRASS_ROOT_GROUND_Y = 0
 const GRASS_ROOT_CULL_PAD = 16
 //
 // Root fans are static, so they are baked white into one shelf-packed atlas
@@ -229,19 +234,21 @@ function buildTuftFractalRoots(tufts) {
     if ((tuft.blades?.length ?? 0) < TUFT_BLADES_MIN) return
     const rand = (min, max) => min + Math.random() * (max - min)
     const tallest = tuft.blades.reduce((m, b) => Math.max(m, b.height), tuft.avgBladeHeight)
-    const maxLen = tallest * GRASS_ROOT_LEN_RATIO
+    const baseLen = tallest * GRASS_ROOT_LEN_RATIO
+    const startThickness = Math.max(GRASS_ROOT_THICKNESS_MIN, tallest * 0.045)
     for (let i = 0; i < GRASS_ROOT_FAN_COUNT; i++) {
       const side = i % 2 === 0 ? 1 : -1
       const anchorX = tuft.x + side * Math.random() * GRASS_ROOT_SPREAD
-      const segs = growTreeRootSegments({
+      const maxLen = baseLen * rand(GRASS_ROOT_LEN_MIN_MULT, GRASS_ROOT_LEN_MAX_MULT)
+      const segs = clampRootSegmentsBelowGroundLine(growTreeRootSegments({
         x: 0,
-        y: 0,
-        angle: Math.PI / 2 + side * rand(0.14, 0.34),
+        y: GRASS_ROOT_GROUND_Y,
+        angle: Math.PI / 2 + side * rand(0.12, 0.26),
         segments: GRASS_ROOT_SEGMENTS,
-        thickness: GRASS_ROOT_THICKNESS,
-        lateralBiasPerSegment: side * 0.045,
+        thickness: startThickness,
+        lateralBiasPerSegment: side * GRASS_ROOT_LATERAL_BIAS,
         rand
-      })
+      }), GRASS_ROOT_GROUND_Y)
       fans.push({ x: anchorX, lines: truncateRootFan(segs, maxLen) })
     }
   })
@@ -261,16 +268,51 @@ function truncateRootFan(segs, maxLen) {
     const segLen = Math.hypot(dx, dy)
     if (used >= maxLen || segLen < 0.01) break
     const t = Math.min(segLen, maxLen - used) / segLen
+    const x1 = seg.startX
+    const y1 = seg.startY
+    const x2 = seg.startX + dx * t
+    const y2 = seg.startY + dy * t
+    if (y1 < GRASS_ROOT_GROUND_Y && y2 < GRASS_ROOT_GROUND_Y) continue
+    const clipped = clipGrassRootLine(x1, y1, x2, y2)
+    if (!clipped) continue
     lines.push({
-      x1: seg.startX,
-      y1: seg.startY,
-      x2: seg.startX + dx * t,
-      y2: seg.startY + dy * t,
+      x1: clipped.x1,
+      y1: clipped.y1,
+      x2: clipped.x2,
+      y2: clipped.y2,
       width: Math.max(GRASS_ROOT_MIN_WIDTH, seg.width * GRASS_ROOT_WIDTH_MULT)
     })
     used += segLen * t
   }
   return lines
+}
+//
+// Drops any segment above the ground anchor — roots only hang below y = 0.
+//
+function clipGrassRootLine(x1, y1, x2, y2) {
+  if (y1 < GRASS_ROOT_GROUND_Y && y2 < GRASS_ROOT_GROUND_Y) return null
+  let sx = x1
+  let sy = y1
+  let ex = x2
+  let ey = y2
+  if (sy < GRASS_ROOT_GROUND_Y) {
+    const dy = ey - sy
+    if (Math.abs(dy) < 1e-6) return null
+    const t = (GRASS_ROOT_GROUND_Y - sy) / dy
+    if (t <= 0 || t >= 1) return null
+    sx = sx + (ex - sx) * t
+    sy = GRASS_ROOT_GROUND_Y
+  }
+  if (ey < GRASS_ROOT_GROUND_Y) {
+    const dy = ey - sy
+    if (Math.abs(dy) < 1e-6) return null
+    const t = (GRASS_ROOT_GROUND_Y - sy) / dy
+    if (t <= 0 || t >= 1) return null
+    ex = sx + (ex - sx) * t
+    ey = GRASS_ROOT_GROUND_Y
+  }
+  if (Math.hypot(ex - sx, ey - sy) < 0.35) return null
+  return { x1: sx, y1: sy, x2: ex, y2: ey }
 }
 //
 // Shelf-packs every fan into one white atlas and stores each fan's cell UV
@@ -312,6 +354,19 @@ function bakeRootAtlas(k, fans, floorY, postBakeCanvas) {
       ctx.moveTo(cell.x + line.x1 - cell.ox, cell.y + line.y1 - cell.oy)
       ctx.lineTo(cell.x + line.x2 - cell.ox, cell.y + line.y2 - cell.oy)
       ctx.stroke()
+    })
+    ctx.fillStyle = '#ffffff'
+    fan.lines.forEach(line => {
+      const tipR = Math.max(GRASS_ROOT_TIP_RADIUS, line.width * 0.42)
+      ctx.beginPath()
+      ctx.arc(
+        cell.x + line.x2 - cell.ox,
+        cell.y + line.y2 - cell.oy,
+        tipR,
+        0,
+        Math.PI * 2
+      )
+      ctx.fill()
     })
     fan.quad = { x: cell.x / atlasW, y: cell.y / atlasH, w: cell.w / atlasW, h: cell.h / atlasH }
     fan.drawX = fan.x + cell.ox

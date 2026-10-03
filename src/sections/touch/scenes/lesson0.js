@@ -921,7 +921,7 @@ export function sceneLesson0(k) {
     if (showTrap2) {
       const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
       k.wait(trap2Delay, () => {
-          LifeDeduction.show({
+        LifeDeduction.show({
           k,
           currentScore: get('lifeScore', 0),
           levelIndicator,
@@ -1875,9 +1875,9 @@ export function sceneLesson0(k) {
     birds._topMargin = TOP_MARGIN
     
     addWorldSpaceDraw(k, L0_BIRD_LAYER_Z, () => {
-      const cameraX = getCameraCenterX(k, birds._heroRef)
-      const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
-      drawL0Birds(k, birds, cameraX, cullDist)
+          const cameraX = getCameraCenterX(k, birds._heroRef)
+          const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
+          drawL0Birds(k, birds, cameraX, cullDist)
     })
     //
     // Create dynamic grass drawer with hero interaction.
@@ -3707,8 +3707,8 @@ function startMonsterConversation(k, monsterBugs, touchLetterState) {
       if (inst.currentTooltip) {
         const bug = monsterBugs[inst.currentAct.lines[inst.lineIndex].speaker]
         if (bug) {
-          inst.currentTooltip.frozenX = Math.round(bug.x)
-          inst.currentTooltip.frozenY = Math.round(bug.y)
+        inst.currentTooltip.frozenX = Math.round(bug.x)
+        inst.currentTooltip.frozenY = Math.round(bug.y)
         }
       }
       if (inst.timer >= inst.currentDisplayTime) {
@@ -4351,7 +4351,7 @@ function drawL0Fireflies(k, fireflies, posScratch, color) {
     const alpha = forceAlpha != null ? forceAlpha : (0.15 + glow * 0.7)
     posScratch.x = f.x
     posScratch.y = f.y
-    k.drawCircle({
+      k.drawCircle({
       pos: posScratch,
       radius: f.radius,
       color,
@@ -5099,7 +5099,7 @@ function onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY
           // Play soft chime for each individually collected firefly
           //
           sound && Sound.playFireflyPickupSound(sound)
-        } else {
+    } else {
           allDone = false
         }
       } else {

@@ -293,7 +293,7 @@ export const CFG = {
           gameplay: PALETTE.gray0
         },
         //
-        // Soft gray rim for low-priority decor (hedgehog pre-colour, captions).
+        // Soft gray rim for low-priority decor (captions, muted props).
         //
         glowOutlineLight: PALETTE.gray2,
         decorGray: PALETTE.gray3,
@@ -303,18 +303,22 @@ export const CFG = {
         hudScore: PALETTE.gray5,
         //
         // Warm cream — soft highlight/shadow tone reused wherever a warm
-        // near-white reads better than a cold gray (e.g. glow hedgehog
-        // death-prompt shadow in the colour world).
+        // near-white reads better than a cold gray (e.g. death-prompt shadow
+        // in the colour world).
         //
         warmCream: PALETTE.sand5,
         //
-        // Glow hedgehog creature — medium-brown quills, cream face/belly and
-        // pink cheek blush (reference art).
+        // Predatory crawler — cool forest shadow (teal/green), pale eye,
+        // dark red pupil. Shears stay bark-brown so they read as horn, not UI.
         //
-        hedgehogMane: PALETTE.brown2,
-        hedgehogManeDark: PALETTE.brown0,
-        hedgehogFace: PALETTE.sand5,
-        hedgehogCheek: PALETTE.pink4,
+        predatorBack: PALETTE.teal0,
+        predatorBelly: PALETTE.green0,
+        predatorMoss: PALETTE.teal1,
+        predatorContour: PALETTE.gray0,
+        predatorLeg: PALETTE.teal0,
+        predatorEye: PALETTE.sand5,
+        predatorPupil: PALETTE.red0,
+        predatorHorn: PALETTE.brown1,
         //
         // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
         // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest

@@ -20,7 +20,7 @@ import {
   CUTE_MUSHROOM_ASPECT,
   TRAMP_FACE_EYE_SCALE
 } from '../utils/cute-mushroom.js'
-import * as Hedgehog from '../components/hedgehog.js'
+import * as Predator from '../components/predator.js'
 import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, onPhysicalKeyPress, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
 import {
   buildGlowTree,
@@ -341,7 +341,7 @@ const PLAYFIELD_BOTTOM_CORNER_Z = CFG.visual.zIndex.ui + 2500
 const PLATFORM_HIDE_Y = 9999
 //
 // Tree. Fixed to the design viewport's own centre (not the live window
-// width) so every element positioned off it — branch, hedgehogs, L/O/W
+// width) so every element positioned off it — branch, mud band, L/O/W
 // platforms, mushrooms — lines up identically on any monitor.
 //
 const TREE_X = Math.round(DESIGN_SCREEN_W * 0.5)
@@ -381,34 +381,19 @@ const TREE_CROP_PAD = 2
 const monolithicTreeOffsets = new WeakMap()
 const TRUNK_EXCLUDE_HALF = 50
 //
-// The left hedgehog stays hidden until the hero runs a stretch past the
-// branch trampoline, then pops out abruptly right in his path — at a
-// normal run speed there's no time to react before colliding, so the only
-// reliable way past it is creeping forward slowly (see
-// maybeSpawnLeftHedgehogAmbush): that leaves enough real time between the
-// pop and actual contact to spot it and jump. TRIGGER_GAP keeps the pop
-// well clear of the branch-tramp ground respawn spot (see
-// treeGroundSpawnX) so a fresh respawn there can never insta-trigger it.
+// Mud band east of the branch trampoline — predator anchor layout.
 //
-const HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP = 170
-const HEDGEHOG_LEFT_AMBUSH_POP_LEAD = 70
-const HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN = 40
+const MUD_ZONE_BRANCH_TRIGGER_GAP = 170
+const MUD_ZONE_PREDATOR_POP_LEAD = 70
+const MUD_ZONE_PREDATOR_DANGER_MARGIN = 40
 //
-// Running covers the extra pop-lead distance in less real time than
-// walking does, so a hero sprinting through gets a slightly longer lead
-// added on top of the base one — a bit more of a fighting chance to react
-// before the hitboxes actually overlap.
-//
-const HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD = 200
-const HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS = 35
-//
-// Soft muddy ground band around the left hedgehog in flat gray explore mode.
-// Jump is lower than normal with a snappy takeoff (no low-gravity hang).
-// Footsteps sound wet; foot bursts are off. Branch trampoline clears the hedgehog.
+// Soft muddy ground band in flat gray explore mode. Jump is lower than
+// normal with a snappy takeoff (no low-gravity hang). Footsteps sound wet;
+// foot bursts are off.
 //
 const MUD_BRANCH_TRAMP_GAP = 42
 const MUD_ZONE_RIGHT_EXTENT = 170
-const MUD_ZONE_HEDGEHOG_MARGIN = 14
+const MUD_ZONE_CREATURE_MARGIN = 14
 const MUD_MAX_DEPTH = 42
 const MUD_MOVE_SPEED_MULT = 0.5
 const MUD_JUMP_FORCE_MULT = 0.68
@@ -418,32 +403,23 @@ const MUD_JUMP_SQUASH_TIME_MULT = 1
 // Letter-caption world freeze: birds + proximity ambient fade duration (sec).
 //
 const GLOW_DIALOG_AUDIO_FADE_SEC = 0.55
-const HEDGEHOG_SCALE = 1.4
-const HEDGEHOG_DRAW_Z = CFG.visual.zIndex.player - 1
-const HEDGEHOG_MUD_SNEAK_DRAW_Z = CFG.visual.zIndex.player + 2
 const GLOW_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
 const GLOW_EAR_TREE_Z = CFG.visual.zIndex.player - 1
 //
-// Positive sink drops the hedgehog anchor below FLOOR_Y so the baked body
-// and live legs sit flush on the ground strip instead of hovering above it.
+// Horizontal band for crediting a jump over the mud predator (HUD L step 1).
 //
-const HEDGEHOG_GROUND_SINK = 6
-const HEDGEHOG_GROUND_RAISE = -HEDGEHOG_GROUND_SINK
+const MUD_PREDATOR_JUMP_CLEARANCE_X = 52
 //
-// Horizontal band for crediting a jump over the left hedgehog (HUD L step 1).
+// Hero must clear this far past the predator anchor X before the L HUD step credits.
 //
-const HEDGEHOG_JUMP_OVER_CLEARANCE_X = 52
-//
-// Hero must clear this far past the hog's X before the L HUD step credits.
-//
-const HEDGEHOG_JUMP_OVER_PASS_MARGIN = 36
-const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
+const MUD_PREDATOR_JUMP_PASS_MARGIN = 36
+const HERO_MUD_HAZARD_SPAWN_CLEARANCE = 20
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
 //
 const GLOW_HERO_HITBOX_HALF_W = 15
-const HERO_HEDGEHOG_RESPAWN_CLEARANCE = 32
-const HEDGEHOG_RESPAWN_TOUCH_GRACE_SEC = 0.5
+const HERO_TOUCH_DEATH_RESPAWN_CLEARANCE = 32
+const TOUCH_DEATH_RESPAWN_GRACE_SEC = 0.5
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -455,7 +431,7 @@ const HERO_TRAMPOLINE_SPAWN_CLEARANCE = 20
 // Wooden spikes hide under a patch of grass at the far edge of the L-log
 // platform. Falling onto them from above is fatal — they blink once at the
 // moment of contact, then the hero shatters into leaves like any other
-// hedgehog death.
+// touch-death burst.
 //
 const RIGHT_SPIKE_COUNT = 5
 const RIGHT_SPIKE_ZONE_W = 60
@@ -474,25 +450,47 @@ const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.55
 //
 const RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET = 3
 //
-// Touching the hedgehog or falling on the spikes is fatal — same
-// disintegration flow as any other level's death, then a standard
-// press-any-key countdown reload.
+// Touching the predator or falling on the spikes is fatal — same
+// disintegration flow as any other level's death, then in-level respawn.
 //
-const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
+const GLOW_TOUCH_DEATH_PARTICLE_COUNT = 34
 const RIGHT_SPIKE_DEATH_HINT_TEXT = 'Life is a complicated thing.\nNext time, be careful.'
-const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens. Next\ntime, be careful.'
 //
-// Every second hedgehog death (2nd, 4th, ...) swaps in this callback line
+// Rotates on each predator kill (odd deaths); even deaths use the repeat line.
+//
+const PREDATOR_DEATH_HINT_TEXTS = [
+  'Too many legs.\nNot enough caution.',
+  'The mud had teeth.\nWalk lighter.',
+  "It wasn't a log.\nNow you know.",
+  'You heard the tapping.\nYou did not listen.',
+  'Some things crawl\nfor a reason.',
+  'The grass hid it.\nThe grass lied.',
+  'Viscous ground.\nFast mistake.',
+  'She counted your steps.\nThen she stopped.'
+]
+//
+// Every second touch death (2nd, 4th, ...) swaps in this callback line
 // instead of the cause-specific text above, then alternates back.
 //
-const HEDGEHOG_DEATH_REPEAT_HINT_TEXT = "And here's 'next time'"
-const HEDGEHOG_DEATH_HINT_RAISE = 96
-const HEDGEHOG_HINT_BUBBLE_OFFSET_Y = -58
-const HEDGEHOG_DEATH_HINT_DURATION = 5
-const HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET = 80
-const HERO_HEDGEHOG_RESPAWN_DELAY = 2.48
+const GLOW_TOUCH_DEATH_REPEAT_HINT_TEXT = "And here's 'next time'"
+const GLOW_TOUCH_DEATH_HINT_RAISE = 96
+const GLOW_TOUCH_HINT_BUBBLE_OFFSET_Y = -58
 //
-// How fast the post-L world wakes up (grass sway, hedgehog wander, birds,
+// Low crawler — anchor the bubble just above the body, not hero-height.
+//
+const PREDATOR_DEATH_HINT_RAISE = 28
+const PREDATOR_DEATH_HINT_OFFSET_Y = -36
+const GLOW_TOUCH_DEATH_HINT_DURATION = 5
+const HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET = 80
+const GLOW_TOUCH_DEATH_RESPAWN_DELAY = 2.48
+//
+// In-level respawn after a predator kill — farther than a generic side step so
+// the hero does not land back inside the body on reload.
+//
+const HERO_PREDATOR_RESPAWN_PUSH =
+  HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET + HERO_TOUCH_DEATH_RESPAWN_CLEARANCE + GLOW_HERO_HITBOX_HALF_W
+//
+// How fast the post-L world wakes up (grass sway, predator patrol, birds,
 // mushroom whistle-lean) once the O-meditation countdown starts, and how
 // quickly it freezes again when the hero breaks stillness.
 //
@@ -502,12 +500,6 @@ const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
 const ROCK_OUTLINE_RGB = DECOR_OUTLINE_RGB
 const ROCK_OUTLINE_WIDTH = 2.5
-//
-// Ground respawn after a hedgehog kill lands just past the wandering
-// hedgehog's own leash, so reloading the level never drops the hero right
-// back into its path. Kept modest — the leash already runs right up to
-// the right trampoline mushroom, so a bigger margin would spawn the hero
-// on top of it instead.
 //
 //
 // Parallax background — sky baked into the far row plus 2 forest planes (each
@@ -948,10 +940,12 @@ const SHORE_ROCK_WIDTH_SCALE = 2.2
 // a few clusters rather than spread uniformly (same idea as the left
 // 6-rock cluster near the tree).
 //
-const RIGHT_ROCK_COUNT = 8
-const RIGHT_ROCK_CLUSTER_COUNT = 3
-const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 30
-const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 20
+const RIGHT_ROCK_COUNT = 16
+const RIGHT_ROCK_CLUSTER_COUNT = 6
+const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 28
+const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 36
+const MUD_EAST_ROCK_INSET = 6
+const MUD_EAST_ROCK_COUNT = 34
 const COLOR_FADE_DURATION = 0.5
 const TREE_REVEAL_FADE_DURATION = 0.85
 //
@@ -1104,8 +1098,8 @@ const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
 const KEY_RIGHT_TRAMP_BOUNCE_LIVE = 'glow.rightTrampBounceLive'
 const KEY_BRANCH_TRAMP_BOUNCE_LIVE = 'glow.branchTrampBounceLive'
 const KEY_L_PLAT_STEPPED = 'glow.lPlatStepped'
-const KEY_LEFT_HEDGEHOG_JUMPED_OVER = 'glow.leftHedgehogJumpedOver'
-const KEY_LEFT_HEDGEHOG_REVEALED = 'glow.leftHedgehogRevealed'
+const KEY_MUD_PREDATOR_JUMPED_OVER = 'glow.mudPredatorJumpedOver'
+const KEY_MUD_PREDATOR_JUMPED_OVER_LEGACY = 'glow.leftHedgehogJumpedOver'
 const KEY_HUD_G_FILL = 'glow.hudGFillParts'
 const KEY_HUD_L_FILL = 'glow.hudLFillParts'
 const KEY_HUD_L_TRAMP_JUMPED = 'glow.hudLTrampJumped'
@@ -1417,10 +1411,14 @@ const GRASS_TUFT_COUNT = 22
 const RIGHT_SPIKE_BLINK_Z = GRASS_Z + 1
 //
 // Blades in the mud zone grow this much bigger/taller than everywhere
-// else — the wandering hedgehog hides there and should be hard to spot
+// else — the predator hides there and should be hard to spot
 // through the grass rather than standing out clearly.
 //
 const MUD_ZONE_GRASS_SCALE_MULT = 2
+//
+// Taller blades on the walk from the branch trampoline up to the mud lip.
+//
+const MUD_APPROACH_GRASS_SCALE_MULT = 1.62
 //
 // Mud grass stays darker than the peek band when the post-L colour fade starts.
 //
@@ -1430,6 +1428,24 @@ const MUD_ZONE_GRASS_GREEN_VOID_LERP = 0.42
 // zone — see createGlowMudExtraGrass.
 //
 const MUD_ZONE_EXTRA_GRASS_TUFT_COUNT = 20
+//
+// DEBUG — true hides grass from the branch trampoline up through the mud
+// band (easy restore: set back to false).
+//
+const GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD = false
+//
+// Surface clutter the predator crawls over — drawn under tall grass.
+//
+const MUD_BEHIND_ROCK_Z = 6
+const MUD_DRAW_Z = 7
+const MUD_FRONT_ROCK_Z = CFG.visual.zIndex.player - 2
+const MUD_WALK_BIG_ROCK_COUNT = 2
+const MUD_WALK_SMALL_ROCK_COUNT = 4
+const MUD_WALK_BRANCH_COUNT = 2
+const MUD_WALK_LOG_MIN_W = 62
+const MUD_WALK_LOG_MAX_W = 96
+const MUD_BLOB_STEPS = 24
+const MUD_ROCK_SINK = 6
 //
 // Right-ground discovery fades into the unknown instead of cutting on a strip.
 //
@@ -2004,10 +2020,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     sound._k = k
     const birdsMusic = createGlowBirdsLoopAudio()
     bindGlowBirdsLoopAudio(birdsMusic)
-    const earWhisperMusic = k.play('whisper', { loop: true, volume: 0, paused: true })
     const stopGlowLoopAudio = () => {
       leaveGlowBirdsLoopAudio()
-      earWhisperMusic?.stop?.()
       Sound.setEarTreeWhisperVolume(0)
       Sound.stopRainSound(sound)
       Sound.stopTrampWaterStepsLoop(sound)
@@ -2133,14 +2147,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
     const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
     //
-    // Left hedgehog ambush spot — see HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP.
+    // Mud predator band east of the branch trampoline.
     //
-    const hedgehogAmbushTriggerX = branchTrampX + HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP
-    const hedgehogAmbushPopX = hedgehogAmbushTriggerX + HEDGEHOG_LEFT_AMBUSH_POP_LEAD
+    const mudPredatorAmbushTriggerX = branchTrampX + MUD_ZONE_BRANCH_TRIGGER_GAP
+    const mudPredatorPopX = mudPredatorAmbushTriggerX + MUD_ZONE_PREDATOR_POP_LEAD
     const mudZoneX1 = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
-    const mudZoneX2 = hedgehogAmbushPopX + MUD_ZONE_RIGHT_EXTENT
-    const leftHedgehogRevealedEarly = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
-    const leftHogStartsVisible = zones.gCollected && leftHedgehogRevealedEarly
+    const mudZoneX2 = mudPredatorPopX + MUD_ZONE_RIGHT_EXTENT
     //
     // L-log platform's home spot — computed early (it only depends on
     // TREE_X and fixed offsets, not on anything laid out further below) so
@@ -2211,7 +2223,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // A saved/derived ground spawn landing right on a mushroom's bounce cap
     // (branch tramp near the tree, or the far right tramp) would launch the
     // hero into the air the instant the level loads — pull it clear to
-    // whichever side is closer before the hedgehog check below.
+    // whichever side is closer before the mud-hazard check below.
     //
     lastSpawnMode !== SPAWN_MODE_CAVE &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
@@ -2223,36 +2235,21 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         trampVisible: isRightTrampolineVisible(zones)
       }))
     //
-    // A saved/derived ground spawn landing inside the left hedgehog's
-    // ambush danger zone (trigger..pop, plus its touch radius) would pop
-    // and kill it the instant the level loads. Pull the spawn back to just
-    // before the trigger instead whenever that would happen — landing past
-    // the whole zone (already-explored ground further right) is left as is.
+    // A saved ground spawn inside the mud ambush band would overlap the
+    // predator the instant the level loads — pull it west of the trigger.
     //
     lastSpawnMode !== SPAWN_MODE_CAVE &&
-      (heroSpawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
+      (heroSpawnX = nudgeGlowHeroSpawnAwayFromMudHazards({
         spawnX: heroSpawnX,
         spawnY: heroSpawnY,
         spawnOnBranch,
-        hedgehogAmbushTriggerX,
-        hedgehogAmbushPopX,
+        mudPredatorAmbushTriggerX,
+        mudPredatorPopX,
         lPlatX,
         rightPlatY,
         rightSpikes: { x1: rightSpikesX1, x2: rightSpikesX2 },
-        floorHogProbe: leftHogStartsVisible
-          ? Hedgehog.createLethalTouchProbe({
-            x: hedgehogAmbushPopX,
-            y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
-            scale: HEDGEHOG_SCALE,
-            facing: 'left'
-          })
-          : null,
-        floorHogBounds: leftHogStartsVisible
-          ? {
-            minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
-            maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
-          }
-          : null
+        mudZoneX1,
+        mudZoneX2
       }))
     //
     // Glow SFX only from the first frame; birds.mp3 waits for the post-L stillness countdown.
@@ -2379,7 +2376,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const earTreeSpots = buildGlowEarTreeSpots(horizBranch.x1)
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots)
-    const mudExtraGrass = createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
+    const mudExtraGrass = GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD
+      ? null
+      : createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
     //
     // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
     // instance (dozens of decor pieces total). Registering them all into one
@@ -2389,29 +2388,34 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // actually tanks FPS once O opens up the whole level's decor at once.
     //
     const decorAtlas = createCanvasAtlasBuilder()
-    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas)
+    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, mudZoneX2)
+    const mudWalkClutter = createGlowMudZoneWalkClutter(k, mudZoneX1, mudZoneX2, zones, decorAtlas)
+    rockObjs.push(...mudWalkClutter.rocks)
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 54, session)) return
-    const leftHedgehogRevealed = leftHedgehogRevealedEarly
-    //
-    // Left hedgehog stays hidden until G is collected; returning saves keep
-    // the reveal state once G was taken.
-    //
-    const hedgehog = Hedgehog.create({
+    const predator = Predator.create({
       k,
-      x: hedgehogAmbushPopX,
-      y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
-      scale: HEDGEHOG_SCALE,
-      facing: 'left',
+      x: mudPredatorPopX,
+      dir: -1,
+      minX: mudZoneX1 + MUD_ZONE_CREATURE_MARGIN,
+      maxX: mudZoneX2 - MUD_ZONE_CREATURE_MARGIN,
+      groundAt: (x) => glowPredatorSurfaceY(rockObjs, mudWalkClutter.surfaces, mudZoneX1, mudZoneX2, x),
       hero: heroInst,
       zones,
-      hiddenUntilPopOut: !leftHogStartsVisible,
-      minX: mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
-      maxX: mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
+      sfx: sound
     })
-    leftHogStartsVisible && !leftHedgehogRevealed &&
-      Hedgehog.popOut(hedgehog, hedgehogAmbushPopX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
+    if (!spawnOnBranch && zones.gCollected && isGlowEyesGameplayUnlocked(zones)) {
+      const footY = heroSpawnY + SURFACE_DETECT_Y
+      Predator.overlapsHeroHitbox(predator, heroSpawnX, footY) &&
+        heroInst.character?.pos &&
+        (heroInst.character.pos.x = resolveGlowPredatorRespawnX(
+          { mudZoneX1, mudZoneX2 },
+          heroSpawnX,
+          heroSpawnY,
+          predator
+        ))
+    }
     if (await glowBootstrapPause(bootstrap, 62, session)) return
     //
     // Wooden spikes sit fixed on the right end of the L-log platform,
@@ -2523,7 +2527,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oStuckHintShown: false,
       sound,
       birdsMusic,
-      earWhisperMusic,
       letterDialogMusic: null,
       dialogHeroPinned: false,
       dialogPinY: 0,
@@ -2560,10 +2563,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       grassLayer,
       mudExtraGrass,
       rockObjs,
+      mudWalkSurfaces: mudWalkClutter.surfaces,
+      mudWalkClutter,
       mushObjs,
-      hedgehog,
-      hedgehogAmbushTriggerX,
-      hedgehogAmbushPopX,
+      predator,
+      mudPredatorAmbushTriggerX,
+      mudPredatorPopX,
       mudZoneX1,
       mudZoneX2,
       rightSpikes,
@@ -2571,16 +2576,16 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       lPlatCaptionHiding: false,
       _lPlatVisibleLastFrame: false,
       oPlatCaptionHiding: false,
-      hedgehogDeathHandled: false,
-      hedgehogDeathCount: 0,
-      hedgehogTouchGraceUntil: 0,
-      hedgehogRespawnWait: null,
+      touchDeathHandled: false,
+      touchDeathCount: 0,
+      touchDeathGraceUntil: 0,
+      touchDeathRespawnWait: null,
       glowHeroCreateCfg,
       heroSpawnNudge: {
         branchTrampX,
         trampX,
-        hedgehogAmbushTriggerX,
-        hedgehogAmbushPopX,
+        mudPredatorAmbushTriggerX,
+        mudPredatorPopX,
         lPlatX,
         rightPlatY: lPlatY,
         mudZoneX1,
@@ -2844,8 +2849,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     })
     k.onSceneLeave(() => {
       backToMenuCancel.cancel()
-      inst.hedgehogRespawnWait?.cancel?.()
-      inst.hedgehogRespawnWait = null
+      inst.touchDeathRespawnWait?.cancel?.()
+      inst.touchDeathRespawnWait = null
       clearGlowHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
@@ -3464,7 +3469,9 @@ function loadGlowZones() {
     rightTrampRevealed,
     rightTrampBounceLive,
     lPlatStepped: get(KEY_L_PLAT_STEPPED, false) || lCollected,
-    leftHedgehogJumpedOver: get(KEY_LEFT_HEDGEHOG_JUMPED_OVER, false) || lCollected,
+    mudPredatorJumpedOver: get(KEY_MUD_PREDATOR_JUMPED_OVER, false) ||
+      get(KEY_MUD_PREDATOR_JUMPED_OVER_LEGACY, false) ||
+      lCollected,
     groundDecor: groundDecorRight || groundDecorLeft,
     groundBg: get(KEY_REVEALED_GROUND_BG, false) || colorWorld,
     water: false,
@@ -3565,7 +3572,7 @@ function applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCave) {
 //
 function persistGlowLastSpawn(inst) {
   const char = inst.heroInst?.character
-  if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled) return
+  if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
   writeGlowLastSpawnKeys(inst, char.pos.x, char.pos.y)
 }
 //
@@ -3805,7 +3812,7 @@ function hideGlowHudLetterFillCounter(inst) {
   inst.hudLetterFillCounter && HeroCounter.hide(inst.hudLetterFillCounter)
 }
 function updateGlowHudLetterFillCounter(inst) {
-  if (inst.deathHandled || inst.hedgehogDeathHandled) {
+  if (inst.deathHandled || inst.touchDeathHandled) {
     hideGlowHudLetterFillCounter(inst)
     return
   }
@@ -3913,13 +3920,13 @@ function countGlowHudGFillParts(inst) {
   return Math.min(GLOW_HUD_G_FILL_PARTS, worldParts)
 }
 //
-// L HUD fill (x/4): hedgehog jump, right mushroom found, bounce on it, L log step.
+// L HUD fill (x/4): mud predator jump, right mushroom found, bounce on it, L log step.
 //
 function countGlowHudLFillParts(inst) {
   const z = inst.zones
   if (z?.lCollected) return GLOW_HUD_L_FILL_PARTS
   let n = 0
-  z?.leftHedgehogJumpedOver && n++
+  z?.mudPredatorJumpedOver && n++
   (z?.rightTrampRevealed || isRightTrampolineVisible(z)) && n++
   glowHudLTrampJumped(z) && n++
   z?.lPlatStepped && n++
@@ -4731,7 +4738,7 @@ function glowDecorFade(inst) {
   return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
 }
 //
-// Hedgehogs, lake, and trampolines share the same colour fade as the O-beat
+// Lake, and trampolines share the same colour fade as the O-beat
 // world (full once L is taken — see applyGlowPostLLitState / revealOZone).
 //
 function glowLZoneDecorFade(inst) {
@@ -4998,6 +5005,19 @@ function applyZoneVisibility(inst) {
   inst.trampBundle.drawLayer.hidden = !isRightTrampolineVisible(z)
   inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
   inst.rockObjs.forEach(o => {
+    if (o._mudZoneWalk) {
+      setDecorObjVisible(o, z.gCollected)
+      return
+    }
+    if (o._rightOfMud) {
+      if (!z.gCollected) {
+        setDecorObjVisible(o, false)
+        return
+      }
+      const rightOp = glowRightDecorOpacity(inst, o)
+      setDecorObjVisible(o, rightOp > 0.04, rightOp)
+      return
+    }
     if (o._lakeShoreEnd) {
       //
       // Cap rocks are painted in drawLakeShoreRocksWorld so they always sit
@@ -5037,12 +5057,13 @@ function applyZoneVisibility(inst) {
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
   inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
-  inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst)
+  inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst))
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
   maybeShowGLetter(inst)
+  syncGlowPredatorVisibility(inst)
 }
 function isGlowGrassLayerVisible(inst) {
   const z = inst.zones
@@ -5092,7 +5113,7 @@ function applyGlowEyeIntroZoneVisibility(inst) {
   inst.rockObjs.forEach(o => setDecorObjVisible(o, false))
   inst.mushObjs.forEach(o => setDecorObjVisible(o, false))
   inst.grassLayer.layer.hidden = true
-  inst.mudExtraGrass.layer.hidden = true
+  inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = true)
   inst.waterLayer && (inst.waterLayer.hidden = true)
   inst.treeObj && (inst.treeObj.hidden = true)
   inst.treeColorObj && (inst.treeColorObj.hidden = true)
@@ -6591,7 +6612,7 @@ function buildGlowChainBuoySpot(x) {
     seed: Math.random() * Math.PI * 2,
     segmentCount: 5 + Math.floor(Math.random() * 4),
     segmentLen: 22 + Math.random() * 10,
-    segmentWidth: 3.5 + Math.random() * 2.5,
+    segmentWidth: 3.85 + Math.random() * 0.55,
     swayAmp: 0.09 + Math.random() * 0.12,
     swaySpeed: 0.75 + Math.random() * 0.65,
     swayLag: 0.35 + Math.random() * 0.35
@@ -6842,22 +6863,11 @@ function resetGlowEarTreeWhisperProximityState(inst) {
 }
 function fadeOutGlowEarTreeWhisper(inst) {
   Sound.setEarTreeWhisperVolume(0)
-  const kaplayWhisper = inst.earWhisperMusic
-  kaplayWhisper && (kaplayWhisper.volume = 0, kaplayWhisper.paused = true)
   resetGlowEarTreeWhisperProximityState(inst)
 }
 function setGlowEarTreeWhisperVolume(inst, volume) {
   const vol = Math.max(0, Math.min(1, volume))
   Sound.setEarTreeWhisperVolume(vol)
-  const kaplayWhisper = inst.earWhisperMusic
-  if (!kaplayWhisper) return
-  if (vol <= 0.001) {
-    kaplayWhisper.volume = 0
-    kaplayWhisper.paused = true
-    return
-  }
-  kaplayWhisper.paused = false
-  kaplayWhisper.volume = vol
 }
 function updateGlowEarTreeWhisperSound(inst, char) {
   const fadeOut = () => fadeOutGlowEarTreeWhisper(inst)
@@ -6941,11 +6951,11 @@ function maybePlayGlowEarlyLandSfx(inst, char, hero, footY, grounded) {
 //
 function computeGlowMudZoneX() {
   const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
-  const hedgehogAmbushTriggerX = branchTrampX + HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP
-  const hedgehogAmbushPopX = hedgehogAmbushTriggerX + HEDGEHOG_LEFT_AMBUSH_POP_LEAD
+  const mudPredatorAmbushTriggerX = branchTrampX + MUD_ZONE_BRANCH_TRIGGER_GAP
+  const mudPredatorPopX = mudPredatorAmbushTriggerX + MUD_ZONE_PREDATOR_POP_LEAD
   return {
     x1: branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP,
-    x2: hedgehogAmbushPopX + MUD_ZONE_RIGHT_EXTENT
+    x2: mudPredatorPopX + MUD_ZONE_RIGHT_EXTENT
   }
 }
 //
@@ -8162,12 +8172,15 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
   const branchR = branchTrampX + TRAMP_GRASS_CLEAR_HALF
   const earTreeExcluded = (x) => (earTreeSpots ?? []).some(spot =>
     x >= spot.x - EAR_TREE_TRUNK_GRASS_CLEAR_HALF && x <= spot.x + EAR_TREE_TRUNK_GRASS_CLEAR_HALF)
+  const mudApproachGrassOff = GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD &&
+    mudZoneX1 != null && mudZoneX2 != null
   const excluded = (x) => (x >= waterX1 && x <= waterX2) ||
     (x >= trunkL && x <= trunkR) ||
     (x >= trampL && x <= trampR) ||
     (x >= branchL && x <= branchR) ||
     earTreeExcluded(x) ||
-    isCrackGrassExcluded(x, WORLD_W)
+    isCrackGrassExcluded(x, WORLD_W) ||
+    (mudApproachGrassOff && x >= branchR && x <= mudZoneX2)
   const grass = Grass.create({
     k,
     floorY: FLOOR_Y,
@@ -8177,10 +8190,19 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     z: GRASS_Z,
     excluded,
     //
-    // Bigger blades over the mud zone — the wandering hedgehog hides there
+    // Bigger blades over the mud zone — the predator hides there
     // and should stay hard to spot through the grass.
     //
-    getScaleMult: (x) => x >= mudZoneX1 && x <= mudZoneX2 ? MUD_ZONE_GRASS_SCALE_MULT : 1,
+    getScaleMult: (x) => {
+      if (GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD) return 1
+      if (mudZoneX1 != null && mudZoneX2 != null && x >= mudZoneX1 && x <= mudZoneX2) {
+        return MUD_ZONE_GRASS_SCALE_MULT
+      }
+      if (mudZoneX1 != null && x >= branchR && x < mudZoneX1) {
+        return MUD_APPROACH_GRASS_SCALE_MULT
+      }
+      return 1
+    },
     postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: (blade) => glowGrassTint(zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones),
@@ -8625,10 +8647,10 @@ function glowBirdsMusicLife(inst) {
 //
 // Rocks — flat value 5 silhouettes.
 //
-function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas) {
+function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas, mudZoneX2) {
   const objs = []
   const clusterCenterX = treeBaseLeftX + 40
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     const radius = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN)
     const angle = (Math.PI / 5) * i
     const spread = 35 + Math.random() * 25
@@ -8686,6 +8708,31 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
     const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas, zones)
     rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
     objs.push(rock)
+  }
+  //
+  // Extra scatter east of the mud band — visible once G opens the mud peek,
+  // not gated behind the right-ground discovery strips.
+  //
+  if (mudZoneX2 != null) {
+    const eastLeft = mudZoneX2 + MUD_EAST_ROCK_INSET
+    const crackZone = getCrackZone(WORLD_W, FLOOR_Y)
+    const eastRockClear = (x) => nearTramp(x) || x >= crackZone.x1 - 52
+    const eastSpan = Math.max(50, rightEdge - eastLeft)
+    for (let i = 0; i < MUD_EAST_ROCK_COUNT; i++) {
+      const t = (i + 0.5) / MUD_EAST_ROCK_COUNT
+      const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
+      let cx = eastLeft + eastSpan * t + (Math.random() - 0.5) * eastSpan * 0.22
+      let safety = 0
+      while (eastRockClear(cx) && safety < 48) {
+        cx = eastLeft + Math.random() * eastSpan
+        safety++
+      }
+      if (eastRockClear(cx) || cx < eastLeft) continue
+      const rock = placeRock(k, cx, radius, 'right', false, 7, 0.85 + Math.random() * 0.35, decorAtlas, zones)
+      rock._rightOfMud = true
+      rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
+      objs.push(rock)
+    }
   }
   return objs
 }
@@ -8761,6 +8808,8 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj._waterCluster = waterCluster
   obj._homeX = worldX - totalW / 2
   obj._homeY = posY
+  obj._surfaceHalfW = totalW * 0.5
+  obj._surfaceTop = posY
   obj._decorWorldX = worldX
   obj._detailRank = radius < 16 ? 'small' : 'large'
   obj._rockBake = {
@@ -8775,6 +8824,231 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj.hidden = true
   obj.pos.y = PLATFORM_HIDE_Y
   return obj
+}
+//
+// Viscous mud crest. Smooth sine peaks, pinched to the ground line at the
+// band edges. Up is a smaller Y. Shared by the blob and the walk surface.
+//
+function glowMudCrestY(x, mudX1, mudX2) {
+  const span = Math.max(1, mudX2 - mudX1)
+  const t = (x - mudX1) / span
+  if (t <= 0 || t >= 1) return FLOOR_Y
+  const edge = Math.sin(t * Math.PI)
+  const swell = Math.sin(x * 0.022) * 8 + Math.sin(x * 0.009 + 1.4) * 5
+  return FLOOR_Y - edge * Math.max(5, 10 + swell)
+}
+//
+// Rounded stratum line inside the mud, softer than the underground jag.
+//
+function glowMudSeamY(x, mudX1, mudX2) {
+  const crest = glowMudCrestY(x, mudX1, mudX2)
+  return crest + (FLOOR_Y - crest) * 0.42
+}
+//
+// Plants a mud rock so its bottom sits in the crest, not above it.
+//
+function seatMudWalkRock(rock, mudX1, mudX2) {
+  const croppedH = rock._rockBake?.croppedH || 16
+  const mudY = glowMudCrestY(rock._decorWorldX, mudX1, mudX2)
+  rock._homeY = mudY - croppedH + MUD_ROCK_SINK
+  rock._surfaceTop = rock._homeY + 1
+}
+//
+// Rocks, a half-buried log and two twigs. Bottoms meet the mud crest.
+//
+function createGlowMudZoneWalkClutter(k, mudX1, mudX2, zones, decorAtlas) {
+  const rocks = []
+  const surfaces = []
+  const branches = []
+  const span = Math.max(40, mudX2 - mudX1)
+  const logW = MUD_WALK_LOG_MIN_W + Math.random() * (MUD_WALK_LOG_MAX_W - MUD_WALK_LOG_MIN_W)
+  const logH = 12 + Math.random() * 4
+  const logCenterX = mudX1 + span * 0.56
+  const logMud = glowMudCrestY(logCenterX, mudX1, mudX2)
+  const logTop = logMud - logH * 0.62
+  surfaces.push({ x1: logCenterX - logW * 0.46, x2: logCenterX + logW * 0.46, topY: logTop })
+  const log = {
+    cx: logCenterX,
+    cy: logTop + logH * 0.5,
+    w: logW,
+    h: logH,
+    detail: generateLogDetail(logW, logH, false)
+  }
+  const logX1 = logCenterX - logW * 0.55
+  const logX2 = logCenterX + logW * 0.55
+  const slots = [0.1, 0.24, 0.78, 0.9, 0.16, 0.86]
+  const counts = MUD_WALK_BIG_ROCK_COUNT + MUD_WALK_SMALL_ROCK_COUNT
+  for (let i = 0; i < counts; i++) {
+    const big = i < MUD_WALK_BIG_ROCK_COUNT
+    let cx = mudX1 + span * slots[i]
+    if (cx > logX1 - 8 && cx < logX2 + 8) cx = i % 2 === 0 ? logX1 - 28 : logX2 + 28
+    const radius = big ? 16 + Math.random() * 8 : 7 + Math.random() * 5
+    const behind = i % 2 === 0
+    const rock = placeRock(
+      k, cx, radius, 'right', false,
+      behind ? MUD_BEHIND_ROCK_Z : MUD_FRONT_ROCK_Z,
+      big ? 1.05 : 0.82, decorAtlas, zones
+    )
+    rock._mudZoneWalk = true
+    seatMudWalkRock(rock, mudX1, mudX2)
+    rocks.push(rock)
+  }
+  const branchSlots = [0.34, 0.72]
+  for (let b = 0; b < MUD_WALK_BRANCH_COUNT; b++) {
+    const bx = mudX1 + span * branchSlots[b]
+    const by = glowMudCrestY(bx, mudX1, mudX2) + 1
+    const len = 18 + Math.random() * 10
+    const tilt = b === 0 ? -0.35 : 0.42
+    const x2 = bx + Math.cos(tilt) * len
+    const y2 = by - Math.sin(Math.abs(tilt)) * len * 0.45
+    branches.push({ x1: bx, y1: by, x2, y2 })
+    const top = Math.min(by, y2) - 3
+    surfaces.push({
+      x1: Math.min(bx, x2),
+      x2: Math.max(bx, x2),
+      topY: top
+    })
+  }
+  k.add([
+    k.z(MUD_DRAW_Z),
+    {
+      draw() {
+        drawGlowMudLayer(zones._sceneRef)
+      }
+    }
+  ])
+  return { rocks, surfaces, log, branches }
+}
+//
+// Mud puddle and the log/twigs on it, one layer between the two rock groups.
+//
+function drawGlowMudLayer(inst) {
+  if (!inst?.mudZoneX1) return
+  drawGlowViscousMud(inst)
+  drawGlowMudWalkClutter(inst)
+}
+//
+// Lower soil swatch, same brown the underground band uses for its deep layer.
+//
+function glowLowerSoilRgb() {
+  if (!glowLowerSoilRgb.cached) {
+    const layers = groundEarthLayersColor()
+    glowLowerSoilRgb.cached = layers[layers.length - 1].rgb
+  }
+  return glowLowerSoilRgb.cached
+}
+//
+// One filled puddle plus a soft inner seam. Reuses point buffers.
+//
+function drawGlowViscousMud(inst) {
+  const x1 = inst.mudZoneX1
+  const x2 = inst.mudZoneX2
+  if (x1 == null || x2 == null || !inst.zones.gCollected) return
+  const k = inst.k
+  const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
+  if (view && (x2 < view.x1 || x1 > view.x2)) return
+  const steps = MUD_BLOB_STEPS
+  const fill = inst._mudFillPts ??= []
+  const seam = inst._mudSeamPts ??= []
+  const fillNeed = (steps + 1) * 2
+  while (fill.length < fillNeed) fill.push(k.vec2(0, 0))
+  while (seam.length < steps + 1) seam.push(k.vec2(0, 0))
+  fill.length = fillNeed
+  seam.length = steps + 1
+  const span = x2 - x1
+  for (let i = 0; i <= steps; i++) {
+    const x = x1 + span * (i / steps)
+    const top = fill[i]
+    top.x = x
+    top.y = glowMudCrestY(x, x1, x2)
+    const line = seam[i]
+    line.x = x
+    line.y = glowMudSeamY(x, x1, x2)
+  }
+  for (let i = 0; i <= steps; i++) {
+    const bottom = fill[steps + 1 + i]
+    bottom.x = x2 - span * (i / steps)
+    bottom.y = FLOOR_Y + 1
+  }
+  const flat = isGlowFlatSingleDecorColor(inst)
+  const fade = inst.colorFade ?? 0
+  const lower = glowLowerSoilRgb()
+  const fillRgb = flat ? DECOR_GRAY : lerpRgb(DECOR_GRAY, lower, Math.max(fade, inst.zones.colorWorld ? 1 : fade))
+  const seamRgb = flat ? DECOR_GRAY : lerpRgb(lower, glowRgb('groundChernozem'), 0.35)
+  k.drawPolygon({
+    pts: fill,
+    color: k.rgb(fillRgb.r, fillRgb.g, fillRgb.b)
+  })
+  k.drawLines({
+    pts: seam,
+    width: 1.6,
+    color: k.rgb(seamRgb.r, seamRgb.g, seamRgb.b),
+    opacity: 0.55
+  })
+}
+//
+// Draws the mud walk log and branches on top of the puddle.
+//
+function drawGlowMudWalkClutter(inst) {
+  const clutter = inst.mudWalkClutter
+  if (!inst.zones.gCollected || !clutter) return
+  const k = inst.k
+  const fade = glowDecorFade(inst)
+  const flat = isGlowFlatSingleDecorColor(inst)
+  const logTone = glowLogColors(inst.zones)
+  const branchRgb = flat ? DECOR_GRAY : glowRgb(logTone.barkDark)
+  const branchColor = k.rgb(branchRgb.r, branchRgb.g, branchRgb.b)
+  const logColors = glowLogColors(inst.zones)
+  if (clutter.log) {
+    const { log } = clutter
+    drawLogPlatform(k, log.w, log.h, log.cx, log.cy, fade, log.detail, logColors)
+  }
+  clutter.branches?.forEach(branch => {
+    k.drawLine({
+      p1: k.vec2(branch.x1, branch.y1),
+      p2: k.vec2(branch.x2, branch.y2),
+      width: 2.2,
+      color: branchColor,
+      opacity: fade
+    })
+  })
+}
+//
+// Walk surface: mud crest, then the top of a log, twig or rock under x.
+// Up is a smaller Y. Rock tops blend in so the body climbs instead of stepping a wall.
+//
+function glowPredatorSurfaceY(rocks, walkSurfaces, mudX1, mudX2, x) {
+  const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
+  let y
+  if (inMud) {
+    y = glowMudCrestY(x, mudX1, mudX2)
+  } else {
+    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
+    y = FLOOR_Y - Math.max(0, lip)
+  }
+  if (walkSurfaces) {
+    for (let i = 0; i < walkSurfaces.length; i++) {
+      y = raiseTowardBand(y, x, walkSurfaces[i].x1, walkSurfaces[i].x2, (walkSurfaces[i].x1 + walkSurfaces[i].x2) * 0.5, walkSurfaces[i].topY)
+    }
+  }
+  if (!rocks) return y
+  for (let i = 0; i < rocks.length; i++) {
+    const rock = rocks[i]
+    if (!rock?._mudZoneWalk || rock._surfaceTop == null || rock._decorWorldX == null) continue
+    const half = rock._surfaceHalfW || 12
+    y = raiseTowardBand(y, x, rock._decorWorldX - half, rock._decorWorldX + half, rock._decorWorldX, rock._surfaceTop)
+  }
+  return y
+}
+//
+// Smooths a step onto a rock or log: full height at the middle, crest at the edges.
+//
+function raiseTowardBand(y, x, x1, x2, mid, topY) {
+  if (x < x1 || x > x2 || topY >= y) return y
+  const half = Math.max(1, (x2 - x1) * 0.5)
+  const edge = Math.abs(x - mid) / half
+  const blend = 1 - edge * edge
+  return y + (topY - y) * Math.max(0, blend)
 }
 //
 // Mushrooms — value 5, excluded from water zone.
@@ -9395,7 +9669,7 @@ function detectGlowSurface(inst) {
   return 'air'
 }
 //
-// True when the hero's feet sit on the soft muddy band around the left hedgehog.
+// True when the hero's feet sit on the soft muddy band in the mud band.
 //
 function isHeroInMudZone(inst, footX) {
   if (!inst.zones.gCollected) return false
@@ -10351,45 +10625,29 @@ function drawGlowMudZoneGroundLine(inst, x1, x2) {
       ? lerpRgb(bodyC, glowGrassColourTarget(inst.zones), 0.82)
       : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
   const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
-  //
-  // The mud zone reuses this same wavy "jelly" rim rather than a separate
-  // flat patch — a flat rect here used to leave a hard rectangular seam
-  // against this band's own wave, and looked nothing like the rest of the
-  // ground. Blending the mud tone into the same wave keeps one continuous
-  // ground silhouette that just reads darker/taller over the mud band.
-  //
   const mudX1 = inst.mudZoneX1
   const mudX2 = inst.mudZoneX2
-  //
-  // Blended by the same colour-world fade as the rim above — at fade 0 (flat
-  // gray mode) this collapses to exactly bodyColor/rimColor, so the mud band
-  // reads as the same gray as everywhere else in mono mode, same as the
-  // user asked; it only tints brown as the world colours in.
-  //
-  const mudBodyRgb = lerpRgb(bodyC, MUD_GROUND_RGB, 0.8 * fade)
-  const mudBodyColor = k.rgb(mudBodyRgb.r, mudBodyRgb.g, mudBodyRgb.b)
-  const mudRimRgb = lerpRgb(rimRgb, MUD_GROUND_RGB, 0.55 * fade)
-  const mudRimColor = k.rgb(mudRimRgb.r, mudRimRgb.g, mudRimRgb.b)
   const step = (x2 - x1) / GROUND_LIP_STEPS
   if (step <= 0) return
   const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
   for (let x = x1; x < x2; x += step) {
     if (view && (x + step < view.x1 || x > view.x2)) continue
     const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
+    if (inMud) continue
     const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    const h = Math.max(2, 4 + lip) + (inMud ? MUD_GROUND_EXTRA_H : 0)
+    const h = Math.max(2, 4 + lip)
     k.drawRect({
       pos: k.vec2(x, FLOOR_Y - h + 2),
       width: step + 1,
       height: h,
-      color: inMud ? mudBodyColor : bodyColor,
-      opacity: inMud ? 0.7 : 0.48
+      color: bodyColor,
+      opacity: 0.48
     })
     k.drawRect({
       pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
       width: step + 1,
       height: GROUND_TOP_RIM_H,
-      color: inMud ? mudRimColor : rimColor,
+      color: rimColor,
       opacity: GROUND_TOP_RIM_OPACITY
     })
   }
@@ -11055,14 +11313,14 @@ function splitGlowCaptionText(text) {
 //
 function beginGlowWorldFreeze(inst) {
   inst._letterCaptionGrainBoost = true
-  syncLeftHedgehogMudSneak(inst)
+  syncGlowPredatorVisibility(inst)
 }
 //
 // No hero state to restore — dialog freeze is world-only.
 //
 function endGlowWorldFreeze(inst) {
   inst._letterCaptionGrainBoost = false
-  syncLeftHedgehogMudSneak(inst)
+  syncGlowPredatorVisibility(inst)
 }
 //
 // Snapshot of birds + proximity ambient volumes for dialog fade.
@@ -11070,10 +11328,7 @@ function endGlowWorldFreeze(inst) {
 function createGlowDialogAudioFadeState(inst) {
   return {
     birdsVol: Sound.getKaplaySoundVolume(inst.birdsMusic),
-    whisperVol: Math.max(
-      Sound.getKaplaySoundVolume(inst.earWhisperMusic),
-      Sound.getEarTreeWhisperVolume()
-    ),
+    whisperVol: Sound.getEarTreeWhisperVolume(),
     ambientVol: Sound.getAmbientVolume(inst.sound)
   }
 }
@@ -11464,8 +11719,8 @@ function collectLetterG(inst) {
   hideGlowLetterPickupInWorld(entry)
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 1)
-  syncLeftHedgehogMudSneak(inst)
-  reconcileLeftHedgehogJumpCredit(inst)
+  syncGlowPredatorVisibility(inst)
+  reconcileMudPredatorJumpCredit(inst)
   //
   // The big tree's roots normally wait for L — moved up to G here too (see
   // glowTreeRootRevealFade), gray only since colour world is still far off.
@@ -11828,7 +12083,7 @@ function registerGlowTrampolineLateBounce(inst) {
 // Launches from mushroom caps after hero.js has finished its grounded pose.
 //
 function runGlowTrampolineLatePass(inst) {
-  if (inst.drowning || inst.dialogOpen || inst.hedgehogDeathHandled) return
+  if (inst.drowning || inst.dialogOpen || inst.touchDeathHandled) return
   if (inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
   const hero = inst.heroInst
   const char = hero?.character
@@ -12002,7 +12257,7 @@ function finishDrowning(inst) {
 //
 // Shared life-HUD bump for any death: +1 lifeScore, reveal/flash/re-tint the
 // life icon and its particle burst, gentle chime. Shared by drowning and the
-// hedgehog touch-death.
+// touch death.
 //
 function bumpGlowLifeHudOnDeath(inst) {
   const newLife = get('lifeScore', 0) + 1
@@ -12032,14 +12287,15 @@ function bumpGlowLifeHudOnDeath(inst) {
   onGlowTeacherLifeHudRevealed(inst)
 }
 //
-// True once the hedgehog's silhouette overlaps the hero's feet, or the hero
+// True once the predator's body overlaps the hero's feet, or the hero
 // has landed on the hidden spikes at the L-log's right edge.
 //
-function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
+function checkGlowTouchDeath(inst, heroX, heroFootY) {
   if (inst.deathHandled) return
-  if (inst.k.time() < (inst.hedgehogTouchGraceUntil ?? 0)) return
-  if (Hedgehog.isTouchingHero(inst.hedgehog, heroX, heroFootY)) {
-    triggerHedgehogDeath(inst, 'leftHedgehog')
+  if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
+  if (Predator.isTouchingHero(inst.predator, heroX, heroFootY)) {
+    Predator.notifyKill(inst.predator)
+    triggerGlowTouchDeath(inst, 'predator')
     return
   }
   checkGlowRightSpikeDeath(inst, heroX, heroFootY)
@@ -12067,21 +12323,21 @@ function checkGlowRightSpikeDeath(inst, heroX, heroFootY) {
   // past this point — it doesn't need the death itself delayed to be seen.
   //
   spikes.blinkUntil = inst.k.time() + RIGHT_SPIKE_BLINK_DURATION
-  triggerHedgehogDeath(inst, 'spikes')
+  triggerGlowTouchDeath(inst, 'spikes')
 }
 //
-// Touching the hedgehog or falling on the spikes is fatal — the hero
+// Touching the predator or falling on the spikes is fatal — the hero
 // shatters exactly like in any other level (Hero.death), but with the
 // level's own dusty ground-burst (bigger, and spread upward too) instead of
 // the generic body-square explosion.
 //
-function triggerHedgehogDeath(inst, cause) {
+function triggerGlowTouchDeath(inst, cause) {
   if (inst.deathHandled) return
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
   inst.deathHandled = true
-  inst.hedgehogDeathHandled = true
+  inst.touchDeathHandled = true
   const deathX = char.pos.x
   const deathY = char.pos.y
   hero.isDying = true
@@ -12095,25 +12351,25 @@ function triggerHedgehogDeath(inst, cause) {
   glowLevel0LiveHeroChar = null
   hero.character = null
   triggerGlowCameraShake(inst)
-  spawnHedgehogDeathBurst(inst, deathX, deathY)
-  finishHedgehogDeath(inst, cause, deathX, deathY)
+  spawnGlowTouchDeathBurst(inst, deathX, deathY)
+  finishGlowTouchDeath(inst, cause, deathX, deathY)
 }
 //
 // Leaf-shaped radial burst at the death spot — green leaf tones in the
 // colour world, a few gray shades while the level is flat/monochrome —
 // instead of the hero's generic body-square explosion.
 //
-function spawnHedgehogDeathBurst(inst, x, y) {
+function spawnGlowTouchDeathBurst(inst, x, y) {
   if (!inst.footParticles) return
-  const palette = hedgehogDeathLeafPalette(inst)
-  GlowFootParticles.spawnLeafBurst(inst.footParticles, x, y, palette, HEDGEHOG_DEATH_PARTICLE_COUNT, FLOOR_Y)
+  const palette = glowTouchDeathLeafPalette(inst)
+  GlowFootParticles.spawnLeafBurst(inst.footParticles, x, y, palette, GLOW_TOUCH_DEATH_PARTICLE_COUNT, FLOOR_Y)
 }
 //
 // Mono world: a few gray shades already used for the level's own decor;
 // colour world: the main tree's own green foliage tones, so the burst
 // reads as real leaves rather than generic dust.
 //
-function hedgehogDeathLeafPalette(inst) {
+function glowTouchDeathLeafPalette(inst) {
   if (!inst?.zones?.lCollected) {
     return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
   }
@@ -12123,90 +12379,54 @@ function hedgehogDeathLeafPalette(inst) {
   return (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).map(hex => glowRgb(hex))
 }
 //
-// Life-HUD bump, optional hedgehog hint, then in-level respawn beside the kill.
+// Picks the predator death line for this kill (cycles through the set).
 //
-function finishHedgehogDeath(inst, cause, deathX, deathY) {
+function predatorDeathHintText(deathOrdinal) {
+  const idx = Math.max(0, deathOrdinal - 1) % PREDATOR_DEATH_HINT_TEXTS.length
+  return PREDATOR_DEATH_HINT_TEXTS[idx]
+}
+//
+// Life-HUD bump, death hint, then in-level respawn beside the kill.
+//
+function finishGlowTouchDeath(inst, cause, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
-  inst.hedgehogDeathCount = (inst.hedgehogDeathCount || 0) + 1
-  const repeatBeat = inst.hedgehogDeathCount % 2 === 0
+  inst.touchDeathCount = (inst.touchDeathCount || 0) + 1
+  const repeatBeat = inst.touchDeathCount % 2 === 0
   if (cause === 'spikes') {
     const spikes = inst.rightSpikes
     HeroHint.show(
       inst.heroHint,
-      repeatBeat ? HEDGEHOG_DEATH_REPEAT_HINT_TEXT : RIGHT_SPIKE_DEATH_HINT_TEXT,
-      HEDGEHOG_DEATH_HINT_DURATION,
+      repeatBeat ? GLOW_TOUCH_DEATH_REPEAT_HINT_TEXT : RIGHT_SPIKE_DEATH_HINT_TEXT,
+      GLOW_TOUCH_DEATH_HINT_DURATION,
       {
         anchorX: spikes ? (spikes.x1 + spikes.x2) / 2 : deathX,
-        anchorY: (spikes?.y ?? deathY) - HEDGEHOG_DEATH_HINT_RAISE,
-        offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+        anchorY: (spikes?.y ?? deathY) - GLOW_TOUCH_DEATH_HINT_RAISE,
+        offsetY: GLOW_TOUCH_HINT_BUBBLE_OFFSET_Y,
         forceAbove: true,
         ignoreMovementDismiss: true,
         dismissDistance: GLOW_HINT_DISMISS_DISTANCE
       }
     )
-  } else {
+  } else if (cause === 'predator') {
     HeroHint.show(
       inst.heroHint,
-      repeatBeat ? HEDGEHOG_DEATH_REPEAT_HINT_TEXT : HEDGEHOG_LEFT_DEATH_HINT_TEXT,
-      HEDGEHOG_DEATH_HINT_DURATION,
+      predatorDeathHintText(inst.touchDeathCount),
+      GLOW_TOUCH_DEATH_HINT_DURATION,
       {
-        anchorX: inst.hedgehog.x,
-        anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
-        offsetY: HEDGEHOG_HINT_BUBBLE_OFFSET_Y,
+        anchorX: inst.predator?.x ?? deathX,
+        anchorY: (inst.predator?.y ?? deathY) - PREDATOR_DEATH_HINT_RAISE,
+        offsetY: PREDATOR_DEATH_HINT_OFFSET_Y,
         forceAbove: true,
         ignoreMovementDismiss: true,
         dismissDistance: GLOW_HINT_DISMISS_DISTANCE
       }
     )
-    if (inst.hedgehog) {
-      markLeftHedgehogRevealed()
-      Hedgehog.popOut(
-        inst.hedgehog,
-        inst.hedgehog.x,
-        inst.hedgehog.y,
-        inst.hedgehog.facing ?? 'left'
-      )
-    }
   }
-  inst.hedgehogRespawnWait?.cancel?.()
-  inst.hedgehogRespawnWait = inst.k.wait(HERO_HEDGEHOG_RESPAWN_DELAY, () => {
-    inst.hedgehogRespawnWait = null
-    inst.hedgehogDeathHandled && respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause)
+  inst.touchDeathRespawnWait?.cancel?.()
+  inst.touchDeathRespawnWait = inst.k.wait(GLOW_TOUCH_DEATH_RESPAWN_DELAY, () => {
+    inst.touchDeathRespawnWait = null
+    inst.touchDeathHandled && respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause)
   })
-}
-//
-// Hog probes for spawn nudge (same rules as initial level bootstrap).
-//
-function getGlowHeroSpawnHogProbes(inst) {
-  const zones = inst.zones
-  const nudge = inst.heroSpawnNudge
-  if (!nudge) return {}
-  const leftHog = inst.hedgehog
-  const leftHogVisible = zones.gCollected &&
-    (leftHog?.popped || get(KEY_LEFT_HEDGEHOG_REVEALED, false))
-  return {
-    floorHogProbe: leftHogVisible && leftHog
-      ? Hedgehog.createLethalTouchProbe({
-        x: leftHog.x,
-        y: leftHog.y,
-        scale: leftHog.scale ?? HEDGEHOG_SCALE,
-        facing: leftHog.facing ?? 'left'
-      })
-      : leftHogVisible
-        ? Hedgehog.createLethalTouchProbe({
-          x: nudge.hedgehogAmbushPopX,
-          y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
-          scale: HEDGEHOG_SCALE,
-          facing: 'left'
-        })
-        : null,
-    floorHogBounds: leftHogVisible
-      ? {
-        minX: leftHog?.minX ?? nudge.mudZoneX1 + MUD_ZONE_HEDGEHOG_MARGIN,
-        maxX: leftHog?.maxX ?? nudge.mudZoneX2 - MUD_ZONE_HEDGEHOG_MARGIN
-      }
-      : null
-  }
 }
 //
 // Spawn clear of the spike zone: offset away from its centre, then pushed
@@ -12222,7 +12442,7 @@ function computeGlowSpikeRespawnX(inst, deathX) {
   // "away from the death spot" there used to clamp straight back onto the
   // spikes and re-trigger the same death every time (the reported loop).
   //
-  let spawnX = spikes.x1 - HERO_HEDGEHOG_RESPAWN_CLEARANCE - GLOW_HERO_HITBOX_HALF_W
+  let spawnX = spikes.x1 - HERO_TOUCH_DEATH_RESPAWN_CLEARANCE - GLOW_HERO_HITBOX_HALF_W
   const home = inst.lPlatHome
   home && (spawnX = Math.max(home.x + LOG_SNAP_X_SLACK, spawnX))
   //
@@ -12238,7 +12458,41 @@ function computeGlowSpikeRespawnX(inst, deathX) {
 // Respawn beside the death spot (offset away from the hog, or clear of the
 // spike zone), with bootstrap nudges.
 //
-function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause) {
+function computeGlowTouchDeathRespawnPose(inst, deathX, deathY, cause) {
+  if (cause === 'predator') {
+    const pred = inst.predator
+    if (!pred) return { x: deathX, y: deathY }
+    let spawnX = resolveGlowPredatorRespawnX(inst, deathX, deathY, pred)
+    const spawnY = deathY
+    const footY = spawnY + SURFACE_DETECT_Y
+    const spawnOnBranch = isHeroOverStartBranchX(inst, spawnX) &&
+      footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX
+    const nudge = inst.heroSpawnNudge
+    spawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
+      spawnX,
+      spawnOnBranch,
+      branchTrampX: nudge.branchTrampX,
+      trampX: nudge.trampX,
+      branchTrampVisible: isBranchTrampolineVisible(inst.zones),
+      trampVisible: isRightTrampolineVisible(inst.zones)
+    })
+    spawnX = nudgeGlowHeroSpawnAwayFromMudHazards({
+      inst,
+      spawnX,
+      spawnY,
+      spawnOnBranch,
+      mudPredatorAmbushTriggerX: nudge.mudPredatorAmbushTriggerX,
+      mudPredatorPopX: nudge.mudPredatorPopX,
+      lPlatX: nudge.lPlatX,
+      rightPlatY: nudge.rightPlatY,
+      rightSpikes: inst.rightSpikes,
+      mudZoneX1: nudge.mudZoneX1,
+      mudZoneX2: nudge.mudZoneX2,
+      predator: pred
+    })
+    spawnX = resolveGlowPredatorRespawnX(inst, spawnX, spawnY, pred)
+    return { x: spawnX, y: spawnY }
+  }
   if (cause === 'spikes') {
     const spawnX = computeGlowSpikeRespawnX(inst, deathX)
     //
@@ -12249,92 +12503,36 @@ function computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause) {
     const spawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     return { x: spawnX, y: spawnY }
   }
-  const hog = inst.hedgehog
-  const hogX = hog?.x ?? deathX
-  const away = deathX <= hogX ? -1 : 1
-  let spawnX = deathX + away * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
-  const spawnY = deathY
-  const footY = spawnY + SURFACE_DETECT_Y
-  const hogLethal = hog && (hog.popped || hog.mudSneakPreview)
-  if (hogLethal) {
-    const liveProbe = Hedgehog.createLethalTouchProbe({
-      x: hog.x,
-      y: hog.y,
-      scale: hog.scale ?? HEDGEHOG_SCALE,
-      facing: hog.facing ?? 'left'
-    })
-    const hogProbes = getGlowHeroSpawnHogProbes(inst)
-    const bounds = hog.minX != null && hog.maxX != null
-      ? { minX: hog.minX, maxX: hog.maxX }
-      : hogProbes.floorHogBounds
-    const preferSign = away
-    spawnX = hogX + preferSign * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET
-    spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
-      spawnX,
-      footY,
-      liveProbe,
-      HERO_HEDGEHOG_RESPAWN_CLEARANCE,
-      GLOW_HERO_HITBOX_HALF_W,
-      bounds,
-      preferSign
-    )
-    const fallbackSign = -preferSign
-    Hedgehog.isTouchingHero(liveProbe, spawnX, footY) &&
-      (spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
-        hogX + fallbackSign * HERO_HEDGEHOG_RESPAWN_SIDE_OFFSET,
-        footY,
-        liveProbe,
-        HERO_HEDGEHOG_RESPAWN_CLEARANCE,
-        GLOW_HERO_HITBOX_HALF_W,
-        bounds,
-        fallbackSign
-      ))
+  return { x: deathX, y: deathY }
+}
+//
+// Picks a ground X on the far side of the predator from the death spot, then
+// slides along the mud band until the hitbox clears the body.
+//
+function resolveGlowPredatorRespawnX(inst, deathX, deathY, pred) {
+  const predX = pred.x
+  const away = deathX <= predX ? -1 : 1
+  const footY = deathY + SURFACE_DETECT_Y
+  const pad = MUD_ZONE_CREATURE_MARGIN + 4
+  const minX = pred.minX ?? (inst.mudZoneX1 != null ? inst.mudZoneX1 + pad : deathX - 200)
+  const maxX = pred.maxX ?? (inst.mudZoneX2 != null ? inst.mudZoneX2 - pad : deathX + 200)
+  let spawnX = predX + away * HERO_PREDATOR_RESPAWN_PUSH
+  spawnX = Math.max(minX, Math.min(maxX, spawnX))
+  let sign = away
+  for (let i = 0; i < 12 && Predator.overlapsHeroHitbox(pred, spawnX, footY); i++) {
+    spawnX += sign * 24
+    spawnX = Math.max(minX, Math.min(maxX, spawnX))
   }
-  const spawnOnBranch = isHeroOverStartBranchX(inst, spawnX) &&
-    footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX
-  const nudge = inst.heroSpawnNudge
-  const hogProbes = getGlowHeroSpawnHogProbes(inst)
-  spawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
-    spawnX,
-    spawnOnBranch,
-    branchTrampX: nudge.branchTrampX,
-    trampX: nudge.trampX,
-    branchTrampVisible: isBranchTrampolineVisible(inst.zones),
-    trampVisible: isRightTrampolineVisible(inst.zones)
-  })
-  spawnX = nudgeGlowHeroSpawnAwayFromHedgehogs({
-    spawnX,
-    spawnY,
-    spawnOnBranch,
-    hedgehogAmbushTriggerX: nudge.hedgehogAmbushTriggerX,
-    hedgehogAmbushPopX: nudge.hedgehogAmbushPopX,
-    lPlatX: nudge.lPlatX,
-    rightPlatY: nudge.rightPlatY,
-    rightSpikes: inst.rightSpikes,
-    ...hogProbes
-  })
-  if (hogLethal && hog) {
-    const liveProbe = Hedgehog.createLethalTouchProbe({
-      x: hog.x,
-      y: hog.y,
-      scale: hog.scale ?? HEDGEHOG_SCALE,
-      facing: hog.facing ?? 'left'
-    })
-    const bounds = hog.minX != null && hog.maxX != null
-      ? { minX: hog.minX, maxX: hog.maxX }
-      : hogProbes.floorHogBounds
-    const preferSign = deathX <= hog.x ? -1 : 1
-    spawnX = Hedgehog.resolveHeroSpawnXClearOfTouchProbe(
-      spawnX,
-      footY,
-      liveProbe,
-      HERO_HEDGEHOG_RESPAWN_CLEARANCE,
-      GLOW_HERO_HITBOX_HALF_W,
-      bounds,
-      preferSign
-    )
+  if (Predator.overlapsHeroHitbox(pred, spawnX, footY)) {
+    sign = -away
+    spawnX = predX + sign * HERO_PREDATOR_RESPAWN_PUSH
+    spawnX = Math.max(minX, Math.min(maxX, spawnX))
+    for (let i = 0; i < 12 && Predator.overlapsHeroHitbox(pred, spawnX, footY); i++) {
+      spawnX += sign * 24
+      spawnX = Math.max(minX, Math.min(maxX, spawnX))
+    }
   }
-  return { x: spawnX, y: spawnY }
+  return spawnX
 }
 //
 // Glow routes landings through the same step timbre as running (footFx is off).
@@ -12348,14 +12546,15 @@ function bindGlowHeroFootSounds(heroInst, sound) {
   }
 }
 //
-// Rebuilds the hero body in-place after a hedgehog kill (no scene reload).
+// Rebuilds the hero body in-place after a touch death (no scene reload).
 //
-function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause) {
+function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   const k = inst.k
   const cfg = inst.glowHeroCreateCfg
   if (!cfg) return
+  inst.heroHint && HeroHint.clear(inst.heroHint)
   releaseGamePhysicalKeys()
-  const pose = computeGlowHeroHedgehogRespawnPose(inst, deathX, deathY, cause)
+  const pose = computeGlowTouchDeathRespawnPose(inst, deathX, deathY, cause)
   writeGlowLastSpawnKeys(inst, pose.x, pose.y)
   const filled = inst.zones.colorWorld || inst.zones.oZone || inst.heroBodyFillApplied
   const heroEyes = getGlowHeroEyeBakeColors(!filled)
@@ -12379,12 +12578,12 @@ function respawnGlowHeroAfterHedgehogDeath(inst, deathX, deathY, cause) {
   fresh.onPlayLandSound = landSound
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
-  inst.hedgehog && (inst.hedgehog.hero = fresh)
+  inst.predator && (inst.predator.hero = fresh)
   inst.rightSpikes && (inst.rightSpikes.triggered = false)
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
-  inst.hedgehogDeathHandled = false
-  inst.hedgehogTouchGraceUntil = inst.k.time() + HEDGEHOG_RESPAWN_TOUCH_GRACE_SEC
+  inst.touchDeathHandled = false
+  inst.touchDeathGraceUntil = inst.k.time() + TOUCH_DEATH_RESPAWN_GRACE_SEC
   restoreGlowRightTrampProgressAfterSpawn(inst)
   inst.lastHeroX = pose.x
   inst.wasGrounded = false
@@ -12415,38 +12614,33 @@ function nudgeGlowHeroSpawnAwayFromTrampolines(cfg) {
   return x
 }
 //
-// Pulls a saved spawn X away from hedgehog danger bands, and clear of the
+// Pulls a saved spawn X away from mud hazard bands, and clear of the
 // L-log's right-edge spike zone, so a reload cannot drop the hero straight
 // onto either hazard.
 //
-function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
+function nudgeGlowHeroSpawnAwayFromMudHazards(cfg) {
   const {
+    inst,
     spawnX,
     spawnY,
     spawnOnBranch,
-    hedgehogAmbushTriggerX,
-    hedgehogAmbushPopX,
+    mudPredatorAmbushTriggerX,
+    mudPredatorPopX,
     lPlatX,
     rightPlatY,
     rightSpikes,
-    floorHogProbe,
-    floorHogBounds
+    predator
   } = cfg
   let x = spawnX
   const heroFootY = spawnY + SURFACE_DETECT_Y
-  if (!spawnOnBranch) {
-    x = Hedgehog.nudgeHeroXClearOfTouchProbe(
-      x,
-      heroFootY,
-      floorHogProbe,
-      HERO_HEDGEHOG_SPAWN_CLEARANCE,
-      floorHogBounds
-    )
+  if (!spawnOnBranch && predator && inst) {
+    Predator.overlapsHeroHitbox(predator, x, heroFootY) &&
+      (x = resolveGlowPredatorRespawnX(inst, x, spawnY, predator))
   }
   if (!spawnOnBranch) {
-    const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
-    x >= hedgehogAmbushTriggerX && x <= dangerEndX &&
-      (x = hedgehogAmbushTriggerX - HERO_HEDGEHOG_SPAWN_CLEARANCE)
+    const dangerEndX = mudPredatorPopX + MUD_ZONE_PREDATOR_DANGER_MARGIN
+    x >= mudPredatorAmbushTriggerX && x <= dangerEndX &&
+      (x = mudPredatorAmbushTriggerX - HERO_MUD_HAZARD_SPAWN_CLEARANCE)
   }
   if (!spawnOnBranch && rightSpikes) {
     const platLeft = lPlatX + LOG_SNAP_X_SLACK
@@ -12457,7 +12651,7 @@ function nudgeGlowHeroSpawnAwayFromHedgehogs(cfg) {
     // gets nudged clear, not only one saved at normal standing height.
     //
     const onLPlat = spawnY >= platHeroY - RIGHT_SPIKE_H && spawnY <= platHeroY + LOG_SNAP_BELOW
-    if (onLPlat && x >= rightSpikes.x1 - HERO_HEDGEHOG_SPAWN_CLEARANCE && x <= rightSpikes.x2 + HERO_HEDGEHOG_SPAWN_CLEARANCE) {
+    if (onLPlat && x >= rightSpikes.x1 - HERO_MUD_HAZARD_SPAWN_CLEARANCE && x <= rightSpikes.x2 + HERO_MUD_HAZARD_SPAWN_CLEARANCE) {
       //
       // The spikes occupy nearly the whole right portion of the platform —
       // there is no clearance on their right within the log's own bounds,
@@ -12916,8 +13110,7 @@ function updateGlowDialogHero(inst) {
   snapHeroToStartBranch(inst, char, heroX, footY)
   snapHeroToMainGround(inst, char, grounded, heroX, footY)
   applyGlowHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded)
-  maybeSpawnLeftHedgehogAmbush(inst, heroX, char.vel?.x ?? 0)
-  !inst.hedgehogDeathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
+  !inst.touchDeathHandled && checkGlowTouchDeath(inst, heroX, footY)
   inst.lastHeroX = heroX
 }
 //
@@ -12937,12 +13130,13 @@ function onUpdate(inst) {
     updateGlowCamera(inst)
     return
   }
+  inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   if (inst.dialogOpen) {
     updateGlowCamera(inst)
     updateGlowDialogHero(inst)
     return
   }
-  if (inst.hedgehogDeathHandled) {
+  if (inst.touchDeathHandled) {
     inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
     inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
     return
@@ -13285,9 +13479,8 @@ function onUpdate(inst) {
   tryUnveilLLetterAfterTramp(inst, snapHeroX, snapFootY, snapGrounded, landingFootBurst)
   !inst.letterCaptionActive &&
     tryCollectGlowLetters(inst, char, snapGrounded, landingFootBurst || justLanded)
-  maybeSpawnLeftHedgehogAmbush(inst, heroX, char.vel?.x ?? 0)
   maybeMarkLPlatStepped(inst, char, grounded)
-  maybeMarkLeftHedgehogJumpedOver(inst, char, grounded)
+  maybeMarkMudPredatorJumpedOver(inst, char, grounded)
   //
   // O-letter meditation: perfect stillness after L summons the countdown.
   //
@@ -13299,7 +13492,7 @@ function onUpdate(inst) {
   inst.zones.oCollected && !inst.zones.wCollected && syncGlowHudWFill(inst)
   updateMeditationCounter(inst)
   updateGlowHudLetterFillCounter(inst)
-  syncLeftHedgehogMudSneak(inst)
+  syncGlowPredatorVisibility(inst)
   updateTrampCheekyHint(inst)
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
@@ -13347,10 +13540,10 @@ function onUpdate(inst) {
   updateGlowCamera(inst)
   inst.lastHeroX = char.pos.x
   //
-  // Hedgehog touch death — last check of the frame since it may destroy
+  // Predator touch death — last check of the frame since it may destroy
   // the hero's character outright.
   //
-  !inst.deathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
+  !inst.deathHandled && checkGlowTouchDeath(inst, heroX, footY)
 }
 //
 // Locks the hero's gaze on the G letter while he stands on the start branch
@@ -14272,7 +14465,12 @@ function updateExploreFades(inst, dt) {
   }
   if (!exploreSettled && !z.groundDecorRight) {
     inst.rockObjs?.forEach(o => {
-      if (o._side !== 'right' || o._lakeShoreEnd) return
+      if (o._rightOfMud && z.gCollected) {
+        const op = glowRightDecorOpacity(inst, o)
+        setDecorObjVisible(o, op > 0.04, op)
+        return
+      }
+      if (o._mudZoneWalk || o._rightOfMud || o._side !== 'right' || o._lakeShoreEnd) return
       const op = glowRightDecorOpacity(inst, o)
       setDecorObjVisible(o, op > 0.04, op)
     })
@@ -15321,7 +15519,7 @@ function footParticleColor(sceneInst, surface, footX = 0, footY = 0) {
   return lerpRgb(INNER_GRAY, GROUND_DARK, sceneInst?.colorFade || 0)
 }
 //
-// First landing on the L log (with the ambush hedgehog) unveils the letter —
+// First landing on the L log (with the L log) unveils the letter —
 // any route counts (tramp arc, spike platform hop, reload revisit).
 //
 function tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded) {
@@ -15362,120 +15560,71 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
   onLLog && markLPlatStepped(inst)
 }
 //
-// One HUD step for clearing the left hedgehog: hero was grounded on one side
-// of it, then crosses to the other side while airborne — a real jump-over,
-// not walking around it (touching it is handled separately as a death).
+// One HUD step for clearing the mud predator: hero was grounded on one side
+// of its anchor, then crosses to the other side while airborne.
 //
-function maybeMarkLeftHedgehogJumpedOver(inst, char, grounded) {
-  const hog = inst.hedgehog
-  if (!hog || !char?.pos || inst.zones.leftHedgehogJumpedOver) return
+function maybeMarkMudPredatorJumpedOver(inst, char, grounded) {
+  const pred = inst.predator
+  if (!pred || !char?.pos || inst.zones.mudPredatorJumpedOver) return
   const heroX = char.pos.x
-  const hogX = hog.x
-  const side = heroX < hogX ? -1 : 1
-  //
-  // Mud jumps arc high — track west→east passage by X only (works for sneak
-  // preview hog before ambush pop and while wandering in the mud band).
-  //
-  heroX < hogX - HEDGEHOG_JUMP_OVER_PASS_MARGIN && (inst._leftHedgehogWasWest = true)
+  const anchorX = pred.x
+  const side = heroX < anchorX ? -1 : 1
+  heroX < anchorX - MUD_PREDATOR_JUMP_PASS_MARGIN && (inst._mudPredatorWasWest = true)
   if (!inst.zones.gCollected) return
-  if (inst._leftHedgehogWasWest && heroX > hogX + HEDGEHOG_JUMP_OVER_PASS_MARGIN) {
-    finishLeftHedgehogJumpedOver(inst, hog)
+  if (inst._mudPredatorWasWest && heroX > anchorX + MUD_PREDATOR_JUMP_PASS_MARGIN) {
+    finishMudPredatorJumpedOver(inst)
     return
   }
   if (grounded) {
-    const prevSide = inst._leftHedgehogGroundSide
-    inst._leftHedgehogGroundSide = side
-    prevSide && prevSide !== side && finishLeftHedgehogJumpedOver(inst, hog)
+    const prevSide = inst._mudPredatorGroundSide
+    inst._mudPredatorGroundSide = side
+    prevSide && prevSide !== side && finishMudPredatorJumpedOver(inst)
   } else {
-    const groundSide = inst._leftHedgehogGroundSide
+    const groundSide = inst._mudPredatorGroundSide
     const prevX = inst.lastHeroX
-    const crossedHog = prevX != null &&
-      ((prevX < hogX && heroX >= hogX) || (prevX > hogX && heroX <= hogX))
-    const nearHogX = Math.abs(heroX - hogX) <= HEDGEHOG_JUMP_OVER_CLEARANCE_X
+    const crossed = prevX != null &&
+      ((prevX < anchorX && heroX >= anchorX) || (prevX > anchorX && heroX <= anchorX))
+    const nearAnchor = Math.abs(heroX - anchorX) <= MUD_PREDATOR_JUMP_CLEARANCE_X
     const jumpedOver = Boolean(groundSide && side !== groundSide) ||
-      (crossedHog && nearHogX)
-    jumpedOver && finishLeftHedgehogJumpedOver(inst, hog)
+      (crossed && nearAnchor)
+    jumpedOver && finishMudPredatorJumpedOver(inst)
   }
 }
 //
 // Credits a jump-over taken in the air right when G is collected mid-flight.
 //
-function reconcileLeftHedgehogJumpCredit(inst) {
-  if (inst.zones.leftHedgehogJumpedOver || !inst.zones.gCollected) return
-  const hog = inst.hedgehog
+function reconcileMudPredatorJumpCredit(inst) {
+  if (inst.zones.mudPredatorJumpedOver || !inst.zones.gCollected) return
+  const pred = inst.predator
   const char = inst.heroInst?.character
-  if (!hog || !char?.pos) return
+  if (!pred || !char?.pos) return
   const heroX = char.pos.x
-  const hogX = hog.x
+  const anchorX = pred.x
   const prevX = inst.lastHeroX
-  if (inst._leftHedgehogWasWest && heroX > hogX + HEDGEHOG_JUMP_OVER_PASS_MARGIN) {
-    finishLeftHedgehogJumpedOver(inst, hog)
+  if (inst._mudPredatorWasWest && heroX > anchorX + MUD_PREDATOR_JUMP_PASS_MARGIN) {
+    finishMudPredatorJumpedOver(inst)
     return
   }
   if (prevX != null &&
-    prevX < hogX - HEDGEHOG_JUMP_OVER_PASS_MARGIN &&
-    heroX > hogX + HEDGEHOG_JUMP_OVER_PASS_MARGIN) {
-    finishLeftHedgehogJumpedOver(inst, hog)
+    prevX < anchorX - MUD_PREDATOR_JUMP_PASS_MARGIN &&
+    heroX > anchorX + MUD_PREDATOR_JUMP_PASS_MARGIN) {
+    finishMudPredatorJumpedOver(inst)
   }
 }
 //
-// Persists the hedgehog jump-over and reveals the hog if it was still hidden.
+// Persists the mud-predator jump-over for the L HUD loader.
 //
-function finishLeftHedgehogJumpedOver(inst, hog) {
-  if (inst.deathHandled || inst.hedgehogDeathHandled) return
-  markLeftHedgehogJumpedOver(inst)
-  if (!hog.popped) {
-    markLeftHedgehogRevealed()
-    Hedgehog.popOut(hog, hog.x, hog.y, hog.facing ?? 'left')
-  }
+function finishMudPredatorJumpedOver(inst) {
+  if (inst.deathHandled || inst.touchDeathHandled) return
+  markMudPredatorJumpedOver(inst)
 }
 //
-// Persists that the left ambush hedgehog has already popped — the next
-// level load must show it visible instead of hiding it again.
+// Shows the mud predator once G unlocks eyes gameplay.
 //
-function markLeftHedgehogRevealed() {
-  set(KEY_LEFT_HEDGEHOG_REVEALED, true)
-}
-//
-// Left hedgehog ambush: stays hidden until the hero has run a stretch past
-// the branch trampoline, then pops out at a fixed spot a bit further
-// ahead of him — at running speed there's normally no time to react before
-// the hitbox overlaps (a small bonus lead is added while actually
-// sprinting so it isn't quite instant-death), but creeping forward slowly
-// leaves a real gap between the pop and actual contact, long enough to
-// spot it and jump.
-//
-function syncLeftHedgehogMudSneak(inst) {
-  const hog = inst.hedgehog
-  if (!hog) return
-  if (hog.popped) {
-    hog.mudSneakPreview = false
-    hog.obj.z = HEDGEHOG_DRAW_Z
-    return
-  }
-  hog.mudSneakPreview = inst.zones.gCollected && isGlowEyesGameplayUnlocked(inst.zones)
-  if (hog.mudSneakPreview && inst.mudZoneX1 != null && inst.mudZoneX2 != null) {
-    const pad = MUD_ZONE_HEDGEHOG_MARGIN + 4
-    const minX = inst.mudZoneX1 + pad
-    const maxX = inst.mudZoneX2 - pad
-    hog.minX = minX
-    hog.maxX = maxX
-    hog.x = Math.max(minX, Math.min(maxX, hog.x))
-    hog.obj.z = HEDGEHOG_MUD_SNEAK_DRAW_Z
-    return
-  }
-  hog.obj.z = HEDGEHOG_DRAW_Z
-}
-function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
-  if (!inst.zones.gCollected) return
-  if (!inst.hedgehog || inst.hedgehog.popped) return
-  if (heroX < inst.hedgehogAmbushTriggerX) return
-  const running = Math.abs(heroVelX) > HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD
-  const popX = inst.hedgehogAmbushPopX + (running ? HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS : 0)
-  if (running) {
-    inst.hedgehog.x = popX
-    inst.hedgehog.y = FLOOR_Y - HEDGEHOG_GROUND_RAISE
-  }
+function syncGlowPredatorVisibility(inst) {
+  const pred = inst.predator
+  pred?.obj &&
+    (pred.obj.hidden = !(inst.zones.gCollected && isGlowEyesGameplayUnlocked(inst.zones)))
 }
 //
 // Persists the L-log step so the HUD letter stays fully gold after leaving.
@@ -15495,20 +15644,20 @@ function markGlowHudLTrampJumped(inst) {
   syncGlowHudLetterFills(inst)
 }
 //
-// Persists the left-hedgehog jump-over so the HUD L counter stays at 1/4+
+// Persists the left-mud predator jump-over so the HUD L counter stays at 1/4+
 // after leaving.
 //
-function markLeftHedgehogJumpedOver(inst) {
-  if (inst.zones.leftHedgehogJumpedOver) return
-  inst.zones.leftHedgehogJumpedOver = true
-  set(KEY_LEFT_HEDGEHOG_JUMPED_OVER, true)
+function markMudPredatorJumpedOver(inst) {
+  if (inst.zones.mudPredatorJumpedOver) return
+  inst.zones.mudPredatorJumpedOver = true
+  set(KEY_MUD_PREDATOR_JUMPED_OVER, true)
   syncGlowHudLetterFills(inst)
 }
 //
 // Hides the Kaplay hero sprite; onDraw redraws it after all world layers.
 //
 function syncGlowPitCaveHeroForegroundDraw(inst, char, footY) {
-  if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled ||
+  if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled ||
     inst.glowDrownHeroClipLock) {
     inst.pitCaveHeroForeground && (char.hidden = false, inst.pitCaveHeroForeground = false)
     return
@@ -15528,7 +15677,7 @@ function syncGlowPitCaveHeroForegroundDraw(inst, char, footY) {
 // Lifts the hero above the cave mouth lip drawn in onDrawWorld.
 //
 function syncGlowPitHeroDrawOrder(inst, char, footY) {
-  if (!char?.pos || inst.drowning || inst.deathHandled || inst.hedgehogDeathHandled) return
+  if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
   const pit = inst.pit
   if (!pit?.zone || !pit.collapsed) return
   if (inst.pitCaveHeroForeground) return
@@ -15906,7 +16055,7 @@ function glowTeacherLZoneAutoHintEligible(inst, inCave) {
   if (!inst.zones.gCollected || inst.zones.lCollected) return false
   //
   // The hint references the L-log platform by name — showing it before the
-  // platform itself is even revealed (e.g. right after only the hedgehog
+  // platform itself is even revealed (e.g. right after only the mud band
   // jump-over step, the first of 4) reads as nonsense.
   //
   if (!inst.zones.lPlatRevealed) return false

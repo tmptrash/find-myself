@@ -121,7 +121,7 @@ export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   }
 }
 //
-// Leaf-shaped radial burst (e.g. a hedgehog-touch death) — wide arc with
+// Leaf-shaped radial burst (e.g. glow touch deaths) — wide arc with
 // tumbling teardrop leaves instead of squares. colors may
 // be a single colour or a palette array; each leaf picks one at random so
 // the burst reads as a scatter of individual leaves. groundY, if given, is

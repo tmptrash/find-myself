@@ -49,6 +49,12 @@ const BUOY_SWAY_HORIZ_GROWTH = 1.12
 const BUOY_EYE_RADIUS = 11
 const BUOY_PUPIL_RADIUS = 4.5
 const BUOY_PUPIL_MARGIN = 0.75
+//
+// Eye ring thickness — fixed and thin; do not scale with stalk segmentWidth
+// (that spread made some buoys look heavy-rimmed and others almost rimless).
+//
+const BUOY_EYE_CONTOUR_EXTRA = 2
+const BUOY_BLINK_LID_LINE_WIDTH = 1.1
 const BUOY_BLINK_LID_SPAN = 0.85 // Closed-lid stroke half-length (× eye radius)
 const BUOY_BLINK_MIN_INTERVAL = 10
 const BUOY_BLINK_MAX_INTERVAL = 20
@@ -254,10 +260,7 @@ function addBuoyJoints(batch, points, segmentWidth, color) {
 }
 function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]
-  //
-  // Contour ring matches the pole width so leg and eye read as one stalk.
-  //
-  const contourExtra = buoy.segmentWidth
+  const contourExtra = BUOY_EYE_CONTOUR_EXTRA
   if (!buoy.blinking) {
     const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY)
     addGlowEyeCreatureToBatch(batch, eye.x, eye.y, pupil.x, pupil.y, colors, {
@@ -271,7 +274,7 @@ function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
   PolyBatch.addLine(batch,
     eye.x - BUOY_EYE_RADIUS * BUOY_BLINK_LID_SPAN, eye.y,
     eye.x + BUOY_EYE_RADIUS * BUOY_BLINK_LID_SPAN, eye.y,
-    contourExtra + 1, colors.contour)
+    BUOY_BLINK_LID_LINE_WIDTH, colors.contour)
 }
 //
 // Clamps the pupil inside the sclera so it always points at the hero.

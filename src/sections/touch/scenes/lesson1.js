@@ -3110,7 +3110,7 @@ function createL1Mushrooms(k, gameState) {
             m.leanAngle = (m.leanAngle ?? 0) * Math.max(0, 1 - k.dt() * L1_MUSHROOM_WHISTLE_SMOOTH)
             if (Math.abs(m.leanAngle) < 0.2) {
               m.leanAngle = 0
-              k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+          k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
             } else {
               k.drawSprite({
                 sprite: m.spriteName,
@@ -3691,8 +3691,8 @@ function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0, sin
       fill.opacity = 1
       outlines.forEach(o => { o.exists?.() && (o.opacity = 1) })
       letterFade.cancel()
-      return
-    }
+    return
+  }
     fill.opacity = Math.min(1, fill.opacity + k.dt() * 1.5)
     outlines.forEach(o => { o.exists?.() && (o.opacity = fill.opacity) })
   })

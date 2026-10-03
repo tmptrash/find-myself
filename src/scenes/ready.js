@@ -1091,7 +1091,7 @@ function onDrawTitle(k, spiderState, titleLetters) {
     if (op <= 0.001) continue
     const shadowPos = k.vec2(letter.x + TITLE_SHADOW_OFFSET, letter.y + TITLE_SHADOW_OFFSET)
     const pos = k.vec2(letter.x, letter.y)
-    k.drawSprite({
+  k.drawSprite({
       sprite: readyLetterShadowSpriteName(letter.char),
       pos: shadowPos,
       anchor: 'center',
@@ -1387,7 +1387,7 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     state.lastMouseY = mp.y
     state.mouseMoved = true
     state.mouseStillTime = 0
-  } else {
+      } else {
     state.mouseMoved = false
     state.mouseStillTime += dt
   }
@@ -1867,7 +1867,7 @@ function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, scale, opacity) {
   k.drawCircle({
     pos: k.vec2(ex, ey),
     radius: HERO_EYE_RING_RADIUS * scale,
-    color: k.rgb(0, 0, 0),
+        color: k.rgb(0, 0, 0),
     opacity
   })
   k.drawCircle({

@@ -54,6 +54,9 @@ export function create() {
 
   const stepGain = ctx.createGain()
   stepGain.connect(glowSfxGain)
+  const predatorFootGain = ctx.createGain()
+  predatorFootGain.gain.value = 0
+  predatorFootGain.connect(glowSfxGain)
 
   const jumpGain = ctx.createGain()
   jumpGain.gain.value = CFG.audio.sfx.jump
@@ -102,6 +105,7 @@ export function create() {
     // SFX master gains
     landGain,
     stepGain,
+    predatorFootGain,
     jumpGain,
     spawnGain,
     bladeSoundGain,
@@ -1433,35 +1437,59 @@ function playGlowMudStep(instance) {
   noiseSource.stop(now + duration)
 }
 //
-// Glow left-hedgehog mud sneak — short dry scratch while the ghost crawls.
+// Mutes or restores predator foot SFX (cuts active one-shots via master gain).
 //
-export function playGlowHedgehogMudSneak(instance) {
+export function setGlowPredatorFootGain(instance, gain) {
+  const g = instance.predatorFootGain
+  if (!g) return
   const now = instance.audioContext.currentTime
-  const duration = 0.11
+  g.gain.cancelScheduledValues(now)
+  g.gain.setValueAtTime(gain > 0.001 ? 1 : 0, now)
+}
+//
+// Soft tap when a predator leg plants on the ground (many legs — keep quiet).
+//
+export function playGlowPredatorFootstep(instance) {
+  const footGain = instance.predatorFootGain ?? instance.stepGain
+  const now = instance.audioContext.currentTime
+  const duration = 0.052
   const bufferSize = instance.audioContext.sampleRate * duration
   const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
   for (let i = 0; i < bufferSize; i++) {
     const t = i / bufferSize
-    noiseData[i] = (Math.random() * 2 - 1) * (1 - t * 0.65)
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - t * 0.85) * 0.55
   }
   const noiseSource = instance.audioContext.createBufferSource()
   noiseSource.buffer = noiseBuffer
   const filter = instance.audioContext.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(480, now)
-  filter.frequency.linearRampToValueAtTime(260, now + duration)
-  filter.Q.value = 0.42
+  filter.frequency.setValueAtTime(220, now)
+  filter.frequency.linearRampToValueAtTime(128, now + duration)
+  filter.Q.value = 0.2
   const envelope = instance.audioContext.createGain()
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.28, now + 0.012)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.11, now + 0.01)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const thump = instance.audioContext.createOscillator()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(92, now)
+  thump.frequency.exponentialRampToValueAtTime(58, now + duration)
+  const thumpGain = instance.audioContext.createGain()
+  thumpGain.gain.setValueAtTime(0.001, now)
+  thumpGain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.038, now + 0.008)
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)
-  envelope.connect(instance.stepGain)
+  envelope.connect(footGain)
+  thump.connect(thumpGain)
+  thumpGain.connect(footGain)
   noiseSource.start(now)
   noiseSource.stop(now + duration)
+  thump.start(now)
+  thump.stop(now + duration)
 }
+
 //
 // Glow muddy band: wet squelch landing (same timbre as mud step, louder).
 //

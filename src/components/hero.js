@@ -919,10 +919,10 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++,
       heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
     )
-  } catch (error) {
-    //
-    // Skip this sprite if there's an error creating it
-    //
+      } catch (error) {
+        //
+        // Skip this sprite if there's an error creating it
+        //
   }
   //
   // Load jump animation frames (3 frames)
@@ -965,7 +965,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
  * @param {Function} onComplete - Callback when death animation completes
  * @param {Object} [opts] - Options
  * @param {boolean} [opts.suppressParticles] - Skip body/eye particles (scene provides custom ones)
- * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. glow hedgehog leaf burst)
+ * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. glow leaf-burst deaths)
  */
 export function death(inst, onComplete, opts = {}) {
   if (inst.isDying) return
@@ -984,14 +984,14 @@ export function death(inst, onComplete, opts = {}) {
   inst.controllable = false
   sfx && Sound.playDeathSound(sfx)
   if (!opts.suppressParticles) {
-    //
-    // Create body particles explosion
-    //
-    createBodyParticles(inst, centerX, centerY)
-    //
-    // Create eye particles
-    //
-    createEyeParticles(inst, centerX, centerY)
+  //
+  // Create body particles explosion
+  //
+  createBodyParticles(inst, centerX, centerY)
+  //
+  // Create eye particles
+  //
+  createEyeParticles(inst, centerX, centerY)
   }
   //
   // Hide character immediately
@@ -1605,24 +1605,24 @@ function onUpdate(inst) {
       } else if (velocity < 100) {
         targetFrame = 3
       } else if (velocity < 400) {
-        targetFrame = 4
-      } else {
+      targetFrame = 4
+    } else {
         targetFrame = 5
-      }
-      if (targetFrame !== inst.jumpFrame) {
-        inst.jumpFrame = targetFrame
+    }
+    if (targetFrame !== inst.jumpFrame) {
+      inst.jumpFrame = targetFrame
         useHeroSprite(inst, `${prefix}-jump-${targetFrame}`)
-      }
+    }
       syncJumpCollision(inst)
-      if (!inst.wasJumping) {
-        inst.runFrame = 0
-        inst.runTimer = 0
-        inst.isRunning = false
-        inst.wasJumping = true
-        inst.jumpPhase = 'jumping'
-      }
-      inst.character.flipX = inst.direction === -1
-      return
+    if (!inst.wasJumping) {
+      inst.runFrame = 0
+      inst.runTimer = 0
+      inst.isRunning = false
+      inst.wasJumping = true
+      inst.jumpPhase = 'jumping'
+    }
+    inst.character.flipX = inst.direction === -1
+    return
     }
   } else {
     //
@@ -1918,7 +1918,7 @@ function updateIdleAnimation(inst) {
 // Slow run cycle for distant background walkers — avoids idle/run sprite fighting
 //
 function updateAmbientWalkAnimation(inst) {
-  const prefix = inst.spritePrefix || inst.type
+      const prefix = inst.spritePrefix || inst.type
   inst.runTimer += inst.k.dt()
   if (inst.runTimer >= inst.ambientRunSpeed) {
     inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
@@ -1987,7 +1987,7 @@ function onUpdateIdleNotes(inst) {
   //
   if (active) {
     inst.idleStillTime += dt
-  } else {
+    } else {
     inst.idleStillTime = 0
   }
   //
@@ -2321,7 +2321,7 @@ function paintHeroEyesAtFrame(ctx, cfg) {
   if (animation === 'run' || animation === 'jump') {
     const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
     paintOne(x, y, PUPIL_SIDE_SHIFT, 0)
-    return
+              return
   }
   const eyeY = headY + EYE_OFFSET_Y
   paintOne(
@@ -2420,8 +2420,8 @@ function paintHeroBakeLayers(ctx, bake) {
   const { drawBakeOutline, drawBakeBody, bakeBodyForPipeline } = bake
   if (drawBakeBody && !drawBakeOutline) {
     paintBodyOnlyBakeInterior(ctx, bake)
-    return
-  }
+              return
+            }
   drawBakeOutline && drawHeroBakeContour(ctx, bake)
   bakeBodyForPipeline && drawHeroBakeBodyFill(ctx, bake)
   finalizeHeroBakeFrame(ctx, bake)
@@ -2721,7 +2721,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
       ctx.beginPath()
       ctx.arc(x, y, EYE_WHITE_RADIUS, 0, Math.PI * 2)
       ctx.fill()
-    } else {
+            } else {
       const eyeY = headY + EYE_OFFSET_Y
       ctx.beginPath()
       ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
@@ -2738,7 +2738,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
     strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
     ctx.restore()
     fillBentLegHipNotches(ctx, cfg, 'body')
-  } else {
+                  } else {
     fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
     fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
   }

@@ -2106,16 +2106,19 @@ function drawIdleNotes(k, inst) {
     const alpha = Math.max(0, Math.min(1, fade))
     const opacity = alpha * 0.85
     if (useSprites) {
-      const spriteName = k._idleNoteGlyphMap[note.glyph]
-      spriteName && k.drawSprite({
-        sprite: spriteName,
+      const baked = k._idleNoteGlyphMap[note.glyph]
+      baked && k.drawSprite({
+        sprite: baked.name,
         pos: k.vec2(note.x, note.y),
         anchor: 'center',
         angle: note.angle,
         color: k.rgb(255, 255, 255),
         opacity,
-        width: IDLE_NOTE_FONT_SIZE,
-        height: IDLE_NOTE_FONT_SIZE
+        //
+        // Native bake dimensions — squashing into a square would shrink glyphs vs drawText.
+        //
+        width: baked.width,
+        height: baked.height
       })
     } else {
       k.drawText({
@@ -4791,10 +4794,12 @@ function ensureIdleNoteGlyphSprites(k, postBake) {
     const canvas = bakeIdleNoteGlyphCanvas(glyph, fontFamily)
     postBake?.(canvas, 7400 + i)
     const name = 'idle-note-glyph-' + i
+    const width = canvas.width
+    const height = canvas.height
     k.loadSprite(name, canvas)
     canvas.width = 0
     canvas.height = 0
-    k._idleNoteGlyphMap[glyph] = name
+    k._idleNoteGlyphMap[glyph] = { name, width, height }
     i++
   })
 }

@@ -1,6 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL } from '../utils/glow-palette.js'
+import { GLOW_PAL, isGlowGrayExploreBeforeL } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
@@ -216,7 +216,8 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const gray = !inst.zones?.colorWorld
+  const colorFade = inst.zones?._sceneRef?.colorFade ?? 0
+  const gray = isGlowGrayExploreBeforeL(inst.zones, colorFade)
   const contour = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorContour)
   const back = rgb(k, gray ? GLOW_PAL.lightGray : GLOW_PAL.predatorBack)
   const belly = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorBelly)

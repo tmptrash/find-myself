@@ -3,6 +3,9 @@
 //
 
 let touchPositions = new Map()
+let touchDeviceCached = null
+let coarsePointerQuery = null
+let noHoverQuery = null
 //
 // Tracks which Kaplay instance the touch hooks are currently registered on —
 // an engine swap (see engine-switch.js) boots a brand new k, so the hooks
@@ -16,10 +19,8 @@ let touchInputInitializedFor = null
  */
 export function isTouchDevice() {
   if (typeof window === 'undefined') return false
-  const touchCapable = 'ontouchstart' in window && navigator.maxTouchPoints > 0
-  const coarsePointer = window.matchMedia('(pointer: coarse)').matches
-  const noHover = window.matchMedia('(hover: none)').matches
-  return touchCapable && (coarsePointer || noHover)
+  ensureTouchDeviceWatch()
+  return touchDeviceCached
 }
 
 /**
@@ -134,4 +135,20 @@ function onKaplayTouchEnd(_pos, touch) {
 //
 function getTouchId(touch) {
   return touch?.identifier ?? touch?.id ?? 0
+}
+//
+// matchMedia is read once and refreshed only when the pointer query changes,
+// so per-frame input checks do not re-query the browser.
+//
+function ensureTouchDeviceWatch() {
+  if (coarsePointerQuery) return
+  coarsePointerQuery = window.matchMedia('(pointer: coarse)')
+  noHoverQuery = window.matchMedia('(hover: none)')
+  coarsePointerQuery.addEventListener('change', refreshTouchDevice)
+  noHoverQuery.addEventListener('change', refreshTouchDevice)
+  refreshTouchDevice()
+}
+function refreshTouchDevice() {
+  const touchCapable = 'ontouchstart' in window && navigator.maxTouchPoints > 0
+  touchDeviceCached = touchCapable && (coarsePointerQuery.matches || noHoverQuery.matches)
 }

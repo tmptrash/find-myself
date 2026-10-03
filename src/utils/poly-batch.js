@@ -70,7 +70,7 @@ export function addLine(inst, x1, y1, x2, y2, width, color) {
  */
 export function addDisc(inst, x, y, radius, color) {
   if (radius <= 0) return
-  const unit = discUnit(Math.max(DISC_SEGMENTS_MIN, Math.round(radius * DISC_SEGMENTS_PER_PX)))
+  const unit = discUnit(discSegmentCount(radius))
   const base = inst.count
   unit.forEach((u, i) => setVertex(inst, base + i, x + u.x * radius, y + u.y * radius, color))
   for (let i = 1; i < unit.length - 1; i++) inst.indices.push(base, base + i, base + i + 1)
@@ -120,6 +120,11 @@ export function flush(inst, k, opacity = 1) {
     })
   }
   reset(inst)
+}
+function discSegmentCount(radius) {
+  if (radius < 3.5) return 6
+  if (radius < 8) return 8
+  return Math.max(DISC_SEGMENTS_MIN, Math.round(radius * DISC_SEGMENTS_PER_PX))
 }
 function discUnit(segments) {
   let unit = discUnitCache.get(segments)

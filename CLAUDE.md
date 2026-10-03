@@ -530,6 +530,9 @@ set('lastLevel', 'level-time.1')
 set('level0BonusCollected', true)  // ❌ Missing section prefix
 ```
 
+### Write frequency
+`set()` serializes the whole progress object and calls `localStorage.setItem` on every call. Do not call it from `onUpdate` or `onDraw`. Read a persisted value once into inst state and write again only when that value actually changes.
+
 ---
 
 ## 12. Anti-Patterns to Avoid
@@ -608,8 +611,22 @@ for (const particle of particles) {
 ### Batching rules
 
 - Mixing **sprites and primitives** (rect, circle, polygon) in alternating order breaks batching — Kaplay flushes to the GPU on texture/blend/shader changes.
+- **`fixed: true` is a batch break** too (different camera uniform). Draw world-space passes together, then screen-space HUD passes. Do not alternate them.
 - **Group draw calls**: all `drawSprite` passes together, then polygons, then other primitives.
-- Static canvas-baked sprites (backgrounds, HUD glyphs, hero frames) should be **generated once per live `k` instance** and reused — never rebake every frame.
+- Static canvas-baked sprites (backgrounds, HUD glyphs, hero frames) should be **generated once per live `k` instance** and reused — never rebake every frame, and never re-grade a canvas once a second because a label string changed.
+
+### Frame time
+
+A 120 Hz display has an 8.3 ms budget. Settled Glow frames spend about 1–2 ms in JS and still missed the budget, because the main thread was waiting on the GPU. When a level drops below the refresh rate, measure `requestAnimationFrame` deltas (p50 / p95), not only the FPS HUD average. If skipping draws restores full refresh rate and adding a few milliseconds of JS does not, the cliff is a GPU sync — do not chase draw-call micro-optimisations until that sync is gone.
+
+Kaplay's `flush()` is patched in `patches/kaplay+4000.0.0-alpha.27.1.patch`. The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Glow it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
+
+### Fill, pixel reads, and per-frame queries
+
+- **Do not call `getImageData` on a canvas the GPU has drawn, every frame or every second.** The read waits until the GPU queue drains (measured ~25 ms once a second on the FPS counter). Film grain and contrast run once per live `k`, on a static bake or a glyph atlas. Compose a changing label from that atlas with `drawImage` (see `fps-counter.js`). If a pixel read cannot be avoided, create the 2D context with `{ willReadFrequently: true }` before any drawing.
+- **Do not cover the screen with texels that are transparent or already hidden.** A world-sized sprite still fills every pixel of its quad, including empty rows. Clip the quad to the visible band, or skip the live draw once an opaque baked layer already contains those pixels. An offscreen backdrop blit stops at the first nearer layer that is opaque across the view.
+- **Kaplay `text` components format their string every frame, including hidden ones.** Counters and FPS labels are baked sprites or a glyph atlas, not a live `k.text()` left in the scene.
+- **`matchMedia` and `isTouchDevice()` stay cached** (`touch-input.js`, refreshed on the query's `change` event). Do not call them from `onUpdate`.
 
 ### When game objects are still correct
 
@@ -699,6 +716,7 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 ### Rules
 
 - Do not add a second, ad-hoc noise pass — reuse `applyGlowFilmGrainToCanvas` or the overlay layer.
+- Do not re-run grain or contrast on a canvas that is rebuilt every frame or every second (HUD counters). Grade a glyph atlas once per live `k`, then compose labels with `drawImage`.
 - Procedural / Kaplay primitive draws that are not baked must still sit under the scene overlay when the scene uses one.
 - Hero and decor: only **body color**, **outline color**, and glow-specific eye bake flags may differ between sections; silhouette bake (`outlineRimPx`, hip shelves, run lean) stays shared via `hero.js` — do not fork drawing logic per section.
 

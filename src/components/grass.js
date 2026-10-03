@@ -96,6 +96,8 @@ const bladeQuadCache = []
 let lastTintRef = null
 let lastTintRgb = null
 let lastTintK = null
+let grassDrawPos = null
+let grassDrawPosK = null
 //
 // Root atlas sprite names must be unique per live Kaplay instance (several
 // grass fields with roots can coexist in one scene).
@@ -500,20 +502,21 @@ function onDraw(inst) {
     if (blade.x > maxX) break
     const tint = inst.getTint(blade)
     if (!tint) continue
-    const color = inst.hueVaryMax > 0
-      ? hueVariedRgb(k, tint, blade, inst.hueVaryMax, inst.hueVarySkew)
-      : grassTintRgb(k, tint)
-    const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG * swayScale
+    const opacity = tint.opacity ?? 1
+    const color = cachedBladeColor(k, inst, blade, tint, opacity)
+    const angle = swayScale > 0.001
+      ? Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG * swayScale
+      : 0
     k.drawSprite({
       sprite: BLADE_ATLAS_SPRITE,
-      pos: k.vec2(blade.x, inst.floorY),
+      pos: grassPos(k, blade.x, inst.floorY),
       anchor: 'bot',
       width: blade.width,
       height: blade.height,
       quad: blade.quad,
       angle,
       color,
-      opacity: tint.opacity ?? 1
+      opacity
     })
   }
   //
@@ -531,7 +534,7 @@ function drawRootFans(inst, rootTint, minX, maxX) {
     if (inst.getRootVisible?.(fan.x) === false) continue
     k.drawSprite({
       sprite: inst.rootAtlasSprite,
-      pos: k.vec2(fan.drawX, fan.drawY),
+      pos: grassPos(k, fan.drawX, fan.drawY),
       width: fan.cell.w,
       height: fan.cell.h,
       quad: fan.quad,
@@ -542,6 +545,30 @@ function drawRootFans(inst, rootTint, minX, maxX) {
 //
 // Reuses the last k.rgb when getTint returns the same object (settled colour world).
 //
+function grassPos(k, x, y) {
+  if (grassDrawPosK !== k || !grassDrawPos) {
+    grassDrawPosK = k
+    grassDrawPos = k.vec2(x, y)
+    return grassDrawPos
+  }
+  grassDrawPos.x = x
+  grassDrawPos.y = y
+  return grassDrawPos
+}
+//
+// Hue variation used to allocate a fresh colour for every blade every frame.
+// The tint object is stable once the world settles, so the resolved colour
+// can live on the blade until that tint (or its opacity) changes.
+//
+function cachedBladeColor(k, inst, blade, tint, opacity) {
+  if (blade._tintRef === tint && blade._tintOp === opacity && blade._color) return blade._color
+  blade._tintRef = tint
+  blade._tintOp = opacity
+  blade._color = inst.hueVaryMax > 0
+    ? hueVariedRgb(k, tint, blade, inst.hueVaryMax, inst.hueVarySkew)
+    : grassTintRgb(k, tint)
+  return blade._color
+}
 function grassTintRgb(k, tint) {
   if (lastTintK === k && lastTintRef === tint && lastTintRgb) return lastTintRgb
   lastTintK = k

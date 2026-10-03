@@ -10,6 +10,13 @@ const HUD_FONT_SIZE = 28
 const HUD_GAP = 18
 const HUD_GAP_AFTER_FPS = 28
 const HUD_OUTLINE_OFFSET = 1
+//
+// Glyphs the FPS / timer labels can show. Baked once per engine so a
+// once-per-second label change copies cells instead of re-grading pixels.
+//
+const FPS_GLYPH_CHARS = ' 0123456789:FPSobjtdcime'
+const FPS_GLYPH_ATLAS_SEED = 4400
+const glyphAtlasByK = new WeakMap()
 
 /**
  * Creates FPS counter display
@@ -294,8 +301,15 @@ function rebuildBakedHudTextNode(node, text, centerX) {
   const { k, font, color, outlineColor, topY, postBakeCanvas } = node
   node.layoutCenterX = centerX
   node.lastText = text
-  const canvas = bakeFpsHudTextCanvas(text, font, color, outlineColor)
-  postBakeCanvas?.(canvas, fpsHudTextHash(text))
+  //
+  // Grain and grade run once on the glyph atlas. Composing the label from
+  // those cells never calls getImageData, so the per-second FPS update
+  // does not stall on the GPU.
+  //
+  const atlas = postBakeCanvas
+    ? fpsGlyphAtlas(k, font, color, outlineColor, postBakeCanvas)
+    : null
+  const canvas = bakeFpsHudTextCanvas(text, font, color, outlineColor, atlas)
   const spriteName = 'fps-hud-bake-' + fpsHudTextHash(text)
   k.loadSprite(spriteName, canvas)
   node.measuredW = canvas.width
@@ -319,7 +333,8 @@ function rebuildBakedHudTextNode(node, text, centerX) {
 //
 // Renders FPS HUD label with a single drop-shadow copy onto a canvas.
 //
-function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor) {
+function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor, atlas = null) {
+  if (atlas) return composeFpsHudTextCanvas(text, atlas)
   const pad = 4
   const off = HUD_OUTLINE_OFFSET
   const probe = document.createElement('canvas').getContext('2d')
@@ -374,4 +389,79 @@ function countKaplayDrawCalls(k) {
     !obj.hidden && typeof obj.draw === 'function' && drawCalls++
   })
   return drawCalls
+}
+//
+// One graded glyph atlas per live Kaplay instance and colour pair.
+//
+function fpsGlyphAtlas(k, font, fillColor, outlineColor, postBakeCanvas) {
+  let byKey = glyphAtlasByK.get(k)
+  if (!byKey) {
+    byKey = new Map()
+    glyphAtlasByK.set(k, byKey)
+  }
+  const key = `${font}|${rgbToCss(fillColor)}|${rgbToCss(outlineColor)}`
+  const cached = byKey.get(key)
+  if (cached) return cached
+  const atlas = bakeFpsGlyphAtlas(font, fillColor, outlineColor, postBakeCanvas)
+  byKey.set(key, atlas)
+  return atlas
+}
+//
+// Draws every HUD glyph once, then runs the section grain/grade pass.
+//
+function bakeFpsGlyphAtlas(font, fillColor, outlineColor, postBakeCanvas) {
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${HUD_FONT_SIZE}px ${font}`
+  const off = HUD_OUTLINE_OFFSET
+  const cellH = Math.ceil(HUD_FONT_SIZE * 1.2 + off)
+  const cells = new Map()
+  const layout = []
+  let x = 0
+  for (const ch of FPS_GLYPH_CHARS) {
+    const advance = Math.max(1, probe.measureText(ch).width)
+    const cellW = Math.ceil(advance + off)
+    layout.push({ ch, x, advance, cellW })
+    x += cellW
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, x)
+  canvas.height = cellH
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.font = `${HUD_FONT_SIZE}px ${font}`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  const cy = cellH / 2 - off / 2
+  const shadow = rgbToCss(outlineColor)
+  const fill = rgbToCss(fillColor)
+  layout.forEach(cell => {
+    ctx.fillStyle = shadow
+    ctx.fillText(cell.ch, cell.x + off, cy + off)
+    ctx.fillStyle = fill
+    ctx.fillText(cell.ch, cell.x, cy)
+    cells.set(cell.ch, { x: cell.x, w: cell.cellW, advance: cell.advance })
+  })
+  postBakeCanvas?.(canvas, FPS_GLYPH_ATLAS_SEED)
+  return { canvas, cells, cellH }
+}
+//
+// Copies pre-graded glyph cells into one label. Cells overlap by the shadow
+// offset so the drop shadow is not clipped and letters keep their advance.
+//
+function composeFpsHudTextCanvas(text, atlas) {
+  const placed = []
+  let cursor = 0
+  for (const ch of text) {
+    const cell = atlas.cells.get(ch)
+    if (!cell) continue
+    placed.push({ cell, x: cursor })
+    cursor += cell.advance
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(cursor + HUD_OUTLINE_OFFSET))
+  canvas.height = atlas.cellH
+  const ctx = canvas.getContext('2d')
+  placed.forEach(({ cell, x }) => {
+    ctx.drawImage(atlas.canvas, cell.x, 0, cell.w, atlas.cellH, x, 0, cell.w, atlas.cellH)
+  })
+  return canvas
 }

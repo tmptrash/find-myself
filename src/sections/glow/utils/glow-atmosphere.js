@@ -2,6 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
+import * as PolyBatch from '../../../utils/poly-batch.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
 import {
   GLOW_PAL,
@@ -357,7 +358,8 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
       maxX: zone.x1 - 16,
       minY,
       maxY
-    }
+    },
+    midgeBatch: PolyBatch.create()
   }
   k.add([
     k.z(MIDGE_Z),
@@ -1003,27 +1005,34 @@ function bakeOnePitMushroomSprite(k, name, colors) {
 function drawGlowMidges(k, ctrl) {
   const life = ctrl.worldLife ?? 0
   if (life < 0.02) return
-  const t = k.time()
   const voidRgb = glowRgb('void')
   const base = ctrl.midgeRgb || voidRgb
-  const midgeC = k.rgb(base.r, base.g, base.b)
   const camX = k.camPos().x
   const camScale = k.camScale?.()
   const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
   const half = k.width() / (2 * zoom) + MIDGE_DRAW_CULL_PAD
   const minX = camX - half
   const maxX = camX + half
+  const batch = ctrl.midgeBatch
+  if (!batch) return
+  PolyBatch.reset(batch)
+  const color = midgeDrawColor(k, ctrl, base)
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
     if (m.x < minX || m.x > maxX) continue
-    const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 7 + m.phase))
-    k.drawCircle({
-      pos: k.vec2(m.x, m.y),
-      radius: m.radius,
-      color: midgeC,
-      opacity: (0.35 + pulse * 0.45) * life
-    })
+    PolyBatch.addDisc(batch, m.x, m.y, m.radius, color)
   }
+  PolyBatch.flush(batch, k, life)
+}
+//
+// One saturated fill per midge — no per-frame pulse or shade ladder.
+//
+function midgeDrawColor(k, ctrl, base) {
+  if (ctrl._midgeColorKey !== base) {
+    ctrl._midgeColorKey = base
+    ctrl._midgeColor = k.rgb(base.r, base.g, base.b)
+  }
+  return ctrl._midgeColor
 }
 //
 // Fractal crack network — forked, uneven segments unique each load

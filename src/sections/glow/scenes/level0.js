@@ -180,10 +180,7 @@ import {
   releaseCanvas
 } from '../utils/glow-canvas-crop.js'
 import {
-  bakeGlowBirdFlapSprites,
   bakeGlowTooltipCanvas,
-  GLOW_BIRD_SPRITE_PREFIX,
-  BIRD_FLAP_FRAME_COUNT,
   glowUiHash,
   createGlowBakedTextHolder,
   syncGlowBakedTextHolder,
@@ -513,15 +510,13 @@ const ROCK_OUTLINE_WIDTH = 2.5
 // on top of it instead.
 //
 //
-// Parallax background — the warm haze backdrop plus 3 forest planes (each
+// Parallax background — sky baked into the far row plus 2 forest planes (each
 // scrolling at its own speed), then a static ground/underground strip at
 // world speed 1.0. A depth row's bushes share their trees' canvas: same
 // scroll speed, same horizontal bleed, and the bush strip sits entirely
 // inside the tree row's world-Y crop, so one sprite covers both and the
 // row costs a single draw call per frame instead of two.
 //
-const BG_PAR_SKY_GRAY = 'glow0-bg-par-sky-gray-v4'
-const BG_PAR_SKY_COLOR = 'glow0-bg-par-sky-color'
 const BG_PAR_TREE3_GRAY = 'glow0-bg-par-tree3-gray'
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
 const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray'
@@ -547,7 +542,6 @@ const PAR_STATIC_WORLD_H = CAVE_BAND_H
 // the same baked canvas).
 //
 const PAR_SKY_SPEED = 0.06
-const PAR_TREE3_SPEED = 0.12
 const PAR_TREE2_SPEED = 0.26
 const PAR_TREE1_SPEED = 0.40
 //
@@ -560,14 +554,47 @@ const HAZE_MID_OPACITY = 0.028
 // Extra horizontal bleed baked into parallax canvases so trees extend past the
 // playfield edges and never run out on the right when the camera scrolls.
 // Kept as tight as the widest crown reaches past a trunk: the bleed is paid
-// twice per layer in texture width AND every frame in the on-screen slice
-// width (see drawParallaxSpriteClipped), so a generous value is expensive.
+// twice per layer in texture width.
 //
 const PAR_TREE_HORIZ_BLEED = 200
 //
 // Safety margin added to the viewport when culling a layer's on-screen slice.
+// The slice is already positioned via the layer's parallax drawX, so this
+// only has to absorb camera shake — never the bake bleed.
 //
 const PARALLAX_DRAW_CULL_PAD = 48
+//
+// Width of one baked parallax column (px). Each column remembers the
+// vertical span of its non-transparent pixels, so empty sky above short
+// crowns and gaps between trunks are never blitted.
+//
+const PAR_COLUMN_W = 128
+//
+// Fully opaque alpha — rows below a near-row column's solid run hide every
+// farther layer, so those rows are trimmed from sky/far/mid draws.
+//
+const PAR_ALPHA_OPAQUE = 255
+//
+// Render scale of the offscreen backdrop (sky/far + mid rows) in
+// the settled colour world. Those layers are depth-blurred at bake time, so
+// half resolution quarters their fill cost without visible softening.
+//
+const PAR_OFFSCREEN_SCALE = 0.5
+//
+// Extra pixels below the near-row occluder so the cropped backdrop blit
+// still covers the seam where the nearer trees become opaque.
+//
+const PAR_BACKDROP_CROP_PAD = 4
+//
+// Per live Kaplay instance: baked parallax sprite name → column bounds.
+// Keyed by k so a native-resolution engine reboot re-measures fresh bakes.
+//
+const parallaxColumnBoundsByK = new WeakMap()
+//
+// Per live Kaplay instance: offscreen backdrop framebuffer (GPU resource
+// tied to that engine's GL context).
+//
+const parallaxOffscreenByK = new WeakMap()
 //
 // Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
@@ -682,7 +709,6 @@ const L_LETTER_LEFT_OF_PLAT_GAP = 56
 //
 const PAR_L1_COLOR_BLEND = 0.22
 const PAR_MID_COLOR_BLEND = 0.28
-const PAR_FAR_COLOR_BLEND = 0.34
 //
 // Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
 // while green stays the leading colour — kept low so parallax stays muted.
@@ -714,8 +740,6 @@ const PAR_BIG_TREE_COUNT = 14
 const PAR_BIG_SEED_BASE = 40000
 const PAR_FAR_TREE_COUNT = 17
 const PAR_FAR_SEED_BASE = 50000
-const PAR_FARTHEST_TREE_COUNT = 20
-const PAR_FARTHEST_SEED_BASE = 60000
 const PAR_BIG_SEED_STEP = 101
 //
 // Three overlapping canopy bands: each deeper row starts lower so the strips
@@ -752,7 +776,6 @@ const PAR_BIG_WIDTH_SCALE_RANGE = 0.06
 //
 const PAR_TREE_FOCUS_BIAS_NEAR = 0.46
 const PAR_TREE_FOCUS_BIAS_MID = 0.32
-const PAR_TREE_FOCUS_BIAS_FAR = 0.2
 const PAR_BIG_BAND_TOP = PAR_NEAR_BAND_TOP
 //
 // Random tree spacing: each next trunk advances by a random fraction of the
@@ -796,8 +819,6 @@ const BUSH_NEAR_HEIGHT_SCALE = 0.78
 const BUSH_FAR_HEIGHT_SCALE = 1.18
 const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
-const PAR_FARTHEST_TOP_MIN_Y = PAR_FAR_BAND_TOP - 55
-const PAR_FARTHEST_TOP_RANGE = 16
 //
 // Hard foliage floor: no background leaf (branch cluster or band leaf) may
 // ever paint below this line — the horizontal middle band of the screen
@@ -848,40 +869,23 @@ function parTreeRowWorldH(_bandTop) {
   return FLOOR_Y - (TOP_MARGIN - PAR_LAYER_V_PAD) + PAR_LAYER_V_PAD
 }
 //
-// The four runtime parallax layers, back to front. Built once at module load
-// instead of per frame: every field is derived from constants only, and
-// rebuilding these objects inside onDraw allocated seven of them every frame.
+// The three runtime parallax layers, back to front. The far row bake also
+// carries the sky gradient (one draw, one scroll speed). Built once at module
+// load instead of per frame.
 //
-// cullPad is the layer's OWN safety margin around the viewport when its
-// on-screen slice is cut (see drawParallaxSpriteClipped). A tree row needs
-// its full horizontal bleed there, because the sprite lags behind the camera
-// by that much; the haze backdrop has no bleed at all, so charging it the
-// tree margin only widened its blit by ~640 px every frame for nothing.
-//
-const PAR_LAYER_SKY = {
-  gray: BG_PAR_SKY_GRAY,
-  color: BG_PAR_SKY_COLOR,
-  speed: PAR_SKY_SPEED,
-  bleed: 0,
-  cullPad: PARALLAX_DRAW_CULL_PAD,
-  worldY: PAR_SKY_WORLD_Y,
-  worldH: PAR_SKY_WORLD_H
-}
 const PAR_LAYER_FAR = {
   gray: BG_PAR_TREE3_GRAY,
   color: BG_PAR_TREE3_COLOR,
-  speed: PAR_TREE3_SPEED,
+  speed: PAR_SKY_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
-  cullPad: PAR_TREE_HORIZ_BLEED + PARALLAX_DRAW_CULL_PAD,
-  worldY: parTreeRowWorldY(PAR_FARTHEST_BAND_TOP),
-  worldH: parTreeRowWorldH(PAR_FARTHEST_BAND_TOP)
+  worldY: PAR_SKY_WORLD_Y,
+  worldH: PAR_SKY_WORLD_H
 }
 const PAR_LAYER_MID = {
   gray: BG_PAR_TREE2_GRAY,
   color: BG_PAR_TREE2_COLOR,
   speed: PAR_TREE2_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
-  cullPad: PAR_TREE_HORIZ_BLEED + PARALLAX_DRAW_CULL_PAD,
   worldY: parTreeRowWorldY(PAR_MID_BAND_TOP),
   worldH: parTreeRowWorldH(PAR_MID_BAND_TOP)
 }
@@ -890,42 +894,9 @@ const PAR_LAYER_NEAR = {
   color: BG_PAR_TREE1_COLOR,
   speed: PAR_TREE1_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
-  cullPad: PAR_TREE_HORIZ_BLEED + PARALLAX_DRAW_CULL_PAD,
   worldY: parTreeRowWorldY(PAR_BIG_BAND_TOP),
   worldH: parTreeRowWorldH(PAR_BIG_BAND_TOP)
 }
-//
-// Background birds — dark brown-gray silhouettes behind the forest planes;
-// they appear with the post-L colour preview and colour world.
-//
-const BIRD_COUNT = 6
-//
-// Birds glide below the parallax leaf canopy so they stay visible in the sky band
-//
-const BIRD_MIN_Y = PAR_LEAF_MAX_Y + 8
-const BIRD_Y_RANGE = 110
-const BIRD_SPEED_MIN = 22
-const BIRD_SPEED_RANGE = 26
-const BIRD_SIZE_MIN = 5
-const BIRD_SIZE_RANGE = 4
-const BIRD_FLAP_SPEED_MIN = 4
-const BIRD_FLAP_SPEED_RANGE = 3
-//
-// Birds scroll with the slowest parallax row plus their own flight speed.
-//
-const BIRD_PARALLAX_SPEED = PAR_SKY_SPEED
-const BIRD_BOB_AMP = 9
-const BIRD_WRAP_PAD = 40
-//
-// Near-black warm silhouettes — never palette void (green0) or leaf greens.
-//
-const BIRD_SILHOUETTE = lerpRgb(glowRgb('decorGray'), glowRgb('hedgehogManeDark'), 0.68)
-const BIRD_VISIBLE_FADE_MIN = 0.02
-const BIRD_UPDATE_INTERVAL = 1 / 24
-//
-// After the colour world settles, birds update less often (draw every frame).
-//
-const COLOR_WORLD_BIRD_UPDATE_INTERVAL = 1 / 12
 //
 // Minimum opacity before skipping a crossfade layer (avoids pops, not steps).
 //
@@ -1011,14 +982,6 @@ const GLOW_HUD_O_FILL_PARTS = 5
 //
 const GLOW_HUD_W_FILL_PARTS = 2
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
-//
-// Countdown of seconds left before the next context teacher hint, bottom-
-// right of the eye HUD icon.
-//
-const TEACHER_HINT_COUNTDOWN_OFFSET_X = 16
-const TEACHER_HINT_COUNTDOWN_OFFSET_Y = 26
-const TEACHER_HINT_COUNTDOWN_FONT_SIZE = 16
-const TEACHER_HINT_COUNTDOWN_OPACITY = 0.85
 //
 // Baked GLOW letters use the same canvas metrics as lesson-indicator's
 // bakeHudLetterCanvas (fontSize * 1.2 + pad * 2 tall).
@@ -1749,7 +1712,6 @@ const DROWN_HERO_DRAW_Z = CFG.visual.zIndex.playerShadow
 const GLOW_DROWN_HERO_CLIP_Z = LAKE_Z + 1
 const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
 const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
-const PAR_TRUNK_WIDTH_SCALE_FAR = 0.84
 //
 // Blocks every bootstrap yield frame until zone visibility and camera are ready.
 //
@@ -2554,7 +2516,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       cameraIntroPlaying: false,
       pendingGlowIntro: false,
       introHintDelayRemaining: 0,
-      birdCamX: null,
       heroSpawnFade: 0,
       pendingHeroFillReveal: null,
       cameraLetterPeek: null,
@@ -2593,10 +2554,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _meditationParallaxPreview: false,
       _meditationPreviewFadingOut: false,
       //
-      // Background birds gliding behind the forest (colour world only).
-      //
-      birds: createBackgroundBirds(),
-      birdTime: 0,
       cornerObjs,
       cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop,
       wallObjs: floorBounds.walls,
@@ -4249,16 +4206,23 @@ function syncGlowHudWFill(inst, burst = true) {
   if (!indicator) return
   ensureGlowHudLetterFillDrawer(inst)
   const live = countGlowHudWFillParts(inst)
-  const saved = Math.min(
-    GLOW_HUD_W_FILL_PARTS,
-    Number(get(KEY_HUD_W_FILL, 0)) || 0
-  )
-  const wParts = Math.max(live, saved)
+  if (inst._hudWFillSaved == null) {
+    inst._hudWFillSaved = Math.min(
+      GLOW_HUD_W_FILL_PARTS,
+      Number(get(KEY_HUD_W_FILL, 0)) || 0
+    )
+  }
+  const wParts = Math.max(live, inst._hudWFillSaved)
   const prevBand = Math.floor(inst._hudWFillParts ?? 0)
   const nextBand = Math.floor(wParts)
   const prevW = inst._hudWFillParts
   inst._hudWFillParts = wParts
-  set(KEY_HUD_W_FILL, Math.min(GLOW_HUD_W_FILL_PARTS, inst.trampWalk?.singCount || 0))
+  const persist = Math.min(GLOW_HUD_W_FILL_PARTS, inst.trampWalk?.singCount || 0)
+  if (persist !== inst._hudWFillPersisted) {
+    inst._hudWFillPersisted = persist
+    inst._hudWFillSaved = persist
+    set(KEY_HUD_W_FILL, persist)
+  }
   tintGlowHudLoaderLetters(inst)
   burst && prevW != null && nextBand > prevBand &&
     flashGlowHudLetterBurst({ levelIndicator: indicator, k: inst.k }, 4)
@@ -4581,13 +4545,6 @@ function stopMeditationBirds(inst) {
   const birds = inst.birdsMusic
   if (!birds) return
   birds.volume = 0
-}
-//
-// True once the permanent colour world has finished fading in.
-//
-function isColorWorldSettled(inst) {
-  const z = inst.zones
-  return Boolean(z.colorWorld && (inst.colorFade ?? 0) >= 1 && (inst.parallaxFade ?? 0) >= 1)
 }
 //
 // Hermite ease for meditation colour preview (0 at start, 1 at timer zero).
@@ -5656,27 +5613,9 @@ function buildParallaxSprites(k, undergroundSpec) {
   const grayMidPal = getTreePaletteSolid('parallaxGrayMid')
   const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
-  bakeParallaxLayerPair(k, BG_PAR_SKY_GRAY, BG_PAR_SKY_COLOR, PAR_SKY_SPEED, maxScroll, 0,
-    PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx) => {
+  bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_SKY_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
+    PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx, pad) => {
       renderSkyBand(grayCtx, colorCtx)
-    }, { blurRadius: glowDepthBlurRadiusPx('background'), grade: GLOW_LAYER_GRADE.far })
-  bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_TREE3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
-    parTreeRowWorldY(PAR_FARTHEST_BAND_TOP), parTreeRowWorldH(PAR_FARTHEST_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      bakeParallaxTrees(grayCtx, colorCtx, pad, {
-        count: PAR_FARTHEST_TREE_COUNT,
-        seedBase: PAR_FARTHEST_SEED_BASE,
-        topMinY: PAR_FARTHEST_TOP_MIN_Y,
-        topRange: PAR_FARTHEST_TOP_RANGE,
-        bandTop: PAR_FARTHEST_BAND_TOP,
-        foliageDensityTier: 'background',
-        grayPal: grayFarPal,
-        colorBlend: PAR_FAR_COLOR_BLEND,
-        flatLeaves: true,
-        leafDarken: 0.18,
-        uniformWood: true,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_FAR,
-        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_FAR
-      })
       bakeParallaxBushes(grayCtx, colorCtx, pad, {
         grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
         cornerBandTop: PAR_FARTHEST_BAND_TOP,
@@ -5882,6 +5821,9 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   drawFn(grayCtx, colorCtx, pad)
   postFxCfg && applyParallaxPostFxToContext(grayCtx, canvasW, canvasH, postFxCfg)
   postFxCfg && applyParallaxPostFxToContext(colorCtx, canvasW, canvasH, postFxCfg)
+  const bounds = parallaxColumnBoundsMap(k)
+  bounds.set(grayName, measureParallaxColumnBounds(grayCanvas, false))
+  bounds.set(colorName, measureParallaxColumnBounds(colorCanvas, colorName === PAR_LAYER_NEAR.color))
   k.loadSprite(grayName, grayCanvas)
   k.loadSprite(colorName, colorCanvas)
   grayCanvas.width = 0
@@ -5889,6 +5831,65 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   colorCanvas.width = 0
   colorCanvas.height = 0
   return pad
+}
+//
+// Column bounds registry for the live Kaplay instance (created on demand).
+//
+function parallaxColumnBoundsMap(k) {
+  let bounds = parallaxColumnBoundsByK.get(k)
+  if (!bounds) {
+    bounds = new Map()
+    parallaxColumnBoundsByK.set(k, bounds)
+  }
+  return bounds
+}
+//
+// Scans one baked parallax canvas in PAR_COLUMN_W strips: top/bottom rows
+// holding any ink, plus (optionally) the top of the fully opaque run that
+// reaches the canvas bottom — used to hide farther layers behind the near row.
+//
+function measureParallaxColumnBounds(canvas, withSolid) {
+  const w = canvas.width
+  const h = canvas.height
+  const data = canvas.getContext('2d').getImageData(0, 0, w, h).data
+  const count = Math.ceil(w / PAR_COLUMN_W)
+  const top = new Int32Array(count)
+  const bottom = new Int32Array(count)
+  const solidTop = withSolid ? new Int32Array(count) : null
+  for (let c = 0; c < count; c++) {
+    const x0 = c * PAR_COLUMN_W
+    const x1 = Math.min(w, x0 + PAR_COLUMN_W)
+    top[c] = firstInkRow(data, w, h, x0, x1, 0, 1)
+    bottom[c] = top[c] >= h ? 0 : firstInkRow(data, w, h, x0, x1, h - 1, -1) + 1
+    withSolid && (solidTop[c] = columnSolidTop(data, w, h, x0, x1))
+  }
+  return { top, bottom, solidTop, count, height: h }
+}
+//
+// First row (scanning from startY by step) with any non-transparent pixel
+// in [x0, x1); h when scanning down finds nothing, -1 when scanning up.
+//
+function firstInkRow(data, w, h, x0, x1, startY, step) {
+  for (let y = startY; y >= 0 && y < h; y += step) {
+    const row = y * w
+    for (let x = x0; x < x1; x++) {
+      if (data[(row + x) * 4 + 3] > 0) return y
+    }
+  }
+  return step > 0 ? h : -1
+}
+//
+// Top row of the fully opaque run touching the canvas bottom in [x0, x1);
+// h when the bottom row itself has a see-through pixel.
+//
+function columnSolidTop(data, w, h, x0, x1) {
+  for (let y = h - 1; y >= 0; y--) {
+    const row = y * w
+    for (let x = x0; x < x1; x++) {
+      if (data[(row + x) * 4 + 3] < PAR_ALPHA_OPAQUE) return y + 1
+    }
+  }
+  return 0
 }
 //
 // Fills one horizontal band across the full width, flat top edge — used for
@@ -6268,91 +6269,6 @@ function drawHiResBushClusters(ctx, mound, baseRgb, foliageDensityTier = 'neargr
   }
 }
 //
-// Creates the background bird flock — each bird gets its own lane, flight
-// direction, speed, size and wing-flap phase.
-//
-function createBackgroundBirds() {
-  const birds = []
-  for (let i = 0; i < BIRD_COUNT; i++) {
-    birds.push({
-      x: LEFT_MARGIN + Math.random() * GAME_W,
-      baseY: BIRD_MIN_Y + Math.random() * BIRD_Y_RANGE,
-      dir: Math.random() < 0.5 ? -1 : 1,
-      speed: BIRD_SPEED_MIN + Math.random() * BIRD_SPEED_RANGE,
-      size: BIRD_SIZE_MIN + Math.random() * BIRD_SIZE_RANGE,
-      flap: Math.random() * Math.PI * 2,
-      flapSpeed: BIRD_FLAP_SPEED_MIN + Math.random() * BIRD_FLAP_SPEED_RANGE,
-      bobPhase: Math.random() * Math.PI * 2
-    })
-  }
-  return birds
-}
-//
-// Moves birds along their lanes, wrapping around the playfield edges.
-//
-function updateBackgroundBirds(inst, dt) {
-  const camX = inst.k.camPos().x
-  const prevCamX = inst.birdCamX ?? camX
-  const camDelta = camX - prevCamX
-  inst.birdCamX = camX
-  const parallaxDrift = camDelta * (1 - BIRD_PARALLAX_SPEED)
-  inst.birds.forEach(bird => { bird.x += parallaxDrift })
-  inst._birdUpdateAcc = (inst._birdUpdateAcc ?? 0) + dt
-  const birdInterval = isColorWorldSettled(inst)
-    ? COLOR_WORLD_BIRD_UPDATE_INTERVAL
-    : BIRD_UPDATE_INTERVAL
-  if (inst._birdUpdateAcc < birdInterval) return
-  const step = inst._birdUpdateAcc
-  inst._birdUpdateAcc = 0
-  inst.birdTime += step
-  const left = LEFT_MARGIN - BIRD_WRAP_PAD
-  const right = WORLD_W - RIGHT_MARGIN + BIRD_WRAP_PAD
-  inst.birds.forEach(bird => {
-    bird.flap += bird.flapSpeed * step
-    bird.x += bird.dir * bird.speed * step
-    bird.x < left && (bird.x = right)
-    bird.x > right && (bird.x = left)
-  })
-}
-//
-// Draws the bird silhouettes — two wing strokes forming a shallow "v" whose
-// tips swing with the flap phase. Drawn in the background pass BEHIND the
-// forest planes; visible only as the colour world fades in (after O).
-//
-function drawBackgroundBirds(inst) {
-  const fade = inst.colorFade
-  if (fade <= 0.01) return
-  const z = inst.zones
-  const decorLife = z.lCollected && !z.oZone && !z.oCollected
-    ? glowPostLRevealFade(inst)
-    : 1
-  if (decorLife <= COLOR_CROSSFADE_EPS) return
-  const k = inst.k
-  bakeGlowBirdFlapSprites(k)
-  if (!inst._birdDrawColor) {
-    inst._birdDrawColor = k.rgb(BIRD_SILHOUETTE.r, BIRD_SILHOUETTE.g, BIRD_SILHOUETTE.b)
-  }
-  const color = inst._birdDrawColor
-  const birdOpacity = (fade >= 1 ? 1 : fade) * decorLife
-  const camX = k.camPos().x
-  const zoom = inst.camera?.zoom || 1
-  const half = VIEW_W / (2 * zoom) + 80
-  inst.birds.forEach(bird => {
-    if (bird.x < camX - half || bird.x > camX + half) return
-    const y = bird.baseY + Math.sin(inst.birdTime * 0.7 + bird.bobPhase) * BIRD_BOB_AMP
-    const frame = ((bird.flap / (Math.PI * 2)) * BIRD_FLAP_FRAME_COUNT) % BIRD_FLAP_FRAME_COUNT | 0
-    k.drawSprite({
-      sprite: GLOW_BIRD_SPRITE_PREFIX + frame,
-      pos: k.vec2(bird.x, y),
-      anchor: 'center',
-      width: bird.size * 2.8,
-      height: bird.size * 1.9,
-      color,
-      opacity: birdOpacity
-    })
-  })
-}
-//
 // True when the camera centres on lake or cave beats — forest haze stays off.
 //
 function isForestHazeSuppressedAtCam(inst) {
@@ -6492,15 +6408,21 @@ function drawExploredGroundLip(inst) {
     if (op < 0.12) continue
     const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
     const h = Math.max(2, 4 + lip)
+    const bodyPos = inst._lipBodyPos ??= k.vec2(0, 0)
+    const rimPos = inst._lipRimPos ??= k.vec2(0, 0)
+    bodyPos.x = x
+    bodyPos.y = FLOOR_Y - h + 2
+    rimPos.x = x
+    rimPos.y = FLOOR_Y - GROUND_TOP_RIM_H
     k.drawRect({
-      pos: k.vec2(x, FLOOR_Y - h + 2),
+      pos: bodyPos,
       width: step + 1,
       height: h,
       color: bodyColor,
       opacity: 0.48 * op
     })
     k.drawRect({
-      pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
+      pos: rimPos,
       width: step + 1,
       height: GROUND_TOP_RIM_H,
       color: rimColor,
@@ -9571,32 +9493,95 @@ function drawWorldSpriteSlice(k, x1, x2, sprite, opacity = 1) {
   k.drawSprite(opts)
 }
 //
-// Draws only the on-screen slice of one cropped parallax layer sprite.
+// Draws only the on-screen slice of one parallax layer sprite, split into
+// baked columns so fully transparent rows are skipped. Rows at or below
+// bottomWorldY are hidden by an opaque nearer layer and are not drawn.
 //
-function drawParallaxSpriteClipped(
-  k, inst, spriteName, speed, horizBleed, opacity = 1, visRange = null, worldY = 0, worldH = WORLD_H, rgbTint = null
-) {
-  const camera = inst.camera
-  const drawX = GlowCamera.getParallaxDrawX(camera, speed, horizBleed)
-  const pad = GlowCamera.getParallaxLayerPad(camera, speed, horizBleed)
+function drawParallaxLayerSlice(inst, layer, spriteName, opacity = 1, rgbTint = null, bottomWorldY = Infinity) {
+  const k = inst.k
+  const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
+  const pad = GlowCamera.getParallaxLayerPad(inst.camera, layer.speed, layer.bleed)
   const spriteW = WORLD_W + pad * 2
-  const range = visRange || visibleWorldXRange(inst, horizBleed + PARALLAX_DRAW_CULL_PAD)
-  const { left: visLeft, right: visRight } = range
-  const clipLeft = Math.max(visLeft, drawX)
-  const clipRight = Math.min(visRight, drawX + spriteW)
-  if (clipRight <= clipLeft + 1) return
-  const w = clipRight - clipLeft
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
+  const sx0 = Math.max(visLeft, drawX) - drawX
+  const sx1 = Math.min(visRight, drawX + spriteW) - drawX
+  if (sx1 <= sx0 + 1) return
+  const slice = inst._parSlice ?? (inst._parSlice = {})
+  slice.sprite = spriteName
+  slice.drawX = drawX
+  slice.spriteW = spriteW
+  slice.worldY = layer.worldY
+  slice.worldH = layer.worldH
+  slice.opacity = opacity
+  slice.color = rgbTint ? k.rgb(rgbTint.r, rgbTint.g, rgbTint.b) : null
+  const yLimit = Math.min(layer.worldH, bottomWorldY - layer.worldY)
+  const cols = parallaxColumnBoundsByK.get(k)?.get(spriteName)
+  if (!cols) {
+    drawParallaxColumnRun(k, slice, sx0, sx1, 0, yLimit)
+    return
+  }
+  drawParallaxColumns(k, slice, cols, sx0, sx1, yLimit)
+}
+//
+// Walks the visible baked columns and merges neighbours with identical
+// vertical bounds into one draw — all runs share one texture, so they stay
+// in a single GPU batch.
+//
+function drawParallaxColumns(k, slice, cols, sx0, sx1, yLimit) {
+  const c0 = Math.max(0, Math.floor(sx0 / PAR_COLUMN_W))
+  const c1 = Math.min(cols.count - 1, Math.floor((sx1 - 1) / PAR_COLUMN_W))
+  let runX = sx0
+  let runY0 = 0
+  let runY1 = 0
+  for (let c = c0; c <= c1; c++) {
+    const y0 = cols.top[c]
+    const y1 = Math.min(cols.bottom[c], yLimit)
+    if (y0 === runY0 && y1 === runY1) continue
+    const x0 = Math.max(sx0, c * PAR_COLUMN_W)
+    drawParallaxColumnRun(k, slice, runX, x0, runY0, runY1)
+    runX = x0
+    runY0 = y0
+    runY1 = y1
+  }
+  drawParallaxColumnRun(k, slice, runX, sx1, runY0, runY1)
+}
+//
+// One sprite-space rectangle [x0, x1) × [y0, y1) of a parallax layer.
+//
+function drawParallaxColumnRun(k, slice, x0, x1, y0, y1) {
+  if (x1 <= x0 || y1 <= y0) return
+  const w = x1 - x0
+  const h = y1 - y0
   const opts = {
-    sprite: spriteName,
-    pos: k.vec2(clipLeft, worldY),
+    sprite: slice.sprite,
+    pos: k.vec2(slice.drawX + x0, slice.worldY + y0),
     width: w,
-    height: worldH,
-    quad: { x: (clipLeft - drawX) / spriteW, y: 0, w: w / spriteW, h: 1 },
+    height: h,
+    quad: { x: x0 / slice.spriteW, y: y0 / slice.worldH, w: w / slice.spriteW, h: h / slice.worldH },
     anchor: 'topleft'
   }
-  opacity < 0.999 && (opts.opacity = opacity)
-  rgbTint && (opts.color = k.rgb(rgbTint.r, rgbTint.g, rgbTint.b))
+  slice.opacity < 0.999 && (opts.opacity = slice.opacity)
+  slice.color && (opts.color = slice.color)
   k.drawSprite(opts)
+}
+//
+// World Y from which the opaque near row hides everything behind it across
+// the whole visible slice (deepest solid column top wins).
+//
+function parallaxNearOccluderWorldY(inst) {
+  const layer = PAR_LAYER_NEAR
+  const cols = parallaxColumnBoundsByK.get(inst.k)?.get(layer.color)
+  if (!cols?.solidTop) return Infinity
+  const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
+  const { left, right } = visibleWorldXRange(inst)
+  const c0 = Math.max(0, Math.floor((left - drawX) / PAR_COLUMN_W))
+  const c1 = Math.min(cols.count - 1, Math.floor((right - drawX) / PAR_COLUMN_W))
+  if (c1 < c0) return Infinity
+  let solid = 0
+  for (let c = c0; c <= c1; c++) {
+    solid = Math.max(solid, cols.solidTop[c])
+  }
+  return layer.worldY + solid
 }
 //
 // True after L until the full parallax stack is fading in (stillness countdown
@@ -9614,13 +9599,8 @@ function shouldDrawGlowPostLNearParallaxGray(inst) {
 // the post-L sand/gray decor policy before the stillness countdown.
 //
 function drawGlowPostLNearParallaxGray(inst) {
-  const k = inst.k
   const layer = PAR_LAYER_NEAR
-  const range = visibleWorldXRange(inst, layer.cullPad)
-  const tint = glowPostLNearParallaxGrayTint(inst)
-  drawParallaxSpriteClipped(
-    k, inst, layer.gray, layer.speed, layer.bleed, 1, range, layer.worldY, layer.worldH, tint
-  )
+  drawParallaxLayerSlice(inst, layer, layer.gray, 1, glowPostLNearParallaxGrayTint(inst))
 }
 //
 // Matches the post-L inner ground band (INNER_GRAY → void) on the nearest
@@ -9645,14 +9625,11 @@ function glowPostLNearParallaxGrayTint(inst) {
 // Keeps the near row at full gray strength while farther rows ramp with
 // parallaxFade so collecting L does not flash away when the countdown starts.
 //
-function glowParallaxNearGrayOpacity(inst, layer, pf, fade, crossfade) {
+function glowParallaxNearGrayOpacity(inst, layer, pf) {
   const z = inst?.zones
-  if (layer !== PAR_LAYER_NEAR) return crossfade ? (1 - fade) * pf : pf
-  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) {
-    return crossfade ? (1 - fade) * pf : pf
-  }
-  if (crossfade) return Math.max((1 - fade) * pf, 1 - fade)
-  return Math.max(pf, 1)
+  if (layer !== PAR_LAYER_NEAR) return pf
+  if (!z?.lCollected || z.oZone || z.oCollected || z.colorWorld) return pf
+  return 1
 }
 //
 // After L, only the nearest tree/bush row is visible until the O zone opens.
@@ -9669,57 +9646,150 @@ function shouldDrawGlowParallaxForestRow(inst, layer) {
 //
 function drawParallaxLayer(inst, layer) {
   if (!shouldDrawGlowParallaxForestRow(inst, layer)) return
-  const k = inst.k
   const zones = inst.zones
   const fade = inst.colorFade
   const pf = inst.parallaxFade
-  if (isGlowFlatSingleDecorColor(inst)) {
-    const range = visibleWorldXRange(inst, layer.cullPad)
-    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, false)
-    grayOp > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(
-      k, inst, layer.gray, layer.speed, layer.bleed, grayOp, range, layer.worldY, layer.worldH,
-      layer === PAR_LAYER_NEAR ? glowPostLNearParallaxGrayTint(inst) : null
-    )
+  if (isGlowFullParallaxStable(inst)) {
+    const occluderY = layer === PAR_LAYER_NEAR ? Infinity : inst._parOccluderY ?? Infinity
+    drawParallaxLayerSlice(inst, layer, layer.color, 1, null, occluderY)
     return
   }
-  const range = visibleWorldXRange(inst, layer.cullPad)
-  const drawSlice = (sprite, op) => {
-    const tint = layer === PAR_LAYER_NEAR && sprite === layer.gray
-      ? glowPostLNearParallaxGrayTint(inst)
-      : null
-    drawParallaxSpriteClipped(
-      k, inst, sprite, layer.speed, layer.bleed, op, range, layer.worldY, layer.worldH, tint
-    )
-  }
-  if (isGlowFullParallaxStable(inst)) {
-    drawSlice(layer.color, 1)
+  const grayTint = layer === PAR_LAYER_NEAR ? glowPostLNearParallaxGrayTint(inst) : null
+  if (isGlowFlatSingleDecorColor(inst)) {
+    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf)
+    grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
     return
   }
   //
   // Permanent colour world: opaque viewport slices only.
   //
   if (zones.colorWorld) {
-    if (fade >= 1 && pf >= 1) {
-      drawSlice(layer.color, 1)
-      return
-    }
-    const op = fade * pf
-    op > COLOR_CROSSFADE_EPS && drawSlice(layer.color, op)
+    const op = fade >= 1 && pf >= 1 ? 1 : fade * pf
+    op > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, op)
     return
   }
   //
-  // Meditation preview: crossfade gray forest → colour forest with the
-  // hero's stillness countdown.
+  // Meditation preview: gray forest stays at its own strength underneath and
+  // the colour forest fades in on top — a true lerp with no mid-fade dip
+  // where the backdrop shows through both half-transparent copies. Once the
+  // colour copy is opaque the gray pass is skipped entirely.
   //
   const colorForest = isGlowMeditationColorPreview(inst) || fade > COLOR_CROSSFADE_EPS
   if (colorForest) {
-    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, true)
-    grayOp > COLOR_CROSSFADE_EPS && drawSlice(layer.gray, grayOp)
-    fade > COLOR_CROSSFADE_EPS && drawSlice(layer.color, fade * pf)
+    const colorOp = fade * pf
+    const grayOp = colorOp < 1 - COLOR_CROSSFADE_EPS ? glowParallaxNearGrayOpacity(inst, layer, pf) : 0
+    grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
+    colorOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, colorOp)
     return
   }
-  const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf, fade, false)
-  grayOp > COLOR_CROSSFADE_EPS && drawSlice(layer.gray, grayOp)
+  const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf)
+  grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
+}
+//
+// Settled colour world: renders the sky+far and mid tree rows into a
+// half-resolution framebuffer (same camera, viewport scaled down) and blits
+// it once over the whole screen. Nothing is drawn before this in the frame,
+// and the framebuffer clears to the same backdrop as the screen, so the
+// blit is equivalent to drawing those layers directly at a quarter of the
+// fill cost.
+//
+function drawGlowParallaxBackdropOffscreen(inst) {
+  const k = inst.k
+  inst._parOffscreen = glowParallaxOffscreenCanvas(k)
+  inst._parOccluderY = parallaxNearOccluderWorldY(inst)
+  inst._drawParBackdrop ??= () => drawGlowParallaxBackdropLayers(inst)
+  inst._parOffscreen.draw(inst._drawParBackdrop)
+  drawGlowParallaxBackdropBlit(inst)
+}
+//
+// Blits the half-resolution backdrop. The near row hides everything below
+// its solid top, so the blit stops there instead of filling the ground.
+// drawCanvas flips the framebuffer around the full screen height, so a
+// shorter quad is shifted up by the cropped amount and samples the top
+// of the texture (high UV, which lands on screen y = 0).
+//
+function drawGlowParallaxBackdropBlit(inst) {
+  const k = inst.k
+  const fullH = k.height()
+  const cropH = glowParallaxBackdropScreenH(inst)
+  if (cropH >= fullH - 1) {
+    k.drawCanvas({
+      canvas: inst._parOffscreen,
+      width: k.width(),
+      height: fullH,
+      fixed: true
+    })
+    return
+  }
+  const frac = cropH / fullH
+  const pos = inst._parBlitPos ??= k.vec2(0, 0)
+  pos.x = 0
+  pos.y = cropH - fullH
+  const quad = inst._parBlitQuad ??= { x: 0, y: 0, w: 1, h: 1 }
+  quad.y = 1 - frac
+  quad.h = frac
+  k.drawCanvas({
+    canvas: inst._parOffscreen,
+    pos,
+    width: k.width(),
+    height: cropH,
+    quad,
+    fixed: true
+  })
+}
+//
+// Screen-space height of the backdrop that is not covered by the near row.
+//
+function glowParallaxBackdropScreenH(inst) {
+  const worldY = inst._parOccluderY
+  if (!Number.isFinite(worldY)) return inst.k.height()
+  const screenY = glowWorldToScreenY(inst, worldY) + PAR_BACKDROP_CROP_PAD
+  return Math.max(1, Math.min(inst.k.height(), Math.ceil(screenY)))
+}
+//
+// Kaplay's camera is centre-anchored: world Y maps to screen Y around camPos.
+//
+function glowWorldToScreenY(inst, worldY) {
+  const k = inst.k
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.y : scale) || 1
+  return (worldY - k.camPos().y) * zoom + k.height() / 2
+}
+//
+// Offscreen pass body — runs with the framebuffer bound.
+//
+function drawGlowParallaxBackdropLayers(inst) {
+  inst._parOffscreen.clear()
+  drawParallaxLayer(inst, PAR_LAYER_FAR)
+  drawParallaxLayer(inst, PAR_LAYER_MID)
+}
+//
+// Offscreen backdrop framebuffer for the live engine, recreated when the
+// native window size changes.
+//
+function glowParallaxOffscreenCanvas(k) {
+  const w = Math.max(1, Math.ceil(k.width() * PAR_OFFSCREEN_SCALE))
+  const h = Math.max(1, Math.ceil(k.height() * PAR_OFFSCREEN_SCALE))
+  const cached = parallaxOffscreenByK.get(k)
+  if (cached && cached.width === w && cached.height === h) return cached
+  cached?.free()
+  const canvas = k.makeCanvas(w, h)
+  enableCanvasLinearFilter(canvas)
+  parallaxOffscreenByK.set(k, canvas)
+  return canvas
+}
+//
+// Kaplay creates framebuffer textures with the engine's crisp (nearest)
+// filter; the upscaled backdrop needs bilinear sampling or every half-res
+// texel turns into a hard 2×2 block.
+//
+function enableCanvasLinearFilter(canvas) {
+  const tex = canvas.fb.tex
+  const gl = tex.ctx.gl
+  tex.bind()
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  tex.unbind()
 }
 //
 // True when the colour forest and parallax stack are fully opaque.
@@ -10109,24 +10179,22 @@ function onDrawWorld(inst) {
   }
   if (inst.zones.lZoneParallax) {
     //
-    // Back-to-front: haze backdrop → far/mid/near forest (each row's bushes
+    // Back-to-front: sky+far bushes → mid/near forest (each row's bushes
     // are baked onto its trees, so one draw covers both), then static
-    // ground. Birds sit right after the opaque backdrop fill.
+    // ground. In the settled colour world everything behind the near row goes
+    // through one half-resolution offscreen pass instead.
     //
-    drawParallaxLayer(inst, PAR_LAYER_SKY)
-    const decorLife = glowPostLRevealFade(inst)
-    const showBirds = decorLife > BIRD_VISIBLE_FADE_MIN &&
-      (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
-    showBirds && drawBackgroundBirds(inst)
-    const pf = inst.parallaxFade
-    drawParallaxLayer(inst, PAR_LAYER_FAR)
-    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
-    drawParallaxLayer(inst, PAR_LAYER_MID)
-    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    if (parallaxStable) {
+      drawGlowParallaxBackdropOffscreen(inst)
+    } else {
+      const pf = inst.parallaxFade
+      drawParallaxLayer(inst, PAR_LAYER_FAR)
+      fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
+      drawParallaxLayer(inst, PAR_LAYER_MID)
+      fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    }
     drawParallaxLayer(inst, PAR_LAYER_NEAR)
     !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
-  } else {
-    drawBackgroundBirds(inst)
   }
   shouldDrawGlowPostLNearParallaxGray(inst) &&
     (inst.parallaxFade ?? 0) <= COLOR_CROSSFADE_EPS &&
@@ -10207,6 +10275,8 @@ function maybeBootstrapGlowPostEyes(inst) {
 // live slice of the SAME underground sprite (buried rocks, roots, cracks)
 // the full underground layer shows after water is discovered, clipped to
 // just the mud zone as an early preview, plus a ground-line rim on top.
+// Once the colour parallax is opaque, BG_STATIC_COLOR already contains
+// that band, so the live sprite is skipped and only the rim remains.
 //
 function drawMudGroundZone(inst) {
   if (!inst.zones.gCollected) return
@@ -10230,7 +10300,7 @@ function drawMudGroundZone(inst) {
       height: CAVE_BAND_H,
       color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
     })
-  } else {
+  } else if (!isGlowFullParallaxStable(inst)) {
     drawUndergroundSpriteBand(k, undergroundEarthDecorSprite(inst.zones), 1, x1, x2)
   }
   drawGlowMudZoneGroundLine(inst, x1, x2)
@@ -10496,8 +10566,7 @@ function updateRockTints(inst) {
   })
 }
 //
-// Midge colour stays near-black in every mode — a warm haze tint made them
-// read as yellow specks against the bright backdrop after O.
+// Midge fill: near-black before colour; warm gold in the colour world.
 //
 function syncGlowMidgeDrawColor(inst) {
   if (!inst.midges) return
@@ -12962,13 +13031,6 @@ function onUpdate(inst) {
   if (!meditationDrivingFade && inst.zones.lZoneParallax && inst.parallaxFade < inst.colorFadeTarget) {
     inst.parallaxFade = inst.colorFade
   }
-  //
-  // Birds glide once the meditation preview or colour world is visible.
-  //
-  const decorLife = glowPostLRevealFade(inst)
-  decorLife > BIRD_VISIBLE_FADE_MIN &&
-    (inst.zones.colorWorld || inst.zones.oZone || inst.meditation?.countdown != null) &&
-    updateBackgroundBirds(inst, k.dt())
   updateTreeRevealFade(inst, k.dt())
   updateExploreFades(inst, k.dt())
   updateGlowLetterPopFades(inst, k.dt())
@@ -13243,7 +13305,6 @@ function onUpdate(inst) {
   updateBranchTrampMarioHint(inst)
   syncGlowPitCaveFlagForTeacherHints(inst)
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
-  syncGlowTeacherHintCountdownHud(inst)
   updateWrongTrampSingHint(inst)
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
@@ -13574,62 +13635,6 @@ function dismissGlowLPlatTeacherHint(inst) {
 //
 function dismissGlowCaveMushroomTeacherHint(inst) {
   dismissGlowTeacherHintByText(inst, PIT_CAVE_HINT_TEXT)
-}
-//
-// Live "seconds until next hint" readout, bottom-right of the eye HUD icon —
-// mirrors teacherContextAccum against the same gate tickGlowTeacherContextHints
-// fires on. Lazily created once the eye HUD anchor first exists (the icon
-// itself is not built until G is collected).
-//
-function syncGlowTeacherHintCountdownHud(inst) {
-  const anchor = glowTeacherHudAnchor(inst)
-  if (!anchor || !inst.levelIndicator?.lifeRevealed) {
-    inst.teacherHintCountdownText && (inst.teacherHintCountdownText.opacity = 0)
-    inst.teacherHintCountdownOutline && (inst.teacherHintCountdownOutline.opacity = 0)
-    return
-  }
-  if (!inst.teacherHintCountdownText) {
-    createGlowTeacherHintCountdownHud(inst)
-  }
-  const remaining = Math.max(0, Math.ceil(GLOW_TEACHER_HINT_MOVE_SEC - (inst.teacherContextAccum || 0)))
-  const text = String(remaining)
-  const x = anchor.x + TEACHER_HINT_COUNTDOWN_OFFSET_X
-  const y = anchor.y + TEACHER_HINT_COUNTDOWN_OFFSET_Y
-  const tone = inst.zones.colorWorld ? glowRgb(GLOW_GOLD_HEX) : glowRgb('decorGray')
-  const k = inst.k
-  inst.teacherHintCountdownText.text = text
-  inst.teacherHintCountdownText.pos.x = x
-  inst.teacherHintCountdownText.pos.y = y
-  inst.teacherHintCountdownText.color = k.rgb(tone.r, tone.g, tone.b)
-  inst.teacherHintCountdownText.opacity = TEACHER_HINT_COUNTDOWN_OPACITY
-  inst.teacherHintCountdownOutline.text = text
-  inst.teacherHintCountdownOutline.pos.x = x + 1
-  inst.teacherHintCountdownOutline.pos.y = y + 1
-  inst.teacherHintCountdownOutline.opacity = TEACHER_HINT_COUNTDOWN_OPACITY * 0.8
-}
-//
-// Builds the countdown's outline + fill text nodes (screen-fixed HUD).
-//
-function createGlowTeacherHintCountdownHud(inst) {
-  const k = inst.k
-  inst.teacherHintCountdownOutline = k.add([
-    k.text('0', { size: TEACHER_HINT_COUNTDOWN_FONT_SIZE, font: GLOW_HUD_LABEL_FONT }),
-    k.pos(0, 0),
-    k.anchor('topleft'),
-    k.z(CFG.visual.zIndex.ui + 20),
-    k.color(0, 0, 0),
-    k.opacity(0),
-    k.fixed()
-  ])
-  inst.teacherHintCountdownText = k.add([
-    k.text('0', { size: TEACHER_HINT_COUNTDOWN_FONT_SIZE, font: GLOW_HUD_LABEL_FONT }),
-    k.pos(0, 0),
-    k.anchor('topleft'),
-    k.z(CFG.visual.zIndex.ui + 21),
-    k.color(255, 255, 255),
-    k.opacity(0),
-    k.fixed()
-  ])
 }
 //
 // Forces idle humming while the post-O trampoline sing countdown ticks.
@@ -14107,23 +14112,36 @@ function syncMonolithicTreeColorMode(inst, fade) {
   const treeColor = inst.treeColorObj
   if (!tree || !treeColor || !inst.treeDrawMonolith) return
   const f = fade ?? glowTreeColorFade(inst)
+  //
+  // A fully transparent monolith is still a full-screen textured draw.
+  // Hide the side that has faded out so the settled colour world pays for
+  // one tree blit, not two.
+  //
+  if (f >= 0.98) {
+    tree.hidden = true
+    tree.opacity = 0
+    treeColor.hidden = false
+    treeColor.opacity = 1
+    return
+  }
   if (f < 0.02) {
     tree.hidden = false
     treeColor.hidden = true
     tree.opacity = 1
     treeColor.opacity = 0
-    treeColor.color = inst.k.rgb(255, 255, 255)
-    const white = inst.k.rgb(255, 255, 255)
-    tree.color = white
     return
   }
+  const white = glowTreeCrossfadeWhite(inst)
   tree.hidden = false
   treeColor.hidden = false
   tree.opacity = 1 - f
   treeColor.opacity = f
-  const white = inst.k.rgb(255, 255, 255)
   tree.color = white
   treeColor.color = white
+}
+function glowTreeCrossfadeWhite(inst) {
+  inst._treeCrossfadeWhite ??= inst.k.rgb(255, 255, 255)
+  return inst._treeCrossfadeWhite
 }
 //
 // Crossfades revealed tree segments between gray and colour palettes.
@@ -14138,8 +14156,12 @@ function syncTreeSegmentsColorCrossfade(inst, fade) {
     entry.grayObj.hidden = false
     entry.colorObj.hidden = false
     const partMul = TreeSegments.isGlowTreeRootsSegmentId(id) ? rootFade : 1
-    entry.grayObj.opacity = (1 - f) * partMul
-    entry.colorObj.opacity = f * partMul
+    const grayOp = (1 - f) * partMul
+    const colorOp = f * partMul
+    entry.grayObj.hidden = grayOp < 0.02
+    entry.colorObj.hidden = colorOp < 0.02
+    entry.grayObj.opacity = grayOp
+    entry.colorObj.opacity = colorOp
   })
 }
 //

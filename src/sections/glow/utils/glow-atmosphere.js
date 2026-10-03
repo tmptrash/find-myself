@@ -67,18 +67,11 @@ export const CAVE_MOUTH_ENTRANCE_EXPAND_LEFT = 42
 //
 export const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
 //
-// 2/3 field midges across the playfield, 1/3 clustered at the cave mouth
+// 2/3 field midges spread along the playfield width, 1/3 at the cave mouth
 //
-const MIDGE_TOTAL = 30
+const MIDGE_TOTAL = 60
 const MIDGE_PIT_COUNT = Math.round(MIDGE_TOTAL / 3)
 const MIDGE_FIELD_COUNT = MIDGE_TOTAL - MIDGE_PIT_COUNT
-//
-// Right field midges mostly move to hover over the mud zone (tall grass
-// hides the wandering hedgehog there) — only a sparse handful stay spread
-// across the rest of the right side.
-//
-const MIDGE_RIGHT_SPARSE_COUNT = 3
-const MIDGE_MUD_ZONE_COUNT = Math.round(MIDGE_FIELD_COUNT / 2) + MIDGE_RIGHT_SPARSE_COUNT
 const MIDGE_SPEED_MIN = 8
 const MIDGE_SPEED_MAX = 22
 const MIDGE_RADIUS_MIN = 1.2
@@ -278,9 +271,9 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
   const pitCy = floorY - 32
   const minY = floorY - 70
   const maxY = floorY - 14
-  const mudX1 = opts.mudZoneX1 ?? null
-  const mudX2 = opts.mudZoneX2 ?? null
-  const hasMudZone = mudX1 != null && mudX2 != null && mudX2 > mudX1
+  const fieldMinX = LEFT_MARGIN + 16
+  const fieldMaxX = zone.x1 - 16
+  const fieldSpan = Math.max(40, fieldMaxX - fieldMinX)
   const midges = []
   for (let i = 0; i < MIDGE_PIT_COUNT; i++) {
     midges.push(makeMidge(
@@ -289,40 +282,17 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
       'pit'
     ))
   }
-  for (let i = 0; i < MIDGE_FIELD_COUNT / 2; i++) {
-    const x0 = LEFT_MARGIN + 20
-    const x1 = treeX - 40
-    const span = Math.max(40, x1 - x0)
-    midges.push(makeMidge(
-      x0 + Math.random() * span,
-      minY + Math.random() * (maxY - minY),
-      'fieldLeft'
-    ))
-  }
   //
-  // The right field used to hold half the swarm; most of it now hovers over
-  // the mud zone instead (grass hides the wandering hedgehog there), and
-  // only a sparse handful stay spread across the rest of the right side so
-  // it does not read as completely empty.
+  // Even horizontal bands with jitter so the swarm reads across the whole
+  // walkable width, not clustered on one side or over the mud strip.
   //
-  for (let i = 0; i < MIDGE_RIGHT_SPARSE_COUNT; i++) {
-    const x0 = treeX + 40
-    const x1 = zone.x1 - 20
-    const span = Math.max(40, x1 - x0)
+  for (let i = 0; i < MIDGE_FIELD_COUNT; i++) {
+    const slot = (i + Math.random()) / MIDGE_FIELD_COUNT
     midges.push(makeMidge(
-      x0 + (span / Math.max(1, MIDGE_RIGHT_SPARSE_COUNT - 1)) * i,
+      fieldMinX + slot * fieldSpan,
       minY + Math.random() * (maxY - minY),
-      'fieldRight'
+      'field'
     ))
-  }
-  if (hasMudZone) {
-    for (let i = 0; i < MIDGE_MUD_ZONE_COUNT; i++) {
-      midges.push(makeMidge(
-        mudX1 + Math.random() * (mudX2 - mudX1),
-        minY + Math.random() * (maxY - minY),
-        'mudZone'
-      ))
-    }
   }
   const ctrl = {
     midges,
@@ -352,7 +322,7 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
       minY,
       maxY
     },
-    mudZone: hasMudZone ? { minX: mudX1, maxX: mudX2, minY, maxY } : null,
+    mudZone: null,
     fieldAll: {
       minX: LEFT_MARGIN + 16,
       maxX: zone.x1 - 16,

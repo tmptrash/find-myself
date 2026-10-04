@@ -20,6 +20,7 @@ export function initGlowTeacherHintState(inst) {
   inst._glowTeacherHintActive = false
   inst.lastGlowTeacherHintText = null
   inst._postLStopHintShows = 0
+  inst._postGCucumberHintShows = 0
   inst._postOBigMushHintShows = 0
   inst._caveEntranceHintShows = 0
   inst._postTreeMushHintShows = 0
@@ -36,6 +37,7 @@ export function initGlowTeacherHintState(inst) {
  * @param {boolean} cfg.caveEligible - Cave mushroom hint may run
  * @param {boolean} cfg.gEligible - G-zone progress hint may run (outside cave)
  * @param {boolean} cfg.lEligible - L-zone progress hint may run (outside cave)
+ * @param {boolean} cfg.postGCucumberEligible - After G, the swamp spirit is out (outside cave)
  * @param {boolean} cfg.postLStopEligible - Post-L stillness nudge (outside cave)
  * @param {boolean} cfg.postOBigMushEligible - Post-O big-mushroom nudge (outside cave)
  * @param {boolean} cfg.caveEntranceEligible - Eyeless intro: still searching the cave mouth
@@ -43,6 +45,7 @@ export function initGlowTeacherHintState(inst) {
  * @param {Function} [cfg.onCaveHint] - Called when cave context hits the gate
  * @param {Function} [cfg.onGHint] - Called when G-zone context hits the gate
  * @param {Function} [cfg.onLHint] - Called when L-zone context hits the gate
+ * @param {Function} [cfg.onPostGCucumberHint] - After G, 10 s active movement, spirit nudge
  * @param {Function} [cfg.onPostLStopHint] - After L pickup, 10 s active movement
  * @param {Function} [cfg.onPostOBigMushHint] - After O pickup, 10 s active movement
  * @param {Function} [cfg.onCaveEntranceHint] - Eyeless intro cave-mouth nudge
@@ -69,6 +72,7 @@ export function tickGlowTeacherContextHints(inst, cfg) {
       cfg.caveEntranceEligible ||
       cfg.gEligible ||
       cfg.lEligible ||
+      cfg.postGCucumberEligible ||
       cfg.postLStopEligible ||
       cfg.postOBigMushEligible ||
       cfg.postTreeMushEligible
@@ -103,11 +107,13 @@ export function tickGlowTeacherContextHints(inst, cfg) {
       ? cfg.onPostTreeMushHint?.()
       : cfg.postOBigMushEligible
         ? cfg.onPostOBigMushHint?.()
-        : cfg.postLStopEligible
-          ? cfg.onPostLStopHint?.()
-          : cfg.lEligible
-            ? cfg.onLHint?.()
-            : cfg.onGHint?.()
+        : cfg.postGCucumberEligible
+          ? cfg.onPostGCucumberHint?.()
+          : cfg.postLStopEligible
+            ? cfg.onPostLStopHint?.()
+            : cfg.lEligible
+              ? cfg.onLHint?.()
+              : cfg.onGHint?.()
 }
 //
 // Shows a teacher hint immediately (bypasses the queue).
@@ -115,7 +121,8 @@ export function tickGlowTeacherContextHints(inst, cfg) {
 export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
   const forceTeacherHint = opts.pitCaveMushroom || opts.gHudStall || opts.lHudStall ||
-    opts.postLStop || opts.postOBigMush || opts.caveEntrance || opts.postTreeMush
+    opts.postLStop || opts.postOBigMush || opts.caveEntrance || opts.postTreeMush ||
+    opts.postGCucumber
   if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
   if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
     if (!forceTeacherHint) return false

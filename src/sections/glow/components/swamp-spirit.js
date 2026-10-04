@@ -25,13 +25,12 @@ const BESIDE_HOLD = 36
 const FLUSH_HIDE_RADIUS = 72
 const HEAD_CLEAR = 14
 const BELLY_SEAM_POINTS = 11
-const BELLY_MIN_VISIBLE = 38
 const FAR_RADIUS = HIDE_RADIUS * 2
 const OBSERVE_RADIUS_Y = 170
 const BODY_HALF = 12
 const BASE_SINK = 1
 const CAP_RATIO = 12 / 15
-const OUTLINE_PAD = 1.7
+const OUTLINE_STROKE = 1.85
 const EYE_RADIUS_LEFT = 6.4
 const EYE_RADIUS_RIGHT = 5.4
 const ARC_STEPS = 4
@@ -43,6 +42,7 @@ const STARTLE_HOLD_MAX = 0.15
 const HERO_MOVE_SPEED = 36
 const HERO_JUMP_SPEED = 70
 const BODY_REST = [0, 17, 38, 64]
+const BELLY_BODY_H = BODY_REST[BODY_REST.length - 1]
 const CHAIN_STIFF = [0, 86, 48, 26]
 const CHAIN_DAMP = [0, 9, 7.2, 5.4]
 const SAMPLE_COUNT = 8
@@ -660,18 +660,17 @@ function drawSpirit(inst) {
   const contour = rgb(k, gray ? GLOW_PAL.decorGray : pal.contour)
   const shadow = rgb(k, gray ? GLOW_PAL.heroOutline : pal.shadow)
   const body = rgb(k, gray ? GLOW_PAL.lightGray : pal.body)
-  const belly = rgb(k, gray ? GLOW_PAL.heroOutline : pal.belly)
   const eye = rgb(k, gray ? GLOW_PAL.lightGray : pal.eye)
   const pupil = rgb(k, gray ? GLOW_PAL.decorGray : pal.pupil)
   const groundY = inst.groundAt(inst.holeX)
   inst.mound > 0.02 && PolyBatch.addDisc(batch, inst.holeX, groundY + 1, 7 + inst.mound * 3, shadow)
   fillSamples(inst)
   if (inst.rise > 0.04 && inst.state !== 'hidden') {
-    drawColumn(inst, batch, groundY, BODY_HALF + OUTLINE_PAD, contour)
     drawColumn(inst, batch, groundY, BODY_HALF, body)
+    drawColumnStroke(inst, batch, groundY, BODY_HALF, contour)
     PolyBatch.flush(batch, k, 0.8)
     PolyBatch.reset(batch)
-    drawBellySkirt(inst, batch, groundY, belly)
+    drawBellySkirt(inst, batch, groundY, contour)
     PolyBatch.flush(batch, k, 1)
     PolyBatch.reset(batch)
     drawEyes(inst, batch, groundY, contour, eye, pupil)
@@ -706,9 +705,47 @@ function fillSamples(inst) {
 // The cut at the soil stays horizontal even when the body leans.
 //
 function drawColumn(inst, batch, groundY, half, color) {
+  const ring = buildColumnRing(inst, groundY, half)
+  if (!ring) return
+  const { n, head, capR } = ring
+  for (let i = 0; i < n - 1; i++) {
+    const a = RING[i]
+    const b = RING[i + 1]
+    const aw = sliceHalf(a.y, head.y, capR, half)
+    const bw = sliceHalf(b.y, head.y, capR, half)
+    addWorldQuad(
+      batch,
+      a.x - aw, a.y,
+      b.x - bw, b.y,
+      b.x + bw, b.y,
+      a.x + aw, a.y,
+      color
+    )
+  }
+}
+//
+// Single contour stroke on the body edge — no second light rim inside the outline.
+//
+function drawColumnStroke(inst, batch, groundY, half, color) {
+  const ring = buildColumnRing(inst, groundY, half)
+  if (!ring) return
+  const { n, head, capR } = ring
+  for (let i = 0; i < n - 1; i++) {
+    const a = RING[i]
+    const b = RING[i + 1]
+    const aw = sliceHalf(a.y, head.y, capR, half)
+    const bw = sliceHalf(b.y, head.y, capR, half)
+    PolyBatch.addLine(batch, a.x - aw, a.y, b.x - bw, b.y, OUTLINE_STROKE, color)
+    PolyBatch.addLine(batch, a.x + aw, a.y, b.x + bw, b.y, OUTLINE_STROKE, color)
+  }
+}
+//
+// Centerline ring shared by the fill and the outline stroke.
+//
+function buildColumnRing(inst, groundY, half) {
   const baseY = groundY + BASE_SINK
   const head = SAMPLES[SAMPLES.length - 1]
-  if (baseY - head.y < 4) return
+  if (baseY - head.y < 4) return null
   const capR = Math.min(half * CAP_RATIO, (baseY - head.y) * 0.86)
   const capY = head.y + capR
   let n = 0
@@ -725,20 +762,7 @@ function drawColumn(inst, batch, groundY, half, color) {
   }
   RING[0].x = inst.holeX
   RING[0].y = baseY
-  for (let i = 0; i < n - 1; i++) {
-    const a = RING[i]
-    const b = RING[i + 1]
-    const aw = sliceHalf(a.y, head.y, capR, half)
-    const bw = sliceHalf(b.y, head.y, capR, half)
-    addWorldQuad(
-      batch,
-      a.x - aw, a.y,
-      b.x - bw, b.y,
-      b.x + bw, b.y,
-      a.x + aw, a.y,
-      color
-    )
-  }
+  return { n, head, capR, baseY }
 }
 //
 // Full width up to the crown, then the hero-idle corner pulls the sides in.
@@ -773,27 +797,29 @@ function drawBellySkirt(inst, batch, groundY, color) {
   const baseY = groundY + BASE_SINK
   const head = SAMPLES[SAMPLES.length - 1]
   const height = baseY - head.y
-  if (!bellyIsVisible(height)) return
+  if (height < 2) return
   const capR = Math.min(BODY_HALF * CAP_RATIO, height * 0.86)
   const seam = inst.bellySeam
   const n = seam.length - 1
+  //
+  // Skirt is fixed on the body and rides the head, then the soil clips it.
+  //
+  const yBot = head.y + BELLY_BODY_H
+  const yb = Math.min(yBot, baseY)
   for (let i = 0; i < n; i++) {
     const t0 = i / n
     const t1 = (i + 1) / n
-    const yTop0 = baseY - height * seam[i]
-    const yTop1 = baseY - height * seam[i + 1]
-    const xl0 = columnXAt(baseY, t0, head.y, capR)
-    const xr0 = columnXAt(baseY, t1, head.y, capR)
+    let yTop0 = head.y + BELLY_BODY_H * (1 - seam[i])
+    let yTop1 = head.y + BELLY_BODY_H * (1 - seam[i + 1])
+    if (yTop0 >= yb - 0.5 && yTop1 >= yb - 0.5) continue
+    yTop0 = Math.min(yTop0, yb - 0.5)
+    yTop1 = Math.min(yTop1, yb - 0.5)
+    const xl0 = columnXAt(yb, t0, head.y, capR)
+    const xr0 = columnXAt(yb, t1, head.y, capR)
     const xl1 = columnXAt(yTop0, t0, head.y, capR)
     const xr1 = columnXAt(yTop1, t1, head.y, capR)
-    addWorldQuad(batch, xl0, baseY, xr0, baseY, xr1, yTop1, xl1, yTop0, color)
+    addWorldQuad(batch, xl0, yb, xr0, yb, xr1, yTop1, xl1, yTop0, color)
   }
-}
-//
-// Skirt only once enough column is above the soil — not when only the head peeks out.
-//
-function bellyIsVisible(visibleHeight) {
-  return visibleHeight >= BELLY_MIN_VISIBLE
 }
 //
 // X across the column at y. t is 0 on the left wall and 1 on the right.

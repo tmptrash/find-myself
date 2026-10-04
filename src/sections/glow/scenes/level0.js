@@ -1287,6 +1287,8 @@ const HERO_TOOLTIP_Y_OFFSET = -72
 // Teacher (life HUD) hints — indirect nudges, not orders.
 //
 const GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS = 2
+const GLOW_TEACHER_HINT_POST_G_CUCUMBER = 'Take a closer look\nat this cucumber'
+const GLOW_TEACHER_HINT_POST_G_CUCUMBER_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_L = 'Don\'t rush. Just\nstop and think...'
 const GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_O = 'That big mushroom seems\nawfully attentive.'
@@ -1428,7 +1430,7 @@ const MUD_ZONE_GRASS_GREEN_VOID_LERP = 0.42
 // Extra tuft count layered on top of the main field just inside the mud
 // zone — see createGlowMudExtraGrass.
 //
-const MUD_ZONE_EXTRA_GRASS_TUFT_COUNT = 20
+const MUD_ZONE_EXTRA_GRASS_TUFT_COUNT = 15
 //
 // DEBUG — true hides grass from the branch trampoline up through the mud
 // band (easy restore: set back to false).
@@ -11727,6 +11729,9 @@ function collectLetterG(inst) {
   triggerGlowCameraShake(inst)
   queueGlowHeroFillReveal(inst, GLOW_HERO_FILL_G)
   inst.zones.gCollected = true
+  inst._postGCucumberHintShows = 0
+  inst.teacherContextAccum = 0
+  inst.teacherIdleStreak = 0
   set(KEY_COLLECTED_G, true)
   syncGlowMidgesZones(inst.midges, inst.zones, inst.pit?.collapsed)
   //
@@ -14590,6 +14595,13 @@ function isBranchTrampDrawnVisible(inst) {
     !inst.branchTrampBundle?.drawLayer?.hidden
 }
 //
+// Right trampoline sprite is on screen (post-landing reveal or colour world).
+//
+function isRightTrampDrawnVisible(inst) {
+  return isRightTrampolineVisible(inst.zones) &&
+    !inst.trampBundle?.drawLayer?.hidden
+}
+//
 // True when the hero stands in the landing-reveal radius of a hidden trampoline.
 //
 function isHeroNearUnrevealedTrampSpot(inst, heroX) {
@@ -14761,6 +14773,11 @@ function revealRightTrampoline(inst) {
   if (!inst.zones.gCollected && !inst.zones.colorWorld) return
   inst.zones.rightTrampRevealed = true
   set(KEY_RIGHT_TRAMP_REVEALED, true)
+  inst._postGCucumberHintShows = GLOW_TEACHER_HINT_POST_G_CUCUMBER_MAX_SHOWS
+  if (inst._glowTeacherHintActive && inst.lastGlowTeacherHintText === GLOW_TEACHER_HINT_POST_G_CUCUMBER) {
+    HeroHint.clear(inst.heroHint)
+    inst._glowTeacherHintActive = false
+  }
   clearTrampMissingHint(inst, 'right')
   Sound.stopAmbient(inst.sound)
   triggerGlowCameraShake(inst)
@@ -15875,12 +15892,13 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
   const caveEligible = glowTeacherCaveMushroomAutoHintEligible(inst, char, footY, inCave)
   const gEligible = glowTeacherGZoneAutoHintEligible(inst, inCave)
   const lEligible = glowTeacherLZoneAutoHintEligible(inst, inCave)
+  const postGCucumberEligible = glowTeacherPostGCucumberHintEligible(inst, inCave)
   const postLStopEligible = glowTeacherPostLStopHintEligible(inst, inCave)
   const postOBigMushEligible = glowTeacherPostOBigMushHintEligible(inst, inCave)
   const caveEntranceEligible = glowTeacherCaveEntranceAutoHintEligible(inst, inCave)
   const postTreeMushEligible = glowTeacherPostTreeMushAutoHintEligible(inst, inCave)
-  if (caveEligible || gEligible || lEligible || postLStopEligible || postOBigMushEligible ||
-    caveEntranceEligible || postTreeMushEligible) {
+  if (caveEligible || gEligible || lEligible || postGCucumberEligible || postLStopEligible ||
+    postOBigMushEligible || caveEntranceEligible || postTreeMushEligible) {
     revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
   }
   tickGlowTeacherContextHints(inst, {
@@ -15892,6 +15910,7 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
     caveEligible,
     gEligible,
     lEligible,
+    postGCucumberEligible,
     postLStopEligible,
     postOBigMushEligible,
     caveEntranceEligible,
@@ -15899,6 +15918,7 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
     onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst),
     onGHint: () => fireGlowTeacherGZoneHint(inst),
     onLHint: () => fireGlowTeacherLZoneHint(inst),
+    onPostGCucumberHint: () => fireGlowTeacherPostGCucumberHint(inst),
     onPostLStopHint: () => fireGlowTeacherPostLStopHint(inst),
     onPostOBigMushHint: () => fireGlowTeacherPostOBigMushHint(inst),
     onCaveEntranceHint: () => fireGlowTeacherCaveEntranceHint(inst),
@@ -16106,6 +16126,28 @@ function fireGlowTeacherLZoneHint(inst) {
   )) return
   inst._lHudStallHintShows = (inst._lHudStallHintShows || 0) + 1
   inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_L_PLAT_TEXT
+}
+//
+// After G the swamp spirit is out on the right. 10 active seconds, then the
+// life-eye nudge, twice — only while the right mushroom is still hidden.
+//
+function glowTeacherPostGCucumberHintEligible(inst, inCave) {
+  if (inCave || inst._inGlowPitCave) return false
+  if (!inst.zones.gCollected || inst.zones.lCollected) return false
+  if (isRightTrampDrawnVisible(inst)) return false
+  if (inst.letterCaptionActive || inst.dialogOpen) return false
+  return (inst._postGCucumberHintShows || 0) < GLOW_TEACHER_HINT_POST_G_CUCUMBER_MAX_SHOWS
+}
+function fireGlowTeacherPostGCucumberHint(inst) {
+  if (!glowTeacherPostGCucumberHintEligible(inst, false)) return
+  if (!showGlowTeacherHintNow(
+    inst,
+    GLOW_TEACHER_HINT_POST_G_CUCUMBER,
+    GLOW_TEACHER_HINT_DURATION,
+    { postGCucumber: true }
+  )) return
+  inst._postGCucumberHintShows = (inst._postGCucumberHintShows || 0) + 1
+  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_POST_G_CUCUMBER
 }
 //
 // After L: 10 active seconds outside the cave → nudge to slow down and stand still.

@@ -1491,6 +1491,158 @@ export function playGlowPredatorFootstep(instance) {
 }
 
 //
+// Swamp spirit: a barely-there wet pop as the body leaves the soil.
+//
+export function playGlowSwampSpiritWhistle(instance) {
+  if (!instance?.audioContext || !instance.stepGain) return
+  const now = instance.audioContext.currentTime
+  const duration = 0.32
+  const osc = instance.audioContext.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(740, now)
+  osc.frequency.linearRampToValueAtTime(980, now + 0.12)
+  osc.frequency.exponentialRampToValueAtTime(620, now + duration)
+  const gain = instance.audioContext.createGain()
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.04, now + 0.04)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const air = instance.audioContext.createBufferSource()
+  const bufferSize = Math.max(1, Math.floor(instance.audioContext.sampleRate * duration))
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1
+  air.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(1400, now)
+  filter.Q.value = 4
+  const airGain = instance.audioContext.createGain()
+  airGain.gain.setValueAtTime(0.001, now)
+  airGain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.012, now + 0.05)
+  airGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(gain)
+  gain.connect(instance.stepGain)
+  air.connect(filter)
+  filter.connect(airGain)
+  airGain.connect(instance.stepGain)
+  osc.start(now)
+  osc.stop(now + duration)
+  air.start(now)
+  air.stop(now + duration)
+}
+
+export function playGlowSwampSpiritEmerge(instance) {
+  playSwampSpiritNoise(instance, {
+    duration: 0.09,
+    freqStart: 160,
+    freqEnd: 70,
+    gain: CFG.audio.sfx.step * 0.035,
+    thumpStart: 110,
+    thumpEnd: 62,
+    thumpGain: CFG.audio.sfx.step * 0.018
+  })
+}
+
+//
+// Swamp spirit: a short dry flick when it notices the hero move.
+//
+export function playGlowSwampSpiritStartle(instance) {
+  playSwampSpiritNoise(instance, {
+    duration: 0.04,
+    freqStart: 520,
+    freqEnd: 180,
+    gain: CFG.audio.sfx.step * 0.05,
+    thumpStart: 240,
+    thumpEnd: 90,
+    thumpGain: CFG.audio.sfx.step * 0.02
+  })
+}
+
+//
+// Swamp spirit: a quick suck of mud as the body pulls under.
+//
+export function playGlowSwampSpiritHide(instance) {
+  if (!instance?.audioContext || !instance.stepGain) return
+  const now = instance.audioContext.currentTime
+  const duration = 0.045
+  const bufferSize = Math.max(1, Math.floor(instance.audioContext.sampleRate * duration))
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - t * t)
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'highpass'
+  filter.frequency.setValueAtTime(900, now)
+  filter.Q.value = 0.7
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.22, now + 0.004)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const click = instance.audioContext.createOscillator()
+  click.type = 'square'
+  click.frequency.setValueAtTime(740, now)
+  click.frequency.exponentialRampToValueAtTime(180, now + duration)
+  const clickGain = instance.audioContext.createGain()
+  clickGain.gain.setValueAtTime(0.001, now)
+  clickGain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.07, now + 0.003)
+  clickGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  click.connect(clickGain)
+  clickGain.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+  click.start(now)
+  click.stop(now + duration)
+}
+
+function playSwampSpiritNoise(instance, opts) {
+  if (!instance?.audioContext || !instance.stepGain) return
+  const now = instance.audioContext.currentTime
+  const duration = opts.duration
+  const bufferSize = Math.max(1, Math.floor(instance.audioContext.sampleRate * duration))
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - t)
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(opts.freqStart, now)
+  filter.frequency.linearRampToValueAtTime(opts.freqEnd, now + duration)
+  filter.Q.value = 0.4
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(opts.gain, now + 0.008)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const thump = instance.audioContext.createOscillator()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(opts.thumpStart, now)
+  thump.frequency.exponentialRampToValueAtTime(opts.thumpEnd, now + duration)
+  const thumpGain = instance.audioContext.createGain()
+  thumpGain.gain.setValueAtTime(0.001, now)
+  thumpGain.gain.linearRampToValueAtTime(opts.thumpGain, now + 0.006)
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  thump.connect(thumpGain)
+  thumpGain.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+  thump.start(now)
+  thump.stop(now + duration)
+}
+
+//
 // Glow muddy band: wet squelch landing (same timbre as mud step, louder).
 //
 function playGlowMudLand(instance) {

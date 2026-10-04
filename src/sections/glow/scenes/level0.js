@@ -21,6 +21,7 @@ import {
   TRAMP_FACE_EYE_SCALE
 } from '../utils/cute-mushroom.js'
 import * as Predator from '../components/predator.js'
+import * as SwampSpirit from '../components/swamp-spirit.js'
 import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, onPhysicalKeyPress, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
 import {
   buildGlowTree,
@@ -2405,6 +2406,21 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       zones,
       sfx: sound
     })
+    const swampBeside = TRAMP_TOTAL_W / 2 + 22
+    const swampSpirit = SwampSpirit.create({
+      k,
+      x: trampX,
+      minX: LEFT_MARGIN + 40,
+      maxX: WORLD_W - RIGHT_MARGIN - 40,
+      holdRadius: TRAMP_MUSH_LAND_REVEAL_DIST,
+      besideGap: swampBeside,
+      mushroomX: () => trampBundle.state?.x ?? trampX,
+      mushroomShown: () => isRightTrampolineVisible(zones),
+      groundAt: glowGroundSurfaceY,
+      hero: heroInst,
+      zones,
+      sfx: sound
+    })
     if (!spawnOnBranch && zones.gCollected && isGlowEyesGameplayUnlocked(zones)) {
       const footY = heroSpawnY + SURFACE_DETECT_Y
       Predator.overlapsHeroHitbox(predator, heroSpawnX, footY) &&
@@ -2567,6 +2583,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       mudWalkClutter,
       mushObjs,
       predator,
+      swampSpirit,
       mudPredatorAmbushTriggerX,
       mudPredatorPopX,
       mudZoneX1,
@@ -4387,8 +4404,8 @@ function ensureGlowBirdsBackgroundPlaying(inst) {
 // hidden discovery spots. Only the horizontal distance to the nearest spot's
 // centre matters: within GLOW_PROXIMITY_SOUND_RADIUS px to either side the
 // current grows into a steady stream the closer the hero walks to the centre
-// X, and fades back to silence outside that band. The right mushroom's spot
-// is excluded from the target list until G is collected.
+// X, and fades back to silence outside that band. The right mushroom spot
+// stays silent — the swamp spirit lives there until L.
 //
 function updateGlowProximitySound(inst, char) {
   if (inst.dialogOpen || inst.drowning || inst.sound?._glowSfxMuted || !char?.pos) {
@@ -4401,13 +4418,6 @@ function updateGlowProximitySound(inst, char) {
   //
   isGlowEyeIntroCaveActive(inst) && !inst.pit?.collapsed &&
     appendGlowProximityTarget(targetXs, (getCrackZone(WORLD_W, FLOOR_Y).x1 + getCrackZone(WORLD_W, FLOOR_Y).x2) * 0.5)
-  //
-  // The right mushroom stays silent until G is collected — before that its
-  // spot isn't a discoverable secret yet, it's just empty ground.
-  //
-  inst.zones.gCollected && !inst.zones.rightTrampRevealed &&
-    isGlowEyesGameplayUnlocked(inst.zones) &&
-    appendGlowProximityTarget(targetXs, inst.trampState?.x)
   isGlowEyesGameplayUnlocked(inst.zones) &&
     !inst.zones.branchTrampRevealed &&
     appendGlowProximityTarget(targetXs, inst.branchTrampState?.x)
@@ -9014,6 +9024,14 @@ function drawGlowMudWalkClutter(inst) {
   })
 }
 //
+// Top of the drawn ground lip at x — the same edge the floor silhouette uses.
+//
+function glowGroundSurfaceY(x) {
+  const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
+  const h = Math.max(2, 4 + lip)
+  return FLOOR_Y - h + 2
+}
+//
 // Walk surface: mud crest, then the top of a log, twig or rock under x.
 // Up is a smaller Y. Rock tops blend in so the body climbs instead of stepping a wall.
 //
@@ -12579,6 +12597,7 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
   inst.predator && (inst.predator.hero = fresh)
+  inst.swampSpirit && (inst.swampSpirit.hero = fresh)
   inst.rightSpikes && (inst.rightSpikes.triggered = false)
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
@@ -13131,6 +13150,7 @@ function onUpdate(inst) {
     return
   }
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
+  inst.swampSpirit && SwampSpirit.update(inst.swampSpirit, k.dt())
   if (inst.dialogOpen) {
     updateGlowCamera(inst)
     updateGlowDialogHero(inst)

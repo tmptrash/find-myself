@@ -320,6 +320,21 @@ export const CFG = {
         predatorPupil: PALETTE.red0,
         predatorHorn: PALETTE.brown1,
         //
+        // Swamp spirit — muted bog green, cool mist, warm eye. Contour is
+        // green-brown ink, never void black or pure white.
+        //
+        swampSpirit: {
+          contour: PALETTE.green0,
+          shadow: PALETTE.brown0,
+          body: PALETTE.teal1,
+          belly: PALETTE.green0,
+          mist: PALETTE.teal3,
+          damp: PALETTE.green1,
+          eye: PALETTE.gold5,
+          pupil: PALETTE.green0,
+          speck: PALETTE.gold3
+        },
+        //
         // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
         // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
         // Otterisk swatches; contour is green-black, not pure black.

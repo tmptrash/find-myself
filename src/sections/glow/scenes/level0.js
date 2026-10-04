@@ -1997,7 +1997,7 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     type: Hero.HEROES.HERO,
     ...getGlowHeroEyeBakeColors(false),
     bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
+    outlineColor: HERO_FILLED_OUTLINE_COLOR,
     outlineOnly: false,
     postBakeCanvas: applyGlowGameplaySharpBake
   })
@@ -2421,7 +2421,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       groundAt: glowGroundSurfaceY,
       hero: heroInst,
       zones,
-      sfx: sound
+      sfx: sound,
+      notePostBake: applyGlowGameplaySharpBake
     })
     if (!spawnOnBranch && zones.gCollected && isGlowEyesGameplayUnlocked(zones)) {
       const footY = heroSpawnY + SURFACE_DETECT_Y

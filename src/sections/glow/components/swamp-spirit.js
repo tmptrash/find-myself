@@ -3,6 +3,7 @@ import { getRGB } from '../../../utils/helper.js'
 import { GLOW_PAL, isGlowGrayExploreBeforeL } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import * as Sound from '../../../utils/sound.js'
+import * as Hero from '../../../components/hero.js'
 
 //
 // Timid bog growth. Pose is a spring chain solved every frame — there is no
@@ -26,7 +27,16 @@ const FLUSH_HIDE_RADIUS = 72
 const HEAD_CLEAR = 14
 const BELLY_SEAM_POINTS = 11
 const FAR_RADIUS = HIDE_RADIUS * 2
+const WHISTLE_HEAR_RADIUS = FAR_RADIUS * 1.35
 const OBSERVE_RADIUS_Y = 170
+const SPIRIT_NOTE_OFFSET_X = -14
+const SPIRIT_NOTE_OFFSET_Y = -10
+const SPIRIT_NOTE_LIFETIME = 2.1
+const SPIRIT_NOTE_RISE_SPEED = 26
+const SPIRIT_NOTE_DRIFT_AMPLITUDE = 14
+const SPIRIT_NOTE_DRIFT_FREQ = 1.35
+const SPIRIT_NOTE_GLYPHS = ['♪', '♫', '♩', '♬']
+const SPIRIT_WHISTLE_NOTE_BURST = 3
 const BODY_HALF = 12
 const BASE_SINK = 1
 const CAP_RATIO = 12 / 15
@@ -62,6 +72,7 @@ const RING = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }))
  * @param {Object} cfg.hero - Hero inst
  * @param {Object} cfg.zones - Level zones
  * @param {Object} [cfg.sfx] - Shared Sound inst
+ * @param {Function} [cfg.notePostBake] - Grain pass for mouth-note glyphs
  * @returns {Object} Swamp spirit inst
  */
 export function create(cfg) {
@@ -107,8 +118,10 @@ export function create(cfg) {
     batch: PolyBatch.create(),
     chain: BODY_REST.map(() => ({ x: cfg.x, y: 0, vx: 0, vy: 0 })),
     eyes: [],
-    motes: Array.from({ length: 14 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 }))
+    motes: Array.from({ length: 14 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1 })),
+    whistleNotes: []
   }
+  cfg.notePostBake && Hero.ensureIdleNoteGlyphs(cfg.k, cfg.notePostBake)
   buryChain(inst, cfg.x)
   initEyes(inst)
   inst.obj = cfg.k.add([
@@ -146,6 +159,7 @@ export function update(inst, dt) {
   tickChain(inst, dt)
   tickEyes(inst, dt, hero)
   tickWhistle(inst, dt)
+  tickWhistleNotes(inst, dt)
   tickMotes(inst, dt)
   inst.mound = Math.max(0, inst.mound - dt * 0.8)
   inst.stateTime += dt
@@ -199,7 +213,7 @@ function enterState(inst, next) {
   inst.state = next
   inst.stateTime = 0
   if (next === 'emerging') {
-    inst.sfx && Sound.playGlowSwampSpiritEmerge(inst.sfx)
+    playSpiritSfx(inst, Sound.playGlowSwampSpiritEmerge)
     inst.riseVel = Math.max(inst.riseVel, 0.4)
     return
   }
@@ -212,14 +226,14 @@ function enterState(inst, next) {
     inst.gaze.open = 1.45
     inst.eyesShut = false
     burst(inst, 5, -1)
-    inst.sfx && Sound.playGlowSwampSpiritStartle(inst.sfx)
+    playSpiritSfx(inst, Sound.playGlowSwampSpiritStartle)
     return
   }
   if (next === 'hiding') {
     inst.riseVel = Math.min(inst.riseVel, -0.2)
     inst.mound = 1
     puffFromBase(inst)
-    inst.sfx && Sound.playGlowSwampSpiritHide(inst.sfx)
+    playSpiritSfx(inst, Sound.playGlowSwampSpiritHide)
     return
   }
   if (next === 'hidden') {
@@ -637,8 +651,62 @@ function tickWhistle(inst, dt) {
   if (!singing) return
   inst.whistleIn -= dt
   if (inst.whistleIn > 0) return
-  inst.sfx && Sound.playGlowSwampSpiritWhistle(inst.sfx)
+  playSpiritWhistleSfx(inst)
+  spawnSpiritWhistleNotes(inst)
   inst.whistleIn = 2.2 + Math.random() * 2.6
+}
+//
+// Close reactions stay inside the creep span; the far whistle reaches farther out.
+//
+function spiritSfxAudible(inst, hero) {
+  return heroWithin(inst, hero, CREEP_RADIUS)
+}
+function spiritWhistleAudible(inst, hero) {
+  return heroWithin(inst, hero, WHISTLE_HEAR_RADIUS)
+}
+function playSpiritSfx(inst, playFn) {
+  if (!inst.sfx) return
+  const hero = heroPoint(inst)
+  spiritSfxAudible(inst, hero) && playFn(inst.sfx)
+}
+function playSpiritWhistleSfx(inst) {
+  if (!inst.sfx) return
+  const hero = heroPoint(inst)
+  spiritWhistleAudible(inst, hero) && Sound.playGlowSwampSpiritWhistle(inst.sfx)
+}
+//
+// Mouth-note burst beside the shut-lid head when the spirit whistles.
+//
+function spawnSpiritWhistleNotes(inst) {
+  const head = inst.chain[inst.chain.length - 1]
+  const mouthX = head.x + SPIRIT_NOTE_OFFSET_X
+  const mouthY = head.y + SPIRIT_NOTE_OFFSET_Y
+  for (let i = 0; i < SPIRIT_WHISTLE_NOTE_BURST; i++) {
+    const jitterX = (Math.random() - 0.5) * 10
+    const jitterY = (Math.random() - 0.5) * 6
+    inst.whistleNotes.push({
+      baseX: mouthX + jitterX,
+      x: mouthX + jitterX,
+      y: mouthY + jitterY,
+      age: i * 0.08,
+      driftPhase: Math.random(),
+      glyph: SPIRIT_NOTE_GLYPHS[Math.floor(Math.random() * SPIRIT_NOTE_GLYPHS.length)],
+      angle: (Math.random() - 0.5) * 16
+    })
+  }
+}
+function tickWhistleNotes(inst, dt) {
+  const notes = inst.whistleNotes
+  if (!notes.length) return
+  for (const note of notes) {
+    note.age += dt
+    const lifeT = note.age / SPIRIT_NOTE_LIFETIME
+    note.x = note.baseX +
+      Math.sin((note.age + note.driftPhase) * SPIRIT_NOTE_DRIFT_FREQ * Math.PI * 2) *
+      SPIRIT_NOTE_DRIFT_AMPLITUDE * lifeT
+    note.y -= SPIRIT_NOTE_RISE_SPEED * dt
+  }
+  inst.whistleNotes = notes.filter(note => note.age < SPIRIT_NOTE_LIFETIME)
 }
 //
 // Hero world position, or null before the body exists.
@@ -682,6 +750,7 @@ function drawSpirit(inst) {
     PolyBatch.addDisc(batch, mote.x, mote.y, 2.1, shadow)
   })
   PolyBatch.flush(batch, k, 0.7)
+  inst.whistleNotes.length && Hero.drawFloatingMusicNotes(k, inst.whistleNotes)
 }
 //
 // Samples the spring chain into a dense silhouette.

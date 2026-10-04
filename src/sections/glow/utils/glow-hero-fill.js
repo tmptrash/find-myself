@@ -199,10 +199,13 @@ export function resolveGlowHeroFilledSpriteKey(inst, cfg, frameKey) {
   preloadGlowHeroFullSprites(inst, cfg)
   const filledPrefix = buildFilledHeroSpritePrefix(hero, cfg.filledBodyColor, cfg.filledOutlineColor)
   if (inst.heroBodyFillApplied || !hero.outlineOnly) {
-    return frameKey?.startsWith(hero.spritePrefix) ? frameKey : `${hero.spritePrefix}_0_0`
+    const key = frameKey?.startsWith(hero.spritePrefix) ? frameKey : `${hero.spritePrefix}_0_0`
+    return glowHeroSpriteReady(inst.k, key) ? key : null
   }
   const filledKey = mapOutlineSpriteToFilled(frameKey, hero.spritePrefix, filledPrefix)
-  return glowHeroSpriteReady(inst.k, filledKey) ? filledKey : `${filledPrefix}_0_0`
+  if (filledKey && glowHeroSpriteReady(inst.k, filledKey)) return filledKey
+  const idleFilled = `${filledPrefix}_0_0`
+  return glowHeroSpriteReady(inst.k, idleFilled) ? idleFilled : null
 }
 export function clearGlowHeroFillPreview(inst) {
   inst.heroFillPreview?.exists?.() && inst.heroFillPreview.destroy()
@@ -251,7 +254,7 @@ function ensureHeroFillPreview(inst, cfg) {
   const char = hero?.character
   if (!char?.exists?.() || inst.heroBodyFillApplied) return
   const idleKey = resolveGlowHeroFilledSpriteKey(inst, cfg, `${hero.spritePrefix}_0_0`)
-  if (!idleKey) return
+  if (!idleKey || !glowHeroSpriteReady(inst.k, idleKey)) return
   const filledPrefix = buildFilledHeroSpritePrefix(hero, cfg.filledBodyColor, cfg.filledOutlineColor)
   if (inst.heroFillFilledPrefix !== filledPrefix && inst.heroFillPreview?.exists?.()) {
     inst.heroFillPreview.destroy()

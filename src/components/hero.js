@@ -2135,6 +2135,25 @@ function drawIdleNotes(k, inst) {
   }
 }
 /**
+ * Bakes shared mouth-note glyphs once per Kaplay instance (e.g. glow spirit whistle).
+ * @param {Object} k - Kaplay inst
+ * @param {Function} [postBake] - Optional canvas grade hook
+ */
+export function ensureIdleNoteGlyphs(k, postBake) {
+  ensureIdleNoteGlyphSprites(k, postBake)
+}
+/**
+ * Draws ephemeral music-note particles in world space.
+ * @param {Object} k - Kaplay inst
+ * @param {Array} notes - { x, y, age, glyph, angle, ... }
+ */
+export function drawFloatingMusicNotes(k, notes) {
+  drawIdleNotes(k, {
+    idleNotes: notes,
+    idleNotePostBake: k._idleNoteGlyphMap ? true : null
+  })
+}
+/**
  * Handle collision with platform
  * @param {Object} inst - Hero instance
  */

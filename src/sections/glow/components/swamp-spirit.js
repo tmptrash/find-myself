@@ -801,11 +801,7 @@ function drawBellySkirt(inst, batch, groundY, color) {
   const capR = Math.min(BODY_HALF * CAP_RATIO, height * 0.86)
   const seam = inst.bellySeam
   const n = seam.length - 1
-  //
-  // Skirt is fixed on the body and rides the head, then the soil clips it.
-  //
-  const yBot = head.y + BELLY_BODY_H
-  const yb = Math.min(yBot, baseY)
+  const yb = baseY
   for (let i = 0; i < n; i++) {
     const t0 = i / n
     const t1 = (i + 1) / n

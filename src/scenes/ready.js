@@ -62,8 +62,9 @@ const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
 //
 const TITLE_FONT_SIZE = 91.2
 //
-// The title is a genuinely hollow white rim — transparent inside the
-// glyphs, like the hero's outline-only look — with a single 1px offset
+// The title is a genuinely hollow rim in the warm moon cream
+// (CFG.visual.colors.ready.moon) — transparent inside the glyphs — with a
+// single 1px offset
 // copy as the drop shadow. Baked to a canvas (bakeReadyTitleSprite) instead
 // of live k.text() draws: the rim is built by stamping 8 one-pixel-offset
 // dilated copies then punching the original glyph shape back out with
@@ -72,7 +73,7 @@ const TITLE_FONT_SIZE = 91.2
 // there is no erase-style blend mode for live draw calls in Kaplay).
 //
 const TITLE_SHADOW_OFFSET = 1
-const TITLE_OUTLINE_COLOR = CFG.visual.colors.hero.eyeWhite
+const TITLE_OUTLINE_COLOR = CFG.visual.colors.ready.moon
 const TITLE_OUTLINE_RIM_PX = 2
 const TITLE_OUTLINE_OFFSETS = [
   [-TITLE_OUTLINE_RIM_PX, -TITLE_OUTLINE_RIM_PX], [0, -TITLE_OUTLINE_RIM_PX], [TITLE_OUTLINE_RIM_PX, -TITLE_OUTLINE_RIM_PX],
@@ -85,7 +86,7 @@ const TITLE_OUTLINE_OFFSETS = [
 //
 //
 // Title letters stay fixed in the string — each glyph is baked once (hollow
-// white rim + black shadow) and drawn at its measured centre every frame.
+// moon-tone rim + black shadow) and drawn at its measured centre every frame.
 //
 const READY_LETTER_CANVAS_SIZE = Math.ceil(TITLE_FONT_SIZE * 1.5)
 const READY_LETTER_CANVAS_CENTER = READY_LETTER_CANVAS_SIZE / 2
@@ -350,12 +351,12 @@ let HERO_U_OFFSET_Y = 6
 //
 const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
 //
-// Outline-only bake — hollow white rim, no body fill, no eyes, matching the
-// hero's outline-only look at the start of the glow level. Both title
-// heroes use this in the title cell; the stayer ('n') keeps it forever,
-// the runner ('u') keeps it for its first few steps after falling.
+// Outline-only bake — hollow moon-tone contour, no body fill, no eyes,
+// matching the letter contour. Both title heroes use this in the title
+// cell; the stayer ('n') keeps it forever, the runner ('u') keeps it for
+// its first few steps after falling.
 //
-const HERO_TITLE_OUTLINE_COLOR = CFG.visual.colors.hero.eyeWhite
+const HERO_TITLE_OUTLINE_COLOR = CFG.visual.colors.ready.moon
 const HERO_TITLE_OUTLINE_BAKE_OPTS = {
   type: HEROES.HERO,
   bodyColor: HERO_TITLE_BODY_COLOR,
@@ -374,7 +375,7 @@ const HERO_N_SPRITE_PREFIX_OUTLINE = buildHeroSpritePrefix(HERO_TITLE_OUTLINE_BA
 //
 const HERO_TITLE_TINTABLE_BAKE_OPTS = {
   type: HEROES.HERO,
-  bodyColor: HERO_TITLE_OUTLINE_COLOR,
+  bodyColor: CFG.visual.colors.hero.eyeWhite,
   outlineColor: CFG.visual.colors.outline,
   noEyes: true
 }
@@ -534,10 +535,8 @@ const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
 let AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
 let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
 //
-// Narrative body copy — cool teal-gray so text reads softly on the
-// deep teal background without competing with the orange title.
+// Narrative body copy — cool teal-gray (ready.text) on the deep teal frame.
 //
-const COLOR_TEXT_GRAY = '#9AB5C4'
 /**
  * Recomputes every resolution-derived ready-scene layout value from the
  * live kaplay viewport. Must run before recomputeMenuBgLayout()'s exports
@@ -852,7 +851,7 @@ function buildReadyStaticSprite(k) {
   for (const line of READY_DESC_LINES) {
     ctx.fillStyle = '#000000'
     ctx.fillText(line, CENTER_X + READY_TEXT_SHADOW_OFFSET, cursorY + READY_TEXT_SHADOW_OFFSET)
-    ctx.fillStyle = COLOR_TEXT_GRAY
+    ctx.fillStyle = CFG.visual.colors.ready.text
     ctx.fillText(line, CENTER_X, cursorY)
     cursorY += TEXT_LINE_HEIGHT
   }
@@ -875,7 +874,7 @@ function buildReadyMoonSprite(k) {
   canvas.height = 0
 }
 //
-// Bakes the title as a hollow white rim over a hollow black drop shadow,
+// Bakes the title as a hollow moon-tone rim over a hollow black drop shadow,
 // from the live text string (spaces where letters have detached into
 // spiders). Reloading the same sprite name updates the texture Kaplay
 // already drew with, so this can be called again every time a letter
@@ -927,7 +926,7 @@ function readyLetterSpriteName(char) {
   return `ready-letter-${char.charCodeAt(0)}`
 }
 //
-// Bakes a single glyph's 2px hollow white contour, centred in a small
+// Bakes a single glyph's 2px hollow moon-tone contour, centred in a small
 // square canvas — no shadow, since a detached letter is "only a contour"
 // from then on. Reloading the same sprite name is harmless when a repeated
 // glyph (e.g. the two 'f's) bakes it twice.
@@ -1115,7 +1114,7 @@ function onDrawTitle(k, spiderState, titleLetters) {
 // Draws the center illustration: eye_big.png centred on the horizon.
 //
 function onDrawIllustration(k, readyEyeState, spiderState) {
-  const eyeOp = LIFE_OPACITY * readyScenePersistentLeftOpacity()
+  const eyeOp = LIFE_OPACITY * readyEyeAndLeftOpacity(spiderState)
   if (eyeOp <= 0.001) return
   const target = resolveReadyEyeLookTarget(readyEyeState?.spiders)
   const frameIndex = readyEyeState?.blink?.frameIndex ?? 0
@@ -1246,7 +1245,7 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
   spiders.forEach(spider => {
     const departureFade = spider.isHeroU
       ? 1
-      : readyLeftHeroOpacity()
+      : readyLeftHeroOpacity(spiderState)
     drawTitleHero(k, spider, departureFade)
   })
 }
@@ -1431,19 +1430,14 @@ function updateReadyDepartureFade(k, runner, spiderState) {
     return
   }
   if (runner.heroPhase === 'finalWalk') {
-    const finalStopX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
-    const endX = k.width() + HERO_N_SPRITE_SIZE * 0.5
-    const span = endX - finalStopX
-    if (span > 0) {
-      const progress = (runner.heroX - finalStopX) / span
-      spiderState.eyeFinalFade = Math.max(0, Math.min(1, progress))
-    }
+    spiderState.eyeFinalFade = 1
     spiderState.departureFade = spiderState._departureFadeHold ?? 0
     return
   }
   if (runner.heroPhase === 'lookLeft') {
     spiderState.departureFade = spiderState._departureFadeHold ?? spiderState.departureFade
-    spiderState.eyeFinalFade = 0
+    const lookT = runner.heroLookLeftTimer / HERO_N_LOOK_LEFT_DURATION
+    spiderState.eyeFinalFade = Math.max(0, Math.min(1, lookT))
     return
   }
   //
@@ -1482,17 +1476,25 @@ function readySceneDepartureOpacity(spiderState) {
   return spiderState?.departureFade ?? 1
 }
 //
-// Left hero, horizon eye, and fireflies stay fully visible while the runner
-// moves right — only the shared backdrop/title fade with departureFade.
+// Fireflies stay fully visible while the runner moves right — only the shared
+// backdrop/title fade with departureFade.
 //
 function readyScenePersistentLeftOpacity() {
   return 1
 }
 //
-// Title stayer ('n') never dims during the runner's departure.
+// Horizon eye and the left title hero fade once the runner stops and looks
+// left at them (eyeFinalFade ramps during lookLeft).
 //
-function readyLeftHeroOpacity() {
-  return readyScenePersistentLeftOpacity()
+function readyEyeAndLeftOpacity(spiderState) {
+  const fade = spiderState?.eyeFinalFade ?? 0
+  return Math.max(0, 1 - fade)
+}
+//
+// Title stayer ('n') shares the same fade as the centre eye.
+//
+function readyLeftHeroOpacity(spiderState) {
+  return readyEyeAndLeftOpacity(spiderState)
 }
 //
 // The stayer never leaves the ground once it lands — it just stands there

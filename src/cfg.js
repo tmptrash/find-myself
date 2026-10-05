@@ -179,8 +179,9 @@ export const CFG = {
       // complementary palette so the on-boarding story already shows the
       // visual grammar the rest of the game speaks. Deep teal backs the
       // dark frame; the hero in the illustration is steel teal; warm
-      // amber/orange focal points (title, glints, anti-hero in the
-      // duality icon) provide the complementary punch.
+      // amber/orange focal points (filled title heroes, glints, anti-hero in
+      // the duality icon) provide the complementary punch. Hollow title letters
+      // use ready.moon so the wordmark reads with the menu L3 moon disc.
       //
       ready: {
         background: "#1A2530",
@@ -189,6 +190,10 @@ export const CFG = {
         // close to the scene background so hollow silhouettes stay subtle.
         //
         uncompletedSectionOutline: PALETTE.gray0,
+        //
+        // Shared draw-moon body — warm cream (Otterisk snap of L3 amber disc).
+        //
+        moon: PALETTE.orange5,
         fireflies: "#F4C040",
         hint: "#809AA8",
         text: "#9AB5C4",

@@ -308,9 +308,16 @@ function refreshLayout(inst) {
   const bubbleCenterX = inst.frozenX
   const offsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
   const labelText = resolveTargetText(target)
-  const { width: textW, height: textH } = measureText(k, labelText, inst.font)
-  const bubbleW = Math.round(textW + BUBBLE_PADDING_X * 2)
-  const bubbleH = Math.round(textH + BUBBLE_PADDING_Y * 2)
+  let bubbleW
+  let bubbleH
+  if (target.iconW != null && target.iconH != null) {
+    bubbleW = Math.round(target.iconW + BUBBLE_PADDING_X * 2)
+    bubbleH = Math.round(target.iconH + BUBBLE_PADDING_Y * 2)
+  } else {
+    const { width: textW, height: textH } = measureText(k, labelText, inst.font)
+    bubbleW = Math.round(textW + BUBBLE_PADDING_X * 2)
+    bubbleH = Math.round(textH + BUBBLE_PADDING_Y * 2)
+  }
   const totalW = bubbleW + BUBBLE_BORDER_WIDTH * 2
   const totalH = bubbleH + BUBBLE_BORDER_WIDTH * 2
   const screenW = k.width()

@@ -124,6 +124,10 @@ import {
   GLOW_TEACHER_HINT_DURATION
 } from '../utils/glow-teacher-hint.js'
 import {
+  syncSwampSpiritProximityHint,
+  destroySwampSpiritProximityHint
+} from '../utils/swamp-spirit-proximity-hint.js'
+import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
   initGlowHeroWithoutEyes,
@@ -2878,6 +2882,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
       inst._dialogAudioRestoreRaf && cancelAnimationFrame(inst._dialogAudioRestoreRaf)
       inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
+      destroySwampSpiritProximityHint(inst)
     })
     if (await glowBootstrapPause(bootstrap, 95, session)) return
     if (glowInitStale(session)) return
@@ -13157,6 +13162,7 @@ function onUpdate(inst) {
   }
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   inst.swampSpirit && SwampSpirit.update(inst.swampSpirit, k.dt())
+  syncSwampSpiritProximityHint(inst, glowTooltipClampInset())
   if (inst.dialogOpen) {
     updateGlowCamera(inst)
     updateGlowDialogHero(inst)

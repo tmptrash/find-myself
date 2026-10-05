@@ -136,6 +136,16 @@ export function create(cfg) {
 }
 
 /**
+ * True when the hero is farther than the spirit's reaction band (creep radius).
+ * @param {Object} inst - Swamp spirit inst
+ * @param {{ x: number, y: number }|null} hero
+ * @returns {boolean}
+ */
+export function isHeroBeyondReactionRadius(inst, hero) {
+  return Boolean(hero) && !heroWithin(inst, hero, CREEP_RADIUS)
+}
+
+/**
  * Steps the state machine, the body springs and the eyes.
  * @param {Object} inst
  * @param {number} dt

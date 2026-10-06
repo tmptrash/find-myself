@@ -20,14 +20,15 @@ const LOADER_BAR_CREEP_HEADROOM_DEFAULT = 12
 // Displayed width may creep slightly ahead of the last reported value (headroom)
 // so short gaps between yields still show motion — never past reported + headroom.
 //
-const LOADER_BAR_CREEP_HEADROOM_BOOST = 4
+const LOADER_BAR_CREEP_HEADROOM_BOOST = 16
+const LOADER_BAR_CREEP_PER_SEC_BOOST = 20
 //
-// Glow bootstrap reports truth in bursts — faster creep keeps the bar moving
+// Glow bootstrap reports truth in bursts — creep keeps the bar moving
 // between those reports so the screen reads as loading, not frozen.
 //
 export function setLoaderBarCreepBoost(boosted) {
   if (boosted) {
-    loaderBarCreepPerSec = 36
+    loaderBarCreepPerSec = LOADER_BAR_CREEP_PER_SEC_BOOST
     loaderBarCreepHeadroom = LOADER_BAR_CREEP_HEADROOM_BOOST
   } else {
     loaderBarCreepPerSec = LOADER_BAR_CREEP_PER_SEC_DEFAULT

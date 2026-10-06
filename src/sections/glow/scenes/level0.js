@@ -1984,10 +1984,20 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   // instead of advancing smoothly.
   //
   await yieldForGpu(1)
-  const undergroundSpec = loadUndergroundSprites(k)
-  onProgress?.(68)
-  await yieldForGpu(1)
-  buildParallaxSprites(k, undergroundSpec)
+  if (!glowUndergroundSpritesReady(k) || !glowParallaxSpritesPrewarmed(k)) {
+    const undergroundSpec = await loadUndergroundSprites(k, async (done, total) => {
+      onProgress?.(55 + Math.round(13 * done / total))
+      await yieldForGpu(1)
+    })
+    onProgress?.(68)
+    await yieldForGpu(1)
+    if (!glowParallaxSpritesPrewarmed(k)) {
+      await buildParallaxSprites(k, undergroundSpec, async (done, total) => {
+        onProgress?.(68 + Math.round(10 * done / total))
+        await yieldForGpu(1)
+      })
+    }
+  }
   onProgress?.(78)
   await yieldForGpu(1)
   //
@@ -2105,8 +2115,22 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Underground decor first: its generated spec is baked both into the
     // standalone sprites (visible before L) and into the combined background.
     //
-    const undergroundSpec = loadUndergroundSprites(k)
-    !glowParallaxSpritesPrewarmed(k) && buildParallaxSprites(k, undergroundSpec)
+    const undergroundReady = glowUndergroundSpritesReady(k)
+    const parallaxReady = glowParallaxSpritesPrewarmed(k)
+    if (!undergroundReady || !parallaxReady) {
+      const undergroundSpec = await loadUndergroundSprites(k, async (done, total) => {
+        const pct = 15 + Math.round(2 * (done - 1) / Math.max(1, total - 1))
+        if (await glowBootstrapPause(bootstrap, pct, session)) return
+      })
+      if (glowInitStale(session)) return
+      if (!parallaxReady) {
+        await buildParallaxSprites(k, undergroundSpec, async (done, total) => {
+          const pct = 18 + Math.round(3 * (done - 1) / Math.max(1, total - 1))
+          if (await glowBootstrapPause(bootstrap, pct, session)) return
+        })
+        if (glowInitStale(session)) return
+      }
+    }
     if (await glowBootstrapPause(bootstrap, 20, session)) return
     if (await glowBootstrapPause(bootstrap, 24, session)) return
     //
@@ -5668,7 +5692,7 @@ function grayDecorTint(sc) {
 // scroll speed and haze-blend steps; colour-world trees use the four reference
 // corner palettes by playfield quadrant and canopy row.
 //
-function buildParallaxSprites(k, undergroundSpec) {
+async function buildParallaxSprites(k, undergroundSpec, onStep) {
   const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
   const grayMidPal = getTreePaletteSolid('parallaxGrayMid')
   const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
@@ -5685,6 +5709,7 @@ function buildParallaxSprites(k, undergroundSpec) {
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('background'), grade: GLOW_LAYER_GRADE.far })
+  onStep && await onStep(1, 4)
   bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (grayCtx, colorCtx, pad) => {
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
@@ -5711,6 +5736,7 @@ function buildParallaxSprites(k, undergroundSpec) {
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('midground'), grade: GLOW_LAYER_GRADE.mid })
+  onStep && await onStep(2, 4)
   bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (grayCtx, colorCtx, pad) => {
       bakeParallaxTrees(grayCtx, colorCtx, pad, {
@@ -5738,6 +5764,7 @@ function buildParallaxSprites(k, undergroundSpec) {
         heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('nearground'), grade: GLOW_LAYER_GRADE.near })
+  onStep && await onStep(3, 4)
   const staticGray = document.createElement('canvas')
   staticGray.width = WORLD_W
   staticGray.height = PAR_STATIC_WORLD_H
@@ -5759,6 +5786,7 @@ function buildParallaxSprites(k, undergroundSpec) {
   staticGray.height = 0
   staticColor.width = 0
   staticColor.height = 0
+  onStep && await onStep(4, 4)
 }
 //
 // Flat explore phase sky — void to playfield gray (no green-teal forest air).
@@ -6499,20 +6527,35 @@ function drawExploredGroundLip(inst) {
 // combined background canvases can bake the exact same decor into their
 // root zones.
 //
-function loadUndergroundSprites(k) {
-  const spec = buildUndergroundSpec()
+const undergroundSpecByK = new WeakMap()
+//
+// Full-world earth bakes. Reused after prewarm so scene init does not grade
+// three WORLD canvases again while the loader sits still.
+//
+async function loadUndergroundSprites(k, onStep) {
   const entries = undergroundPaletteEntries()
-  entries.forEach(entry => {
-    const canvas = document.createElement('canvas')
-    canvas.width = WORLD_W
-    canvas.height = WORLD_H
-    const ctx = canvas.getContext('2d')
-    renderUndergroundSpec(ctx, spec, entry)
-    applyGlowMaterialBake(canvas, entry.name.length * 41)
-    k.loadSprite(entry.name, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  })
+  const cached = undergroundSpecByK.get(k)
+  if (cached && glowUndergroundSpritesReady(k)) {
+    onStep && await onStep(entries.length, entries.length)
+    return cached
+  }
+  const spec = cached || buildUndergroundSpec()
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]
+    if (!k.getSprite(entry.name)) {
+      const canvas = document.createElement('canvas')
+      canvas.width = WORLD_W
+      canvas.height = WORLD_H
+      const ctx = canvas.getContext('2d')
+      renderUndergroundSpec(ctx, spec, entry)
+      applyGlowMaterialBake(canvas, entry.name.length * 41)
+      k.loadSprite(entry.name, canvas)
+      canvas.width = 0
+      canvas.height = 0
+    }
+    onStep && await onStep(i + 1, entries.length)
+  }
+  undergroundSpecByK.set(k, spec)
   return spec
 }
 //
@@ -14423,6 +14466,12 @@ function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
 //
 function glowParallaxSpritesPrewarmed(k) {
   return Boolean(k.getSprite(BG_STATIC_GRAY) && k.getSprite(BG_PAR_TREE1_GRAY))
+}
+//
+// True when the three full-world underground sprites are already on this k.
+//
+function glowUndergroundSpritesReady(k) {
+  return undergroundPaletteEntries().every(entry => k.getSprite(entry.name))
 }
 //
 // Bakes full-tree sprites (fast draw path — two objects instead of many

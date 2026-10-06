@@ -4,6 +4,7 @@ import { GLOW_PAL, isGlowGrayExploreBeforeL } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
+import { isGlowEyesGameplayUnlocked } from '../utils/glow-eye-intro.js'
 
 //
 // Timid bog growth. Pose is a spring chain solved every frame — there is no
@@ -22,7 +23,6 @@ const CREEP_FLOOR = 0.36
 // Inside this span the spirit stays buried. Two hide-radii out, it whistles with shut eyes.
 //
 const CLOSE_RADIUS = 80
-const BESIDE_HOLD = 36
 const FLUSH_HIDE_RADIUS = 72
 const HEAD_CLEAR = 14
 const BELLY_SEAM_POINTS = 11
@@ -44,6 +44,7 @@ const OUTLINE_STROKE = 1.85
 const EYE_RADIUS_LEFT = 6.4
 const EYE_RADIUS_RIGHT = 5.4
 const ARC_STEPS = 4
+const CROWN_APEX_Y_EPS = 1
 const CURIOUS_STILL = 2.5
 const HIDE_DELAY_MIN = 1
 const HIDE_DELAY_MAX = 4
@@ -73,6 +74,10 @@ const RING = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }))
  * @param {Object} cfg.zones - Level zones
  * @param {Object} [cfg.sfx] - Shared Sound inst
  * @param {Function} [cfg.notePostBake] - Grain pass for mouth-note glyphs
+ * @param {Function} [cfg.branchMushroomX] - Left trampoline centre X
+ * @param {Function} [cfg.rightMushroomX] - Right trampoline centre X
+ * @param {Function} [cfg.branchMushroomShown] - Left trampoline visible
+ * @param {Function} [cfg.rightMushroomShown] - Right trampoline visible
  * @returns {Object} Swamp spirit inst
  */
 export function create(cfg) {
@@ -86,10 +91,13 @@ export function create(cfg) {
     maxX: cfg.maxX,
     homeX: cfg.x,
     holdRadius: cfg.holdRadius ?? CLOSE_RADIUS,
-    besideGap: cfg.besideGap ?? 56,
-    mushroomX: cfg.mushroomX ?? null,
-    mushroomShown: cfg.mushroomShown ?? null,
-    mushroomWasShown: false,
+    branchMushroomX: cfg.branchMushroomX ?? null,
+    rightMushroomX: cfg.rightMushroomX ?? null,
+    branchMushroomShown: cfg.branchMushroomShown ?? null,
+    rightMushroomShown: cfg.rightMushroomShown ?? null,
+    burrowPhase: null,
+    pendingBurrowX: null,
+    retired: false,
     holeX: cfg.x,
     state: 'emerging',
     stateTime: 0,
@@ -146,18 +154,45 @@ export function isHeroBeyondReactionRadius(inst, hero) {
 }
 
 /**
+ * True after the right trampoline is out — the spirit no longer appears.
+ * @param {Object} inst - Swamp spirit inst
+ * @returns {boolean}
+ */
+export function isSpiritRetired(inst) {
+  return Boolean(inst?.retired)
+}
+
+/**
+ * Whistle, emerge, and startle stay quiet while the left trampoline sprite
+ * is still hidden. The bury sound and the mushroom-heart hint still play.
+ * @param {Object} inst - Swamp spirit inst
+ * @returns {boolean}
+ */
+export function isSpiritSensoryMuted(inst) {
+  if (!inst || inst.retired) return true
+  const phase = inst.burrowPhase === 'right' ? 'right' : 'left'
+  if (phase === 'right') return false
+  return !Boolean(inst.branchMushroomShown?.())
+}
+
+/**
  * Steps the state machine, the body springs and the eyes.
  * @param {Object} inst
  * @param {number} dt
  */
 export function update(inst, dt) {
   if (!inst || dt <= 0) return
-  if (!inst.zones?.gCollected) {
+  if (!isSpiritGameplayActive(inst)) {
     parkUntilG(inst)
     return
   }
+  syncBurrowPhase(inst)
+  wakeSpiritLive(inst)
+  if (inst.retired) {
+    inst.obj && (inst.obj.hidden = true)
+    return
+  }
   inst.obj && (inst.obj.hidden = false)
-  syncMushroomBurrow(inst)
   const hero = heroPoint(inst)
   const near = heroNear(inst, hero)
   const moving = heroIsMoving(inst)
@@ -178,6 +213,7 @@ export function update(inst, dt) {
 // State machine: hidden, emerging, observe, curious, startled, hiding.
 //
 function tickState(inst, dt, hero, near, moving) {
+  if (inst.retired) return
   const showing = inst.rise > 0.05 &&
     inst.state !== 'hidden' && inst.state !== 'hiding' && inst.state !== 'startled'
   if (showing && heroFlush(inst, hero)) {
@@ -243,11 +279,13 @@ function enterState(inst, next) {
     inst.riseVel = Math.min(inst.riseVel, -0.2)
     inst.mound = 1
     puffFromBase(inst)
-    playSpiritSfx(inst, Sound.playGlowSwampSpiritHide)
+    playSpiritSfx(inst, Sound.playGlowSwampSpiritHide, true)
     return
   }
   if (next === 'hidden') {
-    buryChain(inst, nextBurrowX(inst))
+    const burrowX = inst.pendingBurrowX != null ? inst.pendingBurrowX : nextBurrowX(inst)
+    inst.pendingBurrowX = null
+    buryChain(inst, burrowX)
     inst.mound = 0
     inst.wait = HIDE_DELAY_MIN + Math.random() * (HIDE_DELAY_MAX - HIDE_DELAY_MIN)
     inst.stillTime = 0
@@ -482,9 +520,19 @@ function aimGazeAtPoint(inst, head, point) {
   inst.gaze.ty = clamp(dy / len, -1, 1)
 }
 //
-// Stays buried and invisible until the hero has the G.
+// Active at the branch G-route mushroom after eyes unlock, or anywhere after G.
+//
+function isSpiritGameplayActive(inst) {
+  const z = inst.zones
+  if (!z) return false
+  if (z.gCollected) return true
+  return isGlowEyesGameplayUnlocked(z)
+}
+//
+// Stays buried and invisible until the branch-route beat is live.
 //
 function parkUntilG(inst) {
+  inst._spiritLive = false
   inst.obj && (inst.obj.hidden = true)
   inst.rise = 0
   inst.riseVel = 0
@@ -498,27 +546,75 @@ function parkUntilG(inst) {
   }
 }
 //
-// After the mushroom is on screen, the next burrow is beside it, never on the cap.
+// parkUntilG leaves state hidden without a wait timer — unstick on first live frame.
 //
-function syncMushroomBurrow(inst) {
-  const shown = Boolean(inst.mushroomShown?.())
-  if (!shown) return
-  if (inst.mushroomWasShown) return
-  inst.mushroomWasShown = true
-  if (inst.state === 'hidden') {
-    buryChain(inst, nextBurrowX(inst))
+function wakeSpiritLive(inst) {
+  if (inst._spiritLive) return
+  inst._spiritLive = true
+  inst.wait = 0
+  inst.stateTime = 0
+  inst.state === 'hidden' && enterState(inst, 'emerging')
+}
+//
+// Left trampoline burrow until it is revealed, then the right cap; retire after the right opens.
+//
+function syncBurrowPhase(inst) {
+  if (inst.rightMushroomShown?.()) {
+    retireSpirit(inst)
     return
   }
+  const leftShown = Boolean(inst.branchMushroomShown?.())
+  const wantPhase = leftShown ? 'right' : 'left'
+  if (inst.burrowPhase == null) {
+    inst.burrowPhase = wantPhase
+    buryChain(inst, burrowXForPhase(inst, wantPhase))
+    return
+  }
+  if (inst.burrowPhase === 'left' && wantPhase === 'right') {
+    inst.burrowPhase = 'right'
+    requestBurrowMove(inst, burrowXForPhase(inst, 'right'))
+  }
+}
+//
+// Slides the burrow when the hero unlocks the next trampoline phase.
+//
+function requestBurrowMove(inst, x) {
+  if (inst.state === 'hidden') {
+    buryChain(inst, x)
+    return
+  }
+  inst.pendingBurrowX = x
   inst.state !== 'hiding' && inst.state !== 'startled' && enterState(inst, 'hiding')
 }
 //
-// Mushroom centre until it is revealed, then a random side.
+// Stays gone once the right mushroom-trampoline is on screen.
 //
+function retireSpirit(inst) {
+  if (inst.retired) return
+  inst.retired = true
+  inst.pendingBurrowX = null
+  inst.obj && (inst.obj.hidden = true)
+  inst.rise = 0
+  inst.riseVel = 0
+  inst.mound = 0
+  inst.motes.forEach(mote => {
+    mote.life = 0
+  })
+  if (inst.state !== 'hidden') {
+    inst.state = 'hidden'
+    inst.stateTime = 0
+  }
+  buryChain(inst, inst.holeX)
+}
+//
+// Active burrow sits on the cap centre for the current trampoline phase.
+//
+function burrowXForPhase(inst, phase) {
+  if (phase === 'right') return inst.rightMushroomX?.() ?? inst.homeX
+  return inst.branchMushroomX?.() ?? inst.homeX
+}
 function nextBurrowX(inst) {
-  const mush = inst.mushroomX?.() ?? inst.homeX
-  if (!inst.mushroomShown?.()) return mush
-  const side = Math.random() < 0.5 ? -1 : 1
-  return mush + side * inst.besideGap
+  return burrowXForPhase(inst, inst.burrowPhase === 'right' ? 'right' : 'left')
 }
 //
 // Two specks kicked up from the ground line when the spirit snaps under.
@@ -603,7 +699,7 @@ function proximityScale(inst, hero) {
   const gy = inst.groundAt(inst.holeX)
   if (Math.abs(hero.y - gy) > OBSERVE_RADIUS_Y) return 1
   if (dx >= CREEP_RADIUS) return 1
-  const pad = Math.max(inst.mushroomShown?.() ? BESIDE_HOLD : inst.holdRadius, FLUSH_HIDE_RADIUS)
+  const pad = Math.max(inst.holdRadius, FLUSH_HIDE_RADIUS)
   if (dx <= pad) return 0
   if (dx <= HIDE_RADIUS) {
     const u = (dx - pad) / Math.max(1, HIDE_RADIUS - pad)
@@ -618,7 +714,7 @@ function proximityScale(inst, hero) {
 function heroTooClose(inst, hero) {
   if (!hero) return false
   const gy = inst.groundAt(inst.holeX)
-  const radius = Math.max(inst.mushroomShown?.() ? BESIDE_HOLD : inst.holdRadius, FLUSH_HIDE_RADIUS)
+  const radius = Math.max(inst.holdRadius, FLUSH_HIDE_RADIUS)
   return Math.abs(hero.x - inst.holeX) <= radius &&
     Math.abs(hero.y - gy) <= OBSERVE_RADIUS_Y
 }
@@ -657,6 +753,7 @@ function heroFar(inst, hero) {
 // Occasional soft whistle, only while the hero is far and the body is up.
 //
 function tickWhistle(inst, dt) {
+  if (isSpiritSensoryMuted(inst)) return
   const singing = inst.eyesShut && inst.rise > 0.5
   if (!singing) return
   inst.whistleIn -= dt
@@ -674,13 +771,17 @@ function spiritSfxAudible(inst, hero) {
 function spiritWhistleAudible(inst, hero) {
   return heroWithin(inst, hero, WHISTLE_HEAR_RADIUS)
 }
-function playSpiritSfx(inst, playFn) {
+//
+// ignoreMute is the bury sound — it plays on the hidden left trampoline too.
+//
+function playSpiritSfx(inst, playFn, ignoreMute = false) {
   if (!inst.sfx) return
+  if (!ignoreMute && isSpiritSensoryMuted(inst)) return
   const hero = heroPoint(inst)
   spiritSfxAudible(inst, hero) && playFn(inst.sfx)
 }
 function playSpiritWhistleSfx(inst) {
-  if (!inst.sfx) return
+  if (!inst.sfx || isSpiritSensoryMuted(inst)) return
   const hero = heroPoint(inst)
   spiritWhistleAudible(inst, hero) && Sound.playGlowSwampSpiritWhistle(inst.sfx)
 }
@@ -746,20 +847,20 @@ function drawSpirit(inst) {
   if (inst.rise > 0.04 && inst.state !== 'hidden') {
     drawColumn(inst, batch, groundY, BODY_HALF, body)
     drawColumnStroke(inst, batch, groundY, BODY_HALF, contour)
-    PolyBatch.flush(batch, k, 0.8)
+    PolyBatch.flush(batch, k, 1)
     PolyBatch.reset(batch)
     drawBellySkirt(inst, batch, groundY, contour)
     PolyBatch.flush(batch, k, 1)
     PolyBatch.reset(batch)
     drawEyes(inst, batch, groundY, contour, eye, pupil)
-    PolyBatch.flush(batch, k, 0.95)
+    PolyBatch.flush(batch, k, 1)
     PolyBatch.reset(batch)
   }
   inst.motes.forEach(mote => {
     if (mote.life <= 0) return
     PolyBatch.addDisc(batch, mote.x, mote.y, 2.1, shadow)
   })
-  PolyBatch.flush(batch, k, 0.7)
+  PolyBatch.flush(batch, k, 1)
   inst.whistleNotes.length && Hero.drawFloatingMusicNotes(k, inst.whistleNotes)
 }
 //
@@ -848,6 +949,7 @@ function buildColumnRing(inst, groundY, half) {
 //
 function sliceHalf(y, topY, capR, half) {
   const capY = topY + capR
+  if (y <= topY + CROWN_APEX_Y_EPS) return 0
   if (y >= capY) return half
   const dy = Math.min(capR, capY - y)
   const inset = capR - Math.sqrt(Math.max(0, capR * capR - dy * dy))

@@ -5,6 +5,7 @@ import { GLOW_PAL, isGlowGrayExploreBeforeL } from './glow-palette.js'
 import { glowUiHash } from './glow-ui-bake.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import * as SwampSpirit from '../components/swamp-spirit.js'
+import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 
 //
 // Pictorial nudge when the hero stays outside the spirit's reaction radius —
@@ -22,7 +23,7 @@ const MUSH_STEM_H = 15
 const MUSH_BASE_Y = 34
 const MUSH_CX = 22
 const HEART_CX = 58
-const HEART_CY = 20
+const HEART_CY = 14
 const HEART_SIZE = 22
 const MONO_INK = '#000000'
 const BUBBLE_BORDER_WIDTH = 3
@@ -122,7 +123,12 @@ function tickSpiritHintEyesShutDelay(levelInst, spirit) {
 }
 
 function isSpiritProximityHintEligible(levelInst, spirit) {
-  if (!spirit?.zones?.gCollected) return false
+  const z = spirit?.zones
+  if (!z?.gCollected && !isGlowEyesGameplayUnlocked(z)) return false
+  //
+  // Hint runs at the left and right spirit burrows; gone after the right trampoline opens.
+  //
+  if (SwampSpirit.isSpiritRetired(spirit) || spirit.rightMushroomShown?.()) return false
   if (levelInst.dialogOpen || levelInst.letterCaptionActive) return false
   if (levelInst.drowning || levelInst.deathHandled || levelInst.touchDeathHandled) return false
   if (levelInst._inGlowPitCave) return false

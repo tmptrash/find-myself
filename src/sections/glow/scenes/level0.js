@@ -150,7 +150,9 @@ import {
 import {
   markGlowHudGCaveEntered,
   markGlowHudGPitMushLaunch,
-  countGlowHudGCaveIntroParts
+  countGlowHudGCaveIntroParts,
+  KEY_HUD_G_CAVE_ENTERED,
+  KEY_HUD_G_PIT_MUSH_LAUNCH
 } from '../utils/glow-hud-g-progress.js'
 import {
   getGlowHeroFillProgress,
@@ -448,7 +450,7 @@ const RIGHT_SPIKE_GRASS_TUFT_COUNT = 8
 // Shorter-than-normal blades over the spikes so their tips still poke
 // through — full-height grass (see BLADE_H in grass.js) would bury them.
 //
-const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.55
+const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.72
 //
 // Spike-patch grass must stay this many px inside the L-log's right wood edge
 // (blade anchor is centre — clamp by sprite half-width, not tuft centre X).
@@ -459,25 +461,32 @@ const RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET = 3
 // disintegration flow as any other level's death, then in-level respawn.
 //
 const GLOW_TOUCH_DEATH_PARTICLE_COUNT = 34
-const RIGHT_SPIKE_DEATH_HINT_TEXT = 'Life is a complicated thing.\nNext time, be careful.'
 //
-// Rotates on each predator kill (odd deaths); even deaths use the repeat line.
+// One new line per spike death, then the list repeats.
 //
-const PREDATOR_DEATH_HINT_TEXTS = [
-  'Too many legs.\nNot enough caution.',
-  'The mud had teeth.\nWalk lighter.',
-  "It wasn't a log.\nNow you know.",
-  'You heard the tapping.\nYou did not listen.',
-  'Some things crawl\nfor a reason.',
-  'The grass hid it.\nThe grass lied.',
-  'Viscous ground.\nFast mistake.',
-  'She counted your steps.\nThen she stopped.'
+const RIGHT_SPIKE_DEATH_HINT_TEXTS = [
+  'Life is a complicated thing.\nNext time, be careful.',
+  "And here's 'next time'.",
+  'The log grew teeth.\nYou offered a foot.',
+  'Spikes do not negotiate.',
+  'Same wood. Same lesson.\nSharper this time.',
+  'Gravity is loyal.\nThe spikes are too.',
+  'You can see them now.\nThat was the easy part.',
+  'Careful is a direction.\nYou picked the other one.'
 ]
 //
-// Every second touch death (2nd, 4th, ...) swaps in this callback line
-// instead of the cause-specific text above, then alternates back.
+// Contextual predator death lines (mud, tall grass, charge) plus a generic pool.
 //
-const GLOW_TOUCH_DEATH_REPEAT_HINT_TEXT = "And here's 'next time'"
+const PREDATOR_DEATH_HINT_MUD = 'The mud slowed me down.\nShe did not wait.'
+const PREDATOR_DEATH_HINT_BUSHES = 'I can\'t see anything\nin these bushes.'
+const PREDATOR_DEATH_HINT_FAST = 'This predator is\nso fast.'
+const PREDATOR_DEATH_HINT_TEXTS = [
+  'Too many legs.\nNot enough caution.',
+  'The grass hid her.\nI walked right in.',
+  'Sticky ground.\nOne slow step too many.',
+  'You hear the tapping.\nThen she\'s on you.',
+  'She wasn\'t a log.\nNow I know.'
+]
 const GLOW_TOUCH_DEATH_HINT_RAISE = 96
 const GLOW_TOUCH_HINT_BUBBLE_OFFSET_Y = -58
 //
@@ -1144,6 +1153,12 @@ const HERO_SPAWN_FADE_DURATION = 0.75
 const MEDITATION_IDLE_BEFORE_COUNTDOWN = 5
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
 const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
+const GLOW_TEACHER_HINT_G_NEED_CAVE_TEXT = 'That cave mouth\nfeels important.'
+const GLOW_TEACHER_HINT_G_NEED_PIT_MUSH_TEXT = 'Maybe step on a\nmushroom down there?'
+const GLOW_TEACHER_HINT_G_SWIM_TEXT = 'You might want\nto go swimming.'
+const GLOW_TEACHER_HINT_G_RIGHT_STRIP_TEXT = 'Keep walking.\nSomething\'s farther right.'
+const GLOW_TEACHER_HINT_G_BRANCH_TRAMP_TEXT = 'There\'s another mushroom\non that branch.'
+const GLOW_TEACHER_HINT_G_CLIMB_TREE_TEXT = 'Why not climb\nonto the tree?'
 const GLOW_TEACHER_HINT_L_PLAT_TEXT = 'That platform isn\'t there\nfor nothing ;)'
 const GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS = 2
 //
@@ -1291,7 +1306,7 @@ const HERO_TOOLTIP_Y_OFFSET = -72
 // Teacher (life HUD) hints — indirect nudges, not orders.
 //
 const GLOW_TEACHER_HINT_G_STALL_MAX_SHOWS = 2
-const GLOW_TEACHER_HINT_POST_G_CUCUMBER = 'Take a closer look\nat this cucumber'
+const GLOW_TEACHER_HINT_POST_G_CUCUMBER = 'A timid little beast\nhides in the reeds.'
 const GLOW_TEACHER_HINT_POST_G_CUCUMBER_MAX_SHOWS = 2
 const GLOW_TEACHER_HINT_AFTER_L = 'Don\'t rush. Just\nstop and think...'
 const GLOW_TEACHER_HINT_POST_L_STOP_MAX_SHOWS = 2
@@ -1579,16 +1594,18 @@ const TRAMP_DOCKED_BOOST_MULT = 2.0
 const TRAMP_COOLDOWN = 0.4
 const TRAMP_RADIUS = Math.round(38 * TRAMP_SIZE_SCALE)
 //
-// Horizontal slack on the cap for bounce / pad activation (not ground beside)
+// Collider matches the painted cap. Extra side slack used to hold the hero
+// in the air beside the mushroom and then drop him through the floor.
+//
+const TRAMP_CAP_HALF = TRAMP_RADIUS
+//
+// Spawn clearance still steps back from the old wider band.
 //
 const TRAMP_ADJACENT_X = 22
 //
-// Invisible solid pad under the cap — top flush with capTopY. Matches the
-// same horizontal reach as isHeroAtTrampolineCap's onCap check
-// (TRAMP_RADIUS + TRAMP_ADJACENT_X) so a hero the game logically treats as
-// "on the cap" always has a real collider under their feet there too.
+// Invisible solid pad under the cap — top flush with capTopY, no wider than the art.
 //
-const TRAMP_PAD_W = (TRAMP_RADIUS + TRAMP_ADJACENT_X) * 2
+const TRAMP_PAD_W = TRAMP_CAP_HALF * 2
 const TRAMP_PAD_H = Math.round(10 * TRAMP_SIZE_SCALE)
 //
 // Feet below this offset from capTop keep the pad hidden (walk through stem)
@@ -2412,16 +2429,16 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       zones,
       sfx: sound
     })
-    const swampBeside = TRAMP_TOTAL_W / 2 + 22
     const swampSpirit = SwampSpirit.create({
       k,
-      x: trampX,
+      x: branchTrampX,
       minX: LEFT_MARGIN + 40,
       maxX: WORLD_W - RIGHT_MARGIN - 40,
       holdRadius: TRAMP_MUSH_LAND_REVEAL_DIST,
-      besideGap: swampBeside,
-      mushroomX: () => trampBundle.state?.x ?? trampX,
-      mushroomShown: () => isRightTrampolineVisible(zones),
+      branchMushroomX: () => branchTrampBundle.state?.x ?? branchTrampX,
+      rightMushroomX: () => trampBundle.state?.x ?? trampX,
+      branchMushroomShown: () => isBranchTrampolineVisible(zones),
+      rightMushroomShown: () => isRightTrampolineVisible(zones),
       groundAt: glowGroundSurfaceY,
       hero: heroInst,
       zones,
@@ -2602,6 +2619,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       oPlatCaptionHiding: false,
       touchDeathHandled: false,
       touchDeathCount: 0,
+      predatorDeathCount: 0,
       touchDeathGraceUntil: 0,
       touchDeathRespawnWait: null,
       glowHeroCreateCfg,
@@ -4412,8 +4430,8 @@ function ensureGlowBirdsBackgroundPlaying(inst) {
 // hidden discovery spots. Only the horizontal distance to the nearest spot's
 // centre matters: within GLOW_PROXIMITY_SOUND_RADIUS px to either side the
 // current grows into a steady stream the closer the hero walks to the centre
-// X, and fades back to silence outside that band. The right mushroom spot
-// stays silent — the swamp spirit lives there until L.
+// X, and fades back to silence outside that band. Branch and right mushroom
+// pads stay silent — the swamp spirit covers the branch beat.
 //
 function updateGlowProximitySound(inst, char) {
   if (inst.dialogOpen || inst.drowning || inst.sound?._glowSfxMuted || !char?.pos) {
@@ -4426,9 +4444,6 @@ function updateGlowProximitySound(inst, char) {
   //
   isGlowEyeIntroCaveActive(inst) && !inst.pit?.collapsed &&
     appendGlowProximityTarget(targetXs, (getCrackZone(WORLD_W, FLOOR_Y).x1 + getCrackZone(WORLD_W, FLOOR_Y).x2) * 0.5)
-  isGlowEyesGameplayUnlocked(inst.zones) &&
-    !inst.zones.branchTrampRevealed &&
-    appendGlowProximityTarget(targetXs, inst.branchTrampState?.x)
   if (!inst.pit?.collapsed) {
     const cave = getCrackZone(WORLD_W, FLOOR_Y)
     !isGlowEyeIntroPending(inst.zones) &&
@@ -8310,8 +8325,8 @@ function glowSpikeGrassTint(sc, zones) {
 // Fixed wooden spikes on the L-log's right edge — a static hazard drawn
 // directly (no baking; a handful of triangles redrawn every frame), same
 // gray-outline/wood-bark crossfade as the log platform itself. Blinks white
-// for RIGHT_SPIKE_BLINK_DURATION at the moment the hero lands on it (see
-// checkGlowRightSpikeDeath) before the fatal burst.
+// for RIGHT_SPIKE_BLINK_DURATION when the L log first appears (revealLPlatZone)
+// and again when the hero touches them (checkGlowRightSpikeDeath).
 //
 function createGlowRightSpikes(k, zones, x1, x2, y) {
   const spikes = { x1, x2, y, triggered: false, blinkUntil: 0 }
@@ -10891,15 +10906,40 @@ function shouldDrownInWater(inst, heroX, footY) {
   //
   if (inst.trampBounceAir || inst.branchTrampBounceAir) return false
   //
-  // Standing / bouncing on the walking trampoline is safe over the lake
+  // Only the painted cap counts — isHeroAtTrampolineCap's foot band reaches the
+  // lake floor under a docked mushroom, which used to block drowning there.
   //
-  if (isOnTrampolineCap(inst, inst.heroInst?.character) ||
-    isOnBranchTrampolineCap(inst, inst.heroInst?.character)) return false
+  if (isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.trampState) ||
+    isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.branchTrampState)) return false
   //
   // Over the start branch above the lake floor — not drowning yet
   //
   if (isHeroOverStartBranchX(inst, heroX) && footY < FLOOR_Y - 12) return false
   return isInWaterZone(inst, heroX, footY) && footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
+}
+//
+// Feet on the cap surface only — not the lake floor under the mushroom's X.
+//
+function isHeroStandingOnTrampolineCap(inst, heroX, footY, state) {
+  if (!state) return false
+  const capTopY = FLOOR_Y - TRAMP_TOTAL_H
+  if (Math.abs(heroX - state.x) >= TRAMP_CAP_HALF) return false
+  if (footY < capTopY - 10 || footY > capTopY + LOG_SNAP_STANDING_MAX) return false
+  const branchPad = state === inst.branchTrampState
+  return branchPad
+    ? isBranchTrampolineColliderActive(inst.zones)
+    : isRightTrampolineColliderActive(inst.zones)
+}
+//
+// Branch-to-lake arcs can leave bounce-air latched while the hero stands in water.
+//
+function syncTrampBounceAirForLakeFloor(inst, heroX, footY) {
+  if (!isInWaterZone(inst, heroX, footY)) return
+  if (footY < FLOOR_Y - LOG_SNAP_STANDING_MAX) return
+  if (isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.trampState)) return
+  if (isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.branchTrampState)) return
+  inst.trampBounceAir = false
+  inst.branchTrampBounceAir = false
 }
 //
 // True when hero X sits over the invisible start branch span
@@ -10920,8 +10960,14 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
   if (!wantsTrampolineCapLaunch(inst, char, onCap, state)) return false
   if ((char.vel?.y ?? 0) < -40) return false
   const branchPad = state === inst.branchTrampState
+  const launch = Math.round(CFG.game.jumpForce * boostMult)
+  //
+  // jump() drops the platform stick. A raw vel write left the hero glued to the
+  // cap, so the next pad move carried him off the view and the camera followed.
+  //
+  if (typeof char.jump === 'function') char.jump(launch)
+  else char.vel.y = -launch
   char.vel.x = 0
-  char.vel.y = -Math.round(CFG.game.jumpForce * boostMult)
   state.cooldown = TRAMP_COOLDOWN
   state.squash = TRAMP_SQUASH_MAX
   inst[bounceAirKey] = true
@@ -10952,7 +10998,7 @@ function isHeroAtTrampolineCap(inst, heroX, footY, state) {
   // in that gap (most likely landing near the cap's edge, off dead-centre)
   // read as "not on cap" here and never got a bounce, just stood there.
   //
-  return mDx < TRAMP_RADIUS + TRAMP_ADJACENT_X &&
+  return mDx < TRAMP_CAP_HALF &&
     footY >= capTopY - 10 && footY <= capTopY + TRAMP_SNAP_BELOW
 }
 //
@@ -10987,6 +11033,45 @@ function isOnBranchTrampolineCap(inst, char) {
   return isOnTrampolineCap(inst, char, inst.branchTrampState)
 }
 //
+// moveTo marks the sprite transform dirty. A raw pos write can leave the
+// drawing behind while the camera follows the new coordinates.
+//
+function moveGlowHeroTo(char, x, y) {
+  if (!char?.pos) return
+  if (typeof char.moveTo === 'function') {
+    char.moveTo(x, y)
+    return
+  }
+  char.pos.x = x
+  char.pos.y = y
+}
+//
+// True while Kaplay still treats this pad as the ground under the hero.
+//
+function heroBodyOnPad(char, pad) {
+  const platform = char?.curPlatform?.()
+  return Boolean(pad && platform === pad)
+}
+//
+// Drops the stick without changing the launch velocity.
+//
+function releaseHeroFromPad(char, pad) {
+  if (!heroBodyOnPad(char, pad)) return
+  const vx = char.vel?.x ?? 0
+  const vy = char.vel?.y ?? 0
+  if (typeof char.jump === 'function') char.jump(1)
+  char.vel && (char.vel.x = vx, char.vel.y = vy)
+}
+//
+// Unsticks the hero, then parks the cap collider off the playfield.
+//
+function parkTrampolinePad(char, pad) {
+  if (!pad) return
+  releaseHeroFromPad(char, pad)
+  pad.pos.x = -500
+  pad.pos.y = PLATFORM_HIDE_Y
+}
+//
 // Keeps the invisible trampoline pad under the mushroom. The pad must NEVER
 // teleport to PLATFORM_HIDE_Y / off-screen while the hero could be standing on
 // it — Kaplay carries the body with a moved static platform (hero vanishes).
@@ -11009,8 +11094,7 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   if (!colliderActive) {
     state._capPadLatch = 0
     inst[bounceAirKey] = false
-    pad.pos.x = -500
-    pad.pos.y = PLATFORM_HIDE_Y
+    parkTrampolinePad(char, pad)
     return
   }
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
@@ -11040,8 +11124,7 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
     !walkingPastOnFloor && nearX && inCapBand &&
     (grounded || velY > -80 || fallingOntoCap))
   if (!needsPad) {
-    pad.pos.x = -500
-    pad.pos.y = PLATFORM_HIDE_Y
+    parkTrampolinePad(char, pad)
     return
   }
   //
@@ -11051,12 +11134,19 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const tw = inst.trampWalk
   const trampMarching = state === inst.trampState && tw?.walking
   if (trampMarching && onCap) {
-    pad.pos.x = -500
-    pad.pos.y = PLATFORM_HIDE_Y
+    parkTrampolinePad(char, pad)
     return
   }
-  pad.pos.x = state.x
-  pad.pos.y = capTop + TRAMP_PAD_H / 2
+  const nextX = state.x
+  const nextY = capTop + TRAMP_PAD_H / 2
+  //
+  // A far pad jump while the hero still stands on it drags him with the body.
+  //
+  if (heroBodyOnPad(char, pad) && Math.hypot(nextX - pad.pos.x, nextY - pad.pos.y) > 24) {
+    return
+  }
+  pad.pos.x = nextX
+  pad.pos.y = nextY
   if (bounceAir) {
     const groundedNow = typeof char?.isGrounded === 'function' && char.isGrounded()
     if ((onCap && velY >= -40) || (groundedNow && !onCap)) {
@@ -12323,6 +12413,7 @@ function checkGlowTouchDeath(inst, heroX, heroFootY) {
   if (inst.deathHandled) return
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
   if (Predator.isTouchingHero(inst.predator, heroX, heroFootY)) {
+    inst._predatorDeathHintContext = capturePredatorDeathHintContext(inst, heroX)
     Predator.notifyKill(inst.predator)
     triggerGlowTouchDeath(inst, 'predator')
     return
@@ -12415,17 +12506,63 @@ function predatorDeathHintText(deathOrdinal) {
   return PREDATOR_DEATH_HINT_TEXTS[idx]
 }
 //
+// Picks a predator death line from how the kill happened (mud, grass, charge).
+//
+function predatorDeathHintTextForKill(deathOrdinal, ctx) {
+  const lines = []
+  ctx?.fastAttack && lines.push(PREDATOR_DEATH_HINT_FAST)
+  ctx?.inMudBand && lines.push(PREDATOR_DEATH_HINT_MUD)
+  ctx?.inConcealingGrass && lines.push(PREDATOR_DEATH_HINT_BUSHES)
+  if (lines.length) {
+    return lines[Math.max(0, deathOrdinal - 1) % lines.length]
+  }
+  return predatorDeathHintText(deathOrdinal)
+}
+//
+// Snapshot at the touch frame — before notifyKill resets predator state.
+//
+function capturePredatorDeathHintContext(inst, heroFootX) {
+  const pred = inst.predator
+  const fastAttack = pred?.state === 'charge' || pred?.state === 'orient'
+  const inMudBand = isGlowMudBandFootX(inst, heroFootX)
+  const inConcealingGrass = isGlowPredatorConcealingGrassFootX(inst, heroFootX)
+  return { fastAttack, inMudBand, inConcealingGrass }
+}
+//
+// Soft mud band under the hero's feet (hint-only — ignores gCollected gate).
+//
+function isGlowMudBandFootX(inst, footX) {
+  if (inst.mudZoneX1 == null || inst.mudZoneX2 == null) return false
+  return footX >= inst.mudZoneX1 && footX <= inst.mudZoneX2
+}
+//
+// Tall grass east of the branch trampoline through the mud band.
+//
+function isGlowPredatorConcealingGrassFootX(inst, footX) {
+  if (isGlowMudBandFootX(inst, footX)) return true
+  if (inst.mudZoneX1 == null || inst.branchTrampX == null) return false
+  const branchGrassRight = inst.branchTrampX + TRAMP_GRASS_CLEAR_HALF
+  return footX >= branchGrassRight && footX < inst.mudZoneX1
+}
+//
+// Picks the wooden-spike death line for this kill (cycles through the set).
+//
+function spikeDeathHintText(deathOrdinal) {
+  const idx = Math.max(0, deathOrdinal - 1) % RIGHT_SPIKE_DEATH_HINT_TEXTS.length
+  return RIGHT_SPIKE_DEATH_HINT_TEXTS[idx]
+}
+//
 // Life-HUD bump, death hint, then in-level respawn beside the kill.
 //
 function finishGlowTouchDeath(inst, cause, deathX, deathY) {
   bumpGlowLifeHudOnDeath(inst)
   inst.touchDeathCount = (inst.touchDeathCount || 0) + 1
-  const repeatBeat = inst.touchDeathCount % 2 === 0
   if (cause === 'spikes') {
+    inst.spikeDeathCount = (inst.spikeDeathCount || 0) + 1
     const spikes = inst.rightSpikes
     HeroHint.show(
       inst.heroHint,
-      repeatBeat ? GLOW_TOUCH_DEATH_REPEAT_HINT_TEXT : RIGHT_SPIKE_DEATH_HINT_TEXT,
+      spikeDeathHintText(inst.spikeDeathCount),
       GLOW_TOUCH_DEATH_HINT_DURATION,
       {
         anchorX: spikes ? (spikes.x1 + spikes.x2) / 2 : deathX,
@@ -12437,9 +12574,15 @@ function finishGlowTouchDeath(inst, cause, deathX, deathY) {
       }
     )
   } else if (cause === 'predator') {
+    inst.predatorDeathCount = (inst.predatorDeathCount || 0) + 1
+    const predatorHint = predatorDeathHintTextForKill(
+      inst.predatorDeathCount,
+      inst._predatorDeathHintContext
+    )
+    inst._predatorDeathHintContext = null
     HeroHint.show(
       inst.heroHint,
-      predatorDeathHintText(inst.touchDeathCount),
+      predatorHint,
       GLOW_TOUCH_DEATH_HINT_DURATION,
       {
         anchorX: inst.predator?.x ?? deathX,
@@ -12850,6 +12993,8 @@ function revealLPlatZone(inst, silent = false) {
   set(KEY_REVEALED_L_PLAT, true)
   !silent && playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
+  const spikes = inst.rightSpikes
+  spikes && (spikes.blinkUntil = inst.k.time() + RIGHT_SPIKE_BLINK_DURATION)
 }
 //
 // Opens the L log after a bounce (or jump-land) on the right mushroom.
@@ -13557,6 +13702,7 @@ function onUpdate(inst) {
   //
   // Lake drowning — after ground snap so the hero stands on the floor first.
   //
+  syncTrampBounceAirForLakeFloor(inst, heroX, footY)
   !inst.deathHandled && !inst.drowning &&
     shouldDrownInWater(inst, heroX, footY) && startDrowning(inst)
   updateHeroGazeAtG(inst)
@@ -14623,13 +14769,12 @@ function isHeroNearUnrevealedTrampSpot(inst, heroX) {
 // Shows a fixed "missing mushroom" tooltip at each unrevealed trampoline pad.
 //
 function updateTrampMissingPlaceHints(inst, heroX, footY, grounded) {
-  const z = inst.zones
-  const eyesUnlocked = isGlowEyesGameplayUnlocked(z)
   inst.trampMissingHints = inst.trampMissingHints ?? { right: null, branch: null, cave: null }
   syncOneTrampMissingHint(inst, 'right', inst.trampState?.x ?? -9999, false)
-  const canShow = grounded && footY >= FLOOR_Y - 28 && !z.colorWorld
-  const branchHere = trampMissingPadHere(inst, inst.branchTrampState?.x ?? -9999, z.branchTrampRevealed)
-  syncOneTrampMissingHint(inst, 'branch', inst.branchTrampState?.x ?? -9999, canShow && branchHere && eyesUnlocked)
+  //
+  // Branch pad — no "missing" bubble; the swamp spirit marks the G-route spot.
+  //
+  syncOneTrampMissingHint(inst, 'branch', inst.branchTrampState?.x ?? -9999, false)
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
   const caveMid = (cave.x1 + cave.x2) * 0.5
   const overCave = heroX >= cave.x1 && heroX <= cave.x2 &&
@@ -14999,13 +15144,6 @@ function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
 //
 function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (!state) return
-  //
-  // Tracked unconditionally (before any early return below) so it always
-  // reflects the true previous-to-this-frame delta, not a stale gap left
-  // over from frames where this function bailed out early.
-  //
-  const actualDeltaX = heroX - (state._prevSnapX ?? heroX)
-  state._prevSnapX = heroX
   const branchPad = state === inst.branchTrampState
   const colliderActive = branchPad
     ? isBranchTrampolineColliderActive(inst.zones)
@@ -15014,7 +15152,7 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
   if (isHeroFeetOnMainFloorLane(footY)) return
-  if (Math.abs(heroX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X) return
+  if (Math.abs(heroX - state.x) >= TRAMP_CAP_HALF) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
@@ -15041,48 +15179,13 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   // instead of walking past it. Removed — this rescue only ever needs the
   // narrow high-speed-tunnel margin below.
   //
-  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW
+  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW && footY < TRAMP_MAIN_LANE_FEET_MIN
   //
-  // Edge dead-zone fix: a hero landing near the cap's edge almost always
-  // still carries horizontal speed from the jump arc (a dead-center drop
-  // with zero vx is the rare case). Kaplay only resolves the landing once
-  // the feet actually reach the thin pad's surface — but by then, a hero
-  // that started this fall already close to the edge can have drifted past
-  // TRAMP_RADIUS + TRAMP_ADJACENT_X in X before their feet ever get there,
-  // so the pad and the hero's feet are never in the same place at the same
-  // time and the hero just sails through to the main floor beside the
-  // mushroom (reported as "dead spots" that only fail near the edges — a
-  // dead-center drop has far more X slack before it would ever exit the
-  // zone, so it never showed this). Catch that: once the feet are close
-  // enough above the cap to be a genuine landing attempt (not a high jump
-  // merely passing over), predict one frame ahead — if that would carry the
-  // hero out of the zone before they actually touch down, snap them onto
-  // the cap now instead of letting them fly past. This is a one-shot
-  // correction (same shape as sunkPastCap above), not a per-frame
-  // force-write: pinHeroOnTrampolineCap zeroes vel.y, so the hero is
-  // grounded next frame and this condition stops re-triggering.
+  // Only a fall that already passed through the cap from above. A sideways
+  // pass must not be pinned onto the pad — that left the hero standing in
+  // the air beside the mushroom, then sinking through the floor.
   //
-  const closingIn = footY > capTop - TRAMP_PAD_APPROACH_ABOVE
-  //
-  // char.vel.x is NOT how horizontal movement works in this game — hero.js
-  // drives it entirely through character.move(dx, 0) each frame (and even
-  // forces vel.x to 0 elsewhere), so char.vel.x reads 0 in every real-play
-  // frame, grounded or airborne. The one-frame-ahead prediction below used
-  // to multiply that permanently-zero value by dt, so nextX always collapsed
-  // to the current heroX — which is always still inside the zone here (the
-  // outsideXZone guard above already returned otherwise) — making
-  // aboutToLeaveZone permanently false and this whole predictive catch a
-  // silent no-op in actual gameplay. A synthetic test that manually set
-  // char.vel.x to simulate motion never exercised this, which is why it
-  // looked fixed there but not in real play. actualDeltaX (tracked at the
-  // top of this function, unconditionally, so it survives early returns) is
-  // the hero's real observed frame-to-frame X motion instead — correct
-  // regardless of how it's produced (move(), mud slowdown, a future
-  // velocity-based change, etc).
-  //
-  const nextX = heroX + actualDeltaX
-  const aboutToLeaveZone = Math.abs(nextX - state.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X
-  if (sunkPastCap || (closingIn && aboutToLeaveZone)) pinHeroOnTrampolineCap(inst, char, capTop, state)
+  sunkPastCap && pinHeroOnTrampolineCap(inst, char, capTop, state)
 }
 //
 // Margin kept inside the existing cap X-zone when the late bounce pass
@@ -15106,7 +15209,7 @@ const TRAMP_PIN_X_CLAMP_MARGIN = 4
 // there motionless afterward.
 //
 function pinHeroOnTrampolineCap(inst, char, capTop, state = null) {
-  char.pos.y = capTop - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
+  moveGlowHeroTo(char, char.pos.x, capTop - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED)
   char.vel && (char.vel.y = 0)
   state && (state._edgeCatchPinned = true)
 }
@@ -15118,10 +15221,15 @@ function pinHeroOnTrampolineCap(inst, char, capTop, state = null) {
 // not a zone widening.
 //
 function clampHeroIntoTrampolineCapX(char, state) {
-  if (!state?._edgeCatchPinned) return
+  if (!state?._edgeCatchPinned || !char?.pos) return
   state._edgeCatchPinned = false
-  const half = TRAMP_RADIUS + TRAMP_ADJACENT_X - TRAMP_PIN_X_CLAMP_MARGIN
-  char.pos.x = Math.min(state.x + half, Math.max(state.x - half, char.pos.x))
+  const half = TRAMP_CAP_HALF - TRAMP_PIN_X_CLAMP_MARGIN
+  //
+  // Never drag a hero who only brushed the side of the pad onto the cap.
+  //
+  if (Math.abs(char.pos.x - state.x) > TRAMP_CAP_HALF) return
+  const clamped = Math.min(state.x + half, Math.max(state.x - half, char.pos.x))
+  clamped !== char.pos.x && moveGlowHeroTo(char, clamped, char.pos.y)
 }
 //
 // First mushroom reveal — collider off, hero passes through to FLOOR_Y.
@@ -15164,10 +15272,7 @@ function resetTrampolineCapPadState(inst, state, bounceAirKey, pad) {
   if (!state) return
   state._capPadLatch = 0
   inst[bounceAirKey] = false
-  if (pad) {
-    pad.pos.x = -500
-    pad.pos.y = PLATFORM_HIDE_Y
-  }
+  pad && parkTrampolinePad(inst.heroInst?.character, pad)
 }
 //
 // Catches tunneling through the thin start-branch collider before lake-floor snap.
@@ -15238,8 +15343,8 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   if (heroX < LEFT_MARGIN + 8 || heroX >= floorEndX - 16) return
   if (isHeroOverOpenCaveMouth(inst, heroX)) return
   if (isHeroOverLetterLog(inst, heroX)) return
-  if (isHeroNearTrampolineX(inst, heroX)) return
-  if (isOnTrampolineCap(inst, char)) return
+  if (isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.trampState)) return
+  if (isHeroStandingOnTrampolineCap(inst, heroX, footY, inst.branchTrampState)) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
   //
@@ -15247,11 +15352,11 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   //
   if (footY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) return
   //
-  // Feet tunnelled below the visible floor — pull back up once
+  // Feet under the floor line, including a shallow sink beside a mushroom.
   //
-  if (footY > FLOOR_Y + LOG_SNAP_DEEP_SINK && footY <= FLOOR_Y + 36) {
-    char.pos.y = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    if (char.vel && char.vel.y > 0) char.vel.y = 0
+  if (footY <= FLOOR_Y + 64) {
+    moveGlowHeroTo(char, char.pos.x, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+    char.vel && char.vel.y > 0 && (char.vel.y = 0)
   }
 }
 //
@@ -15854,10 +15959,13 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   markGlowHudGPitMushLaunch()
   syncGlowHudLetterFills(inst, true)
   const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
-  char.pos.x = teleportX
-  char.pos.y = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
+  const teleportY = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
+  moveGlowHeroTo(char, teleportX, teleportY)
+  const launch = Math.round(CFG.game.jumpForce * BRANCH_TRAMP_BOOST_MULT)
+  if (typeof char.jump === 'function') char.jump(launch)
+  else char.vel.y = -launch
   char.vel.x = 0
-  char.vel.y = -Math.round(CFG.game.jumpForce * BRANCH_TRAMP_BOOST_MULT)
+  inst.branchTrampBounceAir = true
   hero.wasJumping = true
   hero.jumpPhase = 'jumping'
   hero.jumpCeilingBonk = false
@@ -15996,6 +16104,40 @@ function glowTeacherGZoneShouldUseTreeNudge(inst) {
   return glowTeacherOnlyBigTreeGZonesRemain(inst)
 }
 //
+// Picks a G HUD stall line from whatever map slice is still missing.
+//
+function glowTeacherGZoneStallHintText(inst) {
+  if (glowTeacherGZoneShouldUseTreeNudge(inst)) {
+    return GLOW_TEACHER_HINT_G_CLIMB_TREE_TEXT
+  }
+  const introParts = countGlowHudGCaveIntroParts()
+  if (introParts < 1 && !get(KEY_HUD_G_CAVE_ENTERED, false)) {
+    return GLOW_TEACHER_HINT_G_NEED_CAVE_TEXT
+  }
+  if (introParts < 2 && !get(KEY_HUD_G_PIT_MUSH_LAUNCH, false)) {
+    return GLOW_TEACHER_HINT_G_NEED_PIT_MUSH_TEXT
+  }
+  const z = inst.zones
+  const treeFull = z?.tree || inst.treeDrawMonolith
+  if (!treeFull) {
+    const treeParts = countGlowBranchTreePartsRevealed(inst)
+    if (treeParts === 0 && !z?.waterDiscovered) {
+      return GLOW_TEACHER_HINT_G_SWIM_TEXT
+    }
+    const lakeMushOpen = z?.waterDiscovered && z?.rightTrampRevealed
+    if (treeParts === 0 && lakeMushOpen) {
+      return GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT
+    }
+    if (treeParts < TreeSegments.TREE_REVEAL_PART_COUNT) {
+      return GLOW_TEACHER_HINT_G_CLIMB_TREE_TEXT
+    }
+  }
+  if (!z?.waterDiscovered) return GLOW_TEACHER_HINT_G_SWIM_TEXT
+  if ((z?.groundRightStripMax ?? -1) < 0) return GLOW_TEACHER_HINT_G_RIGHT_STRIP_TEXT
+  if (!z?.branchTrampRevealed) return GLOW_TEACHER_HINT_G_BRANCH_TRAMP_TEXT
+  return GLOW_TEACHER_HINT_G_PART_TEXT
+}
+//
 // True while lake + right mushroom are open but the big tree is still hidden.
 //
 function glowTeacherPostTreeMushAutoHintEligible(inst, inCave) {
@@ -16081,17 +16223,13 @@ function fireGlowTeacherCaveMushroomHint(inst) {
 //
 function fireGlowTeacherGZoneHint(inst) {
   if (!glowTeacherGZoneAutoHintEligible(inst, false)) return
-  const treeNudge = glowTeacherGZoneShouldUseTreeNudge(inst)
-  const text = treeNudge
-    ? GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT
-    : GLOW_TEACHER_HINT_G_PART_TEXT
-  const opts = treeNudge ? { postTreeMush: true } : { gHudStall: true }
+  const text = glowTeacherGZoneStallHintText(inst)
+  const treeNearMushLine = text === GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT
+  const opts = treeNearMushLine ? { postTreeMush: true } : { gHudStall: true }
   if (!showGlowTeacherHintNow(inst, text, GLOW_TEACHER_HINT_DURATION, opts)) return
-  if (treeNudge) {
-    inst._postTreeMushHintShows = (inst._postTreeMushHintShows || 0) + 1
-  } else {
-    inst._gHudStallHintShows = (inst._gHudStallHintShows || 0) + 1
-  }
+  treeNearMushLine
+    ? (inst._postTreeMushHintShows = (inst._postTreeMushHintShows || 0) + 1)
+    : (inst._gHudStallHintShows = (inst._gHudStallHintShows || 0) + 1)
   inst.lastGlowTeacherHintText = text
 }
 //

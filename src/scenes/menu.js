@@ -878,12 +878,10 @@ export function sceneMenu(k) {
           Cursor.setCursor('arrow')
           const isWordLevel = lastLevel && lastLevel.startsWith('lesson-word.')
           if (isWordLevel) {
-            menuMusic.stop()
-            kidsMusic.stop()
+            stopMenuMusic(menuMusic, kidsMusic)
             showTransitionToLevel(k, lastLevel)
           } else {
-            menuMusic.stop()
-            kidsMusic.stop()
+            stopMenuMusic(menuMusic, kidsMusic)
             createLevelTransition(k, 'menu')
           }
         }
@@ -896,8 +894,7 @@ export function sceneMenu(k) {
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
-          menuMusic.stop()
-          kidsMusic.stop()
+          stopMenuMusic(menuMusic, kidsMusic)
           const currentLastLevel = get('lastLesson', null)
           if (currentLastLevel && currentLastLevel.startsWith('lesson-glow.')) {
             showTransitionToLevel(k, currentLastLevel)
@@ -913,8 +910,7 @@ export function sceneMenu(k) {
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
-          menuMusic.stop()
-          kidsMusic.stop()
+          stopMenuMusic(menuMusic, kidsMusic)
           const lastTouchLevel = get('lastLesson', null)
           if (lastTouchLevel && lastTouchLevel.startsWith('lesson-touch.')) {
             showTransitionToLevel(k, lastTouchLevel)
@@ -931,8 +927,7 @@ export function sceneMenu(k) {
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
-          menuMusic.stop()
-          kidsMusic.stop()
+          stopMenuMusic(menuMusic, kidsMusic)
           const isTimeLevel = lastLevel && lastLevel.startsWith('lesson-time.')
           if (isTimeLevel) {
             showTransitionToLevel(k, lastLevel)
@@ -1466,8 +1461,7 @@ export function sceneMenu(k) {
       if (isMenuTransitionBlocking(k)) return
       beginMenuSceneLeave(k, inst)
       Sound.stopAmbient(sound)
-      menuMusic.stop()
-      kidsMusic.stop()
+      stopMenuMusic(menuMusic, kidsMusic)
       Cursor.setCursor('arrow')
       //
       // The first glow level always enters through the transition, so the
@@ -1505,8 +1499,7 @@ export function sceneMenu(k) {
       //
       if (isMenuTransitionBlocking(k)) return
       Sound.stopAmbient(sound)
-      menuMusic.stop()
-      kidsMusic.stop()
+      stopMenuMusic(menuMusic, kidsMusic)
       goAfterPreparingAssets(k, "ready")
     })
     
@@ -1521,8 +1514,7 @@ export function sceneMenu(k) {
       //
       // Stop menu music
       //
-      menuMusic.stop()
-      kidsMusic.stop()
+      stopMenuMusic(menuMusic, kidsMusic)
       //
       // Destroy all game objects
       //
@@ -2881,7 +2873,23 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
 // Stops menu-owned music before the old Kaplay engine is destroyed directly.
 //
 function stopMenuMusic(menuMusic, kidsMusic) {
-  menuMusic?.stop?.()
-  kidsMusic?.stop?.()
+  hushMenuTrack(menuMusic)
+  hushMenuTrack(kidsMusic)
+}
+//
+// HTML music can resume after pause() if play() resolves late, and then
+// keeps sounding once the Web Audio graph is torn down for the Glow loader.
+//
+function hushMenuTrack(play) {
+  if (!play) return
+  const hush = () => {
+    play.volume = 0
+    play.loop = false
+    play.paused = true
+    play.stop?.()
+  }
+  hush()
+  const timer = setInterval(hush, 200)
+  setTimeout(() => clearInterval(timer), 8000)
 }
 

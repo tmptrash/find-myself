@@ -8,10 +8,10 @@ import * as SwampSpirit from '../components/swamp-spirit.js'
 import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 
 //
-// Pictorial nudge when the hero stays outside the spirit's reaction radius —
-// mushroom plus heart, no letters (gray = black icons, post-L = colour).
+// Pictorial nudge while the spirit's eyes are shut because the hero is far —
+// a single mushroom, no letters (gray = black icon, post-L = colour).
 //
-const HINT_ICON_W = 76
+const HINT_ICON_W = 44
 const HINT_ICON_H = 40
 const HINT_OFFSET_Y = -70
 const HINT_MIN_RISE = 0.18
@@ -22,9 +22,6 @@ const MUSH_STEM_W = 9
 const MUSH_STEM_H = 15
 const MUSH_BASE_Y = 34
 const MUSH_CX = 22
-const HEART_CX = 58
-const HEART_CY = 14
-const HEART_SIZE = 22
 const MONO_INK = '#000000'
 const BUBBLE_BORDER_WIDTH = 3
 const BUBBLE_CORNER_RADIUS = 10
@@ -38,7 +35,7 @@ const BUBBLE_BG_G = 242
 const BUBBLE_BG_B = 235
 const BUBBLE_BG_OPACITY = 0.92
 const TOOLTIP_BAKE_PAD = 4
-const SPRITE_KEY_PREFIX = 'glow-spirit-mush-heart-'
+const SPRITE_KEY_PREFIX = 'glow-spirit-mush-'
 //
 // Extra slack so the hint hides as soon as the spirit leaves the playfield window.
 //
@@ -87,7 +84,7 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
     targets: [target],
     forceVisible: true,
     clampInset,
-    customDraw: drawSpiritMushHeartTooltip
+    customDraw: drawSpiritMushTooltip
   })
   hintTip.activeTarget = target
   hintTip.opacity = 1
@@ -139,7 +136,7 @@ function isSpiritProximityHintEligible(levelInst, spirit) {
   const pos = spirit.hero?.character?.pos
   if (!pos) return false
   const hero = { x: pos.x, y: pos.y }
-  return SwampSpirit.isHeroBeyondReactionRadius(spirit, hero)
+  return SwampSpirit.isHeroFarEnoughToShutEyes(spirit, hero)
 }
 //
 // False when the spirit's head / burrow AABB is fully outside the camera window.
@@ -172,14 +169,14 @@ function isSpiritHintMonochrome(levelInst) {
   return isGlowGrayExploreBeforeL(z, fade)
 }
 
-function drawSpiritMushHeartTooltip(tipInst, layout) {
+function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
-    const canvas = bakeSpiritMushHeartTooltipCanvas(layout, colored)
+    const canvas = bakeSpiritMushTooltipCanvas(layout, colored)
     k.loadSprite(tipInst._spiritHintSprite, canvas)
     const bounds = spiritHintBakeBounds(layout)
     tipInst._spiritHintDrawX = bounds.minX
@@ -214,7 +211,7 @@ function spiritHintBakeBounds(layout) {
   return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 
-function bakeSpiritMushHeartTooltipCanvas(layout, colored) {
+function bakeSpiritMushTooltipCanvas(layout, colored) {
   const halfW = POINTER_WIDTH / 2
   const bx = layout.bubbleX - BUBBLE_BORDER_WIDTH
   const by = layout.bubbleY - BUBBLE_BORDER_WIDTH
@@ -281,7 +278,6 @@ function bakeSpiritMushHeartTooltipCanvas(layout, colored) {
   const iconOx = bubbleX + BUBBLE_PADDING_X
   const iconOy = bubbleY + BUBBLE_PADDING_Y
   drawHintMushroom(ctx, iconOx + MUSH_CX, iconOy + MUSH_BASE_Y, colored)
-  drawHintHeart(ctx, iconOx + HEART_CX, iconOy + HEART_CY, HEART_SIZE, colored)
   applyGlowFilmGrainToCanvas(canvas, glowUiHash(`${colored}|${layout.bubbleW}`))
   return canvas
 }
@@ -317,24 +313,6 @@ function drawHintMushroom(ctx, cx, baseY, colored) {
     capLight: light,
     capShadow: shadow
   })
-}
-
-function drawHintHeart(ctx, cx, cy, size, colored) {
-  const fill = colored ? parseHex(GLOW_PAL.glowAttention.blush) : parseHex(MONO_INK)
-  const s = size / 24
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.scale(s, s)
-  ctx.beginPath()
-  ctx.moveTo(0, 5)
-  ctx.bezierCurveTo(0, 2, -6, -2, -9, 1)
-  ctx.bezierCurveTo(-12, 4, -12, 10, 0, 16)
-  ctx.bezierCurveTo(12, 10, 12, 4, 9, 1)
-  ctx.bezierCurveTo(6, -2, 0, 2, 0, 5)
-  ctx.closePath()
-  ctx.fillStyle = `rgb(${fill[0]},${fill[1]},${fill[2]})`
-  ctx.fill()
-  ctx.restore()
 }
 
 function spiritHintRoundRect(ctx, x, y, w, h, r) {

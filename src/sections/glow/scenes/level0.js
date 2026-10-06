@@ -1599,6 +1599,12 @@ const TRAMP_RADIUS = Math.round(38 * TRAMP_SIZE_SCALE)
 //
 const TRAMP_CAP_HALF = TRAMP_RADIUS
 //
+// Hero centre X span where his hitbox still rests on the cap pad — the pad is
+// TRAMP_CAP_HALF wide each side, the body overhangs it by its own half-width.
+// Bounce / on-cap checks use this so an edge landing launches too.
+//
+const TRAMP_CAP_STAND_HALF = TRAMP_CAP_HALF + GLOW_HERO_HITBOX_HALF_W
+//
 // Spawn clearance still steps back from the old wider band.
 //
 const TRAMP_ADJACENT_X = 22
@@ -10923,7 +10929,7 @@ function shouldDrownInWater(inst, heroX, footY) {
 function isHeroStandingOnTrampolineCap(inst, heroX, footY, state) {
   if (!state) return false
   const capTopY = FLOOR_Y - TRAMP_TOTAL_H
-  if (Math.abs(heroX - state.x) >= TRAMP_CAP_HALF) return false
+  if (Math.abs(heroX - state.x) >= TRAMP_CAP_STAND_HALF) return false
   if (footY < capTopY - 10 || footY > capTopY + LOG_SNAP_STANDING_MAX) return false
   const branchPad = state === inst.branchTrampState
   return branchPad
@@ -10998,7 +11004,7 @@ function isHeroAtTrampolineCap(inst, heroX, footY, state) {
   // in that gap (most likely landing near the cap's edge, off dead-centre)
   // read as "not on cap" here and never got a bounce, just stood there.
   //
-  return mDx < TRAMP_CAP_HALF &&
+  return mDx < TRAMP_CAP_STAND_HALF &&
     footY >= capTopY - 10 && footY <= capTopY + TRAMP_SNAP_BELOW
 }
 //

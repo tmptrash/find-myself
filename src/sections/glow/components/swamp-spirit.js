@@ -144,13 +144,14 @@ export function create(cfg) {
 }
 
 /**
- * True when the hero is farther than the spirit's reaction band (creep radius).
+ * True when the hero is far enough that the spirit relaxes and shuts its eyes
+ * (same distance test as tickEyes, so the mushroom hint matches the lids).
  * @param {Object} inst - Swamp spirit inst
  * @param {{ x: number, y: number }|null} hero
  * @returns {boolean}
  */
-export function isHeroBeyondReactionRadius(inst, hero) {
-  return Boolean(hero) && !heroWithin(inst, hero, CREEP_RADIUS)
+export function isHeroFarEnoughToShutEyes(inst, hero) {
+  return Boolean(hero) && heroFar(inst, hero)
 }
 
 /**
@@ -164,7 +165,7 @@ export function isSpiritRetired(inst) {
 
 /**
  * Whistle, emerge, and startle stay quiet while the left trampoline sprite
- * is still hidden. The bury sound and the mushroom-heart hint still play.
+ * is still hidden. The bury sound and the mushroom hint still play.
  * @param {Object} inst - Swamp spirit inst
  * @returns {boolean}
  */

@@ -560,7 +560,7 @@ function wakeSpiritLive(inst) {
 // Left trampoline burrow until it is revealed, then the right cap; retire after the right opens.
 //
 function syncBurrowPhase(inst) {
-  if (inst.rightMushroomShown?.()) {
+  if (inst.zones?.lPlatRevealed || inst.zones?.lCollected) {
     retireSpirit(inst)
     return
   }

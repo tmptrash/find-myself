@@ -90,6 +90,7 @@ export function create(cfg) {
     return {
       x: spot.x,
       groundY: spot.groundY,
+      chainTrampRole: spot.chainTrampRole ?? null,
       seed: spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2),
       segmentCount: spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT,
       segmentLen: spot.segmentLen ?? BUOY_SEGMENT_LEN_DEFAULT,
@@ -141,7 +142,8 @@ export function onDraw(inst, colors, zones, view = null) {
   const eyeColors = { ...colors, pupil: pupilColor }
   const visible = inst.buoys.filter(buoy =>
     isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) &&
-    !chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin))
+    (buoy.chainTrampRole ||
+      !chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)))
   //
   // All root sprites first, then every stalk body followed by every eye in
   // one batched polygon — interleaving sprite blits with primitives would
@@ -207,6 +209,15 @@ function updateBuoyBlink(buoy, dt) {
 // Vertical chain with a gentle horizontal sine wave — segments stay mostly
 // upright (stretched upward) instead of rotating like a pendulum.
 //
+/**
+ * World position of the stalk-eye cap (top segment).
+ * @param {Object} buoy - One chain-buoy entry
+ * @param {number} time - Sway clock (inst.time)
+ */
+export function getChainBuoyEyePos(buoy, time = 0) {
+  const points = buildBuoyChainPoints(buoy, time)
+  return points[points.length - 1]
+}
 function buildBuoyChainPoints(buoy, time) {
   let x = buoy.x
   let y = buoy.groundY

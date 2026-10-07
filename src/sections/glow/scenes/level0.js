@@ -127,6 +127,7 @@ import {
   syncSwampSpiritProximityHint,
   destroySwampSpiritProximityHint
 } from '../utils/swamp-spirit-proximity-hint.js'
+import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
 import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
@@ -447,15 +448,13 @@ const RIGHT_SPIKE_H = 22
 const RIGHT_SPIKE_BLINK_DURATION = 0.8
 const RIGHT_SPIKE_GRASS_TUFT_COUNT = 8
 //
-// Shorter-than-normal blades over the spikes so their tips still poke
-// through — full-height grass (see BLADE_H in grass.js) would bury them.
+// Tall enough blades to hide spike tips; still slightly varied via grass.js scale.
 //
-const RIGHT_SPIKE_GRASS_SCALE_MULT = 0.72
+const RIGHT_SPIKE_GRASS_SCALE_MULT = 1.02
 //
-// Spike-patch grass must stay this many px inside the L-log's right wood edge
-// (blade anchor is centre — clamp by sprite half-width, not tuft centre X).
+// Right silhouette tip of the L log (halfW + endR*sq semicircle — drawLOutlineLogPlatform).
 //
-const RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET = 3
+const RIGHT_SPIKE_GRASS_LOG_TIP_INSET = 2
 //
 // Touching the predator or falling on the spikes is fatal — same
 // disintegration flow as any other level's death, then in-level respawn.
@@ -1098,6 +1097,20 @@ const KEY_REVEALED_L_PLAT = 'glow.revealedLPlat'
 const KEY_L_LETTER_UNVEILED = 'glow.lLetterUnveiled'
 const L_PLAT_SHIFT_LEFT = 140
 const L_PLAT_RAISE_Y = 58
+const GLOW_CHAIN_TRAMP_EYE_STEP_X = 108
+const GLOW_CHAIN_TRAMP_LEFT_EYE_EXTRA_LEFT = 40
+const GLOW_CHAIN_TRAMP_MUSH_STEP_X = 168
+const GLOW_CHAIN_TRAMP_PAIR_SHIFT_LEFT = 72
+const GLOW_CHAIN_TRAMP_SEGMENT_LEN = 26
+const GLOW_CHAIN_TRAMP_MIDDLE_SEGMENTS = 6
+const GLOW_CHAIN_TRAMP_LEFT_SEGMENTS = 11
+const GLOW_CHAIN_TRAMP_WEST_MARGIN = 64
+const GLOW_CHAIN_TRAMP_SWAY_AMP = 0.11
+const GLOW_CHAIN_TRAMP_SWAY_SPEED = 1.1
+const GLOW_CHAIN_TRAMP_SWAY_LAG = 0.55
+const L_PLAT_ABOVE_LEFT_CHAIN_EYE = 108
+const L_PLAT_LEFT_OF_LEFT_CHAIN_EYE_GAP = 36
+const KEY_CHAIN_MIDDLE_EYE_STEPPED = 'glow.chainMiddleEyeStepped'
 const KEY_REVEALED_GROUND_DECOR = 'glow.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'glow.revealedGroundDecorRight'
 const KEY_REVEALED_GROUND_DECOR_LEFT = 'glow.revealedGroundDecorLeft'
@@ -2193,6 +2206,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     branchPlat.tag('startBranch')
     const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
     const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
+    const earTreeSpots = buildGlowEarTreeSpots(horizBranch.x1)
     //
     // Mud predator band east of the branch trampoline.
     //
@@ -2206,9 +2220,11 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // the spawn-clearance check right after can see it.
     //
     const rightZoneBaseX = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
-    const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
     const rightPlatY = horizBranch.physY
-    const lPlatY = rightPlatY - L_PLAT_RAISE_Y
+    const trampXForLayout = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
+    const chainTrampLayout = computeGlowChainTrampLayoutForTramp(trampXForLayout)
+    const lPlatX = chainTrampLayout.lPlatX
+    const lPlatY = chainTrampLayout.lPlatY
     //
     // Right spike zone's X range — computed early alongside lPlatX so the
     // spawn-clearance check right after can see it too.
@@ -2421,7 +2437,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Computed here (before grass) so the grass field can exclude the same
     // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
     //
-    const earTreeSpots = buildGlowEarTreeSpots(horizBranch.x1)
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots)
     const mudExtraGrass = GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD
       ? null
@@ -2557,6 +2572,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k.opacity(0),
       CFG.game.platformName
     ])
+    const chainEyePads = ChainEyeTramp.createPads(k)
     if (await glowBootstrapPause(bootstrap, 84, session)) return
     const camera = GlowCamera.create({
       k,
@@ -2667,6 +2683,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       branchTrampBundle,
       trampPad,
       branchTrampPad,
+      chainEyeTramp: {
+        ...chainEyePads,
+        ...ChainEyeTramp.createChainEyeTrampStates(zones)
+      },
+      lChainFromRightTramp: false,
+      lChainFromMiddleEye: get(KEY_CHAIN_MIDDLE_EYE_STEPPED, false),
+      chainEyeBounceAir: null,
       branchTrampBounceAir: false,
       branchTrampPitGuardTimer: 0,
       treeRevealFromBranchTramp: false,
@@ -2862,6 +2885,14 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
     })
     inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
+    inst.onChainMiddleEyeStepped = () => {
+      set(KEY_CHAIN_MIDDLE_EYE_STEPPED, true)
+      inst.zones.chainMiddleEyeStepped = true
+      inst.lChainFromMiddleEye = true
+      ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
+    }
+    inst.onLeftChainEyeTouchForLPlat = () => revealLPlatZone(inst)
+    ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
     createGlowChainBuoyLayer(k, zones)
     createGlowEarTreeLayer(k, inst)
     if (await glowBootstrapPause(bootstrap, 93, session)) return
@@ -3534,6 +3565,7 @@ function loadGlowZones() {
     branchTrampBounceLive,
     rightTrampRevealed,
     rightTrampBounceLive,
+    chainMiddleEyeStepped: get(KEY_CHAIN_MIDDLE_EYE_STEPPED, false) || lCollected,
     lPlatStepped: get(KEY_L_PLAT_STEPPED, false) || lCollected,
     mudPredatorJumpedOver: get(KEY_MUD_PREDATOR_JUMPED_OVER, false) ||
       get(KEY_MUD_PREDATOR_JUMPED_OVER_LEGACY, false) ||
@@ -6680,22 +6712,58 @@ function glowChainBuoyXUnderWoodPlatform(x, woodBands) {
   const margin = GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
   return (woodBands ?? []).some(b => x >= b.x1 - margin && x <= b.x2 + margin)
 }
-function buildGlowChainBuoySpot(x) {
+function buildGlowChainBuoySpot(x, opts = null) {
   return {
     x,
     groundY: FLOOR_Y,
-    seed: Math.random() * Math.PI * 2,
-    segmentCount: 5 + Math.floor(Math.random() * 4),
-    segmentLen: 22 + Math.random() * 10,
-    segmentWidth: 3.85 + Math.random() * 0.55,
-    swayAmp: 0.09 + Math.random() * 0.12,
-    swaySpeed: 0.75 + Math.random() * 0.65,
-    swayLag: 0.35 + Math.random() * 0.35
+    chainTrampRole: opts?.chainTrampRole ?? null,
+    seed: opts?.seed ?? Math.random() * Math.PI * 2,
+    segmentCount: opts?.segmentCount ?? 5 + Math.floor(Math.random() * 4),
+    segmentLen: opts?.segmentLen ?? 22 + Math.random() * 10,
+    segmentWidth: opts?.segmentWidth ?? 3.85 + Math.random() * 0.55,
+    swayAmp: opts?.swayAmp ?? 0.09 + Math.random() * 0.12,
+    swaySpeed: opts?.swaySpeed ?? 0.75 + Math.random() * 0.65,
+    swayLag: opts?.swayLag ?? 0.35 + Math.random() * 0.35
+  }
+}
+function computeGlowChainTrampLayoutForTramp(trampX) {
+  return ChainEyeTramp.computeGlowChainTrampLayout(
+    trampX,
+    FLOOR_Y,
+    GLOW_CHAIN_TRAMP_EYE_STEP_X,
+    GLOW_CHAIN_TRAMP_LEFT_EYE_EXTRA_LEFT,
+    GLOW_CHAIN_TRAMP_MUSH_STEP_X,
+    GLOW_CHAIN_TRAMP_PAIR_SHIFT_LEFT,
+    GLOW_CHAIN_TRAMP_SEGMENT_LEN,
+    GLOW_CHAIN_TRAMP_LEFT_SEGMENTS,
+    GLOW_CHAIN_TRAMP_MIDDLE_SEGMENTS,
+    L_PLAT_ABOVE_LEFT_CHAIN_EYE,
+    L_PLAT_LEFT_OF_LEFT_CHAIN_EYE_GAP,
+    L_PLAT_SHIFT_LEFT,
+    LOG_W
+  )
+}
+function glowChainTrampReservedX(x, trampX) {
+  if (trampX == null) return false
+  const layout = computeGlowChainTrampLayoutForTramp(trampX)
+  if (x < layout.leftX - GLOW_CHAIN_TRAMP_WEST_MARGIN) return true
+  return Math.abs(x - layout.middleX) < GLOW_CHAIN_BUOY_MIN_GAP ||
+    Math.abs(x - layout.leftX) < GLOW_CHAIN_BUOY_MIN_GAP
+}
+function pruneGlowChainBuoysWestOfTrampPair(spots, trampX) {
+  if (trampX == null || !spots?.length) return
+  const layout = computeGlowChainTrampLayoutForTramp(trampX)
+  const westBound = layout.leftX - GLOW_CHAIN_TRAMP_WEST_MARGIN
+  for (let i = spots.length - 1; i >= 0; i--) {
+    const spot = spots[i]
+    if (spot.chainTrampRole) continue
+    if (spot.x < westBound) spots.splice(i, 1)
   }
 }
 function tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX) {
   if (Math.abs(x - TREE_X) < GLOW_CHAIN_BUOY_TREE_CLEAR_HALF) return false
   if (glowChainBuoyXUnderWoodPlatform(x, woodBands)) return false
+  if (glowChainTrampReservedX(x, trampX)) return false
   if ((earTreeSpots ?? []).some(s => glowChainBuoyXBlockedNearEarTree(x, s.x))) return false
   //
   // Never right on top of a mushroom trampoline — the random search just
@@ -6754,7 +6822,7 @@ function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots, trampX
     const x = fillX1 + Math.random() * (fillX2 - fillX1)
     tryAddGlowChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX)
   }
-  addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots)
+  addGlowChainBuoysBetweenRightTrees(spots, trampX)
   ensureGlowChainBuoysEastOfMud(
     spots,
     fillX1,
@@ -6768,6 +6836,7 @@ function buildGlowChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots, trampX
     trampX,
     branchTrampX
   )
+  pruneGlowChainBuoysWestOfTrampPair(spots, trampX)
   spots.sort((a, b) => a.x - b.x)
   return spots
 }
@@ -6834,22 +6903,39 @@ function ensureGlowChainBuoysEastOfMud(
 // ear-tree trunk/front/behind clearance (see glowChainBuoyXBlockedNearEarTree), so it's added here
 // on purpose instead, clear of each trunk by only a small margin.
 //
-function addGlowChainBuoysBetweenRightTrees(spots, earTreeSpots) {
-  const rightTrees = (earTreeSpots ?? []).filter(s => s.x > TREE_X).sort((a, b) => a.x - b.x)
-  if (rightTrees.length < 2) return
-  const [treeA, treeB] = rightTrees
-  const gapX1 = treeA.x + GLOW_CHAIN_BUOY_BETWEEN_TREE_MARGIN
-  const gapX2 = treeB.x - GLOW_CHAIN_BUOY_BETWEEN_TREE_MARGIN
-  const innerSpan = gapX2 - gapX1
-  if (innerSpan <= 0) return
-  const count = innerSpan >= GLOW_CHAIN_BUOY_MIN_GAP ? 2 : 1
-  for (let i = 0; i < count; i++) {
-    const t = (i + 1) / (count + 1)
-    const x = gapX1 + innerSpan * t
-    if (spots.some(s => Math.abs(s.x - x) < GLOW_CHAIN_BUOY_MIN_GAP * 0.6)) continue
-    if (rightTrees.some(t => glowChainBuoyXBlockedNearEarTree(x, t.x))) continue
-    spots.push(buildGlowChainBuoySpot(x))
+function addGlowChainBuoysBetweenRightTrees(spots, trampX) {
+  const layout = computeGlowChainTrampLayoutForTramp(trampX)
+  for (let i = spots.length - 1; i >= 0; i--) {
+    const sx = spots[i].x
+    if (Math.abs(sx - layout.middleX) < GLOW_CHAIN_BUOY_MIN_GAP ||
+      Math.abs(sx - layout.leftX) < GLOW_CHAIN_BUOY_MIN_GAP) {
+      spots.splice(i, 1)
+    }
   }
+  const pushChainTrampSpot = (x, role, segmentCount, seed) => {
+    spots.push(buildGlowChainBuoySpot(x, {
+      chainTrampRole: role,
+      segmentCount,
+      segmentLen: GLOW_CHAIN_TRAMP_SEGMENT_LEN,
+      segmentWidth: 4.1,
+      swayAmp: GLOW_CHAIN_TRAMP_SWAY_AMP,
+      swaySpeed: GLOW_CHAIN_TRAMP_SWAY_SPEED,
+      swayLag: GLOW_CHAIN_TRAMP_SWAY_LAG,
+      seed
+    }))
+  }
+  pushChainTrampSpot(
+    layout.middleX,
+    ChainEyeTramp.CHAIN_EYE_ROLE_MIDDLE,
+    GLOW_CHAIN_TRAMP_MIDDLE_SEGMENTS,
+    2.17
+  )
+  pushChainTrampSpot(
+    layout.leftX,
+    ChainEyeTramp.CHAIN_EYE_ROLE_LEFT,
+    GLOW_CHAIN_TRAMP_LEFT_SEGMENTS,
+    4.83
+  )
 }
 //
 // Ear-tree decor spots — two trees clustered right of the big tree (never over mud).
@@ -8320,13 +8406,17 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
 //
 // Small tuft patch hiding the right spikes on the L-log platform's edge.
 //
+function glowSpikeGrassLogRightX(spikeZoneRightX) {
+  const endR = LOG_H * 0.5
+  return spikeZoneRightX + endR * L_PLAT_END_SQUASH - RIGHT_SPIKE_GRASS_LOG_TIP_INSET
+}
 function createGlowSpikeGrass(k, zones, x1, x2, y) {
-  const grassRight = x2 - RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET
+  const logRightX = glowSpikeGrassLogRightX(x2)
   const grass = Grass.create({
     k,
     floorY: y,
     left: x1,
-    right: grassRight,
+    right: logRightX,
     tuftCount: RIGHT_SPIKE_GRASS_TUFT_COUNT,
     z: GRASS_Z,
     getScaleMult: () => RIGHT_SPIKE_GRASS_SCALE_MULT,
@@ -8336,21 +8426,37 @@ function createGlowSpikeGrass(k, zones, x1, x2, y) {
     hueVaryMax: zones.lCollected || zones.oCollected || zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
-  clampGlowSpikeGrassInsidePlatformRight(grass, x2, RIGHT_SPIKE_GRASS_RIGHT_EDGE_INSET)
+  ensureGlowSpikeGrassCoversRightSpike(grass, x2, logRightX)
+  clampGlowSpikeGrassToLogRight(grass, logRightX)
   grass.layer.hidden = true
   return grass
 }
 //
-// Keeps every spike-patch blade inside the log's right edge (draw uses bot
-// anchor at blade.x, so the painted silhouette extends width/2 past centre).
+// Keeps blade silhouettes inside the L-log's right silhouette tip.
 //
-function clampGlowSpikeGrassInsidePlatformRight(grass, platRightX, insetLeft) {
+function clampGlowSpikeGrassToLogRight(grass, logRightX) {
   const blades = grass?.blades
-  if (!blades?.length || insetLeft < 0) return
-  const limitX = platRightX - insetLeft
+  if (!blades?.length) return
   for (const blade of blades) {
     const halfW = blade.width * 0.5
-    blade.x + halfW > limitX && (blade.x = limitX - halfW)
+    blade.x + halfW > logRightX && (blade.x = logRightX - halfW)
+  }
+  blades.sort((a, b) => a.x - b.x)
+}
+//
+// Guarantees at least one tuft over the rightmost spike.
+//
+function ensureGlowSpikeGrassCoversRightSpike(grass, spikeZoneRightX, logRightX) {
+  const blades = grass?.blades
+  if (!blades?.length) return
+  const coverMinX = spikeZoneRightX - 12
+  if (blades.some(b => b.x >= coverMinX)) return
+  const maxX = blades.reduce((m, b) => Math.max(m, b.x), blades[0].x)
+  const shift = Math.min(coverMinX - maxX, logRightX - maxX - 4)
+  if (shift <= 0) return
+  const tuftBand = 28
+  for (const blade of blades) {
+    blade.x >= maxX - tuftBand && (blade.x += shift)
   }
   blades.sort((a, b) => a.x - b.x)
 }
@@ -12386,7 +12492,9 @@ function runGlowTrampolineLatePass(inst) {
       'branchTrampBounceAir'
     ) || bounced
   }
+  bounced = ChainEyeTramp.tryChainEyeTrampBounces(inst) || bounced
   bounced && syncTrampolinePad(inst)
+  bounced && ChainEyeTramp.syncChainEyeTrampPads(inst)
 }
 //
 // Late-frame sink pin — runs after the hero body so the tween is not undone.
@@ -13135,10 +13243,11 @@ function settleHeroAfterTrampReveal(inst, char, heroX, footY, right, branch) {
   }
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
+  inst.chainEyeBounceAir = null
   grounded && !landingPose && (hero.canJump = true)
 }
 //
-// Reveals the L log platform after the first bounce on the right trampoline.
+// Reveals the L log platform after the hero steps the left chain-eye cap on the valid chain.
 //
 function revealLPlatZone(inst, silent = false) {
   if (inst.zones.lPlatRevealed) return
@@ -13152,33 +13261,12 @@ function revealLPlatZone(inst, silent = false) {
 //
 // Opens the L log after a bounce (or jump-land) on the right mushroom.
 //
-function maybeRevealLPlatOnRightTrampBounce(inst) {
-  const z = inst.zones
-  if (z.lPlatRevealed || z.lCollected) return
-  if (!z.gCollected || !z.rightTrampRevealed) return
-  revealLPlatZone(inst)
-}
 //
-// Opens the L log when the hero's feet are on the right trampoline cap.
+// Legacy no-ops — L log now opens from the left chain-eye after the tramp chain.
 //
-function maybeRevealLPlatIfOnRightTrampCap(inst, heroX, footY) {
-  if (!inst.zones.rightTrampRevealed) return
-  if (!isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) return
-  maybeRevealLPlatOnRightTrampBounce(inst)
-}
-//
-// Jump-landing on the right cap also opens the L log if the bounce path missed.
-//
-function maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded) {
-  if (!grounded) return
-  if (!inst.zones.rightTrampRevealed) return
-  const char = inst.heroInst?.character
-  if (!char?.pos) return
-  const heroX = char.pos.x
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  if (!isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState)) return
-  maybeRevealLPlatOnRightTrampBounce(inst)
-}
+function maybeRevealLPlatOnRightTrampBounce(inst) {}
+function maybeRevealLPlatIfOnRightTrampCap(inst, heroX, footY) {}
+function maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded) {}
 //
 // Opens the O platform zone after the post-L stillness countdown completes.
 //
@@ -13634,6 +13722,7 @@ function onUpdate(inst) {
   isGlowChainBuoyLayerVisible(inst) &&
     ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
   inst.chainBuoys && (inst.chainBuoys.pupilZones = inst.zones)
+  ChainEyeTramp.syncChainEyeTrampPads(inst)
   inst.zones.lCollected && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
   updateGlowEarTreeWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
@@ -13654,6 +13743,7 @@ function onUpdate(inst) {
     const dy = char.pos.y - inst.gLetter.y
     Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && queueGlowLetterPickup(inst, 'g', grounded)
   }
+  grounded && ChainEyeTramp.maybeRevealLPlatOnLeftChainEyeTouch(inst, heroX, footY)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
   maybeRevealGlowUndergroundAfterG(inst, grounded)
@@ -14298,7 +14388,8 @@ function updateTrampWaterSteps(inst) {
 //
 function onTrampolineBounce(inst) {
   markGlowHudLTrampJumped(inst)
-  maybeRevealLPlatOnRightTrampBounce(inst)
+  inst.lChainFromRightTramp = true
+  ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
   const holdingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
     TouchControls.isMoveLeftHeld()
   holdingLeft && (inst.trampToLApproach = true)
@@ -15034,6 +15125,7 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
   if (z.rightTrampRevealed && !z.rightTrampBounceLive && nearRight) {
     z.rightTrampBounceLive = true
     set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
+    ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
   }
   if (!z.branchTrampRevealed && nearBranch) {
     revealBranchTrampoline(inst)
@@ -15076,6 +15168,7 @@ function ensureGlowRightTrampHudProgress(inst) {
   if (!isRightTrampolineVisible(inst.zones)) return
   inst.zones.rightTrampRevealed = true
   set(KEY_RIGHT_TRAMP_REVEALED, true)
+  ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
   syncGlowHudLetterFills(inst)
 }
 function revealRightTrampoline(inst) {
@@ -15084,6 +15177,7 @@ function revealRightTrampoline(inst) {
   if (!inst.zones.gCollected && !inst.zones.colorWorld) return
   inst.zones.rightTrampRevealed = true
   set(KEY_RIGHT_TRAMP_REVEALED, true)
+  ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
   inst._postGCucumberHintShows = GLOW_TEACHER_HINT_POST_G_CUCUMBER_MAX_SHOWS
   if (inst._glowTeacherHintActive && inst.lastGlowTeacherHintText === GLOW_TEACHER_HINT_POST_G_CUCUMBER) {
     HeroHint.clear(inst.heroHint)
@@ -15827,12 +15921,23 @@ function footParticleColor(sceneInst, surface, footX = 0, footY = 0) {
   return lerpRgb(INNER_GRAY, GROUND_DARK, sceneInst?.colorFade || 0)
 }
 //
+// True when the hero's feet are in the spike kill band (not a valid L reveal).
+//
+function isHeroStandingOnGlowRightSpikes(inst, heroX, footY) {
+  const spikes = inst.rightSpikes
+  if (!spikes || !inst.zones.lPlatRevealed) return false
+  const withinX = heroX >= spikes.x1 - LOG_SNAP_X_SLACK && heroX <= spikes.x2 + LOG_SNAP_X_SLACK
+  const withinY = footY >= spikes.y - RIGHT_SPIKE_H && footY <= spikes.y + LOG_SNAP_BELOW
+  return withinX && withinY
+}
+//
 // First landing on the L log (with the L log) unveils the letter —
 // any route counts (tramp arc, spike platform hop, reload revisit).
 //
 function tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded) {
   if (!inst.zones.gCollected || inst.zones.lLetterUnveiled || !inst.zones.lPlatRevealed) return
   if (!grounded) return
+  if (isHeroStandingOnGlowRightSpikes(inst, heroX, footY)) return
   const home = inst.lPlatHome
   if (!home) return
   const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK &&

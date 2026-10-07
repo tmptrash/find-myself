@@ -1,3 +1,4 @@
+import { CFG } from '../../../cfg.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { parseHex } from '../../../utils/helper.js'
@@ -13,6 +14,9 @@ import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 //
 const HINT_ICON_W = 44
 const HINT_ICON_H = 40
+const HINT_EYE_DX = 13
+const HINT_EYE_PUPIL_R = 4.2
+const HINT_ICON_CHAIN_W = 40
 const HINT_OFFSET_Y = -70
 const HINT_MIN_RISE = 0.18
 const SPIRIT_HINT_EYES_SHUT_DELAY = 2
@@ -58,8 +62,14 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
   }
   if (tip) {
     const wantColored = !isSpiritHintMonochrome(levelInst)
-    if (tip._spiritHintColored !== wantColored) {
+    const wantRightEyes = spirit.burrowPhase === 'right'
+    const wantIconW = wantRightEyes ? HINT_ICON_CHAIN_W : HINT_ICON_W
+    if (tip._spiritHintColored !== wantColored ||
+      tip._spiritHintAtRightBurrow !== wantRightEyes ||
+      tip.activeTarget?.iconW !== wantIconW) {
       tip._spiritHintColored = wantColored
+      tip._spiritHintAtRightBurrow = wantRightEyes
+      tip.activeTarget && (tip.activeTarget.iconW = wantIconW)
       tip._spiritHintBakeKey = null
     }
     return
@@ -72,7 +82,7 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
     width: 48,
     height: 96,
     text: '',
-    iconW: HINT_ICON_W,
+    iconW: spirit.burrowPhase === 'right' ? HINT_ICON_CHAIN_W : HINT_ICON_W,
     iconH: HINT_ICON_H,
     offsetY: HINT_OFFSET_Y,
     forceAbove: true,
@@ -89,6 +99,7 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
   hintTip.activeTarget = target
   hintTip.opacity = 1
   hintTip._spiritHintColored = !isSpiritHintMonochrome(levelInst)
+  hintTip._spiritHintAtRightBurrow = spirit.burrowPhase === 'right'
   levelInst._swampSpiritProximityHint = hintTip
 }
 
@@ -125,7 +136,7 @@ function isSpiritProximityHintEligible(levelInst, spirit) {
   //
   // Hint runs at the left and right spirit burrows; gone after the right trampoline opens.
   //
-  if (SwampSpirit.isSpiritRetired(spirit) || spirit.rightMushroomShown?.()) return false
+  if (SwampSpirit.isSpiritRetired(spirit)) return false
   if (levelInst.dialogOpen || levelInst.letterCaptionActive) return false
   if (levelInst.drowning || levelInst.deathHandled || levelInst.touchDeathHandled) return false
   if (levelInst._inGlowPitCave) return false
@@ -172,11 +183,12 @@ function isSpiritHintMonochrome(levelInst) {
 function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v3' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
-    const canvas = bakeSpiritMushTooltipCanvas(layout, colored)
+    const canvas = bakeSpiritMushTooltipCanvas(layout, colored, rightEyes)
     k.loadSprite(tipInst._spiritHintSprite, canvas)
     const bounds = spiritHintBakeBounds(layout)
     tipInst._spiritHintDrawX = bounds.minX
@@ -211,7 +223,7 @@ function spiritHintBakeBounds(layout) {
   return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 
-function bakeSpiritMushTooltipCanvas(layout, colored) {
+function bakeSpiritMushTooltipCanvas(layout, colored, rightEyes = false) {
   const halfW = POINTER_WIDTH / 2
   const bx = layout.bubbleX - BUBBLE_BORDER_WIDTH
   const by = layout.bubbleY - BUBBLE_BORDER_WIDTH
@@ -277,9 +289,66 @@ function bakeSpiritMushTooltipCanvas(layout, colored) {
   ctx.fill()
   const iconOx = bubbleX + BUBBLE_PADDING_X
   const iconOy = bubbleY + BUBBLE_PADDING_Y
-  drawHintMushroom(ctx, iconOx + MUSH_CX, iconOy + MUSH_BASE_Y, colored)
-  applyGlowFilmGrainToCanvas(canvas, glowUiHash(`${colored}|${layout.bubbleW}`))
+  if (rightEyes) drawHintChainStalks(ctx, iconOx, iconOy, colored)
+  else drawHintMushroom(ctx, iconOx + MUSH_CX, iconOy + MUSH_BASE_Y, colored)
+  applyGlowFilmGrainToCanvas(canvas, glowUiHash(`${colored}|${rightEyes}|pupils|${layout.bubbleW}`))
+  rightEyes && drawHintChainPupils(ctx, iconOx, iconOy)
   return canvas
+}
+
+function hintChainEyeSpots(iconOx, iconOy) {
+  const baseY = iconOy + MUSH_BASE_Y - 6
+  const midX = iconOx + HINT_ICON_CHAIN_W / 2
+  return {
+    baseY,
+    left: { x: midX - HINT_EYE_DX, eyeY: baseY - 22 },
+    right: { x: midX + HINT_EYE_DX, eyeY: baseY - 12 }
+  }
+}
+
+function drawHintChainStalks(ctx, iconOx, iconOy, colored) {
+  const spots = hintChainEyeSpots(iconOx, iconOy)
+  drawHintChainEyeShell(ctx, spots.left.x, spots.baseY, spots.left.eyeY, colored)
+  drawHintChainEyeShell(ctx, spots.right.x, spots.baseY, spots.right.eyeY, colored)
+}
+
+function drawHintChainPupils(ctx, iconOx, iconOy) {
+  const spots = hintChainEyeSpots(iconOx, iconOy)
+  ctx.save()
+  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = MONO_INK
+  const dot = (ex, ey) => {
+    ctx.beginPath()
+    ctx.arc(ex + 1, ey + 0.5, HINT_EYE_PUPIL_R, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  dot(spots.left.x, spots.left.eyeY)
+  dot(spots.right.x, spots.right.eyeY)
+  ctx.restore()
+}
+
+function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored) {
+  const stalk = parseHex(colored ? GLOW_PAL.decorGray : MONO_INK)
+  const sclera = parseHex(colored ? CFG.visual.colors.hero.eyeWhite : '#FFFFFF')
+  const ink = parseHex(MONO_INK)
+  ctx.strokeStyle = `rgb(${stalk.r},${stalk.g},${stalk.b})`
+  ctx.lineWidth = 2.2
+  ctx.beginPath()
+  ctx.moveTo(ex, baseY)
+  ctx.lineTo(ex, eyeY + 8)
+  ctx.stroke()
+  ctx.fillStyle = `rgb(${sclera.r},${sclera.g},${sclera.b})`
+  ctx.beginPath()
+  ctx.arc(ex, eyeY, 7, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = `rgb(${ink.r},${ink.g},${ink.b})`
+  ctx.lineWidth = 1.8
+  ctx.stroke()
+  ctx.fillStyle = MONO_INK
+  ctx.beginPath()
+  ctx.arc(ex + 1, eyeY + 0.5, HINT_EYE_PUPIL_R - 0.8, 0, Math.PI * 2)
+  ctx.fill()
 }
 
 function drawHintMushroom(ctx, cx, baseY, colored) {

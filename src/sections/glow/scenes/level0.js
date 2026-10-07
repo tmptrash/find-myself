@@ -1163,7 +1163,7 @@ const HERO_SPAWN_FADE_DURATION = 0.75
 //
 // Seconds of idle on the ground after L before the O countdown starts.
 //
-const MEDITATION_IDLE_BEFORE_COUNTDOWN = 5
+const MEDITATION_IDLE_BEFORE_COUNTDOWN = 10
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
 const GLOW_TEACHER_HINT_G_PART_TEXT = 'Open the next zone.\nIt\'s nearby.'
 const GLOW_TEACHER_HINT_G_NEED_CAVE_TEXT = 'That cave mouth\nfeels important.'

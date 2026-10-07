@@ -15,7 +15,7 @@ import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 const HINT_ICON_W = 44
 const HINT_ICON_H = 40
 const HINT_EYE_DX = 13
-const HINT_EYE_PUPIL_R = 4.2
+const HINT_EYE_PUPIL_R = 2.75
 const HINT_ICON_CHAIN_W = 40
 const HINT_OFFSET_Y = -70
 const HINT_MIN_RISE = 0.18
@@ -184,7 +184,7 @@ function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v3' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v4' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
@@ -317,14 +317,8 @@ function drawHintChainPupils(ctx, iconOx, iconOy) {
   ctx.save()
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
-  ctx.fillStyle = MONO_INK
-  const dot = (ex, ey) => {
-    ctx.beginPath()
-    ctx.arc(ex + 1, ey + 0.5, HINT_EYE_PUPIL_R, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  dot(spots.left.x, spots.left.eyeY)
-  dot(spots.right.x, spots.right.eyeY)
+  drawHintChainEyePupil(ctx, spots.left.x, spots.left.eyeY)
+  drawHintChainEyePupil(ctx, spots.right.x, spots.right.eyeY)
   ctx.restore()
 }
 
@@ -345,9 +339,12 @@ function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored) {
   ctx.strokeStyle = `rgb(${ink.r},${ink.g},${ink.b})`
   ctx.lineWidth = 1.8
   ctx.stroke()
+}
+
+function drawHintChainEyePupil(ctx, ex, eyeY) {
   ctx.fillStyle = MONO_INK
   ctx.beginPath()
-  ctx.arc(ex + 1, eyeY + 0.5, HINT_EYE_PUPIL_R - 0.8, 0, Math.PI * 2)
+  ctx.arc(ex + 1, eyeY + 0.5, HINT_EYE_PUPIL_R, 0, Math.PI * 2)
   ctx.fill()
 }
 

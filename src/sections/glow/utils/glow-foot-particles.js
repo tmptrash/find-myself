@@ -6,6 +6,20 @@ import { glowRgb } from './glow-palette.js'
 const LANDING_COUNT = 10
 const PARTICLE_Z = 19
 const GRAVITY = 540
+const CRUMBLE_GRAVITY = 920
+const CRUMBLE_DRIFT_X = 95
+const CRUMBLE_DROP_SPEED_MIN = 25
+const CRUMBLE_DROP_SPEED_EXTRA = 85
+const CRUMBLE_HORIZONTAL_DRAG_PER_SEC = 0.22
+const CRUMBLE_GROUND_BOUNCE_UP_MIN = 28
+const CRUMBLE_GROUND_BOUNCE_UP_EXTRA = 48
+const CRUMBLE_GROUND_SCATTER_SPEED_MIN = 55
+const CRUMBLE_GROUND_SCATTER_SPEED_EXTRA = 95
+const CRUMBLE_GROUND_SCATTER_DRAG = 0.38
+const CRUMBLE_GROUND_SCATTER_SETTLE_SPEED = 14
+const CRUMBLE_GROUND_SCATTER_MIN_SEC = 0.2
+const CRUMBLE_GROUND_LINGER = 0.38
+const CRUMBLE_GROUND_FADE = 0.5
 const LANDING_SPEED_MIN = 90
 const LANDING_SPEED_RANGE = 140
 //
@@ -97,7 +111,13 @@ export function onUpdate(inst, dt) {
   for (let i = inst.particles.length - 1; i >= 0; i--) {
     const p = inst.particles[i]
     p.age += dt
-    p.shape === 'leaf' ? updateLeafParticle(p, dt) : updateDustParticle(p, dt)
+    if (p.shape === 'leaf') {
+      updateLeafParticle(p, dt)
+    } else if (p.crumbleGround) {
+      updateCrumbleParticle(p, dt)
+    } else {
+      updateDustParticle(p, dt)
+    }
     p.age >= p.life && inst.particles.splice(i, 1)
   }
 }
@@ -133,6 +153,53 @@ export function spawnLeafBurst(inst, x, y, colors, count, groundY = null) {
   const palette = Array.isArray(colors) ? colors : [colors || glowRgb('void')]
   for (let i = 0; i < count; i++) {
     pushLeafBurstParticle(inst, x, y, palette[Math.floor(Math.random() * palette.length)], groundY)
+  }
+}
+//
+// Earth crumbs sampled inside a tilted rectangle — used when the G caption
+// dissolves into soil instead of a plain opacity fade.
+//
+export function spawnEarthCrumbleFromRegion(inst, cfg) {
+  if (!inst) return
+  const {
+    centerX,
+    centerY,
+    halfW,
+    halfH,
+    tiltDeg = 0,
+    colors,
+    count = 80,
+    groundY = null
+  } = cfg
+  const palette = Array.isArray(colors) ? colors : [colors || glowRgb('decorGray')]
+  const rad = tiltDeg * Math.PI / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  for (let i = 0; i < count; i++) {
+    const lx = (Math.random() * 2 - 1) * halfW
+    const ly = (Math.random() * 2 - 1) * halfH
+    const wx = centerX + lx * cos - ly * sin
+    const wy = centerY + lx * sin + ly * cos
+    const c = palette[Math.floor(Math.random() * palette.length)]
+    const side = Math.random() < 0.5 ? -1 : 1
+    inst.particles.push({
+      x: wx,
+      y: wy,
+      vx: side * Math.random() * CRUMBLE_DRIFT_X,
+      vy: CRUMBLE_DROP_SPEED_MIN + Math.random() * CRUMBLE_DROP_SPEED_EXTRA,
+      life: Infinity,
+      age: 0,
+      fadeFrom: null,
+      size: 2 + Math.random() * 5,
+      r: c.r,
+      g: c.g,
+      b: c.b,
+      crumbleGround: true,
+      groundY,
+      landed: false,
+      scatterDone: false,
+      scatterTime: 0
+    })
   }
 }
 //
@@ -195,6 +262,58 @@ function updateDustParticle(p, dt) {
   p.y += p.vy * dt
 }
 //
+// Caption earth crumbs — fall to groundY, rest, then fade (no mid-air dissolve).
+//
+function updateCrumbleParticle(p, dt) {
+  if (p.landed) {
+    if (!p.scatterDone) {
+      p.scatterTime += dt
+      p.vy += CRUMBLE_GRAVITY * dt
+      p.vx *= Math.pow(CRUMBLE_GROUND_SCATTER_DRAG, dt)
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      if (p.groundY != null && p.y >= p.groundY - p.size) {
+        p.y = p.groundY - p.size
+        p.vy > 30 && (p.vy = -p.vy * 0.18)
+        p.vy <= 30 && (p.vy = 0)
+      }
+      const speed = Math.hypot(p.vx, p.vy)
+      if (p.scatterTime >= CRUMBLE_GROUND_SCATTER_MIN_SEC && speed < CRUMBLE_GROUND_SCATTER_SETTLE_SPEED) {
+        p.scatterDone = true
+        p.vx = 0
+        p.vy = 0
+        p.groundLinger = 0
+      }
+      return
+    }
+    p.groundLinger = (p.groundLinger ?? 0) + dt
+    p.groundLinger >= CRUMBLE_GROUND_LINGER && startCrumbleFade(p)
+    return
+  }
+  p.vy += CRUMBLE_GRAVITY * dt
+  p.vx *= Math.pow(CRUMBLE_HORIZONTAL_DRAG_PER_SEC, dt)
+  p.x += p.vx * dt
+  p.y += p.vy * dt
+  if (p.groundY != null && p.y >= p.groundY - p.size) {
+    p.y = p.groundY - p.size
+    p.landed = true
+    p.scatterDone = false
+    p.scatterTime = 0
+    const side = Math.random() < 0.5 ? -1 : 1
+    p.vx = side * (CRUMBLE_GROUND_SCATTER_SPEED_MIN + Math.random() * CRUMBLE_GROUND_SCATTER_SPEED_EXTRA)
+    p.vy = -(CRUMBLE_GROUND_BOUNCE_UP_MIN + Math.random() * CRUMBLE_GROUND_BOUNCE_UP_EXTRA)
+  }
+}
+function startCrumbleFade(p) {
+  if (p.fadeFrom != null) return
+  p.fadeFrom = p.age
+  p.life = p.age + CRUMBLE_GROUND_FADE
+}
+function crumbleOpacity(p) {
+  if (p.fadeFrom == null) return 1
+  return Math.max(0, 1 - (p.age - p.fadeFrom) / CRUMBLE_GROUND_FADE)
+}
+//
 // Leaf particle — bursts outward same as dust, but once the outward
 // velocity decays past the fall-speed cap it settles into a slow,
 // wind-blown flutter (capped fall speed + side sway) down to groundY, then
@@ -255,6 +374,16 @@ function drawParticles(inst) {
   for (const p of inst.particles) {
     if (p.shape === 'leaf') {
       drawLeafParticle(k, p, leafOpacity(p))
+      continue
+    }
+    if (p.crumbleGround) {
+      k.drawRect({
+        pos: k.vec2(p.x, p.y),
+        width: p.size,
+        height: p.size,
+        color: k.rgb(p.r, p.g, p.b),
+        opacity: crumbleOpacity(p)
+      })
       continue
     }
     const opacity = Math.max(0, 1 - p.age / p.life)

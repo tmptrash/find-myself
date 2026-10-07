@@ -1176,20 +1176,10 @@ const L_LETTER_PEEK_RETURN = 0.45
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
-const GLOW_DIALOG_L = '[hl]L[/hl]ook closer. The world\nis full of nuances.'
-const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see.'
-//
-// O pickup caption — warm gold on grass/earth (darker phrase, brighter [hl]O).
-//
-const GLOW_O_CAPTION_PHRASE_PAL = 'glowLightCore'
-const GLOW_O_CAPTION_LETTER_PAL = 'glowLightBright'
-//
-// Voice-overs played while the matching letter dialog is open
-//
-const GLOW_DIALOG_SOUND_G = 'glow-g'
-const GLOW_DIALOG_SOUND_L = 'glow-l'
-const GLOW_DIALOG_SOUND_O = 'glow-ow'
+const GLOW_DIALOG_G = '[hl]G[/hl]round'
+const GLOW_DIALOG_L = '[hl]L[/hl]ook'
+const GLOW_DIALOG_O = '[hl]O[/hl]bserve'
+const GLOW_INLINE_WORD_CAPTION_LETTERS = new Set(['G', 'L', 'O'])
 const GLOW_BIRDS_AUDIO_SRC = './sounds/birds.mp3'
 let glowBirdsLoopHandle = null
 //
@@ -1213,9 +1203,12 @@ const GLOW_LETTER_CAPTION_OUTLINE_OFFSETS = [
 ]
 const GLOW_LETTER_CAPTION_FADE_IN = 0.4
 const GLOW_LETTER_CAPTION_FADE_OUT = 0.7
+const GLOW_INLINE_WORD_CAPTION_SUFFIX_CHAR_STAGGER_SEC = 0.07
+const GLOW_INLINE_WORD_CAPTION_CRUMBLE_SEC = 0.9
+const GLOW_INLINE_WORD_CAPTION_CRUMBLE_PARTICLE_COUNT = 104
 const GLOW_LETTER_CAPTION_DURATION_G = 6
-const GLOW_LETTER_CAPTION_DURATION_L = 9
-const GLOW_LETTER_CAPTION_DURATION_O = 9
+const GLOW_LETTER_CAPTION_DURATION_L = 6
+const GLOW_LETTER_CAPTION_DURATION_O = 6
 const GLOW_LETTER_CAPTION_Z = CFG.visual.zIndex.player + 20
 //
 // Speech-bubble hints: two intro lines at spawn (the G letter appears only
@@ -5255,7 +5248,7 @@ function hideGlowLetterPickupInWorld(entry) {
 }
 function setLetterVisible(letterEntry, visible, burst = false) {
   if (!letterEntry) return
-  if (letterEntry.pickedUp) {
+  if (letterEntry.pickedUp && !letterEntry.forceVisible) {
     letterEntry.allObjects?.forEach(obj => { obj.hidden = true })
     return
   }
@@ -5311,7 +5304,7 @@ function setLetterVisible(letterEntry, visible, burst = false) {
 // Steps a freshly revealed pickup letter's fade-in (see setLetterVisible).
 //
 function updateLetterPopFade(letterEntry, dt) {
-  if (!letterEntry || letterEntry.main?.hidden) return
+  if (!letterEntry || letterEntry.main?.hidden || letterEntry.forceVisible) return
   const sc = letterEntry.k?._glowSceneInst
   if (sc && isGlowWorldLetterFlatBeforeL(sc, letterEntry.char)) {
     letterEntry._popFade = null
@@ -11530,6 +11523,41 @@ function restoreGlowDialogAudioFadeIn(inst, state) {
 //
 // Tears down caption objects and unfreezes the world after the hold ends.
 //
+//
+// Gray crumble crumbs — decor tones only (no brown soil swatches).
+//
+function glowCaptionEarthCrumbleColors() {
+  //
+  // True neutrals only — playfieldGray/midGray are green-tinted role aliases in cfg.
+  //
+  return [
+    glowRgb('decorGray'),
+    glowRgb('captionLetterGInk')
+  ]
+}
+//
+// True when the picked-up letter stays in the world and the suffix crumbles away.
+//
+function isGlowInlineWordCaptionLetter(char) {
+  return GLOW_INLINE_WORD_CAPTION_LETTERS.has(char)
+}
+//
+// Spawns a crumble burst over the tilted inline-word caption bounds.
+//
+function spawnGlowInlineWordCaptionCrumble(inst, centerX, centerY, halfW, halfH, tiltDeg) {
+  if (!inst.footParticles) return
+  GlowFootParticles.spawnEarthCrumbleFromRegion(inst.footParticles, {
+    centerX,
+    centerY,
+    halfW,
+    halfH,
+    tiltDeg,
+    colors: glowCaptionEarthCrumbleColors(),
+    count: GLOW_INLINE_WORD_CAPTION_CRUMBLE_PARTICLE_COUNT,
+    groundY: FLOOR_Y
+  })
+}
+//
 function closeGlowLetterCaption(inst, captionObjs, letterEntry, onCloseExtra, audioFade) {
   inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
   inst._dialogCaptionRaf = null
@@ -11554,39 +11582,39 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   beginGlowWorldFreeze(inst)
   const audioFade = createGlowDialogAudioFadeState(inst)
   playGlowLetterDialogMusic(inst, dialogSoundName)
+  const keepWorldLetter = isGlowInlineWordCaptionLetter(letterEntry?.char)
   letterEntry && (letterEntry.forceVisible = true)
   //
-  // The picked-up glyph is painted through the same k.text path as the
-  // caption phrase so size and font metrics stay identical — the world
-  // letter objects stay hidden for the caption's lifetime.
+  // G/L/O keep the world glyph; only the suffix is painted as caption text.
+  // W and legacy paths hide the pickup and repaint the glyph through k.text.
   //
-  letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
+  if (keepWorldLetter) {
+    letterEntry?.allObjects?.forEach(obj => {
+      obj.hidden = false
+      obj.opacity = 1
+    })
+  } else {
+    letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
+  }
   const font = GLOW_LETTER_FONT
   const flatMonoCaption = isGlowFlatSingleDecorColor(inst)
   const decorCaptionRgb = getRGB(k, GLOW_PAL.decorGray)
   const gCaptionTextRgb = getRGB(k, GLOW_PAL.captionLetterGInk)
   const gCaptionLetterRgb = getRGB(k, CFG.visual.colors.hero.eyeWhite)
-  const grayCaptionNoShadow = letterEntry?.char === 'G'
-  const isGrayCaption = grayCaptionNoShadow || letterEntry?.char === 'O'
+  const grayCaptionNoShadow = keepWorldLetter
   const captionLetterLInkRgb = getRGB(k, GLOW_PAL.captionLetterLInk)
-  const captionLetterOInkRgb = getRGB(k, GLOW_PAL[GLOW_O_CAPTION_PHRASE_PAL])
-  const captionLetterOGlyphRgb = getRGB(k, GLOW_PAL[GLOW_O_CAPTION_LETTER_PAL])
-  const captionTextRgb = letterEntry?.char === 'G'
+  const captionTextRgb = keepWorldLetter
     ? gCaptionTextRgb
-    : letterEntry?.char === 'O'
-      ? captionLetterOInkRgb
-      : letterEntry?.char === 'L'
-        ? captionLetterLInkRgb
-        : (isGrayCaption ? gCaptionTextRgb : glowCaptionTextRgb())
+    : letterEntry?.char === 'L'
+      ? captionLetterLInkRgb
+      : glowCaptionTextRgb()
   const letterFillRgb = letterEntry?.char === 'G'
     ? gCaptionLetterRgb
     : flatMonoCaption && letterEntry?.char === 'L'
       ? decorCaptionRgb
       : letterEntry?.char === 'L'
         ? getRGB(k, GLOW_PAL.gold)
-        : letterEntry?.char === 'O'
-          ? captionLetterOGlyphRgb
-          : getRGB(k, CFG.visual.colors.hero.eyeWhite)
+        : getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const captionUseShadow = !grayCaptionNoShadow
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
@@ -11623,8 +11651,24 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const rowStep = oneLineHeight / 2 + GLOW_LETTER_CAPTION_LINE_SPACING
   const pieces = []
   before && pieces.push({ text: before, anchor: 'right', localX: -letterHalfW, localY: 0 })
-  letterEntry && pieces.push({ text: letterEntry.char, anchor: 'center', localX: 0, localY: 0, letterFill: true })
-  afterFirst && pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
+  !keepWorldLetter && letterEntry &&
+    pieces.push({ text: letterEntry.char, anchor: 'center', localX: 0, localY: 0, letterFill: true })
+  if (keepWorldLetter && afterFirst) {
+    let suffixX = letterHalfW
+    for (let i = 0; i < afterFirst.length; i++) {
+      const ch = afterFirst[i]
+      pieces.push({
+        text: ch,
+        anchor: 'left',
+        localX: suffixX,
+        localY: 0,
+        suffixIndex: i
+      })
+      suffixX += k.formatText({ text: ch, size: fontSize, font }).width
+    }
+  } else if (afterFirst) {
+    pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
+  }
   restText && pieces.push({
     text: restText,
     anchor: 'top',
@@ -11632,8 +11676,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
     localX: firstRowCenterX,
     localY: rowStep
   })
-  const shadowObjs = []
-  const mainObjs = []
+  const captionPieces = []
   //
   // Live k.text (not a rotated bitmap bake) keeps every glyph edge sharp at
   // the caption's tilt angle — baking to a sprite and rotating it re-samples
@@ -11647,7 +11690,8 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
       tiltDeg
     )
-    captionUseShadow && shadowObjs.push(k.add([
+    const group = { suffixIndex: piece.suffixIndex ?? null, objs: [] }
+    captionUseShadow && group.objs.push(k.add([
       k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
       k.pos(originX + shadowOffset.x, originY + shadowOffset.y),
       k.anchor(piece.anchor),
@@ -11656,7 +11700,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z)
     ]))
-    mainObjs.push(k.add([
+    group.objs.push(k.add([
       k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
       k.pos(originX + localOffset.x, originY + localOffset.y),
       k.anchor(piece.anchor),
@@ -11665,22 +11709,67 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z + 1)
     ]))
+    captionPieces.push(group)
   })
-  const captionObjs = [...shadowObjs, ...mainObjs]
+  const captionObjs = captionPieces.flatMap(group => group.objs)
   const fadeOutStartSec = GLOW_LETTER_CAPTION_FADE_IN + holdDuration
-  const totalSec = fadeOutStartSec + GLOW_LETTER_CAPTION_FADE_OUT
+  const fadeOutDuration = keepWorldLetter ? GLOW_INLINE_WORD_CAPTION_CRUMBLE_SEC : GLOW_LETTER_CAPTION_FADE_OUT
+  const totalSec = fadeOutStartSec + fadeOutDuration
+  const inlineWordCrumbleHalfW = letterHalfW + afterFirstWidth * 0.5
+  const inlineWordCrumbleHalfH = oneLineHeight * 0.42
+  const inlineWordCrumbleCenter = rotateGlowOffset(afterFirstWidth * 0.5, 0, tiltDeg)
+  const inlineWordCrumbleCenterX = originX + inlineWordCrumbleCenter.x
+  const inlineWordCrumbleCenterY = originY + inlineWordCrumbleCenter.y
+  let inlineWordCrumbleSpawned = false
   const tickStartMs = performance.now()
   const tick = () => {
     if (!inst.letterCaptionActive) return
     const elapsed = (performance.now() - tickStartMs) / 1000
     updateGlowDialogAudioFadeOut(inst, audioFade, elapsed)
-    let opacity = 1
-    if (elapsed < GLOW_LETTER_CAPTION_FADE_IN) {
-      opacity = elapsed / GLOW_LETTER_CAPTION_FADE_IN
-    } else if (elapsed >= fadeOutStartSec) {
-      opacity = Math.max(0, 1 - (elapsed - fadeOutStartSec) / GLOW_LETTER_CAPTION_FADE_OUT)
+    const inFadeOut = elapsed >= fadeOutStartSec
+    const fadeOutOpacity = inFadeOut && !keepWorldLetter
+      ? Math.max(0, 1 - (elapsed - fadeOutStartSec) / GLOW_LETTER_CAPTION_FADE_OUT)
+      : null
+    if (keepWorldLetter && inFadeOut && !inlineWordCrumbleSpawned) {
+      inlineWordCrumbleSpawned = true
+      captionObjs.forEach(obj => {
+        obj.hidden = true
+        obj.opacity = 0
+      })
+      letterEntry?.allObjects?.forEach(obj => {
+        obj.hidden = true
+        obj.opacity = 0
+      })
+      spawnGlowInlineWordCaptionCrumble(
+        inst,
+        inlineWordCrumbleCenterX,
+        inlineWordCrumbleCenterY,
+        inlineWordCrumbleHalfW,
+        inlineWordCrumbleHalfH,
+        tiltDeg
+      )
     }
-    captionObjs.forEach(obj => { obj.opacity = opacity })
+    if (!inlineWordCrumbleSpawned) {
+      captionPieces.forEach(group => {
+        let pieceOpacity = 1
+        if (fadeOutOpacity != null) {
+          pieceOpacity = fadeOutOpacity
+        } else if (keepWorldLetter && group.suffixIndex != null) {
+          const delay = group.suffixIndex * GLOW_INLINE_WORD_CAPTION_SUFFIX_CHAR_STAGGER_SEC
+          const t = elapsed - delay
+          pieceOpacity = t <= 0 ? 0 : Math.min(1, t / GLOW_LETTER_CAPTION_FADE_IN)
+        } else if (elapsed < GLOW_LETTER_CAPTION_FADE_IN) {
+          pieceOpacity = elapsed / GLOW_LETTER_CAPTION_FADE_IN
+        }
+        group.objs.forEach(obj => { obj.opacity = pieceOpacity })
+      })
+      if (keepWorldLetter && letterEntry?.allObjects) {
+        letterEntry.allObjects.forEach(obj => {
+          obj.hidden = false
+          obj.opacity = 1
+        })
+      }
+    }
     if (elapsed < totalSec) {
       inst._dialogCaptionRaf = requestAnimationFrame(tick)
       return
@@ -11884,7 +11973,10 @@ function collectLetterG(inst) {
   //
   HeroHint.clear(inst.heroHint)
   const entry = inst.gLetter
-  hideGlowLetterPickupInWorld(entry)
+  if (entry) {
+    entry.pickedUp = true
+    entry._pickupQueued = false
+  }
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 1)
   syncGlowPredatorVisibility(inst)
@@ -11919,7 +12011,7 @@ function collectLetterG(inst) {
     //
     inst.pendingTreeReveal = !inst.zones.tree
     completeGlowHeroFillRevealAfterCaption(inst, GLOW_CONFIDENCE_HINT_G)
-  }, GLOW_DIALOG_SOUND_G)
+  })
 }
 //
 // Collects L after landing on the solid L platform.
@@ -11945,7 +12037,10 @@ function collectLetterL(inst) {
   refreshPlayfieldCornerSprites(inst)
   updatePlayfieldBorderColors(inst)
   const entry = inst.lLetter
-  hideGlowLetterPickupInWorld(entry)
+  if (entry) {
+    entry.pickedUp = true
+    entry._pickupQueued = false
+  }
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 2)
   if (!inst.levelIndicator) {
@@ -11974,7 +12069,7 @@ function collectLetterL(inst) {
     inst.lPlatCaptionHiding = false
     applyZoneVisibility(inst)
     completeGlowHeroFillRevealAfterCaption(inst, GLOW_CONFIDENCE_HINT_L)
-  }, GLOW_DIALOG_SOUND_L)
+  })
   revealGlowFpsCounter(inst)
 }
 //
@@ -11995,7 +12090,10 @@ function collectLetterO(inst) {
   ensureGlowTreeRootsSegment(inst)
   syncTreeColorCrossfade(inst)
   const entry = inst.oLetter
-  hideGlowLetterPickupInWorld(entry)
+  if (entry) {
+    entry.pickedUp = true
+    entry._pickupQueued = false
+  }
   syncGlowHudLetterFills(inst, false)
   flashGlowHudLetterBurst(inst, 3)
   inst.trampWalk.singAllowedAt = Number.POSITIVE_INFINITY
@@ -12027,7 +12125,7 @@ function collectLetterO(inst) {
     applyZoneVisibility(inst)
     const tw = inst.trampWalk
     tw && (tw.singAllowedAt = inst.k.time() + TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION)
-  }, GLOW_DIALOG_SOUND_O)
+  })
 }
 //
 // Collects W after landing on the solid W platform.
@@ -12146,7 +12244,7 @@ function revealPostWHud(inst) {
   layoutGlowFpsHud(inst)
 }
 //
-// Defers letter state until landing; world burst + chime fire on first touch.
+// L/O/W defer collect until landing; G collects on touch. Burst + chime on first touch.
 //
 function glowLetterEntryByKind(inst, kind) {
   if (kind === 'g') return inst.gLetter
@@ -12160,14 +12258,20 @@ function queueGlowLetterPickup(inst, kind, grounded) {
   if (inst.letterCaptionActive) return
   if (inst.pendingLetterPickup?.kind === kind) {
     grounded && (inst.pendingLetterPickup.pickedOnGround = true)
-    flushPendingGlowLetterPickup(inst, grounded, true)
+    const flushGrounded = kind === 'g' || grounded
+    flushPendingGlowLetterPickup(inst, flushGrounded, true)
     return
   }
   if (inst.pendingLetterPickup) return
   const entry = glowLetterEntryByKind(inst, kind)
-  entry && concealGlowLetterPickupVisual(entry)
+  const collectOnTouch = kind === 'g'
+  !collectOnTouch && entry && concealGlowLetterPickupVisual(entry)
   entry && playGlowLetterWorldPickupFx(inst, entry)
   inst.pendingLetterPickup = { kind, pickedOnGround: grounded }
+  if (collectOnTouch) {
+    flushPendingGlowLetterPickup(inst, true, true)
+    return
+  }
   grounded && flushPendingGlowLetterPickup(inst, true, true)
 }
 //
@@ -13543,7 +13647,7 @@ function onUpdate(inst) {
   //
   const landingFootBurst = justLanded && (hero.wasJumping || hero.jumpPhase === 'jumping')
   //
-  // G letter pickup on branch — FX waits for a grounded landing.
+  // G letter pickup on branch — caption starts on touch (suffix builds in place).
   //
   if (isGLetterCollectable(inst)) {
     const dx = heroX - inst.gLetter.x

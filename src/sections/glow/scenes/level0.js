@@ -3402,11 +3402,21 @@ function createSmallHeroTooltip(inst) {
   })
 }
 //
+// Face counter for the post-O right-trampoline bounce quest (hidden once W opens).
+//
+function isGlowRightTrampHeroCounterRetired(inst) {
+  const z = inst.zones
+  if (!z?.oCollected) return false
+  if (z.wCollected) return true
+  return isGlowWZoneUnlocked(inst)
+}
+//
 // Shows/hides the meditation countdown via the shared hero counter component.
 //
 function isTrampBounceHeroCounterActive(inst) {
   const tw = inst.trampWalk
   if (!tw || !inst.zones?.oCollected || tw.walked) return false
+  if (isGlowRightTrampHeroCounterRetired(inst)) return false
   if ((tw.singCount || 0) >= TRAMP_WALK_BOUNCES_TOTAL) return false
   const char = inst.heroInst?.character
   if (char?.pos && inst.trampState &&
@@ -3845,8 +3855,7 @@ function glowHudLetterFillProgress(inst, index) {
     }
   }
   const total = GLOW_HUD_W_FILL_PARTS
-  const wLive = inst._hudWFillParts || 0
-  const parts = z.wCollected ? total : Math.min(total, Math.floor(wLive + 0.999))
+  const parts = z.wCollected ? total : countGlowHudWFillParts(inst)
   return {
     parts,
     total,
@@ -3872,6 +3881,7 @@ function glowHudLetterTooltipText(inst, index) {
 // Active partial HUD letter fill for the hero-attached counter (one at a time).
 //
 function activeGlowHudLetterFillForHero(inst) {
+  if (isGlowRightTrampHeroCounterRetired(inst)) return null
   const eyesUnlocked = isGlowEyesGameplayUnlocked(inst.zones)
   if (!eyesUnlocked) {
     const gOnly = glowHudLetterFillProgress(inst, 0)
@@ -13356,6 +13366,9 @@ function revealWZone(inst) {
   set(KEY_REVEALED_W, true)
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
+  inst.meditationCounter && HeroCounter.hide(inst.meditationCounter)
+  inst._heroCountdownTickSecond = null
+  hideGlowHudLetterFillCounter(inst)
 }
 //
 // Pit level indicator ref — keep the live HUD pointer on the pit state.

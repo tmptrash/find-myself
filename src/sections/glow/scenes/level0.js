@@ -985,9 +985,9 @@ const GLOW_HUD_G_FILL_PARTS = 8
 const GLOW_HUD_L_FILL_PARTS = 5
 const GLOW_HUD_O_FILL_PARTS = 5
 //
-// Matches TRAMP_WALK_SINGS_TO_WATER — one fill part per mushroom sing.
+// W loader: one segment per right-trampoline bounce after O (10 total).
 //
-const GLOW_HUD_W_FILL_PARTS = 2
+const GLOW_HUD_W_FILL_PARTS = 10
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
 //
 // Baked GLOW letters use the same canvas metrics as lesson-indicator's
@@ -1158,7 +1158,6 @@ const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
 const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nWho made this lake so shallow?!'
 const TRAMP_SHALLOW_HINT_DURATION = 6
-const WRONG_TRAMP_SING_HINT_REPEAT = 20
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
 //
@@ -1195,6 +1194,7 @@ const GLOW_DIALOG_L = '[hl]L[/hl]ook'
 const GLOW_DIALOG_O = '[hl]O[/hl]bserve'
 const GLOW_INLINE_WORD_CAPTION_LETTERS = new Set(['G', 'L', 'O'])
 const GLOW_BIRDS_AUDIO_SRC = './sounds/birds.mp3'
+const GLOW_BIRDS_PLAYBACK_RATE = 1
 let glowBirdsLoopHandle = null
 //
 // Inline letter pickup caption — the dialog phrase now grows straight down
@@ -1662,43 +1662,28 @@ const BRANCH_LOOK_LEFT_DURATION = 2
 const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
 //
-// After O: stand still near the trampoline → countdown → mushroom walks left.
-// Two sings, five seconds each: the first is a land step, the second docks
-// it in the lake and reveals W.
+// After O: ten bounces on the right trampoline — at 5 it walks left and
+// stops; at 10 it marches into the lake and reveals W.
 //
 const TRAMP_SING_ARM_DELAY_AFTER_O_CAPTION = 1
-const TRAMP_WALK_STILL = 3
-const TRAMP_WALK_COUNTDOWN = 5
-const TRAMP_WALK_SINGS_TO_WATER = 2
-const TRAMP_WALK_SING_TOTAL_SEC = TRAMP_WALK_COUNTDOWN * TRAMP_WALK_SINGS_TO_WATER
-const TRAMP_ENDURE_SHAKE_SPEED = 38
-const TRAMP_ENDURE_SHAKE_AMP = 0.7
-const TRAMP_ENDURE_SQUASH_MAX = 0.3
-const TRAMP_ENDURE_PULSE_SPEED = 16
-const TRAMP_ENDURE_PULSE_AMP = 0.035
+const TRAMP_WALK_BOUNCES_TOTAL = 10
+const TRAMP_WALK_BOUNCES_MID_STOP = 5
+const TRAMP_WALK_SINGS_TO_WATER = TRAMP_WALK_BOUNCES_TOTAL
 const TRAMP_WALK_SPEED = 52
-const TRAMP_WALK_NEAR = 220
-//
-// Wider stand-still band while the O-meditation countdown ticks (hero sings)
-//
-const TRAMP_WALK_NEAR_SINGING = 370
-//
-// Matches hero.js IDLE_VOCALIZATION_DELAY — tramp sing arms idle notes once still.
-//
-const TRAMP_SING_VOCAL_IDLE_SEC = 2.05
 //
 // Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
 //
 const TRAMP_CAP_PAD_LATCH_SEC = 0.28
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
-const TRAMP_BAD_SING_TEXT = 'I can\'t listen\nto this anymore'
 //
-// Shown on the final sing (TRAMP_WALK_SINGS_TO_WATER), the one that docks
-// the mushroom in the lake — the line has to land on that exact step.
+// Right-trampoline bubble after the fifth bounce (mid walk stop).
 //
-const TRAMP_BAD_SING_TEXT_FINAL = 'I\'ll go drown myself'
-const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_FINAL]
+const TRAMP_MUSH_BOUNCE_HINT_MID = 'How can one work\nin such conditions?!'
+//
+// Bubble on the tenth bounce before the mushroom docks in the lake.
+//
+const TRAMP_MUSH_BOUNCE_HINT_FINAL = 'I\'ll go drown myself'
 const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
 const CAVE_ENTRANCE_LANDING_PARTICLE_MULT = 2.4
@@ -1798,7 +1783,6 @@ const LAKE_BED_BAKE_PAD = Math.max(
 //
 // Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
 //
-const GLOW_MUSHROOM_WHISTLE_IDLE = 5
 const GLOW_MUSHROOM_WHISTLE_AMP_DEG = 14
 const GLOW_MUSHROOM_WHISTLE_SMOOTH = 7
 //
@@ -2536,9 +2520,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Walk progress (x, sing count, docked) is restored from storage.
     //
     const trampDockX = (lakeX1 + lakeX2) * 0.5
-    const savedTrampSingCount = Number(get(KEY_TRAMP_WALK_SING_COUNT, 0)) || 0
+    let savedTrampSingCount = Number(get(KEY_TRAMP_WALK_SING_COUNT, 0)) || 0
+    //
+    // Legacy saves used 1–2 “sings” instead of bounce counts 5 / 10.
+    //
+    if (savedTrampSingCount > 0 && savedTrampSingCount <= 2) {
+      savedTrampSingCount = savedTrampSingCount >= 2
+        ? TRAMP_WALK_BOUNCES_TOTAL
+        : TRAMP_WALK_BOUNCES_MID_STOP
+    }
     const savedTrampWalked = Boolean(get(KEY_TRAMP_WALKED, false)) ||
-      savedTrampSingCount >= TRAMP_WALK_SINGS_TO_WATER
+      savedTrampSingCount >= TRAMP_WALK_BOUNCES_TOTAL
     const savedTrampXRaw = get(KEY_TRAMP_WALK_X, null)
     const savedTrampX = typeof savedTrampXRaw === 'number' ? savedTrampXRaw : null
     const restoredTrampX = savedTrampWalked
@@ -2707,7 +2699,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         cheekyLineIdx: 0,
         cheekyTooltip: null,
         badSingTooltip: null,
-        wrongSingCooldown: WRONG_TRAMP_SING_HINT_REPEAT,
         waterHintStarted: savedTrampWalked,
         singAllowedAt: zones.oCollected ? 0 : null
       },
@@ -2931,9 +2922,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     zones.lCollected && !zones.oZone && applyGlowPostLLitState(inst)
     zones.lZoneLit && applyGlowPostLStillnessReveal(inst)
     zones.lCollected && ensureGlowTreeRootsSegment(inst)
-    if (zones.oZone) {
-      enableGlowHeroIdleVocalization(inst)
-    }
+    Hero.suppressIdleVocalization()
     if ((zones.oZone || zones.oCollected) && !inst.heroBodyFillApplied) {
       applyGlowHeroBodyFill(inst)
     }
@@ -3415,17 +3404,23 @@ function createSmallHeroTooltip(inst) {
 //
 // Shows/hides the meditation countdown via the shared hero counter component.
 //
-function isTrampSingHeroCounterActive(inst) {
+function isTrampBounceHeroCounterActive(inst) {
   const tw = inst.trampWalk
   if (!tw || !inst.zones?.oCollected || tw.walked) return false
-  return tw.countdown != null || (tw.singCount || 0) > 0 || tw.walking
+  if ((tw.singCount || 0) >= TRAMP_WALK_BOUNCES_TOTAL) return false
+  const char = inst.heroInst?.character
+  if (char?.pos && inst.trampState &&
+    isOnTrampolineCap(inst, char, inst.trampState)) {
+    return true
+  }
+  return (tw.singCount || 0) > 0
 }
 function updateMeditationCounter(inst) {
   const tw = inst.trampWalk
-  const trampSingUi = isTrampSingHeroCounterActive(inst)
-  const remaining = inst.meditation?.countdown ?? (trampSingUi ? tw.countdown : null)
+  const trampBounceUi = isTrampBounceHeroCounterActive(inst)
+  const remaining = inst.meditation?.countdown
   const char = inst.heroInst?.character
-  if ((remaining == null && !trampSingUi) || !char?.pos) {
+  if ((remaining == null && !trampBounceUi) || !char?.pos) {
     inst.meditationCounter && HeroCounter.hide(inst.meditationCounter)
     inst._heroCountdownTickSecond = null
     return
@@ -3439,9 +3434,7 @@ function updateMeditationCounter(inst) {
         // Post-L stillness countdown: menu-style heartbeat while the world
         // crossfades to colour; tramp sing keeps the letter-pickup tick.
         //
-        inst.meditation?.countdown != null
-          ? Sound.playHeartbeatSound(inst.sound)
-          : Sound.playTimerTickSound(inst.sound)
+        Sound.playHeartbeatSound(inst.sound)
       }
     }
   } else {
@@ -3462,8 +3455,8 @@ function updateMeditationCounter(inst) {
   let label
   if (inst.meditation?.countdown != null) {
     label = formatGlowHudFillProgress(countGlowHudOFillParts(inst), GLOW_HUD_O_FILL_PARTS)
-  } else if (trampSingUi) {
-    label = formatGlowHudFillProgress(countTrampWalkSingProgressSec(inst), TRAMP_WALK_SING_TOTAL_SEC)
+  } else if (trampBounceUi) {
+    label = formatGlowHudFillProgress(tw.singCount || 0, TRAMP_WALK_BOUNCES_TOTAL)
   } else {
     label = String(Math.ceil(remaining))
   }
@@ -3474,17 +3467,6 @@ function updateMeditationCounter(inst) {
   inst.meditationCounter.outlineColor = outline
   HeroCounter.update(inst.meditationCounter, label, hx, hy)
   syncHeroCounterPalette(inst.meditationCounter, color, outline)
-}
-//
-// Tramp sing progress across three five-second countdowns (5 + 5 + 5 = 15 s total).
-//
-function countTrampWalkSingProgressSec(inst) {
-  const tw = inst.trampWalk
-  if (!tw || tw.countdown == null) {
-    return Math.min(TRAMP_WALK_SING_TOTAL_SEC, (tw?.singCount || 0) * TRAMP_WALK_COUNTDOWN)
-  }
-  const elapsed = (tw.singCount || 0) * TRAMP_WALK_COUNTDOWN + (TRAMP_WALK_COUNTDOWN - tw.countdown)
-  return Math.min(TRAMP_WALK_SING_TOTAL_SEC, Math.floor(elapsed + 1e-6))
 }
 //
 // Hero-attached counters use gold in the colour world (and after L lights decor).
@@ -3897,9 +3879,9 @@ function activeGlowHudLetterFillForHero(inst) {
     return null
   }
   const tw = inst.trampWalk
-  const trampSingOnHero = tw && inst.zones?.oCollected && !tw.walked &&
-    (tw.countdown != null || (tw.singCount || 0) < TRAMP_WALK_SINGS_TO_WATER)
-  if (trampSingOnHero) return null
+  const trampBounceOnHero = tw && inst.zones?.oCollected && !tw.walked &&
+    (tw.singCount || 0) > 0 && (tw.singCount || 0) < TRAMP_WALK_BOUNCES_TOTAL
+  if (trampBounceOnHero) return null
   if (!inst.zones.lCollected) {
     const lProgress = glowHudLetterFillProgress(inst, 1)
     if (lProgress.parts > 0 && lProgress.parts < lProgress.total) return lProgress
@@ -4060,7 +4042,7 @@ function countGlowHudOFillParts(inst) {
   return Math.min(GLOW_HUD_O_FILL_PARTS, Math.round(fade * GLOW_HUD_O_FILL_PARTS))
 }
 //
-// W HUD fill: one third per post-O sing that walks the right trampoline.
+// W HUD fill: one segment per post-O bounce on the right trampoline.
 //
 function countGlowHudWFillParts(inst) {
   const z = inst.zones
@@ -4069,12 +4051,7 @@ function countGlowHudWFillParts(inst) {
   const tw = inst.trampWalk
   if (!tw) return 0
   const completed = tw.singCount || 0
-  if (completed >= GLOW_HUD_W_FILL_PARTS) return GLOW_HUD_W_FILL_PARTS
-  let stage = 0
-  if (tw.countdown != null) {
-    stage = (TRAMP_WALK_COUNTDOWN - Math.max(0, tw.countdown)) / TRAMP_WALK_COUNTDOWN
-  }
-  return Math.min(GLOW_HUD_W_FILL_PARTS, completed + stage)
+  return Math.min(GLOW_HUD_W_FILL_PARTS, completed)
 }
 //
 // Opaque-pixel box of a HUD glyph, so gold bands follow the letter ink.
@@ -4308,7 +4285,7 @@ function syncGlowHudOFill(inst, burst = true) {
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
-// W loader: one third per five-second sing (fills during each countdown).
+// W loader: one segment per post-O bounce on the right trampoline.
 //
 function syncGlowHudWFill(inst, burst = true) {
   const z = inst.zones
@@ -4450,10 +4427,29 @@ function syncGlowHudLetterFills(inst, burst = true) {
 // HTML5 loop for birds.mp3 — Kaplay k.play().stop() does not reliably restart
 // the same asset after lesson-glow.0 reloads.
 //
+function ensureGlowBirdsPlaybackRate(audio) {
+  if (!audio) return
+  audio.playbackRate = GLOW_BIRDS_PLAYBACK_RATE
+  audio.defaultPlaybackRate = GLOW_BIRDS_PLAYBACK_RATE
+  if ('preservesPitch' in audio) {
+    audio.preservesPitch = true
+  }
+}
+//
+// Letter-caption duck/fade owns birds volume until restore finishes.
+//
+function isGlowBirdsVolumeCaptionManaged(inst) {
+  if (!inst) return false
+  if (inst.letterCaptionActive) return true
+  if (inst._dialogAudioRestoreRaf) return true
+  const birds = inst.birdsMusic
+  return birds?._dialogDuckSaved != null
+}
 function createGlowBirdsLoopAudio() {
   const audio = new Audio(GLOW_BIRDS_AUDIO_SRC)
   audio.loop = true
   audio.volume = 0
+  ensureGlowBirdsPlaybackRate(audio)
   return audio
 }
 function stopGlowBirdsLoopAudio(audio) {
@@ -4472,6 +4468,7 @@ function leaveGlowBirdsLoopAudio() {
 }
 function setGlowBirdsLoopVolume(audio, volume) {
   if (!audio) return
+  ensureGlowBirdsPlaybackRate(audio)
   const vol = Math.max(0, Math.min(1, volume))
   audio.volume = vol
   vol >= 0.001 && audio.paused && audio.play().catch(() => {})
@@ -4627,6 +4624,7 @@ function updateMeditationBirds(inst) {
 // with meditationWorldLife while the countdown runs.
 //
 function syncGlowWorldBirdsVolume(inst) {
+  if (isGlowBirdsVolumeCaptionManaged(inst)) return
   const birds = inst.birdsMusic
   if (!birds) return
   const life = glowBirdsMusicLife(inst)
@@ -4656,14 +4654,6 @@ function stopMeditationBirds(inst) {
 function smoothstep01(t) {
   const x = Math.max(0, Math.min(1, t))
   return x * x * (3 - 2 * x)
-}
-//
-// Linear countdown progress while the post-L stillness timer runs.
-//
-function meditationCountdownLinear(inst) {
-  const remaining = inst.meditation?.countdown
-  if (remaining == null) return 0
-  return 1 - Math.max(0, remaining) / MEDITATION_COUNTDOWN
 }
 //
 // Colour preview progress while the post-L stillness countdown runs — steps
@@ -8828,9 +8818,11 @@ function glowBirdsMusicLife(inst) {
   const z = inst.zones
   if (z.colorWorld || z.oZone || z.oCollected) return 1
   if (z.lCollected && inst.meditation?.countdown != null) {
-    const stepped = inst.meditationWorldLife ?? 0
-    const linear = meditationCountdownLinear(inst)
-    return Math.max(stepped, linear)
+    //
+    // Stepped swell only — linear countdown was louder earlier than the O HUD
+    // and colour beats, which read as birds "speeding up" before Observe.
+    //
+    return inst.meditationWorldLife ?? 0
   }
   return 0
 }
@@ -10968,9 +10960,9 @@ function updateMushroomWhistleLean(inst) {
   // Lean while the idle melody is active — including O-meditation countdown
   // (setEyesClosed clears eyesClosedBySinging, but the whistle keeps playing).
   //
-  const singing = (hero?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
-  const pulse = hero?.whistlePulse ?? 0
-  const side = hero?.whistleLeanSide ?? 1
+  const singing = false
+  const pulse = 0
+  const side = 1
   const skipDecorLean = Boolean(inst.trampWalk?.walking)
   const tramp = inst.trampState
   !skipDecorLean && inst.mushObjs.forEach(obj => {
@@ -11386,15 +11378,6 @@ function maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded) {
 //
 // Arms a confidence hint (+ sparkle burst + chime) for the next time the
 // hero is grounded — a letter taken mid-air shows nothing until he lands.
-//
-// Restores humming + floating notes after the post-L stillness countdown.
-//
-function enableGlowHeroIdleVocalization(inst) {
-  const hero = inst.heroInst
-  if (!hero) return
-  hero.idleVocalization = 'humming'
-  Hero.unsuppressIdleVocalization()
-}
 //
 // Fills the hero body once the world gains full colour (after O).
 // The hero stays whitish — never turns gold when the world colours.
@@ -13348,17 +13331,16 @@ function revealOZone(inst) {
   // hero to land afterward (see maybeApplyPendingHeroFillOnLand) — the zone
   // just being reachable isn't "I feel more confident now" yet.
   //
-  enableGlowHeroIdleVocalization(inst)
 }
 //
-// Opens the W platform zone (first sing at the big mushroom, or a landing).
+// Opens the W platform zone (after ten bounces on the right trampoline).
 //
 //
-// W platform/letter stay hidden until all three post-O sing phases finish.
+// W platform/letter stay hidden until ten post-O bounces finish.
 //
 function isGlowWZoneUnlocked(inst) {
   const tw = inst.trampWalk
-  return Boolean(tw?.walked || (tw?.singCount || 0) >= TRAMP_WALK_SINGS_TO_WATER)
+  return Boolean(tw?.walked || (tw?.singCount || 0) >= TRAMP_WALK_BOUNCES_TOTAL)
 }
 //
 // Saved wZone flags can be set early — gameplay treats W as hidden until sings finish.
@@ -13675,11 +13657,10 @@ function onUpdate(inst) {
   if (!parallaxStable || inst.treeGraySpriteName !== glowMonolithTreeGraySpriteName(inst.zones)) {
     inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
   }
-  const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const meditating = inst.meditation?.countdown != null
-  if (singing || meditating || inst._mushroomLeanActive) {
+  if (meditating || inst._mushroomLeanActive) {
     updateMushroomWhistleLean(inst)
-    inst._mushroomLeanActive = singing || meditating ||
+    inst._mushroomLeanActive = meditating ||
       inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
   }
   maybeSyncGlowLifeHudGrey(inst)
@@ -13825,7 +13806,7 @@ function onUpdate(inst) {
   } else if (onMainGroundLevel) {
     inst.wasOnStartBranch = false
   }
-  updateTrampolineWalk(inst, char, heroMoving, grounded)
+  updateTrampolineWalk(inst)
   updateTrampEndure(inst)
   updateTrampWaterSteps(inst)
   //
@@ -13974,7 +13955,6 @@ function onUpdate(inst) {
   updateBranchTrampMarioHint(inst)
   syncGlowPitCaveFlagForTeacherHints(inst)
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
-  updateWrongTrampSingHint(inst)
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
@@ -14285,7 +14265,7 @@ function dismissGlowPostLStopTeacherHint(inst) {
   dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_AFTER_L)
 }
 //
-// Stops the post-O big-mushroom teacher line once the hero starts singing there.
+// Stops the post-O big-mushroom teacher line once the hero bounces there.
 //
 function dismissGlowPostOBigMushTeacherHint(inst) {
   inst._postOBigMushHintShows = GLOW_TEACHER_HINT_POST_O_MAX_SHOWS
@@ -14307,121 +14287,93 @@ function dismissGlowCaveMushroomTeacherHint(inst) {
   dismissGlowTeacherHintByText(inst, PIT_CAVE_HINT_TEXT)
 }
 //
-// Forces idle humming while the post-O trampoline sing countdown ticks.
+// Cheeky cap lines only before O or after the post-O walk quest finishes.
 //
-function syncGlowTrampSingHeroVocalization(inst, still) {
+function shouldGlowRightTrampShowCheekyHints(inst) {
+  const z = inst.zones
+  if (!z?.oCollected) return true
   const tw = inst.trampWalk
-  if (!still || tw?.countdown == null) return
-  const hero = inst.heroInst
-  if (!hero) return
-  enableGlowHeroIdleVocalization(inst)
-  hero.wasJumping = false
-  hero.isRunning = false
-  hero._effectivelyMoving = false
-  hero.jumpPhase = 'none'
-  hero.idleStillTime = Math.max(hero.idleStillTime ?? 0, TRAMP_SING_VOCAL_IDLE_SEC)
+  return Boolean(tw?.walked)
 }
 //
-// After O: stand still near the trampoline → countdown → mushroom walks
-// left. The first two sings stay on land; the third docks in the lake.
-// Once a walk starts it always finishes — chasing the hero cannot interrupt it.
+// Tears down the rotating cheeky bubble on the right trampoline cap.
 //
-function updateTrampolineWalk(inst, char, heroMoving, grounded) {
+function clearGlowRightTrampCheekyHint(inst) {
+  const tw = inst.trampWalk
+  if (!tw) return
+  tw.cheekyTimer = 0
+  tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
+  tw.cheekyTooltip = null
+}
+//
+// Counts one post-O bounce on the right cap; walks left at 5 and 10.
+//
+function tryGlowRightTrampBounceQuest(inst) {
   const tw = inst.trampWalk
   const z = inst.zones
-  if (!tw || !z.oCollected || tw.walked) {
-    if (tw && (tw.countdown != null || tw.stillTimer > 0) && (tw.walked || !z.oCollected)) {
-      tw.stillTimer = 0
-      tw.countdown = null
-    }
-    return
-  }
-  const dt = inst.k.dt()
-  //
-  // In-progress walk always continues to the current stop (dialog / chase
-  // and hero on the cap ignored) — see syncOneTrampolinePad for cap handling.
-  //
-  if (tw.walking) {
-    inst.trampState.hasLegs = true
-    inst.trampState.walkDir = -1
-    inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9
-    inst.trampState.x -= TRAMP_WALK_SPEED * dt
-    const targetX = tw.walkTargetX ?? tw.dockX
-    if (inst.trampState.x <= targetX) {
-      inst.trampState.x = targetX
-      tw.walking = false
-      if (tw.singCount >= TRAMP_WALK_SINGS_TO_WATER) {
-        tw.walked = true
-        inst.trampState.walkDir = -1
-        persistTrampWalk(inst)
-        startTrampWaterHints(inst)
-      } else {
-        inst.trampState.hasLegs = false
-        inst.trampState.walkDir = 0
-        persistTrampWalk(inst)
-      }
-    }
-    return
-  }
+  if (!tw || !z.oCollected || tw.walked || tw.walking) return
   if (inst.dialogOpen || inst.letterCaptionActive) return
   if (tw.singAllowedAt != null && inst.k.time() < tw.singAllowedAt) return
-  const nearRadius = tw.countdown != null ? TRAMP_WALK_NEAR_SINGING : TRAMP_WALK_NEAR
-  const near = Math.abs(char.pos.x - inst.trampState.x) < nearRadius &&
-    grounded &&
-    Math.abs(char.pos.y + SURFACE_DETECT_Y - FLOOR_Y) < 28
-  const still = near && !heroMoving && Math.abs(char.vel?.y ?? 0) < 1
-  if (!still) {
-    tw.stillTimer = 0
-    tw.countdown = null
-    return
-  }
-  if (tw.countdown == null) {
-    tw.stillTimer += dt
-    if (tw.stillTimer >= TRAMP_WALK_STILL) {
-      tw.countdown = TRAMP_WALK_COUNTDOWN
-      dismissGlowPostOBigMushTeacherHint(inst)
-    }
-    return
-  }
-  syncGlowTrampSingHeroVocalization(inst, still)
-  tw.countdown -= dt
-  if (tw.countdown <= 0) {
-    tw.countdown = null
-    tw.singCount = (tw.singCount || 0) + 1
-    const line = TRAMP_BAD_SING_TEXTS[Math.min(tw.singCount, TRAMP_BAD_SING_TEXTS.length) - 1]
+  if ((tw.singCount || 0) >= TRAMP_WALK_BOUNCES_TOTAL) return
+  tw.singCount = (tw.singCount || 0) + 1
+  dismissGlowPostOBigMushTeacherHint(inst)
+  persistTrampWalk(inst)
+  syncGlowHudWFill(inst)
+  if (tw.singCount === TRAMP_WALK_BOUNCES_MID_STOP) {
+    clearGlowRightTrampCheekyHint(inst)
+    showTrampBadSingHint(inst, TRAMP_MUSH_BOUNCE_HINT_MID)
     tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
     tw.walking = true
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
-    persistTrampWalk(inst)
-    syncGlowHudWFill(inst)
-    showTrampBadSingHint(inst, line)
-    tw.singCount >= TRAMP_WALK_SINGS_TO_WATER && revealWZone(inst)
+    return
+  }
+  if (tw.singCount >= TRAMP_WALK_BOUNCES_TOTAL) {
+    clearGlowRightTrampCheekyHint(inst)
+    showTrampBadSingHint(inst, TRAMP_MUSH_BOUNCE_HINT_FINAL)
+    tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
+    tw.walking = true
+    inst.trampState.hasLegs = true
+    inst.trampState.walkDir = -1
+    revealWZone(inst)
   }
 }
 //
-// During the post-O sing countdown the right mushroom shuts its eyes,
-// shrinks and trembles instead of dancing with the whistle.
+// Mushroom walk after bounce milestones — always runs to completion.
 //
-function updateTrampEndure(inst) {
+function updateTrampolineWalk(inst) {
   const tw = inst.trampWalk
-  const state = inst.trampState
-  if (!state) return
-  const enduring = Boolean(tw && !tw.walked && !tw.walking && tw.countdown != null)
-  state.enduring = enduring
-  if (!enduring) {
-    state.endureShakeX = 0
-    state.endureScaleY = 1
+  const z = inst.zones
+  if (!tw || !z.oCollected || tw.walked || !tw.walking) return
+  const dt = inst.k.dt()
+  inst.trampState.hasLegs = true
+  inst.trampState.walkDir = -1
+  inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9
+  inst.trampState.x -= TRAMP_WALK_SPEED * dt
+  const targetX = tw.walkTargetX ?? tw.dockX
+  if (inst.trampState.x > targetX) return
+  inst.trampState.x = targetX
+  tw.walking = false
+  if (tw.singCount >= TRAMP_WALK_BOUNCES_TOTAL) {
+    tw.walked = true
+    inst.trampState.walkDir = -1
+    persistTrampWalk(inst)
+    startTrampWaterHints(inst)
     return
   }
-  const t = 1 - Math.max(0, tw.countdown) / TRAMP_WALK_COUNTDOWN
-  const time = inst.k.time()
-  const pulse = Math.sin(time * TRAMP_ENDURE_PULSE_SPEED) * TRAMP_ENDURE_PULSE_AMP
-  state.endureScaleY = 1 - t * TRAMP_ENDURE_SQUASH_MAX + pulse
-  state.endureShakeX = Math.sin(time * TRAMP_ENDURE_SHAKE_SPEED) *
-    (TRAMP_ENDURE_SHAKE_AMP + t * 0.4)
-  state.blinking = true
-  state.leanAngle = 0
+  inst.trampState.hasLegs = false
+  inst.trampState.walkDir = 0
+  persistTrampWalk(inst)
+}
+//
+// Legacy endure squash (idle sing removed — keep cap state neutral).
+//
+function updateTrampEndure(inst) {
+  const state = inst.trampState
+  if (!state) return
+  state.enduring = false
+  state.endureShakeX = 0
+  state.endureScaleY = 1
 }
 //
 // Wading loop while the walking mushroom is inside the lake.
@@ -14429,7 +14381,7 @@ function updateTrampEndure(inst) {
 function updateTrampWaterSteps(inst) {
   const tw = inst.trampWalk
   const state = inst.trampState
-  const dockMarch = (tw?.singCount || 0) >= TRAMP_WALK_SINGS_TO_WATER
+  const dockMarch = (tw?.singCount || 0) >= TRAMP_WALK_BOUNCES_TOTAL
   const inWater = Boolean(
     tw?.walking &&
     dockMarch &&
@@ -14449,9 +14401,11 @@ function onTrampolineBounce(inst) {
   const holdingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
     TouchControls.isMoveLeftHeld()
   holdingLeft && (inst.trampToLApproach = true)
+  tryGlowRightTrampBounceQuest(inst)
   const tw = inst.trampWalk
   if (!tw) return
   tw.bounceCount = (tw.bounceCount || 0) + 1
+  if (!shouldGlowRightTrampShowCheekyHints(inst)) return
   if (tw.bounceCount % TRAMP_CHEEKY_EVERY !== 0) return
   tw.cheekyTimer = TRAMP_CHEEKY_DURATION
   const line = TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % TRAMP_CHEEKY_LINES.length]
@@ -14600,32 +14554,6 @@ function updateBranchTrampCheekyHint(inst) {
   if (tw.cheekyTimer > 0) return
   tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
   tw.cheekyTooltip = null
-}
-//
-// Bubble when the hero whistles away from the walk-trampoline mushroom.
-//
-function updateWrongTrampSingHint(inst) {
-  const tw = inst.trampWalk
-  const z = inst.zones
-  if (!tw || !z.oCollected || tw.walked || tw.walking) return
-  if (inst.dialogOpen) return
-  const char = inst.heroInst?.character
-  if (!char?.pos || !inst.trampState) return
-  const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
-  const grounded = char.isGrounded?.() ?? false
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  if (!singing || !grounded || footY > FLOOR_Y + 28) {
-    tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
-    return
-  }
-  const nearCorrect = Math.abs(char.pos.x - inst.trampState.x) < TRAMP_WALK_NEAR_SINGING
-  if (nearCorrect) {
-    tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
-    return
-  }
-  tw.wrongSingCooldown -= inst.k.dt()
-  if (tw.wrongSingCooldown > 0) return
-  tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
 }
 //
 // First hint when the walk-trampoline mushroom reaches the lake; repeats every 30 s.
@@ -16803,14 +16731,14 @@ function glowTooltipBakeBounds(layout) {
   return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 //
-// Land stops for the first two sings; the third walk docks in the lake.
+// Mid stop at five bounces; ten docks in the lake.
 //
-function trampWalkStopX(inst, singCount) {
-  if (singCount >= TRAMP_WALK_SINGS_TO_WATER) return inst.trampWalk.dockX
+function trampWalkStopX(inst, bounceCount) {
+  if (bounceCount >= TRAMP_WALK_BOUNCES_TOTAL) return inst.trampWalk.dockX
   const homeX = inst.trampState.homeX
   const landEndX = inst.lakeX2 + TRAMP_WALK_SHORE_PAD
   const landSpan = Math.max(1, homeX - landEndX)
-  return homeX - (landSpan * singCount) / TRAMP_WALK_SINGS_TO_WATER
+  return homeX - (landSpan * bounceCount) / TRAMP_WALK_BOUNCES_TOTAL
 }
 //
 // Glow runs on its own native-resolution engine, so the real window size is

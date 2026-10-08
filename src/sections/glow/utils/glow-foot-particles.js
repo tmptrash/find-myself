@@ -20,6 +20,11 @@ const CRUMBLE_GROUND_SCATTER_SETTLE_SPEED = 14
 const CRUMBLE_GROUND_SCATTER_MIN_SEC = 0.2
 const CRUMBLE_GROUND_LINGER = 0.38
 const CRUMBLE_GROUND_FADE = 0.5
+const CAPTION_CRUMBLE_GROUND_CONTACT_LEAD = 14
+const CAPTION_CRUMBLE_BULK_SIZE_PAD = 3
+const CAPTION_CRUMBLE_BULK_VY_FRAC = 0.5
+const CAPTION_CRUMBLE_BULK_MIN_SEC = 0.05
+const CAPTION_CRUMBLE_BULK_MAX_SEC = 1.2
 const LANDING_SPEED_MIN = 90
 const LANDING_SPEED_RANGE = 140
 //
@@ -114,7 +119,7 @@ export function onUpdate(inst, dt) {
     if (p.shape === 'leaf') {
       updateLeafParticle(p, dt)
     } else if (p.crumbleGround) {
-      updateCrumbleParticle(p, dt)
+      updateCrumbleParticle(inst, p, dt)
     } else {
       updateDustParticle(p, dt)
     }
@@ -159,6 +164,23 @@ export function spawnLeafBurst(inst, x, y, colors, count, groundY = null) {
 // Earth crumbs sampled inside a tilted rectangle — used when the G caption
 // dissolves into soil instead of a plain opacity fade.
 //
+//
+// When the bulk of the spawn box (mid height, mean drop speed) reaches groundY.
+//
+export function estimateCaptionCrumbleBulkGroundSec(spawnMidY, groundY) {
+  const dist = Math.max(0, groundY - spawnMidY - CAPTION_CRUMBLE_BULK_SIZE_PAD)
+  if (dist <= 0) return CAPTION_CRUMBLE_BULK_MIN_SEC
+  const vy0 = CRUMBLE_DROP_SPEED_MIN + CRUMBLE_DROP_SPEED_EXTRA * CAPTION_CRUMBLE_BULK_VY_FRAC
+  const g = CRUMBLE_GRAVITY
+  const disc = vy0 * vy0 + 2 * g * dist
+  if (disc <= 0) return CAPTION_CRUMBLE_BULK_MIN_SEC
+  const t = (-vy0 + Math.sqrt(disc)) / g
+  return Math.max(
+    CAPTION_CRUMBLE_BULK_MIN_SEC,
+    Math.min(CAPTION_CRUMBLE_BULK_MAX_SEC, t)
+  )
+}
+
 export function spawnEarthCrumbleFromRegion(inst, cfg) {
   if (!inst) return
   const {
@@ -169,8 +191,12 @@ export function spawnEarthCrumbleFromRegion(inst, cfg) {
     tiltDeg = 0,
     colors,
     count = 80,
-    groundY = null
+    groundY = null,
+    onGroundHit = null,
+    captionCrumble = false
   } = cfg
+  inst._crumbleGroundHitCb = onGroundHit
+  inst._crumbleGroundHitFired = false
   const palette = Array.isArray(colors) ? colors : [colors || glowRgb('decorGray')]
   const rad = tiltDeg * Math.PI / 180
   const cos = Math.cos(rad)
@@ -195,6 +221,7 @@ export function spawnEarthCrumbleFromRegion(inst, cfg) {
       g: c.g,
       b: c.b,
       crumbleGround: true,
+      captionCrumble,
       groundY,
       landed: false,
       scatterDone: false,
@@ -264,7 +291,13 @@ function updateDustParticle(p, dt) {
 //
 // Caption earth crumbs — fall to groundY, rest, then fade (no mid-air dissolve).
 //
-function updateCrumbleParticle(p, dt) {
+function notifyCrumbleGroundHit(inst) {
+  if (!inst || inst._crumbleGroundHitFired) return
+  inst._crumbleGroundHitFired = true
+  inst._crumbleGroundHitCb?.()
+}
+
+function updateCrumbleParticle(inst, p, dt) {
   if (p.landed) {
     if (!p.scatterDone) {
       p.scatterTime += dt
@@ -294,9 +327,12 @@ function updateCrumbleParticle(p, dt) {
   p.vx *= Math.pow(CRUMBLE_HORIZONTAL_DRAG_PER_SEC, dt)
   p.x += p.vx * dt
   p.y += p.vy * dt
-  if (p.groundY != null && p.y >= p.groundY - p.size) {
+  const contactLead = p.captionCrumble ? CAPTION_CRUMBLE_GROUND_CONTACT_LEAD : 0
+  const floorLine = p.groundY != null ? p.groundY - p.size - contactLead : null
+  if (floorLine != null && p.y >= floorLine) {
     p.y = p.groundY - p.size
     p.landed = true
+    notifyCrumbleGroundHit(inst)
     p.scatterDone = false
     p.scatterTime = 0
     const side = Math.random() < 0.5 ? -1 : 1

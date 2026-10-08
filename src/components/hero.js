@@ -2293,13 +2293,21 @@ function punchHeroEyeSocket(ctx, cx, eyeY) {
 //
 function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL) {
   if (transparentInterior) {
+    if (eyesClosed) {
+      //
+      // Calm / pre-G lake drown: closed eyes stay hollow — outline ring only.
+      //
+      ctx.strokeStyle = OL
+      ctx.lineWidth = 1.6
+      ctx.beginPath()
+      ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+      ctx.stroke()
+      return
+    }
     ctx.fillStyle = OL
     ctx.beginPath()
     ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
     ctx.fill()
-    if (eyesClosed) {
-      return
-    }
     ctx.save()
     ctx.globalCompositeOperation = 'destination-out'
     ctx.fillStyle = '#000000'

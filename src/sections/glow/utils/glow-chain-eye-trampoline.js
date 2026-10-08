@@ -209,6 +209,8 @@ function tryOneChainEyeBounce(inst, state, pad, hero, char, heroX) {
     inst.onChainMiddleEyeStepped?.()
   }
   if (state.role === CHAIN_EYE_ROLE_LEFT) {
+    inst.zones.chainLeftEyeStepped = true
+    inst.onChainLeftEyeStepped?.()
     maybeRevealLPlatOnLeftChainEyeTouch(inst, heroX, footY)
   }
   return true

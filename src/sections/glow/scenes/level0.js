@@ -982,7 +982,7 @@ const GLOW_HUD_LETTER_COUNT = 4
 // HUD G/L/O/W fill as loaders. Ink-box clip ignores empty font padding.
 //
 const GLOW_HUD_G_FILL_PARTS = 8
-const GLOW_HUD_L_FILL_PARTS = 4
+const GLOW_HUD_L_FILL_PARTS = 5
 const GLOW_HUD_O_FILL_PARTS = 5
 //
 // Matches TRAMP_WALK_SINGS_TO_WATER — one fill part per mushroom sing.
@@ -1111,6 +1111,7 @@ const GLOW_CHAIN_TRAMP_SWAY_LAG = 0.55
 const L_PLAT_ABOVE_LEFT_CHAIN_EYE = 108
 const L_PLAT_LEFT_OF_LEFT_CHAIN_EYE_GAP = 36
 const KEY_CHAIN_MIDDLE_EYE_STEPPED = 'glow.chainMiddleEyeStepped'
+const KEY_CHAIN_LEFT_EYE_STEPPED = 'glow.chainLeftEyeStepped'
 const KEY_REVEALED_GROUND_DECOR = 'glow.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'glow.revealedGroundDecorRight'
 const KEY_REVEALED_GROUND_DECOR_LEFT = 'glow.revealedGroundDecorLeft'
@@ -2890,6 +2891,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       inst.zones.chainMiddleEyeStepped = true
       inst.lChainFromMiddleEye = true
       ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
+      syncGlowHudLetterFills(inst)
+    }
+    inst.onChainLeftEyeStepped = () => {
+      set(KEY_CHAIN_LEFT_EYE_STEPPED, true)
+      inst.zones.chainLeftEyeStepped = true
+      syncGlowHudLetterFills(inst)
     }
     inst.onLeftChainEyeTouchForLPlat = () => revealLPlatZone(inst)
     ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
@@ -3566,6 +3573,7 @@ function loadGlowZones() {
     rightTrampRevealed,
     rightTrampBounceLive,
     chainMiddleEyeStepped: get(KEY_CHAIN_MIDDLE_EYE_STEPPED, false) || lCollected,
+    chainLeftEyeStepped: get(KEY_CHAIN_LEFT_EYE_STEPPED, false) || lCollected,
     lPlatStepped: get(KEY_L_PLAT_STEPPED, false) || lCollected,
     mudPredatorJumpedOver: get(KEY_MUD_PREDATOR_JUMPED_OVER, false) ||
       get(KEY_MUD_PREDATOR_JUMPED_OVER_LEGACY, false) ||
@@ -4018,7 +4026,7 @@ function countGlowHudGFillParts(inst) {
   return Math.min(GLOW_HUD_G_FILL_PARTS, worldParts)
 }
 //
-// L HUD fill (x/4): mud predator jump, right mushroom found, bounce on it, L log step.
+// L HUD fill (x/5): mud jump, right spirit/tramp reveal, middle chain eye, left chain eye, L log.
 //
 function countGlowHudLFillParts(inst) {
   const z = inst.zones
@@ -4026,7 +4034,8 @@ function countGlowHudLFillParts(inst) {
   let n = 0
   z?.mudPredatorJumpedOver && n++
   (z?.rightTrampRevealed || isRightTrampolineVisible(z)) && n++
-  glowHudLTrampJumped(z) && n++
+  z?.chainMiddleEyeStepped && n++
+  z?.chainLeftEyeStepped && n++
   z?.lPlatStepped && n++
   return Math.min(GLOW_HUD_L_FILL_PARTS, n)
 }
@@ -11648,10 +11657,30 @@ function isGlowInlineWordCaptionLetter(char) {
   return GLOW_INLINE_WORD_CAPTION_LETTERS.has(char)
 }
 //
+// Lowest world Y inside the tilted crumble spawn rectangle (Kaplay Y grows down).
+//
+function glowCaptionCrumbleRegionVerticalExtents(centerX, centerY, halfW, halfH, tiltDeg) {
+  const rad = tiltDeg * Math.PI / 180
+  const sin = Math.sin(rad)
+  const cos = Math.cos(rad)
+  let minY = centerY
+  let maxY = centerY
+  for (let i = 0; i < 4; i++) {
+    const lx = i < 2 ? -halfW : halfW
+    const ly = i % 2 === 0 ? -halfH : halfH
+    const wy = centerY + lx * sin + ly * cos
+    wy < minY && (minY = wy)
+    wy > maxY && (maxY = wy)
+  }
+  return { minY, maxY, midY: (minY + maxY) * 0.5 }
+}
+//
 // Spawns a crumble burst over the tilted inline-word caption bounds.
 //
 function spawnGlowInlineWordCaptionCrumble(inst, centerX, centerY, halfW, halfH, tiltDeg) {
   if (!inst.footParticles) return
+  const regionY = glowCaptionCrumbleRegionVerticalExtents(centerX, centerY, halfW, halfH, tiltDeg)
+  const bulkImpactSec = GlowFootParticles.estimateCaptionCrumbleBulkGroundSec(regionY.midY, FLOOR_Y)
   GlowFootParticles.spawnEarthCrumbleFromRegion(inst.footParticles, {
     centerX,
     centerY,
@@ -11660,8 +11689,16 @@ function spawnGlowInlineWordCaptionCrumble(inst, centerX, centerY, halfW, halfH,
     tiltDeg,
     colors: glowCaptionEarthCrumbleColors(),
     count: GLOW_INLINE_WORD_CAPTION_CRUMBLE_PARTICLE_COUNT,
-    groundY: FLOOR_Y
+    groundY: FLOOR_Y,
+    captionCrumble: true
   })
+  //
+  // Short sand burst centred on bulk ground impact (delayed from spawn).
+  //
+  if (inst.sound && !inst.sound._glowSfxMuted) {
+    Sound.resumeAudioContext(inst.sound)
+    Sound.playGlowCaptionSandCrumble(inst.sound, bulkImpactSec)
+  }
 }
 //
 function closeGlowLetterCaption(inst, captionObjs, letterEntry, onCloseExtra, audioFade) {
@@ -11846,14 +11883,22 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
         obj.hidden = true
         obj.opacity = 0
       })
-      spawnGlowInlineWordCaptionCrumble(
-        inst,
-        inlineWordCrumbleCenterX,
-        inlineWordCrumbleCenterY,
-        inlineWordCrumbleHalfW,
-        inlineWordCrumbleHalfH,
-        tiltDeg
-      )
+      const crumbleCx = inlineWordCrumbleCenterX
+      const crumbleCy = inlineWordCrumbleCenterY
+      const crumbleHalfW = inlineWordCrumbleHalfW
+      const crumbleHalfH = inlineWordCrumbleHalfH
+      const crumbleTilt = tiltDeg
+      inst.k.wait(0, () => {
+        if (!inst.letterCaptionActive) return
+        spawnGlowInlineWordCaptionCrumble(
+          inst,
+          crumbleCx,
+          crumbleCy,
+          crumbleHalfW,
+          crumbleHalfH,
+          crumbleTilt
+        )
+      })
     }
     if (!inlineWordCrumbleSpawned) {
       captionPieces.forEach(group => {
@@ -12519,6 +12564,16 @@ function registerDrownLateSink(inst) {
   })
 }
 //
+// Rebakes closed-eye sprites with hollow sockets before the first-G lake sink.
+//
+function ensureGlowHollowDrownClosedEyes(inst) {
+  if (inst.zones?.gCollected) return
+  const hero = inst.heroInst
+  if (!hero?.outlineOnly || hero.transparentEyeInterior) return
+  hero.transparentEyeInterior = true
+  Hero.loadHeroSprites(hero)
+}
+//
 // Slow sink then sad death sound and level restart; water stays revealed.
 //
 function startDrowning(inst) {
@@ -12545,6 +12600,7 @@ function startDrowning(inst) {
   // enterCalmPose clears any mid-air jump/run frame so the hero never rests
   // on the water surface sideways.
   //
+  ensureGlowHollowDrownClosedEyes(inst)
   Hero.enterCalmPose(inst.heroInst)
   Hero.applyCalmIdleSprite(inst.heroInst)
   //
@@ -16049,7 +16105,7 @@ function markLPlatStepped(inst) {
   syncGlowHudLetterFills(inst)
 }
 //
-// Persists a right-trampoline bounce for the L HUD loader (3/4).
+// Persists a right-trampoline bounce (legacy flag; not counted toward L x/5).
 //
 function markGlowHudLTrampJumped(inst) {
   if (get(KEY_HUD_L_TRAMP_JUMPED, false)) return
@@ -16057,7 +16113,7 @@ function markGlowHudLTrampJumped(inst) {
   syncGlowHudLetterFills(inst)
 }
 //
-// Persists the left-mud predator jump-over so the HUD L counter stays at 1/4+
+// Persists the left-mud predator jump-over so the HUD L counter stays at 1/5+
 // after leaving.
 //
 function markMudPredatorJumpedOver(inst) {
@@ -16505,7 +16561,7 @@ function glowTeacherLZoneAutoHintEligible(inst, inCave) {
   //
   // The hint references the L-log platform by name — showing it before the
   // platform itself is even revealed (e.g. right after only the mud band
-  // jump-over step, the first of 4) reads as nonsense.
+  // jump-over step, the first of 5) reads as nonsense.
   //
   if (!inst.zones.lPlatRevealed) return false
   const parts = countGlowHudLFillParts(inst)

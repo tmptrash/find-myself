@@ -16,7 +16,12 @@ const HINT_ICON_W = 44
 const HINT_ICON_H = 40
 const HINT_EYE_DX = 13
 const HINT_EYE_PUPIL_R = 2.75
+const HINT_EYE_STALK_EXTRA_LIFT = 6
+const HINT_STALK_ARM_LEN = 9
+const HINT_STALK_ARM_DROP = 2.2
+const HINT_STALK_ARM_WIDTH = 1.7
 const HINT_ICON_CHAIN_W = 40
+const HINT_ICON_CHAIN_H = 50
 const HINT_OFFSET_Y = -70
 const HINT_MIN_RISE = 0.18
 const SPIRIT_HINT_EYES_SHUT_DELAY = 2
@@ -64,12 +69,15 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
     const wantColored = !isSpiritHintMonochrome(levelInst)
     const wantRightEyes = spirit.burrowPhase === 'right'
     const wantIconW = wantRightEyes ? HINT_ICON_CHAIN_W : HINT_ICON_W
+    const wantIconH = wantRightEyes ? HINT_ICON_CHAIN_H : HINT_ICON_H
     if (tip._spiritHintColored !== wantColored ||
       tip._spiritHintAtRightBurrow !== wantRightEyes ||
-      tip.activeTarget?.iconW !== wantIconW) {
+      tip.activeTarget?.iconW !== wantIconW ||
+      tip.activeTarget?.iconH !== wantIconH) {
       tip._spiritHintColored = wantColored
       tip._spiritHintAtRightBurrow = wantRightEyes
       tip.activeTarget && (tip.activeTarget.iconW = wantIconW)
+      tip.activeTarget && (tip.activeTarget.iconH = wantIconH)
       tip._spiritHintBakeKey = null
     }
     return
@@ -83,7 +91,7 @@ export function syncSwampSpiritProximityHint(levelInst, clampInset) {
     height: 96,
     text: '',
     iconW: spirit.burrowPhase === 'right' ? HINT_ICON_CHAIN_W : HINT_ICON_W,
-    iconH: HINT_ICON_H,
+    iconH: spirit.burrowPhase === 'right' ? HINT_ICON_CHAIN_H : HINT_ICON_H,
     offsetY: HINT_OFFSET_Y,
     forceAbove: true,
     pointerWorldX: () => head.x,
@@ -184,7 +192,7 @@ function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v4' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v6' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
@@ -297,19 +305,20 @@ function bakeSpiritMushTooltipCanvas(layout, colored, rightEyes = false) {
 }
 
 function hintChainEyeSpots(iconOx, iconOy) {
-  const baseY = iconOy + MUSH_BASE_Y - 6
+  const baseY = iconOy + MUSH_BASE_Y
   const midX = iconOx + HINT_ICON_CHAIN_W / 2
+  const lift = HINT_EYE_STALK_EXTRA_LIFT
   return {
     baseY,
-    left: { x: midX - HINT_EYE_DX, eyeY: baseY - 22 },
-    right: { x: midX + HINT_EYE_DX, eyeY: baseY - 12 }
+    left: { x: midX - HINT_EYE_DX, eyeY: baseY - 22 - lift },
+    right: { x: midX + HINT_EYE_DX, eyeY: baseY - 12 - lift }
   }
 }
 
 function drawHintChainStalks(ctx, iconOx, iconOy, colored) {
   const spots = hintChainEyeSpots(iconOx, iconOy)
-  drawHintChainEyeShell(ctx, spots.left.x, spots.baseY, spots.left.eyeY, colored)
-  drawHintChainEyeShell(ctx, spots.right.x, spots.baseY, spots.right.eyeY, colored)
+  drawHintChainEyeShell(ctx, spots.left.x, spots.baseY, spots.left.eyeY, colored, 1.7)
+  drawHintChainEyeShell(ctx, spots.right.x, spots.baseY, spots.right.eyeY, colored, 4.2)
 }
 
 function drawHintChainPupils(ctx, iconOx, iconOy) {
@@ -322,7 +331,29 @@ function drawHintChainPupils(ctx, iconOx, iconOy) {
   ctx.restore()
 }
 
-function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored) {
+function drawHintChainStalkSideArms(ctx, ex, baseY, eyeY, stalkRgb, armSeed) {
+  const stalkLen = baseY - eyeY
+  const joints = [0.38, 0.62]
+  ctx.strokeStyle = `rgb(${stalkRgb.r},${stalkRgb.g},${stalkRgb.b})`
+  ctx.lineWidth = HINT_STALK_ARM_WIDTH
+  joints.forEach((t, i) => {
+    const py = baseY - stalkLen * t
+    const side = i % 2 === 0 ? -1 : 1
+    const wobble = Math.sin(armSeed * 2.3 + i * 1.17) * 2.2
+    const tipX = ex + side * (HINT_STALK_ARM_LEN + wobble)
+    const tipY = py + HINT_STALK_ARM_DROP
+    ctx.beginPath()
+    ctx.moveTo(ex, py)
+    ctx.lineTo(tipX, tipY)
+    ctx.stroke()
+    ctx.fillStyle = `rgb(${stalkRgb.r},${stalkRgb.g},${stalkRgb.b})`
+    ctx.beginPath()
+    ctx.arc(tipX, tipY, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  })
+}
+
+function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored, armSeed) {
   const stalk = parseHex(colored ? GLOW_PAL.decorGray : MONO_INK)
   const sclera = parseHex(colored ? CFG.visual.colors.hero.eyeWhite : '#FFFFFF')
   const ink = parseHex(MONO_INK)
@@ -332,6 +363,7 @@ function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored) {
   ctx.moveTo(ex, baseY)
   ctx.lineTo(ex, eyeY + 8)
   ctx.stroke()
+  drawHintChainStalkSideArms(ctx, ex, baseY, eyeY, stalk, armSeed)
   ctx.fillStyle = `rgb(${sclera.r},${sclera.g},${sclera.b})`
   ctx.beginPath()
   ctx.arc(ex, eyeY, 7, 0, Math.PI * 2)

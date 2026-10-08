@@ -1645,6 +1645,47 @@ function playSwampSpiritNoise(instance, opts) {
 //
 // Glow muddy band: wet squelch landing (same timbre as mud step, louder).
 //
+//
+// Dry sand/grit for G/L/O caption crumble — short swell, centre on bulk ground impact.
+//
+export function playGlowCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25) {
+  if (!instance?.audioContext || instance._glowSfxMuted) return
+  const ctx = instance.audioContext
+  const CAPTION_SAND_ATTACK_SEC = 0.036
+  const CAPTION_SAND_HOLD_SEC = 0.042
+  const CAPTION_SAND_DECAY_SEC = 0.11
+  const totalSec = CAPTION_SAND_ATTACK_SEC + CAPTION_SAND_HOLD_SEC + CAPTION_SAND_DECAY_SEC
+  const startDelay = Math.max(0, bulkGroundImpactSec - totalSec * 0.5)
+  const now = ctx.currentTime + startDelay
+  const peakTime = now + CAPTION_SAND_ATTACK_SEC
+  const endTime = now + totalSec
+  const bufferSize = Math.floor(ctx.sampleRate * (totalSec + 0.04))
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(1400, now)
+  filter.frequency.exponentialRampToValueAtTime(2600, peakTime)
+  filter.frequency.exponentialRampToValueAtTime(520, endTime)
+  filter.Q.value = 0.5
+  const envelope = ctx.createGain()
+  const peak = CFG.audio.sfx.land * 1.12
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.exponentialRampToValueAtTime(peak, peakTime)
+  envelope.gain.setValueAtTime(peak, now + CAPTION_SAND_ATTACK_SEC + CAPTION_SAND_HOLD_SEC)
+  envelope.gain.exponentialRampToValueAtTime(0.001, endTime)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.landGain)
+  noiseSource.start(now)
+  noiseSource.stop(endTime + 0.02)
+}
+
 function playGlowMudLand(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.13

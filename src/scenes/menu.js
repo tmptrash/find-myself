@@ -526,7 +526,7 @@ export function sceneMenu(k) {
       pupilColor: menuHeroPupilColor,
       transparentEyeInterior: menuHeroTransparentEyes,
       noEyes: menuHeroNoEyes,
-      idleVocalization: inGlowPlay ? null : undefined,
+      idleVocalization: (inGlowPlay || !progress.word?.completed) ? null : undefined,
       sfx: sound
     })
     

@@ -37,6 +37,11 @@ const SPIRIT_NOTE_DRIFT_AMPLITUDE = 14
 const SPIRIT_NOTE_DRIFT_FREQ = 1.35
 const SPIRIT_NOTE_GLYPHS = ['♪', '♫', '♩', '♬']
 const SPIRIT_WHISTLE_NOTE_BURST = 3
+//
+// Right trampoline cap is ~49 px half-width — burrow beside it, not under the face.
+//
+const RIGHT_TRAMP_MUSH_HALF_W = 49
+const RIGHT_BURROW_OFFSET_FROM_MUSH_CENTER = RIGHT_TRAMP_MUSH_HALF_W + 14
 const BODY_HALF = 12
 const BASE_SINK = 1
 const CAP_RATIO = 12 / 15
@@ -96,6 +101,7 @@ export function create(cfg) {
     branchMushroomShown: cfg.branchMushroomShown ?? null,
     rightMushroomShown: cfg.rightMushroomShown ?? null,
     burrowPhase: null,
+    rightBurrowSideSign: null,
     pendingBurrowX: null,
     retired: false,
     holeX: cfg.x,
@@ -573,6 +579,7 @@ function syncBurrowPhase(inst) {
   }
   if (inst.burrowPhase === 'left' && wantPhase === 'right') {
     inst.burrowPhase = 'right'
+    inst.rightBurrowSideSign = null
     requestBurrowMove(inst, burrowXForPhase(inst, 'right'))
   }
 }
@@ -611,8 +618,23 @@ function retireSpirit(inst) {
 // Active burrow sits on the cap centre for the current trampoline phase.
 //
 function burrowXForPhase(inst, phase) {
-  if (phase === 'right') return inst.rightMushroomX?.() ?? inst.homeX
+  if (phase === 'right') {
+    const mushX = inst.rightMushroomX?.() ?? inst.homeX
+    const side = rightBurrowSideSign(inst, mushX)
+    return mushX + side * RIGHT_BURROW_OFFSET_FROM_MUSH_CENTER
+  }
   return inst.branchMushroomX?.() ?? inst.homeX
+}
+//
+// Pick left or right of the visible trampoline once per right-burrow phase.
+//
+function rightBurrowSideSign(inst, mushX) {
+  if (inst.rightBurrowSideSign != null) return inst.rightBurrowSideSign
+  const heroX = inst.hero?.character?.pos?.x
+  const camX = inst.k?.camPos?.()?.x
+  const refX = heroX ?? camX ?? mushX
+  inst.rightBurrowSideSign = refX > mushX ? -1 : 1
+  return inst.rightBurrowSideSign
 }
 function nextBurrowX(inst) {
   return burrowXForPhase(inst, inst.burrowPhase === 'right' ? 'right' : 'left')

@@ -497,6 +497,10 @@ const HERO_N_NOTE_OFFSET_Y = -23
 const HERO_N_NOTE_OFFSET_X = -14
 const HERO_N_VOCAL_DELAY = 2.0
 //
+// Mouth notes + idle hum stay off through the word section (see menu hero too).
+//
+const HERO_N_IDLE_VOCAL_ENABLED = false
+//
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
 // upper half of the canvas stays clean for the hint, title and the
@@ -1397,7 +1401,7 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     if (spider.isHeroU) {
       runner = spider
       updateHeroN(k, spider, state, legsStarted, sound, dt)
-      updateHeroNNotes(spider, sound, dt)
+      HERO_N_IDLE_VOCAL_ENABLED && updateHeroNNotes(spider, sound, dt)
       //
       // Once the runner has run past the right edge, the scene flows into
       // the menu by itself after a short beat.
@@ -1534,6 +1538,7 @@ function updateHeroStayer(spider, state, legsStarted, dt) {
 // glyph above his head. Interruptions restart the melody from the top.
 //
 function updateHeroNNotes(spider, sound, dt) {
+  if (!HERO_N_IDLE_VOCAL_ENABLED) return
   //
   // Age + drift existing notes so they fade out naturally in any phase.
   //
@@ -1999,7 +2004,7 @@ function resolveHeroFrameSuffix(spider) {
 // Draws the rising melody note glyphs above the idle hero-n's head.
 //
 function drawHeroNNotes(k, spider, departureFade = 1) {
-  if (!spider.heroNotes?.length) return
+  if (!HERO_N_IDLE_VOCAL_ENABLED || !spider.heroNotes?.length) return
   const fontName = CFG?.visual?.fonts?.regularFull
   for (const note of spider.heroNotes) {
     const fade = Math.max(0, Math.min(1, 1 - note.age / HERO_N_NOTE_LIFETIME))

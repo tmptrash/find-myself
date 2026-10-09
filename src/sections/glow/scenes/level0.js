@@ -1096,7 +1096,12 @@ const KEY_REVEALED_L_LIT = 'glow.revealedLSun'
 const KEY_REVEALED_L_PLAT = 'glow.revealedLPlat'
 const KEY_L_LETTER_UNVEILED = 'glow.lLetterUnveiled'
 const L_PLAT_SHIFT_LEFT = 140
-const L_PLAT_RAISE_Y = 58
+//
+// Extra offset for the L log + right spikes — landing arc from the walking
+// trampoline reads cleaner slightly higher and east of the chain-eye layout.
+//
+const L_PLAT_NUDGE_RIGHT = 22
+const L_PLAT_NUDGE_UP = 44
 const GLOW_CHAIN_TRAMP_EYE_STEP_X = 108
 const GLOW_CHAIN_TRAMP_LEFT_EYE_EXTRA_LEFT = 40
 const GLOW_CHAIN_TRAMP_MUSH_STEP_X = 168
@@ -1156,7 +1161,7 @@ const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
-const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nWho made this lake so shallow?!'
+const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nWho made this\nlake so shallow?!'
 const TRAMP_SHALLOW_HINT_DURATION = 6
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
@@ -1670,6 +1675,10 @@ const TRAMP_WALK_BOUNCES_TOTAL = 10
 const TRAMP_WALK_BOUNCES_MID_STOP = 5
 const TRAMP_WALK_SINGS_TO_WATER = TRAMP_WALK_BOUNCES_TOTAL
 const TRAMP_WALK_SPEED = 52
+//
+// Home vs walked-left placement for bounce-count save reconciliation.
+//
+const TRAMP_HOME_X_SLACK = 16
 //
 // Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
 //
@@ -2521,18 +2530,23 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const trampDockX = (lakeX1 + lakeX2) * 0.5
     let savedTrampSingCount = Number(get(KEY_TRAMP_WALK_SING_COUNT, 0)) || 0
+    const savedTrampXRaw = get(KEY_TRAMP_WALK_X, null)
+    const savedTrampX = typeof savedTrampXRaw === 'number' ? savedTrampXRaw : null
+    const trampAtHomeOnLoad = savedTrampX == null ||
+      Math.abs(savedTrampX - trampX) <= TRAMP_HOME_X_SLACK
     //
-    // Legacy saves used 1–2 “sings” instead of bounce counts 5 / 10.
+    // Legacy “sing” counts only apply when the cap was already walked left.
     //
-    if (savedTrampSingCount > 0 && savedTrampSingCount <= 2) {
+    if (savedTrampSingCount > 0 && savedTrampSingCount <= 2 && !trampAtHomeOnLoad) {
       savedTrampSingCount = savedTrampSingCount >= 2
         ? TRAMP_WALK_BOUNCES_TOTAL
         : TRAMP_WALK_BOUNCES_MID_STOP
     }
+    if (savedTrampSingCount > 0 && savedTrampSingCount <= 2 && trampAtHomeOnLoad) {
+      savedTrampSingCount = 0
+    }
     const savedTrampWalked = Boolean(get(KEY_TRAMP_WALKED, false)) ||
       savedTrampSingCount >= TRAMP_WALK_BOUNCES_TOTAL
-    const savedTrampXRaw = get(KEY_TRAMP_WALK_X, null)
-    const savedTrampX = typeof savedTrampXRaw === 'number' ? savedTrampXRaw : null
     const restoredTrampX = savedTrampWalked
       ? trampDockX
       : (savedTrampX != null
@@ -3616,6 +3630,39 @@ function persistTrampWalk(inst) {
   set(KEY_TRAMP_WALK_X, state.x)
   set(KEY_TRAMP_WALK_SING_COUNT, tw.singCount || 0)
   set(KEY_TRAMP_WALKED, Boolean(tw.walked))
+}
+//
+// True while the walking mushroom cap is still at its spawn/home X.
+//
+function isGlowRightTrampAtHome(state) {
+  if (!state || state.homeX == null) return false
+  return Math.abs(state.x - state.homeX) <= TRAMP_HOME_X_SLACK
+}
+//
+// Aligns saved bounce count with cap X (fixes “5 bounces at home → drowning line”).
+//
+function reconcileGlowRightTrampWalkProgress(inst) {
+  const state = inst.trampState
+  const tw = inst.trampWalk
+  const z = inst.zones
+  if (!state || !tw || !z?.oCollected) return
+  if (tw.walked) {
+    tw.singCount = TRAMP_WALK_BOUNCES_TOTAL
+    state.x = tw.dockX ?? state.x
+    return
+  }
+  if (isGlowRightTrampAtHome(state)) {
+    if ((tw.singCount || 0) >= TRAMP_WALK_BOUNCES_MID_STOP) {
+      tw.singCount = 0
+      set(KEY_TRAMP_WALK_SING_COUNT, 0)
+    }
+    return
+  }
+  const leftOfHome = state.x < state.homeX - TRAMP_HOME_X_SLACK
+  if (leftOfHome && (tw.singCount || 0) < TRAMP_WALK_BOUNCES_MID_STOP) {
+    tw.singCount = TRAMP_WALK_BOUNCES_MID_STOP
+    set(KEY_TRAMP_WALK_SING_COUNT, tw.singCount)
+  }
 }
 //
 // True while the hero stands inside the open pit cave (collapsed mouth).
@@ -5068,6 +5115,12 @@ function restorePersistedGlowZoneVisuals(inst) {
 //
 // Shows/hides world layers and toggles platform collision from zone flags.
 //
+//
+// L log + right spikes — only until the L pickup caption ("Look") starts.
+//
+function isGlowLPlatWithSpikesLive(z) {
+  return Boolean(z?.lPlatRevealed && !z.lCollected)
+}
 function applyZoneVisibility(inst) {
   if (shouldGlowBlockWorldReveal(inst)) {
     applyGlowEyeIntroZoneVisibility(inst)
@@ -5080,15 +5133,10 @@ function applyZoneVisibility(inst) {
   cornerObjsSetHidden(inst.cornerObjs, false)
   refreshPlayfieldCornerSprites(inst)
   //
-  // Stay visible/solid forever once revealed, same as W — only hidden for
-  // the caption's own duration (lPlatCaptionHiding/oPlatCaptionHiding, set/
-  // cleared by collectLetterL/collectLetterO) instead of for good. Gated by
-  // their own flags rather than a one-off override so any other
-  // applyZoneVisibility() call firing mid-caption (hero wandering into
-  // another zone trigger, etc.) can't prematurely bring the log back while
-  // the caption is still up.
+  // L log vanishes for good once the "Look" caption begins (L collected).
+  // O/W logs still hide only for their caption duration (oPlatCaptionHiding).
   //
-  const lPlatWantVisible = z.lPlatRevealed && !inst.lPlatCaptionHiding
+  const lPlatWantVisible = isGlowLPlatWithSpikesLive(z) && !inst.lPlatCaptionHiding
   setPlatVisible(inst.lPlat, lPlatWantVisible, inst.lPlatHome)
   inst._lPlatVisibleLastFrame = lPlatWantVisible
   inst.rightSpikes && (inst.rightSpikes.drawObj.hidden = !lPlatWantVisible)
@@ -5647,7 +5695,7 @@ function rebuildWoodSurfaces(inst) {
   const branch = inst.woodSurfaces[0]
   const list = branch ? [branch] : []
   const z = inst.zones
-  z.lPlatRevealed && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
+  isGlowLPlatWithSpikesLive(z) && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
   z.oZone && z.lCollected && list.push({ x1: inst.oPlatHome.x, x2: inst.oPlatHome.x + LOG_W, y: inst.oPlatHome.y, h: LOG_H })
   isGlowWZoneActive(inst) && z.oCollected &&
     list.push({ x1: inst.wPlatHome.x, x2: inst.wPlatHome.x + LOG_W, y: inst.wPlatHome.y, h: LOG_H })
@@ -6736,7 +6784,7 @@ function buildGlowChainBuoySpot(x, opts = null) {
   }
 }
 function computeGlowChainTrampLayoutForTramp(trampX) {
-  return ChainEyeTramp.computeGlowChainTrampLayout(
+  const layout = ChainEyeTramp.computeGlowChainTrampLayout(
     trampX,
     FLOOR_Y,
     GLOW_CHAIN_TRAMP_EYE_STEP_X,
@@ -6751,6 +6799,11 @@ function computeGlowChainTrampLayoutForTramp(trampX) {
     L_PLAT_SHIFT_LEFT,
     LOG_W
   )
+  return {
+    ...layout,
+    lPlatX: layout.lPlatX + L_PLAT_NUDGE_RIGHT,
+    lPlatY: layout.lPlatY - L_PLAT_NUDGE_UP
+  }
 }
 function glowChainTrampReservedX(x, trampX) {
   if (trampX == null) return false
@@ -11259,6 +11312,12 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
   const velY = char?.vel?.y ?? 0
   const onCap = isOnTrampolineCap(inst, char, state)
+  if (char && isHeroOnLetterLog(inst, char) && !onCap) {
+    state._capPadLatch = 0
+    inst[bounceAirKey] = false
+    parkTrampolinePad(char, pad)
+    return
+  }
   const heroFeet = char?.pos ? char.pos.y + SURFACE_DETECT_Y : 0
   const nearX = char?.pos ? Math.abs(char.pos.x - state.x) < TRAMP_NEAR_X : false
   const bounceAir = Boolean(inst[bounceAirKey])
@@ -11994,7 +12053,7 @@ function forceHeroIdleOnLog(inst, skipHitboxSync = false) {
 function isHeroOverLetterLog(inst, heroX) {
   const z = inst.zones
   const logs = []
-  z.lPlatRevealed && logs.push(inst.lPlatHome)
+  isGlowLPlatWithSpikesLive(z) && logs.push(inst.lPlatHome)
   z.oZone && z.lCollected && logs.push(inst.oPlatHome)
   isGlowWZoneActive(inst) && z.oCollected && logs.push(inst.wPlatHome)
   for (const home of logs) {
@@ -12024,7 +12083,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && homes.push({ ...inst.lPlatHome, w: LOG_W })
+  isGlowLPlatWithSpikesLive(z) && homes.push({ ...inst.lPlatHome, w: LOG_W })
   z.oZone && z.lCollected && homes.push({ ...inst.oPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   isGlowWZoneActive(inst) && z.oCollected &&
     homes.push({ ...inst.wPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
@@ -12197,10 +12256,8 @@ function collectLetterL(inst) {
   inst.meditationWorldLife = 0
   syncGlowBirdsAfterL(inst)
   //
-  // The L-log vanishes for the length of the caption only, same as O —
-  // restored once the caption closes below. Gated by its own flag (rather
-  // than a one-off setPlatVisible override) so it stays hidden even if some
-  // other applyZoneVisibility() call fires while the caption is still up.
+  // Hide the L log for the caption beat — it never returns once L is collected
+  // (isGlowLPlatWithSpikesLive).
   //
   inst.lPlatCaptionHiding = true
   applyZoneVisibility(inst)
@@ -12504,6 +12561,12 @@ function runGlowTrampolineLatePass(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
+  if (isHeroOnLetterLog(inst, char)) {
+    inst.trampBounceAir = false
+    inst.branchTrampBounceAir = false
+    inst.chainEyeBounceAir = null
+    return
+  }
   clampHeroIntoTrampolineCapX(char, inst.trampState)
   clampHeroIntoTrampolineCapX(char, inst.branchTrampState)
   const heroX = char.pos.x
@@ -12737,7 +12800,7 @@ function checkGlowTouchDeath(inst, heroX, heroFootY) {
 //
 function checkGlowRightSpikeDeath(inst, heroX, heroFootY) {
   const spikes = inst.rightSpikes
-  if (!spikes || spikes.triggered) return
+  if (!spikes || spikes.triggered || !isGlowLPlatWithSpikesLive(inst.zones)) return
   const withinX = heroX >= spikes.x1 - LOG_SNAP_X_SLACK && heroX <= spikes.x2 + LOG_SNAP_X_SLACK
   //
   // Triggers as soon as the feet reach the visual spike tips (RIGHT_SPIKE_H
@@ -13400,6 +13463,37 @@ function refreshGlowPitFloorJumpState(inst, char, grounded, footY) {
   hero.controlsDisabled = false
 }
 //
+// Letter logs are thin. A bounce off the walking mushroom can leave jump-6
+// up and canJump false even though the hero is already on the wood.
+//
+function refreshGlowLetterLogJumpState(inst, char) {
+  if (!char?.pos || inst.dialogOpen || inst.drowning || inst.deathHandled) return
+  if (inst.letterCaptionActive || inst.heroLockedAfterW) return
+  if (inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
+  if (!isHeroOnLetterLog(inst, char)) return
+  const hero = inst.heroInst
+  if (!hero || hero.isSquashing) return
+  const velY = char.vel?.y ?? 0
+  if (velY < -48) return
+  const grounded = char.isGrounded?.() ?? false
+  if (!grounded && velY > LOG_SNAP_FALL_VEL) return
+  const poseStuck = hero.jumpPhase === 'jumping' || hero.wasJumping || (hero.landSquashTimer ?? 0) > 0
+  if (poseStuck) {
+    Hero.syncPlatformLanding(hero)
+    hero.jumpPhase = 'none'
+    hero.wasJumping = false
+    hero.postLandAirLock = 0
+    hero.landSquashTimer = 0
+  }
+  inst.trampBounceAir = false
+  inst.branchTrampBounceAir = false
+  inst.chainEyeBounceAir = null
+  if (!grounded && velY > 24) return
+  hero.canJump = true
+  hero.jumpKeyReleaseGate = false
+  hero.jumpDisabled = false
+}
+//
 // Kaplay grounded flicker on the thin start-branch collider can leave
 // canJump false — refresh every frame while the hero stands on the branch.
 //
@@ -13798,6 +13892,7 @@ function onUpdate(inst) {
   !inst.letterCaptionActive && tryCollectGlowLetters(inst, char, grounded, justLanded)
   maybeRevealGlowUndergroundAfterG(inst, grounded)
   refreshGlowBranchJumpState(inst, char)
+  refreshGlowLetterLogJumpState(inst, char)
   refreshGlowMainGroundJumpState(inst, char, grounded, footY)
   syncGlowBranchJumpReady(inst, char, grounded)
   onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
@@ -13910,6 +14005,7 @@ function onUpdate(inst) {
   snapHeroToStartBranch(inst, char, heroX, footY)
   snapHeroToMainGround(inst, char, grounded, heroX, footY)
   refreshGlowBranchJumpState(inst, char)
+  refreshGlowLetterLogJumpState(inst, char)
   refreshGlowMainGroundJumpState(inst, char, grounded, footY)
   const groundedOnBranch = (char.isGrounded?.() ?? false) && isHeroOnStartBranch(inst, char)
   const wantBranchWoodLand = groundedOnBranch &&
@@ -14200,13 +14296,13 @@ function isHeroOnLetterLog(inst, char) {
   const footY = char.pos.y + SURFACE_DETECT_Y
   const z = inst.zones
   const homes = []
-  z.lPlatRevealed && homes.push(inst.lPlatHome)
+  isGlowLPlatWithSpikesLive(z) && homes.push(inst.lPlatHome)
   z.oZone && z.lCollected && homes.push(inst.oPlatHome)
   isGlowWZoneActive(inst) && z.oCollected && homes.push(inst.wPlatHome)
   for (const home of homes) {
     const w = home.w ?? LOG_W
     if (heroX < home.x - LOG_SNAP_X_SLACK || heroX > home.x + w + LOG_SNAP_X_SLACK) continue
-    const platTop = home.y + LOG_COLLISION_DROP_Y
+    const platTop = home.y + (home.dropY ?? LOG_COLLISION_DROP_Y)
     if (footY >= platTop - LOG_HOVER_BAND && footY <= platTop + LOG_SNAP_STANDING_MAX + 6) {
       return true
     }
@@ -14332,7 +14428,8 @@ function tryGlowRightTrampBounceQuest(inst) {
   dismissGlowPostOBigMushTeacherHint(inst)
   persistTrampWalk(inst)
   syncGlowHudWFill(inst)
-  if (tw.singCount === TRAMP_WALK_BOUNCES_MID_STOP) {
+  const atHome = isGlowRightTrampAtHome(inst.trampState)
+  if (tw.singCount === TRAMP_WALK_BOUNCES_MID_STOP && atHome) {
     clearGlowRightTrampCheekyHint(inst)
     showTrampBadSingHint(inst, TRAMP_MUSH_BOUNCE_HINT_MID)
     tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
@@ -14341,7 +14438,7 @@ function tryGlowRightTrampBounceQuest(inst) {
     inst.trampState.walkDir = -1
     return
   }
-  if (tw.singCount >= TRAMP_WALK_BOUNCES_TOTAL) {
+  if (tw.singCount >= TRAMP_WALK_BOUNCES_TOTAL && !atHome) {
     clearGlowRightTrampCheekyHint(inst)
     showTrampBadSingHint(inst, TRAMP_MUSH_BOUNCE_HINT_FINAL)
     tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
@@ -15142,6 +15239,7 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
 // After reload/death: restore L HUD band, hero 1/2 counter, and L letter if on the log.
 //
 function restoreGlowRightTrampProgressAfterSpawn(inst) {
+  reconcileGlowRightTrampWalkProgress(inst)
   ensureGlowRightTrampHudProgress(inst)
   syncGlowHudLetterFills(inst, false)
   const char = inst.heroInst?.character
@@ -15651,7 +15749,7 @@ function snapHeroToLogPlatforms(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && homes.push(inst.lPlatHome)
+  isGlowLPlatWithSpikesLive(z) && homes.push(inst.lPlatHome)
   z.oZone && z.lCollected && homes.push(inst.oPlatHome)
   isGlowWZoneActive(inst) && z.oCollected && homes.push(inst.wPlatHome)
   let hoverHome = null
@@ -15676,6 +15774,21 @@ function snapHeroToLogPlatforms(inst, char) {
     // Standing on the log like on the branch / ground: Kaplay owns the pose.
     //
     if (grounded && footY <= platTop + LOG_SNAP_STANDING_MAX) {
+      inst.logHoverFrames = 0
+      return
+    }
+    //
+    // Trampoline arcs onto the thin L log can rest in this band without
+    // isGrounded — jump-6 stays up and Space never arms. One settle, then idle.
+    //
+    const stuckOnContact = !isStartBranch && !grounded && velY >= 0 && velY < LOG_SNAP_FALL_VEL &&
+      footY >= platTop - LOG_SNAP_TOLERANCE && footY <= platTop + LOG_SNAP_DEEP_SINK &&
+      (hero?.jumpPhase === 'jumping' || hero?.wasJumping || (hero?.landSquashTimer ?? 0) > 0)
+    if (stuckOnContact) {
+      settleHeroOnLog(inst, char, platTop)
+      inst.trampBounceAir = false
+      inst.branchTrampBounceAir = false
+      inst.chainEyeBounceAir = null
       inst.logHoverFrames = 0
       return
     }
@@ -15922,7 +16035,7 @@ function footParticleColor(sceneInst, surface, footX = 0, footY = 0) {
 //
 function isHeroStandingOnGlowRightSpikes(inst, heroX, footY) {
   const spikes = inst.rightSpikes
-  if (!spikes || !inst.zones.lPlatRevealed) return false
+  if (!spikes || !isGlowLPlatWithSpikesLive(inst.zones)) return false
   const withinX = heroX >= spikes.x1 - LOG_SNAP_X_SLACK && heroX <= spikes.x2 + LOG_SNAP_X_SLACK
   const withinY = footY >= spikes.y - RIGHT_SPIKE_H && footY <= spikes.y + LOG_SNAP_BELOW
   return withinX && withinY
@@ -15960,7 +16073,7 @@ function tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded) {
 function maybeMarkLPlatStepped(inst, char, grounded) {
   if (!grounded || !char?.pos) return
   const home = inst.lPlatHome
-  if (!home || !inst.zones.lPlatRevealed) return
+  if (!home || !isGlowLPlatWithSpikesLive(inst.zones)) return
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK &&

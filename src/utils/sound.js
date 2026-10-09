@@ -1674,7 +1674,7 @@ export function playGlowCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25)
   filter.frequency.exponentialRampToValueAtTime(520, endTime)
   filter.Q.value = 0.5
   const envelope = ctx.createGain()
-  const peak = CFG.audio.sfx.land * 1.12
+  const peak = CFG.audio.sfx.land * 0.28
   envelope.gain.setValueAtTime(0.001, now)
   envelope.gain.exponentialRampToValueAtTime(peak, peakTime)
   envelope.gain.setValueAtTime(peak, now + CAPTION_SAND_ATTACK_SEC + CAPTION_SAND_HOLD_SEC)

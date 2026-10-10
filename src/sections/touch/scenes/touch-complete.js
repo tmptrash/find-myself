@@ -1,6 +1,7 @@
 import * as Sound from '../../../utils/sound.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
+import { addFixedTextWithShadow } from '../utils/touch-text-shadow.js'
 
 const FINAL_MESSAGE = "You learned to reach out — to touch and be touched.\n\nNow you feel the difference between contact\n\nand connection with yourself."
 const MESSAGE_HOLD_DURATION = 11.0
@@ -56,23 +57,28 @@ export function sceneTouchComplete(k) {
     //
     // Create final message text (brown, matching touch section color)
     //
-    const messageText = k.add([
-      k.text(FINAL_MESSAGE, {
-        size: k.height() * 0.04,
-        align: "center"
-      }),
-      k.pos(centerX, centerY),
-      k.anchor("center"),
-      k.color(MESSAGE_COLOR_R, MESSAGE_COLOR_G, MESSAGE_COLOR_B),
-      k.opacity(0),
-      k.z(10)
-    ])
+    const messageSize = k.height() * 0.04
+    const messageNodes = addFixedTextWithShadow(k, {
+      text: FINAL_MESSAGE,
+      x: centerX,
+      y: centerY,
+      size: messageSize,
+      align: 'center',
+      colorR: MESSAGE_COLOR_R,
+      colorG: MESSAGE_COLOR_G,
+      colorB: MESSAGE_COLOR_B,
+      zIndex: 10,
+      opacity: 0
+    })
+    const messageText = messageNodes.main
+    const messageShadow = messageNodes.shadow
     //
     // Scene state
     //
     const inst = {
       k,
       messageText,
+      messageShadow,
       endMusic,
       timer: 0,
       phase: 'fade_in',
@@ -107,6 +113,7 @@ function onUpdate(inst) {
     //
     const progress = Math.min(1, inst.timer / FADE_IN_DURATION)
     inst.messageText.opacity = progress
+    inst.messageShadow && (inst.messageShadow.opacity = progress * 0.85)
 
     if (progress >= 1) {
       inst.phase = 'hold'
@@ -125,7 +132,9 @@ function onUpdate(inst) {
     // Fade out message
     //
     const progress = Math.min(1, inst.timer / FADE_OUT_DURATION)
-    inst.messageText.opacity = 1 - progress
+    const fade = 1 - progress
+    inst.messageText.opacity = fade
+    inst.messageShadow && (inst.messageShadow.opacity = fade * 0.85)
 
     if (progress >= 1) {
       inst.phase = 'complete'

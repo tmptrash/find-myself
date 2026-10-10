@@ -571,7 +571,11 @@ function syncBurrowPhase(inst) {
     return
   }
   const leftShown = Boolean(inst.branchMushroomShown?.())
-  const wantPhase = leftShown ? 'right' : 'left'
+  //
+  // Right burrow only after G — the branch trampoline can appear earlier
+  // without moving the spirit off the left burrow.
+  //
+  const wantPhase = (inst.zones?.gCollected && leftShown) ? 'right' : 'left'
   if (inst.burrowPhase == null) {
     inst.burrowPhase = wantPhase
     buryChain(inst, burrowXForPhase(inst, wantPhase))

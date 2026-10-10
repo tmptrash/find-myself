@@ -1178,7 +1178,9 @@ const GLOW_TEACHER_HINT_G_RIGHT_STRIP_TEXT = 'Keep walking.\nSomething\'s farthe
 const GLOW_TEACHER_HINT_G_BRANCH_TRAMP_TEXT = 'There\'s another mushroom\non that branch.'
 const GLOW_TEACHER_HINT_G_CLIMB_TREE_TEXT = 'Why not climb\nonto the tree?'
 const GLOW_TEACHER_HINT_L_PLAT_TEXT = 'That platform isn\'t there\nfor nothing ;)'
+const GLOW_TEACHER_HINT_L_SPIRIT_SLEEP_TEXT = 'Make the timid creature\nfall asleep.'
 const GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS = 2
+const GLOW_HUD_L_SPIRIT_SLEEP_STALL_PARTS = 2
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
@@ -2895,6 +2897,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       set(KEY_CHAIN_MIDDLE_EYE_STEPPED, true)
       inst.zones.chainMiddleEyeStepped = true
       inst.lChainFromMiddleEye = true
+      dismissGlowLSpiritSleepTeacherHint(inst)
       ChainEyeTramp.refreshChainEyeTrampActiveFlags(inst)
       syncGlowHudLetterFills(inst)
     }
@@ -3317,7 +3320,7 @@ function createSmallHeroTooltip(inst) {
       text: LIFE_TOOLTIP_TEXT,
       offsetY: LIFE_SCORE_TOOLTIP_Y_OFFSET,
       forceBelow: true,
-      visible: () => Boolean(inst.levelIndicator?.lifeRevealed),
+      visible: () => glowTeacherHudHoverVisible(inst),
       screenSpace: true
     }, {
       x: () => glowHudLetterHoverPos(inst, 0).x,
@@ -4611,7 +4614,7 @@ function pitCaveSkeletonTooltipVisible(inst) {
   return shouldShowPitCaveSkeleton(inst.pit)
 }
 //
-// Life-icon hover replays the latest teacher nudge (if any).
+// Life-icon hover — "Your experience" (cave mushroom line when that beat is active).
 //
 function glowTeacherHudHoverPos(inst) {
   const anchor = glowTeacherHudAnchor(inst)
@@ -4632,25 +4635,11 @@ function glowLifeScoreTooltipCenter(inst) {
 }
 function glowTeacherHudHoverText(inst) {
   if (glowTeacherCaveMushroomHoverEligible(inst)) return PIT_CAVE_HINT_TEXT
-  const text = inst.lastGlowTeacherHintText ?? ''
-  return glowTeacherHudHoverReplayAllowed(inst, text) ? text : ''
+  return LIFE_TOOLTIP_TEXT
 }
 function glowTeacherHudHoverVisible(inst) {
   if (!inst.levelIndicator?.lifeRevealed || inst.dialogOpen) return false
   if (inst._glowTeacherHintActive && HeroHint.isActive(inst.heroHint)) return false
-  if (glowTeacherCaveMushroomHoverEligible(inst)) return true
-  return Boolean(glowTeacherHudHoverText(inst))
-}
-//
-// Stale post-L copy must not replay on the life icon once O exists or is taken.
-//
-function glowTeacherHudHoverReplayAllowed(inst, text) {
-  if (!text) return false
-  if (text === GLOW_TEACHER_HINT_AFTER_L && (inst.zones.oZone || inst.zones.oCollected)) return false
-  if (text === GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT &&
-    !glowTeacherCaveEntranceAutoHintEligible(inst, false)) {
-    return false
-  }
   return true
 }
 //
@@ -5538,13 +5527,19 @@ function isGlowChainBuoyLayerVisible(inst) {
   return Boolean(z.gCollected || z.lCollected || z.oZone || z.oCollected || z.colorWorld)
 }
 //
-// Stalk-eye colours — gray stalk + eye ring before L, black after L; roots use
-// the same palette as ear-tree roots (glowEarTreeRootKaplayRgb). Colour world:
-// white sclera + black stalk and eye ring (hero eye white / pupil palette).
+// Stalk-eye colours — forest green-black stalk before L, hero pupil ink after L;
+// roots use the same palette as ear-tree roots (glowEarTreeRootKaplayRgb).
+// Colour world: white sclera + green-black stalk (eyeCreature contour).
 //
+function glowChainBuoyStalkRgb(zones) {
+  if (zones?.lCollected) {
+    return glowRgb(CFG.visual.colors.hero.eyePupil)
+  }
+  return glowRgb(GLOW_PAL.eyeCreature.contour)
+}
 function glowChainBuoyColors(inst, k) {
   const zones = inst?.zones
-  const stalkTriplet = glowRgb(zones?.lCollected ? CFG.visual.colors.hero.eyePupil : GLOW_PAL.decorGray)
+  const stalkTriplet = zones?.colorWorld ? glowChainBuoyStalkRgb(zones) : DECOR_GRAY
   const stalk = k.rgb(stalkTriplet.r, stalkTriplet.g, stalkTriplet.b)
   const root = glowEarTreeRootKaplayRgb(inst, k)
   const sclera = glowRgb('lightGray')
@@ -14383,8 +14378,13 @@ function dismissGlowPostOBigMushTeacherHint(inst) {
 //
 // Retires the L-platform nudge the moment L is actually collected.
 //
+function dismissGlowLSpiritSleepTeacherHint(inst) {
+  inst._lHudSpiritSleepHintShows = GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+  dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_L_SPIRIT_SLEEP_TEXT)
+}
 function dismissGlowLPlatTeacherHint(inst) {
   inst._lHudStallHintShows = GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+  dismissGlowLSpiritSleepTeacherHint(inst)
   dismissGlowTeacherHintByText(inst, GLOW_TEACHER_HINT_L_PLAT_TEXT)
 }
 //
@@ -16612,39 +16612,77 @@ function fireGlowTeacherGZoneHint(inst) {
 function glowTeacherLZoneAutoHintEligible(inst, inCave) {
   if (inCave || inst._inGlowPitCave) return false
   if (!inst.zones.gCollected || inst.zones.lCollected) return false
+  const parts = countGlowHudLFillParts(inst)
+  if (parts < 1 || parts >= GLOW_HUD_L_FILL_PARTS) return false
+  if (parts === GLOW_HUD_L_SPIRIT_SLEEP_STALL_PARTS) {
+    return glowTeacherLSpiritSleepStallEligible(inst, parts)
+  }
   //
   // The hint references the L-log platform by name — showing it before the
   // platform itself is even revealed (e.g. right after only the mud band
   // jump-over step, the first of 5) reads as nonsense.
   //
   if (!inst.zones.lPlatRevealed) return false
-  const parts = countGlowHudLFillParts(inst)
-  if (parts < 1 || parts >= GLOW_HUD_L_FILL_PARTS) return false
+  return glowTeacherLPlatformStallEligible(inst, parts)
+}
+//
+// L HUD 2/5 → 3/5: nudge to put the timid swamp spirit to sleep (walk away).
+//
+function glowTeacherLSpiritSleepStallEligible(inst, parts) {
+  syncGlowTeacherLStallWatch(inst, parts, 'spiritSleep')
+  return (inst._lHudSpiritSleepHintShows || 0) < GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+}
+//
+// L HUD platform step stalls (1/5 band and post-chain log steps).
+//
+function glowTeacherLPlatformStallEligible(inst, parts) {
+  syncGlowTeacherLStallWatch(inst, parts, 'platform')
+  return (inst._lHudStallHintShows || 0) < GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+}
+//
+// Resets per-band teacher counters when the L loader advances.
+//
+function syncGlowTeacherLStallWatch(inst, parts, band) {
   if (inst._lHudStallWatchParts == null) {
     inst._lHudStallWatchParts = parts
     inst._lHudStallHintShows = 0
+    inst._lHudSpiritSleepHintShows = 0
+    return
   }
   if (parts > inst._lHudStallWatchParts) {
     inst._lHudStallWatchParts = parts
     inst._lHudStallHintShows = 0
+    inst._lHudSpiritSleepHintShows = 0
     inst.teacherContextAccum = 0
     inst.teacherIdleStreak = 0
+    return
   }
-  return (inst._lHudStallHintShows || 0) < GLOW_TEACHER_HINT_L_STALL_MAX_SHOWS
+  if (parts < inst._lHudStallWatchParts) {
+    inst._lHudStallWatchParts = parts
+    band === 'spiritSleep' && (inst._lHudSpiritSleepHintShows = 0)
+    band === 'platform' && (inst._lHudStallHintShows = 0)
+  }
 }
 //
 // Shows the L-platform teacher line (max two per stall without the log step).
 //
 function fireGlowTeacherLZoneHint(inst) {
   if (!glowTeacherLZoneAutoHintEligible(inst, false)) return
+  const parts = countGlowHudLFillParts(inst)
+  const spiritSleep = parts === GLOW_HUD_L_SPIRIT_SLEEP_STALL_PARTS
+  const text = spiritSleep
+    ? GLOW_TEACHER_HINT_L_SPIRIT_SLEEP_TEXT
+    : GLOW_TEACHER_HINT_L_PLAT_TEXT
   if (!showGlowTeacherHintNow(
     inst,
-    GLOW_TEACHER_HINT_L_PLAT_TEXT,
+    text,
     GLOW_TEACHER_HINT_DURATION,
-    { lHudStall: true }
+    { lHudStall: true, lSpiritSleep: spiritSleep }
   )) return
-  inst._lHudStallHintShows = (inst._lHudStallHintShows || 0) + 1
-  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_L_PLAT_TEXT
+  spiritSleep
+    ? (inst._lHudSpiritSleepHintShows = (inst._lHudSpiritSleepHintShows || 0) + 1)
+    : (inst._lHudStallHintShows = (inst._lHudStallHintShows || 0) + 1)
+  inst.lastGlowTeacherHintText = text
 }
 //
 // After G the swamp spirit is out on the right. 10 active seconds, then the

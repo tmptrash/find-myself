@@ -16,6 +16,7 @@ import * as FallingLeaf from '../components/falling-leaf.js'
 // Rain removed from level 1
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import { respawnTouchPlayableHero } from '../utils/touch-hero-respawn.js'
 import * as GiantWorm from '../components/giant-worm.js'
 import { drawRealisticBird, buildBirdDrawCache } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -432,7 +433,7 @@ const POISON_LEAF_CHANCE = 0.4
 //
 const POISON_LEAF_COLOR_HEX = '#3E708A'
 //
-// Death animation — leaf burst and 10-second restart countdown
+// Death animation — leaf burst at the kill spot
 //
 const DEATH_LEAF_COUNT = 22
 const DEATH_LEAF_BURST_SPEED_MIN = 90
@@ -440,15 +441,6 @@ const DEATH_LEAF_BURST_SPEED_MAX = 240
 const DEATH_LEAF_GRAVITY = 320
 const DEATH_LEAF_DRAG = 0.97
 const DEATH_LEAF_LIFETIME = 4.5
-const DEATH_COUNTDOWN_SECONDS = 7
-//
-// Prompt shown at the top after hero death.
-// Player can press Space or Enter to restart; auto-restarts after 7 s.
-// Countdown number is appended inline after the three dots, same color as the text.
-//
-const L1_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
-const L1_DEATH_PROMPT_Y = TOP_MARGIN + 62
-const L1_DEATH_PROMPT_FONT = 22
 const WORM_BASE_Y = FLOOR_Y + 30
 const WORM_DRAW_Z = 17
 const WORM_SEGMENT_COUNT = 5
@@ -1258,7 +1250,8 @@ export function sceneLesson1(k) {
       completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      hideHeroScoreHud: true
     })
     //
     // Mutable ref updated by letter collection callbacks so the goal button
@@ -1492,8 +1485,19 @@ export function sceneLesson1(k) {
       stepSoundScene: 'lesson-touch.1',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
-      bodyColor: heroBodyColor
+      bodyColor: heroBodyColor,
+      idleVocalization: null
     })
+    const touchL1HeroRespawnCfg = {
+      type: Hero.HEROES.HERO,
+      controllable: true,
+      sfx: sound,
+      stepSoundScene: 'lesson-touch.1',
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
+      bodyColor: heroBodyColor,
+      idleVocalization: null
+    }
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     //
     // Lock hero controls while life deduction animation plays
@@ -1578,6 +1582,8 @@ export function sceneLesson1(k) {
     // Store hero reference in gameState
     //
     gameState._heroRef = heroInst
+    gameState.touchL1HeroRespawnCfg = touchL1HeroRespawnCfg
+    gameState._sceneLock = sceneLock
     //
     // Create tree roots (async - wait for sprites to load)
     //
@@ -1767,7 +1773,7 @@ export function sceneLesson1(k) {
         // During the celebration phase (end music) leaves are harmless
         //
         if (gameState?.phase === 'end') return
-        onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst)
+        onPoisonLeafDeath(k, gameState._heroRef, levelIndicator, sound, bonusHeroInst, gameState)
       },
       onLeafGroundLand: () => Sound.playLeafGroundRustle(sound, 0.16 + Math.random() * 0.14)
     })
@@ -1830,7 +1836,7 @@ export function sceneLesson1(k) {
     //
     // Fireflies: small glowing dots drifting between tree layers (loop registered below)
     //
-    const fireflyRuntime = createFireflies(k, heroInst)
+    const fireflyRuntime = createFireflies(k, () => gameState._heroRef)
     //
     // Tooltip: hero (tracks hero position dynamically)
     //
@@ -1859,21 +1865,6 @@ export function sceneLesson1(k) {
         height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
         text: TOUCH_INDICATOR_TOOLTIP_TEXT,
         offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
-      }]
-    })
-    //
-    // Tooltip: small hero icon (score) - appears below
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: levelIndicator.smallHero.character.pos.x,
-        y: levelIndicator.smallHero.character.pos.y,
-        width: SMALL_HERO_TOOLTIP_SIZE,
-        height: SMALL_HERO_TOOLTIP_SIZE,
-        text: SMALL_HERO_TOOLTIP_TEXT,
-        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
-        forceBelow: true
       }]
     })
     //
@@ -1983,6 +1974,7 @@ export function sceneLesson1(k) {
     //
     const trap2RepositionRuntime = trap2WormInst ? createTrap2WormReposition(k, trap2WormInst, heroInst) : null
     k.onUpdate(() => {
+      const heroInst = gameState._heroRef
       onUpdateLesson1GameLoop(k, {
         heroInst,
         defaultHeroX: HERO_SPAWN_X,
@@ -2004,7 +1996,8 @@ export function sceneLesson1(k) {
         sequencePauseMinimum: SEQUENCE_PAUSE_MINIMUM,
         onMelodySolved,
         processTreeTouch: (touchedIdx) => processL1TreeTouch(k, gameState, touchedIdx, sound, levelIndicator, treeRootsInst, transition),
-        checkGiantWormCollision: (k, heroInst, wormInst, levelIndicator, sound) => checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst),
+        checkGiantWormCollision: (k, heroInst, wormInst, levelIndicator, sound) =>
+          checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst, gameState),
         wormTooltipOnUpdate: () => {
           wormTooltipTarget.y = FLOOR_Y - giantWormInst.riseAmount / 2
           wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
@@ -2183,7 +2176,7 @@ function createRoundedCornerSprite(radius, color) {
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator with lifeImage
  */
-function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
+function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst, gameState) {
   if (heroInst.isDying) return
   //
   // Capture hero position before the character object is destroyed by Hero.death()
@@ -2211,7 +2204,13 @@ function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
     }
-    startDeathCountdown(k, 'lesson-touch.1', deathX, deathY)
+    const cfg = gameState?.touchL1HeroRespawnCfg
+    if (!cfg) return
+    const fresh = respawnTouchPlayableHero(k, cfg, HERO_SPAWN_X, HERO_SPAWN_Y)
+    gameState._heroRef = fresh
+    gameState._sceneLock && (gameState._sceneLock.heroInst = fresh)
+    bonusHeroInst && (bonusHeroInst.heroInst = fresh)
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, fresh)
   }, { suppressParticles: true })
 }
 //
@@ -2722,7 +2721,7 @@ function drawWormEyes(k, inst, head) {
 //
 // Checks if hero overlaps the giant worm body and triggers death + smile.
 //
-function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst) {
+function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst, gameState) {
   //
   // Worm in disco-dance mode does not hurt the hero
   //
@@ -2731,13 +2730,13 @@ function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, b
   const heroY = heroInst.character.pos.y
   if (GiantWorm.checkCollision(wormInst, heroX, heroY)) {
     GiantWorm.startSmiling(wormInst)
-    onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst)
+    onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst, gameState)
   }
 }
 //
 // Fireflies that drift between tree layers at different z-depths
 //
-function createFireflies(k, heroInst) {
+function createFireflies(k, getHero) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   //
   // Spawn band is capped to the foliage zone — bounded above by the
@@ -2794,14 +2793,15 @@ function createFireflies(k, heroInst) {
       }
     ])
   })
-  let lastHeroX = heroInst.character?.pos?.x ?? 0
-  let lastHeroY = heroInst.character?.pos?.y ?? 0
+  let lastHeroX = getHero()?.character?.pos?.x ?? 0
+  let lastHeroY = getHero()?.character?.pos?.y ?? 0
   const playRight = CFG.visual.screen.width - RIGHT_MARGIN
   const zoneForX = (x) => getActiveZoneIndex(x, LEFT_MARGIN, playRight, L1_ZONE_COUNT)
   const onUpdate = (k, activeZone) => {
     const isAwake = (x) => isZoneAwake(zoneForX(x), activeZone, L1_ZONE_COUNT)
     onUpdateFireflies(k, fireflies, isAwake)
-    if (!heroInst.character?.pos) return
+    const heroInst = getHero()
+    if (!heroInst?.character?.pos) return
     const heroX = heroInst.character.pos.x
     const heroY = heroInst.character.pos.y
     const heroVx = heroX - lastHeroX
@@ -4106,59 +4106,5 @@ function spawnLeafDeathBurst(k, x, y) {
       updater.cancel()
       drawer.exists() && k.destroy(drawer)
     }
-  })
-}
-//
-// Shows "Press Space or Enter to continue... N" at the top after hero death.
-// The countdown number is inline, same color as the prompt text.
-// Auto-restarts when the countdown reaches 0.
-//
-function startDeathCountdown(k, sceneName, deathX, deathY) {
-  let elapsed = 0
-  const cx = CFG.visual.screen.width / 2
-  const textCfg = { size: L1_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
-  const initText = L1_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS
-  //
-  // Drop shadow (single black copy offset right+down), glow-level style.
-  //
-  const offs = [[1.5, 1.5]]
-  const outlines = offs.map(([dx, dy]) => k.add([
-    k.text(initText, textCfg),
-    k.pos(cx + dx, L1_DEATH_PROMPT_Y + dy),
-    k.anchor('center'),
-    k.color(0, 0, 0),
-    k.opacity(0.85),
-    k.z(CFG.visual.zIndex.ui + 60)
-  ]))
-  const promptText = k.add([
-    k.text(initText, textCfg),
-    k.pos(cx, L1_DEATH_PROMPT_Y),
-    k.anchor('center'),
-    k.color(k.rgb(220, 220, 220)),
-    k.opacity(1),
-    k.z(CFG.visual.zIndex.ui + 60.1)
-  ])
-  const destroyAll = () => {
-    outlines.forEach(o => o?.exists?.() && k.destroy(o))
-    promptText.exists() && k.destroy(promptText)
-  }
-  const doRestart = () => {
-    skipHandler.cancel()
-    clickHandler.cancel()
-    updateTimer.cancel()
-    destroyAll()
-    goAfterPreparingAssets(k, sceneName)
-  }
-  const skipHandler = k.onKeyPress((key) => {
-    if (key === 'space' || key === 'enter') doRestart()
-  })
-  const clickHandler = k.onMousePress(() => doRestart())
-  const updateTimer = k.onUpdate(() => {
-    elapsed += k.dt()
-    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
-    const newText = L1_DEATH_PROMPT_BASE + Math.ceil(remaining)
-    if (promptText.exists()) promptText.text = newText
-    outlines.forEach(o => o?.exists?.() && (o.text = newText))
-    if (elapsed >= DEATH_COUNTDOWN_SECONDS) doRestart()
   })
 }

@@ -16,6 +16,7 @@ import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import { respawnTouchPlayableHero } from '../utils/touch-hero-respawn.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as TouchLevel2Ambience from '../utils/touch-level2-ambience.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
@@ -482,13 +483,6 @@ const DEATH_SNOWFLAKE_COUNT = 44
 // Pause between closing the final H dialog and the level transition
 //
 const QUEST_COMPLETE_TRANSITION_DELAY = 2
-//
-// Death restart countdown (same prompt style as touch lesson 1)
-//
-const DEATH_COUNTDOWN_SECONDS = 7
-const DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
-const DEATH_PROMPT_Y = TOP_MARGIN + 62
-const DEATH_PROMPT_FONT = 22
 /**
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
@@ -654,7 +648,8 @@ export function sceneLesson2(k) {
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN,
-      sectionLabelCompletedLetters: questLettersCollected
+      sectionLabelCompletedLetters: questLettersCollected,
+      hideHeroScoreHud: true
     })
     LevelHelp.create({
       k,
@@ -758,6 +753,18 @@ export function sceneLesson2(k) {
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
+    const touchL2HeroRespawnCfg = {
+      type: Hero.HEROES.HERO,
+      controllable: true,
+      sfx: sound,
+      dustColor: snowColor,
+      idleVocalization: null,
+      stepSoundScene: 'lesson-touch.2',
+      jumpForce: CFG.game.jumpForce,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
+      bodyColor: heroBodyColor
+    }
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     //
     // Raise hero z above lake/decor layer (L2_DECOR_ABOVE_PLATFORMS_Z = 17) so hero renders on top.
@@ -997,10 +1004,10 @@ export function sceneLesson2(k) {
       // Only draw when hero exists and character is available
       // Single outer circle at maximum radius, barely visible
       //
-      if (!heroInst || !heroInst.character || !heroInst.character.pos) return
-      
-      const heroX = heroInst.character.pos.x
-      const heroY = heroInst.character.pos.y
+      const liveHero = quest?.heroInst
+      if (!liveHero?.character?.pos) return
+      const heroX = liveHero.character.pos.x
+      const heroY = liveHero.character.pos.y
       
       //
       // Draw single outer circle at maximum radius
@@ -1023,6 +1030,7 @@ export function sceneLesson2(k) {
     //
     let lastHeroX = heroInst.character?.pos?.x ?? HERO_SPAWN_X
     k.onUpdate(() => {
+      const heroInst = quest.heroInst
       const dt = k.dt()
       Dust.onUpdate(dustInst, dt)
       //
@@ -1294,21 +1302,6 @@ export function sceneLesson2(k) {
       }]
     })
     //
-    // Tooltip: small hero icon (score) - appears below
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: levelIndicator.smallHero.character.pos.x,
-        y: levelIndicator.smallHero.character.pos.y,
-        width: SMALL_HERO_TOOLTIP_SIZE,
-        height: SMALL_HERO_TOOLTIP_SIZE,
-        text: SMALL_HERO_TOOLTIP_TEXT,
-        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
     // Tooltip: life icon - appears below
     //
     Tooltip.create({
@@ -1428,6 +1421,8 @@ export function sceneLesson2(k) {
       wallColorHex: WALL_COLOR_HEX,
       goalState: questGoalState
     })
+    quest.touchL2HeroRespawnCfg = touchL2HeroRespawnCfg
+    quest._sceneLock = sceneLock
     k.onSceneLeave(() => stopTouch2LetterDialogMusic(quest))
     k.onUpdate(() => onUpdateQuest(quest))
     //
@@ -1442,7 +1437,7 @@ export function sceneLesson2(k) {
       }
     ])
     k.onUpdate(() => {
-      if (quest.lettersCollected >= 4) onUpdateStuckHeroHint(k, stuckHintState, heroInst)
+      if (quest.lettersCollected >= 4) onUpdateStuckHeroHint(k, stuckHintState, quest.heroInst)
     })
     //
     // Breath vapor: periodic white puffs from hero's mouth
@@ -1456,7 +1451,7 @@ export function sceneLesson2(k) {
         }
       }
     ])
-    k.onUpdate(() => onUpdateBreathVapor(k, heroInst, breathState))
+    k.onUpdate(() => onUpdateBreathVapor(k, quest.heroInst, breathState))
     //
     // Cold idle shake and hint when the hero stands still for a long time
     //
@@ -1467,7 +1462,7 @@ export function sceneLesson2(k) {
       lastY: heroInst.character?.pos?.y ?? 0,
       currentHint: null
     }
-    k.onUpdate(() => onUpdateColdIdle(k, coldIdleState, heroInst, stuckHintState))
+    k.onUpdate(() => onUpdateColdIdle(k, coldIdleState, quest.heroInst, stuckHintState))
     //
     // Tree creak: periodic procedural creak sound
     //
@@ -3025,23 +3020,6 @@ function onHeroDeath(k, heroInst, levelIndicator, quest) {
   if (heroInst.isDying) return
   k.shake(DEATH_SHAKE_STRENGTH)
   //
-  // Mark the upcoming reload as a death resume so quest progress survives.
-  // If H was already collected (or completeQuest already zeroed the flag),
-  // keep progress at 4 so the level restarts on the H hunt — not from T.
-  //
-  const storedLetters = get(QUEST_LETTERS_FLAG, 0)
-  const questLetters = quest?.lettersCollected ?? storedLetters
-  const finishedH = questLetters >= 5 ||
-    quest?.stuckHintState?.levelDone ||
-    quest?.levelDone ||
-    storedLetters >= 5
-  if (finishedH) {
-    set(QUEST_LETTERS_FLAG, 4)
-  } else if (questLetters > 0) {
-    set(QUEST_LETTERS_FLAG, questLetters)
-  }
-  set(QUEST_RESUME_FLAG, true)
-  //
   // Scatter the hero into snowflakes instead of the default body particles
   //
   if (quest && heroInst.character?.pos) {
@@ -3061,67 +3039,15 @@ function onHeroDeath(k, heroInst, levelIndicator, quest) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    //
-    // 7-second restart pause with the standard countdown prompt on top
-    //
-    startDeathCountdown(k, 'lesson-touch.2')
+    const cfg = quest?.touchL2HeroRespawnCfg
+    if (!cfg) return
+    const fresh = respawnTouchPlayableHero(k, cfg, HERO_SPAWN_X, HERO_SPAWN_Y)
+    fresh.character && (fresh.character.z = 20)
+    quest.heroInst = fresh
+    quest._sceneLock && (quest._sceneLock.heroInst = fresh)
+    LevelIndicator.bindEyeHudLookAtHero(levelIndicator, fresh)
   }, { suppressParticles: !!quest })
 }
-//
-// Shows "Press Space or Enter to continue... N" at the top after hero death.
-// The countdown number is inline, same color as the prompt text.
-// Auto-restarts when the countdown reaches 0 (same as touch lesson 1).
-//
-function startDeathCountdown(k, sceneName) {
-  let elapsed = 0
-  const cx = CFG.visual.screen.width / 2
-  const textCfg = { size: DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
-  const initText = DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS
-  //
-  // Drop shadow (single black copy offset right+down), glow-level style
-  //
-  const offs = [[1.5, 1.5]]
-  const outlines = offs.map(([dx, dy]) => k.add([
-    k.text(initText, textCfg),
-    k.pos(cx + dx, DEATH_PROMPT_Y + dy),
-    k.anchor('center'),
-    k.color(0, 0, 0),
-    k.opacity(0.85),
-    k.z(CFG.visual.zIndex.ui + 60)
-  ]))
-  const promptText = k.add([
-    k.text(initText, textCfg),
-    k.pos(cx, DEATH_PROMPT_Y),
-    k.anchor('center'),
-    k.color(k.rgb(220, 220, 220)),
-    k.opacity(1),
-    k.z(CFG.visual.zIndex.ui + 60.1)
-  ])
-  const destroyAll = () => {
-    outlines.forEach(o => o?.exists?.() && k.destroy(o))
-    promptText.exists() && k.destroy(promptText)
-  }
-  const doRestart = () => {
-    skipHandler.cancel()
-    clickHandler.cancel()
-    updateTimer.cancel()
-    destroyAll()
-    goAfterPreparingAssets(k, sceneName)
-  }
-  const skipHandler = k.onKeyPress((key) => {
-    if (key === 'space' || key === 'enter') doRestart()
-  })
-  const clickHandler = k.onMousePress(() => doRestart())
-  const updateTimer = k.onUpdate(() => {
-    elapsed += k.dt()
-    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
-    const newText = DEATH_PROMPT_BASE + Math.ceil(remaining)
-    if (promptText.exists()) promptText.text = newText
-    outlines.forEach(o => o?.exists?.() && (o.text = newText))
-    if (elapsed >= DEATH_COUNTDOWN_SECONDS) doRestart()
-  })
-}
-
 /**
  * Flashes life image red/white alternating to indicate death
  * @param {Object} k - Kaplay instance

@@ -16,6 +16,7 @@ import * as JungleDecor from '../components/jungle-decor.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import * as Dust from '../components/dust.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import { respawnTouchPlayableHero } from '../utils/touch-hero-respawn.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
@@ -780,7 +781,8 @@ export function sceneLesson3(k) {
       completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      hideHeroScoreHud: true
     })
     levelIndicator.updateTrapCount(displayTrapCount)
     LevelHelp.create({
@@ -834,8 +836,33 @@ export function sceneLesson3(k) {
       stepSoundScene: 'lesson-touch.3',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
-      bodyColor: heroBodyColor
+      bodyColor: heroBodyColor,
+      idleVocalization: null
     })
+    const touchL3HeroRespawnCfg = {
+      type: Hero.HEROES.HERO,
+      controllable: true,
+      sfx: sound,
+      stepSoundScene: 'lesson-touch.3',
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
+      bodyColor: heroBodyColor,
+      idleVocalization: null
+    }
+    const l3Runtime = {
+      heroInst,
+      spawnX: heroX,
+      spawnY: heroY,
+      touchL3HeroRespawnCfg,
+      sceneLock,
+      levelIndicator,
+      antiHeroInst,
+      creatureInst: null,
+      glowBugInst: null,
+      trapBugInst: null,
+      bottomBugInst: null,
+      decorInst: null
+    }
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     bindHeroAnnihilation(heroInst, antiHeroInst, {
       currentLevel: 'lesson-touch.3',
@@ -1013,6 +1040,8 @@ export function sceneLesson3(k) {
       y: BOTTOM_KILL_Y,
       width: PLAY_AREA_WIDTH - 40
     }
+    l3Runtime.glowBugInst = glowBugInst
+    l3Runtime.trapBugInst = trapBugInst
     const bottomBugInst = GlowBug.create({
       k,
       hero: heroInst,
@@ -1033,10 +1062,12 @@ export function sceneLesson3(k) {
       platforms: CORRIDOR_PLATFORMS,
       platformHeight: PLATFORM_HEIGHT,
       onHeroTouch: () => {
-        if (heroInst.isDying) return
-        onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+        const live = l3Runtime.heroInst
+        if (live.isDying) return
+        onHeroDeath(k, l3Runtime, heroScoreAtStart)
       }
     })
+    l3Runtime.creatureInst = creatureInst
     //
     // Create jungle decorations (grass, vines, thorns on bottom wall and platforms)
     //
@@ -1048,6 +1079,20 @@ export function sceneLesson3(k) {
       platformThorns: PLATFORM_THORN_ZONES,
       skipVineIndices: [TRAP_PLATFORM_INDEX]
     })
+    l3Runtime.bottomBugInst = bottomBugInst
+    l3Runtime.decorInst = decorInst
+    l3Runtime.wireHero = (fresh) => {
+      l3Runtime.heroInst = fresh
+      fresh.character && (fresh.character.z = Z_DARKNESS + 1)
+      fresh.deathParticleZ = Z_DARKNESS + 1
+      l3Runtime.sceneLock && (l3Runtime.sceneLock.heroInst = fresh)
+      l3Runtime.glowBugInst && (l3Runtime.glowBugInst.hero = fresh)
+      l3Runtime.trapBugInst && (l3Runtime.trapBugInst.hero = fresh)
+      l3Runtime.bottomBugInst && (l3Runtime.bottomBugInst.hero = fresh)
+      l3Runtime.decorInst && (l3Runtime.decorInst.hero = fresh)
+      l3Runtime.creatureInst && (l3Runtime.creatureInst.hero = fresh)
+      LevelIndicator.bindEyeHudLookAtHero(l3Runtime.levelIndicator, fresh)
+    }
     decorInst.thornColor = k.rgb(THORN_COLOR_R, THORN_COLOR_G, THORN_COLOR_B)
     //
     // Scale up thorn heights for icy level (longer spikes)
@@ -1337,21 +1382,6 @@ export function sceneLesson3(k) {
       }]
     })
     //
-    // Tooltip: small hero icon (score) - appears below
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: levelIndicator.smallHero.character.pos.x,
-        y: levelIndicator.smallHero.character.pos.y,
-        width: SMALL_HERO_TOOLTIP_SIZE,
-        height: SMALL_HERO_TOOLTIP_SIZE,
-        text: SMALL_HERO_TOOLTIP_TEXT,
-        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
     // Tooltip: life icon - appears below
     //
     Tooltip.create({
@@ -1459,7 +1489,8 @@ export function sceneLesson3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState)
+      const heroInst = l3Runtime.heroInst
+      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, l3Runtime, trapState, trapLeftBlades, trapRightBlades, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState)
       const dt = k.dt()
       updateHeroGlow(heroGlowState, dt)
       Dust.onUpdate(dustInst, dt)
@@ -1512,12 +1543,12 @@ export function sceneLesson3(k) {
     // Proximity-based heartbeat sound driven by creature distance
     //
     const heartbeatState = { timer: L3_HEARTBEAT_INTERVAL_FAR, lastHeartbeatTime: 0 }
-    k.onUpdate(() => onUpdateProximityAudio(k, heroInst, creatureInst, sound, heartbeatState))
-    k.onUpdate(() => onUpdateProximityBreath(k, heroInst, creatureInst, breathMusic))
+    k.onUpdate(() => onUpdateProximityAudio(k, l3Runtime.heroInst, creatureInst, sound, heartbeatState))
+    k.onUpdate(() => onUpdateProximityBreath(k, l3Runtime.heroInst, creatureInst, breathMusic))
     //
     // Screen shake when creature is dangerously close
     //
-    k.onUpdate(() => onUpdateScreenShake(k, heroInst, creatureInst))
+    k.onUpdate(() => onUpdateScreenShake(k, l3Runtime.heroInst, creatureInst))
     //
     // Swaying tree creak ambient sounds
     //
@@ -1526,7 +1557,7 @@ export function sceneLesson3(k) {
     //
     // Watching eyes: ambient eye pairs that follow the hero
     //
-    addWatchingEyes(k, heroInst)
+    addWatchingEyes(k, l3Runtime.heroInst)
     createL3Fireflies(k)
     //
     // ESC key to return to menu
@@ -1553,7 +1584,9 @@ export function sceneLesson3(k) {
  * @param {Object} levelIndicator - Level indicator for life score effects on death
  * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState) {
+function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, l3Runtime, trapState, trapLeftBlades, trapRightBlades, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState) {
+  const heroInst = l3Runtime.heroInst
+  const levelIndicator = l3Runtime.levelIndicator
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   GlowBug.onUpdate(glowBugInst, dt)
@@ -1595,10 +1628,10 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
   // Check bottom wall and platform thorns (only when hero is alive)
   //
   if (!heroInst.isDying) {
-    checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart)
-    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], levelIndicator, heroScoreAtStart)
-    checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator, heroScoreAtStart)
-    checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, levelIndicator, heroScoreAtStart)
+    checkBottomThorns(k, l3Runtime, heroScoreAtStart)
+    checkPlatformThorns(k, l3Runtime, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], heroScoreAtStart)
+    checkTrapLeftThorns(k, l3Runtime, trapLeftThorns, trapState, heroScoreAtStart)
+    checkPlatformIcicles(k, l3Runtime, platformIcicles, logWobbleState, heroScoreAtStart)
   }
   //
   // Get glow positions with darkness glow radius (creature burns within visible light)
@@ -1644,11 +1677,12 @@ function onUpdateTouchL3MusicFade(heroInst, fadeInst) {
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart) {
+function checkBottomThorns(k, l3Runtime, heroScoreAtStart) {
+  const heroInst = l3Runtime.heroInst
   if (!heroInst.character?.pos) return
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
   if (heroFeetY >= BOTTOM_KILL_Y) {
-    onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+    onHeroDeath(k, l3Runtime, heroScoreAtStart)
   }
 }
 
@@ -1660,7 +1694,8 @@ function checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart) {
  * @param {Array} bugEntries - GlowBug entries for shielding check
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator, heroScoreAtStart) {
+function checkPlatformThorns(k, l3Runtime, bugEntries, heroScoreAtStart) {
+  const heroInst = l3Runtime.heroInst
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
@@ -1681,7 +1716,7 @@ function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator, heroScoreA
     if (heroFeetY >= zone.y - PLATFORM_THORN_TOLERANCE &&
         heroFeetY <= zone.y + PLATFORM_THORN_TOLERANCE &&
         heroX >= zone.startX && heroX <= zone.endX) {
-      onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+      onHeroDeath(k, l3Runtime, heroScoreAtStart)
       return
     }
   }
@@ -1782,7 +1817,8 @@ function drawTrapLeftThorns(k, thorns, trapState) {
  * @param {Object} trapState - Trap platform state
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, heroScoreAtStart) {
+function checkTrapLeftThorns(k, l3Runtime, thorns, trapState, heroScoreAtStart) {
+  const heroInst = l3Runtime.heroInst
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
@@ -1796,7 +1832,7 @@ function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, her
   //
   for (const thorn of thorns) {
     if (Math.abs(heroX - thorn.x) < thorn.width) {
-      onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+      onHeroDeath(k, l3Runtime, heroScoreAtStart)
       return
     }
   }
@@ -1811,7 +1847,8 @@ function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, her
  * @param {Object} levelIndicator - Level indicator for life score effects
  * @param {number} heroScoreAtStart - Hero score when level began
  */
-function checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, levelIndicator, heroScoreAtStart) {
+function checkPlatformIcicles(k, l3Runtime, platformIcicles, logWobbleState, heroScoreAtStart) {
+  const heroInst = l3Runtime.heroInst
   if (!heroInst.character?.pos) return
         const heroX = heroInst.character.pos.x
   const heroHeadY = heroInst.character.pos.y - HERO_COLLISION_HEIGHT_SCALED / 2
@@ -1838,7 +1875,7 @@ function checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, leve
       //
       if (heroHeadY >= topY && heroHeadY <= tipY &&
           Math.abs(heroX - cx) < icicle.width / 2 + ICICLE_KILL_HERO_HALF_W) {
-        onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+        onHeroDeath(k, l3Runtime, heroScoreAtStart)
         return
       }
     }
@@ -2017,8 +2054,6 @@ const LIFE_PARTICLE_LIFETIME_MIN = 0.8
 const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
 const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
-const DEATH_RELOAD_DELAY = 0.8
-
 /**
  * Handles hero death: increments life score, restores heroScore to pre-death value,
  * plays laugh sound, flashes life image, creates particles, then reloads the level
@@ -2027,8 +2062,10 @@ const DEATH_RELOAD_DELAY = 0.8
  * @param {Object} levelIndicator - Level indicator with lifeImage and updateLifeScore
  * @param {number} heroScoreAtStart - heroScore value saved at level start for restoration
  */
-function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
-  if (heroInst.isDying) return
+function onHeroDeath(k, l3Runtime, heroScoreAtStart) {
+  const heroInst = l3Runtime?.heroInst
+  const levelIndicator = l3Runtime?.levelIndicator
+  if (!heroInst || heroInst.isDying) return
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
@@ -2038,6 +2075,7 @@ function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
     // Restore heroScore to value at level start so spent points are refunded
     //
     set('heroScore', heroScoreAtStart)
+    levelIndicator?.updateHeroScore?.(heroScoreAtStart)
     //
     // Play laugh sound and trigger life image visual effects
     //
@@ -2047,7 +2085,10 @@ function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.3'))
+    const cfg = l3Runtime?.touchL3HeroRespawnCfg
+    if (!cfg) return
+    const fresh = respawnTouchPlayableHero(k, cfg, l3Runtime.spawnX, l3Runtime.spawnY)
+    l3Runtime.wireHero?.(fresh)
   })
 }
 

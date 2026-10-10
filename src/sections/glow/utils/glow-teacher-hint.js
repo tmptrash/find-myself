@@ -121,8 +121,8 @@ export function tickGlowTeacherContextHints(inst, cfg) {
 export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
   const forceTeacherHint = opts.pitCaveMushroom || opts.gHudStall || opts.lHudStall ||
-    opts.postLStop || opts.postOBigMush || opts.caveEntrance || opts.postTreeMush ||
-    opts.postGCucumber
+    opts.lSpiritSleep || opts.postLStop || opts.postOBigMush || opts.caveEntrance ||
+    opts.postTreeMush || opts.postGCucumber
   if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
   if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
     if (!forceTeacherHint) return false

@@ -122,7 +122,8 @@ export function sceneLesson4(k) {
       completedColor: '#8B5A50',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      hideHeroScoreHud: true
     })
     //
     // Create static cloud platform where hero platform was
@@ -373,7 +374,8 @@ export function sceneLesson4(k) {
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: sound,
-      addArms: true
+      addArms: true,
+      idleVocalization: null
     })
     //
     // Create hero with anti-hero reference for annihilation
@@ -392,7 +394,8 @@ export function sceneLesson4(k) {
       stepSoundScene: 'lesson-touch.4',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
-      bodyColor: heroBodyColor
+      bodyColor: heroBodyColor,
+      idleVocalization: null
     })
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     bindHeroAnnihilation(heroInst, antiHeroInst, {

@@ -48,7 +48,7 @@ export function onUpdateLesson0GameLoop(k, ctx) {
   //
   // 1. Floor thorns
   //
-  ctx.checkFloorThorns(k, ctx.heroInst, ctx.floorThornData, ctx.levelIndicator, ctx.sound)
+  ctx.checkFloorThorns(k, ctx.heroInst, ctx.floorThornData, ctx.levelIndicator, ctx.sound, ctx)
   //
   // 2. Bug4 platform + anti-hero sync
   //

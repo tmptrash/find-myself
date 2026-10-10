@@ -41,6 +41,10 @@ const SCORE_OFFSET_X = 5
 // small hero, so both scores share LIFE_IMAGE_Y_OFFSET for one baseline.
 //
 const SCORE_OFFSET_Y = 2
+//
+// Life score numeral sits right of the teacher eye — nudge up for optical alignment.
+//
+const LIFE_SCORE_Y_NUDGE = -5
 const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
@@ -140,6 +144,7 @@ export function create(config) {
     sectionLabelLetterSpacing = null,
     sectionLabelY = null,
     hideScoreboard = false,
+    hideHeroScoreHud = false,
     scoreboardGreyLife = false,
     greyLife = false,
     lifeGreyTintHex = null,
@@ -294,34 +299,36 @@ export function create(config) {
   const isWordComplete = get('word.completed', false)
   const lifeImageX = k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2
   const smallHeroX = lifeImageX - SPACING_BETWEEN - SMALL_HERO_SIZE / 2
-  const smallHero = Hero.create({
-    k,
-    x: smallHeroX,
-    y: smallHeroY,
-    type: Hero.HEROES.HERO,
-    controllable: false,
-    isStatic: true,
-    scale: (2.6 / 3) * 0.8,
-    //
-    // HUD small hero mirrors the playable hero's body colour — silver
-    // by default, then teal / orange / red as the player completes
-    // each section. Keeps the top-right scoreboard's "you" icon in
-    // chromatic sync with the actual character running the level.
-    //
-    bodyColor: heroBodyColor,
-    outlineColor: heroOutlineColor,
-    eyeWhiteColor: heroEyeWhiteColor,
-    postBakeCanvas: heroPostBakeCanvas,
-    addMouth: isWordComplete,
-    addArms: isTouchComplete,
-    //
-    // HUD indicator hero is purely decorative — never let it whistle or
-    // emit floating notes during gameplay.
-    //
-    idleVocalization: null
-  })
-  smallHero.character.fixed = true
-  smallHero.character.z = CFG.visual.zIndex.ui
+  const smallHero = hideHeroScoreHud
+    ? { character: null, bodyColor: heroBodyColor }
+    : Hero.create({
+      k,
+      x: smallHeroX,
+      y: smallHeroY,
+      type: Hero.HEROES.HERO,
+      controllable: false,
+      isStatic: true,
+      scale: (2.6 / 3) * 0.8,
+      //
+      // HUD small hero mirrors the playable hero's body colour — silver
+      // by default, then teal / orange / red as the player completes
+      // each section. Keeps the top-right scoreboard's "you" icon in
+      // chromatic sync with the actual character running the level.
+      //
+      bodyColor: heroBodyColor,
+      outlineColor: heroOutlineColor,
+      eyeWhiteColor: heroEyeWhiteColor,
+      postBakeCanvas: heroPostBakeCanvas,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
+      //
+      // HUD indicator hero is purely decorative — never let it whistle or
+      // emit floating notes during gameplay.
+      //
+      idleVocalization: null
+    })
+  !hideHeroScoreHud && (smallHero.character.fixed = true)
+  !hideHeroScoreHud && (smallHero.character.z = CFG.visual.zIndex.ui)
   //
   // Create life image (sprite pre-loaded in index.js)
   //
@@ -382,12 +389,16 @@ export function create(config) {
   // offset below the small hero, so the hero numeral needs the same Y bump.
   //
   const heroScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y
-  const lifeScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y
+  const lifeScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y + LIFE_SCORE_Y_NUDGE
   //
   // Hero score outlines (black) and main text (white)
   //
-  const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
+  const heroScoreOutlines = hideHeroScoreHud
+    ? []
+    : createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
+  const heroScoreText = hideHeroScoreHud
+    ? null
+    : createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
   //
   // Life score outlines (black) and main text (white)
   //
@@ -422,10 +433,10 @@ export function create(config) {
     k.z(CFG.visual.zIndex.ui + 1)
   ])
   const scoreboardNodes = [
-    smallHero.character,
+    ...(hideHeroScoreHud ? [] : [smallHero.character]),
     lifeImageData.sprite,
     lifeImageData.pupilLayer,
-    heroScoreText,
+    ...(heroScoreText ? [heroScoreText] : []),
     lifeScoreText,
     ...heroScoreOutlines,
     ...lifeScoreOutlines,
@@ -450,7 +461,8 @@ export function create(config) {
     scoreboardGreyLife,
     hideInactiveLetterShadow,
     sectionLabelCompletedLetters: sectionLabelCompletedLetters ?? 0,
-    smallHeroRevealed: !hideScoreboard,
+    hideHeroScoreHud,
+    smallHeroRevealed: !hideScoreboard && !hideHeroScoreHud,
     lifeRevealed: !hideScoreboard,
     lifeGreyTintHex: lifeGreyTintHex || CFG.visual.colors.palette.decorGray,
     _lifeSpriteName: lifeSpriteName,
@@ -467,6 +479,7 @@ export function create(config) {
     //
     scoreColorHex: HUD_SCORE_ICON_GREY_HEX,
     updateHeroScore: (newScore) => {
+      if (!heroScoreText) return
       if (hudPostBakeCanvas) {
         heroScoreText._scoreBake.score = newScore
         rebakeHudScoreSprite(heroScoreText)
@@ -501,6 +514,25 @@ export function create(config) {
 }
 
 /**
+ * Screen position for fragment / bonus fly-to HUD animations (life icon when hero HUD is hidden).
+ * @param {Object} inst - Level indicator instance from create()
+ * @returns {{ x: number, y: number }|null}
+ */
+export function hudCollectTargetPos(inst) {
+  if (!inst) return null
+  if (!inst.hideHeroScoreHud && inst.smallHero?.character?.exists?.()) {
+    return { x: inst.smallHero.character.pos.x, y: inst.smallHero.character.pos.y }
+  }
+  const life = inst.lifeImage?.sprite
+  if (life?.exists?.()) {
+    return { x: life.pos.x, y: life.pos.y }
+  }
+  return inst.lifeImage?.pos
+    ? { x: inst.lifeImage.pos.x, y: inst.lifeImage.pos.y }
+    : null
+}
+
+/**
  * Hides or shows the section label letters (fills + outlines) in the top-left HUD.
  * Used by levels where the label appears only after the first letter is earned.
  * @param {Object} inst - Level indicator instance from create()
@@ -524,7 +556,7 @@ export function setSectionLabelHidden(inst, hidden) {
  * @param {Object} inst - Level indicator instance from create()
  */
 export function revealSmallHeroHud(inst) {
-  if (!inst || inst.smallHeroRevealed) return
+  if (!inst || inst.hideHeroScoreHud || inst.smallHeroRevealed) return
   inst.smallHeroRevealed = true
   inst.smallHero?.character && (inst.smallHero.character.hidden = false)
   inst.heroScoreText && (inst.heroScoreText.hidden = false)

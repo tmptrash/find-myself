@@ -16,12 +16,29 @@ const HINT_ICON_W = 44
 const HINT_ICON_H = 40
 const HINT_EYE_DX = 13
 const HINT_EYE_PUPIL_R = 2.75
-const HINT_EYE_STALK_EXTRA_LIFT = 6
 const HINT_STALK_ARM_LEN = 9
 const HINT_STALK_ARM_DROP = 2.2
 const HINT_STALK_ARM_WIDTH = 1.7
+//
+// Chain-buoy eyes inside the right-burrow hint bubble (not the mushroom icon layout).
+//
+const HINT_CHAIN_TOP_INSET = 14
+const HINT_CHAIN_BASE_Y = 48
+const HINT_CHAIN_STALK_LIFT = 4
+const HINT_CHAIN_LEFT_EYE_DROP = 22
+const HINT_CHAIN_RIGHT_EYE_DROP = 12
+//
+// Arc above the stalk-eyes — bow upward with even top inset inside the bubble.
+//
+const HINT_CHAIN_ARC_EYE_CLEARANCE = 17
+const HINT_CHAIN_ARC_RADIUS_MUL = 1.02
+const HINT_CHAIN_ARC_STROKE = 2
+const HINT_CHAIN_ARC_HEAD_LEN = 7
+const HINT_CHAIN_ARC_HEAD_ANGLE = 0.48
+const HINT_CHAIN_ARC_TANGENT_EPS = 0.12
+const HINT_CHAIN_ARC_HEAD_TRIM = 0.11
 const HINT_ICON_CHAIN_W = 40
-const HINT_ICON_CHAIN_H = 50
+const HINT_ICON_CHAIN_H = HINT_CHAIN_TOP_INSET + HINT_CHAIN_BASE_Y + 12
 const HINT_OFFSET_Y = -70
 const HINT_MIN_RISE = 0.18
 const SPIRIT_HINT_EYES_SHUT_DELAY = 2
@@ -192,7 +209,7 @@ function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v6' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v10' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
@@ -305,13 +322,13 @@ function bakeSpiritMushTooltipCanvas(layout, colored, rightEyes = false) {
 }
 
 function hintChainEyeSpots(iconOx, iconOy) {
-  const baseY = iconOy + MUSH_BASE_Y
+  const baseY = iconOy + HINT_CHAIN_TOP_INSET + HINT_CHAIN_BASE_Y
   const midX = iconOx + HINT_ICON_CHAIN_W / 2
-  const lift = HINT_EYE_STALK_EXTRA_LIFT
+  const lift = HINT_CHAIN_STALK_LIFT
   return {
     baseY,
-    left: { x: midX - HINT_EYE_DX, eyeY: baseY - 22 - lift },
-    right: { x: midX + HINT_EYE_DX, eyeY: baseY - 12 - lift }
+    left: { x: midX - HINT_EYE_DX, eyeY: baseY - HINT_CHAIN_LEFT_EYE_DROP - lift },
+    right: { x: midX + HINT_EYE_DX, eyeY: baseY - HINT_CHAIN_RIGHT_EYE_DROP - lift }
   }
 }
 
@@ -319,6 +336,8 @@ function drawHintChainStalks(ctx, iconOx, iconOy, colored) {
   const spots = hintChainEyeSpots(iconOx, iconOy)
   drawHintChainEyeShell(ctx, spots.left.x, spots.baseY, spots.left.eyeY, colored, 1.7)
   drawHintChainEyeShell(ctx, spots.right.x, spots.baseY, spots.right.eyeY, colored, 4.2)
+  const ink = parseHex(colored ? GLOW_PAL.eyeCreature.contour : MONO_INK)
+  drawHintChainArcArrow(ctx, spots.left, spots.right, ink)
 }
 
 function drawHintChainPupils(ctx, iconOx, iconOy) {
@@ -354,7 +373,7 @@ function drawHintChainStalkSideArms(ctx, ex, baseY, eyeY, stalkRgb, armSeed) {
 }
 
 function drawHintChainEyeShell(ctx, ex, baseY, eyeY, colored, armSeed) {
-  const stalk = parseHex(colored ? GLOW_PAL.decorGray : MONO_INK)
+  const stalk = parseHex(colored ? GLOW_PAL.eyeCreature.contour : MONO_INK)
   const sclera = parseHex(colored ? CFG.visual.colors.hero.eyeWhite : '#FFFFFF')
   const ink = parseHex(MONO_INK)
   ctx.strokeStyle = `rgb(${stalk.r},${stalk.g},${stalk.b})`
@@ -378,6 +397,61 @@ function drawHintChainEyePupil(ctx, ex, eyeY) {
   ctx.beginPath()
   ctx.arc(ex + 1, eyeY + 0.5, HINT_EYE_PUPIL_R, 0, Math.PI * 2)
   ctx.fill()
+}
+//
+// Arc bowing above the eyes; isosceles chevron at the left end (equal wing angles).
+//
+function drawHintChainArcArrow(ctx, left, right, inkRgb) {
+  const pl = { x: left.x, y: left.eyeY - HINT_CHAIN_ARC_EYE_CLEARANCE }
+  const pr = { x: right.x, y: right.eyeY - HINT_CHAIN_ARC_EYE_CLEARANCE * 0.85 }
+  const mx = (pl.x + pr.x) / 2
+  const my = (pl.y + pr.y) / 2
+  const dx = pr.x - pl.x
+  const dy = pr.y - pl.y
+  const chord = Math.hypot(dx, dy) || 1
+  const half = chord / 2
+  const radius = half * HINT_CHAIN_ARC_RADIUS_MUL
+  const h = Math.sqrt(Math.max(0, radius * radius - half * half))
+  let nx = -dy / chord
+  let ny = dx / chord
+  if (ny < 0) {
+    nx = -nx
+    ny = -ny
+  }
+  const cx = mx + nx * h
+  const cy = my + ny * h
+  const aRight = Math.atan2(pr.y - cy, pr.x - cx)
+  const aLeft = Math.atan2(pl.y - cy, pl.x - cx)
+  const aArcEnd = aLeft + HINT_CHAIN_ARC_HEAD_TRIM
+  ctx.strokeStyle = `rgb(${inkRgb.r},${inkRgb.g},${inkRgb.b})`
+  ctx.lineWidth = HINT_CHAIN_ARC_STROKE
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius, aRight, aArcEnd, true)
+  ctx.stroke()
+  const tipX = cx + radius * Math.cos(aLeft)
+  const tipY = cy + radius * Math.sin(aLeft)
+  const aBefore = aLeft + HINT_CHAIN_ARC_TANGENT_EPS
+  const prevX = cx + radius * Math.cos(aBefore)
+  const prevY = cy + radius * Math.sin(aBefore)
+  const aim = Math.atan2(tipY - prevY, tipX - prevX)
+  drawHintChainArcChevron(ctx, tipX, tipY, aim)
+}
+
+function drawHintChainArcChevron(ctx, tipX, tipY, aim) {
+  const head = HINT_CHAIN_ARC_HEAD_LEN
+  const ha = HINT_CHAIN_ARC_HEAD_ANGLE
+  const back = aim + Math.PI
+  const w1x = tipX + Math.cos(back + ha) * head
+  const w1y = tipY + Math.sin(back + ha) * head
+  const w2x = tipX + Math.cos(back - ha) * head
+  const w2y = tipY + Math.sin(back - ha) * head
+  ctx.beginPath()
+  ctx.moveTo(w1x, w1y)
+  ctx.lineTo(tipX, tipY)
+  ctx.lineTo(w2x, w2y)
+  ctx.stroke()
 }
 
 function drawHintMushroom(ctx, cx, baseY, colored) {

@@ -21,6 +21,7 @@ import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { isTouchDevice } from '../../../utils/touch-input.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import { respawnTouchPlayableHero } from '../utils/touch-hero-respawn.js'
 import { createScrollingCloudBand, createFloorThornSprite } from '../utils/lesson0-scenery-sprites.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from '../../../utils/draw-rock.js'
@@ -87,14 +88,6 @@ const L0_GATHER_PROMPT_BASE = 'Press Space or Enter to continue... '
 const L0_END_TEXT_Y = TOP_MARGIN + 62
 const L0_END_TEXT_FONT = 26
 //
-// Prompt shown at the top after hero death.
-// Player can press Space or Enter to restart; auto-restarts after 7 s.
-// Countdown number is appended inline after the three dots, same color as the text.
-//
-const L0_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
-const L0_DEATH_PROMPT_Y = TOP_MARGIN + 62
-const L0_DEATH_PROMPT_FONT = 22
-//
 // Rounded corner configuration
 //
 const CORNER_RADIUS = 20
@@ -160,14 +153,13 @@ const FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP = 2
 const FLOOR_THORN_COLLISION_TIP_BIAS_DOWN = 14
 const FLOOR_THORN_FEET_BELOW_BASE_PAD = 10
 //
-// Death animation — firefly burst and 10-second restart countdown
+// Death animation — firefly burst at the kill spot
 //
 const DEATH_FIREFLY_COUNT = 22
 const DEATH_FIREFLY_BURST_SPEED_MIN = 80
 const DEATH_FIREFLY_BURST_SPEED_MAX = 220
 const DEATH_FIREFLY_DRAG = 0.982
 const DEATH_FIREFLY_LIFETIME = 5.0
-const DEATH_COUNTDOWN_SECONDS_L0 = 7
 //
 // Z: floor + trap thorns above grass (20) and rocks (7), below hinged trees (25).
 //
@@ -723,6 +715,7 @@ export function sceneLesson0(k) {
   k.scene("lesson-touch.0", () => {
     BootLoader.showLoader()
     recomputeTouchLesson0Layout(k)
+    let touchL0LoopCtx = null
     //
     // Reset life score when entering from a different section.
     // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
@@ -834,7 +827,8 @@ export function sceneLesson0(k) {
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN,
-      sectionLabelCompletedLetters: hudLetterCount
+      sectionLabelCompletedLetters: hudLetterCount,
+      hideHeroScoreHud: true
     })
     const levelHelpInst = LevelHelp.create({
       k,
@@ -2165,8 +2159,19 @@ export function sceneLesson0(k) {
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor,
-      idleVocalization: 'childSinging'
+      idleVocalization: null
     })
+    const touchL0HeroRespawnCfg = {
+      type: Hero.HEROES.HERO,
+      controllable: true,
+      sfx: sound,
+      stepSoundScene: 'lesson-touch.0',
+      jumpForce: CFG.game.jumpForce,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
+      bodyColor: heroBodyColor,
+      idleVocalization: null
+    }
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     const touchStartHint = HeroHint.create({
       k,
@@ -2219,7 +2224,9 @@ export function sceneLesson0(k) {
     // Hero vs floor thorns (death + reload level) — merged into main game loop below
     //
     const trapsEnabled = showTrap || trapAlreadyAdded
-    const trapRuntime = trapsEnabled ? createTrapSpikes(k, heroInst, levelIndicator, sound) : null
+    const trapRuntime = trapsEnabled
+      ? createTrapSpikes(k, heroInst, levelIndicator, sound, () => touchL0LoopCtx)
+      : null
     //
     // Hidden bonus hero on the left side at antihero height
     // Only visible when hero approaches from above (jumping from a bug)
@@ -2591,21 +2598,6 @@ export function sceneLesson0(k) {
       }]
     })
     //
-    // Tooltip for small hero icon (score) - appears below
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: levelIndicator.smallHero.character.pos.x,
-        y: levelIndicator.smallHero.character.pos.y,
-        width: SMALL_HERO_TOOLTIP_SIZE,
-        height: SMALL_HERO_TOOLTIP_SIZE,
-        text: SMALL_HERO_TOOLTIP_TEXT,
-        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
     // Tooltip for life icon - appears below
     //
     Tooltip.create({
@@ -2873,6 +2865,25 @@ export function sceneLesson0(k) {
     const atmosphereAnchorX = LEFT_MARGIN + (WORLD_W - LEFT_MARGIN - RIGHT_MARGIN) / 2
     const lesson0LoopCtx = {
       heroInst,
+      touchL0HeroRespawnCfg,
+      touchStartHint,
+      sceneLock,
+      bonusHeroInst,
+      grassDrawer,
+      trapRuntime,
+      wireHeroRefs(fresh) {
+        lesson0LoopCtx.heroInst = fresh
+        touchLetterState.heroInst = fresh
+        lesson0LoopCtx.fireflies._heroRef = fresh
+        lesson0LoopCtx.birds._heroRef = fresh
+        bigBug4Inst.hero = fresh
+        bonusHeroInst.heroInst = fresh
+        grassDrawer.heroRef = fresh
+        touchStartHint.heroInst = fresh
+        sceneLock.heroInst = fresh
+        fresh.character && (fresh.character.z = 20)
+        LevelIndicator.bindEyeHudLookAtHero(levelIndicator, fresh)
+      },
       checkFloorThorns,
       floorThornData,
       levelIndicator,
@@ -2917,7 +2928,8 @@ export function sceneLesson0(k) {
         touchLetterState.touchMusic = touchMusic
       }
     }
-    k.onUpdate(() => onUpdateLesson0Frame(k, camera, heroInst, lesson0LoopCtx))
+    touchL0LoopCtx = lesson0LoopCtx
+    k.onUpdate(() => onUpdateLesson0Frame(k, camera, lesson0LoopCtx.heroInst, lesson0LoopCtx))
     //
     // Return to menu on ESC
     //
@@ -3029,7 +3041,7 @@ function computeThornClusterTargets(thornData) {
  * @param {Array} floorThornData - Thorn definitions from generateFloorThornsWithGaps
  * @param {Object} levelIndicator - Level indicator inst (life score UI)
  */
-function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, sound) {
+function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, sound, loopCtx) {
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY =
@@ -3046,20 +3058,21 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, sound) {
     const halfW = thorn.width / 2 + HERO_HALF_WIDTH_THORNS
     if (Math.abs(heroX - thorn.x) >= halfW) continue
     if (heroFeetY > thornTopY && heroTopY < thorn.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-      onHeroFloorThornDeath(k, heroInst, levelIndicator, sound)
+      onHeroFloorThornDeath(k, heroInst, levelIndicator, sound, loopCtx)
       return
     }
   }
 }
 
 /**
- * Hero death on floor thorns: life score, gentle sound, reload touch lesson 0
+ * Hero death on floor thorns: life score, gentle sound, in-level respawn
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator inst
  * @param {Object} sound - Sound instance
+ * @param {Object} lesson0LoopCtx - Scene loop context (respawn wiring)
  */
-function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
+function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound, lesson0LoopCtx) {
   if (heroInst.isDying) return
   //
   // Capture hero position before the character object is destroyed by Hero.death()
@@ -3082,7 +3095,14 @@ function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    startL0DeathCountdown(k, 'lesson-touch.0', deathX, deathY)
+    if (!lesson0LoopCtx?.touchL0HeroRespawnCfg) return
+    const fresh = respawnTouchPlayableHero(
+      k,
+      lesson0LoopCtx.touchL0HeroRespawnCfg,
+      HERO_SPAWN_X,
+      HERO_SPAWN_Y
+    )
+    lesson0LoopCtx.wireHeroRefs?.(fresh)
   }, { suppressParticles: true })
 }
 
@@ -3156,7 +3176,7 @@ function createLifeParticlesOnThornDeath(k, levelIndicator) {
  * @param {Object} sound - Sound instance
  * @returns {Object} Trap instance with state
  */
-function createTrapSpikes(k, heroInst, levelIndicator, sound) {
+function createTrapSpikes(k, heroInst, levelIndicator, sound, getLoopCtx) {
   //
   // Generate spike data centered on TRAP_TRIGGER_X
   //
@@ -3198,7 +3218,11 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
   //
   // Update: detect hero proximity, animate rise/hold/retract, check collision
   //
-  const onUpdate = () => onUpdateTrap(k, inst, heroInst, levelIndicator, sound)
+  const onUpdate = () => {
+    const loopCtx = getLoopCtx?.()
+    const liveHero = loopCtx?.heroInst ?? heroInst
+    onUpdateTrap(k, inst, liveHero, levelIndicator, sound, loopCtx)
+  }
   //
   // Tooltip appears only while spikes are visible
   //
@@ -3222,7 +3246,7 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
 //
 // Animates trap spike phases: hidden -> rising -> holding -> retracting -> hidden
 //
-function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
+function onUpdateTrap(k, inst, heroInst, levelIndicator, sound, loopCtx) {
   if (!heroInst.character?.pos) return
   const dt = k.dt()
   const heroX = heroInst.character.pos.x
@@ -3301,7 +3325,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
         const halfW = TRAP_SPIKE_WIDTH_BASE + HERO_HALF_WIDTH_THORNS
         if (Math.abs(heroX - spike.x) >= halfW) continue
         if (heroFeetY > spikeTopY && heroTopY < spike.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-          onHeroFloorThornDeath(k, heroInst, levelIndicator, sound)
+          onHeroFloorThornDeath(k, heroInst, levelIndicator, sound, loopCtx)
           return
         }
       }
@@ -5873,62 +5897,6 @@ function spawnFireflyDeathBurst(k, x, y) {
       updater.cancel()
       drawer.exists() && k.destroy(drawer)
     }
-  })
-}
-//
-// Shows "Press Space or Enter to continue... N" at the top after hero death.
-// The countdown number is inline, same color as the prompt text.
-// Auto-restarts when the countdown reaches 0.
-//
-function startL0DeathCountdown(k, sceneName, deathX, deathY) {
-  let elapsed = 0
-  const cx = SCREEN_W / 2
-  const textCfg = { size: L0_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
-  const initText = L0_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS_L0
-  //
-  // Drop shadow (single black copy offset right+down), glow-level style.
-  //
-  const offs = [[1.5, 1.5]]
-  const outlines = offs.map(([dx, dy]) => k.add([
-    k.text(initText, textCfg),
-    k.pos(cx + dx, L0_DEATH_PROMPT_Y + dy),
-    k.anchor('center'),
-    k.color(0, 0, 0),
-    k.opacity(0.85),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui + 60)
-  ]))
-  const promptText = k.add([
-    k.text(initText, textCfg),
-    k.pos(cx, L0_DEATH_PROMPT_Y),
-    k.anchor('center'),
-    k.color(k.rgb(220, 220, 220)),
-    k.opacity(1),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui + 60.1)
-  ])
-  const destroyAll = () => {
-    outlines.forEach(o => o?.exists?.() && k.destroy(o))
-    promptText.exists() && k.destroy(promptText)
-  }
-  const doRestart = () => {
-    skipHandler.cancel()
-    clickHandler.cancel()
-    updateTimer.cancel()
-    destroyAll()
-    goAfterPreparingAssets(k, sceneName)
-  }
-  const skipHandler = k.onKeyPress((key) => {
-    if (key === 'space' || key === 'enter') doRestart()
-  })
-  const clickHandler = k.onMousePress(() => doRestart())
-  const updateTimer = k.onUpdate(() => {
-    elapsed += k.dt()
-    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS_L0 - elapsed)
-    const newText = L0_DEATH_PROMPT_BASE + Math.ceil(remaining)
-    if (promptText.exists()) promptText.text = newText
-    outlines.forEach(o => o?.exists?.() && (o.text = newText))
-    if (elapsed >= DEATH_COUNTDOWN_SECONDS_L0) doRestart()
   })
 }
 //

@@ -5527,45 +5527,46 @@ function isGlowChainBuoyLayerVisible(inst) {
   return Boolean(z.gCollected || z.lCollected || z.oZone || z.oCollected || z.colorWorld)
 }
 //
-// Stalk-eye colours — forest green-black stalk before L, hero pupil ink after L;
-// roots use the same palette as ear-tree roots (glowEarTreeRootKaplayRgb).
-// Colour world: white sclera + green-black stalk (eyeCreature contour).
+// Stalk-eye colours — decor gray until the post-L colour fade reads as
+// colourful (same beat as the life HUD); then eyeCreature.body stalk ink.
 //
-function glowChainBuoyStalkRgb(zones) {
-  if (zones?.lCollected) {
-    return glowRgb(CFG.visual.colors.hero.eyePupil)
-  }
-  return glowRgb(GLOW_PAL.eyeCreature.contour)
+function glowChainBuoyWantGreenStalk(inst) {
+  const z = inst?.zones
+  if (!z?.lCollected && !z.colorWorld) return false
+  return !glowLifeHudWantGrey(inst)
 }
 function glowChainBuoyColors(inst, k) {
-  const zones = inst?.zones
-  const stalkTriplet = zones?.colorWorld ? glowChainBuoyStalkRgb(zones) : DECOR_GRAY
-  const stalk = k.rgb(stalkTriplet.r, stalkTriplet.g, stalkTriplet.b)
+  const wantGreen = glowChainBuoyWantGreenStalk(inst)
   const root = glowEarTreeRootKaplayRgb(inst, k)
-  const sclera = glowRgb('lightGray')
-  const highlight = glowRgb('lightGray')
+  const grayTriplet = DECOR_GRAY
+  const gray = k.rgb(grayTriplet.r, grayTriplet.g, grayTriplet.b)
+  const scleraGray = glowRgb('lightGray')
   const grayStack = {
-    body: stalk,
-    sclera: k.rgb(sclera.r, sclera.g, sclera.b),
-    pupil: k.rgb(sclera.r, sclera.g, sclera.b),
-    highlight: k.rgb(highlight.r, highlight.g, highlight.b),
-    contour: stalk,
+    body: gray,
+    sclera: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
+    pupil: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
+    highlight: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
+    contour: gray,
     root
   }
-  if (!zones?.colorWorld) {
+  if (!wantGreen) {
     return grayStack
   }
   //
-  // Colour world: black stalk + ring (same as post-L grey stalk), white
-  // sclera — not the warm green-black eyeCreature stack used elsewhere.
+  // Stalk + roots: eyeCreature.body (green-black segment ink). Eye ring only:
+  // eyeCreature.contour. Sclera / pupil unchanged (hero white + chainBuoyPupilRgb).
   //
+  const stalkTriplet = glowRgb(GLOW_PAL.eyeCreature.body)
+  const ringTriplet = glowRgb(GLOW_PAL.eyeCreature.contour)
+  const stalk = k.rgb(stalkTriplet.r, stalkTriplet.g, stalkTriplet.b)
+  const ring = k.rgb(ringTriplet.r, ringTriplet.g, ringTriplet.b)
   const whiteTriplet = glowRgb(CFG.visual.colors.hero.eyeWhite)
   const white = k.rgb(whiteTriplet.r, whiteTriplet.g, whiteTriplet.b)
   return {
     body: stalk,
     sclera: white,
     highlight: white,
-    contour: stalk,
+    contour: ring,
     pupil: grayStack.pupil,
     root
   }

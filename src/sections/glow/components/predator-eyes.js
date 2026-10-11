@@ -27,8 +27,7 @@ export function initEyes(inst) {
  * @param {{ x: number, y: number }|null} hero
  */
 export function tickEyes(inst, dt, hero) {
-  const lock = inst.state === 'notice' || inst.state === 'orient' ||
-    inst.state === 'approach' || inst.state === 'charge'
+  const lock = inst.state === 'stalk' || inst.state === 'hunt' || inst.state === 'lunge' || inst.state === 'feast'
   inst.eyes.forEach(eye => {
     if (lock && hero) {
       const dx = hero.x - inst.x

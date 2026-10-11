@@ -6,6 +6,11 @@ import { initBody, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
 import { initEyes, tickEyes } from './predator-eyes.js'
 import { tickMove } from './predator-move.js'
+import {
+  getPredatorFeastLookTarget,
+  isPredatorFeasting,
+  tickPredatorFruitFeast
+} from './predator-fruit-feast.js'
 import * as Sound from '../../../utils/sound.js'
 
 //
@@ -16,9 +21,11 @@ const LEG_PAIRS = 12
 const THIGH = 11
 const SHIN = 13
 const DRAW_Z = CFG.visual.zIndex.player - 1
-const SPIKE_AT = [0.24, 0.46, 0.68]
-const SPIKE_H = 16
-const SPIKE_HALF = 4.4
+const SPIKE_AT = [0.16, 0.26, 0.36, 0.46, 0.56, 0.66, 0.76, 0.86]
+const SPIKE_H = 10
+const SPIKE_HALF = 2.75
+const SPIKE_OUTLINE_HALF_PAD = 1
+const SPIKE_OUTLINE_H_PAD = 1.4
 const HERO_HIT_HALF_W = 15
 const HERO_HIT_H = 69
 const SHEAR_REACH = 18
@@ -45,6 +52,7 @@ const FOOT_HEAR_RANGE_X = 360
  * @param {Object} cfg.zones - Level zones
  * @param {Object} [cfg.sfx] - Shared Sound inst for foot taps
  * @param {number} [cfg.dir=-1] - Initial facing, -1 left, 1 right
+ * @param {function(): boolean} [cfg.canHuntHero] - When false, the hero is ignored
  * @returns {Object} Predator inst
  */
 export function create(cfg) {
@@ -59,6 +67,7 @@ export function create(cfg) {
     groundAt: cfg.groundAt,
     hero: cfg.hero,
     zones: cfg.zones,
+    canHuntHero: cfg.canHuntHero,
     state: 'search',
     stateTime: 0.4,
     vx: 0,
@@ -72,6 +81,7 @@ export function create(cfg) {
     idleTime: 0,
     wobblePhase: Math.random() * 6,
     orientKick: false,
+    lungeT: 0,
     batch: PolyBatch.create(),
     footHearable: false
   }
@@ -100,13 +110,17 @@ export function create(cfg) {
  */
 export function update(inst, dt) {
   if (!inst) return
+  tickPredatorFruitFeast(inst, inst.levelInst, dt)
   syncFootstepAudibility(inst)
-  const hero = heroPoint(inst)
+  const feasting = isPredatorFeasting(inst)
+  const hero = feasting ? null : heroPoint(inst)
+  const lookTarget = feasting ? (getPredatorFeastLookTarget(inst) ?? hero) : hero
   tickMove(inst, dt, hero)
   tickBody(inst, dt)
-  const hurry = inst.state === 'charge' || inst.state === 'orient'
+  const hurry = inst.state === 'lunge' ||
+    (feasting && (inst.feastPhase === 'approach' || inst.feastBitePhase === 'forward'))
   tickLegs(inst, dt, hurry)
-  tickEyes(inst, dt, hero)
+  tickEyes(inst, dt, lookTarget)
   inst.y = inst.segments[0].y
 }
 
@@ -190,6 +204,7 @@ function initLegs(inst) {
 }
 
 function heroPoint(inst) {
+  if (inst.canHuntHero && !inst.canHuntHero()) return null
   const pos = inst.hero?.character?.pos
   if (!pos) return null
   return { x: pos.x, y: pos.y }
@@ -204,6 +219,11 @@ function predatorBodyCenterX(inst) {
 function syncFootstepAudibility(inst) {
   const sfx = inst.sfx
   if (!sfx?.predatorFootGain) return
+  if (isPredatorFeasting(inst)) {
+    inst.footHearable = false
+    Sound.setGlowPredatorFootGain(sfx, 0)
+    return
+  }
   const hero = heroPoint(inst)
   const hearable = Boolean(hero) &&
     Math.abs(hero.x - predatorBodyCenterX(inst)) <= FOOT_HEAR_RANGE_X
@@ -303,7 +323,7 @@ function drawBackSpike(batch, seg, prev, contour, fill) {
   const ty = dy / len
   const bx = seg.x + nx * seg.radius * 0.28
   const by = seg.y + ny * seg.radius * 0.28
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF + 1.7, SPIKE_H + 2.2, contour)
+  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF + SPIKE_OUTLINE_HALF_PAD, SPIKE_H + SPIKE_OUTLINE_H_PAD, contour)
   addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF, SPIKE_H, fill)
 }
 

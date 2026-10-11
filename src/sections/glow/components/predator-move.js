@@ -1,13 +1,17 @@
 //
-// Speed comes in bursts: a short rush, a stop, a few fast steps, another
-// stop. Steering during a hunt is corrected every frame but never perfectly
-// straight.
+// Distance bands around the hero (world px — ~100 px per meter on this level):
+// beyond 2 m drift slowly inward, inside 2 m run, inside 1 m lunge.
 //
 
-const SEARCH_SPEEDS = [0, 0, 16, 28, 46]
-const NOTICE_RADIUS = 210
-const ATTACK_RADIUS = 78
-const LOSE_RADIUS = 280
+const GLOW_METER_PX = 100
+const HERO_ALERT_FAR_RADIUS = GLOW_METER_PX * 2
+const HERO_ALERT_NEAR_RADIUS = GLOW_METER_PX
+const PATROL_DRIFT_SPEED = 58
+const HUNT_RUN_SPEED = 142
+const LUNGE_SPEED = 298
+const LUNGE_DURATION = 0.36
+
+const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
 
 /**
  * @param {Object} inst
@@ -15,10 +19,9 @@ const LOSE_RADIUS = 280
  * @param {{ x: number, y: number }|null} hero
  */
 export function tickMove(inst, dt, hero) {
+  if (inst.state === 'feast') return
   inst.stateTime -= dt
   inst.idleTime += dt
-  const dist = hero ? hero.x - inst.x : 9999
-  const abs = Math.abs(dist)
   if (inst.state === 'coast') {
     inst.vx *= Math.exp(-dt * 3.2)
     inst.x += inst.vx * dt
@@ -27,32 +30,44 @@ export function tickMove(inst, dt, hero) {
     if (inst.stateTime <= 0) enter(inst, 'search', 0.2)
     return
   }
-  if (inst.state === 'search') {
+  if (!hero) {
     tickSearch(inst, dt)
-    abs < NOTICE_RADIUS && hero && enter(inst, 'notice', 0.1 + Math.random() * 0.2)
-  } else if (inst.state === 'notice') {
-    inst.speedTarget = 0
-    easeSpeed(inst, dt, 18)
-    inst.stateTime <= 0 && enter(inst, 'orient', 0.22 + Math.random() * 0.16)
-  } else if (inst.state === 'orient') {
-    inst.speedTarget = 0
-    easeSpeed(inst, dt, 14)
-    hero && (inst.dir = dist >= 0 ? 1 : -1)
-    inst.headLift = 3
-    inst.stateTime <= 0 && enter(inst, 'approach', 0)
-  } else if (inst.state === 'approach') {
-    hunt(inst, dt, hero, 36, false)
-    abs < ATTACK_RADIUS && enter(inst, 'charge', 0)
-    abs > LOSE_RADIUS && enter(inst, 'search', 0.3)
-  } else if (inst.state === 'charge') {
-    hunt(inst, dt, hero, 108, true)
-    abs > LOSE_RADIUS && enter(inst, 'search', 0.4)
+    inst.x += inst.vx * dt
+    keepInside(inst)
+    softenHeadPose(inst, dt)
+    return
+  }
+  const dx = hero.x - inst.x
+  const dy = hero.y - inst.y
+  const dist = Math.hypot(dx, dy)
+  if (inst.state === 'lunge') {
+    inst.lungeT -= dt
+    hunt(inst, dt, hero, LUNGE_SPEED, true)
+    inst.headLift = 11
+    inst.stretch = 1.34
+    inst.x += inst.vx * dt
+    keepInside(inst)
+    inst.lungeT <= 0 && enter(inst, 'hunt', 0)
+    return
+  }
+  if (dist <= HERO_ALERT_NEAR_RADIUS) {
+    enter(inst, 'lunge', LUNGE_DURATION)
+    inst.lungeT = LUNGE_DURATION
+    hunt(inst, dt, hero, LUNGE_SPEED, true)
+    inst.headLift = 11
+    inst.stretch = 1.34
+  } else if (dist <= HERO_ALERT_FAR_RADIUS) {
+    inst.state = 'hunt'
+    hunt(inst, dt, hero, HUNT_RUN_SPEED, false)
+    inst.headLift = 2.5
+    inst.stretch += (1.1 - inst.stretch) * Math.min(1, dt * 5)
+  } else {
+    inst.state = 'stalk'
+    hunt(inst, dt, hero, PATROL_DRIFT_SPEED, false)
+    softenHeadPose(inst, dt)
   }
   inst.x += inst.vx * dt
   keepInside(inst)
-  const liftTarget = inst.state === 'search' && inst.headLift > 0 ? inst.headLift : inst.state === 'orient' ? 3 : 0
-  inst.headLift += (liftTarget - inst.headLift) * Math.min(1, dt * 6)
-  inst.stretch += ((inst.state === 'charge' ? 1.28 : 1) - inst.stretch) * Math.min(1, dt * 5)
 }
 
 function tickSearch(inst, dt) {
@@ -81,7 +96,13 @@ function hunt(inst, dt, hero, speed, charge) {
   inst.dir = want
   const wobble = Math.sin(inst.idleTime * (charge ? 14 : 6) + inst.wobblePhase) * (charge ? 10 : 6)
   inst.speedTarget = speed + wobble
-  easeSpeed(inst, dt, charge ? 12 : 7)
+  easeSpeed(inst, dt, charge ? 18 : 12)
+}
+
+function softenHeadPose(inst, dt) {
+  const liftTarget = inst.state === 'search' && inst.headLift > 0 ? inst.headLift : 0
+  inst.headLift += (liftTarget - inst.headLift) * Math.min(1, dt * 6)
+  inst.stretch += (1 - inst.stretch) * Math.min(1, dt * 5)
 }
 
 function easeSpeed(inst, dt, rate) {
@@ -107,5 +128,5 @@ function enter(inst, state, time) {
   inst.state = state
   inst.stateTime = time
   state === 'search' && (inst.lookBack = false)
-  state === 'orient' && (inst.orientKick = true)
+  state === 'lunge' && (inst.orientKick = true)
 }

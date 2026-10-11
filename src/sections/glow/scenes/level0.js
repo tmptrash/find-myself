@@ -129,6 +129,12 @@ import {
 } from '../utils/swamp-spirit-proximity-hint.js'
 import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
 import {
+  buildGlowTreeFruitSpots,
+  mountGlowTreeFruitLayer,
+  releaseGlowAnchorFruit,
+  tickGlowTreeFruits
+} from '../utils/glow-tree-fruit.js'
+import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
   initGlowHeroWithoutEyes,
@@ -497,11 +503,18 @@ const GLOW_TOUCH_DEATH_HINT_DURATION = 5
 const HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET = 80
 const GLOW_TOUCH_DEATH_RESPAWN_DELAY = 2.48
 //
-// In-level respawn after a predator kill — farther than a generic side step so
-// the hero does not land back inside the body on reload.
+// In-level respawn after a predator kill — past the tail plus a runway so the
+// hero is not inside the body and has time to run before hunt speed closes
+// the gap (see resolveGlowPredatorRespawnX).
 //
-const HERO_PREDATOR_RESPAWN_PUSH =
-  HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET + HERO_TOUCH_DEATH_RESPAWN_CLEARANCE + GLOW_HERO_HITBOX_HALF_W
+const GLOW_PREDATOR_BODY_LENGTH_PX = 84
+const HERO_PREDATOR_RESPAWN_RUNWAY_PX = 110
+const HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD =
+  GLOW_PREDATOR_BODY_LENGTH_PX +
+  HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET +
+  HERO_TOUCH_DEATH_RESPAWN_CLEARANCE +
+  GLOW_HERO_HITBOX_HALF_W +
+  HERO_PREDATOR_RESPAWN_RUNWAY_PX
 //
 // How fast the post-L world wakes up (grass sway, predator patrol, birds,
 // mushroom whistle-lean) once the O-meditation countdown starts, and how
@@ -1668,6 +1681,15 @@ const CAMERA_INTRO_HINT_DELAY = 1
 const BRANCH_LOOK_LEFT_DURATION = 2
 const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
+const GLOW_BRANCH_JUMP_SHAKE_AMP = 4.5
+const GLOW_BRANCH_JUMP_SHAKE_DURATION = 0.2
+const GLOW_BRANCH_LANDINGS_TO_BREAK = 3
+const PREDATOR_LAKE_EDGE_PAD = 28
+const PREDATOR_CAVE_MOUTH_PAD = 24
+//
+// Predator only tracks the hero when feet sit on the same ground band (branch / cave / air are other planes).
+//
+const GLOW_PREDATOR_HERO_VERTICAL_BAND_PX = 46
 //
 // After O: ten bounces on the right trampoline — at 5 it walks left and
 // stops; at 10 it marches into the lake and reveals W.
@@ -2083,6 +2105,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     ...glowTreeBuildOptsForDensity('nearground')
   })
     scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
+    const treeFruitSpots = buildGlowTreeFruitSpots(treeData, {
+      trunkX: TREE_X,
+      trunkHalf: TRUNK_EXCLUDE_HALF,
+      branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
+      trampClearHalf: TRAMP_GRASS_CLEAR_HALF
+    })
     const savedTreeSegmentsRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
     const hasPersistedSegmentReveal = Array.isArray(savedTreeSegmentsRaw) && savedTreeSegmentsRaw.length > 0
     const treeDrawMonolith = zones.tree && !hasPersistedSegmentReveal
@@ -2203,13 +2231,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
     const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
     const earTreeSpots = buildGlowEarTreeSpots(horizBranch.x1)
-    //
-    // Mud predator band east of the branch trampoline.
-    //
-    const mudPredatorAmbushTriggerX = branchTrampX + MUD_ZONE_BRANCH_TRIGGER_GAP
-    const mudPredatorPopX = mudPredatorAmbushTriggerX + MUD_ZONE_PREDATOR_POP_LEAD
-    const mudZoneX1 = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
-    const mudZoneX2 = mudPredatorPopX + MUD_ZONE_RIGHT_EXTENT
+    const mudPredatorAmbushTriggerX = null
+    const mudPredatorPopX = null
+    const mudZoneX1 = null
+    const mudZoneX2 = null
+    const eastGroundRockMinX = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
+    const PREDATOR_GROUND_PAD = 36
     //
     // L-log platform's home spot — computed early (it only depends on
     // TREE_X and fixed offsets, not on anything laid out further below) so
@@ -2433,10 +2460,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Computed here (before grass) so the grass field can exclude the same
     // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
     //
-    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots)
-    const mudExtraGrass = GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD
-      ? null
-      : createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2)
+    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, null, null, earTreeSpots)
+    const mudExtraGrass = null
     //
     // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
     // instance (dozens of decor pieces total). Registering them all into one
@@ -2446,19 +2471,19 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // actually tanks FPS once O opens up the whole level's decor at once.
     //
     const decorAtlas = createCanvasAtlasBuilder()
-    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, mudZoneX2)
-    const mudWalkClutter = createGlowMudZoneWalkClutter(k, mudZoneX1, mudZoneX2, zones, decorAtlas)
-    rockObjs.push(...mudWalkClutter.rocks)
+    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
+    const mudWalkClutter = { rocks: [], surfaces: [], log: null, branches: [] }
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
     if (await glowBootstrapPause(bootstrap, 54, session)) return
+    const predatorPatrolBounds = computeGlowPredatorPatrolBounds(lakeX2)
     const predator = Predator.create({
       k,
-      x: mudPredatorPopX,
+      x: (predatorPatrolBounds.minX + predatorPatrolBounds.maxX) * 0.42,
       dir: -1,
-      minX: mudZoneX1 + MUD_ZONE_CREATURE_MARGIN,
-      maxX: mudZoneX2 - MUD_ZONE_CREATURE_MARGIN,
-      groundAt: (x) => glowPredatorSurfaceY(rockObjs, mudWalkClutter.surfaces, mudZoneX1, mudZoneX2, x),
+      minX: predatorPatrolBounds.minX,
+      maxX: predatorPatrolBounds.maxX,
+      groundAt: (x) => glowPredatorSurfaceY(rockObjs, null, null, null, x),
       hero: heroInst,
       zones,
       sfx: sound
@@ -2818,8 +2843,14 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _hudGFillParts: null,
       _hudLFillParts: null,
       _hudOFillParts: null,
-      _hudWFillParts: null
+      _hudWFillParts: null,
+      treeFruitSpots,
+      branchTrampX,
+      _branchLandingsAfterG: 0
     }
+    predator.levelInst = inst
+    predator.canHuntHero = () => glowPredatorCanHuntHero(inst)
+    mountGlowTreeFruitLayer(k, inst)
     initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
     inst.eyeIntro = zones.eyesCollected ? null : createGlowEyeIntroState()
@@ -3291,17 +3322,6 @@ function createSmallHeroTooltip(inst) {
       text: () => heroTooltipText(inst),
       offsetY: HERO_TOOLTIP_Y_OFFSET,
       visible: () => isGlowHeroHoverTooltipVisible(inst)
-    }, {
-      x: () => (inst.mudZoneX1 + inst.mudZoneX2) * 0.5,
-      y: () => FLOOR_Y - MUD_MAX_DEPTH * 0.5,
-      width: Math.max(40, inst.mudZoneX2 - inst.mudZoneX1),
-      height: MUD_TOOLTIP_SIZE,
-      text: MUD_TOOLTIP_TEXT,
-      offsetY: MUD_TOOLTIP_Y_OFFSET,
-      visible: () => inst.zones.gCollected &&
-        isGlowEyesGameplayUnlocked(inst.zones) &&
-        inst.mudZoneX1 != null &&
-        !inst.dialogOpen
     }, {
       x: () => glowTeacherHudHoverPos(inst).x,
       y: () => glowTeacherHudHoverPos(inst).y,
@@ -8888,7 +8908,7 @@ function glowBirdsMusicLife(inst) {
 //
 // Rocks — flat value 5 silhouettes.
 //
-function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas, mudZoneX2) {
+function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX) {
   const objs = []
   const clusterCenterX = treeBaseLeftX + 40
   for (let i = 0; i < 10; i++) {
@@ -8951,11 +8971,10 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
     objs.push(rock)
   }
   //
-  // Extra scatter east of the mud band — visible once G opens the mud peek,
-  // not gated behind the right-ground discovery strips.
+  // Extra scatter on the east ground strip (branch trampoline → crack mouth).
   //
-  if (mudZoneX2 != null) {
-    const eastLeft = mudZoneX2 + MUD_EAST_ROCK_INSET
+  if (eastGroundRockMinX != null) {
+    const eastLeft = eastGroundRockMinX + MUD_EAST_ROCK_INSET
     const crackZone = getCrackZone(WORLD_W, FLOOR_Y)
     const eastRockClear = (x) => nearTramp(x) || x >= crackZone.x1 - 52
     const eastSpan = Math.max(50, rightEdge - eastLeft)
@@ -12892,7 +12911,7 @@ function predatorDeathHintTextForKill(deathOrdinal, ctx) {
 //
 function capturePredatorDeathHintContext(inst, heroFootX) {
   const pred = inst.predator
-  const fastAttack = pred?.state === 'charge' || pred?.state === 'orient'
+  const fastAttack = pred?.state === 'lunge' || pred?.state === 'hunt'
   const inMudBand = isGlowMudBandFootX(inst, heroFootX)
   const inConcealingGrass = isGlowPredatorConcealingGrassFootX(inst, heroFootX)
   return { fastAttack, inMudBand, inConcealingGrass }
@@ -13047,33 +13066,47 @@ function computeGlowTouchDeathRespawnPose(inst, deathX, deathY, cause) {
   return { x: deathX, y: deathY }
 }
 //
-// Picks a ground X on the far side of the predator from the death spot, then
-// slides along the mud band until the hitbox clears the body.
+// Picks ground X behind the crawler (opposite its facing) at the current head
+// position, then slides along the mud band until the hitbox clears the body.
 //
 function resolveGlowPredatorRespawnX(inst, deathX, deathY, pred) {
   const predX = pred.x
-  const away = deathX <= predX ? -1 : 1
   const footY = deathY + SURFACE_DETECT_Y
   const pad = MUD_ZONE_CREATURE_MARGIN + 4
   const minX = pred.minX ?? (inst.mudZoneX1 != null ? inst.mudZoneX1 + pad : deathX - 200)
   const maxX = pred.maxX ?? (inst.mudZoneX2 != null ? inst.mudZoneX2 - pad : deathX + 200)
-  let spawnX = predX + away * HERO_PREDATOR_RESPAWN_PUSH
-  spawnX = Math.max(minX, Math.min(maxX, spawnX))
-  let sign = away
-  for (let i = 0; i < 12 && Predator.overlapsHeroHitbox(pred, spawnX, footY); i++) {
-    spawnX += sign * 24
-    spawnX = Math.max(minX, Math.min(maxX, spawnX))
+  const push = HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD
+  const awayFromDeath = deathX <= predX ? -1 : 1
+  let away = -(pred.dir || awayFromDeath)
+  let spawnX = clampGlowPredatorRespawnX(predX + away * push, minX, maxX)
+  if (Math.abs(spawnX - predX) < push * 0.55) {
+    away = -away
+    spawnX = clampGlowPredatorRespawnX(predX + away * push, minX, maxX)
   }
+  spawnX = slideGlowPredatorRespawnClearOfBody(pred, spawnX, footY, away, minX, maxX)
   if (Predator.overlapsHeroHitbox(pred, spawnX, footY)) {
-    sign = -away
-    spawnX = predX + sign * HERO_PREDATOR_RESPAWN_PUSH
-    spawnX = Math.max(minX, Math.min(maxX, spawnX))
-    for (let i = 0; i < 12 && Predator.overlapsHeroHitbox(pred, spawnX, footY); i++) {
-      spawnX += sign * 24
-      spawnX = Math.max(minX, Math.min(maxX, spawnX))
-    }
+    away = -away
+    spawnX = clampGlowPredatorRespawnX(predX + away * push, minX, maxX)
+    spawnX = slideGlowPredatorRespawnClearOfBody(pred, spawnX, footY, away, minX, maxX)
   }
   return spawnX
+}
+//
+// Keeps a respawn X inside the predator patrol band.
+//
+function clampGlowPredatorRespawnX(x, minX, maxX) {
+  return Math.max(minX, Math.min(maxX, x))
+}
+//
+// Nudges spawn along the mud band until the hero feet box clears the body.
+//
+function slideGlowPredatorRespawnClearOfBody(pred, spawnX, footY, sign, minX, maxX) {
+  let x = spawnX
+  for (let i = 0; i < 16 && Predator.overlapsHeroHitbox(pred, x, footY); i++) {
+    x += sign * 28
+    x = clampGlowPredatorRespawnX(x, minX, maxX)
+  }
+  return x
 }
 //
 // Glow routes landings through the same step timbre as running (footFx is off).
@@ -13179,7 +13212,7 @@ function nudgeGlowHeroSpawnAwayFromMudHazards(cfg) {
     Predator.overlapsHeroHitbox(predator, x, heroFootY) &&
       (x = resolveGlowPredatorRespawnX(inst, x, spawnY, predator))
   }
-  if (!spawnOnBranch) {
+  if (!spawnOnBranch && mudPredatorAmbushTriggerX != null && mudPredatorPopX != null) {
     const dangerEndX = mudPredatorPopX + MUD_ZONE_PREDATOR_DANGER_MARGIN
     x >= mudPredatorAmbushTriggerX && x <= dangerEndX &&
       (x = mudPredatorAmbushTriggerX - HERO_MUD_HAZARD_SPAWN_CLEARANCE)
@@ -13616,6 +13649,14 @@ function destroyStrayGlowHeroBody(k, keep = null) {
 //
 function applyGlowHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded) {
   if (!hero || !char) return
+  if (inst.mudZoneX1 == null) {
+    hero.moveSpeedMult = 1
+    hero.jumpSquashTimeMult = 1
+    hero.jumpForceMult = 1
+    hero.mudJumpActive = false
+    inst.mudJumpTakeoff = false
+    return
+  }
   const groundedOnMud = grounded && isHeroInMudZone(inst, heroX)
   hero.moveSpeedMult = groundedOnMud ? MUD_MOVE_SPEED_MULT : 1
   hero.jumpSquashTimeMult = groundedOnMud ? MUD_JUMP_SQUASH_TIME_MULT : 1
@@ -13687,6 +13728,8 @@ function onUpdate(inst) {
     updateGlowCamera(inst)
     return
   }
+  syncGlowPredatorPatrolBounds(inst)
+  tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   inst.swampSpirit && SwampSpirit.update(inst.swampSpirit, k.dt())
   syncSwampSpiritProximityHint(inst, glowTooltipClampInset())
@@ -14062,6 +14105,7 @@ function onUpdate(inst) {
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
+  tickGlowStartBranchFatigue(inst, char, grounded, justLanded)
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
   updateGlowMidges(inst.midges, k.dt(), 1)
@@ -14261,6 +14305,59 @@ function updateTreeRevealArm(inst, char, grounded) {
 //
 // Tree fades in on the first landing on the big-tree branch after leaving it.
 //
+//
+// Predator patrol strip — between the lake's east edge and the cave mouth.
+//
+function computeGlowPredatorPatrolBounds(lakeX2) {
+  const crack = getCrackZone(WORLD_W, FLOOR_Y)
+  const caveMouthX = getGlowCaveMouthFloorLeftX(crack)
+  let minX = LEFT_MARGIN + 36
+  let maxX = caveMouthX - PREDATOR_CAVE_MOUTH_PAD
+  if (lakeX2 != null) {
+    minX = Math.max(minX, lakeX2 + PREDATOR_LAKE_EDGE_PAD)
+  }
+  if (maxX <= minX + 80) {
+    maxX = minX + 80
+  }
+  return { minX, maxX }
+}
+function syncGlowPredatorPatrolBounds(inst) {
+  const pred = inst.predator
+  if (!pred) return
+  const bounds = computeGlowPredatorPatrolBounds(inst.lakeX2)
+  pred.minX = bounds.minX
+  pred.maxX = bounds.maxX
+  pred.x < pred.minX && (pred.x = pred.minX)
+  pred.x > pred.maxX && (pred.x = pred.maxX)
+}
+function isHeroInGlowLakeBand(inst, heroX, footY) {
+  const x1 = inst.lakeX1
+  const x2 = inst.lakeX2
+  if (x1 == null || x2 == null) return false
+  if (heroX < x1 || heroX > x2) return false
+  return footY >= FLOOR_Y - 36
+}
+function glowPredatorCanHuntHero(inst) {
+  const char = inst.heroInst?.character
+  const pred = inst.predator
+  if (!char?.pos || inst.drowning || !pred) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const predatorGroundY = pred.groundAt(char.pos.x)
+  return Math.abs(footY - predatorGroundY) <= GLOW_PREDATOR_HERO_VERTICAL_BAND_PX
+}
+function triggerGlowBranchLandingShake(inst) {
+  inst.camera && GlowCamera.triggerShake(inst.camera, GLOW_BRANCH_JUMP_SHAKE_AMP, GLOW_BRANCH_JUMP_SHAKE_DURATION)
+}
+function tickGlowStartBranchFatigue(inst, char, grounded, justLanded) {
+  if (!justLanded || !grounded || !isHeroOnStartBranch(inst, char)) return
+  triggerGlowBranchLandingShake(inst)
+  if (!inst.zones?.gCollected) return
+  if (!inst.treeFruitSpots?.some(f => f.anchor && f.attached)) return
+  inst._branchLandingsAfterG = (inst._branchLandingsAfterG || 0) + 1
+  if (inst._branchLandingsAfterG >= GLOW_BRANCH_LANDINGS_TO_BREAK) {
+    releaseGlowAnchorFruit(inst)
+  }
+}
 function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (shouldGlowBlockWorldReveal(inst)) return
   if (!inst.pendingTreeReveal || inst.dialogOpen) return

@@ -102,6 +102,7 @@ export function create(cfg) {
     rightMushroomShown: cfg.rightMushroomShown ?? null,
     burrowPhase: null,
     rightBurrowSideSign: null,
+    rightMushWasShown: null,
     pendingBurrowX: null,
     retired: false,
     holeX: cfg.x,
@@ -576,16 +577,25 @@ function syncBurrowPhase(inst) {
   // without moving the spirit off the left burrow.
   //
   const wantPhase = (inst.zones?.gCollected && leftShown) ? 'right' : 'left'
+  const rightShown = Boolean(inst.rightMushroomShown?.())
   if (inst.burrowPhase == null) {
     inst.burrowPhase = wantPhase
+    inst.rightMushWasShown = rightShown
     buryChain(inst, burrowXForPhase(inst, wantPhase))
     return
   }
   if (inst.burrowPhase === 'left' && wantPhase === 'right') {
     inst.burrowPhase = 'right'
     inst.rightBurrowSideSign = null
+    inst.rightMushWasShown = rightShown
+    requestBurrowMove(inst, burrowXForPhase(inst, 'right'))
+    return
+  }
+  if (inst.burrowPhase === 'right' && inst.rightMushWasShown === false && rightShown) {
+    inst.rightBurrowSideSign = null
     requestBurrowMove(inst, burrowXForPhase(inst, 'right'))
   }
+  inst.burrowPhase === 'right' && (inst.rightMushWasShown = rightShown)
 }
 //
 // Slides the burrow when the hero unlocks the next trampoline phase.
@@ -619,11 +629,13 @@ function retireSpirit(inst) {
   buryChain(inst, inst.holeX)
 }
 //
-// Active burrow sits on the cap centre for the current trampoline phase.
+// Left burrow on the branch cap centre; right burrow on the future right cap
+// until that mushroom is visible, then beside it so the hero can land.
 //
 function burrowXForPhase(inst, phase) {
   if (phase === 'right') {
     const mushX = inst.rightMushroomX?.() ?? inst.homeX
+    if (!inst.rightMushroomShown?.()) return mushX
     const side = rightBurrowSideSign(inst, mushX)
     return mushX + side * RIGHT_BURROW_OFFSET_FROM_MUSH_CENTER
   }

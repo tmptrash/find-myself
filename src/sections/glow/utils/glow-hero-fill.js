@@ -232,9 +232,9 @@ export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas) {
   const grayBody = String(GLOW_PAL.heroBodyGray).replace('#', '')
   heroInst.noEyes = false
   //
-  // Hollow pre-G body keeps clear sockets; closed calm/drown eyes stay outline-only.
+  // Solid white sclera + black pupils on the gray hollow body (not ring-only sockets).
   //
-  heroInst.transparentEyeInterior = true
+  heroInst.transparentEyeInterior = false
   heroInst.eyeWhiteColor = CFG.visual.colors.hero.eyeWhite
   heroInst.pupilColor = CFG.visual.colors.hero.eyePupil
   heroInst.outlineOnly = true

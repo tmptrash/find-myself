@@ -15217,12 +15217,10 @@ function updateTrampMissingPlaceHints(inst, heroX, footY, grounded) {
   // Branch pad — no "missing" bubble; the swamp spirit marks the G-route spot.
   //
   syncOneTrampMissingHint(inst, 'branch', inst.branchTrampState?.x ?? -9999, false)
-  const cave = getCrackZone(WORLD_W, FLOOR_Y)
-  const caveMid = (cave.x1 + cave.x2) * 0.5
-  const overCave = heroX >= cave.x1 && heroX <= cave.x2 &&
-    footY <= FLOOR_Y + 20 &&
-    !inst.pit?.collapsed
-  syncOneTrampMissingHint(inst, 'cave', caveMid, grounded && overCave)
+  //
+  // Cave mouth — no "missing mushroom" bubble (eyes / teacher hints cover that beat).
+  //
+  syncOneTrampMissingHint(inst, 'cave', 0, false)
 }
 //
 // True while the hero stands in the hidden mushroom's landing area.

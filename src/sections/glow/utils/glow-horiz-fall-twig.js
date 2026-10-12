@@ -238,13 +238,26 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     releaseRider(inst, char)
     inst.riderAirborne = true
     return
+  } else if (!heroFeetOnRideStick(char, mounted, midX)) {
+    //
+    // Walked off the stick or dropped to the ground. Drop the carry so the
+    // centipede stops bulldozing him, and drop the shield so a touch kills.
+    //
+    releaseRider(inst, char)
+    inst.riderAirborne = false
+    hideRidePlatform(inst)
+    return
   }
   //
-  // Do not rewrite the hero position every frame. A manual pin fought physics
-  // interpolation, so the camera and the drawn world shook around him. The
-  // stick platform carries him (stickToPlatform) the same way ground does.
+  // Keep the same point on the stick. Platform carry alone drifted him as
+  // the centipede walked.
   //
-  char.stickToPlatform = true
+  inst.rideOffset = clampRideOffset((inst.rideOffset ?? 0) + riderInputShift(hero))
+  const rideX = midX + inst.rideOffset
+  const rideY = mounted.y - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
+  typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
+  char.vel && (char.vel.x = 0, char.vel.y = 0)
+  char.stickToPlatform = false
   //
   // The rider platform is teleported every frame, so Kaplay keeps losing the
   // contact — the hero counts the stick as ground himself (idle/run frames,
@@ -260,6 +273,13 @@ export const HORIZ_FALL_TWIG_DRAW_Z = TWIG_Z
 
 const HERO_SURFACE_DETECT_Y = 38
 const HERO_LOG_SNAP_EMBED = 1
+
+function heroFeetOnRideStick(char, mounted, midX) {
+  const footY = char.pos.y + HERO_SURFACE_DETECT_Y
+  const over = Math.abs(char.pos.x - midX) <= TWIG_RIDE_PLAT_HALF_W
+  const onTop = footY >= mounted.y - 20 && footY <= mounted.y + 14
+  return over && onTop
+}
 
 function tryLockRider(inst, char, mounted, midX, velY) {
   if (velY < TWIG_RIDE_JUMP_VEL_Y) return

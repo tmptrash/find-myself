@@ -1151,11 +1151,13 @@ const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 const WATER_SURFACE_Y = FLOOR_Y - 8
 //
-// A centipede fleeing left swims until its head is this close to the left edge.
+// How far the fleeing head stops from the left playfield edge before it turns.
+// The stick swings to the other side of the head, so the hero needs this much
+// room or he slides under the side frame and off the stick.
 //
-const PREDATOR_FLEE_LEFT_EDGE_PAD = 30
+const PREDATOR_FLEE_LEFT_EDGE_PAD = 96
 const PREDATOR_GROUND_CLEARANCE = 0
-const PREDATOR_STICK_EXTRA_LIFT = 0
+const PREDATOR_STICK_EXTRA_LIFT = 4
 //
 // Drop from air onto the same floor Y as main-ground snap before sinking.
 //
@@ -9991,6 +9993,23 @@ function refreshGlowMainGroundJumpState(inst, char, grounded, footY) {
 //
 // Per-frame camera follow — horizontal scroll only.
 //
+const RIDE_CAM_STEP_PX = 1
+
+//
+// Whole-pixel camera while the hero rides the centipede. Only advances once
+// the head has actually travelled a pixel, so decor never shimmers.
+//
+function stepGlowRideCameraX(inst, raw) {
+  const prev = inst._rideCamX
+  if (prev == null) {
+    inst._rideCamX = Math.round(raw)
+    return inst._rideCamX
+  }
+  if (raw >= prev + RIDE_CAM_STEP_PX) inst._rideCamX = Math.floor(raw)
+  else if (raw <= prev - RIDE_CAM_STEP_PX) inst._rideCamX = Math.ceil(raw)
+  return inst._rideCamX
+}
+
 function updateGlowCamera(inst) {
   const ch = inst.heroInst?.character
   if (!ch?.pos || !inst.camera) return
@@ -10002,8 +10021,16 @@ function updateGlowCamera(inst) {
   // pixel alignment and the whole ground layer shimmered by a pixel.
   //
   const ridingStick = HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, ch)
-  const pixelAlignCamX = !inPitCave && (grounded || ridingStick)
-  GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y, pixelAlignCamX)
+  //
+  // The stick point the hero is pinned to wobbles by a fraction of a pixel.
+  // Following that wobble made every ground sprite shimmer. The camera steps
+  // in whole pixels with the centipede's head instead.
+  //
+  const followX = ridingStick
+    ? stepGlowRideCameraX(inst, inst.predator?.x ?? ch.pos.x)
+    : (inst._rideCamX = null, ch.pos.x)
+  const pixelAlignCamX = !ridingStick && !inPitCave && grounded
+  GlowCamera.followHero(inst.camera, followX, ch.pos.y, pixelAlignCamX)
   !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick &&
     GlowCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
@@ -12227,6 +12254,15 @@ function syncHeroTrampDrawOrder(inst) {
     (targetZ = CFG.visual.zIndex.platforms + 2)
   !onBranch && rightInFront &&
     (targetZ = CFG.visual.zIndex.player + 2)
+  //
+  // On the centipede's stick he passes behind both trampoline caps.
+  //
+  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, ch)) {
+    const nearRight = inst.trampState && Math.abs(ch.pos.x - inst.trampState.x) < TRAMP_NEAR_X
+    const nearBranch = inst.branchTrampState && Math.abs(ch.pos.x - inst.branchTrampState.x) < TRAMP_NEAR_X
+    nearRight && (targetZ = Math.min(targetZ, CFG.visual.zIndex.player))
+    nearBranch && (targetZ = Math.min(targetZ, CFG.visual.zIndex.platforms + 1))
+  }
   const footY = ch.pos.y + SURFACE_DETECT_Y
   !inst.pitCaveHeroForeground &&
     isHeroInsideGlowPitCave(inst, ch.pos.x, ch.pos.y, footY) &&

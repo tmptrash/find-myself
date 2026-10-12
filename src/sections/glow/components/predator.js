@@ -325,6 +325,10 @@ function drawLeg(inst, batch, limb, contour, leg) {
     bend *= -1
     knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * limb.reach, SHIN * limb.reach, bend)
   }
+  //
+  // A folded shin can still cross the ground line. Keep the joint on it.
+  //
+  knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
   PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 2.4, contour)
   PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.8, contour)
   PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 1.3, leg)

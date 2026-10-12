@@ -516,7 +516,11 @@ function circleHitsRect(cx, cy, radius, box) {
 //
 function predatorSurfaceAt(inst, x) {
   const water = inst.water
-  if (inst.swimming && water && x >= water.x1 && x <= water.x2) return water.surfaceY + SWIM_SURFACE_SINK
+  //
+  // While swimming, every segment uses the lake surface — per-x land samples
+  // at the shore made the spine kink and lifted the stick at the water edge.
+  //
+  if (inst.swimming && water) return water.surfaceY + SWIM_SURFACE_SINK
   return inst.landAt(x)
 }
 function rgb(k, hex) {

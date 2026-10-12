@@ -1154,6 +1154,8 @@ const WATER_SURFACE_Y = FLOOR_Y - 8
 // A centipede fleeing left swims until its head is this close to the left edge.
 //
 const PREDATOR_FLEE_LEFT_EDGE_PAD = 30
+const PREDATOR_GROUND_CLEARANCE = 0
+const PREDATOR_STICK_EXTRA_LIFT = 0
 //
 // Drop from air onto the same floor Y as main-ground snap before sinking.
 //
@@ -2143,7 +2145,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       dir: -1,
       minX: predatorPatrolBounds.minX,
       maxX: predatorPatrolBounds.maxX,
-      groundAt: (x) => glowPredatorSurfaceY(rockObjs, null, null, null, x),
+      groundAt: () => FLOOR_Y - PREDATOR_GROUND_CLEARANCE,
       hero: heroInst,
       zones,
       sfx: sound,
@@ -2393,6 +2395,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       _branchLandingsSinceTree: 0
     }
     predator.levelInst = inst
+    predator.landAt = (x) => glowPredatorGroundAt(inst, x)
     predator.canHuntHero = () => glowPredatorCanHuntHero(inst)
     mountGlowTreeFruitLayer(k, inst)
     createGlowHorizFallTwigLayer(k, inst)
@@ -6815,41 +6818,13 @@ function glowGroundSurfaceY(x) {
   return FLOOR_Y - h + 2
 }
 //
-// Walk surface: mud crest, then the top of a log, twig or rock under x.
-// Up is a smaller Y. Rock tops blend in so the body climbs instead of stepping a wall.
+// Flat ground line for the centipede. Up is a smaller Y.
 //
-function glowPredatorSurfaceY(rocks, walkSurfaces, mudX1, mudX2, x) {
-  const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
-  let y
-  if (inMud) {
-    y = glowMudCrestY(x, mudX1, mudX2)
-  } else {
-    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    y = FLOOR_Y - Math.max(0, lip)
-  }
-  if (walkSurfaces) {
-    for (let i = 0; i < walkSurfaces.length; i++) {
-      y = raiseTowardBand(y, x, walkSurfaces[i].x1, walkSurfaces[i].x2, (walkSurfaces[i].x1 + walkSurfaces[i].x2) * 0.5, walkSurfaces[i].topY)
-    }
-  }
-  if (!rocks) return y
-  for (let i = 0; i < rocks.length; i++) {
-    const rock = rocks[i]
-    if (!rock?._mudZoneWalk || rock._surfaceTop == null || rock._decorWorldX == null) continue
-    const half = rock._surfaceHalfW || 12
-    y = raiseTowardBand(y, x, rock._decorWorldX - half, rock._decorWorldX + half, rock._decorWorldX, rock._surfaceTop)
-  }
+function glowPredatorGroundAt(levelInst) {
+  let y = FLOOR_Y - PREDATOR_GROUND_CLEARANCE
+  const mounted = levelInst.shoreFallTwigs?.twigs?.some(twig => twig.phase === 'predatorMount')
+  mounted && (y -= PREDATOR_STICK_EXTRA_LIFT)
   return y
-}
-//
-// Smooths a step onto a rock or log: full height at the middle, crest at the edges.
-//
-function raiseTowardBand(y, x, x1, x2, mid, topY) {
-  if (x < x1 || x > x2 || topY >= y) return y
-  const half = Math.max(1, (x2 - x1) * 0.5)
-  const edge = Math.abs(x - mid) / half
-  const blend = 1 - edge * edge
-  return y + (topY - y) * Math.max(0, blend)
 }
 //
 // Mushrooms — value 5, excluded from water zone.
@@ -10022,9 +9997,14 @@ function updateGlowCamera(inst) {
   inst.camera && GlowCamera.updateShake(inst.camera, inst.k.dt())
   const inPitCave = Boolean(inst._inGlowPitCave)
   const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
-  const pixelAlignCamX = !inPitCave && grounded
+  //
+  // Riding the stick is not a Kaplay ground contact, so the camera dropped
+  // pixel alignment and the whole ground layer shimmered by a pixel.
+  //
+  const ridingStick = HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, ch)
+  const pixelAlignCamX = !inPitCave && (grounded || ridingStick)
   GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y, pixelAlignCamX)
-  !inst.heroInst?.isSubmerging && !inPitCave &&
+  !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick &&
     GlowCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
 //
@@ -10145,6 +10125,7 @@ function onUpdate(inst) {
   syncGlowPredatorPatrolBounds(inst)
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.zones.colorWorld && inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
+  inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character

@@ -40,11 +40,13 @@ const TWIG_BACK_REST = TWIG_MAIN_W * 0.5 + 0.5
 //
 // A turn squeezes the stick through zero width instead of tilting it.
 //
-const TWIG_TURN_SPEED = 3.2
+const TWIG_TURN_SPEED = 1.15
+const TWIG_RIDE_TURN_DURATION = 0.85
 const TWIG_RIDE_EDGE_SLACK = 12
 const TWIG_RIDE_EDGE_INSET = 4
 const TWIG_RIDE_SHIELD_BELOW = 6
-const TWIG_RIDE_JUMP_VEL_Y = -20
+const TWIG_RIDE_JUMP_VEL_Y = -220
+const TWIG_RIDE_TURN_MIN_SPEED = 40
 const TWIG_FALL_SUBSTEPS = 5
 const TWIG_RIDE_PLAT_H = 8
 const TWIG_RIDE_PLAT_HALF_W = TWIG_MAIN_LEN * 0.46
@@ -109,8 +111,31 @@ export function dropHorizFallTwigs(inst) {
  * @param {number} floorY - Ground line Y
  * @param {Object} [predator] - Centipede inst (twig may mount its back)
  */
+/**
+ * Advances a delayed stick turn and exposes pause flags for predator movement.
+ * Call before Predator.update() each frame.
+ * @param {Object} inst - Twig inst
+ * @param {number} dt - Frame delta
+ */
+export function tickTwigPredatorRide(inst, dt) {
+  if (!inst) return
+  tickRideTurn(inst, dt)
+}
+
+/**
+ * True while the centipede should hold position (hero jump off the stick).
+ * @param {Object} predatorInst - Predator inst
+ * @returns {boolean}
+ */
+export function isTwigPausingPredatorMove(predatorInst) {
+  const tw = predatorInst?.levelInst?.shoreFallTwigs
+  if (!tw || !mountedTwig(tw)) return false
+  return Boolean(tw.riderAirborne)
+}
+
 export function onUpdate(inst, dt, floorY, predator, heroChar) {
   if (!inst?.twigs?.length) return
+  inst.predator = predator ?? inst.predator ?? null
   inst._heroChar = heroChar ?? inst._heroChar ?? null
   inst.twigs.forEach(twig => stepTwig(twig, dt, floorY, predator, inst))
   syncRidePlatform(inst)
@@ -213,18 +238,13 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     releaseRider(inst, char)
     inst.riderAirborne = true
     return
-  } else {
-    inst.rideOffset += riderInputShift(hero)
   }
   //
-  // Only the player's own steps move him along the stick — collision pushes
-  // from the moving platform used to pile up and slide him onto the tail.
-  // At either end he stops; leaving the stick takes a jump.
+  // Do not rewrite the hero position every frame. A manual pin fought physics
+  // interpolation, so the camera and the drawn world shook around him. The
+  // stick platform carries him (stickToPlatform) the same way ground does.
   //
-  inst.rideOffset = clampRideOffset(inst.rideOffset)
-  char.pos.x = midX + inst.rideOffset
-  char.pos.y = mounted.y - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
-  char.vel && (char.vel.y = 0)
+  char.stickToPlatform = true
   //
   // The rider platform is teleported every frame, so Kaplay keeps losing the
   // contact — the hero counts the stick as ground himself (idle/run frames,
@@ -250,23 +270,108 @@ function tryLockRider(inst, char, mounted, midX, velY) {
   if (!onPlat && !(overStick && atTop)) return
   inst.riderLocked = true
   inst.riderAirborne = false
-  inst.rideDir == null && (inst.rideDir = Math.random() < 0.5 ? -1 : 1)
+  scheduleRideTurnAfterTwigLand(inst)
   inst.rideOffset = clampRideOffset(char.pos.x - midX)
+  const rideX = midX + inst.rideOffset
+  const rideY = mounted.y - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
+  typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
+  char.vel && (char.vel.y = 0)
   //
-  // Kaplay already drags a body standing on a moving platform — with our own
-  // pin on top of that the hero drifted along the stick, so the carry is off.
+  // One seat on the lock frame, then the platform carries him. A per-frame
+  // pin on top of that carry shook the camera.
   //
-  char.stickToPlatform = false
+  char.stickToPlatform = true
+}
+
+//
+// After a landing, ease into the reversed heading instead of snapping dir/vx.
+//
+function scheduleRideTurnAfterTwigLand(inst) {
+  const pred = inst.predator
+  if (!pred) {
+    inst.rideDir == null && (inst.rideDir = 1)
+    return
+  }
+  if (pred.state === 'flee') {
+    inst.rideDir == null && (inst.rideDir = pred.dir ?? 1)
+    return
+  }
+  const mounted = mountedTwig(inst)
+  const next = -(pred.dir || inst.rideDir || 1)
+  inst.rideTurnFromFace = mounted?.face ?? -(pred.dir || 1)
+  inst.rideTurnTargetDir = next
+  inst.rideTurnPending = true
+  inst.rideTurnElapsed = 0
+  //
+  // Body pose is captured here and eased to the reversed spine on the same
+  // blend as the stick. Heading itself flips at the halfway squeeze.
+  //
+  pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
+  pred.rideTurnPoseDir = next
+  pred.rideTurnBlend = 0
+  pred.vx = 0
+  pred.holdFacing = true
+}
+
+function rideTurnBlend(inst) {
+  const t = Math.min(1, (inst.rideTurnElapsed ?? 0) / TWIG_RIDE_TURN_DURATION)
+  return t * t * (3 - 2 * t)
+}
+
+function tickRideTurn(inst, dt) {
+  if (!inst.rideTurnPending || !inst.riderLocked) return
+  const pred = inst.predator
+  if (!pred || pred.state === 'flee') {
+    clearRideTurnPose(inst, pred)
+    return
+  }
+  inst.rideTurnElapsed = (inst.rideTurnElapsed ?? 0) + dt
+  const blend = rideTurnBlend(inst)
+  pred.rideTurnBlend = blend
+  pred.rideTurnPoseDir = inst.rideTurnTargetDir
+  pred.vx = 0
+  pred.holdFacing = true
+  blend >= 0.5 && (pred.dir = inst.rideTurnTargetDir)
+  if (!mountedTwig(inst)) clearRideTurnPose(inst, pred)
+}
+
+function completeRideTurn(inst, pred) {
+  const next = inst.rideTurnTargetDir ?? pred?.dir ?? 1
+  inst.rideDir = next
+  if (pred) {
+    pred.dir = next
+    pred.holdFacing = true
+    pred.vx = next * TWIG_RIDE_TURN_MIN_SPEED
+  }
+  clearRideTurnPose(inst, pred)
+}
+
+function clearRideTurnPose(inst, pred) {
+  inst.rideTurnPending = false
+  inst.rideTurnElapsed = 0
+  inst.rideTurnAnchorX = null
+  if (!pred) return
+  pred.rideTurnFromSegs = null
+  pred.rideTurnBlend = null
+  pred.rideTurnPoseDir = null
+  pred.spineFollowRate = null
 }
 
 function releaseRider(inst, char) {
   if (!inst.riderLocked) return
+  const pred = inst.predator
+  const wasTurning = inst.rideTurnPending
   inst.riderLocked = false
   inst.rideDir = null
   inst.rideOffset = 0
   char && (char.stickToPlatform = true)
   inst._riderHero && (inst._riderHero.carrierGrounded = false)
   inst._riderHero = null
+  if (wasTurning && pred) {
+    pred.dir = inst.rideTurnTargetDir ?? pred.dir
+    pred.vx = (pred.dir || 1) * TWIG_RIDE_TURN_MIN_SPEED
+  }
+  clearRideTurnPose(inst, pred)
 }
 
 //
@@ -296,7 +401,7 @@ function makeRidePlatform(k) {
     k.rect(TWIG_RIDE_PLAT_HALF_W * 2, TWIG_RIDE_PLAT_H),
     k.pos(PLATFORM_HIDE_X, PLATFORM_HIDE_Y),
     k.anchor('top'),
-    k.area(),
+    k.area({ collisionIgnore: [CFG.game.platformName] }),
     k.body({ isStatic: true }),
     k.opacity(0),
     CFG.game.platformName
@@ -353,11 +458,24 @@ function stepTwig(twig, dt, floorY, predator, inst) {
   if (twig.phase === 'predatorMount') {
     const riding = Boolean(inst.riderLocked)
     if (predator) {
-      riding && inst.rideDir == null && (inst.rideDir = predator.dir)
-      predator.holdFacing = riding
-      riding && (predator.dir = inst.rideDir)
+      if (riding) {
+        if (predator.state === 'flee') {
+          inst.rideDir = predator.dir
+          predator.holdFacing = false
+        } else if (inst.rideTurnPending) {
+          predator.holdFacing = true
+        } else {
+          inst.rideDir == null && (inst.rideDir = predator.dir)
+          predator.holdFacing = true
+          predator.dir = inst.rideDir
+        }
+      } else {
+        predator.holdFacing = false
+      }
     }
-    placeTwigOnBack(twig, predator, dt, riding, inst.rideDir)
+    placeTwigOnBack(twig, predator, dt, riding, inst.rideDir, inst)
+    riding && inst.rideTurnPending && rideTurnBlend(inst) >= 1 &&
+      completeRideTurn(inst, predator)
     !riding && (twig.predatorTimer += dt)
     if (!riding && twig.predatorTimer >= TWIG_PREDATOR_MOUNT_TIMER_SEC) {
       twig.phase = 'falling'
@@ -426,11 +544,18 @@ function tryMountTwig(twig, predator) {
 // toward the tail side, so a turn squeezes the horizontal stick thin and
 // widens it again on the other side.
 //
-function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir) {
+function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir, twigInst) {
   const head = predator?.segments?.[0]
   if (!head) return
-  const tailDir = riderLocked && rideDir != null ? -rideDir : -(predator.dir || 1)
-  if (riderLocked && rideDir != null) {
+  const turning = Boolean(riderLocked && twigInst?.rideTurnPending)
+  let tailDir = -(predator.dir || 1)
+  if (riderLocked && !turning && rideDir != null) tailDir = -rideDir
+  if (turning) {
+    const from = twigInst.rideTurnFromFace ?? twig.face ?? tailDir
+    const to = -(twigInst.rideTurnTargetDir || 1)
+    twig.face = from + (to - from) * rideTurnBlend(twigInst)
+    tailDir = to
+  } else if (riderLocked && rideDir != null) {
     twig.face = tailDir
   } else {
     twig.face == null && (twig.face = tailDir)
@@ -438,7 +563,7 @@ function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir) {
   }
   twig.rot = 0
   twig.x = head.x + twig.face * (head.radius + TWIG_BEHIND_HEAD)
-  twig.y = backTopUnderTwig(predator, twig.x, twig.x + tailDir * TWIG_MAIN_LEN) - TWIG_BACK_REST
+  twig.y = backTopUnderTwig(predator, twig.x, twig.x + twig.face * TWIG_MAIN_LEN) - TWIG_BACK_REST
 }
 
 //
@@ -449,7 +574,13 @@ function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir) {
 function backTopUnderTwig(predator, xa, xb) {
   const lo = Math.min(xa, xb)
   const hi = Math.max(xa, xb)
-  const pts = samplePredatorSpineHitPoints(predator)
+  //
+  // During a shared turn the drawn spine is the blend, not the ideal heading,
+  // so the stick rests on the shell the player actually sees.
+  //
+  const pts = predator.rideTurnBlend != null
+    ? predator.segments
+    : samplePredatorSpineHitPoints(predator)
   let top = Infinity
   for (const pt of pts) {
     pt.x >= lo && pt.x <= hi && (top = Math.min(top, pt.y - pt.radius))
@@ -475,15 +606,17 @@ function syncRidePlatform(inst) {
     hideRidePlatform(inst)
     return
   }
-  plat.pos.x = twigMidX(mounted)
-  plat.pos.y = mounted.y
+  const platX = twigMidX(mounted)
+  const platY = mounted.y
+  typeof plat.moveTo === 'function' ? plat.moveTo(platX, platY) : (plat.pos.x = platX, plat.pos.y = platY)
 }
 
 function hideRidePlatform(inst) {
   const plat = inst.ridePlat
   if (!plat) return
-  plat.pos.x = PLATFORM_HIDE_X
-  plat.pos.y = PLATFORM_HIDE_Y
+  typeof plat.moveTo === 'function'
+    ? plat.moveTo(PLATFORM_HIDE_X, PLATFORM_HIDE_Y)
+    : (plat.pos.x = PLATFORM_HIDE_X, plat.pos.y = PLATFORM_HIDE_Y)
 }
 
 //

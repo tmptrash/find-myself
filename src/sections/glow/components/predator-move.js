@@ -1,3 +1,5 @@
+import { isTwigPausingPredatorMove } from '../utils/glow-horiz-fall-twig.js'
+
 //
 // Distance bands around the hero (world px — ~100 px per meter on this level):
 // beyond 2 m drift slowly inward, inside 2 m run, inside 1 m lunge.
@@ -40,8 +42,26 @@ const RIDE_SPEED_EASE = 4
  */
 export function tickMove(inst, dt, hero) {
   if (inst.state === 'feast') return
+  if (isTwigPausingPredatorMove(inst)) {
+    inst.vx *= Math.exp(-dt * 14)
+    softenHeadPose(inst, dt)
+    return
+  }
+  if (inst.levelInst?.shoreFallTwigs?.rideTurnPending) {
+    inst.vx = 0
+    return
+  }
   applyRideFacingLock(inst)
   if (rideFacingLocked(inst)) {
+    //
+    // A rider on the stick must not cancel a lake flee — that used to swap in
+    // slow patrol search, drop swimming, and let keepInside bounce off shore.
+    //
+    if (inst.state === 'flee') {
+      syncTwigRideDirFromPredator(inst)
+      tickFlee(inst, dt)
+      return
+    }
     tickRideLockedMove(inst, dt)
     inst.x += inst.vx * dt
     keepInside(inst)
@@ -235,10 +255,26 @@ function applyRideFacingLock(inst) {
     inst.holdFacing = false
     return
   }
+  if (inst.state === 'flee') {
+    inst.holdFacing = false
+    syncTwigRideDirFromPredator(inst)
+    inst.lookBack = false
+    return
+  }
+  if (twigs.rideTurnPending) {
+    inst.holdFacing = true
+    inst.lookBack = false
+    return
+  }
   twigs.rideDir == null && (twigs.rideDir = inst.dir)
   inst.holdFacing = true
   inst.dir = twigs.rideDir
   inst.lookBack = false
+}
+function syncTwigRideDirFromPredator(inst) {
+  const twigs = inst.levelInst?.shoreFallTwigs
+  if (!twigs) return
+  twigs.rideDir = inst.dir
 }
 
 function tickRideLockedMove(inst, dt) {

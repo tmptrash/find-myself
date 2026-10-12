@@ -57,12 +57,13 @@ export function samplePredatorSpineHitPoints(inst) {
 }
 
 export function tickBody(inst, dt) {
+  if (applyBlendedRideTurn(inst)) return
   const head = inst.segments[0]
   const ride0 = ride(inst, 0)
   head.x = inst.x
   head.y = inst.groundAt(inst.x) - ride0 - inst.headLift
   const gap = SPACING * inst.stretch
-  const followBase = 1 - Math.exp(-dt * 9)
+  const followBase = 1 - Math.exp(-dt * (inst.spineFollowRate ?? 9))
   for (let i = 1; i < inst.segments.length; i++) {
     const prev = inst.segments[i - 1]
     const seg = inst.segments[i]
@@ -79,6 +80,30 @@ export function tickBody(inst, dt) {
 function ride(inst, index) {
   const segR = index === 0 ? 8 : 5
   return segR + inst.bodyClear
+}
+
+//
+// Stick turn and body turn share one blend: segments slide from the pose
+// captured at landing to the reversed spine, instead of lagging behind a
+// heading that already flipped.
+//
+function applyBlendedRideTurn(inst) {
+  const from = inst.rideTurnFromSegs
+  const blend = inst.rideTurnBlend
+  if (!from?.length || blend == null) return false
+  const dir = inst.rideTurnPoseDir ?? inst.dir
+  const n = inst.segments.length
+  const gap = SPACING * inst.stretch
+  const t = Math.max(0, Math.min(1, blend))
+  for (let i = 0; i < n; i++) {
+    const x = inst.x - dir * gap * i
+    const y = inst.groundAt(x) - ride(inst, i) - inst.headLift * (1 - i / Math.max(1, n - 1))
+    const seg = inst.segments[i]
+    const src = from[i] ?? seg
+    seg.x = src.x + (x - src.x) * t
+    seg.y = src.y + (y - src.y) * t
+  }
+  return true
 }
 
 function segmentRadius(index) {

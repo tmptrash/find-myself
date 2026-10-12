@@ -47,6 +47,10 @@ const FLEE_TRIGGER_RADIUS = 460
 // Swimming body rides half under the water line.
 //
 const SWIM_SURFACE_SINK = 16
+//
+// Width inside the shore over which the swim line eases down from the ground.
+//
+const SWIM_SHORE_RAMP_PX = 56
 
 /**
  * Creates the crawler on the ground line.
@@ -520,12 +524,19 @@ function circleHitsRect(cx, cy, radius, box) {
 //
 function predatorSurfaceAt(inst, x) {
   const water = inst.water
+  const land = inst.landAt(x)
+  if (!inst.swimming || !water) return land
   //
-  // While swimming, every segment uses the lake surface — per-x land samples
-  // at the shore made the spine kink and lifted the stick at the water edge.
+  // Lake level only over the lake itself — a flee waypoint ends inland while
+  // still swimming, and a flat lake level there sank the legs under the
+  // ground line. A short eased ramp inside the shore keeps the spine (and the
+  // stick on it) from kinking at the water edge.
   //
-  if (inst.swimming && water) return water.surfaceY + SWIM_SURFACE_SINK
-  return inst.landAt(x)
+  const inset = Math.min(x - water.x1, water.x2 - x)
+  if (inset <= 0) return land
+  const t = Math.min(1, inset / SWIM_SHORE_RAMP_PX)
+  const ease = t * t * (3 - 2 * t)
+  return land + (water.surfaceY + SWIM_SURFACE_SINK - land) * ease
 }
 function rgb(k, hex) {
   const c = getRGB(k, hex)

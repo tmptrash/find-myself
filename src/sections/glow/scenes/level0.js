@@ -1155,7 +1155,7 @@ const WATER_SURFACE_Y = FLOOR_Y - 8
 // The stick swings to the other side of the head, so the hero needs this much
 // room or he slides under the side frame and off the stick.
 //
-const PREDATOR_FLEE_LEFT_EDGE_PAD = 96
+const PREDATOR_FLEE_LEFT_EDGE_PAD = 170
 const PREDATOR_GROUND_CLEARANCE = 0
 const PREDATOR_STICK_EXTRA_LIFT = 4
 //

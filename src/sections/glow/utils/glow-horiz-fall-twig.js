@@ -238,10 +238,10 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     releaseRider(inst, char)
     inst.riderAirborne = true
     return
-  } else if (!heroFeetOnRideStick(char, mounted, midX)) {
+  } else if (heroLeftRideStick(inst, char, mounted, hero)) {
     //
-    // Walked off the stick or dropped to the ground. Drop the carry so the
-    // centipede stops bulldozing him, and drop the shield so a touch kills.
+    // Dropped to the ground or walked off the end. A turn moves the stick
+    // under him — that is not leaving it.
     //
     releaseRider(inst, char)
     inst.riderAirborne = false
@@ -274,11 +274,14 @@ export const HORIZ_FALL_TWIG_DRAW_Z = TWIG_Z
 const HERO_SURFACE_DETECT_Y = 38
 const HERO_LOG_SNAP_EMBED = 1
 
-function heroFeetOnRideStick(char, mounted, midX) {
+function heroLeftRideStick(inst, char, mounted, hero) {
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
-  const over = Math.abs(char.pos.x - midX) <= TWIG_RIDE_PLAT_HALF_W
-  const onTop = footY >= mounted.y - 20 && footY <= mounted.y + 14
-  return over && onTop
+  if (footY > mounted.y + 28) return true
+  const shift = riderInputShift(hero)
+  if (!shift) return false
+  const offset = inst.rideOffset ?? 0
+  const limit = TWIG_RIDE_PLAT_HALF_W - TWIG_RIDE_EDGE_INSET
+  return Math.abs(offset) >= limit - 0.5 && Math.sign(shift) === Math.sign(offset)
 }
 
 function tryLockRider(inst, char, mounted, midX, velY) {
@@ -333,6 +336,24 @@ function scheduleRideTurnAfterTwigLand(inst) {
   pred.holdFacing = true
 }
 
+//
+// A flee waypoint flips the heading in one frame. With a rider that snapped
+// the stick across the head and threw him sideways, so the flip goes through
+// the same eased turn as on land.
+//
+function startFleeRideTurn(inst, pred, mounted) {
+  inst.rideTurnFromFace = mounted.face
+  inst.rideTurnTargetDir = pred.dir
+  inst.rideTurnPending = true
+  inst.rideTurnElapsed = 0
+  pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
+  pred.rideTurnPoseDir = pred.dir
+  pred.rideTurnBlend = 0
+  pred.dir = inst.rideDir
+  pred.vx = 0
+  pred.holdFacing = true
+}
+
 function rideTurnBlend(inst) {
   const t = Math.min(1, (inst.rideTurnElapsed ?? 0) / TWIG_RIDE_TURN_DURATION)
   return t * t * (3 - 2 * t)
@@ -341,7 +362,7 @@ function rideTurnBlend(inst) {
 function tickRideTurn(inst, dt) {
   if (!inst.rideTurnPending || !inst.riderLocked) return
   const pred = inst.predator
-  if (!pred || pred.state === 'flee') {
+  if (!pred) {
     clearRideTurnPose(inst, pred)
     return
   }
@@ -360,7 +381,7 @@ function completeRideTurn(inst, pred) {
   inst.rideDir = next
   if (pred) {
     pred.dir = next
-    pred.holdFacing = true
+    pred.holdFacing = pred.state !== 'flee'
     pred.vx = next * TWIG_RIDE_TURN_MIN_SPEED
   }
   clearRideTurnPose(inst, pred)
@@ -479,11 +500,13 @@ function stepTwig(twig, dt, floorY, predator, inst) {
     const riding = Boolean(inst.riderLocked)
     if (predator) {
       if (riding) {
-        if (predator.state === 'flee') {
-          inst.rideDir = predator.dir
-          predator.holdFacing = false
-        } else if (inst.rideTurnPending) {
+        if (inst.rideTurnPending) {
           predator.holdFacing = true
+        } else if (predator.state === 'flee') {
+          inst.rideDir != null && predator.dir !== inst.rideDir
+            ? startFleeRideTurn(inst, predator, twig)
+            : (inst.rideDir = predator.dir)
+          !inst.rideTurnPending && (predator.holdFacing = false)
         } else {
           inst.rideDir == null && (inst.rideDir = predator.dir)
           predator.holdFacing = true

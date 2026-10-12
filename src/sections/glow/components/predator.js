@@ -1,12 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL, isGlowGrayExploreBeforeL } from '../utils/glow-palette.js'
+import { GLOW_PAL, isGlowGrayWorld } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
-import { initBody, tickBody } from './predator-body.js'
+import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
 import { initEyes, tickEyes } from './predator-eyes.js'
-import { tickMove } from './predator-move.js'
+import { tickMove, startFleeMove } from './predator-move.js'
 import {
+  cancelPredatorFeast,
   getPredatorFeastLookTarget,
   isPredatorFeasting,
   tickPredatorFruitFeast
@@ -31,7 +32,6 @@ const HERO_HIT_H = 69
 const SHEAR_REACH = 18
 const SHEAR_OPEN = 8
 const TRI = [0, 1, 2]
-const BODY_HIT_SCALE = 0.85
 const SNOUT_REACH = 7
 const SNOUT_DROP = 2.4
 const SNOUT_HALF = 4.1
@@ -39,6 +39,14 @@ const SNOUT_HALF = 4.1
 // Hero must be within this horizontal span of the body to hear foot taps.
 //
 const FOOT_HEAR_RANGE_X = 360
+//
+// A burst closer than this (to the body centre) sends the crawler fleeing.
+//
+const FLEE_TRIGGER_RADIUS = 460
+//
+// Swimming body rides half under the water line.
+//
+const SWIM_SURFACE_SINK = 16
 
 /**
  * Creates the crawler on the ground line.
@@ -53,6 +61,8 @@ const FOOT_HEAR_RANGE_X = 360
  * @param {Object} [cfg.sfx] - Shared Sound inst for foot taps
  * @param {number} [cfg.dir=-1] - Initial facing, -1 left, 1 right
  * @param {function(): boolean} [cfg.canHuntHero] - When false, the hero is ignored
+ * @param {{x1: number, x2: number, surfaceY: number}} [cfg.water] - Lake span the crawler can swim across
+ * @param {number} [cfg.fleeLeftX] - Far-left swim target when fleeing left
  * @returns {Object} Predator inst
  */
 export function create(cfg) {
@@ -64,7 +74,12 @@ export function create(cfg) {
     dir: cfg.dir ?? -1,
     minX: cfg.minX,
     maxX: cfg.maxX,
-    groundAt: cfg.groundAt,
+    landAt: cfg.groundAt,
+    groundAt: null,
+    water: cfg.water ?? null,
+    fleeLeftX: cfg.fleeLeftX ?? cfg.minX,
+    swimming: false,
+    fleePath: null,
     hero: cfg.hero,
     zones: cfg.zones,
     canHuntHero: cfg.canHuntHero,
@@ -85,6 +100,7 @@ export function create(cfg) {
     batch: PolyBatch.create(),
     footHearable: false
   }
+  inst.groundAt = x => predatorSurfaceAt(inst, x)
   initBody(inst)
   inst.spikeAt = SPIKE_AT.map(t => Math.min(
     inst.segments.length - 2,
@@ -143,25 +159,44 @@ export function isTouchingHero(inst, heroX, heroFootY) {
  * @param {number} heroFootY
  * @returns {boolean}
  */
+/**
+ * True when a falling twig segment crosses the crawler's back.
+ * @param {Object} inst - Predator inst
+ * @param {number} x1 - Twig start X
+ * @param {number} y1 - Twig start Y
+ * @param {number} x2 - Twig end X
+ * @param {number} y2 - Twig end Y
+ * @returns {{ x: number, y: number, index: number }|null} Mount point on the back
+ */
+export function predatorBackCatchPoint(inst, x1, y1, x2, y2) {
+  if (!inst?.segments?.length || inst.obj?.hidden) return null
+  let best = null
+  let bestD = 22
+  for (let i = 1; i < inst.segments.length - 1; i++) {
+    const seg = inst.segments[i]
+    const topX = seg.x
+    const topY = seg.y - seg.radius * 0.45
+    const d = pointSegDistance(topX, topY, x1, y1, x2, y2)
+    if (d < bestD) {
+      bestD = d
+      best = { x: topX, y: topY - 2, index: i }
+    }
+  }
+  return best
+}
+
 export function overlapsHeroHitbox(inst, heroX, heroFootY) {
   if (!inst || inst.obj?.hidden) return false
   const box = heroHitbox(inst, heroX, heroFootY)
   if (!box) return false
-  for (let i = 0; i < inst.segments.length; i++) {
-    const seg = inst.segments[i]
-    const next = inst.segments[i + 1]
-    const radius = seg.radius * BODY_HIT_SCALE
-    if (!next) {
-      if (circleHitsRect(seg.x, seg.y, radius, box)) return true
-      continue
-    }
-    if (capsuleHitsRect(seg.x, seg.y, next.x, next.y, radius, box)) return true
+  const stretch = Math.max(1, inst.stretch ?? 1)
+  const chains = [inst.segments, samplePredatorSpineHitPoints(inst)]
+  for (let c = 0; c < chains.length; c++) {
+    const spine = chains[c]
+    if (!spine?.length) continue
+    if (spineHitsHero(spine, box, stretch, inst.dir)) return true
   }
-  const head = inst.segments[0]
-  if (!head) return false
-  const snoutX = head.x + inst.dir * (head.radius + SNOUT_REACH)
-  const snoutY = head.y + SNOUT_DROP
-  return capsuleHitsRect(head.x, head.y, snoutX, snoutY, SNOUT_HALF, box)
+  return false
 }
 
 /**
@@ -173,6 +208,19 @@ export function notifyKill(inst) {
   inst.state = 'coast'
   inst.stateTime = 0.35 + Math.random() * 0.25
   inst.speedTarget = 0
+}
+
+/**
+ * Burst at fromX — a crawler within range jerks away from it and flees.
+ * @param {Object} inst - Predator inst
+ * @param {number} fromX - Burst world X
+ */
+export function startFlee(inst, fromX) {
+  if (!inst || inst.obj?.hidden) return
+  const centerX = predatorBodyCenterX(inst)
+  if (Math.abs(centerX - fromX) > FLEE_TRIGGER_RADIUS) return
+  isPredatorFeasting(inst) && cancelPredatorFeast(inst)
+  startFleeMove(inst, centerX >= fromX ? 1 : -1)
 }
 
 function initLegs(inst) {
@@ -236,8 +284,7 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const colorFade = inst.zones?._sceneRef?.colorFade ?? 0
-  const gray = isGlowGrayExploreBeforeL(inst.zones, colorFade)
+  const gray = isGlowGrayWorld(inst.zones)
   const contour = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorContour)
   const back = rgb(k, gray ? GLOW_PAL.lightGray : GLOW_PAL.predatorBack)
   const belly = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorBelly)
@@ -388,6 +435,46 @@ function liveHeroAabb(character) {
   }
 }
 
+function spineHitsHero(spine, box, stretch, dir) {
+  const tailReach = (SHEAR_REACH + 10) * stretch
+  for (let i = 0; i < spine.length; i++) {
+    const seg = spine[i]
+    const next = spine[i + 1]
+    const radius = Math.max(8, seg.radius * 0.95) * (1 + (stretch - 1) * 0.35)
+    if (circleHitsRect(seg.x, seg.y, radius, box)) return true
+    if (!next) continue
+    const linkR = Math.max(radius, next.radius * 0.95)
+    if (capsuleHitsRect(seg.x, seg.y, next.x, next.y, linkR, box)) return true
+  }
+  const head = spine[0]
+  const tail = spine[spine.length - 1]
+  const prev = spine[spine.length - 2]
+  if (head) {
+    const snoutX = head.x + dir * (head.radius + SNOUT_REACH)
+    const snoutY = head.y + SNOUT_DROP
+    if (capsuleHitsRect(head.x, head.y, snoutX, snoutY, Math.max(SNOUT_HALF, 6), box)) return true
+  }
+  if (tail && prev) {
+    const dx = tail.x - prev.x
+    const dy = tail.y - prev.y
+    const len = Math.hypot(dx, dy) || 1
+    const tipX = tail.x + dx / len * tailReach
+    const tipY = tail.y + dy / len * tailReach
+    if (capsuleHitsRect(tail.x, tail.y, tipX, tipY, 9 * stretch, box)) return true
+  }
+  return false
+}
+
+function pointSegDistance(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len2 = dx * dx + dy * dy || 1
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2))
+  const qx = x1 + dx * t
+  const qy = y1 + dy * t
+  return Math.hypot(px - qx, py - qy)
+}
+
 function capsuleHitsRect(x1, y1, x2, y2, radius, box) {
   return segmentHitsRect(
     x1, y1, x2, y2,
@@ -424,6 +511,14 @@ function circleHitsRect(cx, cy, radius, box) {
   return dx * dx + dy * dy <= radius * radius
 }
 
+//
+// Ground under x, or the lake surface while the crawler swims across it.
+//
+function predatorSurfaceAt(inst, x) {
+  const water = inst.water
+  if (inst.swimming && water && x >= water.x1 && x <= water.x2) return water.surfaceY + SWIM_SURFACE_SINK
+  return inst.landAt(x)
+}
 function rgb(k, hex) {
   const c = getRGB(k, hex)
   return k.rgb(c.r, c.g, c.b)

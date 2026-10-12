@@ -15,7 +15,6 @@ import {
   isHeroOnPitCaveFloor,
   KEY_PIT_COLLAPSED
 } from './glow-atmosphere.js'
-import { markGlowHudGCaveEntered } from './glow-hud-g-progress.js'
 import { applyGlowHeroEyesOpenedBake } from './glow-hero-fill.js'
 import { drawGlowEyeCreature, glowCaveHeroEyeColors } from './glow-eye-creature.js'
 
@@ -126,7 +125,7 @@ export function revealGlowHeroEyes(inst, heroInst) {
   if (!heroInst || !inst?.eyeIntro) return
   const char = heroInst.character
   const k = inst.k
-  applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas)
+  applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, !inst.zones?.secondEyeCollected)
   const idleKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix || heroInst.type}_0_0`
   //
   // Closed eyes apply on the first still frame — immediate run/jump skips them.
@@ -253,7 +252,6 @@ function enterGlowEyeIntroCaveApproach(inst, zone) {
 function tryOpenGlowEyeIntroCave(inst, char, zone, pit, grounded, justLanded, footY) {
   if (!justLanded || !grounded || !isHeroOnCrackLid(pit, char.pos.x, footY)) return
   collapseGlowPitForEyeIntro(pit)
-  markGlowHudGCaveEntered()
   inst.eyeIntro.phase = 'inCave'
 }
 function tryRevealGlowCaveFloorEyes(inst, char, pit) {
@@ -268,7 +266,6 @@ function spawnGlowCavePickupEyes(inst, pit) {
   return {
     cx: eyes.cx,
     cy: eyes.cy,
-    leftX: eyes.leftX,
     rightX: eyes.rightX,
     y: eyes.y,
     collected: false
@@ -321,7 +318,7 @@ function finishGlowEyeAttachSequence(inst, heroInst) {
   inst.eyeIntro.eyesOpeningTimer = 0
   inst.eyeIntro.attachClosedApplied = false
   Hero.setEyesClosed(heroInst, false)
-  applyGlowHeroEyesOpenedBake(inst.k, heroInst, heroInst.postBakeCanvas)
+  applyGlowHeroEyesOpenedBake(inst.k, heroInst, heroInst.postBakeCanvas, !inst.zones?.secondEyeCollected)
   const openKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix}_0_0`
   heroInst.character?.exists?.() && inst.k.getSprite(openKey) &&
     heroInst.character.use(inst.k.sprite(openKey))
@@ -368,13 +365,15 @@ export function unlockGlowEyesGameplayFromBranchLaunch(inst) {
   if (!inst?.eyeIntro || inst.eyeIntro.phase === 'complete') return
   completeGlowEyeIntro(inst)
 }
+//
+// The skeleton keeps only its right eye — the hero takes a single cyclops eye.
+//
 function drawGlowCavePickupEyes(k, pickup, heroInst) {
   if (pickup.collected) return
   const heroPos = heroInst?.character?.pos
   const targetX = heroPos?.x ?? pickup.cx
   const targetY = (heroPos?.y ?? pickup.y) - 20
   const colors = glowCaveHeroEyeColors(k)
-  drawGlowTrackingEye(k, pickup.leftX, pickup.y, targetX, targetY, colors)
   drawGlowTrackingEye(k, pickup.rightX, pickup.y, targetX, targetY, colors)
 }
 function drawGlowTrackingEye(k, ex, ey, tx, ty, colors) {

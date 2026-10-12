@@ -304,15 +304,12 @@ export function getCuteMushroomFlatPitBakeColors() {
   }
 }
 /**
- * True while the level stays flat gray (before L / colour world).
+ * True while the level stays flat gray (before the second eye opens the colour world).
  * @param {Object} [z] - Glow zones object
- * @param {number} [colorFade] - Scene colour fade 0..1
  * @returns {boolean}
  */
-export function isGlowGrayExploreBeforeL(z, colorFade = 0) {
-  if (!z) return false
-  if (z.lCollected || z.colorWorld) return false
-  return true
+export function isGlowGrayWorld(z) {
+  return !!z && !z.colorWorld
 }
 
 /**

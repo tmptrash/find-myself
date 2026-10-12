@@ -28,6 +28,23 @@ let globalRainStop = null
 //
 const CALM_PAD_MASTER = 0.13
 //
+// Glow spiky tomato burst: noise blast, sub thump and a short shard rattle.
+//
+const TOMATO_BLAST_DURATION = 0.7
+const TOMATO_BLAST_NOISE_DECAY = 9
+const TOMATO_BLAST_NOISE_GAIN = 0.34
+const TOMATO_BLAST_FILTER_START = 2600
+const TOMATO_BLAST_FILTER_END = 260
+const TOMATO_BLAST_THUMP_START = 95
+const TOMATO_BLAST_THUMP_END = 32
+const TOMATO_BLAST_THUMP_GAIN = 0.32
+const TOMATO_BLAST_SHARD_COUNT = 6
+const TOMATO_BLAST_SHARD_SPREAD = 0.22
+const TOMATO_BLAST_SHARD_FREQ_MIN = 1400
+const TOMATO_BLAST_SHARD_FREQ_RANGE = 1800
+const TOMATO_BLAST_SHARD_DURATION = 0.05
+const TOMATO_BLAST_SHARD_GAIN = 0.035
+//
 // Sustained drone (Hz) for the calm pad — octaves + a perfect fifth (no third),
 // the classic open "om" voicing that reads as a meditation mantra.
 //
@@ -1541,6 +1558,62 @@ export function playGlowSwampSpiritEmerge(instance) {
     thumpEnd: 62,
     thumpGain: CFG.audio.sfx.step * 0.018
   })
+}
+
+/**
+ * Glow spiky tomato explosion — a muffled noise blast with a sub thump and a
+ * few bright shard ticks scattered right after the impact.
+ * @param {Object} instance - Sound instance from create()
+ */
+/**
+ * Short creak when a lip-tree rocks from a nearby landing jolt.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playGlowEarTreeShake(instance) {
+  if (!instance?.audioContext) return
+  playGlowSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 0.55, 0.11)
+}
+
+export function playGlowTomatoExplosion(instance) {
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  const out = instance.glowSfxGain || ctx.destination
+  const now = ctx.currentTime
+  const size = Math.floor(ctx.sampleRate * TOMATO_BLAST_DURATION)
+  const buffer = ctx.createBuffer(1, size, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < size; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / size) * TOMATO_BLAST_NOISE_DECAY)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(TOMATO_BLAST_FILTER_START, now)
+  filter.frequency.exponentialRampToValueAtTime(TOMATO_BLAST_FILTER_END, now + TOMATO_BLAST_DURATION)
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(TOMATO_BLAST_NOISE_GAIN, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + TOMATO_BLAST_DURATION)
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(out)
+  const thump = ctx.createOscillator()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(TOMATO_BLAST_THUMP_START, now)
+  thump.frequency.exponentialRampToValueAtTime(TOMATO_BLAST_THUMP_END, now + TOMATO_BLAST_DURATION)
+  const thumpGain = ctx.createGain()
+  thumpGain.gain.setValueAtTime(0.001, now)
+  thumpGain.gain.linearRampToValueAtTime(TOMATO_BLAST_THUMP_GAIN, now + 0.015)
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + TOMATO_BLAST_DURATION)
+  thump.connect(thumpGain)
+  thumpGain.connect(out)
+  noise.start(now)
+  noise.stop(now + TOMATO_BLAST_DURATION)
+  thump.start(now)
+  thump.stop(now + TOMATO_BLAST_DURATION)
+  for (let i = 0; i < TOMATO_BLAST_SHARD_COUNT; i++) {
+    playTomatoShardTick(ctx, out, now + Math.random() * TOMATO_BLAST_SHARD_SPREAD)
+  }
 }
 
 //
@@ -5498,4 +5571,19 @@ export function playFireflyBurstSound(inst, count) {
     osc.start(now)
     osc.stop(now + FIREFLY_BURST_DECAY)
   }
+}
+//
+// One bright shard tick for the tomato burst — a damped square chirp.
+//
+function playTomatoShardTick(ctx, out, at) {
+  const osc = ctx.createOscillator()
+  osc.type = 'square'
+  osc.frequency.setValueAtTime(TOMATO_BLAST_SHARD_FREQ_MIN + Math.random() * TOMATO_BLAST_SHARD_FREQ_RANGE, at)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(TOMATO_BLAST_SHARD_GAIN, at)
+  g.gain.exponentialRampToValueAtTime(0.001, at + TOMATO_BLAST_SHARD_DURATION)
+  osc.connect(g)
+  g.connect(out)
+  osc.start(at)
+  osc.stop(at + TOMATO_BLAST_SHARD_DURATION)
 }

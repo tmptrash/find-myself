@@ -51,6 +51,13 @@ const EAR_TREE_TRUNK_GRAIN_SEED = 0.71
 // Branch/twig/mouth reach past the trunk centre for camera culling.
 //
 const EAR_TREE_BRANCH_CULL_PAD = MOUTH_LEN + MOUTH_HALF_H
+//
+// Landing jolt — the whole tree rocks around its base with a decaying swing.
+//
+const EAR_TREE_SHAKE_DURATION = 0.6
+const EAR_TREE_SHAKE_FREQ = 30
+const EAR_TREE_SHAKE_MAX_RAD = 0.07
+const RAD_TO_DEG = 180 / Math.PI
 
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
@@ -75,6 +82,7 @@ export function create(cfg) {
       branchCount,
       seed: spot.seed ?? 0,
       shoreLeft: Boolean(spot.shoreLeft),
+      shakeT: 0,
       branches: []
     }
     tree.branches = buildEarTreeBranches(tree)
@@ -226,6 +234,32 @@ export function onUpdate(inst, heroX, heroY, dt) {
 }
 
 /**
+ * Starts the landing jolt on one tree (restarts it if already rocking).
+ * @param {Object} inst - Ear-tree inst
+ * @param {number} index - Tree index in inst.trees
+ */
+export function shake(inst, index) {
+  const tree = inst.trees[index]
+  tree && (tree.shakeT = EAR_TREE_SHAKE_DURATION)
+}
+
+/**
+ * World position of a tree's crown top, following the current jolt swing.
+ * @param {Object} inst - Ear-tree inst
+ * @param {number} index - Tree index in inst.trees
+ * @returns {{x: number, y: number}|null}
+ */
+export function getCrownTop(inst, index) {
+  const tree = inst.trees[index]
+  if (!tree) return null
+  const angle = treeShakeAngle(tree)
+  return {
+    x: tree.x + Math.sin(angle) * tree.trunkH,
+    y: tree.groundY - Math.cos(angle) * tree.trunkH
+  }
+}
+
+/**
  * Draws every tree trunk (baked sprite) under the hero.
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for trunk fill
@@ -276,12 +310,17 @@ export function onDrawBranches(inst, barkColor, outlineColor, lipColor, opacity 
   inst.trees.forEach(tree => {
     const reach = tree.branchLen + EAR_TREE_TWIG_LEN + EAR_TREE_BRANCH_CULL_PAD
     if (!isWorldSpanInView(tree.x - reach, tree.x + reach, view)) return
+    const angle = treeShakeAngle(tree)
+    tree.drawAngle = angle
+    tree.drawCos = Math.cos(angle)
+    tree.drawSin = Math.sin(angle)
     tree.branches.forEach(branch =>
       addEarBranch(batch, inst.mouthIndices, tree, branch, barkColor, outlineColor, lipColor))
   })
   PolyBatch.flush(batch, inst.k, opacity)
 }
 function updateEarTree(tree, heroX, heroY, dt) {
+  tree.shakeT > 0 && (tree.shakeT = Math.max(0, tree.shakeT - dt))
   const ease = Math.min(1, dt * EAR_TREE_REACH_EASE)
   const branchLen = tree.branchLen
   tree.branches.forEach(branch => {
@@ -324,7 +363,40 @@ function drawEarTreeTrunk(k, tree, barkColor, outlineColor, opacity, view) {
     trunkBounds(tree), ctx => paintEarTreeTrunk(ctx, tree, barkColor, outlineColor),
     tree.x * EAR_TREE_TRUNK_GRAIN_SEED)
   if (!baked || !isWorldSpanInView(baked.x, baked.x + baked.w, view)) return
-  drawStaticDecorSprite(k, baked, opacity)
+  const angle = treeShakeAngle(tree)
+  if (!angle) {
+    drawStaticDecorSprite(k, baked, opacity)
+    return
+  }
+  //
+  // Rocking trunk pivots on its base point so it never detaches from the roots.
+  //
+  k.drawSprite({
+    sprite: baked.sprite,
+    pos: k.vec2(tree.x, tree.groundY),
+    anchor: k.vec2((tree.x - baked.x) / baked.w * 2 - 1, (tree.groundY - baked.y) / baked.h * 2 - 1),
+    angle: angle * RAD_TO_DEG,
+    ...(opacity < 1 ? { opacity } : {})
+  })
+}
+//
+// Decaying swing angle (radians) of the landing jolt; 0 when the tree is still.
+//
+function treeShakeAngle(tree) {
+  if (!(tree.shakeT > 0)) return 0
+  const decay = tree.shakeT / EAR_TREE_SHAKE_DURATION
+  return Math.sin((EAR_TREE_SHAKE_DURATION - tree.shakeT) * EAR_TREE_SHAKE_FREQ) * EAR_TREE_SHAKE_MAX_RAD * decay
+}
+//
+// Rotates a world point around the tree base by the current draw swing.
+//
+function swingX(tree, x, y) {
+  if (!tree.drawAngle) return x
+  return tree.x + (x - tree.x) * tree.drawCos - (y - tree.groundY) * tree.drawSin
+}
+function swingY(tree, x, y) {
+  if (!tree.drawAngle) return y
+  return tree.groundY + (x - tree.x) * tree.drawSin + (y - tree.groundY) * tree.drawCos
 }
 //
 // Canvas fills the whole wavy taper as one path, so the outline and bark
@@ -394,18 +466,24 @@ function trunkEdgeAtStep(tree, pad, i) {
 //
 function addEarBranch(batch, mouthIndices, tree, branch, barkColor, outlineColor, lipColor) {
   const limbW = Math.max(3, tree.trunkW * 0.42)
-  PolyBatch.addDisc(batch, branch.baseX, branch.baseY, limbW * 0.55 + 1, outlineColor)
-  PolyBatch.addDisc(batch, branch.baseX, branch.baseY, limbW * 0.45, barkColor)
-  PolyBatch.addLine(batch, branch.baseX, branch.baseY, branch.tipX, branch.tipY, limbW + 2, outlineColor)
-  PolyBatch.addLine(batch, branch.baseX, branch.baseY, branch.tipX, branch.tipY, limbW, barkColor)
+  const bx = swingX(tree, branch.baseX, branch.baseY)
+  const by = swingY(tree, branch.baseX, branch.baseY)
+  const tx = swingX(tree, branch.tipX, branch.tipY)
+  const ty = swingY(tree, branch.tipX, branch.tipY)
+  PolyBatch.addDisc(batch, bx, by, limbW * 0.55 + 1, outlineColor)
+  PolyBatch.addDisc(batch, bx, by, limbW * 0.45, barkColor)
+  PolyBatch.addLine(batch, bx, by, tx, ty, limbW + 2, outlineColor)
+  PolyBatch.addLine(batch, bx, by, tx, ty, limbW, barkColor)
   branch.twigs?.forEach(twig => {
-    PolyBatch.addLine(batch, twig.baseX, twig.baseY, twig.tipX, twig.tipY, limbW * 0.55 + 1, outlineColor)
-    PolyBatch.addLine(batch, twig.baseX, twig.baseY, twig.tipX, twig.tipY, limbW * 0.5, barkColor)
-    twig.hasMouth && addMouth(batch, mouthIndices, twig.tipX, twig.tipY,
-      Math.atan2(twig.tipY - twig.baseY, twig.tipX - twig.baseX), outlineColor, lipColor)
+    const wbx = swingX(tree, twig.baseX, twig.baseY)
+    const wby = swingY(tree, twig.baseX, twig.baseY)
+    const wtx = swingX(tree, twig.tipX, twig.tipY)
+    const wty = swingY(tree, twig.tipX, twig.tipY)
+    PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.55 + 1, outlineColor)
+    PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.5, barkColor)
+    twig.hasMouth && addMouth(batch, mouthIndices, wtx, wty, Math.atan2(wty - wby, wtx - wbx), outlineColor, lipColor)
   })
-  branch.hasMouth && addMouth(batch, mouthIndices, branch.tipX, branch.tipY,
-    Math.atan2(branch.tipY - branch.baseY, branch.tipX - branch.baseX), outlineColor, lipColor)
+  branch.hasMouth && addMouth(batch, mouthIndices, tx, ty, Math.atan2(ty - by, tx - bx), outlineColor, lipColor)
 }
 //
 // Upper and lower lip polygons in local mouth space (+x along the branch).

@@ -1,11 +1,12 @@
 import { CFG } from '../../../cfg.js'
-import { GLOW_PAL, glowRgb, isGlowGrayExploreBeforeL } from './glow-palette.js'
-import { TREE_SEED } from './glow-tree.js'
+import { GLOW_PAL, getTreePaletteColor, glowRgb, isGlowGrayWorld } from './glow-palette.js'
+import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 
 //
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
+const FRUIT_LAYOUT_VERSION = 7
 const FRUIT_RANDOM_COUNT = 17
 const FRUIT_GROUND_LINGER_SEC = 5
 const FRUIT_GROUND_FADE_SEC = 0.9
@@ -29,13 +30,25 @@ const FRUIT_SETTLE_VX = 5
 const FRUIT_WOOD_SEGMENT_PAD = 10
 const HORIZ_BRANCH_FRUIT_EXCLUDE_X_PAD = 34
 const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_ABOVE = 22
-const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_BELOW = 68
+const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_BELOW = 110
 const ANCHOR_CANOPY_MIN_ABOVE_BRANCH = 40
-const FOLIAGE_CLUSTER_CELL_PX = 10
 const FRUIT_CLUSTER_MIN_CELLS = 5
-const FRUIT_HANG_CLUSTER_PAD = 4
-const FRUIT_STEM_ANCHOR_PAD = 5
 const FRUIT_CLUSTER_MIN_SPAN_CELLS = 2
+const FRUIT_HANG_TRIES_MAX = 24
+const FRUIT_HANG_TRIES_PER_CELL = 3
+const FRUIT_HANG_JITTER_MAX = 0
+const FRUIT_HANG_JITTER_FRAC = 0
+//
+// Foliage coverage mask: two rings outside the fruit edge. Only near-opaque
+// mask pixels count — anti-aliased leaf rims and faint loose leaves read as
+// air on screen, so a fruit resting on them looked like it was floating.
+//
+const FRUIT_MASK_RING_PADS = [3, 7]
+const FRUIT_MASK_RING_SAMPLES = 12
+const FRUIT_MASK_RING_MIN_COVERED = 12
+const FRUIT_CLUSTER_MIN_NEIGHBOR_AVG = 1.35
+const FRUIT_MASK_ALPHA_MIN = 200
+const FOLIAGE_MASK_CELL_PAD_MULT = 2
 
 /**
  * X centre of the strip between trunk and branch trampoline (for anchor foliage pick).
@@ -54,6 +67,17 @@ export function computeGlowAnchorFruitDropX(cfg) {
 }
 
 /**
+ * Builds fruit spots once the full tree zone is open (after third branch landing).
+ * @param {Object} levelInst - Glow level inst (treeData, treeFruitAnchorCfg, zones)
+ */
+export function ensureGlowTreeFruitSpots(levelInst) {
+  if (!levelInst.zones?.tree || !levelInst.treeData) return
+  if (levelInst.treeFruitSpots?.length && levelInst.treeFruitLayoutVersion === FRUIT_LAYOUT_VERSION) return
+  levelInst.treeFruitSpots = buildGlowTreeFruitSpots(levelInst.treeData, levelInst.treeFruitAnchorCfg)
+  levelInst.treeFruitLayoutVersion = FRUIT_LAYOUT_VERSION
+}
+
+/**
  * Builds fruit attachment points (repeatable anchor on foliage + random canopy spots).
  * @param {Object} treeData - Output from buildGlowTree()
  * @param {Object} anchorDropCfg - Trunk/tramp layout for anchor cluster pick
@@ -63,6 +87,8 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   const rng = mulberry32(TREE_SEED + FRUIT_SEED_OFFSET)
   const hangable = collectHangableTreeFoliage(treeData)
   if (!hangable.length) return []
+  const cellPx = getTreePaletteColor().foliageClusterCellPx
+  const hang = { treeData, cellPx, mask: buildFoliageMask(treeData, cellPx) }
   const horiz = treeData.horizBranch
   const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
   const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = anchorDropCfg
@@ -92,10 +118,11 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   })
   const anchorR = FRUIT_RADIUS_MIN + 2.5
   const anchorHue = 0.12
-  let anchorPos = pickValidFruitHangOnCluster(treeData, anchorLeaf, anchorR, rng)
+  let anchorPos = pickValidFruitHangOnCluster(hang, anchorLeaf, anchorR, rng)
   if (!anchorPos) {
-    for (const foliage of anchorPool) {
-      anchorPos = pickValidFruitHangOnCluster(treeData, foliage, anchorR, rng)
+    const fallback = [...hangable].sort((a, b) => Math.abs(a.x - dropX) - Math.abs(b.x - dropX))
+    for (const foliage of anchorPool.concat(fallback)) {
+      anchorPos = pickValidFruitHangOnCluster(hang, foliage, anchorR, rng)
       if (anchorPos) {
         anchorLeaf = foliage
         break
@@ -122,7 +149,7 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
       const foliage = pool[idx]
       const r = FRUIT_RADIUS_MIN + rng() * FRUIT_RADIUS_RANGE
       const hue = 0.35 + rng() * 0.55
-      const pos = pickValidFruitHangOnCluster(treeData, foliage, r, rng)
+      const pos = pickValidFruitHangOnCluster(hang, foliage, r, rng)
       if (!pos) continue
       pool.splice(idx, 1)
       spots.push({
@@ -160,7 +187,7 @@ export function releaseGlowAnchorFruit(levelInst) {
     rollDir: pickFruitLandRollDir(fruit.x, fruit.y),
     leaves: fruit.leaves
   })
-  levelInst._branchLandingsAfterG = 0
+  levelInst._branchLandingsSinceTree = 0
 }
 
 /**
@@ -170,7 +197,7 @@ export function releaseGlowAnchorFruit(levelInst) {
  * @param {number} floorY - Ground surface Y
  */
 export function tickGlowTreeFruits(levelInst, dt, floorY) {
-  if (!levelInst.zones?.gCollected) return
+  if (!levelInst.zones?.eyesCollected) return
   const spots = levelInst.treeFruitSpots
   if (!spots?.length || floorY == null) return
   const now = levelInst.k?.time?.() ?? 0
@@ -222,7 +249,7 @@ export function drawGlowTreeFruits(inst) {
   if (!spots?.length || !isGlowTreeFruitVisible(inst)) return
   const k = inst.k
   const fade = inst.colorFade ?? 0
-  const gray = isGlowGrayExploreBeforeL(inst.zones, fade)
+  const gray = isGlowGrayWorld(inst.zones)
   const flat = !gray && !inst.zones?.tree && fade < 0.08
   const bodyA = gray ? glowRgb(GLOW_PAL.decorGray) : glowRgb('glowLightCore')
   const bodyB = gray ? glowRgb(GLOW_PAL.lightGray) : glowRgb(GLOW_PAL.mushroomsLight[0])
@@ -315,82 +342,112 @@ function buildRaggedFruitPolygon(k, cx, cy, r, biteMarks, seed) {
 }
 
 function collectHangableTreeFoliage(treeData) {
-  return (treeData.leaves ?? []).filter(leaf => {
-    if (leaf.type !== 'cluster') return false
-    if ((leaf.cells?.length ?? 0) < FRUIT_CLUSTER_MIN_CELLS) return false
-    return isClusterHangableForFruit(treeData, leaf)
-  })
+  return treeData.leaves.filter(leaf =>
+    leaf.type === 'cluster' &&
+    clusterHasLeafVolume(leaf.cells) &&
+    clusterNeighborAvg(leaf.cells) >= FRUIT_CLUSTER_MIN_NEIGHBOR_AVG
+  )
 }
-
-function pickValidFruitHangOnCluster(treeData, cluster, fruitR, rng) {
-  const cells = cluster.cells ?? []
-  if (!cells.length) return null
-  const tries = Math.min(16, cells.length * 3)
+//
+// Candidate hang points are cell centres exactly as the bake paints them; a
+// point only counts when the rendered foliage mask covers the whole fruit.
+//
+function pickValidFruitHangOnCluster(hang, cluster, fruitR, rng) {
+  const tries = Math.min(FRUIT_HANG_TRIES_MAX, cluster.cells.length * FRUIT_HANG_TRIES_PER_CELL)
   for (let t = 0; t < tries; t++) {
-    const pos = fruitPositionOnFoliage(cluster, fruitR, rng)
-    if (isValidFruitHangOnCluster(treeData, cluster, pos.x, pos.y, fruitR)) return pos
+    const pos = fruitPositionOnFoliage(cluster, fruitR, rng, hang.cellPx)
+    if (isValidFruitHang(hang, pos.x, pos.y, fruitR)) return pos
   }
   return null
 }
-
-function fruitPositionOnFoliage(cluster, fruitR, rng) {
-  const cells = cluster.cells ?? [{ dx: 0, dy: 0 }]
-  const cell = cells[Math.floor(rng() * cells.length)]
-  const cx = cluster.x + cell.dx * FOLIAGE_CLUSTER_CELL_PX
-  const cy = cluster.y + cell.dy * FOLIAGE_CLUSTER_CELL_PX
-  const jitter = Math.min(2.5, fruitR * 0.22)
+function fruitPositionOnFoliage(cluster, fruitR, rng, cellPx) {
+  const cell = cluster.cells[Math.floor(rng() * cluster.cells.length)]
+  const jitter = Math.min(FRUIT_HANG_JITTER_MAX, fruitR * FRUIT_HANG_JITTER_FRAC)
   return {
-    x: cx + (rng() - 0.5) * jitter,
-    y: cy + (rng() - 0.5) * jitter
+    x: Math.round(cluster.x) + cell.dx * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter,
+    y: Math.round(cluster.y) + cell.dy * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter
   }
 }
-
-function isValidFruitHangOnCluster(treeData, cluster, x, y, fruitR) {
+function isValidFruitHang(hang, x, y, fruitR) {
+  const { treeData, mask } = hang
   if (isPointOnTreeWood(treeData, x, y)) return false
   const hb = treeData.horizBranch
   if (hb && isInHeroBranchFruitExcludeZone(hb, x, y)) return false
-  if (!isPointInClusterCells(cluster, x, y, fruitR * 0.55 + FRUIT_HANG_CLUSTER_PAD)) return false
-  return isFruitStemAnchoredOnCluster(cluster, x, y, fruitR)
+  return isFruitCoveredByFoliage(mask, x, y, fruitR)
 }
-
-function isFruitStemAnchoredOnCluster(cluster, x, y, fruitR) {
-  const stemBaseY = y - fruitR
-  const stemTopY = stemBaseY - FRUIT_STEM_LEN
-  const samples = [
-    { x, y: stemTopY },
-    { x, y: stemBaseY - FRUIT_STEM_LEN * 0.5 },
-    { x, y: stemBaseY },
-    { x, y: y - fruitR * 0.35 }
-  ]
-  return samples.some(p => isPointInClusterCells(cluster, p.x, p.y, FRUIT_STEM_ANCHOR_PAD))
-}
-
-function isPointInClusterCells(cluster, x, y, pad) {
-  const cellPx = FOLIAGE_CLUSTER_CELL_PX
-  for (const c of cluster.cells ?? []) {
-    const px = cluster.x + c.dx * cellPx
-    const py = cluster.y + c.dy * cellPx
-    if (Math.hypot(x - px, y - py) <= pad) return true
+//
+// Centre, stem top and nearly the whole ring around the fruit must sit on
+// painted leaves — a fruit on a canopy edge would read as floating in the air.
+//
+function isFruitCoveredByFoliage(mask, x, y, fruitR) {
+  if (!isFoliageMaskCovered(mask, x, y)) return false
+  if (!isFoliageMaskCovered(mask, x, y - fruitR - FRUIT_STEM_LEN)) return false
+  if (!isFoliageMaskCovered(mask, x, y + fruitR * 0.35)) return false
+  for (const pad of FRUIT_MASK_RING_PADS) {
+    const ringR = fruitR + pad
+    let covered = 0
+    for (let i = 0; i < FRUIT_MASK_RING_SAMPLES; i++) {
+      const a = (i / FRUIT_MASK_RING_SAMPLES) * Math.PI * 2
+      isFoliageMaskCovered(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
+    }
+    if (covered < FRUIT_MASK_RING_MIN_COVERED) return false
   }
-  return false
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI * 0.25 + (i / 4) * Math.PI
+    if (!isFoliageMaskCovered(mask, x + Math.cos(a) * fruitR * 0.85, y + Math.sin(a) * fruitR * 0.85)) return false
+  }
+  return true
 }
-
-function isClusterHangableForFruit(treeData, cluster) {
-  const cells = cluster.cells ?? []
-  if (!clusterHasLeafVolume(cells)) return false
-  let clearCells = 0
-  const cellPx = FOLIAGE_CLUSTER_CELL_PX
-  cells.forEach(c => {
-    const px = cluster.x + c.dx * cellPx
-    const py = cluster.y + c.dy * cellPx
-    if (isPointOnTreeWood(treeData, px, py)) return
-    const hb = treeData.horizBranch
-    if (hb && isInHeroBranchFruitExcludeZone(hb, px, py)) return
-    clearCells++
+function isFoliageMaskCovered(mask, x, y) {
+  const px = Math.round(x) - mask.x
+  const py = Math.round(y) - mask.y
+  if (px < 0 || py < 0 || px >= mask.w || py >= mask.h) return false
+  return mask.data[(py * mask.w + px) * 4 + 3] > FRUIT_MASK_ALPHA_MIN
+}
+//
+// One CPU-only canvas, read once while the fruit layout is built (never per frame).
+//
+function buildFoliageMask(treeData, cellPx) {
+  const bounds = foliageBounds(treeData, cellPx)
+  const w = Math.max(1, Math.ceil(bounds.x2 - bounds.x1))
+  const h = Math.max(1, Math.ceil(bounds.y2 - bounds.y1))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.translate(-bounds.x1, -bounds.y1)
+  paintGlowTreeFoliageMask(ctx, treeData, cellPx)
+  const data = ctx.getImageData(0, 0, w, h).data
+  canvas.width = 0
+  canvas.height = 0
+  return { x: bounds.x1, y: bounds.y1, w, h, data }
+}
+function foliageBounds(treeData, cellPx) {
+  const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
+  const pad = cellPx * FOLIAGE_MASK_CELL_PAD_MULT
+  const grow = (x, y, r) => {
+    bounds.x1 = Math.min(bounds.x1, x - r)
+    bounds.y1 = Math.min(bounds.y1, y - r)
+    bounds.x2 = Math.max(bounds.x2, x + r)
+    bounds.y2 = Math.max(bounds.y2, y + r)
+  }
+  treeData.leaves.forEach(leaf => {
+    if (leaf.type !== 'cluster') {
+      grow(leaf.x, leaf.y, leaf.size)
+      return
+    }
+    leaf.cells.forEach(c => grow(Math.round(leaf.x) + c.dx * cellPx, Math.round(leaf.y) + c.dy * cellPx, pad))
   })
-  return clearCells >= Math.max(4, Math.ceil(cells.length * 0.45))
+  //
+  // Tree segments bake into a world-sized canvas starting at 0,0 — leaves
+  // past its edges are never drawn, so fruit must not hang there either.
+  //
+  bounds.x1 = Math.max(0, Math.floor(bounds.x1))
+  bounds.y1 = Math.max(0, Math.floor(bounds.y1))
+  bounds.x2 = Math.min(CFG.visual.glow.worldWidth, bounds.x2)
+  bounds.y2 = Math.min(CFG.visual.glow.worldHeight, bounds.y2)
+  return bounds
 }
-
 function clusterHasLeafVolume(cells) {
   if (cells.length < FRUIT_CLUSTER_MIN_CELLS) return false
   let minDy = 0
@@ -400,6 +457,19 @@ function clusterHasLeafVolume(cells) {
     maxDy = Math.max(maxDy, c.dy)
   })
   return maxDy - minDy >= FRUIT_CLUSTER_MIN_SPAN_CELLS - 1
+}
+function clusterNeighborAvg(cells) {
+  const set = new Set(cells.map(c => `${c.dx},${c.dy}`))
+  let total = 0
+  cells.forEach(c => {
+    let n = 0
+    set.has(`${c.dx + 1},${c.dy}`) && (n += 1)
+    set.has(`${c.dx - 1},${c.dy}`) && (n += 1)
+    set.has(`${c.dx},${c.dy + 1}`) && (n += 1)
+    set.has(`${c.dx},${c.dy - 1}`) && (n += 1)
+    total += n
+  })
+  return total / cells.length
 }
 
 function isInHeroBranchFruitExcludeZone(horizBranch, x, y) {
@@ -547,11 +617,7 @@ function drawFruitLeaf(k, x, y, size, angle, rgb, op) {
 }
 
 function isGlowTreeFruitVisible(inst) {
-  if (!inst.zones?.gCollected) return false
-  if (inst.zones?.tree) return true
-  if (inst.treeSegmentRevealed?.size > 0) return true
-  if (inst.treeObj && !inst.treeObj.hidden && (inst.treeObj.opacity ?? 0) > 0.05) return true
-  return false
+  return Boolean(inst.zones?.eyesCollected && inst.zones?.tree && inst.treeFruitSpots?.length)
 }
 
 function lerpRgb(a, b, t) {

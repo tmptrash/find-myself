@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { parseHex } from '../../../utils/helper.js'
-import { GLOW_PAL, isGlowGrayExploreBeforeL } from './glow-palette.js'
+import { GLOW_PAL, isGlowGrayWorld } from './glow-palette.js'
 import { glowUiHash } from './glow-ui-bake.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import * as SwampSpirit from '../components/swamp-spirit.js'
@@ -10,7 +10,7 @@ import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 
 //
 // Pictorial nudge while the spirit's eyes are shut because the hero is far —
-// a single mushroom, no letters (gray = black icon, post-L = colour).
+// a single mushroom, no letters (gray = black icon, colour world = colour).
 //
 const HINT_ICON_W = 44
 const HINT_ICON_H = 40
@@ -157,12 +157,11 @@ function tickSpiritHintEyesShutDelay(levelInst, spirit) {
 
 function isSpiritProximityHintEligible(levelInst, spirit) {
   const z = spirit?.zones
-  if (!z?.gCollected && !isGlowEyesGameplayUnlocked(z)) return false
+  if (!z?.predatorAwake && !isGlowEyesGameplayUnlocked(z)) return false
   //
   // Hint runs at the left and right spirit burrows; gone after the right trampoline opens.
   //
   if (SwampSpirit.isSpiritRetired(spirit)) return false
-  if (levelInst.dialogOpen || levelInst.letterCaptionActive) return false
   if (levelInst.drowning || levelInst.deathHandled || levelInst.touchDeathHandled) return false
   if (levelInst._inGlowPitCave) return false
   if (spirit.rise < HINT_MIN_RISE) return false
@@ -200,9 +199,7 @@ function isSpiritInCameraView(levelInst, spirit) {
 }
 
 function isSpiritHintMonochrome(levelInst) {
-  const z = levelInst.zones
-  const fade = z?._sceneRef?.colorFade ?? levelInst.colorFade ?? 0
-  return isGlowGrayExploreBeforeL(z, fade)
+  return isGlowGrayWorld(levelInst.zones)
 }
 
 function drawSpiritMushTooltip(tipInst, layout) {

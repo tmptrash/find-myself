@@ -1252,7 +1252,7 @@ function getPitMushroomBakeColors() {
 function pitCrackStompParticleColor(pit) {
   const sc = pit.sceneRef
   if (sc && typeof sc.zones !== 'undefined') {
-    const flat = !sc.zones.lCollected && !sc.zones.colorWorld && (sc.colorFade ?? 0) < 0.5
+    const flat = !sc.zones.colorWorld && (sc.colorFade ?? 0) < 0.5
     if (flat) return glowRgb(GLOW_PAL.decorGray)
   }
   return pit.groundColor
@@ -1385,7 +1385,7 @@ function pitUsesFlatGrayCave(pit) {
   const inst = pit?.sceneRef
   if (!inst?.zones) return false
   const z = inst.zones
-  if (z.lCollected || z.colorWorld) return false
+  if (z.colorWorld) return false
   if ((inst.colorFade ?? 0) >= 0.5) return false
   return true
 }
@@ -1930,7 +1930,7 @@ function isPitMushroomBouncy(pit) {
 function isGlowPitMushroomFlatMono(sc) {
   if (!sc?.zones) return false
   const z = sc.zones
-  if (z.lCollected || z.colorWorld) return false
+  if (z.colorWorld) return false
   return true
 }
 function drawPitTrampoline(k, pit) {
@@ -1942,9 +1942,9 @@ function drawPitTrampoline(k, pit) {
   const sc = pit.sceneRef
   const z = sc?.zones
   const fade = sc?.colorFade ?? 0
-  const flatMono = isGlowPitMushroomFlatMono(sc) || !z?.lCollected
+  const flatMono = isGlowPitMushroomFlatMono(sc) || !z?.colorWorld
   const colorMush = !flatMono &&
-    (z?.lCollected || z?.oCollected || z?.colorWorld || fade >= 0.5)
+    (z?.colorWorld || fade >= 0.5)
   const sprite = colorMush
     ? PIT_MUSH_OUTLINE_SPRITE
     : flatMono

@@ -40,14 +40,29 @@ export function getPredatorFeastLookTarget(pred) {
 }
 
 /**
+ * Drops the current meal (e.g. when a burst scares the crawler away).
+ * @param {Object} pred - Predator inst
+ */
+export function cancelPredatorFeast(pred) {
+  pred && endFeast(pred)
+}
+
+/**
  * Claims nearby settled fruit and drives approach / eat phases.
  * @param {Object} pred - Predator inst
  * @param {Object} levelInst - Glow level inst
  * @param {number} dt - Frame delta
  */
 export function tickPredatorFruitFeast(pred, levelInst, dt) {
-  if (!pred || pred.obj?.hidden || pred.state === 'coast') return
-  if (!levelInst?.zones?.gCollected) return
+  if (!pred || pred.obj?.hidden || pred.state === 'coast' || pred.state === 'flee') return
+  if (!levelInst?.zones?.predatorAwake) return
+  //
+  // A rider on the back pins the walking direction — turning to a fruit would flip it.
+  //
+  if (levelInst.shoreFallTwigs?.riderLocked) {
+    pred.state === 'feast' && endFeast(pred)
+    return
+  }
   if (pred.state === 'feast') {
     tickActiveFeast(pred, levelInst, dt)
     return

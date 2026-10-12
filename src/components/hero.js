@@ -367,6 +367,10 @@ const EYE_WHITE_RADIUS = 4
 const PUPIL_RADIUS = 2
 const EYE_OFFSET_X_LEFT = 9
 const EYE_OFFSET_X_RIGHT = 21
+//
+// Single centred eye (glow cyclops beat) sits between the two regular sockets.
+//
+const EYE_OFFSET_X_CYCLOPS = (EYE_OFFSET_X_LEFT + EYE_OFFSET_X_RIGHT) / 2
 const EYE_OFFSET_Y = 9
 const EYE_PUPIL_SHIFT = 2
 const PUPIL_SIDE_SHIFT = 2
@@ -468,6 +472,7 @@ export function create(config) {
     pupilColor = null,     // Override pupil fill (null = use outline colour)
     transparentEyeInterior = false, // Hollow glow/menu eyes: ring + pupil only, clear socket
     noEyes = false,        // Bake idle/run/jump without eye whites or pupils (glow eyeless intro)
+    cyclopsEye = false,    // Idle frames carry one centred eye instead of two (glow one-eye beat)
     postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
     idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
     outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
@@ -511,6 +516,7 @@ export function create(config) {
       pupilColor,
       transparentEyeInterior,
       noEyes,
+      cyclopsEye,
       postBakeCanvas,
       outlineRimPx,
       character: null  // Marker to indicate this is an inst-like object
@@ -534,6 +540,7 @@ export function create(config) {
     pupilColor,
     transparentEyeInterior,
     noEyes,
+    cyclopsEye,
     outlineRimPx
   })
   const spriteName = `${spritePrefix}_0_0`
@@ -569,6 +576,7 @@ export function create(config) {
         pupilColor,
         transparentEyeInterior,
         noEyes,
+        cyclopsEye,
         postBakeCanvas,
         outlineRimPx
       })
@@ -651,6 +659,7 @@ export function create(config) {
     idleNotePostBake,                     // Glow film grain on baked mouth-note glyphs
     outlineRimPx,                         // Baked silhouette rim width (px)
     noEyes,                               // Eyeless glow intro — no eye whites in baked frames
+    cyclopsEye: Boolean(cyclopsEye),      // One centred idle eye (glow one-eye beat)
     spritePrefix,
     dustColor,
     suppressDust,
@@ -707,6 +716,7 @@ export function create(config) {
     airTime: 0,                 // Seconds continuously airborne (filters platform flicker)
     spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
     postLandAirLock: 0,         // After land, ignore brief air flicker (no second crouch)
+    carrierGrounded: false,     // Set by a level carrier that pins the hero (counts as ground)
     //
     // Head-bonk: full-height collision for the rest of this jump
     //
@@ -797,7 +807,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, bakeLayers, eyeWhite, pupil, transparentInterior, noEyes, postBakeCanvas, outlineRimPx, bakeSeed
+  let k, heroType, color, outline, mouth, arms, watch, bakeLayers, eyeWhite, pupil, transparentInterior, noEyes, cyclopsEye, postBakeCanvas, outlineRimPx, bakeSeed
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -815,6 +825,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     pupil = inst.pupilColor || null
     transparentInterior = inst.transparentEyeInterior || false
     noEyes = inst.noEyes || false
+    cyclopsEye = inst.cyclopsEye || false
     postBakeCanvas = inst.postBakeCanvas || null
     outlineRimPx = inst.outlineRimPx || DEFAULT_OUTLINE_RIM
   } else {
@@ -833,6 +844,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     pupil = null
     transparentInterior = false
     noEyes = false
+    cyclopsEye = false
     postBakeCanvas = null
     outlineRimPx = DEFAULT_OUTLINE_RIM
   }
@@ -863,6 +875,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
   const pupilKey = pupil ? String(pupil).replace('#', '') : ''
   const noEyesFlag = Boolean(noEyes)
+  const cyclopsFlag = Boolean(cyclopsEye)
   const prefix = buildHeroSpritePrefix({
     type: heroType,
     bodyColor: bodyColorForPrefix,
@@ -876,6 +889,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     pupilColor: pupil,
     transparentEyeInterior: transparentInterior,
     noEyes: noEyesFlag,
+    cyclopsEye: cyclopsFlag,
     outlineRimPx
   })
   //
@@ -893,7 +907,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -914,7 +928,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
     closedData && commitHeroBakedSprite(
       k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++,
       heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -929,7 +943,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
       spriteData && commitHeroBakedSprite(
         k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
         heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -945,7 +959,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
       spriteData && commitHeroBakedSprite(
         k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
         heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -1343,7 +1357,7 @@ function onUpdate(inst) {
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //
-  const isGrounded = inst.character.isGrounded?.() ?? false
+  const isGrounded = isHeroGrounded(inst)
   //
   // Tick land-FX debounce so a grounded flicker can't double-fire dust/sound
   //
@@ -1792,7 +1806,7 @@ function syncJumpCollision(inst) {
   const area = inst.character?.area
   if (!area) return
   const ch = inst.character
-  const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
+  const grounded = isHeroGrounded(inst)
   //
   // After a head-bonk keep the full standing hitbox while falling
   //
@@ -2337,11 +2351,11 @@ function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, trans
   }
 }
 //
-// Paints both eyes for one baked frame.
+// Paints both eyes (or the single cyclops eye) for one baked frame.
 //
 function paintHeroEyesAtFrame(ctx, cfg) {
   const {
-    headX, headY, bodyBottom, animation, eyeOffsetX, eyeOffsetY, eyesClosed,
+    cyclopsEye, headX, headY, bodyBottom, animation, eyeOffsetX, eyeOffsetY, eyesClosed,
     OL, PL, EW, BL, transparentInterior, punchSocket
   } = cfg
   const paintOne = (cx, cy, pupilDx, pupilDy) => {
@@ -2354,34 +2368,33 @@ function paintHeroEyesAtFrame(ctx, cfg) {
               return
   }
   const eyeY = headY + EYE_OFFSET_Y
-  paintOne(
-    headX + EYE_OFFSET_X_LEFT,
+  heroIdleEyeXs(headX, cyclopsEye).forEach(x => paintOne(
+    x,
     eyeY,
     eyeOffsetX * EYE_PUPIL_SHIFT,
     eyeOffsetY * EYE_PUPIL_SHIFT
-  )
-  paintOne(
-    headX + EYE_OFFSET_X_RIGHT,
-    eyeY,
-    eyeOffsetX * EYE_PUPIL_SHIFT,
-    eyeOffsetY * EYE_PUPIL_SHIFT
-  )
+  ))
+}
+//
+// Front-view eye centres: two sockets, or one centred socket for the cyclops.
+//
+function heroIdleEyeXs(headX, cyclopsEye) {
+  return cyclopsEye
+    ? [headX + EYE_OFFSET_X_CYCLOPS]
+    : [headX + EYE_OFFSET_X_LEFT, headX + EYE_OFFSET_X_RIGHT]
 }
 //
 // Eye ring discs (same anchors as paintHeroEyesAtFrame) that the contour step
 // pass must leave alone.
 //
-function heroBakeEyeDiscs(headX, headY, bodyBottom, animation) {
+function heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye) {
   const r = EYE_RING_RADIUS + CONTOUR_AA_EYE_MARGIN_PX
   if (animation === 'run' || animation === 'jump') {
     const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
     return [{ x, y, r }]
   }
   const eyeY = headY + EYE_OFFSET_Y
-  return [
-    { x: headX + EYE_OFFSET_X_LEFT, y: eyeY, r },
-    { x: headX + EYE_OFFSET_X_RIGHT, y: eyeY, r }
-  ]
+  return heroIdleEyeXs(headX, cyclopsEye).map(x => ({ x, y: eyeY, r }))
 }
 /**
  * Resolves which baked layers to paint from create()/loadHeroSprites options.
@@ -2432,8 +2445,9 @@ export function buildHeroSpritePrefix(opts) {
   const eyeWhiteKey = opts.eyeWhiteColor ? String(opts.eyeWhiteColor).replace('#', '') : ''
   const pupilKey = opts.pupilColor ? String(opts.pupilColor).replace('#', '') : ''
   const noEyesFlag = Boolean(opts.noEyes)
+  const cyclopsSuffix = opts.cyclopsEye ? '_cyc' : ''
   const rimSuffix = heroSpriteRimSuffix(opts.outlineRimPx ?? DEFAULT_OUTLINE_RIM)
-  return `${type}_${bodyColorForPrefix}_${outlineColorForPrefix}${opts.addMouth ? '_mouth' : ''}${opts.addArms ? '_arms' : ''}${opts.addWatch ? '_watch' : ''}${heroBakeLayersSuffix(layers)}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${pupilKey ? '_pu' + pupilKey : ''}${opts.transparentEyeInterior ? '_tei' : ''}${noEyesFlag ? '_noeyes' : ''}${rimSuffix}`
+  return `${type}_${bodyColorForPrefix}_${outlineColorForPrefix}${opts.addMouth ? '_mouth' : ''}${opts.addArms ? '_arms' : ''}${opts.addWatch ? '_watch' : ''}${heroBakeLayersSuffix(layers)}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${pupilKey ? '_pu' + pupilKey : ''}${opts.transparentEyeInterior ? '_tei' : ''}${noEyesFlag ? '_noeyes' : ''}${cyclopsSuffix}${rimSuffix}`
 }
 //
 // Run hollow bakes need body fill during the pipeline so hip/crotch patches and
@@ -2599,7 +2613,7 @@ function drawHeroBakeBodyFill(ctx, bake) {
 //
 function finalizeHeroBakeFrame(ctx, bake) {
   const {
-    drawBakeOutline, drawBakeBody, bakeBodyForPipeline, bodyOnlyExtract, colors, rim, legOlW, animation, frame, noEyes,
+    drawBakeOutline, drawBakeBody, bakeBodyForPipeline, bodyOnlyExtract, colors, rim, legOlW, animation, frame, noEyes, cyclopsEye,
     eyeOffsetX, eyeOffsetY, eyesClosed, transparentEyeInterior, addMouth,
     headX, headY, bodyBottom, bodyH, showArms, leftArmY, rightArmY,
     leanRad, leanPivotX, leanPivotY, jumpLegBend,
@@ -2660,6 +2674,7 @@ function finalizeHeroBakeFrame(ctx, bake) {
     leanPivotX,
     leanPivotY,
     noEyes,
+    cyclopsEye,
     animation,
     eyeOffsetX,
     eyeOffsetY,
@@ -2686,7 +2701,7 @@ function finalizeHeroBakeFrame(ctx, bake) {
   drawBakeOutline && !bodyOnlyExtract && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
   heroBakeFrameMeta.set(ctx.canvas, {
     rim,
-    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation),
+    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye),
     rebuiltRim: drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame),
     backHip: drawBakeOutline && jumpLegBend !== 0
       ? {
@@ -2699,6 +2714,7 @@ function finalizeHeroBakeFrame(ctx, bake) {
       : null
   })
   !bodyOnlyExtract && !noEyes && paintHeroEyesAtFrame(ctx, {
+    cyclopsEye,
     headX,
     headY,
     bodyBottom,
@@ -2723,7 +2739,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
   const {
     headX, headY, bodyH, showArms, leftArmY, rightArmY,
     leanRad, leanPivotX, leanPivotY,
-    noEyes, animation, eyeOffsetX, eyeOffsetY,
+    noEyes, cyclopsEye, animation, eyeOffsetX, eyeOffsetY,
     jumpLegBend, leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
     jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, jumpFrontHipX, jumpFrontH, jumpFrontBend,
     bodyBottom, rim
@@ -2753,12 +2769,11 @@ function punchOutlineOnlyInterior(ctx, cfg) {
       ctx.fill()
             } else {
       const eyeY = headY + EYE_OFFSET_Y
-      ctx.beginPath()
-      ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.beginPath()
-      ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
+      heroIdleEyeXs(headX, cyclopsEye).forEach(x => {
+        ctx.beginPath()
+        ctx.arc(x, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
+      })
     }
   }
   if (jumpLegBend !== 0) {
@@ -2829,7 +2844,7 @@ function stripBakeBodyFillFromCanvas(ctx, bodyColorHex, tolerance = 0) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, pupilColor = null, transparentEyeInterior = false, noEyes = false, bakeLayers = null) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, pupilColor = null, transparentEyeInterior = false, noEyes = false, bakeLayers = null, cyclopsEye = false) {
   //
   // Choose body color - custom or default
   //
@@ -3082,6 +3097,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         animation,
         frame,
         noEyes,
+        cyclopsEye,
         eyesClosed,
         eyeOffsetX,
         eyeOffsetY,
@@ -4481,6 +4497,16 @@ function fillHalfPillRight(ctx, x, y, w, h, r) {
 // Aborts a blocked pre-jump squash so the hero returns to idle instead of
 // staying stuck in the squat frame under a low platform ceiling.
 //
+//
+// Kaplay contact, or a level-owned carrier that pins the hero every frame
+// (e.g. a stick riding a creature) — its teleported collider loses contact
+// most frames. A rising hero is never grounded, so a launch is not undone.
+//
+function isHeroGrounded(inst) {
+  const ch = inst.character
+  if (ch?.isGrounded?.()) return true
+  return Boolean(inst.carrierGrounded) && (ch?.vel?.y ?? 0) >= 0
+}
 function cancelJumpSquash(inst) {
   inst.isSquashing = false
   inst.squashTimer = 0
@@ -4535,7 +4561,7 @@ function isHeadAgainstCeiling(inst, airborneOk = false) {
   const ch = inst.character
   if (!ch?.exists?.()) return false
   if (!airborneOk) {
-    if (typeof ch.isGrounded !== 'function' || !ch.isGrounded()) return false
+    if (typeof ch.isGrounded !== 'function' || !isHeroGrounded(inst)) return false
   }
   const headTop = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) - (inst.collisionBaseHeight ?? 74) / 2
   const heroFeetY = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) + (inst.collisionBaseHeight ?? 74) / 2

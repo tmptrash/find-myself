@@ -48,6 +48,7 @@ const ROOT_HIGHLIGHT_MIN_W = 3
 // Foliage — large asymmetric pixel-cloud masses (not circles or teardrop fields).
 //
 const FOLIAGE_CLUSTER_CELL_PX_DEFAULT = 10
+const FOLIAGE_MASK_RGB = { r: 255, g: 255, b: 255 }
 const FOLIAGE_CLUSTER_LEAF_SIZE_FRAC = 1.55
 const FOLIAGE_CLOUD_CELLS_MIN = 34
 const FOLIAGE_CLOUD_CELLS_MAX = 54
@@ -168,6 +169,10 @@ const WOOD_OUTLINE_PX = 2
 // Default trunk-height band (fractions of the trunk) branches sprout from.
 // Background trees pass a higher minimum so their foliage gathers at the top.
 //
+//
+// Hero platform branch height as a fraction of the trunk, from the bottom.
+//
+const HORIZ_BRANCH_FRAC_DEFAULT = 0.42
 const BRANCH_FRAC_MIN = 0.5
 const BRANCH_FRAC_MAX = 0.92
 //
@@ -214,7 +219,8 @@ function createRng(seed) {
  * @param {number} [rootStartY] - Y where roots start (defaults to trunk base)
  * @param {Object} [opts] - { includeRoots, includeHeroBranch, branchFracMin,
  *   branchFracMax, branchUpward, includeCrownClusters, skipTopExtraBranches,
- *   trunkProfile, branchThicknessScale, branchLengthScale, branchCount }
+ *   trunkProfile, branchThicknessScale, branchLengthScale, branchCount,
+ *   heroBranchFrac }
  *   — background parallax trees skip roots and the hero platform branch;
  *   branchFracMin/Max limit sprout height; branchUpward=false matches the
  *   main tree's sideways fractal canopy.
@@ -234,7 +240,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     branchLengthScale = 1,
     branchCount = null,
     denseBranchCanopyLeaves = false,
-    lushCanopy = false
+    lushCanopy = false,
+    heroBranchFrac = HORIZ_BRANCH_FRAC_DEFAULT
   } = opts
   const rng = createRng(seed)
   const treeH = trunkBottomY - trunkTopY
@@ -274,7 +281,9 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   // Special horizontal branch in the lower-left: starts horizontal then turns organic.
   // This branch has a physics collision box — the hero starts here.
   //
-  const horizBranch = includeHeroBranch ? buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) : null
+  const horizBranch = includeHeroBranch
+    ? buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, heroBranchFrac)
+    : null
   const leaves = buildLeaves(rng, leafEndpoints, 3, denseBranchCanopyLeaves || lushCanopy, {
     detailMin: opts.foliageDetailLeavesMin,
     detailMax: opts.foliageDetailLeavesMax,
@@ -294,6 +303,106 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     groundClipY: rootBaseY,
     trunkBase
   }
+}
+
+const SHORE_ACCENT_TRUNK_PROFILE = { steps: 16, wBase: 46, wTop: 9, wobble: 6, taperPower: 1.06 }
+const SHORE_ACCENT_BRANCH_W = 8
+const SHORE_ACCENT_BRANCH_TIP_W_FRAC = 1
+const SHORE_ACCENT_ROOT_MAX_DEPTH = 48
+const SHORE_ACCENT_ATTACH_MIN_BELOW_TOP = 14
+const SHORE_ACCENT_BRANCH_LEAF_R_FRAC = 0.22
+const SHORE_ACCENT_CROWN_LEAF_R = 26
+//
+// Trunk side limbs (between ground and the hero branch) — short stubs only.
+//
+const SHORE_ACCENT_TRUNK_SIDE_BRANCH_SPECS = [
+  { t: 0.32, angle: Math.PI - 0.24, len: 7, w: 3.2 },
+  { t: 0.52, angle: -0.2, len: 6, w: 2.8 },
+  { t: 0.72, angle: Math.PI - 0.38, len: 5, w: 2.5 }
+]
+const SHORE_ACCENT_SIDE_LEAF_R = 8
+
+/**
+ * Minimal main-tree-style accent: tapered trunk, roots, one horizontal branch
+ * the hero can stand on, with a leaf mass at its tip and a small crown.
+ * @param {Object} cfg - Layout
+ * @param {number} cfg.seed - Deterministic layout seed
+ * @param {number} cfg.trunkX - Trunk centre X
+ * @param {number} cfg.groundY - Ground line Y
+ * @param {number} cfg.trunkH - Trunk height above ground
+ * @param {number} cfg.branchAttachY - World Y where the branch leaves the trunk
+ * @param {number} cfg.branchAngle - Branch angle (radians, 0 = horizontal to the right)
+ * @param {number} cfg.branchLen - Branch length
+ * @returns {Object} Tree data compatible with renderGlowTreeIntoContext()
+ */
+export function buildGlowShoreAccentTree(cfg) {
+  const { seed, trunkX, groundY, trunkH, branchAttachY, branchAngle, branchLen } = cfg
+  const trunkTopY = groundY - trunkH
+  const rng = createRng(seed)
+  const trunkSegs = buildTrunk(rng, trunkX, groundY, trunkTopY, SHORE_ACCENT_TRUNK_PROFILE)
+  const groundClipY = groundY
+  const trunkBase = computeTrunkBaseAtClip(trunkSegs, groundClipY)
+  const rootSegs = buildRoots(rng, trunkBase, groundY, trunkH, groundY + SHORE_ACCENT_ROOT_MAX_DEPTH)
+  const branchSegs = []
+  const leafEndpoints = []
+  const attachY = Math.max(trunkTopY + SHORE_ACCENT_ATTACH_MIN_BELOW_TOP, Math.min(branchAttachY, groundY))
+  addShoreAccentTrunkSideBranches(rng, trunkSegs, branchSegs, leafEndpoints, attachY, groundY)
+  const trunkSegAtAttach = trunkSegs.find(seg => attachY <= seg.sy && attachY >= seg.ey) ?? trunkSegs[trunkSegs.length - 1]
+  const startX = trunkSegAtAttach.ex
+  const endX = startX + Math.cos(branchAngle) * branchLen
+  const endY = attachY + Math.sin(branchAngle) * branchLen
+  branchSegs.push({
+    sx: startX,
+    sy: attachY,
+    ex: endX,
+    ey: endY,
+    w: SHORE_ACCENT_BRANCH_W,
+    w2: SHORE_ACCENT_BRANCH_W * SHORE_ACCENT_BRANCH_TIP_W_FRAC,
+    //
+    // Gameplay branch reads as continuation of the trunk, not a lighter limb.
+    //
+    trunkTone: true
+  })
+  leafEndpoints.push({ x: endX, y: endY, r: branchLen * SHORE_ACCENT_BRANCH_LEAF_R_FRAC })
+  const trunkTop = trunkSegs[trunkSegs.length - 1]
+  leafEndpoints.push({ x: trunkTop.ex, y: trunkTop.ey, r: SHORE_ACCENT_CROWN_LEAF_R })
+  const leaves = buildLeaves(rng, leafEndpoints, 3, true, {
+    cloudCellBonus: 4,
+    detailMin: 3,
+    detailMax: 7,
+    lobeChanceBoost: 0.15
+  })
+  const branchW = SHORE_ACCENT_BRANCH_W
+  return {
+    seed,
+    trunkSegs,
+    rootSegs,
+    branchSegs,
+    leaves,
+    horizBranch: {
+      x1: Math.min(startX, endX),
+      x2: Math.max(startX, endX),
+      y: attachY,
+      physY: attachY - Math.floor(branchW / 2),
+      w: branchW
+    },
+    rootStartY: groundY,
+    heroBranchSegFrom: 0,
+    groundClipY,
+    trunkBase
+  }
+}
+
+/**
+ * Paints every foliage item of a tree in one opaque colour — a coverage mask
+ * that matches the baked canopy pixel for pixel (same cluster cell size).
+ * @param {CanvasRenderingContext2D} ctx - Target context (world coordinates)
+ * @param {Object} treeData - Output of buildGlowTree()
+ * @param {number} clusterCellPx - Foliage cluster cell size used by the bake palette
+ */
+export function paintGlowTreeFoliageMask(ctx, treeData, clusterCellPx) {
+  const shades = [FOLIAGE_MASK_RGB, FOLIAGE_MASK_RGB, FOLIAGE_MASK_RGB]
+  treeData.leaves.forEach(item => drawFoliageItemToCanvas(ctx, item, shades, null, 1, clusterCellPx))
 }
 
 /**
@@ -405,7 +514,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   if (palette.flatSilhouette) {
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     treeData.branchSegs.forEach(seg => {
-      drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
+      drawFilledWoodSegment(ctx, seg, woodRgbForBranchSeg(seg, trunkRgb, branchRgb), trunkClipY)
     })
     ctx.globalAlpha = 1
     if (!palette.skipLeaves) {
@@ -435,7 +544,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     //
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     treeData.branchSegs.forEach(seg => {
-      drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
+      drawFilledWoodSegment(ctx, seg, woodRgbForBranchSeg(seg, trunkRgb, branchRgb), trunkClipY)
     })
     if (!woodMass) {
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
@@ -447,7 +556,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     }
   } else {
     treeData.branchSegs.forEach(seg => {
-      drawFilledWoodSegment(ctx, seg, branchRgb, trunkClipY)
+      drawFilledWoodSegment(ctx, seg, woodRgbForBranchSeg(seg, trunkRgb, branchRgb), trunkClipY)
     })
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     if (!woodMass) {
@@ -525,6 +634,9 @@ function clampSegmentToMaxY(seg, maxY) {
     ey = maxY
   }
   return { sx, sy, ex, ey, w: seg.w, w2: seg.w2 }
+}
+function woodRgbForBranchSeg(seg, trunkRgb, branchRgb) {
+  return seg.trunkTone ? trunkRgb : branchRgb
 }
 //
 // Fills one wood segment as a capsule (tapered quad + round end caps) —
@@ -1272,6 +1384,45 @@ function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
   return allSegs
 }
 //
+// Short side limbs on the shore trunk (between ground and the hero branch).
+//
+function addShoreAccentTrunkSideBranches(rng, trunkSegs, branchSegs, leafEndpoints, branchAttachY, groundY) {
+  const trunkBottomY = trunkSegs[0]?.sy ?? groundY
+  const span = trunkBottomY - branchAttachY
+  SHORE_ACCENT_TRUNK_SIDE_BRANCH_SPECS.forEach(spec => {
+    const y = trunkBottomY - span * spec.t
+    const seg = trunkSegs.find(s => y <= s.sy && y >= s.ey) ??
+      trunkSegs[Math.min(trunkSegs.length - 1, Math.floor(trunkSegs.length * (1 - spec.t)))]
+    growShoreAccentLimb(rng, seg.ex, seg.ey, spec.angle, spec.len, spec.w, branchSegs, leafEndpoints)
+  })
+}
+//
+// One short leafy stub — no fractal forks, so trunk limbs stay small.
+//
+function growShoreAccentLimb(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints) {
+  const STEP = 4.2
+  let cx = x
+  let cy = y
+  let ang = angle
+  const steps = Math.max(3, Math.round(length))
+  for (let i = 0; i < steps; i++) {
+    const px = cx
+    const py = cy
+    const t = i / steps
+    ang += (rng() - 0.5) * 0.12
+    cx += Math.cos(ang) * STEP
+    cy += Math.sin(ang) * STEP
+    const w = Math.max(1.1, thickness * (1 - t * 0.55))
+    branchSegs.push({ sx: px, sy: py, ex: cx, ey: cy, w, w2: Math.max(1, w * 0.82) })
+  }
+  leafEndpoints.push({ x: cx, y: cy, r: SHORE_ACCENT_SIDE_LEAF_R })
+  const fork = ang + (rng() < 0.5 ? -0.7 : 0.7)
+  const fx = cx + Math.cos(fork) * STEP * 1.6
+  const fy = cy + Math.sin(fork) * STEP * 1.6
+  branchSegs.push({ sx: cx, sy: cy, ex: fx, ey: fy, w: 1.6, w2: 1.1 })
+  leafEndpoints.push({ x: fx, y: fy, r: SHORE_ACCENT_SIDE_LEAF_R * 0.75 })
+}
+//
 // Sprouts branches from the main trunk at RANDOM heights (upper part of the
 // tree). Sides alternate so the canopy stays balanced, but the exact position
 // of every branch on the trunk is seeded-random. Each branch then splits
@@ -1361,17 +1512,13 @@ function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoin
 // The horizontal portion has a physics collision box (returned in horizBranch).
 // After the horizontal extent the branch turns organic, starting at full HORIZ_W.
 //
-function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) {
-  //
-  // Position: fraction 0.32 from bottom, well below the seeded branches.
-  //
-  const HORIZ_FRAC = 0.42
-  const segIdx = Math.min(Math.floor(HORIZ_FRAC * trunkSegs.length), trunkSegs.length - 1)
+function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, horizFrac) {
+  const segIdx = Math.min(Math.floor(horizFrac * trunkSegs.length), trunkSegs.length - 1)
   const seg = trunkSegs[segIdx]
   const startX = seg.ex
   const startY = seg.ey
   const endX = startX - HORIZ_BRANCH_LENGTH
-  const HORIZ_W = 18
+  const HORIZ_W = 8
   const N_SEGS = 7
   const xStep = (endX - startX) / N_SEGS
   let hcx = startX

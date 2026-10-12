@@ -1,6 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL, isGlowGrayExploreBeforeL } from '../utils/glow-palette.js'
+import { GLOW_PAL, isGlowGrayWorld } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
@@ -528,12 +528,11 @@ function aimGazeAtPoint(inst, head, point) {
   inst.gaze.ty = clamp(dy / len, -1, 1)
 }
 //
-// Active at the branch G-route mushroom after eyes unlock, or anywhere after G.
+// Active at the branch mushroom once the eye unlocks gameplay.
 //
 function isSpiritGameplayActive(inst) {
   const z = inst.zones
   if (!z) return false
-  if (z.gCollected) return true
   return isGlowEyesGameplayUnlocked(z)
 }
 //
@@ -564,19 +563,20 @@ function wakeSpiritLive(inst) {
   inst.state === 'hidden' && enterState(inst, 'emerging')
 }
 //
-// Left trampoline burrow until it is revealed, then the right cap; retire after the right opens.
+// Left trampoline burrow first, then the right mushroom spot; retires once
+// the second eye opens the colour world.
 //
 function syncBurrowPhase(inst) {
-  if (inst.zones?.lPlatRevealed || inst.zones?.lCollected) {
+  const z = inst.zones
+  if (z?.colorWorld) {
     retireSpirit(inst)
     return
   }
-  const leftShown = Boolean(inst.branchMushroomShown?.())
   //
-  // Right burrow only after G — the branch trampoline can appear earlier
-  // without moving the spirit off the left burrow.
+  // Right burrow only once the tree is up, the lake found and the crawler
+  // awake — the branch trampoline alone keeps the spirit on the left burrow.
   //
-  const wantPhase = (inst.zones?.gCollected && leftShown) ? 'right' : 'left'
+  const wantPhase = z?.predatorAwake && z.tree && z.waterDiscovered ? 'right' : 'left'
   const rightShown = Boolean(inst.rightMushroomShown?.())
   if (inst.burrowPhase == null) {
     inst.burrowPhase = wantPhase
@@ -873,7 +873,7 @@ function drawSpirit(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const gray = isGlowGrayExploreBeforeL(inst.zones, inst.zones?._sceneRef?.colorFade ?? 0)
+  const gray = isGlowGrayWorld(inst.zones)
   const pal = GLOW_PAL.swampSpirit
   const contour = rgb(k, gray ? GLOW_PAL.decorGray : pal.contour)
   const shadow = rgb(k, gray ? GLOW_PAL.heroOutline : pal.shadow)

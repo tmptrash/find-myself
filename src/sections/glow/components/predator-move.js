@@ -12,6 +12,26 @@ const LUNGE_SPEED = 298
 const LUNGE_DURATION = 0.36
 
 const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
+//
+// Flight from a tomato burst: a sharp jerk away, a sprint along the patrol
+// strip, and (to the left) a swim across the lake and back to the shore.
+//
+const FLEE_RUN_SPEED = 330
+const FLEE_SWIM_SPEED = 150
+const FLEE_JERK_MULT = 1.35
+const FLEE_SPEED_EASE = 6
+const FLEE_ARRIVE_PX = 6
+const FLEE_SHORE_INLAND_PX = 60
+const FLEE_HEAD_LIFT = 9
+const FLEE_STRETCH = 1.28
+const FLEE_POSE_EASE = 3
+const FLEE_END_VX_KEEP = 0.3
+const FLEE_END_SEARCH_DELAY = 0.3
+//
+// With the hero standing on the stick the crawler keeps one steady walk.
+//
+const RIDE_WALK_SPEED = PATROL_DRIFT_SPEED
+const RIDE_SPEED_EASE = 4
 
 /**
  * @param {Object} inst
@@ -20,8 +40,20 @@ const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
  */
 export function tickMove(inst, dt, hero) {
   if (inst.state === 'feast') return
+  applyRideFacingLock(inst)
+  if (rideFacingLocked(inst)) {
+    tickRideLockedMove(inst, dt)
+    inst.x += inst.vx * dt
+    keepInside(inst)
+    applyRideFacingLock(inst)
+    return
+  }
   inst.stateTime -= dt
   inst.idleTime += dt
+  if (inst.state === 'flee') {
+    tickFlee(inst, dt)
+    return
+  }
   if (inst.state === 'coast') {
     inst.vx *= Math.exp(-dt * 3.2)
     inst.x += inst.vx * dt
@@ -70,12 +102,66 @@ export function tickMove(inst, dt, hero) {
   keepInside(inst)
 }
 
+/**
+ * Starts the flight away from a burst. Left runs to the lake shore, swims to
+ * the far left edge and back; right sprints to the cave mouth.
+ * @param {Object} inst - Predator inst
+ * @param {number} dir - Flight direction, -1 left, 1 right
+ */
+export function startFleeMove(inst, dir) {
+  if (rideFacingLocked(inst)) return
+  const left = dir < 0
+  inst.fleePath = left && inst.water
+    ? [
+        { x: inst.minX, swim: false },
+        { x: inst.fleeLeftX, swim: true },
+        { x: inst.minX + FLEE_SHORE_INLAND_PX, swim: true }
+      ]
+    : [{ x: left ? inst.minX : inst.maxX, swim: false }]
+  inst.dir = dir
+  inst.vx = dir * FLEE_RUN_SPEED * FLEE_JERK_MULT
+  inst.headLift = FLEE_HEAD_LIFT
+  inst.stretch = FLEE_STRETCH
+  enter(inst, 'flee', 0)
+  inst.orientKick = true
+}
+
+function tickFlee(inst, dt) {
+  const wp = inst.fleePath?.[0]
+  if (!wp) {
+    finishFlee(inst)
+    return
+  }
+  inst.swimming = wp.swim
+  const dx = wp.x - inst.x
+  if (Math.abs(dx) <= FLEE_ARRIVE_PX) {
+    inst.fleePath.shift()
+    return
+  }
+  !inst.holdFacing && (inst.dir = dx > 0 ? 1 : -1)
+  inst.speedTarget = wp.swim ? FLEE_SWIM_SPEED : FLEE_RUN_SPEED
+  easeSpeed(inst, dt, FLEE_SPEED_EASE)
+  inst.x += inst.vx * dt
+  const passed = inst.dir > 0 ? inst.x > wp.x : inst.x < wp.x
+  passed && (inst.x = wp.x)
+  const ease = Math.min(1, dt * FLEE_POSE_EASE)
+  inst.headLift += ((wp.swim ? 0 : FLEE_HEAD_LIFT * 0.5) - inst.headLift) * ease
+  inst.stretch += ((wp.swim ? 1 : FLEE_STRETCH) - inst.stretch) * ease
+}
+
+function finishFlee(inst) {
+  inst.swimming = false
+  inst.fleePath = null
+  inst.vx *= FLEE_END_VX_KEEP
+  enter(inst, 'search', FLEE_END_SEARCH_DELAY)
+}
+
 function tickSearch(inst, dt) {
   inst.burst -= dt
   if (inst.burst <= 0) {
     inst.speedTarget = SEARCH_SPEEDS[Math.floor(Math.random() * SEARCH_SPEEDS.length)]
     inst.burst = 0.18 + Math.random() * 0.55
-    if (Math.random() < 0.22) {
+    if (!inst.holdFacing && Math.random() < 0.22) {
       inst.dir *= -1
       inst.burst = 0.12 + Math.random() * 0.2
     }
@@ -83,8 +169,8 @@ function tickSearch(inst, dt) {
     inst.headLift = Math.random() < 0.2 ? 4 + Math.random() * 3 : 0
   }
   easeSpeed(inst, dt, 8)
-  if (inst.x < inst.minX + 8) inst.dir = 1
-  if (inst.x > inst.maxX - 8) inst.dir = -1
+  if (!inst.holdFacing && inst.x < inst.minX + 8) inst.dir = 1
+  if (!inst.holdFacing && inst.x > inst.maxX - 8) inst.dir = -1
 }
 
 function hunt(inst, dt, hero, speed, charge) {
@@ -92,8 +178,7 @@ function hunt(inst, dt, hero, speed, charge) {
     enter(inst, 'search', 0.2)
     return
   }
-  const want = hero.x >= inst.x ? 1 : -1
-  inst.dir = want
+  if (!inst.holdFacing) inst.dir = hero.x >= inst.x ? 1 : -1
   const wobble = Math.sin(inst.idleTime * (charge ? 14 : 6) + inst.wobblePhase) * (charge ? 10 : 6)
   inst.speedTarget = speed + wobble
   easeSpeed(inst, dt, charge ? 18 : 12)
@@ -113,6 +198,17 @@ function easeSpeed(inst, dt, rate) {
 }
 
 function keepInside(inst) {
+  if (inst.holdFacing) {
+    if (inst.x < inst.minX) {
+      inst.x = inst.minX
+      inst.vx = 0
+    } else if (inst.x > inst.maxX) {
+      inst.x = inst.maxX
+      inst.vx = 0
+    }
+    applyRideFacingLock(inst)
+    return
+  }
   if (inst.x < inst.minX) {
     inst.x = inst.minX
     inst.vx = Math.abs(inst.vx) * 0.2
@@ -122,6 +218,36 @@ function keepInside(inst) {
     inst.vx = -Math.abs(inst.vx) * 0.2
     inst.dir = -1
   }
+}
+
+function rideFacingLocked(inst) {
+  const twigs = inst.levelInst?.shoreFallTwigs
+  return Boolean(twigs?.riderLocked && mountedTwigOnPredator(twigs))
+}
+
+function mountedTwigOnPredator(twigs) {
+  return twigs?.twigs?.some(twig => twig.phase === 'predatorMount')
+}
+
+function applyRideFacingLock(inst) {
+  const twigs = inst.levelInst?.shoreFallTwigs
+  if (!twigs?.riderLocked || !mountedTwigOnPredator(twigs)) {
+    inst.holdFacing = false
+    return
+  }
+  twigs.rideDir == null && (twigs.rideDir = inst.dir)
+  inst.holdFacing = true
+  inst.dir = twigs.rideDir
+  inst.lookBack = false
+}
+
+function tickRideLockedMove(inst, dt) {
+  inst.state = 'search'
+  inst.lookBack = false
+  inst.headLift = 0
+  inst.speedTarget = RIDE_WALK_SPEED
+  easeSpeed(inst, dt, RIDE_SPEED_EASE)
+  softenHeadPose(inst, dt)
 }
 
 function enter(inst, state, time) {

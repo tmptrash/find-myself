@@ -12,6 +12,8 @@ const SEGMENT_COUNT = 14
 const BODY_LENGTH = 84
 const SPACING = BODY_LENGTH / (SEGMENT_COUNT - 1)
 
+export { SPACING as PREDATOR_SPINE_SPACING }
+
 /**
  * Builds the spine parked on the ground at x.
  * @param {Object} inst
@@ -34,6 +36,26 @@ export function initBody(inst) {
  * @param {Object} inst
  * @param {number} dt
  */
+/**
+ * Spine sample for hit tests — full stretched length from the head, not lagging segment poses.
+ * @param {Object} inst - Predator inst
+ * @returns {Array<{x: number, y: number, radius: number}>}
+ */
+export function samplePredatorSpineHitPoints(inst) {
+  const n = inst.segments?.length ?? 0
+  if (!n) return []
+  const stretch = Math.max(1, inst.stretch ?? 1)
+  const gap = SPACING * stretch
+  const dir = inst.dir
+  const pts = []
+  for (let i = 0; i < n; i++) {
+    const x = inst.x - dir * gap * i
+    const y = inst.groundAt(x) - ride(inst, i) - inst.headLift * (1 - i / (n - 1))
+    pts.push({ x, y, radius: inst.segments[i].radius })
+  }
+  return pts
+}
+
 export function tickBody(inst, dt) {
   const head = inst.segments[0]
   const ride0 = ride(inst, 0)

@@ -1,34 +1,14 @@
 import { CFG } from '../../../cfg.js'
-import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
 import { GLOW_PAL } from './glow-palette.js'
 
-//
-// Letter-by-letter body fill toward the post-L stillness white hero.
-//
-export const GLOW_HERO_FILL_G = 0.25
-export const GLOW_HERO_FILL_L = 0.5
-export const GLOW_MEDITATION_COUNTDOWN = 5
-export const KEY_COLLECTED_G = 'glow.collectedG'
-export const KEY_COLLECTED_L = 'glow.collectedL'
-export const KEY_COLLECTED_O = 'glow.collectedO'
-export const KEY_COLLECTED_W = 'glow.collectedW'
-export const KEY_REVEALED_L_LIT = 'glow.revealedLSun'
 export const KEY_EYES_COLLECTED = 'glow.eyesCollected'
+export const KEY_SECOND_EYE_COLLECTED = 'glow.secondEyeCollected'
 const COLOR_CROSSFADE_EPS = 0.02
 const FILL_BURST_DURATION = 0.65
 const FILL_BURST_RADIUS = 54
 const FILL_BURST_Y_OFFSET = 26
-//
-// Soft gold halo after the W letter — persists until the scene leaves.
-//
-const WITNESS_GLOW_RADIUS = 40
-const WITNESS_GLOW_INNER_RADIUS = 26
-const WITNESS_GLOW_Y_OFFSET = 28
-const WITNESS_GLOW_OPACITY = 0.2
-const WITNESS_GLOW_INNER_OPACITY = 0.14
-const WITNESS_GLOW_PULSE_SPEED = 2.1
 const FILL_STEP_BURST_THRESHOLD = 0.02
 //
 // True while the menu / glow hero should use hollow→filled progression.
@@ -38,38 +18,15 @@ export function usesGlowHeroFillProgress(progress, inGlowPlay) {
   if (progress?.touch?.completed && !inGlowPlay) return false
   return true
 }
-//
-// Linear countdown progress while the post-L stillness timer runs.
-//
-export function meditationCountdownLinear(remaining) {
-  if (remaining == null) return 0
-  return 1 - Math.max(0, remaining) / GLOW_MEDITATION_COUNTDOWN
-}
-function smoothstep01(t) {
-  const x = Math.max(0, Math.min(1, t))
-  return x * x * (3 - 2 * x)
-}
 /**
- * 0→1 hollow-to-white fill based on collected GLOW letters and the L timer.
+ * Hollow hero until the second eye is taken; the colour world then fills him.
  * @param {Object} [opts] - Zone flags; defaults read from localStorage
- * @returns {number}
+ * @param {boolean} [opts.secondEyeCollected] - Second (stalk) eye taken
+ * @returns {number} 0 hollow, 1 filled
  */
 export function getGlowHeroFillProgress(opts = {}) {
-  const gCollected = opts.gCollected ?? get(KEY_COLLECTED_G, false)
-  const lCollected = opts.lCollected ?? get(KEY_COLLECTED_L, false)
-  const lZoneLit = opts.lZoneLit ?? get(KEY_REVEALED_L_LIT, false)
-  const oCollected = opts.oCollected ?? get(KEY_COLLECTED_O, false)
-  const wCollected = opts.wCollected ?? get(KEY_COLLECTED_W, false)
-  const countdownRemaining = opts.meditationCountdown ?? null
-  if (lZoneLit || oCollected || wCollected) return 1
-  if (lCollected && countdownRemaining != null) {
-    const base = gCollected ? GLOW_HERO_FILL_L : GLOW_HERO_FILL_L
-    const t = smoothstep01(meditationCountdownLinear(countdownRemaining))
-    return base + (1 - base) * t
-  }
-  if (lCollected) return GLOW_HERO_FILL_L
-  if (gCollected) return GLOW_HERO_FILL_G
-  return 0
+  const secondEye = opts.secondEyeCollected ?? get(KEY_SECOND_EYE_COLLECTED, false)
+  return secondEye ? 1 : 0
 }
 export function triggerGlowHeroFillBurst(inst) {
   if (!inst) return
@@ -91,41 +48,6 @@ export function drawGlowHeroFillBurst(k, heroInst, inst) {
     radius: r,
     color: k.rgb(255, 255, 255),
     opacity: op
-  })
-}
-/**
- * Enables the persistent witness halo after W is collected.
- * @param {Object} inst - Glow level instance
- * @param {boolean} on - Whether the halo should draw
- */
-export function setGlowHeroWitnessGlow(inst, on) {
-  if (!inst) return
-  inst.heroWitnessGlow = on
-  inst.heroWitnessGlowPhase = inst.heroWitnessGlowPhase ?? 0
-}
-export function updateGlowHeroWitnessGlow(inst, dt) {
-  if (!inst?.heroWitnessGlow) return
-  inst.heroWitnessGlowPhase = (inst.heroWitnessGlowPhase ?? 0) + dt * WITNESS_GLOW_PULSE_SPEED
-}
-export function drawGlowHeroWitnessGlow(k, heroInst, inst) {
-  if (!inst?.heroWitnessGlow) return
-  const char = heroInst?.character
-  if (!char?.pos || char.hidden) return
-  const pulse = 0.88 + Math.sin(inst.heroWitnessGlowPhase ?? 0) * 0.12
-  const rgb = getRGB(k, GLOW_PAL.glowLightMid)
-  const gold = k.rgb(rgb.r, rgb.g, rgb.b)
-  const pos = k.vec2(char.pos.x, char.pos.y - WITNESS_GLOW_Y_OFFSET)
-  k.drawCircle({
-    pos,
-    radius: WITNESS_GLOW_RADIUS * pulse,
-    color: gold,
-    opacity: WITNESS_GLOW_OPACITY * pulse
-  })
-  k.drawCircle({
-    pos,
-    radius: WITNESS_GLOW_INNER_RADIUS * pulse,
-    color: gold,
-    opacity: WITNESS_GLOW_INNER_OPACITY * pulse
   })
 }
 function glowHeroSpriteReady(k, spriteKey) {
@@ -220,8 +142,9 @@ export function clearGlowHeroFillPreview(inst) {
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero component inst
  * @param {Function} [postBakeCanvas] - Glow sharp bake hook
+ * @param {boolean} cyclops - One centred eye (first eye only) instead of two
  */
-export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas) {
+export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas, cyclops) {
   const char = heroInst?.character
   if (!char?.exists?.() || !k) return
   //
@@ -231,6 +154,7 @@ export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas) {
   if (!heroInst.outlineOnly) return
   const grayBody = String(GLOW_PAL.heroBodyGray).replace('#', '')
   heroInst.noEyes = false
+  heroInst.cyclopsEye = Boolean(cyclops)
   //
   // Solid white sclera + black pupils on the gray hollow body (not ring-only sockets).
   //

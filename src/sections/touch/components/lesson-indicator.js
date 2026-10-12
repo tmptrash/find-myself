@@ -121,7 +121,7 @@ const WOBBLE_AMPLITUDE = 4
  * @param {string} [config.heroBodyColor] - Body color for small hero icon (hex), defaults to activeColor
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
- * @param {string} [config.sectionLabel] - Custom header label (e.g. GLOW) instead of TOUCH
+ * @param {string} [config.sectionLabel] - Custom header label instead of TOUCH ('' hides the label row)
  * @param {string} [config.labelColor] - Single color for all letters when sectionLabel is set
  * @param {number} [config.sectionLabelCompletedLetters] - Initial completed letter count (per-letter mode)
  * @param {number} [config.sectionLabelLetterSpacing] - Tighter spacing for custom section labels
@@ -162,7 +162,7 @@ export function create(config) {
     const c = getRGB(k, scoreColorHex)
     return `rgb(${c.r},${c.g},${c.b})`
   })() : null
-  const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
+  const letters = sectionLabel != null ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
   const letterSpacing = sectionLabelLetterSpacing ?? -5
   const outlineThickness = 2

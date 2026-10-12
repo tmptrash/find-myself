@@ -444,6 +444,17 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
+        // Spiky tomato grenade on the lip-trees — danger red, green spikes.
+        //
+        glowTomato: {
+          body: PALETTE.red1,
+          light: PALETTE.red3,
+          dark: PALETTE.red0,
+          outline: PALETTE.brown0,
+          spike: PALETTE.green1,
+          stem: PALETTE.green0
+        },
+        //
         // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
         //
         decorOutline: PALETTE.gray1,

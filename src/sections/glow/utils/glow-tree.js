@@ -307,7 +307,10 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
 
 const SHORE_ACCENT_TRUNK_PROFILE = { steps: 16, wBase: 46, wTop: 9, wobble: 6, taperPower: 1.06 }
 const SHORE_ACCENT_BRANCH_W = 8
-const SHORE_ACCENT_BRANCH_TIP_W_FRAC = 1
+const SHORE_ACCENT_BRANCH_TIP_W_FRAC = 0.52
+const SHORE_ACCENT_HORIZ_SEGS = 6
+const HORIZ_BRANCH_TAPER = 0.44
+const HORIZ_BRANCH_CURVE_AMP = 12
 const SHORE_ACCENT_ROOT_MAX_DEPTH = 48
 const SHORE_ACCENT_ATTACH_MIN_BELOW_TOP = 14
 const SHORE_ACCENT_BRANCH_LEAF_R_FRAC = 0.22
@@ -350,20 +353,38 @@ export function buildGlowShoreAccentTree(cfg) {
   const trunkSegAtAttach = trunkSegs.find(seg => attachY <= seg.sy && attachY >= seg.ey) ?? trunkSegs[trunkSegs.length - 1]
   const startX = trunkSegAtAttach.ex
   const endX = startX + Math.cos(branchAngle) * branchLen
-  const endY = attachY + Math.sin(branchAngle) * branchLen
-  branchSegs.push({
-    sx: startX,
-    sy: attachY,
-    ex: endX,
-    ey: endY,
-    w: SHORE_ACCENT_BRANCH_W,
-    w2: SHORE_ACCENT_BRANCH_W * SHORE_ACCENT_BRANCH_TIP_W_FRAC,
-    //
-    // Gameplay branch reads as continuation of the trunk, not a lighter limb.
-    //
-    trunkTone: true
-  })
-  leafEndpoints.push({ x: endX, y: endY, r: branchLen * SHORE_ACCENT_BRANCH_LEAF_R_FRAC })
+  const horizPlatSegs = []
+  let prevX = startX
+  let prevY = attachY
+  for (let i = 0; i < SHORE_ACCENT_HORIZ_SEGS; i++) {
+    const t0 = i / SHORE_ACCENT_HORIZ_SEGS
+    const t1 = (i + 1) / SHORE_ACCENT_HORIZ_SEGS
+    const ex = startX + (endX - startX) * t1
+    const sag = Math.sin(t1 * Math.PI) * 2.8
+    const ey = attachY + sag + (i > 0 && i < SHORE_ACCENT_HORIZ_SEGS - 1 ? (rng() - 0.5) * 4 : 0)
+    const w0 = SHORE_ACCENT_BRANCH_W * (1 - t0 * (1 - SHORE_ACCENT_BRANCH_TIP_W_FRAC))
+    const w1 = SHORE_ACCENT_BRANCH_W * (1 - t1 * (1 - SHORE_ACCENT_BRANCH_TIP_W_FRAC))
+    branchSegs.push({
+      sx: prevX,
+      sy: prevY,
+      ex,
+      ey,
+      w: w0,
+      w2: w1,
+      //
+      // Gameplay branch reads as continuation of the trunk, not a lighter limb.
+      //
+      trunkTone: true
+    })
+    horizPlatSegs.push({
+      x1: Math.min(prevX, ex),
+      x2: Math.max(prevX, ex),
+      y: Math.min(prevY, ey) - Math.max(w0, w1) * 0.5
+    })
+    prevX = ex
+    prevY = ey
+  }
+  leafEndpoints.push({ x: endX, y: prevY, r: branchLen * SHORE_ACCENT_BRANCH_LEAF_R_FRAC })
   const trunkTop = trunkSegs[trunkSegs.length - 1]
   leafEndpoints.push({ x: trunkTop.ex, y: trunkTop.ey, r: SHORE_ACCENT_CROWN_LEAF_R })
   const leaves = buildLeaves(rng, leafEndpoints, 3, true, {
@@ -383,8 +404,9 @@ export function buildGlowShoreAccentTree(cfg) {
       x1: Math.min(startX, endX),
       x2: Math.max(startX, endX),
       y: attachY,
-      physY: attachY - Math.floor(branchW / 2),
-      w: branchW
+      physY: Math.min(...horizPlatSegs.map(s => s.y)),
+      w: branchW,
+      platSegs: horizPlatSegs
     },
     rootStartY: groundY,
     heroBranchSegFrom: 0,
@@ -511,6 +533,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // the regular fills painted next leave only the outer rim visible, so no
   // internal seams appear at branch/trunk junctions.
   //
+  const foliageCellPx = palette.foliageClusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
   if (palette.flatSilhouette) {
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     treeData.branchSegs.forEach(seg => {
@@ -520,7 +543,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     if (!palette.skipLeaves) {
       const flatRgb = { r: leafR, g: leafG, b: leafB }
       treeData.leaves.forEach(item => {
-        drawFoliageItemToCanvas(ctx, item, [flatRgb], null, palette.leafOpacity ?? 1)
+        drawFoliageItemToCanvas(ctx, item, [flatRgb], null, palette.leafOpacity ?? 1, foliageCellPx)
       })
     }
     return
@@ -578,7 +601,6 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   //
   const vein = palette.noLeafDetails ? null : (palette.leafVein ?? barkDark)
   const leafOpacity = palette.leafOpacity ?? 1
-  const foliageCellPx = palette.foliageClusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
   treeData.leaves.forEach(item => {
     drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, foliageCellPx)
   })
@@ -1521,6 +1543,7 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, horizFrac) 
   const HORIZ_W = 8
   const N_SEGS = 7
   const xStep = (endX - startX) / N_SEGS
+  const horizPlatSegs = []
   let hcx = startX
   let hcy = startY
   //
@@ -1532,12 +1555,21 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, horizFrac) 
     const hpx = hcx
     const hpy = hcy
     hcx = startX + (i + 1) * xStep
+    const t0 = i / N_SEGS
+    const t1 = (i + 1) / N_SEGS
+    const w0 = HORIZ_W * (1 - t0 * HORIZ_BRANCH_TAPER)
+    const w1 = HORIZ_W * (1 - t1 * HORIZ_BRANCH_TAPER)
     if (i > 0 && i < N_SEGS - 1) {
-      hcy = startY + (rng() - 0.5) * 8
+      hcy = startY + Math.sin(t1 * Math.PI) * 2.5 + (rng() - 0.5) * HORIZ_BRANCH_CURVE_AMP
     } else {
       hcy = startY
     }
-    branchSegs.push({ sx: hpx, sy: hpy, ex: hcx, ey: hcy, w: HORIZ_W })
+    branchSegs.push({ sx: hpx, sy: hpy, ex: hcx, ey: hcy, w: w0, w2: w1 })
+    horizPlatSegs.push({
+      x1: Math.min(hpx, hcx),
+      x2: Math.max(hpx, hcx),
+      y: Math.min(hpy, hcy) - Math.max(w0, w1) * 0.5
+    })
   }
   //
   // Smaller leafy branches sprouting from the hero branch — a couple of
@@ -1557,13 +1589,14 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, horizFrac) 
   // physY is the top of the branch visual (center line - half width),
   // so the hero stands on the visible surface rather than floating above it.
   //
-  const physY = startY - Math.floor(HORIZ_W / 2)
+  const physY = Math.min(...horizPlatSegs.map(s => s.y))
   return {
     x1: endX,
     x2: startX,
     y: startY,
     physY,
-    w: HORIZ_W
+    w: HORIZ_W,
+    platSegs: horizPlatSegs
   }
 }
 //

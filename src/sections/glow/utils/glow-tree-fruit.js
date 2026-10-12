@@ -6,7 +6,7 @@ import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
-const FRUIT_LAYOUT_VERSION = 7
+const FRUIT_LAYOUT_VERSION = 8
 const FRUIT_RANDOM_COUNT = 17
 const FRUIT_GROUND_LINGER_SEC = 5
 const FRUIT_GROUND_FADE_SEC = 0.9
@@ -298,6 +298,17 @@ export function getGlowFruitDisplayRadius(fruit) {
   const progress = fruit.eatProgress ?? 0
   return fruit.r * (1 - progress * 0.94)
 }
+//
+// Keeps a fallen fruit's bottom on the ground as bites shrink its radius.
+//
+export function keepGlowFruitRestingOnFloor(fruit) {
+  if (!fruit || fruit.attached || fruit.removed) return
+  const r = getGlowFruitDisplayRadius(fruit)
+  if (fruit._restFloorY == null) {
+    fruit._restFloorY = fruit.y + r + FRUIT_FALL_GROUND_PAD
+  }
+  fruit.y = fruit._restFloorY - r - FRUIT_FALL_GROUND_PAD
+}
 
 function fruitDisplayRadius(fruit) {
   return getGlowFruitDisplayRadius(fruit)
@@ -554,6 +565,7 @@ function stepFallingFruit(fruit, dt, floorY) {
     fruit.y += fruit.vy * dt
     if (fruit.y >= restY && fruit.vy >= 0) {
       fruit.y = restY
+      fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD
       const nextVy = applyFruitGroundImpact(fruit, fruit.vy)
       fruit.vy = nextVy
       fruit.airborne = nextVy !== 0
@@ -561,6 +573,7 @@ function stepFallingFruit(fruit, dt, floorY) {
     return
   }
   fruit.y = restY
+  fruit._restFloorY == null && (fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD)
   fruit.vy = 0
   fruit.x += fruit.vx * dt
   fruit.vx = decayFruitRollSpeed(fruit.vx, dt)
@@ -617,7 +630,9 @@ function drawFruitLeaf(k, x, y, size, angle, rgb, op) {
 }
 
 function isGlowTreeFruitVisible(inst) {
-  return Boolean(inst.zones?.eyesCollected && inst.zones?.tree && inst.treeFruitSpots?.length)
+  if (!inst.zones?.eyesCollected || !inst.treeFruitSpots?.length) return false
+  if (inst.zones.tree) return true
+  return inst.treeFruitSpots.some(f => !f.removed && !f.attached)
 }
 
 function lerpRgb(a, b, t) {

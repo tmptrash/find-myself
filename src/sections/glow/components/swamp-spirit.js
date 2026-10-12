@@ -169,6 +169,14 @@ export function isHeroFarEnoughToShutEyes(inst, hero) {
 export function isSpiritRetired(inst) {
   return Boolean(inst?.retired)
 }
+//
+// True while the mushroom-trampoline at the current burrow is visible on screen.
+//
+function isSpiritHiddenAtTrampoline(inst) {
+  if (!inst || inst.retired) return false
+  if (inst.burrowPhase === 'right') return Boolean(inst.rightMushroomShown?.())
+  return Boolean(inst.branchMushroomShown?.())
+}
 
 /**
  * Whistle, emerge, and startle stay quiet while the left trampoline sprite
@@ -198,6 +206,18 @@ export function update(inst, dt) {
   wakeSpiritLive(inst)
   if (inst.retired) {
     inst.obj && (inst.obj.hidden = true)
+    return
+  }
+  if (isSpiritHiddenAtTrampoline(inst)) {
+    inst.obj && (inst.obj.hidden = true)
+    inst.rise = 0
+    inst.riseVel = 0
+    inst.mound = 0
+    if (inst.state !== 'hidden') {
+      inst.state = 'hidden'
+      inst.stateTime = 0
+      inst.wait = 0.6 + Math.random() * 0.5
+    }
     return
   }
   inst.obj && (inst.obj.hidden = false)

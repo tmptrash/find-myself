@@ -2,7 +2,7 @@
 // Predator breaks off hunt to eat a fallen tree fruit when one lands nearby.
 //
 
-import { getGlowFruitDisplayRadius } from '../utils/glow-tree-fruit.js'
+import { getGlowFruitDisplayRadius, keepGlowFruitRestingOnFloor } from '../utils/glow-tree-fruit.js'
 
 const FEAST_DETECT_RADIUS = 395
 const FEAST_APPROACH_BURST_MULT = 0.72
@@ -114,6 +114,7 @@ function beginFeastEatingCycle(pred, fruit) {
   pred.vx = 0
   pred.speedTarget = 0
   fruit.eatProgress = 0
+  keepGlowFruitRestingOnFloor(fruit)
   refreshFeastBitePose(pred, fruit)
   pred.feastRestPose = {
     x: pred.feastBitePose.x - pred.dir * FEAST_BITE_PULLBACK_X,
@@ -159,6 +160,7 @@ function applyFeastBiteChunk(pred, fruit) {
   fruit.eatProgress = Math.min(1, pred.feastBitesDone / total)
   fruit.biteCount = (fruit.biteCount ?? 0) + 1
   pushFruitBiteMark(fruit)
+  keepGlowFruitRestingOnFloor(fruit)
 }
 
 function feastBitePhaseDuration(phase) {

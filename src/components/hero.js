@@ -1782,8 +1782,12 @@ function resetAirborneState(inst) {
   inst.landSquashTimer = 0
   inst.airTime = 0
   inst.jumpCeilingBonk = false
-  inst.jumpCollisionTuck = 0
-  inst.jumpCollisionLift = 0
+  //
+  // Sentinel keys force syncJumpCollision to rebuild the standing box — zero
+  // keys matched its "unchanged" check and left a mid-jump tucked shape on.
+  //
+  inst.jumpCollisionTuck = -1
+  inst.jumpCollisionLift = -1
   syncJumpCollision(inst)
 }
 //

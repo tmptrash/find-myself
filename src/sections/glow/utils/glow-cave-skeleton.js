@@ -13,7 +13,7 @@ const PIT_CAVE_SKULL_R = PIT_CAVE_EYE_GAP / (PIT_CAVE_SKULL_SOCKET_X_FRAC * 2)
 
 const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
 const SKELETON_BAKE_PAD = 22
-const CAVE_SKELETON_LAYOUT_VERSION = 35
+const CAVE_SKELETON_LAYOUT_VERSION = 37
 //
 // Skull sits against the widened interior's left wall (not the mouth lip).
 //
@@ -370,32 +370,6 @@ function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCs
     row.split('').map((ch, x) => (ch === 'H' && x < midX) ? 'D' : ch).join('')
   )
   drawReferencePixelGrid(ctx, masked, u, palette, 0, topY)
-  drawCaveSkullLeftEmptySocket(ctx, r, deepCss)
-}
-//
-// Left socket stays empty — dark pit rim and a short crack (right eye is the pickup).
-//
-function drawCaveSkullLeftEmptySocket(ctx, r, deepCss) {
-  const cx = -r * PIT_CAVE_SKULL_SOCKET_X_FRAC
-  const cy = -r * PIT_CAVE_SKULL_SOCKET_Y_FRAC
-  const holeR = r * 0.105
-  ctx.fillStyle = deepCss
-  ctx.beginPath()
-  ctx.arc(cx, cy, holeR, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = deepCss
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  ctx.lineWidth = Math.max(1.15, r * 0.017)
-  ctx.beginPath()
-  ctx.arc(cx, cy, holeR + ctx.lineWidth * 0.4, 0, Math.PI * 2)
-  ctx.stroke()
-  ctx.lineWidth = Math.max(0.95, r * 0.013)
-  ctx.beginPath()
-  ctx.moveTo(cx - holeR * 0.25, cy - holeR * 0.15)
-  ctx.lineTo(cx + holeR * 0.12, cy + holeR * 0.9)
-  ctx.lineTo(cx - holeR * 0.55, cy + holeR * 0.4)
-  ctx.stroke()
 }
 //
 // Draws one thorax rib side — full arc, detached gap, or spine-only shear stub.

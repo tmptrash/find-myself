@@ -162,6 +162,10 @@ function isSpiritProximityHintEligible(levelInst, spirit) {
   // Hint runs at the left and right spirit burrows; gone after the right trampoline opens.
   //
   if (SwampSpirit.isSpiritRetired(spirit)) return false
+  //
+  // Right-burrow spirit never shows the mushroom / stalk-eye pictorial hint.
+  //
+  if (spirit.burrowPhase === 'right') return false
   if (levelInst.drowning || levelInst.deathHandled || levelInst.touchDeathHandled) return false
   if (levelInst._inGlowPitCave) return false
   if (spirit.rise < HINT_MIN_RISE) return false

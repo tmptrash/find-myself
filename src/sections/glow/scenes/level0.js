@@ -816,6 +816,7 @@ const PAR_LAYER_NEAR = {
 // Minimum opacity before skipping a crossfade layer (avoids pops, not steps).
 //
 const COLOR_CROSSFADE_EPS = 0.001
+const GLOW_COLOR_REVEAL_GRAY_PHASE_END = 0.5
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
 // hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
@@ -869,7 +870,15 @@ const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 28
 const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 36
 const MUD_EAST_ROCK_INSET = 6
 const MUD_EAST_ROCK_COUNT = 34
-const COLOR_FADE_DURATION = 0.5
+const GLOW_COLOR_WORLD_REVEAL_SEC = 4
+//
+// Colour-world reveal curtain covers every world layer (tree, platforms and
+// foreground grass sit above the hero) but stays under the HUD frame; the
+// hero is redrawn over it so he never vanishes while the world appears.
+//
+const GLOW_COLOR_REVEAL_CURTAIN_Z = CFG.visual.zIndex.ui - 1.5
+const GLOW_COLOR_REVEAL_HERO_Z = CFG.visual.zIndex.ui - 1.25
+const GLOW_POST_FIRST_EYE_PARALLAX_FADE_SEC = 4
 const TREE_REVEAL_FADE_DURATION = 0.85
 //
 // Any element that snaps from hidden to visible fades its opacity in over
@@ -962,8 +971,8 @@ const GLOW_PRIZE_EYE_SWAY_AMP = 0.06
 const GLOW_PRIZE_EYE_SWAY_SPEED = 0.9
 const GLOW_PRIZE_EYE_SWAY_LAG = 0.55
 const GLOW_PRIZE_EYE_SEED = 2.17
-const GLOW_PRIZE_EYE_SCLERA_RADIUS = 8.5
-const GLOW_PRIZE_EYE_PUPIL_RADIUS = 3.5
+const GLOW_PRIZE_EYE_SCLERA_RADIUS = 6.2
+const GLOW_PRIZE_EYE_PUPIL_RADIUS = 2.4
 const GLOW_SHORE_TREE_BUOY_CLEAR_X = 78
 //
 // Two leftmost stalk-eyes form a bounce chain onto the shore-tree branch.
@@ -1550,6 +1559,7 @@ const LOG_SNAP_TOLERANCE = 2
 // penetration — fighting it every frame caused constant twitch.
 //
 const LOG_SNAP_STANDING_MAX = 10
+const MAIN_GROUND_SINK_RESCUE_MAX = 64 // deeper sinks are real falls (crack, water)
 //
 // Feet at or below this Y are on the main floor lane — never snap onto the
 // cap or keep the invisible pad active while strolling past the stem.
@@ -1926,18 +1936,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     // Platform top aligns with physY — the visible branch walk surface
     //
-    const branchPlatY = horizBranch.physY + BRANCH_PLAT_COLLISION_DROP_Y
-    const branchPlat = k.add([
-      k.rect(horizBranch.x2 - horizBranch.x1, HORIZ_PLATFORM_H),
-      k.pos(horizBranch.x1, branchPlatY),
-      k.anchor('topleft'),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),
-      CFG.game.platformName
-    ])
-    branchPlat.tag('startBranch')
-    const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
+    const branchPlatBundle = createGlowHorizBranchPlatforms(k, horizBranch, 'startBranch', BRANCH_PLAT_COLLISION_DROP_Y)
+    const branchPlat = branchPlatBundle.plats[0]
+    const branchPlatHome = branchPlatBundle.homes[0]
+    const branchPlatY = branchPlatHome.y
     const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
     const rightZoneBaseXEarly = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const trampXEarly = rightZoneBaseXEarly + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
@@ -2097,7 +2099,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, !zones.secondEyeCollected)
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
-    tagWoodPlatform(branchPlat, sound, heroInst)
+    branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
     const clusterCenterX = horizBranch.x1 + 40
@@ -2271,7 +2273,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       treeGraySpriteName: glowMonolithTreeGraySpriteName(zones),
       colorFade: zones.colorWorld ? 1 : 0,
       colorFadeTarget: zones.colorWorld ? 1 : 0,
-      parallaxFade: zones.colorWorld ? 1 : 0,
+      colorRevealCurtain: 0,
+      parallaxFade: zones.colorWorld || zones.eyesCollected ? 1 : 0,
+      parallaxFadeTarget: zones.colorWorld || zones.eyesCollected ? 1 : 0,
+      pendingColorWorldFade: false,
       cornerObjs,
       cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop,
       wallObjs: floorBounds.walls,
@@ -2369,9 +2374,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       pendingTreeReveal: !treeDrawMonolith && treeSegmentRevealed.size < treeSegmentIds.length,
       treeBranchLeftOnce: false,
       hasStoodOnStartBranch: false,
-      startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY },
+      startBranch: branchPlatBundle.startBranch,
       branchPlat,
       branchPlatHome,
+      branchPlatSegs: branchPlatBundle,
       midges: createGlowMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, mudZoneX1, mudZoneX2 }),
       pit: null,
       woodSurfaces: [
@@ -2468,23 +2474,22 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.shoreTree = shoreTreeLayout ? ShoreTree.create({ k, layout: shoreTreeLayout }) : null
     const shoreBranch = inst.shoreTree?.treeData?.horizBranch
     if (shoreBranch) {
-      const shoreBranchY = shoreBranch.physY + BRANCH_PLAT_COLLISION_DROP_Y
-      inst.shoreBranchPlat = k.add([
-        k.rect(shoreBranch.x2 - shoreBranch.x1, HORIZ_PLATFORM_H),
-        k.pos(SHORE_BRANCH_PLAT_HIDE_X, SHORE_BRANCH_PLAT_HIDE_Y),
-        k.anchor('topleft'),
-        k.area(),
-        k.body({ isStatic: true }),
-        k.opacity(0),
-        CFG.game.platformName
-      ])
-      inst.shoreBranchPlatHome = { x: shoreBranch.x1, y: shoreBranchY, x2: shoreBranch.x2 }
-      inst.shoreBranchPlat.tag('shoreBranch')
+      const shorePlatBundle = createGlowHorizBranchPlatforms(
+        k, shoreBranch, 'shoreBranch', BRANCH_PLAT_COLLISION_DROP_Y, SHORE_BRANCH_PLAT_HIDE_X, SHORE_BRANCH_PLAT_HIDE_Y
+      )
+      inst.shoreBranchPlat = shorePlatBundle.plats[0]
+      inst.shoreBranchPlatSegs = shorePlatBundle
+      inst.shoreBranchPlatHome = {
+        x: shoreBranch.x1,
+        y: shorePlatBundle.homes[0].y,
+        x2: shoreBranch.x2,
+        homes: shorePlatBundle.homes
+      }
       inst.shoreFallTwigs = HorizFallTwig.create({
         k,
         branchX1: shoreBranch.x1,
         branchX2: shoreBranch.x2,
-        branchY: shoreBranchY
+        branchY: shorePlatBundle.homes[0].y
       })
       inst.shoreFallTwigs.onCycleReset = () => {
         inst._shoreBranchLandingCount = 0
@@ -2652,6 +2657,25 @@ function createPlayfieldFrameOverlay(k, inst) {
       fixed: true,
       draw() {
         drawPlayfieldBottomCornerOverlay(inst)
+        drawGlowWorldRevealCurtain(inst)
+      }
+    }
+  ])
+  k.add([
+    k.pos(0, 0),
+    k.z(GLOW_COLOR_REVEAL_CURTAIN_Z),
+    {
+      fixed: true,
+      draw() {
+        drawGlowColorWorldRevealCurtain(inst)
+      }
+    }
+  ])
+  k.add([
+    k.z(GLOW_COLOR_REVEAL_HERO_Z),
+    {
+      draw() {
+        drawGlowColorRevealHero(inst)
       }
     }
   ])
@@ -3421,17 +3445,27 @@ function glowDecorFade(inst) {
   return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
 }
 //
+// Colour-world reveal: hide the gray world first, then fade colour in from void.
+//
+function glowColorWorldRevealOpacities(fade, pf = 1) {
+  const u = Math.max(0, Math.min(1, (fade ?? 0) * (pf ?? 1)))
+  if (u <= GLOW_COLOR_REVEAL_GRAY_PHASE_END) {
+    const t = u / GLOW_COLOR_REVEAL_GRAY_PHASE_END
+    return { grayOp: 1 - t, colorOp: 0 }
+  }
+  const t = (u - GLOW_COLOR_REVEAL_GRAY_PHASE_END) / (1 - GLOW_COLOR_REVEAL_GRAY_PHASE_END)
+  return { grayOp: 0, colorOp: t }
+}
+//
 // Lake and trampolines are fully coloured once the second eye opens the colour world.
 //
 function glowLZoneDecorFade(inst) {
-  if (inst?.zones?.colorWorld) return 1
   return glowDecorFade(inst)
 }
 //
 // Tree colour crossfade — locked at full colour once the colour world is open.
 //
 function glowTreeColorFade(inst) {
-  if (inst?.zones?.colorWorld) return 1
   return glowDecorFade(inst)
 }
 //
@@ -3807,10 +3841,20 @@ function updateEarTreeRevealFade(inst, dt) {
 // The shore branch is solid only once the tree itself is on screen.
 //
 function syncShoreBranchPlatform(inst) {
+  const bundle = inst.shoreBranchPlatSegs
+  const live = glowEarTreeRevealOpacity(inst) > COLOR_CROSSFADE_EPS
+  if (bundle?.plats?.length) {
+    bundle.plats.forEach((plat, i) => {
+      const home = bundle.homes[i]
+      if (!plat || !home) return
+      plat.pos.x = live ? home.x : SHORE_BRANCH_PLAT_HIDE_X
+      plat.pos.y = live ? home.y : SHORE_BRANCH_PLAT_HIDE_Y
+    })
+    return
+  }
   const plat = inst.shoreBranchPlat
   const home = inst.shoreBranchPlatHome
   if (!plat || !home) return
-  const live = glowEarTreeRevealOpacity(inst) > COLOR_CROSSFADE_EPS
   plat.pos.x = live ? home.x : SHORE_BRANCH_PLAT_HIDE_X
   plat.pos.y = live ? home.y : SHORE_BRANCH_PLAT_HIDE_Y
 }
@@ -3854,12 +3898,17 @@ function tickGlowShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
 function isHeroOnShoreBranch(inst, char) {
   const home = inst.shoreBranchPlatHome
   if (!home || !char?.pos) return false
-  const plat = inst.shoreBranchPlat
-  if (plat && char.curPlatform?.() === plat && plat.pos.y > SHORE_BRANCH_PLAT_HIDE_Y + 1) return true
+  const bundle = inst.shoreBranchPlatSegs
+  const plats = bundle?.plats ?? (inst.shoreBranchPlat ? [inst.shoreBranchPlat] : [])
+  const cur = char.curPlatform?.()
+  if (cur && plats.some(plat => plat === cur && plat.pos.y > SHORE_BRANCH_PLAT_HIDE_Y + 1)) return true
   const footY = char.pos.y + SURFACE_DETECT_Y
-  const x2 = home.x2 ?? home.x
-  return char.pos.x >= home.x && char.pos.x <= x2 &&
-    footY >= home.y - 8 && footY <= home.y + LOG_SNAP_STANDING_MAX + 6
+  const homes = home.homes ?? bundle?.homes ?? [home]
+  return homes.some(seg => {
+    const x2 = seg.x2 ?? seg.x
+    return char.pos.x >= seg.x && char.pos.x <= x2 &&
+      footY >= seg.y - 8 && footY <= seg.y + LOG_SNAP_STANDING_MAX + 6
+  })
 }
 function createGlowShoreTreeLayer(k, inst) {
   k.add([
@@ -5820,9 +5869,10 @@ function drawUndergroundLayer(inst) {
     drawBands(UNDERGROUND_COLOR_SPRITE, 1)
     return
   }
-  const grayOp = 1 - fade
+  const pf = inst.parallaxFade ?? 1
+  const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
   grayOp > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_GRAY_SPRITE, grayOp)
-  fade > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_COLOR_SPRITE, fade)
+  colorOp > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_COLOR_SPRITE, colorOp)
 }
 //
 // Paints the underground under opened ground: the cave band right after the
@@ -7655,8 +7705,11 @@ function drawParallaxLayer(inst, layer) {
   // Permanent colour world: opaque viewport slices only.
   //
   if (zones.colorWorld) {
-    const op = fade >= 1 && pf >= 1 ? 1 : fade * pf
-    op > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, op)
+    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
+    const nearGray = glowParallaxNearGrayOpacity(inst, layer, pf)
+    grayOp > COLOR_CROSSFADE_EPS &&
+      drawParallaxLayerSlice(inst, layer, layer.gray, grayOp * nearGray, grayTint)
+    colorOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, colorOp)
     return
   }
   //
@@ -7667,9 +7720,10 @@ function drawParallaxLayer(inst, layer) {
   //
   const colorForest = fade > COLOR_CROSSFADE_EPS
   if (colorForest) {
-    const colorOp = fade * pf
-    const grayOp = colorOp < 1 - COLOR_CROSSFADE_EPS ? glowParallaxNearGrayOpacity(inst, layer, pf) : 0
-    grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
+    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
+    const nearGray = glowParallaxNearGrayOpacity(inst, layer, pf)
+    grayOp > COLOR_CROSSFADE_EPS &&
+      drawParallaxLayerSlice(inst, layer, layer.gray, grayOp * nearGray, grayTint)
     colorOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, colorOp)
     return
   }
@@ -7983,16 +8037,16 @@ function resolveGlowPitBelowFloorSprite(inst, k) {
   if (isGlowFullParallaxStable(inst) && k.getSprite(BG_STATIC_COLOR)) {
     return { sprite: BG_STATIC_COLOR, opacity: 1 }
   }
-  if (zones.colorWorld && k.getSprite(BG_STATIC_COLOR)) {
+  if (zones.colorWorld && fade >= 1 - COLOR_CROSSFADE_EPS && pf >= 1 - COLOR_CROSSFADE_EPS &&
+    k.getSprite(BG_STATIC_COLOR)) {
     return { sprite: BG_STATIC_COLOR, opacity: 1 }
   }
   const preview = isGlowColorTransitionActive(inst)
   if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
-    if (fade > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_COLOR)) {
-      const op = fade * pf
-      if (op > COLOR_CROSSFADE_EPS) return { sprite: BG_STATIC_COLOR, opacity: op }
+    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
+    if (colorOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_COLOR)) {
+      return { sprite: BG_STATIC_COLOR, opacity: colorOp }
     }
-    const grayOp = (1 - fade) * pf
     if (grayOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
       return { sprite: BG_STATIC_GRAY, opacity: grayOp }
     }
@@ -8203,9 +8257,9 @@ function onDrawWorld(inst) {
     } else if (parallaxStable) {
       drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
     } else if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
-      const grayOp = (1 - fade) * pf
+      const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
       grayOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, grayOp)
-      fade > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, fade * pf)
+      colorOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, colorOp)
     } else {
       pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
     }
@@ -8235,6 +8289,69 @@ function onDrawWorld(inst) {
 //
 // Bottom corners — redrawn after world onDraw and from the ui+2500 fixed layer.
 //
+//
+// Full-screen void curtain while parallaxFade eases up after the first eye.
+//
+function drawGlowWorldRevealCurtain(inst) {
+  const z = inst.zones
+  if (!z?.eyesCollected || z.colorWorld) return
+  const pf = inst.parallaxFade ?? 1
+  if (pf >= 1 - COLOR_CROSSFADE_EPS) return
+  const k = inst.k
+  const backdrop = PRELUDE_BACKDROP
+  k.drawRect({
+    pos: k.vec2(0, 0),
+    width: k.width(),
+    height: k.height(),
+    color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
+    opacity: 1 - pf,
+    fixed: true
+  })
+}
+//
+// Opaque void over the whole colour world that lifts in
+// GLOW_COLOR_WORLD_REVEAL_SEC, so colour appears out of nothing.
+//
+function drawGlowColorWorldRevealCurtain(inst) {
+  const op = Math.min(1, inst.colorRevealCurtain ?? 0)
+  if (op <= COLOR_CROSSFADE_EPS) return
+  const k = inst.k
+  const backdrop = PRELUDE_BACKDROP
+  k.drawRect({
+    pos: k.vec2(0, 0),
+    width: k.width(),
+    height: k.height(),
+    color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
+    opacity: op,
+    fixed: true
+  })
+}
+//
+// Copy of the hero's current baked frame above the reveal curtain.
+//
+function drawGlowColorRevealHero(inst) {
+  if (!((inst.colorRevealCurtain ?? 0) > COLOR_CROSSFADE_EPS)) return
+  const char = inst.heroInst?.character
+  if (!char?.exists?.() || char.hidden || !char.sprite) return
+  inst.k.drawSprite({
+    sprite: char.sprite,
+    frame: char.frame,
+    pos: char.pos,
+    anchor: char.anchor,
+    flipX: char.flipX,
+    scale: char.scale,
+    angle: char.angle,
+    color: char.color,
+    opacity: char.opacity ?? 1
+  })
+}
+//
+// Lifts the colour-world curtain over GLOW_COLOR_WORLD_REVEAL_SEC.
+//
+function updateGlowColorRevealCurtain(inst, dt) {
+  if (!(inst.colorRevealCurtain > 0)) return
+  inst.colorRevealCurtain = Math.max(0, inst.colorRevealCurtain - dt / GLOW_COLOR_WORLD_REVEAL_SEC)
+}
 function drawPlayfieldBottomCornerOverlay(inst) {
   if (!isOuterFrameVisible(inst.zones)) return
   const k = inst.k
@@ -8830,11 +8947,55 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
 // Branch collider always stays active — only the tree sprite toggles visibility.
 //
 function syncBranchPlatHome(inst) {
+  const bundle = inst.branchPlatSegs
+  if (bundle?.plats?.length) {
+    bundle.plats.forEach((plat, i) => {
+      const home = bundle.homes[i]
+      if (!plat || !home) return
+      plat.pos.x = home.x
+      plat.pos.y = home.y
+    })
+    return
+  }
   const plat = inst.branchPlat
   const home = inst.branchPlatHome
   if (!plat || !home) return
   plat.pos.x = home.x
   plat.pos.y = home.y
+}
+//
+// One or more static colliders that follow a curved horizontal branch.
+//
+function createGlowHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX = null, hideY = null) {
+  const segs = horizBranch.platSegs ?? [{
+    x1: horizBranch.x1,
+    x2: horizBranch.x2,
+    y: horizBranch.physY
+  }]
+  const plats = []
+  const homes = []
+  segs.forEach(seg => {
+    const w = Math.max(4, seg.x2 - seg.x1)
+    const y = seg.y + dropY
+    const plat = k.add([
+      k.rect(w, HORIZ_PLATFORM_H),
+      k.pos(hideX ?? seg.x1, hideY ?? y),
+      k.anchor('topleft'),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),
+      CFG.game.platformName
+    ])
+    plat.tag(platTag)
+    plats.push(plat)
+    homes.push({ x: seg.x1, y, x2: seg.x2 })
+  })
+  const startBranchY = Math.min(...homes.map(h => h.y))
+  return {
+    plats,
+    homes,
+    startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: startBranchY }
+  }
 }
 //
 // Opens the colour world (second eye taken).
@@ -8843,9 +9004,15 @@ function startColorWorldFade(inst) {
   inst.zones.colorWorld = true
   inst.zones.groundBg = true
   inst.zones.outerFrame = true
+  //
+  // The gray world is dropped at once and every layer is drawn in full colour;
+  // a single void curtain (drawGlowColorWorldRevealCurtain) then lifts. Fading
+  // the many overlapping horizontal slices one by one showed seams as stripes.
+  //
   inst.colorFadeTarget = 1
-  inst.colorFade = Math.max(inst.colorFade ?? 0, inst.colorFadeTarget)
-  inst.parallaxFade = inst.colorFade
+  inst.colorFade = 1
+  inst.parallaxFade = 1
+  inst.colorRevealCurtain = 1
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
   applyZoneVisibility(inst)
@@ -8857,6 +9024,18 @@ function startColorWorldFade(inst) {
   inst.pendingHeroFillOnLand = true
   invalidateGlowPitCaveInteriorBake(inst.pit)
   ensureGlowBirdsBackgroundPlaying(inst)
+}
+//
+// Second eye is taken in the air — wait until the hero lands, then ease in colour.
+//
+function maybeStartPendingColorWorldFade(inst, grounded) {
+  if (!inst.pendingColorWorldFade) return
+  if (!grounded) return
+  inst.pendingColorWorldFade = false
+  startColorWorldFade(inst)
+  syncGlowGrassHueVariation(inst)
+  syncTreeColorCrossfade(inst)
+  syncGlowAtmosphereZones(inst)
 }
 //
 // Fires once the hero is grounded after taking the second eye — fills the
@@ -9129,6 +9308,7 @@ function ensureGlowHollowDrownClosedEyes(inst) {
 //
 function startDrowning(inst) {
   if (inst.drowning) return
+  if (inst.deathHandled || inst.touchDeathHandled) return
   inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
   inst.glowDrownHeroClipLock = true
@@ -9276,6 +9456,12 @@ function bumpGlowLifeHudOnDeath(inst) {
 //
 function checkGlowTouchDeath(inst, heroX, heroFootY) {
   if (inst.deathHandled) return
+  if (inst.drowning) return
+  //
+  // Lake drown beats predator overlap — same frame used to start drowning and
+  // trigger touch death, which left drowning stuck with no hero and no respawn.
+  //
+  if (shouldDrownInWater(inst, heroX, heroFootY)) return
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
   if (inst.shoreFallTwigs?.riderLocked) return
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
@@ -9548,6 +9734,10 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
   inst.touchDeathHandled = false
+  inst.drowning = false
+  inst.glowDrownHeroClipLock = false
+  inst.drownSinkTween?.cancel?.()
+  inst.drownSinkTween = null
   inst.touchDeathGraceUntil = inst.k.time() + TOUCH_DEATH_RESPAWN_GRACE_SEC
   inst.lastHeroX = pose.x
   inst.wasGrounded = false
@@ -10030,16 +10220,12 @@ function onUpdate(inst) {
     inst._mushroomLeanActive = inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
   }
   maybeSyncGlowLifeHudGrey(inst)
-  if (inst.colorFade < inst.colorFadeTarget) {
-    inst.colorFade = Math.min(inst.colorFadeTarget, inst.colorFade + k.dt() / COLOR_FADE_DURATION)
-    syncTreeColorCrossfade(inst)
-  }
-  //
-  // Forest and colour world share one ease — parallax tracks colorFade so
-  // trees, mushrooms and underground decor all appear together.
-  //
-  if (inst.zones.colorWorld && inst.parallaxFade < inst.colorFadeTarget) {
-    inst.parallaxFade = inst.colorFade
+  if (inst.zones.colorWorld) {
+    updateGlowColorRevealCurtain(inst, k.dt())
+  } else if (inst.zones.eyesCollected) {
+    const pTarget = inst.parallaxFadeTarget ?? 1
+    inst.parallaxFade < pTarget &&
+      (inst.parallaxFade = Math.min(pTarget, inst.parallaxFade + k.dt() / GLOW_POST_FIRST_EYE_PARALLAX_FADE_SEC))
   }
   updateTreeRevealFade(inst, k.dt())
   updateExploreFades(inst, k.dt())
@@ -10232,6 +10418,7 @@ function onUpdate(inst) {
   tickGlowStartBranchFatigue(inst, char, grounded, justLanded)
   tickGlowShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickGlowTomatoTreeLanding(inst, char, grounded, justLanded)
+  maybeStartPendingColorWorldFade(inst, grounded)
   maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
   maybeBootstrapGlowPostEyes(inst)
   updateGlowMidges(inst.midges, k.dt(), 1)
@@ -10393,7 +10580,6 @@ function onGlowTomatoExplode(inst, x) {
 function tickGlowStartBranchFatigue(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded || !isHeroOnStartBranch(inst, char)) return
   triggerGlowBranchLandingShake(inst)
-  if (!inst.zones?.predatorAwake) return
   if (!inst.treeFruitSpots?.some(f => f.anchor && f.attached)) return
   inst._branchLandingsSinceTree = (inst._branchLandingsSinceTree || 0) + 1
   if (inst._branchLandingsSinceTree >= GLOW_BRANCH_LANDINGS_TO_BREAK) {
@@ -10419,6 +10605,15 @@ function isHeroOnStartBranch(inst, char) {
   const branch = inst.startBranch
   if (!branch || !char?.pos) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
+  const bundle = inst.branchPlatSegs
+  const homes = bundle?.homes
+  if (homes?.length) {
+    return homes.some(seg => {
+      const x2 = seg.x2 ?? seg.x
+      return char.pos.x >= seg.x && char.pos.x <= x2 &&
+        footY >= seg.y - 8 && footY <= seg.y + LOG_SNAP_STANDING_MAX + 6
+    })
+  }
   return char.pos.x >= branch.x1 && char.pos.x <= branch.x2 &&
     footY >= branch.y - 8 && footY <= branch.y + LOG_SNAP_STANDING_MAX + 6
 }
@@ -10725,19 +10920,21 @@ function syncMonolithicTreeColorMode(inst, fade) {
   const treeColor = inst.treeColorObj
   if (!tree || !treeColor || !inst.treeDrawMonolith) return
   const f = fade ?? glowTreeColorFade(inst)
+  const pf = inst.parallaxFade ?? 1
+  const { grayOp, colorOp } = glowColorWorldRevealOpacities(f, pf)
   //
   // A fully transparent monolith is still a full-screen textured draw.
   // Hide the side that has faded out so the settled colour world pays for
   // one tree blit, not two.
   //
-  if (f >= 0.98) {
+  if (colorOp >= 0.98) {
     tree.hidden = true
     tree.opacity = 0
     treeColor.hidden = false
     treeColor.opacity = 1
     return
   }
-  if (f < 0.02) {
+  if (grayOp >= 0.98 && colorOp < 0.02) {
     tree.hidden = false
     treeColor.hidden = true
     tree.opacity = 1
@@ -10745,10 +10942,10 @@ function syncMonolithicTreeColorMode(inst, fade) {
     return
   }
   const white = glowTreeCrossfadeWhite(inst)
-  tree.hidden = false
-  treeColor.hidden = false
-  tree.opacity = 1 - f
-  treeColor.opacity = f
+  tree.hidden = grayOp < 0.02
+  treeColor.hidden = colorOp < 0.02
+  tree.opacity = grayOp
+  treeColor.opacity = colorOp
   tree.color = white
   treeColor.color = white
 }
@@ -10769,8 +10966,10 @@ function syncTreeSegmentsColorCrossfade(inst, fade) {
     entry.grayObj.hidden = false
     entry.colorObj.hidden = false
     const partMul = TreeSegments.isGlowTreeRootsSegmentId(id) ? rootFade : 1
-    const grayOp = (1 - f) * partMul
-    const colorOp = f * partMul
+    const pf = inst.parallaxFade ?? 1
+    const { grayOp: grayMix, colorOp: colorMix } = glowColorWorldRevealOpacities(f, pf)
+    const grayOp = grayMix * partMul
+    const colorOp = colorMix * partMul
     entry.grayObj.hidden = grayOp < 0.02
     entry.colorObj.hidden = colorOp < 0.02
     entry.grayObj.opacity = grayOp
@@ -11461,11 +11660,24 @@ function pinHeroToMainFloorOverTrampoline(inst, char, state) {
   // resolve on the way down (isGrounded stuck oscillating a few px above
   // the floor forever, jumpPhase wedged on 'jumping').
   //
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  const sunkThroughFloor = footY > FLOOR_Y + LOG_SNAP_STANDING_MAX
+  // Mid-jump frames tuck the hitbox up, so pos.y + SURFACE_DETECT_Y sits well
+  // below the real collider bottom. Testing that sprite foot line pinned a
+  // slow fall over a hidden mushroom back up every few frames before the
+  // tucked box ever reached the floor — the hero never grounded and hung on
+  // a jump frame.
+  //
+  const bottomY = glowHeroHitboxBottomY(char)
+  const sunkThroughFloor = bottomY > FLOOR_Y + LOG_SNAP_STANDING_MAX
   if (!sunkThroughFloor) return
-  char.pos.y = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  moveGlowHeroTo(char, char.pos.x, char.pos.y - (bottomY - FLOOR_Y))
   char.vel && (char.vel.y = 0)
+}
+//
+// World Y of the hero collider's bottom edge (follows the jump tuck).
+//
+function glowHeroHitboxBottomY(char) {
+  const box = char.worldArea?.()?.bbox?.()
+  return box ? box.pos.y + box.height : char.pos.y + SURFACE_DETECT_Y
 }
 //
 // Drops the invisible cap off-screen when bounce physics are not armed yet.
@@ -11584,12 +11796,17 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   //
   // Standing on the floor — Kaplay owns the pose; never re-pin (caused bounce loops).
   //
-  if (footY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) return
+  // The sink test reads the collider bottom, not footY: a slow fall keeps the
+  // jump-tucked hitbox well above the sprite feet, and footY used to repin the
+  // hero up before the box ever touched the floor (endless frozen jump frame).
+  //
+  const bottomY = glowHeroHitboxBottomY(char)
+  if (bottomY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) return
   //
   // Feet under the floor line, including a shallow sink beside a mushroom.
   //
-  if (footY <= FLOOR_Y + 64) {
-    moveGlowHeroTo(char, char.pos.x, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+  if (bottomY <= FLOOR_Y + MAIN_GROUND_SINK_RESCUE_MAX) {
+    moveGlowHeroTo(char, char.pos.x, char.pos.y - (bottomY - FLOOR_Y))
     char.vel && char.vel.y > 0 && (char.vel.y = 0)
   }
 }
@@ -11926,10 +12143,7 @@ function collectGlowSecondEye(inst) {
   inst.earTreeRevealFade = 0
   inst._grassColorSettled = null
   inst._grassMudColorSettled = null
-  startColorWorldFade(inst)
-  syncGlowGrassHueVariation(inst)
-  syncTreeColorCrossfade(inst)
-  syncGlowAtmosphereZones(inst)
+  inst.pendingColorWorldFade = true
 }
 //
 // Opening the branch mushroom (after the first eye) wakes the mud crawler.

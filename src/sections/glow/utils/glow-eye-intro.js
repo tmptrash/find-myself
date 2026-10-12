@@ -303,6 +303,11 @@ function persistGlowEyesCollected(inst) {
   inst.zones.eyesCollected = true
   set(KEY_EYES_COLLECTED, true)
   set(KEY_PIT_COLLAPSED, true)
+  //
+  // Ease the opened world in under a global void curtain (parallaxFade).
+  //
+  inst.parallaxFadeTarget = 1
+  inst.parallaxFade = 0
 }
 function didGlowEyeAttachHeroMove(intro, char, heroInst) {
   if (!char?.pos || !intro) return false

@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
+import { GLOW_PAL, getTreePaletteGray, glowRgb } from './glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
 import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
@@ -137,7 +137,7 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 }
 
 /**
- * Draws twigs in tree palette wood tones.
+ * Draws dry twigs in muted gray-brown (not live shore-tree branch greens).
  * @param {Object} inst - Twig inst
  * @param {number} opacity - Scene fade multiplier
  * @param {{x1: number, x2: number}|null} view - Camera cull span
@@ -145,10 +145,10 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 export function onDraw(inst, opacity, view) {
   if (!inst?.twigs?.length || opacity <= 0) return
   const k = inst.k
-  const pal = getTreePaletteColor()
+  const pal = getTreePaletteGray()
   const wood = k.rgb(pal.branchR, pal.branchG, pal.branchB)
-  const woodDark = k.rgb(pal.rootR, pal.rootG, pal.rootB)
-  const leafShade = pal.leafShades?.[1] ?? { r: pal.leafR, g: pal.leafG, b: pal.leafB }
+  const woodDark = k.rgb(pal.trunkR, pal.trunkG, pal.trunkB)
+  const leafShade = pal.leafShades?.[0] ?? { r: pal.branchR, g: pal.branchG, b: pal.branchB }
   const leaf = k.rgb(leafShade.r, leafShade.g, leafShade.b)
   const outlineRgb = glowRgb(TWIG_OUTLINE)
   const outline = k.rgb(outlineRgb.r, outlineRgb.g, outlineRgb.b)

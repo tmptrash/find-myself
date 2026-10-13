@@ -6,7 +6,7 @@ import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
-const FRUIT_LAYOUT_VERSION = 8
+const FRUIT_LAYOUT_VERSION = 10
 const FRUIT_RANDOM_COUNT = 17
 const FRUIT_GROUND_LINGER_SEC = 5
 const FRUIT_GROUND_FADE_SEC = 0.9
@@ -46,9 +46,21 @@ const FRUIT_HANG_JITTER_FRAC = 0
 const FRUIT_MASK_RING_PADS = [3, 7]
 const FRUIT_MASK_RING_SAMPLES = 12
 const FRUIT_MASK_RING_MIN_COVERED = 12
-const FRUIT_CLUSTER_MIN_NEIGHBOR_AVG = 1.35
-const FRUIT_MASK_ALPHA_MIN = 200
+const FRUIT_CLUSTER_MIN_NEIGHBOR_AVG = 1.5
+const FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN = 3
+//
+// Keep fallen fruit in front of the right trampoline cap so the centipede's
+// feast stays visible (same cap scale as glow level0 TRAMP_RADIUS).
+//
+const GLOW_RIGHT_TRAMP_CAP_HALF = 38
+const GLOW_FRUIT_TRAMP_ROLL_CLEAR = 16
+const GLOW_FRUIT_TRAMP_HIDE_X_MAX = 148
+const FRUIT_MASK_ALPHA_MIN = 235
+const FRUIT_MASK_SOLID_GRID_STEP = 3
+const FRUIT_MASK_SOLID_GRID_RADIUS = 4
 const FOLIAGE_MASK_CELL_PAD_MULT = 2
+const FRUIT_CANOPY_MIN_ABOVE_BRANCH = 52
+const FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP = 36
 
 /**
  * X centre of the strip between trunk and branch trampoline (for anchor foliage pick).
@@ -85,7 +97,7 @@ export function ensureGlowTreeFruitSpots(levelInst) {
  */
 export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   const rng = mulberry32(TREE_SEED + FRUIT_SEED_OFFSET)
-  const hangable = collectHangableTreeFoliage(treeData)
+  const hangable = collectHangableTreeFoliage(treeData, anchorDropCfg)
   if (!hangable.length) return []
   const cellPx = getTreePaletteColor().foliageClusterCellPx
   const hang = { treeData, cellPx, mask: buildFoliageMask(treeData, cellPx) }
@@ -206,7 +218,7 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
     if (fruit.removed) return
     if (fruit.attached) return
     if (!fruit.settled) {
-      stepFallingFruit(fruit, dt, floorY)
+      stepFallingFruit(fruit, dt, floorY, levelInst)
       return
     }
     fruit.settledAt == null && (fruit.settledAt = now)
@@ -222,6 +234,10 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
     }
   })
   prune && (levelInst.treeFruitSpots = spots.filter(f => !f.removed))
+  spots.forEach(fruit => {
+    if (fruit.removed || fruit.attached || fruit.beingEaten) return
+    if (fruit.settled) nudgeGlowFruitClearOfRightTramp(levelInst, fruit)
+  })
 }
 
 /**
@@ -352,12 +368,34 @@ function buildRaggedFruitPolygon(k, cx, cy, r, biteMarks, seed) {
   return pts
 }
 
-function collectHangableTreeFoliage(treeData) {
-  return treeData.leaves.filter(leaf =>
-    leaf.type === 'cluster' &&
-    clusterHasLeafVolume(leaf.cells) &&
-    clusterNeighborAvg(leaf.cells) >= FRUIT_CLUSTER_MIN_NEIGHBOR_AVG
-  )
+function collectHangableTreeFoliage(treeData, anchorDropCfg) {
+  const cellPx = getTreePaletteColor().foliageClusterCellPx
+  const horiz = treeData.horizBranch
+  const canopyMaxY = horiz ? horiz.physY - FRUIT_CANOPY_MIN_ABOVE_BRANCH : Infinity
+  const canopyMaxX = branchTrampX(anchorDropCfg) + FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP
+  return treeData.leaves.filter(leaf => {
+    if (leaf.type !== 'cluster') return false
+    if (!clusterHasLeafVolume(leaf.cells)) return false
+    if (clusterNeighborAvg(leaf.cells) < FRUIT_CLUSTER_MIN_NEIGHBOR_AVG) return false
+    const c = clusterCentroid(leaf, cellPx)
+    if (c.y > canopyMaxY) return false
+    return c.x <= canopyMaxX
+  })
+}
+function branchTrampX(anchorDropCfg) {
+  return anchorDropCfg?.branchTrampX ?? Infinity
+}
+function clusterCentroid(cluster, cellPx) {
+  const ox = Math.round(cluster.x)
+  const oy = Math.round(cluster.y)
+  let sx = 0
+  let sy = 0
+  const n = cluster.cells.length || 1
+  cluster.cells.forEach(cell => {
+    sx += ox + cell.dx * cellPx
+    sy += oy + cell.dy * cellPx
+  })
+  return { x: sx / n, y: sy / n }
 }
 //
 // Candidate hang points are cell centres exactly as the bake paints them; a
@@ -366,18 +404,28 @@ function collectHangableTreeFoliage(treeData) {
 function pickValidFruitHangOnCluster(hang, cluster, fruitR, rng) {
   const tries = Math.min(FRUIT_HANG_TRIES_MAX, cluster.cells.length * FRUIT_HANG_TRIES_PER_CELL)
   for (let t = 0; t < tries; t++) {
-    const pos = fruitPositionOnFoliage(cluster, fruitR, rng, hang.cellPx)
+    const cell = cluster.cells[Math.floor(rng() * cluster.cells.length)]
+    if (!isFruitClusterCellInterior(cluster.cells, cell)) continue
+    const pos = fruitPositionOnFoliageCell(cluster, cell, fruitR, rng, hang.cellPx)
     if (isValidFruitHang(hang, pos.x, pos.y, fruitR)) return pos
   }
   return null
 }
-function fruitPositionOnFoliage(cluster, fruitR, rng, cellPx) {
-  const cell = cluster.cells[Math.floor(rng() * cluster.cells.length)]
+function fruitPositionOnFoliageCell(cluster, cell, fruitR, rng, cellPx) {
   const jitter = Math.min(FRUIT_HANG_JITTER_MAX, fruitR * FRUIT_HANG_JITTER_FRAC)
   return {
     x: Math.round(cluster.x) + cell.dx * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter,
     y: Math.round(cluster.y) + cell.dy * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter
   }
+}
+function isFruitClusterCellInterior(cells, cell) {
+  const set = new Set(cells.map(c => `${c.dx},${c.dy}`))
+  let n = 0
+  set.has(`${cell.dx + 1},${cell.dy}`) && (n += 1)
+  set.has(`${cell.dx - 1},${cell.dy}`) && (n += 1)
+  set.has(`${cell.dx},${cell.dy + 1}`) && (n += 1)
+  set.has(`${cell.dx},${cell.dy - 1}`) && (n += 1)
+  return n >= FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN
 }
 function isValidFruitHang(hang, x, y, fruitR) {
   const { treeData, mask } = hang
@@ -391,21 +439,32 @@ function isValidFruitHang(hang, x, y, fruitR) {
 // painted leaves — a fruit on a canopy edge would read as floating in the air.
 //
 function isFruitCoveredByFoliage(mask, x, y, fruitR) {
-  if (!isFoliageMaskCovered(mask, x, y)) return false
-  if (!isFoliageMaskCovered(mask, x, y - fruitR - FRUIT_STEM_LEN)) return false
-  if (!isFoliageMaskCovered(mask, x, y + fruitR * 0.35)) return false
+  if (!isFoliageMaskSolid(mask, x, y)) return false
+  if (!isFoliageMaskSolid(mask, x, y - fruitR - FRUIT_STEM_LEN)) return false
+  if (!isFoliageMaskSolid(mask, x, y + fruitR * 0.35)) return false
   for (const pad of FRUIT_MASK_RING_PADS) {
     const ringR = fruitR + pad
     let covered = 0
     for (let i = 0; i < FRUIT_MASK_RING_SAMPLES; i++) {
       const a = (i / FRUIT_MASK_RING_SAMPLES) * Math.PI * 2
-      isFoliageMaskCovered(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
+      isFoliageMaskSolid(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
     }
     if (covered < FRUIT_MASK_RING_MIN_COVERED) return false
   }
   for (let i = 0; i < 4; i++) {
     const a = Math.PI * 0.25 + (i / 4) * Math.PI
-    if (!isFoliageMaskCovered(mask, x + Math.cos(a) * fruitR * 0.85, y + Math.sin(a) * fruitR * 0.85)) return false
+    if (!isFoliageMaskSolid(mask, x + Math.cos(a) * fruitR * 0.85, y + Math.sin(a) * fruitR * 0.85)) return false
+  }
+  return true
+}
+function isFoliageMaskSolid(mask, x, y) {
+  if (!isFoliageMaskCovered(mask, x, y)) return false
+  const step = FRUIT_MASK_SOLID_GRID_STEP
+  const r = FRUIT_MASK_SOLID_GRID_RADIUS
+  for (let oy = -r; oy <= r; oy += step) {
+    for (let ox = -r; ox <= r; ox += step) {
+      if (!isFoliageMaskCovered(mask, x + ox, y + oy)) return false
+    }
   }
   return true
 }
@@ -556,7 +615,7 @@ function leafRgbFromShadeIdx(shadeIdx, grayExplore = false) {
   return glowRgb(shades[i])
 }
 
-function stepFallingFruit(fruit, dt, floorY) {
+function stepFallingFruit(fruit, dt, floorY, levelInst) {
   const restY = floorY - fruit.r - FRUIT_FALL_GROUND_PAD
   fruit.vx = fruit.vx ?? 0
   if (fruit.airborne == null) fruit.airborne = true
@@ -580,7 +639,24 @@ function stepFallingFruit(fruit, dt, floorY) {
   if (Math.abs(fruit.vx) < FRUIT_SETTLE_VX) {
     fruit.vx = 0
     fruit.settled = true
+    levelInst && nudgeGlowFruitClearOfRightTramp(levelInst, fruit)
   }
+}
+
+function nudgeGlowFruitClearOfRightTramp(levelInst, fruit) {
+  const trampX = levelInst.trampState?.x
+  if (trampX == null) return
+  const r = getGlowFruitDisplayRadius(fruit)
+  const capHalf = GLOW_RIGHT_TRAMP_CAP_HALF
+  const blockMin = trampX - capHalf - r - 10
+  const blockMax = trampX + GLOW_FRUIT_TRAMP_HIDE_X_MAX
+  if (fruit.x < blockMin || fruit.x > blockMax) return
+  const lakeX1 = levelInst.lakeX1 ?? 0
+  fruit.x = Math.max(lakeX1 + 52, trampX - capHalf - r - GLOW_FRUIT_TRAMP_ROLL_CLEAR)
+  fruit.vx = -Math.max(Math.abs(fruit.vx ?? 0), FRUIT_LAND_ROLL_SPEED * 0.65)
+  fruit.rollDir = -1
+  fruit.settled = false
+  fruit.airborne = false
 }
 
 function applyFruitGroundImpact(fruit, impactVy) {

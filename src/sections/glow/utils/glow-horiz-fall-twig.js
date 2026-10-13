@@ -235,6 +235,10 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
       return
     }
   } else if (velY < TWIG_RIDE_JUMP_VEL_Y) {
+    //
+    // Leave the stick where the jump started. A stuck platform link would
+    // carry him with the next collider teleport (ride pad, mushroom cap).
+    //
     releaseRider(inst, char)
     inst.riderAirborne = true
     return
@@ -300,10 +304,10 @@ function tryLockRider(inst, char, mounted, midX, velY) {
   typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
   char.vel && (char.vel.y = 0)
   //
-  // One seat on the lock frame, then the platform carries him. A per-frame
-  // pin on top of that carry shook the camera.
+  // The seat is the per-frame pin below. Leaving the platform link on would
+  // drag him the next time that collider is parked off-screen.
   //
-  char.stickToPlatform = true
+  detachHeroFromRidePlatform(char)
 }
 
 //
@@ -398,6 +402,15 @@ function clearRideTurnPose(inst, pred) {
   pred.spineFollowRate = null
 }
 
+function detachHeroFromRidePlatform(char) {
+  if (!char) return
+  const vx = char.vel?.x ?? 0
+  const vy = char.vel?.y ?? 0
+  typeof char.jump === 'function' && char.jump(1)
+  char.vel && (char.vel.x = vx, char.vel.y = vy)
+  char.stickToPlatform = false
+}
+
 function releaseRider(inst, char) {
   if (!inst.riderLocked) return
   const pred = inst.predator
@@ -405,9 +418,15 @@ function releaseRider(inst, char) {
   inst.riderLocked = false
   inst.rideDir = null
   inst.rideOffset = 0
-  char && (char.stickToPlatform = true)
   inst._riderHero && (inst._riderHero.carrierGrounded = false)
   inst._riderHero = null
+  //
+  // jump() clears Kaplay's curPlatform. A raw vel write leaves the link, and
+  // the next static-platform move (hide at x=-500, or a cap snapping home)
+  // carries the body across the level — a hop off the right side landed in
+  // the lake.
+  //
+  detachHeroFromRidePlatform(char)
   if (wasTurning && pred) {
     pred.dir = inst.rideTurnTargetDir ?? pred.dir
     pred.vx = (pred.dir || 1) * TWIG_RIDE_TURN_MIN_SPEED

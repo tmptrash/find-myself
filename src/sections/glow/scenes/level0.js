@@ -132,6 +132,7 @@ import {
   releaseGlowAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
+import { glowLakeRaftWorldX, mountGlowLakeRaftLayer } from '../utils/glow-lake-raft.js'
 import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
@@ -2143,7 +2144,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const predatorPatrolBounds = computeGlowPredatorPatrolBounds(lakeX2)
     const predator = Predator.create({
       k,
-      x: (predatorPatrolBounds.minX + predatorPatrolBounds.maxX) * 0.42,
+      x: trampX,
+      homeX: trampX,
       dir: -1,
       minX: predatorPatrolBounds.minX,
       maxX: predatorPatrolBounds.maxX,
@@ -2400,6 +2402,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     predator.landAt = (x) => glowPredatorGroundAt(inst, x)
     predator.canHuntHero = () => glowPredatorCanHuntHero(inst)
     mountGlowTreeFruitLayer(k, inst)
+    inst.lakeRaftX = glowLakeRaftWorldX(lakeX1, lakeX2)
+    inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
+    mountGlowLakeRaftLayer(k, () => inst)
     createGlowHorizFallTwigLayer(k, inst)
     initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
@@ -8992,6 +8997,11 @@ function startColorWorldFade(inst) {
   inst.colorRevealCurtain = 1
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
+  //
+  // Colour world opens even if the hero never drowned — reveal the lake with
+  // the same curtain instead of leaving an empty gray band on the left.
+  //
+  !inst.zones.waterDiscovered && revealWaterZone(inst, false)
   applyZoneVisibility(inst)
   //
   // Defer body fill until the hero actually lands (maybeApplyPendingHeroFillOnLand)
@@ -10153,6 +10163,7 @@ function onUpdate(inst) {
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.zones.colorWorld && inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
+  inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character
@@ -11173,7 +11184,7 @@ function isBranchTrampolineColliderActive(z) {
 // and the colour world still closed — the swamp spirit waits at the right spot.
 //
 function isGlowRightSpiritBeat(z) {
-  return Boolean(z?.eyesCollected && z.predatorAwake && z.tree && z.waterDiscovered && !z.colorWorld)
+  return Boolean(z?.eyesCollected && z.predatorAwake && z.tree && !z.colorWorld)
 }
 //
 // Right trampoline mushroom is visible only after a nearby landing (or colour world).
@@ -12161,6 +12172,14 @@ function wakeGlowPredator(inst) {
   if (z.predatorAwake || !z.eyesCollected) return
   z.predatorAwake = true
   set(KEY_PREDATOR_AWAKE, true)
+  //
+  // First appearance is the right spirit's burrow (the right trampoline),
+  // not the branch mushroom the hero just landed on.
+  //
+  const pred = inst.predator
+  if (!pred) return
+  const home = inst.trampState?.x ?? pred.homeX
+  home != null && (pred.homeX = home, pred.x = home)
 }
 //
 // Shows the mud predator once the branch mushroom has woken it.

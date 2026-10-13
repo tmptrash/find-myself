@@ -596,7 +596,7 @@ function syncBurrowPhase(inst) {
   // Right burrow only once the tree is up, the lake found and the crawler
   // awake — the branch trampoline alone keeps the spirit on the left burrow.
   //
-  const wantPhase = z?.predatorAwake && z.tree && z.waterDiscovered ? 'right' : 'left'
+  const wantPhase = z?.predatorAwake && z.tree ? 'right' : 'left'
   const rightShown = Boolean(inst.rightMushroomShown?.())
   if (inst.burrowPhase == null) {
     inst.burrowPhase = wantPhase

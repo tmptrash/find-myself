@@ -1,17 +1,16 @@
 //
-// Predator breaks off hunt to eat a fallen tree fruit when one lands nearby.
+// Predator breaks off to eat a fruit knocked from the big tree, from any distance.
 //
 
 import { getGlowFruitDisplayRadius, keepGlowFruitRestingOnFloor } from '../utils/glow-tree-fruit.js'
 
-const FEAST_DETECT_RADIUS = 395
 const FEAST_APPROACH_BURST_MULT = 0.72
-const FEAST_APPROACH_SPEED = 172
+const FEAST_APPROACH_SPEED = 280
 const FEAST_SNOUT_REACH = 7
 const FEAST_SNOUT_DROP = 2.4
 const FEAST_APPROACH_SNAP_GAP = 36
 const FEAST_APPROACH_SNAP_DIST = 58
-const FEAST_APPROACH_MAX_SEC = 2.2
+const FEAST_APPROACH_MAX_SEC = 14
 const FEAST_HEAD_RIDE = 15
 const FEAST_BITE_COUNT = 10
 const FEAST_BITE_FORWARD_SEC = 0.28
@@ -250,7 +249,7 @@ function findNearestFeastFruit(levelInst, pred) {
   const spots = levelInst.treeFruitSpots
   if (!spots?.length) return null
   let best = null
-  let bestDist = FEAST_DETECT_RADIUS
+  let bestDist = Infinity
   spots.forEach(fruit => {
     if (!isFruitFeastEligible(fruit)) return
     const d = fruitFeastNoticeDist(pred, fruit)
@@ -261,8 +260,7 @@ function findNearestFeastFruit(levelInst, pred) {
 
 function isFruitFeastEligible(fruit) {
   if (fruit.removed || fruit.attached || fruit.beingEaten) return false
-  if (fruit.settled) return true
-  return fruit.airborne === false
+  return true
 }
 
 function fruitFeastNoticeDist(pred, fruit) {
@@ -325,12 +323,15 @@ function easeFeastSpeed(pred, dt, rate) {
 }
 
 function keepPredatorInside(pred) {
-  if (pred.x < pred.minX) {
-    pred.x = pred.minX
+  const fruit = pred.feastFruit
+  const minX = fruit && !fruit.removed ? Math.min(pred.minX, fruit.x - 24) : pred.minX
+  const maxX = fruit && !fruit.removed ? Math.max(pred.maxX, fruit.x + 24) : pred.maxX
+  if (pred.x < minX) {
+    pred.x = minX
     pred.vx = Math.abs(pred.vx) * 0.2
     pred.dir = 1
-  } else if (pred.x > pred.maxX) {
-    pred.x = pred.maxX
+  } else if (pred.x > maxX) {
+    pred.x = maxX
     pred.vx = -Math.abs(pred.vx) * 0.2
     pred.dir = -1
   }

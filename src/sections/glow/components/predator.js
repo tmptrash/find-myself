@@ -67,6 +67,7 @@ const SWIM_SHORE_RAMP_PX = 56
  * @param {function(): boolean} [cfg.canHuntHero] - When false, the hero is ignored
  * @param {{x1: number, x2: number, surfaceY: number}} [cfg.water] - Lake span the crawler can swim across
  * @param {number} [cfg.fleeLeftX] - Far-left swim target when fleeing left
+ * @param {number} [cfg.homeX] - Roam-home X when the hero is off the ground line
  * @returns {Object} Predator inst
  */
 export function create(cfg) {
@@ -82,6 +83,7 @@ export function create(cfg) {
     groundAt: null,
     water: cfg.water ?? null,
     fleeLeftX: cfg.fleeLeftX ?? cfg.minX,
+    homeX: cfg.homeX ?? cfg.x,
     swimming: false,
     fleePath: null,
     hero: cfg.hero,

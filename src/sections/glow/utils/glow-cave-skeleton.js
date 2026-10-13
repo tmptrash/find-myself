@@ -15,6 +15,17 @@ const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
 const SKELETON_BAKE_PAD = 22
 const CAVE_SKELETON_LAYOUT_VERSION = 37
 //
+// Bump when the skull bitmap changes so a live Kaplay instance rebakes.
+//
+const CAVE_SKULL_BAKE_REV = 38
+//
+// Rows of the reference skull that hold the right eye, and how far that
+// cluster sits in from the right rim (rim H pixels are teeth, not the eye).
+//
+const CAVE_LEFT_SOCKET_ROW_Y0 = 2
+const CAVE_LEFT_SOCKET_ROW_Y1 = 6
+const CAVE_LEFT_SOCKET_RIM_PAD = 4
+//
 // Skull sits against the widened interior's left wall (not the mouth lip).
 //
 const PIT_CAVE_SKULL_FLOOR_PAD = 20
@@ -261,7 +272,7 @@ export function drawPitCaveSkeleton(k, pit, tones, opts = {}) {
 // Bakes the skeleton once per Kaplay instance (re-bake if embed mode changes).
 //
 function ensurePitCaveSkeletonSprite(k, pit, tones, embedded, bakeVariant = 'pit') {
-  const bakeKey = `${embedded ? 'embed' : 'free'}-${bakeVariant}`
+  const bakeKey = `${embedded ? 'embed' : 'free'}-${bakeVariant}-r${CAVE_SKULL_BAKE_REV}`
   if (pit._caveSkeletonSpriteReady && pit._caveSkeletonBakeKey === bakeKey &&
     pit._caveSkeletonSkullOffsetY != null) return
   const sk = ensurePitCaveSkeletonLayout(pit)
@@ -359,7 +370,7 @@ function drawReferencePixelGrid(ctx, grid, u, palette, centerX, topY, scaleX = 1
 // Reference skull — bitmap traced from the user art (scaled to skullR).
 //
 function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCss) {
-  const grid = solidifyEnclosedDots(CAVE_REF_SKULL_GRID)
+  const grid = punchLeftEyeSocket(solidifyEnclosedDots(CAVE_REF_SKULL_GRID))
   const palette = caveSkeletonSolidPalette(boneCss, deepCss, socketCss)
   const gw = grid[0].length
   const gh = grid.length
@@ -370,6 +381,25 @@ function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCs
     row.split('').map((ch, x) => (ch === 'H' && x < midX) ? 'D' : ch).join('')
   )
   drawReferencePixelGrid(ctx, masked, u, palette, 0, topY)
+}
+//
+// The hero takes the left eye, so that socket stays an empty opening.
+// Right-eye H cells are mirrored into air; the right socket itself is kept.
+//
+function punchLeftEyeSocket(grid) {
+  return grid.map((row, y) => {
+    if (y < CAVE_LEFT_SOCKET_ROW_Y0 || y > CAVE_LEFT_SOCKET_ROW_Y1) return row
+    const cells = row.split('')
+    const gw = cells.length
+    const mid = gw * 0.5
+    const rim = gw - CAVE_LEFT_SOCKET_RIM_PAD
+    for (let x = Math.ceil(mid); x < rim; x++) {
+      if (cells[x] !== 'H') continue
+      const mx = gw - 1 - x
+      mx >= 0 && mx < mid && (cells[mx] = '.')
+    }
+    return cells.join('')
+  })
 }
 //
 // Draws one thorax rib side — full arc, detached gap, or spine-only shear stub.

@@ -15,6 +15,12 @@ const LUNGE_DURATION = 0.36
 
 const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
 //
+// Off the ground line the crawler drifts back to its home mushroom, not a
+// straight patrol: speed and facing keep changing on the way.
+//
+const ROAM_SPEEDS = [0, 18, 34, 52, 74]
+const ROAM_HOME_WANDER_PX = 72
+//
 // Flight from a tomato burst: a sharp jerk away, a sprint along the patrol
 // strip, and (to the left) a swim across the lake and back to the shore.
 //
@@ -83,10 +89,9 @@ export function tickMove(inst, dt, hero) {
     return
   }
   if (!hero) {
-    tickSearch(inst, dt)
+    tickRoamHome(inst, dt)
     inst.x += inst.vx * dt
     keepInside(inst)
-    softenHeadPose(inst, dt)
     return
   }
   const dx = hero.x - inst.x
@@ -174,6 +179,29 @@ function finishFlee(inst) {
   inst.fleePath = null
   inst.vx *= FLEE_END_VX_KEEP
   enter(inst, 'search', FLEE_END_SEARCH_DELAY)
+}
+
+function tickRoamHome(inst, dt) {
+  inst.state = 'search'
+  inst.burst -= dt
+  const home = inst.homeX
+  const dx = home == null ? 0 : home - inst.x
+  const away = home != null && Math.abs(dx) > ROAM_HOME_WANDER_PX
+  if (inst.burst <= 0) {
+    inst.speedTarget = ROAM_SPEEDS[Math.floor(Math.random() * ROAM_SPEEDS.length)]
+    inst.burst = 0.2 + Math.random() * 0.7
+    if (!inst.holdFacing) {
+      if (away) inst.dir = Math.sign(dx) || inst.dir
+      else if (Math.random() < 0.55) inst.dir *= -1
+    }
+    inst.lookBack = Math.random() < 0.16
+    inst.headLift = Math.random() < 0.2 ? 3 + Math.random() * 3 : 0
+  } else if (away && !inst.holdFacing && Math.sign(dx) !== 0 && Math.sign(dx) !== inst.dir &&
+    Math.random() < dt * 1.6) {
+    inst.dir = Math.sign(dx)
+  }
+  easeSpeed(inst, dt, 8)
+  softenHeadPose(inst, dt)
 }
 
 function tickSearch(inst, dt) {

@@ -32,6 +32,7 @@ const DOT_MAX_COUNT = 3
  * @param {number} [opts.outlineWidth=1.5] - Outline stroke width (px)
  * @param {boolean} [opts.flat=false] - Single-tone silhouette: stem uses the
  *   cap colour and highlight/dots are skipped (glow gray-phase style)
+ * @param {boolean} [opts.outlineOnly=false] - Stroke only, no interior fill
  */
 export function drawMushroomToCanvas(ctx, opts) {
   const {
@@ -47,7 +48,8 @@ export function drawMushroomToCanvas(ctx, opts) {
     outlineAlpha = DEFAULT_OUTLINE_ALPHA,
     outlineColor = null,
     outlineWidth = STEM_LINE_WIDTH,
-    flat = false
+    flat = false,
+    outlineOnly = false
   } = opts
   const lightRgb = capLight ?? [
     Math.min(255, capColor[0] + 40),
@@ -82,7 +84,7 @@ export function drawMushroomToCanvas(ctx, opts) {
   ctx.lineTo(cx + stemWidth * 0.4, stemTop)
   ctx.lineTo(cx + stemWidth / 2, baseY)
   ctx.closePath()
-  ctx.fill()
+  !outlineOnly && ctx.fill()
   ctx.stroke()
   //
   // Cap: half-ellipse, full colour, outlined for clean read at small size
@@ -91,12 +93,12 @@ export function drawMushroomToCanvas(ctx, opts) {
   ctx.beginPath()
   ctx.ellipse(cx, stemTop, capWidth / 2, capHeight, 0, Math.PI, 0)
   ctx.closePath()
-  ctx.fill()
+  !outlineOnly && ctx.fill()
   ctx.stroke()
   //
-  // Flat mode ends here — no highlight arc and no cap dots.
+  // Flat / outline mode ends here — no highlight arc and no cap dots.
   //
-  if (flat) return
+  if (flat || outlineOnly) return
   //
   // Cap highlight: small lighter arc near the top-left gives a sense of
   // ambient light without needing a real light source.

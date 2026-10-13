@@ -10,7 +10,7 @@ import { isGlowEyesGameplayUnlocked } from './glow-eye-intro.js'
 
 //
 // Pictorial nudge while the spirit's eyes are shut because the hero is far —
-// a single mushroom, no letters (gray = black icon, colour world = colour).
+// a single mushroom drawn as a black outline, no letters.
 //
 const HINT_ICON_W = 44
 const HINT_ICON_H = 40
@@ -210,7 +210,7 @@ function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v10' : 'mush'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v10' : 'mush-outline'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
@@ -316,7 +316,7 @@ function bakeSpiritMushTooltipCanvas(layout, colored, rightEyes = false) {
   const iconOx = bubbleX + BUBBLE_PADDING_X
   const iconOy = bubbleY + BUBBLE_PADDING_Y
   if (rightEyes) drawHintChainStalks(ctx, iconOx, iconOy, colored)
-  else drawHintMushroom(ctx, iconOx + MUSH_CX, iconOy + MUSH_BASE_Y, colored)
+  else drawHintMushroom(ctx, iconOx + MUSH_CX, iconOy + MUSH_BASE_Y)
   applyGlowFilmGrainToCanvas(canvas, glowUiHash(`${colored}|${rightEyes}|pupils|${layout.bubbleW}`))
   rightEyes && drawHintChainPupils(ctx, iconOx, iconOy)
   return canvas
@@ -455,26 +455,8 @@ function drawHintChainArcChevron(ctx, tipX, tipY, aim) {
   ctx.stroke()
 }
 
-function drawHintMushroom(ctx, cx, baseY, colored) {
-  if (!colored) {
-    const ink = parseHex(MONO_INK)
-    drawMushroomToCanvas(ctx, {
-      cx,
-      baseY,
-      capWidth: MUSH_CAP_W,
-      capHeight: MUSH_CAP_H,
-      stemWidth: MUSH_STEM_W,
-      stemHeight: MUSH_STEM_H,
-      capColor: ink,
-      flat: true,
-      outlineColor: MONO_INK,
-      outlineAlpha: 1
-    })
-    return
-  }
-  const cap = parseHex(GLOW_PAL.mushroomsLight[0])
-  const shadow = parseHex(GLOW_PAL.mushroomsDark[0])
-  const light = parseHex(GLOW_PAL.mushroomsLight[1])
+function drawHintMushroom(ctx, cx, baseY) {
+  const ink = parseHex(MONO_INK)
   drawMushroomToCanvas(ctx, {
     cx,
     baseY,
@@ -482,9 +464,10 @@ function drawHintMushroom(ctx, cx, baseY, colored) {
     capHeight: MUSH_CAP_H,
     stemWidth: MUSH_STEM_W,
     stemHeight: MUSH_STEM_H,
-    capColor: cap,
-    capLight: light,
-    capShadow: shadow
+    capColor: ink,
+    outlineOnly: true,
+    outlineColor: MONO_INK,
+    outlineAlpha: 1
   })
 }
 

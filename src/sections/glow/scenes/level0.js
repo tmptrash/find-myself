@@ -132,7 +132,8 @@ import {
   releaseGlowAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
-import { glowLakeRaftWorldX, mountGlowLakeRaftLayer } from '../utils/glow-lake-raft.js'
+import { glowLakeRaftWorldX, mountGlowLakeRaftLayer, isOnGlowLakeRaft } from '../utils/glow-lake-raft.js'
+import * as GlassesSlot from '../utils/glow-glasses-slot.js'
 import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
@@ -1139,6 +1140,7 @@ const SKELETON_TOOLTIP_Y_OFFSET = -70
 // HUD life-icon (the "teacher") hover tooltip — same as touch lesson 0.
 //
 const LIFE_TOOLTIP_TEXT = 'Your experience'
+const GLASSES_SLOT_TOOLTIP_TEXT = 'Glasses'
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 const LIFE_SCORE_TOOLTIP_SIZE = 44
@@ -2405,7 +2407,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.lakeRaftX = glowLakeRaftWorldX(lakeX1, lakeX2)
     inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
     inst.onGlowEyesCollected = () => revealWaterZone(inst, false)
-    mountGlowLakeRaftLayer(k, () => inst)
+    inst.glassesSlot = GlassesSlot.create({
+      k,
+      getLevelInst: () => inst,
+      leftMargin: LEFT_MARGIN,
+      getAnchorY: () => glowTeacherHudAnchor(inst)?.y ?? null,
+      onPickupSound: () => playGlowGlassesPickupSound(inst)
+    })
+    mountGlowLakeRaftLayer(k, () => inst, {
+      isGlassesOnLog: () => GlassesSlot.isGlassesOnLog(inst.glassesSlot),
+      onGlassesTouched: center => GlassesSlot.collectGlasses(inst.glassesSlot, center)
+    })
     createGlowHorizFallTwigLayer(k, inst)
     initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
@@ -2918,6 +2930,16 @@ function createSmallHeroTooltip(inst) {
       offsetY: LIFE_TOOLTIP_Y_OFFSET,
       forceBelow: true,
       visible: () => glowTeacherHudHoverVisible(inst),
+      screenSpace: true
+    }, {
+      x: () => GlassesSlot.slotRect(inst.glassesSlot).x,
+      y: () => GlassesSlot.slotRect(inst.glassesSlot).y,
+      width: () => GlassesSlot.slotRect(inst.glassesSlot).w,
+      height: () => GlassesSlot.slotRect(inst.glassesSlot).h,
+      text: GLASSES_SLOT_TOOLTIP_TEXT,
+      offsetY: LIFE_TOOLTIP_Y_OFFSET,
+      forceBelow: true,
+      visible: () => GlassesSlot.isSlotFilled(inst.glassesSlot),
       screenSpace: true
     }, {
       x: () => glowLifeScoreTooltipCenter(inst).x,
@@ -7449,6 +7471,7 @@ function detectGlowSurface(inst) {
       return 'wood'
     }
   }
+  if (isOnGlowLakeRaft(inst, x, footY)) return 'wood'
   if (footY >= FLOOR_Y - 30 && isHeroInMudZone(inst, x)) return 'mud'
   if (footY >= FLOOR_Y - 30) return 'ground'
   return 'air'
@@ -7476,7 +7499,14 @@ function isOverGlowWoodSurface(inst, footX, footY) {
 // lake is deep now, drowning applies from the left margin to the shore rocks.
 //
 function isInWaterZone(inst, x, footY) {
+  if (isOnGlowLakeRaft(inst, x, footY)) return false
   return x >= inst.lakeX1 && x <= inst.lakeX2 && footY >= FLOOR_Y - 40
+}
+//
+// Soft pickup chime for the lake raft glasses (silent while glow SFX are muted).
+//
+function playGlowGlassesPickupSound(inst) {
+  inst.sound && !inst.sound._glowSfxMuted && Sound.playLetterPickupSoft(inst.sound)
 }
 //
 // Outer margin frame — visible after G (tree reveal), before inner gray fill.
@@ -9455,6 +9485,7 @@ function checkGlowTouchDeath(inst, heroX, heroFootY) {
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
   if (inst.shoreFallTwigs?.riderLocked) return
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
+  if (isOnGlowLakeRaft(inst, heroX, heroFootY)) return
   if (Predator.isTouchingHero(inst.predator, heroX, heroFootY)) {
     inst._predatorDeathHintContext = capturePredatorDeathHintContext(inst, heroX)
     Predator.notifyKill(inst.predator)
@@ -10393,6 +10424,12 @@ function onUpdate(inst) {
   inst.heroBodyFillApplied && char.opacity < 1 && (char.opacity = 1)
   snapHeroToLogPlatforms(inst, char)
   HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
+  inst.shoreFallTwigs && HorizFallTwig.tryPredatorTurnTowardRaftAfterLanding(
+    inst.shoreFallTwigs,
+    inst,
+    char,
+    isOnGlowLakeRaft
+  )
   snapHeroToStartBranch(inst, char, heroX, footY)
   snapHeroToShoreBranch(inst, char, heroX, footY)
   snapHeroToMainGround(inst, char, grounded, heroX, footY)
@@ -10578,6 +10615,7 @@ function glowPredatorCanHuntHero(inst) {
   if (!char?.pos || inst.drowning || !pred) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
+  if (isOnGlowLakeRaft(inst, char.pos.x, footY)) return false
   const predatorGroundY = pred.groundAt(char.pos.x)
   return Math.abs(footY - predatorGroundY) <= GLOW_PREDATOR_HERO_VERTICAL_BAND_PX
 }

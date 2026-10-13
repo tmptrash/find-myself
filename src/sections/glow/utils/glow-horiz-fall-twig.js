@@ -123,6 +123,32 @@ export function tickTwigPredatorRide(inst, dt) {
 }
 
 /**
+ * After a jump from the lake stick onto the log raft, ease the centipede to
+ * face the raft once the hero has landed on it.
+ * @param {Object} twigInst - Twig inst
+ * @param {Object} levelInst - Glow level inst (lake raft layout)
+ * @param {Object} char - Hero character
+ * @param {function(Object, number, number): boolean} isOnLakeRaft - Feet on raft
+ */
+export function tryPredatorTurnTowardRaftAfterLanding(twigInst, levelInst, char, isOnLakeRaft) {
+  if (!twigInst?.turnTowardRaftPending || !char?.pos || !levelInst) return
+  if (!mountedTwig(twigInst)) {
+    twigInst.turnTowardRaftPending = false
+    return
+  }
+  const footY = char.pos.y + HERO_SURFACE_DETECT_Y
+  if (!isOnLakeRaft(levelInst, char.pos.x, footY)) return
+  if (!(char.isGrounded?.() ?? false)) return
+  const raftX = levelInst.lakeRaftX
+  if (raftX == null) {
+    twigInst.turnTowardRaftPending = false
+    return
+  }
+  twigInst.turnTowardRaftPending = false
+  schedulePredatorTurnTowardWorldX(twigInst, raftX)
+}
+
+/**
  * True while the centipede should hold position (hero jump off the stick).
  * @param {Object} predatorInst - Predator inst
  * @returns {boolean}
@@ -130,6 +156,7 @@ export function tickTwigPredatorRide(inst, dt) {
 export function isTwigPausingPredatorMove(predatorInst) {
   const tw = predatorInst?.levelInst?.shoreFallTwigs
   if (!tw || !mountedTwig(tw)) return false
+  if (tw.rideTurnDisembark && tw.rideTurnPending) return true
   return Boolean(tw.riderAirborne)
 }
 
@@ -241,6 +268,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     //
     releaseRider(inst, char)
     inst.riderAirborne = true
+    inst.predator?.swimming && (inst.turnTowardRaftPending = true)
     return
   } else if (heroLeftRideStick(inst, char, mounted, hero)) {
     //
@@ -313,6 +341,24 @@ function tryLockRider(inst, char, mounted, midX, velY) {
 //
 // After a landing, ease into the reversed heading instead of snapping dir/vx.
 //
+function schedulePredatorTurnTowardWorldX(inst, worldX) {
+  const pred = inst.predator
+  if (!pred || pred.state === 'flee') return
+  const mounted = mountedTwig(inst)
+  const dx = worldX - pred.x
+  const next = Math.abs(dx) < 4 ? (pred.dir || 1) : (dx > 0 ? 1 : -1)
+  inst.rideTurnFromFace = mounted?.face ?? -(pred.dir || 1)
+  inst.rideTurnTargetDir = next
+  inst.rideTurnPending = true
+  inst.rideTurnElapsed = 0
+  inst.rideTurnDisembark = true
+  pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
+  pred.rideTurnPoseDir = next
+  pred.rideTurnBlend = 0
+  pred.vx = 0
+  pred.holdFacing = true
+}
+
 function scheduleRideTurnAfterTwigLand(inst) {
   const pred = inst.predator
   if (!pred) {
@@ -364,7 +410,8 @@ function rideTurnBlend(inst) {
 }
 
 function tickRideTurn(inst, dt) {
-  if (!inst.rideTurnPending || !inst.riderLocked) return
+  if (!inst.rideTurnPending) return
+  if (!inst.riderLocked && !inst.rideTurnDisembark) return
   const pred = inst.predator
   if (!pred) {
     clearRideTurnPose(inst, pred)
@@ -395,6 +442,7 @@ function clearRideTurnPose(inst, pred) {
   inst.rideTurnPending = false
   inst.rideTurnElapsed = 0
   inst.rideTurnAnchorX = null
+  inst.rideTurnDisembark = false
   if (!pred) return
   pred.rideTurnFromSegs = null
   pred.rideTurnBlend = null
@@ -531,12 +579,14 @@ function stepTwig(twig, dt, floorY, predator, inst) {
           predator.holdFacing = true
           predator.dir = inst.rideDir
         }
+      } else if (inst.rideTurnDisembark && inst.rideTurnPending) {
+        predator.holdFacing = true
       } else {
         predator.holdFacing = false
       }
     }
     placeTwigOnBack(twig, predator, dt, riding, inst.rideDir, inst)
-    riding && inst.rideTurnPending && rideTurnBlend(inst) >= 1 &&
+    inst.rideTurnPending && rideTurnBlend(inst) >= 1 &&
       completeRideTurn(inst, predator)
     !riding && (twig.predatorTimer += dt)
     if (!riding && twig.predatorTimer >= TWIG_PREDATOR_MOUNT_TIMER_SEC) {

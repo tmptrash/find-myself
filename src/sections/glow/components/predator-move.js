@@ -280,6 +280,10 @@ function mountedTwigOnPredator(twigs) {
 function applyRideFacingLock(inst) {
   const twigs = inst.levelInst?.shoreFallTwigs
   if (!twigs?.riderLocked || !mountedTwigOnPredator(twigs)) {
+    if (twigs?.rideTurnDisembark && twigs.rideTurnPending) {
+      inst.holdFacing = true
+      return
+    }
     inst.holdFacing = false
     return
   }

@@ -8,7 +8,10 @@ import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 const FRUIT_SEED_OFFSET = 8803
 const FRUIT_LAYOUT_VERSION = 10
 const FRUIT_RANDOM_COUNT = 17
-const FRUIT_GROUND_LINGER_SEC = 5
+//
+// Fallen anchor fruit vanishes after this if the centipede never claims it.
+//
+const FRUIT_GROUND_LINGER_SEC = 10
 const FRUIT_GROUND_FADE_SEC = 0.9
 const FRUIT_RADIUS_MIN = 6
 const FRUIT_RADIUS_RANGE = 4

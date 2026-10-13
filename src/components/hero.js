@@ -372,6 +372,12 @@ const EYE_OFFSET_X_RIGHT = 21
 //
 const EYE_OFFSET_X_CYCLOPS = (EYE_OFFSET_X_LEFT + EYE_OFFSET_X_RIGHT) / 2
 const EYE_OFFSET_Y = 9
+//
+// Head left edge and crouch head top in sprite px — must match the base pose
+// values in the sprite generator (headX / crouch headY).
+//
+const EYE_LINE_HEAD_X = 33
+const JUMP_CROUCH_HEAD_Y = 45
 const EYE_PUPIL_SHIFT = 2
 const PUPIL_SIDE_SHIFT = 2
 //
@@ -1040,6 +1046,31 @@ export function setLookAtPos(inst, pos) {
  */
 export function setAwakeOverride(inst, awake) {
   inst.awakeOverride = !!awake
+}
+
+/**
+ * Current eye line of the hero sprite relative to the character centre, in
+ * sprite px (multiply by the character scale for world px). Follows the head
+ * through idle, run and every jump frame, and mirrors with the facing.
+ * @param {Object} inst - Hero instance
+ * @returns {{ x: number, y: number, sideView: boolean }} Offset and whether the face is in profile
+ */
+export function getEyeLineOffset(inst) {
+  const air = Boolean(inst.jumpPhase && inst.jumpPhase !== 'none')
+  const sideView = air || Boolean(inst.isRunning)
+  let headY = IDLE_HEAD_Y
+  if (air) {
+    const frame = inst.jumpFrame ?? 0
+    const crouch = frame === 0 || frame >= JUMP_AIR_TOP_Y.length + 1
+    headY = crouch ? JUMP_CROUCH_HEAD_Y : JUMP_AIR_TOP_Y[frame - 1]
+  }
+  const eyeX = sideView ? EYE_OFFSET_X_RIGHT : EYE_OFFSET_X_CYCLOPS
+  const dir = inst.direction === -1 ? -1 : 1
+  return {
+    x: (EYE_LINE_HEAD_X + eyeX - SPRITE_SIZE / 2) * dir,
+    y: headY + EYE_OFFSET_Y - SPRITE_SIZE / 2,
+    sideView
+  }
 }
 
 /**

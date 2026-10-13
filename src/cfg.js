@@ -303,7 +303,7 @@ export const CFG = {
         //
         lakeGlasses: {
           rim: PALETTE.gray0,
-          lens: PALETTE.gray5,
+          lens: PALETTE.gray6,
           glint: PALETTE.gray7
         },
         //

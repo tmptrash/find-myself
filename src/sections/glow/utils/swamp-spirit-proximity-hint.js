@@ -210,7 +210,7 @@ function drawSpiritMushTooltip(tipInst, layout) {
   const k = tipInst.k
   const colored = Boolean(tipInst._spiritHintColored)
   const rightEyes = Boolean(tipInst._spiritHintAtRightBurrow)
-  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v10' : 'mush-outline'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  const key = `${SPRITE_KEY_PREFIX}${colored ? 'c' : 'm'}|${rightEyes ? 'eyes-v10' : 'mush-outline-dots'}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
   if (tipInst._spiritHintBakeKey !== key) {
     tipInst._spiritHintBakeKey = key
     tipInst._spiritHintSprite = `${SPRITE_KEY_PREFIX}${glowUiHash(key)}`
@@ -457,6 +457,11 @@ function drawHintChainArcChevron(ctx, tipX, tipY, aim) {
 
 function drawHintMushroom(ctx, cx, baseY) {
   const ink = parseHex(MONO_INK)
+  const lift = [
+    Math.min(255, ink[0] + 36),
+    Math.min(255, ink[1] + 36),
+    Math.min(255, ink[2] + 28)
+  ]
   drawMushroomToCanvas(ctx, {
     cx,
     baseY,
@@ -465,7 +470,10 @@ function drawHintMushroom(ctx, cx, baseY) {
     stemWidth: MUSH_STEM_W,
     stemHeight: MUSH_STEM_H,
     capColor: ink,
+    capLight: lift,
+    capShadow: ink,
     outlineOnly: true,
+    outlineCapDots: true,
     outlineColor: MONO_INK,
     outlineAlpha: 1
   })

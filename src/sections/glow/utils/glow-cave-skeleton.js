@@ -13,18 +13,25 @@ const PIT_CAVE_SKULL_R = PIT_CAVE_EYE_GAP / (PIT_CAVE_SKULL_SOCKET_X_FRAC * 2)
 
 const PIT_CAVE_SKELETON_SPRITE = 'glow-pit-cave-skeleton'
 const SKELETON_BAKE_PAD = 22
-const CAVE_SKELETON_LAYOUT_VERSION = 37
+const CAVE_SKELETON_LAYOUT_VERSION = 38
 //
 // Bump when the skull bitmap changes so a live Kaplay instance rebakes.
 //
-const CAVE_SKULL_BAKE_REV = 38
+const CAVE_SKULL_BAKE_REV = 44
 //
-// Rows of the reference skull that hold the right eye, and how far that
-// cluster sits in from the right rim (rim H pixels are teeth, not the eye).
+// Right-eye H cluster in CAVE_REF_SKULL_GRID (inclusive cells). The other H
+// cells sit on the skull rim, so a plain per-side bbox would span the skull.
 //
-const CAVE_LEFT_SOCKET_ROW_Y0 = 2
-const CAVE_LEFT_SOCKET_ROW_Y1 = 6
-const CAVE_LEFT_SOCKET_RIM_PAD = 4
+const CAVE_RIGHT_SOCKET_COL_X0 = 13
+const CAVE_RIGHT_SOCKET_COL_X1 = 17
+const CAVE_RIGHT_SOCKET_ROW_Y0 = 2
+const CAVE_RIGHT_SOCKET_ROW_Y1 = 6
+//
+// Empty left orbit: hollow ring in a darker bone tone, same size as the right socket.
+//
+const CAVE_LEFT_EMPTY_SOCKET_RIM_ALPHA = 0.6
+const CAVE_LEFT_EMPTY_SOCKET_RIM_CELLS = 0.8
+const CAVE_LEFT_EMPTY_SOCKET_RADIUS_SCALE = 1.45
 //
 // Skull sits against the widened interior's left wall (not the mouth lip).
 //
@@ -370,7 +377,7 @@ function drawReferencePixelGrid(ctx, grid, u, palette, centerX, topY, scaleX = 1
 // Reference skull — bitmap traced from the user art (scaled to skullR).
 //
 function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCss) {
-  const grid = punchLeftEyeSocket(solidifyEnclosedDots(CAVE_REF_SKULL_GRID))
+  const grid = solidifyEnclosedDots(CAVE_REF_SKULL_GRID)
   const palette = caveSkeletonSolidPalette(boneCss, deepCss, socketCss)
   const gw = grid[0].length
   const gh = grid.length
@@ -381,25 +388,32 @@ function drawCaveSkullFromReference(ctx, r, boneCss, deepCss, socketCss = boneCs
     row.split('').map((ch, x) => (ch === 'H' && x < midX) ? 'D' : ch).join('')
   )
   drawReferencePixelGrid(ctx, masked, u, palette, 0, topY)
+  drawCaveEmptyLeftEyeSocketRim(ctx, r, measureCaveRightSocketSize(u), u, deepCss)
 }
 //
-// The hero takes the left eye, so that socket stays an empty opening.
-// Right-eye H cells are mirrored into air; the right socket itself is kept.
+// Radii of the right-eye H cluster (the left rim copies its size).
 //
-function punchLeftEyeSocket(grid) {
-  return grid.map((row, y) => {
-    if (y < CAVE_LEFT_SOCKET_ROW_Y0 || y > CAVE_LEFT_SOCKET_ROW_Y1) return row
-    const cells = row.split('')
-    const gw = cells.length
-    const mid = gw * 0.5
-    const rim = gw - CAVE_LEFT_SOCKET_RIM_PAD
-    for (let x = Math.ceil(mid); x < rim; x++) {
-      if (cells[x] !== 'H') continue
-      const mx = gw - 1 - x
-      mx >= 0 && mx < mid && (cells[mx] = '.')
-    }
-    return cells.join('')
-  })
+function measureCaveRightSocketSize(u) {
+  const cols = CAVE_RIGHT_SOCKET_COL_X1 - CAVE_RIGHT_SOCKET_COL_X0 + 1
+  const rows = CAVE_RIGHT_SOCKET_ROW_Y1 - CAVE_RIGHT_SOCKET_ROW_Y0 + 1
+  const scale = CAVE_LEFT_EMPTY_SOCKET_RADIUS_SCALE
+  return { rx: cols * 0.5 * u * scale, ry: rows * 0.5 * u * scale }
+}
+//
+// The hero took the left eye: hollow rim mirrored from the right eye, centred
+// on the same eye line as the right eye (getPitCaveSkullEyeLine).
+//
+function drawCaveEmptyLeftEyeSocketRim(ctx, r, socket, u, deepCss) {
+  const cx = -r * PIT_CAVE_SKULL_SOCKET_X_FRAC
+  const cy = -r * PIT_CAVE_SKULL_SOCKET_Y_FRAC
+  const prevAlpha = ctx.globalAlpha
+  ctx.strokeStyle = deepCss
+  ctx.lineWidth = Math.max(1, u * CAVE_LEFT_EMPTY_SOCKET_RIM_CELLS)
+  ctx.globalAlpha = prevAlpha * CAVE_LEFT_EMPTY_SOCKET_RIM_ALPHA
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, socket.rx, socket.ry, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = prevAlpha
 }
 //
 // Draws one thorax rib side — full arc, detached gap, or spine-only shear stub.

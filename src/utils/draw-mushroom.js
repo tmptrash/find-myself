@@ -33,6 +33,8 @@ const DOT_MAX_COUNT = 3
  * @param {boolean} [opts.flat=false] - Single-tone silhouette: stem uses the
  *   cap colour and highlight/dots are skipped (glow gray-phase style)
  * @param {boolean} [opts.outlineOnly=false] - Stroke only, no interior fill
+ * @param {boolean} [opts.outlineCapDots=false] - With outlineOnly, still paint
+ *   fixed pale dots on the cap (hint icons)
  */
 export function drawMushroomToCanvas(ctx, opts) {
   const {
@@ -49,7 +51,8 @@ export function drawMushroomToCanvas(ctx, opts) {
     outlineColor = null,
     outlineWidth = STEM_LINE_WIDTH,
     flat = false,
-    outlineOnly = false
+    outlineOnly = false,
+    outlineCapDots = false
   } = opts
   const lightRgb = capLight ?? [
     Math.min(255, capColor[0] + 40),
@@ -98,7 +101,10 @@ export function drawMushroomToCanvas(ctx, opts) {
   //
   // Flat / outline mode ends here — no highlight arc and no cap dots.
   //
-  if (flat || outlineOnly) return
+  if (flat || outlineOnly) {
+    outlineOnly && outlineCapDots && drawMushroomCapDots(ctx, cx, stemTop, capWidth, capHeight, lightRgb)
+    return
+  }
   //
   // Cap highlight: small lighter arc near the top-left gives a sense of
   // ambient light without needing a real light source.
@@ -121,4 +127,20 @@ export function drawMushroomToCanvas(ctx, opts) {
     ctx.arc(dotX, dotY, 1 + Math.random(), 0, Math.PI * 2)
     ctx.fill()
   }
+}
+//
+// Stable cap speckles for outline-only hint mushrooms.
+//
+function drawMushroomCapDots(ctx, cx, stemTop, capWidth, capHeight, lightRgb) {
+  const dots = [
+    { dx: -capWidth * 0.18, dy: -capHeight * 0.55, r: 1.2 },
+    { dx: capWidth * 0.12, dy: -capHeight * 0.72, r: 1 },
+    { dx: capWidth * 0.22, dy: -capHeight * 0.38, r: 1.1 }
+  ]
+  ctx.fillStyle = `rgba(${lightRgb[0]}, ${lightRgb[1]}, ${lightRgb[2]}, 0.42)`
+  dots.forEach(dot => {
+    ctx.beginPath()
+    ctx.arc(cx + dot.dx, stemTop + dot.dy, dot.r, 0, Math.PI * 2)
+    ctx.fill()
+  })
 }

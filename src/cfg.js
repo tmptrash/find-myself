@@ -298,6 +298,15 @@ export const CFG = {
           gameplay: PALETTE.gray0
         },
         //
+        // Lake raft glasses — near-black anti-alias edge pixels, light lenses
+        // and a near-white diagonal glint. Rims/temples use visual.colors.outline.
+        //
+        lakeGlasses: {
+          rim: PALETTE.gray0,
+          lens: PALETTE.gray5,
+          glint: PALETTE.gray7
+        },
+        //
         // Soft gray rim for low-priority decor (captions, muted props).
         //
         glowOutlineLight: PALETTE.gray2,

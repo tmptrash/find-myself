@@ -308,6 +308,7 @@ function persistGlowEyesCollected(inst) {
   //
   inst.parallaxFadeTarget = 1
   inst.parallaxFade = 0
+  inst.onGlowEyesCollected?.()
 }
 function didGlowEyeAttachHeroMove(intro, char, heroInst) {
   if (!char?.pos || !intro) return false

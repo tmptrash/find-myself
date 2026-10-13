@@ -2404,6 +2404,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     mountGlowTreeFruitLayer(k, inst)
     inst.lakeRaftX = glowLakeRaftWorldX(lakeX1, lakeX2)
     inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
+    inst.onGlowEyesCollected = () => revealWaterZone(inst, false)
     mountGlowLakeRaftLayer(k, () => inst)
     createGlowHorizFallTwigLayer(k, inst)
     initGlowTeacherHintState(inst)
@@ -2964,13 +2965,13 @@ function loadGlowZones() {
   groundDecorRightLegacy && groundRightStripMax < 0 && (groundRightStripMax = GROUND_RIGHT_STRIP_COUNT - 1)
   const groundDecorRight = groundDecorRightLegacy || groundRightStripMax >= GROUND_RIGHT_STRIP_COUNT - 1
   const waterDiscovered = get(KEY_REVEALED_WATER, false)
+  const eyesCollectedSaved = get(KEY_EYES_COLLECTED, false)
   //
-  // Left shore decor opens only with the lake — after the first drowning.
+  // Left shore decor opens with the lake (first eye or legacy drowning save).
   //
-  const groundDecorLeft = waterDiscovered
+  const groundDecorLeft = waterDiscovered || eyesCollectedSaved
   const leftShoreRock = waterDiscovered || get(KEY_LEFT_SHORE_ROCK, false)
   const branchTrampRevealed = get(KEY_BRANCH_TRAMP_REVEALED, false)
-  const eyesCollectedSaved = get(KEY_EYES_COLLECTED, false)
   const eyesCollected = eyesCollectedSaved || secondEyeCollected
   eyesCollected && !eyesCollectedSaved && (set(KEY_EYES_COLLECTED, true), set(KEY_PIT_COLLAPSED, true))
   //
@@ -3542,7 +3543,8 @@ function rebakeGlowRockSpritesShaded(inst) {
 // Re-applies lake / decor visuals saved in localStorage (first visit stays bare).
 //
 function restorePersistedGlowZoneVisuals(inst) {
-  inst.zones.waterDiscovered && revealWaterZone(inst, false)
+  const z = inst.zones
+  if (z.waterDiscovered || z.eyesCollected) revealWaterZone(inst, false)
 }
 function applyZoneVisibility(inst) {
   if (shouldGlowBlockWorldReveal(inst)) {
@@ -8954,25 +8956,26 @@ function createGlowHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX = 
     x2: horizBranch.x2,
     y: horizBranch.physY
   }]
-  const plats = []
-  const homes = []
-  segs.forEach(seg => {
-    const w = Math.max(4, seg.x2 - seg.x1)
-    const y = seg.y + dropY
-    const plat = k.add([
-      k.rect(w, HORIZ_PLATFORM_H),
-      k.pos(hideX ?? seg.x1, hideY ?? y),
-      k.anchor('topleft'),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),
-      CFG.game.platformName
-    ])
-    plat.tag(platTag)
-    plats.push(plat)
-    homes.push({ x: seg.x1, y, x2: seg.x2 })
-  })
-  const startBranchY = Math.min(...homes.map(h => h.y))
+  //
+  // One flat collider for the whole branch — segment Y drift is visual only.
+  //
+  const spanX1 = Math.min(...segs.map(s => s.x1))
+  const spanX2 = Math.max(...segs.map(s => s.x2))
+  const walkTopY = Math.min(...segs.map(s => s.y)) + dropY
+  const w = Math.max(4, spanX2 - spanX1)
+  const plat = k.add([
+    k.rect(w, HORIZ_PLATFORM_H),
+    k.pos(hideX ?? spanX1, hideY ?? walkTopY),
+    k.anchor('topleft'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName
+  ])
+  plat.tag(platTag)
+  const plats = [plat]
+  const homes = [{ x: spanX1, y: walkTopY, x2: spanX2 }]
+  const startBranchY = walkTopY
   return {
     plats,
     homes,

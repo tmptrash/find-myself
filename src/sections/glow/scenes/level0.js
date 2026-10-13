@@ -1131,7 +1131,7 @@ const TRAMP_TOOLTIP_Y_OFFSET = -90
 // Buried skeleton hover — visible once the left underground band is open
 //
 const SKELETON_TOOLTIP_TEXT = 'Time to get some sleep...'
-const SKELETON_TOOLTIP_NEED_EYE_TEXT = 'Maybe you need an eye, buddy?'
+const SKELETON_TOOLTIP_NEED_EYE_TEXT = 'Maybe you need\nan eye, buddy?'
 const SKELETON_TOOLTIP_WIDTH = 72
 const SKELETON_TOOLTIP_HEIGHT = 104
 const SKELETON_TOOLTIP_BODY_CENTER_R = 2.3
@@ -1195,6 +1195,8 @@ const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
 const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
 const GLOW_SPIKY_TOMATO_Z = GLOW_EAR_TREE_BRANCHES_Z + 0.5
+const TOMATO_BURST_HERO_SAFE_RADIUS = 100
+const TOMATO_BURST_HERO_SAFE_SEC = 3.2
 const GLOW_EAR_TREE_COUNT = 2
 const GRASS_TUFT_COUNT = 22
 //
@@ -1264,13 +1266,6 @@ const GROUND_LIP_FREQ_B = 0.031
 //
 const GROUND_TOP_RIM_H = 3
 const GROUND_TOP_RIM_OPACITY = 0.62
-//
-// Wavy bottom of the baked earth band (organic silhouette, not a flat rect).
-//
-const GROUND_BOTTOM_WAVE_AMP = 7
-const GROUND_BOTTOM_WAVE_STEPS = 40
-const GROUND_BOTTOM_WAVE_FREQ_A = 0.018
-const GROUND_BOTTOM_WAVE_FREQ_B = 0.041
 //
 // Underground earth band: two soil layers split at 50% depth (wavy seam at
 // mid-height of CAVE_BAND_H). Top = chernozem, bottom = deeper sand/clay.
@@ -1414,7 +1409,7 @@ const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
 const CAMERA_INTRO_HINT_DELAY = 1
 //
-// First spawn on the start branch: glance left, then face right.
+// Branch landing only: glance left, then face right (not used on first ground spawn).
 //
 const BRANCH_LOOK_LEFT_DURATION = 2
 const GLOW_CAMERA_SHAKE_AMP = 5
@@ -1976,9 +1971,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
     )
     //
-    // Ground spawn: right of the branch trampoline (never on its cap). After a
-    // drowning death or any revisit with explored right ground — same spot.
-    // Menu exit / level reload restores the last saved pose (X + Y).
+    // First visit: ground under the start branch (same X as the old branch
+    // spawn). Later: right of the branch trampoline after drowning or once
+    // lower-right ground is open. Menu exit restores the last saved pose.
     //
     let spawnOnBranch = false
     let heroSpawnX = branchSpawnX
@@ -2007,9 +2002,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       heroSpawnX = treeGroundSpawnX
       heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     } else {
-      spawnOnBranch = true
       heroSpawnX = branchSpawnX
-      heroSpawnY = branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      spawnOnBranch = false
     }
     //
     // A saved/derived ground spawn landing right on a mushroom's bounce cap
@@ -2533,7 +2528,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       particles: inst.footParticles,
       sfx: sound,
       groundY: FLOOR_Y,
-      onExplode: x => onGlowTomatoExplode(inst, x)
+      onExplode: (x, y) => onGlowTomatoExplode(inst, x, y)
     })
     createGlowChainBuoyLayer(k, zones)
     createGlowEarTreeLayer(k, inst)
@@ -4385,8 +4380,8 @@ function columnSolidTop(data, w, h, x0, x1) {
   return 0
 }
 //
-// Fills one horizontal band across the full width, flat top edge — used for
-// every earth layer except the deepest, which gets the wavy silhouette.
+// Fills one horizontal band across the full width; the deepest bottom edge
+// stays flat on the playfield floor (interior seams stay jaggy).
 //
 //
 // Deterministic hash for layer-boundary jitter (stable across bakes).
@@ -4428,20 +4423,17 @@ function paintWavyBoundedEarthLayer(ctx, rgb, x0, width, y0, height, topFrac, bo
   for (let i = steps; i >= 0; i--) {
     const t = i / steps
     const x = x0 + t * width
-    let y = groundLayerBoundaryY(x, y0, height, bottomFrac, bottomLayerIndex)
-    if (bottomLayerIndex < 0) {
-      const wave = (Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_A) +
-        Math.sin(x * GROUND_BOTTOM_WAVE_FREQ_B) * 0.55) * GROUND_BOTTOM_WAVE_AMP
-      y = y0 + height + wave
-    }
+    const y = bottomLayerIndex < 0
+      ? y0 + height
+      : groundLayerBoundaryY(x, y0, height, bottomFrac, bottomLayerIndex)
     ctx.lineTo(x, y)
   }
   ctx.closePath()
   ctx.fill()
 }
 //
-// Stacks soil layers top to bottom — flat top on FLOOR_Y, wavy coastline
-// seams between strata; the deepest edge keeps the extra bottom swell.
+// Stacks soil layers top to bottom — flat top on FLOOR_Y, jaggy seams
+// between strata, flat bottom on the playfield earth floor.
 //
 function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
   let cumFrac = 0
@@ -4479,6 +4471,13 @@ function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
   renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
+  //
+  // Flat seal on the playfield earth floor — keeps the deepest stratum edge
+  // perfectly horizontal after bake (no AA ripple along the bottom).
+  //
+  const bottomRgb = layers[layers.length - 1]?.rgb
+  const earthFloorY = FLOOR_Y + CAVE_BAND_H
+  bottomRgb && paintFlatEarthGroundSeal(ctx, bottomRgb, LEFT_MARGIN, earthFloorY - 4, GAME_W)
 }
 //
 // Flat strip flush with the walkable ground line (covers sub-pixel gaps).
@@ -10194,6 +10193,7 @@ function onUpdate(inst) {
     return
   }
   syncGlowPredatorPatrolBounds(inst)
+  syncGlowTreeFruitHostOpacity(inst)
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.zones.colorWorld && inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
@@ -10423,8 +10423,15 @@ function onUpdate(inst) {
   }
   inst.heroBodyFillApplied && char.opacity < 1 && (char.opacity = 1)
   snapHeroToLogPlatforms(inst, char)
-  HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
+  const heroOnLakeRaft = isOnGlowLakeRaft(inst, heroX, footY)
+  !heroOnLakeRaft && HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
   inst.shoreFallTwigs && HorizFallTwig.tryPredatorTurnTowardRaftAfterLanding(
+    inst.shoreFallTwigs,
+    inst,
+    char,
+    isOnGlowLakeRaft
+  )
+  inst.shoreFallTwigs && HorizFallTwig.tickPredatorLakeRaftRetreatFallback(
     inst.shoreFallTwigs,
     inst,
     char,
@@ -10596,9 +10603,11 @@ function syncGlowPredatorPatrolBounds(inst) {
   pred.minX = bounds.minX
   pred.maxX = bounds.maxX
   //
-  // A fleeing centipede may swim past the patrol strip across the lake.
+  // A fleeing centipede may swim past the patrol strip across the lake, and so
+  // may one swimming back from the glasses log — clamping that one snapped its
+  // head onto the shore and dragged the body across the water.
   //
-  if (pred.state === 'flee') return
+  if (pred.state === 'flee' || pred.lakeRaftRetreatX != null) return
   pred.x < pred.minX && (pred.x = pred.minX)
   pred.x > pred.maxX && (pred.x = pred.maxX)
 }
@@ -10633,9 +10642,23 @@ function tickGlowTomatoTreeLanding(inst, char, grounded, justLanded) {
 //
 // Tomato burst on the ground — camera jolt, and a nearby centipede bolts away.
 //
-function onGlowTomatoExplode(inst, x) {
+function onGlowTomatoExplode(inst, x, y) {
   triggerGlowCameraShake(inst)
+  grantGlowTomatoBurstHeroSafety(inst, x, y)
   inst.predator && !inst.predator.obj?.hidden && Predator.startFlee(inst.predator, x)
+}
+//
+// A burst under the hero used to overlap with flee touch-kill — keep him alive
+// and in place while the centipede bolts away.
+//
+function grantGlowTomatoBurstHeroSafety(inst, burstX, burstY) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const by = burstY ?? FLOOR_Y
+  const d = Math.hypot(char.pos.x - burstX, footY - by)
+  if (d > TOMATO_BURST_HERO_SAFE_RADIUS) return
+  inst.touchDeathGraceUntil = inst.k.time() + TOMATO_BURST_HERO_SAFE_SEC
 }
 function tickGlowStartBranchFatigue(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded || !isHeroOnStartBranch(inst, char)) return
@@ -11547,6 +11570,39 @@ function syncTreeSegmentsVisibility(inst) {
     }
   })
   syncTreeSegmentsColorCrossfade(inst, fade)
+}
+//
+// A hanging fruit is as visible as the crown part holding its leaf: hidden
+// while that part is hidden (spawn fade, not yet revealed), fading in with it,
+// and never dimmed because some other part of the tree is still closed.
+//
+function syncGlowTreeFruitHostOpacity(inst) {
+  const spots = inst.treeFruitSpots
+  if (!spots?.length) return
+  if (inst.treeDrawMonolith) {
+    const op = Math.min(1, shownObjOpacity(inst.treeObj) + shownObjOpacity(inst.treeColorObj))
+    spots.forEach(fruit => { fruit.hostOpacity = op })
+    return
+  }
+  if (inst.treeLeafSegmentsFor !== inst.treeData) {
+    inst.treeLeafSegmentsFor = inst.treeData
+    inst.treeLeafSegments = TreeSegments.glowTreeLeafSegmentMap(inst.treeData)
+  }
+  const crownIds = (inst.treeSegmentIds ?? []).filter(id => !TreeSegments.isGlowTreeRootsSegmentId(id))
+  spots.forEach(fruit => {
+    if (!fruit.attached) return
+    const ids = inst.treeLeafSegments.get(fruit.leafKey) ?? crownIds
+    fruit.hostOpacity = ids.reduce((max, id) => Math.max(max, treeSegmentShownOpacity(inst, id)), 0)
+  })
+}
+function treeSegmentShownOpacity(inst, id) {
+  const entry = inst.treeSegmentEntries?.[id]
+  if (!entry) return 0
+  return Math.min(1, shownObjOpacity(entry.grayObj) + shownObjOpacity(entry.colorObj))
+}
+function shownObjOpacity(obj) {
+  if (!obj || obj.hidden) return 0
+  return obj.opacity ?? 1
 }
 //
 // True while hero.js holds the landing crouch (jump-6) or pre-jump squash.

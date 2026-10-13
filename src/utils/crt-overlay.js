@@ -2,32 +2,42 @@ import { CFG } from '../cfg.js'
 import { getRGB, parseHex } from './helper.js'
 
 //
-// Screen-space CRT post layer (scanlines, vignette, phosphor tint, noise).
+// Screen-space CRT post layer (scanlines, phosphor tint, noise). No radial
+// vignette: its gradient steps read as rings spreading from the centre.
 // Baked full-viewport sprites rebuild only on resize — no per-frame readbacks.
 //
 const SPRITE_SCANLINES = 'crt-screen-scanlines'
-const SPRITE_VIGNETTE = 'crt-screen-vignette'
 const SPRITE_NOISE_TILE = 'crt-noise-tile'
 const SPRITE_CHROMA_LEFT = 'crt-chroma-edge-left'
 const SPRITE_CHROMA_RIGHT = 'crt-chroma-edge-right'
 const NOISE_SEED = 0x637274
+const SPRITE_SOFT_BAND_LIGHT = 'crt-soft-band-light'
+const SPRITE_SOFT_BAND_DARK = 'crt-soft-band-dark'
 const CHROMA_EDGE_CANVAS_H = 4
-const GLITCH_ROLL = 'roll'
-const GLITCH_CHROMA_BURST = 'chromaBurst'
-const GLITCH_SNOW = 'snow'
-const GLITCH_SYNC_DROP = 'syncDrop'
-const GLITCH_STUTTER = 'stutterBands'
+//
+// Soft band bake: tall enough that nearest-filter stretching shows no steps.
+//
+const SOFT_BAND_CANVAS_W = 4
+const SOFT_BAND_CANVAS_H = 256
+const GLITCH_HUM_BAR = 'humBar'
+const GLITCH_VERTICAL_ROLL = 'verticalRoll'
+const GLITCH_SNOW_BURST = 'snowBurst'
+const GLITCH_BRIGHTNESS_SAG = 'brightnessSag'
+const GLITCH_COLOR_DRIFT = 'colorDrift'
+//
+// Hum bar is the most common fault on a real set, so it appears twice.
+//
 const GLITCH_KINDS = [
-  GLITCH_ROLL,
-  GLITCH_CHROMA_BURST,
-  GLITCH_SNOW,
-  GLITCH_SYNC_DROP,
-  GLITCH_STUTTER
+  GLITCH_HUM_BAR,
+  GLITCH_HUM_BAR,
+  GLITCH_VERTICAL_ROLL,
+  GLITCH_SNOW_BURST,
+  GLITCH_BRIGHTNESS_SAG,
+  GLITCH_COLOR_DRIFT
 ]
-const GLITCH_ROLL_SLICE_MIN = 4
-const GLITCH_ROLL_SLICE_MAX = 7
-const GLITCH_SYNC_LINE_COUNT = 6
-const GLITCH_STUTTER_BAND_COUNT = 3
+const GLITCH_EDGE_IN = 0.2
+const GLITCH_EDGE_OUT = 0.25
+const SNOW_JITTER_HZ = 30
 
 /**
  * Adds one persistent full-screen CRT layer to this Kaplay instance. It sits
@@ -50,6 +60,7 @@ export function installCrtOverlay(k) {
   }
   ensureCrtNoiseTileSprite(k, crt)
   ensureCrtChromaEdgeSprites(k, crt)
+  ensureCrtSoftBandSprites(k, crt)
   //
   // k.go() removes every root object without stay() at the end of the frame,
   // so a layer re-added per scene would live for one frame only. Global
@@ -69,6 +80,38 @@ export function installCrtOverlay(k) {
       }
     }
   ])
+}
+
+/**
+ * Bakes the grey CRT noise tile (CPU canvas, no GPU readback). Shared with the
+ * DOM loader CRT layer so both grains match.
+ * @param {Object} crt - CFG.visual.crt
+ * @returns {HTMLCanvasElement}
+ */
+export function bakeCrtNoiseTileCanvas(crt) {
+  const size = crt.noise.tileSize ?? 192
+  const block = Math.max(1, crt.noise.blockSize ?? 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const imageData = ctx.createImageData(size, size)
+  const px = imageData.data
+  for (let y = 0; y < size; y++) {
+    const by = (y / block) | 0
+    for (let x = 0; x < size; x++) {
+      const bx = (x / block) | 0
+      const i = (y * size + x) * 4
+      const n = noiseHash(NOISE_SEED, bx, by)
+      const v = 118 + n * 28
+      px[i] = v
+      px[i + 1] = v
+      px[i + 2] = v
+      px[i + 3] = 255
+    }
+  }
+  ctx.putImageData(imageData, 0, 0)
+  return canvas
 }
 
 //
@@ -111,7 +154,7 @@ function onUpdateCrtOverlay(inst) {
 }
 
 //
-// Draw order: warm tint → edge chroma → vignette → scanlines → noise → interference.
+// Draw order: warm tint → edge chroma → scanlines → noise → interference.
 //
 function onDrawCrtOverlay(inst) {
   const crt = CFG.visual.crt
@@ -124,11 +167,10 @@ function onDrawCrtOverlay(inst) {
   ensureCrtScreenSprites(k, inst, w, h, crt)
   drawPhosphorTint(k, w, h, crt, master)
   drawChromaEdges(k, w, h, crt, master)
-  drawFullScreenSprite(k, SPRITE_VIGNETTE, w, h, scaledOpacity(crt.vignette.opacity, master))
   drawFullScreenSprite(k, SPRITE_SCANLINES, w, h, scaledOpacity(crt.scanlines.opacity, master))
   drawCrtNoise(k, w, h, crt, master, inst.noiseScroll)
   drawCrtInterference(k, w, h, crt, master, inst.interference)
-  drawCrtGlitch(k, w, h, crt, master, inst.glitch, inst.noiseScroll)
+  drawCrtGlitch(k, w, h, crt, master, inst.glitch)
 }
 
 function drawPhosphorTint(k, w, h, crt, master) {
@@ -172,16 +214,19 @@ function drawChromaEdges(k, w, h, crt, master) {
 }
 
 function drawCrtNoise(k, w, h, crt, master, scrollY) {
-  const noise = crt.noise
-  const op = scaledOpacity(noise.opacity, master)
+  drawNoiseTiles(k, w, h, crt, scaledOpacity(crt.noise.opacity, master), 0, scrollY)
+}
+
+function drawNoiseTiles(k, w, h, crt, op, offX, offY) {
   if (op <= 0.001 || !k.getSprite(SPRITE_NOISE_TILE)) return
-  const tile = noise.tileSize ?? 192
-  const offsetY = scrollY % tile
+  const tile = crt.noise.tileSize ?? 192
+  const ox = offX % tile
+  const oy = offY % tile
   for (let y = -tile; y < h + tile; y += tile) {
-    for (let x = 0; x < w; x += tile) {
+    for (let x = -tile; x < w; x += tile) {
       k.drawSprite({
         sprite: SPRITE_NOISE_TILE,
-        pos: k.vec2(x, y - offsetY),
+        pos: k.vec2(x + tile - ox, y - oy),
         anchor: 'topleft',
         width: tile,
         height: tile,
@@ -200,14 +245,36 @@ function drawCrtInterference(k, w, h, crt, master, band) {
   const dur = Math.max(0.05, intf.durationSec ?? 0.2)
   const u = Math.min(1, band.t / dur)
   const fade = u < 0.35 ? u / 0.35 : 1 - (u - 0.35) / 0.65
-  const bandH = intf.bandHeightPx ?? 5
-  k.drawRect({
-    pos: k.vec2(0, band.y - bandH * 0.5),
+  const bandH = intf.bandHeightPx ?? 44
+  const y = band.y + band.t * (intf.driftPxPerSec ?? 0)
+  drawSoftBand(k, SPRITE_SOFT_BAND_LIGHT, w, y, bandH, op * Math.max(0, fade))
+}
+//
+// Soft vertical-gradient band stretched across the screen, centred at y.
+//
+function drawSoftBand(k, spriteName, w, y, bandH, opacity) {
+  if (opacity <= 0.001 || !k.getSprite(spriteName)) return
+  k.drawSprite({
+    sprite: spriteName,
+    pos: k.vec2(0, y - bandH * 0.5),
     anchor: 'topleft',
     width: w,
     height: bandH,
-    color: getRGB(k, intf.bandTint),
-    opacity: op * Math.max(0, fade)
+    opacity,
+    fixed: true
+  })
+}
+
+function drawFullScreenTint(k, w, h, hex, opacity) {
+  if (opacity <= 0.001) return
+  k.drawRect({
+    pos: k.vec2(0, 0),
+    anchor: 'topleft',
+    width: w,
+    height: h,
+    color: getRGB(k, hex),
+    opacity,
+    fixed: true
   })
 }
 
@@ -229,12 +296,11 @@ function ensureCrtScreenSprites(k, inst, w, h, crt) {
   inst.bakedW = w
   inst.bakedH = h
   k.loadSprite(SPRITE_SCANLINES, bakeScanlineCanvas(w, h, crt))
-  k.loadSprite(SPRITE_VIGNETTE, bakeVignetteCanvas(w, h, crt))
 }
 
 function ensureCrtNoiseTileSprite(k, crt) {
   if (k.getSprite(SPRITE_NOISE_TILE)) return
-  k.loadSprite(SPRITE_NOISE_TILE, bakeNoiseTile(crt))
+  k.loadSprite(SPRITE_NOISE_TILE, bakeCrtNoiseTileCanvas(crt))
 }
 
 function ensureCrtChromaEdgeSprites(k, crt) {
@@ -250,6 +316,28 @@ function ensureCrtChromaEdgeSprites(k, crt) {
   )
 }
 
+function ensureCrtSoftBandSprites(k, crt) {
+  if (k.getSprite(SPRITE_SOFT_BAND_LIGHT)) return
+  k.loadSprite(SPRITE_SOFT_BAND_LIGHT, bakeSoftBandCanvas(crt.glitches?.humBar?.tint ?? crt.interference.bandTint))
+  k.loadSprite(SPRITE_SOFT_BAND_DARK, bakeSoftBandCanvas(CFG.visual.colors.outline))
+}
+//
+// Bell-shaped alpha profile so band edges dissolve instead of reading as lines.
+//
+function bakeSoftBandCanvas(tintHex) {
+  const canvas = document.createElement('canvas')
+  canvas.width = SOFT_BAND_CANVAS_W
+  canvas.height = SOFT_BAND_CANVAS_H
+  const ctx = canvas.getContext('2d')
+  const [r, g, b] = parseHex(tintHex)
+  for (let y = 0; y < SOFT_BAND_CANVAS_H; y++) {
+    const s = Math.sin(((y + 0.5) / SOFT_BAND_CANVAS_H) * Math.PI)
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${s * s})`
+    ctx.fillRect(0, y, SOFT_BAND_CANVAS_W, 1)
+  }
+  return canvas
+}
+
 function bakeScanlineCanvas(w, h, crt) {
   const canvas = document.createElement('canvas')
   canvas.width = w
@@ -261,51 +349,6 @@ function bakeScanlineCanvas(w, h, crt) {
   for (let y = 0; y < h; y += spacing) {
     ctx.fillRect(0, y, w, 1)
   }
-  return canvas
-}
-
-function bakeVignetteCanvas(w, h, crt) {
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  const cx = w * 0.5
-  const cy = h * 0.5
-  const minDim = Math.min(w, h)
-  const inner = minDim * (crt.vignette.innerRadiusFrac ?? 0.4)
-  const outer = minDim * (crt.vignette.outerRadiusFrac ?? 0.78)
-  const [r, g, b] = parseHex(CFG.visual.colors.outline)
-  const grd = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer)
-  grd.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`)
-  grd.addColorStop(1, `rgba(${r}, ${g}, ${b}, 1)`)
-  ctx.fillStyle = grd
-  ctx.fillRect(0, 0, w, h)
-  return canvas
-}
-
-function bakeNoiseTile(crt) {
-  const size = crt.noise.tileSize ?? 192
-  const block = Math.max(1, crt.noise.blockSize ?? 2)
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const imageData = ctx.createImageData(size, size)
-  const px = imageData.data
-  for (let y = 0; y < size; y++) {
-    const by = (y / block) | 0
-    for (let x = 0; x < size; x++) {
-      const bx = (x / block) | 0
-      const i = (y * size + x) * 4
-      const n = noiseHash(NOISE_SEED, bx, by)
-      const v = 118 + n * 28
-      px[i] = v
-      px[i + 1] = v
-      px[i + 2] = v
-      px[i + 3] = 255
-    }
-  }
-  ctx.putImageData(imageData, 0, 0)
   return canvas
 }
 
@@ -345,186 +388,78 @@ function scheduleNextGlitch(k, crt) {
 }
 
 function spawnCrtGlitch(k, crt, now) {
-  const glitches = crt.glitches
-  const minDur = glitches?.minDurationSec ?? 0.07
-  const maxDur = glitches?.maxDurationSec ?? 0.24
-  const durSpan = Math.max(0.02, maxDur - minDur)
-  const durationSec = minDur + pseudoRand(now * 1.13 + 9.2) * durSpan
   const seed = (now * 1000 + pseudoRand(now) * 999) | 0
   const kind = GLITCH_KINDS[seed % GLITCH_KINDS.length]
-  const h = k.height()
+  const kindCfg = crt.glitches[kind]
+  const durSpan = Math.max(0.02, kindCfg.maxDurationSec - kindCfg.minDurationSec)
   return {
     kind,
     t: 0,
-    durationSec,
+    durationSec: kindCfg.minDurationSec + pseudoRand(now * 1.13 + 9.2) * durSpan,
     seed,
-    bandY: h * (0.1 + pseudoRand(seed * 0.31) * 0.8),
-    shiftPx: (pseudoRand(seed * 1.7) - 0.5) * 48
+    startY: k.height() * pseudoRand(seed * 0.31)
   }
 }
 
 //
-// Rare full-screen TV malfunctions — several kinds, envelope-faded so they read
-// as brief analog hits rather than constant noise.
+// Rare analog TV faults — soft, whole-picture effects envelope-faded in and
+// out, so they read as signal trouble rather than drawn lines.
 //
-function drawCrtGlitch(k, w, h, crt, master, glitch, noiseScroll) {
+function drawCrtGlitch(k, w, h, crt, master, glitch) {
   if (!glitch || !crt.glitches?.enabled) return
   const u = Math.min(1, glitch.t / Math.max(0.04, glitch.durationSec))
-  const envelope = u < 0.2 ? u / 0.2 : u > 0.75 ? (1 - u) / 0.25 : 1
+  const envelope = u < GLITCH_EDGE_IN ? u / GLITCH_EDGE_IN : u > 1 - GLITCH_EDGE_OUT ? (1 - u) / GLITCH_EDGE_OUT : 1
   const strength = clamp01(master) * envelope
   if (strength <= 0.001) return
-  if (glitch.kind === GLITCH_ROLL) drawGlitchRoll(k, w, h, crt, glitch, strength)
-  else if (glitch.kind === GLITCH_CHROMA_BURST) drawGlitchChromaBurst(k, w, h, crt, glitch, strength)
-  else if (glitch.kind === GLITCH_SNOW) drawGlitchSnow(k, w, h, crt, glitch, strength, noiseScroll)
-  else if (glitch.kind === GLITCH_SYNC_DROP) drawGlitchSyncDrop(k, w, h, crt, glitch, strength)
-  else if (glitch.kind === GLITCH_STUTTER) drawGlitchStutterBands(k, w, h, crt, glitch, strength)
+  const kindCfg = crt.glitches[glitch.kind]
+  if (glitch.kind === GLITCH_HUM_BAR) drawGlitchHumBar(k, w, h, kindCfg, glitch, u, strength)
+  else if (glitch.kind === GLITCH_VERTICAL_ROLL) drawGlitchVerticalRoll(k, w, h, kindCfg, u, strength)
+  else if (glitch.kind === GLITCH_SNOW_BURST) drawGlitchSnowBurst(k, w, h, crt, kindCfg, glitch, strength)
+  else if (glitch.kind === GLITCH_BRIGHTNESS_SAG) drawGlitchBrightnessSag(k, w, h, kindCfg, u, strength)
+  else if (glitch.kind === GLITCH_COLOR_DRIFT) drawGlitchColorDrift(k, w, h, crt, kindCfg, glitch, u, strength)
 }
-
-function drawGlitchRoll(k, w, h, crt, glitch, strength) {
-  const sliceCount =
-    GLITCH_ROLL_SLICE_MIN +
-    ((glitch.seed % (GLITCH_ROLL_SLICE_MAX - GLITCH_ROLL_SLICE_MIN + 1)) | 0)
-  const sliceH = 6 + (glitch.seed % 5)
-  const gap = Math.max(sliceH + 2, (h * 0.55) / sliceCount)
-  const chroma = crt.chroma
-  const baseOp = scaledOpacity(chroma.edgeOpacity, 1) * strength * 2.8
-  for (let i = 0; i < sliceCount; i++) {
-    const y = (glitch.bandY + i * gap) % (h - sliceH)
-    const shift = glitch.shiftPx + (pseudoRand(glitch.seed + i * 3.1) - 0.5) * 36
-    const bandOp = baseOp * (0.65 + pseudoRand(glitch.seed + i) * 0.35)
-    k.drawRect({
-      pos: k.vec2(0, y),
-      anchor: 'topleft',
-      width: w,
-      height: sliceH,
-      color: getRGB(k, crt.interference.bandTint),
-      opacity: bandOp * 0.35,
-      fixed: true
-    })
-    if (!k.getSprite(SPRITE_CHROMA_LEFT)) continue
-    k.drawSprite({
-      sprite: SPRITE_CHROMA_LEFT,
-      pos: k.vec2(shift, y),
-      anchor: 'topleft',
-      width: (chroma.edgeWidthPx ?? 52) * 0.45,
-      height: sliceH,
-      opacity: bandOp,
-      fixed: true
-    })
-    k.drawSprite({
-      sprite: SPRITE_CHROMA_RIGHT,
-      pos: k.vec2(w - (chroma.edgeWidthPx ?? 52) * 0.45 + shift * 0.6, y),
-      anchor: 'topleft',
-      width: (chroma.edgeWidthPx ?? 52) * 0.45,
-      height: sliceH,
-      opacity: bandOp,
-      fixed: true
-    })
-  }
+//
+// Mains hum bar: one wide soft bright band drifting slowly down the picture.
+//
+function drawGlitchHumBar(k, w, h, cfg, glitch, u, strength) {
+  const bandH = h * cfg.heightFrac
+  const y = glitch.startY + u * h * 0.5
+  drawSoftBand(k, SPRITE_SOFT_BAND_LIGHT, w, y, bandH, cfg.opacity * strength)
 }
-
-function drawGlitchChromaBurst(k, w, h, crt, glitch, strength) {
-  const chroma = crt.chroma
-  const stripW = (chroma.edgeWidthPx ?? 52) * (1.2 + pseudoRand(glitch.seed) * 0.6)
-  const op = scaledOpacity(chroma.edgeOpacity, 1) * strength * 4.5
-  const bandH = h * (0.22 + pseudoRand(glitch.seed * 2.1) * 0.2)
-  const y0 = glitch.bandY - bandH * 0.5
-  if (!k.getSprite(SPRITE_CHROMA_LEFT)) return
-  k.drawSprite({
-    sprite: SPRITE_CHROMA_LEFT,
-    pos: k.vec2(glitch.shiftPx * 0.4, y0),
-    anchor: 'topleft',
-    width: stripW,
-    height: bandH,
-    opacity: op,
-    fixed: true
-  })
-  k.drawSprite({
-    sprite: SPRITE_CHROMA_RIGHT,
-    pos: k.vec2(w - stripW - glitch.shiftPx * 0.35, y0),
-    anchor: 'topleft',
-    width: stripW,
-    height: bandH,
-    opacity: op,
-    fixed: true
-  })
-  k.drawRect({
-    pos: k.vec2(0, y0),
-    anchor: 'topleft',
-    width: w,
-    height: bandH,
-    color: getRGB(k, chroma.leftTint),
-    opacity: op * 0.12,
-    fixed: true
-  })
+//
+// Lost vertical sync: the dark blanking gap between frames slides top to
+// bottom once while the whole picture dims.
+//
+function drawGlitchVerticalRoll(k, w, h, cfg, u, strength) {
+  const barH = h * cfg.heightFrac
+  const y = -barH + u * (h + barH * 2)
+  drawFullScreenTint(k, w, h, CFG.visual.colors.outline, cfg.dimOpacity * strength)
+  drawSoftBand(k, SPRITE_SOFT_BAND_DARK, w, y, barH, cfg.opacity * strength)
 }
-
-function drawGlitchSnow(k, w, h, crt, glitch, strength, noiseScroll) {
-  const noise = crt.noise
-  const op = scaledOpacity(noise.opacity, 1) * strength * 5.5
-  if (op <= 0.001 || !k.getSprite(SPRITE_NOISE_TILE)) return
-  const tile = noise.tileSize ?? 192
-  const offsetY = (noiseScroll + glitch.seed * 0.07) % tile
-  for (let y = -tile; y < h + tile; y += tile) {
-    for (let x = 0; x < w; x += tile) {
-      k.drawSprite({
-        sprite: SPRITE_NOISE_TILE,
-        pos: k.vec2(x + glitch.shiftPx * 0.2, y - offsetY),
-        anchor: 'topleft',
-        width: tile,
-        height: tile,
-        opacity: op,
-        fixed: true
-      })
-    }
-  }
+//
+// Weak signal: snow flares up and jumps every frame, contrast drops a little.
+//
+function drawGlitchSnowBurst(k, w, h, crt, cfg, glitch, strength) {
+  const step = Math.floor(glitch.t * SNOW_JITTER_HZ)
+  const tile = crt.noise.tileSize ?? 192
+  const ox = pseudoRand(glitch.seed + step * 1.3) * tile
+  const oy = pseudoRand(glitch.seed + step * 2.7) * tile
+  drawNoiseTiles(k, w, h, crt, cfg.opacity * strength, ox, oy)
+  drawFullScreenTint(k, w, h, CFG.visual.colors.outline, cfg.dimOpacity * strength)
 }
-
-function drawGlitchSyncDrop(k, w, h, crt, glitch, strength) {
-  const lineH = 2 + (glitch.seed % 2)
-  const intf = crt.interference
-  const chroma = crt.chroma
-  for (let i = 0; i < GLITCH_SYNC_LINE_COUNT; i++) {
-    const y = (glitch.bandY + i * (h / (GLITCH_SYNC_LINE_COUNT + 2))) % (h - lineH)
-    const shift = glitch.shiftPx + (pseudoRand(glitch.seed + i * 5.3) - 0.5) * 64
-    const op = strength * (0.35 + pseudoRand(glitch.seed + i * 1.9) * 0.45)
-    k.drawRect({
-      pos: k.vec2(shift, y),
-      anchor: 'topleft',
-      width: w,
-      height: lineH,
-      color: getRGB(k, i % 2 === 0 ? chroma.leftTint : chroma.rightTint),
-      opacity: op * 0.22,
-      fixed: true
-    })
-    k.drawRect({
-      pos: k.vec2(0, y),
-      anchor: 'topleft',
-      width: w,
-      height: lineH,
-      color: getRGB(k, intf.bandTint),
-      opacity: op * 0.5,
-      fixed: true
-    })
-  }
+//
+// Supply voltage sag: a few quick brightness dips across the whole frame.
+//
+function drawGlitchBrightnessSag(k, w, h, cfg, u, strength) {
+  const pulse = Math.abs(Math.sin(u * Math.PI * cfg.pulses))
+  drawFullScreenTint(k, w, h, CFG.visual.colors.outline, cfg.opacity * strength * pulse)
 }
-
-function drawGlitchStutterBands(k, w, h, crt, glitch, strength) {
-  const intf = crt.interference
-  const bandH = (intf.bandHeightPx ?? 4) * (1.5 + pseudoRand(glitch.seed) * 1.2)
-  const op = scaledOpacity(intf.opacity, 1) * strength * 3.2
-  for (let i = 0; i < GLITCH_STUTTER_BAND_COUNT; i++) {
-    const y = h * (0.15 + pseudoRand(glitch.seed + i * 7.1) * 0.7)
-    k.drawRect({
-      pos: k.vec2(0, y - bandH * 0.5),
-      anchor: 'topleft',
-      width: w,
-      height: bandH,
-      color: getRGB(k, intf.bandTint),
-      opacity: op * (0.7 + pseudoRand(glitch.seed + i) * 0.3),
-      fixed: true
-    })
-  }
+//
+// Colour subcarrier drift: the picture briefly washes towards red or cyan.
+//
+function drawGlitchColorDrift(k, w, h, crt, cfg, glitch, u, strength) {
+  const tint = glitch.seed % 2 === 0 ? crt.chroma.leftTint : crt.chroma.rightTint
+  drawFullScreenTint(k, w, h, tint, cfg.opacity * strength * Math.sin(u * Math.PI))
 }
 
 function noiseHash(seed, x, y) {

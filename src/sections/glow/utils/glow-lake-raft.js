@@ -7,8 +7,9 @@ import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 // Small log raft over the left lake (where the W log used to sit) — bobs with
 // the same wave phase as the baked water surface.
 //
-const LAKE_RAFT_X_FRAC = 0.34
+const LAKE_RAFT_X_FRAC = 0.2
 const LAKE_RAFT_W = 96
+const LAKE_RAFT_PREDATOR_CLEAR_X = 28
 const LAKE_RAFT_H = 12
 //
 // How many px of the log top stay above the water surface (rest is submerged).
@@ -137,6 +138,17 @@ const glassesSpriteReady = new WeakMap()
  */
 export function glowLakeRaftWorldX(lakeX1, lakeX2) {
   return lakeX1 + (lakeX2 - lakeX1) * LAKE_RAFT_X_FRAC
+}
+
+/**
+ * Minimum centipede head X so the body stays on the lake, right of the glasses
+ * log — not standing on the raft collider.
+ * @param {Object} inst - Glow level inst
+ * @returns {number|null}
+ */
+export function glowLakeRaftPredatorMinX(inst) {
+  if (inst?.lakeRaftX == null) return null
+  return inst.lakeRaftX + LAKE_RAFT_W * 0.5 + LAKE_RAFT_PREDATOR_CLEAR_X
 }
 
 /**

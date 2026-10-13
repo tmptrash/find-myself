@@ -631,7 +631,12 @@ export function sceneReady(k) {
     const centerX = k.width() / 2
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    const spiderState = { timer: 0, titleFlicker: 1, departureFade: 1, eyeFinalFade: 0 }
+    const spiderState = {
+      timer: 0,
+      titleFlicker: 1,
+      departureFade: 1,
+      eyeFinalFade: 0
+    }
     const bgPlane = addBackground(k, CFG.visual.colors.ready.background)
     //
     // Combined static background — the darkened menu-bg picture plus the

@@ -45,6 +45,25 @@ const TOMATO_BLAST_SHARD_FREQ_RANGE = 1800
 const TOMATO_BLAST_SHARD_DURATION = 0.05
 const TOMATO_BLAST_SHARD_GAIN = 0.035
 //
+// Ready scene CRT power-on hiss (looped white noise + long fade).
+//
+const READY_TV_HISS_ATTACK_SEC = 0.045
+const READY_TV_HISS_HP_HZ = 260
+const READY_TV_HISS_LP_HZ = 7800
+const READY_TV_HISS_GAIN_FLOOR = 0.0001
+const READY_TV_HISS_LOOP_SEC = 2
+const READY_TV_HISS_PRE_OPEN_LEVEL = 0.22
+const READY_TV_CLICK_SEC = 0.018
+const READY_TV_CLICK_BAND_HZ = 2400
+const READY_TV_DEGAUSS_FREQS = [50, 100, 150]
+const READY_TV_DEGAUSS_DECAY_SEC = 0.55
+const READY_TV_DEGAUSS_LP_HZ = 420
+const READY_TV_WHINE_HZ = 15200
+const READY_TV_STOP_TAIL_SEC = 0.08
+let readyTvPowerOnSoundNodes = []
+let readyTvLoaderBackdropNodes = null
+const READY_TV_LOADER_HISS_LEVEL = 0.36
+//
 // Sustained drone (Hz) for the calm pad — octaves + a perfect fifth (no third),
 // the classic open "om" voicing that reads as a meditation mantra.
 //
@@ -3627,6 +3646,107 @@ export function playElectricalGlitchSound(inst, gainMultiplier = 1, duration = 0
   noise.stop(now + duration)
 }
 /**
+ * Page-load CRT power-on sound: relay click, degauss hum, faint flyback whine
+ * and white-noise hiss that swells as the picture opens and then fades to silence.
+ * @param {Object} inst - Sound instance
+ * @param {Object} timeline - Seconds from now
+ * @param {number} timeline.clickSec - Relay click / tube ignition
+ * @param {number} timeline.openSec - Picture starts opening vertically (hiss peak)
+ * @param {number} timeline.endSec - Everything silent
+ */
+export function playReadyTvPowerOnSound(inst, timeline) {
+  stopReadyTvPowerOnSound()
+  if (!inst?.audioContext || !inst.glitchSoundGain) return
+  if (globalMuteProceduralSounds) return
+  const { clickSec, openSec, endSec } = timeline
+  if (!(endSec > openSec && openSec > clickSec)) return
+  const now = inst.audioContext.currentTime
+  playReadyTvClick(inst, now + clickSec)
+  playReadyTvDegauss(inst, now + clickSec)
+  playReadyTvWhine(inst, now + clickSec, now + endSec)
+  playReadyTvHiss(inst, now + clickSec, now + openSec, now + endSec)
+}
+/**
+ * Stops every layer of the power-on sound early.
+ */
+export function stopReadyTvPowerOnSound() {
+  const nodes = readyTvPowerOnSoundNodes
+  readyTvPowerOnSoundNodes = []
+  nodes.forEach(node => {
+    try {
+      node.stop?.()
+      node.disconnect()
+    } catch {}
+  })
+}
+/**
+ * Looped TV snow hiss while the DOM loader stays over the CRT backdrop.
+ */
+export function playReadyTvLoaderBackdropHiss() {
+  stopReadyTvLoaderBackdropHiss()
+  const inst = create()
+  if (!inst?.audioContext || !inst.glitchSoundGain) return
+  if (globalMuteProceduralSounds) return
+  const peak = CFG.audio.sfx.readyTvHiss * READY_TV_LOADER_HISS_LEVEL
+  if (!peak || peak <= 0) return
+  const { audioContext, glitchSoundGain } = inst
+  const now = audioContext.currentTime
+  const bufferSize = Math.ceil(audioContext.sampleRate * READY_TV_HISS_LOOP_SEC)
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1
+  }
+  const noise = audioContext.createBufferSource()
+  noise.buffer = buffer
+  noise.loop = true
+  const highpass = audioContext.createBiquadFilter()
+  highpass.type = 'highpass'
+  highpass.frequency.value = READY_TV_HISS_HP_HZ
+  highpass.Q.value = 0.55
+  const lowpass = audioContext.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.frequency.value = READY_TV_HISS_LP_HZ
+  lowpass.Q.value = 0.5
+  const envelope = audioContext.createGain()
+  envelope.gain.setValueAtTime(READY_TV_HISS_GAIN_FLOOR, now)
+  envelope.gain.linearRampToValueAtTime(peak, now + READY_TV_HISS_ATTACK_SEC)
+  noise.connect(highpass)
+  highpass.connect(lowpass)
+  lowpass.connect(envelope)
+  envelope.connect(glitchSoundGain)
+  noise.start(now)
+  readyTvLoaderBackdropNodes = { noise, envelope, highpass, lowpass, audioContext }
+}
+/**
+ * Fades loader-backdrop hiss out over `durationSec`.
+ * @param {number} durationSec
+ */
+export function fadeOutReadyTvLoaderBackdropHiss(durationSec) {
+  if (!readyTvLoaderBackdropNodes) return
+  const { envelope, audioContext, noise } = readyTvLoaderBackdropNodes
+  const now = audioContext.currentTime
+  envelope.gain.cancelScheduledValues(now)
+  envelope.gain.setValueAtTime(envelope.gain.value, now)
+  envelope.gain.exponentialRampToValueAtTime(READY_TV_HISS_GAIN_FLOOR, now + durationSec)
+  window.setTimeout(() => stopReadyTvLoaderBackdropHiss(), durationSec * 1000 + 50)
+}
+/**
+ * Stops loader-backdrop hiss immediately.
+ */
+export function stopReadyTvLoaderBackdropHiss() {
+  if (!readyTvLoaderBackdropNodes) return
+  const { noise, envelope, highpass, lowpass } = readyTvLoaderBackdropNodes
+  readyTvLoaderBackdropNodes = null
+  try {
+    noise.stop()
+    noise.disconnect()
+    envelope.disconnect()
+    highpass.disconnect()
+    lowpass.disconnect()
+  } catch {}
+}
+/**
  * Play time platform disappear sound (mechanical fade out)
  * @param {Object} inst - Sound instance
  */
@@ -5586,4 +5706,110 @@ function playTomatoShardTick(ctx, out, at) {
   g.connect(out)
   osc.start(at)
   osc.stop(at + TOMATO_BLAST_SHARD_DURATION)
+}
+//
+// Fills a mono buffer with white noise (shared by every power-on noise layer).
+//
+function createReadyTvNoiseBuffer(ctx, seconds) {
+  const size = Math.ceil(ctx.sampleRate * seconds)
+  const buffer = ctx.createBuffer(1, size, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1
+  return buffer
+}
+//
+// Short band-passed noise tick — the power relay snapping shut.
+//
+function playReadyTvClick(inst, at) {
+  const ctx = inst.audioContext
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, READY_TV_CLICK_SEC)
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.value = READY_TV_CLICK_BAND_HZ
+  band.Q.value = 1.2
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(CFG.audio.sfx.readyTvClick, at)
+  env.gain.exponentialRampToValueAtTime(READY_TV_HISS_GAIN_FLOOR, at + READY_TV_CLICK_SEC)
+  noise.connect(band)
+  band.connect(env)
+  env.connect(inst.glitchSoundGain)
+  noise.start(at)
+  noise.stop(at + READY_TV_CLICK_SEC)
+  readyTvPowerOnSoundNodes.push(noise, band, env)
+}
+//
+// Mains-harmonic hum burst of the degauss coil, decaying right after ignition.
+//
+function playReadyTvDegauss(inst, at) {
+  const ctx = inst.audioContext
+  const lowpass = ctx.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.frequency.value = READY_TV_DEGAUSS_LP_HZ
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(READY_TV_HISS_GAIN_FLOOR, at)
+  env.gain.linearRampToValueAtTime(CFG.audio.sfx.readyTvDegauss, at + READY_TV_CLICK_SEC)
+  env.gain.exponentialRampToValueAtTime(READY_TV_HISS_GAIN_FLOOR, at + READY_TV_DEGAUSS_DECAY_SEC)
+  lowpass.connect(env)
+  env.connect(inst.glitchSoundGain)
+  READY_TV_DEGAUSS_FREQS.forEach((freq, i) => {
+    const osc = ctx.createOscillator()
+    osc.type = i === 0 ? 'sawtooth' : 'sine'
+    osc.frequency.value = freq
+    osc.connect(lowpass)
+    osc.start(at)
+    osc.stop(at + READY_TV_DEGAUSS_DECAY_SEC + READY_TV_STOP_TAIL_SEC)
+    readyTvPowerOnSoundNodes.push(osc)
+  })
+  readyTvPowerOnSoundNodes.push(lowpass, env)
+}
+//
+// Barely audible flyback-transformer whine, present while the tube is lit.
+//
+function playReadyTvWhine(inst, at, endAt) {
+  const ctx = inst.audioContext
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.value = READY_TV_WHINE_HZ
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(READY_TV_HISS_GAIN_FLOOR, at)
+  env.gain.linearRampToValueAtTime(CFG.audio.sfx.readyTvWhine, at + READY_TV_HISS_ATTACK_SEC)
+  env.gain.exponentialRampToValueAtTime(READY_TV_HISS_GAIN_FLOOR, endAt)
+  osc.connect(env)
+  env.connect(inst.glitchSoundGain)
+  osc.start(at)
+  osc.stop(endAt + READY_TV_STOP_TAIL_SEC)
+  readyTvPowerOnSoundNodes.push(osc, env)
+}
+//
+// Snow hiss: quiet while the line burns, peaks as the picture opens, then
+// decays exponentially so it melts into silence rather than cutting off.
+//
+function playReadyTvHiss(inst, at, openAt, endAt) {
+  const ctx = inst.audioContext
+  const peak = CFG.audio.sfx.readyTvHiss
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, READY_TV_HISS_LOOP_SEC)
+  noise.loop = true
+  const highpass = ctx.createBiquadFilter()
+  highpass.type = 'highpass'
+  highpass.frequency.value = READY_TV_HISS_HP_HZ
+  highpass.Q.value = 0.55
+  const lowpass = ctx.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.frequency.setValueAtTime(READY_TV_HISS_LP_HZ * 0.5, at)
+  lowpass.frequency.linearRampToValueAtTime(READY_TV_HISS_LP_HZ, openAt)
+  lowpass.Q.value = 0.5
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(READY_TV_HISS_GAIN_FLOOR, at)
+  env.gain.linearRampToValueAtTime(peak * READY_TV_HISS_PRE_OPEN_LEVEL, at + READY_TV_HISS_ATTACK_SEC)
+  env.gain.linearRampToValueAtTime(peak, openAt)
+  env.gain.exponentialRampToValueAtTime(READY_TV_HISS_GAIN_FLOOR, endAt)
+  noise.connect(highpass)
+  highpass.connect(lowpass)
+  lowpass.connect(env)
+  env.connect(inst.glitchSoundGain)
+  noise.start(at)
+  noise.stop(endAt + READY_TV_STOP_TAIL_SEC)
+  readyTvPowerOnSoundNodes.push(noise, highpass, lowpass, env)
 }

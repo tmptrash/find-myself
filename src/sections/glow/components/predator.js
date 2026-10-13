@@ -154,7 +154,7 @@ export function update(inst, dt) {
  * @returns {boolean}
  */
 export function isTouchingHero(inst, heroX, heroFootY) {
-  if (!inst || inst.state === 'coast' || inst.obj?.hidden) return false
+  if (!inst || inst.state === 'coast' || inst.state === 'flee' || inst.obj?.hidden) return false
   return overlapsHeroHitbox(inst, heroX, heroFootY)
 }
 

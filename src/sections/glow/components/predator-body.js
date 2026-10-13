@@ -11,6 +11,11 @@
 const SEGMENT_COUNT = 14
 const BODY_LENGTH = 84
 const SPACING = BODY_LENGTH / (SEGMENT_COUNT - 1)
+//
+// In the water the follow lag would pull the tail far behind a swimming head
+// (the body read as stretched back to the shore), so gaps are capped there.
+//
+const SWIM_MAX_GAP_STRETCH = 1.1
 
 export { SPACING as PREDATOR_SPINE_SPACING }
 
@@ -64,6 +69,7 @@ export function tickBody(inst, dt) {
   head.y = inst.groundAt(inst.x) - ride0 - inst.headLift
   const gap = SPACING * inst.stretch
   const followBase = 1 - Math.exp(-dt * (inst.spineFollowRate ?? 9))
+  const maxGap = inst.swimming ? SPACING * Math.max(1, inst.stretch) * SWIM_MAX_GAP_STRETCH : Infinity
   for (let i = 1; i < inst.segments.length; i++) {
     const prev = inst.segments[i - 1]
     const seg = inst.segments[i]
@@ -74,6 +80,8 @@ export function tickBody(inst, dt) {
     const follow = followBase * (1 - along * 0.4)
     seg.x += (wantX - seg.x) * follow
     seg.y += (wantY - seg.y) * follow
+    const off = seg.x - prev.x
+    Math.abs(off) > maxGap && (seg.x = prev.x + Math.sign(off) * maxGap)
   }
 }
 

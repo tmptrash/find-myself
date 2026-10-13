@@ -734,7 +734,7 @@ A single subtle **old-TV post layer** covers the whole game (ready, menu, every 
 
 ### Visual stack (in order)
 
-Scanlines and vignette (baked full-viewport sprites on resize), phosphor tint, edge chroma, scrolling noise tile, occasional horizontal **interference** bands, and **TV glitches** (`crt.glitches` — several kinds: roll slices, chroma burst, snow, sync-drop lines, stutter bands; interval tuned in cfg). All screen-space; **no `getImageData` / GPU readback** and no per-frame canvas allocation.
+Scanlines (baked full-viewport sprite on resize; no radial vignette — its gradient steps read as rings from the centre), phosphor tint, edge chroma, scrolling noise tile, an occasional soft **interference** glow band, and **TV glitches** (`crt.glitches` — soft analog faults, no stacks of thin lines: mains hum bar, vertical roll blanking bar, snow burst, brightness sag, colour drift; per-kind durations and interval tuned in cfg). All screen-space; **no `getImageData` / GPU readback** and no per-frame canvas allocation.
 
 ### Drawing rules
 

@@ -6,7 +6,9 @@ import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { waitForGlowLevel0Bootstrap } from '../sections/glow/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
+import { finishReadyTvIntroNow } from './ready-tv-power-on.js'
 
+const READY_SCENE_NAME = 'ready'
 //
 // City sprite names used by time levels — tracked so we can compare pack keys.
 //
@@ -317,6 +319,10 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   // Clear Touch sprite tracking so next scene starts with a clean registry list.
   //
   drainTrackedTouchSpriteNames()
+  //
+  // The page-load TV snow and its hiss belong to the first "ready" screen only.
+  //
+  sceneName !== READY_SCENE_NAME && finishReadyTvIntroNow()
   setActiveSceneName(sceneName)
   liveK.go(sceneName)
   sceneName === 'lesson-glow.0' && await waitForGlowLevel0Bootstrap()

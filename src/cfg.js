@@ -199,7 +199,15 @@ export const CFG = {
         text: "#9AB5C4",
         title: "#E07020",
         emphasis: "#F4C040",
-        ghostWords: "#3E708A"
+        ghostWords: "#3E708A",
+        //
+        // Page-load CRT power-on: cool phosphor line + halo, gray snow ramp.
+        //
+        tvPowerOn: {
+          lineCore: PALETTE.gray7,
+          lineHalo: PALETTE.blue5,
+          snow: [PALETTE.gray0, PALETTE.gray1, PALETTE.gray2, PALETTE.gray3, PALETTE.gray4, PALETTE.gray5, PALETTE.gray6, PALETTE.gray7]
+        }
       },
       // Hero colors (for procedural generation)
       hero: {
@@ -643,11 +651,6 @@ export const CFG = {
         spacingPx: 3,
         opacity: 0.14
       },
-      vignette: {
-        opacity: 0.42,
-        innerRadiusFrac: 0.38,
-        outerRadiusFrac: 0.82
-      },
       phosphor: {
         tint: PALETTE.gold5,
         opacity: 0.038
@@ -668,17 +671,50 @@ export const CFG = {
         enabled: true,
         minIntervalSec: 14,
         maxIntervalSec: 32,
-        opacity: 0.075,
-        bandHeightPx: 4,
-        durationSec: 0.2,
+        opacity: 0.035,
+        bandHeightPx: 22,      // Soft glow band, not a hairline
+        driftPxPerSec: 60,     // Band creeps down while it lives
+        durationSec: 0.5,
         bandTint: PALETTE.gray6
       },
+      //
+      // Analog TV faults drawn as soft full-screen effects (no line stacks).
+      //
       glitches: {
         enabled: true,
-        minIntervalSec: 18,
-        maxIntervalSec: 42,
-        minDurationSec: 0.07,
-        maxDurationSec: 0.24
+        minIntervalSec: 16,
+        maxIntervalSec: 38,
+        humBar: {
+          minDurationSec: 1.4,
+          maxDurationSec: 2.6,
+          heightFrac: 0.1,     // Mains hum bar height vs screen
+          opacity: 0.04,
+          tint: PALETTE.gray6
+        },
+        verticalRoll: {
+          minDurationSec: 0.35,
+          maxDurationSec: 0.6,
+          heightFrac: 0.035,   // Vertical blanking bar height vs screen
+          opacity: 0.3,
+          dimOpacity: 0.035    // Whole picture dims while sync is lost
+        },
+        snowBurst: {
+          minDurationSec: 0.18,
+          maxDurationSec: 0.45,
+          opacity: 0.09,
+          dimOpacity: 0.025
+        },
+        brightnessSag: {
+          minDurationSec: 0.12,
+          maxDurationSec: 0.28,
+          opacity: 0.07,
+          pulses: 3
+        },
+        colorDrift: {
+          minDurationSec: 0.5,
+          maxDurationSec: 0.9,
+          opacity: 0.025
+        }
       }
     },
     //
@@ -749,7 +785,14 @@ export const CFG = {
       stepFade: MASTER_VOLUME * 0.075,
       stepDuration: 0.05,
       stepFreqStart: 180,
-      stepFreqEnd: 60
+      stepFreqEnd: 60,
+      //
+      // Ready CRT power-on — TV hiss fading to silence (duration set in ready.js).
+      //
+      readyTvHiss: MASTER_VOLUME * 0.19,
+      readyTvClick: MASTER_VOLUME * 0.32,
+      readyTvDegauss: MASTER_VOLUME * 0.22,
+      readyTvWhine: MASTER_VOLUME * 0.008
       }
     }
 }

@@ -2,6 +2,8 @@ import { CFG } from '../../../cfg.js'
 import { GLOW_PAL, getTreePaletteGray, glowRgb } from './glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
+import { glowLakeRaftPredatorMinX } from './glow-lake-raft.js'
+import { beginLakeRaftShoreRetreat } from '../components/predator-move.js'
 import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 
 //
@@ -42,6 +44,7 @@ const TWIG_BACK_REST = TWIG_MAIN_W * 0.5 + 0.5
 //
 const TWIG_TURN_SPEED = 1.15
 const TWIG_RIDE_TURN_DURATION = 0.85
+const TWIG_RAFT_DISBARK_TURN_DURATION = 1.25
 const TWIG_RIDE_EDGE_SLACK = 12
 const TWIG_RIDE_EDGE_INSET = 4
 const TWIG_RIDE_SHIELD_BELOW = 6
@@ -145,7 +148,41 @@ export function tryPredatorTurnTowardRaftAfterLanding(twigInst, levelInst, char,
     return
   }
   twigInst.turnTowardRaftPending = false
-  schedulePredatorTurnTowardWorldX(twigInst, raftX)
+  armPredatorLakeRaftRetreat(twigInst, levelInst, raftX)
+}
+
+/**
+ * When the hero stands on the glasses log but the salute turn never started
+ * (e.g. flee blocked scheduling), force the shore swim.
+ * @param {Object} twigInst - Twig inst
+ * @param {Object} levelInst - Glow level inst
+ * @param {Object} char - Hero character
+ * @param {function(Object, number, number): boolean} isOnLakeRaft
+ */
+export function tickPredatorLakeRaftRetreatFallback(twigInst, levelInst, char, isOnLakeRaft) {
+  if (!twigInst || !levelInst || !char?.pos) return
+  const pred = twigInst.predator
+  if (!pred || pred.lakeRaftRetreatX != null) return
+  const footY = char.pos.y + HERO_SURFACE_DETECT_Y
+  if (!isOnLakeRaft(levelInst, char.pos.x, footY)) return
+  if (!(char.isGrounded?.() ?? false)) return
+  if (!mountedTwig(twigInst)) return
+  const minX = glowLakeRaftPredatorMinX(levelInst)
+  if (minX == null || pred.x < minX - 48) return
+  if (twigInst.lakeRaftRetreatAfterTurn && !twigInst.rideTurnPending) {
+    twigInst.lakeRaftRetreatAfterTurn = false
+    beginLakeRaftShoreRetreat(pred)
+    clearRideTurnPose(twigInst, pred)
+    return
+  }
+  if (
+    !twigInst.lakeRaftRetreatAfterTurn &&
+    !twigInst.rideTurnPending &&
+    pred.lakeRaftRetreatX == null
+  ) {
+    const raftX = levelInst.lakeRaftX
+    raftX != null && armPredatorLakeRaftRetreat(twigInst, levelInst, raftX)
+  }
 }
 
 /**
@@ -268,7 +305,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     //
     releaseRider(inst, char)
     inst.riderAirborne = true
-    inst.predator?.swimming && (inst.turnTowardRaftPending = true)
+    inst.turnTowardRaftPending = true
     return
   } else if (heroLeftRideStick(inst, char, mounted, hero)) {
     //
@@ -341,17 +378,40 @@ function tryLockRider(inst, char, mounted, midX, velY) {
 //
 // After a landing, ease into the reversed heading instead of snapping dir/vx.
 //
-function schedulePredatorTurnTowardWorldX(inst, worldX) {
+function armPredatorLakeRaftRetreat(twigInst, levelInst, raftX) {
+  const pred = twigInst.predator
+  if (!pred || raftX == null) return
+  const minX = glowLakeRaftPredatorMinX(levelInst)
+  minX != null && pred.x < minX && (pred.x = minX, pred.vx = 0)
+  const skipTurnAnim = pred.state === 'feast' || pred.state === 'coast'
+  if (skipTurnAnim) {
+    twigInst.lakeRaftRetreatAfterTurn = false
+    beginLakeRaftShoreRetreat(pred)
+    clearRideTurnPose(twigInst, pred)
+    return
+  }
+  twigInst.lakeRaftRetreatAfterTurn = true
+  schedulePredatorMountedTurn(twigInst, true)
+}
+
+//
+// Same eased 180° squeeze as after a twig lands on the back — body spine blend
+// plus stick face going through zero width.
+//
+function schedulePredatorMountedTurn(inst, disembark) {
   const pred = inst.predator
-  if (!pred || pred.state === 'flee') return
+  if (!pred) {
+    inst.rideDir == null && (inst.rideDir = 1)
+    return
+  }
   const mounted = mountedTwig(inst)
-  const dx = worldX - pred.x
-  const next = Math.abs(dx) < 4 ? (pred.dir || 1) : (dx > 0 ? 1 : -1)
+  const next = -(pred.dir || inst.rideDir || 1)
   inst.rideTurnFromFace = mounted?.face ?? -(pred.dir || 1)
   inst.rideTurnTargetDir = next
   inst.rideTurnPending = true
   inst.rideTurnElapsed = 0
-  inst.rideTurnDisembark = true
+  inst.rideTurnDisembark = Boolean(disembark)
+  inst.rideTurnDurationSec = disembark ? TWIG_RAFT_DISBARK_TURN_DURATION : null
   pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
   pred.rideTurnPoseDir = next
   pred.rideTurnBlend = 0
@@ -369,21 +429,7 @@ function scheduleRideTurnAfterTwigLand(inst) {
     inst.rideDir == null && (inst.rideDir = pred.dir ?? 1)
     return
   }
-  const mounted = mountedTwig(inst)
-  const next = -(pred.dir || inst.rideDir || 1)
-  inst.rideTurnFromFace = mounted?.face ?? -(pred.dir || 1)
-  inst.rideTurnTargetDir = next
-  inst.rideTurnPending = true
-  inst.rideTurnElapsed = 0
-  //
-  // Body pose is captured here and eased to the reversed spine on the same
-  // blend as the stick. Heading itself flips at the halfway squeeze.
-  //
-  pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
-  pred.rideTurnPoseDir = next
-  pred.rideTurnBlend = 0
-  pred.vx = 0
-  pred.holdFacing = true
+  schedulePredatorMountedTurn(inst, false)
 }
 
 //
@@ -405,7 +451,8 @@ function startFleeRideTurn(inst, pred, mounted) {
 }
 
 function rideTurnBlend(inst) {
-  const t = Math.min(1, (inst.rideTurnElapsed ?? 0) / TWIG_RIDE_TURN_DURATION)
+  const dur = inst.rideTurnDurationSec ?? TWIG_RIDE_TURN_DURATION
+  const t = Math.min(1, (inst.rideTurnElapsed ?? 0) / dur)
   return t * t * (3 - 2 * t)
 }
 
@@ -423,17 +470,29 @@ function tickRideTurn(inst, dt) {
   pred.rideTurnPoseDir = inst.rideTurnTargetDir
   pred.vx = 0
   pred.holdFacing = true
+  inst.rideTurnDisembark && (pred.stretch += (1 - pred.stretch) * Math.min(1, dt * 5))
   blend >= 0.5 && (pred.dir = inst.rideTurnTargetDir)
   if (!mountedTwig(inst)) clearRideTurnPose(inst, pred)
 }
 
 function completeRideTurn(inst, pred) {
+  if (inst.lakeRaftRetreatAfterTurn && pred) {
+    inst.lakeRaftRetreatAfterTurn = false
+    const level = pred.levelInst
+    const minX = level && glowLakeRaftPredatorMinX(level)
+    minX != null && pred.x < minX && (pred.x = minX)
+    beginLakeRaftShoreRetreat(pred)
+    clearRideTurnPose(inst, pred)
+    return
+  }
   const next = inst.rideTurnTargetDir ?? pred?.dir ?? 1
   inst.rideDir = next
   if (pred) {
+    const level = pred.levelInst
+    const minX = level && glowLakeRaftPredatorMinX(level)
     pred.dir = next
     pred.holdFacing = pred.state !== 'flee'
-    pred.vx = next * TWIG_RIDE_TURN_MIN_SPEED
+    pred.vx = pred.dir * TWIG_RIDE_TURN_MIN_SPEED
   }
   clearRideTurnPose(inst, pred)
 }
@@ -443,6 +502,7 @@ function clearRideTurnPose(inst, pred) {
   inst.rideTurnElapsed = 0
   inst.rideTurnAnchorX = null
   inst.rideTurnDisembark = false
+  inst.rideTurnDurationSec = null
   if (!pred) return
   pred.rideTurnFromSegs = null
   pred.rideTurnBlend = null
@@ -659,7 +719,9 @@ function tryMountTwig(twig, predator) {
 function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir, twigInst) {
   const head = predator?.segments?.[0]
   if (!head) return
-  const turning = Boolean(riderLocked && twigInst?.rideTurnPending)
+  const turning = Boolean(
+    twigInst?.rideTurnPending && (riderLocked || twigInst.rideTurnDisembark)
+  )
   let tailDir = -(predator.dir || 1)
   if (riderLocked && !turning && rideDir != null) tailDir = -rideDir
   if (turning) {

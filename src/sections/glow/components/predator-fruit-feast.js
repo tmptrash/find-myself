@@ -18,6 +18,8 @@ const FEAST_BITE_BACK_SEC = 0.34
 const FEAST_BITE_PAUSE_SEC = 0.38
 const FEAST_BITE_PULLBACK_X = 18
 const FEAST_BITE_PULLBACK_LIFT = 6.5
+const FEAST_CLUSTER_RADIUS = 52
+const FEAST_MAX_FRUIT_EQUIV = 2
 
 /**
  * @param {Object} pred - Predator inst
@@ -43,7 +45,7 @@ export function getPredatorFeastLookTarget(pred) {
  * @param {Object} pred - Predator inst
  */
 export function cancelPredatorFeast(pred) {
-  pred && endFeast(pred)
+  pred && endFeast(pred, pred.levelInst)
 }
 
 /**
@@ -59,7 +61,7 @@ export function tickPredatorFruitFeast(pred, levelInst, dt) {
   // A rider on the back pins the walking direction — turning to a fruit would flip it.
   //
   if (levelInst.shoreFallTwigs?.riderLocked) {
-    pred.state === 'feast' && endFeast(pred)
+    pred.state === 'feast' && endFeast(pred, levelInst)
     return
   }
   if (pred.state === 'feast') {
@@ -67,13 +69,13 @@ export function tickPredatorFruitFeast(pred, levelInst, dt) {
     return
   }
   const fruit = findNearestFeastFruit(levelInst, pred)
-  fruit && beginFeast(pred, fruit)
+  fruit && beginFeast(pred, fruit, levelInst)
 }
 
 function tickActiveFeast(pred, levelInst, dt) {
   const fruit = pred.feastFruit
   if (!fruit || fruit.removed) {
-    endFeast(pred)
+    endFeast(pred, levelInst)
     return
   }
   if (pred.feastPhase === 'approach') {
@@ -109,7 +111,7 @@ function beginFeastEatingCycle(pred, fruit) {
   pred.feastBitePhase = 'pause'
   pred.feastBitePhaseT = 0
   pred.feastBitesDone = 0
-  pred.feastTotalBites = FEAST_BITE_COUNT
+  pred.feastTotalBites = pred.feastTotalBites ?? FEAST_BITE_COUNT
   pred.vx = 0
   pred.speedTarget = 0
   fruit.eatProgress = 0
@@ -143,9 +145,7 @@ function tickFeastEating(pred, fruit, levelInst, dt) {
     applyFeastBiteChunk(pred, fruit)
     pred.feastBitePhase = 'back'
     if ((fruit.eatProgress ?? 0) >= 1 || getGlowFruitDisplayRadius(fruit) < 1.5) {
-      fruit.removed = true
-      levelInst.treeFruitSpots = levelInst.treeFruitSpots?.filter(f => !f.removed)
-      endFeast(pred)
+      finishFeastCluster(pred, levelInst)
       return
     }
     return
@@ -208,13 +208,17 @@ function smoothstep(t) {
   return x * x * (3 - 2 * x)
 }
 
-function beginFeast(pred, fruit) {
+function beginFeast(pred, fruit, levelInst) {
+  const cluster = collectFeastCluster(levelInst, fruit)
+  const equiv = Math.min(FEAST_MAX_FRUIT_EQUIV, cluster.length)
   pred.state = 'feast'
   pred.feastPhase = 'approach'
+  pred.feastCluster = cluster
   pred.feastFruit = fruit
   pred.feastBitePhase = null
   pred.feastBitePhaseT = 0
   pred.feastBitesDone = 0
+  pred.feastTotalBites = FEAST_BITE_COUNT * equiv
   pred.feastRestPose = null
   pred.feastBitePose = null
   pred.feastApproachT = 0
@@ -225,24 +229,56 @@ function beginFeast(pred, fruit) {
   pred.vx = pred.dir * FEAST_APPROACH_SPEED * FEAST_APPROACH_BURST_MULT
   pred.stretch = 1.1
   pred.headLift = 6
-  fruit.beingEaten = true
-  fruit.fadeOutStarted = false
-  fruit.eatProgress = 0
-  fruit.biteSeed == null && (fruit.biteSeed = (Math.round(fruit.x * 5.3) ^ Math.round(fruit.y * 3.7)) >>> 0)
+  cluster.forEach((f, i) => {
+    f.beingEaten = true
+    f.feastDrawHidden = i > 0
+    f.fadeOutStarted = false
+    f.eatProgress = 0
+    f.biteSeed == null && (f.biteSeed = (Math.round(f.x * 5.3) ^ Math.round(f.y * 3.7)) >>> 0)
+  })
 }
 
-function endFeast(pred) {
+function finishFeastCluster(pred, levelInst) {
+  const cluster = pred.feastCluster ?? (pred.feastFruit ? [pred.feastFruit] : [])
+  cluster.forEach(f => {
+    f.removed = true
+    f.feastDrawHidden = false
+  })
+  levelInst.treeFruitSpots = levelInst.treeFruitSpots?.filter(f => !f.removed)
+  endFeast(pred, levelInst)
+}
+
+function endFeast(pred, levelInst) {
+  pred.feastCluster?.forEach(f => {
+    f.beingEaten = false
+    f.feastDrawHidden = false
+  })
   pred.state = 'search'
   pred.stateTime = 0.28
+  pred.feastCluster = null
   pred.feastFruit = null
   pred.feastPhase = null
   pred.feastBitePhase = null
   pred.feastBitePhaseT = 0
   pred.feastBitesDone = 0
+  pred.feastTotalBites = FEAST_BITE_COUNT
   pred.feastRestPose = null
   pred.feastBitePose = null
   pred.vx *= 0.35
   pred.headLift *= 0.4
+}
+
+function collectFeastCluster(levelInst, anchor) {
+  const spots = levelInst?.treeFruitSpots
+  if (!spots?.length) return [anchor]
+  const cluster = []
+  spots.forEach(fruit => {
+    if (!isFruitFeastEligible(fruit)) return
+    if (Math.hypot(fruit.x - anchor.x, fruit.y - anchor.y) > FEAST_CLUSTER_RADIUS) return
+    cluster.push(fruit)
+  })
+  cluster.includes(anchor) || cluster.push(anchor)
+  return cluster
 }
 
 function findNearestFeastFruit(levelInst, pred) {

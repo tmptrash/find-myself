@@ -1,12 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { GLOW_PAL, getTreePaletteColor, glowRgb, isGlowGrayWorld } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
+import { glowTreeLeafKey } from './glow-tree-segments.js'
 
 //
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
-const FRUIT_LAYOUT_VERSION = 10
+const FRUIT_LAYOUT_VERSION = 11
 const FRUIT_RANDOM_COUNT = 17
 //
 // Fallen anchor fruit vanishes after this if the centipede never claims it.
@@ -18,6 +19,7 @@ const FRUIT_RADIUS_RANGE = 4
 const ANCHOR_DROP_LEFT_PAD = 16
 const ANCHOR_DROP_RIGHT_PAD = 12
 const ANCHOR_LEAF_TARGET_Y_OFFSET = 48
+const ANCHOR_Y_SCORE_WEIGHT = 0.25
 const FRUIT_STEM_LEN = 4
 const FRUIT_Z = CFG.visual.zIndex.platforms - 1
 const FRUIT_FALL_GRAVITY = 1650
@@ -104,50 +106,15 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   if (!hangable.length) return []
   const cellPx = getTreePaletteColor().foliageClusterCellPx
   const hang = { treeData, cellPx, mask: buildFoliageMask(treeData, cellPx) }
-  const horiz = treeData.horizBranch
-  const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
-  const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = anchorDropCfg
-  const stripLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD
-  const stripRight = branchTrampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD
-  const canopyCeilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
-  const anchorCandidates = hangable.filter(f => {
-    if (f.x < stripLeft || f.x > stripRight) return false
-    return f.y <= canopyCeilingY
-  })
-  let anchorPool = anchorCandidates.length
-    ? anchorCandidates
-    : hangable.filter(f => f.x >= stripLeft && f.x <= stripRight)
-  !anchorPool.length && (anchorPool = [...hangable].sort(
-    (a, b) => Math.abs(a.x - dropX) - Math.abs(b.x - dropX)
-  ))
-  if (!anchorPool.length) return []
-  const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : anchorPool[0].y
-  let anchorLeaf = anchorPool[0]
-  let anchorDist = Infinity
-  anchorPool.forEach(foliage => {
-    const d = Math.hypot(foliage.x - dropX, foliage.y - targetY)
-    if (d < anchorDist) {
-      anchorDist = d
-      anchorLeaf = foliage
-    }
-  })
   const anchorR = FRUIT_RADIUS_MIN + 2.5
   const anchorHue = 0.12
-  let anchorPos = pickValidFruitHangOnCluster(hang, anchorLeaf, anchorR, rng)
-  if (!anchorPos) {
-    const fallback = [...hangable].sort((a, b) => Math.abs(a.x - dropX) - Math.abs(b.x - dropX))
-    for (const foliage of anchorPool.concat(fallback)) {
-      anchorPos = pickValidFruitHangOnCluster(hang, foliage, anchorR, rng)
-      if (anchorPos) {
-        anchorLeaf = foliage
-        break
-      }
-    }
-  }
-  if (!anchorPos) return []
+  const anchorPick = pickAnchorFruitHang(hang, hangable, anchorDropCfg, anchorR)
+  if (!anchorPick) return []
+  const { leaf: anchorLeaf, pos: anchorPos } = anchorPick
   const spots = [{
     anchor: true,
     attached: true,
+    leafKey: glowTreeLeafKey(anchorLeaf),
     x: anchorPos.x,
     y: anchorPos.y,
     r: anchorR,
@@ -169,6 +136,7 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
       pool.splice(idx, 1)
       spots.push({
         attached: true,
+        leafKey: glowTreeLeafKey(foliage),
         x: pos.x,
         y: pos.y,
         r,
@@ -276,7 +244,9 @@ export function drawGlowTreeFruits(inst) {
   const baseOp = gray ? 0.5 : flat ? 0.45 : Math.min(1, 0.55 + fade * 0.45)
   spots.forEach(fruit => {
     if (fruit.removed) return
+    if (fruit.feastDrawHidden) return
     let op = baseOp
+    fruit.attached && (op *= Math.min(1, fruit.hostOpacity ?? 1))
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
     if (op <= 0.02) return
     const t = fruit.hue ?? 0.5
@@ -369,6 +339,43 @@ function buildRaggedFruitPolygon(k, cx, cy, r, biteMarks, seed) {
     pts.push(k.vec2(cx + Math.cos(a) * (rr + wobble), cy + Math.sin(a) * (rr + wobble) * 0.92))
   }
   return pts
+}
+
+//
+// The anchor fruit drops straight down, so its hang x decides where it lands.
+// Scan every interior foliage cell and keep the valid one closest to the
+// middle of the gap between trunk and left trampoline; cells whose fruit
+// would overhang either side of the gap are skipped.
+//
+function pickAnchorFruitHang(hang, hangable, anchorDropCfg, fruitR) {
+  const { trunkX, trunkHalf, branchTrampX: trampX, trampClearHalf } = anchorDropCfg
+  const gapLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD + fruitR
+  const gapRight = trampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD - fruitR
+  const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
+  const horiz = hang.treeData.horizBranch
+  const ceilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
+  const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : 0
+  let best = null
+  let bestScore = Infinity
+  hangable.forEach(leaf => {
+    leaf.cells.forEach(cell => {
+      if (!isFruitClusterCellInterior(leaf.cells, cell)) return
+      const pos = foliageCellCentre(leaf, cell, hang.cellPx)
+      if (pos.x < gapLeft || pos.x > gapRight || pos.y > ceilingY) return
+      const score = Math.abs(pos.x - dropX) + Math.abs(pos.y - targetY) * ANCHOR_Y_SCORE_WEIGHT
+      if (score >= bestScore || !isValidFruitHang(hang, pos.x, pos.y, fruitR)) return
+      bestScore = score
+      best = { leaf, pos }
+    })
+  })
+  return best
+}
+
+function foliageCellCentre(cluster, cell, cellPx) {
+  return {
+    x: Math.round(cluster.x) + cell.dx * cellPx + cellPx * 0.5,
+    y: Math.round(cluster.y) + cell.dy * cellPx + cellPx * 0.5
+  }
 }
 
 function collectHangableTreeFoliage(treeData, anchorDropCfg) {

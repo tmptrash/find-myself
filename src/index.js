@@ -1,4 +1,5 @@
 import * as BootLoader from "./utils/boot-loader.js"
+import { playReadyTvIntroBeforeLoader } from "./utils/ready-tv-power-on.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/lesson-assets.js"
 import { bootEngine, RESOLUTION_MODE } from "./utils/game-engine.js"
 import { setActiveEngine } from "./utils/engine-switch.js"
@@ -20,14 +21,25 @@ boot()
  * into it on demand.
  */
 async function boot() {
+  const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
+  let bootDuringTv = null
+  await playReadyTvIntroBeforeLoader({
+    sceneName: startScene,
+    onSnowPhaseStart: () => {
+      bootDuringTv = bootEngine(RESOLUTION_MODE.NATIVE)
+    }
+  })
+  if (!BootLoader.isLoaderVisible()) {
+    BootLoader.showLoader()
+    BootLoader.setLoaderBarPct(0)
+  }
   let k
   try {
-    k = await bootEngine(RESOLUTION_MODE.NATIVE)
+    k = bootDuringTv ? await bootDuringTv : await bootEngine(RESOLUTION_MODE.NATIVE)
   } catch (err) {
     throw err
   }
   setActiveEngine(k, RESOLUTION_MODE.NATIVE)
   installWindowResizeReboot()
-  const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
   await prepareSceneAssetsThenEnterScene(k, startScene)
 }

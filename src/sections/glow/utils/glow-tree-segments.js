@@ -71,6 +71,29 @@ export function buildGlowTreeSegmentPlan(treeData) {
   }
 }
 /**
+ * Which reveal segments paint each leaf (a leaf on a part border may sit in two).
+ * @param {Object} treeData - Full tree from buildGlowTree()
+ * @returns {Map<string, string[]>} glowTreeLeafKey(leaf) -> segment ids
+ */
+export function glowTreeLeafSegmentMap(treeData) {
+  const map = new Map()
+  buildGlowTreeSegmentPlan(treeData).pendingIds.forEach(id => {
+    treeDataForSegment(treeData, id).leaves.forEach(leaf => {
+      const key = glowTreeLeafKey(leaf)
+      map.has(key) ? map.get(key).push(id) : map.set(key, [id])
+    })
+  })
+  return map
+}
+/**
+ * Stable leaf identity shared by segment bakes and fruit hangs.
+ * @param {Object} leaf - Tree leaf
+ * @returns {string}
+ */
+export function glowTreeLeafKey(leaf) {
+  return `${leaf.x}|${leaf.y}`
+}
+/**
  * Filters tree geometry for one segment bake pass.
  * @param {Object} treeData - Full tree from buildGlowTree()
  * @param {string} segmentId - Segment id

@@ -127,6 +127,7 @@ import {
 } from '../utils/swamp-spirit-proximity-hint.js'
 import {
   buildGlowTreeFruitSpots,
+  computeGlowAnchorFruitDropX,
   ensureGlowTreeFruitSpots,
   mountGlowTreeFruitLayer,
   releaseGlowAnchorFruit,
@@ -10028,6 +10029,19 @@ function refreshGlowMainGroundJumpState(inst, char, grounded, footY) {
   if (!hero || hero.isSquashing || glowHeroInTrampLandingPose(hero)) return
   const velY = char.vel?.y ?? 0
   if (Math.abs(velY) > 48) return
+  if (grounded && inst._pitMushroomBranchLaunchLatch) {
+    Hero.syncPlatformLanding(hero)
+    hero.jumpPhase = 'none'
+    hero.wasJumping = false
+    hero.postLandAirLock = 0
+    inst._pitMushroomBranchLaunchLatch = false
+    hero.canJump = true
+    hero.jumpKeyReleaseGate = false
+    hero.jumpDisabled = false
+    hero.controllable = true
+    hero.controlsDisabled = false
+    return
+  }
   if (hero.jumpPhase !== 'jumping') return
   Hero.syncPlatformLanding(hero)
   hero.wasJumping = false
@@ -10677,9 +10691,25 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
   if (!grounded || !justLanded || !char?.pos) return
   if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
-  if (!isHeroOnStartBranch(inst, char)) return
+  const onBranch = isHeroOnStartBranch(inst, char)
+  const onPitLaunchGround = fromBranchTramp && isHeroOnPitMushroomLaunchGround(inst, char)
+  if (!onBranch && !onPitLaunchGround) return
   inst.treeRevealFromBranchTramp = false
   revealTreeSegmentsOnBranchLanding(inst)
+}
+//
+// Ground band between the main trunk and the left mushroom trampoline.
+//
+function isHeroOnPitMushroomLaunchGround(inst, char) {
+  const cfg = inst.treeFruitAnchorCfg
+  if (!cfg || !char?.pos) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (footY < FLOOR_Y - LOG_SNAP_STANDING_MAX || footY > FLOOR_Y + 10) return false
+  const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = cfg
+  const xMin = trunkX + trunkHalf + PIT_MUSH_LAUNCH_GROUND_TRUNK_PAD
+  const xMax = branchTrampX - trampClearHalf - PIT_MUSH_LAUNCH_GROUND_TRAMP_PAD
+  if (xMax <= xMin) return false
+  return char.pos.x >= xMin && char.pos.x <= xMax
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
@@ -12386,32 +12416,33 @@ function syncHeroTrampDrawOrder(inst) {
   ch.z !== targetZ && (ch.z = targetZ)
 }
 //
-// Pit cave mushroom: teleport to the big-tree branch and bounce from there.
+// Pit cave mushroom: pop onto the ground strip between the big tree and the
+// branch trampoline (same band as the anchor fruit), not onto the start branch.
 //
 const PIT_MUSH_LAUNCH_COOLDOWN = 0.55
+const PIT_MUSH_GROUND_LAUNCH_MULT = 1.12
+const PIT_MUSH_LAUNCH_GROUND_TRUNK_PAD = 16
+const PIT_MUSH_LAUNCH_GROUND_TRAMP_PAD = 12
 function launchHeroFromPitMushroomToBranch(inst, char) {
-  const branch = inst.startBranch
   const hero = inst.heroInst
-  if (!branch || !char?.pos || !hero) return false
+  const anchorCfg = inst.treeFruitAnchorCfg
+  if (!anchorCfg || !char?.pos || !hero) return false
   dismissPitCaveMushroomHint(inst.pit)
   dismissGlowCaveMushroomTeacherHint(inst)
-  const teleportX = branch.x1 + Math.round((branch.x2 - branch.x1) * HERO_BRANCH_FRACTION)
-  const teleportY = branch.y - SURFACE_DETECT_Y + WOOD_LOG_SNAP_EMBED
+  const teleportX = computeGlowAnchorFruitDropX(anchorCfg)
+  const teleportY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
   moveGlowHeroTo(char, teleportX, teleportY)
-  const launch = Math.round(CFG.game.jumpForce * BRANCH_TRAMP_BOOST_MULT)
+  const launch = Math.round(CFG.game.jumpForce * PIT_MUSH_GROUND_LAUNCH_MULT)
   if (typeof char.jump === 'function') char.jump(launch)
   else char.vel.y = -launch
   char.vel.x = 0
-  inst.branchTrampBounceAir = true
   hero.wasJumping = true
   hero.jumpPhase = 'jumping'
   hero.jumpCeilingBonk = false
   hero.postLandAirLock = 0
   hero.canJump = false
   inst._pitMushroomBranchLaunchLatch = true
-  inst.wasOnStartBranch = true
   inst.treeRevealFromBranchTramp = true
-  inst.expectBranchWoodLandSound = true
   inst.pit.trampState.cooldown = PIT_MUSH_LAUNCH_COOLDOWN
   inst.pit.trampState.squash = 1
   inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)

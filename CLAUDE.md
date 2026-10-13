@@ -722,9 +722,39 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 
 ---
 
-## 16. Level art direction (reference rules)
+## 16. CRT overlay (full game)
 
-These rules complement sections 3, 13, 14, and 15. They describe **how procedural levels should look** (palette, light, composition, readability) — not engine mechanics. Apply them to every section unless a section’s own `cfg.js` documents a deliberate exception.
+A single subtle **old-TV post layer** covers the whole game (ready, menu, every section). Implementation lives in `src/utils/crt-overlay.js`; tunables in `CFG.visual.crt` in `src/cfg.js`.
+
+### Integration
+
+- Installed once per Kaplay instance in `bootEngine()` via `installCrtOverlay(k)` — do not add per-scene CRT copies.
+- The layer is one root `k.add()` object with **`k.stay()`**, **`k.fixed()`**, and **`k.z(CFG.visual.zIndex.crt)`** so it survives `k.go()` and draws **above** scene objects (global `k.onDraw` runs **before** the object tree and must not be used for CRT).
+- Toggling: `CFG.visual.crt.enabled`. Per-effect strengths use `masterIntensity` and the nested opacity fields — no duplicate CRT systems in section code.
+
+### Visual stack (in order)
+
+Scanlines and vignette (baked full-viewport sprites on resize), phosphor tint, edge chroma, scrolling noise tile, occasional horizontal **interference** bands, and **TV glitches** (`crt.glitches` — several kinds: roll slices, chroma burst, snow, sync-drop lines, stutter bands; interval tuned in cfg). All screen-space; **no `getImageData` / GPU readback** and no per-frame canvas allocation.
+
+### Drawing rules
+
+- Rect tints and glitch fills use **`getRGB(k, paletteHex)`** — not `getColor()` (that returns a Kaplay component for `k.add`, not a draw color).
+- Colors only from **`PALETTE`** via cfg aliases (`phosphor.tint`, `chroma.leftTint`, `interference.bandTint`, etc.).
+- Do not raise section z-indices above `zIndex.crt` for normal gameplay/UI; CRT is meant to sit on top of the picture (fullscreen DOM controls may sit below CRT by design).
+
+### Film grain vs CRT
+
+- **Bake-time / menu-ready film grain** (`glow-parallax-grain.js`) sits **under** CRT — they composite, they do not cancel each other. Avoid stacking heavy extra full-screen noise in scenes when CRT `noise` is already strong.
+
+### When adding new global overlays
+
+If you add another full-screen post effect, either fold it into `crt-overlay.js` and cfg, or place it deliberately above/below `zIndex.crt` and document why — do not fight CRT with a second scanline pass.
+
+---
+
+## 17. Level art direction (reference rules)
+
+These rules complement sections 3, 13, 14, 15, and 16. They describe **how procedural levels should look** (palette, light, composition, readability) — not engine mechanics. Apply them to every section unless a section’s own `cfg.js` documents a deliberate exception.
 
 ### Thematic colour grammar
 

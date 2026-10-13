@@ -633,6 +633,55 @@ export const CFG = {
       }
     },
     //
+    // Full-screen CRT post layer (see utils/crt-overlay.js). One stay() object
+    // at zIndex.crt — above HUD, gameplay, and transition covers.
+    //
+    crt: {
+      enabled: true,
+      masterIntensity: 1,
+      scanlines: {
+        spacingPx: 3,
+        opacity: 0.14
+      },
+      vignette: {
+        opacity: 0.42,
+        innerRadiusFrac: 0.38,
+        outerRadiusFrac: 0.82
+      },
+      phosphor: {
+        tint: PALETTE.gold5,
+        opacity: 0.038
+      },
+      chroma: {
+        edgeOpacity: 0.055,
+        edgeWidthPx: 52,
+        leftTint: PALETTE.red2,
+        rightTint: PALETTE.cyan3
+      },
+      noise: {
+        opacity: 0.05,
+        scrollSpeedPxPerSec: 14,
+        tileSize: 192,
+        blockSize: 2
+      },
+      interference: {
+        enabled: true,
+        minIntervalSec: 14,
+        maxIntervalSec: 32,
+        opacity: 0.075,
+        bandHeightPx: 4,
+        durationSec: 0.2,
+        bandTint: PALETTE.gray6
+      },
+      glitches: {
+        enabled: true,
+        minIntervalSec: 18,
+        maxIntervalSec: 42,
+        minDurationSec: 0.07,
+        maxDurationSec: 0.24
+      }
+    },
+    //
     // Z-indices (layers)
     //
     zIndex: {
@@ -645,6 +694,7 @@ export const CFG = {
       assemblyParticles: 101,
       eyePupil: 1,
       ui: 100,
+      crt: 20000, // Above every scene layer, transitions and fullscreen button
       blades: 14  // Just below platforms, above everything else including huge words
     }
   },

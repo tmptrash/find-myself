@@ -7,7 +7,7 @@ This is a Kaplay.js-based 2D platformer game with procedural graphics and audio,
 
 ## 0. Tooling & Commands
 
-- **Package manager**: npm. Install with `npm install` (runs `patch-package` via `postinstall` — see below, never skip it).
+- **Package manager**: npm. Install with `npm install` (runs `scripts/apply-kaplay-performance-patch.js` via `postinstall` — see below, never skip it).
 - **Dev server**: `npm run dev` (Vite, hot reload) — use this to manually verify gameplay changes in a browser.
 - **Production build**: `npm run build` → outputs to `dist/`. `npm run preview` serves that build locally.
 - **Electron desktop build**: `npm run electron` runs the app in Electron against the current build; `npm run bin` builds and packages via `electron-builder` (dmg/nsis/AppImage per `package.json`'s `build` config).
@@ -15,7 +15,7 @@ This is a Kaplay.js-based 2D platformer game with procedural graphics and audio,
 - **No linter, no formatter, no test suite** are configured in this project (no `.eslintrc`/`.prettierrc`, no `test` script). The rules in this document are the only enforced style — there is no automated check to lean on, so apply them manually and verify behavior by running `npm run dev`.
 - **Language**: plain JavaScript (ES modules), no TypeScript. `@types/node` is a devDependency only for editor tooling — do not add `.ts` files or type annotations.
 - **Kaplay.js version is pinned to an alpha** (`kaplay@4000.0.0-alpha.27.1` in `package.json`). Its API can differ from released-version docs/examples found online or in training data — always check actual usage in this codebase before trusting outside Kaplay examples.
-- **`patches/` + `patch-package`**: dependencies (Kaplay) are patched post-install. Never `npm install` in a way that skips `postinstall`, and never hand-edit `node_modules` directly — edit the source under `patches/` instead so the patch survives a clean install.
+- **Kaplay postinstall patch**: `scripts/apply-kaplay-performance-patch.js` patches Kaplay after install. Never `npm install` in a way that skips `postinstall`, and never hand-edit `node_modules` directly — change that script instead so the fix survives a clean install.
 
 ---
 
@@ -619,7 +619,7 @@ for (const particle of particles) {
 
 A 120 Hz display has an 8.3 ms budget. Settled Glow frames spend about 1–2 ms in JS and still missed the budget, because the main thread was waiting on the GPU. When a level drops below the refresh rate, measure `requestAnimationFrame` deltas (p50 / p95), not only the FPS HUD average. If skipping draws restores full refresh rate and adding a few milliseconds of JS does not, the cliff is a GPU sync — do not chase draw-call micro-optimisations until that sync is gone.
 
-Kaplay's `flush()` is patched in `patches/kaplay+4000.0.0-alpha.27.1.patch`. The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Glow it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
+Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (postinstall). The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Glow it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
 
 ### Fill, pixel reads, and per-frame queries
 

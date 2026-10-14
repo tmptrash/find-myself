@@ -1,10 +1,11 @@
 #
-# Kaplay 4000.0.0-alpha.27.1 requires Node >= 24; patch-package must run on a
-# clean install from package-lock (stale cached node_modules breaks the patch).
+# Kaplay 4000.0.0-alpha.27.1 requires Node >= 24. NPM_CI reinstalls from the
+# lockfile before postinstall patches Kaplay (avoids stale cached node_modules).
 #
 [build]
-  command = "npm ci && npm run build"
+  command = "npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "24"
+  NPM_CI = "true"

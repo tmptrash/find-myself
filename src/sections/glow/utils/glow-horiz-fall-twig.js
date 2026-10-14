@@ -381,6 +381,7 @@ function tryLockRider(inst, char, mounted, midX, velY) {
 function armPredatorLakeRaftRetreat(twigInst, levelInst, raftX) {
   const pred = twigInst.predator
   if (!pred || raftX == null) return
+  if (pred.lakeRaftRetreatX != null) return
   const minX = glowLakeRaftPredatorMinX(levelInst)
   minX != null && pred.x < minX && (pred.x = minX, pred.vx = 0)
   const skipTurnAnim = pred.state === 'feast' || pred.state === 'coast'
@@ -425,11 +426,19 @@ function scheduleRideTurnAfterTwigLand(inst) {
     inst.rideDir == null && (inst.rideDir = 1)
     return
   }
-  if (pred.state === 'flee') {
+  if (isPredatorSteeringItself(pred)) {
     inst.rideDir == null && (inst.rideDir = pred.dir ?? 1)
     return
   }
   schedulePredatorMountedTurn(inst, false)
+}
+//
+// A flee or the swim back from the glasses log owns the heading — the stick
+// follows it instead of locking the crawler to the rider's facing, which
+// pinned it at the log (retreat steered east, the ride lock steered west).
+//
+function isPredatorSteeringItself(pred) {
+  return pred?.state === 'flee' || pred?.lakeRaftRetreatX != null
 }
 
 //
@@ -491,7 +500,7 @@ function completeRideTurn(inst, pred) {
     const level = pred.levelInst
     const minX = level && glowLakeRaftPredatorMinX(level)
     pred.dir = next
-    pred.holdFacing = pred.state !== 'flee'
+    pred.holdFacing = !isPredatorSteeringItself(pred)
     pred.vx = pred.dir * TWIG_RIDE_TURN_MIN_SPEED
   }
   clearRideTurnPose(inst, pred)
@@ -629,7 +638,7 @@ function stepTwig(twig, dt, floorY, predator, inst) {
       if (riding) {
         if (inst.rideTurnPending) {
           predator.holdFacing = true
-        } else if (predator.state === 'flee') {
+        } else if (isPredatorSteeringItself(predator)) {
           inst.rideDir != null && predator.dir !== inst.rideDir
             ? startFleeRideTurn(inst, predator, twig)
             : (inst.rideDir = predator.dir)

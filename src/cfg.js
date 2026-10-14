@@ -315,6 +315,41 @@ export const CFG = {
           glint: PALETTE.gray7
         },
         //
+        // Hologram portal seen through the glasses: blue analog projection.
+        // `ramp` (dark → hot) regrades the Touch level view inside the arch.
+        //
+        holoDoor: {
+          mouth: PALETTE.gray0,
+          core: PALETTE.gray7,
+          edge: PALETTE.blue5,
+          glow: PALETTE.blue3,
+          band: PALETTE.blue1,
+          field: PALETTE.blue2,
+          spark: PALETTE.blue4,
+          ramp: [
+            PALETTE.gray0,
+            PALETTE.slate0,
+            PALETTE.blue0,
+            PALETTE.blue1,
+            PALETTE.blue2,
+            PALETTE.blue3,
+            PALETTE.blue4,
+            PALETTE.blue5,
+            PALETTE.gray7
+          ],
+          //
+          // Grey source tones for the baked Touch view (regraded by `ramp`).
+          //
+          viewSky: PALETTE.gray0,
+          viewCloud: PALETTE.gray3,
+          viewFarTrunk: PALETTE.gray2,
+          viewFarCrown: PALETTE.gray4,
+          viewGround: PALETTE.gray2,
+          viewGroundRim: PALETTE.gray4,
+          viewGrass: PALETTE.gray3,
+          viewRock: PALETTE.gray3
+        },
+        //
         // Soft gray rim for low-priority decor (captions, muted props).
         //
         glowOutlineLight: PALETTE.gray2,

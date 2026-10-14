@@ -91,7 +91,6 @@ import {
   drawGlowPitCaveSkeletonScene,
   drawGlowPitCaveForegroundDecor,
   drawGlowPitCaveSeamCoverRocks,
-  drawGlowPitCaveMushroom,
   drawGlowPitEyeIntroInterior,
   shouldShowPitCaveSkeleton,
   isHeroOnPitCaveFloor,
@@ -135,6 +134,8 @@ import {
 } from '../utils/glow-tree-fruit.js'
 import { glowLakeRaftWorldX, mountGlowLakeRaftLayer, isOnGlowLakeRaft } from '../utils/glow-lake-raft.js'
 import * as GlassesSlot from '../utils/glow-glasses-slot.js'
+import * as HoloDoor from '../utils/glow-holo-door.js'
+import * as GroundPortal from '../utils/glow-ground-portal.js'
 import {
   KEY_EYES_COLLECTED,
   createGlowEyeIntroState,
@@ -1032,7 +1033,7 @@ const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
-const PIT_CAVE_HINT_TEXT = 'Maybe you want to\nstep on a mushroom?'
+const PIT_CAVE_HINT_TEXT = 'Something hums\nunder the cave floor.'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
@@ -1482,6 +1483,12 @@ const WATER_RIGHT_TRIM = 10
 // rocks instead of ending in a vertical sprite edge.
 //
 const LAKE_SHORE_EXTEND_PX = 64
+//
+// Hologram cave door (visible through the glasses) stands in the earth band
+// under the lake, near the playfield's bottom-left corner.
+//
+const HOLO_DOOR_LAKE_X_PAD = 110
+const HOLO_DOOR_EARTH_BOTTOM_PAD = -10
 const LAKE_Z = 12
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
@@ -2406,9 +2413,18 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.glassesSlot = GlassesSlot.create({
       k,
       getLevelInst: () => inst,
+      getPortalLookAt: () => HoloDoor.portalLookWorldPos(inst.holoDoor),
       leftMargin: LEFT_MARGIN,
       getAnchorY: () => glowTeacherHudAnchor(inst)?.y ?? null,
       onPickupSound: () => playGlowGlassesPickupSound(inst)
+    })
+    inst.holoDoor = HoloDoor.create({
+      k,
+      worldX: lakeX1 + HOLO_DOOR_LAKE_X_PAD,
+      worldY: PLAYFIELD_EARTH_BOTTOM_Y - HOLO_DOOR_EARTH_BOTTOM_PAD,
+      isVisible: () => GlassesSlot.isWearing(inst.glassesSlot),
+      getScreenLeft: () => LEFT_MARGIN,
+      getScreenBottom: () => Math.min(PLAYFIELD_BOTTOM_Y, k.height())
     })
     mountGlowLakeRaftLayer(k, () => inst, {
       isGlassesOnLog: () => GlassesSlot.isGlassesOnLog(inst.glassesSlot),
@@ -2469,7 +2485,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pit.onCrackLandingShake = () => {
       shouldGlowCrackLandingCameraShake(inst) && triggerGlowCameraShake(inst)
     }
-    inst.pit.onPitMushroomLaunch = (_pit, char) => launchHeroFromPitMushroomToBranch(inst, char)
+    inst.groundPortal = createGlowCaveGroundPortal(inst)
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
     const chainBuoyWoodBands = buildGlowChainBuoyWoodBands({
@@ -8138,7 +8154,6 @@ function drawGlowPitCaveForegroundPass(inst) {
   }
   const flatDecor = isGlowPitFlatDecorMode(inst)
   drawGlowPitCaveSkeletonScene(k, pit, flatDecor)
-  drawGlowPitCaveMushroom(k, pit)
   drawGlowPitCaveLyingEyes(inst, k)
 }
 //
@@ -8147,6 +8162,7 @@ function drawGlowPitCaveForegroundPass(inst) {
 function onDraw(inst) {
   onDrawWorld(inst)
   drawGlowPitCaveForegroundPass(inst)
+  GroundPortal.draw(inst.groundPortal)
   drawGlowPitCaveHeroForeground(inst)
   drawGlowPitCaveRocksOverEarthBand(inst)
 }
@@ -9724,6 +9740,7 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   const cfg = inst.glowHeroCreateCfg
   if (!cfg) return
   inst.heroHint && HeroHint.clear(inst.heroHint)
+  GroundPortal.reset(inst.groundPortal)
   releaseGamePhysicalKeys()
   const pose = computeGlowTouchDeathRespawnPose(inst, deathX, deathY, cause)
   writeGlowLastSpawnKeys(inst, pose.x, pose.y)
@@ -10195,6 +10212,7 @@ function syncGlowHeroTrampolinePads(inst, char, heroX, footY) {
 //
 function onUpdate(inst) {
   const k = inst.k
+  GroundPortal.update(inst.groundPortal)
   inst.zones._sceneRef = inst
   if (inst._glowBirdsBootstrapKick) {
     inst._glowBirdsBootstrapKick = false
@@ -10203,6 +10221,14 @@ function onUpdate(inst) {
   if (inst.drowning) {
     const drownChar = inst.heroInst?.character
     inst.glowDrownHeroClipLock && drownChar && (drownChar.hidden = true)
+    updateGlowCamera(inst)
+    return
+  }
+  //
+  // Portal trip: the body waits hidden while the portal draws the cut sprite.
+  //
+  if (GroundPortal.isTraveling(inst.groundPortal)) {
+    syncGlowGroundPortalTravelHero(inst)
     updateGlowCamera(inst)
     return
   }
@@ -12416,22 +12442,81 @@ function syncHeroTrampDrawOrder(inst) {
   ch.z !== targetZ && (ch.z = targetZ)
 }
 //
-// Pit cave mushroom: pop onto the ground strip between the big tree and the
-// branch trampoline (same band as the anchor fruit), not onto the start branch.
+// Cave ground portal: the hero dives in on the cave floor and pops out of a
+// second portal on the ground strip between the big tree and the branch
+// trampoline (same band as the anchor fruit), not onto the start branch.
 //
-const PIT_MUSH_LAUNCH_COOLDOWN = 0.55
 const PIT_MUSH_GROUND_LAUNCH_MULT = 1.12
 const PIT_MUSH_LAUNCH_GROUND_TRUNK_PAD = 16
 const PIT_MUSH_LAUNCH_GROUND_TRAMP_PAD = 12
-function launchHeroFromPitMushroomToBranch(inst, char) {
+function createGlowCaveGroundPortal(inst) {
+  const pit = inst.pit
+  return GroundPortal.create({
+    k: inst.k,
+    entry: { x: pit.portalX, y: pit.floorY + pit.zone.depth },
+    exit: { x: computeGlowAnchorFruitDropX(inst.treeFruitAnchorCfg), y: FLOOR_Y },
+    heroFootOffset: SURFACE_DETECT_Y,
+    getHero: () => inst.heroInst,
+    isEnabled: () => isGlowPitMushroomUnlocked(inst),
+    onDiveStart: () => startGlowGroundPortalDive(inst),
+    onTeleport: () => teleportGlowHeroToGroundPortalExit(inst),
+    onPowerOn: () => playGlowGroundPortalPowerOn(inst),
+    onEmerge: () => launchHeroFromGroundPortal(inst)
+  })
+}
+//
+// Freezes the body on the cave floor; only the portal's cut sprite is drawn.
+//
+function startGlowGroundPortalDive(inst) {
   const hero = inst.heroInst
-  const anchorCfg = inst.treeFruitAnchorCfg
-  if (!anchorCfg || !char?.pos || !hero) return false
+  const char = hero?.character
+  if (!char?.pos) return
   dismissPitCaveMushroomHint(inst.pit)
   dismissGlowCaveMushroomTeacherHint(inst)
-  const teleportX = computeGlowAnchorFruitDropX(anchorCfg)
-  const teleportY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-  moveGlowHeroTo(char, teleportX, teleportY)
+  hero.controllable = false
+  hero.controlsDisabled = true
+  hero.isRunning = false
+  hero.jumpPhase = 'none'
+  moveGlowHeroTo(char, inst.groundPortal.entry.x, char.pos.y)
+  char.vel.x = 0
+  syncGlowGroundPortalTravelHero(inst)
+  inst.sound && !inst.sound._glowSfxMuted && Sound.playDisappearSound(inst.sound)
+}
+//
+// Every travel frame: keep the Kaplay sprite hidden and the body still.
+//
+function syncGlowGroundPortalTravelHero(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return
+  char.hidden = true
+  char.vel.x = 0
+  inst.pitCaveHeroForeground = false
+}
+function teleportGlowHeroToGroundPortalExit(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return
+  const exit = inst.groundPortal.exit
+  moveGlowHeroTo(char, exit.x, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+  char.vel.x = 0
+  char.vel.y = 0
+  inst._inGlowPitCave = false
+  snapGlowCameraToHero(inst.k, inst.heroInst)
+  updateGlowCamera(inst)
+}
+function playGlowGroundPortalPowerOn(inst) {
+  inst.sound && !inst.sound._glowSfxMuted && Sound.playSpawnSweep(inst.sound)
+}
+//
+// Out of the exit portal: control back, one jump up, then the same world
+// unlocks the old cave mushroom launch used to trigger.
+//
+function launchHeroFromGroundPortal(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.pos) return
+  hero.controllable = true
+  hero.controlsDisabled = false
+  char.hidden = false
   const launch = Math.round(CFG.game.jumpForce * PIT_MUSH_GROUND_LAUNCH_MULT)
   if (typeof char.jump === 'function') char.jump(launch)
   else char.vel.y = -launch
@@ -12443,15 +12528,12 @@ function launchHeroFromPitMushroomToBranch(inst, char) {
   hero.canJump = false
   inst._pitMushroomBranchLaunchLatch = true
   inst.treeRevealFromBranchTramp = true
-  inst.pit.trampState.cooldown = PIT_MUSH_LAUNCH_COOLDOWN
-  inst.pit.trampState.squash = 1
   inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
   unlockGlowEyesGameplayFromBranchLaunch(inst)
   inst.pit && ensureGlowPitOpenForEyesCollected(inst.pit)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
   maybeBootstrapGlowPostEyes(inst)
-  return true
 }
 function dismissPitCaveMushroomHint(pit) {
   if (!pit) return

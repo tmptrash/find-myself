@@ -284,26 +284,6 @@ export function getCuteMushroomFlatWaterColors() {
 }
 
 /**
- * Pit trampoline in flat mono — light cap, dark stem, void outline on gray floor.
- * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
- */
-export function getCuteMushroomFlatPitBakeColors() {
-  const cap = GLOW_PAL.lightGray
-  const stem = GLOW_PAL.decorGray
-  const spot = GLOW_PAL.glowOutlineLight
-  return {
-    body: stem,
-    bodyShade: stem,
-    cap,
-    capDark: stem,
-    capLight: cap,
-    spot,
-    outline: GLOW_PAL.decorGray,
-    face: GLOW_PAL.lightGray,
-    blush: stem
-  }
-}
-/**
  * True while the level stays flat gray (before the second eye opens the colour world).
  * @param {Object} [z] - Glow zones object
  * @returns {boolean}

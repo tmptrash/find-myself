@@ -400,6 +400,14 @@ function sideViewEyePos(headX, headY, bodyBottom, animation) {
     y: bodyBottom + dx * sin + dy * cos
   }
 }
+//
+// Contact bob: the body sits lowest when a foot plants (phase 0 / 0.5)
+// and rises through the passing poses.
+//
+function runBodyBobPx(frame) {
+  const phase = frame / RUN_FRAME_COUNT
+  return Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * RUN_BODY_BOB)
+}
 
 export const HEROES = {
   HERO: 'hero',
@@ -1064,10 +1072,23 @@ export function getEyeLineOffset(inst) {
     const crouch = frame === 0 || frame >= JUMP_AIR_TOP_Y.length + 1
     headY = crouch ? JUMP_CROUCH_HEAD_Y : JUMP_AIR_TOP_Y[frame - 1]
   }
-  const eyeX = sideView ? EYE_OFFSET_X_RIGHT : EYE_OFFSET_X_CYCLOPS
   const dir = inst.direction === -1 ? -1 : 1
+  if (sideView) {
+    //
+    // Same anchor the baked run/jump frame paints its single eye at
+    // (run frames bob and lean the torso, so the eye moves with them).
+    //
+    const run = !air
+    run && (headY += runBodyBobPx(inst.runFrame ?? 0))
+    const eye = sideViewEyePos(EYE_LINE_HEAD_X, headY, headY + IDLE_HEAD_HEIGHT + IDLE_BODY_HEIGHT, run ? 'run' : 'jump')
+    return {
+      x: (eye.x - SPRITE_SIZE / 2) * dir,
+      y: eye.y - SPRITE_SIZE / 2,
+      sideView
+    }
+  }
   return {
-    x: (EYE_LINE_HEAD_X + eyeX - SPRITE_SIZE / 2) * dir,
+    x: (EYE_LINE_HEAD_X + EYE_OFFSET_X_CYCLOPS - SPRITE_SIZE / 2) * dir,
     y: headY + EYE_OFFSET_Y - SPRITE_SIZE / 2,
     sideView
   }
@@ -2943,7 +2964,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     // Contact bob: the body sits lowest when a foot plants (phase 0 / 0.5)
     // and rises through the passing poses.
     //
-    const bob = Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * RUN_BODY_BOB)
+    const bob = runBodyBobPx(frame)
     headY += bob
     bodyY += bob
     leftArmY += bob

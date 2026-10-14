@@ -1,18 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
-import * as Sound from '../../../utils/sound.js'
-import { toCanvas } from '../../../utils/helper.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
-import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
 import {
   GLOW_PAL,
   glowCaveEarthDeepRgb,
   glowCaveEarthFloorRgb,
   glowPreludeBackdropRgb,
   glowRgb,
-  snapToPalette,
-  getCuteMushroomFlatDecorColors,
-  getCuteMushroomFlatPitBakeColors
+  snapToPalette
 } from './glow-palette.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from './glow-static-bake.js'
@@ -93,15 +88,11 @@ const MIDGE_Z = 14
 const MIDGE_DRAW_CULL_PAD = 48
 const MIDGE_PIT_SPREAD_X = 36
 const MIDGE_PIT_SPREAD_Y = 26
-const PIT_TRAMP_FORCE = 920
-const PIT_TRAMP_COOLDOWN = 0.55
-const PIT_TRAMP_W = 36
 const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 //
-// Wider invisible cap than the painted mushroom — forgiving landings still
-// trigger the pit bounce without pixel-perfect centre hits.
+// Cave floor spot (share of the crack zone width) where the ground portal opens.
 //
-const PIT_TRAMP_CAP_HALF_W = PIT_TRAMP_W * 0.88
+const PIT_PORTAL_ZONE_T = 0.55
 //
 // Cave interior waits until the hero has dropped past the mouth lip — avoids
 // a flat horizontal bar flashing across the opening on the collapse frame.
@@ -122,9 +113,6 @@ const CRACK_STOMP_PARTICLE_MULT = 2.8
 const BONUS_PLAT_FOOT_PAD_ABOVE = 10
 const BONUS_PLAT_FOOT_PAD_BELOW = 14
 const BONUS_PLAT_FOOT_X_PAD = 16
-const PIT_MUSH_SPRITE = 'glow0-pit-mush'
-const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
-const PIT_MUSH_FLAT_FILL_SPRITE = 'glow0-pit-mush-flat-fill-v7'
 const CAVE_LAYOUT_VERSION = 70
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
@@ -423,7 +411,6 @@ export function createGlowPit(cfg) {
     tooltipClampInset = null, zones = null, lastSpawnMode = null
   } = cfg
   const zone = getCrackZone(screenW, floorY)
-  bakePitMushroomSprite(k)
   const startOpen = Boolean(
     alreadyCollapsed ||
     shouldGlowPitBeOpenForZones(zones, lastSpawnMode, heroInst)
@@ -459,7 +446,7 @@ export function createGlowPit(cfg) {
     crackSegs: buildFractalCrackSegs(zone),
     collapsed: startOpen,
     particles: [],
-    trampState: { cooldown: 0, squash: 0, x: zone.x1 + zone.width * 0.55 },
+    portalX: zone.x1 + zone.width * PIT_PORTAL_ZONE_T,
     pitFloor: null,
     pitWalls: [],
     pitBonus: null,
@@ -510,11 +497,8 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   syncGlowPitOpenState(pit)
   const dt = pit.k.dt()
   updatePitParticles(pit, dt)
-  if (pit.trampState.cooldown > 0) pit.trampState.cooldown -= dt
-  if (pit.trampState.squash > 0) pit.trampState.squash = Math.max(0, pit.trampState.squash - dt * 4)
   if (pit.collapsed) {
     clampHeroInCave(pit, char)
-    updatePitTrampoline(pit, char)
     return
   }
   if (!pit.cracksVisible) return
@@ -615,15 +599,6 @@ function clampHeroInCave(pit, char) {
   const maxX = innerX + innerW - 6
   if (char.pos.x < minX) char.pos.x = minX
   if (char.pos.x > maxX) char.pos.x = maxX
-  //
-  // Pit mushroom uses its own cap snap — skip floor pin while standing on it.
-  //
-  const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
-  const capTop = bottomY - mushH
-  const onMushCap = isPitMushroomBouncy(pit) &&
-    Math.abs(char.pos.x - pit.trampState.x) < PIT_TRAMP_CAP_HALF_W &&
-    feetY >= capTop - 10 && feetY <= capTop + 16
-  if (onMushCap) return
   const hero = pit.heroInst
   //
   // Never pin the floor during jump wind-up or launch — that cancelled jumps
@@ -768,10 +743,6 @@ export function drawGlowPitCaveSkeletonScene(k, pit, flatDecor = false) {
  * @param {Object} pit - Pit state
  * @param {boolean} flatDecor - Single-tone decor mode
  */
-export function drawGlowPitCaveMushroom(k, pit) {
-  if (!pit?.collapsed) return
-  drawPitTrampoline(k, pit)
-}
 export function drawGlowPitCaveForegroundDecor(k, pit, flatDecor = false) {
   if (!pit?.collapsed) return
   if (!isCaveInteriorVisible(pit)) return
@@ -933,44 +904,6 @@ function spreadMidgesAfterPit(ctrl) {
     m.x = b.minX + Math.random() * (b.maxX - b.minX)
     m.y = b.minY + Math.random() * (b.maxY - b.minY)
   }
-}
-function bakePitMushroomSprite(k) {
-  //
-  // Always rebaked (no k.getSprite skip) — glow and menu share one native
-  // Kaplay instance, so a "skip if this name is already loaded" check would
-  // keep showing whatever colours/shape were baked on the very first pit
-  // created that session even after a code change, across every later
-  // level re-entry until a full page reload.
-  //
-  bakeOnePitMushroomSprite(k, PIT_MUSH_SPRITE, getPitMushroomBakeColors())
-  //
-  // Same red cap as the ground trampoline mushrooms — no longer a distinct
-  // purple, per design direction.
-  //
-  bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroomRed)
-  bakeOnePitMushroomFlatMonoSprites(k)
-}
-function bakeOnePitMushroomFlatMonoSprites(k) {
-  bakeOnePitMushroomSprite(k, PIT_MUSH_FLAT_FILL_SPRITE, getCuteMushroomFlatPitBakeColors())
-}
-function bakeOnePitMushroomSprite(k, name, colors) {
-  const mushW = PIT_TRAMP_W
-  const totalW = mushW + 4
-  const totalH = Math.ceil(mushW * CUTE_MUSHROOM_ASPECT) + 4
-  const canvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-    drawCuteMushroomToCanvas(ctx, {
-      cx: totalW / 2,
-      baseY: totalH - 2,
-      width: mushW,
-      colors,
-      withFace: true,
-      eyeScale: TRAMP_FACE_EYE_SCALE,
-      simpleShade: true
-    })
-  })
-  k.loadSprite(name, canvas)
-  canvas.width = 0
-  canvas.height = 0
 }
 function drawGlowMidges(k, ctrl) {
   const life = ctrl.worldLife ?? 0
@@ -1239,12 +1172,6 @@ function fillCanvasPoly(ctx, pts, rgb) {
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
   ctx.closePath()
   ctx.fill()
-}
-//
-// Pit-floor mushroom — lighter cap so it reads on the decor-gray floor.
-//
-function getPitMushroomBakeColors() {
-  return getCuteMushroomFlatDecorColors()
 }
 //
 // Gray stomp dust on the flat decor-gray crack entrance.
@@ -1906,7 +1833,7 @@ function caveSeed01(seed) {
   return x - Math.floor(x)
 }
 /**
- * Pit cave mushroom is visible and bouncy only after the lying eyes are taken.
+ * Pit cave ground portal works only after the lying eyes are taken.
  * @param {Object} pit - Pit state
  * @returns {boolean}
  */
@@ -1920,43 +1847,6 @@ export function isGlowPitMushroomUnlocked(pit) {
   return Boolean(intro.pickup?.collected) ||
     intro.phase === 'runBack' ||
     intro.phase === 'complete'
-}
-function isPitMushroomVisible(pit) {
-  return isGlowPitMushroomUnlocked(pit)
-}
-function isPitMushroomBouncy(pit) {
-  return isGlowPitMushroomUnlocked(pit)
-}
-function isGlowPitMushroomFlatMono(sc) {
-  if (!sc?.zones) return false
-  const z = sc.zones
-  if (z.colorWorld) return false
-  return true
-}
-function drawPitTrampoline(k, pit) {
-  if (!isPitMushroomVisible(pit)) return
-  const x = pit.trampState.x
-  const y = pit.floorY + pit.zone.depth - 2
-  const squash = pit.trampState.squash
-  const scaleY = 1 - squash * 0.35
-  const sc = pit.sceneRef
-  const z = sc?.zones
-  const fade = sc?.colorFade ?? 0
-  const flatMono = isGlowPitMushroomFlatMono(sc) || !z?.colorWorld
-  const colorMush = !flatMono &&
-    (z?.colorWorld || fade >= 0.5)
-  const sprite = colorMush
-    ? PIT_MUSH_OUTLINE_SPRITE
-    : flatMono
-      ? PIT_MUSH_FLAT_FILL_SPRITE
-      : PIT_MUSH_SPRITE
-  k.drawSprite({
-    sprite,
-    pos: k.vec2(x, y),
-    anchor: 'bot',
-    scale: k.vec2(1, scaleY),
-    color: k.rgb(255, 255, 255)
-  })
 }
 //
 // World X of the pit cave skull anchor (matches glow-cave-skeleton layout).
@@ -2248,28 +2138,6 @@ function ensureGlowPitMouthWalkShelf(pit) {
   if (pit._mouthShelfLayoutVer === CAVE_LAYOUT_VERSION && pit.pitMouthWalkShelf) return
   refreshGlowPitMouthWalkShelf(pit)
   pit._mouthShelfLayoutVer = CAVE_LAYOUT_VERSION
-}
-function updatePitTrampoline(pit, char) {
-  if (!isPitMushroomBouncy(pit)) return
-  if (pit.trampState.cooldown > 0) return
-  const x = pit.trampState.x
-  const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
-  const capTop = pit.floorY + pit.zone.depth - mushH
-  const feet = char.pos.y + 38
-  const onCap = Math.abs(char.pos.x - x) < PIT_TRAMP_CAP_HALF_W &&
-    feet >= capTop - 10 && feet <= capTop + 16
-  if (onCap && (char.vel?.y ?? 0) >= -40) {
-    if (pit.onPitMushroomLaunch?.(pit, char)) {
-      pit.trampState.squash = 1
-      return
-    }
-    char.vel.y = -PIT_TRAMP_FORCE
-    pit.trampState.cooldown = PIT_TRAMP_COOLDOWN
-    pit.trampState.squash = 1
-    if (pit.sound && !pit.sound._glowSfxMuted) {
-      Sound.playJumpSound(pit.sound)
-    }
-  }
 }
 function spawnPitBurst(pit) {
   const { k, zone, floorY } = pit

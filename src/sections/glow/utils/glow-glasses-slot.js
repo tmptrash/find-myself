@@ -62,6 +62,7 @@ const WORN_GLINT_ALPHA = 0.6
  * @param {number} cfg.leftMargin - Playfield left edge in screen px
  * @param {function(): (number|null)} cfg.getAnchorY - Teacher eye screen Y
  * @param {function(): void} [cfg.onPickupSound] - Plays the pickup sound
+ * @param {function(): ({ x: number, y: number }|null)} [cfg.getPortalLookAt] - Portal look target
  * @returns {Object} Glasses slot inst
  */
 export function create(cfg) {
@@ -69,6 +70,7 @@ export function create(cfg) {
   const inst = {
     k,
     getLevelInst: cfg.getLevelInst,
+    getPortalLookAt: cfg.getPortalLookAt ?? null,
     leftMargin: cfg.leftMargin,
     getAnchorY: cfg.getAnchorY,
     onPickupSound: cfg.onPickupSound ?? null,
@@ -129,6 +131,15 @@ export function collectGlasses(inst, worldCenter) {
 }
 
 /**
+ * True while the glasses sit on the hero's face.
+ * @param {Object|null} inst - Glasses slot inst
+ * @returns {boolean}
+ */
+export function isWearing(inst) {
+  return Boolean(inst?.wearing)
+}
+
+/**
  * True when the slot shows the glasses (hover tooltip + click target).
  * @param {Object|null} inst - Glasses slot inst
  * @returns {boolean}
@@ -164,6 +175,7 @@ function onUpdate(inst) {
   updateGlassesFly(inst, dt)
   inst.slotPop = Math.max(0, inst.slotPop - dt)
   if (!inst.wearing) return
+  syncGlassesPortalLook(inst)
   inst.wearTimer -= dt
   if (inst.wearTimer > 0 && glowHeroCharacter(inst)) return
   takeGlassesOff(inst)
@@ -201,6 +213,7 @@ function onSlotPress(inst) {
   inst.wearing = true
   inst.wearTimer = GLASSES_WEAR_DURATION
   inst.flash = { x: char.pos.x, y: char.pos.y + wornEyeLine(inst, char).y, t: 0 }
+  syncGlassesPortalLook(inst)
 }
 
 //
@@ -209,6 +222,7 @@ function onSlotPress(inst) {
 function takeGlassesOff(inst) {
   inst.wearing = false
   inst.wearTimer = 0
+  syncGlassesPortalLook(inst)
   const char = glowHeroCharacter(inst)
   if (!char) {
     inst.slotPop = GLASSES_SLOT_POP_DURATION
@@ -352,6 +366,16 @@ function wornEyeLine(inst, char) {
   const s = Math.abs(char.scale?.x ?? 1)
   const eye = heroInst ? Hero.getEyeLineOffset(heroInst) : { x: 0, y: 0, sideView: false }
   return { x: eye.x * s, y: eye.y * s, sideView: eye.sideView }
+}
+
+//
+// While the glasses are on, the hero tracks the hologram portal with his eyes.
+//
+function syncGlassesPortalLook(inst) {
+  const hero = inst.getLevelInst()?.heroInst
+  if (!hero) return
+  const target = inst.wearing && inst.getPortalLookAt ? inst.getPortalLookAt() : null
+  Hero.setLookAtPos(hero, target)
 }
 
 //

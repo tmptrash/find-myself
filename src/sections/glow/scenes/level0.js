@@ -1142,8 +1142,8 @@ const SKELETON_TOOLTIP_Y_OFFSET = -70
 //
 // HUD life-icon (the "teacher") hover tooltip — same as touch lesson 0.
 //
-const LIFE_TOOLTIP_TEXT = 'Your experience'
-const GLASSES_SLOT_TOOLTIP_TEXT = 'Glasses'
+const LIFE_TOOLTIP_TEXT = 'Your experience (exp)'
+const GLASSES_SLOT_TOOLTIP_TEXT = `Glasses - ${GlassesSlot.GLASSES_EXPERIENCE_COST} exps`
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 const LIFE_SCORE_TOOLTIP_SIZE = 44
@@ -1836,9 +1836,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
       trampClearHalf: TRAMP_GRASS_CLEAR_HALF
     }
-    let treeFruitSpots = zones.tree
-      ? buildGlowTreeFruitSpots(treeData, treeFruitAnchorCfg)
-      : []
+    let treeFruitSpots = []
+    let treeFruitSpotsBuilt = false
     const savedTreeSegmentsRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
     const hasPersistedSegmentReveal = Array.isArray(savedTreeSegmentsRaw) && savedTreeSegmentsRaw.length > 0
     const treeDrawMonolith = zones.tree && !hasPersistedSegmentReveal
@@ -1868,8 +1867,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
       const crownTreeRevealed = treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
       crownTreeRevealed && (zones.tree = true)
-      crownTreeRevealed && !treeFruitSpots.length &&
-        (treeFruitSpots = buildGlowTreeFruitSpots(treeData, treeFruitAnchorCfg))
+    }
+    const initTreeFruit = buildGlowTreeFruitSpotsForOpenCrown(
+      zones,
+      treeData,
+      treeFruitAnchorCfg,
+      treeSegmentPlan,
+      treeSegmentRevealed
+    )
+    if (initTreeFruit !== null) {
+      treeFruitSpots = initTreeFruit
+      treeFruitSpotsBuilt = true
     }
     if (await glowBootstrapPause(bootstrap, 14, session)) return
     //
@@ -2208,7 +2216,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
     const startingLifeScore = readGlowExperience()
     levelIndicator.updateLifeScore?.(startingLifeScore)
-    syncGlowLifeScoreVisibility(levelIndicator, startingLifeScore)
+    syncGlowLifeScoreVisibility(levelIndicator)
     set(KEY_LIFE_SHOWN, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
     if (await glowBootstrapPause(bootstrap, 78, session)) return
@@ -2400,7 +2408,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       branchLookTimer: spawnOnBranch ? BRANCH_LOOK_LEFT_DURATION : 0,
       pendingReplayIntro2: false,
       treeFruitSpots,
-      treeFruitSpotsBuilt: treeFruitSpots.length > 0,
+      treeFruitSpotsBuilt,
       treeFruitAnchorCfg,
       branchTrampX,
       _branchLandingsSinceTree: 0
@@ -2632,31 +2640,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         }
       }
     ])
-    //
-    // Dev-only hook for automated wood-foot-particle verification.
-    //
-    if (await glowBootstrapPause(bootstrap, 99, session)) return
-    import.meta.env.DEV && (window.__glowFootTest = {
-      peek: () => ({
-        footParticleCount: inst.footParticles?.particles?.length ?? 0,
-        footSpawnTotal: window.__glowFootSpawnTotal || 0,
-        heroDustSpawns: window.__heroDustSpawns || 0,
-        surface: detectGlowSurface(inst),
-        flatDecor: isGlowFlatSingleDecorColor(inst),
-        footY: (inst.heroInst?.character?.pos?.y ?? 0) + SURFACE_DETECT_Y,
-        allowFootBurst: canSpawnGlowFootBurst(inst, inst.heroInst?.character),
-        onWood: isGlowWoodFootPosition(
-          inst,
-          inst.heroInst?.character?.pos?.x ?? 0,
-          (inst.heroInst?.character?.pos?.y ?? 0) + SURFACE_DETECT_Y,
-          inst.heroInst?.character
-        ),
-        onMainGround: isOnGlowMainGroundFoot(
-          (inst.heroInst?.character?.pos?.y ?? 0) + SURFACE_DETECT_Y
-        ),
-        kaplayObjCount: inst.k.get('*').length
-      })
-    })
     await glowBootstrapPause(bootstrap, 100, session)
 }
 //
@@ -3201,7 +3184,7 @@ function createGlowLevelIndicator(k, goldRgb, colorWorld = false) {
 //
 // Experience numeral is shown whenever the life HUD is revealed (including 0).
 //
-function syncGlowLifeScoreVisibility(indicator, score) {
+function syncGlowLifeScoreVisibility(indicator) {
   if (!indicator) return
   const show = indicator.lifeRevealed
   indicator.lifeScoreText && (indicator.lifeScoreText.hidden = !show)
@@ -3213,7 +3196,7 @@ function syncGlowLifeScoreVisibility(indicator, score) {
 function syncGlowExperienceHud(inst, score) {
   if (!inst.levelIndicator) return
   inst.levelIndicator.updateLifeScore?.(score)
-  syncGlowLifeScoreVisibility(inst.levelIndicator, score)
+  syncGlowLifeScoreVisibility(inst.levelIndicator)
 }
 //
 // Life HUD for pit-mushroom nudges — shown as soon as an exploration hint applies.
@@ -3231,7 +3214,7 @@ function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
   LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
   const score = readGlowExperience()
   indicator.updateLifeScore?.(score)
-  syncGlowLifeScoreVisibility(indicator, score)
+  syncGlowLifeScoreVisibility(indicator)
   set(KEY_LIFE_SHOWN, true)
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
@@ -9478,7 +9461,7 @@ function bumpGlowLifeHudOnDeath(inst) {
   syncGlowFpsHudVisibility(inst)
   if (!inst.levelIndicator?.lifeRevealed) return
   inst.levelIndicator.updateLifeScore?.(newLife)
-  syncGlowLifeScoreVisibility(inst.levelIndicator, newLife)
+  syncGlowLifeScoreVisibility(inst.levelIndicator)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
     const greyLife = glowLifeHudWantGrey(inst)
@@ -9562,9 +9545,6 @@ function spawnGlowTouchDeathBurst(inst, x, y) {
 // reads as real leaves rather than generic dust.
 //
 function glowTouchDeathLeafPalette(inst) {
-  if (!inst?.zones?.colorWorld) {
-    return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
-  }
   if (!inst?.zones?.colorWorld) {
     return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
   }
@@ -11550,6 +11530,20 @@ function revealOneTreeSegment(inst, segmentId) {
 //
 function persistTreeSegmentsRevealed(inst) {
   set(KEY_TREE_SEGMENTS_REVEALED, [...inst.treeSegmentRevealed])
+}
+//
+// Init-time fruit layout when the crown is already open (save / monolith tree).
+// Returns null when the crown is still closed; an empty array when open but no
+// valid hang points.
+//
+function buildGlowTreeFruitSpotsForOpenCrown(zones, treeData, anchorCfg, treeSegmentPlan, treeSegmentRevealed) {
+  if (!zones.eyesCollected) return null
+  const crownOpen = zones.tree || (
+    treeSegmentPlan &&
+    treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
+  )
+  if (!crownOpen) return null
+  return buildGlowTreeFruitSpots(treeData, anchorCfg)
 }
 //
 // When every segment is open, mark the legacy tree zone complete.

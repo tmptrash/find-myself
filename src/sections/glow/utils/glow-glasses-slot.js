@@ -12,7 +12,7 @@ export const KEY_GLASSES_COLLECTED = 'glow.glassesCollected'
 //
 // Experience (lifeScore HUD) cost and how long the hero wears the glasses.
 //
-const GLASSES_EXPERIENCE_COST = 2
+export const GLASSES_EXPERIENCE_COST = 2
 const GLASSES_WEAR_DURATION = 2
 const GLASSES_WORLD_FX_Z = CFG.visual.zIndex.player + 0.5
 const GLASSES_HUD_Z = CFG.visual.zIndex.ui

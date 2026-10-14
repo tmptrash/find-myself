@@ -137,9 +137,6 @@ export function clear(inst) {
 //
 export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   if (!inst) return
-  if (import.meta.env.DEV) {
-    window.__glowFootSpawnTotal = (window.__glowFootSpawnTotal || 0) + 1
-  }
   const count = Math.round(LANDING_COUNT * countMult)
   for (let i = 0; i < count; i++) {
     pushParticle(inst, footX, footY, color, LANDING_SPEED_MIN, LANDING_SPEED_RANGE, true)

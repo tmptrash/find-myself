@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { get, set } from '../../../utils/progress.js'
+import { applyGlowExperienceDelta, readGlowExperience } from './glow-experience.js'
 import * as Hero from '../../../components/hero.js'
 import { GLOW_PAL, glowRgb } from './glow-palette.js'
 import { drawGlowLakeGlassesSprite, glowLakeGlassesSpriteSize } from './glow-lake-raft.js'
@@ -9,11 +10,10 @@ import { drawGlowLakeGlassesSprite, glowLakeGlassesSpriteSize } from './glow-lak
 //
 export const KEY_GLASSES_COLLECTED = 'glow.glassesCollected'
 //
-// Experience (lifeScore, shown right of the teacher eye) needed to put them on.
+// Experience (lifeScore HUD) cost and how long the hero wears the glasses.
 //
-const GLASSES_REQUIRED_EXPERIENCE = 5
-const GLASSES_WEAR_DURATION = 5
-const GLASSES_EXPERIENCE_KEY = 'lifeScore'
+const GLASSES_EXPERIENCE_COST = 2
+const GLASSES_WEAR_DURATION = 2
 const GLASSES_WORLD_FX_Z = CFG.visual.zIndex.player + 0.5
 const GLASSES_HUD_Z = CFG.visual.zIndex.ui
 //
@@ -63,6 +63,7 @@ const WORN_GLINT_ALPHA = 0.6
  * @param {function(): (number|null)} cfg.getAnchorY - Teacher eye screen Y
  * @param {function(): void} [cfg.onPickupSound] - Plays the pickup sound
  * @param {function(): ({ x: number, y: number }|null)} [cfg.getPortalLookAt] - Portal look target
+ * @param {function(number): void} [cfg.onExperienceChanged] - HUD sync after spend
  * @returns {Object} Glasses slot inst
  */
 export function create(cfg) {
@@ -71,6 +72,7 @@ export function create(cfg) {
     k,
     getLevelInst: cfg.getLevelInst,
     getPortalLookAt: cfg.getPortalLookAt ?? null,
+    onExperienceChanged: cfg.onExperienceChanged ?? null,
     leftMargin: cfg.leftMargin,
     getAnchorY: cfg.getAnchorY,
     onPickupSound: cfg.onPickupSound ?? null,
@@ -207,11 +209,13 @@ function onSlotPress(inst) {
   const mouse = inst.k.mousePos()
   const rect = slotRect(inst)
   if (Math.abs(mouse.x - rect.x) > rect.w * 0.5 || Math.abs(mouse.y - rect.y) > rect.h * 0.5) return
-  if (get(GLASSES_EXPERIENCE_KEY, 0) < GLASSES_REQUIRED_EXPERIENCE) return
+  if (readGlowExperience() < GLASSES_EXPERIENCE_COST) return
   const char = glowHeroCharacter(inst)
   if (!char) return
   inst.wearing = true
   inst.wearTimer = GLASSES_WEAR_DURATION
+  const score = applyGlowExperienceDelta(-GLASSES_EXPERIENCE_COST)
+  inst.onExperienceChanged?.(score)
   inst.flash = { x: char.pos.x, y: char.pos.y + wornEyeLine(inst, char).y, t: 0 }
   syncGlassesPortalLook(inst)
 }

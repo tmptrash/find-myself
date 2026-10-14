@@ -153,7 +153,12 @@ function onRenderEvent(inst, type) {
   else if (type === EVENTS.FADE_DONE) finishOverlay(inst)
 }
 
+//
+// The loader hide handler set in revealLoaderOverSnow is the only path that
+// fades the snow out, so it must exist before boot continues past the intro.
+//
 function onIntroDone(inst) {
+  revealLoaderOverSnow(inst)
   !inst.finished && Sound.playReadyTvLoaderBackdropHiss()
   inst.resolveIntro()
 }

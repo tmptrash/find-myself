@@ -7,7 +7,6 @@ import { glowTreeLeafKey, isGlowTreeRootsSegmentId } from './glow-tree-segments.
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
-const FRUIT_LAYOUT_VERSION = 11
 const FRUIT_RANDOM_COUNT = 17
 //
 // Fallen anchor fruit vanishes after this if the centipede never claims it.
@@ -88,11 +87,16 @@ export function computeGlowAnchorFruitDropX(cfg) {
  * @param {Object} levelInst - Glow level inst (treeData, treeFruitAnchorCfg, zones)
  */
 export function ensureGlowTreeFruitSpots(levelInst) {
+  if (levelInst.treeFruitSpotsBuilt) return
   if (!levelInst.treeData || !levelInst.zones?.eyesCollected) return
   if (!isGlowTreeCrownRevealed(levelInst)) return
-  if (levelInst.treeFruitSpots?.length && levelInst.treeFruitLayoutVersion === FRUIT_LAYOUT_VERSION) return
+  //
+  // One build per scene run, even when it yields no spots or every fruit is
+  // later eaten — the build paints the whole crown into a canvas and reads it
+  // back, so a per-frame retry drops Glow to ~16 FPS.
+  //
+  levelInst.treeFruitSpotsBuilt = true
   levelInst.treeFruitSpots = buildGlowTreeFruitSpots(levelInst.treeData, levelInst.treeFruitAnchorCfg)
-  levelInst.treeFruitLayoutVersion = FRUIT_LAYOUT_VERSION
 }
 
 /**

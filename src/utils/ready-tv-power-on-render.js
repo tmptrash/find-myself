@@ -137,11 +137,24 @@ function onFrame(inst) {
   if (sec < TV_TIMELINE.openEndSec) {
     onDrawIntro(inst, sec)
   } else {
-    !inst.introDone && (inst.introDone = true, inst.emit(TV_EVENTS.INTRO_DONE))
+    !inst.introDone && finishIntroTimeline(inst)
     onDrawBackdrop(inst, sec)
   }
   if (inst.fadeStartMs != null && applyFade(inst, now)) return
   requestFrame(() => onFrame(inst))
+}
+//
+// A hidden tab can deliver its first frame after the whole intro window, so
+// LOADER_REVEAL must still precede INTRO_DONE — the page installs the loader
+// hide handler that later fades this overlay out on that event.
+//
+function finishIntroTimeline(inst) {
+  if (!inst.loaderRevealed) {
+    inst.loaderRevealed = true
+    inst.emit(TV_EVENTS.LOADER_REVEAL)
+  }
+  inst.introDone = true
+  inst.emit(TV_EVENTS.INTRO_DONE)
 }
 //
 // Erases a growing share of the finished frame so the scene underneath shows

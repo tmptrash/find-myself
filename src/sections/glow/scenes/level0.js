@@ -134,6 +134,7 @@ import {
 } from '../utils/glow-tree-fruit.js'
 import { glowLakeRaftWorldX, mountGlowLakeRaftLayer, isOnGlowLakeRaft } from '../utils/glow-lake-raft.js'
 import * as GlassesSlot from '../utils/glow-glasses-slot.js'
+import { applyGlowExperienceDelta, readGlowExperience } from '../utils/glow-experience.js'
 import * as HoloDoor from '../utils/glow-holo-door.js'
 import * as GroundPortal from '../utils/glow-ground-portal.js'
 import {
@@ -2198,15 +2199,14 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     TouchControls.create(k)
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
     //
-    // The life/eye icon shows from the very start of the level; only its
-    // death-count numeral stays hidden until the first death
-    // (syncGlowLifeScoreVisibility).
+    // The life/eye icon and experience numeral show from the very start of the
+    // level (syncGlowLifeScoreVisibility).
     //
     const levelIndicator = createGlowLevelIndicator(k, goldRgb, zones.colorWorld)
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     pinGlowHudFixed(levelIndicator)
     LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
-    const startingLifeScore = get('lifeScore', 0)
+    const startingLifeScore = readGlowExperience()
     levelIndicator.updateLifeScore?.(startingLifeScore)
     syncGlowLifeScoreVisibility(levelIndicator, startingLifeScore)
     set(KEY_LIFE_SHOWN, true)
@@ -2400,6 +2400,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       branchLookTimer: spawnOnBranch ? BRANCH_LOOK_LEFT_DURATION : 0,
       pendingReplayIntro2: false,
       treeFruitSpots,
+      treeFruitSpotsBuilt: treeFruitSpots.length > 0,
       treeFruitAnchorCfg,
       branchTrampX,
       _branchLandingsSinceTree: 0
@@ -2417,7 +2418,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       getPortalLookAt: () => HoloDoor.portalLookWorldPos(inst.holoDoor),
       leftMargin: LEFT_MARGIN,
       getAnchorY: () => glowTeacherHudAnchor(inst)?.y ?? null,
-      onPickupSound: () => playGlowGlassesPickupSound(inst)
+      onPickupSound: () => playGlowGlassesPickupSound(inst),
+      onExperienceChanged: (score) => syncGlowExperienceHud(inst, score)
     })
     inst.holoDoor = HoloDoor.create({
       k,
@@ -3197,14 +3199,21 @@ function createGlowLevelIndicator(k, goldRgb, colorWorld = false) {
   return indicator
 }
 //
-// The death-count numeral next to the eye only makes sense once the hero has
-// actually died at least once — showing "0" from the start reads as noise.
+// Experience numeral is shown whenever the life HUD is revealed (including 0).
 //
 function syncGlowLifeScoreVisibility(indicator, score) {
   if (!indicator) return
-  const show = score > 0
+  const show = indicator.lifeRevealed
   indicator.lifeScoreText && (indicator.lifeScoreText.hidden = !show)
   indicator.lifeScoreOutlines?.forEach(o => { o.hidden = !show })
+}
+//
+// Keeps the teacher-eye experience counter in sync after spend or death.
+//
+function syncGlowExperienceHud(inst, score) {
+  if (!inst.levelIndicator) return
+  inst.levelIndicator.updateLifeScore?.(score)
+  syncGlowLifeScoreVisibility(inst.levelIndicator, score)
 }
 //
 // Life HUD for pit-mushroom nudges — shown as soon as an exploration hint applies.
@@ -3220,7 +3229,7 @@ function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
     return
   }
   LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
-  const score = get('lifeScore', 0)
+  const score = readGlowExperience()
   indicator.updateLifeScore?.(score)
   syncGlowLifeScoreVisibility(indicator, score)
   set(KEY_LIFE_SHOWN, true)
@@ -9457,13 +9466,12 @@ function finishDrowning(inst) {
   })
 }
 //
-// Shared life-HUD bump for any death: +1 lifeScore, reveal/flash/re-tint the
-// life icon and its particle burst, gentle chime. Shared by drowning and the
-// touch death.
+// Shared life-HUD update for any death: −1 experience (floor 0), reveal/flash/
+// re-tint the life icon and its particle burst, gentle chime. Shared by drowning
+// and touch death.
 //
 function bumpGlowLifeHudOnDeath(inst) {
-  const newLife = get('lifeScore', 0) + 1
-  set('lifeScore', newLife)
+  const newLife = applyGlowExperienceDelta(-1)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, inst.zones.colorWorld)
   }
@@ -11565,7 +11573,7 @@ function maybeEnsureGlowTreeFruitSpots(inst) {
     finishTreeRevealIfComplete(inst)
     return
   }
-  !inst.treeFruitSpots?.length && ensureGlowTreeFruitSpots(inst)
+  ensureGlowTreeFruitSpots(inst)
 }
 //
 // Short camera bump for tree reveals, tramp landings and letter pickups.

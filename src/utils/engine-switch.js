@@ -59,6 +59,20 @@ export function setActiveEngine(k, mode) {
 }
 
 /**
+ * Stops native loop audio and tears down the live Kaplay instance (Vite HMR
+ * dispose — avoids a second boot stacking ready TV hiss over the old scene).
+ */
+export function disposeActiveEngineForHotReload() {
+  runEngineTeardown()
+  activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
+  const stale = activeEngine
+  stale && teardownEngine(stale)
+  activeEngine = null
+  activeResolutionMode = null
+  activeSceneName = null
+}
+
+/**
  * Scene currently on screen (updated just before k.go).
  * @returns {string|null}
  */

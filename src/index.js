@@ -1,18 +1,33 @@
 import * as BootLoader from "./utils/boot-loader.js"
-import { playReadyTvIntroBeforeLoader } from "./utils/ready-tv-power-on.js"
+import { playReadyTvIntroBeforeLoader, finishReadyTvIntroNow } from "./utils/ready-tv-power-on.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/lesson-assets.js"
 import { bootEngine, RESOLUTION_MODE } from "./utils/game-engine.js"
-import { setActiveEngine } from "./utils/engine-switch.js"
+import { disposeActiveEngineForHotReload, setActiveEngine } from "./utils/engine-switch.js"
 import { installWindowResizeReboot } from "./utils/window-resize.js"
+import * as Sound from "./utils/sound.js"
 //
 // Force dark background for all elements
 //
 document.documentElement.style.backgroundColor = '#000000'
 document.body.style.backgroundColor = '#000000'
 //
-// Boot the application (async so we can retry kaplay() and await asset batches)
+// Vite HMR re-runs this module but must not reboot into "ready" or replay TV snow.
 //
-boot()
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    finishReadyTvIntroNow()
+    Sound.stopReadyTvLoaderBackdropHiss()
+    Sound.stopReadyTvPowerOnSound()
+    document.getElementById('ready-tv-power-on-overlay')?.remove()
+    BootLoader.setLoaderHideHandler(null)
+    BootLoader.hideLoader()
+    disposeActiveEngineForHotReload()
+  })
+}
+if (!import.meta.hot?.data.gameBooted) {
+  import.meta.hot && (import.meta.hot.data.gameBooted = true)
+  boot()
+}
 /**
  * Top-level boot sequence: boots the native-resolution engine that "ready",
  * "menu" and Glow/touch lesson 0 all share (see game-engine.js and

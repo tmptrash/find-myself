@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { GLOW_PAL, getTreePaletteColor, glowRgb, isGlowGrayWorld } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
-import { glowTreeLeafKey } from './glow-tree-segments.js'
+import { glowTreeLeafKey, isGlowTreeRootsSegmentId } from './glow-tree-segments.js'
 
 //
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
@@ -88,7 +88,8 @@ export function computeGlowAnchorFruitDropX(cfg) {
  * @param {Object} levelInst - Glow level inst (treeData, treeFruitAnchorCfg, zones)
  */
 export function ensureGlowTreeFruitSpots(levelInst) {
-  if (!levelInst.zones?.tree || !levelInst.treeData) return
+  if (!levelInst.treeData || !levelInst.zones?.eyesCollected) return
+  if (!isGlowTreeCrownRevealed(levelInst)) return
   if (levelInst.treeFruitSpots?.length && levelInst.treeFruitLayoutVersion === FRUIT_LAYOUT_VERSION) return
   levelInst.treeFruitSpots = buildGlowTreeFruitSpots(levelInst.treeData, levelInst.treeFruitAnchorCfg)
   levelInst.treeFruitLayoutVersion = FRUIT_LAYOUT_VERSION
@@ -715,9 +716,19 @@ function drawFruitLeaf(k, x, y, size, angle, rgb, op) {
   k.drawPolygon({ pts, color: k.rgb(rgb.r, rgb.g, rgb.b), opacity: op })
 }
 
+function isGlowTreeCrownRevealed(inst) {
+  if (!inst) return false
+  if (inst.zones?.tree) return true
+  const ids = inst.treeSegmentIds
+  if (!ids?.length) return false
+  return ids
+    .filter(id => !isGlowTreeRootsSegmentId(id))
+    .every(id => inst.treeSegmentRevealed?.has(id))
+}
+
 function isGlowTreeFruitVisible(inst) {
   if (!inst.zones?.eyesCollected || !inst.treeFruitSpots?.length) return false
-  if (inst.zones.tree) return true
+  if (isGlowTreeCrownRevealed(inst)) return true
   return inst.treeFruitSpots.some(f => !f.removed && !f.attached)
 }
 

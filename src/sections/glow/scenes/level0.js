@@ -1865,8 +1865,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         zones.eyesCollected
       )
       applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
-      treeSegmentRevealed.size >= treeSegmentIds.length && (zones.tree = true)
-      zones.tree && !treeFruitSpots.length &&
+      const crownTreeRevealed = treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
+      crownTreeRevealed && (zones.tree = true)
+      crownTreeRevealed && !treeFruitSpots.length &&
         (treeFruitSpots = buildGlowTreeFruitSpots(treeData, treeFruitAnchorCfg))
     }
     if (await glowBootstrapPause(bootstrap, 14, session)) return
@@ -10233,6 +10234,7 @@ function onUpdate(inst) {
     return
   }
   syncGlowPredatorPatrolBounds(inst)
+  maybeEnsureGlowTreeFruitSpots(inst)
   syncGlowTreeFruitHostOpacity(inst)
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.zones.colorWorld && inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
@@ -10714,11 +10716,11 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!inst.pendingTreeReveal) return
   const fromBranchTramp = inst.treeRevealFromBranchTramp ||
     (inst.branchTrampBounceAir && grounded && justLanded)
-  if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
+  const onPitLaunchGround = isHeroOnPitMushroomLaunchGround(inst, char)
+  if (!fromBranchTramp && !inst.treeBranchLeftOnce && !onPitLaunchGround) return
   if (!grounded || !justLanded || !char?.pos) return
   if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
   const onBranch = isHeroOnStartBranch(inst, char)
-  const onPitLaunchGround = fromBranchTramp && isHeroOnPitMushroomLaunchGround(inst, char)
   if (!onBranch && !onPitLaunchGround) return
   inst.treeRevealFromBranchTramp = false
   revealTreeSegmentsOnBranchLanding(inst)
@@ -11546,12 +11548,24 @@ function persistTreeSegmentsRevealed(inst) {
 //
 function finishTreeRevealIfComplete(inst) {
   if (!isAllTreeSegmentsRevealed(inst)) return
-  const justOpened = !inst.zones.tree
   inst.pendingTreeReveal = false
   inst.zones.tree = true
   set(KEY_REVEALED_TREE, true)
   ensureGlowTreeFruitSpots(inst)
   applyZoneVisibility(inst)
+}
+//
+// Crown can be fully open while zones.tree / fruit spots were never synced
+// (e.g. roots segment still hidden, or a missed finishTreeRevealIfComplete).
+//
+function maybeEnsureGlowTreeFruitSpots(inst) {
+  if (inst.treeDrawMonolith || !inst.zones?.eyesCollected) return
+  if (!isAllTreeSegmentsRevealed(inst)) return
+  if (!inst.zones.tree) {
+    finishTreeRevealIfComplete(inst)
+    return
+  }
+  !inst.treeFruitSpots?.length && ensureGlowTreeFruitSpots(inst)
 }
 //
 // Short camera bump for tree reveals, tramp landings and letter pickups.
@@ -12477,7 +12491,6 @@ function startGlowGroundPortalDive(inst) {
   hero.controlsDisabled = true
   hero.isRunning = false
   hero.jumpPhase = 'none'
-  moveGlowHeroTo(char, inst.groundPortal.entry.x, char.pos.y)
   char.vel.x = 0
   syncGlowGroundPortalTravelHero(inst)
   inst.sound && !inst.sound._glowSfxMuted && Sound.playDisappearSound(inst.sound)

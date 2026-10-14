@@ -65,16 +65,22 @@ const FLASH_FROM = 0.35
 const FLASH_TO = 0.75
 const FLASH_ALPHA = 0.6
 const OPEN_SPEED = 1 / 0.5
+const OPEN_SPEED_APPROACH = 1 / 0.22
 const CLOSE_SPEED = 1 / 0.32
 //
-// Hero proximity (open / close) and the footprint that swallows the hero.
+// Hero proximity: open while approaching from the side or from a jump above.
 //
 const NEAR_X = 150
 const NEAR_Y = 80
-const ENTER_HALF_W = PORTAL_RX * 0.75
-const ENTER_ABOVE = 8
-const ENTER_BELOW = 16
+const APPROACH_OPEN_ABOVE = 112
+const APPROACH_FALL_VY = 36
+//
+// Both feet must sit inside the portal ellipse (matches hero stance width).
+//
+const HERO_FOOT_HALF_SPREAD = 12
+const PORTAL_FOOT_INSET = 0.9
 const ENTER_MIN_OPEN = 0.95
+const ENTER_MIN_OPEN_APPROACH = 0.78
 //
 // Travel timings: fast dive, a beat in the dark, then the hero pops out.
 //
@@ -247,8 +253,8 @@ function updatePhase(inst) {
 }
 
 //
-// Entry follows the hero's distance; a fully open entry under the hero's
-// feet (standing or landing, never while rising) starts the dive.
+// Entry opens before the hero lands so a jump into the spot meets an open
+// ring; dive starts when both feet are inside the ellipse (any X on it).
 //
 function updateIdle(inst, char) {
   const entry = inst.entry
@@ -256,12 +262,17 @@ function updateIdle(inst, char) {
     entry.target = 0
     return
   }
+  const feetY = char.pos.y + inst.heroFootOffset
+  const feetDy = feetY - entry.y
   const dx = Math.abs(char.pos.x - entry.x)
-  const feetDy = char.pos.y + inst.heroFootOffset - entry.y
-  entry.target = dx < NEAR_X && Math.abs(feetDy) < NEAR_Y ? 1 : 0
-  const onPortal = dx < ENTER_HALF_W && feetDy > -ENTER_ABOVE && feetDy < ENTER_BELOW
+  const horizNear = dx < NEAR_X
+  const vertNear = feetDy > -APPROACH_OPEN_ABOVE && feetDy < NEAR_Y
+  entry.target = horizNear && vertNear ? 1 : 0
   const falling = (char.vel?.y ?? 0) >= 0
-  if (!onPortal || !falling || entry.t < ENTER_MIN_OPEN) return
+  if (!falling || !bothFeetInsidePortal(entry, char.pos.x, feetY)) return
+  const fromAbove = feetDy < 0
+  const minOpen = fromAbove ? ENTER_MIN_OPEN_APPROACH : ENTER_MIN_OPEN
+  if (entry.t < minOpen) return
   setPhase(inst, 'dive')
   inst.onDiveStart()
 }
@@ -273,8 +284,13 @@ function setPhase(inst, phase) {
 
 function updatePortal(inst, portal, dt) {
   const k = inst.k
+  const char = inst.getHero()?.character
+  const feetY = char?.pos ? char.pos.y + inst.heroFootOffset : 0
+  const rushOpen = portal === inst.entry && portal.target > portal.t &&
+    char?.pos && feetY < portal.y - 2 && (char.vel?.y ?? 0) >= APPROACH_FALL_VY
+  const openSpeed = rushOpen ? OPEN_SPEED_APPROACH : OPEN_SPEED
   portal.t = portal.target > portal.t
-    ? Math.min(portal.target, portal.t + dt * OPEN_SPEED)
+    ? Math.min(portal.target, portal.t + dt * openSpeed)
     : Math.max(portal.target, portal.t - dt * CLOSE_SPEED)
   if (portal.t === 0) {
     portal.sparks = HoloFx.createSparks()
@@ -301,6 +317,24 @@ function easeOut(u) {
 
 function easeIn(u) {
   return u * u
+}
+
+//
+// Foot contacts must lie inside the ground ellipse (inset so the rim reads).
+//
+function bothFeetInsidePortal(portal, heroX, feetY) {
+  const rx = PORTAL_RX * PORTAL_FOOT_INSET
+  const ry = PORTAL_RY * PORTAL_FOOT_INSET
+  const leftX = heroX - HERO_FOOT_HALF_SPREAD
+  const rightX = heroX + HERO_FOOT_HALF_SPREAD
+  return pointInsidePortalEllipse(portal.x, portal.y, rx, ry, leftX, feetY) &&
+    pointInsidePortalEllipse(portal.x, portal.y, rx, ry, rightX, feetY)
+}
+
+function pointInsidePortalEllipse(cx, cy, rx, ry, px, py) {
+  const dx = (px - cx) / rx
+  const dy = (py - cy) / ry
+  return dx * dx + dy * dy <= 1
 }
 
 //

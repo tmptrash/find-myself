@@ -24,9 +24,9 @@ const TV_FADE_WATCHDOG_PAD_SEC = 0.6
 const MSG = TvRender.TV_WORKER_MSG
 const EVENTS = TvRender.TV_EVENTS
 //
-// Session flag: CRT power-on runs once per full page load.
+// CRT power-on runs once per real page load (survives Vite HMR module resets).
 //
-let readyTvPowerOnConsumed = false
+const TV_INTRO_PLAYED_KEY = '__FIND_YOU_TV_INTRO_PLAYED'
 let activeTvIntro = null
 
 /**
@@ -40,8 +40,8 @@ let activeTvIntro = null
  */
 export async function playReadyTvIntroBeforeLoader(opts = {}) {
   const sceneName = opts.sceneName ?? 'ready'
-  if (sceneName !== 'ready' || readyTvPowerOnConsumed) return
-  readyTvPowerOnConsumed = true
+  if (sceneName !== 'ready' || window[TV_INTRO_PLAYED_KEY]) return
+  window[TV_INTRO_PLAYED_KEY] = true
   const inst = create(opts)
   const sound = Sound.create()
   Sound.startAudioContext(sound)

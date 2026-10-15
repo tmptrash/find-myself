@@ -1355,8 +1355,8 @@ function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
   const ROOT_START_LIFT = 6
   const baseSpread = (trunkBase?.w ?? 74) * 0.52
   //
-  // Inject seeded random so the main root directions are deterministic.
-  // growTreeRootSegments branching calls use Math.random for micro-details.
+  // Inject seeded random so the whole root network is deterministic — any
+  // unseeded draw here would shift every later rng() call and reshape the crown.
   //
   const rand = (min, max) => min + rng() * (max - min)
   const baseX = trunkBase.sx

@@ -408,6 +408,10 @@ function runBodyBobPx(frame) {
   const phase = frame / RUN_FRAME_COUNT
   return Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * RUN_BODY_BOB)
 }
+//
+// Glow one-eye beat: profile run/jump frames with a shut side socket (facing left).
+//
+const HERO_RUN_JUMP_PROFILE_EYE_CLOSED_SUFFIX = '-pcl'
 
 export const HEROES = {
   HERO: 'hero',
@@ -487,6 +491,7 @@ export function create(config) {
     transparentEyeInterior = false, // Hollow glow/menu eyes: ring + pupil only, clear socket
     noEyes = false,        // Bake idle/run/jump without eye whites or pupils (glow eyeless intro)
     cyclopsEye = false,    // Idle frames carry one centred eye instead of two (glow one-eye beat)
+    rightEyeClosed = false, // Front idle: left socket open, right socket shut (glow first eye)
     postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
     idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
     outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
@@ -531,6 +536,7 @@ export function create(config) {
       transparentEyeInterior,
       noEyes,
       cyclopsEye,
+      rightEyeClosed,
       postBakeCanvas,
       outlineRimPx,
       character: null  // Marker to indicate this is an inst-like object
@@ -555,6 +561,7 @@ export function create(config) {
     transparentEyeInterior,
     noEyes,
     cyclopsEye,
+    rightEyeClosed,
     outlineRimPx
   })
   const spriteName = `${spritePrefix}_0_0`
@@ -591,6 +598,7 @@ export function create(config) {
         transparentEyeInterior,
         noEyes,
         cyclopsEye,
+        rightEyeClosed,
         postBakeCanvas,
         outlineRimPx
       })
@@ -674,6 +682,9 @@ export function create(config) {
     outlineRimPx,                         // Baked silhouette rim width (px)
     noEyes,                               // Eyeless glow intro — no eye whites in baked frames
     cyclopsEye: Boolean(cyclopsEye),      // One centred idle eye (glow one-eye beat)
+    rightEyeClosed: Boolean(rightEyeClosed),
+    oneEyeMirrorSpritePrefix: null,
+    profileEyeDirection: 1,               // Facing the run/jump eye variant was last picked for
     spritePrefix,
     dustColor,
     suppressDust,
@@ -821,7 +832,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, bakeLayers, eyeWhite, pupil, transparentInterior, noEyes, cyclopsEye, postBakeCanvas, outlineRimPx, bakeSeed
+  let k, heroType, color, outline, mouth, arms, watch, bakeLayers, eyeWhite, pupil, transparentInterior, noEyes, cyclopsEye, rightEyeClosed, postBakeCanvas, outlineRimPx, bakeSeed
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -840,6 +851,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     transparentInterior = inst.transparentEyeInterior || false
     noEyes = inst.noEyes || false
     cyclopsEye = inst.cyclopsEye || false
+    rightEyeClosed = inst.rightEyeClosed || false
     postBakeCanvas = inst.postBakeCanvas || null
     outlineRimPx = inst.outlineRimPx || DEFAULT_OUTLINE_RIM
   } else {
@@ -859,6 +871,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     transparentInterior = false
     noEyes = false
     cyclopsEye = false
+    rightEyeClosed = false
     postBakeCanvas = null
     outlineRimPx = DEFAULT_OUTLINE_RIM
   }
@@ -890,7 +903,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   const pupilKey = pupil ? String(pupil).replace('#', '') : ''
   const noEyesFlag = Boolean(noEyes)
   const cyclopsFlag = Boolean(cyclopsEye)
-  const prefix = buildHeroSpritePrefix({
+  const rightEyeClosedFlag = Boolean(rightEyeClosed)
+  const prefixBakeOpts = {
     type: heroType,
     bodyColor: bodyColorForPrefix,
     outlineColor: outlineColorForPrefix,
@@ -904,14 +918,58 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     transparentEyeInterior: transparentInterior,
     noEyes: noEyesFlag,
     cyclopsEye: cyclopsFlag,
+    rightEyeClosed: rightEyeClosedFlag,
     outlineRimPx
-  })
+  }
+  const prefix = buildHeroSpritePrefix(prefixBakeOpts)
+  const mirrorPrefix = rightEyeClosedFlag && !cyclopsFlag
+    ? buildHeroSpritePrefix({ ...prefixBakeOpts, oneEyeSwapSockets: true })
+    : null
+  const attachOneEyeMirrorPrefix = () => {
+    inst.k && inst.type !== undefined && mirrorPrefix && (inst.oneEyeMirrorSpritePrefix = mirrorPrefix)
+  }
   //
   // Skip only when this exact k already finished baking the full bundle
   // (idle grid + closed frame + run/jump), not when a stale global name exists.
   //
   if (isHeroSpritePrefixReadyOnK(k, prefix)) {
     inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
+    attachOneEyeMirrorPrefix()
+    bakeHeroOneEyeMirrorIdleGrid(k, mirrorPrefix, {
+      heroType,
+      effectiveBodyColor,
+      effectiveOutlineColor,
+      mouth,
+      arms,
+      watch,
+      eyeWhite,
+      outlineRimPx,
+      pupil,
+      transparentInterior,
+      noEyesFlag,
+      bakeLayers,
+      cyclopsFlag,
+      postBakeCanvas,
+      bakeSeedRef: { v: bakeSeed }
+    })
+    bakeHeroOneEyeProfileClosedRunJump(k, prefix, {
+      rightEyeClosedFlag,
+      cyclopsFlag,
+      heroType,
+      effectiveBodyColor,
+      effectiveOutlineColor,
+      mouth,
+      arms,
+      watch,
+      eyeWhite,
+      outlineRimPx,
+      pupil,
+      transparentInterior,
+      noEyesFlag,
+      bakeLayers,
+      postBakeCanvas,
+      bakeSeedRef: { v: bakeSeed }
+    })
     return
   }
   //
@@ -921,7 +979,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag, rightEyeClosedFlag)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -942,7 +1000,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag, rightEyeClosedFlag)
     closedData && commitHeroBakedSprite(
       k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++,
       heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -957,7 +1015,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag, rightEyeClosedFlag)
       spriteData && commitHeroBakedSprite(
         k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
         heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -973,7 +1031,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag, rightEyeClosedFlag)
       spriteData && commitHeroBakedSprite(
         k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
         heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
@@ -984,8 +1042,62 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       //
     }
   }
+  bakeHeroOneEyeProfileClosedRunJump(k, prefix, {
+    rightEyeClosedFlag,
+    cyclopsFlag,
+    heroType,
+    effectiveBodyColor,
+    effectiveOutlineColor,
+    mouth,
+    arms,
+    watch,
+    eyeWhite,
+    outlineRimPx,
+    pupil,
+    transparentInterior,
+    noEyesFlag,
+    bakeLayers,
+    postBakeCanvas,
+    bakeSeedRef: { v: bakeSeed }
+  })
   isHeroIdleGridPresentOnK(k, prefix) && markHeroSpritePrefixReadyOnK(k, prefix)
   inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
+  attachOneEyeMirrorPrefix()
+  bakeHeroOneEyeMirrorIdleGrid(k, mirrorPrefix, {
+    heroType,
+    effectiveBodyColor,
+    effectiveOutlineColor,
+    mouth,
+    arms,
+    watch,
+    eyeWhite,
+    outlineRimPx,
+    pupil,
+    transparentInterior,
+    noEyesFlag,
+    bakeLayers,
+    cyclopsFlag,
+    postBakeCanvas,
+    bakeSeedRef: { v: bakeSeed }
+  })
+  bakeHeroOneEyeProfileClosedRunJump(k, prefix, {
+    rightEyeClosedFlag,
+    cyclopsFlag,
+    heroType,
+    effectiveBodyColor,
+    effectiveOutlineColor,
+    mouth,
+    arms,
+    watch,
+    eyeWhite,
+    outlineRimPx,
+    pupil,
+    transparentInterior,
+    noEyesFlag,
+    bakeLayers,
+    postBakeCanvas,
+    bakeSeedRef: { v: bakeSeed }
+  })
 }
 /**
  * Death effect with particle explosion
@@ -1167,11 +1279,12 @@ export function enterCalmPose(inst) {
 export function getActiveSpriteKey(inst) {
   const prefix = inst.spritePrefix || inst.type
   if (inst.currentEyeSprite) return inst.currentEyeSprite
-  if (inst.jumpPhase && inst.jumpPhase !== 'none') return `${prefix}-jump-${inst.jumpFrame ?? 0}`
-  if (inst.isRunning) return `${prefix}-run-${inst.runFrame ?? 0}`
+  if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst, inst.jumpFrame ?? 0)
+  if (inst.isRunning) return heroRunSpriteName(inst, inst.runFrame ?? 0)
+  const idlePrefix = heroIdleSpritePrefix(inst)
   const eyeX = Math.round(inst.eyeOffsetX ?? 0)
   const eyeY = Math.round(inst.eyeOffsetY ?? 0)
-  return `${prefix}_${eyeX}_${eyeY}`
+  return `${idlePrefix}_${eyeX}_${eyeY}`
 }
 
 /**
@@ -1183,7 +1296,7 @@ export function applyCalmIdleSprite(inst) {
   if (!ch?.exists?.()) return
   inst.isRunning = false
   inst.wasJumping = false
-  const prefix = inst.spritePrefix || inst.type
+  const prefix = heroIdleSpritePrefix(inst)
   const closedName = `${prefix}_closed`
   //
   // Re-applying the sprite every frame (glow drowning) would remount Kaplay
@@ -1282,6 +1395,40 @@ export function spawn(inst, _opts = {}) {
   inst.spawnLandGrace = 0.35
 }
 
+//
+// Run/jump sprite keys for the glow one-eye beat (open profile eye faces right).
+//
+function heroRunJumpProfileEyeSuffix(inst) {
+  if (!inst.rightEyeClosed || inst.cyclopsEye) return ''
+  return inst.direction === -1 ? HERO_RUN_JUMP_PROFILE_EYE_CLOSED_SUFFIX : ''
+}
+function heroRunSpriteName(inst, frame) {
+  const prefix = inst.spritePrefix || inst.type
+  return `${prefix}-run-${frame}${heroRunJumpProfileEyeSuffix(inst)}`
+}
+function heroJumpSpriteName(inst, frame) {
+  const prefix = inst.spritePrefix || inst.type
+  return `${prefix}-jump-${frame}${heroRunJumpProfileEyeSuffix(inst)}`
+}
+//
+// On a facing flip, swaps the shown run/jump frame to the same frame of the
+// other eye variant. Only reacts to the flip itself — remounting the sprite
+// every frame restarts it and makes the run cycle jitter.
+//
+function refreshHeroRunJumpEyeSprite(inst) {
+  if (!inst.rightEyeClosed || inst.cyclopsEye) return
+  if (inst.profileEyeDirection === inst.direction) return
+  inst.profileEyeDirection = inst.direction
+  const ch = inst.character
+  const shown = ch?.sprite
+  if (!ch?.exists?.() || typeof shown !== 'string') return
+  const base = shown.replace(new RegExp(`${HERO_RUN_JUMP_PROFILE_EYE_CLOSED_SUFFIX}$`), '')
+  if (!/-(run|jump)-\d+$/.test(base)) return
+  const desired = `${base}${heroRunJumpProfileEyeSuffix(inst)}`
+  if (desired === shown || !heroSpriteExistsOnK(inst.k, desired)) return
+  ch.use(inst.k.sprite(desired))
+  inst.currentEyeSprite === shown && (inst.currentEyeSprite = desired)
+}
 /**
  * Update character animation and state
  * @param {Object} inst - Hero instance
@@ -1493,9 +1640,10 @@ function onUpdate(inst) {
       const prefix = inst.spritePrefix || inst.type
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        useHeroSprite(inst, `${prefix}-jump-0`)
+        useHeroSprite(inst, heroJumpSpriteName(inst, 0))
       }
       inst.character.flipX = inst.direction === -1
+      refreshHeroRunJumpEyeSprite(inst)
       return
     }
   }
@@ -1529,7 +1677,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        useHeroSprite(inst, `${prefix}-jump-0`)
+        useHeroSprite(inst, heroJumpSpriteName(inst, 0))
       }
     } else {
       //
@@ -1539,7 +1687,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 1) {
         inst.jumpFrame = 1
-        useHeroSprite(inst, `${prefix}-jump-1`)
+        useHeroSprite(inst, heroJumpSpriteName(inst, 1))
       }
     }
     //
@@ -1567,6 +1715,7 @@ function onUpdate(inst) {
     // Update direction during squash
     //
     inst.character.flipX = inst.direction === -1
+    refreshHeroRunJumpEyeSprite(inst)
     //
     // Don't process other animations during squash
     //
@@ -1677,7 +1826,7 @@ function onUpdate(inst) {
     }
     if (targetFrame !== inst.jumpFrame) {
       inst.jumpFrame = targetFrame
-        useHeroSprite(inst, `${prefix}-jump-${targetFrame}`)
+        useHeroSprite(inst, heroJumpSpriteName(inst, targetFrame))
     }
       syncJumpCollision(inst)
     if (!inst.wasJumping) {
@@ -1688,6 +1837,7 @@ function onUpdate(inst) {
       inst.jumpPhase = 'jumping'
     }
     inst.character.flipX = inst.direction === -1
+    refreshHeroRunJumpEyeSprite(inst)
     return
     }
   } else {
@@ -1714,7 +1864,7 @@ function onUpdate(inst) {
         inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
         const prefix = inst.spritePrefix || inst.type
-        useHeroSprite(inst, `${prefix}-jump-6`)
+        useHeroSprite(inst, heroJumpSpriteName(inst, 6))
         inst.currentEyeSprite = null
       } else {
         inst.wasJumping = false
@@ -1782,7 +1932,7 @@ function onUpdate(inst) {
       inst.runFrame = 0
       inst.runTimer = 0
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(`${prefix}-run-0`))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, 0)))
       //
       // Create dust particles when starting to run (skip in water)
       //
@@ -1793,7 +1943,7 @@ function onUpdate(inst) {
       //
       inst.wasJumping = false
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, inst.runFrame)))
     }
 
     inst.isRunning = true
@@ -1801,7 +1951,7 @@ function onUpdate(inst) {
     if (inst.runTimer > RUN_ANIM_SPEED) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, inst.runFrame)))
       inst.runTimer = 0
       //
       // Step sound + footprint on the contact frames (a foot plants on the
@@ -1819,6 +1969,7 @@ function onUpdate(inst) {
   // Mirror based on direction
   //
   inst.character.flipX = inst.direction === -1
+  refreshHeroRunJumpEyeSprite(inst)
   snapPosToPixels(inst)
 }
 //
@@ -1917,7 +2068,7 @@ function updateIdleAnimation(inst) {
   if (inst.eyesClosed) {
     inst.isRunning = false
     inst.wasJumping = false
-    const prefix = inst.spritePrefix || inst.type
+    const prefix = heroIdleSpritePrefix(inst)
     const closedName = `${prefix}_closed`
     //
     // Always re-apply: run frames swap the sprite without clearing
@@ -1994,7 +2145,7 @@ function updateAmbientWalkAnimation(inst) {
     inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
     inst.runTimer = 0
   }
-  const runSprite = `${prefix}-run-${inst.runFrame}`
+  const runSprite = heroRunSpriteName(inst, inst.runFrame)
   if (inst.currentEyeSprite !== runSprite) {
     useHeroSprite(inst, runSprite)
   }
@@ -2361,19 +2512,19 @@ function punchHeroEyeSocket(ctx, cx, eyeY) {
 //
 // Paints one baked hero eye — ring + optional pupil; interior may stay clear.
 //
-function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL) {
+function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL, closedContourOnly = false) {
+  if (eyesClosed && (transparentInterior || closedContourOnly)) {
+    //
+    // Hollow hero: shut socket reads as an outline arc only (no body-colour fill).
+    //
+    ctx.strokeStyle = OL
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+    ctx.stroke()
+    return
+  }
   if (transparentInterior) {
-    if (eyesClosed) {
-      //
-      // Calm / pre-G lake drown: closed eyes stay hollow — outline ring only.
-      //
-      ctx.strokeStyle = OL
-      ctx.lineWidth = 1.6
-      ctx.beginPath()
-      ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-      ctx.stroke()
-      return
-    }
     ctx.fillStyle = OL
     ctx.beginPath()
     ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
@@ -2411,19 +2562,34 @@ function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, trans
 //
 function paintHeroEyesAtFrame(ctx, cfg) {
   const {
-    cyclopsEye, headX, headY, bodyBottom, animation, eyeOffsetX, eyeOffsetY, eyesClosed,
+    cyclopsEye, rightEyeClosed, oneEyeOpenOnRight, profileSideEyeClosed, headX, headY, bodyBottom, animation, eyeOffsetX, eyeOffsetY, eyesClosed,
     OL, PL, EW, BL, transparentInterior, punchSocket
   } = cfg
-  const paintOne = (cx, cy, pupilDx, pupilDy) => {
+  const paintOne = (cx, cy, pupilDx, pupilDy, socketClosed = eyesClosed, closedContourOnly = false) => {
     punchSocket && punchHeroEyeSocket(ctx, cx, cy)
-    paintHeroEye(ctx, cx, cy, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL)
+    paintHeroEye(ctx, cx, cy, pupilDx, pupilDy, OL, PL, socketClosed, transparentInterior, EW, BL, closedContourOnly)
   }
   if (animation === 'run' || animation === 'jump') {
     const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
-    paintOne(x, y, PUPIL_SIDE_SHIFT, 0)
-              return
+    const shutProfile = rightEyeClosed && !cyclopsEye && profileSideEyeClosed
+    shutProfile
+      ? paintOne(x, y, 0, 0, true, true)
+      : paintOne(x, y, PUPIL_SIDE_SHIFT, 0)
+    return
   }
   const eyeY = headY + EYE_OFFSET_Y
+  if (rightEyeClosed && !cyclopsEye) {
+    paintHeroOneEyeFrontSockets({
+      headX,
+      eyeY,
+      eyeOffsetX,
+      eyeOffsetY,
+      eyesClosed,
+      oneEyeOpenOnRight: Boolean(oneEyeOpenOnRight),
+      paintOne
+    })
+    return
+  }
   heroIdleEyeXs(headX, cyclopsEye).forEach(x => paintOne(
     x,
     eyeY,
@@ -2440,17 +2606,31 @@ function heroIdleEyeXs(headX, cyclopsEye) {
     : [headX + EYE_OFFSET_X_LEFT, headX + EYE_OFFSET_X_RIGHT]
 }
 //
+// Glow one-eye idle: open socket on the hero's left; optional mirror bake puts
+// the open socket on the texture right so flipX still reads as the left eye.
+//
+function paintHeroOneEyeFrontSockets(cfg) {
+  const { headX, eyeY, eyeOffsetX, eyeOffsetY, eyesClosed, oneEyeOpenOnRight, paintOne } = cfg
+  const leftX = headX + EYE_OFFSET_X_LEFT
+  const rightX = headX + EYE_OFFSET_X_RIGHT
+  const openX = oneEyeOpenOnRight ? rightX : leftX
+  const shutX = oneEyeOpenOnRight ? leftX : rightX
+  paintOne(openX, eyeY, eyeOffsetX * EYE_PUPIL_SHIFT, eyeOffsetY * EYE_PUPIL_SHIFT, eyesClosed)
+  paintOne(shutX, eyeY, 0, 0, true, true)
+}
+//
 // Eye ring discs (same anchors as paintHeroEyesAtFrame) that the contour step
 // pass must leave alone.
 //
-function heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye) {
+function heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye, rightEyeClosed) {
   const r = EYE_RING_RADIUS + CONTOUR_AA_EYE_MARGIN_PX
   if (animation === 'run' || animation === 'jump') {
     const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
     return [{ x, y, r }]
   }
   const eyeY = headY + EYE_OFFSET_Y
-  return heroIdleEyeXs(headX, cyclopsEye).map(x => ({ x, y: eyeY, r }))
+  const useCyclops = cyclopsEye && !rightEyeClosed
+  return heroIdleEyeXs(headX, useCyclops).map(x => ({ x, y: eyeY, r }))
 }
 /**
  * Resolves which baked layers to paint from create()/loadHeroSprites options.
@@ -2502,8 +2682,11 @@ export function buildHeroSpritePrefix(opts) {
   const pupilKey = opts.pupilColor ? String(opts.pupilColor).replace('#', '') : ''
   const noEyesFlag = Boolean(opts.noEyes)
   const cyclopsSuffix = opts.cyclopsEye ? '_cyc' : ''
+  const rightClosedSuffix = opts.rightEyeClosed
+    ? `_rel2${opts.oneEyeSwapSockets ? 'x' : ''}`
+    : ''
   const rimSuffix = heroSpriteRimSuffix(opts.outlineRimPx ?? DEFAULT_OUTLINE_RIM)
-  return `${type}_${bodyColorForPrefix}_${outlineColorForPrefix}${opts.addMouth ? '_mouth' : ''}${opts.addArms ? '_arms' : ''}${opts.addWatch ? '_watch' : ''}${heroBakeLayersSuffix(layers)}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${pupilKey ? '_pu' + pupilKey : ''}${opts.transparentEyeInterior ? '_tei' : ''}${noEyesFlag ? '_noeyes' : ''}${cyclopsSuffix}${rimSuffix}`
+  return `${type}_${bodyColorForPrefix}_${outlineColorForPrefix}${opts.addMouth ? '_mouth' : ''}${opts.addArms ? '_arms' : ''}${opts.addWatch ? '_watch' : ''}${heroBakeLayersSuffix(layers)}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${pupilKey ? '_pu' + pupilKey : ''}${opts.transparentEyeInterior ? '_tei' : ''}${noEyesFlag ? '_noeyes' : ''}${cyclopsSuffix}${rightClosedSuffix}${rimSuffix}`
 }
 //
 // Run hollow bakes need body fill during the pipeline so hip/crotch patches and
@@ -2731,6 +2914,8 @@ function finalizeHeroBakeFrame(ctx, bake) {
     leanPivotY,
     noEyes,
     cyclopsEye,
+    rightEyeClosed: bake.rightEyeClosed,
+    oneEyeOpenOnRight: bake.oneEyeOpenOnRight,
     animation,
     eyeOffsetX,
     eyeOffsetY,
@@ -2757,7 +2942,7 @@ function finalizeHeroBakeFrame(ctx, bake) {
   drawBakeOutline && !bodyOnlyExtract && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
   heroBakeFrameMeta.set(ctx.canvas, {
     rim,
-    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye),
+    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation, cyclopsEye, bake.rightEyeClosed),
     rebuiltRim: drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame),
     backHip: drawBakeOutline && jumpLegBend !== 0
       ? {
@@ -2771,6 +2956,9 @@ function finalizeHeroBakeFrame(ctx, bake) {
   })
   !bodyOnlyExtract && !noEyes && paintHeroEyesAtFrame(ctx, {
     cyclopsEye,
+    rightEyeClosed: bake.rightEyeClosed,
+    oneEyeOpenOnRight: bake.oneEyeOpenOnRight,
+    profileSideEyeClosed: bake.profileSideEyeClosed,
     headX,
     headY,
     bodyBottom,
@@ -2795,7 +2983,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
   const {
     headX, headY, bodyH, showArms, leftArmY, rightArmY,
     leanRad, leanPivotX, leanPivotY,
-    noEyes, cyclopsEye, animation, eyeOffsetX, eyeOffsetY,
+    noEyes, cyclopsEye, rightEyeClosed, animation, eyeOffsetX, eyeOffsetY,
     jumpLegBend, leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
     jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, jumpFrontHipX, jumpFrontH, jumpFrontBend,
     bodyBottom, rim
@@ -2823,13 +3011,22 @@ function punchOutlineOnlyInterior(ctx, cfg) {
       ctx.beginPath()
       ctx.arc(x, y, EYE_WHITE_RADIUS, 0, Math.PI * 2)
       ctx.fill()
-            } else {
+    } else {
       const eyeY = headY + EYE_OFFSET_Y
-      heroIdleEyeXs(headX, cyclopsEye).forEach(x => {
+      if (rightEyeClosed && !cyclopsEye) {
+        const openX = cfg.oneEyeOpenOnRight
+          ? headX + EYE_OFFSET_X_RIGHT
+          : headX + EYE_OFFSET_X_LEFT
         ctx.beginPath()
-        ctx.arc(x, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+        ctx.arc(openX, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
         ctx.fill()
-      })
+      } else {
+        heroIdleEyeXs(headX, cyclopsEye).forEach(x => {
+          ctx.beginPath()
+          ctx.arc(x, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+        })
+      }
     }
   }
   if (jumpLegBend !== 0) {
@@ -2900,7 +3097,7 @@ function stripBakeBodyFillFromCanvas(ctx, bodyColorHex, tolerance = 0) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, pupilColor = null, transparentEyeInterior = false, noEyes = false, bakeLayers = null, cyclopsEye = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, pupilColor = null, transparentEyeInterior = false, noEyes = false, bakeLayers = null, cyclopsEye = false, rightEyeClosed = false, oneEyeOpenOnRight = false, profileSideEyeClosed = false) {
   //
   // Choose body color - custom or default
   //
@@ -3152,9 +3349,12 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         bakeBodyForPipeline,
         animation,
         frame,
-        noEyes,
-        cyclopsEye,
-        eyesClosed,
+    noEyes,
+    cyclopsEye,
+    rightEyeClosed,
+    oneEyeOpenOnRight,
+    profileSideEyeClosed,
+    eyesClosed,
         eyeOffsetX,
         eyeOffsetY,
         transparentEyeInterior,
@@ -3323,6 +3523,17 @@ export function getHeroCollisionHoverZone(heroInst) {
   })
 }
 
+//
+// Idle sprite prefix for the glow one-eye beat — mirror bake when flipX so the
+// hero's left socket stays open after the sprite is mirrored.
+//
+function heroIdleSpritePrefix(inst) {
+  const base = inst.spritePrefix || inst.type
+  if (!inst.rightEyeClosed || inst.cyclopsEye) return base
+  const flip = inst.character?.flipX
+  if (flip && inst.oneEyeMirrorSpritePrefix) return inst.oneEyeMirrorSpritePrefix
+  return base
+}
 /**
  * Get sprite name for character (supports custom colors)
  * @param {Object} inst - Hero instance
@@ -3336,10 +3547,7 @@ export function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   //
   const roundedX = Math.round(eyeX)
   const roundedY = Math.round(eyeY)
-  //
-  // Use custom sprite prefix if bodyColor is set
-  //
-  const prefix = inst.spritePrefix || inst.type
+  const prefix = heroIdleSpritePrefix(inst)
   return `${prefix}_${roundedX}_${roundedY}`
 }
 
@@ -4606,7 +4814,7 @@ function resolveJumpCeilingBonk(inst) {
   syncJumpCollision(inst)
   const prefix = inst.spritePrefix || inst.type
   inst.jumpFrame = 5
-  useHeroSprite(inst, `${prefix}-jump-5`)
+  useHeroSprite(inst, heroJumpSpriteName(inst, 5))
 }
 //
 // True when a platform underside sits against / just above the hero's head.
@@ -4708,7 +4916,7 @@ function attemptHeroJump(inst) {
     inst.squashTimer = 0
     inst.jumpFrame = 0
     const prefix = inst.spritePrefix || inst.type
-    useHeroSprite(inst, `${prefix}-jump-0`)
+    useHeroSprite(inst, heroJumpSpriteName(inst, 0))
   }
 }
 //
@@ -4733,6 +4941,139 @@ function getPlatformWorldRect(obj) {
   return { left, top, right: left + w, bottom: top + h }
 }
 //
+// Extra run/jump frames with a shut profile eye (used when facing left).
+//
+function bakeHeroOneEyeProfileClosedRunJump(k, prefix, opts) {
+  if (!prefix || !k || !opts.rightEyeClosedFlag || opts.cyclopsFlag) return
+  const suffix = HERO_RUN_JUMP_PROFILE_EYE_CLOSED_SUFFIX
+  try {
+    if (k.getSprite(`${prefix}-run-0${suffix}`)) return
+  } catch (_) {
+    //
+    // Rebake when the pcl bundle is missing on this k.
+    //
+  }
+  let seed = opts.bakeSeedRef?.v ?? 0
+  const {
+    heroType,
+    effectiveBodyColor,
+    effectiveOutlineColor,
+    mouth,
+    arms,
+    watch,
+    eyeWhite,
+    outlineRimPx,
+    pupil,
+    transparentInterior,
+    noEyesFlag,
+    bakeLayers,
+    cyclopsFlag,
+    postBakeCanvas
+  } = opts
+  const rightEyeClosedFlag = true
+  const profileSideEyeClosed = true
+  for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
+    try {
+      const spriteData = createFrame(
+        heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor,
+        mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil,
+        transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag,
+        rightEyeClosedFlag, false, profileSideEyeClosed
+      )
+      spriteData && commitHeroBakedSprite(
+        k, `${prefix}-jump-${frame}${suffix}`, spriteData, postBakeCanvas, seed++,
+        heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
+      )
+    } catch (error) {
+      //
+      // Skip this sprite if there's an error creating it
+      //
+    }
+  }
+  for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
+    try {
+      const spriteData = createFrame(
+        heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor,
+        mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil,
+        transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag,
+        rightEyeClosedFlag, false, profileSideEyeClosed
+      )
+      spriteData && commitHeroBakedSprite(
+        k, `${prefix}-run-${frame}${suffix}`, spriteData, postBakeCanvas, seed++,
+        heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
+      )
+    } catch (error) {
+      //
+      // Skip this sprite if there's an error creating it
+      //
+    }
+  }
+  opts.bakeSeedRef && (opts.bakeSeedRef.v = seed)
+}
+//
+// Bakes idle 9×9 + closed for the mirror prefix (flipX one-eye gray beat).
+//
+function bakeHeroOneEyeMirrorIdleGrid(k, mirrorPrefix, opts) {
+  if (!mirrorPrefix || !k || isHeroIdleGridPresentOnK(k, mirrorPrefix)) return
+  let seed = opts.bakeSeedRef?.v ?? 0
+  const {
+    heroType,
+    effectiveBodyColor,
+    effectiveOutlineColor,
+    mouth,
+    arms,
+    watch,
+    eyeWhite,
+    outlineRimPx,
+    pupil,
+    transparentInterior,
+    noEyesFlag,
+    bakeLayers,
+    cyclopsFlag,
+    postBakeCanvas
+  } = opts
+  const rightEyeClosedFlag = true
+  const oneEyeOpenOnRight = true
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      const spriteName = `${mirrorPrefix}_${x}_${y}`
+      try {
+        const spriteData = createFrame(
+          heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor,
+          mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil,
+          transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag,
+          rightEyeClosedFlag, oneEyeOpenOnRight
+        )
+        spriteData && commitHeroBakedSprite(
+          k, spriteName, spriteData, postBakeCanvas, seed++,
+          heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
+        )
+      } catch (error) {
+        //
+        // Skip this sprite if there's an error creating it
+        //
+      }
+    }
+  }
+  try {
+    const closedData = createFrame(
+      heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor,
+      mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil,
+      transparentInterior, noEyesFlag, bakeLayers, cyclopsFlag,
+      rightEyeClosedFlag, oneEyeOpenOnRight
+    )
+    closedData && commitHeroBakedSprite(
+      k, `${mirrorPrefix}_closed`, closedData, postBakeCanvas, seed++,
+      heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
+    )
+  } catch (error) {
+    //
+    // Skip this sprite if there's an error creating it
+    //
+  }
+  opts.bakeSeedRef && (opts.bakeSeedRef.v = seed)
+}
+//
 // True when every idle eye cell and the closed frame exist on this k.
 //
 function isHeroIdleGridPresentOnK(k, prefix) {
@@ -4753,14 +5094,15 @@ function isHeroIdleGridPresentOnK(k, prefix) {
 //
 function parseHeroSpritePrefix(spriteName) {
   if (!spriteName || typeof spriteName !== 'string') return null
-  if (spriteName.endsWith('_closed')) {
-    return spriteName.slice(0, -'_closed'.length)
+  const baseName = spriteName.replace(new RegExp(`${HERO_RUN_JUMP_PROFILE_EYE_CLOSED_SUFFIX}$`), '')
+  if (baseName.endsWith('_closed')) {
+    return baseName.slice(0, -'_closed'.length)
   }
-  const idle = spriteName.match(/^(.+)_-?\d+_-?\d+$/)
+  const idle = baseName.match(/^(.+)_-?\d+_-?\d+$/)
   if (idle) return idle[1]
-  const run = spriteName.match(/^(.+)-run-\d+$/)
+  const run = baseName.match(/^(.+)-run-\d+$/)
   if (run) return run[1]
-  const jump = spriteName.match(/^(.+)-jump-\d+$/)
+  const jump = baseName.match(/^(.+)-jump-\d+$/)
   if (jump) return jump[1]
   return null
 }
@@ -4827,7 +5169,7 @@ function commitHeroBakedSprite(k, spriteName, canvas, postBake, seedOffset, cris
     // Film grain can re-brighten the outline rim; repair filled silhouettes
     // after grain while keeping a soft AA edge on the outer contour.
     //
-    const skipRimAntialias = /-run-[01234567]$/.test(spriteName) && !crispRimColors?.hollow
+    const skipRimAntialias = /-run-[01234567](-pcl)?$/.test(spriteName) && !crispRimColors?.hollow
     const bakeCtx = canvas.getContext('2d')
     crispRimColors && !skipRimAntialias && antialiasBakeOutlineRim(
       bakeCtx,

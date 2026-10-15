@@ -103,6 +103,7 @@ export function ensureGlowTreeFruitSpots(levelInst) {
  * Builds fruit attachment points (repeatable anchor on foliage + random canopy spots).
  * @param {Object} treeData - Output from buildGlowTree()
  * @param {Object} anchorDropCfg - Trunk/tramp layout for anchor cluster pick
+ * @param {number} [anchorDropCfg.minHangY] - Topmost on-screen world Y; fruit above it is never placed
  * @returns {Array<Object>}
  */
 export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
@@ -110,23 +111,31 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   const hangable = collectHangableTreeFoliage(treeData, anchorDropCfg)
   if (!hangable.length) return []
   const cellPx = getTreePaletteColor().foliageClusterCellPx
-  const hang = { treeData, cellPx, mask: buildFoliageMask(treeData, cellPx) }
+  const hang = {
+    treeData,
+    cellPx,
+    mask: buildFoliageMask(treeData, cellPx),
+    minY: anchorDropCfg?.minHangY ?? -Infinity
+  }
   const anchorR = FRUIT_RADIUS_MIN + 2.5
   const anchorHue = 0.12
   const anchorPick = pickAnchorFruitHang(hang, hangable, anchorDropCfg, anchorR)
-  if (!anchorPick) return []
-  const { leaf: anchorLeaf, pos: anchorPos } = anchorPick
-  const spots = [{
+  const anchorLeaf = anchorPick?.leaf ?? null
+  //
+  // A missing anchor spot only costs the droppable fruit — the rest of the
+  // crown is still hung, so the colour-world tree is never bare.
+  //
+  const spots = anchorPick ? [{
     anchor: true,
     attached: true,
     leafKey: glowTreeLeafKey(anchorLeaf),
-    x: anchorPos.x,
-    y: anchorPos.y,
+    x: anchorPick.pos.x,
+    y: anchorPick.pos.y,
     r: anchorR,
     hue: anchorHue,
     vy: 0,
-    leaves: makeFruitLeafPair(hashFruitLeafSeed(anchorPos.x, anchorPos.y, anchorHue), anchorR, rng, anchorHue)
-  }]
+    leaves: makeFruitLeafPair(hashFruitLeafSeed(anchorPick.pos.x, anchorPick.pos.y, anchorHue), anchorR, rng, anchorHue)
+  }] : []
   const pool = hangable.filter(f => f !== anchorLeaf)
   const pickN = Math.min(FRUIT_RANDOM_COUNT, pool.length)
   for (let n = 0; n < pickN; n++) {
@@ -444,6 +453,7 @@ function isFruitClusterCellInterior(cells, cell) {
 }
 function isValidFruitHang(hang, x, y, fruitR) {
   const { treeData, mask } = hang
+  if (y - fruitR - FRUIT_STEM_LEN < hang.minY) return false
   if (isPointOnTreeWood(treeData, x, y)) return false
   const hb = treeData.horizBranch
   if (hb && isInHeroBranchFruitExcludeZone(hb, x, y)) return false

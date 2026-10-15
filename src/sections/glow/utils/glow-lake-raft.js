@@ -290,6 +290,7 @@ function lakeRaftGlassesCenter(inst, raftTop) {
 // Top of the log in world space, or null while the lake is still closed.
 //
 function lakeRaftTopY(inst) {
+  if (!inst?.zones?.secondEyeCollected) return null
   if (!inst?.zones?.water) return null
   if (inst.lakeX1 == null || inst.lakeX2 == null) return null
   if (typeof inst.lakeSurfaceAt !== 'function') return null

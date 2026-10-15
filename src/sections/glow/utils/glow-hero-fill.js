@@ -142,9 +142,11 @@ export function clearGlowHeroFillPreview(inst) {
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero component inst
  * @param {Function} [postBakeCanvas] - Glow sharp bake hook
- * @param {boolean} cyclops - One centred eye (first eye only) instead of two
+ * @param {Object} [eyeBake] - Eye layout after the hollow gray body opens
+ * @param {boolean} [eyeBake.cyclops] - One centred idle eye (legacy beat)
+ * @param {boolean} [eyeBake.rightEyeClosed] - Right socket shut, left open
  */
-export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas, cyclops) {
+export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas, eyeBake = {}) {
   const char = heroInst?.character
   if (!char?.exists?.() || !k) return
   //
@@ -154,7 +156,8 @@ export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas, cyclops
   if (!heroInst.outlineOnly) return
   const grayBody = String(GLOW_PAL.heroBodyGray).replace('#', '')
   heroInst.noEyes = false
-  heroInst.cyclopsEye = Boolean(cyclops)
+  heroInst.cyclopsEye = Boolean(eyeBake.cyclops)
+  heroInst.rightEyeClosed = Boolean(eyeBake.rightEyeClosed)
   //
   // Solid white sclera + black pupils on the gray hollow body (not ring-only sockets).
   //
@@ -164,10 +167,10 @@ export function applyGlowHeroEyesOpenedBake(k, heroInst, postBakeCanvas, cyclops
   heroInst.outlineOnly = true
   heroInst.bodyColor = grayBody
   //
-  // Same light gray rim as the pre-eye hollow hero — dark heroOutline made the
-  // silhouette vanish on the flat prelude backdrop.
+  // White baked rim — matches eyeless spawn; gray rim matched the flat body and
+  // vanished once the gray world brightened after the first eye.
   //
-  heroInst.outlineColor = grayBody
+  heroInst.outlineColor = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
   postBakeCanvas && (heroInst.postBakeCanvas = postBakeCanvas)
   Hero.loadHeroSprites(heroInst)
   const spriteKey = `${heroInst.spritePrefix}_0_0`

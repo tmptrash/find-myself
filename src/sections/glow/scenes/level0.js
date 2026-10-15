@@ -152,6 +152,7 @@ import {
   onUpdateGlowEyeIntro,
   updateGlowCaveFloorEyeReveal,
   onDrawGlowEyeIntro,
+  glowHeroOneEyeBakeOpts,
   drawGlowCavePickupEyesOnPitLayer,
   unlockGlowEyesGameplayFromBranchLaunch,
   snapGlowHeroToPitFloor,
@@ -175,6 +176,10 @@ import * as EarTree from '../utils/glow-ear-tree.js'
 import * as ShoreTree from '../utils/glow-shore-tree.js'
 import * as HorizFallTwig from '../utils/glow-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
+import * as ForestFloor from '../components/forest-floor.js'
+import * as LightShaft from '../components/light-shaft.js'
+import { createSeededRandom } from '../../../utils/seeded-random.js'
+import { drawFernToCanvas } from '../../../utils/draw-fern.js'
 import * as GlowCamera from '../utils/glow-camera.js'
 import {
   applyParallaxPostFxToContext,
@@ -206,6 +211,11 @@ const INNER_GRAY = glowRgb('playfieldGray')
 const MID_GRAY = glowRgb('midGray')
 const LIGHT_GRAY = glowRgb('lightGray')
 const DECOR_GRAY = glowRgb('decorGray')
+const FLAT_SKY = glowRgb('glowFlatSky')
+const FLAT_EARTH = glowRgb('glowFlatEarth')
+const FLAT_EARTH_DEEP = glowRgb('glowFlatEarthDeep')
+const FLAT_UNDERGROUND = glowRgb('glowFlatUnderground')
+const FLAT_WATER = glowRgb('glowFlatWater')
 //
 // Warm orange grass — same half-brightness front-row foliage tone as menu.js
 //
@@ -232,11 +242,6 @@ const GROUND_DARK = glowRgb('groundDark')
 // grass over the same ground everywhere else.
 //
 const MUD_GROUND_RGB = glowRgb('mudGround')
-//
-// Extra wave height blended into the mud zone's stretch of the ground-line
-// wave (see drawGlowMudZoneGroundLine) so mud reads taller than plain ground.
-//
-const MUD_GROUND_EXTRA_H = 6
 //
 // Cool forest air — parallax trees fade into teal/green sky, not gold (70/20/10).
 //
@@ -389,6 +394,7 @@ const TREE_CROP_PAD = 2
 //
 const monolithicTreeOffsets = new WeakMap()
 const TRUNK_EXCLUDE_HALF = 50
+const TREE_FRUIT_VIEW_TOP_PAD = 16
 //
 // Mud band east of the branch trampoline — predator anchor layout.
 //
@@ -473,7 +479,7 @@ const HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD =
 // Rock rim — green-brown shadow tone (not neutral gray).
 //
 const ROCK_OUTLINE_RGB = DECOR_OUTLINE_RGB
-const ROCK_OUTLINE_WIDTH = 2.5
+const ROCK_OUTLINE_WIDTH = 1.4
 //
 //
 // Parallax background — sky baked into the far row plus 2 forest planes (each
@@ -483,13 +489,13 @@ const ROCK_OUTLINE_WIDTH = 2.5
 // inside the tree row's world-Y crop, so one sprite covers both and the
 // row costs a single draw call per frame instead of two.
 //
-const BG_PAR_TREE3_GRAY = 'glow0-bg-par-tree3-gray'
+const BG_PAR_TREE3_GRAY = 'glow0-bg-par-tree3-gray-v4'
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
-const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray'
+const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray-v4'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
-const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray'
+const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray-v4'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_GRAY = 'glow0-bg-static-gray-v2'
+const BG_STATIC_GRAY = 'glow0-bg-static-gray-v5'
 const BG_STATIC_COLOR = 'glow0-bg-static-color'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
@@ -594,8 +600,19 @@ const LOG_H = 28
 //
 const LOG_COLLISION_DROP_Y = 2
 //
-// Letter-log platforms mirror the main tree wood: warm sand tones in the lit
-// gray world (after L) and the tree's browns once the world gains colour.
+// Flat decor-gray logs — entire pre-colour-world phase (after first eye too).
+//
+const LOG_TREE_FLAT_GRAY_COLORS = {
+  bark: GLOW_PAL.decorGray,
+  barkLight: GLOW_PAL.lightGray,
+  barkDark: GLOW_PAL.glowContour.platform,
+  ring: GLOW_PAL.lightGray,
+  ringDark: GLOW_PAL.glowContour.platform,
+  core: GLOW_PAL.decorGray,
+  shadow: GLOW_PAL.void
+}
+//
+// Letter-log platforms: warm sand during the post-L preview, tree browns in colour world.
 //
 const LOG_TREE_LIT_COLORS = {
   bark: GLOW_PAL.treeLit.branch,
@@ -738,6 +755,20 @@ const BUSH_HIRES_CLUSTER_DENSITY = 0.3
 const BUSH_NEAR_HEIGHT_SCALE = 0.78
 const BUSH_FAR_HEIGHT_SCALE = 1.18
 const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
+//
+// Pinnate ferns tucked into the two nearest bush rows (reference detail);
+// the per-row value is the average fern count per mound.
+//
+const BUSH_FERNS_NEAR = 1.8
+const BUSH_FERNS_MID = 1.4
+const BUSH_FERN_OFFSET = 0.75
+const BUSH_FERN_SIZE_MIN = 1.05
+const BUSH_FERN_SIZE_RANGE = 0.6
+const BUSH_FERN_SEED_RANGE = 1e9
+const BUSH_FERN_STEM = 0.66
+const BUSH_FERN_DARK = 0.5
+const BUSH_FERN_MID = 0.34
+const BUSH_FERN_LIGHT = 0.14
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
 //
 // Hard foliage floor: no background leaf (branch cluster or band leaf) may
@@ -824,23 +855,60 @@ const COLOR_CROSSFADE_EPS = 0.001
 const GLOW_COLOR_REVEAL_GRAY_PHASE_END = 0.5
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
-// hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
-// holes). Baked once per mode (gray backdrop / dark colour-world earth).
+// hanging rootlets, fossil spirals and one buried skeleton (no burrows).
+// Baked once per mode (gray backdrop / dark colour-world earth).
 //
-const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray-v4'
+const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray-v7'
 const UNDERGROUND_POST_L_BROWN_SPRITE = 'glow0-underground-postl-brown-v1'
 const UNDERGROUND_COLOR_SPRITE = 'glow0-underground-color'
 const UG_TOP_PAD = 30
 const UG_BOTTOM_PAD = 2
-const UG_ROCK_COUNT = 6
-const UG_CRACK_COUNT = 9
-const UG_PEBBLE_CLUSTER_COUNT = 6
-const UG_ROOTLET_COUNT = 10
-const UG_SHELL_COUNT = 5
-const UG_BONE_COUNT = 3
-const UG_COIN_COUNT = 4
+const UG_ROCK_COUNT = 14
+const UG_CRACK_COUNT = 18
+const UG_PEBBLE_CLUSTER_COUNT = 22
+const UG_ROOTLET_COUNT = 26
+const UG_SHELL_COUNT = 9
+const UG_BONE_COUNT = 9
+const UG_COIN_COUNT = 6
 const UG_BOTTLE_COUNT = 2
-const UG_WORM_COUNT = 4
+const UG_WORM_COUNT = 8
+const UG_FOSSIL_COUNT = 4
+//
+// Colour-world extras from the reference: packed beds of rounded cobbles in
+// the deep clay (one guaranteed at each end of the band), sediment streaks,
+// dark voids with a lit lip, warm pebbles in the topsoil and fine grit.
+//
+const UG_BOULDER_PILE_COUNT = 7
+const UG_BOULDER_PILE_EDGE_INSET = 50
+const UG_BOULDER_PILE_STONES_MIN = 9
+const UG_BOULDER_PILE_STONES_RANGE = 9
+const UG_BOULDER_R_MIN = 5
+const UG_BOULDER_R_RANGE = 10
+const UG_BOULDER_PILE_SPREAD = 110
+const UG_BOULDER_DEEP_FRAC = 0.62
+const UG_BOULDER_RIM_PX = 2
+const UG_BOULDER_OUTLINE_PX = 1.2
+const UG_STREAK_COUNT = 80
+const UG_STREAK_LEN_MIN = 30
+const UG_STREAK_LEN_RANGE = 110
+const UG_STREAK_PX = 1.5
+const UG_STREAK_ALPHA = 0.4
+const UG_POCKET_COUNT = 30
+const UG_POCKET_R_MIN = 2.5
+const UG_POCKET_R_RANGE = 5
+const UG_POCKET_LIP_ALPHA = 0.55
+const UG_POCKET_VOID_ALPHA = 0.7
+const UG_WARM_PEBBLE_COUNT = 160
+const UG_WARM_PEBBLE_R_MIN = 1.2
+const UG_WARM_PEBBLE_R_RANGE = 1.6
+const UG_WARM_PEBBLE_TOP_FRAC = 0.45
+const UG_GRIT_COUNT = 900
+const UG_GRIT_PX_MIN = 1
+const UG_GRIT_PX_RANGE = 2
+const UG_GRIT_ALPHA = 0.55
+const UG_BONE_KNOB_R = 2.3
+const UG_BONE_KNOB_SPLIT = 1.7
+const UG_BONE_SHAFT_PX = 2.4
 //
 // Guaranteed extra detail inside the mud zone specifically — the normal
 // counts above are spread across the whole world width, so that one narrow
@@ -931,7 +999,10 @@ const GLOW_DECOR_CULL_MARGIN = 64
 //
 const HERO_OUTLINE_COLOR = GLOW_PAL.glowContour.gameplay
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
-const HERO_HOLLOW_OUTLINE_COLOR = HERO_BODY_COLOR
+//
+// Hollow gray-phase rim — warm off-white (same read as ready / eyeless spawn).
+//
+const HERO_HOLLOW_OUTLINE_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
 //
 // Life HUD eye pupil before L — dark gray so it reads with the gray world.
 //
@@ -1194,6 +1265,30 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 // even spread across the ground.
 //
 const GRASS_Z = 20
+//
+// Colour-world forest floor: hill and cream mushrooms behind the hero (under
+// the decor mushrooms at z 7), ferns and plumes in front of him under grass.
+//
+const GLOW_FOREST_FLOOR_BACK_Z = 6.5
+const GLOW_FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
+const GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
+const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
+//
+// Sunlight shafts from the upper left (colour world only), grouped over the
+// left part of the level like in the reference; they fade out toward the ground so
+// the walking hero stays clear. Sizes come from a fixed seed.
+//
+const GLOW_LIGHT_SHAFT_Z = GRASS_Z - 4
+const GLOW_LIGHT_SHAFT_ANGLE = -0.55
+const GLOW_LIGHT_SHAFT_SEED = 9151
+const GLOW_LIGHT_SHAFT_GROUPS = [{ x: 60, count: 4 }, { x: 400, count: 4 }, { x: 760, count: 3 }]
+const GLOW_LIGHT_SHAFT_W_MIN = 26
+const GLOW_LIGHT_SHAFT_W_RANGE = 70
+const GLOW_LIGHT_SHAFT_GAP_MIN = 30
+const GLOW_LIGHT_SHAFT_GAP_RANGE = 60
+const GLOW_LIGHT_SHAFT_REACH = 0.9
+const GLOW_LIGHT_SHAFT_OPACITY_MIN = 0.3
+const GLOW_LIGHT_SHAFT_OPACITY_RANGE = 0.25
 const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
 const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
@@ -1257,29 +1352,30 @@ const MOTE_SIZE_RANGE = 1.4
 const MOTE_OPACITY_MIN = 0.07
 const MOTE_OPACITY_RANGE = 0.1
 //
-// Visual ground lip — height variation only, collision stays on FLOOR_Y.
+// Underground earth band: topsoil, subsoil and deep clay (fractions of
+// CAVE_BAND_H for the first two; the last fills the rest). The deep clay is
+// darkened by GROUND_LAYER_DEEP_SHADE_ALPHA of the glow shadow swatch.
 //
-const GROUND_LIP_AMP = 6
-const GROUND_LIP_STEPS = 36
-const GROUND_LIP_STEPS_PARALLAX_STABLE = 22
-const GROUND_LIP_FREQ_A = 0.012
-const GROUND_LIP_FREQ_B = 0.031
-//
-// Bright “living” strip along the walkable ground line (§16 top edge).
-//
-const GROUND_TOP_RIM_H = 3
-const GROUND_TOP_RIM_OPACITY = 0.62
-//
-// Underground earth band: two soil layers split at 50% depth (wavy seam at
-// mid-height of CAVE_BAND_H). Top = chernozem, bottom = deeper sand/clay.
-//
-const GROUND_LAYER_FRACS = [0.5]
+const GROUND_LAYER_FRACS = [0.36, 0.3]
+const GROUND_LAYER_DEEP_SHADE_ALPHA = 0.3
 //
 // High-frequency jagged seams between soil layers (sample-and-hold noise, like
 // a dense irregular time series — not smooth sine waves).
 //
 const GROUND_LAYER_JAG_CELL_PX = glowFilmGrainBlockPxForTier('gameplay')
+const GROUND_LAYER_SAMPLE_PX = 2
 const GROUND_LAYER_INTERIOR_BOUNDARY_AMP = 12
+//
+// The topsoil hangs into the subsoil as a fringe of uneven teeth (like the
+// reference), on a slow sway so the seam is not a ruler line.
+//
+const GROUND_LAYER_FRINGE_INDEX = 1
+const GROUND_LAYER_FRINGE_W = 9
+const GROUND_LAYER_FRINGE_DEPTH_MIN = 4
+const GROUND_LAYER_FRINGE_DEPTH_RANGE = 18
+const GROUND_LAYER_FRINGE_JAG_AMP = 2
+const GROUND_LAYER_FRINGE_SWAY_A = 6
+const GROUND_LAYER_FRINGE_SWAY_F = 1 / 70
 //
 // Pull each soil swatch toward the layer average so strata read softer.
 //
@@ -1720,6 +1816,8 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     const plan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
     const ids = TreeSegments.allGlowTreeSegmentIds(treeData, plan)
     TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, ids)
+    isGlowEyeIntroPending(zones) && !k.getSprite(TREE_FLAT_SPRITE_NAME) &&
+      bakeMonolithicGlowTreeSprites(k, treeData)
     onProgress?.(48)
   }
   await yieldForGpu(1)
@@ -1834,7 +1932,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       trunkX: TREE_X,
       trunkHalf: TRUNK_EXCLUDE_HALF,
       branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
-      trampClearHalf: TRAMP_GRASS_CLEAR_HALF
+      trampClearHalf: TRAMP_GRASS_CLEAR_HALF,
+      minHangY: glowTreeFruitMinHangY()
     }
     let treeFruitSpots = []
     let treeFruitSpotsBuilt = false
@@ -1867,6 +1966,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
       const crownTreeRevealed = treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
       crownTreeRevealed && (zones.tree = true)
+      isGlowEyeIntroPending(zones) && !k.getSprite(TREE_FLAT_SPRITE_NAME) &&
+        bakeMonolithicGlowTreeSprites(k, treeData)
     }
     const initTreeFruit = buildGlowTreeFruitSpotsForOpenCrown(
       zones,
@@ -2082,7 +2183,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       airAnimDuringFlicker: true,
       runDuringFlicker: true,
       noEyes: !zones.eyesCollected,
-      cyclopsEye: !zones.secondEyeCollected,
+      cyclopsEye: false,
+      rightEyeClosed: zones.eyesCollected && !zones.secondEyeCollected,
       suppressDust: true,
       postBakeCanvas: applyGlowGameplaySharpBake,
       //
@@ -2116,7 +2218,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     bindGlowHeroFootSounds(heroInst, sound)
     !zones.eyesCollected && initGlowHeroWithoutEyes(heroInst)
-    zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, !zones.secondEyeCollected)
+    zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, glowHeroOneEyeBakeOpts(zones))
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
@@ -2181,7 +2283,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       rightMushroomX: () => trampBundle.state?.x ?? trampX,
       branchMushroomShown: () => isBranchTrampolineVisible(zones),
       rightMushroomShown: () => isRightTrampolineVisible(zones),
-      groundAt: glowGroundSurfaceY,
+      groundAt: () => FLOOR_Y,
       hero: heroInst,
       zones,
       sfx: sound,
@@ -2419,7 +2521,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     mountGlowTreeFruitLayer(k, inst)
     inst.lakeRaftX = glowLakeRaftWorldX(lakeX1, lakeX2)
     inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
-    inst.onGlowEyesCollected = () => revealWaterZone(inst, false)
+    inst.onGlowEyesCollected = () => {
+      revealWaterZone(inst, false)
+      syncGlowCanvasBackdrop(inst.k, inst.zones)
+    }
+    inst.treeX = TREE_X
+    inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
+    inst.floorY = FLOOR_Y
     inst.glassesSlot = GlassesSlot.create({
       k,
       getLevelInst: () => inst,
@@ -2561,6 +2669,27 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     createGlowChainBuoyLayer(k, zones)
     createGlowEarTreeLayer(k, inst)
     createGlowShoreTreeLayer(k, inst)
+    const forestFloorBlockers = buildGlowForestFloorBlockers(trampX, branchTrampX, chainBuoySpots, shoreTreeLayout, earTreeSpots)
+    const caveLeftX = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
+    inst.forestFloor = ForestFloor.create({
+      k,
+      floorY: FLOOR_Y,
+      xMin: TREE_X + TRUNK_EXCLUDE_HALF,
+      xMax: WORLD_W - RIGHT_MARGIN,
+      hillX2: WORLD_W,
+      rimSpans: [{ x1: inst.lakeX2, x2: caveLeftX }],
+      isSpotFree: (x, halfW) => isGlowForestFloorSpotFree(inst, forestFloorBlockers, x, halfW),
+      getOpacity: () => glowForestFloorOpacity(inst),
+      backZ: GLOW_FOREST_FLOOR_BACK_Z,
+      frontZ: GLOW_FOREST_FLOOR_FRONT_Z
+    })
+    inst.lightShafts = LightShaft.create({
+      k,
+      shafts: buildGlowLightShafts(),
+      angle: GLOW_LIGHT_SHAFT_ANGLE,
+      getOpacity: () => glowForestFloorOpacity(inst),
+      z: GLOW_LIGHT_SHAFT_Z
+    })
     if (await glowBootstrapPause(bootstrap, 93, session)) return
     syncGlowAtmosphereZones(inst)
     inst.midges.worldLife = 1
@@ -3014,7 +3143,7 @@ function loadGlowZones() {
     // source in updateTreeRevealArm() instead.
     //
     tree: get(KEY_REVEALED_TREE, false),
-    outerFrame: colorWorld,
+    outerFrame: colorWorld || eyesCollected,
     groundDecorRight,
     groundDecorLeft,
     groundRightStripMax,
@@ -3023,7 +3152,7 @@ function loadGlowZones() {
     rightTrampRevealed: get(KEY_RIGHT_TRAMP_REVEALED, false),
     rightTrampBounceLive: get(KEY_RIGHT_TRAMP_BOUNCE_LIVE, false),
     groundDecor: groundDecorRight || groundDecorLeft,
-    groundBg: colorWorld,
+    groundBg: colorWorld || eyesCollected,
     water: false,
     waterRocks: false,
     waterDiscovered,
@@ -3412,6 +3541,9 @@ function glowGroundDarkenAmount(inst) {
 //
 function glowGrayGroundRgb(inst, innerGray) {
   if (!innerGray) return VOID
+  if (isGlowFlatSingleDecorColor(inst)) {
+    return FLAT_EARTH
+  }
   const darken = glowGroundDarkenAmount(inst)
   return darken > 0 ? lerpRgb(INNER_GRAY, VOID, darken) : INNER_GRAY
 }
@@ -3949,6 +4081,59 @@ function isHeroOnShoreBranch(inst, char) {
       footY >= seg.y - 8 && footY <= seg.y + LOG_SNAP_STANDING_MAX + 6
   })
 }
+//
+// Ground spans the forest-floor plants must leave clear: trunks, both
+// trampolines, stalk eyes and ear-trees (the hero needs to read all of them).
+//
+function buildGlowForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTreeLayout, earTreeSpots) {
+  const blockers = [
+    { x: TREE_X, half: TRUNK_EXCLUDE_HALF },
+    { x: trampX, half: TRAMP_MUSHROOM_CLEAR_HALF },
+    { x: branchTrampX, half: TRAMP_MUSHROOM_CLEAR_HALF },
+    ...(buoySpots ?? []).map(s => ({ x: s.x, half: GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF })),
+    ...(earTreeSpots ?? []).map(s => ({ x: s.x, half: EAR_TREE_TRUNK_GRASS_CLEAR_HALF }))
+  ]
+  shoreTreeLayout && blockers.push({ x: shoreTreeLayout.x, half: GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF })
+  return blockers
+}
+function isGlowForestFloorSpotFree(inst, blockers, x, halfW) {
+  const x1 = x - halfW
+  const x2 = x + halfW
+  if (x2 >= inst.lakeX1 && x1 <= inst.lakeX2) return false
+  if (isCrackDecorExcluded(x1, WORLD_W) || isCrackDecorExcluded(x2, WORLD_W)) return false
+  return blockers.every(b => x2 < b.x - b.half || x1 > b.x + b.half)
+}
+//
+// Forest floor exists only in the colour world and fades in with the tree.
+//
+function glowForestFloorOpacity(inst) {
+  if (!inst.zones.colorWorld) return 0
+  return glowColorWorldRevealOpacities(glowDecorFade(inst), inst.parallaxFade).colorOp
+}
+//
+// Shaft tops along the playfield top edge; each group fans a few shafts of
+// mixed width so the light reads as broken through the canopy.
+//
+function buildGlowLightShafts() {
+  const rng = createSeededRandom(GLOW_LIGHT_SHAFT_SEED)
+  const length = (FLOOR_Y - TOP_MARGIN) / Math.cos(GLOW_LIGHT_SHAFT_ANGLE) * GLOW_LIGHT_SHAFT_REACH
+  const shafts = []
+  GLOW_LIGHT_SHAFT_GROUPS.forEach(group => {
+    let x = group.x
+    for (let i = 0; i < group.count; i++) {
+      const width = GLOW_LIGHT_SHAFT_W_MIN + rng() * GLOW_LIGHT_SHAFT_W_RANGE
+      shafts.push({
+        x: x + width / 2,
+        y: TOP_MARGIN,
+        width,
+        length,
+        opacity: GLOW_LIGHT_SHAFT_OPACITY_MIN + rng() * GLOW_LIGHT_SHAFT_OPACITY_RANGE
+      })
+      x += width + GLOW_LIGHT_SHAFT_GAP_MIN + rng() * GLOW_LIGHT_SHAFT_GAP_RANGE
+    }
+  })
+  return shafts
+}
 function createGlowShoreTreeLayer(k, inst) {
   k.add([
     k.z(GLOW_EAR_TREE_TRUNK_OVERLAY_Z),
@@ -4143,6 +4328,7 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
         foliageDensityTier: 'midground',
         colorFlat: false,
         grayFlat: true,
+        ferns: BUSH_FERNS_MID,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('midground'), grade: GLOW_LAYER_GRADE.mid })
@@ -4170,7 +4356,8 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
         cornerBandTop: PAR_NEAR_BAND_TOP,
         foliageDensityTier: 'nearground',
         colorFlat: false,
-        grayFlat: false,
+        grayFlat: true,
+        ferns: BUSH_FERNS_NEAR,
         heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('nearground'), grade: GLOW_LAYER_GRADE.near })
@@ -4234,8 +4421,16 @@ function glowSkyBandRgb(mixT, colorFade, includeDawn) {
 //
 function renderSkyBand(grayCtx, colorCtx) {
   const h = FLOOR_Y - TOP_MARGIN
-  paintGlowSkyGradient(grayCtx, h, 0, false)
+  paintFlatSky(grayCtx, h)
   paintGlowSkyGradient(colorCtx, h, 1, true)
+}
+//
+// Flat neutral sky for gray parallax bakes — one step above the frame so the
+// play zone edge stays readable and the forest rows sit lighter in front.
+//
+function paintFlatSky(ctx, skyHeight) {
+  ctx.fillStyle = `rgb(${FLAT_SKY.r}, ${FLAT_SKY.g}, ${FLAT_SKY.b})`
+  ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, skyHeight + 1)
 }
 //
 // Shared vertical sky fill for baked canvases and live playfield fallback.
@@ -4317,7 +4512,7 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   const colorCtx = colorCanvas.getContext('2d')
   colorCtx.translate(pad, -worldY)
   drawFn(grayCtx, colorCtx, pad)
-  postFxCfg && applyParallaxPostFxToContext(grayCtx, canvasW, canvasH, postFxCfg)
+  postFxCfg && applyParallaxPostFxToContext(grayCtx, canvasW, canvasH, grayParallaxPostFx(postFxCfg))
   postFxCfg && applyParallaxPostFxToContext(colorCtx, canvasW, canvasH, postFxCfg)
   const bounds = parallaxColumnBoundsMap(k)
   bounds.set(grayName, measureParallaxColumnBounds(grayCanvas, false))
@@ -4329,6 +4524,14 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   colorCanvas.width = 0
   colorCanvas.height = 0
   return pad
+}
+//
+// Gray bakes keep blur and grain but skip the contrast grade: pulling around
+// mid-grey would flatten the sky and every forest row into one tone.
+//
+function grayParallaxPostFx(cfg) {
+  if (!cfg.grade) return cfg
+  return { ...cfg, grade: { ...cfg.grade, contrast: 1, saturation: 1 } }
 }
 //
 // Column bounds registry for the live Kaplay instance (created on demand).
@@ -4404,11 +4607,26 @@ function groundLayerJagHash01(n) {
 // Per-column sample-and-hold offset — sharp vertical micro-spikes along X.
 //
 function groundLayerInteriorBoundaryWave(x, layerIndex) {
+  if (layerIndex === GROUND_LAYER_FRINGE_INDEX) return groundLayerFringeOffset(x, layerIndex)
+  return groundLayerJag(x, layerIndex) * GROUND_LAYER_INTERIOR_BOUNDARY_AMP
+}
+function groundLayerJag(x, layerIndex) {
   const seed = layerIndex * 97.13 + 3.7
-  const cell = GROUND_LAYER_JAG_CELL_PX
-  const bx = Math.floor(x / cell)
-  const h = groundLayerJagHash01(bx * 13.7 + seed * 100.3)
-  return (h * 2 - 1) * GROUND_LAYER_INTERIOR_BOUNDARY_AMP
+  const bx = Math.floor(x / GROUND_LAYER_JAG_CELL_PX)
+  return groundLayerJagHash01(bx * 13.7 + seed * 100.3) * 2 - 1
+}
+//
+// One asymmetric tooth per fringe cell (random depth and peak position),
+// centred on the seam so the stratum fractions still hold on average.
+//
+function groundLayerFringeOffset(x, layerIndex) {
+  const cell = Math.floor(x / GROUND_LAYER_FRINGE_W)
+  const f = x / GROUND_LAYER_FRINGE_W - cell
+  const depth = GROUND_LAYER_FRINGE_DEPTH_MIN + groundLayerJagHash01(cell * 7.31 + 1.9) * GROUND_LAYER_FRINGE_DEPTH_RANGE
+  const peak = 0.3 + groundLayerJagHash01(cell * 3.17 + 5.3) * 0.4
+  const tooth = f < peak ? f / peak : (1 - f) / (1 - peak)
+  const sway = Math.sin(x * GROUND_LAYER_FRINGE_SWAY_F) * GROUND_LAYER_FRINGE_SWAY_A
+  return sway + (tooth - 0.5) * depth + groundLayerJag(x, layerIndex) * GROUND_LAYER_FRINGE_JAG_AMP
 }
 function groundLayerBoundaryY(x, y0, height, cumFrac, layerIndex) {
   //
@@ -4420,8 +4638,8 @@ function groundLayerBoundaryY(x, y0, height, cumFrac, layerIndex) {
 //
 // Fills one soil stratum between two wavy horizontal curves (top + bottom).
 //
-function paintWavyBoundedEarthLayer(ctx, rgb, x0, width, y0, height, topFrac, bottomFrac, topLayerIndex, bottomLayerIndex) {
-  const steps = Math.max(2, Math.ceil(width / GROUND_LAYER_JAG_CELL_PX))
+function paintWavyBoundedEarthLayer(ctx, rgb, shade, x0, width, y0, height, topFrac, bottomFrac, topLayerIndex, bottomLayerIndex) {
+  const steps = Math.max(2, Math.ceil(width / GROUND_LAYER_SAMPLE_PX))
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
   for (let i = 0; i <= steps; i++) {
@@ -4440,6 +4658,11 @@ function paintWavyBoundedEarthLayer(ctx, rgb, x0, width, y0, height, topFrac, bo
   }
   ctx.closePath()
   ctx.fill()
+  if (!shade) return
+  ctx.fillStyle = `rgb(${shade.rgb.r}, ${shade.rgb.g}, ${shade.rgb.b})`
+  ctx.globalAlpha = shade.alpha
+  ctx.fill()
+  ctx.globalAlpha = 1
 }
 //
 // Stacks soil layers top to bottom — flat top on FLOOR_Y, jaggy seams
@@ -4454,6 +4677,7 @@ function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
     paintWavyBoundedEarthLayer(
       ctx,
       layers[i].rgb,
+      layers[i].shade,
       x0,
       width,
       y0,
@@ -4468,7 +4692,7 @@ function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
 }
 //
 // Paints the root-zone part of a combined background canvas: the layered
-// earth band (two layers at 50% depth, see groundEarthLayers) inside the
+// earth band (three strata, see withMidEarthStratum) inside the
 // playfield margins, topped with the underground decor.
 //
 function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
@@ -4518,18 +4742,30 @@ function softenGroundEarthLayers(layers) {
   }))
 }
 function groundEarthLayersGray() {
-  const topsoil = glowRgb('groundChernozem')
-  const deep = glowRgb('groundSand')
-  return softenGroundEarthLayers([
-    { rgb: lerpRgb(topsoil, GLOW_SHADOW, 0.1), frac: GROUND_LAYER_FRACS[0] },
-    { rgb: lerpRgb(deep, VOID, 0.28) }
+  return withMidEarthStratum([
+    { rgb: FLAT_EARTH },
+    { rgb: FLAT_EARTH_DEEP }
   ])
 }
 function groundEarthLayersColor() {
-  return softenGroundEarthLayers([
-    { rgb: glowRgb('groundChernozem'), frac: GROUND_LAYER_FRACS[0] },
+  return withMidEarthStratum(softenGroundEarthLayers([
+    { rgb: glowRgb('groundChernozem') },
     { rgb: glowRgb('groundSand') }
-  ])
+  ]))
+}
+//
+// Topsoil / subsoil / deep clay, as in the reference. The palette has no
+// brown between the two soil swatches (a lerp snaps to olive in the bake),
+// so the subsoil takes the bottom tone and the deep clay is that same tone
+// under a translucent shadow. The bottom tone itself stays unchanged
+// (glowGroundEarthBottomLayerRgb fills under the cave floor with it).
+//
+function withMidEarthStratum([top, deep]) {
+  return [
+    { rgb: top.rgb, frac: GROUND_LAYER_FRACS[0] },
+    { rgb: deep.rgb, frac: GROUND_LAYER_FRACS[1] },
+    { rgb: deep.rgb, shade: { rgb: GLOW_SHADOW, alpha: GROUND_LAYER_DEEP_SHADE_ALPHA } }
+  ]
 }
 //
 // Picks one of the four reference corner tree palettes from world X and row.
@@ -4656,6 +4892,7 @@ function applyGlowMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay')
 function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   const {
     grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters,
+    ferns = 0,
     foliageDensityTier = 'midground',
     cornerBandTop = null,
     x1 = LEFT_MARGIN,
@@ -4672,6 +4909,8 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
       ? parallaxCornerLeafRgb(mound.x, cornerBandTop)
       : colorRgb
     const useHiResClusters = hiResClusters ?? glowHiResBushClustersForTier(foliageDensityTier)
+    const fernCount = Math.floor(ferns) + (Math.random() < ferns % 1 ? 1 : 0)
+    for (let f = 0; f < fernCount; f++) paintBushStripFern(grayCtx, colorCtx, mound, grayRgb, moundColorRgb, grayFlat)
     drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
     drawLeafyBushMound(colorCtx, mound, moundColorRgb, colorFlat)
     useHiResClusters && drawHiResBushClusters(colorCtx, mound, moundColorRgb, foliageDensityTier)
@@ -4680,6 +4919,36 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
     //
     x += radius * (BUSH_STEP_MIN_FRAC + Math.random() * BUSH_STEP_RANGE_FRAC)
   }
+}
+//
+// Dark pinnate fern behind a bush mound, poking out above its dome (same
+// seed for both mode canvases so the gray and colour images stay aligned).
+// A flat gray row keeps its single tone, so the fern there is one colour.
+//
+function paintBushStripFern(grayCtx, colorCtx, mound, grayRgb, colorRgb, grayFlat) {
+  const seed = Math.floor(Math.random() * BUSH_FERN_SEED_RANGE)
+  const x = mound.x + (Math.random() * 2 - 1) * mound.radius * BUSH_FERN_OFFSET
+  const size = mound.radius * (BUSH_FERN_SIZE_MIN + Math.random() * BUSH_FERN_SIZE_RANGE)
+  paintBushFernOnto(grayCtx, x, size, seed, grayRgb, grayFlat)
+  paintBushFernOnto(colorCtx, x, size, seed, colorRgb, false)
+}
+function paintBushFernOnto(ctx, x, size, seed, rgb, flat) {
+  drawFernToCanvas(ctx, {
+    x,
+    baseY: FLOOR_Y,
+    size,
+    rng: createSeededRandom(seed),
+    colors: {
+      stem: bushFernTone(rgb, flat, BUSH_FERN_STEM),
+      dark: bushFernTone(rgb, flat, BUSH_FERN_DARK),
+      mid: bushFernTone(rgb, flat, BUSH_FERN_MID),
+      light: bushFernTone(rgb, flat, BUSH_FERN_LIGHT)
+    }
+  })
+}
+function bushFernTone(rgb, flat, shade) {
+  const c = flat ? rgb : lerpRgb(rgb, GLOW_SHADOW, shade)
+  return `rgb(${c.r}, ${c.g}, ${c.b})`
 }
 //
 // Generates the geometry of one leafy bush mound: the dome plus the exact
@@ -4873,66 +5142,6 @@ function drawAtmosphereMotes(inst) {
   })
 }
 //
-// Visual ground relief only — collision stays on FLOOR_Y. Hidden while the
-// world is still a single decor gray.
-//
-function drawExploredGroundLip(inst) {
-  if (isGlowFlatSingleDecorColor(inst)) return
-  if (!isGlowWorldSurfaceDecorUnlocked(inst)) return
-  const z = inst.zones
-  if (!z.groundDecorLeft && z.groundRightStripMax < 0 && !z.water) return
-  const k = inst.k
-  const fade = inst.colorFade ?? 0
-  const bodyC = DECOR_OUTLINE_RGB
-  const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
-  const rimRgb = fade > COLOR_CROSSFADE_EPS
-    ? lerpRgb(bodyC, glowGrassColourTarget(inst.zones), 0.82)
-    : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
-  const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
-  const x0 = LEFT_MARGIN
-  const x1 = WORLD_W - RIGHT_MARGIN
-  const lipSteps = isGlowFullParallaxStable(inst) ? GROUND_LIP_STEPS_PARALLAX_STABLE : GROUND_LIP_STEPS
-  const step = (x1 - x0) / lipSteps
-  const lakeX1 = inst.lakeX1
-  const lakeX2 = inst.lakeX2
-  const pitMouthCut = inst.pit?.collapsed && inst.pit.zone
-    ? getGlowPitEarthBandMouthCutoutForPit(inst.pit)
-    : null
-  const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
-  for (let i = 0; i < lipSteps; i++) {
-    const x = x0 + i * step
-    if (view && (x + step < view.x1 || x > view.x2)) continue
-    if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
-    if (pitMouthCut && x >= pitMouthCut.leftX && x <= pitMouthCut.rightX) continue
-    const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
-      ? glowRightWorldOpacity(inst, x, 'large')
-      : (z.groundDecorLeft ? (inst.leftDecorFade ?? 1) : 0)
-    if (op < 0.12) continue
-    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    const h = Math.max(2, 4 + lip)
-    const bodyPos = inst._lipBodyPos ??= k.vec2(0, 0)
-    const rimPos = inst._lipRimPos ??= k.vec2(0, 0)
-    bodyPos.x = x
-    bodyPos.y = FLOOR_Y - h + 2
-    rimPos.x = x
-    rimPos.y = FLOOR_Y - GROUND_TOP_RIM_H
-    k.drawRect({
-      pos: bodyPos,
-      width: step + 1,
-      height: h,
-      color: bodyColor,
-      opacity: 0.48 * op
-    })
-    k.drawRect({
-      pos: rimPos,
-      width: step + 1,
-      height: GROUND_TOP_RIM_H,
-      color: rimColor,
-      opacity: GROUND_TOP_RIM_OPACITY * op
-    })
-  }
-}
-//
 // Bakes the underground decor sprites (gray + colour-world variants) that
 // dress up the root-zone earth band: buried rocks, burrows with winding
 // tunnels, cracks, pebble clusters, hanging rootlets and a fossil spiral.
@@ -4983,8 +5192,8 @@ function undergroundEarthDecorSprite(z) {
   return UNDERGROUND_POST_L_BROWN_SPRITE
 }
 function undergroundPaletteEntries() {
-  const flatGray = glowRgb(GLOW_PAL.decorGray)
-  const flatDeep = glowRgb(GLOW_PAL.lightGray)
+  const flatGray = FLAT_UNDERGROUND
+  const flatDeep = FLAT_EARTH_DEEP
   const brownFill = glowRgb('groundSand')
   const brownDeep = glowRgb(GLOW_PAL.log.bark)
   const brownLight = glowRgb(GLOW_PAL.log.barkLight)
@@ -5001,15 +5210,31 @@ function undergroundPaletteEntries() {
       fill: brownFill,
       deep: brownDeep,
       light: brownLight,
-      monoStrokes: true
+      monoStrokes: true,
+      ...undergroundColorExtraTones()
     },
     {
       name: UNDERGROUND_COLOR_SPRITE,
       fill: glowRgb('groundChernozem'),
       deep: glowRgb('mudGround'),
-      light: glowRgb('groundSand')
+      light: glowRgb('groundSand'),
+      ...undergroundColorExtraTones()
     }
   ]
+}
+//
+// Cobble, void, pebble and grit tones for the colour-world bakes; the brown
+// entry is the one baked into the static colour earth band, so it needs them too.
+//
+function undergroundColorExtraTones() {
+  const tones = GLOW_PAL.glowUnderground
+  return {
+    stone: glowRgb(tones.stone),
+    stoneLight: glowRgb(tones.stoneLight),
+    contour: glowRgb(tones.contour),
+    grit: glowRgb(tones.grit),
+    pebble: glowRgb(tones.pebble)
+  }
 }
 //
 // Chain-buoy decor spots — spread across the level, skipping the band around
@@ -5604,7 +5829,34 @@ function buildUndergroundSpec() {
   //
   // One fossil spiral — a small ammonite curled among the stones.
   //
-  const fossil = { x: randX(), y: randY(), r: 9 + Math.random() * 5 }
+  const fossils = []
+  for (let i = 0; i < UG_FOSSIL_COUNT; i++) fossils.push({ x: randX(), y: randY(), r: 7 + Math.random() * 7 })
+  //
+  // Boulder piles sit on the band floor; grit specks are spread everywhere.
+  //
+  const deepY1 = FLOOR_Y + CAVE_BAND_H * UG_BOULDER_DEEP_FRAC
+  const pileXs = [areaX1 + UG_BOULDER_PILE_EDGE_INSET, areaX2 - UG_BOULDER_PILE_EDGE_INSET]
+  for (let i = 0; i < UG_BOULDER_PILE_COUNT; i++) pileXs.push(randX())
+  const boulderPiles = pileXs.map(cx => buildUndergroundCobbleBed(cx, deepY1, areaY2))
+  const grit = []
+  for (let i = 0; i < UG_GRIT_COUNT; i++) {
+    grit.push({ x: randX(), y: randY(), px: UG_GRIT_PX_MIN + Math.floor(Math.random() * UG_GRIT_PX_RANGE), light: Math.random() < 0.5 })
+  }
+  const streaks = []
+  for (let i = 0; i < UG_STREAK_COUNT; i++) {
+    streaks.push({ x: randX(), y: randY(), len: UG_STREAK_LEN_MIN + Math.random() * UG_STREAK_LEN_RANGE, tilt: (Math.random() - 0.5) * 0.06 })
+  }
+  const pockets = []
+  for (let i = 0; i < UG_POCKET_COUNT; i++) {
+    const r = UG_POCKET_R_MIN + Math.random() * UG_POCKET_R_RANGE
+    pockets.push({ x: randX(), y: randY(), rx: r * (1.2 + Math.random() * 0.6), ry: r })
+  }
+  const warmPebbles = []
+  const topsoilY2 = FLOOR_Y + CAVE_BAND_H * UG_WARM_PEBBLE_TOP_FRAC
+  for (let i = 0; i < UG_WARM_PEBBLE_COUNT; i++) {
+    const y = Math.random() < 0.75 ? areaY1 + Math.random() * (topsoilY2 - areaY1) : randY()
+    warmPebbles.push({ x: randX(), y, r: UG_WARM_PEBBLE_R_MIN + Math.random() * UG_WARM_PEBBLE_R_RANGE })
+  }
   //
   // Shells, bones, coins, bottles, worms — simple silhouettes for humour.
   //
@@ -5687,7 +5939,29 @@ function buildUndergroundSpec() {
     })
   }
   pebbles.push(mudPebbleStones)
-  return { rocks, cracks, pebbles, rootlets, fossil, shells, bones, coins, bottles, worms, skeleton: null }
+  return {
+    rocks, cracks, pebbles, rootlets, fossils, boulderPiles, grit, streaks, pockets, warmPebbles,
+    shells, bones, coins, bottles, worms, skeleton: null
+  }
+}
+//
+// One packed cobble bed in the deep clay: stones heaped toward the bed
+// centre and the band bottom, sorted so lower stones overlap upper ones.
+//
+function buildUndergroundCobbleBed(cx, y1, y2) {
+  const count = UG_BOULDER_PILE_STONES_MIN + Math.floor(Math.random() * UG_BOULDER_PILE_STONES_RANGE)
+  const stones = []
+  for (let s = 0; s < count; s++) {
+    const r = UG_BOULDER_R_MIN + Math.random() * UG_BOULDER_R_RANGE
+    const u = (Math.random() + Math.random()) * 0.5 - 0.5
+    const centre = 1 - Math.abs(u) * 2
+    stones.push({
+      x: cx + u * UG_BOULDER_PILE_SPREAD,
+      y: y2 - r * 0.5 - Math.random() * (y2 - y1) * (0.35 + 0.65 * centre),
+      r
+    })
+  }
+  return stones.sort((a, b) => a.y - b.y)
 }
 //
 // Renders the shared underground layout with one mode's tones.
@@ -5696,6 +5970,7 @@ function renderUndergroundSpec(ctx, spec, tones) {
   const fillCss = `rgb(${tones.fill.r}, ${tones.fill.g}, ${tones.fill.b})`
   const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
   const lightCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
+  tones.stone && paintUndergroundSediment(ctx, spec, tones, deepCss)
   //
   // Buried rocks — flat single-tone silhouettes, no outline.
   //
@@ -5756,19 +6031,11 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.strokeStyle = lightCss
   ctx.globalAlpha = 0.75
   ctx.lineWidth = 1.5
-  ctx.beginPath()
-  const turns = 2
-  const steps = 40
-  for (let s = 0; s <= steps; s++) {
-    const t = s / steps
-    const angle = t * turns * Math.PI * 2
-    const radius = spec.fossil.r * t
-    const px = spec.fossil.x + Math.cos(angle) * radius
-    const py = spec.fossil.y + Math.sin(angle) * radius
-    s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-  }
-  ctx.stroke()
+  spec.fossils?.forEach(fossil => strokeUndergroundFossil(ctx, fossil))
   ctx.globalAlpha = 1
+  tones.stone && paintUndergroundBoulderPiles(ctx, spec.boulderPiles, tones)
+  tones.grit && paintUndergroundGrit(ctx, spec.grit, tones, deepCss)
+  tones.pebble && paintUndergroundWarmPebbles(ctx, spec.warmPebbles, tones)
   //
   // Buried shells — half-ovals with a split line.
   //
@@ -5798,18 +6065,21 @@ function renderUndergroundSpec(ctx, spec, tones) {
     ctx.translate(bone.x, bone.y)
     ctx.rotate(bone.angle)
     ctx.strokeStyle = lightCss
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = UG_BONE_SHAFT_PX
     ctx.lineCap = 'round'
     ctx.globalAlpha = 0.85
     ctx.beginPath()
     ctx.moveTo(-bone.len * 0.5, 0)
     ctx.lineTo(bone.len * 0.5, 0)
     ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(-bone.len * 0.5, 0, 2.5, 0, Math.PI * 2)
-    ctx.arc(bone.len * 0.5, 0, 2.5, 0, Math.PI * 2)
     ctx.fillStyle = lightCss
-    ctx.fill()
+    for (const end of [-0.5, 0.5]) {
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.arc(bone.len * end, side * UG_BONE_KNOB_SPLIT, UG_BONE_KNOB_R, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
     ctx.restore()
   })
   ctx.globalAlpha = 1
@@ -5847,6 +6117,98 @@ function renderUndergroundSpec(ctx, spec, tones) {
   spec.worms?.forEach(pts => {
     ctx.globalAlpha = 0.65
     strokePolyline(ctx, pts)
+  })
+  ctx.globalAlpha = 1
+}
+//
+// Two-turn ammonite spiral in the current stroke style.
+//
+function strokeUndergroundFossil(ctx, fossil) {
+  const turns = 2
+  const steps = 40
+  ctx.beginPath()
+  for (let s = 0; s <= steps; s++) {
+    const t = s / steps
+    const angle = t * turns * Math.PI * 2
+    const px = fossil.x + Math.cos(angle) * fossil.r * t
+    const py = fossil.y + Math.sin(angle) * fossil.r * t
+    s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+  }
+  ctx.stroke()
+}
+//
+// Sediment streaks along the strata and dark voids with a lit lower lip,
+// painted first so every other buried feature sits on top of them.
+//
+function paintUndergroundSediment(ctx, spec, tones, deepCss) {
+  const lipCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
+  const voidCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
+  ctx.strokeStyle = deepCss
+  ctx.lineWidth = UG_STREAK_PX
+  ctx.lineCap = 'round'
+  ctx.globalAlpha = UG_STREAK_ALPHA
+  spec.streaks?.forEach(streak => {
+    ctx.beginPath()
+    ctx.moveTo(streak.x, streak.y)
+    ctx.quadraticCurveTo(streak.x + streak.len * 0.5, streak.y - 2, streak.x + streak.len, streak.y + streak.len * streak.tilt)
+    ctx.stroke()
+  })
+  spec.pockets?.forEach(pocket => {
+    ctx.globalAlpha = UG_POCKET_LIP_ALPHA
+    ctx.fillStyle = lipCss
+    ctx.beginPath()
+    ctx.ellipse(pocket.x, pocket.y + 1.5, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = UG_POCKET_VOID_ALPHA
+    ctx.fillStyle = voidCss
+    ctx.beginPath()
+    ctx.ellipse(pocket.x, pocket.y, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  ctx.globalAlpha = 1
+}
+//
+// Small warm pebbles, mostly in the topsoil.
+//
+function paintUndergroundWarmPebbles(ctx, pebbles, tones) {
+  ctx.fillStyle = `rgb(${tones.pebble.r}, ${tones.pebble.g}, ${tones.pebble.b})`
+  pebbles?.forEach(p => {
+    ctx.beginPath()
+    ctx.ellipse(p.x, p.y, p.r * 1.25, p.r, 0, 0, Math.PI * 2)
+    ctx.fill()
+  })
+}
+//
+// Rounded cobbles packed in the deep clay: contour, lit top rim, body.
+//
+function paintUndergroundBoulderPiles(ctx, piles, tones) {
+  const stoneCss = `rgb(${tones.stone.r}, ${tones.stone.g}, ${tones.stone.b})`
+  const rimCss = `rgb(${tones.stoneLight.r}, ${tones.stoneLight.g}, ${tones.stoneLight.b})`
+  const contourCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
+  piles?.forEach(stones => stones.forEach(stone => {
+    ctx.fillStyle = contourCss
+    ctx.beginPath()
+    ctx.ellipse(stone.x, stone.y - UG_BOULDER_RIM_PX * 0.5, stone.r + UG_BOULDER_OUTLINE_PX, stone.r * 0.8 + UG_BOULDER_OUTLINE_PX + UG_BOULDER_RIM_PX * 0.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = rimCss
+    ctx.beginPath()
+    ctx.ellipse(stone.x, stone.y - UG_BOULDER_RIM_PX, stone.r, stone.r * 0.8, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = stoneCss
+    ctx.beginPath()
+    ctx.ellipse(stone.x, stone.y, stone.r, stone.r * 0.8, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }))
+}
+//
+// Fine soil grit: half light specks, half dark, so the earth reads textured.
+//
+function paintUndergroundGrit(ctx, grit, tones, deepCss) {
+  const gritCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
+  ctx.globalAlpha = UG_GRIT_ALPHA
+  grit?.forEach(g => {
+    ctx.fillStyle = g.light ? gritCss : deepCss
+    ctx.fillRect(Math.round(g.x), Math.round(g.y), g.px, g.px)
   })
   ctx.globalAlpha = 1
 }
@@ -6183,7 +6545,10 @@ function tagWoodPlatform(platform, sound, heroInst) {
 // sand tones while the world is gray-lit, brown tones in the colour world.
 //
 function glowLogColors(zones) {
-  const fade = zones._sceneRef?.colorFade ?? (zones.colorWorld ? 1 : 0)
+  if (!zones?.colorWorld) {
+    return LOG_TREE_FLAT_GRAY_COLORS
+  }
+  const fade = zones._sceneRef?.colorFade ?? 1
   return fade > 0.5 ? LOG_TREE_COLOR_COLORS : LOG_TREE_LIT_COLORS
 }
 //
@@ -6275,8 +6640,8 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
 // Grass tint for the mud band only — visible after G until the post-L countdown opens the rest.
 //
 function glowGrassColourTarget(zones) {
-  if (zones.colorWorld) return GRASS_GREEN
-  return zones.colorWorld ? GRASS_WARM : GRASS_GREEN
+  if (!zones.colorWorld) return DECOR_GRAY
+  return GRASS_GREEN
 }
 //
 // Grass hue variation is baked into the layer inst at create() — refresh it
@@ -6850,14 +7215,6 @@ function drawGlowMudWalkClutter(inst) {
   })
 }
 //
-// Top of the drawn ground lip at x — the same edge the floor silhouette uses.
-//
-function glowGroundSurfaceY(x) {
-  const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-  const h = Math.max(2, 4 + lip)
-  return FLOOR_Y - h + 2
-}
-//
 // Flat ground line for the centipede. Up is a smaller Y.
 //
 function glowPredatorGroundAt(levelInst) {
@@ -7341,7 +7698,7 @@ function resolveGlowLakeDrawRgb(k, sc) {
   } else {
     const gray = twoTone ? DECOR_GRAY : lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
     const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
-    c = twoTone ? DECOR_GRAY : lerpRgb(gray, tint, fade)
+    c = twoTone ? FLAT_WATER : lerpRgb(gray, tint, fade)
     fade >= 1 && sc && (sc._lakeColorSettled = c)
   }
   const rgb = sc?._lakeDrawRgb
@@ -8032,7 +8389,9 @@ function glowPitBelowCaveEarthRgb(inst) {
     const fade = inst.colorFade ?? 0
     const z = inst.zones
     const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-    if (isGlowFlatSingleDecorColor(inst) && !innerGray) return PRELUDE_BACKDROP
+    if (isGlowFlatSingleDecorColor(inst)) {
+      return innerGray ? FLAT_EARTH_DEEP : PRELUDE_BACKDROP
+    }
     const colorBottom = glowGroundEarthBottomLayerRgb(false)
     const grayBottom = glowGroundEarthBottomLayerRgb(true)
     if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return colorBottom
@@ -8043,7 +8402,9 @@ function glowPitBelowCaveEarthRgb(inst) {
   const z = inst.zones
   const innerGray = isPlayfieldInnerGrayVisible(z, fade)
   const caveEarth = glowCaveEarthFloorRgb()
-  if (isGlowFlatSingleDecorColor(inst) && !innerGray) return PRELUDE_BACKDROP
+  if (isGlowFlatSingleDecorColor(inst)) {
+    return innerGray ? FLAT_EARTH : PRELUDE_BACKDROP
+  }
   if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return caveEarth
   return lerpRgb(glowGrayGroundRgb(inst, innerGray), caveEarth, fade)
 }
@@ -8192,21 +8553,19 @@ function onDrawWorld(inst) {
     drawGlowEarthBand(k, inst, k.rgb(backdrop.r, backdrop.g, backdrop.b), 1)
   }
   if (outerFrame) {
-    let inner = innerGray ? INNER_GRAY : VOID
-    if (flatExplore && !innerGray) {
-      inner = PRELUDE_BACKDROP
-    }
     //
     // Colour world splits the playfield at the ground line: warm haze between
     // the trunks above, dark forest earth below — both lerp up from the deep
-    // green inner base as the colour fade progresses.
+    // inner base as the colour fade progresses.
     //
-    const grayGround = flatExplore && !innerGray
-      ? PRELUDE_BACKDROP
-      : glowGrayGroundRgb(inst, innerGray)
-    const groundC = flatExplore && !innerGray ? PRELUDE_BACKDROP : lerpRgb(grayGround, GROUND_DARK, fade)
+    const flatGround = innerGray ? FLAT_EARTH : PRELUDE_BACKDROP
+    const groundC = flatExplore
+      ? flatGround
+      : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
     groundFillC = groundC
-    inst._surfaceEarthRgb = innerGray ? glowGrayGroundRgb(inst, true) : groundC
+    inst._surfaceEarthRgb = flatExplore
+      ? flatGround
+      : (innerGray ? glowGrayGroundRgb(inst, true) : groundC)
     //
     // Sky scrolls on its own parallax layer once the forest is revealed.
     // Crossfade the dark teal + dawn gradient out as parallaxFade rises.
@@ -8215,7 +8574,8 @@ function onDrawWorld(inst) {
     const fallbackOp = parallaxStable ? 0 : (zones.colorWorld ? Math.max(0, 1 - parallaxMix) : 1)
     if (fallbackOp > COLOR_CROSSFADE_EPS) {
       if (isGlowFlatSingleDecorColor(inst) || (!zones.colorWorld && fade <= COLOR_CROSSFADE_EPS)) {
-        const backdrop = isGlowFlatSingleDecorColor(inst) ? PRELUDE_BACKDROP : glowRgb('void')
+        const flatSky = innerGray ? FLAT_SKY : PRELUDE_BACKDROP
+        const backdrop = isGlowFlatSingleDecorColor(inst) ? flatSky : glowRgb('void')
         k.drawRect({
           pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
           width: GAME_W,
@@ -8263,6 +8623,15 @@ function onDrawWorld(inst) {
     drawParallaxLayer(inst, PAR_LAYER_NEAR)
     !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
   }
+  if (!zones.colorWorld && zones.eyesCollected && outerFrame) {
+    const pf = inst.parallaxFade ?? 0
+    if (pf > COLOR_CROSSFADE_EPS) {
+      drawParallaxLayer(inst, PAR_LAYER_FAR)
+      drawParallaxLayer(inst, PAR_LAYER_MID)
+      drawParallaxLayer(inst, PAR_LAYER_NEAR)
+    }
+    pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
+  }
   //
   // Parallax tree sprites extend below the ground line. Cover that bleed
   // with the baked static earth+underground sprite (one draw) instead of a
@@ -8286,7 +8655,7 @@ function onDrawWorld(inst) {
     } else {
       pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
     }
-  } else if (groundFillC) {
+  } else if (groundFillC && !isGlowGrayStaticEarthOpaque(inst)) {
     const earthRgb = inst._surfaceEarthRgb || groundFillC
     drawGlowEarthBand(k, inst, k.rgb(earthRgb.r, earthRgb.g, earthRgb.b))
   }
@@ -8294,12 +8663,11 @@ function onDrawWorld(inst) {
   //
   // Cave mouth ground tint + surface decor (pit interior draws after parallax).
   //
-  const groundC = flatExplore && !innerGray
-    ? PRELUDE_BACKDROP
+  const groundC = flatExplore
+    ? DECOR_GRAY
     : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
   onDrawGlowEyeIntro(inst, k)
-  !isGlowEyeIntroBareWorld(inst) && drawExploredGroundLip(inst)
   !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst)
   drawGlowPitMouthEarthGapFill(inst, k)
   inst.k && drawGlowPitCutoutBelowFloorFill(inst, k)
@@ -8312,6 +8680,15 @@ function onDrawWorld(inst) {
 //
 // Bottom corners — redrawn after world onDraw and from the ui+2500 fixed layer.
 //
+//
+// One-eye gray world: the baked static earth strata are fully faded in, so a
+// flat earth fill on top would wipe out their layered tones.
+//
+function isGlowGrayStaticEarthOpaque(inst) {
+  const z = inst.zones
+  if (z.colorWorld || !z.eyesCollected || !isOuterFrameVisible(z)) return false
+  return (inst.parallaxFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS
+}
 //
 // Full-screen void curtain while parallaxFade eases up after the first eye.
 //
@@ -8400,9 +8777,9 @@ function maybeBootstrapGlowPostEyes(inst) {
 // Ground-peek band on the soft-mud zone (flat gray explore, after G) — a
 // live slice of the SAME underground sprite (buried rocks, roots, cracks)
 // the full underground layer shows after water is discovered, clipped to
-// just the mud zone as an early preview, plus a ground-line rim on top.
-// Once the colour parallax is opaque, BG_STATIC_COLOR already contains
-// that band, so the live sprite is skipped and only the rim remains.
+// just the mud zone as an early preview. Once the colour parallax is
+// opaque, BG_STATIC_COLOR already contains that band, so the live sprite
+// is skipped.
 //
 function drawMudGroundZone(inst) {
   if (!inst.zones.predatorAwake) return
@@ -8429,7 +8806,6 @@ function drawMudGroundZone(inst) {
   } else if (!isGlowFullParallaxStable(inst)) {
     drawUndergroundSpriteBand(k, undergroundEarthDecorSprite(inst.zones), 1, x1, x2)
   }
-  drawGlowMudZoneGroundLine(inst, x1, x2)
 }
 //
 // Flat earth in the pit mouth cutout (earth band only) — matches the strip
@@ -8460,49 +8836,6 @@ function drawGlowPitMouthEarthGapFill(inst, k) {
     height: belowH,
     color: k.rgb(bottomRgb.r, bottomRgb.g, bottomRgb.b)
   })
-}
-//
-// Same rim look as drawExploredGroundLip (mono-safe outline + lighter top
-// strip), confined to the previewed left band.
-//
-function drawGlowMudZoneGroundLine(inst, x1, x2) {
-  const k = inst.k
-  const fade = inst.colorFade ?? 0
-  const flatMono = isGlowFlatSingleDecorColor(inst)
-  const bodyC = flatMono ? DECOR_GRAY : DECOR_OUTLINE_RGB
-  const bodyColor = k.rgb(bodyC.r, bodyC.g, bodyC.b)
-  const rimRgb = flatMono
-    ? lerpRgb(DECOR_GRAY, LIGHT_GRAY, 0.35)
-    : fade > COLOR_CROSSFADE_EPS
-      ? lerpRgb(bodyC, glowGrassColourTarget(inst.zones), 0.82)
-      : lerpRgb(bodyC, LIGHT_GRAY, 0.45)
-  const rimColor = k.rgb(rimRgb.r, rimRgb.g, rimRgb.b)
-  const mudX1 = inst.mudZoneX1
-  const mudX2 = inst.mudZoneX2
-  const step = (x2 - x1) / GROUND_LIP_STEPS
-  if (step <= 0) return
-  const view = glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
-  for (let x = x1; x < x2; x += step) {
-    if (view && (x + step < view.x1 || x > view.x2)) continue
-    const inMud = mudX1 != null && mudX2 != null && x >= mudX1 && x <= mudX2
-    if (inMud) continue
-    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
-    const h = Math.max(2, 4 + lip)
-    k.drawRect({
-      pos: k.vec2(x, FLOOR_Y - h + 2),
-      width: step + 1,
-      height: h,
-      color: bodyColor,
-      opacity: 0.48
-    })
-    k.drawRect({
-      pos: k.vec2(x, FLOOR_Y - GROUND_TOP_RIM_H),
-      width: step + 1,
-      height: GROUND_TOP_RIM_H,
-      color: rimColor,
-      opacity: GROUND_TOP_RIM_OPACITY
-    })
-  }
 }
 //
 // Paints tree-side lake cap rocks when the water zone is open.
@@ -9749,7 +10082,8 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
     ...heroEyes,
     outlineOnly: !filled,
     noEyes: !inst.zones.eyesCollected,
-    cyclopsEye: !inst.zones.secondEyeCollected
+    cyclopsEye: false,
+    rightEyeClosed: inst.zones.eyesCollected && !inst.zones.secondEyeCollected
   })
   Hero.spawn(fresh, { instant: true })
   fresh.onPlayStepSound = stepSound
@@ -9773,7 +10107,7 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   registerGlowTrampolineLateBounce(inst)
   snapGlowCameraToHero(k, fresh)
   !inst.zones.eyesCollected && initGlowHeroWithoutEyes(fresh)
-  inst.zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, fresh, fresh.postBakeCanvas, !inst.zones.secondEyeCollected)
+  inst.zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, fresh, fresh.postBakeCanvas, glowHeroOneEyeBakeOpts(inst.zones))
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
@@ -10704,28 +11038,12 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!inst.pendingTreeReveal) return
   const fromBranchTramp = inst.treeRevealFromBranchTramp ||
     (inst.branchTrampBounceAir && grounded && justLanded)
-  const onPitLaunchGround = isHeroOnPitMushroomLaunchGround(inst, char)
-  if (!fromBranchTramp && !inst.treeBranchLeftOnce && !onPitLaunchGround) return
+  if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
   if (!grounded || !justLanded || !char?.pos) return
   if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
-  const onBranch = isHeroOnStartBranch(inst, char)
-  if (!onBranch && !onPitLaunchGround) return
+  if (!isHeroOnStartBranch(inst, char)) return
   inst.treeRevealFromBranchTramp = false
   revealTreeSegmentsOnBranchLanding(inst)
-}
-//
-// Ground band between the main trunk and the left mushroom trampoline.
-//
-function isHeroOnPitMushroomLaunchGround(inst, char) {
-  const cfg = inst.treeFruitAnchorCfg
-  if (!cfg || !char?.pos) return false
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  if (footY < FLOOR_Y - LOG_SNAP_STANDING_MAX || footY > FLOOR_Y + 10) return false
-  const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = cfg
-  const xMin = trunkX + trunkHalf + PIT_MUSH_LAUNCH_GROUND_TRUNK_PAD
-  const xMax = branchTrampX - trampClearHalf - PIT_MUSH_LAUNCH_GROUND_TRAMP_PAD
-  if (xMax <= xMin) return false
-  return char.pos.x >= xMin && char.pos.x <= xMax
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
@@ -11536,6 +11854,15 @@ function persistTreeSegmentsRevealed(inst) {
 // Returns null when the crown is still closed; an empty array when open but no
 // valid hang points.
 //
+//
+// Camera Y is pinned to the design centre, so a window shorter than the
+// design crops the top of the world, and the top HUD bar covers another
+// TOP_MARGIN below that. Fruit hung above this line was never on screen.
+//
+function glowTreeFruitMinHangY() {
+  const viewTop = Math.round(DESIGN_SCREEN_H / 2) - Math.min(SCREEN_H, DESIGN_SCREEN_H) / 2
+  return viewTop + TOP_MARGIN + TREE_FRUIT_VIEW_TOP_PAD
+}
 function buildGlowTreeFruitSpotsForOpenCrown(zones, treeData, anchorCfg, treeSegmentPlan, treeSegmentRevealed) {
   if (!zones.eyesCollected) return null
   const crownOpen = zones.tree || (
@@ -11561,7 +11888,11 @@ function finishTreeRevealIfComplete(inst) {
 // (e.g. roots segment still hidden, or a missed finishTreeRevealIfComplete).
 //
 function maybeEnsureGlowTreeFruitSpots(inst) {
-  if (inst.treeDrawMonolith || !inst.zones?.eyesCollected) return
+  if (!inst.zones?.eyesCollected) return
+  if (inst.treeDrawMonolith) {
+    ensureGlowTreeFruitSpots(inst)
+    return
+  }
   if (!isAllTreeSegmentsRevealed(inst)) return
   if (!inst.zones.tree) {
     finishTreeRevealIfComplete(inst)
@@ -12322,7 +12653,10 @@ function collectGlowSecondEye(inst) {
   z.secondEyeCollected = true
   set(KEY_SECOND_EYE_COLLECTED, true)
   ChainBuoy.setPrizeEyeTaken(inst.chainBuoys, true)
-  applyGlowHeroEyesOpenedBake(inst.k, inst.heroInst, inst.heroInst.postBakeCanvas, false)
+  applyGlowHeroEyesOpenedBake(inst.k, inst.heroInst, inst.heroInst.postBakeCanvas, {
+    cyclops: false,
+    rightEyeClosed: false
+  })
   triggerGlowCameraShake(inst)
   inst.sound && !inst.sound._glowSfxMuted && Sound.playLetterPickupSoft(inst.sound)
   rebakeTrampolineGraySprites(inst.k)
@@ -12463,8 +12797,6 @@ function syncHeroTrampDrawOrder(inst) {
 // trampoline (same band as the anchor fruit), not onto the start branch.
 //
 const PIT_MUSH_GROUND_LAUNCH_MULT = 1.12
-const PIT_MUSH_LAUNCH_GROUND_TRUNK_PAD = 16
-const PIT_MUSH_LAUNCH_GROUND_TRAMP_PAD = 12
 function createGlowCaveGroundPortal(inst) {
   const pit = inst.pit
   return GroundPortal.create({
@@ -12542,7 +12874,6 @@ function launchHeroFromGroundPortal(inst) {
   hero.postLandAirLock = 0
   hero.canJump = false
   inst._pitMushroomBranchLaunchLatch = true
-  inst.treeRevealFromBranchTramp = true
   inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
   unlockGlowEyesGameplayFromBranchLaunch(inst)
   inst.pit && ensureGlowPitOpenForEyesCollected(inst.pit)

@@ -23,10 +23,24 @@ const TOMATO_HIGHLIGHT_R = 0.32
 const TOMATO_HIGHLIGHT_OFFSET = 0.38
 const TOMATO_SHADE_R = 0.78
 const TOMATO_SHADE_OFFSET_Y = 0.2
-const TOMATO_SPIKE_COUNT = 9
-const TOMATO_SPIKE_LEN = 6
-const TOMATO_SPIKE_HALF_RAD = 0.2
+const TOMATO_SPIKE_COUNT = 5
+const TOMATO_SPIKE_LEN = 4
+const TOMATO_SPIKE_HALF_RAD = 0.22
 const TOMATO_SPIKE_OUTLINE_PX = 1.2
+//
+// Bud reads as a flower: pointed petals ring a smaller red core.
+//
+const TOMATO_BUD_SCALE = 0.72
+const TOMATO_PETAL_COUNT = 6
+const TOMATO_PETAL_BASE = 0.5
+const TOMATO_PETAL_LEN = 1.05
+const TOMATO_PETAL_HALF_W = 0.42
+const TOMATO_PETAL_SEGMENTS = 5
+const TOMATO_PETAL_OUTLINE_PX = 1
+const TOMATO_PETAL_SPIN_OFFSET = Math.PI / TOMATO_PETAL_COUNT
+const TOMATO_PETAL_RIB_LEN = 0.75
+const TOMATO_PETAL_RIB_W = 1.4
+const TOMATO_STAMEN_R = 0.2
 //
 // Landing radius around the trunk and how many jolts shake the tomato loose.
 //
@@ -147,7 +161,7 @@ function explodeTomato(inst, tomato) {
   const x = tomato.x
   const y = inst.groundY - TOMATO_RADIUS
   const c = GLOW_PAL.glowTomato
-  const palette = [c.body, c.light, c.dark, c.spike].map(glowRgb)
+  const palette = [c.body, c.light, c.petal, c.spike].map(glowRgb)
   GlowFootParticles.spawnLeafBurst(inst.particles, x, y, palette, TOMATO_BURST_COUNT, inst.groundY)
   inst.sfx && !inst.sfx._glowSfxMuted && Sound.playGlowTomatoExplosion(inst.sfx)
   inst.onExplode?.(x, y)
@@ -179,28 +193,74 @@ function resolveTomatoColors(k) {
     light: toK(c.light),
     dark: toK(c.dark),
     outline: toK(c.outline),
-    spike: toK(c.spike)
+    spike: toK(c.spike),
+    petal: toK(c.petal),
+    petalLight: toK(c.petalLight),
+    stamen: toK(c.stamen)
   }
 }
 //
-// Spikes behind the body, then outline, shaded body and highlight.
+// Green sepals and pink petals behind a small red bud with a pollen dot.
 //
 function drawTomato(inst, tomato, colors, opacity) {
   const k = inst.k
   const pulseSpeed = TOMATO_PULSE_SPEED + tomato.hits * TOMATO_PULSE_SPEED_PER_HIT
   const grow = tomatoGrowScale(tomato)
   const r = TOMATO_RADIUS * grow * (1 + Math.sin(inst.time * pulseSpeed + tomato.index) * TOMATO_PULSE_AMP)
+  const bud = r * TOMATO_BUD_SCALE
   const { x, y, spin } = tomato
   drawTomatoSpikes(k, x, y, r, spin, colors, opacity)
-  k.drawCircle({ pos: k.vec2(x, y), radius: r + TOMATO_OUTLINE_PX, color: colors.outline, opacity })
-  k.drawCircle({ pos: k.vec2(x, y), radius: r, color: colors.dark, opacity })
-  k.drawCircle({ pos: k.vec2(x, y - r * TOMATO_SHADE_OFFSET_Y), radius: r * TOMATO_SHADE_R, color: colors.body, opacity })
+  drawTomatoPetals(k, x, y, r, spin + TOMATO_PETAL_SPIN_OFFSET, colors, opacity)
+  k.drawCircle({ pos: k.vec2(x, y), radius: bud + TOMATO_OUTLINE_PX, color: colors.outline, opacity })
+  k.drawCircle({ pos: k.vec2(x, y), radius: bud, color: colors.dark, opacity })
+  k.drawCircle({ pos: k.vec2(x, y - bud * TOMATO_SHADE_OFFSET_Y), radius: bud * TOMATO_SHADE_R, color: colors.body, opacity })
   k.drawCircle({
-    pos: k.vec2(x - r * TOMATO_HIGHLIGHT_OFFSET, y - r * TOMATO_HIGHLIGHT_OFFSET),
-    radius: r * TOMATO_HIGHLIGHT_R,
+    pos: k.vec2(x - bud * TOMATO_HIGHLIGHT_OFFSET, y - bud * TOMATO_HIGHLIGHT_OFFSET),
+    radius: bud * TOMATO_HIGHLIGHT_R,
     color: colors.light,
     opacity
   })
+  k.drawCircle({ pos: k.vec2(x, y), radius: bud * TOMATO_STAMEN_R, color: colors.stamen, opacity })
+}
+//
+// Pointed oval petals radiating from the bud rim, each with a light midrib.
+//
+function drawTomatoPetals(k, x, y, r, spin, colors, opacity) {
+  const len = r * TOMATO_PETAL_LEN
+  const halfW = r * TOMATO_PETAL_HALF_W
+  for (let i = 0; i < TOMATO_PETAL_COUNT; i++) {
+    const a = spin + (i / TOMATO_PETAL_COUNT) * Math.PI * 2
+    const pts = petalPoints(k, x, y, a, r * TOMATO_BUD_SCALE * TOMATO_PETAL_BASE, len, halfW)
+    k.drawPolygon({
+      pts,
+      color: colors.petal,
+      outline: { width: TOMATO_PETAL_OUTLINE_PX, color: colors.outline },
+      opacity
+    })
+    const ribFrom = r * TOMATO_BUD_SCALE
+    const ribTo = r * TOMATO_BUD_SCALE * TOMATO_PETAL_BASE + len * TOMATO_PETAL_RIB_LEN
+    k.drawLine({
+      p1: k.vec2(x + Math.cos(a) * ribFrom, y + Math.sin(a) * ribFrom),
+      p2: k.vec2(x + Math.cos(a) * ribTo, y + Math.sin(a) * ribTo),
+      width: TOMATO_PETAL_RIB_W,
+      color: colors.petalLight,
+      opacity
+    })
+  }
+}
+function petalPoints(k, x, y, angle, base, len, halfW) {
+  const ca = Math.cos(angle)
+  const sa = Math.sin(angle)
+  const side = []
+  for (let s = 0; s <= TOMATO_PETAL_SEGMENTS; s++) {
+    const t = s / TOMATO_PETAL_SEGMENTS
+    side.push({ along: base + len * t, w: Math.sin(t * Math.PI) * halfW })
+  }
+  const toPt = (along, w) => k.vec2(x + ca * along - sa * w, y + sa * along + ca * w)
+  return [
+    ...side.map(p => toPt(p.along, p.w)),
+    ...side.slice(1, -1).reverse().map(p => toPt(p.along, -p.w))
+  ]
 }
 function drawTomatoSpikes(k, x, y, r, spin, colors, opacity) {
   for (let i = 0; i < TOMATO_SPIKE_COUNT; i++) {

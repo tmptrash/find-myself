@@ -10,7 +10,8 @@ import {
 } from './glow-static-bake.js'
 //
 // Small background trees whose branches end in red lips — branches grow from
-// the tapered trunk surface and lean toward the hero like the old ear trees.
+// the tapered trunk surface and lean toward the hero like the old ear trees,
+// while the lips themselves keep facing up.
 //
 const EAR_TREE_TRUNK_H_BASE = 104
 const EAR_TREE_TRIGGER_RADIUS = 280
@@ -31,6 +32,7 @@ const MOUTH_LEN = 30
 const MOUTH_HALF_H = 9
 const MOUTH_GAP = 3
 const MOUTH_OUTLINE_PAD = 1
+const MOUTH_REST_TILT = 0.35
 //
 // Root fan at the base, same growTreeRootSegments algorithm the big glow
 // tree uses — generated once per tree at creation time and baked into a
@@ -481,9 +483,17 @@ function addEarBranch(batch, mouthIndices, tree, branch, barkColor, outlineColor
     const wty = swingY(tree, twig.tipX, twig.tipY)
     PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.55 + 1, outlineColor)
     PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.5, barkColor)
-    twig.hasMouth && addMouth(batch, mouthIndices, wtx, wty, Math.atan2(wty - wby, wtx - wbx), outlineColor, lipColor)
+    twig.hasMouth && addMouth(batch, mouthIndices, wtx, wty, mouthUpAngle(tree, twig.restAngle), outlineColor, lipColor)
   })
-  branch.hasMouth && addMouth(batch, mouthIndices, tx, ty, Math.atan2(ty - by, tx - bx), outlineColor, lipColor)
+  branch.hasMouth && addMouth(batch, mouthIndices, tx, ty, mouthUpAngle(tree, branch.restAngle), outlineColor, lipColor)
+}
+//
+// Lips open toward the sky like flower cups: mostly straight up, keeping a
+// little of the limb's rest tilt, never following the limb's reach toward
+// the hero. The landing jolt still rocks them with the tree.
+//
+function mouthUpAngle(tree, restAngle) {
+  return -Math.PI / 2 + (restAngle + Math.PI / 2) * MOUTH_REST_TILT + (tree.drawAngle || 0)
 }
 //
 // Upper and lower lip polygons in local mouth space (+x along the branch).

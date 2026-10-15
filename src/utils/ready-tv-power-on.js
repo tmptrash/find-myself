@@ -13,9 +13,9 @@ const TV_LOADER_START_PCT = 5
 // When loading ends: full bar holds → loader fades → snow keeps running a
 // little longer → snow fades and reveals the ready scene.
 //
-const TV_LOADER_FULL_BAR_HOLD_SEC = 0.35
-const TV_SNOW_AFTER_LOAD_SEC = 1.1
-const TV_BACKDROP_FADE_OUT_SEC = 0.9
+const TV_LOADER_FULL_BAR_HOLD_SEC = 0.15
+const TV_SNOW_AFTER_LOAD_SEC = 0.25
+const TV_BACKDROP_FADE_OUT_SEC = 0.5
 //
 // A stalled worker never reports the end of its fade — the main thread drops
 // the overlay itself this long after asking for it.

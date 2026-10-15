@@ -251,12 +251,10 @@ export const CFG = {
         //
         glowPreludeBackdrop: PALETTE.gray0,
         //
-        // Playfield frame + inner sky base: deep blue-green forest (reference
-        // #18352B / #214735 / #2B5740 mapped to Otterisk greens/teals). Warm
-        // haze and lit decor still pop against this dark foundation.
+        // Playfield frame — neutral darkest gray so no green rims the play zone.
         //
-        playfieldOuter: PALETTE.teal0,
-        playfieldGray: PALETTE.green1,
+        playfieldOuter: PALETTE.gray0,
+        playfieldGray: PALETTE.gray2,
         midGray: PALETTE.green1,
         //
         // Zenith lift for parallax sky gradients and colour-world canopy air.
@@ -353,7 +351,7 @@ export const CFG = {
         // Soft gray rim for low-priority decor (captions, muted props).
         //
         glowOutlineLight: PALETTE.gray2,
-        decorGray: PALETTE.gray3,
+        decorGray: PALETTE.gray5,
         dialogFill: PALETTE.gray1,
         dialogText: PALETTE.gray6,
         dialogBorder: PALETTE.gray3,
@@ -496,6 +494,56 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
+        // Colour-world forest floor: mossy hill, ferns, light spike bushes,
+        // small cream mushrooms and the ragged ground rim (reference concept art).
+        //
+        glowForestFloor: {
+          contour: PALETTE.gray0,      // Green-black plant / hill contour
+          fernDark: PALETTE.teal0,     // Back fronds (dark teal like the reference)
+          fernMid: PALETTE.teal1,      // Front fronds
+          fernLight: PALETTE.teal2,    // Lit leaflets
+          plume: PALETTE.green5,       // Light spike face
+          plumeLight: PALETTE.gold5,   // Lit chevrons on the spike
+          plumeShade: PALETTE.gold3,   // Spike rim, midrib, shaded chevrons
+          plumeStem: PALETTE.green3,   // Short spike stalks
+          mushCap: PALETTE.mauve5,     // Cream cap
+          mushCapLight: PALETTE.gray7, // Cap highlight
+          mushGill: PALETTE.sand3,     // Shaded cap underside
+          mushStem: PALETTE.sand5,     // Slender stem
+          mushOutline: PALETTE.brown0, // Mushroom contour
+          spotCap: PALETTE.red1,       // Rare red spotted cap on the hill
+          spotCapLight: PALETTE.red3,  // Red cap highlight
+          spotDot: PALETTE.gray7,      // Red cap spots
+          mossDeep: PALETTE.teal0,     // Cool shadow under the moss
+          mossShadow: PALETTE.green0,  // Moss shadow mass
+          mossMid: PALETTE.green1,     // Moss base mass
+          mossLight: PALETTE.green2,   // Sunlit clover clumps
+          mossGlint: PALETTE.green3,   // Rare brightest moss tips
+          grass: PALETTE.green1,       // Hill grass blades
+          grassDry: PALETTE.gold3,     // Dry straw blades
+          stone: PALETTE.sand1,        // Warm grey-brown boulders that make up the hill
+          stoneLight: PALETTE.sand2,   // Boulder lit face (upper left)
+          stoneDark: PALETTE.sand0,    // Boulder shadow face and gaps between stones
+          rimSoil: PALETTE.brown0,     // Dark soil lip under the ground line
+          rimEarth: PALETTE.brown1,    // Crumbly earth bumps on the lip
+          rimMoss: PALETTE.green1,     // Moss patches along the ground line
+          rimMossLight: PALETTE.green3, // Lit moss along the ground line
+          rimDry: PALETTE.gold2,       // Dry litter patches along the ground line
+          rimDryLight: PALETTE.gold4,  // Sunlit litter specks
+          rimPebble: PALETTE.slate2,   // Pebbles poking out of the lip
+          shaft: PALETTE.gold5         // Diagonal sunlight shafts
+        },
+        //
+        // Extra colour-world underground props (cobble beds, voids, pebbles, grit).
+        //
+        glowUnderground: {
+          stone: PALETTE.slate1,       // Cobble body (lighter than the clay around it)
+          stoneLight: PALETTE.slate2,  // Cobble top rim
+          contour: PALETTE.gray0,      // Cobble contour and dark voids
+          grit: PALETTE.brown2,        // Tiny soil specks and void lips
+          pebble: PALETTE.rose2        // Warm pebbles in the topsoil
+        },
+        //
         // Spiky tomato grenade on the lip-trees — danger red, green spikes.
         //
         glowTomato: {
@@ -504,20 +552,23 @@ export const CFG = {
           dark: PALETTE.red0,
           outline: PALETTE.brown0,
           spike: PALETTE.green1,
-          stem: PALETTE.green0
+          stem: PALETTE.green0,
+          petal: PALETTE.pink2,       // Flower-like petals around the bud
+          petalLight: PALETTE.pink4,  // Petal midrib highlight
+          stamen: PALETTE.orange5     // Pollen dot on the bud
         },
         //
         // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
         //
         decorOutline: PALETTE.gray1,
         //
-        // Pre-colour forest silhouettes — green value steps (not gray-green).
+        // Pre-colour forest silhouettes — neutral gray steps (no green until O).
         //
         treeGray: {
-          root: PALETTE.green0,
-          trunk: PALETTE.green0,
-          branch: PALETTE.green1,
-          leaf: PALETTE.green2
+          root: PALETTE.gray0,
+          trunk: PALETTE.gray1,
+          branch: PALETTE.gray2,
+          leaf: PALETTE.gray3
         },
         //
         // Main tree after L — warm brown wood + gold leaf lift (not sand-gray).
@@ -554,16 +605,51 @@ export const CFG = {
         //
         // Legacy aliases — sky bake uses glowSky* (see renderSkyBand).
         //
-        parallaxSkyTopGray: PALETTE.green0,
+        parallaxSkyTopGray: PALETTE.gray0,
         parallaxSkyTopColor: PALETTE.teal0,
         //
         // Parallax forest depths — gray steps in flat mode; in colour mode the
         // far/mid rows stay muted sage/teal silhouettes (not orange) so only
         // the sky haze and main lit tree carry warm pop (§16 art direction).
         //
-        parallaxGrayNear: PALETTE.green2,
-        parallaxGrayMid: PALETTE.green1,
-        parallaxGrayFar: PALETTE.teal0,
+        parallaxGrayNear: PALETTE.gray4,
+        parallaxGrayMid: PALETTE.gray3,
+        parallaxGrayFar: PALETTE.gray2,
+        //
+        // One-eye gray world value ladder (dark sky → light gameplay decor):
+        // frame gray0, sky gray1, far/mid/near forest gray2-4, decor gray5.
+        //
+        glowFlatSky: PALETTE.gray1,
+        glowFlatEarth: PALETTE.gray2,
+        glowFlatEarthDeep: PALETTE.gray1,
+        glowFlatUnderground: PALETTE.gray3,
+        glowFlatWater: PALETTE.gray3,
+        //
+        // Eye-intro umbrella stroller — grays only, each part on its own value
+        // step so the tube frame, fabric, strap and wheels stay readable.
+        //
+        glowStroller: {
+          outline: PALETTE.gray0,      // Ink contour around every part
+          tube: PALETTE.gray6,         // Near-side aluminium tube
+          tubeShade: PALETTE.gray4,    // Near tube underside
+          tubeGlint: PALETTE.gray7,    // Thin metal highlight
+          farTube: PALETTE.gray4,      // Far-side tube (in shadow)
+          farTubeShade: PALETTE.gray2, // Far tube underside
+          fabric: PALETTE.gray3,       // Back sling
+          fabricLight: PALETTE.gray4,  // Seat pan facing up
+          fabricShade: PALETTE.gray2,  // Hem and folds
+          strap: PALETTE.gray6,        // Lap and crotch strap
+          buckle: PALETTE.gray4,       // Strap buckle
+          grip: PALETTE.gray3,         // Foam handle grips
+          gripRib: PALETTE.gray1,      // Grip ribbing
+          plate: PALETTE.gray3,        // Footrest plate
+          plateLight: PALETTE.gray5,   // Footrest top edge
+          tire: PALETTE.gray1,         // Near wheel tyres
+          rim: PALETTE.gray4,          // Near wheel discs
+          hub: PALETTE.gray6,          // Wheel hubs and rivets
+          farTire: PALETTE.gray0,      // Far wheel tyres
+          farRim: PALETTE.gray3        // Far wheel discs
+        },
         //
         // Parallax forest quadrants — cool/warm greens only (no red-pink rows).
         // X picks left/right; canopy row picks top/bottom.

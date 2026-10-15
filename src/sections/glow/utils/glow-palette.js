@@ -241,11 +241,11 @@ export function getTreePaletteGray() {
       glowRgb(t.leaf)
     ],
     //
-    // Bark cracks: cold teal shadow, green highlight (monochrome forest phase).
+    // Bark cracks: void shadow, light gray highlight (monochrome forest phase).
     //
     barkShades: {
-      dark: glowRgb('glowShadow'),
-      highlight: glowRgb('playfieldGray')
+      dark: glowRgb('void'),
+      highlight: glowRgb('lightGray')
     },
     leafVein: glowRgb('void'),
     woodOutline: glowContourRgb('forest'),

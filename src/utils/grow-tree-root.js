@@ -85,7 +85,7 @@ export function growTreeRootSegments(opts) {
     //
     // Rare micro side-roots — thin short offshoots for visual detail
     //
-    if (Math.random() < MICRO_BRANCH_CHANCE && depth < MICRO_BRANCH_DEPTH_LIMIT) {
+    if (rand(0, 1) < MICRO_BRANCH_CHANCE && depth < MICRO_BRANCH_DEPTH_LIMIT) {
       out.push(...growTreeRootSegments({
         x: cx,
         y: cy,
@@ -101,7 +101,7 @@ export function growTreeRootSegments(opts) {
   //
   // 40% chance of a secondary main branch splitting off the tip
   //
-  if (Math.random() < MAIN_BRANCH_CHANCE) {
+  if (rand(0, 1) < MAIN_BRANCH_CHANCE) {
     out.push(...growTreeRootSegments({
       x: cx,
       y: cy,

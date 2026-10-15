@@ -17,6 +17,8 @@ import {
 } from './glow-atmosphere.js'
 import { applyGlowHeroEyesOpenedBake } from './glow-hero-fill.js'
 import { drawGlowEyeCreature, glowCaveHeroEyeColors } from './glow-eye-creature.js'
+import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { bakeBabyStrollerCanvas } from '../../../utils/draw-baby-stroller.js'
 
 //
 // Persisted once the hero collects the cave eyes and returns to the tree.
@@ -36,6 +38,9 @@ const EYE_COLLECTED_HINT_TEXT = 'Whoa. Everything looks\nso much clearer now.'
 const EYE_COLLECTED_HINT_DURATION = 5
 const EYE_COLLECTED_HINT_DISMISS = 80
 const EYE_COLLECTED_HINT_OFFSET_Y = -82
+const EYE_INTRO_STROLLER_SPRITE = 'glow-eye-intro-stroller-v3'
+const EYE_INTRO_STROLLER_BAKE_SEED = 0x73746f6c
+const EYE_INTRO_STROLLER_OFFSET_X = 52
 //
 // Creates runtime state for the pre-G eyeless intro (only when eyes not saved).
 //
@@ -125,7 +130,7 @@ export function revealGlowHeroEyes(inst, heroInst) {
   if (!heroInst || !inst?.eyeIntro) return
   const char = heroInst.character
   const k = inst.k
-  applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, !inst.zones?.secondEyeCollected)
+  applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, glowHeroOneEyeBakeOpts(inst.zones))
   const idleKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix || heroInst.type}_0_0`
   //
   // Closed eyes apply on the first still frame — immediate run/jump skips them.
@@ -224,6 +229,7 @@ export function updateGlowCaveFloorEyeReveal(inst, char) {
 }
 export function onDrawGlowEyeIntro(inst, k) {
   if (!inst?.eyeIntro) return
+  isGlowEyeIntroBareWorld(inst) && drawGlowEyeIntroStroller(k, inst)
   const intro = inst.eyeIntro
   const pit = inst.pit
   const eyesOnPitLayer = pit?.collapsed && intro.pickup && !intro.pickup.collected
@@ -266,7 +272,7 @@ function spawnGlowCavePickupEyes(inst, pit) {
   return {
     cx: eyes.cx,
     cy: eyes.cy,
-    rightX: eyes.rightX,
+    leftX: eyes.leftX,
     y: eyes.y,
     collected: false
   }
@@ -308,6 +314,8 @@ function persistGlowEyesCollected(inst) {
   //
   inst.parallaxFadeTarget = 1
   inst.parallaxFade = 0
+  inst.zones.outerFrame = true
+  inst.zones.groundBg = true
   inst.onGlowEyesCollected?.()
 }
 function didGlowEyeAttachHeroMove(intro, char, heroInst) {
@@ -324,7 +332,7 @@ function finishGlowEyeAttachSequence(inst, heroInst) {
   inst.eyeIntro.eyesOpeningTimer = 0
   inst.eyeIntro.attachClosedApplied = false
   Hero.setEyesClosed(heroInst, false)
-  applyGlowHeroEyesOpenedBake(inst.k, heroInst, heroInst.postBakeCanvas, !inst.zones?.secondEyeCollected)
+  applyGlowHeroEyesOpenedBake(inst.k, heroInst, heroInst.postBakeCanvas, glowHeroOneEyeBakeOpts(inst.zones))
   const openKey = heroInst.currentEyeSprite || `${heroInst.spritePrefix}_0_0`
   heroInst.character?.exists?.() && inst.k.getSprite(openKey) &&
     heroInst.character.use(inst.k.sprite(openKey))
@@ -372,7 +380,7 @@ export function unlockGlowEyesGameplayFromBranchLaunch(inst) {
   completeGlowEyeIntro(inst)
 }
 //
-// The skeleton keeps only its right eye — the hero takes a single cyclops eye.
+// The skeleton's left socket — the hero's first eye is the left one.
 //
 function drawGlowCavePickupEyes(k, pickup, heroInst) {
   if (pickup.collected) return
@@ -380,7 +388,33 @@ function drawGlowCavePickupEyes(k, pickup, heroInst) {
   const targetX = heroPos?.x ?? pickup.cx
   const targetY = (heroPos?.y ?? pickup.y) - 20
   const colors = glowCaveHeroEyeColors(k)
-  drawGlowTrackingEye(k, pickup.rightX, pickup.y, targetX, targetY, colors)
+  const eyeX = pickup.leftX ?? pickup.rightX
+  drawGlowTrackingEye(k, eyeX, pickup.y, targetX, targetY, colors)
+}
+export function glowHeroOneEyeBakeOpts(zones) {
+  return {
+    cyclops: false,
+    rightEyeClosed: Boolean(zones?.eyesCollected && !zones?.secondEyeCollected)
+  }
+}
+function ensureGlowEyeIntroStrollerSprite(k) {
+  if (k.getSprite(EYE_INTRO_STROLLER_SPRITE)) return
+  const canvas = bakeBabyStrollerCanvas()
+  applyGlowFilmGrainToCanvas(canvas, EYE_INTRO_STROLLER_BAKE_SEED)
+  k.loadSprite(EYE_INTRO_STROLLER_SPRITE, canvas)
+}
+function drawGlowEyeIntroStroller(k, inst) {
+  ensureGlowEyeIntroStrollerSprite(k)
+  const treeX = inst.treeX ?? inst.TREE_X
+  const floorY = inst.floorY ?? inst.FLOOR_Y
+  const trunkHalf = inst.trunkExcludeHalf ?? 50
+  if (treeX == null || floorY == null) return
+  const x = treeX + trunkHalf + EYE_INTRO_STROLLER_OFFSET_X
+  k.drawSprite({
+    sprite: EYE_INTRO_STROLLER_SPRITE,
+    pos: k.vec2(x, floorY),
+    anchor: 'bot'
+  })
 }
 function drawGlowTrackingEye(k, ex, ey, tx, ty, colors) {
   const dx = tx - ex

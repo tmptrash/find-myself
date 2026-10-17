@@ -5,45 +5,42 @@ import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
 import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
 import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
-import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
+import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { drawSmallMushroomGroupToCanvas } from '../../../utils/draw-small-mushroom.js'
 import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/glow-static-bake.js'
 import { forestFloorPainterColors } from './forest-floor.js'
 
 //
-// Flat earth island in the left lake carrying a calla plant: an IK stem with
-// a cream spathe whose spadix holds a watching eye, a few closed buds, and
-// leafy tentacle vines that stretch toward the hero once he nears the big tree.
+// Hill island in the left lake carrying a calla bush: a cream spathe whose
+// spadix holds a watching eye, a few closed buds and long grass blades. The
+// closer the hero comes, the harder the whole bush bends and stretches to him.
 //
 // The island runs off the left edge of the playfield (its left part sits under
-// the frame) and wears the same surface as the right-side ground: ragged rim,
-// ferns, spike bushes, grass tufts, mushrooms and stones.
+// the frame) and is the same mossy boulder hill as the one right of the tree,
+// mirrored: a flat crest under the frame, then a long slope that slides into
+// the lake instead of a cut bank.
 //
-const ISLAND_W = 250
+const ISLAND_W = 360
 const ISLAND_OFFSCREEN_W = 80
-const ISLAND_ABOVE_WATER = 18
-const ISLAND_BELOW_WATER = 22
-const ISLAND_TOP_STEP = 10
-const ISLAND_TOP_JITTER = 0.8
-const ISLAND_BOTTOM_STEP = 22
-const ISLAND_BOTTOM_JITTER = 4
-const ISLAND_BOTTOM_INSET = 14
+const ISLAND_ABOVE_WATER = 28
+const ISLAND_BELOW_WATER = 30
+const ISLAND_PLATEAU_FRAC = 0.58
 //
-// Only the right end meets open water, so only it rounds down into the lake
-// (outside the collider span, so the hero never hovers over it).
+// Walkable span ends once the slope has dropped this far below the crest, so
+// the hero never hovers over the descending bank.
 //
-const ISLAND_SHOULDER_W = 26
-const ISLAND_SHOULDER_DROP = 10
-const ISLAND_STRATA_COUNT = 3
-const ISLAND_STRATA_H = 2
-const ISLAND_STRATA_JITTER = 3
-const ISLAND_CONTOUR_W = 2
+const ISLAND_WALK_DROP = 4
+const ISLAND_SAMPLE_STEP = 2
 const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v5'
+const ISLAND_BAKE_KEY = 'v7'
+//
+// Moss, tufts and plants stop above the lake surface; submerged stones may go lower.
+//
+const ISLAND_GREENERY_ABOVE_WATER = 12
 //
 // Surface dressing, placed by offset from the lake's left edge (negative = under
 // the frame). Same painters and colours as the forest floor right of the tree.
@@ -58,13 +55,6 @@ const ISLAND_PLANTS = [
   { kind: KIND.MUSHROOMS, dx: 128 },
   { kind: KIND.PLUME, dx: 138, size: 30 }
 ]
-const ISLAND_STONES = [
-  { dx: 62, rx: 9, ry: 6 },
-  { dx: 96, rx: 5, ry: 3.5 },
-  { dx: 140, rx: 11, ry: 7 }
-]
-const ISLAND_STONE_SINK = 0.35
-const ISLAND_STONE_LIGHT_FRAC = 0.55
 const ISLAND_TUFT_STEP = 13
 const ISLAND_TUFT_CHANCE = 0.55
 //
@@ -91,23 +81,34 @@ const PREDATOR_CLEAR_X = 28
 const PLANT_BASE_DX = ISLAND_OFFSCREEN_W + 44
 const PLANT_BASE_SINK = 2
 //
-// Stem: IK chain that rests as an arch drooping toward the lake and leans
-// its head toward the hero while the flower is open.
+// Whole bush leans toward the hero as he approaches (0 = standing like an
+// ordinary plant, 1 = stretched almost to him). Distances are from the plant
+// root to the hero; the lean eases in over time so it never snaps.
 //
-const STEM_SEGMENTS = 9
+const LEAN_FAR = 1300
+const LEAN_NEAR = 600
+const LEAN_SPEED = 0.7
+//
+// Stretched blades and the stem bow upward over the water: each is a circular
+// arc whose chord points at its target and whose half-turn is this angle.
+//
+const LEAN_ARC_HALF = 0.42
+const LEAN_MIN_LEN_FRAC = 0.6
+//
+// Nothing stretches past this gap short of the big tree.
+//
+const REACH_TREE_GAP = 70
+//
+// Stem: an arc drooping toward the lake at rest; leaning, it stretches so the
+// flower head stops just short of the hero (spathe + eye + a small gap).
+//
+const STEM_SEGMENTS = 14
 const STEM_LEN = 156
 const STEM_REST_BEND = 2
 const STEM_BEND_POW = 1.6
 const STEM_SWAY_AMP = 0.08
 const STEM_SWAY_SPEED = 0.9
-const STEM_STIFFNESS = 0.35
-const STEM_LEAN_MAX = 30
-const STEM_OPEN_LIFT = 10
-//
-// Head target never gets farther than this from the root, so the IK keeps
-// the stem bowed instead of pulling it into a straight pole.
-//
-const STEM_CHORD_MAX_FRAC = 0.8
+const STEM_HERO_GAP = 104
 const STEM_W_BASE = 6
 const STEM_W_TIP = 4
 const CONTOUR_PAD = 2
@@ -171,66 +172,39 @@ const BUD_SWAY_SPEED = 1
 const BUD_STEM_W_BASE = 4
 const BUD_STEM_W_TIP = 3
 //
-// Tentacle vines rooted around the stem. They grow while the hero is left of
-// `reachTriggerX + TENTACLE_TRIGGER_FADE` and straighten toward him, almost
-// all the way to the big tree (their tips stop TENTACLE_TREE_GAP short of it).
+// Buds turn only part of the way toward the hero.
 //
-const TENTACLES = [
-  { dx: -8, angle: -2.3, curl: 0.9, restLen: 90, phase: 0, targetDy: -8, arch: 1.25 },
-  { dx: 4, angle: -1.25, curl: 1.1, restLen: 110, phase: 1.7, targetDy: 0, arch: 0.8 },
-  { dx: 10, angle: -0.6, curl: 1.3, restLen: 80, phase: 3.1, targetDy: 8, arch: 1 }
+const BUD_LEAN_FOLLOW = 0.3
+//
+// Long grass-like blades of the bush. `follow` is how far a blade turns toward
+// the hero at full lean (back blades on the far side barely move), `reach` the
+// share of the root-to-hero distance it stretches over.
+//
+const BLADES = [
+  { dx: -14, angle: -2.55, len: 70, w: 9, phase: 0.4, follow: 0.25, reach: 0.18 },
+  { dx: -9, angle: -2.2, len: 92, w: 10, phase: 1.3, follow: 0.45, reach: 0.3 },
+  { dx: -5, angle: -1.9, len: 64, w: 8, phase: 2.2, follow: 0.6, reach: 0.38 },
+  { dx: -2, angle: -1.65, len: 104, w: 10, phase: 0.2, follow: 0.75, reach: 0.5 },
+  { dx: 2, angle: -1.4, len: 96, w: 11, phase: 0.9, follow: 0.9, reach: 0.62 },
+  { dx: 5, angle: -1.15, len: 84, w: 10, phase: 2.8, follow: 1, reach: 0.72 },
+  { dx: 8, angle: -0.9, len: 76, w: 9, phase: 1.9, follow: 1, reach: 0.58 },
+  { dx: 11, angle: -0.6, len: 58, w: 8, phase: 3.4, follow: 0.85, reach: 0.42 }
 ]
-const TENTACLE_SEGMENTS = 24
-const TENTACLE_TREE_GAP = 70
-const TENTACLE_MAX_LEN_SLACK = 1.15
-const TENTACLE_HERO_GAP = 18
-const TENTACLE_TRIGGER_FADE = 220
-const TENTACLE_GROW_SPEED = 260
-const TENTACLE_SHRINK_SPEED = 320
-const TENTACLE_STIFF_IDLE = 0.3
-const TENTACLE_STIFF_REACH = 0.04
-const TENTACLE_SWAY_AMP = 0.08
-const TENTACLE_SWAY_SPEED = 1.1
-const TENTACLE_WAVE_AMP = 9
-const TENTACLE_WAVE_SPEED = 2.4
-const TENTACLE_WAVE_K = 0.45
-const TENTACLE_WAVE_IDLE = 0.2
+const BLADE_SEGMENTS = 14
+const BLADE_REST_BEND = 0.35
+const BLADE_SWAY_AMP = 0.05
+const BLADE_SWAY_SPEED = 1.3
 //
-// Reaching vines bow upward over the water (fraction of the vine length).
+// Blade width profile: narrow at the root, widest near 40 %, pointed tip.
 //
-const TENTACLE_ARCH_FRAC = 0.1
-const TENTACLE_W_BASE = 6
-const TENTACLE_W_TIP = 1.6
-const TENTACLE_WATER_CLEAR = 3
-const TENTACLE_LEAF_FROM = 2
-const TENTACLE_LEAF_EVERY = 2
-const TENTACLE_LEAF_LEN = 16
-const TENTACLE_LEAF_TAPER = 0.4
-const TENTACLE_LEAF_ANGLE = 0.85
+const BLADE_ROOT_PHASE = 0.15
+const BLADE_TIP_PHASE = 0.98
+const BLADE_MIDRIB_FRAC = 0.35
 //
-// Tall lanceolate leaves rising from the base (plus the ones along the vines).
+// Whisper grows steadily as the hero approaches the plant root.
 //
-const ROSETTE = [
-  { angle: -2.6, len: 62, phase: 0.4 },
-  { angle: -2.15, len: 84, phase: 1.3 },
-  { angle: -1.85, len: 58, phase: 2.2 },
-  { angle: -1.35, len: 92, phase: 0.9 },
-  { angle: -1, len: 74, phase: 2.8 },
-  { angle: -0.6, len: 56, phase: 1.9 }
-]
-const ROSETTE_SWAY_AMP = 0.05
-const ROSETTE_SWAY_SPEED = 1.3
-const LEAF_WIDTH_FRAC = 1.05
-const LEAF_SHAPE = [[0, 0], [0.3, -0.16], [0.6, -0.18], [0.85, -0.1], [1, 0], [0.8, 0.07], [0.5, 0.1], [0.25, 0.08]]
-const LEAF_LIGHT_SHAPE = [[0.04, -0.02], [0.3, -0.13], [0.6, -0.15], [0.85, -0.08], [0.96, -0.01]]
-//
-// Whisper: the flower head alone only reaches HEAD_WHISPER_PEAK; the loop
-// is loudest when a vine tip actually touches the hero.
-//
-const WHISPER_RADIUS = 950
-const HEAD_WHISPER_PEAK = 0.6
-const TOUCH_WHISPER_NEAR = TENTACLE_HERO_GAP + 8
-const TOUCH_WHISPER_FAR = 280
+const WHISPER_FAR = 1400
+const WHISPER_NEAR = 450
 
 /**
  * Creates the island, its walkable collider and the eye-flower plant.
@@ -238,7 +212,7 @@ const TOUCH_WHISPER_FAR = 280
  * @param {Object} cfg.k - Kaplay inst
  * @param {number} cfg.x - Island centre X (see islandWorldX)
  * @param {number} cfg.waterY - Lake surface Y at rest
- * @param {number} cfg.reachTriggerX - Big tree X: hero left of it makes tentacles reach, tips stop just short of it
+ * @param {number} cfg.reachTriggerX - Big tree X: stretched blades and the flower head never pass just short of it
  * @param {function(): ({x: number, y: number}|null)} cfg.getHeroPos - Hero body centre
  * @param {function(): boolean} cfg.isVisible - True while the island exists (colour world + lake)
  * @returns {Object} Eye-flower inst
@@ -248,11 +222,20 @@ export function create(cfg) {
   const x1 = x - ISLAND_W * 0.5
   const x2 = x1 + ISLAND_W
   const topY = waterY - ISLAND_ABOVE_WATER
+  const hill = {
+    x1,
+    x2,
+    floorY: waterY + ISLAND_BELOW_WATER,
+    height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
+    peakLeft: true,
+    plateau: ISLAND_PLATEAU_FRAC
+  }
+  const walkX2 = hillXWhereTopReaches(hill, topY + ISLAND_WALK_DROP)
   const baseX = x1 + PLANT_BASE_DX
-  const baseY = topY + PLANT_BASE_SINK
-  const reachLimitX = cfg.reachTriggerX - TENTACLE_TREE_GAP
+  const baseY = mossyHillTopY(hill, baseX) + PLANT_BASE_SINK
+  const reachLimitX = cfg.reachTriggerX - REACH_TREE_GAP
   const collider = k.add([
-    k.rect(ISLAND_W - ISLAND_SHOULDER_W, COLLIDER_H),
+    k.rect(walkX2 - x1, COLLIDER_H),
     k.pos(COLLIDER_HIDE_POS, COLLIDER_HIDE_POS),
     k.area(),
     k.body({ isStatic: true }),
@@ -266,27 +249,27 @@ export function create(cfg) {
     x2,
     waterY,
     topY,
+    hill,
+    walkX2,
+    shoreX: hillXWhereTopReaches(hill, waterY),
     baseX,
     baseY,
     collider,
-    reachTriggerX: cfg.reachTriggerX,
     reachLimitX,
     getHeroPos: cfg.getHeroPos,
     isVisible: cfg.isVisible,
     visible: false,
     open: 0,
-    stem: IkChain.create({ segments: STEM_SEGMENTS, segLen: STEM_LEN / STEM_SEGMENTS, x: baseX, y: baseY }),
-    stemRest: makePoints(STEM_SEGMENTS + 1),
+    lean: 0,
+    stemPts: makePoints(STEM_SEGMENTS + 1),
     eyeStalk: IkChain.create({ segments: EYE_STALK_SEGMENTS, segLen: EYE_HIDDEN_EXT / EYE_STALK_SEGMENTS, x: baseX, y: baseY }),
     eyeRest: makePoints(EYE_STALK_SEGMENTS + 1),
     head: { x: baseX, y: baseY - STEM_LEN, axis: 0, eyeOut: 0 },
     buds: BUDS.map(bud => ({ ...bud, pts: makePoints(BUD_SEGMENTS + 1) })),
-    tentacles: TENTACLES.map(t => createTentacle(t, baseX, baseY, reachLimitX)),
+    blades: BLADES.map(blade => ({ ...blade, pts: makePoints(BLADE_SEGMENTS + 1) })),
     colors: buildColors(k),
     lipPts: makePoints(LIP_PATH.length),
     hookPts: makePoints(HOOK_PATH.length),
-    leafIdx: fanIndices(LEAF_SHAPE.length),
-    leafLightIdx: fanIndices(LEAF_LIGHT_SHAPE.length),
     spatheIdx: fanIndices(SPATHE_SHAPE.length),
     throatIdx: fanIndices(THROAT_SHAPE.length),
     batch: PolyBatch.create()
@@ -331,7 +314,7 @@ export function islandWorldX(lakeX1) {
  */
 export function predatorMinX(inst) {
   if (!inst?.visible) return null
-  return inst.x2 + PREDATOR_CLEAR_X
+  return inst.shoreX + PREDATOR_CLEAR_X
 }
 
 /**
@@ -343,13 +326,13 @@ export function predatorMinX(inst) {
  */
 export function isOnIsland(inst, footX, footY) {
   if (!inst?.visible) return false
-  if (footX < inst.x1 - STAND_X_SLACK || footX > inst.x2 - ISLAND_SHOULDER_W + STAND_X_SLACK) return false
+  if (footX < inst.x1 - STAND_X_SLACK || footX > inst.walkX2 + STAND_X_SLACK) return false
   return footY >= inst.topY - STAND_ABOVE && footY <= inst.topY + STAND_BELOW
 }
 
 /**
- * 0..1 whisper loudness for a hero at (x, y): grows near the flower head and
- * peaks when a reaching vine tip touches him.
+ * 0..1 whisper loudness for a hero at (x, y): rises steadily as he walks
+ * toward the plant and is loudest right beside it.
  * @param {Object|null} inst - Eye-flower inst
  * @param {number} x - World X
  * @param {number} y - World Y
@@ -357,13 +340,11 @@ export function isOnIsland(inst, footX, footY) {
  */
 export function whisperProximity(inst, x, y) {
   if (!inst?.visible) return 0
-  const d = Math.hypot(x - inst.head.x, y - inst.head.y)
-  const head = Math.max(0, 1 - d / WHISPER_RADIUS) * HEAD_WHISPER_PEAK
-  return inst.tentacles.reduce((loudest, tentacle) => Math.max(loudest, tentacleTouch(tentacle, x, y)), head)
+  return smoothstep(WHISPER_FAR, WHISPER_NEAR, Math.hypot(x - inst.baseX, y - inst.baseY))
 }
 
 //
-// Shows / hides the island, then animates stem, eye, buds and tentacles.
+// Shows / hides the island, then leans the bush and animates stem, eye and buds.
 //
 function onUpdate(inst) {
   inst.visible = inst.isVisible()
@@ -373,38 +354,26 @@ function onUpdate(inst) {
   const dt = inst.k.dt()
   const t = inst.k.time()
   const hero = inst.getHeroPos()
+  const heroDist = hero ? Math.hypot(hero.x - inst.baseX, hero.y - inst.baseY) : Infinity
+  inst.lean = approach(inst.lean, smoothstep(LEAN_FAR, LEAN_NEAR, heroDist), LEAN_SPEED * dt)
   const headDist = hero ? Math.hypot(hero.x - inst.head.x, hero.y - inst.head.y) : Infinity
-  const openTarget = smoothstep(OPEN_FAR, OPEN_NEAR, headDist)
-  inst.open = approach(inst.open, openTarget, OPEN_SPEED * dt)
+  inst.open = approach(inst.open, smoothstep(OPEN_FAR, OPEN_NEAR, headDist), OPEN_SPEED * dt)
   updateStem(inst, hero, t)
   updateEyeStalk(inst, hero)
-  inst.buds.forEach(bud => updateBud(inst, bud, t))
-  inst.tentacles.forEach(tentacle => updateTentacle(inst, tentacle, hero, t, dt))
+  inst.buds.forEach(bud => updateBud(inst, bud, hero, t))
+  inst.blades.forEach(blade => updateBlade(inst, blade, hero, t))
 }
 
+//
+// Drooping rest arc blended with an upward-bowed arc whose tip stops just
+// short of the hero, so the flower head reaches out to him.
+//
 function updateStem(inst, hero, t) {
-  const bend = STEM_REST_BEND + Math.sin(t * STEM_SWAY_SPEED) * STEM_SWAY_AMP
-  const segLen = inst.stem.segLen
-  fillArc(inst.stemRest, inst.baseX, inst.baseY, -Math.PI / 2, bend, STEM_BEND_POW, segLen)
-  const restTip = inst.stemRest[STEM_SEGMENTS]
-  let tx = restTip.x
-  let ty = restTip.y
-  if (hero && inst.open > 0) {
-    const dx = hero.x - restTip.x
-    const dy = hero.y - restTip.y
-    const d = Math.max(Math.hypot(dx, dy), 1)
-    const lean = Math.min(d, STEM_LEAN_MAX)
-    tx += (dx / d) * lean * inst.open
-    ty += (dy / d) * lean * inst.open - STEM_OPEN_LIFT * inst.open
-  }
-  const chord = Math.hypot(tx - inst.baseX, ty - inst.baseY)
-  const chordMax = STEM_LEN * STEM_CHORD_MAX_FRAC
-  if (chord > chordMax) {
-    tx = inst.baseX + (tx - inst.baseX) * chordMax / chord
-    ty = inst.baseY + (ty - inst.baseY) * chordMax / chord
-  }
-  IkChain.solve(inst.stem, inst.baseX, inst.baseY, tx, ty, { rest: inst.stemRest, stiffness: STEM_STIFFNESS })
-  const pts = inst.stem.pts
+  const sway = Math.sin(t * STEM_SWAY_SPEED) * STEM_SWAY_AMP
+  const rest = { angle: -Math.PI / 2, bend: STEM_REST_BEND + sway, len: STEM_LEN, pow: STEM_BEND_POW }
+  const pose = blendArc(rest, leanArc(inst, hero, inst.baseX, inst.baseY, 1, STEM_HERO_GAP, STEM_LEN * LEAN_MIN_LEN_FRAC), inst.lean)
+  fillArc(inst.stemPts, inst.baseX, inst.baseY, pose.angle, pose.bend, pose.pow, pose.len / STEM_SEGMENTS)
+  const pts = inst.stemPts
   const tip = pts[STEM_SEGMENTS]
   const prev = pts[STEM_SEGMENTS - 1]
   const stemAngle = Math.atan2(tip.y - prev.y, tip.x - prev.x)
@@ -434,100 +403,67 @@ function updateEyeStalk(inst, hero) {
   })
 }
 
-function updateBud(inst, bud, t) {
+function updateBud(inst, bud, hero, t) {
+  const rootX = inst.baseX + bud.dx
   const sway = Math.sin(t * BUD_SWAY_SPEED + bud.phase) * BUD_SWAY_AMP
-  fillArc(bud.pts, inst.baseX + bud.dx, inst.baseY, bud.angle + sway, bud.bend, BUD_BEND_POW, bud.len / BUD_SEGMENTS)
+  const heroAngle = hero ? Math.atan2(hero.y - inst.baseY, hero.x - rootX) : bud.angle
+  const angle = bud.angle + sway + angleDelta(bud.angle, heroAngle) * inst.lean * BUD_LEAN_FOLLOW
+  fillArc(bud.pts, rootX, inst.baseY, angle, bud.bend, BUD_BEND_POW, bud.len / BUD_SEGMENTS)
 }
 
 //
-// Grows the vine toward the hero while he is left of the big tree, otherwise
-// curls it back into its resting arc. Tips never pass the tree.
+// Grass blade: a slightly curved rest pose blended toward a bowed arc that
+// stretches over its share of the way to the hero.
 //
-function updateTentacle(inst, tentacle, hero, t, dt) {
-  const rootX = inst.baseX + tentacle.dx
-  const rootY = inst.baseY
-  const act = hero ? smoothstep(inst.reachTriggerX + TENTACLE_TRIGGER_FADE, inst.reachTriggerX, hero.x) : 0
-  tentacle.act = act
-  let targetLen = tentacle.restLen
-  if (hero && act > 0) {
-    const heroDist = Math.hypot(hero.x - rootX, hero.y + tentacle.targetDy - rootY) - TENTACLE_HERO_GAP
-    const reach = Math.min(tentacle.maxLen, Math.max(tentacle.restLen, heroDist))
-    targetLen = tentacle.restLen + (reach - tentacle.restLen) * act
+function updateBlade(inst, blade, hero, t) {
+  const rootX = inst.baseX + blade.dx
+  const sway = Math.sin(t * BLADE_SWAY_SPEED + blade.phase) * BLADE_SWAY_AMP
+  const rest = { angle: blade.angle + sway, bend: BLADE_REST_BEND * Math.sign(Math.cos(blade.angle)), len: blade.len, pow: 1 }
+  const pose = blendArc(rest, leanArc(inst, hero, rootX, inst.baseY, blade.reach, 0, blade.len * LEAN_MIN_LEN_FRAC), inst.lean * blade.follow)
+  fillArc(blade.pts, rootX, inst.baseY, pose.angle, pose.bend, pose.pow, pose.len / BLADE_SEGMENTS)
+}
+
+//
+// Arc from the root toward the hero, ending `share` of the way there minus
+// `gap` (never past the big tree, never shorter than `minReach`). The bow
+// always rises over the chord.
+//
+function leanArc(inst, hero, rootX, rootY, share, gap, minReach) {
+  if (!hero) return null
+  const dx = hero.x - rootX
+  const dy = hero.y - rootY
+  const dist = Math.max(Math.hypot(dx, dy), 1)
+  let reach = dist * share - gap
+  if (dx > 0) reach = Math.min(reach, (inst.reachLimitX - rootX) * dist / dx)
+  reach = Math.max(minReach, reach)
+  const aim = Math.atan2(dy, dx)
+  const side = Math.cos(aim) >= 0 ? 1 : -1
+  return {
+    angle: aim - side * LEAN_ARC_HALF,
+    bend: side * LEAN_ARC_HALF * 2,
+    len: reach * LEAN_ARC_HALF / Math.sin(LEAN_ARC_HALF),
+    pow: 1
   }
-  const speed = targetLen > tentacle.len ? TENTACLE_GROW_SPEED : TENTACLE_SHRINK_SPEED
-  tentacle.len = approach(tentacle.len, targetLen, speed * dt)
-  const segLen = tentacle.len / TENTACLE_SEGMENTS
-  IkChain.setSegLen(tentacle.chain, segLen)
-  const angle = tentacle.angle + Math.sin(t * TENTACLE_SWAY_SPEED + tentacle.phase) * TENTACLE_SWAY_AMP
-  fillArc(tentacle.rest, rootX, rootY, angle, tentacle.curl, 1, segLen)
-  const restTip = tentacle.rest[TENTACLE_SEGMENTS]
-  const tx = hero ? Math.min(inst.reachLimitX, restTip.x + (hero.x - restTip.x) * act) : restTip.x
-  const ty = hero ? restTip.y + (hero.y + tentacle.targetDy - restTip.y) * act : restTip.y
-  IkChain.solve(tentacle.chain, rootX, rootY, tx, ty, {
-    rest: tentacle.rest,
-    stiffness: TENTACLE_STIFF_IDLE + (TENTACLE_STIFF_REACH - TENTACLE_STIFF_IDLE) * act
-  })
-  applyTentacleWave(inst, tentacle, t)
 }
 
-//
-// Sideways travelling wave plus an upward bow on top of the IK pose (both
-// grow while reaching); the drawn vine never dips into the water.
-//
-function applyTentacleWave(inst, tentacle, t) {
-  const pts = tentacle.chain.pts
-  const amp = TENTACLE_WAVE_AMP * (TENTACLE_WAVE_IDLE + (1 - TENTACLE_WAVE_IDLE) * tentacle.act)
-  const arch = tentacle.len * TENTACLE_ARCH_FRAC * tentacle.arch * tentacle.act
-  const maxY = inst.waterY - TENTACLE_WATER_CLEAR
-  pts.forEach((p, i) => {
-    const out = tentacle.draw[i]
-    const a = pts[Math.max(0, i - 1)]
-    const b = pts[Math.min(pts.length - 1, i + 1)]
-    const dx = b.x - a.x
-    const dy = b.y - a.y
-    const d = Math.max(Math.hypot(dx, dy), 1e-6)
-    const u = i / TENTACLE_SEGMENTS
-    const off = Math.sin(t * TENTACLE_WAVE_SPEED + i * TENTACLE_WAVE_K + tentacle.phase) * amp * u
-    out.x = p.x - (dy / d) * off
-    out.y = Math.min(maxY, p.y + (dx / d) * off - Math.sin(Math.PI * u) * arch)
-  })
-}
-
-//
-// 0..1 closeness of a reaching vine tip to the hero (1 = touching him).
-//
-function tentacleTouch(tentacle, x, y) {
-  if (!tentacle.act) return 0
-  const tip = tentacle.draw[TENTACLE_SEGMENTS]
-  const d = Math.hypot(tip.x - x, tip.y - (y + tentacle.targetDy))
-  return tentacle.act * smoothstep(TOUCH_WHISPER_FAR, TOUCH_WHISPER_NEAR, d)
+function blendArc(rest, lean, amount) {
+  if (!lean || amount <= 0) return rest
+  return {
+    angle: rest.angle + angleDelta(rest.angle, lean.angle) * amount,
+    bend: rest.bend + (lean.bend - rest.bend) * amount,
+    len: rest.len + (lean.len - rest.len) * amount,
+    pow: rest.pow + (lean.pow - rest.pow) * amount
+  }
 }
 
 function onDraw(inst) {
   if (!inst.visible) return
-  const t = inst.k.time()
   const { batch, colors: c } = inst
-  inst.tentacles.forEach(tentacle => addTentacle(inst, tentacle))
-  ROSETTE.forEach(leaf => {
-    const angle = leaf.angle + Math.sin(t * ROSETTE_SWAY_SPEED + leaf.phase) * ROSETTE_SWAY_AMP
-    addLeaf(inst, inst.baseX, inst.baseY, angle, leaf.len)
-  })
   inst.buds.forEach(bud => addBud(inst, bud))
-  addTaperedPath(batch, inst.stem.pts, STEM_W_BASE, STEM_W_TIP, c.contour, c.stem)
+  inst.blades.forEach(blade => addBlade(inst, blade))
+  addTaperedPath(batch, inst.stemPts, STEM_W_BASE, STEM_W_TIP, c.contour, c.stem)
   addFlower(inst)
   PolyBatch.flush(batch, inst.k)
-}
-
-function addTentacle(inst, tentacle) {
-  const c = inst.colors
-  addTaperedPath(inst.batch, tentacle.draw, TENTACLE_W_BASE, TENTACLE_W_TIP, c.contour, c.vine)
-  const pts = tentacle.draw
-  for (let i = TENTACLE_LEAF_FROM; i < pts.length - 1; i += TENTACLE_LEAF_EVERY) {
-    const segAngle = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x)
-    const side = (i / TENTACLE_LEAF_EVERY) % 2 === 0 ? 1 : -1
-    const len = TENTACLE_LEAF_LEN * (1 - TENTACLE_LEAF_TAPER * i / TENTACLE_SEGMENTS)
-    addLeaf(inst, pts[i].x, pts[i].y, segAngle + side * TENTACLE_LEAF_ANGLE, len)
-  }
 }
 
 //
@@ -596,17 +532,23 @@ function addEye(inst) {
 }
 
 //
-// Lanceolate leaf: contour, body, then a lit upper half.
+// Blade with a leaf-shaped width profile: contour, body, then a lit midrib.
 //
-function addLeaf(inst, x, y, angle, len) {
+function addBlade(inst, blade) {
   const { colors: c, batch } = inst
-  const cos = Math.cos(angle)
-  const sin = Math.sin(angle)
-  const w = len * LEAF_WIDTH_FRAC
-  PolyBatch.addShape(batch, LEAF_SHAPE, inst.leafIdx, x - cos * CONTOUR_PAD * 0.5, y - sin * CONTOUR_PAD * 0.5,
-    len + CONTOUR_PAD, w + CONTOUR_PAD * 2, cos, sin, c.contour)
-  PolyBatch.addShape(batch, LEAF_SHAPE, inst.leafIdx, x, y, len, w, cos, sin, c.leaf)
-  PolyBatch.addShape(batch, LEAF_LIGHT_SHAPE, inst.leafLightIdx, x, y, len, w, cos, sin, c.leafLight)
+  addBladePass(batch, blade.pts, blade.w + CONTOUR_PAD, c.contour)
+  addBladePass(batch, blade.pts, blade.w, c.leaf)
+  addBladePass(batch, blade.pts, blade.w * BLADE_MIDRIB_FRAC, c.leafLight)
+}
+
+function addBladePass(batch, pts, wMax, color) {
+  const last = pts.length - 1
+  for (let i = 0; i < last; i++) {
+    const u = (i + 0.5) / last
+    const w = wMax * Math.sin(Math.PI * (BLADE_ROOT_PHASE + (BLADE_TIP_PHASE - BLADE_ROOT_PHASE) * u))
+    PolyBatch.addLine(batch, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, w, color)
+    PolyBatch.addDisc(batch, pts[i + 1].x, pts[i + 1].y, w * 0.5, color)
+  }
 }
 
 //
@@ -653,104 +595,65 @@ function drawIsland(inst) {
 }
 
 function islandBounds(inst) {
+  const hillBounds = mossyHillBounds(inst.hill, ISLAND_DECOR_UP)
   return {
-    x1: inst.x1 - ISLAND_BAKE_PAD,
-    y1: inst.topY - ISLAND_DECOR_UP,
-    x2: inst.x2 + ISLAND_BAKE_PAD,
-    y2: inst.waterY + ISLAND_BELOW_WATER + ISLAND_BAKE_PAD
+    x1: hillBounds.x1 - ISLAND_BAKE_PAD,
+    y1: hillBounds.y1,
+    x2: hillBounds.x2 + ISLAND_BAKE_PAD,
+    y2: hillBounds.y2 + ISLAND_BAKE_PAD
   }
 }
 
 //
-// Earth body with strata and a contour, then the forest-floor surface on
-// its flat top: rim, stones, spike bushes, tufts, ferns and mushrooms.
+// Mossy boulder hill (same painter and colours as the hill right of the tree),
+// then plumes, tufts, ferns and mushrooms rooted on its top line.
 //
 function paintIsland(ctx, inst) {
   const rng = createSeededRandom(ISLAND_BAKE_SEED)
   const colors = forestFloorPainterColors()
-  paintIslandBody(ctx, inst, rng)
-  const walkX2 = inst.x2 - ISLAND_SHOULDER_W
-  drawGroundRimToCanvas(ctx, { x1: inst.x1, x2: walkX2, floorY: inst.topY, rng, colors: colors.rim })
-  const lakeX1 = inst.x1 + ISLAND_OFFSCREEN_W
-  ISLAND_STONES.forEach(stone => paintIslandStone(ctx, lakeX1 + stone.dx, inst.topY, stone, colors.hill))
-  ISLAND_PLANTS.filter(p => p.kind === KIND.PLUME).forEach(p => {
-    drawFeatherPlumeToCanvas(ctx, { x: lakeX1 + p.dx, baseY: inst.topY, height: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.plume })
+  const greeneryMaxY = inst.waterY - ISLAND_GREENERY_ABOVE_WATER
+  const rootY = x => mossyHillTopY(inst.hill, x)
+  const dryRootY = x => {
+    const y = rootY(x)
+    return y < greeneryMaxY ? y : null
+  }
+  drawMossyHillToCanvas(ctx, {
+    hill: inst.hill,
+    rng,
+    colors: colors.hill,
+    greeneryMaxY
   })
-  for (let x = inst.x1 + ISLAND_TUFT_STEP; x < walkX2; x += ISLAND_TUFT_STEP) {
-    rng() < ISLAND_TUFT_CHANCE && drawGrassTuftToCanvas(ctx, { x, baseY: inst.topY, rng, colors: colors.tuft })
+  const lakeX1 = inst.x1 + ISLAND_OFFSCREEN_W
+  ISLAND_PLANTS.filter(p => p.kind === KIND.PLUME).forEach(p => {
+    const baseY = dryRootY(lakeX1 + p.dx)
+    baseY != null &&
+      drawFeatherPlumeToCanvas(ctx, { x: lakeX1 + p.dx, baseY, height: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.plume })
+  })
+  for (let x = inst.x1 + ISLAND_TUFT_STEP; x < inst.walkX2; x += ISLAND_TUFT_STEP) {
+    const baseY = dryRootY(x)
+    baseY != null && rng() < ISLAND_TUFT_CHANCE &&
+      drawGrassTuftToCanvas(ctx, { x, baseY, rng, colors: colors.tuft })
   }
   ISLAND_PLANTS.filter(p => p.kind === KIND.FERN).forEach(p => {
-    drawFernToCanvas(ctx, { x: lakeX1 + p.dx, baseY: inst.topY, size: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.fern })
+    const baseY = dryRootY(lakeX1 + p.dx)
+    baseY != null &&
+      drawFernToCanvas(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.fern })
   })
   ISLAND_PLANTS.filter(p => p.kind === KIND.MUSHROOMS).forEach(p => {
-    drawSmallMushroomGroupToCanvas(ctx, { x: lakeX1 + p.dx, baseY: inst.topY, rng: createSeededRandom(nextSeed(rng)), colors: colors.mushroom })
+    const baseY = dryRootY(lakeX1 + p.dx)
+    baseY != null &&
+      drawSmallMushroomGroupToCanvas(ctx, { x: lakeX1 + p.dx, baseY, rng: createSeededRandom(nextSeed(rng)), colors: colors.mushroom })
   })
 }
 
 //
-// Flat top, rounded right shoulder into the water, ragged bottom (hidden
-// under the lake). The left end is cut square — it sits under the frame.
+// First X (walking right from the crest) where the hill top sinks to `y`.
 //
-function paintIslandBody(ctx, inst, rng) {
-  const pal = GLOW_PAL.glowEyeFlower
-  const { x1, x2, topY, waterY } = inst
-  const walkX2 = x2 - ISLAND_SHOULDER_W
-  const bottomY = waterY + ISLAND_BELOW_WATER
-  ctx.beginPath()
-  ctx.moveTo(x1, topY)
-  for (let x = x1 + ISLAND_TOP_STEP; x < walkX2; x += ISLAND_TOP_STEP) ctx.lineTo(x, topY + (rng() - 0.5) * ISLAND_TOP_JITTER * 2)
-  ctx.lineTo(walkX2, topY)
-  ctx.quadraticCurveTo(x2, topY, x2, topY + ISLAND_SHOULDER_DROP)
-  ctx.lineTo(x2 - ISLAND_BOTTOM_INSET, bottomY)
-  for (let x = x2 - ISLAND_BOTTOM_INSET - ISLAND_BOTTOM_STEP; x > x1; x -= ISLAND_BOTTOM_STEP) ctx.lineTo(x, bottomY - rng() * ISLAND_BOTTOM_JITTER)
-  ctx.lineTo(x1, bottomY)
-  ctx.closePath()
-  ctx.fillStyle = pal.soil
-  ctx.fill()
-  ctx.save()
-  ctx.clip()
-  ctx.fillStyle = pal.soilDark
-  const depth = bottomY - topY
-  for (let i = 0; i < ISLAND_STRATA_COUNT; i++) {
-    const y = topY + (i + 1) * depth / (ISLAND_STRATA_COUNT + 1)
-    ctx.fillRect(x1, Math.round(y + (rng() - 0.5) * ISLAND_STRATA_JITTER), x2 - x1, ISLAND_STRATA_H)
+function hillXWhereTopReaches(hill, y) {
+  for (let x = hill.x1; x <= hill.x2; x += ISLAND_SAMPLE_STEP) {
+    if (mossyHillTopY(hill, x) >= y) return x
   }
-  ctx.restore()
-  ctx.lineWidth = ISLAND_CONTOUR_W
-  ctx.strokeStyle = pal.contour
-  ctx.stroke()
-}
-
-//
-// Half-sunk stone: contour, body, lit upper-left face.
-//
-function paintIslandStone(ctx, x, groundY, stone, colors) {
-  const y = groundY + stone.ry * ISLAND_STONE_SINK
-  ctx.beginPath()
-  ctx.ellipse(x, y, stone.rx, stone.ry, 0, Math.PI, Math.PI * 2)
-  ctx.closePath()
-  ctx.fillStyle = colors.stone
-  ctx.fill()
-  ctx.lineWidth = ISLAND_CONTOUR_W
-  ctx.strokeStyle = colors.contour
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.ellipse(x - stone.rx * 0.25, y - stone.ry * 0.35, stone.rx * ISLAND_STONE_LIGHT_FRAC, stone.ry * ISLAND_STONE_LIGHT_FRAC * 0.6, 0, 0, Math.PI * 2)
-  ctx.fillStyle = colors.stoneLight
-  ctx.fill()
-}
-
-function createTentacle(t, baseX, baseY, reachLimitX) {
-  const rootX = baseX + t.dx
-  return {
-    ...t,
-    len: t.restLen,
-    maxLen: Math.max(t.restLen, (reachLimitX - rootX) * TENTACLE_MAX_LEN_SLACK),
-    act: 0,
-    chain: IkChain.create({ segments: TENTACLE_SEGMENTS, segLen: t.restLen / TENTACLE_SEGMENTS, x: rootX, y: baseY, angle: t.angle }),
-    rest: makePoints(TENTACLE_SEGMENTS + 1),
-    draw: makePoints(TENTACLE_SEGMENTS + 1)
-  }
+  return hill.x2
 }
 
 //
@@ -770,7 +673,7 @@ function fillArc(out, x, y, angle, bend, pow, segLen) {
 
 function buildColors(k) {
   const pal = GLOW_PAL.glowEyeFlower
-  const keys = ['contour', 'petal', 'petalShade', 'petalInner', 'spadix', 'spadixDark', 'sclera', 'iris', 'pupil', 'stem', 'vine', 'leaf', 'leafLight']
+  const keys = ['contour', 'petal', 'petalShade', 'petalInner', 'spadix', 'spadixDark', 'sclera', 'iris', 'pupil', 'stem', 'leaf', 'leafLight']
   return Object.fromEntries(keys.map(key => [key, kaplayRgb(k, pal[key])]))
 }
 

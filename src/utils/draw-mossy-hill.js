@@ -4,7 +4,9 @@
 // tops (thick in places, torn open in others so bare stone shows through),
 // and low round-leaf clover grows along the foot. The slope climbs from the
 // left foot to its highest point at hill.x2, so the hill can lean against a
-// wall. Plants on top are left to the caller (mossyHillTopY roots them).
+// wall (hill.peakLeft mirrors that). An optional flat crest (hill.plateau)
+// keeps a walkable top. Plants on top are left to the caller (mossyHillTopY
+// roots them).
 //
 const HILL_SHAPE_POW = 2.1
 const HILL_OUTLINE_STEP = 3
@@ -67,7 +69,7 @@ const HILL_BOUNDS_PAD = 8
  * Paints the boulder heap, its moss blanket and the clover at its foot.
  * @param {CanvasRenderingContext2D} ctx
  * @param {Object} opts
- * @param {Object} opts.hill - { x1, x2, floorY, height } footprint; peak at x2
+ * @param {Object} opts.hill - { x1, x2, floorY, height, peakLeft?, plateau? } footprint; peak at x2 (x1 when peakLeft), plateau = flat crest fraction of the width
  * @param {() => number} opts.rng - Seeded random in [0, 1)
  * @param {Object} opts.colors - Hex colours
  * @param {string} opts.colors.contour - Hill, stone and leaf contour
@@ -79,9 +81,10 @@ const HILL_BOUNDS_PAD = 8
  * @param {string} opts.colors.mid - Moss mid mass
  * @param {string} opts.colors.light - Sunlit clover
  * @param {string} opts.colors.glint - Rare bright specks
+ * @param {number} [opts.greeneryMaxY] - Moss and clover stay above this Y (lake islands)
  */
 export function drawMossyHillToCanvas(ctx, opts) {
-  const { hill, rng, colors } = opts
+  const { hill, rng, colors, greeneryMaxY } = opts
   const rocks = buildRocks(hill, rng)
   const moss = buildMossEdge(hill, rng)
   ctx.fillStyle = colors.contour
@@ -94,21 +97,25 @@ export function drawMossyHillToCanvas(ctx, opts) {
   traceProfile(ctx, hill, 0)
   ctx.fill()
   rocks.forEach(rock => paintRock(ctx, rock, rng, colors))
+  greeneryMaxY != null && ctx.save()
+  greeneryMaxY != null && clipGreeneryAbove(ctx, greeneryMaxY)
   paintMoss(ctx, hill, moss, rng, colors)
   rocks.forEach(rock => rock.patch && paintRockMossPatch(ctx, rock, rng, colors))
+  greeneryMaxY != null && ctx.restore()
   ctx.restore()
-  paintTopTufts(ctx, hill, rng, colors)
-  paintFootClover(ctx, hill, rng, colors)
+  paintTopTufts(ctx, hill, rng, colors, greeneryMaxY)
+  paintFootClover(ctx, hill, rng, colors, greeneryMaxY)
 }
 
 /**
- * Hill top line at world x; up is a smaller Y. Rises from x1 to its peak at x2.
- * @param {Object} hill - { x1, x2, floorY, height }
+ * Hill top line at world x; up is a smaller Y. Rises from the foot to the
+ * peak (x2, or x1 when peakLeft) and stays flat across the plateau.
+ * @param {Object} hill - { x1, x2, floorY, height, peakLeft?, plateau? }
  * @param {number} x - World X
  * @returns {number}
  */
 export function mossyHillTopY(hill, x) {
-  const t = Math.max(0, Math.min(1, (x - hill.x1) / (hill.x2 - hill.x1)))
+  const t = Math.max(0, Math.min(1, hillFootDistance(hill, x) / hillSlopeWidth(hill)))
   const s = 1 - Math.pow(1 - t, HILL_SHAPE_POW)
   return hill.floorY - s * hill.height
 }
@@ -128,13 +135,24 @@ export function mossyHillBounds(hill, plantPad) {
   }
 }
 //
+// Distance from the foot along the slope, and the slope's horizontal span.
+//
+function hillFootDistance(hill, x) {
+  return hill.peakLeft ? hill.x2 - x : x - hill.x1
+}
+function hillSlopeWidth(hill) {
+  return (hill.x2 - hill.x1) * (1 - (hill.plateau ?? 0))
+}
+//
 // Silhouette under the top line, grown by `grow` px for the contour pass.
+// Either end may be the tall side, so both get a vertical edge.
 //
 function traceProfile(ctx, hill, grow) {
   const { x1, x2 } = hill
   const baseY = hill.floorY + HILL_BASE_SINK
   ctx.beginPath()
   ctx.moveTo(x1 - grow, baseY)
+  ctx.lineTo(x1 - grow, mossyHillTopY(hill, x1) - grow)
   for (let x = x1; x <= x2; x += HILL_OUTLINE_STEP) ctx.lineTo(x, mossyHillTopY(hill, x) - grow)
   ctx.lineTo(x2 + grow, mossyHillTopY(hill, x2) - grow)
   ctx.lineTo(x2 + grow, baseY)
@@ -275,14 +293,14 @@ function paintRockCrack(ctx, rock, rng, colors) {
 }
 //
 // Moss thickness along the hill: two waves with random phases plus a bias
-// toward the low left slope, clamped at zero so the blanket tears open.
+// toward the low slope, clamped at zero so the blanket tears open.
 //
 function buildMossEdge(hill, rng) {
   const p1 = rng() * Math.PI * 2
   const p2 = rng() * Math.PI * 2
   const pts = []
   for (let x = hill.x1; x <= hill.x2; x += HILL_OUTLINE_STEP) {
-    const t = (x - hill.x1) / (hill.x2 - hill.x1)
+    const t = Math.min(1, hillFootDistance(hill, x) / (hill.x2 - hill.x1))
     const th = HILL_MOSS_BASE * (1 + HILL_MOSS_LEFT_BOOST * (1 - t)) +
       HILL_MOSS_WAVE_A * Math.sin(x * HILL_MOSS_WAVE_F + p1) +
       HILL_MOSS_RIPPLE_A * Math.sin(x * HILL_MOSS_RIPPLE_F + p2) * (0.5 + rng() * 0.5)
@@ -368,12 +386,22 @@ function paintRockMossPatch(ctx, rock, rng, colors) {
 //
 // Irregular clumps poking above the top line so the crest is not a clean curve.
 //
-function paintTopTufts(ctx, hill, rng, colors) {
+//
+// Keeps moss and clover above the water line on lake islands (stones may go lower).
+//
+function clipGreeneryAbove(ctx, maxY) {
+  const span = 8192
+  ctx.beginPath()
+  ctx.rect(-span, -span, span * 2, maxY + span)
+  ctx.clip()
+}
+function paintTopTufts(ctx, hill, rng, colors, greeneryMaxY = null) {
   const count = Math.round((hill.x2 - hill.x1) * HILL_TOP_TUFTS_PER_PX)
   for (let i = 0; i < count; i++) {
     const x = hill.x1 + (hill.x2 - hill.x1) * (0.04 + rng() * 0.95)
     const r = HILL_TOP_TUFT_R_MIN + rng() * HILL_TOP_TUFT_R_RANGE
     const y = mossyHillTopY(hill, x) + r * 0.2
+    if (greeneryMaxY != null && y > greeneryMaxY) continue
     const a = rng() * Math.PI * 2
     paintClover(ctx, x, y, r + HILL_CONTOUR_PX, a, colors.contour)
     paintClover(ctx, x, y, r, a, colors.shadow)
@@ -384,20 +412,23 @@ function paintTopTufts(ctx, hill, rng, colors) {
 // Low round-leaf clover growing along the hill foot; some gaps leave the
 // bottom stones visible.
 //
-function paintFootClover(ctx, hill, rng, colors) {
+function paintFootClover(ctx, hill, rng, colors, greeneryMaxY = null) {
   for (let x = hill.x1 + HILL_FOOT_STEP_MIN; x < hill.x2; x += HILL_FOOT_STEP_MIN + rng() * HILL_FOOT_STEP_RANGE) {
     if (rng() < HILL_FOOT_SKIP_CHANCE) continue
     const h = HILL_FOOT_H_MIN + rng() * HILL_FOOT_H_RANGE
     const leaves = []
     for (let i = 0; i < HILL_FOOT_LEAVES; i++) {
       const u = rng()
+      const y = hill.floorY - u * h
+      if (greeneryMaxY != null && y > greeneryMaxY) continue
       leaves.push({
         x: x + (rng() - 0.5) * h * 1.6,
-        y: hill.floorY - u * h,
+        y,
         r: HILL_FOOT_LEAF_R_MIN + rng() * HILL_FOOT_LEAF_R_RANGE,
         tone: u > 0.55 ? colors.light : (u > 0.25 ? colors.mid : colors.shadow)
       })
     }
+    if (!leaves.length) continue
     leaves.sort((a, b) => b.y - a.y)
     ctx.fillStyle = colors.contour
     leaves.forEach(leaf => {

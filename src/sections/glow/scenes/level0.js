@@ -923,7 +923,7 @@ const PIT_CAVE_HINT_TEXT = 'Something hums\nunder the cave floor.'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
-const PIT_CAVE_AIR_ABOVE_LIP = 148
+const PIT_CAVE_AIR_ABOVE_LIP = 210
 //
 // Main playfield in front of the mouth — hero stays on the normal sprite here.
 //
@@ -1030,6 +1030,10 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 // even spread across the ground.
 //
 const GRASS_Z = 20
+//
+// Pit-cave hero blit — above trampoline bake (player + 22) and forest-floor front decor.
+//
+const PIT_CAVE_HERO_FOREGROUND_Z = GRASS_Z + 14
 //
 // Colour-world forest floor: hill and cream mushrooms behind the hero (under
 // the decor mushrooms at z 7), ferns and plumes in front of him under grass.
@@ -1985,6 +1989,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       waterLayer,
       pitDrawLayer: null,
       pitCaveHeroForeground: false,
+      pitCaveTrampWasAboveCap: false,
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
       trampBundle,
       branchTrampBundle,
@@ -2241,6 +2246,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         }
       }
     ])
+    //
+    // Pit cave — hero blit after world decor (onDraw runs before the object tree).
+    //
+    k.add([
+      k.z(PIT_CAVE_HERO_FOREGROUND_Z),
+      {
+        draw() {
+          drawGlowPitCaveHeroForeground(inst)
+        }
+      }
+    ])
     await glowBootstrapPause(bootstrap, 100, session)
 }
 //
@@ -2467,7 +2483,9 @@ function isHeroInsideGlowPitCave(inst, heroX, heroY, footY = heroY + SURFACE_DET
     // the drop or airborne within the mouth column counts.
     //
     if (footY <= pit.floorY + PIT_CAVE_APPROACH_GROUND_FEET) return false
-    return footY >= pit.floorY - PIT_CAVE_AIR_ABOVE_LIP
+    const halfH = Hero.HERO_BAKE_SPRITE_SIZE * 0.5
+    const topY = heroY - halfH
+    return topY >= pit.floorY - PIT_CAVE_AIR_ABOVE_LIP
   }
   return isHeroInGlowCaveVolume(heroX, footY)
 }
@@ -4285,7 +4303,7 @@ function buildGlowEarTreeSpot(x, heightTier) {
   }
 }
 //
-// Whisper volume from hero distance to the eye-flower head (2D, so the tree
+// Whisper volume from hero distance to the eye-flower root (2D, so the tree
 // branch above the lake counts as well).
 //
 function resetGlowPlantWhisperProximityState(inst) {
@@ -5954,7 +5972,7 @@ function lakeSurfaceWorldYAt(inst, worldX) {
   return WATER_SURFACE_Y + lakeWaveOffsetAt(t, time)
 }
 //
-// Full hero blit above onDraw while the default sprite stays hidden in the pit.
+// Full hero blit while the default sprite stays hidden in the pit (high-z draw pass).
 //
 function drawGlowPitCaveHeroForeground(inst) {
   if (!inst.pitCaveHeroForeground) return
@@ -6362,8 +6380,8 @@ function glowPitEarthBandCutoutForInst(inst) {
   return getGlowPitEarthBandMouthCutoutForPit(pit)
 }
 //
-// Pit interior is painted at the start of onDrawWorld so earth/static and the
-// cave hero blit at the end of onDraw can stack in the right order.
+// Pit interior is painted at the start of onDrawWorld; the cave hero blit uses
+// PIT_CAVE_HERO_FOREGROUND_Z so it stacks above mouth rocks and forest decor.
 //
 function ensureGlowPitDrawLayer(inst) {
   inst._glowPitDrawInOnDrawWorld = true
@@ -6457,12 +6475,11 @@ function drawGlowPitCaveRocksOverEarthBand(inst) {
   drawGlowPitCaveSeamCoverRocks(inst.k, pit)
 }
 //
-// Main draw — world layers, then the pit cave rocks and cave hero on top.
+// Main draw — world layers, then pit cave mouth rocks over the earth band.
 //
 function onDraw(inst) {
   onDrawWorld(inst)
   drawGlowPitCaveRocksOverEarthBand(inst)
-  drawGlowPitCaveHeroForeground(inst)
 }
 //
 // World-layer draw pass (everything that scrolls with the camera).
@@ -6855,7 +6872,9 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const bounceAir = Boolean(inst[bounceAirKey])
   const inCapBand = heroFeet >= capTop - 14 && heroFeet <= capTop + TRAMP_PAD_FEET_BELOW
   const onMainFloorLane = !pitPad && isHeroFeetOnMainFloorLane(heroFeet)
-  const stickyCap = !onMainFloorLane && nearX && inCapBand &&
+  const onPitFloorLane = pitPad && grounded && isHeroOnGlowPitFloor(inst, char, grounded, heroFeet)
+  const onWalkLane = onMainFloorLane || onPitFloorLane
+  const stickyCap = !onWalkLane && nearX && inCapBand &&
     (onCap || bounceAir || grounded || velY > -160)
   if (stickyCap || onCap || bounceAir) {
     state._capPadLatch = TRAMP_CAP_PAD_LATCH_SEC
@@ -6866,10 +6885,12 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   // Never yank the invisible pad off-screen while the hero rides the cap —
   // Kaplay carries static bodies with their platform (looks like he vanishes).
   //
-  const walkingPastOnFloor = isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet)
-  const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40 && !onMainFloorLane
+  const walkingPastOnFloor = pitPad
+    ? isHeroWalkingPastPitCaveTrampOnFloor(inst, char, heroFeet)
+    : isHeroWalkingPastTrampOnMainFloor(inst, char, heroFeet)
+  const fallingOntoCap = !inst.wasGrounded && nearX && inCapBand && velY >= -40 && !onWalkLane
   const padLatch = (state._capPadLatch ?? 0) > 0
-  const needsPad = colliderActive && !onMainFloorLane && (onCap || bounceAir || padLatch || stickyCap ||
+  const needsPad = colliderActive && !onWalkLane && (onCap || bounceAir || padLatch || stickyCap ||
     !walkingPastOnFloor && nearX && inCapBand &&
     (grounded || velY > -80 || fallingOntoCap))
   if (!needsPad) {
@@ -8086,7 +8107,6 @@ function onUpdate(inst) {
   tickGlowTomatoTreeLanding(inst, char, grounded, justLanded)
   updateGlowMidges(inst.midges, k.dt(), 1)
   updateGlowPit(inst.pit, char)
-  maybeLaunchFromPitCaveMushroomOnLand(inst, char, grounded, justLanded)
   refreshGlowPitFloorJumpState(inst, char, grounded, footY)
   inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
   syncGlowAtmosphereZones(inst)
@@ -8552,7 +8572,7 @@ function wantsTrampolineCapLaunch(inst, char, onCap, state) {
   // Pit-cave caps sit on the underground floor — not the main-lane band the
   // surface tramps use to ignore walkers on FLOOR_Y.
   //
-  if (state.pitCaveTramp) return true
+  if (state.pitCaveTramp) return wantsPitCaveTrampolineCapLaunch(inst, char, onCap, state)
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return false
   if ((char.isGrounded?.() ?? false) && isHeroFeetOnMainFloorLane(footY)) return false
   return true
@@ -8581,6 +8601,38 @@ function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
   return grounded && isHeroFeetOnMainFloorLane(footY)
 }
 //
+// Pit cave — grounded on the cave floor but not on the mushroom cap (walk past).
+//
+function isHeroWalkingPastPitCaveTrampOnFloor(inst, char, footY) {
+  const grounded = char.isGrounded?.() ?? false
+  if (!grounded || !isHeroOnGlowPitFloor(inst, char, grounded, footY)) return false
+  const state = inst.pitCaveTrampState
+  if (!state) return false
+  const onCap = isHeroAtTrampolineCap(inst, char.pos.x, footY, state)
+  !onCap && (inst.pitCaveTrampWasAboveCap = false)
+  return !onCap
+}
+//
+// Pit cave mushroom — teleport only after a fall/jump onto the cap from above.
+//
+function wantsPitCaveTrampolineCapLaunch(inst, char, onCap, state) {
+  if (!onCap || !char?.pos) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  const capTopY = trampolineCapTopY(state)
+  if (footY > capTopY + TRAMP_SNAP_BELOW) return false
+  if (isHeroWalkingPastPitCaveTrampOnFloor(inst, char, footY)) return false
+  const heroX = char.pos.x
+  const grounded = char.isGrounded?.() ?? false
+  const velY = char.vel?.y ?? 0
+  const overCapX = Math.abs(heroX - state.x) < TRAMP_CAP_STAND_HALF
+  const descendingOntoCap = overCapX && !grounded && velY > 24
+  const aboveCap = overCapX && footY < capTopY + 6
+  if (descendingOntoCap || aboveCap) inst.pitCaveTrampWasAboveCap = true
+  if (!inst.pitCaveTrampWasAboveCap) return false
+  inst.pitCaveTrampWasAboveCap = false
+  return true
+}
+//
 // Snaps the hero onto one mushroom cap when feet tunnel through the collider.
 //
 function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
@@ -8595,6 +8647,7 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (!colliderActive) return
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
+  if (pitPad && isHeroWalkingPastPitCaveTrampOnFloor(inst, char, footY)) return
   if (!pitPad && isHeroFeetOnMainFloorLane(footY)) return
   if (Math.abs(heroX - state.x) >= TRAMP_CAP_HALF) return
   const velY = char.vel?.y ?? 0
@@ -8623,15 +8676,19 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   // instead of walking past it. Removed — this rescue only ever needs the
   // narrow high-speed-tunnel margin below.
   //
+  const pitFloorFeetY = trampolineCapFloorY(state)
   const sunkPastCap = pitPad
-    ? footY > capTop + TRAMP_SNAP_BELOW
+    ? footY > capTop + TRAMP_SNAP_BELOW && footY < pitFloorFeetY - PIT_CAVE_TRAMP_TUNNEL_FLOOR_CLEAR
     : footY > capTop + TRAMP_SNAP_BELOW && footY < TRAMP_MAIN_LANE_FEET_MIN
   //
   // Only a fall that already passed through the cap from above. A sideways
   // pass must not be pinned onto the pad — that left the hero standing in
   // the air beside the mushroom, then sinking through the floor.
   //
-  sunkPastCap && pinHeroOnTrampolineCap(inst, char, capTop, state)
+  if (sunkPastCap) {
+    pitPad && (inst.pitCaveTrampWasAboveCap = true)
+    pinHeroOnTrampolineCap(inst, char, capTop, state)
+  }
 }
 //
 // Margin kept inside the existing cap X-zone when the late bounce pass
@@ -9105,7 +9162,7 @@ function syncGlowPredatorVisibility(inst) {
     (pred.obj.hidden = !(inst.zones.predatorAwake))
 }
 //
-// Hides the Kaplay hero sprite; onDraw redraws it after all world layers.
+// Hides the Kaplay hero sprite; PIT_CAVE_HERO_FOREGROUND_Z redraws it above decor.
 //
 function syncGlowPitCaveHeroForegroundDraw(inst, char, footY) {
   if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled ||
@@ -9208,6 +9265,11 @@ function syncHeroTrampDrawOrder(inst) {
 // pops onto the strip between the big tree and the branch trampoline.
 //
 const PIT_MUSH_GROUND_LAUNCH_MULT = 1.12
+//
+// Pit cave snap — only between the cap lip and the cave floor, never while
+// walking the pit floor under the mushroom (that used to yank him onto the cap).
+//
+const PIT_CAVE_TRAMP_TUNNEL_FLOOR_CLEAR = LOG_SNAP_STANDING_MAX + 6
 function setupGlowPitCaveTrampoline(inst) {
   const pit = inst.pit
   if (!pit?.zone) return
@@ -9244,22 +9306,14 @@ function syncPitCaveTrampolineDrawLayer(inst) {
   const layer = inst.pitCaveTrampBundle?.drawLayer
   layer && (layer.hidden = !isPitCaveTrampolineVisible(inst))
 }
-function maybeLaunchFromPitCaveMushroomOnLand(inst, char, grounded, justLanded) {
-  const state = inst.pitCaveTrampState
-  const hero = inst.heroInst
-  if (!state || !char?.pos || !justLanded || !grounded || !hero) return
-  if (!isPitCaveTrampolineColliderActive(inst)) return
-  tryPitCaveTrampTeleport(inst, state, hero, char)
-}
 //
 // Pit cave mushroom — same exit as the old ground portal: teleport between the
-// big tree and the branch trampoline, then launch upward.
+// big tree and the branch trampoline, then launch upward (cap landing only,
+// same late pass as the other trampoline mushrooms).
 //
 function tryPitCaveTrampTeleport(inst, state, hero, char) {
   if (!state || state.cooldown > 0 || !char?.pos) return false
-  const heroX = char.pos.x
-  const heroFeet = char.pos.y + SURFACE_DETECT_Y
-  const onCap = isHeroAtTrampolineCap(inst, heroX, heroFeet, state)
+  const onCap = isOnTrampolineCap(inst, char, state)
   if (!wantsTrampolineCapLaunch(inst, char, onCap, state)) return false
   if ((char.vel?.y ?? 0) < -40) return false
   launchHeroFromPitCaveMushroom(inst)

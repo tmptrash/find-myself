@@ -520,7 +520,7 @@ function strokeEllipse(ctx, cx, cy, rx, ry, from, to, width, style) {
 
 //
 // One half of the rim (back = far half, front = near half): bloom strokes,
-// dim dotted band, edge and hot core — same layering as the holo door arch.
+// dim dotted band, edge and hot core.
 //
 function bakeRingCanvas(from, to) {
   const pal = GLOW_PAL.holoDoor

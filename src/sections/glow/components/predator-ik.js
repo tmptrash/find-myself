@@ -10,6 +10,8 @@ const STEP_LIFT = 7
 const FOOT_SOUND_GAP = 0.055
 const REACH = 16
 const PLANT_BEHIND = 11
+const FAR_HIP_DROP = 2
+const NEAR_HIP_DROP = 4
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -109,9 +111,14 @@ export function hipOf(inst, leg) {
   const len = Math.hypot(tx, ty) || 1
   const nx = -ty / len
   const ny = tx / len
+  //
+  // Near-side hips sit lower on the flank so those legs read in front of
+  // the body instead of hiding behind the far pair.
+  //
+  const drop = leg.side > 0 ? NEAR_HIP_DROP : FAR_HIP_DROP
   return {
     x: seg.x + nx * leg.side * (seg.radius * 0.55),
-    y: seg.y + 2
+    y: seg.y + drop
   }
 }
 

@@ -451,7 +451,7 @@ export function renderGlowTreeToCanvas(treeData, palette, w, h) {
  * can share one layer canvas (used by the big background parallax trees).
  * @param {CanvasRenderingContext2D} ctx - Target context
  * @param {Object} treeData - Output of buildGlowTree()
- * @param {Object} palette - Color palette (e.g. getTreePaletteGray())
+ * @param {Object} palette - Color palette (e.g. getTreePaletteColor())
  * @param {number} w - Canvas width
  * @param {number} h - Canvas height
  */

@@ -1,21 +1,5 @@
 import { glowRgb } from './glow-palette.js'
 //
-// Faulty lamp: steady glow, then a burst of rapid toggles; some bursts end
-// in a short blackout. The "off" state keeps a faint filament glow.
-//
-const LAMP_STEADY_MIN = 0.5
-const LAMP_STEADY_MAX = 2.2
-const LAMP_TOGGLE_MIN = 0.03
-const LAMP_TOGGLE_MAX = 0.1
-const LAMP_BURST_MIN = 2
-const LAMP_BURST_MAX = 6
-const LAMP_DROPOUT_CHANCE = 0.35
-const LAMP_DARK_MIN = 0.12
-const LAMP_DARK_MAX = 0.45
-const LAMP_OFF_LEVEL = 0.12
-const LAMP_HUM_FREQ = 37
-const LAMP_HUM_DEPTH = 0.12
-//
 // Rising sparks: spawn rate, speed, life and the share of brighter 2px ones.
 //
 const SPARK_MAX = 22
@@ -24,78 +8,6 @@ const SPARK_SPEED_MAX = 25
 const SPARK_LIFE_MIN = 1.5
 const SPARK_LIFE_MAX = 3
 const SPARK_HOT_CHANCE = 0.3
-
-/**
- * Creates the faulty-lamp state shared by every Glow hologram. Starts in a
- * burst so a freshly shown hologram stutters on like an old projector.
- * @returns {Object} Lamp inst
- */
-export function createLamp() {
-  return { on: false, phase: 'burst', timer: 0, toggles: 0, dropout: false }
-}
-
-/**
- * Ticks the lamp state machine: steady → burst of toggles → (dark) → steady.
- * @param {Object} lamp - Lamp inst from createLamp()
- * @param {Object} k - Kaplay inst
- * @param {number} dt - Frame delta in seconds
- */
-export function updateLamp(lamp, k, dt) {
-  lamp.timer -= dt
-  if (lamp.timer > 0) return
-  if (lamp.phase === 'burst' && lamp.toggles > 0) {
-    lamp.on = !lamp.on
-    lamp.toggles--
-    lamp.timer = k.rand(LAMP_TOGGLE_MIN, LAMP_TOGGLE_MAX)
-    return
-  }
-  if (lamp.phase === 'burst' && lamp.dropout) {
-    lamp.on = false
-    lamp.phase = 'dark'
-    lamp.timer = k.rand(LAMP_DARK_MIN, LAMP_DARK_MAX)
-    return
-  }
-  if (lamp.phase === 'burst') {
-    lamp.on = true
-    lamp.phase = 'steady'
-    lamp.timer = k.rand(LAMP_STEADY_MIN, LAMP_STEADY_MAX)
-    return
-  }
-  startLampBurst(lamp, k, lamp.phase === 'steady' && Math.random() < LAMP_DROPOUT_CHANCE)
-}
-
-/**
- * Forces a stutter right now (used when a hologram appears).
- * @param {Object} lamp - Lamp inst
- * @param {Object} k - Kaplay inst
- * @param {boolean} dropout - End the burst in a short blackout
- */
-export function startLampBurst(lamp, k, dropout) {
-  lamp.phase = 'burst'
-  lamp.toggles = k.randi(LAMP_BURST_MIN, LAMP_BURST_MAX + 1)
-  lamp.dropout = dropout
-  lamp.timer = 0
-}
-
-/**
- * Current lamp brightness multiplier: mains hum while on, a dim filament when off.
- * @param {Object} lamp - Lamp inst
- * @param {number} time - Hologram clock in seconds
- * @returns {number} 0..1 brightness
- */
-export function lampLevel(lamp, time) {
-  if (!lamp.on) return LAMP_OFF_LEVEL
-  return 1 - LAMP_HUM_DEPTH * (0.5 + 0.5 * Math.sin(time * LAMP_HUM_FREQ))
-}
-
-/**
- * True while the lamp is stuttering (holograms tear and jitter then).
- * @param {Object} lamp - Lamp inst
- * @returns {boolean}
- */
-export function isLampBursting(lamp) {
-  return lamp.phase === 'burst'
-}
 
 /**
  * Creates an empty rising-spark emitter.

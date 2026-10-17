@@ -167,8 +167,7 @@ export function drawHudAnimatedEye(k, inst, drawHost) {
     targetX,
     targetY,
     opacity,
-    fixed: true,
-    pupilRgb: inst._eyeHudPupilRgb ?? undefined
+    fixed: true
   })
 }
 export function setLifeHudEyeHidden(inst, hidden) {

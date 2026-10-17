@@ -38,24 +38,12 @@ export function createPads(k) {
 }
 
 /**
- * True once the colour world (and the shore-tree branch) is open.
- * @param {Object} zones - Glow zones
- * @returns {boolean}
- */
-export function isChainEyeTrampCollidersLive(zones) {
-  return Boolean(zones?.colorWorld)
-}
-
-/**
  * Syncs cap pads to the live stalk-eye positions.
  * @param {Object} inst - Glow level inst
  */
 export function syncChainEyeTrampPads(inst) {
   const chain = inst.chainEyeTramp
   if (!chain || !inst.chainBuoys) return
-  const live = isChainEyeTrampCollidersLive(inst.zones)
-  chain.second.active = live
-  chain.first.active = live
   const char = inst.heroInst?.character
   if (inst.chainEyeBounceAir && char?.isGrounded?.()) {
     const platform = char.curPlatform?.()
@@ -73,7 +61,6 @@ export function syncChainEyeTrampPads(inst) {
 export function tryChainEyeTrampBounces(inst) {
   const chain = inst.chainEyeTramp
   if (!chain || !inst.chainBuoys) return false
-  if (!isChainEyeTrampCollidersLive(inst.zones)) return false
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return false
@@ -86,14 +73,12 @@ export function tryChainEyeTrampBounces(inst) {
 
 /**
  * Builds runtime state for the two stalk-eye trampolines.
- * @param {Object} zones - Glow zones
  * @returns {Object}
  */
-export function createChainEyeTrampStates(zones) {
-  const live = isChainEyeTrampCollidersLive(zones)
+export function createChainEyeTrampStates() {
   return {
-    second: { role: CHAIN_EYE_ROLE_SECOND, active: live, cooldown: 0, x: 0, capTopY: 0 },
-    first: { role: CHAIN_EYE_ROLE_FIRST, active: live, cooldown: 0, x: 0, capTopY: 0 }
+    second: { role: CHAIN_EYE_ROLE_SECOND, active: true, cooldown: 0, x: 0, capTopY: 0 },
+    first: { role: CHAIN_EYE_ROLE_FIRST, active: true, cooldown: 0, x: 0, capTopY: 0 }
   }
 }
 

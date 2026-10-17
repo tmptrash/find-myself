@@ -246,15 +246,9 @@ export const CFG = {
         //
         void: PALETTE.green0,
         //
-        // Pre-colour glow backdrop — neutral dark gray (ready exit tone), not
-        // the green void used once the forest colour world is active.
-        //
-        glowPreludeBackdrop: PALETTE.gray0,
-        //
         // Playfield frame — neutral darkest gray so no green rims the play zone.
         //
         playfieldOuter: PALETTE.gray0,
-        playfieldGray: PALETTE.gray2,
         midGray: PALETTE.green1,
         //
         // Zenith lift for parallax sky gradients and colour-world canopy air.
@@ -304,17 +298,7 @@ export const CFG = {
           gameplay: PALETTE.gray0
         },
         //
-        // Lake raft glasses — near-black anti-alias edge pixels, light lenses
-        // and a near-white diagonal glint. Rims/temples use visual.colors.outline.
-        //
-        lakeGlasses: {
-          rim: PALETTE.gray0,
-          lens: PALETTE.gray6,
-          glint: PALETTE.gray7
-        },
-        //
-        // Hologram portal seen through the glasses: blue analog projection.
-        // `ramp` (dark → hot) regrades the Touch level view inside the arch.
+        // Hologram portal (ground portal): blue analog projection.
         //
         holoDoor: {
           mouth: PALETTE.gray0,
@@ -323,29 +307,7 @@ export const CFG = {
           glow: PALETTE.blue3,
           band: PALETTE.blue1,
           field: PALETTE.blue2,
-          spark: PALETTE.blue4,
-          ramp: [
-            PALETTE.gray0,
-            PALETTE.slate0,
-            PALETTE.blue0,
-            PALETTE.blue1,
-            PALETTE.blue2,
-            PALETTE.blue3,
-            PALETTE.blue4,
-            PALETTE.blue5,
-            PALETTE.gray7
-          ],
-          //
-          // Grey source tones for the baked Touch view (regraded by `ramp`).
-          //
-          viewSky: PALETTE.gray0,
-          viewCloud: PALETTE.gray3,
-          viewFarTrunk: PALETTE.gray2,
-          viewFarCrown: PALETTE.gray4,
-          viewGround: PALETTE.gray2,
-          viewGroundRim: PALETTE.gray4,
-          viewGrass: PALETTE.gray3,
-          viewRock: PALETTE.gray3
+          spark: PALETTE.blue4
         },
         //
         // Soft gray rim for low-priority decor (captions, muted props).
@@ -374,21 +336,6 @@ export const CFG = {
         predatorEye: PALETTE.sand5,
         predatorPupil: PALETTE.red0,
         predatorHorn: PALETTE.brown1,
-        //
-        // Swamp spirit — muted bog green, cool mist, warm eye. Contour is
-        // green-brown ink, never void black or pure white.
-        //
-        swampSpirit: {
-          contour: PALETTE.green0,
-          shadow: PALETTE.brown0,
-          body: PALETTE.teal1,
-          belly: PALETTE.green0,
-          mist: PALETTE.teal3,
-          damp: PALETTE.green1,
-          eye: PALETTE.gold5,
-          pupil: PALETTE.green0,
-          speck: PALETTE.gold3
-        },
         //
         // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
         // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
@@ -484,14 +431,37 @@ export const CFG = {
         mushroomsLight: [PALETTE.orange3, PALETTE.brown2, PALETTE.orange3, PALETTE.orange2],
         //
         // Visual grammar: life, hazard, oddity, "pay attention" — trampolines,
-        // ear-tree mouths. Slightly richer cap than glowMushroom, not neon.
+        // ear-tree leaves. Slightly richer cap than glowMushroom, not neon.
         //
         glowAttention: {
-          lip: PALETTE.red2,
+          leaf: PALETTE.red1,          // Ear-tree leaf body
+          leafLight: PALETTE.red3,     // Lit half of the leaf
+          leafVein: PALETTE.red0,      // Leaf rim and midrib
           mushroomCap: PALETTE.red2,
           mushroomCapDark: PALETTE.brown0,
           mushroomCapLight: PALETTE.orange3,
           blush: PALETTE.red3
+        },
+        //
+        // Eye-flower on the lake island: cream calla spathe hiding a watching
+        // eye, dark stem and leafy tentacle vines on a mossy earth mound.
+        //
+        glowEyeFlower: {
+          contour: PALETTE.gray0,      // Green-black contour around every part
+          petal: PALETTE.mauve5,       // Lit spathe lobe (warm cream)
+          petalShade: PALETTE.mauve4,  // Front lobe in shadow
+          petalInner: PALETTE.mauve3,  // Pink throat between the lobes
+          spadix: PALETTE.gold3,       // Eye stalk
+          spadixDark: PALETTE.gold0,   // Eye stalk rim
+          sclera: PALETTE.gray7,       // Eye white
+          iris: PALETTE.brown0,        // Dark brown iris
+          pupil: PALETTE.gray0,        // Pupil
+          stem: PALETTE.teal0,         // Flower stem
+          vine: PALETTE.green0,        // Tentacle vines
+          leaf: PALETTE.green1,        // Leaf body
+          leafLight: PALETTE.green2,   // Lit half of the leaf
+          soil: PALETTE.brown0,        // Island earth
+          soilDark: PALETTE.sand0      // Earth strata
         },
         //
         // Colour-world forest floor: mossy hill, ferns, light spike bushes,
@@ -537,8 +507,8 @@ export const CFG = {
         // Extra colour-world underground props (cobble beds, voids, pebbles, grit).
         //
         glowUnderground: {
-          stone: PALETTE.slate1,       // Cobble body (lighter than the clay around it)
-          stoneLight: PALETTE.slate2,  // Cobble top rim
+          stone: PALETTE.gray1,        // Deep-clay stone body (dark stone gray)
+          stoneLight: PALETTE.gray2,   // Stone lit cap and face speckles
           contour: PALETTE.gray0,      // Cobble contour and dark voids
           grit: PALETTE.brown2,        // Tiny soil specks and void lips
           pebble: PALETTE.rose2        // Warm pebbles in the topsoil
@@ -562,22 +532,13 @@ export const CFG = {
         //
         decorOutline: PALETTE.gray1,
         //
-        // Pre-colour forest silhouettes — neutral gray steps (no green until O).
+        // Neutral gray wood steps — wood-landing dust tone.
         //
         treeGray: {
           root: PALETTE.gray0,
           trunk: PALETTE.gray1,
           branch: PALETTE.gray2,
           leaf: PALETTE.gray3
-        },
-        //
-        // Main tree after L — warm brown wood + gold leaf lift (not sand-gray).
-        //
-        treeLit: {
-          root: PALETTE.brown0,
-          trunk: PALETTE.brown1,
-          branch: PALETTE.brown2,
-          leaf: PALETTE.gold3
         },
         //
         // Colour-world main tree: dark brown wood with juicy green foliage —
@@ -602,28 +563,6 @@ export const CFG = {
         // Cool air target when parallax trees soften into the sky (not gold).
         //
         warmHaze: PALETTE.teal2,
-        //
-        // Legacy aliases — sky bake uses glowSky* (see renderSkyBand).
-        //
-        parallaxSkyTopGray: PALETTE.gray0,
-        parallaxSkyTopColor: PALETTE.teal0,
-        //
-        // Parallax forest depths — gray steps in flat mode; in colour mode the
-        // far/mid rows stay muted sage/teal silhouettes (not orange) so only
-        // the sky haze and main lit tree carry warm pop (§16 art direction).
-        //
-        parallaxGrayNear: PALETTE.gray4,
-        parallaxGrayMid: PALETTE.gray3,
-        parallaxGrayFar: PALETTE.gray2,
-        //
-        // One-eye gray world value ladder (dark sky → light gameplay decor):
-        // frame gray0, sky gray1, far/mid/near forest gray2-4, decor gray5.
-        //
-        glowFlatSky: PALETTE.gray1,
-        glowFlatEarth: PALETTE.gray2,
-        glowFlatEarthDeep: PALETTE.gray1,
-        glowFlatUnderground: PALETTE.gray3,
-        glowFlatWater: PALETTE.gray3,
         //
         // Eye-intro umbrella stroller — grays only, each part on its own value
         // step so the tube frame, fabric, strap and wheels stay readable.
@@ -710,17 +649,6 @@ export const CFG = {
           outline: PALETTE.gray0,
           face: PALETTE.brown0,
           blush: PALETTE.red3
-        },
-        cuteMushroomGray: {
-          body: PALETTE.gray5,
-          bodyShade: PALETTE.gray4,
-          cap: PALETTE.gray3,
-          capDark: PALETTE.gray1,
-          capLight: PALETTE.gray6,
-          spot: PALETTE.gray6,
-          outline: PALETTE.gray1,
-          face: PALETTE.gray0,
-          blush: PALETTE.gray4
         },
         bark: {
           dark: PALETTE.teal0,

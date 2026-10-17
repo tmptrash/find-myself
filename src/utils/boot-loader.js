@@ -115,7 +115,7 @@ export function showLoader(opts = {}) {
   loaderEl.style.background = opts.transparentBackdrop ? LOADER_BG_TRANSPARENT : LOADER_BG_OPAQUE
   loaderEl.style.zIndex = opts.elevatedZ ? LOADER_Z_OVER_CRT : LOADER_Z_DEFAULT
   setLoaderPanelOverCrt(opts.transparentBackdrop === true)
-  setLoaderCrtVisible(loaderEl, opts.transparentBackdrop !== true)
+  setLoaderCrtVisible(loaderEl, false)
   if (!opts.preserveBar) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
@@ -137,7 +137,7 @@ export function restoreLoaderDefaultBackdrop() {
   if (!loaderEl || loaderEl.style.display !== 'flex') return
   loaderEl.style.background = LOADER_BG_OPAQUE
   loaderEl.style.zIndex = LOADER_Z_DEFAULT
-  setLoaderCrtVisible(loaderEl, true)
+  setLoaderCrtVisible(loaderEl, false)
 }
 
 export function isLoaderVisible() {

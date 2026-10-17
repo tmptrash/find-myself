@@ -1,9 +1,9 @@
 import { CFG } from '../../../cfg.js'
-import { GLOW_PAL, getTreePaletteGray, glowRgb } from './glow-palette.js'
+import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
-import { glowLakeRaftPredatorMinX } from './glow-lake-raft.js'
-import { beginLakeRaftShoreRetreat } from '../components/predator-move.js'
+import * as EyeFlower from '../components/eye-flower.js'
+import { beginIslandShoreRetreat } from '../components/predator-move.js'
 import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 
 //
@@ -13,13 +13,53 @@ import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 const TWIG_COUNT = 1
 const TWIG_ATTACH_BELOW_BRANCH = 5
 const TWIG_MAIN_LEN = 52
-const TWIG_MAIN_W = 3.2
-const TWIG_SIDE_LEN = 14
-const TWIG_SIDE_W = 1.8
-const TWIG_SIDE_ANGLE = 0.55
-const TWIG_LEAF_R = 5
-const TWIG_LEAF_TIP_ANGLE = 0.3
-const TWIG_LEAF_MIN_SQUEEZE = 0.35
+const TWIG_MAIN_W = 6
+const TWIG_OUTLINE_PAD = 2
+//
+// Darker strip along the underside gives the thick stick a second wood tone.
+//
+const TWIG_UNDERSIDE_OFFSET = TWIG_MAIN_W * 0.22
+const TWIG_UNDERSIDE_W = TWIG_MAIN_W * 0.4
+const TWIG_SIDE_W = 2.6
+const TWIG_SIDE_OUTLINE_PAD = 1.2
+//
+// Side twigs in the stick's local frame: `at` is the fraction of the main
+// length, `angle` the heading off the main axis (negative = up while lying),
+// `len` the twig length in px.
+//
+const TWIG_SIDES = [
+  { at: 0.3, angle: -0.75, len: 15 },
+  { at: 0.62, angle: -0.45, len: 17 },
+  { at: 0.82, angle: 0.6, len: 11 }
+]
+const TWIG_TIP_LEAF_ANGLE = 0.3
+//
+// Leaves around every twig tip: `turn` off the twig heading, `back` px back
+// from the tip along the twig, `size` leaf length in px.
+//
+const TWIG_LEAF_CLUSTER = [
+  { turn: -0.7, back: 4, size: 6 },
+  { turn: 0.15, back: 0, size: 8 },
+  { turn: 0.85, back: 6, size: 5 }
+]
+//
+// Asymmetric leaf (base at the origin, tip at +X, fuller on the -Y side),
+// fan-triangulated from the base vertex.
+//
+const LEAF_SHAPE = [
+  [0, 0], [0.18, -0.3], [0.46, -0.42], [0.76, -0.3],
+  [1, 0], [0.72, 0.19], [0.42, 0.25], [0.16, 0.15]
+]
+const LEAF_INDICES = [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 7]
+//
+// Shadow, base and light layers of one leaf (leaf units), each tone index
+// maps to the colour tree palette's leafShades.
+//
+const LEAF_TONES = [
+  { scale: 1, dx: 0, dy: 0 },
+  { scale: 0.76, dx: 0.1, dy: -0.07 },
+  { scale: 0.38, dx: 0.24, dy: -0.14 }
+]
 const TWIG_HANG_ANGLE = 0.72
 const TWIG_FALL_GRAVITY = 1900
 const TWIG_GROUND_LINGER_SEC = 5
@@ -40,11 +80,15 @@ const TWIG_BEHIND_HEAD = 6
 //
 const TWIG_BACK_REST = TWIG_MAIN_W * 0.5 + 0.5
 //
+// The hero stands on the stick's top face, not on its centre line.
+//
+const TWIG_TOP_ABOVE_AXIS = TWIG_MAIN_W * 0.5
+//
 // A turn squeezes the stick through zero width instead of tilting it.
 //
 const TWIG_TURN_SPEED = 1.15
 const TWIG_RIDE_TURN_DURATION = 0.85
-const TWIG_RAFT_DISBARK_TURN_DURATION = 1.25
+const TWIG_ISLAND_DISBARK_TURN_DURATION = 1.25
 const TWIG_RIDE_EDGE_SLACK = 12
 const TWIG_RIDE_EDGE_INSET = 4
 const TWIG_RIDE_SHIELD_BELOW = 6
@@ -79,6 +123,8 @@ export function create(cfg) {
     branchY,
     twigs: [],
     batch: PolyBatch.create(),
+    colors: null,
+    leafPts: LEAF_SHAPE.map(() => [0, 0]),
     dropped: false,
     regrowing: false,
     respawnWait: 0,
@@ -126,62 +172,62 @@ export function tickTwigPredatorRide(inst, dt) {
 }
 
 /**
- * After a jump from the lake stick onto the log raft, ease the centipede to
- * face the raft once the hero has landed on it.
+ * After a jump from the lake stick onto the eye-flower island, ease the
+ * centipede into its turn once the hero has landed there.
  * @param {Object} twigInst - Twig inst
- * @param {Object} levelInst - Glow level inst (lake raft layout)
+ * @param {Object} levelInst - Glow level inst (eye-flower island layout)
  * @param {Object} char - Hero character
- * @param {function(Object, number, number): boolean} isOnLakeRaft - Feet on raft
+ * @param {function(Object, number, number): boolean} isOnIsland - Feet on the island
  */
-export function tryPredatorTurnTowardRaftAfterLanding(twigInst, levelInst, char, isOnLakeRaft) {
-  if (!twigInst?.turnTowardRaftPending || !char?.pos || !levelInst) return
+export function tryPredatorTurnTowardIslandAfterLanding(twigInst, levelInst, char, isOnIsland) {
+  if (!twigInst?.turnTowardIslandPending || !char?.pos || !levelInst) return
   if (!mountedTwig(twigInst)) {
-    twigInst.turnTowardRaftPending = false
+    twigInst.turnTowardIslandPending = false
     return
   }
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
-  if (!isOnLakeRaft(levelInst, char.pos.x, footY)) return
+  if (!isOnIsland(levelInst, char.pos.x, footY)) return
   if (!(char.isGrounded?.() ?? false)) return
-  const raftX = levelInst.lakeRaftX
-  if (raftX == null) {
-    twigInst.turnTowardRaftPending = false
+  const islandX = levelInst.eyeFlower?.x
+  if (islandX == null) {
+    twigInst.turnTowardIslandPending = false
     return
   }
-  twigInst.turnTowardRaftPending = false
-  armPredatorLakeRaftRetreat(twigInst, levelInst, raftX)
+  twigInst.turnTowardIslandPending = false
+  armPredatorIslandRetreat(twigInst, levelInst, islandX)
 }
 
 /**
- * When the hero stands on the glasses log but the salute turn never started
+ * When the hero stands on the island but the salute turn never started
  * (e.g. flee blocked scheduling), force the shore swim.
  * @param {Object} twigInst - Twig inst
  * @param {Object} levelInst - Glow level inst
  * @param {Object} char - Hero character
- * @param {function(Object, number, number): boolean} isOnLakeRaft
+ * @param {function(Object, number, number): boolean} isOnIsland
  */
-export function tickPredatorLakeRaftRetreatFallback(twigInst, levelInst, char, isOnLakeRaft) {
+export function tickPredatorIslandRetreatFallback(twigInst, levelInst, char, isOnIsland) {
   if (!twigInst || !levelInst || !char?.pos) return
   const pred = twigInst.predator
-  if (!pred || pred.lakeRaftRetreatX != null) return
+  if (!pred || pred.islandRetreatX != null) return
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
-  if (!isOnLakeRaft(levelInst, char.pos.x, footY)) return
+  if (!isOnIsland(levelInst, char.pos.x, footY)) return
   if (!(char.isGrounded?.() ?? false)) return
   if (!mountedTwig(twigInst)) return
-  const minX = glowLakeRaftPredatorMinX(levelInst)
+  const minX = EyeFlower.predatorMinX(levelInst.eyeFlower)
   if (minX == null || pred.x < minX - 48) return
-  if (twigInst.lakeRaftRetreatAfterTurn && !twigInst.rideTurnPending) {
-    twigInst.lakeRaftRetreatAfterTurn = false
-    beginLakeRaftShoreRetreat(pred)
+  if (twigInst.islandRetreatAfterTurn && !twigInst.rideTurnPending) {
+    twigInst.islandRetreatAfterTurn = false
+    beginIslandShoreRetreat(pred)
     clearRideTurnPose(twigInst, pred)
     return
   }
   if (
-    !twigInst.lakeRaftRetreatAfterTurn &&
+    !twigInst.islandRetreatAfterTurn &&
     !twigInst.rideTurnPending &&
-    pred.lakeRaftRetreatX == null
+    pred.islandRetreatX == null
   ) {
-    const raftX = levelInst.lakeRaftX
-    raftX != null && armPredatorLakeRaftRetreat(twigInst, levelInst, raftX)
+    const islandX = levelInst.eyeFlower?.x
+    islandX != null && armPredatorIslandRetreat(twigInst, levelInst, islandX)
   }
 }
 
@@ -226,7 +272,7 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 }
 
 /**
- * Draws dry twigs in muted gray-brown (not live shore-tree branch greens).
+ * Draws the leafy twigs in the big tree's wood and leaf tones.
  * @param {Object} inst - Twig inst
  * @param {number} opacity - Scene fade multiplier
  * @param {{x1: number, x2: number}|null} view - Camera cull span
@@ -234,13 +280,7 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 export function onDraw(inst, opacity, view) {
   if (!inst?.twigs?.length || opacity <= 0) return
   const k = inst.k
-  const pal = getTreePaletteGray()
-  const wood = k.rgb(pal.branchR, pal.branchG, pal.branchB)
-  const woodDark = k.rgb(pal.trunkR, pal.trunkG, pal.trunkB)
-  const leafShade = pal.leafShades?.[0] ?? { r: pal.branchR, g: pal.branchG, b: pal.branchB }
-  const leaf = k.rgb(leafShade.r, leafShade.g, leafShade.b)
-  const outlineRgb = glowRgb(TWIG_OUTLINE)
-  const outline = k.rgb(outlineRgb.r, outlineRgb.g, outlineRgb.b)
+  inst.colors ??= buildTwigColors(k)
   const batch = inst.batch
   inst.twigs.forEach(twig => {
     if (twig.phase === 'gone') return
@@ -248,7 +288,7 @@ export function onDraw(inst, opacity, view) {
     const op = opacity * twig.alpha
     if (op <= 0.001) return
     PolyBatch.reset(batch)
-    addTwigGeometry(batch, twig, wood, woodDark, leaf, outline)
+    addTwigGeometry(batch, twig, inst.colors, inst.leafPts)
     PolyBatch.flush(batch, k, op)
   })
 }
@@ -305,7 +345,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
     //
     releaseRider(inst, char)
     inst.riderAirborne = true
-    inst.turnTowardRaftPending = true
+    inst.turnTowardIslandPending = true
     return
   } else if (heroLeftRideStick(inst, char, mounted, hero)) {
     //
@@ -323,7 +363,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
   //
   inst.rideOffset = clampRideOffset((inst.rideOffset ?? 0) + riderInputShift(hero))
   const rideX = midX + inst.rideOffset
-  const rideY = mounted.y - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
+  const rideY = twigSurfaceY(mounted) - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
   typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
   char.vel && (char.vel.x = 0, char.vel.y = 0)
   char.stickToPlatform = false
@@ -345,7 +385,7 @@ const HERO_LOG_SNAP_EMBED = 1
 
 function heroLeftRideStick(inst, char, mounted, hero) {
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
-  if (footY > mounted.y + 28) return true
+  if (footY > twigSurfaceY(mounted) + 28) return true
   const shift = riderInputShift(hero)
   if (!shift) return false
   const offset = inst.rideOffset ?? 0
@@ -358,14 +398,15 @@ function tryLockRider(inst, char, mounted, midX, velY) {
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
   const onPlat = char.curPlatform?.() === inst.ridePlat
   const overStick = Math.abs(char.pos.x - midX) <= TWIG_RIDE_PLAT_HALF_W + TWIG_RIDE_EDGE_SLACK
-  const atTop = footY >= mounted.y - 16 && footY <= mounted.y + 18
+  const surfaceY = twigSurfaceY(mounted)
+  const atTop = footY >= surfaceY - 16 && footY <= surfaceY + 18
   if (!onPlat && !(overStick && atTop)) return
   inst.riderLocked = true
   inst.riderAirborne = false
   scheduleRideTurnAfterTwigLand(inst)
   inst.rideOffset = clampRideOffset(char.pos.x - midX)
   const rideX = midX + inst.rideOffset
-  const rideY = mounted.y - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
+  const rideY = surfaceY - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
   typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
   char.vel && (char.vel.y = 0)
   //
@@ -378,20 +419,20 @@ function tryLockRider(inst, char, mounted, midX, velY) {
 //
 // After a landing, ease into the reversed heading instead of snapping dir/vx.
 //
-function armPredatorLakeRaftRetreat(twigInst, levelInst, raftX) {
+function armPredatorIslandRetreat(twigInst, levelInst, islandX) {
   const pred = twigInst.predator
-  if (!pred || raftX == null) return
-  if (pred.lakeRaftRetreatX != null) return
-  const minX = glowLakeRaftPredatorMinX(levelInst)
+  if (!pred || islandX == null) return
+  if (pred.islandRetreatX != null) return
+  const minX = EyeFlower.predatorMinX(levelInst.eyeFlower)
   minX != null && pred.x < minX && (pred.x = minX, pred.vx = 0)
   const skipTurnAnim = pred.state === 'feast' || pred.state === 'coast'
   if (skipTurnAnim) {
-    twigInst.lakeRaftRetreatAfterTurn = false
-    beginLakeRaftShoreRetreat(pred)
+    twigInst.islandRetreatAfterTurn = false
+    beginIslandShoreRetreat(pred)
     clearRideTurnPose(twigInst, pred)
     return
   }
-  twigInst.lakeRaftRetreatAfterTurn = true
+  twigInst.islandRetreatAfterTurn = true
   schedulePredatorMountedTurn(twigInst, true)
 }
 
@@ -412,7 +453,7 @@ function schedulePredatorMountedTurn(inst, disembark) {
   inst.rideTurnPending = true
   inst.rideTurnElapsed = 0
   inst.rideTurnDisembark = Boolean(disembark)
-  inst.rideTurnDurationSec = disembark ? TWIG_RAFT_DISBARK_TURN_DURATION : null
+  inst.rideTurnDurationSec = disembark ? TWIG_ISLAND_DISBARK_TURN_DURATION : null
   pred.rideTurnFromSegs = pred.segments?.map(seg => ({ x: seg.x, y: seg.y })) ?? null
   pred.rideTurnPoseDir = next
   pred.rideTurnBlend = 0
@@ -433,12 +474,12 @@ function scheduleRideTurnAfterTwigLand(inst) {
   schedulePredatorMountedTurn(inst, false)
 }
 //
-// A flee or the swim back from the glasses log owns the heading — the stick
+// A flee or the swim back from the island owns the heading — the stick
 // follows it instead of locking the crawler to the rider's facing, which
-// pinned it at the log (retreat steered east, the ride lock steered west).
+// pinned it at the island (retreat steered east, the ride lock steered west).
 //
 function isPredatorSteeringItself(pred) {
-  return pred?.state === 'flee' || pred?.lakeRaftRetreatX != null
+  return pred?.state === 'flee' || pred?.islandRetreatX != null
 }
 
 //
@@ -485,12 +526,12 @@ function tickRideTurn(inst, dt) {
 }
 
 function completeRideTurn(inst, pred) {
-  if (inst.lakeRaftRetreatAfterTurn && pred) {
-    inst.lakeRaftRetreatAfterTurn = false
+  if (inst.islandRetreatAfterTurn && pred) {
+    inst.islandRetreatAfterTurn = false
     const level = pred.levelInst
-    const minX = level && glowLakeRaftPredatorMinX(level)
+    const minX = level && EyeFlower.predatorMinX(level.eyeFlower)
     minX != null && pred.x < minX && (pred.x = minX)
-    beginLakeRaftShoreRetreat(pred)
+    beginIslandShoreRetreat(pred)
     clearRideTurnPose(inst, pred)
     return
   }
@@ -498,7 +539,7 @@ function completeRideTurn(inst, pred) {
   inst.rideDir = next
   if (pred) {
     const level = pred.levelInst
-    const minX = level && glowLakeRaftPredatorMinX(level)
+    const minX = level && EyeFlower.predatorMinX(level.eyeFlower)
     pred.dir = next
     pred.holdFacing = !isPredatorSteeringItself(pred)
     pred.vx = pred.dir * TWIG_RIDE_TURN_MIN_SPEED
@@ -560,7 +601,7 @@ function syncRiderAirborne(inst, char, mounted) {
   if (!inst.riderAirborne) return
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
   const landed = (char.isGrounded?.() ?? false) && (char.vel?.y ?? 0) >= 0
-  if (landed || footY > mounted.y + TWIG_RIDE_SHIELD_BELOW) inst.riderAirborne = false
+  if (landed || footY > twigSurfaceY(mounted) + TWIG_RIDE_SHIELD_BELOW) inst.riderAirborne = false
 }
 
 function riderInputShift(hero) {
@@ -775,6 +816,10 @@ function backTopUnderTwig(predator, xa, xb) {
   return top
 }
 
+function twigSurfaceY(twig) {
+  return twig.y - TWIG_TOP_ABOVE_AXIS
+}
+
 function twigMidX(twig) {
   return twig.phase === 'predatorMount'
     ? twig.x + twig.face * TWIG_MAIN_LEN * 0.5
@@ -790,7 +835,7 @@ function syncRidePlatform(inst) {
     return
   }
   const platX = twigMidX(mounted)
-  const platY = mounted.y
+  const platY = twigSurfaceY(mounted)
   typeof plat.moveTo === 'function' ? plat.moveTo(platX, platY) : (plat.pos.x = platX, plat.pos.y = platY)
 }
 
@@ -806,22 +851,73 @@ function hideRidePlatform(inst) {
 // Geometry is built in the stick's local frame (main axis = +X) and mapped to
 // the world with a rotation plus an X squeeze (the mounted stick's turn).
 //
-function addTwigGeometry(batch, twig, wood, woodDark, leaf, outline) {
+function addTwigGeometry(batch, twig, colors, leafPts) {
   const sx = twig.phase === 'predatorMount' ? twig.face : 1
-  const mid = TWIG_MAIN_LEN * 0.55
-  const sideB = TWIG_SIDE_ANGLE * 0.85
-  const sideBLen = TWIG_SIDE_LEN * 0.75
-  const leafScale = Math.max(TWIG_LEAF_MIN_SQUEEZE, Math.abs(sx))
-  const tipLx = TWIG_MAIN_LEN + Math.cos(TWIG_LEAF_TIP_ANGLE) * TWIG_LEAF_R
-  const tipLy = Math.sin(TWIG_LEAF_TIP_ANGLE) * TWIG_LEAF_R
-  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W, wood)
-  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W + 1.2, outline)
-  addTwigLine(batch, twig, sx, mid, 0,
-    mid + Math.cos(-TWIG_SIDE_ANGLE) * TWIG_SIDE_LEN, Math.sin(-TWIG_SIDE_ANGLE) * TWIG_SIDE_LEN, TWIG_SIDE_W, woodDark)
-  addTwigLine(batch, twig, sx, mid, 0, mid + Math.cos(sideB) * sideBLen, Math.sin(sideB) * sideBLen, TWIG_SIDE_W, woodDark)
-  PolyBatch.addDisc(batch, twigWorldX(twig, sx, tipLx, tipLy), twigWorldY(twig, tipLx, tipLy), TWIG_LEAF_R * leafScale, leaf)
-  PolyBatch.addDisc(batch, twigWorldX(twig, sx, tipLx - 4, tipLy + 2), twigWorldY(twig, tipLx - 4, tipLy + 2),
-    TWIG_LEAF_R * 0.65 * leafScale, leaf)
+  //
+  // Painter's order inside one batch: every outline first, so the wood of
+  // the side twigs joins the main stick without a contour seam.
+  //
+  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W + TWIG_OUTLINE_PAD, colors.outline)
+  TWIG_SIDES.forEach(side => addSideTwig(batch, twig, sx, side, TWIG_SIDE_W + TWIG_SIDE_OUTLINE_PAD, colors.outline))
+  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W, colors.wood)
+  addTwigLine(batch, twig, sx, 0, TWIG_UNDERSIDE_OFFSET, TWIG_MAIN_LEN, TWIG_UNDERSIDE_OFFSET,
+    TWIG_UNDERSIDE_W, colors.woodDark)
+  TWIG_SIDES.forEach(side => addSideTwig(batch, twig, sx, side, TWIG_SIDE_W, colors.woodDark))
+  TWIG_SIDES.forEach(side => addLeafCluster(batch, twig, sx,
+    side.at * TWIG_MAIN_LEN + Math.cos(side.angle) * side.len, Math.sin(side.angle) * side.len,
+    side.angle, colors.leaves, leafPts))
+  addLeafCluster(batch, twig, sx, TWIG_MAIN_LEN, 0, TWIG_TIP_LEAF_ANGLE, colors.leaves, leafPts)
+}
+
+function addSideTwig(batch, twig, sx, side, w, color) {
+  const ax = side.at * TWIG_MAIN_LEN
+  addTwigLine(batch, twig, sx, ax, 0,
+    ax + Math.cos(side.angle) * side.len, Math.sin(side.angle) * side.len, w, color)
+}
+
+function addLeafCluster(batch, twig, sx, tipX, tipY, heading, leafColors, leafPts) {
+  const cos = Math.cos(heading)
+  const sin = Math.sin(heading)
+  TWIG_LEAF_CLUSTER.forEach(leaf => addLeaf(batch, twig, sx,
+    tipX - cos * leaf.back, tipY - sin * leaf.back, heading + leaf.turn, leaf.size, leafColors, leafPts))
+}
+
+//
+// Leaf vertices go through the same local → world map as the stick, so the
+// leaves rotate with the fall and squeeze with the mounted turn.
+//
+function addLeaf(batch, twig, sx, ox, oy, angle, size, leafColors, leafPts) {
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  LEAF_TONES.forEach((tone, toneIdx) => {
+    for (let i = 0; i < LEAF_SHAPE.length; i++) {
+      const px = (LEAF_SHAPE[i][0] * tone.scale + tone.dx) * size
+      const py = (LEAF_SHAPE[i][1] * tone.scale + tone.dy) * size
+      const lx = ox + px * cos - py * sin
+      const ly = oy + px * sin + py * cos
+      leafPts[i][0] = twigWorldX(twig, sx, lx, ly)
+      leafPts[i][1] = twigWorldY(twig, lx, ly)
+    }
+    //
+    // Points are already in world space: identity origin, scale and rotation.
+    //
+    PolyBatch.addShape(batch, leafPts, LEAF_INDICES, 0, 0, 1, 1, 1, 0, leafColors[toneIdx])
+  })
+}
+
+//
+// Twig tones from the colour tree palette (built once per inst — the
+// palette is static and the inst lives on one Kaplay instance).
+//
+function buildTwigColors(k) {
+  const pal = getTreePaletteColor()
+  const outlineRgb = glowRgb(TWIG_OUTLINE)
+  return {
+    wood: k.rgb(pal.branchR, pal.branchG, pal.branchB),
+    woodDark: k.rgb(pal.trunkR, pal.trunkG, pal.trunkB),
+    leaves: pal.leafShades.map(c => k.rgb(c.r, c.g, c.b)),
+    outline: k.rgb(outlineRgb.r, outlineRgb.g, outlineRgb.b)
+  }
 }
 
 function addTwigLine(batch, twig, sx, ax, ay, bx, by, w, color) {

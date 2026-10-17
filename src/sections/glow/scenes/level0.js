@@ -6,9 +6,7 @@ import { initTouchInput } from '../../../utils/touch-input.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerGlowNativeTeardown } from '../../../utils/engine-switch.js'
-import { eyeHudSpriteIsDesat } from '../../../utils/eye-hud.js'
 import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
-import { MENU_BG_FRONT_LEAF_RGB } from '../../../utils/menu-bg-generator.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
@@ -20,44 +18,30 @@ import {
   TRAMP_FACE_EYE_SCALE
 } from '../utils/cute-mushroom.js'
 import * as Predator from '../components/predator.js'
-import * as SwampSpirit from '../components/swamp-spirit.js'
-import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, onPhysicalKeyPress, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
+import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
 import {
   buildGlowTree,
   renderGlowTreeToCanvas,
   renderGlowTreeIntoContext,
   TREE_SEED
 } from '../utils/glow-tree.js'
-import * as TreeSegments from '../utils/glow-tree-segments.js'
 import {
   GROUND_RIGHT_STRIP_COUNT,
   groundRightStripIndexForX,
-  groundRightAppearOpacity,
-  groundRightExploredEdgeX
+  groundRightAppearOpacity
 } from '../utils/glow-ground-reveal.js'
 import {
   GLOW_PAL,
   glowCaveEarthDeepRgb,
-  glowCaveEarthFloorRgb,
-  glowPreludeBackdropRgb,
   glowGroundEarthBottomLayerRgb,
   glowRgb,
   glowRockShadedDrawPalette,
   glowContourRgb,
   snapToPalette,
-  getTreePaletteGray,
-  getTreePaletteLit,
-  getTreePaletteFlatDecor,
-  getTreePaletteFlatDecorRootsVisible,
-  getCuteMushroomFlatDecorColors,
-  getCuteMushroomFlatWaterColors,
-  getTreePaletteColor,
   getTreePaletteColorForCorner,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
-  getTreePaletteSolid,
-  getGlowLightRgb,
-  isGlowGrayWorld
+  getGlowLightRgb
 } from '../utils/glow-palette.js'
 import {
   applyFoliageDensityToPalette,
@@ -78,8 +62,7 @@ import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import { generateLogDetail, drawLogPlatform } from '../../touch/utils/log-platform.js'
-import { ensurePitCaveSkeletonLayout } from '../utils/glow-cave-skeleton.js'
+import { drawLogPlatform } from '../../touch/utils/log-platform.js'
 import {
   createGlowMidges,
   updateGlowMidges,
@@ -87,29 +70,17 @@ import {
   createGlowPit,
   updateGlowPit,
   drawGlowPit,
-  drawGlowPitBareCave,
-  drawGlowPitCaveSkeletonScene,
   drawGlowPitCaveForegroundDecor,
   drawGlowPitCaveSeamCoverRocks,
-  drawGlowPitEyeIntroInterior,
-  shouldShowPitCaveSkeleton,
-  isHeroOnPitCaveFloor,
-  setGlowPitCracksVisible,
   isCrackGrassExcluded,
   isCrackDecorExcluded,
   getCrackZone,
-  KEY_PIT_COLLAPSED,
-  ensureGlowPitOpenForEyesCollected,
-  ensureGlowPitCollapsedOnReload,
-  restoreGlowPitEyeIntroInterior,
   getGlowPitHeroStandY,
   getGlowPitEarthBandMouthCutoutForPit,
   isGlowOpenPitMouthWorldX,
   getGlowPitFloorCollider,
   getGlowCaveMouthFloorLeftX,
-  shouldGlowPitBeOpenForZones,
-  glowHeroHasCollectedEyes,
-  invalidateGlowPitCaveInteriorBake
+  getGlowPitCaveTrampolineX
 } from '../utils/glow-atmosphere.js'
 import {
   initGlowTeacherHintState,
@@ -117,62 +88,21 @@ import {
   tickGlowTeacherContextHints,
   onGlowTeacherLifeHudRevealed,
   glowTeacherHudAnchor,
-  GLOW_TEACHER_HINT_MOVE_SEC,
   GLOW_TEACHER_HINT_DURATION
 } from '../utils/glow-teacher-hint.js'
 import {
-  syncSwampSpiritProximityHint,
-  destroySwampSpiritProximityHint
-} from '../utils/swamp-spirit-proximity-hint.js'
-import {
   buildGlowTreeFruitSpots,
   computeGlowAnchorFruitDropX,
-  ensureGlowTreeFruitSpots,
   mountGlowTreeFruitLayer,
   releaseGlowAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
-import { glowLakeRaftWorldX, mountGlowLakeRaftLayer, isOnGlowLakeRaft } from '../utils/glow-lake-raft.js'
-import * as GlassesSlot from '../utils/glow-glasses-slot.js'
 import { applyGlowExperienceDelta, readGlowExperience } from '../utils/glow-experience.js'
-import * as HoloDoor from '../utils/glow-holo-door.js'
-import * as GroundPortal from '../utils/glow-ground-portal.js'
-import {
-  KEY_EYES_COLLECTED,
-  createGlowEyeIntroState,
-  initGlowHeroWithoutEyes,
-  isGlowEyeIntroPending,
-  isGlowEyesGameplayUnlocked,
-  isGlowPitMushroomUnlocked,
-  isGlowEyeIntroBareWorld,
-  shouldGlowSuppressFootDetails,
-  shouldGlowBlockWorldReveal,
-  isGlowEyeIntroCaveActive,
-  syncGlowEyeIntroMidges,
-  onUpdateGlowEyeIntro,
-  updateGlowCaveFloorEyeReveal,
-  onDrawGlowEyeIntro,
-  glowHeroOneEyeBakeOpts,
-  drawGlowCavePickupEyesOnPitLayer,
-  unlockGlowEyesGameplayFromBranchLaunch,
-  snapGlowHeroToPitFloor,
-  restoreGlowEyeIntroFromPersistedState
-} from '../utils/glow-eye-intro.js'
-import {
-  KEY_SECOND_EYE_COLLECTED,
-  getGlowHeroFillProgress,
-  syncGlowHeroFillVisual,
-  updateGlowHeroFillBurst,
-  drawGlowHeroFillBurst,
-  clearGlowHeroFillPreview,
-  resolveGlowHeroFilledSpriteKey,
-  applyGlowHeroEyesOpenedBake,
-  commitGlowHeroBodyFill
-} from '../utils/glow-hero-fill.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
 import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
 import * as EarTree from '../utils/glow-ear-tree.js'
+import * as EyeFlower from '../components/eye-flower.js'
 import * as ShoreTree from '../utils/glow-shore-tree.js'
 import * as HorizFallTwig from '../utils/glow-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
@@ -187,7 +117,6 @@ import {
   drawGlowHiResFoliageCluster,
   GLOW_LAYER_GRADE
 } from '../utils/glow-parallax-grain.js'
-import { finishGlowLifeDesatCanvas } from '../utils/glow-ui-bake.js'
 import {
   measureCanvasContentBounds,
   cropCanvasToBounds,
@@ -195,27 +124,14 @@ import {
 } from '../utils/glow-canvas-crop.js'
 import {
   bakeGlowTooltipCanvas,
-  glowUiHash,
-  createGlowBakedTextHolder,
-  syncGlowBakedTextHolder,
-  destroyGlowBakedTextHolder
+  glowUiHash
 } from '../utils/glow-ui-bake.js'
 //
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
 const VOID = glowRgb('void')
-const PRELUDE_BACKDROP = glowPreludeBackdropRgb()
 const GLOW_SHADOW = glowRgb('glowShadow')
 const OUTER = glowRgb('playfieldOuter')
-const INNER_GRAY = glowRgb('playfieldGray')
-const MID_GRAY = glowRgb('midGray')
-const LIGHT_GRAY = glowRgb('lightGray')
-const DECOR_GRAY = glowRgb('decorGray')
-const FLAT_SKY = glowRgb('glowFlatSky')
-const FLAT_EARTH = glowRgb('glowFlatEarth')
-const FLAT_EARTH_DEEP = glowRgb('glowFlatEarthDeep')
-const FLAT_UNDERGROUND = glowRgb('glowFlatUnderground')
-const FLAT_WATER = glowRgb('glowFlatWater')
 //
 // Warm orange grass — same half-brightness front-row foliage tone as menu.js
 //
@@ -236,8 +152,8 @@ const GLOW_GOLD_HEX = GLOW_PAL.gold
 //
 const GROUND_DARK = glowRgb('groundDark')
 //
-// Wet mud patch fill under the mud zone's tall grass — visible year-round
-// (gray and colour mode alike), a distinct darker/warmer tone than plain
+// Wet mud patch fill under the mud zone's tall grass — a distinct
+// darker/warmer tone than plain
 // groundDark so the soft-mud band reads as its own surface, not just taller
 // grass over the same ground everywhere else.
 //
@@ -247,7 +163,6 @@ const MUD_GROUND_RGB = glowRgb('mudGround')
 //
 const PARALLAX_FOLIAGE_HAZE = glowRgb(GLOW_PAL.glowForestLift)
 const GLOW_LIGHT_CORE = getGlowLightRgb('core')
-const GLOW_LIGHT_BRIGHT = getGlowLightRgb('bright')
 //
 // Forest contour ink for trees, mushrooms, rocks, letters (not pure black).
 //
@@ -260,10 +175,9 @@ const MUSHROOM_CAP_HEX = GLOW_PAL.mushrooms
 const MUSHROOM_CAP_SHADOW_HEX = GLOW_PAL.mushroomsDark
 const MUSHROOM_CAP_LIGHT_HEX = GLOW_PAL.mushroomsLight
 //
-// Cute mushroom palette sets: full colour and the gray-family mirror.
+// Cute mushroom palette set (full colour).
 //
 const CUTE_MUSH_COLORS = GLOW_PAL.cuteMushroom
-const CUTE_MUSH_GRAY_COLORS = GLOW_PAL.cuteMushroomGray
 //
 // Layout. Glow runs on its own native-resolution engine (see game-engine.js /
 // engine-switch.js) so the playfield always fills the real window horizontally
@@ -336,15 +250,6 @@ let glowPlayfieldCornerObjs = null
 //
 const RIGHT_ZONE_SHIFT_X = WORLD_W - 1920
 const CORNER_RADIUS = 20
-//
-// Both colour variants are baked once at scene setup (see
-// loadPlayfieldCornerSprites) and kept loaded for the whole level, so the
-// void <-> outer-frame switch (e.g. on L collection) only ever swaps which
-// already-resident sprite a corner object uses — reloading a sprite here
-// instead would leave the old-colour mask on screen for a stray frame while
-// the backdrop already switched, flashing a visibly mismatched corner.
-//
-const CORNER_SPRITE_VOID = 'glow0-corner-mask-void'
 const CORNER_SPRITE_OUTER = 'glow0-corner-mask-outer'
 const PLAYFIELD_BOTTOM_CORNER_Z = CFG.visual.zIndex.ui + 2500
 const PLATFORM_HIDE_Y = 9999
@@ -376,9 +281,6 @@ const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
 // 150 px at the feet, so the branch is reachable only via the left mushroom.
 //
 const MAIN_TREE_HERO_BRANCH_FRAC = 0.5
-const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-v5'
-const TREE_FLAT_ROOTS_SPRITE_NAME = 'glow0-tree-flat-roots-v5'
-const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-v5'
 //
 // The tree is painted in world space onto a full 3000x1080 canvas, but the
 // trunk and canopy only cover a slice of it. Cropping the bake to that slice
@@ -402,21 +304,17 @@ const MUD_ZONE_BRANCH_TRIGGER_GAP = 170
 const MUD_ZONE_PREDATOR_POP_LEAD = 70
 const MUD_ZONE_PREDATOR_DANGER_MARGIN = 40
 //
-// Soft muddy ground band in flat gray explore mode. Jump is lower than
+// Soft muddy ground band. Jump is lower than
 // normal with a snappy takeoff (no low-gravity hang). Footsteps sound wet;
 // foot bursts are off.
 //
 const MUD_BRANCH_TRAMP_GAP = 42
 const MUD_ZONE_RIGHT_EXTENT = 170
 const MUD_ZONE_CREATURE_MARGIN = 14
-const MUD_MAX_DEPTH = 42
 const MUD_MOVE_SPEED_MULT = 0.5
 const MUD_JUMP_FORCE_MULT = 0.68
 const MUD_GRAVITY_MULT = 1
 const MUD_JUMP_SQUASH_TIME_MULT = 1
-//
-// Letter-caption world freeze: birds + proximity ambient fade duration (sec).
-//
 const GLOW_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
 const GLOW_EAR_TREE_Z = CFG.visual.zIndex.player - 1
 //
@@ -481,7 +379,6 @@ const HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD =
 const ROCK_OUTLINE_RGB = DECOR_OUTLINE_RGB
 const ROCK_OUTLINE_WIDTH = 1.4
 //
-//
 // Parallax background — sky baked into the far row plus 2 forest planes (each
 // scrolling at its own speed), then a static ground/underground strip at
 // world speed 1.0. A depth row's bushes share their trees' canvas: same
@@ -489,14 +386,10 @@ const ROCK_OUTLINE_WIDTH = 1.4
 // inside the tree row's world-Y crop, so one sprite covers both and the
 // row costs a single draw call per frame instead of two.
 //
-const BG_PAR_TREE3_GRAY = 'glow0-bg-par-tree3-gray-v4'
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
-const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray-v4'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
-const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray-v4'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_GRAY = 'glow0-bg-static-gray-v5'
-const BG_STATIC_COLOR = 'glow0-bg-static-color'
+const BG_STATIC_COLOR = 'glow0-bg-static-color-v8'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
 // a depth row reaches from its own crown band down to the ground line rather
@@ -516,12 +409,6 @@ const PAR_STATIC_WORLD_H = CAVE_BAND_H
 const PAR_SKY_SPEED = 0.06
 const PAR_TREE2_SPEED = 0.26
 const PAR_TREE1_SPEED = 0.40
-//
-// Soft sky-coloured veils between forest rows — atmospheric perspective
-// without inventing new tones (opacity only).
-//
-const HAZE_FAR_OPACITY = 0.055
-const HAZE_MID_OPACITY = 0.028
 //
 // Extra horizontal bleed baked into parallax canvases so trees extend past the
 // playfield edges and never run out on the right when the camera scrolls.
@@ -572,6 +459,7 @@ const parallaxOffscreenByK = new WeakMap()
 // Static ground / gameplay sprites stay sharp at bake time.
 //
 const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v5'
+const TREE_COLOR_GRAIN_SEED = 6002
 //
 // Horizontal branch platform.
 //
@@ -600,29 +488,8 @@ const LOG_H = 28
 //
 const LOG_COLLISION_DROP_Y = 2
 //
-// Flat decor-gray logs — entire pre-colour-world phase (after first eye too).
+// Letter-log platforms: tree browns matching the main colour tree.
 //
-const LOG_TREE_FLAT_GRAY_COLORS = {
-  bark: GLOW_PAL.decorGray,
-  barkLight: GLOW_PAL.lightGray,
-  barkDark: GLOW_PAL.glowContour.platform,
-  ring: GLOW_PAL.lightGray,
-  ringDark: GLOW_PAL.glowContour.platform,
-  core: GLOW_PAL.decorGray,
-  shadow: GLOW_PAL.void
-}
-//
-// Letter-log platforms: warm sand during the post-L preview, tree browns in colour world.
-//
-const LOG_TREE_LIT_COLORS = {
-  bark: GLOW_PAL.treeLit.branch,
-  barkLight: GLOW_PAL.treeLit.trunk,
-  barkDark: GLOW_PAL.treeLit.root,
-  ring: GLOW_PAL.treeLit.trunk,
-  ringDark: GLOW_PAL.glowContour.platform,
-  core: GLOW_PAL.treeLit.branch,
-  shadow: GLOW_PAL.void
-}
 const LOG_TREE_COLOR_COLORS = {
   bark: GLOW_PAL.treeColor.root,
   barkLight: GLOW_PAL.treeColor.branch,
@@ -686,14 +553,12 @@ const PAR_CANOPY_SKY_GAP = 132
 const PAR_LEAF_SKY_FLOOR_Y = TOP_MARGIN + PAR_CANOPY_SKY_GAP
 const PAR_LEAF_BAND_H_NEAR = 148
 const PAR_LEAF_BAND_H_MID = 132
-const PAR_LEAF_BAND_H_FAR = 118
 const PAR_LEAF_TIER_OVERLAP = 24
 const PAR_NEAR_BAND_TOP = PAR_LEAF_SKY_FLOOR_Y
 const PAR_NEAR_BAND_BOTTOM = PAR_NEAR_BAND_TOP + PAR_LEAF_BAND_H_NEAR
 const PAR_MID_BAND_TOP = PAR_NEAR_BAND_BOTTOM - PAR_LEAF_TIER_OVERLAP
 const PAR_MID_BAND_BOTTOM = PAR_MID_BAND_TOP + PAR_LEAF_BAND_H_MID
 const PAR_FAR_BAND_TOP = PAR_MID_BAND_BOTTOM - PAR_LEAF_TIER_OVERLAP
-const PAR_FAR_BAND_BOTTOM = PAR_FAR_BAND_TOP + PAR_LEAF_BAND_H_FAR
 //
 // Trunk apex sits above each row's canopy so branches sprout inside the
 // band. The margin has to clear the crown clusters buildGlowTree grows from
@@ -747,7 +612,7 @@ const BUSH_LEAF_DARKEN_STEPS = [0, 0.08]
 const BUSH_HIRES_CLUSTER_DENSITY = 0.3
 //
 // Colour-world bush tones follow the same corner quadrant as the trees in that
-// row (leaf swatch per mound centre X). The gray world keeps every bush gray.
+// row (leaf swatch per mound centre X).
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is taller — three readable ground-level tiers.
@@ -770,12 +635,6 @@ const BUSH_FERN_DARK = 0.5
 const BUSH_FERN_MID = 0.34
 const BUSH_FERN_LIGHT = 0.14
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
-//
-// Hard foliage floor: no background leaf (branch cluster or band leaf) may
-// ever paint below this line — the horizontal middle band of the screen
-// stays trunk-only in every row and every mode.
-//
-const PAR_LEAF_MAX_Y = PAR_FAR_BAND_BOTTOM + 8
 //
 // Headroom kept above each row's own band top when clipping its canopy
 // ceiling (see clipParallaxCanopyCeiling). The PAR_*_TOP_MIN_Y margins
@@ -825,7 +684,6 @@ function parTreeRowWorldH(_bandTop) {
 // load instead of per frame.
 //
 const PAR_LAYER_FAR = {
-  gray: BG_PAR_TREE3_GRAY,
   color: BG_PAR_TREE3_COLOR,
   speed: PAR_SKY_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
@@ -833,7 +691,6 @@ const PAR_LAYER_FAR = {
   worldH: PAR_SKY_WORLD_H
 }
 const PAR_LAYER_MID = {
-  gray: BG_PAR_TREE2_GRAY,
   color: BG_PAR_TREE2_COLOR,
   speed: PAR_TREE2_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
@@ -841,7 +698,6 @@ const PAR_LAYER_MID = {
   worldH: parTreeRowWorldH(PAR_MID_BAND_TOP)
 }
 const PAR_LAYER_NEAR = {
-  gray: BG_PAR_TREE1_GRAY,
   color: BG_PAR_TREE1_COLOR,
   speed: PAR_TREE1_SPEED,
   bleed: PAR_TREE_HORIZ_BLEED,
@@ -849,18 +705,9 @@ const PAR_LAYER_NEAR = {
   worldH: parTreeRowWorldH(PAR_BIG_BAND_TOP)
 }
 //
-// Minimum opacity before skipping a crossfade layer (avoids pops, not steps).
-//
-const COLOR_CROSSFADE_EPS = 0.001
-const GLOW_COLOR_REVEAL_GRAY_PHASE_END = 0.5
-//
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
 // hanging rootlets, fossil spirals and one buried skeleton (no burrows).
-// Baked once per mode (gray backdrop / dark colour-world earth).
 //
-const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray-v7'
-const UNDERGROUND_POST_L_BROWN_SPRITE = 'glow0-underground-postl-brown-v1'
-const UNDERGROUND_COLOR_SPRITE = 'glow0-underground-color'
 const UG_TOP_PAD = 30
 const UG_BOTTOM_PAD = 2
 const UG_ROCK_COUNT = 14
@@ -874,20 +721,45 @@ const UG_BOTTLE_COUNT = 2
 const UG_WORM_COUNT = 8
 const UG_FOSSIL_COUNT = 4
 //
-// Colour-world extras from the reference: packed beds of rounded cobbles in
-// the deep clay (one guaranteed at each end of the band), sediment streaks,
-// dark voids with a lit lip, warm pebbles in the topsoil and fine grit.
+// Colour-world extras from the reference: loose groups of dark slate stones
+// in the deep clay (a dense group guaranteed at each end of the band, a few
+// scattered singles between), sediment streaks, dark voids with a lit lip,
+// warm pebbles in the topsoil and fine grit.
 //
-const UG_BOULDER_PILE_COUNT = 7
-const UG_BOULDER_PILE_EDGE_INSET = 50
-const UG_BOULDER_PILE_STONES_MIN = 9
-const UG_BOULDER_PILE_STONES_RANGE = 9
+const UG_BOULDER_PILE_COUNT = 4
+const UG_BOULDER_PILE_EDGE_INSET = 60
+const UG_BOULDER_PILE_STONES_MIN = 4
+const UG_BOULDER_PILE_STONES_RANGE = 4
+const UG_BOULDER_EDGE_PILE_STONES_MIN = 8
+const UG_BOULDER_EDGE_PILE_STONES_RANGE = 4
+const UG_BOULDER_SCATTER_COUNT = 14
 const UG_BOULDER_R_MIN = 5
-const UG_BOULDER_R_RANGE = 10
-const UG_BOULDER_PILE_SPREAD = 110
-const UG_BOULDER_DEEP_FRAC = 0.62
-const UG_BOULDER_RIM_PX = 2
-const UG_BOULDER_OUTLINE_PX = 1.2
+const UG_BOULDER_R_RANGE = 13
+const UG_BOULDER_PILE_SPREAD = 150
+const UG_BOULDER_DEEP_FRAC = 0.72
+const UG_BOULDER_MIN_GAP_MULT = 0.85
+const UG_BOULDER_PLACE_ATTEMPTS = 12
+const UG_BOULDER_OUTLINE_PX = 1.5
+//
+// Lumpy, rounded silhouette: random-radius lobes joined by quadratic curves.
+//
+const UG_BOULDER_LOBES_MIN = 7
+const UG_BOULDER_LOBES_RANGE = 5
+const UG_BOULDER_LOBE_R_MIN = 0.8
+const UG_BOULDER_LOBE_R_RANGE = 0.28
+const UG_BOULDER_SQUASH_MIN = 0.78
+const UG_BOULDER_SQUASH_RANGE = 0.2
+//
+// Mottled face: a soft lit cap toward the top-left plus a few light speckles.
+//
+const UG_BOULDER_CAP_OFFSET = 0.22
+const UG_BOULDER_CAP_SCALE = 0.68
+const UG_BOULDER_CAP_ALPHA = 0.35
+const UG_BOULDER_SPECKLES_MIN = 2
+const UG_BOULDER_SPECKLES_RANGE = 4
+const UG_BOULDER_SPECKLE_R_MIN = 0.7
+const UG_BOULDER_SPECKLE_R_RANGE = 1.1
+const UG_BOULDER_SPECKLE_ALPHA = 0.55
 const UG_STREAK_COUNT = 80
 const UG_STREAK_LEN_MIN = 30
 const UG_STREAK_LEN_RANGE = 110
@@ -943,22 +815,6 @@ const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 28
 const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 36
 const MUD_EAST_ROCK_INSET = 6
 const MUD_EAST_ROCK_COUNT = 34
-const GLOW_COLOR_WORLD_REVEAL_SEC = 4
-//
-// Colour-world reveal curtain covers every world layer (tree, platforms and
-// foreground grass sit above the hero) but stays under the HUD frame; the
-// hero is redrawn over it so he never vanishes while the world appears.
-//
-const GLOW_COLOR_REVEAL_CURTAIN_Z = CFG.visual.zIndex.ui - 1.5
-const GLOW_COLOR_REVEAL_HERO_Z = CFG.visual.zIndex.ui - 1.25
-const GLOW_POST_FIRST_EYE_PARALLAX_FADE_SEC = 4
-const TREE_REVEAL_FADE_DURATION = 0.85
-//
-// Any element that snaps from hidden to visible fades its opacity in over
-// this long instead of popping at full strength, so nothing appears to
-// materialize out of nowhere mid-transition.
-//
-const POP_REVEAL_FADE_DURATION = 0.35
 //
 // Glow HUD row — the (empty) section label's top Y is derived from the FPS
 // row's vertical CENTER (GLOW_HUD_FPS_TOP_Y) so the small hero / life icons
@@ -982,7 +838,7 @@ const GLOW_HUD_LABEL_BAKED_HALF_H =
 let GLOW_HUD_FPS_TOP_Y = 55
 let GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
 //
-// Neutral HUD grey after the world colours — palette gray5.
+// Neutral HUD grey for HUD text — palette gray5.
 //
 const HUD_SCORE_COLOR_SETTLED = glowRgb('hudScore')
 //
@@ -1000,40 +856,18 @@ const GLOW_DECOR_CULL_MARGIN = 64
 const HERO_OUTLINE_COLOR = GLOW_PAL.glowContour.gameplay
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 //
-// Hollow gray-phase rim — warm off-white (same read as ready / eyeless spawn).
-//
-const HERO_HOLLOW_OUTLINE_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
-//
-// Life HUD eye pupil before L — dark gray so it reads with the gray world.
-//
-const GLOW_HUD_EYE_PUPIL_PRE_L_RGB = glowRgb(GLOW_PAL.dialogFill)
-//
-// Filled glow hero body after the post-L colour reveal — white inside, dark rim.
+// Glow hero: white body, dark rim, two open eyes from the first frame.
 //
 const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
 const HERO_FILLED_OUTLINE_COLOR = CFG.visual.colors.outline
-//
-// Hollow glow eyes: outline ring + matching pupil, clear socket.
-// Filled glow eyes: white sclera + black pupils (standard hero bake).
-//
-function getGlowHeroEyeBakeColors(outlineOnly) {
-  if (outlineOnly) {
-    return {
-      pupilColor: HERO_HOLLOW_OUTLINE_COLOR,
-      transparentEyeInterior: true
-    }
-  }
-  return {
-    eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-    pupilColor: CFG.visual.colors.hero.eyePupil,
-    transparentEyeInterior: false
-  }
+const HERO_EYE_BAKE_COLORS = {
+  eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
+  pupilColor: CFG.visual.colors.hero.eyePupil,
+  transparentEyeInterior: false
 }
 //
 // Zone persistence keys (glow.* prefix).
 //
-const KEY_PREDATOR_AWAKE = 'glow.predatorAwake'
-const KEY_REVEALED_TREE = 'glow.revealedTree'
 const KEY_REVEALED_WATER = 'glow.revealedWater'
 //
 // Prize stalk-eye east of the right mushroom: tall enough that a plain jump
@@ -1066,9 +900,6 @@ const GLOW_CHAIN_TRAMP_SWAY_SPEED = 1.1
 const GLOW_CHAIN_TRAMP_SWAY_LAG = 0.55
 const SHORE_BRANCH_PLAT_HIDE_X = -500
 const SHORE_BRANCH_PLAT_HIDE_Y = -5000
-const GLOW_PRIZE_EYE_PICKUP_HALF_W = 26
-const GLOW_PRIZE_EYE_PICKUP_ABOVE = 22
-const GLOW_PRIZE_EYE_PICKUP_BELOW = 16
 //
 // Extra offset for the L log + right spikes — landing arc from the walking
 // trampoline reads cleaner slightly higher and east of the chain-eye layout.
@@ -1076,20 +907,8 @@ const GLOW_PRIZE_EYE_PICKUP_BELOW = 16
 const KEY_REVEALED_GROUND_DECOR = 'glow.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'glow.revealedGroundDecorRight'
 const KEY_REVEALED_GROUND_DECOR_LEFT = 'glow.revealedGroundDecorLeft'
-const KEY_TREE_SEGMENTS_REVEALED = 'glow.treeSegmentsRevealed'
 const KEY_GROUND_RIGHT_STRIP_MAX = 'glow.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
-const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
-//
-// Right mushroom cap collider / bounce — only after a second landing on the spot.
-//
-const KEY_RIGHT_TRAMP_BOUNCE_LIVE = 'glow.rightTrampBounceLive'
-const KEY_BRANCH_TRAMP_BOUNCE_LIVE = 'glow.branchTrampBounceLive'
-//
-// Trampoline mushrooms appear only after the hero lands within this distance.
-//
-const TRAMP_MUSH_LAND_REVEAL_DIST = 80
-const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
 const KEY_INTRO_SHOWN = 'glow.introShown'
@@ -1098,40 +917,35 @@ const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
 const KEY_LAST_SPAWN_Y = 'glow.lastSpawnY'
-const KEY_BRANCH_TRAMP_REVEALED = 'glow.branchTrampRevealed'
 const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
-const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
-const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
-const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
-const HERO_SPAWN_FADE_DURATION = 0.75
 const PIT_CAVE_HINT_TEXT = 'Something hums\nunder the cave floor.'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
 const PIT_CAVE_AIR_ABOVE_LIP = 148
+//
+// Main playfield in front of the mouth — hero stays on the normal sprite here.
+//
+const PIT_CAVE_APPROACH_GROUND_FEET = 20
 const DROWN_RESPAWN_LAKE_CLEARANCE = 56
 //
-// Birds loop for the colour world.
+// Ambient birds loop for the whole level.
 //
 const GLOW_BIRDS_AUDIO_SRC = './sounds/birds.mp3'
 const GLOW_BIRDS_PLAYBACK_RATE = 1
+//
+// Birds low-pass cutoff — high enough to keep the full, bright mix.
+//
+const GLOW_BIRDS_COLOR_LOWPASS_HZ = 14000
 let glowBirdsLoopHandle = null
 //
 // Speech-bubble hints: two intro lines at spawn, one-shot lines
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself\nin a world I cannot fully see.\nTo understand where I am, I\nneed to learn to see it.'
-const HINT_INTRO_1_DURATION = 16
 const HINT_INTRO_2_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
 const HINT_INTRO_2_DURATION = 18
-//
-// Extra beat between the first and second intro speech bubbles.
-//
-const HINT_INTRO_2_PAUSE = 1.5
-const INTRO_HINT_PHASE_ONE = 'one'
-const INTRO_HINT_PHASE_PAUSE = 'pause'
 const INTRO_HINT_PHASE_TWO = 'two'
 //
 // Walking this far from a Glow speech bubble dismisses it early.
@@ -1150,11 +964,6 @@ const GLOW_PROXIMITY_SOUND_RADIUS = 120
 const GLOW_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
-const HERO_CONFIDENT_HINT_DURATION = 4
-//
-// Self-growth lines on the hero after each letter fill step (less transparent body).
-//
-const GLOW_SECOND_EYE_HINT = 'Now I feel more alive\nin every color.'
 //
 // Repeat drownings get a random self-ironic joke over the sinking hero.
 //
@@ -1166,63 +975,19 @@ const DROWN_JOKES = [
   'I regret nothing.\nWell... one thing.'
 ]
 //
-// After L the gray root zone darkens toward void by this amount.
-//
-const GROUND_L_DARKEN = 0.22
-//
-// After L the gray ground decor (mushrooms, grass, water, rocks) also
-// darkens toward void; the effect fades away with the colour-world fade.
-//
-const L_DECOR_DARKEN = 0.22
-//
-// Hero hover — only the eyeless beat; nudges live on the life-icon teacher.
-//
-const HERO_TOOLTIP_EYELESS_TEXT = "I can't see anything"
-const HERO_TOOLTIP_Y_OFFSET = -72
-//
-// Teacher (life HUD) hints — indirect nudges, not orders.
-//
-const GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT = 'A timid little beast\nhides in the reeds.'
-const GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT_MAX_SHOWS = 2
-//
-// Eyeless intro: nudge toward the right-edge cave mouth (max two, 10 s active each).
-//
-const GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT = 'Something feels different\nover there ⤵'
-const GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS = 2
-//
-// Lake + right mushroom open but the big tree is still hidden (max two).
-//
-const GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT = 'Look for the big tree\nnear the mushroom.'
-const GLOW_TEACHER_HINT_TREE_NEAR_MUSH_MAX_SHOWS = 2
-const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
-const MUD_TOOLTIP_SIZE = 80
-const MUD_TOOLTIP_Y_OFFSET = -50
-//
 // Branch trampoline hover bubble sits above the cap.
 //
 const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
-// Buried skeleton hover — visible once the left underground band is open
-//
-const SKELETON_TOOLTIP_TEXT = 'Time to get some sleep...'
-const SKELETON_TOOLTIP_NEED_EYE_TEXT = 'Maybe you need\nan eye, buddy?'
-const SKELETON_TOOLTIP_WIDTH = 72
-const SKELETON_TOOLTIP_HEIGHT = 104
-const SKELETON_TOOLTIP_BODY_CENTER_R = 2.3
-const SKELETON_TOOLTIP_Y_OFFSET = -70
-//
 // HUD life-icon (the "teacher") hover tooltip — same as touch lesson 0.
 //
 const LIFE_TOOLTIP_TEXT = 'Your experience (exp)'
-const GLASSES_SLOT_TOOLTIP_TEXT = `Glasses - ${GlassesSlot.GLASSES_EXPERIENCE_COST} exps`
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 const LIFE_SCORE_TOOLTIP_SIZE = 44
 const LIFE_SCORE_TOOLTIP_Y_OFFSET = 50
 const LIFE_SCORE_TOOLTIP_CENTER_Y_OFFSET = -6
 const LIFE_SCORE_TOOLTIP_CENTER_Y_LIFT_FRAC = 0.5
-const PIT_CAVE_SKELETON_AUTO_HINT_DELAY = 0.5
-const PIT_CAVE_SKELETON_AUTO_HINT_DURATION = 6
 //
 // Drowning — land on the lake floor, then sink under the fill with the hint.
 //
@@ -1274,21 +1039,21 @@ const GLOW_FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
 const GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 //
-// Sunlight shafts from the upper left (colour world only), grouped over the
-// left part of the level like in the reference; they fade out toward the ground so
-// the walking hero stays clear. Sizes come from a fixed seed.
+// Sunlight rays from one sun high above the upper-left corner (colour world
+// only). Each ray is a wedge from that point with its own angular width, so
+// ray edges spread apart with distance and the rays fan from a single source.
+// They reach the ground line and screen-lighten everything they cross, so the
+// z sits above the topmost world decor (ear-tree branches / spiky tomatoes at
+// GRASS_Z + 3.5) but far below HUD and speech bubbles.
 //
-const GLOW_LIGHT_SHAFT_Z = GRASS_Z - 4
-const GLOW_LIGHT_SHAFT_ANGLE = -0.55
-const GLOW_LIGHT_SHAFT_SEED = 9151
-const GLOW_LIGHT_SHAFT_GROUPS = [{ x: 60, count: 4 }, { x: 400, count: 4 }, { x: 760, count: 3 }]
-const GLOW_LIGHT_SHAFT_W_MIN = 26
-const GLOW_LIGHT_SHAFT_W_RANGE = 70
-const GLOW_LIGHT_SHAFT_GAP_MIN = 30
-const GLOW_LIGHT_SHAFT_GAP_RANGE = 60
-const GLOW_LIGHT_SHAFT_REACH = 0.9
-const GLOW_LIGHT_SHAFT_OPACITY_MIN = 0.3
-const GLOW_LIGHT_SHAFT_OPACITY_RANGE = 0.25
+const GLOW_LIGHT_SHAFT_Z = GRASS_Z + 5
+const GLOW_LIGHT_SUN_OFFSET_X = -300
+const GLOW_LIGHT_SUN_LIFT = 900
+const GLOW_LIGHT_RAYS = [
+  { angle: 0.45, spread: 0.11, opacity: 0.42 },
+  { angle: 0.61, spread: 0.045, opacity: 0.3 },
+  { angle: 0.79, spread: 0.08, opacity: 0.36 }
+]
 const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
 const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
@@ -1308,7 +1073,7 @@ const MUD_ZONE_GRASS_SCALE_MULT = 2
 //
 const MUD_APPROACH_GRASS_SCALE_MULT = 1.62
 //
-// Mud grass stays darker than the peek band when the post-L colour fade starts.
+// Mud grass stays darker than the plain field grass.
 //
 const MUD_ZONE_GRASS_GREEN_VOID_LERP = 0.42
 //
@@ -1324,14 +1089,6 @@ const GLOW_DEBUG_HIDE_GRASS_BEFORE_MUD = false
 //
 // Surface clutter the predator crawls over — drawn under tall grass.
 //
-const MUD_BEHIND_ROCK_Z = 6
-const MUD_DRAW_Z = 7
-const MUD_FRONT_ROCK_Z = CFG.visual.zIndex.player - 2
-const MUD_WALK_BIG_ROCK_COUNT = 2
-const MUD_WALK_SMALL_ROCK_COUNT = 4
-const MUD_WALK_BRANCH_COUNT = 2
-const MUD_WALK_LOG_MIN_W = 62
-const MUD_WALK_LOG_MAX_W = 96
 const MUD_BLOB_STEPS = 24
 const MUD_ROCK_SINK = 6
 //
@@ -1340,17 +1097,6 @@ const MUD_ROCK_SINK = 6
 const GROUND_REVEAL_FADE_WIDTH = 220
 const GROUND_REVEAL_LOOKAHEAD = 80
 const GROUND_DETAIL_LOOKAHEAD = 28
-const LEFT_DECOR_FADE_DURATION = 0.7
-//
-// Quiet drifting motes — few, slow, never competing with the hero.
-//
-const MOTE_COUNT = 7
-const MOTE_SPEED_MIN = 4
-const MOTE_SPEED_RANGE = 8
-const MOTE_SIZE_MIN = 1.2
-const MOTE_SIZE_RANGE = 1.4
-const MOTE_OPACITY_MIN = 0.07
-const MOTE_OPACITY_RANGE = 0.1
 //
 // Underground earth band: topsoil, subsoil and deep clay (fractions of
 // CAVE_BAND_H for the first two; the last fills the rest). The deep clay is
@@ -1363,19 +1109,35 @@ const GROUND_LAYER_DEEP_SHADE_ALPHA = 0.3
 // a dense irregular time series — not smooth sine waves).
 //
 const GROUND_LAYER_JAG_CELL_PX = glowFilmGrainBlockPxForTier('gameplay')
-const GROUND_LAYER_SAMPLE_PX = 2
-const GROUND_LAYER_INTERIOR_BOUNDARY_AMP = 12
+const GROUND_LAYER_SAMPLE_PX = 1
+const GROUND_LAYER_INTERIOR_BOUNDARY_AMP = 10
 //
-// The topsoil hangs into the subsoil as a fringe of uneven teeth (like the
-// reference), on a slow sway so the seam is not a ruler line.
+// Large rolling hills along every interior seam (reference cross-section) —
+// separate seed per boundary so strata do not share the same silhouette.
+// Wavelength ratios are non-integer and the lattice is domain-warped, so the
+// crests never settle into a regular, sine-like rhythm.
+//
+const GROUND_LAYER_MACRO_OCTAVES = [
+  { wavelength: 347, amp: 24 },
+  { wavelength: 151, amp: 15 },
+  { wavelength: 63, amp: 8 }
+]
+const GROUND_LAYER_MACRO_WARP_WAVELENGTH = 229
+const GROUND_LAYER_MACRO_WARP_AMP = 120
+//
+// Slow envelope over the macro sway: calm stretches alternate with wild ones.
+//
+const GROUND_LAYER_MACRO_ENVELOPE_WAVELENGTH = 610
+const GROUND_LAYER_MACRO_ENVELOPE_MIN = 0.45
+//
+// Topsoil hangs into subsoil as soft rounded tongues (not needle teeth).
 //
 const GROUND_LAYER_FRINGE_INDEX = 1
-const GROUND_LAYER_FRINGE_W = 9
-const GROUND_LAYER_FRINGE_DEPTH_MIN = 4
-const GROUND_LAYER_FRINGE_DEPTH_RANGE = 18
-const GROUND_LAYER_FRINGE_JAG_AMP = 2
-const GROUND_LAYER_FRINGE_SWAY_A = 6
-const GROUND_LAYER_FRINGE_SWAY_F = 1 / 70
+const GROUND_LAYER_FRINGE_LOBE_OCTAVES = [
+  { wavelength: 27, amp: 6 },
+  { wavelength: 13, amp: 2.5 }
+]
+const GROUND_LAYER_FRINGE_JAG_AMP = 2.5
 //
 // Pull each soil swatch toward the layer average so strata read softer.
 //
@@ -1389,14 +1151,6 @@ const SKY_DITHER_BAND_COUNT = 7
 //
 const SKY_DAWN_BOTTOM_FRAC = 0.28
 const SKY_DAWN_GLOW_STRENGTH = 0.34
-//
-// Lake bake — horizontal reflection ripples in the mask (tinted at draw time).
-//
-//
-// Suppress orange forest haze when the camera sits over lake or cave beats.
-//
-const HAZE_LAKE_CAM_MARGIN = 96
-const HAZE_CAVE_CAM_MARGIN = 140
 //
 // Rocks.
 //
@@ -1477,11 +1231,6 @@ const TRAMP_PAD_H = Math.round(10 * TRAMP_SIZE_SCALE)
 //
 const TRAMP_PAD_FEET_BELOW = Math.round(20 * TRAMP_SIZE_SCALE)
 //
-// How far above capTop counts as "closing in on the cap" — used by the
-// predictive edge-catch in snapHeroToOneTrampolineCap (see its own comment).
-//
-const TRAMP_PAD_APPROACH_ABOVE = 90
-//
 // Horizontal reach for pad placement and fall-through guards
 //
 const TRAMP_NEAR_X = TRAMP_RADIUS + 80
@@ -1490,18 +1239,13 @@ const TRAMP_NEAR_X = TRAMP_RADIUS + 80
 //
 const TRAMP_SNAP_BELOW = 48
 const TRAMP_SQUASH_MAX = 0.35
-const TRAMP_SPRITE = 'glow0-trampoline-gray-v4'
+const TRAMP_SPRITE = 'glow0-trampoline-v4'
 const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
 //
 const BRANCH_TRAMP_OFFSET_X = 145
 const BRANCH_TRAMP_BOOST_MULT = 1.68
-//
-// Ignore crack collapse right after a branch-trampoline bounce (prevents
-// accidental cave opens while farming hops on the left mushroom).
-//
-const BRANCH_TRAMP_PIT_GUARD_SEC = 5
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
 // After the opening zoom-out finishes, wait this long before the first hint.
@@ -1516,6 +1260,10 @@ const GLOW_CAMERA_SHAKE_DURATION = 0.22
 const GLOW_BRANCH_JUMP_SHAKE_AMP = 4.5
 const GLOW_BRANCH_JUMP_SHAKE_DURATION = 0.2
 const GLOW_BRANCH_LANDINGS_TO_BREAK = 3
+//
+// Every second landing on the big tree's branch shakes one fruit loose.
+//
+const GLOW_START_BRANCH_LANDINGS_TO_DROP_FRUIT = 2
 const PREDATOR_LAKE_EDGE_PAD = 28
 const PREDATOR_CAVE_MOUTH_PAD = 24
 //
@@ -1523,21 +1271,11 @@ const PREDATOR_CAVE_MOUTH_PAD = 24
 //
 const GLOW_PREDATOR_HERO_VERTICAL_BAND_PX = 46
 //
-// After O: ten bounces on the right trampoline — at 5 it walks left and
-// stops; at 10 it marches into the lake and reveals W.
-//
-const TRAMP_WALK_BOUNCES_TOTAL = 10
-const TRAMP_WALK_SINGS_TO_WATER = TRAMP_WALK_BOUNCES_TOTAL
-//
 // Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
 //
 const TRAMP_CAP_PAD_LATCH_SEC = 0.28
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
-//
-// Bubble on the tenth bounce before the mushroom docks in the lake.
-//
-const CAVE_ENTRANCE_LANDING_PARTICLE_MULT = 2.4
 //
 // Rotating quips when the hero keeps bouncing without a break
 //
@@ -1580,12 +1318,6 @@ const WATER_RIGHT_TRIM = 10
 // rocks instead of ending in a vertical sprite edge.
 //
 const LAKE_SHORE_EXTEND_PX = 64
-//
-// Hologram cave door (visible through the glasses) stands in the earth band
-// under the lake, near the playfield's bottom-left corner.
-//
-const HOLO_DOOR_LAKE_X_PAD = 110
-const HOLO_DOOR_EARTH_BOTTOM_PAD = -10
 const LAKE_Z = 12
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
@@ -1646,6 +1378,10 @@ const GLOW_MUSHROOM_WHISTLE_SMOOTH = 7
 // Hero foot offset — matches COLLISION_HEIGHT/2 + COLLISION_OFFSET_Y in hero.js.
 //
 const SURFACE_DETECT_Y = 38
+//
+// Hero pos is above his feet by SURFACE_DETECT_Y; the plant aims at mid-body.
+//
+const GLOW_EYE_FLOWER_HERO_CENTER_DY = 12
 //
 // Slack around a wood surface when deciding "the hero's feet are on wood"
 // for the foot-dust guard — wider than the surface detector's own window so
@@ -1799,27 +1535,15 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   recomputeGlowScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  const zones = loadGlowZones()
   const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
     heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC
   })
   scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
-  const prewarmSegmentSave = get(KEY_TREE_SEGMENTS_REVEALED, [])
-  const prewarmMonolith = zones.tree && !(Array.isArray(prewarmSegmentSave) && prewarmSegmentSave.length > 0)
   onProgress?.(12)
   await yieldForGpu(1)
-  if (prewarmMonolith) {
-    bakeMonolithicGlowTreeSprites(k, treeData)
-    onProgress?.(42)
-  } else {
-    const plan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
-    const ids = TreeSegments.allGlowTreeSegmentIds(treeData, plan)
-    TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, ids)
-    isGlowEyeIntroPending(zones) && !k.getSprite(TREE_FLAT_SPRITE_NAME) &&
-      bakeMonolithicGlowTreeSprites(k, treeData)
-    onProgress?.(48)
-  }
+  bakeMonolithicGlowTreeSprites(k, treeData)
+  onProgress?.(42)
   await yieldForGpu(1)
   onProgress?.(55)
   //
@@ -1830,55 +1554,21 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   // instead of advancing smoothly.
   //
   await yieldForGpu(1)
-  if (!glowUndergroundSpritesReady(k) || !glowParallaxSpritesPrewarmed(k)) {
-    const undergroundSpec = await loadUndergroundSprites(k, async (done, total) => {
-      onProgress?.(55 + Math.round(13 * done / total))
+  if (!glowParallaxSpritesPrewarmed(k)) {
+    await buildParallaxSprites(k, glowUndergroundSpec(k), async (done, total) => {
+      onProgress?.(55 + Math.round(23 * done / total))
       await yieldForGpu(1)
     })
-    onProgress?.(68)
-    await yieldForGpu(1)
-    if (!glowParallaxSpritesPrewarmed(k)) {
-      await buildParallaxSprites(k, undergroundSpec, async (done, total) => {
-        onProgress?.(68 + Math.round(10 * done / total))
-        await yieldForGpu(1)
-      })
-    }
   }
   onProgress?.(78)
   await yieldForGpu(1)
   //
-  // Gray hero frames (outline + filled) bake here so spawn / body-fill fade
-  // never hitch the main thread mid-gameplay. Three separate bakes — ticking
-  // and yielding between each keeps the bar moving instead of holding at
-  // 78% for all three back to back.
+  // Hero frames bake here so the spawn never hitches the main thread.
   //
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(true),
-    bodyColor: HERO_BODY_COLOR,
-    outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
-    outlineOnly: true,
-    noEyes: true,
-    postBakeCanvas: applyGlowGameplaySharpBake
-  })
-  onProgress?.(82)
-  await yieldForGpu(1)
-  Hero.loadHeroSprites({
-    k,
-    type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(true),
-    bodyColor: HERO_BODY_COLOR,
-    outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
-    outlineOnly: true,
-    postBakeCanvas: applyGlowGameplaySharpBake
-  })
-  onProgress?.(86)
-  await yieldForGpu(1)
-  Hero.loadHeroSprites({
-    k,
-    type: Hero.HEROES.HERO,
-    ...getGlowHeroEyeBakeColors(false),
+    ...HERO_EYE_BAKE_COLORS,
     bodyColor: HERO_FILLED_BODY_COLOR,
     outlineColor: HERO_FILLED_OUTLINE_COLOR,
     outlineOnly: false,
@@ -1898,7 +1588,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const bootstrapCurtain = createGlowBootstrapCurtain(k)
     set('lastLesson', 'lesson-glow.0')
     set('lastSection', 'glow')
-    CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.glowPreludeBackdrop)
+    CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.setGravity(CFG.game.gravity)
     const sound = Sound.create()
@@ -1915,14 +1605,11 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     }
     const zones = loadGlowZones()
     if (await glowBootstrapPause(bootstrap, 6, session)) return
-    const colorFadeInit = zones.colorWorld ? 1 : 0
     //
     // Draw callbacks on decor/tramps read zones._sceneRef before inst exists
     // (async bootstrap yields to the engine between setup steps).
     //
-    zones._sceneRef = { zones, colorFade: colorFadeInit }
-    zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
-    !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.glowPreludeBackdrop)
+    zones._sceneRef = { zones }
     const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
     heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC
@@ -1935,124 +1622,39 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       trampClearHalf: TRAMP_GRASS_CLEAR_HALF,
       minHangY: glowTreeFruitMinHangY()
     }
-    let treeFruitSpots = []
-    let treeFruitSpotsBuilt = false
-    const savedTreeSegmentsRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
-    const hasPersistedSegmentReveal = Array.isArray(savedTreeSegmentsRaw) && savedTreeSegmentsRaw.length > 0
-    const treeDrawMonolith = zones.tree && !hasPersistedSegmentReveal
-    let treeSegmentPlan = null
-    let treeSegmentIds = []
-    let treeSegmentEntries = {}
-    const treeSegmentRevealed = new Set()
-    let treeSegmentPending = []
-    if (treeDrawMonolith) {
-      !glowTreeSpritesPrewarmed(k, true, []) && bakeMonolithicGlowTreeSprites(k, treeData)
-    } else {
-      treeSegmentPlan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
-      treeSegmentIds = TreeSegments.allGlowTreeSegmentIds(treeData, treeSegmentPlan)
-      const savedRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
-      const savedTreeSegments = TreeSegments.normalizePersistedTreeSegmentIds(savedRaw, treeData, treeSegmentPlan)
-      savedTreeSegments.forEach(id => treeSegmentRevealed.add(id))
-      treeSegmentPending = treeSegmentPlan.pendingIds.filter(id => !treeSegmentRevealed.has(id))
-      !glowTreeSpritesPrewarmed(k, false, treeSegmentIds) &&
-        TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, treeSegmentIds)
-      treeSegmentEntries = TreeSegments.createGlowTreeSegmentObjects(
-        k,
-        treeSegmentIds,
-        CFG.visual.zIndex.platforms - 2,
-        zones.colorWorld,
-        zones.eyesCollected
-      )
-      applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
-      const crownTreeRevealed = treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
-      crownTreeRevealed && (zones.tree = true)
-      isGlowEyeIntroPending(zones) && !k.getSprite(TREE_FLAT_SPRITE_NAME) &&
-        bakeMonolithicGlowTreeSprites(k, treeData)
-    }
-    const initTreeFruit = buildGlowTreeFruitSpotsForOpenCrown(
-      zones,
-      treeData,
-      treeFruitAnchorCfg,
-      treeSegmentPlan,
-      treeSegmentRevealed
-    )
-    if (initTreeFruit !== null) {
-      treeFruitSpots = initTreeFruit
-      treeFruitSpotsBuilt = true
-    }
+    !glowTreeSpritesPrewarmed(k) && bakeMonolithicGlowTreeSprites(k, treeData)
+    //
+    // One build per scene run — it paints the whole crown into a canvas and
+    // reads it back, so it never runs from a per-frame path.
+    //
+    const treeFruitSpots = buildGlowTreeFruitSpots(treeData, treeFruitAnchorCfg)
     if (await glowBootstrapPause(bootstrap, 14, session)) return
     //
-    // Underground decor first: its generated spec is baked both into the
-    // standalone sprites (visible before L) and into the combined background.
+    // The underground decor spec is baked into the combined static earth band.
     //
-    const undergroundReady = glowUndergroundSpritesReady(k)
-    const parallaxReady = glowParallaxSpritesPrewarmed(k)
-    if (!undergroundReady || !parallaxReady) {
-      const undergroundSpec = await loadUndergroundSprites(k, async (done, total) => {
-        const pct = 15 + Math.round(2 * (done - 1) / Math.max(1, total - 1))
+    if (!glowParallaxSpritesPrewarmed(k)) {
+      await buildParallaxSprites(k, glowUndergroundSpec(k), async (done, total) => {
+        const pct = 15 + Math.round(6 * (done - 1) / Math.max(1, total - 1))
         if (await glowBootstrapPause(bootstrap, pct, session)) return
       })
       if (glowInitStale(session)) return
-      if (!parallaxReady) {
-        await buildParallaxSprites(k, undergroundSpec, async (done, total) => {
-          const pct = 18 + Math.round(3 * (done - 1) / Math.max(1, total - 1))
-          if (await glowBootstrapPause(bootstrap, pct, session)) return
-        })
-        if (glowInitStale(session)) return
-      }
     }
     if (await glowBootstrapPause(bootstrap, 20, session)) return
     if (await glowBootstrapPause(bootstrap, 24, session)) return
     //
-    // Main tree: one sprite pair when fully explored, else segment sprites.
+    // Main tree: one full colour sprite, cropped to its artwork and drawn at
+    // the crop offset that puts it back on its world position.
     //
-    const initialGraySprite = glowMonolithTreeGraySpriteName(zones)
-    let treeObj
-    let treeColorObj
-    if (treeDrawMonolith) {
-      //
-      // Both sprites are cropped to the same bake bounds, so they share one
-      // draw offset that puts the artwork back on its world position.
-      //
-      const treeBake = monolithicTreeBakeOffset(k)
-      treeObj = k.add([
-        k.sprite(initialGraySprite),
-        k.pos(treeBake.x, treeBake.y),
-        k.z(CFG.visual.zIndex.platforms - 2)
-      ])
-      treeColorObj = k.add([
-        k.sprite(TREE_COLOR_SPRITE_NAME),
-        k.pos(treeBake.x, treeBake.y),
-        k.z(CFG.visual.zIndex.platforms - 2),
-        k.opacity(0)
-      ])
-      //
-      // Stay hidden until syncMonolithicTreeColorMode() runs — async bootstrap
-      // can yield before applyZoneVisibility(), and a visible colour sprite
-      // here flashes green for a frame on a gray-phase load.
-      //
-      treeObj.hidden = true
-      treeColorObj.hidden = true
-      treeObj.opacity = 1
-      treeColorObj.opacity = 0
-    } else {
-      treeObj = k.add([
-        k.pos(-WORLD_W, 0),
-        k.z(CFG.visual.zIndex.platforms - 2),
-        k.opacity(0)
-      ])
-      treeObj.hidden = true
-      treeColorObj = k.add([
-        k.pos(-WORLD_W, 0),
-        k.z(CFG.visual.zIndex.platforms - 2),
-        k.opacity(0)
-      ])
-      treeColorObj.hidden = true
-    }
+    const treeBake = monolithicTreeBakeOffset(k)
+    const treeObj = k.add([
+      k.sprite(TREE_COLOR_SPRITE_NAME),
+      k.pos(treeBake.x, treeBake.y),
+      k.z(CFG.visual.zIndex.platforms - 2)
+    ])
     const floorBounds = createLevelBounds(k)
     if (await glowBootstrapPause(bootstrap, 27, session)) return
     const floorPlat = floorBounds.floor
-    const cornerObjs = createRoundedCorners(k, zones)
+    createRoundedCorners(k)
     const { horizBranch } = treeData
     //
     // Platform top aligns with physY — the visible branch walk surface
@@ -2155,7 +1757,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         mudZoneX2
       }))
     //
-    // Glow SFX only from the first frame; birds.mp3 waits for the post-L stillness countdown.
+    // Glow SFX and birds.mp3 from the first frame (see syncGlowWorldBirdsVolume).
     //
     sound._glowSfxMuted = false
     sound.glowSfxGain && (sound.glowSfxGain.gain.value = 1)
@@ -2165,26 +1767,21 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       Sound.stopAmbient(sound)
       k.camScale(1)
     })
-    const heroStartFilled = zones.colorWorld
-    const heroEyes = getGlowHeroEyeBakeColors(!heroStartFilled)
     if (glowInitStale(session)) return
     destroyStrayGlowHeroBody(k)
     const glowHeroCreateCfg = {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      bodyColor: HERO_BODY_COLOR,
-      outlineColor: heroStartFilled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
-      ...heroEyes,
-      outlineOnly: !heroStartFilled,
+      bodyColor: HERO_FILLED_BODY_COLOR,
+      outlineColor: HERO_FILLED_OUTLINE_COLOR,
+      ...HERO_EYE_BAKE_COLORS,
+      outlineOnly: false,
       footFx: false,
       stepSoundScene: 'lesson-glow.0',
       suppressFootprints: true,
       airAnimDuringFlicker: true,
       runDuringFlicker: true,
-      noEyes: !zones.eyesCollected,
-      cyclopsEye: false,
-      rightEyeClosed: zones.eyesCollected && !zones.secondEyeCollected,
       suppressDust: true,
       postBakeCanvas: applyGlowGameplaySharpBake,
       //
@@ -2217,8 +1814,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // ground/wood/mud detection via sound._glowSurface.
     //
     bindGlowHeroFootSounds(heroInst, sound)
-    !zones.eyesCollected && initGlowHeroWithoutEyes(heroInst)
-    zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, heroInst, heroInst.postBakeCanvas, glowHeroOneEyeBakeOpts(zones))
     spawnOnBranch && (heroInst.direction = -1)
     spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
@@ -2245,12 +1840,11 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, null, null, earTreeSpots)
     const mudExtraGrass = null
     //
-    // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
-    // instance (dozens of decor pieces total). Registering them all into one
-    // shared atlas (built right after both are placed) means every decor
-    // sprite on screen shares a single texture bind instead of each piece
-    // forcing its own bindTexture/useProgram GPU state change — this is what
-    // actually tanks FPS once O opens up the whole level's decor at once.
+    // Rocks and mushrooms bake one or two canvases per instance (dozens of
+    // decor pieces total). Registering them all into one shared atlas (built
+    // right after both are placed) means every decor sprite on screen shares
+    // a single texture bind instead of each piece forcing its own
+    // bindTexture/useProgram GPU state change.
     //
     const decorAtlas = createCanvasAtlasBuilder()
     const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
@@ -2273,23 +1867,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       water: { x1: lakeX1, x2: lakeX2, surfaceY: WATER_SURFACE_Y },
       fleeLeftX: LEFT_MARGIN + PREDATOR_FLEE_LEFT_EDGE_PAD
     })
-    const swampSpirit = SwampSpirit.create({
-      k,
-      x: branchTrampX,
-      minX: LEFT_MARGIN + 40,
-      maxX: WORLD_W - RIGHT_MARGIN - 40,
-      holdRadius: TRAMP_MUSH_LAND_REVEAL_DIST,
-      branchMushroomX: () => branchTrampBundle.state?.x ?? branchTrampX,
-      rightMushroomX: () => trampBundle.state?.x ?? trampX,
-      branchMushroomShown: () => isBranchTrampolineVisible(zones),
-      rightMushroomShown: () => isRightTrampolineVisible(zones),
-      groundAt: () => FLOOR_Y,
-      hero: heroInst,
-      zones,
-      sfx: sound,
-      notePostBake: applyGlowGameplaySharpBake
-    })
-    if (!spawnOnBranch && zones.predatorAwake && isGlowEyesGameplayUnlocked(zones)) {
+    if (!spawnOnBranch && zones.predatorAwake) {
       const footY = heroSpawnY + SURFACE_DETECT_Y
       Predator.overlapsHeroHitbox(predator, heroSpawnX, footY) &&
         heroInst.character?.pos &&
@@ -2308,16 +1886,11 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     initTouchInput(k)
     TouchControls.create(k)
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
-    //
-    // The life/eye icon and experience numeral show from the very start of the
-    // level (syncGlowLifeScoreVisibility).
-    //
-    const levelIndicator = createGlowLevelIndicator(k, goldRgb, zones.colorWorld)
+    const levelIndicator = createGlowLevelIndicator(k)
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     pinGlowHudFixed(levelIndicator)
-    LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
-    const startingLifeScore = readGlowExperience()
-    levelIndicator.updateLifeScore?.(startingLifeScore)
+    LevelIndicator.revealLifeHud(levelIndicator, false)
+    levelIndicator.updateLifeScore?.(readGlowExperience())
     syncGlowLifeScoreVisibility(levelIndicator)
     set(KEY_LIFE_SHOWN, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
@@ -2376,31 +1949,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       cameraIntroPlaying: false,
       pendingGlowIntro: false,
       introHintDelayRemaining: 0,
-      heroSpawnFade: 0,
       sound,
       birdsMusic,
       heroInst,
       zones,
       treeObj,
-      treeColorObj,
       treeData,
-      treeDrawMonolith,
-      treeDrawColorMode: Boolean(zones.colorWorld),
-      treeSegmentEntries,
-      treeSegmentIds,
-      treeSegmentPending,
-      treeSegmentRevealed,
-      treeRevealLandingCount: 0,
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
-      treeGraySpriteName: glowMonolithTreeGraySpriteName(zones),
-      colorFade: zones.colorWorld ? 1 : 0,
-      colorFadeTarget: zones.colorWorld ? 1 : 0,
-      colorRevealCurtain: 0,
-      parallaxFade: zones.colorWorld || zones.eyesCollected ? 1 : 0,
-      parallaxFadeTarget: zones.colorWorld || zones.eyesCollected ? 1 : 0,
-      pendingColorWorldFade: false,
-      cornerObjs,
-      cornerColorHex: isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop,
       wallObjs: floorBounds.walls,
       grassLayer,
       mudExtraGrass,
@@ -2409,7 +1964,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       mudWalkClutter,
       mushObjs,
       predator,
-      swampSpirit,
       mudPredatorAmbushTriggerX,
       mudPredatorPopX,
       mudZoneX1,
@@ -2431,28 +1985,18 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       waterLayer,
       pitDrawLayer: null,
       pitCaveHeroForeground: false,
-      earTreeRevealFade: zones.colorWorld ? 1 : null,
-      atmosphereMotes: createAtmosphereMotes(),
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
       trampBundle,
       branchTrampBundle,
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
-      branchTrampPitGuardTimer: 0,
-      treeRevealFromBranchTramp: false,
       branchTrampWalk: {
         bounceCount: 0,
         cheekyTimer: 0,
         cheekyLineIdx: 0,
-        cheekyTooltip: null,
-        marioEligibleSince: null,
-        marioHintCooldown: 0,
-        marioHintTooltip: null,
-        marioHintSpawnX: null,
-        marioHintSpawnY: null
+        cheekyTooltip: null
       },
-      trampMissingHints: { right: null, branch: null, cave: null },
       trampBounceAir: false,
       rightTrampCheeky: { bounceCount: 0, cheekyTimer: 0, cheekyLineIdx: 0, cheekyTooltip: null },
       trampState: trampBundle.state,
@@ -2461,6 +2005,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       lakeX2,
       waterX2,
       lastHeroX: heroSpawnX,
+      heroSpawnX,
       logHoverFrames: 0,
       wasGrounded: false,
       wasGroundedOnBranch: false,
@@ -2477,10 +2022,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       //
       // Tracks whether the playable hero has left outline-only mode.
       //
-      heroBodyFillApplied: heroStartFilled,
       fpsCounter: null,
-      treeRevealFade: zones.tree ? 1 : 0,
-      treeRevealActive: false,
       //
       // Speech-bubble hints controller (shared white cloud from utils).
       //
@@ -2493,9 +2035,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       introStep: 0,
       introHintPhase: null,
       introHintPause: 0,
-      pendingTreeReveal: !treeDrawMonolith && treeSegmentRevealed.size < treeSegmentIds.length,
-      treeBranchLeftOnce: false,
-      hasStoodOnStartBranch: false,
       startBranch: branchPlatBundle.startBranch,
       branchPlat,
       branchPlatHome,
@@ -2510,7 +2049,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       branchLookTimer: spawnOnBranch ? BRANCH_LOOK_LEFT_DURATION : 0,
       pendingReplayIntro2: false,
       treeFruitSpots,
-      treeFruitSpotsBuilt,
       treeFruitAnchorCfg,
       branchTrampX,
       _branchLandingsSinceTree: 0
@@ -2519,60 +2057,34 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     predator.landAt = (x) => glowPredatorGroundAt(inst, x)
     predator.canHuntHero = () => glowPredatorCanHuntHero(inst)
     mountGlowTreeFruitLayer(k, inst)
-    inst.lakeRaftX = glowLakeRaftWorldX(lakeX1, lakeX2)
     inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
-    inst.onGlowEyesCollected = () => {
-      revealWaterZone(inst, false)
-      syncGlowCanvasBackdrop(inst.k, inst.zones)
-    }
     inst.treeX = TREE_X
     inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
     inst.floorY = FLOOR_Y
-    inst.glassesSlot = GlassesSlot.create({
+    inst.eyeFlower = EyeFlower.create({
       k,
-      getLevelInst: () => inst,
-      getPortalLookAt: () => HoloDoor.portalLookWorldPos(inst.holoDoor),
-      leftMargin: LEFT_MARGIN,
-      getAnchorY: () => glowTeacherHudAnchor(inst)?.y ?? null,
-      onPickupSound: () => playGlowGlassesPickupSound(inst),
-      onExperienceChanged: (score) => syncGlowExperienceHud(inst, score)
+      x: EyeFlower.islandWorldX(lakeX1),
+      waterY: WATER_SURFACE_Y,
+      reachTriggerX: TREE_X,
+      getHeroPos: () => glowEyeFlowerHeroPos(inst),
+      isVisible: () => isGlowEyeFlowerVisible(inst)
     })
-    inst.holoDoor = HoloDoor.create({
-      k,
-      worldX: lakeX1 + HOLO_DOOR_LAKE_X_PAD,
-      worldY: PLAYFIELD_EARTH_BOTTOM_Y - HOLO_DOOR_EARTH_BOTTOM_PAD,
-      isVisible: () => GlassesSlot.isWearing(inst.glassesSlot),
-      getScreenLeft: () => LEFT_MARGIN,
-      getScreenBottom: () => Math.min(PLAYFIELD_BOTTOM_Y, k.height())
-    })
-    mountGlowLakeRaftLayer(k, () => inst, {
-      isGlassesOnLog: () => GlassesSlot.isGlassesOnLog(inst.glassesSlot),
-      onGlassesTouched: center => GlassesSlot.collectGlasses(inst.glassesSlot, center)
-    })
+    tagGroundPlatform(inst.eyeFlower.collider, sound, heroInst)
     createGlowHorizFallTwigLayer(k, inst)
     initGlowTeacherHintState(inst)
     if (await glowBootstrapPause(bootstrap, 87, session)) return
-    inst.eyeIntro = zones.eyesCollected ? null : createGlowEyeIntroState()
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
     zones._groundStripEndX = WORLD_W - RIGHT_MARGIN - 20
-    if (!inst.treeDrawMonolith && isAllTreeSegmentsRevealed(inst)) {
-      inst.zones.tree = true
-      set(KEY_REVEALED_TREE, true)
-      ensureGlowTreeFruitSpots(inst)
-    }
     if (await glowBootstrapPause(bootstrap, 89, session)) return
     applyZoneVisibility(inst)
-    syncGlowLifeHudPupil(inst)
-    restorePersistedGlowZoneVisuals(inst)
-    zones.colorWorld && rebakeGlowRockSpritesShaded(inst)
+    revealWaterZone(inst, false)
     syncGlowFpsHudVisibility(inst)
-    maybeStartGlowCameraIntro(inst, zones)
+    maybeStartGlowCameraIntro(inst)
     updateGlowCamera(inst)
     updatePlayfieldBorderColors(inst)
     inst.zones._sceneRef = inst
     const wasInCaveSpawn = lastSpawnMode === SPAWN_MODE_CAVE
-    const pitShouldBeOpen = shouldGlowPitBeOpenForZones(zones, lastSpawnMode, heroInst)
     if (await glowBootstrapPause(bootstrap, 91, session)) return
     inst.pit = createGlowPit({
       k,
@@ -2583,29 +2095,12 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       levelIndicator,
       heroBodyColor: HERO_BODY_COLOR,
       groundColor: GROUND_DARK,
-      zones,
-      lastSpawnMode,
-      alreadyCollapsed: pitShouldBeOpen,
-      cracksVisible: isGlowCaveCracksVisible(zones),
       tooltipClampInset: glowTooltipClampInset()
     })
     inst.pit.sceneRef = inst
     k._glowSceneInst = inst
-    pitShouldBeOpen && !inst.pit.collapsed &&
-      ensureGlowPitCollapsedOnReload(
-        inst.pit,
-        isGlowEyeIntroPending(zones) && !glowHeroHasCollectedEyes(zones, heroInst)
-      )
-    wasInCaveSpawn && isGlowEyeIntroPending(zones) && !glowHeroHasCollectedEyes(zones, heroInst) &&
-      restoreGlowPitEyeIntroInterior(inst.pit)
     applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
-    restoreGlowEyeIntroFromPersistedState(inst)
-    ensureGlowPitOpenForEyesCollected(inst.pit)
-    inst.pit.onCrackLandingShake = () => {
-      shouldGlowCrackLandingCameraShake(inst) && triggerGlowCameraShake(inst)
-    }
-    inst.groundPortal = createGlowCaveGroundPortal(inst)
-    inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
+    setupGlowPitCaveTrampoline(inst)
     inst.footParticles = GlowFootParticles.create({ k })
     const chainBuoyWoodBands = buildGlowChainBuoyWoodBands({
       horizBranch: treeData.horizBranch
@@ -2653,10 +2148,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const chainEyePads = ChainEyeTramp.createPads(k)
     inst.chainEyeTramp = {
       ...chainEyePads,
-      ...ChainEyeTramp.createChainEyeTrampStates(zones)
+      ...ChainEyeTramp.createChainEyeTrampStates()
     }
     inst.chainEyeBounceAir = null
-    zones.secondEyeCollected && ChainBuoy.setPrizeEyeTaken(inst.chainBuoys, true)
     inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
     inst.spikyTomatoes = SpikyTomato.create({
       k,
@@ -2679,25 +2173,22 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       hillX2: WORLD_W,
       rimSpans: [{ x1: inst.lakeX2, x2: caveLeftX }],
       isSpotFree: (x, halfW) => isGlowForestFloorSpotFree(inst, forestFloorBlockers, x, halfW),
-      getOpacity: () => glowForestFloorOpacity(inst),
+      getOpacity: () => 1,
       backZ: GLOW_FOREST_FLOOR_BACK_Z,
       frontZ: GLOW_FOREST_FLOOR_FRONT_Z
     })
     inst.lightShafts = LightShaft.create({
       k,
-      shafts: buildGlowLightShafts(),
-      angle: GLOW_LIGHT_SHAFT_ANGLE,
-      getOpacity: () => glowForestFloorOpacity(inst),
+      sun: { x: LEFT_MARGIN + GLOW_LIGHT_SUN_OFFSET_X, y: TOP_MARGIN - GLOW_LIGHT_SUN_LIFT },
+      rays: GLOW_LIGHT_RAYS,
+      topY: TOP_MARGIN,
+      groundY: FLOOR_Y,
+      getOpacity: () => 1,
       z: GLOW_LIGHT_SHAFT_Z
     })
     if (await glowBootstrapPause(bootstrap, 93, session)) return
     syncGlowAtmosphereZones(inst)
     inst.midges.worldLife = 1
-    inst.k.wait(0, () => syncGlowHeroFillVisual(inst, {
-      filledBodyColor: HERO_FILLED_BODY_COLOR,
-      filledOutlineColor: HERO_FILLED_OUTLINE_COLOR,
-      postBakeCanvas: applyGlowGameplaySharpBake
-    }, glowHeroFillOpts(inst)))
     //
     // First visit: hold hints until the camera intro zoom-out finishes and a
     // short beat passes so the player sees the full level first.
@@ -2707,22 +2198,16 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pendingReplayIntro2 = spawnOnBranch && !zones.predatorAwake &&
       get(KEY_INTRO_SHOWN, false)
     inst.introHintDelayRemaining = 0
-    !deferGlowIntro && !inst.pendingReplayIntro2 && inst.heroSpawnFade <= 0 &&
+    !deferGlowIntro && !inst.pendingReplayIntro2 &&
       startGlowIntro(inst)
     createSmallHeroTooltip(inst)
     applyZoneVisibility(inst)
-    zones.eyesCollected && ensureGlowTreeRootsSegment(inst)
     Hero.suppressIdleVocalization()
-    if (zones.colorWorld && !inst.heroBodyFillApplied) {
-      applyGlowHeroBodyFill(inst)
-    }
-    zones.colorWorld && ensureGlowBirdsBackgroundPlaying(inst)
-    inst._glowBirdsBootstrapKick = zones.colorWorld
-    ensureGlowPitOpenForEyesCollected(inst.pit)
+    ensureGlowBirdsBackgroundPlaying(inst)
+    inst._glowBirdsBootstrapKick = true
     registerGlowNativeTeardown(() => {
       glowLevel0LiveHeroChar = null
       persistGlowOnLeave(inst)
-      clearGlowHeroFillPreview(inst)
       stopGlowLoopAudio()
     })
     const backToMenuCancel = bindBackToMenuKeys(k, () => {
@@ -2732,10 +2217,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       backToMenuCancel.cancel()
       inst.touchDeathRespawnWait?.cancel?.()
       inst.touchDeathRespawnWait = null
-      clearGlowHeroFillPreview(inst)
       persistGlowOnLeave(inst)
       stopGlowLoopAudio()
-      destroySwampSpiritProximityHint(inst)
     })
     if (await glowBootstrapPause(bootstrap, 95, session)) return
     if (glowInitStale(session)) return
@@ -2747,17 +2230,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     registerGlowTrampolineLateBounce(inst)
     if (await glowBootstrapPause(bootstrap, 97, session)) return
     createPlayfieldFrameOverlay(k, inst)
-    //
-    // Letter-fill burst halo — drawn just above the hero sprite.
-    //
-    k.add([
-      k.z(CFG.visual.zIndex.player + 0.5),
-      {
-        draw() {
-          drawGlowHeroFillBurst(k, inst.heroInst, inst)
-        }
-      }
-    ])
     //
     // Drowning — clipped hero blit (no extra water geometry on screen).
     //
@@ -2782,9 +2254,7 @@ function createPlayfieldFrameOverlay(k, inst) {
     {
       fixed: true,
       draw() {
-        isOuterFrameVisible(inst.zones)
-          ? drawPlayfieldTopBar(inst)
-          : drawPlayfieldVoidTopBar(inst)
+        drawPlayfieldTopBar(inst)
       }
     }
   ])
@@ -2794,9 +2264,7 @@ function createPlayfieldFrameOverlay(k, inst) {
     {
       fixed: true,
       draw() {
-        isOuterFrameVisible(inst.zones)
-          ? drawPlayfieldSideChrome(inst)
-          : drawPlayfieldVoidSideChrome(inst)
+        drawPlayfieldSideChrome(inst)
       }
     }
   ])
@@ -2807,67 +2275,16 @@ function createPlayfieldFrameOverlay(k, inst) {
       fixed: true,
       draw() {
         drawPlayfieldBottomCornerOverlay(inst)
-        drawGlowWorldRevealCurtain(inst)
-      }
-    }
-  ])
-  k.add([
-    k.pos(0, 0),
-    k.z(GLOW_COLOR_REVEAL_CURTAIN_Z),
-    {
-      fixed: true,
-      draw() {
-        drawGlowColorWorldRevealCurtain(inst)
-      }
-    }
-  ])
-  k.add([
-    k.z(GLOW_COLOR_REVEAL_HERO_Z),
-    {
-      draw() {
-        drawGlowColorRevealHero(inst)
       }
     }
   ])
 }
 //
-// Void top strip before the outer frame is revealed (matches playfield void).
-//
-function drawPlayfieldVoidTopBar(inst) {
-  const k = inst.k
-  const backdrop = glowPlayfieldBackdropRgb(inst)
-  const voidColor = k.rgb(backdrop.r, backdrop.g, backdrop.b)
-  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: PLAYFIELD_TOP_Y + TOP_MARGIN, color: voidColor, fixed: true })
-}
-//
-// Void side and bottom pillarbox before the outer frame is revealed. Both
-// the top and bottom bars reach all the way to their real screen edge so a
-// taller-than-design window's extra letterbox padding is covered too.
-//
-function drawPlayfieldVoidSideChrome(inst) {
-  const k = inst.k
-  const backdrop = glowPlayfieldBackdropRgb(inst)
-  const voidColor = k.rgb(backdrop.r, backdrop.g, backdrop.b)
-  k.drawRect({ pos: k.vec2(0, PLAYFIELD_BOTTOM_Y), width: SCREEN_W, height: SCREEN_H - PLAYFIELD_BOTTOM_Y, color: voidColor, fixed: true })
-  k.drawRect({ pos: k.vec2(0, PLAYFIELD_TOP_Y + TOP_MARGIN), width: LEFT_MARGIN, height: VIEW_H, color: voidColor, fixed: true })
-  k.drawRect({
-    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, PLAYFIELD_TOP_Y + TOP_MARGIN),
-    width: RIGHT_MARGIN,
-    height: VIEW_H,
-    color: voidColor,
-    fixed: true
-  })
-}
-//
-// Plays the two intro hints with locked controls, advanced by key presses:
-// the first hint waits for ANY key, the next key swaps it for the second
-// hint, and one more key dismisses it and hands the run/jump keys back to
-// the player. Each hint still expires
-// on its own timer as a fallback, so a keyboard-less player is never stuck.
+// Plays the controls intro hint with locked movement until the player
+// dismisses it (key, click, timer, or walk-away fallback on replays).
 //
 function startGlowIntro(inst) {
   if (inst.zones.predatorAwake) return
-  if (inst.heroSpawnFade > 0) return
   //
   // Replays after a death skip the greeting: only the goal reminder shows,
   // controls stay free right away.
@@ -2902,15 +2319,14 @@ function startGlowIntro(inst) {
     return
   }
   inst.introLock = true
-  inst.introStep = 1
-  inst.introHintPhase = INTRO_HINT_PHASE_ONE
+  inst.introHintPhase = INTRO_HINT_PHASE_TWO
   inst.introHintPause = 0
   const introCancels = []
   const cancelIntroInput = () => {
     introCancels.forEach(h => h.cancel())
     introCancels.length = 0
   }
-  HeroHint.show(inst.heroHint, HINT_INTRO_1_TEXT, HINT_INTRO_1_DURATION, {
+  HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
     dismissOnJump: false,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
     dismissHorizontalOnly: true,
@@ -2923,7 +2339,7 @@ function startGlowIntro(inst) {
   }
   inst.introHintOnComplete = finishIntroChain
   //
-  // Space / Enter or click advances: 1st → hint 2, 2nd → unlock (timers still work)
+  // Space / Enter or click dismisses and unlocks (timer still works as fallback).
   //
   const advance = (key) => {
     INTRO_ADVANCE_KEY_NAMES.includes(key) && advanceGlowIntro(inst, { cancel: cancelIntroInput })
@@ -2944,55 +2360,16 @@ function dismissReplayIntroHint(inst, handlers) {
   HeroHint.clear(inst.heroHint)
 }
 //
-// One key press moves the intro forward: 1st press shows the second hint,
-// 2nd press closes it and unlocks the controls immediately.
+// One key press closes the intro hint and unlocks controls immediately.
 //
 function advanceGlowIntro(inst, introHandlers) {
   if (!inst.introLock) {
     introHandlers.cancel()
     return
   }
-  if (inst.introHintPhase === INTRO_HINT_PHASE_TWO) {
-    introHandlers.cancel()
-    HeroHint.clear(inst.heroHint)
-    finishGlowIntro(inst)
-    return
-  }
-  if (inst.introHintPhase === INTRO_HINT_PHASE_PAUSE) {
-    inst.introHintPause = 0
-    showGlowIntroSecondHint(inst)
-    return
-  }
-  if (inst.introStep === 1) {
-    const onSecondHint = inst.heroHint?.target?.text === HINT_INTRO_2_TEXT
-    if (onSecondHint) {
-      introHandlers.cancel()
-      HeroHint.clear(inst.heroHint)
-      finishGlowIntro(inst)
-      return
-    }
-    inst.introStep = 2
-    HeroHint.clear(inst.heroHint)
-    showGlowIntroSecondHint(inst)
-    return
-  }
   introHandlers.cancel()
   HeroHint.clear(inst.heroHint)
   finishGlowIntro(inst)
-}
-//
-// Shows the second intro speech bubble and marks the intro phase.
-//
-function showGlowIntroSecondHint(inst) {
-  inst.introHintPhase = INTRO_HINT_PHASE_TWO
-  inst.introHintPause = 0
-  HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
-    dismissOnJump: false,
-    forceAbove: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
-    dismissHorizontalOnly: true,
-    movementDismissGrace: GLOW_HINT_MOVEMENT_DISMISS_GRACE
-  })
 }
 //
 // Unlocks the hero after the intro hints.
@@ -3008,27 +2385,6 @@ function finishGlowIntro(inst) {
   inst.heroInst.controllable = true
 }
 //
-// Hero hover — eyeless intro only.
-//
-function heroTooltipText(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return HERO_TOOLTIP_EYELESS_TEXT
-  return null
-}
-function glowHeroCollisionHoverZone(inst) {
-  return Hero.getHeroCollisionHoverZone(inst.heroInst)
-}
-//
-// Hero hover bubble stays off while any other hint is on the hero.
-//
-function isGlowHeroHoverTooltipVisible(inst) {
-  if (inst.drowning) return false
-  if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
-  if (inst.introLock && isGlowEyesGameplayUnlocked(inst.zones)) return false
-  if (HeroHint.isActive(inst.heroHint)) return false
-  if (!heroTooltipText(inst)) return false
-  return true
-}
-//
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the playable
 // hero, the life icon (the "teacher") and the GLOW word.
 // Each target only activates once its HUD element has been revealed.
@@ -3037,18 +2393,6 @@ function createSmallHeroTooltip(inst) {
   inst.worldHoverTooltip = createGlowTooltip({
     k: inst.k,
     targets: [{
-      x: () => glowHeroCollisionHoverZone(inst).x,
-      y: () => glowHeroCollisionHoverZone(inst).y,
-      width: () => glowHeroCollisionHoverZone(inst).w,
-      height: () => glowHeroCollisionHoverZone(inst).h,
-      pointerWorldX: () => glowHeroCollisionHoverZone(inst).pointerX,
-      pointerWorldY: () => glowHeroCollisionHoverZone(inst).pointerY,
-      pinBubbleToPointer: true,
-      forceAbove: true,
-      text: () => heroTooltipText(inst),
-      offsetY: HERO_TOOLTIP_Y_OFFSET,
-      visible: () => isGlowHeroHoverTooltipVisible(inst)
-    }, {
       x: () => glowTeacherHudHoverPos(inst).x,
       y: () => glowTeacherHudHoverPos(inst).y,
       width: LIFE_TOOLTIP_SIZE,
@@ -3057,16 +2401,6 @@ function createSmallHeroTooltip(inst) {
       offsetY: LIFE_TOOLTIP_Y_OFFSET,
       forceBelow: true,
       visible: () => glowTeacherHudHoverVisible(inst),
-      screenSpace: true
-    }, {
-      x: () => GlassesSlot.slotRect(inst.glassesSlot).x,
-      y: () => GlassesSlot.slotRect(inst.glassesSlot).y,
-      width: () => GlassesSlot.slotRect(inst.glassesSlot).w,
-      height: () => GlassesSlot.slotRect(inst.glassesSlot).h,
-      text: GLASSES_SLOT_TOOLTIP_TEXT,
-      offsetY: LIFE_TOOLTIP_Y_OFFSET,
-      forceBelow: true,
-      visible: () => GlassesSlot.isSlotFilled(inst.glassesSlot),
       screenSpace: true
     }, {
       x: () => glowLifeScoreTooltipCenter(inst).x,
@@ -3079,15 +2413,6 @@ function createSmallHeroTooltip(inst) {
       visible: () => glowTeacherHudHoverVisible(inst),
       screenSpace: true
     }, {
-      x: () => pitCaveSkeletonTooltipPos(inst).x,
-      y: () => pitCaveSkeletonTooltipPos(inst).y,
-      width: SKELETON_TOOLTIP_WIDTH,
-      height: SKELETON_TOOLTIP_HEIGHT,
-      text: () => pitCaveSkeletonTooltipText(inst),
-      offsetY: SKELETON_TOOLTIP_Y_OFFSET,
-      visible: () => pitCaveSkeletonTooltipVisible(inst),
-      screenSpace: false
-    }, {
       x: () => inst.branchTrampState?.x ?? -1000,
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
       width: TRAMP_TOTAL_W,
@@ -3095,69 +2420,29 @@ function createSmallHeroTooltip(inst) {
       text: BRANCH_TRAMP_MARIO_HINT_TEXT,
       offsetY: TRAMP_TOOLTIP_Y_OFFSET,
       hoverId: 'branchTrampMario',
-      visible: () => isBranchTrampDrawnVisible(inst) &&
-        !inst.branchTrampWalk?.marioHintTooltip
+      visible: () => isBranchTrampDrawnVisible(inst)
     }]
   })
 }
 //
-// Reads persisted zone flags from localStorage.
+// The whole world is open from the first frame: colour, big tree, lake,
+// both shores, every mushroom and the awake crawler.
 //
 function loadGlowZones() {
-  const secondEyeCollected = get(KEY_SECOND_EYE_COLLECTED, false)
-  const colorWorld = secondEyeCollected
-  //
-  // Explored ground / water persist across deaths and level reloads.
-  //
-  const groundDecorRightLegacy = get(KEY_REVEALED_GROUND_DECOR_RIGHT, false)
-  let groundRightStripMax = get(KEY_GROUND_RIGHT_STRIP_MAX, -1)
-  groundDecorRightLegacy && groundRightStripMax < 0 && (groundRightStripMax = GROUND_RIGHT_STRIP_COUNT - 1)
-  const groundDecorRight = groundDecorRightLegacy || groundRightStripMax >= GROUND_RIGHT_STRIP_COUNT - 1
-  const waterDiscovered = get(KEY_REVEALED_WATER, false)
-  const eyesCollectedSaved = get(KEY_EYES_COLLECTED, false)
-  //
-  // Left shore decor opens with the lake (first eye or legacy drowning save).
-  //
-  const groundDecorLeft = waterDiscovered || eyesCollectedSaved
-  const leftShoreRock = waterDiscovered || get(KEY_LEFT_SHORE_ROCK, false)
-  const branchTrampRevealed = get(KEY_BRANCH_TRAMP_REVEALED, false)
-  const eyesCollected = eyesCollectedSaved || secondEyeCollected
-  eyesCollected && !eyesCollectedSaved && (set(KEY_EYES_COLLECTED, true), set(KEY_PIT_COLLAPSED, true))
-  //
-  // The branch mushroom wakes the crawler — an older save that already opened
-  // that mushroom (or got further) must not lose the predator on reload.
-  //
-  const predatorAwake = get(KEY_PREDATOR_AWAKE, false) ||
-    (eyesCollected && branchTrampRevealed) ||
-    secondEyeCollected
   return {
-    predatorAwake,
-    secondEyeCollected,
-    eyesCollected,
-    //
-    // Big tree only after the hero lands on its branch. Read back from
-    // KEY_REVEALED_TREE on purpose: once a real branch landing has revealed
-    // it, a level restart must show it immediately again instead of forcing
-    // the player to replay the reveal — the spawn-drop false-positive that
-    // used to reveal it prematurely on every fresh entry is fixed at the
-    // source in updateTreeRevealArm() instead.
-    //
-    tree: get(KEY_REVEALED_TREE, false),
-    outerFrame: colorWorld || eyesCollected,
-    groundDecorRight,
-    groundDecorLeft,
-    groundRightStripMax,
-    leftShoreRock,
-    branchTrampBounceLive: get(KEY_BRANCH_TRAMP_BOUNCE_LIVE, false),
-    rightTrampRevealed: get(KEY_RIGHT_TRAMP_REVEALED, false),
-    rightTrampBounceLive: get(KEY_RIGHT_TRAMP_BOUNCE_LIVE, false),
-    groundDecor: groundDecorRight || groundDecorLeft,
-    groundBg: colorWorld || eyesCollected,
+    predatorAwake: true,
+    groundDecorRight: true,
+    groundDecorLeft: true,
+    groundRightStripMax: GROUND_RIGHT_STRIP_COUNT - 1,
+    leftShoreRock: true,
+    branchTrampBounceLive: true,
+    rightTrampRevealed: true,
+    rightTrampBounceLive: true,
+    groundDecor: true,
     water: false,
     waterRocks: false,
-    waterDiscovered,
-    branchTrampRevealed,
-    colorWorld
+    waterDiscovered: true,
+    branchTrampRevealed: true
   }
 }
 //
@@ -3177,7 +2462,11 @@ function isHeroInsideGlowPitCave(inst, heroX, heroY, footY = heroY + SURFACE_DET
     const minX = Math.min(leftX + 6, innerX + 6)
     const maxX = Math.max(rightX - 6, innerX + innerW - 6)
     if (heroX < minX || heroX > maxX) return false
-    if (footY >= pit.floorY - 6) return true
+    //
+    // Walking on the outdoor lip left of the mouth is not “inside” — only past
+    // the drop or airborne within the mouth column counts.
+    //
+    if (footY <= pit.floorY + PIT_CAVE_APPROACH_GROUND_FEET) return false
     return footY >= pit.floorY - PIT_CAVE_AIR_ABOVE_LIP
   }
   return isHeroInGlowCaveVolume(heroX, footY)
@@ -3233,7 +2522,6 @@ function writeGlowLastSpawnKeys(inst, heroX, heroY) {
     isHeroInGlowCaveVolume(heroX, footY)
   if (inCave) {
     set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_CAVE)
-    set(KEY_PIT_COLLAPSED, true)
     return
   }
   if (isHeroOverStartBranchX(inst, heroX) &&
@@ -3273,12 +2561,7 @@ function layoutGlowFpsHud(inst) {
 //
 // Creates the glow HUD row — life/eye icon only, no section label.
 //
-function createGlowLevelIndicator(k, goldRgb, colorWorld = false) {
-  //
-  // Rebake the gray teacher silhouette with glow-specific fringe cleanup.
-  //
-  k._lifeDesatReady = false
-  k._lifeDesatPromise = null
+function createGlowLevelIndicator(k) {
   //
   // The HUD small hero mirrors the playable hero: whitish body with grey eye
   // whites — it stays white even once the world colours.
@@ -3292,7 +2575,6 @@ function createGlowLevelIndicator(k, goldRgb, colorWorld = false) {
     heroEyeWhiteColor: HERO_BODY_COLOR,
     heroPostBakeCanvas: applyGlowHudSharpBake,
     hudPostBakeCanvas: applyGlowHudSharpBake,
-    lifeDesatPostBake: finishGlowLifeDesatCanvas,
     //
     // White score numerals with a black shadow, always on.
     //
@@ -3301,13 +2583,9 @@ function createGlowLevelIndicator(k, goldRgb, colorWorld = false) {
     topPlatformHeight: TOP_MARGIN,
     sideWallWidth: LEFT_MARGIN,
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
-    hideScoreboard: true,
-    scoreboardGreyLife: false,
-    greyLife: !colorWorld,
-    lifeGreyTintHex: GLOW_PAL.decorGray
+    hideScoreboard: true
   })
   pinGlowHudFixed(indicator)
-  LevelIndicator.syncLifeHudGrey(indicator, !colorWorld)
   return indicator
 }
 //
@@ -3320,27 +2598,12 @@ function syncGlowLifeScoreVisibility(indicator) {
   indicator.lifeScoreOutlines?.forEach(o => { o.hidden = !show })
 }
 //
-// Keeps the teacher-eye experience counter in sync after spend or death.
-//
-function syncGlowExperienceHud(inst, score) {
-  if (!inst.levelIndicator) return
-  inst.levelIndicator.updateLifeScore?.(score)
-  syncGlowLifeScoreVisibility(inst.levelIndicator)
-}
-//
 // Life HUD for pit-mushroom nudges — shown as soon as an exploration hint applies.
 //
 function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
   const indicator = inst.levelIndicator
-  if (!indicator || indicator.lifeRevealed) return
-  const caveEntranceProgress = glowTeacherCaveEntranceAutoHintEligible(inst, false)
-  const postTreeMushProgress = glowTeacherPostTreeMushAutoHintEligible(inst, false)
-  const bigTreeOnlyGStall = glowTeacherBigTreeBranchOnlyStall(inst)
-  if (!isGlowPitMushroomUnlocked(inst) && !caveEntranceProgress &&
-    !postTreeMushProgress && !bigTreeOnlyGStall) {
-    return
-  }
-  LevelIndicator.revealLifeHud(indicator, !inst.zones.colorWorld)
+  if (!indicator || indicator.lifeRevealed || !inst.pit) return
+  LevelIndicator.revealLifeHud(indicator, false)
   const score = readGlowExperience()
   indicator.updateLifeScore?.(score)
   syncGlowLifeScoreVisibility(indicator)
@@ -3363,6 +2626,7 @@ function ensureGlowBirdsPlaybackRate(audio) {
 function createGlowBirdsLoopAudio() {
   const audio = new Audio(GLOW_BIRDS_AUDIO_SRC)
   audio.loop = true
+  audio.preload = 'auto'
   audio.volume = 0
   ensureGlowBirdsPlaybackRate(audio)
   return audio
@@ -3388,7 +2652,36 @@ function setGlowBirdsLoopVolume(audio, volume) {
   vol >= 0.001 && audio.paused && audio.play().catch(() => {})
 }
 //
-// Snaps birds.mp3 to the volume implied by glowBirdsMusicLife (reload / colour world).
+// Web Audio chain for birds — volume on gain (not the element) so muffling works.
+//
+function ensureGlowBirdsWebAudio(inst, audio) {
+  if (!audio || audio._glowBirdsChain) return audio._glowBirdsChain
+  const ctx = inst?.sound?.audioContext
+  //
+  // createMediaElementSource detaches the element from the default output —
+  // only wire the graph once the procedural context is running or birds stay
+  // silent while suspended (common on level load before the first gesture).
+  //
+  if (!ctx || ctx.state !== 'running') return null
+  try {
+    const source = ctx.createMediaElementSource(audio)
+    const filter = ctx.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.value = GLOW_BIRDS_COLOR_LOWPASS_HZ
+    const gain = ctx.createGain()
+    gain.gain.value = 0
+    source.connect(filter)
+    filter.connect(gain)
+    gain.connect(ctx.destination)
+    audio._glowBirdsChain = { filter, gain }
+    audio.volume = 1
+    return audio._glowBirdsChain
+  } catch (_) {
+    return null
+  }
+}
+//
+// Snaps birds.mp3 to its full volume (reload).
 //
 function ensureGlowBirdsBackgroundPlaying(inst) {
   syncGlowWorldBirdsVolume(inst)
@@ -3400,7 +2693,7 @@ function ensureGlowBirdsBackgroundPlaying(inst) {
 // centre matters: within GLOW_PROXIMITY_SOUND_RADIUS px to either side the
 // current grows into a steady stream the closer the hero walks to the centre
 // X, and fades back to silence outside that band. Branch and right mushroom
-// pads stay silent — the swamp spirit covers the branch beat.
+// pads stay silent.
 //
 function updateGlowProximitySound(inst, char) {
   if (inst.drowning || inst.sound?._glowSfxMuted || !char?.pos) {
@@ -3408,15 +2701,9 @@ function updateGlowProximitySound(inst, char) {
     return
   }
   const targetXs = []
-  //
-  // Eyeless intro: hum at the cave mouth once the hero reaches the right edge.
-  //
-  isGlowEyeIntroCaveActive(inst) && !inst.pit?.collapsed &&
-    appendGlowProximityTarget(targetXs, (getCrackZone(WORLD_W, FLOOR_Y).x1 + getCrackZone(WORLD_W, FLOOR_Y).x2) * 0.5)
   if (!inst.pit?.collapsed) {
     const cave = getCrackZone(WORLD_W, FLOOR_Y)
-    !isGlowEyeIntroPending(inst.zones) &&
-      appendGlowProximityTarget(targetXs, (cave.x1 + cave.x2) * 0.5)
+    appendGlowProximityTarget(targetXs, (cave.x1 + cave.x2) * 0.5)
   }
   if (!targetXs.length) {
     Sound.stopAmbient(inst.sound)
@@ -3440,26 +2727,6 @@ function updateGlowProximitySound(inst, char) {
 //
 function appendGlowProximityTarget(targetXs, x) {
   x != null && targetXs.push(x)
-}
-//
-// Returns the visual centre of the buried skeleton body, not the skull pivot.
-//
-function pitCaveSkeletonTooltipPos(inst) {
-  const pit = inst.pit
-  if (!pit) return { x: -1000, y: -1000 }
-  const sk = ensurePitCaveSkeletonLayout(pit)
-  return {
-    x: sk.x,
-    y: sk.y + sk.skullR * SKELETON_TOOLTIP_BODY_CENTER_R
-  }
-}
-//
-// Cave skeleton tooltip: visible once the pit mouth or cracks can be seen.
-//
-function pitCaveSkeletonTooltipVisible(inst) {
-  if (!inst.pit) return false
-  if (inst.pit.pitCaveSkeletonAutoHintTooltip) return false
-  return shouldShowPitCaveSkeleton(inst.pit)
 }
 //
 // Life-icon hover — "Your experience" (cave mushroom line when that beat is active).
@@ -3496,76 +2763,41 @@ function glowTeacherHudHoverVisible(inst) {
 function glowTeacherCaveMushroomHoverEligible(inst) {
   const pit = inst.pit
   if (!pit?.collapsed || !inst._inGlowPitCave) return false
-  if (!isGlowPitMushroomUnlocked(inst) || pit.pitCaveMushroomDone) return false
+  if (!pit || pit.pitCaveMushroomDone) return false
   return Boolean(pit.pitCaveMushroomHintPausedUntilExit)
 }
 //
-// Skeleton hover copy — eyes request before pickup, tired line after.
-//
-function pitCaveSkeletonTooltipText(inst) {
-  const hasEyes = glowHeroHasCollectedEyes(inst.zones, inst.heroInst)
-  return hasEyes ? SKELETON_TOOLTIP_TEXT : SKELETON_TOOLTIP_NEED_EYE_TEXT
-}
-//
-// Keeps birds silent in the gray world and plays them in the colour world.
+// Full dry birds mix. Until the shared AudioContext runs, the bare element
+// plays unfiltered so the start is never silent; the filtered chain takes
+// over once it resumes.
 //
 function syncGlowWorldBirdsVolume(inst) {
   const birds = inst.birdsMusic
   if (!birds) return
-  const life = glowBirdsMusicLife(inst)
-  if (life < 0.02) {
-    birds.volume = 0
+  const targetVol = CFG.audio.backgroundMusic.birds
+  const ctx = inst.sound?.audioContext
+  ctx?.state === 'suspended' && ctx.resume().catch(ignoreGlowBirdsAudioError)
+  const chain = ensureGlowBirdsWebAudio(inst, birds)
+  ensureGlowBirdsPlaybackRate(birds)
+  if (!chain) {
+    setGlowBirdsLoopVolume(birds, targetVol)
     return
   }
-  inst.sound && Sound.resumeAudioContext(inst.sound)
-  setGlowBirdsLoopVolume(birds, CFG.audio.backgroundMusic.birds * life)
+  chain.filter.frequency.value = GLOW_BIRDS_COLOR_LOWPASS_HZ
+  chain.gain.gain.value = targetVol
+  birds.volume = 1
+  birds.paused && birds.play().catch(ignoreGlowBirdsAudioError)
 }
+//
+// Autoplay rejections are retried by the next frame's sync.
+//
+function ignoreGlowBirdsAudioError() {}
 //
 // Hermite ease for meditation colour preview (0 at start, 1 at timer zero).
 //
 function smoothstep01(t) {
   const x = Math.max(0, Math.min(1, t))
   return x * x * (3 - 2 * x)
-}
-//
-// Post-L ground darkening toward the root-zone earth tone — applied at full
-// strength the instant L is collected, independent of the later stillness
-// countdown (that countdown still gates the separate roots/decor reveal via
-// glowPostLRevealFade).
-//
-function glowGroundDarkenAmount(inst) {
-  return inst?.zones?.colorWorld ? GROUND_L_DARKEN : 0
-}
-//
-// Gray-phase ground colour before the colour-world fade lerps in.
-//
-function glowGrayGroundRgb(inst, innerGray) {
-  if (!innerGray) return VOID
-  if (isGlowFlatSingleDecorColor(inst)) {
-    return FLAT_EARTH
-  }
-  const darken = glowGroundDarkenAmount(inst)
-  return darken > 0 ? lerpRgb(INNER_GRAY, VOID, darken) : INNER_GRAY
-}
-//
-// Root mass belongs to the underground — it opens with the first eye.
-//
-function glowTreeRootRevealFade(inst) {
-  return inst?.zones?.eyesCollected ? 1 : 0
-}
-//
-// True once the post-L stillness countdown (or later beats) unlock surface decor.
-//
-function isGlowWorldSurfaceDecorUnlocked(inst) {
-  const z = inst?.zones
-  return Boolean(z?.colorWorld)
-}
-//
-// Everything below the ground line opens (gray) together with the first eye.
-//
-function isGlowUndergroundLayerVisible(inst) {
-  if (isGlowEyeIntroBareWorld(inst)) return false
-  return Boolean(inst?.zones?.eyesCollected)
 }
 //
 // True when world X lies in the soft-mud band (grass + baked pebbles stay after G).
@@ -3584,140 +2816,12 @@ function isGlowWorldXInGroundPeekZone(inst, worldX) {
   const floorEndX = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
   return worldX >= LEFT_MARGIN && worldX <= floorEndX
 }
-//
-// 0 before the post-L countdown except the ground-peek band after G.
-//
-function glowSurfaceDecorFadeAt(inst, worldX) {
-  if (isGlowWorldSurfaceDecorUnlocked(inst)) {
-    return 1
-  }
-  return isGlowWorldXInGroundPeekZone(inst, worldX) ? 1 : 0
-}
-//
-// Grass is fully green in the colour world and follows the shared fade otherwise.
-//
-function glowGrassGreenFade(sc, zones) {
-  if (zones.colorWorld) return 1
-  if (!sc || isGlowFlatSingleDecorColor(sc)) return 0
-  return sc.colorFade ?? 0
-}
-//
-// Flat gray decor sprites switch to their shaded variants in the colour world.
-//
-function drawShadedGrayDecorBaked(k, sc, flatBaked, shadedBaked, pos, anchor, angle, opacity, color) {
-  const baked = sc?.zones?.colorWorld ? shadedBaked : flatBaked
-  drawDecorAtlasSprite(k, baked, pos, anchor, angle, opacity, color)
-}
-//
-// Clamped colour-fade value shared by every gray↔colour crossfade.
-//
-function glowDecorFade(inst) {
-  return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
-}
-//
-// Colour-world reveal: hide the gray world first, then fade colour in from void.
-//
-function glowColorWorldRevealOpacities(fade, pf = 1) {
-  const u = Math.max(0, Math.min(1, (fade ?? 0) * (pf ?? 1)))
-  if (u <= GLOW_COLOR_REVEAL_GRAY_PHASE_END) {
-    const t = u / GLOW_COLOR_REVEAL_GRAY_PHASE_END
-    return { grayOp: 1 - t, colorOp: 0 }
-  }
-  const t = (u - GLOW_COLOR_REVEAL_GRAY_PHASE_END) / (1 - GLOW_COLOR_REVEAL_GRAY_PHASE_END)
-  return { grayOp: 0, colorOp: t }
-}
-//
-// Lake and trampolines are fully coloured once the second eye opens the colour world.
-//
-function glowLZoneDecorFade(inst) {
-  return glowDecorFade(inst)
-}
-//
-// Tree colour crossfade — locked at full colour once the colour world is open.
-//
-function glowTreeColorFade(inst) {
-  return glowDecorFade(inst)
-}
-//
-// True while any decor/backdrop layer is still lerping toward full colour.
-//
-function isGlowColorTransitionActive(inst) {
-  if (!inst?.zones) return false
-  const fade = glowDecorFade(inst)
-  if (fade <= COLOR_CROSSFADE_EPS) return false
-  return inst.zones.colorWorld && fade < 1 - COLOR_CROSSFADE_EPS
-}
-//
-// Rebakes the walking trampoline gray sprites after L (shaded gray caps).
-//
-function rebakeTrampolineGraySprites(k) {
-  bakeTrampolineVariant(k, TRAMP_SPRITE, CUTE_MUSH_GRAY_COLORS, true)
-  bakeTrampolineVariant(k, TRAMP_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, CUTE_MUSH_GRAY_COLORS, false)
-}
-//
-// Rebakes floor rocks with shaded silhouettes for the colour world (gray stays flat).
-//
-function rebakeGlowRockSpritesShaded(inst) {
-  const k = inst.k
-  const palette = glowRockShadedDrawPalette()
-  //
-  // Rebaked into a fresh shared atlas (same trick as the initial bake in
-  // createGlowRocks) instead of one loadSprite per rock — otherwise every
-  // rock would fall back to its own individual texture the moment the second
-  // eye is collected, undoing the shared-atlas GPU win right before the color
-  // world (and its full decor reveal) even needs it most.
-  //
-  const rebakeAtlas = createCanvasAtlasBuilder()
-  const toSwap = []
-  inst.rockObjs.forEach(obj => {
-    const bake = obj._rockBake
-    if (!bake) return
-    const { cx, cy, radius, verts, widthScale, totalW, croppedH } = bake
-    const bakeShaded = (seedOffset) => {
-      const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
-        ctx.scale(widthScale, 1)
-        drawRockToCanvas(ctx, {
-          cx, cy, radius, verts, palette,
-          skipShadow: true, skipTexture: false,
-          outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
-          outlineWidth: ROCK_OUTLINE_WIDTH,
-          outlineAlpha: 1
-        })
-      })
-      applyGlowMaterialBake(canvas, seedOffset)
-      return canvas
-    }
-    const bakedGray = rebakeAtlas.register(bakeShaded(obj._decorWorldX * 3 | 0))
-    const bakedOutline = rebakeAtlas.register(bakeShaded(obj._decorWorldX * 3 + 1 | 0))
-    toSwap.push({ obj, bakedGray, bakedOutline })
-  })
-  rebakeAtlas.build(k)
-  toSwap.forEach(({ obj, bakedGray, bakedOutline }) => {
-    obj._bakedGray = bakedGray
-    obj._bakedOutline = bakedOutline
-    obj.color = k.rgb(255, 255, 255)
-  })
-}
-//
-// Re-applies lake / decor visuals saved in localStorage (first visit stays bare).
-//
-function restorePersistedGlowZoneVisuals(inst) {
-  const z = inst.zones
-  if (z.waterDiscovered || z.eyesCollected) revealWaterZone(inst, false)
-}
 function applyZoneVisibility(inst) {
-  if (shouldGlowBlockWorldReveal(inst)) {
-    applyGlowEyeIntroZoneVisibility(inst)
-    return
-  }
   const z = inst.zones
   const leftGroundOpen = z.groundDecorLeft
-  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
-  inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
-  cornerObjsSetHidden(inst.cornerObjs, false)
-  refreshPlayfieldCornerSprites(inst)
   inst.trampBundle.drawLayer.hidden = !isRightTrampolineVisible(z)
   inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
+  syncPitCaveTrampolineDrawLayer(inst)
   inst.rockObjs.forEach(o => {
     if (o._mudZoneWalk) {
       setDecorObjVisible(o, z.predatorAwake)
@@ -3747,9 +2851,8 @@ function applyZoneVisibility(inst) {
       return
     }
     if (o._side === 'left') {
-      const decorOp = glowSurfaceDecorFadeAt(inst, wxRock)
-      const showLeft = (o._waterCluster ? z.water : leftGroundOpen) && decorOp > 0.04
-      setDecorObjVisible(o, showLeft, decorOp * (inst.leftDecorFade ?? 1))
+      const showLeft = o._waterCluster ? z.water : leftGroundOpen
+      setDecorObjVisible(o, showLeft, inst.leftDecorFade ?? 1)
       return
     }
     const rightOp = glowRightDecorOpacity(inst, o)
@@ -3762,9 +2865,8 @@ function applyZoneVisibility(inst) {
       return
     }
     const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
-    const decorOp = glowSurfaceDecorFadeAt(inst, wx)
     if (o._side === 'left') {
-      setDecorObjVisible(o, leftGroundOpen && !inLake && decorOp > 0.04, decorOp * (inst.leftDecorFade ?? 1))
+      setDecorObjVisible(o, leftGroundOpen && !inLake, inst.leftDecorFade ?? 1)
       return
     }
     const rightOp = glowRightDecorOpacity(inst, o)
@@ -3780,53 +2882,15 @@ function applyZoneVisibility(inst) {
 }
 function isGlowGrassLayerVisible(inst) {
   const z = inst.zones
-  if (isGlowWorldSurfaceDecorUnlocked(inst)) {
-    return z.groundDecorLeft || z.groundRightStripMax >= 0
-  }
-  //
-  // After G the layer stays on (mud-zone blades only until L countdown — tint culls the rest).
-  //
-  return z.predatorAwake
+  return z.groundDecorLeft || z.groundRightStripMax >= 0
 }
 //
 // The mud zone's own tall-grass overlay (createGlowMudExtraGrass) stays tied
-// to predatorAwake alone, unlike the general grassLayer above — that layer's
-// visibility switches to groundDecorLeft (gated behind waterDiscovered, "the
-// left shore decor only opens after the first drowning" — see loadGlowZones)
-// once world surface decor unlocks (post-L), which has nothing to do with the
-// mud zone itself. A player who reaches full colour world without ever
-// drowning (entirely possible) hid mudExtraGrass along with the rest of the
-// left decor, making the mud patch invisible in colour mode — confirmed live
-// (same mud-zone camera position, gray vs colour screenshots: color showed
-// only thin ordinary grass, no tall mud tufts at all).
+// to predatorAwake alone, unlike the general grassLayer above — that layer
+// follows the opened shore decor, which has nothing to do with the mud zone.
 //
 function isGlowMudExtraGrassVisible(inst) {
   return Boolean(inst.zones?.predatorAwake)
-}
-//
-// Hides every world layer during the eyeless intro — only the start branch,
-// floor colliders and midges stay active.
-//
-function applyGlowEyeIntroZoneVisibility(inst) {
-  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
-  inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
-  cornerObjsSetHidden(inst.cornerObjs, true)
-  inst.trampBundle.drawLayer.hidden = true
-  inst.branchTrampBundle.drawLayer.hidden = true
-  inst.rockObjs.forEach(o => setDecorObjVisible(o, false))
-  inst.mushObjs.forEach(o => setDecorObjVisible(o, false))
-  inst.grassLayer.layer.hidden = true
-  inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = true)
-  inst.waterLayer && (inst.waterLayer.hidden = true)
-  inst.treeObj && (inst.treeObj.hidden = true)
-  inst.treeColorObj && (inst.treeColorObj.hidden = true)
-  inst.treeSegmentIds?.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    entry?.obj && (entry.obj.hidden = true)
-    entry?.colorObj && (entry.colorObj.hidden = true)
-  })
-  rebuildWoodSurfaces(inst)
-  syncGlowMidgeDrawColor(inst)
 }
 //
 // Shows or hides a floor decor sprite — moves off-screen when hidden so nothing
@@ -3842,100 +2906,13 @@ function setDecorObjVisible(obj, visible, opacity = 1) {
   obj.opacity = show ? opacity : 1
 }
 //
-// Toggles corner sprite visibility.
+// Stalk-eye colours — eyeCreature.body stalk ink.
 //
-function cornerObjsSetHidden(cornerObjs, hidden) {
-  cornerObjs.forEach(obj => { obj.hidden = hidden })
-}
-//
-// Life HUD stays grey until the world colour preview (post-L countdown) or
-// full colour world has faded in far enough to read as the same beat.
-//
-function glowLifeHudWantGrey(inst) {
-  if (inst.zones.colorWorld) return false
-  return (inst.colorFade ?? 0) < 0.85
-}
-//
-// Applies the grayscale teacher tint when the glow colour fade changes.
-//
-function maybeSyncGlowLifeHudGrey(inst) {
-  if (!inst.levelIndicator) return
-  syncGlowLifeHudPupil(inst)
-  const wantGrey = glowLifeHudWantGrey(inst)
-  const needsDesat = wantGrey && !eyeHudSpriteIsDesat(inst.levelIndicator._lifeSpriteName)
-  if (inst._lifeHudGrey === wantGrey && !needsDesat) return
-  inst._lifeHudGrey = wantGrey
-  LevelIndicator.syncLifeHudGrey(inst.levelIndicator, wantGrey)
-}
-//
-// HUD eye pupil stays dark gray in the gray world, black once L is taken.
-//
-function syncGlowLifeHudPupil(inst) {
-  const indicator = inst.levelIndicator
-  if (!indicator) return
-  indicator._eyeHudPupilRgb = inst.zones.colorWorld ? null : GLOW_HUD_EYE_PUPIL_PRE_L_RGB
-}
-//
-// Flat single decor gray until L — no per-object shades before then.
-//
-function isGlowFlatSingleDecorColor(inst) {
-  return isGlowGrayWorld(inst?.zones)
-}
-//
-// Cave interior rocks/skeleton use flat gray before colour world and during
-// the eyeless intro (no green earth tones in the pit mouth).
-//
-function isGlowPitFlatDecorMode(inst) {
-  return isGlowFlatSingleDecorColor(inst) || isGlowEyeIntroBareWorld(inst)
-}
-//
-// Single neutral backdrop for sky + earth before the colour world opens.
-//
-function isGlowPreludeBackdropWorld(inst) {
-  return isGlowFlatSingleDecorColor(inst) || isGlowEyeIntroBareWorld(inst)
-}
-function glowPlayfieldBackdropRgb(inst) {
-  return isGlowPreludeBackdropWorld(inst) ? PRELUDE_BACKDROP : VOID
-}
-//
-//
-// Stalk-eyes on the right shore — visible from the first eye; pupil grey
-// until the colour world, then black (see chainBuoyPupilRgb in glow-chain-buoy.js).
-//
-function isGlowChainBuoyLayerVisible(inst) {
-  if (!inst?.chainBuoys) return false
-  if (isGlowEyeIntroBareWorld(inst)) return false
-  return Boolean(inst.zones.eyesCollected)
-}
-//
-// Stalk-eye colours — decor gray until the post-L colour fade reads as
-// colourful (same beat as the life HUD); then eyeCreature.body stalk ink.
-//
-function glowChainBuoyWantGreenStalk(inst) {
-  const z = inst?.zones
-  if (!z?.colorWorld) return false
-  return !glowLifeHudWantGrey(inst)
-}
-function glowChainBuoyColors(inst, k) {
-  const wantGreen = glowChainBuoyWantGreenStalk(inst)
-  const root = glowEarTreeRootKaplayRgb(inst, k)
-  const grayTriplet = DECOR_GRAY
-  const gray = k.rgb(grayTriplet.r, grayTriplet.g, grayTriplet.b)
-  const scleraGray = glowRgb('lightGray')
-  const grayStack = {
-    body: gray,
-    sclera: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
-    pupil: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
-    highlight: k.rgb(scleraGray.r, scleraGray.g, scleraGray.b),
-    contour: gray,
-    root
-  }
-  if (!wantGreen) {
-    return grayStack
-  }
+function glowChainBuoyColors(k) {
+  const root = glowEarTreeRootKaplayRgb(k)
   //
   // Stalk + roots: eyeCreature.body (green-black segment ink). Eye ring only:
-  // eyeCreature.contour. Sclera / pupil unchanged (hero white + chainBuoyPupilRgb).
+  // eyeCreature.contour. Sclera is hero white; the pupil is set by ChainBuoy.
   //
   const stalkTriplet = glowRgb(GLOW_PAL.eyeCreature.body)
   const ringTriplet = glowRgb(GLOW_PAL.eyeCreature.contour)
@@ -3948,31 +2925,30 @@ function glowChainBuoyColors(inst, k) {
     sclera: white,
     highlight: white,
     contour: ring,
-    pupil: grayStack.pupil,
     root
   }
 }
 //
-// Ear-tree colors — dark outline always, gray decor fill before the color
-// world, wood bark + living green ears after.
+// Ear-tree colors — dark outline, wood bark and living green ears.
 //
-function glowEarTreeRootRgb(inst) {
-  const flat = isGlowFlatSingleDecorColor(inst)
-  return flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeColor.root)
-}
-function glowEarTreeRootKaplayRgb(inst, k) {
-  const c = glowEarTreeRootRgb(inst)
+function glowEarTreeRootKaplayRgb(k) {
+  const c = glowRgb(GLOW_PAL.treeColor.root)
   return k.rgb(c.r, c.g, c.b)
 }
-function glowEarTreeColors(inst, k) {
-  const flat = isGlowFlatSingleDecorColor(inst)
-  const bark = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.treeGray.trunk)
-  const lip = flat ? DECOR_GRAY : glowRgb(GLOW_PAL.glowAttention.lip)
-  const root = glowEarTreeRootKaplayRgb(inst, k)
+function glowEarTreeColors(k) {
+  const bark = glowRgb(GLOW_PAL.treeColor.trunk)
+  const leaf = glowRgb(GLOW_PAL.glowAttention.leaf)
+  const leafLight = glowRgb(GLOW_PAL.glowAttention.leafLight)
+  const leafVein = glowRgb(GLOW_PAL.glowAttention.leafVein)
+  const root = glowEarTreeRootKaplayRgb(k)
   return {
     outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
-    lip: k.rgb(lip.r, lip.g, lip.b),
+    leaves: {
+      base: k.rgb(leaf.r, leaf.g, leaf.b),
+      light: k.rgb(leafLight.r, leafLight.g, leafLight.b),
+      vein: k.rgb(leafVein.r, leafVein.g, leafVein.b)
+    },
     root
   }
 }
@@ -3986,61 +2962,43 @@ function createGlowChainBuoyLayer(k, zones) {
     {
       draw() {
         const sc = zones._sceneRef
-        if (!sc || !isGlowChainBuoyLayerVisible(sc)) return
-        const c = glowChainBuoyColors(sc, k)
-        const pupilZones = sc.chainBuoys?.pupilZones ?? sc.zones
-        ChainBuoy.onDraw(sc.chainBuoys, c, pupilZones, glowCameraViewXRange(k, sc, GLOW_DECOR_CULL_MARGIN))
+        if (!sc?.chainBuoys) return
+        const c = glowChainBuoyColors(k)
+        ChainBuoy.onDraw(sc.chainBuoys, c, glowCameraViewXRange(k, sc, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
 }
-function glowEarTreeRevealOpacity(inst) {
-  if (!inst?.zones?.colorWorld) return 0
-  return inst.earTreeRevealFade ?? 0
-}
 //
-// Fades the lip-trees in once the second eye opens the colour world.
-//
-function updateEarTreeRevealFade(inst, dt) {
-  if (inst.zones.colorWorld && inst.earTreeRevealFade != null && inst.earTreeRevealFade < 1) {
-    inst.earTreeRevealFade = Math.min(1, inst.earTreeRevealFade + dt / POP_REVEAL_FADE_DURATION)
-  }
-  syncShoreBranchPlatform(inst)
-  ChainEyeTramp.syncChainEyeTrampPads(inst)
-}
-//
-// The shore branch is solid only once the tree itself is on screen.
+// The shore branch is created parked off-screen; pin it to its home each frame.
 //
 function syncShoreBranchPlatform(inst) {
   const bundle = inst.shoreBranchPlatSegs
-  const live = glowEarTreeRevealOpacity(inst) > COLOR_CROSSFADE_EPS
   if (bundle?.plats?.length) {
     bundle.plats.forEach((plat, i) => {
       const home = bundle.homes[i]
       if (!plat || !home) return
-      plat.pos.x = live ? home.x : SHORE_BRANCH_PLAT_HIDE_X
-      plat.pos.y = live ? home.y : SHORE_BRANCH_PLAT_HIDE_Y
+      plat.pos.x = home.x
+      plat.pos.y = home.y
     })
     return
   }
   const plat = inst.shoreBranchPlat
   const home = inst.shoreBranchPlatHome
   if (!plat || !home) return
-  plat.pos.x = live ? home.x : SHORE_BRANCH_PLAT_HIDE_X
-  plat.pos.y = live ? home.y : SHORE_BRANCH_PLAT_HIDE_Y
+  plat.pos.x = home.x
+  plat.pos.y = home.y
 }
 function createGlowHorizFallTwigLayer(k, inst) {
   k.add([
     k.z(HorizFallTwig.HORIZ_FALL_TWIG_DRAW_Z),
     {
       draw() {
-        const sc = inst
-        const op = glowEarTreeRevealOpacity(sc)
-        if (!sc?.shoreFallTwigs || op <= COLOR_CROSSFADE_EPS) return
+        if (!inst.shoreFallTwigs) return
         HorizFallTwig.onDraw(
-          sc.shoreFallTwigs,
-          op,
-          glowCameraViewXRange(k, sc, GLOW_DECOR_CULL_MARGIN)
+          inst.shoreFallTwigs,
+          1,
+          glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN)
         )
       }
     }
@@ -4103,45 +3061,12 @@ function isGlowForestFloorSpotFree(inst, blockers, x, halfW) {
   if (isCrackDecorExcluded(x1, WORLD_W) || isCrackDecorExcluded(x2, WORLD_W)) return false
   return blockers.every(b => x2 < b.x - b.half || x1 > b.x + b.half)
 }
-//
-// Forest floor exists only in the colour world and fades in with the tree.
-//
-function glowForestFloorOpacity(inst) {
-  if (!inst.zones.colorWorld) return 0
-  return glowColorWorldRevealOpacities(glowDecorFade(inst), inst.parallaxFade).colorOp
-}
-//
-// Shaft tops along the playfield top edge; each group fans a few shafts of
-// mixed width so the light reads as broken through the canopy.
-//
-function buildGlowLightShafts() {
-  const rng = createSeededRandom(GLOW_LIGHT_SHAFT_SEED)
-  const length = (FLOOR_Y - TOP_MARGIN) / Math.cos(GLOW_LIGHT_SHAFT_ANGLE) * GLOW_LIGHT_SHAFT_REACH
-  const shafts = []
-  GLOW_LIGHT_SHAFT_GROUPS.forEach(group => {
-    let x = group.x
-    for (let i = 0; i < group.count; i++) {
-      const width = GLOW_LIGHT_SHAFT_W_MIN + rng() * GLOW_LIGHT_SHAFT_W_RANGE
-      shafts.push({
-        x: x + width / 2,
-        y: TOP_MARGIN,
-        width,
-        length,
-        opacity: GLOW_LIGHT_SHAFT_OPACITY_MIN + rng() * GLOW_LIGHT_SHAFT_OPACITY_RANGE
-      })
-      x += width + GLOW_LIGHT_SHAFT_GAP_MIN + rng() * GLOW_LIGHT_SHAFT_GAP_RANGE
-    }
-  })
-  return shafts
-}
 function createGlowShoreTreeLayer(k, inst) {
   k.add([
     k.z(GLOW_EAR_TREE_TRUNK_OVERLAY_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.shoreTree || op <= COLOR_CROSSFADE_EPS) return
-        ShoreTree.onDraw(inst.shoreTree, op, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
+        inst.shoreTree && ShoreTree.onDraw(inst.shoreTree, 1, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -4151,10 +3076,9 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
-        const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, op, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
+        if (!inst.earTrees) return
+        const c = glowEarTreeColors(k)
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, 1, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -4162,10 +3086,9 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_ROOTS_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
-        const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawRoots(inst.earTrees, c.root, op, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
+        if (!inst.earTrees) return
+        const c = glowEarTreeColors(k)
+        EarTree.onDrawRoots(inst.earTrees, c.root, 1, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -4173,10 +3096,9 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_TRUNK_OVERLAY_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
-        const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, op,
+        if (!inst.earTrees) return
+        const c = glowEarTreeColors(k)
+        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, 1,
           glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
@@ -4185,10 +3107,9 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_EAR_TREE_BRANCHES_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.earTrees || op <= COLOR_CROSSFADE_EPS) return
-        const c = glowEarTreeColors(inst, k)
-        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.lip, op,
+        if (!inst.earTrees) return
+        const c = glowEarTreeColors(k)
+        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.leaves, 1,
           glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
@@ -4201,9 +3122,7 @@ function createGlowEarTreeLayer(k, inst) {
     k.z(GLOW_SPIKY_TOMATO_Z),
     {
       draw() {
-        const op = glowEarTreeRevealOpacity(inst)
-        if (!inst.spikyTomatoes || op <= COLOR_CROSSFADE_EPS) return
-        SpikyTomato.onDraw(inst.spikyTomatoes, op)
+        inst.spikyTomatoes && SpikyTomato.onDraw(inst.spikyTomatoes, 1)
       }
     }
   ])
@@ -4258,63 +3177,33 @@ function isIdentityWhite(c) {
   return c.r === 255 && c.g === 255 && c.b === 255
 }
 //
-// Amount the gray-phase ground decor darkens toward void after L. The push
-// dissolves together with the gray world as the colour fade progresses.
-//
-function grayDecorDarken(sc) {
-  if (!sc?.zones?.colorWorld) return 0
-  return L_DECOR_DARKEN * (1 - (sc.colorFade ?? 0))
-}
-//
-// Multiply-tint that turns a sprite baked in DECOR_GRAY into the current
-// (possibly darkened) gray decor tone. White = no change.
-//
-function grayDecorTint(sc) {
-  if (!sc?.zones) return { r: 255, g: 255, b: 255 }
-  if (isGlowFlatSingleDecorColor(sc)) return { r: 255, g: 255, b: 255 }
-  const t = grayDecorDarken(sc)
-  if (t <= 0) return { r: 255, g: 255, b: 255 }
-  const target = lerpRgb(DECOR_GRAY, VOID, t)
-  return {
-    r: Math.round(255 * target.r / DECOR_GRAY.r),
-    g: Math.round(255 * target.g / DECOR_GRAY.g),
-    b: Math.round(255 * target.b / DECOR_GRAY.b)
-  }
-}
-//
 // Bakes three forest planes (each one's trees AND bushes on a single shared
 // canvas) plus the haze backdrop and the static ground band. Depth comes from
 // scroll speed and haze-blend steps; colour-world trees use the four reference
 // corner palettes by playfield quadrant and canopy row.
 //
 async function buildParallaxSprites(k, undergroundSpec, onStep) {
-  const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
-  const grayMidPal = getTreePaletteSolid('parallaxGrayMid')
-  const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
-  bakeParallaxLayerPair(k, BG_PAR_TREE3_GRAY, BG_PAR_TREE3_COLOR, PAR_SKY_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
-    PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (grayCtx, colorCtx, pad) => {
-      renderSkyBand(grayCtx, colorCtx)
-      bakeParallaxBushes(grayCtx, colorCtx, pad, {
-        grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
+  bakeParallaxLayer(k, BG_PAR_TREE3_COLOR, PAR_SKY_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
+    PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (ctx, pad) => {
+      renderSkyBand(ctx)
+      bakeParallaxBushes(ctx, pad, {
         cornerBandTop: PAR_FARTHEST_BAND_TOP,
         foliageDensityTier: 'background',
         colorFlat: false,
-        grayFlat: true,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('background'), grade: GLOW_LAYER_GRADE.far })
   onStep && await onStep(1, 4)
-  bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
-    parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      bakeParallaxTrees(grayCtx, colorCtx, pad, {
+  bakeParallaxLayer(k, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
+    parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (ctx, pad) => {
+      bakeParallaxTrees(ctx, pad, {
         count: PAR_FAR_TREE_COUNT,
         seedBase: PAR_FAR_SEED_BASE,
         topMinY: PAR_FAR_TOP_MIN_Y,
         topRange: PAR_FAR_TOP_RANGE,
         bandTop: PAR_MID_BAND_TOP,
         foliageDensityTier: 'midground',
-        grayPal: grayMidPal,
         colorBlend: PAR_MID_COLOR_BLEND,
         flatLeaves: true,
         leafDarken: 0.1,
@@ -4322,27 +3211,24 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
         treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
       })
-      bakeParallaxBushes(grayCtx, colorCtx, pad, {
-        grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
+      bakeParallaxBushes(ctx, pad, {
         cornerBandTop: PAR_MID_BAND_TOP,
         foliageDensityTier: 'midground',
         colorFlat: false,
-        grayFlat: true,
         ferns: BUSH_FERNS_MID,
         heightScale: BUSH_FAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('midground'), grade: GLOW_LAYER_GRADE.mid })
   onStep && await onStep(2, 4)
-  bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
-    parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (grayCtx, colorCtx, pad) => {
-      bakeParallaxTrees(grayCtx, colorCtx, pad, {
+  bakeParallaxLayer(k, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
+    parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (ctx, pad) => {
+      bakeParallaxTrees(ctx, pad, {
         count: PAR_BIG_TREE_COUNT,
         seedBase: PAR_BIG_SEED_BASE,
         topMinY: PAR_BIG_TOP_MIN_Y,
         topRange: PAR_BIG_TOP_RANGE,
         bandTop: PAR_NEAR_BAND_TOP,
         foliageDensityTier: 'nearground',
-        grayPal: grayNearPal,
         colorBlend: PAR_L1_COLOR_BLEND,
         flatLeaves: false,
         leafDarken: 0,
@@ -4351,97 +3237,54 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
         treeFocusBias: PAR_TREE_FOCUS_BIAS_NEAR,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_NEAR
       })
-      bakeParallaxBushes(grayCtx, colorCtx, pad, {
-        grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
+      bakeParallaxBushes(ctx, pad, {
         cornerBandTop: PAR_NEAR_BAND_TOP,
         foliageDensityTier: 'nearground',
         colorFlat: false,
-        grayFlat: true,
         ferns: BUSH_FERNS_NEAR,
         heightScale: BUSH_NEAR_HEIGHT_SCALE
       })
     }, { blurRadius: glowDepthBlurRadiusPx('nearground'), grade: GLOW_LAYER_GRADE.near })
   onStep && await onStep(3, 4)
-  const staticGray = document.createElement('canvas')
-  staticGray.width = WORLD_W
-  staticGray.height = PAR_STATIC_WORLD_H
-  const staticGrayCtx = staticGray.getContext('2d')
-  staticGrayCtx.translate(0, -PAR_STATIC_WORLD_Y)
   const staticColor = document.createElement('canvas')
   staticColor.width = WORLD_W
   staticColor.height = PAR_STATIC_WORLD_H
   const staticColorCtx = staticColor.getContext('2d')
   staticColorCtx.translate(0, -PAR_STATIC_WORLD_Y)
-  const [ugGray, ugColor] = undergroundPaletteEntries()
-  renderCombinedGroundBand(staticGrayCtx, groundEarthLayersGray(), undergroundSpec, ugGray)
-  renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, ugColor)
-  applyGlowLayerGradeToCanvas(staticGray, GLOW_LAYER_GRADE.decor, 9100)
+  renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, undergroundStaticEarthTones())
   applyGlowMaterialBake(staticColor, 9101)
-  k.loadSprite(BG_STATIC_GRAY, staticGray)
   k.loadSprite(BG_STATIC_COLOR, staticColor)
-  staticGray.width = 0
-  staticGray.height = 0
   staticColor.width = 0
   staticColor.height = 0
   onStep && await onStep(4, 4)
 }
 //
-// Flat explore phase sky — void to playfield gray (no green-teal forest air).
+// Samples the dark teal sky gradient with dawn gold in the lower band.
 //
-function glowGraySkyBandRgb(mixT) {
-  return glowPreludeBackdropRgb()
-}
-//
-// Samples the dark teal sky gradient; optional dawn gold in the lower band.
-//
-function glowSkyBandRgb(mixT, colorFade, includeDawn) {
-  if (colorFade <= COLOR_CROSSFADE_EPS && !includeDawn) {
-    return glowGraySkyBandRgb(mixT)
-  }
+function glowSkyBandRgb(mixT) {
   const zenith = glowRgb('glowSkyZenith')
   const mid = glowRgb('glowSkyMid')
   const horizon = glowRgb('glowSkyHorizon')
   let c = mixT < 0.5
     ? lerpRgb(zenith, mid, mixT * 2)
     : lerpRgb(mid, horizon, (mixT - 0.5) * 2)
-  if (includeDawn && colorFade > COLOR_CROSSFADE_EPS) {
-    const dawnStart = 1 - SKY_DAWN_BOTTOM_FRAC
-    if (mixT > dawnStart) {
-      const u = (mixT - dawnStart) / (1 - dawnStart)
-      const dawn = GLOW_LIGHT_CORE
-      const strength = SKY_DAWN_GLOW_STRENGTH * colorFade * u
-      c = lerpRgb(c, dawn, strength)
-    }
+  const dawnStart = 1 - SKY_DAWN_BOTTOM_FRAC
+  if (mixT > dawnStart) {
+    const u = (mixT - dawnStart) / (1 - dawnStart)
+    c = lerpRgb(c, GLOW_LIGHT_CORE, SKY_DAWN_GLOW_STRENGTH * u)
   }
   return snapToPalette(c)
 }
 //
-// Paints the sky band into both parallax canvases: same dark green-teal base;
-// colour bake adds golden dawn at the trunk line only.
+// Paints the dark green-teal sky band with golden dawn at the trunk line.
 //
-function renderSkyBand(grayCtx, colorCtx) {
-  const h = FLOOR_Y - TOP_MARGIN
-  paintFlatSky(grayCtx, h)
-  paintGlowSkyGradient(colorCtx, h, 1, true)
-}
-//
-// Flat neutral sky for gray parallax bakes — one step above the frame so the
-// play zone edge stays readable and the forest rows sit lighter in front.
-//
-function paintFlatSky(ctx, skyHeight) {
-  ctx.fillStyle = `rgb(${FLAT_SKY.r}, ${FLAT_SKY.g}, ${FLAT_SKY.b})`
-  ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, skyHeight + 1)
-}
-//
-// Shared vertical sky fill for baked canvases and live playfield fallback.
-//
-function paintGlowSkyGradient(ctx, skyHeight, colorFade, includeDawn) {
+function renderSkyBand(ctx) {
+  const skyHeight = FLOOR_Y - TOP_MARGIN
   const bands = SKY_DITHER_BAND_COUNT
   for (let b = 0; b < bands; b++) {
     const t0 = b / bands
     const t1 = (b + 1) / bands
-    const mix = (t0 + t1) * 0.5
-    const c = glowSkyBandRgb(mix, colorFade, includeDawn)
+    const c = glowSkyBandRgb((t0 + t1) * 0.5)
     ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
     const y = TOP_MARGIN + t0 * skyHeight
     const bandH = Math.ceil(t1 * skyHeight - t0 * skyHeight) + 1
@@ -4449,36 +3292,12 @@ function paintGlowSkyGradient(ctx, skyHeight, colorFade, includeDawn) {
   }
 }
 //
-// Live playfield sky before / between parallax crossfades.
-//
-function drawGlowPlayfieldSky(k, opacity, colorFade) {
-  if (opacity < COLOR_CROSSFADE_EPS) return
-  const skyH = FLOOR_Y - TOP_MARGIN
-  const bands = SKY_DITHER_BAND_COUNT
-  const includeDawn = colorFade > COLOR_CROSSFADE_EPS
-  for (let b = 0; b < bands; b++) {
-    const t0 = b / bands
-    const t1 = (b + 1) / bands
-    const mix = (t0 + t1) * 0.5
-    const c = glowSkyBandRgb(mix, colorFade, includeDawn)
-    const y = TOP_MARGIN + t0 * skyH
-    const bandH = Math.ceil(t1 * skyH - t0 * skyH) + 1
-    k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, y),
-      width: GAME_W,
-      height: bandH,
-      color: k.rgb(c.r, c.g, c.b),
-      opacity
-    })
-  }
-}
-//
 // Renders one tree row into a parallax canvas with horizontal bleed.
 //
-function bakeParallaxTrees(grayCtx, colorCtx, pad, planeCfg) {
+function bakeParallaxTrees(ctx, pad, planeCfg) {
   const treeLeft = LEFT_MARGIN - pad
   const treeRight = WORLD_W - RIGHT_MARGIN + pad
-  renderGlowTreePlane(grayCtx, colorCtx, {
+  renderGlowTreePlane(ctx, {
     ...planeCfg,
     treeX1: treeLeft,
     treeX2: treeRight
@@ -4487,51 +3306,31 @@ function bakeParallaxTrees(grayCtx, colorCtx, pad, planeCfg) {
 //
 // Renders one bush row into a parallax canvas with horizontal bleed.
 //
-function bakeParallaxBushes(grayCtx, colorCtx, pad, stripCfg) {
+function bakeParallaxBushes(ctx, pad, stripCfg) {
   const x1 = LEFT_MARGIN - pad
   const x2 = WORLD_W - RIGHT_MARGIN + pad
-  renderBushStrip(grayCtx, colorCtx, { ...stripCfg, x1, x2 })
+  renderBushStrip(ctx, { ...stripCfg, x1, x2 })
 }
 //
 // Bakes one parallax depth layer with horizontal padding so it never gaps at
-// either scroll limit. Optional postFxCfg bakes depth blur and film grain into
-// both gray and colour canvases after trees and bushes are painted.
+// either scroll limit. Optional postFxCfg bakes depth blur and film grain
+// after trees and bushes are painted.
 //
-function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBleed, worldY, worldH, drawFn, postFxCfg = null) {
+function bakeParallaxLayer(k, name, speed, maxScroll, horizBleed, worldY, worldH, drawFn, postFxCfg = null) {
   const pad = Math.ceil(maxScroll * (1 - speed)) + horizBleed
   const canvasW = WORLD_W + pad * 2
   const canvasH = worldH
-  const grayCanvas = document.createElement('canvas')
-  grayCanvas.width = canvasW
-  grayCanvas.height = canvasH
-  const grayCtx = grayCanvas.getContext('2d')
-  grayCtx.translate(pad, -worldY)
-  const colorCanvas = document.createElement('canvas')
-  colorCanvas.width = canvasW
-  colorCanvas.height = canvasH
-  const colorCtx = colorCanvas.getContext('2d')
-  colorCtx.translate(pad, -worldY)
-  drawFn(grayCtx, colorCtx, pad)
-  postFxCfg && applyParallaxPostFxToContext(grayCtx, canvasW, canvasH, grayParallaxPostFx(postFxCfg))
-  postFxCfg && applyParallaxPostFxToContext(colorCtx, canvasW, canvasH, postFxCfg)
-  const bounds = parallaxColumnBoundsMap(k)
-  bounds.set(grayName, measureParallaxColumnBounds(grayCanvas, false))
-  bounds.set(colorName, measureParallaxColumnBounds(colorCanvas, colorName === PAR_LAYER_NEAR.color))
-  k.loadSprite(grayName, grayCanvas)
-  k.loadSprite(colorName, colorCanvas)
-  grayCanvas.width = 0
-  grayCanvas.height = 0
-  colorCanvas.width = 0
-  colorCanvas.height = 0
-  return pad
-}
-//
-// Gray bakes keep blur and grain but skip the contrast grade: pulling around
-// mid-grey would flatten the sky and every forest row into one tone.
-//
-function grayParallaxPostFx(cfg) {
-  if (!cfg.grade) return cfg
-  return { ...cfg, grade: { ...cfg.grade, contrast: 1, saturation: 1 } }
+  const canvas = document.createElement('canvas')
+  canvas.width = canvasW
+  canvas.height = canvasH
+  const ctx = canvas.getContext('2d')
+  ctx.translate(pad, -worldY)
+  drawFn(ctx, pad)
+  postFxCfg && applyParallaxPostFxToContext(ctx, canvasW, canvasH, postFxCfg)
+  parallaxColumnBoundsMap(k).set(name, measureParallaxColumnBounds(canvas, name === PAR_LAYER_NEAR.color))
+  k.loadSprite(name, canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Column bounds registry for the live Kaplay instance (created on demand).
@@ -4593,10 +3392,6 @@ function columnSolidTop(data, w, h, x0, x1) {
   return 0
 }
 //
-// Fills one horizontal band across the full width; the deepest bottom edge
-// stays flat on the playfield floor (interior seams stay jaggy).
-//
-//
 // Deterministic hash for layer-boundary jitter (stable across bakes).
 //
 function groundLayerJagHash01(n) {
@@ -4607,8 +3402,26 @@ function groundLayerJagHash01(n) {
 // Per-column sample-and-hold offset — sharp vertical micro-spikes along X.
 //
 function groundLayerInteriorBoundaryWave(x, layerIndex) {
-  if (layerIndex === GROUND_LAYER_FRINGE_INDEX) return groundLayerFringeOffset(x, layerIndex)
-  return groundLayerJag(x, layerIndex) * GROUND_LAYER_INTERIOR_BOUNDARY_AMP
+  if (layerIndex <= 0) return 0
+  const macro = groundLayerMacroSeamSway(x, layerIndex)
+  if (layerIndex === GROUND_LAYER_FRINGE_INDEX) {
+    return macro + groundLayerFringeLobeOffset(x, layerIndex)
+  }
+  return macro + groundLayerJag(x, layerIndex) * GROUND_LAYER_INTERIOR_BOUNDARY_AMP
+}
+//
+// Slow undulation on every interior seam — reads as soil rising and falling.
+//
+function groundLayerMacroSeamSway(x, layerIndex) {
+  const seed = layerIndex * 19.1
+  const warpedX = x + groundLayerValueNoise(x / GROUND_LAYER_MACRO_WARP_WAVELENGTH, seed + 7.7) * GROUND_LAYER_MACRO_WARP_AMP
+  let sum = 0
+  for (let i = 0; i < GROUND_LAYER_MACRO_OCTAVES.length; i++) {
+    const octave = GROUND_LAYER_MACRO_OCTAVES[i]
+    sum += groundLayerValueNoise(warpedX / octave.wavelength, seed + i * 41.3) * octave.amp
+  }
+  const envelope01 = (groundLayerValueNoise(x / GROUND_LAYER_MACRO_ENVELOPE_WAVELENGTH, seed + 3.3) + 1) * 0.5
+  return sum * (GROUND_LAYER_MACRO_ENVELOPE_MIN + (1 - GROUND_LAYER_MACRO_ENVELOPE_MIN) * envelope01)
 }
 function groundLayerJag(x, layerIndex) {
   const seed = layerIndex * 97.13 + 3.7
@@ -4616,17 +3429,25 @@ function groundLayerJag(x, layerIndex) {
   return groundLayerJagHash01(bx * 13.7 + seed * 100.3) * 2 - 1
 }
 //
-// One asymmetric tooth per fringe cell (random depth and peak position),
-// centred on the seam so the stratum fractions still hold on average.
+// Rounded tongues of topsoil plus a little pixel grit — centred on zero so the
+// stratum fractions still hold on average.
 //
-function groundLayerFringeOffset(x, layerIndex) {
-  const cell = Math.floor(x / GROUND_LAYER_FRINGE_W)
-  const f = x / GROUND_LAYER_FRINGE_W - cell
-  const depth = GROUND_LAYER_FRINGE_DEPTH_MIN + groundLayerJagHash01(cell * 7.31 + 1.9) * GROUND_LAYER_FRINGE_DEPTH_RANGE
-  const peak = 0.3 + groundLayerJagHash01(cell * 3.17 + 5.3) * 0.4
-  const tooth = f < peak ? f / peak : (1 - f) / (1 - peak)
-  const sway = Math.sin(x * GROUND_LAYER_FRINGE_SWAY_F) * GROUND_LAYER_FRINGE_SWAY_A
-  return sway + (tooth - 0.5) * depth + groundLayerJag(x, layerIndex) * GROUND_LAYER_FRINGE_JAG_AMP
+function groundLayerFringeLobeOffset(x, layerIndex) {
+  let sum = 0
+  for (let i = 0; i < GROUND_LAYER_FRINGE_LOBE_OCTAVES.length; i++) {
+    const octave = GROUND_LAYER_FRINGE_LOBE_OCTAVES[i]
+    sum += groundLayerValueNoise(x / octave.wavelength, layerIndex * 5.1 + i * 13.9) * octave.amp
+  }
+  return sum + groundLayerJag(x, layerIndex) * GROUND_LAYER_FRINGE_JAG_AMP
+}
+//
+// Smooth 1D value noise in [-1, 1]: hashed lattice values, smoothstep blend.
+//
+function groundLayerValueNoise(t, seed) {
+  const i = Math.floor(t)
+  const a = groundLayerJagHash01(i * 17.31 + seed)
+  const b = groundLayerJagHash01((i + 1) * 17.31 + seed)
+  return (a + (b - a) * smoothstep01(t - i)) * 2 - 1
 }
 function groundLayerBoundaryY(x, y0, height, cumFrac, layerIndex) {
   //
@@ -4741,12 +3562,9 @@ function softenGroundEarthLayers(layers) {
     rgb: lerpRgb(layer.rgb, avg, pull)
   }))
 }
-function groundEarthLayersGray() {
-  return withMidEarthStratum([
-    { rgb: FLAT_EARTH },
-    { rgb: FLAT_EARTH_DEEP }
-  ])
-}
+//
+// Colour-world earth strata for the static ground band.
+//
 function groundEarthLayersColor() {
   return withMidEarthStratum(softenGroundEarthLayers([
     { rgb: glowRgb('groundChernozem') },
@@ -4791,17 +3609,16 @@ function parallaxCornerLeafRgb(treeX, bandTop) {
   return glowRgb(corner.leaf)
 }
 //
-// Renders one parallax plane into both combined canvases: each tree uses the
+// Renders one parallax plane into its combined canvas: each tree uses the
 // same glow-tree generator as the main tree (default trunk taper, fractal
 // branches, crown clusters). Only trunk height and a light width scale differ
 // per row so the forest sits lower without a flat canopy fill band.
 //
-function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
+function renderGlowTreePlane(ctx, planeCfg) {
   const {
     count, seedBase, topMinY, topRange,
-    grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformWood,
+    colorBase, colorBlend, flatLeaves, leafDarken, uniformWood,
     leafWarmBlend = 0,
-    grayPal: grayPalOverride,
     colorPal: colorPalOverride,
     bandTop = PAR_NEAR_BAND_TOP,
     treeX1 = LEFT_MARGIN,
@@ -4814,9 +3631,8 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
   const treeXs = buildParallaxTreeXs(count, treeX1, treeX2, TREE_X, treeFocusBias)
   treeXs.forEach((treeX, i) => {
     //
-    // Gray row tone is shared; colour row picks one of the four corner families.
+    // Each tree picks one of the four corner colour families.
     //
-    const grayPal = grayPalOverride || buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
     const colorPal = colorPalOverride || buildDimmedTreePalette(
       colorBase || getTreePaletteParallaxCorner(parallaxForestCornerKey(treeX, bandTop)),
       PARALLAX_FOLIAGE_HAZE,
@@ -4843,10 +3659,8 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
     scaleGlowTreeWidths(treeData, widthScale)
     trunkWidthScale < 1 && scaleGlowTreeTrunkWidths(treeData, trunkWidthScale)
-    const grayPalDraw = applyFoliageDensityToPalette(grayPal, foliageDensityTier)
     const colorPalDraw = applyFoliageDensityToPalette(colorPal, foliageDensityTier)
-    renderGlowTreeIntoContext(grayCtx, treeData, grayPalDraw, WORLD_W, WORLD_H)
-    renderGlowTreeIntoContext(colorCtx, treeData, colorPalDraw, WORLD_W, WORLD_H)
+    renderGlowTreeIntoContext(ctx, treeData, colorPalDraw, WORLD_W, WORLD_H)
   })
 }
 //
@@ -4881,17 +3695,15 @@ function applyGlowMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay')
   }, seedOffset)
 }
 //
-// Renders one bush strip into both combined canvases: leafy mounds of
-// varying radii centred on the ground line (everything below FLOOR_Y is
-// cleared afterwards, so every mound is cut by the ground). The layout and
-// every leaf placement are generated ONCE and painted with the gray and
-// colour tones, so the two mode images stay pixel-aligned. Each mound is a
-// filled dome plus scattered oval leaves and a ragged leaf rim, so the
-// strip reads as real bushes in every mode.
+// Renders one bush strip into its combined canvas: leafy mounds of varying
+// radii centred on the ground line (everything below FLOOR_Y is cleared
+// afterwards, so every mound is cut by the ground). Each mound is a filled
+// dome plus scattered oval leaves and a ragged leaf rim, so the strip reads
+// as real bushes.
 //
-function renderBushStrip(grayCtx, colorCtx, stripCfg) {
+function renderBushStrip(ctx, stripCfg) {
   const {
-    grayRgb, colorRgb, colorFlat, grayFlat, heightScale, hiResClusters,
+    colorRgb, colorFlat, heightScale, hiResClusters,
     ferns = 0,
     foliageDensityTier = 'midground',
     cornerBandTop = null,
@@ -4910,10 +3722,9 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
       : colorRgb
     const useHiResClusters = hiResClusters ?? glowHiResBushClustersForTier(foliageDensityTier)
     const fernCount = Math.floor(ferns) + (Math.random() < ferns % 1 ? 1 : 0)
-    for (let f = 0; f < fernCount; f++) paintBushStripFern(grayCtx, colorCtx, mound, grayRgb, moundColorRgb, grayFlat)
-    drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
-    drawLeafyBushMound(colorCtx, mound, moundColorRgb, colorFlat)
-    useHiResClusters && drawHiResBushClusters(colorCtx, mound, moundColorRgb, foliageDensityTier)
+    for (let f = 0; f < fernCount; f++) paintBushStripFern(ctx, mound, moundColorRgb)
+    drawLeafyBushMound(ctx, mound, moundColorRgb, colorFlat)
+    useHiResClusters && drawHiResBushClusters(ctx, mound, moundColorRgb, foliageDensityTier)
     //
     // Advance less than a radius so each mound overlaps the next one.
     //
@@ -4921,33 +3732,30 @@ function renderBushStrip(grayCtx, colorCtx, stripCfg) {
   }
 }
 //
-// Dark pinnate fern behind a bush mound, poking out above its dome (same
-// seed for both mode canvases so the gray and colour images stay aligned).
-// A flat gray row keeps its single tone, so the fern there is one colour.
+// Dark pinnate fern behind a bush mound, poking out above its dome.
 //
-function paintBushStripFern(grayCtx, colorCtx, mound, grayRgb, colorRgb, grayFlat) {
+function paintBushStripFern(ctx, mound, rgb) {
   const seed = Math.floor(Math.random() * BUSH_FERN_SEED_RANGE)
   const x = mound.x + (Math.random() * 2 - 1) * mound.radius * BUSH_FERN_OFFSET
   const size = mound.radius * (BUSH_FERN_SIZE_MIN + Math.random() * BUSH_FERN_SIZE_RANGE)
-  paintBushFernOnto(grayCtx, x, size, seed, grayRgb, grayFlat)
-  paintBushFernOnto(colorCtx, x, size, seed, colorRgb, false)
+  paintBushFernOnto(ctx, x, size, seed, rgb)
 }
-function paintBushFernOnto(ctx, x, size, seed, rgb, flat) {
+function paintBushFernOnto(ctx, x, size, seed, rgb) {
   drawFernToCanvas(ctx, {
     x,
     baseY: FLOOR_Y,
     size,
     rng: createSeededRandom(seed),
     colors: {
-      stem: bushFernTone(rgb, flat, BUSH_FERN_STEM),
-      dark: bushFernTone(rgb, flat, BUSH_FERN_DARK),
-      mid: bushFernTone(rgb, flat, BUSH_FERN_MID),
-      light: bushFernTone(rgb, flat, BUSH_FERN_LIGHT)
+      stem: bushFernTone(rgb, BUSH_FERN_STEM),
+      dark: bushFernTone(rgb, BUSH_FERN_DARK),
+      mid: bushFernTone(rgb, BUSH_FERN_MID),
+      light: bushFernTone(rgb, BUSH_FERN_LIGHT)
     }
   })
 }
-function bushFernTone(rgb, flat, shade) {
-  const c = flat ? rgb : lerpRgb(rgb, GLOW_SHADOW, shade)
+function bushFernTone(rgb, shade) {
+  const c = lerpRgb(rgb, GLOW_SHADOW, shade)
   return `rgb(${c.r}, ${c.g}, ${c.b})`
 }
 //
@@ -5040,191 +3848,33 @@ function drawHiResBushClusters(ctx, mound, baseRgb, foliageDensityTier = 'neargr
   }
 }
 //
-// True when the camera centres on lake or cave beats — forest haze stays off.
-//
-function isForestHazeSuppressedAtCam(inst) {
-  const camX = inst.k.camPos().x
-  const lakeX1 = inst.lakeX1
-  const lakeX2 = inst.lakeX2
-  if (lakeX1 != null && lakeX2 != null && inst.zones.water) {
-    if (camX >= lakeX1 - HAZE_LAKE_CAM_MARGIN && camX <= lakeX2 + HAZE_LAKE_CAM_MARGIN) {
-      return true
-    }
-  }
-  const crack = getCrackZone(WORLD_W, FLOOR_Y)
-  return camX >= crack.x1 - HAZE_CAVE_CAM_MARGIN
-}
-//
-// Sky-coloured veil over a forest row so farther planes lose contrast.
-//
-function drawAtmosphereHaze(inst, opacity) {
-  if (opacity < 0.01) return
-  if (isForestHazeSuppressedAtCam(inst)) return
-  const k = inst.k
-  const fade = inst.colorFade ?? 0
-  if (fade < COLOR_CROSSFADE_EPS) return
-  const c = GLOW_LIGHT_CORE
-  const skyH = FLOOR_Y - TOP_MARGIN
-  const bandH = skyH * SKY_DAWN_BOTTOM_FRAC
-  k.drawRect({
-    pos: k.vec2(LEFT_MARGIN, FLOOR_Y - bandH),
-    width: GAME_W,
-    height: bandH,
-    color: k.rgb(c.r, c.g, c.b),
-    opacity: opacity * fade * 0.1
-  })
-}
-//
-// Quiet specks that drift through the revealed forest air.
-//
-function createAtmosphereMotes() {
-  const motes = []
-  for (let i = 0; i < MOTE_COUNT; i++) {
-    motes.push({
-      x: LEFT_MARGIN + Math.random() * GAME_W,
-      y: TOP_MARGIN + 40 + Math.random() * Math.max(80, FLOOR_Y - TOP_MARGIN - 120),
-      vx: (Math.random() - 0.5) * MOTE_SPEED_RANGE,
-      vy: -(MOTE_SPEED_MIN + Math.random() * MOTE_SPEED_RANGE),
-      size: MOTE_SIZE_MIN + Math.random() * MOTE_SIZE_RANGE,
-      phase: Math.random() * Math.PI * 2,
-      opacity: MOTE_OPACITY_MIN + Math.random() * MOTE_OPACITY_RANGE
-    })
-  }
-  return motes
-}
-//
-// Wraps motes inside the playfield so the drift never runs off-world.
-//
-function updateAtmosphereMotes(inst, dt) {
-  const motes = inst.atmosphereMotes
-  if (!motes) return
-  const top = TOP_MARGIN + 20
-  const bot = FLOOR_Y - 30
-  const left = LEFT_MARGIN
-  const right = WORLD_W - RIGHT_MARGIN
-  motes.forEach(mote => {
-    mote.phase += dt * 0.6
-    mote.x += mote.vx * dt + Math.sin(mote.phase) * 4 * dt
-    mote.y += mote.vy * dt
-    mote.y < top && (mote.y = bot)
-    mote.y > bot && (mote.y = top)
-    mote.x < left && (mote.x = right)
-    mote.x > right && (mote.x = left)
-  })
-}
-//
-// Specks stay behind the hero; skipped in the single-tone explore phase.
-//
-function drawAtmosphereMotes(inst) {
-  if (!inst.zones.colorWorld) return
-  if (isGlowFlatSingleDecorColor(inst)) return
-  if (isForestHazeSuppressedAtCam(inst)) return
-  const k = inst.k
-  const colorFade = glowDecorFade(inst)
-  const gray = HUD_SCORE_COLOR_SETTLED
-  const warm = lerpRgb(GLOW_LIGHT_CORE, GLOW_LIGHT_BRIGHT, 0.55)
-  const c = inst.zones.colorWorld || colorFade > COLOR_CROSSFADE_EPS
-    ? lerpRgb(gray, warm, colorFade * colorFade)
-    : gray
-  const color = k.rgb(c.r, c.g, c.b)
-  const camX = k.camPos().x
-  const zoom = inst.camera?.zoom || 1
-  const half = VIEW_W / (2 * zoom) + 40
-  const moteFade = Math.max(inst.parallaxFade ?? 0, colorFade)
-  inst.atmosphereMotes?.forEach(mote => {
-    if (mote.x < camX - half || mote.x > camX + half) return
-    k.drawCircle({
-      pos: k.vec2(mote.x, mote.y),
-      radius: mote.size,
-      color,
-      opacity: mote.opacity * moteFade
-    })
-  })
-}
-//
-// Bakes the underground decor sprites (gray + colour-world variants) that
-// dress up the root-zone earth band: buried rocks, burrows with winding
-// tunnels, cracks, pebble clusters, hanging rootlets and a fossil spiral.
-// Both variants share the same generated geometry so the gray↔colour
-// crossfade never shifts a single stone. Returns the generated spec so the
-// combined background canvases can bake the exact same decor into their
-// root zones.
+// Underground decor spec that dresses up the root-zone earth band: buried
+// rocks, cracks, pebble clusters, hanging rootlets and a fossil spiral. It is
+// generated once per live Kaplay instance and baked into the combined static
+// earth band, so a prewarmed engine never regenerates it.
 //
 const undergroundSpecByK = new WeakMap()
-//
-// Full-world earth bakes. Reused after prewarm so scene init does not grade
-// three WORLD canvases again while the loader sits still.
-//
-async function loadUndergroundSprites(k, onStep) {
-  const entries = undergroundPaletteEntries()
+function glowUndergroundSpec(k) {
   const cached = undergroundSpecByK.get(k)
-  if (cached && glowUndergroundSpritesReady(k)) {
-    onStep && await onStep(entries.length, entries.length)
-    return cached
-  }
-  const spec = cached || buildUndergroundSpec()
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i]
-    if (!k.getSprite(entry.name)) {
-      const canvas = document.createElement('canvas')
-      canvas.width = WORLD_W
-      canvas.height = WORLD_H
-      const ctx = canvas.getContext('2d')
-      renderUndergroundSpec(ctx, spec, entry)
-      applyGlowMaterialBake(canvas, entry.name.length * 41)
-      k.loadSprite(entry.name, canvas)
-      canvas.width = 0
-      canvas.height = 0
-    }
-    onStep && await onStep(i + 1, entries.length)
-  }
+  if (cached) return cached
+  const spec = buildUndergroundSpec()
   undergroundSpecByK.set(k, spec)
   return spec
 }
 //
-// Underground decor palettes: the gray world sits on the playfield-gray
-// earth band; the colour world sits on the near-black earth, so its
-// features read as slightly lighter tones.
+// Brown underground tones baked into the static colour earth band.
 //
-function undergroundEarthDecorSprite(z) {
-  if (!z?.colorWorld) return UNDERGROUND_GRAY_SPRITE
-  if (z.colorWorld) return UNDERGROUND_COLOR_SPRITE
-  return UNDERGROUND_POST_L_BROWN_SPRITE
-}
-function undergroundPaletteEntries() {
-  const flatGray = FLAT_UNDERGROUND
-  const flatDeep = FLAT_EARTH_DEEP
-  const brownFill = glowRgb('groundSand')
-  const brownDeep = glowRgb(GLOW_PAL.log.bark)
-  const brownLight = glowRgb(GLOW_PAL.log.barkLight)
-  return [
-    {
-      name: UNDERGROUND_GRAY_SPRITE,
-      fill: flatGray,
-      deep: flatDeep,
-      light: glowRgb(GLOW_PAL.brightLight),
-      monoStrokes: true
-    },
-    {
-      name: UNDERGROUND_POST_L_BROWN_SPRITE,
-      fill: brownFill,
-      deep: brownDeep,
-      light: brownLight,
-      monoStrokes: true,
-      ...undergroundColorExtraTones()
-    },
-    {
-      name: UNDERGROUND_COLOR_SPRITE,
-      fill: glowRgb('groundChernozem'),
-      deep: glowRgb('mudGround'),
-      light: glowRgb('groundSand'),
-      ...undergroundColorExtraTones()
-    }
-  ]
+function undergroundStaticEarthTones() {
+  return {
+    fill: glowRgb('groundSand'),
+    deep: glowRgb(GLOW_PAL.log.bark),
+    light: glowRgb(GLOW_PAL.log.barkLight),
+    monoStrokes: true,
+    ...undergroundColorExtraTones()
+  }
 }
 //
-// Cobble, void, pebble and grit tones for the colour-world bakes; the brown
-// entry is the one baked into the static colour earth band, so it needs them too.
+// Cobble, void, pebble and grit tones for the static colour earth band.
 //
 function undergroundColorExtraTones() {
   const tones = GLOW_PAL.glowUnderground
@@ -5245,16 +3895,6 @@ const GLOW_CHAIN_BUOY_COUNT_MAX = 7
 const GLOW_CHAIN_BUOY_TREE_CLEAR_HALF = 260
 const GLOW_CHAIN_BUOY_MIN_GAP = 150
 const GLOW_CHAIN_BUOY_PLACE_ATTEMPTS = 80
-//
-// The two right-side ear-trees can sit as close as ~350-460px apart — at the
-// old 240px-per-side clearance their exclusion zones combined ate almost the
-// whole (now much narrower, right-of-mud-only) placement span, leaving too
-// little room to ever reach the 5-7 buoy target. A thin chain doesn't need
-// nearly as much clearance from a tree as it did when buoys could spawn
-// anywhere in the world; the dedicated between-right-trees placement (see
-// addGlowChainBuoysBetweenRightTrees) already handles the gap between the
-// two trees specifically with its own tighter 40px margin.
-//
 //
 // No stalk-eye within this distance of an ear-tree trunk, on either side.
 //
@@ -5282,7 +3922,6 @@ const GLOW_EAR_TREE_SCAN_STEP = 4
 const GLOW_SHORE_TREE_EAR_TREE_CLEAR_HALF = 210
 const GLOW_EAR_TREE_MUSHROOM_TRAMP_CLEAR_HALF = 100
 const GLOW_EAR_TREE_STALK_EYE_CLEAR_HALF = 110
-const GLOW_EAR_TREE_MUD_CLEAR = 36
 //
 // Keeps grass blades from spawning over an ear-tree's trunk footprint - the
 // trunk polygon (z = player - 1) sits BELOW the grass layer (GRASS_Z = 20),
@@ -5293,18 +3932,12 @@ const GLOW_EAR_TREE_MUD_CLEAR = 36
 // outline pad) plus a blade's own half-width.
 //
 const EAR_TREE_TRUNK_GRASS_CLEAR_HALF = 26
-const GLOW_EAR_TREE_WHISPER_RADIUS = 300
-const GLOW_EAR_TREE_WHISPER_MAX_VOLUME = 0.42
+const GLOW_PLANT_WHISPER_MAX_VOLUME = 0.42
 //
 // Minimum change in proximity (0..1) per frame to count as moving toward or
-// away from the nearest lip-tree — ignores sub-pixel jitter.
+// away from the eye-flower — ignores sub-pixel jitter.
 //
-const GLOW_EAR_TREE_WHISPER_PROX_DELTA = 0.002
-//
-// Lip-tree whispers only apply on the forest floor — below the lip (cave /
-// pit) horizontal nearness must not keep the loop audible.
-//
-const GLOW_EAR_TREE_WHISPER_SURFACE_FOOT_Y = FLOOR_Y - 10
+const GLOW_PLANT_WHISPER_PROX_DELTA = 0.002
 const GLOW_EARLY_LAND_FOOT_ABOVE = 26
 //
 // Clearance kept around the cave crack zone for both decor kinds — neither
@@ -5652,66 +4285,47 @@ function buildGlowEarTreeSpot(x, heightTier) {
   }
 }
 //
-// Ear-tree whisper volume from hero distance to the nearest lip-tree.
+// Whisper volume from hero distance to the eye-flower head (2D, so the tree
+// branch above the lake counts as well).
 //
-function resetGlowEarTreeWhisperProximityState(inst) {
-  if (!inst.earWhisperProximityState) return
-  inst.earWhisperProximityState.last = 0
-  inst.earWhisperProximityState.wasReceding = false
+function resetGlowPlantWhisperProximityState(inst) {
+  if (!inst.plantWhisperProximityState) return
+  inst.plantWhisperProximityState.last = 0
+  inst.plantWhisperProximityState.wasReceding = false
 }
-function fadeOutGlowEarTreeWhisper(inst) {
+function fadeOutGlowPlantWhisper(inst) {
   Sound.setEarTreeWhisperVolume(0)
-  resetGlowEarTreeWhisperProximityState(inst)
+  resetGlowPlantWhisperProximityState(inst)
 }
-function setGlowEarTreeWhisperVolume(inst, volume) {
-  const vol = Math.max(0, Math.min(1, volume))
-  Sound.setEarTreeWhisperVolume(vol)
-}
-function updateGlowEarTreeWhisperSound(inst, char) {
-  const fadeOut = () => fadeOutGlowEarTreeWhisper(inst)
-  if (!char?.pos || !inst.zones.colorWorld || !inst.earTrees?.trees?.length) {
-    fadeOut()
-    return
-  }
-  if (inst.drowning) {
-    fadeOut()
+function updateGlowPlantWhisperSound(inst, char) {
+  if (!char?.pos || inst.drowning) {
+    fadeOutGlowPlantWhisper(inst)
     return
   }
   const footY = char.pos.y + SURFACE_DETECT_Y
   if (isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)) {
-    fadeOut()
+    fadeOutGlowPlantWhisper(inst)
+    return
+  }
+  const proximity = EyeFlower.whisperProximity(inst.eyeFlower, char.pos.x, char.pos.y)
+  const whisperMax = CFG.audio.backgroundMusic.whisper ?? GLOW_PLANT_WHISPER_MAX_VOLUME
+  const vol = whisperMax * proximity
+  if (vol <= 0.001) {
+    fadeOutGlowPlantWhisper(inst)
     return
   }
   inst.sound && Sound.resumeAudioContext(inst.sound)
-  const hx = char.pos.x
-  const surfaceDy = Math.max(0, footY - GLOW_EAR_TREE_WHISPER_SURFACE_FOOT_Y)
-  let nearestDist = Infinity
-  for (const tree of inst.earTrees.trees) {
-    const dx = hx - tree.x
-    nearestDist = Math.min(nearestDist, Math.hypot(dx, surfaceDy))
-  }
-  const proximity = nearestDist >= GLOW_EAR_TREE_WHISPER_RADIUS
-    ? 0
-    : 1 - nearestDist / GLOW_EAR_TREE_WHISPER_RADIUS
-  const whisperMax = CFG.audio.backgroundMusic.whisper ?? GLOW_EAR_TREE_WHISPER_MAX_VOLUME
-  const vol = whisperMax * proximity
-  if (vol <= 0.001) {
-    fadeOut()
-    return
-  }
-  if (!inst.earWhisperProximityState) {
-    inst.earWhisperProximityState = { last: proximity, wasReceding: false }
-  }
-  const proxState = inst.earWhisperProximityState
-  const approaching = proximity > proxState.last + GLOW_EAR_TREE_WHISPER_PROX_DELTA
-  const receding = proximity < proxState.last - GLOW_EAR_TREE_WHISPER_PROX_DELTA
+  inst.plantWhisperProximityState ??= { last: proximity, wasReceding: false }
+  const proxState = inst.plantWhisperProximityState
+  const approaching = proximity > proxState.last + GLOW_PLANT_WHISPER_PROX_DELTA
+  const receding = proximity < proxState.last - GLOW_PLANT_WHISPER_PROX_DELTA
   receding && (proxState.wasReceding = true)
   if (approaching && proxState.wasReceding) {
     Sound.rewindEarTreeWhisperToStart()
     proxState.wasReceding = false
   }
   proxState.last = proximity
-  setGlowEarTreeWhisperVolume(inst, vol)
+  Sound.setEarTreeWhisperVolume(Math.min(1, vol))
 }
 //
 // Plays ground/wood land SFX a few pixels before isGrounded flips — Kaplay
@@ -5835,9 +4449,15 @@ function buildUndergroundSpec() {
   // Boulder piles sit on the band floor; grit specks are spread everywhere.
   //
   const deepY1 = FLOOR_Y + CAVE_BAND_H * UG_BOULDER_DEEP_FRAC
-  const pileXs = [areaX1 + UG_BOULDER_PILE_EDGE_INSET, areaX2 - UG_BOULDER_PILE_EDGE_INSET]
-  for (let i = 0; i < UG_BOULDER_PILE_COUNT; i++) pileXs.push(randX())
-  const boulderPiles = pileXs.map(cx => buildUndergroundCobbleBed(cx, deepY1, areaY2))
+  const placedStones = []
+  const boulderPiles = [
+    buildUndergroundStoneGroup(areaX1 + UG_BOULDER_PILE_EDGE_INSET, deepY1, areaY2, true, placedStones),
+    buildUndergroundStoneGroup(areaX2 - UG_BOULDER_PILE_EDGE_INSET, deepY1, areaY2, true, placedStones)
+  ]
+  for (let i = 0; i < UG_BOULDER_PILE_COUNT; i++) {
+    boulderPiles.push(buildUndergroundStoneGroup(randX(), deepY1, areaY2, false, placedStones))
+  }
+  boulderPiles.push(buildUndergroundScatteredStones(randX, deepY1, areaY2, placedStones))
   const grit = []
   for (let i = 0; i < UG_GRIT_COUNT; i++) {
     grit.push({ x: randX(), y: randY(), px: UG_GRIT_PX_MIN + Math.floor(Math.random() * UG_GRIT_PX_RANGE), light: Math.random() < 0.5 })
@@ -5945,23 +4565,73 @@ function buildUndergroundSpec() {
   }
 }
 //
-// One packed cobble bed in the deep clay: stones heaped toward the bed
-// centre and the band bottom, sorted so lower stones overlap upper ones.
+// One loose group of slate stones in the deep clay — spaced apart (only a
+// slight touch between neighbours), denser toward the group centre.
 //
-function buildUndergroundCobbleBed(cx, y1, y2) {
-  const count = UG_BOULDER_PILE_STONES_MIN + Math.floor(Math.random() * UG_BOULDER_PILE_STONES_RANGE)
+function buildUndergroundStoneGroup(cx, y1, y2, edgeGroup, placed) {
+  const countMin = edgeGroup ? UG_BOULDER_EDGE_PILE_STONES_MIN : UG_BOULDER_PILE_STONES_MIN
+  const countRange = edgeGroup ? UG_BOULDER_EDGE_PILE_STONES_RANGE : UG_BOULDER_PILE_STONES_RANGE
+  const count = countMin + Math.floor(Math.random() * countRange)
   const stones = []
   for (let s = 0; s < count; s++) {
-    const r = UG_BOULDER_R_MIN + Math.random() * UG_BOULDER_R_RANGE
     const u = (Math.random() + Math.random()) * 0.5 - 0.5
-    const centre = 1 - Math.abs(u) * 2
-    stones.push({
-      x: cx + u * UG_BOULDER_PILE_SPREAD,
-      y: y2 - r * 0.5 - Math.random() * (y2 - y1) * (0.35 + 0.65 * centre),
-      r
+    const stone = placeUndergroundStone(cx + u * UG_BOULDER_PILE_SPREAD, y1, y2, placed)
+    stone && stones.push(stone)
+  }
+  return stones
+}
+//
+// Single stones spread along the deep layer between the groups.
+//
+function buildUndergroundScatteredStones(randX, y1, y2, placed) {
+  const stones = []
+  for (let s = 0; s < UG_BOULDER_SCATTER_COUNT; s++) {
+    const stone = placeUndergroundStone(randX(), y1, y2, placed)
+    stone && stones.push(stone)
+  }
+  return stones
+}
+//
+// Tries a few jittered spots around x until one does not overlap earlier stones.
+//
+function placeUndergroundStone(x, y1, y2, placed) {
+  const r = UG_BOULDER_R_MIN + Math.random() * UG_BOULDER_R_RANGE
+  for (let attempt = 0; attempt < UG_BOULDER_PLACE_ATTEMPTS; attempt++) {
+    const sx = x + (Math.random() - 0.5) * r * 2 * attempt
+    const sy = y1 + r + Math.random() * Math.max(1, y2 - y1 - r * 2)
+    const clear = placed.every(o => Math.hypot(o.x - sx, o.y - sy) >= (o.r + r) * UG_BOULDER_MIN_GAP_MULT)
+    if (!clear) continue
+    const stone = buildUndergroundStoneShape(sx, sy, r)
+    placed.push(stone)
+    return stone
+  }
+  return null
+}
+//
+// Lumpy rounded outline (lobe radii vary) plus speckle positions on the face.
+//
+function buildUndergroundStoneShape(x, y, r) {
+  const lobes = UG_BOULDER_LOBES_MIN + Math.floor(Math.random() * UG_BOULDER_LOBES_RANGE)
+  const squash = UG_BOULDER_SQUASH_MIN + Math.random() * UG_BOULDER_SQUASH_RANGE
+  const phase = Math.random() * Math.PI * 2
+  const verts = []
+  for (let i = 0; i < lobes; i++) {
+    const angle = phase + (i + (Math.random() - 0.5) * 0.5) / lobes * Math.PI * 2
+    const lr = UG_BOULDER_LOBE_R_MIN + Math.random() * UG_BOULDER_LOBE_R_RANGE
+    verts.push({ x: Math.cos(angle) * lr, y: Math.sin(angle) * lr * squash })
+  }
+  const speckles = []
+  const speckleCount = UG_BOULDER_SPECKLES_MIN + Math.floor(Math.random() * UG_BOULDER_SPECKLES_RANGE)
+  for (let i = 0; i < speckleCount; i++) {
+    const a = Math.random() * Math.PI * 2
+    const d = Math.sqrt(Math.random()) * 0.6
+    speckles.push({
+      x: Math.cos(a) * d,
+      y: Math.sin(a) * d * squash,
+      r: UG_BOULDER_SPECKLE_R_MIN + Math.random() * UG_BOULDER_SPECKLE_R_RANGE
     })
   }
-  return stones.sort((a, b) => a.y - b.y)
+  return { x, y, r, verts, speckles }
 }
 //
 // Renders the shared underground layout with one mode's tones.
@@ -6179,26 +4849,53 @@ function paintUndergroundWarmPebbles(ctx, pebbles, tones) {
   })
 }
 //
-// Rounded cobbles packed in the deep clay: contour, lit top rim, body.
+// Dark slate stones in the deep clay: contour, body, soft lit cap, speckles.
 //
 function paintUndergroundBoulderPiles(ctx, piles, tones) {
   const stoneCss = `rgb(${tones.stone.r}, ${tones.stone.g}, ${tones.stone.b})`
-  const rimCss = `rgb(${tones.stoneLight.r}, ${tones.stoneLight.g}, ${tones.stoneLight.b})`
+  const lightCss = `rgb(${tones.stoneLight.r}, ${tones.stoneLight.g}, ${tones.stoneLight.b})`
   const contourCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
-  piles?.forEach(stones => stones.forEach(stone => {
-    ctx.fillStyle = contourCss
+  piles?.forEach(stones => stones.forEach(stone => paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss)))
+}
+function paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss) {
+  ctx.fillStyle = contourCss
+  traceUndergroundStonePath(ctx, stone, stone.x, stone.y, stone.r + UG_BOULDER_OUTLINE_PX)
+  ctx.fill()
+  ctx.fillStyle = stoneCss
+  traceUndergroundStonePath(ctx, stone, stone.x, stone.y, stone.r)
+  ctx.fill()
+  ctx.save()
+  ctx.clip()
+  ctx.globalAlpha = UG_BOULDER_CAP_ALPHA
+  ctx.fillStyle = lightCss
+  const capR = stone.r * UG_BOULDER_CAP_SCALE
+  const capShift = stone.r * UG_BOULDER_CAP_OFFSET
+  traceUndergroundStonePath(ctx, stone, stone.x - capShift, stone.y - capShift, capR)
+  ctx.fill()
+  ctx.globalAlpha = UG_BOULDER_SPECKLE_ALPHA
+  stone.speckles.forEach(sp => {
     ctx.beginPath()
-    ctx.ellipse(stone.x, stone.y - UG_BOULDER_RIM_PX * 0.5, stone.r + UG_BOULDER_OUTLINE_PX, stone.r * 0.8 + UG_BOULDER_OUTLINE_PX + UG_BOULDER_RIM_PX * 0.5, 0, 0, Math.PI * 2)
+    ctx.arc(stone.x + sp.x * stone.r, stone.y + sp.y * stone.r, sp.r, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = rimCss
-    ctx.beginPath()
-    ctx.ellipse(stone.x, stone.y - UG_BOULDER_RIM_PX, stone.r, stone.r * 0.8, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = stoneCss
-    ctx.beginPath()
-    ctx.ellipse(stone.x, stone.y, stone.r, stone.r * 0.8, 0, 0, Math.PI * 2)
-    ctx.fill()
-  }))
+  })
+  ctx.restore()
+}
+//
+// Closed lumpy outline: quadratic curves through lobe midpoints keep it rounded.
+//
+function traceUndergroundStonePath(ctx, stone, cx, cy, r) {
+  const verts = stone.verts
+  const n = verts.length
+  const first = verts[0]
+  const last = verts[n - 1]
+  ctx.beginPath()
+  ctx.moveTo(cx + (last.x + first.x) * 0.5 * r, cy + (last.y + first.y) * 0.5 * r)
+  for (let i = 0; i < n; i++) {
+    const v = verts[i]
+    const next = verts[(i + 1) % n]
+    ctx.quadraticCurveTo(cx + v.x * r, cy + v.y * r, cx + (v.x + next.x) * 0.5 * r, cy + (v.y + next.y) * 0.5 * r)
+  }
+  ctx.closePath()
 }
 //
 // Fine soil grit: half light specks, half dark, so the earth reads textured.
@@ -6219,106 +4916,6 @@ function strokePolyline(ctx, pts) {
   ctx.beginPath()
   pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
   ctx.stroke()
-}
-//
-// Hides monolithic-tree roots until the post-L stillness countdown reveals them.
-//
-function maskGlowMonolithTreeRootsUntilReveal(inst, k, groundC) {
-  if (!inst.treeDrawMonolith || inst.treeObj?.hidden) return
-  const z = inst.zones
-  if ((!z.colorWorld && !z.predatorAwake) || !groundC) return
-  const reveal = glowTreeRootRevealFade(inst)
-  if (reveal >= 1 - COLOR_CROSSFADE_EPS) return
-  const cover = 1 - reveal
-  if (cover <= COLOR_CROSSFADE_EPS) return
-  k.drawRect({
-    pos: k.vec2(TREE_X - TRUNK_EXCLUDE_HALF, FLOOR_Y),
-    width: TRUNK_EXCLUDE_HALF * 2,
-    height: TREE_ROOT_MAX_Y - FLOOR_Y + 4,
-    color: k.rgb(groundC.r, groundC.g, groundC.b),
-    opacity: cover
-  })
-}
-//
-// True when the live underground sprites should paint (not fully replaced by
-// an opaque static parallax earth band).
-//
-function shouldDrawGlowLiveUnderground(inst) {
-  if (!isGlowUndergroundLayerVisible(inst)) return false
-  if (isGlowFullParallaxStable(inst)) return false
-  const z = inst.zones
-  if (!z.colorWorld) return true
-  return (inst.parallaxFade ?? 0) <= COLOR_CROSSFADE_EPS
-}
-//
-// Draws the baked underground decor with the gray↔colour crossfade.
-//
-function drawUndergroundLayer(inst) {
-  if (!shouldDrawGlowLiveUnderground(inst)) return
-  const z = inst.zones
-  const fade = inst.colorFade ?? 0
-  const drawBands = (sprite, opacity) => drawUndergroundSpriteClipped(inst, sprite, opacity)
-  if (isGlowFlatSingleDecorColor(inst) || !z.colorWorld) {
-    drawBands(UNDERGROUND_GRAY_SPRITE, 1)
-    return
-  }
-  //
-  // Once fully faded, skip the now-invisible gray sprite entirely — drawing
-  // a fully transparent full-screen sprite every frame forever after O still
-  // costs a full draw call. In practice this function itself now only runs
-  // during the brief post-O fade window — see shouldDrawGlowLiveUnderground,
-  // which skips calling it at all once BG_STATIC_COLOR already bakes in the
-  // same underground decor.
-  //
-  if (fade >= 1 && z.colorWorld) {
-    drawBands(UNDERGROUND_COLOR_SPRITE, 1)
-    return
-  }
-  const pf = inst.parallaxFade ?? 1
-  const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
-  grayOp > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_GRAY_SPRITE, grayOp)
-  colorOp > COLOR_CROSSFADE_EPS && drawBands(UNDERGROUND_COLOR_SPRITE, colorOp)
-}
-//
-// Paints the underground under opened ground: the cave band right after the
-// first eye, then the left shore and explored right strips.
-//
-function drawUndergroundSpriteClipped(inst, sprite, opacity) {
-  const z = inst.zones
-  if (z.eyesCollected && !z.colorWorld) {
-    const x1 = LEFT_MARGIN
-    const x2 = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
-    x2 > x1 && drawUndergroundSpriteBand(inst.k, sprite, opacity, x1, x2)
-    return
-  }
-  z.groundDecorLeft &&
-    drawUndergroundSpriteBand(inst.k, sprite, opacity, LEFT_MARGIN, TREE_X)
-  if (!z.predatorAwake || (z.groundRightStripMax ?? -1) < 0) return
-  const stripEnd = inst.treeStripEndX ?? z._groundStripEndX ?? WORLD_W
-  const edge = groundRightExploredEdgeX(
-    z.groundRightStripMax,
-    GROUND_REVEAL_TREE_PAST_X,
-    stripEnd
-  )
-  const x1 = GROUND_REVEAL_TREE_PAST_X
-  const x2 = Math.min(WORLD_W - RIGHT_MARGIN, Math.max(x1, edge))
-  x2 > x1 && drawUndergroundSpriteBand(inst.k, sprite, opacity, x1, x2)
-}
-//
-// One horizontal slice of a full-world underground sprite.
-//
-function drawUndergroundSpriteBand(k, sprite, opacity, x1, x2) {
-  const w = x2 - x1
-  if (w <= 1) return
-  k.drawSprite({
-    sprite,
-    pos: k.vec2(x1, 0),
-    width: w,
-    height: WORLD_H,
-    quad: { x: x1 / WORLD_W, y: 0, w: w / WORLD_W, h: 1 },
-    opacity,
-    anchor: 'topleft'
-  })
 }
 //
 // Physics boundary walls, ceiling, and floor.
@@ -6379,9 +4976,9 @@ function createLevelBounds(k) {
 //
 // Rounded corners — one baked mask sprite per corner, rotated like lesson-time.2.
 //
-function createRoundedCorners(k, zones) {
+function createRoundedCorners(k) {
   loadPlayfieldCornerSprites(k)
-  const spriteName = cornerSpriteNameForZones(zones)
+  const spriteName = CORNER_SPRITE_OUTER
   const TOP_CORNER_Z = CFG.visual.zIndex.ui + 30
   const { topY, bottomY, leftX, rightX } = playfieldCornerPositions()
   const corners = [
@@ -6390,23 +4987,8 @@ function createRoundedCorners(k, zones) {
     k.add([k.sprite(spriteName), k.pos(leftX, bottomY), k.rotate(270), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }]),
     k.add([k.sprite(spriteName), k.pos(rightX, bottomY), k.rotate(180), k.anchor('topleft'), k.z(PLAYFIELD_BOTTOM_CORNER_Z), { fixed: true }])
   ]
-  //
-  // Stay hidden until applyZoneVisibility()/applyGlowEyeIntroZoneVisibility()
-  // run — async bootstrap can yield several frames before either fires, and
-  // a visible corner here (picked from whatever zones.outerFrame reads at
-  // this exact instant) flashes a mismatched void/outer colour at the
-  // bottom corners for a moment on a colour-phase load.
-  //
-  corners.forEach(obj => { obj.hidden = true })
   glowPlayfieldCornerObjs = corners
   updatePlayfieldCornerPositions()
-  return corners
-}
-//
-// Which pre-baked corner sprite matches the current outer-frame state.
-//
-function cornerSpriteNameForZones(zones) {
-  return isOuterFrameVisible(zones) ? CORNER_SPRITE_OUTER : CORNER_SPRITE_VOID
 }
 //
 // Screen-space anchor for each playfield corner mask (matches time lesson2 layout).
@@ -6434,29 +5016,10 @@ function updatePlayfieldCornerPositions() {
   glowPlayfieldCornerObjs[3].pos.y = bottomY
 }
 //
-// Swaps the corner objects to the other pre-baked sprite when the playfield
-// chrome switches void → outer. Both variants are already loaded (see
-// loadPlayfieldCornerSprites), so this is an instant sprite-name swap with no
-// reload gap that could flash a stale-colour corner for a frame.
-//
-function refreshPlayfieldCornerSprites(inst) {
-  const hex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop
-  if (inst.cornerColorHex === hex) return
-  inst.cornerColorHex = hex
-  const spriteName = cornerSpriteNameForZones(inst.zones)
-  inst.cornerObjs?.forEach(obj => {
-    obj?.exists?.() && obj.use(inst.k.sprite(spriteName))
-  })
-}
-//
-// Bakes both playfield corner mask variants (void fill + outer-frame fill,
-// each with the inner quarter-circle cut) once per scene entry.
+// Bakes the outer-frame corner mask (inner quarter-circle cut) once per
+// scene entry.
 //
 function loadPlayfieldCornerSprites(k) {
-  const voidCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, GLOW_PAL.glowPreludeBackdrop)
-  k.loadSprite(CORNER_SPRITE_VOID, voidCanvas)
-  voidCanvas.width = 0
-  voidCanvas.height = 0
   const outerCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, OUTER_BG_HEX)
   k.loadSprite(CORNER_SPRITE_OUTER, outerCanvas)
   outerCanvas.width = 0
@@ -6516,15 +5079,6 @@ function drawDecorAtlasSprite(k, baked, pos, anchor, angle, opacity, color) {
     quad: baked.quad
   })
 }
-//
-// Crossfades gray and colour atlas tiles during the meditation preview.
-//
-function drawDecorAtlasCrossfade(k, grayBaked, colorBaked, pos, anchor, angle, fade, grayColor, colorColor) {
-  const f = Math.max(0, Math.min(1, fade))
-  const grayOp = 1 - f
-  grayOp > COLOR_CROSSFADE_EPS && drawDecorAtlasSprite(k, grayBaked, pos, anchor, angle, grayOp, grayColor)
-  f > COLOR_CROSSFADE_EPS && colorBaked && drawDecorAtlasSprite(k, colorBaked, pos, anchor, angle, f, colorColor)
-}
 function tagGroundPlatform(platform, sound, heroInst) {
   platform.onCollide('player', () => {
     sound._l2Surface = null
@@ -6541,15 +5095,10 @@ function tagWoodPlatform(platform, sound, heroInst) {
   })
 }
 //
-// Picks the log wood tones matching the main tree for the current phase:
-// sand tones while the world is gray-lit, brown tones in the colour world.
+// Log wood tones matching the main colour tree.
 //
-function glowLogColors(zones) {
-  if (!zones?.colorWorld) {
-    return LOG_TREE_FLAT_GRAY_COLORS
-  }
-  const fade = zones._sceneRef?.colorFade ?? 1
-  return fade > 0.5 ? LOG_TREE_COLOR_COLORS : LOG_TREE_LIT_COLORS
+function glowLogColors() {
+  return LOG_TREE_COLOR_COLORS
 }
 //
 // Swaying grass — the shared Grass component, excluding water, trunk, the
@@ -6599,11 +5148,10 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     },
     postBakeCanvas: applyGlowGameplaySharpBake,
     getTint: (blade) => glowGrassTint(zones, blade),
-    getSwayScale: () => glowGrassSwayScale(zones),
     roots: true,
-    getRootColor: () => glowGrassRootColor(zones),
+    getRootColor: glowGrassRootColor,
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
@@ -6625,83 +5173,37 @@ function createGlowMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
     z: GRASS_Z,
     getScaleMult: () => MUD_ZONE_GRASS_SCALE_MULT,
     postBakeCanvas: applyGlowGameplaySharpBake,
-    getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, zones, blade),
-    getSwayScale: () => glowGrassSwayScale(zones),
+    getTint: (blade) => glowMudZoneGrassTint(zones._sceneRef, blade),
     roots: true,
-    getRootColor: () => glowGrassRootColor(zones),
+    getRootColor: glowGrassRootColor,
     getRootVisible: (worldX) => glowGrassRootVisible(zones, worldX),
-    hueVaryMax: zones.colorWorld ? GLOW_GRASS_HUE_VARY_MAX : 0,
+    hueVaryMax: GLOW_GRASS_HUE_VARY_MAX,
     hueVarySkew: GLOW_GRASS_HUE_VARY_SKEW
   })
   grass.layer.hidden = true
   return grass
 }
 //
-// Grass tint for the mud band only — visible after G until the post-L countdown opens the rest.
+// Grass tint for the mud band only — darker green over the soft mud.
 //
-function glowGrassColourTarget(zones) {
-  if (!zones.colorWorld) return DECOR_GRAY
-  return GRASS_GREEN
-}
-//
-// Grass hue variation is baked into the layer inst at create() — refresh it
-// when L opens the warm straw field mid-session (reload already had it).
-//
-function syncGlowGrassHueVariation(inst) {
-  const max = inst.zones.colorWorld
-    ? GLOW_GRASS_HUE_VARY_MAX
-    : 0
-  const layers = [inst.grassLayer, inst.mudExtraGrass]
-  for (const layer of layers) {
-    layer && (layer.hueVaryMax = max)
-  }
-}
-function glowMudZoneGrassTint(sc, zones, blade) {
+function glowMudZoneGrassTint(sc, blade) {
   if (!sc?.zones.predatorAwake || !isGlowDecorWorldXInMudZone(sc, blade.x)) return null
-  if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const fade = glowGrassGreenFade(sc, zones)
-  const grassTarget = glowGrassColourTarget(zones)
-  const mudGreen = lerpRgb(grassTarget, GLOW_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
-  if (fade >= 1) {
-    sc._grassMudColorSettled ??= lerpRgb(gray, mudGreen, 1)
-    return sc._grassMudColorSettled
-  }
-  return lerpRgb(gray, mudGreen, fade)
+  sc._grassMudColorSettled ??= lerpRgb(GRASS_GREEN, GLOW_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
+  return sc._grassMudColorSettled
 }
 //
-// Grass tint for the wider early ground-peek band (mud zone through the cave
-// mouth) — same gray/green crossfade as the mud band itself, just without
-// the taller mud-specific blade scale (see glowMudZoneGrassTint).
+// Grass tint for the wider ground-peek band (mud zone through the cave
+// mouth) — warm straw, without the taller mud-specific blade scale.
 //
-function glowPeekStrawGrassTint(sc, zones) {
-  if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-  const fade = glowGrassGreenFade(sc, zones)
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const straw = glowRgb(GLOW_GOLD_HEX)
-  if (fade >= 1) return straw
-  return lerpRgb(gray, straw, fade)
-}
-function glowGroundPeekGrassTint(sc, zones, blade) {
+function glowGroundPeekGrassTint(sc, blade) {
   if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
-  return glowPeekStrawGrassTint(sc, zones)
+  return GRASS_WARM
 }
 //
-// Resolves the tint of one grass blade for the current frame: null while the
-// blade's ground side is unexplored; otherwise the shared decor tone — plain
-// decor gray before L, darkened toward void after L, cross-fading to green
-// in the colour world.
+// Short static root ticks under ground grass tufts — same tone as the mud.
 //
-//
-// Short static root ticks under ground grass tufts — same gray/big-tree-root
-// color switch as the ear-tree and chain-buoy roots.
-//
-function glowGrassRootColor(zones) {
-  if (!zones.colorWorld) return DECOR_GRAY
-  const sc = zones._sceneRef
-  if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-  const c = glowRgb('mudGround')
-  return { r: c.r, g: c.g, b: c.b }
+function glowGrassRootColor() {
+  return MUD_GROUND_RGB
 }
 //
 // Grass roots stay visible for every explored ground strip — unlike blades,
@@ -6709,7 +5211,7 @@ function glowGrassRootColor(zones) {
 //
 function glowGrassRootVisible(zones, worldX) {
   const sc = zones._sceneRef
-  if (!sc || !isGlowWorldSurfaceDecorUnlocked(sc)) return false
+  if (!sc) return false
   const lakeX1 = zones._lakeX1
   const lakeX2 = zones._lakeX2
   if (lakeX1 != null && lakeX2 != null && worldX >= lakeX1 && worldX <= lakeX2) return false
@@ -6720,36 +5222,24 @@ function glowGrassRootVisible(zones, worldX) {
   if (side === 'left') return zones.groundDecorLeft
   return (zones.groundRightStripMax ?? -1) >= 0
 }
+//
+// Resolves the tint of one grass blade for the current frame: null while the
+// blade's ground side is unexplored or off camera, otherwise grass green.
+//
 function glowGrassTint(zones, blade) {
   const sc = zones._sceneRef
+  if (!sc) return null
   const lakeX1 = zones._lakeX1
   const lakeX2 = zones._lakeX2
   if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
     return null
   }
-  if (sc && isGlowOpenPitMouthWorldX(sc.pit, blade.x)) return null
-  if (sc && isGlowFlatSingleDecorColor(sc)) {
-    const mudTint = glowMudZoneGrassTint(sc, zones, blade)
-    if (mudTint) return mudTint
-    const peekTint = glowGroundPeekGrassTint(sc, zones, blade)
-    if (peekTint) return peekTint
-    if (!isGlowWorldSurfaceDecorUnlocked(sc)) {
-      if (!isGlowWorldXInGroundPeekZone(sc, blade.x)) return null
-      return DECOR_GRAY
-    }
-    const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-    if (side === 'left' && !zones.groundDecorLeft) return null
-    if (side === 'right' && (zones.groundRightStripMax ?? -1) < 0) return null
-    return DECOR_GRAY
-  }
-  const mudTint = sc && glowMudZoneGrassTint(sc, zones, blade)
+  if (isGlowOpenPitMouthWorldX(sc.pit, blade.x)) return null
+  const mudTint = glowMudZoneGrassTint(sc, blade)
   if (mudTint) return mudTint
-  const peekTint = sc && glowGroundPeekGrassTint(sc, zones, blade)
+  const peekTint = glowGroundPeekGrassTint(sc, blade)
   if (peekTint) return peekTint
-  if (sc && !isGlowWorldSurfaceDecorUnlocked(sc)) {
-    return null
-  }
-  if (sc?.k) {
+  if (sc.k) {
     if (sc._grassCullFrame !== sc.k.time()) {
       sc._grassCullFrame = sc.k.time()
       const camX = sc.k.camPos().x
@@ -6760,91 +5250,18 @@ function glowGrassTint(zones, blade) {
     }
     if (blade.x < sc._grassCullMinX || blade.x > sc._grassCullMaxX) return null
   }
-  //
-  // Settled colour world: one cached tint — skip per-blade lerp work.
-  //
-  if (sc && zones.colorWorld && (sc.colorFade ?? 0) >= 1) {
-    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), glowGrassColourTarget(zones), 1)
-    if (sc.zones.groundDecorRight) return sc._grassColorSettled
-    const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-    if (side === 'left') {
-      if (!zones.groundDecorLeft) return null
-      const leftFade = sc.leftDecorFade ?? 1
-      if (leftFade < 0.04) return null
-      return leftFade >= 1
-        ? sc._grassColorSettled
-        : { ...sc._grassColorSettled, opacity: leftFade }
-    }
-    const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
-    const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
-    if (op < 0.04) return null
-    return op >= 1
-      ? sc._grassColorSettled
-      : { ...sc._grassColorSettled, opacity: op }
-  }
-  if (sc && (sc.colorFade ?? 0) >= 1 && zones.groundDecorRight && (sc.leftDecorFade ?? 1) >= 1) {
-    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), glowGrassColourTarget(zones), 1)
-    return sc._grassColorSettled
-  }
+  if (zones.groundDecorRight) return GRASS_GREEN
   const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
   if (side === 'left') {
     if (!zones.groundDecorLeft) return null
-    const leftFade = sc?.leftDecorFade ?? 1
+    const leftFade = sc.leftDecorFade ?? 1
     if (leftFade < 0.04) return null
-    if (sc && isGlowFlatSingleDecorColor(sc)) return leftFade >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: leftFade }
-    const fade = glowGrassGreenFade(sc, zones)
-    const grassTarget = glowGrassColourTarget(zones)
-    if (fade >= 1 && leftFade >= 1) {
-      sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), grassTarget, 1)
-      return sc._grassColorSettled
-    }
-    const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-    const rgb = fade >= 1
-      ? (sc._grassColorSettled ??= lerpRgb(gray, grassTarget, 1))
-      : lerpRgb(gray, grassTarget, fade)
-    return { ...rgb, opacity: leftFade }
+    return leftFade >= 1 ? GRASS_GREEN : { ...GRASS_GREEN, opacity: leftFade }
   }
   const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
   const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
   if (op < 0.04) return null
-  if (sc && isGlowFlatSingleDecorColor(sc)) return op >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: op }
-  const fade = glowGrassGreenFade(sc, zones)
-  const grassTarget = glowGrassColourTarget(zones)
-  if (fade >= 1) {
-    sc._grassColorSettled ??= lerpRgb(
-      lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)),
-      grassTarget,
-      1
-    )
-    if (op >= 1) return sc._grassColorSettled
-    const settled = sc._grassColorSettled
-    return { r: settled.r, g: settled.g, b: settled.b, opacity: op }
-  }
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  const rgb = lerpRgb(gray, grassTarget, fade)
-  return op >= 1 ? rgb : { ...rgb, opacity: op }
-}
-//
-// Foreground grass only sways once the meditation countdown is running (or
-// after O opens). The whole level stays still from the first frame until
-// then — including before the L pickup.
-//
-function glowGrassSwayScale(zones) {
-  return zones.colorWorld ? 1 : 0
-}
-//
-// Ambient sway / lean strength — the gray world stays still, colour lives.
-//
-function glowWorldLife(inst) {
-  return inst?.zones?.colorWorld ? 1 : 0
-}
-//
-// birds.mp3 plays only in the colour world.
-//
-function glowBirdsMusicLife(inst) {
-  return inst.zones.colorWorld ? 1 : 0
+  return op >= 1 ? GRASS_GREEN : { ...GRASS_GREEN, opacity: op }
 }
 //
 // Rocks — flat value 5 silhouettes.
@@ -6938,7 +5355,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   return objs
 }
 //
-// Pre-renders a flat rock sprite.
+// Pre-renders a shaded rock sprite (shared decor atlas).
 //
 function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthScale = 1, decorAtlas, zones) {
   const totalW = Math.ceil(radius * 2.6 * widthScale)
@@ -6949,59 +5366,34 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
   const posY = FLOOR_Y - croppedH
   const verts = buildRockVertices(radius)
-  //
-  // Flat mid stone before L; shaded glowRock tones after rebakeGlowRockSpritesShaded.
-  //
-  const decorFlat = glowRgb(GLOW_PAL.decorGray)
-  const flatPalette = {
-    fillR: decorFlat.r, fillG: decorFlat.g, fillB: decorFlat.b,
-    lightR: decorFlat.r, lightG: decorFlat.g, lightB: decorFlat.b,
-    darkR: decorFlat.r, darkG: decorFlat.g, darkB: decorFlat.b
-  }
+  const palette = glowRockShadedDrawPalette()
   const bakeRock = (seedOffset) => {
     const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
       ctx.scale(widthScale, 1)
       drawRockToCanvas(ctx, {
-        cx, cy, radius, verts, palette: flatPalette,
-        flatFill: true,
-        skipShadow: true,
+        cx, cy, radius, verts, palette,
+        skipShadow: true, skipTexture: false,
         outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
         outlineWidth: ROCK_OUTLINE_WIDTH,
         outlineAlpha: 1
       })
     })
+    applyGlowMaterialBake(canvas, seedOffset)
     return canvas
   }
-  const bakedGray = decorAtlas.register(bakeRock(worldX * 3 | 0))
-  const bakedOutline = decorAtlas.register(bakeRock(worldX * 3 + 1 | 0))
+  const baked = decorAtlas.register(bakeRock(worldX * 3 | 0))
+  const bakedLakeCap = decorAtlas.register(bakeRock(worldX * 3 + 1 | 0))
   const obj = k.add([
     k.pos(worldX - totalW / 2, posY),
     k.z(z),
     {
       opacity: 1,
       color: k.rgb(255, 255, 255),
-      _bakedFlat: bakedGray,
-      _bakedGray: bakedGray,
-      _bakedOutline: bakedOutline,
-      _outlined: false,
+      _baked: baked,
+      _bakedLakeCap: bakedLakeCap,
       draw() {
         if (this.hidden) return
-        const sc = zones._sceneRef
-        const fade = glowDecorFade(sc)
-        const white = k.rgb(255, 255, 255)
-        if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
-          drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'topleft', 0, fade, this.color, white)
-          return
-        }
-        if (sc && isGlowFlatSingleDecorColor(sc)) {
-          drawDecorAtlasSprite(k, this._bakedFlat, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
-          return
-        }
-        if (sc?.zones?.colorWorld && this._bakedFlat) {
-          drawShadedGrayDecorBaked(k, sc, this._bakedFlat, this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
-          return
-        }
-        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+        drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
       }
     }
   ])
@@ -7013,15 +5405,6 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj._surfaceTop = posY
   obj._decorWorldX = worldX
   obj._detailRank = radius < 16 ? 'small' : 'large'
-  obj._rockBake = {
-    cx,
-    cy,
-    radius,
-    verts,
-    widthScale,
-    totalW,
-    croppedH
-  }
   obj.hidden = true
   obj.pos.y = PLATFORM_HIDE_Y
   return obj
@@ -7044,89 +5427,6 @@ function glowMudCrestY(x, mudX1, mudX2) {
 function glowMudSeamY(x, mudX1, mudX2) {
   const crest = glowMudCrestY(x, mudX1, mudX2)
   return crest + (FLOOR_Y - crest) * 0.42
-}
-//
-// Plants a mud rock so its bottom sits in the crest, not above it.
-//
-function seatMudWalkRock(rock, mudX1, mudX2) {
-  const croppedH = rock._rockBake?.croppedH || 16
-  const mudY = glowMudCrestY(rock._decorWorldX, mudX1, mudX2)
-  rock._homeY = mudY - croppedH + MUD_ROCK_SINK
-  rock._surfaceTop = rock._homeY + 1
-}
-//
-// Rocks, a half-buried log and two twigs. Bottoms meet the mud crest.
-//
-function createGlowMudZoneWalkClutter(k, mudX1, mudX2, zones, decorAtlas) {
-  const rocks = []
-  const surfaces = []
-  const branches = []
-  const span = Math.max(40, mudX2 - mudX1)
-  const logW = MUD_WALK_LOG_MIN_W + Math.random() * (MUD_WALK_LOG_MAX_W - MUD_WALK_LOG_MIN_W)
-  const logH = 12 + Math.random() * 4
-  const logCenterX = mudX1 + span * 0.56
-  const logMud = glowMudCrestY(logCenterX, mudX1, mudX2)
-  const logTop = logMud - logH * 0.62
-  surfaces.push({ x1: logCenterX - logW * 0.46, x2: logCenterX + logW * 0.46, topY: logTop })
-  const log = {
-    cx: logCenterX,
-    cy: logTop + logH * 0.5,
-    w: logW,
-    h: logH,
-    detail: generateLogDetail(logW, logH, false)
-  }
-  const logX1 = logCenterX - logW * 0.55
-  const logX2 = logCenterX + logW * 0.55
-  const slots = [0.1, 0.24, 0.78, 0.9, 0.16, 0.86]
-  const counts = MUD_WALK_BIG_ROCK_COUNT + MUD_WALK_SMALL_ROCK_COUNT
-  for (let i = 0; i < counts; i++) {
-    const big = i < MUD_WALK_BIG_ROCK_COUNT
-    let cx = mudX1 + span * slots[i]
-    if (cx > logX1 - 8 && cx < logX2 + 8) cx = i % 2 === 0 ? logX1 - 28 : logX2 + 28
-    const radius = big ? 16 + Math.random() * 8 : 7 + Math.random() * 5
-    const behind = i % 2 === 0
-    const rock = placeRock(
-      k, cx, radius, 'right', false,
-      behind ? MUD_BEHIND_ROCK_Z : MUD_FRONT_ROCK_Z,
-      big ? 1.05 : 0.82, decorAtlas, zones
-    )
-    rock._mudZoneWalk = true
-    seatMudWalkRock(rock, mudX1, mudX2)
-    rocks.push(rock)
-  }
-  const branchSlots = [0.34, 0.72]
-  for (let b = 0; b < MUD_WALK_BRANCH_COUNT; b++) {
-    const bx = mudX1 + span * branchSlots[b]
-    const by = glowMudCrestY(bx, mudX1, mudX2) + 1
-    const len = 18 + Math.random() * 10
-    const tilt = b === 0 ? -0.35 : 0.42
-    const x2 = bx + Math.cos(tilt) * len
-    const y2 = by - Math.sin(Math.abs(tilt)) * len * 0.45
-    branches.push({ x1: bx, y1: by, x2, y2 })
-    const top = Math.min(by, y2) - 3
-    surfaces.push({
-      x1: Math.min(bx, x2),
-      x2: Math.max(bx, x2),
-      topY: top
-    })
-  }
-  k.add([
-    k.z(MUD_DRAW_Z),
-    {
-      draw() {
-        drawGlowMudLayer(zones._sceneRef)
-      }
-    }
-  ])
-  return { rocks, surfaces, log, branches }
-}
-//
-// Mud puddle and the log/twigs on it, one layer between the two rock groups.
-//
-function drawGlowMudLayer(inst) {
-  if (!inst?.mudZoneX1) return
-  drawGlowViscousMud(inst)
-  drawGlowMudWalkClutter(inst)
 }
 //
 // Lower soil swatch, same brown the underground band uses for its deep layer.
@@ -7171,11 +5471,8 @@ function drawGlowViscousMud(inst) {
     bottom.x = x2 - span * (i / steps)
     bottom.y = FLOOR_Y + 1
   }
-  const flat = isGlowFlatSingleDecorColor(inst)
-  const fade = inst.colorFade ?? 0
-  const lower = glowLowerSoilRgb()
-  const fillRgb = flat ? DECOR_GRAY : lerpRgb(DECOR_GRAY, lower, Math.max(fade, inst.zones.colorWorld ? 1 : fade))
-  const seamRgb = flat ? DECOR_GRAY : lerpRgb(lower, glowRgb('groundChernozem'), 0.35)
+  const fillRgb = glowLowerSoilRgb()
+  const seamRgb = lerpRgb(fillRgb, glowRgb('groundChernozem'), 0.35)
   k.drawPolygon({
     pts: fill,
     color: k.rgb(fillRgb.r, fillRgb.g, fillRgb.b)
@@ -7194,23 +5491,19 @@ function drawGlowMudWalkClutter(inst) {
   const clutter = inst.mudWalkClutter
   if (!inst.zones.predatorAwake || !clutter) return
   const k = inst.k
-  const fade = glowDecorFade(inst)
-  const flat = isGlowFlatSingleDecorColor(inst)
-  const logTone = glowLogColors(inst.zones)
-  const branchRgb = flat ? DECOR_GRAY : glowRgb(logTone.barkDark)
+  const logColors = glowLogColors()
+  const branchRgb = glowRgb(logColors.barkDark)
   const branchColor = k.rgb(branchRgb.r, branchRgb.g, branchRgb.b)
-  const logColors = glowLogColors(inst.zones)
   if (clutter.log) {
     const { log } = clutter
-    drawLogPlatform(k, log.w, log.h, log.cx, log.cy, fade, log.detail, logColors)
+    drawLogPlatform(k, log.w, log.h, log.cx, log.cy, 1, log.detail, logColors)
   }
   clutter.branches?.forEach(branch => {
     k.drawLine({
       p1: k.vec2(branch.x1, branch.y1),
       p2: k.vec2(branch.x2, branch.y2),
       width: 2.2,
-      color: branchColor,
-      opacity: fade
+      color: branchColor
     })
   })
 }
@@ -7229,10 +5522,6 @@ function glowPredatorGroundAt(levelInst) {
 function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas) {
   const objs = []
   const left = LEFT_MARGIN + 60
-  const decorGrayRgb = (() => {
-    const c = glowRgb(GLOW_PAL.decorGray)
-    return [c.r, c.g, c.b]
-  })()
   const capColorsRgb = MUSHROOM_CAP_HEX.map(hex => {
     const c = glowRgb(hex)
     return [c.r, c.g, c.b]
@@ -7289,21 +5578,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
       stemHeight: stemH
     }
     //
-    // Gray-phase variant — same draw-mushroom primitive as touch lesson 0,
-    // single-tone flat silhouette.
-    //
-    const mushCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, { ...mushDrawOpts, capColor: decorGrayRgb, flat: true })
-    })
-    applyGlowGameplaySharpBake(mushCanvas, posX * 2 | 0)
-    const bakedGray = decorAtlas.register(mushCanvas)
-    const mushFlatCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, { ...mushDrawOpts, capColor: decorGrayRgb, flat: true })
-    })
-    applyGlowGameplaySharpBake(mushFlatCanvas, posX * 2 + 1 | 0)
-    const bakedFlat = decorAtlas.register(mushFlatCanvas)
-    //
-    // Colour-world variant — cap tones from this mushroom's palette family.
+    // Cap tones from this mushroom's palette family.
     //
     const capIdx = shuffledCapIdx[i % shuffledCapIdx.length]
     const mushColorCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
@@ -7315,7 +5590,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
       })
     })
     applyGlowGameplaySharpBake(mushColorCanvas, posX * 2 + 2 | 0)
-    const bakedOutline = decorAtlas.register(mushColorCanvas)
+    const baked = decorAtlas.register(mushColorCanvas)
     //
     // Anchor at the base so whistle lean rotates around the ground, not the cap
     //
@@ -7328,29 +5603,10 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
         opacity: 1,
         color: k.rgb(255, 255, 255),
         angle: 0,
-        _bakedGray: bakedGray,
-        _bakedFlat: bakedFlat,
-        _bakedOutline: bakedOutline,
-        _outlined: false,
+        _baked: baked,
         draw() {
           if (this.hidden) return
-          const sc = zones._sceneRef
-          const fade = glowDecorFade(sc)
-          const white = k.rgb(255, 255, 255)
-          if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
-            drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, fade, this.color, white)
-            return
-          }
-          if (sc?.zones?.colorWorld && this._bakedOutline) {
-            drawDecorAtlasSprite(k, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
-            return
-          }
-          if (sc?.zones?.colorWorld) {
-            drawShadedGrayDecorBaked(k, sc, this._bakedFlat, this._bakedGray, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
-            return
-          }
-          const baked = this._outlined ? this._bakedOutline : this._bakedFlat
-          drawDecorAtlasSprite(k, baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
+          drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
         }
       }
     ])
@@ -7371,25 +5627,19 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
   return objs
 }
 //
-// Mushroom trampoline — the cute chubby mushroom with a blushy face. Four
-// pre-baked variants cover both worlds and both eye states: gray family in
-// the gray phase, warm colours after O; the eyes blink by sprite swap.
+// Mushroom trampoline — the cute chubby mushroom with a blushy face. Two
+// pre-baked variants cover both eye states; the eyes blink by sprite swap.
 //
 function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
+  const pitCaveTramp = Boolean(opts.pitCaveTramp)
   const gateBranchTramp = Boolean(opts.gateBranchTramp)
-  const trampGrayColors = zones.colorWorld
-    ? CUTE_MUSH_GRAY_COLORS
-    : getCuteMushroomFlatWaterColors()
   //
   // Each trampoline mushroom gets its own cap-colour family (opts.colors,
   // opts.spriteKey) so the branch/right/pit characters read as distinct
-  // little guys instead of three identical orange caps — the gray phase
-  // stays shared since it's the same neutral tone for every decor object.
+  // little guys instead of three identical orange caps.
   //
   const colorColors = opts.colors ?? CUTE_MUSH_COLORS
   const colorSpriteBase = TRAMP_OUTLINE_SPRITE + (opts.spriteKey ? `-${opts.spriteKey}` : '')
-  bakeTrampolineVariant(k, TRAMP_SPRITE, trampGrayColors, true)
-  bakeTrampolineVariant(k, TRAMP_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, trampGrayColors, false)
   bakeTrampolineVariant(k, colorSpriteBase, colorColors, true)
   bakeTrampolineVariant(k, colorSpriteBase + TRAMP_BLINK_SPRITE_SUFFIX, colorColors, false)
   const state = {
@@ -7397,6 +5647,8 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     cooldown: 0,
     x: trampX,
     homeX: trampX,
+    floorY,
+    pitCaveTramp,
     hasLegs: false,
     walkPhase: 0,
     blinking: false,
@@ -7408,27 +5660,18 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     k.z(opts.drawZ ?? 6),
     {
       draw() {
-        if (gateBranchTramp) {
+        const sc = zones._sceneRef
+        if (pitCaveTramp) {
+          if (!isPitCaveTrampolineVisible(sc)) return
+        } else if (gateBranchTramp) {
           if (!isBranchTrampolineVisible(zones)) return
         } else if (!isRightTrampolineVisible(zones)) {
           return
         }
         //
-        // Colour world swaps in the coloured sprite set; the gray phase
-        // applies the after-L darkening tint (white = untinted). A blink
-        // swaps to the closed-eyes variant of the current set.
+        // A blink swaps to the closed-eyes variant of the sprite set.
         //
-        const previewFade = zones.colorWorld ? 1 : glowLZoneDecorFade(zones._sceneRef)
-        const graySprite = TRAMP_SPRITE
-        const colorSprite = colorSpriteBase
-        const sc = zones._sceneRef
-        const flatDecor = sc && isGlowFlatSingleDecorColor(sc)
-        const grayTint = grayDecorTint(sc)
-        const white = { r: 255, g: 255, b: 255 }
         const untinted = k.rgb(255, 255, 255)
-        const grayColor = flatDecor ? untinted : k.rgb(grayTint.r, grayTint.g, grayTint.b)
-        const colorTint = lerpRgb(grayTint, white, previewFade)
-        const colorColor = flatDecor ? untinted : k.rgb(colorTint.r, colorTint.g, colorTint.b)
         const enduring = Boolean(state.enduring)
         const angle = enduring ? 0 : (state.leanAngle || 0)
         const drawX = state.x + (state.endureShakeX || 0)
@@ -7436,9 +5679,8 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
           ? (state.endureScaleY || 1)
           : (state.squash > 0.01 ? 1 - state.squash * 0.35 : 1)
         const eyesClosed = enduring || state.blinking
-        const grayEyes = eyesClosed ? graySprite + TRAMP_BLINK_SPRITE_SUFFIX : graySprite
-        const colorEyes = eyesClosed ? colorSprite + TRAMP_BLINK_SPRITE_SUFFIX : colorSprite
-        state.hasLegs && drawTrampolineLegs(k, state, floorY, grayColor, flatDecor)
+        const colorEyes = eyesClosed ? colorSpriteBase + TRAMP_BLINK_SPRITE_SUFFIX : colorSpriteBase
+        state.hasLegs && drawTrampolineLegs(k, state, floorY)
         const drawTrampSprite = (sprite, opacity, color) => {
           k.drawSprite({
             sprite,
@@ -7464,16 +5706,7 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
             lookY: hero?.pos?.y
           })
         }
-        if (!zones.colorWorld && isGlowColorTransitionActive(sc)) {
-          const grayOp = 1 - previewFade
-          grayOp > COLOR_CROSSFADE_EPS && drawTrampSprite(grayEyes, grayOp, grayColor)
-          previewFade > COLOR_CROSSFADE_EPS && drawTrampSprite(colorEyes, previewFade, colorColor)
-          drawTrampPupils()
-          return
-        }
-        const sprite = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorEyes : grayEyes
-        const color = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorColor : grayColor
-        drawTrampSprite(sprite, 1, color)
+        drawTrampSprite(colorEyes, 1, untinted)
         drawTrampPupils()
       }
     }
@@ -7481,20 +5714,22 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
   drawLayer.onUpdate(() => {
     onUpdateTrampolineBlink(k, state)
   })
-  drawLayer.hidden = gateBranchTramp
-    ? !isBranchTrampolineVisible(zones)
-    : !isRightTrampolineVisible(zones)
-  return { state, drawLayer, colliderHome, gateBranchTramp }
+  drawLayer.hidden = pitCaveTramp
+    ? !isPitCaveTrampolineVisible(zones._sceneRef)
+    : gateBranchTramp
+      ? !isBranchTrampolineVisible(zones)
+      : !isRightTrampolineVisible(zones)
+  return { state, drawLayer, colliderHome, gateBranchTramp, pitCaveTramp }
 }
 //
 // Walking legs — alternating stride with a short shin kick
 //
-function drawTrampolineLegs(k, state, floorY, color, flatTone = false) {
+function drawTrampolineLegs(k, state, floorY) {
   const phase = state.walkPhase || 0
   const stride = Math.sin(phase)
   const stride2 = Math.sin(phase + Math.PI)
-  const legC = flatTone ? color : k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
-  const footC = flatTone ? color : k.rgb(VOID.r, VOID.g, VOID.b)
+  const legC = k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
+  const footC = k.rgb(VOID.r, VOID.g, VOID.b)
   const s = TRAMP_SIZE_SCALE
   drawOneTrampLeg(k, state.x - 9 * s, floorY, stride, legC, footC, s)
   drawOneTrampLeg(k, state.x + 9 * s, floorY, stride2, legC, footC, s)
@@ -7690,17 +5925,7 @@ function glowCameraViewXRange(k, sc, margin) {
 // Lake tint at draw time (shared by the baked sprite).
 //
 function resolveGlowLakeDrawRgb(k, sc) {
-  const twoTone = sc && isGlowFlatSingleDecorColor(sc)
-  const fade = glowLZoneDecorFade(sc)
-  let c
-  if (fade >= 1 && sc?._lakeColorSettled) {
-    c = sc._lakeColorSettled
-  } else {
-    const gray = twoTone ? DECOR_GRAY : lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-    const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
-    c = twoTone ? FLAT_WATER : lerpRgb(gray, tint, fade)
-    fade >= 1 && sc && (sc._lakeColorSettled = c)
-  }
+  const c = WATER_COLOR
   const rgb = sc?._lakeDrawRgb
   if (!rgb || rgb.r !== c.r || rgb.g !== c.g || rgb.b !== c.b) {
     sc && (sc._lakeDrawRgb = k.rgb(c.r, c.g, c.b))
@@ -7763,19 +5988,8 @@ function drawGlowDrownHeroClipped(inst) {
   const surfaceY = lakeSurfaceWorldYAt(inst, char.pos.x)
   const prefix = hero.spritePrefix || hero.type
   const outlineClosed = `${prefix}_closed`
-  const fillFade = glowHeroFillFade(inst)
   const layers = []
-  if (inst.heroBodyFillApplied || !hero.outlineOnly) {
-    k.getSprite(outlineClosed) && layers.push({ sprite: outlineClosed, opacity: 1 })
-  } else if (fillFade > 0.001) {
-    const filledClosed = resolveGlowHeroFilledSpriteKey(
-      inst, GLOW_LEVEL_FILL_CFG, outlineClosed
-    )
-    filledClosed && k.getSprite(filledClosed) &&
-      layers.push({ sprite: filledClosed, opacity: fillFade })
-  } else {
-    k.getSprite(outlineClosed) && layers.push({ sprite: outlineClosed, opacity: 1 })
-  }
+  k.getSprite(outlineClosed) && layers.push({ sprite: outlineClosed, opacity: 1 })
   if (!layers.length) return
   const scale = char.scale?.x ?? 1
   const fullH = Hero.HERO_BAKE_SPRITE_SIZE * scale
@@ -7837,7 +6051,7 @@ function detectGlowSurface(inst) {
       return 'wood'
     }
   }
-  if (isOnGlowLakeRaft(inst, x, footY)) return 'wood'
+  if (EyeFlower.isOnIsland(inst.eyeFlower, x, footY)) return 'ground'
   if (footY >= FLOOR_Y - 30 && isHeroInMudZone(inst, x)) return 'mud'
   if (footY >= FLOOR_Y - 30) return 'ground'
   return 'air'
@@ -7865,35 +6079,28 @@ function isOverGlowWoodSurface(inst, footX, footY) {
 // lake is deep now, drowning applies from the left margin to the shore rocks.
 //
 function isInWaterZone(inst, x, footY) {
-  if (isOnGlowLakeRaft(inst, x, footY)) return false
+  if (isOnGlowLakeDryFooting(inst, x, footY)) return false
   return x >= inst.lakeX1 && x <= inst.lakeX2 && footY >= FLOOR_Y - 40
 }
 //
-// Soft pickup chime for the lake raft glasses (silent while glow SFX are muted).
+// The eye-flower island is the only dry footing inside the lake band.
 //
-function playGlowGlassesPickupSound(inst) {
-  inst.sound && !inst.sound._glowSfxMuted && Sound.playLetterPickupSoft(inst.sound)
+function isOnGlowLakeDryFooting(inst, x, footY) {
+  return EyeFlower.isOnIsland(inst.eyeFlower, x, footY)
 }
 //
-// Outer margin frame — visible after G (tree reveal), before inner gray fill.
+// The island and its plant exist only in the colour world once the lake is open.
 //
-function isOuterFrameVisible(zones) {
-  return zones.outerFrame
+function isGlowEyeFlowerVisible(inst) {
+  return !!inst.zones.water
 }
 //
-// Inner playfield gray — parallax after L or colour world after O.
+// Hero body centre for the eye-flower to watch and reach (null while gone).
 //
-function isPlayfieldInnerGrayVisible(zones, fade) {
-  return zones.groundBg || zones.colorWorld || fade > 0
-}
-//
-// Keeps Kaplay clear colour and page chrome aligned with the outer frame.
-//
-function syncGlowCanvasBackdrop(k, zones) {
-  CanvasBackdrop.applyCanvasBackdrop(
-    k,
-    isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.glowPreludeBackdrop
-  )
+function glowEyeFlowerHeroPos(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos || inst.drowning || inst.deathHandled) return null
+  return { x: char.pos.x, y: char.pos.y + GLOW_EYE_FLOWER_HERO_CENTER_DY }
 }
 //
 // Visible world X span for culling full-width baked layers to the viewport.
@@ -8033,82 +6240,12 @@ function parallaxNearOccluderWorldY(inst) {
   return layer.worldY + solid
 }
 //
-// Matches the post-L inner ground band (INNER_GRAY → void) on the nearest
-// parallax bake so bushes and trunks sit in the same muted sand/gray world.
-//
-function glowPostLNearParallaxGrayTint(inst) {
-  const z = inst?.zones
-  if (!z?.colorWorld) return null
-  const fade = inst.colorFade ?? 0
-  const t = Math.max(GROUND_L_DARKEN, L_DECOR_DARKEN) * (1 - fade)
-  if (t <= COLOR_CROSSFADE_EPS) return null
-  const target = lerpRgb(INNER_GRAY, VOID, t)
-  return {
-    r: Math.round(255 * target.r / INNER_GRAY.r),
-    g: Math.round(255 * target.g / INNER_GRAY.g),
-    b: Math.round(255 * target.b / INNER_GRAY.b)
-  }
-}
-//
-// Keeps the near row at full gray strength while farther rows ramp with
-// parallaxFade so collecting L does not flash away when the countdown starts.
-//
-function glowParallaxNearGrayOpacity(inst, layer, pf) {
-  const z = inst?.zones
-  if (layer !== PAR_LAYER_NEAR) return pf
-  if (!z?.colorWorld) return pf
-  return 1
-}
-//
-// Draws one parallax layer for the current world mode: a single opaque slice
-// in the settled colour world, or a gray↔colour crossfade while the world is
-// still turning colourful (meditation preview or the post-O fade).
-// The colour world draws every row — far sky and bushes, mid trees and
-// bushes, then the near row.
+// Draws one parallax layer as a single opaque colour slice. Rows behind the
+// near row are culled below the near row's solid top.
 //
 function drawParallaxLayer(inst, layer) {
-  const zones = inst.zones
-  const fade = inst.colorFade
-  const pf = inst.parallaxFade
-  if (isGlowFullParallaxStable(inst)) {
-    const occluderY = layer === PAR_LAYER_NEAR ? Infinity : inst._parOccluderY ?? Infinity
-    drawParallaxLayerSlice(inst, layer, layer.color, 1, null, occluderY)
-    return
-  }
-  const grayTint = layer === PAR_LAYER_NEAR ? glowPostLNearParallaxGrayTint(inst) : null
-  if (isGlowFlatSingleDecorColor(inst)) {
-    const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf)
-    grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
-    return
-  }
-  //
-  // Permanent colour world: opaque viewport slices only.
-  //
-  if (zones.colorWorld) {
-    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
-    const nearGray = glowParallaxNearGrayOpacity(inst, layer, pf)
-    grayOp > COLOR_CROSSFADE_EPS &&
-      drawParallaxLayerSlice(inst, layer, layer.gray, grayOp * nearGray, grayTint)
-    colorOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, colorOp)
-    return
-  }
-  //
-  // Meditation preview: gray forest stays at its own strength underneath and
-  // the colour forest fades in on top — a true lerp with no mid-fade dip
-  // where the backdrop shows through both half-transparent copies. Once the
-  // colour copy is opaque the gray pass is skipped entirely.
-  //
-  const colorForest = fade > COLOR_CROSSFADE_EPS
-  if (colorForest) {
-    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
-    const nearGray = glowParallaxNearGrayOpacity(inst, layer, pf)
-    grayOp > COLOR_CROSSFADE_EPS &&
-      drawParallaxLayerSlice(inst, layer, layer.gray, grayOp * nearGray, grayTint)
-    colorOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.color, colorOp)
-    return
-  }
-  const grayOp = glowParallaxNearGrayOpacity(inst, layer, pf)
-  grayOp > COLOR_CROSSFADE_EPS && drawParallaxLayerSlice(inst, layer, layer.gray, grayOp, grayTint)
+  const occluderY = layer === PAR_LAYER_NEAR ? Infinity : inst._parOccluderY ?? Infinity
+  drawParallaxLayerSlice(inst, layer, layer.color, 1, null, occluderY)
 }
 //
 // Settled colour world: renders the sky+far and mid tree rows into a
@@ -8217,89 +6354,12 @@ function enableCanvasLinearFilter(canvas) {
   tex.unbind()
 }
 //
-// True when the colour forest and parallax stack are fully opaque.
-//
-function isGlowFullParallaxStable(inst) {
-  const z = inst.zones
-  return Boolean(
-    z.colorWorld &&
-    (inst.colorFade ?? 0) >= 1 &&
-    (inst.parallaxFade ?? 0) >= 1
-  )
-}
-//
 // Pit mouth gap for onDraw earth/static layers (includes floor extended west).
 //
 function glowPitEarthBandCutoutForInst(inst) {
   const pit = inst.pit
   if (!pit?.zone) return null
-  if (!pit.collapsed && !pit.cracksVisible) return null
   return getGlowPitEarthBandMouthCutoutForPit(pit)
-}
-//
-// Full-width horizontal band with a cave-mouth gap once the pit is open.
-//
-function drawGlowHorizontalBand(k, inst, y, height, color, opacity = 1, cutCaveMouth = false) {
-  const pitOpen = inst.pit && (inst.pit.collapsed || inst.pit.cracksVisible)
-  const cutout = cutCaveMouth && pitOpen && inst.pit?.zone
-    ? glowPitEarthBandCutoutForInst(inst)
-    : null
-  if (!cutout) {
-    k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, y),
-      width: GAME_W,
-      height,
-      color,
-      opacity
-    })
-    return
-  }
-  const mouthL = cutout.leftX
-  const rightX = cutout.rightX
-  //
-  // Collapsed pit: keep the full earth-band height open — the lower slice used
-  // to peek light static ground through the cutout under the hero's feet.
-  //
-  if (inst.pit?.collapsed) {
-    drawGlowHorizontalBandRow(k, LEFT_MARGIN, GAME_W, y, height, color, opacity, mouthL, rightX)
-    return
-  }
-  const pitDepth = inst.pit?.zone?.depth ?? 0
-  const caveVoidH = Math.min(height, Math.max(0, pitDepth))
-  const earthBelowH = height - caveVoidH
-  caveVoidH > 0 &&
-    drawGlowHorizontalBandRow(k, LEFT_MARGIN, GAME_W, y, caveVoidH, color, opacity, mouthL, rightX)
-  earthBelowH > 0 &&
-    drawGlowHorizontalBandRow(
-      k, LEFT_MARGIN, GAME_W, y + caveVoidH, earthBelowH, color, opacity, mouthL, rightX
-    )
-}
-//
-// One earth-band row with a pit mouth gap (void + floor west of the crack lip).
-//
-function drawGlowHorizontalBandRow(k, marginX, bandW, y, h, color, opacity, mouthL, rightX) {
-  const leftW = Math.max(0, mouthL - marginX)
-  leftW > 0 && k.drawRect({
-    pos: k.vec2(marginX, y),
-    width: leftW,
-    height: h,
-    color,
-    opacity
-  })
-  const rightW = Math.max(0, marginX + bandW - rightX)
-  rightW > 0 && k.drawRect({
-    pos: k.vec2(rightX, y),
-    width: rightW,
-    height: h,
-    color,
-    opacity
-  })
-}
-//
-// Paints the earth band below FLOOR_Y, leaving a mouth hole while the pit is open.
-//
-function drawGlowEarthBand(k, inst, color, opacity = 1) {
-  drawGlowHorizontalBand(k, inst, FLOOR_Y, CAVE_BAND_H, color, opacity, true)
 }
 //
 // Pit interior is painted at the start of onDrawWorld so earth/static and the
@@ -8314,26 +6374,8 @@ function ensureGlowPitDrawLayer(inst) {
 function drawGlowPitPass(inst) {
   if (!inst.pit) return
   const k = inst.k
-  if (isGlowEyeIntroBareWorld(inst)) {
-    drawGlowPitEyeIntroInterior(k, inst.pit, isGlowPitFlatDecorMode(inst))
-    return
-  }
-  const fade = inst.colorFade ?? 0
-  const zones = inst.zones
-  const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
-  const flatExplore = isGlowFlatSingleDecorColor(inst)
-  const groundC = flatExplore
-    ? DECOR_GRAY
-    : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
   drawGlowPitInteriorVoidBackdrop(inst, k)
-  const flatDecor = isGlowPitFlatDecorMode(inst)
-  drawGlowPit(k, inst.pit, groundC, flatDecor)
-}
-//
-// Pickup eyes sit in the skull sockets — draw on the pit layer above the skeleton.
-//
-function drawGlowPitCaveLyingEyes(inst, k) {
-  drawGlowCavePickupEyesOnPitLayer(inst, k)
+  drawGlowPit(k, inst.pit)
 }
 //
 // Fills the earth-band cutout with cave void — never light playfield gray inside
@@ -8345,7 +6387,7 @@ function drawGlowPitInteriorVoidBackdrop(inst, k) {
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   const w = rightX - leftX
   const interiorH = pit.zone.depth
-  const voidRgb = isGlowPitFlatDecorMode(inst) ? PRELUDE_BACKDROP : glowCaveEarthDeepRgb()
+  const voidRgb = glowCaveEarthDeepRgb()
   interiorH > 0 && k.drawRect({
     pos: k.vec2(leftX, pit.floorY),
     width: w,
@@ -8361,18 +6403,14 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
   //
-  // Always prefer the same baked static-earth slice the strip left of the
-  // cave uses (film grain included) — only the flat gray phase (before any
-  // grain sprite exists yet) falls back to a flat void fill below.
+  // Prefer the same baked static-earth slice the strip left of the cave uses
+  // (film grain included).
   //
-  const slice = isGlowFlatSingleDecorColor(inst)
-    ? null
-    : resolveGlowPitBelowFloorSprite(inst, k)
-  if (slice?.sprite) {
-    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, slice.sprite, slice.opacity)
+  if (k.getSprite(BG_STATIC_COLOR)) {
+    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, BG_STATIC_COLOR)
     return
   }
-  const rgb = glowPitBelowCaveEarthRgb(inst)
+  const rgb = glowPitBelowCaveEarthRgb()
   k.drawRect({
     pos: k.vec2(leftX, bottomY),
     width: rightX - leftX,
@@ -8381,70 +6419,13 @@ function drawGlowPitCutoutBelowFloorFill(inst, k) {
   })
 }
 //
-// Earth-band fill under the cave floor — same baked static band as left of
-// the crack (film grain included), not flat void fill.
+// Earth-band fill under the cave floor — bottom tone of the baked static band.
 //
-function glowPitBelowCaveEarthRgb(inst) {
-  if (inst.pit?.collapsed) {
-    const fade = inst.colorFade ?? 0
-    const z = inst.zones
-    const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-    if (isGlowFlatSingleDecorColor(inst)) {
-      return innerGray ? FLAT_EARTH_DEEP : PRELUDE_BACKDROP
-    }
-    const colorBottom = glowGroundEarthBottomLayerRgb(false)
-    const grayBottom = glowGroundEarthBottomLayerRgb(true)
-    if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return colorBottom
-    return lerpRgb(grayBottom, colorBottom, fade)
-  }
-  if (inst._surfaceEarthRgb) return inst._surfaceEarthRgb
-  const fade = inst.colorFade ?? 0
-  const z = inst.zones
-  const innerGray = isPlayfieldInnerGrayVisible(z, fade)
-  const caveEarth = glowCaveEarthFloorRgb()
-  if (isGlowFlatSingleDecorColor(inst)) {
-    return innerGray ? FLAT_EARTH : PRELUDE_BACKDROP
-  }
-  if (z.colorWorld || fade >= 1 - COLOR_CROSSFADE_EPS) return caveEarth
-  return lerpRgb(glowGrayGroundRgb(inst, innerGray), caveEarth, fade)
+function glowPitBelowCaveEarthRgb() {
+  return glowGroundEarthBottomLayerRgb()
 }
 //
-// Picks the same static earth sprite slice the main playfield uses beside the pit.
-//
-function resolveGlowPitBelowFloorSprite(inst, k) {
-  const fade = inst.colorFade ?? 0
-  const zones = inst.zones
-  const pf = inst.parallaxFade ?? 0
-  if (!zones.colorWorld && k.getSprite(BG_STATIC_GRAY)) {
-    return { sprite: BG_STATIC_GRAY, opacity: 1 }
-  }
-  if (isGlowFullParallaxStable(inst) && k.getSprite(BG_STATIC_COLOR)) {
-    return { sprite: BG_STATIC_COLOR, opacity: 1 }
-  }
-  if (zones.colorWorld && fade >= 1 - COLOR_CROSSFADE_EPS && pf >= 1 - COLOR_CROSSFADE_EPS &&
-    k.getSprite(BG_STATIC_COLOR)) {
-    return { sprite: BG_STATIC_COLOR, opacity: 1 }
-  }
-  const preview = isGlowColorTransitionActive(inst)
-  if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
-    const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
-    if (colorOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_COLOR)) {
-      return { sprite: BG_STATIC_COLOR, opacity: colorOp }
-    }
-    if (grayOp > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
-      return { sprite: BG_STATIC_GRAY, opacity: grayOp }
-    }
-  }
-  if (pf > COLOR_CROSSFADE_EPS && k.getSprite(BG_STATIC_GRAY)) {
-    return { sprite: BG_STATIC_GRAY, opacity: pf }
-  }
-  if (k.getSprite(BG_STATIC_GRAY)) {
-    return { sprite: BG_STATIC_GRAY, opacity: 1 }
-  }
-  return null
-}
-//
-// Horizontal slice of the baked underground band (wavy gray + grain).
+// Horizontal slice of the baked underground band (wavy strata + grain).
 //
 function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, sprite, opacity = 1) {
   const w = x2 - x1
@@ -8467,293 +6448,45 @@ function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, sprite, opacity = 1) {
   k.drawSprite(opts)
 }
 //
-// Crack-lid stomp shake — not while bouncing on or jumping over the mushrooms.
-//
-function shouldGlowCrackLandingCameraShake(inst) {
-  const char = inst.heroInst?.character
-  if (!char?.pos) return false
-  const hero = inst.heroInst
-  if (hero?.jumpPhase === 'jumping' || hero?.wasJumping) return false
-  if (inst.trampBounceAir || inst.branchTrampBounceAir) return false
-  if (isOnTrampolineCap(inst, char, inst.trampState)) return false
-  if (isOnTrampolineCap(inst, char, inst.branchTrampState)) return false
-  const heroX = char.pos.x
-  if (isHeroNearTrampolineX(inst, heroX, inst.trampState)) return false
-  if (isHeroNearTrampolineX(inst, heroX, inst.branchTrampState)) return false
-  return true
-}
-//
 // Cave rocks/pebbles/seams — last world pass so earth-band fills never clip them.
 //
 function drawGlowPitCaveRocksOverEarthBand(inst) {
   const pit = inst.pit
-  if (!pit?.collapsed) return
-  const k = inst.k
-  if (isGlowEyeIntroBareWorld(inst)) return
-  const flatDecor = isGlowPitFlatDecorMode(inst)
-  drawGlowPitCaveForegroundDecor(k, pit, flatDecor)
-  drawGlowPitCaveSeamCoverRocks(k, pit, isGlowPitFlatDecorMode(inst))
+  if (!pit) return
+  drawGlowPitCaveForegroundDecor(inst.k, pit)
+  drawGlowPitCaveSeamCoverRocks(inst.k, pit)
 }
 //
-// Skeleton, mushroom and seam rocks — above earth/static, below the hero.
-//
-function drawGlowPitCaveForegroundPass(inst) {
-  const pit = inst.pit
-  if (!pit?.collapsed) return
-  const k = inst.k
-  if (isGlowEyeIntroBareWorld(inst)) {
-    drawGlowPitCaveSkeletonScene(k, pit, true)
-    drawGlowPitCaveLyingEyes(inst, k)
-    return
-  }
-  const flatDecor = isGlowPitFlatDecorMode(inst)
-  drawGlowPitCaveSkeletonScene(k, pit, flatDecor)
-  drawGlowPitCaveLyingEyes(inst, k)
-}
-//
-// Main draw — void until G opens the outer frame; inner gray after L/O.
+// Main draw — world layers, then the pit cave rocks and cave hero on top.
 //
 function onDraw(inst) {
   onDrawWorld(inst)
-  drawGlowPitCaveForegroundPass(inst)
-  GroundPortal.draw(inst.groundPortal)
-  drawGlowPitCaveHeroForeground(inst)
   drawGlowPitCaveRocksOverEarthBand(inst)
+  drawGlowPitCaveHeroForeground(inst)
 }
 //
 // World-layer draw pass (everything that scrolls with the camera).
 //
 function onDrawWorld(inst) {
   const k = inst.k
-  const fade = inst.colorFade
-  const zones = inst.zones
-  const parallaxStable = isGlowFullParallaxStable(inst)
-  const outerFrame = isOuterFrameVisible(zones)
-  const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
-  const flatExplore = isGlowFlatSingleDecorColor(inst)
   //
-  // Read again just before the post-parallax ground repaint below — see that
-  // call site for why the fill must be reapplied after the tree/bush layers.
+  // Back-to-front: everything behind the near forest row goes through one
+  // half-resolution offscreen pass, then the near row (its bushes are baked
+  // onto its trees). Parallax tree sprites extend below the ground line, so
+  // the baked static earth+underground sprite covers that bleed in one draw.
   //
-  let groundFillC = null
-  //
-  // Before the outer frame opens (pre-L), still paint a dark sky band so
-  // parallax/tree gaps never flash the old green inner playfield through.
-  //
-  if (!outerFrame && flatExplore) {
-    const backdrop = PRELUDE_BACKDROP
-    k.drawRect({
-      pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
-      width: GAME_W,
-      height: FLOOR_Y - TOP_MARGIN,
-      color: k.rgb(backdrop.r, backdrop.g, backdrop.b)
-    })
-    groundFillC = backdrop
-    inst._surfaceEarthRgb = backdrop
-    drawGlowEarthBand(k, inst, k.rgb(backdrop.r, backdrop.g, backdrop.b), 1)
-  }
-  if (outerFrame) {
-    //
-    // Colour world splits the playfield at the ground line: warm haze between
-    // the trunks above, dark forest earth below — both lerp up from the deep
-    // inner base as the colour fade progresses.
-    //
-    const flatGround = innerGray ? FLAT_EARTH : PRELUDE_BACKDROP
-    const groundC = flatExplore
-      ? flatGround
-      : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
-    groundFillC = groundC
-    inst._surfaceEarthRgb = flatExplore
-      ? flatGround
-      : (innerGray ? glowGrayGroundRgb(inst, true) : groundC)
-    //
-    // Sky scrolls on its own parallax layer once the forest is revealed.
-    // Crossfade the dark teal + dawn gradient out as parallaxFade rises.
-    //
-    const parallaxMix = zones.colorWorld ? (inst.parallaxFade ?? 0) : 0
-    const fallbackOp = parallaxStable ? 0 : (zones.colorWorld ? Math.max(0, 1 - parallaxMix) : 1)
-    if (fallbackOp > COLOR_CROSSFADE_EPS) {
-      if (isGlowFlatSingleDecorColor(inst) || (!zones.colorWorld && fade <= COLOR_CROSSFADE_EPS)) {
-        const flatSky = innerGray ? FLAT_SKY : PRELUDE_BACKDROP
-        const backdrop = isGlowFlatSingleDecorColor(inst) ? flatSky : glowRgb('void')
-        k.drawRect({
-          pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
-          width: GAME_W,
-          height: FLOOR_Y - TOP_MARGIN,
-          color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
-          opacity: fallbackOp
-        })
-      } else if (flatExplore && !innerGray) {
-        k.drawRect({
-          pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
-          width: GAME_W,
-          height: FLOOR_Y - TOP_MARGIN,
-          color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b),
-          opacity: fallbackOp
-        })
-      } else {
-        drawGlowPlayfieldSky(k, fallbackOp, fade)
-      }
-    }
-    //
-    // Once the parallax stack is active, its opaque static ground+underground
-    // sprite (drawn below) fully repaints this exact band on top — this fill
-    // would be immediately hidden and is a wasted full-width draw every frame.
-    //
-    fallbackOp > COLOR_CROSSFADE_EPS && drawGlowEarthBand(
-      k, inst, k.rgb(inst._surfaceEarthRgb.r, inst._surfaceEarthRgb.g, inst._surfaceEarthRgb.b), fallbackOp
-    )
-  }
-  if (inst.zones.colorWorld) {
-    //
-    // Back-to-front: sky+far bushes → mid/near forest (each row's bushes
-    // are baked onto its trees, so one draw covers both), then static
-    // ground. In the settled colour world everything behind the near row goes
-    // through one half-resolution offscreen pass instead.
-    //
-    if (parallaxStable) {
-      drawGlowParallaxBackdropOffscreen(inst)
-    } else {
-      const pf = inst.parallaxFade
-      drawParallaxLayer(inst, PAR_LAYER_FAR)
-      fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
-      drawParallaxLayer(inst, PAR_LAYER_MID)
-      fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
-    }
-    drawParallaxLayer(inst, PAR_LAYER_NEAR)
-    !parallaxStable && fade < 0.92 && drawAtmosphereMotes(inst)
-  }
-  if (!zones.colorWorld && zones.eyesCollected && outerFrame) {
-    const pf = inst.parallaxFade ?? 0
-    if (pf > COLOR_CROSSFADE_EPS) {
-      drawParallaxLayer(inst, PAR_LAYER_FAR)
-      drawParallaxLayer(inst, PAR_LAYER_MID)
-      drawParallaxLayer(inst, PAR_LAYER_NEAR)
-    }
-    pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
-  }
-  //
-  // Parallax tree sprites extend below the ground line. Cover that bleed
-  // with the baked static earth+underground sprite (one draw) instead of a
-  // fill rect plus a second underground sprite.
-  //
-  if (zones.colorWorld) {
-    const pf = inst.parallaxFade ?? 0
-    const groundFallbackOp = parallaxStable ? 0 : Math.max(0, 1 - pf)
-    groundFallbackOp > COLOR_CROSSFADE_EPS && inst._surfaceEarthRgb && drawGlowEarthBand(
-      k, inst, k.rgb(inst._surfaceEarthRgb.r, inst._surfaceEarthRgb.g, inst._surfaceEarthRgb.b), groundFallbackOp
-    )
-    const preview = isGlowColorTransitionActive(inst)
-    if (isGlowFlatSingleDecorColor(inst) || !zones.colorWorld) {
-      !parallaxStable && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, 1)
-    } else if (parallaxStable) {
-      drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
-    } else if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
-      const { grayOp, colorOp } = glowColorWorldRevealOpacities(fade, pf)
-      grayOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, grayOp)
-      colorOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, colorOp)
-    } else {
-      pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
-    }
-  } else if (groundFillC && !isGlowGrayStaticEarthOpaque(inst)) {
-    const earthRgb = inst._surfaceEarthRgb || groundFillC
-    drawGlowEarthBand(k, inst, k.rgb(earthRgb.r, earthRgb.g, earthRgb.b))
-  }
-  drawUndergroundLayer(inst)
-  //
-  // Cave mouth ground tint + surface decor (pit interior draws after parallax).
-  //
-  const groundC = flatExplore
-    ? DECOR_GRAY
-    : lerpRgb(glowGrayGroundRgb(inst, innerGray), GROUND_DARK, fade)
-  maskGlowMonolithTreeRootsUntilReveal(inst, k, groundFillC || groundC)
-  onDrawGlowEyeIntro(inst, k)
-  !isGlowEyeIntroBareWorld(inst) && drawMudGroundZone(inst)
+  drawGlowParallaxBackdropOffscreen(inst)
+  drawParallaxLayer(inst, PAR_LAYER_NEAR)
+  drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
   drawGlowPitMouthEarthGapFill(inst, k)
-  inst.k && drawGlowPitCutoutBelowFloorFill(inst, k)
+  drawGlowPitCutoutBelowFloorFill(inst, k)
   //
   // Last in onDrawWorld — earth/static/parallax must not repaint over the pit;
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
   //
   inst._glowPitDrawInOnDrawWorld && inst.pit && drawGlowPitPass(inst)
 }
-//
-// Bottom corners — redrawn after world onDraw and from the ui+2500 fixed layer.
-//
-//
-// One-eye gray world: the baked static earth strata are fully faded in, so a
-// flat earth fill on top would wipe out their layered tones.
-//
-function isGlowGrayStaticEarthOpaque(inst) {
-  const z = inst.zones
-  if (z.colorWorld || !z.eyesCollected || !isOuterFrameVisible(z)) return false
-  return (inst.parallaxFade ?? 0) >= 1 - COLOR_CROSSFADE_EPS
-}
-//
-// Full-screen void curtain while parallaxFade eases up after the first eye.
-//
-function drawGlowWorldRevealCurtain(inst) {
-  const z = inst.zones
-  if (!z?.eyesCollected || z.colorWorld) return
-  const pf = inst.parallaxFade ?? 1
-  if (pf >= 1 - COLOR_CROSSFADE_EPS) return
-  const k = inst.k
-  const backdrop = PRELUDE_BACKDROP
-  k.drawRect({
-    pos: k.vec2(0, 0),
-    width: k.width(),
-    height: k.height(),
-    color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
-    opacity: 1 - pf,
-    fixed: true
-  })
-}
-//
-// Opaque void over the whole colour world that lifts in
-// GLOW_COLOR_WORLD_REVEAL_SEC, so colour appears out of nothing.
-//
-function drawGlowColorWorldRevealCurtain(inst) {
-  const op = Math.min(1, inst.colorRevealCurtain ?? 0)
-  if (op <= COLOR_CROSSFADE_EPS) return
-  const k = inst.k
-  const backdrop = PRELUDE_BACKDROP
-  k.drawRect({
-    pos: k.vec2(0, 0),
-    width: k.width(),
-    height: k.height(),
-    color: k.rgb(backdrop.r, backdrop.g, backdrop.b),
-    opacity: op,
-    fixed: true
-  })
-}
-//
-// Copy of the hero's current baked frame above the reveal curtain.
-//
-function drawGlowColorRevealHero(inst) {
-  if (!((inst.colorRevealCurtain ?? 0) > COLOR_CROSSFADE_EPS)) return
-  const char = inst.heroInst?.character
-  if (!char?.exists?.() || char.hidden || !char.sprite) return
-  inst.k.drawSprite({
-    sprite: char.sprite,
-    frame: char.frame,
-    pos: char.pos,
-    anchor: char.anchor,
-    flipX: char.flipX,
-    scale: char.scale,
-    angle: char.angle,
-    color: char.color,
-    opacity: char.opacity ?? 1
-  })
-}
-//
-// Lifts the colour-world curtain over GLOW_COLOR_WORLD_REVEAL_SEC.
-//
-function updateGlowColorRevealCurtain(inst, dt) {
-  if (!(inst.colorRevealCurtain > 0)) return
-  inst.colorRevealCurtain = Math.max(0, inst.colorRevealCurtain - dt / GLOW_COLOR_WORLD_REVEAL_SEC)
-}
 function drawPlayfieldBottomCornerOverlay(inst) {
-  if (!isOuterFrameVisible(inst.zones)) return
   const k = inst.k
   const transitionOverlay = k._transitionOverlay
   if (transitionOverlay?.exists?.() && transitionOverlay.opacity > 0.02) return
@@ -8762,59 +6495,12 @@ function drawPlayfieldBottomCornerOverlay(inst) {
   drawPlayfieldCornerMask(k, rightX, bottomY, 180)
 }
 //
-// Starts the normal pre-G exploration flow after the eyeless intro ends.
-//
-function maybeBootstrapGlowPostEyes(inst) {
-  if (!inst.eyeIntro || inst.eyeIntro.bootstrapped) return
-  if (inst.eyeIntro.phase !== 'complete') return
-  inst.eyeIntro.bootstrapped = true
-  inst.eyeIntro = null
-  applyZoneVisibility(inst)
-  syncGlowAtmosphereZones(inst)
-  finishGlowIntro(inst)
-}
-//
-// Ground-peek band on the soft-mud zone (flat gray explore, after G) — a
-// live slice of the SAME underground sprite (buried rocks, roots, cracks)
-// the full underground layer shows after water is discovered, clipped to
-// just the mud zone as an early preview. Once the colour parallax is
-// opaque, BG_STATIC_COLOR already contains that band, so the live sprite
-// is skipped.
-//
-function drawMudGroundZone(inst) {
-  if (!inst.zones.predatorAwake) return
-  //
-  // Not just the narrow mud band itself — the whole ground strip from the
-  // world's left edge (same LEFT_MARGIN..TREE_X span the full underground
-  // layer normally only shows once water is discovered — see
-  // drawUndergroundSpriteClipped, previewed early here instead), stopping
-  // the same clear distance before the cave mouth as the decor mushrooms
-  // mouth-shelf left edge — same right bound isGlowWorldXInGroundPeekZone
-  // uses for the surface decor above this band, so nothing (line, texture,
-  // rocks, grass) ever reads as reaching the cave.
-  //
-  const x1 = LEFT_MARGIN
-  const x2 = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
-  const k = inst.k
-  if (isGlowFlatSingleDecorColor(inst) && !inst.zones.eyesCollected) {
-    k.drawRect({
-      pos: k.vec2(x1, FLOOR_Y),
-      width: x2 - x1,
-      height: CAVE_BAND_H,
-      color: k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
-    })
-  } else if (!isGlowFullParallaxStable(inst)) {
-    drawUndergroundSpriteBand(k, undergroundEarthDecorSprite(inst.zones), 1, x1, x2)
-  }
-}
-//
 // Flat earth in the pit mouth cutout (earth band only) — matches the strip
 // left of the cave; drawn in onDrawWorld before the pit void, not over the
 // cave interior in onDraw.
 //
 function drawGlowPitMouthEarthGapFill(inst, k) {
-  const z = inst.zones
-  if (!z.predatorAwake || isGlowFlatSingleDecorColor(inst)) return
+  if (!inst.zones.predatorAwake) return
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
   const { leftX, rightX } = getGlowPitEarthBandMouthCutoutForPit(pit)
@@ -8823,7 +6509,7 @@ function drawGlowPitMouthEarthGapFill(inst, k) {
   const interiorH = Math.min(pit.zone.depth, CAVE_BAND_H)
   const belowH = CAVE_BAND_H - interiorH
   const voidRgb = glowCaveEarthDeepRgb()
-  const bottomRgb = glowPitBelowCaveEarthRgb(inst)
+  const bottomRgb = glowPitBelowCaveEarthRgb()
   interiorH > 0 && k.drawRect({
     pos: k.vec2(leftX, FLOOR_Y),
     width: w,
@@ -8844,18 +6530,10 @@ function drawLakeShoreRocksWorld(inst) {
   const z = inst.zones
   if (!z.water) return
   const k = inst.k
-  const fade = glowDecorFade(inst)
   const white = k.rgb(255, 255, 255)
-  const grayTint = grayDecorTint(inst)
-  const grayColor = k.rgb(grayTint.r, grayTint.g, grayTint.b)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
-    if (isGlowColorTransitionActive(inst) && o._bakedOutline) {
-      drawDecorAtlasCrossfade(k, o._bakedGray, o._bakedOutline, k.vec2(o._homeX, o._homeY), 'topleft', 0, fade, grayColor, white)
-      return
-    }
-    const baked = (z.colorWorld && fade > COLOR_CROSSFADE_EPS) && o._bakedOutline ? o._bakedOutline : o._bakedGray
-    drawDecorAtlasSprite(k, baked, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
+    drawDecorAtlasSprite(k, o._bakedLakeCap, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
   })
 }
 //
@@ -8898,51 +6576,14 @@ function drawPlayfieldSideChrome(inst) {
   drawPlayfieldBottomCornerOverlay(inst)
 }
 //
-// Tints border walls toward playfield gray as the ground zone opens.
+// Tints border walls with the playfield border tone.
 //
 function updatePlayfieldBorderColors(inst) {
-  const fade = inst.colorFade
   if (!inst.wallObjs?.length) return
-  const backdrop = glowPlayfieldBackdropRgb(inst)
-  const dark = { r: backdrop.r, g: backdrop.g, b: backdrop.b }
-  const border = { r: WALL_BORDER_R, g: WALL_BORDER_G, b: WALL_BORDER_B }
-  const t = isOuterFrameVisible(inst.zones) ? 1 : fade
-  if (inst._playfieldBorderT === t) return
-  inst._playfieldBorderT = t
-  const c = lerpRgb(dark, border, t)
+  const c = snapToPalette({ r: WALL_BORDER_R, g: WALL_BORDER_G, b: WALL_BORDER_B })
   inst.wallObjs.forEach(wall => {
     wall.color = inst.k.rgb(c.r, c.g, c.b)
   })
-}
-//
-// Tints mushroom sprites toward their color caps as the world fades in.
-//
-function updateMushroomTints(inst) {
-  const fade = inst.colorFade
-  const twoTone = isGlowFlatSingleDecorColor(inst)
-  //
-  // After L the gray decor phase runs darker — the base tone shifts toward
-  // void and dissolves back as the colour world fades in.
-  //
-  const gray = twoTone ? DECOR_GRAY : lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(inst))
-  const white = inst.k.rgb(255, 255, 255)
-  const grayTint = grayDecorTint(inst)
-  inst.mushObjs.forEach(obj => {
-    if (obj.hidden) return
-    //
-    // Colour-world sprite is pre-baked in the real cap colours — fade its
-    // multiply tint from gray toward white so the true colours emerge as the
-    // world colours in. The gray-family sprite only takes the after-L
-    // darkening multiply (white = untinted).
-    //
-    if (obj._outlined) {
-      const c = lerpRgb(gray, white, fade)
-      obj.color = inst.k.rgb(c.r, c.g, c.b)
-      return
-    }
-    obj.color = twoTone ? white : inst.k.rgb(grayTint.r, grayTint.g, grayTint.b)
-  })
-  updateRockTints(inst)
 }
 //
 // Smooth lean toward each whistle note while the heroine sings idle
@@ -8950,7 +6591,7 @@ function updateMushroomTints(inst) {
 function updateMushroomWhistleLean(inst) {
   const hero = inst.heroInst
   const dt = inst.k.dt()
-  const lifeMul = glowWorldLife(inst)
+  const lifeMul = 1
   //
   // Lean while the idle melody is active — including O-meditation countdown
   // (setEyesClosed clears eyesClosedBySinging, but the whistle keeps playing).
@@ -8988,62 +6629,15 @@ function updateMushroomWhistleLean(inst) {
   }
 }
 //
-// Rocks are baked in DECOR_GRAY, so the after-L darkening is applied as a
-// multiply tint. Outlined (colour-world) rocks always render untinted.
-//
-function updateRockTints(inst) {
-  const fade = glowDecorFade(inst)
-  const flat = isGlowFlatSingleDecorColor(inst)
-  const white = inst.k.rgb(255, 255, 255)
-  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(inst))
-  const tint = grayDecorTint(inst)
-  inst.rockObjs.forEach(obj => {
-    if (obj.hidden) return
-    if (flat || !obj._outlined) {
-      obj.color = inst.k.rgb(tint.r, tint.g, tint.b)
-      return
-    }
-    const c = lerpRgb(gray, white, fade)
-    obj.color = inst.k.rgb(c.r, c.g, c.b)
-  })
-}
-//
-// Midge fill: near-black before colour; warm gold in the colour world.
+// Midge fill: warm gold.
 //
 function syncGlowMidgeDrawColor(inst) {
-  if (!inst.midges) return
-  if (isGlowFlatSingleDecorColor(inst)) {
-    inst.midges.midgeRgb = DECOR_GRAY
-    return
-  }
-  const colorFade = glowDecorFade(inst)
-  if (inst.zones?.colorWorld || colorFade > 0.45) {
-    inst.midges.midgeRgb = getGlowLightRgb('bright')
-    return
-  }
-  inst.midges.midgeRgb = glowRgb('void')
-}
-//
-// Swaps mushrooms and rocks to their outlined sprite variants once the colour
-// world is at least half faded in (dark rims appear after O).
-//
-function updateDecorOutlines(inst) {
-  const fade = glowDecorFade(inst)
-  const outlined = inst.zones.colorWorld && fade > COLOR_CROSSFADE_EPS
-  if (inst._decorOutlineState === outlined) return
-  inst._decorOutlineState = outlined
-  const swap = obj => {
-    if (!obj._bakedOutline || obj._outlined === outlined) return
-    obj._outlined = outlined
-  }
-  inst.mushObjs.forEach(swap)
-  inst.rockObjs.forEach(swap)
+  inst.midges && (inst.midges.midgeRgb = getGlowLightRgb('bright'))
 }
 //
 // True when hero should drown — anywhere in the lake band at floor level.
 //
 function shouldDrownInWater(inst, heroX, footY) {
-  if (isGlowEyeIntroPending(inst.zones)) return false
   //
   // Mid-bounce over the lake — never treat as a floor-level drown
   //
@@ -9103,7 +6697,6 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
   const onCap = isHeroAtTrampolineCap(inst, heroX, heroFeet, state)
   if (!wantsTrampolineCapLaunch(inst, char, onCap, state)) return false
   if ((char.vel?.y ?? 0) < -40) return false
-  const branchPad = state === inst.branchTrampState
   const launch = Math.round(CFG.game.jumpForce * boostMult)
   //
   // jump() drops the platform stick. A raw vel write left the hero glued to the
@@ -9115,7 +6708,6 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
   state.cooldown = TRAMP_COOLDOWN
   state.squash = TRAMP_SQUASH_MAX
   inst[bounceAirKey] = true
-  branchPad && (inst.branchTrampPitGuardTimer = BRANCH_TRAMP_PIT_GUARD_SEC)
   hero.wasJumping = true
   hero.jumpPhase = 'jumping'
   hero.jumpCeilingBonk = false
@@ -9131,9 +6723,18 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
 //
 // True when the hero's feet sit over a mushroom cap (position only).
 //
+function trampolineCapFloorY(state) {
+  return state?.floorY ?? FLOOR_Y
+}
+//
+// Walk surface Y at the top of a mushroom cap (main floor or pit cave).
+//
+function trampolineCapTopY(state) {
+  return trampolineCapFloorY(state) - TRAMP_TOTAL_H
+}
 function isHeroAtTrampolineCap(inst, heroX, footY, state) {
   if (!state) return false
-  const capTopY = FLOOR_Y - TRAMP_TOTAL_H
+  const capTopY = trampolineCapTopY(state)
   const mDx = Math.abs(heroX - state.x)
   //
   // Below-cap tolerance widened to match TRAMP_SNAP_BELOW (the tunnel-through
@@ -9146,18 +6747,6 @@ function isHeroAtTrampolineCap(inst, heroX, footY, state) {
     footY >= capTopY - 10 && footY <= capTopY + TRAMP_SNAP_BELOW
 }
 //
-// True when hero X is close enough that the trampoline pad should stay active
-//
-function isHeroNearTrampolineX(inst, heroX, state = inst.trampState) {
-  if (!state) return false
-  const branchPad = state === inst.branchTrampState
-  const active = branchPad
-    ? isBranchTrampolineColliderActive(inst.zones)
-    : isRightTrampolineColliderActive(inst.zones)
-  if (!active) return false
-  return Math.abs(heroX - state.x) < TRAMP_NEAR_X
-}
-//
 // True while the hero's feet sit on the trampoline mushroom cap
 //
 function isOnTrampolineCap(inst, char, state = inst.trampState) {
@@ -9165,6 +6754,7 @@ function isOnTrampolineCap(inst, char, state = inst.trampState) {
   const heroX = char.pos.x
   const heroFeet = char.pos.y + SURFACE_DETECT_Y
   if (!isHeroAtTrampolineCap(inst, heroX, heroFeet, state)) return false
+  if (state.pitCaveTramp) return isPitCaveTrampolineColliderActive(inst)
   const branchPad = state === inst.branchTrampState
   return branchPad
     ? isBranchTrampolineColliderActive(inst.zones)
@@ -9223,6 +6813,7 @@ function parkTrampolinePad(char, pad) {
 function syncTrampolinePad(inst) {
   syncOneTrampolinePad(inst, inst.trampPad, inst.trampState, 'trampBounceAir')
   syncOneTrampolinePad(inst, inst.branchTrampPad, inst.branchTrampState, 'branchTrampBounceAir')
+  syncOneTrampolinePad(inst, inst.pitCaveTrampPad, inst.pitCaveTrampState, 'pitCaveTrampBounceAir')
 }
 //
 // Positions one invisible cap collider — never hide it while the hero rides that cap.
@@ -9231,10 +6822,13 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const char = inst.heroInst?.character
   if (!pad || !state) return
   state._prevX = state.x
-  const branchPad = state === inst.branchTrampState
-  const colliderActive = branchPad
-    ? isBranchTrampolineColliderActive(inst.zones)
-    : isRightTrampolineColliderActive(inst.zones)
+  const pitPad = state.pitCaveTramp
+  const branchPad = !pitPad && state === inst.branchTrampState
+  const colliderActive = pitPad
+    ? isPitCaveTrampolineColliderActive(inst)
+    : branchPad
+      ? isBranchTrampolineColliderActive(inst.zones)
+      : isRightTrampolineColliderActive(inst.zones)
   //
   // A hero riding the centipede's stick passes the cap — a live pad here
   // shoved him up over the mushroom.
@@ -9246,7 +6840,7 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
     parkTrampolinePad(char, pad)
     return
   }
-  const capTop = FLOOR_Y - TRAMP_TOTAL_H
+  const capTop = trampolineCapTopY(state)
   const velY = char?.vel?.y ?? 0
   const onCap = isOnTrampolineCap(inst, char, state)
   const heroFeet = char?.pos ? char.pos.y + SURFACE_DETECT_Y : 0
@@ -9260,7 +6854,7 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   grounded && !onCap && velY >= 0 && (inst[bounceAirKey] = false)
   const bounceAir = Boolean(inst[bounceAirKey])
   const inCapBand = heroFeet >= capTop - 14 && heroFeet <= capTop + TRAMP_PAD_FEET_BELOW
-  const onMainFloorLane = isHeroFeetOnMainFloorLane(heroFeet)
+  const onMainFloorLane = !pitPad && isHeroFeetOnMainFloorLane(heroFeet)
   const stickyCap = !onMainFloorLane && nearX && inCapBand &&
     (onCap || bounceAir || grounded || velY > -160)
   if (stickyCap || onCap || bounceAir) {
@@ -9355,159 +6949,11 @@ function createGlowHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX = 
   }
 }
 //
-// Opens the colour world (second eye taken).
-//
-function startColorWorldFade(inst) {
-  inst.zones.colorWorld = true
-  inst.zones.groundBg = true
-  inst.zones.outerFrame = true
-  //
-  // The gray world is dropped at once and every layer is drawn in full colour;
-  // a single void curtain (drawGlowColorWorldRevealCurtain) then lifts. Fading
-  // the many overlapping horizontal slices one by one showed seams as stripes.
-  //
-  inst.colorFadeTarget = 1
-  inst.colorFade = 1
-  inst.parallaxFade = 1
-  inst.colorRevealCurtain = 1
-  syncGlowCanvasBackdrop(inst.k, inst.zones)
-  CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
-  //
-  // Colour world opens even if the hero never drowned — reveal the lake with
-  // the same curtain instead of leaving an empty gray band on the left.
-  //
-  !inst.zones.waterDiscovered && revealWaterZone(inst, false)
-  applyZoneVisibility(inst)
-  //
-  // Defer body fill until the hero actually lands (maybeApplyPendingHeroFillOnLand)
-  // — the eye is taken mid-air, and an immediate sprite/hitbox swap there
-  // restarts the crouch→land loop.
-  //
-  inst.pendingHeroFillOnLand = true
-  invalidateGlowPitCaveInteriorBake(inst.pit)
-  ensureGlowBirdsBackgroundPlaying(inst)
-}
-//
-// Second eye is taken in the air — wait until the hero lands, then ease in colour.
-//
-function maybeStartPendingColorWorldFade(inst, grounded) {
-  if (!inst.pendingColorWorldFade) return
-  if (!grounded) return
-  inst.pendingColorWorldFade = false
-  startColorWorldFade(inst)
-  syncGlowGrassHueVariation(inst)
-  syncTreeColorCrossfade(inst)
-  syncGlowAtmosphereZones(inst)
-}
-//
-// Fires once the hero is grounded after taking the second eye — fills the
-// hero body, plays a confirming chime and shows an English hint. See
-// startColorWorldFade.
-//
-function maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded) {
-  if (!inst.pendingHeroFillOnLand) return
-  if (!grounded) return
-  inst.pendingHeroFillOnLand = false
-  applyGlowHeroBodyFill(inst)
-  const hero = inst.heroInst
-  if (hero) {
-    //
-    // Sprite bake briefly ungrounds on wood — keep idle + Space gate so the
-    // crouch→jump loop cannot restart after the sprite swap.
-    //
-    forceHeroIdleOnLog(inst)
-    Hero.armJumpKeyReleaseGate(hero)
-    hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, 0.9)
-    hero.canJump = false
-    hero.wasJumping = false
-    hero.jumpPhase = 'none'
-    hero.jumpCeilingBonk = false
-  }
-  Sound.playLetterPickupSoft(inst.sound)
-  HeroHint.show(inst.heroHint, GLOW_SECOND_EYE_HINT, HERO_CONFIDENT_HINT_DURATION, {
-    followHero: true,
-    anchorX: hero?.character?.pos?.x ?? 0,
-    anchorY: hero?.character?.pos?.y ?? 0,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
-}
-//
-// Fills the hero body once the world gains full colour (second eye).
-// The hero stays whitish — never turns gold when the world colours.
-//
-function applyGlowHeroBodyFill(inst) {
-  commitGlowHeroBodyFill(inst, GLOW_LEVEL_FILL_CFG)
-  const hero = inst.heroInst
-  if (!hero) return
-  hero.canJump = true
-  hero.jumpDisabled = false
-}
-//
-// Zone flags for the shared letter-by-letter hero fill curve.
-//
-function glowHeroFillOpts(inst) {
-  const z = inst.zones
-  return {
-    secondEyeCollected: z.secondEyeCollected
-  }
-}
-const GLOW_LEVEL_FILL_CFG = {
-  filledBodyColor: HERO_FILLED_BODY_COLOR,
-  filledOutlineColor: HERO_FILLED_OUTLINE_COLOR,
-  postBakeCanvas: applyGlowGameplaySharpBake,
-  onFullFill: applyGlowHeroBodyFill
-}
-//
-// 0→1 once the second eye unlocks the colour world and whitens the hero.
-//
-function glowHeroFillFade(inst) {
-  if (inst.heroBodyFillApplied) return 1
-  if (inst.zones.colorWorld) return inst.colorFade ?? 0
-  return getGlowHeroFillProgress(glowHeroFillOpts(inst))
-}
-//
-// Crossfades the hollow hero into a white filled body in the colour world.
-//
-function syncGlowHeroBodyFill(inst) {
-  const fillOverride = effectiveGlowHeroFillAmount(inst)
-  syncGlowHeroFillVisual(inst, GLOW_LEVEL_FILL_CFG, {
-    ...glowHeroFillOpts(inst),
-    fillOverride,
-    holdAutoBurst: Boolean(inst.pendingHeroFillReveal)
-  })
-  updateGlowHeroFillBurst(inst, inst.k.dt())
-}
-//
-// Fill amount shown on the hero — held at the pre-pickup level until the
-// delayed reveal fires.
-//
-function effectiveGlowHeroFillAmount(inst) {
-  const pending = inst.pendingHeroFillReveal
-  if (!pending) return glowHeroFillFade(inst)
-  return pending.from
-}
-//
 // Short chime when a new world segment unlocks.
 //
 function playSegmentRevealSound(inst) {
   if (inst.sound?._glowSfxMuted) return
   Sound.playLetterPickupSoft(inst.sound)
-}
-//
-// Clears jump/land squash and forces the idle sprite on the nearest log.
-//
-function forceHeroIdleOnLog(inst, skipHitboxSync = false) {
-  const hero = inst.heroInst
-  if (!hero) return
-  hero.isSquashing = false
-  hero.squashTimer = 0
-  hero.landSquashTimer = 0
-  hero.isRunning = false
-  hero.wasJumping = false
-  hero.jumpPhase = 'none'
-  hero.jumpFrame = 0
-  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
-  !skipHitboxSync && Hero.syncPlatformLanding(hero)
 }
 //
 // Shows the top-centre FPS HUD when any top-bar element is visible.
@@ -9516,9 +6962,7 @@ function isGlowTopHudElementVisible(inst) {
   const li = inst.levelIndicator
   if (!li) return false
   if (CFG.debug?.showPerformanceHud) return true
-  if (inst.zones.predatorAwake) return true
-  if (li.lifeRevealed) return true
-  return isGlowEyesGameplayUnlocked(inst.zones)
+  return true
 }
 //
 // Creates or hides the FPS counter based on visible HUD chrome.
@@ -9607,6 +7051,7 @@ function runGlowTrampolineLatePass(inst) {
   if (!char?.pos) return
   clampHeroIntoTrampolineCapX(char, inst.trampState)
   clampHeroIntoTrampolineCapX(char, inst.branchTrampState)
+  clampHeroIntoTrampolineCapX(char, inst.pitCaveTrampState)
   const heroX = char.pos.x
   const onRightTrampCap = isOnTrampolineCap(inst, char, inst.trampState)
   const onBranchTrampCap = isOnTrampolineCap(inst, char, inst.branchTrampState)
@@ -9628,6 +7073,11 @@ function runGlowTrampolineLatePass(inst) {
       () => onBranchTrampolineBounce(inst),
       'branchTrampBounceAir'
     ) || bounced
+  }
+  const onPitCaveTrampCap = isOnTrampolineCap(inst, char, inst.pitCaveTrampState)
+  if (isPitCaveTrampolineColliderActive(inst) &&
+    wantsTrampolineCapLaunch(inst, char, onPitCaveTrampCap, inst.pitCaveTrampState)) {
+    bounced = tryPitCaveTrampTeleport(inst, inst.pitCaveTrampState, hero, char) || bounced
   }
   bounced = ChainEyeTramp.tryChainEyeTrampBounces(inst) || bounced
   bounced && syncTrampolinePad(inst)
@@ -9674,8 +7124,6 @@ function startDrowning(inst) {
   inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
   inst.glowDrownHeroClipLock = true
-  inst.heroFillBurst = 0
-  clearGlowHeroFillPreview(inst)
   inst.drownTimer = 0
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
@@ -9789,7 +7237,7 @@ function finishDrowning(inst) {
 function bumpGlowLifeHudOnDeath(inst) {
   const newLife = applyGlowExperienceDelta(-1)
   if (!inst.levelIndicator) {
-    inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, inst.zones.colorWorld)
+    inst.levelIndicator = createGlowLevelIndicator(inst.k)
   }
   syncGlowFpsHudVisibility(inst)
   if (!inst.levelIndicator?.lifeRevealed) return
@@ -9797,16 +7245,11 @@ function bumpGlowLifeHudOnDeath(inst) {
   syncGlowLifeScoreVisibility(inst.levelIndicator)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
-    const greyLife = glowLifeHudWantGrey(inst)
-    LevelIndicator.syncLifeHudGrey(inst.levelIndicator, greyLife)
-    const desatReady = eyeHudSpriteIsDesat(inst.levelIndicator._lifeSpriteName)
-    const canFlash = !greyLife || desatReady
-    if (canFlash) {
-      inst.levelIndicator._lifeFlashLock = true
-      const originalColor = inst.levelIndicator.lifeImage.sprite.color
-      flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0, greyLife)
-    }
-    createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator, greyLife)
+    LevelIndicator.syncLifeHudGrey(inst.levelIndicator, false)
+    inst.levelIndicator._lifeFlashLock = true
+    const originalColor = inst.levelIndicator.lifeImage.sprite.color
+    flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0)
+    createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator)
   }
   syncGlowPitCaveFlagForTeacherHints(inst)
   onGlowTeacherLifeHudRevealed(inst)
@@ -9826,7 +7269,7 @@ function checkGlowTouchDeath(inst, heroX, heroFootY) {
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
   if (inst.shoreFallTwigs?.riderLocked) return
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
-  if (isOnGlowLakeRaft(inst, heroX, heroFootY)) return
+  if (isOnGlowLakeDryFooting(inst, heroX, heroFootY)) return
   if (Predator.isTouchingHero(inst.predator, heroX, heroFootY)) {
     inst._predatorDeathHintContext = capturePredatorDeathHintContext(inst, heroX)
     Predator.notifyKill(inst.predator)
@@ -9853,8 +7296,6 @@ function triggerGlowTouchDeath(inst, cause) {
   hero.controllable = false
   hero.controlsDisabled = true
   destroyStrayGlowHeroBody(inst.k, char)
-  clearGlowHeroFillPreview(inst)
-  inst.heroFillBurst = 0
   char.exists() && inst.k.destroy(char)
   glowLevel0LiveHeroChar = null
   hero.character = null
@@ -9863,24 +7304,19 @@ function triggerGlowTouchDeath(inst, cause) {
   finishGlowTouchDeath(inst, cause, deathX, deathY)
 }
 //
-// Leaf-shaped radial burst at the death spot — green leaf tones in the
-// colour world, a few gray shades while the level is flat/monochrome —
-// instead of the hero's generic body-square explosion.
+// Leaf-shaped radial burst at the death spot — green leaf tones instead of
+// the hero's generic body-square explosion.
 //
 function spawnGlowTouchDeathBurst(inst, x, y) {
   if (!inst.footParticles) return
-  const palette = glowTouchDeathLeafPalette(inst)
+  const palette = glowTouchDeathLeafPalette()
   GlowFootParticles.spawnLeafBurst(inst.footParticles, x, y, palette, GLOW_TOUCH_DEATH_PARTICLE_COUNT, FLOOR_Y)
 }
 //
-// Mono world: a few gray shades already used for the level's own decor;
-// colour world: the main tree's own green foliage tones, so the burst
-// reads as real leaves rather than generic dust.
+// The main tree's own green foliage tones, so the burst reads as real leaves
+// rather than generic dust.
 //
-function glowTouchDeathLeafPalette(inst) {
-  if (!inst?.zones?.colorWorld) {
-    return [DECOR_GRAY, LIGHT_GRAY, glowRgb('brightLight')]
-  }
+function glowTouchDeathLeafPalette() {
   return (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).map(hex => glowRgb(hex))
 }
 //
@@ -10062,12 +7498,9 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   const cfg = inst.glowHeroCreateCfg
   if (!cfg) return
   inst.heroHint && HeroHint.clear(inst.heroHint)
-  GroundPortal.reset(inst.groundPortal)
   releaseGamePhysicalKeys()
   const pose = computeGlowTouchDeathRespawnPose(inst, deathX, deathY, cause)
   writeGlowLastSpawnKeys(inst, pose.x, pose.y)
-  const filled = inst.zones.colorWorld || inst.heroBodyFillApplied
-  const heroEyes = getGlowHeroEyeBakeColors(!filled)
   const prev = inst.heroInst
   const stepSound = prev?.onPlayStepSound
   const landSound = prev?.onPlayLandSound
@@ -10078,12 +7511,6 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
     k,
     x: pose.x,
     y: pose.y,
-    outlineColor: filled ? HERO_OUTLINE_COLOR : HERO_HOLLOW_OUTLINE_COLOR,
-    ...heroEyes,
-    outlineOnly: !filled,
-    noEyes: !inst.zones.eyesCollected,
-    cyclopsEye: false,
-    rightEyeClosed: inst.zones.eyesCollected && !inst.zones.secondEyeCollected
   })
   Hero.spawn(fresh, { instant: true })
   fresh.onPlayStepSound = stepSound
@@ -10091,7 +7518,6 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
   inst.predator && (inst.predator.hero = fresh)
-  inst.swampSpirit && (inst.swampSpirit.hero = fresh)
   glowLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
   inst.touchDeathHandled = false
@@ -10106,8 +7532,6 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.branchTrampBounceAir = false
   registerGlowTrampolineLateBounce(inst)
   snapGlowCameraToHero(k, fresh)
-  !inst.zones.eyesCollected && initGlowHeroWithoutEyes(fresh)
-  inst.zones.eyesCollected && applyGlowHeroEyesOpenedBake(k, fresh, fresh.postBakeCanvas, glowHeroOneEyeBakeOpts(inst.zones))
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
@@ -10204,7 +7628,6 @@ function revealWaterZone(inst, showHint = true) {
 // Reveals ground decor on the left side (water / branch area).
 //
 function revealGroundDecorLeft(inst, silent = false) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return
   if (inst.zones.groundDecorLeft) return
   inst.zones.groundDecorLeft = true
   inst.zones.groundDecor = true
@@ -10214,20 +7637,9 @@ function revealGroundDecorLeft(inst, silent = false) {
   syncGlowAtmosphereZones(inst)
 }
 //
-// Midges + cave cracks follow which sides of the ground the hero has opened
-//
-function isGlowCaveCracksVisible(z) {
-  return Boolean(z.predatorAwake && (z.groundDecorRight || z.colorWorld))
-}
+// Midges follow which sides of the ground the hero has opened.
 //
 function syncGlowAtmosphereZones(inst) {
-  const z = inst.zones
-  if (isGlowEyeIntroPending(z)) {
-    syncGlowEyeIntroMidges(inst.midges)
-    setGlowPitCracksVisible(inst.pit, isGlowEyeIntroCaveActive(inst) || Boolean(inst.pit?.collapsed))
-    return
-  }
-  setGlowPitCracksVisible(inst.pit, isGlowCaveCracksVisible(z))
   syncGlowMidgesZones(inst.midges, inst.zones, Boolean(inst.pit?.collapsed))
 }
 //
@@ -10235,70 +7647,8 @@ function syncGlowAtmosphereZones(inst) {
 // Decor only appears when the hero is on the floor — not on the start branch.
 //
 function checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded) {
-  if (shouldGlowBlockWorldReveal(inst)) return
   if (!grounded || footY < FLOOR_Y - 28) return
   updateGroundRightStripReveal(inst, heroX)
-}
-//
-// Persists the branch-trampoline reveal (independent of full right decor).
-//
-function revealBranchTrampoline(inst) {
-  if (inst.zones.branchTrampRevealed) return
-  inst.zones.branchTrampRevealed = true
-  set(KEY_BRANCH_TRAMP_REVEALED, true)
-  wakeGlowPredator(inst)
-  clearTrampMissingHint(inst, 'branch')
-  Sound.stopAmbient(inst.sound)
-  triggerGlowCameraShake(inst)
-  applyZoneVisibility(inst)
-  showTrampolineRevealHint(inst)
-}
-//
-// First reveal frame: pin the hero on the cap if needed and reset jump /
-// landing animation — skipping bounce on this frame left jumpPhase stuck.
-//
-function settleHeroAfterTrampReveal(inst, char, heroX, footY, right, branch) {
-  const hero = inst.heroInst
-  if (!hero || !char?.pos) return
-  const grounded = char.isGrounded?.() ?? false
-  const landingPose = glowHeroInTrampLandingPose(hero)
-  //
-  // No branch-only shortcut here (there used to be one, skipping straight to
-  // a pad reset without ever repositioning the hero) — pinHeroToMainFloorOverTrampoline
-  // already bails on its own while landingPose is true (glowHeroInTrampLandingPose),
-  // and every call below is additionally gated by !landingPose, so mid-jump
-  // (the original concern: "pin/sync would cancel jump-6 mid-air") is already
-  // safe without a special case. Skipping the pin left the hero's collider
-  // reset (resetTrampolineCapPadState moves the pad off-screen) with nothing
-  // repositioning the hero onto solid ground, which is what actually froze
-  // the animation — landing on the branch mushroom (revealed or not) left
-  // the hero standing over empty space with an inconsistent grounded state
-  // every frame after.
-  //
-  const capTop = FLOOR_Y - TRAMP_TOTAL_H
-  if (right) {
-    resetTrampolineCapPadState(inst, inst.trampState, 'trampBounceAir', inst.trampPad)
-    !landingPose &&
-      inst.zones.rightTrampBounceLive &&
-      isHeroAtTrampolineCap(inst, heroX, footY, inst.trampState) &&
-      pinHeroOnTrampolineCap(inst, char, capTop, inst.trampState)
-    !landingPose &&
-      !inst.zones.rightTrampBounceLive &&
-      pinHeroToMainFloorOverTrampoline(inst, char, inst.trampState)
-  }
-  if (branch) {
-    resetTrampolineCapPadState(inst, inst.branchTrampState, 'branchTrampBounceAir', inst.branchTrampPad)
-    !landingPose &&
-      inst.zones.branchTrampBounceLive &&
-      isHeroAtTrampolineCap(inst, heroX, footY, inst.branchTrampState) &&
-      pinHeroOnTrampolineCap(inst, char, capTop, inst.branchTrampState)
-    !landingPose &&
-      !inst.zones.branchTrampBounceLive &&
-      pinHeroToMainFloorOverTrampoline(inst, char, inst.branchTrampState)
-  }
-  inst.trampBounceAir = false
-  inst.branchTrampBounceAir = false
-  grounded && !landingPose && (hero.canJump = true)
 }
 //
 // Pit level indicator ref — keep the live HUD pointer on the pit state.
@@ -10434,17 +7784,11 @@ function updateGlowCamera(inst) {
 //
 // First visit with no explored zones: ease the camera from a tight view to full width.
 //
-function maybeStartGlowCameraIntro(inst, zones) {
+function maybeStartGlowCameraIntro(inst) {
   const k = inst.k
   k.camScale(1)
   set(KEY_CAMERA_INTRO_DONE, true)
   snapGlowCameraToHero(k, inst.heroInst)
-  if (!zones.predatorAwake && inst.heroInst?.character) {
-    inst.heroInst.character.opacity = 0
-    inst.heroSpawnFade = HERO_SPAWN_FADE_DURATION
-    inst.worldHiddenForSpawnFade = true
-    hideGlowWorldForSpawnFade(inst)
-  }
   updateGlowCamera(inst)
 }
 function snapGlowCameraToHero(k, heroInst) {
@@ -10463,7 +7807,7 @@ function snapGlowCameraToHero(k, heroInst) {
 // k.add() calls, so without this the wrong colour phase can flash for a frame.
 //
 function createGlowBootstrapCurtain(k) {
-  const voidColor = k.rgb(PRELUDE_BACKDROP.r, PRELUDE_BACKDROP.g, PRELUDE_BACKDROP.b)
+  const voidColor = k.rgb(OUTER.r, OUTER.g, OUTER.b)
   return k.add([
     k.fixed(),
     k.pos(0, 0),
@@ -10474,15 +7818,6 @@ function createGlowBootstrapCurtain(k) {
 }
 function destroyGlowBootstrapCurtain(curtain) {
   curtain?.destroy?.()
-}
-function hideGlowWorldForSpawnFade(inst) {
-  inst.treeObj && (inst.treeObj.hidden = true)
-  inst.treeColorObj && (inst.treeColorObj.hidden = true)
-  inst.treeSegmentIds?.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    entry?.obj && (entry.obj.hidden = true)
-    entry?.colorObj && (entry.colorObj.hidden = true)
-  })
 }
 //
 // Removes a duplicate hero body left by an aborted scene bootstrap.
@@ -10526,6 +7861,8 @@ function syncGlowHeroTrampolinePads(inst, char, heroX, footY) {
     snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.trampState)
   isBranchTrampolineColliderActive(inst.zones) &&
     snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.branchTrampState)
+  isPitCaveTrampolineColliderActive(inst) &&
+    snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.pitCaveTrampState)
   pinHeroToMainFloorOverTrampoline(inst, char, inst.trampState)
   pinHeroToMainFloorOverTrampoline(inst, char, inst.branchTrampState)
   syncTrampolinePad(inst)
@@ -10535,7 +7872,6 @@ function syncGlowHeroTrampolinePads(inst, char, heroX, footY) {
 //
 function onUpdate(inst) {
   const k = inst.k
-  GroundPortal.update(inst.groundPortal)
   inst.zones._sceneRef = inst
   if (inst._glowBirdsBootstrapKick) {
     inst._glowBirdsBootstrapKick = false
@@ -10547,44 +7883,22 @@ function onUpdate(inst) {
     updateGlowCamera(inst)
     return
   }
-  //
-  // Portal trip: the body waits hidden while the portal draws the cut sprite.
-  //
-  if (GroundPortal.isTraveling(inst.groundPortal)) {
-    syncGlowGroundPortalTravelHero(inst)
-    updateGlowCamera(inst)
-    return
-  }
   syncGlowPredatorPatrolBounds(inst)
-  maybeEnsureGlowTreeFruitSpots(inst)
-  syncGlowTreeFruitHostOpacity(inst)
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
-  inst.zones.colorWorld && inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
+  inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character
   )
-  inst.swampSpirit && SwampSpirit.update(inst.swampSpirit, k.dt())
-  syncSwampSpiritProximityHint(inst, glowTooltipClampInset())
   if (inst.touchDeathHandled) {
     inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
     inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
     return
   }
   inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
-  if (inst.heroSpawnFade > 0 && inst.heroInst?.character) {
-    inst.heroSpawnFade -= k.dt()
-    const u = 1 - Math.max(0, inst.heroSpawnFade) / HERO_SPAWN_FADE_DURATION
-    inst.heroInst.character.opacity = Math.min(1, u)
-    if (inst.heroSpawnFade <= 0) {
-      inst.heroInst.character.opacity = 1
-      inst.worldHiddenForSpawnFade && (inst.worldHiddenForSpawnFade = false, applyZoneVisibility(inst))
-    }
-    refreshGlowBranchJumpState(inst, inst.heroInst.character)
-  }
-  if (inst.pendingGlowIntro && inst.heroSpawnFade <= 0) {
+  if (inst.pendingGlowIntro) {
     inst.introHintDelayRemaining += k.dt()
     if (inst.introHintDelayRemaining >= CAMERA_INTRO_HINT_DELAY) {
       inst.pendingGlowIntro = false
@@ -10592,7 +7906,7 @@ function onUpdate(inst) {
       startGlowIntro(inst)
     }
   }
-  if (inst.pendingReplayIntro2 && inst.heroSpawnFade <= 0) {
+  if (inst.pendingReplayIntro2) {
     inst.introHintDelayRemaining += k.dt()
     if (inst.introHintDelayRemaining >= CAMERA_INTRO_HINT_DELAY) {
       inst.pendingReplayIntro2 = false
@@ -10600,62 +7914,27 @@ function onUpdate(inst) {
       startGlowIntro(inst)
     }
   }
-  if (inst.introLock && inst.introHintPhase === INTRO_HINT_PHASE_ONE &&
-    !HeroHint.isActive(inst.heroHint)) {
-    inst.introHintPhase = INTRO_HINT_PHASE_PAUSE
-    inst.introHintPause = HINT_INTRO_2_PAUSE
-  }
-  if (inst.introLock && inst.introHintPhase === INTRO_HINT_PHASE_PAUSE) {
-    inst.introHintPause -= k.dt()
-    if (inst.introHintPause <= 0) {
-      showGlowIntroSecondHint(inst)
-    }
-  }
   if (inst.introLock && inst.introHintPhase === INTRO_HINT_PHASE_TWO &&
     !HeroHint.isActive(inst.heroHint)) {
     inst.introHintOnComplete?.()
-  }
-  const fadingWorldVisuals = inst.colorFade < inst.colorFadeTarget || inst.parallaxFade < 1
-  const twoToneWorld = isGlowFlatSingleDecorColor(inst)
-  const colorTransition = isGlowColorTransitionActive(inst)
-  const parallaxStable = isGlowFullParallaxStable(inst)
-  if (!parallaxStable && (fadingWorldVisuals || twoToneWorld || colorTransition)) {
-    updateMushroomTints(inst)
-    updateDecorOutlines(inst)
-    syncGlowMidgeDrawColor(inst)
-  }
-  //
-  // Cheap self-correcting check (early-exits on no change) so the tree's
-  // roots-visible-from-G gray sprite always reflects current zone state even
-  // if some specific event path forgets to call applyZoneVisibility.
-  //
-  if (!parallaxStable || inst.treeGraySpriteName !== glowMonolithTreeGraySpriteName(inst.zones)) {
-    inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
   }
   if (inst._mushroomLeanActive) {
     updateMushroomWhistleLean(inst)
     inst._mushroomLeanActive = inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
   }
-  maybeSyncGlowLifeHudGrey(inst)
-  if (inst.zones.colorWorld) {
-    updateGlowColorRevealCurtain(inst, k.dt())
-  } else if (inst.zones.eyesCollected) {
-    const pTarget = inst.parallaxFadeTarget ?? 1
-    inst.parallaxFade < pTarget &&
-      (inst.parallaxFade = Math.min(pTarget, inst.parallaxFade + k.dt() / GLOW_POST_FIRST_EYE_PARALLAX_FADE_SEC))
-  }
-  updateTreeRevealFade(inst, k.dt())
-  updateExploreFades(inst, k.dt())
-  updateEarTreeRevealFade(inst, k.dt())
-  syncGlowHeroBodyFill(inst)
-  updatePlayfieldBorderColors(inst)
+  syncShoreBranchPlatform(inst)
+  ChainEyeTramp.syncChainEyeTrampPads(inst)
   syncGlowPitLevelIndicator(inst)
   inst.trampState.cooldown > 0 && (inst.trampState.cooldown = Math.max(0, inst.trampState.cooldown - k.dt()))
   inst.branchTrampState?.cooldown > 0 &&
     (inst.branchTrampState.cooldown = Math.max(0, inst.branchTrampState.cooldown - k.dt()))
+  inst.pitCaveTrampState?.cooldown > 0 &&
+    (inst.pitCaveTrampState.cooldown = Math.max(0, inst.pitCaveTrampState.cooldown - k.dt()))
   inst.trampState.squash > 0 && (inst.trampState.squash = Math.max(0, inst.trampState.squash - k.dt() * 4))
   inst.branchTrampState?.squash > 0 &&
     (inst.branchTrampState.squash = Math.max(0, inst.branchTrampState.squash - k.dt() * 4))
+  inst.pitCaveTrampState?.squash > 0 &&
+    (inst.pitCaveTrampState.squash = Math.max(0, inst.pitCaveTrampState.squash - k.dt() * 4))
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
@@ -10668,12 +7947,10 @@ function onUpdate(inst) {
   hero.jumpDisabled = false
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
-  isGlowChainBuoyLayerVisible(inst) &&
+  inst.chainBuoys &&
     ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
-  inst.chainBuoys && (inst.chainBuoys.pupilZones = inst.zones)
-  updateGlowPrizeEyePickup(inst, char)
-  inst.zones.colorWorld && inst.earTrees && EarTree.onUpdate(inst.earTrees, heroX, char.pos.y, k.dt())
-  updateGlowEarTreeWhisperSound(inst, char)
+  inst.earTrees && EarTree.onUpdate(inst.earTrees, k.dt())
+  updateGlowPlantWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   updateBranchSpawnLook(inst, hero, heroMoving)
@@ -10687,7 +7964,6 @@ function onUpdate(inst) {
   refreshGlowBranchJumpState(inst, char)
   refreshGlowMainGroundJumpState(inst, char, grounded, footY)
   syncGlowBranchJumpReady(inst, char, grounded)
-  onUpdateGlowEyeIntro(inst, char, hero, FLOOR_Y, WORLD_W, TREE_X, grounded, justLanded, footY)
   const inStartBranchBand = isHeroOverStartBranchX(inst, heroX) &&
     footY >= inst.startBranch.y - LOG_HOVER_BAND &&
     footY <= inst.startBranch.y + BRANCH_SNAP_BELOW
@@ -10705,35 +7981,8 @@ function onUpdate(inst) {
   } else if (onMainGroundLevel) {
     inst.wasOnStartBranch = false
   }
-  //
-  // Reveal hidden mushrooms before snap / bounce — the hero must settle on
-  // the visible cap first; bouncing on the same frame as reveal felt like an
-  // invisible trampoline.
-  //
-  const rightTrampWasVisible = inst.zones.rightTrampRevealed
-  const branchTrampWasVisible = inst.zones.branchTrampRevealed
-  maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded)
-  const rightRevealFrame = !rightTrampWasVisible && inst.zones.rightTrampRevealed
-  const branchRevealFrame = !branchTrampWasVisible && inst.zones.branchTrampRevealed
-  //
-  // Pad / snap / bounce only after the mushroom sprite is shown.
-  //
   syncGlowHeroTrampolinePads(inst, char, heroX, footY)
-  const groundedAfterPad = char.isGrounded?.() ?? false
-  const onRightTrampCap = isOnTrampolineCap(inst, char, inst.trampState)
-  const onBranchTrampCap = isOnTrampolineCap(inst, char, inst.branchTrampState)
-  inst.wasGrounded = groundedAfterPad
-  if (rightRevealFrame || branchRevealFrame) {
-    //
-    // Cap landing on the reveal frame bounces above — settle would cancel vel.y
-    // and clear branchTrampBounceAir, leaving the hero frozen on the mushroom.
-    //
-    const landedOnRevealedCap =
-      (rightRevealFrame && wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState)) ||
-      (branchRevealFrame && wantsTrampolineCapLaunch(inst, char, onBranchTrampCap, inst.branchTrampState))
-    !landedOnRevealedCap &&
-      settleHeroAfterTrampReveal(inst, char, heroX, footY, rightRevealFrame, branchRevealFrame)
-  }
+  inst.wasGrounded = char.isGrounded?.() ?? false
   //
   // Bounce is the main L-log trigger; a jump-land on the cap is the backup.
   //
@@ -10775,31 +8024,21 @@ function onUpdate(inst) {
   syncBranchPlatHome(inst)
   char.hidden && !inst.glowDrownHeroClipLock && !inst.pitCaveHeroForeground &&
     (char.hidden = false)
-  //
-  // Never override opacity while the body-fill crossfade is running — it
-  // deliberately holds the hollow layer below 1 so the filled preview can
-  // show through. Stomping it back to 1 here doubled-exposed both layers
-  // at once, which read as a stray light-coloured contour beside the body.
-  //
-  if (typeof char.opacity === 'number' && char.opacity < 1 && inst.heroSpawnFade <= 0 &&
-    !inst.heroFillPreview?.exists?.() && !inst.heroBodyFillApplied) {
-    char.opacity = 1
-  }
-  inst.heroBodyFillApplied && char.opacity < 1 && (char.opacity = 1)
+  typeof char.opacity === 'number' && char.opacity < 1 &&
+    (char.opacity = 1)
   snapHeroToLogPlatforms(inst, char)
-  const heroOnLakeRaft = isOnGlowLakeRaft(inst, heroX, footY)
-  !heroOnLakeRaft && HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
-  inst.shoreFallTwigs && HorizFallTwig.tryPredatorTurnTowardRaftAfterLanding(
+  !isOnGlowLakeDryFooting(inst, heroX, footY) && HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
+  inst.shoreFallTwigs && HorizFallTwig.tryPredatorTurnTowardIslandAfterLanding(
     inst.shoreFallTwigs,
     inst,
     char,
-    isOnGlowLakeRaft
+    isOnGlowLakeDryFooting
   )
-  inst.shoreFallTwigs && HorizFallTwig.tickPredatorLakeRaftRetreatFallback(
+  inst.shoreFallTwigs && HorizFallTwig.tickPredatorIslandRetreatFallback(
     inst.shoreFallTwigs,
     inst,
     char,
-    isOnGlowLakeRaft
+    isOnGlowLakeDryFooting
   )
   snapHeroToStartBranch(inst, char, heroX, footY)
   snapHeroToShoreBranch(inst, char, heroX, footY)
@@ -10840,27 +8079,14 @@ function onUpdate(inst) {
   syncGlowPredatorVisibility(inst)
   updateTrampCheekyHint(inst)
   updateBranchTrampCheekyHint(inst)
-  updateBranchTrampMarioHint(inst)
   syncGlowPitCaveFlagForTeacherHints(inst)
   updateGlowTeacherContextHints(inst, char, hero, heroMoving, k.dt())
-  updateTreeRevealArm(inst, char, grounded)
-  tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   tickGlowStartBranchFatigue(inst, char, grounded, justLanded)
   tickGlowShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickGlowTomatoTreeLanding(inst, char, grounded, justLanded)
-  maybeStartPendingColorWorldFade(inst, grounded)
-  maybeApplyPendingHeroFillOnLand(inst, grounded, justLanded)
-  maybeBootstrapGlowPostEyes(inst)
   updateGlowMidges(inst.midges, k.dt(), 1)
-  inst.branchTrampPitGuardTimer > 0 &&
-    (inst.branchTrampPitGuardTimer = Math.max(0, inst.branchTrampPitGuardTimer - k.dt()))
-  updateGlowPit(inst.pit, char, grounded, justLanded, null, {
-    jumpLanding: justLanded && hero.wasJumping,
-    footY,
-    footParticles: inst.footParticles,
-    skipCrackCollapse: inst.branchTrampPitGuardTimer > 0
-  })
-  updateGlowCaveFloorEyeReveal(inst, char)
+  updateGlowPit(inst.pit, char)
+  maybeLaunchFromPitCaveMushroomOnLand(inst, char, grounded, justLanded)
   refreshGlowPitFloorJumpState(inst, char, grounded, footY)
   inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
   syncGlowAtmosphereZones(inst)
@@ -10868,7 +8094,6 @@ function onUpdate(inst) {
   // Platform zone reveals — detect descending hero over trigger volumes.
   //
   checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded)
-  updateTrampMissingPlaceHints(inst, heroX, footY, grounded)
   //
   // Lake drowning — after ground snap so the hero stands on the floor first.
   //
@@ -10902,11 +8127,6 @@ function updateBranchSpawnLook(inst, hero, heroMoving) {
     inst.branchLookPhase = null
     return
   }
-  if (inst.heroSpawnFade > 0) {
-    inst.branchLookPhase === 'left' && (hero.direction = -1)
-    inst.branchLookPhase === 'left' && (char.flipX = true)
-    return
-  }
   if (heroMoving) {
     inst.branchLookPhase = null
     inst.branchLookTimer = 0
@@ -10924,26 +8144,6 @@ function updateBranchSpawnLook(inst, hero, heroMoving) {
   }
   inst.branchLookPhase = null
 }
-//
-// Arms tree reveal only after the hero has left the start branch once (avoids
-// showing the big tree on the initial spawn landing). The hero spawns 80px
-// ABOVE the branch and free-falls onto it as its very first action — during
-// that fall isHeroOnStartBranch is already false (footY is still well above
-// the branch surface), which used to satisfy the "left the branch" check
-// before the hero had ever actually stood on it, revealing the tree on the
-// very first natural landing. Requiring a real grounded stand on the branch
-// first closes that spawn-drop loophole.
-//
-function updateTreeRevealArm(inst, char, grounded) {
-  if (shouldGlowBlockWorldReveal(inst)) return
-  if (!inst.pendingTreeReveal || !char?.pos) return
-  const onBranch = isHeroOnStartBranch(inst, char)
-  if (onBranch && grounded) inst.hasStoodOnStartBranch = true
-  inst.hasStoodOnStartBranch && !onBranch && (inst.treeBranchLeftOnce = true)
-}
-//
-// Tree fades in on the first landing on the big-tree branch after leaving it.
-//
 //
 // Predator patrol strip — between the lake's east edge and the cave mouth.
 //
@@ -10968,27 +8168,20 @@ function syncGlowPredatorPatrolBounds(inst) {
   pred.maxX = bounds.maxX
   //
   // A fleeing centipede may swim past the patrol strip across the lake, and so
-  // may one swimming back from the glasses log — clamping that one snapped its
+  // may one swimming back from the island — clamping that one snapped its
   // head onto the shore and dragged the body across the water.
   //
-  if (pred.state === 'flee' || pred.lakeRaftRetreatX != null) return
+  if (pred.state === 'flee' || pred.islandRetreatX != null) return
   pred.x < pred.minX && (pred.x = pred.minX)
   pred.x > pred.maxX && (pred.x = pred.maxX)
-}
-function isHeroInGlowLakeBand(inst, heroX, footY) {
-  const x1 = inst.lakeX1
-  const x2 = inst.lakeX2
-  if (x1 == null || x2 == null) return false
-  if (heroX < x1 || heroX > x2) return false
-  return footY >= FLOOR_Y - 36
 }
 function glowPredatorCanHuntHero(inst) {
   const char = inst.heroInst?.character
   const pred = inst.predator
-  if (!char?.pos || inst.drowning || !pred) return false
+  if (!char?.pos || inst.drowning || inst.deathHandled || !pred) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
-  if (isOnGlowLakeRaft(inst, char.pos.x, footY)) return false
+  if (isOnGlowLakeDryFooting(inst, char.pos.x, footY)) return false
   const predatorGroundY = pred.groundAt(char.pos.x)
   return Math.abs(footY - predatorGroundY) <= GLOW_PREDATOR_HERO_VERTICAL_BAND_PX
 }
@@ -10999,7 +8192,7 @@ function triggerGlowBranchLandingShake(inst) {
 // Ground landings near a lip-tree jolt it; the third jolt drops its tomato.
 //
 function tickGlowTomatoTreeLanding(inst, char, grounded, justLanded) {
-  if (!justLanded || !grounded || !inst.zones.colorWorld || !inst.spikyTomatoes) return
+  if (!justLanded || !grounded || !inst.spikyTomatoes) return
   if (!isOnGlowMainGroundFoot(char.pos.y + SURFACE_DETECT_Y)) return
   SpikyTomato.onHeroLanded(inst.spikyTomatoes, char.pos.x)
 }
@@ -11029,30 +8222,21 @@ function tickGlowStartBranchFatigue(inst, char, grounded, justLanded) {
   triggerGlowBranchLandingShake(inst)
   if (!inst.treeFruitSpots?.some(f => f.anchor && f.attached)) return
   inst._branchLandingsSinceTree = (inst._branchLandingsSinceTree || 0) + 1
-  if (inst._branchLandingsSinceTree >= GLOW_BRANCH_LANDINGS_TO_BREAK) {
+  inst._branchLandingsSinceTree >= GLOW_START_BRANCH_LANDINGS_TO_DROP_FRUIT &&
     releaseGlowAnchorFruit(inst)
-  }
-}
-function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
-  if (shouldGlowBlockWorldReveal(inst)) return
-  if (!inst.pendingTreeReveal) return
-  const fromBranchTramp = inst.treeRevealFromBranchTramp ||
-    (inst.branchTrampBounceAir && grounded && justLanded)
-  if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
-  if (!grounded || !justLanded || !char?.pos) return
-  if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
-  if (!isHeroOnStartBranch(inst, char)) return
-  inst.treeRevealFromBranchTramp = false
-  revealTreeSegmentsOnBranchLanding(inst)
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
 //
 function isHeroOnStartBranch(inst, char) {
-  const branch = inst.startBranch
-  if (!branch || !char?.pos) return false
-  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (!char?.pos) return false
   const bundle = inst.branchPlatSegs
+  const plats = bundle?.plats ?? (inst.branchPlat ? [inst.branchPlat] : [])
+  const cur = char.curPlatform?.()
+  if (cur && plats.some(plat => plat === cur)) return true
+  const branch = inst.startBranch
+  if (!branch) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
   const homes = bundle?.homes
   if (homes?.length) {
     return homes.some(seg => {
@@ -11086,7 +8270,6 @@ function isOnGlowMainGroundFoot(footY) {
 // True when a landing/run-start foot burst is allowed this frame.
 //
 function canSpawnGlowFootBurst(inst, char) {
-  if (shouldGlowSuppressFootDetails(inst)) return false
   if (!char?.pos || inst?.drowning) return false
   const footX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -11147,7 +8330,6 @@ function onTrampolineBounce(inst) {
 //
 function onBranchTrampolineBounce(inst) {
   inst.expectBranchWoodLandSound = true
-  inst.pendingTreeReveal && !inst.zones.tree && (inst.treeRevealFromBranchTramp = true)
   const tw = inst.branchTrampWalk
   if (!tw || !inst.branchTrampState) return
   tw.bounceCount = (tw.bounceCount || 0) + 1
@@ -11183,82 +8365,6 @@ function updateTrampCheekyHint(inst) {
   tw.cheekyTooltip = null
 }
 //
-// Drops the branch-tramp "see the tree" bubble if it is on screen.
-//
-function clearBranchTrampMarioHint(inst) {
-  const tw = inst.branchTrampWalk
-  if (!tw?.marioHintTooltip) return
-  Tooltip.destroy(tw.marioHintTooltip)
-  tw.marioHintTooltip = null
-  tw.marioHintSpawnX = null
-  tw.marioHintSpawnY = null
-}
-//
-// One-shot nudge on the branch trampoline when water and the right ground
-// are open but the big tree is still hidden.
-//
-function updateBranchTrampMarioHint(inst) {
-  const tw = inst.branchTrampWalk
-  if (!tw || !inst.branchTrampState) return
-  const heroX = inst.heroInst?.character?.pos?.x ?? 0
-  if (isHeroNearUnrevealedTrampSpot(inst, heroX)) {
-    clearBranchTrampMarioHint(inst)
-    return
-  }
-  if (inst.worldHoverTooltip?.activeTarget?.hoverId === 'branchTrampMario') {
-    clearBranchTrampMarioHint(inst)
-    return
-  }
-  const treeOpen = inst.zones.tree || (inst.treeSegmentRevealed?.size > 0)
-  const eligible = !treeOpen && isBranchTrampDrawnVisible(inst)
-  if (!eligible) {
-    tw.marioEligibleSince = null
-    tw.marioHintCooldown = 0
-    clearBranchTrampMarioHint(inst)
-    return
-  }
-  const k = inst.k
-  if (tw.marioHintTooltip) {
-    const ch = inst.heroInst?.character
-    const sx = tw.marioHintSpawnX
-    const sy = tw.marioHintSpawnY
-    ch?.pos && sx != null && sy != null &&
-      Math.hypot(ch.pos.x - sx, ch.pos.y - sy) >= GLOW_HINT_DISMISS_DISTANCE &&
-      clearBranchTrampMarioHint(inst)
-    return
-  }
-  tw.marioEligibleSince == null && (tw.marioEligibleSince = k.time())
-  const since = k.time() - tw.marioEligibleSince
-  if (since < BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY) return
-  tw.marioHintCooldown = (tw.marioHintCooldown ?? 0) - k.dt()
-  if (tw.marioHintCooldown > 0) return
-  tw.marioHintCooldown = BRANCH_TRAMP_MARIO_HINT_REPEAT
-  const ch = inst.heroInst?.character
-  tw.marioHintSpawnX = ch?.pos?.x ?? heroX
-  tw.marioHintSpawnY = ch?.pos?.y ?? FLOOR_Y
-  tw.marioHintTooltip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: () => inst.branchTrampState.x,
-      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-      width: TRAMP_TOTAL_W,
-      height: TRAMP_TOTAL_H,
-      text: BRANCH_TRAMP_MARIO_HINT_TEXT,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET
-    }]
-  })
-  tw.marioHintTooltip.activeTarget = tw.marioHintTooltip.targets[0]
-  tw.marioHintTooltip.opacity = 1
-  k.wait(BRANCH_TRAMP_MARIO_HINT_DURATION, () => {
-    if (!tw.marioHintTooltip) return
-    Tooltip.destroy(tw.marioHintTooltip)
-    tw.marioHintTooltip = null
-    tw.marioHintSpawnX = null
-    tw.marioHintSpawnY = null
-  })
-}
-//
 // Ages the branch-tramp cheeky bubble
 //
 function updateBranchTrampCheekyHint(inst) {
@@ -11270,56 +8376,27 @@ function updateBranchTrampCheekyHint(inst) {
   tw.cheekyTooltip = null
 }
 //
-// True when tree segment sprites were baked during the pre-level transition.
+// True when the main tree sprite was baked during the pre-level transition.
 //
-function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
-  //
-  // Also checks the roots-visible variant — a k instance that baked trees
-  // before that sprite existed (still live from an earlier visit this
-  // session, e.g. menu <-> glow without a full reload) would otherwise read
-  // as "already prewarmed" from the older TREE_FLAT_SPRITE_NAME alone and
-  // skip baking forever, silently keeping the roots invisible.
-  //
-  if (monolith) {
-    return Boolean(k.getSprite(TREE_FLAT_SPRITE_NAME)) && Boolean(k.getSprite(TREE_FLAT_ROOTS_SPRITE_NAME))
-  }
-  const firstId = segmentIds[0]
-  if (!firstId) return false
-  const rootsId = segmentIds.find(id => TreeSegments.isGlowTreeRootsSegmentId(id)) ?? firstId
-  return Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(firstId, false))) &&
-    Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(rootsId, false, true)))
+function glowTreeSpritesPrewarmed(k) {
+  return Boolean(k.getSprite(TREE_COLOR_SPRITE_NAME))
 }
 //
 // True when parallax static layer exists from prewarm.
 //
 function glowParallaxSpritesPrewarmed(k) {
-  return Boolean(k.getSprite(BG_STATIC_GRAY) && k.getSprite(BG_PAR_TREE1_GRAY))
+  return Boolean(k.getSprite(BG_STATIC_COLOR) && k.getSprite(BG_PAR_TREE1_COLOR))
 }
 //
-// True when the three full-world underground sprites are already on this k.
-//
-function glowUndergroundSpritesReady(k) {
-  return undergroundPaletteEntries().every(entry => k.getSprite(entry.name))
-}
-//
-// Bakes full-tree sprites (fast draw path — two objects instead of many
-// segments). Like the segment bake, all three palettes paint identical
-// geometry, so one measured bounding box crops every variant and the
-// flat/lit/colour swaps stay pixel-aligned. The crop offset is stashed for
-// the tree objects to draw at (see monolithicTreeBakeOffset).
+// Bakes the full colour tree as one sprite cropped to its artwork. The crop
+// offset is stashed for the tree object to draw at (see
+// monolithicTreeBakeOffset).
 //
 function bakeMonolithicGlowTreeSprites(k, treeData) {
-  const flatCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecor(), WORLD_W, WORLD_H)
-  const bounds = measureCanvasContentBounds(flatCanvas, TREE_CROP_PAD)
+  const colorCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteColorForCorner(MAIN_TREE_PARALLAX_FOLIAGE_CORNER), WORLD_W, WORLD_H)
+  const bounds = measureCanvasContentBounds(colorCanvas, TREE_CROP_PAD)
   monolithicTreeOffsets.set(k, { x: bounds?.x ?? 0, y: bounds?.y ?? 0 })
-  loadCroppedGlowTreeSprite(k, TREE_FLAT_SPRITE_NAME, flatCanvas, bounds, 6000)
-  const foliageCorner = MAIN_TREE_PARALLAX_FOLIAGE_CORNER
-  loadCroppedGlowTreeSprite(k, TREE_LIT_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H), bounds, 6001)
-  loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteColorForCorner(foliageCorner), WORLD_W, WORLD_H), bounds, 6002)
-  loadCroppedGlowTreeSprite(k, TREE_FLAT_ROOTS_SPRITE_NAME,
-    renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecorRootsVisible(), WORLD_W, WORLD_H), bounds, 6003)
+  loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME, colorCanvas, bounds, TREE_COLOR_GRAIN_SEED)
 }
 //
 // Loads one monolithic tree canvas cropped to its artwork, with film grain
@@ -11340,142 +8417,6 @@ function monolithicTreeBakeOffset(k) {
   return monolithicTreeOffsets.get(k) || { x: 0, y: 0 }
 }
 //
-// Picks the monolith gray tree sprite for the current zone state: full lit
-// palette in the colour world, roots-visible flat tone once the first eye
-// opens the underground (see getTreePaletteFlatDecorRootsVisible), plain
-// flat before that.
-//
-function glowMonolithTreeGraySpriteName(zones) {
-  if (zones.colorWorld) return TREE_LIT_SPRITE_NAME
-  if (zones.eyesCollected) return TREE_FLAT_ROOTS_SPRITE_NAME
-  return TREE_FLAT_SPRITE_NAME
-}
-//
-// Swaps the monolithic gray tree sprite for the roots / colour-world beats.
-//
-function syncMonolithicTreeGraySprite(inst) {
-  const graySpriteName = glowMonolithTreeGraySpriteName(inst.zones)
-  if (inst.treeGraySpriteName === graySpriteName) return
-  inst.treeGraySpriteName = graySpriteName
-  inst.treeObj?.use(inst.k.sprite(graySpriteName))
-}
-//
-// Crossfades gray vs colour monolithic tree sprites from the colour fade.
-//
-function syncMonolithicTreeColorMode(inst, fade) {
-  const tree = inst.treeObj
-  const treeColor = inst.treeColorObj
-  if (!tree || !treeColor || !inst.treeDrawMonolith) return
-  const f = fade ?? glowTreeColorFade(inst)
-  const pf = inst.parallaxFade ?? 1
-  const { grayOp, colorOp } = glowColorWorldRevealOpacities(f, pf)
-  //
-  // A fully transparent monolith is still a full-screen textured draw.
-  // Hide the side that has faded out so the settled colour world pays for
-  // one tree blit, not two.
-  //
-  if (colorOp >= 0.98) {
-    tree.hidden = true
-    tree.opacity = 0
-    treeColor.hidden = false
-    treeColor.opacity = 1
-    return
-  }
-  if (grayOp >= 0.98 && colorOp < 0.02) {
-    tree.hidden = false
-    treeColor.hidden = true
-    tree.opacity = 1
-    treeColor.opacity = 0
-    return
-  }
-  const white = glowTreeCrossfadeWhite(inst)
-  tree.hidden = grayOp < 0.02
-  treeColor.hidden = colorOp < 0.02
-  tree.opacity = grayOp
-  treeColor.opacity = colorOp
-  tree.color = white
-  treeColor.color = white
-}
-function glowTreeCrossfadeWhite(inst) {
-  inst._treeCrossfadeWhite ??= inst.k.rgb(255, 255, 255)
-  return inst._treeCrossfadeWhite
-}
-//
-// Crossfades revealed tree segments between gray and colour palettes.
-//
-function syncTreeSegmentsColorCrossfade(inst, fade) {
-  const f = fade ?? glowTreeColorFade(inst)
-  const rootFade = glowTreeRootRevealFade(inst)
-  inst.treeSegmentIds?.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    if (!entry?.revealed || entry.fadeActive) return
-    TreeSegments.restoreSegmentHomePos(entry)
-    entry.grayObj.hidden = false
-    entry.colorObj.hidden = false
-    const partMul = TreeSegments.isGlowTreeRootsSegmentId(id) ? rootFade : 1
-    const pf = inst.parallaxFade ?? 1
-    const { grayOp: grayMix, colorOp: colorMix } = glowColorWorldRevealOpacities(f, pf)
-    const grayOp = grayMix * partMul
-    const colorOp = colorMix * partMul
-    entry.grayObj.hidden = grayOp < 0.02
-    entry.colorObj.hidden = colorOp < 0.02
-    entry.grayObj.opacity = grayOp
-    entry.colorObj.opacity = colorOp
-  })
-}
-//
-// Applies gray→colour tree crossfade for monolith or segmented draw paths.
-//
-function syncTreeColorCrossfade(inst) {
-  const fade = glowTreeColorFade(inst)
-  inst.treeDrawColorMode = fade >= 0.5
-  inst.treeDrawMonolith && syncMonolithicTreeColorMode(inst, fade)
-  !inst.treeDrawMonolith && syncTreeSegmentsColorCrossfade(inst, fade)
-}
-//
-// Fades newly revealed tree segments in.
-//
-function updateTreeRevealFade(inst, dt) {
-  const ids = inst.treeSegmentIds
-  if (!ids?.length) return
-  if (!inst._treeRevealFadePending && !ids.some(id => inst.treeSegmentEntries?.[id]?.fadeActive)) return
-  const fade = glowTreeColorFade(inst)
-  let anyPending = false
-  ids.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    if (!entry?.fadeActive) return
-    anyPending = true
-    entry.fade = Math.min(1, entry.fade + dt / TREE_REVEAL_FADE_DURATION)
-    entry.grayObj.hidden = false
-    entry.colorObj.hidden = false
-    const partMul = TreeSegments.isGlowTreeRootsSegmentId(id) ? glowTreeRootRevealFade(inst) : 1
-    entry.grayObj.opacity = (1 - fade) * entry.fade * partMul
-    entry.colorObj.opacity = fade * entry.fade * partMul
-    TreeSegments.restoreSegmentHomePos(entry)
-    entry.fade >= 1 && (entry.fadeActive = false)
-  })
-  inst._treeRevealFadePending = anyPending
-}
-//
-// Applies saved segment visibility on scene entry.
-//
-function applyPersistedTreeSegmentVisibility(entries, revealedSet) {
-  revealedSet.forEach(id => {
-    const entry = entries[id]
-    entry && setTreeSegmentRevealedVisual(entry, 1)
-  })
-}
-//
-// True when every baked segment has been revealed.
-//
-function isAllTreeSegmentsRevealed(inst) {
-  const ids = inst.treeSegmentIds
-  if (!ids?.length) return Boolean(inst.zones.tree)
-  return ids
-    .filter(id => !TreeSegments.isGlowTreeRootsSegmentId(id))
-    .every(id => inst.treeSegmentRevealed?.has(id))
-}
-//
 // Soft right-ground opacity: opened land is solid, the unknown fades out.
 //
 function glowRightWorldOpacity(sc, x, rank) {
@@ -11486,7 +8427,6 @@ function glowRightWorldOpacity(sc, x, rank) {
   if (sc.zones.water && lakeX1 != null && lakeX2 != null && x >= lakeX1 - 48 && x <= lakeX2 + 120) {
     return 1
   }
-  if (!sc.zones.colorWorld) return isGlowWorldXInGroundPeekZone(sc, x) ? 1 : 0
   if (sc.zones.groundDecorRight) return 1
   const stripMax = sc.zones.groundRightStripMax ?? -1
   //
@@ -11506,67 +8446,12 @@ function glowRightWorldOpacity(sc, x, rank) {
 }
 function glowRightDecorOpacity(inst, obj) {
   const x = obj._decorWorldX ?? obj._homeX ?? 0
-  let op = glowRightWorldOpacity(inst, x, obj._detailRank === 'small' ? 'small' : 'large')
-  op *= glowSurfaceDecorFadeAt(inst, x)
-  return op
-}
-//
-// Fades left-shore decor in and keeps the right-side discovery edge soft.
-//
-function updateExploreFades(inst, dt) {
-  const z = inst.zones
-  const colorSettled = z.colorWorld && (inst.colorFade ?? 0) >= 1
-  const exploreSettled = z.groundDecorRight && (inst.leftDecorFade >= 1 || !z.groundDecorLeft)
-  if (exploreSettled && colorSettled) return
-  if (z.groundDecorLeft && inst.leftDecorFade < 1) {
-    inst.leftDecorFade = Math.min(1, inst.leftDecorFade + dt / LEFT_DECOR_FADE_DURATION)
-  }
-  if (inst.grassLayer?.layer) {
-    inst.grassLayer.layer.hidden = !isGlowGrassLayerVisible(inst)
-    inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = !isGlowMudExtraGrassVisible(inst))
-  }
-  if (!exploreSettled && !z.groundDecorRight) {
-    inst.rockObjs?.forEach(o => {
-      if (o._rightOfMud && z.predatorAwake) {
-        const op = glowRightDecorOpacity(inst, o)
-        setDecorObjVisible(o, op > 0.04, op)
-        return
-      }
-      if (o._mudZoneWalk || o._rightOfMud || o._side !== 'right' || o._lakeShoreEnd) return
-      const op = glowRightDecorOpacity(inst, o)
-      setDecorObjVisible(o, op > 0.04, op)
-    })
-    inst.mushObjs?.forEach(o => {
-      if (o._side !== 'right') return
-      const wx = o._decorWorldX ?? o._homeX ?? 0
-      const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
-      const op = glowRightDecorOpacity(inst, o)
-      setDecorObjVisible(o, op > 0.04 && !inLake, op)
-    })
-  }
-  if (!exploreSettled && z.groundDecorLeft && inst.leftDecorFade < 1) {
-    inst.rockObjs?.forEach(o => {
-      if (o._side !== 'left' || o._lakeShoreEnd) return
-      const wx = o._decorWorldX ?? o._homeX ?? 0
-      const decorOp = glowSurfaceDecorFadeAt(inst, wx)
-      const show = (o._waterCluster ? z.water : true) && decorOp > 0.04
-      setDecorObjVisible(o, show, decorOp * inst.leftDecorFade)
-    })
-    inst.mushObjs?.forEach(o => {
-      if (o._side !== 'left') return
-      const wx = o._decorWorldX ?? o._homeX ?? 0
-      const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
-      const decorOp = glowSurfaceDecorFadeAt(inst, wx)
-      setDecorObjVisible(o, !inLake && decorOp > 0.04, decorOp * inst.leftDecorFade)
-    })
-  }
-  !colorSettled && updateAtmosphereMotes(inst, dt)
+  return glowRightWorldOpacity(inst, x, obj._detailRank === 'small' ? 'small' : 'large')
 }
 //
 // Opens ground strips to the right of the tree based on hero X.
 //
 function updateGroundRightStripReveal(inst, heroX) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return
   const z = inst.zones
   const idx = groundRightStripIndexForX(heroX, GROUND_REVEAL_TREE_PAST_X, inst.treeStripEndX)
   if (idx < 0 || idx <= z.groundRightStripMax) return
@@ -11592,268 +8477,37 @@ function revealLeftShoreRock(inst) {
   applyZoneVisibility(inst)
 }
 //
-// Right trampoline collider — visible mushroom plus second landing (or colour world).
+// Right trampoline collider — visible mushroom with a live bounce.
 //
 function isRightTrampolineColliderActive(z) {
-  if (!isRightTrampolineVisible(z)) return false
-  if (z?.colorWorld) return true
-  return Boolean(z?.rightTrampBounceLive)
+  return isRightTrampolineVisible(z) && Boolean(z?.rightTrampBounceLive)
 }
 //
-// Branch trampoline collider — only after the mushroom is revealed (or colour world).
+// Branch trampoline collider — visible mushroom with a live bounce.
 //
 function isBranchTrampolineColliderActive(z) {
-  if (!isBranchTrampolineVisible(z)) return false
-  if (z?.colorWorld) return true
-  return Boolean(z?.branchTrampBounceLive)
+  return isBranchTrampolineVisible(z) && Boolean(z?.branchTrampBounceLive)
 }
 //
-// The right-mushroom beat: first eye taken, tree up, lake found, crawler awake
-// and the colour world still closed — the swamp spirit waits at the right spot.
-//
-function isGlowRightSpiritBeat(z) {
-  return Boolean(z?.eyesCollected && z.predatorAwake && z.tree && !z.colorWorld)
-}
-//
-// Right trampoline mushroom is visible only after a nearby landing (or colour world).
+// Right trampoline mushroom is visible once revealed.
 //
 function isRightTrampolineVisible(z) {
-  return Boolean(z?.colorWorld || (z?.eyesCollected && z?.rightTrampRevealed))
+  return Boolean(z?.rightTrampRevealed)
 }
 //
-// Branch trampoline mushroom uses the same landing gate (or colour world).
+// Branch trampoline mushroom uses the same reveal gate.
 //
 function isBranchTrampolineVisible(z) {
-  return Boolean(z?.eyesCollected && (z?.branchTrampRevealed || z?.colorWorld))
+  return Boolean(z?.branchTrampRevealed)
 }
 //
 // True when the branch trampoline sprite is actually on screen (revealed and
-// not hidden by the eyeless intro or zone visibility pass).
+// not hidden by the zone visibility pass).
 //
 function isBranchTrampDrawnVisible(inst) {
-  return isGlowEyesGameplayUnlocked(inst.zones) &&
-    isBranchTrampolineVisible(inst.zones) &&
+  return isBranchTrampolineVisible(inst.zones) &&
     !inst.branchTrampBundle?.drawLayer?.hidden
 }
-//
-// Right trampoline sprite is on screen (post-landing reveal or colour world).
-//
-function isRightTrampDrawnVisible(inst) {
-  return isRightTrampolineVisible(inst.zones) &&
-    !inst.trampBundle?.drawLayer?.hidden
-}
-//
-// True when the hero stands in the landing-reveal radius of a hidden trampoline.
-//
-function isHeroNearUnrevealedTrampSpot(inst, heroX) {
-  const z = inst.zones
-  if (z.colorWorld) return false
-  const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
-  if (isGlowRightSpiritBeat(z) && !z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) return true
-  if (!z.branchTrampRevealed && isGlowEyesGameplayUnlocked(z) && near(inst.branchTrampState?.x ?? -9999)) return true
-  return false
-}
-//
-// Shows a fixed "missing mushroom" tooltip at each unrevealed trampoline pad.
-//
-function updateTrampMissingPlaceHints(inst, heroX, footY, grounded) {
-  inst.trampMissingHints = inst.trampMissingHints ?? { right: null, branch: null, cave: null }
-  syncOneTrampMissingHint(inst, 'right', inst.trampState?.x ?? -9999, false)
-  //
-  // Branch pad — no "missing" bubble; the swamp spirit marks the G-route spot.
-  //
-  syncOneTrampMissingHint(inst, 'branch', inst.branchTrampState?.x ?? -9999, false)
-  //
-  // Cave mouth — no "missing mushroom" bubble (eyes / teacher hints cover that beat).
-  //
-  syncOneTrampMissingHint(inst, 'cave', 0, false)
-}
-//
-// True while the hero stands in the hidden mushroom's landing area.
-//
-function trampMissingPadHere(inst, trampX, revealed) {
-  if (revealed || inst.zones.colorWorld) return false
-  const heroX = inst.heroInst?.character?.pos?.x ?? 0
-  return Math.abs(heroX - trampX) <= TRAMP_MUSH_LAND_REVEAL_DIST
-}
-//
-// Creates or destroys one trampoline placeholder tooltip. These stay up for
-// as long as the hero remains in the mushroom / cave area — they do not use
-// the walk-away dismiss radius of other Glow speech bubbles.
-//
-function syncOneTrampMissingHint(inst, slotKey, worldX, show) {
-  const existing = inst.trampMissingHints[slotKey]
-  if (!show) {
-    existing && Tooltip.destroy(existing)
-    inst.trampMissingHints[slotKey] = null
-    return
-  }
-  if (existing) return
-  const tip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: worldX,
-      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-      width: TRAMP_TOTAL_W,
-      height: TRAMP_TOTAL_H,
-      text: TRAMP_MISSING_HINT_TEXT,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET
-    }]
-  })
-  tip.activeTarget = tip.targets[0]
-  tip.opacity = 1
-  inst.trampMissingHints[slotKey] = tip
-}
-//
-// Removes a placeholder tooltip when the mushroom appears.
-//
-function clearTrampMissingHint(inst, slotKey) {
-  const tip = inst.trampMissingHints?.[slotKey]
-  tip && Tooltip.destroy(tip)
-  inst.trampMissingHints && (inst.trampMissingHints[slotKey] = null)
-}
-//
-// First mushroom: wonder at its size. Second: recognition that another exists.
-//
-function showTrampolineRevealHint(inst) {
-}
-//
-// Reveals trampoline mushrooms when the hero first touches their landing zone.
-//
-function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded) {
-  const z = inst.zones
-  if (!grounded) return
-  //
-  // Opening beat from the start branch — let the real ground landing crouch
-  // finish before mushroom reveal / pad logic runs on the same frame.
-  //
-  if (inst.spawnedOnBranch && (inst.branchLookPhase || inst.heroSpawnFade > 0)) return
-  const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
-  const nearRight = Boolean(
-    isGlowEyesGameplayUnlocked(z) && isGlowRightSpiritBeat(z) && near(inst.trampState?.x ?? -9999)
-  )
-  const nearBranch = isGlowEyesGameplayUnlocked(z) && near(inst.branchTrampState?.x ?? -9999)
-  const nearAnyTramp = nearRight || nearBranch
-  if (!justLanded && !inst._finishBranchSpawnTrampReveal) return
-  if (inst.spawnedOnBranch && nearAnyTramp && glowHeroInTrampLandingPose(inst.heroInst)) {
-    inst._finishBranchSpawnTrampReveal = true
-    return
-  }
-  if (inst._finishBranchSpawnTrampReveal) {
-    if (glowHeroInTrampLandingPose(inst.heroInst)) return
-    inst._finishBranchSpawnTrampReveal = false
-  }
-  if (!z.rightTrampRevealed && nearRight) {
-    revealRightTrampoline(inst)
-    z.rightTrampBounceLive = true
-    set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
-    return
-  }
-  //
-  // The reveal branch above always returns before reaching here on the
-  // reveal frame itself (rightTrampRevealed only just became true), so this
-  // only ever runs on a later, genuinely separate justLanded event — the
-  // first real landing after the reveal. Arming bounceLive right here, still
-  // inside this frame's main onUpdate and before the late bounce pass runs,
-  // is what lets that same landing actually bounce.
-  //
-  if (z.rightTrampRevealed && !z.rightTrampBounceLive && nearRight) {
-    z.rightTrampBounceLive = true
-    set(KEY_RIGHT_TRAMP_BOUNCE_LIVE, true)
-  }
-  if (!z.branchTrampRevealed && nearBranch) {
-    revealBranchTrampoline(inst)
-    z.branchTrampBounceLive = true
-    set(KEY_BRANCH_TRAMP_BOUNCE_LIVE, true)
-    return
-  }
-  if (z.branchTrampRevealed && !z.branchTrampBounceLive && nearBranch) {
-    z.branchTrampBounceLive = true
-    set(KEY_BRANCH_TRAMP_BOUNCE_LIVE, true)
-  }
-}
-function revealRightTrampoline(inst) {
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return
-  if (inst.zones.rightTrampRevealed) return
-  if (!isGlowRightSpiritBeat(inst.zones)) return
-  inst.zones.rightTrampRevealed = true
-  set(KEY_RIGHT_TRAMP_REVEALED, true)
-  inst._postPredatorSpiritHintShows = GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT_MAX_SHOWS
-  if (inst._glowTeacherHintActive && inst.lastGlowTeacherHintText === GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT) {
-    HeroHint.clear(inst.heroHint)
-    inst._glowTeacherHintActive = false
-  }
-  clearTrampMissingHint(inst, 'right')
-  Sound.stopAmbient(inst.sound)
-  triggerGlowCameraShake(inst)
-  applyZoneVisibility(inst)
-  showTrampolineRevealHint(inst)
-}
-//
-// Branch-jump segments revealed so far (roots excluded).
-//
-function countGlowBranchTreePartsRevealed(inst) {
-  let n = 0
-  inst.treeSegmentRevealed?.forEach(id => {
-    !TreeSegments.isGlowTreeRootsSegmentId(id) && n++
-  })
-  return n
-}
-//
-// Registers the root segment after L without a branch landing reveal.
-//
-function ensureGlowTreeRootsSegment(inst) {
-  if (!inst.zones.colorWorld && !inst.zones.predatorAwake) return
-  const id = TreeSegments.TREE_SEGMENT_ROOTS
-  if (inst.treeSegmentRevealed.has(id)) {
-    syncTreeColorCrossfade(inst)
-    return
-  }
-  inst.treeSegmentRevealed.add(id)
-  const entry = inst.treeSegmentEntries?.[id]
-  entry && setTreeSegmentRevealedVisual(entry, 0)
-  persistTreeSegmentsRevealed(inst)
-  syncTreeColorCrossfade(inst)
-}
-//
-// Reveals tree segments on each start-branch landing (hero branch first).
-//
-function revealTreeSegmentsOnBranchLanding(inst) {
-  inst.treeRevealLandingCount = (inst.treeRevealLandingCount ?? 0) + 1
-  inst.treeSegmentPending.length && revealOneTreeSegment(inst, inst.treeSegmentPending.shift())
-  if (isAllTreeSegmentsRevealed(inst)) {
-    finishTreeRevealIfComplete(inst)
-    return
-  }
-  applyZoneVisibility(inst)
-}
-//
-// Marks one tree segment visible and starts its fade-in.
-//
-function revealOneTreeSegment(inst, segmentId) {
-  if (inst.treeSegmentRevealed.has(segmentId)) return
-  inst.treeSegmentRevealed.add(segmentId)
-  const entry = inst.treeSegmentEntries[segmentId]
-  if (!entry) return
-  setTreeSegmentRevealedVisual(entry, 0)
-  entry.fadeActive = true
-  syncTreeSegmentsVisibility(inst)
-  persistTreeSegmentsRevealed(inst)
-  playSegmentRevealSound(inst)
-  triggerGlowCameraShake(inst)
-}
-//
-// Writes revealed segment ids to localStorage.
-//
-function persistTreeSegmentsRevealed(inst) {
-  set(KEY_TREE_SEGMENTS_REVEALED, [...inst.treeSegmentRevealed])
-}
-//
-// Init-time fruit layout when the crown is already open (save / monolith tree).
-// Returns null when the crown is still closed; an empty array when open but no
-// valid hang points.
-//
 //
 // Camera Y is pinned to the design centre, so a window shorter than the
 // design crops the top of the world, and the top HUD bar covers another
@@ -11863,149 +8517,11 @@ function glowTreeFruitMinHangY() {
   const viewTop = Math.round(DESIGN_SCREEN_H / 2) - Math.min(SCREEN_H, DESIGN_SCREEN_H) / 2
   return viewTop + TOP_MARGIN + TREE_FRUIT_VIEW_TOP_PAD
 }
-function buildGlowTreeFruitSpotsForOpenCrown(zones, treeData, anchorCfg, treeSegmentPlan, treeSegmentRevealed) {
-  if (!zones.eyesCollected) return null
-  const crownOpen = zones.tree || (
-    treeSegmentPlan &&
-    treeSegmentPlan.pendingIds.every(id => treeSegmentRevealed.has(id))
-  )
-  if (!crownOpen) return null
-  return buildGlowTreeFruitSpots(treeData, anchorCfg)
-}
-//
-// When every segment is open, mark the legacy tree zone complete.
-//
-function finishTreeRevealIfComplete(inst) {
-  if (!isAllTreeSegmentsRevealed(inst)) return
-  inst.pendingTreeReveal = false
-  inst.zones.tree = true
-  set(KEY_REVEALED_TREE, true)
-  ensureGlowTreeFruitSpots(inst)
-  applyZoneVisibility(inst)
-}
-//
-// Crown can be fully open while zones.tree / fruit spots were never synced
-// (e.g. roots segment still hidden, or a missed finishTreeRevealIfComplete).
-//
-function maybeEnsureGlowTreeFruitSpots(inst) {
-  if (!inst.zones?.eyesCollected) return
-  if (inst.treeDrawMonolith) {
-    ensureGlowTreeFruitSpots(inst)
-    return
-  }
-  if (!isAllTreeSegmentsRevealed(inst)) return
-  if (!inst.zones.tree) {
-    finishTreeRevealIfComplete(inst)
-    return
-  }
-  ensureGlowTreeFruitSpots(inst)
-}
 //
 // Short camera bump for tree reveals, tramp landings and letter pickups.
 //
 function triggerGlowCameraShake(inst) {
   inst.camera && GlowCamera.triggerShake(inst.camera, GLOW_CAMERA_SHAKE_AMP, GLOW_CAMERA_SHAKE_DURATION)
-}
-//
-// Sets one segment to a given fade opacity.
-//
-function setTreeSegmentRevealedVisual(entry, opacity) {
-  entry.revealed = true
-  entry.fade = opacity
-  entry.fadeActive = false
-  entry.grayObj.hidden = false
-  //
-  // Colour sprites stay hidden until syncTreeSegmentsColorCrossfade() runs —
-  // showing both layers at full opacity on a gray-phase load flashes green.
-  //
-  entry.colorObj.hidden = true
-  entry.grayObj.opacity = opacity
-  entry.colorObj.opacity = 0
-  TreeSegments.restoreSegmentHomePos(entry)
-}
-//
-// Gray tree segments switch to the warm lit palette in the colour world.
-//
-function syncTreeSegmentGraySprites(inst) {
-  const lit = Boolean(inst.zones.colorWorld)
-  const rootsVisible = !lit && Boolean(inst.zones.eyesCollected)
-  const want = `${lit}:${rootsVisible}`
-  if (inst.treeSegmentGrayVariant === want) return
-  inst.treeSegmentGrayVariant = want
-  inst.treeSegmentIds?.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    if (!entry) return
-    const name = TreeSegments.segmentGraySpriteName(id, lit, rootsVisible && TreeSegments.isGlowTreeRootsSegmentId(id))
-    entry.grayObj.use(inst.k.sprite(name))
-  })
-}
-//
-// Hides unrevealed segments; revealed ones respect colour-world cross-fade.
-//
-function syncTreeSegmentsVisibility(inst) {
-  const fade = glowTreeColorFade(inst)
-  inst.treeSegmentIds?.forEach(id => {
-    const entry = inst.treeSegmentEntries?.[id]
-    if (!entry) return
-    if (!entry.revealed) {
-      entry.grayObj.hidden = true
-      entry.colorObj.hidden = true
-      entry.grayObj.opacity = 0
-      entry.colorObj.opacity = 0
-      TreeSegments.parkSegmentOffscreen(entry)
-      return
-    }
-    TreeSegments.restoreSegmentHomePos(entry)
-    //
-    // A segment mid reveal-fade owns its own opacity via updateTreeRevealFade
-    // (entry.fade ramping 0->1) — forcing it to 1 here every time this runs
-    // (applyZoneVisibility fires from many unrelated events) snapped it fully
-    // visible immediately, then the very next fade tick pulled it back down
-    // toward 0 and back up again: the segment visibly flashed on, off, on.
-    //
-    if (entry.fadeActive) return
-    if (fade < 0.02) {
-      entry.grayObj.hidden = false
-      entry.colorObj.hidden = true
-      entry.grayObj.opacity = 1
-      entry.colorObj.opacity = 0
-      return
-    }
-  })
-  syncTreeSegmentsColorCrossfade(inst, fade)
-}
-//
-// A hanging fruit is as visible as the crown part holding its leaf: hidden
-// while that part is hidden (spawn fade, not yet revealed), fading in with it,
-// and never dimmed because some other part of the tree is still closed.
-//
-function syncGlowTreeFruitHostOpacity(inst) {
-  const spots = inst.treeFruitSpots
-  if (!spots?.length) return
-  if (inst.treeDrawMonolith) {
-    const op = Math.min(1, shownObjOpacity(inst.treeObj) + shownObjOpacity(inst.treeColorObj))
-    spots.forEach(fruit => { fruit.hostOpacity = op })
-    return
-  }
-  if (inst.treeLeafSegmentsFor !== inst.treeData) {
-    inst.treeLeafSegmentsFor = inst.treeData
-    inst.treeLeafSegments = TreeSegments.glowTreeLeafSegmentMap(inst.treeData)
-  }
-  const crownIds = (inst.treeSegmentIds ?? []).filter(id => !TreeSegments.isGlowTreeRootsSegmentId(id))
-  spots.forEach(fruit => {
-    if (!fruit.attached) return
-    const ids = inst.treeLeafSegments.get(fruit.leafKey) ?? crownIds
-    fruit.hostOpacity = ids.reduce((max, id) => Math.max(max, treeSegmentShownOpacity(inst, id)), 0)
-  })
-}
-function treeSegmentShownOpacity(inst, id) {
-  const entry = inst.treeSegmentEntries?.[id]
-  if (!entry) return 0
-  return Math.min(1, shownObjOpacity(entry.grayObj) + shownObjOpacity(entry.colorObj))
-}
-function shownObjOpacity(obj) {
-  if (!obj || obj.hidden) return 0
-  return obj.opacity ?? 1
 }
 //
 // True while hero.js holds the landing crouch (jump-6) or pre-jump squash.
@@ -12032,6 +8548,11 @@ function glowHeroInTrampLandingPose(hero) {
 function wantsTrampolineCapLaunch(inst, char, onCap, state) {
   if (!onCap || !state || state.cooldown > 0) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
+  //
+  // Pit-cave caps sit on the underground floor — not the main-lane band the
+  // surface tramps use to ignore walkers on FLOOR_Y.
+  //
+  if (state.pitCaveTramp) return true
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return false
   if ((char.isGrounded?.() ?? false) && isHeroFeetOnMainFloorLane(footY)) return false
   return true
@@ -12064,18 +8585,21 @@ function isHeroWalkingPastTrampOnMainFloor(inst, char, footY) {
 //
 function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   if (!state) return
-  const branchPad = state === inst.branchTrampState
-  const colliderActive = branchPad
-    ? isBranchTrampolineColliderActive(inst.zones)
-    : isRightTrampolineColliderActive(inst.zones)
+  const pitPad = state.pitCaveTramp
+  const branchPad = !pitPad && state === inst.branchTrampState
+  const colliderActive = pitPad
+    ? isPitCaveTrampolineColliderActive(inst)
+    : branchPad
+      ? isBranchTrampolineColliderActive(inst.zones)
+      : isRightTrampolineColliderActive(inst.zones)
   if (!colliderActive) return
   if (glowHeroInTrampLandingPose(inst.heroInst)) return
   if (isHeroWalkingPastTrampOnMainFloor(inst, char, footY)) return
-  if (isHeroFeetOnMainFloorLane(footY)) return
+  if (!pitPad && isHeroFeetOnMainFloorLane(footY)) return
   if (Math.abs(heroX - state.x) >= TRAMP_CAP_HALF) return
   const velY = char.vel?.y ?? 0
   if (velY < 0) return
-  const capTop = FLOOR_Y - TRAMP_TOTAL_H
+  const capTop = trampolineCapTopY(state)
   //
   // syncTrampolinePad already keeps a real static collider under the cap, so
   // Kaplay resolves an ordinary landing there on its own — this only needs to
@@ -12099,7 +8623,9 @@ function snapHeroToOneTrampolineCap(inst, char, heroX, footY, state) {
   // instead of walking past it. Removed — this rescue only ever needs the
   // narrow high-speed-tunnel margin below.
   //
-  const sunkPastCap = footY > capTop + TRAMP_SNAP_BELOW && footY < TRAMP_MAIN_LANE_FEET_MIN
+  const sunkPastCap = pitPad
+    ? footY > capTop + TRAMP_SNAP_BELOW
+    : footY > capTop + TRAMP_SNAP_BELOW && footY < TRAMP_MAIN_LANE_FEET_MIN
   //
   // Only a fall that already passed through the cap from above. A sideways
   // pass must not be pinned onto the pad — that left the hero standing in
@@ -12199,42 +8725,11 @@ function glowHeroHitboxBottomY(char) {
   return box ? box.pos.y + box.height : char.pos.y + SURFACE_DETECT_Y
 }
 //
-// Drops the invisible cap off-screen when bounce physics are not armed yet.
-//
-function resetTrampolineCapPadState(inst, state, bounceAirKey, pad) {
-  if (!state) return
-  state._capPadLatch = 0
-  inst[bounceAirKey] = false
-  pad && parkTrampolinePad(inst.heroInst?.character, pad)
-}
-//
-// Catches tunneling through the thin start-branch collider before lake-floor snap.
-//
-// The catch band (LOG_HOVER_BAND above .. BRANCH_SNAP_BELOW below platTop) is
-// intentionally wide so a single fast physics tick can't slip through the
-// branch's thin collider. That width is also wide enough to still contain the
-// hero right after settleHeroOnLog pins him there — so without the "armed"
-// latch below, this refired every single frame for as long as the hero
-// stayed in that X/Y band. Confirmed live: a branch-trampoline bounce with
-// sideways drift toward the tree arcs straight through this band (this is a
-// column of open air the hero is only ever passing through mid-flight, not
-// actually landing in), got caught mid-arc, and settleHeroOnLog re-pinned
-// him to the exact same Y every frame after — footY landed back inside the
-// same band each time (isGrounded() never resolved true at the branch's
-// ragged edge, so the grounded-only early exit above never released him) —
-// a permanent freeze, hero motionless and unresponsive to jump. The latch
-// makes the catch fire once per approach: it disarms on a successful catch
-// and only re-arms once the hero is genuinely outside the band again (or
-// truly grounded), so a hero who doesn't actually come to rest there falls
-// on through under normal gravity instead of being re-pinned forever.
-//
-//
 // Catches the hero on the shore tree horizontal branch (same band logic as start branch).
 //
 function snapHeroToShoreBranch(inst, char, heroX, footY) {
   const home = inst.shoreBranchPlatHome
   if (!home || inst.drowning) return
-  if (glowEarTreeRevealOpacity(inst) <= COLOR_CROSSFADE_EPS) return
   const x2 = home.x2 ?? home.x
   if (heroX < home.x || heroX > x2) {
     inst._shoreBranchTunnelArmed = true
@@ -12518,7 +9013,7 @@ function beginDrownSinkTween(inst) {
 // Flashes life icon gold/white on drowning death (touch lesson 0 pattern
 // recoloured to the glow gold — perception happens through colour here).
 //
-function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count, greyLife = false) {
+function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   if (count >= LIFE_FLASH_COUNT) {
     levelIndicator.lifeImage.sprite.color = originalColor
@@ -12526,25 +9021,25 @@ function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count, gre
     levelIndicator._lifeFlashLock = false
     return
   }
-  const flashA = greyLife ? glowRgb('decorGray') : glowRgb(GLOW_GOLD_HEX)
-  const flashB = greyLife ? glowRgb('decorGray') : glowRgb('brightLight')
+  const flashA = glowRgb(GLOW_GOLD_HEX)
+  const flashB = glowRgb('brightLight')
   if (count % 2 === 0) {
     levelIndicator.lifeImage.sprite.color = k.rgb(flashA.r, flashA.g, flashA.b)
     levelIndicator.lifeImage.sprite.opacity = 1.0
   } else {
     levelIndicator.lifeImage.sprite.color = k.rgb(flashB.r, flashB.g, flashB.b)
-    levelIndicator.lifeImage.sprite.opacity = greyLife ? 0.35 : 0.5
+    levelIndicator.lifeImage.sprite.opacity = 0.5
   }
-  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1, greyLife))
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1))
 }
 //
 // Gold square particles radiating from life icon on drowning death.
 //
-function createLifeParticlesOnDrownDeath(k, levelIndicator, greyLife = false) {
+function createLifeParticlesOnDrownDeath(k, levelIndicator) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   const lifeX = levelIndicator.lifeImage.sprite.pos.x
   const lifeY = levelIndicator.lifeImage.sprite.pos.y
-  const tone = greyLife ? glowRgb('decorGray') : glowRgb(GLOW_GOLD_HEX)
+  const tone = glowRgb(GLOW_GOLD_HEX)
   for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
     const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
     const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
@@ -12575,12 +9070,9 @@ function onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime) {
 }
 //
 // Spawns a landing/run-start dust burst tinted to the surface under the
-// hero's feet — gray while the world is flat/monochrome, earthy colour once
-// it isn't (footParticleColor already carries that split), so the puff
-// always shows, just recoloured to match the current world state.
+// hero's feet.
 //
 function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst, char) {
-  if (shouldGlowSuppressFootDetails(sceneInst)) return
   if (!inst || sceneInst?.drowning || surface === 'wood') return
   //
   // Wood guard: surface tags and foot position can disagree for a frame
@@ -12591,98 +9083,18 @@ function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst, char) {
   // Only the main ground gets a puff — branch and log tops stay clean.
   //
   if (!isOnGlowMainGroundFoot(footY)) return
-  let atCaveEntrance = false
-  const pit = sceneInst?.pit
-  if (pit?.cracksVisible && !pit.collapsed) {
-    const zone = getCrackZone(WORLD_W, FLOOR_Y)
-    if (footX >= zone.x1 && footX <= zone.x2 && footY >= FLOOR_Y - 14) {
-      atCaveEntrance = true
-    }
-  }
-  const countMult = atCaveEntrance ? CAVE_ENTRANCE_LANDING_PARTICLE_MULT : 1
   GlowFootParticles.spawnLanding(
     inst,
     footX,
     footY,
-    footParticleColor(sceneInst, surface, footX, footY),
-    countMult
+    footParticleColor(surface)
   )
 }
 //
 // Picks earth or bark tone for foot particles based on the landing surface
 //
-function footParticleColor(sceneInst, surface, footX = 0, footY = 0) {
-  if (sceneInst && isGlowFlatSingleDecorColor(sceneInst)) {
-    return DECOR_GRAY
-  }
-  if (sceneInst?.pit?.cracksVisible && !sceneInst.pit.collapsed) {
-    const zone = getCrackZone(WORLD_W, FLOOR_Y)
-    if (footX >= zone.x1 && footX <= zone.x2 && footY >= FLOOR_Y - 28) {
-      return DECOR_GRAY
-    }
-  }
-  if (surface === 'wood') {
-    return glowRgb(GLOW_PAL.treeGray.trunk)
-  }
-  return lerpRgb(INNER_GRAY, GROUND_DARK, sceneInst?.colorFade || 0)
-}
-//
-// Landing on the prize stalk-eye (reachable only with a right-mushroom
-// bounce) hands its eye to the hero.
-//
-function updateGlowPrizeEyePickup(inst, char) {
-  const z = inst.zones
-  if (z.secondEyeCollected || !z.rightTrampRevealed || !isGlowRightSpiritBeat(z)) return
-  if (!char?.pos || inst.drowning || inst.touchDeathHandled) return
-  if ((char.vel?.y ?? 0) < 0) return
-  const buoy = ChainBuoy.findPrizeBuoy(inst.chainBuoys)
-  if (!buoy) return
-  const eye = ChainBuoy.getChainBuoyEyePos(buoy, inst.chainBuoys.time)
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  if (Math.abs(char.pos.x - eye.x) > GLOW_PRIZE_EYE_PICKUP_HALF_W) return
-  if (footY < eye.y - GLOW_PRIZE_EYE_PICKUP_ABOVE || footY > eye.y + GLOW_PRIZE_EYE_PICKUP_BELOW) return
-  collectGlowSecondEye(inst)
-}
-//
-// Second eye: the stalk goes bare, the hero gets both eyes back and the
-// colour world (parallax, lip-trees, filled body) opens.
-//
-function collectGlowSecondEye(inst) {
-  const z = inst.zones
-  if (z.secondEyeCollected) return
-  z.secondEyeCollected = true
-  set(KEY_SECOND_EYE_COLLECTED, true)
-  ChainBuoy.setPrizeEyeTaken(inst.chainBuoys, true)
-  applyGlowHeroEyesOpenedBake(inst.k, inst.heroInst, inst.heroInst.postBakeCanvas, {
-    cyclops: false,
-    rightEyeClosed: false
-  })
-  triggerGlowCameraShake(inst)
-  inst.sound && !inst.sound._glowSfxMuted && Sound.playLetterPickupSoft(inst.sound)
-  rebakeTrampolineGraySprites(inst.k)
-  rebakeGlowRockSpritesShaded(inst)
-  ensureGlowTreeRootsSegment(inst)
-  inst.earTreeRevealFade = 0
-  inst._grassColorSettled = null
-  inst._grassMudColorSettled = null
-  inst.pendingColorWorldFade = true
-}
-//
-// Opening the branch mushroom (after the first eye) wakes the mud crawler.
-//
-function wakeGlowPredator(inst) {
-  const z = inst.zones
-  if (z.predatorAwake || !z.eyesCollected) return
-  z.predatorAwake = true
-  set(KEY_PREDATOR_AWAKE, true)
-  //
-  // First appearance is the right spirit's burrow (the right trampoline),
-  // not the branch mushroom the hero just landed on.
-  //
-  const pred = inst.predator
-  if (!pred) return
-  const home = inst.trampState?.x ?? pred.homeX
-  home != null && (pred.homeX = home, pred.x = home)
+function footParticleColor(surface) {
+  return surface === 'wood' ? glowRgb(GLOW_PAL.treeGray.trunk) : GROUND_DARK
 }
 //
 // Shows the mud predator once the branch mushroom has woken it.
@@ -12690,7 +9102,7 @@ function wakeGlowPredator(inst) {
 function syncGlowPredatorVisibility(inst) {
   const pred = inst.predator
   pred?.obj &&
-    (pred.obj.hidden = !(inst.zones.predatorAwake && isGlowEyesGameplayUnlocked(inst.zones)))
+    (pred.obj.hidden = !(inst.zones.predatorAwake))
 }
 //
 // Hides the Kaplay hero sprite; onDraw redraws it after all world layers.
@@ -12792,94 +9204,109 @@ function syncHeroTrampDrawOrder(inst) {
   ch.z !== targetZ && (ch.z = targetZ)
 }
 //
-// Cave ground portal: the hero dives in on the cave floor and pops out of a
-// second portal on the ground strip between the big tree and the branch
-// trampoline (same band as the anchor fruit), not onto the start branch.
+// Pit cave mushroom trampoline — same exit as the old ground portal: the hero
+// pops onto the strip between the big tree and the branch trampoline.
 //
 const PIT_MUSH_GROUND_LAUNCH_MULT = 1.12
-function createGlowCaveGroundPortal(inst) {
+function setupGlowPitCaveTrampoline(inst) {
   const pit = inst.pit
-  return GroundPortal.create({
-    k: inst.k,
-    entry: { x: pit.portalX, y: pit.floorY + pit.zone.depth },
-    exit: { x: computeGlowAnchorFruitDropX(inst.treeFruitAnchorCfg), y: FLOOR_Y },
-    heroFootOffset: SURFACE_DETECT_Y,
-    getHero: () => inst.heroInst,
-    isEnabled: () => isGlowPitMushroomUnlocked(inst),
-    onDiveStart: () => startGlowGroundPortalDive(inst),
-    onTeleport: () => teleportGlowHeroToGroundPortalExit(inst),
-    onPowerOn: () => playGlowGroundPortalPowerOn(inst),
-    onEmerge: () => launchHeroFromGroundPortal(inst)
+  if (!pit?.zone) return
+  const k = inst.k
+  const pitFloorY = pit.floorY + pit.zone.depth
+  const trampX = getGlowPitCaveTrampolineX(pit) ?? pit.portalX
+  const bundle = createMushroomTrampoline(k, trampX, pitFloorY, inst.zones, {
+    pitCaveTramp: true,
+    drawZ: CFG.visual.zIndex.player + 22,
+    colors: GLOW_PAL.cuteMushroom,
+    spriteKey: 'pit'
   })
+  inst.pitCaveTrampBundle = bundle
+  inst.pitCaveTrampState = bundle.state
+  inst.pitCaveTrampPad = k.add([
+    k.rect(TRAMP_PAD_W, TRAMP_PAD_H),
+    k.pos(-500, PLATFORM_HIDE_Y),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName
+  ])
+  inst.pitCaveTrampBounceAir = false
+  syncPitCaveTrampolineDrawLayer(inst)
+}
+function isPitCaveTrampolineVisible(inst) {
+  return Boolean(inst?.pit)
+}
+function isPitCaveTrampolineColliderActive(inst) {
+  return isPitCaveTrampolineVisible(inst)
+}
+function syncPitCaveTrampolineDrawLayer(inst) {
+  const layer = inst.pitCaveTrampBundle?.drawLayer
+  layer && (layer.hidden = !isPitCaveTrampolineVisible(inst))
+}
+function maybeLaunchFromPitCaveMushroomOnLand(inst, char, grounded, justLanded) {
+  const state = inst.pitCaveTrampState
+  const hero = inst.heroInst
+  if (!state || !char?.pos || !justLanded || !grounded || !hero) return
+  if (!isPitCaveTrampolineColliderActive(inst)) return
+  tryPitCaveTrampTeleport(inst, state, hero, char)
 }
 //
-// Freezes the body on the cave floor; only the portal's cut sprite is drawn.
+// Pit cave mushroom — same exit as the old ground portal: teleport between the
+// big tree and the branch trampoline, then launch upward.
 //
-function startGlowGroundPortalDive(inst) {
+function tryPitCaveTrampTeleport(inst, state, hero, char) {
+  if (!state || state.cooldown > 0 || !char?.pos) return false
+  const heroX = char.pos.x
+  const heroFeet = char.pos.y + SURFACE_DETECT_Y
+  const onCap = isHeroAtTrampolineCap(inst, heroX, heroFeet, state)
+  if (!wantsTrampolineCapLaunch(inst, char, onCap, state)) return false
+  if ((char.vel?.y ?? 0) < -40) return false
+  launchHeroFromPitCaveMushroom(inst)
+  state.cooldown = TRAMP_COOLDOWN
+  state.squash = TRAMP_SQUASH_MAX
+  inst.pitCaveTrampBounceAir = true
+  return true
+}
+function glowPitCaveExitX(inst) {
+  const cfg = inst.treeFruitAnchorCfg
+  if (cfg) return computeGlowAnchorFruitDropX(cfg)
+  const trunkX = inst.treeX ?? TREE_X
+  const trunkHalf = inst.trunkExcludeHalf ?? TRUNK_EXCLUDE_HALF
+  const branchTrampX = inst.branchTrampX ?? trunkX + trunkHalf + BRANCH_TRAMP_OFFSET_X
+  return computeGlowAnchorFruitDropX({
+    trunkX,
+    trunkHalf,
+    branchTrampX,
+    trampClearHalf: TRAMP_GRASS_CLEAR_HALF
+  })
+}
+function launchHeroFromPitCaveMushroom(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
   dismissPitCaveMushroomHint(inst.pit)
   dismissGlowCaveMushroomTeacherHint(inst)
-  hero.controllable = false
-  hero.controlsDisabled = true
-  hero.isRunning = false
-  hero.jumpPhase = 'none'
+  const exitX = glowPitCaveExitX(inst)
+  moveGlowHeroTo(char, exitX, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
   char.vel.x = 0
-  syncGlowGroundPortalTravelHero(inst)
-  inst.sound && !inst.sound._glowSfxMuted && Sound.playDisappearSound(inst.sound)
-}
-//
-// Every travel frame: keep the Kaplay sprite hidden and the body still.
-//
-function syncGlowGroundPortalTravelHero(inst) {
-  const char = inst.heroInst?.character
-  if (!char?.pos) return
-  char.hidden = true
-  char.vel.x = 0
-  inst.pitCaveHeroForeground = false
-}
-function teleportGlowHeroToGroundPortalExit(inst) {
-  const char = inst.heroInst?.character
-  if (!char?.pos) return
-  const exit = inst.groundPortal.exit
-  moveGlowHeroTo(char, exit.x, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
-  char.vel.x = 0
-  char.vel.y = 0
-  inst._inGlowPitCave = false
-  snapGlowCameraToHero(inst.k, inst.heroInst)
-  updateGlowCamera(inst)
-}
-function playGlowGroundPortalPowerOn(inst) {
-  inst.sound && !inst.sound._glowSfxMuted && Sound.playSpawnSweep(inst.sound)
-}
-//
-// Out of the exit portal: control back, one jump up, then the same world
-// unlocks the old cave mushroom launch used to trigger.
-//
-function launchHeroFromGroundPortal(inst) {
-  const hero = inst.heroInst
-  const char = hero?.character
-  if (!char?.pos) return
-  hero.controllable = true
-  hero.controlsDisabled = false
   char.hidden = false
+  inst._inGlowPitCave = false
+  inst.pitCaveHeroForeground = false
   const launch = Math.round(CFG.game.jumpForce * PIT_MUSH_GROUND_LAUNCH_MULT)
   if (typeof char.jump === 'function') char.jump(launch)
   else char.vel.y = -launch
-  char.vel.x = 0
   hero.wasJumping = true
   hero.jumpPhase = 'jumping'
   hero.jumpCeilingBonk = false
   hero.postLandAirLock = 0
   hero.canJump = false
   inst._pitMushroomBranchLaunchLatch = true
+  snapGlowCameraToHero(inst.k, inst.heroInst)
+  updateGlowCamera(inst)
   inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
-  unlockGlowEyesGameplayFromBranchLaunch(inst)
-  inst.pit && ensureGlowPitOpenForEyesCollected(inst.pit)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
-  maybeBootstrapGlowPostEyes(inst)
 }
 function dismissPitCaveMushroomHint(pit) {
   if (!pit) return
@@ -12894,19 +9321,13 @@ function dismissPitCaveMushroomHint(pit) {
 function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
   const blocked =
     inst.drowning || inst.introLock ||
-    inst.pendingGlowIntro || inst.heroSpawnFade > 0
+    inst.pendingGlowIntro
   if (blocked || !char?.pos) return
   const footY = char.pos.y + SURFACE_DETECT_Y
   const inCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
-  const pit = inst.pit
   const heroActive = isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving)
   const caveEligible = glowTeacherCaveMushroomAutoHintEligible(inst, char, footY, inCave)
-  const postPredatorSpiritEligible = glowTeacherPostPredatorSpiritHintEligible(inst, inCave)
-  const caveEntranceEligible = glowTeacherCaveEntranceAutoHintEligible(inst, inCave)
-  const postTreeMushEligible = glowTeacherPostTreeMushAutoHintEligible(inst, inCave)
-  if (caveEligible || postPredatorSpiritEligible || caveEntranceEligible || postTreeMushEligible) {
-    revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
-  }
+  caveEligible && revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
   tickGlowTeacherContextHints(inst, {
     dt,
     blocked,
@@ -12914,105 +9335,15 @@ function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
     heroActive,
     inCave,
     caveEligible,
-    postPredatorSpiritEligible,
-    caveEntranceEligible,
-    postTreeMushEligible,
-    onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst),
-    onPostPredatorSpiritHint: () => fireGlowTeacherPostPredatorSpiritHint(inst),
-    onCaveEntranceHint: () => fireGlowTeacherCaveEntranceHint(inst),
-    onPostTreeMushHint: () => fireGlowTeacherPostTreeMushHint(inst)
+    onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst)
   })
-}
-//
-// True while the eyeless intro cave-mouth nudge may auto-fire — from level
-// start until the hero actually jumps through the cracks. 'runRight' is the
-// whole pre-approach phase; 'awaitJump' starts the moment heroX comes within
-// EYE_INTRO_CAVE_APPROACH_X of the crack zone (enterGlowEyeIntroCaveApproach
-// in glow-eye-intro.js), well before the hero visually finds the entrance —
-// excluding it here used to silently retire this hint for the rest of the
-// playthrough as soon as the hero explored anywhere near the right side of
-// the level, regardless of whether he'd actually found the cave, which read
-// as "hint never shows when running right". Both phases count as "hasn't
-// entered the cave yet"; pit.collapsed above already ends eligibility the
-// moment he actually jumps in.
-//
-function glowTeacherCaveEntranceAutoHintEligible(inst, inCave) {
-  if (inCave || inst._inGlowPitCave) return false
-  if (inst.pit?.collapsed) return false
-  if (!isGlowEyeIntroPending(inst.zones)) return false
-  const phase = inst.eyeIntro?.phase
-  if (phase !== 'runRight' && phase !== 'awaitJump') return false
-  return (inst._caveEntranceHintShows || 0) < GLOW_TEACHER_HINT_CAVE_ENTRANCE_MAX_SHOWS
-}
-//
-// Shows the cave-mouth teacher line (max two per intro, 10 s active movement each).
-//
-function fireGlowTeacherCaveEntranceHint(inst) {
-  if (!glowTeacherCaveEntranceAutoHintEligible(inst, false)) return
-  if (!showGlowTeacherHintNow(
-    inst,
-    GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT,
-    GLOW_TEACHER_HINT_DURATION,
-    { caveEntrance: true }
-  )) return
-  inst._caveEntranceHintShows = (inst._caveEntranceHintShows || 0) + 1
-  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_CAVE_ENTRANCE_TEXT
-}
-//
-// Alias for teacher-hint eligibility — only the three tree landings remain.
-//
-function glowTeacherBigTreeBranchOnlyStall(inst) {
-  return glowTeacherOnlyBigTreeGZonesRemain(inst)
-}
-//
-// Every G map slice is open except the three big-tree branch landings.
-//
-function glowTeacherOnlyBigTreeGZonesRemain(inst) {
-  const z = inst.zones
-  if (!z) return false
-  if (z.tree || inst.treeDrawMonolith) return false
-  if (!isGlowEyesGameplayUnlocked(z)) return false
-  if (countGlowBranchTreePartsRevealed(inst) > 0) return false
-  if (!z.waterDiscovered) return false
-  if ((z.groundRightStripMax ?? -1) < 0) return false
-  if (!z.branchTrampRevealed) return false
-  return true
-}
-//
-// True while lake + right mushroom are open but the big tree is still hidden.
-//
-function glowTeacherPostTreeMushAutoHintEligible(inst, inCave) {
-  if (inCave || inst._inGlowPitCave) return false
-  if (!isGlowEyesGameplayUnlocked(inst.zones)) return false
-  if (inst.zones.tree || inst.treeDrawMonolith) return false
-  const bigTreeOnly = glowTeacherOnlyBigTreeGZonesRemain(inst)
-  const lakeMushOpen =
-    inst.zones.waterDiscovered && inst.zones.rightTrampRevealed
-  if (!bigTreeOnly && !lakeMushOpen) return false
-  if (bigTreeOnly) return true
-  return (inst._postTreeMushHintShows || 0) < GLOW_TEACHER_HINT_TREE_NEAR_MUSH_MAX_SHOWS
-}
-//
-// Nudges toward the hidden big tree after the lake and right mushroom open.
-//
-function fireGlowTeacherPostTreeMushHint(inst) {
-  if (!glowTeacherPostTreeMushAutoHintEligible(inst, false)) return
-  if (!showGlowTeacherHintNow(
-    inst,
-    GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT,
-    GLOW_TEACHER_HINT_DURATION,
-    { postTreeMush: true }
-  )) return
-  inst._postTreeMushHintShows = (inst._postTreeMushHintShows || 0) + 1
-  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_TREE_NEAR_MUSH_TEXT
 }
 //
 // True while the pit-mushroom teacher line may auto-fire in the cave.
 //
 function glowTeacherCaveMushroomAutoHintEligible(inst, char, footY, inCave) {
   const pit = inst.pit
-  if (!isGlowPitMushroomUnlocked(inst)) return false
-  if (!pit?.collapsed || pit.pitCaveMushroomDone || !char?.pos) return false
+  if (!pit || pit.pitCaveMushroomDone || !char?.pos) return false
   if (!inCave) return false
   if ((pit.pitCaveMushroomHintShows || 0) >= 2) {
     pit.pitCaveMushroomHintPausedUntilExit = true
@@ -13035,27 +9366,6 @@ function fireGlowTeacherCaveMushroomHint(inst) {
   pit.pitCaveMushroomHintShows = (pit.pitCaveMushroomHintShows || 0) + 1
   inst.lastGlowTeacherHintText = PIT_CAVE_HINT_TEXT
   pit.pitCaveMushroomHintShows >= 2 && (pit.pitCaveMushroomHintPausedUntilExit = true)
-}
-//
-// Once the swamp spirit is out on the right. 10 active seconds, then the
-// life-eye nudge, twice — only while the right mushroom is still hidden.
-//
-function glowTeacherPostPredatorSpiritHintEligible(inst, inCave) {
-  if (inCave || inst._inGlowPitCave) return false
-  if (!isGlowRightSpiritBeat(inst.zones)) return false
-  if (isRightTrampDrawnVisible(inst)) return false
-  return (inst._postPredatorSpiritHintShows || 0) < GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT_MAX_SHOWS
-}
-function fireGlowTeacherPostPredatorSpiritHint(inst) {
-  if (!glowTeacherPostPredatorSpiritHintEligible(inst, false)) return
-  if (!showGlowTeacherHintNow(
-    inst,
-    GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT,
-    GLOW_TEACHER_HINT_DURATION,
-    { postPredatorSpirit: true }
-  )) return
-  inst._postPredatorSpiritHintShows = (inst._postPredatorSpiritHintShows || 0) + 1
-  inst.lastGlowTeacherHintText = GLOW_TEACHER_HINT_POST_PREDATOR_SPIRIT
 }
 //
 // Running and jumping both count toward teacher-hint movement gates.
@@ -13082,43 +9392,9 @@ function isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving) {
 // short beat (no long idle wait).
 //
 function updatePitCaveSkeletonAutoHint(inst, char, dt) {
-  const pit = inst.pit
-  if (!pit?.collapsed || glowHeroHasCollectedEyes(inst.zones, inst.heroInst)) return
-  if (pit.pitCaveSkeletonAutoHintShown || pit.pitCaveSkeletonAutoHintTooltip || !char?.pos) return
-  if (!isHeroOnPitCaveFloor(pit, char)) {
-    pit.pitCaveSkeletonFloorHintTimer = 0
-    return
-  }
-  pit.pitCaveSkeletonFloorHintTimer = (pit.pitCaveSkeletonFloorHintTimer || 0) + dt
-  if (pit.pitCaveSkeletonFloorHintTimer < PIT_CAVE_SKELETON_AUTO_HINT_DELAY) return
-  pit.pitCaveSkeletonAutoHintShown = true
-  showPitCaveSkeletonAutoHint(inst)
-}
-//
-// Forced skeleton bubble — hover stays off while this is visible.
-//
-function showPitCaveSkeletonAutoHint(inst) {
-  const pit = inst.pit
-  if (!pit || pit.pitCaveSkeletonAutoHintTooltip) return
-  pit.pitCaveSkeletonAutoHintTooltip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: () => pitCaveSkeletonTooltipPos(inst).x,
-      y: () => pitCaveSkeletonTooltipPos(inst).y,
-      width: SKELETON_TOOLTIP_WIDTH,
-      height: SKELETON_TOOLTIP_HEIGHT,
-      text: SKELETON_TOOLTIP_NEED_EYE_TEXT,
-      offsetY: SKELETON_TOOLTIP_Y_OFFSET,
-      forceAbove: true
-    }]
-  })
-  pit.pitCaveSkeletonAutoHintTooltip.activeTarget = pit.pitCaveSkeletonAutoHintTooltip.targets[0]
-  pit.pitCaveSkeletonAutoHintTooltip.opacity = 1
-  inst.k.wait(PIT_CAVE_SKELETON_AUTO_HINT_DURATION, () => {
-    pit.pitCaveSkeletonAutoHintTooltip && Tooltip.destroy(pit.pitCaveSkeletonAutoHintTooltip)
-    pit.pitCaveSkeletonAutoHintTooltip = null
-  })
+  //
+  // Skeleton proximity / hover hints removed — eyes beat is read from the pickups.
+  //
 }
 //
 // Playfield chrome inset so Glow tooltips pin to the game window, not the void.

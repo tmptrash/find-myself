@@ -19,19 +19,7 @@ import {
 // Stalk-eye pupil: gray decor before L, hero black after (colour world: white
 // sclera, black stalk and eye ring — same stalk RGB as body).
 //
-const CHAIN_BUOY_PUPIL_PRE_L_PALETTE_KEY = 'decorGray'
-const CHAIN_BUOY_PUPIL_POST_L_HEX = CFG.visual.colors.hero.eyePupil
-/**
- * Resolves stalk-eye pupil RGB from glow zone flags (plain {r,g,b}).
- * @param {Object} [zones] - Glow zones object from the live scene
- * @returns {{ r: number, g: number, b: number }}
- */
-export function chainBuoyPupilRgb(zones) {
-  if (!zones?.colorWorld) {
-    return glowRgb(CHAIN_BUOY_PUPIL_PRE_L_PALETTE_KEY)
-  }
-  return glowRgb(CHAIN_BUOY_PUPIL_POST_L_HEX)
-}
+const CHAIN_BUOY_PUPIL_HEX = CFG.visual.colors.hero.eyePupil
 //
 // Segmented stick-on-a-chain eye creatures — dark green-black body, warm
 // luminous sclera on top. Each stalk sways on its own phase; pupils track
@@ -92,7 +80,6 @@ export function create(cfg) {
       groundY: spot.groundY,
       prizeEye: Boolean(spot.prizeEye),
       chainTrampRole: spot.chainTrampRole ?? null,
-      eyeTaken: false,
       seed: spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2),
       segmentCount: spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT,
       segmentLen: spot.segmentLen ?? BUOY_SEGMENT_LEN_DEFAULT,
@@ -118,25 +105,6 @@ export function create(cfg) {
 }
 
 /**
- * The prize stalk-eye (rightmost in the level) whose eye the hero can take.
- * @param {Object} inst - Chain-buoy inst
- * @returns {Object|null} Buoy entry or null
- */
-export function findPrizeBuoy(inst) {
-  return inst?.buoys.find(buoy => buoy.prizeEye) ?? null
-}
-
-/**
- * Leaves the prize stalk bare (eye taken) or puts the eye back.
- * @param {Object} inst - Chain-buoy inst
- * @param {boolean} taken - True once the hero has the eye
- */
-export function setPrizeEyeTaken(inst, taken) {
-  const buoy = findPrizeBuoy(inst)
-  buoy && (buoy.eyeTaken = taken)
-}
-
-/**
  * Advances per-buoy sway time and blink timers.
  * @param {Object} inst - Chain-buoy inst
  * @param {number} heroX - Hero world X (pupil gaze)
@@ -153,14 +121,13 @@ export function onUpdate(inst, heroX, heroY, dt) {
 /**
  * Draws every chain-buoy stalk-eye — body geometry first, then eyes.
  * @param {Object} inst - Chain-buoy inst
- * @param {Object} colors - { body, sclera, pupil, highlight, contour, root }
- * @param {Object} [zones] - Live glow zones (pupil colour is resolved here)
+ * @param {Object} colors - { body, sclera, highlight, contour, root }
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDraw(inst, colors, zones, view = null) {
+export function onDraw(inst, colors, view = null) {
   const body = colors.body
   const k = inst.k
-  const pupilTriplet = chainBuoyPupilRgb(zones)
+  const pupilTriplet = glowRgb(CHAIN_BUOY_PUPIL_HEX)
   const pupilColor = k.rgb(pupilTriplet.r, pupilTriplet.g, pupilTriplet.b)
   const eyeColors = { ...colors, pupil: pupilColor }
   const visible = inst.buoys.filter(buoy =>
@@ -178,11 +145,7 @@ export function onDraw(inst, colors, zones, view = null) {
   const batch = inst.bodyBatch
   PolyBatch.reset(batch)
   visible.forEach((buoy, i) => addBuoyBody(batch, buoy, chains[i], body))
-  visible.forEach((buoy, i) => {
-    buoy.eyeTaken
-      ? addBuoyBareTip(batch, buoy, chains[i], body)
-      : addBuoyEye(batch, buoy, chains[i], eyeColors, inst.lookX, inst.lookY)
-  })
+  visible.forEach((buoy, i) => addBuoyEye(batch, buoy, chains[i], eyeColors, inst.lookX, inst.lookY))
   PolyBatch.flush(batch, k)
 }
 //
@@ -295,13 +258,6 @@ function addBuoyJoints(batch, points, segmentWidth, color) {
   for (let i = 1; i < points.length - 1; i++) {
     PolyBatch.addDisc(batch, points[i].x, points[i].y, radius, color)
   }
-}
-//
-// Rounded stalk end where the eye used to sit.
-//
-function addBuoyBareTip(batch, buoy, points, color) {
-  const tip = points[points.length - 1]
-  PolyBatch.addDisc(batch, tip.x, tip.y, buoy.segmentWidth * BUOY_JOINT_RADIUS_MULT, color)
 }
 function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]

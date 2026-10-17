@@ -17,12 +17,17 @@ const HILL_ROCK_STEP = 0.8
 const HILL_ROCK_SQUASH = 0.78
 const HILL_ROCK_TOP_SINK = 0.18
 const HILL_ROCK_BACK_ROW_LIFT = 0.45
-const HILL_ROCK_VERTS = 14
-const HILL_ROCK_VERT_JITTER = 0.12
+const HILL_ROCK_VERTS = 18
+const HILL_ROCK_VERT_JITTER = 0.28
+const HILL_ROCK_CRACK_SEGMENTS_MIN = 4
+const HILL_ROCK_CRACK_SEGMENTS_RANGE = 4
+const HILL_ROCK_CRACK_WOBBLE_PX = 3.6
+const HILL_ROCK_CRACKS_MAX = 3
 const HILL_ROCK_LIGHT_SHIFT_X = 0.16
 const HILL_ROCK_LIGHT_SHIFT_Y = 0.7
 const HILL_ROCK_SHADE_SHIFT_X = 0.07
 const HILL_ROCK_SHADE_SHIFT_Y = 0.16
+const HILL_ROCK_TONE_EDGE_WOBBLE = 2.4
 const HILL_ROCK_OUTLINE_PX = 1.3
 const HILL_ROCK_CRACK_CHANCE = 0.7
 const HILL_ROCK_CRACK_PX = 1.2
@@ -176,6 +181,26 @@ function traceRock(ctx, rock, dx, dy, grow) {
   ctx.closePath()
 }
 //
+// Tone fill boundary — same offset as traceRock but with a mild per-vertex
+// radius wobble so light/shade edges are not perfect elliptical arcs.
+//
+function traceRockTone(ctx, rock, dx, dy, grow, rng, edgeWobble) {
+  ctx.beginPath()
+  rock.verts.forEach((v, i) => {
+    const a = (i / rock.verts.length) * Math.PI * 2
+    const wobble = (rng() - 0.5) * edgeWobble * 2
+    const px = rock.cx + dx + Math.cos(a) * (rock.rx * v + grow + wobble)
+    const py = rock.cy + dy + Math.sin(a) * (rock.ry * v + grow + wobble * 0.85)
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+  })
+  ctx.closePath()
+}
+function fillRockTone(ctx, rock, rng, dx, dy, color, edgeWobble) {
+  ctx.fillStyle = color
+  traceRockTone(ctx, rock, dx, dy, 0, rng, edgeWobble)
+  ctx.fill()
+}
+//
 // Lit from the upper left: dark body, the same outline shifted up-left in
 // the mid tone leaves a shaded crescent low on the right, a further shifted
 // copy lights the top cap; contour and an optional crack.
@@ -189,24 +214,64 @@ function paintRock(ctx, rock, rng, colors) {
   ctx.clip()
   ctx.fillStyle = colors.stoneDark
   ctx.fill()
-  ctx.fillStyle = colors.stone
-  traceRock(ctx, rock, -rock.rx * HILL_ROCK_SHADE_SHIFT_X, -rock.ry * HILL_ROCK_SHADE_SHIFT_Y, 0)
-  ctx.fill()
-  ctx.fillStyle = colors.stoneLight
-  traceRock(ctx, rock, -rock.rx * HILL_ROCK_LIGHT_SHIFT_X, -rock.ry * HILL_ROCK_LIGHT_SHIFT_Y, 0)
-  ctx.fill()
+  fillRockTone(
+    ctx, rock, rng,
+    -rock.rx * HILL_ROCK_SHADE_SHIFT_X,
+    -rock.ry * HILL_ROCK_SHADE_SHIFT_Y,
+    colors.stone,
+    HILL_ROCK_TONE_EDGE_WOBBLE
+  )
+  fillRockTone(
+    ctx, rock, rng,
+    -rock.rx * HILL_ROCK_LIGHT_SHIFT_X,
+    -rock.ry * HILL_ROCK_LIGHT_SHIFT_Y,
+    colors.stoneLight,
+    HILL_ROCK_TONE_EDGE_WOBBLE * 0.85
+  )
   ctx.restore()
-  if (rng() > HILL_ROCK_CRACK_CHANCE) return
-  ctx.strokeStyle = colors.stoneDark
-  ctx.lineWidth = HILL_ROCK_CRACK_PX
-  ctx.lineCap = 'round'
-  const sx = rock.cx - rock.rx * (0.1 + rng() * 0.4)
-  const sy = rock.cy - rock.ry * (0.2 + rng() * 0.4)
-  ctx.beginPath()
-  ctx.moveTo(sx, sy)
-  ctx.lineTo(sx + rock.rx * (0.15 + rng() * 0.2), sy + rock.ry * (0.25 + rng() * 0.2))
-  ctx.lineTo(sx + rock.rx * (0.1 + rng() * 0.35), sy + rock.ry * (0.5 + rng() * 0.25))
-  ctx.stroke()
+  const crackCount = 1 + Math.floor(rng() * HILL_ROCK_CRACKS_MAX)
+  for (let c = 0; c < crackCount; c++) {
+    rng() <= HILL_ROCK_CRACK_CHANCE && paintRockCrack(ctx, rock, rng, colors)
+  }
+}
+//
+// Jagged, slightly soft crack on a boulder face (not ruler-straight segments).
+//
+function paintRockCrack(ctx, rock, rng, colors) {
+  const sx = rock.cx - rock.rx * (0.05 + rng() * 0.45)
+  const sy = rock.cy - rock.ry * (0.15 + rng() * 0.45)
+  const segCount = HILL_ROCK_CRACK_SEGMENTS_MIN + Math.floor(rng() * HILL_ROCK_CRACK_SEGMENTS_RANGE)
+  let px = sx
+  let py = sy
+  const pts = [{ x: px, y: py }]
+  for (let s = 0; s < segCount; s++) {
+    px += rock.rx * (0.05 + rng() * 0.16) * (rng() < 0.32 ? -1 : 1)
+    py += rock.ry * (0.07 + rng() * 0.18)
+    pts.push({
+      x: px + (rng() - 0.5) * HILL_ROCK_CRACK_WOBBLE_PX,
+      y: py + (rng() - 0.5) * HILL_ROCK_CRACK_WOBBLE_PX
+    })
+  }
+  const drawStroke = (width, alpha, style) => {
+    ctx.strokeStyle = style
+    ctx.lineWidth = width
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.globalAlpha = alpha
+    ctx.beginPath()
+    ctx.moveTo(pts[0].x, pts[0].y)
+    for (let i = 1; i < pts.length; i++) {
+      const prev = pts[i - 1]
+      const cur = pts[i]
+      const cpx = (prev.x + cur.x) * 0.5 + (rng() - 0.5) * HILL_ROCK_CRACK_WOBBLE_PX * 0.6
+      const cpy = (prev.y + cur.y) * 0.5 + (rng() - 0.5) * HILL_ROCK_CRACK_WOBBLE_PX * 0.6
+      ctx.quadraticCurveTo(cpx, cpy, cur.x, cur.y)
+    }
+    ctx.stroke()
+  }
+  drawStroke(HILL_ROCK_CRACK_PX + 1.1, 0.22, colors.stone)
+  drawStroke(HILL_ROCK_CRACK_PX + rng() * 0.45, 0.5 + rng() * 0.35, colors.stoneDark)
+  ctx.globalAlpha = 1
 }
 //
 // Moss thickness along the hill: two waves with random phases plus a bias

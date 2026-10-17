@@ -1,5 +1,5 @@
 import { isTwigPausingPredatorMove } from '../utils/glow-horiz-fall-twig.js'
-import { glowLakeRaftPredatorMinX } from '../utils/glow-lake-raft.js'
+import * as EyeFlower from './eye-flower.js'
 
 //
 // Distance bands around the hero (world px — ~100 px per meter on this level):
@@ -13,6 +13,26 @@ const PATROL_DRIFT_SPEED = 58
 const HUNT_RUN_SPEED = 142
 const LUNGE_SPEED = 298
 const LUNGE_DURATION = 0.36
+
+//
+// A hero who jumps over the crawler (seen on one side, lands on the other)
+// is chased down: a sprint faster than his run, so he cannot reach the next
+// mushroom. A hop during the chase does not shake it off — it keeps running
+// at his last seen x until the chase times out.
+//
+const PURSUIT_TRIGGER_RADIUS = GLOW_METER_PX * 10
+const PURSUIT_SIDE_MIN_DX = 20
+const PURSUIT_SPEED = 560
+//
+// The close-range lunge during a chase must stay faster than the hero's run,
+// otherwise the crawler brakes right behind him and never touches him.
+//
+const PURSUIT_LUNGE_SPEED = 640
+const PURSUIT_DURATION = 4.5
+const PURSUIT_HEAD_LIFT = 7
+const PURSUIT_STRETCH = 1.22
+const PURSUIT_POSE_EASE = 6
+const HERO_BLIND_STATES = ['feast', 'flee', 'coast']
 
 const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
 //
@@ -36,19 +56,19 @@ const FLEE_STRETCH = 1.28
 const FLEE_POSE_EASE = 3
 const FLEE_END_VX_KEEP = 0.3
 const FLEE_END_SEARCH_DELAY = 0.3
-const LAKE_RAFT_RETREAT_SHORE_PAD = 36
-const LAKE_RAFT_RETREAT_SWIM_SPEED = PATROL_DRIFT_SPEED
-const LAKE_RAFT_RETREAT_SPEED_EASE = 2.5
+const ISLAND_RETREAT_SHORE_PAD = 36
+const ISLAND_RETREAT_SWIM_SPEED = PATROL_DRIFT_SPEED
+const ISLAND_RETREAT_SPEED_EASE = 2.5
 //
-// At the glasses log: brake to a stop in the water, rest, turn the way it
+// At the eye-flower island: brake to a stop in the water, rest, turn the way it
 // turns on land (head creeps, spine folds over slowly), then swim to shore.
 //
-const LAKE_RAFT_ARRIVE_DECEL_PER_SEC = 1.6
-const LAKE_RAFT_STOP_SPEED_EASE = 6
-const LAKE_RAFT_STOP_PAUSE_SEC = 0.7
-const LAKE_RAFT_TURN_SEC = 1.3
-const LAKE_RAFT_TURN_CREEP_SPEED = 12
-const LAKE_RAFT_TURN_SPINE_FOLLOW_RATE = 3.5
+const ISLAND_ARRIVE_DECEL_PER_SEC = 1.6
+const ISLAND_STOP_SPEED_EASE = 6
+const ISLAND_STOP_PAUSE_SEC = 0.7
+const ISLAND_TURN_SEC = 1.3
+const ISLAND_TURN_CREEP_SPEED = 12
+const ISLAND_TURN_SPINE_FOLLOW_RATE = 3.5
 const RETREAT_PHASE_STOP = 'stop'
 const RETREAT_PHASE_TURN = 'turn'
 const RETREAT_PHASE_SWIM = 'swim'
@@ -59,23 +79,23 @@ const RIDE_WALK_SPEED = PATROL_DRIFT_SPEED
 const RIDE_SPEED_EASE = 4
 
 /**
- * Swims back from the glasses log to dry land east of the lake. A crawler
- * still facing the log first stops (optional), then turns like on land, and
+ * Swims back from the eye-flower island to dry land east of the lake. A crawler
+ * still facing the island first stops (optional), then turns like on land, and
  * only then swims; one already turned (after the stick turn) swims at once.
  * @param {Object} pred - Predator inst
  * @param {boolean} [stopFirst=false] - Rest in the water before turning
  */
-export function beginLakeRaftShoreRetreat(pred, stopFirst = false) {
+export function beginIslandShoreRetreat(pred, stopFirst = false) {
   const level = pred?.levelInst
   if (!pred || !level) return
   const shoreX = level.lakeX2 != null
-    ? level.lakeX2 + LAKE_RAFT_RETREAT_SHORE_PAD
+    ? level.lakeX2 + ISLAND_RETREAT_SHORE_PAD
     : pred.minX
-  pred.lakeRaftRetreatX = shoreX
-  pred.lakeRaftRetreatPhase = stopFirst
+  pred.islandRetreatX = shoreX
+  pred.islandRetreatPhase = stopFirst
     ? RETREAT_PHASE_STOP
     : pred.dir > 0 ? RETREAT_PHASE_SWIM : RETREAT_PHASE_TURN
-  pred.lakeRaftRetreatT = 0
+  pred.islandRetreatT = 0
   pred.fleePath = null
   pred.swimming = true
   pred.holdFacing = false
@@ -86,7 +106,7 @@ export function beginLakeRaftShoreRetreat(pred, stopFirst = false) {
   if (tw) {
     tw.rideTurnPending = false
     tw.rideTurnDisembark = false
-    tw.lakeRaftRetreatAfterTurn = false
+    tw.islandRetreatAfterTurn = false
     tw.rideTurnElapsed = 0
     pred.rideTurnFromSegs = null
     pred.rideTurnBlend = null
@@ -95,8 +115,13 @@ export function beginLakeRaftShoreRetreat(pred, stopFirst = false) {
 }
 
 export function tickMove(inst, dt, hero) {
+  //
+  // Feeding, fleeing and the post-kill coast move it without watching the
+  // hero, so a side swap seen afterwards is not a jump over it.
+  //
+  HERO_BLIND_STATES.includes(inst.state) && forgetHeroSide(inst)
   if (inst.state === 'feast') return
-  if (tickLakeRaftShoreRetreat(inst, dt)) return
+  if (tickIslandShoreRetreat(inst, dt)) return
   if (isTwigPausingPredatorMove(inst)) {
     inst.vx *= Math.exp(-dt * 14)
     softenHeadPose(inst, dt)
@@ -137,8 +162,9 @@ export function tickMove(inst, dt, hero) {
     if (inst.stateTime <= 0) enter(inst, 'search', 0.2)
     return
   }
+  inst.pursuitT = Math.max(0, (inst.pursuitT ?? 0) - dt)
   if (!hero) {
-    tickRoamHome(inst, dt)
+    inst.pursuitT > 0 ? chaseLastSeen(inst, dt) : tickRoamHome(inst, dt)
     inst.x += inst.vx * dt
     keepInside(inst)
     return
@@ -146,9 +172,10 @@ export function tickMove(inst, dt, hero) {
   const dx = hero.x - inst.x
   const dy = hero.y - inst.y
   const dist = Math.hypot(dx, dy)
+  trackJumpOver(inst, hero, dx, dist)
   if (inst.state === 'lunge') {
     inst.lungeT -= dt
-    hunt(inst, dt, hero, LUNGE_SPEED, true)
+    hunt(inst, dt, hero, lungeSpeed(inst), true)
     inst.headLift = 11
     inst.stretch = 1.34
     inst.x += inst.vx * dt
@@ -159,9 +186,13 @@ export function tickMove(inst, dt, hero) {
   if (dist <= HERO_ALERT_NEAR_RADIUS) {
     enter(inst, 'lunge', LUNGE_DURATION)
     inst.lungeT = LUNGE_DURATION
-    hunt(inst, dt, hero, LUNGE_SPEED, true)
+    hunt(inst, dt, hero, lungeSpeed(inst), true)
     inst.headLift = 11
     inst.stretch = 1.34
+  } else if (inst.pursuitT > 0) {
+    inst.state = 'hunt'
+    hunt(inst, dt, hero, PURSUIT_SPEED, true)
+    easePursuitPose(inst, dt)
   } else if (dist <= HERO_ALERT_FAR_RADIUS) {
     inst.state = 'hunt'
     hunt(inst, dt, hero, HUNT_RUN_SPEED, false)
@@ -207,9 +238,9 @@ function tickFlee(inst, dt) {
     return
   }
   inst.swimming = wp.swim
-  const raftStopX = fleeRaftStopX(inst, wp)
-  if (raftStopX != null) {
-    tickFleeRaftArrival(inst, dt, raftStopX)
+  const islandStopX = fleeIslandStopX(inst, wp)
+  if (islandStopX != null) {
+    tickFleeIslandArrival(inst, dt, islandStopX)
     return
   }
   const dx = wp.x - inst.x
@@ -223,40 +254,40 @@ function tickFlee(inst, dt) {
   inst.x += inst.vx * dt
   const passed = inst.dir > 0 ? inst.x > wp.x : inst.x < wp.x
   passed && (inst.x = wp.x)
-  clampPredatorClearOfLakeRaft(inst)
+  clampPredatorClearOfIsland(inst)
   const ease = Math.min(1, dt * FLEE_POSE_EASE)
   inst.headLift += ((wp.swim ? 0 : FLEE_HEAD_LIFT * 0.5) - inst.headLift) * ease
   inst.stretch += ((wp.swim ? 1 : FLEE_STRETCH) - inst.stretch) * ease
 }
 
 //
-// The glasses log blocks a westward swim waypoint; the crawler stops in the
+// The island blocks a westward swim waypoint; the crawler stops in the
 // water just east of it instead.
 //
-function fleeRaftStopX(inst, wp) {
+function fleeIslandStopX(inst, wp) {
   if (!wp.swim) return null
-  const stopX = glowLakeRaftPredatorMinX(inst.levelInst)
+  const stopX = EyeFlower.predatorMinX(inst.levelInst?.eyeFlower)
   if (stopX == null || wp.x >= stopX || inst.x < stopX) return null
   return stopX
 }
 //
 // Speed falls with the distance left, so the swim brakes to a halt before the
-// log. A rider keeps it waiting there (his jump onto the log starts the turn);
+// island. A rider keeps it waiting there (his jump onto the island starts the turn);
 // alone it rests, turns and swims back to the shore.
 //
-function tickFleeRaftArrival(inst, dt, stopX) {
+function tickFleeIslandArrival(inst, dt, stopX) {
   const dist = inst.x - stopX
   if (dist > FLEE_ARRIVE_PX) {
     !inst.holdFacing && (inst.dir = -1)
-    inst.speedTarget = Math.min(FLEE_SWIM_SPEED, dist * LAKE_RAFT_ARRIVE_DECEL_PER_SEC)
+    inst.speedTarget = Math.min(FLEE_SWIM_SPEED, dist * ISLAND_ARRIVE_DECEL_PER_SEC)
     easeSpeed(inst, dt, FLEE_SPEED_EASE)
     inst.x += inst.vx * dt
     inst.x < stopX && (inst.x = stopX)
   } else {
     inst.speedTarget = 0
-    easeSpeed(inst, dt, LAKE_RAFT_STOP_SPEED_EASE)
+    easeSpeed(inst, dt, ISLAND_STOP_SPEED_EASE)
     inst.x = Math.max(stopX, inst.x + inst.vx * dt)
-    !rideFacingLocked(inst) && beginLakeRaftShoreRetreat(inst, true)
+    !rideFacingLocked(inst) && beginIslandShoreRetreat(inst, true)
   }
   const ease = Math.min(1, dt * FLEE_POSE_EASE)
   inst.headLift += (0 - inst.headLift) * ease
@@ -321,6 +352,40 @@ function hunt(inst, dt, hero, speed, charge) {
   easeSpeed(inst, dt, charge ? 18 : 12)
 }
 
+//
+// Remembers which side the hero was last seen on; reappearing on the other
+// side nearby means he jumped over, which starts the chase.
+//
+function trackJumpOver(inst, hero, dx, dist) {
+  if (Math.abs(dx) < PURSUIT_SIDE_MIN_DX) return
+  const side = Math.sign(dx)
+  const jumpedOver = inst.heroSide != null && side !== inst.heroSide && dist <= PURSUIT_TRIGGER_RADIUS
+  jumpedOver && (inst.pursuitT = PURSUIT_DURATION, inst.orientKick = true)
+  inst.heroSide = side
+  inst.heroLastX = hero.x
+}
+
+function lungeSpeed(inst) {
+  return inst.pursuitT > 0 ? PURSUIT_LUNGE_SPEED : LUNGE_SPEED
+}
+
+function forgetHeroSide(inst) {
+  inst.heroSide = null
+  inst.pursuitT = 0
+}
+
+function chaseLastSeen(inst, dt) {
+  inst.state = 'hunt'
+  hunt(inst, dt, { x: inst.heroLastX ?? inst.x }, PURSUIT_SPEED, true)
+  easePursuitPose(inst, dt)
+}
+
+function easePursuitPose(inst, dt) {
+  const ease = Math.min(1, dt * PURSUIT_POSE_EASE)
+  inst.headLift += (PURSUIT_HEAD_LIFT - inst.headLift) * ease
+  inst.stretch += (PURSUIT_STRETCH - inst.stretch) * ease
+}
+
 function softenHeadPose(inst, dt) {
   const liftTarget = inst.state === 'search' && inst.headLift > 0 ? inst.headLift : 0
   inst.headLift += (liftTarget - inst.headLift) * Math.min(1, dt * 6)
@@ -334,23 +399,23 @@ function easeSpeed(inst, dt, rate) {
   inst.ax = (inst.vx - prev) / Math.max(dt, 0.001)
 }
 
-function tickLakeRaftShoreRetreat(inst, dt) {
-  const shoreX = inst.lakeRaftRetreatX
+function tickIslandShoreRetreat(inst, dt) {
+  const shoreX = inst.islandRetreatX
   if (shoreX == null) return false
   inst.swimming = true
-  inst.lakeRaftRetreatT = (inst.lakeRaftRetreatT ?? 0) + dt
-  if (inst.lakeRaftRetreatPhase === RETREAT_PHASE_STOP) {
-    tickLakeRaftRetreatStop(inst, dt)
+  inst.islandRetreatT = (inst.islandRetreatT ?? 0) + dt
+  if (inst.islandRetreatPhase === RETREAT_PHASE_STOP) {
+    tickIslandRetreatStop(inst, dt)
     return true
   }
-  if (inst.lakeRaftRetreatPhase === RETREAT_PHASE_TURN) {
-    tickLakeRaftRetreatTurn(inst, dt)
+  if (inst.islandRetreatPhase === RETREAT_PHASE_TURN) {
+    tickIslandRetreatTurn(inst, dt)
     return true
   }
   const dx = shoreX - inst.x
   if (Math.abs(dx) <= FLEE_ARRIVE_PX) {
-    inst.lakeRaftRetreatX = null
-    inst.lakeRaftRetreatPhase = null
+    inst.islandRetreatX = null
+    inst.islandRetreatPhase = null
     inst.swimming = false
     inst.vx *= FLEE_END_VX_KEEP
     inst.dir = 1
@@ -358,64 +423,64 @@ function tickLakeRaftShoreRetreat(inst, dt) {
     return true
   }
   inst.dir = dx > 0 ? 1 : -1
-  inst.speedTarget = LAKE_RAFT_RETREAT_SWIM_SPEED
+  inst.speedTarget = ISLAND_RETREAT_SWIM_SPEED
   inst.stretch += (1 - inst.stretch) * Math.min(1, dt * 4)
   softenHeadPose(inst, dt)
-  easeSpeed(inst, dt, LAKE_RAFT_RETREAT_SPEED_EASE)
+  easeSpeed(inst, dt, ISLAND_RETREAT_SPEED_EASE)
   inst.x += inst.vx * dt
   inst.dir > 0 && inst.x > shoreX && (inst.x = shoreX)
   inst.dir < 0 && inst.x < shoreX && (inst.x = shoreX)
-  clampPredatorClearOfLakeRaft(inst)
+  clampPredatorClearOfIsland(inst)
   return true
 }
 
-function tickLakeRaftRetreatStop(inst, dt) {
+function tickIslandRetreatStop(inst, dt) {
   inst.speedTarget = 0
-  easeSpeed(inst, dt, LAKE_RAFT_STOP_SPEED_EASE)
+  easeSpeed(inst, dt, ISLAND_STOP_SPEED_EASE)
   inst.x += inst.vx * dt
-  clampPredatorClearOfLakeRaft(inst)
+  clampPredatorClearOfIsland(inst)
   softenHeadPose(inst, dt)
-  if (inst.lakeRaftRetreatT < LAKE_RAFT_STOP_PAUSE_SEC) return
-  inst.lakeRaftRetreatPhase = RETREAT_PHASE_TURN
-  inst.lakeRaftRetreatT = 0
+  if (inst.islandRetreatT < ISLAND_STOP_PAUSE_SEC) return
+  inst.islandRetreatPhase = RETREAT_PHASE_TURN
+  inst.islandRetreatT = 0
 }
 //
 // Land-style turn: the heading flips, the head only creeps forward and a slow
 // spine follow lets the body fold over behind it instead of snapping across.
 //
-function tickLakeRaftRetreatTurn(inst, dt) {
+function tickIslandRetreatTurn(inst, dt) {
   inst.dir = 1
-  inst.spineFollowRate = LAKE_RAFT_TURN_SPINE_FOLLOW_RATE
-  inst.speedTarget = LAKE_RAFT_TURN_CREEP_SPEED
-  easeSpeed(inst, dt, LAKE_RAFT_RETREAT_SPEED_EASE)
+  inst.spineFollowRate = ISLAND_TURN_SPINE_FOLLOW_RATE
+  inst.speedTarget = ISLAND_TURN_CREEP_SPEED
+  easeSpeed(inst, dt, ISLAND_RETREAT_SPEED_EASE)
   inst.x += inst.vx * dt
-  clampPredatorClearOfLakeRaft(inst)
+  clampPredatorClearOfIsland(inst)
   softenHeadPose(inst, dt)
-  if (inst.lakeRaftRetreatT < LAKE_RAFT_TURN_SEC) return
+  if (inst.islandRetreatT < ISLAND_TURN_SEC) return
   inst.spineFollowRate = null
-  inst.lakeRaftRetreatPhase = RETREAT_PHASE_SWIM
-  inst.lakeRaftRetreatT = 0
+  inst.islandRetreatPhase = RETREAT_PHASE_SWIM
+  inst.islandRetreatT = 0
 }
 
-function clampPredatorClearOfLakeRaft(inst) {
+function clampPredatorClearOfIsland(inst) {
   const level = inst.levelInst
-  const minX = level && glowLakeRaftPredatorMinX(level)
+  const minX = level && EyeFlower.predatorMinX(level.eyeFlower)
   const water = inst.water
-  const raftX = level?.lakeRaftX
-  if (minX == null || !water || raftX == null) return
+  const islandX = level?.eyeFlower?.x
+  if (minX == null || !water || islandX == null) return
   if (inst.x < water.x1 || inst.x > water.x2) return
-  if (Math.abs(inst.x - raftX) > 160) return
+  if (Math.abs(inst.x - islandX) > 160) return
   if (inst.x >= minX) return
   inst.x = minX
   //
-  // Block sliding onto the log from the right; allow negative vx when leaving
+  // Block sliding onto the island from the right; allow negative vx when leaving
   // back toward the east shore.
   //
   inst.vx > 0 && (inst.vx = 0)
 }
 
 function keepInside(inst) {
-  clampPredatorClearOfLakeRaft(inst)
+  clampPredatorClearOfIsland(inst)
   if (inst.holdFacing) {
     if (inst.x < inst.minX) {
       inst.x = inst.minX

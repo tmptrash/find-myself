@@ -1,6 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL, isGlowGrayWorld } from '../utils/glow-palette.js'
+import { GLOW_PAL } from '../utils/glow-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
@@ -19,6 +19,12 @@ import * as Sound from '../../../utils/sound.js'
 // leg targets and the eye targets — there is no baked walk cycle.
 //
 const LEG_PAIRS = 12
+//
+// Near-side legs start half a stride ahead so the two rows alternate.
+//
+const NEAR_SIDE = 1
+const NEAR_FOOT_LEAD = 5
+const NEAR_STEP_DELAY = 0.08
 const THIGH = 11
 const SHIN = 13
 const DRAW_Z = CFG.visual.zIndex.player - 1
@@ -236,7 +242,7 @@ function initLegs(inst) {
     const seg = 2 + Math.min(span - 1, Math.floor(i * span / LEG_PAIRS))
     for (const side of [-1, 1]) {
       const hipX = inst.x - inst.dir * (10 + i * 7)
-      const footX = hipX + side * 8
+      const footX = hipX + side * 8 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
       inst.legs.push({
         seg,
         side,
@@ -250,7 +256,7 @@ function initLegs(inst) {
         footX,
         footY: inst.groundAt(footX),
         plantX: footX,
-        stepWait: Math.random() * 0.2,
+        stepWait: Math.random() * 0.2 + (side === NEAR_SIDE ? NEAR_STEP_DELAY : 0),
         fidgetAt: 0.4 + Math.random()
       })
     }
@@ -290,16 +296,31 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const gray = isGlowGrayWorld(inst.zones)
-  const contour = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorContour)
-  const back = rgb(k, gray ? GLOW_PAL.lightGray : GLOW_PAL.predatorBack)
-  const belly = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorBelly)
-  const moss = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorMoss)
-  const leg = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorLeg)
-  const eye = rgb(k, gray ? GLOW_PAL.lightGray : GLOW_PAL.predatorEye)
-  const pupil = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorPupil)
-  const horn = rgb(k, gray ? GLOW_PAL.decorGray : GLOW_PAL.predatorHorn)
-  inst.legs.forEach(limb => drawLeg(inst, batch, limb, contour, leg))
+  const contour = rgb(k, GLOW_PAL.predatorContour)
+  const back = rgb(k, GLOW_PAL.predatorBack)
+  const belly = rgb(k, GLOW_PAL.predatorBelly)
+  const moss = rgb(k, GLOW_PAL.predatorMoss)
+  const leg = rgb(k, GLOW_PAL.predatorLeg)
+  const eye = rgb(k, GLOW_PAL.predatorEye)
+  const pupil = rgb(k, GLOW_PAL.predatorPupil)
+  const horn = rgb(k, GLOW_PAL.predatorHorn)
+  //
+  // Far-side legs sit behind the body, near-side legs are drawn over it.
+  //
+  inst.legs.forEach(limb => limb.side !== NEAR_SIDE && drawLeg(inst, batch, limb, contour, leg))
+  drawBodySegments(inst, batch, contour, belly, back, moss)
+  inst.legs.forEach(limb => limb.side === NEAR_SIDE && drawLeg(inst, batch, limb, contour, leg))
+  inst.spikeAt.forEach(index => {
+    const seg = inst.segments[index]
+    const prev = inst.segments[index + 1]
+    prev && drawBackSpike(batch, seg, prev, contour, back)
+  })
+  drawTailShears(inst, batch, contour, horn)
+  drawHead(inst, batch, contour, back, eye, pupil)
+  PolyBatch.flush(batch, k, 1)
+}
+
+function drawBodySegments(inst, batch, contour, belly, back, moss) {
   for (let i = inst.segments.length - 1; i >= 0; i--) {
     const seg = inst.segments[i]
     const prev = inst.segments[i + 1]
@@ -312,14 +333,6 @@ function drawPredator(inst) {
     PolyBatch.addDisc(batch, seg.x, seg.y - 1, seg.radius * 0.5, back)
     seg.moss && PolyBatch.addDisc(batch, seg.x + inst.dir * 2, seg.y - seg.radius * 0.35, 2.2, moss)
   }
-  inst.spikeAt.forEach(index => {
-    const seg = inst.segments[index]
-    const prev = inst.segments[index + 1]
-    prev && drawBackSpike(batch, seg, prev, contour, back)
-  })
-  drawTailShears(inst, batch, contour, horn)
-  drawHead(inst, batch, contour, back, eye, pupil)
-  PolyBatch.flush(batch, k, 1)
 }
 
 function drawLeg(inst, batch, limb, contour, leg) {

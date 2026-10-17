@@ -19,12 +19,9 @@ export function initGlowTeacherHintState(inst) {
   inst._glowTeacherWasInCave = false
   inst._glowTeacherHintActive = false
   inst.lastGlowTeacherHintText = null
-  inst._postPredatorSpiritHintShows = 0
-  inst._caveEntranceHintShows = 0
-  inst._postTreeMushHintShows = 0
 }
 /**
- * Advances the shared context timer and invokes the matching hint callback at 10 s.
+ * Advances the shared context timer and invokes the cave hint callback at 10 s.
  * @param {Object} inst - Glow level inst
  * @param {Object} cfg
  * @param {number} cfg.dt - Frame delta
@@ -33,13 +30,7 @@ export function initGlowTeacherHintState(inst) {
  * @param {boolean} cfg.heroActive - Run/jump/air from hero state
  * @param {boolean} cfg.inCave - Hero inside pit cave
  * @param {boolean} cfg.caveEligible - Cave mushroom hint may run
- * @param {boolean} cfg.postPredatorSpiritEligible - Crawler awake, the swamp spirit is out (outside cave)
- * @param {boolean} cfg.caveEntranceEligible - Eyeless intro: still searching the cave mouth
- * @param {boolean} cfg.postTreeMushEligible - Lake + right mushroom open, big tree still hidden
  * @param {Function} [cfg.onCaveHint] - Called when cave context hits the gate
- * @param {Function} [cfg.onPostPredatorSpiritHint] - Spirit nudge after 10 s active movement
- * @param {Function} [cfg.onCaveEntranceHint] - Eyeless intro cave-mouth nudge
- * @param {Function} [cfg.onPostTreeMushHint] - Big tree still hidden near the right mushroom
  */
 export function tickGlowTeacherContextHints(inst, cfg) {
   if (!inst || cfg.blocked) return
@@ -56,13 +47,7 @@ export function tickGlowTeacherContextHints(inst, cfg) {
     }
   }
   inst._glowTeacherWasInCave = inCave
-  const accumulating = inCave
-    ? Boolean(cfg.caveEligible)
-    : Boolean(
-      cfg.caveEntranceEligible ||
-      cfg.postPredatorSpiritEligible ||
-      cfg.postTreeMushEligible
-    )
+  const accumulating = inCave && Boolean(cfg.caveEligible)
   if (!accumulating) {
     if (!inCave) {
       inst.teacherContextAccum = 0
@@ -83,25 +68,14 @@ export function tickGlowTeacherContextHints(inst, cfg) {
   if ((inst.teacherContextAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
-  if (inCave) {
-    cfg.onCaveHint?.()
-    return
-  }
-  if (cfg.caveEntranceEligible) {
-    cfg.onCaveEntranceHint?.()
-    return
-  }
-  cfg.postTreeMushEligible
-    ? cfg.onPostTreeMushHint?.()
-    : cfg.onPostPredatorSpiritHint?.()
+  cfg.onCaveHint?.()
 }
 //
 // Shows a teacher hint immediately (bypasses the queue).
 //
 export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
-  const forceTeacherHint = opts.pitCaveMushroom || opts.caveEntrance ||
-    opts.postTreeMush || opts.postPredatorSpirit
+  const forceTeacherHint = Boolean(opts.pitCaveMushroom)
   if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
   if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
     if (!forceTeacherHint) return false

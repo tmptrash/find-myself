@@ -25,15 +25,6 @@ import {
 } from '../utils/menu-bg-generator.js'
 import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
 import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
-import {
-  getGlowHeroFillProgress,
-  usesGlowHeroFillProgress,
-  syncGlowHeroFillVisual,
-  updateGlowHeroFillBurst,
-  drawGlowHeroFillBurst,
-  GLOW_MENU_HERO_FILL_CFG,
-  KEY_EYES_COLLECTED
-} from '../sections/glow/utils/glow-hero-fill.js'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -437,8 +428,6 @@ export function sceneMenu(k) {
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.glow?.completed
     const inGlowPlay = lastLevel && lastLevel.startsWith('lesson-glow')
-    const usesGlowHeroFill = usesGlowHeroFillProgress(progress, inGlowPlay)
-    const glowHeroFillAmount = usesGlowHeroFill ? getGlowHeroFillProgress() : 1
     const menuHeroWhite = !progress.touch?.completed || inGlowPlay
     const grayColor = '#656565'
     const uncompletedHollowOutline = MENU_ANTIHERO_HOLLOW_OUTLINE
@@ -455,23 +444,17 @@ export function sceneMenu(k) {
             : progress.glow?.completed
               ? CFG.visual.colors.sections.glow.body
               : "#656565"
-    const menuHeroFilled = usesGlowHeroFill
-      ? glowHeroFillAmount >= 0.98
-      : menuHeroWhite
-    const menuHeroNoEyes = usesGlowHeroFill && !get(KEY_EYES_COLLECTED, false)
+    const menuHeroFilled = menuHeroWhite
     const menuHeroHasMouth = Boolean(progress.word?.completed) && !inGlowPlay
     //
-    // Filled glow menu hero uses the dark body outline and standard white eyes
-    // with black pupils; hollow keeps the white shell with transparent sockets.
+    // White menu hero uses the dark body outline and standard white eyes with
+    // black pupils; section-coloured heroes keep the hollow outline bake.
     //
     const menuHeroOutlineColor = menuHeroFilled
       ? GLOW_MENU_HERO_OUTLINE
       : MENU_HERO_OUTLINE_COLOR
-    const menuHeroTransparentEyes = menuHeroWhite && !menuHeroFilled
     const menuHeroEyeWhite = menuHeroFilled ? CFG.visual.colors.hero.eyeWhite : undefined
-    const menuHeroPupilColor = menuHeroFilled
-      ? CFG.visual.colors.hero.eyePupil
-      : (menuHeroWhite ? menuHeroOutlineColor : undefined)
+    const menuHeroPupilColor = menuHeroFilled ? CFG.visual.colors.hero.eyePupil : undefined
     Hero.loadHeroSprites({
       k,
       type: Hero.HEROES.HERO,
@@ -481,34 +464,7 @@ export function sceneMenu(k) {
       addMouth: menuHeroHasMouth,
       addArms: Boolean(progress.touch?.completed),
       eyeWhiteColor: menuHeroEyeWhite,
-      pupilColor: menuHeroPupilColor,
-      transparentEyeInterior: menuHeroTransparentEyes,
-      noEyes: menuHeroNoEyes
-    })
-    if (menuHeroWhite) {
-      Hero.loadHeroSprites({
-        k,
-        type: Hero.HEROES.HERO,
-        bodyColor: GLOW_MENU_HERO_BODY,
-        outlineColor: GLOW_MENU_HERO_OUTLINE,
-        eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-        pupilColor: CFG.visual.colors.hero.eyePupil,
-        transparentEyeInterior: false,
-        outlineOnly: false,
-        noEyes: menuHeroNoEyes
-      })
-    }
-    menuHeroWhite && !menuHeroFilled && Hero.loadHeroSprites({
-      k,
-      type: Hero.HEROES.HERO,
-      bodyColor: GLOW_MENU_HERO_BODY,
-      outlineColor: MENU_HERO_OUTLINE_COLOR,
-      pupilColor: MENU_HERO_OUTLINE_COLOR,
-      transparentEyeInterior: true,
-      outlineOnly: true,
-      addMouth: menuHeroHasMouth,
-      addArms: Boolean(progress.touch?.completed),
-      noEyes: menuHeroNoEyes
+      pupilColor: menuHeroPupilColor
     })
     const heroInst = Hero.create({
       k,
@@ -524,8 +480,6 @@ export function sceneMenu(k) {
       outlineColor: menuHeroOutlineColor,
       eyeWhiteColor: menuHeroEyeWhite,
       pupilColor: menuHeroPupilColor,
-      transparentEyeInterior: menuHeroTransparentEyes,
-      noEyes: menuHeroNoEyes,
       idleVocalization: (inGlowPlay || !progress.word?.completed) ? null : undefined,
       sfx: sound
     })
@@ -1041,7 +995,6 @@ export function sceneMenu(k) {
       floatSpeedY: FLOAT_SPEED_Y,
       hoveredAntiHero: null,
       heroInst,
-      usesGlowHeroFill,
       isLeavingScene: false,
       heartbeatPhase: 0,
       lastHeartbeatTime: 0,
@@ -1100,8 +1053,6 @@ export function sceneMenu(k) {
       Hero.setLookAtPos(heroInst, hoveredInst
         ? { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y }
         : null)
-      inst.usesGlowHeroFill && syncGlowHeroFillVisual(inst, GLOW_MENU_HERO_FILL_CFG)
-      inst.usesGlowHeroFill && updateGlowHeroFillBurst(inst, k.dt())
       //
       // Update colors for all anti-heroes based on hover state
       //
@@ -1379,7 +1330,6 @@ export function sceneMenu(k) {
       {
         draw() {
           if (inst.isLeavingScene) return
-          inst.usesGlowHeroFill && drawGlowHeroFillBurst(k, inst.heroInst, inst)
           drawProhibitedSlashFront(k, inst)
           drawCompletedCheckmarkFront(k, inst)
         }

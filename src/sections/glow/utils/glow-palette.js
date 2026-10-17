@@ -23,14 +23,6 @@ export function glowRgb(keyOrHex) {
 }
 
 /**
- * Neutral dark playfield fill before the colour world (matches ready exit).
- * @returns {{ r: number, g: number, b: number }}
- */
-export function glowPreludeBackdropRgb() {
-  return glowRgb('glowPreludeBackdrop')
-}
-
-/**
  * Cave pit floor — lower soil layer (groundSand), slightly lifted for readability.
  * @returns {{ r: number, g: number, b: number }}
  */
@@ -89,24 +81,14 @@ function softenGlowGroundEarthLayers(layers) {
 }
 
 /**
- * Bottom stratum of the baked earth band (matches groundEarthLayersColor/Gray).
- * @param {boolean} [grayPhase=false] - Gray underground band before colour fade
+ * Bottom stratum of the baked earth band (matches groundEarthLayersColor).
  * @returns {{ r: number, g: number, b: number }}
  */
-export function glowGroundEarthBottomLayerRgb(grayPhase = false) {
-  const topsoil = glowRgb('groundChernozem')
-  const sand = glowRgb('groundSand')
-  const voidRgb = glowRgb('void')
-  const shadow = glowRgb(GLOW_PAL.glowShadow)
-  const stack = grayPhase
-    ? softenGlowGroundEarthLayers([
-      { rgb: lerpGlowRgb(topsoil, shadow, 0.1), frac: GROUND_EARTH_LAYER_FRAC_TOP },
-      { rgb: lerpGlowRgb(sand, voidRgb, 0.28) }
-    ])
-    : softenGlowGroundEarthLayers([
-      { rgb: topsoil, frac: GROUND_EARTH_LAYER_FRAC_TOP },
-      { rgb: sand }
-    ])
+export function glowGroundEarthBottomLayerRgb() {
+  const stack = softenGlowGroundEarthLayers([
+    { rgb: glowRgb('groundChernozem'), frac: GROUND_EARTH_LAYER_FRAC_TOP },
+    { rgb: glowRgb('groundSand') }
+  ])
   return stack[stack.length - 1].rgb
 }
 
@@ -178,139 +160,6 @@ export function snapToPalette(c) {
 }
 
 /**
- * Single-tone decor gray for the main tree before L (no trunk/leaf shades).
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteFlatDecor() {
-  const c = glowRgb('decorGray')
-  return {
-    rootR: c.r, rootG: c.g, rootB: c.b,
-    trunkR: c.r, trunkG: c.g, trunkB: c.b,
-    branchR: c.r, branchG: c.g, branchB: c.b,
-    leafR: c.r, leafG: c.g, leafB: c.b,
-    leafOpacity: 1,
-    leafShades: [c, c, c],
-    barkShades: { dark: c, highlight: c },
-    leafVein: c,
-    woodOutline: c,
-    flatSilhouette: true
-  }
-}
-
-/**
- * Same flat single-tone tree as getTreePaletteFlatDecor(), except the roots
- * Roots use the same decorGray tone as the trunk (only the root mass is
- * revealed after G, not a separate gray).
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteFlatDecorRootsVisible() {
-  const c = glowRgb('decorGray')
-  return {
-    rootR: c.r, rootG: c.g, rootB: c.b,
-    trunkR: c.r, trunkG: c.g, trunkB: c.b,
-    branchR: c.r, branchG: c.g, branchB: c.b,
-    leafR: c.r, leafG: c.g, leafB: c.b,
-    leafOpacity: 1,
-    leafShades: [c, c, c],
-    barkShades: { dark: c, highlight: c },
-    leafVein: c,
-    woodOutline: c,
-    flatSilhouette: true
-  }
-}
-
-/**
- * Gray-phase foreground tree palette.
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteGray() {
-  const t = GLOW_PAL.treeGray
-  const root = glowRgb('void')
-  const trunk = glowRgb(t.trunk)
-  const branch = glowRgb(t.branch)
-  const leaf = glowRgb(t.leaf)
-  return {
-    rootR: root.r, rootG: root.g, rootB: root.b,
-    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
-    branchR: branch.r, branchG: branch.g, branchB: branch.b,
-    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
-    leafOpacity: 1,
-    leafShades: [
-      glowRgb(t.trunk),
-      glowRgb(t.branch),
-      glowRgb(t.leaf)
-    ],
-    //
-    // Bark cracks: void shadow, light gray highlight (monochrome forest phase).
-    //
-    barkShades: {
-      dark: glowRgb('void'),
-      highlight: glowRgb('lightGray')
-    },
-    leafVein: glowRgb('void'),
-    woodOutline: glowContourRgb('forest'),
-    woodMassStyle: true,
-    noLeafDetails: true
-  }
-}
-
-/**
- * Cute mushroom palette — one decor-gray tone (pre-L flat world).
- * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
- */
-export function getCuteMushroomFlatDecorColors() {
-  const stem = GLOW_PAL.decorGray
-  const cap = GLOW_PAL.lightGray
-  const spot = GLOW_PAL.glowOutlineLight
-  return {
-    body: stem,
-    bodyShade: stem,
-    cap,
-    capDark: stem,
-    capLight: cap,
-    spot,
-    outline: GLOW_PAL.decorGray,
-    face: GLOW_PAL.lightGray,
-    blush: stem
-  }
-}
-
-/**
- * Trampoline mushroom in the flat pre-L phase — same decor gray as the lake.
- * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
- */
-export function getCuteMushroomFlatWaterColors() {
-  return getCuteMushroomFlatDecorColors()
-}
-
-/**
- * True while the level stays flat gray (before the second eye opens the colour world).
- * @param {Object} [z] - Glow zones object
- * @returns {boolean}
- */
-export function isGlowGrayWorld(z) {
-  return !!z && !z.colorWorld
-}
-
-/**
- * Warm "lit" main-tree palette shown after the L (light) letter is collected.
- * Sand tones make the main tree stand out against the gray parallax forest.
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteLit() {
-  return applyFoliageDensityToPalette(getTreePaletteLitBase(), 'nearground')
-}
-
-/**
- * Lit main-tree palette with nearground parallax foliage for one screen corner.
- * @param {string} parallaxCornerKey
- * @returns {Object}
- */
-export function getTreePaletteLitForCorner(parallaxCornerKey) {
-  return getTreePaletteWithNearParallaxFoliage(getTreePaletteLitBase(), parallaxCornerKey)
-}
-
-/**
  * Main-tree colour palette with nearground parallax-matched foliage.
  * @returns {Object}
  */
@@ -332,7 +181,7 @@ export function getTreePaletteColorForCorner(parallaxCornerKey) {
 
 /**
  * Copies nearground parallax leaf tones onto a trunk palette (main tree).
- * @param {Object} trunkPalette - Base tree palette (lit or colour trunk)
+ * @param {Object} trunkPalette - Base tree palette (colour trunk)
  * @param {string} parallaxCornerKey - GLOW_PAL parallaxTreeCorner* key
  * @returns {Object}
  */
@@ -351,34 +200,6 @@ export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCorn
     leafVein: near.leafVein,
     leafOpacity: near.leafOpacity,
     noLeafDetails: near.noLeafDetails
-  }
-}
-
-function getTreePaletteLitBase() {
-  const t = GLOW_PAL.treeLit
-  const root = glowRgb(t.root)
-  const trunk = glowRgb(t.trunk)
-  const branch = glowRgb(t.branch)
-  const leaf = glowRgb(t.leaf)
-  return {
-    rootR: root.r, rootG: root.g, rootB: root.b,
-    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
-    branchR: branch.r, branchG: branch.g, branchB: branch.b,
-    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
-    leafOpacity: 1,
-    leafShades: [
-      glowRgb(t.trunk),
-      glowRgb(t.branch),
-      glowRgb(t.leaf)
-    ],
-    barkShades: {
-      dark: glowRgb(GLOW_PAL.bark.dark),
-      highlight: glowRgb(GLOW_PAL.bark.highlight)
-    },
-    leafVein: glowRgb(t.root),
-    woodOutline: glowContourRgb('forest'),
-    woodMassStyle: true,
-    noLeafDetails: true
   }
 }
 
@@ -426,32 +247,11 @@ function massLeafShadesFromEntry(t) {
 }
 
 /**
- * One-tone silhouette palette for a parallax tree/bush row.
- * @param {string} keyOrHex - Palette key or '#rrggbb'
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
- */
-export function getTreePaletteSolid(keyOrHex) {
-  const c = glowRgb(keyOrHex)
-  return {
-    rootR: c.r, rootG: c.g, rootB: c.b,
-    trunkR: c.r, trunkG: c.g, trunkB: c.b,
-    branchR: c.r, branchG: c.g, branchB: c.b,
-    leafR: c.r, leafG: c.g, leafB: c.b,
-    leafOpacity: 1,
-    leafShades: [c],
-    barkShades: { dark: c, highlight: c },
-    leafVein: c,
-    noLeafDetails: true,
-    flatSilhouette: true
-  }
-}
-
-/**
  * Builds a dimmed background variant of a tree palette: every tone is blended
  * toward the given backdrop colour. Distant trees painted with this palette
  * stay fully OPAQUE — reduced brightness comes from the colours themselves,
  * never from draw transparency.
- * @param {Object} base - Palette from getTreePaletteGray()/Lit()/Color()
+ * @param {Object} base - Palette from getTreePaletteParallaxCorner()/Color()
  * @param {{r: number, g: number, b: number}} bg - Backdrop colour to blend toward
  * @param {number} blend - Blend amount 0..1 (0 = base tones, 1 = backdrop)
  * @param {boolean} [flatLeaves=false] - Paint ALL leaves with one single tone

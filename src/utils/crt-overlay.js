@@ -38,6 +38,7 @@ const GLITCH_KINDS = [
 const GLITCH_EDGE_IN = 0.2
 const GLITCH_EDGE_OUT = 0.25
 const SNOW_JITTER_HZ = 30
+const overlayByK = new WeakMap()
 
 /**
  * Adds one persistent full-screen CRT layer to this Kaplay instance. It sits
@@ -56,8 +57,10 @@ export function installCrtOverlay(k) {
     interference: null,
     nextInterferenceAt: scheduleNextInterference(k, crt),
     glitch: null,
-    nextGlitchAt: scheduleNextGlitch(k, crt)
+    nextGlitchAt: scheduleNextGlitch(k, crt),
+    glitchesSuppressed: false
   }
+  overlayByK.set(k, inst)
   ensureCrtNoiseTileSprite(k, crt)
   ensureCrtChromaEdgeSprites(k, crt)
   ensureCrtSoftBandSprites(k, crt)
@@ -80,6 +83,22 @@ export function installCrtOverlay(k) {
       }
     }
   ])
+}
+
+/**
+ * Pauses analog-TV glitch faults (snow, roll, hum bar) while keeping scanlines
+ * and phosphor tint — used during the glow eyeless intro void.
+ * @param {Object} k - Kaplay instance
+ * @param {boolean} suppressed
+ */
+export function setCrtTvGlitchesSuppressed(k, suppressed) {
+  const inst = overlayByK.get(k)
+  if (!inst) return
+  inst.glitchesSuppressed = suppressed
+  if (suppressed) {
+    inst.glitch = null
+    inst.interference = null
+  }
 }
 
 /**
@@ -126,7 +145,7 @@ function onUpdateCrtOverlay(inst) {
   const noise = crt.noise
   inst.noiseScroll += dt * (noise.scrollSpeedPxPerSec ?? 0)
   const intf = crt.interference
-  if (intf?.enabled) {
+  if (intf?.enabled && !inst.glitchesSuppressed) {
     if (inst.interference) {
       inst.interference.t += dt
       if (inst.interference.t >= intf.durationSec) inst.interference = null
@@ -138,9 +157,23 @@ function onUpdateCrtOverlay(inst) {
       }
       inst.nextInterferenceAt = scheduleNextInterference(k, crt)
     }
+  } else {
+    inst.interference = null
   }
   const glitches = crt.glitches
-  if (!glitches?.enabled) return
+  if (!glitches?.enabled || inst.glitchesSuppressed) {
+    inst.glitch = null
+    return
+  }
+  updateCrtGlitchState(inst, k, crt, now, dt)
+}
+
+function updateCrtGlitchState(inst, k, crt, now, dt) {
+  const glitches = crt.glitches
+  if (!glitches?.enabled || inst.glitchesSuppressed) {
+    inst.glitch = null
+    return
+  }
   if (inst.glitch) {
     inst.glitch.t += dt
     if (inst.glitch.t >= inst.glitch.durationSec) {
@@ -169,8 +202,10 @@ function onDrawCrtOverlay(inst) {
   drawChromaEdges(k, w, h, crt, master)
   drawFullScreenSprite(k, SPRITE_SCANLINES, w, h, scaledOpacity(crt.scanlines.opacity, master))
   drawCrtNoise(k, w, h, crt, master, inst.noiseScroll)
-  drawCrtInterference(k, w, h, crt, master, inst.interference)
-  drawCrtGlitch(k, w, h, crt, master, inst.glitch)
+  if (!inst.glitchesSuppressed) {
+    drawCrtInterference(k, w, h, crt, master, inst.interference)
+    drawCrtGlitch(k, w, h, crt, master, inst.glitch)
+  }
 }
 
 function drawPhosphorTint(k, w, h, crt, master) {

@@ -18,7 +18,7 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 //
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
-const BAKE_VARIANT = 'v4'
+const BAKE_VARIANT = 'v7'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
@@ -27,9 +27,11 @@ const KIND = { HILL: 'hill', FERN: 'fern', PLUME: 'plume', MUSHROOMS: 'mushrooms
 //
 // Foreground scatter: ferns and spike bushes alternate along the free ground.
 //
-const FRONT_STEP_MIN = 95
-const FRONT_STEP_RANGE = 90
-const FRONT_PLUME_CHANCE = 0.38
+const FRONT_STEP_MIN = 58
+const FRONT_STEP_RANGE = 52
+const FRONT_FERN_EXTRA_OFFSET = 34
+const FRONT_FERN_EXTRA_CHANCE = 0.62
+const FRONT_PLUME_CHANCE = 0.28
 const FRONT_FERN_HALF_W = 28
 const FRONT_PLUME_HALF_W = 14
 const FERN_SIZE_MIN = 42
@@ -81,7 +83,7 @@ export function create(cfg) {
     floorY,
     getOpacity,
     isSpotFree,
-    colors: buildPainterColors(GLOW_PAL.glowForestFloor),
+    colors: forestFloorPainterColors(),
     hill: { x1: hillX2 - HILL_HALF_W * 2, x2: hillX2, floorY, height: HILL_H },
     back: [],
     front: []
@@ -108,6 +110,15 @@ export function onDraw(inst, layer) {
     if (!isWorldSpanInView(chunk.baked.x, chunk.baked.x + chunk.baked.w, view)) return
     drawStaticDecorSprite(inst.k, chunk.baked, opacity)
   })
+}
+
+/**
+ * Painter colour contracts of the forest floor, shared with other ground
+ * pieces (the lake island) so their surface matches the right-side ground.
+ * @returns {Object} Colours keyed by painter (fern, plume, mushroom, spotted, tuft, hill, rim)
+ */
+export function forestFloorPainterColors() {
+  return buildPainterColors(GLOW_PAL.glowForestFloor)
 }
 //
 // Maps the flat glowForestFloor cfg block onto each painter's colour contract.
@@ -156,12 +167,18 @@ function buildBackItems(inst, rng, xMin, xMax) {
 }
 function buildFrontItems(inst, rng, xMin, xMax) {
   const items = []
-  for (let x = xMin + rng() * FRONT_STEP_MIN; x < xMax; x += FRONT_STEP_MIN + rng() * FRONT_STEP_RANGE) {
-    const isPlume = rng() < FRONT_PLUME_CHANCE
+  const tryFrontPlant = (x, forceFern = false) => {
+    const isPlume = !forceFern && rng() < FRONT_PLUME_CHANCE
     const halfW = isPlume ? FRONT_PLUME_HALF_W : FRONT_FERN_HALF_W
-    const size = isPlume ? PLUME_H_MIN + rng() * PLUME_H_RANGE : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
-    if (isInHill(inst, x, halfW) || !inst.isSpotFree(x, halfW)) continue
+    const size = isPlume
+      ? PLUME_H_MIN + rng() * PLUME_H_RANGE
+      : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE * (forceFern ? 0.92 : 1)
+    if (isInHill(inst, x, halfW) || !inst.isSpotFree(x, halfW)) return
     items.push({ kind: isPlume ? KIND.PLUME : KIND.FERN, x, size, seed: nextSeed(rng) })
+  }
+  for (let x = xMin + rng() * FRONT_STEP_MIN; x < xMax; x += FRONT_STEP_MIN + rng() * FRONT_STEP_RANGE) {
+    tryFrontPlant(x)
+    rng() < FRONT_FERN_EXTRA_CHANCE && tryFrontPlant(x + FRONT_FERN_EXTRA_OFFSET * (rng() < 0.5 ? -1 : 1), true)
   }
   return items
 }

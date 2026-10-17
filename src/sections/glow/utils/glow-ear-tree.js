@@ -9,13 +9,11 @@ import {
   rootSegmentsBounds
 } from './glow-static-bake.js'
 //
-// Small background trees whose branches end in red lips — branches grow from
-// the tapered trunk surface and lean toward the hero like the old ear trees,
-// while the lips themselves keep facing up.
+// Small background trees whose branches end in clusters of red leaves —
+// branches grow from the tapered trunk surface and stay at rest; only the
+// landing jolt (spiky tomato) rocks the whole tree.
 //
 const EAR_TREE_TRUNK_H_BASE = 104
-const EAR_TREE_TRIGGER_RADIUS = 280
-const EAR_TREE_REACH_EASE = 4
 const EAR_TREE_TRUNK_W_BASE = 9
 const EAR_TREE_BRANCH_COUNT_DEFAULT = 5
 const EAR_TREE_BRANCH_LEN_BASE = 52
@@ -25,14 +23,51 @@ const EAR_TREE_TRUNK_STEPS = 6
 const EAR_TREE_TRUNK_BASE_MULT = 1.05
 const EAR_TREE_TRUNK_TOP_MULT = 0.32
 const EAR_TREE_TRUNK_WOBBLE = 0.12
-const EAR_TREE_TRUNK_OUTLINE_PAD = 2
+const EAR_TREE_TRUNK_OUTLINE_PAD = 1
 const EAR_TREE_BRANCH_ATTACH_MULT = 0.85
-const EAR_TREE_TRUNK_TOP_RIM_W = 3
-const MOUTH_LEN = 30
-const MOUTH_HALF_H = 9
-const MOUTH_GAP = 3
-const MOUTH_OUTLINE_PAD = 1
-const MOUTH_REST_TILT = 0.35
+const EAR_TREE_TRUNK_TOP_RIM_W = 2
+//
+// Extra stroke on branch limbs beyond the bark width (outline pass draws wider).
+//
+const EAR_TREE_BRANCH_LIMB_OUTLINE_EXTRA = 1
+const EAR_TREE_BRANCH_TWIG_OUTLINE_EXTRA = 0.5
+const EAR_TREE_BRANCH_KNOT_OUTLINE_R = 0.5
+//
+// Red leaf clusters at branch and twig tips: each leaf is an asymmetric
+// pointed oval (local +x from stem to tip), two tones plus a dark rim and
+// midrib. Fan angles are offsets from the limb direction.
+//
+const LEAF_LEN = 15
+const LEAF_HALF_W = 6
+const LEAF_OUTLINE_PAD = 1
+const LEAF_MIDRIB_W = 1
+const LEAF_MIDRIB_FRAC = 0.82
+const LEAF_BRANCH_FAN = [-0.7, 0, 0.75]
+const LEAF_TWIG_FAN = [-0.45, 0.5]
+const LEAF_BRANCH_SCALE = 1
+const LEAF_TWIG_SCALE = 0.8
+const LEAF_UP_PULL = 0.35
+//
+// Leaf polygons in local space: stem at the origin, tip at +x = 1; the
+// upper half is a touch fuller than the lower one so leaves are not mirrored.
+//
+const LEAF_SHAPE = [
+  [0, 0],
+  [0.18, -0.62],
+  [0.42, -0.95],
+  [0.7, -0.78],
+  [1, 0],
+  [0.72, 0.62],
+  [0.45, 0.82],
+  [0.18, 0.5]
+]
+const LEAF_LIGHT_SHAPE = [
+  [0.06, -0.06],
+  [0.2, -0.56],
+  [0.43, -0.86],
+  [0.69, -0.7],
+  [0.92, -0.06]
+]
 //
 // Root fan at the base, same growTreeRootSegments algorithm the big glow
 // tree uses — generated once per tree at creation time and baked into a
@@ -47,12 +82,16 @@ const EAR_TREE_ROOT_MIN_DRAW_WIDTH = 0.85
 const EAR_TREE_ROOT_TIP_RADIUS = 0.55
 const EAR_TREE_ROOTS_BAKE_SLOT = 'earTreeRoots'
 const EAR_TREE_TRUNK_BAKE_SLOT = 'earTreeTrunk'
+//
+// Bump when trunk silhouette or outline width changes so live bakes refresh.
+//
+const EAR_TREE_TRUNK_BAKE_REV = 2
 const EAR_TREE_ROOTS_GRAIN_SEED = 0.37
 const EAR_TREE_TRUNK_GRAIN_SEED = 0.71
 //
-// Branch/twig/mouth reach past the trunk centre for camera culling.
+// Branch/twig/leaf reach past the trunk centre for camera culling.
 //
-const EAR_TREE_BRANCH_CULL_PAD = MOUTH_LEN + MOUTH_HALF_H
+const EAR_TREE_BRANCH_CULL_PAD = LEAF_LEN * 2
 //
 // Landing jolt — the whole tree rocks around its base with a decaying swing.
 //
@@ -91,7 +130,7 @@ export function create(cfg) {
     tree.rootSegs = buildEarTreeRoots(tree)
     return tree
   })
-  return { k, trees, mouthIndices: buildMouthIndices(k), branchBatch: PolyBatch.create() }
+  return { k, trees, leafIndices: buildLeafIndices(k), branchBatch: PolyBatch.create() }
 }
 //
 // Rest angles fan out above the trunk, alternating left/right with twigs.
@@ -127,7 +166,6 @@ function buildEarTreeBranches(tree) {
         baseY: forkBaseY,
         restAngle: forkAngle,
         len,
-        hasMouth: true,
         tipX: forkBaseX + Math.cos(forkAngle) * len,
         tipY: forkBaseY + Math.sin(forkAngle) * len
       })
@@ -138,8 +176,7 @@ function buildEarTreeBranches(tree) {
       restAngle,
       tipX,
       tipY,
-      twigs,
-      hasMouth: true
+      twigs
     })
   }
   return branches
@@ -225,14 +262,12 @@ function paintEarTreeRoots(ctx, segs, rootColor) {
 }
 
 /**
- * Eases branch and twig tips toward (or back from) the hero's position.
+ * Advances the landing-jolt timers of every tree.
  * @param {Object} inst - Ear-tree inst
- * @param {number} heroX - Hero world X
- * @param {number} heroY - Hero world Y
  * @param {number} dt - Frame delta
  */
-export function onUpdate(inst, heroX, heroY, dt) {
-  inst.trees.forEach(tree => updateEarTree(tree, heroX, heroY, dt))
+export function onUpdate(inst, dt) {
+  inst.trees.forEach(tree => updateEarTree(tree, dt))
 }
 
 /**
@@ -298,15 +333,15 @@ export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor, opacity = 
 }
 
 /**
- * Draws branches and lip mouths only (trunks are on a lower overlay z).
+ * Draws branches and their red leaf clusters (trunks are on a lower overlay z).
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for branches
- * @param {Object} outlineColor - Kaplay rgb for outlines
- * @param {Object} lipColor - Kaplay rgb for lip fill
+ * @param {Object} outlineColor - Kaplay rgb for limb outlines
+ * @param {{base: Object, light: Object, vein: Object}} leafColors - Kaplay rgb leaf tones
  * @param {number} [opacity=1] - Reveal fade
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDrawBranches(inst, barkColor, outlineColor, lipColor, opacity = 1, view = null) {
+export function onDrawBranches(inst, barkColor, outlineColor, leafColors, opacity = 1, view = null) {
   const batch = inst.branchBatch
   PolyBatch.reset(batch)
   inst.trees.forEach(tree => {
@@ -317,51 +352,19 @@ export function onDrawBranches(inst, barkColor, outlineColor, lipColor, opacity 
     tree.drawCos = Math.cos(angle)
     tree.drawSin = Math.sin(angle)
     tree.branches.forEach(branch =>
-      addEarBranch(batch, inst.mouthIndices, tree, branch, barkColor, outlineColor, lipColor))
+      addEarBranch(batch, inst.leafIndices, tree, branch, barkColor, outlineColor, leafColors))
   })
   PolyBatch.flush(batch, inst.k, opacity)
 }
-function updateEarTree(tree, heroX, heroY, dt) {
+function updateEarTree(tree, dt) {
   tree.shakeT > 0 && (tree.shakeT = Math.max(0, tree.shakeT - dt))
-  const ease = Math.min(1, dt * EAR_TREE_REACH_EASE)
-  const branchLen = tree.branchLen
-  tree.branches.forEach(branch => {
-    const restTipX = branch.baseX + Math.cos(branch.restAngle) * branchLen
-    const restTipY = branch.baseY + Math.sin(branch.restAngle) * branchLen
-    const dx = heroX - branch.baseX
-    const dy = heroY - branch.baseY
-    const dist = Math.hypot(dx, dy) || 1
-    const reachT = Math.max(0, 1 - dist / EAR_TREE_TRIGGER_RADIUS)
-    const towardX = branch.baseX + (dx / dist) * branchLen
-    const towardY = branch.baseY + (dy / dist) * branchLen
-    const targetX = restTipX + (towardX - restTipX) * reachT
-    const targetY = restTipY + (towardY - restTipY) * reachT
-    branch.tipX += (targetX - branch.tipX) * ease
-    branch.tipY += (targetY - branch.tipY) * ease
-    branch.twigs?.forEach(twig => {
-      twig.baseX = branch.baseX + (branch.tipX - branch.baseX) * twig.forkT
-      twig.baseY = branch.baseY + (branch.tipY - branch.baseY) * twig.forkT
-      const restTwigX = twig.baseX + Math.cos(twig.restAngle) * twig.len
-      const restTwigY = twig.baseY + Math.sin(twig.restAngle) * twig.len
-      const twigDx = heroX - twig.baseX
-      const twigDy = heroY - twig.baseY
-      const twigDist = Math.hypot(twigDx, twigDy) || 1
-      const twigTowardX = twig.baseX + (twigDx / twigDist) * twig.len * 0.85
-      const twigTowardY = twig.baseY + (twigDy / twigDist) * twig.len * 0.85
-      const tX = restTwigX + (twigTowardX - restTwigX) * reachT
-      const tY = restTwigY + (twigTowardY - restTwigY) * reachT
-      twig.tipX = twig.tipX ?? restTwigX
-      twig.tipY = twig.tipY ?? restTwigY
-      twig.tipX += (tX - twig.tipX) * ease
-      twig.tipY += (tY - twig.tipY) * ease
-    })
-  })
 }
 //
 // Static trunk blit — baked once per bark/outline colour pair.
 //
 function drawEarTreeTrunk(k, tree, barkColor, outlineColor, opacity, view) {
-  const baked = ensureStaticDecorSprite(k, tree, EAR_TREE_TRUNK_BAKE_SLOT, colorKey(barkColor, outlineColor),
+  const baked = ensureStaticDecorSprite(k, tree, EAR_TREE_TRUNK_BAKE_SLOT,
+    `${colorKey(barkColor, outlineColor)}-r${EAR_TREE_TRUNK_BAKE_REV}`,
     trunkBounds(tree), ctx => paintEarTreeTrunk(ctx, tree, barkColor, outlineColor),
     tree.x * EAR_TREE_TRUNK_GRAIN_SEED)
   if (!baked || !isWorldSpanInView(baked.x, baked.x + baked.w, view)) return
@@ -463,87 +466,69 @@ function trunkEdgeAtStep(tree, pad, i) {
   return { left: tree.x - halfW + wobble, right: tree.x + halfW + wobble, y }
 }
 //
-// Queues one branch (base knot, limb, twigs, lips) into the layer batch in
-// the same back-to-front order the separate draw calls used.
+// Queues one branch (base knot, limb, twigs, leaves) into the layer batch in
+// back-to-front order.
 //
-function addEarBranch(batch, mouthIndices, tree, branch, barkColor, outlineColor, lipColor) {
+function addEarBranch(batch, leafIndices, tree, branch, barkColor, outlineColor, leafColors) {
   const limbW = Math.max(3, tree.trunkW * 0.42)
   const bx = swingX(tree, branch.baseX, branch.baseY)
   const by = swingY(tree, branch.baseX, branch.baseY)
   const tx = swingX(tree, branch.tipX, branch.tipY)
   const ty = swingY(tree, branch.tipX, branch.tipY)
-  PolyBatch.addDisc(batch, bx, by, limbW * 0.55 + 1, outlineColor)
+  PolyBatch.addDisc(batch, bx, by, limbW * 0.55 + EAR_TREE_BRANCH_KNOT_OUTLINE_R, outlineColor)
   PolyBatch.addDisc(batch, bx, by, limbW * 0.45, barkColor)
-  PolyBatch.addLine(batch, bx, by, tx, ty, limbW + 2, outlineColor)
+  PolyBatch.addLine(batch, bx, by, tx, ty, limbW + EAR_TREE_BRANCH_LIMB_OUTLINE_EXTRA, outlineColor)
   PolyBatch.addLine(batch, bx, by, tx, ty, limbW, barkColor)
   branch.twigs?.forEach(twig => {
     const wbx = swingX(tree, twig.baseX, twig.baseY)
     const wby = swingY(tree, twig.baseX, twig.baseY)
     const wtx = swingX(tree, twig.tipX, twig.tipY)
     const wty = swingY(tree, twig.tipX, twig.tipY)
-    PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.55 + 1, outlineColor)
+    PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.55 + EAR_TREE_BRANCH_TWIG_OUTLINE_EXTRA, outlineColor)
     PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.5, barkColor)
-    twig.hasMouth && addMouth(batch, mouthIndices, wtx, wty, mouthUpAngle(tree, twig.restAngle), outlineColor, lipColor)
+    addLeafCluster(batch, leafIndices, wtx, wty, Math.atan2(wty - wby, wtx - wbx), LEAF_TWIG_FAN, LEAF_TWIG_SCALE, leafColors)
   })
-  branch.hasMouth && addMouth(batch, mouthIndices, tx, ty, mouthUpAngle(tree, branch.restAngle), outlineColor, lipColor)
+  addLeafCluster(batch, leafIndices, tx, ty, Math.atan2(ty - by, tx - bx), LEAF_BRANCH_FAN, LEAF_BRANCH_SCALE, leafColors)
 }
 //
-// Lips open toward the sky like flower cups: mostly straight up, keeping a
-// little of the limb's rest tilt, never following the limb's reach toward
-// the hero. The landing jolt still rocks them with the tree.
+// Fans a few leaves around the limb direction, pulled slightly upward so the
+// cluster reads as a crown, not as spikes continuing the limb.
 //
-function mouthUpAngle(tree, restAngle) {
-  return -Math.PI / 2 + (restAngle + Math.PI / 2) * MOUTH_REST_TILT + (tree.drawAngle || 0)
+function addLeafCluster(batch, leafIndices, x, y, limbAngle, fan, scale, leafColors) {
+  const upAngle = limbAngle + angleDelta(limbAngle, -Math.PI / 2) * LEAF_UP_PULL
+  fan.forEach(offset => addLeaf(batch, leafIndices, x, y, upAngle + offset, scale, leafColors))
 }
 //
-// Upper and lower lip polygons in local mouth space (+x along the branch).
+// Signed shortest rotation from angle a to angle b.
 //
-const MOUTH_UPPER_LIP = [
-  [-0.5, -0.15],
-  [-0.35, -0.55],
-  [-0.08, -0.72],
-  [0.2, -0.68],
-  [0.45, -0.42],
-  [0.5, -0.12],
-  [0.35, -0.05],
-  [-0.35, -0.05]
-]
-const MOUTH_LOWER_LIP = [
-  [-0.42, 0.08],
-  [-0.2, 0.42],
-  [0.15, 0.55],
-  [0.42, 0.38],
-  [0.48, 0.12],
-  [0.2, 0.06],
-  [-0.25, 0.06]
-]
+function angleDelta(a, b) {
+  return Math.atan2(Math.sin(b - a), Math.cos(b - a))
+}
 //
-// Lip shapes only ever rotate and scale (positive, per axis), which keeps any
-// valid triangulation valid — so ear-clipping runs once at create time
-// instead of on every one of the ~60 lip polygons each frame.
+// Leaf shapes only ever rotate and scale (positive, per axis), which keeps a
+// valid triangulation valid — ear-clipping runs once at create time.
 //
-function buildMouthIndices(k) {
+function buildLeafIndices(k) {
   return {
-    upper: triangulateMouthShape(k, MOUTH_UPPER_LIP),
-    lower: triangulateMouthShape(k, MOUTH_LOWER_LIP)
+    leaf: triangulateLeafShape(k, LEAF_SHAPE),
+    light: triangulateLeafShape(k, LEAF_LIGHT_SHAPE)
   }
 }
-function triangulateMouthShape(k, shape) {
-  const pts = shape.map(([lx, ly]) => k.vec2(lx * MOUTH_LEN, ly * MOUTH_HALF_H))
+function triangulateLeafShape(k, shape) {
+  const pts = shape.map(([lx, ly]) => k.vec2(lx * LEAF_LEN, ly * LEAF_HALF_W))
   return k.triangulate(pts).flatMap(tri => tri.map(p => pts.indexOf(p)))
 }
-function addMouth(batch, mouthIndices, tipX, tipY, angle, outlineColor, lipColor) {
+//
+// Dark rim (same shape scaled outward), body, lit upper half, midrib.
+//
+function addLeaf(batch, leafIndices, x, y, angle, scale, leafColors) {
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
-  const outlineW = MOUTH_LEN + MOUTH_OUTLINE_PAD
-  const outlineH = MOUTH_HALF_H + MOUTH_OUTLINE_PAD
-  //
-  // Outline drawn first as the same shape scaled slightly outward from the
-  // attach point (same cheap technique the old ear silhouette used) — a
-  // uniform one-pixel-ish rim around each lip, no separate stroke pass needed.
-  //
-  PolyBatch.addShape(batch, MOUTH_UPPER_LIP, mouthIndices.upper, tipX, tipY, outlineW, outlineH, cos, sin, outlineColor)
-  PolyBatch.addShape(batch, MOUTH_LOWER_LIP, mouthIndices.lower, tipX, tipY, outlineW, outlineH, cos, sin, outlineColor)
-  PolyBatch.addShape(batch, MOUTH_UPPER_LIP, mouthIndices.upper, tipX, tipY, MOUTH_LEN, MOUTH_HALF_H, cos, sin, lipColor)
-  PolyBatch.addShape(batch, MOUTH_LOWER_LIP, mouthIndices.lower, tipX, tipY, MOUTH_LEN, MOUTH_HALF_H, cos, sin, lipColor)
+  const len = LEAF_LEN * scale
+  const halfW = LEAF_HALF_W * scale
+  PolyBatch.addShape(batch, LEAF_SHAPE, leafIndices.leaf, x, y, len + LEAF_OUTLINE_PAD * 2, halfW + LEAF_OUTLINE_PAD, cos, sin, leafColors.vein)
+  PolyBatch.addShape(batch, LEAF_SHAPE, leafIndices.leaf, x, y, len, halfW, cos, sin, leafColors.base)
+  PolyBatch.addShape(batch, LEAF_LIGHT_SHAPE, leafIndices.light, x, y, len, halfW, cos, sin, leafColors.light)
+  const ribLen = len * LEAF_MIDRIB_FRAC
+  PolyBatch.addLine(batch, x, y, x + cos * ribLen, y + sin * ribLen, LEAF_MIDRIB_W, leafColors.vein)
 }

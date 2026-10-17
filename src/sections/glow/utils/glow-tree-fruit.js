@@ -1,7 +1,6 @@
 import { CFG } from '../../../cfg.js'
-import { GLOW_PAL, getTreePaletteColor, glowRgb, isGlowGrayWorld } from './glow-palette.js'
+import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
-import { glowTreeLeafKey, isGlowTreeRootsSegmentId } from './glow-tree-segments.js'
 
 //
 // Decorative canopy fruit on the main glow tree (Otterisk palette only).
@@ -83,23 +82,6 @@ export function computeGlowAnchorFruitDropX(cfg) {
 }
 
 /**
- * Builds fruit spots once the full tree zone is open (after third branch landing).
- * @param {Object} levelInst - Glow level inst (treeData, treeFruitAnchorCfg, zones)
- */
-export function ensureGlowTreeFruitSpots(levelInst) {
-  if (levelInst.treeFruitSpotsBuilt) return
-  if (!levelInst.treeData || !levelInst.zones?.eyesCollected) return
-  if (!isGlowTreeCrownRevealed(levelInst)) return
-  //
-  // One build per scene run, even when it yields no spots or every fruit is
-  // later eaten — the build paints the whole crown into a canvas and reads it
-  // back, so a per-frame retry drops Glow to ~16 FPS.
-  //
-  levelInst.treeFruitSpotsBuilt = true
-  levelInst.treeFruitSpots = buildGlowTreeFruitSpots(levelInst.treeData, levelInst.treeFruitAnchorCfg)
-}
-
-/**
  * Builds fruit attachment points (repeatable anchor on foliage + random canopy spots).
  * @param {Object} treeData - Output from buildGlowTree()
  * @param {Object} anchorDropCfg - Trunk/tramp layout for anchor cluster pick
@@ -128,7 +110,6 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   const spots = anchorPick ? [{
     anchor: true,
     attached: true,
-    leafKey: glowTreeLeafKey(anchorLeaf),
     x: anchorPick.pos.x,
     y: anchorPick.pos.y,
     r: anchorR,
@@ -150,7 +131,6 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
       pool.splice(idx, 1)
       spots.push({
         attached: true,
-        leafKey: glowTreeLeafKey(foliage),
         x: pos.x,
         y: pos.y,
         r,
@@ -194,7 +174,6 @@ export function releaseGlowAnchorFruit(levelInst) {
  * @param {number} floorY - Ground surface Y
  */
 export function tickGlowTreeFruits(levelInst, dt, floorY) {
-  if (!levelInst.zones?.eyesCollected) return
   const spots = levelInst.treeFruitSpots
   if (!spots?.length || floorY == null) return
   const now = levelInst.k?.time?.() ?? 0
@@ -247,20 +226,15 @@ export function mountGlowTreeFruitLayer(k, levelInst) {
  */
 export function drawGlowTreeFruits(inst) {
   const spots = inst.treeFruitSpots
-  if (!spots?.length || !isGlowTreeFruitVisible(inst)) return
+  if (!spots?.length) return
   const k = inst.k
-  const fade = inst.colorFade ?? 0
-  const gray = isGlowGrayWorld(inst.zones)
-  const flat = !gray && !inst.zones?.tree && fade < 0.08
-  const bodyA = gray ? glowRgb(GLOW_PAL.decorGray) : glowRgb('glowLightCore')
-  const bodyB = gray ? glowRgb(GLOW_PAL.lightGray) : glowRgb(GLOW_PAL.mushroomsLight[0])
-  const stem = glowRgb(gray ? GLOW_PAL.decorGray : GLOW_PAL.treeColor.root)
-  const baseOp = gray ? 0.5 : flat ? 0.45 : Math.min(1, 0.55 + fade * 0.45)
+  const bodyA = glowRgb('glowLightCore')
+  const bodyB = glowRgb(GLOW_PAL.mushroomsLight[0])
+  const stem = glowRgb(GLOW_PAL.treeColor.root)
   spots.forEach(fruit => {
     if (fruit.removed) return
     if (fruit.feastDrawHidden) return
-    let op = baseOp
-    fruit.attached && (op *= Math.min(1, fruit.hostOpacity ?? 1))
+    let op = 1
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
     if (op <= 0.02) return
     const t = fruit.hue ?? 0.5
@@ -269,7 +243,7 @@ export function drawGlowTreeFruits(inst) {
     const stemCol = k.rgb(stem.r, stem.g, stem.b)
     const leaves = fruit.leaves ?? []
     leaves.forEach(leaf => {
-      const leafRgb = leafRgbFromShadeIdx(leaf.shadeIdx, gray)
+      const leafRgb = leafRgbFromShadeIdx(leaf.shadeIdx)
       const lx = fruit.x + leaf.dx
       const ly = fruit.y + leaf.dy
       drawFruitLeaf(k, lx, ly, leaf.len, leaf.angle, leafRgb, op * 0.95)
@@ -630,11 +604,7 @@ function makeFruitLeafPair(seed, fruitR, rng, hue) {
   ]
 }
 
-function leafRgbFromShadeIdx(shadeIdx, grayExplore = false) {
-  if (grayExplore) {
-    const i = ((shadeIdx ?? 0) % 2 + 2) % 2
-    return glowRgb(i === 0 ? GLOW_PAL.decorGray : GLOW_PAL.lightGray)
-  }
+function leafRgbFromShadeIdx(shadeIdx) {
   const shades = GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]
   const i = ((shadeIdx ?? 0) % shades.length + shades.length) % shades.length
   return glowRgb(shades[i])
@@ -728,22 +698,6 @@ function drawFruitLeaf(k, x, y, size, angle, rgb, op) {
     rot(size * 0.62, -size * 0.32)
   ]
   k.drawPolygon({ pts, color: k.rgb(rgb.r, rgb.g, rgb.b), opacity: op })
-}
-
-function isGlowTreeCrownRevealed(inst) {
-  if (!inst) return false
-  if (inst.zones?.tree) return true
-  const ids = inst.treeSegmentIds
-  if (!ids?.length) return false
-  return ids
-    .filter(id => !isGlowTreeRootsSegmentId(id))
-    .every(id => inst.treeSegmentRevealed?.has(id))
-}
-
-function isGlowTreeFruitVisible(inst) {
-  if (!inst.zones?.eyesCollected || !inst.treeFruitSpots?.length) return false
-  if (isGlowTreeCrownRevealed(inst)) return true
-  return inst.treeFruitSpots.some(f => !f.removed && !f.attached)
 }
 
 function lerpRgb(a, b, t) {

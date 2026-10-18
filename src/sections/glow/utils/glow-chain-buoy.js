@@ -47,6 +47,10 @@ const BUOY_BLINK_LID_SPAN = 0.85 // Closed-lid stroke half-length (× eye radius
 const BUOY_BLINK_MIN_INTERVAL = 10
 const BUOY_BLINK_MAX_INTERVAL = 20
 const BUOY_BLINK_DURATION = 0.14
+//
+// Hero landed on the eye cap — hold the lid closed briefly before reopening.
+//
+const BUOY_LAND_BLINK_HOLD_SEC = 0.3
 const BUOY_SIDE_ARM_LEN_MULT = 2.6
 const BUOY_SIDE_ARM_DROP = 0.35
 const BUOY_SIDE_BALL_RADIUS_MULT = 0.95
@@ -91,6 +95,7 @@ export function create(cfg) {
       pupilRadius: spot.pupilRadius,
       blinking: false,
       blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL),
+      wasHeroOnCap: false,
       rootSegs: buildBuoyRoots(spot.x, spot.groundY, segmentWidth)
     }
   })
@@ -116,6 +121,15 @@ export function onUpdate(inst, heroX, heroY, dt) {
   inst.lookX = heroX
   inst.lookY = heroY
   inst.buoys.forEach(buoy => updateBuoyBlink(buoy, dt))
+}
+/**
+ * Closes a stalk-eye for BUOY_LAND_BLINK_HOLD_SEC (hero landed on its cap).
+ * @param {Object} buoy - One chain-buoy entry
+ */
+export function triggerBuoyLandBlink(buoy) {
+  if (!buoy) return
+  buoy.blinking = true
+  buoy.blinkTimer = BUOY_LAND_BLINK_HOLD_SEC
 }
 
 /**
@@ -274,11 +288,15 @@ function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
     return
   }
   const scleraR = buoy.eyeRadius ?? BUOY_EYE_RADIUS
-  PolyBatch.addDisc(batch, eye.x, eye.y, scleraR + contourExtra, colors.contour)
+  //
+  // Closed lid matches the stalk ink (body), not the sclera ring contour.
+  //
+  const lidColor = colors.body
+  PolyBatch.addDisc(batch, eye.x, eye.y, scleraR + contourExtra, lidColor)
   PolyBatch.addLine(batch,
     eye.x - scleraR * BUOY_BLINK_LID_SPAN, eye.y,
     eye.x + scleraR * BUOY_BLINK_LID_SPAN, eye.y,
-    BUOY_BLINK_LID_LINE_WIDTH, colors.contour)
+    BUOY_BLINK_LID_LINE_WIDTH, lidColor)
 }
 //
 // Clamps the pupil inside the sclera so it always points at the hero.

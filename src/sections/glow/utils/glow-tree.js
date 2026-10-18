@@ -501,7 +501,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     const rootRgb = { r: rootR, g: rootG, b: rootB }
     if (palette.flatSilhouette) {
       drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
-    } else if (palette.woodMassStyle) {
+    } else if (palette.woodMassStyle || palette.simpleRoots) {
       drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
     } else {
       const rootContourRgb = scaleRgbBrightness(rootRgb, 1 - ROOT_CONTOUR_DARKEN)
@@ -570,6 +570,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       drawFilledWoodSegment(ctx, seg, woodRgbForBranchSeg(seg, trunkRgb, branchRgb), trunkClipY)
     })
     if (!woodMass) {
+      drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
       drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
       drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
@@ -585,6 +586,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     if (!woodMass) {
       drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
       drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
+      drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
       drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
       drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
@@ -604,6 +606,23 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   treeData.leaves.forEach(item => {
     drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, foliageCellPx)
   })
+}
+
+/**
+ * Shared gameplay bark on a trunk segment chain (big trees, lip-trees).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Array<Object>} segs - Trunk segments { sx, sy, ex, ey, w, w2? }
+ * @param {number} seed - Per-tree bake seed
+ * @param {number} clipY - Ground clip Y
+ * @param {{ dark: Object, highlight: Object }} barkShades
+ */
+export function paintGlowGameplayBarkOnTrunk(ctx, segs, seed, clipY, barkShades) {
+  if (!segs?.length || !barkShades) return
+  const dark = barkShades.dark
+  const highlight = barkShades.highlight
+  drawWoodShading(ctx, segs, dark, clipY)
+  drawTrunkBark(ctx, segs, dark, highlight, seed, clipY)
+  drawTrunkCracks(ctx, segs, dark, seed + 991, clipY)
 }
 
 //

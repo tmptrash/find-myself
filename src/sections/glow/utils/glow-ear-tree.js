@@ -8,6 +8,8 @@ import {
   isWorldSpanInView,
   rootSegmentsBounds
 } from './glow-static-bake.js'
+import { getGlowGameplayTreeBarkShades } from './glow-palette.js'
+import { paintGlowGameplayBarkOnTrunk } from './glow-tree.js'
 //
 // Small background trees whose branches end in clusters of red leaves —
 // branches grow from the tapered trunk surface and stay at rest; only the
@@ -85,7 +87,7 @@ const EAR_TREE_TRUNK_BAKE_SLOT = 'earTreeTrunk'
 //
 // Bump when trunk silhouette or outline width changes so live bakes refresh.
 //
-const EAR_TREE_TRUNK_BAKE_REV = 2
+const EAR_TREE_TRUNK_BAKE_REV = 3
 const EAR_TREE_ROOTS_GRAIN_SEED = 0.37
 const EAR_TREE_TRUNK_GRAIN_SEED = 0.71
 //
@@ -411,6 +413,33 @@ function paintEarTreeTrunk(ctx, tree, barkColor, outlineColor) {
   fillTrunkOutline(ctx, tree, EAR_TREE_TRUNK_OUTLINE_PAD, outlineColor)
   fillTrunkOutline(ctx, tree, 0, barkColor)
   paintTrunkTopRim(ctx, tree, outlineColor)
+  const segs = buildEarTreeTrunkSegs(tree)
+  paintGlowGameplayBarkOnTrunk(
+    ctx,
+    segs,
+    (tree.seed + tree.x * 0.17) | 0,
+    tree.groundY,
+    getGlowGameplayTreeBarkShades()
+  )
+}
+//
+// Tapered trunk as a segment chain for the shared glow-tree bark pass.
+//
+function buildEarTreeTrunkSegs(tree) {
+  const segs = []
+  for (let i = 0; i < EAR_TREE_TRUNK_STEPS; i++) {
+    const e0 = trunkEdgeAtStep(tree, 0, i)
+    const e1 = trunkEdgeAtStep(tree, 0, i + 1)
+    segs.push({
+      sx: (e0.left + e0.right) * 0.5,
+      sy: e0.y,
+      ex: (e1.left + e1.right) * 0.5,
+      ey: e1.y,
+      w: e0.right - e0.left,
+      w2: e1.right - e1.left
+    })
+  }
+  return segs
 }
 function fillTrunkOutline(ctx, tree, pad, color) {
   ctx.fillStyle = cssRgb(color)

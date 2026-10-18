@@ -459,7 +459,7 @@ const parallaxOffscreenByK = new WeakMap()
 // Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
 //
-const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v5'
+const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v7'
 const TREE_COLOR_GRAIN_SEED = 6002
 //
 // Horizontal branch platform.

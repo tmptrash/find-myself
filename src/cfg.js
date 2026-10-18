@@ -556,6 +556,13 @@ export const CFG = {
         // Colour-world main tree: dark brown wood with juicy green foliage —
         // matches the foreground trees of the reference forest picture.
         //
+        //
+        // Grooves / highlights for the two gameplay brown trees (main + shore).
+        //
+        glowTreeBark: {
+          groove: PALETTE.brown0,
+          highlight: PALETTE.brown3
+        },
         treeColor: {
           root: PALETTE.rose0,
           trunk: PALETTE.rose1,

@@ -172,11 +172,34 @@ export function getTreePaletteColor() {
  * @param {string} parallaxCornerKey
  * @returns {Object}
  */
+/**
+ * Groove / highlight tones for gameplay-tree bark (main, shore, lip-trees).
+ * @returns {{ dark: { r: number, g: number, b: number }, highlight: { r: number, g: number, b: number } }}
+ */
+export function getGlowGameplayTreeBarkShades() {
+  const bark = GLOW_PAL.glowTreeBark
+  return {
+    dark: glowRgb(bark.groove),
+    highlight: glowRgb(bark.highlight)
+  }
+}
+
 export function getTreePaletteColorForCorner(parallaxCornerKey) {
-  return getTreePaletteWithNearParallaxFoliage(
-    getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor),
-    parallaxCornerKey
-  )
+  return {
+    ...getTreePaletteWithNearParallaxFoliage(
+      getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor),
+      parallaxCornerKey
+    ),
+    //
+    // Gameplay trees keep full bark passes; parallax rows stay flat (woodMassStyle).
+    //
+    woodMassStyle: false,
+    //
+    // Roots stay the old flat mass stroke; trunk/branch keep detailed bark.
+    //
+    simpleRoots: true,
+    barkShades: getGlowGameplayTreeBarkShades()
+  }
 }
 
 /**

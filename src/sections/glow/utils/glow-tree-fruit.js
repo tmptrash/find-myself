@@ -3,7 +3,7 @@ import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 
 //
-// Decorative canopy fruit on the main glow tree (Otterisk palette only).
+// Decorative canopy fruit on the main glow tree (game palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
 const FRUIT_RANDOM_COUNT = 17

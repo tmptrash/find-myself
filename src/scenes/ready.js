@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor, parseHex, bindStartGameKeys } from '../utils/helper.js'
+import { parseHex, bindStartGameKeys } from '../utils/helper.js'
 import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
@@ -53,12 +53,11 @@ let HINT_Y = CFG.visual.screen.height - HINT_BOTTOM_MARGIN
 // Crawling letter title — centred at the very top of the canvas,
 // well above the central monster illustration.
 //
-const INSTRUCTIONS_TITLE = 'find yourself'
+const INSTRUCTIONS_TITLE = 'rootward'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
 //
-// Scaled up from the original 76px so the hero-size:font-size ratio stays
-// exactly what it was before the title heroes moved to their native 96px
-// bake resolution (was 80px): 76 * (96 / 80) = 91.2.
+// Keeps the glyph-to-hero size ratio of the original 76px title at the
+// hero's native 96px bake resolution: 76 * (96 / 80) = 91.2.
 //
 const TITLE_FONT_SIZE = 91.2
 //
@@ -90,10 +89,6 @@ const TITLE_OUTLINE_OFFSETS = [
 //
 const READY_LETTER_CANVAS_SIZE = Math.ceil(TITLE_FONT_SIZE * 1.5)
 const READY_LETTER_CANVAS_CENTER = READY_LETTER_CANVAS_SIZE / 2
-//
-// Minimum time after load before the two title heroes fall to the ground.
-//
-const TITLE_HERO_FALL_BASE_DELAY = 7.0
 const TITLE_FLICKER_SPEED = 1.5
 const TITLE_FLICKER_MIN = 0.7
 const TITLE_FLICKER_MAX = 1.0
@@ -317,104 +312,29 @@ const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 //
 const ANTIHERO_READY_BODY_COLOR = '#E07020'
 //
-// Index of 'n' in "find yourself" — replaced by the hero sprite.
-//
-const HERO_N_CHAR_INDEX = 2
-//
-// Index of 'u' in "yourself" — replaced by an upside-down hero sprite
-//
-const HERO_U_CHAR_INDEX = 7
-//
-// Rendered size of the title heroes ('n' and 'u') — matches the hero's
-// native 96px bake resolution (HERO_SPRITE_CANVAS_SIZE further down) for a
-// true 1:1 pixel scale, no up/downscaling blur.
+// Lone hero rendered at its native 96px bake resolution (1:1 pixel scale).
+// It stands on the ground line just right of the centre eye, in one fixed
+// body colour for the whole scene (no section-colour reveal).
 //
 const HERO_N_SPRITE_SIZE = 96
-//
-// Offset applied to hero-n position so it sits visually inside the title word
-//
-const HERO_N_OFFSET_X = 1
-const HERO_N_OFFSET_Y = 1
-//
-// Offsets for the flipped hero-u: shifted left of the char cell. Y is
-// recomputed once fonts are ready (see measureReadyGlyphBottomFromCenter)
-// so the hero's bottom edge lines up with the bottom of the 'r' right
-// after it in "yourself", plus a small extra visual drop — the font
-// metric alone still reads a bit high against the actual letter baseline.
-//
-const HERO_U_OFFSET_X = 0
-const HERO_U_OFFSET_Y_VISUAL_DROP = 18
-let HERO_U_OFFSET_Y = 6
-//
-// Title heroes share the exact colour of the title letters so they read
-// as part of the word rather than separate characters.
-//
-const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
-//
-// Outline-only bake — hollow moon-tone contour, no body fill, no eyes,
-// matching the letter contour. Both title heroes use this in the title
-// cell; the stayer ('n') keeps it forever, the runner ('u') keeps it for
-// its first few steps after falling.
-//
-const HERO_TITLE_OUTLINE_COLOR = CFG.visual.colors.ready.moon
-const HERO_TITLE_OUTLINE_BAKE_OPTS = {
+const HERO_WATCH_GAP_X = 40
+const HERO_BODY_COLOR = CFG.visual.colors.palette.heroBodyGray
+const HERO_BAKE_OPTS = {
   type: HEROES.HERO,
-  bodyColor: HERO_TITLE_BODY_COLOR,
-  outlineColor: HERO_TITLE_OUTLINE_COLOR,
-  outlineOnly: true,
-  transparentEyeInterior: true,
-  noEyes: true
-}
-const HERO_N_SPRITE_PREFIX_OUTLINE = buildHeroSpritePrefix(HERO_TITLE_OUTLINE_BAKE_OPTS)
-//
-// Tintable filled bake — plain white body fill + black outline + normal
-// (white/black) eyes. Drawn with a `color` tint (multiplies the sprite's
-// texture colour, so the white fill becomes the tint while the black
-// outline and pupils stay black) to smoothly recolour the runner's body
-// through the menu's section colours once it is revealed.
-//
-const HERO_TITLE_TINTABLE_BAKE_OPTS = {
-  type: HEROES.HERO,
-  bodyColor: CFG.visual.colors.hero.eyeWhite,
+  bodyColor: HERO_BODY_COLOR,
   outlineColor: CFG.visual.colors.outline,
   noEyes: true
 }
-const HERO_N_SPRITE_PREFIX_TINTABLE = buildHeroSpritePrefix(HERO_TITLE_TINTABLE_BAKE_OPTS)
+const HERO_N_SPRITE_PREFIX = buildHeroSpritePrefix(HERO_BAKE_OPTS)
 //
-// Section colours the runner's body tints through once revealed, in the
-// same clockwise order the menu orbits them (see SECTION_COLORS / sectionOrder
-// in menu.js) — advances one step per running burst, holding at the last one.
-//
-const HERO_N_SECTION_COLOR_SEQUENCE = [
-  CFG.visual.colors.sections.glow.body,
-  CFG.visual.colors.sections.touch.body,
-  CFG.visual.colors.sections.word.body,
-  CFG.visual.colors.sections.time.body,
-  CFG.visual.colors.sections.feel.body,
-  CFG.visual.colors.sections.mind.body
-]
-const HERO_N_SECTION_COLOR_FADE_DURATION = 1.4
-//
-// Footsteps the runner takes, still hollow and eyeless, before its eyes and
-// first section colour start fading in.
-//
-const HERO_N_COLOR_REVEAL_STEP_COUNT = 2
-const HERO_N_BODY_REVEAL_DURATION = 1.2
-//
-// Title hero departure sequence. Once the letters start growing legs AND the
-// mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, BOTH title heroes
-// fall to the black ground line. The right-hand hero ('u') then stands up
-// and runs off-screen right in short bursts (a RANDOM 4–8 steps each, then a
-// stop) — any mouse movement while it is on the ground freezes it in a
-// closed-eyes idle until the mouse rests again. The left-hand hero ('n')
-// simply stays put and fades out in step with the runner's progress toward
-// the right edge (see updateReadyDepartureFade). These constants keep the
-// historic "N" naming from when the left hero used to be the one that ran
-// away; updateTitleHeroes now routes them to whichever spider is flagged
-// isHeroU.
+// Departure sequence. The hero watches the eye until the input has rested
+// for HERO_N_MOUSE_STILL_DELAY seconds, then walks off-screen right in short
+// bursts (a RANDOM 4–8 steps each, then a stop) — any mouse movement while
+// it walks freezes it in a closed-eyes idle until the input rests again.
+// Everything except the eye fades with its progress toward the right edge
+// (see updateReadyDepartureFade).
 //
 const HERO_N_MOUSE_STILL_DELAY = 10
-const HERO_N_FALL_GRAVITY = 1500
 const HERO_N_RUN_SPEED = 42
 const HERO_N_RUN_FRAME_TIME = 0.09
 const HERO_N_RUN_FRAME_COUNT = 8
@@ -471,10 +391,10 @@ const HERO_EYE_PUPIL_RADIUS = 2
 const HERO_EYE_PUPIL_SHIFT = 2
 //
 // Now drawn at the native 96px bake resolution (see HERO_N_SPRITE_SIZE),
-// the same scale as the central illustration hero, so the title heroes
-// reuse its HERO_FEET_PADDING for the same feet-on-the-ground-line fix.
-// Lifted an extra few pixels above that so both heroes stand a bit clear
-// of the ground line while walking/standing on it.
+// the same scale as the central illustration hero, so the lone hero
+// reuses its HERO_FEET_PADDING for the same feet-on-the-ground-line fix.
+// Lifted an extra few pixels above that so it stands a bit clear of the
+// ground line while walking/standing on it.
 //
 const HERO_N_GROUND_LIFT_PX = 3
 let HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING - HERO_N_SPRITE_SIZE / 2 - HERO_N_GROUND_LIFT_PX
@@ -582,13 +502,6 @@ export function sceneReady(k) {
       try { await document.fonts.ready } catch {}
     }
     //
-    // Right title hero's bottom edge lines up with the bottom of the 'r'
-    // right after it in "yourself" — a font metric, so only needs
-    // measuring once fonts are ready, not on every resize.
-    //
-    HERO_U_OFFSET_Y = measureReadyGlyphBottomFromCenter('r', HERO_N_SPRITE_SIZE / 2 + 6) - HERO_N_SPRITE_SIZE / 2 +
-      HERO_U_OFFSET_Y_VISUAL_DROP
-    //
     // Hero illustration is steel teal (cool half of the complementary
     // pair); the anti-hero in the duality icon below is vibrant orange
     // (warm half). Loading both up-front guarantees the icon row has
@@ -600,17 +513,10 @@ export function sceneReady(k) {
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
     //
-    // Outline-only title hero bake — hollow, no eyes. Covers the stayer
-    // ('n') throughout, both heroes in the title cell, and the runner ('u')
-    // for its first few steps after falling, before it reveals its eyes and
-    // body colour (see HERO_N_SPRITE_PREFIX_TINTABLE below).
+    // Eyeless body bake for the lone hero — eyes are drawn on top so they
+    // can look at the centre eye, close while idle and follow the walk.
     //
-    loadHeroSprites({ k, ...HERO_TITLE_OUTLINE_BAKE_OPTS })
-    //
-    // Tintable filled bake — plain white body, recoloured at draw time to
-    // the runner's current section colour once revealed.
-    //
-    loadHeroSprites({ k, ...HERO_TITLE_TINTABLE_BAKE_OPTS })
+    loadHeroSprites({ k, ...HERO_BAKE_OPTS })
     //
     // Richer hero variant for the CENTRAL illustration — adds mouth,
     // both arms and a wrist watch on top of the plain body. Loaded
@@ -663,7 +569,7 @@ export function sceneReady(k) {
     const fireflyField = createFireflyField()
     k.add([k.pos(0, 0), k.z(Z_FIREFLIES), {
       update() { updateFireflyField(k, fireflyField) },
-      draw() { drawFireflyField(k, fireflyField, spiderState) }
+      draw() { drawFireflyField(k, fireflyField) }
     }])
     //
     // Swaying grass tufts along the horizon strip — the shared Grass
@@ -702,14 +608,11 @@ export function sceneReady(k) {
     //
     const readyEyeBlink = createEyeHudBlinkState(k)
     readyEyeBlink.frameIndex = 0
-    const readyEyeState = { blink: readyEyeBlink, spiders: null }
+    const readyEyeState = { blink: readyEyeBlink, hero: null }
     k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, readyEyeState, spiderState) } }])
     //
-    // Title text (crawling letters detach from this) — invisible source of
-    // truth for the live `.text` string (letters get blanked here as spiders
-    // detach) and for measuring letter positions. The actual pixels are a
-    // separate baked-canvas sprite (see bakeReadyTitleSprite), drawn below
-    // at Z_TITLE and rebaked every time this text changes.
+    // Invisible title text — only used to measure letter positions. The
+    // actual pixels are per-letter baked sprites drawn at Z_TITLE.
     //
     const titleText = k.add([
       k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
@@ -735,19 +638,18 @@ export function sceneReady(k) {
       onTap: () => exitToMenu()
     })
     //
-    // Title letter layout — static glyphs plus the two hero slots (n / u).
+    // Title letter layout — every glyph is a static baked letter.
     //
-    const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
-    const titleLetters = letterInfos.filter(li => !li.isHeroN && !li.isHeroU)
+    const titleLetters = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     titleLetters.forEach(li => {
       bakeReadyLetterSprite(k, li.char)
       bakeReadyLetterShadowSprite(k, li.char)
     })
-    const spiders = letterInfos.filter(li => li.isHeroN || li.isHeroU).map(letterInfo => createTitleHeroSpider(letterInfo))
-    readyEyeState.spiders = spiders
+    const hero = createReadyHero()
+    readyEyeState.hero = hero
     k.add([k.pos(0, 0), k.z(Z_TITLE), { draw() { onDrawTitle(k, spiderState, titleLetters) } }])
     //
-    // Shared input-stillness tracker driving the title-hero departure logic.
+    // Shared input-stillness tracker driving the hero departure logic.
     // Both mouse motion and key presses count as player activity.
     //
     const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0, keyPulse: false, heroGoneTime: 0, heroGoneExited: false }
@@ -758,7 +660,7 @@ export function sceneReady(k) {
     k.onUpdate(() => {
       const dt = k.dt()
       spiderState.timer += dt
-      updateTitleHeroes(k, spiders, spiderState, heroLetterState, sound, dt)
+      updateReadyHero(k, hero, spiderState, heroLetterState, sound, dt)
       tickReadySceneEyeBlink(readyEyeState.blink, k, dt)
       //
       // Hint flicker
@@ -782,9 +684,9 @@ export function sceneReady(k) {
       bgPlane.opacity = spiderState.departureFade ?? 1
     })
     //
-    // Spider draw layer — rendered above all text and title (Z_SPIDER)
+    // Hero draw layer — rendered above all text and title (Z_SPIDER)
     //
-    k.add([k.pos(0, 0), k.z(Z_SPIDER), { draw() { onDrawSpidersLayer(k, spiders, spiderState) } }])
+    k.add([k.pos(0, 0), k.z(Z_SPIDER), { draw() { drawTitleHero(k, hero) } }])
     //
     // Glow film grain — same look as lesson-glow.0, drawn over the whole scene.
     //
@@ -896,23 +798,6 @@ function buildReadyMoonSprite(k) {
 // shadow must be hollow too, or its solid interior would show through the
 // rim's punched-out hole as a solid black fill instead of true transparency.
 //
-//
-// How far a glyph's bottom ink edge sits below the vertical centre point
-// canvas text is drawn from (textBaseline='middle' — the same convention
-// every title/letter bake in this file uses), so a hero can be aligned to
-// a specific letter's bottom instead of an eyeballed pixel offset. Falls
-// back to `fallback` if the browser lacks actualBoundingBoxDescent.
-//
-function measureReadyGlyphBottomFromCenter(char, fallback) {
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
-  ctx.textBaseline = 'middle'
-  const metrics = ctx.measureText(char)
-  canvas.width = 0
-  canvas.height = 0
-  return typeof metrics.actualBoundingBoxDescent === 'number' ? metrics.actualBoundingBoxDescent : fallback
-}
 function bakeReadyTitleHollowRing(w, h, text, x, y, color) {
   const canvas = document.createElement('canvas')
   canvas.width = w
@@ -1095,7 +980,7 @@ function onDrawMoon(k, spiderState) {
 function onDrawTitle(k, spiderState, titleLetters) {
   const flicker = spiderState.titleFlicker ?? 1
   for (const letter of titleLetters) {
-    const op = flicker * readySceneDepartureOpacity(spiderState)
+    const op = flicker * readyTitleOpacity(spiderState)
     if (op <= 0.001) continue
     const shadowPos = k.vec2(letter.x + TITLE_SHADOW_OFFSET, letter.y + TITLE_SHADOW_OFFSET)
     const pos = k.vec2(letter.x, letter.y)
@@ -1123,9 +1008,9 @@ function onDrawTitle(k, spiderState, titleLetters) {
 // Draws the center illustration: eye_big.png centred on the horizon.
 //
 function onDrawIllustration(k, readyEyeState, spiderState) {
-  const eyeOp = LIFE_OPACITY * readyEyeAndLeftOpacity(spiderState)
+  const eyeOp = LIFE_OPACITY * readyEyeOpacity(spiderState)
   if (eyeOp <= 0.001) return
-  const target = resolveReadyEyeLookTarget(readyEyeState?.spiders)
+  const target = resolveReadyEyeLookTarget(readyEyeState?.hero)
   const frameIndex = readyEyeState?.blink?.frameIndex ?? 0
   const tx = target?.x ?? (LIFE_X + LIFE_WIDTH / 2)
   const ty = target?.y ?? (LIFE_Y + LIFE_HEIGHT / 2)
@@ -1141,52 +1026,28 @@ function onDrawIllustration(k, readyEyeState, spiderState) {
   })
 }
 //
-// The central eye tracks the runaway title hero (isHeroU) throughout its
-// departure.
+// The central eye tracks the hero from the first frame until it is gone.
 //
-function resolveReadyEyeLookTarget(spiders) {
-  if (!spiders?.length) return null
-  for (const spider of spiders) {
-    if (!spider.isHeroU || spider.heroGone) continue
-    const inTitle = spider.heroPhase === 'title'
-    return inTitle
-      ? { x: spider.x + HERO_U_OFFSET_X, y: spider.y + HERO_U_OFFSET_Y }
-      : { x: spider.heroX, y: spider.heroY }
-  }
-  return null
+function resolveReadyEyeLookTarget(hero) {
+  if (!hero || hero.heroGone) return null
+  return { x: hero.heroX, y: hero.heroY }
 }
 //
-// ────────── Title hero slots (n / u) ──────────
+// Lone hero state — starts on the ground line right of the eye, watching it.
 //
-
-/**
- * Title-hero slot anchored on a title letter centre (n or u).
- * @param {Object} letterInfo - Letter layout from pickLettersFromTitle
- * @returns {Object} Hero spider state
- */
-function createTitleHeroSpider(letterInfo) {
-  const { x, y, isHeroN, isHeroU } = letterInfo
+function createReadyHero() {
   return {
-    x,
-    y,
-    isHeroN,
-    isHeroU,
-    heroPhase: 'title',
-    heroX: 0,
-    heroY: 0,
+    heroPhase: 'watch',
+    heroX: LIFE_X + LIFE_WIDTH + HERO_WATCH_GAP_X + HERO_CHAR_WIDTH / 2,
+    heroY: HERO_N_GROUND_CENTER_Y,
     heroRunFrame: 0,
     heroRunTimer: 0,
     heroBurstDuration: HERO_N_STEP_DURATION * HERO_N_RUN_STEPS_MIN,
     heroFrameTimer: 0,
     heroPauseTimer: 0,
     heroWakeTimer: 0,
-    heroFallVel: 0,
     heroGone: false,
     heroDepartStartX: null,
-    heroStepCount: 0,
-    heroBodyRevealT: 0,
-    heroSectionIndex: 0,
-    heroSectionColorT: 0,
     heroNotes: [],
     heroNoteTimer: 0,
     heroMelodyIndex: 0,
@@ -1207,26 +1068,19 @@ function createTitleHeroSpider(letterInfo) {
  */
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
-  const titleColor = getColor(k, CFG.visual.colors.ready.title)
   const centers = measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontFamily)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
     letterInfos.push({
-      textObj: titleTextObj,
-      charIndex,
       char,
       x: centers[charIndex].x,
-      y: centers[charIndex].y,
-      color: titleColor,
-      isHeroN: charIndex === HERO_N_CHAR_INDEX,
-      isHeroU: charIndex === HERO_U_CHAR_INDEX
+      y: centers[charIndex].y
     })
   })
   return letterInfos
 }
 //
-// Centres of every title glyph, matching the on-screen k.text layout so
-// spiders spawn on the letter they replace (no jump when legs grow).
+// Centres of every title glyph, matching the on-screen k.text layout.
 //
 function measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontFamily) {
   const originY = titleTextObj.pos.y
@@ -1244,20 +1098,6 @@ function measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontF
   }))
 }
 
-/**
- * Draws the two title heroes on the Z_SPIDER layer.
- * @param {Object} k - Kaplay instance
- * @param {Array} spiders - Hero instances (n and u)
- * @param {Object} spiderState - Mutable state carrying the scene timer
- */
-function onDrawSpidersLayer(k, spiders, spiderState) {
-  spiders.forEach(spider => {
-    const departureFade = spider.isHeroU
-      ? 1
-      : readyLeftHeroOpacity(spiderState)
-    drawTitleHero(k, spider, departureFade)
-  })
-}
 //
 // ────────── Animated overlay helpers (clouds / fireflies / grass / ambient sound) ──────────
 //
@@ -1331,9 +1171,7 @@ function updateFireflyField(k, field) {
   }
 }
 
-function drawFireflyField(k, field, spiderState) {
-  const sceneOp = readyScenePersistentLeftOpacity()
-  if (sceneOp <= 0.001) return
+function drawFireflyField(k, field) {
   const time = k.time()
   const color = k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B)
   for (const fly of field.fireflies) {
@@ -1351,13 +1189,13 @@ function drawFireflyField(k, field, spiderState) {
       pos: k.vec2(fly.x, fly.y),
       radius: fly.radius * FIREFLY_GLOW_RADIUS_MULT,
       color,
-      opacity: alpha * 0.18 * sceneOp
+      opacity: alpha * 0.18
     })
     k.drawCircle({
       pos: k.vec2(fly.x, fly.y),
       radius: fly.radius,
       color,
-      opacity: alpha * sceneOp
+      opacity: alpha
     })
   }
 }
@@ -1381,12 +1219,10 @@ function onUpdateAmbientSounds(k, ambient) {
   }
 }
 //
-// Tracks input stillness (mouse motion + key presses) and advances both
-// title heroes: both fall to the ground together after the fall delay and
-// once the input has rested (see the HERO_N_* constants); the runner ('u')
-// then departs while the stayer ('n') stays put and fades out with the scene.
+// Tracks input stillness (mouse motion + key presses), advances the hero and
+// hands the scene over to the menu shortly after it walks off-screen.
 //
-function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
+function updateReadyHero(k, hero, spiderState, state, sound, dt) {
   const mp = k.mousePos()
   const keyActivity = state.keyPulse
   state.keyPulse = false
@@ -1395,37 +1231,25 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     state.lastMouseY = mp.y
     state.mouseMoved = true
     state.mouseStillTime = 0
-      } else {
+  } else {
     state.mouseMoved = false
     state.mouseStillTime += dt
   }
-  const legsStarted = spiderState.timer > TITLE_HERO_FALL_BASE_DELAY
-  let runner = null
-  spiders.forEach(spider => {
-    spider.isHeroN && updateHeroStayer(spider, state, legsStarted, dt)
-    if (spider.isHeroU) {
-      runner = spider
-      updateHeroN(k, spider, state, legsStarted, sound, dt)
-      HERO_N_IDLE_VOCAL_ENABLED && updateHeroNNotes(spider, sound, dt)
-      //
-      // Once the runner has run past the right edge, the scene flows into
-      // the menu by itself after a short beat.
-      //
-      if (spider.heroGone) {
-        state.heroGoneTime += dt
-        if (state.heroGoneTime >= HERO_N_GONE_MENU_DELAY && !state.heroGoneExited) {
-          state.heroGoneExited = true
-          Sound.stopAmbient(sound)
-          goToMenuAfterAssets(k)
-        }
-      }
+  updateHeroN(k, hero, state, sound, dt)
+  HERO_N_IDLE_VOCAL_ENABLED && updateHeroNNotes(hero, sound, dt)
+  if (hero.heroGone) {
+    state.heroGoneTime += dt
+    if (state.heroGoneTime >= HERO_N_GONE_MENU_DELAY && !state.heroGoneExited) {
+      state.heroGoneExited = true
+      Sound.stopAmbient(sound)
+      goToMenuAfterAssets(k)
     }
-  })
-  updateReadyDepartureFade(k, runner, spiderState)
+  }
+  updateReadyDepartureFade(k, hero, spiderState)
 }
 //
-// Fades the whole scene only while the runner is actively moving right —
-// frozen during pauses/idle so the world does not keep dissolving off-screen.
+// Fades the backdrop while the hero walks right (title + centre eye stay
+// lit). After the look-back beat, eyeFinalFade takes both of those out too.
 //
 function updateReadyDepartureFade(k, runner, spiderState) {
   if (!runner || runner.heroDepartStartX == null) {
@@ -1479,64 +1303,27 @@ function updateReadyDepartureFade(k, runner, spiderState) {
   spiderState.eyeFinalFade = 0
 }
 //
-// Uniform scene fade — same multiplier on every letter, star, blade, etc.
+// Backdrop fade while the hero walks right — stars, moon, grass, hint, baked
+// bg and description. Fireflies, title and centre eye stay bright until the
+// final beat (fireflies never join the departure fade).
 //
 function readySceneDepartureOpacity(spiderState) {
   return spiderState?.departureFade ?? 1
 }
 //
-// Fireflies stay fully visible while the runner moves right — only the shared
-// backdrop/title fade with departureFade.
+// Title wordmark and centre eye share the same final fade — full opacity
+// during the walk, then both dim together after the hero turns back (lookLeft).
 //
-function readyScenePersistentLeftOpacity() {
-  return 1
+function readyTitleOpacity(spiderState) {
+  return readyEyeOpacity(spiderState)
 }
 //
-// Horizon eye and the left title hero fade once the runner stops and looks
-// left at them (eyeFinalFade ramps during lookLeft).
+// Horizon eye — see readyTitleOpacity (same eyeFinalFade ramp).
 //
-function readyEyeAndLeftOpacity(spiderState) {
+function readyEyeOpacity(spiderState) {
   const fade = spiderState?.eyeFinalFade ?? 0
   return Math.max(0, 1 - fade)
 }
-//
-// Title stayer ('n') shares the same fade as the centre eye.
-//
-function readyLeftHeroOpacity(spiderState) {
-  return readyEyeAndLeftOpacity(spiderState)
-}
-//
-// The stayer never leaves the ground once it lands — it just stands there
-// with its eyes wandering like the in-game hero's idle animation.
-//
-function updateHeroStayer(spider, state, legsStarted, dt) {
-  if (spider.heroPhase === 'title') {
-    if (legsStarted && state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
-      spider.heroPhase = 'fall'
-      spider.heroX = spider.x + HERO_N_OFFSET_X
-      spider.heroY = spider.y + HERO_N_OFFSET_Y
-      spider.heroFallVel = 0
-    }
-    return
-  }
-  if (spider.heroPhase === 'fall') {
-    spider.heroFallVel += HERO_N_FALL_GRAVITY * dt
-    spider.heroY += spider.heroFallVel * dt
-    if (spider.heroY >= HERO_N_GROUND_CENTER_Y) {
-      spider.heroY = HERO_N_GROUND_CENTER_Y
-      spider.heroPhase = 'stayIdle'
-    }
-    return
-  }
-  //
-  // 'stayIdle': the stayer has no eyes to animate — it just stands there
-  // (see updateReadyDepartureFade for the shared scene fade-out).
-  //
-}
-//
-// Fades every crawling letter (the stayer hero included) toward zero as the
-// runner nears the right edge of the screen — full opacity until it starts
-// running, fully gone once it reaches the edge and disappears.
 //
 // Idle singing for hero-n: while he stands with closed eyes the same melody
 // the in-game hero hums plays note by note, each pitch paired with a rising
@@ -1584,36 +1371,14 @@ function updateHeroNNotes(spider, sound, dt) {
   spider.heroMelodyIndex = (spider.heroMelodyIndex + 1) % IDLE_MELODY.length
 }
 //
-// Runner departure state machine: title → fall → run bursts / pauses, with
-// an interruptible closed-eyes idle whenever the mouse moves on the ground,
+// Hero departure state machine: watch the eye → run bursts / pauses, with
+// an interruptible closed-eyes idle whenever the mouse moves while walking,
 // then a look-left beat at the right margin and a final walk off-screen.
 //
-function updateHeroN(k, spider, state, legsStarted, sound, dt) {
+function updateHeroN(k, spider, state, sound, dt) {
   if (spider.heroGone) return
-  updateHeroNAppearance(spider, dt)
-  if (spider.heroPhase === 'title') {
-    if (legsStarted && state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
-      //
-      // Leave the title cell: from now on the hero is positioned by its own
-      // centre coordinates instead of the letter-cell offsets.
-      //
-      spider.heroPhase = 'fall'
-      spider.heroX = spider.x + HERO_U_OFFSET_X
-      spider.heroY = spider.y + HERO_U_OFFSET_Y
-      spider.heroFallVel = 0
-    }
-    return
-  }
-  if (spider.heroPhase === 'fall') {
-    //
-    // Free fall with gravity — the hero accelerates towards the ground.
-    //
-    spider.heroFallVel += HERO_N_FALL_GRAVITY * dt
-    spider.heroY += spider.heroFallVel * dt
-    if (spider.heroY >= HERO_N_GROUND_CENTER_Y) {
-      spider.heroY = HERO_N_GROUND_CENTER_Y
-      startHeroNBurst(spider)
-    }
+  if (spider.heroPhase === 'watch') {
+    state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY && startHeroNBurst(spider)
     return
   }
   //
@@ -1659,10 +1424,8 @@ function updateHeroN(k, spider, state, legsStarted, sound, dt) {
       //
       // Two foot contacts per 8-frame cycle, same as the in-game hero.
       //
-      if (spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0) {
-        spider.heroStepCount++
+      spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0 &&
         Sound.playStepSound(sound, HERO_N_STEP_SOUND_LEVEL)
-      }
     }
     const lookLeftX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
     if (!spider.heroLookLeftDone && spider.heroX >= lookLeftX) {
@@ -1723,116 +1486,31 @@ function startHeroNBurst(spider) {
   spider.heroFrameTimer = 0
   spider.heroRunFrame = 0
   spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
-  //
-  // Once the body has fully revealed, every new burst also advances one
-  // step through the section-colour sequence (holding at the last one).
-  //
-  if (spider.heroBodyRevealT >= 1 && spider.heroSectionIndex < HERO_N_SECTION_COLOR_SEQUENCE.length - 1) {
-    spider.heroSectionIndex++
-    spider.heroSectionColorT = 0
-  }
 }
 //
-// Advances the hollow→filled reveal crossfade once enough steps have been
-// taken, then eases the body tint toward the next section colour. Only
-// progresses while the runner is actually running — standing still (idle,
-// waking up, paused between bursts) freezes both the reveal and the tint.
+// Draws the lone hero: eyeless body bake plus overlaid eyes that watch the
+// centre eye, close while idle and follow the walk direction.
 //
-function updateHeroNAppearance(spider, dt) {
-  if (spider.heroPhase !== 'run' && spider.heroPhase !== 'finalWalk') return
-  if (spider.heroBodyRevealT < 1) {
-    if (spider.heroStepCount >= HERO_N_COLOR_REVEAL_STEP_COUNT) {
-      spider.heroBodyRevealT = Math.min(1, spider.heroBodyRevealT + dt / HERO_N_BODY_REVEAL_DURATION)
-    }
-    return
-  }
-  if (spider.heroSectionIndex >= HERO_N_SECTION_COLOR_SEQUENCE.length - 1) return
-  spider.heroSectionColorT = Math.min(1, spider.heroSectionColorT + dt / HERO_N_SECTION_COLOR_FADE_DURATION)
-}
-//
-// Lerps between the runner's current and next section colour in the
-// sequence, holding on the last colour once reached.
-//
-function resolveHeroSectionTint(k, spider) {
-  const seq = HERO_N_SECTION_COLOR_SEQUENCE
-  const fromRgb = parseHex(seq[spider.heroSectionIndex])
-  const toIdx = Math.min(spider.heroSectionIndex + 1, seq.length - 1)
-  const toRgb = parseHex(seq[toIdx])
-  const t = spider.heroSectionColorT
-  return k.rgb(
-    fromRgb[0] + (toRgb[0] - fromRgb[0]) * t,
-    fromRgb[1] + (toRgb[1] - fromRgb[1]) * t,
-    fromRgb[2] + (toRgb[2] - fromRgb[2]) * t
-  )
-}
-//
-// Draws a title hero (the stayer 'n' or the runner 'u'). Inside the title
-// both sit within their letter cell using the hollow outline-only bake;
-// once they fall out, the stayer keeps standing with wandering eyes while
-// the runner cycles through its own fall/run/pause phases.
-//
-function drawTitleHero(k, spider, departureFade = 1) {
+function drawTitleHero(k, spider) {
   if (spider.heroGone) return
-  const inTitle = spider.heroPhase === 'title'
-  const cx = inTitle ? spider.x + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X) : spider.heroX
-  const cy = inTitle ? spider.y + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y) : spider.heroY
-  const facingLeft = spider.heroPhase === 'lookLeft'
-  const frameSuffix = resolveHeroFrameSuffix(spider)
-  const pos = k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2)
-  //
-  // Stayer ('n'), and both heroes while still in the title, stay a pure
-  // hollow white outline forever — no body fill, no eyes.
-  //
-  if (spider.isHeroN || inTitle) {
-    k.drawSprite({
-      sprite: `${HERO_N_SPRITE_PREFIX_OUTLINE}${frameSuffix}`,
-      pos,
-      width: HERO_N_SPRITE_SIZE,
-      height: HERO_N_SPRITE_SIZE,
-      flipX: facingLeft,
-      flipY: spider.isHeroU && inTitle,
-      opacity: departureFade
-    })
-    spider.heroPhase === 'wakeOneEye' && drawHeroWakeEye(k, spider, cx, cy)
-    drawHeroNNotes(k, spider, departureFade)
-    return
-  }
-  //
-  // Runner ('u'), grounded: crossfades from the hollow outline-only look
-  // into a filled body — white base tinted to the current section colour,
-  // black outline, normal eyes — once it has taken a couple of steps.
-  //
-  const revealT = spider.heroBodyRevealT
-  if (revealT < 1) {
-    k.drawSprite({
-      sprite: `${HERO_N_SPRITE_PREFIX_OUTLINE}${frameSuffix}`,
-      pos,
-      width: HERO_N_SPRITE_SIZE,
-      height: HERO_N_SPRITE_SIZE,
-      flipX: facingLeft,
-      opacity: (1 - revealT) * departureFade
-    })
-  }
-  if (revealT > 0) {
-    k.drawSprite({
-      sprite: `${HERO_N_SPRITE_PREFIX_TINTABLE}${frameSuffix}`,
-      pos,
-      width: HERO_N_SPRITE_SIZE,
-      height: HERO_N_SPRITE_SIZE,
-      flipX: facingLeft,
-      color: resolveHeroSectionTint(k, spider),
-      opacity: revealT * departureFade
-    })
-  }
+  const cx = spider.heroX
+  const cy = spider.heroY
+  k.drawSprite({
+    sprite: `${HERO_N_SPRITE_PREFIX}${resolveHeroFrameSuffix(spider)}`,
+    pos: k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2),
+    width: HERO_N_SPRITE_SIZE,
+    height: HERO_N_SPRITE_SIZE,
+    flipX: spider.heroPhase === 'lookLeft'
+  })
   const closedIdleFace =
     spider.heroPhase === 'idle' || spider.heroPhase === 'wakeBothEyes'
   if (spider.heroPhase === 'wakeOneEye') {
-    drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_LEFT_X, departureFade)
-    revealT >= 1 && drawHeroWakeEye(k, spider, cx, cy, departureFade)
+    drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_LEFT_X)
+    drawHeroWakeEye(k, spider, cx, cy)
   }
-  closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade)
-  revealT >= 1 && !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade)
-  drawHeroNNotes(k, spider, departureFade)
+  closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy)
+  !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy)
+  drawHeroNNotes(k, spider)
 }
 //
 // Matches hero.js run-lean side-eye anchor in 96px sprite space.
@@ -1875,7 +1553,7 @@ function readyHeroSideEyeCanvasPos(facingLeft, runFrame = 0) {
 //
 // One white/black eye disc for the filled title runner (body is noEyes bake).
 //
-function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, scale, opacity) {
+function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, pupilDy, scale, opacity) {
   k.drawCircle({
     pos: k.vec2(ex, ey),
     radius: HERO_EYE_RING_RADIUS * scale,
@@ -1889,7 +1567,7 @@ function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, scale, opacity) {
     opacity
   })
   k.drawCircle({
-    pos: k.vec2(ex + pupilDx, ey),
+    pos: k.vec2(ex + pupilDx, ey + pupilDy),
     radius: HERO_EYE_PUPIL_RADIUS * scale,
     color: k.rgb(0, 0, 0),
     opacity
@@ -1917,15 +1595,34 @@ function drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade = 1) {
       baseX + x * s,
       baseY + y * s,
       pupilDx,
+      0,
       s,
       departureFade
     )
     return
   }
+  if (spider.heroPhase === 'watch') {
+    drawHeroWatchEyes(k, baseX, baseY, s, departureFade)
+    return
+  }
   if (spider.heroPhase !== 'pause') return
   const eyeY = baseY + HERO_EYE_CANVAS_Y * s
   for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
-    drawHeroTitleEyeDisc(k, baseX + eyeX * s, eyeY, 0, s, departureFade)
+    drawHeroTitleEyeDisc(k, baseX + eyeX * s, eyeY, 0, 0, s, departureFade)
+  }
+}
+//
+// Front eye pair with both pupils turned toward the centre eye while the
+// hero waits beside it.
+//
+function drawHeroWatchEyes(k, baseX, baseY, scale, opacity) {
+  const eyeY = baseY + HERO_EYE_CANVAS_Y * scale
+  const dx = LIFE_X + LIFE_WIDTH / 2 - (baseX + HERO_SPRITE_CANVAS_SIZE * scale / 2)
+  const dy = LIFE_Y + LIFE_HEIGHT / 2 - eyeY
+  const len = Math.hypot(dx, dy) || 1
+  const shift = HERO_EYE_PUPIL_SHIFT * scale
+  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
+    drawHeroTitleEyeDisc(k, baseX + eyeX * scale, eyeY, dx / len * shift, dy / len * shift, scale, opacity)
   }
 }
 //
@@ -1935,22 +1632,18 @@ function drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade = 1) {
   if (departureFade <= 0.001) return
   const phase = spider.heroPhase
   if (phase !== 'idle' && phase !== 'wakeBothEyes') return
-  drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_LEFT_X, departureFade)
-  drawHeroTitleSingleClosedEye(k, spider, cx, cy, HERO_EYE_RIGHT_X, departureFade)
+  drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_LEFT_X, departureFade)
+  drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_RIGHT_X, departureFade)
 }
 //
-// One closed eye — hollow white ring while the runner is still outline-only;
-// black ring + body tint once the interior fill has fully appeared.
+// One closed eye — black ring filled with the body colour (eyelid).
 //
-function drawHeroTitleSingleClosedEye(k, spider, cx, cy, eyeCanvasX, departureFade = 1) {
+function drawHeroTitleSingleClosedEye(k, cx, cy, eyeCanvasX, departureFade = 1) {
   if (departureFade <= 0.001) return
   const s = HERO_N_SPRITE_SCALE
   const ex = cx - HERO_N_SPRITE_SIZE / 2 + eyeCanvasX * s
   const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
-  if (spider.heroBodyRevealT < 1) {
-    drawHeroTitleHollowEyeRing(k, ex, ey, s, departureFade)
-    return
-  }
+  const bodyRgb = parseHex(HERO_BODY_COLOR)
   const contour = k.rgb(0, 0, 0)
   const pos = k.vec2(ex, ey)
   k.drawCircle({
@@ -1962,32 +1655,9 @@ function drawHeroTitleSingleClosedEye(k, spider, cx, cy, eyeCanvasX, departureFa
   k.drawCircle({
     pos,
     radius: HERO_EYE_WHITE_RADIUS * s,
-    color: resolveHeroSectionTint(k, spider),
+    color: k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2]),
     opacity: departureFade
   })
-}
-//
-// Closed-eye ring on the hollow title runner — outline colour only, no fill.
-//
-function drawHeroTitleHollowEyeRing(k, ex, ey, scale, opacity) {
-  const rgb = parseHex(HERO_TITLE_OUTLINE_COLOR)
-  const color = k.rgb(rgb[0], rgb[1], rgb[2])
-  const outer = HERO_EYE_RING_RADIUS * scale
-  const inner = HERO_EYE_WHITE_RADIUS * scale
-  const mid = (outer + inner) / 2
-  const ringWidth = Math.max(1, outer - inner)
-  const segments = 14
-  for (let i = 0; i < segments; i++) {
-    const a0 = (i / segments) * Math.PI * 2
-    const a1 = ((i + 1) / segments) * Math.PI * 2
-    k.drawLine({
-      p1: k.vec2(ex + Math.cos(a0) * mid, ey + Math.sin(a0) * mid),
-      p2: k.vec2(ex + Math.cos(a1) * mid, ey + Math.sin(a1) * mid),
-      width: ringWidth,
-      color,
-      opacity
-    })
-  }
 }
 //
 // Frame-name suffix shared by every title-hero sprite variant, driven by
@@ -2035,5 +1705,5 @@ function drawHeroWakeEye(k, spider, cx, cy, departureFade = 1) {
   const ex = cx - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_RIGHT_X * s
   const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
   const pupilDx = Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2) * HERO_EYE_PUPIL_SHIFT * s
-  drawHeroTitleEyeDisc(k, ex, ey, pupilDx, s, departureFade)
+  drawHeroTitleEyeDisc(k, ex, ey, pupilDx, 0, s, departureFade)
 }

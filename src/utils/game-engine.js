@@ -31,7 +31,6 @@ import { installLevelFadeIn } from "./transition.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
 import { resetLessonHelpPanelState } from "./lesson-help.js"
-import { installCrtOverlay } from "./crt-overlay.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -182,7 +181,6 @@ export async function bootEngine(resolutionMode) {
     })
   }
   installLevelFadeIn(k)
-  installCrtOverlay(k)
   const setupTasks = buildSetupTasks(k)
   const soundTasks = buildSoundTasks(k)
   totalTasks = setupTasks.length + soundTasks.length

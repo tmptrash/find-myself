@@ -127,12 +127,12 @@ export const cfg = {
 - Always use hex strings: `"FF8C00"` (not arrays or objects)
 - Include descriptive comments
 
-### Fixed palette (Otterisk 96)
-- **Every colour in the game must come from the fixed [Otterisk 96](https://lospec.com/palette-list/otterisk-96) palette** — no ad-hoc RGB, no colours outside the set
-- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families)
+### Fixed palette (96 swatches)
+- **Every colour in the game must come from the fixed 96-swatch game palette** — no ad-hoc RGB, no colours outside the set
+- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families). It is sampled from the Glow forest reference art: muted teal/green forest, warm brown earth, cream highlights, gold light, soft red/orange accents
 - Semantic aliases in `CFG.visual.colors.palette` must reference `PALETTE.*` keys only — never raw hex literals
 - Brightness / fade may use opacity on a palette colour; do not invent new hex values by lerping unless the result is snapped back to the nearest palette swatch (see `snapToPalette()` in `glow-palette.js`)
-- New colours: pick the closest existing swatch or add a named alias in `cfg.js` that points at an existing `PALETTE` entry — do not add colours that are not in Otterisk 96
+- New colours: pick the closest existing swatch or add a named alias in `cfg.js` that points at an existing `PALETTE` entry — do not add colours that are not in `PALETTE`
 
 ### Color Configuration Rules
 - **Global colors** (hero, platform, UI elements) → `src/cfg.js`
@@ -722,39 +722,9 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 
 ---
 
-## 16. CRT overlay (full game)
+## 16. Level art direction (reference rules)
 
-A single subtle **old-TV post layer** covers the whole game (ready, menu, every section). Implementation lives in `src/utils/crt-overlay.js`; tunables in `CFG.visual.crt` in `src/cfg.js`.
-
-### Integration
-
-- Installed once per Kaplay instance in `bootEngine()` via `installCrtOverlay(k)` — do not add per-scene CRT copies.
-- The layer is one root `k.add()` object with **`k.stay()`**, **`k.fixed()`**, and **`k.z(CFG.visual.zIndex.crt)`** so it survives `k.go()` and draws **above** scene objects (global `k.onDraw` runs **before** the object tree and must not be used for CRT).
-- Toggling: `CFG.visual.crt.enabled`. Per-effect strengths use `masterIntensity` and the nested opacity fields — no duplicate CRT systems in section code.
-
-### Visual stack (in order)
-
-Scanlines (baked full-viewport sprite on resize; no radial vignette — its gradient steps read as rings from the centre), phosphor tint, edge chroma, scrolling noise tile, an occasional soft **interference** glow band, and **TV glitches** (`crt.glitches` — soft analog faults, no stacks of thin lines: mains hum bar, vertical roll blanking bar, snow burst, brightness sag, colour drift; per-kind durations and interval tuned in cfg). All screen-space; **no `getImageData` / GPU readback** and no per-frame canvas allocation.
-
-### Drawing rules
-
-- Rect tints and glitch fills use **`getRGB(k, paletteHex)`** — not `getColor()` (that returns a Kaplay component for `k.add`, not a draw color).
-- Colors only from **`PALETTE`** via cfg aliases (`phosphor.tint`, `chroma.leftTint`, `interference.bandTint`, etc.).
-- Do not raise section z-indices above `zIndex.crt` for normal gameplay/UI; CRT is meant to sit on top of the picture (fullscreen DOM controls may sit below CRT by design).
-
-### Film grain vs CRT
-
-- **Bake-time / menu-ready film grain** (`glow-parallax-grain.js`) sits **under** CRT — they composite, they do not cancel each other. Avoid stacking heavy extra full-screen noise in scenes when CRT `noise` is already strong.
-
-### When adding new global overlays
-
-If you add another full-screen post effect, either fold it into `crt-overlay.js` and cfg, or place it deliberately above/below `zIndex.crt` and document why — do not fight CRT with a second scanline pass.
-
----
-
-## 17. Level art direction (reference rules)
-
-These rules complement sections 3, 13, 14, 15, and 16. They describe **how procedural levels should look** (palette, light, composition, readability) — not engine mechanics. Apply them to every section unless a section’s own `cfg.js` documents a deliberate exception.
+These rules complement sections 3, 13, 14, and 15. They describe **how procedural levels should look** (palette, light, composition, readability) — not engine mechanics. Apply them to every section unless a section’s own `cfg.js` documents a deliberate exception.
 
 ### Thematic colour grammar
 
@@ -778,7 +748,7 @@ These rules complement sections 3, 13, 14, 15, and 16. They describe **how proce
 - Avoid grey-green, grey-brown, grey-violet, and grey-beige as the default look.
 - **Grey is for materials**: stone, some soil, metal, UI — not for “forest green” or “tree shadow.”
 - Shadows read as **cool hue** (green-blue, blue-violet) from the palette, not flat neutral grey.
-- Rocks and ruins: **tinted** stone (green/brown/warm grey from Otterisk), not pure neutral grey fills.
+- Rocks and ruins: **tinted** stone (green/brown/warm grey from `PALETTE`), not pure neutral grey fills.
 - Deepest darks: **very dark hue** (green-black, blue-black), not `#000000`, unless a section explicitly needs void black.
 
 ### Light
@@ -847,7 +817,6 @@ These rules complement sections 3, 13, 14, 15, and 16. They describe **how proce
 - **Water**: dark fill, simple striped or distorted reflection — not a sharp mirror.
 - **Cave/pit void**: near-black interior, no grey seam at the lip; large rocks do not float above the ground line.
 - Fill geometry must not **clip** foreground rocks or props — draw order and masks respect silhouettes.
-- **Heavy CRT / scanlines / chromatic aberration**: dedicated modes only, not the default outdoor look.
 - **Moon shafts / vertical light bands**: rare, semi-transparent palette swatches; do not cover player or HUD.
 
 ### Reference games (borrow, do not clone)

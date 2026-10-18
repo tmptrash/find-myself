@@ -10,7 +10,7 @@ const GRAIN_ALPHA_MIN = 8
 // Film grain must not brighten the outline rim — noise on dark ink pixels
 // reads as a grey fringe between the light body and the outer contour.
 // Perceptual luminance (not a flat per-channel cap) so hued dark outlines
-// like glow's bluish-gray rim (#2f3b3d, luminance ~56) are still protected.
+// like glow's bluish-gray rim (#2d4141, luminance ~58) are still protected.
 //
 const GRAIN_OUTLINE_LUM_MAX = 90
 //

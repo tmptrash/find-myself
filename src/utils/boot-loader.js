@@ -1,4 +1,3 @@
-import * as LoaderCrt from './loader-crt.js'
 //
 // Shared DOM loader (same markup as index.html). Fatal errors may replace
 // innerHTML — ensureLoaderStructure() restores the bar before reuse.
@@ -9,7 +8,7 @@ const LOADER_INNER_HTML = `<div id="loader-panel"><div id="loader-message">Loadi
 //
 const LOADER_PANEL_BG_OVER_CRT = 'rgba(14, 20, 26, 0.97)'
 const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10px 60px rgba(0, 0, 0, 0.95)'
-const LOADER_MESSAGE_COLOR = '#ebf0ee'
+const LOADER_MESSAGE_COLOR = '#f4f1de'
 const LOADER_TRACK_HEIGHT_OVER_CRT = '6px'
 const LOADER_TRACK_HEIGHT_DEFAULT = '4px'
 const LOADER_UI_FADE_SEC = 0.32
@@ -17,10 +16,6 @@ const LOADER_UI_FADE_SEC = 0.32
 // Optional owner of the hide sequence (CRT intro keeps snow running after the bar finishes).
 //
 let loaderHideHandler = null
-//
-// Old-TV layer over the plain loader; the TV intro canvas brings its own glass.
-//
-let loaderCrt = null
 
 export const DEFAULT_GPU_YIELD_FRAMES = 2
 //
@@ -115,7 +110,6 @@ export function showLoader(opts = {}) {
   loaderEl.style.background = opts.transparentBackdrop ? LOADER_BG_TRANSPARENT : LOADER_BG_OPAQUE
   loaderEl.style.zIndex = opts.elevatedZ ? LOADER_Z_OVER_CRT : LOADER_Z_DEFAULT
   setLoaderPanelOverCrt(opts.transparentBackdrop === true)
-  setLoaderCrtVisible(loaderEl, false)
   if (!opts.preserveBar) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
@@ -137,7 +131,6 @@ export function restoreLoaderDefaultBackdrop() {
   if (!loaderEl || loaderEl.style.display !== 'flex') return
   loaderEl.style.background = LOADER_BG_OPAQUE
   loaderEl.style.zIndex = LOADER_Z_DEFAULT
-  setLoaderCrtVisible(loaderEl, false)
 }
 
 export function isLoaderVisible() {
@@ -165,7 +158,6 @@ function finishHideLoader() {
   if (!loaderEl) return
   setLoaderPanelOverCrt(false)
   restoreLoaderDefaultBackdrop()
-  setLoaderCrtVisible(loaderEl, false)
   loaderEl.style.display = 'none'
   document.querySelectorAll('canvas').forEach(canvas => {
     canvas.style.visibility = 'visible'
@@ -289,11 +281,6 @@ function setLoaderPanelOverCrt(overCrt) {
   panel.style.boxShadow = overCrt ? LOADER_PANEL_SHADOW_OVER_CRT : 'none'
   track && (track.style.height = overCrt ? LOADER_TRACK_HEIGHT_OVER_CRT : LOADER_TRACK_HEIGHT_DEFAULT)
   bar && (bar.style.boxShadow = overCrt ? '0 0 12px rgba(220, 20, 60, 0.85)' : 'none')
-}
-
-function setLoaderCrtVisible(loaderEl, visible) {
-  !loaderCrt && visible && (loaderCrt = LoaderCrt.create(loaderEl))
-  LoaderCrt.setVisible(loaderCrt, visible)
 }
 
 function wait(sec) {

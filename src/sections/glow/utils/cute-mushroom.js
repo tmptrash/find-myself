@@ -76,7 +76,7 @@ export const CUTE_MUSHROOM_ASPECT = REF_HEIGHT / REF_WIDTH
  * @param {number} opts.cx - Mushroom centre X (world)
  * @param {number} opts.baseY - Mushroom base Y (world, bot anchor)
  * @param {number} opts.width - Cap width (TRAMP_W)
- * @param {string} opts.pupilHex - Otterisk hex for pupils
+ * @param {string} opts.pupilHex - Palette hex for pupils
  * @param {number} [opts.eyeScale=1]
  * @param {number} [opts.angle=0] - Lean angle (degrees)
  * @param {number} [opts.scaleY=1] - Vertical squash scale

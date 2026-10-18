@@ -3,107 +3,110 @@
 //
 const MASTER_VOLUME = 0.7
 //
-// Game-wide 96-colour palette (single source of truth, image order, row-major).
-// Every colour used in game code MUST be one of these values (brightness via
-// opacity is allowed). Rows are hue families, index 0 = darkest tone.
+// Game-wide 96-colour palette (single source of truth, row-major). Sampled
+// from the Glow forest reference art: swatches present in the picture are
+// taken from it directly, hue families it lacks (blue, violet, purple, pink)
+// carry the same colour grade. Every colour used in game code MUST be one of
+// these values (brightness via opacity is allowed). Rows are hue families,
+// index 0 = darkest tone.
 //
 const PALETTE = {
-  gray0: '#2f3b3d',
-  gray1: '#464b4f',
-  gray2: '#5c6163',
-  gray3: '#7b7d77',
-  gray4: '#999991',
-  gray5: '#b5b2ac',
-  gray6: '#d4d0cd',
-  gray7: '#ebf0ee',
-  sand0: '#57483b',
-  sand1: '#6e5f4d',
-  sand2: '#8a7b63',
-  sand3: '#a3987a',
-  sand4: '#bdb395',
-  sand5: '#d6d0b0',
-  mauve0: '#614257',
-  mauve1: '#7a586a',
-  mauve2: '#997482',
-  mauve3: '#b39196',
-  mauve4: '#c9adab',
-  mauve5: '#decbbf',
-  slate0: '#444a66',
-  slate1: '#566178',
-  slate2: '#6c8091',
-  slate3: '#839ea6',
-  slate4: '#99bab5',
-  slate5: '#bed4c8',
-  rose0: '#5e4452',
-  rose1: '#80575b',
-  rose2: '#9e7565',
-  rose3: '#ba9273',
-  rose4: '#d1ae8a',
-  brown0: '#5c4644',
-  brown1: '#785a55',
-  brown2: '#9c756a',
-  brown3: '#b89184',
-  brown4: '#ccad9b',
-  red0: '#8f3648',
-  red1: '#b04a58',
-  red2: '#cc6764',
-  red3: '#e38674',
-  red4: '#e8a68e',
-  red5: '#ebcbbc',
-  orange0: '#8a3c24',
-  orange1: '#9e5333',
-  orange2: '#bd6f42',
-  orange3: '#d48d57',
-  orange4: '#e0ac6c',
-  orange5: '#e8cd97',
-  gold0: '#855c22',
-  gold1: '#9e7a36',
-  gold2: '#ba9745',
-  gold3: '#ccb45c',
-  gold4: '#e3d176',
-  gold5: '#e6dfa1',
-  green0: '#2d5b16',
-  green1: '#41761f',
-  green2: '#569229',
-  green3: '#6fae3a',
-  green4: '#93c653',
-  green5: '#c0dc82',
-  teal0: '#255461',
-  teal1: '#346c70',
-  teal2: '#4d8a7e',
-  teal3: '#68a88e',
-  teal4: '#8ac290',
-  teal5: '#b7d9a9',
-  cyan0: '#255269',
-  cyan1: '#336c7a',
-  cyan2: '#438c91',
-  cyan3: '#5ba9a4',
-  cyan4: '#80c2ac',
-  cyan5: '#abdbb8',
-  blue0: '#364996',
-  blue1: '#4761ad',
-  blue2: '#5782ba',
-  blue3: '#709fcf',
-  blue4: '#8cbade',
-  blue5: '#add6e0',
-  violet0: '#46449c',
-  violet1: '#5d59b3',
-  violet2: '#7c75c9',
-  violet3: '#a08fdb',
-  violet4: '#c0aae3',
-  violet5: '#d6caeb',
-  purple0: '#683b8a',
-  purple1: '#864ea6',
-  purple2: '#a46abd',
-  purple3: '#c385d6',
-  purple4: '#d8a3e3',
-  purple5: '#e8c5e6',
-  pink0: '#85347a',
-  pink1: '#a8487f',
-  pink2: '#c4668c',
-  pink3: '#db84a1',
-  pink4: '#e6a3af',
-  pink5: '#ebc7ca'
+  gray0: '#2d4141',
+  gray1: '#444c4a',
+  gray2: '#595b54',
+  gray3: '#77756b',
+  gray4: '#928d78',
+  gray5: '#a7a685',
+  gray6: '#c9c7c1',
+  gray7: '#f4f1de',
+  sand0: '#5c5141',
+  sand1: '#786652',
+  sand2: '#86836b',
+  sand3: '#a49b7e',
+  sand4: '#c4b493',
+  sand5: '#cac597',
+  mauve0: '#5d414c',
+  mauve1: '#74555c',
+  mauve2: '#906f70',
+  mauve3: '#a88981',
+  mauve4: '#bda393',
+  mauve5: '#d1bea4',
+  slate0: '#404556',
+  slate1: '#515a65',
+  slate2: '#5c7c81',
+  slate3: '#7b928c',
+  slate4: '#91ac9a',
+  slate5: '#b3c4aa',
+  rose0: '#513932',
+  rose1: '#854f48',
+  rose2: '#b4746a',
+  rose3: '#a28157',
+  rose4: '#e4b48e',
+  brown0: '#5b4039',
+  brown1: '#6c534c',
+  brown2: '#b17168',
+  brown3: '#b18c76',
+  brown4: '#b2a687',
+  red0: '#9c4d4a',
+  red1: '#b55555',
+  red2: '#bf5f5d',
+  red3: '#cb694d',
+  red4: '#e0a180',
+  red5: '#debfa2',
+  orange0: '#93442d',
+  orange1: '#cc6548',
+  orange2: '#bf7554',
+  orange3: '#c6863e',
+  orange4: '#cca269',
+  orange5: '#c9c392',
+  gold0: '#876341',
+  gold1: '#a77b42',
+  gold2: '#b1964b',
+  gold3: '#d5b45c',
+  gold4: '#f0d470',
+  gold5: '#e5e3a7',
+  green0: '#50682d',
+  green1: '#657e33',
+  green2: '#6f963d',
+  green3: '#87b04c',
+  green4: '#a6c55f',
+  green5: '#cccb6d',
+  teal0: '#1f4c57',
+  teal1: '#276666',
+  teal2: '#3f7866',
+  teal3: '#869e7f',
+  teal4: '#8db984',
+  teal5: '#bdc487',
+  cyan0: '#1c4c51',
+  cyan1: '#3b6064',
+  cyan2: '#26726e',
+  cyan3: '#5a9c8c',
+  cyan4: '#7eb495',
+  cyan5: '#a6cda1',
+  blue0: '#2d3f72',
+  blue1: '#3b5484',
+  blue2: '#4c7292',
+  blue3: '#628da4',
+  blue4: '#7da6b2',
+  blue5: '#9fc2b9',
+  violet0: '#393a75',
+  violet1: '#4c4d87',
+  violet2: '#68669a',
+  violet3: '#897eaa',
+  violet4: '#a898b4',
+  violet5: '#c0b7be',
+  purple0: '#59366a',
+  purple1: '#72477f',
+  purple2: '#8d5f92',
+  purple3: '#a878a6',
+  purple4: '#bd93b3',
+  purple5: '#d0b4bb',
+  pink0: '#763461',
+  pink1: '#994869',
+  pink2: '#b56376',
+  pink3: '#ca7e87',
+  pink4: '#d69a94',
+  pink5: '#dab9aa'
 }
 //
 // Deep merge function to combine nested objects
@@ -191,7 +194,7 @@ export const CFG = {
         //
         uncompletedSectionOutline: PALETTE.gray0,
         //
-        // Shared draw-moon body — warm cream (Otterisk snap of L3 amber disc).
+        // Shared draw-moon body — warm cream (palette snap of L3 amber disc).
         //
         moon: PALETTE.orange5,
         fireflies: "#F4C040",
@@ -256,7 +259,7 @@ export const CFG = {
         glowForestLift: PALETTE.teal1,
         //
         // Glow sky — dark green-teal foundation (#18332F / #23483B / #2B5944 →
-        // Otterisk greens/teals). Stays darker than canopy foliage; dawn gold
+        // palette greens/teals). Stays darker than canopy foliage; dawn gold
         // lives in glowSkyDawnGlow and the lower sky band only.
         //
         glowSkyZenith: PALETTE.green0,
@@ -339,7 +342,7 @@ export const CFG = {
         //
         // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
         // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
-        // Otterisk swatches; contour is green-black, not pure black.
+        // palette swatches; contour is green-black, not pure black.
         //
         eyeCreature: {
           body: PALETTE.gray0,
@@ -407,7 +410,7 @@ export const CFG = {
         gold: PALETTE.gold4,
         //
         // Terracotta decor + cute mushrooms — refs #B86B4A / #D48A57 / #6D4038
-        // (nearest Otterisk orange2 / orange3 / brown0).
+        // (nearest palette orange2 / orange3 / brown0).
         //
         glowMushroom: {
           cap: PALETTE.orange2,
@@ -690,83 +693,6 @@ export const CFG = {
       }
     },
     //
-    // Full-screen CRT post layer (see utils/crt-overlay.js). One stay() object
-    // at zIndex.crt — above HUD, gameplay, and transition covers.
-    //
-    crt: {
-      enabled: true,
-      masterIntensity: 1,
-      scanlines: {
-        spacingPx: 3,
-        opacity: 0.14
-      },
-      phosphor: {
-        tint: PALETTE.gold5,
-        opacity: 0.038
-      },
-      chroma: {
-        edgeOpacity: 0.055,
-        edgeWidthPx: 52,
-        leftTint: PALETTE.red2,
-        rightTint: PALETTE.cyan3
-      },
-      noise: {
-        opacity: 0.05,
-        scrollSpeedPxPerSec: 14,
-        tileSize: 192,
-        blockSize: 2
-      },
-      interference: {
-        enabled: true,
-        minIntervalSec: 14,
-        maxIntervalSec: 32,
-        opacity: 0.035,
-        bandHeightPx: 22,      // Soft glow band, not a hairline
-        driftPxPerSec: 60,     // Band creeps down while it lives
-        durationSec: 0.5,
-        bandTint: PALETTE.gray6
-      },
-      //
-      // Analog TV faults drawn as soft full-screen effects (no line stacks).
-      //
-      glitches: {
-        enabled: true,
-        minIntervalSec: 16,
-        maxIntervalSec: 38,
-        humBar: {
-          minDurationSec: 1.4,
-          maxDurationSec: 2.6,
-          heightFrac: 0.1,     // Mains hum bar height vs screen
-          opacity: 0.04,
-          tint: PALETTE.gray6
-        },
-        verticalRoll: {
-          minDurationSec: 0.35,
-          maxDurationSec: 0.6,
-          heightFrac: 0.035,   // Vertical blanking bar height vs screen
-          opacity: 0.3,
-          dimOpacity: 0.035    // Whole picture dims while sync is lost
-        },
-        snowBurst: {
-          minDurationSec: 0.18,
-          maxDurationSec: 0.45,
-          opacity: 0.09,
-          dimOpacity: 0.025
-        },
-        brightnessSag: {
-          minDurationSec: 0.12,
-          maxDurationSec: 0.28,
-          opacity: 0.07,
-          pulses: 3
-        },
-        colorDrift: {
-          minDurationSec: 0.5,
-          maxDurationSec: 0.9,
-          opacity: 0.025
-        }
-      }
-    },
-    //
     // Z-indices (layers)
     //
     zIndex: {
@@ -779,7 +705,6 @@ export const CFG = {
       assemblyParticles: 101,
       eyePupil: 1,
       ui: 100,
-      crt: 20000, // Above every scene layer, transitions and fullscreen button
       blades: 14  // Just below platforms, above everything else including huge words
     }
   },

@@ -1043,20 +1043,20 @@ const GLOW_FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
 const GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 //
-// Sunlight rays from one sun high above the upper-left corner (colour world
-// only). Each ray is a wedge from that point with its own angular width, so
-// ray edges spread apart with distance and the rays fan from a single source.
-// They reach the ground line and screen-lighten everything they cross, so the
-// z sits above the topmost world decor (ear-tree branches / spiky tomatoes at
-// GRASS_Z + 3.5) but far below HUD and speech bubbles.
+// Parallel sunlight through the left big tree's canopy (colour world only).
+// Rays screen-lighten everything they cross, so z sits above ear-tree branches
+// / spiky tomatoes (GRASS_Z + 3.5) but below HUD and speech bubbles.
 //
 const GLOW_LIGHT_SHAFT_Z = GRASS_Z + 5
-const GLOW_LIGHT_SUN_OFFSET_X = -300
-const GLOW_LIGHT_SUN_LIFT = 900
+//
+// One distant sun angle; each entry is an X offset from the first-start ground
+// spawn foot plus band width and peak opacity (fixed for the whole level).
+//
+const GLOW_LIGHT_ANGLE = 0.5
 const GLOW_LIGHT_RAYS = [
-  { angle: 0.45, spread: 0.11, opacity: 0.42 },
-  { angle: 0.61, spread: 0.045, opacity: 0.3 },
-  { angle: 0.79, spread: 0.08, opacity: 0.36 }
+  { spawnOffsetX: -85, width: 170, opacity: 0.48 },
+  { spawnOffsetX: 0, width: 150, opacity: 0.5 },
+  { spawnOffsetX: 72, width: 80, opacity: 0.3 }
 ]
 const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
@@ -1107,7 +1107,7 @@ const GROUND_DETAIL_LOOKAHEAD = 28
 // darkened by GROUND_LAYER_DEEP_SHADE_ALPHA of the glow shadow swatch.
 //
 const GROUND_LAYER_FRACS = [0.36, 0.3]
-const GROUND_LAYER_DEEP_SHADE_ALPHA = 0.3
+const GROUND_LAYER_DEEP_SHADE_ALPHA = 0.42
 //
 // High-frequency jagged seams between soil layers (sample-and-hold noise, like
 // a dense irregular time series — not smooth sine waves).
@@ -1675,14 +1675,17 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const trampX = trampXEarly
     const heroGroundCenterY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    const branchTrampSpawnClearX =
-      branchTrampX + TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
-    const whisperSilentSpawnX = EyeFlower.minHeroXOutsidePlantWhisper(
-      LEFT_MARGIN,
-      WATER_SURFACE_Y,
-      heroGroundCenterY
-    )
-    const treeGroundSpawnX = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
+    let heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    const glowFirstStartGroundSpawnX = computeGlowFirstStartGroundSpawnX({
+      branchTrampX,
+      trampX,
+      branchTrampVisible: isBranchTrampolineVisible(zones),
+      trampVisible: isRightTrampolineVisible(zones),
+      heroGroundCenterY,
+      heroSpawnY,
+      mudPredatorAmbushTriggerX,
+      mudPredatorPopX
+    })
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
     const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
@@ -1693,8 +1696,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // mushroom, outside the island flower's whisper. A saved cave or ground
     // pose from a menu exit is restored as is.
     //
-    let heroSpawnX = treeGroundSpawnX
-    let heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    let heroSpawnX = glowFirstStartGroundSpawnX
     const hasSavedPose = lastSpawnX != null && lastSpawnY != null && lastSpawnMode
     if (!respawnNearTree && hasSavedPose && lastSpawnMode !== SPAWN_MODE_BRANCH) {
       heroSpawnX = lastSpawnX
@@ -1706,7 +1708,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // hero into the air the instant the level loads — pull it clear to
     // whichever side is closer before the mud-hazard check below.
     //
-    lastSpawnMode !== SPAWN_MODE_CAVE &&
+    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
         spawnX: heroSpawnX,
         spawnOnBranch: false,
@@ -1719,7 +1721,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // A saved ground spawn inside the mud ambush band would overlap the
     // predator the instant the level loads — pull it west of the trigger.
     //
-    lastSpawnMode !== SPAWN_MODE_CAVE &&
+    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromMudHazards({
         spawnX: heroSpawnX,
         spawnY: heroSpawnY,
@@ -1978,6 +1980,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       waterX2,
       lastHeroX: heroSpawnX,
       heroSpawnX,
+      glowFirstStartGroundSpawnX,
       logHoverFrames: 0,
       wasGrounded: false,
       wasGroundedOnBranch: false,
@@ -2147,10 +2150,14 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       backZ: GLOW_FOREST_FLOOR_BACK_Z,
       frontZ: GLOW_FOREST_FLOOR_FRONT_Z
     })
-    inst.lightShafts = LightShaft.create({
+    LightShaft.create({
       k,
-      sun: { x: LEFT_MARGIN + GLOW_LIGHT_SUN_OFFSET_X, y: TOP_MARGIN - GLOW_LIGHT_SUN_LIFT },
-      rays: GLOW_LIGHT_RAYS,
+      angle: GLOW_LIGHT_ANGLE,
+      rays: GLOW_LIGHT_RAYS.map(ray => ({
+        x: glowFirstStartGroundSpawnX + ray.spawnOffsetX,
+        width: ray.width,
+        opacity: ray.opacity
+      })),
       topY: TOP_MARGIN,
       groundY: FLOOR_Y,
       getOpacity: () => 1,
@@ -7521,6 +7528,48 @@ function respawnGlowHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.branchTrampBounceAir = false
   registerGlowTrampolineLateBounce(inst)
   snapGlowCameraToHero(k, fresh)
+}
+//
+// First-visit ground X: right of the branch tramp, outside the island
+// flower whisper, then the same trampoline / mud nudges as the hero spawn.
+// Light shafts stay anchored here for the whole level.
+//
+function computeGlowFirstStartGroundSpawnX(cfg) {
+  const {
+    branchTrampX,
+    trampX,
+    branchTrampVisible,
+    trampVisible,
+    heroGroundCenterY,
+    heroSpawnY,
+    mudPredatorAmbushTriggerX,
+    mudPredatorPopX
+  } = cfg
+  const branchTrampSpawnClearX =
+    branchTrampX + TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
+  const whisperSilentSpawnX = EyeFlower.minHeroXOutsidePlantWhisper(
+    LEFT_MARGIN,
+    WATER_SURFACE_Y,
+    heroGroundCenterY
+  )
+  let x = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
+  x = nudgeGlowHeroSpawnAwayFromTrampolines({
+    spawnX: x,
+    spawnOnBranch: false,
+    branchTrampX,
+    trampX,
+    branchTrampVisible,
+    trampVisible
+  })
+  return nudgeGlowHeroSpawnAwayFromMudHazards({
+    spawnX: x,
+    spawnY: heroSpawnY,
+    spawnOnBranch: false,
+    mudPredatorAmbushTriggerX,
+    mudPredatorPopX,
+    predator: null,
+    inst: null
+  })
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap

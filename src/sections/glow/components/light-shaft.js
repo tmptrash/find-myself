@@ -1,11 +1,11 @@
 import { GLOW_PAL } from '../utils/glow-palette.js'
 //
-// Soft sunlight rays falling from one sun point above the upper-left corner.
-// Every ray is a wedge cut from that point, so its edges drift apart the
-// farther they get from the sun, and the rays fan out slightly from each
-// other — one source, perspective spread. Each wedge is clipped to the band
-// between the playfield top and the ground line, so the light always lands
-// on the ground. Softness comes from per-vertex opacity (across the width
+// Soft sunlight rays from one distant sun. The sun is so far away that every
+// ray falls at the same angle to the ground — the rays are parallel bands
+// through canopy gaps. Geometry starts well above the playfield top so the
+// fade-in finishes before the visible frame edge — rays read as coming from
+// behind the canopy, not starting on a horizontal cut. Softness comes from
+// per-vertex opacity (across the width
 // and along the length), and a warm pool of light is laid where the ray
 // meets the ground. Everything is drawn with Screen blending above the world
 // decor, so whatever the ray crosses — grass, mushrooms, the hero, the
@@ -13,8 +13,12 @@ import { GLOW_PAL } from '../utils/glow-palette.js'
 //
 const SHAFT_COLUMNS = 18
 const SHAFT_ACROSS_POW = 1.4
-const SHAFT_HEAD_FRAC = 0.1
 const SHAFT_BOTTOM_ALPHA = 0.7
+//
+// Beam origin sits this many world px above topY so the head fade completes
+// before the playfield's top edge.
+//
+const SHAFT_ORIGIN_ABOVE_TOP = 220
 //
 // Inner structure: a few brighter streaks and dimmer gaps across each ray
 // (deterministic per ray), as in the reference.
@@ -42,23 +46,23 @@ const POOL_ALPHA_MULT = 1.15
  * Creates the light-shaft layer.
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay inst
- * @param {{x: number, y: number}} cfg.sun - World point every ray starts from
- * @param {Array<{angle: number, spread: number, opacity: number}>} cfg.rays - Ray centre angle from straight down (radians, positive leans right), angular width and peak opacity
- * @param {number} cfg.topY - World Y where the rays become visible (playfield top)
+ * @param {number} cfg.angle - Shared ray angle from straight down (radians, positive leans right)
+ * @param {Array<{x: number, width: number, opacity: number}>} cfg.rays - Ray foot centre X on the ground line, band width and peak opacity
+ * @param {number} cfg.topY - World Y of the playfield top (fade finishes here)
  * @param {number} cfg.groundY - World Y of the ground line every ray lands on
  * @param {Function} cfg.getOpacity - () => number, global layer opacity
  * @param {number} cfg.z - Layer z (above the world decor the light should brighten)
  * @returns {Object} Light-shaft inst
  */
 export function create(cfg) {
-  const { k, sun, rays, topY, groundY, getOpacity, z } = cfg
+  const { k, angle, rays, topY, groundY, getOpacity, z } = cfg
   const rgb = hexToRgb(GLOW_PAL.glowForestFloor.shaft)
   const inst = {
     k,
     getOpacity,
     color: k.rgb(rgb.r, rgb.g, rgb.b),
     blend: k.BlendMode.Screen,
-    shafts: rays.map((ray, i) => buildShaftGeometry(k, sun, ray, topY, groundY, i))
+    shafts: rays.map((ray, i) => buildShaftGeometry(k, angle, ray, topY, groundY, i))
   }
   k.add([k.z(z), { draw() { onDraw(inst) } }])
   return inst
@@ -96,36 +100,32 @@ function drawShaftPolygon(inst, poly, strength) {
 //
 // Static geometry for one ray: wedge grid + ground pool fan (world space).
 //
-function buildShaftGeometry(k, sun, ray, topY, groundY, index) {
-  const half = ray.spread / 2
-  const footLeft = rayX(sun, ray.angle - half, groundY)
-  const footRight = rayX(sun, ray.angle + half, groundY)
+function buildShaftGeometry(k, angle, ray, topY, groundY, index) {
   return {
     opacity: ray.opacity,
     phase: index * SHAFT_SHIMMER_PHASE_STEP,
-    beam: buildBeamPolygon(k, sun, ray, topY, groundY, index),
-    pool: buildPoolPolygon(k, (footLeft + footRight) / 2, groundY + POOL_SINK_PX, (footRight - footLeft) * POOL_RX_MULT)
+    beam: buildBeamPolygon(k, angle, ray, topY, groundY, index),
+    pool: buildPoolPolygon(k, ray.x, groundY + POOL_SINK_PX, ray.width * POOL_RX_MULT)
   }
 }
 //
-// Three rows (top, end of head fade-in, ground) × columns across the angular
-// width. Each column follows its own line from the sun, so the wedge widens
-// with distance and the bottom row lies flat on the ground as the broad foot.
+// Three rows (origin above frame, full strength at playfield top, ground) ×
+// columns across the band width. Every column runs along the shared sun angle.
 //
-function buildBeamPolygon(k, sun, ray, topY, groundY, index) {
+function buildBeamPolygon(k, angle, ray, topY, groundY, index) {
+  const originY = topY - SHAFT_ORIGIN_ABOVE_TOP
   const rows = [
-    { v: 0, along: 0 },
-    { v: SHAFT_HEAD_FRAC, along: 1 },
-    { v: 1, along: SHAFT_BOTTOM_ALPHA }
+    { y: originY, along: 0 },
+    { y: topY, along: 1 },
+    { y: groundY, along: SHAFT_BOTTOM_ALPHA }
   ]
-  const height = groundY - topY
   const pts = []
   const base = []
   rows.forEach(row => {
-    const y = topY + height * row.v
+    const y = row.y
     for (let c = 0; c <= SHAFT_COLUMNS; c++) {
       const u = c / SHAFT_COLUMNS
-      pts.push(k.vec2(rayX(sun, ray.angle + (u - 0.5) * ray.spread, y), y))
+      pts.push(k.vec2(rayX(angle, ray.x + (u - 0.5) * ray.width, groundY, y), y))
       base.push(row.along * Math.pow(Math.sin(Math.PI * u), SHAFT_ACROSS_POW) * shaftStreak(u, index))
     }
   })
@@ -141,10 +141,10 @@ function buildBeamPolygon(k, sun, ray, topY, groundY, index) {
   return { pts, indices, base, opacities: new Array(base.length).fill(0) }
 }
 //
-// X where the line leaving the sun at the given angle crosses world Y.
+// X at world Y on the sun-angle line that lands on the ground at footX.
 //
-function rayX(sun, angle, y) {
-  return sun.x + Math.tan(angle) * (y - sun.y)
+function rayX(angle, footX, groundY, y) {
+  return footX - Math.tan(angle) * (groundY - y)
 }
 //
 // Across-beam brightness streaks in [1 - depth, 1]; phases differ per shaft.

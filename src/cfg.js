@@ -262,9 +262,18 @@ export const CFG = {
         // palette greens/teals). Stays darker than canopy foliage; dawn gold
         // lives in glowSkyDawnGlow and the lower sky band only.
         //
-        glowSkyZenith: PALETTE.green0,
-        glowSkyMid: PALETTE.teal0,
-        glowSkyHorizon: PALETTE.teal1,
+        glowSkyZenith: PALETTE.teal1,
+        glowSkyMid: PALETTE.teal3,
+        glowSkyHorizon: PALETTE.gray5,
+        //
+        // Depth-grade pivots: far rows dissolve into warm sunlit air, mid rows
+        // into cool sage, the near row keeps nearly its own tones.
+        //
+        glowHaze: {
+          far: PALETTE.gray5,
+          mid: PALETTE.teal3,
+          near: PALETTE.slate2
+        },
         //
         // GLOW light — warm gold as colour (not gray brightness). Use sparingly:
         // core in sky gaps / haze, mid on reveals & HUD, bright on letter peaks.
@@ -400,7 +409,7 @@ export const CFG = {
         //
         groundChernozem: PALETTE.brown1,
         groundClay: PALETTE.brown2,
-        groundSand: PALETTE.brown0,
+        groundSand: PALETTE.rose0,
         //
         // Wet mud patch under the mud-zone tall grass — a darker, warmer
         // earth tone than plain groundDark so the soft-mud band reads as a
@@ -548,9 +557,9 @@ export const CFG = {
         // matches the foreground trees of the reference forest picture.
         //
         treeColor: {
-          root: PALETTE.brown0,
-          trunk: PALETTE.brown1,
-          branch: PALETTE.brown2,
+          root: PALETTE.rose0,
+          trunk: PALETTE.rose1,
+          branch: PALETTE.rose1,
           //
           // Pulled back from the brighter green3-5 swatches (read as acid/neon
           // against the warm bark and haze) toward the darker greens plus a
@@ -596,33 +605,37 @@ export const CFG = {
         // Parallax forest quadrants — cool/warm greens only (no red-pink rows).
         // X picks left/right; canopy row picks top/bottom.
         //
+        //
+        // West half: deep turquoise canopy in cool shade; east half: sunlit
+        // olive / yellow-green, as in the reference forest.
+        //
         parallaxTreeCornerTL: {
           root: PALETTE.teal0,
-          trunk: PALETTE.teal0,
-          branch: PALETTE.teal1,
-          leaf: PALETTE.teal2,
-          leafShades: [PALETTE.teal0, PALETTE.teal1, PALETTE.teal2]
+          trunk: PALETTE.cyan1,
+          branch: PALETTE.cyan1,
+          leaf: PALETTE.teal1,
+          leafShades: [PALETTE.cyan0, PALETTE.teal1, PALETTE.cyan2]
         },
         parallaxTreeCornerTR: {
           root: PALETTE.green0,
-          trunk: PALETTE.green0,
-          branch: PALETTE.green1,
-          leaf: PALETTE.green2,
-          leafShades: [PALETTE.green0, PALETTE.green2, PALETTE.teal3]
+          trunk: PALETTE.gray1,
+          branch: PALETTE.gray1,
+          leaf: PALETTE.green3,
+          leafShades: [PALETTE.green1, PALETTE.green3, PALETTE.green4]
         },
         parallaxTreeCornerBL: {
-          root: PALETTE.green0,
-          trunk: PALETTE.green0,
-          branch: PALETTE.teal1,
-          leaf: PALETTE.teal3,
-          leafShades: [PALETTE.green0, PALETTE.teal2, PALETTE.teal4]
+          root: PALETTE.teal0,
+          trunk: PALETTE.gray1,
+          branch: PALETTE.gray1,
+          leaf: PALETTE.teal2,
+          leafShades: [PALETTE.teal0, PALETTE.teal2, PALETTE.cyan3]
         },
         parallaxTreeCornerBR: {
           root: PALETTE.green0,
           trunk: PALETTE.green0,
           branch: PALETTE.green1,
           leaf: PALETTE.green2,
-          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2]
+          leafShades: [PALETTE.green0, PALETTE.green2, PALETTE.green3]
         },
         //
         // Branch trampoline — standard glowMushroom terracotta (unusual beat,

@@ -13,6 +13,7 @@ const GRAIN_ALPHA_MIN = 8
 // like glow's bluish-gray rim (#2d4141, luminance ~58) are still protected.
 //
 const GRAIN_OUTLINE_LUM_MAX = 90
+const GRADE_NEUTRAL_PIVOT = { r: 128, g: 128, b: 128 }
 //
 // Shared film-grain look for every glow bake (matches the near parallax row).
 //
@@ -74,11 +75,13 @@ export function applyGlowCanvasPixelate(canvas, cellPx) {
 //
 // Depth = contrast + saturation + grain (detail). Far layers stay soft and muted;
 // foreground stays sharp and vivid — separation without stacking haze overlays.
+// Contrast pulls toward a hued haze swatch, not neutral mid-grey, so distance
+// reads as sunlit green-gold air instead of grey fog.
 //
 export const GLOW_LAYER_GRADE = {
-  far: { contrast: 0.15, saturation: 0.24, grain: 0, grainBlockSize: 10 },
-  mid: { contrast: 0.44, saturation: 0.52, grain: 0.08, grainBlockSize: 6 },
-  near: { contrast: 0.72, saturation: 0.8, grain: 0.32, grainBlockSize: 5 },
+  far: { contrast: 0.4, saturation: 0.7, grain: 0, grainBlockSize: 10, haze: glowRgb(GLOW_PAL.glowHaze.far) },
+  mid: { contrast: 0.66, saturation: 0.9, grain: 0.08, grainBlockSize: 6, haze: glowRgb(GLOW_PAL.glowHaze.mid) },
+  near: { contrast: 0.92, saturation: 1.05, grain: 0.32, grainBlockSize: 5, haze: glowRgb(GLOW_PAL.glowHaze.near) },
   //
   // Smooth decor (hero, mushrooms, water mask) — grade only, almost no grain.
   //
@@ -98,14 +101,14 @@ export const GLOW_LAYER_GRADE = {
 export function applyGlowLayerGradeToCanvas(canvas, grade, seedOffset = 0) {
   if (!canvas?.width || !canvas?.height || !grade) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  applyContrastSaturationToContext(ctx, canvas.width, canvas.height, grade.contrast, grade.saturation)
+  applyContrastSaturationToContext(ctx, canvas.width, canvas.height, grade.contrast, grade.saturation, grade.haze)
   const grain = grainCfg(seedOffset, grade.grain ?? 1, grade.grainBlockSize)
   applyFilmGrainToContext(ctx, canvas.width, canvas.height, grain)
 }
 export function applyParallaxPostFxToContext(ctx, width, height, cfg) {
   if (!cfg) return
   cfg.blurRadius > 0 && applyBlurToContext(ctx, width, height, cfg.blurRadius)
-  cfg.grade && applyContrastSaturationToContext(ctx, width, height, cfg.grade.contrast, cfg.grade.saturation)
+  cfg.grade && applyContrastSaturationToContext(ctx, width, height, cfg.grade.contrast, cfg.grade.saturation, cfg.grade.haze)
   const grain = grainCfg(cfg.grainSeedOffset ?? 0, cfg.grade?.grain ?? 1, cfg.grade?.grainBlockSize)
   applyFilmGrainToContext(ctx, width, height, grain)
 }
@@ -131,10 +134,11 @@ function applyBlurToContext(ctx, width, height, radiusPx) {
   scratch.height = 0
 }
 //
-// Shifts pixel contrast around mid-grey and lerps colour toward luminance.
+// Shifts pixel contrast around the haze pivot (mid-grey by default) and
+// lerps colour toward luminance.
 //
-function applyContrastSaturationToContext(ctx, width, height, contrast, saturation) {
-  if (contrast >= 0.999 && saturation >= 0.999) return
+function applyContrastSaturationToContext(ctx, width, height, contrast, saturation, haze = GRADE_NEUTRAL_PIVOT) {
+  if (Math.abs(contrast - 1) < 0.001 && Math.abs(saturation - 1) < 0.001) return
   const imageData = ctx.getImageData(0, 0, width, height)
   const px = imageData.data
   for (let i = 0; i < px.length; i += 4) {
@@ -146,9 +150,9 @@ function applyContrastSaturationToContext(ctx, width, height, contrast, saturati
     let nr = lum + (r - lum) * saturation
     let ng = lum + (g - lum) * saturation
     let nb = lum + (b - lum) * saturation
-    nr = (nr - 128) * contrast + 128
-    ng = (ng - 128) * contrast + 128
-    nb = (nb - 128) * contrast + 128
+    nr = (nr - haze.r) * contrast + haze.r
+    ng = (ng - haze.g) * contrast + haze.g
+    nb = (nb - haze.b) * contrast + haze.b
     px[i] = clamp255(nr)
     px[i + 1] = clamp255(ng)
     px[i + 2] = clamp255(nb)

@@ -1,17 +1,67 @@
+import { CFG } from '../cfg.js'
+import * as Cursor from './cursor.js'
 //
-// Shared DOM loader (same markup as index.html). Fatal errors may replace
-// innerHTML — ensureLoaderStructure() restores the bar before reuse.
+// Shared DOM loader. Fatal errors may replace innerHTML —
+// ensureLoaderStructure() rebuilds the eye before reuse.
 //
-const LOADER_INNER_HTML = `<div id="loader-panel"><div id="loader-message">Loading. Please wait...</div><div id="loader-track"><div id="loader-bar"></div></div></div>`
+const LOADER_MESSAGE_ID = 'loader-message'
+const LOADER_PANEL_ID = 'loader-panel'
+const LOADER_EYE_ID = 'loader-eye'
+const LOADER_MESSAGE_TEXT = 'Loading. Please wait...'
+const SVG_NS = 'http://www.w3.org/2000/svg'
 //
-// Panel chrome over CRT snow: near-opaque plate, bright type, thick glowing bar.
+// Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
 //
 const LOADER_PANEL_BG_OVER_CRT = 'rgba(14, 20, 26, 0.97)'
 const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10px 60px rgba(0, 0, 0, 0.95)'
-const LOADER_MESSAGE_COLOR = '#f4f1de'
-const LOADER_TRACK_HEIGHT_OVER_CRT = '6px'
-const LOADER_TRACK_HEIGHT_DEFAULT = '4px'
 const LOADER_UI_FADE_SEC = 0.32
+//
+// Stalk-eye geometry (SVG user units = CSS px): the chain-buoy eye from the
+// Glow level lying on its side, ~1.4× its in-level size. The segmented stalk
+// grows from the root knot on the left; each finished joint sprouts a side
+// spike (alternating up / down, leaning back toward the root) and the eye
+// rides the right tip.
+//
+const EYE_VIEW_W = 360
+const EYE_VIEW_H = 96
+const STALK_ROOT_X = 14
+const STALK_Y = EYE_VIEW_H / 2
+const STALK_SEGMENT_LEN = 30
+const STALK_SEGMENT_W = 7
+const STALK_JOINT_R = STALK_SEGMENT_W * 0.5
+const SPIKE_LEN = STALK_SEGMENT_W * 2.6
+const SPIKE_LEN_WOBBLE = STALK_SEGMENT_W * 0.35
+const SPIKE_LEAN_BACK = STALK_SEGMENT_W * 0.35
+const SPIKE_W = STALK_SEGMENT_W * 0.72
+const SPIKE_BALL_R = STALK_SEGMENT_W * 0.95
+const STALK_WAVE_AMP = 7
+const STALK_WAVE_FREQ = 0.045
+const STALK_WAVE_SPEED = 2.2
+const ROOT_RX = 8
+const ROOT_RY = 5
+const EYE_R = 17
+const EYE_CONTOUR_W = 3
+const EYE_PUPIL_R = 7
+const EYE_LID_W = 1.6
+const EYE_LID_SPAN = 0.85
+const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
+//
+// Pupil saccades: a quick dart to a random spot, then a hold, as if the eye
+// is tracking something that keeps moving around the screen.
+//
+const PUPIL_MAX_OFFSET = EYE_R - EYE_PUPIL_R - 1
+const PUPIL_DART_RATE = 22
+const PUPIL_HOLD_MIN_SEC = 0.25
+const PUPIL_HOLD_MAX_SEC = 1.3
+const PUPIL_MIN_REACH = 0.35
+const PUPIL_CENTER_CHANCE = 0.15
+//
+// Occasional blink: a closed lid in the stalk ink, like the level's buoys.
+//
+const BLINK_SEC = 0.14
+const BLINK_GAP_MIN_SEC = 2.4
+const BLINK_GAP_MAX_SEC = 5
+const MAX_FRAME_DT = 0.05
 //
 // Optional owner of the hide sequence (CRT intro keeps snow running after the bar finishes).
 //
@@ -19,18 +69,17 @@ let loaderHideHandler = null
 
 export const DEFAULT_GPU_YIELD_FRAMES = 2
 //
-// Reported progress (truth) vs displayed width (smooth creep between reports).
+// Reported progress (truth) vs displayed stalk length (smooth creep between reports).
 //
 let loaderBarReportedPct = 0
 let loaderBarDisplayPct = 0
 let loaderBarAnimFrame = null
 let loaderBarCreepPerSec = 22
 let loaderBarCreepHeadroom = 12
-let loaderBarSessionStartMs = 0
 const LOADER_BAR_CREEP_PER_SEC_DEFAULT = 22
 const LOADER_BAR_CREEP_HEADROOM_DEFAULT = 12
 //
-// Displayed width may creep slightly ahead of the last reported value (headroom)
+// Displayed length may creep slightly ahead of the last reported value (headroom)
 // so short gaps between yields still show motion — never past reported + headroom.
 //
 const LOADER_BAR_CREEP_HEADROOM_BOOST = 16
@@ -40,9 +89,15 @@ const LOADER_Z_OVER_CRT = '10001'
 const LOADER_BG_OPAQUE = '#000000'
 const LOADER_BG_TRANSPARENT = 'transparent'
 //
-// Glow bootstrap reports truth in bursts — creep keeps the bar moving
-// between those reports so the screen reads as loading, not frozen.
+// Live SVG nodes and animation state of the loader eye.
 //
+let eye = null
+
+/**
+ * Glow bootstrap reports truth in bursts — creep keeps the stalk growing
+ * between those reports so the screen reads as loading, not frozen.
+ * @param {boolean} boosted - Faster creep with more headroom
+ */
 export function setLoaderBarCreepBoost(boosted) {
   if (boosted) {
     loaderBarCreepPerSec = LOADER_BAR_CREEP_PER_SEC_BOOST
@@ -53,14 +108,15 @@ export function setLoaderBarCreepBoost(boosted) {
   }
   isLoaderVisible() && startLoaderBarAnimation()
 }
-
+/**
+ * Builds the loader panel (caption + eye on a stalk) if it is missing.
+ */
 export function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
-  if (!document.getElementById('loader-panel')) {
-    loaderEl.innerHTML = LOADER_INNER_HTML
-    applyLoaderChromeStyles()
-  }
+  if (document.getElementById(LOADER_PANEL_ID) && document.getElementById(LOADER_EYE_ID)) return
+  loaderEl.innerHTML = ''
+  loaderEl.appendChild(buildLoaderPanel())
 }
 /**
  * Lets a caller take over hideLoader() (e.g. CRT snow outro). The handler
@@ -71,17 +127,15 @@ export function setLoaderHideHandler(handler) {
   loaderHideHandler = handler
 }
 /**
- * Snaps the bar to 100%, then fades the loader UI out and hides it — the
- * full-screen backdrop (if any) is left to the caller.
- * @param {number} holdSec - How long the full bar stays visible before fading
+ * Grows the stalk to full length, then fades the loader UI out and hides it —
+ * the full-screen backdrop (if any) is left to the caller. The pupil keeps
+ * watching during the hold and the fade.
+ * @param {number} holdSec - How long the full stalk stays visible before fading
  * @returns {Promise<void>}
  */
 export function completeAndFadeOutLoaderUi(holdSec) {
-  const bar = document.getElementById('loader-bar')
-  bar && (bar.style.width = '100%')
   loaderBarDisplayPct = 100
   loaderBarReportedPct = 100
-  stopLoaderBarAnimation()
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return Promise.resolve()
   return wait(holdSec).then(() => {
@@ -94,13 +148,13 @@ export function completeAndFadeOutLoaderUi(holdSec) {
     loaderEl.style.opacity = '1'
   })
 }
-
 /**
+ * Shows the full-screen loader and takes the mouse cursor away until it hides.
  * @param {Object} [opts]
  * @param {boolean} [opts.transparentBackdrop] - Let a CRT/snow layer show through
  * @param {boolean} [opts.elevatedZ] - Draw above the TV intro canvas
  * @param {string[]} [opts.keepCanvasIds] - Do not hide these canvases (TV overlay)
- * @param {boolean} [opts.preserveBar] - Keep current bar width (re-show only)
+ * @param {boolean} [opts.preserveBar] - Keep current stalk length (re-show only)
  */
 export function showLoader(opts = {}) {
   ensureLoaderStructure()
@@ -110,13 +164,12 @@ export function showLoader(opts = {}) {
   loaderEl.style.background = opts.transparentBackdrop ? LOADER_BG_TRANSPARENT : LOADER_BG_OPAQUE
   loaderEl.style.zIndex = opts.elevatedZ ? LOADER_Z_OVER_CRT : LOADER_Z_DEFAULT
   setLoaderPanelOverCrt(opts.transparentBackdrop === true)
+  Cursor.setHiddenByLoader(true)
   if (!opts.preserveBar) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
-    loaderBarSessionStartMs = performance.now()
-    const bar = document.getElementById('loader-bar')
-    bar && (bar.style.width = '0%')
   }
+  drawLoaderEye(0)
   startLoaderBarAnimation()
   const keepIds = opts.keepCanvasIds ?? []
   document.querySelectorAll('canvas').forEach(canvas => {
@@ -132,12 +185,16 @@ export function restoreLoaderDefaultBackdrop() {
   loaderEl.style.background = LOADER_BG_OPAQUE
   loaderEl.style.zIndex = LOADER_Z_DEFAULT
 }
-
+/**
+ * @returns {boolean} True while the loader overlay is on screen
+ */
 export function isLoaderVisible() {
   const loaderEl = document.getElementById('loader')
   return Boolean(loaderEl && loaderEl.style.display === 'flex')
 }
-
+/**
+ * Hides the loader, or hands the hide over to a registered outro handler.
+ */
 export function hideLoader() {
   if (!loaderHideHandler) {
     finishHideLoader()
@@ -147,73 +204,28 @@ export function hideLoader() {
   loaderHideHandler = null
   handler()
 }
-function finishHideLoader() {
-  const bar = document.getElementById('loader-bar')
-  bar && (bar.style.width = '100%')
-  loaderBarDisplayPct = 100
-  loaderBarReportedPct = Math.max(loaderBarReportedPct, 100)
-  stopLoaderBarAnimation()
-  setLoaderBarCreepBoost(false)
-  const loaderEl = document.getElementById('loader')
-  if (!loaderEl) return
-  setLoaderPanelOverCrt(false)
-  restoreLoaderDefaultBackdrop()
-  loaderEl.style.display = 'none'
-  document.querySelectorAll('canvas').forEach(canvas => {
-    canvas.style.visibility = 'visible'
-  })
-}
-
+/**
+ * Reports loading progress; the stalk never shrinks within one session.
+ * @param {number} pct - Progress 0..100 (0 resets the stalk)
+ */
 export function setLoaderBarPct(pct) {
-  const bar = document.getElementById('loader-bar')
-  if (!bar) return
   const clamped = Math.min(100, Math.max(0, pct))
   if (clamped === 0) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
-    bar.style.width = '0%'
+    drawLoaderEye(0)
     return
   }
   if (clamped <= loaderBarReportedPct) return
   loaderBarReportedPct = clamped
-  if (loaderBarDisplayPct < loaderBarReportedPct) {
-    loaderBarDisplayPct = loaderBarReportedPct
-    bar.style.width = `${loaderBarDisplayPct}%`
-  }
+  loaderBarDisplayPct < loaderBarReportedPct && (loaderBarDisplayPct = loaderBarReportedPct)
   isLoaderVisible() && startLoaderBarAnimation()
 }
-function loaderBarCreepCeilingPct() {
-  if (loaderBarReportedPct >= 100) return 100
-  return Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
-}
-function startLoaderBarAnimation() {
-  if (loaderBarAnimFrame != null) return
-  let lastTs = performance.now()
-  const step = (ts) => {
-    const bar = document.getElementById('loader-bar')
-    if (!bar || !isLoaderVisible()) {
-      loaderBarAnimFrame = null
-      return
-    }
-    const dt = Math.min(0.05, (ts - lastTs) / 1000)
-    lastTs = ts
-    const creepCeiling = loaderBarCreepCeilingPct()
-    if (loaderBarDisplayPct < creepCeiling) {
-      loaderBarDisplayPct = Math.min(
-        creepCeiling,
-        loaderBarDisplayPct + loaderBarCreepPerSec * dt
-      )
-      bar.style.width = `${loaderBarDisplayPct}%`
-    }
-    loaderBarAnimFrame = requestAnimationFrame(step)
-  }
-  loaderBarAnimFrame = requestAnimationFrame(step)
-}
-function stopLoaderBarAnimation() {
-  loaderBarAnimFrame != null && cancelAnimationFrame(loaderBarAnimFrame)
-  loaderBarAnimFrame = null
-}
-
+/**
+ * Resolves after the given number of animation frames.
+ * @param {number} [frames=DEFAULT_GPU_YIELD_FRAMES]
+ * @returns {Promise<void>}
+ */
 export function yieldForGpu(frames = DEFAULT_GPU_YIELD_FRAMES) {
   return new Promise(resolve => {
     function waitFrames(framesLeft) {
@@ -226,22 +238,43 @@ export function yieldForGpu(frames = DEFAULT_GPU_YIELD_FRAMES) {
     waitFrames(frames)
   })
 }
-
+/**
+ * Replaces the loader with an error message and gives the cursor back.
+ * @param {string} message
+ */
 export function showFatalLoaderError(message) {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
+  stopLoaderBarAnimation()
+  eye = null
+  Cursor.setHiddenByLoader(false)
   loaderEl.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
   loaderEl.style.display = 'flex'
 }
+
+function finishHideLoader() {
+  loaderBarDisplayPct = 100
+  loaderBarReportedPct = Math.max(loaderBarReportedPct, 100)
+  stopLoaderBarAnimation()
+  setLoaderBarCreepBoost(false)
+  Cursor.setHiddenByLoader(false)
+  const loaderEl = document.getElementById('loader')
+  if (!loaderEl) return
+  setLoaderPanelOverCrt(false)
+  restoreLoaderDefaultBackdrop()
+  loaderEl.style.display = 'none'
+  document.querySelectorAll('canvas').forEach(canvas => {
+    canvas.style.visibility = 'visible'
+  })
+}
 //
-// Readable loader chrome on top of CRT snow (panel + high-contrast type).
+// Caption above the eye; the panel turns into a plate over CRT snow.
 //
-function applyLoaderChromeStyles() {
-  const panel = document.getElementById('loader-panel')
-  const message = document.getElementById('loader-message')
-  const track = document.getElementById('loader-track')
-  const bar = document.getElementById('loader-bar')
-  panel && Object.assign(panel.style, {
+function buildLoaderPanel() {
+  const colors = CFG.visual.colors.loader
+  const panel = document.createElement('div')
+  panel.id = LOADER_PANEL_ID
+  Object.assign(panel.style, {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -249,38 +282,250 @@ function applyLoaderChromeStyles() {
     borderRadius: '8px',
     background: 'transparent'
   })
-  message && Object.assign(message.style, {
-    color: LOADER_MESSAGE_COLOR,
+  const message = document.createElement('div')
+  message.id = LOADER_MESSAGE_ID
+  message.textContent = LOADER_MESSAGE_TEXT
+  Object.assign(message.style, {
+    color: colors.message,
     fontSize: '24px',
-    marginBottom: '20px',
+    marginBottom: '12px',
     textShadow: '0 2px 6px rgba(0, 0, 0, 1)'
   })
-  track && Object.assign(track.style, {
-    width: '325px',
-    height: LOADER_TRACK_HEIGHT_DEFAULT,
-    background: '#333',
-    borderRadius: '3px',
-    overflow: 'hidden'
-  })
-  bar && Object.assign(bar.style, {
-    width: '0%',
-    height: '100%',
-    background: '#DC143C',
-    transition: 'width 0.1s'
-  })
+  panel.appendChild(message)
+  panel.appendChild(buildLoaderEyeSvg(colors))
+  return panel
 }
 //
-// Over CRT snow the panel turns into a solid plate so text and bar never drown.
+// SVG scene: root knot, stroked stalk segments and spikes, filled joint knots
+// and spike balls, then the eye (open: ring + sclera + pupil; closed: lid).
+//
+function buildLoaderEyeSvg(colors) {
+  const svg = svgEl('svg', {
+    id: LOADER_EYE_ID,
+    width: EYE_VIEW_W,
+    height: EYE_VIEW_H,
+    viewBox: `0 0 ${EYE_VIEW_W} ${EYE_VIEW_H}`
+  })
+  svg.style.overflow = 'visible'
+  const root = svgEl('ellipse', {
+    cx: STALK_ROOT_X,
+    cy: STALK_Y + ROOT_RY * 0.4,
+    rx: ROOT_RX,
+    ry: ROOT_RY,
+    fill: colors.root
+  })
+  const stalk = svgEl('path', strokeAttrs(colors.body, STALK_SEGMENT_W))
+  const spikes = svgEl('path', strokeAttrs(colors.body, SPIKE_W))
+  const knots = svgEl('path', { fill: colors.body })
+  const eyeGroup = svgEl('g', {})
+  const openEye = svgEl('g', {})
+  openEye.appendChild(svgEl('circle', { r: EYE_R + EYE_CONTOUR_W, fill: colors.eyeContour }))
+  openEye.appendChild(svgEl('circle', { r: EYE_R, fill: colors.sclera }))
+  const pupil = svgEl('circle', { r: EYE_PUPIL_R, fill: colors.pupil })
+  openEye.appendChild(pupil)
+  const closedEye = svgEl('g', { display: 'none' })
+  closedEye.appendChild(svgEl('circle', { r: EYE_R + EYE_CONTOUR_W, fill: colors.body }))
+  closedEye.appendChild(svgEl('line', {
+    x1: -EYE_R * EYE_LID_SPAN,
+    x2: EYE_R * EYE_LID_SPAN,
+    y1: 0,
+    y2: 0,
+    stroke: colors.eyeContour,
+    'stroke-width': EYE_LID_W,
+    'stroke-linecap': 'round'
+  }))
+  eyeGroup.appendChild(openEye)
+  eyeGroup.appendChild(closedEye)
+  svg.appendChild(root)
+  svg.appendChild(stalk)
+  svg.appendChild(spikes)
+  svg.appendChild(knots)
+  svg.appendChild(eyeGroup)
+  eye = {
+    stalk,
+    spikes,
+    knots,
+    eyeGroup,
+    openEye,
+    closedEye,
+    pupil,
+    time: 0,
+    pupilX: 0,
+    pupilY: 0,
+    targetX: 0,
+    targetY: 0,
+    holdLeft: 0,
+    blinkLeft: 0,
+    blinkGap: randomRange(BLINK_GAP_MIN_SEC, BLINK_GAP_MAX_SEC)
+  }
+  return svg
+}
+
+function strokeAttrs(color, width) {
+  return {
+    fill: 'none',
+    stroke: color,
+    'stroke-width': width,
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round'
+  }
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag)
+  Object.entries(attrs).forEach(([name, value]) => el.setAttribute(name, String(value)))
+  return el
+}
+//
+// Advances the pupil / blink state and redraws the stalk at the shown progress.
+//
+function drawLoaderEye(dt) {
+  if (!eye) return
+  eye.time += dt
+  tickPupilSaccade(dt)
+  const closed = tickBlink(dt)
+  const len = STALK_MAX_LEN * loaderBarDisplayPct / 100
+  const points = buildStalkPoints(STALK_ROOT_X + len)
+  const joints = points.slice(1, -1)
+  const tip = points[points.length - 1]
+  const spikeTips = joints.map((p, i) => spikeTipFor(p, i))
+  eye.stalk.setAttribute('d', pointsToPath(points))
+  eye.spikes.setAttribute('d', joints.map((p, i) => linePath(p, spikeTips[i])).join(' '))
+  eye.knots.setAttribute('d', [
+    ...joints.map(p => circlePath(p.x, p.y, STALK_JOINT_R)),
+    ...spikeTips.map(p => circlePath(p.x, p.y, SPIKE_BALL_R))
+  ].join(' '))
+  eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
+  eye.openEye.setAttribute('display', closed ? 'none' : 'inline')
+  eye.closedEye.setAttribute('display', closed ? 'inline' : 'none')
+  eye.pupil.setAttribute('cx', eye.pupilX.toFixed(2))
+  eye.pupil.setAttribute('cy', eye.pupilY.toFixed(2))
+}
+//
+// Joints every segment length plus the partial tip; the wave grows from zero
+// at the root, so the knot stays planted while the tip (and the eye) sways.
+//
+function buildStalkPoints(tipX) {
+  const points = []
+  for (let x = STALK_ROOT_X; x < tipX; x += STALK_SEGMENT_LEN) {
+    points.push({ x, y: stalkYAt(x) })
+  }
+  points.push({ x: tipX, y: stalkYAt(tipX) })
+  return points
+}
+//
+// Spikes alternate up / down per joint with a fixed per-joint length wobble,
+// leaning back toward the root like the buoy arms droop toward the ground.
+//
+function spikeTipFor(joint, index) {
+  const side = index % 2 === 0 ? -1 : 1
+  const len = SPIKE_LEN + Math.sin(index * 1.17) * SPIKE_LEN_WOBBLE
+  return { x: joint.x - SPIKE_LEAN_BACK, y: joint.y + side * len }
+}
+
+function linePath(a, b) {
+  return `M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`
+}
+
+function circlePath(cx, cy, r) {
+  return `M${(cx - r).toFixed(1)} ${cy.toFixed(1)} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0`
+}
+
+function stalkYAt(x) {
+  const along = (x - STALK_ROOT_X) / STALK_MAX_LEN
+  const wave = Math.sin(x * STALK_WAVE_FREQ - eye.time * STALK_WAVE_SPEED)
+  return STALK_Y + wave * STALK_WAVE_AMP * along
+}
+
+function pointsToPath(points) {
+  return points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+}
+//
+// Quick dart toward the current target, hold, then pick a new spot (now and
+// then straight ahead, so it reads as looking around rather than jittering).
+//
+function tickPupilSaccade(dt) {
+  eye.holdLeft -= dt
+  if (eye.holdLeft <= 0) {
+    pickPupilTarget()
+    eye.holdLeft = randomRange(PUPIL_HOLD_MIN_SEC, PUPIL_HOLD_MAX_SEC)
+  }
+  const ease = Math.min(1, dt * PUPIL_DART_RATE)
+  eye.pupilX += (eye.targetX - eye.pupilX) * ease
+  eye.pupilY += (eye.targetY - eye.pupilY) * ease
+}
+
+function pickPupilTarget() {
+  if (Math.random() < PUPIL_CENTER_CHANCE) {
+    eye.targetX = 0
+    eye.targetY = 0
+    return
+  }
+  const angle = Math.random() * Math.PI * 2
+  const reach = PUPIL_MAX_OFFSET * randomRange(PUPIL_MIN_REACH, 1)
+  eye.targetX = Math.cos(angle) * reach
+  eye.targetY = Math.sin(angle) * reach
+}
+//
+// Returns true while the lid is closed.
+//
+function tickBlink(dt) {
+  if (eye.blinkLeft > 0) {
+    eye.blinkLeft = Math.max(0, eye.blinkLeft - dt)
+    return eye.blinkLeft > 0
+  }
+  eye.blinkGap -= dt
+  if (eye.blinkGap > 0) return false
+  eye.blinkLeft = BLINK_SEC
+  eye.blinkGap = randomRange(BLINK_GAP_MIN_SEC, BLINK_GAP_MAX_SEC)
+  return true
+}
+
+function randomRange(min, max) {
+  return min + Math.random() * (max - min)
+}
+//
+// Over CRT snow the panel turns into a solid plate so the caption and the eye
+// never drown in the static.
 //
 function setLoaderPanelOverCrt(overCrt) {
-  const panel = document.getElementById('loader-panel')
-  const track = document.getElementById('loader-track')
-  const bar = document.getElementById('loader-bar')
+  const panel = document.getElementById(LOADER_PANEL_ID)
   if (!panel) return
   panel.style.background = overCrt ? LOADER_PANEL_BG_OVER_CRT : 'transparent'
   panel.style.boxShadow = overCrt ? LOADER_PANEL_SHADOW_OVER_CRT : 'none'
-  track && (track.style.height = overCrt ? LOADER_TRACK_HEIGHT_OVER_CRT : LOADER_TRACK_HEIGHT_DEFAULT)
-  bar && (bar.style.boxShadow = overCrt ? '0 0 12px rgba(220, 20, 60, 0.85)' : 'none')
+}
+
+function loaderBarCreepCeilingPct() {
+  if (loaderBarReportedPct >= 100) return 100
+  return Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
+}
+//
+// One rAF loop per visible loader: creeps the stalk and keeps the eye alive.
+//
+function startLoaderBarAnimation() {
+  if (loaderBarAnimFrame != null) return
+  let lastTs = performance.now()
+  const step = (ts) => {
+    if (!isLoaderVisible()) {
+      loaderBarAnimFrame = null
+      return
+    }
+    const dt = Math.min(MAX_FRAME_DT, Math.max(0, (ts - lastTs) / 1000))
+    lastTs = ts
+    const creepCeiling = loaderBarCreepCeilingPct()
+    loaderBarDisplayPct < creepCeiling &&
+      (loaderBarDisplayPct = Math.min(creepCeiling, loaderBarDisplayPct + loaderBarCreepPerSec * dt))
+    drawLoaderEye(dt)
+    loaderBarAnimFrame = requestAnimationFrame(step)
+  }
+  loaderBarAnimFrame = requestAnimationFrame(step)
+}
+
+function stopLoaderBarAnimation() {
+  loaderBarAnimFrame != null && cancelAnimationFrame(loaderBarAnimFrame)
+  loaderBarAnimFrame = null
 }
 
 function wait(sec) {

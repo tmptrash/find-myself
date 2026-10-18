@@ -60,6 +60,14 @@ export function tickPredatorFruitFeast(pred, levelInst, dt) {
   if (pred.obj?.hidden || pred.state === 'coast' || pred.state === 'flee') return
   if (!levelInst?.zones?.predatorAwake) return
   //
+  // The swim back from the island owns the crawler until it is ashore —
+  // a feast approach clamps x to the patrol strip and teleported it there.
+  //
+  if (pred.islandRetreatX != null || pred.swimming) {
+    pred.state === 'feast' && endFeast(pred, levelInst)
+    return
+  }
+  //
   // A rider on the back pins the walking direction — turning to a fruit would flip it.
   //
   if (levelInst.shoreFallTwigs?.riderLocked) {

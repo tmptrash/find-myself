@@ -21,6 +21,12 @@ const POINTER_HOTSPOT_X = 8
 //
 let cursorEl = null
 let cursorType = 'arrow'
+//
+// Independent hide reasons — the overlay shows only when none of them applies.
+//
+let sceneVisible = true
+let hiddenByLoader = false
+let pointerInWindow = true
 
 /**
  * Sets the cursor type to 'arrow' (normal) or 'pointer' (hand)
@@ -40,8 +46,17 @@ export function setCursor(type) {
  * @param {boolean} visible
  */
 export function setVisible(visible) {
-  if (!cursorEl) return
-  cursorEl.style.display = visible ? '' : 'none'
+  sceneVisible = visible
+  applyVisibility()
+}
+/**
+ * Takes the cursor away while the loader is on screen (works before init too,
+ * so a loader shown during the first engine boot already hides it).
+ * @param {boolean} hidden
+ */
+export function setHiddenByLoader(hidden) {
+  hiddenByLoader = hidden
+  applyVisibility()
 }
 
 /**
@@ -69,6 +84,7 @@ export function init(k) {
   cursorEl.style.willChange = 'transform'
   cursorEl.innerHTML = ARROW_SVG
   document.body.appendChild(cursorEl)
+  applyVisibility()
   //
   // Track mouse position and update cursor element via transform
   //
@@ -76,12 +92,19 @@ export function init(k) {
   //
   // Hide cursor when mouse leaves the browser window entirely
   //
-  document.addEventListener('mouseleave', () => {
-    cursorEl.style.display = 'none'
-  })
-  document.addEventListener('mouseenter', () => {
-    cursorEl.style.display = ''
-  })
+  document.addEventListener('mouseleave', () => setPointerInWindow(false))
+  document.addEventListener('mouseenter', () => setPointerInWindow(true))
+}
+
+function setPointerInWindow(inside) {
+  pointerInWindow = inside
+  applyVisibility()
+}
+
+function applyVisibility() {
+  if (!cursorEl) return
+  const visible = sceneVisible && !hiddenByLoader && pointerInWindow
+  cursorEl.style.display = visible ? '' : 'none'
 }
 //
 // Update overlay position using CSS transform for minimal layout thrashing

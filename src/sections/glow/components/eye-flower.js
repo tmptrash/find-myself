@@ -67,6 +67,12 @@ const PLANT_Z = CFG.visual.zIndex.player - 0.5
 // Static collider over the walkable top (hidden far away while the plant is off).
 //
 const COLLIDER_H = 10
+//
+// Walkable box extends past the hill crest on the right and sits slightly lower
+// than the baked top line so landings feel grounded on the slope.
+//
+const COLLIDER_EXTEND_RIGHT = 52
+const COLLIDER_DROP = 8
 const COLLIDER_HIDE_POS = -5000
 const STAND_X_SLACK = 6
 const STAND_ABOVE = 14
@@ -247,13 +253,15 @@ export function create(cfg) {
     plateau: ISLAND_PLATEAU_FRAC
   }
   const walkX2 = hillXWhereTopReaches(hill, topY + ISLAND_WALK_DROP)
+  const colliderWalkX2 = walkX2 + COLLIDER_EXTEND_RIGHT
+  const colliderTopY = topY + COLLIDER_DROP
   const baseX = x1 + PLANT_BASE_DX
   const baseY = mossyHillTopY(hill, baseX) + PLANT_BASE_SINK
   const reachLimitX = cfg.reachTriggerX - REACH_TREE_GAP
   const lakeSpan = cfg.lakeX2 - cfg.lakeX1
   const stemReachMaxX = cfg.lakeX1 + lakeSpan * STEM_LAKE_REACH_FRAC
   const collider = k.add([
-    k.rect(walkX2 - x1, COLLIDER_H),
+    k.rect(colliderWalkX2 - x1, COLLIDER_H),
     k.pos(COLLIDER_HIDE_POS, COLLIDER_HIDE_POS),
     k.area(),
     k.body({ isStatic: true }),
@@ -269,6 +277,8 @@ export function create(cfg) {
     topY,
     hill,
     walkX2,
+    colliderWalkX2,
+    colliderTopY,
     shoreX: hillXWhereTopReaches(hill, waterY),
     baseX,
     baseY,
@@ -346,8 +356,9 @@ export function predatorMinX(inst) {
  */
 export function isOnIsland(inst, footX, footY) {
   if (!inst?.visible) return false
-  if (footX < inst.x1 - STAND_X_SLACK || footX > inst.walkX2 + STAND_X_SLACK) return false
-  return footY >= inst.topY - STAND_ABOVE && footY <= inst.topY + STAND_BELOW
+  if (footX < inst.x1 - STAND_X_SLACK || footX > inst.colliderWalkX2 + STAND_X_SLACK) return false
+  const topY = inst.colliderTopY
+  return footY >= topY - STAND_ABOVE && footY <= topY + STAND_BELOW
 }
 
 /**
@@ -405,7 +416,7 @@ export function minHeroXOutsidePlantWhisper(lakeX1, waterSurfaceY, heroY) {
 function onUpdate(inst) {
   inst.visible = inst.isVisible()
   inst.collider.pos.x = inst.visible ? inst.x1 : COLLIDER_HIDE_POS
-  inst.collider.pos.y = inst.visible ? inst.topY : COLLIDER_HIDE_POS
+  inst.collider.pos.y = inst.visible ? inst.colliderTopY : COLLIDER_HIDE_POS
   if (!inst.visible) return
   const dt = inst.k.dt()
   const t = inst.k.time()

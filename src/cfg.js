@@ -178,6 +178,19 @@ export const CFG = {
         platformColor: "#1A1A1A"       // Platform color (for menu background)
       },
       //
+      // DOM loader: the Glow stalk-eye lying on its side and growing with the
+      // progress. Same inks as the chain-buoy eyes in the level (dark
+      // segmented body with side spikes, green-black eye ring, hero eye).
+      //
+      loader: {
+        message: PALETTE.gray7,        // "Loading" caption
+        body: PALETTE.gray0,           // Stalk segments, joints and side spikes
+        root: PALETTE.rose0,           // Root knot the stalk grows from
+        eyeContour: PALETTE.green0,    // Ring around the sclera
+        sclera: "#FFFFFF",             // Eye white (hero eye)
+        pupil: "#000000"               // Pupil (hero eye)
+      },
+      //
       // Ready screen colors. The scene runs on a teal+orange
       // complementary palette so the on-boarding story already shows the
       // visual grammar the rest of the game speaks. Deep teal backs the

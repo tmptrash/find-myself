@@ -2170,12 +2170,9 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // First visit: hold hints until the camera intro zoom-out finishes and a
     // short beat passes so the player sees the full level first.
     //
-    const deferGlowIntro = !zones.predatorAwake && !get(KEY_INTRO_SHOWN, false)
-    inst.pendingGlowIntro = deferGlowIntro
+    const needsControlsIntro = !get(KEY_INTRO_SHOWN, false)
+    inst.pendingGlowIntro = needsControlsIntro
     inst.introHintDelayRemaining = 0
-    !deferGlowIntro &&
-      startGlowIntro(inst)
-    createSmallHeroTooltip(inst)
     applyZoneVisibility(inst)
     Hero.suppressIdleVocalization()
     ensureGlowBirdsBackgroundPlaying(inst)
@@ -2270,40 +2267,7 @@ function createPlayfieldFrameOverlay(k, inst) {
 // dismisses it (key, click, timer, or walk-away fallback on replays).
 //
 function startGlowIntro(inst) {
-  if (inst.zones.predatorAwake) return
-  //
-  // Replays after a death skip the greeting: only the goal reminder shows,
-  // controls stay free right away.
-  //
-  if (get(KEY_INTRO_SHOWN, false)) {
-    finishGlowIntro(inst)
-    //
-    // Post-death reminder: timer, Space/Esc, or walking 80 px away. Jump
-    // dismissal stays off so the respawn landing itself can't wipe it instantly.
-    //
-    HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
-      dismissOnJump: false,
-      dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
-      dismissHorizontalOnly: true,
-      movementDismissGrace: GLOW_HINT_MOVEMENT_DISMISS_GRACE,
-      forceAbove: true
-    })
-    let replayHintDismissed = false
-    const dismissReplay = () => {
-      if (replayHintDismissed) return
-      replayHintDismissed = true
-      replayClick.cancel()
-      dismissReplayIntroHint(inst, replayKeys)
-    }
-    const replayKeys = ['space', ...CFG.controls.backToMenu]
-      .map(key => inst.k.onKeyPress(key, dismissReplay))
-    const replayClick = bindPointerActivate(inst.k, () => {
-      if (replayHintDismissed) return false
-      dismissReplay()
-      return true
-    })
-    return
-  }
+  if (get(KEY_INTRO_SHOWN, false)) return
   inst.introLock = true
   inst.introHintPhase = INTRO_HINT_PHASE_TWO
   inst.introHintPause = 0
@@ -2336,14 +2300,6 @@ function startGlowIntro(inst) {
     advance('space')
     return true
   }))
-}
-//
-// Clears the post-death goal reminder as soon as the player starts moving
-// and detaches all the run/jump key handlers registered for it.
-//
-function dismissReplayIntroHint(inst, handlers) {
-  handlers.forEach(handler => handler.cancel())
-  HeroHint.clear(inst.heroHint)
 }
 //
 // One key press closes the intro hint and unlocks controls immediately.
@@ -7174,18 +7130,9 @@ function startDrowning(inst) {
   beginDrownSinkTween(inst)
   const drownY = inst.drownSinkY
   registerDrownLateSink(inst)
-  const firstDrown = !get(KEY_DROWN_HINT_SHOWN, false)
-  firstDrown && set(KEY_DROWN_HINT_SHOWN, true)
-  const drownHint = firstDrown
-    ? HINT_DROWN_TEXT
-    : DROWN_JOKES[Math.floor(Math.random() * DROWN_JOKES.length)]
-  HeroHint.show(inst.heroHint, drownHint, HINT_DROWN_DURATION, {
-    ignoreMovementDismiss: true,
-    followHero: true,
-    anchorX: drownX,
-    anchorY: drownY,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-  })
+  if (!get(KEY_DROWN_HINT_SHOWN, false)) {
+    set(KEY_DROWN_HINT_SHOWN, true)
+  }
 }
 //
 // Completes drowning sequence and reloads the scene.
@@ -7369,24 +7316,7 @@ function finishGlowTouchDeath(inst, cause, deathX, deathY) {
   inst.touchDeathCount = (inst.touchDeathCount || 0) + 1
   if (cause === 'predator') {
     inst.predatorDeathCount = (inst.predatorDeathCount || 0) + 1
-    const predatorHint = predatorDeathHintTextForKill(
-      inst.predatorDeathCount,
-      inst._predatorDeathHintContext
-    )
     inst._predatorDeathHintContext = null
-    HeroHint.show(
-      inst.heroHint,
-      predatorHint,
-      GLOW_TOUCH_DEATH_HINT_DURATION,
-      {
-        anchorX: inst.predator?.x ?? deathX,
-        anchorY: (inst.predator?.y ?? deathY) - PREDATOR_DEATH_HINT_RAISE,
-        offsetY: PREDATOR_DEATH_HINT_OFFSET_Y,
-        forceAbove: true,
-        ignoreMovementDismiss: true,
-        dismissDistance: GLOW_HINT_DISMISS_DISTANCE
-      }
-    )
   }
   inst.touchDeathRespawnWait?.cancel?.()
   inst.touchDeathRespawnWait = inst.k.wait(GLOW_TOUCH_DEATH_RESPAWN_DELAY, () => {
@@ -7972,9 +7902,15 @@ function onUpdate(inst) {
   // Glow owns all foot FX — block hero.js dust for the whole frame.
   //
   hero.suppressDust = true
-  hero.controllable = true
-  hero.controlsDisabled = false
-  hero.jumpDisabled = false
+  if (inst.introLock || inst.pendingGlowIntro) {
+    hero.controllable = false
+    hero.controlsDisabled = true
+    hero.jumpDisabled = true
+  } else {
+    hero.controllable = true
+    hero.controlsDisabled = false
+    hero.jumpDisabled = false
+  }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
@@ -8310,24 +8246,6 @@ function onTrampolineBounce(inst) {
   const tw = inst.rightTrampCheeky
   tw.bounceCount = (tw.bounceCount || 0) + 1
   if (tw.bounceCount % TRAMP_CHEEKY_EVERY !== 0) return
-  tw.cheekyTimer = TRAMP_CHEEKY_DURATION
-  const line = TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % TRAMP_CHEEKY_LINES.length]
-  tw.cheekyLineIdx = (tw.cheekyLineIdx + 1) % TRAMP_CHEEKY_LINES.length
-  tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: () => inst.trampState.x,
-      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-      width: TRAMP_TOTAL_W,
-      height: TRAMP_TOTAL_H,
-      text: line,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET
-    }]
-  })
-  tw.cheekyTooltip.activeTarget = tw.cheekyTooltip.targets[0]
-  tw.cheekyTooltip.opacity = 1
 }
 //
 // Cheeky bubble on the branch trampoline every Nth bounce (same lines as the walk tramp).
@@ -8338,24 +8256,6 @@ function onBranchTrampolineBounce(inst) {
   if (!tw || !inst.branchTrampState) return
   tw.bounceCount = (tw.bounceCount || 0) + 1
   if (tw.bounceCount % BRANCH_TRAMP_CHEEKY_EVERY !== 0) return
-  tw.cheekyTimer = TRAMP_CHEEKY_DURATION
-  const line = BRANCH_TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % BRANCH_TRAMP_CHEEKY_LINES.length]
-  tw.cheekyLineIdx = (tw.cheekyLineIdx + 1) % BRANCH_TRAMP_CHEEKY_LINES.length
-  tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = createGlowTooltip({
-    k: inst.k,
-    forceVisible: true,
-    targets: [{
-      x: () => inst.branchTrampState.x,
-      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-      width: TRAMP_TOTAL_W,
-      height: TRAMP_TOTAL_H,
-      text: line,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET
-    }]
-  })
-  tw.cheekyTooltip.activeTarget = tw.cheekyTooltip.targets[0]
-  tw.cheekyTooltip.opacity = 1
 }
 //
 // Ages the cheeky trampoline bubble and tears it down when the timer ends
@@ -9369,24 +9269,9 @@ function dismissPitCaveMushroomHint(pit) {
 // Shared 10 s teacher gate: exploration nudges outside the cave, mushroom nudge inside.
 //
 function updateGlowTeacherContextHints(inst, char, hero, heroMoving, dt) {
-  const blocked =
-    inst.drowning || inst.introLock ||
-    inst.pendingGlowIntro
-  if (blocked || !char?.pos) return
-  const footY = char.pos.y + SURFACE_DETECT_Y
-  const inCave = isHeroInsideGlowPitCave(inst, char.pos.x, char.pos.y, footY)
-  const heroActive = isGlowHeroActiveForTeacherHint(inst, hero, char, heroMoving)
-  const caveEligible = glowTeacherCaveMushroomAutoHintEligible(inst, char, footY, inCave)
-  caveEligible && revealGlowTeacherHudForExplorationHintsIfNeeded(inst)
-  tickGlowTeacherContextHints(inst, {
-    dt,
-    blocked,
-    heroMoving,
-    heroActive,
-    inCave,
-    caveEligible,
-    onCaveHint: () => fireGlowTeacherCaveMushroomHint(inst)
-  })
+  //
+  // Level hints disabled — only the first-visit controls intro uses HeroHint.
+  //
 }
 //
 // True while the pit-mushroom teacher line may auto-fire in the cave.

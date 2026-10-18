@@ -8,7 +8,7 @@ import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 
 //
 // Dry twigs hung under the shore tree's horizontal branch — they drop on the
-// third hero landing on that branch, then regrow after a pause with fade-in.
+// second hero landing on that branch, then regrow after a pause with fade-in.
 //
 const TWIG_COUNT = 1
 const TWIG_ATTACH_BELOW_BRANCH = 5

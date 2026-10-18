@@ -55,7 +55,9 @@ export function cancelPredatorFeast(pred) {
  * @param {number} dt - Frame delta
  */
 export function tickPredatorFruitFeast(pred, levelInst, dt) {
-  if (!pred || pred.obj?.hidden || pred.state === 'coast' || pred.state === 'flee') return
+  if (!pred) return
+  releaseOrphanedFeastFruit(pred, levelInst)
+  if (pred.obj?.hidden || pred.state === 'coast' || pred.state === 'flee') return
   if (!levelInst?.zones?.predatorAwake) return
   //
   // A rider on the back pins the walking direction — turning to a fruit would flip it.
@@ -266,6 +268,21 @@ function endFeast(pred, levelInst) {
   pred.feastBitePose = null
   pred.vx *= 0.35
   pred.headLift *= 0.4
+}
+
+//
+// A kill, flee or ride overwrites pred.state without endFeast — the fruit kept
+// beingEaten forever and the crawler never looked at it again.
+//
+function releaseOrphanedFeastFruit(pred, levelInst) {
+  if (pred.state === 'feast') return
+  levelInst?.treeFruitSpots?.forEach(f => {
+    if (!f.beingEaten) return
+    f.beingEaten = false
+    f.feastDrawHidden = false
+  })
+  pred.feastCluster = null
+  pred.feastFruit = null
 }
 
 function collectFeastCluster(levelInst, anchor) {

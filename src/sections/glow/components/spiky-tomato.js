@@ -45,7 +45,7 @@ const TOMATO_STAMEN_R = 0.2
 // Landing radius around the trunk and how many jolts shake the tomato loose.
 //
 const TOMATO_LAND_RADIUS = 120
-const TOMATO_HITS_TO_DROP = 3
+const TOMATO_HITS_TO_DROP = 2
 //
 // Free fall from the crown, then a shard burst on the ground line.
 //

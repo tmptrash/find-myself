@@ -94,6 +94,7 @@ import {
   buildGlowTreeFruitSpots,
   computeGlowAnchorFruitDropX,
   mountGlowTreeFruitLayer,
+  hasGlowAnchorFruitDropInWorld,
   releaseGlowAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
@@ -918,7 +919,6 @@ const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
 const KEY_LAST_SPAWN_Y = 'glow.lastSpawnY'
 const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
-const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const PIT_CAVE_HINT_TEXT = 'Something hums\nunder the cave floor.'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
@@ -1255,19 +1255,15 @@ const BRANCH_TRAMP_CHEEKY_EVERY = 6
 // After the opening zoom-out finishes, wait this long before the first hint.
 //
 const CAMERA_INTRO_HINT_DELAY = 1
-//
-// Branch landing only: glance left, then face right (not used on first ground spawn).
-//
-const BRANCH_LOOK_LEFT_DURATION = 2
 const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
 const GLOW_BRANCH_JUMP_SHAKE_AMP = 4.5
 const GLOW_BRANCH_JUMP_SHAKE_DURATION = 0.2
-const GLOW_BRANCH_LANDINGS_TO_BREAK = 3
 //
-// Every second landing on the big tree's branch shakes one fruit loose.
+// Second landing on a big tree's branch drops its payload: the apple on the
+// left tree, the dry stick onto the centipede's back on the right tree.
 //
-const GLOW_START_BRANCH_LANDINGS_TO_DROP_FRUIT = 2
+const GLOW_BRANCH_LANDINGS_TO_DROP = 2
 const PREDATOR_LAKE_EDGE_PAD = 28
 const PREDATOR_CAVE_MOUTH_PAD = 24
 //
@@ -1619,13 +1615,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC
   })
     scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
-    const treeFruitAnchorCfg = {
-      trunkX: TREE_X,
-      trunkHalf: TRUNK_EXCLUDE_HALF,
-      branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
-      trampClearHalf: TRAMP_GRASS_CLEAR_HALF,
-      minHangY: glowTreeFruitMinHangY()
-    }
+    const treeFruitAnchorCfg = buildGlowTreeFruitAnchorCfg()
     !glowTreeSpritesPrewarmed(k) && bakeMonolithicGlowTreeSprites(k, treeData)
     //
     // One build per scene run — it paints the whole crown into a canvas and
@@ -1684,52 +1674,31 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // it; createMushroomTrampoline() reuses this same value further below.
     //
     const trampX = trampXEarly
-    const treeGroundSpawnX = branchTrampX + HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X
+    const heroGroundCenterY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    const branchTrampSpawnClearX =
+      branchTrampX + TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
+    const whisperSilentSpawnX = EyeFlower.minHeroXOutsidePlantWhisper(
+      LEFT_MARGIN,
+      WATER_SURFACE_Y,
+      heroGroundCenterY
+    )
+    const treeGroundSpawnX = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
-    const branchSpawnX = horizBranch.x1 + Math.round((horizBranch.x2 - horizBranch.x1) * HERO_BRANCH_FRACTION)
     const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
     const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
-    const clampBranchSpawnX = (x) => Math.max(
-      horizBranch.x1 + LOG_SNAP_X_SLACK,
-      Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
-    )
     //
-    // First visit: ground under the start branch (same X as the old branch
-    // spawn). Later: right of the branch trampoline after drowning or once
-    // lower-right ground is open. Menu exit restores the last saved pose.
+    // Default and branch-saved starts: on the ground right of the left
+    // mushroom, outside the island flower's whisper. A saved cave or ground
+    // pose from a menu exit is restored as is.
     //
-    let spawnOnBranch = false
-    let heroSpawnX = branchSpawnX
-    let heroSpawnY = branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    let heroSpawnX = treeGroundSpawnX
+    let heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     const hasSavedPose = lastSpawnX != null && lastSpawnY != null && lastSpawnMode
-    if (respawnNearTree) {
-      heroSpawnX = treeGroundSpawnX
-      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    } else if (hasSavedPose) {
-      if (lastSpawnMode === SPAWN_MODE_CAVE) {
-        heroSpawnX = lastSpawnX
-        heroSpawnY = lastSpawnY
-        spawnOnBranch = false
-      } else if (lastSpawnMode === SPAWN_MODE_BRANCH) {
-        //
-        // Y comes from the live branch — a saved height outlives any change to it.
-        //
-        heroSpawnX = clampBranchSpawnX(lastSpawnX)
-        spawnOnBranch = true
-      } else {
-        heroSpawnX = lastSpawnX
-        heroSpawnY = lastSpawnY
-        spawnOnBranch = false
-      }
-    } else if (zones.groundDecorRight) {
-      heroSpawnX = treeGroundSpawnX
-      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    } else {
-      heroSpawnX = branchSpawnX
-      heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-      spawnOnBranch = false
+    if (!respawnNearTree && hasSavedPose && lastSpawnMode !== SPAWN_MODE_BRANCH) {
+      heroSpawnX = lastSpawnX
+      heroSpawnY = lastSpawnY
     }
     //
     // A saved/derived ground spawn landing right on a mushroom's bounce cap
@@ -1740,7 +1709,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     lastSpawnMode !== SPAWN_MODE_CAVE &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
         spawnX: heroSpawnX,
-        spawnOnBranch,
+        spawnOnBranch: false,
         branchTrampX,
         trampX,
         branchTrampVisible: isBranchTrampolineVisible(zones),
@@ -1754,7 +1723,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromMudHazards({
         spawnX: heroSpawnX,
         spawnY: heroSpawnY,
-        spawnOnBranch,
+        spawnOnBranch: false,
         mudPredatorAmbushTriggerX,
         mudPredatorPopX,
         mudZoneX1,
@@ -1818,8 +1787,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // ground/wood/mud detection via sound._glowSurface.
     //
     bindGlowHeroFootSounds(heroInst, sound)
-    spawnOnBranch && (heroInst.direction = -1)
-    spawnOnBranch && heroInst.character && (heroInst.character.flipX = true)
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
@@ -1871,7 +1838,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       water: { x1: lakeX1, x2: lakeX2, surfaceY: WATER_SURFACE_Y },
       fleeLeftX: LEFT_MARGIN + PREDATOR_FLEE_LEFT_EDGE_PAD
     })
-    if (!spawnOnBranch && zones.predatorAwake) {
+    if (zones.predatorAwake) {
       const footY = heroSpawnY + SURFACE_DETECT_Y
       Predator.overlapsHeroHitbox(predator, heroSpawnX, footY) &&
         heroInst.character?.pos &&
@@ -2049,14 +2016,10 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
       ],
-      spawnedOnBranch: spawnOnBranch,
-      branchLookPhase: spawnOnBranch ? 'left' : null,
-      branchLookTimer: spawnOnBranch ? BRANCH_LOOK_LEFT_DURATION : 0,
-      pendingReplayIntro2: false,
       treeFruitSpots,
       treeFruitAnchorCfg,
       branchTrampX,
-      _branchLandingsSinceTree: 0
+      _startBranchLandingCount: 0
     }
     predator.levelInst = inst
     predator.landAt = (x) => glowPredatorGroundAt(inst, x)
@@ -2202,10 +2165,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     //
     const deferGlowIntro = !zones.predatorAwake && !get(KEY_INTRO_SHOWN, false)
     inst.pendingGlowIntro = deferGlowIntro
-    inst.pendingReplayIntro2 = spawnOnBranch && !zones.predatorAwake &&
-      get(KEY_INTRO_SHOWN, false)
     inst.introHintDelayRemaining = 0
-    !deferGlowIntro && !inst.pendingReplayIntro2 &&
+    !deferGlowIntro &&
       startGlowIntro(inst)
     createSmallHeroTooltip(inst)
     applyZoneVisibility(inst)
@@ -3025,7 +2986,8 @@ function createGlowHorizFallTwigLayer(k, inst) {
   ])
 }
 //
-// Shore horizontal branch: camera shake on jump, dry twigs drop on 3rd landing.
+// Shore horizontal branch: camera shake on jump, dry twigs drop on 2nd landing.
+// Landings while the stick is down or regrowing do not count.
 //
 function tickGlowShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
   if (!inst?.shoreFallTwigs) return
@@ -3035,9 +2997,13 @@ function tickGlowShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
   jumpStarted && triggerGlowBranchLandingShake(inst)
   if (justLanded && grounded && onShore) {
     triggerGlowBranchLandingShake(inst)
-    inst._shoreBranchLandingCount = (inst._shoreBranchLandingCount || 0) + 1
-    inst._shoreBranchLandingCount >= GLOW_BRANCH_LANDINGS_TO_BREAK &&
-      HorizFallTwig.dropHorizFallTwigs(inst.shoreFallTwigs)
+    const twigs = inst.shoreFallTwigs
+    if (!twigs.dropped && !twigs.regrowing) {
+      inst._shoreBranchLandingCount = (inst._shoreBranchLandingCount || 0) + 1
+      inst._shoreBranchLandingCount >= GLOW_BRANCH_LANDINGS_TO_DROP &&
+        HorizFallTwig.dropHorizFallTwigs(twigs)
+      twigs.dropped && (inst._shoreBranchLandingCount = 0)
+    }
   }
   inst._shoreBranchGrounded = onShore && grounded
 }
@@ -7929,14 +7895,6 @@ function onUpdate(inst) {
       startGlowIntro(inst)
     }
   }
-  if (inst.pendingReplayIntro2) {
-    inst.introHintDelayRemaining += k.dt()
-    if (inst.introHintDelayRemaining >= CAMERA_INTRO_HINT_DELAY) {
-      inst.pendingReplayIntro2 = false
-      inst.introHintDelayRemaining = 0
-      startGlowIntro(inst)
-    }
-  }
   if (inst.introLock && inst.introHintPhase === INTRO_HINT_PHASE_TWO &&
     !HeroHint.isActive(inst.heroHint)) {
     inst.introHintOnComplete?.()
@@ -7976,7 +7934,6 @@ function onUpdate(inst) {
   updateGlowPlantWhisperSound(inst, char)
   updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
-  updateBranchSpawnLook(inst, hero, heroMoving)
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
   //
@@ -8139,34 +8096,6 @@ function onUpdate(inst) {
   !inst.deathHandled && checkGlowTouchDeath(inst, heroX, footY)
 }
 //
-// First appearance on the start branch: face left, then right after a beat.
-// Any real step cancels the scripted look.
-//
-function updateBranchSpawnLook(inst, hero, heroMoving) {
-  if (!inst.branchLookPhase) return
-  const char = hero?.character
-  if (!char) {
-    inst.branchLookPhase = null
-    return
-  }
-  if (heroMoving) {
-    inst.branchLookPhase = null
-    inst.branchLookTimer = 0
-    return
-  }
-  if (inst.branchLookPhase === 'left') {
-    hero.direction = -1
-    char.flipX = true
-    inst.branchLookTimer -= inst.k.dt()
-    if (inst.branchLookTimer > 0) return
-    inst.branchLookPhase = 'right'
-    hero.direction = 1
-    char.flipX = false
-    return
-  }
-  inst.branchLookPhase = null
-}
-//
 // Predator patrol strip — between the lake's east edge and the cave mouth.
 //
 function computeGlowPredatorPatrolBounds(lakeX2) {
@@ -8239,13 +8168,17 @@ function grantGlowTomatoBurstHeroSafety(inst, burstX, burstY) {
   if (d > TOMATO_BURST_HERO_SAFE_RADIUS) return
   inst.touchDeathGraceUntil = inst.k.time() + TOMATO_BURST_HERO_SAFE_SEC
 }
+//
+// Left big tree: every second landing on its branch knocks the anchor apple
+// loose. Landings while the last apple still waits for the centipede do not count.
+//
 function tickGlowStartBranchFatigue(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded || !isHeroOnStartBranch(inst, char)) return
   triggerGlowBranchLandingShake(inst)
-  if (!inst.treeFruitSpots?.some(f => f.anchor && f.attached)) return
-  inst._branchLandingsSinceTree = (inst._branchLandingsSinceTree || 0) + 1
-  inst._branchLandingsSinceTree >= GLOW_START_BRANCH_LANDINGS_TO_DROP_FRUIT &&
-    releaseGlowAnchorFruit(inst)
+  if (hasGlowAnchorFruitDropInWorld(inst)) return
+  inst._startBranchLandingCount = (inst._startBranchLandingCount || 0) + 1
+  if (inst._startBranchLandingCount < GLOW_BRANCH_LANDINGS_TO_DROP) return
+  releaseGlowAnchorFruit(inst) && (inst._startBranchLandingCount = 0)
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
@@ -8538,6 +8471,18 @@ function isBranchTrampDrawnVisible(inst) {
 function glowTreeFruitMinHangY() {
   const viewTop = Math.round(DESIGN_SCREEN_H / 2) - Math.min(SCREEN_H, DESIGN_SCREEN_H) / 2
   return viewTop + TOP_MARGIN + TREE_FRUIT_VIEW_TOP_PAD
+}
+//
+// Layout for anchor-fruit placement on the main tree canopy.
+//
+function buildGlowTreeFruitAnchorCfg() {
+  return {
+    trunkX: TREE_X,
+    trunkHalf: TRUNK_EXCLUDE_HALF,
+    branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
+    trampClearHalf: TRAMP_GRASS_CLEAR_HALF,
+    minHangY: glowTreeFruitMinHangY()
+  }
 }
 //
 // Short camera bump for tree reveals, tramp landings and letter pickups.

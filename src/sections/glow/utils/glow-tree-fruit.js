@@ -147,13 +147,28 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
 }
 
 /**
- * Spawns a falling copy; the anchor fruit stays attached for the next cycle.
+ * True while the single branch-knocked apple is still falling or on the ground.
  * @param {Object} levelInst - Glow level inst
+ * @returns {boolean}
+ */
+export function hasGlowAnchorFruitDropInWorld(levelInst) {
+  const spots = levelInst.treeFruitSpots
+  if (!spots?.length) return false
+  return spots.some(f => f.fromAnchorDrop && !f.removed)
+}
+
+/**
+ * Spawns the one falling anchor apple (start-branch knock). No second drop until
+ * the centipede has eaten the current one.
+ * @param {Object} levelInst - Glow level inst
+ * @returns {boolean} True when an apple was knocked loose
  */
 export function releaseGlowAnchorFruit(levelInst) {
+  if (hasGlowAnchorFruitDropInWorld(levelInst)) return false
   const fruit = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
-  if (!fruit) return
+  if (!fruit) return false
   levelInst.treeFruitSpots.push({
+    fromAnchorDrop: true,
     attached: false,
     x: fruit.x,
     y: fruit.y,
@@ -164,7 +179,7 @@ export function releaseGlowAnchorFruit(levelInst) {
     rollDir: pickFruitLandRollDir(fruit.x, fruit.y),
     leaves: fruit.leaves
   })
-  levelInst._branchLandingsSinceTree = 0
+  return true
 }
 
 /**
@@ -186,7 +201,10 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
       return
     }
     fruit.settledAt == null && (fruit.settledAt = now)
-    if (fruit.beingEaten) return
+    //
+    // The knocked apple waits on the ground until the centipede eats it.
+    //
+    if (fruit.beingEaten || fruit.fromAnchorDrop) return
     const linger = now - fruit.settledAt
     if (!fruit.fadeOutStarted && linger >= FRUIT_GROUND_LINGER_SEC) {
       fruit.fadeOutStarted = true
@@ -231,9 +249,14 @@ export function drawGlowTreeFruits(inst) {
   const bodyA = glowRgb('glowLightCore')
   const bodyB = glowRgb(GLOW_PAL.mushroomsLight[0])
   const stem = glowRgb(GLOW_PAL.treeColor.root)
+  //
+  // The tree copy of the anchor apple regrows only after the fallen one is eaten.
+  //
+  const anchorDropInWorld = hasGlowAnchorFruitDropInWorld(inst)
   spots.forEach(fruit => {
     if (fruit.removed) return
     if (fruit.feastDrawHidden) return
+    if (fruit.anchor && fruit.attached && anchorDropInWorld) return
     let op = 1
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
     if (op <= 0.02) return

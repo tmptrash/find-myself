@@ -84,6 +84,19 @@ const LOADER_BAR_CREEP_HEADROOM_DEFAULT = 12
 //
 const LOADER_BAR_CREEP_HEADROOM_BOOST = 16
 const LOADER_BAR_CREEP_PER_SEC_BOOST = 20
+//
+// The stalk never jumps to a report: it catches up at a speed proportional to
+// the gap (bounded), so bursts of progress still read as steady growth.
+//
+const LOADER_BAR_CATCHUP_GAIN = 1.6
+const LOADER_BAR_CATCHUP_MAX_PER_SEC = 45
+//
+// On hide the stalk first grows to its full length, holds a beat, then the
+// loader goes. The timeout covers a paused rAF (background tab).
+//
+const LOADER_FINISH_PER_SEC = 140
+const LOADER_FINISH_HOLD_SEC = 0.15
+const LOADER_FINISH_TIMEOUT_SEC = 2
 const LOADER_Z_DEFAULT = '9999'
 const LOADER_Z_OVER_CRT = '10001'
 const LOADER_BG_OPAQUE = '#000000'
@@ -92,6 +105,13 @@ const LOADER_BG_TRANSPARENT = 'transparent'
 // Live SVG nodes and animation state of the loader eye.
 //
 let eye = null
+//
+// Finish run: stalk grows to 100% before hiding; showLoader() bumps the token
+// to cancel a pending hide and keep the same session going.
+//
+let loaderFinishing = false
+let loaderFinishWaiters = []
+let loaderHideToken = 0
 
 /**
  * Glow bootstrap reports truth in bursts — creep keeps the stalk growing
@@ -134,11 +154,9 @@ export function setLoaderHideHandler(handler) {
  * @returns {Promise<void>}
  */
 export function completeAndFadeOutLoaderUi(holdSec) {
-  loaderBarDisplayPct = 100
-  loaderBarReportedPct = 100
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return Promise.resolve()
-  return wait(holdSec).then(() => {
+  return growStalkToEnd().then(() => wait(holdSec)).then(() => {
     loaderEl.style.transition = `opacity ${LOADER_UI_FADE_SEC}s ease-out`
     loaderEl.style.opacity = '0'
     return wait(LOADER_UI_FADE_SEC)
@@ -160,12 +178,19 @@ export function showLoader(opts = {}) {
   ensureLoaderStructure()
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
+  //
+  // Re-showing a loader still on screen (or finishing) continues the same
+  // session: the pending hide is dropped and the stalk keeps its length.
+  //
+  const continuing = isLoaderVisible()
+  loaderHideToken++
+  loaderFinishing = false
   loaderEl.style.display = 'flex'
   loaderEl.style.background = opts.transparentBackdrop ? LOADER_BG_TRANSPARENT : LOADER_BG_OPAQUE
   loaderEl.style.zIndex = opts.elevatedZ ? LOADER_Z_OVER_CRT : LOADER_Z_DEFAULT
   setLoaderPanelOverCrt(opts.transparentBackdrop === true)
   Cursor.setHiddenByLoader(true)
-  if (!opts.preserveBar) {
+  if (!opts.preserveBar && !continuing) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
   }
@@ -194,31 +219,38 @@ export function isLoaderVisible() {
 }
 /**
  * Hides the loader, or hands the hide over to a registered outro handler.
+ * The stalk always grows to its full length first, so the loader never
+ * vanishes halfway.
  */
 export function hideLoader() {
-  if (!loaderHideHandler) {
+  if (loaderHideHandler) {
+    const handler = loaderHideHandler
+    loaderHideHandler = null
+    handler()
+    return
+  }
+  if (!isLoaderVisible()) {
     finishHideLoader()
     return
   }
-  const handler = loaderHideHandler
-  loaderHideHandler = null
-  handler()
+  const token = ++loaderHideToken
+  growStalkToEnd()
+    .then(() => wait(LOADER_FINISH_HOLD_SEC))
+    .then(() => token === loaderHideToken && finishHideLoader())
 }
 /**
- * Reports loading progress; the stalk never shrinks within one session.
- * @param {number} pct - Progress 0..100 (0 resets the stalk)
+ * Reports loading progress. The stalk never shrinks within one visible
+ * session — a new phase reporting from 0 only pauses its growth.
+ * @param {number} pct - Progress 0..100
  */
 export function setLoaderBarPct(pct) {
   const clamped = Math.min(100, Math.max(0, pct))
   if (clamped === 0) {
     loaderBarReportedPct = 0
-    loaderBarDisplayPct = 0
-    drawLoaderEye(0)
     return
   }
   if (clamped <= loaderBarReportedPct) return
   loaderBarReportedPct = clamped
-  loaderBarDisplayPct < loaderBarReportedPct && (loaderBarDisplayPct = loaderBarReportedPct)
   isLoaderVisible() && startLoaderBarAnimation()
 }
 /**
@@ -252,9 +284,31 @@ export function showFatalLoaderError(message) {
   loaderEl.style.display = 'flex'
 }
 
+//
+// Resolves once the stalk is drawn at full length (or after the timeout when
+// rAF is paused and the stalk cannot grow).
+//
+function growStalkToEnd() {
+  loaderFinishing = true
+  loaderBarReportedPct = 100
+  startLoaderBarAnimation()
+  const grown = new Promise(resolve => {
+    loaderBarDisplayPct >= 100 ? resolve() : loaderFinishWaiters.push(resolve)
+  })
+  return Promise.race([grown, wait(LOADER_FINISH_TIMEOUT_SEC)])
+}
+
+function resolveFinishWaiters() {
+  const waiters = loaderFinishWaiters
+  loaderFinishWaiters = []
+  waiters.forEach(resolve => resolve())
+}
+
 function finishHideLoader() {
   loaderBarDisplayPct = 100
   loaderBarReportedPct = Math.max(loaderBarReportedPct, 100)
+  loaderFinishing = false
+  resolveFinishWaiters()
   stopLoaderBarAnimation()
   setLoaderBarCreepBoost(false)
   Cursor.setHiddenByLoader(false)
@@ -498,11 +552,26 @@ function setLoaderPanelOverCrt(overCrt) {
 }
 
 function loaderBarCreepCeilingPct() {
-  if (loaderBarReportedPct >= 100) return 100
+  if (loaderFinishing || loaderBarReportedPct >= 100) return 100
   return Math.min(99, loaderBarReportedPct + loaderBarCreepHeadroom)
 }
 //
-// One rAF loop per visible loader: creeps the stalk and keeps the eye alive.
+// Behind the last report the stalk catches up (bounded speed); past it, it
+// creeps toward the headroom ceiling and slows as it nears it, so it never
+// stops dead. A finish run grows it to the end at a fixed fast pace.
+//
+function stalkGrowthPerSec() {
+  if (loaderFinishing) return LOADER_FINISH_PER_SEC
+  const gap = loaderBarReportedPct - loaderBarDisplayPct
+  if (gap > 0) {
+    return Math.min(LOADER_BAR_CATCHUP_MAX_PER_SEC,
+      Math.max(loaderBarCreepPerSec, gap * LOADER_BAR_CATCHUP_GAIN))
+  }
+  const room = loaderBarCreepCeilingPct() - loaderBarDisplayPct
+  return loaderBarCreepPerSec * Math.max(0, room / loaderBarCreepHeadroom)
+}
+//
+// One rAF loop per visible loader: grows the stalk and keeps the eye alive.
 //
 function startLoaderBarAnimation() {
   if (loaderBarAnimFrame != null) return
@@ -514,10 +583,11 @@ function startLoaderBarAnimation() {
     }
     const dt = Math.min(MAX_FRAME_DT, Math.max(0, (ts - lastTs) / 1000))
     lastTs = ts
-    const creepCeiling = loaderBarCreepCeilingPct()
-    loaderBarDisplayPct < creepCeiling &&
-      (loaderBarDisplayPct = Math.min(creepCeiling, loaderBarDisplayPct + loaderBarCreepPerSec * dt))
+    const ceiling = loaderBarCreepCeilingPct()
+    loaderBarDisplayPct < ceiling &&
+      (loaderBarDisplayPct = Math.min(ceiling, loaderBarDisplayPct + stalkGrowthPerSec() * dt))
     drawLoaderEye(dt)
+    loaderBarDisplayPct >= 100 && resolveFinishWaiters()
     loaderBarAnimFrame = requestAnimationFrame(step)
   }
   loaderBarAnimFrame = requestAnimationFrame(step)

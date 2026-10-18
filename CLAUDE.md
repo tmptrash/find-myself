@@ -1,4 +1,4 @@
-# Find Yourself - Coding Rules
+# rootward - Coding Rules
 
 ## Project Overview
 This is a Kaplay.js-based 2D platformer game with procedural graphics and audio, built with Vite and packaged as a standalone app via Electron. Follow these architectural patterns and conventions when contributing to the codebase.

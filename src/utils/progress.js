@@ -7,7 +7,8 @@ import { prop, setProp } from './helper.js'
  *   time.completed, time.lesson3SnowballInstructionsCount, etc.
  * Global properties: lastLevel, heroScore, lifeScore, sounds
  */
-const STORAGE_KEY = 'find-yourself'
+const STORAGE_KEY = 'rootward'
+const LEGACY_STORAGE_KEY = 'find-yourself'
 const SECTIONS = ['glow', 'word', 'touch', 'feel', 'mind', 'time']
 //
 // Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
@@ -93,8 +94,16 @@ function migrate(data) {
  */
 export function getProgress() {
   try {
-    const data = JSON.parse(localStorage[STORAGE_KEY])
-    return migrate(data)
+    let raw = localStorage[STORAGE_KEY]
+    if (raw == null && localStorage[LEGACY_STORAGE_KEY] != null) {
+      raw = localStorage[LEGACY_STORAGE_KEY]
+      localStorage.setItem(STORAGE_KEY, raw)
+      localStorage.removeItem(LEGACY_STORAGE_KEY)
+    }
+    if (raw != null) {
+      const data = JSON.parse(raw)
+      return migrate(data)
+    }
   } catch (_) {}
   return createDefault()
 }
@@ -108,7 +117,7 @@ export function get(path, defValue = null) {
   const val = prop(path, getProgress())
   if (val !== null && val !== undefined) return val
   //
-  // Legacy top-level localStorage keys (e.g. devtools edits outside find-yourself)
+  // Legacy top-level localStorage keys (e.g. devtools edits outside rootward)
   //
   if (path === 'heroScore' || path === 'lifeScore') {
     try {

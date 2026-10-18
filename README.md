@@ -1,4 +1,4 @@
-# Find Yourself
+# rootward
 
 A philosophical hi-bit pixel-art platformer about perception, self-discovery, and growing through interaction with the world.
 
@@ -14,7 +14,7 @@ A philosophical hi-bit pixel-art platformer about perception, self-discovery, an
 
 ## Description
 
-**Find Yourself** is a narrative 2D platformer where gameplay is built around psychological growth instead of traditional progression.
+**rootward** is a narrative 2D platformer where gameplay is built around psychological growth instead of traditional progression.
 
 Rather than collecting coins or unlocking weapons, the player discovers words, emotions, senses and ways of perceiving the world. Every level represents a small step of self-development, and every mechanic is designed to symbolize an internal change.
 

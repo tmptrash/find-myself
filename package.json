@@ -1,5 +1,5 @@
 {
-	"name": "find-yourself",
+	"name": "rootward",
 	"version": "1.0.0",
 	"type": "module",
 	"engines": {
@@ -16,8 +16,8 @@
 		"postinstall": "node scripts/apply-kaplay-performance-patch.js"
 	},
 	"build": {
-		"appId": "com.findyourself.game",
-		"productName": "Find Yourself",
+		"appId": "com.rootward.game",
+		"productName": "rootward",
 		"files": [
 			"dist/**/*",
 			"electron/**/*"

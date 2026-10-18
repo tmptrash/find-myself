@@ -51,7 +51,7 @@ const PHRASES = [
   'wrong again', 'said wrong thing', 'cant stop thinking',
   'did they notice', 'they are judging me', 'something bad coming',
   'stayed quiet again', 'nobody likes me', 'that look meant it',
-  'words like blades', 'find yourself', 'lost again', 'keep running'
+  'words like blades', 'rootward', 'lost again', 'keep running'
 ]
 const LETTERS = ['a', 'e', 'i', 'o', 'u', 'y', '?', '.', '—']
 

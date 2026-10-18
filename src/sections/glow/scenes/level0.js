@@ -2070,6 +2070,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k,
       x: EyeFlower.islandWorldX(lakeX1),
       waterY: WATER_SURFACE_Y,
+      lakeX1,
+      lakeX2,
       reachTriggerX: TREE_X,
       getHeroPos: () => glowEyeFlowerHeroPos(inst),
       isVisible: () => isGlowEyeFlowerVisible(inst)

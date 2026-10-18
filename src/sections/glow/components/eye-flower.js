@@ -87,7 +87,12 @@ const PLANT_BASE_SINK = 2
 //
 const LEAN_FAR = 1300
 const LEAN_NEAR = 600
-const LEAN_SPEED = 0.7
+const LEAN_SPEED = 0.42
+//
+// Lagged aim point the stem and blades chase (hero position snaps instantly
+// without this — the flower would move in lockstep with him).
+//
+const LEAN_HERO_LAG_SPEED = 105
 //
 // Stretched blades and the stem bow upward over the water: each is a circular
 // arc whose chord points at its target and whose half-turn is this angle.
@@ -109,6 +114,11 @@ const STEM_BEND_POW = 1.6
 const STEM_SWAY_AMP = 0.08
 const STEM_SWAY_SPEED = 0.9
 const STEM_HERO_GAP = 104
+//
+// Main calla stem — at full lean its tip stops at this fraction of the lake
+// width (blades may reach farther; whisper still uses hero-to-head distance).
+//
+const STEM_LAKE_REACH_FRAC = 0.5
 const STEM_W_BASE = 6
 const STEM_W_TIP = 4
 const CONTOUR_PAD = 2
@@ -201,7 +211,7 @@ const BLADE_ROOT_PHASE = 0.15
 const BLADE_TIP_PHASE = 0.98
 const BLADE_MIDRIB_FRAC = 0.35
 //
-// Whisper grows steadily as the hero approaches the plant root.
+// Whisper grows as the hero approaches the flower head (loudest at closest range).
 //
 const WHISPER_FAR = 1400
 const WHISPER_NEAR = 450
@@ -212,6 +222,8 @@ const WHISPER_NEAR = 450
  * @param {Object} cfg.k - Kaplay inst
  * @param {number} cfg.x - Island centre X (see islandWorldX)
  * @param {number} cfg.waterY - Lake surface Y at rest
+ * @param {number} cfg.lakeX1 - Lake left edge (world X)
+ * @param {number} cfg.lakeX2 - Lake right edge (world X)
  * @param {number} cfg.reachTriggerX - Big tree X: stretched blades and the flower head never pass just short of it
  * @param {function(): ({x: number, y: number}|null)} cfg.getHeroPos - Hero body centre
  * @param {function(): boolean} cfg.isVisible - True while the island exists (colour world + lake)
@@ -234,6 +246,8 @@ export function create(cfg) {
   const baseX = x1 + PLANT_BASE_DX
   const baseY = mossyHillTopY(hill, baseX) + PLANT_BASE_SINK
   const reachLimitX = cfg.reachTriggerX - REACH_TREE_GAP
+  const lakeSpan = cfg.lakeX2 - cfg.lakeX1
+  const stemReachMaxX = cfg.lakeX1 + lakeSpan * STEM_LAKE_REACH_FRAC
   const collider = k.add([
     k.rect(walkX2 - x1, COLLIDER_H),
     k.pos(COLLIDER_HIDE_POS, COLLIDER_HIDE_POS),
@@ -256,11 +270,13 @@ export function create(cfg) {
     baseY,
     collider,
     reachLimitX,
+    stemReachMaxX,
     getHeroPos: cfg.getHeroPos,
     isVisible: cfg.isVisible,
     visible: false,
     open: 0,
     lean: 0,
+    leanHero: { x: baseX, y: baseY },
     stemPts: makePoints(STEM_SEGMENTS + 1),
     eyeStalk: IkChain.create({ segments: EYE_STALK_SEGMENTS, segLen: EYE_HIDDEN_EXT / EYE_STALK_SEGMENTS, x: baseX, y: baseY }),
     eyeRest: makePoints(EYE_STALK_SEGMENTS + 1),
@@ -331,8 +347,8 @@ export function isOnIsland(inst, footX, footY) {
 }
 
 /**
- * 0..1 whisper loudness for a hero at (x, y): rises steadily as he walks
- * toward the plant and is loudest right beside it.
+ * 0..1 whisper loudness for a hero at (x, y): rises as he nears the flower
+ * head and peaks at the closest approach (same far/near band as before).
  * @param {Object|null} inst - Eye-flower inst
  * @param {number} x - World X
  * @param {number} y - World Y
@@ -340,7 +356,8 @@ export function isOnIsland(inst, footX, footY) {
  */
 export function whisperProximity(inst, x, y) {
   if (!inst?.visible) return 0
-  return smoothstep(WHISPER_FAR, WHISPER_NEAR, Math.hypot(x - inst.baseX, y - inst.baseY))
+  const head = inst.head
+  return smoothstep(WHISPER_FAR, WHISPER_NEAR, Math.hypot(x - head.x, y - head.y))
 }
 
 //
@@ -356,6 +373,7 @@ function onUpdate(inst) {
   const hero = inst.getHeroPos()
   const heroDist = hero ? Math.hypot(hero.x - inst.baseX, hero.y - inst.baseY) : Infinity
   inst.lean = approach(inst.lean, smoothstep(LEAN_FAR, LEAN_NEAR, heroDist), LEAN_SPEED * dt)
+  tickLeanHeroAim(inst, hero, dt)
   const headDist = hero ? Math.hypot(hero.x - inst.head.x, hero.y - inst.head.y) : Infinity
   inst.open = approach(inst.open, smoothstep(OPEN_FAR, OPEN_NEAR, headDist), OPEN_SPEED * dt)
   updateStem(inst, hero, t)
@@ -371,13 +389,14 @@ function onUpdate(inst) {
 function updateStem(inst, hero, t) {
   const sway = Math.sin(t * STEM_SWAY_SPEED) * STEM_SWAY_AMP
   const rest = { angle: -Math.PI / 2, bend: STEM_REST_BEND + sway, len: STEM_LEN, pow: STEM_BEND_POW }
-  const pose = blendArc(rest, leanArc(inst, hero, inst.baseX, inst.baseY, 1, STEM_HERO_GAP, STEM_LEN * LEAN_MIN_LEN_FRAC), inst.lean)
+  const pose = blendArc(rest, leanArc(inst, inst.leanHero, inst.baseX, inst.baseY, 1, STEM_HERO_GAP, STEM_LEN * LEAN_MIN_LEN_FRAC), inst.lean)
   fillArc(inst.stemPts, inst.baseX, inst.baseY, pose.angle, pose.bend, pose.pow, pose.len / STEM_SEGMENTS)
   const pts = inst.stemPts
   const tip = pts[STEM_SEGMENTS]
   const prev = pts[STEM_SEGMENTS - 1]
   const stemAngle = Math.atan2(tip.y - prev.y, tip.x - prev.x)
-  const heroAngle = hero ? Math.atan2(hero.y - tip.y, hero.x - tip.x) : stemAngle
+  const aim = inst.leanHero
+  const heroAngle = Math.atan2(aim.y - tip.y, aim.x - tip.x)
   inst.head.x = tip.x
   inst.head.y = tip.y
   inst.head.axis = stemAngle + angleDelta(stemAngle, heroAngle) * inst.open * FLOWER_TURN
@@ -403,10 +422,39 @@ function updateEyeStalk(inst, hero) {
   })
 }
 
+//
+// Calla stem aim — toward the hero but never past the middle of the lake.
+//
+function stemLeanHeroTarget(inst, hero) {
+  if (!hero) return null
+  const maxX = inst.stemReachMaxX
+  if (hero.x <= maxX) return hero
+  const dx = hero.x - inst.baseX
+  if (dx <= 1) return hero
+  const t = (maxX - inst.baseX) / dx
+  return { x: maxX, y: inst.baseY + (hero.y - inst.baseY) * t }
+}
+//
+// Eases the lean aim toward the hero (capped stem target) or back to the root.
+//
+function tickLeanHeroAim(inst, hero, dt) {
+  const step = LEAN_HERO_LAG_SPEED * dt
+  let tx = inst.baseX
+  let ty = inst.baseY
+  if (hero) {
+    const aim = stemLeanHeroTarget(inst, hero)
+    tx = aim.x
+    ty = aim.y
+  }
+  const lag = inst.leanHero
+  lag.x = approach(lag.x, tx, step)
+  lag.y = approach(lag.y, ty, step)
+}
 function updateBud(inst, bud, hero, t) {
   const rootX = inst.baseX + bud.dx
   const sway = Math.sin(t * BUD_SWAY_SPEED + bud.phase) * BUD_SWAY_AMP
-  const heroAngle = hero ? Math.atan2(hero.y - inst.baseY, hero.x - rootX) : bud.angle
+  const aim = inst.leanHero
+  const heroAngle = Math.atan2(aim.y - inst.baseY, aim.x - rootX)
   const angle = bud.angle + sway + angleDelta(bud.angle, heroAngle) * inst.lean * BUD_LEAN_FOLLOW
   fillArc(bud.pts, rootX, inst.baseY, angle, bud.bend, BUD_BEND_POW, bud.len / BUD_SEGMENTS)
 }
@@ -419,7 +467,7 @@ function updateBlade(inst, blade, hero, t) {
   const rootX = inst.baseX + blade.dx
   const sway = Math.sin(t * BLADE_SWAY_SPEED + blade.phase) * BLADE_SWAY_AMP
   const rest = { angle: blade.angle + sway, bend: BLADE_REST_BEND * Math.sign(Math.cos(blade.angle)), len: blade.len, pow: 1 }
-  const pose = blendArc(rest, leanArc(inst, hero, rootX, inst.baseY, blade.reach, 0, blade.len * LEAN_MIN_LEN_FRAC), inst.lean * blade.follow)
+  const pose = blendArc(rest, leanArc(inst, inst.leanHero, rootX, inst.baseY, blade.reach, 0, blade.len * LEAN_MIN_LEN_FRAC), inst.lean * blade.follow)
   fillArc(blade.pts, rootX, inst.baseY, pose.angle, pose.bend, pose.pow, pose.len / BLADE_SEGMENTS)
 }
 

@@ -45,6 +45,39 @@ const TOMATO_BLAST_SHARD_FREQ_RANGE = 1800
 const TOMATO_BLAST_SHARD_DURATION = 0.05
 const TOMATO_BLAST_SHARD_GAIN = 0.035
 //
+// Glow eye-flower grab: a leafy shiver when it notices the hero, a wet
+// squeeze when the tentacles close, and a heavy earth gulp when it drags
+// him under (sub thump, low rumble and a rattle of pebbles).
+//
+const FLOWER_RUSTLE_SEC = 0.42
+const FLOWER_RUSTLE_BAND_HZ = 1900
+const FLOWER_RUSTLE_Q = 1.4
+const FLOWER_RUSTLE_GAIN = 0.16
+const FLOWER_RUSTLE_TREMOLO_HZ = 23
+const FLOWER_RUSTLE_TREMOLO_DEPTH = 0.6
+const FLOWER_SQUEEZE_SEC = 0.32
+const FLOWER_SQUEEZE_LP_START = 1300
+const FLOWER_SQUEEZE_LP_END = 320
+const FLOWER_SQUEEZE_NOISE_GAIN = 0.2
+const FLOWER_SQUEEZE_TONE_START = 170
+const FLOWER_SQUEEZE_TONE_END = 70
+const FLOWER_SQUEEZE_TONE_GAIN = 0.16
+const FLOWER_GULP_SEC = 0.9
+const FLOWER_GULP_THUMP_START = 110
+const FLOWER_GULP_THUMP_END = 28
+const FLOWER_GULP_THUMP_GAIN = 0.42
+const FLOWER_GULP_RUMBLE_LP_START = 900
+const FLOWER_GULP_RUMBLE_LP_END = 140
+const FLOWER_GULP_RUMBLE_GAIN = 0.3
+const FLOWER_GULP_PEBBLE_COUNT = 9
+const FLOWER_GULP_PEBBLE_SPREAD = 0.45
+const FLOWER_GULP_PEBBLE_SEC = 0.03
+const FLOWER_GULP_PEBBLE_BAND_MIN = 1800
+const FLOWER_GULP_PEBBLE_BAND_RANGE = 2600
+const FLOWER_GULP_PEBBLE_GAIN = 0.07
+const FLOWER_SFX_ATTACK_SEC = 0.012
+const FLOWER_SFX_FLOOR = 0.0001
+//
 // Ready scene CRT power-on hiss (looped white noise + long fade).
 //
 const READY_TV_HISS_ATTACK_SEC = 0.045
@@ -4682,6 +4715,107 @@ export function playLeafGroundRustle(instance, volume = 0.22) {
   src.stop(now + dur + 0.01)
 }
 /**
+ * Glow eye-flower notices the hero: a short trembling rustle of its blades.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playFlowerRustle(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const now = ctx.currentTime
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, FLOWER_RUSTLE_SEC)
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.value = FLOWER_RUSTLE_BAND_HZ
+  band.Q.value = FLOWER_RUSTLE_Q
+  const env = createFlowerEnvelope(ctx, now, FLOWER_RUSTLE_GAIN, FLOWER_RUSTLE_SEC)
+  //
+  // Fast tremolo makes the hiss read as many leaves shivering, not wind.
+  //
+  const tremolo = ctx.createOscillator()
+  const depth = ctx.createGain()
+  const shiver = ctx.createGain()
+  tremolo.frequency.value = FLOWER_RUSTLE_TREMOLO_HZ
+  depth.gain.value = FLOWER_RUSTLE_TREMOLO_DEPTH * 0.5
+  shiver.gain.value = 1 - FLOWER_RUSTLE_TREMOLO_DEPTH * 0.5
+  tremolo.connect(depth)
+  depth.connect(shiver.gain)
+  noise.connect(band)
+  band.connect(shiver)
+  shiver.connect(env)
+  env.connect(ctx.destination)
+  noise.start(now)
+  tremolo.start(now)
+  noise.stop(now + FLOWER_RUSTLE_SEC)
+  tremolo.stop(now + FLOWER_RUSTLE_SEC)
+}
+/**
+ * Glow eye-flower tentacles close around the hero: wet, sinking squeeze.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playFlowerSqueeze(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const now = ctx.currentTime
+  const end = now + FLOWER_SQUEEZE_SEC
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, FLOWER_SQUEEZE_SEC)
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(FLOWER_SQUEEZE_LP_START, now)
+  lp.frequency.exponentialRampToValueAtTime(FLOWER_SQUEEZE_LP_END, end)
+  const noiseEnv = createFlowerEnvelope(ctx, now, FLOWER_SQUEEZE_NOISE_GAIN, FLOWER_SQUEEZE_SEC)
+  noise.connect(lp)
+  lp.connect(noiseEnv)
+  noiseEnv.connect(ctx.destination)
+  const tone = ctx.createOscillator()
+  tone.type = 'sine'
+  tone.frequency.setValueAtTime(FLOWER_SQUEEZE_TONE_START, now)
+  tone.frequency.exponentialRampToValueAtTime(FLOWER_SQUEEZE_TONE_END, end)
+  const toneEnv = createFlowerEnvelope(ctx, now, FLOWER_SQUEEZE_TONE_GAIN, FLOWER_SQUEEZE_SEC)
+  tone.connect(toneEnv)
+  toneEnv.connect(ctx.destination)
+  noise.start(now)
+  tone.start(now)
+  noise.stop(end)
+  tone.stop(end)
+}
+/**
+ * Glow eye-flower drags the hero underground: sub thump, falling rumble and
+ * a scatter of pebble ticks.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playFlowerEarthGulp(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const now = ctx.currentTime
+  const end = now + FLOWER_GULP_SEC
+  const thump = ctx.createOscillator()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(FLOWER_GULP_THUMP_START, now)
+  thump.frequency.exponentialRampToValueAtTime(FLOWER_GULP_THUMP_END, end)
+  const thumpEnv = createFlowerEnvelope(ctx, now, FLOWER_GULP_THUMP_GAIN, FLOWER_GULP_SEC)
+  thump.connect(thumpEnv)
+  thumpEnv.connect(ctx.destination)
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, FLOWER_GULP_SEC)
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(FLOWER_GULP_RUMBLE_LP_START, now)
+  lp.frequency.exponentialRampToValueAtTime(FLOWER_GULP_RUMBLE_LP_END, end)
+  const rumbleEnv = createFlowerEnvelope(ctx, now, FLOWER_GULP_RUMBLE_GAIN, FLOWER_GULP_SEC)
+  noise.connect(lp)
+  lp.connect(rumbleEnv)
+  rumbleEnv.connect(ctx.destination)
+  thump.start(now)
+  noise.start(now)
+  thump.stop(end)
+  noise.stop(end)
+  for (let i = 0; i < FLOWER_GULP_PEBBLE_COUNT; i++) {
+    playFlowerPebbleTick(ctx, now + Math.random() * FLOWER_GULP_PEBBLE_SPREAD)
+  }
+}
+/**
  * Stops the global rain loop (shared across scene reloads / Sound instances).
  * @param {Object} [instance] - Optional sound instance (kept for call-site compatibility)
  */
@@ -5660,4 +5794,38 @@ function playReadyTvHiss(inst, at, openAt, endAt) {
   noise.start(at)
   noise.stop(endAt + READY_TV_STOP_TAIL_SEC)
   readyTvPowerOnSoundNodes.push(noise, highpass, lowpass, env)
+}
+//
+// Audio context ready for a one-shot procedural sound (null while muted or suspended).
+//
+function runningProceduralContext(instance) {
+  if (globalMuteProceduralSounds) return null
+  const ctx = instance?.audioContext
+  return ctx && ctx.state === 'running' ? ctx : null
+}
+//
+// Gain node with a short attack and an exponential tail to silence.
+//
+function createFlowerEnvelope(ctx, at, peak, duration) {
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(FLOWER_SFX_FLOOR, at)
+  env.gain.linearRampToValueAtTime(peak, at + FLOWER_SFX_ATTACK_SEC)
+  env.gain.exponentialRampToValueAtTime(FLOWER_SFX_FLOOR, at + duration)
+  return env
+}
+//
+// One pebble knocking on another — a tiny band-passed noise click.
+//
+function playFlowerPebbleTick(ctx, at) {
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, FLOWER_GULP_PEBBLE_SEC)
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.value = FLOWER_GULP_PEBBLE_BAND_MIN + Math.random() * FLOWER_GULP_PEBBLE_BAND_RANGE
+  const env = createFlowerEnvelope(ctx, at, FLOWER_GULP_PEBBLE_GAIN, FLOWER_GULP_PEBBLE_SEC)
+  noise.connect(band)
+  band.connect(env)
+  env.connect(ctx.destination)
+  noise.start(at)
+  noise.stop(at + FLOWER_GULP_PEBBLE_SEC)
 }

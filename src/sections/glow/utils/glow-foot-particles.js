@@ -28,6 +28,12 @@ const CAPTION_CRUMBLE_BULK_MAX_SEC = 1.2
 const LANDING_SPEED_MIN = 90
 const LANDING_SPEED_RANGE = 140
 //
+// Soil burst out of a hole (eye-flower grab): crumbs fan upward inside a cone
+// around straight up, then fall back and rest on the ground line.
+//
+const SOIL_BURST_SPREAD_DEG = 70
+const SOIL_BURST_LIFT_PX = 2
+//
 // Wide radial burst (death, big impacts) — angles cover a full arc from
 // low-left to low-right through straight up, so plenty of particles always
 // shoot upward instead of just a shallow forward-up puff like a footstep.
@@ -219,6 +225,40 @@ export function spawnEarthCrumbleFromRegion(inst, cfg) {
       b: c.b,
       crumbleGround: true,
       captionCrumble,
+      groundY,
+      landed: false,
+      scatterDone: false,
+      scatterTime: 0
+    })
+  }
+}
+//
+// Earth bursting out of the ground at (x, groundY): crumbs or pebbles thrown
+// up inside a cone, falling back to groundY where they scatter, rest and fade.
+//
+export function spawnSoilBurst(inst, cfg) {
+  if (!inst) return
+  const { x, groundY, halfW, colors, count, speedMin, speedRange, sizeMin, sizeRange } = cfg
+  const spread = (cfg.spreadDeg ?? SOIL_BURST_SPREAD_DEG) * Math.PI / 180
+  for (let i = 0; i < count; i++) {
+    const c = colors[Math.floor(Math.random() * colors.length)]
+    const angle = -Math.PI / 2 + (Math.random() * 2 - 1) * spread
+    const speed = speedMin + Math.random() * speedRange
+    const size = sizeMin + Math.random() * sizeRange
+    inst.particles.push({
+      x: x + (Math.random() * 2 - 1) * halfW,
+      y: groundY - size - SOIL_BURST_LIFT_PX,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: Infinity,
+      age: 0,
+      fadeFrom: null,
+      size,
+      r: c.r,
+      g: c.g,
+      b: c.b,
+      crumbleGround: true,
+      captionCrumble: false,
       groundY,
       landed: false,
       scatterDone: false,

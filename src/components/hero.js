@@ -4623,6 +4623,7 @@ function isHeadAgainstCeiling(inst, airborneOk = false) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
     if (obj.is?.('annihilation')) continue
     if (obj.is?.('startBranch')) continue
+    if (obj.is?.(CFG.game.noCeilingTag)) continue
     //
     // Hidden/off-screen pads must not count as ceilings
     //

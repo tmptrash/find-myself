@@ -183,6 +183,46 @@ export function releaseGlowAnchorFruit(levelInst) {
 }
 
 /**
+ * Where the knocked apple still in the world lies (falling or waiting for the
+ * centipede), null when there is none — saved level state.
+ * @param {Object} levelInst - Glow level inst
+ * @param {number} floorY - Ground surface Y used while it is still falling
+ * @returns {{x: number, floorY: number}|null}
+ */
+export function getFallenAnchorFruit(levelInst, floorY) {
+  const fruit = levelInst.treeFruitSpots?.find(f => f.fromAnchorDrop && !f.removed && !f.beingEaten)
+  return fruit ? { x: fruit.x, floorY: fruit.settled ? (fruit._restFloorY ?? floorY) : floorY } : null
+}
+
+/**
+ * Puts a saved knocked apple back on the ground at x, already settled, so
+ * the centipede comes for it as before.
+ * @param {Object} levelInst - Glow level inst
+ * @param {number} x - Ground X of the apple
+ * @param {number} floorY - Ground surface Y
+ */
+export function restoreFallenAnchorFruit(levelInst, x, floorY) {
+  if (hasGlowAnchorFruitDropInWorld(levelInst)) return
+  const anchor = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
+  if (!anchor) return
+  levelInst.treeFruitSpots.push({
+    fromAnchorDrop: true,
+    attached: false,
+    x,
+    y: floorY - anchor.r - FRUIT_FALL_GROUND_PAD,
+    r: anchor.r,
+    hue: anchor.hue,
+    vy: 0,
+    vx: 0,
+    rollDir: pickFruitLandRollDir(x, floorY),
+    leaves: anchor.leaves,
+    airborne: false,
+    settled: true,
+    _restFloorY: floorY
+  })
+}
+
+/**
  * Steps falling fruit physics.
  * @param {Object} levelInst - Glow level inst
  * @param {number} dt - Frame delta

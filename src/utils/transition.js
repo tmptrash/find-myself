@@ -17,6 +17,7 @@ import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
 import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
 import { bindPointerActivate } from './pointer-activate.js'
+import { focusGameCanvas } from './canvas-focus.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -1182,6 +1183,7 @@ export function installLevelFadeIn(k) {
   const originalGo = k.go.bind(k)
   k.go = (name, ...args) => {
     originalGo(name, ...args)
+    focusGameCanvas()
     isLevelSceneName(name) && createSceneFadeIn(k, 0, 0, 0)
   }
 }

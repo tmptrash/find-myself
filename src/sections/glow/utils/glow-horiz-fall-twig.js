@@ -67,7 +67,6 @@ const TWIG_FADE_SEC = 0.85
 const TWIG_RESPAWN_PAUSE_SEC = 2.5
 const TWIG_REGROW_FADE_SEC = 0.75
 const TWIG_ROT_SPEED = 2.4
-const TWIG_PREDATOR_MOUNT_TIMER_SEC = 15
 //
 // The near end of a mounted stick is pinned this far behind the head centre;
 // the stick never follows the lagging body segments, so its length on the back
@@ -198,6 +197,22 @@ export function tryPredatorTurnTowardIslandAfterLanding(twigInst, levelInst, cha
 }
 
 /**
+ * The island flower took the hero: his jump off the stick is over (his body
+ * leaves physics, so the airborne flag would pause the centipede forever),
+ * and a crawler waiting at the island turns and swims back to the shore.
+ * @param {Object} twigInst - Twig inst
+ * @param {Object} levelInst - Glow level inst
+ */
+export function releasePredatorAtIsland(twigInst, levelInst) {
+  if (!twigInst) return
+  twigInst.riderAirborne = false
+  twigInst.turnTowardIslandPending = false
+  const islandX = levelInst?.eyeFlower?.x
+  mountedTwig(twigInst) && twigInst.predator?.swimming && islandX != null &&
+    armPredatorIslandRetreat(twigInst, levelInst, islandX)
+}
+
+/**
  * When the hero stands on the island but the salute turn never started
  * (e.g. flee blocked scheduling), force the shore swim.
  * @param {Object} twigInst - Twig inst
@@ -304,6 +319,36 @@ export function isHeroRidingPredator(inst, char) {
 }
 
 /**
+ * True while the fallen stick lies on the centipede's back (saved level state).
+ * @param {Object} inst - Twig inst
+ * @returns {boolean}
+ */
+export function isTwigOnPredator(inst) {
+  return Boolean(mountedTwig(inst))
+}
+
+/**
+ * Puts the stick straight onto the centipede's back (restoring a saved run).
+ * @param {Object} inst - Twig inst
+ * @param {Object} predator - Centipede inst
+ */
+export function restoreTwigOnPredator(inst, predator) {
+  const twig = inst?.twigs?.[0]
+  if (!twig || !predator) return
+  inst.dropped = true
+  inst.regrowing = false
+  inst.predator = predator
+  twig.phase = 'predatorMount'
+  twig.vx = 0
+  twig.vy = 0
+  twig.rotVel = 0
+  twig.alpha = 1
+  twig.rot = 0
+  twig.face = -(predator.dir || 1)
+  predator.segments?.length && placeTwigOnBack(twig, predator, 0)
+}
+
+/**
  * True while the stick protects the hero from the centipede: standing on it,
  * or airborne after jumping off it and still above the stick.
  * @param {Object} inst - Twig inst
@@ -333,7 +378,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
   const velY = char.vel?.y ?? 0
   const midX = twigMidX(mounted)
   if (!inst.riderLocked) {
-    tryLockRider(inst, char, mounted, midX, velY)
+    tryLockRider(inst, char, mounted, midX, velY, hero)
     if (!inst.riderLocked) {
       syncRiderAirborne(inst, char, mounted)
       return
@@ -362,6 +407,7 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
   // the centipede walked.
   //
   inst.rideOffset = clampRideOffset((inst.rideOffset ?? 0) + riderInputShift(hero))
+  keepRiderOffIslandSide(inst, mounted, midX)
   const rideX = midX + inst.rideOffset
   const rideY = twigSurfaceY(mounted) - HERO_SURFACE_DETECT_Y + HERO_LOG_SNAP_EMBED
   typeof char.moveTo === 'function' ? char.moveTo(rideX, rideY) : (char.pos.x = rideX, char.pos.y = rideY)
@@ -382,21 +428,58 @@ export const HORIZ_FALL_TWIG_DRAW_Z = TWIG_Z
 
 const HERO_SURFACE_DETECT_Y = 38
 const HERO_LOG_SNAP_EMBED = 1
+const HERO_HALF_W = 20
+const ISLAND_WALL_GAP = 1
 
 function heroLeftRideStick(inst, char, mounted, hero) {
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
   if (footY > twigSurfaceY(mounted) + 28) return true
   const shift = riderInputShift(hero)
-  if (!shift) return false
+  if (!shift || hero?.isSquashing) return false
   const offset = inst.rideOffset ?? 0
   const limit = TWIG_RIDE_PLAT_HALF_W - TWIG_RIDE_EDGE_INSET
-  return Math.abs(offset) >= limit - 0.5 && Math.sign(shift) === Math.sign(offset)
+  if (Math.abs(offset) < limit - 0.5 || Math.sign(shift) !== Math.sign(offset)) return false
+  //
+  // Afloat, the end of the stick is open water: he only steps off onto the
+  // island top, otherwise he stays at the edge (and can still jump).
+  //
+  if (!inst.predator?.swimming) return true
+  const island = inst.predator.levelInst?.eyeFlower
+  return EyeFlower.isOnIsland(island, char.pos.x + Math.sign(shift) * HERO_HALF_W, twigSurfaceY(mounted))
 }
 
-function tryLockRider(inst, char, mounted, midX, velY) {
+//
+// The island collider's side is a wall for a rider whose stick sits lower
+// than the island top. Kaplay pushing the pinned body out of it every frame
+// broke his ground contact and cancelled the jump crouch.
+//
+function keepRiderOffIslandSide(inst, mounted, midX) {
+  const island = inst.predator?.levelInst?.eyeFlower
+  const wallX = EyeFlower.sideWallX(island, twigSurfaceY(mounted))
+  if (wallX == null) return
+  const minOffset = wallX + HERO_HALF_W + ISLAND_WALL_GAP - midX
+  inst.rideOffset < minOffset && (inst.rideOffset = clampRideOffset(minOffset))
+}
+
+function tryLockRider(inst, char, mounted, midX, velY, hero) {
   if (velY < TWIG_RIDE_JUMP_VEL_Y) return
+  //
+  // Just walked off an end and still pushing that way: re-boarding inside
+  // the edge slack flipped him on and off the stick every frame, which
+  // cancelled every jump crouch there.
+  //
+  const shift = riderInputShift(hero)
+  const offset = char.pos.x - midX
+  if (shift && Math.sign(shift) === Math.sign(offset) &&
+    Math.abs(offset) >= TWIG_RIDE_PLAT_HALF_W - TWIG_RIDE_EDGE_INSET - 0.5) return
   const footY = char.pos.y + HERO_SURFACE_DETECT_Y
   const onPlat = char.curPlatform?.() === inst.ridePlat
+  //
+  // Standing on other solid ground next to the stick (the island top sits
+  // at the stick's height) is not boarding it.
+  //
+  if (!onPlat && char.isGrounded?.() && char.curPlatform?.()) return
+  if (!onPlat && EyeFlower.isOnIsland(inst.predator?.levelInst?.eyeFlower, char.pos.x, footY)) return
   const overStick = Math.abs(char.pos.x - midX) <= TWIG_RIDE_PLAT_HALF_W + TWIG_RIDE_EDGE_SLACK
   const surfaceY = twigSurfaceY(mounted)
   const atTop = footY >= surfaceY - 16 && footY <= surfaceY + 18
@@ -662,8 +745,7 @@ function makeTwigState(x, y, index, hangRot) {
     alpha: 1,
     seed: 0.22 + index * 0.41,
     groundTimer: 0,
-    fadeT: 0,
-    predatorTimer: 0
+    fadeT: 0
   }
 }
 
@@ -698,17 +780,6 @@ function stepTwig(twig, dt, floorY, predator, inst) {
     placeTwigOnBack(twig, predator, dt, riding, inst.rideDir, inst)
     inst.rideTurnPending && rideTurnBlend(inst) >= 1 &&
       completeRideTurn(inst, predator)
-    !riding && (twig.predatorTimer += dt)
-    if (!riding && twig.predatorTimer >= TWIG_PREDATOR_MOUNT_TIMER_SEC) {
-      twig.phase = 'falling'
-      twig.rot = twig.face >= 0 ? 0 : Math.PI
-      twig.face = 1
-      twig.vy = 40
-      twig.vx = (predator?.dir ?? 1) * 18
-      twig.rotVel = 1.1
-      predator && (predator.holdFacing = false)
-      hideRidePlatform(inst)
-    }
     return
   }
   if (twig.phase === 'falling') {
@@ -751,7 +822,6 @@ function tryMountTwig(twig, predator) {
   const hit = predatorBackCatchPoint(predator, twig.x, twig.y, x2, y2)
   if (!hit) return false
   twig.phase = 'predatorMount'
-  twig.predatorTimer = 0
   twig.vy = 0
   twig.vx = 0
   twig.rotVel = 0

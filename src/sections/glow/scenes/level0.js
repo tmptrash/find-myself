@@ -96,6 +96,8 @@ import {
   mountGlowTreeFruitLayer,
   hasGlowAnchorFruitDropInWorld,
   releaseGlowAnchorFruit,
+  getFallenAnchorFruit,
+  restoreFallenAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
 import { applyGlowExperienceDelta, readGlowExperience } from '../utils/glow-experience.js'
@@ -104,6 +106,8 @@ import * as ChainBuoy from '../utils/glow-chain-buoy.js'
 import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
 import * as EarTree from '../utils/glow-ear-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
+import * as FlowerGrab from '../components/flower-grab.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/glow-shore-tree.js'
 import * as HorizFallTwig from '../utils/glow-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
@@ -913,6 +917,7 @@ const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
 const KEY_INTRO_SHOWN = 'glow.introShown'
+const KEY_LEVEL_STATE = 'glow.levelState'
 const KEY_CAMERA_INTRO_DONE = 'glow.cameraIntroDone'
 const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
@@ -1383,6 +1388,13 @@ const SURFACE_DETECT_Y = 38
 //
 const GLOW_EYE_FLOWER_HERO_CENTER_DY = 12
 //
+// Eye-flower grab ends the level: hand-off into the touch section.
+//
+const FLOWER_GRAB_TRANSITION_FROM = 'glow-complete'
+const FLOWER_GRAB_NEXT_LESSON = 'lesson-touch.0'
+const KEY_GLOW_COMPLETED = 'glow.completed'
+const KEY_LAST_LESSON = 'lastLesson'
+//
 // Slack around a wood surface when deciding "the hero's feet are on wood"
 // for the foot-dust guard — wider than the surface detector's own window so
 // a single off-by-a-frame sample can never leak a dust puff onto the branch.
@@ -1692,23 +1704,25 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
     const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
     //
-    // Default and branch-saved starts: on the ground right of the left
-    // mushroom, outside the island flower's whisper. A saved cave or ground
-    // pose from a menu exit is restored as is.
+    // Default start: on the ground right of the left mushroom, outside the
+    // island flower's whisper. A saved pose (ground, branch, tree, cave) from
+    // a menu exit or reload is restored as is.
     //
     let heroSpawnX = glowFirstStartGroundSpawnX
-    const hasSavedPose = lastSpawnX != null && lastSpawnY != null && lastSpawnMode
-    if (!respawnNearTree && hasSavedPose && lastSpawnMode !== SPAWN_MODE_BRANCH) {
+    const hasSavedPose = !respawnNearTree && lastSpawnX != null && lastSpawnY != null && lastSpawnMode
+    if (hasSavedPose) {
       heroSpawnX = lastSpawnX
       heroSpawnY = lastSpawnY
     }
+    const spawnElevated = hasSavedPose && lastSpawnMode !== SPAWN_MODE_CAVE &&
+      heroSpawnY + SURFACE_DETECT_Y < FLOOR_Y - LOG_SNAP_STANDING_MAX
     //
     // A saved/derived ground spawn landing right on a mushroom's bounce cap
     // (branch tramp near the tree, or the far right tramp) would launch the
     // hero into the air the instant the level loads — pull it clear to
     // whichever side is closer before the mud-hazard check below.
     //
-    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose &&
+    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose && !spawnElevated &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromTrampolines({
         spawnX: heroSpawnX,
         spawnOnBranch: false,
@@ -1721,7 +1735,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // A saved ground spawn inside the mud ambush band would overlap the
     // predator the instant the level loads — pull it west of the trigger.
     //
-    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose &&
+    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose && !spawnElevated &&
       (heroSpawnX = nudgeGlowHeroSpawnAwayFromMudHazards({
         spawnX: heroSpawnX,
         spawnY: heroSpawnY,
@@ -1779,6 +1793,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Glow level: no particle assembly on spawn (first visit or reload).
     //
     Hero.spawn(heroInst, { instant: true })
+    spawnElevated && holdGlowHeroForElevatedSpawn(heroInst)
     glowLevel0LiveHeroChar = heroInst.character
     snapGlowCameraToHero(k, heroInst)
     if (await glowBootstrapPause(bootstrap, 29, session)) return
@@ -1841,8 +1856,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       fleeLeftX: LEFT_MARGIN + PREDATOR_FLEE_LEFT_EDGE_PAD
     })
     if (zones.predatorAwake) {
-      const footY = heroSpawnY + SURFACE_DETECT_Y
-      Predator.overlapsHeroHitbox(predator, heroSpawnX, footY) &&
+      isGlowSpawnTooCloseToPredator(predator, heroSpawnX, heroSpawnY) &&
         heroInst.character?.pos &&
         (heroInst.character.pos.x = resolveGlowPredatorRespawnX(
           { mudZoneX1, mudZoneX2 },
@@ -2075,6 +2089,15 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     setupGlowPitCaveTrampoline(inst)
     inst.footParticles = GlowFootParticles.create({ k })
+    inst.flowerGrab = FlowerGrab.create({
+      k,
+      flower: inst.eyeFlower,
+      heroInst,
+      footParticles: inst.footParticles,
+      camera,
+      sound,
+      onFinished: finishGlowFlowerGrab
+    })
     const chainBuoyWoodBands = buildGlowChainBuoyWoodBands({
       horizBranch: treeData.horizBranch
     })
@@ -2174,11 +2197,15 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     inst.pendingGlowIntro = needsControlsIntro
     inst.introHintDelayRemaining = 0
     applyZoneVisibility(inst)
+    restoreGlowLevelState(inst)
+    spawnElevated && releaseGlowHeroOnElevatedSpawn(inst, heroSpawnY)
+    bindGlowUnloadPersist(inst)
     Hero.suppressIdleVocalization()
     ensureGlowBirdsBackgroundPlaying(inst)
     inst._glowBirdsBootstrapKick = true
     registerGlowNativeTeardown(() => {
       glowLevel0LiveHeroChar = null
+      unbindGlowUnloadPersist(inst)
       persistGlowOnLeave(inst)
       stopGlowLoopAudio()
     })
@@ -2189,6 +2216,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       backToMenuCancel.cancel()
       inst.touchDeathRespawnWait?.cancel?.()
       inst.touchDeathRespawnWait = null
+      unbindGlowUnloadPersist(inst)
       persistGlowOnLeave(inst)
       stopGlowLoopAudio()
     })
@@ -2391,7 +2419,65 @@ function loadGlowZones() {
 // Persists glow storage keys before scene leave or native engine teardown.
 //
 function persistGlowOnLeave(inst) {
+  if (FlowerGrab.isActive(inst.flowerGrab)) return
   persistGlowLastSpawn(inst)
+  persistGlowLevelState(inst)
+}
+//
+// World state that survives a reload: branch / bomb-tree landing counts, the
+// knocked apple on the ground and the stick on the centipede's back.
+//
+function persistGlowLevelState(inst) {
+  set(KEY_LEVEL_STATE, {
+    startBranchLandings: inst._startBranchLandingCount ?? 0,
+    shoreBranchLandings: inst._shoreBranchLandingCount ?? 0,
+    tomatoHits: inst.spikyTomatoes ? SpikyTomato.getHits(inst.spikyTomatoes) : [],
+    fallenApple: getFallenAnchorFruit(inst, FLOOR_Y),
+    twigOnPredator: HorizFallTwig.isTwigOnPredator(inst.shoreFallTwigs)
+  })
+}
+//
+// Puts the saved world state back once every object it touches exists.
+//
+function restoreGlowLevelState(inst) {
+  const state = get(KEY_LEVEL_STATE, null)
+  if (!state) return
+  inst._startBranchLandingCount = state.startBranchLandings ?? 0
+  inst._shoreBranchLandingCount = state.shoreBranchLandings ?? 0
+  inst.spikyTomatoes && SpikyTomato.restoreHits(inst.spikyTomatoes, state.tomatoHits)
+  state.fallenApple && restoreFallenAnchorFruit(inst, state.fallenApple.x, state.fallenApple.floorY)
+  state.twigOnPredator && inst.zones?.predatorAwake &&
+    HorizFallTwig.restoreTwigOnPredator(inst.shoreFallTwigs, inst.predator)
+}
+//
+// A closed window or reload skips scene leave, so the same save runs on unload.
+//
+function bindGlowUnloadPersist(inst) {
+  inst.unloadPersist = persistGlowOnLeave.bind(null, inst)
+  window.addEventListener('pagehide', inst.unloadPersist)
+  window.addEventListener('beforeunload', inst.unloadPersist)
+}
+//
+// Drops the unload save once this level instance is gone.
+//
+function unbindGlowUnloadPersist(inst) {
+  if (!inst.unloadPersist) return
+  window.removeEventListener('pagehide', inst.unloadPersist)
+  window.removeEventListener('beforeunload', inst.unloadPersist)
+  inst.unloadPersist = null
+}
+//
+// Last pose where a reload may put the hero back: on solid ground, not on the
+// centipede's stick, not in the lake and not on the flower island.
+//
+function trackGlowSafeHeroPose(inst, char, heroX, footY, grounded) {
+  if (!grounded || isInWaterZone(inst, heroX, footY)) return
+  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)) return
+  if (EyeFlower.isOnIsland(inst.eyeFlower, heroX, footY)) return
+  if (inst.predator && Predator.overlapsHeroHitbox(inst.predator, heroX, footY)) return
+  inst.safeHeroPose ??= { x: heroX, y: char.pos.y }
+  inst.safeHeroPose.x = heroX
+  inst.safeHeroPose.y = char.pos.y
 }
 //
 // True while the hero stands inside the open pit cave (collapsed mouth).
@@ -2447,13 +2533,38 @@ function applyGlowCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCave) {
   snapGlowCameraToHero(inst.k, inst.heroInst)
 }
 //
+// Tree branches and other raised platforms are built later in the bootstrap,
+// so a hero saved up there would fall to the ground during loading frames.
+// He hangs in place without gravity until they exist.
+//
+function holdGlowHeroForElevatedSpawn(heroInst) {
+  const char = heroInst?.character
+  if (!char) return
+  char.gravityScale = 0
+  char.vel && (char.vel.x = 0, char.vel.y = 0)
+}
+//
+// Every platform exists now: put the hero back on the saved spot and let
+// gravity settle him onto it.
+//
+function releaseGlowHeroOnElevatedSpawn(inst, heroSpawnY) {
+  const char = inst.heroInst?.character
+  if (!char?.exists?.()) return
+  syncShoreBranchPlatform(inst)
+  char.pos.y = heroSpawnY
+  char.vel && (char.vel.x = 0, char.vel.y = 0)
+  char.gravityScale = 1
+  snapGlowCameraToHero(inst.k, inst.heroInst)
+}
+//
 // Remembers whether the hero was on the start branch or the ground so the
 // next visit can resume at the same place (menu exit or level reload).
 //
 function persistGlowLastSpawn(inst) {
   const char = inst.heroInst?.character
   if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
-  writeGlowLastSpawnKeys(inst, char.pos.x, char.pos.y)
+  const pose = inst.safeHeroPose
+  pose ? writeGlowLastSpawnKeys(inst, pose.x, pose.y) : writeGlowLastSpawnKeys(inst, char.pos.x, char.pos.y)
 }
 //
 // Stores spawn pose for the next reload (menu exit, death, or scene leave).
@@ -4244,6 +4355,7 @@ function resetGlowPlantWhisperProximityState(inst) {
 }
 function fadeOutGlowPlantWhisper(inst) {
   Sound.setEarTreeWhisperVolume(0)
+  EyeFlower.setWhisper(inst.eyeFlower, 0)
   resetGlowPlantWhisperProximityState(inst)
 }
 function updateGlowPlantWhisperSound(inst, char) {
@@ -4275,6 +4387,7 @@ function updateGlowPlantWhisperSound(inst, char) {
   }
   proxState.last = proximity
   Sound.setEarTreeWhisperVolume(Math.min(1, vol))
+  EyeFlower.setWhisper(inst.eyeFlower, proximity)
 }
 //
 // Plays ground/wood land SFX a few pixels before isGrounded flips — Kaplay
@@ -7389,6 +7502,17 @@ function resolveGlowPredatorRespawnX(inst, deathX, deathY, pred) {
   return spawnX
 }
 //
+// A restored spawn must not drop the hero into the crawler's body or right
+// in front of its head on the ground it patrols (branches above are fine).
+//
+function isGlowSpawnTooCloseToPredator(pred, heroX, heroY) {
+  const footY = heroY + SURFACE_DETECT_Y
+  if (Predator.overlapsHeroHitbox(pred, heroX, footY)) return true
+  if (footY < FLOOR_Y - LOG_SNAP_STANDING_MAX) return false
+  if (heroX < pred.minX || heroX > pred.maxX) return false
+  return Math.abs(heroX - pred.x) < HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD
+}
+//
 // Keeps a respawn X inside the predator patrol band.
 //
 function clampGlowPredatorRespawnX(x, minX, maxX) {
@@ -7865,6 +7989,10 @@ function onUpdate(inst) {
     inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
     return
   }
+  if (FlowerGrab.isActive(inst.flowerGrab)) {
+    updateGlowFlowerGrabFrame(inst)
+    return
+  }
   inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
   if (inst.pendingGlowIntro) {
     inst.introHintDelayRemaining += k.dt()
@@ -7921,6 +8049,8 @@ function onUpdate(inst) {
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
+  if (tryStartGlowFlowerGrab(inst, heroX, footY, grounded)) return
+  trackGlowSafeHeroPose(inst, char, heroX, footY, grounded)
   //
   // refreshGlowMainGroundJumpState clears wasJumping before foot bursts run —
   // latch landing dust here while jump state is still intact.
@@ -8111,10 +8241,54 @@ function syncGlowPredatorPatrolBounds(inst) {
   pred.x < pred.minX && (pred.x = pred.minX)
   pred.x > pred.maxX && (pred.x = pred.maxX)
 }
+//
+// The flower takes the hero whenever he stands on the island top — however he
+// got there (jump, step off the stick). A fly-over or a brush against its
+// side never counts: he must be grounded, and not still riding the centipede.
+//
+function tryStartGlowFlowerGrab(inst, heroX, footY, grounded) {
+  if (!grounded || FlowerGrab.isActive(inst.flowerGrab)) return false
+  if (!isHeroStandingOnGlowIsland(inst, heroX, footY)) return false
+  destroyStrayGlowHeroBody(inst.k, inst.heroInst.character)
+  HorizFallTwig.releasePredatorAtIsland(inst.shoreFallTwigs, inst)
+  FlowerGrab.start(inst.flowerGrab, footY)
+  return true
+}
+//
+// Feet on the island collider (Kaplay contact or the island band), and not
+// pinned to the stick on the centipede's back next to it.
+//
+function isHeroStandingOnGlowIsland(inst, heroX, footY) {
+  const char = inst.heroInst?.character
+  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)) return false
+  if (inst.eyeFlower?.visible && char?.curPlatform?.() === inst.eyeFlower.collider) return true
+  return EyeFlower.isOnIsland(inst.eyeFlower, heroX, footY)
+}
+//
+// While the flower drags the hero away the level only runs the sequence,
+// particles, whisper, FPS and camera.
+//
+function updateGlowFlowerGrabFrame(inst) {
+  const k = inst.k
+  FlowerGrab.onUpdate(inst.flowerGrab, k.dt())
+  inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
+  inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
+  updateGlowPlantWhisperSound(inst, inst.heroInst.character)
+  updateGlowCamera(inst)
+}
+//
+// The swallowed hero ends the glow section: straight on to touch lesson 0.
+//
+function finishGlowFlowerGrab(k) {
+  set(KEY_GLOW_COMPLETED, true)
+  set(KEY_LAST_LESSON, FLOWER_GRAB_NEXT_LESSON)
+  createLevelTransition(k, FLOWER_GRAB_TRANSITION_FROM)
+}
 function glowPredatorCanHuntHero(inst) {
   const char = inst.heroInst?.character
   const pred = inst.predator
   if (!char?.pos || inst.drowning || inst.deathHandled || !pred) return false
+  if (FlowerGrab.isActive(inst.flowerGrab)) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
   if (isOnGlowLakeDryFooting(inst, char.pos.x, footY)) return false

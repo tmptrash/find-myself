@@ -126,6 +126,26 @@ export function onHeroLanded(inst, heroX) {
 }
 
 /**
+ * Jolts each hanging tomato has taken so far (0 for fallen ones) — saved level state.
+ * @param {Object} inst - Spiky tomato inst
+ * @returns {number[]}
+ */
+export function getHits(inst) {
+  return inst.tomatoes.map(t => (t.state === STATE_HANG ? t.hits : 0))
+}
+
+/**
+ * Restores saved jolt counts on hanging tomatoes (never enough to drop one).
+ * @param {Object} inst - Spiky tomato inst
+ * @param {number[]} hits - Counts in tree order
+ */
+export function restoreHits(inst, hits) {
+  inst.tomatoes.forEach((t, i) => {
+    t.state === STATE_HANG && (t.hits = Math.min(TOMATO_HITS_TO_DROP - 1, Math.max(0, hits?.[i] ?? 0)))
+  })
+}
+
+/**
  * Draws all tomatoes still in play (hanging or falling).
  * @param {Object} inst - Spiky tomato inst
  * @param {number} [opacity=1] - Reveal fade shared with the lip-trees

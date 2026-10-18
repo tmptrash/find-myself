@@ -28,6 +28,7 @@ import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
 import { installLevelFadeIn } from "./transition.js"
+import { setFocusCanvas, focusGameCanvas } from "./canvas-focus.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
 import { resetLessonHelpPanelState } from "./lesson-help.js"
@@ -168,18 +169,8 @@ export async function bootEngine(resolutionMode) {
   // Focus the canvas on boot so Kaplay onKeyPress works without an extra click.
   // Physical window listeners (bindBackToMenuKeys, etc.) still cover unfocused cases.
   //
-  if (k.canvas) {
-    k.canvas.tabIndex = 0
-    requestAnimationFrame(() => {
-      try {
-        k.canvas.focus({ preventScroll: true })
-      } catch (_) {
-        //
-        // Some browsers reject focus on a hidden canvas during boot
-        //
-      }
-    })
-  }
+  setFocusCanvas(k.canvas ?? null)
+  focusGameCanvas()
   installLevelFadeIn(k)
   const setupTasks = buildSetupTasks(k)
   const soundTasks = buildSoundTasks(k)
@@ -227,7 +218,10 @@ export async function bootEngine(resolutionMode) {
     })
   })
   await prepareDesaturatedLifeSprite(k)
-  k.canvas && !BootLoader.isLoaderVisible() && (k.canvas.style.visibility = 'visible')
+  if (k.canvas && !BootLoader.isLoaderVisible()) {
+    k.canvas.style.visibility = 'visible'
+    focusGameCanvas()
+  }
   unlockKaplayAudioOnFirstGesture(k)
   return k
 }

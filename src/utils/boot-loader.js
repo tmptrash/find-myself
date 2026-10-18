@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Cursor from './cursor.js'
+import { focusGameCanvas } from './canvas-focus.js'
 //
 // Shared DOM loader. Fatal errors may replace innerHTML —
 // ensureLoaderStructure() rebuilds the eye before reuse.
@@ -320,6 +321,7 @@ function finishHideLoader() {
   document.querySelectorAll('canvas').forEach(canvas => {
     canvas.style.visibility = 'visible'
   })
+  focusGameCanvas()
 }
 //
 // Caption above the eye; the panel turns into a plate over CRT snow.

@@ -10,7 +10,7 @@
 		"build": "vite build",
 		"bin": "npm run build && electron-builder",
 		"dev": "vite",
-		"electron": "electron .",
+		"electron": "node scripts/run-electron.js",
 		"preview": "vite preview",
 		"zip": "npm run build && mkdir -p dist && zip -r dist/game.zip dist -x \"**/.DS_Store\"",
 		"postinstall": "node scripts/apply-kaplay-performance-patch.js"

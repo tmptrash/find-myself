@@ -137,7 +137,8 @@ export const CFG = {
     moveSpeed: 300,
     jumpForce: 640,
     gravity: 2000,
-    platformName: "platform"
+    platformName: "platform",
+    noCeilingTag: "noJumpCeiling" // Ground-only platforms that never block a jump from below or beside
   },
   controls: {
     moveLeft: ['left', 'a', 'KeyA'],       // Move left (KeyA = physical key for any layout)
@@ -486,7 +487,13 @@ export const CFG = {
           leaf: PALETTE.green1,        // Leaf body
           leafLight: PALETTE.green2,   // Lit half of the leaf
           soil: PALETTE.brown0,        // Island earth
-          soilDark: PALETTE.sand0      // Earth strata
+          soilDark: PALETTE.sand0,     // Earth strata
+          soilLight: PALETTE.brown1,   // Loose earth thrown up by the grab
+          stone: PALETTE.gray2,        // Pebbles burst out of the hole
+          stoneLight: PALETTE.sand2,   // Lit pebbles
+          stoneDark: PALETTE.gray1,    // Shaded pebbles
+          hole: PALETTE.gray0,         // Torn earth where the hero vanished
+          fade: PALETTE.gray0          // Level fade-out after the grab
         },
         //
         // Colour-world forest floor: mossy hill, ferns, light spike bushes,

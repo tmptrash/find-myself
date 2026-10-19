@@ -3,9 +3,7 @@ import * as PolyBatch from '../../../utils/poly-batch.js'
 import {
   GLOW_PAL,
   glowCaveEarthDeepRgb,
-  glowCaveEarthFloorRgb,
-  glowRgb,
-  snapToPalette
+  glowRgb
 } from './glow-palette.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from './glow-static-bake.js'
@@ -86,7 +84,34 @@ const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 //
 const PIT_CAVE_TRAMP_ZONE_T = 0.82
 const PIT_DRAW_CULL_MARGIN = 80
-const CAVE_LAYOUT_VERSION = 70
+const CAVE_LAYOUT_VERSION = 72
+//
+// Interior decor kept sparse: a few larger stones on the floor and in the
+// void rather than dozens of small fragments.
+//
+const CAVE_FLOOR_PEBBLE_COUNT_MIN = 5
+const CAVE_FLOOR_PEBBLE_COUNT_RANGE = 4
+const CAVE_FLOOR_PEBBLE_R_MIN = 5
+const CAVE_FLOOR_PEBBLE_R_RANGE = 5
+const CAVE_BG_ROCK_COUNT_MIN = 6
+const CAVE_BG_ROCK_COUNT_RANGE = 4
+const CAVE_BG_ROCK_R_MIN = 7
+const CAVE_BG_ROCK_R_RANGE = 8
+//
+// Lit cap on each stone body: a shrunken copy shifted up-left.
+//
+const CAVE_ROCK_CAP_SCALE = 0.62
+const CAVE_ROCK_CAP_SHIFT = 0.22
+//
+// Depth shading inside the void: darkest toward the low back, a faint lit
+// band of soil just under the mouth.
+//
+const CAVE_RECESS_CENTER_X_FRAC = 0.42
+const CAVE_RECESS_CENTER_Y_FRAC = 0.72
+const CAVE_RECESS_RADIUS_FRAC = 0.75
+const CAVE_RECESS_ALPHA = 0.85
+const CAVE_LIP_BAND_FRAC = 0.32
+const CAVE_LIP_ALPHA = 0.28
 const CAVE_SEAM_COLUMN_X_SPREAD = 7
 const CAVE_SEAM_COLUMN_RADIUS_MIN = 6.5
 const CAVE_SEAM_COLUMN_RADIUS_MAX = 14
@@ -122,8 +147,19 @@ const CAVE_ANCHOR_CLEAR_HALF_W = 73
 //
 const CAVE_INTERIOR_EXTEND_LEFT = 132
 const CAVE_LEFT_BLOCK_W = 12
-const CAVE_WALL_ROCK_STEP = 3
-const CAVE_WALL_ROCK_LAYERS = 3
+//
+// Wall rocks: fewer, larger stones along each wall — still wide enough to
+// hide the void / earth join.
+//
+const CAVE_WALL_ROCK_STEP = 5
+const CAVE_WALL_ROCK_LAYERS = 2
+const CAVE_WALL_ROCK_R_MIN = 9
+const CAVE_WALL_ROCK_R_RANGE = 10
+//
+// Only every Nth cave stone gets the lit reddish-brown body; the rest take
+// the dark soil tone so stones read as embedded, not as pink confetti.
+//
+const CAVE_ROCK_LIT_EVERY = 3
 //
 // Versioned so a CAVE_LAYOUT_VERSION bump (any change to the cave geometry
 // generator) always forces a fresh bake. Glow and menu share one native
@@ -629,7 +665,9 @@ function bakeCaveInteriorSprite(k, pit) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
-  fillCanvasPoly(ctx, caveMouthPts(layout.mouth, layout.interiorWallEdge), pal.void)
+  const voidPts = caveMouthPts(layout.mouth, layout.interiorWallEdge)
+  fillCanvasPoly(ctx, voidPts, pal.void)
+  paintCaveDepthShading(ctx, voidPts, layout.mouth, pal)
   const groundY = layout.mouth.floorY
   //
   // Wall/contour rocks are drawn live on the foreground pass so bake void
@@ -720,17 +758,61 @@ function isCaveRockOnOrBelowGround(rock, floorY) {
 //
 function paintCanvasRocks(ctx, rocks, pal, floorY = null, roundOrigin = false) {
   if (!rocks?.length) return
-  const tone = caveRockPalette(pal)
-  const fill = { r: tone.fillR, g: tone.fillG, b: tone.fillB }
-  const shade = { r: tone.darkR, g: tone.darkG, b: tone.darkB }
   rocks.forEach((rock, idx) => {
     if (!rock.verts?.length) return
     if (floorY != null && !isCaveRockOnOrBelowGround(rock, floorY)) return
     const rx = roundOrigin ? Math.round(rock.x) : rock.x
     const ry = roundOrigin ? Math.round(rock.y) : rock.y
-    const pts = rock.verts.map(v => ({ x: rx + v.x, y: ry + v.y }))
-    fillCanvasPoly(ctx, pts, idx % 2 === 0 ? fill : shade)
+    const lit = idx % CAVE_ROCK_LIT_EVERY === 0
+    fillCanvasPoly(ctx, rock.verts.map(v => ({ x: rx + v.x, y: ry + v.y })), lit ? pal.stone : pal.stoneShade)
+    lit && fillCanvasPoly(ctx, caveRockCapPts(rock, rx, ry), pal.stoneLight)
   })
+}
+//
+// Lit cap: the stone outline shrunk and nudged toward the upper left light.
+//
+function caveRockCapPts(rock, rx, ry) {
+  const shift = rock.radius * CAVE_ROCK_CAP_SHIFT
+  return rock.verts.map(v => ({
+    x: rx - shift + v.x * CAVE_ROCK_CAP_SCALE,
+    y: ry - shift + v.y * CAVE_ROCK_CAP_SCALE
+  }))
+}
+//
+// Inside the void silhouette only: a dark recess pooled toward the low back,
+// and a faint band of daylit soil right under the mouth, so the cave reads
+// as hollowed out of the earth instead of a flat cut-out.
+//
+function paintCaveDepthShading(ctx, voidPts, mouth, pal) {
+  if (voidPts.length < 3) return
+  const xs = voidPts.map(p => p.x)
+  const x1 = Math.min(...xs)
+  const x2 = Math.max(...xs)
+  const top = mouth.floorY
+  const h = mouth.bottomY - top
+  const w = x2 - x1
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(voidPts[0].x, voidPts[0].y)
+  for (let i = 1; i < voidPts.length; i++) ctx.lineTo(voidPts[i].x, voidPts[i].y)
+  ctx.closePath()
+  ctx.clip()
+  const cx = x1 + w * CAVE_RECESS_CENTER_X_FRAC
+  const cy = top + h * CAVE_RECESS_CENTER_Y_FRAC
+  const recess = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * CAVE_RECESS_RADIUS_FRAC)
+  recess.addColorStop(0, rgbaCss(pal.recess, CAVE_RECESS_ALPHA))
+  recess.addColorStop(1, rgbaCss(pal.recess, 0))
+  ctx.fillStyle = recess
+  ctx.fillRect(x1, top - CAVE_BAKE_PAD, w, h + CAVE_BAKE_PAD * 2)
+  const lip = ctx.createLinearGradient(0, top, 0, top + h * CAVE_LIP_BAND_FRAC)
+  lip.addColorStop(0, rgbaCss(pal.lip, CAVE_LIP_ALPHA))
+  lip.addColorStop(1, rgbaCss(pal.lip, 0))
+  ctx.fillStyle = lip
+  ctx.fillRect(x1, top - CAVE_BAKE_PAD, w, h * CAVE_LIP_BAND_FRAC + CAVE_BAKE_PAD)
+  ctx.restore()
+}
+function rgbaCss(rgb, alpha) {
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`
 }
 function fillCanvasPoly(ctx, pts, rgb) {
   if (!pts || pts.length < 3) return
@@ -741,28 +823,17 @@ function fillCanvasPoly(ctx, pts, rgb) {
   ctx.closePath()
   ctx.fill()
 }
-function caveRockPalette(pal) {
-  const fill = snapToPalette(pal.pebble ?? pal.floor ?? glowRgb('midGray'))
-  const shade = snapToPalette(pal.depthOuter ?? glowRgb('playfieldOuter'))
-  const light = snapToPalette(pal.rimEdge ?? glowRgb('lightGray'))
-  return {
-    fillR: fill.r, fillG: fill.g, fillB: fill.b,
-    lightR: light.r, lightG: light.g, lightB: light.b,
-    darkR: shade.r, darkG: shade.g, darkB: shade.b
-  }
-}
 function drawCaveLayoutRocks(k, rocks, pal, floorY = null) {
   if (!rocks?.length) return
-  const tone = caveRockPalette(pal)
-  const fill = k.rgb(tone.fillR, tone.fillG, tone.fillB)
-  const shade = k.rgb(tone.darkR, tone.darkG, tone.darkB)
+  const fill = k.rgb(pal.stone.r, pal.stone.g, pal.stone.b)
+  const shade = k.rgb(pal.stoneShade.r, pal.stoneShade.g, pal.stoneShade.b)
   rocks.forEach((rock, idx) => {
     if (!rock.verts?.length) return
     if (floorY != null && !isCaveRockOnOrBelowGround(rock, floorY)) return
     const rx = Math.round(rock.x)
     const ry = Math.round(rock.y)
     const pts = rock.verts.map(v => k.vec2(rx + v.x, ry + v.y))
-    k.drawPolygon({ pts, color: idx % 2 === 0 ? fill : shade })
+    k.drawPolygon({ pts, color: idx % CAVE_ROCK_LIT_EVERY === 0 ? fill : shade })
   })
 }
 //
@@ -828,18 +899,14 @@ function buildJaggedHorizontalEdge(xFrom, xTo, baseY, seed) {
 // to colour world). Kept mode-independent here instead.
 //
 function buildCavePalette() {
-  const rock = GLOW_PAL.glowRock
-  const floor = glowCaveEarthFloorRgb()
-  const deep = glowCaveEarthDeepRgb()
+  const cave = GLOW_PAL.glowCave
   return {
-    void: deep,
-    depthOuter: glowRgb(rock.shadow),
-    depthMid: floor,
-    depthInner: deep,
-    floor,
-    pebble: glowRgb('groundClay'),
-    rim: glowRgb(rock.light),
-    rimEdge: floor
+    void: glowCaveEarthDeepRgb(),
+    stone: glowRgb(cave.stone),
+    stoneShade: glowRgb(cave.stoneShade),
+    stoneLight: glowRgb(cave.stoneLight),
+    recess: glowRgb(cave.recess),
+    lip: glowRgb(cave.lip)
   }
 }
 //
@@ -871,11 +938,12 @@ function buildCaveSceneLayout(zone, floorY) {
     floorY,
     bottomY
   )
-  const pebbleCount = 28 + Math.floor(caveSeed01(seed + 400) * 14)
+  const pebbleCount = CAVE_FLOOR_PEBBLE_COUNT_MIN +
+    Math.floor(caveSeed01(seed + 400) * CAVE_FLOOR_PEBBLE_COUNT_RANGE)
   for (let i = 0; i < pebbleCount; i++) {
     const px = interiorLeft + 4 + caveSeed01(seed + i * 3.1) * (mouth.right[0].x - interiorLeft - 8)
     const surfaceY = sampleProfileY(floorTop, px)
-    const radius = 2.5 + caveSeed01(seed + i * 7.3) * 6.5
+    const radius = CAVE_FLOOR_PEBBLE_R_MIN + caveSeed01(seed + i * 7.3) * CAVE_FLOOR_PEBBLE_R_RANGE
     pebbles.push({
       x: px,
       y: surfaceY + 2 + caveSeed01(seed + i * 5.7) * 10,
@@ -942,11 +1010,11 @@ function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed, interiorLeft = n
   const rocks = []
   const x1 = (interiorLeft ?? mouth.left[0].x) + 8
   const x2 = mouth.right[0].x - 8
-  const count = 34 + Math.floor(caveSeed01(seed) * 18)
+  const count = CAVE_BG_ROCK_COUNT_MIN + Math.floor(caveSeed01(seed) * CAVE_BG_ROCK_COUNT_RANGE)
   for (let i = 0; i < count; i++) {
     const px = x1 + caveSeed01(seed + i * 2.9) * (x2 - x1)
     const py = floorY + 14 + caveSeed01(seed + i * 5.1) * (bottomY - floorY - 28)
-    const radius = 3 + caveSeed01(seed + i * 8.3) * 9
+    const radius = CAVE_BG_ROCK_R_MIN + caveSeed01(seed + i * 8.3) * CAVE_BG_ROCK_R_RANGE
     rocks.push({ x: px, y: py, radius, verts: buildRockVertices(radius) })
   }
   return rocks
@@ -1181,7 +1249,7 @@ function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY
     const layerSeed = seed + layer * 137
     for (let i = 0; i < edge.length; i += CAVE_WALL_ROCK_STEP) {
       const p = edge[i]
-      const radius = 5 + caveSeed01(layerSeed + i * 3.17) * 12
+      const radius = CAVE_WALL_ROCK_R_MIN + caveSeed01(layerSeed + i * 3.17) * CAVE_WALL_ROCK_R_RANGE
       //
       // Allowed to go slightly negative (rock drifts inward, straddling the
       // wall line into the void) instead of always sitting outward — a

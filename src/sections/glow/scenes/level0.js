@@ -39,6 +39,7 @@ import {
   glowContourRgb,
   snapToPalette,
   getTreePaletteColorForCorner,
+  getGlowGameplayTreeVolumeShades,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
   getGlowLightRgb
@@ -399,7 +400,7 @@ const ROCK_OUTLINE_WIDTH = 1.4
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_COLOR = 'glow0-bg-static-color-v11'
+const BG_STATIC_COLOR = 'glow0-bg-static-color-v12'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
 // a depth row reaches from its own crown band down to the ground line rather
@@ -468,7 +469,7 @@ const parallaxOffscreenByK = new WeakMap()
 // Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
 //
-const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v7'
+const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v8'
 const TREE_COLOR_GRAIN_SEED = 6002
 //
 // Horizontal branch platform.
@@ -584,6 +585,15 @@ const PAR_FAR_TOP_RANGE = 18
 const PAR_BIG_WIDTH_SCALE_MIN = 0.96
 const PAR_BIG_WIDTH_SCALE_RANGE = 0.06
 //
+// East-half canopy thinning: leaves past CANOPY_THIN_RIM (normalised crown
+// radius) are the silhouette and stay; inside, noise patches of about
+// CANOPY_THIN_CELL_PX open where the noise falls under the hole threshold.
+//
+const CANOPY_THIN_RIM = 0.78
+const CANOPY_THIN_CELL_PX = 64
+const CANOPY_THIN_CLUSTER_HOLE = 0.44
+const CANOPY_THIN_DETAIL_HOLE = 0.5
+//
 // Pull parallax trunks toward the main tree; nearer rows hug the centre more.
 //
 const PAR_TREE_FOCUS_BIAS_NEAR = 0.46
@@ -609,6 +619,15 @@ const BUSH_RADIUS_MIN = 54
 const BUSH_RADIUS_MAX = 72
 const BUSH_STEP_MIN_FRAC = 0.45
 const BUSH_STEP_RANGE_FRAC = 0.5
+//
+// East half: hedges break into uneven clumps of a few mounds with open gaps
+// between them (about half the mounds of the old continuous band), so the
+// forest behind shows through.
+//
+const BUSH_EAST_CLUMP_MIN = 2
+const BUSH_EAST_CLUMP_RANGE = 3
+const BUSH_EAST_GAP_MIN_FRAC = 1.4
+const BUSH_EAST_GAP_RANGE_FRAC = 1.9
 //
 // Bush leaf texture: oval leaves scattered across each dome plus a ragged
 // leafy rim along the arc. Shades vary only in brightness (darkened base
@@ -784,6 +803,15 @@ const UG_WARM_PEBBLE_COUNT = 160
 const UG_WARM_PEBBLE_R_MIN = 1.2
 const UG_WARM_PEBBLE_R_RANGE = 1.6
 const UG_WARM_PEBBLE_TOP_FRAC = 0.45
+//
+// East of the main tree the roots carry the underground: most small pink
+// pebbles, grit specks and grit-lipped pockets are dropped there, and the
+// few surviving pebbles grow so they read as stones, not noise.
+//
+const UG_RIGHT_WARM_PEBBLE_KEEP = 0.12
+const UG_RIGHT_WARM_PEBBLE_R_MULT = 1.9
+const UG_RIGHT_GRIT_KEEP = 0.35
+const UG_RIGHT_POCKET_KEEP = 0.4
 const UG_GRIT_COUNT = 900
 const UG_GRIT_PX_MIN = 1
 const UG_GRIT_PX_RANGE = 2
@@ -2179,6 +2207,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       hillX2: WORLD_W,
       rimSpans: [{ x1: inst.lakeX2, x2: caveLeftX }],
       isSpotFree: (x, halfW) => isGlowForestFloorSpotFree(inst, forestFloorBlockers, x, halfW),
+      accentXs: earTreeSpots.map(spot => spot.x),
       getOpacity: () => 1,
       backZ: GLOW_FOREST_FLOOR_BACK_Z,
       frontZ: GLOW_FOREST_FLOOR_FRONT_Z
@@ -3648,10 +3677,47 @@ function renderGlowTreePlane(ctx, planeCfg) {
     //
     const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
     scaleGlowTreeWidths(treeData, widthScale)
+    treeX >= (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5 && thinGlowTreeCanopy(treeData, treeSeed)
     trunkWidthScale < 1 && scaleGlowTreeTrunkWidths(treeData, trunkWidthScale)
     const colorPalDraw = applyFoliageDensityToPalette(colorPal, foliageDensityTier)
     renderGlowTreeIntoContext(ctx, treeData, colorPalDraw, WORLD_W, WORLD_H)
   })
+}
+//
+// Opens irregular holes inside an east-half canopy so branches and the haze
+// behind show through. Leaves near the crown's outer edge always stay, so the
+// silhouette is kept; inside it a smooth 2D noise picks whole patches to drop
+// (clusters and their small detail leaves together), never a uniform sieve.
+//
+function thinGlowTreeCanopy(treeData, seed) {
+  const leaves = treeData.leaves
+  if (!leaves?.length) return
+  const xs = leaves.map(l => l.x)
+  const ys = leaves.map(l => l.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const cx = (minX + maxX) * 0.5
+  const cy = (minY + maxY) * 0.5
+  const halfW = Math.max(1, (maxX - minX) * 0.5)
+  const halfH = Math.max(1, (maxY - minY) * 0.5)
+  treeData.leaves = leaves.filter(leaf => {
+    const d = Math.hypot((leaf.x - cx) / halfW, (leaf.y - cy) / halfH)
+    if (d > CANOPY_THIN_RIM) return true
+    const n = canopyThinNoise01(leaf.x / CANOPY_THIN_CELL_PX, leaf.y / CANOPY_THIN_CELL_PX, seed)
+    return n >= (leaf.type === 'detail' ? CANOPY_THIN_DETAIL_HOLE : CANOPY_THIN_CLUSTER_HOLE)
+  })
+}
+function canopyThinNoise01(u, v, seed) {
+  const iu = Math.floor(u)
+  const iv = Math.floor(v)
+  const fu = smoothstep01(u - iu)
+  const fv = smoothstep01(v - iv)
+  const corner = (a, b) => groundLayerJagHash01(a * 57.31 + b * 113.17 + seed * 0.013)
+  const top = corner(iu, iv) + (corner(iu + 1, iv) - corner(iu, iv)) * fu
+  const bottom = corner(iu, iv + 1) + (corner(iu + 1, iv + 1) - corner(iu, iv + 1)) * fu
+  return top + (bottom - top) * fv
 }
 //
 // Scales trunk and branch widths of a glow tree (geometry stays the same).
@@ -3702,8 +3768,16 @@ function renderBushStrip(ctx, stripCfg) {
   } = stripCfg
   let x = x1
   const right = x2
+  const eastX = (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5
+  let clumpLeft = 0
   while (x < right) {
     const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
+    if (x >= eastX && clumpLeft <= 0) {
+      x += radius * (BUSH_EAST_GAP_MIN_FRAC + Math.random() * BUSH_EAST_GAP_RANGE_FRAC)
+      clumpLeft = BUSH_EAST_CLUMP_MIN + Math.floor(Math.random() * BUSH_EAST_CLUMP_RANGE)
+      continue
+    }
+    clumpLeft--
     const leafSizeScale = glowBushLeafSizeScaleForTier(foliageDensityTier)
     const leafDensityScale = glowBushLeafDensityScaleForTier(foliageDensityTier)
     const mound = buildLeafyBushMoundSpec(x, radius, leafSizeScale, leafDensityScale)
@@ -4450,9 +4524,13 @@ function buildUndergroundSpec() {
     boulderPiles.push(buildUndergroundStoneGroup(randX(), deepY1, areaY2, false, placedStones))
   }
   boulderPiles.push(buildUndergroundScatteredStones(randX, deepY1, areaY2, placedStones))
+  const rightX = TREE_X + TRUNK_EXCLUDE_HALF
+  const keepOnRight = (x, keep) => x < rightX || Math.random() < keep
   const grit = []
   for (let i = 0; i < UG_GRIT_COUNT; i++) {
-    grit.push({ x: randX(), y: randY(), px: UG_GRIT_PX_MIN + Math.floor(Math.random() * UG_GRIT_PX_RANGE), light: Math.random() < 0.5 })
+    const x = randX()
+    keepOnRight(x, UG_RIGHT_GRIT_KEEP) &&
+      grit.push({ x, y: randY(), px: UG_GRIT_PX_MIN + Math.floor(Math.random() * UG_GRIT_PX_RANGE), light: Math.random() < 0.5 })
   }
   const streaks = []
   for (let i = 0; i < UG_STREAK_COUNT; i++) {
@@ -4461,13 +4539,21 @@ function buildUndergroundSpec() {
   const pockets = []
   for (let i = 0; i < UG_POCKET_COUNT; i++) {
     const r = UG_POCKET_R_MIN + Math.random() * UG_POCKET_R_RANGE
-    pockets.push({ x: randX(), y: randY(), rx: r * (1.2 + Math.random() * 0.6), ry: r })
+    const x = randX()
+    keepOnRight(x, UG_RIGHT_POCKET_KEEP) &&
+      pockets.push({ x, y: randY(), rx: r * (1.2 + Math.random() * 0.6), ry: r })
   }
   const warmPebbles = []
   const topsoilY2 = FLOOR_Y + CAVE_BAND_H * UG_WARM_PEBBLE_TOP_FRAC
   for (let i = 0; i < UG_WARM_PEBBLE_COUNT; i++) {
+    const x = randX()
     const y = Math.random() < 0.75 ? areaY1 + Math.random() * (topsoilY2 - areaY1) : randY()
-    warmPebbles.push({ x: randX(), y, r: UG_WARM_PEBBLE_R_MIN + Math.random() * UG_WARM_PEBBLE_R_RANGE })
+    const r = UG_WARM_PEBBLE_R_MIN + Math.random() * UG_WARM_PEBBLE_R_RANGE
+    if (x < rightX) {
+      warmPebbles.push({ x, y, r })
+      continue
+    }
+    Math.random() < UG_RIGHT_WARM_PEBBLE_KEEP && warmPebbles.push({ x, y, r: r * UG_RIGHT_WARM_PEBBLE_R_MULT })
   }
   //
   // Shells, bones, coins, bottles, worms — simple silhouettes for humour.
@@ -8449,7 +8535,11 @@ function glowParallaxSpritesPrewarmed(k) {
 // monolithicTreeBakeOffset).
 //
 function bakeMonolithicGlowTreeSprites(k, treeData) {
-  const colorCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteColorForCorner(MAIN_TREE_PARALLAX_FOLIAGE_CORNER), WORLD_W, WORLD_H)
+  const palette = {
+    ...getTreePaletteColorForCorner(MAIN_TREE_PARALLAX_FOLIAGE_CORNER),
+    woodVolume: getGlowGameplayTreeVolumeShades()
+  }
+  const colorCanvas = renderGlowTreeToCanvas(treeData, palette, WORLD_W, WORLD_H)
   const bounds = measureCanvasContentBounds(colorCanvas, TREE_CROP_PAD)
   monolithicTreeOffsets.set(k, { x: bounds?.x ?? 0, y: bounds?.y ?? 0 })
   loadCroppedGlowTreeSprite(k, TREE_COLOR_SPRITE_NAME, colorCanvas, bounds, TREE_COLOR_GRAIN_SEED)

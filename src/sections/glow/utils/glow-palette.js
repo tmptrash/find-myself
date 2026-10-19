@@ -23,21 +23,6 @@ export function glowRgb(keyOrHex) {
 }
 
 /**
- * Cave pit floor — lower soil layer (groundSand), slightly lifted for readability.
- * @returns {{ r: number, g: number, b: number }}
- */
-export function glowCaveEarthFloorRgb() {
-  const mud = glowRgb('mudGround')
-  const clay = glowRgb('groundClay')
-  const sand = glowRgb('groundSand')
-  return {
-    r: Math.round(mud.r * 0.62 + clay.r * 0.28 + sand.r * 0.1),
-    g: Math.round(mud.g * 0.62 + clay.g * 0.28 + sand.g * 0.1),
-    b: Math.round(mud.b * 0.62 + clay.b * 0.28 + sand.b * 0.1)
-  }
-}
-
-/**
  * Darker cave fill — deep brown (no green void in pit earth gaps).
  * @returns {{ r: number, g: number, b: number }}
  */
@@ -148,6 +133,20 @@ export function getGlowGameplayTreeBarkShades() {
   return {
     dark: glowRgb(bark.groove),
     highlight: glowRgb(bark.highlight)
+  }
+}
+
+/**
+ * Side-light tones for the gameplay trees' volume pass (sun from the left).
+ * @returns {{ lit: Object, rim: Object, shade: Object, deep: Object }}
+ */
+export function getGlowGameplayTreeVolumeShades() {
+  const bark = GLOW_PAL.glowTreeBark
+  return {
+    lit: glowRgb(bark.lit),
+    rim: glowRgb(bark.rim),
+    shade: glowRgb(bark.shade),
+    deep: glowRgb(bark.deep)
   }
 }
 

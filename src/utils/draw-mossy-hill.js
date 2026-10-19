@@ -64,6 +64,26 @@ const HILL_FOOT_LEAVES = 14
 const HILL_FOOT_LEAF_R_MIN = 4
 const HILL_FOOT_LEAF_R_RANGE = 4
 const HILL_BOUNDS_PAD = 8
+//
+// Eroded soil showing between the boulders: three wavy strata that follow
+// the slope (reddish topsoil under the moss, main soil, darkest at the foot),
+// a few warm crumbs on the top seam, and a dark band seating the foot into
+// the ground. Depth fractions are of the local hill height.
+//
+const HILL_SOIL_STRATA = [
+  { key: 'soilTop', depth: 0.08 },
+  { key: 'soil', depth: 0.34 },
+  { key: 'soilDeep', depth: 0.7 }
+]
+const HILL_SOIL_WAVE_A = 4
+const HILL_SOIL_WAVE_F = 1 / 41
+const HILL_SOIL_RIPPLE_A = 2
+const HILL_SOIL_RIPPLE_F = 1 / 13
+const HILL_SOIL_CRUMB_PER_PX = 0.05
+const HILL_SOIL_CRUMB_PX = 2
+const HILL_SOIL_CRUMB_ALPHA = 0.6
+const HILL_FOOT_SHADE_H = 26
+const HILL_FOOT_SHADE_ALPHA = 0.55
 
 /**
  * Paints the boulder heap, its moss blanket and the clover at its foot.
@@ -82,6 +102,7 @@ const HILL_BOUNDS_PAD = 8
  * @param {string} opts.colors.light - Sunlit clover
  * @param {string} opts.colors.glint - Rare bright specks
  * @param {number} [opts.greeneryMaxY] - Moss and clover stay above this Y (lake islands)
+ * @param {boolean} [opts.erodedSoil] - Paint soil strata between the boulders and a dark foot (needs colors.soilTop / soil / soilDeep / soilLight)
  */
 export function drawMossyHillToCanvas(ctx, opts) {
   const { hill, rng, colors, greeneryMaxY } = opts
@@ -96,7 +117,9 @@ export function drawMossyHillToCanvas(ctx, opts) {
   ctx.fillStyle = colors.stone
   traceProfile(ctx, hill, 0)
   ctx.fill()
+  opts.erodedSoil && paintSoilStrata(ctx, hill, rng, colors)
   rocks.forEach(rock => paintRock(ctx, rock, rng, colors))
+  opts.erodedSoil && paintFootShade(ctx, hill, colors.soilDeep)
   greeneryMaxY != null && ctx.save()
   greeneryMaxY != null && clipGreeneryAbove(ctx, greeneryMaxY)
   paintMoss(ctx, hill, moss, rng, colors)
@@ -157,6 +180,53 @@ function traceProfile(ctx, hill, grow) {
   ctx.lineTo(x2 + grow, mossyHillTopY(hill, x2) - grow)
   ctx.lineTo(x2 + grow, baseY)
   ctx.closePath()
+}
+//
+// Soil strata inside the hill clip: each stratum fills from its wavy seam
+// down to the base, so later (deeper) strata cover the lower part of the
+// earlier ones. Warm crumbs dot the topmost seam.
+//
+function paintSoilStrata(ctx, hill, rng, colors) {
+  const baseY = hill.floorY + HILL_BASE_SINK
+  const phase = rng() * Math.PI * 2
+  HILL_SOIL_STRATA.forEach((stratum, i) => {
+    ctx.fillStyle = colors[stratum.key]
+    ctx.beginPath()
+    ctx.moveTo(hill.x1, baseY)
+    for (let x = hill.x1; x <= hill.x2; x += HILL_OUTLINE_STEP) ctx.lineTo(x, soilSeamY(hill, x, stratum.depth, phase + i * 1.7))
+    ctx.lineTo(hill.x2, baseY)
+    ctx.closePath()
+    ctx.fill()
+  })
+  if (!colors.soilLight) return
+  ctx.fillStyle = colors.soilLight
+  ctx.globalAlpha = HILL_SOIL_CRUMB_ALPHA
+  const count = Math.round((hill.x2 - hill.x1) * HILL_SOIL_CRUMB_PER_PX)
+  for (let i = 0; i < count; i++) {
+    const x = hill.x1 + rng() * (hill.x2 - hill.x1)
+    const y = soilSeamY(hill, x, HILL_SOIL_STRATA[0].depth, phase) + rng() * HILL_SOIL_WAVE_A
+    ctx.fillRect(Math.round(x), Math.round(y), HILL_SOIL_CRUMB_PX, HILL_SOIL_CRUMB_PX)
+  }
+  ctx.globalAlpha = 1
+}
+function soilSeamY(hill, x, depth, phase) {
+  const top = mossyHillTopY(hill, x)
+  const wave = HILL_SOIL_WAVE_A * Math.sin(x * HILL_SOIL_WAVE_F + phase) +
+    HILL_SOIL_RIPPLE_A * Math.sin(x * HILL_SOIL_RIPPLE_F + phase * 2.3)
+  return top + (hill.floorY - top) * depth + wave
+}
+//
+// Darkest soil fading up from the base line so the slope sits in the ground.
+//
+function paintFootShade(ctx, hill, color) {
+  const baseY = hill.floorY + HILL_BASE_SINK
+  const grad = ctx.createLinearGradient(0, baseY - HILL_FOOT_SHADE_H, 0, baseY)
+  grad.addColorStop(0, `${color}00`)
+  grad.addColorStop(1, color)
+  ctx.globalAlpha = HILL_FOOT_SHADE_ALPHA
+  ctx.fillStyle = grad
+  ctx.fillRect(hill.x1, baseY - HILL_FOOT_SHADE_H, hill.x2 - hill.x1, HILL_FOOT_SHADE_H)
+  ctx.globalAlpha = 1
 }
 //
 // Two rows of boulders sized by the local hill height: a back row lifted

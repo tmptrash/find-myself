@@ -19,20 +19,29 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 //
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
-const BAKE_VARIANT = 'v8'
+const BAKE_VARIANT = 'v9'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
 const MIN_DRAW_OPACITY = 0.02
 const KIND = { HILL: 'hill', FERN: 'fern', PLUME: 'plume', MUSHROOMS: 'mushrooms', RIM: 'rim' }
 //
-// Foreground scatter: ferns and spike bushes alternate along the free ground.
+// Foreground plants grow in separate patches, not a mixed even scatter:
+// a teal fern patch (a few big fronds in the middle, smaller ones at its
+// edges) or a smaller patch of light spike bushes, then open ground.
+// Patches keep clear of the red ear-tree accents so the two never mingle.
 //
-const FRONT_STEP_MIN = 58
-const FRONT_STEP_RANGE = 52
-const FRONT_FERN_EXTRA_OFFSET = 34
-const FRONT_FERN_EXTRA_CHANCE = 0.62
-const FRONT_PLUME_CHANCE = 0.28
+const PATCH_GAP_MIN = 150
+const PATCH_GAP_RANGE = 190
+const PATCH_FERN_COUNT_MIN = 3
+const PATCH_FERN_COUNT_RANGE = 3
+const PATCH_PLUME_COUNT_MIN = 2
+const PATCH_PLUME_COUNT_RANGE = 2
+const PATCH_PLUME_CHANCE = 0.3
+const PATCH_STEP_MIN = 20
+const PATCH_STEP_RANGE = 18
+const PATCH_EDGE_SIZE_MULT = 0.68
+const PATCH_ACCENT_CLEAR_HALF = 110
 const FRONT_FERN_HALF_W = 28
 const FRONT_PLUME_HALF_W = 14
 const FERN_SIZE_MIN = 42
@@ -55,8 +64,12 @@ const HILL_PLANT_PAD = 90
 const HILL_PLANT_SINK = 4
 const HILL_PLANT_HALF_W = 14
 const HILL_PLUME_H_SCALE = 0.7
-const HILL_FERNS_T = [0.12, 0.3, 0.47, 0.64, 0.83]
-const HILL_PLUMES_T = [0.21, 0.39, 0.56, 0.74, 0.9]
+//
+// Hill plants in two fern patches and two spike patches, apart from each
+// other, instead of alternating fern / spike all the way up the slope.
+//
+const HILL_FERNS_T = [0.09, 0.15, 0.22, 0.63, 0.7]
+const HILL_PLUMES_T = [0.4, 0.46, 0.86, 0.91]
 const HILL_TUFT_STEP_T = 0.055
 const HILL_MUSH_T = [0.04, 0.36, 0.68, 0.97]
 const HILL_SPOT_MUSH_T = [0.16, 0.6]
@@ -72,6 +85,7 @@ const HILL_SPOT_MUSH_T = [0.16, 0.6]
  * @param {number} cfg.hillX2 - World X of the hill peak (the slope climbs to it from the left)
  * @param {Array<{x1: number, x2: number}>} cfg.rimSpans - Ground runs that get the ragged rim
  * @param {Function} cfg.isSpotFree - (x, halfW) => boolean, false over water, trampolines, trunks, cave
+ * @param {number[]} [cfg.accentXs] - World X of red accent plants (ear-trees) that fern / spike patches keep clear of
  * @param {Function} cfg.getOpacity - () => number, 0 outside the colour world
  * @param {number} cfg.backZ - Z of the layer behind the hero
  * @param {number} cfg.frontZ - Z of the layer in front of the hero
@@ -84,6 +98,7 @@ export function create(cfg) {
     floorY,
     getOpacity,
     isSpotFree,
+    accentXs: cfg.accentXs ?? [],
     colors: { ...forestFloorPainterColors(), contactShadow: forestContactShadowRgb() },
     hill: { x1: hillX2 - HILL_HALF_W * 2, x2: hillX2, floorY, height: HILL_H },
     back: [],
@@ -133,7 +148,8 @@ function buildPainterColors(c) {
     tuft: { grass: c.grass, dry: c.grassDry },
     hill: {
       contour: c.contour, stoneDark: c.stoneDark, stone: c.stone, stoneLight: c.stoneLight,
-      deep: c.mossDeep, shadow: c.mossShadow, mid: c.mossMid, light: c.mossLight, glint: c.mossGlint
+      deep: c.mossDeep, shadow: c.mossShadow, mid: c.mossMid, light: c.mossLight, glint: c.mossGlint,
+      soilTop: c.slopeSoilTop, soil: c.slopeSoil, soilDeep: c.slopeSoilDeep, soilLight: c.slopeSoilLight
     },
     rim: {
       soil: c.rimSoil, earth: c.rimEarth, moss: c.rimMoss, mossLight: c.rimMossLight,
@@ -168,20 +184,35 @@ function buildBackItems(inst, rng, xMin, xMax) {
 }
 function buildFrontItems(inst, rng, xMin, xMax) {
   const items = []
-  const tryFrontPlant = (x, forceFern = false) => {
-    const isPlume = !forceFern && rng() < FRONT_PLUME_CHANCE
-    const halfW = isPlume ? FRONT_PLUME_HALF_W : FRONT_FERN_HALF_W
-    const size = isPlume
-      ? PLUME_H_MIN + rng() * PLUME_H_RANGE
-      : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE * (forceFern ? 0.92 : 1)
-    if (isInHill(inst, x, halfW) || !inst.isSpotFree(x, halfW)) return
-    items.push({ kind: isPlume ? KIND.PLUME : KIND.FERN, x, size, seed: nextSeed(rng) })
-  }
-  for (let x = xMin + rng() * FRONT_STEP_MIN; x < xMax; x += FRONT_STEP_MIN + rng() * FRONT_STEP_RANGE) {
-    tryFrontPlant(x)
-    rng() < FRONT_FERN_EXTRA_CHANCE && tryFrontPlant(x + FRONT_FERN_EXTRA_OFFSET * (rng() < 0.5 ? -1 : 1), true)
+  let x = xMin + rng() * PATCH_GAP_MIN
+  while (x < xMax) {
+    const isPlume = rng() < PATCH_PLUME_CHANCE
+    const count = isPlume
+      ? PATCH_PLUME_COUNT_MIN + Math.floor(rng() * PATCH_PLUME_COUNT_RANGE)
+      : PATCH_FERN_COUNT_MIN + Math.floor(rng() * PATCH_FERN_COUNT_RANGE)
+    for (let i = 0; i < count; i++) {
+      const edge = i === 0 || i === count - 1
+      const plant = buildPatchPlant(inst, rng, x, isPlume, edge)
+      plant && items.push(plant)
+      x += PATCH_STEP_MIN + rng() * PATCH_STEP_RANGE
+    }
+    x += PATCH_GAP_MIN + rng() * PATCH_GAP_RANGE
   }
   return items
+}
+//
+// One plant of a patch; edge plants are smaller so the patch fades out.
+//
+function buildPatchPlant(inst, rng, x, isPlume, edge) {
+  const halfW = isPlume ? FRONT_PLUME_HALF_W : FRONT_FERN_HALF_W
+  const base = isPlume ? PLUME_H_MIN + rng() * PLUME_H_RANGE : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
+  const size = edge ? base * PATCH_EDGE_SIZE_MULT : base
+  const seed = nextSeed(rng)
+  if (isInHill(inst, x, halfW) || !inst.isSpotFree(x, halfW) || isNearAccent(inst, x, halfW)) return null
+  return { kind: isPlume ? KIND.PLUME : KIND.FERN, x, size, seed }
+}
+function isNearAccent(inst, x, halfW) {
+  return inst.accentXs.some(ax => Math.abs(ax - x) < PATCH_ACCENT_CLEAR_HALF + halfW)
 }
 function isInHill(inst, x, halfW) {
   return x + halfW >= inst.hill.x1 && x - halfW <= inst.hill.x2
@@ -245,7 +276,7 @@ function paintItem(ctx, inst, item) {
 //
 function paintHill(ctx, inst, rng) {
   const { hill, colors, floorY } = inst
-  drawMossyHillToCanvas(ctx, { hill, rng, colors: colors.hill })
+  drawMossyHillToCanvas(ctx, { hill, rng, colors: colors.hill, erodedSoil: true })
   hillPlantXs(inst, HILL_PLUMES_T).forEach(x => {
     const height = PLUME_H_MIN + rng() * PLUME_H_RANGE * HILL_PLUME_H_SCALE
     const baseY = hillPlantY(hill, x)

@@ -451,6 +451,17 @@ export const CFG = {
           light: PALETTE.sand2
         },
         //
+        // Pit cave interior: muted reddish-brown stones with a warm lit cap,
+        // dark soil shade, and the deepest warm brown for the recessed back.
+        //
+        glowCave: {
+          stone: PALETTE.rose1,        // Stone body
+          stoneShade: PALETTE.brown0,  // Shaded stones / dark soil clods
+          stoneLight: PALETTE.brown1,  // Lit cap on the upper left of a stone
+          recess: PALETTE.rose0,       // Darkest recessed back of the cave
+          lip: PALETTE.brown1          // Faint daylight on soil under the mouth
+        },
+        //
         // Scatter caps — same family, slight hue steps (no cool rainbow caps).
         //
         mushrooms: [PALETTE.orange2, PALETTE.brown1, PALETTE.orange2, PALETTE.brown2],
@@ -526,6 +537,10 @@ export const CFG = {
           stone: PALETTE.sand1,        // Warm grey-brown boulders that make up the hill
           stoneLight: PALETTE.sand2,   // Boulder lit face (upper left)
           stoneDark: PALETTE.sand0,    // Boulder shadow face and gaps between stones
+          slopeSoilTop: PALETTE.rose1,   // Eroded reddish-brown soil just under the moss
+          slopeSoil: PALETTE.brown0,     // Main exposed soil of the slope
+          slopeSoilDeep: PALETTE.rose0,  // Darkest soil at the slope foot
+          slopeSoilLight: PALETTE.brown1, // Faint warm crumbs on the upper soil line
           rimSoil: PALETTE.brown0,     // Dark soil lip under the ground line
           rimEarth: PALETTE.brown1,    // Crumbly earth bumps on the lip
           rimMoss: PALETTE.green1,     // Moss patches along the ground line
@@ -581,7 +596,15 @@ export const CFG = {
         //
         glowTreeBark: {
           groove: PALETTE.brown0,
-          highlight: PALETTE.brown3
+          highlight: PALETTE.brown3,
+          //
+          // Gameplay-tree volume: the sun from the left warms that flank, the
+          // right flank steps down into a cool brown shade.
+          //
+          lit: PALETTE.red0,
+          rim: PALETTE.brown2,
+          shade: PALETTE.brown1,
+          deep: PALETTE.rose0
         },
         treeColor: {
           root: PALETTE.rose0,

@@ -3,7 +3,7 @@ import {
   buildGlowShoreAccentTree,
   renderGlowTreeIntoContext
 } from './glow-tree.js'
-import { getTreePaletteColor } from './glow-palette.js'
+import { getTreePaletteColor, getGlowGameplayTreeVolumeShades } from './glow-palette.js'
 import {
   colorKey,
   drawStaticDecorSprite,
@@ -25,7 +25,7 @@ const SHORE_TREE_STALK_EYE_RADIUS = 11
 const SHORE_TREE_FIRST_EYE_ROLE = 'chainTrampFirst'
 const SHORE_TREE_BAKE_WORLD_W = CFG.visual.glow.worldWidth
 const SHORE_TREE_BAKE_WORLD_H = CFG.visual.glow.worldHeight
-const SHORE_TREE_BAKE_SLOT = 'shoreTreeFull-v5'
+const SHORE_TREE_BAKE_SLOT = 'shoreTreeFull-v6'
 const SHORE_TREE_BAKE_GRAIN_SEED = 0.61
 const SHORE_TREE_CULL_PAD = 120
 const SHORE_TREE_BOUNDS_PAD = 28
@@ -95,8 +95,12 @@ export function onDraw(inst, opacity = 1, view = null) {
   )
   drawStaticDecorSprite(inst.k, baked, opacity)
 }
+//
+// Same side-lit wood as the main tree so both gameplay trees share one light.
+//
 function paintShoreTree(ctx, treeData, palette) {
-  renderGlowTreeIntoContext(ctx, treeData, palette, SHORE_TREE_BAKE_WORLD_W, SHORE_TREE_BAKE_WORLD_H)
+  const lit = { ...palette, woodVolume: getGlowGameplayTreeVolumeShades() }
+  renderGlowTreeIntoContext(ctx, treeData, lit, SHORE_TREE_BAKE_WORLD_W, SHORE_TREE_BAKE_WORLD_H)
 }
 //
 // Root segments use the same {sx, sy, ex, ey, w} shape as wood segments.

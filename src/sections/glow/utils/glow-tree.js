@@ -166,6 +166,81 @@ const BRANCH_RIDGE_HIGHLIGHT_ALPHA = 0.12
 //
 const WOOD_OUTLINE_PX = 2
 //
+// Wood volume (palette.woodVolume, gameplay trees only): sun from the left.
+// Side bands are measured as a fraction of the full trunk width from their
+// edge; the inner border wobbles so light and shade never meet on a ruler
+// line. side -1 = screen-left flank, 1 = screen-right flank.
+//
+const TRUNK_VOLUME_BANDS = [
+  { side: 1, frac: 0.52, tone: 'shade', wobble: 0.12, phase: 0.7 },
+  { side: 1, frac: 0.24, tone: 'deep', wobble: 0.09, phase: 2.3 },
+  { side: -1, frac: 0.34, tone: 'lit', wobble: 0.12, phase: 4.1 },
+  { side: -1, frac: 0.11, tone: 'rim', wobble: 0.06, phase: 5.6 }
+]
+const TRUNK_VOLUME_EDGE_OVERSHOOT = 1.15
+const TRUNK_VOLUME_SUBSTEPS = 4
+const TRUNK_VOLUME_WAVE_FREQ = 0.45
+const TRUNK_VOLUME_WAVE2_FREQ = 1.3
+const TRUNK_VOLUME_WAVE2_AMP = 0.5
+//
+// Uneven bark daubs: short vertical strokes that cross the band borders —
+// warm on the lit flank, deep brown on the shaded one, mixed in the middle.
+//
+const TRUNK_DAUB_COUNT = 46
+const TRUNK_DAUB_SEED = 3313
+const TRUNK_DAUB_SPAN = 0.9
+const TRUNK_DAUB_MIN_HW = 6
+const TRUNK_DAUB_FRAC_SPAN = 0.85
+const TRUNK_DAUB_SIDE_FRAC = 0.3
+const TRUNK_DAUB_LEN_MIN = 10
+const TRUNK_DAUB_LEN_RANGE = 38
+const TRUNK_DAUB_W_MIN = 1.5
+const TRUNK_DAUB_W_RANGE = 2.8
+const TRUNK_DAUB_BEND = 6
+const TRUNK_DAUB_ALPHA_MIN = 0.4
+const TRUNK_DAUB_ALPHA_RANGE = 0.4
+//
+// Branch collars: where a limb leaves the trunk the wood flares out and
+// tapers into the limb instead of meeting the trunk as a straight tube.
+//
+const BRANCH_COLLAR_MIN_W = 5
+const BRANCH_COLLAR_BASE_FRAC = 0.6
+const BRANCH_COLLAR_FLARE = 1.9
+const BRANCH_COLLAR_LEN_FRAC = 1.2
+//
+// Branch side light: lit stripe along the upper flank, rim on top of it,
+// shade along the underside. Offsets / widths are fractions of branch width.
+//
+//
+// Branch bulges: width swells and pinches along a limb on a position-based
+// wave (shared joints get the same factor, so no steps). Draw-only — the
+// limb centrelines and walk surfaces stay where they are.
+//
+const BRANCH_BULGE_MIN_W = 3
+const BRANCH_BULGE_AMP = 0.16
+const BRANCH_BULGE_FREQ_X = 0.09
+const BRANCH_BULGE_FREQ_Y = 0.07
+const BRANCH_BULGE2_FREQ_X = 0.051
+const BRANCH_BULGE2_FREQ_Y = 0.113
+const BRANCH_BULGE_MIX = 0.6
+//
+// Sparse knots on thick limbs: a dark eye with a lit lip toward the sun.
+//
+const BRANCH_KNOT_MIN_W = 10
+const BRANCH_KNOT_CHANCE = 0.05
+const BRANCH_KNOT_SEED = 4421
+const BRANCH_KNOT_RX_FRAC = 0.24
+const BRANCH_KNOT_RY_FRAC = 0.15
+const BRANCH_KNOT_LIP_SHIFT = 0.6
+const BRANCH_VOLUME_MIN_W = 3
+const BRANCH_LIGHT_DIR_X = -0.5
+const BRANCH_LIGHT_DIR_Y = -0.87
+const BRANCH_VOLUME_LANES = [
+  { tone: 'shade', offset: -0.24, width: 0.3 },
+  { tone: 'lit', offset: 0.2, width: 0.24 },
+  { tone: 'rim', offset: 0.31, width: 0.1 }
+]
+//
 // Default trunk-height band (fractions of the trunk) branches sprout from.
 // Background trees pass a higher minimum so their foliage gathers at the top.
 //
@@ -551,10 +626,13 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   const treeSeed = treeData.seed ?? TREE_SEED
   const branchesOverTrunk = palette.branchesOverTrunk ?? false
   const woodMass = palette.woodMassStyle ?? false
+  const volume = palette.woodVolume ?? null
+  const limbs = volume ? treeData.branchSegs.map(bulgeBranchSeg) : treeData.branchSegs
+  const branchWood = volume ? [...buildBranchCollars(treeData), ...limbs] : limbs
   if (palette.woodOutline) {
     const ol = palette.woodOutline
     if (!branchesOverTrunk) {
-      treeData.branchSegs.forEach(seg => {
+      branchWood.forEach(seg => {
         drawFilledWoodSegment(ctx, { ...seg, w: seg.w + WOOD_OUTLINE_PX * 2 }, ol, trunkClipY)
       })
     }
@@ -579,18 +657,30 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
     }
   } else {
-    treeData.branchSegs.forEach(seg => {
+    branchWood.forEach(seg => {
       drawFilledWoodSegment(ctx, seg, woodRgbForBranchSeg(seg, trunkRgb, branchRgb), trunkClipY)
     })
+    //
+    // Branch side light goes under the trunk fill so limb bases stay hidden
+    // inside the trunk silhouette.
+    //
+    volume && !woodMass && drawBranchVolume(ctx, limbs, volume, trunkClipY)
+    volume && !woodMass && drawBranchKnots(ctx, limbs, volume, treeSeed + BRANCH_KNOT_SEED, trunkClipY)
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     if (!woodMass) {
       drawBranchCracks(ctx, treeData.branchSegs, barkDark, treeSeed + 1777, trunkClipY)
       drawBranchRidges(ctx, treeData.branchSegs, barkDark, barkHighlight, treeSeed + 2317, trunkClipY)
-      drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
+      //
+      // The volume pass owns the trunk's light direction; the generic shading
+      // darkens the opposite flank and would flatten it again.
+      //
+      volume || drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
+      volume && drawTrunkVolumeBands(ctx, barkSegs, volume, barkClipY)
       drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+      volume && drawTrunkVolumeDaubs(ctx, barkSegs, volume, treeSeed + TRUNK_DAUB_SEED, barkClipY)
       drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
-      drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+      volume || drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
     }
   }
   //
@@ -835,6 +925,221 @@ function drawWoodShading(ctx, segs, rgb, maxY) {
     ctx.arc(bx, by, hw, 0, Math.PI * 2)
   })
   ctx.fill()
+}
+//
+// Side-lit trunk: stacked bands per flank (lit + rim on the left, shade +
+// deep on the right), clipped to the trunk silhouette.
+//
+function drawTrunkVolumeBands(ctx, segs, vol, maxY) {
+  const { spine } = buildChainOutline(segs, maxY)
+  if (spine.length < 2) return
+  const dense = densifySpine(spine, TRUNK_VOLUME_SUBSTEPS)
+  withChainClip(ctx, segs, maxY, () => {
+    TRUNK_VOLUME_BANDS.forEach(band => fillTrunkSideBand(ctx, dense, band, vol[band.tone]))
+  })
+}
+//
+// One flank band: outer border sits past the trunk edge (the clip trims it),
+// inner border wobbles on two slow sine waves.
+//
+function fillTrunkSideBand(ctx, spine, band, rgb) {
+  const outer = []
+  const inner = []
+  spine.forEach((j, i) => {
+    const r = screenRightNormal(j)
+    const wave = Math.sin(i * TRUNK_VOLUME_WAVE_FREQ + band.phase) +
+      Math.sin(i * TRUNK_VOLUME_WAVE2_FREQ + band.phase * 1.7) * TRUNK_VOLUME_WAVE2_AMP
+    const innerFrac = 1 - 2 * band.frac + band.wobble * wave
+    outer.push({ x: j.x + r.x * band.side * j.hw * TRUNK_VOLUME_EDGE_OVERSHOOT, y: j.y + r.y * band.side * j.hw * TRUNK_VOLUME_EDGE_OVERSHOOT })
+    inner.push({ x: j.x + r.x * band.side * j.hw * innerFrac, y: j.y + r.y * band.side * j.hw * innerFrac })
+  })
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.beginPath()
+  outer.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+  for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i].x, inner[i].y)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Short uneven bark strokes along the trunk, toned by which flank they sit on.
+//
+function drawTrunkVolumeDaubs(ctx, segs, vol, seed, maxY) {
+  const { spine } = buildChainOutline(segs, maxY)
+  if (spine.length < 2) return
+  const rng = createRng(seed)
+  withChainClip(ctx, segs, maxY, () => {
+    ctx.lineCap = 'round'
+    for (let i = 0; i < TRUNK_DAUB_COUNT; i++) {
+      const idx = Math.floor(rng() * (spine.length - 1) * TRUNK_DAUB_SPAN)
+      const a = spine[idx]
+      const b = spine[idx + 1]
+      if (a.hw < TRUNK_DAUB_MIN_HW) continue
+      const r = screenRightNormal(a)
+      const frac = (rng() * 2 - 1) * TRUNK_DAUB_FRAC_SPAN
+      const tone = vol[trunkDaubTone(frac, rng())]
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y) || 1
+      const tx = (b.x - a.x) / segLen
+      const ty = (b.y - a.y) / segLen
+      const len = TRUNK_DAUB_LEN_MIN + rng() * TRUNK_DAUB_LEN_RANGE
+      const bend = (rng() - 0.5) * TRUNK_DAUB_BEND
+      const sx = a.x + r.x * a.hw * frac
+      const sy = a.y + r.y * a.hw * frac
+      const ex = sx + tx * len
+      const ey = sy + ty * len
+      ctx.strokeStyle = `rgba(${tone.r}, ${tone.g}, ${tone.b}, ${TRUNK_DAUB_ALPHA_MIN + rng() * TRUNK_DAUB_ALPHA_RANGE})`
+      ctx.lineWidth = TRUNK_DAUB_W_MIN + rng() * TRUNK_DAUB_W_RANGE
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.quadraticCurveTo((sx + ex) * 0.5 + r.x * bend, (sy + ey) * 0.5 + r.y * bend, ex, ey)
+      ctx.stroke()
+    }
+  })
+}
+//
+// Lit flank gets warm daubs, shaded flank deep ones, the middle mixes both.
+//
+function trunkDaubTone(frac, roll) {
+  if (frac < -TRUNK_DAUB_SIDE_FRAC) return roll < 0.7 ? 'lit' : 'rim'
+  if (frac > TRUNK_DAUB_SIDE_FRAC) return roll < 0.6 ? 'deep' : 'shade'
+  return roll < 0.5 ? 'shade' : 'lit'
+}
+//
+// Joint normal flipped to point toward screen-right, whatever the chain's
+// winding — keeps "left flank" meaning the sunlit side.
+//
+function screenRightNormal(j) {
+  return j.nx >= 0 ? { x: j.nx, y: j.ny } : { x: -j.nx, y: -j.ny }
+}
+//
+// Linear sub-steps between spine joints so band borders curve smoothly
+// instead of kinking once per trunk segment.
+//
+function densifySpine(spine, substeps) {
+  const out = [spine[0]]
+  for (let i = 1; i < spine.length; i++) {
+    const a = spine[i - 1]
+    const b = spine[i]
+    for (let s = 1; s <= substeps; s++) {
+      const t = s / substeps
+      out.push({
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        nx: a.nx + (b.nx - a.nx) * t,
+        ny: a.ny + (b.ny - a.ny) * t,
+        hw: a.hw + (b.hw - a.hw) * t
+      })
+    }
+  }
+  return out
+}
+//
+// Flared wedges at every limb base that starts on the trunk spine: wide at
+// the trunk, tapering to the limb width a little way out.
+//
+function buildBranchCollars(treeData) {
+  const collars = []
+  treeData.branchSegs.forEach(seg => {
+    if (seg.w < BRANCH_COLLAR_MIN_W) return
+    const trunk = trunkCrossSectionAtY(treeData.trunkSegs, seg.sy)
+    if (!trunk || Math.abs(seg.sx - trunk.x) > trunk.hw * BRANCH_COLLAR_BASE_FRAC) return
+    const dx = seg.ex - seg.sx
+    const dy = seg.ey - seg.sy
+    const len = Math.hypot(dx, dy) || 1
+    const reach = trunk.hw + seg.w * BRANCH_COLLAR_LEN_FRAC
+    collars.push({
+      sx: seg.sx,
+      sy: seg.sy,
+      ex: seg.sx + dx / len * reach,
+      ey: seg.sy + dy / len * reach,
+      w: seg.w * BRANCH_COLLAR_FLARE,
+      w2: seg.w,
+      trunkTone: true
+    })
+  })
+  return collars
+}
+//
+// Trunk centre X and half-width at one height (null outside the trunk).
+//
+function trunkCrossSectionAtY(trunkSegs, y) {
+  const seg = trunkSegs.find(s => y <= s.sy && y >= s.ey)
+  if (!seg) return null
+  const t = seg.sy === seg.ey ? 0 : (seg.sy - y) / (seg.sy - seg.ey)
+  return {
+    x: seg.sx + (seg.ex - seg.sx) * t,
+    hw: (seg.w + ((seg.w2 ?? seg.w) - seg.w) * t) * 0.5
+  }
+}
+//
+// Branch side light: one stroke pass per lane across all limbs, so lanes
+// never paint over each other at joints.
+//
+function drawBranchVolume(ctx, segs, vol, maxY) {
+  ctx.lineCap = 'round'
+  BRANCH_VOLUME_LANES.forEach(lane => {
+    const rgb = vol[lane.tone]
+    ctx.strokeStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+    segs.forEach(seg => {
+      if (seg.w < BRANCH_VOLUME_MIN_W) return
+      const c = clampSegmentToMaxY(seg, maxY)
+      if (!c) return
+      const dx = c.ex - c.sx
+      const dy = c.ey - c.sy
+      const len = Math.hypot(dx, dy) || 1
+      const nx = -dy / len
+      const ny = dx / len
+      const flip = nx * BRANCH_LIGHT_DIR_X + ny * BRANCH_LIGHT_DIR_Y >= 0 ? 1 : -1
+      const ux = nx * flip
+      const uy = ny * flip
+      const w = (c.w + (c.w2 ?? c.w)) * 0.5
+      const off = w * lane.offset
+      ctx.lineWidth = Math.max(1, w * lane.width)
+      ctx.beginPath()
+      ctx.moveTo(c.sx + ux * off, c.sy + uy * off)
+      ctx.lineTo(c.ex + ux * off, c.ey + uy * off)
+      ctx.stroke()
+    })
+  })
+}
+//
+// Limb copy with both end widths scaled by the bulge wave at that point.
+//
+function bulgeBranchSeg(seg) {
+  if (seg.w < BRANCH_BULGE_MIN_W) return seg
+  return {
+    ...seg,
+    w: seg.w * branchBulgeAt(seg.sx, seg.sy),
+    w2: (seg.w2 ?? seg.w) * branchBulgeAt(seg.ex, seg.ey)
+  }
+}
+function branchBulgeAt(x, y) {
+  const a = Math.sin(x * BRANCH_BULGE_FREQ_X + y * BRANCH_BULGE_FREQ_Y)
+  const b = Math.sin(x * BRANCH_BULGE2_FREQ_X - y * BRANCH_BULGE2_FREQ_Y)
+  return 1 + BRANCH_BULGE_AMP * (a * BRANCH_BULGE_MIX + b * (1 - BRANCH_BULGE_MIX))
+}
+//
+// A few knots on thick limbs, oriented along the limb.
+//
+function drawBranchKnots(ctx, segs, vol, seed, maxY) {
+  const rng = createRng(seed)
+  segs.forEach(seg => {
+    if (seg.w < BRANCH_KNOT_MIN_W || rng() > BRANCH_KNOT_CHANCE) return
+    const c = clampSegmentToMaxY(seg, maxY)
+    if (!c) return
+    const angle = Math.atan2(c.ey - c.sy, c.ex - c.sx)
+    const cx = (c.sx + c.ex) * 0.5
+    const cy = (c.sy + c.ey) * 0.5
+    const rx = c.w * BRANCH_KNOT_RX_FRAC
+    const ry = c.w * BRANCH_KNOT_RY_FRAC
+    ctx.fillStyle = `rgb(${vol.rim.r}, ${vol.rim.g}, ${vol.rim.b})`
+    ctx.beginPath()
+    ctx.ellipse(cx + BRANCH_LIGHT_DIR_X * ry * BRANCH_KNOT_LIP_SHIFT, cy + BRANCH_LIGHT_DIR_Y * ry * BRANCH_KNOT_LIP_SHIFT, rx, ry, angle, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = `rgb(${vol.deep.r}, ${vol.deep.g}, ${vol.deep.b})`
+    ctx.beginPath()
+    ctx.ellipse(cx, cy, rx, ry, angle, 0, Math.PI * 2)
+    ctx.fill()
+  })
 }
 //
 // Resolves the drawn width of one root segment: its own natural taper near

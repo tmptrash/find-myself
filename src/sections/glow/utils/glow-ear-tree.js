@@ -79,10 +79,10 @@ const LEAF_LIGHT_SHAPE = [
 // of a sudden width jump.
 //
 const EAR_TREE_ROOT_COUNT = 3
-const EAR_TREE_ROOT_SEGMENTS = 10
+const EAR_TREE_ROOT_SEGMENTS = 5
 const EAR_TREE_ROOT_MIN_DRAW_WIDTH = 0.85
 const EAR_TREE_ROOT_TIP_RADIUS = 0.55
-const EAR_TREE_ROOTS_BAKE_SLOT = 'earTreeRoots'
+const EAR_TREE_ROOTS_BAKE_SLOT = 'earTreeRootsShort'
 const EAR_TREE_TRUNK_BAKE_SLOT = 'earTreeTrunk'
 //
 // Bump when trunk silhouette or outline width changes so live bakes refresh.

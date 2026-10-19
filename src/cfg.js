@@ -179,17 +179,17 @@ export const CFG = {
         platformColor: "#1A1A1A"       // Platform color (for menu background)
       },
       //
-      // DOM loader: the Glow stalk-eye lying on its side and growing with the
-      // progress. Same inks as the chain-buoy eyes in the level (dark
-      // segmented body with side spikes, green-black eye ring, hero eye).
+      // DOM loader: the Glow chain-buoy stalk-eye lying on its side (same inks
+      // as glowEyeFlower — red stalk, white berry, gray contour and pupil).
       //
       loader: {
-        message: PALETTE.gray7,        // "Loading" caption
-        body: PALETTE.gray0,           // Stalk segments, joints and side spikes
-        root: PALETTE.rose0,           // Root knot the stalk grows from
-        eyeContour: PALETTE.green0,    // Ring around the sclera
-        sclera: "#FFFFFF",             // Eye white (hero eye)
-        pupil: "#000000"               // Pupil (hero eye)
+        message: PALETTE.gray7,
+        contour: PALETTE.gray0,
+        berry: PALETTE.gray7,
+        berryShade: PALETTE.mauve4,
+        pupil: PALETTE.gray0,
+        stem: PALETTE.red0,
+        stemLight: PALETTE.red2
       },
       //
       // Ready screen colors. The scene runs on a teal+orange
@@ -424,6 +424,7 @@ export const CFG = {
         groundChernozem: PALETTE.brown1,
         groundClay: PALETTE.brown2,
         groundSand: PALETTE.rose0,
+        groundDeep: PALETTE.rose0,     // Deepest earth stratum + bottom depth fade (darkest warm brown)
         //
         // Wet mud patch under the mud-zone tall grass — a darker, warmer
         // earth tone than plain groundDark so the soft-mud band reads as a
@@ -479,6 +480,8 @@ export const CFG = {
           pupil: PALETTE.gray0,        // Berry pupil
           stem: PALETTE.red0,          // Red stalk and berry stems
           stemLight: PALETTE.red2,     // Lit edge of the stalk
+          undergroundStem: PALETTE.rose1,      // Buried stalk — darker, duller red
+          undergroundStemLight: PALETTE.red0,  // Buried stalk lit line (old stem tone)
           vine: PALETTE.green0,        // Tentacle vines
           leaf: PALETTE.green1,        // Leaf body
           leafLight: PALETTE.green2,   // Lit half of the leaf

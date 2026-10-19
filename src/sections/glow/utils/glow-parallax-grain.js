@@ -79,9 +79,9 @@ export function applyGlowCanvasPixelate(canvas, cellPx) {
 // reads as sunlit green-gold air instead of grey fog.
 //
 export const GLOW_LAYER_GRADE = {
-  far: { contrast: 0.4, saturation: 0.7, grain: 0, grainBlockSize: 10, haze: glowRgb(GLOW_PAL.glowHaze.far) },
-  mid: { contrast: 0.66, saturation: 0.9, grain: 0.08, grainBlockSize: 6, haze: glowRgb(GLOW_PAL.glowHaze.mid) },
-  near: { contrast: 0.92, saturation: 1.05, grain: 0.32, grainBlockSize: 5, haze: glowRgb(GLOW_PAL.glowHaze.near) },
+  far: { contrast: 0.34, saturation: 0.62, grain: 0, grainBlockSize: 10, haze: glowRgb(GLOW_PAL.glowHaze.far) },
+  mid: { contrast: 0.6, saturation: 0.84, grain: 0.07, grainBlockSize: 6, haze: glowRgb(GLOW_PAL.glowHaze.mid) },
+  near: { contrast: 0.96, saturation: 1.08, grain: 0.34, grainBlockSize: 5, haze: glowRgb(GLOW_PAL.glowHaze.near) },
   //
   // Smooth decor (hero, mushrooms, water mask) — grade only, almost no grain.
   //

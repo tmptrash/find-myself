@@ -102,6 +102,7 @@ import {
 } from '../utils/glow-tree-fruit.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
+import { glowEyeBerryColors } from '../utils/glow-eye-berry.js'
 import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
 import * as EarTree from '../utils/glow-ear-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
@@ -111,6 +112,11 @@ import * as ShoreTree from '../utils/glow-shore-tree.js'
 import * as HorizFallTwig from '../utils/glow-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as ForestFloor from '../components/forest-floor.js'
+import {
+  glowUndergroundLargeFeatureAlpha,
+  glowUndergroundSmallDetailAlpha,
+  paintUndergroundDepthVignette
+} from '../utils/glow-forest-atmosphere.js'
 import * as LightShaft from '../components/light-shaft.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
@@ -393,7 +399,7 @@ const ROCK_OUTLINE_WIDTH = 1.4
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_COLOR = 'glow0-bg-static-color-v8'
+const BG_STATIC_COLOR = 'glow0-bg-static-color-v11'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
 // a depth row reaches from its own crown band down to the ground line rather
@@ -515,13 +521,13 @@ const RIGHT_PLAT_OFFSET_X = 100
 // palette swatches (one step darker than the sky), the near colour-world
 // row keeps green foliage with a light haze blend.
 //
-const PAR_L1_COLOR_BLEND = 0.22
-const PAR_MID_COLOR_BLEND = 0.28
+const PAR_L1_COLOR_BLEND = 0.14
+const PAR_MID_COLOR_BLEND = 0.34
 //
 // Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
 // while green stays the leading colour — kept low so parallax stays muted.
 //
-const PAR_L1_LEAF_WARM_BLEND = 0
+const PAR_L1_LEAF_WARM_BLEND = 0.08
 //
 // Reference corner tree families — left/right from playfield midline; top/bottom
 // from canopy row (far + mid = upper pair, near = lower pair on screen).
@@ -1118,12 +1124,10 @@ const GROUND_REVEAL_FADE_WIDTH = 220
 const GROUND_REVEAL_LOOKAHEAD = 80
 const GROUND_DETAIL_LOOKAHEAD = 28
 //
-// Underground earth band: topsoil, subsoil and deep clay (fractions of
-// CAVE_BAND_H for the first two; the last fills the rest). The deep clay is
-// darkened by GROUND_LAYER_DEEP_SHADE_ALPHA of the glow shadow swatch.
+// Underground earth band: topsoil, subsoil, then the darkest groundDeep
+// (fractions of CAVE_BAND_H for the first two; the last fills the rest).
 //
 const GROUND_LAYER_FRACS = [0.36, 0.3]
-const GROUND_LAYER_DEEP_SHADE_ALPHA = 0.42
 //
 // High-frequency jagged seams between soil layers (sample-and-hold noise, like
 // a dense irregular time series — not smooth sine waves).
@@ -1158,10 +1162,6 @@ const GROUND_LAYER_FRINGE_LOBE_OCTAVES = [
   { wavelength: 13, amp: 2.5 }
 ]
 const GROUND_LAYER_FRINGE_JAG_AMP = 2.5
-//
-// Pull each soil swatch toward the layer average so strata read softer.
-//
-const GROUND_LAYER_CONTRAST_PULL = 0.52
 //
 // Sky bake uses stacked palette bands instead of a smooth CSS gradient.
 //
@@ -2122,7 +2122,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k,
       spots: chainBuoySpots,
       woodPlatformBands: chainBuoyWoodBands,
-      platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN
+      platformXMargin: GLOW_CHAIN_BUOY_PLATFORM_X_MARGIN,
+      earthBottomY: PLAYFIELD_EARTH_BOTTOM_Y
     })
     const shoreTreeLayout = ShoreTree.buildGlowShoreTreeLayout(chainBuoySpots, FLOOR_Y)
     inst.shoreTree = shoreTreeLayout ? ShoreTree.create({ k, layout: shoreTreeLayout }) : null
@@ -2203,7 +2204,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       groundY: FLOOR_Y,
       getOpacity: () => 1,
       hazeStrength: 0.38,
-      poolStrength: 1,
+      poolStrength: 1.08,
       z: GLOW_LIGHT_SHAFT_Z
     })
     if (await glowBootstrapPause(bootstrap, 93, session)) return
@@ -2943,27 +2944,10 @@ function setDecorObjVisible(obj, visible, opacity = 1) {
   obj.opacity = show ? opacity : 1
 }
 //
-// Stalk-eye colours — eyeCreature.body stalk ink.
+// Stalk-eye colours — the island eye-flower's berry look, tree-root ink below.
 //
 function glowChainBuoyColors(k) {
-  const root = glowEarTreeRootKaplayRgb(k)
-  //
-  // Stalk + roots: eyeCreature.body (green-black segment ink). Eye ring only:
-  // eyeCreature.contour. Sclera is hero white; the pupil is set by ChainBuoy.
-  //
-  const stalkTriplet = glowRgb(GLOW_PAL.eyeCreature.body)
-  const ringTriplet = glowRgb(GLOW_PAL.eyeCreature.contour)
-  const stalk = k.rgb(stalkTriplet.r, stalkTriplet.g, stalkTriplet.b)
-  const ring = k.rgb(ringTriplet.r, ringTriplet.g, ringTriplet.b)
-  const whiteTriplet = glowRgb(CFG.visual.colors.hero.eyeWhite)
-  const white = k.rgb(whiteTriplet.r, whiteTriplet.g, whiteTriplet.b)
-  return {
-    body: stalk,
-    sclera: white,
-    highlight: white,
-    contour: ring,
-    root
-  }
+  return { ...glowEyeBerryColors(k), root: glowEarTreeRootKaplayRgb(k) }
 }
 //
 // Ear-tree colors — dark outline, wood bark and living green ears.
@@ -3248,7 +3232,7 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
         foliageDensityTier: 'midground',
         colorBlend: PAR_MID_COLOR_BLEND,
         flatLeaves: true,
-        leafDarken: 0.1,
+        leafDarken: 0.14,
         uniformWood: true,
         treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
         trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
@@ -3555,7 +3539,7 @@ function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
 }
 //
 // Paints the root-zone part of a combined background canvas: the layered
-// earth band (three strata, see withMidEarthStratum) inside the
+// earth band (three strata, groundEarthLayersColor) inside the
 // playfield margins, topped with the underground decor.
 //
 function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
@@ -3567,14 +3551,8 @@ function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
   const topRgb = layers[0]?.rgb
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
   renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
+  paintUndergroundDepthVignette(ctx, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
-  //
-  // Flat seal on the playfield earth floor — keeps the deepest stratum edge
-  // perfectly horizontal after bake (no AA ripple along the bottom).
-  //
-  const bottomRgb = layers[layers.length - 1]?.rgb
-  const earthFloorY = FLOOR_Y + CAVE_BAND_H
-  bottomRgb && paintFlatEarthGroundSeal(ctx, bottomRgb, LEFT_MARGIN, earthFloorY - 4, GAME_W)
 }
 //
 // Flat strip flush with the walkable ground line (covers sub-pixel gaps).
@@ -3586,45 +3564,15 @@ function paintFlatEarthGroundSeal(ctx, rgb, x0, y0, width) {
 //
 // Three soil layers for the underground earth band, top to bottom, each
 // { rgb, frac } (frac of the total band height; the last layer just fills
-// whatever remains so rounding never leaves a gap). Both modes use brown soil
-// tones; shadows lean on glowShadow / void (green-teal), not neutral gray.
-//
-function softenGroundEarthLayers(layers) {
-  const avg = layers.reduce((acc, layer) => ({
-    r: acc.r + layer.rgb.r,
-    g: acc.g + layer.rgb.g,
-    b: acc.b + layer.rgb.b
-  }), { r: 0, g: 0, b: 0 })
-  avg.r = Math.round(avg.r / layers.length)
-  avg.g = Math.round(avg.g / layers.length)
-  avg.b = Math.round(avg.b / layers.length)
-  const pull = GROUND_LAYER_CONTRAST_PULL
-  return layers.map(layer => ({
-    ...layer,
-    rgb: lerpRgb(layer.rgb, avg, pull)
-  }))
-}
-//
-// Colour-world earth strata for the static ground band.
+// whatever remains so rounding never leaves a gap). Each stratum is a darker
+// warm brown than the one above; the bottom one is the darkest. No teal or
+// green shade here — over brown it reads as a glow from below.
 //
 function groundEarthLayersColor() {
-  return withMidEarthStratum(softenGroundEarthLayers([
-    { rgb: glowRgb('groundChernozem') },
-    { rgb: glowRgb('groundSand') }
-  ]))
-}
-//
-// Topsoil / subsoil / deep clay, as in the reference. The palette has no
-// brown between the two soil swatches (a lerp snaps to olive in the bake),
-// so the subsoil takes the bottom tone and the deep clay is that same tone
-// under a translucent shadow. The bottom tone itself stays unchanged
-// (glowGroundEarthBottomLayerRgb fills under the cave floor with it).
-//
-function withMidEarthStratum([top, deep]) {
   return [
-    { rgb: top.rgb, frac: GROUND_LAYER_FRACS[0] },
-    { rgb: deep.rgb, frac: GROUND_LAYER_FRACS[1] },
-    { rgb: deep.rgb, shade: { rgb: GLOW_SHADOW, alpha: GROUND_LAYER_DEEP_SHADE_ALPHA } }
+    { rgb: glowRgb('groundChernozem'), frac: GROUND_LAYER_FRACS[0] },
+    { rgb: glowRgb('mudGround'), frac: GROUND_LAYER_FRACS[1] },
+    { rgb: glowRgb('groundDeep') }
   ]
 }
 //
@@ -4678,6 +4626,19 @@ function buildUndergroundStoneShape(x, y, r) {
   return { x, y, r, verts, speckles }
 }
 //
+// Scales baked underground decor opacity by depth (large masses fade slower).
+//
+function paintUndergroundDecorAtDepth(ctx, y, large, paintFn) {
+  const a = large
+    ? glowUndergroundLargeFeatureAlpha(y, FLOOR_Y, CAVE_BAND_H)
+    : glowUndergroundSmallDetailAlpha(y, FLOOR_Y, CAVE_BAND_H)
+  if (a < 0.03) return
+  ctx.save()
+  ctx.globalAlpha *= a
+  paintFn()
+  ctx.restore()
+}
+//
 // Renders the shared underground layout with one mode's tones.
 //
 function renderUndergroundSpec(ctx, spec, tones) {
@@ -4694,7 +4655,9 @@ function renderUndergroundSpec(ctx, spec, tones) {
     darkR: tones.fill.r, darkG: tones.fill.g, darkB: tones.fill.b
   }
   spec.rocks.forEach(rock => {
-    drawRockToCanvas(ctx, { cx: rock.x, cy: rock.y, radius: rock.radius, verts: rock.verts, palette: rockPalette, skipOutline: true, skipShadow: true })
+    paintUndergroundDecorAtDepth(ctx, rock.y, false, () => {
+      drawRockToCanvas(ctx, { cx: rock.x, cy: rock.y, radius: rock.radius, verts: rock.verts, palette: rockPalette, skipOutline: true, skipShadow: true })
+    })
   })
   //
   // Cracks — thin fissures with a short side branch.
@@ -4706,8 +4669,11 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.globalAlpha = 0.7
   ctx.lineWidth = 1.4
   spec.cracks.forEach(crack => {
-    strokePolyline(ctx, crack.pts)
-    strokePolyline(ctx, crack.branch)
+    const cy = crack.pts[0]?.y ?? FLOOR_Y
+    paintUndergroundDecorAtDepth(ctx, cy, false, () => {
+      strokePolyline(ctx, crack.pts)
+      strokePolyline(ctx, crack.branch)
+    })
   })
   ctx.globalAlpha = 1
   //
@@ -4716,9 +4682,11 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.fillStyle = fillCss
   spec.pebbles.forEach(stones => {
     stones.forEach(stone => {
-      ctx.beginPath()
-      ctx.arc(stone.x, stone.y, stone.r, 0, Math.PI * 2)
-      ctx.fill()
+      paintUndergroundDecorAtDepth(ctx, stone.y, false, () => {
+        ctx.beginPath()
+        ctx.arc(stone.x, stone.y, stone.r, 0, Math.PI * 2)
+        ctx.fill()
+      })
     })
   })
   //
@@ -4736,16 +4704,21 @@ function renderUndergroundSpec(ctx, spec, tones) {
     // as stray sticks on the interior void edge.
     //
     if (rx >= cave.x1 - 32 && rx <= cave.x2 + 48) return
-    strokePolyline(ctx, pts)
+    const ry = pts[pts.length - 1]?.y ?? pts[0]?.y ?? FLOOR_Y
+    paintUndergroundDecorAtDepth(ctx, ry, false, () => strokePolyline(ctx, pts))
   })
   ctx.globalAlpha = 1
   //
   // Fossil spiral — a small two-turn ammonite drawn in the light tone.
   //
   ctx.strokeStyle = lightCss
-  ctx.globalAlpha = 0.75
   ctx.lineWidth = 1.5
-  spec.fossils?.forEach(fossil => strokeUndergroundFossil(ctx, fossil))
+  spec.fossils?.forEach(fossil => {
+    paintUndergroundDecorAtDepth(ctx, fossil.y, false, () => {
+      ctx.globalAlpha = 0.75
+      strokeUndergroundFossil(ctx, fossil)
+    })
+  })
   ctx.globalAlpha = 1
   tones.stone && paintUndergroundBoulderPiles(ctx, spec.boulderPiles, tones)
   tones.grit && paintUndergroundGrit(ctx, spec.grit, tones, deepCss)
@@ -4754,47 +4727,51 @@ function renderUndergroundSpec(ctx, spec, tones) {
   // Buried shells — half-ovals with a split line.
   //
   spec.shells?.forEach(shell => {
-    ctx.save()
-    ctx.translate(shell.x, shell.y)
-    shell.flip && ctx.scale(-1, 1)
-    ctx.fillStyle = lightCss
-    ctx.globalAlpha = 0.8
-    ctx.beginPath()
-    ctx.ellipse(0, 0, shell.w * 0.5, shell.h * 0.45, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = deepCss
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(-shell.w * 0.35, 0)
-    ctx.lineTo(shell.w * 0.35, 0)
-    ctx.stroke()
-    ctx.restore()
+    paintUndergroundDecorAtDepth(ctx, shell.y, false, () => {
+      ctx.save()
+      ctx.translate(shell.x, shell.y)
+      shell.flip && ctx.scale(-1, 1)
+      ctx.fillStyle = lightCss
+      ctx.globalAlpha = 0.8
+      ctx.beginPath()
+      ctx.ellipse(0, 0, shell.w * 0.5, shell.h * 0.45, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = deepCss
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(-shell.w * 0.35, 0)
+      ctx.lineTo(shell.w * 0.35, 0)
+      ctx.stroke()
+      ctx.restore()
+    })
   })
   ctx.globalAlpha = 1
   //
   // Bones — two short segments with knobs.
   //
   spec.bones?.forEach(bone => {
-    ctx.save()
-    ctx.translate(bone.x, bone.y)
-    ctx.rotate(bone.angle)
-    ctx.strokeStyle = lightCss
-    ctx.lineWidth = UG_BONE_SHAFT_PX
-    ctx.lineCap = 'round'
-    ctx.globalAlpha = 0.85
-    ctx.beginPath()
-    ctx.moveTo(-bone.len * 0.5, 0)
-    ctx.lineTo(bone.len * 0.5, 0)
-    ctx.stroke()
-    ctx.fillStyle = lightCss
-    for (const end of [-0.5, 0.5]) {
-      for (const side of [-1, 1]) {
-        ctx.beginPath()
-        ctx.arc(bone.len * end, side * UG_BONE_KNOB_SPLIT, UG_BONE_KNOB_R, 0, Math.PI * 2)
-        ctx.fill()
+    paintUndergroundDecorAtDepth(ctx, bone.y, false, () => {
+      ctx.save()
+      ctx.translate(bone.x, bone.y)
+      ctx.rotate(bone.angle)
+      ctx.strokeStyle = lightCss
+      ctx.lineWidth = UG_BONE_SHAFT_PX
+      ctx.lineCap = 'round'
+      ctx.globalAlpha = 0.85
+      ctx.beginPath()
+      ctx.moveTo(-bone.len * 0.5, 0)
+      ctx.lineTo(bone.len * 0.5, 0)
+      ctx.stroke()
+      ctx.fillStyle = lightCss
+      for (const end of [-0.5, 0.5]) {
+        for (const side of [-1, 1]) {
+          ctx.beginPath()
+          ctx.arc(bone.len * end, side * UG_BONE_KNOB_SPLIT, UG_BONE_KNOB_R, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
-    }
-    ctx.restore()
+      ctx.restore()
+    })
   })
   ctx.globalAlpha = 1
   //
@@ -4802,24 +4779,28 @@ function renderUndergroundSpec(ctx, spec, tones) {
   //
   ctx.fillStyle = lightCss
   spec.coins?.forEach(coin => {
-    ctx.globalAlpha = 0.75
-    ctx.beginPath()
-    ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2)
-    ctx.fill()
+    paintUndergroundDecorAtDepth(ctx, coin.y, false, () => {
+      ctx.globalAlpha = 0.75
+      ctx.beginPath()
+      ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2)
+      ctx.fill()
+    })
   })
   ctx.globalAlpha = 1
   //
   // Bottles — stuck at an angle (message in a bottle vibes).
   //
   spec.bottles?.forEach(bottle => {
-    ctx.save()
-    ctx.translate(bottle.x, bottle.y)
-    ctx.rotate(bottle.tilt)
-    ctx.fillStyle = lightCss
-    ctx.globalAlpha = 0.7
-    ctx.fillRect(-3, -bottle.h * 0.5, 6, bottle.h * 0.65)
-    ctx.fillRect(-2, -bottle.h * 0.5 - 4, 4, 4)
-    ctx.restore()
+    paintUndergroundDecorAtDepth(ctx, bottle.y, false, () => {
+      ctx.save()
+      ctx.translate(bottle.x, bottle.y)
+      ctx.rotate(bottle.tilt)
+      ctx.fillStyle = lightCss
+      ctx.globalAlpha = 0.7
+      ctx.fillRect(-3, -bottle.h * 0.5, 6, bottle.h * 0.65)
+      ctx.fillRect(-2, -bottle.h * 0.5 - 4, 4, 4)
+      ctx.restore()
+    })
   })
   ctx.globalAlpha = 1
   //
@@ -4829,8 +4810,11 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.lineWidth = 1.4
   ctx.lineCap = 'round'
   spec.worms?.forEach(pts => {
-    ctx.globalAlpha = 0.65
-    strokePolyline(ctx, pts)
+    const wy = pts[pts.length - 1]?.y ?? pts[0]?.y ?? FLOOR_Y
+    paintUndergroundDecorAtDepth(ctx, wy, false, () => {
+      ctx.globalAlpha = 0.65
+      strokePolyline(ctx, pts)
+    })
   })
   ctx.globalAlpha = 1
 }
@@ -4887,9 +4871,11 @@ function paintUndergroundSediment(ctx, spec, tones, deepCss) {
 function paintUndergroundWarmPebbles(ctx, pebbles, tones) {
   ctx.fillStyle = `rgb(${tones.pebble.r}, ${tones.pebble.g}, ${tones.pebble.b})`
   pebbles?.forEach(p => {
-    ctx.beginPath()
-    ctx.ellipse(p.x, p.y, p.r * 1.25, p.r, 0, 0, Math.PI * 2)
-    ctx.fill()
+    paintUndergroundDecorAtDepth(ctx, p.y, false, () => {
+      ctx.beginPath()
+      ctx.ellipse(p.x, p.y, p.r * 1.25, p.r, 0, 0, Math.PI * 2)
+      ctx.fill()
+    })
   })
 }
 //
@@ -4899,7 +4885,11 @@ function paintUndergroundBoulderPiles(ctx, piles, tones) {
   const stoneCss = `rgb(${tones.stone.r}, ${tones.stone.g}, ${tones.stone.b})`
   const lightCss = `rgb(${tones.stoneLight.r}, ${tones.stoneLight.g}, ${tones.stoneLight.b})`
   const contourCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
-  piles?.forEach(stones => stones.forEach(stone => paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss)))
+  piles?.forEach(stones => stones.forEach(stone => {
+    paintUndergroundDecorAtDepth(ctx, stone.y, true, () => {
+      paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss)
+    })
+  }))
 }
 function paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss) {
   ctx.fillStyle = contourCss
@@ -4948,8 +4938,10 @@ function paintUndergroundGrit(ctx, grit, tones, deepCss) {
   const gritCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
   ctx.globalAlpha = UG_GRIT_ALPHA
   grit?.forEach(g => {
-    ctx.fillStyle = g.light ? gritCss : deepCss
-    ctx.fillRect(Math.round(g.x), Math.round(g.y), g.px, g.px)
+    paintUndergroundDecorAtDepth(ctx, g.y, false, () => {
+      ctx.fillStyle = g.light ? gritCss : deepCss
+      ctx.fillRect(Math.round(g.x), Math.round(g.y), g.px, g.px)
+    })
   })
   ctx.globalAlpha = 1
 }

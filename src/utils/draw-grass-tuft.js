@@ -1,3 +1,4 @@
+import { paintForestContactShadow } from '../sections/glow/utils/glow-forest-atmosphere.js'
 //
 // Canvas2D grass tuft: a handful of curved tapered blades, some dry straw.
 // For baked decor; the live swaying field stays in components/grass.js.
@@ -24,6 +25,7 @@ const TUFT_BEND = 0.6
  */
 export function drawGrassTuftToCanvas(ctx, opts) {
   const { x, baseY, rng, colors } = opts
+  colors.contactShadow && paintForestContactShadow(ctx, x, baseY, TUFT_SPREAD * 1.05, 3.2, colors.contactShadow, 0.85)
   const blades = TUFT_BLADES_MIN + Math.floor(rng() * TUFT_BLADES_RANGE)
   for (let i = 0; i < blades; i++) {
     const bx = x + (rng() - 0.5) * TUFT_SPREAD

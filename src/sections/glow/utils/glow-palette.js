@@ -51,45 +51,12 @@ export function glowCaveEarthDeepRgb() {
   }
 }
 
-const GROUND_EARTH_LAYER_CONTRAST_PULL = 0.52
-const GROUND_EARTH_LAYER_FRAC_TOP = 0.5
-
-function lerpGlowRgb(a, b, t) {
-  const u = Math.max(0, Math.min(1, t))
-  return {
-    r: Math.round(a.r + (b.r - a.r) * u),
-    g: Math.round(a.g + (b.g - a.g) * u),
-    b: Math.round(a.b + (b.b - a.b) * u)
-  }
-}
-
-function softenGlowGroundEarthLayers(layers) {
-  const n = layers.length
-  const avg = layers.reduce((acc, layer) => ({
-    r: acc.r + layer.rgb.r,
-    g: acc.g + layer.rgb.g,
-    b: acc.b + layer.rgb.b
-  }), { r: 0, g: 0, b: 0 })
-  avg.r = Math.round(avg.r / n)
-  avg.g = Math.round(avg.g / n)
-  avg.b = Math.round(avg.b / n)
-  const pull = GROUND_EARTH_LAYER_CONTRAST_PULL
-  return layers.map(layer => ({
-    ...layer,
-    rgb: lerpGlowRgb(layer.rgb, avg, pull)
-  }))
-}
-
 /**
  * Bottom stratum of the baked earth band (matches groundEarthLayersColor).
  * @returns {{ r: number, g: number, b: number }}
  */
 export function glowGroundEarthBottomLayerRgb() {
-  const stack = softenGlowGroundEarthLayers([
-    { rgb: glowRgb('groundChernozem'), frac: GROUND_EARTH_LAYER_FRAC_TOP },
-    { rgb: glowRgb('groundSand') }
-  ])
-  return stack[stack.length - 1].rgb
+  return glowRgb('groundDeep')
 }
 
 /**

@@ -11,9 +11,9 @@ import { glowFilmGrainBlockPxForTier } from './glow-pixel-density.js'
 // Gameplay plane stays sharp; foreground heroes/HUD get a light pixel pass.
 //
 export const GLOW_FOCUS_BLUR_PX = {
-  background: 5,
-  midground: 2.25,
-  nearground: 0.45,
+  background: 5.5,
+  midground: 2.5,
+  nearground: 0.5,
   gameplay: 0,
   foreground: 0
 }

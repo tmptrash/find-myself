@@ -7,6 +7,7 @@ import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
 import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { drawSmallMushroomGroupToCanvas } from '../../../utils/draw-small-mushroom.js'
+import { addEyeBerry, addTaperedPass } from '../utils/glow-eye-berry.js'
 import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/glow-static-bake.js'
 import { forestFloorPainterColors } from './forest-floor.js'
@@ -180,8 +181,6 @@ const BERRY_SWAY_SPEED = 1.4
 // at rest and lock onto the hero as the bush wakes (openness).
 //
 const BERRY_CONTOUR_W = 1.5
-const BERRY_SHADE_DROP = 0.22
-const BERRY_SHADE_FRAC = 0.86
 const BERRY_PUPIL_FRAC = 0.4
 const BERRY_LOOK_FRAC = 0.4
 const BERRY_REST_LOOK = Math.PI / 2
@@ -1114,10 +1113,8 @@ function addBerry(inst, berry) {
   const heroLook = hero ? Math.atan2(hero.y - eye.y, hero.x - eye.x) : restLook
   const look = restLook + angleDelta(restLook, heroLook) * inst.open
   const pupilR = r * BERRY_PUPIL_FRAC * (1 + whisperPulse(inst) * PUPIL_WHISPER_DILATE)
-  PolyBatch.addDisc(batch, eye.x, eye.y, r + BERRY_CONTOUR_W, c.contour)
-  PolyBatch.addDisc(batch, eye.x, eye.y, r, c.berryShade)
-  PolyBatch.addDisc(batch, eye.x, eye.y - r * BERRY_SHADE_DROP, r * BERRY_SHADE_FRAC, c.berry)
-  PolyBatch.addDisc(batch, eye.x + Math.cos(look) * r * BERRY_LOOK_FRAC, eye.y + Math.sin(look) * r * BERRY_LOOK_FRAC, pupilR, c.pupil)
+  addEyeBerry(batch, eye.x, eye.y, r, eye.x + Math.cos(look) * r * BERRY_LOOK_FRAC,
+    eye.y + Math.sin(look) * r * BERRY_LOOK_FRAC, pupilR, c, BERRY_CONTOUR_W)
 }
 
 //
@@ -1198,18 +1195,6 @@ function drawGrabFront(inst) {
   if (!inst.visible || !grab || sink >= GRAB_SINK_DEPTH) return
   grab.tentacles.forEach(tent => tent.wrap > 0 && addBlade(inst, tent.blade, inst.frontBatch, tent.frontMask))
   PolyBatch.flush(inst.frontBatch, inst.k, 1, sink, sinkFloorY(inst, sink))
-}
-
-//
-// One round-jointed tapered polyline pass.
-//
-function addTaperedPass(batch, pts, wBase, wTip, color) {
-  const last = pts.length - 1
-  for (let i = 0; i < last; i++) {
-    const w = wBase + (wTip - wBase) * (i / last)
-    PolyBatch.addLine(batch, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, w, color)
-    PolyBatch.addDisc(batch, pts[i + 1].x, pts[i + 1].y, w * 0.5, color)
-  }
 }
 
 function drawIsland(inst) {

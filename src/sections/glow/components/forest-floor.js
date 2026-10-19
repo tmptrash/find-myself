@@ -5,6 +5,7 @@ import { drawGroundRimToCanvas, groundRimBounds } from '../../../utils/draw-grou
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { drawSmallMushroomGroupToCanvas, drawSpottedMushroomToCanvas, smallMushroomGroupBounds } from '../../../utils/draw-small-mushroom.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
+import { forestContactShadowRgb, paintForestContactShadow } from '../utils/glow-forest-atmosphere.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/glow-static-bake.js'
 //
@@ -18,7 +19,7 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 //
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
-const BAKE_VARIANT = 'v7'
+const BAKE_VARIANT = 'v8'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
@@ -83,7 +84,7 @@ export function create(cfg) {
     floorY,
     getOpacity,
     isSpotFree,
-    colors: forestFloorPainterColors(),
+    colors: { ...forestFloorPainterColors(), contactShadow: forestContactShadowRgb() },
     hill: { x1: hillX2 - HILL_HALF_W * 2, x2: hillX2, floorY, height: HILL_H },
     back: [],
     front: []
@@ -223,9 +224,18 @@ function paintItem(ctx, inst, item) {
   const { x, size } = item
   if (item.kind === KIND.RIM) drawGroundRimToCanvas(ctx, { x1: item.x1, x2: item.x2, floorY, rng, colors: colors.rim })
   else if (item.kind === KIND.HILL) paintHill(ctx, inst, rng)
-  else if (item.kind === KIND.FERN) drawFernToCanvas(ctx, { x, baseY: floorY, size, rng, colors: colors.fern })
-  else if (item.kind === KIND.PLUME) drawFeatherPlumeToCanvas(ctx, { x, baseY: floorY, height: size, rng, colors: colors.plume })
-  else drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: colors.mushroom })
+  else if (item.kind === KIND.FERN) {
+    paintForestFloorContactShadow(ctx, x, floorY, size * 0.42, 5, colors)
+    drawFernToCanvas(ctx, { x, baseY: floorY, size, rng, colors: colors.fern })
+  }
+  else if (item.kind === KIND.PLUME) {
+    paintForestFloorContactShadow(ctx, x, floorY, size * 0.22, 4, colors)
+    drawFeatherPlumeToCanvas(ctx, { x, baseY: floorY, height: size, rng, colors: colors.plume })
+  }
+  else {
+    paintForestFloorContactShadow(ctx, x, floorY, 14, 4.5, colors)
+    drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: { ...colors.mushroom, contactShadow: colors.contactShadow } })
+  }
 }
 //
 // Boulder heap under its moss first, then spike bushes behind ferns, grass
@@ -238,17 +248,29 @@ function paintHill(ctx, inst, rng) {
   drawMossyHillToCanvas(ctx, { hill, rng, colors: colors.hill })
   hillPlantXs(inst, HILL_PLUMES_T).forEach(x => {
     const height = PLUME_H_MIN + rng() * PLUME_H_RANGE * HILL_PLUME_H_SCALE
-    drawFeatherPlumeToCanvas(ctx, { x, baseY: hillPlantY(hill, x), height, rng, colors: colors.plume })
+    const baseY = hillPlantY(hill, x)
+    paintForestFloorContactShadow(ctx, x, baseY, height * 0.18, 4, colors)
+    drawFeatherPlumeToCanvas(ctx, { x, baseY, height, rng, colors: colors.plume })
   })
   hillPlantXs(inst, HILL_FERNS_T).forEach(x => {
     const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
-    drawFernToCanvas(ctx, { x, baseY: hillPlantY(hill, x), size, rng, colors: colors.fern })
+    const baseY = hillPlantY(hill, x)
+    paintForestFloorContactShadow(ctx, x, baseY, size * 0.4, 5, colors)
+    drawFernToCanvas(ctx, { x, baseY, size, rng, colors: colors.fern })
   })
   hillPlantXs(inst, hillTuftTs()).forEach(x => {
-    drawGrassTuftToCanvas(ctx, { x, baseY: hillPlantY(hill, x), rng, colors: colors.tuft })
+    const baseY = hillPlantY(hill, x)
+    paintForestFloorContactShadow(ctx, x, baseY, 9, 3.2, colors)
+    drawGrassTuftToCanvas(ctx, { x, baseY, rng, colors: { ...colors.tuft, contactShadow: colors.contactShadow } })
   })
-  hillPlantXs(inst, HILL_MUSH_T).forEach(x => drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: colors.mushroom }))
-  hillPlantXs(inst, HILL_SPOT_MUSH_T).forEach(x => drawSpottedMushroomToCanvas(ctx, { x, baseY: floorY, colors: colors.spotted }))
+  hillPlantXs(inst, HILL_MUSH_T).forEach(x => {
+    paintForestFloorContactShadow(ctx, x, floorY, 14, 4.5, colors)
+    drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: { ...colors.mushroom, contactShadow: colors.contactShadow } })
+  })
+  hillPlantXs(inst, HILL_SPOT_MUSH_T).forEach(x => {
+    paintForestFloorContactShadow(ctx, x, floorY, 12, 4, colors)
+    drawSpottedMushroomToCanvas(ctx, { x, baseY: floorY, colors: colors.spotted })
+  })
 }
 function hillPlantXs(inst, ts) {
   return ts.map(t => inst.hill.x1 + (inst.hill.x2 - inst.hill.x1) * t).filter(x => inst.isSpotFree(x, HILL_PLANT_HALF_W))
@@ -260,6 +282,9 @@ function hillTuftTs() {
 }
 function hillPlantY(hill, x) {
   return mossyHillTopY(hill, x) + HILL_PLANT_SINK
+}
+function paintForestFloorContactShadow(ctx, x, baseY, rx, ry, colors) {
+  colors.contactShadow && paintForestContactShadow(ctx, x, baseY, rx, ry, colors.contactShadow)
 }
 function viewXRange(k) {
   const cam = k.getCamPos()

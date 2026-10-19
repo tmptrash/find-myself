@@ -17,11 +17,9 @@ const LOADER_PANEL_BG_OVER_CRT = 'rgba(14, 20, 26, 0.97)'
 const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10px 60px rgba(0, 0, 0, 0.95)'
 const LOADER_UI_FADE_SEC = 0.32
 //
-// Stalk-eye geometry (SVG user units = CSS px): the chain-buoy eye from the
-// Glow level lying on its side, slightly larger than in-level. The segmented stalk
-// grows from the root knot on the left; each finished joint sprouts a side
-// spike (alternating up / down, leaning back toward the root) and the eye
-// rides the right tip.
+// Stalk-eye geometry (SVG user units = CSS px): the Glow chain-buoy eye-berry
+// lying on its side. Red contoured stalk with a lit line, side spikes on each
+// joint, white berry with shaded underside and a dark pupil on the tip.
 //
 const EYE_VIEW_W = 360
 const EYE_VIEW_H = 96
@@ -29,6 +27,8 @@ const STALK_ROOT_X = 14
 const STALK_Y = EYE_VIEW_H / 2
 const STALK_SEGMENT_LEN = 30
 const STALK_SEGMENT_W = 7
+const STALK_CONTOUR_PAD = 2
+const STALK_LIGHT_FRAC = 0.35
 const STALK_JOINT_R = STALK_SEGMENT_W * 0.5
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
 const SPIKE_LEN_WOBBLE = STALK_SEGMENT_W * 0.35
@@ -38,11 +38,12 @@ const SPIKE_BALL_R = STALK_SEGMENT_W * 0.95
 const STALK_WAVE_AMP = 7
 const STALK_WAVE_FREQ = 0.045
 const STALK_WAVE_SPEED = 2.2
-const ROOT_RX = 8
-const ROOT_RY = 5
 const EYE_R = 12
-const EYE_CONTOUR_W = 2
-const EYE_PUPIL_R = 5
+const EYE_CONTOUR_W = 1.5
+const EYE_BERRY_SHADE_DROP = 0.22
+const EYE_BERRY_FACE_FRAC = 0.86
+const EYE_PUPIL_FRAC = 0.4
+const EYE_PUPIL_R = EYE_R * EYE_PUPIL_FRAC
 const EYE_LID_W = 1.4
 const EYE_LID_SPAN = 0.85
 const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
@@ -57,7 +58,7 @@ const PUPIL_HOLD_MAX_SEC = 1.3
 const PUPIL_MIN_REACH = 0.35
 const PUPIL_CENTER_CHANCE = 0.15
 //
-// Occasional blink: a closed lid in the stalk ink, like the level's buoys.
+// Occasional blink: a closed lid on the berry, like the level's buoys.
 //
 const BLINK_SEC = 0.14
 const BLINK_GAP_MIN_SEC = 2.4
@@ -352,8 +353,7 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene: root knot, stroked stalk segments and spikes, filled joint knots
-// and spike balls, then the eye (open: ring + sclera + pupil; closed: lid).
+// SVG scene: contoured red stalk, spikes, knots, then the eye-berry.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -363,42 +363,39 @@ function buildLoaderEyeSvg(colors) {
     viewBox: `0 0 ${EYE_VIEW_W} ${EYE_VIEW_H}`
   })
   svg.style.overflow = 'visible'
-  const root = svgEl('ellipse', {
-    cx: STALK_ROOT_X,
-    cy: STALK_Y + ROOT_RY * 0.4,
-    rx: ROOT_RX,
-    ry: ROOT_RY,
-    fill: colors.root
-  })
-  const stalk = svgEl('path', strokeAttrs(colors.body, STALK_SEGMENT_W))
-  const spikes = svgEl('path', strokeAttrs(colors.body, SPIKE_W))
-  const knots = svgEl('path', { fill: colors.body })
+  const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_PAD))
+  const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
+  const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W * STALK_LIGHT_FRAC))
+  const spikes = svgEl('path', strokeAttrs(colors.stem, SPIKE_W))
+  const knots = svgEl('path', { fill: colors.stem })
   const eyeGroup = svgEl('g', {})
   const openEye = svgEl('g', {})
-  openEye.appendChild(svgEl('circle', { r: EYE_R + EYE_CONTOUR_W, fill: colors.eyeContour }))
-  openEye.appendChild(svgEl('circle', { r: EYE_R, fill: colors.sclera }))
+  appendLoaderBerryBall(openEye, colors, 0, 0)
   const pupil = svgEl('circle', { r: EYE_PUPIL_R, fill: colors.pupil })
   openEye.appendChild(pupil)
   const closedEye = svgEl('g', { display: 'none' })
-  closedEye.appendChild(svgEl('circle', { r: EYE_R + EYE_CONTOUR_W, fill: colors.body }))
+  appendLoaderBerryBall(closedEye, colors, 0, 0)
   closedEye.appendChild(svgEl('line', {
     x1: -EYE_R * EYE_LID_SPAN,
     x2: EYE_R * EYE_LID_SPAN,
     y1: 0,
     y2: 0,
-    stroke: colors.eyeContour,
+    stroke: colors.contour,
     'stroke-width': EYE_LID_W,
     'stroke-linecap': 'round'
   }))
   eyeGroup.appendChild(openEye)
   eyeGroup.appendChild(closedEye)
-  svg.appendChild(root)
-  svg.appendChild(stalk)
+  svg.appendChild(stalkContour)
+  svg.appendChild(stalkBody)
+  svg.appendChild(stalkLight)
   svg.appendChild(spikes)
   svg.appendChild(knots)
   svg.appendChild(eyeGroup)
   eye = {
-    stalk,
+    stalkContour,
+    stalkBody,
+    stalkLight,
     spikes,
     knots,
     eyeGroup,
@@ -426,6 +423,29 @@ function strokeAttrs(color, width) {
     'stroke-linejoin': 'round'
   }
 }
+//
+// Eye-berry stack matching the in-level chain-buoy (contour, shade, lit face).
+//
+function appendLoaderBerryBall(parent, colors, cx, cy) {
+  parent.appendChild(svgEl('circle', {
+    cx,
+    cy,
+    r: EYE_R + EYE_CONTOUR_W,
+    fill: colors.contour
+  }))
+  parent.appendChild(svgEl('circle', {
+    cx,
+    cy,
+    r: EYE_R,
+    fill: colors.berryShade
+  }))
+  parent.appendChild(svgEl('circle', {
+    cx,
+    cy: cy - EYE_R * EYE_BERRY_SHADE_DROP,
+    r: EYE_R * EYE_BERRY_FACE_FRAC,
+    fill: colors.berry
+  }))
+}
 
 function svgEl(tag, attrs) {
   const el = document.createElementNS(SVG_NS, tag)
@@ -445,7 +465,10 @@ function drawLoaderEye(dt) {
   const joints = points.slice(1, -1)
   const tip = points[points.length - 1]
   const spikeTips = joints.map((p, i) => spikeTipFor(p, i))
-  eye.stalk.setAttribute('d', pointsToPath(points))
+  const stalkPath = pointsToPath(points)
+  eye.stalkContour.setAttribute('d', stalkPath)
+  eye.stalkBody.setAttribute('d', stalkPath)
+  eye.stalkLight.setAttribute('d', stalkPath)
   eye.spikes.setAttribute('d', joints.map((p, i) => linePath(p, spikeTips[i])).join(' '))
   eye.knots.setAttribute('d', [
     ...joints.map(p => circlePath(p.x, p.y, STALK_JOINT_R)),

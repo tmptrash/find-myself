@@ -1,3 +1,4 @@
+import { paintForestContactShadow } from '../sections/glow/utils/glow-forest-atmosphere.js'
 //
 // Canvas2D small forest mushrooms: slender cream mushrooms in little groups
 // and a single red spotted cap. Distinct from draw-mushroom.js (the chunky
@@ -42,6 +43,7 @@ const SPOT_DOTS = [[-0.22, -0.55, 1.4], [0.15, -0.72, 1.2], [0.3, -0.35, 1.1], [
  */
 export function drawSmallMushroomGroupToCanvas(ctx, opts) {
   const { x, baseY, rng, colors } = opts
+  colors.contactShadow && paintForestContactShadow(ctx, x, baseY, MUSH_SPREAD * 1.35, 4.2, colors.contactShadow)
   const count = MUSH_COUNT_MIN + Math.floor(rng() * MUSH_COUNT_RANGE)
   const shrooms = []
   for (let i = 0; i < count; i++) {

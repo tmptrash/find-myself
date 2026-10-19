@@ -144,6 +144,7 @@ export function create(config) {
     sectionLabelLetterSpacing = null,
     sectionLabelY = null,
     hideScoreboard = false,
+    hideLifeScore = false,
     hideHeroScoreHud = false,
     scoreboardGreyLife = false,
     greyLife = false,
@@ -402,8 +403,12 @@ export function create(config) {
   //
   // Life score outlines (black) and main text (white)
   //
-  const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
-  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
+  const lifeScoreOutlines = hideLifeScore
+    ? []
+    : createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
+  const lifeScoreText = hideLifeScore
+    ? null
+    : createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas, hudScoreFlat, scoreFillCss)
   //
   // Trap count badge with outline (bold red number right of life icon)
   //
@@ -437,7 +442,7 @@ export function create(config) {
     lifeImageData.sprite,
     lifeImageData.pupilLayer,
     ...(heroScoreText ? [heroScoreText] : []),
-    lifeScoreText,
+    ...(lifeScoreText ? [lifeScoreText] : []),
     ...heroScoreOutlines,
     ...lifeScoreOutlines,
     trapBadgeText,
@@ -491,6 +496,7 @@ export function create(config) {
       })
     },
     updateLifeScore: (newScore) => {
+      if (hideLifeScore || !lifeScoreText) return
       if (hudPostBakeCanvas) {
         lifeScoreText._scoreBake.score = newScore
         rebakeHudScoreSprite(lifeScoreText)

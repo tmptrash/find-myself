@@ -177,27 +177,29 @@ export function create(cfg) {
 /**
  * Starts the grab on the hero who just landed on the island: takes him out of
  * physics and input, and wakes the flower. Does nothing after the first call.
+ * The hole opens on the painted soil under the pull spot, above the
+ * waterline collider he stands on.
  * @param {Object} inst - Flower-grab inst
- * @param {number} footY - Hero feet Y on the island (the ground line he sinks through)
  */
-export function start(inst, footY) {
+export function start(inst) {
   if (inst.started) return
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
   inst.started = true
-  inst.groundY = footY
   inst.startX = char.pos.x
   inst.startY = char.pos.y
   inst.heroX = char.pos.x
   inst.heroY = char.pos.y
   inst.side = char.pos.x >= inst.flower.baseX ? 1 : -1
+  inst.holeX = inst.startX - inst.side * PULL_TOWARD_PLANT
+  inst.groundY = Math.min(EyeFlower.soilLineY(inst.flower, inst.holeX), inst.flower.waterY - HOLE_RY)
   inst.flipX = char.flipX
   inst.prey.scale = char.scale?.x ?? 1
   inst.sprites = heroSprites(inst, hero)
   captureHero(hero, char)
   syncPrey(inst)
-  EyeFlower.startGrab(inst.flower, inst.prey, footY)
+  EyeFlower.startGrab(inst.flower, inst.prey, inst.groundY)
   setBeat(inst, BEAT.AWARE)
   inst.sound && Sound.playFlowerRustle(inst.sound)
 }
@@ -288,7 +290,6 @@ function setBeat(inst, beat) {
     case BEAT.PULL:
       inst.pullFromX = inst.heroX
       inst.pullFromY = inst.heroY
-      inst.holeX = inst.startX - inst.side * PULL_TOWARD_PLANT
       EyeFlower.setGrabPhase(flower, EyeFlower.GRAB_PHASE.PULL)
       break
     case BEAT.BURIED:
@@ -436,7 +437,8 @@ function heroSprites(inst, hero) {
 
 //
 // Grabbed hero: rotated with the dangle, squashed by the coils, and cut at the
-// ground line while he is dragged under.
+// soil line only while he is dragged under (he first stands lower, on the
+// waterline collider).
 //
 function drawHero(inst) {
   if (!inst.started || !inst.heroVisible || !inst.sprites) return
@@ -447,7 +449,8 @@ function drawHero(inst) {
   const width = size * (1 - inst.squash.v)
   const height = size * (1 + inst.squash.v * SQUASH_Y_GAIN)
   const topY = inst.heroY - height * 0.5
-  const visibleH = Math.min(height, inst.groundY - topY)
+  const clipY = inst.beat === BEAT.PULL ? inst.groundY : Infinity
+  const visibleH = Math.min(height, clipY - topY)
   if (visibleH <= 0) return
   const opts = {
     sprite,

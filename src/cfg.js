@@ -469,20 +469,16 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
-        // Eye-flower on the lake island: cream calla spathe hiding a watching
-        // eye, dark stem and leafy tentacle vines on a mossy earth mound.
+        // Eye-flower on the lake island: a red stalk of white eye-berries
+        // (doll's eyes) and leafy tentacle vines on a mossy earth mound.
         //
         glowEyeFlower: {
           contour: PALETTE.gray0,      // Green-black contour around every part
-          petal: PALETTE.mauve5,       // Lit spathe lobe (warm cream)
-          petalShade: PALETTE.mauve4,  // Front lobe in shadow
-          petalInner: PALETTE.mauve3,  // Pink throat between the lobes
-          spadix: PALETTE.gold3,       // Eye stalk
-          spadixDark: PALETTE.gold0,   // Eye stalk rim
-          sclera: PALETTE.gray7,       // Eye white
-          iris: PALETTE.brown0,        // Dark brown iris
-          pupil: PALETTE.gray0,        // Pupil
-          stem: PALETTE.teal0,         // Flower stem
+          berry: PALETTE.gray7,        // Lit eye-berry (white)
+          berryShade: PALETTE.mauve4,  // Shaded underside of the berry
+          pupil: PALETTE.gray0,        // Berry pupil
+          stem: PALETTE.red0,          // Red stalk and berry stems
+          stemLight: PALETTE.red2,     // Lit edge of the stalk
           vine: PALETTE.green0,        // Tentacle vines
           leaf: PALETTE.green1,        // Leaf body
           leafLight: PALETTE.green2,   // Lit half of the leaf

@@ -12,9 +12,10 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/glow-st
 import { forestFloorPainterColors } from './forest-floor.js'
 
 //
-// Hill island in the left lake carrying a calla bush: a cream spathe whose
-// spadix holds a watching eye, a few closed buds and long grass blades. The
-// closer the hero comes, the harder the whole bush bends and stretches to him.
+// Hill island in the left lake carrying a doll's-eyes bush: a red stalk whose
+// top branches into short red stems, each holding a white eye-berry with a
+// dark pupil, over long grass blades. The closer the hero comes, the harder
+// the whole bush bends and stretches to him, and every berry watches him.
 //
 // The island runs off the left edge of the playfield (its left part sits under
 // the frame) and is the same mossy boulder hill as the one right of the tree,
@@ -68,11 +69,16 @@ const PLANT_Z = CFG.visual.zIndex.player - 0.5
 //
 const COLLIDER_H = 10
 //
-// Walkable box extends past the hill crest on the right and sits slightly lower
-// than the baked top line so landings feel grounded on the slope.
+// Walkable box extends past the hill crest on the right; its top edge aligns
+// with the lake surface so the hero lands at the waterline on the slope.
 //
 const COLLIDER_EXTEND_RIGHT = 52
-const COLLIDER_DROP = 14
+const COLLIDER_DROP = ISLAND_ABOVE_WATER
+//
+// Painted soil line (grab hole, landing crumbs) sits this far under the
+// mossy crest, above the waterline collider.
+//
+const SOIL_LINE_DROP = 14
 const COLLIDER_HIDE_POS = -5000
 const STAND_X_SLACK = 6
 const STAND_ABOVE = 14
@@ -121,7 +127,7 @@ const LEAN_MIN_LEN_FRAC = 0.6
 const REACH_TREE_GAP = 70
 //
 // Stem: an arc drooping toward the lake at rest; leaning, it stretches so the
-// flower head stops just short of the hero (spathe + eye + a small gap).
+// berry cluster stops just short of the hero (berries + a small gap).
 //
 const STEM_SEGMENTS = 14
 const STEM_LEN = 156
@@ -131,47 +137,59 @@ const STEM_SWAY_AMP = 0.08
 const STEM_SWAY_SPEED = 0.9
 const STEM_HERO_GAP = 104
 //
-// Main calla stem — at full lean its tip stops at this fraction of the lake
+// Main stalk — at full lean its tip stops at this fraction of the lake
 // width (blades may reach farther; whisper still uses hero-to-head distance).
 //
 const STEM_LAKE_REACH_FRAC = 0.5
 const STEM_W_BASE = 6
-const STEM_W_TIP = 4
+const STEM_W_TIP = 3
+const STEM_LIGHT_FRAC = 0.35
 const CONTOUR_PAD = 2
 //
-// Bud spathe in its own frame (u along the stem axis, v across it): a slim
-// furled funnel with a curled point.
+// Eye-berries on short red stems branching off the upper stalk, like the
+// doll's-eyes reference: big berries on long stems at the top, smaller ones
+// lower down. `at` is where the stem leaves the stalk (0 = root, 1 = tip),
+// `turn` its angle off the stalk heading (negative = left of it), `len` the
+// stem length and `r` the berry radius.
 //
-const SPATHE_SHAPE = [[0, 0], [0.12, 0.16], [0.4, 0.42], [0.7, 0.6], [0.92, 0.5], [1.02, 0.28], [1.06, 0], [1.14, -0.35], [1.22, -0.75], [1.32, -1.05], [1, -1], [0.7, -0.82], [0.42, -0.5], [0.15, -0.18]]
-const HOOK_PATH = [[1.22, -0.75], [1.32, -1.05], [1.25, -1.22], [1.12, -1.14]]
-const HOOK_W_BASE = 3
-const HOOK_W_TIP = 1.2
+const BERRIES = [
+  { at: 1, turn: -0.3, len: 26, r: 10, phase: 0.3 },
+  { at: 1, turn: 0.45, len: 20, r: 8.5, phase: 1.1 },
+  { at: 0.95, turn: -1, len: 38, r: 9.5, phase: 2.4 },
+  { at: 0.91, turn: 1.05, len: 40, r: 10, phase: 0.8 },
+  { at: 0.86, turn: -0.6, len: 18, r: 6, phase: 1.9 },
+  { at: 0.82, turn: 0.7, len: 22, r: 7, phase: 2.9 },
+  { at: 0.77, turn: -1.15, len: 32, r: 8.5, phase: 0.5 },
+  { at: 0.72, turn: 1.1, len: 18, r: 5.5, phase: 1.5 },
+  { at: 0.67, turn: -0.8, len: 22, r: 6.5, phase: 2.2 },
+  { at: 0.62, turn: 0.95, len: 26, r: 7, phase: 3.1 },
+  { at: 0.56, turn: -1, len: 15, r: 5, phase: 0.1 },
+  { at: 0.52, turn: 0.85, len: 17, r: 5.5, phase: 1.7 }
+]
+const BERRY_STEM_SEGMENTS = 4
+const BERRY_STEM_W_BASE = 3
+const BERRY_STEM_W_TIP = 2
 //
-// Flower head: two broad calla petals hinged at the stem tip, the eye on its
-// spadix between them. Each petal lives in its own frame (u along its spine,
-// v away from the head axis); the inner edge reaches over the axis so the
-// closed pair hides the eye, and the wide outer edge is the cream lobe with a
-// pink cupped face. The petal tip curls outward like the reference calla.
+// Berry stems curl upward toward their tips and sway on their own.
 //
-const FLOWER_LEN = 60
-const FLOWER_TURN = 0.7
-const PETAL_HALF_W = 26
-const PETAL_SHAPE = [[0, 0], [0.15, 0.35], [0.4, 0.85], [0.65, 1], [0.85, 0.8], [1, 0.42], [1.08, 0.05], [0.95, -0.22], [0.7, -0.4], [0.42, -0.42], [0.18, -0.25]]
-const PETAL_FACE_SHAPE = [[0.08, 0], [0.22, 0.28], [0.42, 0.66], [0.64, 0.78], [0.82, 0.6], [0.94, 0.28], [0.98, 0.04], [0.86, -0.12], [0.64, -0.24], [0.4, -0.26], [0.2, -0.14]]
-const PETAL_HOOK_PATH = [[1.04, 0.24], [1.16, 0.4], [1.2, 0.62], [1.1, 0.74]]
+const BERRY_STEM_CURL = 0.45
+const BERRY_SWAY_AMP = 0.12
+const BERRY_SWAY_SPEED = 1.4
 //
-// Spread of each petal off the head axis (radians): nearly shut while the
-// hero is far, wide apart as he comes close.
+// Berry look: shaded underside, then one dark pupil off centre. Pupils drift
+// at rest and lock onto the hero as the bush wakes (openness).
 //
-const PETAL_SPREAD_CLOSED = 0.04
-const PETAL_SPREAD_OPEN = 0.72
-const THROAT_SHOW = 0.05
-const THROAT_U = [0.45, 0.9]
+const BERRY_CONTOUR_W = 1.5
+const BERRY_SHADE_DROP = 0.22
+const BERRY_SHADE_FRAC = 0.86
+const BERRY_PUPIL_FRAC = 0.4
+const BERRY_LOOK_FRAC = 0.4
+const BERRY_REST_LOOK = Math.PI / 2
+const BERRY_REST_LOOK_SPREAD = 1.2
 //
-// Whispering: the petals flap apart and back in an uneven, syllable-like
-// rhythm, as wide as the whisper is loud.
+// Whispering: the pupils dilate in an uneven, syllable-like rhythm.
 //
-const MOUTH_SPREAD = 0.22
+const PUPIL_WHISPER_DILATE = 0.35
 const MOUTH_SYLLABLE_A = 9.3
 const MOUTH_SYLLABLE_B = 14.1
 const MOUTH_SYLLABLE_B_PHASE = 1.7
@@ -179,52 +197,11 @@ const MOUTH_SYLLABLE_A_W = 0.55
 const MOUTH_SYLLABLE_B_W = 0.45
 const MOUTH_WHISPER_SPEED = 3
 //
-// Openness follows distance from hero to the flower head (far = closed).
+// Openness follows distance from hero to the berry cluster (far = asleep).
 //
 const OPEN_FAR = 850
 const OPEN_NEAR = 450
 const OPEN_SPEED = 1.2
-//
-// Eye on the yellow spadix: tucked between the shut petals, it slides out
-// along the head axis as they part, staying centred between them.
-//
-const EYE_STALK_SEGMENTS = 3
-const EYE_ORIGIN_FRAC = 0.1
-const EYE_HIDDEN_EXT = 20
-const EYE_OUT_EXT = 34
-const EYE_OUT_FROM = 0.35
-const EYE_TURN = 0.2
-const EYE_STALK_SLACK = 0.92
-const EYE_STALK_STIFFNESS = 0.4
-const EYE_STALK_W = 4
-const EYE_R = 9
-const EYE_IRIS_FRAC = 0.58
-const EYE_PUPIL_FRAC = 0.32
-const EYE_LOOK_FRAC = 0.35
-const EYE_GLINT_FRAC = 0.18
-const EYE_CONTOUR_W = 1.5
-//
-// Closed side buds on their own stems, like the reference plant: one droops
-// left, one stands up, one droops right.
-//
-const BUDS = [
-  { dx: -12, angle: -1.95, bend: -1.5, len: 118, size: 0.6, phase: 0.6 },
-  { dx: -2, angle: -1.62, bend: 0.3, len: 146, size: 0.5, phase: 2.1 },
-  { dx: 12, angle: -1.25, bend: 1.7, len: 102, size: 0.55, phase: 1.2 }
-]
-const BUD_LEN = 52
-const BUD_HALF_W = 30
-const BUD_SEGMENTS = 8
-const BUD_BEND_POW = 1.8
-const BUD_WIDTH = 0.38
-const BUD_SWAY_AMP = 0.06
-const BUD_SWAY_SPEED = 1
-const BUD_STEM_W_BASE = 4
-const BUD_STEM_W_TIP = 3
-//
-// Buds turn only part of the way toward the hero.
-//
-const BUD_LEAN_FOLLOW = 0.3
 //
 // Long grass-like blades of the bush. `follow` is how far a blade turns toward
 // the hero at full lean (back blades on the far side barely move), `reach` the
@@ -362,20 +339,18 @@ const GRAB_HOLD_TREMBLE = 120
 const GRAB_AIM_SPRING = { k: 90, c: 15 }
 //
 // While the hero is hauled the stem aims no lower than this above the ground
-// line, and stem, head, eye and buds are held above it (the lake under the
-// island is see-through).
+// line, and stalk and berries are held above it (the lake under the island
+// is see-through).
 //
 const GRAB_AIM_ABOVE_GROUND = 44
 const GRAB_STEM_CLEAR = 4
 const GRAB_HEAD_CLEAR = 34
-const GRAB_EYE_CLEAR = EYE_R + 4
-const GRAB_BUD_CLEAR = 14
+const GRAB_BERRY_CLEAR = 12
 const GRAB_STEM_GAP = 64
 const GRAB_LEAN_SPEED = 2.5
 const GRAB_OPEN_SPEED = 3.2
 const GRAB_CLOSE_SPEED = 0.7
 const GRAB_BLADE_TILT_FOLLOW = 0.6
-const GRAB_BUD_TILT_FOLLOW = 0.4
 //
 // Coils that pass in front of the hero draw over him.
 //
@@ -462,19 +437,10 @@ export function create(cfg) {
     lean: 0,
     leanHero: { x: baseX, y: baseY },
     stemPts: makePoints(STEM_SEGMENTS + 1),
-    eyeStalk: IkChain.create({ segments: EYE_STALK_SEGMENTS, segLen: EYE_HIDDEN_EXT / EYE_STALK_SEGMENTS, x: baseX, y: baseY }),
-    eyeRest: makePoints(EYE_STALK_SEGMENTS + 1),
-    head: { x: baseX, y: baseY - STEM_LEN, axis: 0, eyeOut: 0 },
-    buds: BUDS.map(bud => ({ ...bud, pts: makePoints(BUD_SEGMENTS + 1) })),
+    head: { x: baseX, y: baseY - STEM_LEN },
+    berries: BERRIES.map(berry => ({ ...berry, pts: makePoints(BERRY_STEM_SEGMENTS + 1) })),
     blades: BLADES.map(blade => ({ ...blade, pts: makePoints(BLADE_SEGMENTS + 1) })),
     colors: buildColors(k),
-    hookPts: makePoints(HOOK_PATH.length),
-    petalHookPts: makePoints(PETAL_HOOK_PATH.length),
-    spatheIdx: fanIndices(SPATHE_SHAPE.length),
-    petalIdx: fanIndices(PETAL_SHAPE.length),
-    petalFaceIdx: fanIndices(PETAL_FACE_SHAPE.length),
-    throatShape: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-    throatIdx: fanIndices(5),
     batch: PolyBatch.create(),
     frontBatch: PolyBatch.create(),
     grab: null,
@@ -592,10 +558,23 @@ export function tickGrab(inst, dt) {
   inst.leanHero.y = grab.aim.y
   const hero = { x: grab.prey.x, y: grab.prey.y }
   updateStem(inst, hero, t)
-  updateEyeStalk(inst, hero)
-  inst.buds.forEach(bud => updateBud(inst, bud, hero, t))
+  inst.berries.forEach(berry => updateBerry(inst, berry, t))
   inst.blades.forEach(blade => !blade.tentacle && updateBlade(inst, blade, hero, t))
   grab.tentacles.forEach(tent => poseTentacle(inst, tent, t))
+}
+
+/**
+ * Refreshes island visibility and parks / places its collider. The level
+ * calls this before its own island checks: the plant's update runs after the
+ * level's, so on a spawn right on the island the first frame would still see
+ * no island and drown the hero.
+ * @param {Object|null} inst - Eye-flower inst
+ */
+export function syncVisible(inst) {
+  if (!inst) return
+  inst.visible = inst.isVisible()
+  inst.collider.pos.x = inst.visible ? inst.x1 : COLLIDER_HIDE_POS
+  inst.collider.pos.y = inst.visible ? inst.colliderTopY : COLLIDER_HIDE_POS
 }
 
 /**
@@ -629,24 +608,22 @@ export function predatorMinX(inst) {
 export function isOnIsland(inst, footX, footY) {
   if (!inst?.visible) return false
   if (footX < inst.x1 - STAND_X_SLACK || footX > inst.colliderWalkX2 + STAND_X_SLACK) return false
-  const topY = inst.colliderTopY
-  return footY >= topY - STAND_ABOVE && footY <= topY + STAND_BELOW
+  return isInIslandStandBand(inst, footY)
 }
 
 /**
- * True when the feet come down on the bank right of the collider, where the
- * body still overlaps the painted shore (the collider itself is too short
- * to catch him there, so he would drop into the lake).
+ * True when the feet are anywhere over the island (collider top and the bank
+ * up to the shore) at island height — the flower's grab trigger, regardless
+ * of velocity or what he stands on.
  * @param {Object|null} inst - Eye-flower inst
  * @param {number} footX - Feet world X
  * @param {number} footY - Feet world Y
  * @returns {boolean}
  */
-export function isOnIslandBank(inst, footX, footY) {
+export function containsHero(inst, footX, footY) {
   if (!inst?.visible) return false
-  if (footX <= inst.colliderWalkX2 || footX > inst.shoreX + BANK_BODY_REACH) return false
-  const topY = inst.colliderTopY
-  return footY >= topY - STAND_ABOVE && footY <= topY + STAND_BELOW
+  if (footX < inst.x1 - STAND_X_SLACK || footX > inst.shoreX + BANK_BODY_REACH) return false
+  return isInIslandStandBand(inst, footY)
 }
 
 /**
@@ -672,9 +649,19 @@ export function sideWallX(inst, footY) {
  * @param {{y: number, water: boolean}} out - Receives the surface Y and whether it is water
  */
 export function landingSurface(inst, x, out) {
-  const groundY = mossyHillTopY(inst.hill, Math.max(inst.x1, x)) + COLLIDER_DROP
+  const groundY = soilLineY(inst, x)
   out.water = x > inst.x2 || groundY >= inst.waterY
   out.y = out.water ? inst.waterY : groundY
+}
+
+/**
+ * Painted island soil line at world X (never below the lake surface).
+ * @param {Object} inst - Eye-flower inst
+ * @param {number} x - World X
+ * @returns {number}
+ */
+export function soilLineY(inst, x) {
+  return Math.min(inst.waterY, mossyHillTopY(inst.hill, Math.max(inst.x1, x)) + SOIL_LINE_DROP)
 }
 
 /**
@@ -736,12 +723,10 @@ export function minHeroXOutsidePlantWhisper(lakeX1, waterSurfaceY, heroY) {
 }
 
 //
-// Shows / hides the island, then leans the bush and animates stem, eye and buds.
+// Shows / hides the island, then leans the bush and animates stalk and berries.
 //
 function onUpdate(inst) {
-  inst.visible = inst.isVisible()
-  inst.collider.pos.x = inst.visible ? inst.x1 : COLLIDER_HIDE_POS
-  inst.collider.pos.y = inst.visible ? inst.colliderTopY : COLLIDER_HIDE_POS
+  syncVisible(inst)
   if (!inst.visible || inst.grab) return
   const dt = inst.k.dt()
   const t = inst.k.time()
@@ -753,8 +738,7 @@ function onUpdate(inst) {
   const headDist = hero ? Math.hypot(hero.x - inst.head.x, hero.y - inst.head.y) : Infinity
   inst.open = approach(inst.open, smoothstep(OPEN_FAR, OPEN_NEAR, headDist), OPEN_SPEED * dt)
   updateStem(inst, hero, t)
-  updateEyeStalk(inst, hero)
-  inst.buds.forEach(bud => updateBud(inst, bud, hero, t))
+  inst.berries.forEach(berry => updateBerry(inst, berry, t))
   inst.blades.forEach(blade => updateBlade(inst, blade, hero, t))
 }
 
@@ -778,34 +762,28 @@ function updateStem(inst, hero, t) {
     keepAboveGround(pts, inst.grab.clipY - GRAB_STEM_CLEAR)
     tip.y = Math.min(tip.y, inst.grab.clipY - GRAB_HEAD_CLEAR)
   }
-  const prev = pts[STEM_SEGMENTS - 1]
-  const stemAngle = Math.atan2(tip.y - prev.y, tip.x - prev.x)
-  const aim = inst.leanHero
-  const heroAngle = Math.atan2(aim.y - tip.y, aim.x - tip.x)
   inst.head.x = tip.x
   inst.head.y = tip.y
-  inst.head.axis = stemAngle + angleDelta(stemAngle, heroAngle) * inst.open * FLOWER_TURN
 }
 
 //
-// Spadix bends from the spathe axis toward the hero as it rises out.
+// Berry stem: leaves the stalk at its `at` point, angled off the stalk's
+// local heading, curling upward toward the berry.
 //
-function updateEyeStalk(inst, hero) {
-  const head = inst.head
-  head.eyeOut = smoothstep(EYE_OUT_FROM, 1, inst.open)
-  const ext = EYE_HIDDEN_EXT + (EYE_OUT_EXT - EYE_HIDDEN_EXT) * head.eyeOut
-  const ox = head.x + Math.cos(head.axis) * FLOWER_LEN * EYE_ORIGIN_FRAC
-  const oy = head.y + Math.sin(head.axis) * FLOWER_LEN * EYE_ORIGIN_FRAC
-  const heroAngle = hero ? Math.atan2(hero.y - oy, hero.x - ox) : head.axis
-  const aim = head.axis + angleDelta(head.axis, heroAngle) * head.eyeOut * EYE_TURN
-  const segLen = ext / EYE_STALK_SEGMENTS
-  IkChain.setSegLen(inst.eyeStalk, segLen)
-  fillArc(inst.eyeRest, ox, oy, head.axis, 0, 1, segLen)
-  IkChain.solve(inst.eyeStalk, ox, oy, ox + Math.cos(aim) * ext * EYE_STALK_SLACK, oy + Math.sin(aim) * ext * EYE_STALK_SLACK, {
-    rest: inst.eyeRest,
-    stiffness: EYE_STALK_STIFFNESS
-  })
-  inst.grab && keepAboveGround(inst.eyeStalk.pts, inst.grab.clipY - GRAB_EYE_CLEAR)
+function updateBerry(inst, berry, t) {
+  const pts = inst.stemPts
+  const f = Math.min(berry.at * STEM_SEGMENTS, STEM_SEGMENTS - 0.001)
+  const i = Math.floor(f)
+  const a = pts[i]
+  const b = pts[i + 1]
+  const u = f - i
+  const heading = Math.atan2(b.y - a.y, b.x - a.x)
+  const sway = Math.sin(t * BERRY_SWAY_SPEED + berry.phase) * BERRY_SWAY_AMP
+  const curl = -Math.sign(berry.turn) * BERRY_STEM_CURL
+  const x = a.x + (b.x - a.x) * u
+  const y = a.y + (b.y - a.y) * u
+  fillArc(berry.pts, x, y, heading + berry.turn + sway, curl, 1, berry.len / BERRY_STEM_SEGMENTS)
+  inst.grab && keepAboveGround(berry.pts, inst.grab.clipY - GRAB_BERRY_CLEAR)
 }
 
 //
@@ -836,17 +814,6 @@ function tickLeanHeroAim(inst, hero, dt) {
   lag.x = approach(lag.x, tx, step)
   lag.y = approach(lag.y, ty, step)
 }
-function updateBud(inst, bud, hero, t) {
-  const rootX = inst.baseX + bud.dx
-  const sway = Math.sin(t * BUD_SWAY_SPEED + bud.phase) * BUD_SWAY_AMP
-  const aim = inst.leanHero
-  const heroAngle = Math.atan2(aim.y - inst.baseY, aim.x - rootX)
-  const recoil = inst.grab ? inst.grab.tilt.v * GRAB_BUD_TILT_FOLLOW : 0
-  const angle = bud.angle + sway + recoil + angleDelta(bud.angle, heroAngle) * inst.lean * BUD_LEAN_FOLLOW
-  fillArc(bud.pts, rootX, inst.baseY, angle, bud.bend, BUD_BEND_POW, bud.len / BUD_SEGMENTS)
-  inst.grab && keepAboveGround(bud.pts, inst.grab.clipY - GRAB_BUD_CLEAR)
-}
-
 //
 // Grass blade: a slightly curved rest pose blended toward a bowed arc that
 // stretches over its share of the way to the hero.
@@ -1098,11 +1065,10 @@ function blendArc(rest, lean, amount) {
 function onDraw(inst) {
   const sink = grabSink(inst)
   if (!inst.visible || sink >= GRAB_SINK_DEPTH) return
-  const { batch, colors: c } = inst
-  inst.buds.forEach(bud => addBud(inst, bud))
+  const batch = inst.batch
   inst.blades.forEach(blade => addBlade(inst, blade))
-  addTaperedPath(batch, inst.stemPts, STEM_W_BASE, STEM_W_TIP, c.contour, c.stem)
-  addFlower(inst)
+  addStalk(inst)
+  inst.berries.forEach(berry => addBerry(inst, berry))
   PolyBatch.flush(batch, inst.k, 1, sink, sinkFloorY(inst, sink))
 }
 
@@ -1121,116 +1087,50 @@ function sinkFloorY(inst, sink) {
 }
 
 //
-// Thin stem ending in a furled spathe (no throat, no eye).
+// Red stalk and berry stems: every contour first, then every fill, so no
+// contour cuts across the stalk where a stem branches off. A thin lit line
+// runs up the stalk.
 //
-function addBud(inst, bud) {
-  const c = inst.colors
-  addTaperedPath(inst.batch, bud.pts, BUD_STEM_W_BASE, BUD_STEM_W_TIP, c.contour, c.stem)
-  const tip = bud.pts[BUD_SEGMENTS]
-  const prev = bud.pts[BUD_SEGMENTS - 1]
-  const axis = Math.atan2(tip.y - prev.y, tip.x - prev.x)
-  addSpathe(inst, tip.x, tip.y, axis, BUD_LEN * bud.size, BUD_HALF_W * bud.size * BUD_WIDTH, c.petalShade)
+function addStalk(inst) {
+  const { batch, colors: c, stemPts, berries } = inst
+  addTaperedPass(batch, stemPts, STEM_W_BASE + CONTOUR_PAD, STEM_W_TIP + CONTOUR_PAD, c.contour)
+  berries.forEach(berry => addTaperedPass(batch, berry.pts, BERRY_STEM_W_BASE + CONTOUR_PAD, BERRY_STEM_W_TIP + CONTOUR_PAD, c.contour))
+  addTaperedPass(batch, stemPts, STEM_W_BASE, STEM_W_TIP, c.stem)
+  berries.forEach(berry => addTaperedPass(batch, berry.pts, BERRY_STEM_W_BASE, BERRY_STEM_W_TIP, c.stem))
+  addTaperedPass(batch, stemPts, STEM_W_BASE * STEM_LIGHT_FRAC, STEM_W_TIP * STEM_LIGHT_FRAC, c.stemLight)
 }
 
 //
-// Pink throat between the parted petals, spadix + eye on it, then the back
-// (upper) petal and the front (lower) one. Shut, the petals cover the eye;
-// drawn after it, they never hide it once parted.
+// White eye-berry at the end of its stem: contour, shaded underside, lit
+// face, then one dark pupil. Pupils drift down at rest, each a little
+// differently, and swing onto the hero as the bush wakes; whispering dilates them.
 //
-function addFlower(inst) {
-  const { head, colors: c } = inst
-  const side = spatheSide(head.axis)
-  const spread = PETAL_SPREAD_CLOSED + (PETAL_SPREAD_OPEN - PETAL_SPREAD_CLOSED) * inst.open +
-    MOUTH_SPREAD * mouthOpen(inst)
-  inst.open > THROAT_SHOW && addThroat(inst, spread)
-  addEye(inst)
-  addPetal(inst, -side, spread, c.petal)
-  addPetal(inst, side, spread, c.petalShade)
+function addBerry(inst, berry) {
+  const { batch, colors: c } = inst
+  const eye = berry.pts[BERRY_STEM_SEGMENTS]
+  const r = berry.r
+  const hero = inst.getHeroPos()
+  const restLook = BERRY_REST_LOOK + Math.sin(berry.phase * 2) * BERRY_REST_LOOK_SPREAD
+  const heroLook = hero ? Math.atan2(hero.y - eye.y, hero.x - eye.x) : restLook
+  const look = restLook + angleDelta(restLook, heroLook) * inst.open
+  const pupilR = r * BERRY_PUPIL_FRAC * (1 + whisperPulse(inst) * PUPIL_WHISPER_DILATE)
+  PolyBatch.addDisc(batch, eye.x, eye.y, r + BERRY_CONTOUR_W, c.contour)
+  PolyBatch.addDisc(batch, eye.x, eye.y, r, c.berryShade)
+  PolyBatch.addDisc(batch, eye.x, eye.y - r * BERRY_SHADE_DROP, r * BERRY_SHADE_FRAC, c.berry)
+  PolyBatch.addDisc(batch, eye.x + Math.cos(look) * r * BERRY_LOOK_FRAC, eye.y + Math.sin(look) * r * BERRY_LOOK_FRAC, pupilR, c.pupil)
 }
 
 //
-// One petal turned `dir * spread` off the head axis; v points away from the
-// axis on its side, so the inner edge reaches back across it.
+// 0..1 whisper beat this frame: whisper loudness times an uneven syllable
+// beat (two detuned waves, silent whenever their sum dips below zero), only
+// as far as the bush is awake.
 //
-function addPetal(inst, dir, spread, rimColor) {
-  const { head, colors: c, batch } = inst
-  const angle = head.axis + dir * spread
-  const cos = Math.cos(angle)
-  const sin = Math.sin(angle)
-  const sy = dir * PETAL_HALF_W
-  const padSy = dir * (PETAL_HALF_W + CONTOUR_PAD)
-  PolyBatch.addShape(batch, PETAL_SHAPE, inst.petalIdx, head.x - cos * CONTOUR_PAD, head.y - sin * CONTOUR_PAD,
-    FLOWER_LEN + CONTOUR_PAD * 2, padSy, cos, sin, c.contour)
-  PolyBatch.addShape(batch, PETAL_SHAPE, inst.petalIdx, head.x, head.y, FLOWER_LEN, sy, cos, sin, rimColor)
-  PolyBatch.addShape(batch, PETAL_FACE_SHAPE, inst.petalFaceIdx, head.x, head.y, FLOWER_LEN, sy, cos, sin, c.petalInner)
-  mapPath(inst.petalHookPts, PETAL_HOOK_PATH, head.x, head.y, FLOWER_LEN, sy, cos, sin)
-  addTaperedPath(batch, inst.petalHookPts, HOOK_W_BASE, HOOK_W_TIP, c.contour, rimColor)
-}
-
-//
-// Wedge between the two petal spines (head frame), behind the eye.
-//
-function addThroat(inst, spread) {
-  const { head, colors: c } = inst
-  const shape = inst.throatShape
-  const cosS = Math.cos(spread)
-  const sinS = Math.sin(spread)
-  shape[1][0] = THROAT_U[0] * cosS
-  shape[1][1] = -THROAT_U[0] * sinS
-  shape[2][0] = THROAT_U[1] * cosS
-  shape[2][1] = -THROAT_U[1] * sinS
-  shape[3][0] = THROAT_U[1] * cosS
-  shape[3][1] = THROAT_U[1] * sinS
-  shape[4][0] = THROAT_U[0] * cosS
-  shape[4][1] = THROAT_U[0] * sinS
-  PolyBatch.addShape(inst.batch, shape, inst.throatIdx, head.x, head.y, FLOWER_LEN, FLOWER_LEN,
-    Math.cos(head.axis), Math.sin(head.axis), c.petalInner)
-}
-
-//
-// 0..1 mouth opening this frame: whisper loudness times an uneven syllable
-// beat (two detuned waves, closed whenever their sum dips below zero), only
-// as far as the spathe itself is open.
-//
-function mouthOpen(inst) {
+function whisperPulse(inst) {
   if (inst.whisperLevel <= 0) return 0
   const t = inst.k.time()
   const beat = Math.sin(t * MOUTH_SYLLABLE_A) * MOUTH_SYLLABLE_A_W +
     Math.sin(t * MOUTH_SYLLABLE_B + MOUTH_SYLLABLE_B_PHASE) * MOUTH_SYLLABLE_B_W
   return inst.whisperLevel * inst.open * Math.min(1, Math.max(0, beat))
-}
-
-//
-// Contoured bud spathe plus its curled point. The long lip always faces up,
-// whichever way the axis points.
-//
-function addSpathe(inst, x, y, axis, len, halfW, color, shape = SPATHE_SHAPE) {
-  const { colors: c, batch } = inst
-  const side = spatheSide(axis)
-  const cos = Math.cos(axis)
-  const sin = Math.sin(axis)
-  PolyBatch.addShape(batch, shape, inst.spatheIdx, x - cos * CONTOUR_PAD, y - sin * CONTOUR_PAD,
-    len + CONTOUR_PAD * 2, (halfW + CONTOUR_PAD) * side, cos, sin, c.contour)
-  PolyBatch.addShape(batch, shape, inst.spatheIdx, x, y, len, halfW * side, cos, sin, color)
-  mapPath(inst.hookPts, HOOK_PATH, x, y, len, halfW * side, cos, sin)
-  addTaperedPath(batch, inst.hookPts, HOOK_W_BASE, HOOK_W_TIP, c.contour, color)
-}
-
-function addEye(inst) {
-  const c = inst.colors
-  const batch = inst.batch
-  const pts = inst.eyeStalk.pts
-  addTaperedPath(batch, pts, EYE_STALK_W, EYE_STALK_W, c.spadixDark, c.spadix)
-  const eye = pts[pts.length - 1]
-  const hero = inst.getHeroPos()
-  const lookAngle = hero ? Math.atan2(hero.y - eye.y, hero.x - eye.x) : inst.head.axis
-  const lookX = eye.x + Math.cos(lookAngle) * EYE_R * EYE_LOOK_FRAC
-  const lookY = eye.y + Math.sin(lookAngle) * EYE_R * EYE_LOOK_FRAC
-  PolyBatch.addDisc(batch, eye.x, eye.y, EYE_R + EYE_CONTOUR_W, c.contour)
-  PolyBatch.addDisc(batch, eye.x, eye.y, EYE_R, c.sclera)
-  PolyBatch.addDisc(batch, lookX, lookY, EYE_R * EYE_IRIS_FRAC, c.iris)
-  PolyBatch.addDisc(batch, lookX, lookY, EYE_R * EYE_PUPIL_FRAC, c.pupil)
-  PolyBatch.addDisc(batch, lookX - EYE_R * EYE_GLINT_FRAC, lookY - EYE_R * EYE_GLINT_FRAC, EYE_R * EYE_GLINT_FRAC, c.sclera)
 }
 
 //
@@ -1301,13 +1201,8 @@ function drawGrabFront(inst) {
 }
 
 //
-// Round-jointed tapered polyline: a contour pass under a fill pass.
+// One round-jointed tapered polyline pass.
 //
-function addTaperedPath(batch, pts, wBase, wTip, contour, fill) {
-  addTaperedPass(batch, pts, wBase + CONTOUR_PAD, wTip + CONTOUR_PAD, contour)
-  addTaperedPass(batch, pts, wBase, wTip, fill)
-}
-
 function addTaperedPass(batch, pts, wBase, wTip, color) {
   const last = pts.length - 1
   for (let i = 0; i < last; i++) {
@@ -1315,25 +1210,6 @@ function addTaperedPass(batch, pts, wBase, wTip, color) {
     PolyBatch.addLine(batch, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, w, color)
     PolyBatch.addDisc(batch, pts[i + 1].x, pts[i + 1].y, w * 0.5, color)
   }
-}
-
-//
-// Places a local (u, v) path into world points, same transform as addShape.
-//
-function mapPath(out, path, x, y, sx, sy, cos, sin) {
-  path.forEach(([u, v], i) => {
-    const px = u * sx
-    const py = v * sy
-    out[i].x = x + px * cos - py * sin
-    out[i].y = y + px * sin + py * cos
-  })
-}
-
-//
-// Negative v is "up" for an axis pointing right; mirror it for a left axis.
-//
-function spatheSide(axis) {
-  return Math.cos(axis) >= 0 ? 1 : -1
 }
 
 function drawIsland(inst) {
@@ -1422,7 +1298,7 @@ function fillArc(out, x, y, angle, bend, pow, segLen) {
 
 function buildColors(k) {
   const pal = GLOW_PAL.glowEyeFlower
-  const keys = ['contour', 'petal', 'petalShade', 'petalInner', 'spadix', 'spadixDark', 'sclera', 'iris', 'pupil', 'stem', 'leaf', 'leafLight']
+  const keys = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight', 'leaf', 'leafLight']
   return Object.fromEntries(keys.map(key => [key, kaplayRgb(k, pal[key])]))
 }
 
@@ -1431,14 +1307,16 @@ function kaplayRgb(k, hex) {
   return k.rgb(c.r, c.g, c.b)
 }
 
-function fanIndices(count) {
-  const out = []
-  for (let i = 1; i < count - 1; i++) out.push(0, i, i + 1)
-  return out
-}
-
 function makePoints(count) {
   return Array.from({ length: count }, () => ({ x: 0, y: 0 }))
+}
+
+//
+// The collider sits at the waterline but the painted crest (and the stick a
+// rider docks with) is higher — feet anywhere from the crest down count.
+//
+function isInIslandStandBand(inst, footY) {
+  return footY >= inst.topY - STAND_ABOVE && footY <= inst.colliderTopY + STAND_BELOW
 }
 
 function smoothstep(edge0, edge1, v) {

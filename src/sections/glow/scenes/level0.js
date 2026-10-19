@@ -100,7 +100,6 @@ import {
   restoreFallenAnchorFruit,
   tickGlowTreeFruits
 } from '../utils/glow-tree-fruit.js'
-import { applyGlowExperienceDelta, readGlowExperience } from '../utils/glow-experience.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as ChainBuoy from '../utils/glow-chain-buoy.js'
 import * as ChainEyeTramp from '../utils/glow-chain-eye-trampoline.js'
@@ -986,14 +985,9 @@ const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
 // HUD life-icon (the "teacher") hover tooltip — same as touch lesson 0.
 //
-const LIFE_TOOLTIP_TEXT = 'Your experience (exp)'
+const LIFE_TOOLTIP_TEXT = 'Teacher'
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
-const LIFE_SCORE_TOOLTIP_SIZE = 44
-const LIFE_SCORE_TOOLTIP_Y_OFFSET = 50
-const LIFE_SCORE_TOOLTIP_CENTER_Y_OFFSET = -6
-const LIFE_SCORE_TOOLTIP_CENTER_Y_LIFT_FRAC = 0.5
-//
 // Drowning — land on the lake floor, then sink under the fill with the hint.
 //
 const WATER_SURFACE_Y = FLOOR_Y - 8
@@ -1894,8 +1888,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
     pinGlowHudFixed(levelIndicator)
     LevelIndicator.revealLifeHud(levelIndicator, false)
-    levelIndicator.updateLifeScore?.(readGlowExperience())
-    syncGlowLifeScoreVisibility(levelIndicator)
     set(KEY_LIFE_SHOWN, true)
     if (await glowBootstrapPause(bootstrap, 76, session)) return
     if (await glowBootstrapPause(bootstrap, 78, session)) return
@@ -2401,16 +2393,6 @@ function createSmallHeroTooltip(inst) {
       visible: () => glowTeacherHudHoverVisible(inst),
       screenSpace: true
     }, {
-      x: () => glowLifeScoreTooltipCenter(inst).x,
-      y: () => glowLifeScoreTooltipCenter(inst).y,
-      width: LIFE_SCORE_TOOLTIP_SIZE,
-      height: LIFE_SCORE_TOOLTIP_SIZE,
-      text: LIFE_TOOLTIP_TEXT,
-      offsetY: LIFE_SCORE_TOOLTIP_Y_OFFSET,
-      forceBelow: true,
-      visible: () => glowTeacherHudHoverVisible(inst),
-      screenSpace: true
-    }, {
       x: () => inst.branchTrampState?.x ?? -1000,
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
       width: TRAMP_TOTAL_W,
@@ -2658,27 +2640,15 @@ function createGlowLevelIndicator(k) {
     heroEyeWhiteColor: HERO_BODY_COLOR,
     heroPostBakeCanvas: applyGlowHudSharpBake,
     hudPostBakeCanvas: applyGlowHudSharpBake,
-    //
-    // White score numerals with a black shadow, always on.
-    //
-    scoreColorHex: HERO_BODY_COLOR,
     hudScoreFlat: false,
     topPlatformHeight: TOP_MARGIN,
     sideWallWidth: LEFT_MARGIN,
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
-    hideScoreboard: true
+    hideScoreboard: true,
+    hideLifeScore: true
   })
   pinGlowHudFixed(indicator)
   return indicator
-}
-//
-// Experience numeral is shown whenever the life HUD is revealed (including 0).
-//
-function syncGlowLifeScoreVisibility(indicator) {
-  if (!indicator) return
-  const show = indicator.lifeRevealed
-  indicator.lifeScoreText && (indicator.lifeScoreText.hidden = !show)
-  indicator.lifeScoreOutlines?.forEach(o => { o.hidden = !show })
 }
 //
 // Life HUD for pit-mushroom nudges — shown as soon as an exploration hint applies.
@@ -2687,9 +2657,6 @@ function revealGlowTeacherHudForExplorationHintsIfNeeded(inst) {
   const indicator = inst.levelIndicator
   if (!indicator || indicator.lifeRevealed || !inst.pit) return
   LevelIndicator.revealLifeHud(indicator, false)
-  const score = readGlowExperience()
-  indicator.updateLifeScore?.(score)
-  syncGlowLifeScoreVisibility(indicator)
   set(KEY_LIFE_SHOWN, true)
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
@@ -2817,19 +2784,6 @@ function appendGlowProximityTarget(targetXs, x) {
 function glowTeacherHudHoverPos(inst) {
   const anchor = glowTeacherHudAnchor(inst)
   return anchor ?? { x: -1000, y: -1000 }
-}
-//
-// Baked life-score sprites anchor left; tooltip pointer needs the numeral centre.
-//
-function glowLifeScoreTooltipCenter(inst) {
-  const t = inst.levelIndicator?.lifeScoreText
-  if (!t?.pos) return { x: -1000, y: -1000 }
-  const w = t.width ?? LIFE_SCORE_TOOLTIP_SIZE
-  const h = t.height ?? LIFE_SCORE_TOOLTIP_SIZE
-  return {
-    x: t.pos.x + w * 0.5,
-    y: t.pos.y + h * (0.5 - LIFE_SCORE_TOOLTIP_CENTER_Y_LIFT_FRAC) + LIFE_SCORE_TOOLTIP_CENTER_Y_OFFSET
-  }
 }
 function glowTeacherHudHoverText(inst) {
   if (glowTeacherCaveMushroomHoverEligible(inst)) return PIT_CAVE_HINT_TEXT
@@ -7315,19 +7269,15 @@ function finishDrowning(inst) {
   })
 }
 //
-// Shared life-HUD update for any death: −1 experience (floor 0), reveal/flash/
-// re-tint the life icon and its particle burst, gentle chime. Shared by drowning
-// and touch death.
+// Shared life-HUD update for any death: reveal/flash/re-tint the life icon and
+// its particle burst, gentle chime. Shared by drowning and touch death.
 //
 function bumpGlowLifeHudOnDeath(inst) {
-  const newLife = applyGlowExperienceDelta(-1)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k)
   }
   syncGlowFpsHudVisibility(inst)
   if (!inst.levelIndicator?.lifeRevealed) return
-  inst.levelIndicator.updateLifeScore?.(newLife)
-  syncGlowLifeScoreVisibility(inst.levelIndicator)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
     LevelIndicator.syncLifeHudGrey(inst.levelIndicator, false)
@@ -8008,6 +7958,7 @@ function syncGlowHeroTrampolinePads(inst, char, heroX, footY) {
 function onUpdate(inst) {
   const k = inst.k
   inst.zones._sceneRef = inst
+  EyeFlower.syncVisible(inst.eyeFlower)
   if (inst._glowBirdsBootstrapKick) {
     inst._glowBirdsBootstrapKick = false
     ensureGlowBirdsBackgroundPlaying(inst)
@@ -8018,6 +7969,7 @@ function onUpdate(inst) {
     updateGlowCamera(inst)
     return
   }
+  if (!inst.deathHandled && tryStartGlowFlowerGrab(inst)) return
   syncGlowPredatorPatrolBounds(inst)
   tickGlowTreeFruits(inst, k.dt(), FLOOR_Y)
   inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
@@ -8092,7 +8044,6 @@ function onUpdate(inst) {
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
-  if (tryStartGlowFlowerGrab(inst, heroX, footY)) return
   trackGlowSafeHeroPose(inst, char, heroX, footY, grounded)
   //
   // refreshGlowMainGroundJumpState clears wasJumping before foot bursts run —
@@ -8285,34 +8236,19 @@ function syncGlowPredatorPatrolBounds(inst) {
   pred.x > pred.maxX && (pred.x = pred.maxX)
 }
 //
-// The flower takes the hero the moment his feet reach the island top — however
-// he got there (jump off the stick, fall, walk). It does not wait for Kaplay's
-// grounded flag or the twig's rider lock: on landing frames those can still
-// report the stick or the air, and the stick never reaches over the island.
-// A fly-over (still rising) or a brush against its side never counts.
+// Hero on the island means grabbed — however he got there and whatever the
+// physics, stick or input state says. Runs first in the level update, before
+// the stick, the centipede and the lake checks can move or drown him.
 //
-function tryStartGlowFlowerGrab(inst, heroX, footY) {
-  if (FlowerGrab.isActive(inst.flowerGrab)) return false
-  if (!isHeroStandingOnGlowIsland(inst, heroX, footY)) return false
-  destroyStrayGlowHeroBody(inst.k, inst.heroInst.character)
-  HorizFallTwig.releasePredatorAtIsland(inst.shoreFallTwigs, inst)
-  FlowerGrab.start(inst.flowerGrab, inst.eyeFlower.colliderTopY)
-  return true
-}
-//
-// Feet on the island collider (Kaplay contact) or inside the island top band,
-// down at its top line and not moving up. The bank past the collider counts
-// too, unless he is still standing on the stick that docks beside it.
-//
-function isHeroStandingOnGlowIsland(inst, heroX, footY) {
+function tryStartGlowFlowerGrab(inst) {
+  if (!inst.flowerGrab || FlowerGrab.isActive(inst.flowerGrab)) return false
   const char = inst.heroInst?.character
-  const flower = inst.eyeFlower
-  if (!flower?.visible || !char) return false
-  if (char.curPlatform?.() === flower.collider) return true
-  if ((char.vel?.y ?? 0) < 0 || footY < flower.colliderTopY) return false
-  if (EyeFlower.isOnIsland(flower, heroX, footY)) return true
-  return EyeFlower.isOnIslandBank(flower, heroX, footY) &&
-    !HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)
+  if (!char?.pos) return false
+  if (!EyeFlower.containsHero(inst.eyeFlower, char.pos.x, char.pos.y + SURFACE_DETECT_Y)) return false
+  destroyStrayGlowHeroBody(inst.k, char)
+  HorizFallTwig.releasePredatorAtIsland(inst.shoreFallTwigs, inst)
+  FlowerGrab.start(inst.flowerGrab)
+  return true
 }
 //
 // While the flower drags the hero away the level only runs the sequence,

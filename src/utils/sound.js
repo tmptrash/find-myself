@@ -28,6 +28,20 @@ let globalRainStop = null
 //
 const CALM_PAD_MASTER = 0.13
 //
+// Glow anchor apple hitting the ground: short, soft, low thud.
+//
+const APPLE_THUD_VOLUME = 0.5
+const APPLE_THUD_DURATION = 0.06
+const APPLE_THUD_ATTACK = 0.003
+const APPLE_THUD_FREQ_START = 150
+const APPLE_THUD_FREQ_JITTER = 20
+const APPLE_THUD_FREQ_END = 70
+const APPLE_THUD_NOISE_DURATION = 0.03
+const APPLE_THUD_NOISE_CUTOFF = 260
+const APPLE_THUD_NOISE_Q = 0.5
+const APPLE_THUD_NOISE_MIX = 0.35
+const APPLE_THUD_SILENT = 0.001
+//
 // Glow spiky tomato burst: noise blast, sub thump and a short shard rattle.
 //
 const TOMATO_BLAST_DURATION = 0.7
@@ -1573,6 +1587,14 @@ export function playGlowEarTreeShake(instance) {
   playGlowSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 0.55, 0.11)
 }
 
+//
+// Anchor apple knocked from the start branch — soft padded thump when it drops.
+//
+export function playGlowAppleSoftFall(instance) {
+  if (!instance?.audioContext) return
+  playGlowAppleSoftImpact(instance, instance.landGain, CFG.audio.sfx.land * APPLE_THUD_VOLUME)
+}
+
 export function playGlowTomatoExplosion(instance) {
   if (!instance?.audioContext) return
   const ctx = instance.audioContext
@@ -1698,8 +1720,51 @@ function playGlowWoodKnockStep(instance) {
 }
 
 //
+// Apple on soft forest floor: a dull low "tuk" — a quick sine body dropping
+// in pitch plus a heavily muffled noise puff, both gone within ~60 ms.
+//
+function playGlowAppleSoftImpact(instance, destinationGain, peakAmp) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const end = now + APPLE_THUD_DURATION
+  const bufferSize = Math.floor(ctx.sampleRate * APPLE_THUD_NOISE_DURATION)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(APPLE_THUD_NOISE_CUTOFF, now)
+  filter.Q.value = APPLE_THUD_NOISE_Q
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(peakAmp * APPLE_THUD_NOISE_MIX, now)
+  noiseGain.gain.exponentialRampToValueAtTime(APPLE_THUD_SILENT, now + APPLE_THUD_NOISE_DURATION)
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(destinationGain)
+  noise.start(now)
+  noise.stop(now + APPLE_THUD_NOISE_DURATION)
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(APPLE_THUD_FREQ_START + Math.random() * APPLE_THUD_FREQ_JITTER, now)
+  osc.frequency.exponentialRampToValueAtTime(APPLE_THUD_FREQ_END, end)
+  const oscGain = ctx.createGain()
+  oscGain.gain.setValueAtTime(APPLE_THUD_SILENT, now)
+  oscGain.gain.linearRampToValueAtTime(peakAmp, now + APPLE_THUD_ATTACK)
+  oscGain.gain.exponentialRampToValueAtTime(APPLE_THUD_SILENT, end)
+  osc.connect(oscGain)
+  oscGain.connect(destinationGain)
+  osc.start(now)
+  osc.stop(end)
+}
+
+//
 // Soft padded wood step — muffled thump similar to mushroom-trampoline bounce.
 //
+
 function playGlowSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
   const ctx = instance.audioContext
   const now = ctx.currentTime

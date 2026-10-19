@@ -1,4 +1,5 @@
 import { CFG } from '../../../cfg.js'
+import * as Sound from '../../../utils/sound.js'
 import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 
@@ -683,6 +684,9 @@ function stepFallingFruit(fruit, dt, floorY, levelInst) {
     if (fruit.y >= restY && fruit.vy >= 0) {
       fruit.y = restY
       fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD
+      fruit.fromAnchorDrop && !fruit._anchorFallSoundPlayed &&
+        levelInst?.sound &&
+        (fruit._anchorFallSoundPlayed = true, Sound.playGlowAppleSoftFall(levelInst.sound))
       const nextVy = applyFruitGroundImpact(fruit, fruit.vy)
       fruit.vy = nextVy
       fruit.airborne = nextVy !== 0

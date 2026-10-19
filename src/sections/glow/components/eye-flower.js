@@ -78,6 +78,11 @@ const STAND_X_SLACK = 6
 const STAND_ABOVE = 14
 const STAND_BELOW = 14
 //
+// Past the collider the hero still visibly lands on the bank while his body
+// overlaps the painted shore (feet up to this far beyond it).
+//
+const BANK_BODY_REACH = 14
+//
 // Hero body height: feet below the collider top by less than this put the
 // body against the collider's right side.
 //
@@ -134,35 +139,45 @@ const STEM_W_BASE = 6
 const STEM_W_TIP = 4
 const CONTOUR_PAD = 2
 //
-// Calla spathe in its own frame (u along the stem axis, v across it): a
-// funnel whose upper lip runs long into a curled point and whose lower lip
-// rolls toward the viewer. Closed, it narrows to a slim bud around the eye.
+// Bud spathe in its own frame (u along the stem axis, v across it): a slim
+// furled funnel with a curled point.
 //
-const FLOWER_LEN = 52
-const FLOWER_HALF_W = 30
-const FLOWER_CLOSED_W = 0.3
-const FLOWER_TURN = 0.7
-const FLOWER_THROAT_SHOW = 0.05
 const SPATHE_SHAPE = [[0, 0], [0.12, 0.16], [0.4, 0.42], [0.7, 0.6], [0.92, 0.5], [1.02, 0.28], [1.06, 0], [1.14, -0.35], [1.22, -0.75], [1.32, -1.05], [1, -1], [0.7, -0.82], [0.42, -0.5], [0.15, -0.18]]
-const THROAT_SHAPE = [[0.08, 0], [0.3, 0.25], [0.62, 0.4], [0.9, 0.25], [1.05, -0.2], [1.12, -0.7], [0.85, -0.75], [0.55, -0.55], [0.28, -0.25]]
-const LIP_PATH = [[0.05, 0.12], [0.35, 0.42], [0.68, 0.6], [0.95, 0.45], [1.04, 0.24]]
 const HOOK_PATH = [[1.22, -0.75], [1.32, -1.05], [1.25, -1.22], [1.12, -1.14]]
+const HOOK_W_BASE = 3
+const HOOK_W_TIP = 1.2
 //
-// Whispering: the lower lobe of the spathe (its +v half: lip, throat and the
-// spathe's lower edge) drops open and shuts in an uneven, syllable-like
+// Flower head: two broad calla petals hinged at the stem tip, the eye on its
+// spadix between them. Each petal lives in its own frame (u along its spine,
+// v away from the head axis); the inner edge reaches over the axis so the
+// closed pair hides the eye, and the wide outer edge is the cream lobe with a
+// pink cupped face. The petal tip curls outward like the reference calla.
+//
+const FLOWER_LEN = 60
+const FLOWER_TURN = 0.7
+const PETAL_HALF_W = 26
+const PETAL_SHAPE = [[0, 0], [0.15, 0.35], [0.4, 0.85], [0.65, 1], [0.85, 0.8], [1, 0.42], [1.08, 0.05], [0.95, -0.22], [0.7, -0.4], [0.42, -0.42], [0.18, -0.25]]
+const PETAL_FACE_SHAPE = [[0.08, 0], [0.22, 0.28], [0.42, 0.66], [0.64, 0.78], [0.82, 0.6], [0.94, 0.28], [0.98, 0.04], [0.86, -0.12], [0.64, -0.24], [0.4, -0.26], [0.2, -0.14]]
+const PETAL_HOOK_PATH = [[1.04, 0.24], [1.16, 0.4], [1.2, 0.62], [1.1, 0.74]]
+//
+// Spread of each petal off the head axis (radians): nearly shut while the
+// hero is far, wide apart as he comes close.
+//
+const PETAL_SPREAD_CLOSED = 0.04
+const PETAL_SPREAD_OPEN = 0.72
+const THROAT_SHOW = 0.05
+const THROAT_U = [0.45, 0.9]
+//
+// Whispering: the petals flap apart and back in an uneven, syllable-like
 // rhythm, as wide as the whisper is loud.
 //
-const MOUTH_DROP = 0.5
+const MOUTH_SPREAD = 0.22
 const MOUTH_SYLLABLE_A = 9.3
 const MOUTH_SYLLABLE_B = 14.1
 const MOUTH_SYLLABLE_B_PHASE = 1.7
 const MOUTH_SYLLABLE_A_W = 0.55
 const MOUTH_SYLLABLE_B_W = 0.45
 const MOUTH_WHISPER_SPEED = 3
-const LIP_W_BASE = 4
-const LIP_W_TIP = 2
-const HOOK_W_BASE = 3
-const HOOK_W_TIP = 1.2
 //
 // Openness follows distance from hero to the flower head (far = closed).
 //
@@ -170,15 +185,15 @@ const OPEN_FAR = 850
 const OPEN_NEAR = 450
 const OPEN_SPEED = 1.2
 //
-// Eye on the yellow spadix: tucked inside the closed spathe, it rises out of
-// the throat toward the hero in the second half of the opening.
+// Eye on the yellow spadix: tucked between the shut petals, it slides out
+// along the head axis as they part, staying centred between them.
 //
 const EYE_STALK_SEGMENTS = 3
 const EYE_ORIGIN_FRAC = 0.1
-const EYE_HIDDEN_EXT = 12
-const EYE_OUT_EXT = 36
+const EYE_HIDDEN_EXT = 20
+const EYE_OUT_EXT = 34
 const EYE_OUT_FROM = 0.35
-const EYE_TURN = 0.6
+const EYE_TURN = 0.2
 const EYE_STALK_SLACK = 0.92
 const EYE_STALK_STIFFNESS = 0.4
 const EYE_STALK_W = 4
@@ -197,6 +212,8 @@ const BUDS = [
   { dx: -2, angle: -1.62, bend: 0.3, len: 146, size: 0.5, phase: 2.1 },
   { dx: 12, angle: -1.25, bend: 1.7, len: 102, size: 0.55, phase: 1.2 }
 ]
+const BUD_LEN = 52
+const BUD_HALF_W = 30
 const BUD_SEGMENTS = 8
 const BUD_BEND_POW = 1.8
 const BUD_WIDTH = 0.38
@@ -344,9 +361,9 @@ const GRAB_PULL_TILT_KICK = 4
 const GRAB_HOLD_TREMBLE = 120
 const GRAB_AIM_SPRING = { k: 90, c: 15 }
 //
-// Only the tentacles follow the hero under the ground: the stem aims no lower
-// than this above the ground line, and stem, head, eye and buds are held
-// above it (the lake under the island is see-through).
+// While the hero is hauled the stem aims no lower than this above the ground
+// line, and stem, head, eye and buds are held above it (the lake under the
+// island is see-through).
 //
 const GRAB_AIM_ABOVE_GROUND = 44
 const GRAB_STEM_CLEAR = 4
@@ -363,6 +380,15 @@ const GRAB_BUD_TILT_FOLLOW = 0.4
 // Coils that pass in front of the hero draw over him.
 //
 const GRAB_FRONT_Z = CFG.visual.zIndex.player + 0.5
+//
+// Right after the pull the whole plant follows the hero down, accelerating.
+// Vertices that pass the ground line are flattened onto it there: the line
+// sits inside the island soil, which draws over the plant and hides them,
+// so nothing reaches the see-through lake below.
+//
+const GRAB_SINK_DELAY = 0.08
+const GRAB_SINK_SEC = 0.75
+const GRAB_SINK_DEPTH = 300
 //
 // Scratch points for ground clipping and coil sampling (no per-segment allocations).
 //
@@ -442,18 +468,18 @@ export function create(cfg) {
     buds: BUDS.map(bud => ({ ...bud, pts: makePoints(BUD_SEGMENTS + 1) })),
     blades: BLADES.map(blade => ({ ...blade, pts: makePoints(BLADE_SEGMENTS + 1) })),
     colors: buildColors(k),
-    lipPts: makePoints(LIP_PATH.length),
     hookPts: makePoints(HOOK_PATH.length),
+    petalHookPts: makePoints(PETAL_HOOK_PATH.length),
     spatheIdx: fanIndices(SPATHE_SHAPE.length),
-    throatIdx: fanIndices(THROAT_SHAPE.length),
+    petalIdx: fanIndices(PETAL_SHAPE.length),
+    petalFaceIdx: fanIndices(PETAL_FACE_SHAPE.length),
+    throatShape: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+    throatIdx: fanIndices(5),
     batch: PolyBatch.create(),
     frontBatch: PolyBatch.create(),
     grab: null,
     whisper: 0,
-    whisperLevel: 0,
-    mouthSpathe: SPATHE_SHAPE.map(([u, v]) => [u, v]),
-    mouthThroat: THROAT_SHAPE.map(([u, v]) => [u, v]),
-    mouthLip: LIP_PATH.map(([u, v]) => [u, v])
+    whisperLevel: 0
   }
   k.add([
     k.z(ISLAND_Z),
@@ -508,6 +534,7 @@ export function startGrab(inst, prey, clipY) {
     phase: GRAB_PHASE.AWARE,
     phaseTime: 0,
     time: 0,
+    sinkTime: 0,
     tilt: { v: 0, vel: 0 },
     stretch: { v: 1, vel: 0 },
     aim: { x: inst.leanHero.x, y: inst.leanHero.y, vx: 0, vy: 0 },
@@ -552,6 +579,9 @@ export function tickGrab(inst, dt) {
   const step = Math.min(dt, GRAB_MAX_DT)
   grab.phaseTime += step
   grab.time += step
+  const sinking = grab.phase === GRAB_PHASE.PULL || grab.phase === GRAB_PHASE.RELEASE
+  sinking && (grab.sinkTime += step)
+  if (grabSink(inst) >= GRAB_SINK_DEPTH) return
   for (let left = step; left > 0; left -= GRAB_STEP) stepGrab(inst, Math.min(GRAB_STEP, left))
   const t = inst.k.time()
   const releasing = grab.phase === GRAB_PHASE.RELEASE
@@ -604,6 +634,22 @@ export function isOnIsland(inst, footX, footY) {
 }
 
 /**
+ * True when the feet come down on the bank right of the collider, where the
+ * body still overlaps the painted shore (the collider itself is too short
+ * to catch him there, so he would drop into the lake).
+ * @param {Object|null} inst - Eye-flower inst
+ * @param {number} footX - Feet world X
+ * @param {number} footY - Feet world Y
+ * @returns {boolean}
+ */
+export function isOnIslandBank(inst, footX, footY) {
+  if (!inst?.visible) return false
+  if (footX <= inst.colliderWalkX2 || footX > inst.shoreX + BANK_BODY_REACH) return false
+  const topY = inst.colliderTopY
+  return footY >= topY - STAND_ABOVE && footY <= topY + STAND_BELOW
+}
+
+/**
  * Right edge of the island collider when a hero with feet at footY would
  * hit its side instead of walking over it (null when he passes above/below).
  * @param {Object} inst - Eye-flower inst
@@ -615,6 +661,20 @@ export function sideWallX(inst, footY) {
   const topY = inst.colliderTopY
   if (footY <= topY || footY - SIDE_WALL_HERO_H >= topY + COLLIDER_H) return null
   return inst.colliderWalkX2
+}
+
+/**
+ * Where something falling at world X comes to rest: the island ground (it
+ * sinks lower along the mound's slope) or the lake surface past the shore.
+ * Writes into `out` to stay allocation-free for per-frame particle checks.
+ * @param {Object} inst - Eye-flower inst
+ * @param {number} x - World X
+ * @param {{y: number, water: boolean}} out - Receives the surface Y and whether it is water
+ */
+export function landingSurface(inst, x, out) {
+  const groundY = mossyHillTopY(inst.hill, Math.max(inst.x1, x)) + COLLIDER_DROP
+  out.water = x > inst.x2 || groundY >= inst.waterY
+  out.y = out.water ? inst.waterY : groundY
 }
 
 /**
@@ -1036,13 +1096,28 @@ function blendArc(rest, lean, amount) {
 }
 
 function onDraw(inst) {
-  if (!inst.visible) return
+  const sink = grabSink(inst)
+  if (!inst.visible || sink >= GRAB_SINK_DEPTH) return
   const { batch, colors: c } = inst
   inst.buds.forEach(bud => addBud(inst, bud))
   inst.blades.forEach(blade => addBlade(inst, blade))
   addTaperedPath(batch, inst.stemPts, STEM_W_BASE, STEM_W_TIP, c.contour, c.stem)
   addFlower(inst)
-  PolyBatch.flush(batch, inst.k)
+  PolyBatch.flush(batch, inst.k, 1, sink, sinkFloorY(inst, sink))
+}
+
+//
+// Eased-in depth the plant has sunk to (0 until the pull starts).
+//
+function grabSink(inst) {
+  const grab = inst.grab
+  if (!grab) return 0
+  const u = Math.min(1, Math.max(0, (grab.sinkTime - GRAB_SINK_DELAY) / GRAB_SINK_SEC))
+  return GRAB_SINK_DEPTH * u * u
+}
+
+function sinkFloorY(inst, sink) {
+  return sink > 0 ? inst.grab.clipY : Infinity
 }
 
 //
@@ -1054,31 +1129,62 @@ function addBud(inst, bud) {
   const tip = bud.pts[BUD_SEGMENTS]
   const prev = bud.pts[BUD_SEGMENTS - 1]
   const axis = Math.atan2(tip.y - prev.y, tip.x - prev.x)
-  addSpathe(inst, tip.x, tip.y, axis, FLOWER_LEN * bud.size, FLOWER_HALF_W * bud.size * BUD_WIDTH, c.petalShade)
+  addSpathe(inst, tip.x, tip.y, axis, BUD_LEN * bud.size, BUD_HALF_W * bud.size * BUD_WIDTH, c.petalShade)
 }
 
 //
-// Spathe back, pink throat, spadix + eye, then the rolled lower lip and the
-// curled point over them. Closed, the narrow spathe hides the eye.
+// Pink throat between the parted petals, spadix + eye on it, then the back
+// (upper) petal and the front (lower) one. Shut, the petals cover the eye;
+// drawn after it, they never hide it once parted.
 //
 function addFlower(inst) {
-  const { head, colors: c, batch } = inst
-  const len = FLOWER_LEN
-  const halfW = FLOWER_HALF_W * (FLOWER_CLOSED_W + (1 - FLOWER_CLOSED_W) * inst.open)
+  const { head, colors: c } = inst
   const side = spatheSide(head.axis)
-  const cos = Math.cos(head.axis)
-  const sin = Math.sin(head.axis)
-  const mouth = 1 + MOUTH_DROP * mouthOpen(inst)
-  openMouth(inst.mouthSpathe, SPATHE_SHAPE, mouth)
-  openMouth(inst.mouthThroat, THROAT_SHAPE, mouth)
-  openMouth(inst.mouthLip, LIP_PATH, mouth)
-  addSpathe(inst, head.x, head.y, head.axis, len, halfW, c.petal, inst.mouthSpathe)
-  if (inst.open > FLOWER_THROAT_SHOW) {
-    PolyBatch.addShape(batch, inst.mouthThroat, inst.throatIdx, head.x, head.y, len, halfW * side, cos, sin, c.petalInner)
-    addEye(inst)
-  }
-  mapPath(inst.lipPts, inst.mouthLip, head.x, head.y, len, halfW * side, cos, sin)
-  addTaperedPath(batch, inst.lipPts, LIP_W_BASE, LIP_W_TIP, c.contour, c.petalShade)
+  const spread = PETAL_SPREAD_CLOSED + (PETAL_SPREAD_OPEN - PETAL_SPREAD_CLOSED) * inst.open +
+    MOUTH_SPREAD * mouthOpen(inst)
+  inst.open > THROAT_SHOW && addThroat(inst, spread)
+  addEye(inst)
+  addPetal(inst, -side, spread, c.petal)
+  addPetal(inst, side, spread, c.petalShade)
+}
+
+//
+// One petal turned `dir * spread` off the head axis; v points away from the
+// axis on its side, so the inner edge reaches back across it.
+//
+function addPetal(inst, dir, spread, rimColor) {
+  const { head, colors: c, batch } = inst
+  const angle = head.axis + dir * spread
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const sy = dir * PETAL_HALF_W
+  const padSy = dir * (PETAL_HALF_W + CONTOUR_PAD)
+  PolyBatch.addShape(batch, PETAL_SHAPE, inst.petalIdx, head.x - cos * CONTOUR_PAD, head.y - sin * CONTOUR_PAD,
+    FLOWER_LEN + CONTOUR_PAD * 2, padSy, cos, sin, c.contour)
+  PolyBatch.addShape(batch, PETAL_SHAPE, inst.petalIdx, head.x, head.y, FLOWER_LEN, sy, cos, sin, rimColor)
+  PolyBatch.addShape(batch, PETAL_FACE_SHAPE, inst.petalFaceIdx, head.x, head.y, FLOWER_LEN, sy, cos, sin, c.petalInner)
+  mapPath(inst.petalHookPts, PETAL_HOOK_PATH, head.x, head.y, FLOWER_LEN, sy, cos, sin)
+  addTaperedPath(batch, inst.petalHookPts, HOOK_W_BASE, HOOK_W_TIP, c.contour, rimColor)
+}
+
+//
+// Wedge between the two petal spines (head frame), behind the eye.
+//
+function addThroat(inst, spread) {
+  const { head, colors: c } = inst
+  const shape = inst.throatShape
+  const cosS = Math.cos(spread)
+  const sinS = Math.sin(spread)
+  shape[1][0] = THROAT_U[0] * cosS
+  shape[1][1] = -THROAT_U[0] * sinS
+  shape[2][0] = THROAT_U[1] * cosS
+  shape[2][1] = -THROAT_U[1] * sinS
+  shape[3][0] = THROAT_U[1] * cosS
+  shape[3][1] = THROAT_U[1] * sinS
+  shape[4][0] = THROAT_U[0] * cosS
+  shape[4][1] = THROAT_U[0] * sinS
+  PolyBatch.addShape(inst.batch, shape, inst.throatIdx, head.x, head.y, FLOWER_LEN, FLOWER_LEN,
+    Math.cos(head.axis), Math.sin(head.axis), c.petalInner)
 }
 
 //
@@ -1095,18 +1201,8 @@ function mouthOpen(inst) {
 }
 
 //
-// Copies `src` into `out` with its lower (+v) half dropped by `scale`.
-//
-function openMouth(out, src, scale) {
-  src.forEach(([u, v], i) => {
-    out[i][0] = u
-    out[i][1] = v > 0 ? v * scale : v
-  })
-}
-
-//
-// Contoured spathe silhouette plus its curled point. The long lip always
-// faces up, whichever way the axis points.
+// Contoured bud spathe plus its curled point. The long lip always faces up,
+// whichever way the axis points.
 //
 function addSpathe(inst, x, y, axis, len, halfW, color, shape = SPATHE_SHAPE) {
   const { colors: c, batch } = inst
@@ -1198,9 +1294,10 @@ function clipSegment(a, b, clipY) {
 //
 function drawGrabFront(inst) {
   const grab = inst.grab
-  if (!inst.visible || !grab) return
+  const sink = grabSink(inst)
+  if (!inst.visible || !grab || sink >= GRAB_SINK_DEPTH) return
   grab.tentacles.forEach(tent => tent.wrap > 0 && addBlade(inst, tent.blade, inst.frontBatch, tent.frontMask))
-  PolyBatch.flush(inst.frontBatch, inst.k)
+  PolyBatch.flush(inst.frontBatch, inst.k, 1, sink, sinkFloorY(inst, sink))
 }
 
 //

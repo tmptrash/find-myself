@@ -980,7 +980,7 @@ function onDrawMoon(k, spiderState) {
 function onDrawTitle(k, spiderState, titleLetters) {
   const flicker = spiderState.titleFlicker ?? 1
   for (const letter of titleLetters) {
-    const op = flicker * readyTitleOpacity(spiderState)
+    const op = flicker * readyTitleOpacity()
     if (op <= 0.001) continue
     const shadowPos = k.vec2(letter.x + TITLE_SHADOW_OFFSET, letter.y + TITLE_SHADOW_OFFSET)
     const pos = k.vec2(letter.x, letter.y)
@@ -1249,7 +1249,7 @@ function updateReadyHero(k, hero, spiderState, state, sound, dt) {
 }
 //
 // Fades the backdrop while the hero walks right (title + centre eye stay
-// lit). After the look-back beat, eyeFinalFade takes both of those out too.
+// lit). After the look-back beat, eyeFinalFade takes the eye out; the title stays.
 //
 function updateReadyDepartureFade(k, runner, spiderState) {
   if (!runner || runner.heroDepartStartX == null) {
@@ -1304,21 +1304,21 @@ function updateReadyDepartureFade(k, runner, spiderState) {
 }
 //
 // Backdrop fade while the hero walks right — stars, moon, grass, hint, baked
-// bg and description. Fireflies, title and centre eye stay bright until the
-// final beat (fireflies never join the departure fade).
+// bg and description. Fireflies, title and centre eye stay bright (the eye
+// leaves on the final beat; fireflies and title never fade).
 //
 function readySceneDepartureOpacity(spiderState) {
   return spiderState?.departureFade ?? 1
 }
 //
-// Title wordmark and centre eye share the same final fade — full opacity
-// during the walk, then both dim together after the hero turns back (lookLeft).
+// The title wordmark stays through the whole scene — only the centre eye
+// leaves after the hero turns back (lookLeft).
 //
-function readyTitleOpacity(spiderState) {
-  return readyEyeOpacity(spiderState)
+function readyTitleOpacity() {
+  return 1
 }
 //
-// Horizon eye — see readyTitleOpacity (same eyeFinalFade ramp).
+// Centre eye: full opacity during the walk, then the eyeFinalFade ramp.
 //
 function readyEyeOpacity(spiderState) {
   const fade = spiderState?.eyeFinalFade ?? 0

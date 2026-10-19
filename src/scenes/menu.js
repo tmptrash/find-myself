@@ -24,6 +24,7 @@ import {
   MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
 import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
+import * as MenuMushroom from '../sections/glow/components/menu-mushroom.js'
 import { addGlowFilmGrainOverlayLayer } from '../sections/glow/utils/glow-parallax-grain.js'
 //
 // Section colors configuration (body color only, outline is always black)
@@ -141,6 +142,17 @@ const GLOW_MENU_HERO_OUTLINE = GLOW_PAL.heroOutline
 // Glow section icon on the ring — white body like the filled lesson hero.
 //
 const GLOW_MENU_SECTION_HERO_BODY = CFG.visual.colors.hero.eyeWhite
+//
+// Centre hero before touch is completed — white body and black rim, the same
+// filled bake the player walks with in lesson-glow.0.
+//
+const MENU_CENTRE_HERO_WHITE_BODY = CFG.visual.colors.hero.eyeWhite
+const MENU_CENTRE_HERO_WHITE_OUTLINE = CFG.visual.colors.outline
+//
+// The glow icon is drawn as the trampoline mushroom; its anti-hero stays as
+// an invisible hover / click target at the same spot.
+//
+const GLOW_MENU_MUSHROOM_Z = 10
 //
 // Centre hero hollow rim before glow play — soft gray body tone.
 //
@@ -434,7 +446,7 @@ export function sceneMenu(k) {
     const uncompletedHollowOutlineNoHash = MENU_ANTIHERO_HOLLOW_OUTLINE.replace('#', '')
     const menuHeroOutlineNoHash = MENU_HERO_OUTLINE_COLOR.replace('#', '')
     const heroBodyColor = menuHeroWhite
-      ? GLOW_MENU_HERO_BODY
+      ? MENU_CENTRE_HERO_WHITE_BODY
       : progress.word?.completed
         ? "#E74C3C"
         : progress.time?.completed
@@ -451,7 +463,7 @@ export function sceneMenu(k) {
     // black pupils; section-coloured heroes keep the hollow outline bake.
     //
     const menuHeroOutlineColor = menuHeroFilled
-      ? GLOW_MENU_HERO_OUTLINE
+      ? MENU_CENTRE_HERO_WHITE_OUTLINE
       : MENU_HERO_OUTLINE_COLOR
     const menuHeroEyeWhite = menuHeroFilled ? CFG.visual.colors.hero.eyeWhite : undefined
     const menuHeroPupilColor = menuHeroFilled ? CFG.visual.colors.hero.eyePupil : undefined
@@ -911,10 +923,14 @@ export function sceneMenu(k) {
       // Store "unknown" flag on the anti-hero for hover-title lookup
       //
       antiHeroInst.isUnknown = !labelVisible
+      //
+      // Glow shows no letter label under its icon.
+      //
       const labelEntry = createSectionProgressLabel(
-        k, config, progress, lastLevel, grayColor, labelVisible
+        k, config, progress, lastLevel, grayColor, labelVisible && config.section !== 'glow'
       )
       sectionLabels.push(labelEntry)
+      config.section === 'glow' && (antiHeroInst.character.hidden = true)
     })
     
     //
@@ -1000,6 +1016,7 @@ export function sceneMenu(k) {
       lastHeartbeatTime: 0,
       bgDefaultOpacity: 1.0
     }
+    createGlowMenuMushroom(inst)
     
     //
     // Track mouse position and check for hover over anti-heroes
@@ -1499,7 +1516,7 @@ const TITLE_ORBIT_SHADOW_DY = 2
 // is described by the inner struggle its letters represent.
 //
 const SECTION_DESCRIPTIONS = {
-  glow: 'perception',
+  glow: 'forest',
   word: 'self-doubt',
   touch: 'connection',
   time: 'impermanence',
@@ -1508,7 +1525,7 @@ const SECTION_DESCRIPTIONS = {
 }
 //
 // Glow hover — phrases fan along radials from the title orbit centre through
-// the “perception” arc (same circle as the orbiting letters).
+// the “forest” arc (same circle as the orbiting letters).
 //
 const GLOW_PERCEPTION_RAY_LINES = [
   'learned:',
@@ -1606,7 +1623,7 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
   //
   // Completed sections and the section currently being played show their
   // description; everything else stays "unknown". First launch (empty save)
-  // treats glow as the entry section, so its label is "perception".
+  // treats glow as the entry section, so its label is "forest".
   //
   const sectionLabelKnown = hoveredAntiHero && !hoveredAntiHero.isUnknown
   const newTargetText = hoveredAntiHero
@@ -1803,7 +1820,7 @@ function createGlowPerceptionRaysState() {
   }
 }
 /**
- * Advances ray reveal after the orbiting title has snapped to “perception”.
+ * Advances ray reveal after the orbiting title has snapped to “forest”.
  * @param {Object} inst - Menu scene instance
  * @param {Object} k - Kaplay instance
  * @param {Object|null} hoveredAntiHero - Hovered anti-hero
@@ -1847,7 +1864,7 @@ function updateGlowPerceptionRays(inst, k, hoveredAntiHero) {
   }
 }
 /**
- * Draws lesson phrases along orbit radials through the “perception” arc.
+ * Draws lesson phrases along orbit radials through the “forest” arc.
  * @param {Object} k - Kaplay instance
  * @param {Object} inst - Menu scene instance
  */
@@ -1894,7 +1911,7 @@ function drawGlowPerceptionRays(k, inst) {
 }
 //
 // One phrase — glyphs left-to-right along the radial from the orbit centre
-// (perpendicular to “perception”), all sharing one tangent angle.
+// (perpendicular to “forest”), all sharing one tangent angle.
 //
 function drawGlowPerceptionRayPhrase(k, cfg) {
   const {
@@ -1985,7 +2002,7 @@ function getGlowPerceptionRayAngles(titleInst, text, count) {
   return out
 }
 //
-// Radial angles of visible “perception” glyphs (orbit centre → letter).
+// Radial angles of visible “forest” glyphs (orbit centre → letter).
 //
 function getGlowPerceptionLetterAngles(titleInst, text) {
   const angles = []
@@ -2389,6 +2406,28 @@ function drawScene(inst) {
   }
   drawOrbitingTitle(k, inst.title)
   drawGlowPerceptionRays(k, inst)
+}
+//
+// Trampoline mushroom over the hidden glow anti-hero: follows its position
+// and hover pulse, watches the centre hero.
+//
+function createGlowMenuMushroom(inst) {
+  const glowAntiHero = inst.antiHeroes.find(ah => ah.section === 'glow')
+  if (!glowAntiHero) return
+  const char = glowAntiHero.character
+  const pose = { x: 0, y: 0, scale: 1 }
+  MenuMushroom.create({
+    k: inst.k,
+    z: GLOW_MENU_MUSHROOM_Z,
+    getPose: () => {
+      pose.x = char.pos.x
+      pose.y = char.pos.y
+      pose.scale = char.scale?.x ?? 1
+      return pose
+    },
+    getLookAt: () => inst.hero.pos,
+    isVisible: () => !inst.isLeavingScene
+  })
 }
 //
 // True while a live pre-level transition overlay owns input. Clears a

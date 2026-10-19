@@ -72,11 +72,15 @@ const PULL_TOWARD_PLANT = 10
 const PULL_BURY_PAD = 6
 //
 // Earth bursts: a big one as the feet break the ground, a smaller closing
-// puff once the head is gone.
+// puff once the head is gone and one where the plant itself goes under.
+// The cones lean toward the open lake (the island only runs out to the
+// right), so most of the earth rains into the water and the rest lands
+// along the mound at whatever height it comes down on.
 //
-const SOIL_BURST = { halfW: 14, count: 46, speedMin: 160, speedRange: 260, sizeMin: 2, sizeRange: 4 }
-const STONE_BURST = { halfW: 10, count: 12, speedMin: 220, speedRange: 300, sizeMin: 4, sizeRange: 4, spreadDeg: 55 }
-const CLOSE_BURST = { halfW: 10, count: 18, speedMin: 90, speedRange: 140, sizeMin: 2, sizeRange: 3 }
+const SOIL_BURST = { halfW: 14, count: 46, speedMin: 220, speedRange: 340, sizeMin: 2, sizeRange: 4, spreadDeg: 48, tiltDeg: 42, drag: 0.85 }
+const STONE_BURST = { halfW: 10, count: 12, speedMin: 260, speedRange: 340, sizeMin: 4, sizeRange: 4, spreadDeg: 45, tiltDeg: 36, drag: 0.9 }
+const CLOSE_BURST = { halfW: 10, count: 18, speedMin: 140, speedRange: 180, sizeMin: 2, sizeRange: 3, spreadDeg: 50, tiltDeg: 32, drag: 0.8 }
+const PLANT_BURST = { halfW: 18, count: 24, speedMin: 120, speedRange: 200, sizeMin: 2, sizeRange: 3, spreadDeg: 55, tiltDeg: 24, drag: 0.7 }
 const BURST_DUST_MULT = 2.4
 const IMPACT_SHAKE = 8
 const IMPACT_SHAKE_SEC = 0.5
@@ -146,6 +150,7 @@ export function create(cfg) {
     soilColors: [pal.soil, pal.soilDark, pal.soilLight].map(glowRgb),
     stoneColors: [pal.stone, pal.stoneLight, pal.stoneDark].map(glowRgb),
     dustColor: glowRgb(pal.soilLight),
+    splashColor: glowRgb(pal.splash),
     holeColor: getRGB(k, pal.hole),
     holeRimColor: getRGB(k, pal.soilDark),
     fadeColor: pal.fade
@@ -288,7 +293,8 @@ function setBeat(inst, beat) {
       break
     case BEAT.BURIED:
       inst.heroVisible = false
-      burstCloseSoil(inst)
+      burstSoil(inst, inst.holeX, CLOSE_BURST, inst.soilColors)
+      burstSoil(inst, inst.flower.baseX, PLANT_BURST, inst.soilColors)
       EyeFlower.setGrabPhase(flower, EyeFlower.GRAB_PHASE.RELEASE)
       break
     case BEAT.FADE:
@@ -360,20 +366,26 @@ function squashTarget(inst) {
 function burstEarth(inst) {
   inst.impactDone = true
   const particles = inst.footParticles
-  const base = { x: inst.holeX, groundY: inst.groundY }
-  particles && GlowFootParticles.spawnSoilBurst(particles, { ...base, ...SOIL_BURST, colors: inst.soilColors })
-  particles && GlowFootParticles.spawnSoilBurst(particles, { ...base, ...STONE_BURST, colors: inst.stoneColors })
+  burstSoil(inst, inst.holeX, SOIL_BURST, inst.soilColors)
+  burstSoil(inst, inst.holeX, STONE_BURST, inst.stoneColors)
   particles && GlowFootParticles.spawnLanding(particles, inst.holeX, inst.groundY, inst.dustColor, BURST_DUST_MULT)
   inst.camera && GlowCamera.triggerShake(inst.camera, IMPACT_SHAKE, IMPACT_SHAKE_SEC)
   inst.sound && Sound.playFlowerEarthGulp(inst.sound)
 }
 
-function burstCloseSoil(inst) {
+//
+// Crumbs land on the island ground or splash into the lake, wherever each
+// one comes down.
+//
+function burstSoil(inst, x, burst, colors) {
   inst.footParticles && GlowFootParticles.spawnSoilBurst(inst.footParticles, {
-    x: inst.holeX,
+    x,
     groundY: inst.groundY,
-    ...CLOSE_BURST,
-    colors: inst.soilColors
+    ...burst,
+    colors,
+    surfaceAt: EyeFlower.landingSurface,
+    surfaceTarget: inst.flower,
+    splashColor: inst.splashColor
   })
 }
 

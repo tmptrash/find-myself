@@ -107,11 +107,14 @@ export function addShape(inst, shape, indices, ox, oy, sx, sy, cos, sin, color) 
  * @param {Object} inst - Batch inst
  * @param {Object} k - Kaplay instance
  * @param {number} [opacity=1] - Shared opacity
+ * @param {number} [shiftY=0] - Moves every vertex down by this many px
+ * @param {number} [maxY=Infinity] - Vertices below this line (after the shift) are flattened onto it
  */
-export function flush(inst, k, opacity = 1) {
+export function flush(inst, k, opacity = 1, shiftY = 0, maxY = Infinity) {
   if (inst.count >= 3 && inst.indices.length) {
     inst.pts.length = inst.count
     inst.colors.length = inst.count
+    if (shiftY !== 0 || maxY < Infinity) shiftVertices(inst.pts, shiftY, maxY)
     k.drawPolygon({
       pts: inst.pts,
       colors: inst.colors,
@@ -120,6 +123,11 @@ export function flush(inst, k, opacity = 1) {
     })
   }
   reset(inst)
+}
+function shiftVertices(pts, shiftY, maxY) {
+  pts.forEach(p => {
+    p.y = Math.min(p.y + shiftY, maxY)
+  })
 }
 function discSegmentCount(radius) {
   if (radius < 3.5) return 6

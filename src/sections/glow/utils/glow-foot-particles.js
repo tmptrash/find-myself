@@ -34,6 +34,25 @@ const LANDING_SPEED_RANGE = 140
 const SOIL_BURST_SPREAD_DEG = 70
 const SOIL_BURST_LIFT_PX = 2
 //
+// With a landing surface each crumb rests wherever it comes down (a few px
+// deeper or higher, so they never line up on one row); crumbs that hit the
+// lake throw up a couple of droplets and sink out of sight.
+//
+const LAND_REST_JITTER_PX = 5
+const WATER_SINK_SPEED = 26
+const WATER_SINK_SEC = 0.32
+const WATER_SINK_DRAG = 0.05
+const SPLASH_DROPS_MIN = 1
+const SPLASH_DROPS_RANGE = 2
+const SPLASH_SPEED_MIN = 40
+const SPLASH_SPEED_RANGE = 80
+const SPLASH_SPREAD_DEG = 35
+const SPLASH_SIZE_MIN = 1
+const SPLASH_SIZE_RANGE = 2
+const SPLASH_LIFE_MIN = 0.22
+const SPLASH_LIFE_RANGE = 0.2
+const SURFACE = { y: 0, water: false }
+//
 // Wide radial burst (death, big impacts) — angles cover a full arc from
 // low-left to low-right through straight up, so plenty of particles always
 // shoot upward instead of just a shallow forward-up puff like a footstep.
@@ -234,15 +253,19 @@ export function spawnEarthCrumbleFromRegion(inst, cfg) {
 }
 //
 // Earth bursting out of the ground at (x, groundY): crumbs or pebbles thrown
-// up inside a cone, falling back to groundY where they scatter, rest and fade.
+// up inside a cone (tiltDeg leans it, + = right), falling back to groundY —
+// or, with surfaceAt(surfaceTarget, x, out), to whatever surface is under
+// each crumb (water when out.water) — where they scatter, rest and fade.
+// drag is the share of sideways speed left after one second.
 //
 export function spawnSoilBurst(inst, cfg) {
   if (!inst) return
   const { x, groundY, halfW, colors, count, speedMin, speedRange, sizeMin, sizeRange } = cfg
   const spread = (cfg.spreadDeg ?? SOIL_BURST_SPREAD_DEG) * Math.PI / 180
+  const tilt = (cfg.tiltDeg ?? 0) * Math.PI / 180
   for (let i = 0; i < count; i++) {
     const c = colors[Math.floor(Math.random() * colors.length)]
-    const angle = -Math.PI / 2 + (Math.random() * 2 - 1) * spread
+    const angle = -Math.PI / 2 + tilt + (Math.random() * 2 - 1) * spread
     const speed = speedMin + Math.random() * speedRange
     const size = sizeMin + Math.random() * sizeRange
     inst.particles.push({
@@ -260,6 +283,11 @@ export function spawnSoilBurst(inst, cfg) {
       crumbleGround: true,
       captionCrumble: false,
       groundY,
+      drag: cfg.drag ?? CRUMBLE_HORIZONTAL_DRAG_PER_SEC,
+      surfaceAt: cfg.surfaceAt,
+      surfaceTarget: cfg.surfaceTarget,
+      restJitter: Math.random() * LAND_REST_JITTER_PX,
+      splashColor: cfg.splashColor,
       landed: false,
       scatterDone: false,
       scatterTime: 0
@@ -335,6 +363,13 @@ function notifyCrumbleGroundHit(inst) {
 }
 
 function updateCrumbleParticle(inst, p, dt) {
+  if (p.sinking) {
+    p.vx *= Math.pow(WATER_SINK_DRAG, dt)
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    return
+  }
+  if (p.surfaceAt && followSurface(inst, p)) return
   if (p.landed) {
     if (!p.scatterDone) {
       p.scatterTime += dt
@@ -361,7 +396,7 @@ function updateCrumbleParticle(inst, p, dt) {
     return
   }
   p.vy += CRUMBLE_GRAVITY * dt
-  p.vx *= Math.pow(CRUMBLE_HORIZONTAL_DRAG_PER_SEC, dt)
+  p.vx *= Math.pow(p.drag ?? CRUMBLE_HORIZONTAL_DRAG_PER_SEC, dt)
   p.x += p.vx * dt
   p.y += p.vy * dt
   const contactLead = p.captionCrumble ? CAPTION_CRUMBLE_GROUND_CONTACT_LEAD : 0
@@ -377,6 +412,52 @@ function updateCrumbleParticle(inst, p, dt) {
     p.vy = -(CRUMBLE_GROUND_BOUNCE_UP_MIN + Math.random() * CRUMBLE_GROUND_BOUNCE_UP_EXTRA)
   }
 }
+//
+// Rest line under the crumb from its landing surface; true once it dropped
+// into the water (it sinks from then on).
+//
+function followSurface(inst, p) {
+  p.surfaceAt(p.surfaceTarget, p.x, SURFACE)
+  if (!SURFACE.water) {
+    p.groundY = SURFACE.y + p.restJitter
+    return false
+  }
+  if (p.y + p.size < SURFACE.y) return false
+  sinkIntoWater(inst, p, SURFACE.y)
+  return true
+}
+
+function sinkIntoWater(inst, p, waterY) {
+  p.sinking = true
+  p.y = waterY - p.size * 0.5
+  p.vy = WATER_SINK_SPEED
+  p.fadeFrom = p.age
+  p.fadeSec = WATER_SINK_SEC
+  p.life = p.age + WATER_SINK_SEC
+  p.splashColor && spawnSplash(inst, p.x + p.size * 0.5, waterY, p.splashColor)
+}
+
+function spawnSplash(inst, x, y, color) {
+  const count = SPLASH_DROPS_MIN + Math.floor(Math.random() * (SPLASH_DROPS_RANGE + 1))
+  const spread = SPLASH_SPREAD_DEG * Math.PI / 180
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI / 2 + (Math.random() * 2 - 1) * spread
+    const speed = SPLASH_SPEED_MIN + Math.random() * SPLASH_SPEED_RANGE
+    inst.particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: SPLASH_LIFE_MIN + Math.random() * SPLASH_LIFE_RANGE,
+      age: 0,
+      size: SPLASH_SIZE_MIN + Math.random() * SPLASH_SIZE_RANGE,
+      r: color.r,
+      g: color.g,
+      b: color.b
+    })
+  }
+}
+
 function startCrumbleFade(p) {
   if (p.fadeFrom != null) return
   p.fadeFrom = p.age
@@ -384,7 +465,7 @@ function startCrumbleFade(p) {
 }
 function crumbleOpacity(p) {
   if (p.fadeFrom == null) return 1
-  return Math.max(0, 1 - (p.age - p.fadeFrom) / CRUMBLE_GROUND_FADE)
+  return Math.max(0, 1 - (p.age - p.fadeFrom) / (p.fadeSec ?? CRUMBLE_GROUND_FADE))
 }
 //
 // Leaf particle — bursts outward same as dust, but once the outward

@@ -493,6 +493,7 @@ export const CFG = {
           stoneLight: PALETTE.sand2,   // Lit pebbles
           stoneDark: PALETTE.gray1,    // Shaded pebbles
           hole: PALETTE.gray0,         // Torn earth where the hero vanished
+          splash: PALETTE.cyan4,       // Droplets where thrown earth hits the lake
           fade: PALETTE.gray0          // Level fade-out after the grab
         },
         //

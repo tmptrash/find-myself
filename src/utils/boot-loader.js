@@ -18,7 +18,7 @@ const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10p
 const LOADER_UI_FADE_SEC = 0.32
 //
 // Stalk-eye geometry (SVG user units = CSS px): the chain-buoy eye from the
-// Glow level lying on its side, ~1.4× its in-level size. The segmented stalk
+// Glow level lying on its side, slightly larger than in-level. The segmented stalk
 // grows from the root knot on the left; each finished joint sprouts a side
 // spike (alternating up / down, leaning back toward the root) and the eye
 // rides the right tip.
@@ -40,10 +40,10 @@ const STALK_WAVE_FREQ = 0.045
 const STALK_WAVE_SPEED = 2.2
 const ROOT_RX = 8
 const ROOT_RY = 5
-const EYE_R = 17
-const EYE_CONTOUR_W = 3
-const EYE_PUPIL_R = 7
-const EYE_LID_W = 1.6
+const EYE_R = 12
+const EYE_CONTOUR_W = 2
+const EYE_PUPIL_R = 5
+const EYE_LID_W = 1.4
 const EYE_LID_SPAN = 0.85
 const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
 //

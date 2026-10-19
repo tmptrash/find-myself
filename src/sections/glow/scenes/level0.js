@@ -1054,14 +1054,31 @@ const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 //
 const GLOW_LIGHT_SHAFT_Z = GRASS_Z + 5
 //
-// One distant sun angle; each entry is an X offset from the first-start ground
-// spawn foot plus band width and peak opacity (fixed for the whole level).
+// One wide sun shaft through a canopy gap up-left of the first-start spawn:
+// foot centred on the hero (spawnOffsetX 0). depth 'back' sits behind near
+// parallax; 'fore' screen-lightens gameplay and the hero.
 //
-const GLOW_LIGHT_ANGLE = 0.5
-const GLOW_LIGHT_RAYS = [
-  { spawnOffsetX: -85, width: 170, opacity: 0.48 },
-  { spawnOffsetX: 0, width: 150, opacity: 0.5 },
-  { spawnOffsetX: 72, width: 80, opacity: 0.3 }
+const GLOW_LIGHT_SOURCE_DX = -620
+const GLOW_LIGHT_SOURCE_DY = -300
+const GLOW_LIGHT_DEPTH_BACK = 'back'
+const GLOW_LIGHT_DEPTH_FORE = 'fore'
+const GLOW_LIGHT_RAY_WIDTH_BACK = 680
+const GLOW_LIGHT_RAY_WIDTH_FORE = 620
+const GLOW_LIGHT_RAY_OPACITY_BACK = 0.17
+const GLOW_LIGHT_RAY_OPACITY_FORE = 0.32
+const GLOW_LIGHT_RAY_SPECS = [
+  {
+    spawnOffsetX: 0,
+    width: GLOW_LIGHT_RAY_WIDTH_BACK,
+    opacity: GLOW_LIGHT_RAY_OPACITY_BACK,
+    depth: GLOW_LIGHT_DEPTH_BACK
+  },
+  {
+    spawnOffsetX: 0,
+    width: GLOW_LIGHT_RAY_WIDTH_FORE,
+    opacity: GLOW_LIGHT_RAY_OPACITY_FORE,
+    depth: GLOW_LIGHT_DEPTH_FORE
+  }
 ]
 const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
@@ -2173,17 +2190,28 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       backZ: GLOW_FOREST_FLOOR_BACK_Z,
       frontZ: GLOW_FOREST_FLOOR_FRONT_Z
     })
-    LightShaft.create({
+    const glowLightGap = {
+      x: glowFirstStartGroundSpawnX + GLOW_LIGHT_SOURCE_DX,
+      y: TOP_MARGIN + GLOW_LIGHT_SOURCE_DY
+    }
+    inst.lightShaftBack = LightShaft.create({
       k,
-      angle: GLOW_LIGHT_ANGLE,
-      rays: GLOW_LIGHT_RAYS.map(ray => ({
-        x: glowFirstStartGroundSpawnX + ray.spawnOffsetX,
-        width: ray.width,
-        opacity: ray.opacity
-      })),
-      topY: TOP_MARGIN,
+      source: glowLightGap,
+      rays: mapGlowLightRaysForDepth(glowFirstStartGroundSpawnX, GLOW_LIGHT_DEPTH_BACK),
       groundY: FLOOR_Y,
       getOpacity: () => 1,
+      hazeStrength: 1,
+      poolStrength: 0.5,
+      mount: 'manual'
+    })
+    LightShaft.create({
+      k,
+      source: glowLightGap,
+      rays: mapGlowLightRaysForDepth(glowFirstStartGroundSpawnX, GLOW_LIGHT_DEPTH_FORE),
+      groundY: FLOOR_Y,
+      getOpacity: () => 1,
+      hazeStrength: 0.38,
+      poolStrength: 1,
       z: GLOW_LIGHT_SHAFT_Z
     })
     if (await glowBootstrapPause(bootstrap, 93, session)) return
@@ -6537,6 +6565,7 @@ function onDrawWorld(inst) {
   // the baked static earth+underground sprite covers that bleed in one draw.
   //
   drawGlowParallaxBackdropOffscreen(inst)
+  inst.lightShaftBack && LightShaft.onDraw(inst.lightShaftBack)
   drawParallaxLayer(inst, PAR_LAYER_NEAR)
   drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
   drawGlowPitMouthEarthGapFill(inst, k)
@@ -7626,6 +7655,20 @@ function computeGlowFirstStartGroundSpawnX(cfg) {
   })
 }
 //
+// Builds world-space beam descriptors for one depth tier (back / fore).
+//
+function mapGlowLightRaysForDepth(anchorX, depth) {
+  return GLOW_LIGHT_RAY_SPECS
+    .filter(spec => spec.depth === depth)
+    .map(spec => ({
+      x: anchorX + spec.spawnOffsetX,
+      width: spec.width,
+      opacity: spec.opacity,
+      gapSkewX: spec.gapSkewX,
+      gapSkewY: spec.gapSkewY
+    }))
+}
+//
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap
 // (same horizontal band as isHeroAtTrampolineCap) — landing on it would fire
 // the automatic bounce the instant the level loads. Branch spawns are left
@@ -8049,7 +8092,7 @@ function onUpdate(inst) {
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
-  if (tryStartGlowFlowerGrab(inst, heroX, footY, grounded)) return
+  if (tryStartGlowFlowerGrab(inst, heroX, footY)) return
   trackGlowSafeHeroPose(inst, char, heroX, footY, grounded)
   //
   // refreshGlowMainGroundJumpState clears wasJumping before foot bursts run —
@@ -8242,27 +8285,34 @@ function syncGlowPredatorPatrolBounds(inst) {
   pred.x > pred.maxX && (pred.x = pred.maxX)
 }
 //
-// The flower takes the hero whenever he stands on the island top — however he
-// got there (jump, step off the stick). A fly-over or a brush against its
-// side never counts: he must be grounded, and not still riding the centipede.
+// The flower takes the hero the moment his feet reach the island top — however
+// he got there (jump off the stick, fall, walk). It does not wait for Kaplay's
+// grounded flag or the twig's rider lock: on landing frames those can still
+// report the stick or the air, and the stick never reaches over the island.
+// A fly-over (still rising) or a brush against its side never counts.
 //
-function tryStartGlowFlowerGrab(inst, heroX, footY, grounded) {
-  if (!grounded || FlowerGrab.isActive(inst.flowerGrab)) return false
+function tryStartGlowFlowerGrab(inst, heroX, footY) {
+  if (FlowerGrab.isActive(inst.flowerGrab)) return false
   if (!isHeroStandingOnGlowIsland(inst, heroX, footY)) return false
   destroyStrayGlowHeroBody(inst.k, inst.heroInst.character)
   HorizFallTwig.releasePredatorAtIsland(inst.shoreFallTwigs, inst)
-  FlowerGrab.start(inst.flowerGrab, footY)
+  FlowerGrab.start(inst.flowerGrab, inst.eyeFlower.colliderTopY)
   return true
 }
 //
-// Feet on the island collider (Kaplay contact or the island band), and not
-// pinned to the stick on the centipede's back next to it.
+// Feet on the island collider (Kaplay contact) or inside the island top band,
+// down at its top line and not moving up. The bank past the collider counts
+// too, unless he is still standing on the stick that docks beside it.
 //
 function isHeroStandingOnGlowIsland(inst, heroX, footY) {
   const char = inst.heroInst?.character
-  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)) return false
-  if (inst.eyeFlower?.visible && char?.curPlatform?.() === inst.eyeFlower.collider) return true
-  return EyeFlower.isOnIsland(inst.eyeFlower, heroX, footY)
+  const flower = inst.eyeFlower
+  if (!flower?.visible || !char) return false
+  if (char.curPlatform?.() === flower.collider) return true
+  if ((char.vel?.y ?? 0) < 0 || footY < flower.colliderTopY) return false
+  if (EyeFlower.isOnIsland(flower, heroX, footY)) return true
+  return EyeFlower.isOnIslandBank(flower, heroX, footY) &&
+    !HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)
 }
 //
 // While the flower drags the hero away the level only runs the sequence,

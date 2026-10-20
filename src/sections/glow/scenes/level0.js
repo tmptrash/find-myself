@@ -120,7 +120,6 @@ import {
   glowUndergroundSmallDetailAlpha,
   paintUndergroundDepthVignette
 } from '../utils/glow-forest-atmosphere.js'
-import * as LightShaft from '../components/light-shaft.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
 import * as GlowCamera from '../utils/glow-camera.js'
@@ -1084,31 +1083,6 @@ const GLOW_FOREST_FLOOR_BACK_Z = 6.5
 const GLOW_FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
 const GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
-//
-// Parallel sunlight through the left big tree's canopy (colour world only).
-// Screen blend; z sits just under the main tree bake so the crown occludes
-// the shaft, but still above the hero and gameplay decor below the grass band.
-//
-const GLOW_MAIN_TREE_SPRITE_Z = CFG.visual.zIndex.platforms - 2
-const GLOW_LIGHT_SHAFT_Z = GLOW_MAIN_TREE_SPRITE_Z - 0.1
-//
-// One wide sun shaft through a canopy gap up-left of the first-start spawn:
-// foot centred on the hero (spawnOffsetX 0). depth 'back' sits behind near
-// parallax; 'fore' screen-lightens gameplay and the hero.
-//
-const GLOW_LIGHT_SOURCE_DX = -750
-const GLOW_LIGHT_SOURCE_DY = -300
-const GLOW_LIGHT_DEPTH_FORE = 'fore'
-const GLOW_LIGHT_RAY_WIDTH_FORE = 310
-const GLOW_LIGHT_RAY_OPACITY_FORE = 0.32
-const GLOW_LIGHT_RAY_SPECS = [
-  {
-    spawnOffsetX: 0,
-    width: GLOW_LIGHT_RAY_WIDTH_FORE,
-    opacity: GLOW_LIGHT_RAY_OPACITY_FORE,
-    depth: GLOW_LIGHT_DEPTH_FORE
-  }
-]
 const GLOW_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const GLOW_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
 const GLOW_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
@@ -1906,7 +1880,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const treeObj = k.add([
       k.sprite(TREE_COLOR_SPRITE_NAME),
       k.pos(treeBake.x, treeBake.y),
-      k.z(GLOW_MAIN_TREE_SPRITE_Z)
+      k.z(CFG.visual.zIndex.platforms - 2)
     ])
     const floorBounds = createLevelBounds(k)
     if (await glowBootstrapPause(bootstrap, 27, session)) return
@@ -2423,20 +2397,6 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       getOpacity: () => 1,
       backZ: GLOW_FOREST_FLOOR_BACK_Z,
       frontZ: GLOW_FOREST_FLOOR_FRONT_Z
-    })
-    const glowLightGap = {
-      x: glowFirstStartGroundSpawnX + GLOW_LIGHT_SOURCE_DX,
-      y: TOP_MARGIN + GLOW_LIGHT_SOURCE_DY
-    }
-    inst.lightShaft = LightShaft.create({
-      k,
-      source: glowLightGap,
-      rays: mapGlowLightRaysForDepth(glowFirstStartGroundSpawnX, GLOW_LIGHT_DEPTH_FORE),
-      groundY: FLOOR_Y,
-      getOpacity: () => 1,
-      hazeStrength: 0.42,
-      poolStrength: 1.08,
-      z: GLOW_LIGHT_SHAFT_Z
     })
     if (await glowBootstrapPause(bootstrap, 93, session)) return
     syncGlowAtmosphereZones(inst)
@@ -8593,20 +8553,6 @@ function computeGlowFirstStartGroundSpawnX(cfg) {
     predator: null,
     inst: null
   })
-}
-//
-// Builds world-space beam descriptors for one depth tier (back / fore).
-//
-function mapGlowLightRaysForDepth(anchorX, depth) {
-  return GLOW_LIGHT_RAY_SPECS
-    .filter(spec => spec.depth === depth)
-    .map(spec => ({
-      x: anchorX + spec.spawnOffsetX,
-      width: spec.width,
-      opacity: spec.opacity,
-      gapSkewX: spec.gapSkewX,
-      gapSkewY: spec.gapSkewY
-    }))
 }
 //
 // Pulls a ground spawn X clear of an active mushroom trampoline's bounce cap

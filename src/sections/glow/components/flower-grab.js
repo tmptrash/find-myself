@@ -66,7 +66,7 @@ const HOLD_TREMBLE_PX = 1.6
 const PULL_ANGLE_DAMP = 18
 //
 // Pull: cubic ease-in toward the hole (slow first frames, violent end), a bit
-// closer to the plant, until the whole sprite is under the ground line.
+// closer to the plant, until the whole sprite is below the opening's near lip.
 //
 const PULL_TOWARD_PLANT = 10
 const PULL_BURY_PAD = 6
@@ -96,14 +96,17 @@ const HOLE_RY = 9
 const HOLE_INNER = 0.72
 const HOLE_OPEN_SEC = 0.16
 //
-// The grabbed hero is drawn in front of the island and the whole hole (the
-// island's baked greenery sits above the player plane and would swallow him
-// before he reaches the hole). While he is pulled his body is cut at the
-// hole's centre line, so the dark front half of the opening stays visible
-// under him and he sinks into it. The flower's front coils (eye-flower
-// GRAB_FRONT_Z) stay above him. The fade covers everything in the level.
+// The grabbed hero is drawn in front of the island and the hole's back wall
+// (the island's baked greenery sits above the player plane and would swallow
+// him before he reaches the hole). While he is pulled his body is cut at the
+// opening's near edge and the near half of the rim is drawn over him, so he
+// drops into the hole instead of slipping behind it. The flower's front
+// coils (eye-flower GRAB_FRONT_Z) stay above both. The fade covers
+// everything in the level.
 //
 const HERO_Z = HOLE_Z + 0.02
+const HOLE_FRONT_Z = HERO_Z + 0.01
+const HOLE_FRONT_SEGMENTS = 16
 const FADE_Z = CFG.visual.zIndex.ui * 20
 
 /**
@@ -174,6 +177,14 @@ export function create(cfg) {
     {
       draw() {
         drawHole(inst)
+      }
+    }
+  ])
+  k.add([
+    k.z(HOLE_FRONT_Z),
+    {
+      draw() {
+        drawHoleFront(inst)
       }
     }
   ])
@@ -346,7 +357,7 @@ function updatePull(inst, step) {
   const u = Math.min(1, inst.beatTime / PULL_SEC)
   const e = u * u * u
   const halfH = Hero.HERO_BAKE_SPRITE_SIZE * inst.prey.scale * 0.5
-  const endY = inst.groundY + halfH + PULL_BURY_PAD
+  const endY = inst.groundY + HOLE_RY * HOLE_INNER + halfH + PULL_BURY_PAD
   inst.heroX = inst.pullFromX + (inst.holeX - inst.pullFromX) * e
   inst.heroY = inst.pullFromY + (endY - inst.pullFromY) * e
   inst.swing.v *= Math.exp(-PULL_ANGLE_DAMP * step)
@@ -456,7 +467,7 @@ function drawHero(inst) {
   const width = size * (1 - inst.squash.v)
   const height = size * (1 + inst.squash.v * SQUASH_Y_GAIN)
   const topY = inst.heroY - height * 0.5
-  const clipY = inst.beat === BEAT.PULL ? inst.groundY : Infinity
+  const clipY = inst.beat === BEAT.PULL ? inst.groundY + HOLE_RY * HOLE_INNER * inst.holeOpen : Infinity
   const visibleH = Math.min(height, clipY - topY)
   if (visibleH <= 0) return
   const opts = {
@@ -482,6 +493,30 @@ function drawHole(inst) {
   const pos = k.vec2(inst.holeX, inst.groundY)
   k.drawEllipse({ pos, radiusX: HOLE_RX * open, radiusY: HOLE_RY * open, color: inst.holeRimColor })
   k.drawEllipse({ pos, radiusX: HOLE_RX * HOLE_INNER * open, radiusY: HOLE_RY * HOLE_INNER * open, color: inst.holeColor })
+}
+//
+// Near half of the rim (between the opening's and the rim's lower arcs),
+// drawn over the hero so his body disappears behind the hole's front lip.
+//
+function drawHoleFront(inst) {
+  if (inst.holeOpen <= 0 || inst.beat !== BEAT.PULL || !inst.heroVisible) return
+  const k = inst.k
+  const open = inst.holeOpen
+  const outerRx = HOLE_RX * open
+  const outerRy = HOLE_RY * open
+  const innerRx = outerRx * HOLE_INNER
+  const innerRy = outerRy * HOLE_INNER
+  const pts = []
+  const indices = []
+  for (let i = 0; i <= HOLE_FRONT_SEGMENTS; i++) {
+    const a = Math.PI * i / HOLE_FRONT_SEGMENTS
+    const cos = Math.cos(a)
+    const sin = Math.sin(a)
+    pts.push(k.vec2(inst.holeX + outerRx * cos, inst.groundY + outerRy * sin))
+    pts.push(k.vec2(inst.holeX + innerRx * cos, inst.groundY + innerRy * sin))
+    i > 0 && indices.push(i * 2 - 2, i * 2 - 1, i * 2, i * 2 - 1, i * 2 + 1, i * 2)
+  }
+  k.drawPolygon({ pts, indices, color: inst.holeRimColor })
 }
 function addFadeOverlay(inst) {
   const k = inst.k

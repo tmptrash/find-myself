@@ -1086,19 +1086,20 @@ const GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 //
 // Parallel sunlight through the left big tree's canopy (colour world only).
-// Rays screen-lighten everything they cross, so z sits above ear-tree branches
-// / spiky tomatoes (GRASS_Z + 3.5) but below HUD and speech bubbles.
+// Screen blend; z sits just under the main tree bake so the crown occludes
+// the shaft, but still above the hero and gameplay decor below the grass band.
 //
-const GLOW_LIGHT_SHAFT_Z = GRASS_Z + 5
+const GLOW_MAIN_TREE_SPRITE_Z = CFG.visual.zIndex.platforms - 2
+const GLOW_LIGHT_SHAFT_Z = GLOW_MAIN_TREE_SPRITE_Z - 0.1
 //
 // One wide sun shaft through a canopy gap up-left of the first-start spawn:
 // foot centred on the hero (spawnOffsetX 0). depth 'back' sits behind near
 // parallax; 'fore' screen-lightens gameplay and the hero.
 //
-const GLOW_LIGHT_SOURCE_DX = -620
+const GLOW_LIGHT_SOURCE_DX = -750
 const GLOW_LIGHT_SOURCE_DY = -300
 const GLOW_LIGHT_DEPTH_FORE = 'fore'
-const GLOW_LIGHT_RAY_WIDTH_FORE = 620
+const GLOW_LIGHT_RAY_WIDTH_FORE = 310
 const GLOW_LIGHT_RAY_OPACITY_FORE = 0.32
 const GLOW_LIGHT_RAY_SPECS = [
   {
@@ -1375,9 +1376,26 @@ const LAKE_Z = 12
 const LAKE_SHORE_ROCK_CLIP_STEP_PX = 2
 const LAKE_SHORE_ROCK_FLANK_EXP = 0.6
 const LAKE_SHORE_ROCK_BED_OVERSHOOT_PX = 14
-const LAKE_SHORE_ROCK_BASE_SPREAD = 0.5
+const LAKE_SHORE_ROCK_BASE_SPREAD = 1.55
+//
+// Pinch the dry cap and flare the submerged base so the pile is wider at
+// the bed than above the water line.
+//
+const LAKE_SHORE_ROCK_TOP_PINCH = 0.22
+const LAKE_SHORE_ROCK_BOTTOM_FLARE = 1.35
 const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
 const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
+//
+// The whole merged rock shrinks toward the lake's right shore (between the
+// water core end and the bake end) so it only caps the shoreline instead of
+// reaching far into the lake.
+//
+const LAKE_SHORE_ROCK_SCALE = 0.3
+const LAKE_SHORE_ROCK_ANCHOR_T = 0.5
+//
+// The small cap rises a little above the water line.
+//
+const LAKE_SHORE_ROCK_LIFT_PX = 6
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -1387,7 +1405,7 @@ const LAKE_WAVE_SECOND_FREQ = 1.6
 //
 // Baked lake surface frames (painted water + grain), drawn untinted.
 //
-const LAKE_BAKE_GEOMETRY_VERSION = 13
+const LAKE_BAKE_GEOMETRY_VERSION = 15
 const LAKE_BAKE_SPRITE_PREFIX = `glow0-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
 const LAKE_BAKE_FRAME_COUNT = 24
 const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
@@ -1888,7 +1906,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     const treeObj = k.add([
       k.sprite(TREE_COLOR_SPRITE_NAME),
       k.pos(treeBake.x, treeBake.y),
-      k.z(CFG.visual.zIndex.platforms - 2)
+      k.z(GLOW_MAIN_TREE_SPRITE_Z)
     ])
     const floorBounds = createLevelBounds(k)
     if (await glowBootstrapPause(bootstrap, 27, session)) return
@@ -6732,7 +6750,8 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
   const rocks = rockObjs.filter(o => (o._lakeShoreEnd || o._waterCluster) && o._rockVerts)
   const main = rocks.find(o => o._shoreTreeSide)
   if (!main) return
-  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, floorLocal))
+  const anchorX = lake.x1 + lake.coreSpan + (lake.bakeSpan - lake.coreSpan) * LAKE_SHORE_ROCK_ANCHOR_T
+  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, floorLocal, anchorX))
   const pts = loops.flat()
   const pad = ROCK_OUTLINE_WIDTH * 2
   const x0 = Math.floor(Math.min(...pts.map(p => p.x)) - pad)
@@ -6761,31 +6780,36 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
   main._lakeFullSprite = { name, x: x0, y: y0, width, height }
 }
 //
-// Sunk outline of one shore rock in world coordinates.
+// Sunk outline of one shore rock in world coordinates, scaled toward the
+// shore anchor (x) and the ground line (y) before sinking into the bed.
 //
-function lakeShoreRockWorldLoop(lake, rock, floorLocal) {
-  const ox = rock._homeX + rock._lakeBakeW / 2
-  const oy = rock._homeY + rock._rockBakeCy
+function lakeShoreRockWorldLoop(lake, rock, floorLocal, anchorX) {
+  const ox = anchorX + (rock._homeX + rock._lakeBakeW / 2 - anchorX) * LAKE_SHORE_ROCK_SCALE
+  const oy = FLOOR_Y + (rock._homeY + rock._rockBakeCy - FLOOR_Y) * LAKE_SHORE_ROCK_SCALE - LAKE_SHORE_ROCK_LIFT_PX
   const ws = rock._rockWidthScale
-  return lakeShoreRockSunkVerts(lake, rock, floorLocal).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
+  return lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
 }
 //
-// Lower-half rock verts pulled down past the bed under each vertex (the bed
-// clip trims the overshoot) and spread outward on the way down, so the rock
-// widens into the bed like a pile and leaves no water gap under it.
+// Scaled lower-half rock verts pulled down past the bed under each vertex
+// (the bed clip trims the overshoot) and spread outward on the way down, so
+// the rock widens into the bed like a pile and leaves no water gap under it.
 //
-function lakeShoreRockSunkVerts(lake, rock, floorLocal) {
+function lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy) {
   const ws = rock._rockWidthScale
-  const cx = rock._lakeBakeW / (2 * ws)
-  const centerY = rock._homeY + rock._rockBakeCy
-  const maxLowerY = Math.max(...rock._rockVerts.map(v => v.y))
-  return rock._rockVerts.map(v => {
-    if (v.y <= 0) return v
+  const verts = rock._rockVerts.map(v => ({ x: v.x * LAKE_SHORE_ROCK_SCALE, y: v.y * LAKE_SHORE_ROCK_SCALE }))
+  const minY = Math.min(...verts.map(v => v.y))
+  const maxLowerY = Math.max(...verts.map(v => v.y))
+  const ySpan = Math.max(1, maxLowerY - minY)
+  return verts.map(v => {
+    const depthT = (v.y - minY) / ySpan
+    const topNarrow = 1 - LAKE_SHORE_ROCK_TOP_PINCH * (1 - depthT)
+    let x = v.x * topNarrow
+    let y = v.y
+    if (v.y <= 0) return { x, y }
     const reach = Math.pow(v.y / maxLowerY, LAKE_SHORE_ROCK_FLANK_EXP)
-    const x = v.x * (1 + LAKE_SHORE_ROCK_BASE_SPREAD * reach)
-    const worldX = rock._homeX + (cx + x) * ws
-    const bedY = lakeShoreRockBedWorldY(lake, worldX, floorLocal) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - centerY
-    return { x, y: Math.max(v.y, v.y + (bedY - v.y) * reach) }
+    x = x * (1 + LAKE_SHORE_ROCK_BASE_SPREAD * reach * LAKE_SHORE_ROCK_BOTTOM_FLARE)
+    const bedY = lakeShoreRockBedWorldY(lake, ox + x * ws, floorLocal) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - oy
+    return { x, y: Math.max(y, y + (bedY - y) * reach) }
   })
 }
 //

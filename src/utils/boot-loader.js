@@ -8,6 +8,11 @@ import { focusGameCanvas } from './canvas-focus.js'
 //
 const LOADER_PANEL_ID = 'loader-panel'
 const LOADER_EYE_ID = 'loader-eye'
+//
+// Bumped when loader eye DOM changes so ensureLoaderStructure() rebuilds
+// instead of keeping an old SVG from a previous bundle.
+//
+const LOADER_EYE_REVISION = 5
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -28,7 +33,6 @@ const STALK_SEGMENT_LEN = 30
 const STALK_SEGMENT_W = 7
 const STALK_CONTOUR_PAD = 2
 const STALK_LIGHT_FRAC = 0.35
-const STALK_JOINT_R = STALK_SEGMENT_W * 0.5
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
 const SPIKE_LEN_WOBBLE = STALK_SEGMENT_W * 0.35
 const SPIKE_LEAN_BACK = STALK_SEGMENT_W * 0.35
@@ -133,7 +137,8 @@ export function setLoaderBarCreepBoost(boosted) {
 export function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
-  if (document.getElementById(LOADER_PANEL_ID) && document.getElementById(LOADER_EYE_ID)) return
+  const svg = document.getElementById(LOADER_EYE_ID)
+  if (document.getElementById(LOADER_PANEL_ID) && svg?.dataset.revision === String(LOADER_EYE_REVISION)) return
   loaderEl.innerHTML = ''
   loaderEl.appendChild(buildLoaderPanel())
 }
@@ -340,9 +345,10 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene: contoured red stalk, spikes, knots, then the eye-berry. Every
-// contour pass is drawn before any fill (same stacking as chain buoys) so the
-// dark rim stays on the outside and never reads as an inner stroke.
+// SVG scene: every contour (stalk, spike stems, spike balls) goes under every
+// fill, so the dark rim survives only on the outer silhouette. Spike fills
+// come before the stalk fill and the lit stripe goes last, so nothing from a
+// spike paints over the trunk interior.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -351,6 +357,7 @@ function buildLoaderEyeSvg(colors) {
     height: EYE_VIEW_H,
     viewBox: `0 0 ${EYE_VIEW_W} ${EYE_VIEW_H}`
   })
+  svg.dataset.revision = String(LOADER_EYE_REVISION)
   svg.style.overflow = 'visible'
   const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_PAD))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
@@ -380,10 +387,10 @@ function buildLoaderEyeSvg(colors) {
   svg.appendChild(stalkContour)
   svg.appendChild(spikesContour)
   svg.appendChild(knotsContour)
-  svg.appendChild(stalkBody)
-  svg.appendChild(stalkLight)
   svg.appendChild(spikes)
   svg.appendChild(knots)
+  svg.appendChild(stalkBody)
+  svg.appendChild(stalkLight)
   svg.appendChild(eyeGroup)
   eye = {
     stalkContour,
@@ -418,6 +425,7 @@ function strokeAttrs(color, width) {
     'stroke-linejoin': 'round'
   }
 }
+
 //
 // Eye-berry stack matching the in-level chain-buoy (contour, shade, lit face).
 //
@@ -464,11 +472,11 @@ function drawLoaderEye(dt) {
   const stalkPath = pointsToPath(points)
   eye.stalkContour.setAttribute('d', stalkPath)
   eye.spikesContour.setAttribute('d', spikePaths)
-  eye.knotsContour.setAttribute('d', loaderSpikeBallContourPath(spikeTips))
+  eye.knotsContour.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R + STALK_CONTOUR_PAD * 0.5))
+  eye.spikes.setAttribute('d', spikePaths)
+  eye.knots.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R))
   eye.stalkBody.setAttribute('d', stalkPath)
   eye.stalkLight.setAttribute('d', stalkPath)
-  eye.spikes.setAttribute('d', spikePaths)
-  eye.knots.setAttribute('d', loaderKnotsFillPath(joints, spikeTips))
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
   eye.openEye.setAttribute('display', closed ? 'none' : 'inline')
   eye.closedEye.setAttribute('display', closed ? 'inline' : 'none')
@@ -505,21 +513,16 @@ function circlePath(cx, cy, r) {
   return `M${(cx - r).toFixed(1)} ${cy.toFixed(1)} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0`
 }
 //
-// Contour ring only on the spike-end balls (joint beads use the stalk stroke
-// caps — a separate contour disc there would read as an inner line).
+// Discs on the spike ends (contour ring or fill, by radius).
 //
-function loaderSpikeBallContourPath(spikeTips) {
-  const r = SPIKE_BALL_R + STALK_CONTOUR_PAD * 0.5
+function loaderSpikeBallPath(spikeTips, r) {
   return spikeTips.map(p => circlePath(p.x, p.y, r)).join(' ')
 }
-//
-// Stem fill for joint beads and spike-end balls, drawn over every contour pass.
-//
-function loaderKnotsFillPath(joints, spikeTips) {
-  return [
-    ...joints.map(p => circlePath(p.x, p.y, STALK_JOINT_R)),
-    ...spikeTips.map(p => circlePath(p.x, p.y, SPIKE_BALL_R))
-  ].join(' ')
+
+function pointsToPath(points) {
+  return points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
 }
 
 function stalkYAt(x) {
@@ -528,11 +531,6 @@ function stalkYAt(x) {
   return STALK_Y + wave * STALK_WAVE_AMP * along
 }
 
-function pointsToPath(points) {
-  return points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(' ')
-}
 //
 // Quick dart toward the current target, hold, then pick a new spot (now and
 // then straight ahead, so it reads as looking around rather than jittering).

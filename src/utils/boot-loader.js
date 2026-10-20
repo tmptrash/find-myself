@@ -340,7 +340,9 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene: contoured red stalk, spikes, knots, then the eye-berry.
+// SVG scene: contoured red stalk, spikes, knots, then the eye-berry. Every
+// contour pass is drawn before any fill (same stacking as chain buoys) so the
+// dark rim stays on the outside and never reads as an inner stroke.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -353,7 +355,9 @@ function buildLoaderEyeSvg(colors) {
   const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_PAD))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
   const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W * STALK_LIGHT_FRAC))
+  const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + STALK_CONTOUR_PAD))
   const spikes = svgEl('path', strokeAttrs(colors.stem, SPIKE_W))
+  const knotsContour = svgEl('path', { fill: colors.contour })
   const knots = svgEl('path', { fill: colors.stem })
   const eyeGroup = svgEl('g', {})
   const openEye = svgEl('g', {})
@@ -374,6 +378,8 @@ function buildLoaderEyeSvg(colors) {
   eyeGroup.appendChild(openEye)
   eyeGroup.appendChild(closedEye)
   svg.appendChild(stalkContour)
+  svg.appendChild(spikesContour)
+  svg.appendChild(knotsContour)
   svg.appendChild(stalkBody)
   svg.appendChild(stalkLight)
   svg.appendChild(spikes)
@@ -383,7 +389,9 @@ function buildLoaderEyeSvg(colors) {
     stalkContour,
     stalkBody,
     stalkLight,
+    spikesContour,
     spikes,
+    knotsContour,
     knots,
     eyeGroup,
     openEye,
@@ -452,15 +460,15 @@ function drawLoaderEye(dt) {
   const joints = points.slice(1, -1)
   const tip = points[points.length - 1]
   const spikeTips = joints.map((p, i) => spikeTipFor(p, i))
+  const spikePaths = joints.map((p, i) => linePath(p, spikeTips[i])).join(' ')
   const stalkPath = pointsToPath(points)
   eye.stalkContour.setAttribute('d', stalkPath)
+  eye.spikesContour.setAttribute('d', spikePaths)
+  eye.knotsContour.setAttribute('d', loaderSpikeBallContourPath(spikeTips))
   eye.stalkBody.setAttribute('d', stalkPath)
   eye.stalkLight.setAttribute('d', stalkPath)
-  eye.spikes.setAttribute('d', joints.map((p, i) => linePath(p, spikeTips[i])).join(' '))
-  eye.knots.setAttribute('d', [
-    ...joints.map(p => circlePath(p.x, p.y, STALK_JOINT_R)),
-    ...spikeTips.map(p => circlePath(p.x, p.y, SPIKE_BALL_R))
-  ].join(' '))
+  eye.spikes.setAttribute('d', spikePaths)
+  eye.knots.setAttribute('d', loaderKnotsFillPath(joints, spikeTips))
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
   eye.openEye.setAttribute('display', closed ? 'none' : 'inline')
   eye.closedEye.setAttribute('display', closed ? 'inline' : 'none')
@@ -495,6 +503,23 @@ function linePath(a, b) {
 
 function circlePath(cx, cy, r) {
   return `M${(cx - r).toFixed(1)} ${cy.toFixed(1)} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0`
+}
+//
+// Contour ring only on the spike-end balls (joint beads use the stalk stroke
+// caps — a separate contour disc there would read as an inner line).
+//
+function loaderSpikeBallContourPath(spikeTips) {
+  const r = SPIKE_BALL_R + STALK_CONTOUR_PAD * 0.5
+  return spikeTips.map(p => circlePath(p.x, p.y, r)).join(' ')
+}
+//
+// Stem fill for joint beads and spike-end balls, drawn over every contour pass.
+//
+function loaderKnotsFillPath(joints, spikeTips) {
+  return [
+    ...joints.map(p => circlePath(p.x, p.y, STALK_JOINT_R)),
+    ...spikeTips.map(p => circlePath(p.x, p.y, SPIKE_BALL_R))
+  ].join(' ')
 }
 
 function stalkYAt(x) {

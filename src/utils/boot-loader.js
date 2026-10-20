@@ -12,7 +12,7 @@ const LOADER_EYE_ID = 'loader-eye'
 // Bumped when loader eye DOM changes so ensureLoaderStructure() rebuilds
 // instead of keeping an old SVG from a previous bundle.
 //
-const LOADER_EYE_REVISION = 5
+const LOADER_EYE_REVISION = 8
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -31,6 +31,10 @@ const STALK_ROOT_X = 14
 const STALK_Y = EYE_VIEW_H / 2
 const STALK_SEGMENT_LEN = 30
 const STALK_SEGMENT_W = 7
+//
+// Dark outline ring around the stalk body only (spikes keep STALK_CONTOUR_PAD).
+//
+const STALK_CONTOUR_OUTLINE = 0.5
 const STALK_CONTOUR_PAD = 2
 const STALK_LIGHT_FRAC = 0.35
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
@@ -359,7 +363,7 @@ function buildLoaderEyeSvg(colors) {
   })
   svg.dataset.revision = String(LOADER_EYE_REVISION)
   svg.style.overflow = 'visible'
-  const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_PAD))
+  const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_OUTLINE))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
   const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W * STALK_LIGHT_FRAC))
   const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + STALK_CONTOUR_PAD))

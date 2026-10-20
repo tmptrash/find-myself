@@ -91,14 +91,19 @@ const SQUEEZE_SHAKE_SEC = 0.2
 // under the lake fill at 12) so it covers the soil, not the hero.
 //
 const HOLE_Z = 11.9
-const HOLE_RX = 24
-const HOLE_RY = 6
+const HOLE_RX = 34
+const HOLE_RY = 9
 const HOLE_INNER = 0.72
-const HOLE_OPEN_SEC = 0.18
+const HOLE_OPEN_SEC = 0.16
 //
-// Hero layer sits on the player plane, the fade over everything in the level.
+// The grabbed hero is drawn in front of the island and the whole hole (the
+// island's baked greenery sits above the player plane and would swallow him
+// before he reaches the hole). While he is pulled his body is cut at the
+// hole's centre line, so the dark front half of the opening stays visible
+// under him and he sinks into it. The flower's front coils (eye-flower
+// GRAB_FRONT_Z) stay above him. The fade covers everything in the level.
 //
-const HERO_Z = CFG.visual.zIndex.player
+const HERO_Z = HOLE_Z + 0.02
 const FADE_Z = CFG.visual.zIndex.ui * 20
 
 /**
@@ -145,6 +150,7 @@ export function create(cfg) {
     sprites: null,
     flipX: false,
     impactDone: false,
+    holeOpening: false,
     holeOpen: 0,
     fade: null,
     soilColors: [pal.soil, pal.soilDark, pal.soilLight].map(glowRgb),
@@ -192,7 +198,7 @@ export function start(inst) {
   inst.heroX = char.pos.x
   inst.heroY = char.pos.y
   inst.side = char.pos.x >= inst.flower.baseX ? 1 : -1
-  inst.holeX = inst.startX - inst.side * PULL_TOWARD_PLANT
+  inst.holeX = Math.min(inst.startX - inst.side * PULL_TOWARD_PLANT, inst.flower.shoreX - HOLE_RX)
   inst.groundY = Math.min(EyeFlower.soilLineY(inst.flower, inst.holeX), inst.flower.waterY - HOLE_RY)
   inst.flipX = char.flipX
   inst.prey.scale = char.scale?.x ?? 1
@@ -227,7 +233,7 @@ export function onUpdate(inst, dt) {
   inst.beatTime += step
   updateBeat(inst, step)
   stepSpring(inst.squash, squashTarget(inst), SQUASH_SPRING, step)
-  inst.holeOpen = inst.impactDone ? Math.min(1, inst.holeOpen + step / HOLE_OPEN_SEC) : 0
+  inst.holeOpen = inst.holeOpening ? Math.min(1, inst.holeOpen + step / HOLE_OPEN_SEC) : 0
   pinHero(inst)
   syncPrey(inst)
   EyeFlower.tickGrab(inst.flower, step)
@@ -290,6 +296,7 @@ function setBeat(inst, beat) {
     case BEAT.PULL:
       inst.pullFromX = inst.heroX
       inst.pullFromY = inst.heroY
+      inst.holeOpening = true
       EyeFlower.setGrabPhase(flower, EyeFlower.GRAB_PHASE.PULL)
       break
     case BEAT.BURIED:
@@ -476,7 +483,6 @@ function drawHole(inst) {
   k.drawEllipse({ pos, radiusX: HOLE_RX * open, radiusY: HOLE_RY * open, color: inst.holeRimColor })
   k.drawEllipse({ pos, radiusX: HOLE_RX * HOLE_INNER * open, radiusY: HOLE_RY * HOLE_INNER * open, color: inst.holeColor })
 }
-
 function addFadeOverlay(inst) {
   const k = inst.k
   return k.add([

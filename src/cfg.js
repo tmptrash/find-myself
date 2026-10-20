@@ -383,6 +383,27 @@ export const CFG = {
         grassGreen: PALETTE.teal4,
         water: PALETTE.cyan2,
         //
+        // Lake paint over the base water fill, all at low opacity so the
+        // surface stays calm: a lighter skin under the surface, a darker
+        // deep end, soft tree reflections and thin shore ripples. The water
+        // is see-through, so the murk behind it, the sandy bed with pebbles
+        // and the swaying algae are painted as their own layer underneath.
+        //
+        waterPaint: {
+          light: PALETTE.cyan3,
+          deep: PALETTE.cyan0,
+          reflection: PALETTE.teal0,
+          ripple: PALETTE.cyan5,
+          murkTop: PALETTE.cyan1,
+          murkDeep: PALETTE.teal0,
+          bed: PALETTE.sand1,
+          bedRim: PALETTE.sand3,
+          pebble: PALETTE.gray3,
+          pebbleLight: PALETTE.gray5,
+          algae: PALETTE.green1,
+          algaeLight: PALETTE.green3
+        },
+        //
         // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
         // while gray ellipses stay for the monochrome reveal.
         //
@@ -481,6 +502,16 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
+        // Canopy apples on the main tree — warm reds with a shaded underside
+        // (same ball stack as glowEyeFlower berries).
+        //
+        glowTreeFruit: {
+          body: PALETTE.red2,          // Lit apple face
+          light: PALETTE.red3,         // Brighter variation on some fruit
+          shade: PALETTE.red0,         // Full-disk underside shadow
+          contour: PALETTE.gray0       // Dark rim
+        },
+        //
         // Eye-flower on the lake island: a red stalk of white eye-berries
         // (doll's eyes) and leafy tentacle vines on a mossy earth mound.
         //
@@ -491,8 +522,9 @@ export const CFG = {
           pupil: PALETTE.gray0,        // Berry pupil
           stem: PALETTE.red0,          // Red stalk and berry stems
           stemLight: PALETTE.red2,     // Lit edge of the stalk
-          undergroundStem: PALETTE.rose1,      // Buried stalk — darker, duller red
-          undergroundStemLight: PALETTE.red0,  // Buried stalk lit line (old stem tone)
+          undergroundStem: PALETTE.brown0,     // Buried stalk — a step off the earth fill
+          undergroundStemLight: PALETTE.brown1, // Buried stalk lit line, barely lighter
+          undergroundStemContour: PALETTE.rose0, // Buried stalk outline melts into the earth
           vine: PALETTE.green0,        // Tentacle vines
           leaf: PALETTE.green1,        // Leaf body
           leafLight: PALETTE.green2,   // Lit half of the leaf
@@ -652,12 +684,9 @@ export const CFG = {
           farRim: PALETTE.gray3        // Far wheel discs
         },
         //
-        // Parallax forest quadrants — cool/warm greens only (no red-pink rows).
-        // X picks left/right; canopy row picks top/bottom.
-        //
-        //
-        // West half: deep turquoise canopy in cool shade; east half: sunlit
-        // olive / yellow-green, as in the reference forest.
+        // Parallax forest quadrants — all cool turquoise / blue so the
+        // green gameplay trees read in front of them. X picks left/right;
+        // canopy row picks top/bottom.
         //
         parallaxTreeCornerTL: {
           root: PALETTE.teal0,
@@ -667,11 +696,11 @@ export const CFG = {
           leafShades: [PALETTE.cyan0, PALETTE.teal1, PALETTE.cyan2]
         },
         parallaxTreeCornerTR: {
-          root: PALETTE.green0,
-          trunk: PALETTE.gray1,
-          branch: PALETTE.gray1,
-          leaf: PALETTE.green3,
-          leafShades: [PALETTE.green1, PALETTE.green3, PALETTE.green4]
+          root: PALETTE.teal0,
+          trunk: PALETTE.cyan1,
+          branch: PALETTE.cyan1,
+          leaf: PALETTE.cyan2,
+          leafShades: [PALETTE.teal0, PALETTE.cyan2, PALETTE.cyan3]
         },
         parallaxTreeCornerBL: {
           root: PALETTE.teal0,
@@ -681,11 +710,22 @@ export const CFG = {
           leafShades: [PALETTE.teal0, PALETTE.teal2, PALETTE.cyan3]
         },
         parallaxTreeCornerBR: {
+          root: PALETTE.teal0,
+          trunk: PALETTE.gray1,
+          branch: PALETTE.gray1,
+          leaf: PALETTE.teal1,
+          leafShades: [PALETTE.cyan0, PALETTE.teal1, PALETTE.cyan2]
+        },
+        //
+        // Crowns of the two gameplay trees (main + shore): sunlit green, so
+        // the playable trees stand out in front of the all-blue parallax.
+        //
+        gameplayTreeFoliage: {
           root: PALETTE.green0,
-          trunk: PALETTE.green0,
-          branch: PALETTE.green1,
-          leaf: PALETTE.green2,
-          leafShades: [PALETTE.green0, PALETTE.green2, PALETTE.green3]
+          trunk: PALETTE.gray1,
+          branch: PALETTE.gray1,
+          leaf: PALETTE.green3,
+          leafShades: [PALETTE.green1, PALETTE.green3, PALETTE.green4]
         },
         //
         // Branch trampoline — standard glowMushroom terracotta (unusual beat,
@@ -715,6 +755,22 @@ export const CFG = {
           outline: PALETTE.gray0,
           face: PALETTE.brown0,
           blush: PALETTE.red3
+        },
+        //
+        // Menu ring glow icon: same mushroom, but it sits on the dark menu
+        // backdrop with no forest light around it, so the cap and stem run
+        // brighter and more saturated than in the level.
+        //
+        cuteMushroomMenu: {
+          body: PALETTE.gray7,
+          bodyShade: PALETTE.sand4,
+          cap: PALETTE.orange1,
+          capDark: PALETTE.orange0,
+          capLight: PALETTE.rose4,
+          spot: PALETTE.gray7,
+          outline: PALETTE.gray0,
+          face: PALETTE.brown0,
+          blush: PALETTE.pink3
         },
         bark: {
           dark: PALETTE.teal0,
@@ -823,6 +879,11 @@ export const CFG = {
       stepDuration: 0.05,
       stepFreqStart: 180,
       stepFreqEnd: 60,
+      //
+      // Centipede leg taps (fractions of `step`): noise patter and low thump.
+      //
+      predatorFootNoise: 0.44,
+      predatorFootThump: 0.16,
       //
       // Ready CRT power-on — TV hiss fading to silence (duration set in ready.js).
       //

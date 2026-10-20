@@ -20,6 +20,12 @@ const ANCHOR_DROP_RIGHT_PAD = 12
 const ANCHOR_LEAF_TARGET_Y_OFFSET = 48
 const ANCHOR_Y_SCORE_WEIGHT = 0.25
 const FRUIT_STEM_LEN = 4
+//
+// Shaded round fruit stack — same layout as glow-eye-berry addBerryBall.
+//
+const FRUIT_SHADE_DROP = 0.22
+const FRUIT_SHADE_FRAC = 0.86
+const FRUIT_CONTOUR_W = 1.2
 const FRUIT_Z = CFG.visual.zIndex.platforms - 1
 const FRUIT_FALL_GRAVITY = 1650
 const FRUIT_FALL_GROUND_PAD = 2
@@ -101,7 +107,7 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
     minY: anchorDropCfg?.minHangY ?? -Infinity
   }
   const anchorR = FRUIT_RADIUS_MIN + 2.5
-  const anchorHue = 0.12
+  const anchorHue = 0.62
   const anchorPick = pickAnchorFruitHang(hang, hangable, anchorDropCfg, anchorR)
   const anchorLeaf = anchorPick?.leaf ?? null
   //
@@ -126,7 +132,7 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
       const idx = Math.floor(rng() * pool.length)
       const foliage = pool[idx]
       const r = FRUIT_RADIUS_MIN + rng() * FRUIT_RADIUS_RANGE
-      const hue = 0.35 + rng() * 0.55
+      const hue = 0.12 + rng() * 0.72
       const pos = pickValidFruitHangOnCluster(hang, foliage, r, rng)
       if (!pos) continue
       pool.splice(idx, 1)
@@ -287,8 +293,11 @@ export function drawGlowTreeFruits(inst) {
   const spots = inst.treeFruitSpots
   if (!spots?.length) return
   const k = inst.k
-  const bodyA = glowRgb('glowLightCore')
-  const bodyB = glowRgb(GLOW_PAL.mushroomsLight[0])
+  const fruitPal = GLOW_PAL.glowTreeFruit
+  const bodyA = glowRgb(fruitPal.body)
+  const bodyB = glowRgb(fruitPal.light)
+  const shadeRgb = glowRgb(fruitPal.shade)
+  const contourRgb = glowRgb(fruitPal.contour)
   const stem = glowRgb(GLOW_PAL.treeColor.root)
   //
   // The tree copy of the anchor apple regrows only after the fallen one is eaten.
@@ -319,14 +328,16 @@ export function drawGlowTreeFruits(inst) {
       color: stemCol,
       opacity: op
     })
-    drawFruitBody(k, fruit, col, op)
-    const highlight = glowRgb(GLOW_PAL.treeColor.leafShades?.[0] ?? GLOW_PAL.treeColor.leaf)
+    const shadeCol = k.rgb(shadeRgb.r, shadeRgb.g, shadeRgb.b)
+    const contourCol = k.rgb(contourRgb.r, contourRgb.g, contourRgb.b)
+    drawFruitBody(k, fruit, col, shadeCol, contourCol, op)
+    const highlight = glowRgb(fruitPal.light)
     const bodyR = fruitDisplayRadius(fruit)
     bodyR > 2 && k.drawCircle({
-      pos: k.vec2(fruit.x - bodyR * 0.25, fruit.y - bodyR * 0.2),
-      radius: bodyR * 0.22,
+      pos: k.vec2(fruit.x - bodyR * 0.22, fruit.y - bodyR * FRUIT_SHADE_DROP - bodyR * 0.12),
+      radius: bodyR * 0.18,
       color: k.rgb(highlight.r, highlight.g, highlight.b),
-      opacity: op * 0.35
+      opacity: op * 0.28
     })
   })
 }
@@ -355,19 +366,34 @@ function fruitDisplayRadius(fruit) {
   return getGlowFruitDisplayRadius(fruit)
 }
 
-function drawFruitBody(k, fruit, col, op) {
+function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
   const r = fruitDisplayRadius(fruit)
   if (r < 1.2) return
   const bites = fruit.biteCount ?? 0
   const eaten = (fruit.eatProgress ?? 0) > 0.02 || bites > 0
   if (eaten) {
     const pts = buildRaggedFruitPolygon(k, fruit.x, fruit.y, r, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
-    pts.length >= 3 && k.drawPolygon({ pts, color: col, opacity: op })
+    pts.length >= 3 && k.drawPolygon({ pts, color: shadeCol, opacity: op })
+    const litY = fruit.y - r * FRUIT_SHADE_DROP
+    const litPts = buildRaggedFruitPolygon(k, fruit.x, litY, r * FRUIT_SHADE_FRAC, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
+    litPts.length >= 3 && k.drawPolygon({ pts: litPts, color: col, opacity: op })
     return
   }
   k.drawCircle({
     pos: k.vec2(fruit.x, fruit.y),
+    radius: r + FRUIT_CONTOUR_W,
+    color: contourCol,
+    opacity: op
+  })
+  k.drawCircle({
+    pos: k.vec2(fruit.x, fruit.y),
     radius: r,
+    color: shadeCol,
+    opacity: op
+  })
+  k.drawCircle({
+    pos: k.vec2(fruit.x, fruit.y - r * FRUIT_SHADE_DROP),
+    radius: r * FRUIT_SHADE_FRAC,
     color: col,
     opacity: op
   })

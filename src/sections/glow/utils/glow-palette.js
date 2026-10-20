@@ -6,6 +6,7 @@ import { applyFoliageDensityToPalette } from './glow-pixel-density.js'
 // game-wide palette aliases (CFG.visual.colors.palette).
 //
 export const GLOW_PAL = CFG.visual.colors.palette
+export const GAMEPLAY_TREE_FOLIAGE_KEY = 'gameplayTreeFoliage'
 
 /**
  * Parses a palette hex key or raw hex string into an RGB triplet.
@@ -116,7 +117,7 @@ export function snapToPalette(c) {
  * @returns {Object}
  */
 export function getTreePaletteColor() {
-  return getTreePaletteColorForCorner('parallaxTreeCornerTL')
+  return getTreePaletteColorForCorner(GAMEPLAY_TREE_FOLIAGE_KEY)
 }
 
 /**

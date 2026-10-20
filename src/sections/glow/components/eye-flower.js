@@ -10,6 +10,7 @@ import { drawSmallMushroomGroupToCanvas } from '../../../utils/draw-small-mushro
 import { addEyeBerry, addTaperedPass } from '../utils/glow-eye-berry.js'
 import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/glow-static-bake.js'
+import * as SoilSeam from '../utils/glow-soil-seam.js'
 import { forestFloorPainterColors } from './forest-floor.js'
 
 //
@@ -38,7 +39,16 @@ const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v7'
+const ISLAND_BAKE_KEY = 'v9'
+const ISLAND_BAKE_BELOW_WATER = 10
+//
+// Rock-to-soil seam: centred this far under the water line so even its
+// highest tongue stays below the ground line (water line + 8 px); the last
+// stretch before the shore eases up to ISLAND_BAKE_BELOW_WATER.
+//
+const ISLAND_SEAM_BELOW_WATER = 21
+const ISLAND_SEAM_INDEX = 7
+const ISLAND_SEAM_SHORE_BLEND = 24
 //
 // Moss, tufts and plants stop above the lake surface; submerged stones may go lower.
 //
@@ -85,19 +95,20 @@ const STAND_X_SLACK = 6
 const STAND_ABOVE = 14
 const STAND_BELOW = 14
 //
-// Past the collider the hero still visibly lands on the bank while his body
-// overlaps the painted shore (feet up to this far beyond it).
+// Open water kept between the island edge and a swimming centipede's head.
 //
-const BANK_BODY_REACH = 14
+const PREDATOR_CLEAR_X = 28
+//
+// Past the collider the grab still takes the hero anywhere up to the
+// centipede's stop line: a short hop off the stick lands in that strip with
+// the body against the painted shore, and it must read as "on the island".
+//
+const BANK_BODY_REACH = PREDATOR_CLEAR_X
 //
 // Hero body height: feet below the collider top by less than this put the
 // body against the collider's right side.
 //
 const SIDE_WALL_HERO_H = 74
-//
-// Open water kept between the island edge and a swimming centipede's head.
-//
-const PREDATOR_CLEAR_X = 28
 //
 // Plant root just right of the frame, so the flower and its buds are on screen.
 //
@@ -351,9 +362,11 @@ const GRAB_OPEN_SPEED = 3.2
 const GRAB_CLOSE_SPEED = 0.7
 const GRAB_BLADE_TILT_FOLLOW = 0.6
 //
-// Coils that pass in front of the hero draw over him.
+// Coils that pass in front of the hero draw over him; the grabbed hero is
+// drawn just above the island and its torn-earth hole (flower-grab), so the
+// coils sit above that, still under the lake fill.
 //
-const GRAB_FRONT_Z = CFG.visual.zIndex.player + 0.5
+const GRAB_FRONT_Z = ISLAND_Z + 0.18
 //
 // Right after the pull the whole plant follows the hero down, accelerating.
 // Vertices that pass the ground line are flattened onto it there: the line
@@ -387,14 +400,7 @@ export function create(cfg) {
   const x1 = x - ISLAND_W * 0.5
   const x2 = x1 + ISLAND_W
   const topY = waterY - ISLAND_ABOVE_WATER
-  const hill = {
-    x1,
-    x2,
-    floorY: waterY + ISLAND_BELOW_WATER,
-    height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
-    peakLeft: true,
-    plateau: ISLAND_PLATEAU_FRAC
-  }
+  const hill = buildIslandHill(x1, waterY)
   const walkX2 = hillXWhereTopReaches(hill, topY + ISLAND_WALK_DROP)
   const colliderWalkX2 = walkX2 + COLLIDER_EXTEND_RIGHT
   const colliderTopY = topY + COLLIDER_DROP
@@ -584,6 +590,17 @@ export function syncVisible(inst) {
  */
 export function islandWorldX(lakeX1) {
   return lakeX1 - ISLAND_OFFSCREEN_W + ISLAND_W * 0.5
+}
+
+/**
+ * World X where the island's east slope meets the water line, known before
+ * the island exists so the lake bake can start shore ripples there.
+ * @param {number} lakeX1 - Lake left edge X
+ * @param {number} waterY - Lake surface Y
+ * @returns {number}
+ */
+export function islandShoreWorldX(lakeX1, waterY) {
+  return hillXWhereTopReaches(buildIslandHill(islandWorldX(lakeX1) - ISLAND_W * 0.5, waterY), waterY)
 }
 
 /**
@@ -1210,8 +1227,39 @@ function islandBounds(inst) {
     x1: hillBounds.x1 - ISLAND_BAKE_PAD,
     y1: hillBounds.y1,
     x2: hillBounds.x2 + ISLAND_BAKE_PAD,
-    y2: hillBounds.y2 + ISLAND_BAKE_PAD
+    y2: Math.min(hillBounds.y2 + ISLAND_BAKE_PAD, inst.waterY + ISLAND_SEAM_BELOW_WATER + SoilSeam.seamFringeMaxOffset())
   }
+}
+
+//
+// Where the island's rock gives way to the soil: rounded tongues like the
+// topsoil/subsoil seam, kept below the ground line. Towards the shore it eases
+// up to just under the water line, so no cut-off underwater mound shows
+// through the see-through lake.
+//
+function islandSeamY(inst, x) {
+  const soilY = inst.waterY + ISLAND_SEAM_BELOW_WATER + SoilSeam.seamFringeOffset(x, ISLAND_SEAM_INDEX)
+  const shoreT = Math.max(0, Math.min(1, (x - inst.shoreX + ISLAND_SEAM_SHORE_BLEND) / ISLAND_SEAM_SHORE_BLEND))
+  return soilY + (inst.waterY + ISLAND_BAKE_BELOW_WATER - soilY) * shoreT
+}
+
+//
+// Erases everything under the seam (the bake has no grain yet at this point).
+//
+function cutIslandSeam(ctx, inst) {
+  const x1 = inst.hill.x1 - ISLAND_BAKE_PAD
+  const x2 = inst.hill.x2 + ISLAND_BAKE_PAD
+  const bottomY = inst.waterY + ISLAND_SEAM_BELOW_WATER + SoilSeam.seamFringeMaxOffset() + ISLAND_BAKE_PAD
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.moveTo(x1, islandSeamY(inst, x1))
+  for (let x = x1 + 1; x <= x2; x++) ctx.lineTo(x, islandSeamY(inst, x))
+  ctx.lineTo(x2, bottomY)
+  ctx.lineTo(x1, bottomY)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
 }
 
 //
@@ -1233,6 +1281,7 @@ function paintIsland(ctx, inst) {
     colors: colors.hill,
     greeneryMaxY
   })
+  cutIslandSeam(ctx, inst)
   const lakeX1 = inst.x1 + ISLAND_OFFSCREEN_W
   ISLAND_PLANTS.filter(p => p.kind === KIND.PLUME).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
@@ -1254,6 +1303,20 @@ function paintIsland(ctx, inst) {
     baseY != null &&
       drawSmallMushroomGroupToCanvas(ctx, { x: lakeX1 + p.dx, baseY, rng: createSeededRandom(nextSeed(rng)), colors: colors.mushroom })
   })
+}
+
+//
+// Mossy hill shape of the island whose left edge is `x1`.
+//
+function buildIslandHill(x1, waterY) {
+  return {
+    x1,
+    x2: x1 + ISLAND_W,
+    floorY: waterY + ISLAND_BELOW_WATER,
+    height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
+    peakLeft: true,
+    plateau: ISLAND_PLATEAU_FRAC
+  }
 }
 
 //

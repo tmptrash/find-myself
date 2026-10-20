@@ -1,6 +1,6 @@
 import { toCanvas } from '../../../utils/helper.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
-import { applyGlowGameplaySharpBake } from '../utils/glow-focus-depth.js'
+import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
 import {
   CUTE_MUSHROOM_ASPECT,
   TRAMP_FACE_EYE_SCALE,
@@ -18,8 +18,8 @@ const BAKE_PAD = 4
 const BAKE_BASE_INSET = 2
 const BAKE_W = MUSH_W + BAKE_PAD
 const BAKE_H = Math.ceil(MUSH_W * CUTE_MUSHROOM_ASPECT) + BAKE_PAD
-const SPRITE_OPEN = 'menu-glow-mushroom'
-const SPRITE_BLINK = 'menu-glow-mushroom-blink'
+const SPRITE_OPEN = 'menu-glow-mushroom-v3'
+const SPRITE_BLINK = 'menu-glow-mushroom-blink-v3'
 const BAKE_GRAIN_SEED = 7331
 const BLINK_MIN_INTERVAL = 2.5
 const BLINK_MAX_INTERVAL = 6
@@ -114,7 +114,7 @@ function bakeVariant(k, name, eyesOpen) {
       cx: BAKE_W / 2,
       baseY: BAKE_H - BAKE_BASE_INSET,
       width: MUSH_W,
-      colors: GLOW_PAL.cuteMushroom,
+      colors: GLOW_PAL.cuteMushroomMenu,
       withFace: true,
       eyesOpen,
       eyeScale: TRAMP_FACE_EYE_SCALE,
@@ -122,7 +122,11 @@ function bakeVariant(k, name, eyesOpen) {
       simpleShade: true
     })
   })
-  applyGlowGameplaySharpBake(canvas, BAKE_GRAIN_SEED + name.length)
+  //
+  // Grain only: the in-level decor grade lowers contrast and saturation,
+  // which washes the icon out on the dark menu backdrop.
+  //
+  applyGlowFilmGrainToCanvas(canvas, BAKE_GRAIN_SEED + name.length)
   k.loadSprite(name, canvas)
 }
 

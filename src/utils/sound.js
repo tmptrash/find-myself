@@ -1552,7 +1552,7 @@ export function playGlowPredatorFootstep(instance) {
   filter.Q.value = 0.2
   const envelope = instance.audioContext.createGain()
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.145, now + 0.01)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * CFG.audio.sfx.predatorFootNoise, now + 0.01)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   const thump = instance.audioContext.createOscillator()
   thump.type = 'sine'
@@ -1560,7 +1560,7 @@ export function playGlowPredatorFootstep(instance) {
   thump.frequency.exponentialRampToValueAtTime(58, now + duration)
   const thumpGain = instance.audioContext.createGain()
   thumpGain.gain.setValueAtTime(0.001, now)
-  thumpGain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.05, now + 0.008)
+  thumpGain.gain.linearRampToValueAtTime(CFG.audio.sfx.step * CFG.audio.sfx.predatorFootThump, now + 0.008)
   thumpGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)

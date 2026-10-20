@@ -49,11 +49,11 @@ const BUOY_SIDE_ARM_DROP = 0.35
 const BUOY_SIDE_BALL_RADIUS_MULT = 0.95
 //
 // Crooked underground continuation of the red stalk — baked once, no sway,
-// from the ground line to the bottom of the playfield earth band. Darker
-// inks and partial opacity so it sinks into the soil behind the lit stalk.
+// from the ground line to the bottom of the playfield earth band. Earth-toned
+// inks and low opacity so it is only a faint trace in the soil.
 //
 const BUOY_UNDERGROUND_BAKE_SLOT = 'buoyUndergroundStemCrooked'
-const BUOY_UNDERGROUND_OPACITY = 0.62
+const BUOY_UNDERGROUND_OPACITY = 0.4
 const BUOY_UNDERGROUND_GRAIN_SEED = 0.53
 const BUOY_UNDERGROUND_SEGMENT_LEN = 22
 const BUOY_UNDERGROUND_WOBBLE = 0.34
@@ -190,7 +190,7 @@ export function onDraw(inst, colors, view = null) {
   // a stalk where a side stem branches off.
   //
   const greeneryColors = buoyGreeneryPainterColors()
-  visible.forEach(buoy => drawBuoyUndergroundStem(k, buoy, colors))
+  visible.forEach(buoy => drawBuoyUndergroundStem(k, buoy))
   visible.forEach(buoy => drawBuoyBaseGreeneryBack(k, buoy, greeneryColors))
   const chains = visible.map(buoy => buildBuoyChainPoints(buoy, inst.time))
   const batch = inst.bodyBatch
@@ -234,20 +234,20 @@ function buildBuoyUndergroundPoints(x, groundY, earthBottomY, segLen, seed) {
 //
 // Baked underground stalk — same tapered passes as the stem above ground.
 //
-function drawBuoyUndergroundStem(k, buoy, colors) {
+function drawBuoyUndergroundStem(k, buoy) {
   const pts = buoy.undergroundPts
   if (!pts || pts.length < 2) return
-  const inks = buoyUndergroundStemColors(colors)
+  const inks = buoyUndergroundStemColors()
   const key = colorKey(inks.contour, inks.stem, inks.stemLight)
   drawStaticDecorSprite(k, ensureStaticDecorSprite(k, buoy, BUOY_UNDERGROUND_BAKE_SLOT, key,
     buoyUndergroundStemBounds(pts, buoy.segmentWidth),
     ctx => paintBuoyUndergroundStem(ctx, pts, buoy.segmentWidth, inks),
     buoy.x * BUOY_UNDERGROUND_GRAIN_SEED), BUOY_UNDERGROUND_OPACITY)
 }
-function buoyUndergroundStemColors(colors) {
+function buoyUndergroundStemColors() {
   const pal = GLOW_PAL.glowEyeFlower
   return {
-    contour: colors.contour,
+    contour: glowRgb(pal.undergroundStemContour),
     stem: glowRgb(pal.undergroundStem),
     stemLight: glowRgb(pal.undergroundStemLight)
   }

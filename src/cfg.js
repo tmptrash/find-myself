@@ -184,12 +184,12 @@ export const CFG = {
       //
       loader: {
         message: PALETTE.gray7,
-        contour: PALETTE.gray0,
-        berry: PALETTE.gray7,
-        berryShade: PALETTE.mauve4,
-        pupil: PALETTE.gray0,
-        stem: PALETTE.red0,
-        stemLight: PALETTE.red2
+        contour: PALETTE.rose1,     // Warm burgundy-brown outline (stalk, spikes, eye)
+        berry: PALETTE.gray7,       // Warm ivory sclera
+        berryShade: PALETTE.sand4,  // Muted shade on the sclera's unlit side
+        pupil: PALETTE.cyan0,       // Dark teal pupil
+        stem: PALETTE.red2,         // Muted coral-red stalk body
+        stemLight: PALETTE.pink4    // Dusty coral highlight on the stalk's upper edge
       },
       //
       // Ready screen colors. The scene runs on a teal+orange

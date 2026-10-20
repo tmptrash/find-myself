@@ -12,7 +12,7 @@ const LOADER_EYE_ID = 'loader-eye'
 // Bumped when loader eye DOM changes so ensureLoaderStructure() rebuilds
 // instead of keeping an old SVG from a previous bundle.
 //
-const LOADER_EYE_REVISION = 10
+const LOADER_EYE_REVISION = 12
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -22,8 +22,8 @@ const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10p
 const LOADER_UI_FADE_SEC = 0.32
 //
 // Stalk-eye geometry (SVG user units = CSS px): the Glow chain-buoy eye-berry
-// lying on its side. Red contoured stalk with a lit line, side spikes on each
-// joint, white berry with shaded underside and a dark pupil on the tip.
+// lying on its side. Coral stalk with a broken highlight on its upper edge,
+// side spikes on each joint, ivory berry with a shaded side and a teal pupil.
 //
 const EYE_VIEW_W = 360
 const EYE_VIEW_H = 96
@@ -32,25 +32,40 @@ const STALK_Y = EYE_VIEW_H / 2
 const STALK_SEGMENT_LEN = 30
 const STALK_SEGMENT_W = 7
 //
-// Dark outline ring around the stalk body only (spikes keep STALK_CONTOUR_PAD).
+// One burgundy outline width per side for the stalk, spikes, balls and eye.
 //
-const STALK_CONTOUR_OUTLINE = 0.25
-const STALK_CONTOUR_PAD = 1
+const LOADER_OUTLINE_W = 0.9
 //
-// Thin stem-colour rim per side inside the contour; the rest of the stalk,
-// spikes and spike balls is filled with the light stem colour.
+// Highlight: a thin stroke riding near the upper edge, broken into a few
+// irregular dashes so only parts of the stalk catch the light.
 //
-const STALK_RIM_W = 1
+const STALK_HIGHLIGHT_W = 1.1
+const STALK_HIGHLIGHT_OPACITY = 0.7
+const STALK_HIGHLIGHT_LIFT = STALK_SEGMENT_W * 0.22
+const STALK_HIGHLIGHT_DASH = '22 9 13 14 30 11'
+const SPIKE_BALL_HIGHLIGHT_FRAC = 0.32
+const SPIKE_BALL_HIGHLIGHT_OFFSET = 0.35
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
 const SPIKE_LEN_WOBBLE = STALK_SEGMENT_W * 0.35
 const SPIKE_LEAN_BACK = STALK_SEGMENT_W * 0.35
 const SPIKE_W = STALK_SEGMENT_W * 0.72
 const SPIKE_BALL_R = STALK_SEGMENT_W * 0.95
+//
+// Slow sway: a main wave plus a weaker, slower one so the bend never repeats
+// exactly. Spike tips trail the stalk by a phase lag (follow-through).
+//
 const STALK_WAVE_AMP = 7
 const STALK_WAVE_FREQ = 0.045
 const STALK_WAVE_SPEED = 2.2
+const STALK_WAVE2_AMP = 2.2
+const STALK_WAVE2_FREQ = 0.021
+const STALK_WAVE2_SPEED = 0.9
+const STALK_WAVE2_PHASE = 1.4
+const SPIKE_SWAY_AMP = 1.4
+const SPIKE_SWAY_LAG = 0.7
+const SPIKE_SWAY_JOINT_PHASE = 0.9
 const EYE_R = 12
-const EYE_CONTOUR_W = 1.5
+const EYE_CONTOUR_W = LOADER_OUTLINE_W * 1.5
 const EYE_PUPIL_FRAC = 0.4
 const EYE_PUPIL_R = EYE_R * EYE_PUPIL_FRAC
 const EYE_LID_W = 1.4
@@ -61,9 +76,9 @@ const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
 // is tracking something that keeps moving around the screen.
 //
 const PUPIL_MAX_OFFSET = EYE_R - EYE_PUPIL_R - 1
-const PUPIL_DART_RATE = 22
-const PUPIL_HOLD_MIN_SEC = 0.25
-const PUPIL_HOLD_MAX_SEC = 1.3
+const PUPIL_DART_RATE = 14
+const PUPIL_HOLD_MIN_SEC = 0.7
+const PUPIL_HOLD_MAX_SEC = 2.2
 const PUPIL_MIN_REACH = 0.35
 const PUPIL_CENTER_CHANCE = 0.15
 //
@@ -353,9 +368,9 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene in three passes: every contour, then every stem-colour rim, then
-// every light fill, so neither the dark contour nor a rim crosses the light
-// interior where a spike joins the trunk.
+// SVG scene in three passes: every outline, then every coral fill, then the
+// highlights, so the outline survives only on the outer silhouette and never
+// crosses the stalk where a spike joins it.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -366,15 +381,18 @@ function buildLoaderEyeSvg(colors) {
   })
   svg.dataset.revision = String(LOADER_EYE_REVISION)
   svg.style.overflow = 'visible'
-  const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_OUTLINE))
+  const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + LOADER_OUTLINE_W * 2))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
-  const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W - STALK_RIM_W * 2))
-  const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + STALK_CONTOUR_PAD))
+  const stalkLight = svgEl('path', {
+    ...strokeAttrs(colors.stemLight, STALK_HIGHLIGHT_W),
+    'stroke-dasharray': STALK_HIGHLIGHT_DASH,
+    'stroke-opacity': STALK_HIGHLIGHT_OPACITY
+  })
+  const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + LOADER_OUTLINE_W * 2))
   const spikes = svgEl('path', strokeAttrs(colors.stem, SPIKE_W))
-  const spikesLight = svgEl('path', strokeAttrs(colors.stemLight, SPIKE_W - STALK_RIM_W * 2))
   const knotsContour = svgEl('path', { fill: colors.contour })
   const knots = svgEl('path', { fill: colors.stem })
-  const knotsLight = svgEl('path', { fill: colors.stemLight })
+  const knotsLight = svgEl('path', { fill: colors.stemLight, 'fill-opacity': STALK_HIGHLIGHT_OPACITY })
   const eyeGroup = svgEl('g', {})
   const openEye = svgEl('g', {})
   appendLoaderBerryBall(openEye, colors, 0, 0)
@@ -399,7 +417,6 @@ function buildLoaderEyeSvg(colors) {
   svg.appendChild(spikes)
   svg.appendChild(knots)
   svg.appendChild(stalkBody)
-  svg.appendChild(spikesLight)
   svg.appendChild(knotsLight)
   svg.appendChild(stalkLight)
   svg.appendChild(eyeGroup)
@@ -409,7 +426,6 @@ function buildLoaderEyeSvg(colors) {
     stalkLight,
     spikesContour,
     spikes,
-    spikesLight,
     knotsContour,
     knots,
     knotsLight,
@@ -485,13 +501,12 @@ function drawLoaderEye(dt) {
   const stalkPath = pointsToPath(points)
   eye.stalkContour.setAttribute('d', stalkPath)
   eye.spikesContour.setAttribute('d', spikePaths)
-  eye.knotsContour.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R + STALK_CONTOUR_PAD * 0.5))
+  eye.knotsContour.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R + LOADER_OUTLINE_W))
   eye.spikes.setAttribute('d', spikePaths)
   eye.knots.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R))
-  eye.spikesLight.setAttribute('d', spikePaths)
-  eye.knotsLight.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R - STALK_RIM_W))
+  eye.knotsLight.setAttribute('d', loaderSpikeBallPath(spikeTips.map(spikeBallHighlightCenter), SPIKE_BALL_R * SPIKE_BALL_HIGHLIGHT_FRAC))
   eye.stalkBody.setAttribute('d', stalkPath)
-  eye.stalkLight.setAttribute('d', stalkPath)
+  eye.stalkLight.setAttribute('d', pointsToPath(points.map(p => ({ x: p.x, y: p.y - STALK_HIGHLIGHT_LIFT }))))
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
   eye.openEye.setAttribute('display', closed ? 'none' : 'inline')
   eye.closedEye.setAttribute('display', closed ? 'inline' : 'none')
@@ -517,7 +532,15 @@ function buildStalkPoints(tipX) {
 function spikeTipFor(joint, index) {
   const side = index % 2 === 0 ? -1 : 1
   const len = SPIKE_LEN + Math.sin(index * 1.17) * SPIKE_LEN_WOBBLE
-  return { x: joint.x - SPIKE_LEAN_BACK, y: joint.y + side * len }
+  const sway = Math.sin(eye.time * STALK_WAVE_SPEED - SPIKE_SWAY_LAG - index * SPIKE_SWAY_JOINT_PHASE) * SPIKE_SWAY_AMP
+  return { x: joint.x - SPIKE_LEAN_BACK + sway, y: joint.y + side * len }
+}
+//
+// Small lit spot toward the upper-left of a spike ball (same light as the stalk).
+//
+function spikeBallHighlightCenter(tip) {
+  const d = SPIKE_BALL_R * SPIKE_BALL_HIGHLIGHT_OFFSET
+  return { x: tip.x - d, y: tip.y - d }
 }
 
 function linePath(a, b) {
@@ -542,8 +565,9 @@ function pointsToPath(points) {
 
 function stalkYAt(x) {
   const along = (x - STALK_ROOT_X) / STALK_MAX_LEN
-  const wave = Math.sin(x * STALK_WAVE_FREQ - eye.time * STALK_WAVE_SPEED)
-  return STALK_Y + wave * STALK_WAVE_AMP * along
+  const wave = Math.sin(x * STALK_WAVE_FREQ - eye.time * STALK_WAVE_SPEED) * STALK_WAVE_AMP
+  const drift = Math.sin(x * STALK_WAVE2_FREQ - eye.time * STALK_WAVE2_SPEED + STALK_WAVE2_PHASE) * STALK_WAVE2_AMP
+  return STALK_Y + (wave + drift) * along
 }
 
 //

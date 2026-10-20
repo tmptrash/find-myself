@@ -2,20 +2,69 @@ import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import { GLOW_SUN_LIT_FRAC, GLOW_SUN_LIT_OFFSET_X, GLOW_SUN_LIT_OFFSET_Y } from './glow-eye-berry.js'
 import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
-import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
+import { GLOW_LAYER_GRADE, applyGlowLayerGradeToCanvas } from './glow-parallax-grain.js'
+import { glowFilmGrainBlockPxForTier } from './glow-pixel-density.js'
+import { TREE_SEED, collectGlowTreeClusterLeaves, paintGlowTreeClusterLeaves, paintGlowTreeFoliageMask } from './glow-tree.js'
 
 //
 // Decorative canopy fruit on the main glow tree (game palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
-const FRUIT_RANDOM_COUNT = 17
+const FRUIT_RANDOM_COUNT = 7
 //
 // Fallen anchor fruit vanishes after this if the centipede never claims it.
 //
 const FRUIT_GROUND_LINGER_SEC = 10
 const FRUIT_GROUND_FADE_SEC = 0.9
-const FRUIT_RADIUS_MIN = 6
-const FRUIT_RADIUS_RANGE = 4
+const FRUIT_ANCHOR_R = 8.5
+const FRUIT_ANCHOR_HUE = 0.62
+//
+// Fruit hangs from the free tips of thin twigs on a short visible stem.
+//
+const FRUIT_TWIG_TIP_MAX_W = 3.2
+const FRUIT_TIP_STEM_LEN_MIN = 5
+const FRUIT_TIP_STEM_LEN_RANGE = 3
+const FRUIT_TIP_LEAN_MAX = 0.35
+const FRUIT_STEM_W = 1.8
+const FRUIT_STEM_CONTOUR_W = 1
+//
+// The fruit must touch painted foliage (ring cover). Depth = distance to the
+// crown's silhouette: fruit on the front edge is big and bright, fruit deep
+// inside is small, darker and partly hidden behind canopy leaves re-painted
+// on top of it.
+//
+const FRUIT_DEPTH_RING_PAD = 5
+const FRUIT_DEPTH_RING_SAMPLES = 16
+const FRUIT_DEPTH_MIN_COVER = 0.3
+const FRUIT_EDGE_DEPTH_PX = 28
+const FRUIT_EDGE_RAYS = 12
+const FRUIT_EDGE_STEP_PX = 3
+const FRUIT_R_NEAR = 11
+const FRUIT_R_DEEP = 5
+const FRUIT_R_JITTER = 0.8
+const FRUIT_R_PROBE = 8
+const FRUIT_HUE_NEAR = 0.8
+const FRUIT_HUE_DEEP = 0.2
+const FRUIT_COVER_DEPTH_MIN = 0.12
+const FRUIT_COVER_FRAC_MIN = 0.2
+const FRUIT_COVER_FRAC_MAX = 0.42
+const FRUIT_COVER_FRAC_JITTER = 0.35
+const FRUIT_COVER_SKIP_CHANCE = 0.35
+const FRUIT_COVER_SIDE_JITTER = 0.8
+const FRUIT_COVER_SIDE_MIN = 0.7
+const FRUIT_COVER_CHORD_SCALE = 1.75
+const FRUIT_COVER_LEAF_REACH = 0.25
+const FRUIT_COVER_LEAF_CENTROID = 0.45
+const FRUIT_COVER_SPRITE = 'glow-tree-fruit-cover'
+const FRUIT_COVER_GRAIN_SEED = 6011
+const FRUIT_COVER_BAKE_PAD = 2
+//
+// Spacing keeps the crown from reading as a polka-dot pattern: no fruit in a
+// vertical stack, none crowded against another.
+//
+const FRUIT_MIN_SPACING = 42
+const FRUIT_STACK_DX = 24
+const FRUIT_STACK_DY = 90
 const ANCHOR_DROP_LEFT_PAD = 16
 const ANCHOR_DROP_RIGHT_PAD = 12
 const ANCHOR_LEAF_TARGET_Y_OFFSET = 48
@@ -40,10 +89,6 @@ const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_BELOW = 110
 const ANCHOR_CANOPY_MIN_ABOVE_BRANCH = 40
 const FRUIT_CLUSTER_MIN_CELLS = 5
 const FRUIT_CLUSTER_MIN_SPAN_CELLS = 2
-const FRUIT_HANG_TRIES_MAX = 24
-const FRUIT_HANG_TRIES_PER_CELL = 3
-const FRUIT_HANG_JITTER_MAX = 0
-const FRUIT_HANG_JITTER_FRAC = 0
 //
 // Foliage coverage mask: two rings outside the fruit edge. Only near-opaque
 // mask pixels count — anti-aliased leaf rims and faint loose leaves read as
@@ -102,49 +147,20 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
     mask: buildFoliageMask(treeData, cellPx),
     minY: anchorDropCfg?.minHangY ?? -Infinity
   }
-  const anchorR = FRUIT_RADIUS_MIN + 2.5
-  const anchorHue = 0.62
-  const anchorPick = pickAnchorFruitHang(hang, hangable, anchorDropCfg, anchorR)
-  const anchorLeaf = anchorPick?.leaf ?? null
+  const tips = collectTwigTipHangs(hang, anchorDropCfg, rng)
+  const anchor = pickAnchorTipHang(tips, anchorDropCfg, treeData.horizBranch) ?? pickAnchorClusterHang(hang, hangable, anchorDropCfg, rng)
   //
   // A missing anchor spot only costs the droppable fruit — the rest of the
   // crown is still hung, so the colour-world tree is never bare.
   //
-  const spots = anchorPick ? [{
-    anchor: true,
-    attached: true,
-    x: anchorPick.pos.x,
-    y: anchorPick.pos.y,
-    r: anchorR,
-    hue: anchorHue,
-    vy: 0,
-    leaves: makeFruitLeafPair(hashFruitLeafSeed(anchorPick.pos.x, anchorPick.pos.y, anchorHue), anchorR, rng, anchorHue)
-  }] : []
-  const pool = hangable.filter(f => f !== anchorLeaf)
-  const pickN = Math.min(FRUIT_RANDOM_COUNT, pool.length)
-  for (let n = 0; n < pickN; n++) {
-    let placed = false
-    for (let attempt = 0; attempt < 10 && pool.length; attempt++) {
-      const idx = Math.floor(rng() * pool.length)
-      const foliage = pool[idx]
-      const r = FRUIT_RADIUS_MIN + rng() * FRUIT_RADIUS_RANGE
-      const hue = 0.12 + rng() * 0.72
-      const pos = pickValidFruitHangOnCluster(hang, foliage, r, rng)
-      if (!pos) continue
-      pool.splice(idx, 1)
-      spots.push({
-        attached: true,
-        x: pos.x,
-        y: pos.y,
-        r,
-        hue,
-        vy: 0,
-        leaves: makeFruitLeafPair(hashFruitLeafSeed(pos.x, pos.y, hue), r, rng, hue)
-      })
-      placed = true
-      break
-    }
-    !placed && pool.length && pool.pop()
+  const spots = anchor ? [anchor] : []
+  const leaves = collectGlowTreeClusterLeaves(treeData, getTreePaletteColor())
+  shuffleInPlace(tips, rng)
+  tips.sort((a, b) => Number(b.isTip) - Number(a.isTip))
+  for (const tip of tips) {
+    if (spots.length - (anchor ? 1 : 0) >= FRUIT_RANDOM_COUNT) break
+    if (spots.some(s => fruitSpotsTooClose(s, tip))) continue
+    spots.push(makeTwigFruitSpot(tip, leaves, rng))
   }
   return spots
 }
@@ -266,11 +282,14 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
 }
 
 /**
- * Registers a fixed draw layer for tree fruits.
+ * Registers a fixed draw layer for tree fruits. Canopy leaves that sit in
+ * front of deep fruit are baked once per scene run into one sprite drawn
+ * over the fruit, so those apples read as hanging inside the crown.
  * @param {Object} k - Kaplay inst
  * @param {Object} levelInst - Glow level inst (needs treeFruitSpots)
  */
 export function mountGlowTreeFruitLayer(k, levelInst) {
+  levelInst.treeFruitCover = bakeFruitLeafCover(k, levelInst.treeFruitSpots ?? [])
   k.add([
     k.z(FRUIT_Z),
     {
@@ -317,15 +336,9 @@ export function drawGlowTreeFruits(inst) {
       const ly = fruit.y + leaf.dy
       drawFruitLeaf(k, lx, ly, leaf.len, leaf.angle, leafRgb, op * 0.95)
     })
-    fruit.attached && k.drawLine({
-      p1: k.vec2(fruit.x, fruit.y - fruit.r),
-      p2: k.vec2(fruit.x, fruit.y - fruit.r - FRUIT_STEM_LEN),
-      width: 1.6,
-      color: stemCol,
-      opacity: op
-    })
     const shadeCol = k.rgb(shadeRgb.r, shadeRgb.g, shadeRgb.b)
     const contourCol = k.rgb(contourRgb.r, contourRgb.g, contourRgb.b)
+    fruit.attached && drawFruitStem(k, fruit, stemCol, contourCol, op)
     drawFruitBody(k, fruit, col, shadeCol, contourCol, op)
     const highlight = glowRgb(fruitPal.light)
     const bodyR = fruitDisplayRadius(fruit)
@@ -339,6 +352,8 @@ export function drawGlowTreeFruits(inst) {
       opacity: op * 0.28
     })
   })
+  const cover = inst.treeFruitCover
+  cover && k.drawSprite({ sprite: FRUIT_COVER_SPRITE, pos: k.vec2(cover.x, cover.y) })
 }
 
 /**
@@ -420,33 +435,273 @@ function buildRaggedFruitPolygon(k, cx, cy, r, biteMarks, seed) {
 }
 
 //
-// The anchor fruit drops straight down, so its hang x decides where it lands.
-// Scan every interior foliage cell and keep the valid one closest to the
-// middle of the gap between trunk and left trampoline; cells whose fruit
-// would overhang either side of the gap are skipped.
+// Every free twig tip (a segment end no other segment grows from) that can
+// carry a fruit: stem down from the tip, fruit sized by how deep in the
+// crown it hangs.
 //
-function pickAnchorFruitHang(hang, hangable, anchorDropCfg, fruitR) {
-  const { trunkX, trunkHalf, branchTrampX: trampX, trampClearHalf } = anchorDropCfg
-  const gapLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD + fruitR
-  const gapRight = trampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD - fruitR
-  const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
+function collectTwigTipHangs(hang, anchorDropCfg, rng) {
+  const segs = hang.treeData.branchSegs ?? []
+  const starts = new Set(segs.map(s => `${s.sx},${s.sy}`))
   const horiz = hang.treeData.horizBranch
-  const ceilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
-  const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : 0
-  let best = null
-  let bestScore = Infinity
+  const canopyMaxY = horiz ? horiz.physY - FRUIT_CANOPY_MIN_ABOVE_BRANCH : Infinity
+  const canopyMaxX = branchTrampX(anchorDropCfg) + FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP
+  const out = []
+  segs.forEach(seg => {
+    if ((seg.w2 ?? seg.w) > FRUIT_TWIG_TIP_MAX_W || seg.ey < hang.minY) return
+    const len = Math.hypot(seg.ex - seg.sx, seg.ey - seg.sy) || 1
+    const lean = Math.max(-FRUIT_TIP_LEAN_MAX, Math.min(FRUIT_TIP_LEAN_MAX, (seg.ex - seg.sx) / len * FRUIT_TIP_LEAN_MAX))
+    const stemLen = FRUIT_TIP_STEM_LEN_MIN + rng() * FRUIT_TIP_STEM_LEN_RANGE
+    const probe = hangFromTip(seg.ex, seg.ey, lean, stemLen, FRUIT_R_PROBE)
+    if (foliageRingCover(hang.mask, probe.x, probe.y, FRUIT_R_PROBE) < FRUIT_DEPTH_MIN_COVER) return
+    const depth = foliageEdgeDepth(hang.mask, probe.x, probe.y)
+    const r = FRUIT_R_NEAR + (FRUIT_R_DEEP - FRUIT_R_NEAR) * depth + (rng() - 0.5) * FRUIT_R_JITTER * 2
+    const pos = hangFromTip(seg.ex, seg.ey, lean, stemLen, r)
+    if (pos.y > canopyMaxY || pos.x > canopyMaxX) return
+    if (horiz && isInHeroBranchFruitExcludeZone(horiz, pos.x, pos.y)) return
+    if (isPointOnTreeWood(hang.treeData, pos.x, pos.y)) return
+    out.push({
+      x: pos.x,
+      y: pos.y,
+      r,
+      depth,
+      inward: foliageInwardSide(hang.mask, pos.x, pos.y),
+      stemX: seg.ex,
+      stemY: seg.ey,
+      isTip: !starts.has(`${seg.ex},${seg.ey}`)
+    })
+  })
+  return out
+}
+//
+// Fruit centre below a twig tip: the stem leans slightly with the twig.
+//
+function hangFromTip(tipX, tipY, lean, stemLen, r) {
+  return {
+    x: tipX + Math.sin(lean) * (stemLen + r),
+    y: tipY + Math.cos(lean) * (stemLen + r)
+  }
+}
+//
+// Share of the ring just outside the fruit that lies on painted leaves.
+//
+function foliageRingCover(mask, x, y, r) {
+  const ringR = r + FRUIT_DEPTH_RING_PAD
+  let covered = 0
+  for (let i = 0; i < FRUIT_DEPTH_RING_SAMPLES; i++) {
+    const a = (i / FRUIT_DEPTH_RING_SAMPLES) * Math.PI * 2
+    isFoliageMaskCovered(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
+  }
+  return covered / FRUIT_DEPTH_RING_SAMPLES
+}
+//
+// 0 on the crown's silhouette, 1 once the nearest gap in the leaves is
+// FRUIT_EDGE_DEPTH_PX away in every direction.
+//
+function foliageEdgeDepth(mask, x, y) {
+  let nearest = FRUIT_EDGE_DEPTH_PX
+  for (let i = 0; i < FRUIT_EDGE_RAYS; i++) {
+    const a = (i / FRUIT_EDGE_RAYS) * Math.PI * 2
+    nearest = Math.min(nearest, foliageRayReach(mask, x, y, a, nearest))
+  }
+  return nearest / FRUIT_EDGE_DEPTH_PX
+}
+//
+// Direction (radians from straight up, clockwise) toward the thickest
+// foliage around a point — cover leaves come from the crown's inner side.
+//
+function foliageInwardSide(mask, x, y) {
+  let sx = 0
+  let sy = 0
+  for (let i = 0; i < FRUIT_EDGE_RAYS; i++) {
+    const a = (i / FRUIT_EDGE_RAYS) * Math.PI * 2
+    const reach = foliageRayReach(mask, x, y, a, FRUIT_EDGE_DEPTH_PX)
+    sx += Math.cos(a) * reach
+    sy += Math.sin(a) * reach
+  }
+  return Math.atan2(sx, -sy)
+}
+function foliageRayReach(mask, x, y, a, maxD) {
+  for (let d = FRUIT_EDGE_STEP_PX; d < maxD; d += FRUIT_EDGE_STEP_PX) {
+    if (!isFoliageMaskCovered(mask, x + Math.cos(a) * d, y + Math.sin(a) * d)) return d
+  }
+  return maxD
+}
+//
+// The anchor fruit drops straight down, so its hang x decides where it lands:
+// keep the twig tip closest to the middle of the trunk–trampoline gap.
+//
+function pickAnchorTipHang(tips, anchorDropCfg, horiz) {
+  const best = pickBestAnchorPos(tips, anchorDropCfg, horiz)
+  if (!best) return null
+  tips.splice(tips.indexOf(best), 1)
+  return {
+    anchor: true,
+    attached: true,
+    x: best.x,
+    y: best.y - best.r + FRUIT_ANCHOR_R,
+    r: FRUIT_ANCHOR_R,
+    hue: FRUIT_ANCHOR_HUE,
+    vy: 0,
+    leaves: [],
+    stemX: best.stemX,
+    stemY: best.stemY
+  }
+}
+//
+// Fallback when no twig tip fits the gap: the old interior-foliage-cell scan.
+// Cells whose fruit would overhang either side of the gap are skipped.
+//
+function pickAnchorClusterHang(hang, hangable, anchorDropCfg, rng) {
+  const cells = []
   hangable.forEach(leaf => {
     leaf.cells.forEach(cell => {
       if (!isFruitClusterCellInterior(leaf.cells, cell)) return
       const pos = foliageCellCentre(leaf, cell, hang.cellPx)
-      if (pos.x < gapLeft || pos.x > gapRight || pos.y > ceilingY) return
-      const score = Math.abs(pos.x - dropX) + Math.abs(pos.y - targetY) * ANCHOR_Y_SCORE_WEIGHT
-      if (score >= bestScore || !isValidFruitHang(hang, pos.x, pos.y, fruitR)) return
-      bestScore = score
-      best = { leaf, pos }
+      isValidFruitHang(hang, pos.x, pos.y, FRUIT_ANCHOR_R) && cells.push(pos)
     })
   })
+  const pos = pickBestAnchorPos(cells, anchorDropCfg, hang.treeData.horizBranch)
+  if (!pos) return null
+  return {
+    anchor: true,
+    attached: true,
+    x: pos.x,
+    y: pos.y,
+    r: FRUIT_ANCHOR_R,
+    hue: FRUIT_ANCHOR_HUE,
+    vy: 0,
+    leaves: makeFruitLeafPair(hashFruitLeafSeed(pos.x, pos.y, FRUIT_ANCHOR_HUE), FRUIT_ANCHOR_R, rng, FRUIT_ANCHOR_HUE)
+  }
+}
+//
+// Lowest score inside the drop gap: distance to the gap middle plus a light
+// pull toward the canopy height just above the hero branch.
+//
+function pickBestAnchorPos(items, anchorDropCfg, horiz) {
+  const { trunkX, trunkHalf, branchTrampX: trampX, trampClearHalf } = anchorDropCfg
+  const gapLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD + FRUIT_ANCHOR_R
+  const gapRight = trampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD - FRUIT_ANCHOR_R
+  const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
+  const ceilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
+  const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : 0
+  let best = null
+  let bestScore = Infinity
+  items.forEach(item => {
+    if (item.x < gapLeft || item.x > gapRight || item.y > ceilingY) return
+    const score = Math.abs(item.x - dropX) + Math.abs(item.y - targetY) * ANCHOR_Y_SCORE_WEIGHT
+    if (score >= bestScore) return
+    bestScore = score
+    best = item
+  })
   return best
+}
+//
+// Ordinary crown fruit: deeper fruit is smaller, darker and some of it gets
+// a leaf cover over one side.
+//
+function makeTwigFruitSpot(tip, leaves, rng) {
+  const coverRoll = rng()
+  const side = keepStemSideOpen(tip.inward + (rng() - 0.5) * FRUIT_COVER_SIDE_JITTER)
+  const depthT = (tip.depth - FRUIT_COVER_DEPTH_MIN) / (1 - FRUIT_COVER_DEPTH_MIN)
+  const covered = depthT > 0 && coverRoll >= FRUIT_COVER_SKIP_CHANCE
+  const frac = FRUIT_COVER_FRAC_MIN + (FRUIT_COVER_FRAC_MAX - FRUIT_COVER_FRAC_MIN) * Math.min(1, depthT + rng() * FRUIT_COVER_FRAC_JITTER)
+  return {
+    attached: true,
+    x: tip.x,
+    y: tip.y,
+    r: tip.r,
+    hue: FRUIT_HUE_NEAR + (FRUIT_HUE_DEEP - FRUIT_HUE_NEAR) * tip.depth,
+    vy: 0,
+    leaves: [],
+    stemX: tip.stemX,
+    stemY: tip.stemY,
+    cover: covered ? collectCoverLeaves(leaves, tip, side, frac) : []
+  }
+}
+//
+// Canopy leaves lying over the chosen side of the fruit, beyond a chord that
+// leaves roughly `frac` of the disc hidden.
+//
+function collectCoverLeaves(leaves, fruit, side, frac) {
+  const dirX = Math.sin(side)
+  const dirY = -Math.cos(side)
+  const chord = fruit.r * (0.5 - frac) * FRUIT_COVER_CHORD_SCALE
+  return leaves.filter(leaf => {
+    const cx = leaf.x + leaf.size * FRUIT_COVER_LEAF_CENTROID * Math.sin(leaf.angle)
+    const cy = leaf.y - leaf.size * FRUIT_COVER_LEAF_CENTROID * Math.cos(leaf.angle)
+    const dx = cx - fruit.x
+    const dy = cy - fruit.y
+    if (Math.hypot(dx, dy) > fruit.r + leaf.size * FRUIT_COVER_LEAF_REACH) return false
+    return dx * dirX + dy * dirY >= chord
+  })
+}
+//
+// Cover never comes straight from above, where it would hide the stem.
+//
+function keepStemSideOpen(side) {
+  const a = Math.atan2(Math.sin(side), Math.cos(side))
+  if (Math.abs(a) >= FRUIT_COVER_SIDE_MIN) return a
+  return a < 0 ? -FRUIT_COVER_SIDE_MIN : FRUIT_COVER_SIDE_MIN
+}
+function fruitSpotsTooClose(a, b) {
+  const dx = Math.abs(a.x - b.x)
+  const dy = Math.abs(a.y - b.y)
+  if (dx < FRUIT_STACK_DX && dy < FRUIT_STACK_DY) return true
+  return Math.hypot(dx, dy) < FRUIT_MIN_SPACING
+}
+//
+// One sprite with every cover leaf, graded like the tree bake so the leaves
+// match the canopy behind them.
+//
+function bakeFruitLeafCover(k, spots) {
+  const leaves = spots.flatMap(s => s.cover ?? [])
+  if (!leaves.length) return null
+  let x1 = Infinity
+  let y1 = Infinity
+  let x2 = -Infinity
+  let y2 = -Infinity
+  leaves.forEach(l => {
+    x1 = Math.min(x1, l.x - l.size)
+    y1 = Math.min(y1, l.y - l.size)
+    x2 = Math.max(x2, l.x + l.size)
+    y2 = Math.max(y2, l.y + l.size)
+  })
+  const ox = Math.floor(x1) - FRUIT_COVER_BAKE_PAD
+  const oy = Math.floor(y1) - FRUIT_COVER_BAKE_PAD
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(x2 - ox) + FRUIT_COVER_BAKE_PAD
+  canvas.height = Math.ceil(y2 - oy) + FRUIT_COVER_BAKE_PAD
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.translate(-ox, -oy)
+  paintGlowTreeClusterLeaves(ctx, leaves, getTreePaletteColor().leafOpacity ?? 1)
+  applyGlowLayerGradeToCanvas(canvas, {
+    ...GLOW_LAYER_GRADE.material,
+    grainBlockSize: glowFilmGrainBlockPxForTier('gameplay')
+  }, FRUIT_COVER_GRAIN_SEED)
+  k.loadSprite(FRUIT_COVER_SPRITE, canvas)
+  return { x: ox, y: oy }
+}
+//
+// Short stem from the twig tip to the top of the fruit, contoured like it.
+//
+function drawFruitStem(k, fruit, stemCol, contourCol, op) {
+  const sx = fruit.stemX ?? fruit.x
+  const sy = fruit.stemY ?? fruit.y - fruit.r - FRUIT_STEM_LEN
+  const dx = sx - fruit.x
+  const dy = sy - fruit.y
+  const len = Math.hypot(dx, dy) || 1
+  const p1 = k.vec2(fruit.x + dx / len * fruit.r * 0.8, fruit.y + dy / len * fruit.r * 0.8)
+  const p2 = k.vec2(sx, sy)
+  k.drawLine({ p1, p2, width: FRUIT_STEM_W + FRUIT_STEM_CONTOUR_W * 2, color: contourCol, opacity: op })
+  k.drawLine({ p1, p2, width: FRUIT_STEM_W, color: stemCol, opacity: op })
+}
+function shuffleInPlace(list, rng) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const tmp = list[i]
+    list[i] = list[j]
+    list[j] = tmp
+  }
 }
 
 function foliageCellCentre(cluster, cell, cellPx) {
@@ -484,27 +739,6 @@ function clusterCentroid(cluster, cellPx) {
     sy += oy + cell.dy * cellPx
   })
   return { x: sx / n, y: sy / n }
-}
-//
-// Candidate hang points are cell centres exactly as the bake paints them; a
-// point only counts when the rendered foliage mask covers the whole fruit.
-//
-function pickValidFruitHangOnCluster(hang, cluster, fruitR, rng) {
-  const tries = Math.min(FRUIT_HANG_TRIES_MAX, cluster.cells.length * FRUIT_HANG_TRIES_PER_CELL)
-  for (let t = 0; t < tries; t++) {
-    const cell = cluster.cells[Math.floor(rng() * cluster.cells.length)]
-    if (!isFruitClusterCellInterior(cluster.cells, cell)) continue
-    const pos = fruitPositionOnFoliageCell(cluster, cell, fruitR, rng, hang.cellPx)
-    if (isValidFruitHang(hang, pos.x, pos.y, fruitR)) return pos
-  }
-  return null
-}
-function fruitPositionOnFoliageCell(cluster, cell, fruitR, rng, cellPx) {
-  const jitter = Math.min(FRUIT_HANG_JITTER_MAX, fruitR * FRUIT_HANG_JITTER_FRAC)
-  return {
-    x: Math.round(cluster.x) + cell.dx * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter,
-    y: Math.round(cluster.y) + cell.dy * cellPx + cellPx * 0.5 + (rng() - 0.5) * jitter
-  }
 }
 function isFruitClusterCellInterior(cells, cell) {
   const set = new Set(cells.map(c => `${c.dx},${c.dy}`))

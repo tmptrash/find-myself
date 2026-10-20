@@ -2,7 +2,7 @@ import { drawFernToCanvas, fernBounds } from '../../../utils/draw-fern.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestFloorPainterColors } from '../components/forest-floor.js'
-import { addClosedEyeBerry, addEyeBerry, addTaperedPass } from './glow-eye-berry.js'
+import { addLiddedEyeBerry, addTaperedPass } from './glow-eye-berry.js'
 import { GLOW_PAL, glowRgb } from './glow-palette.js'
 import {
   colorKey,
@@ -39,7 +39,7 @@ const BUOY_PUPIL_MARGIN = 0.75
 const BUOY_EYE_CONTOUR_EXTRA = 1.5
 const BUOY_BLINK_MIN_INTERVAL = 10
 const BUOY_BLINK_MAX_INTERVAL = 20
-const BUOY_BLINK_DURATION = 0.14
+const BUOY_BLINK_SEC = 0.32
 //
 // Hero landed on the eye cap — hold the lid closed briefly before reopening.
 //
@@ -123,8 +123,11 @@ export function create(cfg) {
       swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
       eyeRadius: spot.eyeRadius,
       pupilRadius: spot.pupilRadius,
-      blinking: false,
-      blinkTimer: BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL),
+      lidClose: 0,
+      blinkLeft: 0,
+      landHoldLeft: 0,
+      landHoldPending: false,
+      blinkGap: randomBuoyBlinkGap(),
       wasHeroOnCap: false,
       undergroundPts: buildBuoyUndergroundPoints(
         spot.x,
@@ -165,9 +168,10 @@ export function onUpdate(inst, heroX, heroY, dt) {
  * @param {Object} buoy - One chain-buoy entry
  */
 export function triggerBuoyLandBlink(buoy) {
-  if (!buoy) return
-  buoy.blinking = true
-  buoy.blinkTimer = BUOY_LAND_BLINK_HOLD_SEC
+  if (!buoy || buoy.landHoldLeft > 0) return
+  const closing = buoy.blinkLeft > BUOY_BLINK_SEC * 0.5
+  closing || (buoy.blinkLeft = BUOY_BLINK_SEC * (1 - Math.asin(Math.min(1, buoy.lidClose ?? 0)) / Math.PI))
+  buoy.landHoldPending = true
 }
 
 /**
@@ -445,17 +449,34 @@ function mergeBounds(into, from) {
 //
 // Random blink cadence per buoy — eyes stay open most of the time.
 //
+//
+// Lid close amount runs one sine over BUOY_BLINK_SEC (shut at mid). A landing
+// blink pauses at the shut midpoint for BUOY_LAND_BLINK_HOLD_SEC.
+//
 function updateBuoyBlink(buoy, dt) {
-  buoy.blinkTimer -= dt
-  if (buoy.blinkTimer > 0) return
-  if (buoy.blinking) {
-    buoy.blinking = false
-    buoy.blinkTimer = BUOY_BLINK_MIN_INTERVAL +
-      Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL)
+  if (buoy.landHoldLeft > 0) {
+    buoy.landHoldLeft = Math.max(0, buoy.landHoldLeft - dt)
+    buoy.lidClose = 1
     return
   }
-  buoy.blinking = true
-  buoy.blinkTimer = BUOY_BLINK_DURATION
+  if (buoy.blinkLeft > 0) {
+    buoy.blinkLeft = Math.max(0, buoy.blinkLeft - dt)
+    if (buoy.landHoldPending && buoy.blinkLeft <= BUOY_BLINK_SEC * 0.5) {
+      buoy.landHoldPending = false
+      buoy.blinkLeft = BUOY_BLINK_SEC * 0.5
+      buoy.landHoldLeft = BUOY_LAND_BLINK_HOLD_SEC
+    }
+    buoy.lidClose = Math.sin(Math.PI * (1 - buoy.blinkLeft / BUOY_BLINK_SEC))
+    return
+  }
+  buoy.lidClose = 0
+  buoy.blinkGap -= dt
+  if (buoy.blinkGap > 0) return
+  buoy.blinkLeft = BUOY_BLINK_SEC
+  buoy.blinkGap = randomBuoyBlinkGap()
+}
+function randomBuoyBlinkGap() {
+  return BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL)
 }
 //
 // Vertical chain with a gentle horizontal sine wave — segments stay mostly
@@ -520,13 +541,9 @@ function addBuoySideArms(batch, buoy, points, color, pad) {
 function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]
   const scleraR = buoy.eyeRadius ?? BUOY_EYE_RADIUS
-  if (buoy.blinking) {
-    addClosedEyeBerry(batch, eye.x, eye.y, scleraR, colors, BUOY_EYE_CONTOUR_EXTRA)
-    return
-  }
   const pupilR = buoy.pupilRadius ?? BUOY_PUPIL_RADIUS
   const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY, scleraR, pupilR)
-  addEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA)
+  addLiddedEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA, buoy.lidClose)
 }
 //
 // Clamps the pupil inside the sclera so it always points at the hero.

@@ -13,8 +13,15 @@ import { GLOW_PAL } from './glow-palette.js'
 export const GLOW_SUN_LIT_OFFSET_X = -0.14
 export const GLOW_SUN_LIT_OFFSET_Y = -0.22
 export const GLOW_SUN_LIT_FRAC = 0.86
-const BERRY_LID_SPAN = 0.85
-const BERRY_LID_W = 1.1
+//
+// Blink lid (same shape as the boot loader eye): arc bulge as a fraction of
+// the berry radius, overhang past the ring, strip column count.
+//
+const BERRY_LID_BULGE_FRAC = 0.9
+const BERRY_LID_OVERHANG = 2
+const BERRY_LID_COLUMNS = 24
+const BERRY_LID_EDGE_W = 1.1
+const BERRY_RING_SEGMENTS = 32
 const COLOR_KEYS = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight']
 const colorCache = new WeakMap()
 
@@ -50,17 +57,46 @@ export function addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, cont
 }
 
 /**
- * Queues a shut eye-berry: the same ball with a contour lid line across it.
+ * Queues an eye-berry with a stem-coloured lid sliding down over it, like the
+ * boot loader eye: the lid's lower edge is an arc bulging downward that sweeps
+ * from above the berry to past its bottom; the contour ring stays on top.
  * @param {Object} batch - PolyBatch inst
  * @param {number} x - Berry centre X
  * @param {number} y - Berry centre Y
  * @param {number} r - Berry radius
+ * @param {number} pupilX - Pupil centre X
+ * @param {number} pupilY - Pupil centre Y
+ * @param {number} pupilR - Pupil radius
  * @param {Object} colors - From glowEyeBerryColors()
  * @param {number} contourW - Contour ring width
+ * @param {number} close - 0 open … 1 fully shut
  */
-export function addClosedEyeBerry(batch, x, y, r, colors, contourW) {
-  addBerryBall(batch, x, y, r, colors, contourW)
-  PolyBatch.addLine(batch, x - r * BERRY_LID_SPAN, y, x + r * BERRY_LID_SPAN, y, BERRY_LID_W, colors.contour)
+export function addLiddedEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW, close) {
+  addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW)
+  if (close <= 0) return
+  const lidR = r + contourW * 0.5
+  const bulge = r * BERRY_LID_BULGE_FRAC
+  const side = lidR + BERRY_LID_OVERHANG
+  const edgeY = -lidR - bulge * 0.5 + (lidR * 2 + bulge * 0.5) * close
+  const shape = []
+  const indices = []
+  const edge = []
+  for (let i = 0; i <= BERRY_LID_COLUMNS; i++) {
+    const lx = -lidR + (2 * lidR * i) / BERRY_LID_COLUMNS
+    const half = Math.sqrt(Math.max(0, lidR * lidR - lx * lx))
+    const curve = edgeY + bulge * 0.5 * (1 - (lx / side) * (lx / side))
+    shape.push([lx, -half], [lx, Math.max(-half, Math.min(half, curve))])
+    edge.push(curve > -half && curve < half ? { x: x + lx, y: y + curve } : null)
+    const a = i * 2
+    i > 0 && indices.push(a - 2, a - 1, a, a - 1, a + 1, a)
+  }
+  PolyBatch.addShape(batch, shape, indices, x, y, 1, 1, 1, 0, colors.stem)
+  for (let i = 1; i < edge.length; i++) {
+    const p = edge[i - 1]
+    const q = edge[i]
+    p && q && PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, BERRY_LID_EDGE_W, colors.contour)
+  }
+  addContourRing(batch, x, y, lidR, contourW, colors.contour)
 }
 
 /**
@@ -81,6 +117,16 @@ export function addTaperedPass(batch, pts, wBase, wTip, color) {
   }
 }
 
+//
+// Contour ring re-drawn over the lid so the lid edge never eats into it.
+//
+function addContourRing(batch, x, y, ringR, w, color) {
+  for (let i = 0; i < BERRY_RING_SEGMENTS; i++) {
+    const a0 = (i / BERRY_RING_SEGMENTS) * Math.PI * 2
+    const a1 = ((i + 1) / BERRY_RING_SEGMENTS) * Math.PI * 2
+    PolyBatch.addLine(batch, x + Math.cos(a0) * ringR, y + Math.sin(a0) * ringR, x + Math.cos(a1) * ringR, y + Math.sin(a1) * ringR, w, color)
+  }
+}
 function addBerryBall(batch, x, y, r, colors, contourW) {
   PolyBatch.addDisc(batch, x, y, r + contourW, colors.contour)
   PolyBatch.addDisc(batch, x, y, r, colors.berryShade)

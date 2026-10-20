@@ -42,6 +42,20 @@ const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
 const ROAM_SPEEDS = [0, 18, 34, 52, 74]
 const ROAM_HOME_WANDER_PX = 72
 //
+// Near home a heading flip waits at least this long after the previous one —
+// back-to-back flips read as twitching in place.
+//
+const ROAM_TURN_CHANCE = 0.35
+const ROAM_TURN_MIN_INTERVAL_SEC = 1.6
+const ROAM_TURN_INTERVAL_RANGE_SEC = 1.4
+//
+// Hunting stops within HUNT_ARRIVE_PX of its target and only turns around for
+// a target more than HUNT_TURN_DEADBAND_PX behind it.
+//
+const HUNT_ARRIVE_PX = 10
+const HUNT_TURN_DEADBAND_PX = 28
+const PURSUIT_LAST_SEEN_ARRIVE_PX = 24
+//
 // Flight from a tomato burst: a sharp jerk away, a sprint along the patrol
 // strip, and (to the left) a swim across the lake and back to the shore.
 //
@@ -307,12 +321,16 @@ function tickRoamHome(inst, dt) {
   const home = inst.homeX
   const dx = home == null ? 0 : home - inst.x
   const away = home != null && Math.abs(dx) > ROAM_HOME_WANDER_PX
+  inst.roamTurnCooldown = Math.max(0, (inst.roamTurnCooldown ?? 0) - dt)
   if (inst.burst <= 0) {
     inst.speedTarget = ROAM_SPEEDS[Math.floor(Math.random() * ROAM_SPEEDS.length)]
     inst.burst = 0.2 + Math.random() * 0.7
     if (!inst.holdFacing) {
       if (away) inst.dir = Math.sign(dx) || inst.dir
-      else if (Math.random() < 0.55) inst.dir *= -1
+      else if (inst.roamTurnCooldown <= 0 && Math.random() < ROAM_TURN_CHANCE) {
+        inst.dir *= -1
+        inst.roamTurnCooldown = ROAM_TURN_MIN_INTERVAL_SEC + Math.random() * ROAM_TURN_INTERVAL_RANGE_SEC
+      }
     }
     inst.lookBack = Math.random() < 0.16
     inst.headLift = Math.random() < 0.2 ? 3 + Math.random() * 3 : 0
@@ -341,15 +359,28 @@ function tickSearch(inst, dt) {
   if (!inst.holdFacing && inst.x > inst.maxX - 8) inst.dir = -1
 }
 
+//
+// Heads for the hero's x clamped to the patrol strip. Close to it (or with the
+// hero above / past the strip edge) it stops instead of flipping its heading
+// every frame; a turn needs the target clearly on the other side.
+//
 function hunt(inst, dt, hero, speed, charge) {
   if (!hero) {
     enter(inst, 'search', 0.2)
     return
   }
-  if (!inst.holdFacing) inst.dir = hero.x >= inst.x ? 1 : -1
+  const dx = clamp(hero.x, inst.minX, inst.maxX) - inst.x
+  const rate = charge ? 18 : 12
+  const behind = Math.sign(dx) !== inst.dir
+  if (Math.abs(dx) <= HUNT_ARRIVE_PX || (behind && Math.abs(dx) <= HUNT_TURN_DEADBAND_PX)) {
+    inst.speedTarget = 0
+    easeSpeed(inst, dt, rate)
+    return
+  }
+  behind && !inst.holdFacing && (inst.dir = Math.sign(dx))
   const wobble = Math.sin(inst.idleTime * (charge ? 14 : 6) + inst.wobblePhase) * (charge ? 10 : 6)
   inst.speedTarget = speed + wobble
-  easeSpeed(inst, dt, charge ? 18 : 12)
+  easeSpeed(inst, dt, rate)
 }
 
 //
@@ -374,9 +405,19 @@ function forgetHeroSide(inst) {
   inst.pursuitT = 0
 }
 
+//
+// Runs to where the hero was last seen; reaching that spot ends the chase
+// (circling it until the timer ran out read as a freeze with twitching).
+//
 function chaseLastSeen(inst, dt) {
+  const lastX = clamp(inst.heroLastX ?? inst.x, inst.minX, inst.maxX)
+  if (Math.abs(lastX - inst.x) <= PURSUIT_LAST_SEEN_ARRIVE_PX) {
+    inst.pursuitT = 0
+    tickRoamHome(inst, dt)
+    return
+  }
   inst.state = 'hunt'
-  hunt(inst, dt, { x: inst.heroLastX ?? inst.x }, PURSUIT_SPEED, true)
+  hunt(inst, dt, { x: lastX }, PURSUIT_SPEED, true)
   easePursuitPose(inst, dt)
 }
 
@@ -551,6 +592,10 @@ function tickRideLockedMove(inst, dt) {
   inst.speedTarget = RIDE_WALK_SPEED
   easeSpeed(inst, dt, RIDE_SPEED_EASE)
   softenHeadPose(inst, dt)
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v))
 }
 
 function enter(inst, state, time) {

@@ -12,7 +12,7 @@ const LOADER_EYE_ID = 'loader-eye'
 // Bumped when loader eye DOM changes so ensureLoaderStructure() rebuilds
 // instead of keeping an old SVG from a previous bundle.
 //
-const LOADER_EYE_REVISION = 8
+const LOADER_EYE_REVISION = 10
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -34,9 +34,13 @@ const STALK_SEGMENT_W = 7
 //
 // Dark outline ring around the stalk body only (spikes keep STALK_CONTOUR_PAD).
 //
-const STALK_CONTOUR_OUTLINE = 0.5
-const STALK_CONTOUR_PAD = 2
-const STALK_LIGHT_FRAC = 0.35
+const STALK_CONTOUR_OUTLINE = 0.25
+const STALK_CONTOUR_PAD = 1
+//
+// Thin stem-colour rim per side inside the contour; the rest of the stalk,
+// spikes and spike balls is filled with the light stem colour.
+//
+const STALK_RIM_W = 1
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
 const SPIKE_LEN_WOBBLE = STALK_SEGMENT_W * 0.35
 const SPIKE_LEAN_BACK = STALK_SEGMENT_W * 0.35
@@ -349,10 +353,9 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene: every contour (stalk, spike stems, spike balls) goes under every
-// fill, so the dark rim survives only on the outer silhouette. Spike fills
-// come before the stalk fill and the lit stripe goes last, so nothing from a
-// spike paints over the trunk interior.
+// SVG scene in three passes: every contour, then every stem-colour rim, then
+// every light fill, so neither the dark contour nor a rim crosses the light
+// interior where a spike joins the trunk.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -365,11 +368,13 @@ function buildLoaderEyeSvg(colors) {
   svg.style.overflow = 'visible'
   const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + STALK_CONTOUR_OUTLINE))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
-  const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W * STALK_LIGHT_FRAC))
+  const stalkLight = svgEl('path', strokeAttrs(colors.stemLight, STALK_SEGMENT_W - STALK_RIM_W * 2))
   const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + STALK_CONTOUR_PAD))
   const spikes = svgEl('path', strokeAttrs(colors.stem, SPIKE_W))
+  const spikesLight = svgEl('path', strokeAttrs(colors.stemLight, SPIKE_W - STALK_RIM_W * 2))
   const knotsContour = svgEl('path', { fill: colors.contour })
   const knots = svgEl('path', { fill: colors.stem })
+  const knotsLight = svgEl('path', { fill: colors.stemLight })
   const eyeGroup = svgEl('g', {})
   const openEye = svgEl('g', {})
   appendLoaderBerryBall(openEye, colors, 0, 0)
@@ -394,6 +399,8 @@ function buildLoaderEyeSvg(colors) {
   svg.appendChild(spikes)
   svg.appendChild(knots)
   svg.appendChild(stalkBody)
+  svg.appendChild(spikesLight)
+  svg.appendChild(knotsLight)
   svg.appendChild(stalkLight)
   svg.appendChild(eyeGroup)
   eye = {
@@ -402,8 +409,10 @@ function buildLoaderEyeSvg(colors) {
     stalkLight,
     spikesContour,
     spikes,
+    spikesLight,
     knotsContour,
     knots,
+    knotsLight,
     eyeGroup,
     openEye,
     closedEye,
@@ -479,6 +488,8 @@ function drawLoaderEye(dt) {
   eye.knotsContour.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R + STALK_CONTOUR_PAD * 0.5))
   eye.spikes.setAttribute('d', spikePaths)
   eye.knots.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R))
+  eye.spikesLight.setAttribute('d', spikePaths)
+  eye.knotsLight.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R - STALK_RIM_W))
   eye.stalkBody.setAttribute('d', stalkPath)
   eye.stalkLight.setAttribute('d', stalkPath)
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)

@@ -12,7 +12,7 @@ const LOADER_EYE_ID = 'loader-eye'
 // Bumped when loader eye DOM changes so ensureLoaderStructure() rebuilds
 // instead of keeping an old SVG from a previous bundle.
 //
-const LOADER_EYE_REVISION = 12
+const LOADER_EYE_REVISION = 17
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -22,8 +22,8 @@ const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10p
 const LOADER_UI_FADE_SEC = 0.32
 //
 // Stalk-eye geometry (SVG user units = CSS px): the Glow chain-buoy eye-berry
-// lying on its side. Coral stalk with a broken highlight on its upper edge,
-// side spikes on each joint, ivory berry with a shaded side and a teal pupil.
+// lying on its side. Coral stalk, side spikes on each joint, ivory berry
+// with a shaded side and a teal pupil.
 //
 const EYE_VIEW_W = 360
 const EYE_VIEW_H = 96
@@ -36,13 +36,9 @@ const STALK_SEGMENT_W = 7
 //
 const LOADER_OUTLINE_W = 0.9
 //
-// Highlight: a thin stroke riding near the upper edge, broken into a few
-// irregular dashes so only parts of the stalk catch the light.
+// Small lit spot on each spike ball (upper-left, same light as the stalk).
 //
-const STALK_HIGHLIGHT_W = 1.1
-const STALK_HIGHLIGHT_OPACITY = 0.7
-const STALK_HIGHLIGHT_LIFT = STALK_SEGMENT_W * 0.22
-const STALK_HIGHLIGHT_DASH = '22 9 13 14 30 11'
+const SPIKE_BALL_HIGHLIGHT_OPACITY = 0.7
 const SPIKE_BALL_HIGHLIGHT_FRAC = 0.32
 const SPIKE_BALL_HIGHLIGHT_OFFSET = 0.35
 const SPIKE_LEN = STALK_SEGMENT_W * 2.6
@@ -68,8 +64,6 @@ const EYE_R = 12
 const EYE_CONTOUR_W = LOADER_OUTLINE_W * 1.5
 const EYE_PUPIL_FRAC = 0.4
 const EYE_PUPIL_R = EYE_R * EYE_PUPIL_FRAC
-const EYE_LID_W = 1.4
-const EYE_LID_SPAN = 0.85
 const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
 //
 // Pupil saccades: a quick dart to a random spot, then a hold, as if the eye
@@ -82,11 +76,20 @@ const PUPIL_HOLD_MAX_SEC = 2.2
 const PUPIL_MIN_REACH = 0.35
 const PUPIL_CENTER_CHANCE = 0.15
 //
-// Occasional blink: a closed lid on the berry, like the level's buoys.
+// Occasional blink: a stem-coloured lid slides down over the berry with its
+// lower edge bowed into an arc, reaches the bottom, then lifts back.
 //
-const BLINK_SEC = 0.14
-const BLINK_GAP_MIN_SEC = 2.4
-const BLINK_GAP_MAX_SEC = 5
+const BLINK_SEC = 0.32
+const EYE_LID_BULGE = EYE_R * 0.9
+const EYE_LID_OVERHANG = 2
+const EYE_LID_CLIP_ID = 'loader-eye-lid-clip'
+//
+// Extra lid reach past the contour ring so anti-aliased sclera pixels at the
+// berry's edge never show through a closed lid.
+//
+const EYE_LID_AA_PAD = 0.5
+const BLINK_GAP_MIN_SEC = 0.9
+const BLINK_GAP_MAX_SEC = 2.1
 const MAX_FRAME_DT = 0.05
 //
 // Optional owner of the hide sequence (CRT intro keeps snow running after the bar finishes).
@@ -368,9 +371,9 @@ function buildLoaderPanel() {
   return panel
 }
 //
-// SVG scene in three passes: every outline, then every coral fill, then the
-// highlights, so the outline survives only on the outer silhouette and never
-// crosses the stalk where a spike joins it.
+// SVG scene in three passes: every outline, then every coral fill, then spike
+// ball highlights, so the outline survives only on the outer silhouette and
+// never crosses the stalk where a spike joins it.
 //
 function buildLoaderEyeSvg(colors) {
   const svg = svgEl('svg', {
@@ -383,34 +386,38 @@ function buildLoaderEyeSvg(colors) {
   svg.style.overflow = 'visible'
   const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + LOADER_OUTLINE_W * 2))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
-  const stalkLight = svgEl('path', {
-    ...strokeAttrs(colors.stemLight, STALK_HIGHLIGHT_W),
-    'stroke-dasharray': STALK_HIGHLIGHT_DASH,
-    'stroke-opacity': STALK_HIGHLIGHT_OPACITY
-  })
   const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + LOADER_OUTLINE_W * 2))
   const spikes = svgEl('path', strokeAttrs(colors.stem, SPIKE_W))
   const knotsContour = svgEl('path', { fill: colors.contour })
   const knots = svgEl('path', { fill: colors.stem })
-  const knotsLight = svgEl('path', { fill: colors.stemLight, 'fill-opacity': STALK_HIGHLIGHT_OPACITY })
+  const knotsLight = svgEl('path', { fill: colors.stemLight, 'fill-opacity': SPIKE_BALL_HIGHLIGHT_OPACITY })
   const eyeGroup = svgEl('g', {})
   const openEye = svgEl('g', {})
   appendLoaderBerryBall(openEye, colors, 0, 0)
   const pupil = svgEl('circle', { r: EYE_PUPIL_R, fill: colors.pupil })
   openEye.appendChild(pupil)
-  const closedEye = svgEl('g', { display: 'none' })
-  appendLoaderBerryBall(closedEye, colors, 0, 0)
-  closedEye.appendChild(svgEl('line', {
-    x1: -EYE_R * EYE_LID_SPAN,
-    x2: EYE_R * EYE_LID_SPAN,
-    y1: 0,
-    y2: 0,
+  const lidClip = svgEl('clipPath', { id: EYE_LID_CLIP_ID })
+  lidClip.appendChild(svgEl('circle', { cx: 0, cy: 0, r: EYE_R + EYE_CONTOUR_W + EYE_LID_AA_PAD }))
+  const lid = svgEl('g', { 'clip-path': `url(#${EYE_LID_CLIP_ID})`, display: 'none' })
+  const lidFill = svgEl('path', { fill: colors.stem })
+  const lidEdge = svgEl('path', strokeAttrs(colors.contour, EYE_CONTOUR_W))
+  lid.appendChild(lidFill)
+  lid.appendChild(lidEdge)
+  //
+  // The lid covers the berry's contour ring too (so no sclera rim peeks out),
+  // so the ring is redrawn on top of it.
+  //
+  lid.appendChild(svgEl('circle', {
+    cx: 0,
+    cy: 0,
+    r: EYE_R + (EYE_CONTOUR_W + EYE_LID_AA_PAD) * 0.5,
+    fill: 'none',
     stroke: colors.contour,
-    'stroke-width': EYE_LID_W,
-    'stroke-linecap': 'round'
+    'stroke-width': EYE_CONTOUR_W + EYE_LID_AA_PAD
   }))
+  openEye.appendChild(lid)
+  eyeGroup.appendChild(lidClip)
   eyeGroup.appendChild(openEye)
-  eyeGroup.appendChild(closedEye)
   svg.appendChild(stalkContour)
   svg.appendChild(spikesContour)
   svg.appendChild(knotsContour)
@@ -418,12 +425,10 @@ function buildLoaderEyeSvg(colors) {
   svg.appendChild(knots)
   svg.appendChild(stalkBody)
   svg.appendChild(knotsLight)
-  svg.appendChild(stalkLight)
   svg.appendChild(eyeGroup)
   eye = {
     stalkContour,
     stalkBody,
-    stalkLight,
     spikesContour,
     spikes,
     knotsContour,
@@ -431,7 +436,9 @@ function buildLoaderEyeSvg(colors) {
     knotsLight,
     eyeGroup,
     openEye,
-    closedEye,
+    lid,
+    lidFill,
+    lidEdge,
     pupil,
     time: 0,
     pupilX: 0,
@@ -491,7 +498,7 @@ function drawLoaderEye(dt) {
   if (!eye) return
   eye.time += dt
   tickPupilSaccade(dt)
-  const closed = tickBlink(dt)
+  const lidClose = tickBlink(dt)
   const len = STALK_MAX_LEN * loaderBarDisplayPct / 100
   const points = buildStalkPoints(STALK_ROOT_X + len)
   const joints = points.slice(1, -1)
@@ -506,10 +513,8 @@ function drawLoaderEye(dt) {
   eye.knots.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R))
   eye.knotsLight.setAttribute('d', loaderSpikeBallPath(spikeTips.map(spikeBallHighlightCenter), SPIKE_BALL_R * SPIKE_BALL_HIGHLIGHT_FRAC))
   eye.stalkBody.setAttribute('d', stalkPath)
-  eye.stalkLight.setAttribute('d', pointsToPath(points.map(p => ({ x: p.x, y: p.y - STALK_HIGHLIGHT_LIFT }))))
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
-  eye.openEye.setAttribute('display', closed ? 'none' : 'inline')
-  eye.closedEye.setAttribute('display', closed ? 'inline' : 'none')
+  drawLoaderLid(lidClose)
   eye.pupil.setAttribute('cx', eye.pupilX.toFixed(2))
   eye.pupil.setAttribute('cy', eye.pupilY.toFixed(2))
 }
@@ -597,18 +602,36 @@ function pickPupilTarget() {
   eye.targetY = Math.sin(angle) * reach
 }
 //
-// Returns true while the lid is closed.
+// Returns how far the lid is down (0 open, 1 fully closed): a smooth
+// close-then-open over BLINK_SEC.
 //
 function tickBlink(dt) {
   if (eye.blinkLeft > 0) {
     eye.blinkLeft = Math.max(0, eye.blinkLeft - dt)
-    return eye.blinkLeft > 0
+    return Math.sin(Math.PI * (1 - eye.blinkLeft / BLINK_SEC))
   }
   eye.blinkGap -= dt
-  if (eye.blinkGap > 0) return false
+  if (eye.blinkGap > 0) return 0
   eye.blinkLeft = BLINK_SEC
   eye.blinkGap = randomRange(BLINK_GAP_MIN_SEC, BLINK_GAP_MAX_SEC)
-  return true
+  return 0
+}
+//
+// Lid lower edge is a downward-bowed arc; its ends start just above the berry
+// (arc middle on the top rim) and end at the bottom rim, so a full blink
+// covers the whole eye.
+//
+function drawLoaderLid(close) {
+  if (close <= 0) {
+    eye.lid.setAttribute('display', 'none')
+    return
+  }
+  const side = EYE_R + EYE_LID_OVERHANG
+  const edgeY = -EYE_R - EYE_LID_BULGE * 0.5 + (EYE_R * 2 + EYE_LID_BULGE * 0.5) * close
+  const arc = `Q0 ${(edgeY + EYE_LID_BULGE).toFixed(2)} ${-side} ${edgeY.toFixed(2)}`
+  eye.lid.setAttribute('display', 'inline')
+  eye.lidFill.setAttribute('d', `M${-side} ${-side} L${side} ${-side} L${side} ${edgeY.toFixed(2)} ${arc} Z`)
+  eye.lidEdge.setAttribute('d', `M${side} ${edgeY.toFixed(2)} ${arc}`)
 }
 
 function randomRange(min, max) {

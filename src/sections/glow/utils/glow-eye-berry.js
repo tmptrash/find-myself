@@ -6,8 +6,13 @@ import { GLOW_PAL } from './glow-palette.js'
 // white eye-berries with a shaded underside and a dark pupil on red,
 // contoured stalks with a lit line.
 //
-const BERRY_SHADE_DROP = 0.22
-const BERRY_SHADE_FRAC = 0.86
+//
+// Sun from the upper-left — shaded disc at centre, lit face up-left (berries,
+// loader eye, canopy apples).
+//
+export const GLOW_SUN_LIT_OFFSET_X = -0.14
+export const GLOW_SUN_LIT_OFFSET_Y = -0.22
+export const GLOW_SUN_LIT_FRAC = 0.86
 const BERRY_LID_SPAN = 0.85
 const BERRY_LID_W = 1.1
 const COLOR_KEYS = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight']
@@ -79,5 +84,11 @@ export function addTaperedPass(batch, pts, wBase, wTip, color) {
 function addBerryBall(batch, x, y, r, colors, contourW) {
   PolyBatch.addDisc(batch, x, y, r + contourW, colors.contour)
   PolyBatch.addDisc(batch, x, y, r, colors.berryShade)
-  PolyBatch.addDisc(batch, x, y - r * BERRY_SHADE_DROP, r * BERRY_SHADE_FRAC, colors.berry)
+  PolyBatch.addDisc(
+    batch,
+    x + r * GLOW_SUN_LIT_OFFSET_X,
+    y + r * GLOW_SUN_LIT_OFFSET_Y,
+    r * GLOW_SUN_LIT_FRAC,
+    colors.berry
+  )
 }

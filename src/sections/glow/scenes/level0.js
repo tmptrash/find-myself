@@ -111,6 +111,7 @@ import * as SoilSeam from '../utils/glow-soil-seam.js'
 import * as FlowerGrab from '../components/flower-grab.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/glow-shore-tree.js'
+import { paintGlowShoreRock } from '../utils/glow-shore-rock.js'
 import * as HorizFallTwig from '../utils/glow-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as ForestFloor from '../components/forest-floor.js'
@@ -400,7 +401,7 @@ const ROCK_OUTLINE_WIDTH = 1.4
 const BG_PAR_TREE3_COLOR = 'glow0-bg-par-tree3-color'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_STATIC_COLOR = 'glow0-bg-static-color-v13'
+const BG_STATIC_COLOR = 'glow0-bg-static-color-v14'
 //
 // Cropped parallax sprites only bake the world-Y band they actually paint —
 // a depth row reaches from its own crown band down to the ground line rather
@@ -469,7 +470,7 @@ const parallaxOffscreenByK = new WeakMap()
 // Parallax depth blur radii live in glow-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
 //
-const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v9'
+const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-v10'
 const TREE_COLOR_GRAIN_SEED = 6002
 //
 // Horizontal branch platform.
@@ -1096,19 +1097,10 @@ const GLOW_LIGHT_SHAFT_Z = GRASS_Z + 5
 //
 const GLOW_LIGHT_SOURCE_DX = -620
 const GLOW_LIGHT_SOURCE_DY = -300
-const GLOW_LIGHT_DEPTH_BACK = 'back'
 const GLOW_LIGHT_DEPTH_FORE = 'fore'
-const GLOW_LIGHT_RAY_WIDTH_BACK = 680
 const GLOW_LIGHT_RAY_WIDTH_FORE = 620
-const GLOW_LIGHT_RAY_OPACITY_BACK = 0.17
 const GLOW_LIGHT_RAY_OPACITY_FORE = 0.32
 const GLOW_LIGHT_RAY_SPECS = [
-  {
-    spawnOffsetX: 0,
-    width: GLOW_LIGHT_RAY_WIDTH_BACK,
-    opacity: GLOW_LIGHT_RAY_OPACITY_BACK,
-    depth: GLOW_LIGHT_DEPTH_BACK
-  },
   {
     spawnOffsetX: 0,
     width: GLOW_LIGHT_RAY_WIDTH_FORE,
@@ -1192,6 +1184,15 @@ const GROUND_LAYER_MACRO_ENVELOPE_MIN = 0.45
 // Topsoil hangs into subsoil as soft rounded tongues (not needle teeth).
 //
 const GROUND_LAYER_FRINGE_INDEX = 1
+//
+// Fine organic specks in the upper topsoil (reference cross-section) — not
+// square grit or coarse film-grain blocks.
+//
+const TOPSOIL_ORGANIC_SPECK_COUNT = 3200
+const TOPSOIL_ORGANIC_SEED = 41827
+const TOPSOIL_ORGANIC_ALPHA = 0.42
+const EARTH_STATIC_BAKE_GRAIN = 0.26
+const EARTH_STATIC_BAKE_GRAIN_BLOCK_PX = 2
 //
 // Sky bake uses stacked palette bands instead of a smooth CSS gradient.
 //
@@ -1365,6 +1366,18 @@ const WATER_RIGHT_TRIM = 10
 //
 const LAKE_SHORE_EXTEND_PX = 64
 const LAKE_Z = 12
+//
+// Tree-side shore rocks baked as one tall rock reaching the lake bed: clip
+// sampling step, how steeply the flanks drop, how far past the bed they sink,
+// how much the base spreads outward, and the water tint on the submerged
+// part (top of the water / near the bed).
+//
+const LAKE_SHORE_ROCK_CLIP_STEP_PX = 2
+const LAKE_SHORE_ROCK_FLANK_EXP = 0.6
+const LAKE_SHORE_ROCK_BED_OVERSHOOT_PX = 14
+const LAKE_SHORE_ROCK_BASE_SPREAD = 0.5
+const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
+const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -1374,7 +1387,7 @@ const LAKE_WAVE_SECOND_FREQ = 1.6
 //
 // Baked lake surface frames (painted water + grain), drawn untinted.
 //
-const LAKE_BAKE_GEOMETRY_VERSION = 7
+const LAKE_BAKE_GEOMETRY_VERSION = 13
 const LAKE_BAKE_SPRITE_PREFIX = `glow0-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
 const LAKE_BAKE_FRAME_COUNT = 24
 const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
@@ -1394,49 +1407,136 @@ const LAKE_OPAQUE_SKIN_PX = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 1
 const LAKE_BODY_FADE_PX = 10
 const LAKE_BODY_ALPHA = 0.42
 //
-// Lake bed layer under the water (static bake): murk, sandy bed, pebbles.
+// Double surface: a bright top line, a light band and a second fainter line
+// under it, both riding the wave.
+//
+const LAKE_SURFACE_LINE_PX = 1.5
+const LAKE_SURFACE_BAND_ALPHA = 0.32
+const LAKE_SURFACE_SECOND_LINE_PX = 1
+const LAKE_SURFACE_SECOND_LINE_ALPHA = 0.55
+//
+// Inner surface line uses its own wave frequencies and a time lag so the two
+// bright lines and the band between them do not stay parallel.
+//
+const LAKE_SURFACE_INNER_WAVE_FREQ = 1.12
+const LAKE_SURFACE_INNER_WAVE_AMP = 2.6
+const LAKE_SURFACE_INNER_WAVE_PHASE_SCALE = 3.4
+const LAKE_SURFACE_INNER_SECOND_FREQ = 2.05
+const LAKE_SURFACE_INNER_SECOND_AMP = 1.35
+const LAKE_SURFACE_INNER_TIME_LAG = 0.48
+//
+// Lake bed layer under the water (static bake): earthy banks cut by a dark
+// edge, and a sand layer with gravel on the ledges and the floor (its lit
+// top edge sits a little above the bottom line, so the floor reads slightly
+// 3D).
 //
 const LAKE_BED_Z = 11.6
 const LAKE_BED_SPRITE = `glow0-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-const LAKE_BED_SEGMENTS = 64
-const LAKE_BED_SAND_H = 6
-const LAKE_BED_SAND_WOBBLE_A = 2
-const LAKE_BED_SAND_WOBBLE_B = 1
-const LAKE_BED_SAND_FREQ_A = 0.09
-const LAKE_BED_SAND_FREQ_B = 0.23
-const LAKE_BED_SAND_PHASE_B = 1.3
-const LAKE_BED_RIM_PX = 1.5
+const LAKE_BED_SEGMENTS = 160
+const LAKE_BED_BACK_RISE_PX = 11
+const LAKE_BED_BACK_FULL_DEPTH_PX = 40
+const LAKE_BED_BACK_WOBBLE_PX = 3
+const LAKE_BED_BACK_WOBBLE_WAVELENGTH = 47
+const LAKE_BED_BACK_WOBBLE_SEED = 12.9
+const LAKE_BED_RIM_PX = 2
+const LAKE_BED_EDGE_PX = 2
+const LAKE_BED_MUD_SEAM_INDEX = 5
 const LAKE_BED_FLOOR_OVERLAP_PX = 2
-const LAKE_BED_PEBBLE_COUNT = 16
-const LAKE_BED_PEBBLE_R_MIN = 2.5
-const LAKE_BED_PEBBLE_R_RANGE = 3
+const LAKE_BED_SLOPE_PROBE_PX = 3
+const LAKE_BED_SAND_MAX_SLOPE = 0.55
+const LAKE_BED_GRAVEL_COUNT = 140
+const LAKE_BED_GRAVEL_R_MIN = 0.8
+const LAKE_BED_GRAVEL_R_RANGE = 1.2
+const LAKE_BED_GRAVEL_STRETCH = 1.4
+const LAKE_BED_GRAVEL_ALPHA = 0.85
+const LAKE_BED_PEBBLE_COUNT = 22
+const LAKE_BED_PEBBLE_R_MIN = 1.8
+const LAKE_BED_PEBBLE_R_RANGE = 2.6
 const LAKE_BED_PEBBLE_SQUASH = 0.7
 const LAKE_BED_PEBBLE_LIGHT_FRAC = 0.45
-const LAKE_BED_PEBBLE_SINK = 0.5
 const LAKE_BED_PEBBLE_GLINT_SHIFT = 0.3
 const LAKE_BED_GRAIN_SEED = 5900
 //
-// Algae: a few tufts rooted on the bed, swaying slowly with a lag up the
-// blade so the tips trail the base.
+// Faceted boulders on the floor: one large rock and a dark rubble cluster in
+// the deep part, a few loose stones on the ledges. Each is a lumpy polygon
+// with a lit upper-left facet and a shaded lower-right.
+//
+const LAKE_BED_BOULDERS = [
+  { t: 0.5, r: 7, seed: 41 },
+  { t: 0.53, r: 9, seed: 43 },
+  { t: 0.57, r: 6, seed: 47 },
+  { t: 0.63, r: 22, seed: 11 },
+  { t: 0.12, r: 6, seed: 67 },
+  { t: 0.3, r: 8, seed: 37 }
+]
+const LAKE_BED_BOULDER_VERTS = 7
+const LAKE_BED_BOULDER_JITTER = 0.22
+const LAKE_BED_BOULDER_ANGLE_JITTER = 0.5
+const LAKE_BED_BOULDER_SQUASH = 0.72
+const LAKE_BED_BOULDER_SINK = 0.35
+const LAKE_BED_BOULDER_DEPTH_FRAC = 0.7
+const LAKE_BED_BOULDER_CONTOUR_PX = 1.5
+const LAKE_BED_BOULDER_MID_SHIFT = 0.14
+const LAKE_BED_BOULDER_MID_FRAC = 0.9
+const LAKE_BED_BOULDER_LIGHT_SHIFT = 0.3
+const LAKE_BED_BOULDER_LIGHT_FRAC = 0.45
+//
+// Sunken snag: a branch lying on the floor in the shallower left half, with
+// two short side twigs (fractions along it, angle, length fraction).
+//
+const LAKE_SNAG_T = 0.32
+const LAKE_SNAG_LEN = 74
+const LAKE_SNAG_W = 6
+const LAKE_SNAG_TIP_W = 2
+const LAKE_SNAG_TILT = -0.12
+const LAKE_SNAG_BOW_PX = 4
+const LAKE_SNAG_SEGMENTS = 8
+const LAKE_SNAG_TWIGS = [
+  { at: 0.35, angle: -0.9, len: 0.28 },
+  { at: 0.7, angle: -0.55, len: 0.22 }
+]
+const LAKE_SNAG_DEPTH_FRAC = 0.6
+const LAKE_SNAG_TWIG_W_FRAC = 0.6
+const LAKE_SNAG_TWIG_TIP_W = 1
+const LAKE_SNAG_LIGHT_FRAC = 0.35
+const LAKE_SNAG_LIGHT_LIFT = 0.25
+const LAKE_SNAG_CONTOUR_PX = 1.5
+//
+// Algae: tufts rooted at different depths of the floor face. Fronds are
+// tall tapered leaves; grass tufts are short and thin. Each blade sways
+// with a lag up its length so the tip trails the base.
 //
 const LAKE_ALGAE_Z = 11.7
-const LAKE_ALGAE_SPOTS = [0.3, 0.38, 0.47, 0.56, 0.66, 0.75, 0.84]
+const LAKE_ALGAE_TUFTS = [
+  { t: 0.05, kind: 'grass' },
+  { t: 0.16, kind: 'frond' },
+  { t: 0.38, kind: 'grass' },
+  { t: 0.48, kind: 'frond' },
+  { t: 0.63, kind: 'frond' },
+  { t: 0.76, kind: 'grass' },
+  { t: 0.88, kind: 'frond' },
+  { t: 0.96, kind: 'grass' }
+]
+const LAKE_ALGAE_KINDS = {
+  frond: { bladesMin: 3, bladesRange: 3, hMin: 32, hRange: 30, wMin: 5, wRange: 3, lean: 0.3, spread: 10 },
+  grass: { bladesMin: 4, bladesRange: 3, hMin: 10, hRange: 10, wMin: 1.6, wRange: 1, lean: 0.45, spread: 7 }
+}
+const LAKE_ALGAE_LAYOUT_SEED = 7721
 const LAKE_ALGAE_SHORE_CLEAR_PX = 24
-const LAKE_ALGAE_BLADES_MIN = 3
-const LAKE_ALGAE_BLADES_RANGE = 2
-const LAKE_ALGAE_SPREAD_PX = 8
-const LAKE_ALGAE_H_MIN = 18
-const LAKE_ALGAE_H_RANGE = 24
-const LAKE_ALGAE_MIN_H = 10
+const LAKE_ALGAE_MIN_H = 8
 const LAKE_ALGAE_TOP_CLEAR_PX = 8
 const LAKE_ALGAE_SEGMENTS = 7
-const LAKE_ALGAE_WIDTH_MIN = 3
-const LAKE_ALGAE_WIDTH_RANGE = 1.5
-const LAKE_ALGAE_CORE_FRAC = 0.4
-const LAKE_ALGAE_LEAN_RANGE = 0.25
+const LAKE_ALGAE_TIP_W_FRAC = 0.15
+const LAKE_ALGAE_MIDRIB_PX = 1
+const LAKE_ALGAE_ROOT_DEPTH_MIN = 0.3
+const LAKE_ALGAE_ROOT_DEPTH_RANGE = 0.55
 const LAKE_ALGAE_SWAY_PX = 5
 const LAKE_ALGAE_SWAY_SPEED = 0.9
 const LAKE_ALGAE_SWAY_LAG = 2.2
+const LAKE_ALGAE_SWAY_MUL_MIN = 0.65
+const LAKE_ALGAE_SWAY_MUL_RANGE = 0.75
+const LAKE_ALGAE_WAVE_PX = 1.6
+const LAKE_ALGAE_WAVE_FREQ = 9
 const LAKE_REFLECTION_ALPHA = 0.3
 const LAKE_REFLECTION_CORE_FRAC = 0.55
 const LAKE_REFLECTION_PASS_ALPHA = 0.5
@@ -1484,20 +1584,27 @@ const GLOW_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 //
 const SHORE_END_ROCK_Z = GRASS_Z + 1
 //
-// Lake bed: one wide parabola from the island's shore (where its slope meets
-// the water line) to the far end of the shore bake, deep enough for the full
-// drown sink. The island's own mound stops at the water line, so its slope
-// runs straight on into the bed. A skew pushes the deepest point right
-// (gentle island side, steeper far bank), and slow noise breaks the symmetry:
-// a broad sag plus small humps, both fading out at the shores.
+// Lake bed profile from the island's shore (where its slope meets the water
+// line) to the far end of the shore bake, deep enough for the full drown
+// sink. The island side steps down in earthy terraces, the middle is a broad
+// floor, and the tree side rises as a steep bank under the shore rocks.
+// Keypoints are (u along the water, depth fraction); smoothstep between them
+// flattens every keypoint into a ledge. Small humps break the regularity.
 //
 const LAKE_BED_MAX_DEPTH = DROWN_FULL_SINK_FEET_Y - WATER_SURFACE_Y
-const LAKE_BED_PARABOLA_PEAK = 4
-const LAKE_BED_SKEW = 1.35
-const LAKE_BED_SAG = 0.2
-const LAKE_BED_SAG_WAVELENGTH = 260
-const LAKE_BED_SAG_SEED = 31.7
-const LAKE_BED_HUMP_PX = 5
+const LAKE_BED_PROFILE = [
+  { u: 0, d: 0 },
+  { u: 0.05, d: 0.2 },
+  { u: 0.13, d: 0.24 },
+  { u: 0.2, d: 0.52 },
+  { u: 0.29, d: 0.58 },
+  { u: 0.38, d: 0.88 },
+  { u: 0.56, d: 0.97 },
+  { u: 0.72, d: 1 },
+  { u: 0.85, d: 0.95 },
+  { u: 1, d: 0 }
+]
+const LAKE_BED_HUMP_PX = 4
 const LAKE_BED_HUMP_WAVELENGTH = 58
 const LAKE_BED_HUMP_SEED = 77.3
 //
@@ -1992,7 +2099,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
         ))
     }
     if (await glowBootstrapPause(bootstrap, 62, session)) return
-    const waterLayer = createWater(k, lakeX1, waterX2, zones)
+    const waterLayer = createWater(k, lakeX1, waterX2, zones, rockObjs)
     createLakeShoreRockLayer(k, zones)
     if (await glowBootstrapPause(bootstrap, 72, session)) return
     if (await glowBootstrapPause(bootstrap, 74, session)) return
@@ -2303,23 +2410,13 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       x: glowFirstStartGroundSpawnX + GLOW_LIGHT_SOURCE_DX,
       y: TOP_MARGIN + GLOW_LIGHT_SOURCE_DY
     }
-    inst.lightShaftBack = LightShaft.create({
-      k,
-      source: glowLightGap,
-      rays: mapGlowLightRaysForDepth(glowFirstStartGroundSpawnX, GLOW_LIGHT_DEPTH_BACK),
-      groundY: FLOOR_Y,
-      getOpacity: () => 1,
-      hazeStrength: 1,
-      poolStrength: 0.5,
-      mount: 'manual'
-    })
-    LightShaft.create({
+    inst.lightShaft = LightShaft.create({
       k,
       source: glowLightGap,
       rays: mapGlowLightRaysForDepth(glowFirstStartGroundSpawnX, GLOW_LIGHT_DEPTH_FORE),
       groundY: FLOOR_Y,
       getOpacity: () => 1,
-      hazeStrength: 0.38,
+      hazeStrength: 0.42,
       poolStrength: 1.08,
       z: GLOW_LIGHT_SHAFT_Z
     })
@@ -2770,7 +2867,8 @@ function createGlowLevelIndicator(k) {
     sideWallWidth: LEFT_MARGIN,
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
     hideScoreboard: true,
-    hideLifeScore: true
+    hideLifeScore: true,
+    lifeHudPlayfieldRightX: SCREEN_W - RIGHT_MARGIN
   })
   pinGlowHudFixed(indicator)
   return indicator
@@ -2998,10 +3096,11 @@ function applyZoneVisibility(inst) {
       setDecorObjVisible(o, rightOp > 0.04, rightOp)
       return
     }
-    if (o._lakeShoreEnd) {
+    if (o._lakeShoreEnd || o._lakeMerged) {
       //
-      // Cap rocks are painted in drawLakeShoreRocksWorld so they always sit
-      // above the lake fill and parallax ground band.
+      // Cap rocks (and the cluster merged into them) are painted in
+      // drawLakeShoreRocksWorld so they always sit above the lake fill and
+      // parallax ground band.
       //
       o.hidden = true
       o.pos.y = PLATFORM_HIDE_Y
@@ -3402,7 +3501,11 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   const staticColorCtx = staticColor.getContext('2d')
   staticColorCtx.translate(0, -PAR_STATIC_WORLD_Y)
   renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, undergroundStaticEarthTones())
-  applyGlowMaterialBake(staticColor, 9101)
+  applyGlowLayerGradeToCanvas(staticColor, {
+    ...GLOW_LAYER_GRADE.material,
+    grain: EARTH_STATIC_BAKE_GRAIN,
+    grainBlockSize: EARTH_STATIC_BAKE_GRAIN_BLOCK_PX
+  }, 9101)
   k.loadSprite(BG_STATIC_COLOR, staticColor)
   staticColor.width = 0
   staticColor.height = 0
@@ -3636,6 +3739,7 @@ function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
 //
 function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
   paintLayeredEarthBand(ctx, layers, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
+  paintTopsoilOrganicTexture(ctx, layers, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
   //
   // Flat seal along FLOOR_Y so the topsoil always meets the walkable ground
   // line with no sub-pixel gaps from the wavy interior seams below.
@@ -3652,6 +3756,38 @@ function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
 function paintFlatEarthGroundSeal(ctx, rgb, x0, y0, width) {
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.fillRect(x0, y0, width, 4)
+}
+//
+// Soft elliptical flecks in the upper topsoil — reads like the reference
+// cross-section instead of square grit or coarse grain blocks.
+//
+function paintTopsoilOrganicTexture(ctx, layers, x0, y0, width, height) {
+  const base = layers[0]?.rgb
+  if (!base) return
+  const y1 = y0 + 5
+  const y2 = y0 + height * GROUND_LAYER_FRACS[0] - 3
+  if (y2 <= y1) return
+  const darkRgb = glowRgb('mudGround')
+  const lightRgb = glowRgb('groundClay')
+  for (let i = 0; i < TOPSOIL_ORGANIC_SPECK_COUNT; i++) {
+    const seed = TOPSOIL_ORGANIC_SEED + i * 17.31
+    const u = SoilSeam.seamHash01(seed)
+    const v = SoilSeam.seamHash01(seed * 1.73)
+    const x = x0 + u * width
+    const y = y1 + v * (y2 - y1)
+    const tone = SoilSeam.seamHash01(seed * 2.41)
+    const rgb = tone < 0.52
+      ? lerpRgb(base, darkRgb, 0.1 + tone * 0.55)
+      : lerpRgb(base, lightRgb, (tone - 0.52) * 1.05)
+    const rx = 0.75 + SoilSeam.seamHash01(seed * 3.17) * 2.4
+    const ry = rx * (0.62 + SoilSeam.seamHash01(seed * 4.91) * 0.5)
+    ctx.globalAlpha = TOPSOIL_ORGANIC_ALPHA * (0.3 + SoilSeam.seamHash01(seed * 5.83) * 0.7)
+    ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+    ctx.beginPath()
+    ctx.ellipse(x, y, rx, ry, SoilSeam.seamHash01(seed * 6.07) * Math.PI, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
 }
 //
 // Three soil layers for the underground earth band, top to bottom, each
@@ -5096,11 +5232,16 @@ function traceUndergroundStonePath(ctx, stone, cx, cy, r) {
 //
 function paintUndergroundGrit(ctx, grit, tones, deepCss) {
   const gritCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
+  const topsoilY2 = FLOOR_Y + CAVE_BAND_H * GROUND_LAYER_FRACS[0]
   ctx.globalAlpha = UG_GRIT_ALPHA
   grit?.forEach(g => {
+    if (g.y < topsoilY2) return
     paintUndergroundDecorAtDepth(ctx, g.y, false, () => {
       ctx.fillStyle = g.light ? gritCss : deepCss
-      ctx.fillRect(Math.round(g.x), Math.round(g.y), g.px, g.px)
+      const r = g.px * 0.52
+      ctx.beginPath()
+      ctx.arc(g.x, g.y, r, 0, Math.PI * 2)
+      ctx.fill()
     })
   })
   ctx.globalAlpha = 1
@@ -5601,6 +5742,13 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj._surfaceTop = posY
   obj._decorWorldX = worldX
   obj._detailRank = radius < 16 ? 'small' : 'large'
+  if (z === SHORE_END_ROCK_Z || waterCluster) {
+    obj._rockRadius = radius
+    obj._rockWidthScale = widthScale
+    obj._rockVerts = verts
+    obj._lakeBakeW = totalW
+    obj._rockBakeCy = cy
+  }
   obj.hidden = true
   obj.pos.y = PLATFORM_HIDE_Y
   return obj
@@ -6025,14 +6173,9 @@ function bakeLakeWaterSprites(k, x1, x2Core) {
     // hold the water line, so no surface strip runs across them.
     //
     const waterSpan = bakeSpan - islandShoreLocalX
-    const pts = []
-    for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-      const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-      const coreT = Math.min(1, localX / coreSpan)
-      const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
-      const wave = lakeWaveOffsetAt(coreT, time) * shoreFade
-      pts.push([localX, topMargin + wave])
-    }
+    const surfaceTop = buildLakeSurfaceLinePts(geom, time, lakeWaveOffsetAt)
+    const surfaceInner = buildLakeSurfaceLinePts(geom, time + LAKE_SURFACE_INNER_TIME_LAG, lakeSurfaceInnerWaveOffsetAt)
+    const pts = [...surfaceTop]
     for (let i = LAKE_SEGMENTS; i >= 0; i--) {
       const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
       pts.push([localX, lakeBottomLocalY(geom, localX)])
@@ -6056,7 +6199,10 @@ function bakeLakeWaterSprites(k, x1, x2Core) {
     paintLakeReflections(paint)
     paintLakeShoreRipples(paint, islandShoreLocalX, 1)
     paintLakeShoreRipples(paint, coreSpan, -1)
+    paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner)
     ctx.restore()
+    strokeLakeSurfaceLine(ctx, surfaceTop, 0, GLOW_PAL.waterPaint.surfaceLine, LAKE_SURFACE_LINE_PX)
+    strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(GLOW_PAL.waterPaint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
     applyGlowGameplaySharpBake(canvas, 5000 + f)
     k.loadSprite(LAKE_BAKE_SPRITE_PREFIX + f, canvas)
     canvas.width = 0
@@ -6065,12 +6211,48 @@ function bakeLakeWaterSprites(k, x1, x2Core) {
   return geom
 }
 //
+// Light band between the top surface line and the inner line (each has its
+// own wave phase so the band breathes).
+//
+function buildLakeSurfaceLinePts(geom, time, waveOffsetAt) {
+  const { islandShoreLocalX, bakeSpan, coreSpan, topMargin } = geom
+  const waterSpan = bakeSpan - islandShoreLocalX
+  const line = []
+  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
+    const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
+    const coreT = Math.min(1, localX / coreSpan)
+    const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
+    line.push([localX, topMargin + waveOffsetAt(coreT, time) * shoreFade])
+  }
+  return line
+}
+function paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner) {
+  const colors = GLOW_PAL.waterPaint
+  ctx.beginPath()
+  ctx.moveTo(surfaceTop[0][0], surfaceTop[0][1])
+  for (let i = 1; i < surfaceTop.length; i++) ctx.lineTo(surfaceTop[i][0], surfaceTop[i][1])
+  for (let i = surfaceInner.length - 1; i >= 0; i--) ctx.lineTo(surfaceInner[i][0], surfaceInner[i][1])
+  ctx.closePath()
+  ctx.fillStyle = hexWithAlpha(colors.surfaceBand, LAKE_SURFACE_BAND_ALPHA)
+  ctx.fill()
+}
+function strokeLakeSurfaceLine(ctx, surface, offsetY, color, width) {
+  ctx.beginPath()
+  ctx.moveTo(surface[0][0], surface[0][1] + offsetY)
+  for (let i = 1; i < surface.length; i++) ctx.lineTo(surface[i][0], surface[i][1] + offsetY)
+  ctx.strokeStyle = color
+  ctx.lineWidth = width
+  ctx.lineJoin = 'round'
+  ctx.stroke()
+}
+//
 // Water — see-through fill bounded by the wave polygon, over the bed layer
 // (murk, sandy bed, pebbles) and the swaying algae.
 //
-function createWater(k, x1, x2Core, zones) {
+function createWater(k, x1, x2Core, zones, rockObjs) {
   const lake = bakeLakeWaterSprites(k, x1, x2Core)
   bakeLakeBedSprite(k, lake)
+  rockObjs && bakeLakeShoreRockFullSprites(k, lake, rockObjs)
   lake.x2Bake = x1 + lake.bakeSpan
   lake.algae = buildLakeAlgae(k, lake)
   zones._lake = lake
@@ -6140,26 +6322,41 @@ function drawLakeBed(k, zones, lake) {
 function lakeBottomLocalY(lake, localX) {
   const u = (localX - lake.islandShoreLocalX) / (lake.bakeSpan - lake.islandShoreLocalX)
   if (u <= 0 || u >= 1) return lake.topMargin
-  const skewed = Math.pow(u, LAKE_BED_SKEW)
-  const shape = LAKE_BED_PARABOLA_PEAK * skewed * (1 - skewed)
-  const sag01 = (SoilSeam.seamValueNoise(localX / LAKE_BED_SAG_WAVELENGTH, LAKE_BED_SAG_SEED) + 1) * 0.5
+  const shape = lakeBedProfileAt(u)
   const hump = SoilSeam.seamValueNoise(localX / LAKE_BED_HUMP_WAVELENGTH, LAKE_BED_HUMP_SEED) * LAKE_BED_HUMP_PX
-  const depth = (LAKE_BED_MAX_DEPTH * (1 - LAKE_BED_SAG * sag01) + hump) * shape
+  const depth = (LAKE_BED_MAX_DEPTH + hump) * shape
   return lake.topMargin + Math.min(LAKE_BED_MAX_DEPTH, Math.max(0, depth))
 }
 //
-// Top of the sandy bed: a soft wobble above the bottom, never above the
-// lowest wave trough.
+// Depth fraction at u: smoothstep between neighbouring profile keypoints.
 //
-function lakeBedTopLocalY(lake, localX) {
-  const sand = LAKE_BED_SAND_H +
-    Math.sin(localX * LAKE_BED_SAND_FREQ_A) * LAKE_BED_SAND_WOBBLE_A +
-    Math.sin(localX * LAKE_BED_SAND_FREQ_B + LAKE_BED_SAND_PHASE_B) * LAKE_BED_SAND_WOBBLE_B
-  return Math.max(lake.topMargin + LAKE_OPAQUE_SKIN_PX, lakeBottomLocalY(lake, localX) - sand)
+function lakeBedProfileAt(u) {
+  let i = 1
+  while (i < LAKE_BED_PROFILE.length - 1 && LAKE_BED_PROFILE[i].u < u) i++
+  const a = LAKE_BED_PROFILE[i - 1]
+  const b = LAKE_BED_PROFILE[i]
+  const s = Math.min(1, Math.max(0, (u - a.u) / (b.u - a.u)))
+  return a.d + (b.d - a.d) * s * s * (3 - 2 * s)
 }
 //
-// Static layer seen through the water: darkening murk from below the wave
-// band down to the bottom, a sandy bed with a light rim, and pebbles on it.
+// Top of the sand that settled on the bed (canvas-local Y). Sand only builds
+// up where the bed is flat and deep enough — ledges and the floor — and
+// thins to nothing on the terrace steps and the steep banks, so those read
+// as bare earth.
+//
+function lakeBedTopLocalY(lake, localX) {
+  const bottom = lakeBottomLocalY(lake, localX)
+  const slope = Math.abs(lakeBottomLocalY(lake, localX + LAKE_BED_SLOPE_PROBE_PX) - lakeBottomLocalY(lake, localX - LAKE_BED_SLOPE_PROBE_PX)) / (LAKE_BED_SLOPE_PROBE_PX * 2)
+  const flat01 = Math.max(0, 1 - slope / LAKE_BED_SAND_MAX_SLOPE)
+  const depth01 = Math.min(1, (bottom - lake.topMargin) / LAKE_BED_BACK_FULL_DEPTH_PX)
+  const wobble = SoilSeam.seamValueNoise(localX / LAKE_BED_BACK_WOBBLE_WAVELENGTH, LAKE_BED_BACK_WOBBLE_SEED) * LAKE_BED_BACK_WOBBLE_PX
+  const rise = (LAKE_BED_BACK_RISE_PX + wobble) * depth01 * flat01 * flat01
+  return Math.max(lake.topMargin + LAKE_OPAQUE_SKIN_PX, bottom - rise)
+}
+//
+// Static layer seen through the water: darkening murk, the earthy floor face
+// with a lit far rim, then pebbles, the sunken snag and faceted boulders
+// (clipped to the bottom line), and a dark front cut along the bottom.
 //
 function bakeLakeBedSprite(k, lake) {
   if (k.getSprite(LAKE_BED_SPRITE)) return
@@ -6170,6 +6367,7 @@ function bakeLakeBedSprite(k, lake) {
   const ctx = canvas.getContext('2d')
   const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
   const step = lake.bakeSpan / LAKE_BED_SEGMENTS
+  const floorY = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + LAKE_BED_FLOOR_OVERLAP_PX
   ctx.beginPath()
   ctx.moveTo(0, murkTop)
   ctx.lineTo(lake.bakeSpan, murkTop)
@@ -6183,29 +6381,57 @@ function bakeLakeBedSprite(k, lake) {
   murk.addColorStop(1, colors.murkDeep)
   ctx.fillStyle = murk
   ctx.fill()
+  const murkPath = new Path2D()
+  murkPath.moveTo(0, murkTop)
+  murkPath.lineTo(lake.bakeSpan, murkTop)
+  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) murkPath.lineTo(i * step, Math.max(murkTop, lakeBottomLocalY(lake, i * step)))
+  murkPath.closePath()
+  paintLakeBedFace(ctx, lake, step, floorY, colors)
   ctx.save()
-  ctx.clip()
+  ctx.clip(murkPath)
   paintLakeBedPebbles(ctx, lake, colors)
+  paintLakeBedSnag(ctx, lake, colors)
+  paintLakeBedBoulders(ctx, lake, colors)
   ctx.restore()
-  paintLakeBedSand(ctx, lake, step, colors)
+  paintLakeBedFrontEdge(ctx, lake, step, floorY, colors)
   applyGlowGameplaySharpBake(canvas, LAKE_BED_GRAIN_SEED)
   k.loadSprite(LAKE_BED_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
 }
 //
-// Sand from the bed top down to the bottom, and at least to just under the
-// ground line, so the shallow shore ends never leave a gap above the earth.
+// Earth fill from the bottom down to just under the ground line, so the
+// shallow shore ends never leave a gap above the earth band; then the sand
+// layer with dark gravel specks and a lit top edge.
 //
-function paintLakeBedSand(ctx, lake, step, colors) {
-  const floorY = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + LAKE_BED_FLOOR_OVERLAP_PX
+function paintLakeBedFace(ctx, lake, step, floorY, colors) {
+  ctx.beginPath()
+  ctx.moveTo(0, lakeBedMudSeamLocalY(lake, 0, floorY))
+  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
+  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, Math.max(floorY, lakeBottomLocalY(lake, i * step)))
+  ctx.closePath()
+  ctx.fillStyle = colors.bank
+  ctx.fill()
   ctx.beginPath()
   ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
   for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, Math.max(floorY, lakeBottomLocalY(lake, i * step)))
+  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
   ctx.closePath()
   ctx.fillStyle = colors.bed
   ctx.fill()
+  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
+  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 5)
+  ctx.fillStyle = hexWithAlpha(colors.bedGravel, LAKE_BED_GRAVEL_ALPHA)
+  for (let i = 0; i < LAKE_BED_GRAVEL_COUNT; i++) {
+    const x = x1 + rng() * (lake.bakeSpan - x1)
+    const top = lakeBedTopLocalY(lake, x)
+    const bottom = lakeBottomLocalY(lake, x)
+    const r = LAKE_BED_GRAVEL_R_MIN + rng() * LAKE_BED_GRAVEL_R_RANGE
+    if (bottom - top < r * 2) continue
+    ctx.beginPath()
+    ctx.ellipse(x, top + r + (bottom - top - r * 2) * rng(), r * LAKE_BED_GRAVEL_STRETCH, r, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
   ctx.beginPath()
   ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
   for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
@@ -6214,14 +6440,38 @@ function paintLakeBedSand(ctx, lake, step, colors) {
   ctx.stroke()
 }
 //
-// Pebbles half-sunk into the sand, east of the island so they stay visible.
+// Dark cut where the floor face meets the earth band below the lake.
+//
+function paintLakeBedFrontEdge(ctx, lake, step, floorY, colors) {
+  ctx.beginPath()
+  ctx.moveTo(0, lakeBedMudSeamLocalY(lake, 0, floorY))
+  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
+  ctx.strokeStyle = colors.bedEdge
+  ctx.lineWidth = LAKE_BED_EDGE_PX
+  ctx.lineJoin = 'round'
+  ctx.stroke()
+}
+//
+// Sand/mud contact on the bed: same soft tongues and pixel grit as the
+// topsoil/subsoil seam in the ground band.
+//
+function lakeBedMudSeamLocalY(lake, localX, floorY) {
+  const worldX = lake.x1 + localX
+  const base = lakeBottomLocalY(lake, localX)
+  const jag = SoilSeam.seamFringeOffset(worldX, LAKE_BED_MUD_SEAM_INDEX)
+  return Math.max(floorY, base + jag)
+}
+//
+// Pebbles scattered across the floor face, east of the island.
 //
 function paintLakeBedPebbles(ctx, lake, colors) {
   const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
+  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 17)
   for (let i = 0; i < LAKE_BED_PEBBLE_COUNT; i++) {
-    const x = x1 + Math.random() * (lake.coreSpan - x1)
-    const r = LAKE_BED_PEBBLE_R_MIN + Math.random() * LAKE_BED_PEBBLE_R_RANGE
-    const y = lakeBedTopLocalY(lake, x) + r * LAKE_BED_PEBBLE_SQUASH * LAKE_BED_PEBBLE_SINK
+    const x = x1 + rng() * (lake.coreSpan - x1)
+    const r = LAKE_BED_PEBBLE_R_MIN + rng() * LAKE_BED_PEBBLE_R_RANGE
+    const top = lakeBedTopLocalY(lake, x)
+    const y = top + (lakeBottomLocalY(lake, x) - top) * rng()
     ctx.fillStyle = colors.pebble
     ctx.beginPath()
     ctx.ellipse(x, y, r, r * LAKE_BED_PEBBLE_SQUASH, 0, 0, Math.PI * 2)
@@ -6234,54 +6484,218 @@ function paintLakeBedPebbles(ctx, lake, colors) {
   }
 }
 //
-// Algae tufts on the bed (world space); blade height is capped so the tips
-// stay below the surface wave band.
+// Sunken branch lying across the floor face: tapered, slightly bowed, with
+// two side twigs; contour first, then the body, then a lit top line.
 //
-function buildLakeAlgae(k, lake) {
-  const blades = []
-  const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  for (const t of LAKE_ALGAE_SPOTS) {
-    const cx = t * lake.coreSpan
-    if (cx < lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX) continue
-    const count = LAKE_ALGAE_BLADES_MIN + Math.floor(Math.random() * LAKE_ALGAE_BLADES_RANGE)
-    for (let b = 0; b < count; b++) {
-      const x = cx + (Math.random() * 2 - 1) * LAKE_ALGAE_SPREAD_PX
-      const rootY = lakeBedTopLocalY(lake, x)
-      const h = Math.min(LAKE_ALGAE_H_MIN + Math.random() * LAKE_ALGAE_H_RANGE, rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX)
-      if (h < LAKE_ALGAE_MIN_H) continue
-      blades.push({
-        x: lake.x1 + x,
-        y: lake.originY + rootY,
-        h,
-        width: LAKE_ALGAE_WIDTH_MIN + Math.random() * LAKE_ALGAE_WIDTH_RANGE,
-        lean: (Math.random() * 2 - 1) * LAKE_ALGAE_LEAN_RANGE,
-        phase: Math.random() * Math.PI * 2,
-        pts: Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, () => k.vec2(0, 0))
-      })
-    }
+function paintLakeBedSnag(ctx, lake, colors) {
+  const cx = lakeWaterLocalX(lake, LAKE_SNAG_T)
+  const top = lakeBedTopLocalY(lake, cx)
+  const cy = top + (lakeBottomLocalY(lake, cx) - top) * LAKE_SNAG_DEPTH_FRAC
+  const pts = []
+  for (let s = 0; s <= LAKE_SNAG_SEGMENTS; s++) {
+    const u = s / LAKE_SNAG_SEGMENTS
+    const along = (u - 0.5) * LAKE_SNAG_LEN
+    pts.push({
+      x: cx + along,
+      y: cy + along * LAKE_SNAG_TILT - Math.sin(u * Math.PI) * LAKE_SNAG_BOW_PX
+    })
   }
-  return {
-    blades,
-    color: getRGB(k, GLOW_PAL.waterPaint.algae),
-    lightColor: getRGB(k, GLOW_PAL.waterPaint.algaeLight)
+  const contour = LAKE_SNAG_CONTOUR_PX * 2
+  strokeTaperedPolyline(ctx, pts, LAKE_SNAG_W + contour, LAKE_SNAG_TIP_W + contour, colors.stoneContour)
+  for (const twig of LAKE_SNAG_TWIGS) {
+    strokeTaperedPolyline(ctx, snagTwigPoints(pts, twig), lerpSnagWidth(twig.at) * LAKE_SNAG_TWIG_W_FRAC + contour, contour, colors.stoneContour)
+  }
+  strokeTaperedPolyline(ctx, pts, LAKE_SNAG_W, LAKE_SNAG_TIP_W, colors.snag)
+  for (const twig of LAKE_SNAG_TWIGS) {
+    strokeTaperedPolyline(ctx, snagTwigPoints(pts, twig), lerpSnagWidth(twig.at) * LAKE_SNAG_TWIG_W_FRAC, LAKE_SNAG_TWIG_TIP_W, colors.snag)
+  }
+  const lit = pts.map((p, s) => ({ x: p.x, y: p.y - lerpSnagWidth(s / LAKE_SNAG_SEGMENTS) * LAKE_SNAG_LIGHT_LIFT }))
+  strokeTaperedPolyline(ctx, lit, LAKE_SNAG_W * LAKE_SNAG_LIGHT_FRAC, LAKE_SNAG_TIP_W * LAKE_SNAG_LIGHT_FRAC, colors.snagLight)
+}
+function lerpSnagWidth(u) {
+  return LAKE_SNAG_W + (LAKE_SNAG_TIP_W - LAKE_SNAG_W) * u
+}
+//
+// Straight twig leaving the branch at a fraction of its length.
+//
+function snagTwigPoints(pts, twig) {
+  const idx = Math.round(twig.at * (pts.length - 1))
+  const base = pts[idx]
+  const len = twig.len * LAKE_SNAG_LEN
+  return [
+    base,
+    { x: base.x + Math.cos(twig.angle) * len, y: base.y + Math.sin(twig.angle) * len }
+  ]
+}
+//
+// Polyline whose stroke width shrinks linearly from w0 to w1 (round caps hide
+// the joints between segments).
+//
+function strokeTaperedPolyline(ctx, pts, w0, w1, color) {
+  ctx.strokeStyle = color
+  ctx.lineCap = 'round'
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineWidth = w0 + (w1 - w0) * ((i - 0.5) / (pts.length - 1))
+    ctx.beginPath()
+    ctx.moveTo(pts[i - 1].x, pts[i - 1].y)
+    ctx.lineTo(pts[i].x, pts[i].y)
+    ctx.stroke()
   }
 }
 //
-// Slow sway: the bend grows toward the tip and lags behind the base.
+// Floor boulders half-sunk into the sand layer.
+//
+function paintLakeBedBoulders(ctx, lake, colors) {
+  for (const spec of LAKE_BED_BOULDERS) {
+    const cx = lakeWaterLocalX(lake, spec.t)
+    const top = lakeBedTopLocalY(lake, cx)
+    const baseY = top + (lakeBottomLocalY(lake, cx) - top) * LAKE_BED_BOULDER_DEPTH_FRAC
+    paintLakeBoulder(ctx, cx, baseY - spec.r * LAKE_BED_BOULDER_SQUASH * (1 - LAKE_BED_BOULDER_SINK), spec, colors)
+  }
+}
+//
+// One faceted boulder: dark shadow tone, a mid facet pushed to the upper
+// left, a small lit facet, then a dark contour.
+//
+function paintLakeBoulder(ctx, cx, cy, spec, colors) {
+  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + spec.seed)
+  const verts = []
+  for (let i = 0; i < LAKE_BED_BOULDER_VERTS; i++) {
+    const a = (i + (rng() - 0.5) * LAKE_BED_BOULDER_ANGLE_JITTER) / LAKE_BED_BOULDER_VERTS * Math.PI * 2
+    const rr = spec.r * (1 + (rng() * 2 - 1) * LAKE_BED_BOULDER_JITTER)
+    verts.push({ x: Math.cos(a) * rr, y: Math.sin(a) * rr * LAKE_BED_BOULDER_SQUASH })
+  }
+  const outline = boulderPath(verts, cx, cy, 1, 0, 0)
+  ctx.fillStyle = colors.stoneDark
+  ctx.fill(outline)
+  ctx.save()
+  ctx.clip(outline)
+  const midShift = -spec.r * LAKE_BED_BOULDER_MID_SHIFT
+  ctx.fillStyle = colors.stone
+  ctx.fill(boulderPath(verts, cx, cy, LAKE_BED_BOULDER_MID_FRAC, midShift, midShift))
+  const lightShift = -spec.r * LAKE_BED_BOULDER_LIGHT_SHIFT
+  ctx.fillStyle = colors.stoneLight
+  ctx.fill(boulderPath(verts, cx, cy, LAKE_BED_BOULDER_LIGHT_FRAC, lightShift, lightShift))
+  ctx.restore()
+  ctx.strokeStyle = colors.stoneContour
+  ctx.lineWidth = LAKE_BED_BOULDER_CONTOUR_PX
+  ctx.lineJoin = 'round'
+  ctx.stroke(outline)
+}
+function boulderPath(verts, cx, cy, scale, dx, dy) {
+  const path = new Path2D()
+  verts.forEach((v, i) => {
+    const x = cx + dx + v.x * scale
+    const y = cy + dy + v.y * scale
+    i === 0 ? path.moveTo(x, y) : path.lineTo(x, y)
+  })
+  path.closePath()
+  return path
+}
+//
+// Canvas-local X at fraction t of the open water, from just clear of the
+// island shore to the right end of the lake core.
+//
+function lakeWaterLocalX(lake, t) {
+  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
+  return x1 + t * (lake.coreSpan - x1)
+}
+function lakeBedBakeRng(seed) {
+  let t = seed >>> 0
+  return () => {
+    t += 0x6D2B79F5
+    let r = Math.imul(t ^ (t >>> 15), 1 | t)
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
+  }
+}
+//
+// Algae tufts (world space) rooted at random depths of the floor face, so
+// they sit "on" the receding floor; heights are capped below the wave band.
+//
+function buildLakeAlgae(k, lake) {
+  const fronds = []
+  const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
+  const palette = GLOW_PAL.waterPaint
+  const tones = [palette.algaeDark, palette.algae, palette.algaeLight].map((hex) => {
+    const c = getRGB(k, hex)
+    return k.rgb(c.r, c.g, c.b)
+  })
+  const rng = lakeBedBakeRng(LAKE_ALGAE_LAYOUT_SEED)
+  for (const tuft of LAKE_ALGAE_TUFTS) {
+    const cx = lakeWaterLocalX(lake, tuft.t)
+    const kind = LAKE_ALGAE_KINDS[tuft.kind]
+    const count = kind.bladesMin + Math.floor(rng() * kind.bladesRange)
+    for (let b = 0; b < count; b++) {
+      const x = cx + (rng() * 2 - 1) * kind.spread
+      const top = lakeBedTopLocalY(lake, x)
+      const rootY = top + (lakeBottomLocalY(lake, x) - top) * (LAKE_ALGAE_ROOT_DEPTH_MIN + rng() * LAKE_ALGAE_ROOT_DEPTH_RANGE)
+      const h = Math.min(kind.hMin + rng() * kind.hRange, rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX)
+      if (h < LAKE_ALGAE_MIN_H) continue
+      const width = kind.wMin + rng() * kind.wRange
+      fronds.push({
+        x: lake.x1 + x,
+        y: lake.originY + rootY,
+        h,
+        width,
+        isFrond: tuft.kind === 'frond',
+        lean: (rng() * 2 - 1) * kind.lean,
+        phase: rng() * Math.PI * 2,
+        swayMul: LAKE_ALGAE_SWAY_MUL_MIN + rng() * LAKE_ALGAE_SWAY_MUL_RANGE,
+        color: tones[Math.floor(rng() * tones.length)],
+        midrib: tones[tones.length - 1],
+        spine: Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, () => k.vec2(0, 0)),
+        poly: Array.from({ length: (LAKE_ALGAE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
+      })
+    }
+  }
+  return { blades: fronds, indices: lakeAlgaeStripIndices() }
+}
+//
+// Triangle strip between the left and right edges of a leaf polygon (left
+// edge bottom→tip, right edge tip→bottom). Kaplay's default fan from vertex
+// 0 would fold over on a curved blade.
+//
+function lakeAlgaeStripIndices() {
+  const last = (LAKE_ALGAE_SEGMENTS + 1) * 2 - 1
+  const indices = []
+  for (let s = 0; s < LAKE_ALGAE_SEGMENTS; s++) {
+    indices.push(s, s + 1, last - s, s + 1, last - s - 1, last - s)
+  }
+  return indices
+}
+//
+// Slow sway with the bend growing toward the tip and lagging behind the
+// base; fronds also ripple along their length. All leaf polygons first, then
+// the frond midribs, to keep the primitive batch unbroken.
 //
 function drawLakeAlgae(k, zones, lake) {
   if (!isLakeLayerVisible(k, zones, lake)) return
-  const algae = lake.algae
-  const time = k.time() * LAKE_ALGAE_SWAY_SPEED
-  for (const blade of algae.blades) {
-    for (let s = 0; s <= LAKE_ALGAE_SEGMENTS; s++) {
-      const u = s / LAKE_ALGAE_SEGMENTS
-      const sway = Math.sin(time + blade.phase - u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
-      blade.pts[s].x = blade.x + sway + blade.lean * blade.h * u
-      blade.pts[s].y = blade.y - blade.h * u
-    }
-    k.drawLines({ pts: blade.pts, width: blade.width, color: algae.color })
-    k.drawLines({ pts: blade.pts, width: blade.width * LAKE_ALGAE_CORE_FRAC, color: algae.lightColor })
+  const time = k.time()
+  for (const blade of lake.algae.blades) {
+    updateLakeAlgaeBlade(blade, time)
+    k.drawPolygon({ pts: blade.poly, indices: lake.algae.indices, color: blade.color })
+  }
+  for (const blade of lake.algae.blades) {
+    blade.isFrond && k.drawLines({ pts: blade.spine, width: LAKE_ALGAE_MIDRIB_PX, color: blade.midrib })
+  }
+}
+function updateLakeAlgaeBlade(blade, time) {
+  const swayRate = LAKE_ALGAE_SWAY_SPEED * blade.swayMul
+  const last = blade.poly.length - 1
+  for (let s = 0; s <= LAKE_ALGAE_SEGMENTS; s++) {
+    const u = s / LAKE_ALGAE_SEGMENTS
+    const sway = Math.sin(time * swayRate + blade.phase - u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
+    const ripple = blade.isFrond ? Math.sin(u * LAKE_ALGAE_WAVE_FREQ + blade.phase) * LAKE_ALGAE_WAVE_PX * u : 0
+    const x = blade.x + sway + ripple + blade.lean * blade.h * u
+    const y = blade.y - blade.h * u
+    const half = blade.width * (1 - (1 - LAKE_ALGAE_TIP_W_FRAC) * u) * 0.5
+    blade.spine[s].x = x
+    blade.spine[s].y = y
+    blade.poly[s].x = x - half
+    blade.poly[s].y = y
+    blade.poly[last - s].x = x + half
+    blade.poly[last - s].y = y
   }
 }
 //
@@ -6303,6 +6717,113 @@ function createLakeShoreRockLayer(k, zones) {
       }
     }
   ])
+}
+//
+// Bakes the tree-side shore cap rocks and the water-edge rock cluster as ONE
+// mossy rock sprite: all silhouettes merge into a single outline, their
+// lower halves pulled down
+// (and spread outward) until they sink into the lake bed. Everything below
+// the bed / bank line is clipped away (the earth band sits in front), and
+// the part under the water line is tinted with the water colour so it reads
+// as submerged but stays opaque. The sprite hangs on the tree-side rock.
+//
+function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
+  const floorLocal = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + LAKE_BED_FLOOR_OVERLAP_PX
+  const rocks = rockObjs.filter(o => (o._lakeShoreEnd || o._waterCluster) && o._rockVerts)
+  const main = rocks.find(o => o._shoreTreeSide)
+  if (!main) return
+  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, floorLocal))
+  const pts = loops.flat()
+  const pad = ROCK_OUTLINE_WIDTH * 2
+  const x0 = Math.floor(Math.min(...pts.map(p => p.x)) - pad)
+  const y0 = Math.floor(Math.min(...pts.map(p => p.y)) - pad)
+  const width = Math.ceil(Math.max(...pts.map(p => p.x)) + pad) - x0
+  const height = Math.ceil(Math.max(...pts.map(p => p.y)) + pad) - y0
+  const waterY = WATER_SURFACE_Y - y0
+  const canvas = toCanvas({ width, height, pixelRatio: 1 }, (ctx) => {
+    ctx.save()
+    clipLakeShoreRockToBed(ctx, lake, x0, y0, width, height, floorLocal)
+    paintGlowShoreRock(ctx, {
+      loops: loops.map(loop => loop.map(p => ({ x: p.x - x0, y: p.y - y0 }))),
+      waterY,
+      rng: createSeededRandom((main._decorWorldX * 13 | 0) + LAKE_BAKE_GEOMETRY_VERSION),
+      outlineWidth: ROCK_OUTLINE_WIDTH
+    })
+    ctx.restore()
+    tintLakeShoreRockUnderwater(ctx, width, height, waterY)
+  })
+  applyGlowLayerGradeToCanvas(canvas, GLOW_LAYER_GRADE.decor, (main._decorWorldX * 7 | 0) + 91)
+  const name = `glow0-lake-shore-rock-v${LAKE_BAKE_GEOMETRY_VERSION}-${main._decorWorldX | 0}`
+  k.loadSprite(name, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  rocks.forEach(rock => { rock._lakeMerged = true })
+  main._lakeFullSprite = { name, x: x0, y: y0, width, height }
+}
+//
+// Sunk outline of one shore rock in world coordinates.
+//
+function lakeShoreRockWorldLoop(lake, rock, floorLocal) {
+  const ox = rock._homeX + rock._lakeBakeW / 2
+  const oy = rock._homeY + rock._rockBakeCy
+  const ws = rock._rockWidthScale
+  return lakeShoreRockSunkVerts(lake, rock, floorLocal).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
+}
+//
+// Lower-half rock verts pulled down past the bed under each vertex (the bed
+// clip trims the overshoot) and spread outward on the way down, so the rock
+// widens into the bed like a pile and leaves no water gap under it.
+//
+function lakeShoreRockSunkVerts(lake, rock, floorLocal) {
+  const ws = rock._rockWidthScale
+  const cx = rock._lakeBakeW / (2 * ws)
+  const centerY = rock._homeY + rock._rockBakeCy
+  const maxLowerY = Math.max(...rock._rockVerts.map(v => v.y))
+  return rock._rockVerts.map(v => {
+    if (v.y <= 0) return v
+    const reach = Math.pow(v.y / maxLowerY, LAKE_SHORE_ROCK_FLANK_EXP)
+    const x = v.x * (1 + LAKE_SHORE_ROCK_BASE_SPREAD * reach)
+    const worldX = rock._homeX + (cx + x) * ws
+    const bedY = lakeShoreRockBedWorldY(lake, worldX, floorLocal) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - centerY
+    return { x, y: Math.max(v.y, v.y + (bedY - v.y) * reach) }
+  })
+}
+//
+// World Y of the lake bed front line (or the ground line outside the lake
+// bake) at world X.
+//
+function lakeShoreRockBedWorldY(lake, worldX, floorLocal) {
+  const localX = worldX - lake.x1
+  if (localX < 0 || localX > lake.bakeSpan) return FLOOR_Y + LAKE_BED_FLOOR_OVERLAP_PX
+  return lake.originY + lakeBedMudSeamLocalY(lake, localX, floorLocal)
+}
+//
+// Clip to everything above the bed line under the rock's columns.
+//
+function clipLakeShoreRockToBed(ctx, lake, x0, y0, width, height, floorLocal) {
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(width, 0)
+  for (let x = width; x >= 0; x -= LAKE_SHORE_ROCK_CLIP_STEP_PX) {
+    ctx.lineTo(x, Math.min(height, lakeShoreRockBedWorldY(lake, x0 + x, floorLocal) - y0))
+  }
+  ctx.lineTo(0, Math.min(height, lakeShoreRockBedWorldY(lake, x0, floorLocal) - y0))
+  ctx.closePath()
+  ctx.clip()
+}
+//
+// Water colour over the drawn rock pixels below the water line, deepening
+// toward the bed (source-atop keeps the silhouette and stays opaque).
+//
+function tintLakeShoreRockUnderwater(ctx, width, height, waterY) {
+  if (waterY >= height) return
+  const tint = ctx.createLinearGradient(0, waterY, 0, height)
+  tint.addColorStop(0, hexWithAlpha(GLOW_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
+  tint.addColorStop(1, hexWithAlpha(GLOW_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.fillStyle = tint
+  ctx.fillRect(0, waterY, width, height - waterY)
+  ctx.globalCompositeOperation = 'source-over'
 }
 //
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
@@ -6392,6 +6913,11 @@ function paintLakeShoreRipples(paint, shoreLocalX, dir) {
 function lakeWaveOffsetAt(t, time) {
   const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
   const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
+  return wavePrimary + waveSecondary
+}
+function lakeSurfaceInnerWaveOffsetAt(t, time) {
+  const wavePrimary = Math.sin(time * LAKE_SURFACE_INNER_WAVE_FREQ + t * LAKE_SURFACE_INNER_WAVE_PHASE_SCALE) * LAKE_SURFACE_INNER_WAVE_AMP
+  const waveSecondary = Math.sin(time * LAKE_SURFACE_INNER_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 1.85 + 0.9) * LAKE_SURFACE_INNER_SECOND_AMP
   return wavePrimary + waveSecondary
 }
 //
@@ -6952,7 +7478,6 @@ function onDrawWorld(inst) {
   // the baked static earth+underground sprite covers that bleed in one draw.
   //
   drawGlowParallaxBackdropOffscreen(inst)
-  inst.lightShaftBack && LightShaft.onDraw(inst.lightShaftBack)
   drawParallaxLayer(inst, PAR_LAYER_NEAR)
   drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
   drawGlowPitMouthEarthGapFill(inst, k)
@@ -7001,7 +7526,8 @@ function drawGlowPitMouthEarthGapFill(inst, k) {
   })
 }
 //
-// Paints tree-side lake cap rocks when the water zone is open.
+// Paints tree-side lake cap rocks when the water zone is open: one merged
+// mossy rock reaching the lake bed (the other shore rocks are part of it).
 //
 function drawLakeShoreRocksWorld(inst) {
   const z = inst.zones
@@ -7010,7 +7536,12 @@ function drawLakeShoreRocksWorld(inst) {
   const white = k.rgb(255, 255, 255)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
-    drawDecorAtlasSprite(k, o._bakedLakeCap, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
+    const full = o._lakeFullSprite
+    if (full) {
+      k.drawSprite({ sprite: full.name, pos: k.vec2(full.x, full.y), width: full.width, height: full.height, color: white })
+      return
+    }
+    o._lakeMerged || drawDecorAtlasSprite(k, o._bakedLakeCap, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
   })
 }
 //
@@ -7471,7 +8002,7 @@ function syncGlowFpsHudVisibility(inst) {
 function forceWaterEdgeRocksVisible(inst) {
   inst.zones.waterRocks = true
   inst.rockObjs.forEach(o => {
-    o._waterCluster && setDecorObjVisible(o, true)
+    o._waterCluster && !o._lakeMerged && setDecorObjVisible(o, true)
   })
 }
 //

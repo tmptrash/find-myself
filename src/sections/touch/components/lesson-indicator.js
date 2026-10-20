@@ -6,6 +6,7 @@ import {
   EYE_HUD_BLINK_SEQUENCE,
   EYE_HUD_DISPLAY_SCALE_MUL,
   EYE_HUD_FRAME_HEIGHT,
+  EYE_HUD_FRAME_WIDTH,
   EYE_HUD_OPEN_SPRITE,
   applyEyeHudFrame,
   bindEyeHudLookAtHero,
@@ -298,7 +299,12 @@ export function create(config) {
     : topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
   const isTouchComplete = get('touch.completed', false)
   const isWordComplete = get('word.completed', false)
-  const lifeImageX = k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2
+  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8 *
+    EYE_HUD_DISPLAY_SCALE_MUL
+  const lifeHalfDisplayW = (EYE_HUD_FRAME_WIDTH * lifeImageScale) * 0.5
+  const lifeImageX = config.lifeHudPlayfieldRightX != null
+    ? config.lifeHudPlayfieldRightX - lifeHalfDisplayW + 5
+    : k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2
   const smallHeroX = lifeImageX - SPACING_BETWEEN - SMALL_HERO_SIZE / 2
   const smallHero = hideHeroScoreHud
     ? { character: null, bodyColor: heroBodyColor }
@@ -333,8 +339,6 @@ export function create(config) {
   //
   // Create life image (sprite pre-loaded in index.js)
   //
-  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8 *
-    EYE_HUD_DISPLAY_SCALE_MUL
   const wantGreyLife = greyLife || scoreboardGreyLife
   const lifePostBake = lifeDesatPostBake || hudPostBakeCanvas
   lifePostBake && (k._lifeDesatPostBake = lifePostBake)

@@ -1,3 +1,4 @@
+import { GLOW_SUN_LIT_FRAC, GLOW_SUN_LIT_OFFSET_X, GLOW_SUN_LIT_OFFSET_Y } from '../sections/glow/utils/glow-eye-berry.js'
 import { CFG } from '../cfg.js'
 import * as Cursor from './cursor.js'
 import { focusGameCanvas } from './canvas-focus.js'
@@ -5,10 +6,8 @@ import { focusGameCanvas } from './canvas-focus.js'
 // Shared DOM loader. Fatal errors may replace innerHTML —
 // ensureLoaderStructure() rebuilds the eye before reuse.
 //
-const LOADER_MESSAGE_ID = 'loader-message'
 const LOADER_PANEL_ID = 'loader-panel'
 const LOADER_EYE_ID = 'loader-eye'
-const LOADER_MESSAGE_TEXT = 'Loading. Please wait...'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 // Panel chrome over CRT snow: near-opaque plate so the eye never drowns.
@@ -40,8 +39,6 @@ const STALK_WAVE_FREQ = 0.045
 const STALK_WAVE_SPEED = 2.2
 const EYE_R = 12
 const EYE_CONTOUR_W = 1.5
-const EYE_BERRY_SHADE_DROP = 0.22
-const EYE_BERRY_FACE_FRAC = 0.86
 const EYE_PUPIL_FRAC = 0.4
 const EYE_PUPIL_R = EYE_R * EYE_PUPIL_FRAC
 const EYE_LID_W = 1.4
@@ -325,7 +322,7 @@ function finishHideLoader() {
   focusGameCanvas()
 }
 //
-// Caption above the eye; the panel turns into a plate over CRT snow.
+// Stalk-eye only; the panel turns into a plate over CRT snow.
 //
 function buildLoaderPanel() {
   const colors = CFG.visual.colors.loader
@@ -339,16 +336,6 @@ function buildLoaderPanel() {
     borderRadius: '8px',
     background: 'transparent'
   })
-  const message = document.createElement('div')
-  message.id = LOADER_MESSAGE_ID
-  message.textContent = LOADER_MESSAGE_TEXT
-  Object.assign(message.style, {
-    color: colors.message,
-    fontSize: '24px',
-    marginBottom: '12px',
-    textShadow: '0 2px 6px rgba(0, 0, 0, 1)'
-  })
-  panel.appendChild(message)
   panel.appendChild(buildLoaderEyeSvg(colors))
   return panel
 }
@@ -440,9 +427,9 @@ function appendLoaderBerryBall(parent, colors, cx, cy) {
     fill: colors.berryShade
   }))
   parent.appendChild(svgEl('circle', {
-    cx,
-    cy: cy - EYE_R * EYE_BERRY_SHADE_DROP,
-    r: EYE_R * EYE_BERRY_FACE_FRAC,
+    cx: cx + EYE_R * GLOW_SUN_LIT_OFFSET_X,
+    cy: cy + EYE_R * GLOW_SUN_LIT_OFFSET_Y,
+    r: EYE_R * GLOW_SUN_LIT_FRAC,
     fill: colors.berry
   }))
 }

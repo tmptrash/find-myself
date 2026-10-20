@@ -157,6 +157,42 @@ export function mossyHillBounds(hill, plantPad) {
     y2: hill.floorY + HILL_BASE_SINK + HILL_BOUNDS_PAD
   }
 }
+
+/**
+ * Paints one hill boulder (same stone look as the hill heap) and optionally
+ * a small moss patch on its upper rim, so other rock piles can match it.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} opts
+ * @param {number} opts.cx - Boulder centre X
+ * @param {number} opts.cy - Boulder centre Y
+ * @param {number} opts.rx - Horizontal radius
+ * @param {number} opts.ry - Vertical radius
+ * @param {() => number} opts.rng - Seeded random in [0, 1)
+ * @param {Object} opts.colors - Hill colours (see drawMossyHillToCanvas)
+ * @param {boolean} [opts.mossPatch=false] - Add the moss patch on top
+ */
+export function drawMossyBoulderToCanvas(ctx, opts) {
+  const { cx, cy, rx, ry, rng, colors, mossPatch = false } = opts
+  const rock = { cx, cy, rx, ry, verts: buildRockOutline(rng) }
+  paintRock(ctx, rock, rng, colors)
+  mossPatch && paintRockMossPatch(ctx, rock, rng, colors)
+}
+
+/**
+ * Paints one moss tuft like the ones poking above the hill crest.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x - Tuft centre X
+ * @param {number} y - Tuft centre Y
+ * @param {number} r - Tuft radius
+ * @param {() => number} rng - Seeded random in [0, 1)
+ * @param {Object} colors - Hill colours (see drawMossyHillToCanvas)
+ */
+export function drawMossyTuftToCanvas(ctx, x, y, r, rng, colors) {
+  const a = rng() * Math.PI * 2
+  paintClover(ctx, x, y, r + HILL_CONTOUR_PX, a, colors.contour)
+  paintClover(ctx, x, y, r, a, colors.shadow)
+  paintClover(ctx, x - r * 0.15, y - r * 0.2, r * 0.7, a, rng() < 0.6 ? colors.light : colors.mid)
+}
 //
 // Distance from the foot along the slope, and the slope's horizontal span.
 //
@@ -472,10 +508,7 @@ function paintTopTufts(ctx, hill, rng, colors, greeneryMaxY = null) {
     const r = HILL_TOP_TUFT_R_MIN + rng() * HILL_TOP_TUFT_R_RANGE
     const y = mossyHillTopY(hill, x) + r * 0.2
     if (greeneryMaxY != null && y > greeneryMaxY) continue
-    const a = rng() * Math.PI * 2
-    paintClover(ctx, x, y, r + HILL_CONTOUR_PX, a, colors.contour)
-    paintClover(ctx, x, y, r, a, colors.shadow)
-    paintClover(ctx, x - r * 0.15, y - r * 0.2, r * 0.7, a, rng() < 0.6 ? colors.light : colors.mid)
+    drawMossyTuftToCanvas(ctx, x, y, r, rng, colors)
   }
 }
 //

@@ -200,6 +200,29 @@ const TRUNK_DAUB_BEND = 6
 const TRUNK_DAUB_ALPHA_MIN = 0.4
 const TRUNK_DAUB_ALPHA_RANGE = 0.4
 //
+// Stacked bark plates on gameplay trunks: columns across the trunk width,
+// plate length along the trunk (px), groove / lit-edge strokes and the
+// slow wobble of the column grooves.
+//
+const BARK_PLATE_SEED = 7193
+const BARK_PLATE_COLUMNS = 6
+const BARK_PLATE_COL_JITTER = 0.5
+const BARK_PLATE_LEN_MIN = 16
+const BARK_PLATE_LEN_RANGE = 34
+const BARK_PLATE_MIN_HW = 8
+const BARK_PLATE_GAP_W = 1.6
+const BARK_PLATE_GAP_ALPHA = 0.6
+const BARK_PLATE_LIT_W = 1.5
+const BARK_PLATE_LIT_ALPHA = 0.55
+const BARK_PLATE_LIT_INSET = 0.24
+const BARK_PLATE_LIP_OFFSET = 2
+const BARK_PLATE_EDGE_TRIM = 3
+const BARK_PLATE_BREAK_SAG_MIN = 1
+const BARK_PLATE_BREAK_SAG_RANGE = 3
+const BARK_PLATE_SIDE_FRAC = 0.35
+const BARK_PLATE_WOBBLE = 0.05
+const BARK_PLATE_WOBBLE_FREQ = 0.03
+//
 // Branch collars: where a limb leaves the trunk the wood flares out and
 // tapers into the limb instead of meeting the trunk as a straight tube.
 //
@@ -677,6 +700,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       volume || drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
       volume && drawTrunkVolumeBands(ctx, barkSegs, volume, barkClipY)
+      volume && drawTrunkBarkPlates(ctx, barkSegs, volume, treeSeed + BARK_PLATE_SEED, barkClipY)
       drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
       volume && drawTrunkVolumeDaubs(ctx, barkSegs, volume, treeSeed + TRUNK_DAUB_SEED, barkClipY)
       drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
@@ -994,6 +1018,134 @@ function drawTrunkVolumeDaubs(ctx, segs, vol, seed, maxY) {
       ctx.stroke()
     }
   })
+}
+//
+// Stacked bark plates (reference trunk): vertical grooves split the trunk
+// into columns, each column breaks into staggered plates, and every plate
+// carries a lit stroke along its sun-side edge and a lit lip under its top
+// break, toned by the flank it sits on.
+//
+function drawTrunkBarkPlates(ctx, segs, vol, seed, maxY) {
+  const { spine } = buildChainOutline(segs, maxY)
+  if (spine.length < 2) return
+  const dense = densifySpine(spine, TRUNK_VOLUME_SUBSTEPS)
+  const cum = spineArcLengths(dense)
+  const rng = createRng(seed)
+  const bounds = []
+  for (let b = 0; b <= BARK_PLATE_COLUMNS; b++) {
+    const edge = b === 0 || b === BARK_PLATE_COLUMNS
+    bounds.push({
+      frac: -1 + (2 * b) / BARK_PLATE_COLUMNS + (edge ? 0 : (rng() * 2 - 1) * BARK_PLATE_COL_JITTER / BARK_PLATE_COLUMNS),
+      phase: rng() * Math.PI * 2
+    })
+  }
+  withChainClip(ctx, segs, maxY, () => {
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    const deep = vol.deep
+    ctx.strokeStyle = `rgba(${deep.r}, ${deep.g}, ${deep.b}, ${BARK_PLATE_GAP_ALPHA})`
+    ctx.lineWidth = BARK_PLATE_GAP_W
+    bounds.slice(1, -1).forEach(bound => {
+      ctx.beginPath()
+      dense.forEach((j, i) => {
+        const p = barkPlatePoint(j, plateBoundFrac(bound, cum[i]))
+        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)
+      })
+      ctx.stroke()
+    })
+    for (let c = 0; c < BARK_PLATE_COLUMNS; c++) {
+      drawBarkPlateColumn(ctx, rng, dense, cum, bounds[c], bounds[c + 1], vol)
+    }
+  })
+}
+//
+// One column of plates between two groove bounds.
+//
+function drawBarkPlateColumn(ctx, rng, dense, cum, left, right, vol) {
+  const total = cum[cum.length - 1]
+  let s = rng() * BARK_PLATE_LEN_MIN
+  while (s < total) {
+    const len = BARK_PLATE_LEN_MIN + rng() * BARK_PLATE_LEN_RANGE
+    const end = Math.min(total, s + len)
+    const j0 = spineJointAt(dense, cum, s)
+    if (j0.hw >= BARK_PLATE_MIN_HW) {
+      const f0 = plateBoundFrac(left, s)
+      const f1 = plateBoundFrac(right, s)
+      const mid = (f0 + f1) * 0.5
+      const tone = vol[barkPlateTone(mid)]
+      drawBarkPlateBreak(ctx, j0, f0, f1, vol.deep, tone, rng)
+      drawBarkPlateLitEdge(ctx, dense, cum, s, end, left, right, tone)
+    }
+    s = end
+  }
+}
+//
+// Dark sagging break across the column with a lit lip right under it.
+//
+function drawBarkPlateBreak(ctx, j, f0, f1, dark, lit, rng) {
+  const a = barkPlatePoint(j, f0)
+  const b = barkPlatePoint(j, f1)
+  const sag = BARK_PLATE_BREAK_SAG_MIN + rng() * BARK_PLATE_BREAK_SAG_RANGE
+  const mx = (a.x + b.x) * 0.5
+  const my = (a.y + b.y) * 0.5 + sag
+  ctx.strokeStyle = `rgba(${dark.r}, ${dark.g}, ${dark.b}, ${BARK_PLATE_GAP_ALPHA})`
+  ctx.lineWidth = BARK_PLATE_GAP_W
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.quadraticCurveTo(mx, my, b.x, b.y)
+  ctx.stroke()
+  ctx.strokeStyle = `rgba(${lit.r}, ${lit.g}, ${lit.b}, ${BARK_PLATE_LIT_ALPHA})`
+  ctx.lineWidth = BARK_PLATE_LIT_W
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y + BARK_PLATE_LIP_OFFSET)
+  ctx.quadraticCurveTo(mx, my + BARK_PLATE_LIP_OFFSET, b.x, b.y + BARK_PLATE_LIP_OFFSET)
+  ctx.stroke()
+}
+//
+// Lit stroke down the sun-side (screen-left) edge of one plate.
+//
+function drawBarkPlateLitEdge(ctx, dense, cum, s0, s1, left, right, tone) {
+  ctx.strokeStyle = `rgba(${tone.r}, ${tone.g}, ${tone.b}, ${BARK_PLATE_LIT_ALPHA})`
+  ctx.lineWidth = BARK_PLATE_LIT_W
+  ctx.beginPath()
+  let started = false
+  for (let i = 0; i < dense.length; i++) {
+    if (cum[i] < s0 + BARK_PLATE_EDGE_TRIM || cum[i] > s1 - BARK_PLATE_EDGE_TRIM) continue
+    const fl = plateBoundFrac(left, cum[i])
+    const fr = plateBoundFrac(right, cum[i])
+    const p = barkPlatePoint(dense[i], fl + (fr - fl) * BARK_PLATE_LIT_INSET)
+    started ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)
+    started = true
+  }
+  started && ctx.stroke()
+}
+//
+// Lit flank plates catch the rim tone, the middle the lit tone, the shaded
+// flank only a faint shade-tone edge.
+//
+function barkPlateTone(frac) {
+  if (frac < -BARK_PLATE_SIDE_FRAC) return 'rim'
+  if (frac > BARK_PLATE_SIDE_FRAC) return 'shade'
+  return 'lit'
+}
+function plateBoundFrac(bound, s) {
+  return bound.frac + Math.sin(s * BARK_PLATE_WOBBLE_FREQ + bound.phase) * BARK_PLATE_WOBBLE
+}
+function barkPlatePoint(j, frac) {
+  const r = screenRightNormal(j)
+  return { x: j.x + r.x * j.hw * frac, y: j.y + r.y * j.hw * frac }
+}
+function spineArcLengths(spine) {
+  const cum = [0]
+  for (let i = 1; i < spine.length; i++) {
+    cum.push(cum[i - 1] + Math.hypot(spine[i].x - spine[i - 1].x, spine[i].y - spine[i - 1].y))
+  }
+  return cum
+}
+function spineJointAt(spine, cum, s) {
+  let i = 1
+  while (i < cum.length - 1 && cum[i] < s) i++
+  return spine[i]
 }
 //
 // Lit flank gets warm daubs, shaded flank deep ones, the middle mixes both.

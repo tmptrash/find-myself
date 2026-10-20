@@ -19,7 +19,7 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 //
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
-const BAKE_VARIANT = 'v9'
+const BAKE_VARIANT = 'v10'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
@@ -63,13 +63,11 @@ const HILL_H = 118
 const HILL_PLANT_PAD = 90
 const HILL_PLANT_SINK = 4
 const HILL_PLANT_HALF_W = 14
-const HILL_PLUME_H_SCALE = 0.7
 //
-// Hill plants in two fern patches and two spike patches, apart from each
-// other, instead of alternating fern / spike all the way up the slope.
+// Hill plants in fern patches plus grass tufts — no gold spike bushes on the
+// right mound (they stay in open ground patches only).
 //
 const HILL_FERNS_T = [0.09, 0.15, 0.22, 0.63, 0.7]
-const HILL_PLUMES_T = [0.4, 0.46, 0.86, 0.91]
 const HILL_TUFT_STEP_T = 0.055
 const HILL_MUSH_T = [0.04, 0.36, 0.68, 0.97]
 const HILL_SPOT_MUSH_T = [0.16, 0.6]
@@ -269,20 +267,13 @@ function paintItem(ctx, inst, item) {
   }
 }
 //
-// Boulder heap under its moss first, then spike bushes behind ferns, grass
-// tufts, mushrooms at the feet and two red spotted accents, as on the
-// reference hill. Plants that would cover a trunk, trampoline or stalk eye
-// are skipped.
+// Boulder heap under its moss first, then ferns, grass tufts, mushrooms at the
+// feet and two red spotted accents, as on the reference hill. Plants that
+// would cover a trunk, trampoline or stalk eye are skipped.
 //
 function paintHill(ctx, inst, rng) {
   const { hill, colors, floorY } = inst
   drawMossyHillToCanvas(ctx, { hill, rng, colors: colors.hill, erodedSoil: true })
-  hillPlantXs(inst, HILL_PLUMES_T).forEach(x => {
-    const height = PLUME_H_MIN + rng() * PLUME_H_RANGE * HILL_PLUME_H_SCALE
-    const baseY = hillPlantY(hill, x)
-    paintForestFloorContactShadow(ctx, x, baseY, height * 0.18, 4, colors)
-    drawFeatherPlumeToCanvas(ctx, { x, baseY, height, rng, colors: colors.plume })
-  })
   hillPlantXs(inst, HILL_FERNS_T).forEach(x => {
     const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
     const baseY = hillPlantY(hill, x)

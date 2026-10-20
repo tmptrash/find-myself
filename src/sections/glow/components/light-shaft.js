@@ -8,23 +8,30 @@ import { GLOW_PAL } from '../utils/glow-palette.js'
 //
 const SHAFT_COLUMNS = 22
 //
-// Fraction of half-width (0 at lateral edge, 1 at centre) kept at full
-// strength; only the outer band fades for anti-alias.
+// Fraction of the half-width (measured from the lateral edge) that fades
+// out. Kept short so the edge stays crisp; dedicated vertex columns inside
+// that band keep the fade from smearing across a whole grid cell.
 //
-const SHAFT_EDGE_RIM = 0.08
-const HAZE_EDGE_RIM = 0.14
+const SHAFT_EDGE_RIM = 0.035
+const HAZE_EDGE_RIM = 0.035
+const EDGE_RIM_STEPS = 3
 //
-// Brightness along a beam (t = 0 at the gap, 1 on the ground) and width
-// there as a fraction of the foot width — extra rows for smooth falloff.
+// Beam width at the gap as a fraction of the foot width. The width grows
+// linearly with t so both side edges are straight lines.
+//
+const SHAFT_GAP_WIDTH = 0.14
+//
+// Brightness along a beam (t = 0 at the gap, 1 on the ground) — extra rows
+// for smooth falloff.
 //
 const SHAFT_ROWS = [
-  { t: 0, alpha: 0, width: 0.14 },
-  { t: 0.12, alpha: 0.42, width: 0.28 },
-  { t: 0.28, alpha: 0.88, width: 0.42 },
-  { t: 0.45, alpha: 1, width: 0.55 },
-  { t: 0.62, alpha: 0.78, width: 0.72 },
-  { t: 0.8, alpha: 0.52, width: 0.88 },
-  { t: 1, alpha: 0.32, width: 1 }
+  { t: 0, alpha: 0 },
+  { t: 0.12, alpha: 0.42 },
+  { t: 0.28, alpha: 0.88 },
+  { t: 0.45, alpha: 1 },
+  { t: 0.62, alpha: 0.78 },
+  { t: 0.8, alpha: 0.52 },
+  { t: 1, alpha: 0.32 }
 ]
 //
 // Inner structure: brighter streaks and softer gaps across each beam.
@@ -154,18 +161,30 @@ function beamGapSource(source, ray) {
 function buildBeamPolygon(k, gap, ray, groundY, index) {
   const pts = []
   const base = []
+  const us = shaftColumnUs(SHAFT_EDGE_RIM)
   SHAFT_ROWS.forEach(row => {
     const y = gap.y + (groundY - gap.y) * row.t
     const axisX = gap.x + (ray.x - gap.x) * row.t
-    const width = ray.width * row.width
+    const width = ray.width * (SHAFT_GAP_WIDTH + (1 - SHAFT_GAP_WIDTH) * row.t)
     const along = row.alpha * (1 - SHAFT_LENGTH_FADE * row.t)
-    for (let c = 0; c <= SHAFT_COLUMNS; c++) {
-      const u = c / SHAFT_COLUMNS
+    us.forEach(u => {
       pts.push(k.vec2(axisX + (u - 0.5) * width, y))
       base.push(along * shaftAcrossAlpha(u, SHAFT_EDGE_RIM) * shaftStreak(u, index))
-    }
+    })
   })
-  return { pts, indices: gridIndices(SHAFT_ROWS.length, SHAFT_COLUMNS), base, opacities: new Array(base.length).fill(0) }
+  return { pts, indices: gridIndices(SHAFT_ROWS.length, us.length - 1), base, opacities: new Array(base.length).fill(0) }
+}
+//
+// Column positions across a beam (0..1): extra columns inside each edge
+// rim band so the short fade has its own vertices, uniform in the core.
+//
+function shaftColumnUs(rim) {
+  const rimU = rim * 0.5
+  const us = []
+  for (let s = 0; s < EDGE_RIM_STEPS; s++) us.push(rimU * s / EDGE_RIM_STEPS)
+  for (let c = 0; c <= SHAFT_COLUMNS; c++) us.push(rimU + (1 - 2 * rimU) * c / SHAFT_COLUMNS)
+  for (let s = EDGE_RIM_STEPS - 1; s >= 0; s--) us.push(1 - rimU * s / EDGE_RIM_STEPS)
+  return us
 }
 //
 // Wide wedge from the gap to the ground over every beam foot plus pad.
@@ -175,17 +194,17 @@ function buildHazePolygon(k, source, rays, groundY) {
   const rightX = Math.max(...rays.map(ray => ray.x + ray.width * 0.5)) + HAZE_SPREAD_PAD
   const pts = []
   const base = []
+  const us = shaftColumnUs(HAZE_EDGE_RIM)
   HAZE_ROWS.forEach(row => {
     const y = source.y + (groundY - source.y) * row.t
     const along = row.alpha * (1 - SHAFT_LENGTH_FADE * row.t * 0.65)
-    for (let c = 0; c <= SHAFT_COLUMNS; c++) {
-      const u = c / SHAFT_COLUMNS
+    us.forEach(u => {
       const footX = leftX + (rightX - leftX) * u
       pts.push(k.vec2(source.x + (footX - source.x) * row.t, y))
       base.push(along * shaftAcrossAlpha(u, HAZE_EDGE_RIM))
-    }
+    })
   })
-  return { pts, indices: gridIndices(HAZE_ROWS.length, SHAFT_COLUMNS), base, opacities: new Array(base.length).fill(0) }
+  return { pts, indices: gridIndices(HAZE_ROWS.length, us.length - 1), base, opacities: new Array(base.length).fill(0) }
 }
 //
 // Two triangles per cell of a rows × columns vertex grid.
@@ -206,6 +225,7 @@ function gridIndices(rowCount, columns) {
 // Lateral opacity: 1 in the core, smoothstep only in the outer rim band.
 //
 function shaftAcrossAlpha(u, rim) {
+  if (rim <= 0) return 1
   const edgeDist = 1 - Math.abs(u - 0.5) * 2
   if (edgeDist >= rim) return 1
   const t = edgeDist / rim

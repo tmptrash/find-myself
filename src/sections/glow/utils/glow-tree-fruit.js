@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
+import { GLOW_SUN_LIT_FRAC, GLOW_SUN_LIT_OFFSET_X, GLOW_SUN_LIT_OFFSET_Y } from './glow-eye-berry.js'
 import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
 import { TREE_SEED, paintGlowTreeFoliageMask } from './glow-tree.js'
 
@@ -20,11 +21,6 @@ const ANCHOR_DROP_RIGHT_PAD = 12
 const ANCHOR_LEAF_TARGET_Y_OFFSET = 48
 const ANCHOR_Y_SCORE_WEIGHT = 0.25
 const FRUIT_STEM_LEN = 4
-//
-// Shaded round fruit stack — same layout as glow-eye-berry addBerryBall.
-//
-const FRUIT_SHADE_DROP = 0.22
-const FRUIT_SHADE_FRAC = 0.86
 const FRUIT_CONTOUR_W = 1.2
 const FRUIT_Z = CFG.visual.zIndex.platforms - 1
 const FRUIT_FALL_GRAVITY = 1650
@@ -334,7 +330,10 @@ export function drawGlowTreeFruits(inst) {
     const highlight = glowRgb(fruitPal.light)
     const bodyR = fruitDisplayRadius(fruit)
     bodyR > 2 && k.drawCircle({
-      pos: k.vec2(fruit.x - bodyR * 0.22, fruit.y - bodyR * FRUIT_SHADE_DROP - bodyR * 0.12),
+      pos: k.vec2(
+        fruit.x + bodyR * GLOW_SUN_LIT_OFFSET_X - bodyR * 0.08,
+        fruit.y + bodyR * GLOW_SUN_LIT_OFFSET_Y - bodyR * 0.1
+      ),
       radius: bodyR * 0.18,
       color: k.rgb(highlight.r, highlight.g, highlight.b),
       opacity: op * 0.28
@@ -374,8 +373,9 @@ function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
   if (eaten) {
     const pts = buildRaggedFruitPolygon(k, fruit.x, fruit.y, r, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
     pts.length >= 3 && k.drawPolygon({ pts, color: shadeCol, opacity: op })
-    const litY = fruit.y - r * FRUIT_SHADE_DROP
-    const litPts = buildRaggedFruitPolygon(k, fruit.x, litY, r * FRUIT_SHADE_FRAC, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
+    const litX = fruit.x + r * GLOW_SUN_LIT_OFFSET_X
+    const litY = fruit.y + r * GLOW_SUN_LIT_OFFSET_Y
+    const litPts = buildRaggedFruitPolygon(k, litX, litY, r * GLOW_SUN_LIT_FRAC, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
     litPts.length >= 3 && k.drawPolygon({ pts: litPts, color: col, opacity: op })
     return
   }
@@ -392,8 +392,8 @@ function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
     opacity: op
   })
   k.drawCircle({
-    pos: k.vec2(fruit.x, fruit.y - r * FRUIT_SHADE_DROP),
-    radius: r * FRUIT_SHADE_FRAC,
+    pos: k.vec2(fruit.x + r * GLOW_SUN_LIT_OFFSET_X, fruit.y + r * GLOW_SUN_LIT_OFFSET_Y),
+    radius: r * GLOW_SUN_LIT_FRAC,
     color: col,
     opacity: op
   })

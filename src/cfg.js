@@ -396,12 +396,24 @@ export const CFG = {
           ripple: PALETTE.cyan5,
           murkTop: PALETTE.cyan1,
           murkDeep: PALETTE.teal0,
-          bed: PALETTE.sand1,
-          bedRim: PALETTE.sand3,
-          pebble: PALETTE.gray3,
-          pebbleLight: PALETTE.gray5,
+          bank: PALETTE.brown1,        // Earth fill under the shallow shore ends (topsoil tone)
+          bed: PALETTE.rose3,          // Sand settled on the ledges and the floor
+          bedRim: PALETTE.sand4,       // Lit top edge of the sand layer
+          bedEdge: PALETTE.rose0,      // Dark cut where the bed meets the earth band
+          bedGravel: PALETTE.slate0,   // Gravel specks in the sand
+          pebble: PALETTE.slate1,
+          pebbleLight: PALETTE.slate3,
+          stone: PALETTE.sand1,        // Faceted boulders on the floor
+          stoneLight: PALETTE.sand4,   // Boulder face lit from the upper left
+          stoneDark: PALETTE.sand0,    // Boulder shadow facet
+          stoneContour: PALETTE.gray0,
+          snag: PALETTE.brown0,        // Sunken branch
+          snagLight: PALETTE.mauve1,   // Lit top line of the branch
+          surfaceLine: PALETTE.cyan5,  // Bright top line of the double surface
+          surfaceBand: PALETTE.cyan3,  // Light band between the two surface lines
           algae: PALETTE.green1,
-          algaeLight: PALETTE.green3
+          algaeLight: PALETTE.green3,
+          algaeDark: PALETTE.green0
         },
         //
         // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
@@ -627,21 +639,24 @@ export const CFG = {
         // Grooves / highlights for the two gameplay brown trees (main + shore).
         //
         glowTreeBark: {
-          groove: PALETTE.brown0,
-          highlight: PALETTE.brown3,
+          groove: PALETTE.rose0,
+          highlight: PALETTE.orange4,
           //
           // Gameplay-tree volume: the sun from the left warms that flank, the
           // right flank steps down into a cool brown shade.
           //
-          lit: PALETTE.red0,
-          rim: PALETTE.brown2,
-          shade: PALETTE.brown1,
-          deep: PALETTE.rose0
+          lit: PALETTE.orange2,
+          rim: PALETTE.orange4,
+          shade: PALETTE.orange0,
+          deep: PALETTE.brown0
         },
+        //
+        // Warm rust-brown wood like the reference lake tree.
+        //
         treeColor: {
           root: PALETTE.rose0,
-          trunk: PALETTE.rose1,
-          branch: PALETTE.rose1,
+          trunk: PALETTE.orange0,
+          branch: PALETTE.orange0,
           //
           // Pulled back from the brighter green3-5 swatches (read as acid/neon
           // against the warm bark and haze) toward the darker greens plus a

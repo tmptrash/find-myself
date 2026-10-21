@@ -1774,7 +1774,8 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   await yieldForGpu(1)
   const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
-    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC
+    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
+    structuredCrown: true
   })
   scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
   onProgress?.(12)
@@ -1849,7 +1850,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     zones._sceneRef = { zones }
     const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
-    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC
+    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
+    structuredCrown: true
   })
     scaleGlowTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
     const treeFruitAnchorCfg = buildGlowTreeFruitAnchorCfg()

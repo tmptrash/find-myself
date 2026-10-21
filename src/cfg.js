@@ -642,13 +642,14 @@ export const CFG = {
           groove: PALETTE.rose0,
           highlight: PALETTE.orange4,
           //
-          // Gameplay-tree volume: the sun from the left warms that flank, the
-          // right flank steps down into a cool brown shade.
+          // Gameplay-tree volume: the sun from the left lights a wide flank
+          // band; the right flank is a light rose wash so the shade stays a
+          // warm mid brown instead of a dark one.
           //
           lit: PALETTE.orange2,
-          rim: PALETTE.orange4,
-          shade: PALETTE.orange0,
-          deep: PALETTE.brown0
+          rim: PALETTE.rose2,
+          shade: PALETTE.rose1,
+          deep: PALETTE.rose1
         },
         //
         // Warm rust-brown wood like the reference lake tree.
@@ -740,7 +741,12 @@ export const CFG = {
           trunk: PALETTE.gray1,
           branch: PALETTE.gray1,
           leaf: PALETTE.green3,
-          leafShades: [PALETTE.green1, PALETTE.green3, PALETTE.green4]
+          leafShades: [PALETTE.green1, PALETTE.green2, PALETTE.green4],
+          //
+          // Star leaves (reference apple tree): every leaf unit is a small
+          // flat star of round leaflets around one joint.
+          //
+          sprigLeaves: true
         },
         //
         // Branch trampoline — standard glowMushroom terracotta (unusual beat,

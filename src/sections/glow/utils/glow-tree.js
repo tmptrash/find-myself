@@ -50,6 +50,34 @@ const ROOT_HIGHLIGHT_MIN_W = 3
 const FOLIAGE_CLUSTER_CELL_PX_DEFAULT = 10
 const FOLIAGE_MASK_RGB = { r: 255, g: 255, b: 255 }
 const FOLIAGE_CLUSTER_LEAF_SIZE_FRAC = 1.55
+//
+// Star leaves (palette.sprigLeaves, reference apple tree): every leaf unit
+// is a small star of 5–7 round leaflets fanning out of one joint, flat
+// colour, no outline — depth comes only from darker stars behind lighter
+// ones and the gaps between the leaflets. Stars are packed densely on a
+// jittered subset of cells. Leaflet sizes are fractions of the star size.
+//
+const SPRIG_SIZE_FRAC = 2.4
+const SPRIG_SIZE_JITTER = 0.2
+const SPRIG_POS_JITTER = 0.45
+const SPRIG_CELL_KEEP = 0.55
+const SPRIG_BACK_CHANCE = 0.4
+const SPRIG_FRONT_CHANCE = 0.2
+const SPRIG_CLUSTER_HASH_X = 83492791
+const SPRIG_CLUSTER_HASH_Y = 2654435761
+const SPRIG_LEAFLETS_MIN = 5
+const SPRIG_LEAFLETS_RANGE = 3
+const SPRIG_LEAFLET_LEN = 0.5
+const SPRIG_LEAFLET_WID = 0.28
+const SPRIG_LEAFLET_LEN_JITTER = 0.2
+const SPRIG_LEAFLET_ANGLE_JITTER = 0.2
+const SPRIG_WOBBLE_ANGLE_FREQ = 7
+const SPRIG_WOBBLE_STEP = 2.39
+const SPRIG_LEN_ANGLE_FREQ = 5
+const SPRIG_LEN_STEP = 1.7
+const SPRIG_CORE_R = 0.07
+const SPRIG_DROP_NECK = 0.75
+const SPRIG_DETAIL_SIZE_SCALE = 1.6
 const FOLIAGE_CLOUD_CELLS_MIN = 34
 const FOLIAGE_CLOUD_CELLS_MAX = 54
 const FOLIAGE_CLOUD_LOBE_CELLS_MIN = 12
@@ -169,13 +197,15 @@ const WOOD_OUTLINE_PX = 2
 // Wood volume (palette.woodVolume, gameplay trees only): sun from the left.
 // Side bands are measured as a fraction of the full trunk width from their
 // edge; the inner border wobbles so light and shade never meet on a ruler
-// line. side -1 = screen-left flank, 1 = screen-right flank.
+// line. side 1 = shaded flank, -1 = sunlit flank. Shade bands are light
+// washes (alpha < 1) so the shaded flank stays a warm mid brown; the deep
+// band stacks on the shade band near the edge.
 //
 const TRUNK_VOLUME_BANDS = [
-  { side: 1, frac: 0.52, tone: 'shade', wobble: 0.12, phase: 0.7 },
-  { side: 1, frac: 0.24, tone: 'deep', wobble: 0.09, phase: 2.3 },
-  { side: -1, frac: 0.34, tone: 'lit', wobble: 0.12, phase: 4.1 },
-  { side: -1, frac: 0.11, tone: 'rim', wobble: 0.06, phase: 5.6 }
+  { side: 1, frac: 0.34, tone: 'shade', alpha: 0.4, wobble: 0.08, phase: 0.7 },
+  { side: 1, frac: 0.1, tone: 'deep', alpha: 0.3, wobble: 0.04, phase: 2.3 },
+  { side: -1, frac: 0.34, tone: 'lit', alpha: 0.9, wobble: 0.08, phase: 4.1 },
+  { side: -1, frac: 0.09, tone: 'rim', alpha: 1, wobble: 0.04, phase: 5.6 }
 ]
 const TRUNK_VOLUME_EDGE_OVERSHOOT = 1.15
 const TRUNK_VOLUME_SUBSTEPS = 4
@@ -186,7 +216,7 @@ const TRUNK_VOLUME_WAVE2_AMP = 0.5
 // Uneven bark daubs: short vertical strokes that cross the band borders —
 // warm on the lit flank, deep brown on the shaded one, mixed in the middle.
 //
-const TRUNK_DAUB_COUNT = 46
+const TRUNK_DAUB_COUNT = 16
 const TRUNK_DAUB_SEED = 3313
 const TRUNK_DAUB_SPAN = 0.9
 const TRUNK_DAUB_MIN_HW = 6
@@ -197,31 +227,38 @@ const TRUNK_DAUB_LEN_RANGE = 38
 const TRUNK_DAUB_W_MIN = 1.5
 const TRUNK_DAUB_W_RANGE = 2.8
 const TRUNK_DAUB_BEND = 6
-const TRUNK_DAUB_ALPHA_MIN = 0.4
-const TRUNK_DAUB_ALPHA_RANGE = 0.4
+const TRUNK_DAUB_ALPHA_MIN = 0.2
+const TRUNK_DAUB_ALPHA_RANGE = 0.25
 //
-// Stacked bark plates on gameplay trunks: columns across the trunk width,
-// plate length along the trunk (px), groove / lit-edge strokes and the
-// slow wobble of the column grooves.
+// Crack net on gameplay trunks (reference apple tree): a few long thin dark
+// cracks run along the trunk with gaps, short cross cracks join neighbours
+// into big irregular plates, and a faint lit line hugs each crack on its
+// sun side. Lengths are px along the trunk, fracs are of the half-width.
 //
-const BARK_PLATE_SEED = 7193
-const BARK_PLATE_COLUMNS = 6
-const BARK_PLATE_COL_JITTER = 0.5
-const BARK_PLATE_LEN_MIN = 16
-const BARK_PLATE_LEN_RANGE = 34
-const BARK_PLATE_MIN_HW = 8
-const BARK_PLATE_GAP_W = 1.6
-const BARK_PLATE_GAP_ALPHA = 0.6
-const BARK_PLATE_LIT_W = 1.5
-const BARK_PLATE_LIT_ALPHA = 0.55
-const BARK_PLATE_LIT_INSET = 0.24
-const BARK_PLATE_LIP_OFFSET = 2
-const BARK_PLATE_EDGE_TRIM = 3
-const BARK_PLATE_BREAK_SAG_MIN = 1
-const BARK_PLATE_BREAK_SAG_RANGE = 3
-const BARK_PLATE_SIDE_FRAC = 0.35
-const BARK_PLATE_WOBBLE = 0.05
-const BARK_PLATE_WOBBLE_FREQ = 0.03
+const BARK_CRACK_SEED = 7193
+const BARK_CRACK_COLUMNS = 6
+const BARK_CRACK_COL_JITTER = 0.45
+const BARK_CRACK_MIN_HW = 6
+const BARK_CRACK_W = 1.3
+const BARK_CRACK_W_SCALE_MIN = 0.75
+const BARK_CRACK_ALPHA = 0.55
+const BARK_CRACK_RUN_MIN = 50
+const BARK_CRACK_RUN_RANGE = 90
+const BARK_CRACK_GAP_MIN = 6
+const BARK_CRACK_GAP_RANGE = 18
+const BARK_CRACK_WOBBLE = 0.08
+const BARK_CRACK_WOBBLE_FREQ = 0.035
+const BARK_CRACK_JITTER_PX = 0.9
+const BARK_CRACK_LIT_W = 1
+const BARK_CRACK_LIT_ALPHA = 0.3
+const BARK_CRACK_LIT_OFFSET = 1.8
+const BARK_CROSS_STEP_MIN = 18
+const BARK_CROSS_STEP_RANGE = 40
+const BARK_CROSS_CHANCE = 0.6
+const BARK_CROSS_REACH_MIN = 0.55
+const BARK_CROSS_SLANT_PX = 7
+const BARK_CROSS_SAG_MIN = 1
+const BARK_CROSS_SAG_RANGE = 2.5
 //
 // Branch collars: where a limb leaves the trunk the wood flares out and
 // tapers into the limb instead of meeting the trunk as a straight tube.
@@ -254,20 +291,20 @@ const BRANCH_KNOT_LIP_SHIFT = 0.6
 const BRANCH_LIGHT_DIR_X = -0.5
 const BRANCH_LIGHT_DIR_Y = -0.87
 //
-// Limb bark reuses the trunk passes; plate columns and stroke sizes scale
+// Limb bark reuses the trunk passes; crack columns and stroke sizes scale
 // with limb half-width relative to BRANCH_BARK_REF_HW.
 //
 const BRANCH_BARK_SEED = 5167
 const BRANCH_BARK_CHAIN_SEED_STEP = 131
 const BRANCH_BARK_MIN_HW = 1.5
 const BRANCH_BARK_REF_HW = 14
-const BRANCH_BARK_HW_PER_COLUMN = 3
+const BRANCH_BARK_HW_PER_COLUMN = 5
 const BRANCH_BARK_COLUMNS_MIN = 2
-const BRANCH_BARK_COLUMNS_MAX = 4
-const BRANCH_BARK_PLATE_MIN_HW = 3
-const BRANCH_BARK_PLATE_LEN_SCALE_MIN = 0.85
+const BRANCH_BARK_COLUMNS_MAX = 3
+const BRANCH_BARK_CRACK_MIN_HW = 3.5
+const BRANCH_BARK_CRACK_LEN_SCALE_MIN = 0.6
 const BRANCH_BARK_DAUB_MIN_HW = 2.5
-const BRANCH_BARK_DAUBS_PER_PX = 0.09
+const BRANCH_BARK_DAUBS_PER_PX = 0.035
 const BRANCH_BARK_CHAIN_WIDTH_JUMP = 1.3
 //
 // Default trunk-height band (fractions of the trunk) branches sprout from.
@@ -289,6 +326,41 @@ const BRANCH_UP_SPREAD_RANGE = 0.45
 // Extra upward branches added near the trunk top of EVERY tree so the crown
 // reads as reaching upward rather than only fanning sideways.
 //
+//
+// Main-tree crown (structuredCrown): scripted limbs instead of random ones —
+// one long upper-left limb above the hero branch, a central fan toward the
+// top and several shorter right limbs. frac = height on the trunk from the
+// bottom, len = growth steps, wFrac = base width as a share of the trunk
+// width at the attach point, so limbs read as splits of the trunk rather
+// than twigs stuck onto it.
+//
+const STRUCTURED_CROWN_LIMBS = [
+  { frac: 0.62, angle: -Math.PI + 0.55, len: 9, wFrac: 0.5 },
+  { frac: 0.74, angle: -Math.PI / 2 - 0.62, len: 20, wFrac: 0.62 },
+  { frac: 0.84, angle: -Math.PI / 2 - 0.15, len: 14, wFrac: 0.6 },
+  { frac: 0.92, angle: -Math.PI / 2 + 0.35, len: 13, wFrac: 0.6 },
+  { frac: 0.58, angle: -0.26, len: 20, wFrac: 0.6 },
+  { frac: 0.68, angle: -0.55, len: 17, wFrac: 0.55 },
+  { frac: 0.8, angle: -0.9, len: 14, wFrac: 0.55 }
+]
+const STRUCTURED_LIMB_ANGLE_JITTER = 0.08
+const STRUCTURED_LIMB_SEED_RANGE = 1000000
+const STRUCTURED_LIMB_SEED_STEP = 7919
+//
+// Scripted limbs taper to 60% of their base width before forking; the main
+// fork keeps most of that width, the side fork is thinner.
+//
+const STRUCTURED_LEAF_STYLE = { midChance: 0.4, massScale: 0.72, tipTaper: 0.4, childW: [0.95, 0.75] }
+const BRANCH_CHILD_W = [0.66, 0.56]
+//
+// Crown light: groups low in the crown take the shadow mass shade, groups
+// near the top the light one; inside every group the lowest cells drop one
+// shade and the top cells gain one.
+//
+const CROWN_SHADE_LOW_T = 0.62
+const CROWN_SHADE_HIGH_T = 0.32
+const CLUSTER_SHADE_LOW_FRAC = 0.62
+const CLUSTER_SHADE_HIGH_FRAC = 0.3
 const BRANCH_TOP_EXTRA_COUNT = 4
 const BRANCH_TOP_FRAC_MIN = 0.78
 const BRANCH_TOP_FRAC_RANGE = 0.16
@@ -383,7 +455,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     branchCount = null,
     denseBranchCanopyLeaves = false,
     lushCanopy = false,
-    heroBranchFrac = HORIZ_BRANCH_FRAC_DEFAULT
+    heroBranchFrac = HORIZ_BRANCH_FRAC_DEFAULT,
+    structuredCrown = false
   } = opts
   const rng = createRng(seed)
   const treeH = trunkBottomY - trunkTopY
@@ -396,17 +469,20 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   const branchSegs = []
   const leafEndpoints = []
   //
-  // Seeded branches sprout from random heights along the configured trunk band.
+  // Seeded branches sprout from random heights along the configured trunk
+  // band — or, for the main tree, from a scripted asymmetric limb layout.
   //
-  buildBranchesFromTrunk(
-    rng, trunkSegs, branchSegs, leafEndpoints,
-    branchFracMin, branchFracMax, branchUpward, skipTopExtraBranches,
-    branchThicknessScale, branchLengthScale, branchCount, denseBranchCanopyLeaves || lushCanopy
-  )
+  structuredCrown
+    ? buildStructuredCrown(rng, trunkSegs, branchSegs, leafEndpoints)
+    : buildBranchesFromTrunk(
+      rng, trunkSegs, branchSegs, leafEndpoints,
+      branchFracMin, branchFracMax, branchUpward, skipTopExtraBranches,
+      branchThicknessScale, branchLengthScale, branchCount, denseBranchCanopyLeaves || lushCanopy
+    )
   //
   // Top crown — three clusters grow from the trunk apex for a full canopy.
   //
-  if (includeCrownClusters) {
+  if (includeCrownClusters && !structuredCrown) {
     const trunkTop = trunkSegs[trunkSegs.length - 1]
     const crownAngles = lushCanopy
       ? [-Math.PI / 2, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55, -Math.PI / 2 - 0.28, -Math.PI / 2 + 0.28]
@@ -432,7 +508,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     cloudCellBonus: lushCanopy ? FOLIAGE_LUSH_CLOUD_CELL_BONUS : 0,
     lobeChanceBoost: lushCanopy ? FOLIAGE_LUSH_LOBE_CHANCE_BOOST : 0,
     extraLobeChance: lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0,
-    massByRadius: true
+    massByRadius: true,
+    shadeByHeight: structuredCrown
   })
   return {
     seed,
@@ -581,25 +658,18 @@ export function paintGlowTreeFoliageMask(ctx, treeData, clusterCellPx) {
 export function collectGlowTreeClusterLeaves(treeData, palette) {
   const leafShades = palette.leafShades ?? [{ r: palette.leafR, g: palette.leafG, b: palette.leafB }]
   const cell = palette.foliageClusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
+  const sprig = sprigLook(palette)
   const out = []
   treeData.leaves.forEach(item => {
     if (item.type !== 'cluster') return
-    const shadeIdx = item.shadeIdx ?? 1
-    const base = leafShades[shadeIdx] ?? leafShades[0]
-    const accentIdx = shadeIdx <= 0 ? Math.min(leafShades.length - 1, 1) : Math.max(0, shadeIdx - 1)
-    const accent = leafShades[accentIdx] ?? base
     const ox = Math.round(item.x)
     const oy = Math.round(item.y)
-    item.cells.forEach(c => {
-      const hash = ((c.dx * 73856093) ^ (c.dy * 19349663)) | 0
-      out.push({
-        x: ox + c.dx * cell + cell * 0.5,
-        y: oy + c.dy * cell + cell * 0.5,
-        size: cell * FOLIAGE_CLUSTER_LEAF_SIZE_FRAC,
-        angle: ((hash % 628) / 100) - Math.PI,
-        rgb: c.detail ? accent : base
-      })
-    })
+    clusterLeafDraws(item, leafShades, cell, sprig).forEach(d => out.push({
+      ...d,
+      x: ox + d.x,
+      y: oy + d.y,
+      sprig: Boolean(sprig)
+    }))
   })
   return out
 }
@@ -611,7 +681,9 @@ export function collectGlowTreeClusterLeaves(treeData, palette) {
  * @param {number} [opacity=1] - Leaf opacity used by the tree bake
  */
 export function paintGlowTreeClusterLeaves(ctx, leaves, opacity = 1) {
-  leaves.forEach(l => drawLeafToCanvas(ctx, l.x, l.y, l.size, l.angle, l.rgb.r, l.rgb.g, l.rgb.b, opacity, null))
+  leaves.forEach(l => l.sprig
+    ? drawSprigLeafToCanvas(ctx, l.x, l.y, l.size, l.angle, l.leaflets, l.rgb, opacity)
+    : drawLeafToCanvas(ctx, l.x, l.y, l.size, l.angle, l.rgb.r, l.rgb.g, l.rgb.b, opacity, null))
 }
 
 /**
@@ -780,7 +852,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     // Branch bark goes under the trunk fill so limb bases stay hidden
     // inside the trunk silhouette.
     //
-    volume && !woodMass && drawBranchBark(ctx, branchWood, volume, treeSeed + BRANCH_BARK_SEED, trunkClipY)
+    volume && !woodMass && drawBranchBark(ctx, branchWood, volume, barkDark, treeSeed + BRANCH_BARK_SEED, trunkClipY)
     volume && !woodMass && drawBranchKnots(ctx, limbs, volume, treeSeed + BRANCH_KNOT_SEED, trunkClipY)
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
     if (!woodMass) {
@@ -792,12 +864,20 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       //
       volume || drawWoodShading(ctx, treeData.trunkSegs, barkDark, trunkClipY)
       const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
-      volume && drawTrunkVolumeBands(ctx, barkSegs, volume, barkClipY)
-      volume && drawTrunkBarkPlates(ctx, barkSegs, volume, treeSeed + BARK_PLATE_SEED, barkClipY)
-      drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
-      volume && drawTrunkVolumeDaubs(ctx, barkSegs, volume, treeSeed + TRUNK_DAUB_SEED, barkClipY)
-      drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
-      volume || drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+      if (volume) {
+        //
+        // Volume trees: smooth side light, a few faint daubs and the crack
+        // net on top — the generic bark's dense lines and seams would turn
+        // the trunk into stripes.
+        //
+        drawTrunkVolumeBands(ctx, barkSegs, volume, barkClipY)
+        drawTrunkVolumeDaubs(ctx, barkSegs, volume, treeSeed + TRUNK_DAUB_SEED, barkClipY)
+        drawTrunkCrackNet(ctx, barkSegs, volume, barkDark, treeSeed + BARK_CRACK_SEED, barkClipY)
+      } else {
+        drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
+        drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
+        drawWoodShading(ctx, treeData.branchSegs, barkDark, trunkClipY)
+      }
     }
   }
   //
@@ -810,8 +890,9 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   //
   const vein = palette.noLeafDetails ? null : (palette.leafVein ?? barkDark)
   const leafOpacity = palette.leafOpacity ?? 1
+  const sprig = sprigLook(palette)
   treeData.leaves.forEach(item => {
-    drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, foliageCellPx)
+    drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, foliageCellPx, sprig)
   })
 }
 
@@ -1070,7 +1151,7 @@ function fillTrunkSideBand(ctx, spine, band, rgb) {
     outer.push({ x: j.x + r.x * band.side * j.hw * TRUNK_VOLUME_EDGE_OVERSHOOT, y: j.y + r.y * band.side * j.hw * TRUNK_VOLUME_EDGE_OVERSHOOT })
     inner.push({ x: j.x + r.x * band.side * j.hw * innerFrac, y: j.y + r.y * band.side * j.hw * innerFrac })
   })
-  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${band.alpha})`
   ctx.beginPath()
   outer.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
   for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i].x, inner[i].y)
@@ -1115,122 +1196,131 @@ function drawTrunkVolumeDaubs(ctx, segs, vol, seed, maxY, opts = {}) {
   })
 }
 //
-// Stacked bark plates (reference trunk): vertical grooves split the trunk
-// into columns, each column breaks into staggered plates, and every plate
-// carries a lit stroke along its sun-side edge and a lit lip under its top
-// break, toned by the flank it sits on.
+// Crack net (reference apple tree): long thin dark cracks run along the
+// trunk in broken runs, short sagging cross cracks join neighbouring columns
+// into big irregular plates, and a faint lit line hugs each long crack on
+// its sun side.
 //
-function drawTrunkBarkPlates(ctx, segs, vol, seed, maxY, opts = {}) {
-  const { columns = BARK_PLATE_COLUMNS, minHw = BARK_PLATE_MIN_HW, scale = 1 } = opts
+function drawTrunkCrackNet(ctx, segs, vol, dark, seed, maxY, opts = {}) {
+  const { columns = BARK_CRACK_COLUMNS, minHw = BARK_CRACK_MIN_HW, scale = 1 } = opts
   const { spine } = buildChainOutline(segs, maxY)
   if (spine.length < 2) return
   const dense = densifySpine(orientSpineToShade(spine), TRUNK_VOLUME_SUBSTEPS)
   const cum = spineArcLengths(dense)
   const rng = createRng(seed)
+  const bounds = buildCrackBounds(rng, dense, columns)
+  const net = {
+    dense,
+    cum,
+    minHw,
+    scale,
+    width: BARK_CRACK_W * Math.max(BARK_CRACK_W_SCALE_MIN, scale),
+    dark,
+    lit: vol.lit
+  }
+  withChainClip(ctx, segs, maxY, () => {
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    bounds.slice(1, -1).forEach(bound => drawLongCrack(ctx, rng, net, bound))
+    for (let c = 0; c < columns; c++) drawCrossCracks(ctx, rng, net, bounds[c], bounds[c + 1])
+  })
+}
+//
+// Column borders across the width: the two trunk edges plus jittered inner
+// crack lines. Per-joint jitter is stored so the dark crack, its lit line
+// and the cross cracks ending on it all share one jagged path.
+//
+function buildCrackBounds(rng, dense, columns) {
   const bounds = []
   for (let b = 0; b <= columns; b++) {
     const edge = b === 0 || b === columns
     bounds.push({
-      frac: -1 + (2 * b) / columns + (edge ? 0 : (rng() * 2 - 1) * BARK_PLATE_COL_JITTER / columns),
-      phase: rng() * Math.PI * 2
+      frac: -1 + (2 * b) / columns + (edge ? 0 : (rng() * 2 - 1) * BARK_CRACK_COL_JITTER / columns),
+      phase: rng() * Math.PI * 2,
+      jitter: dense.map(() => edge ? 0 : (rng() * 2 - 1) * BARK_CRACK_JITTER_PX)
     })
   }
-  const plate = { minHw, scale }
-  withChainClip(ctx, segs, maxY, () => {
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    const deep = vol.deep
-    ctx.strokeStyle = `rgba(${deep.r}, ${deep.g}, ${deep.b}, ${BARK_PLATE_GAP_ALPHA})`
-    ctx.lineWidth = BARK_PLATE_GAP_W
-    bounds.slice(1, -1).forEach(bound => {
-      ctx.beginPath()
-      dense.forEach((j, i) => {
-        const p = barkPlatePoint(j, plateBoundFrac(bound, cum[i]))
-        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)
-      })
-      ctx.stroke()
-    })
-    for (let c = 0; c < columns; c++) {
-      drawBarkPlateColumn(ctx, rng, dense, cum, bounds[c], bounds[c + 1], vol, plate)
-    }
-  })
+  return bounds
+}
+function crackPoint(net, bound, i) {
+  const j = net.dense[i]
+  const r = shadeSideNormal(j)
+  const frac = bound.frac + Math.sin(net.cum[i] * BARK_CRACK_WOBBLE_FREQ + bound.phase) * BARK_CRACK_WOBBLE
+  const off = j.hw * frac + bound.jitter[i]
+  return { x: j.x + r.x * off, y: j.y + r.y * off, nx: r.x, ny: r.y }
 }
 //
-// One column of plates between two groove bounds.
+// One long crack, broken into runs with short gaps so it never reads as a
+// ruler line down the whole trunk.
 //
-function drawBarkPlateColumn(ctx, rng, dense, cum, left, right, vol, plate) {
-  const total = cum[cum.length - 1]
-  let s = rng() * BARK_PLATE_LEN_MIN * plate.scale
+function drawLongCrack(ctx, rng, net, bound) {
+  const total = net.cum[net.cum.length - 1]
+  let s = rng() * BARK_CRACK_GAP_RANGE * net.scale
   while (s < total) {
-    const len = (BARK_PLATE_LEN_MIN + rng() * BARK_PLATE_LEN_RANGE) * plate.scale
-    const end = Math.min(total, s + len)
-    const j0 = spineJointAt(dense, cum, s)
-    if (j0.hw >= plate.minHw) {
-      const f0 = plateBoundFrac(left, s)
-      const f1 = plateBoundFrac(right, s)
-      const mid = (f0 + f1) * 0.5
-      const tone = vol[barkPlateTone(mid)]
-      drawBarkPlateBreak(ctx, j0, f0, f1, vol.deep, tone, rng)
-      drawBarkPlateLitEdge(ctx, dense, cum, s, end, left, right, tone)
+    const end = s + (BARK_CRACK_RUN_MIN + rng() * BARK_CRACK_RUN_RANGE) * net.scale
+    const pts = []
+    for (let i = 0; i < net.dense.length; i++) {
+      if (net.cum[i] < s || net.cum[i] > end || net.dense[i].hw < net.minHw) continue
+      pts.push(crackPoint(net, bound, i))
     }
-    s = end
+    pts.length > 1 && strokeCrackRun(ctx, net, pts)
+    s = end + (BARK_CRACK_GAP_MIN + rng() * BARK_CRACK_GAP_RANGE) * net.scale
   }
 }
 //
-// Dark sagging break across the column with a lit lip right under it.
+// Lit line first (offset toward the sun), dark crack over it.
 //
-function drawBarkPlateBreak(ctx, j, f0, f1, dark, lit, rng) {
-  const a = barkPlatePoint(j, f0)
-  const b = barkPlatePoint(j, f1)
-  const sag = BARK_PLATE_BREAK_SAG_MIN + rng() * BARK_PLATE_BREAK_SAG_RANGE
-  const mx = (a.x + b.x) * 0.5
-  const my = (a.y + b.y) * 0.5 + sag
-  ctx.strokeStyle = `rgba(${dark.r}, ${dark.g}, ${dark.b}, ${BARK_PLATE_GAP_ALPHA})`
-  ctx.lineWidth = BARK_PLATE_GAP_W
+function strokeCrackRun(ctx, net, pts) {
+  const { lit, dark } = net
+  ctx.strokeStyle = `rgba(${lit.r}, ${lit.g}, ${lit.b}, ${BARK_CRACK_LIT_ALPHA})`
+  ctx.lineWidth = BARK_CRACK_LIT_W
+  strokeOffsetPolyline(ctx, pts, -BARK_CRACK_LIT_OFFSET)
+  ctx.strokeStyle = `rgba(${dark.r}, ${dark.g}, ${dark.b}, ${BARK_CRACK_ALPHA})`
+  ctx.lineWidth = net.width
+  strokeOffsetPolyline(ctx, pts, 0)
+}
+function strokeOffsetPolyline(ctx, pts, offset) {
+  ctx.beginPath()
+  pts.forEach((p, i) => {
+    const x = p.x + p.nx * offset
+    const y = p.y + p.ny * offset
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  })
+  ctx.stroke()
+}
+//
+// Sparse cross cracks inside one column, stepping along the trunk.
+//
+function drawCrossCracks(ctx, rng, net, left, right) {
+  const { dark } = net
+  const total = net.cum[net.cum.length - 1]
+  ctx.strokeStyle = `rgba(${dark.r}, ${dark.g}, ${dark.b}, ${BARK_CRACK_ALPHA})`
+  ctx.lineWidth = net.width
+  let i = 0
+  let s = rng() * BARK_CROSS_STEP_RANGE * net.scale
+  while (s < total) {
+    while (i < net.cum.length - 1 && net.cum[i] < s) i++
+    net.dense[i].hw >= net.minHw && rng() < BARK_CROSS_CHANCE && drawCrossCrack(ctx, rng, net, left, right, i)
+    s += (BARK_CROSS_STEP_MIN + rng() * BARK_CROSS_STEP_RANGE) * net.scale
+  }
+}
+//
+// Starts on one column border and reaches part or all of the way across,
+// slanted along the trunk and sagging down on screen.
+//
+function drawCrossCrack(ctx, rng, net, left, right, i) {
+  const fromLeft = rng() < 0.5
+  const a = crackPoint(net, fromLeft ? left : right, i)
+  const far = crackPoint(net, fromLeft ? right : left, i)
+  const reach = BARK_CROSS_REACH_MIN + rng() * (1 - BARK_CROSS_REACH_MIN)
+  const slant = (rng() * 2 - 1) * BARK_CROSS_SLANT_PX * net.scale
+  const sag = (BARK_CROSS_SAG_MIN + rng() * BARK_CROSS_SAG_RANGE) * net.scale
+  const bx = a.x + (far.x - a.x) * reach - a.ny * slant
+  const by = a.y + (far.y - a.y) * reach + a.nx * slant
   ctx.beginPath()
   ctx.moveTo(a.x, a.y)
-  ctx.quadraticCurveTo(mx, my, b.x, b.y)
+  ctx.quadraticCurveTo((a.x + bx) * 0.5, (a.y + by) * 0.5 + sag, bx, by)
   ctx.stroke()
-  ctx.strokeStyle = `rgba(${lit.r}, ${lit.g}, ${lit.b}, ${BARK_PLATE_LIT_ALPHA})`
-  ctx.lineWidth = BARK_PLATE_LIT_W
-  ctx.beginPath()
-  ctx.moveTo(a.x, a.y + BARK_PLATE_LIP_OFFSET)
-  ctx.quadraticCurveTo(mx, my + BARK_PLATE_LIP_OFFSET, b.x, b.y + BARK_PLATE_LIP_OFFSET)
-  ctx.stroke()
-}
-//
-// Lit stroke down the sun-side (screen-left) edge of one plate.
-//
-function drawBarkPlateLitEdge(ctx, dense, cum, s0, s1, left, right, tone) {
-  ctx.strokeStyle = `rgba(${tone.r}, ${tone.g}, ${tone.b}, ${BARK_PLATE_LIT_ALPHA})`
-  ctx.lineWidth = BARK_PLATE_LIT_W
-  ctx.beginPath()
-  let started = false
-  for (let i = 0; i < dense.length; i++) {
-    if (cum[i] < s0 + BARK_PLATE_EDGE_TRIM || cum[i] > s1 - BARK_PLATE_EDGE_TRIM) continue
-    const fl = plateBoundFrac(left, cum[i])
-    const fr = plateBoundFrac(right, cum[i])
-    const p = barkPlatePoint(dense[i], fl + (fr - fl) * BARK_PLATE_LIT_INSET)
-    started ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)
-    started = true
-  }
-  started && ctx.stroke()
-}
-//
-// Lit flank plates catch the rim tone, the middle the lit tone, the shaded
-// flank only a faint shade-tone edge.
-//
-function barkPlateTone(frac) {
-  if (frac < -BARK_PLATE_SIDE_FRAC) return 'rim'
-  if (frac > BARK_PLATE_SIDE_FRAC) return 'shade'
-  return 'lit'
-}
-function plateBoundFrac(bound, s) {
-  return bound.frac + Math.sin(s * BARK_PLATE_WOBBLE_FREQ + bound.phase) * BARK_PLATE_WOBBLE
-}
-function barkPlatePoint(j, frac) {
-  const r = shadeSideNormal(j)
-  return { x: j.x + r.x * j.hw * frac, y: j.y + r.y * j.hw * frac }
 }
 function spineArcLengths(spine) {
   const cum = [0]
@@ -1238,11 +1328,6 @@ function spineArcLengths(spine) {
     cum.push(cum[i - 1] + Math.hypot(spine[i].x - spine[i - 1].x, spine[i].y - spine[i - 1].y))
   }
   return cum
-}
-function spineJointAt(spine, cum, s) {
-  let i = 1
-  while (i < cum.length - 1 && cum[i] < s) i++
-  return spine[i]
 }
 //
 // Lit flank gets warm daubs, shaded flank deep ones, the middle mixes both.
@@ -1338,10 +1423,10 @@ function trunkCrossSectionAtY(trunkSegs, y) {
 }
 //
 // Limb bark = the trunk's bark passes run on every limb chain: wavy flank
-// bands, plate columns with breaks and lit edges, short daubs. Plate columns,
-// plate length and daub size scale down with the limb so twigs stay readable.
+// bands, short daubs and the crack net. Crack columns, run length and daub
+// size scale down with the limb so twigs stay readable.
 //
-function drawBranchBark(ctx, segs, vol, seed, maxY) {
+function drawBranchBark(ctx, segs, vol, dark, seed, maxY) {
   buildBranchChains(segs).forEach((chain, i) => {
     const maxHw = Math.max(...chain.map(s => s.w)) * 0.5
     if (maxHw < BRANCH_BARK_MIN_HW) return
@@ -1351,15 +1436,15 @@ function drawBranchBark(ctx, segs, vol, seed, maxY) {
     const columns = Math.max(BRANCH_BARK_COLUMNS_MIN, Math.min(BRANCH_BARK_COLUMNS_MAX, Math.round(maxHw / BRANCH_BARK_HW_PER_COLUMN)))
     const clipY = Math.max(...chain.map(s => Math.max(s.sy, s.ey))) <= maxY ? Infinity : maxY
     drawTrunkVolumeBands(ctx, chain, vol, clipY)
-    drawTrunkBarkPlates(ctx, chain, vol, chainSeed, clipY, {
-      columns,
-      minHw: BRANCH_BARK_PLATE_MIN_HW,
-      scale: Math.max(BRANCH_BARK_PLATE_LEN_SCALE_MIN, scale)
-    })
     drawTrunkVolumeDaubs(ctx, chain, vol, chainSeed + 1, clipY, {
       count: Math.round(len * BRANCH_BARK_DAUBS_PER_PX),
       minHw: BRANCH_BARK_DAUB_MIN_HW,
       scale
+    })
+    drawTrunkCrackNet(ctx, chain, vol, dark, chainSeed, clipY, {
+      columns,
+      minHw: BRANCH_BARK_CRACK_MIN_HW,
+      scale: Math.max(BRANCH_BARK_CRACK_LEN_SCALE_MIN, scale)
     })
   })
 }
@@ -2052,6 +2137,24 @@ function growShoreAccentLimb(rng, x, y, angle, length, thickness, branchSegs, le
   leafEndpoints.push({ x: fx, y: fy, r: SHORE_ACCENT_SIDE_LEAF_R * 0.75 })
 }
 //
+// Main-tree limbs from STRUCTURED_CROWN_LIMBS: each limb grows and forks like
+// any branch, but carries fewer, smaller leaf groups so gaps between them
+// show the wood and the forest behind.
+//
+function buildStructuredCrown(rng, trunkSegs, branchSegs, leafEndpoints) {
+  const baseSeed = Math.floor(rng() * STRUCTURED_LIMB_SEED_RANGE)
+  STRUCTURED_CROWN_LIMBS.forEach((limb, i) => {
+    //
+    // Own stream per limb: retuning one limb keeps the others' forks as-is.
+    //
+    const limbRng = createRng(baseSeed + i * STRUCTURED_LIMB_SEED_STEP)
+    const segIdx = Math.min(Math.floor(limb.frac * trunkSegs.length), trunkSegs.length - 1)
+    const seg = trunkSegs[segIdx]
+    const angle = limb.angle + (limbRng() - 0.5) * STRUCTURED_LIMB_ANGLE_JITTER * 2
+    growBranch(limbRng, seg.ex, seg.ey, angle, limb.len, seg.w * limb.wFrac, branchSegs, leafEndpoints, 0, false, STRUCTURED_LEAF_STYLE)
+  })
+}
+//
 // Sprouts branches from the main trunk at RANDOM heights (upper part of the
 // tree). Sides alternate so the canopy stays balanced, but the exact position
 // of every branch on the trunk is seeded-random. Each branch then splits
@@ -2099,13 +2202,14 @@ function buildBranchesFromTrunk(
 //
 // Recursively grows a branch segment, spawning sub-branches and leaf endpoints.
 //
-function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints, depth, denseCanopyLeaves = false) {
+function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints, depth, denseCanopyLeaves = false, leafStyle = null) {
   if (length <= 2 || thickness < 0.45 || depth > 7) {
-    leafEndpoints.push({ x, y, r: 32 + depth * 6 })
+    leafEndpoints.push({ x, y, r: 32 + depth * 6, massScale: leafStyle?.massScale })
     return
   }
+  const midLeafChance = leafStyle?.midChance ?? (denseCanopyLeaves ? 0.62 : 0.5)
   const STEP = 5 + rng() * 4
-  const TIP_TAPER = 0.93
+  const TIP_TAPER = leafStyle?.tipTaper ?? 0.93
   let cx = x
   let cy = y
   for (let i = 0; i < length; i++) {
@@ -2125,15 +2229,21 @@ function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoin
     })
     denseCanopyLeaves && depth <= 2 && i > 0 && i % 2 === 0 && rng() < (0.52 - depth * 0.08) &&
       leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 4 + rng() * 18 })
-    if (depth >= 1 && i > 0 && i % 2 === 0 && rng() < (denseCanopyLeaves ? 0.62 : 0.5)) {
-      leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 5 + rng() * 14 })
+    if (depth >= 1 && i > 0 && i % 2 === 0 && rng() < midLeafChance) {
+      leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 5 + rng() * 14, massScale: leafStyle?.massScale })
     }
   }
+  //
+  // Scripted limbs fork from their tapered end width (each fork thinner than
+  // the wood it grows from); other branches restart from their base width.
+  //
+  const forkW = leafStyle?.childW ? thickness * (1 - TIP_TAPER) : thickness
+  const childW = leafStyle?.childW ?? BRANCH_CHILD_W
   if (rng() < 0.82) {
-    growBranch(rng, cx, cy, angle - 0.35 - rng() * 0.2, Math.round(length * 0.65), thickness * 0.66, branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves)
+    growBranch(rng, cx, cy, angle - 0.35 - rng() * 0.2, Math.round(length * 0.65), forkW * childW[0], branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves, leafStyle)
   }
   if (rng() < 0.65) {
-    growBranch(rng, cx, cy, angle + 0.35 + rng() * 0.2, Math.round(length * 0.55), thickness * 0.56, branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves)
+    growBranch(rng, cx, cy, angle + 0.35 + rng() * 0.2, Math.round(length * 0.55), forkW * childW[1], branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves, leafStyle)
   }
 }
 //
@@ -2240,11 +2350,14 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
   const cloudBonus = detailOpts.cloudCellBonus ?? 0
   const lobeChance = FOLIAGE_CLOUD_LOBE_CHANCE + (detailOpts.lobeChanceBoost ?? 0)
   const extraLobeChance = detailOpts.extraLobeChance ?? 0
+  const byHeight = detailOpts.shadeByHeight ?? false
+  const crownTop = Math.min(...endpoints.map(ep => ep.y))
+  const crown = byHeight ? { top: crownTop, span: Math.max(1, Math.max(...endpoints.map(ep => ep.y)) - crownTop) } : null
   const out = []
   endpoints.forEach(ep => {
     const mass = foliageMassScale(ep, detailOpts.massByRadius)
     const spread = Math.min(72, ep.r * 1.08) * Math.sqrt(mass)
-    const mainShade = pickLeafMassShadeIdx(rng, shadeCount)
+    const mainShade = pickEndpointShadeIdx(rng, shadeCount, ep, crown)
     const mainCells = buildAsymmetricPixelCloud(
       rng,
       Math.round((FOLIAGE_CLOUD_CELLS_MIN + (denseCanopy ? FOLIAGE_DENSE_CLOUD_CELL_BONUS : 0) + cloudBonus) * mass),
@@ -2255,6 +2368,7 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
       x: ep.x + (rng() - 0.5) * spread * 0.2,
       y: ep.y + (rng() - 0.5) * spread * 0.12,
       shadeIdx: mainShade,
+      vertShade: byHeight,
       cells: mainCells
     })
     const lobeRoll = rng()
@@ -2265,7 +2379,8 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
         type: 'cluster',
         x: ep.x + Math.cos(a) * dist,
         y: ep.y + Math.sin(a) * dist * 0.5,
-        shadeIdx: pickLeafMassShadeIdx(rng, shadeCount),
+        shadeIdx: pickEndpointShadeIdx(rng, shadeCount, ep, crown),
+        vertShade: byHeight,
         cells: buildAsymmetricPixelCloud(rng, Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MIN * mass), Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MAX * mass))
       })
     }
@@ -2273,7 +2388,8 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
       type: 'cluster',
       x: ep.x + (rng() - 0.5) * spread * 0.5,
       y: ep.y + (rng() - 0.5) * spread * 0.35,
-      shadeIdx: pickLeafMassShadeIdx(rng, shadeCount),
+      shadeIdx: pickEndpointShadeIdx(rng, shadeCount, ep, crown),
+      vertShade: byHeight,
       cells: buildAsymmetricPixelCloud(rng, Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MIN * mass), Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MAX * mass))
     })
     const detailSpan = Math.max(0, detailMax - detailMin + 1)
@@ -2406,43 +2522,166 @@ function pickWeightedIndex(rng, weights) {
 //
 // Draws one foliage entry (pixel cluster or small detail leaf).
 //
-function drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, clusterCellPx) {
+function drawFoliageItemToCanvas(ctx, item, leafShades, vein, leafOpacity, clusterCellPx, sprig = null) {
   if (item.type === 'cluster') {
-    drawFoliageClusterToCanvas(ctx, item, leafShades, leafOpacity, clusterCellPx)
+    drawFoliageClusterToCanvas(ctx, item, leafShades, leafOpacity, clusterCellPx, sprig)
     return
   }
   const shade = leafShades[item.shadeIdx ?? 0] ?? leafShades[0]
   const opacity = (item.opacity ?? 1) * leafOpacity
+  if (sprig) {
+    drawSprigLeafToCanvas(ctx, item.x, item.y, item.size * SPRIG_DETAIL_SIZE_SCALE, item.angle, SPRIG_LEAFLETS_MIN, shade, opacity)
+    return
+  }
   drawLeafToCanvas(ctx, item.x, item.y, item.size, item.angle, shade.r, shade.g, shade.b, opacity, vein)
 }
 //
 // Paints a cluster as snapped pixel blocks; a few cells use the accent shade.
 //
-function drawFoliageClusterToCanvas(ctx, cluster, leafShades, leafOpacity, clusterCellPx) {
-  const base = leafShades[cluster.shadeIdx ?? 1] ?? leafShades[0]
-  const shadeIdx = cluster.shadeIdx ?? 1
-  const accentIdx = shadeIdx <= 0
-    ? Math.min(leafShades.length - 1, 1)
-    : Math.max(0, shadeIdx - 1)
-  const accent = leafShades[accentIdx] ?? base
+function drawFoliageClusterToCanvas(ctx, cluster, leafShades, leafOpacity, clusterCellPx, sprig) {
   const cell = clusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
   const ox = Math.round(cluster.x)
   const oy = Math.round(cluster.y)
-  cluster.cells.forEach(c => {
-    const rgb = c.detail ? accent : base
-    const px = ox + c.dx * cell
-    const py = oy + c.dy * cell
-    const cx = px + cell * 0.5
-    const cy = py + cell * 0.5
+  clusterLeafDraws(cluster, leafShades, cell, sprig).forEach(d => sprig
+    ? drawSprigLeafToCanvas(ctx, ox + d.x, oy + d.y, d.size, d.angle, d.leaflets, d.rgb, leafOpacity)
+    : drawLeafToCanvas(ctx, ox + d.x, oy + d.y, d.size, d.angle, d.rgb.r, d.rgb.g, d.rgb.b, leafOpacity, null))
+}
+//
+// Leaf draws of one cluster, relative to its origin. Star crowns keep a
+// jittered subset of cells; some stars drop one shade and paint first as a
+// back layer that shows through the gaps, a few gain one shade and paint
+// last as lit front stars, and inside each layer bottom cells paint first,
+// so the upper (lit) stars overlap the lower ones.
+//
+function clusterLeafDraws(cluster, leafShades, cell, sprig) {
+  const rgbs = clusterCellRgbs(cluster, leafShades)
+  const clusterHash = (Math.round(cluster.x) * SPRIG_CLUSTER_HASH_X) ^ (Math.round(cluster.y) * SPRIG_CLUSTER_HASH_Y)
+  const draws = []
+  cluster.cells.forEach((c, i) => {
     const hash = ((c.dx * 73856093) ^ (c.dy * 19349663)) | 0
-    const angle = ((hash % 628) / 100) - Math.PI
-    const leafSize = cell * FOLIAGE_CLUSTER_LEAF_SIZE_FRAC
-    drawLeafToCanvas(ctx, cx, cy, leafSize, angle, rgb.r, rgb.g, rgb.b, leafOpacity, null)
+    const rgb = rgbs[i]
+    if (!sprig) {
+      draws.push({
+        x: c.dx * cell + cell * 0.5,
+        y: c.dy * cell + cell * 0.5,
+        size: cell * FOLIAGE_CLUSTER_LEAF_SIZE_FRAC,
+        angle: ((hash % 628) / 100) - Math.PI,
+        rgb
+      })
+      return
+    }
+    const starHash = hash ^ clusterHash
+    if (hashUnit(starHash, 4) > SPRIG_CELL_KEEP) return
+    const jy = (hashUnit(starHash, 2) - 0.5) * 2 * SPRIG_POS_JITTER * cell
+    const layerRoll = hashUnit(starHash, 7)
+    const layer = layerRoll < SPRIG_BACK_CHANCE ? -1 : layerRoll > 1 - SPRIG_FRONT_CHANCE ? 1 : 0
+    const shadeIdx = Math.max(0, Math.min(leafShades.length - 1, leafShades.indexOf(rgb) + layer))
+    draws.push({
+      x: c.dx * cell + cell * 0.5 + (hashUnit(starHash, 1) - 0.5) * 2 * SPRIG_POS_JITTER * cell,
+      y: c.dy * cell + cell * 0.5 + jy,
+      dy: c.dy + jy / cell,
+      layer,
+      size: cell * SPRIG_SIZE_FRAC * (1 + (hashUnit(starHash, 3) - 0.5) * 2 * SPRIG_SIZE_JITTER),
+      angle: hashUnit(starHash, 5) * Math.PI * 2,
+      leaflets: SPRIG_LEAFLETS_MIN + Math.floor(hashUnit(starHash, 6) * SPRIG_LEAFLETS_RANGE),
+      rgb: leafShades.includes(rgb) ? leafShades[shadeIdx] : rgb
+    })
+  })
+  sprig && draws.sort((p, q) => (p.layer - q.layer) || (q.dy - p.dy))
+  return draws
+}
+//
+// Stable 0..1 value per cell hash and channel (position / size jitter).
+//
+function hashUnit(hash, channel) {
+  const h = Math.imul(hash ^ (channel * 0x9e3779b1), 0x85ebca6b) >>> 0
+  return (h % 10007) / 10007
+}
+//
+// Whether a bake palette uses star leaves instead of classic teardrops.
+//
+function sprigLook(palette) {
+  return Boolean(palette.sprigLeaves)
+}
+//
+// One star leaf: leaflets spread evenly around the joint with a small
+// per-leaflet wobble in angle and length (stable per star angle), plus a
+// round core that closes the joint. The core winds the same way as the
+// drops, otherwise the nonzero fill would punch a hole in the middle.
+//
+function drawSprigLeafToCanvas(ctx, x, y, size, angle, leaflets, rgb, opacity) {
+  ctx.globalAlpha = opacity
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.beginPath()
+  const step = (Math.PI * 2) / leaflets
+  for (let k = 0; k < leaflets; k++) {
+    const wobble = Math.sin(angle * SPRIG_WOBBLE_ANGLE_FREQ + k * SPRIG_WOBBLE_STEP)
+    const a = angle + k * step + wobble * SPRIG_LEAFLET_ANGLE_JITTER
+    const shrink = 0.5 + 0.5 * Math.cos(angle * SPRIG_LEN_ANGLE_FREQ + k * SPRIG_LEN_STEP)
+    const len = size * SPRIG_LEAFLET_LEN * (1 - SPRIG_LEAFLET_LEN_JITTER * shrink)
+    addLeafletDrop(ctx, x, y, len, size * SPRIG_LEAFLET_WID, a)
+  }
+  ctx.moveTo(x + size * SPRIG_CORE_R, y)
+  ctx.arc(x, y, size * SPRIG_CORE_R, 0, Math.PI * 2, true)
+  ctx.fill()
+  ctx.globalAlpha = 1
+}
+//
+// Adds one drop leaflet to the current path: the point sits on the joint,
+// the sides swell out and close in a round end. Every drop winds the same
+// way, so overlaps inside one path never punch holes.
+//
+function addLeafletDrop(ctx, x, y, len, wid, angle) {
+  const r = wid * 0.5
+  const dx = Math.cos(angle)
+  const dy = Math.sin(angle)
+  const cx = x + dx * (len - r)
+  const cy = y + dy * (len - r)
+  const kx = x + dx * len * SPRIG_DROP_NECK
+  const ky = y + dy * len * SPRIG_DROP_NECK
+  ctx.moveTo(x, y)
+  ctx.quadraticCurveTo(kx - dy * r, ky + dx * r, cx - dy * r, cy + dx * r)
+  ctx.arc(cx, cy, r, angle + Math.PI / 2, angle - Math.PI / 2, true)
+  ctx.quadraticCurveTo(kx + dy * r, ky - dx * r, x, y)
+}
+//
+// Per-cell colours of a cluster: detail cells take the accent shade; with
+// vertShade the lowest cells drop one shade and the top cells gain one, so
+// every leaf group reads lit from above.
+//
+function clusterCellRgbs(cluster, leafShades) {
+  const shadeIdx = cluster.shadeIdx ?? 1
+  const maxIdx = leafShades.length - 1
+  const accentIdx = shadeIdx <= 0 ? Math.min(maxIdx, 1) : Math.max(0, shadeIdx - 1)
+  const dys = cluster.cells.map(c => c.dy)
+  const minDy = Math.min(...dys)
+  const spanDy = Math.max(1, Math.max(...dys) - minDy)
+  return cluster.cells.map(c => {
+    if (c.detail) return leafShades[accentIdx] ?? leafShades[0]
+    if (!cluster.vertShade) return leafShades[shadeIdx] ?? leafShades[0]
+    const t = (c.dy - minDy) / spanDy
+    const shift = t > CLUSTER_SHADE_LOW_FRAC ? -1 : t < CLUSTER_SHADE_HIGH_FRAC ? 1 : 0
+    return leafShades[Math.max(0, Math.min(maxIdx, shadeIdx + shift))] ?? leafShades[0]
   })
 }
 //
-// Three foliage masses per crown: mostly base, rare shadow/light accents.
+// Main-tree crowns shade masses by height; other trees keep the random mix.
 //
+function pickEndpointShadeIdx(rng, shadeCount, ep, crown) {
+  if (!crown) return pickLeafMassShadeIdx(rng, shadeCount)
+  return pickCrownHeightShadeIdx(rng, shadeCount, (ep.y - crown.top) / crown.span)
+}
+//
+// t = 0 at the crown top … 1 at its lowest leaf group.
+//
+function pickCrownHeightShadeIdx(rng, shadeCount, t) {
+  const maxIdx = Math.max(0, Math.min(2, shadeCount - 1))
+  const u = rng()
+  if (t > CROWN_SHADE_LOW_T) return u < 0.75 ? 0 : Math.min(1, maxIdx)
+  if (t < CROWN_SHADE_HIGH_T) return u < 0.6 ? maxIdx : Math.min(1, maxIdx)
+  if (u < 0.15) return 0
+  return u < 0.85 ? Math.min(1, maxIdx) : maxIdx
+}
 function pickLeafMassShadeIdx(rng, shadeCount) {
   const maxIdx = Math.max(0, Math.min(2, shadeCount - 1))
   if (maxIdx === 0) return 0

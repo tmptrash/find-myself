@@ -177,10 +177,8 @@ export function getTreePaletteColorForCorner(parallaxCornerKey) {
  */
 export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCornerKey = 'parallaxTreeCornerTL') {
   const lit = applyFoliageDensityToPalette(trunkPalette, 'nearground')
-  const near = applyFoliageDensityToPalette(
-    getTreePaletteFromGlowTreeEntry(GLOW_PAL[parallaxCornerKey]),
-    'nearground'
-  )
+  const entry = GLOW_PAL[parallaxCornerKey]
+  const near = applyFoliageDensityToPalette(getTreePaletteFromGlowTreeEntry(entry), 'nearground')
   return {
     ...lit,
     leafR: near.leafR,
@@ -189,7 +187,8 @@ export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCorn
     leafShades: near.leafShades,
     leafVein: near.leafVein,
     leafOpacity: near.leafOpacity,
-    noLeafDetails: near.noLeafDetails
+    noLeafDetails: near.noLeafDetails,
+    sprigLeaves: Boolean(entry.sprigLeaves)
   }
 }
 

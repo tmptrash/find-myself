@@ -1,7 +1,7 @@
-import { applyGlowLayerGradeToCanvas, GLOW_LAYER_GRADE } from './glow-parallax-grain.js'
-import { glowRgb } from './glow-palette.js'
+import { applyForestLayerGradeToCanvas, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
+import { forestRgb } from './forest-palette.js'
 //
-// Foot burst particles for glow level landings
+// Foot burst particles for forest level landings
 //
 const LANDING_COUNT = 10
 const PARTICLE_Z = 19
@@ -106,13 +106,13 @@ const LEAF_GROUND_SPIN_DECAY = 0.9
 // avoids rebuilding the same small point array for every particle.
 //
 const leafPointsCache = new Map()
-const GLOW_LEAF_SPRITE_PREFIX = 'glow-leaf-'
+const FOREST_LEAF_SPRITE_PREFIX = 'forest-leaf-'
 //
 // Baked leaf sprite metadata keyed by the live Kaplay instance — resolution
 // swaps tear the engine down and empty the sprite registry, so a plain Map
 // would hand stale names to a fresh k and drawSprite() would throw.
 //
-const glowLeafSpriteMetaByK = new WeakMap()
+const forestLeafSpriteMetaByK = new WeakMap()
 //
 // Creates the foot-particle pool and a single draw pass for the level scene
 //
@@ -168,7 +168,7 @@ export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   }
 }
 //
-// Leaf-shaped radial burst (e.g. glow touch deaths) — wide arc with
+// Leaf-shaped radial burst (e.g. forest touch deaths) — wide arc with
 // tumbling teardrop leaves instead of squares. colors may
 // be a single colour or a palette array; each leaf picks one at random so
 // the burst reads as a scatter of individual leaves. groundY, if given, is
@@ -177,7 +177,7 @@ export function spawnLanding(inst, footX, footY, color, countMult = 1) {
 //
 export function spawnLeafBurst(inst, x, y, colors, count, groundY = null) {
   if (!inst) return
-  const palette = Array.isArray(colors) ? colors : [colors || glowRgb('void')]
+  const palette = Array.isArray(colors) ? colors : [colors || forestRgb('void')]
   for (let i = 0; i < count; i++) {
     pushLeafBurstParticle(inst, x, y, palette[Math.floor(Math.random() * palette.length)], groundY)
   }
@@ -219,7 +219,7 @@ export function spawnEarthCrumbleFromRegion(inst, cfg) {
   } = cfg
   inst._crumbleGroundHitCb = onGroundHit
   inst._crumbleGroundHitFired = false
-  const palette = Array.isArray(colors) ? colors : [colors || glowRgb('decorGray')]
+  const palette = Array.isArray(colors) ? colors : [colors || forestRgb('decorGray')]
   const rad = tiltDeg * Math.PI / 180
   const cos = Math.cos(rad)
   const sin = Math.sin(rad)
@@ -301,7 +301,7 @@ function pushParticle(inst, footX, footY, color, speedMin, speedRange, splash) {
   const side = splash ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1)
   const angle = (5 + Math.random() * 28) * (Math.PI / 180)
   const speed = speedMin + Math.random() * speedRange
-  const c = color || glowRgb('void')
+  const c = color || forestRgb('void')
   inst.particles.push({
     x: footX + side * (4 + Math.random() * 14),
     y: footY - 2 + Math.random() * 4,
@@ -319,9 +319,9 @@ function pushLeafBurstParticle(inst, x, y, color, groundY) {
   const side = Math.random() < 0.5 ? -1 : 1
   const angle = (BURST_ANGLE_MIN_DEG + Math.random() * BURST_ANGLE_RANGE_DEG) * (Math.PI / 180)
   const speed = BURST_SPEED_MIN + Math.random() * BURST_SPEED_RANGE
-  const c = color || glowRgb('void')
+  const c = color || forestRgb('void')
   const size = LEAF_SIZE_MIN + Math.random() * LEAF_SIZE_RANGE
-  ensureGlowLeafSprite(inst.k, size, c.r, c.g, c.b)
+  ensureForestLeafSprite(inst.k, size, c.r, c.g, c.b)
   inst.particles.push({
     x: x + side * (2 + Math.random() * 10),
     y: y - 4 + Math.random() * 8,
@@ -575,7 +575,7 @@ function leafOpacity(p) {
   return Math.max(0, 1 - (p.age - p.fadeFrom) / LEAF_GROUND_FADE)
 }
 function drawLeafParticle(k, p, opacity) {
-  const baked = ensureGlowLeafSprite(k, p.size, p.r, p.g, p.b)
+  const baked = ensureForestLeafSprite(k, p.size, p.r, p.g, p.b)
   if (baked && k.getSprite(baked.name)) {
     k.drawSprite({
       sprite: baked.name,
@@ -597,21 +597,21 @@ function drawLeafParticle(k, p, opacity) {
 }
 //
 // Bakes a coloured leaf sprite with grain for one size + RGB key — same bake
-// pattern as other glow decor (colour on canvas, grain once, white-tint blit).
+// pattern as other forest decor (colour on canvas, grain once, white-tint blit).
 //
-function glowLeafSpriteCache(k) {
-  let cache = glowLeafSpriteMetaByK.get(k)
+function forestLeafSpriteCache(k) {
+  let cache = forestLeafSpriteMetaByK.get(k)
   if (!cache) {
     cache = new Map()
-    glowLeafSpriteMetaByK.set(k, cache)
+    forestLeafSpriteMetaByK.set(k, cache)
   }
   return cache
 }
-function ensureGlowLeafSprite(k, size, r, g, b) {
+function ensureForestLeafSprite(k, size, r, g, b) {
   const sizeKey = Math.round(size * 2) / 2
-  const name = GLOW_LEAF_SPRITE_PREFIX +
+  const name = FOREST_LEAF_SPRITE_PREFIX +
     String(sizeKey).replace('.', '_') + '_' + r + '_' + g + '_' + b
-  const cache = glowLeafSpriteCache(k)
+  const cache = forestLeafSpriteCache(k)
   const cached = cache.get(name)
   if (cached && k.getSprite(name)) return cached
   const pts = buildLeafPoints(k, size)
@@ -641,7 +641,7 @@ function ensureGlowLeafSprite(k, size, r, g, b) {
   })
   ctx.closePath()
   ctx.fill()
-  applyGlowLayerGradeToCanvas(canvas, GLOW_LAYER_GRADE.decor, 7500 + (sizeKey * 10) + (r * 3 + g * 5 + b * 7) | 0)
+  applyForestLayerGradeToCanvas(canvas, FOREST_LAYER_GRADE.decor, 7500 + (sizeKey * 10) + (r * 3 + g * 5 + b * 7) | 0)
   k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0

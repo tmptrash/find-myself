@@ -1,6 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL } from '../utils/glow-palette.js'
+import { FOREST_PAL } from '../utils/forest-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
@@ -281,7 +281,7 @@ function syncFootstepAudibility(inst) {
   if (!sfx?.predatorFootGain) return
   if (isPredatorFeasting(inst)) {
     inst.footHearable = false
-    Sound.setGlowPredatorFootGain(sfx, 0)
+    Sound.setForestPredatorFootGain(sfx, 0)
     return
   }
   const hero = heroPoint(inst)
@@ -289,21 +289,21 @@ function syncFootstepAudibility(inst) {
     Math.abs(hero.x - predatorBodyCenterX(inst)) <= FOOT_HEAR_RANGE_X
   if (hearable === inst.footHearable) return
   inst.footHearable = hearable
-  Sound.setGlowPredatorFootGain(sfx, hearable ? 1 : 0)
+  Sound.setForestPredatorFootGain(sfx, hearable ? 1 : 0)
 }
 
 function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const contour = rgb(k, GLOW_PAL.predatorContour)
-  const back = rgb(k, GLOW_PAL.predatorBack)
-  const belly = rgb(k, GLOW_PAL.predatorBelly)
-  const moss = rgb(k, GLOW_PAL.predatorMoss)
-  const leg = rgb(k, GLOW_PAL.predatorLeg)
-  const eye = rgb(k, GLOW_PAL.predatorEye)
-  const pupil = rgb(k, GLOW_PAL.predatorPupil)
-  const horn = rgb(k, GLOW_PAL.predatorHorn)
+  const contour = rgb(k, FOREST_PAL.predatorContour)
+  const back = rgb(k, FOREST_PAL.predatorBack)
+  const belly = rgb(k, FOREST_PAL.predatorBelly)
+  const moss = rgb(k, FOREST_PAL.predatorMoss)
+  const leg = rgb(k, FOREST_PAL.predatorLeg)
+  const eye = rgb(k, FOREST_PAL.predatorEye)
+  const pupil = rgb(k, FOREST_PAL.predatorPupil)
+  const horn = rgb(k, FOREST_PAL.predatorHorn)
   //
   // Far-side legs sit behind the body, near-side legs are drawn over it.
   //

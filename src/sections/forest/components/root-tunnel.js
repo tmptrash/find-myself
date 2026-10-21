@@ -2,9 +2,9 @@ import { CFG } from '../../../cfg.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
-import { GLOW_PAL } from '../utils/glow-palette.js'
-import { glowEyeBerryColors, addEyeBerry, addTaperedPass } from '../utils/glow-eye-berry.js'
-import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
+import { FOREST_PAL } from '../utils/forest-palette.js'
+import { forestEyeBerryColors, addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
+import { applyForestFilmGrainToCanvas } from '../utils/forest-parallax-grain.js'
 //
 // Tunnel the eye-flower's roots tear through the island while they drag the
 // hero under. Nothing of it exists before the pull: a narrow ragged crack
@@ -283,8 +283,8 @@ const CRUMB_MAX = 60
  */
 export function create(cfg) {
   const { k } = cfg
-  const pal = GLOW_PAL.glowRootTunnel
-  const flowerPal = GLOW_PAL.glowEyeFlower
+  const pal = FOREST_PAL.forestRootTunnel
+  const flowerPal = FOREST_PAL.forestEyeFlower
   const surfaceY = cfg.surfaceAt(cfg.surfaceTarget, cfg.x)
   const inst = {
     k,
@@ -330,7 +330,7 @@ export function create(cfg) {
       crumbs: [pal.crumb, pal.wallStrata[0], pal.stone, pal.clod].map(hex => getRGB(k, hex)),
       darkness: getRGB(k, pal.darkness)
     },
-    berryColors: glowEyeBerryColors(k)
+    berryColors: forestEyeBerryColors(k)
   }
   const rng = createSeededRandom(cfg.seed)
   buildSpine(inst, rng)
@@ -539,8 +539,8 @@ function clamp01(v) {
 function bakeTunnel(inst, rng) {
   const box = tunnelBox(inst)
   const canvas = toCanvas({ width: box.w, height: box.h }, ctx => paintTunnel(inst, ctx, rng, box))
-  applyGlowFilmGrainToCanvas(canvas, inst.seed)
-  const name = `glow-root-tunnel-${inst.seed}`
+  applyForestFilmGrainToCanvas(canvas, inst.seed)
+  const name = `forest-root-tunnel-${inst.seed}`
   inst.k.loadSprite(name, canvas)
   return { name, ox: box.x1, oy: box.y1, w: box.w, h: box.h }
 }
@@ -957,8 +957,8 @@ function bakeDeepEarth(inst, rng) {
   if (h <= 0) return false
   const box = { x1, y1, x2: x1 + w, y2: y1 + h, w, h }
   const canvas = toCanvas({ width: w, height: h }, ctx => paintDeepEarth(inst, ctx, rng, box))
-  applyGlowFilmGrainToCanvas(canvas, DEEP_GRAIN_SEED + inst.seed)
-  const name = `glow-root-tunnel-deep-${inst.seed}`
+  applyForestFilmGrainToCanvas(canvas, DEEP_GRAIN_SEED + inst.seed)
+  const name = `forest-root-tunnel-deep-${inst.seed}`
   k.loadSprite(name, canvas)
   return { name, ox: x1, oy: y1, w, h }
 }

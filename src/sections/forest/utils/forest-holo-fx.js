@@ -1,4 +1,4 @@
-import { glowRgb } from './glow-palette.js'
+import { forestRgb } from './forest-palette.js'
 //
 // Rising sparks: spawn rate, speed, life and the share of brighter 2px ones.
 //
@@ -74,7 +74,7 @@ export function drawSparks(k, sparks, x, y, op, tones) {
  * @returns {Object} Kaplay color
  */
 export function paletteColor(k, hex) {
-  const c = glowRgb(hex)
+  const c = forestRgb(hex)
   return k.rgb(c.r, c.g, c.b)
 }
 
@@ -85,6 +85,6 @@ export function paletteColor(k, hex) {
  * @returns {string}
  */
 export function cssColor(hex, alpha) {
-  const c = glowRgb(hex)
+  const c = forestRgb(hex)
   return `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`
 }

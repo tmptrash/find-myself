@@ -1,13 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
-import { GLOW_SUN_LIT_FRAC, GLOW_SUN_LIT_OFFSET_X, GLOW_SUN_LIT_OFFSET_Y } from './glow-eye-berry.js'
-import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
-import { GLOW_LAYER_GRADE, applyGlowLayerGradeToCanvas } from './glow-parallax-grain.js'
-import { glowFilmGrainBlockPxForTier } from './glow-pixel-density.js'
-import { TREE_SEED, collectGlowTreeClusterLeaves, paintGlowTreeClusterLeaves, paintGlowTreeFoliageMask } from './glow-tree.js'
+import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y } from './forest-eye-berry.js'
+import { FOREST_PAL, getTreePaletteColor, forestRgb } from './forest-palette.js'
+import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-parallax-grain.js'
+import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
+import { TREE_SEED, collectForestTreeClusterLeaves, paintForestTreeClusterLeaves, paintForestTreeFoliageMask } from './forest-tree.js'
 
 //
-// Decorative canopy fruit on the main glow tree (game palette only).
+// Decorative canopy fruit on the main forest tree (game palette only).
 //
 const FRUIT_SEED_OFFSET = 8803
 const FRUIT_RANDOM_COUNT = 7
@@ -55,7 +55,7 @@ const FRUIT_COVER_SIDE_MIN = 0.7
 const FRUIT_COVER_CHORD_SCALE = 1.75
 const FRUIT_COVER_LEAF_REACH = 0.25
 const FRUIT_COVER_LEAF_CENTROID = 0.45
-const FRUIT_COVER_SPRITE = 'glow-tree-fruit-cover'
+const FRUIT_COVER_SPRITE = 'forest-tree-fruit-cover'
 const FRUIT_COVER_GRAIN_SEED = 6011
 const FRUIT_COVER_BAKE_PAD = 2
 //
@@ -101,11 +101,11 @@ const FRUIT_CLUSTER_MIN_NEIGHBOR_AVG = 1.5
 const FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN = 3
 //
 // Keep fallen fruit in front of the right trampoline cap so the centipede's
-// feast stays visible (same cap scale as glow level0 TRAMP_RADIUS).
+// feast stays visible (same cap scale as forest level0 TRAMP_RADIUS).
 //
-const GLOW_RIGHT_TRAMP_CAP_HALF = 38
-const GLOW_FRUIT_TRAMP_ROLL_CLEAR = 16
-const GLOW_FRUIT_TRAMP_HIDE_X_MAX = 148
+const FOREST_RIGHT_TRAMP_CAP_HALF = 38
+const FOREST_FRUIT_TRAMP_ROLL_CLEAR = 16
+const FOREST_FRUIT_TRAMP_HIDE_X_MAX = 148
 const FRUIT_MASK_ALPHA_MIN = 235
 const FRUIT_MASK_SOLID_GRID_STEP = 3
 const FRUIT_MASK_SOLID_GRID_RADIUS = 4
@@ -122,8 +122,8 @@ const FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP = 36
  * @param {number} cfg.trampClearHalf
  * @returns {number}
  */
-export function computeGlowAnchorFruitDropX(cfg) {
-  const { x1, x2 } = glowAnchorFruitGroundClearSpan(cfg)
+export function computeForestAnchorFruitDropX(cfg) {
+  const { x1, x2 } = forestAnchorFruitGroundClearSpan(cfg)
   return (x1 + x2) * 0.5
 }
 
@@ -137,7 +137,7 @@ export function computeGlowAnchorFruitDropX(cfg) {
  * @param {number} cfg.trampClearHalf
  * @returns {{ x1: number, x2: number }}
  */
-export function glowAnchorFruitGroundClearSpan(cfg) {
+export function forestAnchorFruitGroundClearSpan(cfg) {
   const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = cfg
   return {
     x1: trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD,
@@ -148,22 +148,22 @@ export function glowAnchorFruitGroundClearSpan(cfg) {
 /**
  * True when world X lies in the anchor-apple ground strip (no grass / ferns).
  * @param {number} x - World X
- * @param {Object} cfg - Same layout object as computeGlowAnchorFruitDropX
+ * @param {Object} cfg - Same layout object as computeForestAnchorFruitDropX
  * @returns {boolean}
  */
-export function isGlowAnchorFruitGroundX(x, cfg) {
-  const { x1, x2 } = glowAnchorFruitGroundClearSpan(cfg)
+export function isForestAnchorFruitGroundX(x, cfg) {
+  const { x1, x2 } = forestAnchorFruitGroundClearSpan(cfg)
   return x >= x1 && x <= x2
 }
 
 /**
  * Builds fruit attachment points (repeatable anchor on foliage + random canopy spots).
- * @param {Object} treeData - Output from buildGlowTree()
+ * @param {Object} treeData - Output from buildForestTree()
  * @param {Object} anchorDropCfg - Trunk/tramp layout for anchor cluster pick
  * @param {number} [anchorDropCfg.minHangY] - Topmost on-screen world Y; fruit above it is never placed
  * @returns {Array<Object>}
  */
-export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
+export function buildForestTreeFruitSpots(treeData, anchorDropCfg) {
   const rng = mulberry32(TREE_SEED + FRUIT_SEED_OFFSET)
   const hangable = collectHangableTreeFoliage(treeData, anchorDropCfg)
   if (!hangable.length) return []
@@ -181,7 +181,7 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
   // crown is still hung, so the colour-world tree is never bare.
   //
   const spots = anchor ? [anchor] : []
-  const leaves = collectGlowTreeClusterLeaves(treeData, getTreePaletteColor())
+  const leaves = collectForestTreeClusterLeaves(treeData, getTreePaletteColor())
   shuffleInPlace(tips, rng)
   tips.sort((a, b) => Number(b.isTip) - Number(a.isTip))
   for (const tip of tips) {
@@ -194,10 +194,10 @@ export function buildGlowTreeFruitSpots(treeData, anchorDropCfg) {
 
 /**
  * True while the single branch-knocked apple is still falling or on the ground.
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @returns {boolean}
  */
-export function hasGlowAnchorFruitDropInWorld(levelInst) {
+export function hasForestAnchorFruitDropInWorld(levelInst) {
   const spots = levelInst.treeFruitSpots
   if (!spots?.length) return false
   return spots.some(f => f.fromAnchorDrop && !f.removed)
@@ -206,11 +206,11 @@ export function hasGlowAnchorFruitDropInWorld(levelInst) {
 /**
  * Spawns the one falling anchor apple (start-branch knock). No second drop until
  * the centipede has eaten the current one.
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @returns {boolean} True when an apple was knocked loose
  */
-export function releaseGlowAnchorFruit(levelInst) {
-  if (hasGlowAnchorFruitDropInWorld(levelInst)) return false
+export function releaseForestAnchorFruit(levelInst) {
+  if (hasForestAnchorFruitDropInWorld(levelInst)) return false
   const fruit = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
   if (!fruit) return false
   levelInst.treeFruitSpots.push({
@@ -231,7 +231,7 @@ export function releaseGlowAnchorFruit(levelInst) {
 /**
  * Where the knocked apple still in the world lies (falling or waiting for the
  * centipede), null when there is none — saved level state.
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @param {number} floorY - Ground surface Y used while it is still falling
  * @returns {{x: number, floorY: number}|null}
  */
@@ -243,12 +243,12 @@ export function getFallenAnchorFruit(levelInst, floorY) {
 /**
  * Puts a saved knocked apple back on the ground at x, already settled, so
  * the centipede comes for it as before.
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @param {number} x - Ground X of the apple
  * @param {number} floorY - Ground surface Y
  */
 export function restoreFallenAnchorFruit(levelInst, x, floorY) {
-  if (hasGlowAnchorFruitDropInWorld(levelInst)) return
+  if (hasForestAnchorFruitDropInWorld(levelInst)) return
   const anchor = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
   if (!anchor) return
   levelInst.treeFruitSpots.push({
@@ -270,11 +270,11 @@ export function restoreFallenAnchorFruit(levelInst, x, floorY) {
 
 /**
  * Steps falling fruit physics.
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @param {number} dt - Frame delta
  * @param {number} floorY - Ground surface Y
  */
-export function tickGlowTreeFruits(levelInst, dt, floorY) {
+export function tickForestTreeFruits(levelInst, dt, floorY) {
   const spots = levelInst.treeFruitSpots
   if (!spots?.length || floorY == null) return
   const now = levelInst.k?.time?.() ?? 0
@@ -304,7 +304,7 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
   prune && (levelInst.treeFruitSpots = spots.filter(f => !f.removed))
   spots.forEach(fruit => {
     if (fruit.removed || fruit.attached || fruit.beingEaten) return
-    if (fruit.settled) nudgeGlowFruitClearOfRightTramp(levelInst, fruit)
+    if (fruit.settled) nudgeForestFruitClearOfRightTramp(levelInst, fruit)
   })
 }
 
@@ -313,15 +313,15 @@ export function tickGlowTreeFruits(levelInst, dt, floorY) {
  * front of deep fruit are baked once per scene run into one sprite drawn
  * over the fruit, so those apples read as hanging inside the crown.
  * @param {Object} k - Kaplay inst
- * @param {Object} levelInst - Glow level inst (needs treeFruitSpots)
+ * @param {Object} levelInst - Forest level inst (needs treeFruitSpots)
  */
-export function mountGlowTreeFruitLayer(k, levelInst) {
+export function mountForestTreeFruitLayer(k, levelInst) {
   levelInst.treeFruitCover = bakeFruitLeafCover(k, levelInst.treeFruitSpots ?? [])
   k.add([
     k.z(FRUIT_Z),
     {
       draw() {
-        drawGlowTreeFruits(levelInst)
+        drawForestTreeFruits(levelInst)
       }
     }
   ])
@@ -329,22 +329,22 @@ export function mountGlowTreeFruitLayer(k, levelInst) {
 
 /**
  * Draws fruits when the main tree is visible.
- * @param {Object} inst - Glow level inst
+ * @param {Object} inst - Forest level inst
  */
-export function drawGlowTreeFruits(inst) {
+export function drawForestTreeFruits(inst) {
   const spots = inst.treeFruitSpots
   if (!spots?.length) return
   const k = inst.k
-  const fruitPal = GLOW_PAL.glowTreeFruit
-  const bodyA = glowRgb(fruitPal.body)
-  const bodyB = glowRgb(fruitPal.light)
-  const shadeRgb = glowRgb(fruitPal.shade)
-  const contourRgb = glowRgb(fruitPal.contour)
-  const stem = glowRgb(GLOW_PAL.treeColor.root)
+  const fruitPal = FOREST_PAL.forestTreeFruit
+  const bodyA = forestRgb(fruitPal.body)
+  const bodyB = forestRgb(fruitPal.light)
+  const shadeRgb = forestRgb(fruitPal.shade)
+  const contourRgb = forestRgb(fruitPal.contour)
+  const stem = forestRgb(FOREST_PAL.treeColor.root)
   //
   // The tree copy of the anchor apple regrows only after the fallen one is eaten.
   //
-  const anchorDropInWorld = hasGlowAnchorFruitDropInWorld(inst)
+  const anchorDropInWorld = hasForestAnchorFruitDropInWorld(inst)
   spots.forEach(fruit => {
     if (fruit.removed) return
     if (fruit.feastDrawHidden) return
@@ -367,12 +367,12 @@ export function drawGlowTreeFruits(inst) {
     const contourCol = k.rgb(contourRgb.r, contourRgb.g, contourRgb.b)
     fruit.attached && drawFruitStem(k, fruit, stemCol, contourCol, op)
     drawFruitBody(k, fruit, col, shadeCol, contourCol, op)
-    const highlight = glowRgb(fruitPal.light)
+    const highlight = forestRgb(fruitPal.light)
     const bodyR = fruitDisplayRadius(fruit)
     bodyR > 2 && k.drawCircle({
       pos: k.vec2(
-        fruit.x + bodyR * GLOW_SUN_LIT_OFFSET_X - bodyR * 0.08,
-        fruit.y + bodyR * GLOW_SUN_LIT_OFFSET_Y - bodyR * 0.1
+        fruit.x + bodyR * FOREST_SUN_LIT_OFFSET_X - bodyR * 0.08,
+        fruit.y + bodyR * FOREST_SUN_LIT_OFFSET_Y - bodyR * 0.1
       ),
       radius: bodyR * 0.18,
       color: k.rgb(highlight.r, highlight.g, highlight.b),
@@ -387,16 +387,16 @@ export function drawGlowTreeFruits(inst) {
  * @param {Object} fruit - Tree fruit spot
  * @returns {number}
  */
-export function getGlowFruitDisplayRadius(fruit) {
+export function getForestFruitDisplayRadius(fruit) {
   const progress = fruit.eatProgress ?? 0
   return fruit.r * (1 - progress * 0.94)
 }
 //
 // Keeps a fallen fruit's bottom on the ground as bites shrink its radius.
 //
-export function keepGlowFruitRestingOnFloor(fruit) {
+export function keepForestFruitRestingOnFloor(fruit) {
   if (!fruit || fruit.attached || fruit.removed) return
-  const r = getGlowFruitDisplayRadius(fruit)
+  const r = getForestFruitDisplayRadius(fruit)
   if (fruit._restFloorY == null) {
     fruit._restFloorY = fruit.y + r + FRUIT_FALL_GROUND_PAD
   }
@@ -404,7 +404,7 @@ export function keepGlowFruitRestingOnFloor(fruit) {
 }
 
 function fruitDisplayRadius(fruit) {
-  return getGlowFruitDisplayRadius(fruit)
+  return getForestFruitDisplayRadius(fruit)
 }
 
 function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
@@ -415,9 +415,9 @@ function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
   if (eaten) {
     const pts = buildRaggedFruitPolygon(k, fruit.x, fruit.y, r, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
     pts.length >= 3 && k.drawPolygon({ pts, color: shadeCol, opacity: op })
-    const litX = fruit.x + r * GLOW_SUN_LIT_OFFSET_X
-    const litY = fruit.y + r * GLOW_SUN_LIT_OFFSET_Y
-    const litPts = buildRaggedFruitPolygon(k, litX, litY, r * GLOW_SUN_LIT_FRAC, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
+    const litX = fruit.x + r * FOREST_SUN_LIT_OFFSET_X
+    const litY = fruit.y + r * FOREST_SUN_LIT_OFFSET_Y
+    const litPts = buildRaggedFruitPolygon(k, litX, litY, r * FOREST_SUN_LIT_FRAC, fruit.biteMarks ?? [], fruit.biteSeed ?? 0)
     litPts.length >= 3 && k.drawPolygon({ pts: litPts, color: col, opacity: op })
     return
   }
@@ -434,8 +434,8 @@ function drawFruitBody(k, fruit, col, shadeCol, contourCol, op) {
     opacity: op
   })
   k.drawCircle({
-    pos: k.vec2(fruit.x + r * GLOW_SUN_LIT_OFFSET_X, fruit.y + r * GLOW_SUN_LIT_OFFSET_Y),
-    radius: r * GLOW_SUN_LIT_FRAC,
+    pos: k.vec2(fruit.x + r * FOREST_SUN_LIT_OFFSET_X, fruit.y + r * FOREST_SUN_LIT_OFFSET_Y),
+    radius: r * FOREST_SUN_LIT_FRAC,
     color: col,
     opacity: op
   })
@@ -608,7 +608,7 @@ function pickBestAnchorPos(items, anchorDropCfg, horiz) {
   const { trunkX, trunkHalf, branchTrampX: trampX, trampClearHalf } = anchorDropCfg
   const gapLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD + FRUIT_ANCHOR_R
   const gapRight = trampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD - FRUIT_ANCHOR_R
-  const dropX = computeGlowAnchorFruitDropX(anchorDropCfg)
+  const dropX = computeForestAnchorFruitDropX(anchorDropCfg)
   const ceilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
   const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : 0
   let best = null
@@ -700,10 +700,10 @@ function bakeFruitLeafCover(k, spots) {
   canvas.height = Math.ceil(y2 - oy) + FRUIT_COVER_BAKE_PAD
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.translate(-ox, -oy)
-  paintGlowTreeClusterLeaves(ctx, leaves, getTreePaletteColor().leafOpacity ?? 1)
-  applyGlowLayerGradeToCanvas(canvas, {
-    ...GLOW_LAYER_GRADE.material,
-    grainBlockSize: glowFilmGrainBlockPxForTier('gameplay')
+  paintForestTreeClusterLeaves(ctx, leaves, getTreePaletteColor().leafOpacity ?? 1)
+  applyForestLayerGradeToCanvas(canvas, {
+    ...FOREST_LAYER_GRADE.material,
+    grainBlockSize: forestFilmGrainBlockPxForTier('gameplay')
   }, FRUIT_COVER_GRAIN_SEED)
   k.loadSprite(FRUIT_COVER_SPRITE, canvas)
   return { x: ox, y: oy }
@@ -836,7 +836,7 @@ function buildFoliageMask(treeData, cellPx) {
   canvas.height = h
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.translate(-bounds.x1, -bounds.y1)
-  paintGlowTreeFoliageMask(ctx, treeData, cellPx)
+  paintForestTreeFoliageMask(ctx, treeData, cellPx)
   const data = ctx.getImageData(0, 0, w, h).data
   canvas.width = 0
   canvas.height = 0
@@ -864,8 +864,8 @@ function foliageBounds(treeData, cellPx) {
   //
   bounds.x1 = Math.max(0, Math.floor(bounds.x1))
   bounds.y1 = Math.max(0, Math.floor(bounds.y1))
-  bounds.x2 = Math.min(CFG.visual.glow.worldWidth, bounds.x2)
-  bounds.y2 = Math.min(CFG.visual.glow.worldHeight, bounds.y2)
+  bounds.x2 = Math.min(CFG.visual.forest.worldWidth, bounds.x2)
+  bounds.y2 = Math.min(CFG.visual.forest.worldHeight, bounds.y2)
   return bounds
 }
 function clusterHasLeafVolume(cells) {
@@ -931,7 +931,7 @@ function distancePointToSegment(px, py, x1, y1, x2, y2) {
 function makeFruitLeafPair(seed, fruitR, rng, hue) {
   const r = mulberry32(seed >>> 0)
   const jitter = () => (rng ? rng() : r())
-  const shadeCount = (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).length
+  const shadeCount = (FOREST_PAL.treeColor.leafShades || [FOREST_PAL.treeColor.leaf]).length
   const hueSkew = (hue ?? 0.5) * 0.55
   const angleA = -0.38 - hueSkew - jitter() * 0.35
   const angleB = 0.22 + hueSkew * 0.85 + jitter() * 0.4
@@ -956,9 +956,9 @@ function makeFruitLeafPair(seed, fruitR, rng, hue) {
 }
 
 function leafRgbFromShadeIdx(shadeIdx) {
-  const shades = GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]
+  const shades = FOREST_PAL.treeColor.leafShades || [FOREST_PAL.treeColor.leaf]
   const i = ((shadeIdx ?? 0) % shades.length + shades.length) % shades.length
-  return glowRgb(shades[i])
+  return forestRgb(shades[i])
 }
 
 function stepFallingFruit(fruit, dt, floorY, levelInst) {
@@ -973,7 +973,7 @@ function stepFallingFruit(fruit, dt, floorY, levelInst) {
       fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD
       fruit.fromAnchorDrop && !fruit._anchorFallSoundPlayed &&
         levelInst?.sound &&
-        (fruit._anchorFallSoundPlayed = true, Sound.playGlowAppleSoftFall(levelInst.sound))
+        (fruit._anchorFallSoundPlayed = true, Sound.playForestAppleSoftFall(levelInst.sound))
       const nextVy = applyFruitGroundImpact(fruit, fruit.vy)
       fruit.vy = nextVy
       fruit.airborne = nextVy !== 0
@@ -988,20 +988,20 @@ function stepFallingFruit(fruit, dt, floorY, levelInst) {
   if (Math.abs(fruit.vx) < FRUIT_SETTLE_VX) {
     fruit.vx = 0
     fruit.settled = true
-    levelInst && nudgeGlowFruitClearOfRightTramp(levelInst, fruit)
+    levelInst && nudgeForestFruitClearOfRightTramp(levelInst, fruit)
   }
 }
 
-function nudgeGlowFruitClearOfRightTramp(levelInst, fruit) {
+function nudgeForestFruitClearOfRightTramp(levelInst, fruit) {
   const trampX = levelInst.trampState?.x
   if (trampX == null) return
-  const r = getGlowFruitDisplayRadius(fruit)
-  const capHalf = GLOW_RIGHT_TRAMP_CAP_HALF
+  const r = getForestFruitDisplayRadius(fruit)
+  const capHalf = FOREST_RIGHT_TRAMP_CAP_HALF
   const blockMin = trampX - capHalf - r - 10
-  const blockMax = trampX + GLOW_FRUIT_TRAMP_HIDE_X_MAX
+  const blockMax = trampX + FOREST_FRUIT_TRAMP_HIDE_X_MAX
   if (fruit.x < blockMin || fruit.x > blockMax) return
   const lakeX1 = levelInst.lakeX1 ?? 0
-  fruit.x = Math.max(lakeX1 + 52, trampX - capHalf - r - GLOW_FRUIT_TRAMP_ROLL_CLEAR)
+  fruit.x = Math.max(lakeX1 + 52, trampX - capHalf - r - FOREST_FRUIT_TRAMP_ROLL_CLEAR)
   fruit.vx = -Math.max(Math.abs(fruit.vx ?? 0), FRUIT_LAND_ROLL_SPEED * 0.65)
   fruit.rollDir = -1
   fruit.settled = false

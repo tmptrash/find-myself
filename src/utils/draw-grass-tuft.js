@@ -1,4 +1,4 @@
-import { paintForestContactShadow } from '../sections/glow/utils/glow-forest-atmosphere.js'
+import { paintForestContactShadow } from '../sections/forest/utils/forest-atmosphere.js'
 //
 // Canvas2D grass tuft: a handful of curved tapered blades, some dry straw.
 // For baked decor; the live swaying field stays in components/grass.js.

@@ -1,5 +1,5 @@
 //
-// Glow level camera — scrolls a 3000×1080 world horizontally through a fixed
+// Forest level camera — scrolls a 3000×1080 world horizontally through a fixed
 // viewport window (playfield between the HUD bar and the bottom screen margin).
 //
 // Kaplay uses a *center-anchored* camera: cam.pos is the world point drawn at
@@ -9,7 +9,7 @@
 //
 
 /**
- * Creates the glow camera controller.
+ * Creates the forest camera controller.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.viewW - Visible world width through the playfield window

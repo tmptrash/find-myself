@@ -2,15 +2,15 @@ import { drawFernToCanvas, fernBounds } from '../../../utils/draw-fern.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestFloorPainterColors } from '../components/forest-floor.js'
-import { addLiddedEyeBerry, addTaperedPass } from './glow-eye-berry.js'
-import { GLOW_PAL, glowRgb } from './glow-palette.js'
+import { addLiddedEyeBerry, addTaperedPass } from './forest-eye-berry.js'
+import { FOREST_PAL, forestRgb } from './forest-palette.js'
 import {
   colorKey,
   cssRgb,
   drawStaticDecorSprite,
   ensureStaticDecorSprite,
   isWorldSpanInView
-} from './glow-static-bake.js'
+} from './forest-static-bake.js'
 //
 // Segmented stalk-eye creatures in the island eye-flower's look: a red,
 // contoured stalk with a lit line and short side stems, topped by a white
@@ -178,7 +178,7 @@ export function triggerBuoyLandBlink(buoy) {
  * Draws every chain-buoy stalk-eye — stalk contours, stalk fills, lit
  * lines, then eyes.
  * @param {Object} inst - Chain-buoy inst
- * @param {Object} colors - glowEyeBerryColors()
+ * @param {Object} colors - forestEyeBerryColors()
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
 export function onDraw(inst, colors, view = null) {
@@ -249,11 +249,11 @@ function drawBuoyUndergroundStem(k, buoy) {
     buoy.x * BUOY_UNDERGROUND_GRAIN_SEED), BUOY_UNDERGROUND_OPACITY)
 }
 function buoyUndergroundStemColors() {
-  const pal = GLOW_PAL.glowEyeFlower
+  const pal = FOREST_PAL.forestEyeFlower
   return {
-    contour: glowRgb(pal.undergroundStemContour),
-    stem: glowRgb(pal.undergroundStem),
-    stemLight: glowRgb(pal.undergroundStemLight)
+    contour: forestRgb(pal.undergroundStemContour),
+    stem: forestRgb(pal.undergroundStem),
+    stemLight: forestRgb(pal.undergroundStemLight)
   }
 }
 function buoyUndergroundStemBounds(pts, segmentWidth) {
@@ -380,8 +380,8 @@ function paintBuoyBaseGreeneryFront(ctx, buoy, colors) {
   g.leavesFront.forEach(leaf => drawBuoyBaseLeafToCanvas(ctx, leaf.pts, leaf.w, colors.leaf))
 }
 function buoyGreeneryPainterColors() {
-  const pal = GLOW_PAL.glowEyeFlower
-  const toCss = hex => cssRgb(glowRgb(hex))
+  const pal = FOREST_PAL.forestEyeFlower
+  const toCss = hex => cssRgb(forestRgb(hex))
   return {
     fern: forestFloorPainterColors().fern,
     leaf: {

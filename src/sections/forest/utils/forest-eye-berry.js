@@ -1,6 +1,6 @@
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { getRGB } from '../../../utils/helper.js'
-import { GLOW_PAL } from './glow-palette.js'
+import { FOREST_PAL } from './forest-palette.js'
 //
 // Shared look of the island eye-flower and the stalk-eyes on the right:
 // white eye-berries with a shaded underside and a dark pupil on red,
@@ -10,9 +10,9 @@ import { GLOW_PAL } from './glow-palette.js'
 // Sun from the upper-left — shaded disc at centre, lit face up-left (berries,
 // loader eye, canopy apples).
 //
-export const GLOW_SUN_LIT_OFFSET_X = -0.14
-export const GLOW_SUN_LIT_OFFSET_Y = -0.22
-export const GLOW_SUN_LIT_FRAC = 0.86
+export const FOREST_SUN_LIT_OFFSET_X = -0.14
+export const FOREST_SUN_LIT_OFFSET_Y = -0.22
+export const FOREST_SUN_LIT_FRAC = 0.86
 //
 // Blink lid (same shape as the boot loader eye): arc bulge as a fraction of
 // the berry radius, overhang past the ring, strip column count.
@@ -30,10 +30,10 @@ const colorCache = new WeakMap()
  * @param {Object} k - Kaplay inst
  * @returns {{ contour: Object, berry: Object, berryShade: Object, pupil: Object, stem: Object, stemLight: Object }}
  */
-export function glowEyeBerryColors(k) {
+export function forestEyeBerryColors(k) {
   let colors = colorCache.get(k)
   if (colors) return colors
-  const pal = GLOW_PAL.glowEyeFlower
+  const pal = FOREST_PAL.forestEyeFlower
   colors = Object.fromEntries(COLOR_KEYS.map(key => [key, getRGB(k, pal[key])]))
   colorCache.set(k, colors)
   return colors
@@ -48,7 +48,7 @@ export function glowEyeBerryColors(k) {
  * @param {number} pupilX - Pupil centre X
  * @param {number} pupilY - Pupil centre Y
  * @param {number} pupilR - Pupil radius
- * @param {Object} colors - From glowEyeBerryColors()
+ * @param {Object} colors - From forestEyeBerryColors()
  * @param {number} contourW - Contour ring width
  */
 export function addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW) {
@@ -67,7 +67,7 @@ export function addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, cont
  * @param {number} pupilX - Pupil centre X
  * @param {number} pupilY - Pupil centre Y
  * @param {number} pupilR - Pupil radius
- * @param {Object} colors - From glowEyeBerryColors()
+ * @param {Object} colors - From forestEyeBerryColors()
  * @param {number} contourW - Contour ring width
  * @param {number} close - 0 open … 1 fully shut
  */
@@ -132,9 +132,9 @@ function addBerryBall(batch, x, y, r, colors, contourW) {
   PolyBatch.addDisc(batch, x, y, r, colors.berryShade)
   PolyBatch.addDisc(
     batch,
-    x + r * GLOW_SUN_LIT_OFFSET_X,
-    y + r * GLOW_SUN_LIT_OFFSET_Y,
-    r * GLOW_SUN_LIT_FRAC,
+    x + r * FOREST_SUN_LIT_OFFSET_X,
+    y + r * FOREST_SUN_LIT_OFFSET_Y,
+    r * FOREST_SUN_LIT_FRAC,
     colors.berry
   )
 }

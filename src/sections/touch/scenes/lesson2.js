@@ -4323,7 +4323,7 @@ function playTouch2LetterDialogMusic(quest, soundName) {
   quest.letterDialogMusic = Sound.playInScene(
     quest.k,
     soundName,
-    GLOBAL_CFG.audio.backgroundMusic.glowLetterDialog
+    GLOBAL_CFG.audio.backgroundMusic.forestLetterDialog
   )
 }
 //

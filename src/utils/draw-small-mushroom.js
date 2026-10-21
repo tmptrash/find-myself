@@ -1,4 +1,4 @@
-import { paintForestContactShadow } from '../sections/glow/utils/glow-forest-atmosphere.js'
+import { paintForestContactShadow } from '../sections/forest/utils/forest-atmosphere.js'
 //
 // Canvas2D small forest mushrooms: slender cream mushrooms in little groups
 // and a single red spotted cap. Distinct from draw-mushroom.js (the chunky

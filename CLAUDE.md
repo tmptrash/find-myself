@@ -129,9 +129,9 @@ export const cfg = {
 
 ### Fixed palette (96 swatches)
 - **Every colour in the game must come from the fixed 96-swatch game palette** — no ad-hoc RGB, no colours outside the set
-- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families). It is sampled from the Glow forest reference art: muted teal/green forest, warm brown earth, cream highlights, gold light, soft red/orange accents
+- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families). It is sampled from the forest level reference art: muted teal/green forest, warm brown earth, cream highlights, gold light, soft red/orange accents
 - Semantic aliases in `CFG.visual.colors.palette` must reference `PALETTE.*` keys only — never raw hex literals
-- Brightness / fade may use opacity on a palette colour; do not invent new hex values by lerping unless the result is snapped back to the nearest palette swatch (see `snapToPalette()` in `glow-palette.js`)
+- Brightness / fade may use opacity on a palette colour; do not invent new hex values by lerping unless the result is snapped back to the nearest palette swatch (see `snapToPalette()` in `forest-palette.js`)
 - New colours: pick the closest existing swatch or add a named alias in `cfg.js` that points at an existing `PALETTE` entry — do not add colours that are not in `PALETTE`
 
 ### Color Configuration Rules
@@ -458,7 +458,7 @@ function onAnnihilationCollide(inst) {
 
 ## 10. File Structure
 
-Sections currently in the game: `feel`, `glow`, `memory`, `stress`, `time`, `touch`, `word`. Each follows the same internal layout shown below for `word/`.
+Sections currently in the game: `feel`, `forest`, `memory`, `stress`, `time`, `touch`, `word`. Each follows the same internal layout shown below for `word/`.
 
 ```
 src/
@@ -485,7 +485,7 @@ src/
 │   │   │   └── word-complete.js      # Section completion scene
 │   │   └── utils/                    # Word section utilities
 │   │       └── scene.js              # Level initialization helper
-│   ├── touch/, time/, glow/,
+│   ├── touch/, time/, forest/,
 │   │   feel/, stress/, memory/       # Same components/scenes/utils layout
 └── utils/                            # Global utility functions
     ├── helper.js                     # Color helpers, key checks
@@ -617,9 +617,9 @@ for (const particle of particles) {
 
 ### Frame time
 
-A 120 Hz display has an 8.3 ms budget. Settled Glow frames spend about 1–2 ms in JS and still missed the budget, because the main thread was waiting on the GPU. When a level drops below the refresh rate, measure `requestAnimationFrame` deltas (p50 / p95), not only the FPS HUD average. If skipping draws restores full refresh rate and adding a few milliseconds of JS does not, the cliff is a GPU sync — do not chase draw-call micro-optimisations until that sync is gone.
+A 120 Hz display has an 8.3 ms budget. Settled Forest frames spend about 1–2 ms in JS and still missed the budget, because the main thread was waiting on the GPU. When a level drops below the refresh rate, measure `requestAnimationFrame` deltas (p50 / p95), not only the FPS HUD average. If skipping draws restores full refresh rate and adding a few milliseconds of JS does not, the cliff is a GPU sync — do not chase draw-call micro-optimisations until that sync is gone.
 
-Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (postinstall). The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Glow it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
+Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (postinstall). The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Forest it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
 
 ### Fill, pixel reads, and per-frame queries
 
@@ -638,14 +638,14 @@ Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (po
 ## 14. Pixel-Perfect Native-Resolution Levels
 
 ### Why this exists
-Every scene except Glow and touch lesson 0 runs on a **fixed 1920x1080 virtual canvas** that Kaplay
+Every scene except Forest and touch lesson 0 runs on a **fixed 1920x1080 virtual canvas** that Kaplay
 letterboxes (stretches via CSS) to fit the real window. That stretch is smooth/
 anti-aliased, so on any window size where the stretch factor isn't a clean
 integer (almost every real monitor), hairline art — most noticeably the hero's
 1px black outline — blends into its background and flickers depending on which
 side of a source pixel the scaled edge lands on.
 
-The Glow level (`src/sections/glow/scenes/level0.js`) and touch lesson 0
+The Forest level (`src/sections/forest/scenes/level0.js`) and touch lesson 0
 (`src/sections/touch/scenes/lesson0.js`) instead boot their own
 Kaplay instance in **native resolution**: the canvas (and every
 `k.width()`/`k.height()` read afterwards) matches the real window size 1:1,
@@ -675,7 +675,7 @@ for any future level that needs the same pixel-perfect rendering.
 ### Rules for writing a native-resolution level
 - Register the scene's name prefix in `resolutionModeForScene()`
   (`engine-switch.js`) so the engine swap happens automatically on entry
-  (Glow: `lesson-glow`, touch lesson 0: `lesson-touch.0`).
+  (Forest: `lesson-forest`, touch lesson 0: `lesson-touch.0`).
 - Never hardcode `CFG.visual.screen.width/height` for layout in a
   native-resolution scene — the real window size is unknown until the scene
   actually starts. Instead:
@@ -684,9 +684,9 @@ for any future level that needs the same pixel-perfect rendering.
   - Add one `recomputeLayout(k)` function that reassigns all of them from
     `k.width()`/`k.height()`, and call it as the **first line** inside the
     scene's `k.scene(name, () => { ... })` callback, before anything else
-    reads those constants. See `recomputeGlowScreenLayout()` in `level0.js`.
+    reads those constants. See `recomputeForestScreenLayout()` in `level0.js`.
 - Stop any level-specific looping audio (ambient music, rain, etc.) via a
-  registered teardown callback (see `registerGlowNativeTeardown()`), not only
+  registered teardown callback (see `registerForestNativeTeardown()`), not only
   via `k.onSceneLeave()` — leaving the native engine for a resolution swap
   destroys the Kaplay instance directly and `onSceneLeave` never fires.
 - Re-bake any module-level "generate once" sprite (canvas-baked backgrounds,
@@ -700,25 +700,25 @@ for any future level that needs the same pixel-perfect rendering.
 
 ## 15. Film Grain (baked sprites)
 
-Every canvas-baked sprite or texture in the game must carry the same film-grain look used in the glow section — never ship a flat, grain-free bake when the surrounding art is grained.
+Every canvas-baked sprite or texture in the game must carry the same film-grain look used in the forest section — never ship a flat, grain-free bake when the surrounding art is grained.
 
 ### Bake-time grain (preferred)
 
-- Import `applyGlowFilmGrainToCanvas` from `src/sections/glow/utils/glow-parallax-grain.js`.
+- Import `applyForestFilmGrainToCanvas` from `src/sections/forest/utils/forest-parallax-grain.js`.
 - Run it **once per baked canvas** before `k.loadSprite()` — either call it directly after drawing, or pass it as `postBakeCanvas` / `heroPostBakeCanvas` / `hudPostBakeCanvas` so `commitHeroBakedSprite` applies it automatically.
 - Use a **unique `seedOffset` per sprite** (name hash, index, world position) so grain tiles do not align across instances.
-- Constants live in `GLOW_FILM_GRAIN` in the same module; caption-sized text may use `applyGlowCaptionGrainToCanvas` / `GLOW_CAPTION_FILM_GRAIN`.
+- Constants live in `FOREST_FILM_GRAIN` in the same module; caption-sized text may use `applyGlowCaptionGrainToCanvas` / `GLOW_CAPTION_FILM_GRAIN`.
 
 ### Scene overlay grain
 
-- For full-screen grain on top of live rendering (menu, ready, glow HUD), use `addGlowFilmGrainOverlayLayer(k, zIndex)` from the same module.
+- For full-screen grain on top of live rendering (menu, ready, forest HUD), use `addForestFilmGrainOverlayLayer(k, zIndex)` from the same module.
 
 ### Rules
 
-- Do not add a second, ad-hoc noise pass — reuse `applyGlowFilmGrainToCanvas` or the overlay layer.
+- Do not add a second, ad-hoc noise pass — reuse `applyForestFilmGrainToCanvas` or the overlay layer.
 - Do not re-run grain or contrast on a canvas that is rebuilt every frame or every second (HUD counters). Grade a glyph atlas once per live `k`, then compose labels with `drawImage`.
 - Procedural / Kaplay primitive draws that are not baked must still sit under the scene overlay when the scene uses one.
-- Hero and decor: only **body color**, **outline color**, and glow-specific eye bake flags may differ between sections; silhouette bake (`outlineRimPx`, hip shelves, run lean) stays shared via `hero.js` — do not fork drawing logic per section.
+- Hero and decor: only **body color**, **outline color**, and forest-specific eye bake flags may differ between sections; silhouette bake (`outlineRimPx`, hip shelves, run lean) stays shared via `hero.js` — do not fork drawing logic per section.
 
 ---
 

@@ -3,7 +3,7 @@ import { getRGB, parseHex } from './helper.js'
 import * as Sound from './sound.js'
 
 //
-// Default landing / run-start dust used by platformer sections (not glow).
+// Default landing / run-start dust used by platformer sections (not forest).
 //
 const DUST_PARTICLE_COUNT = 8
 const DUST_PARTICLE_SIZE = 4

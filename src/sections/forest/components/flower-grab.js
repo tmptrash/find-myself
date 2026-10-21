@@ -4,11 +4,11 @@ import * as Sound from '../../../utils/sound.js'
 import { getRGB } from '../../../utils/helper.js'
 import * as EyeFlower from './eye-flower.js'
 import * as RootTunnel from './root-tunnel.js'
-import * as GlowCamera from '../utils/glow-camera.js'
-import * as GlowFootParticles from '../utils/glow-foot-particles.js'
-import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
+import * as ForestCamera from '../utils/forest-camera.js'
+import * as ForestFootParticles from '../utils/forest-foot-particles.js'
+import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 //
-// Scripted end of the glow level: the hero lands on the lake island, the
+// Scripted end of the forest level: the hero lands on the lake island, the
 // eye-flower notices him, whips its tentacles around him, hoists him up,
 // hesitates, then yanks him into a crack its roots tear open in the island.
 // The roots drag him down the fresh tunnel, the camera follows a little,
@@ -134,15 +134,15 @@ const FADE_Z = CFG.visual.zIndex.ui * 20
  * @param {Object} cfg.flower - Eye-flower inst
  * @param {Object} cfg.heroInst - Hero inst
  * @param {number} cfg.earthBottomY - World Y where the playfield earth band ends
- * @param {Object} [cfg.footParticles] - Glow foot-particle pool (earth bursts)
- * @param {Object} [cfg.camera] - Glow camera inst (impact shake, view height)
+ * @param {Object} [cfg.footParticles] - Forest foot-particle pool (earth bursts)
+ * @param {Object} [cfg.camera] - Forest camera inst (impact shake, view height)
  * @param {Object} [cfg.sound] - Sound inst
  * @param {function(Object): void} cfg.onFinished - Called once with k after the fade-out
  * @returns {Object} Flower-grab inst
  */
 export function create(cfg) {
   const { k } = cfg
-  const pal = GLOW_PAL.glowEyeFlower
+  const pal = FOREST_PAL.forestEyeFlower
   const inst = {
     k,
     flower: cfg.flower,
@@ -181,10 +181,10 @@ export function create(cfg) {
     holeOpening: false,
     holeOpen: 0,
     fade: null,
-    soilColors: [pal.soil, pal.soilDark, pal.soilLight].map(glowRgb),
-    stoneColors: [pal.stone, pal.stoneLight, pal.stoneDark].map(glowRgb),
-    dustColor: glowRgb(pal.soilLight),
-    splashColor: glowRgb(pal.splash),
+    soilColors: [pal.soil, pal.soilDark, pal.soilLight].map(forestRgb),
+    stoneColors: [pal.stone, pal.stoneLight, pal.stoneDark].map(forestRgb),
+    dustColor: forestRgb(pal.soilLight),
+    splashColor: forestRgb(pal.splash),
     fadeColor: pal.fade
   }
   k.add([
@@ -327,7 +327,7 @@ function setBeat(inst, beat) {
       break
     case BEAT.SQUEEZE:
       inst.squash.vel += SQUEEZE_KICK
-      inst.camera && GlowCamera.triggerShake(inst.camera, SQUEEZE_SHAKE, SQUEEZE_SHAKE_SEC)
+      inst.camera && ForestCamera.triggerShake(inst.camera, SQUEEZE_SHAKE, SQUEEZE_SHAKE_SEC)
       inst.sound && Sound.playFlowerSqueeze(inst.sound)
       break
     case BEAT.LIFT:
@@ -459,8 +459,8 @@ function burstEarth(inst) {
   const particles = inst.footParticles
   burstSoil(inst, inst.holeX, SOIL_BURST, inst.soilColors)
   burstSoil(inst, inst.holeX, STONE_BURST, inst.stoneColors)
-  particles && GlowFootParticles.spawnLanding(particles, inst.holeX, inst.groundY, inst.dustColor, BURST_DUST_MULT)
-  inst.camera && GlowCamera.triggerShake(inst.camera, IMPACT_SHAKE, IMPACT_SHAKE_SEC)
+  particles && ForestFootParticles.spawnLanding(particles, inst.holeX, inst.groundY, inst.dustColor, BURST_DUST_MULT)
+  inst.camera && ForestCamera.triggerShake(inst.camera, IMPACT_SHAKE, IMPACT_SHAKE_SEC)
   inst.sound && Sound.playFlowerEarthGulp(inst.sound)
 }
 
@@ -469,7 +469,7 @@ function burstEarth(inst) {
 // one comes down.
 //
 function burstSoil(inst, x, burst, colors) {
-  inst.footParticles && GlowFootParticles.spawnSoilBurst(inst.footParticles, {
+  inst.footParticles && ForestFootParticles.spawnSoilBurst(inst.footParticles, {
     x,
     groundY: inst.groundY,
     ...burst,

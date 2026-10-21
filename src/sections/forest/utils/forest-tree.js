@@ -1,14 +1,14 @@
 /**
- * Glow section — deterministic organic tree generator.
+ * Forest section — deterministic organic tree generator.
  * All randomness is seeded so the same seed always produces the same tree.
  * Change the seed constant exported below to get a different tree shape.
  *
- * The tree is rendered once to an HTMLCanvasElement via renderGlowTreeToCanvas()
+ * The tree is rendered once to an HTMLCanvasElement via renderForestTreeToCanvas()
  * and loaded as a Kaplay sprite so that per-frame drawing cost is zero.
  */
 
 import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
-import { getTreeBarkPalette } from './glow-palette.js'
+import { getTreeBarkPalette } from './forest-palette.js'
 //
 // Default seed — modify this value to reshape the entire tree.
 //
@@ -446,7 +446,7 @@ function createRng(seed) {
  *   main tree's sideways fractal canopy.
  * @returns {Object} { seed, trunkSegs, rootSegs, branchSegs, leaves, horizBranch }
  */
-export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, rootStartY, opts = {}) {
+export function buildForestTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, rootStartY, opts = {}) {
   const {
     includeRoots = true,
     includeHeroBranch = true,
@@ -562,9 +562,9 @@ const SHORE_ACCENT_SIDE_LEAF_R = 8
  * @param {number} cfg.branchAttachY - World Y where the branch leaves the trunk
  * @param {number} cfg.branchAngle - Branch angle (radians, 0 = horizontal to the right)
  * @param {number} cfg.branchLen - Branch length
- * @returns {Object} Tree data compatible with renderGlowTreeIntoContext()
+ * @returns {Object} Tree data compatible with renderForestTreeIntoContext()
  */
-export function buildGlowShoreAccentTree(cfg) {
+export function buildForestShoreAccentTree(cfg) {
   const { seed, trunkX, groundY, trunkH, branchAttachY, branchAngle, branchLen } = cfg
   const trunkTopY = groundY - trunkH
   const rng = createRng(seed)
@@ -645,10 +645,10 @@ export function buildGlowShoreAccentTree(cfg) {
  * Paints every foliage item of a tree in one opaque colour — a coverage mask
  * that matches the baked canopy pixel for pixel (same cluster cell size).
  * @param {CanvasRenderingContext2D} ctx - Target context (world coordinates)
- * @param {Object} treeData - Output of buildGlowTree()
+ * @param {Object} treeData - Output of buildForestTree()
  * @param {number} clusterCellPx - Foliage cluster cell size used by the bake palette
  */
-export function paintGlowTreeFoliageMask(ctx, treeData, clusterCellPx) {
+export function paintForestTreeFoliageMask(ctx, treeData, clusterCellPx) {
   const shades = [FOLIAGE_MASK_RGB, FOLIAGE_MASK_RGB, FOLIAGE_MASK_RGB]
   treeData.leaves.forEach(item => drawFoliageItemToCanvas(ctx, item, shades, null, 1, clusterCellPx))
 }
@@ -657,11 +657,11 @@ export function paintGlowTreeFoliageMask(ctx, treeData, clusterCellPx) {
  * Lists every cluster leaf of a tree exactly as the bake paints it (position,
  * size, angle, colour, draw order) — lets decor re-paint a few canopy leaves
  * in front of objects that hang inside the crown.
- * @param {Object} treeData - Output of buildGlowTree()
+ * @param {Object} treeData - Output of buildForestTree()
  * @param {Object} palette - Bake palette (leafShades, foliageClusterCellPx)
  * @returns {Array<{x: number, y: number, size: number, angle: number, rgb: Object}>}
  */
-export function collectGlowTreeClusterLeaves(treeData, palette) {
+export function collectForestTreeClusterLeaves(treeData, palette) {
   const leafShades = palette.leafShades ?? [{ r: palette.leafR, g: palette.leafG, b: palette.leafB }]
   const cell = palette.foliageClusterCellPx ?? FOLIAGE_CLUSTER_CELL_PX_DEFAULT
   const sprig = sprigLook(palette)
@@ -681,12 +681,12 @@ export function collectGlowTreeClusterLeaves(treeData, palette) {
 }
 
 /**
- * Paints leaves from collectGlowTreeClusterLeaves() with the bake's leaf shape.
+ * Paints leaves from collectForestTreeClusterLeaves() with the bake's leaf shape.
  * @param {CanvasRenderingContext2D} ctx - Target context (world coordinates)
  * @param {Array<Object>} leaves - Leaf descriptors
  * @param {number} [opacity=1] - Leaf opacity used by the tree bake
  */
-export function paintGlowTreeClusterLeaves(ctx, leaves, opacity = 1) {
+export function paintForestTreeClusterLeaves(ctx, leaves, opacity = 1) {
   leaves.forEach(l => l.sprig
     ? drawSprigLeafToCanvas(ctx, l.x, l.y, l.size, l.angle, l.leaflets, l.rgb, opacity)
     : drawLeafToCanvas(ctx, l.x, l.y, l.size, l.angle, l.rgb.r, l.rgb.g, l.rgb.b, opacity, null))
@@ -696,18 +696,18 @@ export function paintGlowTreeClusterLeaves(ctx, leaves, opacity = 1) {
  * Renders the complete tree to an HTMLCanvasElement using canvas2D.
  * The canvas is transparent except for the tree pixels.
  * Load the returned canvas with k.loadSprite() and display it as a full-screen sprite.
- * @param {Object} treeData - Output of buildGlowTree()
+ * @param {Object} treeData - Output of buildForestTree()
  * @param {Object} palette - Color palette (e.g. TREE_PALETTE_GRAY)
  * @param {number} w - Canvas width (should match screen width)
  * @param {number} h - Canvas height (should match screen height)
  * @returns {HTMLCanvasElement} Ready-to-load canvas
  */
-export function renderGlowTreeToCanvas(treeData, palette, w, h) {
+export function renderForestTreeToCanvas(treeData, palette, w, h) {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
-  renderGlowTreeIntoContext(ctx, treeData, palette, w, h)
+  renderForestTreeIntoContext(ctx, treeData, palette, w, h)
   return canvas
 }
 
@@ -715,12 +715,12 @@ export function renderGlowTreeToCanvas(treeData, palette, w, h) {
  * Renders the complete tree into an EXISTING canvas2D context — several trees
  * can share one layer canvas (used by the big background parallax trees).
  * @param {CanvasRenderingContext2D} ctx - Target context
- * @param {Object} treeData - Output of buildGlowTree()
+ * @param {Object} treeData - Output of buildForestTree()
  * @param {Object} palette - Color palette (e.g. getTreePaletteColor())
  * @param {number} w - Canvas width
  * @param {number} h - Canvas height
  */
-export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
+export function renderForestTreeIntoContext(ctx, treeData, palette, w, h) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   //
@@ -742,8 +742,8 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // Bark tones come from the palette per phase — gray phase stays grayscale.
   //
   const fallbackBark = getTreeBarkPalette()
-  const barkDark = palette.barkShades?.dark ?? glowHexToRgb(fallbackBark.dark)
-  const barkHighlight = palette.barkShades?.highlight ?? glowHexToRgb(fallbackBark.highlight)
+  const barkDark = palette.barkShades?.dark ?? forestHexToRgb(fallbackBark.dark)
+  const barkHighlight = palette.barkShades?.highlight ?? forestHexToRgb(fallbackBark.highlight)
   //
   // Roots — organic stroke network (same primitive as the ready/menu trees).
   // Width tapers with proximity to the ground surface so no root ever reads
@@ -910,7 +910,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
  * @param {number} clipY - Ground clip Y
  * @param {{ dark: Object, highlight: Object }} barkShades
  */
-export function paintGlowGameplayBarkOnTrunk(ctx, segs, seed, clipY, barkShades) {
+export function paintForestGameplayBarkOnTrunk(ctx, segs, seed, clipY, barkShades) {
   if (!segs?.length || !barkShades) return
   const dark = barkShades.dark
   const highlight = barkShades.highlight
@@ -2028,7 +2028,7 @@ function drawBranchCracks(ctx, segs, dark, seed, maxY) {
 //
 // Parses a hex string into RGB components for bark drawing.
 //
-function glowHexToRgb(hex) {
+function forestHexToRgb(hex) {
   const h = hex.replace('#', '')
   return {
     r: parseInt(h.slice(0, 2), 16),

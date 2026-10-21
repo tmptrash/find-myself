@@ -1,12 +1,12 @@
-import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
 //
 // Static vector decor (root fans, trunks, cave rocks) baked once into a
 // canvas sprite per live Kaplay instance and colour variant — the same
 // geometry redrawn as hundreds of immediate drawLine/drawPolygon calls every
-// frame was the single largest CPU cost of the glow level.
+// frame was the single largest CPU cost of the forest level.
 //
 const STATIC_BAKE_PAD = 2
-const STATIC_BAKE_SPRITE_PREFIX = 'glow-static-decor'
+const STATIC_BAKE_SPRITE_PREFIX = 'forest-static-decor'
 const spriteSerialByK = new WeakMap()
 
 /**
@@ -110,7 +110,7 @@ function bakeStaticDecor(k, bounds, paint, seedOffset) {
   const ctx = canvas.getContext('2d')
   ctx.translate(-x, -y)
   paint(ctx)
-  applyGlowFilmGrainToCanvas(canvas, seedOffset)
+  applyForestFilmGrainToCanvas(canvas, seedOffset)
   const serial = (spriteSerialByK.get(k) ?? 0) + 1
   spriteSerialByK.set(k, serial)
   const sprite = `${STATIC_BAKE_SPRITE_PREFIX}-${serial}`

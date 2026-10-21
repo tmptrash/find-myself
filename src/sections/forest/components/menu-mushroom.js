@@ -1,6 +1,6 @@
 import { toCanvas } from '../../../utils/helper.js'
-import { GLOW_PAL } from '../utils/glow-palette.js'
-import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
+import { FOREST_PAL } from '../utils/forest-palette.js'
+import { applyForestFilmGrainToCanvas } from '../utils/forest-parallax-grain.js'
 import {
   CUTE_MUSHROOM_ASPECT,
   TRAMP_FACE_EYE_SCALE,
@@ -8,8 +8,8 @@ import {
   drawCuteMushroomToCanvas
 } from '../utils/cute-mushroom.js'
 //
-// Glow section icon on the menu ring: the trampoline mushroom from
-// lesson-glow.0 (same painter, palette and blushy face) standing in for the
+// Forest section icon on the menu ring: the trampoline mushroom from
+// lesson-forest.0 (same painter, palette and blushy face) standing in for the
 // section anti-hero. Two baked variants cover open / closed eyes; pupils are
 // drawn live so they can watch the centre hero.
 //
@@ -18,15 +18,15 @@ const BAKE_PAD = 4
 const BAKE_BASE_INSET = 2
 const BAKE_W = MUSH_W + BAKE_PAD
 const BAKE_H = Math.ceil(MUSH_W * CUTE_MUSHROOM_ASPECT) + BAKE_PAD
-const SPRITE_OPEN = 'menu-glow-mushroom-v3'
-const SPRITE_BLINK = 'menu-glow-mushroom-blink-v3'
+const SPRITE_OPEN = 'menu-forest-mushroom-v3'
+const SPRITE_BLINK = 'menu-forest-mushroom-blink-v3'
 const BAKE_GRAIN_SEED = 7331
 const BLINK_MIN_INTERVAL = 2.5
 const BLINK_MAX_INTERVAL = 6
 const BLINK_DURATION = 0.14
 
 /**
- * Creates the menu glow mushroom layer.
+ * Creates the menu forest mushroom layer.
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay inst
  * @param {number} cfg.z - Draw layer z
@@ -114,7 +114,7 @@ function bakeVariant(k, name, eyesOpen) {
       cx: BAKE_W / 2,
       baseY: BAKE_H - BAKE_BASE_INSET,
       width: MUSH_W,
-      colors: GLOW_PAL.cuteMushroomMenu,
+      colors: FOREST_PAL.cuteMushroomMenu,
       withFace: true,
       eyesOpen,
       eyeScale: TRAMP_FACE_EYE_SCALE,
@@ -126,7 +126,7 @@ function bakeVariant(k, name, eyesOpen) {
   // Grain only: the in-level decor grade lowers contrast and saturation,
   // which washes the icon out on the dark menu backdrop.
   //
-  applyGlowFilmGrainToCanvas(canvas, BAKE_GRAIN_SEED + name.length)
+  applyForestFilmGrainToCanvas(canvas, BAKE_GRAIN_SEED + name.length)
   k.loadSprite(name, canvas)
 }
 

@@ -137,7 +137,7 @@ export function isAnyPanelOpen() {
  * closing fade finishes (see the panelPhase 'closing' branch below, and
  * openStandalonePanel's onClose) — but if the underlying Kaplay engine is
  * torn down first (e.g. a resolution-mode swap into a native-resolution
- * level like glow), that onUpdate never runs its completion branch, and
+ * level like forest), that onUpdate never runs its completion branch, and
  * isAnyPanelOpen() — the only thing that reads these — stays stuck true for
  * the rest of the session, silently blocking every future jump attempt
  * (attemptHeroJump is its only caller) with no other symptom. Call this
@@ -349,7 +349,7 @@ function getSectionPanelColors(levelName) {
 //
 //
 // Drop shadow (single black copy offset right+down) — the same text shadow
-// style the glow level uses.
+// style the forest level uses.
 //
 function buildOutlineOffsets(thickness) {
   return [[thickness, thickness]]

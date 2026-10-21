@@ -1,6 +1,6 @@
 import { quadPoint, quadTangent } from './quad-curve.js'
 //
-// Canvas2D fern clump in the look of the glow reference: one to three
+// Canvas2D fern clump in the look of the forest reference: one to three
 // upright pinnate fronds. Each frond is a gently bowed stem with a bare stalk
 // at the bottom, then four or five pairs of big rounded leaflets set slightly
 // alternate with open gaps (so the stem reads between them), shrinking toward

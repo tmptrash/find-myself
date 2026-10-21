@@ -3,7 +3,7 @@ import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../utils
 // Swaying grass — thick baked blade sprites growing in tufts (never an even
 // spread). Blades are baked white and tinted at draw time, so any scene can
 // colour (or hide) each blade per frame through the getTint callback.
-// Extracted from the glow section so every section shares one grass look.
+// Extracted from the forest section so every section shares one grass look.
 //
 const BLADE_VARIANTS = 5
 const BLADE_W = 14

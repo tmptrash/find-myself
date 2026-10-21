@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { GLOW_PAL, getTreePaletteColor, glowRgb } from './glow-palette.js'
+import { FOREST_PAL, getTreePaletteColor, forestRgb } from './forest-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
 import * as EyeFlower from '../components/eye-flower.js'
@@ -100,7 +100,7 @@ const TWIG_RIDE_PLAT_HALF_W = TWIG_MAIN_LEN * 0.46
 // Over the centipede, under the hero, the mushrooms and the big trees.
 //
 const TWIG_Z = CFG.visual.zIndex.player - 0.5
-const TWIG_OUTLINE = GLOW_PAL.glowContour.platform
+const TWIG_OUTLINE = FOREST_PAL.forestContour.platform
 const PLATFORM_HIDE_X = -500
 const PLATFORM_HIDE_Y = -5000
 
@@ -174,7 +174,7 @@ export function tickTwigPredatorRide(inst, dt) {
  * After a jump from the lake stick onto the eye-flower island, ease the
  * centipede into its turn once the hero has landed there.
  * @param {Object} twigInst - Twig inst
- * @param {Object} levelInst - Glow level inst (eye-flower island layout)
+ * @param {Object} levelInst - Forest level inst (eye-flower island layout)
  * @param {Object} char - Hero character
  * @param {function(Object, number, number): boolean} isOnIsland - Feet on the island
  */
@@ -201,7 +201,7 @@ export function tryPredatorTurnTowardIslandAfterLanding(twigInst, levelInst, cha
  * leaves physics, so the airborne flag would pause the centipede forever),
  * and a crawler waiting at the island turns and swims back to the shore.
  * @param {Object} twigInst - Twig inst
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  */
 export function releasePredatorAtIsland(twigInst, levelInst) {
   if (!twigInst) return
@@ -216,7 +216,7 @@ export function releasePredatorAtIsland(twigInst, levelInst) {
  * When the hero stands on the island but the salute turn never started
  * (e.g. flee blocked scheduling), force the shore swim.
  * @param {Object} twigInst - Twig inst
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @param {Object} char - Hero character
  * @param {function(Object, number, number): boolean} isOnIsland
  */
@@ -981,7 +981,7 @@ function addLeaf(batch, twig, sx, ox, oy, angle, size, leafColors, leafPts) {
 //
 function buildTwigColors(k) {
   const pal = getTreePaletteColor()
-  const outlineRgb = glowRgb(TWIG_OUTLINE)
+  const outlineRgb = forestRgb(TWIG_OUTLINE)
   return {
     wood: k.rgb(pal.branchR, pal.branchG, pal.branchB),
     woodDark: k.rgb(pal.trunkR, pal.trunkG, pal.trunkB),

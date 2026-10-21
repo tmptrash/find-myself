@@ -150,7 +150,7 @@ export function setVisible(inst, visible) {
   })
 }
 /**
- * Pins FPS HUD nodes to screen space (same as GLOW label / scoreboard).
+ * Pins FPS HUD nodes to screen space (same as FOREST label / scoreboard).
  * @param {Object} inst - FPS counter instance
  */
 export function pinScreenFixed(inst) {
@@ -191,7 +191,7 @@ export function layoutAtScreenCenterX(inst, centerX) {
   })
 }
 //
-// Creates HUD text with a single drop-shadow copy (glow-level style).
+// Creates HUD text with a single drop-shadow copy (forest-level style).
 //
 function createOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas = null) {
   if (postBakeCanvas) {
@@ -233,7 +233,7 @@ function setOutlinedHudText(node, text) {
 //
 //
 // Drop shadow (single black copy offset right+down) — the same text shadow
-// style the glow level uses.
+// style the forest level uses.
 //
 function buildOutlineOffsets(thickness) {
   return [[thickness, thickness]]

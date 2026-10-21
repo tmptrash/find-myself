@@ -7,10 +7,10 @@ import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
 import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { drawSmallMushroomGroupToCanvas } from '../../../utils/draw-small-mushroom.js'
-import { addEyeBerry, addTaperedPass } from '../utils/glow-eye-berry.js'
-import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/glow-static-bake.js'
-import * as SoilSeam from '../utils/glow-soil-seam.js'
+import { addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
+import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/forest-static-bake.js'
+import * as SoilSeam from '../utils/forest-soil-seam.js'
 import { forestFloorPainterColors } from './forest-floor.js'
 
 //
@@ -1355,13 +1355,13 @@ function fillArc(out, x, y, angle, bend, pow, segLen) {
 }
 
 function buildColors(k) {
-  const pal = GLOW_PAL.glowEyeFlower
+  const pal = FOREST_PAL.forestEyeFlower
   const keys = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight', 'leaf', 'leafLight']
   return Object.fromEntries(keys.map(key => [key, kaplayRgb(k, pal[key])]))
 }
 
 function kaplayRgb(k, hex) {
-  const c = glowRgb(hex)
+  const c = forestRgb(hex)
   return k.rgb(c.r, c.g, c.b)
 }
 

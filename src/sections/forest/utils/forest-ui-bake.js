@@ -1,10 +1,10 @@
 import {
-  applyGlowFilmGrainToCanvas,
+  applyForestFilmGrainToCanvas,
   applyParallaxPostFxToContext
-} from './glow-parallax-grain.js'
+} from './forest-parallax-grain.js'
 
 //
-// Shared bake-time grain (and optional blur) for glow HUD / UI sprites.
+// Shared bake-time grain (and optional blur) for forest HUD / UI sprites.
 //
 const TEXT_PAD = 3
 export const BIRD_FLAP_FRAME_COUNT = 8
@@ -14,12 +14,12 @@ const BIRD_BAKE_BLUR = 1.2
 const BIRD_BAKE_LINE_WIDTH = 2
 const TOOLTIP_BAKE_PAD = 4
 //
-// Sprite name prefixes for glow UI bakes.
+// Sprite name prefixes for forest UI bakes.
 //
-export const GLOW_BIRD_SPRITE_PREFIX = 'glow-bird-flap-'
+export const FOREST_BIRD_SPRITE_PREFIX = 'forest-bird-flap-'
 
 /**
- * Applies the standard glow film grain, optionally with blur first.
+ * Applies the standard forest film grain, optionally with blur first.
  * @param {HTMLCanvasElement} canvas
  * @param {number} [seedOffset=0]
  * @param {number} [blurRadius=0]
@@ -29,7 +29,7 @@ export const GLOW_BIRD_SPRITE_PREFIX = 'glow-bird-flap-'
 // tinted gray — drop those pixels and skip grain for a flat silhouette.
 //
 const LIFE_DESAT_ALPHA_FRINGE = 48
-export function finishGlowLifeDesatCanvas(canvas) {
+export function finishForestLifeDesatCanvas(canvas) {
   if (!canvas?.width || !canvas?.height) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -39,7 +39,7 @@ export function finishGlowLifeDesatCanvas(canvas) {
   }
   ctx.putImageData(imageData, 0, 0)
 }
-function finishGlowUiCanvas(canvas, seedOffset = 0, blurRadius = 0) {
+function finishForestUiCanvas(canvas, seedOffset = 0, blurRadius = 0) {
   if (!canvas?.width || !canvas?.height) return
   if (blurRadius > 0) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
@@ -49,7 +49,7 @@ function finishGlowUiCanvas(canvas, seedOffset = 0, blurRadius = 0) {
     })
     return
   }
-  applyGlowFilmGrainToCanvas(canvas, seedOffset)
+  applyForestFilmGrainToCanvas(canvas, seedOffset)
 }
 
 /**
@@ -58,7 +58,7 @@ function finishGlowUiCanvas(canvas, seedOffset = 0, blurRadius = 0) {
  * @param {Object} cfg
  * @returns {HTMLCanvasElement}
  */
-function bakeGlowTextCanvas(text, cfg) {
+function bakeForestTextCanvas(text, cfg) {
   const {
     fontFamily,
     fontSize,
@@ -105,16 +105,16 @@ function bakeGlowTextCanvas(text, cfg) {
 }
 
 /**
- * Bakes text to a Kaplay sprite with glow grain.
+ * Bakes text to a Kaplay sprite with forest grain.
  * @param {Object} k
  * @param {string} spriteName
  * @param {string} text
  * @param {Object} cfg
  * @param {number} [seedOffset=0]
  */
-export function loadGlowTextSprite(k, spriteName, text, cfg, seedOffset = 0) {
-  const canvas = bakeGlowTextCanvas(text, cfg)
-  finishGlowUiCanvas(canvas, seedOffset, cfg.blurRadius ?? 0)
+export function loadForestTextSprite(k, spriteName, text, cfg, seedOffset = 0) {
+  const canvas = bakeForestTextCanvas(text, cfg)
+  finishForestUiCanvas(canvas, seedOffset, cfg.blurRadius ?? 0)
   k.loadSprite(spriteName, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -125,7 +125,7 @@ export function loadGlowTextSprite(k, spriteName, text, cfg, seedOffset = 0) {
  * @param {string} key
  * @returns {number}
  */
-export function glowUiHash(key) {
+export function forestUiHash(key) {
   let h = 2166136261
   const s = String(key)
   for (let i = 0; i < s.length; i++) {
@@ -139,8 +139,8 @@ export function glowUiHash(key) {
  * Bakes one bird wing-stroke frame (white mask + blur + grain).
  * @param {Object} k
  */
-export function bakeGlowBirdFlapSprites(k) {
-  if (k.getSprite(GLOW_BIRD_SPRITE_PREFIX + '0')) return
+export function bakeForestBirdFlapSprites(k) {
+  if (k.getSprite(FOREST_BIRD_SPRITE_PREFIX + '0')) return
   for (let f = 0; f < BIRD_FLAP_FRAME_COUNT; f++) {
     const flap = (f / BIRD_FLAP_FRAME_COUNT) * Math.PI * 2
     const canvas = document.createElement('canvas')
@@ -160,8 +160,8 @@ export function bakeGlowBirdFlapSprites(k) {
     ctx.lineTo(cx, cy)
     ctx.lineTo(cx + size, wingTipY)
     ctx.stroke()
-    finishGlowUiCanvas(canvas, 7000 + f, BIRD_BAKE_BLUR)
-    k.loadSprite(GLOW_BIRD_SPRITE_PREFIX + f, canvas)
+    finishForestUiCanvas(canvas, 7000 + f, BIRD_BAKE_BLUR)
+    k.loadSprite(FOREST_BIRD_SPRITE_PREFIX + f, canvas)
     canvas.width = 0
     canvas.height = 0
   }
@@ -175,7 +175,7 @@ export function bakeGlowBirdFlapSprites(k) {
  * @param {number} lineSpacing
  * @returns {HTMLCanvasElement}
  */
-export function bakeGlowTooltipCanvas(layout, fontFamily, fontSize, lineSpacing) {
+export function bakeForestTooltipCanvas(layout, fontFamily, fontSize, lineSpacing) {
   const BUBBLE_BORDER_WIDTH = 3
   const BUBBLE_CORNER_RADIUS = 10
   const BUBBLE_PADDING_X = 14
@@ -263,17 +263,17 @@ export function bakeGlowTooltipCanvas(layout, fontFamily, fontSize, lineSpacing)
     ctx.fillText(line, bubbleX + layout.bubbleW / 2, ty)
     ty += lineH + (i < lines.length - 1 ? lineSpacing : 0)
   })
-  finishGlowUiCanvas(canvas, glowUiHash(layout.labelText + layout.totalW))
+  finishForestUiCanvas(canvas, forestUiHash(layout.labelText + layout.totalW))
   return canvas
 }
 
 /**
- * Creates a glow baked-text holder that swaps Kaplay sprites on text change.
+ * Creates a forest baked-text holder that swaps Kaplay sprites on text change.
  * @param {Object} k
  * @param {Object} cfg
  * @returns {Object}
  */
-export function createGlowBakedTextHolder(k, cfg) {
+export function createForestBakedTextHolder(k, cfg) {
   const {
     prefix,
     fontFamily,
@@ -314,13 +314,13 @@ export function createGlowBakedTextHolder(k, cfg) {
 
 /**
  * Updates or creates baked-text sprite objects for a holder.
- * @param {Object} holder - From createGlowBakedTextHolder
+ * @param {Object} holder - From createForestBakedTextHolder
  * @param {string} text
  * @param {number} x
  * @param {number} y
  * @param {number} [opacity=1]
  */
-export function syncGlowBakedTextHolder(holder, text, x, y, opacity = 1) {
+export function syncForestBakedTextHolder(holder, text, x, y, opacity = 1) {
   const { k, prefix, fontFamily, fontSize, fillStyle, shadowStyle, shadowOffsetX, shadowOffsetY, align, lineSpacing, anchor, z, fixed, seedBase } = holder
   if (holder.lastText === text && holder.main?.exists?.()) {
     holder.main.pos.x = x
@@ -330,9 +330,9 @@ export function syncGlowBakedTextHolder(holder, text, x, y, opacity = 1) {
     return
   }
   holder.lastText = text
-  const seed = seedBase + glowUiHash(text)
-  const mainName = `${prefix}-main-${glowUiHash(text)}`
-  loadGlowTextSprite(k, mainName, text, {
+  const seed = seedBase + forestUiHash(text)
+  const mainName = `${prefix}-main-${forestUiHash(text)}`
+  loadForestTextSprite(k, mainName, text, {
     fontFamily, fontSize, fillStyle, align, lineSpacing
   }, seed)
   holder.main?.exists?.() && k.destroy(holder.main)
@@ -346,8 +346,8 @@ export function syncGlowBakedTextHolder(holder, text, x, y, opacity = 1) {
   fixed && (holder.main.fixed = true)
   z !== undefined && (holder.main.z = z)
   if (shadowStyle) {
-    const shadowName = `${prefix}-shadow-${glowUiHash(text)}`
-    loadGlowTextSprite(k, shadowName, text, {
+    const shadowName = `${prefix}-shadow-${forestUiHash(text)}`
+    loadForestTextSprite(k, shadowName, text, {
       fontFamily, fontSize, fillStyle: shadowStyle, align, lineSpacing
     }, seed + 1)
     holder.shadow = k.add([
@@ -365,7 +365,7 @@ export function syncGlowBakedTextHolder(holder, text, x, y, opacity = 1) {
  * Destroys baked-text holder Kaplay objects.
  * @param {Object} holder
  */
-export function destroyGlowBakedTextHolder(holder) {
+export function destroyForestBakedTextHolder(holder) {
   if (!holder) return
   holder.main?.exists?.() && holder.k.destroy(holder.main)
   holder.shadow?.exists?.() && holder.k.destroy(holder.shadow)

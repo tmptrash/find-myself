@@ -1,4 +1,4 @@
-import { isTwigPausingPredatorMove } from '../utils/glow-horiz-fall-twig.js'
+import { isTwigPausingPredatorMove } from '../utils/forest-horiz-fall-twig.js'
 import * as EyeFlower from './eye-flower.js'
 
 //
@@ -6,9 +6,9 @@ import * as EyeFlower from './eye-flower.js'
 // beyond 2 m drift slowly inward, inside 2 m run, inside 1 m lunge.
 //
 
-const GLOW_METER_PX = 100
-const HERO_ALERT_FAR_RADIUS = GLOW_METER_PX * 2
-const HERO_ALERT_NEAR_RADIUS = GLOW_METER_PX
+const FOREST_METER_PX = 100
+const HERO_ALERT_FAR_RADIUS = FOREST_METER_PX * 2
+const HERO_ALERT_NEAR_RADIUS = FOREST_METER_PX
 const PATROL_DRIFT_SPEED = 58
 const HUNT_RUN_SPEED = 142
 const LUNGE_SPEED = 298
@@ -20,7 +20,7 @@ const LUNGE_DURATION = 0.36
 // mushroom. A hop during the chase does not shake it off — it keeps running
 // at his last seen x until the chase times out.
 //
-const PURSUIT_TRIGGER_RADIUS = GLOW_METER_PX * 10
+const PURSUIT_TRIGGER_RADIUS = FOREST_METER_PX * 10
 const PURSUIT_SIDE_MIN_DX = 20
 const PURSUIT_SPEED = 560
 //

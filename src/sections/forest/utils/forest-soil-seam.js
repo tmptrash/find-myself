@@ -1,10 +1,10 @@
-import { glowFilmGrainBlockPxForTier } from './glow-pixel-density.js'
+import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 
 //
 // Shared noise for soft earth seams: the topsoil/subsoil fringe in the ground
 // band and the island's rock meeting the soil use the same rounded tongues.
 //
-const JAG_CELL_PX = glowFilmGrainBlockPxForTier('gameplay')
+const JAG_CELL_PX = forestFilmGrainBlockPxForTier('gameplay')
 const FRINGE_LOBE_OCTAVES = [
   { wavelength: 27, amp: 6 },
   { wavelength: 13, amp: 2.5 }

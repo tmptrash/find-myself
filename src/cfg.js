@@ -4,7 +4,7 @@
 const MASTER_VOLUME = 0.7
 //
 // Game-wide 96-colour palette (single source of truth, row-major). Sampled
-// from the Glow forest reference art: swatches present in the picture are
+// from the forest level reference art: swatches present in the picture are
 // taken from it directly, hue families it lacks (blue, violet, purple, pink)
 // carry the same colour grade. Every colour used in game code MUST be one of
 // these values (brightness via opacity is allowed). Rows are hue families,
@@ -153,10 +153,10 @@ export const CFG = {
       height: 1080
     },
     //
-    // Glow section world — wider than the viewport; the level scrolls a camera
-    // through a fixed on-screen playfield window (see glow-camera.js).
+    // Forest section world — wider than the viewport; the level scrolls a camera
+    // through a fixed on-screen playfield window (see forest-camera.js).
     //
-    glow: {
+    forest: {
       worldWidth: 3000,
       worldHeight: 1080
     },
@@ -179,8 +179,8 @@ export const CFG = {
         platformColor: "#1A1A1A"       // Platform color (for menu background)
       },
       //
-      // DOM loader: the Glow chain-buoy stalk-eye lying on its side (same inks
-      // as glowEyeFlower — red stalk, white berry, gray contour and pupil).
+      // DOM loader: the Forest chain-buoy stalk-eye lying on its side (same inks
+      // as forestEyeFlower — red stalk, white berry, gray contour and pupil).
       //
       loader: {
         message: PALETTE.gray7,
@@ -249,17 +249,17 @@ export const CFG = {
       palette: {
         swatches: Object.values(PALETTE),
         //
-        // GLOW palette balance (~70 / 20 / 10) — perception level: most of the
+        // FOREST palette balance (~70 / 20 / 10) — perception level: most of the
         // frame reads cool forest; earth is supporting; gold/orange are rare
         // accents so any warm spark draws the eye. Do not sprinkle gold across
         // parallax rows or ambient decor — reserve it for sky dawn, the lit
-        // main tree, HUD/letters, and glowAttention beats.
+        // main tree, HUD/letters, and forestAttention beats.
         //
         // ~70% — dark / medium green & blue-green (void, sky, parallax, grass).
         // ~20% — warm earth (ground, wood, rocks, terracotta mushrooms).
         // ~10% — gold / orange (sparse; uneven placement is intentional).
         //
-        // Glow void — near-black forest floor (green/teal, never pure black).
+        // Forest void — near-black forest floor (green/teal, never pure black).
         //
         void: PALETTE.green0,
         //
@@ -270,37 +270,37 @@ export const CFG = {
         //
         // Zenith lift for parallax sky gradients and colour-world canopy air.
         //
-        glowForestLift: PALETTE.teal1,
+        forestLift: PALETTE.teal1,
         //
-        // Glow sky — dark green-teal foundation (#18332F / #23483B / #2B5944 →
+        // Forest sky — dark green-teal foundation (#18332F / #23483B / #2B5944 →
         // palette greens/teals). Stays darker than canopy foliage; dawn gold
-        // lives in glowSkyDawnGlow and the lower sky band only.
+        // lives in forestSkyDawnGlow and the lower sky band only.
         //
-        glowSkyZenith: PALETTE.teal1,
-        glowSkyMid: PALETTE.teal3,
-        glowSkyHorizon: PALETTE.gray5,
+        forestSkyZenith: PALETTE.teal1,
+        forestSkyMid: PALETTE.teal3,
+        forestSkyHorizon: PALETTE.gray5,
         //
         // Depth-grade pivots: far rows dissolve into warm sunlit air, mid rows
         // into cool sage, the near row keeps nearly its own tones.
         //
-        glowHaze: {
+        forestHaze: {
           far: PALETTE.gray5,
           mid: PALETTE.teal3,
           near: PALETTE.slate2
         },
         //
-        // GLOW light — warm gold as colour (not gray brightness). Use sparingly:
+        // FOREST light — warm gold as colour (not gray brightness). Use sparingly:
         // core in sky gaps / haze, mid on reveals & HUD, bright on letter peaks.
         // Reference #DFAF58 / #E8C66F / #F0D58A → gold3 / gold4 / gold5.
         //
-        glowLightCore: PALETTE.gold3,
-        glowLightMid: PALETTE.gold4,
-        glowLightBright: PALETTE.gold5,
-        glowSkyDawnGlow: PALETTE.gold3,
+        forestLightCore: PALETTE.gold3,
+        forestLightMid: PALETTE.gold4,
+        forestLightBright: PALETTE.gold5,
+        forestSkyDawnGlow: PALETTE.gold3,
         //
         // Cold forest shadow (green-blue), not neutral gray — for foliage depth.
         //
-        glowShadow: PALETTE.teal0,
+        forestShadow: PALETTE.teal0,
         lightGray: PALETTE.gray6,
         brightLight: PALETTE.gray7,
         heroBodyGray: PALETTE.gray6,
@@ -308,7 +308,7 @@ export const CFG = {
         letterFill: PALETTE.gray6,
         letterOutline: PALETTE.gray0,
         //
-        // Lighter outline used across the Glow level's own hero/decor/rock
+        // Lighter outline used across the Forest level's own hero/decor/rock
         // silhouettes in place of the harsher, near-black heroOutline/void —
         // menu.js still reads heroOutline/decorOutline directly so it keeps
         // its original darker rim.
@@ -317,7 +317,7 @@ export const CFG = {
         // Role-based contours (#172621 → gray0 forest ink) — not pure black and
         // not one width everywhere. void stays fill/backdrop only.
         //
-        glowContour: {
+        forestContour: {
           forest: PALETTE.gray0,
           eye: PALETTE.green0,
           platform: PALETTE.brown0,
@@ -338,7 +338,7 @@ export const CFG = {
         //
         // Soft gray rim for low-priority decor (captions, muted props).
         //
-        glowOutlineLight: PALETTE.gray2,
+        forestOutlineLight: PALETTE.gray2,
         decorGray: PALETTE.gray5,
         dialogFill: PALETTE.gray1,
         dialogText: PALETTE.gray6,
@@ -363,7 +363,7 @@ export const CFG = {
         predatorPupil: PALETTE.red0,
         predatorHorn: PALETTE.brown1,
         //
-        // Stalk-eye decor — warm luminous sclera in the cool forest (GLOW =
+        // Stalk-eye decor — warm luminous sclera in the cool forest (FOREST =
         // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
         // palette swatches; contour is green-black, not pure black.
         //
@@ -469,7 +469,7 @@ export const CFG = {
         // Terracotta decor + cute mushrooms — refs #B86B4A / #D48A57 / #6D4038
         // (nearest palette orange2 / orange3 / brown0).
         //
-        glowMushroom: {
+        forestMushroom: {
           cap: PALETTE.orange2,
           light: PALETTE.orange3,
           shadow: PALETTE.brown0
@@ -478,7 +478,7 @@ export const CFG = {
         // Floor / cave rocks — green-brown stone (not neutral decor gray).
         // Refs #4C5146 / #646657 / #77705A → gray1 / sand1 / sand2.
         //
-        glowRock: {
+        forestRock: {
           shadow: PALETTE.gray1,
           mid: PALETTE.sand1,
           light: PALETTE.sand2
@@ -487,7 +487,7 @@ export const CFG = {
         // Pit cave interior: muted reddish-brown stones with a warm lit cap,
         // dark soil shade, and the deepest warm brown for the recessed back.
         //
-        glowCave: {
+        forestCave: {
           stone: PALETTE.rose1,        // Stone body
           stoneShade: PALETTE.brown0,  // Shaded stones / dark soil clods
           stoneLight: PALETTE.brown1,  // Lit cap on the upper left of a stone
@@ -502,9 +502,9 @@ export const CFG = {
         mushroomsLight: [PALETTE.orange3, PALETTE.brown2, PALETTE.orange3, PALETTE.orange2],
         //
         // Visual grammar: life, hazard, oddity, "pay attention" — trampolines,
-        // ear-tree leaves. Slightly richer cap than glowMushroom, not neon.
+        // ear-tree leaves. Slightly richer cap than forestMushroom, not neon.
         //
-        glowAttention: {
+        forestAttention: {
           leaf: PALETTE.red1,          // Ear-tree leaf body
           leafLight: PALETTE.red3,     // Lit half of the leaf
           leafVein: PALETTE.red0,      // Leaf rim and midrib
@@ -519,9 +519,9 @@ export const CFG = {
         },
         //
         // Canopy apples on the main tree — warm reds with a shaded underside
-        // (same ball stack as glowEyeFlower berries).
+        // (same ball stack as forestEyeFlower berries).
         //
-        glowTreeFruit: {
+        forestTreeFruit: {
           body: PALETTE.red2,          // Lit apple face
           light: PALETTE.red3,         // Brighter variation on some fruit
           shade: PALETTE.red0,         // Full-disk underside shadow
@@ -531,7 +531,7 @@ export const CFG = {
         // Eye-flower on the lake island: a red stalk of white eye-berries
         // (doll's eyes) and leafy tentacle vines on a mossy earth mound.
         //
-        glowEyeFlower: {
+        forestEyeFlower: {
           contour: PALETTE.gray0,      // Green-black contour around every part
           berry: PALETTE.gray7,        // Lit eye-berry (white)
           berryShade: PALETTE.mauve4,  // Shaded underside of the berry
@@ -558,7 +558,7 @@ export const CFG = {
         // Tunnel the flower's roots tear through the island when they drag
         // the hero under: an open soil cut, warm light at the lip, darkness below.
         //
-        glowRootTunnel: {
+        forestRootTunnel: {
           contour: PALETTE.gray0,      // Clod, stone and root contours
           wall: PALETTE.brown1,        // Torn soil wall, a step lighter than the earth around it
           wallStrata: [PALETTE.rose0, PALETTE.brown0, PALETTE.sand0, PALETTE.rose1], // Uneven earth layers in the cut
@@ -587,7 +587,7 @@ export const CFG = {
         // Colour-world forest floor: mossy hill, ferns, light spike bushes,
         // small cream mushrooms and the ragged ground rim (reference concept art).
         //
-        glowForestFloor: {
+        forestFloor: {
           contour: PALETTE.gray0,      // Green-black plant / hill contour
           fernDark: PALETTE.teal0,     // Back fronds (dark teal like the reference)
           fernMid: PALETTE.teal1,      // Front fronds
@@ -632,7 +632,7 @@ export const CFG = {
         // grey stones lit from the upper left, in two depth layers — far
         // stones darker and duller, near stones lighter.
         //
-        glowShoreRock: {
+        forestShoreRock: {
           far: {
             contour: PALETTE.gray0,    // Stone outline
             crevice: PALETTE.gray0,    // Cracks
@@ -655,7 +655,7 @@ export const CFG = {
         //
         // Extra colour-world underground props (cobble beds, voids, pebbles, grit).
         //
-        glowUnderground: {
+        forestUnderground: {
           stone: PALETTE.gray1,        // Deep-clay stone body (dark stone gray)
           stoneLight: PALETTE.gray2,   // Stone lit cap and face speckles
           contour: PALETTE.gray0,      // Cobble contour and dark voids
@@ -665,7 +665,7 @@ export const CFG = {
         //
         // Spiky tomato grenade on the lip-trees — danger red, green spikes.
         //
-        glowTomato: {
+        forestTomato: {
           body: PALETTE.red1,
           light: PALETTE.red3,
           dark: PALETTE.red0,
@@ -696,7 +696,7 @@ export const CFG = {
         //
         // Grooves / highlights for the two gameplay brown trees (main + shore).
         //
-        glowTreeBark: {
+        forestTreeBark: {
           groove: PALETTE.rose0,
           highlight: PALETTE.orange4,
           //
@@ -735,7 +735,7 @@ export const CFG = {
         // Eye-intro umbrella stroller — grays only, each part on its own value
         // step so the tube frame, fabric, strap and wheels stay readable.
         //
-        glowStroller: {
+        forestStroller: {
           outline: PALETTE.gray0,      // Ink contour around every part
           tube: PALETTE.gray6,         // Near-side aluminium tube
           tubeShade: PALETTE.gray4,    // Near tube underside
@@ -807,7 +807,7 @@ export const CFG = {
           sprigLeaves: true
         },
         //
-        // Branch trampoline — standard glowMushroom terracotta (unusual beat,
+        // Branch trampoline — standard forestMushroom terracotta (unusual beat,
         // same saturation as decor). Gray set mirrors inside the gray family.
         //
         cuteMushroom: {
@@ -822,7 +822,7 @@ export const CFG = {
           blush: PALETTE.orange4
         },
         //
-        // Right ground + pit cave trampolines — glowAttention (richer, not brighter).
+        // Right ground + pit cave trampolines — forestAttention (richer, not brighter).
         //
         cuteMushroomRed: {
           body: PALETTE.sand5,
@@ -836,7 +836,7 @@ export const CFG = {
           blush: PALETTE.red3
         },
         //
-        // Menu ring glow icon: same mushroom, but it sits on the dark menu
+        // Menu ring forest icon: same mushroom, but it sits on the dark menu
         // backdrop with no forest light around it, so the cap and stem run
         // brighter and more saturated than in the level.
         //
@@ -870,7 +870,7 @@ export const CFG = {
         }
       },
       sections: {
-        glow: {
+        forest: {
           body: PALETTE.gold3  // Gold from the game palette — perception through colour
         },
         word: {
@@ -931,11 +931,11 @@ export const CFG = {
       touch: MASTER_VOLUME * 0.4,
       word: MASTER_VOLUME * 0.3,
       breath: MASTER_VOLUME * 0.15, // breath.mp3 (parallel with word in word section)
-      birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for glow level
-      whisper: MASTER_VOLUME * 0.38,  // whisper.mp3 near glow lip-trees
-      glowLetterDialog: MASTER_VOLUME * 0.85,
+      birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for forest level
+      whisper: MASTER_VOLUME * 0.38,  // whisper.mp3 near forest lip-trees
+      forestLetterDialog: MASTER_VOLUME * 0.85,
       //
-      // Touch lesson 0 letter dialog voice-overs (louder than glow)
+      // Touch lesson 0 letter dialog voice-overs (louder than forest)
       //
       touchLetterDialog: Math.min(1, MASTER_VOLUME * 1.35),
       //

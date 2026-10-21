@@ -28,7 +28,7 @@ let globalRainStop = null
 //
 const CALM_PAD_MASTER = 0.13
 //
-// Glow anchor apple hitting the ground: short, soft, low thud.
+// Forest anchor apple hitting the ground: short, soft, low thud.
 //
 const APPLE_THUD_VOLUME = 0.5
 const APPLE_THUD_DURATION = 0.06
@@ -42,7 +42,7 @@ const APPLE_THUD_NOISE_Q = 0.5
 const APPLE_THUD_NOISE_MIX = 0.35
 const APPLE_THUD_SILENT = 0.001
 //
-// Glow spiky tomato burst: noise blast, sub thump and a short shard rattle.
+// Forest spiky tomato burst: noise blast, sub thump and a short shard rattle.
 //
 const TOMATO_BLAST_DURATION = 0.7
 const TOMATO_BLAST_NOISE_DECAY = 9
@@ -59,7 +59,7 @@ const TOMATO_BLAST_SHARD_FREQ_RANGE = 1800
 const TOMATO_BLAST_SHARD_DURATION = 0.05
 const TOMATO_BLAST_SHARD_GAIN = 0.035
 //
-// Glow eye-flower grab: a leafy shiver when it notices the hero, a wet
+// Forest eye-flower grab: a leafy shiver when it notices the hero, a wet
 // squeeze when the tentacles close, and a heavy earth gulp when it drags
 // him under (sub thump, low rumble and a rattle of pebbles).
 //
@@ -130,23 +130,23 @@ export function create() {
   // Create master gains for SFX (reusable)
   //
   const landGain = ctx.createGain()
-  const glowSfxGain = ctx.createGain()
-  glowSfxGain.gain.value = 1
-  glowSfxGain.connect(ctx.destination)
-  landGain.connect(glowSfxGain)
+  const forestSfxGain = ctx.createGain()
+  forestSfxGain.gain.value = 1
+  forestSfxGain.connect(ctx.destination)
+  landGain.connect(forestSfxGain)
 
   const stepGain = ctx.createGain()
-  stepGain.connect(glowSfxGain)
+  stepGain.connect(forestSfxGain)
   const predatorFootGain = ctx.createGain()
   predatorFootGain.gain.value = 0
-  predatorFootGain.connect(glowSfxGain)
+  predatorFootGain.connect(forestSfxGain)
 
   const jumpGain = ctx.createGain()
   jumpGain.gain.value = CFG.audio.sfx.jump
-  jumpGain.connect(glowSfxGain)
+  jumpGain.connect(forestSfxGain)
 
   const spawnGain = ctx.createGain()
-  spawnGain.connect(glowSfxGain)
+  spawnGain.connect(forestSfxGain)
   //
   // Create master gain for blade sounds (for volume control)
   //
@@ -197,7 +197,7 @@ export function create() {
     bugStepGain,
     clockTickGain,
     clockDestroyGain,
-    glowSfxGain,
+    forestSfxGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -429,7 +429,7 @@ export function setAmbientVolume(instance, volume) {
   }
 }
 //
-// Plain HTML5 Audio for the glow ear-tree whisper.mp3 loop — deliberately
+// Plain HTML5 Audio for the forest ear-tree whisper.mp3 loop — deliberately
 // bypasses Kaplay's own sound system for the same reason as water-steps (see
 // that section below): a k.play() lookup made while any unrelated background
 // asset is still loading can silently no-op with no error, which is exactly
@@ -575,7 +575,7 @@ function resumeAudioContextIfSuspended(instance) {
 export function playLandSound(instance, currentLevel = null) {
   resumeAudioContextIfSuspended(instance)
   if (!instance?.audioContext || instance.audioContext.state !== 'running') return
-  if (instance._glowSfxMuted) return
+  if (instance._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section level 3 (monster footstep sound)
@@ -589,7 +589,7 @@ export function playLandSound(instance, currentLevel = null) {
   // Check if we're in touch section (soft landing)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
-  const isGlowSection = currentLevel && currentLevel.startsWith('lesson-glow.')
+  const isForestSection = currentLevel && currentLevel.startsWith('lesson-forest.')
   
   if (isTimeLevel3) {
     //
@@ -667,16 +667,16 @@ export function playLandSound(instance, currentLevel = null) {
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
-  } else if (isGlowSection) {
-    if (instance._glowSurface === 'water') return
+  } else if (isForestSection) {
+    if (instance._forestSurface === 'water') return
     //
     // Dedicated land hits (same family as steps, louder, via landGain)
     //
-    instance._glowSurface === 'wood'
-      ? playGlowWoodKnockLand(instance)
-      : instance._glowSurface === 'mud'
-        ? playGlowMudLand(instance)
-        : playGlowGroundLand(instance)
+    instance._forestSurface === 'wood'
+      ? playForestWoodKnockLand(instance)
+      : instance._forestSurface === 'mud'
+        ? playForestMudLand(instance)
+        : playForestGroundLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -1011,7 +1011,7 @@ export function playTextSlideSound(instance) {
  */
 export function playJumpSound(instance, currentLevel = null) {
   resumeAudioContextIfSuspended(instance)
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section (clock tick jump)
@@ -1120,7 +1120,7 @@ export function playJumpSound(instance, currentLevel = null) {
  */
 export function playStepSound(instance, currentLevel = null) {
   resumeAudioContextIfSuspended(instance)
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section level 3 (monster footstep sound)
@@ -1134,7 +1134,7 @@ export function playStepSound(instance, currentLevel = null) {
   // Check if we're in touch section (soft steps)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
-  const isGlowSection = currentLevel && currentLevel.startsWith('lesson-glow.')
+  const isForestSection = currentLevel && currentLevel.startsWith('lesson-forest.')
   
   if (isTimeLevel3) {
     //
@@ -1212,13 +1212,13 @@ export function playStepSound(instance, currentLevel = null) {
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     playWoodKnockStep(instance)
-  } else if (isGlowSection) {
-    if (instance._glowSurface === 'water') return
-    instance._glowSurface === 'wood'
-      ? playGlowWoodKnockStep(instance)
-      : instance._glowSurface === 'mud'
-        ? playGlowMudStep(instance)
-        : playGlowGroundStep(instance)
+  } else if (isForestSection) {
+    if (instance._forestSurface === 'water') return
+    instance._forestSurface === 'wood'
+      ? playForestWoodKnockStep(instance)
+      : instance._forestSurface === 'mud'
+        ? playForestMudStep(instance)
+        : playForestGroundStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -1432,9 +1432,9 @@ function playWoodKnockStep(instance) {
 }
 
 //
-// Glow section: dull muffled step on dry earth.
+// Forest section: dull muffled step on dry earth.
 //
-function playGlowGroundStep(instance) {
+function playForestGroundStep(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.08
   const bufferSize = instance.audioContext.sampleRate * duration
@@ -1462,9 +1462,9 @@ function playGlowGroundStep(instance) {
 }
 
 //
-// Glow section: dull muffled landing on dry earth (same timbre as step, louder).
+// Forest section: dull muffled landing on dry earth (same timbre as step, louder).
 //
-function playGlowGroundLand(instance) {
+function playForestGroundLand(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.11
   const bufferSize = instance.audioContext.sampleRate * duration
@@ -1491,9 +1491,9 @@ function playGlowGroundLand(instance) {
   noiseSource.stop(now + duration)
 }
 //
-// Glow muddy band: wet squelch step (lower, softer than dry ground).
+// Forest muddy band: wet squelch step (lower, softer than dry ground).
 //
-function playGlowMudStep(instance) {
+function playForestMudStep(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.1
   const bufferSize = instance.audioContext.sampleRate * duration
@@ -1522,7 +1522,7 @@ function playGlowMudStep(instance) {
 //
 // Mutes or restores predator foot SFX (cuts active one-shots via master gain).
 //
-export function setGlowPredatorFootGain(instance, gain) {
+export function setForestPredatorFootGain(instance, gain) {
   const g = instance.predatorFootGain
   if (!g) return
   const now = instance.audioContext.currentTime
@@ -1532,7 +1532,7 @@ export function setGlowPredatorFootGain(instance, gain) {
 //
 // Soft tap when a predator leg plants on the ground (many legs — keep quiet).
 //
-export function playGlowPredatorFootstep(instance) {
+export function playForestPredatorFootstep(instance) {
   const footGain = instance.predatorFootGain ?? instance.stepGain
   const now = instance.audioContext.currentTime
   const duration = 0.052
@@ -1574,7 +1574,7 @@ export function playGlowPredatorFootstep(instance) {
 }
 
 /**
- * Glow spiky tomato explosion — a muffled noise blast with a sub thump and a
+ * Forest spiky tomato explosion — a muffled noise blast with a sub thump and a
  * few bright shard ticks scattered right after the impact.
  * @param {Object} instance - Sound instance from create()
  */
@@ -1582,23 +1582,23 @@ export function playGlowPredatorFootstep(instance) {
  * Short creak when a lip-tree rocks from a nearby landing jolt.
  * @param {Object} instance - Sound instance from create()
  */
-export function playGlowEarTreeShake(instance) {
+export function playForestEarTreeShake(instance) {
   if (!instance?.audioContext) return
-  playGlowSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 0.55, 0.11)
+  playForestSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 0.55, 0.11)
 }
 
 //
 // Anchor apple knocked from the start branch — soft padded thump when it drops.
 //
-export function playGlowAppleSoftFall(instance) {
+export function playForestAppleSoftFall(instance) {
   if (!instance?.audioContext) return
-  playGlowAppleSoftImpact(instance, instance.landGain, CFG.audio.sfx.land * APPLE_THUD_VOLUME)
+  playForestAppleSoftImpact(instance, instance.landGain, CFG.audio.sfx.land * APPLE_THUD_VOLUME)
 }
 
-export function playGlowTomatoExplosion(instance) {
+export function playForestTomatoExplosion(instance) {
   if (!instance?.audioContext) return
   const ctx = instance.audioContext
-  const out = instance.glowSfxGain || ctx.destination
+  const out = instance.forestSfxGain || ctx.destination
   const now = ctx.currentTime
   const size = Math.floor(ctx.sampleRate * TOMATO_BLAST_DURATION)
   const buffer = ctx.createBuffer(1, size, ctx.sampleRate)
@@ -1638,13 +1638,13 @@ export function playGlowTomatoExplosion(instance) {
 }
 
 //
-// Glow muddy band: wet squelch landing (same timbre as mud step, louder).
+// Forest muddy band: wet squelch landing (same timbre as mud step, louder).
 //
 //
 // Dry sand/grit for G/L/O caption crumble — short swell, centre on bulk ground impact.
 //
-export function playGlowCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25) {
-  if (!instance?.audioContext || instance._glowSfxMuted) return
+export function playForestCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25) {
+  if (!instance?.audioContext || instance._forestSfxMuted) return
   const ctx = instance.audioContext
   const CAPTION_SAND_ATTACK_SEC = 0.036
   const CAPTION_SAND_HOLD_SEC = 0.042
@@ -1681,7 +1681,7 @@ export function playGlowCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25)
   noiseSource.stop(endTime + 0.02)
 }
 
-function playGlowMudLand(instance) {
+function playForestMudLand(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.13
   const bufferSize = instance.audioContext.sampleRate * duration
@@ -1709,21 +1709,21 @@ function playGlowMudLand(instance) {
 }
 
 //
-// Glow section: deep wooden knock on branches and log platforms.
+// Forest section: deep wooden knock on branches and log platforms.
 //
-function playGlowWoodKnockLand(instance) {
-  playGlowSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 1.4, 0.1)
+function playForestWoodKnockLand(instance) {
+  playForestSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 1.4, 0.1)
 }
 
-function playGlowWoodKnockStep(instance) {
-  playGlowSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * 1.2, 0.07)
+function playForestWoodKnockStep(instance) {
+  playForestSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * 1.2, 0.07)
 }
 
 //
 // Apple on soft forest floor: a dull low "tuk" — a quick sine body dropping
 // in pitch plus a heavily muffled noise puff, both gone within ~60 ms.
 //
-function playGlowAppleSoftImpact(instance, destinationGain, peakAmp) {
+function playForestAppleSoftImpact(instance, destinationGain, peakAmp) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
   const end = now + APPLE_THUD_DURATION
@@ -1765,7 +1765,7 @@ function playGlowAppleSoftImpact(instance, destinationGain, peakAmp) {
 // Soft padded wood step — muffled thump similar to mushroom-trampoline bounce.
 //
 
-function playGlowSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
+function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
   const bufferSize = Math.floor(ctx.sampleRate * duration)
@@ -1976,7 +1976,7 @@ export function playDisappearSound(instance) {
  * @param {Object} instance - Sound instance
  */
 export function playSpawnSweep(instance) {
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   // Quick rise (energy wave)
   const sweep = instance.audioContext.createOscillator()
@@ -2000,7 +2000,7 @@ export function playSpawnSweep(instance) {
  * @param {Object} instance - Sound instance
  */
 export function playSpawnClick(instance) {
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   // Click at spawn moment
   const click = instance.audioContext.createOscillator()
@@ -2094,7 +2094,7 @@ export function playLifeSound(_k) {
  * @param {Object} instance - Sound instance
  */
 export function playGentleLifeSound(instance) {
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const { audioContext } = instance
   const now = audioContext.currentTime
   //
@@ -2177,7 +2177,7 @@ export function playVictorySound(instance) {
  * @param {Object} instance - Sound instance from create()
  */
 export function playLetterPickupSoft(instance) {
-  if (instance?._glowSfxMuted) return
+  if (instance?._forestSfxMuted) return
   const now = instance.audioContext.currentTime
   const duration = 0.55
   //
@@ -2200,7 +2200,7 @@ export function playLetterPickupSoft(instance) {
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   osc.connect(filter)
   filter.connect(gain)
-  gain.connect(instance.glowSfxGain || instance.audioContext.destination)
+  gain.connect(instance.forestSfxGain || instance.audioContext.destination)
   osc.start(now)
   osc.stop(now + duration)
   //
@@ -3293,7 +3293,7 @@ export function playBugCheerSound(inst, delay = 0, baseFreqOverride = null, volu
  * @param {number} [config.volume=1] - Per-note gain multiplier
  */
 export function playIdleHumNote(inst, config = {}) {
-  if (!inst?.audioContext || inst._glowSfxMuted) return
+  if (!inst?.audioContext || inst._forestSfxMuted) return
   const ctx = inst.audioContext
   if (ctx.state === 'suspended') {
     ctx.resume()
@@ -4370,7 +4370,7 @@ export function resumeGlobalAudio() {
  * @param {Object} instance - Sound instance
  */
 export function playTimerTickSound(instance) {
-  if (globalMuteProceduralSounds || instance?._glowSfxMuted) return
+  if (globalMuteProceduralSounds || instance?._forestSfxMuted) return
   //
   // Same chime as a pickup-ready letter appearing (playLetterPickupSoft) —
   // requested so each second of the countdown reads as the same sound cue
@@ -4510,7 +4510,7 @@ export function playSplashSound(instance, volume = 0.3) {
   hissNoise.stop(now + 0.14)
 }
 //
-// Glow shallow water — replay water-steps.mp3 while wading until hero leaves water.
+// Forest shallow water — replay water-steps.mp3 while wading until hero leaves water.
 // Each take gets a random playback speed and volume so the chained loop never
 // sounds mechanical.
 //
@@ -4535,7 +4535,7 @@ export function updateWaterStepsPlayback(instance, inWater, volume = 0.42) {
   inWater && !instance._waterStepsHandle && playWaterStepsLoopOnce(instance, volume)
 }
 /**
- * Starts looping water-steps playback for glow section wading.
+ * Starts looping water-steps playback for forest section wading.
  * @param {Object} instance - Sound instance (must have _k Kaplay reference)
  * @param {number} [volume=0.42] - Playback volume 0..1
  */
@@ -4544,7 +4544,7 @@ export function startWaterStepsLoop(instance, volume = 0.42) {
 }
 /**
  * Plays a single water-steps take (no chained replay) — used when the hero
- * first falls into the glow lake.
+ * first falls into the forest lake.
  * @param {Object} instance - Sound instance
  * @param {number} [volume=0.42] - Playback volume 0..1
  */
@@ -4555,7 +4555,7 @@ export function playWaterStepsOnce(instance, volume = 0.42) {
   playWaterStepsHtml5(vol, 1)
 }
 /**
- * Stops glow water-steps loop playback.
+ * Stops forest water-steps loop playback.
  * @param {Object} instance - Sound instance
  */
 export function stopWaterStepsLoop(instance) {
@@ -4635,7 +4635,7 @@ function playWaterStepsHtml5(volume, speed) {
   }
 }
 //
-// Glow trampoline lake wading: the clip is 1 s; chain with a short pause
+// Forest trampoline lake wading: the clip is 1 s; chain with a short pause
 // or, sometimes, an overlap just before the take ends.
 //
 const TRAMP_WATER_STEPS_DURATION = 1
@@ -4645,7 +4645,7 @@ const TRAMP_WATER_STEPS_OVERLAP_MIN = 0.12
 const TRAMP_WATER_STEPS_OVERLAP_RANGE = 0.22
 const TRAMP_WATER_STEPS_VOLUME = 0.42
 /**
- * Loops water-steps.mp3 while the glow trampoline mushroom wades the lake.
+ * Loops water-steps.mp3 while the forest trampoline mushroom wades the lake.
  * After each take: a 0–500 ms pause, or sometimes an overlap before the clip ends.
  * @param {Object} instance - Sound instance (must have _k Kaplay reference)
  * @param {boolean} inWater - Whether the mushroom is currently in the lake
@@ -4780,7 +4780,7 @@ export function playLeafGroundRustle(instance, volume = 0.22) {
   src.stop(now + dur + 0.01)
 }
 /**
- * Glow eye-flower notices the hero: a short trembling rustle of its blades.
+ * Forest eye-flower notices the hero: a short trembling rustle of its blades.
  * @param {Object} instance - Sound instance from create()
  */
 export function playFlowerRustle(instance) {
@@ -4815,7 +4815,7 @@ export function playFlowerRustle(instance) {
   tremolo.stop(now + FLOWER_RUSTLE_SEC)
 }
 /**
- * Glow eye-flower tentacles close around the hero: wet, sinking squeeze.
+ * Forest eye-flower tentacles close around the hero: wet, sinking squeeze.
  * @param {Object} instance - Sound instance from create()
  */
 export function playFlowerSqueeze(instance) {
@@ -4846,7 +4846,7 @@ export function playFlowerSqueeze(instance) {
   tone.stop(end)
 }
 /**
- * Glow eye-flower drags the hero underground: sub thump, falling rumble and
+ * Forest eye-flower drags the hero underground: sub thump, falling rumble and
  * a scatter of pebble ticks.
  * @param {Object} instance - Sound instance from create()
  */

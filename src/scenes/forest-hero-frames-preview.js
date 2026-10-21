@@ -1,30 +1,30 @@
 import {
-  bakeGlowHeroFrameStripBlocks,
-  drawGlowHeroFramesStripHud,
-  recomputeGlowHeroFramesStripLayout
-} from '../sections/glow/utils/glow-hero-frames-strip.js'
+  bakeForestHeroFrameStripBlocks,
+  drawForestHeroFramesStripHud,
+  recomputeForestHeroFramesStripLayout
+} from '../sections/forest/utils/forest-hero-frames-strip.js'
 
 //
-// Dev full-page view — same strips as lesson-glow.0 HUD. Open:
-// /?scene=dev-glow-hero-frames
+// Dev full-page view — same strips as lesson-forest.0 HUD. Open:
+// /?scene=dev-forest-hero-frames
 //
 
 /**
- * Registers the Glow hero run/jump frame sheet (dev only).
+ * Registers the Forest hero run/jump frame sheet (dev only).
  * @param {Object} k - Kaplay instance
  */
-export function sceneGlowHeroFramesPreview(k) {
-  k.scene('dev-glow-hero-frames', () => {
-    const blocks = bakeGlowHeroFrameStripBlocks(k)
+export function sceneForestHeroFramesPreview(k) {
+  k.scene('dev-forest-hero-frames', () => {
+    const blocks = bakeForestHeroFrameStripBlocks(k)
     const stripInst = {
       k,
       blocks,
       levelHeroScale: 1,
       maxHeightPx: k.height() - 40
     }
-    recomputeGlowHeroFramesStripLayout(stripInst)
+    recomputeForestHeroFramesStripLayout(stripInst)
     k.setBackground(k.rgb(10, 10, 10))
-    k.onDraw(() => drawGlowHeroFramesStripHud(stripInst))
+    k.onDraw(() => drawForestHeroFramesStripHud(stripInst))
     k.onKeyPress('escape', () => k.go('menu'))
   })
 }

@@ -9,7 +9,7 @@ import { prop, setProp } from './helper.js'
  */
 const STORAGE_KEY = 'rootward'
 const LEGACY_STORAGE_KEY = 'find-yourself'
-const SECTIONS = ['glow', 'word', 'touch', 'feel', 'mind', 'time']
+const SECTIONS = ['forest', 'word', 'touch', 'feel', 'mind', 'time']
 //
 // Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
 //

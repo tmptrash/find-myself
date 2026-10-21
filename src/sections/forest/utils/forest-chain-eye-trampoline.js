@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { getChainBuoyEyePos, triggerBuoyLandBlink } from './glow-chain-buoy.js'
+import { getChainBuoyEyePos, triggerBuoyLandBlink } from './forest-chain-buoy.js'
 import * as Sound from '../../../utils/sound.js'
 
 //
@@ -39,7 +39,7 @@ export function createPads(k) {
 
 /**
  * Syncs cap pads to the live stalk-eye positions.
- * @param {Object} inst - Glow level inst
+ * @param {Object} inst - Forest level inst
  */
 export function syncChainEyeTrampPads(inst) {
   const chain = inst.chainEyeTramp
@@ -56,7 +56,7 @@ export function syncChainEyeTrampPads(inst) {
 
 /**
  * Late-pass bounce attempts for both stalk-eye caps.
- * @param {Object} inst - Glow level inst
+ * @param {Object} inst - Forest level inst
  * @returns {boolean} True if a bounce fired this frame
  */
 export function tryChainEyeTrampBounces(inst) {
@@ -174,7 +174,7 @@ function tryOneChainEyeBounce(inst, state, pad, hero, char, heroX) {
   hero.isSquashing = false
   hero.squashTimer = 0
   hero.canJump = false
-  inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
+  inst.sound && !inst.sound._forestSfxMuted && Sound.playJumpSound(inst.sound)
   return true
 }
 

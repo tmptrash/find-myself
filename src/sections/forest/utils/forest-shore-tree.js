@@ -1,15 +1,15 @@
 import { CFG } from '../../../cfg.js'
 import {
-  buildGlowShoreAccentTree,
-  renderGlowTreeIntoContext
-} from './glow-tree.js'
-import { getTreePaletteColor, getGlowGameplayTreeVolumeShades } from './glow-palette.js'
+  buildForestShoreAccentTree,
+  renderForestTreeIntoContext
+} from './forest-tree.js'
+import { getTreePaletteColor, getForestGameplayTreeVolumeShades } from './forest-palette.js'
 import {
   colorKey,
   drawStaticDecorSprite,
   ensureStaticDecorSprite,
   isWorldSpanInView
-} from './glow-static-bake.js'
+} from './forest-static-bake.js'
 //
 // Shore accent left of the chain-buoy eyes — same procedural language as the
 // hero tree, but one horizontal branch the hero can land on after the
@@ -23,8 +23,8 @@ const SHORE_TREE_BRANCH_LEN = 120
 const SHORE_TREE_CROWN_ABOVE_BRANCH = 46
 const SHORE_TREE_STALK_EYE_RADIUS = 11
 const SHORE_TREE_FIRST_EYE_ROLE = 'chainTrampFirst'
-const SHORE_TREE_BAKE_WORLD_W = CFG.visual.glow.worldWidth
-const SHORE_TREE_BAKE_WORLD_H = CFG.visual.glow.worldHeight
+const SHORE_TREE_BAKE_WORLD_W = CFG.visual.forest.worldWidth
+const SHORE_TREE_BAKE_WORLD_H = CFG.visual.forest.worldHeight
 const SHORE_TREE_BAKE_SLOT = 'shoreTreeFull-v7'
 const SHORE_TREE_BAKE_GRAIN_SEED = 0.61
 const SHORE_TREE_CULL_PAD = 120
@@ -39,7 +39,7 @@ const SHORE_TREE_FOLIAGE_CELL_PAD = 10
  * @param {number} floorY - Ground line Y
  * @returns {{ x: number, groundY: number, trunkH: number, branchAttachY: number }|null}
  */
-export function buildGlowShoreTreeLayout(buoySpots, floorY) {
+export function buildForestShoreTreeLayout(buoySpots, floorY) {
   const leftEye = buoySpots?.find(s => s.chainTrampRole === SHORE_TREE_FIRST_EYE_ROLE) ??
     buoySpots?.filter(s => !s.prizeEye).reduce((best, s) => (!best || s.x < best.x ? s : best), null)
   if (!leftEye) return null
@@ -57,12 +57,12 @@ export function buildGlowShoreTreeLayout(buoySpots, floorY) {
  * Creates the shore-tree decor inst (baked main-tree-style sprite).
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay inst
- * @param {Object} cfg.layout - Result of buildGlowShoreTreeLayout()
+ * @param {Object} cfg.layout - Result of buildForestShoreTreeLayout()
  * @returns {Object} Shore-tree inst
  */
 export function create(cfg) {
   const { k, layout } = cfg
-  const treeData = buildGlowShoreAccentTree({
+  const treeData = buildForestShoreAccentTree({
     seed: SHORE_TREE_SEED,
     trunkX: layout.x,
     groundY: layout.groundY,
@@ -99,8 +99,8 @@ export function onDraw(inst, opacity = 1, view = null) {
 // Same side-lit wood as the main tree so both gameplay trees share one light.
 //
 function paintShoreTree(ctx, treeData, palette) {
-  const lit = { ...palette, woodVolume: getGlowGameplayTreeVolumeShades() }
-  renderGlowTreeIntoContext(ctx, treeData, lit, SHORE_TREE_BAKE_WORLD_W, SHORE_TREE_BAKE_WORLD_H)
+  const lit = { ...palette, woodVolume: getForestGameplayTreeVolumeShades() }
+  renderForestTreeIntoContext(ctx, treeData, lit, SHORE_TREE_BAKE_WORLD_W, SHORE_TREE_BAKE_WORLD_H)
 }
 //
 // Root segments use the same {sx, sy, ex, ey, w} shape as wood segments.

@@ -4,7 +4,7 @@ import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
-import { waitForGlowLevel0Bootstrap } from '../sections/glow/scenes/level0.js'
+import { waitForForestLevel0Bootstrap } from '../sections/forest/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
 import { finishReadyTvIntroNow } from './ready-tv-power-on.js'
 
@@ -78,8 +78,8 @@ export function sceneToPackKey(sceneName) {
   if (sceneName === 'word-complete' || sceneName === 'time-complete' || sceneName === 'touch-complete') {
     return 'hub'
   }
-  if (sceneName.startsWith('lesson-glow')) return 'glow'
-  if (sceneName.startsWith('glow-complete')) return 'hub'
+  if (sceneName.startsWith('lesson-forest')) return 'forest'
+  if (sceneName.startsWith('forest-complete')) return 'hub'
   if (sceneName.startsWith('lesson-word')) return 'word'
   if (sceneName.startsWith('lesson-time')) return `time-${sceneName.split('.')[1]}`
   if (sceneName.startsWith('lesson-touch')) return `touch-${sceneName.split('.')[1]}`
@@ -156,9 +156,9 @@ async function applyPack(k, packKey, sceneName) {
     await BootLoader.yieldForGpu(2)
     return
   }
-  if (packKey === 'glow') {
+  if (packKey === 'forest') {
     //
-    // Glow GPU work runs in prewarmGlowLevel0HeavyAssets — no bar jump here.
+    // Forest GPU work runs in prewarmForestLevel0HeavyAssets — no bar jump here.
     //
     return
   }
@@ -209,7 +209,7 @@ async function applyPack(k, packKey, sceneName) {
  * @param {Object} k
  * @param {string} sceneName
  * @param {Object} [opts]
- * @param {boolean} [opts.retainLoader] - Keep the DOM loader visible after prepare (Glow pre-level)
+ * @param {boolean} [opts.retainLoader] - Keep the DOM loader visible after prepare (Forest pre-level)
  * @param {boolean} [opts.deferLoaderReveal] - Skip this function's own show/hide/delay logic
  *   entirely because the caller already owns a single loader-reveal timer spanning this
  *   pack-prep step plus additional work of its own (see native-prelevel handling in transition.js)
@@ -234,7 +234,7 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
   // repaint before we hand the thread to the canvas generator.
   //
   const isTimePack = packKey.startsWith('time-')
-  const isGlowPack = packKey === 'glow'
+  const isForestPack = packKey === 'forest'
   let loaderShown = false
   let loaderTimer = null
   if (!quietFirstHub && !deferLoaderReveal) {
@@ -247,7 +247,7 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
       //
       await BootLoader.yieldForGpu(2)
       if (nonceAtStart !== prepareCancelNonce) return
-    } else if (isGlowPack) {
+    } else if (isForestPack) {
       BootLoader.showLoader()
       loaderShown = true
       await BootLoader.yieldForGpu(2)
@@ -281,7 +281,7 @@ export function onEngineResolutionSwapped() {
 }
 
 /**
- * Enter the scene. Native-resolution scenes (Glow, touch lesson 0) run on a
+ * Enter the scene. Native-resolution scenes (Forest, touch lesson 0) run on a
  * differently sized engine than the one passed in — ensureEngineForScene transparently
  * swaps to it first, tearing down and rebooting the whole Kaplay instance
  * when needed (see engine-switch.js). Touch procedural sprites from the
@@ -325,7 +325,7 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   sceneName !== READY_SCENE_NAME && finishReadyTvIntroNow()
   setActiveSceneName(sceneName)
   liveK.go(sceneName)
-  sceneName === 'lesson-glow.0' && await waitForGlowLevel0Bootstrap()
+  sceneName === 'lesson-forest.0' && await waitForForestLevel0Bootstrap()
   afterGo?.(liveK)
 }
 
@@ -358,7 +358,7 @@ export function goAfterPreparingAssets(k, sceneName, afterGo) {
 export function goToMenuAfterAssets(k) {
   //
   // Only pre-show the loader when an actual engine swap is coming — menu now
-  // shares the native engine with Glow/touch lesson 0, so leaving one of
+  // shares the native engine with Forest/touch lesson 0, so leaving one of
   // those straight into menu needs no swap at all. Checking the CURRENT mode
   // alone (rather than whether it differs from menu's target mode) used to
   // retain a loader that ensureEngineForScene's same-mode early return would

@@ -1,7 +1,7 @@
-import * as EarTree from '../utils/glow-ear-tree.js'
-import * as GlowFootParticles from '../utils/glow-foot-particles.js'
+import * as EarTree from '../utils/forest-ear-tree.js'
+import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as Sound from '../../../utils/sound.js'
-import { GLOW_PAL, glowRgb } from '../utils/glow-palette.js'
+import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 //
 // Pulsing spiky tomato "grenade" sitting on the crown of each lip-tree.
 // Landing near a tree jolts it; the third jolt drops the tomato, which bursts
@@ -67,7 +67,7 @@ const TOMATO_GROW_MIN_SCALE = 0.12
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay inst
  * @param {Object} cfg.earTrees - Ear-tree inst (tomatoes ride its crowns)
- * @param {Object} cfg.particles - Glow foot-particle inst for the shard burst
+ * @param {Object} cfg.particles - Forest foot-particle inst for the shard burst
  * @param {Object} cfg.sfx - Sound inst for the explosion
  * @param {number} cfg.groundY - Ground line Y where a falling tomato bursts
  * @param {Function} [cfg.onExplode] - (x, y) => void after a burst
@@ -120,7 +120,7 @@ export function onHeroLanded(inst, heroX) {
     t.state === STATE_HANG && Math.abs(inst.earTrees.trees[t.index].x - heroX) <= TOMATO_LAND_RADIUS)
   if (!tomato) return
   EarTree.shake(inst.earTrees, tomato.index)
-  inst.sfx && !inst.sfx._glowSfxMuted && Sound.playGlowEarTreeShake(inst.sfx)
+  inst.sfx && !inst.sfx._forestSfxMuted && Sound.playForestEarTreeShake(inst.sfx)
   tomato.hits += 1
   tomato.hits >= TOMATO_HITS_TO_DROP && (tomato.state = STATE_FALL)
 }
@@ -180,10 +180,10 @@ function explodeTomato(inst, tomato) {
   tomato.regrowTimer = TOMATO_REGROW_SEC
   const x = tomato.x
   const y = inst.groundY - TOMATO_RADIUS
-  const c = GLOW_PAL.glowTomato
-  const palette = [c.body, c.light, c.petal, c.spike].map(glowRgb)
-  GlowFootParticles.spawnLeafBurst(inst.particles, x, y, palette, TOMATO_BURST_COUNT, inst.groundY)
-  inst.sfx && !inst.sfx._glowSfxMuted && Sound.playGlowTomatoExplosion(inst.sfx)
+  const c = FOREST_PAL.forestTomato
+  const palette = [c.body, c.light, c.petal, c.spike].map(forestRgb)
+  ForestFootParticles.spawnLeafBurst(inst.particles, x, y, palette, TOMATO_BURST_COUNT, inst.groundY)
+  inst.sfx && !inst.sfx._forestSfxMuted && Sound.playForestTomatoExplosion(inst.sfx)
   inst.onExplode?.(x, y)
 }
 function resetTomatoOnCrown(tomato, inst) {
@@ -203,9 +203,9 @@ function tomatoGrowScale(tomato) {
   return TOMATO_GROW_MIN_SCALE + (1 - TOMATO_GROW_MIN_SCALE) * eased
 }
 function resolveTomatoColors(k) {
-  const c = GLOW_PAL.glowTomato
+  const c = FOREST_PAL.forestTomato
   const toK = hex => {
-    const rgb = glowRgb(hex)
+    const rgb = forestRgb(hex)
     return k.rgb(rgb.r, rgb.g, rgb.b)
   }
   return {

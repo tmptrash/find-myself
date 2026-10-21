@@ -1,4 +1,4 @@
-import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
+import { FOREST_PAL } from '../sections/forest/utils/forest-palette.js'
 
 //
 // Umbrella stroller in three-quarter view (traced from the reference photo):
@@ -118,11 +118,11 @@ export function babyStrollerSpriteSize() {
 }
 
 /**
- * Gray stroller tones from the glowStroller palette block.
+ * Gray stroller tones from the forestStroller palette block.
  * @returns {Object} Hex colour map for drawBabyStrollerToCanvas()
  */
 export function babyStrollerGrayColors() {
-  return { ...GLOW_PAL.glowStroller }
+  return { ...FOREST_PAL.forestStroller }
 }
 
 /**

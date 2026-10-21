@@ -5,16 +5,16 @@ import { drawGroundRimToCanvas, groundRimBounds } from '../../../utils/draw-grou
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { drawSmallMushroomGroupToCanvas, drawSpottedMushroomToCanvas, smallMushroomGroupBounds } from '../../../utils/draw-small-mushroom.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
-import { forestContactShadowRgb, paintForestContactShadow } from '../utils/glow-forest-atmosphere.js'
-import { GLOW_PAL } from '../utils/glow-palette.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/glow-static-bake.js'
+import { forestContactShadowRgb, paintForestContactShadow } from '../utils/forest-atmosphere.js'
+import { FOREST_PAL } from '../utils/forest-palette.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/forest-static-bake.js'
 //
 // Colour-world forest floor dressing from the reference art: the ragged
 // ground rim and one wide mossy hill behind the hero, ferns and light spike
 // bushes in front of him, and small clusters of ordinary cream mushrooms on
 // the ground. This module only lays the pieces out; the painters live in
 // src/utils/draw-*.js. Everything is baked once per live Kaplay instance into
-// a few chunk sprites (film grain applied by glow-static-bake), then blitted
+// a few chunk sprites (film grain applied by forest-static-bake), then blitted
 // with one drawSprite per visible chunk — no per-plant objects or draws.
 //
 const LAYOUT_SEED = 40213
@@ -132,10 +132,10 @@ export function onDraw(inst, layer) {
  * @returns {Object} Colours keyed by painter (fern, plume, mushroom, spotted, tuft, hill, rim)
  */
 export function forestFloorPainterColors() {
-  return buildPainterColors(GLOW_PAL.glowForestFloor)
+  return buildPainterColors(FOREST_PAL.forestFloor)
 }
 //
-// Maps the flat glowForestFloor cfg block onto each painter's colour contract.
+// Maps the flat forestFloor cfg block onto each painter's colour contract.
 //
 function buildPainterColors(c) {
   return {

@@ -30,7 +30,7 @@ if (!import.meta.hot?.data.gameBooted) {
 }
 /**
  * Top-level boot sequence: boots the native-resolution engine that "ready",
- * "menu" and Glow/touch lesson 0 all share (see game-engine.js and
+ * "menu" and Forest/touch lesson 0 all share (see game-engine.js and
  * engine-switch.js), then enters "ready" directly with no engine swap.
  * Every remaining lesson still runs on the fixed 1920x1080 engine and swaps
  * into it on demand.

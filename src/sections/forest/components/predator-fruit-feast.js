@@ -2,7 +2,7 @@
 // Predator breaks off to eat a fruit knocked from the big tree, from any distance.
 //
 
-import { getGlowFruitDisplayRadius, keepGlowFruitRestingOnFloor } from '../utils/glow-tree-fruit.js'
+import { getForestFruitDisplayRadius, keepForestFruitRestingOnFloor } from '../utils/forest-tree-fruit.js'
 
 const FEAST_APPROACH_BURST_MULT = 0.72
 const FEAST_APPROACH_SPEED = 280
@@ -51,7 +51,7 @@ export function cancelPredatorFeast(pred) {
 /**
  * Claims nearby settled fruit and drives approach / eat phases.
  * @param {Object} pred - Predator inst
- * @param {Object} levelInst - Glow level inst
+ * @param {Object} levelInst - Forest level inst
  * @param {number} dt - Frame delta
  */
 export function tickPredatorFruitFeast(pred, levelInst, dt) {
@@ -125,7 +125,7 @@ function beginFeastEatingCycle(pred, fruit) {
   pred.vx = 0
   pred.speedTarget = 0
   fruit.eatProgress = 0
-  keepGlowFruitRestingOnFloor(fruit)
+  keepForestFruitRestingOnFloor(fruit)
   refreshFeastBitePose(pred, fruit)
   pred.feastRestPose = {
     x: pred.feastBitePose.x - pred.dir * FEAST_BITE_PULLBACK_X,
@@ -154,7 +154,7 @@ function tickFeastEating(pred, fruit, levelInst, dt) {
   if (phase === 'forward') {
     applyFeastBiteChunk(pred, fruit)
     pred.feastBitePhase = 'back'
-    if ((fruit.eatProgress ?? 0) >= 1 || getGlowFruitDisplayRadius(fruit) < 1.5) {
+    if ((fruit.eatProgress ?? 0) >= 1 || getForestFruitDisplayRadius(fruit) < 1.5) {
       finishFeastCluster(pred, levelInst)
       return
     }
@@ -169,7 +169,7 @@ function applyFeastBiteChunk(pred, fruit) {
   fruit.eatProgress = Math.min(1, pred.feastBitesDone / total)
   fruit.biteCount = (fruit.biteCount ?? 0) + 1
   pushFruitBiteMark(fruit)
-  keepGlowFruitRestingOnFloor(fruit)
+  keepForestFruitRestingOnFloor(fruit)
 }
 
 function feastBitePhaseDuration(phase) {
@@ -199,7 +199,7 @@ function applyFeastBitePose(pred, phase, t) {
 function refreshFeastBitePose(pred, fruit) {
   const head = pred.segments?.[0]
   const headR = head?.radius ?? 11
-  const fruitR = getGlowFruitDisplayRadius(fruit)
+  const fruitR = getForestFruitDisplayRadius(fruit)
   facePredatorTowardFruit(pred, fruit)
   const forward = headR + FEAST_SNOUT_REACH
   const biteX = fruit.x - pred.dir * (fruitR * 0.78 + forward)
@@ -336,7 +336,7 @@ function facePredatorTowardFruit(pred, fruit) {
 function fruitPredatorDist(pred, fruit) {
   const snout = predatorSnoutPoint(pred)
   if (!snout) return Infinity
-  const fruitR = getGlowFruitDisplayRadius(fruit)
+  const fruitR = getForestFruitDisplayRadius(fruit)
   return Math.hypot(fruit.x - snout.x, fruit.y - snout.y) - fruitR
 }
 
@@ -353,14 +353,14 @@ function predatorSnoutPoint(pred) {
 function snoutToFruitSurfaceGap(pred, fruit) {
   const snout = predatorSnoutPoint(pred)
   if (!snout) return Infinity
-  const fruitR = getGlowFruitDisplayRadius(fruit)
+  const fruitR = getForestFruitDisplayRadius(fruit)
   return Math.hypot(fruit.x - snout.x, fruit.y - snout.y) - fruitR
 }
 
 function feastApproachHeadX(pred, fruit) {
   const head = pred.segments?.[0]
   const forward = (head?.radius ?? 11) + FEAST_SNOUT_REACH
-  const fruitR = getGlowFruitDisplayRadius(fruit)
+  const fruitR = getForestFruitDisplayRadius(fruit)
   const dir = fruit.x >= pred.x ? 1 : -1
   return fruit.x - dir * (fruitR * 0.78 + forward)
 }

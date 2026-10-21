@@ -22,7 +22,7 @@ import {
   MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
 import * as Grass from '../components/grass.js'
-import { drawGlowFilmGrainWorldPatch } from '../sections/glow/utils/glow-parallax-grain.js'
+import { drawForestFilmGrainWorldPatch } from '../sections/forest/utils/forest-parallax-grain.js'
 import {
   READY_EYE_DISPLAY_HEIGHT,
   READY_EYE_DISPLAY_WIDTH,
@@ -45,7 +45,7 @@ const HINT_FONT_SIZE = 20
 // corner anchoring) so the hint sits the same distance off the bottom at
 // any resolution. Recomputed by recomputeReadyLayout() from the live
 // k.height() — every `let` below this comment is resolution-derived and
-// updated the same way, mirroring Glow's recomputeGlowScreenLayout pattern.
+// updated the same way, mirroring Forest's recomputeForestScreenLayout pattern.
 //
 const HINT_BOTTOM_MARGIN = 35
 let HINT_Y = CFG.visual.screen.height - HINT_BOTTOM_MARGIN
@@ -210,7 +210,7 @@ const FIREFLY_COLOR_B = 96
 // Grass is excluded from the central horizontal band where the
 // monster illustration stands (matches the keep-out used by rocks /
 // mushrooms in `menu-bg-generator.js`). The field itself is the shared
-// Grass component (same tufts as the glow level) tinted glow-grass green.
+// Grass component (same tufts as the forest level) tinted forest-grass green.
 //
 const GRASS_CENTER_KEEPOUT_HALF = 400
 const GRASS_TUFT_COUNT = 44
@@ -224,9 +224,9 @@ const GRASS_EDGE_INSET = 30
 //
 let GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
 //
-// The blades take the SAME tone as the near-row glow-forest foliage: the
+// The blades take the SAME tone as the near-row forest foliage: the
 // palette tree-leaf green pushed toward the warm haze by the combined
-// near-row blend of the glow level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
+// near-row blend of the forest level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
 //
 //
 // Grass matches the warm yellow-orange foliage of the front-row side trees,
@@ -342,10 +342,10 @@ const HERO_N_RUN_STEPS_MIN = 4
 const HERO_N_RUN_STEPS_RANGE = 5
 //
 // Passed as the "current level" to Sound.playStepSound so it takes the same
-// branch as an actual ground step in the glow level — no real scene change,
+// branch as an actual ground step in the forest level — no real scene change,
 // just routing into the same procedural ground-footstep sound.
 //
-const HERO_N_STEP_SOUND_LEVEL = 'lesson-glow.0'
+const HERO_N_STEP_SOUND_LEVEL = 'lesson-forest.0'
 //
 // The 8-frame run cycle contains TWO foot contacts, so one visible step
 // lasts half a full sprite cycle.
@@ -465,8 +465,8 @@ let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEI
  * Recomputes every resolution-derived ready-scene layout value from the
  * live kaplay viewport. Must run before recomputeMenuBgLayout()'s exports
  * are read, and before any of the sprite baking / field creation calls
- * below it — mirrors Glow's recomputeGlowScreenLayout() pattern, since
- * "ready" now shares the native-resolution engine with menu/Glow/touch
+ * below it — mirrors Forest's recomputeForestScreenLayout() pattern, since
+ * "ready" now shares the native-resolution engine with menu/Forest/touch
  * lesson 0 (see engine-switch.js) instead of a fixed 1920x1080 canvas.
  * @param {Object} k - Kaplay inst
  */
@@ -490,7 +490,7 @@ function recomputeReadyLayout(k) {
 export function sceneReady(k) {
   k.scene('ready', async () => {
     //
-    // Ready now shares the native-resolution engine with menu, Glow and
+    // Ready now shares the native-resolution engine with menu, Forest and
     // touch lesson 0 — recompute the whole baked-background + layout state
     // from the live window size before anything below reads it.
     //
@@ -573,7 +573,7 @@ export function sceneReady(k) {
     }])
     //
     // Swaying grass tufts along the horizon strip — the shared Grass
-    // component (the same baked blades as the glow level), skipping the
+    // component (the same baked blades as the forest level), skipping the
     // central keep-out band around the monster illustration. The density
     // weight grows with the distance from the centre, so the field thickens
     // towards the screen edges.
@@ -688,7 +688,7 @@ export function sceneReady(k) {
     //
     k.add([k.pos(0, 0), k.z(Z_SPIDER), { draw() { drawTitleHero(k, hero) } }])
     //
-    // Glow film grain — same look as lesson-glow.0, drawn over the whole scene.
+    // Forest film grain — same look as lesson-forest.0, drawn over the whole scene.
     //
     k.add([
       k.fixed(),
@@ -697,7 +697,7 @@ export function sceneReady(k) {
         draw() {
           const op = spiderState.departureFade ?? 1
           if (op <= 0.001) return
-          drawGlowFilmGrainWorldPatch(k, 0, 0, k.width(), k.height(), 0.14 * op)
+          drawForestFilmGrainWorldPatch(k, 0, 0, k.width(), k.height(), 0.14 * op)
         }
       }
     ])

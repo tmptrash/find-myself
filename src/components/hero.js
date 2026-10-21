@@ -480,8 +480,8 @@ export function create(config) {
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
     eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
     pupilColor = null,     // Override pupil fill (null = use outline colour)
-    transparentEyeInterior = false, // Hollow glow/menu eyes: ring + pupil only, clear socket
-    noEyes = false,        // Bake idle/run/jump without eye whites or pupils (glow eyeless intro)
+    transparentEyeInterior = false, // Hollow forest/menu eyes: ring + pupil only, clear socket
+    noEyes = false,        // Bake idle/run/jump without eye whites or pupils (forest eyeless intro)
     postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
     idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
     outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
@@ -661,10 +661,10 @@ export function create(config) {
     eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
     pupilColor: pupilColor ? String(pupilColor).replace('#', '') : null,
     transparentEyeInterior: Boolean(transparentEyeInterior),
-    postBakeCanvas,                       // Glow film grain on baked hero frames
-    idleNotePostBake,                     // Glow film grain on baked mouth-note glyphs
+    postBakeCanvas,                       // Forest film grain on baked hero frames
+    idleNotePostBake,                     // Forest film grain on baked mouth-note glyphs
     outlineRimPx,                         // Baked silhouette rim width (px)
-    noEyes,                               // Eyeless glow intro — no eye whites in baked frames
+    noEyes,                               // Eyeless forest intro — no eye whites in baked frames
     spritePrefix,
     dustColor,
     suppressDust,
@@ -699,7 +699,7 @@ export function create(config) {
     lookAtPos: null,
     isAnnihilating: false,
     isDying: false,
-    isSubmerging: false,  // Glow lake sink — scene drives Y; skip physics/anim pipeline
+    isSubmerging: false,  // Forest lake sink — scene drives Y; skip physics/anim pipeline
     isSpawned: false,   // Flag to prevent controls before spawn completes
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
@@ -733,9 +733,9 @@ export function create(config) {
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     jumpDisabled: false,      // Flag to block only jumping while movement stays free (e.g. intro hints)
-    jumpForceMult: 1,         // Per-zone jump multiplier (e.g. glow mud band = 0.5)
-    moveSpeedMult: 1,         // Per-zone horizontal speed multiplier (e.g. glow mud = 0.5)
-    jumpSquashTimeMult: 1,    // Pre-jump squash duration multiplier (glow mud = 1)
+    jumpForceMult: 1,         // Per-zone jump multiplier (e.g. forest mud band = 0.5)
+    moveSpeedMult: 1,         // Per-zone horizontal speed multiplier (e.g. forest mud = 0.5)
+    jumpSquashTimeMult: 1,    // Pre-jump squash duration multiplier (forest mud = 1)
     mudJumpActive: false,     // True for the whole arc of a jump launched from mud
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
     lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
@@ -981,7 +981,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
  * @param {Function} onComplete - Callback when death animation completes
  * @param {Object} [opts] - Options
  * @param {boolean} [opts.suppressParticles] - Skip body/eye particles (scene provides custom ones)
- * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. glow leaf-burst deaths)
+ * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. forest leaf-burst deaths)
  */
 export function death(inst, onComplete, opts = {}) {
   if (inst.isDying) return
@@ -1164,7 +1164,7 @@ export function getActiveSpriteKey(inst) {
 }
 
 /**
- * Forces the closed-eyes idle sprite (used during glow lake drowning).
+ * Forces the closed-eyes idle sprite (used during forest lake drowning).
  * @param {Object} inst - Hero instance
  */
 export function applyCalmIdleSprite(inst) {
@@ -1175,7 +1175,7 @@ export function applyCalmIdleSprite(inst) {
   const prefix = heroIdleSpritePrefix(inst)
   const closedName = `${prefix}_closed`
   //
-  // Re-applying the sprite every frame (glow drowning) would remount Kaplay
+  // Re-applying the sprite every frame (forest drowning) would remount Kaplay
   // components and fight the scene-driven sink tween.
   //
   if (inst.currentEyeSprite === closedName) return
@@ -1293,7 +1293,7 @@ function onUpdate(inst) {
   //
   if (inst.isAnnihilating) return
   //
-  // Lake drowning in glow — position/opacity are driven by the scene sink tween.
+  // Lake drowning in forest — position/opacity are driven by the scene sink tween.
   //
   if (inst.isSubmerging) {
     const ch = inst.character
@@ -1311,7 +1311,7 @@ function onUpdate(inst) {
     inst.drownHeroDrawZ != null && (ch.z = inst.drownHeroDrawZ)
     ch && (ch.hidden = true)
     //
-    // Body is removed in glow drowning — only scene-driven Y applies.
+    // Body is removed in forest drowning — only scene-driven Y applies.
     //
     ch?.vel && (ch.vel.x = 0, ch.vel.y = 0)
     return
@@ -1443,7 +1443,7 @@ function onUpdate(inst) {
   // Wood platforms: pre-jump squash can briefly unground — abort only that
   // orphaned squash so it cannot loop crouch↔air. Never cancel an intentional
   // grounded squash while postLandAirLock is ticking (that killed jumps after
-  // letter dialogs on glow logs).
+  // letter dialogs on forest logs).
   //
   if (inst.isSquashing && !isGrounded) {
     cancelJumpSquash(inst)
@@ -1610,7 +1610,7 @@ function onUpdate(inst) {
           return
         }
         //
-        // Glow thin branch/log flicker while walking: keep the run cycle below
+        // Forest thin branch/log flicker while walking: keep the run cycle below
         // instead of freezing on a single run frame (used to return here even
         // when isMoving).
         //
@@ -1625,7 +1625,7 @@ function onUpdate(inst) {
         Math.abs(inst.character.vel.y) < 80 &&
         inst.jumpPhase !== 'jumping')
     //
-    // Glow keeps a real in-progress jump animating through brief ungrounded
+    // Forest keeps a real in-progress jump animating through brief ungrounded
     // flicker (thin branch/log collision) instead of snapping back to run/idle.
     // Gating this on raw vel.y thresholds instead of the jump-state flags used
     // to misfire from ordinary gravity noise (a single frame's downward pull
@@ -1634,8 +1634,8 @@ function onUpdate(inst) {
     // or walking on the branch. wasJumping / jumpPhase alone only turn true
     // once a real jump has already been recognised, so they can't misfire.
     //
-    const glowAirAnim = inst.airAnimDuringFlicker && (inst.wasJumping || inst.jumpPhase === 'jumping')
-    if (inst.isSpawned && (!groundFlicker || glowAirAnim)) {
+    const forestAirAnim = inst.airAnimDuringFlicker && (inst.wasJumping || inst.jumpPhase === 'jumping')
+    if (inst.isSpawned && (!groundFlicker || forestAirAnim)) {
       //
       // Cancel any squash that was accidentally started while airborne (e.g. when
       // standing on a dynamic/floating platform that Kaplay doesn't mark as grounded).
@@ -2202,7 +2202,7 @@ function drawIdleNotes(k, inst) {
   }
 }
 /**
- * Bakes shared mouth-note glyphs once per Kaplay instance (e.g. glow spirit whistle).
+ * Bakes shared mouth-note glyphs once per Kaplay instance (e.g. forest spirit whistle).
  * @param {Object} k - Kaplay inst
  * @param {Function} [postBake] - Optional canvas grade hook
  */
@@ -2245,7 +2245,7 @@ function onCollisionPlatform(inst) {
     //
     // Prefer the surface stamped by the platform collide tag this frame
     //
-    noBuiltInFootFx && inst.sfx && !inst.sfx._glowSurface && (inst.sfx._glowSurface = 'ground')
+    noBuiltInFootFx && inst.sfx && !inst.sfx._forestSurface && (inst.sfx._forestSurface = 'ground')
     playHeroLandFx(inst, inst.wasJumping)
   }
 }
@@ -4689,7 +4689,7 @@ function pollJumpInput(inst) {
 function attemptHeroJump(inst) {
   //
   // controllable=false / open letter panels: Space closes the dialog and must
-  // not start a crouch→jump (especially on glow wood platforms after O).
+  // not start a crouch→jump (especially on forest wood platforms after O).
   //
   if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
   if (isAnyPanelOpen()) return
@@ -4886,7 +4886,7 @@ function isHeroSpritePrefixReadyOnK(k, prefix) {
   return heroSpritePrefixesReadyFor.get(k)?.has(prefix) ?? false
 }
 //
-// Bakes mouth-note glyphs once per Kaplay instance for glow grain.
+// Bakes mouth-note glyphs once per Kaplay instance for forest grain.
 //
 function ensureIdleNoteGlyphSprites(k, postBake) {
   if (k._idleNoteGlyphMap) return

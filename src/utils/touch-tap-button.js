@@ -40,7 +40,7 @@ const HINT_OUTLINE_G = 0
 const HINT_OUTLINE_B = 0
 //
 // Drop shadow (single black copy offset right+down) — the same text shadow
-// style the glow level uses.
+// style the forest level uses.
 //
 const HINT_OUTLINE_OFFSETS = [[1, 1]]
 const ENTER_LABEL = 'Enter'

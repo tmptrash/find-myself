@@ -1,8 +1,8 @@
 import { CFG } from '../../../cfg.js'
-import { glowRgb } from './glow-palette.js'
+import { forestRgb } from './forest-palette.js'
 
 //
-// Cute chubby mushroom drawing primitive for the glow section: a cream blob
+// Cute chubby mushroom drawing primitive for the forest section: a cream blob
 // body under a rounded wavy-edged spotted cap, with an optional blushy face
 // (eyes + smile). Ported from a 420x420 Canvas2D reference sketch and
 // normalized so callers control the size and the palette colours. The face
@@ -97,9 +97,9 @@ export function drawCuteMushroomPupilOverlay(k, opts) {
   } = opts
   const s = width / REF_WIDTH
   const e = s * (eyeScale || 1)
-  const pupilRgb = glowRgb(pupilHex ?? CFG.visual.colors.hero.eyePupil)
+  const pupilRgb = forestRgb(pupilHex ?? CFG.visual.colors.hero.eyePupil)
   const pupilC = k.rgb(pupilRgb.r, pupilRgb.g, pupilRgb.b)
-  const glintRgb = glowRgb(CFG.visual.colors.hero.eyeWhite)
+  const glintRgb = forestRgb(CFG.visual.colors.hero.eyeWhite)
   const glintC = k.rgb(glintRgb.r, glintRgb.g, glintRgb.b)
   const rad = (angle * Math.PI) / 180
   const cos = Math.cos(rad)
@@ -197,7 +197,7 @@ export function drawCuteMushroomToCanvas(ctx, opts) {
 // Converts a palette hex into a css rgb()/rgba() string.
 //
 function css(hex, alpha = 1) {
-  const c = glowRgb(hex)
+  const c = forestRgb(hex)
   return alpha >= 1 ? `rgb(${c.r}, ${c.g}, ${c.b})` : `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`
 }
 //

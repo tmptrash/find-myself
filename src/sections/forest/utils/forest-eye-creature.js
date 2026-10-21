@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
-import { GLOW_PAL } from './glow-palette.js'
+import { FOREST_PAL } from './forest-palette.js'
 
 //
 // Specular on the warm sclera — small offset so the eye reads luminous, not
@@ -16,8 +16,8 @@ const EYE_HIGHLIGHT_OFFSET_Y_MULT = -0.36
  * @param {Object} k - Kaplay inst
  * @returns {{ body: Object, sclera: Object, pupil: Object, highlight: Object, contour: Object }}
  */
-export function glowEyeCreatureColors(k) {
-  const pal = GLOW_PAL.eyeCreature
+export function forestEyeCreatureColors(k) {
+  const pal = FOREST_PAL.eyeCreature
   return {
     body: getRGB(k, pal.body),
     sclera: getRGB(k, pal.sclera),
@@ -31,11 +31,11 @@ export function glowEyeCreatureColors(k) {
  * @param {Object} k - Kaplay inst
  * @returns {{ body: Object, sclera: Object, pupil: Object, highlight: Object, contour: Object }}
  */
-export function glowCaveHeroEyeColors(k) {
+export function forestCaveHeroEyeColors(k) {
   const sclera = getRGB(k, CFG.visual.colors.hero.eyeWhite)
   const pupil = getRGB(k, CFG.visual.colors.hero.eyePupil)
-  const contour = getRGB(k, GLOW_PAL.glowContour.gameplay)
-  const highlight = getRGB(k, GLOW_PAL.lightGray)
+  const contour = getRGB(k, FOREST_PAL.forestContour.gameplay)
+  const highlight = getRGB(k, FOREST_PAL.lightGray)
   return {
     body: contour,
     sclera,
@@ -52,11 +52,11 @@ export function glowCaveHeroEyeColors(k) {
  * @param {number} cy - Sclera center Y
  * @param {number} pupilX - Pupil center X
  * @param {number} pupilY - Pupil center Y
- * @param {Object} colors - Kaplay rgb from glowEyeCreatureColors()
+ * @param {Object} colors - Kaplay rgb from forestEyeCreatureColors()
  * @param {Object} radii - { scleraR, pupilR, contourExtra }
  * @param {Object} [opts] - { skipHighlight }
  */
-export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii, opts) {
+export function drawForestEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii, opts) {
   const { sclera, pupil, highlight, contour } = colors
   const { scleraR, pupilR, contourExtra } = radii
   const skipHighlight = Boolean(opts?.skipHighlight)
@@ -84,18 +84,18 @@ export function drawGlowEyeCreature(k, cx, cy, pupilX, pupilY, colors, radii, op
 }
 
 /**
- * Same eye stack as drawGlowEyeCreature, queued into a PolyBatch so many eyes
+ * Same eye stack as drawForestEyeCreature, queued into a PolyBatch so many eyes
  * (and the bodies they sit on) go out in one draw call.
  * @param {Object} batch - PolyBatch inst
  * @param {number} cx - Sclera center X
  * @param {number} cy - Sclera center Y
  * @param {number} pupilX - Pupil center X
  * @param {number} pupilY - Pupil center Y
- * @param {Object} colors - Kaplay rgb from glowEyeCreatureColors()
+ * @param {Object} colors - Kaplay rgb from forestEyeCreatureColors()
  * @param {Object} radii - { scleraR, pupilR, contourExtra }
  * @param {Object} [opts] - { skipHighlight }
  */
-export function addGlowEyeCreatureToBatch(batch, cx, cy, pupilX, pupilY, colors, radii, opts) {
+export function addForestEyeCreatureToBatch(batch, cx, cy, pupilX, pupilY, colors, radii, opts) {
   const { sclera, pupil, highlight, contour } = colors
   const { scleraR, pupilR, contourExtra } = radii
   PolyBatch.addDisc(batch, cx, cy, scleraR + contourExtra, contour)

@@ -1,7 +1,7 @@
-import { GLOW_PAL, glowRgb } from './glow-palette.js'
+import { FOREST_PAL, forestRgb } from './forest-palette.js'
 
 //
-// Baked blur + film-grain passes for glow sprites (parallax forest, decor,
+// Baked blur + film-grain passes for forest sprites (parallax forest, decor,
 // hero, tree, water frames). Applied once at bake time so runtime draw
 // stays a plain blit.
 //
@@ -10,25 +10,25 @@ const GRAIN_ALPHA_MIN = 8
 // Film grain must not brighten the outline rim — noise on dark ink pixels
 // reads as a grey fringe between the light body and the outer contour.
 // Perceptual luminance (not a flat per-channel cap) so hued dark outlines
-// like glow's bluish-gray rim (#2d4141, luminance ~58) are still protected.
+// like forest's bluish-gray rim (#2d4141, luminance ~58) are still protected.
 //
 const GRAIN_OUTLINE_LUM_MAX = 90
 const GRADE_NEUTRAL_PIVOT = { r: 128, g: 128, b: 128 }
 //
-// Shared film-grain look for every glow bake (matches the near parallax row).
+// Shared film-grain look for every forest bake (matches the near parallax row).
 //
-export const GLOW_FILM_GRAIN = {
+export const FOREST_FILM_GRAIN = {
   strength: 6,
   blockSize: 1,
   seed: 43011
 }
 
 /**
- * Adds the standard glow film grain to a baked canvas.
+ * Adds the standard forest film grain to a baked canvas.
  * @param {HTMLCanvasElement} canvas
  * @param {number} [seedOffset=0] - Per-sprite seed tweak so repeats do not align
  */
-export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0, opts = {}) {
+export function applyForestFilmGrainToCanvas(canvas, seedOffset = 0, opts = {}) {
   if (!canvas?.width || !canvas?.height) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   applyFilmGrainToContext(ctx, canvas.width, canvas.height, grainCfg(
@@ -43,7 +43,7 @@ export function applyGlowFilmGrainToCanvas(canvas, seedOffset = 0, opts = {}) {
  * @param {HTMLCanvasElement} canvas
  * @param {number} cellPx - Block size in source pixels (2 = focal tier)
  */
-export function applyGlowCanvasPixelate(canvas, cellPx) {
+export function applyForestCanvasPixelate(canvas, cellPx) {
   if (!canvas?.width || !cellPx || cellPx <= 1) return
   const w = canvas.width
   const h = canvas.height
@@ -64,7 +64,7 @@ export function applyGlowCanvasPixelate(canvas, cellPx) {
 }
 
 /**
- * Blurs then adds the standard glow film grain to a parallax forest canvas.
+ * Blurs then adds the standard forest film grain to a parallax forest canvas.
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} width - Canvas width in px
  * @param {number} height - Canvas height in px
@@ -78,10 +78,10 @@ export function applyGlowCanvasPixelate(canvas, cellPx) {
 // Contrast pulls toward a hued haze swatch, not neutral mid-grey, so distance
 // reads as sunlit green-gold air instead of grey fog.
 //
-export const GLOW_LAYER_GRADE = {
-  far: { contrast: 0.34, saturation: 0.62, grain: 0, grainBlockSize: 10, haze: glowRgb(GLOW_PAL.glowHaze.far) },
-  mid: { contrast: 0.6, saturation: 0.84, grain: 0.07, grainBlockSize: 6, haze: glowRgb(GLOW_PAL.glowHaze.mid) },
-  near: { contrast: 0.96, saturation: 1.08, grain: 0.34, grainBlockSize: 5, haze: glowRgb(GLOW_PAL.glowHaze.near) },
+export const FOREST_LAYER_GRADE = {
+  far: { contrast: 0.34, saturation: 0.62, grain: 0, grainBlockSize: 10, haze: forestRgb(FOREST_PAL.forestHaze.far) },
+  mid: { contrast: 0.6, saturation: 0.84, grain: 0.07, grainBlockSize: 6, haze: forestRgb(FOREST_PAL.forestHaze.mid) },
+  near: { contrast: 0.96, saturation: 1.08, grain: 0.34, grainBlockSize: 5, haze: forestRgb(FOREST_PAL.forestHaze.near) },
   //
   // Smooth decor (hero, mushrooms, water mask) — grade only, almost no grain.
   //
@@ -98,7 +98,7 @@ export const GLOW_LAYER_GRADE = {
  * @param {{ contrast: number, saturation: number, grain?: number }} grade
  * @param {number} [seedOffset=0]
  */
-export function applyGlowLayerGradeToCanvas(canvas, grade, seedOffset = 0) {
+export function applyForestLayerGradeToCanvas(canvas, grade, seedOffset = 0) {
   if (!canvas?.width || !canvas?.height || !grade) return
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   applyContrastSaturationToContext(ctx, canvas.width, canvas.height, grade.contrast, grade.saturation, grade.haze)
@@ -185,13 +185,13 @@ function applyFilmGrainToContext(ctx, width, height, cfg) {
   ctx.putImageData(imageData, 0, 0)
 }
 //
-// Builds a grain cfg from the shared glow preset plus an optional seed offset.
+// Builds a grain cfg from the shared forest preset plus an optional seed offset.
 //
 function grainCfg(seedOffset = 0, strengthScale = 1, blockSize) {
   return {
-    strength: GLOW_FILM_GRAIN.strength * strengthScale,
-    blockSize: blockSize ?? GLOW_FILM_GRAIN.blockSize,
-    seed: GLOW_FILM_GRAIN.seed + (seedOffset | 0)
+    strength: FOREST_FILM_GRAIN.strength * strengthScale,
+    blockSize: blockSize ?? FOREST_FILM_GRAIN.blockSize,
+    seed: FOREST_FILM_GRAIN.seed + (seedOffset | 0)
   }
 }
 //
@@ -211,10 +211,10 @@ function clamp255(v) {
 }
 //
 // Full-screen film-grain overlay for non-baked scenes (menu, ready) — tiles
-// the same luminance noise as the glow bake pass across the whole viewport.
+// the same luminance noise as the forest bake pass across the whole viewport.
 //
 const GRAIN_OVERLAY_TILE = 256
-const GRAIN_OVERLAY_SPRITE = 'glow-film-grain-tile'
+const GRAIN_OVERLAY_SPRITE = 'forest-film-grain-tile'
 const GRAIN_OVERLAY_OPACITY = 0.14
 let grainOverlayTileCanvas = null
 //
@@ -229,7 +229,7 @@ function buildGrainOverlayTile() {
   const ctx = canvas.getContext('2d')
   const imageData = ctx.createImageData(size, size)
   const px = imageData.data
-  const { strength, seed, blockSize } = GLOW_FILM_GRAIN
+  const { strength, seed, blockSize } = FOREST_FILM_GRAIN
   const block = Math.max(1, blockSize | 0)
   for (let y = 0; y < size; y++) {
     const by = (y / block) | 0
@@ -251,13 +251,13 @@ function buildGrainOverlayTile() {
 //
 // Loads the grain tile sprite once per Kaplay instance.
 //
-function ensureGlowFilmGrainOverlaySprite(k) {
+function ensureForestFilmGrainOverlaySprite(k) {
   if (k.getSprite(GRAIN_OVERLAY_SPRITE)) return
   k.loadSprite(GRAIN_OVERLAY_SPRITE, buildGrainOverlayTile())
 }
 /**
  * Draws the shared grain tile across one WORLD-space rect (scrolls with the
- * camera, unlike addGlowFilmGrainOverlayLayer's fixed full-screen version) —
+ * camera, unlike addForestFilmGrainOverlayLayer's fixed full-screen version) —
  * for small live-drawn (not baked) shapes that need the same grain look as
  * the game's baked sprites without baking their own canvas.
  * @param {Object} k - Kaplay instance
@@ -267,8 +267,8 @@ function ensureGlowFilmGrainOverlaySprite(k) {
  * @param {number} y2
  * @param {number} [opacity] - Defaults to the standard overlay opacity
  */
-export function drawGlowFilmGrainWorldPatch(k, x1, y1, x2, y2, opacity = GRAIN_OVERLAY_OPACITY) {
-  ensureGlowFilmGrainOverlaySprite(k)
+export function drawForestFilmGrainWorldPatch(k, x1, y1, x2, y2, opacity = GRAIN_OVERLAY_OPACITY) {
+  ensureForestFilmGrainOverlaySprite(k)
   const tile = GRAIN_OVERLAY_TILE
   for (let y = y1; y < y2; y += tile) {
     for (let x = x1; x < x2; x += tile) {
@@ -285,8 +285,8 @@ export function drawGlowFilmGrainWorldPatch(k, x1, y1, x2, y2, opacity = GRAIN_O
 //
 // Draws the grain tile across the full viewport (call from a fixed draw layer).
 //
-function drawGlowFilmGrainOverlay(k) {
-  ensureGlowFilmGrainOverlaySprite(k)
+function drawForestFilmGrainOverlay(k) {
+  ensureForestFilmGrainOverlaySprite(k)
   const w = k.width()
   const h = k.height()
   const tile = GRAIN_OVERLAY_TILE
@@ -308,12 +308,12 @@ function drawGlowFilmGrainOverlay(k) {
  * @param {Object} k - Kaplay instance
  * @param {number} zIndex - Draw order (above gameplay/UI, below leave covers)
  */
-export function addGlowFilmGrainOverlayLayer(k, zIndex) {
-  ensureGlowFilmGrainOverlaySprite(k)
+export function addForestFilmGrainOverlayLayer(k, zIndex) {
+  ensureForestFilmGrainOverlaySprite(k)
   k.add([
     k.fixed(),
     k.z(zIndex),
-    { draw() { drawGlowFilmGrainOverlay(k) } }
+    { draw() { drawForestFilmGrainOverlay(k) } }
   ])
 }
 /**
@@ -326,8 +326,8 @@ export function addGlowFilmGrainOverlayLayer(k, zIndex) {
  * @param {{ r: number, g: number, b: number }} baseRgb - Fallback mid tone
  * @param {number} [seed=0] - Per-clump seed
  */
-export function drawGlowHiResFoliageCluster(ctx, cx, cy, radius, baseRgb, seed = 0) {
-  const shades = GLOW_PAL.treeColor.leafShades.map(h => glowRgb(h))
+export function drawForestHiResFoliageCluster(ctx, cx, cy, radius, baseRgb, seed = 0) {
+  const shades = FOREST_PAL.treeColor.leafShades.map(h => forestRgb(h))
   const shadow = shades[0] || baseRgb
   const mid = shades[2] || baseRgb
   const highlight = shades[Math.min(3, shades.length - 1)] || baseRgb

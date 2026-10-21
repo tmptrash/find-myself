@@ -1,7 +1,7 @@
 import * as Hero from '../../../components/hero.js'
-import { GLOW_PAL } from './glow-palette.js'
-import * as HoloFx from './glow-holo-fx.js'
-import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import { FOREST_PAL } from './forest-palette.js'
+import * as HoloFx from './forest-holo-fx.js'
+import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
 //
 // Flat hologram ellipse lying on the ground: opening radii and the dim band
 // of dashed field around it.
@@ -96,10 +96,10 @@ const SPARK_PER_SEC = 10
 //
 // Baked sprites, regenerated once per live Kaplay instance.
 //
-const SPRITE_RING_BACK = 'glow-ground-portal-ring-back'
-const SPRITE_RING_FRONT = 'glow-ground-portal-ring-front'
-const SPRITE_FIELD = 'glow-ground-portal-field'
-const SPRITE_BEAM = 'glow-ground-portal-beam'
+const SPRITE_RING_BACK = 'forest-ground-portal-ring-back'
+const SPRITE_RING_FRONT = 'forest-ground-portal-ring-front'
+const SPRITE_FIELD = 'forest-ground-portal-field'
+const SPRITE_BEAM = 'forest-ground-portal-beam'
 const GRAIN_SEED_RING_BACK = 7503
 const GRAIN_SEED_RING_FRONT = 7607
 const GRAIN_SEED_FIELD = 7709
@@ -127,7 +127,7 @@ const bakedFor = new WeakMap()
  */
 export function create(cfg) {
   const { k } = cfg
-  const pal = GLOW_PAL.holoDoor
+  const pal = FOREST_PAL.holoDoor
   ensureGroundPortalSprites(k)
   const inst = {
     k,
@@ -167,7 +167,7 @@ export function update(portalInst) {
 
 /**
  * Draws both portal sites. Call from the level onDraw after cave decor and
- * before drawGlowPitCaveHeroForeground so the hero stays in front.
+ * before drawForestPitCaveHeroForeground so the hero stays in front.
  * @param {Object|null} portalInst - Ground portal inst from create()
  */
 export function draw(portalInst) {
@@ -499,7 +499,7 @@ function ensureGroundPortalSprites(k) {
 }
 
 function bakeGrained(canvas, seed) {
-  applyGlowFilmGrainToCanvas(canvas, seed)
+  applyForestFilmGrainToCanvas(canvas, seed)
   return canvas
 }
 
@@ -523,7 +523,7 @@ function strokeEllipse(ctx, cx, cy, rx, ry, from, to, width, style) {
 // dim dotted band, edge and hot core.
 //
 function bakeRingCanvas(from, to) {
-  const pal = GLOW_PAL.holoDoor
+  const pal = FOREST_PAL.holoDoor
   const canvas = makeCanvas(RING_SPRITE_W, RING_SPRITE_H)
   const ctx = canvas.getContext('2d')
   const cx = RING_SPRITE_W / 2
@@ -544,7 +544,7 @@ function bakeRingCanvas(from, to) {
 // brighter dashes like the door's projection field.
 //
 function bakeFieldCanvas() {
-  const pal = GLOW_PAL.holoDoor
+  const pal = FOREST_PAL.holoDoor
   const canvas = makeCanvas(FIELD_RX * 2, FIELD_RY * 2)
   const ctx = canvas.getContext('2d')
   const cx = FIELD_RX
@@ -567,7 +567,7 @@ function bakeFieldCanvas() {
 // upwards (linear), with dotted streaks climbing out of the opening.
 //
 function bakeBeamCanvas() {
-  const pal = GLOW_PAL.holoDoor
+  const pal = FOREST_PAL.holoDoor
   const canvas = makeCanvas(BEAM_W, BEAM_H)
   const ctx = canvas.getContext('2d')
   const half = BEAM_W / 2

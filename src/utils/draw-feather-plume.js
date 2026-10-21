@@ -1,6 +1,6 @@
 import { strokeQuad } from './quad-curve.js'
 //
-// Canvas2D light spike bush from the glow reference: a tuft of upright
+// Canvas2D light spike bush from the forest reference: a tuft of upright
 // lance-shaped pale spikes on short stalks, each widest a third of the way
 // up and pointed at the top, its face covered in stacked chevrons (the
 // overlapping scales of the reference plant) with a darker midrib.

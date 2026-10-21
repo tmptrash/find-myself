@@ -8,7 +8,7 @@ import {
   ensureStaticDecorSprite,
   isWorldSpanInView,
   rootSegmentsBounds
-} from './glow-static-bake.js'
+} from './forest-static-bake.js'
 //
 // Small background trees whose branches end in clusters of red leaves —
 // forest-green tapered trunks lit from the left, with ragged lit / shaded
@@ -71,7 +71,7 @@ const LEAF_LIGHT_SHAPE = [
   [0.92, -0.06]
 ]
 //
-// Root fan at the base, same growTreeRootSegments algorithm the big glow
+// Root fan at the base, same growTreeRootSegments algorithm the big forest
 // tree uses — generated once per tree at creation time and baked into a
 // sprite (never regrown), same as the trunk. Starting thickness matches the
 // trunk's own local cross-section width at ground level (see
@@ -221,7 +221,7 @@ function trunkHalfWidthAt(tree, y) {
 }
 //
 // Grows a small root fan at the trunk base once, at creation time — the
-// same growTreeRootSegments algorithm the big glow tree uses, just fewer
+// same growTreeRootSegments algorithm the big forest tree uses, just fewer
 // and thinner roots. Cached on the tree and baked into a sprite on first
 // draw (never regrown).
 //

@@ -1,28 +1,28 @@
 import * as HeroHint from '../../../utils/hero-hint.js'
 //
 // Weighted seconds before a context teacher hint may fire (movement = 1:1,
-// standing still = 0.5:1 until idle exceeds GLOW_TEACHER_IDLE_CAP_SEC).
+// standing still = 0.5:1 until idle exceeds FOREST_TEACHER_IDLE_CAP_SEC).
 //
-export const GLOW_TEACHER_HINT_MOVE_SEC = 10
-export const GLOW_TEACHER_HINT_DURATION = 5
-const GLOW_TEACHER_IDLE_RATE = 0.5
-const GLOW_TEACHER_IDLE_CAP_SEC = 5
-const GLOW_TEACHER_HINT_OFFSET_Y = 68
-const GLOW_TEACHER_HINT_DISMISS_DISTANCE = 9999
+export const FOREST_TEACHER_HINT_MOVE_SEC = 10
+export const FOREST_TEACHER_HINT_DURATION = 5
+const FOREST_TEACHER_IDLE_RATE = 0.5
+const FOREST_TEACHER_IDLE_CAP_SEC = 5
+const FOREST_TEACHER_HINT_OFFSET_Y = 68
+const FOREST_TEACHER_HINT_DISMISS_DISTANCE = 9999
 //
-// Initializes teacher-hint queue state on the glow level inst.
+// Initializes teacher-hint queue state on the forest level inst.
 //
-export function initGlowTeacherHintState(inst) {
+export function initForestTeacherHintState(inst) {
   inst.teacherHintQueue = []
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
-  inst._glowTeacherWasInCave = false
-  inst._glowTeacherHintActive = false
-  inst.lastGlowTeacherHintText = null
+  inst._forestTeacherWasInCave = false
+  inst._forestTeacherHintActive = false
+  inst.lastForestTeacherHintText = null
 }
 /**
  * Advances the shared context timer and invokes the cave hint callback at 10 s.
- * @param {Object} inst - Glow level inst
+ * @param {Object} inst - Forest level inst
  * @param {Object} cfg
  * @param {number} cfg.dt - Frame delta
  * @param {boolean} cfg.blocked - Pause accumulation (intro, dialog, etc.)
@@ -32,12 +32,12 @@ export function initGlowTeacherHintState(inst) {
  * @param {boolean} cfg.caveEligible - Cave mushroom hint may run
  * @param {Function} [cfg.onCaveHint] - Called when cave context hits the gate
  */
-export function tickGlowTeacherContextHints(inst, cfg) {
+export function tickForestTeacherContextHints(inst, cfg) {
   if (!inst || cfg.blocked) return
   if (!inst.levelIndicator?.lifeRevealed) return
-  if (HeroHint.isActive(inst.heroHint) && inst._glowTeacherHintActive) return
+  if (HeroHint.isActive(inst.heroHint) && inst._forestTeacherHintActive) return
   const inCave = Boolean(cfg.inCave)
-  if (inCave && !inst._glowTeacherWasInCave) {
+  if (inCave && !inst._forestTeacherWasInCave) {
     inst.teacherContextAccum = 0
     inst.teacherIdleStreak = 0
     const pit = inst.pit
@@ -46,7 +46,7 @@ export function tickGlowTeacherContextHints(inst, cfg) {
       pit.pitCaveMushroomHintShows = 0
     }
   }
-  inst._glowTeacherWasInCave = inCave
+  inst._forestTeacherWasInCave = inCave
   const accumulating = inCave && Boolean(cfg.caveEligible)
   if (!accumulating) {
     if (!inCave) {
@@ -62,10 +62,10 @@ export function tickGlowTeacherContextHints(inst, cfg) {
     inst.teacherContextAccum = (inst.teacherContextAccum || 0) + dt
   } else {
     inst.teacherIdleStreak = (inst.teacherIdleStreak || 0) + dt
-    inst.teacherIdleStreak <= GLOW_TEACHER_IDLE_CAP_SEC &&
-      (inst.teacherContextAccum = (inst.teacherContextAccum || 0) + dt * GLOW_TEACHER_IDLE_RATE)
+    inst.teacherIdleStreak <= FOREST_TEACHER_IDLE_CAP_SEC &&
+      (inst.teacherContextAccum = (inst.teacherContextAccum || 0) + dt * FOREST_TEACHER_IDLE_RATE)
   }
-  if ((inst.teacherContextAccum || 0) < GLOW_TEACHER_HINT_MOVE_SEC) return
+  if ((inst.teacherContextAccum || 0) < FOREST_TEACHER_HINT_MOVE_SEC) return
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
   cfg.onCaveHint?.()
@@ -73,26 +73,26 @@ export function tickGlowTeacherContextHints(inst, cfg) {
 //
 // Shows a teacher hint immediately (bypasses the queue).
 //
-export function showGlowTeacherHintNow(inst, text, duration = GLOW_TEACHER_HINT_DURATION, opts = {}) {
+export function showForestTeacherHintNow(inst, text, duration = FOREST_TEACHER_HINT_DURATION, opts = {}) {
   if (!text || !inst) return false
   const forceTeacherHint = Boolean(opts.pitCaveMushroom)
-  if (inst._inGlowPitCave && !opts.pitCaveMushroom) return false
-  if (HeroHint.isActive(inst.heroHint) && !inst._glowTeacherHintActive) {
+  if (inst._inForestPitCave && !opts.pitCaveMushroom) return false
+  if (HeroHint.isActive(inst.heroHint) && !inst._forestTeacherHintActive) {
     if (!forceTeacherHint) return false
     HeroHint.clear(inst.heroHint)
   }
-  if (forceTeacherHint && HeroHint.isActive(inst.heroHint) && inst._glowTeacherHintActive) {
+  if (forceTeacherHint && HeroHint.isActive(inst.heroHint) && inst._forestTeacherHintActive) {
     HeroHint.clear(inst.heroHint)
-    inst._glowTeacherHintActive = false
+    inst._forestTeacherHintActive = false
   }
-  const shown = showGlowTeacherHint(inst, text, duration, opts)
+  const shown = showForestTeacherHint(inst, text, duration, opts)
   shown && (inst.teacherContextAccum = 0)
   return shown
 }
 //
 // Called when the life HUD first appears so context gating restarts cleanly.
 //
-export function onGlowTeacherLifeHudRevealed(inst) {
+export function onForestTeacherLifeHudRevealed(inst) {
   if (!inst) return
   inst.teacherContextAccum = 0
   inst.teacherIdleStreak = 0
@@ -100,7 +100,7 @@ export function onGlowTeacherLifeHudRevealed(inst) {
 //
 // Screen anchor for the life (teacher) HUD icon.
 //
-export function glowTeacherHudAnchor(inst) {
+export function forestTeacherHudAnchor(inst) {
   const life = inst.levelIndicator?.lifeImage
   const sprite = life?.sprite
   if (!sprite?.exists?.()) return null
@@ -113,22 +113,22 @@ export function glowTeacherHudAnchor(inst) {
 //
 // Shows a hint anchored below the life (teacher) HUD icon.
 //
-function showGlowTeacherHint(inst, text, duration, opts = {}) {
-  const anchor = glowTeacherHudAnchor(inst)
+function showForestTeacherHint(inst, text, duration, opts = {}) {
+  const anchor = forestTeacherHudAnchor(inst)
   if (!anchor || !inst.levelIndicator?.lifeRevealed) {
     if (opts.pitCaveMushroom) return false
     return false
   }
-  inst._glowTeacherHintActive = true
-  inst.lastGlowTeacherHintText = text
+  inst._forestTeacherHintActive = true
+  inst.lastForestTeacherHintText = text
   HeroHint.show(inst.heroHint, text, duration, {
     anchorX: anchor.x,
     anchorY: anchor.y,
     anchorScreenSpace: true,
-    offsetY: opts.offsetY ?? GLOW_TEACHER_HINT_OFFSET_Y,
+    offsetY: opts.offsetY ?? FOREST_TEACHER_HINT_OFFSET_Y,
     forceBelow: true,
     ignoreMovementDismiss: true,
-    dismissDistance: GLOW_TEACHER_HINT_DISMISS_DISTANCE,
+    dismissDistance: FOREST_TEACHER_HINT_DISMISS_DISTANCE,
     dismissOnJump: false,
     ...opts
   })

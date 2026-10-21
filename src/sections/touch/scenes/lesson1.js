@@ -3630,7 +3630,7 @@ function playTouch1LetterDialogMusic(k, gameState, soundName) {
   gameState.letterDialogMusic = Sound.playInScene(
     k,
     soundName,
-    CFG.audio.backgroundMusic.glowLetterDialog
+    CFG.audio.backgroundMusic.forestLetterDialog
   )
 }
 //

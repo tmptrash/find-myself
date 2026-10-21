@@ -291,8 +291,8 @@ const PLACEMENT_MAX_ATTEMPTS = 80
  * Recomputes every resolution-derived layout value from the live kaplay
  * viewport. Must be called before generateMenuBackgroundCanvas() (and before
  * any caller reads the MENU_BG_* exports) whenever the canvas/window size is
- * known — `ready` and `menu` both call this first, mirroring Glow's
- * recomputeGlowScreenLayout() pattern. Side decoration (tree clusters, rocks,
+ * known — `ready` and `menu` both call this first, mirroring Forest's
+ * recomputeForestScreenLayout() pattern. Side decoration (tree clusters, rocks,
  * mushrooms) keeps its fixed pixel margin from each edge, so the clusters sit
  * closer together on a smaller window and farther apart on a larger one; the
  * moon keeps a fixed pixel margin from the top-right corner instead, so it

@@ -1140,7 +1140,7 @@ export function dismissCollectHint(inst) {
 // Plays a short bright chime sound on collection
 //
 function playCollectSound(inst) {
-  if (!inst.sfx || inst.sfx._glowSfxMuted) return
+  if (!inst.sfx || inst.sfx._forestSfxMuted) return
   const ctx = inst.sfx.audioContext
   if (!ctx || ctx.state !== 'running') return
   const now = ctx.currentTime

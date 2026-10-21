@@ -1,5 +1,5 @@
 //
-// Canvas2D rocky hill in the look of the glow reference: a heap of big
+// Canvas2D rocky hill in the look of the forest reference: a heap of big
 // boulders makes most of the mass, a ragged moss blanket drapes over their
 // tops (thick in places, torn open in others so bare stone shows through),
 // and low round-leaf clover grows along the foot. The slope climbs from the

@@ -1,7 +1,7 @@
 import kaplay from "kaplay"
 import { CFG } from "../cfg.js"
 import { sceneReady } from "../scenes/ready.js"
-import { sceneGlowHeroFramesPreview } from "../scenes/glow-hero-frames-preview.js"
+import { sceneForestHeroFramesPreview } from "../scenes/forest-hero-frames-preview.js"
 import { sceneMenu } from "../scenes/menu.js"
 import { sceneLesson0 } from "../sections/word/scenes/lesson0.js"
 import { sceneLesson1 } from "../sections/word/scenes/lesson1.js"
@@ -9,8 +9,8 @@ import { sceneLesson2 } from "../sections/word/scenes/lesson2.js"
 import { sceneLesson3 } from "../sections/word/scenes/lesson3.js"
 import { sceneLesson4 } from "../sections/word/scenes/lesson4.js"
 import { sceneWordComplete } from "../sections/word/scenes/word-complete.js"
-import { sceneGlowLevel0 } from "../sections/glow/scenes/level0.js"
-import { sceneGlowComplete } from "../sections/glow/scenes/glow-complete.js"
+import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
+import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
 import { sceneLesson0 as sceneTouchLevel0 } from "../sections/touch/scenes/lesson0.js"
 import { sceneLesson1 as sceneTouchLevel1 } from "../sections/touch/scenes/lesson1.js"
 import { sceneLesson2 as sceneTouchLevel2 } from "../sections/touch/scenes/lesson2.js"
@@ -37,12 +37,12 @@ import { resetLessonHelpPanelState } from "./lesson-help.js"
 // The engine can boot in two resolution modes:
 // - FIXED: legacy virtual canvas at CFG.visual.screen (1920x1080), stretched
 //   to fit the window via Kaplay's letterbox. Used by the remaining lessons
-//   (word/touch 1+/time, glow-complete) whose baked art assumes that exact
+//   (word/touch 1+/time, forest-complete) whose baked art assumes that exact
 //   aspect ratio.
 // - NATIVE: canvas (and Kaplay's internal coordinate space) matches the real
 //   window resolution 1:1 — no internal offscreen buffer, no stretch, so
 //   hairline art (the hero's 1px outline) never aliases regardless of the
-//   user's monitor. Used by "ready", "menu", the Glow level and touch lesson
+//   user's monitor. Used by "ready", "menu", the Forest level and touch lesson
 //   0 — the whole hub flow shares one engine with no swap between them —
 //   whose own layout adapts to whatever width/height that turns out to be.
 //
@@ -231,7 +231,7 @@ export async function bootEngine(resolutionMode) {
 // That context boots suspended and only resumes inside a real k.play() call —
 // every earlier sound in the game happens to be either procedural or started
 // paused (e.g. birds.mp3), so the very first unpaused k.play() (typically
-// glow's water-steps.mp3 on the first drowning) can race the async
+// forest's water-steps.mp3 on the first drowning) can race the async
 // AudioContext.resume() and play silently. Firing a silent, immediately
 // stopped k.play() inside the user's very first keyboard/pointer gesture on
 // the page resumes it synchronously within a trusted gesture handler, well
@@ -425,7 +425,7 @@ function buildSetupTasks(k) {
     () => loadHeroSprites(k, HEROES.HERO),
     () => loadHeroSprites(k, HEROES.ANTIHERO),
     () => sceneReady(k),
-    () => sceneGlowHeroFramesPreview(k),
+    () => sceneForestHeroFramesPreview(k),
     () => sceneMenu(k),
     () => sceneLesson0(k),
     () => sceneLesson1(k),
@@ -433,8 +433,8 @@ function buildSetupTasks(k) {
     () => sceneLesson3(k),
     () => sceneLesson4(k),
     () => sceneWordComplete(k),
-    () => sceneGlowLevel0(k),
-    () => sceneGlowComplete(k),
+    () => sceneForestLevel0(k),
+    () => sceneForestComplete(k),
     () => sceneTouchLevel0(k),
     () => sceneTouchLevel1(k),
     () => sceneTouchLevel2(k),

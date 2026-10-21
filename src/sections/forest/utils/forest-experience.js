@@ -1,28 +1,28 @@
 import { get, set } from '../../../utils/progress.js'
 
 //
-// Glow experience is section-scoped (glow.experience) so touch/word lifeScore
+// Forest experience is section-scoped (forest.experience) so touch/word lifeScore
 // traps do not wipe it; the HUD still shows it via updateLifeScore.
 //
-export const GLOW_EXPERIENCE_START = 20
-const GLOW_EXPERIENCE_PATH = 'glow.experience'
+export const FOREST_EXPERIENCE_START = 20
+const FOREST_EXPERIENCE_PATH = 'forest.experience'
 
 /**
- * Ensures glow.experience exists in save data (20 on first Glow play).
+ * Ensures forest.experience exists in save data (20 on first Forest play).
  */
-function ensureGlowExperienceStored() {
-  const stored = get(GLOW_EXPERIENCE_PATH, null)
+function ensureForestExperienceStored() {
+  const stored = get(FOREST_EXPERIENCE_PATH, null)
   if (stored !== null && stored !== undefined) return
-  set(GLOW_EXPERIENCE_PATH, GLOW_EXPERIENCE_START)
+  set(FOREST_EXPERIENCE_PATH, FOREST_EXPERIENCE_START)
 }
 
 /**
  * Current experience, never below zero.
  * @returns {number}
  */
-export function readGlowExperience() {
-  ensureGlowExperienceStored()
-  return Math.max(0, get(GLOW_EXPERIENCE_PATH, GLOW_EXPERIENCE_START))
+export function readForestExperience() {
+  ensureForestExperienceStored()
+  return Math.max(0, get(FOREST_EXPERIENCE_PATH, FOREST_EXPERIENCE_START))
 }
 
 /**
@@ -30,8 +30,8 @@ export function readGlowExperience() {
  * @param {number} delta - Positive or negative change
  * @returns {number}
  */
-export function applyGlowExperienceDelta(delta) {
-  const next = Math.max(0, readGlowExperience() + delta)
-  set(GLOW_EXPERIENCE_PATH, next)
+export function applyForestExperienceDelta(delta) {
+  const next = Math.max(0, readForestExperience() + delta)
+  set(FOREST_EXPERIENCE_PATH, next)
   return next
 }

@@ -31,7 +31,7 @@ const DOT_MAX_COUNT = 3
  *   (null = default translucent black using outlineAlpha)
  * @param {number} [opts.outlineWidth=1.5] - Outline stroke width (px)
  * @param {boolean} [opts.flat=false] - Single-tone silhouette: stem uses the
- *   cap colour and highlight/dots are skipped (glow gray-phase style)
+ *   cap colour and highlight/dots are skipped (forest gray-phase style)
  * @param {boolean} [opts.outlineOnly=false] - Stroke only, no interior fill
  * @param {boolean} [opts.outlineCapDots=false] - With outlineOnly, still paint
  *   fixed pale dots on the cap (hint icons)

@@ -261,7 +261,7 @@ function shouldDismissByMovement(inst) {
   const dy = ch.pos.y - inst.spawnY
   const dist = inst.dismissDistance ?? HINT_DISMISS_DISTANCE
   //
-  // Glow intro hints only count horizontal walk — vertical settle must not
+  // Forest intro hints only count horizontal walk — vertical settle must not
   // read as "walking away".
   //
   return inst.dismissHorizontalOnly

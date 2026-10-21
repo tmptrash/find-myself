@@ -1,6 +1,6 @@
 import { drawMossyTuftToCanvas } from '../../../utils/draw-mossy-hill.js'
 import { forestFloorPainterColors } from '../components/forest-floor.js'
-import { GLOW_PAL } from './glow-palette.js'
+import { FOREST_PAL } from './forest-palette.js'
 
 //
 // Lake-shore dry-stone pile (reference art: right end of the lake). The
@@ -102,8 +102,8 @@ const TUFT_SINK = 0.2
  * @param {() => number} cfg.rng - Seeded random in [0, 1)
  * @param {number} cfg.outlineWidth - Outer contour width (px)
  */
-export function paintGlowShoreRock(ctx, cfg) {
-  const pal = GLOW_PAL.glowShoreRock
+export function paintForestShoreRock(ctx, cfg) {
+  const pal = FOREST_PAL.forestShoreRock
   const { loops, rng, waterY } = cfg
   const bounds = loopBounds(loops, cfg.outlineWidth)
   ctx.lineJoin = 'round'

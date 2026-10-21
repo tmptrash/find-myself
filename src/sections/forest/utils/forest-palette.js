@@ -1,20 +1,25 @@
 import { CFG } from '../../../cfg.js'
-import { applyFoliageDensityToPalette } from './glow-pixel-density.js'
+import { applyFoliageDensityToPalette } from './forest-pixel-density.js'
 
 //
-// Glow section palette — every colour on lesson-glow.0 must come from the
+// Forest section palette — every colour on lesson-forest.0 must come from the
 // game-wide palette aliases (CFG.visual.colors.palette).
 //
-export const GLOW_PAL = CFG.visual.colors.palette
+export const FOREST_PAL = CFG.visual.colors.palette
 export const GAMEPLAY_TREE_FOLIAGE_KEY = 'gameplayTreeFoliage'
+//
+// Lower sky fraction that picks up dawn gold (between the trunks, not zenith).
+//
+const SKY_DAWN_BOTTOM_FRAC = 0.28
+const SKY_DAWN_GLOW_STRENGTH = 0.34
 
 /**
  * Parses a palette hex key or raw hex string into an RGB triplet.
  * @param {string} keyOrHex - Semantic key on the palette or '#rrggbb'
  * @returns {{ r: number, g: number, b: number }}
  */
-export function glowRgb(keyOrHex) {
-  const hex = keyOrHex.startsWith('#') ? keyOrHex : GLOW_PAL[keyOrHex]
+export function forestRgb(keyOrHex) {
+  const hex = keyOrHex.startsWith('#') ? keyOrHex : FOREST_PAL[keyOrHex]
   const h = hex.replace('#', '')
   return {
     r: parseInt(h.slice(0, 2), 16),
@@ -27,9 +32,9 @@ export function glowRgb(keyOrHex) {
  * Darker cave fill — deep brown (no green void in pit earth gaps).
  * @returns {{ r: number, g: number, b: number }}
  */
-export function glowCaveEarthDeepRgb() {
-  const mud = glowRgb('mudGround')
-  const clay = glowRgb('groundClay')
+export function forestCaveEarthDeepRgb() {
+  const mud = forestRgb('mudGround')
+  const clay = forestRgb('groundClay')
   return {
     r: Math.round(mud.r * 0.88 + clay.r * 0.12),
     g: Math.round(mud.g * 0.88 + clay.g * 0.12),
@@ -41,27 +46,27 @@ export function glowCaveEarthDeepRgb() {
  * Bottom stratum of the baked earth band (matches groundEarthLayersColor).
  * @returns {{ r: number, g: number, b: number }}
  */
-export function glowGroundEarthBottomLayerRgb() {
-  return glowRgb('groundDeep')
+export function forestGroundEarthBottomLayerRgb() {
+  return forestRgb('groundDeep')
 }
 
 /**
- * Glow contour ink by role (forest / eye / platform / gameplay).
+ * Forest contour ink by role (forest / eye / platform / gameplay).
  * @param {'forest'|'eye'|'platform'|'gameplay'} [role='forest']
  * @returns {{ r: number, g: number, b: number }}
  */
-export function glowContourRgb(role = 'forest') {
-  return glowRgb(GLOW_PAL.glowContour[role])
+export function forestContourRgb(role = 'forest') {
+  return forestRgb(FOREST_PAL.forestContour[role])
 }
 
 /**
- * drawRockToCanvas palette for glow floor rocks (shadow / mid / light).
+ * drawRockToCanvas palette for forest floor rocks (shadow / mid / light).
  * @returns {{ fillR: number, fillG: number, fillB: number, lightR: number, lightG: number, lightB: number, darkR: number, darkG: number, darkB: number }}
  */
-export function glowRockShadedDrawPalette() {
-  const shadow = glowRgb(GLOW_PAL.glowRock.shadow)
-  const mid = glowRgb(GLOW_PAL.glowRock.mid)
-  const light = glowRgb(GLOW_PAL.glowRock.light)
+export function forestRockShadedDrawPalette() {
+  const shadow = forestRgb(FOREST_PAL.forestRock.shadow)
+  const mid = forestRgb(FOREST_PAL.forestRock.mid)
+  const light = forestRgb(FOREST_PAL.forestRock.light)
   return {
     fillR: mid.r, fillG: mid.g, fillB: mid.b,
     lightR: light.r, lightG: light.g, lightB: light.b,
@@ -70,23 +75,45 @@ export function glowRockShadedDrawPalette() {
 }
 
 /**
- * Warm golden GLOW light tiers (see cfg glowLightCore/Mid/Bright).
+ * Samples the forest sky gradient (dark teal zenith → mid → hazy horizon)
+ * with dawn gold rising in the lower band. Shared by the level's sky bake
+ * and the menu's forest background.
+ * @param {number} mixT - 0 at the zenith, 1 at the horizon
+ * @returns {{ r: number, g: number, b: number }} Palette-snapped colour
+ */
+export function forestSkyBandRgb(mixT) {
+  const zenith = forestRgb('forestSkyZenith')
+  const mid = forestRgb('forestSkyMid')
+  const horizon = forestRgb('forestSkyHorizon')
+  let c = mixT < 0.5
+    ? blendRgb(zenith, mid, mixT * 2)
+    : blendRgb(mid, horizon, (mixT - 0.5) * 2)
+  const dawnStart = 1 - SKY_DAWN_BOTTOM_FRAC
+  if (mixT > dawnStart) {
+    const u = (mixT - dawnStart) / (1 - dawnStart)
+    c = blendRgb(c, getForestLightRgb('core'), SKY_DAWN_GLOW_STRENGTH * u)
+  }
+  return snapToPalette(c)
+}
+
+/**
+ * Warm golden FOREST light tiers (see cfg forestLightCore/Mid/Bright).
  * @param {'core'|'mid'|'bright'} [tier='mid']
  * @returns {{ r: number, g: number, b: number }}
  */
-export function getGlowLightRgb(tier = 'mid') {
+export function getForestLightRgb(tier = 'mid') {
   const key = tier === 'core'
-    ? 'glowLightCore'
+    ? 'forestLightCore'
     : tier === 'bright'
-      ? 'glowLightBright'
-      : 'glowLightMid'
-  return glowRgb(key)
+      ? 'forestLightBright'
+      : 'forestLightMid'
+  return forestRgb(key)
 }
 //
 // Parsed swatches for nearest-neighbour snaps so mixed/dimmed fills never
 // leave the game-wide palette.
 //
-const PALETTE_RGBS = GLOW_PAL.swatches.map(hex => glowRgb(hex))
+const PALETTE_RGBS = FOREST_PAL.swatches.map(hex => forestRgb(hex))
 //
 // Integer RGB → nearest swatch memo. Per-frame colour lerps (grass tints,
 // fades, decor darkening) snap the same few hundred values every frame, and
@@ -129,11 +156,11 @@ export function getTreePaletteColor() {
  * Groove / highlight tones for gameplay-tree bark (main, shore, lip-trees).
  * @returns {{ dark: { r: number, g: number, b: number }, highlight: { r: number, g: number, b: number } }}
  */
-export function getGlowGameplayTreeBarkShades() {
-  const bark = GLOW_PAL.glowTreeBark
+export function getForestGameplayTreeBarkShades() {
+  const bark = FOREST_PAL.forestTreeBark
   return {
-    dark: glowRgb(bark.groove),
-    highlight: glowRgb(bark.highlight)
+    dark: forestRgb(bark.groove),
+    highlight: forestRgb(bark.highlight)
   }
 }
 
@@ -141,20 +168,20 @@ export function getGlowGameplayTreeBarkShades() {
  * Side-light tones for the gameplay trees' volume pass (sun from the left).
  * @returns {{ lit: Object, rim: Object, shade: Object, deep: Object }}
  */
-export function getGlowGameplayTreeVolumeShades() {
-  const bark = GLOW_PAL.glowTreeBark
+export function getForestGameplayTreeVolumeShades() {
+  const bark = FOREST_PAL.forestTreeBark
   return {
-    lit: glowRgb(bark.lit),
-    rim: glowRgb(bark.rim),
-    shade: glowRgb(bark.shade),
-    deep: glowRgb(bark.deep)
+    lit: forestRgb(bark.lit),
+    rim: forestRgb(bark.rim),
+    shade: forestRgb(bark.shade),
+    deep: forestRgb(bark.deep)
   }
 }
 
 export function getTreePaletteColorForCorner(parallaxCornerKey) {
   return {
     ...getTreePaletteWithNearParallaxFoliage(
-      getTreePaletteFromGlowTreeEntry(GLOW_PAL.treeColor),
+      getTreePaletteFromForestTreeEntry(FOREST_PAL.treeColor),
       parallaxCornerKey
     ),
     //
@@ -165,20 +192,20 @@ export function getTreePaletteColorForCorner(parallaxCornerKey) {
     // Roots stay the old flat mass stroke; trunk/branch keep detailed bark.
     //
     simpleRoots: true,
-    barkShades: getGlowGameplayTreeBarkShades()
+    barkShades: getForestGameplayTreeBarkShades()
   }
 }
 
 /**
  * Copies nearground parallax leaf tones onto a trunk palette (main tree).
  * @param {Object} trunkPalette - Base tree palette (colour trunk)
- * @param {string} parallaxCornerKey - GLOW_PAL parallaxTreeCorner* key
+ * @param {string} parallaxCornerKey - FOREST_PAL parallaxTreeCorner* key
  * @returns {Object}
  */
 export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCornerKey = 'parallaxTreeCornerTL') {
   const lit = applyFoliageDensityToPalette(trunkPalette, 'nearground')
-  const entry = GLOW_PAL[parallaxCornerKey]
-  const near = applyFoliageDensityToPalette(getTreePaletteFromGlowTreeEntry(entry), 'nearground')
+  const entry = FOREST_PAL[parallaxCornerKey]
+  const near = applyFoliageDensityToPalette(getTreePaletteFromForestTreeEntry(entry), 'nearground')
   return {
     ...lit,
     leafR: near.leafR,
@@ -194,18 +221,18 @@ export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCorn
 
 /**
  * Parallax forest tree palette for one screen-corner quadrant (see cfg parallaxTreeCorner*).
- * @param {string} cornerKey - One of parallaxTreeCornerTL/TR/BL/BR on GLOW_PAL
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ * @param {string} cornerKey - One of parallaxTreeCornerTL/TR/BL/BR on FOREST_PAL
+ * @returns {Object} Canvas RGB palette for renderForestTreeToCanvas()
  */
 export function getTreePaletteParallaxCorner(cornerKey) {
-  return getTreePaletteFromGlowTreeEntry(GLOW_PAL[cornerKey])
+  return getTreePaletteFromForestTreeEntry(FOREST_PAL[cornerKey])
 }
 
-function getTreePaletteFromGlowTreeEntry(t) {
-  const root = glowRgb(t.root)
-  const trunk = glowRgb(t.trunk)
-  const branch = glowRgb(t.branch)
-  const leaf = glowRgb(t.leaf)
+function getTreePaletteFromForestTreeEntry(t) {
+  const root = forestRgb(t.root)
+  const trunk = forestRgb(t.trunk)
+  const branch = forestRgb(t.branch)
+  const leaf = forestRgb(t.leaf)
   return {
     rootR: root.r, rootG: root.g, rootB: root.b,
     trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
@@ -217,11 +244,11 @@ function getTreePaletteFromGlowTreeEntry(t) {
     // Wood uses trunk / branch / shadow only — no bark micro-texture pass.
     //
     barkShades: {
-      dark: glowRgb(GLOW_PAL.bark.dark),
-      highlight: glowRgb(GLOW_PAL.bark.highlight)
+      dark: forestRgb(FOREST_PAL.bark.dark),
+      highlight: forestRgb(FOREST_PAL.bark.highlight)
     },
-    leafVein: glowRgb((t.leafShades && t.leafShades[0]) || t.leaf),
-    woodOutline: glowContourRgb('forest'),
+    leafVein: forestRgb((t.leafShades && t.leafShades[0]) || t.leaf),
+    woodOutline: forestContourRgb('forest'),
     woodMassStyle: true,
     noLeafDetails: true
   }
@@ -232,7 +259,7 @@ function massLeafShadesFromEntry(t) {
   const shadow = hexes[0]
   const base = hexes[Math.min(1, hexes.length - 1)]
   const light = hexes[Math.min(2, hexes.length - 1)]
-  return [glowRgb(shadow), glowRgb(base), glowRgb(light)]
+  return [forestRgb(shadow), forestRgb(base), forestRgb(light)]
 }
 
 /**
@@ -250,8 +277,8 @@ function massLeafShadesFromEntry(t) {
  *   trunk tone: leaves, branches and bark all match the trunk exactly, so the
  *   tree reads as one flat silhouette (2nd+ background rows)
  * @param {number} [leafWarmBlend=0] - Extra leaf-only blend toward the backdrop
- *   (keep 0 for GLOW 70/20/10 — gold/orange stay rare accents)
- * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ *   (keep 0 for FOREST 70/20/10 — gold/orange stay rare accents)
+ * @returns {Object} Canvas RGB palette for renderForestTreeToCanvas()
  */
 export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false, leafWarmBlend = 0) {
   const mix = (r, g, b) => snapToPalette({
@@ -308,7 +335,7 @@ export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leaf
  * @returns {{ dark: string, mid: string, light: string, highlight: string }}
  */
 export function getTreeBarkPalette() {
-  const b = GLOW_PAL.bark
+  const b = FOREST_PAL.bark
   return {
     dark: b.dark,
     mid: b.mid,
@@ -322,7 +349,7 @@ export function getTreeBarkPalette() {
 //
 function darkenRgb(c, t) {
   if (t <= 0) return c
-  const v = glowRgb('glowShadow')
+  const v = forestRgb('forestShadow')
   return snapToPalette({
     r: Math.round(c.r + (v.r - c.r) * t),
     g: Math.round(c.g + (v.g - c.g) * t),
@@ -347,4 +374,14 @@ function nearestPaletteSwatch(c) {
 }
 function isByte(v) {
   return Number.isInteger(v) && v >= 0 && v <= 255
+}
+//
+// Unsnapped linear blend of two RGB triplets (callers snap the result).
+//
+function blendRgb(a, b, t) {
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t)
+  }
 }

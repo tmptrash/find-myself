@@ -4,18 +4,18 @@ import { runEngineTeardown } from './engine-teardown.js'
 
 //
 // Scene name prefixes that run on the native-resolution engine. `ready` and
-// `menu` join Glow and touch lesson 0 here so the hub flow (ready → menu →
-// glow) never needs an engine swap — their background/layout code recomputes
+// `menu` join Forest and touch lesson 0 here so the hub flow (ready → menu →
+// forest) never needs an engine swap — their background/layout code recomputes
 // itself from the live k.width()/k.height() instead of assuming a fixed
 // 1920x1080 canvas (see menu-bg-generator.js's recomputeMenuBgLayout and each
 // scene's own recomputeLayout()). Every remaining lesson (word/touch 1+/time,
-// glow-complete) still runs on the fixed 1920x1080 engine. `lesson-touch.0`
+// forest-complete) still runs on the fixed 1920x1080 engine. `lesson-touch.0`
 // is exact-prefix so lesson-touch.1+ stay on the letterboxed canvas.
 //
-const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-glow', 'lesson-touch.0', 'ready', 'menu']
+const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-forest', 'lesson-touch.0', 'ready', 'menu']
 //
 // Avoid flashing the DOM loader on fast engine swaps (e.g. right after the
-// yellow pre-Glow subtitle when boot finishes within this window).
+// yellow pre-Forest subtitle when boot finishes within this window).
 //
 const ENGINE_SWAP_LOADER_DELAY_MS = 200
 //
@@ -96,10 +96,10 @@ export function registerNativeTeardown(fn) {
   nativeTeardown = fn
 }
 /**
- * Glow-level alias — same registry as registerNativeTeardown.
+ * Forest-level alias — same registry as registerNativeTeardown.
  * @param {Function|null} fn
  */
-export function registerGlowNativeTeardown(fn) {
+export function registerForestNativeTeardown(fn) {
   registerNativeTeardown(fn)
 }
 //

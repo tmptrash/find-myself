@@ -145,11 +145,11 @@ export function footNow(inst, leg) {
 
 function onFootPlant(inst) {
   const sfx = inst.sfx
-  if (!sfx || sfx._glowSfxMuted || !inst.k || !inst.footHearable) return
+  if (!sfx || sfx._forestSfxMuted || !inst.k || !inst.footHearable) return
   const now = inst.k.time()
   if (now < (inst.footSoundUntil ?? 0)) return
   inst.footSoundUntil = now + FOOT_SOUND_GAP
-  Sound.playGlowPredatorFootstep(sfx)
+  Sound.playForestPredatorFootstep(sfx)
 }
 
 function clamp(v, lo, hi) {

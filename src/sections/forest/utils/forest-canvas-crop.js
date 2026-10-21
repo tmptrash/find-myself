@@ -1,7 +1,7 @@
 //
-// Crops baked glow canvases down to the pixels they actually paint.
+// Crops baked forest canvases down to the pixels they actually paint.
 //
-// Several glow bakes are drawn in WORLD space: the painter needs world
+// Several forest bakes are drawn in WORLD space: the painter needs world
 // coordinates, so the canvas is created at the full world size (3000x1080)
 // even though the artwork covers a fraction of it. Uploading that as a
 // sprite makes every frame blit a mostly transparent world-sized quad and

@@ -1,4 +1,4 @@
-import { GLOW_SUN_LIT_FRAC, GLOW_SUN_LIT_OFFSET_X, GLOW_SUN_LIT_OFFSET_Y } from '../sections/glow/utils/glow-eye-berry.js'
+import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y } from '../sections/forest/utils/forest-eye-berry.js'
 import { CFG } from '../cfg.js'
 import * as Cursor from './cursor.js'
 import { focusGameCanvas } from './canvas-focus.js'
@@ -21,7 +21,7 @@ const LOADER_PANEL_BG_OVER_CRT = 'rgba(14, 20, 26, 0.97)'
 const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10px 60px rgba(0, 0, 0, 0.95)'
 const LOADER_UI_FADE_SEC = 0.32
 //
-// Stalk-eye geometry (SVG user units = CSS px): the Glow chain-buoy eye-berry
+// Stalk-eye geometry (SVG user units = CSS px): the Forest chain-buoy eye-berry
 // lying on its side. Coral stalk, side spikes on each joint, ivory berry
 // with a shaded side and a teal pupil.
 //
@@ -143,7 +143,7 @@ let loaderFinishWaiters = []
 let loaderHideToken = 0
 
 /**
- * Glow bootstrap reports truth in bursts — creep keeps the stalk growing
+ * Forest bootstrap reports truth in bursts — creep keeps the stalk growing
  * between those reports so the screen reads as loading, not frozen.
  * @param {boolean} boosted - Faster creep with more headroom
  */
@@ -479,9 +479,9 @@ function appendLoaderBerryBall(parent, colors, cx, cy) {
     fill: colors.berryShade
   }))
   parent.appendChild(svgEl('circle', {
-    cx: cx + EYE_R * GLOW_SUN_LIT_OFFSET_X,
-    cy: cy + EYE_R * GLOW_SUN_LIT_OFFSET_Y,
-    r: EYE_R * GLOW_SUN_LIT_FRAC,
+    cx: cx + EYE_R * FOREST_SUN_LIT_OFFSET_X,
+    cy: cy + EYE_R * FOREST_SUN_LIT_OFFSET_Y,
+    r: EYE_R * FOREST_SUN_LIT_FRAC,
     fill: colors.berry
   }))
 }

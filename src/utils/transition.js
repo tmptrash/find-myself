@@ -10,12 +10,12 @@ import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterP
 import * as CanvasBackdrop from './canvas-backdrop.js'
 import * as BootLoader from './boot-loader.js'
 import {
-  prewarmGlowLevel0HeavyAssets,
-  setGlowLevel0BootstrapReporter
-} from '../sections/glow/scenes/level0.js'
+  prewarmForestLevel0HeavyAssets,
+  setForestLevel0BootstrapReporter
+} from '../sections/forest/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
-import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
-import { GLOW_PAL } from '../sections/glow/utils/glow-palette.js'
+import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
+import { FOREST_PAL } from '../sections/forest/utils/forest-palette.js'
 import { bindPointerActivate } from './pointer-activate.js'
 import { focusGameCanvas } from './canvas-focus.js'
 
@@ -27,9 +27,9 @@ const LEVEL_TRANSITIONS = {
   'menu': 'lesson-word.0',
   'menu-time': 'lesson-time.0',
   'menu-touch': 'lesson-touch.0',
-  'menu-glow': 'lesson-glow.0',
-  'lesson-glow.0': 'glow-complete',
-  'glow-complete': 'lesson-touch.0',
+  'menu-forest': 'lesson-forest.0',
+  'lesson-forest.0': 'forest-complete',
+  'forest-complete': 'lesson-touch.0',
   'lesson-word.0': 'lesson-word.1',
   'lesson-word.1': 'lesson-word.2',
   'lesson-word.2': 'lesson-word.3',
@@ -54,9 +54,9 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'menu-glow': '',
-  'lesson-glow.0': '',
-  'glow-complete': '',
+  'menu-forest': '',
+  'lesson-forest.0': '',
+  'forest-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
   'lesson-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
@@ -82,11 +82,11 @@ const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level text
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
-const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
-const GLOW_PREWARM_BAR_START = 5
-const GLOW_PREWARM_BAR_END = 38
-const GLOW_BOOTSTRAP_BAR_START = GLOW_PREWARM_BAR_END
-const GLOW_BOOTSTRAP_BAR_END = 100
+const FOREST_PRELEVEL_SCENE = 'lesson-forest.0'
+const FOREST_PREWARM_BAR_START = 5
+const FOREST_PREWARM_BAR_END = 38
+const FOREST_BOOTSTRAP_BAR_START = FOREST_PREWARM_BAR_END
+const FOREST_BOOTSTRAP_BAR_END = 100
 const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
 //
 // Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)
@@ -110,7 +110,7 @@ const HINT_CHAR_WIDTH_RATIO = 0.55
 //
 const TIME_SUBTITLE_COLOR = '#FF8C00'
 const SECTION_SUBTITLE_COLORS = {
-  glow: GLOW_PAL.heroBodyGray,
+  forest: FOREST_PAL.heroBodyGray,
   time: TIME_SUBTITLE_COLOR,
   word: CFG.visual.colors.sections.word.body,
   touch: CFG.visual.colors.sections.touch.body,
@@ -264,12 +264,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isFromLevel = currentLevel !== 'menu' && isLessonScene(currentLevel)
   const isFromMenuTime = currentLevel === 'menu-time'
   const isFromMenuTouch = currentLevel === 'menu-touch'
-  const isFromMenuGlow = currentLevel === 'menu-glow'
-  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuGlow
+  const isFromMenuForest = currentLevel === 'menu-forest'
+  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuForest
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
-  const isGlowPrelevel = needsEarlyAssetLoad && nextLevel === GLOW_PRELEVEL_SCENE
-  const isNativePrelevel = isGlowPrelevel ||
+  const isForestPrelevel = needsEarlyAssetLoad && nextLevel === FOREST_PRELEVEL_SCENE
+  const isNativePrelevel = isForestPrelevel ||
     (needsEarlyAssetLoad && nextLevel === TOUCH_L0_PRELEVEL_SCENE)
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   //
@@ -281,7 +281,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // screen instead of flashing the loader.
   //
   let nativePrelevelLoaderTimer = null
-  if (isGlowPrelevel) {
+  if (isForestPrelevel) {
     BootLoader.showLoader()
     BootLoader.setLoaderBarPct(0)
   } else if (isNativePrelevel) {
@@ -472,19 +472,19 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         transitionK.fixed()
       ])
       transitionK._transitionOverlay = overlay
-      if (nextLevel === GLOW_PRELEVEL_SCENE) {
-        setGlowLevel0BootstrapReporter(reportLoad, {
-          start: GLOW_BOOTSTRAP_BAR_START,
-          end: GLOW_BOOTSTRAP_BAR_END
+      if (nextLevel === FOREST_PRELEVEL_SCENE) {
+        setForestLevel0BootstrapReporter(reportLoad, {
+          start: FOREST_BOOTSTRAP_BAR_START,
+          end: FOREST_BOOTSTRAP_BAR_END
         })
-        reportLoad(GLOW_PREWARM_BAR_START + 7)
-        await prewarmGlowLevel0HeavyAssets(transitionK, bakedPct => {
+        reportLoad(FOREST_PREWARM_BAR_START + 7)
+        await prewarmForestLevel0HeavyAssets(transitionK, bakedPct => {
           const t = Math.min(100, Math.max(0, bakedPct)) / 100
-          reportLoad(GLOW_PREWARM_BAR_START + Math.round(
-            (GLOW_PREWARM_BAR_END - GLOW_PREWARM_BAR_START) * t
+          reportLoad(FOREST_PREWARM_BAR_START + Math.round(
+            (FOREST_PREWARM_BAR_END - FOREST_PREWARM_BAR_START) * t
           ))
         })
-        reportLoad(GLOW_PREWARM_BAR_END)
+        reportLoad(FOREST_PREWARM_BAR_END)
       }
     } finally {
       !inst.skipped && (inst.assetPrepareDone = true)
@@ -535,10 +535,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       Sound.unmuteProceduralSounds()
       Sound.resumeGlobalAudio()
       needsEarlyAssetLoad && BootLoader.showLoader()
-      !isGlowPrelevel && needsEarlyAssetLoad && BootLoader.setLoaderBarPct(100)
+      !isForestPrelevel && needsEarlyAssetLoad && BootLoader.setLoaderBarPct(100)
       try {
         await enterPreparedScene(transitionK, nextLevel, () => {
-          isGlowPrelevel && BootLoader.setLoaderBarPct(100)
+          isForestPrelevel && BootLoader.setLoaderBarPct(100)
           afterGo?.(transitionK)
           overlay?.exists?.() && transitionK.destroy(overlay)
           transitionK._transitionOverlay === overlay && (transitionK._transitionOverlay = null)
@@ -612,7 +612,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (inst.assetPrepareDone) {
         if (isNativePrelevel) {
           cancelNativePrelevelLoaderTimer()
-          isGlowPrelevel && BootLoader.hideLoader()
+          isForestPrelevel && BootLoader.hideLoader()
         } else {
           BootLoader.hideLoader()
         }
@@ -710,7 +710,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Get color based on section (matches anti-hero hover color in menu)
           //
           const levelColorHex = getSectionSubtitleColor(nextLevel)
-          const useGlowGrain = nextLevel === GLOW_PRELEVEL_SCENE
+          const useForestGrain = nextLevel === FOREST_PRELEVEL_SCENE
           const [r, g, b] = parseHex(levelColorHex)
           const textSize = k.height() * 0.04
           const textX = k.width() / 2
@@ -718,9 +718,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           const outlineOffsets = [
             [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
           ]
-          if (useGlowGrain) {
-            const mainName = `glow-trans-main-${glowUiHash(subtitle)}`
-            loadGlowTextSprite(k, mainName, subtitle, {
+          if (useForestGrain) {
+            const mainName = `forest-trans-main-${forestUiHash(subtitle)}`
+            loadForestTextSprite(k, mainName, subtitle, {
               fontFamily: TRANSITION_FONT,
               fontSize: textSize,
               fillStyle: `rgb(${r},${g},${b})`,
@@ -743,7 +743,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           } else {
           //
           // Drop shadow (single black copy offset right+down) — the same
-          // text shadow style the glow level uses.
+          // text shadow style the forest level uses.
           //
           const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
             k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
@@ -777,9 +777,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             const hintYOffset = nextLevel === 'lesson-touch.0' ? textSize * 2.35 : textSize * 1.9
             const hintY = textY + hintYOffset
             const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
-            if (useGlowGrain) {
-              const hintName = `glow-trans-hint-${glowUiHash(wrappedHint)}`
-              loadGlowTextSprite(k, hintName, wrappedHint, {
+            if (useForestGrain) {
+              const hintName = `forest-trans-hint-${forestUiHash(wrappedHint)}`
+              loadForestTextSprite(k, hintName, wrappedHint, {
                 fontFamily: TRANSITION_FONT,
                 fontSize: hintSize,
                 fillStyle: 'rgb(140,140,140)',
@@ -829,9 +829,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           if (preText) {
             const preTextSize = textSize * 0.62
             const preTextY = textY + textSize * preTextYMult
-            if (useGlowGrain) {
-              const preName = `glow-trans-pre-${glowUiHash(preText)}`
-              loadGlowTextSprite(k, preName, preText, {
+            if (useForestGrain) {
+              const preName = `forest-trans-pre-${forestUiHash(preText)}`
+              loadForestTextSprite(k, preName, preText, {
                 fontFamily: TRANSITION_FONT,
                 fontSize: preTextSize,
                 fillStyle: 'rgb(140,140,140)',
@@ -1214,7 +1214,7 @@ function cancelTransitionSkipInput(inst) {
 }
 //
 // Space/Enter/Esc skip and pointer activate — rebound on every engine swap
-// (Glow pre-level reboots Kaplay mid-transition). Physical key listeners sit
+// (Forest pre-level reboots Kaplay mid-transition). Physical key listeners sit
 // on window so they keep working even when the canvas never received focus;
 // Kaplay onKeyPress is kept as a backup on the live instance.
 //

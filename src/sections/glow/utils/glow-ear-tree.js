@@ -1,5 +1,6 @@
 import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
+import { createSeededRandom } from '../../../utils/seeded-random.js'
 import {
   colorKey,
   cssRgb,
@@ -8,12 +9,11 @@ import {
   isWorldSpanInView,
   rootSegmentsBounds
 } from './glow-static-bake.js'
-import { getGlowGameplayTreeBarkShades } from './glow-palette.js'
-import { paintGlowGameplayBarkOnTrunk } from './glow-tree.js'
 //
 // Small background trees whose branches end in clusters of red leaves —
-// branches grow from the tapered trunk surface and stay at rest; only the
-// landing jolt (spiky tomato) rocks the whole tree.
+// forest-green tapered trunks lit from the left, with ragged lit / shaded
+// flanks and wavy fissures; only the landing jolt (spiky tomato) rocks the
+// whole tree.
 //
 const EAR_TREE_TRUNK_H_BASE = 104
 const EAR_TREE_TRUNK_W_BASE = 9
@@ -87,7 +87,36 @@ const EAR_TREE_TRUNK_BAKE_SLOT = 'earTreeTrunk'
 //
 // Bump when trunk silhouette or outline width changes so live bakes refresh.
 //
-const EAR_TREE_TRUNK_BAKE_REV = 3
+const EAR_TREE_TRUNK_BAKE_REV = 8
+//
+// Trunk volume, sun from the left: a lit flank on the left and a shaded
+// flank on the right, each bounded by a ragged line that wanders across
+// the trunk (fraction of its width, 0 = left edge) so neither reads as a
+// straight stripe. Wander keys sit every KNOT px and are eased between.
+//
+const EAR_TREE_LIT_TO = 0.32
+const EAR_TREE_SHADE_FROM = 0.6
+const EAR_TREE_FLANK_WANDER = 0.13
+const EAR_TREE_FLANK_KNOT_PX = 9
+const EAR_TREE_FLANK_STEP_PX = 2
+//
+// Long wavy bark fissures running up the trunk, staggered across its width;
+// their tone follows the flank they cross (a gap in the light reads as the
+// base tone, in the shade as the cool deep fissure). Skipped near the crown.
+//
+const EAR_TREE_FISSURE_COUNT_PER_PX = 0.09
+const EAR_TREE_FISSURE_LEN_MIN = 6
+const EAR_TREE_FISSURE_LEN_RANGE = 10
+const EAR_TREE_FISSURE_W = 1
+const EAR_TREE_FISSURE_STEP_PX = 3
+const EAR_TREE_FISSURE_WAVE = 0.7
+const EAR_TREE_FISSURE_EDGE_PAD = 0.12
+const EAR_TREE_FISSURE_MIN_HALF_W = 3
+//
+// Limb underside shade: a thinner line pushed toward the lower edge.
+//
+const EAR_TREE_LIMB_SHADE_OFFSET = 0.22
+const EAR_TREE_LIMB_SHADE_W = 0.45
 const EAR_TREE_ROOTS_GRAIN_SEED = 0.37
 const EAR_TREE_TRUNK_GRAIN_SEED = 0.71
 //
@@ -302,12 +331,13 @@ export function getCrownTop(inst, index) {
  * Draws every tree trunk (baked sprite) under the hero.
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for trunk fill
+ * @param {{light: Object, shade: Object, fissure: Object}} barkShades - Kaplay rgb bark tones
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
  * @param {number} [opacity=1] - Reveal fade
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDrawTrunks(inst, barkColor, outlineColor, opacity = 1, view = null) {
-  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor, opacity, view))
+export function onDrawTrunks(inst, barkColor, barkShades, outlineColor, opacity = 1, view = null) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, barkShades, outlineColor, opacity, view))
 }
 
 /**
@@ -326,24 +356,26 @@ export function onDrawRoots(inst, rootColor, opacity = 1, view = null) {
  * Redraws every trunk above grass and shore decor (branches draw on a higher z).
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for trunk fill
+ * @param {{light: Object, shade: Object, fissure: Object}} barkShades - Kaplay rgb bark tones
  * @param {Object} outlineColor - Kaplay rgb for trunk outline
  * @param {number} [opacity=1] - Reveal fade
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDrawTrunksAboveGrass(inst, barkColor, outlineColor, opacity = 1, view = null) {
-  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, outlineColor, opacity, view))
+export function onDrawTrunksAboveGrass(inst, barkColor, barkShades, outlineColor, opacity = 1, view = null) {
+  inst.trees.forEach(tree => drawEarTreeTrunk(inst.k, tree, barkColor, barkShades, outlineColor, opacity, view))
 }
 
 /**
  * Draws branches and their red leaf clusters (trunks are on a lower overlay z).
  * @param {Object} inst - Ear-tree inst
  * @param {Object} barkColor - Kaplay rgb for branches
+ * @param {{light: Object, shade: Object, fissure: Object}} barkShades - Kaplay rgb bark tones
  * @param {Object} outlineColor - Kaplay rgb for limb outlines
  * @param {{base: Object, light: Object, vein: Object}} leafColors - Kaplay rgb leaf tones
  * @param {number} [opacity=1] - Reveal fade
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDrawBranches(inst, barkColor, outlineColor, leafColors, opacity = 1, view = null) {
+export function onDrawBranches(inst, barkColor, barkShades, outlineColor, leafColors, opacity = 1, view = null) {
   const batch = inst.branchBatch
   PolyBatch.reset(batch)
   inst.trees.forEach(tree => {
@@ -354,7 +386,7 @@ export function onDrawBranches(inst, barkColor, outlineColor, leafColors, opacit
     tree.drawCos = Math.cos(angle)
     tree.drawSin = Math.sin(angle)
     tree.branches.forEach(branch =>
-      addEarBranch(batch, inst.leafIndices, tree, branch, barkColor, outlineColor, leafColors))
+      addEarBranch(batch, inst.leafIndices, tree, branch, barkColor, barkShades.shade, outlineColor, leafColors))
   })
   PolyBatch.flush(batch, inst.k, opacity)
 }
@@ -364,10 +396,11 @@ function updateEarTree(tree, dt) {
 //
 // Static trunk blit — baked once per bark/outline colour pair.
 //
-function drawEarTreeTrunk(k, tree, barkColor, outlineColor, opacity, view) {
+function drawEarTreeTrunk(k, tree, barkColor, barkShades, outlineColor, opacity, view) {
+  const { light, shade, fissure } = barkShades
   const baked = ensureStaticDecorSprite(k, tree, EAR_TREE_TRUNK_BAKE_SLOT,
-    `${colorKey(barkColor, outlineColor)}-r${EAR_TREE_TRUNK_BAKE_REV}`,
-    trunkBounds(tree), ctx => paintEarTreeTrunk(ctx, tree, barkColor, outlineColor),
+    `${colorKey(barkColor, light, shade, fissure, outlineColor)}-r${EAR_TREE_TRUNK_BAKE_REV}`,
+    trunkBounds(tree), ctx => paintEarTreeTrunk(ctx, tree, barkColor, barkShades, outlineColor),
     tree.x * EAR_TREE_TRUNK_GRAIN_SEED)
   if (!baked || !isWorldSpanInView(baked.x, baked.x + baked.w, view)) return
   const angle = treeShakeAngle(tree)
@@ -406,43 +439,35 @@ function swingY(tree, x, y) {
   return tree.groundY + (x - tree.x) * tree.drawSin + (y - tree.groundY) * tree.drawCos
 }
 //
-// Canvas fills the whole wavy taper as one path, so the outline and bark
-// read as one seamless silhouette (no per-step quad seams).
+// Trunk lit from the left: base fill, lit and shaded flanks with ragged
+// inner bounds, then wavy fissures — all clipped to the silhouette so the
+// outline stays clean.
 //
-function paintEarTreeTrunk(ctx, tree, barkColor, outlineColor) {
+function paintEarTreeTrunk(ctx, tree, barkColor, barkShades, outlineColor) {
   fillTrunkOutline(ctx, tree, EAR_TREE_TRUNK_OUTLINE_PAD, outlineColor)
   fillTrunkOutline(ctx, tree, 0, barkColor)
+  const rng = createSeededRandom((tree.seed * 1e4 + tree.x) | 0)
+  const litBound = buildFlankBound(tree, rng, EAR_TREE_LIT_TO)
+  const shadeBound = buildFlankBound(tree, rng, EAR_TREE_SHADE_FROM)
+  ctx.save()
+  traceTrunkOutline(ctx, tree, 0)
+  ctx.clip()
+  fillFlank(ctx, litBound, -1, barkShades.light)
+  fillFlank(ctx, shadeBound, 1, barkShades.shade)
+  paintTrunkFissures(ctx, tree, rng, litBound, shadeBound, {
+    light: barkColor,
+    mid: barkShades.shade,
+    shade: barkShades.fissure
+  })
+  ctx.restore()
   paintTrunkTopRim(ctx, tree, outlineColor)
-  const segs = buildEarTreeTrunkSegs(tree)
-  paintGlowGameplayBarkOnTrunk(
-    ctx,
-    segs,
-    (tree.seed + tree.x * 0.17) | 0,
-    tree.groundY,
-    getGlowGameplayTreeBarkShades()
-  )
-}
-//
-// Tapered trunk as a segment chain for the shared glow-tree bark pass.
-//
-function buildEarTreeTrunkSegs(tree) {
-  const segs = []
-  for (let i = 0; i < EAR_TREE_TRUNK_STEPS; i++) {
-    const e0 = trunkEdgeAtStep(tree, 0, i)
-    const e1 = trunkEdgeAtStep(tree, 0, i + 1)
-    segs.push({
-      sx: (e0.left + e0.right) * 0.5,
-      sy: e0.y,
-      ex: (e1.left + e1.right) * 0.5,
-      ey: e1.y,
-      w: e0.right - e0.left,
-      w2: e1.right - e1.left
-    })
-  }
-  return segs
 }
 function fillTrunkOutline(ctx, tree, pad, color) {
   ctx.fillStyle = cssRgb(color)
+  traceTrunkOutline(ctx, tree, pad)
+  ctx.fill()
+}
+function traceTrunkOutline(ctx, tree, pad) {
   const base = trunkEdgeAtStep(tree, pad, 0)
   ctx.beginPath()
   ctx.moveTo(base.left, base.y)
@@ -455,7 +480,80 @@ function fillTrunkOutline(ctx, tree, pad, color) {
     ctx.lineTo(edge.right, edge.y)
   }
   ctx.closePath()
+}
+//
+// Ragged flank bound from ground to crown: a fraction of the trunk width
+// that wanders by eased random keys, sampled every few px.
+//
+function buildFlankBound(tree, rng, frac) {
+  const keyCount = Math.ceil(tree.trunkH / EAR_TREE_FLANK_KNOT_PX) + 1
+  const keys = Array.from({ length: keyCount }, () => frac + (rng() * 2 - 1) * EAR_TREE_FLANK_WANDER)
+  const pts = []
+  for (let d = 0; d <= tree.trunkH; d += EAR_TREE_FLANK_STEP_PX) {
+    const k = d / EAR_TREE_FLANK_KNOT_PX
+    const i = Math.floor(k)
+    const s = k - i
+    const ease = s * s * (3 - 2 * s)
+    const f = keys[i] + (keys[Math.min(i + 1, keyCount - 1)] - keys[i]) * ease
+    const y = tree.groundY - d
+    const edge = trunkEdgeAtY(tree, 0, y)
+    pts.push({ x: edge.left + (edge.right - edge.left) * f, y, left: edge.left, right: edge.right })
+  }
+  return pts
+}
+//
+// Fills from a flank bound out past the trunk edge on one side (-1 = left,
+// 1 = right); the clip trims the overshoot.
+//
+function fillFlank(ctx, bound, side, color) {
+  ctx.fillStyle = cssRgb(color)
+  ctx.beginPath()
+  bound.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+  for (let i = bound.length - 1; i >= 0; i--) {
+    const p = bound[i]
+    ctx.lineTo(side < 0 ? p.left - 1 : p.right + 1, p.y)
+  }
+  ctx.closePath()
   ctx.fill()
+}
+//
+// Wavy fissures up the trunk; each short step takes the tone one value
+// darker than the flank it sits on (`tones` keyed light / mid / shade).
+//
+function paintTrunkFissures(ctx, tree, rng, litBound, shadeBound, tones) {
+  ctx.lineWidth = EAR_TREE_FISSURE_W
+  ctx.lineCap = 'round'
+  const count = Math.round(tree.trunkH * EAR_TREE_FISSURE_COUNT_PER_PX)
+  for (let n = 0; n < count; n++) {
+    const len = EAR_TREE_FISSURE_LEN_MIN + rng() * EAR_TREE_FISSURE_LEN_RANGE
+    const startD = rng() * (tree.trunkH - len)
+    const across = EAR_TREE_FISSURE_EDGE_PAD + rng() * (1 - EAR_TREE_FISSURE_EDGE_PAD * 2)
+    const phase = rng() * Math.PI * 2
+    paintTrunkFissure(ctx, tree, { startD, len, across, phase }, litBound, shadeBound, tones)
+  }
+}
+function paintTrunkFissure(ctx, tree, fissure, litBound, shadeBound, tones) {
+  const { startD, len, across, phase } = fissure
+  let prev = null
+  for (let d = startD; d <= startD + len; d += EAR_TREE_FISSURE_STEP_PX) {
+    const y = tree.groundY - d
+    const edge = trunkEdgeAtY(tree, 0, y)
+    if ((edge.right - edge.left) * 0.5 < EAR_TREE_FISSURE_MIN_HALF_W) return
+    const x = edge.left + (edge.right - edge.left) * across + Math.sin(phase + d) * EAR_TREE_FISSURE_WAVE
+    if (prev) {
+      const i = Math.min(litBound.length - 1, Math.round(d / EAR_TREE_FLANK_STEP_PX))
+      ctx.strokeStyle = cssRgb(fissureTone(x, litBound[i], shadeBound[i], tones))
+      ctx.beginPath()
+      ctx.moveTo(prev.x, prev.y)
+      ctx.lineTo(x, y)
+      ctx.stroke()
+    }
+    prev = { x, y }
+  }
+}
+function fissureTone(x, lit, shade, tones) {
+  if (x >= shade.x) return tones.shade
+  return x <= lit.x ? tones.light : tones.mid
 }
 //
 // Black cap line along the crown — the tapered polygon alone left the top
@@ -488,8 +586,10 @@ function trunkBounds(tree) {
 // Left/right taper edge at step i (0 = ground, EAR_TREE_TRUNK_STEPS = crown).
 //
 function trunkEdgeAtStep(tree, pad, i) {
-  const t = i / EAR_TREE_TRUNK_STEPS
-  const y = tree.groundY - tree.trunkH * t
+  return trunkEdgeAtY(tree, pad, tree.groundY - tree.trunkH * (i / EAR_TREE_TRUNK_STEPS))
+}
+function trunkEdgeAtY(tree, pad, y) {
+  const t = (tree.groundY - y) / tree.trunkH
   const halfW = trunkHalfWidthAt(tree, y) + pad
   const wobble = Math.sin(t * Math.PI * 1.4 + tree.seed * 3) * tree.trunkW * EAR_TREE_TRUNK_WOBBLE
   return { left: tree.x - halfW + wobble, right: tree.x + halfW + wobble, y }
@@ -498,7 +598,7 @@ function trunkEdgeAtStep(tree, pad, i) {
 // Queues one branch (base knot, limb, twigs, leaves) into the layer batch in
 // back-to-front order.
 //
-function addEarBranch(batch, leafIndices, tree, branch, barkColor, outlineColor, leafColors) {
+function addEarBranch(batch, leafIndices, tree, branch, barkColor, shadeColor, outlineColor, leafColors) {
   const limbW = Math.max(3, tree.trunkW * 0.42)
   const bx = swingX(tree, branch.baseX, branch.baseY)
   const by = swingY(tree, branch.baseX, branch.baseY)
@@ -508,16 +608,31 @@ function addEarBranch(batch, leafIndices, tree, branch, barkColor, outlineColor,
   PolyBatch.addDisc(batch, bx, by, limbW * 0.45, barkColor)
   PolyBatch.addLine(batch, bx, by, tx, ty, limbW + EAR_TREE_BRANCH_LIMB_OUTLINE_EXTRA, outlineColor)
   PolyBatch.addLine(batch, bx, by, tx, ty, limbW, barkColor)
+  addLimbUnderside(batch, bx, by, tx, ty, limbW, shadeColor)
   branch.twigs?.forEach(twig => {
     const wbx = swingX(tree, twig.baseX, twig.baseY)
     const wby = swingY(tree, twig.baseX, twig.baseY)
     const wtx = swingX(tree, twig.tipX, twig.tipY)
     const wty = swingY(tree, twig.tipX, twig.tipY)
+    const twigW = limbW * 0.5
     PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.55 + EAR_TREE_BRANCH_TWIG_OUTLINE_EXTRA, outlineColor)
-    PolyBatch.addLine(batch, wbx, wby, wtx, wty, limbW * 0.5, barkColor)
+    PolyBatch.addLine(batch, wbx, wby, wtx, wty, twigW, barkColor)
+    addLimbUnderside(batch, wbx, wby, wtx, wty, twigW, shadeColor)
     addLeafCluster(batch, leafIndices, wtx, wty, Math.atan2(wty - wby, wtx - wbx), LEAF_TWIG_FAN, LEAF_TWIG_SCALE, leafColors)
   })
   addLeafCluster(batch, leafIndices, tx, ty, Math.atan2(ty - by, tx - bx), LEAF_BRANCH_FAN, LEAF_BRANCH_SCALE, leafColors)
+}
+//
+// Shade along the lower edge of a limb: the limb normal that points down
+// picks the side, so it always lands under the light from above.
+//
+function addLimbUnderside(batch, x0, y0, x1, y1, w, color) {
+  const len = Math.hypot(x1 - x0, y1 - y0) || 1
+  let nx = -(y1 - y0) / len
+  let ny = (x1 - x0) / len
+  ny < 0 && (nx = -nx, ny = -ny)
+  const off = w * EAR_TREE_LIMB_SHADE_OFFSET
+  PolyBatch.addLine(batch, x0 + nx * off, y0 + ny * off, x1 + nx * off, y1 + ny * off, w * EAR_TREE_LIMB_SHADE_W, color)
 }
 //
 // Fans a few leaves around the limb direction, pulled slightly upward so the

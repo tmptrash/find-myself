@@ -94,6 +94,8 @@ import {
 import {
   buildGlowTreeFruitSpots,
   computeGlowAnchorFruitDropX,
+  glowAnchorFruitGroundClearSpan,
+  isGlowAnchorFruitGroundX,
   mountGlowTreeFruitLayer,
   hasGlowAnchorFruitDropInWorld,
   releaseGlowAnchorFruit,
@@ -1358,7 +1360,7 @@ const LAKE_SHORE_ROCK_BASE_SPREAD = 1.55
 // the bed than above the water line.
 //
 const LAKE_SHORE_ROCK_TOP_PINCH = 0.22
-const LAKE_SHORE_ROCK_BOTTOM_FLARE = 1.35
+const LAKE_SHORE_ROCK_BOTTOM_FLARE = 2.4
 const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
 const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
 //
@@ -1369,9 +1371,9 @@ const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
 const LAKE_SHORE_ROCK_SCALE = 0.3
 const LAKE_SHORE_ROCK_ANCHOR_T = 0.5
 //
-// The small cap rises a little above the water line.
+// The stone pile rises well above the water line, like a heap against the bank.
 //
-const LAKE_SHORE_ROCK_LIFT_PX = 6
+const LAKE_SHORE_ROCK_LIFT_PX = 24
 const LAKE_SEGMENTS = 16
 const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
@@ -2058,7 +2060,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     // Computed here (before grass) so the grass field can exclude the same
     // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
     //
-    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, null, null, earTreeSpots)
+    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, null, null, earTreeSpots, treeFruitAnchorCfg)
     const mudExtraGrass = null
     //
     // Rocks and mushrooms bake one or two canvases per instance (dozens of
@@ -2324,6 +2326,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
       k,
       flower: inst.eyeFlower,
       heroInst,
+      earthBottomY: PLAYFIELD_EARTH_BOTTOM_Y,
       footParticles: inst.footParticles,
       camera,
       sound,
@@ -2391,7 +2394,7 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     createGlowChainBuoyLayer(k, zones)
     createGlowEarTreeLayer(k, inst)
     createGlowShoreTreeLayer(k, inst)
-    const forestFloorBlockers = buildGlowForestFloorBlockers(trampX, branchTrampX, chainBuoySpots, shoreTreeLayout, earTreeSpots)
+    const forestFloorBlockers = buildGlowForestFloorBlockers(trampX, branchTrampX, chainBuoySpots, shoreTreeLayout, earTreeSpots, treeFruitAnchorCfg)
     const caveLeftX = getGlowCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
     inst.forestFloor = ForestFloor.create({
       k,
@@ -3159,14 +3162,18 @@ function glowChainBuoyColors(k) {
   return { ...glowEyeBerryColors(k), root: glowEarTreeRootKaplayRgb(k) }
 }
 //
-// Ear-tree colors — dark outline, wood bark and living green ears.
+// Ear-tree colors — muted forest-green stems, red attention leaves.
 //
 function glowEarTreeRootKaplayRgb(k) {
   const c = glowRgb(GLOW_PAL.treeColor.root)
   return k.rgb(c.r, c.g, c.b)
 }
 function glowEarTreeColors(k) {
-  const bark = glowRgb(GLOW_PAL.treeColor.trunk)
+  const att = GLOW_PAL.glowAttention
+  const bark = glowRgb(att.stem)
+  const barkLight = glowRgb(att.stemLight)
+  const barkShade = glowRgb(att.stemShade)
+  const barkFissure = glowRgb(att.stemFissure)
   const leaf = glowRgb(GLOW_PAL.glowAttention.leaf)
   const leafLight = glowRgb(GLOW_PAL.glowAttention.leafLight)
   const leafVein = glowRgb(GLOW_PAL.glowAttention.leafVein)
@@ -3174,6 +3181,11 @@ function glowEarTreeColors(k) {
   return {
     outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
+    barkShades: {
+      light: k.rgb(barkLight.r, barkLight.g, barkLight.b),
+      shade: k.rgb(barkShade.r, barkShade.g, barkShade.b),
+      fissure: k.rgb(barkFissure.r, barkFissure.g, barkFissure.b)
+    },
     leaves: {
       base: k.rgb(leaf.r, leaf.g, leaf.b),
       light: k.rgb(leafLight.r, leafLight.g, leafLight.b),
@@ -3278,7 +3290,7 @@ function isHeroOnShoreBranch(inst, char) {
 // Ground spans the forest-floor plants must leave clear: trunks, both
 // trampolines, stalk eyes and ear-trees (the hero needs to read all of them).
 //
-function buildGlowForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTreeLayout, earTreeSpots) {
+function buildGlowForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTreeLayout, earTreeSpots, treeFruitAnchorCfg) {
   const blockers = [
     { x: TREE_X, half: TRUNK_EXCLUDE_HALF },
     { x: trampX, half: TRAMP_MUSHROOM_CLEAR_HALF },
@@ -3286,8 +3298,16 @@ function buildGlowForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTree
     ...(buoySpots ?? []).map(s => ({ x: s.x, half: GLOW_FOREST_FLOOR_STALK_EYE_CLEAR_HALF })),
     ...(earTreeSpots ?? []).map(s => ({ x: s.x, half: EAR_TREE_TRUNK_GRASS_CLEAR_HALF }))
   ]
+  treeFruitAnchorCfg && blockers.push(glowAnchorFruitForestFloorBlocker(treeFruitAnchorCfg))
   shoreTreeLayout && blockers.push({ x: shoreTreeLayout.x, half: GLOW_FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF })
   return blockers
+}
+//
+// Fern / plume patches and hill plants skip the anchor-apple landing strip.
+//
+function glowAnchorFruitForestFloorBlocker(cfg) {
+  const { x1, x2 } = glowAnchorFruitGroundClearSpan(cfg)
+  return { x: (x1 + x2) * 0.5, half: (x2 - x1) * 0.5 }
 }
 function isGlowForestFloorSpotFree(inst, blockers, x, halfW) {
   const x1 = x - halfW
@@ -3313,7 +3333,7 @@ function createGlowEarTreeLayer(k, inst) {
       draw() {
         if (!inst.earTrees) return
         const c = glowEarTreeColors(k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.outline, 1, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
+        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, 1, glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -3333,7 +3353,7 @@ function createGlowEarTreeLayer(k, inst) {
       draw() {
         if (!inst.earTrees) return
         const c = glowEarTreeColors(k)
-        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.outline, 1,
+        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.barkShades, c.outline, 1,
           glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
@@ -3344,7 +3364,7 @@ function createGlowEarTreeLayer(k, inst) {
       draw() {
         if (!inst.earTrees) return
         const c = glowEarTreeColors(k)
-        EarTree.onDrawBranches(inst.earTrees, c.bark, c.outline, c.leaves, 1,
+        EarTree.onDrawBranches(inst.earTrees, c.bark, c.barkShades, c.outline, c.leaves, 1,
           glowCameraViewXRange(k, inst, GLOW_DECOR_CULL_MARGIN))
       }
     }
@@ -5425,11 +5445,11 @@ function glowLogColors() {
 }
 //
 // Swaying grass — the shared Grass component, excluding water, trunk, the
-// trampoline mushroom band and every ear-tree's trunk footprint (so no blade
-// ever covers its face). The tint callback also hides blades of unexplored
-// ground sides.
+// trampoline mushroom band, the anchor-apple landing strip, and every
+// ear-tree's trunk footprint (so no blade ever covers its face). The tint
+// callback also hides blades of unexplored ground sides.
 //
-function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots) {
+function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots, treeFruitAnchorCfg) {
   const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
   const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
   const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
@@ -5445,6 +5465,7 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZo
     (x >= trampL && x <= trampR) ||
     (x >= branchL && x <= branchR) ||
     earTreeExcluded(x) ||
+    (treeFruitAnchorCfg && isGlowAnchorFruitGroundX(x, treeFruitAnchorCfg)) ||
     isCrackGrassExcluded(x, WORLD_W) ||
     (mudApproachGrassOff && x >= branchR && x <= mudZoneX2)
   const grass = Grass.create({
@@ -9203,7 +9224,8 @@ function tryStartGlowFlowerGrab(inst) {
 }
 //
 // While the flower drags the hero away the level only runs the sequence,
-// particles, whisper, FPS and camera.
+// particles, whisper, FPS and camera. The camera follows him a little way
+// down the root tunnel on top of its regular horizontal follow.
 //
 function updateGlowFlowerGrabFrame(inst) {
   const k = inst.k
@@ -9212,6 +9234,8 @@ function updateGlowFlowerGrabFrame(inst) {
   inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
   updateGlowPlantWhisperSound(inst, inst.heroInst.character)
   updateGlowCamera(inst)
+  const drop = FlowerGrab.cameraDropY(inst.flowerGrab)
+  drop > 0 && k.camPos(k.camPos().x, k.camPos().y + drop)
 }
 //
 // The swallowed hero ends the glow section: straight on to touch lesson 0.

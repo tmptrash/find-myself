@@ -508,6 +508,10 @@ export const CFG = {
           leaf: PALETTE.red1,          // Ear-tree leaf body
           leafLight: PALETTE.red3,     // Lit half of the leaf
           leafVein: PALETTE.red0,      // Leaf rim and midrib
+          stem: PALETTE.green1,        // Ear-tree trunk and limbs (same family as forest grass)
+          stemLight: PALETTE.green3,   // Bark plates catching the light on the left flank
+          stemShade: PALETTE.green0,   // Shaded right flank and limb undersides
+          stemFissure: PALETTE.teal0,  // Bark fissures (cool deep shadow)
           mushroomCap: PALETTE.red2,
           mushroomCapDark: PALETTE.brown0,
           mushroomCapLight: PALETTE.orange3,
@@ -549,6 +553,35 @@ export const CFG = {
           hole: PALETTE.gray0,         // Torn earth where the hero vanished
           splash: PALETTE.cyan4,       // Droplets where thrown earth hits the lake
           fade: PALETTE.gray0          // Level fade-out after the grab
+        },
+        //
+        // Tunnel the flower's roots tear through the island when they drag
+        // the hero under: an open soil cut, warm light at the lip, darkness below.
+        //
+        glowRootTunnel: {
+          contour: PALETTE.gray0,      // Clod, stone and root contours
+          wall: PALETTE.brown1,        // Torn soil wall, a step lighter than the earth around it
+          wallStrata: [PALETTE.rose0, PALETTE.brown0, PALETTE.sand0, PALETTE.rose1], // Uneven earth layers in the cut
+          wallLight: PALETTE.rose2,    // Forest light caught on the torn upper lip
+          wallRim: PALETTE.orange2,    // Hot rim right under the opening
+          cavity: PALETTE.rose0,       // Tunnel interior
+          cavityGlow: PALETTE.rose1,   // Daylight spilling into the crack
+          cavityDeep: PALETTE.gray0,   // Interior darkens with depth
+          gouge: PALETTE.brown0,       // Fresh scrapes the roots left on the back wall
+          stone: PALETTE.gray2,        // Stones embedded in the cut
+          stoneWarm: PALETTE.sand1,    // Warm stones
+          stoneLight: PALETTE.sand2,   // Lit stone faces
+          stoneDark: PALETTE.gray1,    // Deep stones
+          root: PALETTE.brown3,        // Thin roots in the soil cut
+          rootDark: PALETTE.rose1,     // Torn root ends hanging into the cavity
+          turf: PALETTE.green1,        // Torn turf on the lip
+          turfLight: PALETTE.green2,   // Lit turf edge
+          clod: PALETTE.brown1,        // Chipped clods on the lip
+          puller: PALETTE.brown3,      // Living roots that drag the hero down
+          pullerLight: PALETTE.brown4, // Lit ridge of the living roots
+          crumb: PALETTE.brown1,       // Soil crumbs shaken loose
+          deepEarth: PALETTE.rose0,    // Earth below the playfield, seen while the camera follows
+          darkness: PALETTE.gray0      // Underground atmosphere closing in
         },
         //
         // Colour-world forest floor: mossy hill, ferns, light spike bushes,
@@ -593,6 +626,31 @@ export const CFG = {
           rimDryLight: PALETTE.gold4,  // Sunlit litter specks
           rimPebble: PALETTE.slate2,   // Pebbles poking out of the lip
           shaft: PALETTE.gold5         // Diagonal sunlight shafts
+        },
+        //
+        // Dry-stone pile at the right end of the lake: distinct faceted warm
+        // grey stones lit from the upper left, in two depth layers — far
+        // stones darker and duller, near stones lighter.
+        //
+        glowShoreRock: {
+          far: {
+            contour: PALETTE.gray0,    // Stone outline
+            crevice: PALETTE.gray0,    // Cracks
+            shadow: PALETTE.gray1,     // Lower-right facets
+            faces: [PALETTE.gray2, PALETTE.sand1, PALETTE.gray2], // Stone body tones
+            light: PALETTE.gray3,      // Upper-left facets
+            glint: PALETTE.sand2       // Thin lit edge along the top
+          },
+          near: {
+            contour: PALETTE.gray0,    // Stone outline
+            crevice: PALETTE.gray1,    // Cracks
+            shadow: PALETTE.gray2,     // Lower-right facets
+            faces: [PALETTE.gray3, PALETTE.sand2, PALETTE.gray3, PALETTE.gray4], // Stone body tones (warm grey mix)
+            light: PALETTE.gray4,      // Upper-left facets
+            glint: PALETTE.gray5,      // Thin lit edge along the top
+            moss: PALETTE.green1,      // Rare moss specks on dry stones
+            mossLight: PALETTE.green2  // Lit moss speck edge
+          }
         },
         //
         // Extra colour-world underground props (cobble beds, voids, pebbles, grit).

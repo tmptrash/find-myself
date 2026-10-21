@@ -123,10 +123,37 @@ const FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP = 36
  * @returns {number}
  */
 export function computeGlowAnchorFruitDropX(cfg) {
+  const { x1, x2 } = glowAnchorFruitGroundClearSpan(cfg)
+  return (x1 + x2) * 0.5
+}
+
+/**
+ * World X span on the ground kept clear for the knocked anchor apple (between
+ * trunk and branch-trampoline pads). Matches the foliage pick gap.
+ * @param {Object} cfg
+ * @param {number} cfg.trunkX
+ * @param {number} cfg.trunkHalf
+ * @param {number} cfg.branchTrampX
+ * @param {number} cfg.trampClearHalf
+ * @returns {{ x1: number, x2: number }}
+ */
+export function glowAnchorFruitGroundClearSpan(cfg) {
   const { trunkX, trunkHalf, branchTrampX, trampClearHalf } = cfg
-  const stripLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD
-  const stripRight = branchTrampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD
-  return (stripLeft + stripRight) * 0.5
+  return {
+    x1: trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD,
+    x2: branchTrampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD
+  }
+}
+
+/**
+ * True when world X lies in the anchor-apple ground strip (no grass / ferns).
+ * @param {number} x - World X
+ * @param {Object} cfg - Same layout object as computeGlowAnchorFruitDropX
+ * @returns {boolean}
+ */
+export function isGlowAnchorFruitGroundX(x, cfg) {
+  const { x1, x2 } = glowAnchorFruitGroundClearSpan(cfg)
+  return x >= x1 && x <= x2
 }
 
 /**

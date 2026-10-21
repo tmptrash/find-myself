@@ -681,6 +681,16 @@ export function soilLineY(inst, x) {
 }
 
 /**
+ * Top of the island turf at world X (the mound outline above the soil line).
+ * @param {Object} inst - Eye-flower inst
+ * @param {number} x - World X
+ * @returns {number}
+ */
+export function surfaceY(inst, x) {
+  return Math.min(inst.waterY, mossyHillTopY(inst.hill, Math.max(inst.x1, x)))
+}
+
+/**
  * 0..1 whisper loudness for a hero at (x, y): rises as he nears the flower
  * head and peaks at the closest approach (same far/near band as before).
  * @param {Object|null} inst - Eye-flower inst

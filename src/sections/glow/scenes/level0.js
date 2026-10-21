@@ -292,6 +292,8 @@ const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
 // 150 px at the feet, so the branch is reachable only via the left mushroom.
 //
 const MAIN_TREE_HERO_BRANCH_FRAC = 0.5
+const MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN = 0
+const MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX = 0
 //
 // The tree is painted in world space onto a full 3000x1080 canvas, but the
 // trunk and canopy only cover a slice of it. Cropping the bake to that slice
@@ -1774,6 +1776,8 @@ export async function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   await yieldForGpu(1)
   const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
+    foliageDetailLeavesMin: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN,
+    foliageDetailLeavesMax: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX,
     heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
     structuredCrown: true
   })
@@ -1850,6 +1854,8 @@ async function initGlowLevel0Scene(k, bootstrap, session) {
     zones._sceneRef = { zones }
     const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
     ...glowTreeBuildOptsForDensity('nearground'),
+    foliageDetailLeavesMin: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN,
+    foliageDetailLeavesMax: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX,
     heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
     structuredCrown: true
   })

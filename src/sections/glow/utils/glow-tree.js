@@ -54,13 +54,13 @@ const FOLIAGE_CLUSTER_LEAF_SIZE_FRAC = 1.55
 // Star leaves (palette.sprigLeaves, reference apple tree): every leaf unit
 // is a small star of 5–7 round leaflets fanning out of one joint, flat
 // colour, no outline — depth comes only from darker stars behind lighter
-// ones and the gaps between the leaflets. Stars are packed densely on a
-// jittered subset of cells. Leaflet sizes are fractions of the star size.
+// ones and the gaps between the leaflets. Only a jittered subset of each
+// cluster's cells become stars. Leaflet sizes are fractions of the star size.
 //
 const SPRIG_SIZE_FRAC = 2.4
 const SPRIG_SIZE_JITTER = 0.2
 const SPRIG_POS_JITTER = 0.45
-const SPRIG_CELL_KEEP = 0.55
+const SPRIG_CELL_KEEP = 0.3
 const SPRIG_BACK_CHANCE = 0.4
 const SPRIG_FRONT_CHANCE = 0.2
 const SPRIG_CLUSTER_HASH_X = 83492791
@@ -350,8 +350,14 @@ const STRUCTURED_LIMB_SEED_STEP = 7919
 // Scripted limbs taper to 60% of their base width before forking; the main
 // fork keeps most of that width, the side fork is thinner.
 //
-const STRUCTURED_LEAF_STYLE = { midChance: 0.4, massScale: 0.72, tipTaper: 0.4, childW: [0.95, 0.75] }
+const STRUCTURED_LEAF_STYLE = { midChance: 0.28, massScale: 0.72, tipTaper: 0.4, childW: [0.95, 0.75] }
 const BRANCH_CHILD_W = [0.66, 0.56]
+//
+// Main-tree structured crown: smaller pixel clouds and fewer side lobes so
+// the canopy stays open and star leaves stay readable.
+//
+const STRUCTURED_CROWN_CLOUD_CELL_BONUS = -14
+const STRUCTURED_CROWN_LOBE_CHANCE_DELTA = -0.28
 //
 // Crown light: groups low in the crown take the shadow mass shade, groups
 // near the top the light one; inside every group the lowest cells drop one
@@ -505,8 +511,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   const leaves = buildLeaves(rng, leafEndpoints, 3, denseBranchCanopyLeaves || lushCanopy, {
     detailMin: opts.foliageDetailLeavesMin,
     detailMax: opts.foliageDetailLeavesMax,
-    cloudCellBonus: lushCanopy ? FOLIAGE_LUSH_CLOUD_CELL_BONUS : 0,
-    lobeChanceBoost: lushCanopy ? FOLIAGE_LUSH_LOBE_CHANCE_BOOST : 0,
+    cloudCellBonus: (lushCanopy ? FOLIAGE_LUSH_CLOUD_CELL_BONUS : 0) + (structuredCrown ? STRUCTURED_CROWN_CLOUD_CELL_BONUS : 0),
+    lobeChanceBoost: (lushCanopy ? FOLIAGE_LUSH_LOBE_CHANCE_BOOST : 0) + (structuredCrown ? STRUCTURED_CROWN_LOBE_CHANCE_DELTA : 0),
     extraLobeChance: lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0,
     massByRadius: true,
     shadeByHeight: structuredCrown

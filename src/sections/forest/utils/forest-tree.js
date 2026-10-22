@@ -350,14 +350,35 @@ const STRUCTURED_LIMB_SEED_STEP = 7919
 // Scripted limbs taper to 60% of their base width before forking; the main
 // fork keeps most of that width, the side fork is thinner.
 //
-const STRUCTURED_LEAF_STYLE = { midChance: 0.28, massScale: 0.72, tipTaper: 0.4, childW: [0.95, 0.75] }
+const STRUCTURED_LEAF_STYLE = { midChance: 0.32, massScale: 0.7, tipTaper: 0.4, childW: [0.95, 0.75], twigs: true }
+//
+// Thin twigs sprouting along the main-tree limbs (trunk → limb → twig →
+// leaves): every TWIG_STEP_EVERY-th limb step on the first two limb levels
+// may grow a short twig that leaves the limb at a slant (biased upward) and
+// ends in its own leaf group. Twigs draw from their own position-seeded
+// stream so the limbs keep their exact shape.
+//
+const TWIG_STEP_EVERY = 2
+const TWIG_MAX_DEPTH = 1
+const TWIG_CHANCE = 0.32
+const TWIG_LEN_MIN = 2
+const TWIG_LEN_RANGE = 3
+const TWIG_W_FRAC = 0.32
+const TWIG_W_MIN = 1.2
+const TWIG_ANGLE_MIN = 0.55
+const TWIG_ANGLE_RANGE = 0.6
+const TWIG_UP_BIAS = 0.35
+const TWIG_HASH_X = 73856093
+const TWIG_HASH_Y = 19349663
+const TWIG_LEAF_STYLE = { midChance: 0.35, massScale: 0.66, tipTaper: 0.5, childW: [0.8, 0.65] }
 const BRANCH_CHILD_W = [0.66, 0.56]
 //
 // Main-tree structured crown: smaller pixel clouds and fewer side lobes so
 // the canopy stays open and star leaves stay readable.
 //
-const STRUCTURED_CROWN_CLOUD_CELL_BONUS = -14
-const STRUCTURED_CROWN_LOBE_CHANCE_DELTA = -0.28
+const STRUCTURED_CROWN_CLOUD_CELL_BONUS = -18
+const STRUCTURED_CROWN_LOBE_CHANCE_DELTA = -0.2
+const STRUCTURED_CROWN_EXTRA_LOBE_CHANCE = 0.05
 //
 // Crown light: groups low in the crown take the shadow mass shade, groups
 // near the top the light one; inside every group the lowest cells drop one
@@ -415,6 +436,21 @@ const BRANCH_SWAY_POS_FREQ_Y = 0.017
 const FOLIAGE_MASS_REF_R = 44
 const FOLIAGE_MASS_SCALE_MIN = 0.65
 const FOLIAGE_MASS_SCALE_MAX = 1.2
+//
+// Trunk falloff (main and shore trees): foliage thins toward the main trunk
+// and fills out toward the crown edge. Each leaf group's distance to the
+// trunk line, normalised by the farthest group, scales its mass between the
+// near and far factors; groups close to the trunk may be dropped entirely
+// (chance fades from TRUNK_NEAR_SKIP at the trunk to 0 at TRUNK_SKIP_REACH).
+// The drop roll is hashed from the group position, not drawn from the
+// shared stream, so the remaining layout stays put.
+//
+const TRUNK_NEAR_MASS = 0.55
+const TRUNK_FAR_MASS = 1.25
+const TRUNK_NEAR_SKIP = 0.6
+const TRUNK_SKIP_REACH = 0.45
+const TRUNK_SKIP_HASH_X = 2246822519
+const TRUNK_SKIP_HASH_Y = 3266489917
 
 /**
  * Creates a seeded pseudo-random number generator.
@@ -513,9 +549,10 @@ export function buildForestTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY,
     detailMax: opts.foliageDetailLeavesMax,
     cloudCellBonus: (lushCanopy ? FOLIAGE_LUSH_CLOUD_CELL_BONUS : 0) + (structuredCrown ? STRUCTURED_CROWN_CLOUD_CELL_BONUS : 0),
     lobeChanceBoost: (lushCanopy ? FOLIAGE_LUSH_LOBE_CHANCE_BOOST : 0) + (structuredCrown ? STRUCTURED_CROWN_LOBE_CHANCE_DELTA : 0),
-    extraLobeChance: lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0,
+    extraLobeChance: (lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0) + (structuredCrown ? STRUCTURED_CROWN_EXTRA_LOBE_CHANCE : 0),
     massByRadius: true,
-    shadeByHeight: structuredCrown
+    shadeByHeight: structuredCrown,
+    trunkFalloffSegs: structuredCrown ? trunkSegs : null
   })
   return {
     seed,
@@ -550,6 +587,32 @@ const SHORE_ACCENT_TRUNK_SIDE_BRANCH_SPECS = [
   { t: 0.72, angle: Math.PI - 0.38, len: 5, w: 2.5 }
 ]
 const SHORE_ACCENT_SIDE_LEAF_R = 8
+//
+// Fuller shore-tree canopy: extra leaf masses around the trunk apex (offsets
+// from the apex) and masses hanging under the walkable branch (fraction along
+// it, drop below it). The apex sits just above that branch, so the apex
+// masses grow up and to the left, away from the walkable wood.
+//
+const SHORE_ACCENT_CROWN_EXTRA = [
+  { dx: -30, dy: -4 },
+  { dx: -8, dy: -30 },
+  { dx: 14, dy: -38 },
+  { dx: -44, dy: 26 },
+  { dx: -34, dy: 58 }
+]
+const SHORE_ACCENT_CROWN_EXTRA_R = 24
+const SHORE_ACCENT_BRANCH_HANG = [
+  { t: 0.45, dy: 30 },
+  { t: 0.72, dy: 34 }
+]
+const SHORE_ACCENT_BRANCH_HANG_R = 18
+const SHORE_ACCENT_LEAF_OPTS = {
+  cloudCellBonus: 12,
+  detailMin: 3,
+  detailMax: 7,
+  lobeChanceBoost: 0.35,
+  extraLobeChance: 0.5
+}
 
 /**
  * Minimal main-tree-style accent: tapered trunk, roots, one horizontal branch
@@ -611,14 +674,19 @@ export function buildForestShoreAccentTree(cfg) {
     prevY = ey
   }
   leafEndpoints.push({ x: endX, y: prevY, r: branchLen * SHORE_ACCENT_BRANCH_LEAF_R_FRAC })
+  SHORE_ACCENT_BRANCH_HANG.forEach(hang => leafEndpoints.push({
+    x: startX + (endX - startX) * hang.t,
+    y: attachY + hang.dy,
+    r: SHORE_ACCENT_BRANCH_HANG_R
+  }))
   const trunkTop = trunkSegs[trunkSegs.length - 1]
   leafEndpoints.push({ x: trunkTop.ex, y: trunkTop.ey, r: SHORE_ACCENT_CROWN_LEAF_R })
-  const leaves = buildLeaves(rng, leafEndpoints, 3, true, {
-    cloudCellBonus: 4,
-    detailMin: 3,
-    detailMax: 7,
-    lobeChanceBoost: 0.15
-  })
+  SHORE_ACCENT_CROWN_EXTRA.forEach(off => leafEndpoints.push({
+    x: trunkTop.ex + off.dx,
+    y: trunkTop.ey + off.dy,
+    r: SHORE_ACCENT_CROWN_EXTRA_R
+  }))
+  const leaves = buildLeaves(rng, leafEndpoints, 3, true, { ...SHORE_ACCENT_LEAF_OPTS, trunkFalloffSegs: trunkSegs })
   const branchW = SHORE_ACCENT_BRANCH_W
   return {
     seed,
@@ -2218,6 +2286,7 @@ function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoin
   const TIP_TAPER = leafStyle?.tipTaper ?? 0.93
   let cx = x
   let cy = y
+  const twigSpots = []
   for (let i = 0; i < length; i++) {
     const px = cx
     const py = cy
@@ -2238,7 +2307,14 @@ function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoin
     if (depth >= 1 && i > 0 && i % 2 === 0 && rng() < midLeafChance) {
       leafEndpoints.push({ x: cx, y: cy, r: 20 + depth * 5 + rng() * 14, massScale: leafStyle?.massScale })
     }
+    leafStyle?.twigs && depth <= TWIG_MAX_DEPTH && i > 0 && i % TWIG_STEP_EVERY === 1 &&
+      twigSpots.push({ x: cx, y: cy, angle, w: segW })
   }
+  //
+  // Twigs grow after the limb loop so the limb's segments stay one
+  // contiguous chain (bark / outline chains join consecutive segments).
+  //
+  twigSpots.forEach(spot => growTwig(spot, branchSegs, leafEndpoints, depth))
   //
   // Scripted limbs fork from their tapered end width (each fork thinner than
   // the wood it grows from); other branches restart from their base width.
@@ -2251,6 +2327,21 @@ function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoin
   if (rng() < 0.65) {
     growBranch(rng, cx, cy, angle + 0.35 + rng() * 0.2, Math.round(length * 0.55), forkW * childW[1], branchSegs, leafEndpoints, depth + 1, denseCanopyLeaves, leafStyle)
   }
+}
+//
+// One thin side twig off a limb step, seeded by its position.
+//
+function growTwig(spot, branchSegs, leafEndpoints, depth) {
+  const twigRng = createRng(Math.floor(spot.x * TWIG_HASH_X) ^ Math.floor(spot.y * TWIG_HASH_Y))
+  if (twigRng() > TWIG_CHANCE) return
+  const side = twigRng() < 0.5 ? -1 : 1
+  const off = TWIG_ANGLE_MIN + twigRng() * TWIG_ANGLE_RANGE
+  const up = -Math.PI / 2
+  const toUp = Math.atan2(Math.sin(up - spot.angle), Math.cos(up - spot.angle))
+  const angle = spot.angle + side * off + toUp * TWIG_UP_BIAS
+  const len = TWIG_LEN_MIN + Math.floor(twigRng() * (TWIG_LEN_RANGE + 1))
+  const w = Math.max(TWIG_W_MIN, spot.w * TWIG_W_FRAC)
+  growBranch(twigRng, spot.x, spot.y, angle, len, w, branchSegs, leafEndpoints, depth + 2, false, TWIG_LEAF_STYLE)
 }
 //
 // Per-step turn: gentle pull toward straight up plus a slow wave.
@@ -2360,8 +2451,12 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
   const crownTop = Math.min(...endpoints.map(ep => ep.y))
   const crown = byHeight ? { top: crownTop, span: Math.max(1, Math.max(...endpoints.map(ep => ep.y)) - crownTop) } : null
   const out = []
+  const trunkReach = buildTrunkReach(endpoints, detailOpts.trunkFalloffSegs)
   endpoints.forEach(ep => {
-    const mass = foliageMassScale(ep, detailOpts.massByRadius)
+    const trunkT = trunkReach ? trunkReach(ep) : 1
+    if (trunkReach && isNearTrunkSkipped(ep, trunkT)) return
+    const mass = foliageMassScale(ep, detailOpts.massByRadius) *
+      (trunkReach ? TRUNK_NEAR_MASS + (TRUNK_FAR_MASS - TRUNK_NEAR_MASS) * trunkT : 1)
     const spread = Math.min(72, ep.r * 1.08) * Math.sqrt(mass)
     const mainShade = pickEndpointShadeIdx(rng, shadeCount, ep, crown)
     const mainCells = buildAsymmetricPixelCloud(
@@ -2418,6 +2513,29 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
     }
   })
   return out
+}
+//
+// Returns ep → 0..1 (0 on the trunk line, 1 at the farthest leaf group), or
+// null when the tree has no trunk falloff.
+//
+function buildTrunkReach(endpoints, trunkSegs) {
+  if (!trunkSegs?.length || !endpoints.length) return null
+  const dist = ep => Math.min(...trunkSegs.map(s => pointSegmentDistance(ep.x, ep.y, s)))
+  const far = Math.max(1, ...endpoints.map(dist))
+  return ep => Math.min(1, dist(ep) / far)
+}
+function pointSegmentDistance(x, y, s) {
+  const dx = s.ex - s.sx
+  const dy = s.ey - s.sy
+  const lenSq = dx * dx + dy * dy
+  const u = lenSq > 0 ? Math.max(0, Math.min(1, ((x - s.sx) * dx + (y - s.sy) * dy) / lenSq)) : 0
+  return Math.hypot(x - (s.sx + dx * u), y - (s.sy + dy * u))
+}
+function isNearTrunkSkipped(ep, trunkT) {
+  if (trunkT >= TRUNK_SKIP_REACH) return false
+  const chance = TRUNK_NEAR_SKIP * (1 - trunkT / TRUNK_SKIP_REACH)
+  const roll = createRng(Math.floor(ep.x * TRUNK_SKIP_HASH_X) ^ Math.floor(ep.y * TRUNK_SKIP_HASH_Y))()
+  return roll < chance
 }
 //
 // Relative size of one leaf mass: endpoint radius around the reference,

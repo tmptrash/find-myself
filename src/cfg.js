@@ -510,18 +510,19 @@ export const CFG = {
         // ear-tree leaves. Slightly richer cap than forestMushroom, not neon.
         //
         forestAttention: {
-          leaf: PALETTE.red1,          // Ear-tree leaf body
-          leafLight: PALETTE.red3,     // Lit half of the leaf
-          leafVein: PALETTE.red0,      // Leaf rim and midrib
           //
-          // Ear-tree (bomb tree) wood is the only purple in the level, so it
-          // reads apart from the teal forest, brown soil / roots and the rose
-          // apple bark.
+          // Ear-tree (bomb tree) look: pale cream wood — the only light trunk
+          // in the level, so with its dark contour it reads apart from the
+          // teal forest, brown soil / roots and the rose apple bark — under
+          // deep crimson leaves (red = danger).
           //
-          stem: PALETTE.purple1,       // Ear-tree trunk and limbs
-          stemLight: PALETTE.purple3,  // Bark plates catching the light on the left flank
-          stemShade: PALETTE.purple0,  // Shaded right flank and limb undersides
-          stemFissure: PALETTE.violet0, // Bark fissures (deep blue-violet shadow)
+          leaf: PALETTE.red0,          // Ear-tree leaf body
+          leafLight: PALETTE.red2,     // Lit half of the leaf
+          leafVein: PALETTE.mauve0,    // Leaf rim and midrib
+          stem: PALETTE.sand4,         // Ear-tree trunk and limbs
+          stemLight: PALETTE.sand5,    // Bark plates catching the light on the left flank
+          stemShade: PALETTE.sand2,    // Shaded right flank and limb undersides
+          stemFissure: PALETTE.sand0,  // Bark fissures
           mushroomCap: PALETTE.red2,
           mushroomCapDark: PALETTE.brown0,
           mushroomCapLight: PALETTE.orange3,
@@ -643,6 +644,19 @@ export const CFG = {
         // stones darker and duller, near stones lighter.
         //
         forestShoreRock: {
+          //
+          // Deepest layer: a solid dark backing inside the pile silhouette
+          // plus small dark stones, so no water shows between the stones.
+          //
+          back: {
+            fill: PALETTE.gray1,       // Solid backing behind every stone
+            contour: PALETTE.gray0,    // Stone outline
+            crevice: PALETTE.gray0,    // Cracks
+            shadow: PALETTE.gray0,     // Lower-right facets
+            faces: [PALETTE.gray1, PALETTE.sand0, PALETTE.gray1], // Stone body tones
+            light: PALETTE.gray2,      // Upper-left facets
+            glint: PALETTE.sand1       // Thin lit edge along the top
+          },
           far: {
             contour: PALETTE.gray0,    // Stone outline
             crevice: PALETTE.gray0,    // Cracks
@@ -675,16 +689,20 @@ export const CFG = {
         //
         // Spiky tomato grenade on the lip-trees — danger red, green spikes.
         //
+        //
+        // Bomb bud on the ear-trees: orange body with gold spikes and cream
+        // petals, so it pops against the crimson leaves it hangs in.
+        //
         forestTomato: {
-          body: PALETTE.red1,
-          light: PALETTE.red3,
-          dark: PALETTE.red0,
+          body: PALETTE.orange1,
+          light: PALETTE.red4,
+          dark: PALETTE.orange0,
           outline: PALETTE.brown0,
-          spike: PALETTE.green1,
-          stem: PALETTE.green0,
-          petal: PALETTE.pink2,       // Flower-like petals around the bud
-          petalLight: PALETTE.pink4,  // Petal midrib highlight
-          stamen: PALETTE.orange5     // Pollen dot on the bud
+          spike: PALETTE.gold1,
+          stem: PALETTE.sand0,
+          petal: PALETTE.red5,        // Flower-like petals around the bud
+          petalLight: PALETTE.gray7,  // Petal midrib highlight
+          stamen: PALETTE.gold4       // Pollen dot on the bud
         },
         //
         // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
@@ -717,7 +735,15 @@ export const CFG = {
           lit: PALETTE.orange2,
           rim: PALETTE.rose2,
           shade: PALETTE.rose1,
-          deep: PALETTE.rose1
+          deep: PALETTE.rose1,
+          //
+          // Root relief (reference lake tree): the same dark earth tone as
+          // the bomb-tree roots, so they stay part of the soil, with a soft
+          // contour and a lit upper edge in the topsoil tone.
+          //
+          root: PALETTE.rose0,
+          rootLit: PALETTE.brown1,
+          rootContour: PALETTE.rose0
         },
         //
         // Warm rust-brown wood like the reference lake tree.
@@ -737,6 +763,11 @@ export const CFG = {
           //
           leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2]
         },
+        //
+        // White leaves the hero bursts into on a touch death (mostly white,
+        // a few in the shade tone so the burst keeps some depth).
+        //
+        heroDeathLeaves: [PALETTE.gray7, PALETTE.gray7, PALETTE.gray6],
         //
         // Cool air target when parallax trees soften into the sky (not gold).
         //

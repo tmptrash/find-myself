@@ -288,6 +288,11 @@ export function tickReadySceneEyeBlink(state, k, dt) {
 function resolveEyeHudLookTarget(inst, k) {
   const pos = inst._eyeLookHero?.character?.pos
   if (!pos || !k) return null
+  //
+  // toScreen applies the full camera transform (position and zoom), so the
+  // pupil still finds the hero while a level zooms the camera.
+  //
+  if (k.toScreen) return k.toScreen(pos)
   const cam = k.camPos?.()
   if (!cam) return { x: pos.x, y: pos.y }
   return {

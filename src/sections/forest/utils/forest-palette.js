@@ -165,6 +165,19 @@ export function getForestGameplayTreeBarkShades() {
 }
 
 /**
+ * Root relief tones for the gameplay trees (fill, lit edge, contour).
+ * @returns {{ fill: Object, lit: Object, contour: Object }}
+ */
+export function getForestGameplayTreeRootShades() {
+  const bark = FOREST_PAL.forestTreeBark
+  return {
+    fill: forestRgb(bark.root),
+    lit: forestRgb(bark.rootLit),
+    contour: forestRgb(bark.rootContour)
+  }
+}
+
+/**
  * Side-light tones for the gameplay trees' volume pass (sun from the left).
  * @returns {{ lit: Object, rim: Object, shade: Object, deep: Object }}
  */
@@ -189,9 +202,9 @@ export function getTreePaletteColorForCorner(parallaxCornerKey) {
     //
     woodMassStyle: false,
     //
-    // Roots stay the old flat mass stroke; trunk/branch keep detailed bark.
+    // Roots get the contour / fill / lit-edge relief in their own warm tones.
     //
-    simpleRoots: true,
+    rootRelief: getForestGameplayTreeRootShades(),
     barkShades: getForestGameplayTreeBarkShades()
   }
 }

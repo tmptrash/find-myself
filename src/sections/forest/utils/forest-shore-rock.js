@@ -5,16 +5,34 @@ import { FOREST_PAL } from './forest-palette.js'
 //
 // Lake-shore dry-stone pile (reference art: right end of the lake). The
 // rock silhouette only decides where stones lie — it never clips them, so
-// every stone keeps its whole rounded outline. Two layers: a far row of
-// smaller, darker stones that backs the whole heap without holes, then a
-// near row of bigger, lighter stones with gaps through which the far row
-// shows.
+// every stone keeps its whole rounded outline. Layers back to front: a solid
+// dark backing inset inside the silhouette, a dense row of small dark stones
+// on it, a far row of smaller, darker stones, then a near row of bigger,
+// lighter stones with gaps through which the rows behind show — never the
+// water behind the pile.
 // Each layer goes top row first, so lower stones sit in front of upper
 // ones. Every stone is a rounded polygon cut into flat facets around an
 // off-centre point: light facets up-left, shadow facets down-right, its
 // own dark outline and a thin lit top edge. Moss is rare: a speck on a
 // few near stones and a couple of small tufts on top.
 //
+const BACK_LAYER = {
+  width: 20,
+  aspect: 0.78,
+  sizeJitter: 0.2,
+  stepX: 0.62,
+  stepY: 0.55,
+  rowShift: 0.5,
+  posJitter: 0.1,
+  skip: 0,
+  mossy: false
+}
+//
+// The backing stays this far inside the silhouette, so its flat edge hides
+// behind the outer stones.
+//
+const BACKING_INSET_PX = 6
+const BACKING_ERODE_DIRS = 8
 const FAR_LAYER = {
   width: 30,
   aspect: 0.74,
@@ -108,11 +126,56 @@ export function paintForestShoreRock(ctx, cfg) {
   const bounds = loopBounds(loops, cfg.outlineWidth)
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
+  paintBacking(ctx, loops, pal.back.fill)
+  buildStones(loops, bounds, rng, BACK_LAYER).forEach(stone => paintStone(ctx, stone, rng, pal.back, waterY, BACK_LAYER.mossy))
   buildStones(loops, bounds, rng, FAR_LAYER).forEach(stone => paintStone(ctx, stone, rng, pal.far, waterY, FAR_LAYER.mossy))
   buildStones(loops, bounds, rng, NEAR_LAYER).forEach(stone => paintStone(ctx, stone, rng, pal.near, waterY, NEAR_LAYER.mossy))
   paintTopTufts(ctx, loops, rng, forestFloorPainterColors().hill, waterY)
 }
 
+//
+// Solid fill of the merged silhouette, shrunk by BACKING_INSET_PX: the union
+// is intersected with copies of itself shifted around a circle, which erodes
+// only its outer edge (overlapping loop edges inside stay filled). Built on
+// scratch canvases so nothing the target already holds is touched.
+//
+function paintBacking(ctx, loops, color) {
+  const w = ctx.canvas.width
+  const h = ctx.canvas.height
+  const union = scratchCanvas(w, h)
+  const uctx = union.getContext('2d')
+  uctx.setTransform(ctx.getTransform())
+  traceLoops(uctx, loops)
+  uctx.fillStyle = color
+  uctx.fill()
+  const eroded = scratchCanvas(w, h)
+  const ectx = eroded.getContext('2d')
+  ectx.drawImage(union, 0, 0)
+  ectx.globalCompositeOperation = 'destination-in'
+  for (let i = 0; i < BACKING_ERODE_DIRS; i++) {
+    const a = (i / BACKING_ERODE_DIRS) * Math.PI * 2
+    ectx.drawImage(union, Math.cos(a) * BACKING_INSET_PX, Math.sin(a) * BACKING_INSET_PX)
+  }
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.drawImage(eroded, 0, 0)
+  ctx.restore()
+  union.width = 0
+  eroded.width = 0
+}
+function scratchCanvas(w, h) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  return canvas
+}
+function traceLoops(ctx, loops) {
+  ctx.beginPath()
+  loops.forEach(loop => {
+    loop.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.closePath()
+  })
+}
 //
 // Bake area: the outlines' box grown by the caller's contour pad.
 //

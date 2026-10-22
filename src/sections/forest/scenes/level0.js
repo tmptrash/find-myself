@@ -39,6 +39,7 @@ import {
   forestContourRgb,
   snapToPalette,
   getTreePaletteColor,
+  getForestGameplayTreeRootShades,
   getForestGameplayTreeVolumeShades,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
@@ -1307,6 +1308,12 @@ const WATER_RIGHT_TRIM = 10
 // rocks instead of ending in a vertical sprite edge.
 //
 const LAKE_SHORE_EXTEND_PX = 64
+//
+// The lake's right shore (and its rock cluster) is laid out from the hero
+// branch root at the trunk, this far to the left — independent of how long
+// the branch itself is drawn.
+//
+const LAKE_SHORE_ANCHOR_FROM_TRUNK = 200
 const LAKE_Z = 12
 //
 // Tree-side shore rocks baked as one tall rock reaching the lake bed: clip
@@ -2005,7 +2012,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
-    const clusterCenterX = horizBranch.x1 + 40
+    const lakeShoreAnchorX = horizBranch.x2 - LAKE_SHORE_ANCHOR_FROM_TRUNK
+    const clusterCenterX = lakeShoreAnchorX + 40
     const waterX2 = clusterCenterX + CLUSTER_ROCK_RADIUS_MAX + 10 - WATER_RIGHT_TRIM
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
@@ -2033,7 +2041,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // bindTexture/useProgram GPU state change.
     //
     const decorAtlas = createCanvasAtlasBuilder()
-    const rockObjs = createForestRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
+    const rockObjs = createForestRocks(k, lakeShoreAnchorX, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
     const mudWalkClutter = { rocks: [], surfaces: [], log: null, branches: [] }
     const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
@@ -3140,7 +3148,10 @@ function forestEarTreeColors(k) {
   const leaf = forestRgb(FOREST_PAL.forestAttention.leaf)
   const leafLight = forestRgb(FOREST_PAL.forestAttention.leafLight)
   const leafVein = forestRgb(FOREST_PAL.forestAttention.leafVein)
-  const root = forestEarTreeRootKaplayRgb(k)
+  //
+  // Same relief tones as the big forest trees' roots.
+  //
+  const root = getForestGameplayTreeRootShades()
   return {
     outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
     bark: k.rgb(bark.r, bark.g, bark.b),
@@ -8160,8 +8171,8 @@ function triggerForestTouchDeath(inst, cause) {
   finishForestTouchDeath(inst, cause, deathX, deathY)
 }
 //
-// Leaf-shaped radial burst at the death spot — green leaf tones instead of
-// the hero's generic body-square explosion.
+// Leaf-shaped radial burst at the death spot — white leaves instead of the
+// hero's generic body-square explosion.
 //
 function spawnForestTouchDeathBurst(inst, x, y) {
   if (!inst.footParticles) return
@@ -8173,7 +8184,7 @@ function spawnForestTouchDeathBurst(inst, x, y) {
 // rather than generic dust.
 //
 function forestTouchDeathLeafPalette() {
-  return (FOREST_PAL.treeColor.leafShades || [FOREST_PAL.treeColor.leaf]).map(hex => forestRgb(hex))
+  return FOREST_PAL.heroDeathLeaves.map(hex => forestRgb(hex))
 }
 //
 // Picks the predator death line for this kill (cycles through the set).
@@ -8370,6 +8381,10 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.flowerGrab && (inst.flowerGrab.heroInst = fresh)
   inst.pit && (inst.pit.heroInst = fresh)
   inst.predator && (inst.predator.hero = fresh)
+  //
+  // The HUD eye keeps watching the respawned hero, not the destroyed body.
+  //
+  inst.levelIndicator && LevelIndicator.bindEyeHudLookAtHero(inst.levelIndicator, fresh)
   forestLevel0LiveHeroChar = fresh.character
   inst.deathHandled = false
   inst.touchDeathHandled = false

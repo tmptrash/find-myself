@@ -24,7 +24,10 @@ import {
   MENU_BG_CANVAS_H,
   MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
-import { generateForestMenuBackgroundCanvas, forestMenuEdgeSpotXs } from '../sections/forest/utils/forest-menu-bg.js'
+import {
+  generateForestMenuBackdrops,
+  forestMenuEdgeSpotXs
+} from '../sections/forest/utils/forest-menu-bg.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../sections/forest/utils/forest-palette.js'
@@ -69,7 +72,6 @@ const MENU_BG_EDGE_OVERSCAN = 1
 // Hovering the forest mushroom reveals the full-colour forest built from the
 // level's own pieces, like the level itself turning colourful.
 //
-const MENU_BG_VARIANT_FOREST = 'forest'
 const MENU_BG_VARIANT_FOREST_GRAY = 'forest-gray'
 const MENU_BG_VARIANT_NIGHT = 'night'
 const MENU_FOREST_SECTION = 'forest'
@@ -79,11 +81,17 @@ const MENU_PREVIEW_END_SCENE = 'lesson-touch.0'
 // Alpha each picture is blended with over the menu base colour.
 //
 const MENU_BG_LAYER_ALPHA = {
-  [MENU_BG_VARIANT_FOREST]: 1,
   [MENU_BG_VARIANT_FOREST_GRAY]: 0.45,
   [MENU_BG_VARIANT_NIGHT]: MENU_BG_BASE_OPACITY
 }
 const MENU_FOREST_GRASS_RGB = forestRgb(FOREST_PAL.forestFloor.grassDry)
+//
+// Colour forest parallax: the rows behind the edge trees drift against the
+// cursor by up to MENU_PARALLAX_MAX_PX times their depth, eased.
+//
+const MENU_PARALLAX_MAX_PX = 24
+const MENU_PARALLAX_EASE = 3
+const MENU_FOREST_LAYER_SPRITE = `${MENU_STATIC_SPRITE}-forest-layer`
 const MENU_FOREST_GRAY_GRASS_RGB = forestRgb(FOREST_PAL.decorGray)
 //
 // Stalk eyes standing on the forest backdrop's edges, drawn live so they
@@ -376,7 +384,7 @@ export async function prewarmMenuAssets(k) {
   const lastLevel = resolveMenuLastLevel(get('lastLesson', null))
   buildMenuStaticSprite(k, resolveMenuBgVariant(lastLevel))
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
-  buildMenuStaticSprite(k, MENU_BG_VARIANT_FOREST)
+  loadMenuForestLayerSprites(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuHeroSprites(k, getProgress(), lastLevel)
 }
@@ -910,7 +918,7 @@ export function sceneMenu(k) {
     //
     const bgVariant = resolveMenuBgVariant(lastLevel)
     buildMenuStaticSprite(k, bgVariant)
-    buildMenuStaticSprite(k, MENU_BG_VARIANT_FOREST)
+    const forestPieces = loadMenuForestLayerSprites(k)
     const forestEyes = createMenuForestEyes(k)
     //
     // Swaying grass along the menu-bg horizon — shared Grass component in
@@ -965,7 +973,9 @@ export function sceneMenu(k) {
       heartbeatPhase: 0,
       lastHeartbeatTime: 0,
       bgDefaultOpacity: 1.0,
-      forestRevealOpacity: 0
+      forestRevealOpacity: 0,
+      forestPieces,
+      parallaxT: 0
     }
     createForestMenuMushroom(inst)
     
@@ -1136,7 +1146,7 @@ export function sceneMenu(k) {
       //
       const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
       inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
-      updateForestReveal(inst, hoveredInst)
+      updateForestReveal(inst, hoveredInst, mousePos)
       //
       // Fireflies only appear for antiheroes whose section is completed or currently being played
       //
@@ -2655,7 +2665,20 @@ function drawMenuBackground(inst) {
   // is baked in), then the colour forest revealed by the mushroom hover.
   //
   drawMenuBackgroundLayer(inst, inst.bgVariant, inst.bgDefaultOpacity)
-  drawMenuBackgroundLayer(inst, MENU_BG_VARIANT_FOREST, inst.forestRevealOpacity)
+  drawMenuForestLayers(inst, inst.forestRevealOpacity)
+}
+//
+// Colour forest pieces back to front at their baked screen spots; the
+// parallax rows shift with the eased cursor offset.
+//
+function drawMenuForestLayers(inst, opacity) {
+  if (opacity <= 0.01) return
+  const { k } = inst
+  inst.forestPieces.forEach(piece => k.drawSprite({
+    sprite: piece.sprite,
+    pos: k.vec2(piece.x - inst.parallaxT * MENU_PARALLAX_MAX_PX * piece.depth, piece.y),
+    opacity: opacity * piece.alpha
+  }))
 }
 function drawMenuBackgroundLayer(inst, variant, opacity) {
   const { k } = inst
@@ -2670,15 +2693,58 @@ function drawMenuBackgroundLayer(inst, variant, opacity) {
 //
 // The colour forest fades in only while the forest mushroom is hovered.
 //
-function updateForestReveal(inst, hoveredInst) {
+function updateForestReveal(inst, hoveredInst, mousePos) {
+  const { k } = inst
   const target = hoveredInst?.section === MENU_FOREST_SECTION ? 1 : 0
-  inst.forestRevealOpacity += (target - inst.forestRevealOpacity) * Math.min(inst.k.dt() * BG_FADE_SPEED, 1)
+  inst.forestRevealOpacity += (target - inst.forestRevealOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1)
+  //
+  // Cursor across the screen → -1..1 parallax drift.
+  //
+  const parallaxTarget = Math.max(-1, Math.min(1, mousePos.x / k.width() * 2 - 1))
+  inst.parallaxT += (parallaxTarget - inst.parallaxT) * Math.min(k.dt() * MENU_PARALLAX_EASE, 1)
 }
 //
-// Bakes the combined static menu background once per live Kaplay instance
-// and variant: the scene base colour plus the variant's picture — the level
-// pieces of the forest at full strength, or the night forest at its
-// darkening alpha — loaded as a single sprite. Tracks the specific `k` it
+// Both forest backdrops (colour layers + gray canvas) for the current
+// screen size, painted once and cached, so a new engine only re-uploads them.
+//
+const menuForestBackdropCache = new Map()
+function forestMenuBackdrops() {
+  const cacheKey = `${MENU_BG_CANVAS_W}x${MENU_BG_CANVAS_H}`
+  const cached = menuForestBackdropCache.get(cacheKey)
+  if (cached) return cached
+  const backdrops = generateForestMenuBackdrops({
+    width: MENU_BG_CANVAS_W,
+    height: MENU_BG_CANVAS_H,
+    groundY: MENU_BG_GROUND_Y,
+    overscan: MENU_PARALLAX_MAX_PX
+  })
+  menuForestBackdropCache.set(cacheKey, backdrops)
+  return backdrops
+}
+//
+// Uploads the colour forest pieces (sky, parallax rows, edge trees, soil)
+// once per live k. Returns the draw list.
+//
+const menuForestPiecesByK = new WeakMap()
+function loadMenuForestLayerSprites(k) {
+  const loaded = menuForestPiecesByK.get(k)
+  if (loaded) return loaded
+  const layers = forestMenuBackdrops()
+  const pieces = [
+    { ...layers.sky, depth: 0, alpha: 1 },
+    ...layers.parallax,
+    ...layers.front.map(piece => ({ ...piece, depth: 0, alpha: 1 }))
+  ].map((piece, i) => ({ ...piece, sprite: `${MENU_FOREST_LAYER_SPRITE}-${i}` }))
+  pieces.forEach(piece => k.loadSprite(piece.sprite, piece.canvas))
+  menuForestPiecesByK.set(k, pieces)
+  return pieces
+}
+//
+// Bakes the combined idle menu background once per live Kaplay instance
+// and variant: the scene base colour plus the variant's picture — the
+// gray-phase forest or the night forest at its darkening alpha — loaded as a
+// single sprite (the colour forest is layered, see
+// loadMenuForestLayerSprites). Tracks the specific `k` it
 // baked for (not just a boolean) so a fresh engine booted after a
 // resolution swap (see engine-switch.js) re-bakes instead of skipping the
 // load and leaving the sprite registry empty on the new k.
@@ -2707,27 +2773,27 @@ function composeMenuStaticCanvas(variant) {
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = CFG.visual.colors.ready.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  const forestGray = variant === MENU_BG_VARIANT_FOREST_GRAY
-  const forest = variant === MENU_BG_VARIANT_FOREST || forestGray
   //
   // The night picture's plain sky/underground bands are filled with the same
   // READY background colour the menu uses, so blended over the same colour
   // they disappear — no horizontal strips above and below the composition.
   //
-  const bgCanvas = forest
-    ? generateForestMenuBackgroundCanvas({
-      width: MENU_BG_CANVAS_W,
-      height: MENU_BG_CANVAS_H,
-      groundY: MENU_BG_GROUND_Y,
-      mono: forestGray
-    })
+  const forestGray = variant === MENU_BG_VARIANT_FOREST_GRAY
+  const bgCanvas = forestGray
+    ? forestMenuBackdrops().gray
     : generateMenuBackgroundCanvas(CFG.visual.colors.ready.background)
   ctx.globalAlpha = MENU_BG_LAYER_ALPHA[variant]
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1
-  bgCanvas.width = 0
-  bgCanvas.height = 0
+  //
+  // The gray canvas stays cached with the forest backdrops.
+  //
+  !forestGray && releaseMenuCanvas(bgCanvas)
   return canvas
+}
+function releaseMenuCanvas(canvas) {
+  canvas.width = 0
+  canvas.height = 0
 }
 function menuStaticSpriteName(variant) {
   return `${MENU_STATIC_SPRITE}-${variant}`

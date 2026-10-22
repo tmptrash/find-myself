@@ -1,4 +1,4 @@
-import { clampRootSegmentsBelowGroundLine, growTreeRootSegments } from '../../../utils/grow-tree-root.js'
+import { clampRootSegmentsBelowGroundLine, growTreeRootSegments, paintRootRelief } from '../../../utils/grow-tree-root.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import {
@@ -78,11 +78,18 @@ const LEAF_LIGHT_SHAPE = [
 // buildEarTreeRoots) so trunk and roots read as one continuous seam instead
 // of a sudden width jump.
 //
-const EAR_TREE_ROOT_COUNT = 3
-const EAR_TREE_ROOT_SEGMENTS = 5
+const EAR_TREE_ROOT_COUNT = 5
+const EAR_TREE_ROOT_SEGMENTS = 7
+const EAR_TREE_ROOT_LATERAL_BIAS = 0.05
 const EAR_TREE_ROOT_MIN_DRAW_WIDTH = 0.85
-const EAR_TREE_ROOT_TIP_RADIUS = 0.55
-const EAR_TREE_ROOTS_BAKE_SLOT = 'earTreeRootsShort'
+const EAR_TREE_ROOTS_BAKE_SLOT = 'earTreeRootsRelief'
+const EAR_TREE_ROOT_HAIR_SEED_SALT = 7919
+//
+// Hair rootlets reach this far past the root strokes (bake bounds pad), and
+// are clipped to a box this far around the trunk below the ground line.
+//
+const EAR_TREE_ROOT_HAIR_PAD = 24
+const EAR_TREE_ROOT_HAIR_CLIP_SPAN = 1000
 const EAR_TREE_TRUNK_BAKE_SLOT = 'earTreeTrunk'
 //
 // Bump when trunk silhouette or outline width changes so live bakes refresh.
@@ -248,7 +255,7 @@ function buildEarTreeRoots(tree) {
       angle: startAngle,
       segments: EAR_TREE_ROOT_SEGMENTS,
       thickness: startThickness,
-      lateralBiasPerSegment: side * 0.03,
+      lateralBiasPerSegment: side * EAR_TREE_ROOT_LATERAL_BIAS,
       rand
     }))
   }
@@ -258,38 +265,43 @@ function buildEarTreeRoots(tree) {
 // Root fan blit — the ~500 tapered segments per tree are baked once per
 // colour instead of being re-stroked every frame.
 //
-function drawEarTreeRoots(k, tree, rootColor, opacity, view) {
+function drawEarTreeRoots(k, tree, shades, opacity, view) {
   if (!tree.rootSegs?.length) return
-  const baked = ensureStaticDecorSprite(k, tree, EAR_TREE_ROOTS_BAKE_SLOT, colorKey(rootColor),
-    rootSegmentsBounds(tree.rootSegs, EAR_TREE_ROOT_MIN_DRAW_WIDTH),
-    ctx => paintEarTreeRoots(ctx, tree.rootSegs, rootColor),
+  const baked = ensureStaticDecorSprite(k, tree, EAR_TREE_ROOTS_BAKE_SLOT, colorKey(shades.fill, shades.lit, shades.contour),
+    earTreeRootBakeBounds(tree),
+    ctx => paintEarTreeRoots(ctx, tree, shades),
     tree.x * EAR_TREE_ROOTS_GRAIN_SEED)
   if (!baked || !isWorldSpanInView(baked.x, baked.x + baked.w, view)) return
   drawStaticDecorSprite(k, baked, opacity)
 }
 //
-// Fill-only root lines — round caps plus a tip dot on every terminal end so
-// the taper never reads as chopped off before the point.
+// Root bake extent grown by the hair reach on the sides and below (never
+// above — hairs are clipped at the ground line).
 //
-function paintEarTreeRoots(ctx, segs, rootColor) {
-  const startKeys = new Set(segs.map(seg => `${seg.startX},${seg.startY}`))
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = cssRgb(rootColor)
-  ctx.fillStyle = cssRgb(rootColor)
-  segs.forEach(seg => {
-    ctx.lineWidth = Math.max(EAR_TREE_ROOT_MIN_DRAW_WIDTH, seg.width)
-    ctx.beginPath()
-    ctx.moveTo(seg.startX, seg.startY)
-    ctx.lineTo(seg.endX, seg.endY)
-    ctx.stroke()
-  })
-  segs.forEach(seg => {
-    if (startKeys.has(`${seg.endX},${seg.endY}`)) return
-    const tipR = Math.max(EAR_TREE_ROOT_TIP_RADIUS, seg.width * 0.45)
-    ctx.beginPath()
-    ctx.arc(seg.endX, seg.endY, tipR, 0, Math.PI * 2)
-    ctx.fill()
-  })
+function earTreeRootBakeBounds(tree) {
+  const b = rootSegmentsBounds(tree.rootSegs, EAR_TREE_ROOT_MIN_DRAW_WIDTH)
+  return { x1: b.x1 - EAR_TREE_ROOT_HAIR_PAD, y1: b.y1, x2: b.x2 + EAR_TREE_ROOT_HAIR_PAD, y2: b.y2 + EAR_TREE_ROOT_HAIR_PAD }
+}
+//
+// Same round-wood relief as the big forest trees (shared paintRootRelief),
+// seeded per tree so a rebake looks the same. Clipped at the ground line so
+// the rim, lit streak and hairs of the shallowest roots never poke above it.
+//
+function paintEarTreeRoots(ctx, tree, shades) {
+  const segs = tree.rootSegs.map(seg => ({
+    sx: seg.startX,
+    sy: seg.startY,
+    ex: seg.endX,
+    ey: seg.endY,
+    w: Math.max(EAR_TREE_ROOT_MIN_DRAW_WIDTH, seg.width)
+  }))
+  const rng = createSeededRandom(((tree.seed * 1e4 + tree.x) | 0) + EAR_TREE_ROOT_HAIR_SEED_SALT)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(tree.x - EAR_TREE_ROOT_HAIR_CLIP_SPAN, tree.groundY, EAR_TREE_ROOT_HAIR_CLIP_SPAN * 2, EAR_TREE_ROOT_HAIR_CLIP_SPAN)
+  ctx.clip()
+  paintRootRelief(ctx, segs, rng, shades)
+  ctx.restore()
 }
 
 /**
@@ -344,12 +356,12 @@ export function onDrawTrunks(inst, barkColor, barkShades, outlineColor, opacity 
  * Draws every root fan (baked sprite) above the grass layer so blade tufts
  * do not crop taper tips.
  * @param {Object} inst - Ear-tree inst
- * @param {Object} rootColor - Kaplay rgb for the root fan, big-tree style
+ * @param {{fill: Object, lit: Object, contour: Object}} shades - Root relief tones ({r, g, b}), big-tree style
  * @param {number} [opacity=1] - Reveal fade
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
-export function onDrawRoots(inst, rootColor, opacity = 1, view = null) {
-  inst.trees.forEach(tree => drawEarTreeRoots(inst.k, tree, rootColor, opacity, view))
+export function onDrawRoots(inst, shades, opacity = 1, view = null) {
+  inst.trees.forEach(tree => drawEarTreeRoots(inst.k, tree, shades, opacity, view))
 }
 
 /**

@@ -7,7 +7,7 @@
  * and loaded as a Kaplay sprite so that per-frame drawing cost is zero.
  */
 
-import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
+import { growTreeRootSegments, paintRootHairs, paintRootRelief } from '../../../utils/grow-tree-root.js'
 import { getTreeBarkPalette } from './forest-palette.js'
 //
 // Default seed — modify this value to reshape the entire tree.
@@ -32,18 +32,16 @@ const ROOT_TRUNK_MERGE_DEPTH = 40
 //
 const ROOT_CLIP_BELOW_GROUND = 2
 //
-// Root relief — the roots are drawn in three passes so they read as round
-// wood instead of flat lines: a darker contour underdraw (silhouette rim),
-// the base fill strokes, then a thin light streak along the upper-left of
-// each segment (the lit side).
+// Root details are seeded per tree; flat roots without a relief palette get
+// their fill tone lightened by this much for the lit edge.
 //
-const ROOT_CONTOUR_EXTRA_W = 2.6
-const ROOT_CONTOUR_DARKEN = 0.45
-const ROOT_HIGHLIGHT_LIGHTEN = 0.32
-const ROOT_HIGHLIGHT_ALPHA = 0.58
-const ROOT_HIGHLIGHT_OFFSET_X = -1.6
-const ROOT_HIGHLIGHT_OFFSET_Y = -1.6
-const ROOT_HIGHLIGHT_MIN_W = 3
+const ROOT_DETAIL_SEED_SALT = 6151
+const ROOT_FALLBACK_LIT_LIGHTEN = 0.32
+//
+// Main-tree root fan: start width and primary segment count of every root.
+//
+const ROOT_W_BASE = 19
+const ROOT_SEGMENTS = 16
 //
 // Foliage — large asymmetric pixel-cloud masses (not circles or teardrop fields).
 //
@@ -197,15 +195,16 @@ const WOOD_OUTLINE_PX = 2
 // Wood volume (palette.woodVolume, gameplay trees only): sun from the left.
 // Side bands are measured as a fraction of the full trunk width from their
 // edge; the inner border wobbles so light and shade never meet on a ruler
-// line. side 1 = shaded flank, -1 = sunlit flank. Shade bands are light
-// washes (alpha < 1) so the shaded flank stays a warm mid brown; the deep
-// band stacks on the shade band near the edge.
+// line. side 1 = shaded flank, -1 = sunlit flank. Every band is a light
+// wash (reference: an even mid red-brown trunk with soft volume), so lit and
+// shaded flanks differ gently instead of splitting the trunk in two; the
+// deep band stacks on the shade band near the edge.
 //
 const TRUNK_VOLUME_BANDS = [
-  { side: 1, frac: 0.34, tone: 'shade', alpha: 0.4, wobble: 0.08, phase: 0.7 },
-  { side: 1, frac: 0.1, tone: 'deep', alpha: 0.3, wobble: 0.04, phase: 2.3 },
-  { side: -1, frac: 0.34, tone: 'lit', alpha: 0.9, wobble: 0.08, phase: 4.1 },
-  { side: -1, frac: 0.09, tone: 'rim', alpha: 1, wobble: 0.04, phase: 5.6 }
+  { side: 1, frac: 0.34, tone: 'shade', alpha: 0.22, wobble: 0.08, phase: 0.7 },
+  { side: 1, frac: 0.1, tone: 'deep', alpha: 0.14, wobble: 0.04, phase: 2.3 },
+  { side: -1, frac: 0.34, tone: 'lit', alpha: 0.38, wobble: 0.08, phase: 4.1 },
+  { side: -1, frac: 0.09, tone: 'rim', alpha: 0.35, wobble: 0.04, phase: 5.6 }
 ]
 const TRUNK_VOLUME_EDGE_OVERSHOOT = 1.15
 const TRUNK_VOLUME_SUBSTEPS = 4
@@ -227,8 +226,8 @@ const TRUNK_DAUB_LEN_RANGE = 38
 const TRUNK_DAUB_W_MIN = 1.5
 const TRUNK_DAUB_W_RANGE = 2.8
 const TRUNK_DAUB_BEND = 6
-const TRUNK_DAUB_ALPHA_MIN = 0.2
-const TRUNK_DAUB_ALPHA_RANGE = 0.25
+const TRUNK_DAUB_ALPHA_MIN = 0.08
+const TRUNK_DAUB_ALPHA_RANGE = 0.12
 //
 // Crack net on gameplay trunks (reference apple tree): a few long thin dark
 // cracks run along the trunk with gaps, short cross cracks join neighbours
@@ -260,13 +259,14 @@ const BARK_CROSS_SLANT_PX = 7
 const BARK_CROSS_SAG_MIN = 1
 const BARK_CROSS_SAG_RANGE = 2.5
 //
-// Branch collars: where a limb leaves the trunk the wood flares out and
-// tapers into the limb instead of meeting the trunk as a straight tube.
+// Branch collars: where a limb leaves the trunk the wood flares out a little
+// and tapers into the limb over a short run instead of meeting the trunk as a
+// straight tube — a gentle flare, never a swollen knob.
 //
 const BRANCH_COLLAR_MIN_W = 5
 const BRANCH_COLLAR_BASE_FRAC = 0.6
-const BRANCH_COLLAR_FLARE = 1.9
-const BRANCH_COLLAR_LEN_FRAC = 1.2
+const BRANCH_COLLAR_FLARE = 1.35
+const BRANCH_COLLAR_LEN_FRAC = 0.7
 //
 // Branch bulges: width swells and pinches along a limb on a position-based
 // wave (shared joints get the same factor, so no steps). Draw-only — the
@@ -341,16 +341,33 @@ const STRUCTURED_CROWN_LIMBS = [
   { frac: 0.92, angle: -Math.PI / 2 + 0.35, len: 13, wFrac: 0.6 },
   { frac: 0.58, angle: -0.26, len: 20, wFrac: 0.6 },
   { frac: 0.68, angle: -0.55, len: 17, wFrac: 0.55 },
-  { frac: 0.8, angle: -0.9, len: 14, wFrac: 0.55 }
+  { frac: 0.8, angle: -0.9, len: 14, wFrac: 0.55 },
+  //
+  // Fills the gap above the hero branch: a left limb rising gently between
+  // the hero branch and the upper-left limb (appended last so the other
+  // limbs keep their own seeds).
+  //
+  { frac: 0.57, angle: -Math.PI + 0.4, len: 13, wFrac: 0.45 },
+  //
+  // Fills the empty upper-left crown between the upper-left limb and the
+  // foliage over the hero branch: a long limb rising left at mid crown.
+  //
+  { frac: 0.68, angle: -Math.PI + 0.5, len: 18, wFrac: 0.45 }
 ]
 const STRUCTURED_LIMB_ANGLE_JITTER = 0.08
+//
+// Limb base width at the trunk, on top of each limb's wFrac.
+//
+const STRUCTURED_LIMB_W_SCALE = 0.85
 const STRUCTURED_LIMB_SEED_RANGE = 1000000
 const STRUCTURED_LIMB_SEED_STEP = 7919
 //
-// Scripted limbs taper to 60% of their base width before forking; the main
-// fork keeps most of that width, the side fork is thinner.
+// Scripted limbs taper to half their base width before forking; past a fork
+// the continuing limb is clearly thinner than the wood it leaves and the side
+// fork thinner still (reference: twigs get thin quickly), so a fork never
+// reads thicker than its parent.
 //
-const STRUCTURED_LEAF_STYLE = { midChance: 0.32, massScale: 0.7, tipTaper: 0.4, childW: [0.95, 0.75], twigs: true }
+const STRUCTURED_LEAF_STYLE = { midChance: 0.32, massScale: 0.7, tipTaper: 0.5, childW: [0.82, 0.55], twigs: true }
 //
 // Thin twigs sprouting along the main-tree limbs (trunk → limb → twig →
 // leaves): every TWIG_STEP_EVERY-th limb step on the first two limb levels
@@ -370,7 +387,7 @@ const TWIG_ANGLE_RANGE = 0.6
 const TWIG_UP_BIAS = 0.35
 const TWIG_HASH_X = 73856093
 const TWIG_HASH_Y = 19349663
-const TWIG_LEAF_STYLE = { midChance: 0.35, massScale: 0.66, tipTaper: 0.5, childW: [0.8, 0.65] }
+const TWIG_LEAF_STYLE = { midChance: 0.35, massScale: 0.66, tipTaper: 0.5, childW: [0.7, 0.5] }
 const BRANCH_CHILD_W = [0.66, 0.56]
 //
 // Main-tree structured crown: smaller pixel clouds and fewer side lobes so
@@ -397,7 +414,7 @@ const BRANCH_TOP_FRAC_RANGE = 0.16
 //
 // Horizontal branch length (px) — the branch that extends left from the trunk.
 //
-const HORIZ_BRANCH_LENGTH = 200
+const HORIZ_BRANCH_LENGTH = 140
 //
 // Load-bearing look of the hero branch: drawn thick at the trunk and tapering
 // toward the tip. The extra width grows downward only, so the walkable top
@@ -416,7 +433,7 @@ const HORIZ_BRANCH_TWIGS = [
   { frac: 0.74, tilt: -0.5, len: 6 }
 ]
 const HORIZ_BRANCH_TWIG_W_FRAC = 0.42
-const HORIZ_BRANCH_TIP_LEN_MIN = 6
+const HORIZ_BRANCH_TIP_LEN_MIN = 4
 const HORIZ_BRANCH_TIP_LEN_RANGE = 2
 const HORIZ_BRANCH_LEAF_MASS_SCALE = 0.75
 //
@@ -459,8 +476,15 @@ const TRUNK_SKIP_HASH_Y = 3266489917
 const TIP_REACH = 0.6
 const TIP_EXTRA_LOBES_MIN = 1
 const TIP_EXTRA_LOBES_RANGE = 2
+const DEFAULT_TRUNK_FALLOFF = { farMass: TRUNK_FAR_MASS, curve: 1, tipLobesRange: TIP_EXTRA_LOBES_RANGE }
 const TIP_LOBE_DIST_MIN = 0.3
 const TIP_LOBE_DIST_RANGE = 0.45
+//
+// Main (apple) tree: a steeper falloff — the mass weight follows trunkT to
+// this power, so mid-crown groups barely change while the crown rim fills
+// out a lot, and the outermost tips get more extra lobes.
+//
+const MAIN_TREE_FALLOFF = { farMass: 2.1, curve: 1.8, tipLobesRange: 5 }
 
 /**
  * Creates a seeded pseudo-random number generator.
@@ -562,7 +586,8 @@ export function buildForestTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY,
     extraLobeChance: (lushCanopy ? FOLIAGE_LUSH_EXTRA_LOBE_CHANCE : 0) + (structuredCrown ? STRUCTURED_CROWN_EXTRA_LOBE_CHANCE : 0),
     massByRadius: true,
     shadeByHeight: structuredCrown,
-    trunkFalloffSegs: structuredCrown ? trunkSegs : null
+    trunkFalloffSegs: structuredCrown ? trunkSegs : null,
+    trunkFalloff: structuredCrown ? MAIN_TREE_FALLOFF : null
   })
   return {
     seed,
@@ -583,8 +608,20 @@ const SHORE_ACCENT_BRANCH_W = 8
 const SHORE_ACCENT_BRANCH_TIP_W_FRAC = 0.52
 const SHORE_ACCENT_HORIZ_SEGS = 6
 const HORIZ_BRANCH_TAPER = 0.44
-const HORIZ_BRANCH_CURVE_AMP = 12
-const SHORE_ACCENT_ROOT_MAX_DEPTH = 48
+//
+// Visual Y drift of the hero branch. Its collider is one flat line at the
+// highest segment top, so any segment drawn lower leaves the hero floating —
+// keep the wobble and the mid sag small.
+//
+const HORIZ_BRANCH_CURVE_AMP = 3
+const HORIZ_BRANCH_SAG = 1
+const SHORE_ACCENT_ROOT_MAX_DEPTH = 130
+//
+// Thinner, shorter fan than the main tree so every root tapers out before
+// the depth cutoff instead of ending in a blunt clipped stump.
+//
+const SHORE_ACCENT_ROOT_W = 11
+const SHORE_ACCENT_ROOT_SEGMENTS = 8
 const SHORE_ACCENT_ATTACH_MIN_BELOW_TOP = 14
 const SHORE_ACCENT_BRANCH_LEAF_R_FRAC = 0.22
 const SHORE_ACCENT_CROWN_LEAF_R = 26
@@ -644,7 +681,7 @@ export function buildForestShoreAccentTree(cfg) {
   const trunkSegs = buildTrunk(rng, trunkX, groundY, trunkTopY, SHORE_ACCENT_TRUNK_PROFILE)
   const groundClipY = groundY
   const trunkBase = computeTrunkBaseAtClip(trunkSegs, groundClipY)
-  const rootSegs = buildRoots(rng, trunkBase, groundY, trunkH, groundY + SHORE_ACCENT_ROOT_MAX_DEPTH)
+  const rootSegs = buildRoots(rng, trunkBase, groundY, trunkH, groundY + SHORE_ACCENT_ROOT_MAX_DEPTH, SHORE_ACCENT_ROOT_W, SHORE_ACCENT_ROOT_SEGMENTS)
   const branchSegs = []
   const leafEndpoints = []
   const attachY = Math.max(trunkTopY + SHORE_ACCENT_ATTACH_MIN_BELOW_TOP, Math.min(branchAttachY, groundY))
@@ -844,14 +881,16 @@ export function renderForestTreeIntoContext(ctx, treeData, palette, w, h) {
     const rootRgb = { r: rootR, g: rootG, b: rootB }
     if (palette.flatSilhouette) {
       drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
-    } else if (palette.woodMassStyle || palette.simpleRoots) {
+    } else if (palette.woodMassStyle) {
       drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
+      paintRootHairs(ctx, drawnRootSegs(treeData, h, groundY, trunkBaseX, trunkHalfW), rootDetailRng(treeData), `rgb(${rootRgb.r}, ${rootRgb.g}, ${rootRgb.b})`)
     } else {
-      const rootContourRgb = scaleRgbBrightness(rootRgb, 1 - ROOT_CONTOUR_DARKEN)
-      const rootHighlightRgb = lightenRgb(rootRgb, ROOT_HIGHLIGHT_LIGHTEN)
-      drawRootStrokes(ctx, treeData, rootContourRgb, h, groundY, trunkBaseX, trunkHalfW, ROOT_CONTOUR_EXTRA_W)
-      drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
-      drawRootHighlights(ctx, treeData, rootHighlightRgb, h, groundY, trunkBaseX, trunkHalfW)
+      const shades = palette.rootRelief ?? {
+        fill: rootRgb,
+        lit: lightenRgb(rootRgb, ROOT_FALLBACK_LIT_LIGHTEN),
+        contour: rootRgb
+      }
+      paintRootRelief(ctx, drawnRootSegs(treeData, h, groundY, trunkBaseX, trunkHalfW), rootDetailRng(treeData), shades)
     }
     ctx.restore()
   }
@@ -1651,32 +1690,18 @@ function drawRootStrokes(ctx, treeData, rgb, h, groundY, trunkBaseX, trunkHalfW,
   })
 }
 //
-// Thin light streak along the upper-left of every thick-enough root segment —
-// the lit side that makes the root read as a round volume.
+// Root segments with their drawn width (ground / trunk-merge taper applied).
 //
-function drawRootHighlights(ctx, treeData, rgb, h, groundY, trunkBaseX, trunkHalfW) {
-  ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${ROOT_HIGHLIGHT_ALPHA})`
-  treeData.rootSegs.forEach(seg => {
-    const width = rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW)
-    if (width < ROOT_HIGHLIGHT_MIN_W) return
-    ctx.lineWidth = Math.max(1, width * 0.28)
-    ctx.beginPath()
-    ctx.moveTo(seg.sx + ROOT_HIGHLIGHT_OFFSET_X, seg.sy + ROOT_HIGHLIGHT_OFFSET_Y)
-    ctx.lineTo(seg.ex + ROOT_HIGHLIGHT_OFFSET_X, seg.ey + ROOT_HIGHLIGHT_OFFSET_Y)
-    ctx.stroke()
-  })
+function drawnRootSegs(treeData, h, groundY, trunkBaseX, trunkHalfW) {
+  return treeData.rootSegs.map(seg => ({ ...seg, w: rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) }))
+}
+function rootDetailRng(treeData) {
+  return createRng((treeData.seed ?? 0) + ROOT_DETAIL_SEED_SALT)
 }
 //
-// Brightness-only helpers for the root relief tones: scale toward black or
-// blend toward white (allowed by the palette rule — no new hues appear).
+// Brightness-only helper for the fallback root lit tone: blend toward white
+// (allowed by the palette rule — no new hue appears).
 //
-function scaleRgbBrightness(c, f) {
-  return {
-    r: Math.round(c.r * f),
-    g: Math.round(c.g * f),
-    b: Math.round(c.b * f)
-  }
-}
 function lightenRgb(c, t) {
   return {
     r: Math.round(c.r + (255 - c.r) * t),
@@ -2120,10 +2145,8 @@ function forestHexToRgb(hex) {
 // Each root starts nearly vertical and gradually curls outward (left or right)
 // via a lateral bias, just like menu trees curl toward the canvas centre.
 //
-function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
+function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY, rootW = ROOT_W_BASE, rootSegments = ROOT_SEGMENTS) {
   const ROOT_COUNT = 5 + Math.floor(rng() * 3)
-  const ROOT_W_BASE = 15
-  const ROOT_SEGMENTS = 16
   //
   // Roots start slightly above the trunk base line, spread across the trunk
   // base width, so the trunk fill painted after them hides every junction.
@@ -2158,8 +2181,8 @@ function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
       x: baseX + xJitter,
       y: startY,
       angle: startAngle,
-      segments: ROOT_SEGMENTS,
-      thickness: ROOT_W_BASE,
+      segments: rootSegments,
+      thickness: rootW,
       lateralBiasPerSegment: lateralBias,
       rand
     })
@@ -2235,7 +2258,7 @@ function buildStructuredCrown(rng, trunkSegs, branchSegs, leafEndpoints) {
     const segIdx = Math.min(Math.floor(limb.frac * trunkSegs.length), trunkSegs.length - 1)
     const seg = trunkSegs[segIdx]
     const angle = limb.angle + (limbRng() - 0.5) * STRUCTURED_LIMB_ANGLE_JITTER * 2
-    growBranch(limbRng, seg.ex, seg.ey, angle, limb.len, seg.w * limb.wFrac, branchSegs, leafEndpoints, 0, false, STRUCTURED_LEAF_STYLE)
+    growBranch(limbRng, seg.ex, seg.ey, angle, limb.len, seg.w * limb.wFrac * STRUCTURED_LIMB_W_SCALE, branchSegs, leafEndpoints, 0, false, STRUCTURED_LEAF_STYLE)
   })
 }
 //
@@ -2393,7 +2416,7 @@ function buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints, horizFrac) 
     const w0 = HORIZ_W * (1 - t0 * HORIZ_BRANCH_TAPER)
     const w1 = HORIZ_W * (1 - t1 * HORIZ_BRANCH_TAPER)
     if (i > 0 && i < N_SEGS - 1) {
-      hcy = startY + Math.sin(t1 * Math.PI) * 2.5 + (rng() - 0.5) * HORIZ_BRANCH_CURVE_AMP
+      hcy = startY + Math.sin(t1 * Math.PI) * HORIZ_BRANCH_SAG + (rng() - 0.5) * HORIZ_BRANCH_CURVE_AMP
     } else {
       hcy = startY
     }
@@ -2462,11 +2485,13 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
   const crown = byHeight ? { top: crownTop, span: Math.max(1, Math.max(...endpoints.map(ep => ep.y)) - crownTop) } : null
   const out = []
   const trunkReach = buildTrunkReach(endpoints, detailOpts.trunkFalloffSegs)
+  const falloff = detailOpts.trunkFalloff ?? DEFAULT_TRUNK_FALLOFF
   endpoints.forEach(ep => {
     const trunkT = trunkReach ? trunkReach(ep) : 1
+    const massT = Math.pow(trunkT, falloff.curve)
     if (trunkReach && isNearTrunkSkipped(ep, trunkT)) return
     const mass = foliageMassScale(ep, detailOpts.massByRadius) *
-      (trunkReach ? TRUNK_NEAR_MASS + (TRUNK_FAR_MASS - TRUNK_NEAR_MASS) * trunkT : 1)
+      (trunkReach ? TRUNK_NEAR_MASS + (falloff.farMass - TRUNK_NEAR_MASS) * massT : 1)
     const spread = Math.min(72, ep.r * 1.08) * Math.sqrt(mass)
     const mainShade = pickEndpointShadeIdx(rng, shadeCount, ep, crown)
     const mainCells = buildAsymmetricPixelCloud(
@@ -2504,7 +2529,7 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
       cells: buildAsymmetricPixelCloud(rng, Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MIN * mass), Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MAX * mass))
     })
     trunkReach && ep.tip && trunkT >= TIP_REACH &&
-      pushTipLobes(rng, out, ep, trunkT, spread, mass, shadeCount, crown, byHeight)
+      pushTipLobes(rng, out, ep, trunkT, falloff.tipLobesRange, spread, mass, shadeCount, crown, byHeight)
     const detailSpan = Math.max(0, detailMax - detailMin + 1)
     const detailCount = detailSpan > 0
       ? detailMin + Math.floor(rng() * detailSpan) + (denseCanopy ? FOLIAGE_DENSE_DETAIL_BONUS : 0)
@@ -2529,8 +2554,8 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
 //
 // Extra lobes around an outer branch tip — more the farther the tip is.
 //
-function pushTipLobes(rng, out, ep, trunkT, spread, mass, shadeCount, crown, byHeight) {
-  const count = TIP_EXTRA_LOBES_MIN + Math.round((trunkT - TIP_REACH) / (1 - TIP_REACH) * TIP_EXTRA_LOBES_RANGE)
+function pushTipLobes(rng, out, ep, trunkT, lobesRange, spread, mass, shadeCount, crown, byHeight) {
+  const count = TIP_EXTRA_LOBES_MIN + Math.round((trunkT - TIP_REACH) / (1 - TIP_REACH) * lobesRange)
   for (let i = 0; i < count; i++) {
     const a = rng() * Math.PI * 2
     const dist = spread * (TIP_LOBE_DIST_MIN + rng() * TIP_LOBE_DIST_RANGE)

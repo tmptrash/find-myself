@@ -4,6 +4,8 @@ import { set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
+import { bindBackToMenuKeys } from '../../../utils/helper.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerNativeTeardown } from '../../../utils/engine-switch.js'
 import { addForestFilmGrainOverlayLayer } from '../../forest/utils/forest-parallax-grain.js'
 //
@@ -49,6 +51,11 @@ export function sceneLesson0(k) {
     const clearBackdrop = () => CanvasBackdrop.clearCanvasBackdrop(k)
     k.onSceneLeave(clearBackdrop)
     registerNativeTeardown(clearBackdrop)
+    //
+    // Esc (CFG.controls.backToMenu) leaves the end screen for the menu.
+    //
+    const backToMenu = bindBackToMenuKeys(k, () => goToMenuAfterAssets(k))
+    k.onSceneLeave(() => backToMenu.cancel())
     const inst = createPreviewEnd(k)
     k.add([k.z(Z_TEXT), { draw() { onDraw(inst) } }])
     k.onUpdate(() => onUpdate(inst))

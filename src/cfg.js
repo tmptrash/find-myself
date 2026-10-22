@@ -303,6 +303,11 @@ export const CFG = {
         forestShadow: PALETTE.teal0,
         lightGray: PALETTE.gray6,
         brightLight: PALETTE.gray7,
+        //
+        // Whole gray ramp, dark to light — monochrome (gray-phase) bakes such
+        // as the idle menu forest.
+        //
+        grayRamp: [PALETTE.gray0, PALETTE.gray1, PALETTE.gray2, PALETTE.gray3, PALETTE.gray4, PALETTE.gray5, PALETTE.gray6, PALETTE.gray7],
         heroBodyGray: PALETTE.gray6,
         heroOutline: PALETTE.gray0,
         letterFill: PALETTE.gray6,

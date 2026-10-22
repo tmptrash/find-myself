@@ -14,14 +14,29 @@ const SECTIONS = ['forest', 'word', 'touch', 'feel', 'mind', 'time']
 // Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
 //
 const TIME_SCENE_MAX_INDEX = 3
+//
+// The forest section used to be called "glow": saves written before the
+// rename still carry the old scene names.
+//
+const LEGACY_FOREST_LESSON_PREFIX = 'lesson-glow.'
+const FOREST_LESSON_PREFIX = 'lesson-forest.'
+const LEGACY_FOREST_COMPLETE = 'glow-complete'
+const FOREST_COMPLETE = 'forest-complete'
 
 /**
- * Maps invalid time scene names (e.g. lesson-time.4 from stale saves) to the last valid level.
+ * Maps stale saved scene names to current ones: pre-rename glow scenes to
+ * their forest names, invalid time scenes (e.g. lesson-time.4) to the last
+ * valid level.
  * @param {string|null} sceneName
  * @returns {string|null}
  */
 export function normalizeSceneName(sceneName) {
-  if (!sceneName || !sceneName.startsWith('lesson-time.')) return sceneName
+  if (!sceneName) return sceneName
+  if (sceneName === LEGACY_FOREST_COMPLETE) return FOREST_COMPLETE
+  if (sceneName.startsWith(LEGACY_FOREST_LESSON_PREFIX)) {
+    return FOREST_LESSON_PREFIX + sceneName.slice(LEGACY_FOREST_LESSON_PREFIX.length)
+  }
+  if (!sceneName.startsWith('lesson-time.')) return sceneName
   const index = parseInt(sceneName.replace('lesson-time.', ''), 10)
   if (Number.isNaN(index) || index <= TIME_SCENE_MAX_INDEX) return sceneName
   return `lesson-time.${TIME_SCENE_MAX_INDEX}`

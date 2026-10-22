@@ -27,7 +27,17 @@ import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 // open for the section ring. Seeded, so every visit paints the same scene.
 //
 const LAYOUT_SEED = 61027
-const SKY_BAND_COUNT = 28
+//
+// Sky gradient: the palette-snapped zenith→horizon ramp is sampled once; each
+// pixel reads it at its own height pushed by a seeded triangular jitter of up
+// to SKY_DITHER_SPREAD (fraction of the sky height). Every swatch hand-over is
+// spread over that whole band as fine hi-res grain instead of a hard edge.
+//
+const SKY_RAMP_SAMPLES = 256
+const SKY_DITHER_SPREAD = 0.16
+const SKY_DITHER_SEED = 40213
+const RGBA_STRIDE = 4
+const OPAQUE_ALPHA = 255
 //
 // Open centre — no tree trunk, rock or plant root inside this half-width.
 // Edge zones fill the rest of each side.
@@ -38,17 +48,23 @@ const EDGE_OVERHANG = 60
 // Trunks stand farther out than the ground decor so the crowns (which
 // spread well past the trunk) still stop short of the open centre.
 //
-const TREE_CROWN_CLEAR = 240
+const TREE_CROWN_CLEAR = 150
 //
 // Three tree rows, back to front: each nearer row is less dissolved into the
 // sky haze, slightly shorter and stands a little lower so the rows overlap
 // like the level's parallax.
 //
 const TREE_ROWS = [
-  { count: 4, heightMin: 0.5, heightRange: 0.1, scale: 0.42, haze: 0.62, uniformWood: true, flatLeaves: true, sink: 0 },
-  { count: 3, heightMin: 0.42, heightRange: 0.08, scale: 0.48, haze: 0.34, uniformWood: false, flatLeaves: false, sink: 6 },
-  { count: 2, heightMin: 0.34, heightRange: 0.06, scale: 0.55, haze: 0.06, uniformWood: false, flatLeaves: false, sink: 12 }
+  { count: 6, heightMin: 0.5, heightRange: 0.1, scale: 0.42, haze: 0.62, uniformWood: true, flatLeaves: true, sink: 0 },
+  { count: 5, heightMin: 0.42, heightRange: 0.08, scale: 0.48, haze: 0.34, uniformWood: false, flatLeaves: false, sink: 6 },
+  { count: 3, heightMin: 0.34, heightRange: 0.06, scale: 0.55, haze: 0.06, uniformWood: false, flatLeaves: false, sink: 12 }
 ]
+//
+// Tree height follows the distance from the screen edge: full height (times
+// the edge factor) at the outer edge, shrinking toward the open centre.
+//
+const TREE_EDGE_HEIGHT_FACTOR = 1.25
+const TREE_CENTER_HEIGHT_FACTOR = 0.3
 const TREE_CORNER_KEYS = ['parallaxTreeCornerTL', 'parallaxTreeCornerTR', 'parallaxTreeCornerBL', 'parallaxTreeCornerBR']
 const TREE_BUILD_OPTS = { includeRoots: false, includeHeroBranch: false }
 //
@@ -69,6 +85,14 @@ const MUSHROOM_GROUP_COUNT = 3
 const SPOTTED_MUSHROOM_COUNT = 1
 const CONTACT_SHADOW_RY = 4.5
 const GRAIN_SEED = 7731
+//
+// Monochrome variant: every pixel is mapped by luminance onto the palette's
+// gray ramp (Rec. 601 luma weights).
+//
+const LUMA_R = 0.299
+const LUMA_G = 0.587
+const LUMA_B = 0.114
+const GRAY_RAMP = FOREST_PAL.grayRamp.map(hex => forestRgb(hex))
 
 /**
  * Paints the forest-level menu backdrop into a fresh canvas.
@@ -76,21 +100,27 @@ const GRAIN_SEED = 7731
  * @param {number} cfg.width - Canvas width
  * @param {number} cfg.height - Canvas height
  * @param {number} cfg.groundY - Horizon / ground line Y
+ * @param {boolean} [cfg.mono=false] - Gray-phase variant: no sky, the rest
+ *   recoloured onto the palette's gray ramp (same layout and seed)
  * @returns {HTMLCanvasElement} Baked canvas (film grain applied)
  */
 export function generateForestMenuBackgroundCanvas(cfg) {
-  const { width, height, groundY } = cfg
+  const { width, height, groundY, mono = false } = cfg
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  const ctx = canvas.getContext('2d')
+  //
+  // The gray variant reads its pixels back once (see mapCanvasToGrayRamp).
+  //
+  const ctx = canvas.getContext('2d', { willReadFrequently: mono })
   const rng = createSeededRandom(LAYOUT_SEED)
   const zones = buildEdgeZones(width, 0)
   const treeZones = buildEdgeZones(width, TREE_CROWN_CLEAR)
-  paintSky(ctx, width, groundY)
+  !mono && paintSky(ctx, width, groundY)
   TREE_ROWS.forEach((row, i) => paintTreeRow(ctx, rng, row, i, treeZones, width, height, groundY))
   paintLayeredEarthBand(ctx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
   paintGroundDressing(ctx, rng, zones, width, groundY)
+  mono && mapCanvasToGrayRamp(ctx, width, height)
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
   return canvas
 }
@@ -126,21 +156,47 @@ function buildEdgeZones(width, extraClear) {
 //
 function pickEdgeX(rng, zone) {
   const t = Math.pow(rng(), EDGE_BIAS)
-  const inner = zone.outer === zone.x1 ? zone.x2 : zone.x1
-  return zone.outer + (inner - zone.outer) * t
+  return zone.outer + (zoneInnerX(zone) - zone.outer) * t
+}
+//
+// 0 at the zone's outer screen edge, 1 at its inner (centre-facing) end.
+//
+function edgeDistanceT(zone, x) {
+  const t = (x - zone.outer) / (zoneInnerX(zone) - zone.outer)
+  return Math.min(1, Math.max(0, t))
+}
+function zoneInnerX(zone) {
+  return zone.outer === zone.x1 ? zone.x2 : zone.x1
 }
 //
 // Same stacked palette bands as the level's sky bake (dark teal zenith down
 // to the dawn-gold horizon).
 //
 function paintSky(ctx, width, groundY) {
-  for (let b = 0; b < SKY_BAND_COUNT; b++) {
-    const t0 = b / SKY_BAND_COUNT
-    const t1 = (b + 1) / SKY_BAND_COUNT
-    const c = forestSkyBandRgb((t0 + t1) * 0.5)
-    ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
-    ctx.fillRect(0, Math.floor(t0 * groundY), width, Math.ceil((t1 - t0) * groundY) + 1)
+  const ramp = buildSkyRamp()
+  const last = ramp.length - 1
+  const rng = createSeededRandom(SKY_DITHER_SEED)
+  const image = ctx.createImageData(width, groundY)
+  const data = image.data
+  for (let y = 0; y < groundY; y++) {
+    const t = (y + 0.5) / groundY
+    for (let x = 0; x < width; x++) {
+      const jittered = t + (rng() + rng() - 1) * SKY_DITHER_SPREAD
+      const c = ramp[Math.min(last, Math.max(0, Math.floor(jittered * ramp.length)))]
+      const i = (y * width + x) * RGBA_STRIDE
+      data[i] = c.r
+      data[i + 1] = c.g
+      data[i + 2] = c.b
+      data[i + 3] = OPAQUE_ALPHA
+    }
   }
+  ctx.putImageData(image, 0, 0)
+}
+//
+// Palette-snapped sky colour at evenly spaced heights, zenith first.
+//
+function buildSkyRamp() {
+  return Array.from({ length: SKY_RAMP_SAMPLES }, (_, i) => forestSkyBandRgb((i + 0.5) / SKY_RAMP_SAMPLES))
 }
 //
 // One parallax row on both edges — farther rows dissolve into the forest
@@ -154,12 +210,14 @@ function paintTreeRow(ctx, rng, row, rowIndex, zones, width, height, groundY) {
   zones.forEach((zone, side) => {
     for (let i = 0; i < row.count; i++) {
       const x = Math.round(pickEdgeX(rng, zone))
+      const centerT = edgeDistanceT(zone, x)
+      const heightFactor = TREE_EDGE_HEIGHT_FACTOR + (TREE_CENTER_HEIGHT_FACTOR - TREE_EDGE_HEIGHT_FACTOR) * centerT
       const cornerKey = TREE_CORNER_KEYS[side + (rowIndex > 0 ? 2 : 0)]
       const base = rowIndex === TREE_ROWS.length - 1
         ? getTreePaletteColorForCorner(cornerKey)
         : getTreePaletteParallaxCorner(cornerKey)
       const palette = buildDimmedTreePalette(base, haze, row.haze, row.flatLeaves, 0, row.uniformWood)
-      const treeH = groundY * (row.heightMin + rng() * row.heightRange) / row.scale
+      const treeH = groundY * (row.heightMin + rng() * row.heightRange) * heightFactor / row.scale
       const treeData = buildForestTree(
         nextSeed(rng), x, bottomY, Math.round(bottomY - treeH), bottomY, bottomY, TREE_BUILD_OPTS
       )
@@ -227,4 +285,32 @@ function paintRock(ctx, rng, x, groundY, shadow) {
 }
 function repeat(count, fn) {
   for (let i = 0; i < count; i++) fn()
+}
+//
+// Gray-phase recolour: each opaque pixel takes the ramp swatch closest to its
+// luminance, alpha is kept so edges stay soft.
+//
+function mapCanvasToGrayRamp(ctx, width, height) {
+  const lut = buildGrayRampLut()
+  const image = ctx.getImageData(0, 0, width, height)
+  const data = image.data
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    const c = lut[Math.round(data[i] * LUMA_R + data[i + 1] * LUMA_G + data[i + 2] * LUMA_B)]
+    data[i] = c.r
+    data[i + 1] = c.g
+    data[i + 2] = c.b
+  }
+  ctx.putImageData(image, 0, 0)
+}
+//
+// Luminance 0–255 → nearest gray-ramp swatch.
+//
+function buildGrayRampLut() {
+  const rampLuma = GRAY_RAMP.map(c => c.r * LUMA_R + c.g * LUMA_G + c.b * LUMA_B)
+  return Array.from({ length: 256 }, (_, l) => {
+    let best = 0
+    rampLuma.forEach((luma, i) => Math.abs(luma - l) < Math.abs(rampLuma[best] - l) && (best = i))
+    return GRAY_RAMP[best]
+  })
 }

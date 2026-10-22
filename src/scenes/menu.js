@@ -61,18 +61,32 @@ const MENU_BG_BASE_OPACITY = 0.35
 //
 const MENU_BG_EDGE_OVERSCAN = 1
 //
-// The menu backdrop follows the level the player is on. The forest level
-// (and a fresh save, whose first level is the forest) gets a picture built
-// from that level's own pieces at full strength; other levels keep the
-// darkened night forest.
+// Two backdrop layers. The idle one follows the level the player is on: the
+// forest level (and a fresh save, whose first level is the forest) shows the
+// forest in its gray phase — the same layout as the forest picture, no sky,
+// only muted gray silhouettes; other levels keep the darkened night forest.
+// Hovering the forest mushroom reveals the full-colour forest built from the
+// level's own pieces, like the level itself turning colourful.
 //
 const MENU_BG_VARIANT_FOREST = 'forest'
+const MENU_BG_VARIANT_FOREST_GRAY = 'forest-gray'
 const MENU_BG_VARIANT_NIGHT = 'night'
-const MENU_FOREST_BG_OPACITY = 1
+const MENU_FOREST_SECTION = 'forest'
+const MENU_FOREST_LESSON_PREFIX = 'lesson-forest.'
+const MENU_PREVIEW_END_SCENE = 'lesson-touch.0'
+//
+// Alpha each picture is blended with over the menu base colour.
+//
+const MENU_BG_LAYER_ALPHA = {
+  [MENU_BG_VARIANT_FOREST]: 1,
+  [MENU_BG_VARIANT_FOREST_GRAY]: 0.45,
+  [MENU_BG_VARIANT_NIGHT]: MENU_BG_BASE_OPACITY
+}
 const MENU_FOREST_GRASS_RGB = forestRgb(FOREST_PAL.forestFloor.grassDry)
+const MENU_FOREST_GRAY_GRASS_RGB = forestRgb(FOREST_PAL.decorGray)
 //
 // Stalk eyes standing on the forest backdrop's edges, drawn live so they
-// sway and watch the cursor; they hide once the backdrop fades for a hover.
+// sway and watch the cursor; they come alive with the colour forest only.
 //
 const MENU_FOREST_EYE_COUNT_PER_SIDE = 2
 const MENU_FOREST_EYE_SEED = 33191
@@ -1002,7 +1016,8 @@ export function sceneMenu(k) {
     //
     const bgVariant = resolveMenuBgVariant(lastLevel)
     buildMenuStaticSprite(k, bgVariant)
-    const forestEyes = bgVariant === MENU_BG_VARIANT_FOREST ? createMenuForestEyes(k) : null
+    buildMenuStaticSprite(k, MENU_BG_VARIANT_FOREST)
+    const forestEyes = createMenuForestEyes(k)
     //
     // Swaying grass along the menu-bg horizon — shared Grass component in
     // manual-draw mode (no z given): drawScene renders it between the
@@ -1055,7 +1070,8 @@ export function sceneMenu(k) {
       isLeavingScene: false,
       heartbeatPhase: 0,
       lastHeartbeatTime: 0,
-      bgDefaultOpacity: 1.0
+      bgDefaultOpacity: 1.0,
+      forestRevealOpacity: 0
     }
     createForestMenuMushroom(inst)
     
@@ -1226,6 +1242,7 @@ export function sceneMenu(k) {
       //
       const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
       inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
+      updateForestReveal(inst, hoveredInst)
       //
       // Fireflies only appear for antiheroes whose section is completed or currently being played
       //
@@ -2739,18 +2756,29 @@ function drawUnknownSectionMarks(k, inst) {
 // Draw menu background with section-specific fade transitions
 //
 function drawMenuBackground(inst) {
-  const { k, bgDefaultOpacity } = inst
   //
-  // Draw the combined static background sprite with fade (hidden when
-  // hovering an anti-hero). The darkening is already baked into the image.
+  // Idle layer first (hidden while any anti-hero is hovered; its darkening
+  // is baked in), then the colour forest revealed by the mushroom hover.
   //
-  bgDefaultOpacity > 0.01 && k.drawSprite({
-    sprite: menuStaticSpriteName(inst.bgVariant),
+  drawMenuBackgroundLayer(inst, inst.bgVariant, inst.bgDefaultOpacity)
+  drawMenuBackgroundLayer(inst, MENU_BG_VARIANT_FOREST, inst.forestRevealOpacity)
+}
+function drawMenuBackgroundLayer(inst, variant, opacity) {
+  const { k } = inst
+  opacity > 0.01 && k.drawSprite({
+    sprite: menuStaticSpriteName(variant),
     pos: k.vec2(-MENU_BG_EDGE_OVERSCAN, -MENU_BG_EDGE_OVERSCAN),
     width: k.width() + MENU_BG_EDGE_OVERSCAN * 2,
     height: k.height() + MENU_BG_EDGE_OVERSCAN * 2,
-    opacity: bgDefaultOpacity
+    opacity
   })
+}
+//
+// The colour forest fades in only while the forest mushroom is hovered.
+//
+function updateForestReveal(inst, hoveredInst) {
+  const target = hoveredInst?.section === MENU_FOREST_SECTION ? 1 : 0
+  inst.forestRevealOpacity += (target - inst.forestRevealOpacity) * Math.min(inst.k.dt() * BG_FADE_SPEED, 1)
 }
 //
 // Bakes the combined static menu background once per live Kaplay instance
@@ -2771,16 +2799,22 @@ function buildMenuStaticSprite(k, variant) {
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = CFG.visual.colors.ready.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  const forest = variant === MENU_BG_VARIANT_FOREST
+  const forestGray = variant === MENU_BG_VARIANT_FOREST_GRAY
+  const forest = variant === MENU_BG_VARIANT_FOREST || forestGray
   //
   // The night picture's plain sky/underground bands are filled with the same
   // READY background colour the menu uses, so blended over the same colour
   // they disappear — no horizontal strips above and below the composition.
   //
   const bgCanvas = forest
-    ? generateForestMenuBackgroundCanvas({ width: MENU_BG_CANVAS_W, height: MENU_BG_CANVAS_H, groundY: MENU_BG_GROUND_Y })
+    ? generateForestMenuBackgroundCanvas({
+      width: MENU_BG_CANVAS_W,
+      height: MENU_BG_CANVAS_H,
+      groundY: MENU_BG_GROUND_Y,
+      mono: forestGray
+    })
     : generateMenuBackgroundCanvas(CFG.visual.colors.ready.background)
-  ctx.globalAlpha = forest ? MENU_FOREST_BG_OPACITY : MENU_BG_BASE_OPACITY
+  ctx.globalAlpha = MENU_BG_LAYER_ALPHA[variant]
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1
   bgCanvas.width = 0
@@ -2794,10 +2828,12 @@ function menuStaticSpriteName(variant) {
 }
 //
 // The level the player is on picks the backdrop; a fresh save starts in the
-// forest, so it shows the forest too.
+// forest, so it shows the forest too. Touch lesson 0 is only the end-of-preview
+// screen right after the forest, so the player is still in the forest world.
 //
 function resolveMenuBgVariant(lastLevel) {
-  return !lastLevel || lastLevel.startsWith('lesson-forest.') ? MENU_BG_VARIANT_FOREST : MENU_BG_VARIANT_NIGHT
+  const inForest = !lastLevel || lastLevel.startsWith(MENU_FOREST_LESSON_PREFIX) || lastLevel === MENU_PREVIEW_END_SCENE
+  return inForest ? MENU_BG_VARIANT_FOREST_GRAY : MENU_BG_VARIANT_NIGHT
 }
 //
 // Stalk eyes on both edges of the forest backdrop, rooted on its ground line.
@@ -2811,10 +2847,10 @@ function createMenuForestEyes(k) {
 // Eyes follow the cursor and sway on their own clock.
 //
 function updateMenuForestEyes(inst, mousePos) {
-  inst.forestEyes && ChainBuoy.onUpdate(inst.forestEyes, mousePos.x, mousePos.y, inst.k.dt())
+  ChainBuoy.onUpdate(inst.forestEyes, mousePos.x, mousePos.y, inst.k.dt())
 }
 function drawMenuForestEyes(inst) {
-  if (!inst.forestEyes || inst.bgDefaultOpacity < MENU_FOREST_EYE_MIN_BG_OPACITY) return
+  if (inst.forestRevealOpacity < MENU_FOREST_EYE_MIN_BG_OPACITY) return
   ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(inst.k))
 }
 //
@@ -2824,18 +2860,21 @@ function drawMenuForestEyes(inst) {
 // dissolve).
 //
 function getMenuGrassTint(inst) {
+  //
+  // The colour forest gets the level's dry straw blades.
+  //
+  if (inst.forestRevealOpacity > inst.bgDefaultOpacity) {
+    return { ...MENU_FOREST_GRASS_RGB, opacity: inst.forestRevealOpacity }
+  }
   const op = inst.bgDefaultOpacity
   if (op <= 0.01) return null
   //
-  // The forest backdrop gets the level's dry straw blades instead.
+  // The gray-phase forest keeps its blades gray and as muted as its picture.
   //
-  const forest = inst.bgVariant === MENU_BG_VARIANT_FOREST
-  return {
-    r: forest ? MENU_FOREST_GRASS_RGB.r : MENU_GRASS_TINT_R,
-    g: forest ? MENU_FOREST_GRASS_RGB.g : MENU_GRASS_TINT_G,
-    b: forest ? MENU_FOREST_GRASS_RGB.b : MENU_GRASS_TINT_B,
-    opacity: op
+  if (inst.bgVariant === MENU_BG_VARIANT_FOREST_GRAY) {
+    return { ...MENU_FOREST_GRAY_GRASS_RGB, opacity: op * MENU_BG_LAYER_ALPHA[MENU_BG_VARIANT_FOREST_GRAY] }
   }
+  return { r: MENU_GRASS_TINT_R, g: MENU_GRASS_TINT_G, b: MENU_GRASS_TINT_B, opacity: op }
 }
 /**
  * Creates the per-letter progress label displayed below each anti-hero.

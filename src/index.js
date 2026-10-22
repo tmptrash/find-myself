@@ -5,6 +5,7 @@ import { bootEngine, RESOLUTION_MODE } from "./utils/game-engine.js"
 import { disposeActiveEngineForHotReload, setActiveEngine } from "./utils/engine-switch.js"
 import { installWindowResizeReboot } from "./utils/window-resize.js"
 import * as Sound from "./utils/sound.js"
+import { prewarmMenuAssets } from "./scenes/menu.js"
 //
 // Force dark background for all elements
 //
@@ -31,7 +32,9 @@ if (!import.meta.hot?.data.gameBooted) {
 /**
  * Top-level boot sequence: boots the native-resolution engine that "ready",
  * "menu" and Forest/touch lesson 0 all share (see game-engine.js and
- * engine-switch.js), then enters "ready" directly with no engine swap.
+ * engine-switch.js), bakes the menu's heavy assets under the same first
+ * loader (so the first menu visit has no pause), then enters "ready" directly
+ * with no engine swap.
  * Every remaining lesson still runs on the fixed 1920x1080 engine and swaps
  * into it on demand.
  */
@@ -47,5 +50,6 @@ async function boot() {
   }
   setActiveEngine(k, RESOLUTION_MODE.NATIVE)
   installWindowResizeReboot()
+  await prewarmMenuAssets(k)
   await prepareSceneAssetsThenEnterScene(k, startScene)
 }

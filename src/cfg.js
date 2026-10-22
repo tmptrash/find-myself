@@ -513,10 +513,15 @@ export const CFG = {
           leaf: PALETTE.red1,          // Ear-tree leaf body
           leafLight: PALETTE.red3,     // Lit half of the leaf
           leafVein: PALETTE.red0,      // Leaf rim and midrib
-          stem: PALETTE.green1,        // Ear-tree trunk and limbs (same family as forest grass)
-          stemLight: PALETTE.green3,   // Bark plates catching the light on the left flank
-          stemShade: PALETTE.green0,   // Shaded right flank and limb undersides
-          stemFissure: PALETTE.teal0,  // Bark fissures (cool deep shadow)
+          //
+          // Ear-tree (bomb tree) wood is the only purple in the level, so it
+          // reads apart from the teal forest, brown soil / roots and the rose
+          // apple bark.
+          //
+          stem: PALETTE.purple1,       // Ear-tree trunk and limbs
+          stemLight: PALETTE.purple3,  // Bark plates catching the light on the left flank
+          stemShade: PALETTE.purple0,  // Shaded right flank and limb undersides
+          stemFissure: PALETTE.violet0, // Bark fissures (deep blue-violet shadow)
           mushroomCap: PALETTE.red2,
           mushroomCapDark: PALETTE.brown0,
           mushroomCapLight: PALETTE.orange3,

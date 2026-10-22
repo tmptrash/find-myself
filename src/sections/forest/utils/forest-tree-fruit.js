@@ -73,7 +73,11 @@ const FRUIT_STEM_LEN = 4
 const FRUIT_CONTOUR_W = 1.2
 const FRUIT_Z = CFG.visual.zIndex.platforms - 1
 const FRUIT_FALL_GRAVITY = 1650
-const FRUIT_FALL_GROUND_PAD = 2
+//
+// A landed apple settles a little INTO the ground (its bottom this many px
+// below the floor line) so it nests in the grass instead of hovering above it.
+//
+const FRUIT_GROUND_SINK = 5
 const FRUIT_LEAF_SEED = 9917
 const FRUIT_BOUNCE_RESTITUTION_FIRST = 0.36
 const FRUIT_BOUNCE_RESTITUTION_SECOND = 0.2
@@ -255,7 +259,7 @@ export function restoreFallenAnchorFruit(levelInst, x, floorY) {
     fromAnchorDrop: true,
     attached: false,
     x,
-    y: floorY - anchor.r - FRUIT_FALL_GROUND_PAD,
+    y: floorY - anchor.r + FRUIT_GROUND_SINK,
     r: anchor.r,
     hue: anchor.hue,
     vy: 0,
@@ -398,9 +402,9 @@ export function keepForestFruitRestingOnFloor(fruit) {
   if (!fruit || fruit.attached || fruit.removed) return
   const r = getForestFruitDisplayRadius(fruit)
   if (fruit._restFloorY == null) {
-    fruit._restFloorY = fruit.y + r + FRUIT_FALL_GROUND_PAD
+    fruit._restFloorY = fruit.y + r - FRUIT_GROUND_SINK
   }
-  fruit.y = fruit._restFloorY - r - FRUIT_FALL_GROUND_PAD
+  fruit.y = fruit._restFloorY - r + FRUIT_GROUND_SINK
 }
 
 function fruitDisplayRadius(fruit) {
@@ -962,7 +966,7 @@ function leafRgbFromShadeIdx(shadeIdx) {
 }
 
 function stepFallingFruit(fruit, dt, floorY, levelInst) {
-  const restY = floorY - fruit.r - FRUIT_FALL_GROUND_PAD
+  const restY = floorY - fruit.r + FRUIT_GROUND_SINK
   fruit.vx = fruit.vx ?? 0
   if (fruit.airborne == null) fruit.airborne = true
   if (fruit.airborne) {
@@ -970,7 +974,7 @@ function stepFallingFruit(fruit, dt, floorY, levelInst) {
     fruit.y += fruit.vy * dt
     if (fruit.y >= restY && fruit.vy >= 0) {
       fruit.y = restY
-      fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD
+      fruit._restFloorY = restY + fruit.r - FRUIT_GROUND_SINK
       fruit.fromAnchorDrop && !fruit._anchorFallSoundPlayed &&
         levelInst?.sound &&
         (fruit._anchorFallSoundPlayed = true, Sound.playForestAppleSoftFall(levelInst.sound))
@@ -981,7 +985,7 @@ function stepFallingFruit(fruit, dt, floorY, levelInst) {
     return
   }
   fruit.y = restY
-  fruit._restFloorY == null && (fruit._restFloorY = restY + fruit.r + FRUIT_FALL_GROUND_PAD)
+  fruit._restFloorY == null && (fruit._restFloorY = restY + fruit.r - FRUIT_GROUND_SINK)
   fruit.vy = 0
   fruit.x += fruit.vx * dt
   fruit.vx = decayFruitRollSpeed(fruit.vx, dt)

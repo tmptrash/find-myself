@@ -9,6 +9,7 @@ import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
+import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { renderHintWithEnter } from "../utils/touch-tap-button.js"
 import * as Grass from '../components/grass.js'
@@ -197,6 +198,27 @@ const MENU_HERO_BLACK_OUTLINE = '#000000'
 //
 const MENU_ANTIHERO_HOLLOW_OUTLINE = CFG.visual.colors.ready.uncompletedSectionOutline
 //
+// Anti-hero sprite bodies: gray base for every section icon, orange for the
+// completed time section, red for the centre hero once word is completed.
+//
+const MENU_GRAY_BODY = '#656565'
+const MENU_TIME_YELLOW_BODY = '#FF8C00'
+const MENU_WORD_HERO_BODY = '#E74C3C'
+//
+// Section-complete markers saved as lastLesson point at the next section's
+// first lesson (time-complete ends the game: no current lesson).
+//
+const MENU_COMPLETE_NEXT_LESSON = {
+  'word-complete': 'lesson-time.0',
+  'time-complete': null,
+  'touch-complete': 'lesson-word.0',
+  'forest-complete': 'lesson-touch.0'
+}
+//
+// Boot prewarm yields between heavy bakes so the loader keeps animating.
+//
+const MENU_PREWARM_YIELD_FRAMES = 2
+//
 // "?" shown instead of the anti-hero for sections not finished yet — same
 // gray as the old hollow icon body, dark drop shadow underneath.
 //
@@ -341,6 +363,25 @@ function getSectionPositions(centerX, centerY, radius) {
 }
 
 /**
+ * Bakes the menu's heavy static assets ahead of time — both backdrop
+ * pictures for the current window size and every hero / anti-hero sprite
+ * the section ring uses — on the given live Kaplay instance. Called under the
+ * first boot loader, so the first menu visit only reuses loaded sprites.
+ * Read-only on the save: it resolves the current lesson without writing it.
+ * @param {Object} k - Kaplay inst (native-resolution engine)
+ * @returns {Promise<void>} Resolves when every bake is loaded into k
+ */
+export async function prewarmMenuAssets(k) {
+  recomputeMenuBgLayout(k.width(), k.height())
+  const lastLevel = resolveMenuLastLevel(get('lastLesson', null))
+  buildMenuStaticSprite(k, resolveMenuBgVariant(lastLevel))
+  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
+  buildMenuStaticSprite(k, MENU_BG_VARIANT_FOREST)
+  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
+  loadMenuHeroSprites(k, getProgress(), lastLevel)
+}
+
+/**
  * Menu scene with hero in center
  * @param {Object} k - Kaplay instance
  */
@@ -434,25 +475,9 @@ export function sceneMenu(k) {
     //
     // Sanitize lastLesson: section-complete markers should point to the next section
     //
-    let lastLevel = get('lastLesson', null)
-    const normalizedLastLevel = normalizeSceneName(lastLevel)
-    if (normalizedLastLevel !== lastLevel) {
-      lastLevel = normalizedLastLevel
-      set('lastLesson', lastLevel)
-    }
-    if (lastLevel === 'word-complete') {
-      lastLevel = 'lesson-time.0'
-      set('lastLesson', lastLevel)
-    } else if (lastLevel === 'time-complete') {
-      lastLevel = null
-      set('lastLesson', lastLevel)
-    } else if (lastLevel === 'touch-complete') {
-      lastLevel = 'lesson-word.0'
-      set('lastLesson', lastLevel)
-    } else if (lastLevel === 'forest-complete') {
-      lastLevel = 'lesson-touch.0'
-      set('lastLesson', lastLevel)
-    }
+    const savedLastLevel = get('lastLesson', null)
+    const lastLevel = resolveMenuLastLevel(savedLastLevel)
+    lastLevel !== savedLastLevel && set('lastLesson', lastLevel)
     const currentSection = getSectionFromLevel(lastLevel)
     
     //
@@ -483,59 +508,24 @@ export function sceneMenu(k) {
     // Color progression: gray → gold (forest) → teal (touch) → orange (time) → red (word)
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.forest?.completed
-    const inForestPlay = lastLevel && lastLevel.startsWith('lesson-forest')
-    const menuHeroWhite = !progress.touch?.completed || inForestPlay
-    const grayColor = '#656565'
-    const uncompletedHollowOutline = MENU_ANTIHERO_HOLLOW_OUTLINE
+    const inForestPlay = isForestLesson(lastLevel)
+    const centreLook = menuCentreHeroLook(progress, lastLevel)
+    const menuHeroWhite = centreLook.filled
+    const grayColor = MENU_GRAY_BODY
     const uncompletedHollowOutlineNoHash = MENU_ANTIHERO_HOLLOW_OUTLINE.replace('#', '')
     const menuHeroOutlineNoHash = MENU_HERO_OUTLINE_COLOR.replace('#', '')
-    const heroBodyColor = menuHeroWhite
-      ? MENU_CENTRE_HERO_WHITE_BODY
-      : progress.word?.completed
-        ? "#E74C3C"
-        : progress.time?.completed
-          ? "#FF8C00"
-          : progress.touch?.completed
-            ? CFG.visual.colors.sections.touch.body
-            : progress.forest?.completed
-              ? CFG.visual.colors.sections.forest.body
-              : "#656565"
-    const menuHeroFilled = menuHeroWhite
-    const menuHeroHasMouth = Boolean(progress.word?.completed) && !inForestPlay
     //
-    // White menu hero uses the dark body outline and standard white eyes with
-    // black pupils; section-coloured heroes keep the hollow outline bake.
+    // Every hero / anti-hero bake the menu needs (no-op when prewarmed on boot,
+    // see prewarmMenuAssets).
     //
-    const menuHeroOutlineColor = menuHeroFilled
-      ? MENU_CENTRE_HERO_WHITE_OUTLINE
-      : MENU_HERO_OUTLINE_COLOR
-    const menuHeroEyeWhite = menuHeroFilled ? CFG.visual.colors.hero.eyeWhite : undefined
-    const menuHeroPupilColor = menuHeroFilled ? CFG.visual.colors.hero.eyePupil : undefined
-    Hero.loadHeroSprites({
-      k,
-      type: Hero.HEROES.HERO,
-      bodyColor: heroBodyColor,
-      outlineColor: menuHeroOutlineColor,
-      outlineOnly: !menuHeroFilled,
-      addMouth: menuHeroHasMouth,
-      addArms: Boolean(progress.touch?.completed),
-      eyeWhiteColor: menuHeroEyeWhite,
-      pupilColor: menuHeroPupilColor
-    })
+    loadMenuHeroSprites(k, progress, lastLevel)
     const heroInst = Hero.create({
       k,
       x: centerX,
       y: centerY,
-      type: Hero.HEROES.HERO,
       scale: 5 / 3,
       controllable: false,
-      addMouth: menuHeroHasMouth,
-      addArms: Boolean(progress.touch?.completed),
-      bodyColor: heroBodyColor,
-      outlineOnly: !menuHeroFilled,
-      outlineColor: menuHeroOutlineColor,
-      eyeWhiteColor: menuHeroEyeWhite,
-      pupilColor: menuHeroPupilColor,
+      ...centreLook.sprite,
       idleVocalization: (inForestPlay || !progress.word?.completed) ? null : undefined,
       sfx: sound
     })
@@ -554,22 +544,6 @@ export function sceneMenu(k) {
     //
     // Hollow outline-only anti-hero used for every section icon on the menu.
     //
-    Hero.loadHeroSprites({
-      k,
-      type: Hero.HEROES.ANTIHERO,
-      bodyColor: grayColor,
-      outlineColor: uncompletedHollowOutline,
-      outlineOnly: true,
-      noEyes: true
-    })
-    Hero.loadHeroSprites({
-      k,
-      type: Hero.HEROES.ANTIHERO,
-      bodyColor: FOREST_MENU_HERO_BODY,
-      outlineColor: uncompletedHollowOutline,
-      outlineOnly: true,
-      noEyes: true
-    })
     const hollowSuffixes = '_outline_noeyes'
     const spritePrefixHollow = `${Hero.HEROES.ANTIHERO}_${grayColor.replace('#', '')}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
     const forestMenuBodyNoHashEarly = FOREST_MENU_HERO_BODY.replace('#', '')
@@ -594,15 +568,9 @@ export function sceneMenu(k) {
       // Color tint will be applied in onUpdate for completed/hovered sections
       // For time section when completed, use yellow color
       //
-      const grayColor = '#656565'
       const hollowOutlineColor = MENU_ANTIHERO_HOLLOW_OUTLINE
-      const coloredOutlineColor = MENU_HERO_OUTLINE_COLOR
-      const yellowColor = '#FF8C00'  // Anti-hero orange/yellow color (same as hero color in time-complete)
-      const bodyColor = grayColor  // Always gray for sprite
-      const outlineColor = hollowOutlineColor
-      const hasMouth = isCompleted && (config.section === 'word' || config.section === 'time')
-      const hasArms = isCompleted && (config.section === 'touch' || config.section === 'word' || config.section === 'time')
-      const hasWatch = isCompleted && config.section === 'time'
+      const yellowColor = MENU_TIME_YELLOW_BODY
+      const { hasMouth, hasArms, hasWatch } = menuSectionFeatures(config.section, isCompleted)
       //
       // Create anti-hero for this section
       //
@@ -614,8 +582,8 @@ export function sceneMenu(k) {
         scale: 1,
         controllable: false,
         isStatic: true,
-        bodyColor,
-        outlineColor,
+        bodyColor: grayColor,
+        outlineColor: hollowOutlineColor,
         outlineOnly: true,
         noEyes: !isCompleted,
         addMouth: hasMouth,
@@ -627,72 +595,6 @@ export function sceneMenu(k) {
         // "z-Z" sleeping glyphs that would otherwise float over the UI.
         //
         idleVocalization: null
-      })
-      //
-      // Preload section color variant with black outline for hover/completed state
-      //
-      Hero.loadHeroSprites({
-        k,
-        type: Hero.HEROES.ANTIHERO,
-        bodyColor: grayColor,
-        outlineColor: MENU_HERO_OUTLINE_COLOR,
-        addMouth: hasMouth,
-        addArms: hasArms,
-        addWatch: hasWatch,
-        outlineOnly: true
-      })
-      //
-      // For time section, also preload yellow variant (with mouth, as time now has mouth)
-      //
-      if (config.section === 'time') {
-        Hero.loadHeroSprites({
-          k,
-          type: Hero.HEROES.ANTIHERO,
-          bodyColor: yellowColor,
-          outlineColor: MENU_HERO_OUTLINE_COLOR,
-          addMouth: true,
-          addArms: true,
-          addWatch: true,
-          outlineOnly: true
-        })
-      }
-      if (config.section === 'forest') {
-        Hero.loadHeroSprites({
-          k,
-          type: Hero.HEROES.ANTIHERO,
-          bodyColor: FOREST_MENU_SECTION_HERO_BODY,
-          outlineColor: FOREST_MENU_HERO_OUTLINE,
-          addMouth: hasMouth,
-          addArms: hasArms,
-          addWatch: hasWatch,
-          outlineOnly: false
-        })
-      }
-      if (config.section === 'touch') {
-        Hero.loadHeroSprites({
-          k,
-          type: Hero.HEROES.ANTIHERO,
-          bodyColor: config.color.body,
-          outlineColor: MENU_HERO_BLACK_OUTLINE,
-          addMouth: hasMouth,
-          addArms: hasArms,
-          addWatch: hasWatch,
-          outlineOnly: false
-        })
-      }
-      //
-      // Preload section-colored variant for accurate hover/completed color
-      // (avoids dark tinting that occurs when multiplying gray × section color)
-      //
-      Hero.loadHeroSprites({
-        k,
-        type: Hero.HEROES.ANTIHERO,
-        bodyColor: config.color.body,
-        outlineColor: config.section === 'touch' ? MENU_HERO_BLACK_OUTLINE : MENU_HERO_OUTLINE_COLOR,
-        addMouth: hasMouth,
-        addArms: hasArms,
-        addWatch: hasWatch,
-        outlineOnly: true
       })
       //
       // Cache sprite prefixes for outline switching
@@ -735,14 +637,6 @@ export function sceneMenu(k) {
       const lockedHoverOutlineNoHash = lockedHoverOutlineHex.replace('#', '')
       antiHeroInst.spritePrefixLockedHover =
         `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${lockedHoverOutlineNoHash}${hollowSuffixes}`
-      Hero.loadHeroSprites({
-        k,
-        type: Hero.HEROES.ANTIHERO,
-        bodyColor: grayColor,
-        outlineColor: lockedHoverOutlineHex,
-        outlineOnly: true,
-        noEyes: true
-      })
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${antiHeroOutlineNoHash}${outlineSuffix}`
       antiHeroInst.currentPrefix = isCompleted
         ? (config.section === 'forest' && antiHeroInst.spritePrefixForest
@@ -866,7 +760,7 @@ export function sceneMenu(k) {
       antiHeroInst.isCompleted = isCompleted
       antiHeroInst.grayColor = grayColor
       antiHeroInst.yellowColor = yellowColor
-      antiHeroInst.originalBodyColor = bodyColor
+      antiHeroInst.originalBodyColor = grayColor
       antiHeroInst.baseScale = 1
       
       //
@@ -2790,9 +2684,23 @@ function updateForestReveal(inst, hoveredInst) {
 // load and leaving the sprite registry empty on the new k.
 //
 const menuStaticSpriteBakedFor = new Map()
+//
+// The composed pictures themselves are kept per variant and canvas size, so
+// a fresh engine (after a resolution swap) only re-uploads them.
+//
+const menuStaticCanvasCache = new Map()
 function buildMenuStaticSprite(k, variant) {
   if (menuStaticSpriteBakedFor.get(variant) === k) return
   menuStaticSpriteBakedFor.set(variant, k)
+  const cacheKey = `${variant}:${MENU_BG_CANVAS_W}x${MENU_BG_CANVAS_H}`
+  const canvas = menuStaticCanvasCache.get(cacheKey) ?? composeMenuStaticCanvas(variant)
+  menuStaticCanvasCache.set(cacheKey, canvas)
+  k.loadSprite(menuStaticSpriteName(variant), canvas)
+}
+//
+// Scene base colour plus the variant's picture at its blend alpha.
+//
+function composeMenuStaticCanvas(variant) {
   const canvas = document.createElement('canvas')
   canvas.width = MENU_BG_CANVAS_W
   canvas.height = MENU_BG_CANVAS_H
@@ -2819,9 +2727,7 @@ function buildMenuStaticSprite(k, variant) {
   ctx.globalAlpha = 1
   bgCanvas.width = 0
   bgCanvas.height = 0
-  k.loadSprite(menuStaticSpriteName(variant), canvas)
-  canvas.width = 0
-  canvas.height = 0
+  return canvas
 }
 function menuStaticSpriteName(variant) {
   return `${MENU_STATIC_SPRITE}-${variant}`
@@ -3025,4 +2931,111 @@ function hushMenuTrack(play) {
   const timer = setInterval(hush, 200)
   setTimeout(() => clearInterval(timer), 8000)
 }
-
+//
+// Current lesson as the menu sees it: stale names normalised, section-complete
+// markers advanced to the next section.
+//
+function resolveMenuLastLevel(saved) {
+  const normalized = normalizeSceneName(saved)
+  return normalized in MENU_COMPLETE_NEXT_LESSON ? MENU_COMPLETE_NEXT_LESSON[normalized] : normalized
+}
+function isForestLesson(lastLevel) {
+  return Boolean(lastLevel?.startsWith(MENU_FOREST_LESSON_PREFIX))
+}
+//
+// Centre hero look by progress. Color progression: gray → gold (forest) →
+// teal (touch) → orange (time) → red (word); while touch is not completed (or
+// the player is back in the forest) it is the filled white hero with the dark
+// body outline and standard eyes, otherwise a section-coloured hollow outline.
+//
+function menuCentreHeroLook(progress, lastLevel) {
+  const inForestPlay = isForestLesson(lastLevel)
+  const filled = !progress.touch?.completed || inForestPlay
+  const bodyColor = filled ? MENU_CENTRE_HERO_WHITE_BODY : menuCentreHeroProgressBody(progress)
+  return {
+    filled,
+    sprite: {
+      type: Hero.HEROES.HERO,
+      bodyColor,
+      outlineColor: filled ? MENU_CENTRE_HERO_WHITE_OUTLINE : MENU_HERO_OUTLINE_COLOR,
+      outlineOnly: !filled,
+      addMouth: Boolean(progress.word?.completed) && !inForestPlay,
+      addArms: Boolean(progress.touch?.completed),
+      eyeWhiteColor: filled ? CFG.visual.colors.hero.eyeWhite : undefined,
+      pupilColor: filled ? CFG.visual.colors.hero.eyePupil : undefined
+    }
+  }
+}
+function menuCentreHeroProgressBody(progress) {
+  if (progress.word?.completed) return MENU_WORD_HERO_BODY
+  if (progress.time?.completed) return MENU_TIME_YELLOW_BODY
+  if (progress.touch?.completed) return CFG.visual.colors.sections.touch.body
+  if (progress.forest?.completed) return CFG.visual.colors.sections.forest.body
+  return MENU_GRAY_BODY
+}
+//
+// Features a section icon grows once its section is completed.
+//
+function menuSectionFeatures(section, isCompleted) {
+  return {
+    hasMouth: isCompleted && (section === 'word' || section === 'time'),
+    hasArms: isCompleted && (section === 'touch' || section === 'word' || section === 'time'),
+    hasWatch: isCompleted && section === 'time'
+  }
+}
+//
+// Bakes every hero / anti-hero sprite the menu draws or swaps to on hover.
+// loadHeroSprites skips prefixes already on this k, so a prewarmed engine
+// pays nothing here.
+//
+function loadMenuHeroSprites(k, progress, lastLevel) {
+  menuHeroSpriteSpecs(progress, lastLevel).forEach(spec => Hero.loadHeroSprites({ k, ...spec }))
+}
+function menuHeroSpriteSpecs(progress, lastLevel) {
+  const hollow = { type: Hero.HEROES.ANTIHERO, outlineColor: MENU_ANTIHERO_HOLLOW_OUTLINE, outlineOnly: true, noEyes: true }
+  const specs = [
+    menuCentreHeroLook(progress, lastLevel).sprite,
+    { ...hollow, bodyColor: MENU_GRAY_BODY },
+    { ...hollow, bodyColor: FOREST_MENU_HERO_BODY }
+  ]
+  getSectionPositions(0, 0, 0).forEach(config => {
+    const isCompleted = progress[config.section]?.completed || false
+    const { hasMouth, hasArms, hasWatch } = menuSectionFeatures(config.section, isCompleted)
+    const features = { type: Hero.HEROES.ANTIHERO, addMouth: hasMouth, addArms: hasArms, addWatch: hasWatch }
+    //
+    // The icon itself (gray hollow), its black-outline hover variant and the
+    // section-coloured variant (avoids the dark tint of gray × section colour).
+    //
+    specs.push({ ...features, bodyColor: MENU_GRAY_BODY, outlineColor: MENU_ANTIHERO_HOLLOW_OUTLINE, outlineOnly: true, noEyes: !isCompleted })
+    specs.push({ ...features, bodyColor: MENU_GRAY_BODY, outlineColor: MENU_HERO_OUTLINE_COLOR, outlineOnly: true })
+    config.section === 'time' && specs.push({
+      type: Hero.HEROES.ANTIHERO,
+      bodyColor: MENU_TIME_YELLOW_BODY,
+      outlineColor: MENU_HERO_OUTLINE_COLOR,
+      addMouth: true,
+      addArms: true,
+      addWatch: true,
+      outlineOnly: true
+    })
+    config.section === 'forest' && specs.push({
+      ...features,
+      bodyColor: FOREST_MENU_SECTION_HERO_BODY,
+      outlineColor: FOREST_MENU_HERO_OUTLINE,
+      outlineOnly: false
+    })
+    config.section === 'touch' && specs.push({
+      ...features,
+      bodyColor: config.color.body,
+      outlineColor: MENU_HERO_BLACK_OUTLINE,
+      outlineOnly: false
+    })
+    specs.push({
+      ...features,
+      bodyColor: config.color.body,
+      outlineColor: config.section === 'touch' ? MENU_HERO_BLACK_OUTLINE : MENU_HERO_OUTLINE_COLOR,
+      outlineOnly: true
+    })
+    specs.push({ ...hollow, bodyColor: MENU_GRAY_BODY, outlineColor: menuSectionHoverInkHex(config.section, config) })
+  })
+  return specs
+}

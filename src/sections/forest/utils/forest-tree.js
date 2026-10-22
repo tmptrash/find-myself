@@ -451,6 +451,16 @@ const TRUNK_NEAR_SKIP = 0.6
 const TRUNK_SKIP_REACH = 0.45
 const TRUNK_SKIP_HASH_X = 2246822519
 const TRUNK_SKIP_HASH_Y = 3266489917
+//
+// Outer branch tips (far from the trunk) carry extra leaf lobes around their
+// end group: TIP_EXTRA_LOBES_MIN at TIP_REACH, growing by TIP_EXTRA_LOBES_RANGE
+// toward the farthest tip, scattered TIP_LOBE_DIST_MIN..+RANGE of the spread.
+//
+const TIP_REACH = 0.6
+const TIP_EXTRA_LOBES_MIN = 1
+const TIP_EXTRA_LOBES_RANGE = 2
+const TIP_LOBE_DIST_MIN = 0.3
+const TIP_LOBE_DIST_RANGE = 0.45
 
 /**
  * Creates a seeded pseudo-random number generator.
@@ -2278,7 +2288,7 @@ function buildBranchesFromTrunk(
 //
 function growBranch(rng, x, y, angle, length, thickness, branchSegs, leafEndpoints, depth, denseCanopyLeaves = false, leafStyle = null) {
   if (length <= 2 || thickness < 0.45 || depth > 7) {
-    leafEndpoints.push({ x, y, r: 32 + depth * 6, massScale: leafStyle?.massScale })
+    leafEndpoints.push({ x, y, r: 32 + depth * 6, massScale: leafStyle?.massScale, tip: true })
     return
   }
   const midLeafChance = leafStyle?.midChance ?? (denseCanopyLeaves ? 0.62 : 0.5)
@@ -2493,6 +2503,8 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
       vertShade: byHeight,
       cells: buildAsymmetricPixelCloud(rng, Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MIN * mass), Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MAX * mass))
     })
+    trunkReach && ep.tip && trunkT >= TIP_REACH &&
+      pushTipLobes(rng, out, ep, trunkT, spread, mass, shadeCount, crown, byHeight)
     const detailSpan = Math.max(0, detailMax - detailMin + 1)
     const detailCount = detailSpan > 0
       ? detailMin + Math.floor(rng() * detailSpan) + (denseCanopy ? FOLIAGE_DENSE_DETAIL_BONUS : 0)
@@ -2513,6 +2525,24 @@ function buildLeaves(rng, endpoints, shadeCount = 3, denseCanopy = false, detail
     }
   })
   return out
+}
+//
+// Extra lobes around an outer branch tip — more the farther the tip is.
+//
+function pushTipLobes(rng, out, ep, trunkT, spread, mass, shadeCount, crown, byHeight) {
+  const count = TIP_EXTRA_LOBES_MIN + Math.round((trunkT - TIP_REACH) / (1 - TIP_REACH) * TIP_EXTRA_LOBES_RANGE)
+  for (let i = 0; i < count; i++) {
+    const a = rng() * Math.PI * 2
+    const dist = spread * (TIP_LOBE_DIST_MIN + rng() * TIP_LOBE_DIST_RANGE)
+    out.push({
+      type: 'cluster',
+      x: ep.x + Math.cos(a) * dist,
+      y: ep.y + Math.sin(a) * dist * 0.6,
+      shadeIdx: pickEndpointShadeIdx(rng, shadeCount, ep, crown),
+      vertShade: byHeight,
+      cells: buildAsymmetricPixelCloud(rng, Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MIN * mass), Math.round(FOLIAGE_CLOUD_LOBE_CELLS_MAX * mass))
+    })
+  }
 }
 //
 // Returns ep → 0..1 (0 on the trunk line, 1 at the farthest leaf group), or

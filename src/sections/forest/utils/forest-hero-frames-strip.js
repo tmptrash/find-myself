@@ -19,7 +19,6 @@ const STRIP_TOP_PAD_PX = 6
 const LABEL_FONT_SIZE = 11
 const LABEL_GAP_PX = 3
 const LABEL_COLOR = '#a8a8a8'
-const HERO_OUTLINE_COLOR = FOREST_PAL.forestContour.gameplay
 const HERO_BODY_COLOR = FOREST_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
 const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')

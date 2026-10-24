@@ -93,15 +93,40 @@ function bakeForestTextCanvas(text, cfg) {
     let x = pad
     align === 'center' && (x = (canvas.width - lineW) / 2)
     align === 'right' && (x = canvas.width - pad - lineW)
-    shadowStyle && (() => {
-      ctx.fillStyle = shadowStyle
-      ctx.fillText(line, x + shadowOffsetX, y + shadowOffsetY)
-    })()
-    ctx.fillStyle = fillStyle
-    ctx.fillText(line, x, y)
+    //
+    // Justified: every line but the last spreads its words over the widest
+    // line's width; the last line stays left-aligned.
+    //
+    const justify = align === 'justify' && i < lines.length - 1
+    const drawLine = (style, dx, dy) => {
+      ctx.fillStyle = style
+      justify
+        ? fillJustifiedLine(ctx, line, x + dx, y + dy, maxW)
+        : ctx.fillText(line, x + dx, y + dy)
+    }
+    shadowStyle && drawLine(shadowStyle, shadowOffsetX, shadowOffsetY)
+    drawLine(fillStyle, 0, 0)
     y += lineH + (i < lines.length - 1 ? lineSpacing : 0)
   })
   return canvas
+}
+//
+// One line stretched to `width`: the spare width is shared evenly between
+// the gaps of its words.
+//
+function fillJustifiedLine(ctx, line, x, y, width) {
+  const words = line.split(' ').filter(Boolean)
+  if (words.length < 2) {
+    ctx.fillText(line, x, y)
+    return
+  }
+  const wordsW = words.reduce((sum, word) => sum + ctx.measureText(word).width, 0)
+  const gap = (width - wordsW) / (words.length - 1)
+  let cx = x
+  words.forEach(word => {
+    ctx.fillText(word, cx, y)
+    cx += ctx.measureText(word).width + gap
+  })
 }
 
 /**
@@ -178,10 +203,7 @@ export function bakeForestBirdFlapSprites(k) {
 export function bakeForestTooltipCanvas(layout, fontFamily, fontSize, lineSpacing) {
   const BUBBLE_BORDER_WIDTH = 3
   const BUBBLE_CORNER_RADIUS = 10
-  const BUBBLE_PADDING_X = 14
-  const BUBBLE_PADDING_Y = 10
   const POINTER_WIDTH = 12
-  const POINTER_HEIGHT = 10
   const BUBBLE_BORDER_R = 20
   const BUBBLE_BG_R = 245
   const BUBBLE_BG_G = 242

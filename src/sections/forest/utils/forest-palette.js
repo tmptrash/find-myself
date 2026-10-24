@@ -33,12 +33,12 @@ export function forestRgb(keyOrHex) {
  * @returns {{ r: number, g: number, b: number }}
  */
 export function forestCaveEarthDeepRgb() {
-  const mud = forestRgb('mudGround')
+  const loam = forestRgb('groundLoam')
   const clay = forestRgb('groundClay')
   return {
-    r: Math.round(mud.r * 0.88 + clay.r * 0.12),
-    g: Math.round(mud.g * 0.88 + clay.g * 0.12),
-    b: Math.round(mud.b * 0.88 + clay.b * 0.12)
+    r: Math.round(loam.r * 0.88 + clay.r * 0.12),
+    g: Math.round(loam.g * 0.88 + clay.g * 0.12),
+    b: Math.round(loam.b * 0.88 + clay.b * 0.12)
   }
 }
 

@@ -299,8 +299,7 @@ function paintBuriedDecor(ctx, width, height, layout, scale) {
     bandH: height - layout.groundY,
     bottomY: height,
     treeX: Math.round(width * APPLE_TREE_X_FRAC),
-    treeClearHalf: BURIED_TREE_CLEAR_HALF * scale,
-    extraZone: null
+    treeClearHalf: BURIED_TREE_CLEAR_HALF * scale
   })
   renderUndergroundSpec(ctx, spec, undergroundStaticEarthTones())
   paintUndergroundDepthVignette(ctx, 0, layout.groundY, width, height - layout.groundY)

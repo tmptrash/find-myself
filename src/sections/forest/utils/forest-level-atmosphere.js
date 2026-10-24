@@ -28,11 +28,6 @@ const PIT_FLOOR_EXTRA_W_LEFT = 18
 //
 const PIT_FLOOR_EXTRA_W_RIGHT = PIT_WALL_W
 //
-// Horizontal shelf of rocks at the cave mouth — centred on the cave anchor;
-// keep narrow so it does not span the whole mouth.
-//
-const CAVE_SEAM_TOP_SHELF_HALF_W = 12
-//
 // Invisible lip shelf at the cave mouth.
 //
 const PIT_MOUTH_WALK_SHELF_W = 22
@@ -250,7 +245,7 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
   }
   //
   // Even horizontal bands with jitter so the swarm reads across the whole
-  // walkable width, not clustered on one side or over the mud strip.
+  // walkable width, not clustered on one side.
   //
   for (let i = 0; i < MIDGE_FIELD_COUNT; i++) {
     const slot = (i + Math.random()) / MIDGE_FIELD_COUNT
@@ -268,7 +263,6 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
     showPit: true,
     showLeft: true,
     showRight: true,
-    showMudZone: true,
     spreadAfterPit: false,
     pit: {
       minX: pitCx - MIDGE_PIT_SPREAD_X,
@@ -288,7 +282,6 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
       minY,
       maxY
     },
-    mudZone: null,
     fieldAll: {
       minX: LEFT_MARGIN + 16,
       maxX: zone.x1 - 16,
@@ -355,13 +348,12 @@ export function updateForestMidges(ctrl, dt, worldLife = 0) {
 /**
  * Sets up the always-open cave pit at the right edge of the playfield.
  * @param {Object} cfg - Setup config
- * @param {Object} [cfg.tooltipClampInset] - Playfield inset for pit collect hints
  * @returns {Object} Pit state
  */
 export function createForestPit(cfg) {
   const {
     k, floorY, screenW, heroInst, sound, levelIndicator,
-    heroBodyColor, groundColor, tooltipClampInset = null
+    heroBodyColor, groundColor
   } = cfg
   const zone = getCrackZone(screenW, floorY)
   const pit = {
@@ -378,15 +370,8 @@ export function createForestPit(cfg) {
     portalX: zone.x1 + zone.width * PIT_CAVE_TRAMP_ZONE_T,
     pitFloor: null,
     pitWalls: [],
-    pitCaveIdleTime: 0,
-    pitCaveMushroomDone: false,
-    pitCaveMushroomMoveAccum: 0,
-    pitCaveMushroomHintShows: 0,
-    pitCaveMushroomHintPausedUntilExit: false,
-    pitCaveHintTooltip: null,
     pitLeftWall: null,
     pitMouthWalkShelf: null,
-    tooltipClampInset,
     wallProfile: null
   }
   openPitPhysics(pit)
@@ -547,7 +532,6 @@ function midgeRoleVisible(ctrl, role) {
   if (role === 'pit') return ctrl.showPit
   if (role === 'fieldLeft') return ctrl.showLeft
   if (role === 'fieldRight') return ctrl.showRight || ctrl.spreadAfterPit
-  if (role === 'mudZone') return ctrl.showMudZone !== false
   if (role === 'field') return ctrl.showLeft || ctrl.showRight
   return false
 }
@@ -555,7 +539,6 @@ function boundsForRole(ctrl, role) {
   if (role === 'pit') return ctrl.spreadAfterPit ? ctrl.fieldAll : ctrl.pit
   if (role === 'fieldLeft') return ctrl.fieldLeft
   if (role === 'fieldRight') return ctrl.fieldRight
-  if (role === 'mudZone') return ctrl.mudZone || ctrl.fieldAll
   return ctrl.fieldAll
 }
 //
@@ -1056,29 +1039,6 @@ function appendCaveInteriorSeamTopRocks(rocks, interiorLeftEdge, floorY, cutLeft
     })
   }
 }
-function appendCaveInteriorSeamColumnRocks(rocks, interiorLeftEdge, floorY, bottomY, cutLeft, seed) {
-  const fallbackX = interiorLeftEdge?.[0]?.x ?? cutLeft
-  const count = 18 + Math.floor(caveSeed01(seed) * 4)
-  const yTop = floorY + CAVE_SEAM_COLUMN_RADIUS_MAX - 0.5
-  const yBottom = bottomY - 12
-  for (let i = 0; i < count; i++) {
-    const t = i / Math.max(1, count - 1)
-    const radius = CAVE_SEAM_COLUMN_RADIUS_MIN +
-      caveSeed01(seed + i * 4.7) * (CAVE_SEAM_COLUMN_RADIUS_MAX - CAVE_SEAM_COLUMN_RADIUS_MIN)
-    let y = yTop + t * (yBottom - yTop)
-    y += (caveSeed01(seed + i * 8.1) - 0.5) * 3
-    y = Math.max(y, floorY + radius - 0.5)
-    const seamX = caveSeamCoverXAtY(interiorLeftEdge, y, cutLeft, fallbackX)
-    const x = seamX + (caveSeed01(seed + i * 6.3) - 0.5) * (CAVE_SEAM_COLUMN_X_SPREAD + 4)
-    rocks.push({
-      x,
-      y,
-      radius,
-      straddleMouthGround: true,
-      verts: buildRockVertices(radius)
-    })
-  }
-}
 //
 // Small rocks east/west of the seam column so the vertical stack reads less uniform.
 //
@@ -1136,7 +1096,6 @@ function appendCaveInteriorSeamEndCapRocks(rocks, interiorLeftEdge, floorY, bott
   const topExtraRadius = CAVE_SEAM_END_CAP_RADIUS_MIN +
     caveSeed01(seed + 8.7) * (CAVE_SEAM_END_CAP_RADIUS_MAX - CAVE_SEAM_END_CAP_RADIUS_MIN)
   const topExtraY = floorY + topExtraRadius - 0.5
-  const topExtraSeamX = caveSeamCoverXAtY(interiorLeftEdge, topExtraY, cutLeft, fallbackX)
   const topExtraXRaw = topX + CAVE_SEAM_TOP_EXTRA_RIGHT_OFFSET + (caveSeed01(seed + 9.3) - 0.5) * 4
   const topExtraX = clampRockXToMouthShelf(topExtraXRaw, topExtraRadius, zone)
   rocks.push({

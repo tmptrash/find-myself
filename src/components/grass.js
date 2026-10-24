@@ -26,7 +26,7 @@ const TUFT_PLACE_ATTEMPTS = 24
 // couple of tiny straight ticks, not the full organic tree-root algorithm,
 // since these only need to read as "planted", not as a detailed root mass.
 // Length is relative to that tuft's own average blade height (~80% of it),
-// not a flat constant, so taller tufts (e.g. the mud-zone scale bump) grow
+// not a flat constant, so taller tufts (see cfg.getScaleMult) grow
 // proportionally longer roots.
 //
 const GRASS_ROOT_LEN_RATIO = 0.82

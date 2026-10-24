@@ -1304,45 +1304,9 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
   //
   startPlatform.heartSystem = inst
   //
-  // DEBUG: Create all platforms at once for visualization
+  // Create initial next platform
   //
-  const DEBUG_SHOW_ALL_PLATFORMS = false
-  if (DEBUG_SHOW_ALL_PLATFORMS) {
-    for (let i = 1; i < FINAL_PLATFORM_INDEX - 7; i++) {
-      const pos = getPlatformPosition(i, k)
-      const randomOffset = Math.floor(Math.random() * 60)
-      const platform = TimePlatform.create({
-        k,
-        x: pos.x,
-        y: pos.y,
-        hero,
-        persistent: true,
-        showSecondsOnly: true,
-        initialTime: randomOffset,
-        staticTime: false,
-        killOnOddSum: true,  // Kill hero when digit sum is odd
-        duration: 0,
-        sfx: sound,
-        enableColorChange: true,  // Enable color change on landing
-        levelIndicator,
-        currentLevel: 'lesson-time.2',
-        heartSystem: inst  // Pass inst that contains attemptsRemaining, updateHearts, destroyHearts
-      })
-      platforms.push({
-        inst: platform,
-        index: i,
-        timeOffset: randomOffset,
-        ageInSeconds: 0,
-        maxDarkening: Math.max(12 - Math.floor(i / 6), 1),
-        lastGlobalTime: 0
-      })
-    }
-  } else {
-    //
-    // Create initial next platform
-    //
-    createNextPlatform(inst)
-  }
+  createNextPlatform(inst)
   //
   // Update function called every frame
   //

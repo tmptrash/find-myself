@@ -94,7 +94,7 @@ const BUG_PATTERNS = [
 ]
 
 /**
- * Creates a small bug with IK legs (for small bugs and debug bug)
+ * Creates a small bug with IK legs
  * @param {Object} config - Bug configuration
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.x - X position
@@ -102,7 +102,7 @@ const BUG_PATTERNS = [
  * @param {Object} config.hero - Hero instance to react to
  * @param {string} config.surface - Surface type: 'floor', 'leftWall', 'rightWall'
  * @param {Object} config.bounds - Movement bounds {minX, maxX, minY, maxY}
- * @param {number} [config.scale=1] - Scale multiplier for bug size (for debugging)
+ * @param {number} [config.scale=1] - Scale multiplier for bug size
  * @param {number} [config.legLength1] - First leg segment length (overrides default)
  * @param {number} [config.legLength2] - Second leg segment length (overrides default)
  * @param {number} [config.crawlSpeed] - Crawling speed (overrides default)
@@ -116,7 +116,6 @@ const BUG_PATTERNS = [
  * @param {string} [config.bodyShape='semicircle'] - Body shape: 'semicircle' or 'circle'
  * @param {number} [config.legCount=4] - Number of legs: 2 or 4
  * @param {number} [config.targetFloorY] - Target floor Y position
- * @param {boolean} [config.isDebugBug=false] - Whether this is a debug bug
  * @param {number} [config.touchRadius=30] - Distance at which bug crouches when touching hero
  * @returns {Object} Bug instance
  */
@@ -136,7 +135,6 @@ export function create(config) {
     bodyShape = 'semicircle',
     legCount = 4,
     targetFloorY = null,
-    isDebugBug = false,
     touchRadius = 30
   } = config
   //
@@ -342,9 +340,8 @@ export function create(config) {
     headOutlinePx,   // Optional 1 px head rim (touch lesson 0)
     legThickness,    // Store for leg thickness
     bodyShape,       // Store for body shape
-    legCount: finalLegCount,  // Store for number of legs (ensure 4 for debug bugs)
+    legCount: finalLegCount,
     targetFloorY,    // Store for target floor Y position
-    isDebugBug,      // Store for debug bug flag
     touchRadius,     // Store for touch detection radius
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
@@ -548,40 +545,23 @@ export function onUpdate(inst, dt) {
       if (inst.dropOffset < 0) inst.dropOffset = 0
     }
     //
-    // Debug bugs always crawl and never stop or bounce
-    // Small bugs always stay in crawling state, never stop
+    // Small bugs: always stay in crawling state, never stop
+    // If they're in stopping state, immediately switch to crawling with movement
     //
-    if (inst.isDebugBug) {
-      //
-      // Debug bugs: always stay in crawling state, never stop
-      //
+    if (inst.state === 'stopping') {
       inst.state = 'crawling'
+      //
+      // Ensure small bugs always have velocity
+      //
       if (inst.vx === 0 && inst.vy === 0) {
         //
-        // Ensure debug bugs always have velocity
+        // Restore velocity based on current movement angle
         //
         inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
         inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
       }
-    } else {
-      //
-      // Small bugs: always stay in crawling state, never stop
-      // If they're in stopping state, immediately switch to crawling with movement
-      //
-      if (inst.state === 'stopping') {
-        inst.state = 'crawling'
-        //
-        // Ensure small bugs always have velocity
-        //
-        if (inst.vx === 0 && inst.vy === 0) {
-          //
-          // Restore velocity based on current movement angle
-          //
-          inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
-          inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
-        }
-      }
     }
+  
     //
     // Handle scattering state (after pyramid destruction)
     //
@@ -608,15 +588,8 @@ export function onUpdate(inst, dt) {
       const newY = inst.y + inst.vy * dt
       //
       // Check bounds and reverse direction if hitting edge
-      // Debug bugs continue moving without bouncing
       //
-      if (inst.isDebugBug) {
-        //
-        // Debug bugs: continue moving without bounds check
-        //
-        inst.x = newX
-        inst.y = newY
-      } else if (inst.bounds) {
+      if (inst.bounds) {
         if (inst.surface === 'floor') {
           //
           // Floor: check left/right bounds
@@ -736,7 +709,7 @@ function updateLegs(inst, dt) {
     //
     // Check if leg should step
     // Only one leg at a time, diagonal sequence: [1, 2, 0, 3]
-    // Adjust threshold based on scale to work with both small and debug bugs
+    // Adjust threshold based on scale
     //
     if (!leg.isStepping) {
       const anyLegStepping = inst.legs.some(l => l.isStepping)

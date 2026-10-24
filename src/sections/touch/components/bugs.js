@@ -113,7 +113,7 @@ const BUG_PATTERNS = [
  * @param {Object} config.hero - Hero instance to react to
  * @param {string} config.surface - Surface type: 'floor', 'leftWall', 'rightWall'
  * @param {Object} config.bounds - Movement bounds {minX, maxX, minY, maxY}
- * @param {number} [config.scale=1] - Scale multiplier for bug size (for debugging)
+ * @param {number} [config.scale=1] - Scale multiplier for bug size
  * @param {number} [config.legLength1] - First leg segment length (overrides default)
  * @param {number} [config.legLength2] - Second leg segment length (overrides default)
  * @param {number} [config.crawlSpeed] - Crawling speed (overrides default)
@@ -146,15 +146,10 @@ export function create(config) {
     legCount = 4,
     hasUpwardLegs = false,
     targetFloorY = null,
-    isDebugBug = false,
     eyeScaleMultiplier = 1,
     eyeOutlineMultiplier = 1,
     headRingOutline = 0
   } = config
-  //
-  // Ensure debug bugs always have 4 legs
-  //
-  const finalLegCount = isDebugBug ? 4 : legCount
   //
   // Choose random pattern or use custom color
   //
@@ -198,21 +193,7 @@ export function create(config) {
     //
     const hasUpwardLegs = config.hasUpwardLegs || false
     
-    //
-    // For debug bugs, always create 4 legs
-    //
-    if (isDebugBug) {
-      //
-      // 4 legs: 2 front (pointing forward-down), 2 back (pointing backward-down)
-      // Indices: 0 = left front, 1 = right front, 2 = left back, 3 = right back
-      //
-      legAngles = [
-        Math.PI * 0.25,   // Left front leg (forward-down-left)
-        Math.PI * 0.25,   // Right front leg (forward-down-right)
-        Math.PI * 0.75,   // Left back leg (backward-down-left)
-        Math.PI * 0.75    // Right back leg (backward-down-right)
-      ]
-    } else if (finalLegCount === 2) {
+    if (legCount === 2) {
       if (hasUpwardLegs) {
         //
         // 2 legs with upward bend: start from sides going up, then down
@@ -256,7 +237,7 @@ export function create(config) {
     // For 4 legs: Back legs (0, 1): bend backward (side = -1), Front legs (2, 3): bend forward (side = 1)
     // For 2 legs: Left leg (i=0) bends right (outward), Right leg (i=1) bends left (outward)
     //
-    const side = finalLegCount === 2 ? (i === 0 ? 1 : -1) : (i < 2 ? -1 : 1)
+    const side = legCount === 2 ? (i === 0 ? 1 : -1) : (i < 2 ? -1 : 1)
     const reach = (legLength1 + legLength2) * scale
     
     //
@@ -298,7 +279,7 @@ export function create(config) {
         finalFloorY = Math.max(floorY, minFloorY)
       }
       
-        if (finalLegCount === 2) {
+        if (legCount === 2) {
           //
           // 2 legs: place them on left and right sides
           //
@@ -386,10 +367,9 @@ export function create(config) {
     showOutline,     // Store for outline display
     legThickness,    // Store for leg thickness
     bodyShape,       // Store for body shape
-    legCount: finalLegCount,  // Store for number of legs (ensure 4 for debug bugs)
+    legCount,
     hasUpwardLegs,   // Store for upward legs flag
     targetFloorY,    // Store for target floor Y position
-    isDebugBug,      // Store for debug bug flag
     eyeScaleMultiplier,
     eyeOutlineMultiplier,
     headRingOutline,
@@ -490,23 +470,10 @@ export function onUpdate(inst, dt) {
     //
     // Small bugs (isMother === false) don't change direction by timer, only bounce off walls
     // Big bugs (isMother === true) use timer-based direction changes
-    // Debug bugs always crawl and never stop or bounce
     //
     const isSmallBug = inst.isMother === false
     
-    if (inst.isDebugBug) {
-      //
-      // Debug bugs: always stay in crawling state, never stop
-      //
-      inst.state = 'crawling'
-      if (inst.vx === 0 && inst.vy === 0) {
-        //
-        // Ensure debug bugs always have velocity
-        //
-        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
-        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
-      }
-    } else if (inst.isPlatformWalker) {
+    if (inst.isPlatformWalker) {
       //
       // Platform walker (trap2 bug4): always crawl, never stop
       //
@@ -598,15 +565,8 @@ export function onUpdate(inst, dt) {
       const newY = inst.y + inst.vy * dt
       //
       // Check bounds and reverse direction if hitting edge
-      // Debug bugs continue moving without bouncing
       //
-      if (inst.isDebugBug) {
-        //
-        // Debug bugs: continue moving without bounds check
-        //
-        inst.x = newX
-        inst.y = newY
-      } else if (inst.bounds) {
+      if (inst.bounds) {
         if (inst.surface === 'floor') {
           //
           // Floor: check left/right bounds
@@ -658,8 +618,7 @@ function updateLegs(inst, dt) {
   const isScaredOrRecovering = inst.state === 'scared' || inst.state === 'recovering'
   const movementAngle = Math.atan2(inst.vy, inst.vx)
   const reach = (inst.legLength1 + inst.legLength2) * inst.scale
-  // Debug bugs should use small bug logic for leg positioning (bent knees)
-  const isSmallBug = (inst.legLength1 + inst.legLength2) < 5 || inst.isDebugBug
+  const isSmallBug = (inst.legLength1 + inst.legLength2) < 5
   //
   // Calculate step size based on movement speed
   // Step size should be synchronized with body movement speed
@@ -775,51 +734,7 @@ function updateLegs(inst, dt) {
           const bodyFrontX = movingRight ? inst.x + bodyRadius : inst.x - bodyRadius
           const bodyBackX = movingRight ? inst.x - bodyRadius : inst.x + bodyRadius
           
-          if (inst.isDebugBug) {
-            //
-            // Debug bug: legs bent backwards at knees
-            // Front legs: foot positions behind front body edge
-            // Back legs: foot positions behind back body edge
-            // Legs step when distance from foot to body edge reaches delta D
-            //
-            const DELTA_D = bodyRadius * 0.8  // Fixed distance threshold for stepping
-            
-            if (isFrontLeg) {
-              //
-              // Front legs: positioned behind front body edge (bent backwards)
-              // When stepping: move forward closer to body edge
-              // When not stepping: stay behind body edge
-              //
-              const isStepping = leg.isStepping
-              const offset = isStepping ? DELTA_D * 0.2 : DELTA_D * 0.5  // Closer when stepping
-              
-              if (movingRight) {
-                idealX = bodyFrontX - offset  // Behind front edge
-              } else if (movingLeft) {
-                idealX = bodyFrontX + offset  // Behind front edge
-              } else {
-                idealX = inst.x + bodyRadius - offset  // Default: behind front edge
-              }
-            } else if (isBackLeg) {
-              //
-              // Back legs: positioned behind back body edge (bent backwards)
-              // When stepping: move forward closer to body edge
-              // When not stepping: stay behind body edge
-              //
-              const isStepping = leg.isStepping
-              const offset = isStepping ? DELTA_D * 0.2 : DELTA_D * 0.5  // Closer when stepping
-              
-              if (movingRight) {
-                idealX = bodyBackX - offset  // Behind back edge
-              } else if (movingLeft) {
-                idealX = bodyBackX + offset  // Behind back edge
-              } else {
-                idealX = inst.x - bodyRadius - offset  // Default: behind back edge
-              }
-            } else {
-              idealX = inst.x
-            }
-          } else if (isSmallBug) {
+          if (isSmallBug) {
             //
             // Small bugs: legs must be tightly synchronized with body position
             // Use bodyRadius with very small offset to keep legs close to body edges
@@ -939,73 +854,7 @@ function updateLegs(inst, dt) {
       //
       // Check if this leg should step
       //
-      if (inst.isDebugBug && !leg.isStepping && inst.legCount === 4) {
-        //
-        // Debug bug: legs step when distance from foot to body edge reaches delta D
-        //
-        const debugBodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
-        const DELTA_D = debugBodyRadius * 0.8  // Fixed distance threshold for stepping
-        const movingRight = inst.vx > 0
-        const movingLeft = inst.vx < 0
-        let isFrontLeg, isBackLeg
-        
-        if (movingRight) {
-          isFrontLeg = (i === 2 || i === 3)
-          isBackLeg = (i === 0 || i === 1)
-        } else if (movingLeft) {
-          isFrontLeg = (i === 0 || i === 1)
-          isBackLeg = (i === 2 || i === 3)
-        } else {
-          isFrontLeg = (i === 2 || i === 3)
-          isBackLeg = (i === 0 || i === 1)
-        }
-        
-        const bodyFrontX = movingRight ? inst.x + debugBodyRadius : inst.x - debugBodyRadius
-        const bodyBackX = movingRight ? inst.x - debugBodyRadius : inst.x + debugBodyRadius
-        
-        let distanceToBodyEdge
-        if (isFrontLeg) {
-          //
-          // Front legs: check distance from foot to front body edge
-          // When moving right: foot should be behind front edge, so distance = bodyFrontX - footX
-          // When moving left: foot should be behind front edge, so distance = footX - bodyFrontX
-          //
-          if (movingRight) {
-            distanceToBodyEdge = bodyFrontX - leg.footX  // Positive when foot is behind
-          } else if (movingLeft) {
-            distanceToBodyEdge = leg.footX - bodyFrontX  // Positive when foot is behind
-          } else {
-            distanceToBodyEdge = Math.abs(leg.footX - bodyFrontX)
-          }
-        } else if (isBackLeg) {
-          //
-          // Back legs: check distance from foot to back body edge
-          // When moving right: foot should be behind back edge, so distance = bodyBackX - footX
-          // When moving left: foot should be behind back edge, so distance = footX - bodyBackX
-          //
-          if (movingRight) {
-            distanceToBodyEdge = bodyBackX - leg.footX  // Positive when foot is behind
-          } else if (movingLeft) {
-            distanceToBodyEdge = leg.footX - bodyBackX  // Positive when foot is behind
-          } else {
-            distanceToBodyEdge = Math.abs(leg.footX - bodyBackX)
-          }
-        } else {
-          distanceToBodyEdge = Infinity
-        }
-        
-        //
-        // Step when distance reaches delta D (leg is too far behind body edge)
-        //
-        if (distanceToBodyEdge >= DELTA_D) {
-          leg.isStepping = true
-          leg.stepProgress = 0
-          leg.stepStartX = leg.footX
-          leg.stepStartY = leg.footY
-          leg.targetFootX = idealX
-          leg.targetFootY = idealY
-        }
-      } else if (!leg.isStepping && inst.legCount === 4) {
+      if (!leg.isStepping && inst.legCount === 4) {
         //
         // Check if it's this leg's turn to step based on stepping sequence
         // Step sequence: front right -> back left -> front left -> back right
@@ -1114,9 +963,8 @@ function updateLegs(inst, dt) {
         //
         // When not stepping, pull legs towards ideal position to keep synchronized with body movement
         // This prevents legs from stretching when body moves
-        // For debug bugs, don't pull legs - let them step instead
         //
-        if (!inst.isDebugBug && footDist > 0) {
+        if (footDist > 0) {
           //
           // Pull leg towards ideal position to keep synchronized
           // For large bugs with 2 legs: don't pull legs when not stepping (they should stay in place)
@@ -1144,10 +992,6 @@ function updateLegs(inst, dt) {
             }
           }
         }
-        //
-        // For debug bugs: legs stay in place until they step
-        // This allows distance to body edge to increase and trigger stepping
-        //
       }
     }
   })

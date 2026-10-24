@@ -678,9 +678,7 @@ export function playLandSound(instance, currentLevel = null) {
     //
     instance._forestSurface === 'wood'
       ? playForestWoodKnockLand(instance)
-      : instance._forestSurface === 'mud'
-        ? playForestMudLand(instance)
-        : playForestGroundLand(instance)
+      : playForestGroundLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -1220,9 +1218,7 @@ export function playStepSound(instance, currentLevel = null) {
     if (instance._forestSurface === 'water') return
     instance._forestSurface === 'wood'
       ? playForestWoodKnockStep(instance)
-      : instance._forestSurface === 'mud'
-        ? playForestMudStep(instance)
-        : playForestGroundStep(instance)
+      : playForestGroundStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -1495,35 +1491,6 @@ function playForestGroundLand(instance) {
   noiseSource.stop(now + duration)
 }
 //
-// Forest muddy band: wet squelch step (lower, softer than dry ground).
-//
-function playForestMudStep(instance) {
-  const now = instance.audioContext.currentTime
-  const duration = 0.1
-  const bufferSize = instance.audioContext.sampleRate * duration
-  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
-  const noiseData = noiseBuffer.getChannelData(0)
-  for (let i = 0; i < bufferSize; i++) {
-    noiseData[i] = Math.random() * 2 - 1
-  }
-  const noiseSource = instance.audioContext.createBufferSource()
-  noiseSource.buffer = noiseBuffer
-  const filter = instance.audioContext.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(140, now)
-  filter.frequency.linearRampToValueAtTime(70, now + duration)
-  filter.Q.value = 0.35
-  const envelope = instance.audioContext.createGain()
-  envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 1.35, now + 0.014)
-  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  noiseSource.connect(filter)
-  filter.connect(envelope)
-  envelope.connect(instance.stepGain)
-  noiseSource.start(now)
-  noiseSource.stop(now + duration)
-}
-//
 // Mutes or restores predator foot SFX (cuts active one-shots via master gain).
 //
 export function setForestPredatorFootGain(instance, gain) {
@@ -1642,9 +1609,6 @@ export function playForestTomatoExplosion(instance) {
 }
 
 //
-// Forest muddy band: wet squelch landing (same timbre as mud step, louder).
-//
-//
 // Dry sand/grit for G/L/O caption crumble — short swell, centre on bulk ground impact.
 //
 export function playForestCaptionSandCrumble(instance, bulkGroundImpactSec = 0.25) {
@@ -1685,32 +1649,6 @@ export function playForestCaptionSandCrumble(instance, bulkGroundImpactSec = 0.2
   noiseSource.stop(endTime + 0.02)
 }
 
-function playForestMudLand(instance) {
-  const now = instance.audioContext.currentTime
-  const duration = 0.13
-  const bufferSize = instance.audioContext.sampleRate * duration
-  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
-  const noiseData = noiseBuffer.getChannelData(0)
-  for (let i = 0; i < bufferSize; i++) {
-    noiseData[i] = Math.random() * 2 - 1
-  }
-  const noiseSource = instance.audioContext.createBufferSource()
-  noiseSource.buffer = noiseBuffer
-  const filter = instance.audioContext.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(150, now)
-  filter.frequency.linearRampToValueAtTime(65, now + duration)
-  filter.Q.value = 0.35
-  const envelope = instance.audioContext.createGain()
-  envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.land * 1.75, now + 0.014)
-  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  noiseSource.connect(filter)
-  filter.connect(envelope)
-  envelope.connect(instance.landGain)
-  noiseSource.start(now)
-  noiseSource.stop(now + duration)
-}
 
 //
 // Forest section: deep wooden knock on branches and log platforms.
@@ -1902,7 +1840,7 @@ export function playCrunchSound(instance) {
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   //
-  // High-pass filter for crispness (remove low mud)
+  // High-pass filter for crispness (cut the low rumble)
   //
   const hpFilter = instance.audioContext.createBiquadFilter()
   hpFilter.type = 'highpass'

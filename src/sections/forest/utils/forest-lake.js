@@ -76,7 +76,7 @@ const LAKE_BED_BACK_WOBBLE_WAVELENGTH = 47
 const LAKE_BED_BACK_WOBBLE_SEED = 12.9
 const LAKE_BED_RIM_PX = 2
 const LAKE_BED_EDGE_PX = 2
-const LAKE_BED_MUD_SEAM_INDEX = 5
+const LAKE_BED_SEAM_INDEX = 5
 export const LAKE_BED_FLOOR_OVERLAP_PX = 2
 const LAKE_BED_SLOPE_PROBE_PX = 3
 const LAKE_BED_SAND_MAX_SLOPE = 0.55
@@ -302,14 +302,14 @@ export function lakeBottomLocalY(lake, localX) {
 }
 
 /**
- * Sand/mud contact line on the bed (canvas-local Y).
+ * Sand / earth contact line on the bed (canvas-local Y).
  * @param {Object} lake - Lake inst
  * @param {number} localX - Canvas-local X
  * @param {number} floorY - Canvas-local floor Y
  * @returns {number}
  */
-export function lakeBedMudSeamLocalY(lake, localX, floorY) {
-  return mudSeamLocalY(lake, localX, floorY)
+export function lakeBedSeamLocalY(lake, localX, floorY) {
+  return bedSeamLocalY(lake, localX, floorY)
 }
 
 /**
@@ -533,8 +533,8 @@ function bakeLakeBedSprite(k, lake) {
 //
 function paintLakeBedFace(ctx, lake, step, floorY, colors) {
   ctx.beginPath()
-  ctx.moveTo(0, mudSeamLocalY(lake, 0, floorY))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, mudSeamLocalY(lake, i * step, floorY))
+  ctx.moveTo(0, bedSeamLocalY(lake, 0, floorY))
+  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
   for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, Math.max(floorY, bottomLocalY(lake, i * step)))
   ctx.closePath()
   ctx.fillStyle = colors.bank
@@ -542,7 +542,7 @@ function paintLakeBedFace(ctx, lake, step, floorY, colors) {
   ctx.beginPath()
   ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
   for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, mudSeamLocalY(lake, i * step, floorY))
+  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
   ctx.closePath()
   ctx.fillStyle = colors.bed
   ctx.fill()
@@ -571,21 +571,21 @@ function paintLakeBedFace(ctx, lake, step, floorY, colors) {
 //
 function paintLakeBedFrontEdge(ctx, lake, step, floorY, colors) {
   ctx.beginPath()
-  ctx.moveTo(0, mudSeamLocalY(lake, 0, floorY))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, mudSeamLocalY(lake, i * step, floorY))
+  ctx.moveTo(0, bedSeamLocalY(lake, 0, floorY))
+  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
   ctx.strokeStyle = colors.bedEdge
   ctx.lineWidth = LAKE_BED_EDGE_PX
   ctx.lineJoin = 'round'
   ctx.stroke()
 }
 //
-// Sand/mud contact on the bed: same soft tongues and pixel grit as the
+// Sand / earth contact on the bed: same soft tongues and pixel grit as the
 // topsoil/subsoil seam in the ground band.
 //
-function mudSeamLocalY(lake, localX, floorY) {
+function bedSeamLocalY(lake, localX, floorY) {
   const worldX = lake.x1 + localX
   const base = bottomLocalY(lake, localX)
-  const jag = SoilSeam.seamFringeOffset(worldX, LAKE_BED_MUD_SEAM_INDEX)
+  const jag = SoilSeam.seamFringeOffset(worldX, LAKE_BED_SEAM_INDEX)
   return Math.max(floorY, base + jag)
 }
 //

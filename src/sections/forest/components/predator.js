@@ -443,7 +443,7 @@ function liveHeroAabb(character) {
   let shape = null
   try {
     shape = character.worldArea()
-  } catch (_) {
+  } catch {
     return null
   }
   const box = shape?.bbox?.() ?? shape

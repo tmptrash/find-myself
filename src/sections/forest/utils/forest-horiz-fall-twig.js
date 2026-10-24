@@ -10,7 +10,6 @@ import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 // Dry twigs hung under the shore tree's horizontal branch — they drop on the
 // second hero landing on that branch, then regrow after a pause with fade-in.
 //
-const TWIG_COUNT = 1
 const TWIG_ATTACH_BELOW_BRANCH = 5
 const TWIG_MAIN_LEN = 52
 const TWIG_MAIN_W = 6
@@ -621,8 +620,6 @@ function completeRideTurn(inst, pred) {
   const next = inst.rideTurnTargetDir ?? pred?.dir ?? 1
   inst.rideDir = next
   if (pred) {
-    const level = pred.levelInst
-    const minX = level && EyeFlower.predatorMinX(level.eyeFlower)
     pred.dir = next
     pred.holdFacing = !isPredatorSteeringItself(pred)
     pred.vx = pred.dir * TWIG_RIDE_TURN_MIN_SPEED
@@ -689,7 +686,7 @@ function syncRiderAirborne(inst, char, mounted) {
 
 function riderInputShift(hero) {
   if (!hero?._effectivelyMoving || !hero.k) return 0
-  return (hero.direction ?? 0) * hero.speed * (hero.moveSpeedMult ?? 1) * hero.k.dt()
+  return (hero.direction ?? 0) * hero.speed * hero.k.dt()
 }
 
 function clampRideOffset(offset) {

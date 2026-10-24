@@ -46,7 +46,7 @@ const GROUND_LAYER_FRINGE_INDEX = 1
 export function groundEarthLayersColor() {
   return [
     { rgb: forestRgb('groundChernozem'), frac: GROUND_LAYER_FRACS[0] },
-    { rgb: forestRgb('mudGround'), frac: GROUND_LAYER_FRACS[1] },
+    { rgb: forestRgb('groundLoam'), frac: GROUND_LAYER_FRACS[1] },
     { rgb: forestRgb('groundDeep') }
   ]
 }

@@ -464,11 +464,10 @@ export const CFG = {
         groundSand: PALETTE.rose0,
         groundDeep: PALETTE.rose0,     // Deepest earth stratum + bottom depth fade (darkest warm brown)
         //
-        // Wet mud patch under the mud-zone tall grass — a darker, warmer
-        // earth tone than plain groundDark so the soft-mud band reads as a
-        // distinct surface once the grass overlay lets it show through.
+        // Dark loam: the second earth stratum, the topsoil flecks and the
+        // grass root ticks — darker and warmer than plain groundDark.
         //
-        mudGround: PALETTE.brown0,
+        groundLoam: PALETTE.brown0,
         gold: PALETTE.gold4,
         //
         // Terracotta decor + cute mushrooms — refs #B86B4A / #D48A57 / #6D4038
@@ -772,6 +771,35 @@ export const CFG = {
         // Red prohibition sign over the locked levels of the menu.
         //
         menuProhibited: PALETTE.red1,
+        //
+        // Menu key hint: the key names in a warm gold, their meaning in the
+        // cream text tone.
+        //
+        menuHintKey: PALETTE.gold3,
+        //
+        // Global confirm dialog (components/confirm-dialog.js): a forest
+        // signboard hung on two vines — warm wood planks with grain, knots and
+        // a lit top edge, cream painted text.
+        // Buttons are small wooden tags; the selected one glows gold. The
+        // close button is a twig cross. Leaves fly off when the board breaks.
+        //
+        confirmDialog: {
+          wood: PALETTE.rose1,
+          woodDark: PALETTE.rose0,
+          woodLight: PALETTE.rose2,
+          contour: PALETTE.gray0,
+          text: PALETTE.gray7,
+          textShadow: PALETTE.gray0,
+          tag: PALETTE.rose0,
+          tagSelected: PALETTE.gold3,
+          tagSelectedText: PALETTE.gray0,
+          leaf: [PALETTE.green1, PALETTE.green2, PALETTE.green3, PALETTE.gold2],
+          vine: PALETTE.green0,
+          vineLight: PALETTE.green1,
+          twig: PALETTE.brown1,
+          twigHover: PALETTE.gold3,
+          backdrop: PALETTE.gray0
+        },
         //
         // Cool air target when parallax trees soften into the sky (not gold).
         //

@@ -34,7 +34,6 @@ const PURSUIT_STRETCH = 1.22
 const PURSUIT_POSE_EASE = 6
 const HERO_BLIND_STATES = ['feast', 'flee', 'coast']
 
-const SEARCH_SPEEDS = [0, 0, 22, 38, 58]
 //
 // Off the ground line the crawler drifts back to its home mushroom, not a
 // straight patrol: speed and facing keep changing on the way.
@@ -342,22 +341,6 @@ function tickRoamHome(inst, dt) {
   softenHeadPose(inst, dt)
 }
 
-function tickSearch(inst, dt) {
-  inst.burst -= dt
-  if (inst.burst <= 0) {
-    inst.speedTarget = SEARCH_SPEEDS[Math.floor(Math.random() * SEARCH_SPEEDS.length)]
-    inst.burst = 0.18 + Math.random() * 0.55
-    if (!inst.holdFacing && Math.random() < 0.22) {
-      inst.dir *= -1
-      inst.burst = 0.12 + Math.random() * 0.2
-    }
-    inst.lookBack = Math.random() < 0.18
-    inst.headLift = Math.random() < 0.2 ? 4 + Math.random() * 3 : 0
-  }
-  easeSpeed(inst, dt, 8)
-  if (!inst.holdFacing && inst.x < inst.minX + 8) inst.dir = 1
-  if (!inst.holdFacing && inst.x > inst.maxX - 8) inst.dir = -1
-}
 
 //
 // Heads for the hero's x clamped to the patrol strip. Close to it (or with the

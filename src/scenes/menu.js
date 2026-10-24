@@ -4,7 +4,7 @@ import { getRGB, bindBackToMenuKeys, bindStartGameKeys } from "../utils/helper.j
 import * as Hero from "../components/hero.js"
 import { showTransitionToLevel } from "../utils/transition.js"
 import { goAfterPreparingAssets } from "../utils/lesson-assets.js"
-import { getProgress, get, set, normalizeSceneName } from "../utils/progress.js"
+import { getProgress, get, set, normalizeSceneName, resetProgress } from "../utils/progress.js"
 import * as Cursor from "../utils/cursor.js"
 import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
@@ -22,15 +22,16 @@ import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import * as Grass from '../components/grass.js'
 import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
-import { addForestFilmGrainOverlayLayer } from '../sections/forest/utils/forest-parallax-grain.js'
+import * as ConfirmDialog from '../components/confirm-dialog.js'
+import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (only the
-// forest has one so far: the trampoline mushroom), its name to the right and
-// its description at the bottom; every other level is a "?" crossed by the
-// red prohibition sign, with no name and no description. Each level owns a
-// backdrop that cross-fades in while it is selected.
+// forest has one so far: the trampoline mushroom) and, while selected, its
+// description to the right; every other level is a "?" crossed by the red
+// prohibition sign, with no description. Each level owns a backdrop that
+// cross-fades in while it is selected.
 //
 const BACKDROP_FOREST = 'forest'
 const BACKDROP_NIGHT = 'night'
@@ -38,16 +39,17 @@ const LEVEL_ICON_MUSHROOM = 'mushroom'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
 const FOREST_FIRST_LESSON = 'lesson-forest.0'
 const FOREST_DESCRIPTION = [
-  'A gray forest that has forgotten its colours.',
-  'Look closely: the forest looks back,',
-  'and it wakes only for those who learn to see.'
+  'A gray forest that has forgotten its',
+  'colours. Look closely: the forest looks',
+  'back, and it wakes only for those who',
+  'learn to see.'
 ].join('\n')
 const LEVELS = [
-  { section: 'forest', name: 'forest', icon: LEVEL_ICON_MUSHROOM, description: FOREST_DESCRIPTION, backdrop: BACKDROP_FOREST },
-  { section: 'touch', name: 'touch', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'word', name: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'time', name: 'time', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'feel', name: 'feel', icon: null, description: null, backdrop: BACKDROP_NIGHT }
+  { section: 'forest', icon: LEVEL_ICON_MUSHROOM, description: FOREST_DESCRIPTION, backdrop: BACKDROP_FOREST },
+  { section: 'touch', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'time', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'feel', icon: null, description: null, backdrop: BACKDROP_NIGHT }
 ]
 //
 // Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
@@ -59,11 +61,10 @@ const MENU_COLUMN_X_FRAC = 0.2
 const MENU_COLUMN_Y_FRAC = 0.42
 const MENU_ITEM_STEP = 112
 const MENU_HERO_GAP = 118
-const MENU_NAME_GAP = 66
-const MENU_DESCRIPTION_Y_FRAC = 0.885
+const MENU_DESCRIPTION_GAP = 66
 const MENU_HINT_BOTTOM = 26
 //
-// Mouse hover band of one row: from the hero's spot to past the name.
+// Mouse hover band of one row: from the hero's spot into the description.
 //
 const MENU_ROW_LEFT_PAD = 50
 const MENU_ROW_RIGHT_REACH = 260
@@ -146,24 +147,54 @@ const PROHIBITED_PULSE_SPEED = 2
 const PROHIBITED_PULSE_AMP = 2
 const PROHIBITED_COLOR = FOREST_PAL.menuProhibited
 //
-// Baked texts: level names, descriptions and the key hint, all in the
-// regular font with a dark drop shadow.
+// Baked texts: level descriptions (justified) and the key hint (centred),
+// all in the regular font with a dark drop shadow.
 //
 const MENU_TEXT_FONT = CFG.visual.fonts.regularFull
 const MENU_TEXT_HEX = CFG.visual.colors.hero.eyeWhite
 const MENU_TEXT_SHADOW_HEX = CFG.visual.colors.outline
-const MENU_NAME_SIZE = 34
 const MENU_DESCRIPTION_SIZE = 22
 const MENU_DESCRIPTION_LINE_SPACING = 6
+//
+// Key hint at the bottom: key names in the hint gold, their meaning in the
+// text cream, pairs spaced apart.
+//
 const MENU_HINT_SIZE = 16
-const MENU_HINT_OPACITY = 0.55
-const MENU_HINT_TEXT = '↑ ↓  choose     enter  play     esc  back'
+const MENU_HINT_OPACITY = 0.8
+const MENU_HINT_ITEMS = [
+  { key: '↑ ↓', label: 'choose' },
+  { key: 'space', label: 'play' },
+  { key: 'enter', label: 'new game' },
+  { key: 'esc', label: 'back' }
+]
+const MENU_HINT_KEY_GAP = ' '
+const MENU_HINT_ITEM_GAP = '     '
+const MENU_HINT_SPRITE = 'menu-hint'
+const MENU_HINT_PAD = 4
+const MENU_HINT_SHADOW_OFFSET = 1.5
+const MENU_HINT_GRAIN_SEED = 4411
+//
+// "New game" confirm dialog (Enter): Yes wipes the save and starts the
+// forest from its first lesson.
+//
+const MENU_NEW_GAME_QUESTION = 'Are you sure you want to start\nthe game from the beginning?'
+const MENU_NEW_GAME_YES = 'Yes'
+const MENU_NEW_GAME_NO = 'No'
+const MENU_DIALOG_Z = CFG.visual.zIndex.ui + 10
+const MENU_KEY_NEW_GAME = 'enter'
+const MENU_KEY_BACK = 'escape'
+//
+// Space / Enter / Esc are heard twice per press (window keydown before the
+// canvas has focus, then Kaplay's own key press): a repeat of the same key
+// within this window is the same press.
+//
+const MENU_KEY_REPEAT_GUARD = 0.25
 const MENU_TEXT_SPRITE = 'menu-text'
 //
-// The selected level's name blinks while the hero stands by it.
+// The selected level's description blinks while the hero stands by it.
 //
-const MENU_NAME_BLINK_SPEED = 2.5
-const MENU_NAME_BLINK_MIN = 0.25
+const MENU_DESCRIPTION_BLINK_SPEED = 2.5
+const MENU_DESCRIPTION_BLINK_MIN = 0.25
 //
 // The hero's eyes dart around while it waits: a new glance every
 // MENU_GLANCE_MIN..+RANGE seconds at a random spot this far around the hero.
@@ -260,6 +291,8 @@ export function sceneMenu(k) {
       lastMouse: { x: k.mousePos().x, y: k.mousePos().y },
       musicT: 0,
       glanceT: 0,
+      lastKey: null,
+      lastKeyAt: 0,
       isLeavingScene: false,
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_NIGHT]: 0 },
@@ -289,6 +322,15 @@ export function sceneMenu(k) {
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
     k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
+    inst.dialog = ConfirmDialog.create({
+      k,
+      question: MENU_NEW_GAME_QUESTION,
+      yesLabel: MENU_NEW_GAME_YES,
+      noLabel: MENU_NEW_GAME_NO,
+      onYes: () => startNewGame(inst),
+      onSelect: () => Sound.playMenuClickSound(sound),
+      z: MENU_DIALOG_Z
+    })
     k.add([k.z(MENU_LEAVE_COVER_Z), { draw: () => drawLeaveCover(inst) }])
     addForestFilmGrainOverlayLayer(k, MENU_FILM_GRAIN_Z)
     k.onUpdate(() => onUpdate(inst))
@@ -312,7 +354,7 @@ export async function prewarmMenuAssets(k) {
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
-  await document.fonts?.load?.(`${MENU_NAME_SIZE}px ${MENU_TEXT_FONT}`)
+  await document.fonts?.load?.(`${MENU_DESCRIPTION_SIZE}px ${MENU_TEXT_FONT}`)
   loadMenuAssets(k)
 }
 
@@ -328,13 +370,13 @@ function buildMenuLevel(level, index, layout, progress) {
     y: layout.firstY + index * layout.step,
     completed,
     playable,
-    showName: playable || completed,
     selectScale: 1,
     textOpacity: 0
   }
 }
 //
-// Window-derived layout: column, hero and name X, row Y spacing, text Y.
+// Window-derived layout: column, hero and description X, row Y spacing,
+// hint Y.
 //
 function computeMenuLayout(k) {
   const s = k.height() / MENU_REF_HEIGHT
@@ -345,9 +387,8 @@ function computeMenuLayout(k) {
     step,
     columnX,
     heroX: columnX - MENU_HERO_GAP * s,
-    nameX: columnX + MENU_NAME_GAP * s,
+    descriptionX: columnX + MENU_DESCRIPTION_GAP * s,
     firstY: k.height() * MENU_COLUMN_Y_FRAC - step * (LEVELS.length - 1) / 2,
-    descriptionY: k.height() * MENU_DESCRIPTION_Y_FRAC,
     hintY: k.height() - MENU_HINT_BOTTOM * s
   }
 }
@@ -371,8 +412,10 @@ function createMenuMushrooms(inst) {
   })
 }
 //
-// Keyboard (up/down, w/s, space/enter, esc) and mouse (hover selects, click
-// enters) bindings.
+// Keyboard and mouse bindings. Menu: up/down (w/s) choose, Space enters the
+// selected level, Enter asks to start a new game, Esc goes back; hover
+// selects a row, a click enters it. While the dialog is open every key and
+// click goes to it instead.
 //
 function bindMenuInput(inst) {
   const { k } = inst
@@ -380,17 +423,41 @@ function bindMenuInput(inst) {
     k.onKeyPress('up', () => moveSelection(inst, -1)),
     k.onKeyPress('w', () => moveSelection(inst, -1)),
     k.onKeyPress('down', () => moveSelection(inst, 1)),
-    k.onKeyPress('s', () => moveSelection(inst, 1))
+    k.onKeyPress('s', () => moveSelection(inst, 1)),
+    k.onKeyPress('left', () => ConfirmDialog.moveSelection(inst.dialog, -1)),
+    k.onKeyPress('a', () => ConfirmDialog.moveSelection(inst.dialog, -1)),
+    k.onKeyPress('right', () => ConfirmDialog.moveSelection(inst.dialog, 1)),
+    k.onKeyPress('d', () => ConfirmDialog.moveSelection(inst.dialog, 1))
   ]
-  inst.startCancel = bindStartGameKeys(k, () => enterLevel(inst, inst.levels[inst.selected]))
+  inst.startCancel = bindStartGameKeys(k, key => onStartKey(inst, key))
   inst.pointerCancel = bindPointerActivate(k, () => onPointerActivate(inst))
   inst.backCancel = bindBackToMenuKeys(k, () => onBackKey(inst))
 }
 //
-// Steps the selection with wrap-around (last → first and back).
+// Space plays the selected level, Enter opens the new-game question; with
+// the dialog open both confirm its highlighted button.
+//
+function onStartKey(inst, key) {
+  if (inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
+  if (isRepeatedKeyPress(inst, key)) return
+  if (ConfirmDialog.isOpen(inst.dialog)) {
+    ConfirmDialog.confirm(inst.dialog)
+    return
+  }
+  key === MENU_KEY_NEW_GAME
+    ? ConfirmDialog.open(inst.dialog)
+    : enterLevel(inst, inst.levels[inst.selected])
+}
+//
+// Steps the selection with wrap-around (last → first and back); with the
+// dialog open, up/down move its highlight instead.
 //
 function moveSelection(inst, delta) {
   if (inst.isLeavingScene) return
+  if (ConfirmDialog.isOpen(inst.dialog)) {
+    ConfirmDialog.moveSelection(inst.dialog, delta)
+    return
+  }
   const count = inst.levels.length
   selectLevel(inst, (inst.selected + delta + count) % count)
 }
@@ -404,6 +471,10 @@ function selectLevel(inst, index) {
 //
 function onPointerActivate(inst) {
   if (inst.isLeavingScene) return false
+  if (ConfirmDialog.isOpen(inst.dialog)) {
+    ConfirmDialog.click(inst.dialog)
+    return true
+  }
   const level = levelUnderPointer(inst)
   if (!level) return false
   selectLevel(inst, level.index)
@@ -412,6 +483,11 @@ function onPointerActivate(inst) {
 }
 function onBackKey(inst) {
   if (!inst.sceneReady || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
+  if (isRepeatedKeyPress(inst, MENU_KEY_BACK)) return
+  if (ConfirmDialog.isOpen(inst.dialog)) {
+    ConfirmDialog.close(inst.dialog)
+    return
+  }
   stopMenuMusic(inst.music)
   goAfterPreparingAssets(inst.k, "ready")
 }
@@ -428,14 +504,35 @@ function enterLevel(inst, level) {
   showTransitionToLevel(inst.k, lesson)
 }
 //
+// True for the second hearing of one key press (see MENU_KEY_REPEAT_GUARD).
+//
+function isRepeatedKeyPress(inst, key) {
+  const now = inst.k.time()
+  const repeated = inst.lastKey === key && now - inst.lastKeyAt < MENU_KEY_REPEAT_GUARD
+  inst.lastKey = key
+  inst.lastKeyAt = now
+  return repeated
+}
+//
+// "Yes" in the new-game dialog: the save is wiped and the forest starts from
+// its first lesson.
+//
+function startNewGame(inst) {
+  if (inst.isLeavingScene) return
+  resetProgress()
+  beginMenuSceneLeave(inst)
+  stopMenuMusic(inst.music)
+  showTransitionToLevel(inst.k, FOREST_FIRST_LESSON)
+}
+//
 // Row under the mouse: within half a row step of its centre, inside the band
-// from the hero's spot to past the name.
+// from the hero's spot into the description.
 //
 function levelUnderPointer(inst) {
   const { k, layout } = inst
   const mouse = k.mousePos()
   if (mouse.x < layout.heroX - MENU_ROW_LEFT_PAD * layout.s) return null
-  if (mouse.x > layout.nameX + MENU_ROW_RIGHT_REACH * layout.s) return null
+  if (mouse.x > layout.descriptionX + MENU_ROW_RIGHT_REACH * layout.s) return null
   return inst.levels.find(level => Math.abs(mouse.y - level.y) < layout.step / 2) ?? null
 }
 function onUpdate(inst) {
@@ -496,6 +593,11 @@ function updateMenuCrawler(inst, dt) {
 // keyboard. The pointer cursor marks rows that can be entered.
 //
 function updatePointerHover(inst) {
+  if (ConfirmDialog.isOpen(inst.dialog)) {
+    Cursor.setCursor(ConfirmDialog.updatePointer(inst.dialog) ? 'pointer' : 'arrow')
+    inst.lastMouse = { x: inst.k.mousePos().x, y: inst.k.mousePos().y }
+    return
+  }
   const mouse = inst.k.mousePos()
   const moved = mouse.x !== inst.lastMouse.x || mouse.y !== inst.lastMouse.y
   inst.lastMouse = { x: mouse.x, y: mouse.y }
@@ -504,7 +606,7 @@ function updatePointerHover(inst) {
   moved && level && selectLevel(inst, level.index)
 }
 //
-// Selected row: icon breathes, its name and description fade in; the rest
+// Selected row: icon breathes, its description fades in; the rest
 // settle back and fade out.
 //
 function updateLevelRow(inst, row, dt) {
@@ -601,39 +703,33 @@ function drawProhibitedSign(k, cx, cy, scale, color) {
   })
 }
 //
-// Name to the right of the row (left-aligned, vertically centred), the
-// description centred at the bottom, the key hint under it.
+// Description to the right of the selected row (justified, vertically
+// centred on it, blinking), the key hint centred at the bottom.
 //
 function drawLevelTexts(inst) {
   if (inst.isLeavingScene) return
   const { k, layout } = inst
   inst.levels.forEach(level => {
-    if (level.textOpacity <= MENU_FADE_EPS) return
-    level.showName && k.drawSprite({
-      sprite: menuTextSpriteName(`name-${level.section}`, MENU_NAME_SIZE, layout.s),
-      pos: k.vec2(layout.nameX, level.y),
-      anchor: 'left',
-      opacity: level.textOpacity * nameBlink(k)
-    })
-    level.description && k.drawSprite({
+    if (level.textOpacity <= MENU_FADE_EPS || !level.description) return
+    k.drawSprite({
       sprite: menuTextSpriteName(`description-${level.section}`, MENU_DESCRIPTION_SIZE, layout.s),
-      pos: k.vec2(k.width() / 2, layout.descriptionY),
-      anchor: 'center',
-      opacity: level.textOpacity
+      pos: k.vec2(layout.descriptionX, level.y),
+      anchor: 'left',
+      opacity: level.textOpacity * descriptionBlink(k)
     })
   })
   k.drawSprite({
-    sprite: menuTextSpriteName('hint', MENU_HINT_SIZE, layout.s),
+    sprite: menuHintSpriteName(layout.s),
     pos: k.vec2(k.width() / 2, layout.hintY),
     anchor: 'center',
     opacity: MENU_HINT_OPACITY
   })
 }
 //
-// Blink factor of the selected name: a soft on/off pulse.
+// Blink factor of the selected description: a soft on/off pulse.
 //
-function nameBlink(k) {
-  return MENU_NAME_BLINK_MIN + (1 - MENU_NAME_BLINK_MIN) * (0.5 + 0.5 * Math.cos(k.time() * MENU_NAME_BLINK_SPEED))
+function descriptionBlink(k) {
+  return MENU_DESCRIPTION_BLINK_MIN + (1 - MENU_DESCRIPTION_BLINK_MIN) * (0.5 + 0.5 * Math.cos(k.time() * MENU_DESCRIPTION_BLINK_SPEED))
 }
 //
 // Solid cover while leaving — the menu art never flashes during level load.
@@ -722,31 +818,69 @@ function loadMenuAssets(k) {
   loadMenuTextSprites(k)
 }
 //
-// Name / description / hint / "?" sprites at the window's text scale.
+// Description / hint / "?" sprites at the window's text scale.
 //
 function loadMenuTextSprites(k) {
   const s = k.height() / MENU_REF_HEIGHT
   loadQuestionMarkSprite(k, s)
-  loadMenuTextSprite(k, 'hint', MENU_HINT_TEXT, MENU_HINT_SIZE, s, MENU_TEXT_HEX)
+  loadMenuHintSprite(k, s)
   LEVELS.forEach(level => {
-    loadMenuTextSprite(k, `name-${level.section}`, level.name, MENU_NAME_SIZE, s, MENU_TEXT_HEX)
-    level.description && loadMenuTextSprite(k, `description-${level.section}`, level.description, MENU_DESCRIPTION_SIZE, s, MENU_TEXT_HEX)
+    level.description && loadMenuTextSprite(k, `description-${level.section}`, level.description, MENU_DESCRIPTION_SIZE, s, 'justify')
   })
 }
-function loadMenuTextSprite(k, key, text, size, s, fillStyle) {
+function loadMenuTextSprite(k, key, text, size, s, align) {
   const name = menuTextSpriteName(key, size, s)
   if (k.getSprite(name)) return
   loadForestTextSprite(k, name, text, {
     fontFamily: MENU_TEXT_FONT,
     fontSize: Math.round(size * s),
-    fillStyle,
+    fillStyle: MENU_TEXT_HEX,
     shadowStyle: MENU_TEXT_SHADOW_HEX,
-    align: 'center',
+    align,
     lineSpacing: Math.round(MENU_DESCRIPTION_LINE_SPACING * s)
   }, forestUiHash(key))
 }
+//
+// Key hint line: each key in the hint gold, then its meaning in the text
+// cream, with a dark drop shadow under both.
+//
+function loadMenuHintSprite(k, s) {
+  const name = menuHintSpriteName(s)
+  if (k.getSprite(name)) return
+  const size = Math.round(MENU_HINT_SIZE * s)
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${size}px ${MENU_TEXT_FONT}`
+  const runs = []
+  MENU_HINT_ITEMS.forEach((item, i) => {
+    runs.push({ text: item.key, color: FOREST_PAL.menuHintKey })
+    runs.push({ text: MENU_HINT_KEY_GAP + item.label, color: MENU_TEXT_HEX })
+    i < MENU_HINT_ITEMS.length - 1 && runs.push({ text: MENU_HINT_ITEM_GAP, color: null })
+  })
+  const width = runs.reduce((sum, run) => sum + probe.measureText(run.text).width, 0)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(width + MENU_HINT_PAD * 2)
+  canvas.height = Math.ceil(size * 1.3 + MENU_HINT_PAD * 2)
+  const ctx = canvas.getContext('2d')
+  ctx.font = probe.font
+  ctx.textBaseline = 'top'
+  let x = MENU_HINT_PAD
+  runs.forEach(run => {
+    if (run.color) {
+      ctx.fillStyle = MENU_TEXT_SHADOW_HEX
+      ctx.fillText(run.text, x + MENU_HINT_SHADOW_OFFSET, MENU_HINT_PAD + MENU_HINT_SHADOW_OFFSET)
+      ctx.fillStyle = run.color
+      ctx.fillText(run.text, x, MENU_HINT_PAD)
+    }
+    x += ctx.measureText(run.text).width
+  })
+  applyForestFilmGrainToCanvas(canvas, MENU_HINT_GRAIN_SEED)
+  k.loadSprite(name, canvas)
+}
+function menuHintSpriteName(s) {
+  return `${MENU_HINT_SPRITE}-v2-${Math.round(MENU_HINT_SIZE * s)}`
+}
 function menuTextSpriteName(key, size, s) {
-  return `${MENU_TEXT_SPRITE}-${key}-${Math.round(size * s)}`
+  return `${MENU_TEXT_SPRITE}-v3-${key}-${Math.round(size * s)}`
 }
 //
 // "?" baked into a canvas sized to the glyph's ink box (measured, not the

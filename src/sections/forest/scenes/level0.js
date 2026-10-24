@@ -18,7 +18,7 @@ import {
   TRAMP_FACE_EYE_SCALE
 } from '../utils/cute-mushroom.js'
 import * as Predator from '../components/predator.js'
-import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys, isAnyKeyDown } from '../../../utils/helper.js'
+import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys } from '../../../utils/helper.js'
 import {
   buildForestTree,
   renderForestTreeToCanvas,
@@ -59,9 +59,7 @@ import {
 import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
-import * as Tooltip from '../../../utils/tooltip.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import { drawLogPlatform } from '../../touch/utils/log-platform.js'
 import {
   createForestMidges,
   updateForestMidges,
@@ -81,14 +79,6 @@ import {
   getForestCaveMouthFloorLeftX,
   getForestPitCaveTrampolineX
 } from '../utils/forest-level-atmosphere.js'
-import {
-  initForestTeacherHintState,
-  showForestTeacherHintNow,
-  tickForestTeacherContextHints,
-  onForestTeacherLifeHudRevealed,
-  forestTeacherHudAnchor,
-  FOREST_TEACHER_HINT_DURATION
-} from '../utils/forest-teacher-hint.js'
 import {
   buildForestTreeFruitSpots,
   computeForestAnchorFruitDropX,
@@ -132,15 +122,10 @@ import {
   cropCanvasToBounds,
   releaseCanvas
 } from '../utils/forest-canvas-crop.js'
-import {
-  bakeForestTooltipCanvas,
-  forestUiHash
-} from '../utils/forest-ui-bake.js'
 //
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
 const VOID = forestRgb('void')
-const FOREST_SHADOW = forestRgb('forestShadow')
 const OUTER = forestRgb('playfieldOuter')
 //
 // Warm orange grass — same half-brightness front-row foliage tone as menu.js
@@ -161,12 +146,9 @@ const FOREST_GOLD_HEX = FOREST_PAL.gold
 //
 const GROUND_DARK = forestRgb('groundDark')
 //
-// Wet mud patch fill under the mud zone's tall grass — a distinct
-// darker/warmer tone than plain
-// groundDark so the soft-mud band reads as its own surface, not just taller
-// grass over the same ground everywhere else.
+// Dark warm soil tone of the short static root ticks under the grass tufts.
 //
-const MUD_GROUND_RGB = forestRgb('mudGround')
+const GRASS_ROOT_RGB = forestRgb('groundLoam')
 //
 // Cool forest air — parallax trees fade into teal/green sky, not gold (70/20/10).
 //
@@ -263,7 +245,7 @@ const PLAYFIELD_BOTTOM_CORNER_Z = CFG.visual.zIndex.ui + 2500
 const PLATFORM_HIDE_Y = 9999
 //
 // Tree. Fixed to the design viewport's own centre (not the live window
-// width) so every element positioned off it — branch, mud band, L/O/W
+// width) so every element positioned off it — branch, east ground, L/O/W
 // platforms, mushrooms — lines up identically on any monitor.
 //
 const TREE_X = Math.round(DESIGN_SCREEN_W * 0.5)
@@ -308,29 +290,12 @@ const monolithicTreeOffsets = new WeakMap()
 const TRUNK_EXCLUDE_HALF = 50
 const TREE_FRUIT_VIEW_TOP_PAD = 16
 //
-// Mud band east of the branch trampoline — predator anchor layout.
+// The east ground starts this far past the branch trampoline's grass
+// clearing; the stalk eyes, ear-trees and east rocks are laid out from there.
 //
-const MUD_ZONE_BRANCH_TRIGGER_GAP = 170
-const MUD_ZONE_PREDATOR_POP_LEAD = 70
-const MUD_ZONE_PREDATOR_DANGER_MARGIN = 40
-//
-// Soft muddy ground band. Jump is lower than
-// normal with a snappy takeoff (no low-gravity hang). Footsteps sound wet;
-// foot bursts are off.
-//
-const MUD_BRANCH_TRAMP_GAP = 42
-const MUD_ZONE_RIGHT_EXTENT = 170
-const MUD_ZONE_CREATURE_MARGIN = 14
-const MUD_MOVE_SPEED_MULT = 0.5
-const MUD_JUMP_FORCE_MULT = 0.68
-const MUD_GRAVITY_MULT = 1
-const MUD_JUMP_SQUASH_TIME_MULT = 1
+const EAST_GROUND_TRAMP_GAP = 42
 const FOREST_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
 const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1
-//
-// Hero must clear this far past the predator anchor X before the L HUD step credits.
-//
-const HERO_MUD_HAZARD_SPAWN_CLEARANCE = 20
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
 //
@@ -349,25 +314,6 @@ const HERO_TRAMPOLINE_SPAWN_CLEARANCE = 20
 // disintegration flow as any other level's death, then in-level respawn.
 //
 const FOREST_TOUCH_DEATH_PARTICLE_COUNT = 34
-//
-// Contextual predator death lines (mud, tall grass, charge) plus a generic pool.
-//
-const PREDATOR_DEATH_HINT_MUD = 'The mud slowed me down.\nShe did not wait.'
-const PREDATOR_DEATH_HINT_BUSHES = 'I can\'t see anything\nin these bushes.'
-const PREDATOR_DEATH_HINT_FAST = 'This predator is\nso fast.'
-const PREDATOR_DEATH_HINT_TEXTS = [
-  'Too many legs.\nNot enough caution.',
-  'The grass hid her.\nI walked right in.',
-  'Sticky ground.\nOne slow step too many.',
-  'You hear the tapping.\nThen she\'s on you.',
-  'She wasn\'t a log.\nNow I know.'
-]
-//
-// Low crawler — anchor the bubble just above the body, not hero-height.
-//
-const PREDATOR_DEATH_HINT_RAISE = 28
-const PREDATOR_DEATH_HINT_OFFSET_Y = -36
-const FOREST_TOUCH_DEATH_HINT_DURATION = 5
 const HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET = 80
 const FOREST_TOUCH_DEATH_RESPAWN_DELAY = 2.48
 //
@@ -383,6 +329,11 @@ const HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD =
   HERO_TOUCH_DEATH_RESPAWN_CLEARANCE +
   FOREST_HERO_HITBOX_HALF_W +
   HERO_PREDATOR_RESPAWN_RUNWAY_PX
+//
+// Respawn strip half-width around the death spot when the crawler has no
+// patrol bounds of its own.
+//
+const HERO_PREDATOR_RESPAWN_FALLBACK_SPAN = 200
 //
 // Rock rim — green-brown shadow tone (not neutral gray).
 //
@@ -498,18 +449,6 @@ const LOG_H = 28
 //
 const LOG_COLLISION_DROP_Y = 2
 //
-// Letter-log platforms: tree browns matching the main colour tree.
-//
-const LOG_TREE_COLOR_COLORS = {
-  bark: FOREST_PAL.treeColor.root,
-  barkLight: FOREST_PAL.treeColor.branch,
-  barkDark: FOREST_PAL.treeColor.root,
-  ring: FOREST_PAL.treeColor.trunk,
-  ringDark: FOREST_PAL.forestContour.platform,
-  core: FOREST_PAL.treeColor.branch,
-  shadow: FOREST_PAL.void
-}
-//
 // The L-log platform stands out from the plain W/O logs: a bare outline
 // silhouette with no fill, only its cracks, rounded end cap and grain
 // stripes painted in one single accent tone.
@@ -623,37 +562,6 @@ const BUSH_FERNS_NEAR = 1.8
 const BUSH_FERNS_MID = 1.4
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
 //
-// Headroom kept above each row's own band top when clipping its canopy
-// ceiling (see clipParallaxCanopyCeiling). The PAR_*_TOP_MIN_Y margins
-// (near/mid/far) now already keep each row's own tree crowns (28-50px
-// clusters off the trunk apex, see buildForestTree) naturally inside their
-// band — a real hedgehog... er, tree, not a shape with its top sliced off —
-// so this clip is a rare backstop for an unlucky outlier, not the everyday
-// shaping mechanism. Sized to sit above where those margins already put the
-// crowns so it essentially never engages in normal play.
-//
-const PAR_CANOPY_CEILING_HEADROOM = 100
-//
-// Amplitude of the layered-sine wobble on the canopy ceiling clip line.
-//
-const PAR_CLIP_PAD = 4000
-//
-// Clips away anything drawn above ceilingWorldY on this baked-layer canvas
-// (world-space Y — the context is already translated so this lines up).
-// Callers must ctx.save() before calling this and ctx.restore() once the
-// tree/bush drawing is done, BEFORE bakeParallaxLayerPair's post-bake blur
-// pass (applyParallaxPostFxToContext) runs on the whole canvas — the blur
-// needs the clip lifted so it can spread pixels upward across the hard
-// clip line, which is what turns it into the fuzzy top edge the parallax
-// bands want instead of a razor-straight one.
-//
-function clipParallaxCanopyCeiling(ctx, bandTop) {
-  const ceilingWorldY = bandTop - PAR_CANOPY_CEILING_HEADROOM
-  ctx.beginPath()
-  ctx.rect(-PAR_CLIP_PAD, ceilingWorldY, WORLD_W + PAR_CLIP_PAD * 2, PAR_CLIP_PAD + WORLD_H)
-  ctx.clip()
-}
-//
 // World-Y crop for one parallax tree row (crowns + trunks down to ground).
 //
 function parTreeRowWorldY(_bandTop) {
@@ -691,12 +599,6 @@ const PAR_LAYER_NEAR = {
   worldY: parTreeRowWorldY(PAR_BIG_BAND_TOP),
   worldH: parTreeRowWorldH(PAR_BIG_BAND_TOP)
 }
-//
-// Guaranteed extra detail inside the mud zone specifically — the normal
-// counts above are spread across the whole world width, so that one narrow
-// band would otherwise get little to nothing by pure chance (see
-// drawMudGroundZone, which previews this same sprite there right after G).
-//
 const OUTER_BG_HEX = FOREST_PAL.playfieldOuter
 const WALL_BORDER_R = OUTER.r
 const WALL_BORDER_G = OUTER.g
@@ -720,8 +622,8 @@ const RIGHT_ROCK_COUNT = 16
 const RIGHT_ROCK_CLUSTER_COUNT = 6
 const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 28
 const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 36
-const MUD_EAST_ROCK_INSET = 6
-const MUD_EAST_ROCK_COUNT = 34
+const EAST_ROCK_INSET = 6
+const EAST_ROCK_COUNT = 34
 //
 // Forest HUD row — the (empty) section label's top Y is derived from the FPS
 // row's vertical CENTER (FOREST_HUD_FPS_TOP_Y) so the small hero / life icons
@@ -817,7 +719,6 @@ const KEY_REVEALED_GROUND_DECOR_LEFT = 'forest.revealedGroundDecorLeft'
 const KEY_GROUND_RIGHT_STRIP_MAX = 'forest.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'forest.leftShoreRock'
 const KEY_LIFE_SHOWN = 'forest.lifeShown'
-const KEY_DROWN_HINT_SHOWN = 'forest.drownHintShown'
 const KEY_INTRO_SHOWN = 'forest.introShown'
 const KEY_LEVEL_STATE = 'forest.levelState'
 const KEY_CAMERA_INTRO_DONE = 'forest.cameraIntroDone'
@@ -825,8 +726,6 @@ const KEY_RESPAWN_NEAR_TREE = 'forest.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'forest.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'forest.lastSpawnX'
 const KEY_LAST_SPAWN_Y = 'forest.lastSpawnY'
-const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
-const PIT_CAVE_HINT_TEXT = 'Something hums\nunder the cave floor.'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
@@ -847,51 +746,32 @@ const FOREST_BIRDS_PLAYBACK_RATE = 1
 const FOREST_BIRDS_COLOR_LOWPASS_HZ = 14000
 let forestBirdsLoopHandle = null
 //
-// Speech-bubble hints: two intro lines at spawn, one-shot lines
-// when the right ground / water zones first open, and a consolation line on
-// the first drowning.
-//
-const HINT_INTRO_2_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
-const HINT_INTRO_2_DURATION = 18
-const INTRO_HINT_PHASE_TWO = 'two'
-//
-// Walking this far from a Forest speech bubble dismisses it early.
-//
-const FOREST_HINT_DISMISS_DISTANCE = 80
-//
-// Intro / replay hints ignore the first moments of movement so spawn settle
-// and camera snap never clear the bubble before the player walks 80 px away.
-//
-const FOREST_HINT_MOVEMENT_DISMISS_GRACE = 0.45
-//
 // Intro advances on deliberate confirm keys — not movement bindings.
 //
+//
+// First-visit controls hint: a speech bubble on the hero with the hot keys.
+// Movement stays locked until it is dismissed.
+//
+const HINT_INTRO_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
+const HINT_INTRO_DURATION = 18
+//
+// Walking this far from the bubble dismisses it early; the first moments of
+// movement are ignored so spawn settle and camera snap never clear it.
+//
+const FOREST_HINT_DISMISS_DISTANCE = 80
+const FOREST_HINT_MOVEMENT_DISMISS_GRACE = 0.45
+//
+// The hint closes on deliberate confirm keys — not movement bindings.
+//
 const INTRO_ADVANCE_KEY_NAMES = ['space', 'enter']
+//
+// After the opening camera settles, wait this long before showing the hint.
+//
+const CAMERA_INTRO_HINT_DELAY = 1
 const FOREST_PROXIMITY_SOUND_RADIUS = 120
 const FOREST_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
-const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
-const HINT_DROWN_DURATION = 4
 //
-// Repeat drownings get a random self-ironic joke over the sinking hero.
-//
-const DROWN_JOKES = [
-  'But I\'m still so young...',
-  'Tell the birds\nmy story...',
-  'Note to self:\nI am not a fish.',
-  'Okay, the lake wins.\nThis round.',
-  'I regret nothing.\nWell... one thing.'
-]
-//
-// Branch trampoline hover bubble sits above the cap.
-//
-const TRAMP_TOOLTIP_Y_OFFSET = -90
-//
-// HUD life-icon (the "teacher") hover tooltip — same as touch lesson 0.
-//
-const LIFE_TOOLTIP_TEXT = 'Teacher'
-const LIFE_TOOLTIP_SIZE = 60
-const LIFE_TOOLTIP_Y_OFFSET = 50
-// Drowning — land on the lake floor, then sink under the fill with the hint.
+// Drowning — land on the lake floor, then sink under the fill.
 //
 const WATER_SURFACE_Y = FLOOR_Y - 8
 //
@@ -952,35 +832,6 @@ const TOMATO_BURST_HERO_SAFE_RADIUS = 100
 const TOMATO_BURST_HERO_SAFE_SEC = 3.2
 const FOREST_EAR_TREE_COUNT = 2
 const GRASS_TUFT_COUNT = 22
-//
-// Blades in the mud zone grow this much bigger/taller than everywhere
-// else — the predator hides there and should be hard to spot
-// through the grass rather than standing out clearly.
-//
-const MUD_ZONE_GRASS_SCALE_MULT = 2
-//
-// Taller blades on the walk from the branch trampoline up to the mud lip.
-//
-const MUD_APPROACH_GRASS_SCALE_MULT = 1.62
-//
-// Mud grass stays darker than the plain field grass.
-//
-const MUD_ZONE_GRASS_GREEN_VOID_LERP = 0.42
-//
-// Extra tuft count layered on top of the main field just inside the mud
-// zone — see createForestMudExtraGrass.
-//
-const MUD_ZONE_EXTRA_GRASS_TUFT_COUNT = 15
-//
-// DEBUG — true hides grass from the branch trampoline up through the mud
-// band (easy restore: set back to false).
-//
-const FOREST_DEBUG_HIDE_GRASS_BEFORE_MUD = false
-//
-// Surface clutter the predator crawls over — drawn under tall grass.
-//
-const MUD_BLOB_STEPS = 24
-const MUD_ROCK_SINK = 6
 //
 // Right-ground discovery fades into the unknown instead of cutting on a strip.
 //
@@ -1095,11 +946,6 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 const BRANCH_TRAMP_OFFSET_X = 145
 const BRANCH_TRAMP_BOOST_MULT = 1.68
-const BRANCH_TRAMP_CHEEKY_EVERY = 6
-//
-// After the opening zoom-out finishes, wait this long before the first hint.
-//
-const CAMERA_INTRO_HINT_DELAY = 1
 const FOREST_CAMERA_SHAKE_AMP = 5
 const FOREST_CAMERA_SHAKE_DURATION = 0.22
 const FOREST_BRANCH_JUMP_SHAKE_AMP = 4.5
@@ -1119,29 +965,6 @@ const FOREST_PREDATOR_HERO_VERTICAL_BAND_PX = 46
 // Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
 //
 const TRAMP_CAP_PAD_LATCH_SEC = 0.28
-const TRAMP_CHEEKY_EVERY = 5
-const TRAMP_CHEEKY_DURATION = 3
-//
-// Rotating quips when the hero keeps bouncing without a break
-//
-const TRAMP_CHEEKY_LINES = [
-  'Getting cheeky, are we?',
-  'Boing. Boing. Boing.',
-  'Someone\'s got spring fever.',
-  'The mushroom is judging you.',
-  'Still bouncing? Really?',
-  'You\'re wearing me out.',
-  'This is not a trampoline park.',
-  'Fine. Keep going. See if I care.'
-]
-const BRANCH_TRAMP_CHEEKY_LINES = [
-  'I am a mushroom,\nnot a springboard.',
-  'Easy, hero, my cap only bounces so much.',
-  'You and me, we have bounced enough today.',
-  'Careful up there, I bruise easily.',
-  'Again? My stem is getting tired.',
-  'Go easy on a fungus, will you?'
-]
 //
 // Colour-phase outlines for ground decor (appear after O). Each decor object
 // bakes a second "-o" sprite variant with a thin dark rim in a tone derived
@@ -1531,12 +1354,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const rightZoneBaseXEarly = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const trampXEarly = rightZoneBaseXEarly + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const earTreeSpots = buildForestEarTreeSpots({ branchTrampX, trampX: trampXEarly })
-    const mudPredatorAmbushTriggerX = null
-    const mudPredatorPopX = null
-    const mudZoneX1 = null
-    const mudZoneX2 = null
-    const eastGroundRockMinX = branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP
-    const PREDATOR_GROUND_PAD = 36
+    const eastGroundRockMinX = forestEastGroundStartX()
     const rightZoneBaseX = rightZoneBaseXEarly
     //
     // Right mushroom trampoline's X — computed early (same reason as
@@ -1551,10 +1369,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       trampX,
       branchTrampVisible: isBranchTrampolineVisible(zones),
       trampVisible: isRightTrampolineVisible(zones),
-      heroGroundCenterY,
-      heroSpawnY,
-      mudPredatorAmbushTriggerX,
-      mudPredatorPopX
+      heroGroundCenterY
     })
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
@@ -1578,7 +1393,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // A saved/derived ground spawn landing right on a mushroom's bounce cap
     // (branch tramp near the tree, or the far right tramp) would launch the
     // hero into the air the instant the level loads — pull it clear to
-    // whichever side is closer before the mud-hazard check below.
+    // whichever side is closer.
     //
     lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose && !spawnElevated &&
       (heroSpawnX = nudgeForestHeroSpawnAwayFromTrampolines({
@@ -1588,20 +1403,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
         trampX,
         branchTrampVisible: isBranchTrampolineVisible(zones),
         trampVisible: isRightTrampolineVisible(zones)
-      }))
-    //
-    // A saved ground spawn inside the mud ambush band would overlap the
-    // predator the instant the level loads — pull it west of the trigger.
-    //
-    lastSpawnMode !== SPAWN_MODE_CAVE && hasSavedPose && !spawnElevated &&
-      (heroSpawnX = nudgeForestHeroSpawnAwayFromMudHazards({
-        spawnX: heroSpawnX,
-        spawnY: heroSpawnY,
-        spawnOnBranch: false,
-        mudPredatorAmbushTriggerX,
-        mudPredatorPopX,
-        mudZoneX1,
-        mudZoneX2
       }))
     //
     // Forest SFX and birds.mp3 from the first frame (see syncForestWorldBirdsVolume).
@@ -1645,9 +1446,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       ...forestHeroCreateCfg
     })
     //
-    // No footprint trail in the forest level — the ground stays clean.
-    //
-    //
     // Forest level: no particle assembly on spawn (first visit or reload).
     //
     Hero.spawn(heroInst, { instant: true })
@@ -1659,7 +1457,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     if (await forestBootstrapPause(bootstrap, 36, session)) return
     //
     // footFx stays off (no dust) but run-step sounds still route through forest
-    // ground/wood/mud detection via sound._forestSurface.
+    // ground/wood detection via sound._forestSurface.
     //
     bindForestHeroFootSounds(heroInst, sound)
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
@@ -1684,8 +1482,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // Computed here (before grass) so the grass field can exclude the same
     // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
     //
-    const grassLayer = createForestGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, null, null, earTreeSpots, treeFruitAnchorCfg)
-    const mudExtraGrass = null
+    const grassLayer = createForestGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, earTreeSpots, treeFruitAnchorCfg)
     //
     // Rocks and mushrooms bake one or two canvases per instance (dozens of
     // decor pieces total). Registering them all into one shared atlas (built
@@ -1695,7 +1492,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     const decorAtlas = createCanvasAtlasBuilder()
     const rockObjs = createForestRocks(k, lakeShoreAnchorX, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
-    const mudWalkClutter = { rocks: [], surfaces: [], log: null, branches: [] }
     const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
     if (await forestBootstrapPause(bootstrap, 54, session)) return
@@ -1718,7 +1514,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       isForestSpawnTooCloseToPredator(predator, heroSpawnX, heroSpawnY) &&
         heroInst.character?.pos &&
         (heroInst.character.pos.x = resolveForestPredatorRespawnX(
-          { mudZoneX1, mudZoneX2 },
           heroSpawnX,
           heroSpawnY,
           predator
@@ -1745,7 +1540,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     trampBundle.state.x = trampX
     trampBundle.state.hasLegs = false
     trampBundle.state.walkDir = 0
-    trampBundle.state._prevX = trampX
     //
     // Thin solid pad under the right mushroom cap (bounce collider).
     //
@@ -1791,8 +1585,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k,
       camera,
       cameraIntroPlaying: false,
-      pendingForestIntro: false,
-      introHintDelayRemaining: 0,
       sound,
       birdsMusic,
       heroInst,
@@ -1802,16 +1594,9 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
       wallObjs: floorBounds.walls,
       grassLayer,
-      mudExtraGrass,
       rockObjs,
-      mudWalkSurfaces: mudWalkClutter.surfaces,
-      mudWalkClutter,
       mushObjs,
       predator,
-      mudPredatorAmbushTriggerX,
-      mudPredatorPopX,
-      mudZoneX1,
-      mudZoneX2,
       touchDeathHandled: false,
       touchDeathCount: 0,
       predatorDeathCount: 0,
@@ -1820,11 +1605,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       forestHeroCreateCfg,
       heroSpawnNudge: {
         branchTrampX,
-        trampX,
-        mudPredatorAmbushTriggerX,
-        mudPredatorPopX,
-        mudZoneX1,
-        mudZoneX2
+        trampX
       },
       waterLayer,
       pitDrawLayer: null,
@@ -1836,14 +1617,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
-      branchTrampWalk: {
-        bounceCount: 0,
-        cheekyTimer: 0,
-        cheekyLineIdx: 0,
-        cheekyTooltip: null
-      },
       trampBounceAir: false,
-      rightTrampCheeky: { bounceCount: 0, cheekyTimer: 0, cheekyLineIdx: 0, cheekyTooltip: null },
       trampState: trampBundle.state,
       branchTrampState: branchTrampBundle.state,
       lakeX1,
@@ -1858,7 +1632,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       expectBranchWoodLandSound: false,
       wasHeroRunning: false,
       drowning: false,
-      drownTimer: 0,
       forestDrownHeroClipLock: false,
       deathHandled: false,
       wasOnStartBranch: false,
@@ -1870,22 +1643,19 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       //
       fpsCounter: null,
       //
-      // Speech-bubble hints controller (shared white cloud from utils).
+      // Speech bubble for the controls hint; controls stay locked while it
+      // is waiting to show or on screen.
       //
       heroHint: HeroHint.create({ k, heroInst, clampInset: forestTooltipClampInset() }),
-      //
-      // Controls stay locked while the intro hints play. introStep tracks
-      // which intro hint is on screen for the key-press advance.
-      //
+      pendingForestIntro: false,
+      introHintDelayRemaining: 0,
       introLock: false,
-      introStep: 0,
-      introHintPhase: null,
-      introHintPause: 0,
+      introHintOnComplete: null,
       startBranch: branchPlatBundle.startBranch,
       branchPlat,
       branchPlatHome,
       branchPlatSegs: branchPlatBundle,
-      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, mudZoneX1, mudZoneX2 }),
+      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X }),
       pit: null,
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
@@ -1899,7 +1669,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     predator.landAt = (x) => forestPredatorGroundAt(inst, x)
     predator.canHuntHero = () => forestPredatorCanHuntHero(inst)
     mountForestTreeFruitLayer(k, inst)
-    inst.lakeSurfaceAt = (x) => lakeSurfaceWorldYAt(inst, x)
     inst.treeX = TREE_X
     inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
     inst.floorY = FLOOR_Y
@@ -1915,14 +1684,13 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     tagGroundPlatform(inst.eyeFlower.collider, sound, heroInst)
     createForestHorizFallTwigLayer(k, inst)
-    initForestTeacherHintState(inst)
     if (await forestBootstrapPause(bootstrap, 87, session)) return
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
     zones._groundStripEndX = WORLD_W - RIGHT_MARGIN - 20
     if (await forestBootstrapPause(bootstrap, 89, session)) return
     applyZoneVisibility(inst)
-    revealWaterZone(inst, false)
+    revealWaterZone(inst)
     syncForestFpsHudVisibility(inst)
     maybeStartForestCameraIntro(inst)
     updateForestCamera(inst)
@@ -1938,11 +1706,9 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       sound,
       levelIndicator,
       heroBodyColor: HERO_BODY_COLOR,
-      groundColor: GROUND_DARK,
-      tooltipClampInset: forestTooltipClampInset()
+      groundColor: GROUND_DARK
     })
     inst.pit.sceneRef = inst
-    k._forestSceneInst = inst
     applyForestCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     setupForestPitCaveTrampoline(inst)
     inst.footParticles = ForestFootParticles.create({ k })
@@ -2036,13 +1802,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     if (await forestBootstrapPause(bootstrap, 93, session)) return
     syncForestAtmosphereZones(inst)
     inst.midges.worldLife = 1
-    //
-    // First visit: hold hints until the camera intro zoom-out finishes and a
-    // short beat passes so the player sees the full level first.
-    //
-    const needsControlsIntro = !get(KEY_INTRO_SHOWN, false)
-    inst.pendingForestIntro = needsControlsIntro
-    inst.introHintDelayRemaining = 0
+    inst.pendingForestIntro = !get(KEY_INTRO_SHOWN, false)
     applyZoneVisibility(inst)
     restoreForestLevelState(inst)
     spawnElevated && releaseForestHeroOnElevatedSpawn(inst, heroSpawnY)
@@ -2146,31 +1906,42 @@ function createPlayfieldFrameOverlay(k, inst) {
   ])
 }
 //
-// Plays the controls intro hint with locked movement until the player
-// dismisses it (key, click, timer, or walk-away fallback on replays).
+// Shows the controls hint once the opening delay has passed, and unlocks
+// the hero as soon as the bubble is gone (timer or walk-away fallback).
+//
+function updateForestIntroHint(inst, dt) {
+  if (inst.pendingForestIntro) {
+    inst.introHintDelayRemaining += dt
+    if (inst.introHintDelayRemaining < CAMERA_INTRO_HINT_DELAY) return
+    inst.pendingForestIntro = false
+    inst.introHintDelayRemaining = 0
+    startForestIntro(inst)
+  }
+  inst.introLock && !HeroHint.isActive(inst.heroHint) && inst.introHintOnComplete?.()
+}
+//
+// Plays the controls hint with locked movement until the player dismisses
+// it (key, click, timer, or walk-away fallback).
 //
 function startForestIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) return
   inst.introLock = true
-  inst.introHintPhase = INTRO_HINT_PHASE_TWO
-  inst.introHintPause = 0
   const introCancels = []
   const cancelIntroInput = () => {
     introCancels.forEach(h => h.cancel())
     introCancels.length = 0
   }
-  HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
+  HeroHint.show(inst.heroHint, HINT_INTRO_TEXT, HINT_INTRO_DURATION, {
     dismissOnJump: false,
     dismissDistance: FOREST_HINT_DISMISS_DISTANCE,
     dismissHorizontalOnly: true,
     movementDismissGrace: FOREST_HINT_MOVEMENT_DISMISS_GRACE,
     forceAbove: true
   })
-  const finishIntroChain = () => {
+  inst.introHintOnComplete = () => {
     cancelIntroInput()
     inst.introLock && finishForestIntro(inst)
   }
-  inst.introHintOnComplete = finishIntroChain
   //
   // Space / Enter or click dismisses and unlocks (timer still works as fallback).
   //
@@ -2180,64 +1951,43 @@ function startForestIntro(inst) {
   introCancels.push(bindStartGameKeys(inst.k, advance))
   introCancels.push(bindPointerActivate(inst.k, () => {
     if (!inst.introLock) return false
-    advance('space')
+    advance(INTRO_ADVANCE_KEY_NAMES[0])
     return true
   }))
 }
 //
-// One key press closes the intro hint and unlocks controls immediately.
+// One key press closes the hint and unlocks controls immediately.
 //
 function advanceForestIntro(inst, introHandlers) {
-  if (!inst.introLock) {
-    introHandlers.cancel()
-    return
-  }
   introHandlers.cancel()
+  if (!inst.introLock) return
   HeroHint.clear(inst.heroHint)
   finishForestIntro(inst)
 }
 //
-// Unlocks the hero after the intro hints.
+// Unlocks the hero after the controls hint; it never shows again.
 //
 function finishForestIntro(inst) {
   set(KEY_INTRO_SHOWN, true)
   inst.introLock = false
-  inst.introHintPhase = null
-  inst.introHintPause = 0
   inst.introHintOnComplete = null
   inst.heroInst.controlsDisabled = false
   inst.heroInst.jumpDisabled = false
   inst.heroInst.controllable = true
 }
 //
-// Hover tooltips over the HUD (same bubbles as touch lesson 0): the playable
-// hero, the life icon (the "teacher") and the FOREST word.
-// Each target only activates once its HUD element has been revealed.
+// Playfield chrome inset so the hint bubble pins to the game window, not the void.
 //
-function createSmallHeroTooltip(inst) {
-  inst.worldHoverTooltip = createForestTooltip({
-    k: inst.k,
-    targets: [{
-      x: () => forestTeacherHudHoverPos(inst).x,
-      y: () => forestTeacherHudHoverPos(inst).y,
-      width: LIFE_TOOLTIP_SIZE,
-      height: LIFE_TOOLTIP_SIZE,
-      text: () => forestTeacherHudHoverText(inst),
-      offsetY: LIFE_TOOLTIP_Y_OFFSET,
-      forceBelow: true,
-      visible: () => forestTeacherHudHoverVisible(inst),
-      screenSpace: true
-    }, {
-      x: () => inst.branchTrampState?.x ?? -1000,
-      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-      width: TRAMP_TOTAL_W,
-      height: TRAMP_TOTAL_H,
-      text: BRANCH_TRAMP_MARIO_HINT_TEXT,
-      offsetY: TRAMP_TOOLTIP_Y_OFFSET,
-      hoverId: 'branchTrampMario',
-      visible: () => isBranchTrampDrawnVisible(inst)
-    }]
-  })
+function forestTooltipClampInset() {
+  return {
+    left: LEFT_MARGIN,
+    right: RIGHT_MARGIN,
+    //
+    // HUD icons sit in the top void strip above PLAYFIELD_TOP_Y + TOP_MARGIN.
+    //
+    top: PLAYFIELD_TOP_Y,
+    bottom: SCREEN_H - PLAYFIELD_BOTTOM_Y
+  }
 }
 //
 // The whole world is open from the first frame: colour, big tree, lake,
@@ -2253,9 +2003,7 @@ function loadForestZones() {
     branchTrampBounceLive: true,
     rightTrampRevealed: true,
     rightTrampBounceLive: true,
-    groundDecor: true,
     water: false,
-    waterRocks: false,
     waterDiscovered: true,
     branchTrampRevealed: true
   }
@@ -2347,9 +2095,10 @@ function isHeroInsideForestPitCave(inst, heroX, heroY, footY = heroY + SURFACE_D
   return isHeroInForestCaveVolume(heroX, footY)
 }
 //
-// Keeps teacher-hint gating aligned with the hero pose (incl. mid-air jumps in the pit).
+// Keeps the in-pit-cave flag (camera follow) aligned with the hero pose,
+// including mid-air jumps in the pit.
 //
-function syncForestPitCaveFlagForTeacherHints(inst) {
+function syncForestPitCaveFlag(inst) {
   const char = inst.heroInst?.character
   if (!char?.pos) {
     inst._inForestPitCave = false
@@ -2487,17 +2236,6 @@ function createForestLevelIndicator(k) {
   return indicator
 }
 //
-// Life HUD for pit-mushroom nudges — shown as soon as an exploration hint applies.
-//
-function revealForestTeacherHudForExplorationHintsIfNeeded(inst) {
-  const indicator = inst.levelIndicator
-  if (!indicator || indicator.lifeRevealed || !inst.pit) return
-  LevelIndicator.revealLifeHud(indicator, false)
-  set(KEY_LIFE_SHOWN, true)
-  inst.teacherContextAccum = 0
-  inst.teacherIdleStreak = 0
-}
-//
 // HTML5 loop for birds.mp3 — Kaplay k.play().stop() does not reliably restart
 // the same asset after lesson-forest.0 reloads.
 //
@@ -2562,7 +2300,7 @@ function ensureForestBirdsWebAudio(inst, audio) {
     audio._forestBirdsChain = { filter, gain }
     audio.volume = 1
     return audio._forestBirdsChain
-  } catch (_) {
+  } catch {
     return null
   }
 }
@@ -2615,31 +2353,6 @@ function appendForestProximityTarget(targetXs, x) {
   x != null && targetXs.push(x)
 }
 //
-// Life-icon hover — "Your experience" (cave mushroom line when that beat is active).
-//
-function forestTeacherHudHoverPos(inst) {
-  const anchor = forestTeacherHudAnchor(inst)
-  return anchor ?? { x: -1000, y: -1000 }
-}
-function forestTeacherHudHoverText(inst) {
-  if (forestTeacherCaveMushroomHoverEligible(inst)) return PIT_CAVE_HINT_TEXT
-  return LIFE_TOOLTIP_TEXT
-}
-function forestTeacherHudHoverVisible(inst) {
-  if (!inst.levelIndicator?.lifeRevealed) return false
-  if (inst._forestTeacherHintActive && HeroHint.isActive(inst.heroHint)) return false
-  return true
-}
-//
-// After two auto mushroom hints, hover on the teacher replays it while still in the cave.
-//
-function forestTeacherCaveMushroomHoverEligible(inst) {
-  const pit = inst.pit
-  if (!pit?.collapsed || !inst._inForestPitCave) return false
-  if (!pit || pit.pitCaveMushroomDone) return false
-  return Boolean(pit.pitCaveMushroomHintPausedUntilExit)
-}
-//
 // Full dry birds mix. Until the shared AudioContext runs, the bare element
 // plays unfiltered so the start is never silent; the filtered chain takes
 // over once it resumes.
@@ -2673,16 +2386,9 @@ function smoothstep01(t) {
   return x * x * (3 - 2 * x)
 }
 //
-// True when world X lies in the soft-mud band (grass + baked pebbles stay after G).
-//
-function isForestDecorWorldXInMudZone(inst, worldX) {
-  if (worldX == null || inst.mudZoneX1 == null || inst.mudZoneX2 == null) return false
-  return worldX >= inst.mudZoneX1 && worldX <= inst.mudZoneX2
-}
-//
-// True when world X lies in the early ground-peek band after G — same
-// LEFT_MARGIN..mouth-shelf span drawMudGroundZone previews underground,
-// mirrored here for the surface decor (rocks/mushrooms/grass) above it.
+// True when world X lies in the early ground-peek band after G — the
+// LEFT_MARGIN..mouth-shelf span of the surface decor (rocks, mushrooms,
+// grass).
 //
 function isForestWorldXInGroundPeekZone(inst, worldX) {
   if (worldX == null || !inst.zones?.predatorAwake) return false
@@ -2696,19 +2402,6 @@ function applyZoneVisibility(inst) {
   inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
   syncPitCaveTrampolineDrawLayer(inst)
   inst.rockObjs.forEach(o => {
-    if (o._mudZoneWalk) {
-      setDecorObjVisible(o, z.predatorAwake)
-      return
-    }
-    if (o._rightOfMud) {
-      if (!z.predatorAwake) {
-        setDecorObjVisible(o, false)
-        return
-      }
-      const rightOp = forestRightDecorOpacity(inst, o)
-      setDecorObjVisible(o, rightOp > 0.04, rightOp)
-      return
-    }
     if (o._lakeShoreEnd || o._lakeMerged) {
       //
       // Cap rocks (and the cluster merged into them) are painted in
@@ -2747,24 +2440,14 @@ function applyZoneVisibility(inst) {
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
   inst.grassLayer.layer.hidden = !isForestGrassLayerVisible(inst)
-  inst.mudExtraGrass && (inst.mudExtraGrass.layer.hidden = !isForestMudExtraGrassVisible(inst))
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
-  z.water && ensureLakeShoreRocksVisible(inst)
   syncForestMidgeDrawColor(inst)
   syncForestPredatorVisibility(inst)
 }
 function isForestGrassLayerVisible(inst) {
   const z = inst.zones
   return z.groundDecorLeft || z.groundRightStripMax >= 0
-}
-//
-// The mud zone's own tall-grass overlay (createForestMudExtraGrass) stays tied
-// to predatorAwake alone, unlike the general grassLayer above — that layer
-// follows the opened shore decor, which has nothing to do with the mud zone.
-//
-function isForestMudExtraGrassVisible(inst) {
-  return Boolean(inst.zones?.predatorAwake)
 }
 //
 // Shows or hides a floor decor sprite — moves off-screen when hidden so nothing
@@ -3252,7 +2935,7 @@ function paintTopsoilOrganicTexture(ctx, layers, x0, y0, width, height) {
   const y1 = y0 + 5
   const y2 = y0 + height * GROUND_LAYER_FRACS[0] - 3
   if (y2 <= y1) return
-  const darkRgb = forestRgb('mudGround')
+  const darkRgb = forestRgb('groundLoam')
   const lightRgb = forestRgb('groundClay')
   for (let i = 0; i < TOPSOIL_ORGANIC_SPECK_COUNT; i++) {
     const seed = TOPSOIL_ORGANIC_SEED + i * 17.31
@@ -3424,10 +3107,9 @@ function applyForestMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay
 //
 const undergroundSpecByK = new WeakMap()
 //
-// Level layout for the buried decor: the playfield band, the main tree, the
-// mud zone with its guaranteed extras, and no hair-roots west of the tree
-// (the lake) or over the cave mouth / pit back wall, where they read as
-// stray sticks on the void edge.
+// Level layout for the buried decor: the playfield band, the main tree, and
+// no hair-roots west of the tree (the lake) or over the cave mouth / pit
+// back wall, where they read as stray sticks on the void edge.
 //
 function forestUndergroundLayout() {
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
@@ -3439,7 +3121,6 @@ function forestUndergroundLayout() {
     bottomY: PLAYFIELD_EARTH_BOTTOM_Y,
     treeX: TREE_X,
     treeClearHalf: TRUNK_EXCLUDE_HALF,
-    extraZone: computeForestMudZoneX(),
     skipRootlet: rx => rx >= cave.x1 - FOREST_UG_CAVE_ROOTLET_CLEAR_L && rx <= cave.x2 + FOREST_UG_CAVE_ROOTLET_CLEAR_R
   }
 }
@@ -3463,17 +3144,17 @@ const FOREST_CHAIN_BUOY_PLACE_ATTEMPTS = 80
 // No stalk-eye within this distance of an ear-tree trunk, on either side.
 //
 const FOREST_CHAIN_BUOY_EAR_TREE_FAR_CLEAR = 118
-const FOREST_CHAIN_BUOY_MUD_EAST_MIN = 4
+const FOREST_CHAIN_BUOY_EAST_MIN = 4
 //
-// All buoys stay right of the mud zone (the lake sits to the mud's own
-// left) — same gap the ear-trees use right of the mud.
+// All buoys stand on the east ground, this far past its start — the same gap
+// the ear-trees keep.
 //
-const FOREST_CHAIN_BUOY_MUD_RIGHT_GAP = 56
+const FOREST_CHAIN_BUOY_EAST_GAP = 56
 const FOREST_CHAIN_BUOY_PLATFORM_X_MARGIN = 36
 const FOREST_CHAIN_BUOY_PLATFORM_SIDE_MIN = 88
 const FOREST_CHAIN_BUOY_PLATFORM_SIDE_JITTER = 56
 const FOREST_EAR_TREE_RIGHT_COUNT = 2
-const FOREST_EAR_TREE_MUD_RIGHT_GAP = 56
+const FOREST_EAR_TREE_EAST_GAP = 56
 const FOREST_EAR_TREE_RIGHT_CAVE_MARGIN = 0
 const FOREST_EAR_TREE_MIN_GAP = 240
 const FOREST_EAR_TREE_SCAN_STEP = 4
@@ -3533,7 +3214,7 @@ function buildForestChainBuoySpot(x, opts = null) {
     pupilRadius: opts?.pupilRadius
   }
 }
-function tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX) {
+function tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, eastX1, cave, woodBands, earTreeSpots, trampX, branchTrampX) {
   if (Math.abs(x - TREE_X) < FOREST_CHAIN_BUOY_TREE_CLEAR_HALF) return false
   if (forestChainBuoyXUnderWoodPlatform(x, woodBands)) return false
   if (x > forestPrizeEyeX(trampX) - FOREST_CHAIN_BUOY_MIN_GAP) return false
@@ -3545,15 +3226,13 @@ function tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBand
   if (trampX != null && Math.abs(x - trampX) < TRAMP_ROCK_CLEAR_HALF) return false
   if (branchTrampX != null && Math.abs(x - branchTrampX) < TRAMP_ROCK_CLEAR_HALF) return false
   //
-  // Every buoy stays right of the mud (which itself sits right of the lake),
-  // never in or near the water — a hard rule now, not just one exclusion
-  // among several, since the old whole-world random search let a spot land
-  // inside the lake whenever the passed lakeX1/lakeX2 didn't quite track the
-  // water's actual current extent.
+  // Every buoy stands on the east ground, never in or near the water — a
+  // hard rule, not just one exclusion among several, since a whole-world
+  // random search let a spot land inside the lake whenever the passed
+  // lakeX1/lakeX2 didn't quite track the water's actual current extent.
   //
-  if (x < mud.x2 + FOREST_CHAIN_BUOY_MUD_RIGHT_GAP) return false
+  if (x < eastX1 + FOREST_CHAIN_BUOY_EAST_GAP) return false
   if (x >= lakeX1 && x <= lakeX2) return false
-  if (x >= mud.x1 - 24 && x <= mud.x2 + 24) return false
   if (x >= cave.x1 - FOREST_CAVE_DECOR_CLEAR && x <= cave.x2 + FOREST_CAVE_DECOR_CLEAR) return false
   if (spots.some(s => Math.abs(s.x - x) < FOREST_CHAIN_BUOY_MIN_GAP)) return false
   spots.push(buildForestChainBuoySpot(x))
@@ -3561,7 +3240,7 @@ function tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBand
 }
 function buildForestChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots, trampX, branchTrampX) {
   const spots = []
-  const mud = computeForestMudZoneX()
+  const eastX1 = forestEastGroundStartX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
   const target = FOREST_CHAIN_BUOY_COUNT_MIN +
     Math.floor(Math.random() * (FOREST_CHAIN_BUOY_COUNT_MAX - FOREST_CHAIN_BUOY_COUNT_MIN + 1))
@@ -3579,31 +3258,31 @@ function buildForestChainBuoySpots(lakeX1, lakeX2, woodBands, earTreeSpots, tram
   }
   for (const x of sideXs) {
     if (spots.length >= target) break
-    tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX)
+    tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, eastX1, cave, woodBands, earTreeSpots, trampX, branchTrampX)
   }
   //
-  // Random fill now only searches right of the mud through to the cave —
-  // matches the "all buoys right of the mud" rule above and, being a much
-  // smaller span than the whole world, reliably hits the 5-7 target instead
-  // of frequently running out of attempts against every exclusion combined.
+  // Random fill only searches the east ground through to the cave — matches
+  // the rule above and, being a much smaller span than the whole world,
+  // reliably hits the 5-7 target instead of frequently running out of
+  // attempts against every exclusion combined.
   //
-  const fillX1 = mud.x2 + FOREST_CHAIN_BUOY_MUD_RIGHT_GAP
+  const fillX1 = eastX1 + FOREST_CHAIN_BUOY_EAST_GAP
   const fillX2 = cave.x1 - FOREST_CAVE_DECOR_CLEAR
   let attempts = 0
   while (spots.length < target && attempts < FOREST_CHAIN_BUOY_PLACE_ATTEMPTS && fillX2 > fillX1) {
     attempts += 1
     const x = fillX1 + Math.random() * (fillX2 - fillX1)
-    tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, mud, cave, woodBands, earTreeSpots, trampX, branchTrampX)
+    tryAddForestChainBuoySpot(spots, x, lakeX1, lakeX2, eastX1, cave, woodBands, earTreeSpots, trampX, branchTrampX)
   }
   addForestPrizeEyeSpot(spots, trampX)
   addForestChainTrampEyes(spots, trampX)
-  ensureForestChainBuoysEastOfMud(
+  ensureForestChainBuoysOnEastGround(
     spots,
     fillX1,
     fillX2,
     lakeX1,
     lakeX2,
-    mud,
+    eastX1,
     cave,
     woodBands,
     earTreeSpots,
@@ -3679,16 +3358,16 @@ function forestChainBuoyXBlockedNearEarTree(x, treeX) {
   return Math.abs(x - treeX) < FOREST_CHAIN_BUOY_EAR_TREE_FAR_CLEAR
 }
 //
-// Guarantees at least four buoys east of the mud — random fill often misses
+// Guarantees at least four buoys on the east ground — random fill often misses
 // targets once platform/trampoline exclusions eat the span.
 //
-function ensureForestChainBuoysEastOfMud(
+function ensureForestChainBuoysOnEastGround(
   spots,
   fillX1,
   fillX2,
   lakeX1,
   lakeX2,
-  mud,
+  eastX1,
   cave,
   woodBands,
   earTreeSpots,
@@ -3698,10 +3377,10 @@ function ensureForestChainBuoysEastOfMud(
   const span = fillX2 - fillX1
   if (span <= FOREST_CHAIN_BUOY_MIN_GAP) return
   let eastCount = spots.filter(s => s.x >= fillX1).length
-  if (eastCount >= FOREST_CHAIN_BUOY_MUD_EAST_MIN) return
+  if (eastCount >= FOREST_CHAIN_BUOY_EAST_MIN) return
   const slots = [0.14, 0.36, 0.58, 0.82]
   for (const slot of slots) {
-    if (eastCount >= FOREST_CHAIN_BUOY_MUD_EAST_MIN) break
+    if (eastCount >= FOREST_CHAIN_BUOY_EAST_MIN) break
     let x = fillX1 + span * slot
     for (let attempt = 0; attempt < 6; attempt++) {
       if (tryAddForestChainBuoySpot(
@@ -3709,7 +3388,7 @@ function ensureForestChainBuoysEastOfMud(
         x,
         lakeX1,
         lakeX2,
-        mud,
+        eastX1,
         cave,
         woodBands,
         earTreeSpots,
@@ -3750,7 +3429,7 @@ function addForestPrizeEyeSpot(spots, trampX) {
   }))
 }
 //
-// Ear-tree decor spots — two trees clustered right of the big tree (never over mud).
+// Ear-tree decor spots — two trees clustered on the east ground.
 //
 function forestShoreTreeTrunkXFromTramp(trampX) {
   if (trampX == null) return null
@@ -3791,7 +3470,6 @@ function buildForestEarTreeSpots(layoutCfg) {
     TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
   const trampX = layoutCfg?.trampX ?? null
   const shoreTrunkX = forestShoreTreeTrunkXFromTramp(trampX)
-  const mud = computeForestMudZoneX()
   const cave = getCrackZone(WORLD_W, FLOOR_Y)
   //
   // The branch (left) mushroom trampoline sits at TREE_X + a modest offset —
@@ -3800,7 +3478,7 @@ function buildForestEarTreeSpots(layoutCfg) {
   // mushroom's cap/stem then visually covers the tree's thin trunk column
   // while its wider branches remain visible above, reading as "no trunk".
   //
-  const rightXMin = mud.x2 + FOREST_EAR_TREE_MUD_RIGHT_GAP
+  const rightXMin = forestEastGroundStartX() + FOREST_EAR_TREE_EAST_GAP
   const rightXMax = cave.x1 - FOREST_CAVE_DECOR_CLEAR - FOREST_EAR_TREE_RIGHT_CAVE_MARGIN
   const rightHeightTiers = ['short', 'tall']
   const minSpan = FOREST_EAR_TREE_MIN_GAP * (FOREST_EAR_TREE_RIGHT_COUNT - 1) + 48
@@ -3905,17 +3583,13 @@ function maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded) {
   }
 }
 //
-// Mud zone's X bounds — pure function of TREE_X and fixed offsets, so it can
-// be computed this early (before the scene layout that normally derives it).
+// X where the east ground starts (past the branch trampoline's grass
+// clearing) — a pure function of TREE_X and fixed offsets, so it can be
+// computed this early in the bootstrap.
 //
-function computeForestMudZoneX() {
+function forestEastGroundStartX() {
   const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
-  const mudPredatorAmbushTriggerX = branchTrampX + MUD_ZONE_BRANCH_TRIGGER_GAP
-  const mudPredatorPopX = mudPredatorAmbushTriggerX + MUD_ZONE_PREDATOR_POP_LEAD
-  return {
-    x1: branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP,
-    x2: mudPredatorPopX + MUD_ZONE_RIGHT_EXTENT
-  }
+  return branchTrampX + TRAMP_GRASS_CLEAR_HALF + EAST_GROUND_TRAMP_GAP
 }
 //
 // Physics boundary walls, ceiling, and floor.
@@ -4095,18 +3769,12 @@ function tagWoodPlatform(platform, sound, heroInst) {
   })
 }
 //
-// Log wood tones matching the main colour tree.
-//
-function forestLogColors() {
-  return LOG_TREE_COLOR_COLORS
-}
-//
 // Swaying grass — the shared Grass component, excluding water, trunk, the
 // trampoline mushroom band, the anchor-apple landing strip, and every
 // ear-tree's trunk footprint (so no blade ever covers its face). The tint
 // callback also hides blades of unexplored ground sides.
 //
-function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mudZoneX1, mudZoneX2, earTreeSpots, treeFruitAnchorCfg) {
+function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, earTreeSpots, treeFruitAnchorCfg) {
   const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
   const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
   const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
@@ -4115,16 +3783,13 @@ function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mud
   const branchR = branchTrampX + TRAMP_GRASS_CLEAR_HALF
   const earTreeExcluded = (x) => (earTreeSpots ?? []).some(spot =>
     x >= spot.x - EAR_TREE_TRUNK_GRASS_CLEAR_HALF && x <= spot.x + EAR_TREE_TRUNK_GRASS_CLEAR_HALF)
-  const mudApproachGrassOff = FOREST_DEBUG_HIDE_GRASS_BEFORE_MUD &&
-    mudZoneX1 != null && mudZoneX2 != null
   const excluded = (x) => (x >= waterX1 && x <= waterX2) ||
     (x >= trunkL && x <= trunkR) ||
     (x >= trampL && x <= trampR) ||
     (x >= branchL && x <= branchR) ||
     earTreeExcluded(x) ||
     (treeFruitAnchorCfg && isForestAnchorFruitGroundX(x, treeFruitAnchorCfg)) ||
-    isCrackGrassExcluded(x, WORLD_W) ||
-    (mudApproachGrassOff && x >= branchR && x <= mudZoneX2)
+    isCrackGrassExcluded(x, WORLD_W)
   const grass = Grass.create({
     k,
     floorY: FLOOR_Y,
@@ -4133,20 +3798,6 @@ function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mud
     tuftCount: GRASS_TUFT_COUNT,
     z: GRASS_Z,
     excluded,
-    //
-    // Bigger blades over the mud zone — the predator hides there
-    // and should stay hard to spot through the grass.
-    //
-    getScaleMult: (x) => {
-      if (FOREST_DEBUG_HIDE_GRASS_BEFORE_MUD) return 1
-      if (mudZoneX1 != null && mudZoneX2 != null && x >= mudZoneX1 && x <= mudZoneX2) {
-        return MUD_ZONE_GRASS_SCALE_MULT
-      }
-      if (mudZoneX1 != null && x >= branchR && x < mudZoneX1) {
-        return MUD_APPROACH_GRASS_SCALE_MULT
-      }
-      return 1
-    },
     postBakeCanvas: applyForestGameplaySharpBake,
     getTint: (blade) => forestGrassTint(zones, blade),
     roots: true,
@@ -4159,52 +3810,17 @@ function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, mud
   return grass
 }
 //
-// Extra tuft density just for the mud band — the main field's tuftCount is
-// spread across the whole ground strip, so only a handful naturally land in
-// the (much narrower) mud zone. This overlay adds more blades on top of it,
-// same tint/sway as the main field's own mud-zone blades.
-//
-function createForestMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
-  const grass = Grass.create({
-    k,
-    floorY: FLOOR_Y,
-    left: mudZoneX1,
-    right: mudZoneX2,
-    tuftCount: MUD_ZONE_EXTRA_GRASS_TUFT_COUNT,
-    z: GRASS_Z,
-    getScaleMult: () => MUD_ZONE_GRASS_SCALE_MULT,
-    postBakeCanvas: applyForestGameplaySharpBake,
-    getTint: (blade) => forestMudZoneGrassTint(zones._sceneRef, blade),
-    roots: true,
-    getRootColor: forestGrassRootColor,
-    getRootVisible: (worldX) => forestGrassRootVisible(zones, worldX),
-    hueVaryMax: FOREST_GRASS_HUE_VARY_MAX,
-    hueVarySkew: FOREST_GRASS_HUE_VARY_SKEW
-  })
-  grass.layer.hidden = true
-  return grass
-}
-//
-// Grass tint for the mud band only — darker green over the soft mud.
-//
-function forestMudZoneGrassTint(sc, blade) {
-  if (!sc?.zones.predatorAwake || !isForestDecorWorldXInMudZone(sc, blade.x)) return null
-  sc._grassMudColorSettled ??= lerpForestRgb(GRASS_GREEN, FOREST_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
-  return sc._grassMudColorSettled
-}
-//
-// Grass tint for the wider ground-peek band (mud zone through the cave
-// mouth) — warm straw, without the taller mud-specific blade scale.
+// Grass tint for the ground-peek band (through the cave mouth) — warm straw.
 //
 function forestGroundPeekGrassTint(sc, blade) {
   if (!isForestWorldXInGroundPeekZone(sc, blade.x)) return null
   return GRASS_WARM
 }
 //
-// Short static root ticks under ground grass tufts — same tone as the mud.
+// Short static root ticks under ground grass tufts — dark loam tone.
 //
 function forestGrassRootColor() {
-  return MUD_GROUND_RGB
+  return GRASS_ROOT_RGB
 }
 //
 // Grass roots stay visible for every explored ground strip — unlike blades,
@@ -4217,7 +3833,6 @@ function forestGrassRootVisible(zones, worldX) {
   const lakeX2 = zones._lakeX2
   if (lakeX1 != null && lakeX2 != null && worldX >= lakeX1 && worldX <= lakeX2) return false
   if (isForestOpenPitMouthWorldX(sc.pit, worldX)) return false
-  if (isForestDecorWorldXInMudZone(sc, worldX)) return zones.predatorAwake
   if (isForestWorldXInGroundPeekZone(sc, worldX)) return true
   const side = worldX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
   if (side === 'left') return zones.groundDecorLeft
@@ -4236,8 +3851,6 @@ function forestGrassTint(zones, blade) {
     return null
   }
   if (isForestOpenPitMouthWorldX(sc.pit, blade.x)) return null
-  const mudTint = forestMudZoneGrassTint(sc, blade)
-  if (mudTint) return mudTint
   const peekTint = forestGroundPeekGrassTint(sc, blade)
   if (peekTint) return peekTint
   if (sc.k) {
@@ -4298,13 +3911,10 @@ function createForestRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, br
   // Right side — a few small clusters spread across the whole lower-right
   // ground (same jittered-around-a-center technique as the left 6-rock
   // cluster above, just smaller groups), never in front of the trampoline
-  // mushroom (resampled out of its zone).
-  //
-  //
-  // Scatter rocks stay left of the cave mouth (no stone above the entrance)
+  // mushroom (resampled out of its zone). Scatter rocks stay left of the
+  // cave mouth (no stone above the entrance).
   //
   const rightEdge = getCrackZone(WORLD_W, FLOOR_Y).x1 - 40
-  const stripStartX = GROUND_REVEAL_TREE_PAST_X
   const nearTramp = (x) => Math.abs(x - trampX) <= TRAMP_ROCK_CLEAR_HALF ||
     Math.abs(x - branchTrampX) <= TRAMP_ROCK_CLEAR_HALF
   const badRock = (x) => nearTramp(x) || isCrackDecorExcluded(x, WORLD_W)
@@ -4326,19 +3936,18 @@ function createForestRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, br
     }
     if (badRock(cx)) continue
     const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas, zones)
-    rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
     objs.push(rock)
   }
   //
   // Extra scatter on the east ground strip (branch trampoline → crack mouth).
   //
   if (eastGroundRockMinX != null) {
-    const eastLeft = eastGroundRockMinX + MUD_EAST_ROCK_INSET
+    const eastLeft = eastGroundRockMinX + EAST_ROCK_INSET
     const crackZone = getCrackZone(WORLD_W, FLOOR_Y)
     const eastRockClear = (x) => nearTramp(x) || x >= crackZone.x1 - 52
     const eastSpan = Math.max(50, rightEdge - eastLeft)
-    for (let i = 0; i < MUD_EAST_ROCK_COUNT; i++) {
-      const t = (i + 0.5) / MUD_EAST_ROCK_COUNT
+    for (let i = 0; i < EAST_ROCK_COUNT; i++) {
+      const t = (i + 0.5) / EAST_ROCK_COUNT
       const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
       let cx = eastLeft + eastSpan * t + (Math.random() - 0.5) * eastSpan * 0.22
       let safety = 0
@@ -4348,8 +3957,6 @@ function createForestRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, br
       }
       if (eastRockClear(cx) || cx < eastLeft) continue
       const rock = placeRock(k, cx, radius, 'right', false, 7, 0.85 + Math.random() * 0.35, decorAtlas, zones)
-      rock._rightOfMud = true
-      rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
       objs.push(rock)
     }
   }
@@ -4402,12 +4009,9 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj._waterCluster = waterCluster
   obj._homeX = worldX - totalW / 2
   obj._homeY = posY
-  obj._surfaceHalfW = totalW * 0.5
-  obj._surfaceTop = posY
   obj._decorWorldX = worldX
   obj._detailRank = radius < 16 ? 'small' : 'large'
   if (z === SHORE_END_ROCK_Z || waterCluster) {
-    obj._rockRadius = radius
     obj._rockWidthScale = widthScale
     obj._rockVerts = verts
     obj._lakeBakeW = totalW
@@ -4416,104 +4020,6 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
   obj.hidden = true
   obj.pos.y = PLATFORM_HIDE_Y
   return obj
-}
-//
-// Viscous mud crest. Smooth sine peaks, pinched to the ground line at the
-// band edges. Up is a smaller Y. Shared by the blob and the walk surface.
-//
-function forestMudCrestY(x, mudX1, mudX2) {
-  const span = Math.max(1, mudX2 - mudX1)
-  const t = (x - mudX1) / span
-  if (t <= 0 || t >= 1) return FLOOR_Y
-  const edge = Math.sin(t * Math.PI)
-  const swell = Math.sin(x * 0.022) * 8 + Math.sin(x * 0.009 + 1.4) * 5
-  return FLOOR_Y - edge * Math.max(5, 10 + swell)
-}
-//
-// Rounded stratum line inside the mud, softer than the underground jag.
-//
-function forestMudSeamY(x, mudX1, mudX2) {
-  const crest = forestMudCrestY(x, mudX1, mudX2)
-  return crest + (FLOOR_Y - crest) * 0.42
-}
-//
-// Lower soil swatch, same brown the underground band uses for its deep layer.
-//
-function forestLowerSoilRgb() {
-  if (!forestLowerSoilRgb.cached) {
-    const layers = groundEarthLayersColor()
-    forestLowerSoilRgb.cached = layers[layers.length - 1].rgb
-  }
-  return forestLowerSoilRgb.cached
-}
-//
-// One filled puddle plus a soft inner seam. Reuses point buffers.
-//
-function drawForestViscousMud(inst) {
-  const x1 = inst.mudZoneX1
-  const x2 = inst.mudZoneX2
-  if (x1 == null || x2 == null || !inst.zones.predatorAwake) return
-  const k = inst.k
-  const view = forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN)
-  if (view && (x2 < view.x1 || x1 > view.x2)) return
-  const steps = MUD_BLOB_STEPS
-  const fill = inst._mudFillPts ??= []
-  const seam = inst._mudSeamPts ??= []
-  const fillNeed = (steps + 1) * 2
-  while (fill.length < fillNeed) fill.push(k.vec2(0, 0))
-  while (seam.length < steps + 1) seam.push(k.vec2(0, 0))
-  fill.length = fillNeed
-  seam.length = steps + 1
-  const span = x2 - x1
-  for (let i = 0; i <= steps; i++) {
-    const x = x1 + span * (i / steps)
-    const top = fill[i]
-    top.x = x
-    top.y = forestMudCrestY(x, x1, x2)
-    const line = seam[i]
-    line.x = x
-    line.y = forestMudSeamY(x, x1, x2)
-  }
-  for (let i = 0; i <= steps; i++) {
-    const bottom = fill[steps + 1 + i]
-    bottom.x = x2 - span * (i / steps)
-    bottom.y = FLOOR_Y + 1
-  }
-  const fillRgb = forestLowerSoilRgb()
-  const seamRgb = lerpForestRgb(fillRgb, forestRgb('groundChernozem'), 0.35)
-  k.drawPolygon({
-    pts: fill,
-    color: k.rgb(fillRgb.r, fillRgb.g, fillRgb.b)
-  })
-  k.drawLines({
-    pts: seam,
-    width: 1.6,
-    color: k.rgb(seamRgb.r, seamRgb.g, seamRgb.b),
-    opacity: 0.55
-  })
-}
-//
-// Draws the mud walk log and branches on top of the puddle.
-//
-function drawForestMudWalkClutter(inst) {
-  const clutter = inst.mudWalkClutter
-  if (!inst.zones.predatorAwake || !clutter) return
-  const k = inst.k
-  const logColors = forestLogColors()
-  const branchRgb = forestRgb(logColors.barkDark)
-  const branchColor = k.rgb(branchRgb.r, branchRgb.g, branchRgb.b)
-  if (clutter.log) {
-    const { log } = clutter
-    drawLogPlatform(k, log.w, log.h, log.cx, log.cy, 1, log.detail, logColors)
-  }
-  clutter.branches?.forEach(branch => {
-    k.drawLine({
-      p1: k.vec2(branch.x1, branch.y1),
-      p2: k.vec2(branch.x2, branch.y2),
-      width: 2.2,
-      color: branchColor
-    })
-  })
 }
 //
 // Flat ground line for the centipede. Up is a smaller Y.
@@ -4576,7 +4082,6 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
       safety++
     }
     if (isBadSpot(posX)) continue
-    const posY = FLOOR_Y - totalH + MUSHROOM_EXTRA_LOWER
     const mushDrawOpts = {
       cx: totalW / 2,
       baseY: totalH - 2,
@@ -4620,9 +4125,6 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     ])
     obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
     obj._decorWorldX = posX
-    obj._rightStrip = obj._side === 'right'
-      ? groundRightStripIndexForX(posX, GROUND_REVEAL_TREE_PAST_X, right)
-      : -1
     obj._homeX = baseX
     obj._homeY = baseY
     obj._detailRank = capW < 28 ? 'small' : 'large'
@@ -4957,7 +4459,7 @@ function lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy) {
 function lakeShoreRockBedWorldY(lake, worldX, floorLocal) {
   const localX = worldX - lake.x1
   if (localX < 0 || localX > lake.bakeSpan) return FLOOR_Y + Lake.LAKE_BED_FLOOR_OVERLAP_PX
-  return lake.originY + Lake.lakeBedMudSeamLocalY(lake, localX, floorLocal)
+  return lake.originY + Lake.lakeBedSeamLocalY(lake, localX, floorLocal)
 }
 //
 // Clip to everything above the bed line under the rock's columns.
@@ -5140,17 +4642,8 @@ function detectForestSurface(inst) {
     }
   }
   if (EyeFlower.isOnIsland(inst.eyeFlower, x, footY)) return 'ground'
-  if (footY >= FLOOR_Y - 30 && isHeroInMudZone(inst, x)) return 'mud'
   if (footY >= FLOOR_Y - 30) return 'ground'
   return 'air'
-}
-//
-// True when the hero's feet sit on the soft muddy band in the mud band.
-//
-function isHeroInMudZone(inst, footX) {
-  if (!inst.zones.predatorAwake) return false
-  if (inst.mudZoneX1 == null || inst.mudZoneX2 == null) return false
-  return footX >= inst.mudZoneX1 && footX <= inst.mudZoneX2
 }
 //
 // True when the given feet position sits on any wood surface (branch or log
@@ -5682,7 +5175,6 @@ function updatePlayfieldBorderColors(inst) {
 // Smooth lean toward each whistle note while the heroine sings idle
 //
 function updateMushroomWhistleLean(inst) {
-  const hero = inst.heroInst
   const dt = inst.k.dt()
   const lifeMul = 1
   //
@@ -5914,7 +5406,6 @@ function syncTrampolinePad(inst) {
 function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   const char = inst.heroInst?.character
   if (!pad || !state) return
-  state._prevX = state.x
   const pitPad = state.pitCaveTramp
   const branchPad = !pitPad && state === inst.branchTrampState
   const colliderActive = pitPad
@@ -6085,7 +5576,6 @@ function syncForestFpsHudVisibility(inst) {
 // Lake shore / water-cluster rocks must appear the moment the lake opens.
 //
 function forceWaterEdgeRocksVisible(inst) {
-  inst.zones.waterRocks = true
   inst.rockObjs.forEach(o => {
     o._waterCluster && !o._lakeMerged && setDecorObjVisible(o, true)
   })
@@ -6155,8 +5645,7 @@ function runForestTrampolineLatePass(inst) {
   let bounced = false
   if (isRightTrampolineColliderActive(inst.zones) &&
     wantsTrampolineCapLaunch(inst, char, onRightTrampCap, inst.trampState)) {
-    bounced = tryMushroomTrampBounce(inst, inst.trampState, TRAMP_BOOST_MULT, hero, char, heroX,
-      () => onTrampolineBounce(inst)) || bounced
+    bounced = tryMushroomTrampBounce(inst, inst.trampState, TRAMP_BOOST_MULT, hero, char, heroX, null) || bounced
   }
   if (isBranchTrampolineColliderActive(inst.zones) &&
     wantsTrampolineCapLaunch(inst, char, onBranchTrampCap, inst.branchTrampState)) {
@@ -6221,7 +5710,6 @@ function startDrowning(inst) {
   inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
   inst.forestDrownHeroClipLock = true
-  inst.drownTimer = 0
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
   inst.heroInst.controllable = false
@@ -6264,7 +5752,6 @@ function startDrowning(inst) {
   // Sink tween starts at the hero's current pose; feet settle on the lake floor.
   //
   const drownX = Math.round(char.pos.x)
-  const floorY = drownFloorStandY()
   const startY = char.pos.y
   inst.drownSinkX = drownX
   inst.drownSinkY = startY
@@ -6273,11 +5760,7 @@ function startDrowning(inst) {
   char.opacity = 1
   applyDrownSinkPose(inst)
   beginDrownSinkTween(inst)
-  const drownY = inst.drownSinkY
   registerDrownLateSink(inst)
-  if (!get(KEY_DROWN_HINT_SHOWN, false)) {
-    set(KEY_DROWN_HINT_SHOWN, true)
-  }
 }
 //
 // Completes drowning sequence and reloads the scene.
@@ -6335,8 +5818,7 @@ function bumpForestLifeHudOnDeath(inst) {
     flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0)
     createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator)
   }
-  syncForestPitCaveFlagForTeacherHints(inst)
-  onForestTeacherLifeHudRevealed(inst)
+  syncForestPitCaveFlag(inst)
 }
 //
 // True once the predator's body overlaps the hero's feet, or the hero
@@ -6355,7 +5837,6 @@ function checkForestTouchDeath(inst, heroX, heroFootY) {
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
   if (isOnForestLakeDryFooting(inst, heroX, heroFootY)) return
   if (Predator.isTouchingHero(inst.predator, heroX, heroFootY)) {
-    inst._predatorDeathHintContext = capturePredatorDeathHintContext(inst, heroX)
     Predator.notifyKill(inst.predator)
     triggerForestTouchDeath(inst, 'predator')
     return
@@ -6404,60 +5885,13 @@ function forestTouchDeathLeafPalette() {
   return FOREST_PAL.heroDeathLeaves.map(hex => forestRgb(hex))
 }
 //
-// Picks the predator death line for this kill (cycles through the set).
-//
-function predatorDeathHintText(deathOrdinal) {
-  const idx = Math.max(0, deathOrdinal - 1) % PREDATOR_DEATH_HINT_TEXTS.length
-  return PREDATOR_DEATH_HINT_TEXTS[idx]
-}
-//
-// Picks a predator death line from how the kill happened (mud, grass, charge).
-//
-function predatorDeathHintTextForKill(deathOrdinal, ctx) {
-  const lines = []
-  ctx?.fastAttack && lines.push(PREDATOR_DEATH_HINT_FAST)
-  ctx?.inMudBand && lines.push(PREDATOR_DEATH_HINT_MUD)
-  ctx?.inConcealingGrass && lines.push(PREDATOR_DEATH_HINT_BUSHES)
-  if (lines.length) {
-    return lines[Math.max(0, deathOrdinal - 1) % lines.length]
-  }
-  return predatorDeathHintText(deathOrdinal)
-}
-//
-// Snapshot at the touch frame — before notifyKill resets predator state.
-//
-function capturePredatorDeathHintContext(inst, heroFootX) {
-  const pred = inst.predator
-  const fastAttack = pred?.state === 'lunge' || pred?.state === 'hunt'
-  const inMudBand = isForestMudBandFootX(inst, heroFootX)
-  const inConcealingGrass = isForestPredatorConcealingGrassFootX(inst, heroFootX)
-  return { fastAttack, inMudBand, inConcealingGrass }
-}
-//
-// Soft mud band under the hero's feet (hint-only — ignores predatorAwake gate).
-//
-function isForestMudBandFootX(inst, footX) {
-  if (inst.mudZoneX1 == null || inst.mudZoneX2 == null) return false
-  return footX >= inst.mudZoneX1 && footX <= inst.mudZoneX2
-}
-//
-// Tall grass east of the branch trampoline through the mud band.
-//
-function isForestPredatorConcealingGrassFootX(inst, footX) {
-  if (isForestMudBandFootX(inst, footX)) return true
-  if (inst.mudZoneX1 == null || inst.branchTrampX == null) return false
-  const branchGrassRight = inst.branchTrampX + TRAMP_GRASS_CLEAR_HALF
-  return footX >= branchGrassRight && footX < inst.mudZoneX1
-}
-//
-// Life-HUD bump, death hint, then in-level respawn beside the kill.
+// Life-HUD bump, then in-level respawn beside the kill.
 //
 function finishForestTouchDeath(inst, cause, deathX, deathY) {
   bumpForestLifeHudOnDeath(inst)
   inst.touchDeathCount = (inst.touchDeathCount || 0) + 1
   if (cause === 'predator') {
     inst.predatorDeathCount = (inst.predatorDeathCount || 0) + 1
-    inst._predatorDeathHintContext = null
   }
   inst.touchDeathRespawnWait?.cancel?.()
   inst.touchDeathRespawnWait = inst.k.wait(FOREST_TOUCH_DEATH_RESPAWN_DELAY, () => {
@@ -6473,7 +5907,7 @@ function computeForestTouchDeathRespawnPose(inst, deathX, deathY, cause) {
   if (cause === 'predator') {
     const pred = inst.predator
     if (!pred) return { x: deathX, y: deathY }
-    let spawnX = resolveForestPredatorRespawnX(inst, deathX, deathY, pred)
+    let spawnX = resolveForestPredatorRespawnX(deathX, deathY, pred)
     const spawnY = deathY
     const footY = spawnY + SURFACE_DETECT_Y
     const spawnOnBranch = isHeroOverStartBranchX(inst, spawnX) &&
@@ -6487,32 +5921,21 @@ function computeForestTouchDeathRespawnPose(inst, deathX, deathY, cause) {
       branchTrampVisible: isBranchTrampolineVisible(inst.zones),
       trampVisible: isRightTrampolineVisible(inst.zones)
     })
-    spawnX = nudgeForestHeroSpawnAwayFromMudHazards({
-      inst,
-      spawnX,
-      spawnY,
-      spawnOnBranch,
-      mudPredatorAmbushTriggerX: nudge.mudPredatorAmbushTriggerX,
-      mudPredatorPopX: nudge.mudPredatorPopX,
-      mudZoneX1: nudge.mudZoneX1,
-      mudZoneX2: nudge.mudZoneX2,
-      predator: pred
-    })
-    spawnX = resolveForestPredatorRespawnX(inst, spawnX, spawnY, pred)
+    spawnX = resolveForestPredatorRespawnX(spawnX, spawnY, pred)
     return { x: spawnX, y: spawnY }
   }
   return { x: deathX, y: deathY }
 }
 //
 // Picks ground X behind the crawler (opposite its facing) at the current head
-// position, then slides along the mud band until the hitbox clears the body.
+// position, then slides along its patrol strip until the hitbox clears the
+// body.
 //
-function resolveForestPredatorRespawnX(inst, deathX, deathY, pred) {
+function resolveForestPredatorRespawnX(deathX, deathY, pred) {
   const predX = pred.x
   const footY = deathY + SURFACE_DETECT_Y
-  const pad = MUD_ZONE_CREATURE_MARGIN + 4
-  const minX = pred.minX ?? (inst.mudZoneX1 != null ? inst.mudZoneX1 + pad : deathX - 200)
-  const maxX = pred.maxX ?? (inst.mudZoneX2 != null ? inst.mudZoneX2 - pad : deathX + 200)
+  const minX = pred.minX ?? deathX - HERO_PREDATOR_RESPAWN_FALLBACK_SPAN
+  const maxX = pred.maxX ?? deathX + HERO_PREDATOR_RESPAWN_FALLBACK_SPAN
   const push = HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD
   const awayFromDeath = deathX <= predX ? -1 : 1
   let away = -(pred.dir || awayFromDeath)
@@ -6547,7 +5970,7 @@ function clampForestPredatorRespawnX(x, minX, maxX) {
   return Math.max(minX, Math.min(maxX, x))
 }
 //
-// Nudges spawn along the mud band until the hero feet box clears the body.
+// Nudges spawn along the patrol strip until the hero feet box clears the body.
 //
 function slideForestPredatorRespawnClearOfBody(pred, spawnX, footY, sign, minX, maxX) {
   let x = spawnX
@@ -6619,7 +6042,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
 }
 //
 // First-visit ground X: right of the branch tramp, outside the island
-// flower whisper, then the same trampoline / mud nudges as the hero spawn.
+// flower whisper, then the same trampoline nudge as the hero spawn.
 // Light shafts stay anchored here for the whole level.
 //
 function computeForestFirstStartGroundSpawnX(cfg) {
@@ -6628,10 +6051,7 @@ function computeForestFirstStartGroundSpawnX(cfg) {
     trampX,
     branchTrampVisible,
     trampVisible,
-    heroGroundCenterY,
-    heroSpawnY,
-    mudPredatorAmbushTriggerX,
-    mudPredatorPopX
+    heroGroundCenterY
   } = cfg
   const branchTrampSpawnClearX =
     branchTrampX + TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
@@ -6640,23 +6060,14 @@ function computeForestFirstStartGroundSpawnX(cfg) {
     WATER_SURFACE_Y,
     heroGroundCenterY
   )
-  let x = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
-  x = nudgeForestHeroSpawnAwayFromTrampolines({
+  const x = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
+  return nudgeForestHeroSpawnAwayFromTrampolines({
     spawnX: x,
     spawnOnBranch: false,
     branchTrampX,
     trampX,
     branchTrampVisible,
     trampVisible
-  })
-  return nudgeForestHeroSpawnAwayFromMudHazards({
-    spawnX: x,
-    spawnY: heroSpawnY,
-    spawnOnBranch: false,
-    mudPredatorAmbushTriggerX,
-    mudPredatorPopX,
-    predator: null,
-    inst: null
   })
 }
 //
@@ -6679,76 +6090,23 @@ function nudgeForestHeroSpawnAwayFromTrampolines(cfg) {
   return x
 }
 //
-// Pulls a saved spawn X away from the mud hazard band so a reload cannot drop
-// the hero straight onto the crawler.
-//
-function nudgeForestHeroSpawnAwayFromMudHazards(cfg) {
-  const {
-    inst,
-    spawnX,
-    spawnY,
-    spawnOnBranch,
-    mudPredatorAmbushTriggerX,
-    mudPredatorPopX,
-    predator
-  } = cfg
-  let x = spawnX
-  const heroFootY = spawnY + SURFACE_DETECT_Y
-  if (!spawnOnBranch && predator && inst) {
-    Predator.overlapsHeroHitbox(predator, x, heroFootY) &&
-      (x = resolveForestPredatorRespawnX(inst, x, spawnY, predator))
-  }
-  if (!spawnOnBranch && mudPredatorAmbushTriggerX != null && mudPredatorPopX != null) {
-    const dangerEndX = mudPredatorPopX + MUD_ZONE_PREDATOR_DANGER_MARGIN
-    x >= mudPredatorAmbushTriggerX && x <= dangerEndX &&
-      (x = mudPredatorAmbushTriggerX - HERO_MUD_HAZARD_SPAWN_CLEARANCE)
-  }
-  return x
-}
-function ensureLakeShoreRocksVisible(inst) {
-  inst.zones.waterRocks = true
-}
-//
-// Ensures tree-side lake cap rocks are visible as soon as the water zone opens.
-//
-function showLakeShoreRocks(inst) {
-  ensureLakeShoreRocksVisible(inst)
-}
-//
-// Shore rocks appear together with the first-time water discovery hint.
-//
-function showWaterZoneDiscoveryHint(inst) {
-  inst.zones.waterRocks = true
-  showLakeShoreRocks(inst)
-  forceWaterEdgeRocksVisible(inst)
-  applyZoneVisibility(inst)
-}
-//
 // Reveals the lake after the hero drowns in it (or when reloading a save that
-// already discovered water). The first-time hint plays on the live drowning.
+// already discovered water), with its shore rocks.
 //
-function revealWaterZone(inst, showHint = true) {
-  const firstOpen = !inst.zones.waterDiscovered
+function revealWaterZone(inst) {
   if (inst.zones.water) {
-    ensureLakeShoreRocksVisible(inst)
     forceWaterEdgeRocksVisible(inst)
     applyZoneVisibility(inst)
     return
   }
   inst.zones.water = true
-  inst.zones.waterRocks = true
   inst.zones.waterDiscovered = true
   set(KEY_REVEALED_WATER, true)
   revealGroundDecorLeft(inst, true)
   revealLeftShoreRock(inst)
   syncForestAtmosphereZones(inst)
-  if (showHint && firstOpen) {
-    showWaterZoneDiscoveryHint(inst)
-  } else {
-    showLakeShoreRocks(inst)
-    forceWaterEdgeRocksVisible(inst)
-    applyZoneVisibility(inst)
-  }
+  forceWaterEdgeRocksVisible(inst)
+  applyZoneVisibility(inst)
 }
 //
 // Reveals ground decor on the left side (water / branch area).
@@ -6756,7 +6114,6 @@ function revealWaterZone(inst, showHint = true) {
 function revealGroundDecorLeft(inst, silent = false) {
   if (inst.zones.groundDecorLeft) return
   inst.zones.groundDecorLeft = true
-  inst.zones.groundDecor = true
   set(KEY_REVEALED_GROUND_DECOR_LEFT, true)
   !silent && playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
@@ -6955,30 +6312,6 @@ function destroyStrayForestHeroBody(k, keep = null) {
   forestLevel0LiveHeroChar = keep
 }
 //
-// Mud run/jump tuning — only when grounded on the band (see onUpdate hero pass).
-//
-function applyForestHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded) {
-  if (!hero || !char) return
-  if (inst.mudZoneX1 == null) {
-    hero.moveSpeedMult = 1
-    hero.jumpSquashTimeMult = 1
-    hero.jumpForceMult = 1
-    hero.mudJumpActive = false
-    inst.mudJumpTakeoff = false
-    return
-  }
-  const groundedOnMud = grounded && isHeroInMudZone(inst, heroX)
-  hero.moveSpeedMult = groundedOnMud ? MUD_MOVE_SPEED_MULT : 1
-  hero.jumpSquashTimeMult = groundedOnMud ? MUD_JUMP_SQUASH_TIME_MULT : 1
-  hero.jumpForceMult = groundedOnMud ? MUD_JUMP_FORCE_MULT : 1
-  groundedOnMud && hero.isSquashing && (inst.mudJumpTakeoff = true)
-  !groundedOnMud && !hero.mudJumpActive && (inst.mudJumpTakeoff = false)
-  hero.jumpPhase === 'jumping' && inst.mudJumpTakeoff &&
-    (hero.mudJumpActive = true, inst.mudJumpTakeoff = false)
-  justLanded && (hero.mudJumpActive = false)
-  char.gravityScale = hero.mudJumpActive ? MUD_GRAVITY_MULT : 1
-}
-//
 // Trampoline pad sync + cap snap — must run every frame so the invisible cap
 // moves off once the hero walks away.
 //
@@ -7030,18 +6363,7 @@ function onUpdate(inst) {
     return
   }
   inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
-  if (inst.pendingForestIntro) {
-    inst.introHintDelayRemaining += k.dt()
-    if (inst.introHintDelayRemaining >= CAMERA_INTRO_HINT_DELAY) {
-      inst.pendingForestIntro = false
-      inst.introHintDelayRemaining = 0
-      startForestIntro(inst)
-    }
-  }
-  if (inst.introLock && inst.introHintPhase === INTRO_HINT_PHASE_TWO &&
-    !HeroHint.isActive(inst.heroHint)) {
-    inst.introHintOnComplete?.()
-  }
+  updateForestIntroHint(inst, k.dt())
   if (inst._mushroomLeanActive) {
     updateMushroomWhistleLean(inst)
     inst._mushroomLeanActive = inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
@@ -7066,15 +6388,10 @@ function onUpdate(inst) {
   // Forest owns all foot FX — block hero.js dust for the whole frame.
   //
   hero.suppressDust = true
-  if (inst.introLock || inst.pendingForestIntro) {
-    hero.controllable = false
-    hero.controlsDisabled = true
-    hero.jumpDisabled = true
-  } else {
-    hero.controllable = true
-    hero.controlsDisabled = false
-    hero.jumpDisabled = false
-  }
+  const introLocked = inst.introLock || inst.pendingForestIntro
+  hero.controllable = !introLocked
+  hero.controlsDisabled = introLocked
+  hero.jumpDisabled = introLocked
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
@@ -7082,7 +6399,6 @@ function onUpdate(inst) {
   inst.earTrees && EarTree.onUpdate(inst.earTrees, k.dt())
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
-  const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
   trackForestSafeHeroPose(inst, char, heroX, footY, grounded)
@@ -7118,15 +6434,9 @@ function onUpdate(inst) {
   //
   const surface = detectForestSurface(inst)
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
-  if (surface === 'wood' || surface === 'ground' || surface === 'mud') {
+  if (surface === 'wood' || surface === 'ground') {
     inst.sound._forestSurface = surface
-    inst._forestLastFootSurface = surface
   }
-  //
-  // Mud movement/jump only when grounded on the band; airborne over mud keeps
-  // the takeoff arc from a mushroom bounce or a mud launch already in flight.
-  //
-  applyForestHeroMudPhysics(inst, hero, char, heroX, grounded, justLanded)
   maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded)
   //
   // Landing SFX backup (collide path can miss on wood flicker / air-lock).
@@ -7207,10 +6517,7 @@ function onUpdate(inst) {
   }
   syncForestWorldBirdsVolume(inst)
   syncForestPredatorVisibility(inst)
-  updateTrampCheekyHint(inst)
-  updateBranchTrampCheekyHint(inst)
-  syncForestPitCaveFlagForTeacherHints(inst)
-  updateForestTeacherContextHints(inst, char, hero, heroMoving, k.dt())
+  syncForestPitCaveFlag(inst)
   tickForestStartBranchFatigue(inst, char, grounded, justLanded)
   tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
@@ -7232,7 +6539,6 @@ function onUpdate(inst) {
   //
   // Camera tracks the hero after all movement (drowning may have started above).
   //
-  updatePitCaveSkeletonAutoHint(inst, char, k.dt())
   syncForestBranchJumpReady(inst, char, grounded)
   syncHeroTrampDrawOrder(inst)
   syncForestPitCaveHeroForegroundDraw(inst, char, footY)
@@ -7424,71 +6730,15 @@ function canSpawnForestFootBurst(inst, char) {
   if (!char?.pos || inst?.drowning) return false
   const footX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
-  if (isHeroInMudZone(inst, footX)) return false
   if (detectForestSurface(inst) === 'wood') return false
   if (isForestWoodFootPosition(inst, footX, footY, char)) return false
   return isOnForestMainGroundFoot(footY)
 }
 //
-// Clears the active teacher-hint bubble on the eye HUD if its text matches
-// (no-op otherwise) — shared by every "retire this specific hint early"
-// caller below, since a hint reaching its max show count only blocks FUTURE
-// fires and never touches a bubble already on screen.
-//
-function dismissForestTeacherHintByText(inst, text) {
-  if (inst.lastForestTeacherHintText !== text) return
-  inst.lastForestTeacherHintText = null
-  if (!HeroHint.isActive(inst.heroHint) || !inst._forestTeacherHintActive) return
-  HeroHint.clear(inst.heroHint)
-  inst._forestTeacherHintActive = false
-}
-//
-// Retires the "step on a mushroom?" cave nudge once the hero actually
-// launches off the pit mushroom (dismissPitCaveMushroomHint already blocks
-// it from firing again, but does not hide a bubble already on screen).
-//
-function dismissForestCaveMushroomTeacherHint(inst) {
-  dismissForestTeacherHintByText(inst, PIT_CAVE_HINT_TEXT)
-}
-//
-// Counts trampoline bounces; every Nth bounce shows a cheeky bubble on the cap
-//
-function onTrampolineBounce(inst) {
-  const tw = inst.rightTrampCheeky
-  tw.bounceCount = (tw.bounceCount || 0) + 1
-  if (tw.bounceCount % TRAMP_CHEEKY_EVERY !== 0) return
-}
-//
-// Cheeky bubble on the branch trampoline every Nth bounce (same lines as the walk tramp).
+// A branch-trampoline bounce lands on wood next — arm the wood land sound.
 //
 function onBranchTrampolineBounce(inst) {
   inst.expectBranchWoodLandSound = true
-  const tw = inst.branchTrampWalk
-  if (!tw || !inst.branchTrampState) return
-  tw.bounceCount = (tw.bounceCount || 0) + 1
-  if (tw.bounceCount % BRANCH_TRAMP_CHEEKY_EVERY !== 0) return
-}
-//
-// Ages the cheeky trampoline bubble and tears it down when the timer ends
-//
-function updateTrampCheekyHint(inst) {
-  const tw = inst.rightTrampCheeky
-  if (!tw || tw.cheekyTimer <= 0) return
-  tw.cheekyTimer -= inst.k.dt()
-  if (tw.cheekyTimer > 0) return
-  tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = null
-}
-//
-// Ages the branch-tramp cheeky bubble
-//
-function updateBranchTrampCheekyHint(inst) {
-  const tw = inst.branchTrampWalk
-  if (!tw || tw.cheekyTimer <= 0) return
-  tw.cheekyTimer -= inst.k.dt()
-  if (tw.cheekyTimer > 0) return
-  tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = null
 }
 //
 // True when the main tree sprite was baked during the pre-level transition.
@@ -7618,14 +6868,6 @@ function isRightTrampolineVisible(z) {
 //
 function isBranchTrampolineVisible(z) {
   return Boolean(z?.branchTrampRevealed)
-}
-//
-// True when the branch trampoline sprite is actually on screen (revealed and
-// not hidden by the zone visibility pass).
-//
-function isBranchTrampDrawnVisible(inst) {
-  return isBranchTrampolineVisible(inst.zones) &&
-    !inst.branchTrampBundle?.drawLayer?.hidden
 }
 //
 // Camera Y is pinned to the design centre, so a window shorter than the
@@ -8265,7 +7507,7 @@ function footParticleColor(surface) {
   return surface === 'wood' ? forestRgb(FOREST_PAL.treeGray.trunk) : GROUND_DARK
 }
 //
-// Shows the mud predator once the branch mushroom has woken it.
+// Shows the crawler once the branch mushroom has woken it.
 //
 function syncForestPredatorVisibility(inst) {
   const pred = inst.predator
@@ -8450,8 +7692,6 @@ function launchHeroFromPitCaveMushroom(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
-  dismissPitCaveMushroomHint(inst.pit)
-  dismissForestCaveMushroomTeacherHint(inst)
   const exitX = forestPitCaveExitX(inst)
   moveForestHeroTo(char, exitX, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
   char.vel.x = 0
@@ -8472,151 +7712,6 @@ function launchHeroFromPitCaveMushroom(inst) {
   inst.sound && !inst.sound._forestSfxMuted && Sound.playJumpSound(inst.sound)
   applyZoneVisibility(inst)
   syncForestAtmosphereZones(inst)
-}
-function dismissPitCaveMushroomHint(pit) {
-  if (!pit) return
-  pit.pitCaveMushroomDone = true
-  pit.pitCaveMushroomMoveAccum = 0
-  pit.pitCaveMushroomHintShows = 2
-  pit.pitCaveMushroomHintPausedUntilExit = true
-}
-//
-// Shared 10 s teacher gate: exploration nudges outside the cave, mushroom nudge inside.
-//
-function updateForestTeacherContextHints(inst, char, hero, heroMoving, dt) {
-  //
-  // Level hints disabled — only the first-visit controls intro uses HeroHint.
-  //
-}
-//
-// True while the pit-mushroom teacher line may auto-fire in the cave.
-//
-function forestTeacherCaveMushroomAutoHintEligible(inst, char, footY, inCave) {
-  const pit = inst.pit
-  if (!pit || pit.pitCaveMushroomDone || !char?.pos) return false
-  if (!inCave) return false
-  if ((pit.pitCaveMushroomHintShows || 0) >= 2) {
-    pit.pitCaveMushroomHintPausedUntilExit = true
-    return false
-  }
-  return !pit.pitCaveMushroomHintPausedUntilExit
-}
-//
-// Shows the in-cave mushroom teacher line (max two auto shows per visit streak).
-//
-function fireForestTeacherCaveMushroomHint(inst) {
-  const pit = inst.pit
-  if (!pit || pit.pitCaveMushroomDone || pit.pitCaveMushroomHintPausedUntilExit) return
-  if (!showForestTeacherHintNow(
-    inst,
-    PIT_CAVE_HINT_TEXT,
-    FOREST_TEACHER_HINT_DURATION,
-    { pitCaveMushroom: true }
-  )) return
-  pit.pitCaveMushroomHintShows = (pit.pitCaveMushroomHintShows || 0) + 1
-  inst.lastForestTeacherHintText = PIT_CAVE_HINT_TEXT
-  pit.pitCaveMushroomHintShows >= 2 && (pit.pitCaveMushroomHintPausedUntilExit = true)
-}
-//
-// Running and jumping both count toward teacher-hint movement gates.
-//
-function isForestHeroActiveForTeacherHint(inst, hero, char, heroMoving) {
-  if (heroMoving) return true
-  if (!hero || !char) return false
-  if (hero._effectivelyMoving || hero.isRunning) return true
-  const k = inst.k
-  if (k) {
-    const left = isAnyKeyDown(k, CFG.controls.moveLeft)
-    const right = isAnyKeyDown(k, CFG.controls.moveRight)
-    if (left || right) return true
-    if (isAnyKeyDown(k, CFG.controls.jump)) return true
-  }
-  if (hero.jumpPhase && hero.jumpPhase !== 'none') return true
-  if (hero.isSquashing || hero.wasJumping) return true
-  const vx = char.vel?.x ?? 0
-  const vy = char.vel?.y ?? 0
-  return Math.abs(vx) > 24 || Math.abs(vy) > 24
-}
-//
-// Once the hero stands on the pit floor, nudge the skeleton line after a
-// short beat (no long idle wait).
-//
-function updatePitCaveSkeletonAutoHint(inst, char, dt) {
-  //
-  // Skeleton proximity / hover hints removed — eyes beat is read from the pickups.
-  //
-}
-//
-// Playfield chrome inset so Forest tooltips pin to the game window, not the void.
-//
-function forestTooltipClampInset() {
-  return {
-    left: LEFT_MARGIN,
-    right: RIGHT_MARGIN,
-    //
-    // HUD icons sit in the top void strip above PLAYFIELD_TOP_Y + TOP_MARGIN.
-    //
-    top: PLAYFIELD_TOP_Y,
-    bottom: SCREEN_H - PLAYFIELD_BOTTOM_Y
-  }
-}
-//
-// Forest tooltips clamp to the playfield so off-screen sources stay readable.
-//
-function createForestTooltip(cfg) {
-  return Tooltip.create({
-    ...cfg,
-    clampInset: cfg.clampInset ?? forestTooltipClampInset(),
-    customDraw: drawForestBakedTooltip
-  })
-}
-//
-// Draws a tooltip from a grain-baked canvas sprite (re-bakes when layout changes).
-//
-function drawForestBakedTooltip(inst, layout) {
-  const k = inst.k
-  const key = `${layout.labelText}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
-  if (inst._forestTipKey !== key) {
-    inst._forestTipKey = key
-    inst._forestTipSprite = `forest-tip-${forestUiHash(key)}`
-    const canvas = bakeForestTooltipCanvas(layout, inst.font, 26, 6)
-    k.loadSprite(inst._forestTipSprite, canvas)
-    const bounds = forestTooltipBakeBounds(layout)
-    inst._forestTipDrawX = bounds.minX
-    inst._forestTipDrawY = bounds.minY
-    inst._forestTipDrawW = bounds.w
-    inst._forestTipDrawH = bounds.h
-    canvas.width = 0
-    canvas.height = 0
-  }
-  k.drawSprite({
-    sprite: inst._forestTipSprite,
-    pos: k.vec2(inst._forestTipDrawX, inst._forestTipDrawY),
-    width: inst._forestTipDrawW,
-    height: inst._forestTipDrawH,
-    opacity: inst.opacity,
-    fixed: true
-  })
-  return true
-}
-//
-// Tight bounds for a baked tooltip canvas (bubble + pointer).
-//
-function forestTooltipBakeBounds(layout) {
-  const BUBBLE_BORDER_WIDTH = 3
-  const POINTER_WIDTH = 12
-  const halfW = POINTER_WIDTH / 2
-  const bx = layout.bubbleX - BUBBLE_BORDER_WIDTH
-  const by = layout.bubbleY - BUBBLE_BORDER_WIDTH
-  const px = layout.clampedPointerX
-  const tipY = layout.pointerTipY
-  const baseY = layout.pointerBaseEdge
-  let minX = Math.min(bx, px - halfW - BUBBLE_BORDER_WIDTH)
-  let maxX = Math.max(bx + layout.totalW, px + halfW + BUBBLE_BORDER_WIDTH)
-  let minY = Math.min(by, tipY, baseY)
-  let maxY = Math.max(by + layout.totalH, tipY, baseY)
-  const pad = 4
-  return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 //
 // Forest runs on its own native-resolution engine, so the real window size is

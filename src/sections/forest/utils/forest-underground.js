@@ -107,9 +107,6 @@ const UG_GRIT_ALPHA = 0.55
 const UG_BONE_KNOB_R = 2.3
 const UG_BONE_KNOB_SPLIT = 1.7
 const UG_BONE_SHAFT_PX = 2.4
-const UG_MUD_ZONE_EXTRA_ROCK_COUNT = 5
-const UG_MUD_ZONE_EXTRA_ROOTLET_COUNT = 6
-const UG_MUD_ZONE_EXTRA_SHELL_COUNT = 2
 
 /**
  * Builds a random buried-decor layout for an earth band.
@@ -121,7 +118,6 @@ const UG_MUD_ZONE_EXTRA_SHELL_COUNT = 2
  * @param {number} layout.bottomY - Deepest Y for decor
  * @param {number} layout.treeX - Big tree trunk X
  * @param {number} layout.treeClearHalf - Half-width of the trunk zone
- * @param {{x1: number, x2: number}|null} [layout.extraZone] - Zone with guaranteed extra decor
  * @param {function(number): boolean} [layout.skipRootlet] - True drops a hair-root at that X
  * @returns {Object} Decor spec (carries its layout)
  */
@@ -319,61 +315,10 @@ function buildSpec(layout) {
     }
     worms.push(pts)
   }
-  //
-  // Guaranteed extra rocks/roots/shells inside the mud zone — see
-  // UG_MUD_ZONE_EXTRA_* above.
-  //
-  const mudZone = layout.extraZone
-  const randMudX = () => mudZone.x1 + Math.random() * (mudZone.x2 - mudZone.x1)
-  mudZone && addExtraZoneDecor(layout, { rocks, rootlets, shells, pebbles }, randMudX, randY)
   return {
     rocks, cracks, pebbles, rootlets, fossils, boulderPiles, grit, streaks, pockets, warmPebbles,
     shells, bones, coins, bottles, worms, skeleton: null, layout
   }
-}
-//
-// Guaranteed extra rocks, rootlets, shells and one pebble cluster inside the
-// extra zone (the level's mud band).
-//
-function addExtraZoneDecor(layout, spec, randMudX, randY) {
-  const { rocks, rootlets, shells, pebbles } = spec
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROCK_COUNT; i++) {
-    const radius = 10 + Math.random() * 16
-    rocks.push({ x: randMudX(), y: randY(), radius, verts: buildRockVertices(radius) })
-  }
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROOTLET_COUNT; i++) {
-    const rx = randMudX()
-    const pts = [{ x: rx, y: layout.surfaceY + 4 }]
-    let px = rx
-    let py = layout.surfaceY + 4
-    const segs = 2 + Math.floor(Math.random() * 2)
-    for (let s = 0; s < segs; s++) {
-      px += (Math.random() - 0.5) * 14
-      py += 10 + Math.random() * 16
-      pts.push({ x: px, y: py })
-    }
-    rootlets.push(pts)
-  }
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_SHELL_COUNT; i++) {
-    shells.push({
-      x: randMudX(),
-      y: randY(),
-      w: 10 + Math.random() * 8,
-      h: 7 + Math.random() * 5,
-      flip: Math.random() < 0.5
-    })
-  }
-  const mudPebbleStones = []
-  const mudPebbleCx = randMudX()
-  const mudPebbleCy = randY()
-  for (let s = 0; s < 4; s++) {
-    mudPebbleStones.push({
-      x: mudPebbleCx + (Math.random() - 0.5) * 26,
-      y: mudPebbleCy + (Math.random() - 0.5) * 14,
-      r: 2 + Math.random() * 3
-    })
-  }
-  pebbles.push(mudPebbleStones)
 }
 //
 // One loose group of slate stones in the deep clay — spaced apart (only a

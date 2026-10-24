@@ -333,12 +333,6 @@ function facePredatorTowardFruit(pred, fruit) {
   pred.dir = fruit.x >= pred.x ? 1 : -1
 }
 
-function fruitPredatorDist(pred, fruit) {
-  const snout = predatorSnoutPoint(pred)
-  if (!snout) return Infinity
-  const fruitR = getForestFruitDisplayRadius(fruit)
-  return Math.hypot(fruit.x - snout.x, fruit.y - snout.y) - fruitR
-}
 
 function predatorSnoutPoint(pred) {
   const head = pred.segments?.[0]
@@ -376,12 +370,6 @@ function pushFruitBiteMark(fruit) {
   fruit.biteMarks = marks
 }
 
-function easeFeastSpeed(pred, dt, rate) {
-  const prev = pred.vx
-  const target = pred.dir * Math.max(0, pred.speedTarget)
-  pred.vx += (target - pred.vx) * Math.min(1, dt * rate)
-  pred.ax = (pred.vx - prev) / Math.max(dt, 0.001)
-}
 
 function keepPredatorInside(pred) {
   const fruit = pred.feastFruit

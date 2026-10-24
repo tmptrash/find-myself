@@ -110,7 +110,6 @@ export function hipOf(inst, leg) {
   const ty = next.y - seg.y
   const len = Math.hypot(tx, ty) || 1
   const nx = -ty / len
-  const ny = tx / len
   //
   // Near-side hips sit lower on the flank so those legs read in front of
   // the body instead of hiding behind the far pair.

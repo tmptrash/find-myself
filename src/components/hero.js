@@ -733,10 +733,6 @@ export function create(config) {
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     jumpDisabled: false,      // Flag to block only jumping while movement stays free (e.g. intro hints)
-    jumpForceMult: 1,         // Per-zone jump multiplier (e.g. forest mud band = 0.5)
-    moveSpeedMult: 1,         // Per-zone horizontal speed multiplier (e.g. forest mud = 0.5)
-    jumpSquashTimeMult: 1,    // Pre-jump squash duration multiplier (forest mud = 1)
-    mudJumpActive: false,     // True for the whole arc of a jump launched from mud
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
     lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
     //
@@ -1377,10 +1373,10 @@ function onUpdate(inst) {
     // Apply movement only once per frame, prioritizing last pressed direction
     //
     if (isMovingLeft && !isMovingRight) {
-      inst.character.move(-inst.speed * (inst.moveSpeedMult ?? 1), 0)
+      inst.character.move(-inst.speed, 0)
       inst.direction = -1
     } else if (isMovingRight && !isMovingLeft) {
-      inst.character.move(inst.speed * (inst.moveSpeedMult ?? 1), 0)
+      inst.character.move(inst.speed, 0)
       inst.direction = 1
     }
     //
@@ -1520,7 +1516,7 @@ function onUpdate(inst) {
     //
     // Switch between frame 0 (squash) and frame 1 (stretch) while on ground
     //
-    if (inst.squashTimer < JUMP_STRETCH_START * (inst.jumpSquashTimeMult ?? 1)) {
+    if (inst.squashTimer < JUMP_STRETCH_START) {
       //
       // First part: squash (frame 0)
       //
@@ -1544,12 +1540,12 @@ function onUpdate(inst) {
     //
     syncJumpCollision(inst)
 
-    if (inst.squashTimer >= JUMP_SQUASH_TIME * (inst.jumpSquashTimeMult ?? 1)) {
+    if (inst.squashTimer >= JUMP_SQUASH_TIME) {
       //
       // Squash animation complete - actually jump!
       //
-      inst.character.vel.y = -inst.jumpForce * (inst.jumpForceMult ?? 1)
-      inst.jumpTakeoffSpeed = inst.jumpForce * (inst.jumpForceMult ?? 1)
+      inst.character.vel.y = -inst.jumpForce
+      inst.jumpTakeoffSpeed = inst.jumpForce
       inst.canJump = false
       inst.isSquashing = false
       inst.squashTimer = 0

@@ -16,7 +16,8 @@ import { forestFloorPainterColors } from '../components/forest-floor.js'
 import { forestContactShadowRgb, paintForestContactShadow } from './forest-atmosphere.js'
 import { applyForestFilmGrainToCanvas, applyForestLayerGradeToCanvas, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
 import { TRAMP_FACE_EYE_SCALE, drawCuteMushroomToCanvas } from './cute-mushroom.js'
-import { LAKE_SHORE_EXTEND_PX } from './forest-lake.js'
+import * as Lake from './forest-lake.js'
+import { paintForestShoreRock } from './forest-shore-rock.js'
 import { renderBushStrip } from './forest-bush-strip.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
 import { paintUndergroundDepthVignette } from './forest-atmosphere.js'
@@ -54,10 +55,12 @@ const SKY_GROUND_OVERLAP = 8
 //
 // Parallax rows behind the scene — as many as the level has (far, mid,
 // near): full-width rows of trees with bushes at their feet, graded by depth
-// (contrast / saturation pulled toward the hued haze) and drawn at a rising
-// alpha so the far row stays a quiet backdrop. Trees are spread evenly over
-// the row width (jittered); a strip of the level's leafy bushes (with ferns
-// tucked behind on the nearer rows) runs along their feet, sized and
+// (contrast / saturation pulled toward the hued haze). Rows are opaque;
+// `alpha` is how much of a row's own colour survives its mix toward the sky
+// (rising toward the front), so the far row stays a quiet backdrop. Trees are
+// spread evenly over the row width (jittered); a strip of the level's leafy
+// bushes (with ferns tucked behind on the nearer rows) runs along their feet,
+// sized and
 // detailed per depth tier like the level's planes.
 //
 const PARALLAX_ROWS = [
@@ -162,19 +165,39 @@ const LAKE_X1_FRAC = 0.24
 const LAKE_X2_CORE_FRAC = 0.44
 const LAKE_SURFACE_LIFT = 2
 //
-// Rocks: single stones by the edge trees, cut flat by the ground line, and
-// a pile capping the lake's tree-side shallows (baked as its own piece drawn
-// over the water, sunk a little below the water line).
+// Ground rocks like the level's scatter: textured shaded stones, stretched a
+// little wider than tall and seated deep in the soil (the ground cuts them
+// flat), in small groups around the ear-trees and the screen edges.
 //
 const ROCK_GROUPS = [
-  { xFrac: 0.9, count: 2, spread: 40, radiusMin: 18, radiusRange: 16 },
+  { xFrac: 0.765, count: 3, spread: 44, radiusMin: 12, radiusRange: 12 },
+  { xFrac: 0.845, count: 2, spread: 36, radiusMin: 16, radiusRange: 14 },
+  { xFrac: 0.91, count: 3, spread: 50, radiusMin: 14, radiusRange: 16 },
+  { xFrac: 0.98, count: 2, spread: 30, radiusMin: 12, radiusRange: 10 },
   { xFrac: 0.06, count: 2, spread: 40, radiusMin: 16, radiusRange: 14 }
 ]
-const SHORE_PILE = { count: 5, spread: 56, radiusMin: 20, radiusRange: 18 }
-const SHORE_PILE_SINK = 6
-const SHORE_PILE_SEED = 61091
-const ROCK_SINK = 0.28
+const ROCK_WIDTH_SCALE_MIN = 1
+const ROCK_WIDTH_SCALE_RANGE = 0.6
+const ROCK_CENTER_ABOVE_GROUND = 0.11
 const ROCK_OUTLINE_WIDTH = 2
+//
+// The lake's tree-side stone pile, built like the level's: a few lumpy
+// stone heaps painted by the shore-rock painter — their caps stand above
+// the water line, their flanks flare and run down the bank into the lake
+// bed (clipped at the bed, tinted under the water). Offsets / sizes are
+// design px from the shore anchor (between the core end and the shallows).
+//
+const SHORE_PILE_HEAPS = [
+  { dx: -14, top: 34, capHalfW: 48, footHalfW: 86 },
+  { dx: -78, top: 8, capHalfW: 30, footHalfW: 54 },
+  { dx: 52, top: 22, capHalfW: 30, footHalfW: 40 }
+]
+const SHORE_PILE_ARC_STEPS = 10
+const SHORE_PILE_FOOT_STEPS = 12
+const SHORE_PILE_JITTER = 0.08
+const SHORE_PILE_BED_OVERSHOOT = 14
+const SHORE_PILE_PAD = 6
+const SHORE_PILE_SEED = 61091
 //
 // Ground plants: ferns and straw tufts thicken toward the screen edges and
 // around the apple tree's foot, mushroom groups gather at the tree.
@@ -223,7 +246,7 @@ export function forestMenuLayout(width, height) {
   const x2Core = Math.round(width * LAKE_X2_CORE_FRAC)
   return {
     groundY,
-    lake: { x1, x2Core, x2: x2Core + LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
+    lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
     eyeSpots: EYE_SPOT_FRACS.map(f => ({ x: Math.round(width * f), groundY })),
     earTreeSpots: EAR_TREE_SPOTS.map(spot => ({ x: Math.round(width * spot.xFrac), tier: spot.tier })),
     crawler: { minX: Math.round(width * CRAWLER_MIN_X_FRAC), maxX: Math.round(width * CRAWLER_MAX_X_FRAC) }
@@ -231,42 +254,91 @@ export function forestMenuLayout(width, height) {
 }
 
 /**
- * Paints the forest menu backdrop as baked layers. `back` goes under the
- * live lake, back to front: sky, the three parallax rows, then the front
- * scene (framing trees, soil, apple tree, ground dressing). `fore` goes over
- * the lake: the stone pile on its tree-side shallows. Every piece except the
+ * Paints the forest menu backdrop as baked layers that go under the live
+ * lake, back to front: sky, the three parallax rows, then the front scene
+ * (framing trees, soil, apple tree, ground dressing). Every piece except the
  * sky is trimmed to its painted area so drawing it never covers empty screen.
  * @param {Object} cfg - Configuration
  * @param {number} cfg.width - Screen width
  * @param {number} cfg.height - Screen height
- * @returns {{back: Array<Object>, fore: Array<Object>}} Pieces `{ canvas, x, y, alpha }`
+ * @returns {Array<Object>} Pieces `{ canvas, x, y }`
  */
 export function generateForestMenuBackdrop(cfg) {
   const { width, height } = cfg
   const layout = forestMenuLayout(width, height)
   const { groundY } = layout
   const scale = height / REF_HEIGHT
-  const sky = { canvas: paintSkyCanvas(width, groundY + SKY_GROUND_OVERLAP), x: 0, y: 0, alpha: 1 }
+  const skyH = groundY + SKY_GROUND_OVERLAP
+  const sky = { canvas: paintSkyCanvas(width, skyH), x: 0, y: 0 }
   const parallax = PARALLAX_ROWS.map(row => {
     const rowCanvas = paintParallaxRow(row, width, groundY + PARALLAX_BOTTOM_PAD, groundY)
+    hazeRowOverSky(rowCanvas, row.alpha, skyH)
     const piece = cropToContent(rowCanvas)
     releaseCanvas(rowCanvas)
-    return { ...piece, alpha: row.alpha }
+    return piece
   })
   const front = newCanvas(width, height)
   paintFrontScene(front.getContext('2d', { willReadFrequently: true }), width, height, layout, scale)
   applyForestFilmGrainToCanvas(front, FRONT_GRAIN_SEED)
-  const frontPiece = { ...cropToContent(front), alpha: 1 }
+  const frontPiece = cropToContent(front)
   releaseCanvas(front)
-  const pile = newCanvas(width, height)
-  paintShorePile(pile.getContext('2d', { willReadFrequently: true }), width, layout, scale)
-  applyForestFilmGrainToCanvas(pile, SHORE_PILE_SEED)
-  const pilePiece = { ...cropToContent(pile), alpha: 1 }
-  releaseCanvas(pile)
-  return {
-    back: [sky, ...parallax, frontPiece].filter(piece => piece.canvas),
-    fore: [pilePiece].filter(piece => piece.canvas)
+  return [sky, ...parallax, frontPiece].filter(piece => piece.canvas)
+}
+
+/**
+ * Bakes the lake's tree-side stone pile for a live lake (its bed shape
+ * comes from the lake): heaps whose caps stand above the water and whose
+ * flanks run into the bed, clipped at the bed and tinted under the water.
+ * @param {Object} lake - Lake inst (forest-lake.js)
+ * @param {number} height - Screen height (layout scale)
+ * @returns {{canvas: HTMLCanvasElement, x: number, y: number}} Canvas at screen x / y
+ */
+export function bakeForestMenuShorePile(lake, height) {
+  const s = height / REF_HEIGHT
+  const anchorX = lake.x1 + lake.coreSpan + (lake.bakeSpan - lake.coreSpan) / 2
+  const rng = createSeededRandom(SHORE_PILE_SEED)
+  const loops = SHORE_PILE_HEAPS.map(heap => shoreHeapLoop(lake, rng, anchorX + heap.dx * s, heap, s))
+  const pts = loops.flat()
+  const pad = SHORE_PILE_PAD * s
+  const x0 = Math.floor(Math.min(...pts.map(p => p.x)) - pad)
+  const y0 = Math.floor(Math.min(...pts.map(p => p.y)) - pad)
+  const canvas = newCanvas(Math.max(...pts.map(p => p.x)) + pad - x0, Math.max(...pts.map(p => p.y)) + pad - y0)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const waterY = lake.surfaceY - y0
+  ctx.save()
+  Lake.clipToBed(ctx, lake, x0, y0, canvas.width, canvas.height)
+  paintForestShoreRock(ctx, {
+    loops: loops.map(loop => loop.map(p => ({ x: p.x - x0, y: p.y - y0 }))),
+    waterY,
+    rng,
+    outlineWidth: ROCK_OUTLINE_WIDTH
+  })
+  ctx.restore()
+  Lake.tintUnderwater(ctx, canvas.width, canvas.height, waterY)
+  applyForestFilmGrainToCanvas(canvas, SHORE_PILE_SEED)
+  return { canvas, x: x0, y: y0 }
+}
+//
+// One heap outline: a lumpy cap arc from the water line up and over, then
+// the flared foot following the lake bed (a little past it — the bed clip
+// trims the overshoot).
+//
+function shoreHeapLoop(lake, rng, cx, heap, s) {
+  const waterY = lake.surfaceY
+  const capH = heap.top * s
+  const capHalfW = heap.capHalfW * s
+  const footHalfW = heap.footHalfW * s
+  const loop = []
+  for (let i = 0; i <= SHORE_PILE_ARC_STEPS; i++) {
+    const a = Math.PI + (i / SHORE_PILE_ARC_STEPS) * Math.PI
+    const jitter = 1 + (rng() - 0.5) * 2 * SHORE_PILE_JITTER
+    loop.push({ x: cx + Math.cos(a) * capHalfW * jitter, y: waterY + Math.sin(a) * capH * jitter })
   }
+  for (let i = 0; i <= SHORE_PILE_FOOT_STEPS; i++) {
+    const x = cx + footHalfW - (i / SHORE_PILE_FOOT_STEPS) * footHalfW * 2
+    loop.push({ x, y: Lake.bedWorldY(lake, x) + SHORE_PILE_BED_OVERSHOOT * s })
+  }
+  return loop
 }
 //
 // The front scene from one seeded stream: framing trees, soil band, rocks
@@ -279,7 +351,7 @@ function paintFrontScene(ctx, width, height, layout, scale) {
   FRAME_TREES.forEach(tree => paintFrameTree(ctx, rng, tree, width, height, groundY))
   paintLayeredEarthBand(ctx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
   paintBuriedDecor(ctx, width, height, layout, scale)
-  ROCK_GROUPS.forEach(group => paintRockGroup(ctx, rng, group, width * group.xFrac, groundY, width, scale, groundY))
+  ROCK_GROUPS.forEach(group => paintRockGroup(ctx, rng, group, width * group.xFrac, groundY, width, scale))
   const rimColors = forestFloorPainterColors().rim
   drawGroundRimToCanvas(ctx, { x1: 0, x2: lake.x1, floorY: groundY, rng, colors: rimColors })
   drawGroundRimToCanvas(ctx, { x1: lake.x2, x2: width, floorY: groundY, rng, colors: rimColors })
@@ -305,14 +377,27 @@ function paintBuriedDecor(ctx, width, height, layout, scale) {
   paintUndergroundDepthVignette(ctx, 0, layout.groundY, width, height - layout.groundY)
 }
 //
-// Stone pile capping the lake's tree-side shallows, sunk a little under the
-// water line.
+// Opaque haze for a parallax row: every painted pixel is mixed toward the
+// sky colour at its height by (1 - strength) instead of drawing the row
+// semi-transparent, so a nearer row's bushes fully cover the trunks of the
+// rows behind (no see-through) while the row still fades into the air.
+// Edge pixels keep their own alpha (anti-aliasing).
 //
-function paintShorePile(ctx, width, layout, scale) {
-  const rng = createSeededRandom(SHORE_PILE_SEED)
-  const { lake, groundY } = layout
-  const clipY = groundY + SHORE_PILE_SINK * scale
-  paintRockGroup(ctx, rng, SHORE_PILE, (lake.x2Core + lake.x2) / 2, groundY, width, scale, clipY)
+function hazeRowOverSky(canvas, strength, skyH) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const data = image.data
+  for (let y = 0; y < canvas.height; y++) {
+    const sky = forestSkyBandRgb(Math.min(1, y / skyH))
+    for (let x = 0; x < canvas.width; x++) {
+      const i = (y * canvas.width + x) * RGBA_STRIDE
+      if (data[i + 3] === 0) continue
+      data[i] = Math.round(sky.r + (data[i] - sky.r) * strength)
+      data[i + 1] = Math.round(sky.g + (data[i + 1] - sky.g) * strength)
+      data[i + 2] = Math.round(sky.b + (data[i + 2] - sky.b) * strength)
+    }
+  }
+  ctx.putImageData(image, 0, 0)
 }
 //
 // Smooth sky gradient through palette-snapped stops of the level's ramp.
@@ -468,30 +553,34 @@ function paintApple(ctx, x, y, body, pal) {
 //
 // A small pile of shaded forest rocks around one spot.
 //
-function paintRockGroup(ctx, rng, group, cx, groundY, width, scale, clipY) {
+function paintRockGroup(ctx, rng, group, cx, groundY, width, scale) {
   for (let i = 0; i < group.count; i++) {
     const x = cx + (rng() - 0.5) * group.spread * scale
-    paintRock(ctx, x, groundY, width, (group.radiusMin + rng() * group.radiusRange) * scale, clipY)
+    const radius = (group.radiusMin + rng() * group.radiusRange) * scale
+    paintRock(ctx, x, groundY, width, radius, ROCK_WIDTH_SCALE_MIN + rng() * ROCK_WIDTH_SCALE_RANGE)
   }
 }
 //
-// Shaded forest rock seated in the soil, with the forest contour. Only its
-// part above clipY is drawn: the soil (or the water) cuts it horizontally.
+// Textured shaded forest rock (as the level paints its scatter), stretched
+// by widthScale and seated in the soil: only its part above the ground line
+// is drawn, the soil cuts it flat.
 //
-function paintRock(ctx, x, groundY, width, radius, clipY) {
+function paintRock(ctx, x, groundY, width, radius, widthScale) {
   const contour = forestContourRgb('forest')
   ctx.save()
   ctx.beginPath()
-  ctx.rect(0, 0, width, clipY)
+  ctx.rect(0, 0, width, groundY)
   ctx.clip()
+  ctx.translate(x, 0)
+  ctx.scale(widthScale, 1)
   drawRockToCanvas(ctx, {
-    cx: x,
-    cy: groundY - radius * ROCK_SINK,
+    cx: 0,
+    cy: groundY - radius * ROCK_CENTER_ABOVE_GROUND,
     radius,
     verts: buildRockVertices(radius),
     palette: forestRockShadedDrawPalette(),
     skipShadow: true,
-    skipTexture: true,
+    skipTexture: false,
     outlineColor: `rgb(${contour.r}, ${contour.g}, ${contour.b})`,
     outlineWidth: ROCK_OUTLINE_WIDTH,
     outlineAlpha: 1

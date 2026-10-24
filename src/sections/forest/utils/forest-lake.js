@@ -15,6 +15,13 @@ import { getRGB } from '../../../utils/helper.js'
 //
 const LAKE_FULL_SINK_DEPTH = 96
 //
+// Shore rocks sunk into the lake: bed clip sampling step and the water tint
+// on their submerged part (top of the water / near the bed).
+//
+const LAKE_SHORE_ROCK_CLIP_STEP_PX = 2
+const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
+const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
+//
 // Leaf midrib width of the algae fronds.
 //
 const LAKE_ALGAE_MIDRIB_PX = 1
@@ -320,6 +327,70 @@ export function lakeBedSeamLocalY(lake, localX, floorY) {
  */
 export function lakeWaveOffsetAt(t, time) {
   return waveOffsetAt(t, time)
+}
+
+/**
+ * Canvas-local Y of the bed's front line (sand / earth seam) under a lake —
+ * the floor reference the bed bake and shore rocks sit on.
+ * @param {Object} lake - Lake inst
+ * @returns {number}
+ */
+export function bedFloorLocalY(lake) {
+  return lake.topMargin + lake.floorY - lake.surfaceY + LAKE_BED_FLOOR_OVERLAP_PX
+}
+
+/**
+ * World Y of the bed front line at a world X, or just under the ground line
+ * outside the lake's bake span.
+ * @param {Object} lake - Lake inst
+ * @param {number} worldX - World X
+ * @returns {number}
+ */
+export function bedWorldY(lake, worldX) {
+  const localX = worldX - lake.x1
+  if (localX < 0 || localX > lake.bakeSpan) return lake.floorY + LAKE_BED_FLOOR_OVERLAP_PX
+  return lake.originY + bedSeamLocalY(lake, localX, bedFloorLocalY(lake))
+}
+
+/**
+ * Clips a canvas (placed at world x0 / y0) to everything above the lake bed,
+ * so shore rocks sunk into the lake stop at the bed.
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {Object} lake - Lake inst
+ * @param {number} x0 - World X of the canvas
+ * @param {number} y0 - World Y of the canvas
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+export function clipToBed(ctx, lake, x0, y0, width, height) {
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(width, 0)
+  for (let x = width; x >= 0; x -= LAKE_SHORE_ROCK_CLIP_STEP_PX) {
+    ctx.lineTo(x, Math.min(height, bedWorldY(lake, x0 + x) - y0))
+  }
+  ctx.lineTo(0, Math.min(height, bedWorldY(lake, x0) - y0))
+  ctx.closePath()
+  ctx.clip()
+}
+
+/**
+ * Water colour over the drawn pixels below the water line, deepening toward
+ * the bed (source-atop keeps the silhouette and stays opaque).
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ * @param {number} waterY - Canvas Y of the water line
+ */
+export function tintUnderwater(ctx, width, height, waterY) {
+  if (waterY >= height) return
+  const tint = ctx.createLinearGradient(0, waterY, 0, height)
+  tint.addColorStop(0, hexWithAlpha(FOREST_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
+  tint.addColorStop(1, hexWithAlpha(FOREST_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.fillStyle = tint
+  ctx.fillRect(0, waterY, width, height - waterY)
+  ctx.globalCompositeOperation = 'source-over'
 }
 
 /**

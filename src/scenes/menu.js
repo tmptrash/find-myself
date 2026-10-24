@@ -11,7 +11,7 @@ import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { bindPointerActivate } from '../utils/pointer-activate.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
-import { generateForestMenuBackdrop, forestMenuLayout } from '../sections/forest/utils/forest-menu-bg.js'
+import { generateForestMenuBackdrop, forestMenuLayout, bakeForestMenuShorePile } from '../sections/forest/utils/forest-menu-bg.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../sections/forest/utils/forest-palette.js'
@@ -94,6 +94,7 @@ const MENU_NIGHT_ALPHA = 0.35
 //
 const MENU_BG_EDGE_OVERSCAN = 1
 const MENU_FOREST_LAYER_SPRITE = 'menu-forest-layer'
+const MENU_SHORE_PILE_SPRITE = 'menu-shore-pile'
 //
 // Live decor of the forest backdrop without its own fade (stalk eyes, the
 // crawler) shows once the forest backdrop is mostly in.
@@ -297,8 +298,7 @@ export function sceneMenu(k) {
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_NIGHT]: 0 },
       forestLayout,
-      forestBack: forestPieces.back,
-      forestFore: forestPieces.fore,
+      forestPieces,
       forestEyes: ChainBuoy.create({ k, spots: forestLayout.eyeSpots, earthBottomY: k.height() }),
       lake: createMenuLake(k, forestLayout),
       earTrees: EarTree.create({
@@ -307,6 +307,7 @@ export function sceneMenu(k) {
       }),
       crawlerT: 0
     }
+    inst.shorePile = loadMenuShorePile(k, inst.lake)
     inst.grass = createMenuGrass(inst)
     inst.tomatoes = SpikyTomato.create({
       k,
@@ -641,11 +642,11 @@ function drawBackdrops(inst) {
   })
   const forest = inst.bgOpacity[BACKDROP_FOREST]
   if (forest <= MENU_FADE_EPS) return
-  drawForestPieces(k, inst.forestBack, forest)
+  drawForestPieces(k, inst.forestPieces, forest)
   Lake.drawBed(k, inst.lake, forest)
   Lake.drawAlgae(k, inst.lake, forest)
   Lake.drawFill(k, inst.lake, forest)
-  drawForestPieces(k, inst.forestFore, forest)
+  k.drawSprite({ sprite: inst.shorePile.sprite, pos: k.vec2(inst.shorePile.x, inst.shorePile.y), opacity: forest })
   const c = EarTree.earTreeColors(k)
   EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, forest)
   Grass.draw(inst.grass)
@@ -659,7 +660,7 @@ function drawForestPieces(k, pieces, opacity) {
   pieces.forEach(piece => k.drawSprite({
     sprite: piece.sprite,
     pos: k.vec2(piece.x, piece.y),
-    opacity: opacity * piece.alpha
+    opacity
   }))
 }
 //
@@ -935,21 +936,34 @@ function forestMenuBackdrop(width, height) {
 //
 // Uploads the forest layers once per live k (keyed by k, so a fresh engine
 // after a resolution swap re-uploads instead of finding an empty registry).
-// Returns the draw lists under and over the lake.
+// Returns the draw list (under the lake).
 //
 const menuForestPiecesByK = new WeakMap()
 function loadMenuForestLayerSprites(k) {
   const loaded = menuForestPiecesByK.get(k)
   if (loaded) return loaded
-  const layers = forestMenuBackdrop(k.width(), k.height())
-  const upload = (list, group) => list.map((piece, i) => {
-    const sprite = `${MENU_FOREST_LAYER_SPRITE}-${group}-${i}`
+  const pieces = forestMenuBackdrop(k.width(), k.height()).map((piece, i) => {
+    const sprite = `${MENU_FOREST_LAYER_SPRITE}-v2-${i}`
     k.loadSprite(sprite, piece.canvas)
     return { ...piece, sprite }
   })
-  const pieces = { back: upload(layers.back, 'back'), fore: upload(layers.fore, 'fore') }
   menuForestPiecesByK.set(k, pieces)
   return pieces
+}
+//
+// The lake's tree-side stone pile (shaped by the live lake's bed), drawn over
+// the water; baked once per k and window size.
+//
+const menuShorePileByK = new WeakMap()
+function loadMenuShorePile(k, lake) {
+  const sprite = `${MENU_SHORE_PILE_SPRITE}-${k.width()}x${k.height()}`
+  const cached = menuShorePileByK.get(k)
+  if (cached?.sprite === sprite) return cached
+  const pile = bakeForestMenuShorePile(lake, k.height())
+  k.loadSprite(sprite, pile.canvas)
+  const placed = { sprite, x: pile.x, y: pile.y }
+  menuShorePileByK.set(k, placed)
+  return placed
 }
 //
 // The level's lake for the menu layout (sprites keyed by window size, since

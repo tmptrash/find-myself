@@ -989,12 +989,10 @@ const WATER_RIGHT_TRIM = 10
 const LAKE_SHORE_ANCHOR_FROM_TRUNK = 200
 const LAKE_Z = 12
 //
-// Tree-side shore rocks baked as one tall rock reaching the lake bed: clip
-// sampling step, how steeply the flanks drop, how far past the bed they sink,
-// how much the base spreads outward, and the water tint on the submerged
-// part (top of the water / near the bed).
+// Tree-side shore rocks baked as one tall rock reaching the lake bed: how
+// steeply the flanks drop, how far past the bed they sink and how much the
+// base spreads outward (bed clip and underwater tint: forest-lake.js).
 //
-const LAKE_SHORE_ROCK_CLIP_STEP_PX = 2
 const LAKE_SHORE_ROCK_FLANK_EXP = 0.6
 const LAKE_SHORE_ROCK_BED_OVERSHOOT_PX = 14
 const LAKE_SHORE_ROCK_BASE_SPREAD = 1.55
@@ -1004,8 +1002,6 @@ const LAKE_SHORE_ROCK_BASE_SPREAD = 1.55
 //
 const LAKE_SHORE_ROCK_TOP_PINCH = 0.22
 const LAKE_SHORE_ROCK_BOTTOM_FLARE = 2.4
-const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
-const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
 //
 // The whole merged rock shrinks toward the lake's right shore (between the
 // water core end and the bake end) so it only caps the shoreline instead of
@@ -4386,12 +4382,11 @@ function createLakeShoreRockLayer(k, zones) {
 // as submerged but stays opaque. The sprite hangs on the tree-side rock.
 //
 function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
-  const floorLocal = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + Lake.LAKE_BED_FLOOR_OVERLAP_PX
   const rocks = rockObjs.filter(o => (o._lakeShoreEnd || o._waterCluster) && o._rockVerts)
   const main = rocks.find(o => o._shoreTreeSide)
   if (!main) return
   const anchorX = lake.x1 + lake.coreSpan + (lake.bakeSpan - lake.coreSpan) * LAKE_SHORE_ROCK_ANCHOR_T
-  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, floorLocal, anchorX))
+  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, anchorX))
   const pts = loops.flat()
   const pad = ROCK_OUTLINE_WIDTH * 2
   const x0 = Math.floor(Math.min(...pts.map(p => p.x)) - pad)
@@ -4401,7 +4396,7 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
   const waterY = WATER_SURFACE_Y - y0
   const canvas = toCanvas({ width, height, pixelRatio: 1 }, (ctx) => {
     ctx.save()
-    clipLakeShoreRockToBed(ctx, lake, x0, y0, width, height, floorLocal)
+    Lake.clipToBed(ctx, lake, x0, y0, width, height)
     paintForestShoreRock(ctx, {
       loops: loops.map(loop => loop.map(p => ({ x: p.x - x0, y: p.y - y0 }))),
       waterY,
@@ -4409,7 +4404,7 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
       outlineWidth: ROCK_OUTLINE_WIDTH
     })
     ctx.restore()
-    tintLakeShoreRockUnderwater(ctx, width, height, waterY)
+    Lake.tintUnderwater(ctx, width, height, waterY)
   })
   applyForestLayerGradeToCanvas(canvas, FOREST_LAYER_GRADE.decor, (main._decorWorldX * 7 | 0) + 91)
   const name = `forest0-lake-shore-rock-v${Lake.LAKE_BAKE_GEOMETRY_VERSION}-${main._decorWorldX | 0}`
@@ -4423,18 +4418,18 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
 // Sunk outline of one shore rock in world coordinates, scaled toward the
 // shore anchor (x) and the ground line (y) before sinking into the bed.
 //
-function lakeShoreRockWorldLoop(lake, rock, floorLocal, anchorX) {
+function lakeShoreRockWorldLoop(lake, rock, anchorX) {
   const ox = anchorX + (rock._homeX + rock._lakeBakeW / 2 - anchorX) * LAKE_SHORE_ROCK_SCALE
   const oy = FLOOR_Y + (rock._homeY + rock._rockBakeCy - FLOOR_Y) * LAKE_SHORE_ROCK_SCALE - LAKE_SHORE_ROCK_LIFT_PX
   const ws = rock._rockWidthScale
-  return lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
+  return lakeShoreRockSunkVerts(lake, rock, ox, oy).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
 }
 //
 // Scaled lower-half rock verts pulled down past the bed under each vertex
 // (the bed clip trims the overshoot) and spread outward on the way down, so
 // the rock widens into the bed like a pile and leaves no water gap under it.
 //
-function lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy) {
+function lakeShoreRockSunkVerts(lake, rock, ox, oy) {
   const ws = rock._rockWidthScale
   const verts = rock._rockVerts.map(v => ({ x: v.x * LAKE_SHORE_ROCK_SCALE, y: v.y * LAKE_SHORE_ROCK_SCALE }))
   const minY = Math.min(...verts.map(v => v.y))
@@ -4448,46 +4443,9 @@ function lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy) {
     if (v.y <= 0) return { x, y }
     const reach = Math.pow(v.y / maxLowerY, LAKE_SHORE_ROCK_FLANK_EXP)
     x = x * (1 + LAKE_SHORE_ROCK_BASE_SPREAD * reach * LAKE_SHORE_ROCK_BOTTOM_FLARE)
-    const bedY = lakeShoreRockBedWorldY(lake, ox + x * ws, floorLocal) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - oy
+    const bedY = Lake.bedWorldY(lake, ox + x * ws) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - oy
     return { x, y: Math.max(y, y + (bedY - y) * reach) }
   })
-}
-//
-// World Y of the lake bed front line (or the ground line outside the lake
-// bake) at world X.
-//
-function lakeShoreRockBedWorldY(lake, worldX, floorLocal) {
-  const localX = worldX - lake.x1
-  if (localX < 0 || localX > lake.bakeSpan) return FLOOR_Y + Lake.LAKE_BED_FLOOR_OVERLAP_PX
-  return lake.originY + Lake.lakeBedSeamLocalY(lake, localX, floorLocal)
-}
-//
-// Clip to everything above the bed line under the rock's columns.
-//
-function clipLakeShoreRockToBed(ctx, lake, x0, y0, width, height, floorLocal) {
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(width, 0)
-  for (let x = width; x >= 0; x -= LAKE_SHORE_ROCK_CLIP_STEP_PX) {
-    ctx.lineTo(x, Math.min(height, lakeShoreRockBedWorldY(lake, x0 + x, floorLocal) - y0))
-  }
-  ctx.lineTo(0, Math.min(height, lakeShoreRockBedWorldY(lake, x0, floorLocal) - y0))
-  ctx.closePath()
-  ctx.clip()
-}
-//
-// Water colour over the drawn rock pixels below the water line, deepening
-// toward the bed (source-atop keeps the silhouette and stays opaque).
-//
-function tintLakeShoreRockUnderwater(ctx, width, height, waterY) {
-  if (waterY >= height) return
-  const tint = ctx.createLinearGradient(0, waterY, 0, height)
-  tint.addColorStop(0, Lake.hexWithAlpha(FOREST_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
-  tint.addColorStop(1, Lake.hexWithAlpha(FOREST_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.fillStyle = tint
-  ctx.fillRect(0, waterY, width, height - waterY)
-  ctx.globalCompositeOperation = 'source-over'
 }
 //
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)

@@ -1,4 +1,4 @@
-import { buildForestTree, renderForestTreeIntoContext } from './forest-tree.js'
+import { buildForestTree, renderForestTreeIntoContext, TREE_SEED } from './forest-tree.js'
 import {
   FOREST_PAL,
   forestRgb,
@@ -7,28 +7,43 @@ import {
   forestContourRgb,
   buildDimmedTreePalette,
   getTreePaletteParallaxCorner,
-  getTreePaletteColor
+  getTreePaletteColor,
+  getForestGameplayTreeVolumeShades
 } from './forest-palette.js'
+import { forestTreeBuildOptsForDensity } from './forest-pixel-density.js'
 import { groundEarthLayersColor, paintLayeredEarthBand } from './forest-earth-band.js'
 import { forestFloorPainterColors } from '../components/forest-floor.js'
 import { forestContactShadowRgb, paintForestContactShadow } from './forest-atmosphere.js'
 import { applyForestFilmGrainToCanvas, applyForestLayerGradeToCanvas, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
+import { TRAMP_FACE_EYE_SCALE, drawCuteMushroomToCanvas } from './cute-mushroom.js'
+import { LAKE_SHORE_EXTEND_PX } from './forest-lake.js'
+import { renderBushStrip } from './forest-bush-strip.js'
+import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
+import { paintUndergroundDepthVignette } from './forest-atmosphere.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
-import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
-import { drawMossyTuftToCanvas } from '../../../utils/draw-mossy-hill.js'
 import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
 import { drawSmallMushroomGroupToCanvas, drawSpottedMushroomToCanvas } from '../../../utils/draw-small-mushroom.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 //
-// Menu backdrop for the forest level: the level's own colour-world pieces
-// (sky gradient, parallax tree rows, layered soil with its ragged rim,
-// rocks, ferns, straw grass, mushroom groups) composed like the old menu
-// picture — everything pulled to the left and right edges, the centre kept
-// open for the section ring. Seeded, so every visit paints the same scene.
+// Menu backdrop for the forest level, composed from the level's own
+// colour-world pieces like one still of the level: a cool sky and three hazy
+// parallax tree rows behind, framing trees on both screen edges, the big
+// apple tree as the one vertical anchor on the right with its roots spread
+// through the layered soil, the level's lake to its left with a stone pile on
+// the tree-side bank, and warm accents (apples, spotted mushrooms) clustered
+// around the tree. The left third stays calm for the menu column. Seeded, so
+// every visit paints the same scene. Layout values are design px at
+// REF_HEIGHT and scale with the screen height. The lake water, grass,
+// ear-trees, stalk eyes and the crawler are live (see forestMenuLayout).
 //
 const LAYOUT_SEED = 61027
+const REF_HEIGHT = 1080
+//
+// Ground line as a fraction of the screen height.
+//
+const GROUND_Y_FRAC = 0.78
 //
 // Sky: a plain smooth gradient through palette stops of the level's sky ramp
 // (dark teal zenith → dawn-gold horizon), no grain. It runs a little below
@@ -37,11 +52,13 @@ const LAYOUT_SEED = 61027
 const SKY_STOP_COUNT = 6
 const SKY_GROUND_OVERLAP = 8
 //
-// Parallax rows behind the edge trees: full-width rows of trees with bushes
-// at their feet, graded far/mid (low contrast, low saturation) and drawn at a
-// low alpha so they stay a quiet backdrop with no focus. `depth` scales the
-// cursor drift of each row; trees are spread evenly over the row width
-// (jittered), plants every `plantStep` px.
+// Parallax rows behind the scene — as many as the level has (far, mid,
+// near): full-width rows of trees with bushes at their feet, graded by depth
+// (contrast / saturation pulled toward the hued haze) and drawn at a rising
+// alpha so the far row stays a quiet backdrop. Trees are spread evenly over
+// the row width (jittered); a strip of the level's leafy bushes (with ferns
+// tucked behind on the nearer rows) runs along their feet, sized and
+// detailed per depth tier like the level's planes.
 //
 const PARALLAX_ROWS = [
   {
@@ -53,10 +70,10 @@ const PARALLAX_ROWS = [
     haze: 0.5,
     grade: 'far',
     alpha: 0.34,
-    depth: 0.35,
     sink: 0,
-    plants: 'tufts',
-    plantStep: 40,
+    tier: 'background',
+    bushScale: 1.55,
+    ferns: 0,
     cornerKey: 'parallaxTreeCornerTL'
   },
   {
@@ -68,192 +85,235 @@ const PARALLAX_ROWS = [
     haze: 0.32,
     grade: 'mid',
     alpha: 0.42,
-    depth: 0.7,
     sink: 4,
-    plants: 'ferns',
-    plantStep: 62,
+    tier: 'midground',
+    bushScale: 1.18,
+    ferns: 1.4,
     cornerKey: 'parallaxTreeCornerBR'
+  },
+  {
+    seed: 51533,
+    count: 7,
+    heightMin: 0.46,
+    heightRange: 0.12,
+    scale: 0.46,
+    haze: 0.2,
+    grade: 'near',
+    alpha: 0.6,
+    sink: 6,
+    tier: 'nearground',
+    bushScale: 0.78,
+    ferns: 1.8,
+    cornerKey: 'parallaxTreeCornerTR'
   }
 ]
 const PARALLAX_TREE_JITTER = 0.4
-const PARALLAX_TUFT_R_MIN = 12
-const PARALLAX_TUFT_R_RANGE = 14
-const PARALLAX_TUFT_SINK = 0.35
-const PARALLAX_FERN_SIZE_MIN = 30
-const PARALLAX_FERN_SIZE_RANGE = 22
-const PARALLAX_PLUME_CHANCE = 0.3
-const PARALLAX_PLUME_H_MIN = 34
-const PARALLAX_PLUME_H_RANGE = 20
 const PARALLAX_GRAIN_SEED = 7907
 //
 // Parallax rows are painted only down to just below the ground line (the
-// soil band covers everything lower); the soil piece starts this far above
-// the ground line to keep the rim, grass, ferns and rocks on it.
+// soil band covers everything lower).
 //
 const PARALLAX_BOTTOM_PAD = 24
-const GROUND_DECOR_TOP_PAD = 140
 const RGBA_STRIDE = 4
 //
-// Open centre — no tree trunk, rock or plant root inside this half-width.
-// Edge zones fill the rest of each side.
+// Framing trees standing on the screen edges (x as a fraction of the screen
+// width): the left one is hazier and shorter so it never competes with the
+// menu column, the right pair is greener and taller and closes the frame
+// behind the apple tree.
 //
-const CENTER_KEEPOUT_HALF = 400
-const EDGE_OVERHANG = 60
-//
-// Trunks stand farther out than the ground decor so the crowns (which
-// spread well past the trunk) still stop short of the open centre.
-//
-const TREE_CROWN_CLEAR = 150
-//
-// Three tree rows, back to front: each nearer row is less dissolved into the
-// sky haze, slightly shorter and stands a little lower so the rows overlap
-// like the level's parallax.
-//
-const TREE_ROWS = [
-  { count: 6, heightMin: 0.5, heightRange: 0.1, scale: 0.42, haze: 0.62, uniformWood: true, flatLeaves: true, sink: 0 },
-  { count: 5, heightMin: 0.42, heightRange: 0.08, scale: 0.48, haze: 0.2, uniformWood: false, flatLeaves: false, sink: 6, green: true },
-  { count: 3, heightMin: 0.34, heightRange: 0.06, scale: 0.55, haze: 0.04, uniformWood: false, flatLeaves: false, sink: 12, green: true }
+const FRAME_TREES = [
+  { xFrac: -0.03, heightFrac: 0.58, scale: 0.5, haze: 0.42, green: false, cornerKey: 'parallaxTreeCornerTL' },
+  { xFrac: 0.93, heightFrac: 0.6, scale: 0.52, haze: 0.18, green: true },
+  { xFrac: 1.04, heightFrac: 0.7, scale: 0.56, haze: 0.08, green: true }
 ]
+const FRAME_TREE_BUILD_OPTS = { includeRoots: false, includeHeroBranch: false }
 //
-// Tree height follows the distance from the screen edge: full height (times
-// the edge factor) at the outer edge, shrinking toward the open centre.
+// The apple tree — the level's own main tree (same seed and crown build) at
+// level size, standing at APPLE_TREE_X_FRAC with its roots in the soil.
 //
-const TREE_EDGE_HEIGHT_FACTOR = 1.25
-const TREE_CENTER_HEIGHT_FACTOR = 0.3
+const APPLE_TREE_X_FRAC = 0.66
+const APPLE_TREE_TRUNK_H = 380
+const APPLE_TREE_ROOT_DEPTH = 200
+const APPLE_TREE_HERO_BRANCH_FRAC = 0.5
 //
-// Back edge row palette per side (left, right); the nearer rows use the
-// green big-tree palette of the level.
+// Apples hung on foliage clusters of the apple tree, kept apart so they
+// read as a few warm accents, not a pattern.
 //
-const TREE_CORNER_KEYS = ['parallaxTreeCornerTL', 'parallaxTreeCornerTR']
-const TREE_BUILD_OPTS = { includeRoots: false, includeHeroBranch: false }
+const APPLE_COUNT = 9
+const APPLE_MIN_GAP = 70
+const APPLE_RADIUS = 8
+const APPLE_HANG = 6
+const APPLE_STEM_LEN = 6
+const APPLE_STEM_W = 1.6
+const APPLE_CONTOUR_W = 1.5
+const APPLE_SHADE_ALPHA = 0.55
+const APPLE_SHADE_OFFSET = 0.28
+const APPLE_HIGHLIGHT_ALPHA = 0.5
+const APPLE_HIGHLIGHT_R = 0.22
+const APPLE_HIGHLIGHT_OFFSET = -0.35
+const APPLE_MIN_DEPTH_BELOW_TOP = 60
 //
-// Ground dressing per side (counts are for one side; density grows toward
-// the outer edge through EDGE_BIAS).
+// The level's lake to the left of the apple tree (x as fractions of the
+// screen width): its water line sits LAKE_SURFACE_LIFT px above the ground
+// line (a little lower than in the level, so the bank shows); the shallows
+// run on past the core right end.
 //
-const EDGE_BIAS = 1.8
-const ROCK_COUNT = 3
-const ROCK_RADIUS_MIN = 22
-const ROCK_RADIUS_RANGE = 22
+const LAKE_X1_FRAC = 0.24
+const LAKE_X2_CORE_FRAC = 0.44
+const LAKE_SURFACE_LIFT = 2
+//
+// Rocks: single stones by the edge trees, cut flat by the ground line, and
+// a pile capping the lake's tree-side shallows (baked as its own piece drawn
+// over the water, sunk a little below the water line).
+//
+const ROCK_GROUPS = [
+  { xFrac: 0.9, count: 2, spread: 40, radiusMin: 18, radiusRange: 16 },
+  { xFrac: 0.06, count: 2, spread: 40, radiusMin: 16, radiusRange: 14 }
+]
+const SHORE_PILE = { count: 5, spread: 56, radiusMin: 20, radiusRange: 18 }
+const SHORE_PILE_SINK = 6
+const SHORE_PILE_SEED = 61091
 const ROCK_SINK = 0.28
 const ROCK_OUTLINE_WIDTH = 2
-const FERN_COUNT = 5
+//
+// Ground plants: ferns and straw tufts thicken toward the screen edges and
+// around the apple tree's foot, mushroom groups gather at the tree.
+//
+const FERN_SPOTS = [0.02, 0.09, 0.15, 0.5, 0.61, 0.74, 0.8, 0.87, 0.97]
 const FERN_SIZE_MIN = 42
 const FERN_SIZE_RANGE = 26
-const TUFT_COUNT = 12
-const MUSHROOM_GROUP_COUNT = 3
-const SPOTTED_MUSHROOM_COUNT = 1
+const TUFT_COUNT = 34
+const TUFT_EDGE_BIAS = 1.6
+const MUSHROOM_GROUP_SPOTS = [0.58, 0.77, 0.95, 0.12]
+const SPOTTED_MUSHROOM_SPOTS = [0.6, 0.79, 0.22]
+//
+// The level's trampoline mushroom, sleeping by the tree — the big warm
+// accent of the ground plane (echoes the menu icon).
+//
+const CUTE_MUSHROOM_X_FRAC = 0.575
+const CUTE_MUSHROOM_W = 76
 const CONTACT_SHADOW_RY = 4.5
-const GRAIN_SEED = 7731
-const GROUND_GRAIN_SEED = 7741
 //
-// Monochrome variant: every pixel is mapped by luminance onto the palette's
-// gray ramp (Rec. 601 luma weights).
+// Live decor spots (fractions of the screen width): stalk eyes watching the
+// menu hero, the two ear-trees (short, tall) and the crawler's roaming strip
+// on the ground east of the lake.
 //
-const LUMA_R = 0.299
-const LUMA_G = 0.587
-const LUMA_B = 0.114
-const GRAY_RAMP = FOREST_PAL.grayRamp.map(hex => forestRgb(hex))
+const EYE_SPOT_FRACS = [0.52, 0.735]
+const EAR_TREE_SPOTS = [{ xFrac: 0.8, tier: 'short' }, { xFrac: 0.875, tier: 'tall' }]
+const CRAWLER_MIN_X_FRAC = 0.5
+const CRAWLER_MAX_X_FRAC = 0.98
+const FRONT_GRAIN_SEED = 7741
+//
+// Half-width of the apple tree's trunk zone for the buried decor (thinner
+// small decor there, hair-roots only east of it).
+//
+const BURIED_TREE_CLEAR_HALF = 50
 
 /**
- * Paints both forest menu backdrops in one pass. Colour: separate baked
- * layers, back to front — sky, parallax rows (wider than the screen by
- * `overscan` on both sides so they can drift), then the left / right edge
- * trees and the soil band with its dressing; every piece except the sky is
- * trimmed to its painted area so drawing it never covers empty screen.
- * Gray: the same edge trees and soil (no sky, no parallax rows) recoloured
- * onto the palette's gray ramp as one canvas — reusing the colour paint
- * instead of growing the trees twice.
+ * Forest menu layout for a screen size: the ground line, the lake span and
+ * the spots of the live decor standing on the ground.
+ * @param {number} width - Screen width
+ * @param {number} height - Screen height
+ * @returns {Object} groundY, lake {x1, x2Core, x2, surfaceY}, eyeSpots,
+ *   earTreeSpots [{x, tier}], crawler {minX, maxX}
+ */
+export function forestMenuLayout(width, height) {
+  const groundY = Math.round(height * GROUND_Y_FRAC)
+  const x1 = Math.round(width * LAKE_X1_FRAC)
+  const x2Core = Math.round(width * LAKE_X2_CORE_FRAC)
+  return {
+    groundY,
+    lake: { x1, x2Core, x2: x2Core + LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
+    eyeSpots: EYE_SPOT_FRACS.map(f => ({ x: Math.round(width * f), groundY })),
+    earTreeSpots: EAR_TREE_SPOTS.map(spot => ({ x: Math.round(width * spot.xFrac), tier: spot.tier })),
+    crawler: { minX: Math.round(width * CRAWLER_MIN_X_FRAC), maxX: Math.round(width * CRAWLER_MAX_X_FRAC) }
+  }
+}
+
+/**
+ * Paints the forest menu backdrop as baked layers. `back` goes under the
+ * live lake, back to front: sky, the three parallax rows, then the front
+ * scene (framing trees, soil, apple tree, ground dressing). `fore` goes over
+ * the lake: the stone pile on its tree-side shallows. Every piece except the
+ * sky is trimmed to its painted area so drawing it never covers empty screen.
  * @param {Object} cfg - Configuration
  * @param {number} cfg.width - Screen width
  * @param {number} cfg.height - Screen height
- * @param {number} cfg.groundY - Horizon / ground line Y
- * @param {number} cfg.overscan - Extra parallax width on each side (px)
- * @returns {{sky: Object, parallax: Object[], front: Object[], gray: HTMLCanvasElement}}
- *   Colour pieces `{ canvas, x, y }` in screen px (parallax pieces also carry
- *   `depth`, the cursor drift factor, and `alpha`, the draw opacity) plus the
- *   full-screen gray canvas
+ * @returns {{back: Array<Object>, fore: Array<Object>}} Pieces `{ canvas, x, y, alpha }`
  */
-export function generateForestMenuBackdrops(cfg) {
-  const { width, height, groundY, overscan } = cfg
-  const sky = { canvas: paintSkyCanvas(width, groundY + SKY_GROUND_OVERLAP), x: 0, y: 0 }
+export function generateForestMenuBackdrop(cfg) {
+  const { width, height } = cfg
+  const layout = forestMenuLayout(width, height)
+  const { groundY } = layout
+  const scale = height / REF_HEIGHT
+  const sky = { canvas: paintSkyCanvas(width, groundY + SKY_GROUND_OVERLAP), x: 0, y: 0, alpha: 1 }
   const parallax = PARALLAX_ROWS.map(row => {
-    const rowCanvas = paintParallaxRow(row, width + overscan * 2, groundY + PARALLAX_BOTTOM_PAD, groundY)
-    const piece = cropToContent(rowCanvas, 0, rowCanvas.width)
+    const rowCanvas = paintParallaxRow(row, width, groundY + PARALLAX_BOTTOM_PAD, groundY)
+    const piece = cropToContent(rowCanvas)
     releaseCanvas(rowCanvas)
-    return { ...piece, x: piece.x - overscan, depth: row.depth, alpha: row.alpha }
+    return { ...piece, alpha: row.alpha }
   })
-  const trees = newCanvas(width, height)
-  const ground = newCanvas(width, height)
-  paintFrontScene(trees.getContext('2d', { willReadFrequently: true }), ground.getContext('2d', { willReadFrequently: true }), width, height, groundY)
-  const gray = composeGrayCanvas(trees, ground)
-  applyForestFilmGrainToCanvas(trees, GRAIN_SEED)
-  applyForestFilmGrainToCanvas(ground, GROUND_GRAIN_SEED)
-  const groundTop = Math.max(0, groundY - GROUND_DECOR_TOP_PAD)
-  const front = [
-    cropToContent(trees, 0, width / 2),
-    cropToContent(trees, width / 2, width),
-    { canvas: copyRegion(ground, 0, groundTop, width, height - groundTop), x: 0, y: groundTop }
-  ].filter(piece => piece.canvas)
-  releaseCanvas(trees)
-  releaseCanvas(ground)
-  return { sky, parallax: parallax.filter(piece => piece.canvas), front, gray }
-}
-
-/**
- * Ground-anchored X spots on both screen edges (outside the open centre),
- * for decor drawn live on top of the baked backdrop (e.g. stalk eyes).
- * @param {number} width - Canvas width
- * @param {number} count - Spots per side
- * @param {number} seed - Layout seed
- * @returns {number[]} World X positions, left side first
- */
-export function forestMenuEdgeSpotXs(width, count, seed) {
-  const rng = createSeededRandom(seed)
-  const zones = buildEdgeZones(width, 0)
-  return zones.flatMap(zone => Array.from({ length: count }, () => pickEdgeX(rng, zone)))
+  const front = newCanvas(width, height)
+  paintFrontScene(front.getContext('2d', { willReadFrequently: true }), width, height, layout, scale)
+  applyForestFilmGrainToCanvas(front, FRONT_GRAIN_SEED)
+  const frontPiece = { ...cropToContent(front), alpha: 1 }
+  releaseCanvas(front)
+  const pile = newCanvas(width, height)
+  paintShorePile(pile.getContext('2d', { willReadFrequently: true }), width, layout, scale)
+  applyForestFilmGrainToCanvas(pile, SHORE_PILE_SEED)
+  const pilePiece = { ...cropToContent(pile), alpha: 1 }
+  releaseCanvas(pile)
+  return {
+    back: [sky, ...parallax, frontPiece].filter(piece => piece.canvas),
+    fore: [pilePiece].filter(piece => piece.canvas)
+  }
 }
 //
-// Left and right decor zones; `outer` is the screen edge each zone leans to,
-// `extraClear` widens the open centre further for that kind of decor.
+// The front scene from one seeded stream: framing trees, soil band, rocks
+// and the ground rim (open over the lake), the apple tree with its roots over
+// the soil, then the ground plants and mushrooms over its foot.
 //
-function buildEdgeZones(width, extraClear) {
-  const centerX = width / 2
-  const keepout = CENTER_KEEPOUT_HALF + extraClear
-  return [
-    { x1: -EDGE_OVERHANG, x2: centerX - keepout, outer: -EDGE_OVERHANG },
-    { x1: centerX + keepout, x2: width + EDGE_OVERHANG, outer: width + EDGE_OVERHANG }
-  ]
-}
-//
-// Random X inside a zone, skewed toward its outer screen edge so the decor
-// thickens outward and thins toward the open centre.
-//
-function pickEdgeX(rng, zone) {
-  const t = Math.pow(rng(), EDGE_BIAS)
-  return zone.outer + (zoneInnerX(zone) - zone.outer) * t
-}
-//
-// 0 at the zone's outer screen edge, 1 at its inner (centre-facing) end.
-//
-function edgeDistanceT(zone, x) {
-  const t = (x - zone.outer) / (zoneInnerX(zone) - zone.outer)
-  return Math.min(1, Math.max(0, t))
-}
-function zoneInnerX(zone) {
-  return zone.outer === zone.x1 ? zone.x2 : zone.x1
-}
-//
-// Edge trees into treeCtx, then the soil band and its dressing into
-// groundCtx (both the same context for the one-canvas gray bake), all from
-// one seeded stream so both variants share the layout.
-//
-function paintFrontScene(treeCtx, groundCtx, width, height, groundY) {
+function paintFrontScene(ctx, width, height, layout, scale) {
+  const { groundY, lake } = layout
   const rng = createSeededRandom(LAYOUT_SEED)
-  const zones = buildEdgeZones(width, 0)
-  const treeZones = buildEdgeZones(width, TREE_CROWN_CLEAR)
-  TREE_ROWS.forEach((row, i) => paintTreeRow(treeCtx, rng, row, i, treeZones, width, height, groundY))
-  paintLayeredEarthBand(groundCtx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
-  paintGroundDressing(groundCtx, rng, zones, width, groundY)
+  FRAME_TREES.forEach(tree => paintFrameTree(ctx, rng, tree, width, height, groundY))
+  paintLayeredEarthBand(ctx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
+  paintBuriedDecor(ctx, width, height, layout, scale)
+  ROCK_GROUPS.forEach(group => paintRockGroup(ctx, rng, group, width * group.xFrac, groundY, width, scale, groundY))
+  const rimColors = forestFloorPainterColors().rim
+  drawGroundRimToCanvas(ctx, { x1: 0, x2: lake.x1, floorY: groundY, rng, colors: rimColors })
+  drawGroundRimToCanvas(ctx, { x1: lake.x2, x2: width, floorY: groundY, rng, colors: rimColors })
+  paintAppleTree(ctx, rng, width, height, groundY, scale)
+  paintGroundPlants(ctx, rng, width, groundY, lake)
+}
+//
+// The level's buried decor (stones, cracks, pebbles, hair-roots under the
+// apple tree side, fossils, shells, bones, coins, bottles, worms) and its
+// depth vignette over the soil band.
+//
+function paintBuriedDecor(ctx, width, height, layout, scale) {
+  const spec = buildUndergroundSpec({
+    x1: 0,
+    x2: width,
+    surfaceY: layout.groundY,
+    bandH: height - layout.groundY,
+    bottomY: height,
+    treeX: Math.round(width * APPLE_TREE_X_FRAC),
+    treeClearHalf: BURIED_TREE_CLEAR_HALF * scale,
+    extraZone: null
+  })
+  renderUndergroundSpec(ctx, spec, undergroundStaticEarthTones())
+  paintUndergroundDepthVignette(ctx, 0, layout.groundY, width, height - layout.groundY)
+}
+//
+// Stone pile capping the lake's tree-side shallows, sunk a little under the
+// water line.
+//
+function paintShorePile(ctx, width, layout, scale) {
+  const rng = createSeededRandom(SHORE_PILE_SEED)
+  const { lake, groundY } = layout
+  const clipY = groundY + SHORE_PILE_SINK * scale
+  paintRockGroup(ctx, rng, SHORE_PILE, (lake.x2Core + lake.x2) / 2, groundY, width, scale, clipY)
 }
 //
 // Smooth sky gradient through palette-snapped stops of the level's ramp.
@@ -287,29 +347,34 @@ function paintParallaxRow(row, width, height, groundY) {
   for (let i = 0; i < row.count; i++) {
     const x = Math.round(slot * (i + 0.5 + (rng() - 0.5) * PARALLAX_TREE_JITTER))
     const treeH = groundY * (row.heightMin + rng() * row.heightRange) / row.scale
-    const treeData = buildForestTree(nextSeed(rng), x, bottomY, Math.round(bottomY - treeH), bottomY, bottomY, TREE_BUILD_OPTS)
+    const treeData = buildForestTree(nextSeed(rng), x, bottomY, Math.round(bottomY - treeH), bottomY, bottomY, FRAME_TREE_BUILD_OPTS)
     paintScaledTree(ctx, treeData, palette, x, bottomY, row.scale, width, height)
   }
-  paintParallaxPlants(ctx, rng, row, width, bottomY)
+  renderBushStrip(ctx, {
+    x1: 0,
+    x2: width,
+    baseY: bottomY,
+    heightScale: row.bushScale * height / REF_HEIGHT,
+    colorAt: () => forestRgb(FOREST_PAL[row.cornerKey].leaf),
+    ferns: row.ferns,
+    foliageDensityTier: row.tier
+  })
   applyForestLayerGradeToCanvas(canvas, FOREST_LAYER_GRADE[row.grade], PARALLAX_GRAIN_SEED + row.seed)
   return canvas
 }
 //
-// Bushes at the row's feet: round mossy clumps on the far row, ferns with an
-// occasional spike bush on the nearer one.
+// One framing tree: grown at level size and scaled down around its base,
+// in the parallax corner palette (left, hazy) or the level's green big-tree
+// palette (right).
 //
-function paintParallaxPlants(ctx, rng, row, width, baseY) {
-  const colors = forestFloorPainterColors()
-  for (let x = rng() * row.plantStep; x < width; x += row.plantStep * (0.6 + rng() * 0.8)) {
-    if (row.plants === 'tufts') {
-      const r = PARALLAX_TUFT_R_MIN + rng() * PARALLAX_TUFT_R_RANGE
-      drawMossyTuftToCanvas(ctx, x, baseY - r * PARALLAX_TUFT_SINK, r, rng, colors.hill)
-      continue
-    }
-    rng() < PARALLAX_PLUME_CHANCE
-      ? drawFeatherPlumeToCanvas(ctx, { x, baseY, height: PARALLAX_PLUME_H_MIN + rng() * PARALLAX_PLUME_H_RANGE, rng, colors: colors.plume })
-      : drawFernToCanvas(ctx, { x, baseY, size: PARALLAX_FERN_SIZE_MIN + rng() * PARALLAX_FERN_SIZE_RANGE, rng, colors: colors.fern })
-  }
+function paintFrameTree(ctx, rng, tree, width, height, groundY) {
+  const haze = forestRgb(FOREST_PAL.forestLift)
+  const base = tree.green ? getTreePaletteColor() : getTreePaletteParallaxCorner(tree.cornerKey)
+  const palette = buildDimmedTreePalette(base, haze, tree.haze, !tree.green, 0, !tree.green)
+  const x = Math.round(width * tree.xFrac)
+  const treeH = groundY * tree.heightFrac / tree.scale
+  const treeData = buildForestTree(nextSeed(rng), x, groundY, Math.round(groundY - treeH), groundY, groundY, FRAME_TREE_BUILD_OPTS)
+  paintScaledTree(ctx, treeData, palette, x, groundY, tree.scale, width, height)
 }
 //
 // Trees are grown at level size (the generator's crown spread is tuned for
@@ -324,126 +389,101 @@ function paintScaledTree(ctx, treeData, palette, x, bottomY, scale, width, heigh
   ctx.restore()
 }
 //
-// Copy of the painted pixels of canvas columns [x1, x2) trimmed to their
-// alpha bounding box — one pixel read per bake. Null when nothing is there.
+// The level's main tree (same seed, structured crown, hero branch) in the
+// gameplay palette with its wood volume, scaled with the screen around its
+// base; its roots spread through the soil and apples hang in the crown.
 //
-function cropToContent(canvas, x1, x2) {
-  const sx = Math.max(0, Math.floor(x1))
-  const sw = Math.min(canvas.width, Math.ceil(x2)) - sx
-  const data = canvas.getContext('2d', { willReadFrequently: true }).getImageData(sx, 0, sw, canvas.height).data
-  let minX = sw
-  let minY = canvas.height
-  let maxX = -1
-  let maxY = -1
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < sw; x++) {
-      if (data[(y * sw + x) * RGBA_STRIDE + 3] === 0) continue
-      x < minX && (minX = x)
-      x > maxX && (maxX = x)
-      y < minY && (minY = y)
-      y > maxY && (maxY = y)
-    }
-  }
-  if (maxX < 0) return { canvas: null, x: 0, y: 0 }
-  const out = newCanvas(maxX - minX + 1, maxY - minY + 1)
-  out.getContext('2d').drawImage(canvas, sx + minX, minY, out.width, out.height, 0, 0, out.width, out.height)
-  return { canvas: out, x: sx + minX, y: minY }
-}
-//
-// Edge trees over the soil band, recoloured onto the gray ramp, with grain.
-//
-function composeGrayCanvas(trees, ground) {
-  const canvas = newCanvas(trees.width, trees.height)
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(trees, 0, 0)
-  ctx.drawImage(ground, 0, 0)
-  mapCanvasToGrayRamp(ctx, canvas.width, canvas.height)
-  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
-  return canvas
-}
-function copyRegion(canvas, x, y, width, height) {
-  const out = newCanvas(width, height)
-  out.getContext('2d').drawImage(canvas, x, y, width, height, 0, 0, width, height)
-  return out
-}
-function newCanvas(width, height) {
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(width))
-  canvas.height = Math.max(1, Math.round(height))
-  return canvas
-}
-function releaseCanvas(canvas) {
-  canvas.width = 0
-  canvas.height = 0
-}
-//
-// One edge tree row on both sides — the back row dissolves into the forest
-// air colour like the level's background rows, the nearer rows wear the
-// green leaves of the level's big trees.
-//
-function paintTreeRow(ctx, rng, row, rowIndex, zones, width, height, groundY) {
-  const haze = forestRgb(FOREST_PAL.forestLift)
-  const bottomY = groundY + row.sink
-  zones.forEach((zone, side) => {
-    for (let i = 0; i < row.count; i++) {
-      const x = Math.round(pickEdgeX(rng, zone))
-      const centerT = edgeDistanceT(zone, x)
-      const heightFactor = TREE_EDGE_HEIGHT_FACTOR + (TREE_CENTER_HEIGHT_FACTOR - TREE_EDGE_HEIGHT_FACTOR) * centerT
-      const base = row.green ? getTreePaletteColor() : getTreePaletteParallaxCorner(TREE_CORNER_KEYS[side])
-      const palette = buildDimmedTreePalette(base, haze, row.haze, row.flatLeaves, 0, row.uniformWood)
-      const treeH = groundY * (row.heightMin + rng() * row.heightRange) * heightFactor / row.scale
-      const treeData = buildForestTree(
-        nextSeed(rng), x, bottomY, Math.round(bottomY - treeH), bottomY, bottomY, TREE_BUILD_OPTS
-      )
-      paintScaledTree(ctx, treeData, palette, x, bottomY, row.scale, width, height)
-    }
+function paintAppleTree(ctx, rng, width, height, groundY, scale) {
+  const x = Math.round(width * APPLE_TREE_X_FRAC)
+  const treeData = buildForestTree(TREE_SEED, x, groundY, groundY - APPLE_TREE_TRUNK_H, groundY + APPLE_TREE_ROOT_DEPTH, groundY, {
+    ...forestTreeBuildOptsForDensity('nearground'),
+    heroBranchFrac: APPLE_TREE_HERO_BRANCH_FRAC,
+    structuredCrown: true
   })
+  const palette = { ...getTreePaletteColor(), woodVolume: getForestGameplayTreeVolumeShades() }
+  //
+  // In tree space the canvas bottom lies (height - groundY) / scale below the
+  // base, so roots taper toward the real bottom edge.
+  //
+  const treeSpaceH = groundY + (height - groundY) / scale
+  ctx.save()
+  ctx.translate(x, groundY)
+  ctx.scale(scale, scale)
+  ctx.translate(-x, -groundY)
+  renderForestTreeIntoContext(ctx, treeData, palette, width / scale, treeSpaceH)
+  paintApples(ctx, rng, treeData)
+  ctx.restore()
 }
 //
-// Rocks first (cut flat by the ground line), then the ragged rim along the
-// whole ground line over their feet, then ferns, straw tufts and mushroom
-// groups on the edges only, each on its own contact shadow.
+// A few apples under well-separated foliage clusters of the crown (never at
+// the very top, where they would read as stuck on the silhouette).
 //
-function paintGroundDressing(ctx, rng, zones, width, groundY) {
-  const colors = forestFloorPainterColors()
-  const shadow = forestContactShadowRgb()
-  zones.forEach(zone => repeat(ROCK_COUNT, () => paintRock(ctx, rng, pickEdgeX(rng, zone), groundY, width)))
-  drawGroundRimToCanvas(ctx, { x1: 0, x2: width, floorY: groundY, rng, colors: colors.rim })
-  const tuftColors = {
-    grass: FOREST_PAL.forestFloor.rimDry,
-    dry: FOREST_PAL.forestFloor.grassDry,
-    contactShadow: shadow
+function paintApples(ctx, rng, treeData) {
+  const clusters = treeData.leaves.filter(leaf => leaf.type === 'cluster')
+  if (!clusters.length) return
+  const topY = Math.min(...clusters.map(leaf => leaf.y))
+  const candidates = clusters.filter(leaf => leaf.y > topY + APPLE_MIN_DEPTH_BELOW_TOP)
+  const picked = []
+  for (let tries = 0; tries < candidates.length && picked.length < APPLE_COUNT; tries++) {
+    const leaf = candidates[Math.floor(rng() * candidates.length)]
+    picked.every(p => Math.hypot(p.x - leaf.x, p.y - leaf.y) > APPLE_MIN_GAP) && picked.push(leaf)
   }
-  zones.forEach(zone => {
-    repeat(FERN_COUNT, () => {
-      const x = pickEdgeX(rng, zone)
-      const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
-      paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
-      drawFernToCanvas(ctx, { x, baseY: groundY, size, rng, colors: colors.fern })
-    })
-    repeat(MUSHROOM_GROUP_COUNT, () => {
-      const x = pickEdgeX(rng, zone)
-      drawSmallMushroomGroupToCanvas(ctx, { x, baseY: groundY, rng, colors: { ...colors.mushroom, contactShadow: shadow } })
-    })
-    repeat(SPOTTED_MUSHROOM_COUNT, () => {
-      drawSpottedMushroomToCanvas(ctx, { x: pickEdgeX(rng, zone), baseY: groundY, colors: colors.spotted })
-    })
-    repeat(TUFT_COUNT, () => {
-      drawGrassTuftToCanvas(ctx, { x: pickEdgeX(rng, zone), baseY: groundY, rng, colors: tuftColors })
-    })
-  })
+  const pal = FOREST_PAL.forestTreeFruit
+  picked.forEach(leaf => paintApple(ctx, leaf.x, leaf.y + APPLE_HANG, rng() < 0.5 ? pal.body : pal.light, pal))
+}
+//
+// One apple: stem, body with its contour, the shaded lower-right part and a
+// small lit spot on the upper left (sun from the left).
+//
+function paintApple(ctx, x, y, body, pal) {
+  const r = APPLE_RADIUS
+  ctx.strokeStyle = FOREST_PAL.treeColor.root
+  ctx.lineWidth = APPLE_STEM_W
+  ctx.beginPath()
+  ctx.moveTo(x, y - r)
+  ctx.lineTo(x + 1, y - r - APPLE_STEM_LEN)
+  ctx.stroke()
+  ctx.fillStyle = body
+  ctx.strokeStyle = pal.contour
+  ctx.lineWidth = APPLE_CONTOUR_W
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.save()
+  ctx.clip()
+  ctx.globalAlpha = APPLE_SHADE_ALPHA
+  ctx.fillStyle = pal.shade
+  ctx.beginPath()
+  ctx.arc(x + r * APPLE_SHADE_OFFSET, y + r * APPLE_SHADE_OFFSET, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = APPLE_HIGHLIGHT_ALPHA
+  ctx.fillStyle = pal.light
+  ctx.beginPath()
+  ctx.arc(x + r * APPLE_HIGHLIGHT_OFFSET, y + r * APPLE_HIGHLIGHT_OFFSET, r * APPLE_HIGHLIGHT_R, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.stroke()
+}
+//
+// A small pile of shaded forest rocks around one spot.
+//
+function paintRockGroup(ctx, rng, group, cx, groundY, width, scale, clipY) {
+  for (let i = 0; i < group.count; i++) {
+    const x = cx + (rng() - 0.5) * group.spread * scale
+    paintRock(ctx, x, groundY, width, (group.radiusMin + rng() * group.radiusRange) * scale, clipY)
+  }
 }
 //
 // Shaded forest rock seated in the soil, with the forest contour. Only its
-// part above the ground line is drawn: the soil cuts it horizontally, the
-// ground rim then covers the cut.
+// part above clipY is drawn: the soil (or the water) cuts it horizontally.
 //
-function paintRock(ctx, rng, x, groundY, width) {
-  const radius = ROCK_RADIUS_MIN + rng() * ROCK_RADIUS_RANGE
+function paintRock(ctx, x, groundY, width, radius, clipY) {
   const contour = forestContourRgb('forest')
   ctx.save()
   ctx.beginPath()
-  ctx.rect(0, 0, width, groundY)
+  ctx.rect(0, 0, width, clipY)
   ctx.clip()
   drawRockToCanvas(ctx, {
     cx: x,
@@ -459,34 +499,87 @@ function paintRock(ctx, rng, x, groundY, width) {
   })
   ctx.restore()
 }
-function repeat(count, fn) {
-  for (let i = 0; i < count; i++) fn()
-}
 //
-// Gray-phase recolour: each opaque pixel takes the ramp swatch closest to its
-// luminance, alpha is kept so edges stay soft.
+// Ferns, mushroom groups, spotted mushrooms and the sleeping trampoline
+// mushroom at their spots, then straw tufts thickening toward the edges;
+// nothing grows on the lake.
 //
-function mapCanvasToGrayRamp(ctx, width, height) {
-  const lut = buildGrayRampLut()
-  const image = ctx.getImageData(0, 0, width, height)
-  const data = image.data
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    const c = lut[Math.round(data[i] * LUMA_R + data[i + 1] * LUMA_G + data[i + 2] * LUMA_B)]
-    data[i] = c.r
-    data[i + 1] = c.g
-    data[i + 2] = c.b
-  }
-  ctx.putImageData(image, 0, 0)
-}
-//
-// Luminance 0–255 → nearest gray-ramp swatch.
-//
-function buildGrayRampLut() {
-  const rampLuma = GRAY_RAMP.map(c => c.r * LUMA_R + c.g * LUMA_G + c.b * LUMA_B)
-  return Array.from({ length: 256 }, (_, l) => {
-    let best = 0
-    rampLuma.forEach((luma, i) => Math.abs(luma - l) < Math.abs(rampLuma[best] - l) && (best = i))
-    return GRAY_RAMP[best]
+function paintGroundPlants(ctx, rng, width, groundY, lake) {
+  const colors = forestFloorPainterColors()
+  const shadow = forestContactShadowRgb()
+  const onLake = x => x > lake.x1 && x < lake.x2
+  FERN_SPOTS.forEach(f => {
+    const x = width * f
+    const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
+    paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
+    drawFernToCanvas(ctx, { x, baseY: groundY, size, rng, colors: colors.fern })
   })
+  paintCuteMushroom(ctx, width * CUTE_MUSHROOM_X_FRAC, groundY, shadow)
+  MUSHROOM_GROUP_SPOTS.forEach(f => drawSmallMushroomGroupToCanvas(ctx, {
+    x: width * f,
+    baseY: groundY,
+    rng,
+    colors: { ...colors.mushroom, contactShadow: shadow }
+  }))
+  SPOTTED_MUSHROOM_SPOTS.forEach(f => drawSpottedMushroomToCanvas(ctx, { x: width * f, baseY: groundY, colors: colors.spotted }))
+  const tuftColors = {
+    grass: FOREST_PAL.forestFloor.rimDry,
+    dry: FOREST_PAL.forestFloor.grassDry,
+    contactShadow: shadow
+  }
+  for (let i = 0; i < TUFT_COUNT; i++) {
+    const t = Math.pow(rng(), TUFT_EDGE_BIAS) * 0.5
+    const x = (i % 2 === 0 ? t : 1 - t) * width
+    onLake(x) || drawGrassTuftToCanvas(ctx, { x, baseY: groundY, rng, colors: tuftColors })
+  }
+}
+//
+// The level's trampoline mushroom with its face, eyes closed (asleep).
+//
+function paintCuteMushroom(ctx, x, groundY, shadow) {
+  paintForestContactShadow(ctx, x, groundY, CUTE_MUSHROOM_W * 0.45, CONTACT_SHADOW_RY, shadow)
+  drawCuteMushroomToCanvas(ctx, {
+    cx: x,
+    baseY: groundY,
+    width: CUTE_MUSHROOM_W,
+    colors: FOREST_PAL.cuteMushroomMenu,
+    withFace: true,
+    eyesOpen: false,
+    eyeScale: TRAMP_FACE_EYE_SCALE,
+    simpleShade: true
+  })
+}
+//
+// Copy of the painted pixels of a canvas trimmed to their alpha bounding
+// box — one pixel read per bake. Null canvas when nothing is there.
+//
+function cropToContent(canvas) {
+  const data = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data
+  let minX = canvas.width
+  let minY = canvas.height
+  let maxX = -1
+  let maxY = -1
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * RGBA_STRIDE + 3] === 0) continue
+      x < minX && (minX = x)
+      x > maxX && (maxX = x)
+      y < minY && (minY = y)
+      y > maxY && (maxY = y)
+    }
+  }
+  if (maxX < 0) return { canvas: null, x: 0, y: 0 }
+  const out = newCanvas(maxX - minX + 1, maxY - minY + 1)
+  out.getContext('2d').drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height)
+  return { canvas: out, x: minX, y: minY }
+}
+function newCanvas(width, height) {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(width))
+  canvas.height = Math.max(1, Math.round(height))
+  return canvas
+}
+function releaseCanvas(canvas) {
+  canvas.width = 0
+  canvas.height = 0
 }

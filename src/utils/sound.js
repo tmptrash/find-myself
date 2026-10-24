@@ -42,6 +42,10 @@ const APPLE_THUD_NOISE_Q = 0.5
 const APPLE_THUD_NOISE_MIX = 0.35
 const APPLE_THUD_SILENT = 0.001
 //
+// Menu click envelopes end at this gain (exponential ramps cannot reach 0).
+//
+const MENU_CLICK_SILENCE = 0.001
+//
 // Forest spiky tomato burst: noise blast, sub thump and a short shard rattle.
 //
 const TOMATO_BLAST_DURATION = 0.7
@@ -2017,6 +2021,45 @@ export function playSpawnClick(instance) {
 
   click.start(now)
   click.stop(now + 0.05)
+}
+/**
+ * Plays the short dry "click" of switching the selected level in the menu:
+ * a high-passed noise snap plus a quick falling sine blip.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playMenuClickSound(instance) {
+  const cfg = CFG.audio.sfx.menuClick
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const end = now + cfg.duration
+  const frames = Math.ceil(ctx.sampleRate * cfg.duration)
+  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames)
+  const noise = ctx.createBufferSource()
+  noise.buffer = buffer
+  const highpass = ctx.createBiquadFilter()
+  highpass.type = 'highpass'
+  highpass.frequency.setValueAtTime(cfg.noiseHighpass, now)
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(cfg.volume, now)
+  noiseGain.gain.exponentialRampToValueAtTime(MENU_CLICK_SILENCE, end)
+  noise.connect(highpass)
+  highpass.connect(noiseGain)
+  noiseGain.connect(instance.spawnGain)
+  const blip = ctx.createOscillator()
+  blip.type = 'sine'
+  blip.frequency.setValueAtTime(cfg.blipFreqStart, now)
+  blip.frequency.exponentialRampToValueAtTime(cfg.blipFreqEnd, end)
+  const blipGain = ctx.createGain()
+  blipGain.gain.setValueAtTime(cfg.blipVolume, now)
+  blipGain.gain.exponentialRampToValueAtTime(MENU_CLICK_SILENCE, end)
+  blip.connect(blipGain)
+  blipGain.connect(instance.spawnGain)
+  noise.start(now)
+  noise.stop(end)
+  blip.start(now)
+  blip.stop(end)
 }
 /**
  * Play one-time calm monotone sound when arrow is pressed

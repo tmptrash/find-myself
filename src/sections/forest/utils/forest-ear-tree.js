@@ -1,6 +1,7 @@
 import { clampRootSegmentsBelowGroundLine, growTreeRootSegments, paintRootRelief } from '../../../utils/grow-tree-root.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
+import { FOREST_PAL, forestRgb, forestContourRgb, getForestGameplayTreeRootShades } from './forest-palette.js'
 import {
   colorKey,
   cssRgb,
@@ -137,7 +138,22 @@ const EAR_TREE_SHAKE_DURATION = 0.6
 const EAR_TREE_SHAKE_FREQ = 30
 const EAR_TREE_SHAKE_MAX_RAD = 0.07
 const RAD_TO_DEG = 180 / Math.PI
-
+//
+// Spot variation (buildSpot): trunk height scale per height tier, trunk
+// width, branch length and branch count ranges.
+//
+const SPOT_SHORT_SCALE_MIN = 0.8
+const SPOT_SHORT_SCALE_RANGE = 0.12
+const SPOT_TALL_SCALE_MIN = 1.1
+const SPOT_TALL_SCALE_RANGE = 0.2
+const SPOT_MID_SCALE_MIN = 0.92
+const SPOT_MID_SCALE_RANGE = 0.28
+const SPOT_TRUNK_W_MIN = 0.85
+const SPOT_TRUNK_W_RANGE = 0.35
+const SPOT_BRANCH_MIN = 0.9
+const SPOT_BRANCH_RANGE = 0.25
+const SPOT_BRANCH_COUNT_MIN = 4
+const SPOT_BRANCH_COUNT_RANGE = 2
 /**
  * Creates the ear-tree decor inst for a set of ground-planted spots.
  * @param {Object} cfg - Configuration
@@ -302,6 +318,62 @@ function paintEarTreeRoots(ctx, tree, shades) {
   ctx.clip()
   paintRootRelief(ctx, segs, rng, shades)
   ctx.restore()
+}
+
+/**
+ * One planting spot with its randomised trunk / branch variation: short
+ * trees stay under the crowds, tall ones tower; anything else is in between.
+ * @param {number} x - Trunk X
+ * @param {number} groundY - Ground line Y
+ * @param {('short'|'tall'|null)} [heightTier=null] - Height class
+ * @returns {Object} Spot for create()
+ */
+export function buildSpot(x, groundY, heightTier = null) {
+  const trunkScale = heightTier === 'short'
+    ? SPOT_SHORT_SCALE_MIN + Math.random() * SPOT_SHORT_SCALE_RANGE
+    : heightTier === 'tall'
+      ? SPOT_TALL_SCALE_MIN + Math.random() * SPOT_TALL_SCALE_RANGE
+      : SPOT_MID_SCALE_MIN + Math.random() * SPOT_MID_SCALE_RANGE
+  return {
+    x,
+    groundY,
+    trunkScale,
+    trunkWScale: SPOT_TRUNK_W_MIN + Math.random() * SPOT_TRUNK_W_RANGE,
+    branchScale: SPOT_BRANCH_MIN + Math.random() * SPOT_BRANCH_RANGE,
+    branchCount: SPOT_BRANCH_COUNT_MIN + Math.floor(Math.random() * SPOT_BRANCH_COUNT_RANGE),
+    seed: Math.random() * Math.PI * 2
+  }
+}
+
+/**
+ * Draw colours of the ear-trees (Kaplay colours; root relief as {r, g, b}):
+ * cream stems with lit / shaded flanks and fissures, crimson attention leaves
+ * and the big trees' root relief.
+ * @param {Object} k - Kaplay inst
+ * @returns {Object} Colours for the onDraw* functions
+ */
+export function earTreeColors(k) {
+  const att = FOREST_PAL.forestAttention
+  const toK = hex => {
+    const c = forestRgb(hex)
+    return k.rgb(c.r, c.g, c.b)
+  }
+  const outline = forestContourRgb('forest')
+  return {
+    outline: k.rgb(outline.r, outline.g, outline.b),
+    bark: toK(att.stem),
+    barkShades: {
+      light: toK(att.stemLight),
+      shade: toK(att.stemShade),
+      fissure: toK(att.stemFissure)
+    },
+    leaves: {
+      base: toK(att.leaf),
+      light: toK(att.leafLight),
+      vein: toK(att.leafVein)
+    },
+    root: getForestGameplayTreeRootShades()
+  }
 }
 
 /**

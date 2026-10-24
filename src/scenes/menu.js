@@ -1,217 +1,195 @@
 import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
-import { getRGB, parseHex, bindBackToMenuKeys, bindStartGameKeys } from "../utils/helper.js"
+import { getRGB, bindBackToMenuKeys, bindStartGameKeys } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
-import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
-import { normalizeSceneName } from "../utils/progress.js"
+import { showTransitionToLevel } from "../utils/transition.js"
 import { goAfterPreparingAssets } from "../utils/lesson-assets.js"
-import { getProgress, get, set, resetProgress } from "../utils/progress.js"
-import { drawConnectionWave } from "../utils/connection.js"
-import * as Particles from "../utils/particles.js"
+import { getProgress, get, set, normalizeSceneName } from "../utils/progress.js"
 import * as Cursor from "../utils/cursor.js"
 import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
-import { renderHintWithEnter } from "../utils/touch-tap-button.js"
-import * as Grass from '../components/grass.js'
 import { bindPointerActivate } from '../utils/pointer-activate.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
-import {
-  generateMenuBackgroundCanvas,
-  recomputeMenuBgLayout,
-  MENU_BG_GROUND_Y,
-  MENU_BG_HORIZON_LINE_HEIGHT,
-  MENU_BG_CANVAS_W,
-  MENU_BG_CANVAS_H,
-  MENU_BG_FRONT_LEAF_RGB
-} from '../utils/menu-bg-generator.js'
-import {
-  generateForestMenuBackdrops,
-  forestMenuEdgeSpotXs
-} from '../sections/forest/utils/forest-menu-bg.js'
+import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
+import { generateForestMenuBackdrop, forestMenuLayout } from '../sections/forest/utils/forest-menu-bg.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../sections/forest/utils/forest-palette.js'
+import * as Lake from '../sections/forest/utils/forest-lake.js'
+import * as EarTree from '../sections/forest/utils/forest-ear-tree.js'
+import * as Predator from '../sections/forest/components/predator.js'
+import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
+import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
+import * as Grass from '../components/grass.js'
 import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
 import { addForestFilmGrainOverlayLayer } from '../sections/forest/utils/forest-parallax-grain.js'
+import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
 //
-// Section colors configuration (body color only, outline is always black)
-// All colors are imported from global config (CFG.visual.colors.sections)
+// Level list: a vertical column of levels, the hero standing left of it as
+// the cursor. A level the player can enter shows its picture (only the
+// forest has one so far: the trampoline mushroom), its name to the right and
+// its description at the bottom; every other level is a "?" crossed by the
+// red prohibition sign, with no name and no description. Each level owns a
+// backdrop that cross-fades in while it is selected.
 //
-const SECTION_COLORS = {
-  forest: CFG.visual.colors.sections.forest,
-  word: CFG.visual.colors.sections.word,
-  touch: CFG.visual.colors.sections.touch,
-  feel: CFG.visual.colors.sections.feel,
-  mind: CFG.visual.colors.sections.mind,
-  time: CFG.visual.colors.sections.time
-}
+const BACKDROP_FOREST = 'forest'
+const BACKDROP_NIGHT = 'night'
+const LEVEL_ICON_MUSHROOM = 'mushroom'
+const FOREST_LESSON_PREFIX = 'lesson-forest.'
+const FOREST_FIRST_LESSON = 'lesson-forest.0'
+const FOREST_DESCRIPTION = [
+  'A gray forest that has forgotten its colours.',
+  'Look closely: the forest looks back,',
+  'and it wakes only for those who learn to see.'
+].join('\n')
+const LEVELS = [
+  { section: 'forest', name: 'forest', icon: LEVEL_ICON_MUSHROOM, description: FOREST_DESCRIPTION, backdrop: BACKDROP_FOREST },
+  { section: 'touch', name: 'touch', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'word', name: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'time', name: 'time', icon: null, description: null, backdrop: BACKDROP_NIGHT },
+  { section: 'feel', name: 'feel', icon: null, description: null, backdrop: BACKDROP_NIGHT }
+]
 //
-// Background fade transition speed (higher = faster)
+// Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
+// column stands at MENU_COLUMN_X_FRAC of the width, centred on
+// MENU_COLUMN_Y_FRAC of the height.
 //
-const BG_FADE_SPEED = 3.0
+const MENU_REF_HEIGHT = 1080
+const MENU_COLUMN_X_FRAC = 0.2
+const MENU_COLUMN_Y_FRAC = 0.42
+const MENU_ITEM_STEP = 112
+const MENU_HERO_GAP = 118
+const MENU_NAME_GAP = 66
+const MENU_DESCRIPTION_Y_FRAC = 0.885
+const MENU_HINT_BOTTOM = 26
 //
-// Combined static background — ONE baked full-screen image holding the
-// black base and the darkened menu-bg picture (moon, tree layers, rocks,
-// roots, mushrooms), drawn as a single sprite per frame. Baked lazily once
-// per session; re-entering the menu reuses the loaded sprite.
+// Mouse hover band of one row: from the hero's spot to past the name.
 //
-const MENU_STATIC_SPRITE = 'menu-static-bg'
-const MENU_BG_BASE_OPACITY = 0.35
+const MENU_ROW_LEFT_PAD = 50
+const MENU_ROW_RIGHT_REACH = 260
+//
+// Hero glide between rows and the gentle breathing pulse of the selected icon.
+//
+const MENU_HERO_EASE = 12
+const MENU_SELECT_PULSE_AMP = 0.06
+const MENU_SELECT_PULSE_SPEED = 2.8
+const MENU_SELECT_SCALE_EASE = 8
+//
+// Fade speeds (per second, eased): backdrops and texts.
+//
+const BG_FADE_SPEED = 3
+const TEXT_FADE_SPEED = 6
+const MENU_FADE_EPS = 0.01
+//
+// Night backdrop for the levels without their own picture: the darkened
+// menu-bg forest blended over the scene base colour, baked once per k.
+//
+const MENU_NIGHT_SPRITE = 'menu-night-bg'
+const MENU_NIGHT_ALPHA = 0.35
 //
 // Full-screen sprites live in a texture atlas: linear sampling at the very
-// edge rows pulls in neighbour texels, which reads as thin horizontal lines
-// at the top/bottom of the canvas. Drawing the sprite overscanned by one
-// pixel pushes those edge rows off-screen.
+// edge rows pulls in neighbour texels. Drawing overscanned by one pixel
+// pushes those rows off-screen.
 //
 const MENU_BG_EDGE_OVERSCAN = 1
+const MENU_FOREST_LAYER_SPRITE = 'menu-forest-layer'
 //
-// Two backdrop layers. The idle one follows the level the player is on: the
-// forest level (and a fresh save, whose first level is the forest) shows the
-// forest in its gray phase — the same layout as the forest picture, no sky,
-// only muted gray silhouettes; other levels keep the darkened night forest.
-// Hovering the forest mushroom reveals the full-colour forest built from the
-// level's own pieces, like the level itself turning colourful.
+// Live decor of the forest backdrop without its own fade (stalk eyes, the
+// crawler) shows once the forest backdrop is mostly in.
 //
-const MENU_BG_VARIANT_FOREST_GRAY = 'forest-gray'
-const MENU_BG_VARIANT_NIGHT = 'night'
-const MENU_FOREST_SECTION = 'forest'
-const MENU_FOREST_LESSON_PREFIX = 'lesson-forest.'
-const MENU_PREVIEW_END_SCENE = 'lesson-touch.0'
+const MENU_FOREST_LIVE_MIN_OPACITY = 0.5
+const MENU_LAKE_SPRITE_KEY = 'menu'
 //
-// Alpha each picture is blended with over the menu base colour.
+// Swaying grass along the forest ground: the level's grass tone shifting
+// toward warm gold per blade, so the field reads yellow; none on the lake.
 //
-const MENU_BG_LAYER_ALPHA = {
-  [MENU_BG_VARIANT_FOREST_GRAY]: 0.45,
-  [MENU_BG_VARIANT_NIGHT]: MENU_BG_BASE_OPACITY
-}
-const MENU_FOREST_GRASS_RGB = forestRgb(FOREST_PAL.forestFloor.grassDry)
+const MENU_GRASS_TUFT_COUNT = 40
+const MENU_GRASS_EDGE_INSET = 20
+const MENU_GRASS_RGB = forestRgb(FOREST_PAL.treeColor.leafShades[0])
+const MENU_GRASS_HUE_VARY_MAX = 1
+const MENU_GRASS_HUE_VARY_SKEW = 0.5
 //
-// Colour forest parallax: the rows behind the edge trees drift against the
-// cursor by up to MENU_PARALLAX_MAX_PX times their depth, eased.
+// The crawler roams the ground east of the lake, heading for a new random
+// spot every few seconds; it never hunts the menu hero.
 //
-const MENU_PARALLAX_MAX_PX = 24
-const MENU_PARALLAX_EASE = 3
-const MENU_FOREST_LAYER_SPRITE = `${MENU_STATIC_SPRITE}-forest-layer`
-const MENU_FOREST_GRAY_GRASS_RGB = forestRgb(FOREST_PAL.decorGray)
+const MENU_CRAWLER_RETARGET_MIN = 2.5
+const MENU_CRAWLER_RETARGET_RANGE = 4
 //
-// Stalk eyes standing on the forest backdrop's edges, drawn live so they
-// sway and watch the cursor; they come alive with the colour forest only.
+// Draw layers.
 //
-const MENU_FOREST_EYE_COUNT_PER_SIDE = 2
-const MENU_FOREST_EYE_SEED = 33191
-const MENU_FOREST_EYE_MIN_BG_OPACITY = 0.5
+const MENU_BG_Z = 0
+const MENU_ICON_Z = 10
+const MENU_TEXT_Z = 20
+const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
+const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
 //
-// Swaying grass along the menu-bg horizon — the shared Grass component with
-// the same density principle the ready scene uses: the further from the
-// screen centre, the more tufts. The tint fades with the background when an
-// anti-hero is hovered.
+// "?" glyph and the red prohibition sign over it (ring + slash). The glyph
+// is baked into a canvas sized to its ink box, so its centre is the circle's.
 //
-const MENU_GRASS_TUFT_COUNT = 44
-const MENU_GRASS_EDGE_INSET = 30
+const MENU_QUESTION_MARK_TEXT = '?'
+const MENU_QUESTION_MARK_SIZE = 72
+const MENU_QUESTION_MARK_HEX = FOREST_PAL.lightGray
+const MENU_QUESTION_MARK_SPRITE = 'menu-question-mark'
+const MENU_QUESTION_MARK_SHADOW_OFFSET = 3
+const MENU_QUESTION_MARK_PAD = 4
 //
-// The blades take the SAME tone as the near-row forest foliage: the
-// palette tree-leaf green pushed toward the warm haze by the combined
-// near-row blend of the forest level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
+// Optical nudge: the glyph's bowl hangs left of its stem, so a box-centred
+// "?" still reads left of the ring's centre.
 //
-//
-// Grass matches the warm yellow-orange foliage of the front-row side trees,
-// at half brightness so it doesn't overpower the night scene
-//
-const MENU_GRASS_TINT_R = Math.round(MENU_BG_FRONT_LEAF_RGB.r / 2)
-const MENU_GRASS_TINT_G = Math.round(MENU_BG_FRONT_LEAF_RGB.g / 2)
-const MENU_GRASS_TINT_B = Math.round(MENU_BG_FRONT_LEAF_RGB.b / 2)
-//
-// Firefly particles target opacity when hovering an anti-hero
-//
-const PARTICLES_HOVER_OPACITY = 0.8
-const PARTICLES_FADE_IN_SPEED = 4.0
-const PARTICLES_FADE_OUT_SPEED = 0.5
-//
-// Menu audio configuration (relative to CFG.audio.masterVolume)
-//
-const MENU_AUDIO = {
-  menuMusicNormal: CFG.audio.masterVolume * 0.3,      // menu.mp3 normal volume (21% of master)
-  menuMusicHover: CFG.audio.masterVolume * 0.08,      // menu.mp3 hover volume (5.6% of master)
-  kidsMusicTarget: CFG.audio.masterVolume * 0.4,      // kids.mp3 target volume (28% of master)
-  kidsMusicHover: CFG.audio.masterVolume * 0.1,       // kids.mp3 hover volume (7% of master)
-  kidsMusicFadeInDuration: 4.0                         // Fade-in duration in seconds
-}
-
-//
-// Prohibited sign visual style (drawn on locked anti-heroes when hovered).
-// Ring + slash drawn in a dark crimson, pulsing gently.
-//
+const MENU_QUESTION_MARK_NUDGE_X = 4
 const PROHIBITED_RING_RADIUS = 40
 const PROHIBITED_RING_SEGMENTS = 36
 const PROHIBITED_RING_WIDTH = 5
 const PROHIBITED_SLASH_WIDTH = 7
-const PROHIBITED_PULSE_SPEED = 2.8
-const PROHIBITED_COLOR = '#B82C2C'
-const PROHIBITED_SIGN_OPACITY = 1.0
-const MENU_ANTIHERO_HOVER_AMP = 0.08
-const MENU_ANTIHERO_PULSE_SPEED = 2.8
-const MENU_ANTIHERO_HOVER_LERP = 8
-const MENU_ANTIHERO_HOVER_RADIUS = 90
+const PROHIBITED_SLASH_REACH = 0.72
+const PROHIBITED_PULSE_SPEED = 2
+const PROHIBITED_PULSE_AMP = 2
+const PROHIBITED_COLOR = FOREST_PAL.menuProhibited
 //
-// Green checkmark displayed on completed anti-heroes when hovered
+// Baked texts: level names, descriptions and the key hint, all in the
+// regular font with a dark drop shadow.
 //
-const CHECKMARK_COLOR_R = 90
-const CHECKMARK_COLOR_G = 210
-const CHECKMARK_COLOR_B = 100
-const CHECKMARK_OUTLINE_COLOR_R = 18
-const CHECKMARK_OUTLINE_COLOR_G = 24
-const CHECKMARK_OUTLINE_COLOR_B = 18
-const CHECKMARK_SIZE = 28
-const CHECKMARK_WIDTH = 6
-const CHECKMARK_OUTLINE_WIDTH = 8
-const CHECKMARK_OPACITY = 1.0
-const CHECKMARK_PULSE_SPEED = 1.8
+const MENU_TEXT_FONT = CFG.visual.fonts.regularFull
+const MENU_TEXT_HEX = CFG.visual.colors.hero.eyeWhite
+const MENU_TEXT_SHADOW_HEX = CFG.visual.colors.outline
+const MENU_NAME_SIZE = 34
+const MENU_DESCRIPTION_SIZE = 22
+const MENU_DESCRIPTION_LINE_SPACING = 6
+const MENU_HINT_SIZE = 16
+const MENU_HINT_OPACITY = 0.55
+const MENU_HINT_TEXT = '↑ ↓  choose     enter  play     esc  back'
+const MENU_TEXT_SPRITE = 'menu-text'
 //
-// Scene-leave cover — sits above menu sprites so anti-heroes do not flash during load
+// The selected level's name blinks while the hero stands by it.
 //
-const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
-const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
-const MENU_ARROW_START_OFFSET = 96
-const MENU_ARROW_END_OFFSET = 96
-const MENU_ARROW_ARC_RADIUS_INSET = 8
-const MENU_ARROW_MAX_SPAN_RATIO = 0.38
+const MENU_NAME_BLINK_SPEED = 2.5
+const MENU_NAME_BLINK_MIN = 0.25
 //
-// Forest anti-hero on the menu — same whitish body + dark outline as the
-// playable hero in lesson-forest.0 before the world turns colourful.
+// The hero's eyes dart around while it waits: a new glance every
+// MENU_GLANCE_MIN..+RANGE seconds at a random spot this far around the hero.
 //
-const FOREST_MENU_HERO_BODY = FOREST_PAL.heroBodyGray
-const FOREST_MENU_HERO_OUTLINE = FOREST_PAL.heroOutline
+const MENU_GLANCE_MIN = 0.25
+const MENU_GLANCE_RANGE = 0.9
+const MENU_GLANCE_REACH_X = 220
+const MENU_GLANCE_REACH_Y = 160
 //
-// Forest section icon on the ring — white body like the filled lesson hero.
+// The hero cursor — the white forest hero at its usual size.
 //
-const FOREST_MENU_SECTION_HERO_BODY = CFG.visual.colors.hero.eyeWhite
+const MENU_HERO_LOOK = {
+  type: Hero.HEROES.HERO,
+  bodyColor: CFG.visual.colors.hero.eyeWhite,
+  outlineColor: CFG.visual.colors.outline,
+  eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
+  pupilColor: CFG.visual.colors.hero.eyePupil,
+  outlineOnly: false
+}
 //
-// Centre hero before touch is completed — white body and black rim, the same
-// filled bake the player walks with in lesson-forest.0.
+// Menu music (relative to CFG.audio.masterVolume): menu.mp3 at once, kids.mp3
+// fading in.
 //
-const MENU_CENTRE_HERO_WHITE_BODY = CFG.visual.colors.hero.eyeWhite
-const MENU_CENTRE_HERO_WHITE_OUTLINE = CFG.visual.colors.outline
-//
-// The forest icon is drawn as the trampoline mushroom; its anti-hero stays as
-// an invisible hover / click target at the same spot.
-//
-const FOREST_MENU_MUSHROOM_Z = 10
-//
-// Centre hero hollow rim before forest play — soft gray body tone.
-//
-const MENU_HERO_OUTLINE_COLOR = FOREST_MENU_HERO_BODY
-const MENU_HERO_BLACK_OUTLINE = '#000000'
-//
-// Uncompleted section anti-heroes — soft rim near the ready/menu backdrop.
-//
-const MENU_ANTIHERO_HOLLOW_OUTLINE = CFG.visual.colors.ready.uncompletedSectionOutline
-//
-// Anti-hero sprite bodies: gray base for every section icon, orange for the
-// completed time section, red for the centre hero once word is completed.
-//
-const MENU_GRAY_BODY = '#656565'
-const MENU_TIME_YELLOW_BODY = '#FF8C00'
-const MENU_WORD_HERO_BODY = '#E74C3C'
+const MENU_MUSIC_VOLUME = CFG.audio.masterVolume * 0.3
+const MENU_KIDS_VOLUME = CFG.audio.masterVolume * 0.4
+const MENU_KIDS_FADE_IN = 4
 //
 // Section-complete markers saved as lastLesson point at the next section's
 // first lesson (time-complete ends the game: no current lesson).
@@ -222,2886 +200,703 @@ const MENU_COMPLETE_NEXT_LESSON = {
   'touch-complete': 'lesson-word.0',
   'forest-complete': 'lesson-touch.0'
 }
-//
-// Boot prewarm yields between heavy bakes so the loader keeps animating.
-//
+const MENU_SCENE_GUARD_DELAY = 0.2
 const MENU_PREWARM_YIELD_FRAMES = 2
-//
-// "?" shown instead of the anti-hero for sections not finished yet — same
-// gray as the old hollow icon body, dark drop shadow underneath.
-//
-const MENU_QUESTION_MARK_TEXT = '?'
-const MENU_QUESTION_MARK_SIZE = 72
-const MENU_QUESTION_MARK_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
-const MENU_QUESTION_MARK_HEX = FOREST_PAL.lightGray
-const MENU_QUESTION_MARK_SHADOW_HEX = CFG.visual.colors.outline
-const MENU_QUESTION_MARK_SHADOW_OFFSET = 3
-const MENU_LEAVE_BG_R = 26
-const MENU_LEAVE_BG_G = 26
-const MENU_LEAVE_BG_B = 26
-//
-// Per-letter progress labels below anti-heroes —
-// the current level letter and every letter before it are highlighted; completed sections show all.
-//
-const SECTION_LABEL_FONT_SIZE = 18
-const SECTION_LABEL_LETTER_SPACING = -1
-//
-// Letter sequences for each section (matching their in-game HUD indicators)
-//
-const SECTION_LETTERS = {
-  forest: ['F', 'O', 'R', 'E', 'S', 'T'],
-  touch:  ['T', 'O', 'U', 'C', 'H'],
-  time:   ['T', '1', 'M', 'E'],
-  word:   ['W', 'O', 'R', 'D', 'S'],
-  feel:   ['F', 'E', 'E', 'L'],
-  mind:   ['M', 'I', 'N', 'D']
-}
-//
-// Storage keys of the collected FOREST letters — the menu label under the forest
-// anti-hero lights up exactly as many letters as the hero has found.
-//
-const FOREST_LETTER_KEYS = ['forest.collectedF', 'forest.collectedO', 'forest.collectedR', 'forest.collectedE', 'forest.collectedS', 'forest.collectedT']
-//
-// Touch "H" hangs lower and continuously sways — mirroring the in-game TOUCH HUD indicator
-//
-const TOUCH_H_INDEX = 4
-const TOUCH_H_TILT = 22
-const TOUCH_H_Y_RATIO = 0.3
-const TOUCH_H_X_OFFSET = -6
-const TOUCH_H_WOBBLE_SPEED = 2.5
-const TOUCH_H_WOBBLE_AMPLITUDE = 4
-function getSectionDisplayName(section) {
-  //
-  // Return section name as-is (singular form)
-  //
-  return section
-}
-/**
- * Returns the index of the HUD letter that matches the player's current level.
- * Level 0 maps to the first letter (e.g. word "W"), level 1 to the second ("O"), etc.
- * @param {string} section - Section key ('touch', 'time', 'word', …)
- * @param {string|null} lastLevel - Value of get('lastLesson')
- * @param {Object} progress - Full progress object from getProgress()
- * @returns {number} Active letter index, -1 when unknown, -2 when the whole section is done
- */
-function getSectionActiveLetterIndex(section, lastLevel, progress) {
-  //
-  // Fully completed section → highlight every letter
-  //
-  if (progress[section]?.completed) return -2
-  //
-  // Forest lights one letter per collected in-level letter (G, L, O, W) —
-  // independent of the level number.
-  //
-  if (section === 'forest') {
-    const collected = FOREST_LETTER_KEYS.filter(key => get(key, false)).length
-    return collected - 1
-  }
-  if (!lastLevel) return -1
-  if (section === 'touch' && lastLevel.startsWith('lesson-touch.')) {
-    const n = parseInt(lastLevel.replace('lesson-touch.', ''), 10)
-    return isNaN(n) ? -1 : n
-  }
-  if (section === 'time' && lastLevel.startsWith('lesson-time.')) {
-    const n = parseInt(lastLevel.replace('lesson-time.', ''), 10)
-    return isNaN(n) ? -1 : n
-  }
-  if (section === 'word' && lastLevel.startsWith('lesson-word.')) {
-    const n = parseInt(lastLevel.replace('lesson-word.', ''), 10)
-    return isNaN(n) ? -1 : n
-  }
-  return -1
-}
-//
-// Hero/anti-hero circle — design reference values at the reference
-// 1920x1080 canvas (see CFG.visual.screen). The circle always stays
-// centred on the live window; its radius scales uniformly with the window
-// (never stretched into an oval) and is clamped so the whole composition —
-// anti-hero sprites, their hover glow, the section labels below them and
-// the orbiting title above — always fits inside the window at any
-// resolution.
-//
-const CIRCLE_DESIGN_RADIUS = 302
-const CIRCLE_OUTER_MARGIN = 170
-const CIRCLE_MIN_RADIUS = 150
-/**
- * Computes the hero/anti-hero circle centre + radius for the live window.
- * @param {Object} k - Kaplay inst
- * @returns {{centerX: number, centerY: number, radius: number}}
- */
-function computeMenuCircleLayout(k) {
-  const centerX = k.width() / 2
-  const centerY = k.height() / 2
-  const scale = Math.min(k.width() / CFG.visual.screen.width, k.height() / CFG.visual.screen.height)
-  const maxRadius = Math.min(centerX, k.width() - centerX, centerY, k.height() - centerY) - CIRCLE_OUTER_MARGIN
-  const radius = Math.max(CIRCLE_MIN_RADIUS, Math.min(CIRCLE_DESIGN_RADIUS * scale, maxRadius))
-  return { centerX, centerY, radius }
-}
-/**
- * Get section label positions (arranged in circle)
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @param {number} radius - Circle radius
- * @returns {Array} Array of section configs with positions
- */
-function getSectionPositions(centerX, centerY, radius) {
-  //
-  // Clockwise order (6 sections, 60° apart): forest → touch → word → time → feel → mind.
-  //
-  const sections = ['touch', 'word', 'time', 'feel', 'mind', 'forest']
-  const angleStep = (Math.PI * 2) / sections.length
-  //
-  // Start angle shifted to have 2 anti-heroes at top
-  // -120° puts first anti-hero at top-left, second at top-right
-  //
-  const startAngle = -Math.PI * 2 / 3  // -120 degrees
-  
-  return sections.map((section, index) => {
-    const angle = startAngle + angleStep * index
-    const x = centerX + Math.cos(angle) * radius
-    const y = centerY + Math.sin(angle) * radius
-    
-    return {
-      section,
-      x,
-      y,
-      color: SECTION_COLORS[section]
-    }
-  })
-}
+const MENU_LEAVE_BG_HEX = '#1A1A1A'
+const MENU_HUSH_INTERVAL_MS = 200
+const MENU_HUSH_DURATION_MS = 8000
 
 /**
- * Bakes the menu's heavy static assets ahead of time — both backdrop
- * pictures for the current window size and every hero / anti-hero sprite
- * the section ring uses — on the given live Kaplay instance. Called under the
- * first boot loader, so the first menu visit only reuses loaded sprites.
- * Read-only on the save: it resolves the current lesson without writing it.
- * @param {Object} k - Kaplay inst (native-resolution engine)
- * @returns {Promise<void>} Resolves when every bake is loaded into k
- */
-export async function prewarmMenuAssets(k) {
-  recomputeMenuBgLayout(k.width(), k.height())
-  const lastLevel = resolveMenuLastLevel(get('lastLesson', null))
-  buildMenuStaticSprite(k, resolveMenuBgVariant(lastLevel))
-  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
-  loadMenuForestLayerSprites(k)
-  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
-  loadMenuHeroSprites(k, getProgress(), lastLevel)
-}
-
-/**
- * Menu scene with hero in center
+ * Menu scene: a vertical level column with the hero as the cursor.
  * @param {Object} k - Kaplay instance
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
     //
-    // Menu now shares the native-resolution engine with "ready", Forest and
-    // touch lesson 0 (see engine-switch.js) — the baked background and every
-    // resolution-derived layout constant must be recomputed from the live
-    // window size before anything below reads them, mirroring Forest's
-    // recomputeForestScreenLayout() pattern.
+    // Native-resolution engine: every layout value comes from the live window.
     //
     recomputeMenuBgLayout(k.width(), k.height())
-    //
-    // Clear any leftover pre-level transition handle from a prior scene.
-    // A stale k.transitionCleanup would silently block Space / anti-hero
-    // clicks from starting the current level.
-    //
     if (k.transitionCleanup) {
-      try { k.transitionCleanup() } catch (_) { /* ignore stale cleanup errors */ }
+      try { k.transitionCleanup() } catch (_) { /* stale cleanup */ }
       k.transitionCleanup = null
     }
-    //
-    // Restore volume to 1 (in case it was muted by transition)
-    //
     k.volume(1)
-    //
-    // Set the canvas backdrop to the READY scene background: the menu shares
-    // the same tone, and the baked static sprite blends into this exact colour
-    // at its top/bottom bands, so the letterbox bars never read as horizontal
-    // strips of a different tone.
-    //
-    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
-    //
-    // Clean up persistent word-pile objects from previous scenes
-    //
-    k.get("word-pile-text").forEach(obj => obj.destroy())
-    k.get("word-pile-outline").forEach(obj => obj.destroy())
-    k.get("flying-word").forEach(obj => obj.destroy())
-    k.flyingWordsInstance = null
-    //
-    // Clean up life.png sprite from level indicators
-    //
-    k.get("life").forEach(obj => obj.destroy())
-    
-    //
-    // Reset flying words instance so it can be recreated in next level
-    //
-    k.flyingWordsInstance = null
-    
-    //
-    // Ensure default cursor type when entering menu
-    //
-    Cursor.setCursor('arrow')
-    
-    //
-    // Disable gravity in menu
-    //
     k.setGravity(0)
-    
-    const { centerX, centerY, radius } = computeMenuCircleLayout(k)
-    //
-    // Create stars for background
-    //
-    const stars = createStars(k, 150)
-    //
-    // Create firefly particles background
-    //
-    const particlesBg = Particles.create({
-      k,
-      particleCount: 180,
-      color: '#FF8C00',
-      baseOpacity: 0,
-      flickerSpeed: 1.5,
-      trembleRadius: 12,
-      gaussianFactor: 0.35,
-      disableMouseInteraction: true
-    })
-    
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
+    Cursor.setCursor('arrow')
+    const lastLevel = syncMenuLastLesson()
     const progress = getProgress()
-    //
-    // Migrate legacy 'lastLevel' key (old format: 'level-touch.1') to 'lastLesson'
-    // ('lesson-touch.1'). Only runs once — removes the old key afterwards.
-    //
-    const legacyLastLevel = get('lastLevel', null)
-    if (legacyLastLevel) {
-      const migrated = legacyLastLevel.startsWith('level-') ? legacyLastLevel.replace(/^level-/, 'lesson-') : legacyLastLevel
-      if (!get('lastLesson', null)) set('lastLesson', migrated)
-      localStorage.removeItem('lastLevel')
-    }
-    //
-    // Sanitize lastLesson: section-complete markers should point to the next section
-    //
-    const savedLastLevel = get('lastLesson', null)
-    const lastLevel = resolveMenuLastLevel(savedLastLevel)
-    lastLevel !== savedLastLevel && set('lastLesson', lastLevel)
-    const currentSection = getSectionFromLevel(lastLevel)
-    
-    //
-    // Create sound instance and start audio context
-    // Don't start ambient automatically - it will play on hover
-    //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    //
-    // Play menu background music
-    //
-    const menuMusic = k.play("menu", { loop: true, volume: MENU_AUDIO.menuMusicNormal })
-    const MENU_MUSIC_NORMAL_VOLUME = MENU_AUDIO.menuMusicNormal
-    const MENU_MUSIC_HOVER_VOLUME = MENU_AUDIO.menuMusicHover
-    //
-    // Play kids.mp3 music with fade in
-    //
-    const kidsMusic = k.play("kids", { loop: true, volume: 0 })
-    const KIDS_MUSIC_TARGET_VOLUME = MENU_AUDIO.kidsMusicTarget
-    const KIDS_MUSIC_HOVER_VOLUME = MENU_AUDIO.kidsMusicHover
-    const KIDS_MUSIC_CURRENT_SECTION_VOLUME = MENU_AUDIO.kidsMusicHover * 0.5  // Even quieter when hovering current section
-    const KIDS_MUSIC_FADE_IN_DURATION = MENU_AUDIO.kidsMusicFadeInDuration
-    let kidsMusicFadeTimer = 0
-    registerEngineTeardown(() => stopMenuMusic(menuMusic, kidsMusic))
-
-    //
-    // Create hero in center (using HERO type)
-    // Color progression: gray → gold (forest) → teal (touch) → orange (time) → red (word)
-    //
-    const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed && !progress.forest?.completed
-    const inForestPlay = isForestLesson(lastLevel)
-    const centreLook = menuCentreHeroLook(progress, lastLevel)
-    const menuHeroWhite = centreLook.filled
-    const grayColor = MENU_GRAY_BODY
-    const uncompletedHollowOutlineNoHash = MENU_ANTIHERO_HOLLOW_OUTLINE.replace('#', '')
-    const menuHeroOutlineNoHash = MENU_HERO_OUTLINE_COLOR.replace('#', '')
-    //
-    // Every hero / anti-hero bake the menu needs (no-op when prewarmed on boot,
-    // see prewarmMenuAssets).
-    //
-    loadMenuHeroSprites(k, progress, lastLevel)
+    const music = startMenuMusic(k)
+    registerEngineTeardown(() => stopMenuMusic(music))
+    loadMenuAssets(k)
+    const layout = computeMenuLayout(k)
+    const levels = LEVELS.map((level, i) => buildMenuLevel(level, i, layout, progress))
+    const selected = Math.max(0, levels.findIndex(level => lastLevel?.startsWith(`lesson-${level.section}.`)))
     const heroInst = Hero.create({
       k,
-      x: centerX,
-      y: centerY,
-      scale: 5 / 3,
+      x: layout.heroX,
+      y: levels[selected].y,
+      ...MENU_HERO_LOOK,
       controllable: false,
-      ...centreLook.sprite,
-      idleVocalization: (inForestPlay || !progress.word?.completed) ? null : undefined,
+      isStatic: true,
+      idleVocalization: null,
       sfx: sound
     })
-    
-    const hero = heroInst.character
-    hero.z = 10
-    //
-    // Apply same color tint as inactive anti-heroes when no sections complete
-    //
-    if (noSectionsComplete) {
-      hero.color = k.rgb(255, 255, 255)
-    }
-    if (noSectionsComplete || menuHeroWhite) {
-      hero.color = k.rgb(255, 255, 255)
-    }
-    //
-    // Hollow outline-only anti-hero used for every section icon on the menu.
-    //
-    const hollowSuffixes = '_outline_noeyes'
-    const spritePrefixHollow = `${Hero.HEROES.ANTIHERO}_${grayColor.replace('#', '')}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
-    const forestMenuBodyNoHashEarly = FOREST_MENU_HERO_BODY.replace('#', '')
-    const spritePrefixForestHollow = `${Hero.HEROES.ANTIHERO}_${forestMenuBodyNoHashEarly}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
-    //
-    // Create 6 anti-heroes around the main hero (sections)
-    //
-    const sectionConfigs = getSectionPositions(centerX, centerY, radius)
-    const antiHeroes = []
-    const sectionLabels = []
-    //
-    // Floating animation configuration (firefly-like in all directions)
-    //
-    const FLOAT_RADIUS = 6         // Maximum float distance from base position
-    const FLOAT_SPEED_X = 0.8      // Speed of horizontal floating
-    const FLOAT_SPEED_Y = 1.2      // Speed of vertical floating
-    
-    sectionConfigs.forEach((config, index) => {
-      const isCompleted = progress[config.section]?.completed || false
-      //
-      // Always create with gray body (sprite generation)
-      // Color tint will be applied in onUpdate for completed/hovered sections
-      // For time section when completed, use yellow color
-      //
-      const hollowOutlineColor = MENU_ANTIHERO_HOLLOW_OUTLINE
-      const yellowColor = MENU_TIME_YELLOW_BODY
-      const { hasMouth, hasArms, hasWatch } = menuSectionFeatures(config.section, isCompleted)
-      //
-      // Create anti-hero for this section
-      //
-      const antiHeroInst = Hero.create({
-        k,
-        x: config.x,
-        y: config.y,
-        type: Hero.HEROES.ANTIHERO,
-        scale: 1,
-        controllable: false,
-        isStatic: true,
-        bodyColor: grayColor,
-        outlineColor: hollowOutlineColor,
-        outlineOnly: true,
-        noEyes: !isCompleted,
-        addMouth: hasMouth,
-        addArms: hasArms,
-        addWatch: hasWatch,
-        hitboxPadding: 5,
-        //
-        // Section icon anti-heroes are purely decorative; suppress the
-        // "z-Z" sleeping glyphs that would otherwise float over the UI.
-        //
-        idleVocalization: null
-      })
-      //
-      // Cache sprite prefixes for outline switching
-      // Remove # from colors to match loadHeroSprites prefix format
-      //
-      const grayColorNoHash = grayColor.replace('#', '')
-      const grayOutlineColorNoHash = uncompletedHollowOutlineNoHash
-      const outlineColorNoHash = menuHeroOutlineNoHash
-      const menuHeroBlackOutlineNoHash = MENU_HERO_BLACK_OUTLINE.replace('#', '')
-      const antiHeroOutlineNoHash = config.section === 'touch'
-        ? menuHeroBlackOutlineNoHash
-        : outlineColorNoHash
-      const yellowColorNoHash = yellowColor.replace('#', '')
-      const sectionColorNoHash = config.color.body.replace('#', '')
-      const hasMouthSuffix = hasMouth
-      const hasArmsSuffix = hasArms
-      const hasWatchSuffix = hasWatch
-      const featureSuffix = `${hasMouthSuffix ? '_mouth' : ''}${hasArmsSuffix ? '_arms' : ''}${hasWatchSuffix ? '_watch' : ''}`
-      const outlineSuffix = `${featureSuffix}_outline`
-      const forestMenuBodyNoHash = FOREST_MENU_HERO_BODY.replace('#', '')
-      const forestMenuOutlineNoHash = FOREST_MENU_HERO_OUTLINE.replace('#', '')
-      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${outlineSuffix}`
-      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${outlineSuffix}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time'
-        ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch_outline`
-        : null
-      const forestSectionBodyNoHash = FOREST_MENU_SECTION_HERO_BODY.replace('#', '')
-      antiHeroInst.spritePrefixForest = config.section === 'forest'
-        ? `${Hero.HEROES.ANTIHERO}_${forestSectionBodyNoHash}_${forestMenuOutlineNoHash}${featureSuffix}`
-        : null
-      antiHeroInst.spritePrefixTouchFilled = config.section === 'touch'
-        ? `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${antiHeroOutlineNoHash}${featureSuffix}`
-        : null
-      const spritePrefixForestSectionHollow = config.section === 'forest'
-        ? `${Hero.HEROES.ANTIHERO}_${forestSectionBodyNoHash}_${uncompletedHollowOutlineNoHash}${hollowSuffixes}`
-        : null
-      antiHeroInst.spritePrefixForestHollow = spritePrefixForestSectionHollow
-      antiHeroInst.spritePrefixHollow = spritePrefixHollow
-      const lockedHoverOutlineHex = menuSectionHoverInkHex(config.section, config)
-      const lockedHoverOutlineNoHash = lockedHoverOutlineHex.replace('#', '')
-      antiHeroInst.spritePrefixLockedHover =
-        `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${lockedHoverOutlineNoHash}${hollowSuffixes}`
-      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${antiHeroOutlineNoHash}${outlineSuffix}`
-      antiHeroInst.currentPrefix = isCompleted
-        ? (config.section === 'forest' && antiHeroInst.spritePrefixForest
-          ? antiHeroInst.spritePrefixForest
-          : antiHeroInst.spritePrefixColored)
-        : spritePrefixHollow
-      antiHeroInst.bakeByPrefix = {
-        [antiHeroInst.spritePrefixGray]: {
-          bodyColor: grayColor,
-          outlineColor: hollowOutlineColor,
-          addMouth: hasMouth,
-          addArms: hasArms,
-          addWatch: hasWatch,
-          outlineOnly: true
-        },
-        [antiHeroInst.spritePrefixBlack]: {
-          bodyColor: grayColor,
-          outlineColor: MENU_HERO_OUTLINE_COLOR,
-          addMouth: hasMouth,
-          addArms: hasArms,
-          addWatch: hasWatch,
-          outlineOnly: true
-        },
-        [antiHeroInst.spritePrefixColored]: {
-          bodyColor: config.color.body,
-          outlineColor: MENU_HERO_OUTLINE_COLOR,
-          addMouth: hasMouthSuffix,
-          addArms: hasArmsSuffix,
-          addWatch: hasWatchSuffix,
-          outlineOnly: true
-        }
-      }
-      antiHeroInst.spritePrefixYellow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixYellow] = {
-        bodyColor: yellowColor,
-        outlineColor: MENU_HERO_OUTLINE_COLOR,
-        addMouth: true,
-        addArms: true,
-        addWatch: true,
-        outlineOnly: true
-      })
-      antiHeroInst.spritePrefixForest && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixForest] = {
-        bodyColor: FOREST_MENU_SECTION_HERO_BODY,
-        outlineColor: FOREST_MENU_HERO_OUTLINE,
-        addMouth: hasMouth,
-        addArms: hasArms,
-        addWatch: hasWatch,
-        outlineOnly: false,
-        noEyes: false
-      })
-      antiHeroInst.spritePrefixTouchFilled && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixTouchFilled] = {
-        bodyColor: config.color.body,
-        outlineColor: MENU_HERO_BLACK_OUTLINE,
-        addMouth: hasMouth,
-        addArms: hasArms,
-        addWatch: hasWatch,
-        outlineOnly: false
-      })
-      antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixHollow] = {
-        bodyColor: grayColor,
-        outlineColor: hollowOutlineColor,
-        outlineOnly: true,
-        noEyes: true,
-        addMouth: false,
-        addArms: false,
-        addWatch: false
-      }
-      antiHeroInst.spritePrefixForestHollow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixForestHollow] = {
-        bodyColor: FOREST_MENU_SECTION_HERO_BODY,
-        outlineColor: hollowOutlineColor,
-        outlineOnly: true,
-        noEyes: true,
-        addMouth: false,
-        addArms: false,
-        addWatch: false
-      })
-      antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixLockedHover] = {
-        bodyColor: grayColor,
-        outlineColor: lockedHoverOutlineHex,
-        outlineOnly: true,
-        noEyes: true,
-        addMouth: false,
-        addArms: false,
-        addWatch: false
-      }
-      //
-      // Switch to colored sprite immediately if section is completed
-      // (Hero.create uses gray body, so the actual sprite needs replacing)
-      //
-      const isFirstPlayForestIcon = !lastLevel && config.section === 'forest'
-      if (isCompleted) {
-        const completedPrefix = config.section === 'time'
-          ? antiHeroInst.spritePrefixYellow
-          : (config.section === 'forest' && antiHeroInst.spritePrefixForest
-            ? antiHeroInst.spritePrefixForest
-            : antiHeroInst.spritePrefixColored)
-        completedPrefix && applyMenuAntiHeroSpritePrefix(antiHeroInst, completedPrefix)
-      } else if (isFirstPlayForestIcon && antiHeroInst.spritePrefixForest) {
-        applyMenuAntiHeroSpritePrefix(antiHeroInst, antiHeroInst.spritePrefixForest)
-      } else if (currentSection === config.section) {
-        applyMenuAntiHeroSpritePrefix(
-          antiHeroInst,
-          resolveMenuAntiHeroSpritePrefix(antiHeroInst, currentSection, false)
-        )
-      } else {
-        applyMenuAntiHeroSpritePrefix(antiHeroInst, spritePrefixHollow)
-      }
-      //
-      // Store base position and phase offsets for floating animation
-      //
-      antiHeroInst.baseX = config.x
-      antiHeroInst.baseY = config.y
-      antiHeroInst.floatPhaseX = index * 1.1 + Math.random() * 2
-      antiHeroInst.floatPhaseY = index * 0.7 + Math.random() * 2
-      
-      antiHeroInst.character.z = 10
-      //
-      // Store section info for hover color change
-      //
-      antiHeroInst.section = config.section
-      antiHeroInst.sectionColor = config.color.body
-      antiHeroInst.isCompleted = isCompleted
-      antiHeroInst.grayColor = grayColor
-      antiHeroInst.yellowColor = yellowColor
-      antiHeroInst.originalBodyColor = grayColor
-      antiHeroInst.baseScale = 1
-      
-      //
-      // Add click handlers for implemented sections
-      // Only if section is not completed AND previous section is completed (or it's the first section)
-      //
-      const sectionOrder = ['forest', 'touch', 'word', 'time', 'feel', 'mind']
-      const currentIndex = sectionOrder.indexOf(config.section)
-      const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
-      const previousSection = sectionOrder[previousIndex]
-      const isPreviousCompleted = progress[previousSection]?.completed || false
-      const canAccess = currentIndex === 0 || isPreviousCompleted  // First section is always accessible
-      
-      if (config.section === 'word' && !isCompleted && canAccess) {
-        antiHeroInst.onMenuSelect = () => {
-          if (isMenuTransitionBlocking(k)) return
-          beginMenuSceneLeave(k, inst)
-          Sound.stopAmbient(sound)
-          Cursor.setCursor('arrow')
-          const isWordLevel = lastLevel && lastLevel.startsWith('lesson-word.')
-          if (isWordLevel) {
-            stopMenuMusic(menuMusic, kidsMusic)
-            showTransitionToLevel(k, lastLevel)
-          } else {
-            stopMenuMusic(menuMusic, kidsMusic)
-            createLevelTransition(k, 'menu')
-          }
-        }
-        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
-      }
-      
-      if (config.section === 'forest' && !isCompleted && canAccess) {
-        antiHeroInst.onMenuSelect = () => {
-          if (isMenuTransitionBlocking(k)) return
-          beginMenuSceneLeave(k, inst)
-          Sound.stopAmbient(sound)
-          Cursor.setCursor('arrow')
-          stopMenuMusic(menuMusic, kidsMusic)
-          const currentLastLevel = get('lastLesson', null)
-          if (currentLastLevel && currentLastLevel.startsWith('lesson-forest.')) {
-            showTransitionToLevel(k, currentLastLevel)
-          } else {
-            showTransitionToLevel(k, 'lesson-forest.0')
-          }
-        }
-        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
-      }
-      if (config.section === 'touch' && !isCompleted && canAccess) {
-        antiHeroInst.onMenuSelect = () => {
-          if (isMenuTransitionBlocking(k)) return
-          beginMenuSceneLeave(k, inst)
-          Sound.stopAmbient(sound)
-          Cursor.setCursor('arrow')
-          stopMenuMusic(menuMusic, kidsMusic)
-          const lastTouchLevel = get('lastLesson', null)
-          if (lastTouchLevel && lastTouchLevel.startsWith('lesson-touch.')) {
-            showTransitionToLevel(k, lastTouchLevel)
-          } else {
-            createLevelTransition(k, 'menu-touch')
-          }
-        }
-        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
-      }
-      
-      if (config.section === 'time' && !isCompleted && canAccess) {
-        antiHeroInst.onMenuSelect = () => {
-          if (isMenuTransitionBlocking(k)) return
-          beginMenuSceneLeave(k, inst)
-          Sound.stopAmbient(sound)
-          Cursor.setCursor('arrow')
-          stopMenuMusic(menuMusic, kidsMusic)
-          const isTimeLevel = lastLevel && lastLevel.startsWith('lesson-time.')
-          if (isTimeLevel) {
-            showTransitionToLevel(k, lastLevel)
-          } else {
-            createLevelTransition(k, 'menu-time')
-          }
-        }
-        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
-      }
-      
-      antiHeroes.push(antiHeroInst)
-      //
-      // Per-letter progress label below the anti-hero.
-      // Completed levels → section colour; remaining → gray.
-      // Touch "H" hangs lower and sways like the in-game HUD indicator.
-      // Unknown sections (never visited) are hidden — "unknown" appears in the
-      // hover-title floating label instead (see updateTitle).
-      //
-      const isCurrentSection = Boolean(lastLevel?.startsWith(`lesson-${config.section}.`))
-      //
-      // First launch (empty save): forest is the starting section — never show
-      // "unknown" for it; the player must see FOREST as the entry point.
-      //
-      const isFirstPlayForest = !lastLevel && config.section === 'forest'
-      const labelVisible = isCompleted || isCurrentSection || isFirstPlayForest
-      //
-      // Store "unknown" flag on the anti-hero for hover-title lookup
-      //
-      antiHeroInst.isUnknown = !labelVisible
-      //
-      // Forest shows no letter label under its icon.
-      //
-      const labelEntry = createSectionProgressLabel(
-        k, config, progress, lastLevel, grayColor, labelVisible && config.section !== 'forest'
-      )
-      sectionLabels.push(labelEntry)
-      config.section === 'forest' && (antiHeroInst.character.hidden = true)
-      //
-      // Sections the player has not finished yet show a "?" instead of the
-      // hollow outline anti-hero (forest keeps its own mushroom stand-in).
-      // The hidden character still drives hover/click by distance.
-      //
-      antiHeroInst.showQuestionMark = !isCompleted && config.section !== 'forest'
-      antiHeroInst.showQuestionMark && (antiHeroInst.character.hidden = true)
-    })
-    
-    //
-    // Create arrows between anti-heroes in clockwise order
-    // Sort anti-heroes by angle clockwise
-    // Clockwise order: sort by ascending angle (smaller angles first, going clockwise)
-    //
-    const sortedAntiHeroes = [...antiHeroes].sort((a, b) => {
-      //
-      // Calculate angle for each anti-hero relative to center
-      //
-      const angleA = Math.atan2(a.baseY - centerY, a.baseX - centerX)
-      const angleB = Math.atan2(b.baseY - centerY, b.baseX - centerX)
-      //
-      // Normalize angles to 0-2π range
-      //
-      const normalizedA = ((angleA + Math.PI * 2) % (Math.PI * 2))
-      const normalizedB = ((angleB + Math.PI * 2) % (Math.PI * 2))
-      //
-      // Sort ascending for clockwise order (smaller angles first)
-      //
-      return normalizedA - normalizedB
-    })
-    
-    const arrows = sortedAntiHeroes.map((fromAntiHero, i) => {
-      const toAntiHero = sortedAntiHeroes[(i + 1) % sortedAntiHeroes.length]
-      return { fromAntiHero, toAntiHero }
-    })
-    
-    //
-    // Combined static background sprite (baked once per session).
-    //
-    const bgVariant = resolveMenuBgVariant(lastLevel)
-    buildMenuStaticSprite(k, bgVariant)
+    Hero.setAwakeOverride(heroInst, true)
+    const forestLayout = forestMenuLayout(k.width(), k.height())
     const forestPieces = loadMenuForestLayerSprites(k)
-    const forestEyes = createMenuForestEyes(k)
-    //
-    // Swaying grass along the menu-bg horizon — shared Grass component in
-    // manual-draw mode (no z given): drawScene renders it between the
-    // background and the stars, fading it together with the background.
-    //
-    //
-    // The density ramp spans the FULL half-width of the current canvas, so
-    // the tuft probability keeps growing all the way to the screen edges
-    // instead of saturating partway out. Computed here (after this scene's
-    // recomputeMenuBgLayout() call above) rather than as a module constant
-    // so it tracks the live resolution instead of freezing at import time.
-    //
-    const menuGrassDensityRamp = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
-    const grassField = Grass.create({
-      k,
-      floorY: MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT,
-      left: MENU_GRASS_EDGE_INSET,
-      right: MENU_BG_CANVAS_W - MENU_GRASS_EDGE_INSET,
-      tuftCount: MENU_GRASS_TUFT_COUNT,
-      density: (x) => Math.min(1, Math.abs(x - centerX) / menuGrassDensityRamp),
-      getTint: () => getMenuGrassTint(inst)
-    })
-    //
-    // Scene instance with all state
-    //
     const inst = {
       k,
-      centerX,
-      centerY,
-      hero,
       sound,
-      particlesBg,
-      stars,
-      grassField,
-      bgVariant,
-      forestEyes,
-      title: createTitle(k, centerX, centerY, radius),
-      forestPerceptionRays: createForestPerceptionRaysState(),
-      antiHeroes,
-      sectionLabels,
-      arrows,  // Store arrows data in instance
-      currentSection,
-      progress,  // Store progress for checking section completion
-      floatTime: 0,
-      floatRadius: FLOAT_RADIUS,
-      floatSpeedX: FLOAT_SPEED_X,
-      floatSpeedY: FLOAT_SPEED_Y,
-      hoveredAntiHero: null,
+      music,
+      layout,
+      levels,
+      selected,
+      lastLevel,
       heroInst,
+      heroY: levels[selected].y,
+      lastMouse: { x: k.mousePos().x, y: k.mousePos().y },
+      musicT: 0,
+      glanceT: 0,
       isLeavingScene: false,
-      heartbeatPhase: 0,
-      lastHeartbeatTime: 0,
-      bgDefaultOpacity: 1.0,
-      forestRevealOpacity: 0,
-      forestPieces,
-      parallaxT: 0
+      sceneReady: false,
+      bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_NIGHT]: 0 },
+      forestLayout,
+      forestBack: forestPieces.back,
+      forestFore: forestPieces.fore,
+      forestEyes: ChainBuoy.create({ k, spots: forestLayout.eyeSpots, earthBottomY: k.height() }),
+      lake: createMenuLake(k, forestLayout),
+      earTrees: EarTree.create({
+        k,
+        spots: forestLayout.earTreeSpots.map(spot => EarTree.buildSpot(spot.x, forestLayout.groundY, spot.tier))
+      }),
+      crawlerT: 0
     }
-    createForestMenuMushroom(inst)
-    
-    //
-    // Track mouse position and check for hover over anti-heroes
-    //
-    k.onUpdate(() => {
-      if (inst.isLeavingScene) return
-      //
-      // Update trembling particles
-      //
-      Particles.onUpdate(particlesBg)
-      //
-      // Fade in kids music
-      //
-      if (kidsMusicFadeTimer < KIDS_MUSIC_FADE_IN_DURATION) {
-        kidsMusicFadeTimer += k.dt()
-        const progress = Math.min(kidsMusicFadeTimer / KIDS_MUSIC_FADE_IN_DURATION, 1.0)
-        kidsMusic.volume = progress * KIDS_MUSIC_TARGET_VOLUME
-      }
-      //
-      // Update heartbeat phase for lightning pulsation (60 BPM = 1 beat per second)
-      //
-      const HEARTBEAT_BPM = 60
-      const heartbeatSpeed = HEARTBEAT_BPM / 60
-      inst.heartbeatPhase = (inst.heartbeatPhase + k.dt() * heartbeatSpeed) % 1
-      
-      const mousePos = k.mousePos()
-      updateMenuForestEyes(inst, mousePos)
-      let foundHover = false
-      let hoveredInst = null
-      
-      //
-      // Check each anti-hero for hover
-      //
-      antiHeroes.forEach(antiHeroInst => {
-        const char = antiHeroInst.character
-        const dx = mousePos.x - char.pos.x
-        const dy = mousePos.y - char.pos.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        const hoverRadius = MENU_ANTIHERO_HOVER_RADIUS
-        
-        if (distance < hoverRadius) {
-          hoveredInst = antiHeroInst
-          foundHover = true
-        }
-      })
-      //
-      // The sleeping singer wakes while an anti-hero is hovered: the song
-      // pauses, the eyes open and follow the hovered character; once the
-      // mouse leaves he dozes off and the idle tune resumes on its own.
-      //
-      Hero.setAwakeOverride(heroInst, Boolean(hoveredInst))
-      Hero.setLookAtPos(heroInst, hoveredInst
-        ? { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y }
-        : null)
-      //
-      // Update colors for all anti-heroes based on hover state
-      //
-      antiHeroes.forEach(antiHeroInst => {
-        const isHovered = antiHeroInst === hoveredInst
-        const lockedHover = isHovered &&
-          isAntiHeroLocked(antiHeroInst, inst.progress, inst.currentSection)
-        let desiredPrefix = resolveMenuAntiHeroSpritePrefix(
-          antiHeroInst,
-          inst.currentSection,
-          isHovered
-        )
-        lockedHover && antiHeroInst.spritePrefixLockedHover &&
-          (desiredPrefix = antiHeroInst.spritePrefixLockedHover)
-        //
-        // White tint for all states since sprites now have correct colors baked in
-        //
-        antiHeroInst.character.color = k.rgb(255, 255, 255)
-        //
-        // Switch sprite variant if needed
-        //
-        if (antiHeroInst.currentPrefix !== desiredPrefix) {
-          applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix)
-        }
-        //
-        // Keep anti-hero at base position; scale breathes gently while hovered
-        //
-        antiHeroInst.character.pos.x = antiHeroInst.baseX
-        antiHeroInst.character.pos.y = antiHeroInst.baseY
-        const baseScale = antiHeroInst.baseScale ?? 1
-        antiHeroInst.hoverScale == null && (antiHeroInst.hoverScale = 1)
-        const targetHoverScale = isHovered
-          ? 1 + MENU_ANTIHERO_HOVER_AMP * Math.sin(k.time() * MENU_ANTIHERO_PULSE_SPEED)
-          : 1
-        antiHeroInst.hoverScale += (targetHoverScale - antiHeroInst.hoverScale) *
-          Math.min(1, MENU_ANTIHERO_HOVER_LERP * k.dt())
-        const pulseScale = baseScale * antiHeroInst.hoverScale
-        antiHeroInst.character.scale = k.vec2(pulseScale, pulseScale)
-      })
-      
-      //
-      // Per-letter label update: show hover outlines and animate the touch "H" wobble
-      //
-      sectionLabels.forEach(entry => {
-        if (!entry.labelVisible) return
-        const { letters, section, isCompleted, fallingH } = entry
-        const isHover = hoveredInst && hoveredInst.section === section
-        const isCurrent = inst.currentSection === section
-        const outlineOpacity = (isHover || isCurrent || isCompleted) ? 1 : 0
-        letters.forEach(letterEntry => {
-          letterEntry.outlines.forEach(outlineObj => {
-            outlineObj.opacity = outlineOpacity
-          })
-        })
-        //
-        // Animate the dangling "H" for the touch section
-        //
-        if (section === 'touch' && fallingH && fallingH.length > 0) {
-          const wobbleAngle = TOUCH_H_TILT + Math.sin(k.time() * TOUCH_H_WOBBLE_SPEED) * TOUCH_H_WOBBLE_AMPLITUDE
-          fallingH.forEach(obj => { obj.angle = wobbleAngle })
-        }
-      })
-      
-      //
-      // Change cursor to pointer when hovering over implemented sections
-      // Only if previous section is completed OR if this is the current section being played
-      // Don't change cursor if leaving scene
-      //
-      if (!inst.isLeavingScene) {
-        if (hoveredInst) {
-          //
-          // Get previous section in clockwise order
-          //
-          const sectionOrder = ['forest', 'touch', 'word', 'time', 'feel', 'mind']
-          const currentIndex = sectionOrder.indexOf(hoveredInst.section)
-          const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
-          const previousSection = sectionOrder[previousIndex]
-          const previousAntiHero = antiHeroes.find(ah => ah.section === previousSection)
-          const isPreviousCompleted = previousAntiHero ? previousAntiHero.isCompleted : false
-          
-          //
-          // Word, touch, and time sections are clickable
-          // Can access if: previous section is completed (or it's the first section) OR if this is the current section being played
-          //
-          const isImplementedSection = (hoveredInst.section === 'forest' || hoveredInst.section === 'word' || hoveredInst.section === 'touch' || hoveredInst.section === 'time')
-          const isCurrentSection = inst.currentSection === hoveredInst.section
-          const canAccess = isCurrentSection || (currentIndex === 0 || isPreviousCompleted)  // Current section is always accessible, or first section, or previous completed
-          
-          if (isImplementedSection && !hoveredInst.isCompleted && canAccess) {
-            Cursor.setCursor('pointer')
-          } else {
-            Cursor.setCursor('arrow')
-          }
-        } else {
-          Cursor.setCursor('arrow')
-        }
-      }
-      
-      inst.hoveredAntiHero = hoveredInst
-      //
-      // Make hero and antihero eyes look at each other when hovering
-      //
-      if (hoveredInst && hoveredInst.character?.pos) {
-        Hero.setLookAtPos(inst.heroInst, { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y })
-        Hero.setLookAtPos(hoveredInst, { x: hero.pos.x, y: hero.pos.y })
-      } else {
-        Hero.setLookAtPos(inst.heroInst, null)
-        antiHeroes.forEach(ah => Hero.setLookAtPos(ah, null))
-      }
-      //
-      // Fade default background out when hovering any anti-hero, back in when not
-      //
-      const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
-      inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
-      updateForestReveal(inst, hoveredInst, mousePos)
-      //
-      // Fireflies only appear for antiheroes whose section is completed or currently being played
-      //
-      const lastLevel = get('lastLesson', null)
-      const isEmptyLS = !lastLevel
-      const forestAH = antiHeroes.find(ah => ah.section === 'forest')
-      const fireflyAllowed = hoveredInst && (
-        hoveredInst.isCompleted ||
-        (inst.currentSection && hoveredInst.section === inst.currentSection) ||
-        (isEmptyLS && forestAH && hoveredInst === forestAH)
-      )
-      //
-      // Fade firefly particles in when hovering allowed anti-hero, out otherwise
-      //
-      if (fireflyAllowed) {
-        particlesBg.baseOpacity = Math.min(PARTICLES_HOVER_OPACITY, particlesBg.baseOpacity + k.dt() * PARTICLES_FADE_IN_SPEED)
-      } else {
-        particlesBg.baseOpacity += (0 - particlesBg.baseOpacity) * Math.min(k.dt() * PARTICLES_FADE_OUT_SPEED, 1.0)
-      }
-      //
-      // Attract fireflies toward hovered anti-hero, scatter when unhovered
-      //
-      if (fireflyAllowed) {
-        particlesBg.attractTarget = {
-          x: hoveredInst.character.pos.x,
-          y: hoveredInst.character.pos.y,
-          active: true
-        }
-      } else if (particlesBg.attractTarget) {
-        particlesBg.attractTarget.active = false
-      }
-      //
-      // Control music volume based on hover state
-      //
-      if (!inst.isLeavingScene) {
-        //
-        // Check if hovering over anti-hero of current section
-        //
-        const isCurrentSectionHover = foundHover && hoveredInst && !hoveredInst.isCompleted && inst.currentSection && hoveredInst.section === inst.currentSection
-        
-        if (foundHover && hoveredInst && !hoveredInst.isCompleted) {
-          //
-          // Fade music volume down when hovering
-          //
-          const targetVolume = MENU_MUSIC_HOVER_VOLUME
-          menuMusic.volume += (targetVolume - menuMusic.volume) * 5 * k.dt()
-          //
-          // Fade kids music volume down when hovering
-          // Even quieter when hovering current section (with lightning and heartbeat)
-          //
-          if (kidsMusicFadeTimer >= KIDS_MUSIC_FADE_IN_DURATION) {
-            const kidsTargetVolume = isCurrentSectionHover ? KIDS_MUSIC_CURRENT_SECTION_VOLUME : KIDS_MUSIC_HOVER_VOLUME
-            kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 5 * k.dt()
-          }
-        } else {
-          //
-          // Fade music volume back to normal when not hovering
-          //
-          const targetVolume = MENU_MUSIC_NORMAL_VOLUME
-          menuMusic.volume += (targetVolume - menuMusic.volume) * 3 * k.dt()
-          //
-          // Fade kids music volume back to normal when not hovering
-          //
-          if (kidsMusicFadeTimer >= KIDS_MUSIC_FADE_IN_DURATION) {
-            const kidsTargetVolume = KIDS_MUSIC_TARGET_VOLUME
-            kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 3 * k.dt()
-          }
-        }
-        
-        //
-        // Play heartbeat sound for current section anti-hero OR forest when localStorage is empty
-        //
-        const isForestAntiHeroHover = isEmptyLS && forestAH && !forestAH.isCompleted && hoveredInst === forestAH
-        
-        if (isCurrentSectionHover || isForestAntiHeroHover) {
-          const HEARTBEAT_INTERVAL = 1.0
-          if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
-            Sound.playHeartbeatSound(sound)
-            inst.lastHeartbeatTime = k.time()
-          }
-        }
-      }
-      
-      //
-      // Update title movement or hide when leaving
-      //
-      if (inst.isLeavingScene) {
-        hideTitle(inst.title)
-        } else {
-        updateTitle(inst.title, k, hoveredInst)
-        updateForestPerceptionRays(inst, k, hoveredInst)
-      }
-      
-      //
-      // Control ambient sound based on hover state
-      // Only start ambient for current section being played (not completed sections)
-      //
-      if (!inst.isLeavingScene) {
-        //
-        // Check if hovering over anti-hero of current section
-        //
-        const isCurrentSectionHover = foundHover && hoveredInst && !hoveredInst.isCompleted && inst.currentSection && hoveredInst.section === inst.currentSection
-        
-        //
-        // First launch: forest hover also gets the electric ambient (same as
-        // a current-section hover once lastLesson exists).
-        //
-        const isForestEmptyHover = isEmptyLS && forestAH && !forestAH.isCompleted &&
-          foundHover && hoveredInst === forestAH
-        if (isCurrentSectionHover || isForestEmptyHover) {
-          if (!Sound.isAmbientPlaying(sound)) {
-            Sound.startAmbient(sound)
-          }
-        } else if (Sound.isAmbientPlaying(sound)) {
-          Sound.stopAmbient(sound)
-        }
-      }
+    inst.grass = createMenuGrass(inst)
+    inst.tomatoes = SpikyTomato.create({
+      k,
+      earTrees: inst.earTrees,
+      particles: null,
+      sfx: sound,
+      groundY: forestLayout.groundY
     })
-    
-    //
-    // Background layer with animation
-    //
-    k.onDraw(() => {
-      //
-      // Solid cover while leaving — prevents menu art flashing during level load
-      //
-      if (inst.isLeavingScene) {
-        k.drawRect({
-          width: k.width(),
-          height: k.height(),
-          pos: k.vec2(0, 0),
-          color: k.rgb(26, 26, 26)
-        })
-        return
-      }
-      drawScene(inst)
-    })
-    //
-    // Full-screen cover while leaving — above all menu sprites (anti-heroes, hero, UI)
-    //
-    k.add([
-      k.z(MENU_LEAVE_COVER_Z),
-      { fixed: true },
-      {
-        draw() {
-          if (!inst.isLeavingScene) return
-          k.drawRect({
-            width: k.width(),
-            height: k.height(),
-            pos: k.vec2(0, 0),
-            color: k.rgb(MENU_LEAVE_BG_R, MENU_LEAVE_BG_G, MENU_LEAVE_BG_B)
-          })
-        }
-      }
-    ])
-    //
-    // High-z layer: draws the prohibited slash in front of all hero/anti-hero sprites
-    //
-    k.add([
-      k.z(CFG.visual.zIndex.player + 1),
-      {
-        draw() {
-          if (inst.isLeavingScene) return
-          drawUnknownSectionMarks(k, inst)
-          drawProhibitedSlashFront(k, inst)
-          drawCompletedCheckmarkFront(k, inst)
-        }
-      }
-    ])
-    //
-    // Forest film grain — same look as lesson-forest.0, drawn over the whole menu.
-    //
+    inst.crawler = createMenuCrawler(inst)
+    inst.bgOpacity[levels[selected].backdrop] = 1
+    levels[selected].textOpacity = 1
+    createMenuMushrooms(inst)
+    k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
+    k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
+    k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
+    k.add([k.z(MENU_LEAVE_COVER_Z), { draw: () => drawLeaveCover(inst) }])
     addForestFilmGrainOverlayLayer(k, MENU_FILM_GRAIN_Z)
-    //
-    // Check if there's a saved game
-    //
-    const hasSavedGame = lastLevel !== null
-    
-    //
-    // Hint text - Space to continue, Enter to start new, ESC to go back.
-    // If all sections completed, don't show continue option.
-    // Touch devices keep the full hint visible but render the "Enter" word
-    // as a tappable button so phones can start a new game without a keyboard.
-    //
-    const allCompleted = progress.word?.completed && progress.touch?.completed
-    const HINT_FONT_SIZE = 20
-    const HINT_BOTTOM_MARGIN = 50
-    const HINT_CENTER_X = centerX
-    const HINT_Y = k.height() - HINT_BOTTOM_MARGIN
-    let hintPrefix
-    let hintSuffix
-    if (allCompleted) {
-      hintPrefix = ''
-      hintSuffix = ' - new game  |  ESC - back'
-    } else if (hasSavedGame) {
-      hintPrefix = 'Space - continue  |  '
-      hintSuffix = ' - new game  |  ESC - back'
-    } else {
-      hintPrefix = 'Space / '
-      hintSuffix = ' - start  |  ESC - back'
-    }
-    const hintParts = renderHintWithEnter({
+    k.onUpdate(() => onUpdate(inst))
+    bindMenuInput(inst)
+    k.wait(MENU_SCENE_GUARD_DELAY, () => { inst.sceneReady = true })
+    k.onSceneLeave(() => onMenuLeave(inst))
+  })
+}
+
+/**
+ * Bakes the menu's heavy static assets ahead of time on the given live
+ * Kaplay instance — both backdrops for the current window size, the hero
+ * cursor and the baked texts. Called under the first boot loader, so the
+ * first menu visit only reuses loaded sprites.
+ * @param {Object} k - Kaplay inst (native-resolution engine)
+ * @returns {Promise<void>} Resolves when every bake is loaded into k
+ */
+export async function prewarmMenuAssets(k) {
+  recomputeMenuBgLayout(k.width(), k.height())
+  buildMenuNightSprite(k)
+  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
+  loadMenuForestLayerSprites(k)
+  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
+  await document.fonts?.load?.(`${MENU_NAME_SIZE}px ${MENU_TEXT_FONT}`)
+  loadMenuAssets(k)
+}
+
+//
+// Per-level row state: position, what it shows and whether it can be entered.
+//
+function buildMenuLevel(level, index, layout, progress) {
+  const completed = Boolean(progress[level.section]?.completed)
+  const playable = Boolean(level.icon)
+  return {
+    ...level,
+    index,
+    y: layout.firstY + index * layout.step,
+    completed,
+    playable,
+    showName: playable || completed,
+    selectScale: 1,
+    textOpacity: 0
+  }
+}
+//
+// Window-derived layout: column, hero and name X, row Y spacing, text Y.
+//
+function computeMenuLayout(k) {
+  const s = k.height() / MENU_REF_HEIGHT
+  const step = MENU_ITEM_STEP * s
+  const columnX = Math.round(k.width() * MENU_COLUMN_X_FRAC)
+  return {
+    s,
+    step,
+    columnX,
+    heroX: columnX - MENU_HERO_GAP * s,
+    nameX: columnX + MENU_NAME_GAP * s,
+    firstY: k.height() * MENU_COLUMN_Y_FRAC - step * (LEVELS.length - 1) / 2,
+    descriptionY: k.height() * MENU_DESCRIPTION_Y_FRAC,
+    hintY: k.height() - MENU_HINT_BOTTOM * s
+  }
+}
+//
+// The forest icon is the level's trampoline mushroom; it watches the hero.
+//
+function createMenuMushrooms(inst) {
+  const { k } = inst
+  inst.levels.filter(level => level.icon === LEVEL_ICON_MUSHROOM).forEach(level => {
+    const pose = { x: inst.layout.columnX, y: level.y, scale: 1 }
+    MenuMushroom.create({
       k,
-      centerX: HINT_CENTER_X,
-      y: HINT_Y,
-      prefix: hintPrefix,
-      suffix: hintSuffix,
-      fontSize: HINT_FONT_SIZE,
-      onTap: () => startGame(true)
-    })
-    //
-    // Smooth flicker animation for hint text (text only — the touch
-    // button keeps its high contrast so the tap target stays readable).
-    //
-    const FLICKER_FADE_DURATION = 1.2
-    const FLICKER_MIN_OPACITY = 0.5
-    const FLICKER_MAX_OPACITY = 1.0
-    let hintFlickerTime = FLICKER_FADE_DURATION
-    let hintDirection = -1
-    k.onUpdate(() => {
-      hintFlickerTime += hintDirection * k.dt()
-      if (hintFlickerTime >= FLICKER_FADE_DURATION) {
-        hintDirection = -1
-        hintFlickerTime = FLICKER_FADE_DURATION
-      } else if (hintFlickerTime <= 0) {
-        hintDirection = 1
-        hintFlickerTime = 0
-      }
-      const progress = hintFlickerTime / FLICKER_FADE_DURATION
-      const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-      hintParts.setOpacity(newOpacity)
-    })
-    
-    //
-    // Start game controls
-    // Space or Enter - Continue from last saved level or start from beginning
-    //
-    //
-    // Start game action: Space continues saved game or starts new; Enter always starts new
-    //
-    const startGame = (forceNew) => {
-      if (allCompleted && !forceNew) return
-      if (isMenuTransitionBlocking(k)) return
-      beginMenuSceneLeave(k, inst)
-      Sound.stopAmbient(sound)
-      stopMenuMusic(menuMusic, kidsMusic)
-      Cursor.setCursor('arrow')
-      //
-      // The first forest level always enters through the transition, so the
-      // pre-level phrase is shown.
-      //
-      if (forceNew) {
-        resetProgress()
-        showTransitionToLevel(k, 'lesson-forest.0')
-      } else if (hasSavedGame) {
-        showTransitionToLevel(k, lastLevel)
-      } else {
-        showTransitionToLevel(k, 'lesson-forest.0')
-      }
-    }
-    const startGameInputCancel = bindStartGameKeys(k, (key) => {
-      startGame(key === 'enter')
-    })
-    inst.antiHeroClick = bindPointerActivate(k, () => {
-      if (inst.isLeavingScene) return
-      if (isMenuTransitionBlocking(k)) return
-      activateMenuAntiHeroAtPointer(inst)
-    })
-    
-    //
-    // Back to ready scene (ESC) — guarded to prevent firing from a scene transition
-    //
-    const SCENE_GUARD_DELAY = 0.2
-    let sceneReady = false
-    k.wait(SCENE_GUARD_DELAY, () => { sceneReady = true })
-    const backToMenuCancel = bindBackToMenuKeys(k, () => {
-      if (!sceneReady) return
-      //
-      // If a level transition overlay is active (pre-level text), let the
-      // transition's own Esc handler take care of navigation (it goes to menu).
-      //
-      if (isMenuTransitionBlocking(k)) return
-      Sound.stopAmbient(sound)
-      stopMenuMusic(menuMusic, kidsMusic)
-      goAfterPreparingAssets(k, "ready")
-    })
-    
-    //
-    // Cleanup when leaving scene
-    //
-    k.onSceneLeave(() => {
-      startGameInputCancel.cancel()
-      backToMenuCancel.cancel()
-      inst.antiHeroClick?.cancel()
-      CanvasBackdrop.clearCanvasBackdrop(k)
-      //
-      // Stop menu music
-      //
-      stopMenuMusic(menuMusic, kidsMusic)
-      //
-      // Destroy all game objects
-      //
-      heroInst.character.destroy()
-      antiHeroes.forEach(antiHeroInst => {
-        antiHeroInst.character.destroy()
-      })
-      sectionLabels.forEach(entry => {
-        entry.allObjects.forEach(obj => obj.destroy())
-      })
-      
-      //
-      // Destroy title objects
-      //
-      hideTitle(inst.title)
-      
-      hintParts.destroy()
-      
-      //
-      // Stop ambient sound
-      //
-      Sound.stopAmbient(sound)
+      z: MENU_ICON_Z,
+      getPose: () => {
+        pose.scale = level.selectScale * inst.layout.s
+        return pose
+      },
+      getLookAt: () => inst.heroInst.character.pos,
+      isVisible: () => !inst.isLeavingScene
     })
   })
 }
-
-const TITLE_ORBIT_ARC_CHAR_SPACING = 0.075
-const TITLE_ORBIT_SHADOW_DX = 2
-const TITLE_ORBIT_SHADOW_DY = 2
 //
-// Hover label shown while a completed anti-hero is hovered — each section
-// is described by the inner struggle its letters represent.
+// Keyboard (up/down, w/s, space/enter, esc) and mouse (hover selects, click
+// enters) bindings.
 //
-const SECTION_DESCRIPTIONS = {
-  forest: 'forest',
-  word: 'self-doubt',
-  touch: 'connection',
-  time: 'impermanence',
-  feel: 'vulnerability',
-  mind: 'overthinking'
+function bindMenuInput(inst) {
+  const { k } = inst
+  inst.keyCancels = [
+    k.onKeyPress('up', () => moveSelection(inst, -1)),
+    k.onKeyPress('w', () => moveSelection(inst, -1)),
+    k.onKeyPress('down', () => moveSelection(inst, 1)),
+    k.onKeyPress('s', () => moveSelection(inst, 1))
+  ]
+  inst.startCancel = bindStartGameKeys(k, () => enterLevel(inst, inst.levels[inst.selected]))
+  inst.pointerCancel = bindPointerActivate(k, () => onPointerActivate(inst))
+  inst.backCancel = bindBackToMenuKeys(k, () => onBackKey(inst))
 }
 //
-// Forest hover — phrases fan along radials from the title orbit centre through
-// the “forest” arc (same circle as the orbiting letters).
+// Steps the selection with wrap-around (last → first and back).
 //
-const FOREST_PERCEPTION_RAY_LINES = [
-  'learned:',
-  'Ground',
-  'Look',
-  'Observe',
-  'Witness'
-]
-const FOREST_PERCEPTION_RAY_SETTLE_DELAY = 0.1
-const FOREST_PERCEPTION_RAY_LINE_STAGGER = 0.08
-const FOREST_PERCEPTION_RAY_LINE_FADE_DUR = 0.32
-const FOREST_PERCEPTION_SNAP_ANGLE_EPS = 0.055
-const FOREST_PERCEPTION_RAY_FONT_SIZE = 18
-const FOREST_PERCEPTION_RAY_TEXT_OPACITY = 0.62
-const FOREST_PERCEPTION_RAY_SHADOW_OFFSET_X = 1
-const FOREST_PERCEPTION_RAY_SHADOW_OFFSET_Y = 1
-const FOREST_PERCEPTION_RAY_SHADOW_OPACITY = 1
-const FOREST_PERCEPTION_RAY_PHRASE_GAP = 44
-const FOREST_PERCEPTION_RAY_REVEAL_SLIDE = 32
-const FOREST_PERCEPTION_RAY_CHAR_STEP = 0.56
-//
-// Which FOREST letter (G=0 … W=3) each perception-ray phrase represents; -1 = none.
-//
-const FOREST_PERCEPTION_RAY_LINE_LETTER_INDEX = [-1, 0, 1, 2, 3]
-//
-// Inactive ray glyphs — same gray as uncollected FOREST letters under the hero.
-//
-const FOREST_PERCEPTION_RAY_INACTIVE_HEX = '#656565'
-const TITLE_UNKNOWN_TEXT = 'unknown'
-const TITLE_TEXT_FADE_OUT_SPEED = 5.0
-const TITLE_TEXT_FADE_IN_SPEED = 4.0
-/**
- * Create title with circular motion around anti-heroes
- * @param {Object} k - Kaplay instance
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @param {number} radius - Radius of anti-heroes circle
- * @returns {Object} Title instance with state
- */
-function createTitle(k, centerX, centerY, radius) {
-  const defaultText = "find"
-  const titleSize = 32
-  const dimColor = k.rgb(120, 120, 120)
-  //
-  // Glyph pool sized for the longest possible label (default word, "unknown"
-  // or any section description) so switching text never needs reallocation.
-  //
-  const maxTextLength = Math.max(
-    defaultText.length,
-    TITLE_UNKNOWN_TEXT.length,
-    ...Object.values(SECTION_DESCRIPTIONS).map(text => text.length)
-  )
-  return {
-    defaultText,
-    text: defaultText,
-    targetText: defaultText,
-    textFadePhase: 1.0,
-    isTextChanging: false,
-    titleSize,
-    circleRadius: radius + 100,
-    centerX,
-    centerY,
-    angle: 0,
-    targetAngle: 0,
-    isHovering: false,
-    hoverAngle: 0,
-    hoverRange: 0.3,
-    hoverPhase: 0,
-    moveSpeed: 0.15,
-    snapSpeed: 3.0,
-    colorR: dimColor.r,
-    colorG: dimColor.g,
-    colorB: dimColor.b,
-    dimColorR: dimColor.r,
-    dimColorG: dimColor.g,
-    dimColorB: dimColor.b,
-    isReversed: false,
-    targetReversed: false,
-    reverseFadePhase: 1.0,
-    isReverseChanging: false,
-    baseOpacity: 0.3,
-    hidden: false,
-    glyphs: Array.from({ length: maxTextLength }, () => ({ x: 0, y: 0, angle: 0, opacity: 0 }))
-  }
-}
-
-/**
- * Update title circular movement
- * @param {Object} titleInst - Title instance
- * @param {Object} k - Kaplay instance
- * @param {Object|null} hoveredAntiHero - Currently hovered anti-hero
- */
-function updateTitle(titleInst, k, hoveredAntiHero) {
-  const dt = k.dt()
-  //
-  // Completed sections and the section currently being played show their
-  // description; everything else stays "unknown". First launch (empty save)
-  // treats forest as the entry section, so its label is "forest".
-  //
-  const sectionLabelKnown = hoveredAntiHero && !hoveredAntiHero.isUnknown
-  const newTargetText = hoveredAntiHero
-    ? (sectionLabelKnown
-      ? (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText)
-      : TITLE_UNKNOWN_TEXT)
-    : titleInst.defaultText
-  if (newTargetText !== titleInst.targetText) {
-    titleInst.targetText = newTargetText
-    titleInst.isTextChanging = true
-    titleInst.textFadePhase = Math.min(titleInst.textFadePhase, 1)
-  }
-  //
-  // Text swap fades the old word out, swaps the string, then fades the new
-  // word back in — mirrors the reversal fade below.
-  //
-  if (titleInst.isTextChanging) {
-    if (titleInst.text !== titleInst.targetText) {
-      titleInst.textFadePhase -= dt * TITLE_TEXT_FADE_OUT_SPEED
-      if (titleInst.textFadePhase <= 0) {
-        titleInst.textFadePhase = 0
-        titleInst.text = titleInst.targetText
-      }
-    } else if (titleInst.textFadePhase < 1) {
-      titleInst.textFadePhase += dt * TITLE_TEXT_FADE_IN_SPEED
-      if (titleInst.textFadePhase >= 1) {
-        titleInst.textFadePhase = 1
-        titleInst.isTextChanging = false
-      }
-    }
-  }
-  //
-  // Determine if letters should be reversed based on angle
-  // Text direction depends on position on circle (clockwise motion)
-  //
-  const normalizedAngle = ((titleInst.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
-  const degrees = (normalizedAngle * 180 / Math.PI)
-  //
-  // Bottom half (30°-210°) → reversed, top half → normal
-  //
-  const shouldReverse = degrees >= 30 && degrees < 210
-  //
-  // Check if reversal state needs to change
-  //
-  if (shouldReverse !== titleInst.targetReversed) {
-    titleInst.targetReversed = shouldReverse
-    if (!titleInst.isReverseChanging) {
-      titleInst.isReverseChanging = true
-      titleInst.reverseFadePhase = 1.0
-    }
-  }
-  //
-  // Handle fade animation for reversal change
-  //
-  if (titleInst.isReverseChanging) {
-    if (titleInst.reverseFadePhase > 0 && titleInst.isReversed !== titleInst.targetReversed) {
-      titleInst.reverseFadePhase -= dt * 3.33
-      if (titleInst.reverseFadePhase <= 0) {
-        titleInst.reverseFadePhase = 0
-        titleInst.isReversed = titleInst.targetReversed
-      }
-    } else if (titleInst.reverseFadePhase < 1) {
-      titleInst.reverseFadePhase += dt * 2.5
-      if (titleInst.reverseFadePhase >= 1) {
-        titleInst.reverseFadePhase = 1
-        titleInst.isReverseChanging = false
-      }
-    }
-  }
-  //
-  // Update hover state — orbit snaps toward the hovered anti-hero
-  //
-  if (hoveredAntiHero) {
-    const dx = hoveredAntiHero.character.pos.x - titleInst.centerX
-    const dy = hoveredAntiHero.character.pos.y - titleInst.centerY
-    titleInst.hoverAngle = Math.atan2(dy, dx)
-    if (!titleInst.isHovering) {
-      titleInst.isHovering = true
-      titleInst.hoverPhase = 0
-    }
-    //
-    // Move to hovered position quickly
-    //
-    let angleDiff = titleInst.hoverAngle - titleInst.angle
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-    titleInst.angle += angleDiff * titleInst.snapSpeed * dt
-    //
-    // Update hover phase for back-and-forth movement
-    //
-    titleInst.hoverPhase += dt * 2
-    const hoverOffset = Math.sin(titleInst.hoverPhase) * titleInst.hoverRange
-    titleInst.targetAngle = titleInst.hoverAngle + hoverOffset
-    //
-    // Change to anti-hero's section color
-    //
-    const sectionHex = hoveredAntiHero.section === 'time'
-      ? '#FF8C00'
-      : hoveredAntiHero.section === 'forest'
-        ? FOREST_MENU_HERO_BODY
-        : hoveredAntiHero.sectionColor
-    const sectionRgb = getRGB(k, sectionHex)
-    titleInst.colorR += (sectionRgb.r - titleInst.colorR) * 5 * dt
-    titleInst.colorG += (sectionRgb.g - titleInst.colorG) * 5 * dt
-    titleInst.colorB += (sectionRgb.b - titleInst.colorB) * 5 * dt
-  } else {
-    titleInst.isHovering = false
-    //
-    // Rotate slowly around circle
-    //
-    titleInst.angle += titleInst.moveSpeed * dt
-    titleInst.targetAngle = titleInst.angle
-    //
-    // Dim letters back to gray
-    //
-    titleInst.colorR += (titleInst.dimColorR - titleInst.colorR) * 3 * dt
-    titleInst.colorG += (titleInst.dimColorG - titleInst.colorG) * 3 * dt
-    titleInst.colorB += (titleInst.dimColorB - titleInst.colorB) * 3 * dt
-  }
-  //
-  // Position each letter along the arc
-  //
-  const textLength = titleInst.text.length
-  const arcLength = TITLE_ORBIT_ARC_CHAR_SPACING * (textLength - 1)
-  const angleStep = textLength > 1 ? arcLength / (textLength - 1) : 0
-  for (let index = 0; index < titleInst.glyphs.length; index++) {
-    const glyph = titleInst.glyphs[index]
-    //
-    // Unused glyph slots (current text shorter than the pool) stay invisible
-    //
-    if (index >= textLength) {
-      glyph.opacity = 0
-      continue
-    }
-    const displayIndex = titleInst.isReversed ? (textLength - 1 - index) : index
-    const letterAngle = titleInst.angle + (displayIndex - textLength / 2) * angleStep
-    glyph.x = titleInst.centerX + Math.cos(letterAngle) * titleInst.circleRadius
-    glyph.y = titleInst.centerY + Math.sin(letterAngle) * titleInst.circleRadius
-    glyph.angle = letterAngle + Math.PI / 2
-    const baseFinalOpacity = hoveredAntiHero ? 1.0 : titleInst.baseOpacity
-    glyph.opacity = baseFinalOpacity * titleInst.reverseFadePhase * titleInst.textFadePhase
-  }
-}
-//
-// Draws the orbiting "find" title in screen space (Kaplay 4000-safe).
-//
-function drawOrbitingTitle(k, titleInst) {
-  if (titleInst.hidden) return
-  const text = titleInst.text
-  const letterColor = k.rgb(titleInst.colorR, titleInst.colorG, titleInst.colorB)
-  const shadowColor = k.rgb(0, 0, 0)
-  for (let i = 0; i < text.length; i++) {
-    const glyph = titleInst.glyphs[i]
-    if (glyph.opacity <= 0.01) continue
-    const char = text[i]
-    k.pushTransform()
-    k.pushTranslate(k.vec2(glyph.x, glyph.y))
-    k.drawText({
-      text: char,
-      size: titleInst.titleSize,
-      pos: k.vec2(TITLE_ORBIT_SHADOW_DX, TITLE_ORBIT_SHADOW_DY),
-      anchor: 'center',
-      angle: glyph.angle,
-      color: shadowColor,
-      opacity: glyph.opacity,
-      fixed: true
-    })
-    k.drawText({
-      text: char,
-      size: titleInst.titleSize,
-      pos: k.vec2(0, 0),
-      anchor: 'center',
-      angle: glyph.angle,
-      color: letterColor,
-      opacity: glyph.opacity,
-      fixed: true
-    })
-    k.popTransform()
-  }
-}
-//
-// Hide title instantly (used when leaving scene)
-//
-function hideTitle(titleInst) {
-  titleInst.hidden = true
-}
-//
-// Per-line fade state for forest perception sun rays.
-//
-function createForestPerceptionRaysState() {
-  return {
-    settle: 0,
-    lineReveal: FOREST_PERCEPTION_RAY_LINES.map(() => 0)
-  }
-}
-/**
- * Advances ray reveal after the orbiting title has snapped to “forest”.
- * @param {Object} inst - Menu scene instance
- * @param {Object} k - Kaplay instance
- * @param {Object|null} hoveredAntiHero - Hovered anti-hero
- */
-function updateForestPerceptionRays(inst, k, hoveredAntiHero) {
-  const rays = inst.forestPerceptionRays
-  if (!rays) return
-  const dt = k.dt()
-  const title = inst.title
-  const active = Boolean(
-    hoveredAntiHero?.section === 'forest' &&
-    !hoveredAntiHero.isUnknown &&
-    title.text === SECTION_DESCRIPTIONS.forest &&
-    title.textFadePhase >= 0.98 &&
-    !title.isTextChanging
-  )
-  if (!active) {
-    rays.settle = 0
-    rays.lineReveal.fill(0)
-    return
-  }
-  let angleDiff = title.hoverAngle - title.angle
-  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-  const snapped = title.isHovering && Math.abs(angleDiff) < FOREST_PERCEPTION_SNAP_ANGLE_EPS
-  if (snapped) {
-    rays.settle += dt
-  } else {
-    rays.settle = 0
-    rays.lineReveal.fill(0)
-    return
-  }
-  const phraseCount = forestPerceptionVisiblePhraseCount()
-  for (let i = 0; i < FOREST_PERCEPTION_RAY_LINES.length; i++) {
-    if (i >= phraseCount) {
-      rays.lineReveal[i] = 0
-      continue
-    }
-    const t = rays.settle - FOREST_PERCEPTION_RAY_SETTLE_DELAY - i * FOREST_PERCEPTION_RAY_LINE_STAGGER
-    rays.lineReveal[i] = clamp01(t / FOREST_PERCEPTION_RAY_LINE_FADE_DUR)
-  }
-}
-/**
- * Draws lesson phrases along orbit radials through the “forest” arc.
- * @param {Object} k - Kaplay instance
- * @param {Object} inst - Menu scene instance
- */
-function drawForestPerceptionRays(k, inst) {
-  const rays = inst.forestPerceptionRays
-  const title = inst.title
-  if (!rays || title.hidden) return
-  const text = SECTION_DESCRIPTIONS.forest
-  if (title.text !== text) return
-  const phraseCount = forestPerceptionVisiblePhraseCount()
-  if (phraseCount <= 0) return
-  const rayAngles = getForestPerceptionRayAngles(title, text, phraseCount)
-  if (!rayAngles.length) return
-  const heroRgb = getRGB(k, FOREST_MENU_HERO_BODY)
-  const heroLetterColor = k.rgb(heroRgb.r, heroRgb.g, heroRgb.b)
-  const inactiveRgb = getRGB(k, FOREST_PERCEPTION_RAY_INACTIVE_HEX)
-  const inactiveLetterColor = k.rgb(inactiveRgb.r, inactiveRgb.g, inactiveRgb.b)
-  const shadowColor = k.rgb(0, 0, 0)
-  const cx = title.centerX
-  const cy = title.centerY
-  const baseR = title.circleRadius
-  const phraseInnerR = baseR + FOREST_PERCEPTION_RAY_PHRASE_GAP
-  //
-  // Same ray angles — map line 0 to the topmost radial (reverse index only).
-  //
-  const rayCount = rayAngles.length
-  for (let i = 0; i < phraseCount; i++) {
-    const reveal = rays.lineReveal[i]
-    if (reveal <= 0.01) continue
-    drawForestPerceptionRayPhrase(k, {
-      cx,
-      cy,
-      rayAngle: rayAngles[rayCount - 1 - i],
-      lineText: FOREST_PERCEPTION_RAY_LINES[i],
-      lineLetterIndex: FOREST_PERCEPTION_RAY_LINE_LETTER_INDEX[i],
-      reveal,
-      heroLetterColor,
-      inactiveLetterColor,
-      shadowColor,
-      fontSize: FOREST_PERCEPTION_RAY_FONT_SIZE,
-      phraseInnerR
-    })
-  }
-}
-//
-// One phrase — glyphs left-to-right along the radial from the orbit centre
-// (perpendicular to “forest”), all sharing one tangent angle.
-//
-function drawForestPerceptionRayPhrase(k, cfg) {
-  const {
-    cx, cy, rayAngle, lineText, lineLetterIndex, reveal, heroLetterColor,
-    inactiveLetterColor, shadowColor, fontSize, phraseInnerR
-  } = cfg
-  const step = fontSize * FOREST_PERCEPTION_RAY_CHAR_STEP
-  const n = lineText.length
-  const slide = (1 - reveal) * FOREST_PERCEPTION_RAY_REVEAL_SLIDE
-  const rLastChar = phraseInnerR + slide
-  //
-  // Same tangent as orbiting title glyphs — perpendicular to the radial
-  // (Kaplay drawText angle is radians, not degrees).
-  //
-  const phraseAngle = rayAngle + Math.PI / 2
-  const op = FOREST_PERCEPTION_RAY_TEXT_OPACITY * reveal
-  const shadowOp = FOREST_PERCEPTION_RAY_SHADOW_OPACITY * reveal
-  const forestLetter = lineLetterIndex >= 0 ? FOREST_LETTER_KEYS[lineLetterIndex] : null
-  const forestLetterCollected = forestLetter ? get(forestLetter, false) : false
-  const forestChar = forestLetterCollected && lineLetterIndex >= 0
-    ? 'FOREST'[lineLetterIndex]
-    : null
-  //
-  // Last glyph (reading end) sits closest to the perception arc; earlier
-  // letters step outward along the same radial.
-  //
-  for (let c = 0; c < n; c++) {
-    const along = n - 1 - c
-    const r = rLastChar + along * step
-    const x = cx + Math.cos(rayAngle) * r
-    const y = cy + Math.sin(rayAngle) * r
-    const ch = lineText[c]
-    const isSignature = forestChar && ch.toUpperCase() === forestChar
-    const ink = isSignature && forestLetterCollected ? heroLetterColor : inactiveLetterColor
-    k.pushTransform()
-    k.pushTranslate(k.vec2(x, y))
-    k.drawText({
-      text: ch,
-      size: fontSize,
-      pos: k.vec2(
-        FOREST_PERCEPTION_RAY_SHADOW_OFFSET_X,
-        FOREST_PERCEPTION_RAY_SHADOW_OFFSET_Y
-      ),
-      anchor: 'center',
-      angle: phraseAngle,
-      color: shadowColor,
-      opacity: shadowOp,
-      fixed: true
-    })
-    k.drawText({
-      text: ch,
-      size: fontSize,
-      pos: k.vec2(0, 0),
-      anchor: 'center',
-      angle: phraseAngle,
-      color: ink,
-      opacity: op,
-      fixed: true
-    })
-    k.popTransform()
-  }
-}
-//
-// How many gray ray phrases to show (one more than collected FOREST letters).
-//
-function forestPerceptionVisiblePhraseCount() {
-  const collected = FOREST_LETTER_KEYS.filter(key => get(key, false)).length
-  if (collected <= 0) return 0
-  return Math.min(FOREST_PERCEPTION_RAY_LINES.length, collected + 1)
-}
-//
-// Ray tilts — symmetric about the perception arc centre for the active count.
-//
-function getForestPerceptionRayAngles(titleInst, text, count) {
-  const sorted = getForestPerceptionLetterAngles(titleInst, text).sort((a, b) => a - b)
-  if (!sorted.length || count <= 0) return []
-  const minAngle = sorted[0]
-  const maxAngle = sorted[sorted.length - 1]
-  const centerAngle = (minAngle + maxAngle) * 0.5
-  if (count === 1) return [centerAngle]
-  const arcSpan = maxAngle - minAngle
-  const step = arcSpan / (FOREST_PERCEPTION_RAY_LINES.length + 1)
-  const out = []
-  for (let i = 0; i < count; i++) {
-    const offset = (i - (count - 1) / 2) * step
-    out.push(centerAngle + offset)
-  }
-  return out
-}
-//
-// Radial angles of visible “forest” glyphs (orbit centre → letter).
-//
-function getForestPerceptionLetterAngles(titleInst, text) {
-  const angles = []
-  for (let i = 0; i < text.length; i++) {
-    const glyph = titleInst.glyphs[i]
-    if (glyph.opacity <= 0.01) continue
-    angles.push(glyph.angle - Math.PI / 2)
-  }
-  return angles
-}
-function clamp01(v) {
-  return v < 0 ? 0 : v > 1 ? 1 : v
-}
-
-//
-// Extract section name from level id (e.g., 'lesson-word.2' -> 'word')
-//
-function getSectionFromLevel(levelName) {
-  if (!levelName) return null
-  const match = levelName.match(/^(?:level|lesson)-(\w+)\./)
-  return match ? match[1] : null
-}
-
-/**
- * Create stars for background
- * @param {Object} k - Kaplay instance
- * @param {number} count - Number of stars
- * @returns {Array} Array of star objects
- */
-function createStars(k, count) {
-  const stars = []
-  
-  for (let i = 0; i < count; i++) {
-    stars.push({
-      x: Math.random() * k.width(),
-      y: Math.random() * k.height(),
-      size: 0.5 + Math.random() * 1.5,  // Star size 0.5-2px
-      opacity: 0.3 + Math.random() * 0.4,  // Opacity 0.3-0.7
-      twinkleSpeed: 0.5 + Math.random() * 1.5,  // Twinkle speed
-      twinklePhase: Math.random() * Math.PI * 2  // Random start phase
-    })
-  }
-  
-  return stars
-}
-
-/**
- * Draw background scene
- * @param {Object} inst - Scene instance
- */
-function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg, stars, grassField, arrows, centerX, centerY, antiHeroes, sectionLabels, progress } = inst
-  
-  //
-  // Get gray color from first anti-hero (same as inactive anti-heroes use)
-  //
-  const grayColorHex = antiHeroes && antiHeroes.length > 0 ? antiHeroes[0].grayColor : '#656565'  // Body color of inactive anti-heroes
-  const grayOutlineColorHex = '#1A1A1A'  // Outline color of inactive anti-heroes
-  const grayColorRgb = getRGB(k, grayColorHex)
-  const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
-  
-  //
-  // Draw menu background image (darkened)
-  //
-  drawMenuBackground(inst)
-  drawMenuForestEyes(inst)
-  //
-  // Swaying grass on the horizon strip — fades out with the background when
-  // hovering an anti-hero (opacity fade, see getMenuGrassTint)
-  //
-  Grass.draw(grassField)
-  
-  //
-  // Draw stars with twinkling effect
-  //
-  stars.forEach(star => {
-    star.twinklePhase += star.twinkleSpeed * k.dt()
-    const twinkle = 0.5 + Math.sin(star.twinklePhase) * 0.5  // 0 to 1
-    const currentOpacity = star.opacity * twinkle
-    
-    k.drawCircle({
-      pos: k.vec2(star.x, star.y),
-      radius: star.size,
-      color: k.rgb(255, 255, 255),
-      opacity: currentOpacity
-    })
-  })
-  
-  //
-  // Draw trembling particles
-  //
-  Particles.draw(particlesBg)
-  //
-  // Draw arrows between anti-heroes in clockwise order (as curved arcs)
-  //
-  if (arrows && arrows.length > 0) {
-    //
-    // Arrow material matches time-level0 street lamp metal:
-    // medium gray-blue body, black outline, and semi-transparent so they blend
-    // with the menu background the same way distant lamp poles do.
-    //
-    const ARROW_COLOR = k.rgb(128, 130, 136)
-    const ARROW_OUTLINE_COLOR = k.rgb(0, 0, 0)
-    const ARROW_OPACITY = 0.78
-    const ARROW_WIDTH = 9
-    const ARROW_OUTLINE_WIDTH = 2
-    const ARROW_START_OFFSET = MENU_ARROW_START_OFFSET
-    const ARROW_END_OFFSET = MENU_ARROW_END_OFFSET
-    const ARROWHEAD_SIZE = 22  // Arrowhead size
-    const ARC_RADIUS_OFFSET = MENU_ARROW_ARC_RADIUS_INSET
-    const ARC_SEGMENTS = 30  // Number of segments for smooth arc
-    
-    arrows.forEach(({ fromAntiHero, toAntiHero }) => {
-      //
-      // Only draw arrow if the source anti-hero's section is completed
-      //
-      if (!fromAntiHero.isCompleted) {
-        return
-      }
-      
-      //
-      // Use ARROW_COLOR directly (same base color as inactive anti-hero sprites)
-      //
-      const arrowBodyColor = ARROW_COLOR
-      const arrowOutlineColor = ARROW_OUTLINE_COLOR
-      
-      //
-      // Get current positions of anti-heroes
-      //
-      const fromX = fromAntiHero.character.pos.x
-      const fromY = fromAntiHero.character.pos.y
-      const toX = toAntiHero.character.pos.x
-      const toY = toAntiHero.character.pos.y
-      
-      //
-      // Calculate angles from center to each anti-hero
-      //
-      const fromAngle = Math.atan2(fromY - centerY, fromX - centerX)
-      const toAngle = Math.atan2(toY - centerY, toX - centerX)
-      
-      //
-      // Calculate distance from center to anti-heroes
-      //
-      const fromDist = Math.sqrt((fromX - centerX) ** 2 + (fromY - centerY) ** 2)
-      const toDist = Math.sqrt((toX - centerX) ** 2 + (toY - centerY) ** 2)
-      const avgDist = (fromDist + toDist) / 2
-      
-      //
-      // Normalize angles to 0-2π range
-      //
-      const normalizedFrom = ((fromAngle + Math.PI * 2) % (Math.PI * 2))
-      const normalizedTo = ((toAngle + Math.PI * 2) % (Math.PI * 2))
-      
-      //
-      // Calculate angle difference for clockwise direction
-      //
-      let angleDiff = normalizedTo - normalizedFrom
-      if (angleDiff < 0) {
-        angleDiff += Math.PI * 2
-      }
-      //
-      // If angle is more than π, we're going the long way - take the shorter path
-      //
-      if (angleDiff > Math.PI) {
-        angleDiff = angleDiff - Math.PI * 2
-      }
-      //
-      // Ensure angle is positive (clockwise direction)
-      //
-      if (angleDiff < 0) {
-        angleDiff = Math.abs(angleDiff)
-      }
-      
-      //
-      // Calculate start and end angles for the arrow
-      // Arrow starts at some distance from first anti-hero (going clockwise)
-      // Arrow ends at some distance before second anti-hero
-      //
-      // Convert pixel offsets to angular offsets
-      const startAngleOffset = ARROW_START_OFFSET / avgDist
-      const endAngleOffset = ARROW_END_OFFSET / avgDist
-      
-      // Calculate start angle (from first anti-hero + offset)
-      const arrowStartAngle = normalizedFrom + startAngleOffset
-      // Calculate end angle (to second anti-hero - offset)
-      const arrowEndAngle = normalizedTo - endAngleOffset
-      
-      //
-      // Calculate actual angle span of the arrow (clockwise)
-      //
-      let arrowAngleSpan = arrowEndAngle - arrowStartAngle
-      // Normalize to 0-2π range
-      if (arrowAngleSpan < 0) {
-        arrowAngleSpan += Math.PI * 2
-      }
-      // If span is more than π, we're going the wrong way
-      if (arrowAngleSpan > Math.PI) {
-        arrowAngleSpan = arrowAngleSpan - Math.PI * 2
-      }
-      // Ensure positive (clockwise)
-      if (arrowAngleSpan < 0) {
-        arrowAngleSpan = Math.abs(arrowAngleSpan)
-      }
-      //
-      // Ensure arrow spans most of the arc between the two anti-heroes
-      //
-      const maxSpan = Math.abs(angleDiff) * MENU_ARROW_MAX_SPAN_RATIO
-      if (arrowAngleSpan > maxSpan) {
-        arrowAngleSpan = maxSpan
-      }
-      
-      //
-      // Arc follows the same ring the anti-heroes sit on
-      //
-      const arcRadius = avgDist - MENU_ARROW_ARC_RADIUS_INSET + ARC_RADIUS_OFFSET
-      
-      //
-      // Draw arc using multiple line segments
-      // Start from arrowStartAngle and go clockwise by arrowAngleSpan
-      //
-      const arcPoints = []
-      const numSegments = Math.max(8, Math.floor(ARC_SEGMENTS * (arrowAngleSpan / (Math.PI / 3))))
-      for (let i = 0; i <= numSegments; i++) {
-        const t = i / numSegments
-        const currentAngle = arrowStartAngle + arrowAngleSpan * t
-        const x = centerX + Math.cos(currentAngle) * arcRadius
-        const y = centerY + Math.sin(currentAngle) * arcRadius
-        arcPoints.push({ x, y })
-      }
-      
-      //
-      // Draw arc outline pass: first segment extended backward for uniform back edge
-      //
-      for (let i = 0; i < arcPoints.length - 1; i++) {
-        let p1x = arcPoints[i].x
-        let p1y = arcPoints[i].y
-        if (i === 0) {
-          const dx = arcPoints[1].x - arcPoints[0].x
-          const dy = arcPoints[1].y - arcPoints[0].y
-          const len = Math.sqrt(dx * dx + dy * dy)
-          p1x -= (dx / len) * ARROW_OUTLINE_WIDTH
-          p1y -= (dy / len) * ARROW_OUTLINE_WIDTH
-        }
-        k.drawLine({
-          p1: k.vec2(p1x, p1y),
-          p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),
-          width: ARROW_WIDTH + ARROW_OUTLINE_WIDTH * 2,
-          color: arrowOutlineColor,
-          opacity: ARROW_OPACITY
-        })
-      }
-      //
-      // Draw arc body pass on top of outline
-      //
-      for (let i = 0; i < arcPoints.length - 1; i++) {
-        k.drawLine({
-          p1: k.vec2(arcPoints[i].x, arcPoints[i].y),
-          p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),
-          width: ARROW_WIDTH,
-          color: arrowBodyColor,
-          opacity: ARROW_OPACITY
-        })
-      }
-      
-      //
-      // Draw sharp arrowhead at the end (pointing to next anti-hero)
-      // Position it BEYOND the end of the arc to make it appear at the actual end
-      //
-      const lastPoint = arcPoints[arcPoints.length - 1]
-      const secondLastPoint = arcPoints[arcPoints.length - 2]
-      
-      //
-      // Calculate the direction angle of the arrow at the end
-      //
-      const arrowAngle = Math.atan2(
-        lastPoint.y - secondLastPoint.y,
-        lastPoint.x - secondLastPoint.x
-      )
-      
-      //
-      // Move the tip point forward along the arc direction
-      // This positions the triangle at the actual end of the visible arc
-      //
-      const tipOffset = ARROW_WIDTH + ARROW_OUTLINE_WIDTH  // Move tip forward more to align with arc end
-      const actualTipX = lastPoint.x + Math.cos(arrowAngle) * tipOffset
-      const actualTipY = lastPoint.y + Math.sin(arrowAngle) * tipOffset
-      
-      //
-      // Create triangle pointing forward
-      // Make it blunter by increasing the spread angle to π/6 (30 degrees on each side)
-      //
-      const baseAngle = arrowAngle + Math.PI  // 180 degrees back
-      const spreadAngle = Math.PI / 6  // 30 degrees spread (blunter triangle)
-      
-      //
-      // Calculate base points: go back from tip, then spread left/right
-      //
-      const baseLeftAngle = baseAngle - spreadAngle
-      const baseRightAngle = baseAngle + spreadAngle
-      
-      //
-      // Tip point is pushed forward from the last arc point
-      //
-      const tipPoint = k.vec2(actualTipX, actualTipY)
-      const baseLeft = k.vec2(
-        actualTipX + Math.cos(baseLeftAngle) * ARROWHEAD_SIZE,
-        actualTipY + Math.sin(baseLeftAngle) * ARROWHEAD_SIZE
-      )
-      const baseRight = k.vec2(
-        actualTipX + Math.cos(baseRightAngle) * ARROWHEAD_SIZE,
-        actualTipY + Math.sin(baseRightAngle) * ARROWHEAD_SIZE
-      )
-      
-      //
-      // Outline triangle (larger) - ensure tip is also outlined
-      //
-      const outlineSize = ARROWHEAD_SIZE + ARROW_OUTLINE_WIDTH + 1
-      const outlineLeft = k.vec2(
-        actualTipX + Math.cos(baseLeftAngle) * outlineSize,
-        actualTipY + Math.sin(baseLeftAngle) * outlineSize
-      )
-      const outlineRight = k.vec2(
-        actualTipX + Math.cos(baseRightAngle) * outlineSize,
-        actualTipY + Math.sin(baseRightAngle) * outlineSize
-      )
-      //
-      // Extend tip forward for outline to ensure tip is outlined
-      //
-      const outlineTipX = actualTipX + Math.cos(arrowAngle) * (ARROW_OUTLINE_WIDTH + 1)
-      const outlineTipY = actualTipY + Math.sin(arrowAngle) * (ARROW_OUTLINE_WIDTH + 1)
-      const outlineTipPoint = k.vec2(outlineTipX, outlineTipY)
-      //
-      // Draw filled polygon for outline (black) - includes extended tip
-      //
-      k.drawPolygon({
-        pts: [outlineTipPoint, outlineLeft, outlineRight],
-        color: arrowOutlineColor,
-        opacity: ARROW_OPACITY
-      })
-      //
-      // Draw main filled triangle (gray)
-      //
-      k.drawPolygon({
-        pts: [tipPoint, baseLeft, baseRight],
-        color: arrowBodyColor,
-        opacity: ARROW_OPACITY
-      })
-    })
-  }
-  
-  //
-  // Draw lightning between hero and hovered anti-hero
-  // Only for incomplete sections that match the current section being played
-  // OR if localStorage is empty, show electricity on forest (first section)
-  //
-  const lastLevel = get('lastLesson', null)
-  const isEmptyLocalStorage = !lastLevel
-  
-  if (isEmptyLocalStorage) {
-    //
-    // First launch: forest is the entry section — electricity while hovering it
-    //
-    const forestAntiHero = antiHeroes.find(ah => ah.section === 'forest')
-    if (forestAntiHero && !forestAntiHero.isCompleted && hoveredAntiHero === forestAntiHero) {
-      const heroPos = { x: hero.pos.x, y: hero.pos.y }
-      const antiHeroPos = { 
-        x: forestAntiHero.character.pos.x, 
-        y: forestAntiHero.character.pos.y 
-      }
-      //
-      // Draw electric connection
-      //
-      drawConnectionWave(k, heroPos, antiHeroPos, {
-        segmentWidth: 8,
-        mainWidth: 3,
-        opacity: 0.6,
-        heartbeatPhase: inst.heartbeatPhase
-      })
-    }
-  } else if (hoveredAntiHero && !hoveredAntiHero.isCompleted && inst.currentSection && hoveredAntiHero.section === inst.currentSection) {
-    const heroPos = { x: hero.pos.x, y: hero.pos.y }
-    const antiHeroPos = { 
-      x: hoveredAntiHero.character.pos.x, 
-      y: hoveredAntiHero.character.pos.y 
-    }
-    
-    //
-    // Draw electric connection
-    //
-    drawConnectionWave(k, heroPos, antiHeroPos, {
-      segmentWidth: 8,
-      mainWidth: 3,
-      opacity: 0.6,
-      heartbeatPhase: inst.heartbeatPhase
-    })
-  }
-  //
-  // Draw prohibited sign over hovered anti-hero when their section is locked
-  //
-  if (hoveredAntiHero && isAntiHeroLocked(hoveredAntiHero, progress, inst.currentSection)) {
-    drawProhibitedSign(k, hoveredAntiHero.character.pos.x, hoveredAntiHero.character.pos.y)
-  }
-  drawOrbitingTitle(k, inst.title)
-  drawForestPerceptionRays(k, inst)
-}
-//
-// Trampoline mushroom over the hidden forest anti-hero: follows its position
-// and hover pulse, watches the centre hero.
-//
-function createForestMenuMushroom(inst) {
-  const forestAntiHero = inst.antiHeroes.find(ah => ah.section === 'forest')
-  if (!forestAntiHero) return
-  const char = forestAntiHero.character
-  const pose = { x: 0, y: 0, scale: 1 }
-  MenuMushroom.create({
-    k: inst.k,
-    z: FOREST_MENU_MUSHROOM_Z,
-    getPose: () => {
-      pose.x = char.pos.x
-      pose.y = char.pos.y
-      pose.scale = char.scale?.x ?? 1
-      return pose
-    },
-    getLookAt: () => inst.hero.pos,
-    isVisible: () => !inst.isLeavingScene
-  })
-}
-//
-// True while a live pre-level transition overlay owns input. Clears a
-// stale transitionCleanup handle left behind after a broken leave.
-//
-function isMenuTransitionBlocking(k) {
-  if (!k.transitionCleanup) return false
-  if (k._transitionOverlay?.exists?.()) return true
-  try { k.transitionCleanup() } catch (_) { /* ignore */ }
-  k.transitionCleanup = null
-  return false
-}
-//
-// Hides menu sprites and paints a solid background while assets load for the next scene
-//
-function beginMenuSceneLeave(k, inst) {
+function moveSelection(inst, delta) {
   if (inst.isLeavingScene) return
-  inst.isLeavingScene = true
-  inst.antiHeroClick?.cancel()
-  k.setBackground(k.rgb(MENU_LEAVE_BG_R, MENU_LEAVE_BG_G, MENU_LEAVE_BG_B))
-  k.canvas?.style.setProperty('background-color', `rgb(${MENU_LEAVE_BG_R}, ${MENU_LEAVE_BG_G}, ${MENU_LEAVE_BG_B})`, 'important')
-  inst.heroInst?.character && (inst.heroInst.character.hidden = true)
-  inst.antiHeroes?.forEach((antiHeroInst) => {
-    antiHeroInst.character && (antiHeroInst.character.hidden = true)
-  })
-  inst.sectionLabels?.forEach((entry) => {
-    entry.allObjects.forEach(obj => { obj.hidden = true })
-  })
-  inst.title && hideTitle(inst.title)
+  const count = inst.levels.length
+  selectLevel(inst, (inst.selected + delta + count) % count)
+}
+function selectLevel(inst, index) {
+  if (index === inst.selected) return
+  inst.selected = index
+  Sound.playMenuClickSound(inst.sound)
 }
 //
-// Resolves the anti-hero under the cursor and enters its section. Uses
-// distance, not Kaplay onClick — the player sprite's area() would otherwise
-// swallow the press when standing on the current-section anti-hero.
+// A click on a row selects it and enters it; a click elsewhere does nothing.
 //
-function activateMenuAntiHeroAtPointer(inst) {
-  const mousePos = inst.k.mousePos()
-  let best = inst.hoveredAntiHero
-  let bestDist = MENU_ANTIHERO_HOVER_RADIUS
-  inst.antiHeroes.forEach(antiHeroInst => {
-    const char = antiHeroInst.character
-    if (!char?.pos) return
-    const dx = mousePos.x - char.pos.x
-    const dy = mousePos.y - char.pos.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist < bestDist) {
-      bestDist = dist
-      best = antiHeroInst
-    }
-  })
-  best?.onMenuSelect?.()
+function onPointerActivate(inst) {
+  if (inst.isLeavingScene) return false
+  const level = levelUnderPointer(inst)
+  if (!level) return false
+  selectLevel(inst, level.index)
+  enterLevel(inst, level)
+  return true
+}
+function onBackKey(inst) {
+  if (!inst.sceneReady || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
+  stopMenuMusic(inst.music)
+  goAfterPreparingAssets(inst.k, "ready")
 }
 //
-// True when the player's saved lesson belongs to this menu section.
+// Enters a playable level: the forest continues the saved forest lesson or
+// starts from its first one; locked levels ignore the press.
 //
-function isMenuSectionInPlay(section, currentSection) {
-  return Boolean(section && currentSection && section === currentSection)
+function enterLevel(inst, level) {
+  if (!level.playable || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
+  const saved = get('lastLesson', null)
+  const lesson = saved?.startsWith(FOREST_LESSON_PREFIX) ? saved : FOREST_FIRST_LESSON
+  beginMenuSceneLeave(inst)
+  stopMenuMusic(inst.music)
+  showTransitionToLevel(inst.k, lesson)
 }
 //
-// Picks the menu anti-hero sprite: gray when locked, in-level colours when
-// that section is the active lesson, completed palette when done.
+// Row under the mouse: within half a row step of its centre, inside the band
+// from the hero's spot to past the name.
 //
-function resolveMenuAntiHeroSpritePrefix(antiHeroInst, currentSection, isHovered) {
-  const section = antiHeroInst.section
-  const inPlay = isMenuSectionInPlay(section, currentSection)
-  if (antiHeroInst.isCompleted) {
-    if (section === 'forest') {
-      return antiHeroInst.spritePrefixForest || antiHeroInst.spritePrefixColored
-    }
-    if (section === 'time') {
-      return antiHeroInst.spritePrefixYellow || antiHeroInst.spritePrefixColored
-    }
-    return antiHeroInst.spritePrefixColored
-  }
-  if (inPlay) {
-    if (section === 'forest') {
-      return antiHeroInst.spritePrefixForest || antiHeroInst.spritePrefixColored
-    }
-    if (section === 'touch') {
-      return antiHeroInst.spritePrefixTouchFilled || antiHeroInst.spritePrefixColored
-    }
-    if (section === 'time') {
-      return antiHeroInst.spritePrefixYellow || antiHeroInst.spritePrefixColored
-    }
-    return antiHeroInst.spritePrefixColored
-  }
-  if (isHovered) {
-    if (section === 'time') {
-      return antiHeroInst.spritePrefixYellow || antiHeroInst.spritePrefixColored
-    }
-    if (section === 'forest') {
-      return antiHeroInst.spritePrefixForest || antiHeroInst.spritePrefixColored
-    }
-    return antiHeroInst.spritePrefixColored
-  }
-  if (section === 'forest' && !antiHeroInst.isCompleted) {
-    return antiHeroInst.spritePrefixForest || antiHeroInst.spritePrefixForestHollow || antiHeroInst.spritePrefixHollow
-  }
-  return antiHeroInst.spritePrefixHollow
+function levelUnderPointer(inst) {
+  const { k, layout } = inst
+  const mouse = k.mousePos()
+  if (mouse.x < layout.heroX - MENU_ROW_LEFT_PAD * layout.s) return null
+  if (mouse.x > layout.nameX + MENU_ROW_RIGHT_REACH * layout.s) return null
+  return inst.levels.find(level => Math.abs(mouse.y - level.y) < layout.step / 2) ?? null
 }
-//
-// Ink colour for the orbiting hover title — same hues used for locked-hover rims.
-//
-function menuSectionHoverInkHex(section, config) {
-  if (section === 'time') return '#FF8C00'
-  if (section === 'forest') return FOREST_MENU_HERO_BODY
-  return config?.color?.body ?? '#656565'
-}
-//
-// Returns true when the given anti-hero's section cannot be accessed yet:
-// the previous section must be completed first.
-//
-function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
-  const sectionOrder = ['forest', 'touch', 'word', 'time', 'feel', 'mind']
-  const idx = sectionOrder.indexOf(antiHeroInst.section)
-  if (idx <= 0) return false
-  const prevSection = sectionOrder[idx - 1]
-  const isPrevCompleted = progress[prevSection]?.completed || false
-  return !isPrevCompleted && !antiHeroInst.isCompleted && antiHeroInst.section !== currentSection
-}
-//
-// Swaps a menu anti-hero to another baked sprite prefix and syncs bake
-// metadata so idle eye frames reload after an engine swap.
-//
-function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
-  if (!desiredPrefix) return
-  const k = antiHeroInst.k
-  const bake = antiHeroInst.bakeByPrefix?.[desiredPrefix]
-  antiHeroInst.currentPrefix = desiredPrefix
-  antiHeroInst.spritePrefix = desiredPrefix
-  if (bake) {
-    antiHeroInst.bodyColor = String(bake.bodyColor).replace('#', '')
-    antiHeroInst.outlineColor = String(bake.outlineColor).replace('#', '')
-    antiHeroInst.addMouth = bake.addMouth
-    antiHeroInst.addArms = bake.addArms
-    antiHeroInst.addWatch = bake.addWatch
-    antiHeroInst.outlineOnly = bake.outlineOnly ?? true
-    antiHeroInst.noEyes = bake.noEyes ?? false
-    Hero.loadHeroSprites({
-      k,
-      type: antiHeroInst.type,
-      bodyColor: bake.bodyColor,
-      outlineColor: bake.outlineColor,
-      addMouth: bake.addMouth,
-      addArms: bake.addArms,
-      addWatch: bake.addWatch,
-      outlineOnly: bake.outlineOnly ?? true,
-      noEyes: bake.noEyes ?? false
-    })
-  }
-  const idleName = `${desiredPrefix}_0_0`
-  if (!k.getSprite(idleName)) return
-  antiHeroInst.character.use(k.sprite(idleName))
-  antiHeroInst.currentEyeSprite = idleName
-  antiHeroInst.character.color = k.rgb(255, 255, 255)
-}
-//
-// Draws a crimson ⊘ prohibition ring + slash centered on (cx, cy).
-// The circle encircles the anti-hero sprite, creating a "wearing the sign" look.
-//
-function drawProhibitedSign(k, cx, cy) {
-  const t = k.time()
-  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
-  const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
-  const color = k.rgb(pr, pg, pb)
+function onUpdate(inst) {
+  if (inst.isLeavingScene) return
+  const { k } = inst
+  const dt = k.dt()
+  updatePointerHover(inst)
+  const level = inst.levels[inst.selected]
+  inst.heroY += (level.y - inst.heroY) * Math.min(1, dt * MENU_HERO_EASE)
   //
-  // Red ring outline drawn as arc segments — circle is empty inside (no fill)
+  // A fresh vec2, not an in-place edit: Kaplay only refreshes the transform
+  // of a fixed object when its pos is assigned.
   //
+  const hero = inst.heroInst.character
+  hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
+  updateHeroGlance(inst, dt)
+  inst.levels.forEach(row => updateLevelRow(inst, row, dt))
+  Object.keys(inst.bgOpacity).forEach(key => {
+    const target = key === level.backdrop ? 1 : 0
+    inst.bgOpacity[key] += (target - inst.bgOpacity[key]) * Math.min(1, dt * BG_FADE_SPEED)
+  })
+  ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
+  EarTree.onUpdate(inst.earTrees, dt)
+  SpikyTomato.onUpdate(inst.tomatoes, dt)
+  updateMenuCrawler(inst, dt)
+  updateMenuMusic(inst, dt)
+}
+//
+// Darting eyes: every so often the hero glances at a new random spot around
+// itself.
+//
+function updateHeroGlance(inst, dt) {
+  inst.glanceT -= dt
+  if (inst.glanceT > 0) return
+  inst.glanceT = MENU_GLANCE_MIN + Math.random() * MENU_GLANCE_RANGE
+  const pos = inst.heroInst.character.pos
+  Hero.setLookAtPos(inst.heroInst, {
+    x: pos.x + (Math.random() * 2 - 1) * MENU_GLANCE_REACH_X,
+    y: pos.y + (Math.random() * 2 - 1) * MENU_GLANCE_REACH_Y
+  })
+}
+//
+// The crawler is shown with the forest only; while shown it heads for a new
+// random spot of its strip every few seconds.
+//
+function updateMenuCrawler(inst, dt) {
+  const crawler = inst.crawler
+  crawler.obj.hidden = inst.bgOpacity[BACKDROP_FOREST] < MENU_FOREST_LIVE_MIN_OPACITY
+  inst.crawlerT -= dt
+  if (inst.crawlerT <= 0) {
+    inst.crawlerT = MENU_CRAWLER_RETARGET_MIN + Math.random() * MENU_CRAWLER_RETARGET_RANGE
+    crawler.homeX = crawler.minX + Math.random() * (crawler.maxX - crawler.minX)
+  }
+  Predator.update(crawler, dt)
+}
+//
+// Mouse movement over a row selects it; a resting mouse never fights the
+// keyboard. The pointer cursor marks rows that can be entered.
+//
+function updatePointerHover(inst) {
+  const mouse = inst.k.mousePos()
+  const moved = mouse.x !== inst.lastMouse.x || mouse.y !== inst.lastMouse.y
+  inst.lastMouse = { x: mouse.x, y: mouse.y }
+  const level = levelUnderPointer(inst)
+  Cursor.setCursor(level?.playable ? 'pointer' : 'arrow')
+  moved && level && selectLevel(inst, level.index)
+}
+//
+// Selected row: icon breathes, its name and description fade in; the rest
+// settle back and fade out.
+//
+function updateLevelRow(inst, row, dt) {
+  const { k } = inst
+  const isSelected = row.index === inst.selected
+  const scaleTarget = isSelected ? 1 + MENU_SELECT_PULSE_AMP * Math.sin(k.time() * MENU_SELECT_PULSE_SPEED) : 1
+  row.selectScale += (scaleTarget - row.selectScale) * Math.min(1, dt * MENU_SELECT_SCALE_EASE)
+  row.textOpacity += ((isSelected ? 1 : 0) - row.textOpacity) * Math.min(1, dt * TEXT_FADE_SPEED)
+}
+function updateMenuMusic(inst, dt) {
+  if (inst.musicT >= MENU_KIDS_FADE_IN) return
+  inst.musicT = Math.min(MENU_KIDS_FADE_IN, inst.musicT + dt)
+  inst.music.kids.volume = inst.musicT / MENU_KIDS_FADE_IN * MENU_KIDS_VOLUME
+}
+//
+// Night picture under the forest one; each fades with its own opacity, so a
+// switch cross-fades. The forest goes back to front like the level: baked
+// back layers, the lake (bed, algae, water), the stone pile over its
+// shallows, ear-tree trunks, grass, ear-tree roots / trunk tops / crowns
+// with their spiky bombs, then the stalk eyes once the forest is mostly in.
+//
+function drawBackdrops(inst) {
+  if (inst.isLeavingScene) return
+  const { k } = inst
+  const night = inst.bgOpacity[BACKDROP_NIGHT]
+  night > MENU_FADE_EPS && k.drawSprite({
+    sprite: MENU_NIGHT_SPRITE,
+    pos: k.vec2(-MENU_BG_EDGE_OVERSCAN, -MENU_BG_EDGE_OVERSCAN),
+    width: k.width() + MENU_BG_EDGE_OVERSCAN * 2,
+    height: k.height() + MENU_BG_EDGE_OVERSCAN * 2,
+    opacity: night
+  })
+  const forest = inst.bgOpacity[BACKDROP_FOREST]
+  if (forest <= MENU_FADE_EPS) return
+  drawForestPieces(k, inst.forestBack, forest)
+  Lake.drawBed(k, inst.lake, forest)
+  Lake.drawAlgae(k, inst.lake, forest)
+  Lake.drawFill(k, inst.lake, forest)
+  drawForestPieces(k, inst.forestFore, forest)
+  const c = EarTree.earTreeColors(k)
+  EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, forest)
+  Grass.draw(inst.grass)
+  EarTree.onDrawRoots(inst.earTrees, c.root, forest)
+  EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.barkShades, c.outline, forest)
+  EarTree.onDrawBranches(inst.earTrees, c.bark, c.barkShades, c.outline, c.leaves, forest)
+  SpikyTomato.onDraw(inst.tomatoes, forest)
+  forest > MENU_FOREST_LIVE_MIN_OPACITY && ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(k))
+}
+function drawForestPieces(k, pieces, opacity) {
+  pieces.forEach(piece => k.drawSprite({
+    sprite: piece.sprite,
+    pos: k.vec2(piece.x, piece.y),
+    opacity: opacity * piece.alpha
+  }))
+}
+//
+// "?" glyphs first (one sprite pass), then the prohibition rings and slashes
+// (one primitive pass) — the mushroom icon draws itself.
+//
+function drawLevelIcons(inst) {
+  if (inst.isLeavingScene) return
+  const { k, layout } = inst
+  const locked = inst.levels.filter(level => !level.icon)
+  locked.forEach(level => k.drawSprite({
+    sprite: questionMarkSpriteName(layout.s),
+    pos: k.vec2(layout.columnX + MENU_QUESTION_MARK_NUDGE_X * layout.s, level.y),
+    anchor: 'center',
+    scale: k.vec2(level.selectScale, level.selectScale)
+  }))
+  const color = getRGB(k, PROHIBITED_COLOR)
+  locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s * level.selectScale, color))
+}
+//
+// Red ring with the diagonal slash over a locked level.
+//
+function drawProhibitedSign(k, cx, cy, scale, color) {
+  const r = (PROHIBITED_RING_RADIUS + Math.sin(k.time() * PROHIBITED_PULSE_SPEED) * PROHIBITED_PULSE_AMP) * scale
   for (let i = 0; i < PROHIBITED_RING_SEGMENTS; i++) {
     const a1 = (i / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
     const a2 = ((i + 1) / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
     k.drawLine({
       p1: k.vec2(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r),
       p2: k.vec2(cx + Math.cos(a2) * r, cy + Math.sin(a2) * r),
-      width: PROHIBITED_RING_WIDTH,
-      color,
-      opacity: PROHIBITED_SIGN_OPACITY
+      width: PROHIBITED_RING_WIDTH * scale,
+      color
     })
+  }
+  const reach = r * PROHIBITED_SLASH_REACH
+  k.drawLine({
+    p1: k.vec2(cx - reach, cy - reach),
+    p2: k.vec2(cx + reach, cy + reach),
+    width: PROHIBITED_SLASH_WIDTH * scale,
+    color
+  })
+}
+//
+// Name to the right of the row (left-aligned, vertically centred), the
+// description centred at the bottom, the key hint under it.
+//
+function drawLevelTexts(inst) {
+  if (inst.isLeavingScene) return
+  const { k, layout } = inst
+  inst.levels.forEach(level => {
+    if (level.textOpacity <= MENU_FADE_EPS) return
+    level.showName && k.drawSprite({
+      sprite: menuTextSpriteName(`name-${level.section}`, MENU_NAME_SIZE, layout.s),
+      pos: k.vec2(layout.nameX, level.y),
+      anchor: 'left',
+      opacity: level.textOpacity * nameBlink(k)
+    })
+    level.description && k.drawSprite({
+      sprite: menuTextSpriteName(`description-${level.section}`, MENU_DESCRIPTION_SIZE, layout.s),
+      pos: k.vec2(k.width() / 2, layout.descriptionY),
+      anchor: 'center',
+      opacity: level.textOpacity
+    })
+  })
+  k.drawSprite({
+    sprite: menuTextSpriteName('hint', MENU_HINT_SIZE, layout.s),
+    pos: k.vec2(k.width() / 2, layout.hintY),
+    anchor: 'center',
+    opacity: MENU_HINT_OPACITY
+  })
+}
+//
+// Blink factor of the selected name: a soft on/off pulse.
+//
+function nameBlink(k) {
+  return MENU_NAME_BLINK_MIN + (1 - MENU_NAME_BLINK_MIN) * (0.5 + 0.5 * Math.cos(k.time() * MENU_NAME_BLINK_SPEED))
+}
+//
+// Solid cover while leaving — the menu art never flashes during level load.
+//
+function drawLeaveCover(inst) {
+  if (!inst.isLeavingScene) return
+  const { k } = inst
+  k.drawRect({ pos: k.vec2(0, 0), width: k.width(), height: k.height(), color: getRGB(k, MENU_LEAVE_BG_HEX) })
+}
+function beginMenuSceneLeave(inst) {
+  if (inst.isLeavingScene) return
+  inst.isLeavingScene = true
+  inst.pointerCancel?.cancel()
+  Cursor.setCursor('arrow')
+  inst.heroInst.character.hidden = true
+}
+function onMenuLeave(inst) {
+  inst.keyCancels.forEach(c => c?.cancel?.())
+  inst.startCancel.cancel()
+  inst.backCancel.cancel()
+  inst.pointerCancel?.cancel()
+  CanvasBackdrop.clearCanvasBackdrop(inst.k)
+  stopMenuMusic(inst.music)
+  inst.heroInst.character.destroy()
+}
+//
+// True while a live pre-level transition overlay owns input. Clears a stale
+// transitionCleanup handle left behind after a broken leave.
+//
+function isMenuTransitionBlocking(k) {
+  if (!k.transitionCleanup) return false
+  if (k._transitionOverlay?.exists?.()) return true
+  try { k.transitionCleanup() } catch (_) { /* stale cleanup */ }
+  k.transitionCleanup = null
+  return false
+}
+//
+// Normalises the saved lesson (legacy 'lastLevel' key, stale names,
+// section-complete markers) and writes it back when it changed.
+//
+function syncMenuLastLesson() {
+  const legacy = get('lastLevel', null)
+  if (legacy) {
+    get('lastLesson', null) || set('lastLesson', legacy.replace(/^level-/, 'lesson-'))
+    localStorage.removeItem('lastLevel')
+  }
+  const saved = get('lastLesson', null)
+  const normalized = normalizeSceneName(saved)
+  const lastLevel = normalized in MENU_COMPLETE_NEXT_LESSON ? MENU_COMPLETE_NEXT_LESSON[normalized] : normalized
+  lastLevel !== saved && set('lastLesson', lastLevel)
+  return lastLevel
+}
+function startMenuMusic(k) {
+  return {
+    menu: k.play("menu", { loop: true, volume: MENU_MUSIC_VOLUME }),
+    kids: k.play("kids", { loop: true, volume: 0 })
   }
 }
 //
-// Draws only the diagonal slash (⊘ prohibition style) — called at high z-index so the
-// slash appears in front of the anti-hero sprite.
+// HTML music can resume after pause() if play() resolves late, and then keeps
+// sounding once the Web Audio graph is torn down for the Forest loader — so
+// the tracks are hushed repeatedly for a while.
 //
-function drawProhibitedSlashFront(k, inst) {
-  const { hoveredAntiHero, progress, currentSection } = inst
-  if (!hoveredAntiHero || !isAntiHeroLocked(hoveredAntiHero, progress, currentSection)) return
-  const cx = hoveredAntiHero.character.pos.x
-  const cy = hoveredAntiHero.character.pos.y
-  const t = k.time()
-  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
-  const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
-  const color = k.rgb(pr, pg, pb)
-  const slashR = r * 0.72
-  k.drawLine({
-    p1: k.vec2(cx - slashR, cy - slashR),
-    p2: k.vec2(cx + slashR, cy + slashR),
-    width: PROHIBITED_SLASH_WIDTH,
-    color,
-    opacity: PROHIBITED_SIGN_OPACITY
-  })
-}
-//
-// Draws a green checkmark on completed anti-heroes when hovered — rendered at
-// high z-index so it appears in front of the anti-hero sprite.
-//
-function drawCompletedCheckmarkFront(k, inst) {
-  const { hoveredAntiHero } = inst
-  if (!hoveredAntiHero || !hoveredAntiHero.isCompleted) return
-  const cx = hoveredAntiHero.character.pos.x
-  const cy = hoveredAntiHero.character.pos.y
-  const pulse = 0.9 + 0.1 * Math.sin(k.time() * CHECKMARK_PULSE_SPEED)
-  const s = CHECKMARK_SIZE * pulse
-  const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
-  const outlineColor = k.rgb(
-    CHECKMARK_OUTLINE_COLOR_R,
-    CHECKMARK_OUTLINE_COLOR_G,
-    CHECKMARK_OUTLINE_COLOR_B
-  )
-  const op = CHECKMARK_OPACITY
-  //
-  // Two lines forming a ✓: short down-right stroke, then long up-right stroke.
-  // A filled circle at the junction ensures no gap appears when the pulse animates.
-  //
-  const startX = cx - s * 0.55
-  const endX = cx + s * 0.65
-  const jx = cx - s * 0.1
-  const jy = cy + s * 0.45
-  const endY = cy - s * 0.45
-  k.drawLine({ p1: k.vec2(startX, cy), p2: k.vec2(jx, jy), width: CHECKMARK_OUTLINE_WIDTH, color: outlineColor, opacity: op })
-  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(endX, endY), width: CHECKMARK_OUTLINE_WIDTH, color: outlineColor, opacity: op })
-  k.drawCircle({ pos: k.vec2(startX, cy), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
-  k.drawCircle({ pos: k.vec2(jx, jy), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
-  k.drawCircle({ pos: k.vec2(endX, endY), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
-  k.drawLine({ p1: k.vec2(startX, cy), p2: k.vec2(jx, jy), width: CHECKMARK_WIDTH, color, opacity: op })
-  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(endX, endY), width: CHECKMARK_WIDTH, color, opacity: op })
-  k.drawCircle({ pos: k.vec2(jx, jy), radius: CHECKMARK_WIDTH / 2, color, opacity: op })
-}
-//
-// "?" glyph in place of every unfinished section's anti-hero — dark shadow
-// copy first, then the gray glyph; breathes with the same hover pulse the
-// anti-hero sprite used.
-//
-function drawUnknownSectionMarks(k, inst) {
-  const color = getRGB(k, MENU_QUESTION_MARK_HEX)
-  const shadowColor = getRGB(k, MENU_QUESTION_MARK_SHADOW_HEX)
-  inst.antiHeroes.forEach(antiHeroInst => {
-    if (!antiHeroInst.showQuestionMark) return
-    const pos = antiHeroInst.character.pos
-    const opts = {
-      text: MENU_QUESTION_MARK_TEXT,
-      size: MENU_QUESTION_MARK_SIZE * (antiHeroInst.hoverScale ?? 1),
-      font: MENU_QUESTION_MARK_FONT,
-      anchor: 'center'
+function stopMenuMusic(music) {
+  [music.menu, music.kids].forEach(play => {
+    if (!play) return
+    const hush = () => {
+      play.volume = 0
+      play.loop = false
+      play.paused = true
+      play.stop?.()
     }
-    k.drawText({
-      ...opts,
-      pos: k.vec2(pos.x + MENU_QUESTION_MARK_SHADOW_OFFSET, pos.y + MENU_QUESTION_MARK_SHADOW_OFFSET),
-      color: shadowColor
-    })
-    k.drawText({ ...opts, pos: k.vec2(pos.x, pos.y), color })
+    hush()
+    const timer = setInterval(hush, MENU_HUSH_INTERVAL_MS)
+    setTimeout(() => clearInterval(timer), MENU_HUSH_DURATION_MS)
   })
 }
 //
-// Draw menu background with section-specific fade transitions
+// Every bake the scene draws: night backdrop, forest layers, hero cursor
+// frames and the texts — each a no-op once loaded on this k.
 //
-function drawMenuBackground(inst) {
-  //
-  // Idle layer first (hidden while any anti-hero is hovered; its darkening
-  // is baked in), then the colour forest revealed by the mushroom hover.
-  //
-  drawMenuBackgroundLayer(inst, inst.bgVariant, inst.bgDefaultOpacity)
-  drawMenuForestLayers(inst, inst.forestRevealOpacity)
+function loadMenuAssets(k) {
+  buildMenuNightSprite(k)
+  loadMenuForestLayerSprites(k)
+  Hero.loadHeroSprites({ k, ...MENU_HERO_LOOK })
+  loadMenuTextSprites(k)
 }
 //
-// Colour forest pieces back to front at their baked screen spots; the
-// parallax rows shift with the eased cursor offset.
+// Name / description / hint / "?" sprites at the window's text scale.
 //
-function drawMenuForestLayers(inst, opacity) {
-  if (opacity <= 0.01) return
-  const { k } = inst
-  inst.forestPieces.forEach(piece => k.drawSprite({
-    sprite: piece.sprite,
-    pos: k.vec2(piece.x - inst.parallaxT * MENU_PARALLAX_MAX_PX * piece.depth, piece.y),
-    opacity: opacity * piece.alpha
-  }))
-}
-function drawMenuBackgroundLayer(inst, variant, opacity) {
-  const { k } = inst
-  opacity > 0.01 && k.drawSprite({
-    sprite: menuStaticSpriteName(variant),
-    pos: k.vec2(-MENU_BG_EDGE_OVERSCAN, -MENU_BG_EDGE_OVERSCAN),
-    width: k.width() + MENU_BG_EDGE_OVERSCAN * 2,
-    height: k.height() + MENU_BG_EDGE_OVERSCAN * 2,
-    opacity
+function loadMenuTextSprites(k) {
+  const s = k.height() / MENU_REF_HEIGHT
+  loadQuestionMarkSprite(k, s)
+  loadMenuTextSprite(k, 'hint', MENU_HINT_TEXT, MENU_HINT_SIZE, s, MENU_TEXT_HEX)
+  LEVELS.forEach(level => {
+    loadMenuTextSprite(k, `name-${level.section}`, level.name, MENU_NAME_SIZE, s, MENU_TEXT_HEX)
+    level.description && loadMenuTextSprite(k, `description-${level.section}`, level.description, MENU_DESCRIPTION_SIZE, s, MENU_TEXT_HEX)
   })
 }
-//
-// The colour forest fades in only while the forest mushroom is hovered.
-//
-function updateForestReveal(inst, hoveredInst, mousePos) {
-  const { k } = inst
-  const target = hoveredInst?.section === MENU_FOREST_SECTION ? 1 : 0
-  inst.forestRevealOpacity += (target - inst.forestRevealOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1)
-  //
-  // Cursor across the screen → -1..1 parallax drift.
-  //
-  const parallaxTarget = Math.max(-1, Math.min(1, mousePos.x / k.width() * 2 - 1))
-  inst.parallaxT += (parallaxTarget - inst.parallaxT) * Math.min(k.dt() * MENU_PARALLAX_EASE, 1)
+function loadMenuTextSprite(k, key, text, size, s, fillStyle) {
+  const name = menuTextSpriteName(key, size, s)
+  if (k.getSprite(name)) return
+  loadForestTextSprite(k, name, text, {
+    fontFamily: MENU_TEXT_FONT,
+    fontSize: Math.round(size * s),
+    fillStyle,
+    shadowStyle: MENU_TEXT_SHADOW_HEX,
+    align: 'center',
+    lineSpacing: Math.round(MENU_DESCRIPTION_LINE_SPACING * s)
+  }, forestUiHash(key))
+}
+function menuTextSpriteName(key, size, s) {
+  return `${MENU_TEXT_SPRITE}-${key}-${Math.round(size * s)}`
 }
 //
-// Both forest backdrops (colour layers + gray canvas) for the current
-// screen size, painted once and cached, so a new engine only re-uploads them.
+// "?" baked into a canvas sized to the glyph's ink box (measured, not the
+// font's line box), with its drop shadow — drawn centred it sits in the
+// middle of the prohibition ring.
+//
+function loadQuestionMarkSprite(k, s) {
+  const name = questionMarkSpriteName(s)
+  if (k.getSprite(name)) return
+  const size = Math.round(MENU_QUESTION_MARK_SIZE * s)
+  const font = `${size}px ${MENU_TEXT_FONT}`
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = font
+  const m = probe.measureText(MENU_QUESTION_MARK_TEXT)
+  const inkW = m.actualBoundingBoxLeft + m.actualBoundingBoxRight
+  const inkH = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent
+  const shadow = MENU_QUESTION_MARK_SHADOW_OFFSET * s
+  const pad = MENU_QUESTION_MARK_PAD
+  const canvas = document.createElement('canvas')
+  //
+  // The shadow offset pads both sides, so the glyph itself stays centred.
+  //
+  canvas.width = Math.ceil(inkW + (shadow + pad) * 2)
+  canvas.height = Math.ceil(inkH + (shadow + pad) * 2)
+  const ctx = canvas.getContext('2d')
+  ctx.font = font
+  ctx.textBaseline = 'alphabetic'
+  const x = pad + shadow + m.actualBoundingBoxLeft
+  const y = pad + shadow + m.actualBoundingBoxAscent
+  ctx.fillStyle = MENU_TEXT_SHADOW_HEX
+  ctx.fillText(MENU_QUESTION_MARK_TEXT, x + shadow, y + shadow)
+  ctx.fillStyle = MENU_QUESTION_MARK_HEX
+  ctx.fillText(MENU_QUESTION_MARK_TEXT, x, y)
+  k.loadSprite(name, canvas)
+}
+function questionMarkSpriteName(s) {
+  return `${MENU_QUESTION_MARK_SPRITE}-v2-${Math.round(MENU_QUESTION_MARK_SIZE * s)}`
+}
+//
+// Forest backdrop layers for the current screen size, painted once and
+// cached, so a new engine only re-uploads them.
 //
 const menuForestBackdropCache = new Map()
-function forestMenuBackdrops() {
-  const cacheKey = `${MENU_BG_CANVAS_W}x${MENU_BG_CANVAS_H}`
+function forestMenuBackdrop(width, height) {
+  const cacheKey = `${width}x${height}`
   const cached = menuForestBackdropCache.get(cacheKey)
   if (cached) return cached
-  const backdrops = generateForestMenuBackdrops({
-    width: MENU_BG_CANVAS_W,
-    height: MENU_BG_CANVAS_H,
-    groundY: MENU_BG_GROUND_Y,
-    overscan: MENU_PARALLAX_MAX_PX
-  })
-  menuForestBackdropCache.set(cacheKey, backdrops)
-  return backdrops
+  const layers = generateForestMenuBackdrop({ width, height })
+  menuForestBackdropCache.set(cacheKey, layers)
+  return layers
 }
 //
-// Uploads the colour forest pieces (sky, parallax rows, edge trees, soil)
-// once per live k. Returns the draw list.
+// Uploads the forest layers once per live k (keyed by k, so a fresh engine
+// after a resolution swap re-uploads instead of finding an empty registry).
+// Returns the draw lists under and over the lake.
 //
 const menuForestPiecesByK = new WeakMap()
 function loadMenuForestLayerSprites(k) {
   const loaded = menuForestPiecesByK.get(k)
   if (loaded) return loaded
-  const layers = forestMenuBackdrops()
-  const pieces = [
-    { ...layers.sky, depth: 0, alpha: 1 },
-    ...layers.parallax,
-    ...layers.front.map(piece => ({ ...piece, depth: 0, alpha: 1 }))
-  ].map((piece, i) => ({ ...piece, sprite: `${MENU_FOREST_LAYER_SPRITE}-${i}` }))
-  pieces.forEach(piece => k.loadSprite(piece.sprite, piece.canvas))
+  const layers = forestMenuBackdrop(k.width(), k.height())
+  const upload = (list, group) => list.map((piece, i) => {
+    const sprite = `${MENU_FOREST_LAYER_SPRITE}-${group}-${i}`
+    k.loadSprite(sprite, piece.canvas)
+    return { ...piece, sprite }
+  })
+  const pieces = { back: upload(layers.back, 'back'), fore: upload(layers.fore, 'fore') }
   menuForestPiecesByK.set(k, pieces)
   return pieces
 }
 //
-// Bakes the combined idle menu background once per live Kaplay instance
-// and variant: the scene base colour plus the variant's picture — the
-// gray-phase forest or the night forest at its darkening alpha — loaded as a
-// single sprite (the colour forest is layered, see
-// loadMenuForestLayerSprites). Tracks the specific `k` it
-// baked for (not just a boolean) so a fresh engine booted after a
-// resolution swap (see engine-switch.js) re-bakes instead of skipping the
-// load and leaving the sprite registry empty on the new k.
+// The level's lake for the menu layout (sprites keyed by window size, since
+// the layout follows it).
 //
-const menuStaticSpriteBakedFor = new Map()
-//
-// The composed pictures themselves are kept per variant and canvas size, so
-// a fresh engine (after a resolution swap) only re-uploads them.
-//
-const menuStaticCanvasCache = new Map()
-function buildMenuStaticSprite(k, variant) {
-  if (menuStaticSpriteBakedFor.get(variant) === k) return
-  menuStaticSpriteBakedFor.set(variant, k)
-  const cacheKey = `${variant}:${MENU_BG_CANVAS_W}x${MENU_BG_CANVAS_H}`
-  const canvas = menuStaticCanvasCache.get(cacheKey) ?? composeMenuStaticCanvas(variant)
-  menuStaticCanvasCache.set(cacheKey, canvas)
-  k.loadSprite(menuStaticSpriteName(variant), canvas)
+function createMenuLake(k, forestLayout) {
+  const { lake, groundY } = forestLayout
+  return Lake.create({
+    k,
+    x1: lake.x1,
+    x2Core: lake.x2Core,
+    surfaceY: lake.surfaceY,
+    floorY: groundY,
+    spriteKey: `${MENU_LAKE_SPRITE_KEY}-${k.width()}x${k.height()}`
+  })
 }
 //
-// Scene base colour plus the variant's picture at its blend alpha.
+// Swaying grass along the forest ground (drawn manually inside the backdrop
+// pass), fading with the forest.
 //
-function composeMenuStaticCanvas(variant) {
+function createMenuGrass(inst) {
+  const { k, forestLayout } = inst
+  const { lake } = forestLayout
+  return Grass.create({
+    k,
+    floorY: forestLayout.groundY,
+    left: MENU_GRASS_EDGE_INSET,
+    right: k.width() - MENU_GRASS_EDGE_INSET,
+    tuftCount: MENU_GRASS_TUFT_COUNT,
+    excluded: x => x >= lake.x1 && x <= lake.x2,
+    postBakeCanvas: applyForestGameplaySharpBake,
+    getTint: () => menuGrassTint(inst),
+    hueVaryMax: MENU_GRASS_HUE_VARY_MAX,
+    hueVarySkew: MENU_GRASS_HUE_VARY_SKEW
+  })
+}
+function menuGrassTint(inst) {
+  const opacity = inst.bgOpacity[BACKDROP_FOREST]
+  return opacity > MENU_FADE_EPS ? { ...MENU_GRASS_RGB, opacity } : null
+}
+//
+// The level's crawler on the ground east of the lake; it never hunts.
+//
+function createMenuCrawler(inst) {
+  const { k, forestLayout } = inst
+  const { minX, maxX } = forestLayout.crawler
+  return Predator.create({
+    k,
+    x: minX + Math.random() * (maxX - minX),
+    minX,
+    maxX,
+    groundAt: () => forestLayout.groundY,
+    hero: inst.heroInst,
+    canHuntHero: () => false
+  })
+}
+//
+// Night backdrop: scene base colour plus the darkened menu-bg forest, baked
+// once per live k; the composed canvas is cached per size.
+//
+const menuNightBakedFor = new WeakSet()
+const menuNightCanvasCache = new Map()
+function buildMenuNightSprite(k) {
+  if (menuNightBakedFor.has(k)) return
+  menuNightBakedFor.add(k)
+  const cacheKey = `${k.width()}x${k.height()}`
+  const canvas = menuNightCanvasCache.get(cacheKey) ?? composeMenuNightCanvas(k.width(), k.height())
+  menuNightCanvasCache.set(cacheKey, canvas)
+  k.loadSprite(MENU_NIGHT_SPRITE, canvas)
+}
+function composeMenuNightCanvas(width, height) {
   const canvas = document.createElement('canvas')
-  canvas.width = MENU_BG_CANVAS_W
-  canvas.height = MENU_BG_CANVAS_H
+  canvas.width = width
+  canvas.height = height
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = CFG.visual.colors.ready.background
-  ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  //
-  // The night picture's plain sky/underground bands are filled with the same
-  // READY background colour the menu uses, so blended over the same colour
-  // they disappear — no horizontal strips above and below the composition.
-  //
-  const forestGray = variant === MENU_BG_VARIANT_FOREST_GRAY
-  const bgCanvas = forestGray
-    ? forestMenuBackdrops().gray
-    : generateMenuBackgroundCanvas(CFG.visual.colors.ready.background)
-  ctx.globalAlpha = MENU_BG_LAYER_ALPHA[variant]
-  ctx.drawImage(bgCanvas, 0, 0)
-  ctx.globalAlpha = 1
-  //
-  // The gray canvas stays cached with the forest backdrops.
-  //
-  !forestGray && releaseMenuCanvas(bgCanvas)
+  ctx.fillRect(0, 0, width, height)
+  const picture = generateMenuBackgroundCanvas(CFG.visual.colors.ready.background)
+  ctx.globalAlpha = MENU_NIGHT_ALPHA
+  ctx.drawImage(picture, 0, 0)
+  picture.width = 0
+  picture.height = 0
   return canvas
-}
-function releaseMenuCanvas(canvas) {
-  canvas.width = 0
-  canvas.height = 0
-}
-function menuStaticSpriteName(variant) {
-  return `${MENU_STATIC_SPRITE}-${variant}`
-}
-//
-// The level the player is on picks the backdrop; a fresh save starts in the
-// forest, so it shows the forest too. Touch lesson 0 is only the end-of-preview
-// screen right after the forest, so the player is still in the forest world.
-//
-function resolveMenuBgVariant(lastLevel) {
-  const inForest = !lastLevel || lastLevel.startsWith(MENU_FOREST_LESSON_PREFIX) || lastLevel === MENU_PREVIEW_END_SCENE
-  return inForest ? MENU_BG_VARIANT_FOREST_GRAY : MENU_BG_VARIANT_NIGHT
-}
-//
-// Stalk eyes on both edges of the forest backdrop, rooted on its ground line.
-//
-function createMenuForestEyes(k) {
-  const spots = forestMenuEdgeSpotXs(MENU_BG_CANVAS_W, MENU_FOREST_EYE_COUNT_PER_SIDE, MENU_FOREST_EYE_SEED)
-    .map(x => ({ x, groundY: MENU_BG_GROUND_Y }))
-  return ChainBuoy.create({ k, spots, earthBottomY: MENU_BG_CANVAS_H })
-}
-//
-// Eyes follow the cursor and sway on their own clock.
-//
-function updateMenuForestEyes(inst, mousePos) {
-  ChainBuoy.onUpdate(inst.forestEyes, mousePos.x, mousePos.y, inst.k.dt())
-}
-function drawMenuForestEyes(inst) {
-  if (inst.forestRevealOpacity < MENU_FOREST_EYE_MIN_BG_OPACITY) return
-  ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(inst.k))
-}
-//
-// Grass tint for the menu horizon: the shared forest grass green fading OUT
-// through opacity together with the background when an anti-hero is hovered
-// (never darkening toward black — the blades keep their colour while they
-// dissolve).
-//
-function getMenuGrassTint(inst) {
-  //
-  // The colour forest gets the level's dry straw blades.
-  //
-  if (inst.forestRevealOpacity > inst.bgDefaultOpacity) {
-    return { ...MENU_FOREST_GRASS_RGB, opacity: inst.forestRevealOpacity }
-  }
-  const op = inst.bgDefaultOpacity
-  if (op <= 0.01) return null
-  //
-  // The gray-phase forest keeps its blades gray and as muted as its picture.
-  //
-  if (inst.bgVariant === MENU_BG_VARIANT_FOREST_GRAY) {
-    return { ...MENU_FOREST_GRAY_GRASS_RGB, opacity: op * MENU_BG_LAYER_ALPHA[MENU_BG_VARIANT_FOREST_GRAY] }
-  }
-  return { r: MENU_GRASS_TINT_R, g: MENU_GRASS_TINT_G, b: MENU_GRASS_TINT_B, opacity: op }
-}
-/**
- * Creates the per-letter progress label displayed below each anti-hero.
- * Colored letters = current level and every level before it; gray = not yet reached.
- * For the touch section the last letter "H" always hangs lower and sways.
- * @param {Object} k - Kaplay instance
- * @param {Object} config - Section config object from getSectionPositions()
- * @param {Object} progress - Full progress object from getProgress()
- * @param {string|null} lastLevel - Value of get('lastLesson')
- * @param {string} grayColor - Hex string for inactive/gray letters
- * @param {boolean} [visible=true] - When false, shows "unknown" instead of letter sequence
- * @returns {Object} Label entry stored in sectionLabels[]
- */
-function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, visible = true) {
-  const section = config.section
-  //
-  // Sections the player hasn't reached yet: hide the label entirely.
-  // The word "unknown" will appear in the floating hover-title instead.
-  //
-  if (!visible) {
-    return {
-      letters: [],
-      fallingH: [],
-      allObjects: [],
-      labelVisible: false,
-      section,
-      sectionColor: grayColor,
-      grayColor,
-      isCompleted: false
-    }
-  }
-  const letters = SECTION_LETTERS[section] || [section.toUpperCase()]
-  const activeLetterIndex = getSectionActiveLetterIndex(section, lastLevel, progress)
-  const allLettersActive = activeLetterIndex === -2
-  //
-  // Time section always uses the anti-hero's orange/yellow, matching the in-game HUD indicator
-  //
-  const sectionColor = section === 'time'
-    ? '#FF8C00'
-    : section === 'forest'
-      ? FOREST_MENU_HERO_BODY
-      : config.color.body
-  //
-  // Layout: center the word at (config.x, config.y + 55)
-  //
-  const fontSize = SECTION_LABEL_FONT_SIZE
-  const spacing = SECTION_LABEL_LETTER_SPACING
-  const letterStep = fontSize + spacing
-  const totalWidth = letters.length * letterStep - spacing
-  const baseX = config.x - totalWidth / 2 + fontSize / 2
-  const baseY = config.y + 55
-  const fallingExtraY = Math.round(fontSize * TOUCH_H_Y_RATIO)
-  //
-  // Drop shadow (single black copy offset right+down) — the same text
-  // shadow style the forest level uses.
-  //
-  const outlineOffsets = [
-    { dx: 1, dy: 1 }
-  ]
-  const letterEntries = []
-  const fallingH = []
-  const allObjects = []
-  letters.forEach((letter, i) => {
-    const isFalling = section === 'touch' && i === TOUCH_H_INDEX
-    let colorHex
-    if (section === 'forest') {
-      //
-      // Only letters actually collected in lesson-forest.0 light up white.
-      //
-      colorHex = get(FOREST_LETTER_KEYS[i], false) ? FOREST_MENU_HERO_BODY : grayColor
-    } else {
-      const isActive = allLettersActive || (activeLetterIndex >= 0 && i <= activeLetterIndex)
-      colorHex = isFalling && !isActive ? grayColor : (isActive ? sectionColor : grayColor)
-    }
-    const { r, g, b } = getRGB(k, colorHex)
-    const lx = baseX + i * letterStep
-    const ly = isFalling ? baseY + fallingExtraY : baseY
-    const lxOff = isFalling ? TOUCH_H_X_OFFSET : 0
-    //
-    // Black drop shadow — shown only when hovered / current section.
-    // Falling H uses the default topleft anchor so rotation pivots at the
-    // top-left corner of the glyph (the top of the left vertical stroke),
-    // giving a natural pendulum hang.  Regular letters keep anchor('center').
-    //
-    const outlines = outlineOffsets.map(({ dx, dy }) => {
-      const components = [
-        k.text(letter, { size: fontSize }),
-        k.pos(lx + lxOff + dx, ly + dy),
-        k.color(0, 0, 0),
-        k.opacity(0),
-        k.z(99)
-      ]
-      !isFalling && components.push(k.anchor('center'))
-      const outlineObj = k.add(components)
-      isFalling && (outlineObj.angle = TOUCH_H_TILT)
-      allObjects.push(outlineObj)
-      return outlineObj
-    })
-    //
-    // Main colored letter on top
-    //
-    const mainComponents = [
-      k.text(letter, { size: fontSize }),
-      k.pos(lx + lxOff, ly),
-      k.color(r, g, b),
-      k.z(100)
-    ]
-    !isFalling && mainComponents.push(k.anchor('center'))
-    const mainObj = k.add(mainComponents)
-    isFalling && (mainObj.angle = TOUCH_H_TILT)
-    allObjects.push(mainObj)
-    letterEntries.push({ main: mainObj, outlines })
-    if (isFalling) {
-      fallingH.push(mainObj, ...outlines)
-    }
-  })
-  return {
-    letters: letterEntries,
-    fallingH,
-    allObjects,
-    section,
-    sectionColor,
-    grayColor,
-    isCompleted: progress[section]?.completed || false,
-    labelVisible: true
-  }
-}
-//
-// Stops menu-owned music before the old Kaplay engine is destroyed directly.
-//
-function stopMenuMusic(menuMusic, kidsMusic) {
-  hushMenuTrack(menuMusic)
-  hushMenuTrack(kidsMusic)
-}
-//
-// HTML music can resume after pause() if play() resolves late, and then
-// keeps sounding once the Web Audio graph is torn down for the Forest loader.
-//
-function hushMenuTrack(play) {
-  if (!play) return
-  const hush = () => {
-    play.volume = 0
-    play.loop = false
-    play.paused = true
-    play.stop?.()
-  }
-  hush()
-  const timer = setInterval(hush, 200)
-  setTimeout(() => clearInterval(timer), 8000)
-}
-//
-// Current lesson as the menu sees it: stale names normalised, section-complete
-// markers advanced to the next section.
-//
-function resolveMenuLastLevel(saved) {
-  const normalized = normalizeSceneName(saved)
-  return normalized in MENU_COMPLETE_NEXT_LESSON ? MENU_COMPLETE_NEXT_LESSON[normalized] : normalized
-}
-function isForestLesson(lastLevel) {
-  return Boolean(lastLevel?.startsWith(MENU_FOREST_LESSON_PREFIX))
-}
-//
-// Centre hero look by progress. Color progression: gray → gold (forest) →
-// teal (touch) → orange (time) → red (word); while touch is not completed (or
-// the player is back in the forest) it is the filled white hero with the dark
-// body outline and standard eyes, otherwise a section-coloured hollow outline.
-//
-function menuCentreHeroLook(progress, lastLevel) {
-  const inForestPlay = isForestLesson(lastLevel)
-  const filled = !progress.touch?.completed || inForestPlay
-  const bodyColor = filled ? MENU_CENTRE_HERO_WHITE_BODY : menuCentreHeroProgressBody(progress)
-  return {
-    filled,
-    sprite: {
-      type: Hero.HEROES.HERO,
-      bodyColor,
-      outlineColor: filled ? MENU_CENTRE_HERO_WHITE_OUTLINE : MENU_HERO_OUTLINE_COLOR,
-      outlineOnly: !filled,
-      addMouth: Boolean(progress.word?.completed) && !inForestPlay,
-      addArms: Boolean(progress.touch?.completed),
-      eyeWhiteColor: filled ? CFG.visual.colors.hero.eyeWhite : undefined,
-      pupilColor: filled ? CFG.visual.colors.hero.eyePupil : undefined
-    }
-  }
-}
-function menuCentreHeroProgressBody(progress) {
-  if (progress.word?.completed) return MENU_WORD_HERO_BODY
-  if (progress.time?.completed) return MENU_TIME_YELLOW_BODY
-  if (progress.touch?.completed) return CFG.visual.colors.sections.touch.body
-  if (progress.forest?.completed) return CFG.visual.colors.sections.forest.body
-  return MENU_GRAY_BODY
-}
-//
-// Features a section icon grows once its section is completed.
-//
-function menuSectionFeatures(section, isCompleted) {
-  return {
-    hasMouth: isCompleted && (section === 'word' || section === 'time'),
-    hasArms: isCompleted && (section === 'touch' || section === 'word' || section === 'time'),
-    hasWatch: isCompleted && section === 'time'
-  }
-}
-//
-// Bakes every hero / anti-hero sprite the menu draws or swaps to on hover.
-// loadHeroSprites skips prefixes already on this k, so a prewarmed engine
-// pays nothing here.
-//
-function loadMenuHeroSprites(k, progress, lastLevel) {
-  menuHeroSpriteSpecs(progress, lastLevel).forEach(spec => Hero.loadHeroSprites({ k, ...spec }))
-}
-function menuHeroSpriteSpecs(progress, lastLevel) {
-  const hollow = { type: Hero.HEROES.ANTIHERO, outlineColor: MENU_ANTIHERO_HOLLOW_OUTLINE, outlineOnly: true, noEyes: true }
-  const specs = [
-    menuCentreHeroLook(progress, lastLevel).sprite,
-    { ...hollow, bodyColor: MENU_GRAY_BODY },
-    { ...hollow, bodyColor: FOREST_MENU_HERO_BODY }
-  ]
-  getSectionPositions(0, 0, 0).forEach(config => {
-    const isCompleted = progress[config.section]?.completed || false
-    const { hasMouth, hasArms, hasWatch } = menuSectionFeatures(config.section, isCompleted)
-    const features = { type: Hero.HEROES.ANTIHERO, addMouth: hasMouth, addArms: hasArms, addWatch: hasWatch }
-    //
-    // The icon itself (gray hollow), its black-outline hover variant and the
-    // section-coloured variant (avoids the dark tint of gray × section colour).
-    //
-    specs.push({ ...features, bodyColor: MENU_GRAY_BODY, outlineColor: MENU_ANTIHERO_HOLLOW_OUTLINE, outlineOnly: true, noEyes: !isCompleted })
-    specs.push({ ...features, bodyColor: MENU_GRAY_BODY, outlineColor: MENU_HERO_OUTLINE_COLOR, outlineOnly: true })
-    config.section === 'time' && specs.push({
-      type: Hero.HEROES.ANTIHERO,
-      bodyColor: MENU_TIME_YELLOW_BODY,
-      outlineColor: MENU_HERO_OUTLINE_COLOR,
-      addMouth: true,
-      addArms: true,
-      addWatch: true,
-      outlineOnly: true
-    })
-    config.section === 'forest' && specs.push({
-      ...features,
-      bodyColor: FOREST_MENU_SECTION_HERO_BODY,
-      outlineColor: FOREST_MENU_HERO_OUTLINE,
-      outlineOnly: false
-    })
-    config.section === 'touch' && specs.push({
-      ...features,
-      bodyColor: config.color.body,
-      outlineColor: MENU_HERO_BLACK_OUTLINE,
-      outlineOnly: false
-    })
-    specs.push({
-      ...features,
-      bodyColor: config.color.body,
-      outlineColor: config.section === 'touch' ? MENU_HERO_BLACK_OUTLINE : MENU_HERO_OUTLINE_COLOR,
-      outlineOnly: true
-    })
-    specs.push({ ...hollow, bodyColor: MENU_GRAY_BODY, outlineColor: menuSectionHoverInkHex(config.section, config) })
-  })
-  return specs
 }

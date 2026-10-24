@@ -769,6 +769,10 @@ export const CFG = {
         //
         heroDeathLeaves: [PALETTE.gray7, PALETTE.gray7, PALETTE.gray6],
         //
+        // Red prohibition sign over the locked levels of the menu.
+        //
+        menuProhibited: PALETTE.red1,
+        //
         // Cool air target when parallax trees soften into the sky (not gold).
         //
         warmHaze: PALETTE.teal2,
@@ -988,6 +992,18 @@ export const CFG = {
     // Level sound effects
     //
     sfx: {
+      //
+      // Menu level switch: a dry tick — a very short high-passed noise
+      // snap over a quick falling blip.
+      //
+      menuClick: {
+        volume: MASTER_VOLUME * 0.5,
+        duration: 0.035,
+        noiseHighpass: 2400,
+        blipFreqStart: 1900,
+        blipFreqEnd: 900,
+        blipVolume: MASTER_VOLUME * 0.25
+      },
       jump: MASTER_VOLUME * 0.62,
       land: MASTER_VOLUME * 0.613,
       landFade: MASTER_VOLUME * 0.612,

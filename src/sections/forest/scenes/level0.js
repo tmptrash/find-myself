@@ -38,8 +38,8 @@ import {
   forestRockShadedDrawPalette,
   forestContourRgb,
   snapToPalette,
+  lerpForestRgb,
   getTreePaletteColor,
-  getForestGameplayTreeRootShades,
   getForestGameplayTreeVolumeShades,
   getTreePaletteParallaxCorner,
   buildDimmedTreePalette,
@@ -48,11 +48,7 @@ import {
 } from '../utils/forest-palette.js'
 import {
   applyFoliageDensityToPalette,
-  forestBushHiResClusterRadiusRangeForTier,
-  forestBushLeafDensityScaleForTier,
-  forestBushLeafSizeScaleForTier,
   forestFilmGrainBlockPxForTier,
-  forestHiResBushClustersForTier,
   forestTreeBuildOptsForDensity
 } from '../utils/forest-pixel-density.js'
 import {
@@ -112,6 +108,9 @@ import * as ChainEyeTramp from '../utils/forest-chain-eye-trampoline.js'
 import * as EarTree from '../utils/forest-ear-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
+import * as Lake from '../utils/forest-lake.js'
+import * as Underground from '../utils/forest-underground.js'
+import * as BushStrip from '../utils/forest-bush-strip.js'
 import { GROUND_LAYER_FRACS, groundEarthLayersColor, paintLayeredEarthBand } from '../utils/forest-earth-band.js'
 import * as FlowerGrab from '../components/flower-grab.js'
 import { createLevelTransition } from '../../../utils/transition.js'
@@ -120,18 +119,12 @@ import { paintForestShoreRock } from '../utils/forest-shore-rock.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as ForestFloor from '../components/forest-floor.js'
-import {
-  forestUndergroundLargeFeatureAlpha,
-  forestUndergroundSmallDetailAlpha,
-  paintUndergroundDepthVignette
-} from '../utils/forest-atmosphere.js'
+import { paintUndergroundDepthVignette } from '../utils/forest-atmosphere.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
-import { drawFernToCanvas } from '../../../utils/draw-fern.js'
 import * as ForestCamera from '../utils/forest-camera.js'
 import {
   applyParallaxPostFxToContext,
   applyForestLayerGradeToCanvas,
-  drawForestHiResFoliageCluster,
   FOREST_LAYER_GRADE
 } from '../utils/forest-parallax-grain.js'
 import {
@@ -613,39 +606,6 @@ const PAR_TREE_EDGE_PAD = 30
 const PAR_TREE_STEP_MIN_FRAC = 0.55
 const PAR_TREE_STEP_RANGE_FRAC = 0.9
 //
-// Background bushes — leafy mounds cut by the ground line, drawn IN FRONT of
-// the tree planes. Each mound is a filled dome scattered with small oval
-// leaves (a different leaf shape than the tree teardrops), so the strip
-// reads as real bushes instead of plain semicircles — in every mode.
-// The radius spread is kept narrow, so every strip holds one roughly even
-// height with only a small random step up/down — three uniform horizontal
-// hedge bands, like the reference picture.
-//
-const BUSH_RADIUS_MIN = 54
-const BUSH_RADIUS_MAX = 72
-const BUSH_STEP_MIN_FRAC = 0.45
-const BUSH_STEP_RANGE_FRAC = 0.5
-//
-// East half: hedges break into uneven clumps of a few mounds with open gaps
-// between them (about half the mounds of the old continuous band), so the
-// forest behind shows through.
-//
-const BUSH_EAST_CLUMP_MIN = 2
-const BUSH_EAST_CLUMP_RANGE = 3
-const BUSH_EAST_GAP_MIN_FRAC = 1.4
-const BUSH_EAST_GAP_RANGE_FRAC = 1.9
-//
-// Bush leaf texture: oval leaves scattered across each dome plus a ragged
-// leafy rim along the arc. Shades vary only in brightness (darkened base
-// tone), so the colour composition of every strip stays unchanged.
-//
-const BUSH_LEAF_SIZE_MIN = 9
-const BUSH_LEAF_SIZE_RANGE = 8
-const BUSH_LEAF_DENSITY = 0.009
-const BUSH_RIM_LEAF_SPACING = 18
-const BUSH_LEAF_DARKEN_STEPS = [0, 0.08]
-const BUSH_HIRES_CLUSTER_DENSITY = 0.3
-//
 // Colour-world bush tones follow the same corner quadrant as the trees in that
 // row (leaf swatch per mound centre X).
 //
@@ -661,14 +621,6 @@ const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
 //
 const BUSH_FERNS_NEAR = 1.8
 const BUSH_FERNS_MID = 1.4
-const BUSH_FERN_OFFSET = 0.75
-const BUSH_FERN_SIZE_MIN = 1.05
-const BUSH_FERN_SIZE_RANGE = 0.6
-const BUSH_FERN_SEED_RANGE = 1e9
-const BUSH_FERN_STEM = 0.66
-const BUSH_FERN_DARK = 0.5
-const BUSH_FERN_MID = 0.34
-const BUSH_FERN_LIGHT = 0.14
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
 //
 // Headroom kept above each row's own band top when clipping its canopy
@@ -740,108 +692,11 @@ const PAR_LAYER_NEAR = {
   worldH: parTreeRowWorldH(PAR_BIG_BAND_TOP)
 }
 //
-// Underground decor in the root zone: buried rocks, cracks, pebble clusters,
-// hanging rootlets, fossil spirals and one buried skeleton (no burrows).
-//
-const UG_TOP_PAD = 30
-const UG_BOTTOM_PAD = 2
-const UG_ROCK_COUNT = 14
-const UG_CRACK_COUNT = 18
-const UG_PEBBLE_CLUSTER_COUNT = 22
-const UG_ROOTLET_COUNT = 26
-const UG_SHELL_COUNT = 9
-const UG_BONE_COUNT = 9
-const UG_COIN_COUNT = 6
-const UG_BOTTLE_COUNT = 2
-const UG_WORM_COUNT = 8
-const UG_FOSSIL_COUNT = 4
-//
-// Colour-world extras from the reference: loose groups of dark slate stones
-// in the deep clay (a dense group guaranteed at each end of the band, a few
-// scattered singles between), sediment streaks, dark voids with a lit lip,
-// warm pebbles in the topsoil and fine grit.
-//
-const UG_BOULDER_PILE_COUNT = 4
-const UG_BOULDER_PILE_EDGE_INSET = 60
-const UG_BOULDER_PILE_STONES_MIN = 4
-const UG_BOULDER_PILE_STONES_RANGE = 4
-const UG_BOULDER_EDGE_PILE_STONES_MIN = 8
-const UG_BOULDER_EDGE_PILE_STONES_RANGE = 4
-const UG_BOULDER_SCATTER_COUNT = 14
-const UG_BOULDER_R_MIN = 5
-const UG_BOULDER_R_RANGE = 13
-const UG_BOULDER_PILE_SPREAD = 150
-const UG_BOULDER_DEEP_FRAC = 0.72
-const UG_BOULDER_MIN_GAP_MULT = 0.85
-const UG_BOULDER_PLACE_ATTEMPTS = 12
-const UG_BOULDER_OUTLINE_PX = 1.5
-//
-// Lumpy, rounded silhouette: random-radius lobes joined by quadratic curves.
-//
-const UG_BOULDER_LOBES_MIN = 7
-const UG_BOULDER_LOBES_RANGE = 5
-const UG_BOULDER_LOBE_R_MIN = 0.8
-const UG_BOULDER_LOBE_R_RANGE = 0.28
-const UG_BOULDER_SQUASH_MIN = 0.78
-const UG_BOULDER_SQUASH_RANGE = 0.2
-//
-// Mottled face: a soft lit cap toward the top-left plus a few light speckles.
-//
-const UG_BOULDER_CAP_OFFSET = 0.22
-const UG_BOULDER_CAP_SCALE = 0.68
-const UG_BOULDER_CAP_ALPHA = 0.35
-const UG_BOULDER_SPECKLES_MIN = 2
-const UG_BOULDER_SPECKLES_RANGE = 4
-const UG_BOULDER_SPECKLE_R_MIN = 0.7
-const UG_BOULDER_SPECKLE_R_RANGE = 1.1
-const UG_BOULDER_SPECKLE_ALPHA = 0.55
-const UG_STREAK_COUNT = 80
-const UG_STREAK_LEN_MIN = 30
-const UG_STREAK_LEN_RANGE = 110
-const UG_STREAK_PX = 1.5
-const UG_STREAK_ALPHA = 0.4
-const UG_POCKET_COUNT = 30
-const UG_POCKET_R_MIN = 2.5
-const UG_POCKET_R_RANGE = 5
-const UG_POCKET_LIP_ALPHA = 0.55
-const UG_POCKET_VOID_ALPHA = 0.7
-const UG_WARM_PEBBLE_COUNT = 160
-const UG_WARM_PEBBLE_R_MIN = 1.2
-const UG_WARM_PEBBLE_R_RANGE = 1.6
-const UG_WARM_PEBBLE_TOP_FRAC = 0.45
-//
-// East of the main tree the roots carry the underground: most small pink
-// pebbles, grit specks and grit-lipped pockets are dropped there, and the
-// few surviving pebbles grow so they read as stones, not noise.
-//
-const UG_RIGHT_WARM_PEBBLE_KEEP = 0.12
-const UG_RIGHT_WARM_PEBBLE_R_MULT = 1.9
-const UG_RIGHT_GRIT_KEEP = 0.35
-const UG_RIGHT_POCKET_KEEP = 0.4
-//
-// Small decor (pebbles, grit, pockets, shells, bones, coins, worms) is cut
-// to about half across the band and thinned harder under the central tree
-// so its big roots stay the read. Rocks, boulders and roots are untouched.
-//
-const UG_SMALL_DECOR_KEEP = 0.5
-const UG_ROOT_SMALL_DECOR_KEEP = 0.2
-const UG_ROOT_CLEAR_HALF = 320
-const UG_GRIT_COUNT = 900
-const UG_GRIT_PX_MIN = 1
-const UG_GRIT_PX_RANGE = 2
-const UG_GRIT_ALPHA = 0.55
-const UG_BONE_KNOB_R = 2.3
-const UG_BONE_KNOB_SPLIT = 1.7
-const UG_BONE_SHAFT_PX = 2.4
-//
 // Guaranteed extra detail inside the mud zone specifically — the normal
 // counts above are spread across the whole world width, so that one narrow
 // band would otherwise get little to nothing by pure chance (see
 // drawMudGroundZone, which previews this same sprite there right after G).
 //
-const UG_MUD_ZONE_EXTRA_ROCK_COUNT = 5
-const UG_MUD_ZONE_EXTRA_ROOTLET_COUNT = 6
-const UG_MUD_ZONE_EXTRA_SHELL_COUNT = 2
 const OUTER_BG_HEX = FOREST_PAL.playfieldOuter
 const WALL_BORDER_R = OUTER.r
 const WALL_BORDER_G = OUTER.g
@@ -1304,11 +1159,6 @@ const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE) + 2
 //
 const WATER_RIGHT_TRIM = 10
 //
-// Bake extends past the gameplay shore line so water tapers under the cap
-// rocks instead of ending in a vertical sprite edge.
-//
-const LAKE_SHORE_EXTEND_PX = 64
-//
 // The lake's right shore (and its rock cluster) is laid out from the hero
 // branch root at the trunk, this far to the left — independent of how long
 // the branch itself is drawn.
@@ -1344,191 +1194,18 @@ const LAKE_SHORE_ROCK_ANCHOR_T = 0.5
 // The stone pile rises well above the water line, like a heap against the bank.
 //
 const LAKE_SHORE_ROCK_LIFT_PX = 24
-const LAKE_SEGMENTS = 16
-const LAKE_WAVE_FREQ = 0.85
-const LAKE_WAVE_AMP = 3
-const LAKE_WAVE_PHASE_SCALE = 4
-const LAKE_WAVE_SECOND_AMP = 1.2
-const LAKE_WAVE_SECOND_FREQ = 1.6
 //
-// Baked lake surface frames (painted water + grain), drawn untinted.
-//
-const LAKE_BAKE_GEOMETRY_VERSION = 15
-const LAKE_BAKE_SPRITE_PREFIX = `forest0-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
-const LAKE_BAKE_FRAME_COUNT = 24
-const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
-//
-// Lake paint: every layer is a low-opacity palette swatch over the base
-// fill, so the water reads painted while the surface stays calm next to
-// the centipede ride.
-//
-const LAKE_SKIN_ALPHA = 0.28
-const LAKE_SKIN_DEPTH_PX = 16
-const LAKE_DEEP_ALPHA = 0.2
-//
-// See-through water: opaque only across the wave band at the surface, then
-// fading to a light tint so the bed, algae and island slope show through.
-//
-const LAKE_OPAQUE_SKIN_PX = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 1
-const LAKE_BODY_FADE_PX = 10
-const LAKE_BODY_ALPHA = 0.42
-//
-// Double surface: a bright top line, a light band and a second fainter line
-// under it, both riding the wave.
-//
-const LAKE_SURFACE_LINE_PX = 1.5
-const LAKE_SURFACE_BAND_ALPHA = 0.32
-const LAKE_SURFACE_SECOND_LINE_PX = 1
-const LAKE_SURFACE_SECOND_LINE_ALPHA = 0.55
-//
-// Inner surface line uses its own wave frequencies and a time lag so the two
-// bright lines and the band between them do not stay parallel.
-//
-const LAKE_SURFACE_INNER_WAVE_FREQ = 1.12
-const LAKE_SURFACE_INNER_WAVE_AMP = 2.6
-const LAKE_SURFACE_INNER_WAVE_PHASE_SCALE = 3.4
-const LAKE_SURFACE_INNER_SECOND_FREQ = 2.05
-const LAKE_SURFACE_INNER_SECOND_AMP = 1.35
-const LAKE_SURFACE_INNER_TIME_LAG = 0.48
-//
-// Lake bed layer under the water (static bake): earthy banks cut by a dark
-// edge, and a sand layer with gravel on the ledges and the floor (its lit
-// top edge sits a little above the bottom line, so the floor reads slightly
-// 3D).
+// Lake layers (see forest-lake.js): the bed and the algae under the water
+// fill. The sprite key keeps the level's baked lake names.
 //
 const LAKE_BED_Z = 11.6
-const LAKE_BED_SPRITE = `forest0-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-const LAKE_BED_SEGMENTS = 160
-const LAKE_BED_BACK_RISE_PX = 11
-const LAKE_BED_BACK_FULL_DEPTH_PX = 40
-const LAKE_BED_BACK_WOBBLE_PX = 3
-const LAKE_BED_BACK_WOBBLE_WAVELENGTH = 47
-const LAKE_BED_BACK_WOBBLE_SEED = 12.9
-const LAKE_BED_RIM_PX = 2
-const LAKE_BED_EDGE_PX = 2
-const LAKE_BED_MUD_SEAM_INDEX = 5
-const LAKE_BED_FLOOR_OVERLAP_PX = 2
-const LAKE_BED_SLOPE_PROBE_PX = 3
-const LAKE_BED_SAND_MAX_SLOPE = 0.55
-const LAKE_BED_GRAVEL_COUNT = 140
-const LAKE_BED_GRAVEL_R_MIN = 0.8
-const LAKE_BED_GRAVEL_R_RANGE = 1.2
-const LAKE_BED_GRAVEL_STRETCH = 1.4
-const LAKE_BED_GRAVEL_ALPHA = 0.85
-const LAKE_BED_PEBBLE_COUNT = 22
-const LAKE_BED_PEBBLE_R_MIN = 1.8
-const LAKE_BED_PEBBLE_R_RANGE = 2.6
-const LAKE_BED_PEBBLE_SQUASH = 0.7
-const LAKE_BED_PEBBLE_LIGHT_FRAC = 0.45
-const LAKE_BED_PEBBLE_GLINT_SHIFT = 0.3
-const LAKE_BED_GRAIN_SEED = 5900
-//
-// Faceted boulders on the floor: one large rock and a dark rubble cluster in
-// the deep part, a few loose stones on the ledges. Each is a lumpy polygon
-// with a lit upper-left facet and a shaded lower-right.
-//
-const LAKE_BED_BOULDERS = [
-  { t: 0.5, r: 7, seed: 41 },
-  { t: 0.53, r: 9, seed: 43 },
-  { t: 0.57, r: 6, seed: 47 },
-  { t: 0.63, r: 22, seed: 11 },
-  { t: 0.12, r: 6, seed: 67 },
-  { t: 0.3, r: 8, seed: 37 }
-]
-const LAKE_BED_BOULDER_VERTS = 7
-const LAKE_BED_BOULDER_JITTER = 0.22
-const LAKE_BED_BOULDER_ANGLE_JITTER = 0.5
-const LAKE_BED_BOULDER_SQUASH = 0.72
-const LAKE_BED_BOULDER_SINK = 0.35
-const LAKE_BED_BOULDER_DEPTH_FRAC = 0.7
-const LAKE_BED_BOULDER_CONTOUR_PX = 1.5
-const LAKE_BED_BOULDER_MID_SHIFT = 0.14
-const LAKE_BED_BOULDER_MID_FRAC = 0.9
-const LAKE_BED_BOULDER_LIGHT_SHIFT = 0.3
-const LAKE_BED_BOULDER_LIGHT_FRAC = 0.45
-//
-// Sunken snag: a branch lying on the floor in the shallower left half, with
-// two short side twigs (fractions along it, angle, length fraction).
-//
-const LAKE_SNAG_T = 0.32
-const LAKE_SNAG_LEN = 74
-const LAKE_SNAG_W = 6
-const LAKE_SNAG_TIP_W = 2
-const LAKE_SNAG_TILT = -0.12
-const LAKE_SNAG_BOW_PX = 4
-const LAKE_SNAG_SEGMENTS = 8
-const LAKE_SNAG_TWIGS = [
-  { at: 0.35, angle: -0.9, len: 0.28 },
-  { at: 0.7, angle: -0.55, len: 0.22 }
-]
-const LAKE_SNAG_DEPTH_FRAC = 0.6
-const LAKE_SNAG_TWIG_W_FRAC = 0.6
-const LAKE_SNAG_TWIG_TIP_W = 1
-const LAKE_SNAG_LIGHT_FRAC = 0.35
-const LAKE_SNAG_LIGHT_LIFT = 0.25
-const LAKE_SNAG_CONTOUR_PX = 1.5
-//
-// Algae: tufts rooted at different depths of the floor face. Fronds are
-// tall tapered leaves; grass tufts are short and thin. Each blade sways
-// with a lag up its length so the tip trails the base.
-//
 const LAKE_ALGAE_Z = 11.7
-const LAKE_ALGAE_TUFTS = [
-  { t: 0.05, kind: 'grass' },
-  { t: 0.16, kind: 'frond' },
-  { t: 0.38, kind: 'grass' },
-  { t: 0.48, kind: 'frond' },
-  { t: 0.63, kind: 'frond' },
-  { t: 0.76, kind: 'grass' },
-  { t: 0.88, kind: 'frond' },
-  { t: 0.96, kind: 'grass' }
-]
-const LAKE_ALGAE_KINDS = {
-  frond: { bladesMin: 3, bladesRange: 3, hMin: 32, hRange: 30, wMin: 5, wRange: 3, lean: 0.3, spread: 10 },
-  grass: { bladesMin: 4, bladesRange: 3, hMin: 10, hRange: 10, wMin: 1.6, wRange: 1, lean: 0.45, spread: 7 }
-}
-const LAKE_ALGAE_LAYOUT_SEED = 7721
-const LAKE_ALGAE_SHORE_CLEAR_PX = 24
-const LAKE_ALGAE_MIN_H = 8
-const LAKE_ALGAE_TOP_CLEAR_PX = 8
-const LAKE_ALGAE_SEGMENTS = 7
-const LAKE_ALGAE_TIP_W_FRAC = 0.15
-const LAKE_ALGAE_MIDRIB_PX = 1
-const LAKE_ALGAE_ROOT_DEPTH_MIN = 0.3
-const LAKE_ALGAE_ROOT_DEPTH_RANGE = 0.55
-const LAKE_ALGAE_SWAY_PX = 5
-const LAKE_ALGAE_SWAY_SPEED = 0.9
-const LAKE_ALGAE_SWAY_LAG = 2.2
-const LAKE_ALGAE_SWAY_MUL_MIN = 0.65
-const LAKE_ALGAE_SWAY_MUL_RANGE = 0.75
-const LAKE_ALGAE_WAVE_PX = 1.6
-const LAKE_ALGAE_WAVE_FREQ = 9
-const LAKE_REFLECTION_ALPHA = 0.3
-const LAKE_REFLECTION_CORE_FRAC = 0.55
-const LAKE_REFLECTION_PASS_ALPHA = 0.5
-const LAKE_REFLECTION_ROW_PX = 2
-const LAKE_REFLECTION_WOBBLE_PX = 1.5
-const LAKE_REFLECTION_WOBBLE_ROW_PHASE = 0.7
-const LAKE_REFLECTION_TAPER = 0.35
+const LAKE_SPRITE_KEY = 'forest0'
 //
-// Reflection columns: lake span fraction, width and length (px). They sit
-// under the far-bank trunks, so they are not tied to gameplay trees.
+// Hair-root clearance around the cave mouth (left / right of the crack zone).
 //
-const LAKE_REFLECTIONS = [
-  { t: 0.24, w: 20, len: 30 },
-  { t: 0.47, w: 14, len: 22 },
-  { t: 0.68, w: 24, len: 34 },
-  { t: 0.88, w: 16, len: 20 }
-]
-const LAKE_RIPPLE_COUNT = 3
-const LAKE_RIPPLE_SPACING_PX = 12
-const LAKE_RIPPLE_START_PX = 6
-const LAKE_RIPPLE_LEN_PX = 12
-const LAKE_RIPPLE_LEN_SHRINK = 0.5
-const LAKE_RIPPLE_DROP_PX = 3
-const LAKE_RIPPLE_DROP_STEP_PX = 1.5
-const LAKE_RIPPLE_ALPHA = 0.6
-const LAKE_RIPPLE_PX = 1
+const FOREST_UG_CAVE_ROOTLET_CLEAR_L = 32
+const FOREST_UG_CAVE_ROOTLET_CLEAR_R = 48
 //
 // Drowning: default hero sprite hidden; clipped draw shows only above the wave.
 //
@@ -1549,30 +1226,6 @@ const FOREST_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 // the shore caps when the left ground decor opens with the lake.
 //
 const SHORE_END_ROCK_Z = GRASS_Z + 1
-//
-// Lake bed profile from the island's shore (where its slope meets the water
-// line) to the far end of the shore bake, deep enough for the full drown
-// sink. The island side steps down in earthy terraces, the middle is a broad
-// floor, and the tree side rises as a steep bank under the shore rocks.
-// Keypoints are (u along the water, depth fraction); smoothstep between them
-// flattens every keypoint into a ledge. Small humps break the regularity.
-//
-const LAKE_BED_MAX_DEPTH = DROWN_FULL_SINK_FEET_Y - WATER_SURFACE_Y
-const LAKE_BED_PROFILE = [
-  { u: 0, d: 0 },
-  { u: 0.05, d: 0.2 },
-  { u: 0.13, d: 0.24 },
-  { u: 0.2, d: 0.52 },
-  { u: 0.29, d: 0.58 },
-  { u: 0.38, d: 0.88 },
-  { u: 0.56, d: 0.97 },
-  { u: 0.72, d: 1 },
-  { u: 0.85, d: 0.95 },
-  { u: 1, d: 0 }
-]
-const LAKE_BED_HUMP_PX = 4
-const LAKE_BED_HUMP_WAVELENGTH = 58
-const LAKE_BED_HUMP_SEED = 77.3
 //
 // Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
 //
@@ -3133,40 +2786,11 @@ function forestChainBuoyColors(k) {
   return { ...forestEyeBerryColors(k), root: forestEarTreeRootKaplayRgb(k) }
 }
 //
-// Ear-tree colors — muted forest-green stems, red attention leaves.
+// Root tone of the eye-berry stalks (the level's tree roots).
 //
 function forestEarTreeRootKaplayRgb(k) {
   const c = forestRgb(FOREST_PAL.treeColor.root)
   return k.rgb(c.r, c.g, c.b)
-}
-function forestEarTreeColors(k) {
-  const att = FOREST_PAL.forestAttention
-  const bark = forestRgb(att.stem)
-  const barkLight = forestRgb(att.stemLight)
-  const barkShade = forestRgb(att.stemShade)
-  const barkFissure = forestRgb(att.stemFissure)
-  const leaf = forestRgb(FOREST_PAL.forestAttention.leaf)
-  const leafLight = forestRgb(FOREST_PAL.forestAttention.leafLight)
-  const leafVein = forestRgb(FOREST_PAL.forestAttention.leafVein)
-  //
-  // Same relief tones as the big forest trees' roots.
-  //
-  const root = getForestGameplayTreeRootShades()
-  return {
-    outline: k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b),
-    bark: k.rgb(bark.r, bark.g, bark.b),
-    barkShades: {
-      light: k.rgb(barkLight.r, barkLight.g, barkLight.b),
-      shade: k.rgb(barkShade.r, barkShade.g, barkShade.b),
-      fissure: k.rgb(barkFissure.r, barkFissure.g, barkFissure.b)
-    },
-    leaves: {
-      base: k.rgb(leaf.r, leaf.g, leaf.b),
-      light: k.rgb(leafLight.r, leafLight.g, leafLight.b),
-      vein: k.rgb(leafVein.r, leafVein.g, leafVein.b)
-    },
-    root
-  }
 }
 //
 // World-layer draw hooks for the chain-buoy and ear-tree decor — created
@@ -3306,7 +2930,7 @@ function createForestEarTreeLayer(k, inst) {
     {
       draw() {
         if (!inst.earTrees) return
-        const c = forestEarTreeColors(k)
+        const c = EarTree.earTreeColors(k)
         EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
@@ -3316,7 +2940,7 @@ function createForestEarTreeLayer(k, inst) {
     {
       draw() {
         if (!inst.earTrees) return
-        const c = forestEarTreeColors(k)
+        const c = EarTree.earTreeColors(k)
         EarTree.onDrawRoots(inst.earTrees, c.root, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
@@ -3326,7 +2950,7 @@ function createForestEarTreeLayer(k, inst) {
     {
       draw() {
         if (!inst.earTrees) return
-        const c = forestEarTreeColors(k)
+        const c = EarTree.earTreeColors(k)
         EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.barkShades, c.outline, 1,
           forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
@@ -3337,7 +2961,7 @@ function createForestEarTreeLayer(k, inst) {
     {
       draw() {
         if (!inst.earTrees) return
-        const c = forestEarTreeColors(k)
+        const c = EarTree.earTreeColors(k)
         EarTree.onDrawBranches(inst.earTrees, c.bark, c.barkShades, c.outline, c.leaves, 1,
           forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
@@ -3384,26 +3008,6 @@ function buildParallaxTreeXs(count, gameLeft, gameRight, focusX = null, focusBia
     x += cell * (PAR_TREE_STEP_MIN_FRAC + Math.random() * PAR_TREE_STEP_RANGE_FRAC)
   }
   return xs
-}
-//
-// Linearly blends two RGB triplets.
-//
-function lerpRgb(a, b, t) {
-  const u = Math.max(0, Math.min(1, t))
-  const mixed = {
-    r: Math.round(a.r + (b.r - a.r) * u),
-    g: Math.round(a.g + (b.g - a.g) * u),
-    b: Math.round(a.b + (b.b - a.b) * u)
-  }
-  //
-  // Identity-white multiply tints must stay unsnapped — white is "no tint"
-  // on an already-baked sprite, not a painted fill.
-  //
-  if (isIdentityWhite(a) || isIdentityWhite(b)) return mixed
-  return snapToPalette(mixed)
-}
-function isIdentityWhite(c) {
-  return c.r === 255 && c.g === 255 && c.b === 255
 }
 //
 // Bakes three forest planes (each one's trees AND bushes on a single shared
@@ -3480,7 +3084,7 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   staticColor.height = PAR_STATIC_WORLD_H
   const staticColorCtx = staticColor.getContext('2d')
   staticColorCtx.translate(0, -PAR_STATIC_WORLD_Y)
-  renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, undergroundStaticEarthTones())
+  renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, Underground.undergroundStaticEarthTones())
   applyForestLayerGradeToCanvas(staticColor, {
     ...FOREST_LAYER_GRADE.material,
     grain: EARTH_STATIC_BAKE_GRAIN,
@@ -3523,9 +3127,15 @@ function bakeParallaxTrees(ctx, pad, planeCfg) {
 // Renders one bush row into a parallax canvas with horizontal bleed.
 //
 function bakeParallaxBushes(ctx, pad, stripCfg) {
-  const x1 = LEFT_MARGIN - pad
-  const x2 = WORLD_W - RIGHT_MARGIN + pad
-  renderBushStrip(ctx, { ...stripCfg, x1, x2 })
+  const { cornerBandTop, ...rest } = stripCfg
+  BushStrip.renderBushStrip(ctx, {
+    ...rest,
+    x1: LEFT_MARGIN - pad,
+    x2: WORLD_W - RIGHT_MARGIN + pad,
+    baseY: FLOOR_Y,
+    eastX: (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5,
+    colorAt: cornerBandTop != null ? x => parallaxCornerLeafRgb(x, cornerBandTop) : null
+  })
 }
 //
 // Bakes one parallax depth layer with horizontal padding so it never gaps at
@@ -3621,7 +3231,7 @@ function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
   //
   const topRgb = layers[0]?.rgb
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
-  renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
+  Underground.renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
   paintUndergroundDepthVignette(ctx, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
 }
@@ -3652,8 +3262,8 @@ function paintTopsoilOrganicTexture(ctx, layers, x0, y0, width, height) {
     const y = y1 + v * (y2 - y1)
     const tone = SoilSeam.seamHash01(seed * 2.41)
     const rgb = tone < 0.52
-      ? lerpRgb(base, darkRgb, 0.1 + tone * 0.55)
-      : lerpRgb(base, lightRgb, (tone - 0.52) * 1.05)
+      ? lerpForestRgb(base, darkRgb, 0.1 + tone * 0.55)
+      : lerpForestRgb(base, lightRgb, (tone - 0.52) * 1.05)
     const rx = 0.75 + SoilSeam.seamHash01(seed * 3.17) * 2.4
     const ry = rx * (0.62 + SoilSeam.seamHash01(seed * 4.91) * 0.5)
     ctx.globalAlpha = TOPSOIL_ORGANIC_ALPHA * (0.3 + SoilSeam.seamHash01(seed * 5.83) * 0.7)
@@ -3807,204 +3417,38 @@ function applyForestMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay
   }, seedOffset)
 }
 //
-// Renders one bush strip into its combined canvas: leafy mounds of varying
-// radii centred on the ground line (everything below FLOOR_Y is cleared
-// afterwards, so every mound is cut by the ground). Each mound is a filled
-// dome plus scattered oval leaves and a ragged leaf rim, so the strip reads
-// as real bushes.
-//
-function renderBushStrip(ctx, stripCfg) {
-  const {
-    colorRgb, colorFlat, heightScale, hiResClusters,
-    ferns = 0,
-    foliageDensityTier = 'midground',
-    cornerBandTop = null,
-    x1 = LEFT_MARGIN,
-    x2 = WORLD_W - RIGHT_MARGIN
-  } = stripCfg
-  let x = x1
-  const right = x2
-  const eastX = (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5
-  let clumpLeft = 0
-  while (x < right) {
-    const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
-    if (x >= eastX && clumpLeft <= 0) {
-      x += radius * (BUSH_EAST_GAP_MIN_FRAC + Math.random() * BUSH_EAST_GAP_RANGE_FRAC)
-      clumpLeft = BUSH_EAST_CLUMP_MIN + Math.floor(Math.random() * BUSH_EAST_CLUMP_RANGE)
-      continue
-    }
-    clumpLeft--
-    const leafSizeScale = forestBushLeafSizeScaleForTier(foliageDensityTier)
-    const leafDensityScale = forestBushLeafDensityScaleForTier(foliageDensityTier)
-    const mound = buildLeafyBushMoundSpec(x, radius, leafSizeScale, leafDensityScale)
-    const moundColorRgb = cornerBandTop != null
-      ? parallaxCornerLeafRgb(mound.x, cornerBandTop)
-      : colorRgb
-    const useHiResClusters = hiResClusters ?? forestHiResBushClustersForTier(foliageDensityTier)
-    const fernCount = Math.floor(ferns) + (Math.random() < ferns % 1 ? 1 : 0)
-    for (let f = 0; f < fernCount; f++) paintBushStripFern(ctx, mound, moundColorRgb)
-    drawLeafyBushMound(ctx, mound, moundColorRgb, colorFlat)
-    useHiResClusters && drawHiResBushClusters(ctx, mound, moundColorRgb, foliageDensityTier)
-    //
-    // Advance less than a radius so each mound overlaps the next one.
-    //
-    x += radius * (BUSH_STEP_MIN_FRAC + Math.random() * BUSH_STEP_RANGE_FRAC)
-  }
-}
-//
-// Dark pinnate fern behind a bush mound, poking out above its dome.
-//
-function paintBushStripFern(ctx, mound, rgb) {
-  const seed = Math.floor(Math.random() * BUSH_FERN_SEED_RANGE)
-  const x = mound.x + (Math.random() * 2 - 1) * mound.radius * BUSH_FERN_OFFSET
-  const size = mound.radius * (BUSH_FERN_SIZE_MIN + Math.random() * BUSH_FERN_SIZE_RANGE)
-  paintBushFernOnto(ctx, x, size, seed, rgb)
-}
-function paintBushFernOnto(ctx, x, size, seed, rgb) {
-  drawFernToCanvas(ctx, {
-    x,
-    baseY: FLOOR_Y,
-    size,
-    rng: createSeededRandom(seed),
-    colors: {
-      stem: bushFernTone(rgb, BUSH_FERN_STEM),
-      dark: bushFernTone(rgb, BUSH_FERN_DARK),
-      mid: bushFernTone(rgb, BUSH_FERN_MID),
-      light: bushFernTone(rgb, BUSH_FERN_LIGHT)
-    }
-  })
-}
-function bushFernTone(rgb, shade) {
-  const c = lerpRgb(rgb, FOREST_SHADOW, shade)
-  return `rgb(${c.r}, ${c.g}, ${c.b})`
-}
-//
-// Generates the geometry of one leafy bush mound: the dome plus the exact
-// position, size, tilt and shade index of every inner and rim leaf, so the
-// same mound can be painted identically with different tones.
-//
-function buildLeafyBushMoundSpec(x, radius, leafSizeScale = 1, leafDensityScale = 1) {
-  const leaves = []
-  //
-  // Inner leaves — density scales with the dome area; sqrt keeps the radial
-  // distribution uniform so no thin spots appear near the rim.
-  //
-  const innerCount = Math.round(radius * radius * BUSH_LEAF_DENSITY * leafDensityScale)
-  for (let i = 0; i < innerCount; i++) {
-    const a = Math.PI + Math.random() * Math.PI
-    const dist = radius * Math.sqrt(Math.random())
-    leaves.push({
-      x: x + Math.cos(a) * dist,
-      y: FLOOR_Y + Math.sin(a) * dist,
-      size: (BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE) * leafSizeScale,
-      angle: Math.random() * Math.PI * 2,
-      shadeIdx: Math.floor(Math.random() * BUSH_LEAF_DARKEN_STEPS.length)
-    })
-  }
-  //
-  // Rim leaves — spaced along the arc, tilted along it, poking past the dome
-  // edge so the silhouette gets an organic leafy fringe.
-  //
-  const rimCount = Math.max(4, Math.round(Math.PI * radius / BUSH_RIM_LEAF_SPACING))
-  for (let i = 0; i < rimCount; i++) {
-    const a = Math.PI + ((i + 0.5) / rimCount) * Math.PI + (Math.random() - 0.5) * 0.14
-    leaves.push({
-      x: x + Math.cos(a) * radius,
-      y: FLOOR_Y + Math.sin(a) * radius,
-      size: (BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE) * leafSizeScale,
-      angle: a + Math.PI / 2 + (Math.random() - 0.5) * 0.6,
-      shadeIdx: Math.floor(Math.random() * 2)
-    })
-  }
-  return { x, radius, leaves }
-}
-//
-// Paints one prebuilt mound spec: a solid dome in the base tone (keeps the
-// silhouette closed) and the leaf scatter with brightness-only shade
-// variation resolved from the shade index of each leaf. With `flat` set all
-// leaves take the exact dome tone, so the mound reads as one flat colour
-// (the 2nd+ colour-world strips have no leaf details).
-//
-function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
-  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => flat ? rgb : lerpRgb(rgb, FOREST_SHADOW, t))
-  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-  ctx.beginPath()
-  ctx.arc(mound.x, FLOOR_Y, mound.radius, Math.PI, 0)
-  ctx.closePath()
-  ctx.fill()
-  mound.leaves.forEach(leaf => drawBushLeaf(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shades[leaf.shadeIdx]))
-}
-//
-// One bush leaf — a plain rounded oval, deliberately a different shape than
-// the teardrop tree leaves.
-//
-function drawBushLeaf(ctx, x, y, size, angle, rgb) {
-  ctx.save()
-  ctx.translate(x, y)
-  ctx.rotate(angle)
-  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-  ctx.beginPath()
-  ctx.ellipse(0, 0, size * 0.55, size * 0.32, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
-}
-//
-// Clustered pixel-style foliage on the nearest parallax bush row (puffy
-// clumps with a darker shadow base and a highlight rim), scattered evenly
-// across the whole dome — sqrt(random()) for the radial sample keeps the
-// density uniform per unit area (same trick buildLeafyBushMoundSpec uses
-// for its inner leaves) instead of bunching everything near the base.
-//
-function drawHiResBushClusters(ctx, mound, baseRgb, foliageDensityTier = 'nearground') {
-  const { minPx, maxPx } = forestBushHiResClusterRadiusRangeForTier(foliageDensityTier)
-  const clusterCount = Math.max(10, Math.round(mound.radius * BUSH_HIRES_CLUSTER_DENSITY))
-  for (let i = 0; i < clusterCount; i++) {
-    const a = Math.PI + Math.random() * Math.PI
-    const dist = mound.radius * Math.sqrt(Math.random())
-    const cx = mound.x + Math.cos(a) * dist
-    const cy = FLOOR_Y + Math.sin(a) * dist
-    const r = minPx + Math.random() * (maxPx - minPx)
-    drawForestHiResFoliageCluster(ctx, cx, cy, r, baseRgb, mound.x * 17 + i * 991)
-  }
-}
-//
 // Underground decor spec that dresses up the root-zone earth band: buried
 // rocks, cracks, pebble clusters, hanging rootlets and a fossil spiral. It is
 // generated once per live Kaplay instance and baked into the combined static
 // earth band, so a prewarmed engine never regenerates it.
 //
 const undergroundSpecByK = new WeakMap()
+//
+// Level layout for the buried decor: the playfield band, the main tree, the
+// mud zone with its guaranteed extras, and no hair-roots west of the tree
+// (the lake) or over the cave mouth / pit back wall, where they read as
+// stray sticks on the void edge.
+//
+function forestUndergroundLayout() {
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
+  return {
+    x1: LEFT_MARGIN,
+    x2: WORLD_W - RIGHT_MARGIN,
+    surfaceY: FLOOR_Y,
+    bandH: CAVE_BAND_H,
+    bottomY: PLAYFIELD_EARTH_BOTTOM_Y,
+    treeX: TREE_X,
+    treeClearHalf: TRUNK_EXCLUDE_HALF,
+    extraZone: computeForestMudZoneX(),
+    skipRootlet: rx => rx >= cave.x1 - FOREST_UG_CAVE_ROOTLET_CLEAR_L && rx <= cave.x2 + FOREST_UG_CAVE_ROOTLET_CLEAR_R
+  }
+}
 function forestUndergroundSpec(k) {
   const cached = undergroundSpecByK.get(k)
   if (cached) return cached
-  const spec = buildUndergroundSpec()
+  const spec = Underground.buildUndergroundSpec(forestUndergroundLayout())
   undergroundSpecByK.set(k, spec)
   return spec
-}
-//
-// Brown underground tones baked into the static colour earth band.
-//
-function undergroundStaticEarthTones() {
-  return {
-    fill: forestRgb('groundSand'),
-    deep: forestRgb(FOREST_PAL.log.bark),
-    light: forestRgb(FOREST_PAL.log.barkLight),
-    monoStrokes: true,
-    ...undergroundColorExtraTones()
-  }
-}
-//
-// Cobble, void, pebble and grit tones for the static colour earth band.
-//
-function undergroundColorExtraTones() {
-  const tones = FOREST_PAL.forestUnderground
-  return {
-    stone: forestRgb(tones.stone),
-    stoneLight: forestRgb(tones.stoneLight),
-    contour: forestRgb(tones.contour),
-    grit: forestRgb(tones.grit),
-    pebble: forestRgb(tones.pebble)
-  }
 }
 //
 // Chain-buoy decor spots — spread across the level, skipping the band around
@@ -4339,7 +3783,7 @@ function forestEarTreeXOnFixedStalkEye(x, trampX) {
 }
 function tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX, heightTier) {
   if (!forestEarTreeSpotXAllowed(spots, x, branchTrampX, trampX, shoreTrunkX)) return false
-  spots.push(buildForestEarTreeSpot(x, heightTier))
+  spots.push(EarTree.buildSpot(x, FLOOR_Y, heightTier))
   return true
 }
 function buildForestEarTreeSpots(layoutCfg) {
@@ -4384,25 +3828,6 @@ function buildForestEarTreeSpots(layoutCfg) {
   }
   spots.sort((a, b) => a.x - b.x)
   return spots
-}
-//
-// Shared per-spot randomized trunk/branch variation.
-//
-function buildForestEarTreeSpot(x, heightTier) {
-  const trunkScale = heightTier === 'short'
-    ? 0.8 + Math.random() * 0.12
-    : heightTier === 'tall'
-      ? 1.1 + Math.random() * 0.2
-      : 0.92 + Math.random() * 0.28
-  return {
-    x,
-    groundY: FLOOR_Y,
-    trunkScale,
-    trunkWScale: 0.85 + Math.random() * 0.35,
-    branchScale: 0.9 + Math.random() * 0.25,
-    branchCount: 4 + Math.floor(Math.random() * 2),
-    seed: Math.random() * Math.PI * 2
-  }
 }
 //
 // Whisper volume from hero distance to the eye-flower root (2D, so the tree
@@ -4491,629 +3916,6 @@ function computeForestMudZoneX() {
     x1: branchTrampX + TRAMP_GRASS_CLEAR_HALF + MUD_BRANCH_TRAMP_GAP,
     x2: mudPredatorPopX + MUD_ZONE_RIGHT_EXTENT
   }
-}
-//
-// Generates the random layout of all underground features once, so both
-// colour variants can be rendered from identical geometry.
-//
-//
-// Random keep roll for one small underground decor item at world X.
-//
-function keepUndergroundSmallDecor(x) {
-  const keep = Math.abs(x - TREE_X) < UG_ROOT_CLEAR_HALF ? UG_ROOT_SMALL_DECOR_KEEP : UG_SMALL_DECOR_KEEP
-  return Math.random() < keep
-}
-function buildUndergroundSpec() {
-  const areaX1 = LEFT_MARGIN + 40
-  const areaX2 = WORLD_W - RIGHT_MARGIN - 40
-  const areaY1 = FLOOR_Y + UG_TOP_PAD
-  const areaY2 = PLAYFIELD_EARTH_BOTTOM_Y - UG_BOTTOM_PAD
-  const randX = () => areaX1 + Math.random() * (areaX2 - areaX1)
-  const randY = () => areaY1 + Math.random() * (areaY2 - areaY1)
-  //
-  // Buried rocks — reuse the shared rock silhouette generator.
-  //
-  const rocks = []
-  for (let i = 0; i < UG_ROCK_COUNT; i++) {
-    const radius = 12 + Math.random() * 22
-    rocks.push({ x: randX(), y: randY(), radius, verts: buildRockVertices(radius) })
-  }
-  //
-  // Cracks — thin polylines with one smaller side branch each.
-  //
-  const cracks = []
-  for (let i = 0; i < UG_CRACK_COUNT; i++) {
-    const pts = [{ x: randX(), y: randY() }]
-    for (let s = 0; s < 3; s++) {
-      const last = pts[pts.length - 1]
-      pts.push({ x: last.x + (Math.random() - 0.5) * 46, y: last.y + 8 + Math.random() * 22 })
-    }
-    const mid = pts[1]
-    const branch = [
-      { x: mid.x, y: mid.y },
-      { x: mid.x + (Math.random() - 0.5) * 36, y: mid.y + 10 + Math.random() * 16 }
-    ]
-    cracks.push({ pts, branch })
-  }
-  //
-  // Pebble clusters — a handful of tiny stones packed together.
-  //
-  const pebbles = []
-  for (let i = 0; i < UG_PEBBLE_CLUSTER_COUNT; i++) {
-    const cx = randX()
-    const cy = randY()
-    if (!keepUndergroundSmallDecor(cx)) continue
-    const stones = []
-    const count = 3 + Math.floor(Math.random() * 4)
-    for (let s = 0; s < count; s++) {
-      stones.push({ x: cx + (Math.random() - 0.5) * 26, y: cy + (Math.random() - 0.5) * 14, r: 2 + Math.random() * 3 })
-    }
-    pebbles.push(stones)
-  }
-  //
-  // Rootlets — thin hair-roots hanging down from dry ground only. The whole
-  // left field is the lake, so nothing hangs under the water.
-  //
-  const dryX1 = TREE_X + TRUNK_EXCLUDE_HALF
-  const randRootX = () => dryX1 + Math.random() * Math.max(1, areaX2 - dryX1)
-  const rootlets = []
-  for (let i = 0; i < UG_ROOTLET_COUNT; i++) {
-    const rx = randRootX()
-    const pts = [{ x: rx, y: FLOOR_Y + 4 }]
-    let px = rx
-    let py = FLOOR_Y + 4
-    const segs = 2 + Math.floor(Math.random() * 2)
-    for (let s = 0; s < segs; s++) {
-      px += (Math.random() - 0.5) * 14
-      py += 10 + Math.random() * 16
-      pts.push({ x: px, y: py })
-    }
-    rootlets.push(pts)
-  }
-  //
-  // One fossil spiral — a small ammonite curled among the stones.
-  //
-  const fossils = []
-  for (let i = 0; i < UG_FOSSIL_COUNT; i++) {
-    const x = randX()
-    keepUndergroundSmallDecor(x) && fossils.push({ x, y: randY(), r: 7 + Math.random() * 7 })
-  }
-  //
-  // Boulder piles sit on the band floor; grit specks are spread everywhere.
-  //
-  const deepY1 = FLOOR_Y + CAVE_BAND_H * UG_BOULDER_DEEP_FRAC
-  const placedStones = []
-  const boulderPiles = [
-    buildUndergroundStoneGroup(areaX1 + UG_BOULDER_PILE_EDGE_INSET, deepY1, areaY2, true, placedStones),
-    buildUndergroundStoneGroup(areaX2 - UG_BOULDER_PILE_EDGE_INSET, deepY1, areaY2, true, placedStones)
-  ]
-  for (let i = 0; i < UG_BOULDER_PILE_COUNT; i++) {
-    boulderPiles.push(buildUndergroundStoneGroup(randX(), deepY1, areaY2, false, placedStones))
-  }
-  boulderPiles.push(buildUndergroundScatteredStones(randX, deepY1, areaY2, placedStones))
-  const rightX = TREE_X + TRUNK_EXCLUDE_HALF
-  const keepOnRight = (x, keep) => x < rightX || Math.random() < keep
-  const grit = []
-  for (let i = 0; i < UG_GRIT_COUNT; i++) {
-    const x = randX()
-    keepOnRight(x, UG_RIGHT_GRIT_KEEP) && keepUndergroundSmallDecor(x) &&
-      grit.push({ x, y: randY(), px: UG_GRIT_PX_MIN + Math.floor(Math.random() * UG_GRIT_PX_RANGE), light: Math.random() < 0.5 })
-  }
-  const streaks = []
-  for (let i = 0; i < UG_STREAK_COUNT; i++) {
-    streaks.push({ x: randX(), y: randY(), len: UG_STREAK_LEN_MIN + Math.random() * UG_STREAK_LEN_RANGE, tilt: (Math.random() - 0.5) * 0.06 })
-  }
-  const pockets = []
-  for (let i = 0; i < UG_POCKET_COUNT; i++) {
-    const r = UG_POCKET_R_MIN + Math.random() * UG_POCKET_R_RANGE
-    const x = randX()
-    keepOnRight(x, UG_RIGHT_POCKET_KEEP) && keepUndergroundSmallDecor(x) &&
-      pockets.push({ x, y: randY(), rx: r * (1.2 + Math.random() * 0.6), ry: r })
-  }
-  const warmPebbles = []
-  const topsoilY2 = FLOOR_Y + CAVE_BAND_H * UG_WARM_PEBBLE_TOP_FRAC
-  for (let i = 0; i < UG_WARM_PEBBLE_COUNT; i++) {
-    const x = randX()
-    const y = Math.random() < 0.75 ? areaY1 + Math.random() * (topsoilY2 - areaY1) : randY()
-    const r = UG_WARM_PEBBLE_R_MIN + Math.random() * UG_WARM_PEBBLE_R_RANGE
-    if (!keepUndergroundSmallDecor(x)) continue
-    if (x < rightX) {
-      warmPebbles.push({ x, y, r })
-      continue
-    }
-    Math.random() < UG_RIGHT_WARM_PEBBLE_KEEP && warmPebbles.push({ x, y, r: r * UG_RIGHT_WARM_PEBBLE_R_MULT })
-  }
-  //
-  // Shells, bones, coins, bottles, worms — simple silhouettes for humour.
-  //
-  const shells = []
-  for (let i = 0; i < UG_SHELL_COUNT; i++) {
-    const x = randX()
-    keepUndergroundSmallDecor(x) && shells.push({
-      x,
-      y: randY(),
-      w: 10 + Math.random() * 8,
-      h: 7 + Math.random() * 5,
-      flip: Math.random() < 0.5
-    })
-  }
-  const bones = []
-  for (let i = 0; i < UG_BONE_COUNT; i++) {
-    const x = randX()
-    const y = randY()
-    const angle = (Math.random() - 0.5) * 0.8
-    keepUndergroundSmallDecor(x) && bones.push({ x, y, angle, len: 18 + Math.random() * 14 })
-  }
-  const coins = []
-  for (let i = 0; i < UG_COIN_COUNT; i++) {
-    const x = randX()
-    keepUndergroundSmallDecor(x) && coins.push({ x, y: randY(), r: 3 + Math.random() * 2 })
-  }
-  const bottles = []
-  for (let i = 0; i < UG_BOTTLE_COUNT; i++) {
-    bottles.push({ x: randX(), y: randY(), h: 14 + Math.random() * 6, tilt: (Math.random() - 0.5) * 0.5 })
-  }
-  const worms = []
-  for (let i = 0; i < UG_WORM_COUNT; i++) {
-    const x = randX()
-    const y = randY()
-    if (!keepUndergroundSmallDecor(x)) continue
-    const pts = [{ x, y }]
-    for (let s = 0; s < 4; s++) {
-      const last = pts[pts.length - 1]
-      pts.push({ x: last.x + 6 + Math.random() * 8, y: last.y + (Math.random() - 0.5) * 6 })
-    }
-    worms.push(pts)
-  }
-  //
-  // Guaranteed extra rocks/roots/shells inside the mud zone — see
-  // UG_MUD_ZONE_EXTRA_* above.
-  //
-  const mudZone = computeForestMudZoneX()
-  const randMudX = () => mudZone.x1 + Math.random() * (mudZone.x2 - mudZone.x1)
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROCK_COUNT; i++) {
-    const radius = 10 + Math.random() * 16
-    rocks.push({ x: randMudX(), y: randY(), radius, verts: buildRockVertices(radius) })
-  }
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_ROOTLET_COUNT; i++) {
-    const rx = randMudX()
-    const pts = [{ x: rx, y: FLOOR_Y + 4 }]
-    let px = rx
-    let py = FLOOR_Y + 4
-    const segs = 2 + Math.floor(Math.random() * 2)
-    for (let s = 0; s < segs; s++) {
-      px += (Math.random() - 0.5) * 14
-      py += 10 + Math.random() * 16
-      pts.push({ x: px, y: py })
-    }
-    rootlets.push(pts)
-  }
-  for (let i = 0; i < UG_MUD_ZONE_EXTRA_SHELL_COUNT; i++) {
-    shells.push({
-      x: randMudX(),
-      y: randY(),
-      w: 10 + Math.random() * 8,
-      h: 7 + Math.random() * 5,
-      flip: Math.random() < 0.5
-    })
-  }
-  const mudPebbleStones = []
-  const mudPebbleCx = randMudX()
-  const mudPebbleCy = randY()
-  for (let s = 0; s < 4; s++) {
-    mudPebbleStones.push({
-      x: mudPebbleCx + (Math.random() - 0.5) * 26,
-      y: mudPebbleCy + (Math.random() - 0.5) * 14,
-      r: 2 + Math.random() * 3
-    })
-  }
-  pebbles.push(mudPebbleStones)
-  return {
-    rocks, cracks, pebbles, rootlets, fossils, boulderPiles, grit, streaks, pockets, warmPebbles,
-    shells, bones, coins, bottles, worms, skeleton: null
-  }
-}
-//
-// One loose group of slate stones in the deep clay — spaced apart (only a
-// slight touch between neighbours), denser toward the group centre.
-//
-function buildUndergroundStoneGroup(cx, y1, y2, edgeGroup, placed) {
-  const countMin = edgeGroup ? UG_BOULDER_EDGE_PILE_STONES_MIN : UG_BOULDER_PILE_STONES_MIN
-  const countRange = edgeGroup ? UG_BOULDER_EDGE_PILE_STONES_RANGE : UG_BOULDER_PILE_STONES_RANGE
-  const count = countMin + Math.floor(Math.random() * countRange)
-  const stones = []
-  for (let s = 0; s < count; s++) {
-    const u = (Math.random() + Math.random()) * 0.5 - 0.5
-    const stone = placeUndergroundStone(cx + u * UG_BOULDER_PILE_SPREAD, y1, y2, placed)
-    stone && stones.push(stone)
-  }
-  return stones
-}
-//
-// Single stones spread along the deep layer between the groups.
-//
-function buildUndergroundScatteredStones(randX, y1, y2, placed) {
-  const stones = []
-  for (let s = 0; s < UG_BOULDER_SCATTER_COUNT; s++) {
-    const stone = placeUndergroundStone(randX(), y1, y2, placed)
-    stone && stones.push(stone)
-  }
-  return stones
-}
-//
-// Tries a few jittered spots around x until one does not overlap earlier stones.
-//
-function placeUndergroundStone(x, y1, y2, placed) {
-  const r = UG_BOULDER_R_MIN + Math.random() * UG_BOULDER_R_RANGE
-  for (let attempt = 0; attempt < UG_BOULDER_PLACE_ATTEMPTS; attempt++) {
-    const sx = x + (Math.random() - 0.5) * r * 2 * attempt
-    const sy = y1 + r + Math.random() * Math.max(1, y2 - y1 - r * 2)
-    const clear = placed.every(o => Math.hypot(o.x - sx, o.y - sy) >= (o.r + r) * UG_BOULDER_MIN_GAP_MULT)
-    if (!clear) continue
-    const stone = buildUndergroundStoneShape(sx, sy, r)
-    placed.push(stone)
-    return stone
-  }
-  return null
-}
-//
-// Lumpy rounded outline (lobe radii vary) plus speckle positions on the face.
-//
-function buildUndergroundStoneShape(x, y, r) {
-  const lobes = UG_BOULDER_LOBES_MIN + Math.floor(Math.random() * UG_BOULDER_LOBES_RANGE)
-  const squash = UG_BOULDER_SQUASH_MIN + Math.random() * UG_BOULDER_SQUASH_RANGE
-  const phase = Math.random() * Math.PI * 2
-  const verts = []
-  for (let i = 0; i < lobes; i++) {
-    const angle = phase + (i + (Math.random() - 0.5) * 0.5) / lobes * Math.PI * 2
-    const lr = UG_BOULDER_LOBE_R_MIN + Math.random() * UG_BOULDER_LOBE_R_RANGE
-    verts.push({ x: Math.cos(angle) * lr, y: Math.sin(angle) * lr * squash })
-  }
-  const speckles = []
-  const speckleCount = UG_BOULDER_SPECKLES_MIN + Math.floor(Math.random() * UG_BOULDER_SPECKLES_RANGE)
-  for (let i = 0; i < speckleCount; i++) {
-    const a = Math.random() * Math.PI * 2
-    const d = Math.sqrt(Math.random()) * 0.6
-    speckles.push({
-      x: Math.cos(a) * d,
-      y: Math.sin(a) * d * squash,
-      r: UG_BOULDER_SPECKLE_R_MIN + Math.random() * UG_BOULDER_SPECKLE_R_RANGE
-    })
-  }
-  return { x, y, r, verts, speckles }
-}
-//
-// Scales baked underground decor opacity by depth (large masses fade slower).
-//
-function paintUndergroundDecorAtDepth(ctx, y, large, paintFn) {
-  const a = large
-    ? forestUndergroundLargeFeatureAlpha(y, FLOOR_Y, CAVE_BAND_H)
-    : forestUndergroundSmallDetailAlpha(y, FLOOR_Y, CAVE_BAND_H)
-  if (a < 0.03) return
-  ctx.save()
-  ctx.globalAlpha *= a
-  paintFn()
-  ctx.restore()
-}
-//
-// Renders the shared underground layout with one mode's tones.
-//
-function renderUndergroundSpec(ctx, spec, tones) {
-  const fillCss = `rgb(${tones.fill.r}, ${tones.fill.g}, ${tones.fill.b})`
-  const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
-  const lightCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
-  tones.stone && paintUndergroundSediment(ctx, spec, tones, deepCss)
-  //
-  // Buried rocks — flat single-tone silhouettes, no outline.
-  //
-  const rockPalette = {
-    fillR: tones.fill.r, fillG: tones.fill.g, fillB: tones.fill.b,
-    lightR: tones.fill.r, lightG: tones.fill.g, lightB: tones.fill.b,
-    darkR: tones.fill.r, darkG: tones.fill.g, darkB: tones.fill.b
-  }
-  spec.rocks.forEach(rock => {
-    paintUndergroundDecorAtDepth(ctx, rock.y, false, () => {
-      drawRockToCanvas(ctx, { cx: rock.x, cy: rock.y, radius: rock.radius, verts: rock.verts, palette: rockPalette, skipOutline: true, skipShadow: true })
-    })
-  })
-  //
-  // Cracks — thin fissures with a short side branch.
-  //
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  const strokeCss = tones.monoStrokes ? fillCss : deepCss
-  ctx.strokeStyle = strokeCss
-  ctx.globalAlpha = 0.7
-  ctx.lineWidth = 1.4
-  spec.cracks.forEach(crack => {
-    const cy = crack.pts[0]?.y ?? FLOOR_Y
-    paintUndergroundDecorAtDepth(ctx, cy, false, () => {
-      strokePolyline(ctx, crack.pts)
-      strokePolyline(ctx, crack.branch)
-    })
-  })
-  ctx.globalAlpha = 1
-  //
-  // Pebble clusters.
-  //
-  ctx.fillStyle = fillCss
-  spec.pebbles.forEach(stones => {
-    stones.forEach(stone => {
-      paintUndergroundDecorAtDepth(ctx, stone.y, false, () => {
-        ctx.beginPath()
-        ctx.arc(stone.x, stone.y, stone.r, 0, Math.PI * 2)
-        ctx.fill()
-      })
-    })
-  })
-  //
-  // Hair-roots hanging from the ground line.
-  //
-  ctx.strokeStyle = strokeCss
-  ctx.globalAlpha = 0.6
-  ctx.lineWidth = 1.6
-  const cave = getCrackZone(WORLD_W, FLOOR_Y)
-  spec.rootlets.forEach(pts => {
-    const rx = pts[0]?.x ?? 0
-    if (rx < TREE_X - TRUNK_EXCLUDE_HALF) return
-    //
-    // No hanging hair-roots over the cave mouth / pit back wall — they read
-    // as stray sticks on the interior void edge.
-    //
-    if (rx >= cave.x1 - 32 && rx <= cave.x2 + 48) return
-    const ry = pts[pts.length - 1]?.y ?? pts[0]?.y ?? FLOOR_Y
-    paintUndergroundDecorAtDepth(ctx, ry, false, () => strokePolyline(ctx, pts))
-  })
-  ctx.globalAlpha = 1
-  //
-  // Fossil spiral — a small two-turn ammonite drawn in the light tone.
-  //
-  ctx.strokeStyle = lightCss
-  ctx.lineWidth = 1.5
-  spec.fossils?.forEach(fossil => {
-    paintUndergroundDecorAtDepth(ctx, fossil.y, false, () => {
-      ctx.globalAlpha = 0.75
-      strokeUndergroundFossil(ctx, fossil)
-    })
-  })
-  ctx.globalAlpha = 1
-  tones.stone && paintUndergroundBoulderPiles(ctx, spec.boulderPiles, tones)
-  tones.grit && paintUndergroundGrit(ctx, spec.grit, tones, deepCss)
-  tones.pebble && paintUndergroundWarmPebbles(ctx, spec.warmPebbles, tones)
-  //
-  // Buried shells — half-ovals with a split line.
-  //
-  spec.shells?.forEach(shell => {
-    paintUndergroundDecorAtDepth(ctx, shell.y, false, () => {
-      ctx.save()
-      ctx.translate(shell.x, shell.y)
-      shell.flip && ctx.scale(-1, 1)
-      ctx.fillStyle = lightCss
-      ctx.globalAlpha = 0.8
-      ctx.beginPath()
-      ctx.ellipse(0, 0, shell.w * 0.5, shell.h * 0.45, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = deepCss
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(-shell.w * 0.35, 0)
-      ctx.lineTo(shell.w * 0.35, 0)
-      ctx.stroke()
-      ctx.restore()
-    })
-  })
-  ctx.globalAlpha = 1
-  //
-  // Bones — two short segments with knobs.
-  //
-  spec.bones?.forEach(bone => {
-    paintUndergroundDecorAtDepth(ctx, bone.y, false, () => {
-      ctx.save()
-      ctx.translate(bone.x, bone.y)
-      ctx.rotate(bone.angle)
-      ctx.strokeStyle = lightCss
-      ctx.lineWidth = UG_BONE_SHAFT_PX
-      ctx.lineCap = 'round'
-      ctx.globalAlpha = 0.85
-      ctx.beginPath()
-      ctx.moveTo(-bone.len * 0.5, 0)
-      ctx.lineTo(bone.len * 0.5, 0)
-      ctx.stroke()
-      ctx.fillStyle = lightCss
-      for (const end of [-0.5, 0.5]) {
-        for (const side of [-1, 1]) {
-          ctx.beginPath()
-          ctx.arc(bone.len * end, side * UG_BONE_KNOB_SPLIT, UG_BONE_KNOB_R, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      }
-      ctx.restore()
-    })
-  })
-  ctx.globalAlpha = 1
-  //
-  // Coins — tiny buried discs.
-  //
-  ctx.fillStyle = lightCss
-  spec.coins?.forEach(coin => {
-    paintUndergroundDecorAtDepth(ctx, coin.y, false, () => {
-      ctx.globalAlpha = 0.75
-      ctx.beginPath()
-      ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2)
-      ctx.fill()
-    })
-  })
-  ctx.globalAlpha = 1
-  //
-  // Bottles — stuck at an angle (message in a bottle vibes).
-  //
-  spec.bottles?.forEach(bottle => {
-    paintUndergroundDecorAtDepth(ctx, bottle.y, false, () => {
-      ctx.save()
-      ctx.translate(bottle.x, bottle.y)
-      ctx.rotate(bottle.tilt)
-      ctx.fillStyle = lightCss
-      ctx.globalAlpha = 0.7
-      ctx.fillRect(-3, -bottle.h * 0.5, 6, bottle.h * 0.65)
-      ctx.fillRect(-2, -bottle.h * 0.5 - 4, 4, 4)
-      ctx.restore()
-    })
-  })
-  ctx.globalAlpha = 1
-  //
-  // Worms — wavy polylines.
-  //
-  ctx.strokeStyle = deepCss
-  ctx.lineWidth = 1.4
-  ctx.lineCap = 'round'
-  spec.worms?.forEach(pts => {
-    const wy = pts[pts.length - 1]?.y ?? pts[0]?.y ?? FLOOR_Y
-    paintUndergroundDecorAtDepth(ctx, wy, false, () => {
-      ctx.globalAlpha = 0.65
-      strokePolyline(ctx, pts)
-    })
-  })
-  ctx.globalAlpha = 1
-}
-//
-// Two-turn ammonite spiral in the current stroke style.
-//
-function strokeUndergroundFossil(ctx, fossil) {
-  const turns = 2
-  const steps = 40
-  ctx.beginPath()
-  for (let s = 0; s <= steps; s++) {
-    const t = s / steps
-    const angle = t * turns * Math.PI * 2
-    const px = fossil.x + Math.cos(angle) * fossil.r * t
-    const py = fossil.y + Math.sin(angle) * fossil.r * t
-    s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-  }
-  ctx.stroke()
-}
-//
-// Sediment streaks along the strata and dark voids with a lit lower lip,
-// painted first so every other buried feature sits on top of them.
-//
-function paintUndergroundSediment(ctx, spec, tones, deepCss) {
-  const lipCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
-  const voidCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
-  ctx.strokeStyle = deepCss
-  ctx.lineWidth = UG_STREAK_PX
-  ctx.lineCap = 'round'
-  ctx.globalAlpha = UG_STREAK_ALPHA
-  spec.streaks?.forEach(streak => {
-    ctx.beginPath()
-    ctx.moveTo(streak.x, streak.y)
-    ctx.quadraticCurveTo(streak.x + streak.len * 0.5, streak.y - 2, streak.x + streak.len, streak.y + streak.len * streak.tilt)
-    ctx.stroke()
-  })
-  spec.pockets?.forEach(pocket => {
-    ctx.globalAlpha = UG_POCKET_LIP_ALPHA
-    ctx.fillStyle = lipCss
-    ctx.beginPath()
-    ctx.ellipse(pocket.x, pocket.y + 1.5, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = UG_POCKET_VOID_ALPHA
-    ctx.fillStyle = voidCss
-    ctx.beginPath()
-    ctx.ellipse(pocket.x, pocket.y, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
-    ctx.fill()
-  })
-  ctx.globalAlpha = 1
-}
-//
-// Small warm pebbles, mostly in the topsoil.
-//
-function paintUndergroundWarmPebbles(ctx, pebbles, tones) {
-  ctx.fillStyle = `rgb(${tones.pebble.r}, ${tones.pebble.g}, ${tones.pebble.b})`
-  pebbles?.forEach(p => {
-    paintUndergroundDecorAtDepth(ctx, p.y, false, () => {
-      ctx.beginPath()
-      ctx.ellipse(p.x, p.y, p.r * 1.25, p.r, 0, 0, Math.PI * 2)
-      ctx.fill()
-    })
-  })
-}
-//
-// Dark slate stones in the deep clay: contour, body, soft lit cap, speckles.
-//
-function paintUndergroundBoulderPiles(ctx, piles, tones) {
-  const stoneCss = `rgb(${tones.stone.r}, ${tones.stone.g}, ${tones.stone.b})`
-  const lightCss = `rgb(${tones.stoneLight.r}, ${tones.stoneLight.g}, ${tones.stoneLight.b})`
-  const contourCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
-  piles?.forEach(stones => stones.forEach(stone => {
-    paintUndergroundDecorAtDepth(ctx, stone.y, true, () => {
-      paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss)
-    })
-  }))
-}
-function paintUndergroundStone(ctx, stone, stoneCss, lightCss, contourCss) {
-  ctx.fillStyle = contourCss
-  traceUndergroundStonePath(ctx, stone, stone.x, stone.y, stone.r + UG_BOULDER_OUTLINE_PX)
-  ctx.fill()
-  ctx.fillStyle = stoneCss
-  traceUndergroundStonePath(ctx, stone, stone.x, stone.y, stone.r)
-  ctx.fill()
-  ctx.save()
-  ctx.clip()
-  ctx.globalAlpha = UG_BOULDER_CAP_ALPHA
-  ctx.fillStyle = lightCss
-  const capR = stone.r * UG_BOULDER_CAP_SCALE
-  const capShift = stone.r * UG_BOULDER_CAP_OFFSET
-  traceUndergroundStonePath(ctx, stone, stone.x - capShift, stone.y - capShift, capR)
-  ctx.fill()
-  ctx.globalAlpha = UG_BOULDER_SPECKLE_ALPHA
-  stone.speckles.forEach(sp => {
-    ctx.beginPath()
-    ctx.arc(stone.x + sp.x * stone.r, stone.y + sp.y * stone.r, sp.r, 0, Math.PI * 2)
-    ctx.fill()
-  })
-  ctx.restore()
-}
-//
-// Closed lumpy outline: quadratic curves through lobe midpoints keep it rounded.
-//
-function traceUndergroundStonePath(ctx, stone, cx, cy, r) {
-  const verts = stone.verts
-  const n = verts.length
-  const first = verts[0]
-  const last = verts[n - 1]
-  ctx.beginPath()
-  ctx.moveTo(cx + (last.x + first.x) * 0.5 * r, cy + (last.y + first.y) * 0.5 * r)
-  for (let i = 0; i < n; i++) {
-    const v = verts[i]
-    const next = verts[(i + 1) % n]
-    ctx.quadraticCurveTo(cx + v.x * r, cy + v.y * r, cx + (v.x + next.x) * 0.5 * r, cy + (v.y + next.y) * 0.5 * r)
-  }
-  ctx.closePath()
-}
-//
-// Fine soil grit: half light specks, half dark, so the earth reads textured.
-//
-function paintUndergroundGrit(ctx, grit, tones, deepCss) {
-  const gritCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
-  const topsoilY2 = FLOOR_Y + CAVE_BAND_H * GROUND_LAYER_FRACS[0]
-  ctx.globalAlpha = UG_GRIT_ALPHA
-  grit?.forEach(g => {
-    if (g.y < topsoilY2) return
-    paintUndergroundDecorAtDepth(ctx, g.y, false, () => {
-      ctx.fillStyle = g.light ? gritCss : deepCss
-      const r = g.px * 0.52
-      ctx.beginPath()
-      ctx.arc(g.x, g.y, r, 0, Math.PI * 2)
-      ctx.fill()
-    })
-  })
-  ctx.globalAlpha = 1
-}
-//
-// Strokes an open polyline through the given points.
-//
-function strokePolyline(ctx, pts) {
-  ctx.beginPath()
-  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
-  ctx.stroke()
 }
 //
 // Physics boundary walls, ceiling, and floor.
@@ -5387,7 +4189,7 @@ function createForestMudExtraGrass(k, zones, mudZoneX1, mudZoneX2) {
 //
 function forestMudZoneGrassTint(sc, blade) {
   if (!sc?.zones.predatorAwake || !isForestDecorWorldXInMudZone(sc, blade.x)) return null
-  sc._grassMudColorSettled ??= lerpRgb(GRASS_GREEN, FOREST_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
+  sc._grassMudColorSettled ??= lerpForestRgb(GRASS_GREEN, FOREST_SHADOW, MUD_ZONE_GRASS_GREEN_VOID_LERP)
   return sc._grassMudColorSettled
 }
 //
@@ -5678,7 +4480,7 @@ function drawForestViscousMud(inst) {
     bottom.y = FLOOR_Y + 1
   }
   const fillRgb = forestLowerSoilRgb()
-  const seamRgb = lerpRgb(fillRgb, forestRgb('groundChernozem'), 0.35)
+  const seamRgb = lerpForestRgb(fillRgb, forestRgb('groundChernozem'), 0.35)
   k.drawPolygon({
     pts: fill,
     color: k.rgb(fillRgb.r, fillRgb.g, fillRgb.b)
@@ -6006,123 +4808,27 @@ function onUpdateTrampolineBlink(k, state) {
   }
 }
 //
-// Water — value 5 fill bounded by wave polygon.
-//
-function lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan) {
-  if (localX <= coreSpan) return 1
-  if (bakeSpan <= coreSpan) return 0
-  const u = (localX - coreSpan) / (bakeSpan - coreSpan)
-  return Math.max(0, 1 - u)
-}
-//
-function bakeLakeWaterSprites(k, x1, x2Core) {
-  const coreSpan = x2Core - x1
-  const bakeSpan = coreSpan + LAKE_SHORE_EXTEND_PX
-  const canvasW = Math.ceil(bakeSpan)
-  const topMargin = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 2
-  const canvasH = Math.ceil(LAKE_BED_MAX_DEPTH + topMargin) + 2
-  const originY = WATER_SURFACE_Y - topMargin
-  const islandShoreLocalX = EyeFlower.islandShoreWorldX(x1, WATER_SURFACE_Y) - x1
-  const geom = { x1, x2Core, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX }
-  for (let f = 0; f < LAKE_BAKE_FRAME_COUNT; f++) {
-    const time = (f / LAKE_BAKE_FRAME_COUNT) * LAKE_BAKE_CYCLE
-    const canvas = document.createElement('canvas')
-    canvas.width = canvasW
-    canvas.height = canvasH
-    const ctx = canvas.getContext('2d')
-    //
-    // The water starts at the island's shore: further left the island's rocks
-    // hold the water line, so no surface strip runs across them.
-    //
-    const waterSpan = bakeSpan - islandShoreLocalX
-    const surfaceTop = buildLakeSurfaceLinePts(geom, time, lakeWaveOffsetAt)
-    const surfaceInner = buildLakeSurfaceLinePts(geom, time + LAKE_SURFACE_INNER_TIME_LAG, lakeSurfaceInnerWaveOffsetAt)
-    const pts = [...surfaceTop]
-    for (let i = LAKE_SEGMENTS; i >= 0; i--) {
-      const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-      pts.push([localX, lakeBottomLocalY(geom, localX)])
-    }
-    const bodyY = topMargin + LAKE_OPAQUE_SKIN_PX
-    const body = ctx.createLinearGradient(0, bodyY, 0, bodyY + LAKE_BODY_FADE_PX)
-    body.addColorStop(0, FOREST_PAL.water)
-    body.addColorStop(1, hexWithAlpha(FOREST_PAL.water, LAKE_BODY_ALPHA))
-    ctx.fillStyle = body
-    ctx.beginPath()
-    ctx.moveTo(pts[0][0], pts[0][1])
-    for (let p = 1; p < pts.length; p++) {
-      ctx.lineTo(pts[p][0], pts[p][1])
-    }
-    ctx.closePath()
-    ctx.fill()
-    ctx.save()
-    ctx.clip()
-    const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time }
-    paintLakeGradient(paint)
-    paintLakeReflections(paint)
-    paintLakeShoreRipples(paint, islandShoreLocalX, 1)
-    paintLakeShoreRipples(paint, coreSpan, -1)
-    paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner)
-    ctx.restore()
-    strokeLakeSurfaceLine(ctx, surfaceTop, 0, FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_LINE_PX)
-    strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
-    applyForestGameplaySharpBake(canvas, 5000 + f)
-    k.loadSprite(LAKE_BAKE_SPRITE_PREFIX + f, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  }
-  return geom
-}
-//
-// Light band between the top surface line and the inner line (each has its
-// own wave phase so the band breathes).
-//
-function buildLakeSurfaceLinePts(geom, time, waveOffsetAt) {
-  const { islandShoreLocalX, bakeSpan, coreSpan, topMargin } = geom
-  const waterSpan = bakeSpan - islandShoreLocalX
-  const line = []
-  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-    const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-    const coreT = Math.min(1, localX / coreSpan)
-    const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
-    line.push([localX, topMargin + waveOffsetAt(coreT, time) * shoreFade])
-  }
-  return line
-}
-function paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner) {
-  const colors = FOREST_PAL.waterPaint
-  ctx.beginPath()
-  ctx.moveTo(surfaceTop[0][0], surfaceTop[0][1])
-  for (let i = 1; i < surfaceTop.length; i++) ctx.lineTo(surfaceTop[i][0], surfaceTop[i][1])
-  for (let i = surfaceInner.length - 1; i >= 0; i--) ctx.lineTo(surfaceInner[i][0], surfaceInner[i][1])
-  ctx.closePath()
-  ctx.fillStyle = hexWithAlpha(colors.surfaceBand, LAKE_SURFACE_BAND_ALPHA)
-  ctx.fill()
-}
-function strokeLakeSurfaceLine(ctx, surface, offsetY, color, width) {
-  ctx.beginPath()
-  ctx.moveTo(surface[0][0], surface[0][1] + offsetY)
-  for (let i = 1; i < surface.length; i++) ctx.lineTo(surface[i][0], surface[i][1] + offsetY)
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.lineJoin = 'round'
-  ctx.stroke()
-}
-//
 // Water — see-through fill bounded by the wave polygon, over the bed layer
 // (murk, sandy bed, pebbles) and the swaying algae.
 //
 function createWater(k, x1, x2Core, zones, rockObjs) {
-  const lake = bakeLakeWaterSprites(k, x1, x2Core)
-  bakeLakeBedSprite(k, lake)
+  const lake = Lake.create({
+    k,
+    x1,
+    x2Core,
+    surfaceY: WATER_SURFACE_Y,
+    floorY: FLOOR_Y,
+    spriteKey: LAKE_SPRITE_KEY,
+    waterStartX: EyeFlower.islandShoreWorldX(x1, WATER_SURFACE_Y)
+  })
   rockObjs && bakeLakeShoreRockFullSprites(k, lake, rockObjs)
   lake.x2Bake = x1 + lake.bakeSpan
-  lake.algae = buildLakeAlgae(k, lake)
   zones._lake = lake
   k.add([
     k.z(LAKE_BED_Z),
     {
       draw() {
-        drawLakeBed(k, zones, lake)
+        isLakeLayerVisible(k, zones, lake) && Lake.drawBed(k, lake)
       }
     }
   ])
@@ -6130,7 +4836,7 @@ function createWater(k, x1, x2Core, zones, rockObjs) {
     k.z(LAKE_ALGAE_Z),
     {
       draw() {
-        drawLakeAlgae(k, zones, lake)
+        isLakeLayerVisible(k, zones, lake) && Lake.drawAlgae(k, lake)
       }
     }
   ])
@@ -6138,7 +4844,7 @@ function createWater(k, x1, x2Core, zones, rockObjs) {
     k.z(LAKE_Z),
     {
       draw() {
-        drawLakeFill(k, zones, lake)
+        isLakeLayerVisible(k, zones, lake) && Lake.drawFill(k, lake)
       }
     }
   ])
@@ -6153,418 +4859,6 @@ function createWater(k, x1, x2Core, zones, rockObjs) {
 //
 function isLakeLayerVisible(k, zones, lake) {
   return !!zones.water && isLakeFillInCameraView(k, zones._sceneRef, lake.x1, lake.x2Bake)
-}
-//
-// Current water frame of the baked wave cycle.
-//
-function drawLakeFill(k, zones, lake) {
-  if (!isLakeLayerVisible(k, zones, lake)) return
-  const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
-  k.drawSprite({
-    sprite: LAKE_BAKE_SPRITE_PREFIX + frame,
-    pos: k.vec2(lake.x1, lake.originY),
-    width: lake.canvasW,
-    height: lake.canvasH
-  })
-}
-function drawLakeBed(k, zones, lake) {
-  if (!isLakeLayerVisible(k, zones, lake)) return
-  k.drawSprite({
-    sprite: LAKE_BED_SPRITE,
-    pos: k.vec2(lake.x1, lake.originY),
-    width: lake.canvasW,
-    height: lake.canvasH
-  })
-}
-//
-// Lake bottom (canvas-local Y) at canvas-local X: zero depth at the island
-// shore and at the end of the shore bake, the skewed, uneven parabola in
-// between (never deeper than LAKE_BED_MAX_DEPTH).
-//
-function lakeBottomLocalY(lake, localX) {
-  const u = (localX - lake.islandShoreLocalX) / (lake.bakeSpan - lake.islandShoreLocalX)
-  if (u <= 0 || u >= 1) return lake.topMargin
-  const shape = lakeBedProfileAt(u)
-  const hump = SoilSeam.seamValueNoise(localX / LAKE_BED_HUMP_WAVELENGTH, LAKE_BED_HUMP_SEED) * LAKE_BED_HUMP_PX
-  const depth = (LAKE_BED_MAX_DEPTH + hump) * shape
-  return lake.topMargin + Math.min(LAKE_BED_MAX_DEPTH, Math.max(0, depth))
-}
-//
-// Depth fraction at u: smoothstep between neighbouring profile keypoints.
-//
-function lakeBedProfileAt(u) {
-  let i = 1
-  while (i < LAKE_BED_PROFILE.length - 1 && LAKE_BED_PROFILE[i].u < u) i++
-  const a = LAKE_BED_PROFILE[i - 1]
-  const b = LAKE_BED_PROFILE[i]
-  const s = Math.min(1, Math.max(0, (u - a.u) / (b.u - a.u)))
-  return a.d + (b.d - a.d) * s * s * (3 - 2 * s)
-}
-//
-// Top of the sand that settled on the bed (canvas-local Y). Sand only builds
-// up where the bed is flat and deep enough — ledges and the floor — and
-// thins to nothing on the terrace steps and the steep banks, so those read
-// as bare earth.
-//
-function lakeBedTopLocalY(lake, localX) {
-  const bottom = lakeBottomLocalY(lake, localX)
-  const slope = Math.abs(lakeBottomLocalY(lake, localX + LAKE_BED_SLOPE_PROBE_PX) - lakeBottomLocalY(lake, localX - LAKE_BED_SLOPE_PROBE_PX)) / (LAKE_BED_SLOPE_PROBE_PX * 2)
-  const flat01 = Math.max(0, 1 - slope / LAKE_BED_SAND_MAX_SLOPE)
-  const depth01 = Math.min(1, (bottom - lake.topMargin) / LAKE_BED_BACK_FULL_DEPTH_PX)
-  const wobble = SoilSeam.seamValueNoise(localX / LAKE_BED_BACK_WOBBLE_WAVELENGTH, LAKE_BED_BACK_WOBBLE_SEED) * LAKE_BED_BACK_WOBBLE_PX
-  const rise = (LAKE_BED_BACK_RISE_PX + wobble) * depth01 * flat01 * flat01
-  return Math.max(lake.topMargin + LAKE_OPAQUE_SKIN_PX, bottom - rise)
-}
-//
-// Static layer seen through the water: darkening murk, the earthy floor face
-// with a lit far rim, then pebbles, the sunken snag and faceted boulders
-// (clipped to the bottom line), and a dark front cut along the bottom.
-//
-function bakeLakeBedSprite(k, lake) {
-  if (k.getSprite(LAKE_BED_SPRITE)) return
-  const colors = FOREST_PAL.waterPaint
-  const canvas = document.createElement('canvas')
-  canvas.width = lake.canvasW
-  canvas.height = lake.canvasH
-  const ctx = canvas.getContext('2d')
-  const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const step = lake.bakeSpan / LAKE_BED_SEGMENTS
-  const floorY = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + LAKE_BED_FLOOR_OVERLAP_PX
-  ctx.beginPath()
-  ctx.moveTo(0, murkTop)
-  ctx.lineTo(lake.bakeSpan, murkTop)
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) {
-    const x = i * step
-    ctx.lineTo(x, Math.max(murkTop, lakeBottomLocalY(lake, x)))
-  }
-  ctx.closePath()
-  const murk = ctx.createLinearGradient(0, murkTop, 0, lake.canvasH)
-  murk.addColorStop(0, colors.murkTop)
-  murk.addColorStop(1, colors.murkDeep)
-  ctx.fillStyle = murk
-  ctx.fill()
-  const murkPath = new Path2D()
-  murkPath.moveTo(0, murkTop)
-  murkPath.lineTo(lake.bakeSpan, murkTop)
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) murkPath.lineTo(i * step, Math.max(murkTop, lakeBottomLocalY(lake, i * step)))
-  murkPath.closePath()
-  paintLakeBedFace(ctx, lake, step, floorY, colors)
-  ctx.save()
-  ctx.clip(murkPath)
-  paintLakeBedPebbles(ctx, lake, colors)
-  paintLakeBedSnag(ctx, lake, colors)
-  paintLakeBedBoulders(ctx, lake, colors)
-  ctx.restore()
-  paintLakeBedFrontEdge(ctx, lake, step, floorY, colors)
-  applyForestGameplaySharpBake(canvas, LAKE_BED_GRAIN_SEED)
-  k.loadSprite(LAKE_BED_SPRITE, canvas)
-  canvas.width = 0
-  canvas.height = 0
-}
-//
-// Earth fill from the bottom down to just under the ground line, so the
-// shallow shore ends never leave a gap above the earth band; then the sand
-// layer with dark gravel specks and a lit top edge.
-//
-function paintLakeBedFace(ctx, lake, step, floorY, colors) {
-  ctx.beginPath()
-  ctx.moveTo(0, lakeBedMudSeamLocalY(lake, 0, floorY))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, Math.max(floorY, lakeBottomLocalY(lake, i * step)))
-  ctx.closePath()
-  ctx.fillStyle = colors.bank
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
-  ctx.closePath()
-  ctx.fillStyle = colors.bed
-  ctx.fill()
-  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
-  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 5)
-  ctx.fillStyle = hexWithAlpha(colors.bedGravel, LAKE_BED_GRAVEL_ALPHA)
-  for (let i = 0; i < LAKE_BED_GRAVEL_COUNT; i++) {
-    const x = x1 + rng() * (lake.bakeSpan - x1)
-    const top = lakeBedTopLocalY(lake, x)
-    const bottom = lakeBottomLocalY(lake, x)
-    const r = LAKE_BED_GRAVEL_R_MIN + rng() * LAKE_BED_GRAVEL_R_RANGE
-    if (bottom - top < r * 2) continue
-    ctx.beginPath()
-    ctx.ellipse(x, top + r + (bottom - top - r * 2) * rng(), r * LAKE_BED_GRAVEL_STRETCH, r, 0, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  ctx.beginPath()
-  ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  ctx.strokeStyle = colors.bedRim
-  ctx.lineWidth = LAKE_BED_RIM_PX
-  ctx.stroke()
-}
-//
-// Dark cut where the floor face meets the earth band below the lake.
-//
-function paintLakeBedFrontEdge(ctx, lake, step, floorY, colors) {
-  ctx.beginPath()
-  ctx.moveTo(0, lakeBedMudSeamLocalY(lake, 0, floorY))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedMudSeamLocalY(lake, i * step, floorY))
-  ctx.strokeStyle = colors.bedEdge
-  ctx.lineWidth = LAKE_BED_EDGE_PX
-  ctx.lineJoin = 'round'
-  ctx.stroke()
-}
-//
-// Sand/mud contact on the bed: same soft tongues and pixel grit as the
-// topsoil/subsoil seam in the ground band.
-//
-function lakeBedMudSeamLocalY(lake, localX, floorY) {
-  const worldX = lake.x1 + localX
-  const base = lakeBottomLocalY(lake, localX)
-  const jag = SoilSeam.seamFringeOffset(worldX, LAKE_BED_MUD_SEAM_INDEX)
-  return Math.max(floorY, base + jag)
-}
-//
-// Pebbles scattered across the floor face, east of the island.
-//
-function paintLakeBedPebbles(ctx, lake, colors) {
-  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
-  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 17)
-  for (let i = 0; i < LAKE_BED_PEBBLE_COUNT; i++) {
-    const x = x1 + rng() * (lake.coreSpan - x1)
-    const r = LAKE_BED_PEBBLE_R_MIN + rng() * LAKE_BED_PEBBLE_R_RANGE
-    const top = lakeBedTopLocalY(lake, x)
-    const y = top + (lakeBottomLocalY(lake, x) - top) * rng()
-    ctx.fillStyle = colors.pebble
-    ctx.beginPath()
-    ctx.ellipse(x, y, r, r * LAKE_BED_PEBBLE_SQUASH, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = colors.pebbleLight
-    ctx.beginPath()
-    const glint = r * LAKE_BED_PEBBLE_GLINT_SHIFT
-    ctx.ellipse(x - glint, y - glint, r * LAKE_BED_PEBBLE_LIGHT_FRAC, r * LAKE_BED_PEBBLE_LIGHT_FRAC * LAKE_BED_PEBBLE_SQUASH, 0, 0, Math.PI * 2)
-    ctx.fill()
-  }
-}
-//
-// Sunken branch lying across the floor face: tapered, slightly bowed, with
-// two side twigs; contour first, then the body, then a lit top line.
-//
-function paintLakeBedSnag(ctx, lake, colors) {
-  const cx = lakeWaterLocalX(lake, LAKE_SNAG_T)
-  const top = lakeBedTopLocalY(lake, cx)
-  const cy = top + (lakeBottomLocalY(lake, cx) - top) * LAKE_SNAG_DEPTH_FRAC
-  const pts = []
-  for (let s = 0; s <= LAKE_SNAG_SEGMENTS; s++) {
-    const u = s / LAKE_SNAG_SEGMENTS
-    const along = (u - 0.5) * LAKE_SNAG_LEN
-    pts.push({
-      x: cx + along,
-      y: cy + along * LAKE_SNAG_TILT - Math.sin(u * Math.PI) * LAKE_SNAG_BOW_PX
-    })
-  }
-  const contour = LAKE_SNAG_CONTOUR_PX * 2
-  strokeTaperedPolyline(ctx, pts, LAKE_SNAG_W + contour, LAKE_SNAG_TIP_W + contour, colors.stoneContour)
-  for (const twig of LAKE_SNAG_TWIGS) {
-    strokeTaperedPolyline(ctx, snagTwigPoints(pts, twig), lerpSnagWidth(twig.at) * LAKE_SNAG_TWIG_W_FRAC + contour, contour, colors.stoneContour)
-  }
-  strokeTaperedPolyline(ctx, pts, LAKE_SNAG_W, LAKE_SNAG_TIP_W, colors.snag)
-  for (const twig of LAKE_SNAG_TWIGS) {
-    strokeTaperedPolyline(ctx, snagTwigPoints(pts, twig), lerpSnagWidth(twig.at) * LAKE_SNAG_TWIG_W_FRAC, LAKE_SNAG_TWIG_TIP_W, colors.snag)
-  }
-  const lit = pts.map((p, s) => ({ x: p.x, y: p.y - lerpSnagWidth(s / LAKE_SNAG_SEGMENTS) * LAKE_SNAG_LIGHT_LIFT }))
-  strokeTaperedPolyline(ctx, lit, LAKE_SNAG_W * LAKE_SNAG_LIGHT_FRAC, LAKE_SNAG_TIP_W * LAKE_SNAG_LIGHT_FRAC, colors.snagLight)
-}
-function lerpSnagWidth(u) {
-  return LAKE_SNAG_W + (LAKE_SNAG_TIP_W - LAKE_SNAG_W) * u
-}
-//
-// Straight twig leaving the branch at a fraction of its length.
-//
-function snagTwigPoints(pts, twig) {
-  const idx = Math.round(twig.at * (pts.length - 1))
-  const base = pts[idx]
-  const len = twig.len * LAKE_SNAG_LEN
-  return [
-    base,
-    { x: base.x + Math.cos(twig.angle) * len, y: base.y + Math.sin(twig.angle) * len }
-  ]
-}
-//
-// Polyline whose stroke width shrinks linearly from w0 to w1 (round caps hide
-// the joints between segments).
-//
-function strokeTaperedPolyline(ctx, pts, w0, w1, color) {
-  ctx.strokeStyle = color
-  ctx.lineCap = 'round'
-  for (let i = 1; i < pts.length; i++) {
-    ctx.lineWidth = w0 + (w1 - w0) * ((i - 0.5) / (pts.length - 1))
-    ctx.beginPath()
-    ctx.moveTo(pts[i - 1].x, pts[i - 1].y)
-    ctx.lineTo(pts[i].x, pts[i].y)
-    ctx.stroke()
-  }
-}
-//
-// Floor boulders half-sunk into the sand layer.
-//
-function paintLakeBedBoulders(ctx, lake, colors) {
-  for (const spec of LAKE_BED_BOULDERS) {
-    const cx = lakeWaterLocalX(lake, spec.t)
-    const top = lakeBedTopLocalY(lake, cx)
-    const baseY = top + (lakeBottomLocalY(lake, cx) - top) * LAKE_BED_BOULDER_DEPTH_FRAC
-    paintLakeBoulder(ctx, cx, baseY - spec.r * LAKE_BED_BOULDER_SQUASH * (1 - LAKE_BED_BOULDER_SINK), spec, colors)
-  }
-}
-//
-// One faceted boulder: dark shadow tone, a mid facet pushed to the upper
-// left, a small lit facet, then a dark contour.
-//
-function paintLakeBoulder(ctx, cx, cy, spec, colors) {
-  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + spec.seed)
-  const verts = []
-  for (let i = 0; i < LAKE_BED_BOULDER_VERTS; i++) {
-    const a = (i + (rng() - 0.5) * LAKE_BED_BOULDER_ANGLE_JITTER) / LAKE_BED_BOULDER_VERTS * Math.PI * 2
-    const rr = spec.r * (1 + (rng() * 2 - 1) * LAKE_BED_BOULDER_JITTER)
-    verts.push({ x: Math.cos(a) * rr, y: Math.sin(a) * rr * LAKE_BED_BOULDER_SQUASH })
-  }
-  const outline = boulderPath(verts, cx, cy, 1, 0, 0)
-  ctx.fillStyle = colors.stoneDark
-  ctx.fill(outline)
-  ctx.save()
-  ctx.clip(outline)
-  const midShift = -spec.r * LAKE_BED_BOULDER_MID_SHIFT
-  ctx.fillStyle = colors.stone
-  ctx.fill(boulderPath(verts, cx, cy, LAKE_BED_BOULDER_MID_FRAC, midShift, midShift))
-  const lightShift = -spec.r * LAKE_BED_BOULDER_LIGHT_SHIFT
-  ctx.fillStyle = colors.stoneLight
-  ctx.fill(boulderPath(verts, cx, cy, LAKE_BED_BOULDER_LIGHT_FRAC, lightShift, lightShift))
-  ctx.restore()
-  ctx.strokeStyle = colors.stoneContour
-  ctx.lineWidth = LAKE_BED_BOULDER_CONTOUR_PX
-  ctx.lineJoin = 'round'
-  ctx.stroke(outline)
-}
-function boulderPath(verts, cx, cy, scale, dx, dy) {
-  const path = new Path2D()
-  verts.forEach((v, i) => {
-    const x = cx + dx + v.x * scale
-    const y = cy + dy + v.y * scale
-    i === 0 ? path.moveTo(x, y) : path.lineTo(x, y)
-  })
-  path.closePath()
-  return path
-}
-//
-// Canvas-local X at fraction t of the open water, from just clear of the
-// island shore to the right end of the lake core.
-//
-function lakeWaterLocalX(lake, t) {
-  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
-  return x1 + t * (lake.coreSpan - x1)
-}
-function lakeBedBakeRng(seed) {
-  let t = seed >>> 0
-  return () => {
-    t += 0x6D2B79F5
-    let r = Math.imul(t ^ (t >>> 15), 1 | t)
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
-  }
-}
-//
-// Algae tufts (world space) rooted at random depths of the floor face, so
-// they sit "on" the receding floor; heights are capped below the wave band.
-//
-function buildLakeAlgae(k, lake) {
-  const fronds = []
-  const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const palette = FOREST_PAL.waterPaint
-  const tones = [palette.algaeDark, palette.algae, palette.algaeLight].map((hex) => {
-    const c = getRGB(k, hex)
-    return k.rgb(c.r, c.g, c.b)
-  })
-  const rng = lakeBedBakeRng(LAKE_ALGAE_LAYOUT_SEED)
-  for (const tuft of LAKE_ALGAE_TUFTS) {
-    const cx = lakeWaterLocalX(lake, tuft.t)
-    const kind = LAKE_ALGAE_KINDS[tuft.kind]
-    const count = kind.bladesMin + Math.floor(rng() * kind.bladesRange)
-    for (let b = 0; b < count; b++) {
-      const x = cx + (rng() * 2 - 1) * kind.spread
-      const top = lakeBedTopLocalY(lake, x)
-      const rootY = top + (lakeBottomLocalY(lake, x) - top) * (LAKE_ALGAE_ROOT_DEPTH_MIN + rng() * LAKE_ALGAE_ROOT_DEPTH_RANGE)
-      const h = Math.min(kind.hMin + rng() * kind.hRange, rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX)
-      if (h < LAKE_ALGAE_MIN_H) continue
-      const width = kind.wMin + rng() * kind.wRange
-      fronds.push({
-        x: lake.x1 + x,
-        y: lake.originY + rootY,
-        h,
-        width,
-        isFrond: tuft.kind === 'frond',
-        lean: (rng() * 2 - 1) * kind.lean,
-        phase: rng() * Math.PI * 2,
-        swayMul: LAKE_ALGAE_SWAY_MUL_MIN + rng() * LAKE_ALGAE_SWAY_MUL_RANGE,
-        color: tones[Math.floor(rng() * tones.length)],
-        midrib: tones[tones.length - 1],
-        spine: Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, () => k.vec2(0, 0)),
-        poly: Array.from({ length: (LAKE_ALGAE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
-      })
-    }
-  }
-  return { blades: fronds, indices: lakeAlgaeStripIndices() }
-}
-//
-// Triangle strip between the left and right edges of a leaf polygon (left
-// edge bottom→tip, right edge tip→bottom). Kaplay's default fan from vertex
-// 0 would fold over on a curved blade.
-//
-function lakeAlgaeStripIndices() {
-  const last = (LAKE_ALGAE_SEGMENTS + 1) * 2 - 1
-  const indices = []
-  for (let s = 0; s < LAKE_ALGAE_SEGMENTS; s++) {
-    indices.push(s, s + 1, last - s, s + 1, last - s - 1, last - s)
-  }
-  return indices
-}
-//
-// Slow sway with the bend growing toward the tip and lagging behind the
-// base; fronds also ripple along their length. All leaf polygons first, then
-// the frond midribs, to keep the primitive batch unbroken.
-//
-function drawLakeAlgae(k, zones, lake) {
-  if (!isLakeLayerVisible(k, zones, lake)) return
-  const time = k.time()
-  for (const blade of lake.algae.blades) {
-    updateLakeAlgaeBlade(blade, time)
-    k.drawPolygon({ pts: blade.poly, indices: lake.algae.indices, color: blade.color })
-  }
-  for (const blade of lake.algae.blades) {
-    blade.isFrond && k.drawLines({ pts: blade.spine, width: LAKE_ALGAE_MIDRIB_PX, color: blade.midrib })
-  }
-}
-function updateLakeAlgaeBlade(blade, time) {
-  const swayRate = LAKE_ALGAE_SWAY_SPEED * blade.swayMul
-  const last = blade.poly.length - 1
-  for (let s = 0; s <= LAKE_ALGAE_SEGMENTS; s++) {
-    const u = s / LAKE_ALGAE_SEGMENTS
-    const sway = Math.sin(time * swayRate + blade.phase - u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
-    const ripple = blade.isFrond ? Math.sin(u * LAKE_ALGAE_WAVE_FREQ + blade.phase) * LAKE_ALGAE_WAVE_PX * u : 0
-    const x = blade.x + sway + ripple + blade.lean * blade.h * u
-    const y = blade.y - blade.h * u
-    const half = blade.width * (1 - (1 - LAKE_ALGAE_TIP_W_FRAC) * u) * 0.5
-    blade.spine[s].x = x
-    blade.spine[s].y = y
-    blade.poly[s].x = x - half
-    blade.poly[s].y = y
-    blade.poly[last - s].x = x + half
-    blade.poly[last - s].y = y
-  }
-}
-//
-// '#rrggbb' plus an alpha byte, for canvas gradient stops.
-//
-function hexWithAlpha(hex, alpha) {
-  return hex + Math.round(alpha * 255).toString(16).padStart(2, '0')
 }
 //
 // Draws lake cap rocks above grass and the water fill (sprites stay off-screen).
@@ -6590,7 +4884,7 @@ function createLakeShoreRockLayer(k, zones) {
 // as submerged but stays opaque. The sprite hangs on the tree-side rock.
 //
 function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
-  const floorLocal = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + LAKE_BED_FLOOR_OVERLAP_PX
+  const floorLocal = lake.topMargin + FLOOR_Y - WATER_SURFACE_Y + Lake.LAKE_BED_FLOOR_OVERLAP_PX
   const rocks = rockObjs.filter(o => (o._lakeShoreEnd || o._waterCluster) && o._rockVerts)
   const main = rocks.find(o => o._shoreTreeSide)
   if (!main) return
@@ -6609,14 +4903,14 @@ function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
     paintForestShoreRock(ctx, {
       loops: loops.map(loop => loop.map(p => ({ x: p.x - x0, y: p.y - y0 }))),
       waterY,
-      rng: createSeededRandom((main._decorWorldX * 13 | 0) + LAKE_BAKE_GEOMETRY_VERSION),
+      rng: createSeededRandom((main._decorWorldX * 13 | 0) + Lake.LAKE_BAKE_GEOMETRY_VERSION),
       outlineWidth: ROCK_OUTLINE_WIDTH
     })
     ctx.restore()
     tintLakeShoreRockUnderwater(ctx, width, height, waterY)
   })
   applyForestLayerGradeToCanvas(canvas, FOREST_LAYER_GRADE.decor, (main._decorWorldX * 7 | 0) + 91)
-  const name = `forest0-lake-shore-rock-v${LAKE_BAKE_GEOMETRY_VERSION}-${main._decorWorldX | 0}`
+  const name = `forest0-lake-shore-rock-v${Lake.LAKE_BAKE_GEOMETRY_VERSION}-${main._decorWorldX | 0}`
   k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -6662,8 +4956,8 @@ function lakeShoreRockSunkVerts(lake, rock, floorLocal, ox, oy) {
 //
 function lakeShoreRockBedWorldY(lake, worldX, floorLocal) {
   const localX = worldX - lake.x1
-  if (localX < 0 || localX > lake.bakeSpan) return FLOOR_Y + LAKE_BED_FLOOR_OVERLAP_PX
-  return lake.originY + lakeBedMudSeamLocalY(lake, localX, floorLocal)
+  if (localX < 0 || localX > lake.bakeSpan) return FLOOR_Y + Lake.LAKE_BED_FLOOR_OVERLAP_PX
+  return lake.originY + Lake.lakeBedMudSeamLocalY(lake, localX, floorLocal)
 }
 //
 // Clip to everything above the bed line under the rock's columns.
@@ -6686,8 +4980,8 @@ function clipLakeShoreRockToBed(ctx, lake, x0, y0, width, height, floorLocal) {
 function tintLakeShoreRockUnderwater(ctx, width, height, waterY) {
   if (waterY >= height) return
   const tint = ctx.createLinearGradient(0, waterY, 0, height)
-  tint.addColorStop(0, hexWithAlpha(FOREST_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
-  tint.addColorStop(1, hexWithAlpha(FOREST_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
+  tint.addColorStop(0, Lake.hexWithAlpha(FOREST_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
+  tint.addColorStop(1, Lake.hexWithAlpha(FOREST_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
   ctx.globalCompositeOperation = 'source-atop'
   ctx.fillStyle = tint
   ctx.fillRect(0, waterY, width, height - waterY)
@@ -6712,83 +5006,6 @@ function forestCameraViewXRange(k, sc, margin) {
   return { x1: camX - halfW, x2: camX + halfW }
 }
 //
-// Calm depth read: a light skin just under the surface, darkening with depth.
-//
-function paintLakeGradient(paint) {
-  const { ctx, topMargin, canvasW, canvasH } = paint
-  const colors = FOREST_PAL.waterPaint
-  ctx.globalAlpha = LAKE_SKIN_ALPHA
-  const skin = ctx.createLinearGradient(0, topMargin, 0, topMargin + LAKE_SKIN_DEPTH_PX)
-  skin.addColorStop(0, colors.light)
-  skin.addColorStop(1, `${colors.light}00`)
-  ctx.fillStyle = skin
-  ctx.fillRect(0, 0, canvasW, topMargin + LAKE_SKIN_DEPTH_PX)
-  ctx.globalAlpha = LAKE_DEEP_ALPHA
-  const deep = ctx.createLinearGradient(0, topMargin + LAKE_SKIN_DEPTH_PX, 0, topMargin + LAKE_BED_MAX_DEPTH)
-  deep.addColorStop(0, `${colors.deep}00`)
-  deep.addColorStop(1, colors.deep)
-  ctx.fillStyle = deep
-  ctx.fillRect(0, topMargin, canvasW, canvasH - topMargin)
-  ctx.globalAlpha = 1
-}
-//
-// Soft dark columns under the far-bank trunks, sliced into rows that sway
-// with the frame time so they read as reflections, not stripes.
-//
-function paintLakeReflections(paint) {
-  const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
-  ctx.fillStyle = FOREST_PAL.waterPaint.reflection
-  for (const spot of LAKE_REFLECTIONS) {
-    const cx = spot.t * coreSpan
-    const surfaceY = topMargin + lakeWaveOffsetAt(spot.t, time) * lakeShoreFadeAtLocalX(cx, coreSpan, bakeSpan)
-    for (let row = 0; row < spot.len; row += LAKE_REFLECTION_ROW_PX) {
-      const u = row / spot.len
-      const sway = Math.sin(time * LAKE_WAVE_FREQ + row * LAKE_REFLECTION_WOBBLE_ROW_PHASE) * LAKE_REFLECTION_WOBBLE_PX
-      const w = spot.w * (1 - LAKE_REFLECTION_TAPER * u)
-      const y = surfaceY + row
-      ctx.globalAlpha = LAKE_REFLECTION_ALPHA * (1 - u) * LAKE_REFLECTION_PASS_ALPHA
-      ctx.fillRect(cx + sway - w * 0.5, y, w, LAKE_REFLECTION_ROW_PX)
-      const coreW = w * LAKE_REFLECTION_CORE_FRAC
-      ctx.fillRect(cx + sway - coreW * 0.5, y, coreW, LAKE_REFLECTION_ROW_PX)
-    }
-  }
-  ctx.globalAlpha = 1
-}
-//
-// Thin light dashes drifting away from a shore line toward open water
-// (`dir` = +1 east, -1 west); one full drift per bake cycle keeps the loop
-// seamless.
-//
-function paintLakeShoreRipples(paint, shoreLocalX, dir) {
-  const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
-  const cycleU = time / LAKE_BAKE_CYCLE
-  ctx.fillStyle = FOREST_PAL.waterPaint.ripple
-  for (let i = 0; i < LAKE_RIPPLE_COUNT; i++) {
-    const u = (cycleU + i / LAKE_RIPPLE_COUNT) % 1
-    const dist = LAKE_RIPPLE_START_PX + u * LAKE_RIPPLE_SPACING_PX * LAKE_RIPPLE_COUNT
-    const cx = shoreLocalX + dir * dist
-    const coreT = Math.max(0, Math.min(1, cx / coreSpan))
-    const surfaceY = topMargin + lakeWaveOffsetAt(coreT, time) * lakeShoreFadeAtLocalX(cx, coreSpan, bakeSpan)
-    const len = LAKE_RIPPLE_LEN_PX * (1 - LAKE_RIPPLE_LEN_SHRINK * u)
-    ctx.globalAlpha = LAKE_RIPPLE_ALPHA * Math.sin(u * Math.PI)
-    ctx.fillRect(cx - len * 0.5, surfaceY + LAKE_RIPPLE_DROP_PX + u * LAKE_RIPPLE_DROP_STEP_PX * LAKE_RIPPLE_COUNT, len, LAKE_RIPPLE_PX)
-  }
-  ctx.globalAlpha = 1
-}
-//
-// Animated lake surface height at normalized shore span (0 = left).
-//
-function lakeWaveOffsetAt(t, time) {
-  const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
-  const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
-  return wavePrimary + waveSecondary
-}
-function lakeSurfaceInnerWaveOffsetAt(t, time) {
-  const wavePrimary = Math.sin(time * LAKE_SURFACE_INNER_WAVE_FREQ + t * LAKE_SURFACE_INNER_WAVE_PHASE_SCALE) * LAKE_SURFACE_INNER_WAVE_AMP
-  const waveSecondary = Math.sin(time * LAKE_SURFACE_INNER_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 1.85 + 0.9) * LAKE_SURFACE_INNER_SECOND_AMP
-  return wavePrimary + waveSecondary
-}
-//
 // Lake surface world Y at hero X (same wave as the baked lake animation).
 //
 function lakeSurfaceWorldYAt(inst, worldX) {
@@ -6798,8 +5015,8 @@ function lakeSurfaceWorldYAt(inst, worldX) {
     return WATER_SURFACE_Y
   }
   const t = (worldX - x1) / (x2Core - x1)
-  const time = inst.k.time() % LAKE_BAKE_CYCLE
-  return WATER_SURFACE_Y + lakeWaveOffsetAt(t, time)
+  const time = inst.k.time() % Lake.LAKE_BAKE_CYCLE
+  return WATER_SURFACE_Y + Lake.lakeWaveOffsetAt(t, time)
 }
 //
 // Full hero blit while the default sprite stays hidden in the pit (high-z draw pass).
@@ -6892,7 +5109,7 @@ function drawForestDrownHeroUnderwater(inst) {
   const fullH = Hero.HERO_BAKE_SPRITE_SIZE * (char.scale?.x ?? 1)
   const topY = char.pos.y - fullH * 0.5
   const surfaceY = Math.max(topY, lakeSurfaceWorldYAt(inst, char.pos.x))
-  const bottomY = Math.min(topY + fullH, lake.originY + lakeBottomLocalY(lake, char.pos.x - lake.x1))
+  const bottomY = Math.min(topY + fullH, lake.originY + Lake.lakeBottomLocalY(lake, char.pos.x - lake.x1))
   const visibleH = bottomY - surfaceY
   if (visibleH <= 0) return
   const quadY = (surfaceY - topY) / fullH

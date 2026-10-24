@@ -153,6 +153,25 @@ export function getTreePaletteColor() {
  * @returns {Object}
  */
 /**
+ * Blends two RGB triplets and snaps the result to the palette. Identity
+ * white (a "no tint" multiply on a baked sprite) stays unsnapped.
+ * @param {{r: number, g: number, b: number}} a - From
+ * @param {{r: number, g: number, b: number}} b - To
+ * @param {number} t - 0..1
+ * @returns {{r: number, g: number, b: number}}
+ */
+export function lerpForestRgb(a, b, t) {
+  const u = Math.max(0, Math.min(1, t))
+  const mixed = {
+    r: Math.round(a.r + (b.r - a.r) * u),
+    g: Math.round(a.g + (b.g - a.g) * u),
+    b: Math.round(a.b + (b.b - a.b) * u)
+  }
+  if (isIdentityWhite(a) || isIdentityWhite(b)) return mixed
+  return snapToPalette(mixed)
+}
+
+/**
  * Groove / highlight tones for gameplay-tree bark (main, shore, lip-trees).
  * @returns {{ dark: { r: number, g: number, b: number }, highlight: { r: number, g: number, b: number } }}
  */
@@ -397,4 +416,7 @@ function blendRgb(a, b, t) {
     g: Math.round(a.g + (b.g - a.g) * t),
     b: Math.round(a.b + (b.b - a.b) * t)
   }
+}
+function isIdentityWhite(c) {
+  return c.r === 255 && c.g === 255 && c.b === 255
 }

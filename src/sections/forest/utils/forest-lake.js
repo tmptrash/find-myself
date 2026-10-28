@@ -282,15 +282,25 @@ export function drawAlgae(k, lake, opacity = 1) {
 }
 
 /**
+ * Sprite name of the water frame showing now in the baked wave cycle.
+ * @param {Object} k - Kaplay inst
+ * @param {Object} lake - Lake inst
+ * @returns {string}
+ */
+export function fillFrameSprite(k, lake) {
+  const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
+  return lake.waterSpritePrefix + frame
+}
+
+/**
  * Draws the current water frame of the baked wave cycle.
  * @param {Object} k - Kaplay inst
  * @param {Object} lake - Lake inst
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawFill(k, lake, opacity = 1) {
-  const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
   k.drawSprite({
-    sprite: lake.waterSpritePrefix + frame,
+    sprite: fillFrameSprite(k, lake),
     pos: k.vec2(lake.x1, lake.originY),
     width: lake.canvasW,
     height: lake.canvasH,

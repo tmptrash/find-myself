@@ -138,7 +138,8 @@ export const CFG = {
     jumpForce: 640,
     gravity: 2000,
     platformName: "platform",
-    noCeilingTag: "noJumpCeiling" // Ground-only platforms that never block a jump from below or beside
+    noCeilingTag: "noJumpCeiling", // Ground-only platforms that never block a jump from below or beside
+    caveDarkness: false   // Cave darkness + lantern mushroom light; off for now (the cave is always lit)
   },
   controls: {
     moveLeft: ['left', 'a', 'KeyA'],       // Move left (KeyA = physical key for any layout)
@@ -801,6 +802,96 @@ export const CFG = {
           backdrop: PALETTE.gray0
         },
         //
+        // Cave section — cool blue-teal stone base, brown roots as the earth
+        // band, fluorescent cyan as the one light colour (mushrooms) and rare
+        // gold for fireflies.
+        //
+        cave: {
+          darkness: PALETTE.gray0,
+          frame: PALETTE.gray0,
+          backWall: [PALETTE.gray0, PALETTE.teal0, PALETTE.cyan0, PALETTE.blue0],
+          backWallStreak: [PALETTE.gray0, PALETTE.cyan1],
+          backEarth: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.brown1],
+          backMoss: [PALETTE.green0, PALETTE.teal1, PALETTE.green1],
+          backVine: [PALETTE.gray0, PALETTE.teal0, PALETTE.cyan1],
+          backVineDark: [PALETTE.gray0, PALETTE.gray0, PALETTE.gray0],
+          backHaze: { far: PALETTE.cyan0, mid: PALETTE.teal0, near: PALETTE.gray0 },
+          backRock: [PALETTE.gray0, PALETTE.gray1, PALETTE.gray1, PALETTE.slate1],
+          plantMoss: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4],
+          plantLichen: PALETTE.gold2,
+          plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.orange0, PALETTE.gold1],
+          plantIvy: [PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
+          eyeGlint: PALETTE.gray7,
+          plantStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5],
+          plantRosette: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.teal2],
+          plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.red4],
+          leaf: [PALETTE.gray0, PALETTE.green0, PALETTE.green3, PALETTE.green5, PALETTE.gold5],
+          leafMoss: [PALETTE.gray0, PALETTE.green1, PALETTE.green2],
+          leaf3d: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.green5, PALETTE.gold5],
+          trapLeaf3d: [PALETTE.gray0, PALETTE.rose0, PALETTE.red0, PALETTE.red1, PALETTE.red3, PALETTE.red4, PALETTE.gold5],
+          trapLeaf: [PALETTE.gray0, PALETTE.rose0, PALETTE.red0, PALETTE.red2, PALETTE.red4],
+          trapTooth: [PALETTE.gray0, PALETTE.gray6, PALETTE.gray7],
+          leafSlime: PALETTE.green3,
+          spore: {
+            cap: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate2, PALETTE.slate3],
+            hole: PALETTE.gold1,
+            holeGlow: PALETTE.gold4,
+            gill: PALETTE.gold3,
+            tendril: PALETTE.gold1,
+            bead: PALETTE.gold4,
+            spark: PALETTE.gold5,
+            stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3]
+          },
+          bubble: {
+            rim: PALETTE.cyan5,
+            fill: PALETTE.cyan4,
+            glint: PALETTE.gray7,
+            core: PALETTE.gold5,
+            stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3, PALETTE.sand5]
+          },
+          airPlant: {
+            body: [PALETTE.gray0, PALETTE.teal1, PALETTE.teal2, PALETTE.teal3, PALETTE.teal4],
+            spot: PALETTE.teal5,
+            mouth: PALETTE.rose0,
+            tooth: PALETTE.gray6,
+            air: PALETTE.gray7
+          },
+          backNear: [PALETTE.gray0, PALETTE.gray0, PALETTE.cyan0, PALETTE.teal0],
+          backPlant: [PALETTE.gray0, PALETTE.cyan0, PALETTE.teal1],
+          shaft: PALETTE.gold3,
+          wallEye: {
+            contour: PALETTE.gray0,
+            vein: PALETTE.rose0,
+            knot: PALETTE.rose0
+          },
+          backBoulder: [PALETTE.gray0, PALETTE.mauve0, PALETTE.mauve1, PALETTE.mauve2],
+          backGlow: PALETTE.cyan3,
+          glowCore: PALETTE.gray7,
+          rock: [PALETTE.gray0, PALETTE.gray1, PALETTE.slate1, PALETTE.slate2],
+          rockRim: PALETTE.slate3,
+          contour: PALETTE.gray0,
+          moss: [PALETTE.teal1, PALETTE.teal2, PALETTE.cyan3],
+          root: PALETTE.rose0,
+          rootLit: PALETTE.brown1,
+          plant: [PALETTE.gray0, PALETTE.teal0, PALETTE.cyan1],
+          spike: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate3],
+          glow: PALETTE.cyan4,
+          glowBright: PALETTE.cyan5,
+          glowHalo: PALETTE.cyan3,
+          glowTint: PALETTE.cyan2,
+          mushroomStem: PALETTE.gold5,
+          mushroomStemShade: PALETTE.teal5,
+          mushroomCap: PALETTE.cyan3,
+          mushroomGill: PALETTE.cyan2,
+          water: PALETTE.cyan0,
+          waterDeep: PALETTE.slate0,
+          waterLine: PALETTE.blue3,
+          waterGlint: PALETTE.cyan5,
+          firefly: PALETTE.gold4,
+          fireflyCore: PALETTE.gold5,
+          heroSpark: [PALETTE.cyan5, PALETTE.gold5, PALETTE.cyan4]
+        },
+        //
         // Cool air target when parallax trees soften into the sky (not gold).
         //
         warmHaze: PALETTE.teal2,
@@ -1025,12 +1116,14 @@ export const CFG = {
       // snap over a quick falling blip.
       //
       menuClick: {
-        volume: MASTER_VOLUME * 0.5,
-        duration: 0.035,
-        noiseHighpass: 2400,
-        blipFreqStart: 1900,
-        blipFreqEnd: 900,
-        blipVolume: MASTER_VOLUME * 0.25
+        volume: MASTER_VOLUME * 0.035,  // Faint breath of noise under the tap
+        duration: 0.09,
+        attack: 0.008,                  // Soft onset — no click at the start
+        noiseHighpass: 700,
+        lowpass: 900,                   // Rounds the tap off (no ring)
+        blipFreqStart: 340,
+        blipFreqEnd: 210,
+        blipVolume: MASTER_VOLUME * 0.2
       },
       jump: MASTER_VOLUME * 0.62,
       land: MASTER_VOLUME * 0.613,

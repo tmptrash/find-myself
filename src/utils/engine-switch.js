@@ -5,14 +5,14 @@ import { runEngineTeardown } from './engine-teardown.js'
 //
 // Scene name prefixes that run on the native-resolution engine. `ready` and
 // `menu` join Forest and touch lesson 0 here so the hub flow (ready → menu →
-// forest) never needs an engine swap — their background/layout code recomputes
+// forest → cave) never needs an engine swap — their background/layout code recomputes
 // itself from the live k.width()/k.height() instead of assuming a fixed
 // 1920x1080 canvas (see menu-bg-generator.js's recomputeMenuBgLayout and each
 // scene's own recomputeLayout()). Every remaining lesson (word/touch 1+/time,
 // forest-complete) still runs on the fixed 1920x1080 engine. `lesson-touch.0`
 // is exact-prefix so lesson-touch.1+ stay on the letterboxed canvas.
 //
-const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-forest', 'lesson-touch.0', 'ready', 'menu']
+const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-forest', 'lesson-cave', 'lesson-touch.0', 'ready', 'menu']
 //
 // Avoid flashing the DOM loader on fast engine swaps (e.g. right after the
 // yellow pre-Forest subtitle when boot finishes within this window).

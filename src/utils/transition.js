@@ -28,7 +28,9 @@ const LEVEL_TRANSITIONS = {
   'menu-time': 'lesson-time.0',
   'menu-touch': 'lesson-touch.0',
   'menu-forest': 'lesson-forest.0',
-  'lesson-forest.0': 'forest-complete',
+  'menu-cave': 'lesson-cave.0',
+  'lesson-forest.0': 'lesson-cave.0',
+  'lesson-cave.0': 'lesson-touch.0',
   'forest-complete': 'lesson-touch.0',
   'lesson-word.0': 'lesson-word.1',
   'lesson-word.1': 'lesson-word.2',
@@ -55,7 +57,9 @@ const LEVEL_SUBTITLES = {
   'menu-time': '',
   'menu-touch': '',
   'menu-forest': '',
+  'menu-cave': '',
   'lesson-forest.0': '',
+  'lesson-cave.0': '',
   'forest-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
@@ -265,7 +269,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isFromMenuTime = currentLevel === 'menu-time'
   const isFromMenuTouch = currentLevel === 'menu-touch'
   const isFromMenuForest = currentLevel === 'menu-forest'
-  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuForest
+  const isFromMenuCave = currentLevel === 'menu-cave'
+  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuForest || isFromMenuCave
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
   const isForestPrelevel = needsEarlyAssetLoad && nextLevel === FOREST_PRELEVEL_SCENE

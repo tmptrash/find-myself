@@ -1061,8 +1061,8 @@ const FOREST_EYE_FLOWER_HERO_CENTER_DY = 12
 //
 // Eye-flower grab ends the level: hand-off into the touch section.
 //
-const FLOWER_GRAB_TRANSITION_FROM = 'forest-complete'
-const FLOWER_GRAB_NEXT_LESSON = 'lesson-touch.0'
+const FLOWER_GRAB_TRANSITION_FROM = 'lesson-forest.0'
+const FLOWER_GRAB_NEXT_LESSON = 'lesson-cave.0'
 const KEY_FOREST_COMPLETED = 'forest.completed'
 const KEY_LAST_LESSON = 'lastLesson'
 //
@@ -6578,7 +6578,7 @@ function updateForestFlowerGrabFrame(inst) {
   drop > 0 && k.camPos(k.camPos().x, k.camPos().y + drop)
 }
 //
-// The swallowed hero ends the forest section: straight on to touch lesson 0.
+// The swallowed hero ends the forest section: he drops into the cave below.
 //
 function finishForestFlowerGrab(k) {
   set(KEY_FOREST_COMPLETED, true)

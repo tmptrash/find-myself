@@ -4,7 +4,7 @@ import { getRGB, bindBackToMenuKeys, bindStartGameKeys } from "../utils/helper.j
 import * as Hero from "../components/hero.js"
 import { showTransitionToLevel } from "../utils/transition.js"
 import { goAfterPreparingAssets } from "../utils/lesson-assets.js"
-import { getProgress, get, set, normalizeSceneName, resetProgress } from "../utils/progress.js"
+import { getProgress, get, set, normalizeSceneName } from "../utils/progress.js"
 import * as Cursor from "../utils/cursor.js"
 import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
@@ -22,13 +22,14 @@ import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import * as Grass from '../components/grass.js'
 import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
+import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
 //
 // Level list: a vertical column of levels, the hero standing left of it as
-// the cursor. A level the player can enter shows its picture (only the
-// forest has one so far: the trampoline mushroom) and, while selected, its
+// the cursor. A level the player can enter shows its picture (the forest's
+// trampoline mushroom, the cave's glowing mushroom) and, while selected, its
 // description to the right; every other level is a "?" crossed by the red
 // prohibition sign, with no description. Each level owns a backdrop that
 // cross-fades in while it is selected.
@@ -36,20 +37,47 @@ import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/for
 const BACKDROP_FOREST = 'forest'
 const BACKDROP_NIGHT = 'night'
 const LEVEL_ICON_MUSHROOM = 'mushroom'
+const LEVEL_ICON_GLOW_MUSHROOM = 'glowMushroom'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
 const FOREST_FIRST_LESSON = 'lesson-forest.0'
+const CAVE_LESSON_PREFIX = 'lesson-cave.'
+const CAVE_FIRST_LESSON = 'lesson-cave.0'
+//
+// Cave icon: one of the level's always-lit mushrooms, standing on the row.
+//
+const MENU_GLOW_MUSHROOM_SCALE = 0.8
+const MENU_GLOW_MUSHROOM_SEED = 23
 const FOREST_DESCRIPTION = [
   'A gray forest that has forgotten its',
   'colours. Look closely: the forest looks',
   'back, and it wakes only for those who',
   'learn to see.'
 ].join('\n')
+const CAVE_DESCRIPTION = [
+  'Below the roots the darkness begins. A',
+  'sleeping mushroom remembers the light:',
+  'wake it, learn the way while it glows,',
+  'and step into the deep before it fades.'
+].join('\n')
 const LEVELS = [
-  { section: 'forest', icon: LEVEL_ICON_MUSHROOM, description: FOREST_DESCRIPTION, backdrop: BACKDROP_FOREST },
+  {
+    section: 'forest',
+    icon: LEVEL_ICON_MUSHROOM,
+    description: FOREST_DESCRIPTION,
+    backdrop: BACKDROP_FOREST,
+    lessonPrefix: FOREST_LESSON_PREFIX,
+    firstLesson: FOREST_FIRST_LESSON
+  },
+  {
+    section: 'cave',
+    icon: LEVEL_ICON_GLOW_MUSHROOM,
+    description: CAVE_DESCRIPTION,
+    backdrop: BACKDROP_NIGHT,
+    lessonPrefix: CAVE_LESSON_PREFIX,
+    firstLesson: CAVE_FIRST_LESSON
+  },
   { section: 'touch', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'time', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'feel', icon: null, description: null, backdrop: BACKDROP_NIGHT }
+  { section: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT }
 ]
 //
 // Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
@@ -61,7 +89,13 @@ const MENU_COLUMN_X_FRAC = 0.2
 const MENU_COLUMN_Y_FRAC = 0.42
 const MENU_ITEM_STEP = 112
 const MENU_HERO_GAP = 118
-const MENU_DESCRIPTION_GAP = 66
+const MENU_DESCRIPTION_GAP = 101
+//
+// The baked description keeps extra room under its last line for the drop
+// shadow, so its ink sits above the sprite centre; this pulls it back onto
+// the row centre (icons are centred on their visible art).
+//
+const MENU_DESCRIPTION_INK_SHIFT = 4
 const MENU_HINT_BOTTOM = 26
 //
 // Mouse hover band of one row: from the hero's spot into the description.
@@ -165,7 +199,7 @@ const MENU_HINT_OPACITY = 0.8
 const MENU_HINT_ITEMS = [
   { key: '↑ ↓', label: 'choose' },
   { key: 'space', label: 'play' },
-  { key: 'enter', label: 'new game' },
+  { key: 'enter', label: 'restart' },
   { key: 'esc', label: 'back' }
 ]
 const MENU_HINT_KEY_GAP = ' '
@@ -175,14 +209,14 @@ const MENU_HINT_PAD = 4
 const MENU_HINT_SHADOW_OFFSET = 1.5
 const MENU_HINT_GRAIN_SEED = 4411
 //
-// "New game" confirm dialog (Enter): Yes wipes the save and starts the
-// forest from its first lesson.
+// Restart confirm dialog (Enter on a playable level): Yes clears that
+// level's saved state and starts it from its first lesson.
 //
-const MENU_NEW_GAME_QUESTION = 'Are you sure you want to start\nthe game from the beginning?'
-const MENU_NEW_GAME_YES = 'Yes'
-const MENU_NEW_GAME_NO = 'No'
+const MENU_RESTART_QUESTION = 'Are you sure you want to start\nthis level from the beginning?'
+const MENU_RESTART_YES = 'Yes'
+const MENU_RESTART_NO = 'No'
 const MENU_DIALOG_Z = CFG.visual.zIndex.ui + 10
-const MENU_KEY_NEW_GAME = 'enter'
+const MENU_KEY_RESTART = 'enter'
 const MENU_KEY_BACK = 'escape'
 //
 // Space / Enter / Esc are heard twice per press (window keydown before the
@@ -325,10 +359,11 @@ export function sceneMenu(k) {
     k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
     inst.dialog = ConfirmDialog.create({
       k,
-      question: MENU_NEW_GAME_QUESTION,
-      yesLabel: MENU_NEW_GAME_YES,
-      noLabel: MENU_NEW_GAME_NO,
-      onYes: () => startNewGame(inst),
+      question: MENU_RESTART_QUESTION,
+      yesLabel: MENU_RESTART_YES,
+      noLabel: MENU_RESTART_NO,
+      onYes: () => restartLevel(inst),
+      defaultYes: true,
       onSelect: () => Sound.playMenuClickSound(sound),
       z: MENU_DIALOG_Z
     })
@@ -394,7 +429,8 @@ function computeMenuLayout(k) {
   }
 }
 //
-// The forest icon is the level's trampoline mushroom; it watches the hero.
+// The forest icon is the level's trampoline mushroom; it watches the hero
+// and blinks on its own (no size pulse on selection).
 //
 function createMenuMushrooms(inst) {
   const { k } = inst
@@ -404,17 +440,21 @@ function createMenuMushrooms(inst) {
       k,
       z: MENU_ICON_Z,
       getPose: () => {
-        pose.scale = level.selectScale * inst.layout.s
+        pose.scale = inst.layout.s
         return pose
       },
       getLookAt: () => inst.heroInst.character.pos,
       isVisible: () => !inst.isLeavingScene
     })
   })
+  inst.glowMushrooms = inst.levels.filter(level => level.icon === LEVEL_ICON_GLOW_MUSHROOM).map(level => ({
+    level,
+    mushroom: GlowMushroom.create({ k, x: inst.layout.columnX, y: level.y, seed: MENU_GLOW_MUSHROOM_SEED, moss: false })
+  }))
 }
 //
 // Keyboard and mouse bindings. Menu: up/down (w/s) choose, Space enters the
-// selected level, Enter asks to start a new game, Esc goes back; hover
+// selected level, Enter asks to restart it, Esc goes back; hover
 // selects a row, a click enters it. While the dialog is open every key and
 // click goes to it instead.
 //
@@ -435,8 +475,8 @@ function bindMenuInput(inst) {
   inst.backCancel = bindBackToMenuKeys(k, () => onBackKey(inst))
 }
 //
-// Space plays the selected level, Enter opens the new-game question; with
-// the dialog open both confirm its highlighted button.
+// Space plays the selected level, Enter asks to restart it (playable
+// levels only); with the dialog open both confirm its highlighted button.
 //
 function onStartKey(inst, key) {
   if (inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
@@ -445,9 +485,12 @@ function onStartKey(inst, key) {
     ConfirmDialog.confirm(inst.dialog)
     return
   }
-  key === MENU_KEY_NEW_GAME
-    ? ConfirmDialog.open(inst.dialog)
-    : enterLevel(inst, inst.levels[inst.selected])
+  const level = inst.levels[inst.selected]
+  if (key !== MENU_KEY_RESTART) {
+    enterLevel(inst, level)
+    return
+  }
+  level.playable && ConfirmDialog.open(inst.dialog)
 }
 //
 // Steps the selection with wrap-around (last → first and back); with the
@@ -493,13 +536,13 @@ function onBackKey(inst) {
   goAfterPreparingAssets(inst.k, "ready")
 }
 //
-// Enters a playable level: the forest continues the saved forest lesson or
+// Enters a playable level: it continues the saved lesson of that level or
 // starts from its first one; locked levels ignore the press.
 //
 function enterLevel(inst, level) {
   if (!level.playable || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
   const saved = get('lastLesson', null)
-  const lesson = saved?.startsWith(FOREST_LESSON_PREFIX) ? saved : FOREST_FIRST_LESSON
+  const lesson = saved?.startsWith(level.lessonPrefix) ? saved : level.firstLesson
   beginMenuSceneLeave(inst)
   stopMenuMusic(inst.music)
   showTransitionToLevel(inst.k, lesson)
@@ -515,15 +558,17 @@ function isRepeatedKeyPress(inst, key) {
   return repeated
 }
 //
-// "Yes" in the new-game dialog: the save is wiped and the forest starts from
-// its first lesson.
+// "Yes" in the restart dialog: the selected level's saved state is cleared
+// (its completed mark stays) and it starts from its first lesson.
 //
-function startNewGame(inst) {
-  if (inst.isLeavingScene) return
-  resetProgress()
+function restartLevel(inst) {
+  const level = inst.levels[inst.selected]
+  if (inst.isLeavingScene || !level.playable) return
+  set(level.section, { completed: level.completed })
+  set('lastLesson', level.firstLesson)
   beginMenuSceneLeave(inst)
   stopMenuMusic(inst.music)
-  showTransitionToLevel(inst.k, FOREST_FIRST_LESSON)
+  showTransitionToLevel(inst.k, level.firstLesson)
 }
 //
 // Row under the mouse: within half a row step of its centre, inside the band
@@ -549,6 +594,7 @@ function onUpdate(inst) {
   //
   const hero = inst.heroInst.character
   hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
+  inst.glowMushrooms.forEach(item => GlowMushroom.onUpdate(item.mushroom, null))
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   Object.keys(inst.bgOpacity).forEach(key => {
@@ -664,12 +710,14 @@ function drawForestPieces(k, pieces, opacity) {
   }))
 }
 //
-// "?" glyphs first (one sprite pass), then the prohibition rings and slashes
-// (one primitive pass) — the mushroom icon draws itself.
+// Glowing cave mushrooms (body, then the additive halo), "?" glyphs (one
+// sprite pass), then the prohibition rings and slashes (one primitive pass)
+// — the forest mushroom icon draws itself.
 //
 function drawLevelIcons(inst) {
   if (inst.isLeavingScene) return
   const { k, layout } = inst
+  inst.glowMushrooms.forEach(item => drawGlowMushroomIcon(inst, item))
   const locked = inst.levels.filter(level => !level.icon)
   locked.forEach(level => k.drawSprite({
     sprite: questionMarkSpriteName(layout.s),
@@ -679,6 +727,18 @@ function drawLevelIcons(inst) {
   }))
   const color = getRGB(k, PROHIBITED_COLOR)
   locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s * level.selectScale, color))
+}
+//
+// Cave icon: its visible art (cap top to ground) centred on the row; it
+// lives like in the level (now and then it squats).
+//
+function drawGlowMushroomIcon(inst, item) {
+  const { layout } = inst
+  const { level, mushroom } = item
+  const scale = MENU_GLOW_MUSHROOM_SCALE * layout.s
+  GlowMushroom.setPose(mushroom, layout.columnX, level.y + GlowMushroom.visibleHeight(mushroom, scale) / 2, scale)
+  GlowMushroom.onDraw(mushroom)
+  GlowMushroom.onDrawHalo(mushroom)
 }
 //
 // Red ring with the diagonal slash over a locked level.
@@ -714,7 +774,7 @@ function drawLevelTexts(inst) {
     if (level.textOpacity <= MENU_FADE_EPS || !level.description) return
     k.drawSprite({
       sprite: menuTextSpriteName(`description-${level.section}`, MENU_DESCRIPTION_SIZE, layout.s),
-      pos: k.vec2(layout.descriptionX, level.y),
+      pos: k.vec2(layout.descriptionX, level.y + MENU_DESCRIPTION_INK_SHIFT * layout.s),
       anchor: 'left',
       opacity: level.textOpacity * descriptionBlink(k)
     })
@@ -878,7 +938,7 @@ function loadMenuHintSprite(k, s) {
   k.loadSprite(name, canvas)
 }
 function menuHintSpriteName(s) {
-  return `${MENU_HINT_SPRITE}-v2-${Math.round(MENU_HINT_SIZE * s)}`
+  return `${MENU_HINT_SPRITE}-v3-${Math.round(MENU_HINT_SIZE * s)}`
 }
 function menuTextSpriteName(key, size, s) {
   return `${MENU_TEXT_SPRITE}-v3-${key}-${Math.round(size * s)}`

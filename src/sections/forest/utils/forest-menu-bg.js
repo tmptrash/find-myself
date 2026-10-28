@@ -387,8 +387,9 @@ function hazeRowOverSky(canvas, strength, skyH) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const data = image.data
+  const stops = skyGradientStops()
   for (let y = 0; y < canvas.height; y++) {
-    const sky = forestSkyBandRgb(Math.min(1, y / skyH))
+    const sky = skyGradientRgb(stops, Math.min(1, y / skyH))
     for (let x = 0; x < canvas.width; x++) {
       const i = (y * canvas.width + x) * RGBA_STRIDE
       if (data[i + 3] === 0) continue
@@ -406,14 +407,28 @@ function paintSkyCanvas(width, height) {
   const canvas = newCanvas(width, height)
   const ctx = canvas.getContext('2d')
   const gradient = ctx.createLinearGradient(0, 0, 0, height)
-  for (let i = 0; i < SKY_STOP_COUNT; i++) {
-    const t = i / (SKY_STOP_COUNT - 1)
-    const c = forestSkyBandRgb(t)
-    gradient.addColorStop(t, `rgb(${c.r}, ${c.g}, ${c.b})`)
-  }
+  skyGradientStops().forEach((c, i) => gradient.addColorStop(i / (SKY_STOP_COUNT - 1), `rgb(${c.r}, ${c.g}, ${c.b})`))
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, width, height)
   return canvas
+}
+//
+// Palette-snapped sky stops, top to bottom.
+//
+function skyGradientStops() {
+  return Array.from({ length: SKY_STOP_COUNT }, (_, i) => forestSkyBandRgb(i / (SKY_STOP_COUNT - 1)))
+}
+//
+// Sky colour at height fraction t, interpolated between the stops exactly
+// like the sky canvas gradient (no per-row palette snap, so no steps).
+//
+function skyGradientRgb(stops, t) {
+  const pos = t * (stops.length - 1)
+  const i = Math.min(stops.length - 2, Math.floor(pos))
+  const f = pos - i
+  const a = stops[i]
+  const b = stops[i + 1]
+  return { r: a.r + (b.r - a.r) * f, g: a.g + (b.g - a.g) * f, b: a.b + (b.b - a.b) * f }
 }
 //
 // One full-width parallax row: evenly spread trees in the parallax palette,

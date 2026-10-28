@@ -11,6 +11,7 @@ import { sceneLesson4 } from "../sections/word/scenes/lesson4.js"
 import { sceneWordComplete } from "../sections/word/scenes/word-complete.js"
 import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
 import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
+import { sceneCaveLevel0 } from "../sections/cave/scenes/level0.js"
 import { sceneLesson0 as sceneTouchLevel0 } from "../sections/touch/scenes/lesson0.js"
 import { sceneLesson1 as sceneTouchLevel1 } from "../sections/touch/scenes/lesson1.js"
 import { sceneLesson2 as sceneTouchLevel2 } from "../sections/touch/scenes/lesson2.js"
@@ -435,6 +436,7 @@ function buildSetupTasks(k) {
     () => sceneWordComplete(k),
     () => sceneForestLevel0(k),
     () => sceneForestComplete(k),
+    () => sceneCaveLevel0(k),
     () => sceneTouchLevel0(k),
     () => sceneTouchLevel1(k),
     () => sceneTouchLevel2(k),

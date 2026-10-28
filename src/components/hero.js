@@ -439,6 +439,7 @@ const CONTOUR_AA_EYE_MARGIN_PX = 1.5
  * @param {boolean} [config.runDuringFlicker=false] - Keep run cycle through brief ungrounded flicker
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @param {boolean} [config.suppressDust=false] - Disable landing and run-start dust
+ * @param {boolean} [config.suppressFootprints=false] - Leave no footprints while running
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
  * @param {boolean} [config.isStatic=false] - If true, no physics/gravity is applied
  * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
@@ -465,6 +466,7 @@ export function create(config) {
     outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
     suppressDust = false,  // Disable landing and run-start dust for this hero
+    suppressFootprints = false, // Leave no footprints while running
     isStatic = false,      // If true, no physics (for indicators / decorative heroes)
     fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
@@ -668,6 +670,7 @@ export function create(config) {
     spritePrefix,
     dustColor,
     suppressDust,
+    suppressFootprints,
     speed: CFG.game.moveSpeed,
     jumpForce: config.jumpForce ?? CFG.game.jumpForce,
     direction: 1,

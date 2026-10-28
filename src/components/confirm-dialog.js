@@ -208,6 +208,7 @@ const DEG = Math.PI / 180
  * @param {Function} cfg.onYes - Called once "Yes" has played its break
  * @param {Function} [cfg.onSelect] - Called when the highlighted tag changes
  * @param {number} cfg.z - Draw layer
+ * @param {boolean} [cfg.defaultYes=false] - Highlight "Yes" when the dialog opens
  * @returns {Object} Dialog inst
  */
 export function create(cfg) {
@@ -221,6 +222,7 @@ export function create(cfg) {
     onYes: cfg.onYes,
     onSelect: cfg.onSelect,
     phase: PHASE_CLOSED,
+    defaultChoice: cfg.defaultYes ? CHOICE_YES : CHOICE_NO,
     selected: CHOICE_NO,
     closeHovered: false,
     lastMouse: null,
@@ -249,7 +251,7 @@ export function create(cfg) {
 export function open(inst) {
   if (inst.phase !== PHASE_CLOSED) return
   inst.phase = PHASE_OPEN
-  inst.selected = CHOICE_NO
+  inst.selected = inst.defaultChoice
   inst.closeHovered = false
   inst.y = -inst.sprites.boardH - DROP_EXTRA * inst.s
   inst.vy = 0

@@ -13,7 +13,7 @@ import * as Mouth from './leaf-mouth.js'
 // staying shut (a low bud, a safe step) for a while before it swells,
 // opens again and lets the spores go.
 //
-const SPRITE_PREFIX = 'cave0-leaf-v9'
+const SPRITE_PREFIX = 'cave0-leaf-v10'
 const GRAIN_SEED_BASE = 9900
 const GRAIN_HANG_SEED = 50
 const BAKE_PAD = 6
@@ -21,6 +21,10 @@ const BAKE_PAD = 6
 // Side room in the bake for the rim's lobes reaching past the leaf ends.
 //
 const SIDE_ROOM = 0.16
+//
+// The near rim sprite reaches this far above the rim line (the lit lip).
+//
+const RIM_BAND = 8
 //
 // Leaf in depth (the reference's fleshy pads): a flat top the hero walks
 // on, a slightly raised near lip, the very ends hanging down, and the rim
@@ -155,6 +159,7 @@ const LEAF_LOBE_LEN_MIN = 4
 const LEAF_LOBE_LEN_MAX = 18
 const LEAF_LOBE_W_MIN = 5
 const LEAF_LOBE_W_RANGE = 6
+const LOBE_TOP_STEPS = 6
 const LEAF_DROP_CHANCE = 0.3
 const LEAF_DROP_R = 2
 const LEAF_DROP_ALPHA = 0.9
@@ -164,7 +169,11 @@ const STRAND_LEN_RANGE = 90
 const STRAND_SHORT_POW = 1.8
 const STRAND_EDGE_FROM = 0.06
 const STRAND_EDGE_SPAN = 0.88
-const STRAND_SINK = 3
+//
+// Strands hang from the leaf's rim (the dark line between the lit lip and
+// the underside), pinned this far below it so their top bud sits on it.
+//
+const STRAND_PIN = 1
 const SWAY_EVERY = 55
 //
 // Room above the pad inside the bake.
@@ -182,7 +191,7 @@ const HERO_HOLD = 2
 const SPORE_HOLD = 3
 const ANTICIPATE_SHARE = 0.35
 const SWELL = 0.08
-const MOUTH_R_SHARE = 0.22
+const MOUTH_R_SHARE = 0.3
 const MOUTH_LIFT = 3
 const ALERT_PAD_X = 60
 const ALERT_ABOVE = 260
@@ -287,31 +296,29 @@ export function strandAnchors(inst) {
 }
 
 /**
- * Draws what lies behind the hero: everything hanging under the leaves and
- * the far half of every leaf.
+ * Draws what lies behind the hero: the far half of every leaf.
  * @param {Object} inst - Plant instance
  */
 export function onDrawBack(inst) {
   const k = inst.k
-  inst.leaves.forEach(leaf => {
-    const sp = leaf.sprites
-    const pos = k.vec2(leaf.x1 - sp.padX, leaf.y - sp.lineY)
-    k.drawSprite({ sprite: sp.hang, pos })
-    k.drawSprite({ sprite: sp.back, pos })
-  })
+  inst.leaves.forEach(leaf => k.drawSprite({ sprite: leaf.sprites.back, pos: k.vec2(leaf.x1 - leaf.sprites.padX, leaf.y - leaf.sprites.lineY) }))
 }
 
 /**
- * Draws what lies in front of the hero: the near half of every leaf (its
- * raised lip and underside), then the trap mouths.
+ * Draws what lies in front of the hero, back to front: the near part of the
+ * leaf's top face, the trap mouth on it, the near rim (raised lobes, lit
+ * lip, underside) in front of the mouth, then everything hanging from it.
  * @param {Object} inst - Plant instance
  */
 export function onDrawFront(inst) {
   const k = inst.k
   inst.leaves.forEach(leaf => {
     const sp = leaf.sprites
-    k.drawSprite({ sprite: sp.front, pos: k.vec2(leaf.x1 - sp.padX, leaf.y - sp.lineY) })
+    const pos = k.vec2(leaf.x1 - sp.padX, leaf.y - sp.lineY)
+    k.drawSprite({ sprite: sp.face, pos })
     leaf.mouth && Mouth.onDraw(leaf.mouth)
+    k.drawSprite({ sprite: sp.rim, pos })
+    k.drawSprite({ sprite: sp.hang, pos })
   })
 }
 //
@@ -398,6 +405,8 @@ function bakeLeaves(k) {
     const body = bakeCanvas(w, h, ctx => paintPad(ctx, geo, tones, rng))
     applyForestFilmGrainToCanvas(body.canvas, seed)
     const front = frontMask(geo, w, h)
+    const near = maskedCopy(body.canvas, front, 'destination-in')
+    const rim = rimMask(geo, w, h)
     const name = `${SPRITE_PREFIX}-${def.id}`
     out[def.id] = {
       w,
@@ -406,7 +415,8 @@ function bakeLeaves(k) {
       padX,
       hang: loadCanvas(k, `${name}-hang`, hang.canvas),
       back: loadCanvas(k, `${name}-back`, maskedCopy(body.canvas, front, 'destination-out')),
-      front: loadCanvas(k, `${name}-front`, maskedCopy(body.canvas, front, 'destination-in')),
+      face: loadCanvas(k, `${name}-face`, maskedCopy(near, rim, 'destination-out')),
+      rim: loadCanvas(k, `${name}-rim`, maskedCopy(near, rim, 'destination-in')),
       tips: hang.result.tips,
       anchors: hang.result.anchors
     }
@@ -435,6 +445,19 @@ function frontMask(geo, w, h) {
   path.lineTo(w, geo.cy)
   path.lineTo(w, h)
   path.lineTo(0, h)
+  path.closePath()
+  return path
+}
+//
+// The near rim and everything under it: below the rim line raised by the
+// lit lip's width, so the lip goes with the rim.
+//
+function rimMask(geo, w, h) {
+  const path = new Path2D()
+  path.moveTo(0, h)
+  geo.front.slice().reverse().forEach(p => path.lineTo(p.x, p.y - RIM_BAND))
+  path.lineTo(w, geo.front[0].y - RIM_BAND)
+  path.lineTo(w, h)
   path.closePath()
   return path
 }
@@ -513,29 +536,29 @@ function underThick(geo, a) {
   return LEAF_THICK * (LEAF_THICK_EDGE + (1 - LEAF_THICK_EDGE) * Math.sin(a)) + Math.sin(a * LEAF_FOLD_F + geo.ph2) * LEAF_FOLD_AMP + bumps(a, geo.folds) / 2 + bumps(a, geo.raises)
 }
 //
-// What hangs under the leaf (behind the hero): short moss strands and
-// slime lobes. Returns drip tips and anchors for the long
-// swaying strands, all on the underside's lower edge.
+// What hangs from the leaf's rim (drawn over its near half): short moss
+// strands and slime lobes. Returns drip tips and the rim anchors for the
+// long swaying strands.
 //
 function paintLeafHang(ctx, geo, tones, rng, len) {
   const tips = []
   for (let i = 0; i < Math.round(len / STRAND_EVERY); i++) {
-    const p = lowerEdgePoint(geo, rng)
-    tips.push(paintMossStrand(ctx, p.x, p.y - STRAND_SINK, STRAND_LEN_MIN + Math.pow(rng(), STRAND_SHORT_POW) * STRAND_LEN_RANGE, rng))
+    const p = rimPoint(geo, rng)
+    tips.push(paintMossStrand(ctx, p.x, p.y + STRAND_PIN, STRAND_LEN_MIN + Math.pow(rng(), STRAND_SHORT_POW) * STRAND_LEN_RANGE, rng))
   }
-  paintLobes(ctx, geo.lower, rng, tones, tips)
+  paintLobes(ctx, geo.front, rng, tones, tips)
   const anchors = []
   for (let i = 0; i < Math.round(len / SWAY_EVERY); i++) {
-    const p = lowerEdgePoint(geo, rng)
-    anchors.push({ x: p.x, y: p.y - STRAND_SINK })
+    const p = rimPoint(geo, rng)
+    anchors.push({ x: p.x, y: p.y + STRAND_PIN })
   }
   return { tips, anchors }
 }
 //
-// Random point on the underside's lower edge, away from the very ends.
+// Random point on the leaf's near rim, away from the very ends.
 //
-function lowerEdgePoint(geo, rng) {
-  return geo.lower[Math.floor(geo.lower.length * (STRAND_EDGE_FROM + rng() * STRAND_EDGE_SPAN))]
+function rimPoint(geo, rng) {
+  return geo.front[Math.floor(geo.front.length * (STRAND_EDGE_FROM + rng() * STRAND_EDGE_SPAN))]
 }
 //
 // One pad: the underside under the raised near lip, then the top face.
@@ -691,32 +714,56 @@ function paintSpeckles(ctx, cx, cy, rx, ry, deep, high, rng) {
   }
 }
 //
-// Fleshy slime lobes hanging from the lower edge; some end in a drop.
+// Fleshy slime lobes hanging from the rim; some end in a drop. A lobe's
+// top follows the rim's curve right under its dark line (so it grows out
+// of the line, whatever its slope); only its sides and bottom get a
+// contour.
 //
-function paintLobes(ctx, lower, rng, tones, tips) {
+function paintLobes(ctx, rim, rng, tones, tips) {
   const [contour, deep, dark, , , , glow] = tones
-  for (let i = 1; i < lower.length - 1; i++) {
+  for (let i = 1; i < rim.length - 1; i++) {
     if (rng() > LEAF_LOBE_CHANCE) continue
-    const p = lower[i]
+    const p = rim[i]
     const len = LEAF_LOBE_LEN_MIN + rng() * (LEAF_LOBE_LEN_MAX - LEAF_LOBE_LEN_MIN)
     const w = LEAF_LOBE_W_MIN + rng() * LEAF_LOBE_W_RANGE
-    ctx.beginPath()
-    ctx.moveTo(p.x - w / 2, p.y - 2)
-    ctx.quadraticCurveTo(p.x - w / 2, p.y + len, p.x, p.y + len)
-    ctx.quadraticCurveTo(p.x + w / 2, p.y + len, p.x + w / 2, p.y - 2)
-    ctx.closePath()
+    const top = []
+    for (let s = 0; s <= LOBE_TOP_STEPS; s++) {
+      const x = p.x - w / 2 + w * s / LOBE_TOP_STEPS
+      top.push({ x, y: rimYAt(rim, x) + LEAF_CONTOUR_W / 2 })
+    }
+    const left = top[0]
+    const right = top[top.length - 1]
+    const tipY = Math.max(left.y, right.y) + len
+    const body = new Path2D()
+    body.moveTo(right.x, right.y)
+    body.quadraticCurveTo(right.x, tipY, p.x, tipY)
+    body.quadraticCurveTo(left.x, tipY, left.x, left.y)
+    const shape = new Path2D()
+    top.forEach((q, k) => (k ? shape.lineTo(q.x, q.y) : shape.moveTo(q.x, q.y)))
+    shape.addPath(body)
     ctx.fillStyle = css(rng() < HALF ? dark : deep)
-    ctx.fill()
+    ctx.fill(shape)
     ctx.strokeStyle = css(contour)
     ctx.lineWidth = 1
-    ctx.stroke()
+    ctx.stroke(body)
     if (rng() > LEAF_DROP_CHANCE) continue
     ctx.fillStyle = css(glow, LEAF_DROP_ALPHA)
     ctx.beginPath()
-    ctx.arc(p.x, p.y + len + LEAF_DROP_R, LEAF_DROP_R, 0, Math.PI * 2)
+    ctx.arc(p.x, tipY + LEAF_DROP_R, LEAF_DROP_R, 0, Math.PI * 2)
     ctx.fill()
-    tips.push({ x: p.x, y: p.y + len + LEAF_DROP_R * 2 })
+    tips.push({ x: p.x, y: tipY + LEAF_DROP_R * 2 })
   }
+}
+//
+// Y of the rim line at an X (interpolated between rim points).
+//
+function rimYAt(rim, x) {
+  for (let i = 1; i < rim.length; i++) {
+    const a = rim[i - 1]
+    const b = rim[i]
+    if ((x - a.x) * (x - b.x) <= 0) return a.y + (b.y - a.y) * ((x - a.x) / ((b.x - a.x) || 1))
+  }
+  return Math.abs(x - rim[0].x) < Math.abs(x - rim[rim.length - 1].x) ? rim[0].y : rim[rim.length - 1].y
 }
 function radial(ctx, x, y, r, hex, alpha) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r)

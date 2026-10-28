@@ -1,6 +1,8 @@
+import * as Lake from '../../forest/utils/forest-lake.js'
+import { paintForestShoreRock } from '../../forest/utils/forest-shore-rock.js'
 import * as Layout from './cave-layout.js'
-import { plantShape, axisAt, PLANT_ROCK } from './cave-plant-shape.js'
-import { CAVE_PAL, css, paintRockMass, paintMossRim, paintMossStrand, paintEdgeFern, sampleEdge } from './cave-paint.js'
+import { plantShape, axisAt, PLANT_FOOT } from './cave-plant-shape.js'
+import { CAVE_PAL, css, paintMossStrand, paintEdgeFern } from './cave-paint.js'
 //
 // Bake of the monster plant's body into the terrain canvas, aiming at the
 // reference: a mossy rock island in the lake, one main woody vine with
@@ -158,7 +160,7 @@ const DEEP_MAX = 9
 const FINE_PER_DEEP = 2
 const BARK_TWIST = 0.03
 //
-// Trunk stems carry oak-like bark instead: a fractal net of fissures laid
+// Trunk stems and thicker vines carry oak-like bark: a fractal net of fissures laid
 // out around the stem (angle) and along it (point index). Long wandering
 // fissures run along the stem (midpoint displacement sideways), fork into
 // thinner, fainter ones again and again, and short cross breaks split the
@@ -173,7 +175,13 @@ const BARK_TWIST = 0.03
 //
 const MAIN_TWIST = 0.004
 const OAK_NET = { px: 4.5, runMin: 14, runRange: 34, runAvg: 24, drift: 0.3, wander: 0.6, subdiv: 4, depth: 3, w: 1 }
-const OAK_FINE_NET = { px: 2.2, runMin: 4, runRange: 9, runAvg: 7, drift: 0.5, wander: 0.8, subdiv: 3, depth: 3, w: 0.42 }
+const OAK_FINE_NET = { px: 2.2, runMin: 4, runRange: 9, runAvg: 7, drift: 0.5, wander: 0.8, subdiv: 3, depth: 3, w: 0.55 }
+//
+// Every vine at least this wide (trunk stems, the branches to the leaves,
+// their brushes, the thicker winding vines) gets the oak bark; thinner
+// ones keep plain grooves.
+//
+const OAK_MIN_VINE_W = 9
 const OAK_FORKS = 2
 const OAK_FORK_FROM = 0.15
 const OAK_FORK_SPAN = 0.7
@@ -188,7 +196,7 @@ const OAK_CROSS_SPAN = 0.15
 const OAK_CROSS_SPAN_RANGE = 0.25
 const OAK_CROSS_SAG = 0.6
 const OAK_CROSS_W = 0.55
-const OAK_W = 2.4
+const OAK_W = 2.8
 const OAK_MIN_W = 0.5
 const OAK_SHADE_W = 1.3
 const OAK_SHADE_ALPHA = 0.3
@@ -329,20 +337,60 @@ const MOSS_SPREAD = 0.45
 const MOSS_R_MIN = 1.4
 const MOSS_R_RANGE = 3
 //
-// Rock island: outline wobble, moss cap; roots spilling over it.
+// The plant is painted on its own layer (world box below), tinted with the
+// lake's water under the surface and clipped at the lake bed, so its foot
+// stands in the water and grows out of the bed.
 //
-const ROCK_STEP = 8
-const ROCK_WOBBLE = 10
-const ROCK_SEED = 7.7
-const ROCK_BULGE = 0.35
-const ROOTS = 7
-const ROOT_SPREAD = 1.25
-const ROOT_DIP = 40
-const ROOT_W = 18
-const ROOT_TIP_W = 3
-const ROOT_STEPS = 18
-const ROOT_JITTER = 2
-const ROOT_STEP = 2
+const LAYER = { x1: 280, y1: 360, x2: 1040 }
+//
+// Big separate stones on the lake bed around the foot (the forest shore
+// pile's look), lying at random: each at an offset from the foot across
+// BED_SPREAD, its own half-width, its top above or below the water line
+// (negative: breaking the surface), some tilted. Back stones are behind
+// the stems, front ones before them.
+//
+const BED_BACK_COUNT = 7
+const BED_FRONT_COUNT = 5
+const BED_SPREAD = 130
+const BED_RX_MIN = 26
+const BED_RX_RANGE = 42
+const BED_TOP_MIN = -48
+const BED_TOP_RANGE = 66
+const BED_FRONT_LOWER = 10
+const BED_TILT = 0.35
+const STONE_ARC_POW = 0.7
+const STONE_ARC_STEPS = 18
+const STONE_OUTLINE_W = 2
+//
+// Plants on the stone tops above the water.
+//
+const STONE_GREENS = 4
+const STONE_GREEN_SPAN = 0.9
+const STONE_GREEN_ABOVE = 3
+const STONE_FERN_SCALE = 0.4
+const STONE_FERN_RANGE = 0.25
+const STONE_FERN_TILT = 0.5
+//
+// Greens over the trunk's foot: very dense at the waterline, thinning as
+// the vines climb (bias pushes picks toward the foot).
+//
+const FOOT_CLUSTERS = 90
+const FOOT_BIAS = 2.4
+const FOOT_T_MAX = 0.42
+const FOOT_ACROSS = 1.3
+const FOOT_LEAVES_MIN = 5
+const FOOT_LEAVES_RANGE = 5
+const FOOT_SPREAD = 14
+const FOOT_LEAF_MIN = 4.5
+const FOOT_LEAF_RANGE = 3
+const FOOT_HANG = 0.9
+const FOOT_FERNS = 22
+const FOOT_TUFTS = 22
+const FOOT_FERN_SCALE = 0.45
+const FOOT_FERN_RANGE = 0.35
+const FOOT_TILT = 0.9
+const LEAF_THIN = 0.75
+const STEM_PLANT_BIAS = 1.8
 //
 // Short moss strands baked onto the vines (the long ones sway, see
 // plant-strands.js): count, where along the host, length.
@@ -373,21 +421,46 @@ const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 
 /**
- * Paints the whole plant body (no leaves) into a world-sized canvas.
+ * Paints the whole plant body (no leaves) into a world-sized canvas: on its
+ * own layer, tinted under the water line and clipped at the lake bed.
  * @param {CanvasRenderingContext2D} ctx
  * @param {() => number} rng - Seeded random
+ * @param {Object} lake - Lake instance (bed line)
  */
-export function paintPlant(ctx, rng) {
+export function paintPlant(ctx, rng, lake) {
+  const layer = document.createElement('canvas')
+  layer.width = LAYER.x2 - LAYER.x1
+  layer.height = Layout.WORLD_H - LAYER.y1
+  const lctx = layer.getContext('2d')
+  lctx.translate(-LAYER.x1, -LAYER.y1)
+  paintPlantLayer(lctx, rng)
+  lctx.setTransform(1, 0, 0, 1, 0, 0)
+  Lake.tintUnderwater(lctx, layer.width, layer.height, Layout.LAKE_SURFACE_Y - LAYER.y1)
+  ctx.save()
+  Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
+  ctx.drawImage(layer, LAYER.x1, LAYER.y1)
+  ctx.restore()
+  layer.width = 0
+}
+//
+// Everything of the plant, in world coordinates: bed stones behind, the
+// vines back to front, bed stones in front, then the greens.
+//
+function paintPlantLayer(ctx, rng) {
   const shape = plantShape()
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  paintRockIsland(ctx, rng)
-  paintRoots(ctx, rng)
+  const backStones = bedStones(BED_BACK_COUNT, 0, rng)
+  const frontStones = bedStones(BED_FRONT_COUNT, BED_FRONT_LOWER, rng)
+  paintBedStones(ctx, backStones, rng)
   paintGaps(ctx, shape.axis)
   const vines = shape.vines.map((pts, i) => prepareVine(pts, rng, i < shape.stemCount))
   vines.flatMap(depthPieces).sort((a, b) => a.z - b.z).forEach(piece => paintPiece(ctx, piece, shape.eyes, rng))
+  paintBedStones(ctx, frontStones, rng)
   paintLichen(ctx, shape.axis, rng)
   paintIvy(ctx, shape.axis, rng)
+  paintStoneGreens(ctx, [...backStones, ...frontStones], rng)
+  paintFootFoliage(ctx, shape, rng)
   paintStemPlants(ctx, shape, rng)
   paintRopeStrands(ctx, shape.vines, rng)
   paintThorns(ctx, rng)
@@ -426,7 +499,7 @@ function prepareVine(pts, rng, main) {
   const maxW = Math.max(...pts.map(p => p.w))
   const deep = Math.max(DEEP_MIN, Math.min(DEEP_MAX, Math.round(maxW / FURROW_PX)))
   const twist = (rng() < TWIST_FLIP_CHANCE ? -1 : 1) * (main ? MAIN_TWIST : BARK_TWIST)
-  const bark = main ? oakBarkFor(pts, rng, maxW) : barkFor(pts, rng, deep, deep * FINE_PER_DEEP, twist)
+  const bark = maxW >= OAK_MIN_VINE_W ? oakBarkFor(pts, rng, maxW) : barkFor(pts, rng, deep, deep * FINE_PER_DEEP, twist)
   return { pts, stem: main, tones: woodTones(step), rough: roughen(pts), bark }
 }
 //
@@ -517,7 +590,7 @@ function band(ctx, pts, wShare, extra, offShare, color, caps) {
     const n = shadowNormal(a, b)
     const g = sideNormal(a, b)
     const c = { x: p.x + n.x * p.w * offShare, y: p.y + n.y * p.w * offShare }
-    const half = (p.w * wShare + extra) / 2
+    const half = Math.max(0, p.w * wShare + extra) / 2
     left.push({ x: c.x + g.x * half, y: c.y + g.y * half })
     right.push({ x: c.x - g.x * half, y: c.y - g.y * half })
     ends.push({ c, half, angle: Math.atan2(g.y, g.x) })
@@ -1030,7 +1103,7 @@ function paintVineLeaves(ctx, pts, rng) {
     walked += Math.hypot(pts[i].x - a.x, pts[i].y - a.y)
     if (walked < LEAF_EVERY) continue
     walked = 0
-    if (rng() > LEAF_CHANCE) continue
+    if (rng() > LEAF_CHANCE * (1 - heightShare(a.y) * LEAF_THIN)) continue
     const g = sideNormal(a, pts[i])
     const side = rng() < HALF ? -1 : 1
     const n = 1 + Math.floor(rng() * LEAF_CLUSTER)
@@ -1066,49 +1139,121 @@ function paintMoss(ctx, pts, rng) {
   }
 }
 //
-// Mossy rock the plant stands on, rising out of the lake.
+// Random bed stones: offset, half-width, top (front ones sit a bit lower)
+// and tilt (one side of the top raised).
 //
-function paintRockIsland(ctx, rng) {
-  const r = PLANT_ROCK
-  const top = sampleEdge(r.x1, r.x2, ROCK_STEP, x => ({ x, y: rockTopAt(x) }))
-  const pts = [...top, { x: r.x2 + ROCK_WOBBLE, y: Layout.WORLD_H }, { x: r.x1 - ROCK_WOBBLE, y: Layout.WORLD_H }]
-  paintRockMass(ctx, pts, rng, { edgeStones: true, smooth: true })
-  paintMossRim(ctx, r.x1 + ROCK_WOBBLE, r.x2 - ROCK_WOBBLE, rockTopAt, rng, CAVE_PAL.plantMoss)
-  paintMossRim(ctx, r.x1 + ROCK_WOBBLE * 2, r.x2 - ROCK_WOBBLE * 2, x => rockTopAt(x) + ROCK_WOBBLE / 2, rng, CAVE_PAL.plantMoss)
-}
-//
-// Rock top line: a rounded hump from the lake up to the plateau.
-//
-function rockTopAt(x) {
-  const r = PLANT_ROCK
-  const half = (r.x2 - r.x1) / 2
-  const u = (x - (r.x1 + r.x2) / 2) / half
-  return r.topY + (Layout.LAKE_SURFACE_Y - r.topY) * Math.pow(Math.abs(u), 2) * (1 - ROCK_BULGE) +
-    Layout.profileNoise(x, ROCK_SEED) * ROCK_WOBBLE
-}
-//
-// Roots leaving the main vine's foot and spilling down over the rock.
-//
-function paintRoots(ctx, rng) {
-  const foot = Layout.PLANT_TRUNK
-  const half = (PLANT_ROCK.x2 - PLANT_ROCK.x1) / 2
-  const tones = woodTones(ROOT_STEP)
-  for (let i = 0; i < ROOTS; i++) {
-    const side = i / (ROOTS - 1) * 2 - 1
-    const pts = []
-    for (let s = 0; s <= ROOT_STEPS; s++) {
-      const t = s / ROOT_STEPS
-      pts.push({
-        x: foot.x + side * half * ROOT_SPREAD * Math.sin(t * Math.PI / 2) + (rng() - 0.5) * ROOT_JITTER,
-        y: PLANT_ROCK.topY + (ROOT_DIP + Math.abs(side) * (Layout.LAKE_SURFACE_Y - PLANT_ROCK.topY)) * t * t,
-        w: ROOT_W + (ROOT_TIP_W - ROOT_W) * t,
-        z: 1
-      })
-    }
-    const bark = barkFor(pts, rng, DEEP_MIN, DEEP_MIN * FINE_PER_DEEP, BARK_TWIST)
-    paintCylinder(ctx, pts, roughen(pts), tones, ROUND_CAPS)
-    paintBarkSpan(ctx, pts, bark, tones, 0, pts.length - 1, true, rng)
+function bedStones(count, lower, rng) {
+  const out = []
+  for (let i = 0; i < count; i++) {
+    out.push({
+      dx: (rng() * 2 - 1) * BED_SPREAD,
+      rx: BED_RX_MIN + rng() * BED_RX_RANGE,
+      top: BED_TOP_MIN + rng() * BED_TOP_RANGE + lower,
+      tilt: (rng() * 2 - 1) * BED_TILT
+    })
   }
+  return out.sort((a, b) => a.top - b.top)
+}
+//
+// Big stones on the lake bed, each painted on its own (tallest first, so
+// lower ones lie in front): a rounded hump from the bed up to its top,
+// filled with whole faceted stones like the forest shore pile.
+//
+function paintBedStones(ctx, defs, rng) {
+  defs.forEach(def => paintForestShoreRock(ctx, { loops: [stoneLoop(def)], waterY: Layout.LAKE_SURFACE_Y, rng, outlineWidth: STONE_OUTLINE_W }))
+}
+//
+// Outline of one bed stone: an arch from its foot on one side, over its
+// top, down to the other side, closed along the world bottom.
+//
+function stoneLoop(def) {
+  const pts = []
+  for (let i = 0; i <= STONE_ARC_STEPS; i++) {
+    const a = i / STONE_ARC_STEPS * Math.PI
+    const x = PLANT_FOOT.x + def.dx + Math.cos(a) * def.rx
+    pts.push({ x, y: stoneTopAt(def, x) })
+  }
+  return [...pts, { x: PLANT_FOOT.x + def.dx - def.rx, y: Layout.WORLD_H }, { x: PLANT_FOOT.x + def.dx + def.rx, y: Layout.WORLD_H }]
+}
+//
+// Top of a bed stone at a world X (an arch falling to the world bottom,
+// tilted to one side).
+//
+function stoneTopAt(def, x) {
+  const d = (x - PLANT_FOOT.x - def.dx) / def.rx
+  const u = Math.min(1, Math.abs(d))
+  const top = Layout.LAKE_SURFACE_Y + def.top + d * def.tilt * def.rx
+  return Layout.WORLD_H - (Layout.WORLD_H - top) * Math.pow(Math.sqrt(1 - u * u), STONE_ARC_POW)
+}
+//
+// Ferns, blade tufts and leaf clusters on the stone tops above the water.
+//
+function paintStoneGreens(ctx, defs, rng) {
+  const [, dark, mid, light] = CAVE_PAL.plantIvy
+  defs.forEach(def => {
+    for (let g = 0; g < STONE_GREENS; g++) {
+      const x = PLANT_FOOT.x + def.dx + (rng() - HALF) * def.rx * STONE_GREEN_SPAN * 2
+      const y = stoneTopAt(def, x)
+      y < Layout.LAKE_SURFACE_Y - STONE_GREEN_ABOVE && paintStoneGreen(ctx, x, y, rng, [dark, mid, light])
+    }
+  })
+}
+//
+// One plant on a stone's top: a fern, a tuft of blades or a leaf cluster.
+//
+function paintStoneGreen(ctx, x, y, rng, fernTones) {
+  const kind = rng()
+  const tilt = (rng() - HALF) * STONE_FERN_TILT * 2
+  if (kind < 1 / 3) return paintEdgeFern(ctx, x, y, tilt, rng, STONE_FERN_SCALE + rng() * STONE_FERN_RANGE, fernTones)
+  if (kind < 2 / 3) return paintBladeTuft(ctx, x, y, tilt, rng)
+  paintLeafCluster(ctx, x, y, rng)
+}
+//
+// Dense leaves, ferns and blade tufts over the trunk's foot, thinning with
+// height (picks biased toward the bottom), so at the foot they hide even
+// the thick stems.
+//
+function paintFootFoliage(ctx, shape, rng) {
+  const [, dark, mid, light] = CAVE_PAL.plantIvy
+  for (let i = 0; i < FOOT_CLUSTERS; i++) {
+    const p = footSpot(shape.axis, rng)
+    paintLeafCluster(ctx, p.x, p.y, rng)
+  }
+  for (let i = 0; i < FOOT_FERNS; i++) {
+    const p = footSpot(shape.axis, rng)
+    paintEdgeFern(ctx, p.x, p.y, (rng() - HALF) * FOOT_TILT * 2, rng, FOOT_FERN_SCALE + rng() * FOOT_FERN_RANGE, [dark, mid, light])
+  }
+  for (let i = 0; i < FOOT_TUFTS; i++) {
+    const p = footSpot(shape.axis, rng)
+    paintBladeTuft(ctx, p.x, p.y, (rng() - HALF) * FOOT_TILT * 2, rng)
+  }
+}
+//
+// A random point on the trunk's face near its foot (biased low).
+//
+function footSpot(axis, rng) {
+  return onRope(axis, Math.pow(rng(), FOOT_BIAS) * FOOT_T_MAX, (rng() * 2 - 1) * FOOT_ACROSS)
+}
+//
+// A small bunch of real leaves hanging and spreading from one point.
+//
+function paintLeafCluster(ctx, x, y, rng) {
+  const [, dark, mid, light] = CAVE_PAL.plantIvy
+  const tones = [dark, mid, mid, light]
+  const n = FOOT_LEAVES_MIN + Math.floor(rng() * FOOT_LEAVES_RANGE)
+  for (let l = 0; l < n; l++) {
+    const a = Math.PI / 2 + (rng() - HALF) * Math.PI * FOOT_HANG * 2
+    const lx = x + (rng() - HALF) * FOOT_SPREAD
+    const ly = y + (rng() - HALF) * FOOT_SPREAD
+    paintRealLeaf(ctx, lx, ly, FOOT_LEAF_MIN + rng() * FOOT_LEAF_RANGE, a, tones[Math.floor(rng() * tones.length)], rng)
+  }
+}
+//
+// Height share of a world Y on the plant (0 at the foot, 1 at the top leaf).
+//
+function heightShare(y) {
+  const top = Math.min(...Layout.PLANT_LEAVES.map(l => l.y))
+  return Math.max(0, Math.min(1, (PLANT_FOOT.y - y) / (PLANT_FOOT.y - top)))
 }
 //
 // Ferns and blade tufts growing out of the trunk stems' near faces.
@@ -1132,7 +1277,7 @@ function paintStemPlants(ctx, shape, rng) {
 function stemPlantSpot(stems, eyes, rng) {
   for (let t = 0; t < STEM_PLANT_TRIES; t++) {
     const stem = stems[Math.floor(rng() * stems.length)]
-    const i = 1 + Math.floor(rng() * (stem.length - 2))
+    const i = 1 + Math.floor(Math.pow(rng(), STEM_PLANT_BIAS) * (stem.length - 2))
     const p = stem[i]
     if (p.z < STEM_PLANT_MIN_Z) continue
     const g = sideNormal(stem[i - 1], stem[i + 1])

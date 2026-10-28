@@ -57,12 +57,13 @@ const COLLAR_LEN = 0.38
 const COLLAR_W = 0.16
 const COLLAR_TILT = 0.4
 //
-// Breathing while open, quiver when prey is near, swell before opening.
+// Breathing while open (the whole mouth swells evenly), a small trembling
+// tilt when prey is near (degrees), swell before opening.
 //
 const BREATH = 0.03
 const BREATH_SPEED = 1.4
 const QUIVER_SPEED = 9
-const QUIVER = 0.025
+const QUIVER_DEG = 2.5
 const FULL_TURN = Math.PI * 2
 const bakedByK = new WeakMap()
 
@@ -112,13 +113,13 @@ export function onDraw(inst) {
   const t = k.time()
   const frame = inst.frames.names[Math.round(inst.open * (FRAMES - 1))]
   const breath = Math.sin(t * BREATH_SPEED + inst.phase) * BREATH * inst.open
-  const quiver = inst.alert ? Math.sin(t * QUIVER_SPEED + inst.phase) * QUIVER : 0
-  const s = 1 + inst.swell + breath + quiver
+  const s = 1 + inst.swell + breath
   k.drawSprite({
     sprite: frame,
     pos: k.vec2(inst.x, inst.y),
     anchor: k.vec2(0, CENTER_Y * 2 - 1),
-    scale: k.vec2(s, 1 + inst.swell + breath)
+    scale: k.vec2(s, s),
+    angle: inst.alert ? Math.sin(t * QUIVER_SPEED + inst.phase) * QUIVER_DEG : 0
   })
 }
 //

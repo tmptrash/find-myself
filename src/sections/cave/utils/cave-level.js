@@ -29,7 +29,6 @@ import * as Darkness from './cave-darkness.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
 import * as Shaft from './cave-shaft.js'
-import { PLANT_ROCK } from './cave-plant-shape.js'
 import { ropeStrandAnchors } from './cave-plant-art.js'
 import { CAVE_PAL, caveShadeColor } from './cave-paint.js'
 //
@@ -88,10 +87,12 @@ const Z_FRONT_FX = CFG.visual.zIndex.player + 1
 const Z_LEAF_FRONT = CFG.visual.zIndex.player + 0.5
 //
 // Long moss strands swaying in the draught: how many hang off the vines
-// (more hang under the leaves), their seed.
+// (more hang from the leaves' edges, drawn with the leaves' near half),
+// their seeds.
 //
 const ROPE_SWAY_STRANDS = 9
 const STRAND_SEED = 4411
+const LEAF_STRAND_SEED = 4412
 //
 // Contraptions: keys that jump out of a bubble, air aim above the cup,
 // spores held a little above a closed trap's lip, sparks of a popped bubble.
@@ -100,11 +101,6 @@ const BUBBLE_EXIT_KEYS = ['up', 'w', 'space']
 const AIR_TARGET_LIFT = 30
 const TRAPPED_SPORES_LIFT = 14
 const BUBBLE_POP_SPARKS = 10
-//
-// The rock under the plant: its plateau is solid ground.
-//
-const ROCK_COLLIDE_SINK = 4
-const ROCK_COLLIDE_H = 30
 const Z_DROWN_HERO = Z_WORLD + 0.5
 //
 // Ambient fireflies and hanging plants.
@@ -199,7 +195,8 @@ export function create(k) {
     fps: null
   }
   inst.wallEyes = WallEye.create({ k, parallax: inst.parallax })
-  inst.strands = PlantStrands.create({ k, anchors: swayAnchors(inst), seed: STRAND_SEED })
+  inst.ropeStrands = PlantStrands.create({ k, anchors: ropeStrandAnchors(ROPE_SWAY_STRANDS, createSeededRandom(STRAND_SEED)), seed: STRAND_SEED })
+  inst.leafStrands = PlantStrands.create({ k, anchors: GiantPlant.strandAnchors(inst.plant), seed: LEAF_STRAND_SEED })
   inst.backMushrooms = createBackMushrooms(inst)
   inst.drips = Drips.create({ k, tips: dripTips(inst), onLand: (x, y, water) => onDropLand(inst, x, y, water) })
   createBodies(inst)
@@ -232,7 +229,9 @@ function onUpdate(inst) {
   WallEye.onUpdate(inst.wallEyes, focus, View.worldRect(inst.view))
   Drips.onUpdate(inst.drips)
   CaveSound.onUpdate(inst.caveSound, dt, focus.y)
-  PlantStrands.onUpdate(inst.strands, CaveSound.gust(inst.caveSound))
+  const gust = CaveSound.gust(inst.caveSound)
+  PlantStrands.onUpdate(inst.ropeStrands, gust)
+  PlantStrands.onUpdate(inst.leafStrands, gust)
   View.follow(inst.view, focus.x, focus.y, focus.vy)
   inst.fps && FpsCounter.onUpdate(inst.fps)
 }
@@ -455,7 +454,6 @@ function createBodies(inst) {
     inst.platformByBody.set(solid(p.x1, p.y, p.x2 - p.x1, h), p)
   })
   inst.plant.leaves.filter(l => l.kind === Layout.LEAF_KIND.LEAF).forEach(l => inst.platformByBody.set(l.body, l))
-  solid(PLANT_ROCK.plateauX1, PLANT_ROCK.topY + ROCK_COLLIDE_SINK, PLANT_ROCK.plateauX2 - PLANT_ROCK.plateauX1, ROCK_COLLIDE_H)
 }
 function createHud(inst) {
   const k = inst.k
@@ -475,7 +473,7 @@ function addDrawLayers(inst) {
   k.add([k.z(Z_WORLD_FRONT), { draw: () => drawWorldFront(inst) }])
   k.add([k.z(Z_DARKNESS), { draw: () => drawDarkness(inst) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
-  k.add([k.z(Z_LEAF_FRONT), { draw: () => GiantPlant.onDrawFront(inst.plant) }])
+  k.add([k.z(Z_LEAF_FRONT), { draw: () => drawPlantFront(inst) }])
   k.add([k.z(Z_FRONT_FX), { draw: () => BubbleLift.onDrawBubble(inst.bubble) }])
   k.add([k.z(Z_FRAME), { draw: () => View.onDrawFrame(inst.view) }])
 }
@@ -492,7 +490,7 @@ function drawWorldFront(inst) {
   Water.onDrawFill(inst.water)
   Terrain.onDraw(inst.terrain, r.top, r.bottom)
   GiantPlant.onDrawBack(inst.plant)
-  PlantStrands.onDraw(inst.strands, r.top, r.bottom)
+  PlantStrands.onDraw(inst.ropeStrands, r.top, r.bottom)
   SporeMushroom.onDraw(inst.spores)
   BubbleLift.onDraw(inst.bubble)
   AirPlant.onDraw(inst.airPlant)
@@ -580,10 +578,13 @@ function drawBackMushrooms(inst, r) {
   })
 }
 //
-// Long swaying strands: under the leaves and off the vines' near faces.
+// In front of the hero: the leaves' near half, then the long strands
+// swaying from their edges.
 //
-function swayAnchors(inst) {
-  return [...GiantPlant.strandAnchors(inst.plant), ...ropeStrandAnchors(ROPE_SWAY_STRANDS, createSeededRandom(STRAND_SEED))]
+function drawPlantFront(inst) {
+  const r = View.worldRect(inst.view)
+  GiantPlant.onDrawFront(inst.plant)
+  PlantStrands.onDraw(inst.leafStrands, r.top, r.bottom)
 }
 //
 // Drops fall from every deadly stalactite, every few harmless ones, and

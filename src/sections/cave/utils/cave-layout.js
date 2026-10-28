@@ -82,8 +82,7 @@ export const LEAF_KIND = {
 export const PLANT_LEAVES = [
   { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.LEAF, collideInset: 34 },
   { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF },
-  { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true },
-  { id: 'F', x1: 780, x2: 930, y: 1400, kind: LEAF_KIND.LEAF }
+  { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true }
 ]
 export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
 //

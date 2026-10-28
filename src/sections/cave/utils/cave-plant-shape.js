@@ -1,24 +1,25 @@
 import * as Layout from './cave-layout.js'
 //
 // Geometry of the monster plant, shared by its bake (cave-plant-art.js),
-// the eyes grown into it (wall-eye.js), its hanging strands and the level
-// (rock base collider). One main woody vine rises from a mossy rock in the
-// lake, thinning as it climbs; many thinner vines wind around it, showing
+// the eyes grown into it (wall-eye.js) and its hanging strands. Woody stems
+// twisted into a trunk rise from the lake bed between big stones, thinning
+// as they climb; many thinner vines wind around it, showing
 // in front, slipping behind and coming out again. Some peel off toward a
 // leaf; under every leaf the vine feeding it splits into a brush of fingers
 // holding the pad up. Each point carries its width and a depth `z`
 // (-1 behind the main vine … 1 in front).
 //
 //
-// Rock the plant grows out of (top plateau stands above the lake).
+// The plant grows from the lake bed: its foot (height share 0) sits just
+// above the water, the axis carries on below it down to the bottom of the
+// world (the bake clips it at the bed). Shares below the foot are negative.
 //
-export const PLANT_ROCK = { x1: 655, x2: 830, topY: 1720, plateauX1: 700, plateauX2: 790 }
+export const PLANT_FOOT = { x: Layout.PLANT_TRUNK.x, y: Layout.LAKE_SURFACE_Y - 30 }
 //
 // Main trunk: the axis it grows along, the width of its stem bundle at the
 // foot / top, taper curve, flare at the foot (the stems spread into roots
 // there), gentle S sway.
 //
-const AXIS_SINK = 24
 const MAIN_W0 = 100
 const MAIN_W1 = 46
 const MAIN_TAPER_POW = 1
@@ -65,7 +66,7 @@ const WRAPS = [
   { phase: 0, twists: 2.2, w0: 18, w1: 8, from: 0, to: 1, leaf: null },
   { phase: 2.1, twists: 2.2, w0: 18, w1: 9, from: 0, to: 1, leaf: 'B' },
   { phase: 4.2, twists: 2.2, w0: 16, w1: 8, from: 0, to: 1, leaf: 'T' },
-  { phase: 1, twists: 2.6, w0: 16, w1: 8, from: 0, to: 1, leaf: 'F' },
+  { phase: 1, twists: 2.6, w0: 16, w1: 8, from: 0, to: 1, leaf: null },
   { phase: 3, twists: -2.8, w0: 11, w1: 5, from: 0.02, to: 0.95, leaf: null },
   { phase: 5, twists: -3.4, w0: 9, w1: 4, from: 0.1, to: 1, leaf: null },
   { phase: 0.6, twists: 3.8, w0: 8, w1: 4, from: 0.15, to: 0.8, leaf: null },
@@ -162,13 +163,15 @@ export function plantShape() {
 }
 
 /**
- * Axis point at a height share (0 = base, 1 = top), interpolated.
+ * Axis point at a height share (0 = foot, 1 = top; below the foot
+ * negative), interpolated.
  * @param {Array} axis - Axis points from plantShape()
  * @param {number} t - Height share
  * @returns {{x: number, y: number, w: number}}
  */
 export function axisAt(axis, t) {
-  const f = Math.min(1, Math.max(0, t)) * (axis.length - 1)
+  const t0 = axis[0].t
+  const f = (Math.min(1, Math.max(t0, t)) - t0) / (1 - t0) * (axis.length - 1)
   const i = Math.min(axis.length - 2, Math.floor(f))
   const u = f - i
   const a = axis[i]
@@ -176,24 +179,25 @@ export function axisAt(axis, t) {
   return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, w: a.w + (b.w - a.w) * u }
 }
 //
-// Main vine centre line from the rock up to the top leaf: tapering, flared
-// at the foot, swaying gently and leaning toward the top leaf's middle.
+// Trunk centre line from the world bottom (clipped at the lake bed) up to
+// the top leaf: tapering, flared at the foot, swaying gently and leaning toward the top leaf's middle.
 //
 function axisPoints() {
-  const bottomY = PLANT_ROCK.topY + AXIS_SINK
+  const footY = PLANT_FOOT.y
   const topLeaf = Layout.PLANT_LEAVES.find(isTopLeaf)
   const topY = topLeaf.y + AXIS_TOP_UNDER
-  const span = bottomY - topY
-  const baseX = Layout.PLANT_TRUNK.x
+  const span = footY - topY
+  const baseX = PLANT_FOOT.x
   const leanX = (topLeaf.x1 + topLeaf.x2) / 2 - baseX
   const pts = []
-  for (let y = bottomY; y >= topY; y -= STEP_PX) {
-    const t = (bottomY - y) / span
-    const flare = Math.pow(Math.max(0, 1 - t / FLARE_SHARE), 2) * FLARE_W
+  for (let y = Layout.WORLD_H; y >= topY; y -= STEP_PX) {
+    const t = (footY - y) / span
+    const up = Math.max(0, t)
+    const flare = Math.pow(Math.max(0, 1 - up / FLARE_SHARE), 2) * FLARE_W
     pts.push({
-      x: baseX + trunkBend(t) + leanX * Math.pow(t, TOP_LEAN_POW),
+      x: baseX + trunkBend(up) + leanX * Math.pow(up, TOP_LEAN_POW),
       y,
-      w: MAIN_W1 + (MAIN_W0 - MAIN_W1) * Math.pow(1 - t, MAIN_TAPER_POW) + flare,
+      w: MAIN_W1 + (MAIN_W0 - MAIN_W1) * Math.pow(1 - up, MAIN_TAPER_POW) + flare,
       flare,
       t
     })
@@ -236,8 +240,8 @@ function wrapPoints(def, axis) {
   const peelT = leaf ? axisShareAtY(axis, leaf.y + PEEL_DROP) : def.to
   const side = leaf ? Math.sign((leaf.x1 + leaf.x2) / 2 - Layout.PLANT_TRUNK.x) || 1 : 1
   const phase = leaf ? side * PEEL_ANGLE - peelT * def.twists * FULL_TURN : def.phase
-  const from = Math.round(def.from * (axis.length - 1))
-  const to = Math.round(peelT * (axis.length - 1))
+  const from = def.from > 0 ? axisIndexAt(axis, def.from) : 0
+  const to = axisIndexAt(axis, peelT)
   const pts = []
   for (let i = from; i <= to; i++) {
     const p = axis[i]
@@ -245,7 +249,7 @@ function wrapPoints(def, axis) {
     const a = p.t * def.twists * FULL_TURN + phase
     const lump = 1 + Layout.profileNoise(p.y * VINE_LUMP_FREQ, def.phase) * VINE_LUMP
     const tip = leaf ? 1 : vineTip(u, def.from > 0)
-    const w = (def.w0 + (def.w1 - def.w0) * Math.pow(p.t, VINE_TAPER_POW)) * lump * tip
+    const w = (def.w0 + (def.w1 - def.w0) * Math.pow(Math.max(0, p.t), VINE_TAPER_POW)) * lump * tip
     pts.push({ x: p.x + Math.sin(a) * (p.w / 2 + w * WRAP_STAND), y: p.y, w, z: Math.cos(a) })
   }
   leaf && pts.push(...peelPoints(pts[pts.length - 1], leaf))
@@ -266,7 +270,14 @@ function vineTip(u, freeStart) {
 function axisShareAtY(axis, y) {
   let best = 0
   axis.forEach((p, i) => Math.abs(p.y - y) < Math.abs(axis[best].y - y) && (best = i))
-  return best / (axis.length - 1)
+  return axis[best].t
+}
+//
+// Index of the axis point nearest to a height share.
+//
+function axisIndexAt(axis, t) {
+  const t0 = axis[0].t
+  return Math.max(0, Math.min(axis.length - 1, Math.round((t - t0) / (1 - t0) * (axis.length - 1))))
 }
 //
 // From the trunk toward the leaf's hub: rising in an S (cubic curve) with

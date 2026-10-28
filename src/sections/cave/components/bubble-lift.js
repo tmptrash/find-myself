@@ -41,6 +41,11 @@ const SHRINK_SPEED = 8
 const R_WOBBLE = 1.2
 const R_WOBBLE_SPEED = 3
 //
+// A regrowing bubble starts from nothing; the wobble would push its radius
+// below zero, which Kaplay cannot draw — skip it until it is this big.
+//
+const MIN_DRAW_R = 1
+//
 // Rides: rise / sink speeds, hang time at the top, sink time, regrow delay.
 //
 const RISE_SPEED = 95
@@ -183,6 +188,7 @@ export function onDrawBubble(inst) {
   if (inst.state === B.POPPED) return
   const k = inst.k
   const r = inst.r + Math.sin(k.time() * R_WOBBLE_SPEED) * R_WOBBLE
+  if (r < MIN_DRAW_R) return
   const pos = k.vec2(inst.cx, inst.cy)
   Glow.drawGlow(k, inst.cx, inst.cy + r * GLINT_SHIFT, r * CORE_GLOW_R, inst.coreRgb, CORE_GLOW_OPACITY)
   k.drawCircle({ pos, radius: r, color: inst.fillRgb, opacity: FILL_OPACITY, outline: { width: RIM_W, color: inst.rimRgb, opacity: RIM_OPACITY } })

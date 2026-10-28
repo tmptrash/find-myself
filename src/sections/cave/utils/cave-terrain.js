@@ -122,7 +122,7 @@ function paintTerrain(ctx, rng, stalactites, lake) {
   paintRockMass(ctx, leftWallOutline(), rng, { edgeStones: true })
   paintRockMass(ctx, rightWallOutline(), rng, { edgeStones: true })
   paintCeiling(ctx, rng)
-  paintPlant(ctx, rng)
+  paintPlant(ctx, rng, lake)
   Layout.PLATFORMS.forEach(p => paintPlatform(ctx, p, rng))
   stalactites.forEach(s => paintSpike(ctx, s.x, s.y, s.w, s.len, 1, rng))
   const decorTips = paintDecorStalactites(ctx, rng)

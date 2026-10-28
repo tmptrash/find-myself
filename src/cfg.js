@@ -822,6 +822,7 @@ export const CFG = {
           plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.orange0, PALETTE.gold1],
           plantIvy: [PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
           eyeGlint: PALETTE.gray7,
+          plantStone: [PALETTE.gray0, PALETTE.gray1, PALETTE.sand0, PALETTE.sand1],
           plantStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5],
           plantRosette: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.teal2],
           plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.red4],

@@ -359,6 +359,17 @@ const BED_TOP_RANGE = 66
 const BED_FRONT_LOWER = 10
 const BED_TILT = 0.35
 const STONE_ARC_POW = 0.7
+//
+// Scree under the bed stones: a heap widening downward like a triangle
+// from just under the stones' tops, its left flank running far down-left
+// (offsets from the foot; apex relative to the water line).
+//
+const SCREE_APEX_DX = -10
+const SCREE_APEX_TOP = -6
+const SCREE_LEFT_DX = -330
+const SCREE_RIGHT_DX = 190
+const SCREE_FLANK_STEPS = 8
+const SCREE_FLANK_BULGE = 14
 const STONE_ARC_STEPS = 18
 const STONE_OUTLINE_W = 2
 //
@@ -402,21 +413,21 @@ const ROPE_STRAND_LEN_RANGE = 70
 //
 // Thorns right of the second leaf.
 //
-const THORN_STEP_MIN = 12
+const THORN_STEP_MIN = 9
 const THORN_STEP_RANGE = 8
-const THORN_ROOT_FROM = 0.15
-const THORN_ROOT_RANGE = 0.3
-const THORN_LEN_MIN = 14
-const THORN_LEN_RANGE = 14
-const THORN_W_MIN = 6
+const THORN_LEN_MIN = 12
+const THORN_LEN_RANGE = 16
+const THORN_W_MIN = 5
 const THORN_W_RANGE = 4
-const THORN_RISE = 0.25
-const THORN_BEND = 0.3
-const THORN_MID = 0.5
+const THORN_SINK = 0.42
+const THORN_TILT = 0.45
+const THORN_CURL = 0.3
+const THORN_BELLY = 0.35
 const THORN_CONTOUR_W = 1.2
-const THORN_LIT_FROM = 0.2
-const THORN_LIT_TO = 0.25
-const THORN_LIT_SHIFT = 0.25
+const THORN_LIT_FROM = 0.15
+const THORN_LIT_TO = 0.75
+const THORN_LIT_SHIFT = 0.22
+const THORN_RIGHT_CHANCE = 0.35
 const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 
@@ -452,6 +463,7 @@ function paintPlantLayer(ctx, rng) {
   ctx.lineJoin = 'round'
   const backStones = bedStones(BED_BACK_COUNT, 0, rng)
   const frontStones = bedStones(BED_FRONT_COUNT, BED_FRONT_LOWER, rng)
+  paintScree(ctx, rng)
   paintBedStones(ctx, backStones, rng)
   paintGaps(ctx, shape.axis)
   const vines = shape.vines.map((pts, i) => prepareVine(pts, rng, i < shape.stemCount))
@@ -463,7 +475,7 @@ function paintPlantLayer(ctx, rng) {
   paintFootFoliage(ctx, shape, rng)
   paintStemPlants(ctx, shape, rng)
   paintRopeStrands(ctx, shape.vines, rng)
-  paintThorns(ctx, rng)
+  paintThorns(ctx, shape.axis, rng)
 }
 
 /**
@@ -1166,6 +1178,23 @@ function paintBedStones(ctx, defs, rng) {
 // Outline of one bed stone: an arch from its foot on one side, over its
 // top, down to the other side, closed along the world bottom.
 //
+//
+// The scree heap behind the bed stones: a triangle from an apex near the
+// foot down to the world bottom, its flanks bulging a little.
+//
+function paintScree(ctx, rng) {
+  const apex = { x: PLANT_FOOT.x + SCREE_APEX_DX, y: Layout.LAKE_SURFACE_Y + SCREE_APEX_TOP }
+  const flank = dx => {
+    const pts = []
+    for (let i = 1; i <= SCREE_FLANK_STEPS; i++) {
+      const t = i / SCREE_FLANK_STEPS
+      pts.push({ x: apex.x + (PLANT_FOOT.x + dx - apex.x) * t, y: apex.y + (Layout.WORLD_H - apex.y) * t - Math.sin(Math.PI * t) * SCREE_FLANK_BULGE })
+    }
+    return pts
+  }
+  const loop = [...flank(SCREE_LEFT_DX).reverse(), apex, ...flank(SCREE_RIGHT_DX)]
+  paintForestShoreRock(ctx, { loops: [loop], waterY: Layout.LAKE_SURFACE_Y, rng, outlineWidth: STONE_OUTLINE_W })
+}
 function stoneLoop(def) {
   const pts = []
   for (let i = 0; i <= STONE_ARC_STEPS; i++) {
@@ -1344,32 +1373,64 @@ function ropeStrandAnchorsFrom(vines, count, rng) {
   return out
 }
 //
-// Curved red thorns sticking out of the main vine's left side.
+// Curved red thorns along the thorny band of the trunk, rooted in its
+// surface (mostly on the left side, some on the right) and sticking out
+// perpendicular to the trunk's direction there, each tilted a little at
+// random and its tip curling upward along the trunk.
 //
-function paintThorns(ctx, rng) {
+function paintThorns(ctx, axis, rng) {
   const t = Layout.PLANT_THORNS
-  const [dark, mid, light] = CAVE_PAL.plantThorn
   for (let y = t.y1; y < t.y2; y += THORN_STEP_MIN + rng() * THORN_STEP_RANGE) {
-    const baseX = t.x1 + (t.x2 - t.x1) * (THORN_ROOT_FROM + rng() * THORN_ROOT_RANGE)
-    const len = THORN_LEN_MIN + rng() * THORN_LEN_RANGE
-    const w = THORN_W_MIN + rng() * THORN_W_RANGE
-    const tipX = baseX - len
-    const tipY = y - len * THORN_RISE
-    ctx.beginPath()
-    ctx.moveTo(baseX, y - w / 2)
-    ctx.quadraticCurveTo(baseX - len * THORN_MID, y - w * THORN_BEND, tipX, tipY)
-    ctx.quadraticCurveTo(baseX - len * THORN_MID, y + w * THORN_BEND, baseX, y + w / 2)
-    ctx.closePath()
-    ctx.fillStyle = css(mid)
-    ctx.fill()
-    ctx.strokeStyle = css(dark)
-    ctx.lineWidth = THORN_CONTOUR_W
-    ctx.stroke()
-    ctx.strokeStyle = css(light)
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(baseX - len * THORN_LIT_FROM, y - w * THORN_LIT_SHIFT)
-    ctx.lineTo(tipX + len * THORN_LIT_TO, tipY + 1)
-    ctx.stroke()
+    const i = axisIndexAtY(axis, y)
+    const a = axis[Math.max(0, i - 1)]
+    const b = axis[Math.min(axis.length - 1, i + 1)]
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const up = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
+    const side = rng() < THORN_RIGHT_CHANCE ? 1 : -1
+    const out = { x: -up.y * side, y: up.x * side }
+    const p = axis[i]
+    const base = { x: p.x + out.x * p.w * THORN_SINK, y: p.y + out.y * p.w * THORN_SINK }
+    const tilt = (rng() - HALF) * THORN_TILT * 2
+    const dir = { x: out.x * Math.cos(tilt) - out.y * Math.sin(tilt), y: out.x * Math.sin(tilt) + out.y * Math.cos(tilt) }
+    paintThorn(ctx, base, dir, up, THORN_LEN_MIN + rng() * THORN_LEN_RANGE, THORN_W_MIN + rng() * THORN_W_RANGE)
   }
+}
+//
+// Index of the trunk axis point nearest to a world Y.
+//
+function axisIndexAtY(axis, y) {
+  let best = 0
+  axis.forEach((q, k) => Math.abs(q.y - y) < Math.abs(axis[best].y - y) && (best = k))
+  return best
+}
+//
+// One thorn: a tapered hook from a base on the bark along a direction,
+// its tip curling toward `up`; dark rim, lit streak along its upper side.
+//
+function paintThorn(ctx, base, dir, up, len, w) {
+  const [dark, mid, light] = CAVE_PAL.plantThorn
+  const side = { x: -dir.y, y: dir.x }
+  const tip = { x: base.x + dir.x * len + up.x * len * THORN_CURL, y: base.y + dir.y * len + up.y * len * THORN_CURL }
+  const mid1 = { x: base.x + dir.x * len * HALF, y: base.y + dir.y * len * HALF }
+  const a = { x: base.x + side.x * w / 2, y: base.y + side.y * w / 2 }
+  const b = { x: base.x - side.x * w / 2, y: base.y - side.y * w / 2 }
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.quadraticCurveTo(mid1.x + side.x * w * THORN_BELLY, mid1.y + side.y * w * THORN_BELLY, tip.x, tip.y)
+  ctx.quadraticCurveTo(mid1.x - side.x * w * THORN_BELLY, mid1.y - side.y * w * THORN_BELLY, b.x, b.y)
+  ctx.closePath()
+  ctx.fillStyle = css(mid)
+  ctx.fill()
+  ctx.strokeStyle = css(dark)
+  ctx.lineWidth = THORN_CONTOUR_W
+  ctx.stroke()
+  const litSide = side.x * LIGHT.x + side.y * LIGHT.y > 0 ? 1 : -1
+  const from = { x: base.x + (tip.x - base.x) * THORN_LIT_FROM + side.x * litSide * w * THORN_LIT_SHIFT, y: base.y + (tip.y - base.y) * THORN_LIT_FROM + side.y * litSide * w * THORN_LIT_SHIFT }
+  const to = { x: base.x + (tip.x - base.x) * THORN_LIT_TO, y: base.y + (tip.y - base.y) * THORN_LIT_TO }
+  ctx.strokeStyle = css(light)
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(from.x, from.y)
+  ctx.lineTo(to.x, to.y)
+  ctx.stroke()
 }

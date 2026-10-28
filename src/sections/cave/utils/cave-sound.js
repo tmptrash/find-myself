@@ -159,6 +159,34 @@ const LEAF_RUSTLE_Q = 0.7
 const LEAF_RUSTLE_SHARE = 0.06
 const LEAF_PITCH_JITTER = 0.25
 //
+// Steps on cave rock: soft, not glassy — a muffled scuff of low noise and
+// a dull low knock, a little of it in the cave reverb. Landing is a little
+// louder, lower and longer.
+//
+const STONE_SCUFF_BAND = 1100
+const STONE_SCUFF_Q = 0.7
+const STONE_SCUFF_GAIN = 0.07
+const STONE_SCUFF_TIME = 0.05
+const STONE_KNOCK_FREQ = 240
+const STONE_KNOCK_DROP = 0.7
+const STONE_KNOCK_GAIN = 0.1
+const STONE_KNOCK_TIME = 0.07
+const STONE_JITTER = 0.18
+const STONE_LAND_GAIN = 1.5
+const STONE_LAND_PITCH = 0.8
+const STONE_LAND_TIME = 1.5
+//
+// Tendrils seizing the hero: a wet slither (noise sweeping down) over a
+// low creak.
+//
+const GRAB_NOISE_FROM = 2400
+const GRAB_NOISE_TO = 600
+const GRAB_NOISE_GAIN = 0.1
+const GRAB_TIME = 0.35
+const GRAB_CREAK = 110
+const GRAB_CREAK_GAIN = 0.12
+const GRAB_CREAK_DROP = 0.7
+//
 // Lantern mushroom: soft spring, rising chime, dim ticks.
 //
 const SPRING_FROM = 170
@@ -367,6 +395,45 @@ export function playLeafSnap(inst) {
   const at = inst.ctx.currentTime
   tone(inst, SNAP_FREQ, at, SNAP_GAIN, SNAP_DECAY, false, SNAP_DROP)
   noiseHit(inst, at, SNAP_NOISE_BAND, SNAP_NOISE_GAIN, SNAP_NOISE_DECAY)
+}
+
+/**
+ * The hero stepping or landing on rock: a soft scuff and a dull knock.
+ * @param {Object} inst - Cave sound instance
+ * @param {boolean} land - Landing (louder, lower, longer)
+ */
+export function playStoneStep(inst, land) {
+  if (!ready(inst)) return
+  const at = inst.ctx.currentTime
+  const pitch = (land ? STONE_LAND_PITCH : 1) * (1 + (Math.random() - HALF) * STONE_JITTER)
+  const gain = land ? STONE_LAND_GAIN : 1
+  const time = land ? STONE_LAND_TIME : 1
+  noiseHit(inst, at, STONE_SCUFF_BAND * pitch, STONE_SCUFF_GAIN * gain, STONE_SCUFF_TIME * time, STONE_SCUFF_Q, true)
+  tone(inst, STONE_KNOCK_FREQ * pitch, at, STONE_KNOCK_GAIN * gain, STONE_KNOCK_TIME * time, true, STONE_KNOCK_DROP)
+}
+
+/**
+ * A trap's tendrils seizing the hero: a wet slither and a low creak.
+ * @param {Object} inst - Cave sound instance
+ */
+export function playTendrilGrab(inst) {
+  if (!ready(inst)) return
+  const { ctx } = inst
+  const at = ctx.currentTime
+  const src = ctx.createBufferSource()
+  src.buffer = inst.white
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.setValueAtTime(GRAB_NOISE_FROM, at)
+  band.frequency.exponentialRampToValueAtTime(GRAB_NOISE_TO, at + GRAB_TIME)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(GRAB_NOISE_GAIN, at)
+  g.gain.exponentialRampToValueAtTime(SILENT, at + GRAB_TIME)
+  src.connect(band)
+  band.connect(g)
+  g.connect(inst.out)
+  src.start(at, Math.random() * NOISE_SECONDS / 2, GRAB_TIME * 2)
+  tone(inst, GRAB_CREAK, at, GRAB_CREAK_GAIN, GRAB_TIME, false, GRAB_CREAK_DROP)
 }
 
 /**
@@ -646,21 +713,24 @@ function tone(inst, freq, at, gain, decay, echo, drop = 1) {
   osc.stop(at + decay)
 }
 //
-// One band-passed noise burst (rasp, pop).
+// One band-passed noise burst (rasp, pop, click), optionally into the
+// cave reverb.
 //
-function noiseHit(inst, at, band, gain, decay) {
+function noiseHit(inst, at, band, gain, decay, q = 1, echo = false) {
   const { ctx } = inst
   const src = ctx.createBufferSource()
   src.buffer = inst.white
   const filter = ctx.createBiquadFilter()
   filter.type = 'bandpass'
   filter.frequency.value = band
+  filter.Q.value = q
   const g = ctx.createGain()
   g.gain.setValueAtTime(gain, at)
   g.gain.exponentialRampToValueAtTime(SILENT, at + decay)
   src.connect(filter)
   filter.connect(g)
   g.connect(inst.out)
+  echo && g.connect(inst.send)
   src.start(at, 0, decay * 2)
 }
 //

@@ -142,11 +142,12 @@ const bakedByK = new WeakMap()
  * @param {boolean} [cfg.moss=true] - Moss tuft at the feet (off for the menu icon)
  * @param {Object|null} [cfg.tint=null] - Kaplay rgb multiplied over the art (darker background mushrooms)
  * @param {number} [cfg.haloOpacity] - Halo strength (weaker for background mushrooms)
+ * @param {number} [cfg.blur=0] - Blur radius baked into the art (background depth)
  * @returns {Object} Mushroom instance
  */
 export function create(cfg) {
-  const { k, x, y, scale = 1, seed = 1, kind = MUSHROOM_KIND.LIT, moss = true, tint = null, haloOpacity = HALO_LIT_OPACITY } = cfg
-  const sprites = bakeMushroom(k, seed, moss)
+  const { k, x, y, scale = 1, seed = 1, kind = MUSHROOM_KIND.LIT, moss = true, tint = null, haloOpacity = HALO_LIT_OPACITY, blur = 0 } = cfg
+  const sprites = bakeMushroom(k, seed, moss, blur)
   const inst = {
     k,
     x,
@@ -383,12 +384,12 @@ function releaseFloat(inst) {
 //
 // Bakes the small ones and the main mushroom's gill fan, stem and cap as
 // separate sprites, plus their contours (same canvas size, so they overlay
-// exactly) once per k.
+// exactly) once per k and blur (background mushrooms are soft).
 //
-function bakeMushroom(k, seed, moss) {
+function bakeMushroom(k, seed, moss, blur) {
   let perK = bakedByK.get(k)
   !perK && (perK = new Map(), bakedByK.set(k, perK), Glow.create(k))
-  const key = `${seed}-${moss ? 'moss' : 'bare'}`
+  const key = `${seed}-${moss ? 'moss' : 'bare'}-${blur}`
   const cached = perK.get(key)
   if (cached) return cached
   const w = Math.ceil(BASE_CAP_W * CLUSTER_W + BAKE_PAD * 2)
@@ -404,6 +405,7 @@ function bakeMushroom(k, seed, moss) {
     const ctx = canvas.getContext('2d')
     ctx.lineJoin = 'round'
     paint(ctx)
+    blur > 0 && blurCanvas(canvas, blur)
     k.loadSprite(name, canvas)
     return name
   }
@@ -679,4 +681,18 @@ function strokeOverBehind(ctx) {
   ctx.fill()
   ctx.globalCompositeOperation = 'source-over'
   ctx.stroke()
+}
+//
+// Softens a baked canvas in place (one copy through a blur filter).
+//
+function blurCanvas(canvas, radius) {
+  const copy = document.createElement('canvas')
+  copy.width = canvas.width
+  copy.height = canvas.height
+  copy.getContext('2d').drawImage(canvas, 0, 0)
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.filter = `blur(${radius}px)`
+  ctx.drawImage(copy, 0, 0)
+  ctx.filter = 'none'
 }

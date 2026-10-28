@@ -93,6 +93,7 @@ const Z_LEAF_FRONT = CFG.visual.zIndex.player + 0.5
 const ROPE_SWAY_STRANDS = 9
 const STRAND_SEED = 4411
 const LEAF_STRAND_SEED = 4412
+const LEDGE_STRAND_SEED = 4413
 //
 // Contraptions: keys that jump out of a bubble, air aim above the cup,
 // spores held a little above a closed trap's lip, sparks of a popped bubble.
@@ -121,7 +122,8 @@ const LEAF_DRIP_EVERY = 5
 const DROP_PAN_RANGE = 600
 const DROP_HEAR_RANGE = 700
 //
-// Background mushrooms: size, shade, glow strength, seeds, row, cull pad.
+// Background mushrooms: size, shade, glow strength, seeds, row, cull pad,
+// blur (soft like their row).
 //
 const BACK_MUSHROOM_SCALE = 0.5
 const BACK_MUSHROOM_SHADE = 0.78
@@ -129,6 +131,7 @@ const BACK_MUSHROOM_HALO = 0.05
 const BACK_MUSHROOM_SEED = 70
 const BACK_MUSHROOM_ROW = 'mid'
 const BACK_MUSHROOM_CULL = 80
+const BACK_MUSHROOM_BLUR = 1.5
 //
 // Parallax rows behind and in front of the back-wall eyes.
 //
@@ -188,6 +191,7 @@ export function create(k) {
     safe: get(KEY_SAFE_SPOT, null),
     dead: false,
     drown: null,
+    grabbed: false,
     respawnAt: 0,
     deathX: 0,
     deathY: 0,
@@ -197,6 +201,7 @@ export function create(k) {
   inst.wallEyes = WallEye.create({ k, parallax: inst.parallax })
   inst.ropeStrands = PlantStrands.create({ k, anchors: ropeStrandAnchors(ROPE_SWAY_STRANDS, createSeededRandom(STRAND_SEED)), seed: STRAND_SEED })
   inst.leafStrands = PlantStrands.create({ k, anchors: GiantPlant.strandAnchors(inst.plant), seed: LEAF_STRAND_SEED })
+  inst.ledgeStrands = PlantStrands.create({ k, anchors: inst.terrain.swayAnchors, seed: LEDGE_STRAND_SEED })
   inst.backMushrooms = createBackMushrooms(inst)
   inst.drips = Drips.create({ k, tips: dripTips(inst), onLand: (x, y, water) => onDropLand(inst, x, y, water) })
   createBodies(inst)
@@ -219,7 +224,7 @@ function onUpdate(inst) {
   const char = inst.heroInst?.character
   if (inst.drown) updateDrown(inst, char)
   else if (inst.dead) updateRespawn(inst)
-  else char?.exists?.() && updateHero(inst, char)
+  else !inst.grabbed && char?.exists?.() && updateHero(inst, char)
   updateLantern(inst)
   inst.litMushrooms.forEach(m => Mushroom.onUpdate(m, null))
   inst.backMushrooms.forEach(item => Mushroom.onUpdate(item.mushroom, null))
@@ -232,6 +237,7 @@ function onUpdate(inst) {
   const gust = CaveSound.gust(inst.caveSound)
   PlantStrands.onUpdate(inst.ropeStrands, gust)
   PlantStrands.onUpdate(inst.leafStrands, gust)
+  PlantStrands.onUpdate(inst.ledgeStrands, gust)
   View.follow(inst.view, focus.x, focus.y, focus.vy)
   inst.fps && FpsCounter.onUpdate(inst.fps)
 }
@@ -244,6 +250,8 @@ function onUpdate(inst) {
 function updateContraptions(inst) {
   const hero = inst.dead || inst.drown ? null : inst.heroInst
   const plant = GiantPlant.onUpdate(inst.plant, hero)
+  plant.grabbedBy && seizeHero(inst)
+  plant.hold && holdHero(inst, plant.hold)
   plant.eatenBy && eatHero(inst, plant.eatenBy)
   plant.released.forEach(() => SporeMushroom.release(inst.spores))
   const sporeEvent = SporeMushroom.onUpdate(inst.spores, hero)
@@ -269,12 +277,36 @@ function popBubble(inst) {
   Fireflies.burst(inst.fireflies, b.cx, b.cy, BUBBLE_POP_SPARKS)
 }
 //
+// A trap's tendrils seize the hero: no control, no physics, he only moves
+// where the tendrils drag him.
+//
+function seizeHero(inst) {
+  const hero = inst.heroInst
+  const char = hero.character
+  hero.controllable = false
+  char.isStatic = true
+  char.vel = inst.k.vec2(0, 0)
+  inst.grabbed = true
+  releaseGamePhysicalKeys()
+  CaveSound.playTendrilGrab(inst.caveSound)
+}
+//
+// Puts the seized hero where the tendrils hold him, squeezed as they crush.
+//
+function holdHero(inst, hold) {
+  const char = inst.heroInst?.character
+  if (!char?.exists?.()) return
+  char.pos = inst.k.vec2(hold.x, hold.y)
+  char.scale = inst.k.vec2(hold.sx, hold.sy)
+}
+//
 // A trap leaf closes over the hero: he is gone inside it (no burst), and
 // comes back on the last safe platform.
 //
 function eatHero(inst, leaf) {
   const char = inst.heroInst?.character
   if (!char?.exists?.()) return
+  inst.grabbed = false
   CaveSound.playLeafSnap(inst.caveSound)
   Sound.playCrunchSound(inst.sfx)
   killHero(inst, true)
@@ -421,13 +453,13 @@ function spawnHero(inst, pose) {
   !prev && View.snapTo(inst.view, pose.x, pose.y)
 }
 //
-// Footsteps: soft and quiet on the plant's leaves, the usual sound on rock.
+// Footsteps: soft and quiet on the plant's leaves, a soft scuff on rock.
 //
 function playHeroStep(inst, hero, land) {
   if (!hero.sfx) return
   const on = hero.character?.curPlatform?.()
   if (inst.plant.leaves.some(l => l.body === on)) return CaveSound.playLeafStep(inst.caveSound, land)
-  land ? Sound.playLandSound(hero.sfx, hero.stepSoundScene) : Sound.playStepSound(hero.sfx, hero.stepSoundScene)
+  CaveSound.playStoneStep(inst.caveSound, land)
 }
 //
 // Walls, ceiling around the shaft and every platform; plain plant leaves
@@ -491,6 +523,7 @@ function drawWorldFront(inst) {
   Terrain.onDraw(inst.terrain, r.top, r.bottom)
   GiantPlant.onDrawBack(inst.plant)
   PlantStrands.onDraw(inst.ropeStrands, r.top, r.bottom)
+  PlantStrands.onDraw(inst.ledgeStrands, r.top, r.bottom)
   SporeMushroom.onDraw(inst.spores)
   BubbleLift.onDraw(inst.bubble)
   AirPlant.onDraw(inst.airPlant)
@@ -533,7 +566,7 @@ function bindLeave(inst) {
 }
 //
 // Plants hang from the ceiling and under the solid ledges / small platforms
-// that have no stalactites.
+// that have no stalactites (styled rock ledges grow their own roots).
 //
 function buildPlantSpots() {
   const rng = createSeededRandom(PLANT_SEED)
@@ -542,7 +575,7 @@ function buildPlantSpots() {
     const px = Math.round(x + rng() * CEILING_PLANT_STEP * CEILING_PLANT_JITTER)
     spots.push({ x: px, y: Math.round(Layout.ceilingBottomAt(px)) - CEILING_PLANT_SINK })
   }
-  Layout.PLATFORMS.filter(p => p.kind !== Layout.PLATFORM_KIND.GROUND && !p.stalactites).forEach(p => {
+  Layout.PLATFORMS.filter(p => p.kind !== Layout.PLATFORM_KIND.GROUND && !p.stalactites && !p.style).forEach(p => {
     const x1 = Math.max(p.x1, Layout.WALL_COLLIDE_W * 2)
     const x2 = Math.min(p.x2, Layout.WORLD_W - Layout.WALL_COLLIDE_W * 2)
     for (let x = x1 + UNDER_PLANT_STEP / 2; x < x2; x += UNDER_PLANT_STEP) {
@@ -566,7 +599,8 @@ function createBackMushrooms(inst) {
       scale: BACK_MUSHROOM_SCALE,
       seed: BACK_MUSHROOM_SEED + i,
       tint,
-      haloOpacity: BACK_MUSHROOM_HALO
+      haloOpacity: BACK_MUSHROOM_HALO,
+      blur: BACK_MUSHROOM_BLUR
     })
   }))
 }
@@ -578,13 +612,14 @@ function drawBackMushrooms(inst, r) {
   })
 }
 //
-// In front of the hero: the leaves' near half, then the long strands
-// swaying from their edges.
+// In front of the hero: the leaves' near half, the long strands swaying
+// from their edges, the rock ledges' front greens.
 //
 function drawPlantFront(inst) {
   const r = View.worldRect(inst.view)
   GiantPlant.onDrawFront(inst.plant)
   PlantStrands.onDraw(inst.leafStrands, r.top, r.bottom)
+  Terrain.onDrawFront(inst.terrain, r.top, r.bottom)
 }
 //
 // Drops fall from every deadly stalactite, every few harmless ones, and

@@ -60,13 +60,15 @@ const K = PLATFORM_KIND
 //
 // Rock surfaces. L0 entry ledge, C spore ledge, G the
 // target ledge on the right wall, D the lit floor with the bubble and the
-// air plant. Leaves of the plant are listed separately (PLANT_LEAVES).
+// air plant. A `style` names a rock ledge look from CAVE_CFG.ledge (baked
+// by cave-ledge.js; visual only). Leaves of the plant are listed
+// separately (PLANT_LEAVES).
 //
 export const PLATFORMS = [
-  { id: 'L0', x1: 0, x2: 400, y: 430, h: 54, kind: K.LEDGE, wall: 'left' },
-  { id: 'C', x1: 0, x2: 440, y: 1100, h: 60, kind: K.LEDGE, wall: 'left' },
-  { id: 'G', x1: 1060, x2: WORLD_W, y: 1300, h: 50, kind: K.LEDGE, wall: 'right' },
-  { id: 'D', x1: LAKE_X2, x2: WORLD_W, y: 1720, h: WORLD_H - 1720, kind: K.GROUND }
+  { id: 'L0', x1: 0, x2: 400, y: 430, h: 54, kind: K.LEDGE, wall: 'left', style: 'entry' },
+  { id: 'C', x1: 0, x2: 440, y: 1100, h: 60, kind: K.LEDGE, wall: 'left', style: 'wide' },
+  { id: 'G', x1: 1060, x2: WORLD_W, y: 1300, h: 50, kind: K.LEDGE, wall: 'right', style: 'target' },
+  { id: 'D', x1: LAKE_X2, x2: WORLD_W, y: 1720, h: WORLD_H - 1720, kind: K.GROUND, style: 'ground' }
 ]
 //
 // The monster plant: rope foot (bottom in the lake, top at the first

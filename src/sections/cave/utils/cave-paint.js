@@ -1,11 +1,10 @@
 import { CFG } from '../../../cfg.js'
 import { forestRgb } from '../../forest/utils/forest-palette.js'
-import { growTreeRootSegments, paintRootRelief } from '../../../utils/grow-tree-root.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
 import * as Layout from './cave-layout.js'
 //
 // Shared Canvas2D painters for the cave bakes (terrain tiles, parallax rows,
-// platforms): stony rock masses, moss rims, stalactites, stalagmites, roots
+// platforms): stony rock masses, moss rims, stalactites, stalagmites
 // and dark ferns. Every colour comes from CFG.visual.colors.palette.cave.
 //
 export const CAVE_PAL = CFG.visual.colors.palette.cave
@@ -87,11 +86,6 @@ const EDGE_STONE_CHANCE = 0.65
 const EDGE_STONE_R_MIN = 3
 const EDGE_STONE_R_RANGE = 4
 const EDGE_STONE_INSET = 0.55
-//
-// Root bundles: segment count range per bundle.
-//
-const ROOT_SEGMENTS_MIN = 4
-const ROOT_SEGMENTS_RANGE = 4
 //
 // Ferns: size range when sprouting from rock edges.
 //
@@ -312,34 +306,6 @@ export function paintSpike(ctx, x, y, w, len, dir, rng, tones = CAVE_PAL.spike) 
 }
 
 /**
- * Root bundle grown from a point (shared tree-root relief look).
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} x - Root start X
- * @param {number} y - Root start Y
- * @param {number} angle - Growth direction (radians, PI/2 = down)
- * @param {number} thickness - Starting width
- * @param {() => number} rng - Seeded random
- * @param {number} [bias=0] - Lateral curl per segment
- */
-export function paintRoot(ctx, x, y, angle, thickness, rng, bias = 0) {
-  const rand = (min, max) => min + rng() * (max - min)
-  const segs = growTreeRootSegments({
-    x,
-    y,
-    angle,
-    segments: ROOT_SEGMENTS_MIN + Math.floor(rng() * ROOT_SEGMENTS_RANGE),
-    thickness,
-    lateralBiasPerSegment: bias,
-    rand
-  }).map(s => ({ sx: s.startX, sy: s.startY, ex: s.endX, ey: s.endY, w: s.width }))
-  paintRootRelief(ctx, segs, rng, {
-    fill: forestRgb(CAVE_PAL.root),
-    lit: forestRgb(CAVE_PAL.rootLit),
-    contour: forestRgb(CAVE_PAL.contour)
-  })
-}
-
-/**
  * Dark fern clump sprouting from a rock edge along its outward normal.
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} x - Root X
@@ -556,8 +522,9 @@ export function paintPlatformSlab(ctx, p, rng, opts = {}) {
         x,
         y: Math.max(p.y + r * 2, bottomAt(x)) + Layout.profileNoise(x * PLATFORM_BOTTOM_JAG_FREQ, seed) * PLATFORM_BOTTOM_JAG
       })), ...end(x1 + r, -1).reverse()]
+  const topAt = x => p.y + Layout.profileNoise(x, seed) * PLATFORM_TOP_WAVE
   paintRockMass(ctx, pts, rng, { tones: opts.tones, stoneScale: opts.stoneScale, edgeStones: true, smooth: true })
-  paintMossRim(ctx, opts.mossX1 ?? x1, opts.mossX2 ?? x2, x => p.y + Layout.profileNoise(x, seed) * PLATFORM_TOP_WAVE, rng, opts.mossTones)
+  paintMossRim(ctx, opts.mossX1 ?? x1, opts.mossX2 ?? x2, topAt, rng, opts.mossTones)
   return bottomAt
 }
 
@@ -680,7 +647,12 @@ function paintLeafCrown(ctx, x, y, rng, scale, mid, light) {
 //
 // Closed outline through vertex midpoints with quadratic corners (smooth).
 //
-function smoothPath(pts) {
+/**
+ * Closed path through the midpoints of an outline, rounding every corner.
+ * @param {Array<{x: number, y: number}>} pts - Outline
+ * @returns {Path2D}
+ */
+export function smoothPath(pts) {
   const path = new Path2D()
   const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
   const start = mid(pts[pts.length - 1], pts[0])
@@ -692,11 +664,16 @@ function smoothPath(pts) {
   path.closePath()
   return path
 }
-//
-// Hit test in drawing coordinates (isPointInPath expects device pixels, the
-// path itself follows the context transform, e.g. the half-res bakes).
-//
-function insidePath(ctx, path, x, y) {
+/**
+ * Hit test of a point in drawing coordinates against a path (isPointInPath
+ * itself expects device pixels, which differ on a scaled bake).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Path2D} path
+ * @param {number} x - Drawing X
+ * @param {number} y - Drawing Y
+ * @returns {boolean}
+ */
+export function insidePath(ctx, path, x, y) {
   const m = ctx.getTransform()
   return ctx.isPointInPath(path, m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f)
 }
@@ -709,12 +686,25 @@ function polygonPath(pts) {
   path.closePath()
   return path
 }
-function fillEllipse(ctx, x, y, rx, ry) {
+/**
+ * Fills an axis-aligned ellipse in the current fill style.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x - Centre X
+ * @param {number} y - Centre Y
+ * @param {number} rx - Radius X
+ * @param {number} ry - Radius Y
+ */
+export function fillEllipse(ctx, x, y, rx, ry) {
   ctx.beginPath()
   ctx.ellipse(x, y, rx, ry, 0, 0, FULL_TURN)
   ctx.fill()
 }
-function polygonBounds(pts) {
+/**
+ * Bounding box of an outline.
+ * @param {Array<{x: number, y: number}>} pts - Outline
+ * @returns {{x: number, y: number, w: number, h: number}}
+ */
+export function polygonBounds(pts) {
   const xs = pts.map(p => p.x)
   const ys = pts.map(p => p.y)
   const x = Math.min(...xs)

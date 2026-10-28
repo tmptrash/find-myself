@@ -8,8 +8,10 @@ import * as Mouth from './leaf-mouth.js'
 // Leaves of the monster plant: one wide fleshy pad each, which the hero can
 // stand on, with big rounded lobes whose ends and a few folds bend down over
 // the sides. A trap leaf carries a red mouth
-// (leaf-mouth.js) in the middle of its pad. Landing on an open mouth snaps
-// it shut and the hero is eaten; it can also be fed the spore swarm,
+// (leaf-mouth.js) in the middle of its pad. Landing on an open mouth makes
+// its own tendrils coil round the hero, lift him, set him on the middle of
+// the mouth and close over him;
+// only then it snaps shut and he is eaten; it can also be fed the spore swarm,
 // staying shut (a low bud, a safe step) for a while before it swells,
 // opens again and lets the spores go.
 //
@@ -94,8 +96,8 @@ const UNDER_DEEP_ALPHA = 0.7
 const UNDER_LIT_W = 2.5
 //
 // Top face lighting: drooping far part in shade, raised near lip catching
-// the light, warm light / highlight / glow to the upper left, a shallow
-// hollow, veins from a navel near the middle, speckles.
+// the light, warm light / highlight / glow to the upper left, veins from a
+// navel near the middle, speckles.
 //
 const BACK_SHADE_ALPHA = 0.55
 const LIP_LIGHT_W = 7
@@ -117,9 +119,6 @@ const LEAF_GLOW_R = 0.18
 const LEAF_GLOW_X = 0.36
 const HALF = 0.5
 const LEAF_GLOW_ALPHA = 0.4
-const LEAF_HOLLOW_SCALE = 0.62
-const LEAF_HOLLOW_W = 0.3
-const LEAF_HOLLOW_ALPHA = 0.16
 const LEAF_HUB_X = 0.04
 const LEAF_HUB_Y = 0.05
 const NAVEL_R = 3.5
@@ -196,11 +195,36 @@ const MOUTH_LIFT = 3
 const ALERT_PAD_X = 60
 const ALERT_ABOVE = 260
 //
+// Grab timeline (seconds), like the forest flower: the mouth's tendrils
+// strike out to the hero, coil round him, lift him up off the pad, hold
+// him squeezing, set him down on the middle of the mouth, all of them
+// close over him and crush him: he is squeezed narrow and flat in pulses
+// (feet staying on the pad) and only then swallowed.
+//
+const GRAB_STRIKE = 0.22
+const GRAB_WRAP = 0.22
+const GRAB_LIFT = 0.32
+const GRAB_HOLD = 0.2
+const GRAB_PLACE = 0.4
+const GRAB_CLOSE = 0.3
+const GRAB_CRUSH = 0.6
+const CRUSH_SX = 0.5
+const CRUSH_SY = 0.55
+const CRUSH_PULSE = 0.08
+const CRUSH_PULSE_SPEED = 26
+const CRUSH_COIL = 0.25
+const HERO_FEET_DY = 38
+const GRAB_LIFT_PX = 30
+const GRAB_SQUEEZE = 0.12
+const GRAB_SQUEEZE_PULSE = 0.05
+const GRAB_SQUEEZE_SPEED = 20
+//
 // Colliders along each leaf top.
 //
 const COLLIDE_H = 14
 const LEAF_STATE = {
   OPEN: 'open',
+  GRABBING: 'grabbing',
   CLOSING: 'closing',
   CLOSED: 'closed',
   OPENING: 'opening'
@@ -265,21 +289,23 @@ export function snap(inst, id, prey) {
 }
 
 /**
- * Runs the trap mouths. Returns what happened this frame: a trap the hero is
- * standing on (to be eaten), and traps that just let their spores go.
+ * Runs the trap mouths. Returns what happened this frame: a trap that just
+ * seized the hero, where it holds him while dragging him in, a trap that
+ * swallowed him (to be eaten), and traps that just let their spores go.
  * @param {Object} inst - Plant instance
  * @param {Object|null} heroInst - Hero instance
- * @returns {{eatenBy: Object|null, released: Object[]}}
+ * @returns {{grabbedBy: Object|null, hold: {x: number, y: number, sx: number, sy: number}|null, eatenBy: Object|null, released: Object[]}}
  */
 export function onUpdate(inst, heroInst) {
   const dt = inst.k.dt()
-  const out = { eatenBy: null, released: [] }
+  const out = { grabbedBy: null, hold: null, eatenBy: null, released: [] }
   const char = heroInst?.character
   const standing = char?.exists?.() && char.isGrounded?.() ? char.curPlatform?.() : null
   inst.leaves.forEach(leaf => {
     if (!leaf.mouth) return
     leaf.timer += dt
-    if (leaf.state === S.OPEN && standing === leaf.body && snap(inst, leaf.id, 'hero')) out.eatenBy = leaf
+    leaf.state === S.OPEN && standing === leaf.body && startGrab(leaf, char, out)
+    leaf.state === S.GRABBING && stepGrab(leaf, out)
     stepTrap(leaf) && out.released.push(leaf)
     Mouth.setState(leaf.mouth, trapOpenness(leaf), trapSwell(leaf), leaf.state === S.OPEN && preyNear(leaf, char))
   })
@@ -296,12 +322,16 @@ export function strandAnchors(inst) {
 }
 
 /**
- * Draws what lies behind the hero: the far half of every leaf.
+ * Draws what lies behind the hero: the far half of every leaf and the
+ * parts of grabbing tendrils that pass behind him.
  * @param {Object} inst - Plant instance
  */
 export function onDrawBack(inst) {
   const k = inst.k
-  inst.leaves.forEach(leaf => k.drawSprite({ sprite: leaf.sprites.back, pos: k.vec2(leaf.x1 - leaf.sprites.padX, leaf.y - leaf.sprites.lineY) }))
+  inst.leaves.forEach(leaf => {
+    k.drawSprite({ sprite: leaf.sprites.back, pos: k.vec2(leaf.x1 - leaf.sprites.padX, leaf.y - leaf.sprites.lineY) })
+    leaf.mouth && Mouth.onDrawBack(leaf.mouth)
+  })
 }
 
 /**
@@ -322,11 +352,62 @@ export function onDrawFront(inst) {
   })
 }
 //
+// The hero landed on an open mouth: its tendrils seize him where he stands.
+//
+function startGrab(leaf, char, out) {
+  leaf.state = S.GRABBING
+  leaf.timer = 0
+  leaf.prey = 'hero'
+  leaf.grabFrom = { x: char.pos.x, y: char.pos.y }
+  out.grabbedBy = leaf
+}
+//
+// One frame of the grab: where the tendrils are and where the hero is.
+// When he is in the throat, the mouth snaps shut on him.
+//
+function stepGrab(leaf, out) {
+  const t = leaf.timer
+  const from = leaf.grabFrom
+  const mouth = leaf.mouth
+  const placeAt = GRAB_STRIKE + GRAB_WRAP + GRAB_LIFT + GRAB_HOLD
+  const lift = smooth(phase(t, GRAB_STRIKE + GRAB_WRAP, GRAB_LIFT))
+  const hold = phase(t, GRAB_STRIKE + GRAB_WRAP + GRAB_LIFT, GRAB_HOLD)
+  const place = smooth(phase(t, placeAt, GRAB_PLACE))
+  const close = smooth(phase(t, placeAt + GRAB_PLACE, GRAB_CLOSE))
+  const crush = phase(t, placeAt + GRAB_PLACE + GRAB_CLOSE, GRAB_CRUSH)
+  const pulse = Math.sin(t * CRUSH_PULSE_SPEED) * CRUSH_PULSE * Math.sin(Math.PI * crush)
+  const sx = 1 - (1 - CRUSH_SX) * smooth(crush) + pulse
+  const sy = 1 - (1 - CRUSH_SY) * smooth(crush) - pulse
+  const pos = {
+    x: from.x + (mouth.x - from.x) * place,
+    y: from.y - GRAB_LIFT_PX * lift * (1 - place) + HERO_FEET_DY * (1 - sy),
+    sx,
+    sy
+  }
+  const squeeze = lift * GRAB_SQUEEZE + Math.sin(t * GRAB_SQUEEZE_SPEED) * GRAB_SQUEEZE_PULSE * hold + CRUSH_COIL * crush
+  Mouth.setGrab(mouth, { reach: phase(t, 0, GRAB_STRIKE), wrap: smooth(phase(t, GRAB_STRIKE, GRAB_WRAP)), squeeze, close, ...pos })
+  out.hold = pos
+  if (t < placeAt + GRAB_PLACE + GRAB_CLOSE + GRAB_CRUSH) return
+  Mouth.setGrab(mouth, null)
+  leaf.state = S.CLOSING
+  leaf.timer = 0
+  out.eatenBy = leaf
+}
+//
+// Progress 0 … 1 through a phase starting at `from` and lasting `time`.
+//
+function phase(t, from, time) {
+  return Math.max(0, Math.min(1, (t - from) / time))
+}
+function smooth(u) {
+  return u * u * (3 - 2 * u)
+}
+//
 // Advances a trap's state clock; true when it just opened again after
 // holding the spores.
 //
 function stepTrap(leaf) {
-  if (leaf.state === S.OPEN || leaf.timer < stateTime(leaf)) return false
+  if (leaf.state === S.OPEN || leaf.state === S.GRABBING || leaf.timer < stateTime(leaf)) return false
   const spores = leaf.state === S.OPENING && leaf.prey === 'spores'
   leaf.timer = 0
   leaf.state = NEXT_STATE[leaf.state]
@@ -345,7 +426,7 @@ function stateTime(leaf) {
 // Mouth openness by state: snapping shut fast, opening after a swell.
 //
 function trapOpenness(leaf) {
-  if (leaf.state === S.OPEN) return 1
+  if (leaf.state === S.OPEN || leaf.state === S.GRABBING) return 1
   if (leaf.state === S.CLOSED) return 0
   if (leaf.state === S.CLOSING) return Math.max(0, 1 - leaf.timer / SNAP_TIME)
   const u = leaf.timer / OPEN_TIME
@@ -605,7 +686,7 @@ function paintUnderside(ctx, geo, tones, rng) {
 }
 //
 // Top face: base tone, the drooping far part in shade, warm light to the
-// upper left, cool shade to the right, a shallow hollow, veins from a navel,
+// upper left, cool shade to the right, veins from a navel,
 // speckles, the raised near lip catching the light, a glow on the far rim.
 //
 function paintLeafFace(ctx, face, geo, tones, rng) {
@@ -625,11 +706,6 @@ function paintLeafFace(ctx, face, geo, tones, rng) {
   radial(ctx, cx - rx * LEAF_LIGHT_X, cy - ry * LEAF_LIGHT_Y, rx * LEAF_LIGHT_R, light, LEAF_LIGHT_ALPHA)
   radial(ctx, cx - rx * LEAF_LIGHT_X, cy - ry * LEAF_LIGHT_Y, rx * LEAF_HIGH_R, high, LEAF_HIGH_ALPHA)
   radial(ctx, cx - rx * LEAF_GLOW_X, cy - ry * LEAF_LIGHT_Y, rx * LEAF_GLOW_R, glow, LEAF_GLOW_ALPHA)
-  ctx.strokeStyle = css(deep, LEAF_HOLLOW_ALPHA)
-  ctx.lineWidth = ry * LEAF_HOLLOW_W
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx * LEAF_HOLLOW_SCALE, ry * LEAF_HOLLOW_SCALE, 0, 0, Math.PI * 2)
-  ctx.stroke()
   const hub = { x: cx + rx * LEAF_HUB_X, y: cy + ry * LEAF_HUB_Y }
   paintVeins(ctx, ring, hub, rx, deep, high, rng)
   paintSpeckles(ctx, cx, cy, rx, ry, deep, high, rng)

@@ -3,25 +3,28 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 import * as Lake from '../../forest/utils/forest-lake.js'
 import * as Layout from './cave-layout.js'
 import { paintPlant } from './cave-plant-art.js'
+import { paintLedge, paintGround, paintRubble } from './cave-ledge.js'
+import { CAVE_CFG } from '../cfg.js'
 import {
-  paintRockMass,
-  paintPlatformSlab,
   paintSpike,
-  paintRoot,
   paintEdgeFern,
-  sampleEdge
+  sampleEdge,
+  smoothPath,
+  polygonBounds,
+  insidePath
 } from './cave-paint.js'
 //
 // Gameplay-plane terrain of cave lesson 0, baked once per live k into
 // horizontal tiles (only the tiles crossing the view are drawn): ragged
-// walls of stones, roots and dark ferns, the ceiling with the entry shaft,
+// walls of stones and dark ferns, the ceiling with the entry shaft,
 // platforms with moss rims and stalactites, the stalagmite floor and the
 // lake basin.
 //
 const TILE_H = 540
-const TILE_SPRITE_PREFIX = 'cave0-terrain-v14'
+const TILE_SPRITE_PREFIX = 'cave0-terrain-v15'
 const TERRAIN_SEED = 7301
 const GRAIN_SEED_BASE = 8100
+const FRONT_GRAIN_SEED = 500
 const EDGE_STEP = 6
 const OUTSIDE_PAD = 12
 //
@@ -46,31 +49,12 @@ const DECOR_SPIKE_SINK = 7
 const BASIN_SHORE_OVERLAP = 40
 const BASIN_UNDER_BED = 4
 //
-// Roots crawling down both walls and hanging from the ceiling.
-//
-const WALL_ROOT_COUNT = 18
-const WALL_ROOT_MAX_Y = 1700
-const WALL_ROOT_THICK_MIN = 3
-const WALL_ROOT_THICK_RANGE = 5
-const WALL_ROOT_INSET = 14
-const WALL_ROOT_BIAS = 0.05
-const CEILING_ROOT_COUNT = 9
-const CEILING_ROOT_THICK_MIN = 4
-const CEILING_ROOT_THICK_RANGE = 5
-const LEDGE_ROOT_CHANCE = 0.7
-const LEDGE_ROOT_THICK = 2.6
-const LEDGE_ROOT_FROM = 0.3
-const LEDGE_ROOT_SPAN = 0.4
-const LEDGE_ROOT_SINK = 2
-const ROOT_DOWN_SPREAD = 0.5
-//
-// Dark ferns jutting out of the wall edges and ledge corners.
+// Dark ferns jutting out of the wall edges.
 //
 const WALL_FERN_STEP = 44
 const WALL_FERN_CHANCE = 0.55
 const WALL_FERN_TILT = 0.5
 const WALL_FERN_SINK = 2
-const LEDGE_FERN_SCALE = 0.8
 const HALF_PI = Math.PI / 2
 const terrainByK = new WeakMap()
 
@@ -80,8 +64,10 @@ const terrainByK = new WeakMap()
  * @param {Object} cfg.k - Kaplay instance
  * @param {Array} cfg.stalactites - Deadly stalactites from Layout.buildStalactites()
  * @param {Object} cfg.lake - Forest lake inst; the rock basin starts under its bed
- * @returns {Object} Terrain instance (tiles, and decorTips: tip points of
- *   the harmless ceiling / floor-underside stalactites)
+ * @returns {Object} Terrain instance (tiles, decorTips: tip points of
+ *   the harmless ceiling / floor-underside stalactites, swayAnchors: pin
+ *   points of the rock ledges' vines that sway, drawn live, fronts: the
+ *   ledges' top greens drawn in front of the hero)
  */
 export function create(cfg) {
   const { k, stalactites, lake } = cfg
@@ -92,11 +78,18 @@ export function create(cfg) {
   canvas.height = Layout.WORLD_H
   const ctx = canvas.getContext('2d')
   const rng = createSeededRandom(TERRAIN_SEED)
-  const decorTips = paintTerrain(ctx, rng, stalactites, lake)
+  const ledges = { swayAnchors: [], fronts: [] }
+  const decorTips = paintTerrain(ctx, rng, stalactites, lake, ledges)
   const tiles = sliceTiles(k, canvas)
   canvas.width = 0
   canvas.height = 0
-  const inst = { k, tiles, decorTips }
+  const fronts = ledges.fronts.map((f, i) => {
+    applyForestFilmGrainToCanvas(f.canvas, GRAIN_SEED_BASE + FRONT_GRAIN_SEED + i)
+    const name = `${TILE_SPRITE_PREFIX}-front-${i}`
+    k.loadSprite(name, f.canvas)
+    return { name, x: f.x, y: f.y, h: f.canvas.height }
+  })
+  const inst = { k, tiles, decorTips, swayAnchors: ledges.swayAnchors, fronts }
   terrainByK.set(k, inst)
   return inst
 }
@@ -113,20 +106,32 @@ export function onDraw(inst, top, bottom) {
     tile.y + tile.h > top && tile.y < bottom && k.drawSprite({ sprite: tile.name, pos: k.vec2(0, tile.y) })
   })
 }
+/**
+ * Draws the rock ledges' top greens that stand in front of the hero.
+ * @param {Object} inst - Terrain instance
+ * @param {number} top - View top world Y
+ * @param {number} bottom - View bottom world Y
+ */
+export function onDrawFront(inst, top, bottom) {
+  const k = inst.k
+  inst.fronts.forEach(f => {
+    f.y + f.h > top && f.y < bottom && k.drawSprite({ sprite: f.name, pos: k.vec2(f.x, f.y) })
+  })
+}
 //
 // Every terrain layer, back to front: walls and the lake basin, ceiling,
-// the monster plant, platforms, stalactites, then roots and ferns on the rock.
+// the monster plant, platforms, stalactites, then ferns on the rock.
 //
-function paintTerrain(ctx, rng, stalactites, lake) {
-  paintBasin(ctx, rng, lake)
-  paintRockMass(ctx, leftWallOutline(), rng, { edgeStones: true })
-  paintRockMass(ctx, rightWallOutline(), rng, { edgeStones: true })
-  paintCeiling(ctx, rng)
+function paintTerrain(ctx, rng, stalactites, lake, ledges) {
+  const rubbleRng = createSeededRandom(CAVE_CFG.rubble.seed)
+  paintBasin(ctx, rubbleRng, lake)
+  paintWall(ctx, leftWallOutline(), y => Layout.leftWallX(y), 1, rubbleRng)
+  paintWall(ctx, rightWallOutline(), y => Layout.rightWallX(y), -1, rubbleRng)
+  paintCeiling(ctx, rubbleRng)
   paintPlant(ctx, rng, lake)
-  Layout.PLATFORMS.forEach(p => paintPlatform(ctx, p, rng))
+  Layout.PLATFORMS.forEach(p => paintPlatform(ctx, p, ledges))
   stalactites.forEach(s => paintSpike(ctx, s.x, s.y, s.w, s.len, 1, rng))
   const decorTips = paintDecorStalactites(ctx, rng)
-  paintWallRoots(ctx, rng)
   paintWallFerns(ctx, rng)
   return decorTips
 }
@@ -142,22 +147,16 @@ function rightWallOutline() {
 //
 // Ceiling split by the entry shaft; its lips bend up into the shaft.
 //
-function paintCeiling(ctx, rng) {
+function paintCeiling(ctx, rubbleRng) {
   const bottomAt = Layout.ceilingBottomAt
   const lip = (x, edgeX) => {
     const d = Math.abs(x - edgeX)
     return d < SHAFT_LIP_DROP ? (1 - d / SHAFT_LIP_DROP) * SHAFT_LIP_DROP : 0
   }
   const left = sampleEdge(-OUTSIDE_PAD, Layout.ENTRY_X1, EDGE_STEP, x => ({ x, y: bottomAt(x) - lip(x, Layout.ENTRY_X1) }))
-  paintRockMass(ctx, [{ x: -OUTSIDE_PAD, y: -OUTSIDE_PAD }, ...left, { x: Layout.ENTRY_X1, y: -OUTSIDE_PAD }], rng)
+  paintCeilingRubble(ctx, [{ x: -OUTSIDE_PAD, y: -OUTSIDE_PAD }, ...left, { x: Layout.ENTRY_X1, y: -OUTSIDE_PAD }], rubbleRng)
   const right = sampleEdge(Layout.ENTRY_X2, Layout.WORLD_W + OUTSIDE_PAD, EDGE_STEP, x => ({ x, y: bottomAt(x) - lip(x, Layout.ENTRY_X2) }))
-  paintRockMass(ctx, [{ x: Layout.ENTRY_X2, y: -OUTSIDE_PAD }, ...right, { x: Layout.WORLD_W + OUTSIDE_PAD, y: -OUTSIDE_PAD }], rng)
-  for (let i = 0; i < CEILING_ROOT_COUNT; i++) {
-    const x = Layout.ENTRY_X2 + rng() * (Layout.WORLD_W - Layout.ENTRY_X2 - Layout.WALL_COLLIDE_W * 2)
-    paintRoot(ctx, x, bottomAt(x) - EDGE_STEP, HALF_PI + (rng() - 0.5) * ROOT_DOWN_SPREAD, CEILING_ROOT_THICK_MIN + rng() * CEILING_ROOT_THICK_RANGE, rng)
-  }
-  paintRoot(ctx, Layout.ENTRY_X1 - EDGE_STEP, bottomAt(Layout.ENTRY_X1) - SHAFT_LIP_DROP, HALF_PI, CEILING_ROOT_THICK_MIN, rng)
-  paintRoot(ctx, Layout.ENTRY_X2 + EDGE_STEP, bottomAt(Layout.ENTRY_X2) - SHAFT_LIP_DROP, HALF_PI, CEILING_ROOT_THICK_MIN, rng)
+  paintCeilingRubble(ctx, [{ x: Layout.ENTRY_X2, y: -OUTSIDE_PAD }, ...right, { x: Layout.WORLD_W + OUTSIDE_PAD, y: -OUTSIDE_PAD }], rubbleRng)
 }
 function paintDecorStalactites(ctx, rng) {
   const tips = []
@@ -178,19 +177,16 @@ function rootUnder(edgeAt, x, w) {
   return Math.min(edgeAt(x - w / 2), edgeAt(x + w / 2)) - DECOR_SPIKE_SINK
 }
 //
-// One platform: flat walkable top, tapered wavy underside, moss rim and a
-// few hanging rootlets. Ledges run into their wall; ground fills down.
+// One platform in its rubble style (cave-ledge.js): ledges grow out of
+// their wall, ground fills down; collects swaying vines and front greens.
 //
-function paintPlatform(ctx, p, rng) {
+function paintPlatform(ctx, p, ledges) {
   const { x1, x2 } = Layout.platformArtSpan(p)
-  const span = x2 - x1
-  const bottomAt = paintPlatformSlab(ctx, p, rng, {
-    mossX1: Math.max(x1, Layout.leftWallX(p.y) - EDGE_STEP),
-    mossX2: Math.min(x2, Layout.rightWallX(p.y) + EDGE_STEP)
-  })
-  if (p.kind === Layout.PLATFORM_KIND.GROUND || p.stalactites) return
-  rng() < LEDGE_ROOT_CHANCE && paintRoot(ctx, p.x1 + span * LEDGE_ROOT_FROM + rng() * span * LEDGE_ROOT_SPAN, bottomAt(p.x1 + span / 2) - LEDGE_ROOT_SINK, HALF_PI, LEDGE_ROOT_THICK, rng)
-  p.kind === Layout.PLATFORM_KIND.LEDGE && paintEdgeFern(ctx, p.wall === 'left' ? p.x2 - EDGE_STEP : p.x1 + EDGE_STEP, p.y, 0, rng, LEDGE_FERN_SCALE)
+  const moss = { x1: Math.max(x1, Layout.leftWallX(p.y) - EDGE_STEP), x2: Math.min(x2, Layout.rightWallX(p.y) + EDGE_STEP) }
+  const paint = p.kind === Layout.PLATFORM_KIND.GROUND ? paintGround : paintLedge
+  const ledge = paint(ctx, p, CAVE_CFG.ledge[p.style], moss)
+  ledges.swayAnchors.push(...ledge.swaying)
+  ledges.fronts.push(ledge.front)
 }
 //
 // Lake basin rock under the lake bed, between both shores.
@@ -199,19 +195,52 @@ function paintBasin(ctx, rng, lake) {
   const x1 = Layout.LAKE_X1 - BASIN_SHORE_OVERLAP
   const x2 = Layout.LAKE_X2 + BASIN_SHORE_OVERLAP
   const bed = sampleEdge(x1, x2, EDGE_STEP, x => ({ x, y: Lake.bedWorldY(lake, x) + BASIN_UNDER_BED }))
-  paintRockMass(ctx, [...bed, { x: x2, y: Layout.WORLD_H + OUTSIDE_PAD }, { x: x1, y: Layout.WORLD_H + OUTSIDE_PAD }], rng)
+  const pts = [...bed, { x: x2, y: Layout.WORLD_H + OUTSIDE_PAD }, { x: x1, y: Layout.WORLD_H + OUTSIDE_PAD }]
+  const path = smoothPath(pts)
+  const bedAt = x => Lake.bedWorldY(lake, x) + BASIN_UNDER_BED
+  ctx.save()
+  ctx.clip(path)
+  paintRubble(ctx, {
+    path,
+    bounds: polygonBounds(pts),
+    sizes: CAVE_CFG.rubble.stones,
+    inside: (x, y) => x > x1 && x < x2 && y > bedAt(x),
+    shadeAt: st => rubbleShade(st.y - bedAt(st.x))
+  }, rng)
+  ctx.restore()
 }
 //
-// Thick roots crawling down the wall faces.
+// A side wall in rubble, stones sinking into shadow away from its face
+// (dir: +1 for the left wall, whose rock is left of the face).
 //
-function paintWallRoots(ctx, rng) {
-  for (let i = 0; i < WALL_ROOT_COUNT; i++) {
-    const y = Layout.CEILING_Y + rng() * (WALL_ROOT_MAX_Y - Layout.CEILING_Y)
-    const leftSide = i % 2 === 0
-    const x = leftSide ? Layout.leftWallX(y) - WALL_ROOT_INSET : Layout.rightWallX(y) + WALL_ROOT_INSET
-    const bias = leftSide ? -WALL_ROOT_BIAS : WALL_ROOT_BIAS
-    paintRoot(ctx, x, y, HALF_PI + (rng() - 0.5) * ROOT_DOWN_SPREAD, WALL_ROOT_THICK_MIN + rng() * WALL_ROOT_THICK_RANGE, rng, bias)
-  }
+function paintWall(ctx, pts, faceAt, dir, rng) {
+  paintRubble(ctx, {
+    path: smoothPath(pts),
+    bounds: polygonBounds(pts),
+    sizes: CAVE_CFG.rubble.stones,
+    inside: (x, y) => (faceAt(y) - x) * dir > 0,
+    shadeAt: st => rubbleShade((faceAt(st.y) - st.x) * dir)
+  }, rng)
+}
+//
+// One side of the ceiling in rubble, darker up from its lower edge.
+//
+function paintCeilingRubble(ctx, pts, rng) {
+  const path = smoothPath(pts)
+  paintRubble(ctx, {
+    path,
+    bounds: polygonBounds(pts),
+    sizes: CAVE_CFG.rubble.stones,
+    inside: (x, y) => insidePath(ctx, path, x, y),
+    shadeAt: st => rubbleShade(Layout.ceilingBottomAt(st.x) - st.y)
+  }, rng)
+}
+//
+// Shadow of a rubble stone this deep into the rock (0 lit … 1 darkest).
+//
+function rubbleShade(depth) {
+  const r = CAVE_CFG.rubble
+  return Math.min(1, r.shadeMin + (1 - r.shadeMin) * Math.max(0, depth) / r.shadeDepth)
 }
 //
 // Dark ferns growing sideways out of both wall edges.

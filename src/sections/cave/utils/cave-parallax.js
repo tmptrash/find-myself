@@ -8,9 +8,9 @@ import { paintRubble, paintLedge as paintRockLedge } from './cave-ledge.js'
 import {
   CAVE_PAL,
   css,
-  paintRockMass,
   paintEdgeFern,
   paintHangingVine,
+  paintMossStrand,
   sampleEdge,
   smoothPath,
   polygonBounds,
@@ -23,36 +23,47 @@ import {
 // from the sides and floating free — the row's grade, shade and blur make
 // them darker and softer — and the darkest rubble masses nearest the camera. Plants only grow
 // out of rock (nothing hangs in mid air). Three rows lag behind the camera
-// on both axes; all bake at half resolution and draw stretched back.
+// on both axes; all bake at full resolution (sharp, only blurred).
 //
-const BAKE_SCALE = 0.5
-const SPRITE_PREFIX = 'cave0-parallax-v10'
+//
+// Fine film grain on the rows (no blocky clusters: they read as pixels).
+//
+const GRAIN_BLOCK = 1
+const SPRITE_PREFIX = 'cave0-parallax-v12'
 const GRAIN_SEED_BASE = 8400
 const EDGE_STEP = 8
 const OUTSIDE_PAD = 12
 const HALF_PI = Math.PI / 2
 const HALF = 0.5
 //
-// The forest depth blur is softened here so the back rows stay readable.
-//
-const BLUR_SCALE = 0.45
-//
 // Rows: camera-follow fraction, seed, the forest depth rules (grade = lower
-// contrast / saturation toward the row's haze, blur tier) and how far each
-// is pushed into the cave shade (far deepest, so the gameplay plane reads
-// first).
+// contrast / saturation toward the row's haze, blur tier, softened by
+// blurScale so the rows stay readable) and how far each is pushed into the
+// cave shade (far deepest, so the gameplay plane reads first).
 //
 const LAYERS = [
-  { id: 'far', speed: 0.22, seed: 601, shade: 0.72, grade: FOREST_LAYER_GRADE.far, blurTier: 'background' },
-  { id: 'mid', speed: 0.46, seed: 602, shade: 0.55, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground' },
-  { id: 'near', speed: 0.7, seed: 603, shade: 0.6, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground' }
+  { id: 'far', speed: 0.22, seed: 601, shade: 0.6, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.2 },
+  { id: 'mid', speed: 0.46, seed: 602, shade: 0.55, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.45 },
+  { id: 'near', speed: 0.7, seed: 603, shade: 0.6, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.45 }
 ]
 const RGBA_STRIDE = 4
 const BYTE = 255
 //
-// Far wall: stone size.
+// Far wall: plants on it — vine length range, fern size, small leaf
+// clusters, short moss strands.
 //
-const FAR_STONE_SCALE = 3.4
+const FAR_VINE_LEN_MIN = 50
+const DARK_VINE_EVERY = 2
+const FAR_VINE_LEN_RANGE = 240
+const FAR_VINE_SCALE = 1.3
+const FAR_FERN_MIN = 0.8
+const FAR_FERN_RANGE = 0.9
+const FAR_FERN_TILT = 1.2
+const FAR_SPRIG_LEAVES = 5
+const FAR_SPRIG_SPREAD = 10
+const FAR_SPRIG_SIZE = 4
+const FAR_STRAND_MIN = 20
+const FAR_STRAND_RANGE = 60
 //
 // Mid row: rock ledges growing from both side walls, and free-floating
 // ones in between (sizes in layer px; reach as a share of the row width).
@@ -175,10 +186,9 @@ function bakeLayer(k, layer, index) {
   const w = Layout.WORLD_W
   const h = Math.ceil((Layout.WORLD_H - Layout.MAX_VIEW_H) * layer.speed + Layout.MAX_VIEW_H)
   const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(w * BAKE_SCALE)
-  canvas.height = Math.ceil(h * BAKE_SCALE)
+  canvas.width = w
+  canvas.height = h
   const ctx = canvas.getContext('2d')
-  ctx.scale(BAKE_SCALE, BAKE_SCALE)
   const rng = createSeededRandom(layer.seed)
   layer.id === 'far' && paintFar(ctx, w, h, rng)
   const anchors = []
@@ -186,8 +196,8 @@ function bakeLayer(k, layer, index) {
   layer.id === 'mid' && paintMid(ctx, w, h, rng, anchors, eyes)
   layer.id === 'near' && paintNear(ctx, w, h, rng)
   applyParallaxPostFxToContext(ctx, canvas.width, canvas.height, {
-    blurRadius: forestDepthBlurRadiusPx(layer.blurTier) * BAKE_SCALE * BLUR_SCALE,
-    grade: { ...layer.grade, haze: forestRgb(CAVE_PAL.backHaze[layer.id]) },
+    blurRadius: forestDepthBlurRadiusPx(layer.blurTier) * layer.blurScale,
+    grade: { ...layer.grade, grainBlockSize: GRAIN_BLOCK, haze: forestRgb(CAVE_PAL.backHaze[layer.id]) },
     grainSeedOffset: GRAIN_SEED_BASE + index
   })
   shadeCanvas(canvas, layer.shade)
@@ -196,15 +206,50 @@ function bakeLayer(k, layer, index) {
   return { id: layer.id, name, speed: layer.speed, seed: layer.seed, w, h, anchors, eyes }
 }
 //
-// Opaque far wall: one big mass of large, low-contrast stones.
+// Opaque far wall: rubble of big stones in many different darknesses,
+// with plants growing on it.
 //
 function paintFar(ctx, w, h, rng) {
-  const tones = CAVE_PAL.backWall
-  ctx.fillStyle = css(tones[1])
-  ctx.fillRect(0, 0, w, h)
+  const far = CAVE_CFG.parallax.far
   const pad = OUTSIDE_PAD
-  paintRockMass(ctx, [{ x: -pad, y: -pad }, { x: w + pad, y: -pad }, { x: w + pad, y: h + pad }, { x: -pad, y: h + pad }], rng,
-    { tones, stoneScale: FAR_STONE_SCALE, contour: false })
+  const pts = [{ x: -pad, y: -pad }, { x: w + pad, y: -pad }, { x: w + pad, y: h + pad }, { x: -pad, y: h + pad }]
+  const seed = rng() * LEDGE_SEED_SPREAD
+  paintRubble(ctx, {
+    path: smoothPath(pts),
+    bounds: polygonBounds(pts),
+    sizes: far.stones,
+    colors: far,
+    inside: () => true,
+    shadeAt: st => Math.max(0, Math.min(1, HALF + (Layout.profileNoise(st.x * far.patchFreq * w, seed) + Layout.profileNoise(st.y * far.patchFreq * w, seed + 1)) * far.patchShade + (rng() - HALF) * far.stoneShade))
+  }, rng)
+  paintFarGreens(ctx, w, h, far, rng)
+}
+//
+// Greens growing on the far wall: hanging vines, ferns, little leaf
+// clusters and short moss strands, scattered over the stones.
+//
+function paintFarGreens(ctx, w, h, far, rng) {
+  const [shadow, dark, mid, light] = far.greens
+  for (let i = 0; i < far.vines; i++) {
+    const tones = i % DARK_VINE_EVERY === 0 ? [shadow, shadow, dark] : [shadow, dark, mid]
+    paintHangingVine(ctx, rng() * w, rng() * h, FAR_VINE_LEN_MIN + rng() * FAR_VINE_LEN_RANGE, rng, { tones, scale: FAR_VINE_SCALE, contour: false, crown: true })
+  }
+  for (let i = 0; i < far.ferns; i++) {
+    paintEdgeFern(ctx, rng() * w, rng() * h, (rng() - HALF) * FAR_FERN_TILT, rng, FAR_FERN_MIN + rng() * FAR_FERN_RANGE, [dark, mid, light])
+  }
+  for (let i = 0; i < far.sprigs; i++) {
+    const x = rng() * w
+    const y = rng() * h
+    for (let l = 0; l < FAR_SPRIG_LEAVES; l++) {
+      ctx.fillStyle = css(rng() < HALF ? mid : light)
+      ctx.beginPath()
+      ctx.ellipse(x + (rng() - HALF) * FAR_SPRIG_SPREAD, y + (rng() - HALF) * FAR_SPRIG_SPREAD, FAR_SPRIG_SIZE, FAR_SPRIG_SIZE * HALF, rng() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  for (let i = 0; i < far.mossStrands; i++) {
+    paintMossStrand(ctx, rng() * w, rng() * h, FAR_STRAND_MIN + rng() * FAR_STRAND_RANGE, rng, { tones: [shadow, dark, mid, light, light], drop: false })
+  }
 }
 //
 // Mid row: free-floating ledges first (further back), then ledges from

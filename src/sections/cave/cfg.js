@@ -123,6 +123,31 @@ export const CAVE_CFG = {
         { r: 12, range: 0.4, tries: 3 }
       ]
     },
+    //
+    // The far wall behind the ledges: the same rubble, stones of many
+    // different darknesses (shade drifts in big patches, then varies per
+    // stone), and greens growing on it.
+    //
+    far: {
+      void: '#0a0f10',
+      rock: ['#6a7874', '#5c6a66', '#4f5c59', '#434f4d', '#384342', '#2e3737', '#252d2e'],
+      rockLit: ['#97a99e', '#83958b', '#718279', '#606f69', '#505d59'],
+      gaps: ['#101617', '#151c1d', '#1b2324', '#222b2b', '#18261a', '#253a25'],
+      stones: [
+        { r: 44, range: 0.35, tries: 0.6 },
+        { r: 26, range: 0.4, tries: 1.2 },
+        { r: 14, range: 0.4, tries: 2.2 },
+        { r: 7, range: 0.4, tries: 2.5 }
+      ],
+      greens: ['#0e1a13', '#24412d', '#3f6a44', '#76a058'],   // Shadow, dark, mid, light
+      patchFreq: 0.012,
+      patchShade: 0.3,
+      stoneShade: 0.45,
+      vines: 34,
+      ferns: 26,
+      sprigs: 60,
+      mossStrands: 30
+    },
     shadeDepth: 160
   },
   //

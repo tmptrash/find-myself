@@ -72,8 +72,8 @@ export const PLATFORMS = [
 ]
 //
 // The monster plant: rope foot (bottom in the lake, top at the first
-// leaf), its pad leaves (the spore leaf T is a trap with a red mouth that
-// snaps shut on prey; collideInset trims a leaf's collider at both ends
+// leaf), its pad leaves (the top leaf A and the spore leaf T are traps
+// with red mouths that seize the hero; collideInset trims a leaf's collider at both ends
 // where its rim droops), and the thorny band right of the second leaf.
 //
 export const PLANT_TRUNK = { x: 742, bottomY: WORLD_H, topY: 470, width: 84 }
@@ -82,18 +82,23 @@ export const LEAF_KIND = {
   LEAF: 'leaf'
 }
 export const PLANT_LEAVES = [
-  { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.LEAF, collideInset: 34 },
+  { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.TRAP, collideInset: 34 },
   { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF },
   { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true }
 ]
 export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
 //
+// Extra thorns on the trunk's right side at the hero's height above leaf B
+// (inside the thorny band's hit area).
+//
+export const PLANT_THORNS_RIGHT = { y1: 728, y2: 800 }
+//
 // Spore mushroom on the left part of ledge C; swarm stations it hovers at:
 // above the mushroom, a step to the right, then above the spore trap leaf.
 //
-export const SPORE_MUSHROOM = { x: 180, y: 1100 }
+export const SPORE_MUSHROOM = { x: 230, y: 1100 }
 export const SPORE_STATIONS = [
-  { x: 180, y: 935 },
+  { x: 230, y: 935 },
   { x: 345, y: 955 },
   { x: 600, y: 1150 }
 ]
@@ -170,7 +175,6 @@ export const DORMANT_MUSHROOM = { x: 345, y: 430, scale: 1, seed: 11 }
 // Always-lit small mushrooms (x, ground y, scale, light radius).
 //
 export const LIT_MUSHROOMS = [
-  { x: 95, y: 1100, scale: 0.45, seed: 21, light: 120 },
   { x: 905, y: 1720, scale: 0.55, seed: 22, light: 150 },
   { x: 950, y: 1720, scale: 0.4, seed: 23, light: 110 },
   { x: 1200, y: 1300, scale: 0.5, seed: 24, light: 140 }

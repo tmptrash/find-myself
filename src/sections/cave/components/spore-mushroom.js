@@ -5,8 +5,9 @@ import { getRGB } from '../../../utils/helper.js'
 import * as Glow from '../utils/cave-glow.js'
 import { CAVE_PAL, css } from '../utils/cave-paint.js'
 //
-// Spore mushroom: a wide dome cap pierced with glowing holes, golden gills
-// and swaying tendrils with glowing beads. Landing on its cap lets a swarm
+// Spore mushroom: a tall dome cap pierced with glowing holes of different
+// sizes, a lit underside with golden gills and a slim stem rising into its
+// centre. Landing on its cap lets a swarm
 // of spores out to hover above it. Jumping into the swarm moves it:
 //   - straight up from below: it scatters up, then flies home;
 //   - from its right, moving left: it drifts up-left, then flies home;
@@ -14,70 +15,102 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 //     last station it flies into the trap leaf there (the level snaps it).
 // A hovering swarm left alone flies home after a while.
 //
-const SPRITE = 'cave0-spore-mushroom-v1'
+const SPRITE = 'cave0-spore-mushroom-v3'
 const GRAIN_SEED = 9950
 const BAKE_PAD = 8
 //
-// Shape: cap size, stem, holes, gills.
+// Shape: cap size (a rounded dome: control shares for its sides), the
+// underside seen from below (an ellipse with gills from the stem), the stem.
 //
-const CAP_W = 150
-const CAP_H = 64
-const CAP_RIM_DROP = 10
-const STEM_H = 34
-const STEM_W = 26
-const STEM_FOOT_W = 40
-const HOLES = [
-  { u: -0.32, v: 0.55, r: 9 }, { u: -0.05, v: 0.3, r: 11 }, { u: 0.26, v: 0.45, r: 10 },
-  { u: 0.12, v: 0.72, r: 7 }, { u: -0.22, v: 0.8, r: 6 }, { u: 0.38, v: 0.78, r: 6 }, { u: 0.02, v: 0.06, r: 6 }
-]
-const HOLE_SQUASH = 0.62
-const HOLE_INNER = 0.62
-const GILL_COUNT = 13
-const GILL_DEPTH = 12
+const SIZE = 0.82
+const CAP_W = Math.round(168 * SIZE)
+const CAP_H = Math.round(78 * SIZE)
+const DOME_SIDE_X = 0.52
+const DOME_SIDE_Y = 0.75
+const DOME_TOP_X = 0.3
+const UNDER_RY = Math.round(13 * SIZE)
+const UNDER_INSET = 4
+const GILL_COUNT = 22
+const GILL_ALPHA = 0.55
+const STEM_H = Math.round(44 * SIZE)
+const STEM_W = Math.round(16 * SIZE)
+const STEM_FOOT_W = Math.round(32 * SIZE)
+const STEM_TOP_W = Math.round(20 * SIZE)
+//
+// Stem detail: fibres wandering up it (midpoint displacement, forking once),
+// each a dark groove with a lit lip, plus a few pale specks.
+//
+const STEM_FIBRES = 6
+const STEM_FIBRE_LEVELS = 3
+const STEM_FIBRE_WANDER = 0.35
+const STEM_FIBRE_FORK_FROM = 0.3
+const STEM_FIBRE_FORK_SPAN = 0.4
+const STEM_FIBRE_FORK_LEN = 0.45
+const STEM_FIBRE_FORK_LEAN = 4
+const STEM_FIBRE_ALPHA = 0.6
+const STEM_LIP_ALPHA = 0.45
+const STEM_SPECKS = 14
+const STEM_SPECK_ALPHA = 0.5
+const STEM_LIT_X = 0.25
+const STEM_LIT_W = 3
+const STEM_COLLAR = 3
 const CONTOUR_W = 1.8
-const CAP_SHADE_SHIFT = 0.2
-const CAP_LIGHT_SHIFT = 0.25
-const CAP_LIGHT_W = 0.5
-const CAP_LIGHT_H = 0.35
-const CAP_LIGHT_Y = 0.35
-const CAP_SHADE_W = 0.45
-const CAP_SHADE_H = 0.5
-const CAP_DOME_LIFT = 0.15
+//
+// Cap shading: shade on the lower right, light on the upper left.
+//
+const CAP_SHADE_SHIFT = 0.22
+const CAP_SHADE_W = 0.5
+const CAP_SHADE_H = 0.55
+const CAP_LIGHT_SHIFT = 0.2
+const CAP_LIGHT_Y = 0.32
+const CAP_LIGHT_W = 0.28
+const CAP_LIGHT_H = 0.3
+//
+// Holes in the cap (u: share of the cap width from its centre, v: share of
+// its height from the top, r: radius). Toward the dome's sides they are
+// foreshortened (narrower); each has a dark rim, a glowing inside and a
+// bright crescent at its lower edge.
+//
+const HOLES = [
+  { u: -0.08, v: 0.2, r: 12 }, { u: 0.17, v: 0.24, r: 9 }, { u: -0.29, v: 0.4, r: 11 },
+  { u: 0.03, v: 0.48, r: 14 }, { u: 0.3, v: 0.45, r: 12 }, { u: -0.12, v: 0.7, r: 8 },
+  { u: 0.17, v: 0.72, r: 10 }, { u: -0.38, v: 0.68, r: 7 }, { u: 0.4, v: 0.72, r: 7 },
+  { u: -0.22, v: 0.08, r: 5 }, { u: 0.08, v: 0.06, r: 5 }, { u: -0.43, v: 0.88, r: 4 },
+  { u: 0.03, v: 0.86, r: 5 }, { u: 0.29, v: 0.9, r: 4 }, { u: -0.3, v: 0.88, r: 5 }
+]
+const HOLE_SQUASH = 0.8
+const HOLE_SIZE = SIZE
+const HOLE_EDGE_SQUEEZE = 0.9
 const HOLE_RIM = 2
-const HOLE_RIM_LIFT = 1.5
+const HOLE_INNER = 0.68
+const HOLE_CRESCENT = 0.4
 const SPORE_HALO_SHARE = 0.6
-const HALF = 0.5
-//
-// Tendrils: count, length, sway, bead glow.
-//
-const TENDRILS = 9
-const TENDRIL_LEN_MIN = 26
-const TENDRIL_LEN_RANGE = 34
-const TENDRIL_SEGS = 5
-const TENDRIL_W = 1.6
-const TENDRIL_SWAY = 4
-const TENDRIL_SWAY_SPEED = 1.3
-const BEAD_R = 2.6
-const BEAD_GLOW_R = 9
-const BEAD_GLOW_OPACITY = 0.6
-const HOLE_GLOW_R = 14
+const HOLE_GLOW_R = 1.3
 const HOLE_GLOW_OPACITY = 0.35
+const HALF = 0.5
 //
 // Collider across the cap top.
 //
-const CAP_COLLIDE_W = 0.62
+const CAP_COLLIDE_W = 0.42
 const CAP_COLLIDE_H = 12
 const CAP_COLLIDE_SINK = 6
 //
-// Swarm: spore count, orbit, speeds, hit radius, moves, hover timeout.
+// Swarm: spore count, speeds, hit radius, moves, hover timeout.
 //
 const SPORES = 16
-const ORBIT_R_MIN = 12
-const ORBIT_R_RANGE = 34
-const ORBIT_SPEED_MIN = 1.2
-const ORBIT_SPEED_RANGE = 1.8
-const ORBIT_FLATTEN = 0.6
-const SPORE_FOLLOW = 5
+//
+// Each spore wanders on its own around the swarm centre: a random push
+// every frame, a pull back toward the centre (stronger past its range),
+// damping; the range is flatter than tall.
+//
+const WANDER_PUSH = 900
+const WANDER_PULL = 3
+const WANDER_DAMP = 2.2
+const WANDER_R_MIN = 18
+const WANDER_R_RANGE = 34
+const WANDER_FLATTEN = 0.65
+const SPORE_FOLLOW = 7
+const MAX_DT = 0.05
 const CENTER_SPEED = 260
 const HOME_SPEED = 220
 const ARRIVE_DIST = 6
@@ -94,6 +127,15 @@ const SPORE_CORE_R = 2.2
 const SPORE_OPACITY = 0.9
 const TRAPPED_OPACITY = 0.45
 const TRAPPED_ORBIT = 0.35
+//
+// Breathing now and then: the mushroom swells a little (wider, a touch
+// taller, feet on the ground) for a breath, then rests a random while.
+//
+const BREATH_REST_MIN = 3
+const BREATH_REST_RANGE = 5
+const BREATH_TIME = 1.6
+const BREATH_W = 0.05
+const BREATH_H = 0.035
 const FULL_TURN = Math.PI * 2
 const SWARM_STATE = {
   INSIDE: 'inside',
@@ -120,7 +162,7 @@ export function create(cfg) {
   !bakedFor.has(k) && (bake(k), bakedFor.add(k))
   Glow.create(k)
   const capTopY = y - STEM_H - CAP_H
-  const home = { x, y: capTopY + CAP_H * 0.5 }
+  const home = { x, y: capTopY + CAP_H * HALF }
   const rng = createSeededRandom(GRAIN_SEED)
   return {
     k,
@@ -137,18 +179,14 @@ export function create(cfg) {
       k.opacity(0),
       CFG.game.platformName
     ]),
-    tendrils: Array.from({ length: TENDRILS }, (_, i) => ({
-      u: (i + HALF) / TENDRILS - HALF,
-      len: TENDRIL_LEN_MIN + rng() * TENDRIL_LEN_RANGE,
-      phase: rng() * FULL_TURN
-    })),
-    spores: Array.from({ length: SPORES }, () => ({
-      x: home.x,
-      y: home.y,
-      angle: rng() * FULL_TURN,
-      r: ORBIT_R_MIN + rng() * ORBIT_R_RANGE,
-      speed: (ORBIT_SPEED_MIN + rng() * ORBIT_SPEED_RANGE) * (rng() < HALF ? -1 : 1)
-    })),
+    spores: Array.from({ length: SPORES }, (_, i) => {
+      const hole = HOLES[i % HOLES.length]
+      const at = { x: x + hole.u * CAP_W, y: capTopY + hole.v * CAP_H }
+      return { ...at, hole, ox: 0, oy: 0, vx: 0, vy: 0, range: WANDER_R_MIN + rng() * WANDER_R_RANGE }
+    }),
+    breath: 0,
+    breathT: -1,
+    breathRest: BREATH_REST_MIN + rng() * BREATH_REST_RANGE,
     state: W.INSIDE,
     center: { ...home },
     target: { ...home },
@@ -191,6 +229,7 @@ export function onUpdate(inst, heroInst) {
   inst.state === W.HOVER && inst.timer > HOVER_TIME && goHome(inst)
   inst.state === W.WANDER && inst.timer > WANDER_TIME && goHome(inst)
   moveSpores(inst, dt)
+  breathe(inst, dt)
   return event
 }
 
@@ -214,38 +253,24 @@ export function release(inst) {
 }
 
 /**
- * Draws the mushroom (cap, tendrils, beads) — world pass.
+ * Draws the mushroom with its stem foot on the ground (the bake has a pad
+ * under the foot) — world pass.
  * @param {Object} inst - Spore mushroom instance
  */
 export function onDraw(inst) {
-  const k = inst.k
-  const t = k.time()
-  const underY = inst.capTopY + CAP_H
-  inst.tendrils.forEach(td => {
-    const x0 = inst.x + td.u * CAP_W * 0.85
-    const pts = []
-    for (let i = 0; i <= TENDRIL_SEGS; i++) {
-      const s = i / TENDRIL_SEGS
-      pts.push(k.vec2(x0 + Math.sin(t * TENDRIL_SWAY_SPEED + td.phase + s * 2) * TENDRIL_SWAY * s, underY + td.len * s))
-    }
-    k.drawLines({ pts, width: TENDRIL_W, color: getRGB(k, CAVE_PAL.spore.tendril) })
-  })
-  k.drawSprite({ sprite: SPRITE, pos: k.vec2(inst.x, inst.y), anchor: 'bot' })
+  const b = inst.breath
+  inst.k.drawSprite({ sprite: SPRITE, pos: inst.k.vec2(inst.x, inst.y + BAKE_PAD), anchor: 'bot', scale: inst.k.vec2(1 + BREATH_W * b, 1 + BREATH_H * b) })
 }
 
 /**
- * Additive glows: holes, tendril beads and the spores — light pass.
+ * Additive glows: holes and the spores — light pass.
  * @param {Object} inst - Spore mushroom instance
  */
 export function onDrawGlow(inst) {
   const k = inst.k
-  const t = k.time()
-  const underY = inst.capTopY + CAP_H
-  HOLES.forEach(h => Glow.drawGlow(k, inst.x + h.u * CAP_W, inst.capTopY + h.v * CAP_H, HOLE_GLOW_R, inst.glowRgb, HOLE_GLOW_OPACITY))
-  inst.tendrils.forEach(td => {
-    const bx = inst.x + td.u * CAP_W * 0.85 + Math.sin(t * TENDRIL_SWAY_SPEED + td.phase + 2) * TENDRIL_SWAY
-    Glow.drawGlow(k, bx, underY + td.len, BEAD_GLOW_R, inst.glowRgb, BEAD_GLOW_OPACITY)
-    Glow.drawGlow(k, bx, underY + td.len, BEAD_R, inst.sparkRgb, 1)
+  HOLES.forEach(h => {
+    const at = holeAt(inst, h)
+    Glow.drawGlow(k, at.x, at.y, h.r * HOLE_SIZE * HOLE_GLOW_R, inst.glowRgb, HOLE_GLOW_OPACITY)
   })
   if (inst.state === W.INSIDE) return
   const opacity = inst.state === W.TRAPPED ? TRAPPED_OPACITY : SPORE_OPACITY
@@ -310,68 +335,192 @@ function arrive(inst) {
   return inst.state === W.HOVER && inst.station === inst.stations.length - 1 ? 'trap' : null
 }
 //
-// Each spore circles the swarm centre on its own orbit (shrunk inside a
-// trap, collapsed into the cap when home) and eases toward its place.
+// Spores inside sit in their holes; out, each wanders randomly around the
+// swarm centre (random pushes, a pull back, damping), its range shrunk
+// when trapped. Positions ease after the target, so they stream out of the
+// holes and back in.
 //
 function moveSpores(inst, dt) {
-  const ease = Math.min(1, dt * SPORE_FOLLOW)
-  const orbitScale = inst.state === W.TRAPPED ? TRAPPED_ORBIT : inst.state === W.INSIDE ? 0 : 1
+  const step = Math.min(dt, MAX_DT)
+  const ease = Math.min(1, step * SPORE_FOLLOW)
+  const scale = inst.state === W.TRAPPED ? TRAPPED_ORBIT : 1
   inst.spores.forEach(sp => {
-    sp.angle += sp.speed * dt
-    const tx = inst.center.x + Math.cos(sp.angle) * sp.r * orbitScale
-    const ty = inst.center.y + Math.sin(sp.angle) * sp.r * ORBIT_FLATTEN * orbitScale
-    sp.x += (tx - sp.x) * ease
-    sp.y += (ty - sp.y) * ease
+    if (inst.state === W.INSIDE) {
+      const at = holeAt(inst, sp.hole)
+      sp.x += (at.x - sp.x) * ease
+      sp.y += (at.y - sp.y) * ease
+      sp.ox = sp.x - inst.center.x
+      sp.oy = sp.y - inst.center.y
+      sp.vx = 0
+      sp.vy = 0
+      return
+    }
+    const range = sp.range * scale
+    const far = Math.max(1, Math.hypot(sp.ox, sp.oy / WANDER_FLATTEN) / range)
+    sp.vx += ((Math.random() - HALF) * WANDER_PUSH - sp.ox * WANDER_PULL * far - sp.vx * WANDER_DAMP) * step
+    sp.vy += ((Math.random() - HALF) * WANDER_PUSH * WANDER_FLATTEN - sp.oy * WANDER_PULL * far - sp.vy * WANDER_DAMP) * step
+    sp.ox += sp.vx * step
+    sp.oy += sp.vy * step
+    sp.x += (inst.center.x + sp.ox - sp.x) * ease
+    sp.y += (inst.center.y + sp.oy - sp.y) * ease
   })
 }
 //
-// Cap (dome, mottled shading, glowing holes, golden gills) on a short stem.
+// World position of a hole on the cap, swelling with the breath.
+//
+function holeAt(inst, h) {
+  const b = inst.breath
+  return { x: inst.x + h.u * CAP_W * (1 + BREATH_W * b), y: inst.y - (inst.y - inst.capTopY - h.v * CAP_H) * (1 + BREATH_H * b) }
+}
+//
+// Rests a random while, then takes one slow breath (swell and back).
+//
+function breathe(inst, dt) {
+  if (inst.breathT < 0) {
+    inst.breathRest -= dt
+    if (inst.breathRest > 0) return
+    inst.breathT = 0
+  }
+  inst.breathT += dt
+  const u = inst.breathT / BREATH_TIME
+  inst.breath = u < 1 ? Math.sin(Math.PI * u) : 0
+  if (u < 1) return
+  inst.breathT = -1
+  inst.breathRest = BREATH_REST_MIN + Math.random() * BREATH_REST_RANGE
+}
+//
+// Underside (lit, gills from the centre), the stem rising into its centre,
+// then the dome over them with its glowing holes.
 //
 function bake(k) {
-  const pal = CAVE_PAL.spore
   const w = CAP_W + BAKE_PAD * 2
   const h = CAP_H + STEM_H + BAKE_PAD * 2
   const cx = w / 2
   const groundY = h - BAKE_PAD
-  const capTop = BAKE_PAD
-  const rimY = capTop + CAP_H
+  const rimY = BAKE_PAD + CAP_H
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.lineJoin = 'round'
-  const [sDark, sMid, sLight] = pal.stem
+  paintUnderside(ctx, cx, rimY)
+  paintStem(ctx, cx, rimY, groundY)
+  paintCap(ctx, cx, BAKE_PAD, rimY)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
+  k.loadSprite(SPRITE, canvas)
+}
+//
+// The cap's underside seen from below: a lit ellipse with gills fanning
+// from its centre.
+//
+function paintUnderside(ctx, cx, rimY) {
+  const pal = CAVE_PAL.spore
+  const rx = CAP_W / 2 - UNDER_INSET
   ctx.beginPath()
-  ctx.moveTo(cx - STEM_W / 2, rimY - 4)
-  ctx.quadraticCurveTo(cx - STEM_W / 2, groundY - 6, cx - STEM_FOOT_W / 2, groundY)
-  ctx.lineTo(cx + STEM_FOOT_W / 2, groundY)
-  ctx.quadraticCurveTo(cx + STEM_W / 2, groundY - 6, cx + STEM_W / 2, rimY - 4)
-  ctx.closePath()
-  ctx.fillStyle = css(sMid)
-  ctx.fill()
-  ctx.strokeStyle = css(sDark)
-  ctx.lineWidth = CONTOUR_W
-  ctx.stroke()
-  ctx.fillStyle = css(sLight)
-  ctx.fillRect(cx - STEM_W / 2 + 4, rimY, 3, STEM_H - 10)
-  ctx.beginPath()
-  ctx.ellipse(cx, rimY - 2, CAP_W / 2 - 4, GILL_DEPTH, 0, 0, Math.PI)
+  ctx.ellipse(cx, rimY, rx, UNDER_RY, 0, 0, FULL_TURN)
   ctx.fillStyle = css(pal.gill)
   ctx.fill()
-  ctx.strokeStyle = css(pal.hole)
+  ctx.strokeStyle = css(pal.hole, GILL_ALPHA)
   ctx.lineWidth = 1
   for (let i = 1; i < GILL_COUNT; i++) {
     const a = Math.PI * i / GILL_COUNT
     ctx.beginPath()
-    ctx.moveTo(cx, rimY - 2)
-    ctx.lineTo(cx + Math.cos(a) * (CAP_W / 2 - 4), rimY - 2 + Math.sin(a) * GILL_DEPTH)
+    ctx.moveTo(cx, rimY)
+    ctx.lineTo(cx + Math.cos(a) * rx, rimY + Math.sin(a) * UNDER_RY)
     ctx.stroke()
   }
-  const [cDark, cMid, cLight, cHigh] = pal.cap
+  ctx.strokeStyle = css(pal.stem[0])
+  ctx.lineWidth = CONTOUR_W
+  ctx.beginPath()
+  ctx.ellipse(cx, rimY, rx, UNDER_RY, 0, 0, Math.PI)
+  ctx.stroke()
+}
+//
+// Slim stem from a wider foot up into the underside's centre, with a dark
+// collar where it meets the gills, a lit streak on its left and fibres.
+//
+function paintStem(ctx, cx, rimY, groundY) {
+  const [dark, mid, light] = CAVE_PAL.spore.stem
+  ctx.beginPath()
+  ctx.moveTo(cx - STEM_TOP_W / 2, rimY)
+  ctx.quadraticCurveTo(cx - STEM_W / 2, (rimY + groundY) / 2, cx - STEM_FOOT_W / 2, groundY)
+  ctx.lineTo(cx + STEM_FOOT_W / 2, groundY)
+  ctx.quadraticCurveTo(cx + STEM_W / 2, (rimY + groundY) / 2, cx + STEM_TOP_W / 2, rimY)
+  ctx.closePath()
+  ctx.fillStyle = css(mid)
+  ctx.fill()
+  ctx.strokeStyle = css(dark)
+  ctx.lineWidth = CONTOUR_W
+  ctx.stroke()
+  ctx.fillStyle = css(light)
+  ctx.fillRect(cx - STEM_W * STEM_LIT_X - STEM_LIT_W / 2, rimY + STEM_COLLAR, STEM_LIT_W, groundY - rimY - STEM_COLLAR * 3)
+  ctx.save()
+  ctx.clip()
+  paintStemFibres(ctx, cx, rimY, groundY, createSeededRandom(GRAIN_SEED + 1))
+  ctx.restore()
+  ctx.fillStyle = css(dark)
+  ctx.beginPath()
+  ctx.ellipse(cx, rimY, STEM_TOP_W / 2, STEM_COLLAR, 0, 0, FULL_TURN)
+  ctx.fill()
+}
+//
+// Fibres running up the stem, wandering and forking, with lit lips, and a
+// few pale specks.
+//
+function paintStemFibres(ctx, cx, rimY, groundY, rng) {
+  const [dark, , light] = CAVE_PAL.spore.stem
+  for (let i = 0; i < STEM_FIBRES; i++) {
+    const x = cx + ((i + HALF) / STEM_FIBRES - HALF) * STEM_FOOT_W
+    const pts = wander({ x, y: groundY }, { x: cx + (x - cx) * STEM_TOP_W / STEM_FOOT_W, y: rimY }, rng)
+    fibre(ctx, pts, dark, light)
+    const from = pts[Math.floor(pts.length * (STEM_FIBRE_FORK_FROM + rng() * STEM_FIBRE_FORK_SPAN))]
+    const len = (groundY - rimY) * STEM_FIBRE_FORK_LEN
+    fibre(ctx, wander(from, { x: from.x + (rng() - HALF) * STEM_FIBRE_FORK_LEAN * 2, y: from.y - len }, rng), dark, light)
+  }
+  ctx.fillStyle = css(light, STEM_SPECK_ALPHA)
+  for (let i = 0; i < STEM_SPECKS; i++) {
+    ctx.fillRect(Math.round(cx + (rng() - HALF) * STEM_W), Math.round(rimY + rng() * (groundY - rimY)), 1, 1)
+  }
+}
+//
+// One fibre: dark groove with a lit lip on its left.
+//
+function fibre(ctx, pts, dark, light) {
+  ctx.lineWidth = 1
+  ;[[light, STEM_LIP_ALPHA, -1], [dark, STEM_FIBRE_ALPHA, 0]].forEach(([tone, alpha, dx]) => {
+    ctx.strokeStyle = css(tone, alpha)
+    ctx.beginPath()
+    pts.forEach((p, i) => (i ? ctx.lineTo(p.x + dx, p.y) : ctx.moveTo(p.x + dx, p.y)))
+    ctx.stroke()
+  })
+}
+//
+// A line from a to b bent sideways by midpoint displacement.
+//
+function wander(a, b, rng) {
+  let pts = [a, b]
+  let amp = Math.abs(b.y - a.y) * STEM_FIBRE_WANDER * HALF
+  for (let l = 0; l < STEM_FIBRE_LEVELS; l++) {
+    const next = [pts[0]]
+    for (let i = 1; i < pts.length; i++) {
+      next.push({ x: (pts[i - 1].x + pts[i].x) / 2 + (rng() - HALF) * amp, y: (pts[i - 1].y + pts[i].y) / 2 }, pts[i])
+    }
+    pts = next
+    amp *= HALF
+  }
+  return pts
+}
+//
+// The dome: rounded sides up to a soft top, shade lower right, light upper
+// left, and the glowing holes.
+//
+function paintCap(ctx, cx, capTop, rimY) {
+  const [cDark, cMid, cLight] = CAVE_PAL.spore.cap
+  const half = CAP_W / 2
   const dome = new Path2D()
-  dome.moveTo(cx - CAP_W / 2, rimY)
-  dome.bezierCurveTo(cx - CAP_W / 2, capTop - CAP_H * CAP_DOME_LIFT, cx + CAP_W / 2, capTop - CAP_H * CAP_DOME_LIFT, cx + CAP_W / 2, rimY)
-  dome.quadraticCurveTo(cx, rimY - CAP_RIM_DROP, cx - CAP_W / 2, rimY)
+  dome.moveTo(cx - half, rimY)
+  dome.bezierCurveTo(cx - half * DOME_SIDE_X * 2, rimY - CAP_H * DOME_SIDE_Y, cx - half * DOME_TOP_X, capTop, cx, capTop)
+  dome.bezierCurveTo(cx + half * DOME_TOP_X, capTop, cx + half * DOME_SIDE_X * 2, rimY - CAP_H * DOME_SIDE_Y, cx + half, rimY)
   dome.closePath()
   ctx.save()
   ctx.fillStyle = css(cMid)
@@ -379,32 +528,41 @@ function bake(k) {
   ctx.clip(dome)
   ctx.fillStyle = css(cDark)
   ctx.beginPath()
-  ctx.ellipse(cx + CAP_W * CAP_SHADE_SHIFT, rimY, CAP_W * CAP_SHADE_W, CAP_H * CAP_SHADE_H, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx + CAP_W * CAP_SHADE_SHIFT, rimY, CAP_W * CAP_SHADE_W, CAP_H * CAP_SHADE_H, 0, 0, FULL_TURN)
   ctx.fill()
   ctx.fillStyle = css(cLight)
   ctx.beginPath()
-  ctx.ellipse(cx - CAP_W * CAP_LIGHT_SHIFT, capTop + CAP_H * CAP_LIGHT_Y, CAP_W * CAP_LIGHT_W / 2, CAP_H * CAP_LIGHT_H, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx - CAP_W * CAP_LIGHT_SHIFT, capTop + CAP_H * CAP_LIGHT_Y, CAP_W * CAP_LIGHT_W, CAP_H * CAP_LIGHT_H, 0, 0, FULL_TURN)
   ctx.fill()
-  HOLES.forEach(hl => {
-    const hx = cx + hl.u * CAP_W
-    const hy = capTop + hl.v * CAP_H
-    ctx.fillStyle = css(cHigh)
-    ctx.beginPath()
-    ctx.ellipse(hx, hy - HOLE_RIM_LIFT, hl.r + HOLE_RIM, (hl.r + HOLE_RIM) * HOLE_SQUASH, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = css(pal.hole)
-    ctx.beginPath()
-    ctx.ellipse(hx, hy, hl.r, hl.r * HOLE_SQUASH, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = css(pal.holeGlow)
-    ctx.beginPath()
-    ctx.ellipse(hx, hy + 1, hl.r * HOLE_INNER, hl.r * HOLE_INNER * HOLE_SQUASH, 0, 0, Math.PI * 2)
-    ctx.fill()
-  })
+  HOLES.forEach(hl => paintHole(ctx, cx + hl.u * CAP_W, capTop + hl.v * CAP_H, hl))
   ctx.restore()
   ctx.strokeStyle = css(cDark)
   ctx.lineWidth = CONTOUR_W
   ctx.stroke(dome)
-  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
-  k.loadSprite(SPRITE, canvas)
+}
+//
+// One hole: dark rim, glowing inside, a bright crescent at its lower edge
+// (the light inside the cap); narrower toward the dome's sides.
+//
+function paintHole(ctx, x, y, hl) {
+  const pal = CAVE_PAL.spore
+  const r = hl.r * HOLE_SIZE
+  const rx = r * (1 - Math.abs(hl.u) * 2 * HOLE_EDGE_SQUEEZE * HALF)
+  const ry = r * HOLE_SQUASH
+  ctx.fillStyle = css(CAVE_PAL.spore.cap[0])
+  ctx.beginPath()
+  ctx.ellipse(x, y, rx + HOLE_RIM, ry + HOLE_RIM, 0, 0, FULL_TURN)
+  ctx.fill()
+  ctx.fillStyle = css(pal.hole)
+  ctx.beginPath()
+  ctx.ellipse(x, y, rx, ry, 0, 0, FULL_TURN)
+  ctx.fill()
+  ctx.fillStyle = css(pal.holeGlow)
+  ctx.beginPath()
+  ctx.ellipse(x, y + ry * (1 - HOLE_INNER) * HALF, rx * HOLE_INNER, ry * HOLE_INNER, 0, 0, FULL_TURN)
+  ctx.fill()
+  ctx.fillStyle = css(pal.spark)
+  ctx.beginPath()
+  ctx.ellipse(x, y + ry * HOLE_INNER * HALF, rx * HOLE_CRESCENT, ry * HOLE_CRESCENT * HALF, 0, 0, Math.PI)
+  ctx.fill()
 }

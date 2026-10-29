@@ -217,7 +217,28 @@ const FULL_TURN = Math.PI * 2
  */
 export function paintLedge(ctx, p, style, moss) {
   const rng = createSeededRandom(style.seed)
-  const geo = ledgeGeometry(p, style, rng)
+  return paintRock(ctx, ledgeGeometry(p, style, rng), style, moss, rng)
+}
+
+/**
+ * Paints a free-standing rock bridge in the ledge look: the top arches up
+ * over the middle, the underside arches up higher (thick ends, thin
+ * middle), both ends ragged and uneven.
+ * @param {CanvasRenderingContext2D} ctx - World-space context
+ * @param {{x1: number, x2: number, y: number}} p - Span and the top's height at the ends
+ * @param {Object} style - Ledge style (thick, archRise, archMid, endJag, endBulge …)
+ * @param {{x1: number, x2: number}} moss - Span the moss and plants keep to
+ * @returns {{swaying: Array, front: Object}} As paintLedge
+ */
+export function paintBridge(ctx, p, style, moss) {
+  const rng = createSeededRandom(style.seed)
+  return paintRock(ctx, bridgeGeometry(p, style, rng), style, moss, rng)
+}
+//
+// Rubble body, roots, vines, stone greens, moss and plants of a ledge or
+// bridge from its geometry.
+//
+function paintRock(ctx, geo, style, moss, rng) {
   const body = smoothPath(geo.outline)
   const bounds = polygonBounds(geo.outline)
   ctx.lineCap = 'round'
@@ -232,6 +253,7 @@ export function paintLedge(ctx, p, style, moss) {
     path: body,
     bounds,
     sizes: style.stones,
+    colors: style.colors,
     inside: (x, y) => insidePath(ctx, body, x, y),
     shadeAt: st => ledgeShade(st, geo, bounds),
     onStone: (st, shade) => shade < CAP_DEPTH && rng() < CAP_CHANCE * (1 - shade / CAP_DEPTH) && insidePath(ctx, room, st.x, st.y) && greens.push(st)
@@ -383,10 +405,11 @@ function ledgeGeometry(p, style, rng) {
   const capX = tipX - sign * style.overhang
   const top = sampleEdge(wallX, tipX, EDGE_STEP, x => ({ x, y: topAt(x) }))
   const capBottom = bottomAt(capX)
+  const capBulge = (rng() * 2 - 1) * (style.endBulge ?? 0)
   const cap = []
   for (let i = 1; i <= CAP_STEPS; i++) {
     const s = i / CAP_STEPS
-    cap.push({ x: tipX - sign * style.overhang * Math.pow(s, CAP_POW) + (rng() - HALF) * CAP_JAG, y: topAt(tipX) + (capBottom - topAt(tipX)) * s })
+    cap.push({ x: tipX - sign * style.overhang * Math.pow(s, CAP_POW) + sign * capBulge * Math.sin(Math.PI * s) + (rng() - HALF) * (style.endJag ?? CAP_JAG), y: topAt(tipX) + (capBottom - topAt(tipX)) * s })
   }
   const under = sampleEdge(capX, wallX, EDGE_STEP, x => ({ x, y: bottomAt(x) }))
   return { left, wallX, tipX, sign, topAt, bottomAt, top, under, outline: [...top, ...cap, ...under] }
@@ -436,6 +459,30 @@ function addToGrid(grid, st) {
   const key = gridKey(Math.floor(st.x / PACK_CELL), Math.floor(st.y / PACK_CELL))
   const cell = grid.get(key)
   cell ? cell.push(st) : grid.set(key, [st])
+}
+//
+// A rock bridge: arched top, an underside arching higher (thick ends, thin
+// middle), and two ragged ends, each bulging its own way.
+//
+function bridgeGeometry(p, style, rng) {
+  const len = p.x2 - p.x1
+  const seed = rng() * FULL_TURN
+  const arch = x => Math.sin(Math.PI * Math.max(0, Math.min(1, (x - p.x1) / len)))
+  const topAt = x => p.y - style.archRise * arch(x) + Layout.profileNoise(x * NOISE_A, seed) * style.topWave
+  const thickAt = x => style.thick * (style.archMid + (1 - style.archMid) * (1 - arch(x))) + Layout.profileNoise(x * UNDER_JAG_FREQ, seed + NOISE_B) * UNDER_JAG
+  const bottomAt = x => topAt(x) + thickAt(x)
+  const end = (x, out) => {
+    const bulge = (rng() * 2 - 1) * style.endBulge
+    const pts = []
+    for (let i = 1; i < CAP_STEPS; i++) {
+      const s = i / CAP_STEPS
+      pts.push({ x: x + out * (bulge * Math.sin(Math.PI * s) + (rng() - HALF) * style.endJag), y: topAt(x) + (bottomAt(x) - topAt(x)) * s })
+    }
+    return pts
+  }
+  const top = sampleEdge(p.x1, p.x2, EDGE_STEP, x => ({ x, y: topAt(x) }))
+  const under = sampleEdge(p.x2, p.x1, EDGE_STEP, x => ({ x, y: bottomAt(x) }))
+  return { left: true, wallX: p.x1, tipX: p.x2, sign: 1, topAt, bottomAt, top, under, outline: [...top, ...end(p.x2, 1), ...under, ...end(p.x1, -1).reverse()] }
 }
 //
 // Space out of the wall's rock (its ragged face, tucked in a little): the

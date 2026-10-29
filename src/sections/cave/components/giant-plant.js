@@ -15,7 +15,7 @@ import * as Mouth from './leaf-mouth.js'
 // staying shut (a low bud, a safe step) for a while before it swells,
 // opens again and lets the spores go.
 //
-const SPRITE_PREFIX = 'cave0-leaf-v10'
+const SPRITE_PREFIX = 'cave0-leaf-v11'
 const GRAIN_SEED_BASE = 9900
 const GRAIN_HANG_SEED = 50
 const BAKE_PAD = 6
@@ -58,6 +58,12 @@ const RAISE_MIN = 8
 const RAISE_RANGE = 18
 const RAISE_W_MIN = 0.1
 const RAISE_W_RANGE = 0.2
+//
+// On a trap leaf the raised lobes are lower and kept to the front right,
+// clear of the mouth in the middle (span of angles from the right end).
+//
+const TRAP_RAISE_SCALE = 0.4
+const TRAP_RAISE_SPAN = 0.55
 const FOLDS_MAX = 3
 const FOLD_SPREAD = 0.5
 const FOLD_MIN = 6
@@ -199,7 +205,7 @@ const ALERT_ABOVE = 260
 // strike out to the hero, coil round him, lift him up off the pad, hold
 // him squeezing, set him down on the middle of the mouth, all of them
 // close over him and crush him: he is squeezed narrow and flat in pulses
-// (feet staying on the pad) and only then swallowed.
+// while sinking down into the hole (below the pad's face) and swallowed.
 //
 const GRAB_STRIKE = 0.22
 const GRAB_WRAP = 0.22
@@ -207,9 +213,10 @@ const GRAB_LIFT = 0.32
 const GRAB_HOLD = 0.2
 const GRAB_PLACE = 0.4
 const GRAB_CLOSE = 0.3
-const GRAB_CRUSH = 0.6
+const GRAB_CRUSH = 0.8
+const CRUSH_SINK = 36
 const CRUSH_SX = 0.5
-const CRUSH_SY = 0.55
+const CRUSH_SY = 0.45
 const CRUSH_PULSE = 0.08
 const CRUSH_PULSE_SPEED = 26
 const CRUSH_COIL = 0.25
@@ -380,7 +387,7 @@ function stepGrab(leaf, out) {
   const sy = 1 - (1 - CRUSH_SY) * smooth(crush) - pulse
   const pos = {
     x: from.x + (mouth.x - from.x) * place,
-    y: from.y - GRAB_LIFT_PX * lift * (1 - place) + HERO_FEET_DY * (1 - sy),
+    y: from.y - GRAB_LIFT_PX * lift * (1 - place) + HERO_FEET_DY * (1 - sy) + CRUSH_SINK * smooth(crush),
     sx,
     sy
   }
@@ -479,7 +486,7 @@ function bakeLeaves(k) {
     const h = Math.ceil(lineY + ry * (1 + SIDE_DROOP) + FOLD_SAG + LEAF_THICK + LEAF_FOLD_AMP + STRAND_LEN_MIN + STRAND_LEN_RANGE + LEAF_DROP_R * 2 + BAKE_PAD)
     const tones = CAVE_PAL.leaf3d
     const seed = GRAIN_SEED_BASE + i
-    const geo = leafGeometry(padX + len / 2, lineY, len / 2, ry, createSeededRandom(seed))
+    const geo = leafGeometry(padX + len / 2, lineY, len / 2, ry, createSeededRandom(seed), def.kind === Layout.LEAF_KIND.TRAP)
     const rng = createSeededRandom(seed)
     const hang = bakeCanvas(w, h, ctx => paintLeafHang(ctx, geo, tones, rng, len))
     applyForestFilmGrainToCanvas(hang.canvas, seed + GRAIN_HANG_SEED)
@@ -560,9 +567,11 @@ function maskedCopy(src, mask, mode) {
 // Leaf outline in depth: the rim ring, its near half (left end → right end
 // along the front) and the underside's lower edge below that.
 //
-function leafGeometry(cx, cy, rx, ry, rng) {
+function leafGeometry(cx, cy, rx, ry, rng, trap = false) {
   const geo = { cx, cy, rx, ry, ph1: rng() * Math.PI * 2, ph2: rng() * Math.PI * 2, ph3: rng() * Math.PI * 2 }
-  geo.raises = randomBumps(rng, RAISES_MAX, () => RAISE_FROM + rng() * RAISE_SPAN, RAISE_MIN, RAISE_RANGE, RAISE_W_MIN, RAISE_W_RANGE)
+  geo.raises = trap
+    ? randomBumps(rng, RAISES_MAX, () => RAISE_FROM + rng() * TRAP_RAISE_SPAN, RAISE_MIN * TRAP_RAISE_SCALE, RAISE_RANGE * TRAP_RAISE_SCALE, RAISE_W_MIN, RAISE_W_RANGE)
+    : randomBumps(rng, RAISES_MAX, () => RAISE_FROM + rng() * RAISE_SPAN, RAISE_MIN, RAISE_RANGE, RAISE_W_MIN, RAISE_W_RANGE)
   geo.folds = randomBumps(rng, FOLDS_MAX, () => (rng() < HALF ? 0 : Math.PI) + (rng() - HALF) * FOLD_SPREAD * 2, FOLD_MIN, FOLD_RANGE, FOLD_W_MIN, FOLD_W_RANGE)
   geo.ring = []
   for (let i = 0; i < LEAF_RING_STEPS; i++) geo.ring.push(leafEdge(geo, i / LEAF_RING_STEPS * Math.PI * 2))

@@ -10,9 +10,9 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 // pointed tendrils around it. Open, the tendrils lean out and back like a
 // flower; shut, they fold in over the throat into a low bud. A few openness
 // frames are baked once per live k and picked by the trap's state; while
-// open it breathes, and it quivers when prey is near.
+// open it stays still while its tendrils sway, harder when prey is near.
 //
-const SPRITE_PREFIX = 'cave0-mouth-v1'
+const SPRITE_PREFIX = 'cave0-mouth-v3'
 const GRAIN_SEED = 9400
 const FRAMES = 8
 const BAKE_W = 2.2
@@ -51,6 +51,15 @@ const LIP_W = 0.14
 const LIP_LIT_W = 2
 const THROAT_GLOW = 0.45
 //
+// Teeth round the throat (when it is open enough): count, length and base
+// width (shares of R), how far toward the centre they may reach.
+//
+const TEETH_FROM = 0.3
+const TEETH = 16
+const TOOTH_LEN = 0.12
+const TOOTH_W = 0.07
+const TOOTH_REACH = 0.7
+//
 // Green collar where the mouth leaves the pad.
 //
 const COLLAR_LEAVES = 13
@@ -60,13 +69,15 @@ const COLLAR_LEN = 0.38
 const COLLAR_W = 0.16
 const COLLAR_TILT = 0.4
 //
-// Breathing while open (the whole mouth swells evenly), a small trembling
-// tilt when prey is near (degrees), swell before opening.
+// Waiting open, the mouth itself stays still and only its tendrils sway
+// (live): tip swing as a share of the radius, speed, and how much harder
+// they sway when prey is near.
 //
-const BREATH = 0.03
-const BREATH_SPEED = 1.4
-const QUIVER_SPEED = 9
-const QUIVER_DEG = 2.5
+const SWAY = 0.08
+const SWAY_SPEED = 1.3
+const SWAY_STEP = 0.9
+const SWAY_ALERT = 2.5
+const SWAY_ALERT_SPEED = 3
 //
 // Grab: while the mouth seizes prey its own tendrils are drawn live (the
 // baked frame then shows only collar and throat). Every other tendril
@@ -99,6 +110,15 @@ const GRAB_OUTLINE = 2.4
 const GRAB_LIT_SHARE = 0.35
 const PREY_HALF_W = 15
 const PREY_HALF_H = 32
+//
+// Separately baked parts of the open mouth (the live tendrils go between
+// the collar and the throat).
+//
+const PART = {
+  ALL: 'all',
+  COLLAR: 'collar',
+  THROAT: 'throat'
+}
 const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 const bakedByK = new WeakMap()
@@ -170,23 +190,39 @@ export function setState(inst, open, swell, alert) {
 }
 
 /**
- * Draws the frame closest to the current openness, breathing while open.
+ * Draws the mouth: waiting open, the leaf collar, the live swaying tendrils
+ * and the throat between them;
+ * otherwise the frame closest to the current openness.
  * @param {Object} inst - Mouth instance
  */
 export function onDraw(inst) {
   const k = inst.k
   const t = k.time()
-  const frame = inst.grab ? inst.frames.base : inst.frames.names[Math.round(inst.open * (FRAMES - 1))]
-  const breath = inst.grab ? 0 : Math.sin(t * BREATH_SPEED + inst.phase) * BREATH * inst.open
-  const s = 1 + inst.swell + breath
-  k.drawSprite({
-    sprite: frame,
-    pos: k.vec2(inst.x, inst.y),
-    anchor: k.vec2(0, CENTER_Y * 2 - 1),
-    scale: k.vec2(s, s),
-    angle: inst.alert ? Math.sin(t * QUIVER_SPEED + inst.phase) * QUIVER_DEG : 0
-  })
-  inst.grab && drawLines(inst, true)
+  const idle = !inst.grab && inst.open >= 1 && inst.swell === 0
+  const live = idle || inst.grab
+  idle && (inst.lines = inst.tendrils.map((td, i) => swayLine(inst, td, i, t)))
+  live && drawPart(inst, inst.frames.collar)
+  idle && drawLines(inst, false)
+  drawPart(inst, live ? inst.frames.base : inst.frames.names[Math.round(inst.open * (FRAMES - 1))])
+  live && drawLines(inst, true)
+}
+//
+// One baked mouth sprite at the mouth's spot (swelling before it opens).
+//
+function drawPart(inst, sprite) {
+  const k = inst.k
+  const s = 1 + inst.swell
+  k.drawSprite({ sprite, pos: k.vec2(inst.x, inst.y), anchor: k.vec2(0, CENTER_Y * 2 - 1), scale: k.vec2(s, s) })
+}
+//
+// A waiting tendril: from its root to its open tip, the tip swaying side
+// to side (each one a little out of step), harder when prey is near.
+//
+function swayLine(inst, td, i, t) {
+  const { base, tip, front } = tendrilPose(inst, td)
+  const speed = inst.alert ? SWAY_ALERT_SPEED : SWAY_SPEED
+  const swing = Math.sin(t * speed + inst.phase + i * SWAY_STEP) * inst.r * SWAY * (inst.alert ? SWAY_ALERT : 1)
+  return reachPoints(inst, base, { x: tip.x + swing, y: tip.y }, inst.r * TENDRIL_W, GRAB_TIP_W, front)
 }
 //
 // Tendril layout (angle round the lip ring, length, where it meets when
@@ -334,33 +370,55 @@ function bakeFrames(k, r, seed) {
     k.loadSprite(name, canvas)
     names.push(name)
   }
-  const base = document.createElement('canvas')
-  base.width = w
-  base.height = h
-  paintMouth(base.getContext('2d'), w / 2, h * CENTER_Y, r, 1, createSeededRandom(seed), false)
-  applyForestFilmGrainToCanvas(base, GRAIN_SEED + seed + FRAMES)
-  k.loadSprite(`${SPRITE_PREFIX}-${key}-base`, base)
-  const out = { names, base: `${SPRITE_PREFIX}-${key}-base` }
+  const out = {
+    names,
+    collar: bakePart(k, `${SPRITE_PREFIX}-${key}-collar`, w, h, r, seed, PART.COLLAR, GRAIN_SEED + seed + FRAMES),
+    base: bakePart(k, `${SPRITE_PREFIX}-${key}-base`, w, h, r, seed, PART.THROAT, GRAIN_SEED + seed + FRAMES + 1)
+  }
   perK.set(key, out)
   return out
 }
 //
 // One frame: green collar, tendrils behind the throat, lips and throat,
-// tendrils in front (or no tendrils: the base shown while they grab live).
+// tendrils in front — or only the collar, or only the throat (the parts
+// the live tendrils go between).
 //
-function paintMouth(ctx, cx, cy, r, open, rng, withTendrils = true) {
+function paintMouth(ctx, cx, cy, r, open, rng, part = PART.ALL) {
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   //
   // The layout is always drawn from rng, so the collar after it comes out
-  // the same in the frames and in the tendril-less base.
+  // the same in the frames and in the separate parts.
   //
   const layout = tendrilLayout(rng)
-  const tendrils = withTendrils ? layout : []
-  paintCollar(ctx, cx, cy, r, rng)
+  const tendrils = part === PART.ALL ? layout : []
+  part !== PART.THROAT ? paintCollar(ctx, cx, cy, r, rng) : paintCollar(scratchCtx(), cx, cy, r, rng)
   tendrils.filter(td => Math.sin(td.a) < 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
-  paintThroat(ctx, cx, cy, r, open)
+  part !== PART.COLLAR && paintThroat(ctx, cx, cy, r, open)
   tendrils.filter(td => Math.sin(td.a) >= 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
+}
+//
+// One open-mouth part (collar or throat) baked alone, for the live
+// tendrils to go between them.
+//
+function bakePart(k, name, w, h, r, seed, part, grainSeed) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  paintMouth(canvas.getContext('2d'), w / 2, h * CENTER_Y, r, 1, createSeededRandom(seed), part)
+  applyForestFilmGrainToCanvas(canvas, grainSeed)
+  k.loadSprite(name, canvas)
+  return name
+}
+//
+// A throwaway 1x1 context (the throat-only part still walks the collar's
+// random draws, so the throat comes out the same as in the frames).
+//
+function scratchCtx() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  return canvas.getContext('2d')
 }
 //
 // Pointed dark-green leaves fanning flat around the mouth's base.
@@ -416,6 +474,34 @@ function paintThroat(ctx, cx, cy, r, open) {
   ctx.beginPath()
   ctx.ellipse(cx, cy, rx, ry, 0, 0, FULL_TURN)
   ctx.fill()
+  open > TEETH_FROM && paintTeeth(ctx, cx, cy, rx, ry, r)
+}
+//
+// A ring of pale pointed teeth around the throat's rim, pointing in toward
+// its centre; the far ones (upper half) in shade.
+//
+function paintTeeth(ctx, cx, cy, rx, ry, r) {
+  const [contour, tooth, lit] = CAVE_PAL.trapTooth
+  const len = r * TOOTH_LEN
+  const half = r * TOOTH_W / 2
+  for (let i = 0; i < TEETH; i++) {
+    const a = (i + HALF) / TEETH * FULL_TURN
+    const base = { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry }
+    const toC = { x: cx - base.x, y: cy - base.y }
+    const d = Math.hypot(toC.x, toC.y) || 1
+    const dir = { x: toC.x / d, y: toC.y / d }
+    const tip = { x: base.x + dir.x * Math.min(len, d * TOOTH_REACH), y: base.y + dir.y * Math.min(len, d * TOOTH_REACH) }
+    ctx.beginPath()
+    ctx.moveTo(base.x - dir.y * half, base.y + dir.x * half)
+    ctx.quadraticCurveTo(base.x + dir.x * len * HALF, base.y + dir.y * len * HALF, tip.x, tip.y)
+    ctx.lineTo(base.x + dir.y * half, base.y - dir.x * half)
+    ctx.closePath()
+    ctx.fillStyle = css(Math.sin(a) < 0 ? tooth : lit)
+    ctx.fill()
+    ctx.strokeStyle = css(contour)
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
 }
 //
 // One tendril: a tapered curved spike from the lip ring; open it leans out

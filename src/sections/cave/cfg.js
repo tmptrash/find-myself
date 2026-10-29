@@ -90,9 +90,12 @@ export const CAVE_CFG = {
     ground: { ...WIDE, seed: 5180, mushrooms: 1, ferns: 2 },
     //
     // Ledges in the back parallax row: the same look (all baked: no live
-    // vines, nothing in front of the hero); each ledge offsets the seed.
+    // vines, nothing in front of the hero), long slabs with ragged ends
+    // (endJag / endBulge); the free ones are arched bridges (archRise: how
+    // high the top arches, archMid: thickness left in the middle); each
+    // ledge offsets the seed.
     //
-    back: { ...WIDE, seed: 5300, vines: 0, swayShare: 0, frontShare: 0, roots: 2, mushrooms: 1 }
+    back: { ...WIDE, seed: 5300, vines: 0, swayShare: 0, frontShare: 0, roots: 2, mushrooms: 1, tipShare: 0.85, lobes: 2, lobeDepth: 16, lobeWidth: 0.2, overhang: 10, endJag: 14, endBulge: 18, archRise: 42, archMid: 0.4 }
   },
   //
   // Back parallax rows in the same rubble, but dark (the rows are further

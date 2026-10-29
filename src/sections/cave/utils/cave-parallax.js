@@ -4,7 +4,7 @@ import { forestRgb } from '../../forest/utils/forest-palette.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Layout from './cave-layout.js'
-import { paintRubble, paintLedge as paintRockLedge } from './cave-ledge.js'
+import { paintRubble, paintLedge as paintRockLedge, paintBridge } from './cave-ledge.js'
 import {
   CAVE_PAL,
   css,
@@ -29,7 +29,7 @@ import {
 // Fine film grain on the rows (no blocky clusters: they read as pixels).
 //
 const GRAIN_BLOCK = 1
-const SPRITE_PREFIX = 'cave0-parallax-v12'
+const SPRITE_PREFIX = 'cave0-parallax-v14'
 const GRAIN_SEED_BASE = 8400
 const EDGE_STEP = 8
 const OUTSIDE_PAD = 12
@@ -42,9 +42,9 @@ const HALF = 0.5
 // cave shade (far deepest, so the gameplay plane reads first).
 //
 const LAYERS = [
-  { id: 'far', speed: 0.22, seed: 601, shade: 0.6, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.2 },
-  { id: 'mid', speed: 0.46, seed: 602, shade: 0.55, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.45 },
-  { id: 'near', speed: 0.7, seed: 603, shade: 0.6, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.45 }
+  { id: 'far', speed: 0.12, seed: 601, shade: 0.6, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.2 },
+  { id: 'mid', speed: 0.3, seed: 602, shade: 0.55, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.45 },
+  { id: 'near', speed: 0.5, seed: 603, shade: 0.6, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.45 }
 ]
 const RGBA_STRIDE = 4
 const BYTE = 255
@@ -69,15 +69,19 @@ const FAR_STRAND_RANGE = 60
 // ones in between (sizes in layer px; reach as a share of the row width).
 //
 const MID_LEDGES = 9
-const MID_LEDGE_REACH_MIN = 0.18
-const MID_LEDGE_REACH_RANGE = 0.18
-const MID_LEDGE_THICK_MIN = 70
-const MID_LEDGE_THICK_RANGE = 60
+const MID_LEDGE_REACH_MIN = 0.25
+const MID_LEDGE_REACH_RANGE = 0.2
+const MID_LEDGE_THICK_MIN = 46
+const MID_LEDGE_THICK_RANGE = 34
 const MID_FLOATERS = 7
-const MID_FLOATER_W_MIN = 130
-const MID_FLOATER_W_RANGE = 150
-const MID_FLOATER_THICK_MIN = 50
-const MID_FLOATER_THICK_RANGE = 40
+const MID_FLOATER_W_MIN = 240
+const MID_FLOATER_W_RANGE = 220
+const MID_FLOATER_THICK_MIN = 48
+const MID_FLOATER_THICK_RANGE = 30
+//
+// Every third back ledge is painted in the near row's dark rubble.
+//
+const DARK_LEDGE_EVERY = 3
 const MID_FLOATER_MARGIN = 150
 const MID_SEED_STEP = 7
 const MID_VINE_LEN_MIN = 40
@@ -252,7 +256,7 @@ function paintFarGreens(ctx, w, h, far, rng) {
   }
 }
 //
-// Mid row: free-floating ledges first (further back), then ledges from
+// Mid row: free arched rock bridges first (further back), then ledges from
 // alternating side walls, all in the gameplay ledge look.
 //
 function paintMid(ctx, w, h, rng, anchors, eyes) {
@@ -262,7 +266,7 @@ function paintMid(ctx, w, h, rng, anchors, eyes) {
     const x1 = MID_FLOATER_MARGIN + rng() * (w - MID_FLOATER_MARGIN * 2 - width)
     const y = h * (i + rng()) / MID_FLOATERS
     const thick = MID_FLOATER_THICK_MIN + rng() * MID_FLOATER_THICK_RANGE
-    paintBackLedge(ctx, { x1, x2: x1 + width, y, wall: rng() < HALF ? 'left' : 'right' }, { ...style, seed: style.seed + i * MID_SEED_STEP, thick }, i, anchors, eyes)
+    paintBackLedge(ctx, { x1, x2: x1 + width, y, bridge: true }, { ...style, seed: style.seed + i * MID_SEED_STEP, thick }, i, anchors, eyes)
   }
   const step = h / MID_LEDGES
   for (let i = 0; i < MID_LEDGES; i++) {
@@ -280,7 +284,9 @@ function paintMid(ctx, w, h, rng, anchors, eyes) {
 function paintBackLedge(ctx, p, style, i, anchors, eyes) {
   const span = p.x2 - p.x1
   const fromWall = share => (p.wall === 'left' ? p.x1 + span * share : p.x2 - span * share)
-  paintRockLedge(ctx, { ...p, h: style.thick, kind: Layout.PLATFORM_KIND.LEDGE }, style, { x1: p.x1, x2: p.x2 })
+  const colors = i % DARK_LEDGE_EVERY === 0 ? CAVE_CFG.parallax.near : undefined
+  const paint = p.bridge ? paintBridge : paintRockLedge
+  paint(ctx, { ...p, h: style.thick, kind: Layout.PLATFORM_KIND.LEDGE }, { ...style, colors }, { x1: p.x1, x2: p.x2 })
   anchors.push({ x: fromWall(LEDGE_MUSHROOM_AT), y: p.y })
   i % BACK_EYE_EVERY || eyes.push({ x: fromWall(BACK_EYE_AT), y: p.y })
 }

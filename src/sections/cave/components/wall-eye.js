@@ -80,6 +80,11 @@ const BACK_R_RANGE = 4
 const BACK_SHADE = 0.55
 const BACK_ROW = 'mid'
 const CULL_PAD = 90
+//
+// Stalk eyes (on the walls and the back row) are switched off for now;
+// only the eyes grown into the plant stay.
+//
+const STALK_EYES = false
 const BYTE = 255
 const COLOR_KEYS = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight', 'glint']
 const knotsByK = new WeakMap()
@@ -93,7 +98,7 @@ const knotsByK = new WeakMap()
  */
 export function create(cfg) {
   const { k, parallax } = cfg
-  const wall = Layout.WALL_EYES.map(spot => {
+  const wall = (STALK_EYES ? Layout.WALL_EYES : []).map(spot => {
     const side = spot.side === 'left' ? -1 : 1
     const edgeX = spot.side === 'left' ? Layout.leftWallX(spot.y) : Layout.rightWallX(spot.y)
     const angle = spot.side === 'left' ? -STALK_TILT : Math.PI + STALK_TILT
@@ -101,7 +106,7 @@ export function create(cfg) {
   })
   plantShape().eyes.forEach(spot => wall.push({ ...newEye(k, spot.x, spot.y, spot.r, 0, 0, 0), embedded: true }))
   const rng = createSeededRandom(GRAIN_SEED_BASE)
-  const back = Parallax.backEyeAnchors(parallax).map(a => {
+  const back = (STALK_EYES ? Parallax.backEyeAnchors(parallax) : []).map(a => {
     const r = BACK_R_MIN + Math.round(rng() * BACK_R_RANGE)
     return newEye(k, a.x, a.y, r, -Math.PI / 2, 0, STALK_LEN_BACK)
   })

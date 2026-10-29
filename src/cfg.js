@@ -835,8 +835,6 @@ export const CFG = {
             hole: PALETTE.gold1,
             holeGlow: PALETTE.gold4,
             gill: PALETTE.gold3,
-            tendril: PALETTE.gold1,
-            bead: PALETTE.gold4,
             spark: PALETTE.gold5,
             stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3]
           },

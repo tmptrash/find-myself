@@ -12,7 +12,7 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 // frames are baked once per live k and picked by the trap's state; while
 // open it stays still while its tendrils sway, harder when prey is near.
 //
-const SPRITE_PREFIX = 'cave0-mouth-v3'
+const SPRITE_PREFIX = 'cave0-mouth-v4'
 const GRAIN_SEED = 9400
 const FRAMES = 8
 const BAKE_W = 2.2
@@ -136,12 +136,14 @@ const bakedByK = new WeakMap()
 export function create(cfg) {
   const { k, x, y, r, seed = 1 } = cfg
   const [contour, , dark, mid, light, high] = CAVE_PAL.trapLeaf3d
+  const tendrils = tendrilLayout(createSeededRandom(seed))
   return {
     k,
     x,
     y,
     r,
-    tendrils: tendrilLayout(createSeededRandom(seed)),
+    tendrils,
+    depthOrder: tendrils.map((td, i) => i).sort((a, b) => depthOf(tendrils[a]) - depthOf(tendrils[b])),
     frames: bakeFrames(k, r, seed),
     open: 1,
     swell: 0,
@@ -149,6 +151,7 @@ export function create(cfg) {
     grab: null,
     lines: [],
     batch: PolyBatch.create(),
+    opacity: 1,
     grabRgb: { contour: getRGB(k, contour), dark: getRGB(k, dark), mid: getRGB(k, mid), light: getRGB(k, light), high: getRGB(k, high) },
     phase: createSeededRandom(seed)() * FULL_TURN
   }
@@ -174,6 +177,15 @@ export function setGrab(inst, grab) {
  */
 export function onDrawBack(inst) {
   inst.grab && drawLines(inst, false)
+}
+
+/**
+ * Fades the whole mouth (the menu picture cross-fading).
+ * @param {Object} inst - Mouth instance
+ * @param {number} opacity - 0 … 1
+ */
+export function setOpacity(inst, opacity) {
+  inst.opacity = opacity
 }
 
 /**
@@ -212,7 +224,7 @@ export function onDraw(inst) {
 function drawPart(inst, sprite) {
   const k = inst.k
   const s = 1 + inst.swell
-  k.drawSprite({ sprite, pos: k.vec2(inst.x, inst.y), anchor: k.vec2(0, CENTER_Y * 2 - 1), scale: k.vec2(s, s) })
+  k.drawSprite({ sprite, pos: k.vec2(inst.x, inst.y), anchor: k.vec2(0, CENTER_Y * 2 - 1), scale: k.vec2(s, s), opacity: inst.opacity })
 }
 //
 // A waiting tendril: from its root to its open tip, the tip swaying side
@@ -312,11 +324,15 @@ function coilPoints(g, band, startA, dir) {
 }
 //
 // Draws the runs of every live tendril on one side of the prey (front or
-// back), in one polygon batch: outline, body, lit edge, tip.
+// back), in one polygon batch: outline, body, lit edge, tip — far tendrils
+// first, so a nearer one (lower on the lip ring) always lies over its
+// neighbours.
 //
 function drawLines(inst, front) {
   const { k, batch, grabRgb } = inst
-  inst.lines.forEach((pts, i) => {
+  inst.depthOrder.forEach(i => {
+    const pts = inst.lines[i]
+    if (!pts) return
     tendrilRuns(pts, front).forEach(run => {
       const a = run[0]
       const b = run[run.length - 1]
@@ -328,7 +344,7 @@ function drawLines(inst, front) {
     const tip = pts[pts.length - 1]
     tip.front === front && PolyBatch.addDisc(batch, tip.x, tip.y, TIP_R, grabRgb.high)
   })
-  PolyBatch.flush(batch, k)
+  PolyBatch.flush(batch, k, inst.opacity)
 }
 //
 // Consecutive points on one side of the prey, each run sharing its end
@@ -393,9 +409,16 @@ function paintMouth(ctx, cx, cy, r, open, rng, part = PART.ALL) {
   const layout = tendrilLayout(rng)
   const tendrils = part === PART.ALL ? layout : []
   part !== PART.THROAT ? paintCollar(ctx, cx, cy, r, rng) : paintCollar(scratchCtx(), cx, cy, r, rng)
-  tendrils.filter(td => Math.sin(td.a) < 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
+  const byDepth = tendrils.slice().sort((a, b) => depthOf(a) - depthOf(b))
+  byDepth.filter(td => depthOf(td) < 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
   part !== PART.COLLAR && paintThroat(ctx, cx, cy, r, open)
-  tendrils.filter(td => Math.sin(td.a) >= 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
+  byDepth.filter(td => depthOf(td) >= 0).forEach(td => paintTendril(ctx, cx, cy, r, open, td))
+}
+//
+// How near a tendril's root is on the lip ring (-1 far back … 1 nearest).
+//
+function depthOf(td) {
+  return Math.sin(td.a)
 }
 //
 // One open-mouth part (collar or throat) baked alone, for the live

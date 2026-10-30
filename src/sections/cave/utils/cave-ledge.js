@@ -213,7 +213,9 @@ const FULL_TURN = Math.PI * 2
 /**
  * Paints a rock ledge in the given style into the terrain canvas.
  * @param {CanvasRenderingContext2D} ctx - World-space terrain context
- * @param {Object} p - Layout.PLATFORMS entry (walkable top p.y, wall side)
+ * @param {Object} p - Layout.PLATFORMS entry (walkable top p.y, wall side);
+ *   off the level's world (e.g. the menu picture) p.span {x1, x2} gives
+ *   the art span and p.wallAt(y) the wall face X instead of the level's
  * @param {Object} style - Style from CAVE_CFG.ledge (e.g. .wide)
  * @param {{x1: number, x2: number}} moss - Span the moss and plants keep to (outside the wall rock)
  * @returns {{swaying: Array<{x: number, y: number}>, front: {canvas: HTMLCanvasElement, x: number, y: number}}}
@@ -338,20 +340,22 @@ function paintTopMoss(ctx, geo, style, moss, rng) {
  * style: stones darkening with depth, moss and plants on top, a ragged face
  * toward the open side.
  * @param {CanvasRenderingContext2D} ctx - World-space terrain context
- * @param {Object} p - Layout.PLATFORMS entry of kind GROUND
+ * @param {Object} p - Layout.PLATFORMS entry of kind GROUND (p.span {x1, x2} overrides its art span,
+ *   p.bottom the Y it runs down to, the world bottom by default)
  * @param {Object} style - Style from CAVE_CFG.ledge
  * @param {{x1: number, x2: number}} moss - Span the moss and plants keep to
  * @returns {{swaying: Array, front: {canvas: HTMLCanvasElement, x: number, y: number}}}
  */
 export function paintGround(ctx, p, style, moss) {
   const rng = createSeededRandom(style.seed)
-  const span = Layout.platformArtSpan(p)
+  const span = p.span ?? Layout.platformArtSpan(p)
   const seed = rng() * FULL_TURN
   const topAt = x => p.y + Layout.profileNoise(x * NOISE_A, seed) * style.topWave
   const faceAt = y => span.x1 - Layout.profileNoise(y * NOISE_A, seed + NOISE_B) * GROUND_FACE_JAG
   const top = sampleEdge(span.x1, span.x2 + ART_PAD, EDGE_STEP, x => ({ x, y: topAt(x) }))
-  const face = sampleEdge(Layout.WORLD_H + ART_PAD, p.y, EDGE_STEP, y => ({ x: faceAt(y), y }))
-  const outline = [...top, { x: span.x2 + ART_PAD, y: Layout.WORLD_H + ART_PAD }, ...face]
+  const bottom = (p.bottom ?? Layout.WORLD_H) + ART_PAD
+  const face = sampleEdge(bottom, p.y, EDGE_STEP, y => ({ x: faceAt(y), y }))
+  const outline = [...top, { x: span.x2 + ART_PAD, y: bottom }, ...face]
   const body = smoothPath(outline)
   const bounds = polygonBounds(outline)
   const geo = { topAt }
@@ -411,7 +415,7 @@ export function paintRubble(ctx, cfg, rng) {
 //
 function ledgeGeometry(p, style, rng) {
   const left = p.wall !== 'right'
-  const span = Layout.platformArtSpan(p)
+  const span = p.span ?? Layout.platformArtSpan(p)
   const wallX = left ? span.x1 - ART_PAD : span.x2 + ART_PAD
   const tipX = left ? span.x2 : span.x1
   const len = Math.abs(tipX - wallX)
@@ -438,7 +442,7 @@ function ledgeGeometry(p, style, rng) {
     cap.push({ x: tipX - sign * style.overhang * Math.pow(s, CAP_POW) + sign * capBulge * Math.sin(Math.PI * s) + (rng() - HALF) * (style.endJag ?? CAP_JAG), y: topAt(tipX) + (capBottom - topAt(tipX)) * s })
   }
   const under = sampleEdge(capX, wallX, EDGE_STEP, x => ({ x, y: bottomAt(x) }))
-  return { left, wallX, tipX, sign, topAt, bottomAt, top, under, outline: [...top, ...cap, ...under] }
+  return { left, wallX, tipX, sign, topAt, bottomAt, top, under, outline: [...top, ...cap, ...under], wallAt: p.wallAt }
 }
 //
 // Rubble stones inside the body: each size class in turn (big first), a
@@ -508,19 +512,21 @@ function bridgeGeometry(p, style, rng) {
   }
   const top = sampleEdge(p.x1, p.x2, EDGE_STEP, x => ({ x, y: topAt(x) }))
   const under = sampleEdge(p.x2, p.x1, EDGE_STEP, x => ({ x, y: bottomAt(x) }))
-  return { left: true, wallX: p.x1, tipX: p.x2, sign: 1, topAt, bottomAt, top, under, outline: [...top, ...end(p.x2, 1), ...under, ...end(p.x1, -1).reverse()] }
+  return { left: true, wallX: p.x1, tipX: p.x2, sign: 1, topAt, bottomAt, top, under, outline: [...top, ...end(p.x2, 1), ...under, ...end(p.x1, -1).reverse()], wallAt: p.wallAt }
 }
 //
 // Space out of the wall's rock (its ragged face, tucked in a little): the
 // ledge is painted only there, so it grows from the wall without a strip
-// over the wall face.
+// over the wall face. The face is the level's wall unless the geometry
+// carries its own (wallAt).
 //
 function outOfWall(geo, bounds) {
   const path = new Path2D()
   const far = geo.left ? bounds.x + bounds.w * 2 : bounds.x - bounds.w
   const y1 = bounds.y - bounds.h
   const y2 = bounds.y + bounds.h * 2
-  const faceAt = y => (geo.left ? Layout.leftWallX(y) - WALL_TUCK : Layout.rightWallX(y) + WALL_TUCK)
+  const wallAt = geo.wallAt ?? (geo.left ? Layout.leftWallX : Layout.rightWallX)
+  const faceAt = y => (geo.left ? wallAt(y) - WALL_TUCK : wallAt(y) + WALL_TUCK)
   path.moveTo(faceAt(y1), y1)
   for (let y = y1; y <= y2; y += EDGE_STEP) path.lineTo(faceAt(y), y)
   path.lineTo(far, y2)

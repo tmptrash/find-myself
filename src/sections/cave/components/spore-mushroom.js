@@ -213,6 +213,20 @@ const BREATH_REST_RANGE = 5
 const BREATH_TIME = 1.6
 const BREATH_W = 0.05
 const BREATH_H = 0.035
+//
+// The mushroom gives under the hero: landing on the cap kicks a damped
+// spring that squashes the whole mushroom from the ground (shorter, a bit
+// wider) and lets it settle a little lower while he stands on it; it
+// springs back when he leaves. SAG_H / SAG_W: height / width change per
+// unit of sag (SAG_REST under his weight); the cap collider follows the
+// cap's top, so the hero sinks with it.
+//
+const SAG_H = 0.05
+const SAG_W = 0.03
+const SAG_REST = 1
+const SAG_KICK = 14
+const SAG_STIFF = 180
+const SAG_DAMP = 14
 const FULL_TURN = Math.PI * 2
 const SWARM_STATE = {
   INSIDE: 'inside',
@@ -265,6 +279,8 @@ export function create(cfg) {
     cooldown: 0,
     prevHeroX: null,
     onCap: false,
+    sag: 0,
+    sagV: 0,
     capY: capTopY + CAP_COLLIDE_SINK,
     prey: null,
     homeFrom: 1,
@@ -297,6 +313,7 @@ export function onUpdate(inst, heroInst) {
     const onCap = char.isGrounded?.() && char.curPlatform?.() === inst.body
     const landed = onCap && !inst.onCap
     inst.onCap = onCap
+    landed && (inst.sagV += SAG_KICK)
     if (landed && inst.state === W.INSIDE) {
       flyTo(inst, inst.stations[0], W.HOVER, 0)
       inst.spores.forEach(sp => (sp.wait = Math.random() * RELEASE_SPREAD))
@@ -308,6 +325,7 @@ export function onUpdate(inst, heroInst) {
     inst.onCap = false
     dropCap(inst)
   }
+  sagStep(inst, dt)
   moveCenter(inst, dt) && (event = arrive(inst) ?? event)
   inst.state === W.HOVER && inst.timer > HOVER_TIME && goHome(inst)
   inst.state === W.WANDER && inst.timer > WANDER_TIME && goHome(inst)
@@ -341,8 +359,18 @@ export function release(inst) {
  * @param {Object} inst - Spore mushroom instance
  */
 export function onDraw(inst) {
-  const b = inst.breath
-  inst.k.drawSprite({ sprite: SPRITE, pos: inst.k.vec2(inst.x, inst.y + BAKE_PAD), anchor: 'bot', scale: inst.k.vec2(1 + BREATH_W * b, 1 + BREATH_H * b) })
+  const s = bodyScale(inst)
+  inst.k.drawSprite({ sprite: SPRITE, pos: inst.k.vec2(inst.x, inst.y + BAKE_PAD), anchor: 'bot', scale: inst.k.vec2(s.x, s.y) })
+}
+
+/**
+ * Whether a body is the mushroom's cap collider.
+ * @param {Object} inst - Spore mushroom instance
+ * @param {Object|null} body - Kaplay object
+ * @returns {boolean}
+ */
+export function isCap(inst, body) {
+  return Boolean(body) && body === inst.body
 }
 
 /**
@@ -487,7 +515,7 @@ function gateCap(inst, heroInst) {
   const over = Math.abs(box.pos.x + box.width * HALF - inst.x) < (CAP_W * CAP_COLLIDE_W + box.width) * HALF
   const rising = char.vel.y < 0
   const depth = inst.body ? CAP_COLLIDE_DROP : CAP_COLLIDE_TOL
-  const want = over && !rising && feet <= inst.capY + depth
+  const want = over && !rising && feet <= liveCapY(inst) + depth
   want && !inst.body && (inst.body = addCap(inst))
   !want && dropCap(inst)
 }
@@ -498,7 +526,7 @@ function addCap(inst) {
   const k = inst.k
   return k.add([
     k.rect(CAP_W * CAP_COLLIDE_W, CAP_COLLIDE_H),
-    k.pos(inst.x - CAP_W * CAP_COLLIDE_W / 2, inst.capY),
+    k.pos(inst.x - CAP_W * CAP_COLLIDE_W / 2, liveCapY(inst)),
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
@@ -509,6 +537,28 @@ function addCap(inst) {
 function dropCap(inst) {
   inst.body?.exists() && inst.k.destroy(inst.body)
   inst.body = null
+}
+//
+// One step of the sag spring (toward resting under the hero's weight
+// while he stands on the cap, else upright); the collider rides the cap.
+//
+function sagStep(inst, dt) {
+  const target = inst.onCap ? SAG_REST : 0
+  inst.sagV += (-SAG_STIFF * (inst.sag - target) - SAG_DAMP * inst.sagV) * dt
+  inst.sag += inst.sagV * dt
+  inst.body?.exists() && (inst.body.pos = inst.k.vec2(inst.body.pos.x, liveCapY(inst)))
+}
+//
+// Collider top: the resting cap top lowered by the sag.
+//
+function liveCapY(inst) {
+  return inst.capY + (inst.y - inst.capTopY) * SAG_H * inst.sag
+}
+//
+// Sprite scale from the ground: breathing swells it, the sag squashes it.
+//
+function bodyScale(inst) {
+  return { x: 1 + BREATH_W * inst.breath + SAG_W * inst.sag, y: 1 + BREATH_H * inst.breath - SAG_H * inst.sag }
 }
 //
 // Every so often a spore picks a new spot to head for: a random point in
@@ -535,11 +585,11 @@ function avoidPrey(sp, prey, step) {
   sp.x += side * AVOID_PUSH * (1 - d / AVOID_R) * step
 }
 //
-// World position of a hole on the cap, swelling with the breath.
+// World position of a hole on the cap, moving with the breath and sag.
 //
 function holeAt(inst, h) {
-  const b = inst.breath
-  return { x: inst.x + h.u * CAP_W * (1 + BREATH_W * b), y: inst.y - (inst.y - inst.capTopY - h.v * CAP_H) * (1 + BREATH_H * b) }
+  const s = bodyScale(inst)
+  return { x: inst.x + h.u * CAP_W * s.x, y: inst.y - (inst.y - inst.capTopY - h.v * CAP_H) * s.y }
 }
 //
 // Rests a random while, then takes one slow breath (swell and back).

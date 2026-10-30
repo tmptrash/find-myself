@@ -170,10 +170,20 @@ export function create(cfg) {
     babyIdle: newIdle(),
     haloRgb: getRGB(k, CAVE_PAL.glowTint),
     tint,
-    haloOpacity
+    haloOpacity,
+    fade: 1
   }
   setPose(inst, x, y, scale)
   return inst
+}
+
+/**
+ * Fades the whole mushroom and its halo (the menu picture cross-fading).
+ * @param {Object} inst - Mushroom instance
+ * @param {number} fade - 0 … 1
+ */
+export function setFade(inst, fade) {
+  inst.fade = fade
 }
 
 /**
@@ -262,7 +272,7 @@ export function onDrawHalo(inst) {
   const k = inst.k
   const breath = 1 + Math.sin(k.time() * HALO_BREATH_SPEED + inst.phase) * HALO_BREATH_AMP
   const r = inst.capW * HALO_RADIUS_FRAC * (inst.kind === MUSHROOM_KIND.DORMANT ? DORMANT_HALO_SCALE : 1)
-  Glow.drawGlow(k, inst.x, inst.capTopY + inst.capW * CAP_H_FRAC, r, inst.haloRgb, inst.haloOpacity * inst.light * breath)
+  Glow.drawGlow(k, inst.x, inst.capTopY + inst.capW * CAP_H_FRAC, r, inst.haloRgb, inst.haloOpacity * inst.light * breath * inst.fade)
 }
 
 /**
@@ -300,7 +310,8 @@ export function destroy(inst) {
 // One baked layer standing on the ground line: squash shortens it from the
 // bottom (so the cap dips), widen spreads it sideways.
 //
-function drawLayer(inst, sprite, squash, widen, opacity) {
+function drawLayer(inst, sprite, squash, widen, layerOpacity) {
+  const opacity = layerOpacity * inst.fade
   if (opacity <= 0) return
   const pad = BAKE_PAD * inst.scale
   inst.k.drawSprite({

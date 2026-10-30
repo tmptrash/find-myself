@@ -198,6 +198,13 @@ const ANTICIPATE_SHARE = 0.35
 const SWELL = 0.08
 const MOUTH_R_SHARE = 0.3
 const MOUTH_LIFT = 3
+//
+// The plant as a picture outside the level (the menu): each trap snaps
+// shut on its own after a random wait (min + random range, seconds), then
+// opens again like after a meal.
+//
+const DECOR_SNAP_MIN = 5
+const DECOR_SNAP_RANGE = 7
 const ALERT_PAD_X = 60
 const ALERT_ABOVE = 260
 //
@@ -267,6 +274,76 @@ export function create(k) {
     }) : null
   }))
   return { k, leaves }
+}
+
+/**
+ * The plant's leaves and trap mouths as a picture outside the level (the
+ * menu): no colliders, every piece placed at a scale through a world →
+ * screen mapping, the traps now and then snapping shut and opening again.
+ * @param {Object} cfg
+ * @param {Object} cfg.k - Kaplay instance
+ * @param {(x: number, y: number) => {x: number, y: number}} cfg.toScreen - World point → screen point
+ * @param {number} cfg.scale - Screen px per world px
+ * @returns {Object} Decor instance
+ */
+export function createDecor(cfg) {
+  const { k, toScreen, scale } = cfg
+  const sprites = bakeLeaves(k)
+  const leaves = Layout.PLANT_LEAVES.map((def, i) => {
+    const sp = sprites[def.id]
+    const mouthAt = toScreen((def.x1 + def.x2) / 2, def.y - MOUTH_LIFT)
+    const at = toScreen(def.x1 - sp.padX, def.y - sp.lineY)
+    return {
+      sprites: sp,
+      pos: k.vec2(at.x, at.y),
+      state: S.OPEN,
+      timer: 0,
+      prey: null,
+      wait: decorWait(),
+      mouth: def.kind === Layout.LEAF_KIND.TRAP ? Mouth.create({
+        k,
+        x: mouthAt.x,
+        y: mouthAt.y,
+        r: Math.round((def.x2 - def.x1) * MOUTH_R_SHARE * scale),
+        seed: GRAIN_SEED_BASE + i
+      }) : null
+    }
+  })
+  return { k, scale, leaves }
+}
+
+/**
+ * Runs the picture's traps: open for a while, snap shut, open again.
+ * @param {Object} inst - Decor instance
+ */
+export function onUpdateDecor(inst) {
+  const dt = inst.k.dt()
+  inst.leaves.forEach(leaf => {
+    if (!leaf.mouth) return
+    leaf.timer += dt
+    leaf.state === S.OPEN && leaf.timer > leaf.wait && snapDecor(leaf)
+    stepTrap(leaf)
+    Mouth.setState(leaf.mouth, trapOpenness(leaf), trapSwell(leaf), false)
+  })
+}
+
+/**
+ * Draws the picture's leaves back to front like the level (far halves,
+ * then each leaf's near face, mouth, rim and hanging strands).
+ * @param {Object} inst - Decor instance
+ * @param {number} opacity - Fade 0 … 1
+ */
+export function onDrawDecor(inst, opacity) {
+  const k = inst.k
+  const scale = k.vec2(inst.scale, inst.scale)
+  inst.leaves.forEach(leaf => k.drawSprite({ sprite: leaf.sprites.back, pos: leaf.pos, scale, opacity }))
+  inst.leaves.forEach(leaf => {
+    k.drawSprite({ sprite: leaf.sprites.face, pos: leaf.pos, scale, opacity })
+    leaf.mouth && Mouth.setOpacity(leaf.mouth, opacity)
+    leaf.mouth && Mouth.onDraw(leaf.mouth)
+    k.drawSprite({ sprite: leaf.sprites.rim, pos: leaf.pos, scale, opacity })
+    k.drawSprite({ sprite: leaf.sprites.hang, pos: leaf.pos, scale, opacity })
+  })
 }
 
 /**
@@ -453,6 +530,17 @@ function preyNear(leaf, char) {
   if (!char?.exists?.()) return false
   const { x, y } = char.pos
   return x > leaf.x1 - ALERT_PAD_X && x < leaf.x2 + ALERT_PAD_X && y < leaf.y && y > leaf.y - ALERT_ABOVE
+}
+//
+// A picture trap snaps shut (nothing caught) and waits anew for the next.
+//
+function snapDecor(leaf) {
+  leaf.state = S.CLOSING
+  leaf.timer = 0
+  leaf.wait = decorWait()
+}
+function decorWait() {
+  return DECOR_SNAP_MIN + Math.random() * DECOR_SNAP_RANGE
 }
 //
 // Static body along the leaf top, trimmed at both ends by collideInset and

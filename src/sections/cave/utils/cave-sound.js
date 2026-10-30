@@ -179,6 +179,26 @@ const STONE_JITTER = 0.2
 const STONE_LAND_GAIN = 1.25
 const STONE_LAND_TIME = 1.2
 //
+// Landing on the spore mushroom's cap: soft flesh giving way — a low
+// muffled thump with a gentle attack and a short breath of air pushed out
+// through the holes, its filter falling as the cap settles. All noise, no
+// tone and no reverb.
+//
+const CAP_THUD_LP = 170
+const CAP_THUD_GAIN = 0.9
+const CAP_THUD_TIME = 0.11
+const CAP_AIR_FROM = 1400
+const CAP_AIR_TO = 500
+const CAP_AIR_Q = 0.5
+const CAP_AIR_SHARE = 0.12
+const CAP_AIR_TIME = 0.16
+const CAP_JITTER = 0.15
+//
+// A puff of noise: band-passed, its centre sliding from one frequency to
+// another, with a soft attack.
+//
+const PUFF_ATTACK = 0.025
+//
 // Tendrils seizing the hero: a wet slither (noise sweeping down) over a
 // low creak.
 //
@@ -214,7 +234,7 @@ const SPARK_DROP = 0.6
 const SPARK_DECAY = 0.12
 const SPARK_GAIN = 0.05
 //
-// Plant contraptions: trap snap, spore run, bubble pop, air plant breath.
+// Plant contraptions: trap snap, spore puff, bubble pop, air plant breath.
 //
 const SNAP_FREQ = 140
 const SNAP_GAIN = 0.22
@@ -223,10 +243,18 @@ const SNAP_DROP = 0.5
 const SNAP_NOISE_BAND = 900
 const SNAP_NOISE_GAIN = 0.12
 const SNAP_NOISE_DECAY = 0.12
-const SPORE_NOTES = [990, 1180, 1320, 1570]
-const SPORE_STAGGER = 0.07
-const SPORE_GAIN = 0.035
-const SPORE_DECAY = 0.6
+//
+// Spores puffing out: a dry breath of dust falling in pitch, and a couple
+// of smaller puffs trailing it at uneven steps.
+//
+const SPORE_PUFF_FROM = 2400
+const SPORE_PUFF_TO = 900
+const SPORE_PUFF_Q = 0.6
+const SPORE_PUFF_TIME = 0.4
+const SPORE_PUFF_GAIN = 0.12
+const SPORE_PUFF_TRAIL = 2
+const SPORE_TRAIL_STEP = 0.08
+const SPORE_TRAIL_SHARE = 0.45
 const POP_FREQ = 1400
 const POP_GAIN = 0.06
 const POP_DECAY = 0.07
@@ -420,6 +448,18 @@ export function playStoneStep(inst, land) {
 }
 
 /**
+ * The hero landing on the spore mushroom's cap: a short dull thump.
+ * @param {Object} inst - Cave sound instance
+ */
+export function playCapLand(inst) {
+  if (!ready(inst)) return
+  const at = inst.ctx.currentTime
+  const pitch = 1 + (Math.random() - HALF) * CAP_JITTER
+  softBurst(inst, inst.brown, at, 'lowpass', CAP_THUD_LP * pitch, 1, CAP_THUD_TIME, CAP_THUD_GAIN)
+  puff(inst, at, CAP_AIR_FROM * pitch, CAP_AIR_TO * pitch, CAP_AIR_Q, CAP_AIR_TIME, CAP_THUD_GAIN * CAP_AIR_SHARE)
+}
+
+/**
  * A trap's tendrils seizing the hero: a wet slither and a low creak.
  * @param {Object} inst - Cave sound instance
  */
@@ -444,13 +484,18 @@ export function playTendrilGrab(inst) {
 }
 
 /**
- * Spores leaving the mushroom: a soft rising run of high notes.
+ * Spores leaving the mushroom: a soft dry puff of dust from its holes, a
+ * couple of small ones trailing it.
  * @param {Object} inst - Cave sound instance
  */
 export function playSporeRelease(inst) {
   if (!ready(inst)) return
   const at = inst.ctx.currentTime
-  SPORE_NOTES.forEach((freq, i) => tone(inst, freq, at + i * SPORE_STAGGER, SPORE_GAIN, SPORE_DECAY, true))
+  puff(inst, at, SPORE_PUFF_FROM, SPORE_PUFF_TO, SPORE_PUFF_Q, SPORE_PUFF_TIME, SPORE_PUFF_GAIN)
+  for (let i = 1; i <= SPORE_PUFF_TRAIL; i++) {
+    const later = at + i * SPORE_TRAIL_STEP * (1 + Math.random())
+    puff(inst, later, SPORE_PUFF_FROM, SPORE_PUFF_TO, SPORE_PUFF_Q, SPORE_PUFF_TIME * SPORE_TRAIL_SHARE, SPORE_PUFF_GAIN * SPORE_TRAIL_SHARE)
+  }
 }
 
 /**
@@ -695,6 +740,28 @@ function softBurst(inst, buffer, at, type, freq, q, time, gain) {
   const g = ctx.createGain()
   g.gain.setValueAtTime(0, at)
   g.gain.linearRampToValueAtTime(gain, at + LEAF_PAT_ATTACK)
+  g.gain.exponentialRampToValueAtTime(SILENT, at + time)
+  src.connect(filter)
+  filter.connect(g)
+  g.connect(inst.out)
+  src.start(at, Math.random() * NOISE_SECONDS / 2, time * 2)
+}
+//
+// A breath of noise: band-passed with its centre sliding from one
+// frequency to another, soft attack, fading out (no click, no tone).
+//
+function puff(inst, at, from, to, q, time, gain) {
+  const { ctx } = inst
+  const src = ctx.createBufferSource()
+  src.buffer = inst.white
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.Q.value = q
+  filter.frequency.setValueAtTime(from, at)
+  filter.frequency.exponentialRampToValueAtTime(to, at + time)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0, at)
+  g.gain.linearRampToValueAtTime(gain, at + PUFF_ATTACK)
   g.gain.exponentialRampToValueAtTime(SILENT, at + time)
   src.connect(filter)
   filter.connect(g)

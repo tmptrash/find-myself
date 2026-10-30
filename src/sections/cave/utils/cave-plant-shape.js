@@ -123,19 +123,19 @@ const FINGER_STEPS = 16
 const FINGER_BACK_Z = 0.4
 //
 // Eyes grown into the main vine, each set by hand: height share on the axis,
-// side across it (share of the half-width, - left) and radius. They sit
-// where vines cross or peel off toward a leaf, alternating sides, clear of
-// the thorny band (left side, shares 0.75–0.88).
+// side across it (share of the half-width, - left) and radius. Big and
+// small ones mixed, some close together and some far apart, on both
+// sides, clear of the thorny band (left side, shares 0.75–0.88).
 //
 const EYES = [
-  { t: 0.07, across: 0.4, r: 11 },
-  { t: 0.2, across: -0.35, r: 10 },
-  { t: 0.34, across: 0.3, r: 12 },
-  { t: 0.47, across: -0.3, r: 9 },
-  { t: 0.6, across: 0.35, r: 11 },
-  { t: 0.71, across: -0.25, r: 10 },
-  { t: 0.83, across: 0.3, r: 10 },
-  { t: 0.94, across: -0.2, r: 12 }
+  { t: 0.05, across: 0.35, r: 15 },
+  { t: 0.13, across: -0.4, r: 7 },
+  { t: 0.29, across: 0.25, r: 13 },
+  { t: 0.35, across: -0.35, r: 6 },
+  { t: 0.55, across: -0.25, r: 16 },
+  { t: 0.66, across: 0.4, r: 8 },
+  { t: 0.82, across: 0.3, r: 11 },
+  { t: 0.9, across: -0.2, r: 6 }
 ]
 const EYE_MAX_W_SHARE = 0.3
 const FULL_TURN = Math.PI * 2

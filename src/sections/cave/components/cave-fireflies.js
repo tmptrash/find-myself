@@ -125,13 +125,14 @@ export function onUpdate(inst) {
  * @param {Object} inst - Fireflies instance
  * @param {number} top - View top world Y
  * @param {number} bottom - View bottom world Y
+ * @param {number} [opacity=1] - Fade (the menu picture cross-fading)
  */
-export function onDraw(inst, top, bottom) {
+export function onDraw(inst, top, bottom, opacity = 1) {
   const k = inst.k
   const t = k.time()
   inst.ambient.forEach(f => {
     if (f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
-    const flicker = flickerAt(t, f)
+    const flicker = flickerAt(t, f) * opacity
     Glow.drawGlow(k, f.x, f.y, AMBIENT_GLOW_R, inst.glowRgb, AMBIENT_OPACITY * flicker)
     Glow.drawGlow(k, f.x, f.y, AMBIENT_CORE_R / CORE_GLOW_SCALE, inst.coreRgb, flicker)
   })

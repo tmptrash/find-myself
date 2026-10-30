@@ -102,6 +102,24 @@ export function create(cfg) {
 }
 
 /**
+ * Paints a mass of the walls' light-grey rubble inside an outline: stones
+ * sink into shadow the deeper they lie in the rock.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Array<{x: number, y: number}>} pts - Outline
+ * @param {(x: number, y: number) => number} depthAt - How deep a point lies in the rock (> 0 inside)
+ * @param {() => number} rng - Seeded random
+ */
+export function paintRubbleMass(ctx, pts, depthAt, rng) {
+  paintRubble(ctx, {
+    path: smoothPath(pts),
+    bounds: polygonBounds(pts),
+    sizes: CAVE_CFG.rubble.stones,
+    inside: (x, y) => depthAt(x, y) > 0,
+    shadeAt: st => rubbleShade(depthAt(st.x, st.y))
+  }, rng)
+}
+
+/**
  * Draws the terrain tiles crossing the visible world band.
  * @param {Object} inst - Terrain instance
  * @param {number} top - View top world Y
@@ -234,13 +252,7 @@ function paintBasin(ctx, rng, lake) {
 // (dir: +1 for the left wall, whose rock is left of the face).
 //
 function paintWall(ctx, pts, faceAt, dir, rng) {
-  paintRubble(ctx, {
-    path: smoothPath(pts),
-    bounds: polygonBounds(pts),
-    sizes: CAVE_CFG.rubble.stones,
-    inside: (x, y) => (faceAt(y) - x) * dir > 0,
-    shadeAt: st => rubbleShade((faceAt(st.y) - st.x) * dir)
-  }, rng)
+  paintRubbleMass(ctx, pts, (x, y) => (faceAt(y) - x) * dir, rng)
 }
 //
 // One side of the ceiling in rubble, darker up from its lower edge.

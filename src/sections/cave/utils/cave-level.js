@@ -460,11 +460,13 @@ function spawnHero(inst, pose) {
   !prev && View.snapTo(inst.view, pose.x, pose.y)
 }
 //
-// Footsteps: soft and quiet on the plant's leaves, a soft scuff on rock.
+// Footsteps: soft and quiet on the plant's leaves, a soft scuff on rock; a
+// landing on the spore mushroom's cap is a dull thump (steps on it stay soft).
 //
 function playHeroStep(inst, hero, land) {
   if (!hero.sfx) return
   const on = hero.character?.curPlatform?.()
+  if (SporeMushroom.isCap(inst.spores, on)) return land ? CaveSound.playCapLand(inst.caveSound) : CaveSound.playLeafStep(inst.caveSound, false)
   if (inst.plant.leaves.some(l => l.body === on)) return CaveSound.playLeafStep(inst.caveSound, land)
   CaveSound.playStoneStep(inst.caveSound, land)
 }

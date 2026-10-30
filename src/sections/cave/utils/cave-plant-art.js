@@ -455,13 +455,8 @@ const HALF = 0.5
  *   world x / y)
  */
 export function paintPlant(ctx, rng, lake) {
-  const layer = document.createElement('canvas')
-  layer.width = LAYER.x2 - LAYER.x1
-  layer.height = Layout.WORLD_H - LAYER.y1
+  const layer = plantLayerCanvas(rng)
   const lctx = layer.getContext('2d')
-  lctx.translate(-LAYER.x1, -LAYER.y1)
-  paintPlantLayer(lctx, rng)
-  lctx.setTransform(1, 0, 0, 1, 0, 0)
   Lake.tintUnderwater(lctx, layer.width, layer.height, Layout.LAKE_SURFACE_Y - LAYER.y1)
   ctx.save()
   Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
@@ -470,6 +465,29 @@ export function paintPlant(ctx, rng, lake) {
   const front = footFront(layer, lake)
   layer.width = 0
   return front
+}
+/**
+ * Paints the plant body alone, without the lake (no water tint, no bed
+ * clip), for a picture outside the level (the menu).
+ * @param {() => number} rng - Seeded random
+ * @returns {{canvas: HTMLCanvasElement, x: number, y: number}} The plant
+ *   and the world point its canvas starts at
+ */
+export function paintPlantPicture(rng) {
+  return { canvas: plantLayerCanvas(rng), x: LAYER.x1, y: LAYER.y1 }
+}
+//
+// The plant painted on its own canvas covering its world box.
+//
+function plantLayerCanvas(rng) {
+  const layer = document.createElement('canvas')
+  layer.width = LAYER.x2 - LAYER.x1
+  layer.height = Layout.WORLD_H - LAYER.y1
+  const ctx = layer.getContext('2d')
+  ctx.translate(-LAYER.x1, -LAYER.y1)
+  paintPlantLayer(ctx, rng)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  return layer
 }
 //
 // The plant's bake between FRONT_FROM_Y and the lake surface, clipped at

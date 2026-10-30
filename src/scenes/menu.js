@@ -23,6 +23,7 @@ import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-fo
 import * as Grass from '../components/grass.js'
 import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
 import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
+import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
@@ -35,6 +36,7 @@ import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/for
 // cross-fades in while it is selected.
 //
 const BACKDROP_FOREST = 'forest'
+const BACKDROP_CAVE = 'cave'
 const BACKDROP_NIGHT = 'night'
 const LEVEL_ICON_MUSHROOM = 'mushroom'
 const LEVEL_ICON_GLOW_MUSHROOM = 'glowMushroom'
@@ -72,7 +74,7 @@ const LEVELS = [
     section: 'cave',
     icon: LEVEL_ICON_GLOW_MUSHROOM,
     description: CAVE_DESCRIPTION,
-    backdrop: BACKDROP_NIGHT,
+    backdrop: BACKDROP_CAVE,
     lessonPrefix: CAVE_LESSON_PREFIX,
     firstLesson: CAVE_FIRST_LESSON
   },
@@ -330,7 +332,8 @@ export function sceneMenu(k) {
       lastKeyAt: 0,
       isLeavingScene: false,
       sceneReady: false,
-      bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_NIGHT]: 0 },
+      bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0 },
+      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height() }),
       forestLayout,
       forestPieces,
       forestEyes: ChainBuoy.create({ k, spots: forestLayout.eyeSpots, earthBottomY: k.height() }),
@@ -378,7 +381,7 @@ export function sceneMenu(k) {
 
 /**
  * Bakes the menu's heavy static assets ahead of time on the given live
- * Kaplay instance — both backdrops for the current window size, the hero
+ * Kaplay instance — the backdrops (night, forest, cave) for the current window size, the hero
  * cursor and the baked texts. Called under the first boot loader, so the
  * first menu visit only reuses loaded sprites.
  * @param {Object} k - Kaplay inst (native-resolution engine)
@@ -389,6 +392,8 @@ export async function prewarmMenuAssets(k) {
   buildMenuNightSprite(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
+  await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
+  CaveMenuBg.prewarm(k, k.width(), k.height())
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   await document.fonts?.load?.(`${MENU_DESCRIPTION_SIZE}px ${MENU_TEXT_FONT}`)
   loadMenuAssets(k)
@@ -601,6 +606,7 @@ function onUpdate(inst) {
     const target = key === level.backdrop ? 1 : 0
     inst.bgOpacity[key] += (target - inst.bgOpacity[key]) * Math.min(1, dt * BG_FADE_SPEED)
   })
+  inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
   EarTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
@@ -669,11 +675,8 @@ function updateMenuMusic(inst, dt) {
   inst.music.kids.volume = inst.musicT / MENU_KIDS_FADE_IN * MENU_KIDS_VOLUME
 }
 //
-// Night picture under the forest one; each fades with its own opacity, so a
-// switch cross-fades. The forest goes back to front like the level: baked
-// back layers, the lake (bed, algae, water), the stone pile over its
-// shallows, ear-tree trunks, grass, ear-tree roots / trunk tops / crowns
-// with their spiky bombs, then the stalk eyes once the forest is mostly in.
+// Night picture under the forest and cave ones; each fades with its own
+// opacity, so a switch cross-fades.
 //
 function drawBackdrops(inst) {
   if (inst.isLeavingScene) return
@@ -687,7 +690,18 @@ function drawBackdrops(inst) {
     opacity: night
   })
   const forest = inst.bgOpacity[BACKDROP_FOREST]
-  if (forest <= MENU_FADE_EPS) return
+  forest > MENU_FADE_EPS && drawForestBackdrop(inst, forest)
+  const cave = inst.bgOpacity[BACKDROP_CAVE]
+  cave > MENU_FADE_EPS && CaveMenuBg.onDraw(inst.caveBg, cave)
+}
+//
+// The forest goes back to front like the level: baked back layers, the
+// lake (bed, algae, water), the stone pile over its shallows, ear-tree
+// trunks, grass, ear-tree roots / trunk tops / crowns with their spiky
+// bombs, then the stalk eyes once the forest is mostly in.
+//
+function drawForestBackdrop(inst, forest) {
+  const { k } = inst
   drawForestPieces(k, inst.forestPieces, forest)
   Lake.drawBed(k, inst.lake, forest)
   Lake.drawAlgae(k, inst.lake, forest)

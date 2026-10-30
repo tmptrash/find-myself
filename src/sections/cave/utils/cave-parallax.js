@@ -38,7 +38,7 @@ const HALF = 0.5
 //
 // Rows: camera-follow fraction, seed, the forest depth rules (grade = lower
 // contrast / saturation toward the row's haze, blur tier scaled by
-// blurScale: far ~3 px, mid ~1.5 px, near almost sharp), how far each is
+// blurScale: far ~3 px, mid ~0.75 px, near almost sharp), how far each is
 // pushed into the cave shade toward its own tint (CAVE_PAL.backTint), and
 // its light from above (lightTop at the row's top fading to lightBottom at
 // its bottom). Each row reads apart from the others: a cold, flat, bluish
@@ -47,7 +47,7 @@ const HALF = 0.5
 //
 const LAYERS = [
   { id: 'far', speed: 0.12, seed: 601, shade: 0.66, lightTop: 1.1, lightBottom: 0.72, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.55 },
-  { id: 'mid', speed: 0.3, seed: 602, shade: 0.55, lightTop: 1, lightBottom: 0.82, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.6 },
+  { id: 'mid', speed: 0.3, seed: 602, shade: 0.55, lightTop: 1, lightBottom: 0.82, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.3 },
   { id: 'near', speed: 0.5, seed: 603, shade: 0.76, lightTop: 0.85, lightBottom: 0.7, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.8 }
 ]
 const RGBA_STRIDE = 4
@@ -125,6 +125,7 @@ const BACK_EYE_EVERY = 2
 const BACK_EYE_AT = 0.82
 const LEDGE_SEED_SPREAD = 10
 const parallaxByK = new WeakMap()
+const screenRowsByK = new WeakMap()
 
 /**
  * Bakes (once per live k) the three back rows.
@@ -169,6 +170,30 @@ export function mushroomAnchors(inst) {
 }
 
 /**
+ * Bakes (once per live k and size) the three back rows at a screen size —
+ * the same look as the level's rows, the mid row's ledges grown from the
+ * screen's own edges — for the menu picture.
+ * @param {Object} k - Kaplay instance
+ * @param {number} w - Row width (px)
+ * @param {number} h - Row height (px)
+ * @returns {Array<{id: string, name: string}>} Rows back to front
+ */
+export function bakeScreenRows(k, w, h) {
+  let perK = screenRowsByK.get(k)
+  !perK && (perK = new Map(), screenRowsByK.set(k, perK))
+  const key = `${w}x${h}`
+  const cached = perK.get(key)
+  if (cached) return cached
+  const rows = LAYERS.map((layer, i) => {
+    const name = `${SPRITE_PREFIX}-screen-${key}-${layer.id}`
+    k.loadSprite(name, paintRow(layer, i, w, h, true).canvas)
+    return { id: layer.id, name }
+  })
+  perK.set(key, rows)
+  return rows
+}
+
+/**
  * Anchors for eyes growing from the mid row's rocks (layer coordinates).
  * @param {Object} inst - Parallax instance
  * @returns {Array<{x: number, y: number}>}
@@ -203,6 +228,17 @@ export function onDraw(inst, viewLeft, viewTop, ids = null) {
 function bakeLayer(k, layer, index) {
   const w = Layout.WORLD_W
   const h = Math.ceil((Layout.WORLD_H - Layout.MAX_VIEW_H) * layer.speed + Layout.MAX_VIEW_H)
+  const row = paintRow(layer, index, w, h, false)
+  const name = `${SPRITE_PREFIX}-${layer.id}`
+  k.loadSprite(name, row.canvas)
+  return { id: layer.id, name, speed: layer.speed, seed: layer.seed, w, h, anchors: row.anchors, eyes: row.eyes }
+}
+//
+// One row painted, graded, blurred and shaded on its own canvas, with the
+// mid row's mushroom / eye spots. Free rows (not the level's world) grow
+// the mid ledges from the canvas edges instead of the level's walls.
+//
+function paintRow(layer, index, w, h, free) {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -211,7 +247,7 @@ function bakeLayer(k, layer, index) {
   layer.id === 'far' && paintFar(ctx, w, h, rng)
   const anchors = []
   const eyes = []
-  layer.id === 'mid' && paintMid(ctx, w, h, rng, anchors, eyes)
+  layer.id === 'mid' && paintMid(ctx, w, h, rng, anchors, eyes, free)
   layer.id === 'near' && paintNear(ctx, w, h, rng)
   applyParallaxPostFxToContext(ctx, canvas.width, canvas.height, {
     blurRadius: forestDepthBlurRadiusPx(layer.blurTier) * layer.blurScale,
@@ -219,9 +255,7 @@ function bakeLayer(k, layer, index) {
     grainSeedOffset: GRAIN_SEED_BASE + index
   })
   shadeCanvas(canvas, layer)
-  const name = `${SPRITE_PREFIX}-${layer.id}`
-  k.loadSprite(name, canvas)
-  return { id: layer.id, name, speed: layer.speed, seed: layer.seed, w, h, anchors, eyes }
+  return { canvas, anchors, eyes }
 }
 //
 // Opaque far wall: rubble of big stones in many different darknesses,
@@ -271,9 +305,10 @@ function paintFarGreens(ctx, w, h, far, rng) {
 }
 //
 // Mid row: ledges from alternating side walls, some carrying a bridge;
-// bridges are painted first so the ledge tips cover their ends.
+// bridges are painted first so the ledge tips cover their ends. Free rows
+// take the canvas edges for the walls.
 //
-function paintMid(ctx, w, h, rng, anchors, eyes) {
+function paintMid(ctx, w, h, rng, anchors, eyes, free) {
   const style = CAVE_CFG.ledge.back
   const step = h / MID_LEDGES
   const ledges = []
@@ -288,8 +323,18 @@ function paintMid(ctx, w, h, rng, anchors, eyes) {
     bridges.push(span.bridge)
     span.pair && ledges.push(span.pair)
   }
-  const rocks = [...bridges, ...ledges]
+  const rocks = [...bridges, ...ledges].map(p => (free ? freeEdges(p, w) : p))
   rocks.forEach((p, n) => paintBackLedge(ctx, p, { ...style, ...p.look.style, seed: style.seed + n * MID_SEED_STEP, thick: p.thick }, n, anchors, eyes))
+}
+//
+// A rock of a free row: its art runs past the canvas edge it grows from
+// and nothing clips it (no level wall there).
+//
+function freeEdges(p, w) {
+  const left = p.bridge || p.wall === 'left'
+  const edge = left ? -OUTSIDE_PAD - MID_BRIDGE_OFF : w + OUTSIDE_PAD + MID_BRIDGE_OFF
+  const span = left ? { x1: -OUTSIDE_PAD, x2: p.x2 } : { x1: p.x1, x2: w + OUTSIDE_PAD }
+  return { ...p, span, wallAt: () => edge }
 }
 //
 // A back ledge in the given look growing from the left or right wall.

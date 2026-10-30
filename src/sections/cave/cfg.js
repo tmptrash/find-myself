@@ -24,8 +24,8 @@ const WIDE = {
     { r: 36, range: 0.35, tries: 0.6 },
     { r: 22, range: 0.4, tries: 1.2 },
     { r: 12, range: 0.4, tries: 3 },
-    { r: 6, range: 0.4, tries: 6 },
-    { r: 3, range: 0.3, tries: 8 }
+    { r: 6, range: 0.4, tries: 0.35 },
+    { r: 3, range: 0.3, tries: 0.15 }
   ],
   topMoss: 10,            // Moss thickness on top (it swells and thins along it)
   frontShare: 0.4,        // Share of top grass and leaves drawn in front of the hero
@@ -244,9 +244,9 @@ export const CAVE_CFG = {
     stones: [
       { r: 44, range: 0.45, tries: 0.5 },
       { r: 26, range: 0.45, tries: 1 },
-      { r: 14, range: 0.45, tries: 2 },
-      { r: 7, range: 0.4, tries: 3 },
-      { r: 3, range: 0.3, tries: 4 }
+      { r: 14, range: 0.45, tries: 2.4 },
+      { r: 7, range: 0.4, tries: 0.3 },
+      { r: 3, range: 0.3, tries: 0.1 }
     ],
     shadeDepth: 120,
     shadeMin: 0.05
@@ -256,8 +256,8 @@ export const CAVE_CFG = {
     stones: [
       { r: 36, range: 0.35, tries: 0.5 },
       { r: 22, range: 0.4, tries: 1 },
-      { r: 12, range: 0.4, tries: 2.2 },
-      { r: 6, range: 0.4, tries: 3.5 }
+      { r: 12, range: 0.4, tries: 2.4 },
+      { r: 6, range: 0.4, tries: 0.3 }
     ],
     shadeDepth: 90,
     shadeMin: 0.15

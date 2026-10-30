@@ -110,19 +110,20 @@ export function create(cfg) {
     const r = BACK_R_MIN + Math.round(rng() * BACK_R_RANGE)
     return newEye(k, a.x, a.y, r, -Math.PI / 2, 0, STALK_LEN_BACK)
   })
-  const backTint = caveShadeColor(k, BACK_SHADE)
-  const colors = { ...forestEyeBerryColors(k), glint: getRGB(k, CAVE_PAL.eyeGlint) }
-  return {
-    k,
-    parallax,
-    wall,
-    back,
-    backTint,
-    batch: PolyBatch.create(),
-    socketRgb: getRGB(k, CAVE_PAL.plantRosette[2]),
-    colors,
-    backColors: Object.fromEntries(COLOR_KEYS.map(key => [key, shade(k, colors[key], backTint)]))
-  }
+  return eyesInst(k, parallax, wall, back)
+}
+
+/**
+ * Creates eyes grown into the plant at given spots (no wall or back eyes),
+ * for a picture outside the level (the menu).
+ * @param {Object} cfg
+ * @param {Object} cfg.k - Kaplay instance
+ * @param {Array<{x: number, y: number, r: number}>} cfg.spots - Eye centres and radii
+ * @returns {Object} Eyes instance
+ */
+export function createEmbedded(cfg) {
+  const { k, spots } = cfg
+  return eyesInst(k, null, spots.map(spot => ({ ...newEye(k, spot.x, spot.y, spot.r, 0, 0, 0), embedded: true })), [])
 }
 
 /**
@@ -159,9 +160,10 @@ export function onDrawBack(inst, view) {
  * Wall eyes (front world pass).
  * @param {Object} inst - Eyes instance
  * @param {{top: number, bottom: number}} view - Visible world rect
+ * @param {number} [opacity=1] - Fade (the menu picture cross-fading)
  */
-export function onDrawWall(inst, view) {
-  drawEyes(inst, inst.wall.filter(eye => inView(eye, view)), inst.colors, null)
+export function onDrawWall(inst, view, opacity = 1) {
+  drawEyes(inst, inst.wall.filter(eye => inView(eye, view)), inst.colors, null, opacity)
 }
 
 /**
@@ -173,6 +175,24 @@ export function onDrawWall(inst, view) {
  */
 export function onDrawWallBelow(inst, view, fromY) {
   drawEyes(inst, inst.wall.filter(eye => eye.embedded && eye.tipY >= fromY && inView(eye, view)), inst.colors, null)
+}
+//
+// Eyes instance: colours (the back row's shaded) and one polygon batch.
+//
+function eyesInst(k, parallax, wall, back) {
+  const backTint = caveShadeColor(k, BACK_SHADE)
+  const colors = { ...forestEyeBerryColors(k), glint: getRGB(k, CAVE_PAL.eyeGlint) }
+  return {
+    k,
+    parallax,
+    wall,
+    back,
+    backTint,
+    batch: PolyBatch.create(),
+    socketRgb: getRGB(k, CAVE_PAL.plantRosette[2]),
+    colors,
+    backColors: Object.fromEntries(COLOR_KEYS.map(key => [key, shade(k, colors[key], backTint)]))
+  }
 }
 function inView(eye, view) {
   return eye.tipY > view.top - CULL_PAD && eye.tipY < view.bottom + CULL_PAD
@@ -238,7 +258,7 @@ function buildStalk(eye, x, y, t) {
 //
 // Root knots (sprites), then every stalk and eye-berry in one polygon batch.
 //
-function drawEyes(inst, eyes, colors, tint) {
+function drawEyes(inst, eyes, colors, tint, opacity = 1) {
   const { k, batch } = inst
   eyes.filter(eye => !eye.embedded).forEach(eye => k.drawSprite({
     sprite: eye.knot,
@@ -265,7 +285,7 @@ function drawEyes(inst, eyes, colors, tint) {
     addLiddedEyeBerry(batch, eye.tipX, eye.tipY, eye.r, pupil[0], pupil[1], eye.r * PUPIL_R, colors, EYE_CONTOUR_W, close)
     close === 0 && addGlint(batch, pupil, eye.r * PUPIL_R, colors.glint)
   })
-  PolyBatch.flush(batch, k)
+  PolyBatch.flush(batch, k, opacity)
 }
 //
 // Small light glint on the upper right of a pupil.

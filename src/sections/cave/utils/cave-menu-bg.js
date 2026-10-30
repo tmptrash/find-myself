@@ -23,7 +23,7 @@ import * as Fireflies from '../components/cave-fireflies.js'
 // mushrooms on the floor and fireflies. Everything baked is baked once per
 // live k and screen size.
 //
-const SPRITE_PREFIX = 'cave0-menu-v2'
+const SPRITE_PREFIX = 'cave0-menu-v3'
 const GRAIN_SEED = 8800
 const ROOM_SEED = 8811
 const PLANT_SEED = 7301
@@ -84,17 +84,17 @@ const PER_EDGE = 1000
 const FERN_REACH = 70
 const GRASS_REACH = 90
 //
-// Glowing mushrooms on the floor (x share, size), their stems sunk this deep
-// into the grass (the floor's front grass is drawn over them), and fireflies
-// over the room.
+// Glowing mushrooms on the floor (x share, size, clear of the side walls),
+// standing just into it: the whole floor (its rock, moss and grass) and
+// its front grass are drawn over their feet. Fireflies over the room.
 //
 const GLOW_MUSHROOMS = [
-  { x: 0.09, scale: 0.9, seed: 31 },
+  { x: 0.11, scale: 0.9, seed: 31 },
   { x: 0.4, scale: 0.7, seed: 32 },
   { x: 0.79, scale: 1, seed: 33 },
-  { x: 0.92, scale: 0.75, seed: 34 }
+  { x: 0.89, scale: 0.75, seed: 34 }
 ]
-const MUSHROOM_SINK = 14
+const MUSHROOM_SINK = 3
 const FIREFLY_COUNT = 30
 const HALF_PI = Math.PI / 2
 const roomByK = new WeakMap()
@@ -121,6 +121,7 @@ export function create(cfg) {
     h,
     rows: Parallax.bakeScreenRows(k, w, h),
     pieces: room.pieces,
+    floor: room.floor,
     grass: room.grass,
     plant: GiantPlant.createDecor({ k, toScreen: place.toScreen, scale: place.scale }),
     eyes: WallEye.createEmbedded({ k, spots: plantShape().eyes.map(e => ({ ...place.toScreen(e.x, e.y), r: Math.max(1, Math.round(e.r * place.scale)) })) }),
@@ -155,9 +156,10 @@ export function onUpdate(inst, focus) {
 
 /**
  * Draws the backdrop back to front: rows, the rubble room with the plant's
- * body, the plant's leaves and traps, its eyes, the floor mushrooms, the
- * floor's front grass over their stems, then the additive glows (mushroom
- * halos, fireflies).
+ * body, the plant's leaves and traps, the floor mushrooms, the floor band
+ * over their feet, the plant's eyes (some sit low on the trunk, in that
+ * band), the floor's front grass, then the additive glows (mushroom halos,
+ * fireflies).
  * @param {Object} inst - Backdrop instance
  * @param {number} opacity - Cross-fade 0 … 1
  */
@@ -167,11 +169,12 @@ export function onDraw(inst, opacity) {
   inst.rows.forEach(row => k.drawSprite({ sprite: row.name, pos: origin, opacity }))
   inst.pieces.forEach(piece => k.drawSprite({ sprite: piece.name, pos: k.vec2(piece.x, piece.y), opacity }))
   GiantPlant.onDrawDecor(inst.plant, opacity)
-  WallEye.onDrawWall(inst.eyes, { top: -Infinity, bottom: Infinity }, opacity)
   inst.mushrooms.forEach(m => {
     GlowMushroom.setFade(m, opacity)
     GlowMushroom.onDraw(m)
   })
+  k.drawSprite({ sprite: inst.floor.name, pos: k.vec2(inst.floor.x, inst.floor.y), opacity })
+  WallEye.onDrawWall(inst.eyes, { top: -Infinity, bottom: Infinity }, opacity)
   k.drawSprite({ sprite: inst.grass.name, pos: k.vec2(inst.grass.x, inst.grass.y), opacity })
   inst.mushrooms.forEach(m => GlowMushroom.onDrawHalo(m))
   Fireflies.onDraw(inst.fireflies, -Infinity, Infinity, opacity)
@@ -192,7 +195,8 @@ function plantPlacement(w, h) {
 //
 // The rubble room with the plant's body in it, once per live k and size:
 // side walls and ceiling, the plant, then the floor over its foot, grained
-// and cut into pieces; the floor's front grass is its own sprite.
+// and cut into pieces (the floor band apart, drawn over the mushrooms);
+// the floor's front grass is its own sprite.
 //
 function bakeRoom(k, w, h, place) {
   let perK = roomByK.get(k)
@@ -215,19 +219,21 @@ function bakeRoom(k, w, h, place) {
   applyForestFilmGrainToCanvas(front.canvas, FRONT_GRAIN_SEED)
   const grassName = `${SPRITE_PREFIX}-grass-${key}`
   k.loadSprite(grassName, front.canvas)
-  const pieces = roomPieces(w, h, plantBox).map((r, i) => {
+  const rects = roomPieces(w, h, plantBox)
+  const sprites = [...rects.above, rects.floor].map((r, i) => {
     const name = `${SPRITE_PREFIX}-room-${key}-${i}`
     k.loadSprite(name, cutCanvas(canvas, r))
     return { name, x: r.x, y: r.y }
   })
   canvas.width = 0
-  const room = { pieces, grass: { name: grassName, x: front.x, y: front.y } }
+  const room = { pieces: sprites.slice(0, -1), floor: sprites[sprites.length - 1], grass: { name: grassName, x: front.x, y: front.y } }
   perK.set(key, room)
   return room
 }
 //
-// Non-overlapping rects covering everything painted in the room: ceiling
-// band, left wall, plant box, right wall, floor band.
+// Non-overlapping rects covering everything painted in the room: above the
+// floor the ceiling band, left wall, plant box and right wall; then the
+// floor band.
 //
 function roomPieces(w, h, plantBox) {
   const ceilB = Math.min(h, Math.ceil(h * CEIL_DEPTH * (1 + FACE_WANDER) + CEIL_VINE_MIN + CEIL_VINE_RANGE + OUTSIDE_PAD))
@@ -236,13 +242,13 @@ function roomPieces(w, h, plantBox) {
   const px1 = Math.max(wallW, Math.floor(plantBox.x1))
   const px2 = Math.min(w - wallW, Math.ceil(plantBox.x2))
   const band = floorT - ceilB
-  return [
+  const above = [
     { x: 0, y: 0, w, h: ceilB },
     { x: 0, y: ceilB, w: wallW, h: band },
     { x: px1, y: ceilB, w: px2 - px1, h: band },
-    { x: w - wallW, y: ceilB, w: wallW, h: band },
-    { x: 0, y: floorT, w, h: h - floorT }
+    { x: w - wallW, y: ceilB, w: wallW, h: band }
   ].filter(r => r.w > 0 && r.h > 0)
+  return { above, floor: { x: 0, y: floorT, w, h: h - floorT } }
 }
 function cutCanvas(src, r) {
   const canvas = document.createElement('canvas')

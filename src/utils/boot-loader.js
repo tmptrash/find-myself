@@ -1,6 +1,5 @@
 import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y } from '../sections/forest/utils/forest-eye-berry.js'
 import { CFG } from '../cfg.js'
-import * as Cursor from './cursor.js'
 import { focusGameCanvas } from './canvas-focus.js'
 //
 // Shared DOM loader. Fatal errors may replace innerHTML —
@@ -219,7 +218,6 @@ export function showLoader(opts = {}) {
   loaderEl.style.background = opts.transparentBackdrop ? LOADER_BG_TRANSPARENT : LOADER_BG_OPAQUE
   loaderEl.style.zIndex = opts.elevatedZ ? LOADER_Z_OVER_CRT : LOADER_Z_DEFAULT
   setLoaderPanelOverCrt(opts.transparentBackdrop === true)
-  Cursor.setHiddenByLoader(true)
   if (!opts.preserveBar && !continuing) {
     loaderBarReportedPct = 0
     loaderBarDisplayPct = 0
@@ -309,7 +307,6 @@ export function showFatalLoaderError(message) {
   if (!loaderEl) return
   stopLoaderBarAnimation()
   eye = null
-  Cursor.setHiddenByLoader(false)
   loaderEl.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
   loaderEl.style.display = 'flex'
 }
@@ -341,7 +338,6 @@ function finishHideLoader() {
   resolveFinishWaiters()
   stopLoaderBarAnimation()
   setLoaderBarCreepBoost(false)
-  Cursor.setHiddenByLoader(false)
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   setLoaderPanelOverCrt(false)

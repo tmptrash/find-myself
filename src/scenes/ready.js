@@ -4,7 +4,6 @@ import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
-import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN, buildHeroSpritePrefix } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
@@ -532,8 +531,6 @@ export function sceneReady(k) {
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
     k.flyingWordsInstance = null
-    Cursor.setVisible(false)
-    k.onSceneLeave(() => Cursor.setVisible(true))
     const centerX = k.width() / 2
     const sound = Sound.create()
     Sound.startAudioContext(sound)
@@ -630,8 +627,8 @@ export function sceneReady(k) {
       k,
       centerX,
       y: HINT_Y,
-      prefix: 'press Space, ',
-      suffix: ' or click to start',
+      prefix: 'press Space or ',
+      suffix: ' to start',
       fontSize: HINT_FONT_SIZE,
       color: hintRgb,
       z: Z_HINT,

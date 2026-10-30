@@ -802,6 +802,30 @@ export const CFG = {
           backdrop: PALETTE.gray0
         },
         //
+        // Cave look of the confirm dialog: a fleshy pad leaf of the monster
+        // plant (lit rim, darker underside and veins) hung on two of its
+        // red-brown stems; the answers are small dark leaves, the chosen one
+        // turns the red of the trap flowers; a cross of the plant's wood;
+        // cave leaves fly off when it breaks.
+        //
+        confirmDialogCave: {
+          wood: PALETTE.green1,
+          woodDark: PALETTE.green0,
+          woodLight: PALETTE.green3,
+          contour: PALETTE.gray0,
+          text: PALETTE.gray7,
+          textShadow: PALETTE.gray0,
+          tag: PALETTE.teal0,
+          tagSelected: PALETTE.red1,
+          tagSelectedText: PALETTE.gray7,
+          leaf: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
+          vine: PALETTE.rose0,
+          vineLight: PALETTE.rose1,
+          twig: PALETTE.brown0,
+          twigHover: PALETTE.red3,
+          backdrop: PALETTE.gray0
+        },
+        //
         // Cave section — cool blue-teal stone base, brown roots as the earth
         // band, fluorescent cyan as the one light colour (mushrooms) and rare
         // gold for fireflies.

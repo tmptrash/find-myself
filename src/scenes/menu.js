@@ -5,7 +5,6 @@ import * as Hero from "../components/hero.js"
 import { showTransitionToLevel } from "../utils/transition.js"
 import { goAfterPreparingAssets } from "../utils/lesson-assets.js"
 import { getProgress, get, set, normalizeSceneName } from "../utils/progress.js"
-import * as Cursor from "../utils/cursor.js"
 import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { bindPointerActivate } from '../utils/pointer-activate.js'
@@ -67,6 +66,7 @@ const LEVELS = [
     icon: LEVEL_ICON_MUSHROOM,
     description: FOREST_DESCRIPTION,
     backdrop: BACKDROP_FOREST,
+    dialog: ConfirmDialog.LOOKS.FOREST,
     lessonPrefix: FOREST_LESSON_PREFIX,
     firstLesson: FOREST_FIRST_LESSON
   },
@@ -75,6 +75,7 @@ const LEVELS = [
     icon: LEVEL_ICON_GLOW_MUSHROOM,
     description: CAVE_DESCRIPTION,
     backdrop: BACKDROP_CAVE,
+    dialog: ConfirmDialog.LOOKS.CAVE,
     lessonPrefix: CAVE_LESSON_PREFIX,
     firstLesson: CAVE_FIRST_LESSON
   },
@@ -291,7 +292,6 @@ export function sceneMenu(k) {
     k.volume(1)
     k.setGravity(0)
     CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
-    Cursor.setCursor('arrow')
     const lastLevel = syncMenuLastLesson()
     const progress = getProgress()
     const sound = Sound.create()
@@ -360,16 +360,8 @@ export function sceneMenu(k) {
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
     k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
-    inst.dialog = ConfirmDialog.create({
-      k,
-      question: MENU_RESTART_QUESTION,
-      yesLabel: MENU_RESTART_YES,
-      noLabel: MENU_RESTART_NO,
-      onYes: () => restartLevel(inst),
-      defaultYes: true,
-      onSelect: () => Sound.playMenuClickSound(sound),
-      z: MENU_DIALOG_Z
-    })
+    inst.dialogs = Object.fromEntries(Object.values(ConfirmDialog.LOOKS).map(look => [look, createRestartDialog(inst, look)]))
+    inst.dialog = inst.dialogs[ConfirmDialog.LOOKS.FOREST]
     k.add([k.z(MENU_LEAVE_COVER_Z), { draw: () => drawLeaveCover(inst) }])
     addForestFilmGrainOverlayLayer(k, MENU_FILM_GRAIN_Z)
     k.onUpdate(() => onUpdate(inst))
@@ -495,7 +487,26 @@ function onStartKey(inst, key) {
     enterLevel(inst, level)
     return
   }
-  level.playable && ConfirmDialog.open(inst.dialog)
+  if (!level.playable) return
+  inst.dialog = inst.dialogs[level.dialog ?? ConfirmDialog.LOOKS.FOREST]
+  ConfirmDialog.open(inst.dialog)
+}
+//
+// The restart question in one look (each level asks in its own: the forest
+// signboard, the cave's pad leaf).
+//
+function createRestartDialog(inst, look) {
+  return ConfirmDialog.create({
+    k: inst.k,
+    question: MENU_RESTART_QUESTION,
+    yesLabel: MENU_RESTART_YES,
+    noLabel: MENU_RESTART_NO,
+    onYes: () => restartLevel(inst),
+    defaultYes: true,
+    onSelect: () => Sound.playMenuClickSound(inst.sound),
+    z: MENU_DIALOG_Z,
+    look
+  })
 }
 //
 // Steps the selection with wrap-around (last → first and back); with the
@@ -642,12 +653,12 @@ function updateMenuCrawler(inst, dt) {
   Predator.update(crawler, dt)
 }
 //
-// Mouse movement over a row selects it; a resting mouse never fights the
-// keyboard. The pointer cursor marks rows that can be entered.
+// A touch sliding over a row selects it (the game takes no mouse; touches
+// arrive through the pointer); a resting touch never fights the keyboard.
 //
 function updatePointerHover(inst) {
   if (ConfirmDialog.isOpen(inst.dialog)) {
-    Cursor.setCursor(ConfirmDialog.updatePointer(inst.dialog) ? 'pointer' : 'arrow')
+    ConfirmDialog.updatePointer(inst.dialog)
     inst.lastMouse = { x: inst.k.mousePos().x, y: inst.k.mousePos().y }
     return
   }
@@ -655,7 +666,6 @@ function updatePointerHover(inst) {
   const moved = mouse.x !== inst.lastMouse.x || mouse.y !== inst.lastMouse.y
   inst.lastMouse = { x: mouse.x, y: mouse.y }
   const level = levelUnderPointer(inst)
-  Cursor.setCursor(level?.playable ? 'pointer' : 'arrow')
   moved && level && selectLevel(inst, level.index)
 }
 //
@@ -818,7 +828,6 @@ function beginMenuSceneLeave(inst) {
   if (inst.isLeavingScene) return
   inst.isLeavingScene = true
   inst.pointerCancel?.cancel()
-  Cursor.setCursor('arrow')
   inst.heroInst.character.hidden = true
 }
 function onMenuLeave(inst) {

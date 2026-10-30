@@ -24,7 +24,6 @@ import { sceneLesson3 as sceneTimeLevel3 } from "../sections/time/scenes/lesson3
 import { sceneTimeComplete } from "../sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "../components/hero.js"
 import { prepareDesaturatedLifeSprite } from "../sections/touch/components/lesson-indicator.js"
-import * as Cursor from "./cursor.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
@@ -162,7 +161,6 @@ export async function bootEngine(resolutionMode) {
     BootLoader.showFatalLoaderError('WebGL is not available in this browser. Please reload the page or try a different browser.')
     throw err
   }
-  Cursor.init(k)
   TouchInput.initTouchInput(k)
   Fullscreen.createFullscreenButton(k)
   initBlurKeyReset()

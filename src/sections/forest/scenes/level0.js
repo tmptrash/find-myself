@@ -752,7 +752,7 @@ let forestBirdsLoopHandle = null
 // First-visit controls hint: a speech bubble on the hero with the hot keys.
 // The hero can move while it is up (walking away is one way to close it).
 //
-const HINT_INTRO_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
+const HINT_INTRO_TEXT = '\'awd, ←, →, ↑ & space\'\nto move, jump & interact\nwith the world.'
 const HINT_INTRO_DURATION = 18
 //
 // Walking this far from the bubble dismisses it early; the first moments of

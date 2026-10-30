@@ -20,7 +20,7 @@ const DIALOG_Z = 620
 //
 // Close hint styling
 //
-const CLOSE_HINT_TEXT = 'Click, Space or Esc to close'
+const CLOSE_HINT_TEXT = 'Space or Esc to close'
 const CLOSE_HINT_FONT_SIZE = 20
 const CLOSE_HINT_FLICKER_DURATION = 1.2
 const CLOSE_HINT_MIN_OPACITY = 0.4

@@ -6,6 +6,7 @@ import { disposeActiveEngineForHotReload, setActiveEngine } from "./utils/engine
 import { installWindowResizeReboot } from "./utils/window-resize.js"
 import * as Sound from "./utils/sound.js"
 import { prewarmMenuAssets } from "./scenes/menu.js"
+import * as NoMouse from "./utils/no-mouse.js"
 //
 // Force dark background for all elements
 //
@@ -39,6 +40,7 @@ if (!import.meta.hot?.data.gameBooted) {
  * into it on demand.
  */
 async function boot() {
+  NoMouse.create()
   const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)

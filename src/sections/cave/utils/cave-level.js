@@ -62,6 +62,11 @@ const RESPAWN_BURST_COUNT = 14
 const RESPAWN_DELAY = 2.3
 const DEATH_SHAKE = 5
 const FALL_OUT_Y = Layout.WORLD_H + 120
+//
+// A landing sounds after this long in the air (a jump or a fall, not a
+// flicker over a bump in the ground), seconds.
+//
+const LAND_MIN_AIR = 0.12
 const SPLASH_VOLUME = 0.3
 //
 // Drowning (like the forest lake): the hero sinks slowly into the water,
@@ -198,6 +203,7 @@ export function create(k) {
     deathX: 0,
     deathY: 0,
     lanternStep: -1,
+    airFor: 0,
     fps: null
   }
   inst.wallEyes = WallEye.create({ k, parallax: inst.parallax })
@@ -322,12 +328,27 @@ function updateHero(inst, char) {
   // snapping in the air made jumps and falls stutter.
   //
   char.isGrounded() && Hero.snapPosToPixels(inst.heroInst)
+  trackLanding(inst, char)
   Mushroom.onUpdate(inst.lantern, inst.heroInst) && CaveSound.playLanternBounce(inst.caveSound)
   trackSafeSpot(inst, char)
   const { x, y } = char.pos
   if (Layout.hitsSpikes(inst.stalactites, x, y)) return killHero(inst)
   if (Layout.isInLake(x, y)) return startDrown(inst, char)
   y > FALL_OUT_Y && killHero(inst)
+}
+//
+// Landings are heard by the level, not by the hero's own landing hook (it
+// misses landings after the jump key was let go in the air): after a real
+// time in the air, the first grounded frame plays the landing on the
+// surface under him (leaf, cap or rock), the same sound as his steps there.
+//
+function trackLanding(inst, char) {
+  if (!char.isGrounded()) {
+    inst.airFor += inst.k.dt()
+    return
+  }
+  inst.airFor >= LAND_MIN_AIR && playHeroStep(inst, inst.heroInst, true)
+  inst.airFor = 0
 }
 //
 // Lantern light drives the upper darkness; each dimming step ticks.
@@ -449,14 +470,15 @@ function spawnHero(inst, pose) {
     idleVocalization: null
   })
   hero.onPlayStepSound = h => playHeroStep(inst, h, false)
-  hero.onPlayLandSound = h => playHeroStep(inst, h, true)
   //
-  // A landing after a jump sounds like a step on that surface only (no
-  // extra jump tone on top).
+  // The hero's own landing hooks stay silent: the level plays landings
+  // itself (trackLanding), the surface's sound only, no jump tone on top.
   //
+  hero.onPlayLandSound = null
   hero.onPlayJumpLandSound = null
   Hero.spawn(hero, { instant: true })
   inst.heroInst = hero
+  inst.airFor = 0
   !prev && View.snapTo(inst.view, pose.x, pose.y)
 }
 //

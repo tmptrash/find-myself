@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { getRGB, parseHex } from '../utils/helper.js'
 import { createSeededRandom } from '../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
+import { paintMossStrand } from '../sections/cave/utils/cave-paint.js'
 //
 // Global Yes / No confirm dialog, usable from any scene, drawn as a forest
 // signboard: a wooden board with grain and knots hangs on two crooked
@@ -17,10 +18,23 @@ import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-pa
 // and lets it fall — the action runs once that has played.
 //
 // It opens on "No", so a stray confirm never triggers the action. Arrows /
-// WASD move the choice, Enter / Space confirm it, the mouse selects by
-// hovering and confirms by clicking. Every piece is baked once per live k and
+// WASD move the choice, Enter / Space confirm it; on a touch screen a touch
+// sliding over a tag selects it and a tap confirms it (the game takes no
+// mouse). Every piece is baked once per live k and
 // window scale. Sizes are design px at REF_HEIGHT.
 //
+// Looks: the forest signboard (default) or the cave's — a pad leaf of the
+// monster plant hung on two of its stems, small leaves for the answers.
+// Each look has its own palette (CFG `confirmDialog` / `confirmDialogCave`).
+//
+export const LOOKS = {
+  FOREST: 'forest',
+  CAVE: 'cave'
+}
+const PALETTES = {
+  [LOOKS.FOREST]: CFG.visual.colors.palette.confirmDialog,
+  [LOOKS.CAVE]: CFG.visual.colors.palette.confirmDialogCave
+}
 const REF_HEIGHT = 1080
 const CHOICE_YES = 0
 const CHOICE_NO = 1
@@ -29,7 +43,6 @@ const PHASE_CLOSED = 'closed'
 const PHASE_OPEN = 'open'
 const PHASE_OUT = 'out'
 const PHASE_BREAK = 'break'
-const PAL = CFG.visual.colors.palette.confirmDialog
 //
 // Board: plank size, padding around the question and the tag row, the
 // ragged outline (vertex step and jitter, chamfered corners).
@@ -61,6 +74,57 @@ const BOARD_LIT_ALPHA = 0.5
 const BOARD_SHADE_H = 9
 const BOARD_SHADE_ALPHA = 0.4
 const BOARD_SEED = 7121
+//
+// Cave board: a pad leaf — a rounded-square oval (SQUARENESS: superellipse
+// power) scalloped by lobes of uneven depth, its underside showing as a
+// darker band below the rim, veins running from its very centre to every
+// side and branching on the way (fractal: each side vein splits the same
+// way, thinner, DEPTH levels), a lit rim, and short moss strands with
+// drops hanging off its lower edge (extra room baked under the board for
+// them). The stems come down onto the leaf and end in knobs on it
+// (ATTACH_Y under its top); its cross sits in the leaf's top-right corner
+// (CLOSE_INSET from its right side, CLOSE_Y under its top), inside the
+// rounded rim and right of the question.
+//
+const PAD_SQUARENESS = 3
+const PAD_LOBES = 9
+const PAD_LOBE_AMP = 0.035
+const PAD_LOBE_JITTER = 0.02
+const PAD_STEPS = 140
+const PAD_THICK = 9
+const PAD_VEINS = 14
+const PAD_VEIN_JITTER = 0.4
+const PAD_VEIN_REACH = 0.97
+const PAD_VEIN_W = 2.8
+const PAD_VEIN_ALPHA = 0.7
+const PAD_VEIN_DEPTH = 2
+const PAD_VEIN_STEPS = 10
+const PAD_VEIN_WANDER = 0.18
+const PAD_VEIN_BRANCH_AT = [0.3, 0.5, 0.7]
+const PAD_VEIN_FORK_MIN = 0.45
+const PAD_VEIN_FORK_RANGE = 0.35
+const PAD_VEIN_BRANCH_LEN = 0.6
+const PAD_VEIN_THIN = 0.6
+const PAD_CENTER_R = 5
+const PAD_CENTER_ALPHA = 0.6
+const PAD_ATTACH_Y = 38
+const PAD_CLOSE_INSET = 50
+const PAD_CLOSE_Y = 70
+const PAD_RIM_LIT_W = 4
+const PAD_RIM_LIT_ALPHA = 0.55
+const PAD_STRANDS = 10
+const PAD_STRAND_FROM = 0.25
+const PAD_STRAND_MIN = 16
+const PAD_STRAND_RANGE = 34
+const PAD_HANG_ROOM = 64
+const PAD_KNOB_R = 6
+const PAD_SEED = 7131
+//
+// Cave answer: a small pad leaf (fewer, deeper lobes, thinner underside).
+//
+const TAG_PAD_LOBES = 5
+const TAG_PAD_LOBE_AMP = 0.06
+const TAG_PAD_THICK = 4
 //
 // Painted question text with a dark shadow.
 //
@@ -194,7 +258,7 @@ const VIGNETTE_INNER = 0.25
 const VIGNETTE_CENTER_ALPHA = 0.7
 const VIGNETTE_EDGE_ALPHA = 0.97
 const BAKE_PAD = 26
-const SPRITE_PREFIX = 'confirm-dialog-v2'
+const SPRITE_PREFIX = 'confirm-dialog-v4'
 const GRAIN_SEED = 8221
 const DEG = Math.PI / 180
 
@@ -209,15 +273,19 @@ const DEG = Math.PI / 180
  * @param {Function} [cfg.onSelect] - Called when the highlighted tag changes
  * @param {number} cfg.z - Draw layer
  * @param {boolean} [cfg.defaultYes=false] - Highlight "Yes" when the dialog opens
+ * @param {string} [cfg.look=LOOKS.FOREST] - Look of the board (forest signboard or cave leaf)
  * @returns {Object} Dialog inst
  */
 export function create(cfg) {
   const { k } = cfg
   const s = k.height() / REF_HEIGHT
-  const sprites = bakeSprites(k, cfg, s)
+  const look = cfg.look ?? LOOKS.FOREST
+  const pal = PALETTES[look]
+  const sprites = bakeSprites(k, cfg, s, look, pal)
   const inst = {
     k,
     s,
+    pal,
     sprites,
     onYes: cfg.onYes,
     onSelect: cfg.onSelect,
@@ -464,7 +532,8 @@ function tagUnderPointer(inst) {
 }
 //
 // Veil, vines (lines), then every sprite: vine leaves, board, tags, twig
-// cross, flying leaves.
+// cross, flying leaves. The cave's stems come down over its leaf instead
+// (drawn after it, ending in their knobs on it).
 //
 function onDraw(inst) {
   if (inst.phase === PHASE_CLOSED && !inst.burst.length && inst.veil < 0.01) return
@@ -477,8 +546,10 @@ function onDraw(inst) {
     opacity: inst.veil * VEIL_OPACITY
   })
   const hanging = inst.phase === PHASE_OPEN || inst.phase === PHASE_OUT
-  hanging && drawVines(inst)
+  const onLeaf = Boolean(sprites.knob)
+  hanging && !onLeaf && drawVines(inst)
   inst.phase !== PHASE_CLOSED && drawBoard(inst)
+  hanging && onLeaf && drawVines(inst)
   inst.burst.forEach(leaf => k.drawSprite({
     sprite: leaf.sprite,
     pos: k.vec2(leaf.x, leaf.y),
@@ -494,8 +565,8 @@ function onDraw(inst) {
 //
 function drawVines(inst) {
   const { k, s, sprites } = inst
-  const vine = getRGB(k, PAL.vine)
-  const vineLight = getRGB(k, PAL.vineLight)
+  const vine = getRGB(k, inst.pal.vine)
+  const vineLight = getRGB(k, inst.pal.vineLight)
   const paths = sprites.nailsAt.map((nail, i) => {
     const bottom = toWorld(inst, nail)
     return vinePath(inst, inst.vines[i], { x: inst.pivotX + nail.x, y: VINE_TOP_Y * s }, bottom)
@@ -514,6 +585,10 @@ function drawVines(inst) {
       scale: leafScale
     })
   }))
+  sprites.knob && paths.forEach(path => {
+    const end = path[path.length - 1]
+    k.drawSprite({ sprite: sprites.knob, pos: k.vec2(end.x, end.y), anchor: 'center' })
+  })
 }
 //
 // Fixed random shape of each vine (bow, waves, kinks), seeded so it never
@@ -606,45 +681,52 @@ function drawBoard(inst) {
 // vignette), once per k, scale and question; plus the board-local spots of
 // the tags, the cross and the vine nails.
 //
-function bakeSprites(k, cfg, s) {
+function bakeSprites(k, cfg, s, look, pal) {
+  const cave = look === LOOKS.CAVE
   const lines = cfg.question.split('\n')
   const lineH = Math.ceil(QUESTION_SIZE * TEXT_LINE_HEIGHT)
   const questionH = lines.length * lineH + (lines.length - 1) * QUESTION_LINE_GAP
   const boardH = (BOARD_PAD_TOP + questionH + QUESTION_TO_TAGS + TAG_H + BOARD_PAD_BOTTOM) * s
-  const key = `${SPRITE_PREFIX}-${Math.round(s * 1000)}-${cfg.question.length}`
+  const key = `${SPRITE_PREFIX}-${look}-${Math.round(s * 1000)}-${cfg.question.length}`
   const load = (name, bake) => {
     k.getSprite(name) || k.loadSprite(name, bake())
     return name
   }
   const pad = BAKE_PAD * s
-  const board = load(`${key}-board`, () => bakeBoard(lines, lineH, s, boardH))
+  const hangRoom = cave ? PAD_HANG_ROOM * s : 0
+  const board = load(`${key}-board`, () => (cave ? bakePadBoard(lines, lineH, s, boardH, hangRoom, pal) : bakeBoard(lines, lineH, s, boardH, pal)))
   const tagsY = (BOARD_PAD_TOP + questionH + QUESTION_TO_TAGS + TAG_H / 2) * s
   const tagHalfGap = (TAG_W + TAG_GAP) / 2 * s
   const tags = [cfg.yesLabel, cfg.noLabel].map((label, i) => ({
-    normal: load(`${key}-tag-${i}`, () => bakeTag(label, s, false)),
-    selected: load(`${key}-tag-${i}-selected`, () => bakeTag(label, s, true))
+    normal: load(`${key}-tag-${i}`, () => bakeTag(label, s, false, cave, pal)),
+    selected: load(`${key}-tag-${i}-selected`, () => bakeTag(label, s, true, cave, pal))
   }))
   const close = {
-    normal: load(`${key}-close`, () => bakeClose(s, false)),
-    hovered: load(`${key}-close-hovered`, () => bakeClose(s, true))
+    normal: load(`${key}-close`, () => bakeClose(s, false, pal)),
+    hovered: load(`${key}-close-hovered`, () => bakeClose(s, true, pal))
   }
-  const leaves = PAL.leaf.map((hex, i) => load(`${key}-leaf-${i}`, () => bakeLeaf(s, hex)))
+  const leaves = pal.leaf.map((hex, i) => load(`${key}-leaf-${i}`, () => bakeLeaf(s, hex, pal)))
   const leafPad = BAKE_PAD * s * LEAF_BAKE_PAD
   const leafW = Math.ceil(LEAF_LEN * s + leafPad * 2)
-  const vignette = load(`${SPRITE_PREFIX}-vignette-${k.width()}x${k.height()}`, () => bakeVignette(k.width(), k.height()))
+  const vignette = load(`${SPRITE_PREFIX}-${look}-vignette-${k.width()}x${k.height()}`, () => bakeVignette(k.width(), k.height(), pal))
+  const knob = cave ? load(`${key}-knob`, () => bakeKnob(s, pal)) : null
   const attachX = BOARD_W * VINE_ATTACH_FRAC * s
+  const nailY = (cave ? PAD_ATTACH_Y : VINE_NAIL_Y) * s
+  const closeX = (BOARD_W / 2 - (cave ? PAD_CLOSE_INSET : CLOSE_INSET + CLOSE_SIZE / 2)) * s
+  const closeY = (cave ? PAD_CLOSE_Y : CLOSE_INSET + CLOSE_SIZE / 2) * s
   return {
     board,
     tags,
     close,
     leaves,
+    knob,
     leafStemAnchorX: (2 * leafPad) / leafW - 1,
     vignette,
     boardH,
-    boardAnchorY: (2 * pad) / (boardH + pad * 2) - 1,
+    boardAnchorY: (2 * pad) / (boardH + pad * 2 + hangRoom) - 1,
     tagsAt: [{ x: -tagHalfGap, y: tagsY }, { x: tagHalfGap, y: tagsY }],
-    closeAt: { x: BOARD_W * s / 2 - (CLOSE_INSET + CLOSE_SIZE / 2) * s, y: (CLOSE_INSET + CLOSE_SIZE / 2) * s },
-    nailsAt: [{ x: -attachX, y: VINE_NAIL_Y * s }, { x: attachX, y: VINE_NAIL_Y * s }]
+    closeAt: { x: closeX, y: closeY },
+    nailsAt: [{ x: -attachX, y: nailY }, { x: attachX, y: nailY }]
   }
 }
 //
@@ -652,45 +734,214 @@ function bakeSprites(k, cfg, s) {
 // top edge and a shaded bottom, the dark contour, nails for the vines and the
 // painted question.
 //
-function bakeBoard(lines, lineH, s, boardH) {
+function bakeBoard(lines, lineH, s, boardH, pal) {
   const pad = BAKE_PAD * s
   const w = BOARD_W * s
   const canvas = newCanvas(w + pad * 2, boardH + pad * 2)
   const ctx = canvas.getContext('2d')
   const rng = createSeededRandom(BOARD_SEED)
   const outline = raggedRectPath(pad, pad, w, boardH, BOARD_CHAMFER * s, BOARD_EDGE_STEP * s, BOARD_EDGE_JITTER * s, rng)
-  ctx.fillStyle = PAL.wood
+  ctx.fillStyle = pal.wood
   ctx.fill(outline)
   ctx.save()
   ctx.clip(outline)
-  paintWoodGrain(ctx, pad, pad, w, boardH, s, rng)
+  paintWoodGrain(ctx, pad, pad, w, boardH, s, rng, pal)
   ctx.restore()
-  ctx.strokeStyle = PAL.contour
+  ctx.strokeStyle = pal.contour
   ctx.lineWidth = BOARD_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)
   const attachX = w * VINE_ATTACH_FRAC
   const nails = [-attachX, attachX]
-  nails.forEach(dx => paintNail(ctx, pad + w / 2 + dx, pad + VINE_NAIL_Y * s, s))
+  nails.forEach(dx => paintNail(ctx, pad + w / 2 + dx, pad + VINE_NAIL_Y * s, s, pal))
+  paintQuestion(ctx, lines, lineH, pad, w, s, pal)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
+  return canvas
+}
+//
+// The cave board: the pad leaf's underside band, its top, veins and lit
+// rim, the contour, moss strands off its lower edge and the painted
+// question (the stem knobs are drawn live over the stems).
+//
+function bakePadBoard(lines, lineH, s, boardH, hangRoom, pal) {
+  const pad = BAKE_PAD * s
+  const w = BOARD_W * s
+  const canvas = newCanvas(w + pad * 2, boardH + pad * 2 + hangRoom)
+  const ctx = canvas.getContext('2d')
+  const rng = createSeededRandom(PAD_SEED)
+  const rim = padRim(pad + w / 2, pad + boardH / 2, w / 2, boardH / 2, PAD_LOBES, PAD_LOBE_AMP, rng)
+  const top = closedPath(rim)
+  const under = closedPath(rim.map(p => ({ x: p.x, y: p.y + PAD_THICK * s })))
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.fillStyle = pal.woodDark
+  ctx.fill(under)
+  ctx.strokeStyle = pal.contour
+  ctx.lineWidth = BOARD_CONTOUR * s
+  ctx.stroke(under)
+  ctx.fillStyle = pal.wood
+  ctx.fill(top)
+  ctx.save()
+  ctx.clip(top)
+  paintPadVeins(ctx, { x: pad + w / 2, y: pad + boardH / 2 }, rim, s, rng, pal)
+  ctx.globalAlpha = PAD_RIM_LIT_ALPHA
+  ctx.strokeStyle = pal.woodLight
+  ctx.lineWidth = PAD_RIM_LIT_W * s
+  ctx.stroke(top)
+  ctx.restore()
+  ctx.strokeStyle = pal.contour
+  ctx.lineWidth = BOARD_CONTOUR * s
+  ctx.stroke(top)
+  paintPadStrands(ctx, rim, s, rng)
+  paintQuestion(ctx, lines, lineH, pad, w, s, pal)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
+  return canvas
+}
+//
+// Rim of a pad leaf: a rounded-square oval scalloped by lobes of uneven
+// depth (points clockwise from the right).
+//
+function padRim(cx, cy, rx, ry, lobes, amp, rng) {
+  const phase = rng() * Math.PI * 2
+  const depth = Array.from({ length: lobes }, () => 1 + (rng() - 0.5) * 2 * PAD_LOBE_JITTER / amp)
+  const exp = 2 / PAD_SQUARENESS
+  const pts = []
+  for (let i = 0; i < PAD_STEPS; i++) {
+    const a = i / PAD_STEPS * Math.PI * 2
+    const lobe = Math.floor(((a + phase) / (Math.PI * 2)) * lobes) % lobes
+    const m = 1 - amp + amp * Math.abs(Math.sin((a + phase) * lobes / 2)) * depth[lobe]
+    const c = Math.cos(a)
+    const sn = Math.sin(a)
+    pts.push({ x: cx + Math.sign(c) * Math.pow(Math.abs(c), exp) * rx * m, y: cy + Math.sign(sn) * Math.pow(Math.abs(sn), exp) * ry * m, a })
+  }
+  return pts
+}
+//
+// Veins from the leaf's centre to every side (each reaching almost to the
+// rim in its direction, branching on the way), and a dark dot at the
+// centre where they meet.
+//
+function paintPadVeins(ctx, center, rim, s, rng, pal) {
+  ctx.globalAlpha = PAD_VEIN_ALPHA
+  ctx.strokeStyle = pal.woodDark
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (let i = 0; i < PAD_VEINS; i++) {
+    const a = (i + (rng() - 0.5) * PAD_VEIN_JITTER) / PAD_VEINS * Math.PI * 2
+    const end = rimToward(rim, center, a)
+    const len = Math.hypot(end.x - center.x, end.y - center.y) * PAD_VEIN_REACH
+    paintVein(ctx, center, Math.atan2(end.y - center.y, end.x - center.x), len, PAD_VEIN_W * s, PAD_VEIN_DEPTH, rng)
+  }
+  ctx.globalAlpha = PAD_CENTER_ALPHA
+  ctx.fillStyle = pal.woodDark
+  ctx.beginPath()
+  ctx.arc(center.x, center.y, PAD_CENTER_R * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+}
+//
+// The rim point lying in a direction from the centre.
+//
+function rimToward(rim, center, a) {
+  const offs = rim.map(p => {
+    const d = Math.atan2(p.y - center.y, p.x - center.x) - a
+    return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)))
+  })
+  return rim[offs.indexOf(Math.min(...offs))]
+}
+//
+// One vein: a line wandering a little from a point along a heading, with
+// thinner side veins sprouting from it on alternate sides that split the
+// same way, until depth runs out.
+//
+function paintVein(ctx, from, heading, len, w, depth, rng) {
+  const pts = [from]
+  const headings = [heading]
+  let h = heading
+  for (let i = 1; i <= PAD_VEIN_STEPS; i++) {
+    h += (rng() - 0.5) * PAD_VEIN_WANDER
+    const p = pts[i - 1]
+    pts.push({ x: p.x + Math.cos(h) * len / PAD_VEIN_STEPS, y: p.y + Math.sin(h) * len / PAD_VEIN_STEPS })
+    headings.push(h)
+  }
+  ctx.lineWidth = w
+  ctx.beginPath()
+  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.stroke()
+  if (depth <= 0) return
+  const flip = rng() < 0.5 ? 1 : -1
+  PAD_VEIN_BRANCH_AT.forEach((t, j) => {
+    const at = Math.round(t * PAD_VEIN_STEPS)
+    const side = (j % 2 === 0 ? 1 : -1) * flip
+    const fork = side * (PAD_VEIN_FORK_MIN + rng() * PAD_VEIN_FORK_RANGE)
+    paintVein(ctx, pts[at], headings[at] + fork, len * (1 - t) * PAD_VEIN_BRANCH_LEN, w * PAD_VEIN_THIN, depth - 1, rng)
+  })
+}
+//
+// Short moss strands with drops hanging off the leaf's lower edge (below
+// its underside band), away from its sides.
+//
+function paintPadStrands(ctx, rim, s, rng) {
+  const lower = rim.filter(p => Math.sin(p.a) > PAD_STRAND_FROM)
+  for (let i = 0; i < PAD_STRANDS && lower.length; i++) {
+    const p = lower[Math.floor(rng() * lower.length)]
+    paintMossStrand(ctx, p.x, p.y + PAD_THICK * s, (PAD_STRAND_MIN + rng() * PAD_STRAND_RANGE) * s, rng)
+  }
+}
+//
+// The knob a stem ends in on the leaf.
+//
+function bakeKnob(s, pal) {
+  const r = (PAD_KNOB_R + 1) * s
+  const canvas = newCanvas(r * 2 + 2, r * 2 + 2)
+  paintStemKnob(canvas.getContext('2d'), canvas.width / 2, canvas.height / 2, s, pal)
+  return canvas
+}
+//
+// Where a stem holds the leaf: a round knob of the stem's wood.
+//
+function paintStemKnob(ctx, x, y, s, pal) {
+  ctx.fillStyle = pal.contour
+  ctx.beginPath()
+  ctx.arc(x, y, (PAD_KNOB_R + 1) * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = pal.vine
+  ctx.beginPath()
+  ctx.arc(x, y, PAD_KNOB_R * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = pal.vineLight
+  const glint = PAD_KNOB_R * s * VINE_NAIL_GLINT
+  ctx.beginPath()
+  ctx.arc(x - glint, y - glint, glint, 0, Math.PI * 2)
+  ctx.fill()
+}
+//
+// The question painted over the board, with a dark shadow.
+//
+function paintQuestion(ctx, lines, lineH, pad, w, s, pal) {
   ctx.font = `${Math.round(QUESTION_SIZE * s)}px ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   lines.forEach((line, i) => {
     const y = pad + (BOARD_PAD_TOP + i * (lineH + QUESTION_LINE_GAP)) * s
-    ctx.fillStyle = PAL.textShadow
+    ctx.fillStyle = pal.textShadow
     ctx.fillText(line, pad + w / 2 + QUESTION_SHADOW * s, y + QUESTION_SHADOW * s)
-    ctx.fillStyle = PAL.text
+    ctx.fillStyle = pal.text
     ctx.fillText(line, pad + w / 2, y)
   })
-  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
-  return canvas
+}
+function closedPath(pts) {
+  const path = new Path2D()
+  pts.forEach((p, i) => (i === 0 ? path.moveTo(p.x, p.y) : path.lineTo(p.x, p.y)))
+  path.closePath()
+  return path
 }
 //
 // Wavy grain lines, plank seams, a few knot rings, the lit top strip and the
 // shaded bottom strip (all low-alpha steps of the wood tones).
 //
-function paintWoodGrain(ctx, x, y, w, h, s, rng) {
-  ctx.strokeStyle = PAL.woodDark
+function paintWoodGrain(ctx, x, y, w, h, s, rng, pal) {
+  ctx.strokeStyle = pal.woodDark
   ctx.globalAlpha = BOARD_GRAIN_ALPHA
   ctx.lineWidth = BOARD_GRAIN_W * s
   for (let i = 0; i < BOARD_GRAIN_LINES; i++) {
@@ -719,56 +970,62 @@ function paintWoodGrain(ctx, x, y, w, h, s, rng) {
     ctx.stroke()
   }
   ctx.globalAlpha = BOARD_LIT_ALPHA
-  ctx.fillStyle = PAL.woodLight
+  ctx.fillStyle = pal.woodLight
   ctx.fillRect(x, y, w, BOARD_LIT_H * s)
   ctx.globalAlpha = BOARD_SHADE_ALPHA
-  ctx.fillStyle = PAL.woodDark
+  ctx.fillStyle = pal.woodDark
   ctx.fillRect(x, y + h - BOARD_SHADE_H * s, w, BOARD_SHADE_H * s)
   ctx.globalAlpha = 1
 }
-function paintNail(ctx, x, y, s) {
-  ctx.fillStyle = PAL.contour
+function paintNail(ctx, x, y, s, pal) {
+  ctx.fillStyle = pal.contour
   ctx.beginPath()
   ctx.arc(x, y, VINE_NAIL_R * s, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = PAL.woodLight
+  ctx.fillStyle = pal.woodLight
   ctx.beginPath()
   const glint = VINE_NAIL_R * s * VINE_NAIL_GLINT
   ctx.arc(x - glint, y - glint, glint, 0, Math.PI * 2)
   ctx.fill()
 }
 //
-// One answer tag: a small ragged plank, dark (or glowing gold when selected,
-// with a sprout of two leaves on its corner), and its painted label.
+// One answer tag: a small ragged plank (a small pad leaf in the cave look),
+// dark — or in the selected colour, with a sprout of two leaves on its
+// corner — and its painted label.
 //
-function bakeTag(label, s, selected) {
+function bakeTag(label, s, selected, cave, pal) {
   const pad = BAKE_PAD * s
   const w = TAG_W * s
   const h = TAG_H * s
   const canvas = newCanvas(w + pad * 2, h + pad * 2)
   const ctx = canvas.getContext('2d')
   const rng = createSeededRandom(GRAIN_SEED + label.length)
-  const outline = raggedRectPath(pad, pad, w, h, BOARD_CHAMFER * s * TAG_CHAMFER_SCALE, BOARD_EDGE_STEP * s * TAG_EDGE_STEP_SCALE, TAG_JITTER * s, rng)
-  ctx.fillStyle = selected ? PAL.tagSelected : PAL.tag
+  const rim = cave ? padRim(pad + w / 2, pad + h / 2, w / 2, h / 2, TAG_PAD_LOBES, TAG_PAD_LOBE_AMP, rng) : null
+  const outline = cave ? closedPath(rim) : raggedRectPath(pad, pad, w, h, BOARD_CHAMFER * s * TAG_CHAMFER_SCALE, BOARD_EDGE_STEP * s * TAG_EDGE_STEP_SCALE, TAG_JITTER * s, rng)
+  if (cave) {
+    ctx.fillStyle = pal.contour
+    ctx.fill(closedPath(rim.map(p => ({ x: p.x, y: p.y + TAG_PAD_THICK * s }))))
+  }
+  ctx.fillStyle = selected ? pal.tagSelected : pal.tag
   ctx.fill(outline)
   ctx.save()
   ctx.clip(outline)
   ctx.globalAlpha = BOARD_LIT_ALPHA
-  ctx.fillStyle = PAL.woodLight
+  ctx.fillStyle = pal.woodLight
   ctx.fillRect(pad, pad, w, BOARD_LIT_H * s * TAG_LIT_SCALE)
   ctx.restore()
-  ctx.strokeStyle = PAL.contour
+  ctx.strokeStyle = pal.contour
   ctx.lineWidth = TAG_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)
   if (selected) {
     TAG_SPROUT_ANGLES.forEach((angle, i) => paintLeaf(ctx, pad + TAG_SPROUT_X * s, pad + TAG_SPROUT_Y * s, angle,
-      TAG_SPROUT_LEAF * s * (i === 0 ? 1 : TAG_SPROUT_SECOND_SCALE), PAL.leaf[i + 1], s))
+      TAG_SPROUT_LEAF * s * (i === 0 ? 1 : TAG_SPROUT_SECOND_SCALE), pal.leaf[i + 1], s, pal))
   }
   ctx.font = `${Math.round(TAG_TEXT_SIZE * s)}px ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = selected ? PAL.tagSelectedText : PAL.text
+  ctx.fillStyle = selected ? pal.tagSelectedText : pal.text
   ctx.fillText(label, pad + w / 2, pad + h / 2)
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + label.length + (selected ? 1 : 0))
   return canvas
@@ -776,7 +1033,7 @@ function bakeTag(label, s, selected) {
 //
 // Two crossed twigs with a dark contour and a small side nub each.
 //
-function bakeClose(s, hovered) {
+function bakeClose(s, hovered, pal) {
   const size = CLOSE_SIZE * s
   const pad = BAKE_PAD * s
   const canvas = newCanvas(size + pad * 2, size + pad * 2)
@@ -802,26 +1059,26 @@ function bakeClose(s, hovered) {
       ctx.stroke()
     })
   }
-  stroke(PAL.contour, (CLOSE_TWIG_W + CLOSE_CONTOUR * 2) * s)
-  stroke(hovered ? PAL.twigHover : PAL.twig, CLOSE_TWIG_W * s)
+  stroke(pal.contour, (CLOSE_TWIG_W + CLOSE_CONTOUR * 2) * s)
+  stroke(hovered ? pal.twigHover : pal.twig, CLOSE_TWIG_W * s)
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + (hovered ? 2 : 3))
   return canvas
 }
 //
 // One leaf sprite, pointing right from its stem at the left edge.
 //
-function bakeLeaf(s, fill) {
+function bakeLeaf(s, fill, pal) {
   const len = LEAF_LEN * s
   const pad = BAKE_PAD * s * LEAF_BAKE_PAD
   const canvas = newCanvas(len + pad * 2, len * LEAF_W * 2 + pad * 2)
   const ctx = canvas.getContext('2d')
-  paintLeaf(ctx, pad, canvas.height / 2, 0, len, fill, s)
+  paintLeaf(ctx, pad, canvas.height / 2, 0, len, fill, s, pal)
   return canvas
 }
 //
 // Teardrop leaf from (x, y) along `angle`, with a dark contour and midrib.
 //
-function paintLeaf(ctx, x, y, angle, len, fill, s) {
+function paintLeaf(ctx, x, y, angle, len, fill, s, pal) {
   const half = len * LEAF_W
   ctx.save()
   ctx.translate(x, y)
@@ -833,7 +1090,7 @@ function paintLeaf(ctx, x, y, angle, len, fill, s) {
   ctx.closePath()
   ctx.fillStyle = fill
   ctx.fill()
-  ctx.strokeStyle = PAL.contour
+  ctx.strokeStyle = pal.contour
   ctx.lineWidth = LEAF_CONTOUR * s
   ctx.stroke()
   ctx.beginPath()
@@ -845,14 +1102,14 @@ function paintLeaf(ctx, x, y, angle, len, fill, s) {
 //
 // Soft radial veil: light in the middle, dark toward the edges.
 //
-function bakeVignette(width, height) {
+function bakeVignette(width, height, pal) {
   const w = Math.max(1, Math.round(width * VIGNETTE_SCALE))
   const h = Math.max(1, Math.round(height * VIGNETTE_SCALE))
   const canvas = newCanvas(w, h)
   const ctx = canvas.getContext('2d')
   const radius = Math.hypot(w, h) / 2
   const gradient = ctx.createRadialGradient(w / 2, h / 2, radius * VIGNETTE_INNER, w / 2, h / 2, radius)
-  const [r, g, b] = parseHex(PAL.backdrop)
+  const [r, g, b] = parseHex(pal.backdrop)
   gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${VIGNETTE_CENTER_ALPHA})`)
   gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${VIGNETTE_EDGE_ALPHA})`)
   ctx.fillStyle = gradient

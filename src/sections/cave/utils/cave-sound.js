@@ -159,22 +159,25 @@ const LEAF_RUSTLE_Q = 0.7
 const LEAF_RUSTLE_SHARE = 0.06
 const LEAF_PITCH_JITTER = 0.25
 //
-// Steps on cave rock: soft, not glassy — a muffled scuff of low noise and
-// a dull low knock, a little of it in the cave reverb. Landing is a little
-// louder, lower and longer.
+// Steps on cave rock: a soft padded footfall, no ringing tone and no
+// reverb (those made it sound like a drum) — a muffled low thump of noise
+// with a gentle attack and two faint grains of grit crunching under the
+// foot, the second a moment later. A landing is the same footfall, only a
+// little louder and longer.
 //
-const STONE_SCUFF_BAND = 1100
-const STONE_SCUFF_Q = 0.7
-const STONE_SCUFF_GAIN = 0.07
-const STONE_SCUFF_TIME = 0.05
-const STONE_KNOCK_FREQ = 240
-const STONE_KNOCK_DROP = 0.7
-const STONE_KNOCK_GAIN = 0.1
-const STONE_KNOCK_TIME = 0.07
-const STONE_JITTER = 0.18
-const STONE_LAND_GAIN = 1.5
-const STONE_LAND_PITCH = 0.8
-const STONE_LAND_TIME = 1.5
+const STONE_THUD_LP = 260
+const STONE_THUD_GAIN = 0.55
+const STONE_STEP_TIME = 0.06
+const STONE_GRIT_BAND = 1800
+const STONE_GRIT_Q = 0.8
+const STONE_GRIT_SHARE = 0.1
+const STONE_GRIT2_SHARE = 0.06
+const STONE_GRIT2_DELAY_MIN = 0.01
+const STONE_GRIT2_DELAY_RANGE = 0.015
+const STONE_GRIT_TIME = 0.6         // Grit length, share of the step's
+const STONE_JITTER = 0.2
+const STONE_LAND_GAIN = 1.25
+const STONE_LAND_TIME = 1.2
 //
 // Tendrils seizing the hero: a wet slither (noise sweeping down) over a
 // low creak.
@@ -398,18 +401,22 @@ export function playLeafSnap(inst) {
 }
 
 /**
- * The hero stepping or landing on rock: a soft scuff and a dull knock.
+ * The hero stepping or landing on rock: a soft muffled thump with a faint
+ * crunch of grit; a landing is the same footfall, a little louder.
  * @param {Object} inst - Cave sound instance
- * @param {boolean} land - Landing (louder, lower, longer)
+ * @param {boolean} land - Landing (a little louder and longer)
  */
 export function playStoneStep(inst, land) {
   if (!ready(inst)) return
   const at = inst.ctx.currentTime
-  const pitch = (land ? STONE_LAND_PITCH : 1) * (1 + (Math.random() - HALF) * STONE_JITTER)
-  const gain = land ? STONE_LAND_GAIN : 1
-  const time = land ? STONE_LAND_TIME : 1
-  noiseHit(inst, at, STONE_SCUFF_BAND * pitch, STONE_SCUFF_GAIN * gain, STONE_SCUFF_TIME * time, STONE_SCUFF_Q, true)
-  tone(inst, STONE_KNOCK_FREQ * pitch, at, STONE_KNOCK_GAIN * gain, STONE_KNOCK_TIME * time, true, STONE_KNOCK_DROP)
+  const pitch = 1 + (Math.random() - HALF) * STONE_JITTER
+  const gain = STONE_THUD_GAIN * (land ? STONE_LAND_GAIN : 1)
+  const time = STONE_STEP_TIME * (land ? STONE_LAND_TIME : 1)
+  const grit = time * STONE_GRIT_TIME
+  const later = at + STONE_GRIT2_DELAY_MIN + Math.random() * STONE_GRIT2_DELAY_RANGE
+  softBurst(inst, inst.brown, at, 'lowpass', STONE_THUD_LP * pitch, 1, time, gain)
+  softBurst(inst, inst.white, at, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT_SHARE)
+  softBurst(inst, inst.white, later, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT2_SHARE)
 }
 
 /**

@@ -120,7 +120,12 @@ const MOSS_MIN = 2
 const MOSS_R = 4
 const MOSS_JITTER = 3
 const MOSS_LIGHT_CHANCE = 0.45
-const FRONT_ABOVE = 24
+//
+// Strip for the greens in front of the hero: it spans the top's whole
+// height range along the ledge, with room above for the tallest plants
+// (big tufts and flower stems reach ~60 px) so none is cut off.
+//
+const FRONT_ABOVE = 80
 const FRONT_BELOW = 10
 const FRONT_PAD = 12
 const FRONT_SINK = 1
@@ -224,8 +229,10 @@ export function paintLedge(ctx, p, style, moss) {
  * Paints a free-standing rock bridge in the ledge look: the top arches up
  * over the middle, the underside arches up higher (thick ends, thin
  * middle), both ends ragged and uneven.
+ * The ends may sit at different heights (y at the left, y2 at the right),
+ * so a bridge can run from one ledge's tip to another's.
  * @param {CanvasRenderingContext2D} ctx - World-space context
- * @param {{x1: number, x2: number, y: number}} p - Span and the top's height at the ends
+ * @param {{x1: number, x2: number, y: number, y2?: number}} p - Span and the top's height at the left / right end
  * @param {Object} style - Ledge style (thick, archRise, archMid, endJag, endBulge …)
  * @param {{x1: number, x2: number}} moss - Span the moss and plants keep to
  * @returns {{swaying: Array, front: Object}} As paintLedge
@@ -233,6 +240,19 @@ export function paintLedge(ctx, p, style, moss) {
 export function paintBridge(ctx, p, style, moss) {
   const rng = createSeededRandom(style.seed)
   return paintRock(ctx, bridgeGeometry(p, style, rng), style, moss, rng)
+}
+
+/**
+ * Height of a bridge's top at x (without the small top wave): the line
+ * between the end heights, arched up over the middle.
+ * @param {{x1: number, x2: number, y: number, y2?: number}} p - Bridge span and end heights
+ * @param {Object} style - Ledge style (archRise)
+ * @param {number} x - World X
+ * @returns {number} World Y of the top
+ */
+export function bridgeTopAt(p, style, x) {
+  const t = Math.max(0, Math.min(1, (x - p.x1) / (p.x2 - p.x1)))
+  return p.y + ((p.y2 ?? p.y) - p.y) * t - style.archRise * Math.sin(Math.PI * t)
 }
 //
 // Rubble body, roots, vines, stone greens, moss and plants of a ledge or
@@ -272,14 +292,20 @@ function paintRock(ctx, geo, style, moss, rng) {
 }
 //
 // A canvas covering the strip along the top, in world coordinates, for the
-// greens that stand in front of the hero.
+// greens that stand in front of the hero: from above the highest point of
+// the top to below its lowest one.
 //
 function frontStrip(geo, moss) {
-  const x = Math.floor(moss.x1 - FRONT_PAD)
-  const y = Math.floor(geo.topAt(moss.x1) - FRONT_ABOVE)
+  const x1 = moss.x1 - FRONT_PAD
+  const x2 = moss.x2 + FRONT_PAD
+  const tops = []
+  for (let at = x1; at <= x2; at += EDGE_STEP) tops.push(geo.topAt(at))
+  tops.push(geo.topAt(x2))
+  const x = Math.floor(x1)
+  const y = Math.floor(Math.min(...tops) - FRONT_ABOVE)
   const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(moss.x2 - moss.x1 + FRONT_PAD * 2)
-  canvas.height = FRONT_ABOVE + FRONT_BELOW
+  canvas.width = Math.ceil(x2 - x1)
+  canvas.height = Math.ceil(Math.max(...tops) + FRONT_BELOW - y)
   const ctx = canvas.getContext('2d')
   ctx.translate(-x, -y)
   ctx.lineCap = 'round'
@@ -468,7 +494,7 @@ function bridgeGeometry(p, style, rng) {
   const len = p.x2 - p.x1
   const seed = rng() * FULL_TURN
   const arch = x => Math.sin(Math.PI * Math.max(0, Math.min(1, (x - p.x1) / len)))
-  const topAt = x => p.y - style.archRise * arch(x) + Layout.profileNoise(x * NOISE_A, seed) * style.topWave
+  const topAt = x => bridgeTopAt(p, style, x) + Layout.profileNoise(x * NOISE_A, seed) * style.topWave
   const thickAt = x => style.thick * (style.archMid + (1 - style.archMid) * (1 - arch(x))) + Layout.profileNoise(x * UNDER_JAG_FREQ, seed + NOISE_B) * UNDER_JAG
   const bottomAt = x => topAt(x) + thickAt(x)
   const end = (x, out) => {

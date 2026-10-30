@@ -1,8 +1,9 @@
 import * as Lake from '../../forest/utils/forest-lake.js'
-import { paintForestShoreRock } from '../../forest/utils/forest-shore-rock.js'
 import * as Layout from './cave-layout.js'
 import { plantShape, axisAt, PLANT_FOOT } from './cave-plant-shape.js'
-import { CAVE_PAL, css, paintMossStrand, paintEdgeFern } from './cave-paint.js'
+import { CAVE_PAL, css, paintMossStrand, paintEdgeFern, smoothPath, polygonBounds, insidePath } from './cave-paint.js'
+import { paintRubble } from './cave-ledge.js'
+import { CAVE_CFG } from '../cfg.js'
 //
 // Bake of the monster plant's body into the terrain canvas, aiming at the
 // reference: a mossy rock island in the lake, one main woody vine with
@@ -343,17 +344,27 @@ const MOSS_R_RANGE = 3
 //
 const LAYER = { x1: 280, y1: 360, x2: 1040 }
 //
-// Big separate stones on the lake bed around the foot (the forest shore
-// pile's look), lying at random: each at an offset from the foot across
-// BED_SPREAD, its own half-width, its top above or below the water line
-// (negative: breaking the surface), some tilted. Back stones are behind
-// the stems, front ones before them.
+// The trunk's foot is also drawn in front of the hero (he passes behind
+// it at the bottom): the plant's bake from FRONT_FROM_Y down to the lake
+// surface (the water is drawn over what lies below), fading in over
+// FRONT_FADE px at the top so a jump never shows a hard cut across him.
+//
+const FRONT_FROM_Y = 1480
+const FRONT_FADE = 40
+const MASK_CLEAR = 'rgba(0, 0, 0, 0)'
+const MASK_SOLID = 'rgba(0, 0, 0, 1)'
+//
+// Heaps of stones on the lake bed around the foot (the walls' light-grey
+// rubble, stones of many sizes), lying at random: each at an offset from
+// the foot across BED_SPREAD, its own half-width (small to wide), its top
+// above or below the water line (negative: breaking the surface), some
+// tilted. Back heaps are behind the stems, front ones before them.
 //
 const BED_BACK_COUNT = 7
 const BED_FRONT_COUNT = 5
 const BED_SPREAD = 130
-const BED_RX_MIN = 26
-const BED_RX_RANGE = 42
+const BED_RX_MIN = 18
+const BED_RX_RANGE = 70
 const BED_TOP_MIN = -48
 const BED_TOP_RANGE = 66
 const BED_FRONT_LOWER = 10
@@ -371,7 +382,7 @@ const SCREE_RIGHT_DX = 190
 const SCREE_FLANK_STEPS = 8
 const SCREE_FLANK_BULGE = 14
 const STONE_ARC_STEPS = 18
-const STONE_OUTLINE_W = 2
+const MIN_SPAN = 1e-3
 //
 // Plants on the stone tops above the water.
 //
@@ -439,6 +450,9 @@ const HALF = 0.5
  * @param {CanvasRenderingContext2D} ctx
  * @param {() => number} rng - Seeded random
  * @param {Object} lake - Lake instance (bed line)
+ * @returns {{canvas: HTMLCanvasElement, x: number, y: number}} The trunk's
+ *   foot down to the lake surface, to draw in front of the hero (canvas at
+ *   world x / y)
  */
 export function paintPlant(ctx, rng, lake) {
   const layer = document.createElement('canvas')
@@ -453,7 +467,30 @@ export function paintPlant(ctx, rng, lake) {
   Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
   ctx.drawImage(layer, LAYER.x1, LAYER.y1)
   ctx.restore()
+  const front = footFront(layer, lake)
   layer.width = 0
+  return front
+}
+//
+// The plant's bake between FRONT_FROM_Y and the lake surface, clipped at
+// the bed like the bake itself, fading in at the top.
+//
+function footFront(layer, lake) {
+  const canvas = document.createElement('canvas')
+  canvas.width = layer.width
+  canvas.height = Layout.LAKE_SURFACE_Y - FRONT_FROM_Y
+  const ctx = canvas.getContext('2d')
+  ctx.translate(-LAYER.x1, -FRONT_FROM_Y)
+  Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
+  ctx.drawImage(layer, LAYER.x1, LAYER.y1)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  const fade = ctx.createLinearGradient(0, 0, 0, FRONT_FADE)
+  fade.addColorStop(0, MASK_CLEAR)
+  fade.addColorStop(1, MASK_SOLID)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.fillStyle = fade
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  return { canvas, x: LAYER.x1, y: FRONT_FROM_Y }
 }
 //
 // Everything of the plant, in world coordinates: bed stones behind, the
@@ -1169,20 +1206,44 @@ function bedStones(count, lower, rng) {
   return out.sort((a, b) => a.top - b.top)
 }
 //
-// Big stones on the lake bed, each painted on its own (tallest first, so
-// lower ones lie in front): a rounded hump from the bed up to its top,
-// filled with whole faceted stones like the forest shore pile.
+// Heaps on the lake bed, each painted on its own (tallest first, so lower
+// ones lie in front): a rounded hump from the bed up to its top, packed
+// with the walls' rubble.
 //
 function paintBedStones(ctx, defs, rng) {
-  defs.forEach(def => paintForestShoreRock(ctx, { loops: [stoneLoop(def)], waterY: Layout.LAKE_SURFACE_Y, rng, outlineWidth: STONE_OUTLINE_W }))
+  defs.forEach(def => paintPile(ctx, stoneLoop(def), rng))
 }
 //
-// Outline of one bed stone: an arch from its foot on one side, over its
-// top, down to the other side, closed along the world bottom.
+// The walls' light-grey rubble inside an outline: stones of many sizes,
+// darker the deeper they lie under the heap's top.
 //
+function paintPile(ctx, loop, rng) {
+  const foot = CAVE_CFG.plantFoot
+  const path = smoothPath(loop)
+  const top = loop.filter(p => p.y < Layout.WORLD_H).sort((a, b) => a.x - b.x)
+  paintRubble(ctx, {
+    path,
+    bounds: polygonBounds(loop),
+    sizes: foot.stones,
+    inside: (x, y) => insidePath(ctx, path, x, y),
+    shadeAt: st => Math.min(1, foot.shadeMin + (1 - foot.shadeMin) * Math.max(0, st.y - lineYAt(top, st.x)) / foot.shadeDepth)
+  }, rng)
+}
+//
+// Height of a line (points sorted by x) at x, flat past its ends.
+//
+function lineYAt(line, x) {
+  if (x <= line[0].x) return line[0].y
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]
+    const b = line[i]
+    if (x <= b.x) return a.y + (b.y - a.y) * (x - a.x) / Math.max(MIN_SPAN, b.x - a.x)
+  }
+  return line[line.length - 1].y
+}
 //
 // The scree heap behind the bed stones: a triangle from an apex near the
-// foot down to the world bottom, its flanks bulging a little.
+// foot down to the world bottom, its flanks bulging a little, in rubble.
 //
 function paintScree(ctx, rng) {
   const apex = { x: PLANT_FOOT.x + SCREE_APEX_DX, y: Layout.LAKE_SURFACE_Y + SCREE_APEX_TOP }
@@ -1195,8 +1256,12 @@ function paintScree(ctx, rng) {
     return pts
   }
   const loop = [...flank(SCREE_LEFT_DX).reverse(), apex, ...flank(SCREE_RIGHT_DX)]
-  paintForestShoreRock(ctx, { loops: [loop], waterY: Layout.LAKE_SURFACE_Y, rng, outlineWidth: STONE_OUTLINE_W })
+  paintPile(ctx, loop, rng)
 }
+//
+// Outline of one bed heap: an arch from its foot on one side, over its
+// top, down to the other side, closed along the world bottom.
+//
 function stoneLoop(def) {
   const pts = []
   for (let i = 0; i <= STONE_ARC_STEPS; i++) {

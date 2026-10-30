@@ -74,7 +74,8 @@ export const PLATFORMS = [
 // The monster plant: rope foot (bottom in the lake, top at the first
 // leaf), its pad leaves (the top leaf A and the spore leaf T are traps
 // with red mouths that seize the hero; collideInset trims a leaf's collider at both ends
-// where its rim droops), and the thorny band right of the second leaf.
+// where its rim droops; walkDrop sets the hero this much lower into the
+// leaf's top), and the thorny band right of the second leaf.
 //
 export const PLANT_TRUNK = { x: 742, bottomY: WORLD_H, topY: 470, width: 84 }
 export const LEAF_KIND = {
@@ -83,7 +84,7 @@ export const LEAF_KIND = {
 }
 export const PLANT_LEAVES = [
   { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.TRAP, collideInset: 34 },
-  { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF },
+  { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF, walkDrop: 10 },
   { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true }
 ]
 export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
@@ -328,7 +329,7 @@ export function standPoseOn(platform, x) {
   const pad = Math.min(STAND_EDGE_PAD, (platform.x2 - platform.x1) / 2)
   const minX = Math.max(platform.x1, WALL_COLLIDE_W) + pad
   const maxX = Math.min(platform.x2, WORLD_W - WALL_COLLIDE_W) - pad
-  return { x: Math.max(minX, Math.min(maxX, x)), y: platform.y - HERO_FEET_DY }
+  return { x: Math.max(minX, Math.min(maxX, x)), y: platform.y + (platform.walkDrop ?? 0) - HERO_FEET_DY }
 }
 
 /**

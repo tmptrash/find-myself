@@ -813,7 +813,12 @@ export const CFG = {
           backWallStreak: [PALETTE.gray0, PALETTE.cyan1],
           backEarth: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.brown1],
           backVineDark: [PALETTE.gray0, PALETTE.gray0, PALETTE.gray0],
-          backHaze: { far: PALETTE.cyan0, mid: PALETTE.teal0, near: PALETTE.gray0 },
+          backHaze: { far: PALETTE.teal0, mid: PALETTE.cyan0, near: PALETTE.gray0 },
+          //
+          // Shade tint per back row: cold blue far wall, teal-green middle
+          // ledges, green-black near masses.
+          //
+          backTint: { far: PALETTE.blue1, mid: PALETTE.teal2, near: PALETTE.gray0 },
           plantMoss: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4],
           plantLichen: PALETTE.gold2,
           plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.orange0, PALETTE.gold1],

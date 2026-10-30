@@ -450,6 +450,11 @@ function spawnHero(inst, pose) {
   })
   hero.onPlayStepSound = h => playHeroStep(inst, h, false)
   hero.onPlayLandSound = h => playHeroStep(inst, h, true)
+  //
+  // A landing after a jump sounds like a step on that surface only (no
+  // extra jump tone on top).
+  //
+  hero.onPlayJumpLandSound = null
   Hero.spawn(hero, { instant: true })
   inst.heroInst = hero
   !prev && View.snapTo(inst.view, pose.x, pose.y)
@@ -626,11 +631,14 @@ function drawBackMushrooms(inst, r) {
   })
 }
 //
-// In front of the hero: the leaves' near half, the long strands swaying
-// from their edges, the rock ledges' front greens.
+// In front of the hero: the plant's foot (with its eyes there), the
+// leaves' near half, the long strands swaying from their edges, the rock
+// ledges' front greens.
 //
 function drawPlantFront(inst) {
   const r = View.worldRect(inst.view)
+  Terrain.onDrawPlantFoot(inst.terrain, r.top, r.bottom)
+  WallEye.onDrawWallBelow(inst.wallEyes, r, inst.terrain.plantFoot.y)
   GiantPlant.onDrawFront(inst.plant)
   PlantStrands.onDraw(inst.leafStrands, r.top, r.bottom)
   Terrain.onDrawFront(inst.terrain, r.top, r.bottom)

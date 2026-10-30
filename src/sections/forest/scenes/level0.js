@@ -750,7 +750,7 @@ let forestBirdsLoopHandle = null
 //
 //
 // First-visit controls hint: a speech bubble on the hero with the hot keys.
-// Movement stays locked until it is dismissed.
+// The hero can move while it is up (walking away is one way to close it).
 //
 const HINT_INTRO_TEXT = '\'awd, ←, →, ↑, space & mouse\'\nto move, jump & interact\nwith the world.'
 const HINT_INTRO_DURATION = 18
@@ -1639,8 +1639,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       //
       fpsCounter: null,
       //
-      // Speech bubble for the controls hint; controls stay locked while it
-      // is waiting to show or on screen.
+      // Speech bubble for the controls hint (introLock: it is on screen).
       //
       heroHint: HeroHint.create({ k, heroInst, clampInset: forestTooltipClampInset() }),
       pendingForestIntro: false,
@@ -1902,8 +1901,8 @@ function createPlayfieldFrameOverlay(k, inst) {
   ])
 }
 //
-// Shows the controls hint once the opening delay has passed, and unlocks
-// the hero as soon as the bubble is gone (timer or walk-away fallback).
+// Shows the controls hint once the opening delay has passed, and marks it
+// shown as soon as the bubble is gone (timer or walk-away fallback).
 //
 function updateForestIntroHint(inst, dt) {
   if (inst.pendingForestIntro) {
@@ -1916,8 +1915,8 @@ function updateForestIntroHint(inst, dt) {
   inst.introLock && !HeroHint.isActive(inst.heroHint) && inst.introHintOnComplete?.()
 }
 //
-// Plays the controls hint with locked movement until the player dismisses
-// it (key, click, timer, or walk-away fallback).
+// Plays the controls hint until the player dismisses it (key, click,
+// timer, or walking away).
 //
 function startForestIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) return
@@ -1952,7 +1951,7 @@ function startForestIntro(inst) {
   }))
 }
 //
-// One key press closes the hint and unlocks controls immediately.
+// One key press closes the hint immediately.
 //
 function advanceForestIntro(inst, introHandlers) {
   introHandlers.cancel()
@@ -1961,15 +1960,12 @@ function advanceForestIntro(inst, introHandlers) {
   finishForestIntro(inst)
 }
 //
-// Unlocks the hero after the controls hint; it never shows again.
+// Closes the controls hint for good; it never shows again.
 //
 function finishForestIntro(inst) {
   set(KEY_INTRO_SHOWN, true)
   inst.introLock = false
   inst.introHintOnComplete = null
-  inst.heroInst.controlsDisabled = false
-  inst.heroInst.jumpDisabled = false
-  inst.heroInst.controllable = true
 }
 //
 // Playfield chrome inset so the hint bubble pins to the game window, not the void.
@@ -6346,10 +6342,12 @@ function onUpdate(inst) {
   // Forest owns all foot FX — block hero.js dust for the whole frame.
   //
   hero.suppressDust = true
-  const introLocked = inst.introLock || inst.pendingForestIntro
-  hero.controllable = !introLocked
-  hero.controlsDisabled = introLocked
-  hero.jumpDisabled = introLocked
+  //
+  // The hero is playable from the first frame, the controls hint included.
+  //
+  hero.controllable = true
+  hero.controlsDisabled = false
+  hero.jumpDisabled = false
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&

@@ -25,6 +25,7 @@ const TILE_SPRITE_PREFIX = 'cave0-terrain-v15'
 const TERRAIN_SEED = 7301
 const GRAIN_SEED_BASE = 8100
 const FRONT_GRAIN_SEED = 500
+const FOOT_GRAIN_SEED = 600
 const EDGE_STEP = 6
 const OUTSIDE_PAD = 12
 //
@@ -67,7 +68,8 @@ const terrainByK = new WeakMap()
  * @returns {Object} Terrain instance (tiles, decorTips: tip points of
  *   the harmless ceiling / floor-underside stalactites, swayAnchors: pin
  *   points of the rock ledges' vines that sway, drawn live, fronts: the
- *   ledges' top greens drawn in front of the hero)
+ *   ledges' top greens drawn in front of the hero, plantFoot: the monster
+ *   plant's foot drawn in front of the hero)
  */
 export function create(cfg) {
   const { k, stalactites, lake } = cfg
@@ -79,7 +81,8 @@ export function create(cfg) {
   const ctx = canvas.getContext('2d')
   const rng = createSeededRandom(TERRAIN_SEED)
   const ledges = { swayAnchors: [], fronts: [] }
-  const decorTips = paintTerrain(ctx, rng, stalactites, lake, ledges)
+  const plant = { foot: null }
+  const decorTips = paintTerrain(ctx, rng, stalactites, lake, ledges, plant)
   const tiles = sliceTiles(k, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -89,7 +92,11 @@ export function create(cfg) {
     k.loadSprite(name, f.canvas)
     return { name, x: f.x, y: f.y, h: f.canvas.height }
   })
-  const inst = { k, tiles, decorTips, swayAnchors: ledges.swayAnchors, fronts }
+  applyForestFilmGrainToCanvas(plant.foot.canvas, GRAIN_SEED_BASE + FOOT_GRAIN_SEED)
+  const footName = `${TILE_SPRITE_PREFIX}-plant-foot`
+  k.loadSprite(footName, plant.foot.canvas)
+  const plantFoot = { name: footName, x: plant.foot.x, y: plant.foot.y, h: plant.foot.canvas.height }
+  const inst = { k, tiles, decorTips, swayAnchors: ledges.swayAnchors, fronts, plantFoot }
   terrainByK.set(k, inst)
   return inst
 }
@@ -107,6 +114,18 @@ export function onDraw(inst, top, bottom) {
   })
 }
 /**
+ * Draws the monster plant's foot in front of the hero (he passes behind
+ * it at the bottom).
+ * @param {Object} inst - Terrain instance
+ * @param {number} top - View top world Y
+ * @param {number} bottom - View bottom world Y
+ */
+export function onDrawPlantFoot(inst, top, bottom) {
+  const f = inst.plantFoot
+  f.y + f.h > top && f.y < bottom && inst.k.drawSprite({ sprite: f.name, pos: inst.k.vec2(f.x, f.y) })
+}
+
+/**
  * Draws the rock ledges' top greens that stand in front of the hero.
  * @param {Object} inst - Terrain instance
  * @param {number} top - View top world Y
@@ -120,15 +139,16 @@ export function onDrawFront(inst, top, bottom) {
 }
 //
 // Every terrain layer, back to front: walls and the lake basin, ceiling,
-// the monster plant, platforms, stalactites, then ferns on the rock.
+// the monster plant (its foot also kept in plant.foot), platforms,
+// stalactites, then ferns on the rock.
 //
-function paintTerrain(ctx, rng, stalactites, lake, ledges) {
+function paintTerrain(ctx, rng, stalactites, lake, ledges, plant) {
   const rubbleRng = createSeededRandom(CAVE_CFG.rubble.seed)
   paintBasin(ctx, rubbleRng, lake)
   paintWall(ctx, leftWallOutline(), y => Layout.leftWallX(y), 1, rubbleRng)
   paintWall(ctx, rightWallOutline(), y => Layout.rightWallX(y), -1, rubbleRng)
   paintCeiling(ctx, rubbleRng)
-  paintPlant(ctx, rng, lake)
+  plant.foot = paintPlant(ctx, rng, lake)
   Layout.PLATFORMS.forEach(p => paintPlatform(ctx, p, ledges))
   stalactites.forEach(s => paintSpike(ctx, s.x, s.y, s.w, s.len, 1, rng))
   const decorTips = paintDecorStalactites(ctx, rng)

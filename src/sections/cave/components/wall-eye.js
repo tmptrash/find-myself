@@ -163,6 +163,17 @@ export function onDrawBack(inst, view) {
 export function onDrawWall(inst, view) {
   drawEyes(inst, inst.wall.filter(eye => inView(eye, view)), inst.colors, null)
 }
+
+/**
+ * Plant eyes from a height down, drawn again over the plant's foot that
+ * covers the hero.
+ * @param {Object} inst - Eyes instance
+ * @param {{top: number, bottom: number}} view - Visible world rect
+ * @param {number} fromY - World Y the redrawn band starts at
+ */
+export function onDrawWallBelow(inst, view, fromY) {
+  drawEyes(inst, inst.wall.filter(eye => eye.embedded && eye.tipY >= fromY && inView(eye, view)), inst.colors, null)
+}
 function inView(eye, view) {
   return eye.tipY > view.top - CULL_PAD && eye.tipY < view.bottom + CULL_PAD
 }

@@ -455,13 +455,14 @@ function preyNear(leaf, char) {
   return x > leaf.x1 - ALERT_PAD_X && x < leaf.x2 + ALERT_PAD_X && y < leaf.y && y > leaf.y - ALERT_ABOVE
 }
 //
-// Static body along the leaf top, trimmed at both ends by collideInset.
+// Static body along the leaf top, trimmed at both ends by collideInset and
+// lowered by walkDrop.
 //
 function addCollider(k, def) {
   const inset = def.collideInset ?? 0
   return k.add([
     k.rect(def.x2 - def.x1 - inset * 2, COLLIDE_H),
-    k.pos(def.x1 + inset, def.y),
+    k.pos(def.x1 + inset, def.y + (def.walkDrop ?? 0)),
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
@@ -492,7 +493,7 @@ function bakeLeaves(k) {
     applyForestFilmGrainToCanvas(hang.canvas, seed + GRAIN_HANG_SEED)
     const body = bakeCanvas(w, h, ctx => paintPad(ctx, geo, tones, rng))
     applyForestFilmGrainToCanvas(body.canvas, seed)
-    const front = frontMask(geo, w, h)
+    const front = frontMask(geo, w, h, lineY + (def.walkDrop ?? 0))
     const near = maskedCopy(body.canvas, front, 'destination-in')
     const rim = rimMask(geo, w, h)
     const name = `${SPRITE_PREFIX}-${def.id}`
@@ -524,13 +525,14 @@ function loadCanvas(k, name, canvas) {
 }
 //
 // The part of the bake in front of the hero: everything below the line he
-// stands on, and below the near rim where a lobe curls up above that line.
+// stands on (walkY), and below the near rim where a lobe curls up above
+// that line.
 //
-function frontMask(geo, w, h) {
+function frontMask(geo, w, h, walkY) {
   const path = new Path2D()
-  path.moveTo(0, geo.cy)
-  geo.front.slice().reverse().forEach(p => path.lineTo(p.x, Math.min(geo.cy, p.y)))
-  path.lineTo(w, geo.cy)
+  path.moveTo(0, walkY)
+  geo.front.slice().reverse().forEach(p => path.lineTo(p.x, Math.min(walkY, p.y)))
+  path.lineTo(w, walkY)
   path.lineTo(w, h)
   path.lineTo(0, h)
   path.closePath()

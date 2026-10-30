@@ -4,7 +4,7 @@ import { forestRgb } from '../../forest/utils/forest-palette.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Layout from './cave-layout.js'
-import { paintRubble, paintLedge as paintRockLedge, paintBridge } from './cave-ledge.js'
+import { paintRubble, paintLedge as paintRockLedge, paintBridge, bridgeTopAt } from './cave-ledge.js'
 import {
   CAVE_PAL,
   css,
@@ -20,7 +20,7 @@ import {
 // Back parallax of cave lesson 0 in the look of the cave reference: a deep
 // blue-teal far wall, then rock ledges in the very look of the gameplay
 // ones (light grey rubble, moss, grass, flowers, ferns, vines) reaching in
-// from the sides and floating free — the row's grade, shade and blur make
+// from the sides and arched bridges spanning from their tips — the row's grade, shade and blur make
 // them darker and softer — and the darkest rubble masses nearest the camera. Plants only grow
 // out of rock (nothing hangs in mid air). Three rows lag behind the camera
 // on both axes; all bake at full resolution (sharp, only blurred).
@@ -29,7 +29,7 @@ import {
 // Fine film grain on the rows (no blocky clusters: they read as pixels).
 //
 const GRAIN_BLOCK = 1
-const SPRITE_PREFIX = 'cave0-parallax-v14'
+const SPRITE_PREFIX = 'cave0-parallax-v17'
 const GRAIN_SEED_BASE = 8400
 const EDGE_STEP = 8
 const OUTSIDE_PAD = 12
@@ -37,14 +37,18 @@ const HALF_PI = Math.PI / 2
 const HALF = 0.5
 //
 // Rows: camera-follow fraction, seed, the forest depth rules (grade = lower
-// contrast / saturation toward the row's haze, blur tier, softened by
-// blurScale so the rows stay readable) and how far each is pushed into the
-// cave shade (far deepest, so the gameplay plane reads first).
+// contrast / saturation toward the row's haze, blur tier scaled by
+// blurScale: far ~3 px, mid ~1.5 px, near almost sharp), how far each is
+// pushed into the cave shade toward its own tint (CAVE_PAL.backTint), and
+// its light from above (lightTop at the row's top fading to lightBottom at
+// its bottom). Each row reads apart from the others: a cold, flat, bluish
+// far wall lit faintly from above; teal-green middle ledges; near masses
+// nearly green-black silhouettes. All stay darker than the gameplay plane.
 //
 const LAYERS = [
-  { id: 'far', speed: 0.12, seed: 601, shade: 0.6, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.2 },
-  { id: 'mid', speed: 0.3, seed: 602, shade: 0.55, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.45 },
-  { id: 'near', speed: 0.5, seed: 603, shade: 0.6, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.45 }
+  { id: 'far', speed: 0.12, seed: 601, shade: 0.66, lightTop: 1.1, lightBottom: 0.72, grade: FOREST_LAYER_GRADE.far, blurTier: 'background', blurScale: 0.55 },
+  { id: 'mid', speed: 0.3, seed: 602, shade: 0.55, lightTop: 1, lightBottom: 0.82, grade: FOREST_LAYER_GRADE.mid, blurTier: 'midground', blurScale: 0.6 },
+  { id: 'near', speed: 0.5, seed: 603, shade: 0.76, lightTop: 0.85, lightBottom: 0.7, grade: FOREST_LAYER_GRADE.near, blurTier: 'nearground', blurScale: 0.8 }
 ]
 const RGBA_STRIDE = 4
 const BYTE = 255
@@ -65,24 +69,34 @@ const FAR_SPRIG_SIZE = 4
 const FAR_STRAND_MIN = 20
 const FAR_STRAND_RANGE = 60
 //
-// Mid row: rock ledges growing from both side walls, and free-floating
-// ones in between (sizes in layer px; reach as a share of the row width).
+// Mid row: rock ledges growing from both side walls (sizes in layer px;
+// reach as a share of the row width).
 //
 const MID_LEDGES = 9
 const MID_LEDGE_REACH_MIN = 0.25
 const MID_LEDGE_REACH_RANGE = 0.2
 const MID_LEDGE_THICK_MIN = 46
 const MID_LEDGE_THICK_RANGE = 34
-const MID_FLOATERS = 7
-const MID_FLOATER_W_MIN = 240
-const MID_FLOATER_W_RANGE = 220
-const MID_FLOATER_THICK_MIN = 48
-const MID_FLOATER_THICK_RANGE = 30
 //
-// Every third back ledge is painted in the near row's dark rubble.
+// Bridges never hang free: some ledges carry an arched bridge from their
+// tip across the cave, onto the tip of a ledge from the other wall (at
+// about the same height, when the gap between the tips is wide enough) or
+// off the row's far edge. Bridge ends tuck under the ledge tips (painted
+// behind them) and are a bit thinner than those tips.
 //
-const DARK_LEDGE_EVERY = 3
-const MID_FLOATER_MARGIN = 150
+const MID_BRIDGE_CHANCE = 0.4
+const MID_PAIR_CHANCE = 0.6
+const MID_PAIR_DY = 50
+const MID_OFF_DY = 60
+const MID_BRIDGE_TUCK = 30
+const MID_BRIDGE_DROP = 6
+const MID_BRIDGE_OFF = 80
+const MID_BRIDGE_MIN_GAP = 160
+const MID_BRIDGE_THICK = 0.9
+//
+// Ledges take the row's looks in turn, so neighbours never match; a
+// ledge's bridge and paired ledge share its look so the joints match.
+//
 const MID_SEED_STEP = 7
 const MID_VINE_LEN_MIN = 40
 const MID_VINE_LEN_RANGE = 200
@@ -204,7 +218,7 @@ function bakeLayer(k, layer, index) {
     grade: { ...layer.grade, grainBlockSize: GRAIN_BLOCK, haze: forestRgb(CAVE_PAL.backHaze[layer.id]) },
     grainSeedOffset: GRAIN_SEED_BASE + index
   })
-  shadeCanvas(canvas, layer.shade)
+  shadeCanvas(canvas, layer)
   const name = `${SPRITE_PREFIX}-${layer.id}`
   k.loadSprite(name, canvas)
   return { id: layer.id, name, speed: layer.speed, seed: layer.seed, w, h, anchors, eyes }
@@ -256,39 +270,68 @@ function paintFarGreens(ctx, w, h, far, rng) {
   }
 }
 //
-// Mid row: free arched rock bridges first (further back), then ledges from
-// alternating side walls, all in the gameplay ledge look.
+// Mid row: ledges from alternating side walls, some carrying a bridge;
+// bridges are painted first so the ledge tips cover their ends.
 //
 function paintMid(ctx, w, h, rng, anchors, eyes) {
   const style = CAVE_CFG.ledge.back
-  for (let i = 0; i < MID_FLOATERS; i++) {
-    const width = MID_FLOATER_W_MIN + rng() * MID_FLOATER_W_RANGE
-    const x1 = MID_FLOATER_MARGIN + rng() * (w - MID_FLOATER_MARGIN * 2 - width)
-    const y = h * (i + rng()) / MID_FLOATERS
-    const thick = MID_FLOATER_THICK_MIN + rng() * MID_FLOATER_THICK_RANGE
-    paintBackLedge(ctx, { x1, x2: x1 + width, y, bridge: true }, { ...style, seed: style.seed + i * MID_SEED_STEP, thick }, i, anchors, eyes)
-  }
   const step = h / MID_LEDGES
+  const ledges = []
+  const bridges = []
   for (let i = 0; i < MID_LEDGES; i++) {
-    const left = i % 2 === 0
     const y = step * (i + HALF) + (rng() - HALF) * step * HALF
-    const reach = w * (MID_LEDGE_REACH_MIN + rng() * MID_LEDGE_REACH_RANGE)
-    const thick = MID_LEDGE_THICK_MIN + rng() * MID_LEDGE_THICK_RANGE
-    const p = { x1: left ? 0 : w - reach, x2: left ? reach : w, y, wall: left ? 'left' : 'right' }
-    paintBackLedge(ctx, p, { ...style, seed: style.seed + (MID_FLOATERS + i) * MID_SEED_STEP, thick }, i, anchors, eyes)
+    const look = CAVE_CFG.parallax.looks[i % CAVE_CFG.parallax.looks.length]
+    const ledge = midLedge(w, i % 2 === 0, y, look, rng)
+    ledges.push(ledge)
+    if (rng() >= MID_BRIDGE_CHANCE) continue
+    const span = midBridge(ledge, w, rng)
+    bridges.push(span.bridge)
+    span.pair && ledges.push(span.pair)
   }
+  const rocks = [...bridges, ...ledges]
+  rocks.forEach((p, n) => paintBackLedge(ctx, p, { ...style, ...p.look.style, seed: style.seed + n * MID_SEED_STEP, thick: p.thick }, n, anchors, eyes))
 }
 //
-// One back ledge (fully baked) and its mushroom / eye spots on top.
+// A back ledge in the given look growing from the left or right wall.
 //
-function paintBackLedge(ctx, p, style, i, anchors, eyes) {
+function midLedge(w, left, y, look, rng) {
+  const reach = w * (MID_LEDGE_REACH_MIN + rng() * MID_LEDGE_REACH_RANGE)
+  const thick = (MID_LEDGE_THICK_MIN + rng() * MID_LEDGE_THICK_RANGE) * look.thickScale
+  return { x1: left ? 0 : w - reach, x2: left ? reach : w, y, wall: left ? 'left' : 'right', thick, look }
+}
+//
+// An arched bridge from a ledge's tip across the cave: onto the tip of a
+// new ledge from the other wall when there is room, else off the row's far
+// edge. Returns the bridge and that paired ledge (null when there is none).
+//
+function midBridge(from, w, rng) {
+  const left = from.wall === 'left'
+  const pair = rng() < MID_PAIR_CHANCE ? midLedge(w, !left, from.y + (rng() - HALF) * MID_PAIR_DY, from.look, rng) : null
+  const gap = pair ? (left ? pair.x1 - from.x2 : from.x1 - pair.x2) : 0
+  const to = gap >= MID_BRIDGE_MIN_GAP ? pair : null
+  const tip = { x: left ? from.x2 - MID_BRIDGE_TUCK : from.x1 + MID_BRIDGE_TUCK, y: from.y + MID_BRIDGE_DROP }
+  const end = to
+    ? { x: left ? to.x1 + MID_BRIDGE_TUCK : to.x2 - MID_BRIDGE_TUCK, y: to.y + MID_BRIDGE_DROP }
+    : { x: left ? w + MID_BRIDGE_OFF : -MID_BRIDGE_OFF, y: from.y + (rng() - HALF) * MID_OFF_DY }
+  const [a, b] = left ? [tip, end] : [end, tip]
+  const thick = Math.min(from.thick, to?.thick ?? from.thick) * CAVE_CFG.ledge.back.tipShare * MID_BRIDGE_THICK
+  return { bridge: { x1: a.x, x2: b.x, y: a.y, y2: b.y, bridge: true, thick, look: from.look }, pair: to }
+}
+//
+// One back ledge or bridge (fully baked) and its mushroom / eye spots on
+// top (on a bridge, measured from its right end and set on its arch).
+//
+function paintBackLedge(ctx, p, style, n, anchors, eyes) {
   const span = p.x2 - p.x1
   const fromWall = share => (p.wall === 'left' ? p.x1 + span * share : p.x2 - span * share)
-  const colors = i % DARK_LEDGE_EVERY === 0 ? CAVE_CFG.parallax.near : undefined
+  const topAt = x => (p.bridge ? bridgeTopAt(p, style, x) : p.y)
+  const colors = p.look.colors
   const paint = p.bridge ? paintBridge : paintRockLedge
   paint(ctx, { ...p, h: style.thick, kind: Layout.PLATFORM_KIND.LEDGE }, { ...style, colors }, { x1: p.x1, x2: p.x2 })
-  anchors.push({ x: fromWall(LEDGE_MUSHROOM_AT), y: p.y })
-  i % BACK_EYE_EVERY || eyes.push({ x: fromWall(BACK_EYE_AT), y: p.y })
+  const mushroomX = fromWall(LEDGE_MUSHROOM_AT)
+  anchors.push({ x: mushroomX, y: topAt(mushroomX) })
+  const eyeX = fromWall(BACK_EYE_AT)
+  n % BACK_EYE_EVERY || eyes.push({ x: eyeX, y: topAt(eyeX) })
 }
 //
 // Dark rubble mass inside an outline, stones sinking into shadow below its
@@ -331,19 +374,28 @@ function paintNear(ctx, w, h, rng) {
   }
 }
 //
-// Pulls every painted pixel toward the cave shade (multiplies it by the
-// darkness swatch by `amount`), keeping alpha.
+// Pulls every painted pixel toward the row's shade tint (multiplies it by
+// the tint swatch by the row's shade) and lights it from above (brighter
+// at the row's top), keeping alpha.
 //
-function shadeCanvas(canvas, amount) {
+function shadeCanvas(canvas, layer) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const w = canvas.width
+  const h = canvas.height
+  const image = ctx.getImageData(0, 0, w, h)
   const data = image.data
-  const tint = forestRgb(CAVE_PAL.darkness)
-  const mul = [tint.r, tint.g, tint.b].map(c => 1 - amount * (1 - c / BYTE))
-  for (let i = 0; i < data.length; i += RGBA_STRIDE) {
-    data[i] = Math.round(data[i] * mul[0])
-    data[i + 1] = Math.round(data[i + 1] * mul[1])
-    data[i + 2] = Math.round(data[i + 2] * mul[2])
+  const tint = forestRgb(CAVE_PAL.backTint[layer.id])
+  const mul = [tint.r, tint.g, tint.b].map(c => 1 - layer.shade * (1 - c / BYTE))
+  for (let y = 0; y < h; y++) {
+    const light = layer.lightTop + (layer.lightBottom - layer.lightTop) * y / h
+    const r = mul[0] * light
+    const g = mul[1] * light
+    const b = mul[2] * light
+    for (let i = y * w * RGBA_STRIDE, end = (y + 1) * w * RGBA_STRIDE; i < end; i += RGBA_STRIDE) {
+      data[i] = data[i] * r
+      data[i + 1] = data[i + 1] * g
+      data[i + 2] = data[i + 2] * b
+    }
   }
   ctx.putImageData(image, 0, 0)
 }

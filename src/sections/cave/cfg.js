@@ -40,6 +40,51 @@ const WIDE = {
   roots: 5,
   vines: 3
 }
+//
+// Dark rubble of the back rows nearest the camera (also one of the mid
+// row's ledge looks).
+//
+const BACK_NEAR = {
+  void: '#070a0b',
+  rock: ['#2c3332', '#262c2c', '#202627', '#1b2021', '#161b1c', '#121617'],
+  rockLit: ['#4c5a52', '#414c47', '#363f3c', '#2d3533', '#252c2b'],
+  gaps: ['#0a0e0f', '#0e1314', '#131819', '#181e1e', '#101a12', '#18261a'],
+  stones: [
+    { r: 40, range: 0.35, tries: 0.6 },
+    { r: 24, range: 0.4, tries: 1.4 },
+    { r: 12, range: 0.4, tries: 3 }
+  ]
+}
+//
+// Dark teal rubble of the mid row (also one of its ledge looks).
+//
+const BACK_MID = {
+  void: '#0c1112',
+  rock: ['#5a6864', '#4c5956', '#404b49', '#353e3d', '#2c3434', '#242b2c'],
+  rockLit: ['#90a28e', '#7a8b7e', '#66756d', '#53605b', '#424d4b'],
+  gaps: ['#121819', '#192022', '#20292a', '#29322f', '#1c2a1d', '#2a3f27'],
+  stones: [
+    { r: 30, range: 0.35, tries: 0.6 },
+    { r: 18, range: 0.4, tries: 1.4 },
+    { r: 10, range: 0.4, tries: 3 },
+    { r: 5, range: 0.4, tries: 4 }
+  ]
+}
+//
+// Stone sizes for the mid row's ledge looks: big boulders and fine gravel.
+//
+const BOULDERS = [
+  { r: 52, range: 0.3, tries: 0.6 },
+  { r: 30, range: 0.4, tries: 1 },
+  { r: 14, range: 0.4, tries: 2 },
+  { r: 6, range: 0.4, tries: 3 }
+]
+const GRAVEL = [
+  { r: 18, range: 0.35, tries: 0.8 },
+  { r: 10, range: 0.4, tries: 2 },
+  { r: 5, range: 0.4, tries: 4 },
+  { r: 3, range: 0.3, tries: 6 }
+]
 export const CAVE_CFG = {
   ledge: {
     colors: {
@@ -103,29 +148,61 @@ export const CAVE_CFG = {
   // near side masses darkest. Stone sizes per row (bigger far away).
   //
   parallax: {
-    mid: {
-      void: '#0c1112',
-      rock: ['#5a6864', '#4c5956', '#404b49', '#353e3d', '#2c3434', '#242b2c'],
-      rockLit: ['#90a28e', '#7a8b7e', '#66756d', '#53605b', '#424d4b'],
-      gaps: ['#121819', '#192022', '#20292a', '#29322f', '#1c2a1d', '#2a3f27'],
-      stones: [
-        { r: 30, range: 0.35, tries: 0.6 },
-        { r: 18, range: 0.4, tries: 1.4 },
-        { r: 10, range: 0.4, tries: 3 },
-        { r: 5, range: 0.4, tries: 4 }
-      ]
-    },
-    near: {
-      void: '#070a0b',
-      rock: ['#2c3332', '#262c2c', '#202627', '#1b2021', '#161b1c', '#121617'],
-      rockLit: ['#4c5a52', '#414c47', '#363f3c', '#2d3533', '#252c2b'],
-      gaps: ['#0a0e0f', '#0e1314', '#131819', '#181e1e', '#101a12', '#18261a'],
-      stones: [
-        { r: 40, range: 0.35, tries: 0.6 },
-        { r: 24, range: 0.4, tries: 1.4 },
-        { r: 12, range: 0.4, tries: 3 }
-      ]
-    },
+    mid: BACK_MID,
+    near: BACK_NEAR,
+    //
+    // Looks of the mid row's ledges (a ledge's bridge and paired ledge take
+    // its look; neighbours always differ): stone tones, all darker than the
+    // gameplay ledges (the row's shade darkens them further), stone sizes,
+    // thickness (thickScale) and shape, and how green they are.
+    //
+    looks: [
+      {
+        name: 'slate',          // Cool blue-grey boulders, thick
+        colors: {
+          void: '#0d1114',
+          rock: ['#7c858a', '#6c757a', '#5d666b', '#4f575c', '#42494e', '#363c41'],
+          rockLit: ['#a6b0b2', '#929c9f', '#7f888b', '#6c7477', '#5a6164'],
+          gaps: ['#121618', '#1a1f22', '#23292c', '#2d3437', '#1b2a20', '#2c4029']
+        },
+        thickScale: 1.2,
+        style: { stones: BOULDERS, lobes: 3, lobeDepth: 26 }
+      },
+      {
+        name: 'moss',           // Green-tinted gravel, overgrown
+        colors: {
+          void: '#0c120e',
+          rock: ['#6b7766', '#5d6858', '#505a4c', '#434c40', '#373f35', '#2c332b'],
+          rockLit: ['#98a68a', '#85937a', '#73806a', '#626d5b', '#525b4c'],
+          gaps: ['#0f1510', '#161e17', '#1f281f', '#283228', '#1d3220', '#2f4d2a']
+        },
+        thickScale: 0.85,
+        style: { stones: GRAVEL, topMoss: 18, topGrass: 0.6, topLeaves: 0.35, lipVines: 0.5, underVines: 0.6, ferns: 3, tufts: 10 }
+      },
+      {
+        name: 'earth',          // Warm brown-grey, bare, rooty, deep lobes
+        colors: {
+          void: '#120e0b',
+          rock: ['#7d7266', '#6d6358', '#5e554b', '#50483f', '#433c34', '#37312b'],
+          rockLit: ['#a89c8a', '#958a79', '#827868', '#706758', '#5e5649'],
+          gaps: ['#17120e', '#201a15', '#2a231c', '#342c24', '#22281a', '#33402a']
+        },
+        thickScale: 1,
+        style: { topMoss: 5, topGrass: 0.15, topLeaves: 0.08, lipVines: 0.1, underVines: 0.15, roots: 8, ferns: 1, tufts: 3, lobes: 3, lobeDepth: 32 }
+      },
+      {
+        name: 'near',           // Near-black boulders
+        colors: BACK_NEAR,
+        thickScale: 1.1,
+        style: { stones: BOULDERS }
+      },
+      {
+        name: 'teal',           // Dark teal gravel, thin and wavy
+        colors: BACK_MID,
+        thickScale: 0.8,
+        style: { stones: GRAVEL, topWave: 3, lobes: 1 }
+      }
+    ],
     //
     // The far wall behind the ledges: the same rubble, stones of many
     // different darknesses (shade drifts in big patches, then varies per
@@ -158,6 +235,22 @@ export const CAVE_CFG = {
   // bit sparser than the ledges, these areas are big) and how deep into the
   // rock the stones sink into full shadow.
   //
+  //
+  // Stones at the monster plant's foot (the bed humps and the scree heap)
+  // in the walls' light-grey rubble: many sizes, from boulders to grit,
+  // and how deep under a heap's top they sink into full shadow.
+  //
+  plantFoot: {
+    stones: [
+      { r: 44, range: 0.45, tries: 0.5 },
+      { r: 26, range: 0.45, tries: 1 },
+      { r: 14, range: 0.45, tries: 2 },
+      { r: 7, range: 0.4, tries: 3 },
+      { r: 3, range: 0.3, tries: 4 }
+    ],
+    shadeDepth: 120,
+    shadeMin: 0.05
+  },
   rubble: {
     seed: 5190,
     stones: [

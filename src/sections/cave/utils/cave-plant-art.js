@@ -523,7 +523,7 @@ function paintPlantLayer(ctx, rng) {
   paintScree(ctx, rng)
   paintBedStones(ctx, backStones, rng)
   paintGaps(ctx, shape.axis)
-  const vines = shape.vines.map((pts, i) => prepareVine(pts, rng, i < shape.stemCount))
+  const vines = [...shape.vines, ...shape.eyeStalks].map((pts, i) => prepareVine(pts, rng, i < shape.stemCount))
   vines.flatMap(depthPieces).sort((a, b) => a.z - b.z).forEach(piece => paintPiece(ctx, piece, shape.eyes, rng))
   paintBedStones(ctx, frontStones, rng)
   paintLichen(ctx, shape.axis, rng)

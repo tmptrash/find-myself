@@ -122,10 +122,11 @@ const FINGER_TIP_W = 3
 const FINGER_STEPS = 16
 const FINGER_BACK_Z = 0.4
 //
-// Eyes grown into the main vine, each set by hand: height share on the axis,
-// side across it (share of the half-width, - left) and radius. Big and
-// small ones mixed, some close together and some far apart, on both
-// sides, clear of the thorny band (left side, shares 0.75–0.88).
+// Eyes of the plant, each set by hand: height share on the axis, side
+// across it (share of the half-width, - left: where its stalk leaves the
+// trunk and the side it grows to) and radius. Big and small ones mixed,
+// some close together and some far apart, on both sides, clear of the
+// thorny band (left side, shares 0.75–0.88).
 //
 const EYES = [
   { t: 0.05, across: 0.35, r: 15 },
@@ -137,17 +138,35 @@ const EYES = [
   { t: 0.82, across: 0.3, r: 11 },
   { t: 0.9, across: -0.2, r: 6 }
 ]
-const EYE_MAX_W_SHARE = 0.3
+//
+// Each eye sits on a stalk of the plant's wood, like the branches feeding
+// its leaves: from the trunk's face it bends out sideways, then up (an S),
+// thinning to the eye at its end. How far it reaches out / up grows with
+// the eye (px plus px per px of radius) and differs a little from eye to
+// eye (VARY, by turns); its width at the trunk (per px of radius, at most
+// a share of the trunk) and under the eye (per px of radius).
+//
+const EYE_STALK_OUT = 30
+const EYE_STALK_OUT_PER_R = 1.6
+const EYE_STALK_UP = 14
+const EYE_STALK_UP_PER_R = 1
+const EYE_STALK_VARY = [1, 0.75, 1.25]
+const EYE_STALK_BEND = 0.5
+const EYE_STALK_W0 = 1.1
+const EYE_STALK_W_MAX = 0.35
+const EYE_STALK_W1 = 0.8
+const EYE_STALK_STEPS = 14
 const FULL_TURN = Math.PI * 2
 let cached = null
 
 /**
  * The plant's axis, its vines and eye spots (built once).
- * @returns {{axis: Array, stemCount: number, vines: Array<Array>, eyes: Array}}
+ * @returns {{axis: Array, stemCount: number, vines: Array<Array>, eyeStalks: Array<Array>, eyes: Array}}
  *   axis: trunk centre line {x, y, w (stem bundle width), flare (extra
  *   width at the foot), t}; stemCount:
  *   how many of the vines (first) are trunk stems; vines: arrays of points
- *   {x, y, w, z} (stems, wrapping vines, brush fingers); eyes: {x, y, r}
+ *   {x, y, w, z} (stems, wrapping vines, brush fingers); eyeStalks: the
+ *   eyes' stalks (points like the vines); eyes: {x, y, r} at the stalk ends
  */
 export function plantShape() {
   if (cached) return cached
@@ -158,7 +177,8 @@ export function plantShape() {
   const wraps = WRAPS.map(def => wrapPoints(def, axis))
   const leafVines = WRAPS.map((def, i) => ({ leaf: Layout.PLANT_LEAVES.find(l => l.id === def.leaf), pts: wraps[i] })).filter(v => v.leaf)
   const brushes = [{ leaf: topLeaf, pts: stems[0] }, ...leafVines].flatMap(b => brushPoints(b.pts[b.pts.length - 1], b.leaf))
-  cached = { axis, stemCount: stems.length, vines: [...stems, ...wraps, ...brushes], eyes: EYES.map(def => eyeSpot(axis, def)) }
+  const stalks = EYES.map((def, i) => eyeStalk(axis, def, i))
+  cached = { axis, stemCount: stems.length, vines: [...stems, ...wraps, ...brushes], eyeStalks: stalks.map(e => e.pts), eyes: stalks.map(e => e.eye) }
   return cached
 }
 
@@ -325,9 +345,22 @@ function cubicPoints(p0, p1, p2, p3, steps, widthAt, depthAt) {
   return pts
 }
 //
-// One eye on the main vine's face, no wider than it allows there.
+// One eye's stalk from the trunk's face out and up (in front of the
+// trunk), and the eye at its end.
 //
-function eyeSpot(axis, def) {
+function eyeStalk(axis, def, i) {
   const p = axisAt(axis, def.t)
-  return { x: p.x + def.across * p.w / 2, y: p.y, r: Math.min(def.r, p.w * EYE_MAX_W_SHARE) }
+  const side = Math.sign(def.across) || 1
+  const vary = EYE_STALK_VARY[i % EYE_STALK_VARY.length]
+  const base = { x: p.x + def.across * p.w / 2, y: p.y }
+  const tip = {
+    x: base.x + side * (EYE_STALK_OUT + def.r * EYE_STALK_OUT_PER_R) * vary,
+    y: base.y - (EYE_STALK_UP + def.r * EYE_STALK_UP_PER_R) * vary
+  }
+  const c1 = { x: base.x + (tip.x - base.x) * EYE_STALK_BEND, y: base.y }
+  const c2 = { x: tip.x, y: base.y + (tip.y - base.y) * EYE_STALK_BEND }
+  const w0 = Math.min(def.r * EYE_STALK_W0, p.w * EYE_STALK_W_MAX)
+  const w1 = def.r * EYE_STALK_W1
+  const pts = cubicPoints(base, c1, c2, tip, EYE_STALK_STEPS, t => w0 + (w1 - w0) * t, () => 1)
+  return { pts, eye: { x: tip.x, y: tip.y, r: def.r } }
 }

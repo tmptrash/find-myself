@@ -836,6 +836,8 @@ export const CFG = {
             holeGlow: PALETTE.gold4,
             gill: PALETTE.gold3,
             spark: PALETTE.gold5,
+            swarm: PALETTE.red1,       // Spores out of the mushroom: red glow
+            swarmCore: PALETTE.red4,   // and a warm pale core
             stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3]
           },
           bubble: {

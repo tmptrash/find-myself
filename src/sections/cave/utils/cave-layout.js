@@ -88,17 +88,18 @@ export const PLANT_LEAVES = [
 ]
 export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
 //
-// Extra thorns on the trunk's right side at the hero's height above leaf B
-// (inside the thorny band's hit area).
+// Extra thorns, densely, on the trunk's left side (by leaf B) from the
+// leaf up to the hero's head (inside the thorny band's hit area).
 //
-export const PLANT_THORNS_RIGHT = { y1: 728, y2: 800 }
+export const PLANT_THORNS_DENSE = { y1: 712, y2: 800 }
 //
 // Spore mushroom on the left part of ledge C; swarm stations it hovers at:
-// above the mushroom, a step to the right, then above the spore trap leaf.
+// a little right of and above the hero's head on the mushroom, a step to the right, then above
+// the spore trap leaf.
 //
 export const SPORE_MUSHROOM = { x: 230, y: 1100 }
 export const SPORE_STATIONS = [
-  { x: 230, y: 935 },
+  { x: 288, y: 878 },
   { x: 345, y: 955 },
   { x: 600, y: 1150 }
 ]

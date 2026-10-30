@@ -133,6 +133,13 @@ const BACK_MUSHROOM_ROW = 'mid'
 const BACK_MUSHROOM_CULL = 80
 const BACK_MUSHROOM_BLUR = 1.5
 //
+// Glowing mushrooms on the ledges: each one, at random (seeded), stands
+// behind the ledge's grass and plants (drawn before the terrain) or in
+// front of them.
+//
+const LIT_MUSHROOM_SEED = 4520
+const BEHIND_GRASS_CHANCE = 0.5
+//
 // Parallax rows behind and in front of the back-wall eyes.
 //
 const BACK_ROWS = ['far', 'mid']
@@ -176,12 +183,7 @@ export function create(k) {
     plants: HangingPlant.create({ k, spots: buildPlantSpots(), seed: PLANT_SEED }),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
     lantern: Mushroom.create({ k, ...Layout.DORMANT_MUSHROOM, kind: Mushroom.MUSHROOM_KIND.DORMANT }),
-    litMushrooms: Layout.LIT_MUSHROOMS.map(m => Mushroom.create({
-      k,
-      ...m,
-      x: Layout.fitOnPlatform(m.x, m.y, Mushroom.clusterHalfWidth(m.scale)),
-      kind: Mushroom.MUSHROOM_KIND.LIT
-    })),
+    litMushrooms: createLitMushrooms(k),
     plant: GiantPlant.create(k),
     spores: SporeMushroom.create({ k, ...Layout.SPORE_MUSHROOM, stations: Layout.SPORE_STATIONS }),
     bubble,
@@ -520,6 +522,7 @@ function drawWorld(inst) {
 function drawWorldFront(inst) {
   const r = View.worldRect(inst.view)
   Water.onDrawFill(inst.water)
+  inst.litMushrooms.filter(m => m.behindGrass).forEach(m => Mushroom.onDraw(m))
   Terrain.onDraw(inst.terrain, r.top, r.bottom)
   GiantPlant.onDrawBack(inst.plant)
   PlantStrands.onDraw(inst.ropeStrands, r.top, r.bottom)
@@ -540,7 +543,7 @@ function drawDarkness(inst) {
 function drawLights(inst) {
   const r = View.worldRect(inst.view)
   Shaft.onDraw(inst.shaft, r.top)
-  inst.litMushrooms.forEach(m => Mushroom.onDraw(m))
+  inst.litMushrooms.filter(m => !m.behindGrass).forEach(m => Mushroom.onDraw(m))
   Mushroom.onDraw(inst.lantern)
   inst.litMushrooms.forEach(m => Mushroom.onDrawHalo(m))
   Mushroom.onDrawHalo(inst.lantern)
@@ -583,6 +586,17 @@ function buildPlantSpots() {
     }
   })
   return spots
+}
+//
+// Glowing mushrooms on the ledges, each behind or in front of the grass.
+//
+function createLitMushrooms(k) {
+  const rng = createSeededRandom(LIT_MUSHROOM_SEED)
+  return Layout.LIT_MUSHROOMS.map(m => {
+    const mushroom = Mushroom.create({ k, ...m, x: Layout.fitOnPlatform(m.x, m.y, Mushroom.clusterHalfWidth(m.scale)), kind: Mushroom.MUSHROOM_KIND.LIT })
+    mushroom.behindGrass = rng() < BEHIND_GRASS_CHANCE
+    return mushroom
+  })
 }
 //
 // Small glowing mushrooms on the mid parallax row's ledges and platforms,

@@ -15,7 +15,7 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 //     last station it flies into the trap leaf there (the level snaps it).
 // A hovering swarm left alone flies home after a while.
 //
-const SPRITE = 'cave0-spore-mushroom-v3'
+const SPRITE = 'cave0-spore-mushroom-v6'
 const GRAIN_SEED = 9950
 const BAKE_PAD = 8
 //
@@ -23,12 +23,13 @@ const BAKE_PAD = 8
 // underside seen from below (an ellipse with gills from the stem), the stem.
 //
 const SIZE = 0.82
-const CAP_W = Math.round(168 * SIZE)
-const CAP_H = Math.round(78 * SIZE)
-const DOME_SIDE_X = 0.52
-const DOME_SIDE_Y = 0.75
-const DOME_TOP_X = 0.3
-const UNDER_RY = Math.round(13 * SIZE)
+const CAP_SIZE = 0.68
+const CAP_W = Math.round(168 * CAP_SIZE)
+const CAP_H = Math.round(58 * CAP_SIZE)
+const DOME_SIDE_X = 0.5
+const DOME_SIDE_Y = 0.95
+const DOME_TOP_X = 0.72
+const UNDER_RY = Math.round(13 * CAP_SIZE)
 const UNDER_INSET = 4
 const GILL_COUNT = 22
 const GILL_ALPHA = 0.55
@@ -56,6 +57,35 @@ const STEM_LIT_W = 3
 const STEM_COLLAR = 3
 const CONTOUR_W = 1.8
 //
+// Bumpy cap: the outline swells and dips in lumps (bumps along it, share
+// of the cap size), and rounded scales cover the dome, each lit on top and
+// shaded below.
+//
+const DOME_STEPS = 48
+const DOME_BUMPS = 9
+const DOME_BUMP = 0.05
+const DOME_BUMP_SEED = 1.7
+const SCALES = 46
+const SCALE_R_MIN = 3
+const SCALE_R_RANGE = 4
+const SCALE_FLAT = 0.7
+const SCALE_SHADE_ALPHA = 0.45
+const SCALE_LIT_ALPHA = 0.55
+const SCALE_HOLE_CLEAR = 3
+const SCALE_SPAN = 0.95
+const SCALE_SHADE_W = 1.2
+const SCALE_LIT_FROM = Math.PI * 1.1
+const SCALE_LIT_TO = Math.PI * 1.9
+//
+// Crooked stem like a little tree trunk: its centre line bends side to
+// side (two waves) on its way up.
+//
+const STEM_BEND = 5
+const STEM_BEND_TURNS = 1.3
+const STEM_BEND_FINE = 1.5
+const STEM_BEND_FINE_TURNS = 3.1
+const STEM_STEPS = 16
+//
 // Cap shading: shade on the lower right, light on the upper left.
 //
 const CAP_SHADE_SHIFT = 0.22
@@ -79,7 +109,7 @@ const HOLES = [
   { u: 0.03, v: 0.86, r: 5 }, { u: 0.29, v: 0.9, r: 4 }, { u: -0.3, v: 0.88, r: 5 }
 ]
 const HOLE_SQUASH = 0.8
-const HOLE_SIZE = SIZE
+const HOLE_SIZE = CAP_SIZE
 const HOLE_EDGE_SQUEEZE = 0.9
 const HOLE_RIM = 2
 const HOLE_INNER = 0.68
@@ -89,30 +119,77 @@ const HOLE_GLOW_R = 1.3
 const HOLE_GLOW_OPACITY = 0.35
 const HALF = 0.5
 //
-// Collider across the cap top.
+// Collider across the cap top, one-way: it appears only once the hero is
+// over the cap with his feet above its top and not rising (dropping onto it
+// from a jump or from a higher ledge), and stays while he stands on it; it
+// goes away when he jumps up, steps off its sides or ends up below its top,
+// so under or beside the mushroom he walks and jumps as if it were not
+// there (it is also tagged so the hero never takes it for a ceiling). Feet:
+// the bottom of the hero's live hitbox (it tucks and lifts in a jump).
+// CAP_COLLIDE_TOL: how far the feet may sink into the cap and still count
+// as on top when it appears; CAP_COLLIDE_DROP: how far below its top they
+// must be for it to go (a fast fall sinks in a whole physics step before
+// it is pushed out, so this is deeper). The collider is thick so such a
+// fall cannot tunnel through it.
 //
-const CAP_COLLIDE_W = 0.42
-const CAP_COLLIDE_H = 12
+const CAP_COLLIDE_W = 0.92
+const CAP_COLLIDE_H = 64
 const CAP_COLLIDE_SINK = 6
+const CAP_COLLIDE_TOL = 6
+const CAP_COLLIDE_DROP = 48
 //
 // Swarm: spore count, speeds, hit radius, moves, hover timeout.
 //
 const SPORES = 16
 //
-// Each spore wanders on its own around the swarm centre: a random push
-// every frame, a pull back toward the centre (stronger past its range),
-// damping; the range is flatter than tall.
+// Each spore wanders on its own over a patch around the swarm centre: it
+// heads for a spot of its own somewhere in its range (picked again every
+// GOAL_MIN … GOAL_MIN + GOAL_RANGE s), with a jittery push and damping; the
+// patch is flatter than tall.
 //
 const WANDER_PUSH = 900
-const WANDER_PULL = 3
+const GOAL_PULL = 6
+const GOAL_MIN = 0.6
+const GOAL_RANGE = 1.4
 const WANDER_DAMP = 2.2
-const WANDER_R_MIN = 18
-const WANDER_R_RANGE = 34
-const WANDER_FLATTEN = 0.65
-const SPORE_FOLLOW = 7
+const WANDER_R_MIN = 34
+const WANDER_R_RANGE = 56
+const WANDER_FLATTEN = 0.75
+//
+// How fast each spore catches up with its spot in the swarm (its own rate
+// in this range), so a moving swarm strings out and every spore travels at
+// its own pace; and how far each wanders (its own share of the push).
+//
+const FOLLOW_MIN = 1.8
+const FOLLOW_RANGE = 7
+const PUSH_MIN = 0.5
+const PUSH_RANGE = 1
 const MAX_DT = 0.05
+//
+// Flying home, the spores steer from the swarm toward their own holes as
+// the swarm nears the mushroom, still wandering a little; inside, a spore
+// is hidden once it is this close to its hole.
+//
+const SETTLE_DIST = 2.5
+//
+// Each spore leaves and comes back on its own: out of its hole after a
+// random wait (up to RELEASE_SPREAD s), and home it keeps wandering a
+// random while (up to RETURN_SPREAD s) before slipping in at its own pace.
+//
+const RELEASE_SPREAD = 1.6
+const RETURN_SPREAD = 2.2
+const PACE_MIN = 0.25
+const PACE_RANGE = 0.75
+//
+// Spores swerve round the hero's sides instead of through him: within this
+// reach of his body (flattened: taller than wide) they are pushed sideways,
+// each to the side it is already on (or its own preferred side).
+//
+const AVOID_R = 46
+const AVOID_FLAT = 0.55
+const AVOID_PUSH = 900
 const CENTER_SPEED = 260
-const HOME_SPEED = 220
+const HOME_SPEED = 110
 const ARRIVE_DIST = 6
 const HIT_R = 62
 const HIT_COOLDOWN = 0.8
@@ -164,25 +241,18 @@ export function create(cfg) {
   const capTopY = y - STEM_H - CAP_H
   const home = { x, y: capTopY + CAP_H * HALF }
   const rng = createSeededRandom(GRAIN_SEED)
-  return {
+  const inst = {
     k,
     x,
     y,
     capTopY,
     stations,
     home,
-    body: k.add([
-      k.rect(CAP_W * CAP_COLLIDE_W, CAP_COLLIDE_H),
-      k.pos(x - CAP_W * CAP_COLLIDE_W / 2, capTopY + CAP_COLLIDE_SINK),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),
-      CFG.game.platformName
-    ]),
+    body: null,
     spores: Array.from({ length: SPORES }, (_, i) => {
-      const hole = HOLES[i % HOLES.length]
+      const hole = HOLES[Math.floor(rng() * HOLES.length)]
       const at = { x: x + hole.u * CAP_W, y: capTopY + hole.v * CAP_H }
-      return { ...at, hole, ox: 0, oy: 0, vx: 0, vy: 0, range: WANDER_R_MIN + rng() * WANDER_R_RANGE }
+      return { ...at, hole, ox: 0, oy: 0, vx: 0, vy: 0, range: WANDER_R_MIN + rng() * WANDER_R_RANGE, side: rng() < HALF ? -1 : 1, inside: true, wait: 0, pace: 1, gx: 0, gy: 0, goalT: 0, follow: FOLLOW_MIN + rng() * FOLLOW_RANGE, push: PUSH_MIN + rng() * PUSH_RANGE }
     }),
     breath: 0,
     breathT: -1,
@@ -194,9 +264,15 @@ export function create(cfg) {
     timer: 0,
     cooldown: 0,
     prevHeroX: null,
-    sparkRgb: getRGB(k, CAVE_PAL.spore.spark),
-    glowRgb: getRGB(k, CAVE_PAL.spore.holeGlow)
+    onCap: false,
+    capY: capTopY + CAP_COLLIDE_SINK,
+    prey: null,
+    homeFrom: 1,
+    glowRgb: getRGB(k, CAVE_PAL.spore.holeGlow),
+    swarmRgb: getRGB(k, CAVE_PAL.spore.swarm),
+    swarmCoreRgb: getRGB(k, CAVE_PAL.spore.swarmCore)
   }
+  return inst
 }
 
 /**
@@ -212,18 +288,25 @@ export function onUpdate(inst, heroInst) {
   inst.cooldown = Math.max(0, inst.cooldown - dt)
   inst.timer += dt
   const char = heroInst?.character
+  inst.prey = char?.exists?.() ? { x: char.pos.x, y: char.pos.y } : null
   let event = null
   if (char?.exists?.()) {
     const vx = inst.prevHeroX === null ? 0 : (char.pos.x - inst.prevHeroX) / Math.max(dt, 1e-3)
     inst.prevHeroX = char.pos.x
+    gateCap(inst, heroInst)
     const onCap = char.isGrounded?.() && char.curPlatform?.() === inst.body
-    if (onCap && inst.state === W.INSIDE) {
+    const landed = onCap && !inst.onCap
+    inst.onCap = onCap
+    if (landed && inst.state === W.INSIDE) {
       flyTo(inst, inst.stations[0], W.HOVER, 0)
+      inst.spores.forEach(sp => (sp.wait = Math.random() * RELEASE_SPREAD))
       event = 'released'
     }
     !char.isGrounded?.() && tryHit(inst, char, vx)
   } else {
     inst.prevHeroX = null
+    inst.onCap = false
+    dropCap(inst)
   }
   moveCenter(inst, dt) && (event = arrive(inst) ?? event)
   inst.state === W.HOVER && inst.timer > HOVER_TIME && goHome(inst)
@@ -272,11 +355,11 @@ export function onDrawGlow(inst) {
     const at = holeAt(inst, h)
     Glow.drawGlow(k, at.x, at.y, h.r * HOLE_SIZE * HOLE_GLOW_R, inst.glowRgb, HOLE_GLOW_OPACITY)
   })
-  if (inst.state === W.INSIDE) return
   const opacity = inst.state === W.TRAPPED ? TRAPPED_OPACITY : SPORE_OPACITY
   inst.spores.forEach(sp => {
-    Glow.drawGlow(k, sp.x, sp.y, SPORE_GLOW_R, inst.glowRgb, opacity * SPORE_HALO_SHARE)
-    Glow.drawGlow(k, sp.x, sp.y, SPORE_CORE_R, inst.sparkRgb, opacity)
+    if (sp.inside) return
+    Glow.drawGlow(k, sp.x, sp.y, SPORE_GLOW_R, inst.swarmRgb, opacity * SPORE_HALO_SHARE)
+    Glow.drawGlow(k, sp.x, sp.y, SPORE_CORE_R, inst.swarmCoreRgb, opacity)
   })
 }
 //
@@ -303,9 +386,15 @@ function flyTo(inst, point, then, station) {
   inst.then = then
   inst.station = station
 }
+//
+// The swarm flies home; every spore picks a random hole to slip back into
+// (several may share one).
+//
 function goHome(inst) {
   inst.state = W.HOME
   inst.target = { ...inst.home }
+  inst.homeFrom = Math.max(1, Math.hypot(inst.center.x - inst.home.x, inst.center.y - inst.home.y))
+  inst.spores.forEach(sp => (sp.hole = HOLES[Math.floor(Math.random() * HOLES.length)]))
 }
 //
 // Centre glides to its target; true when it has arrived this frame.
@@ -329,41 +418,121 @@ function arrive(inst) {
   if (inst.state === W.HOME) {
     inst.state = W.INSIDE
     inst.station = 0
+    inst.spores.forEach(sp => {
+      sp.wait = sp.inside ? 0 : Math.random() * RETURN_SPREAD
+      sp.pace = PACE_MIN + Math.random() * PACE_RANGE
+    })
     return null
   }
   inst.state = inst.then
   return inst.state === W.HOVER && inst.station === inst.stations.length - 1 ? 'trap' : null
 }
 //
-// Spores inside sit in their holes; out, each wanders randomly around the
-// swarm centre (random pushes, a pull back, damping), its range shrunk
-// when trapped. Positions ease after the target, so they stream out of the
-// holes and back in.
+// Spores inside sit in their holes (hidden once settled) and come out one
+// by one after their own wait; out, each wanders randomly around the swarm
+// centre (random pushes, a pull back, damping), its range shrunk when
+// trapped; flying home they steer from the swarm to their own holes, linger
+// a random while and slip in at their own pace. They swerve round the hero.
 //
 function moveSpores(inst, dt) {
   const step = Math.min(dt, MAX_DT)
-  const ease = Math.min(1, step * SPORE_FOLLOW)
   const scale = inst.state === W.TRAPPED ? TRAPPED_ORBIT : 1
+  const homing = inst.state === W.HOME ? 1 - Math.min(1, Math.hypot(inst.center.x - inst.home.x, inst.center.y - inst.home.y) / inst.homeFrom) : 0
   inst.spores.forEach(sp => {
-    if (inst.state === W.INSIDE) {
+    const ease = Math.min(1, step * sp.follow)
+    if (sp.inside && inst.state !== W.INSIDE) {
+      sp.wait -= step
       const at = holeAt(inst, sp.hole)
-      sp.x += (at.x - sp.x) * ease
-      sp.y += (at.y - sp.y) * ease
+      sp.x = at.x
+      sp.y = at.y
+      sp.ox = sp.x - inst.center.x
+      sp.oy = sp.y - inst.center.y
+      sp.inside = sp.wait > 0
+      return
+    }
+    if (inst.state === W.INSIDE && sp.wait > 0) sp.wait -= step
+    else if (inst.state === W.INSIDE) {
+      const at = holeAt(inst, sp.hole)
+      sp.x += (at.x - sp.x) * ease * sp.pace
+      sp.y += (at.y - sp.y) * ease * sp.pace
+      sp.inside = sp.inside || Math.hypot(at.x - sp.x, at.y - sp.y) < SETTLE_DIST
       sp.ox = sp.x - inst.center.x
       sp.oy = sp.y - inst.center.y
       sp.vx = 0
       sp.vy = 0
       return
     }
-    const range = sp.range * scale
-    const far = Math.max(1, Math.hypot(sp.ox, sp.oy / WANDER_FLATTEN) / range)
-    sp.vx += ((Math.random() - HALF) * WANDER_PUSH - sp.ox * WANDER_PULL * far - sp.vx * WANDER_DAMP) * step
-    sp.vy += ((Math.random() - HALF) * WANDER_PUSH * WANDER_FLATTEN - sp.oy * WANDER_PULL * far - sp.vy * WANDER_DAMP) * step
+    const range = sp.range * scale * (1 - homing * homing)
+    pickGoal(sp, step)
+    sp.vx += ((Math.random() - HALF) * WANDER_PUSH * sp.push + (sp.gx * range - sp.ox) * GOAL_PULL - sp.vx * WANDER_DAMP) * step
+    sp.vy += ((Math.random() - HALF) * WANDER_PUSH * sp.push * WANDER_FLATTEN + (sp.gy * range * WANDER_FLATTEN - sp.oy) * GOAL_PULL - sp.vy * WANDER_DAMP) * step
     sp.ox += sp.vx * step
     sp.oy += sp.vy * step
-    sp.x += (inst.center.x + sp.ox - sp.x) * ease
-    sp.y += (inst.center.y + sp.oy - sp.y) * ease
+    const hole = holeAt(inst, sp.hole)
+    const baseX = inst.center.x + (hole.x - inst.center.x) * homing
+    const baseY = inst.center.y + (hole.y - inst.center.y) * homing
+    sp.x += (baseX + sp.ox - sp.x) * ease
+    sp.y += (baseY + sp.oy - sp.y) * ease
+    inst.prey && avoidPrey(sp, inst.prey, step)
   })
+}
+//
+// The cap collider appears when the hero drops onto the cap from above and
+// goes when he jumps off, steps off a side or is below the cap's top.
+//
+function gateCap(inst, heroInst) {
+  const char = heroInst.character
+  const box = char.worldArea().bbox()
+  const feet = box.pos.y + box.height
+  const over = Math.abs(box.pos.x + box.width * HALF - inst.x) < (CAP_W * CAP_COLLIDE_W + box.width) * HALF
+  const rising = char.vel.y < 0
+  const depth = inst.body ? CAP_COLLIDE_DROP : CAP_COLLIDE_TOL
+  const want = over && !rising && feet <= inst.capY + depth
+  want && !inst.body && (inst.body = addCap(inst))
+  !want && dropCap(inst)
+}
+//
+// Static collider across the cap's top.
+//
+function addCap(inst) {
+  const k = inst.k
+  return k.add([
+    k.rect(CAP_W * CAP_COLLIDE_W, CAP_COLLIDE_H),
+    k.pos(inst.x - CAP_W * CAP_COLLIDE_W / 2, inst.capY),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName,
+    CFG.game.noCeilingTag
+  ])
+}
+function dropCap(inst) {
+  inst.body?.exists() && inst.k.destroy(inst.body)
+  inst.body = null
+}
+//
+// Every so often a spore picks a new spot to head for: a random point in
+// the unit disc (scaled by its range when used), spread evenly over it.
+//
+function pickGoal(sp, step) {
+  sp.goalT -= step
+  if (sp.goalT > 0) return
+  const a = Math.random() * FULL_TURN
+  const d = Math.sqrt(Math.random())
+  sp.gx = Math.cos(a) * d
+  sp.gy = Math.sin(a) * d
+  sp.goalT = GOAL_MIN + Math.random() * GOAL_RANGE
+}
+//
+// Pushes a spore sideways out of the hero's body, so the swarm streams
+// round his sides.
+//
+function avoidPrey(sp, prey, step) {
+  const dx = sp.x - prey.x
+  const d = Math.hypot(dx, (sp.y - prey.y) * AVOID_FLAT)
+  if (d >= AVOID_R) return
+  const side = Math.abs(dx) > 1 ? Math.sign(dx) : sp.side
+  sp.x += side * AVOID_PUSH * (1 - d / AVOID_R) * step
 }
 //
 // World position of a hole on the cap, swelling with the breath.
@@ -436,42 +605,65 @@ function paintUnderside(ctx, cx, rimY) {
   ctx.stroke()
 }
 //
-// Slim stem from a wider foot up into the underside's centre, with a dark
-// collar where it meets the gills, a lit streak on its left and fibres.
+// Crooked stem from a wider foot up into the underside's centre, bending
+// like a little trunk, with a dark collar under the gills, a lit streak on
+// its left and fibres following it.
 //
 function paintStem(ctx, cx, rimY, groundY) {
   const [dark, mid, light] = CAVE_PAL.spore.stem
-  ctx.beginPath()
-  ctx.moveTo(cx - STEM_TOP_W / 2, rimY)
-  ctx.quadraticCurveTo(cx - STEM_W / 2, (rimY + groundY) / 2, cx - STEM_FOOT_W / 2, groundY)
-  ctx.lineTo(cx + STEM_FOOT_W / 2, groundY)
-  ctx.quadraticCurveTo(cx + STEM_W / 2, (rimY + groundY) / 2, cx + STEM_TOP_W / 2, rimY)
-  ctx.closePath()
+  const at = y => cx + stemBend(y, rimY, groundY)
+  const halfW = y => {
+    const t = (y - rimY) / (groundY - rimY)
+    return (STEM_TOP_W + (STEM_W - STEM_TOP_W) * Math.sin(Math.PI * t * HALF) + (STEM_FOOT_W - STEM_W) * Math.pow(t, 4)) / 2
+  }
+  const left = []
+  const right = []
+  for (let i = 0; i <= STEM_STEPS; i++) {
+    const y = rimY + (groundY - rimY) * i / STEM_STEPS
+    left.push({ x: at(y) - halfW(y), y })
+    right.push({ x: at(y) + halfW(y), y })
+  }
+  const path = new Path2D()
+  ;[...left, ...right.reverse()].forEach((q, i) => (i ? path.lineTo(q.x, q.y) : path.moveTo(q.x, q.y)))
+  path.closePath()
   ctx.fillStyle = css(mid)
-  ctx.fill()
+  ctx.fill(path)
+  ctx.save()
+  ctx.clip(path)
+  ctx.strokeStyle = css(light)
+  ctx.lineWidth = STEM_LIT_W
+  ctx.beginPath()
+  left.slice().reverse().forEach((q, i) => {
+    const x = at(q.y) - halfW(q.y) * STEM_LIT_X * 2
+    i ? ctx.lineTo(x, q.y) : ctx.moveTo(x, q.y)
+  })
+  ctx.stroke()
+  paintStemFibres(ctx, at, halfW, rimY, groundY, createSeededRandom(GRAIN_SEED + 1))
+  ctx.restore()
   ctx.strokeStyle = css(dark)
   ctx.lineWidth = CONTOUR_W
-  ctx.stroke()
-  ctx.fillStyle = css(light)
-  ctx.fillRect(cx - STEM_W * STEM_LIT_X - STEM_LIT_W / 2, rimY + STEM_COLLAR, STEM_LIT_W, groundY - rimY - STEM_COLLAR * 3)
-  ctx.save()
-  ctx.clip()
-  paintStemFibres(ctx, cx, rimY, groundY, createSeededRandom(GRAIN_SEED + 1))
-  ctx.restore()
+  ctx.stroke(path)
   ctx.fillStyle = css(dark)
   ctx.beginPath()
-  ctx.ellipse(cx, rimY, STEM_TOP_W / 2, STEM_COLLAR, 0, 0, FULL_TURN)
+  ctx.ellipse(at(rimY), rimY, STEM_TOP_W / 2, STEM_COLLAR, 0, 0, FULL_TURN)
   ctx.fill()
+}
+//
+// Sideways bend of the stem at a height (none at the foot or the top).
+//
+function stemBend(y, rimY, groundY) {
+  const t = (y - rimY) / (groundY - rimY)
+  return Math.sin(Math.PI * t) * (Math.sin(t * Math.PI * 2 * STEM_BEND_TURNS) * STEM_BEND + Math.sin(t * Math.PI * 2 * STEM_BEND_FINE_TURNS) * STEM_BEND_FINE)
 }
 //
 // Fibres running up the stem, wandering and forking, with lit lips, and a
 // few pale specks.
 //
-function paintStemFibres(ctx, cx, rimY, groundY, rng) {
+function paintStemFibres(ctx, at, halfW, rimY, groundY, rng) {
   const [dark, , light] = CAVE_PAL.spore.stem
   for (let i = 0; i < STEM_FIBRES; i++) {
-    const x = cx + ((i + HALF) / STEM_FIBRES - HALF) * STEM_FOOT_W
-    const pts = wander({ x, y: groundY }, { x: cx + (x - cx) * STEM_TOP_W / STEM_FOOT_W, y: rimY }, rng)
+    const share = (i + HALF) / STEM_FIBRES * 2 - 1
+    const pts = wander({ x: 0, y: groundY }, { x: 0, y: rimY }, rng).map(q => ({ x: at(q.y) + share * halfW(q.y) + q.x, y: q.y }))
     fibre(ctx, pts, dark, light)
     const from = pts[Math.floor(pts.length * (STEM_FIBRE_FORK_FROM + rng() * STEM_FIBRE_FORK_SPAN))]
     const len = (groundY - rimY) * STEM_FIBRE_FORK_LEN
@@ -479,7 +671,8 @@ function paintStemFibres(ctx, cx, rimY, groundY, rng) {
   }
   ctx.fillStyle = css(light, STEM_SPECK_ALPHA)
   for (let i = 0; i < STEM_SPECKS; i++) {
-    ctx.fillRect(Math.round(cx + (rng() - HALF) * STEM_W), Math.round(rimY + rng() * (groundY - rimY)), 1, 1)
+    const y = rimY + rng() * (groundY - rimY)
+    ctx.fillRect(Math.round(at(y) + (rng() - HALF) * halfW(y) * 2), Math.round(y), 1, 1)
   }
 }
 //
@@ -511,17 +704,12 @@ function wander(a, b, rng) {
   return pts
 }
 //
-// The dome: rounded sides up to a soft top, shade lower right, light upper
-// left, and the glowing holes.
+// The dome: a lumpy outline rising to a flattish top, shade lower right,
+// light upper left, scales, and the glowing holes.
 //
 function paintCap(ctx, cx, capTop, rimY) {
   const [cDark, cMid, cLight] = CAVE_PAL.spore.cap
-  const half = CAP_W / 2
-  const dome = new Path2D()
-  dome.moveTo(cx - half, rimY)
-  dome.bezierCurveTo(cx - half * DOME_SIDE_X * 2, rimY - CAP_H * DOME_SIDE_Y, cx - half * DOME_TOP_X, capTop, cx, capTop)
-  dome.bezierCurveTo(cx + half * DOME_TOP_X, capTop, cx + half * DOME_SIDE_X * 2, rimY - CAP_H * DOME_SIDE_Y, cx + half, rimY)
-  dome.closePath()
+  const dome = domePath(cx, capTop, rimY)
   ctx.save()
   ctx.fillStyle = css(cMid)
   ctx.fill(dome)
@@ -534,11 +722,70 @@ function paintCap(ctx, cx, capTop, rimY) {
   ctx.beginPath()
   ctx.ellipse(cx - CAP_W * CAP_LIGHT_SHIFT, capTop + CAP_H * CAP_LIGHT_Y, CAP_W * CAP_LIGHT_W, CAP_H * CAP_LIGHT_H, 0, 0, FULL_TURN)
   ctx.fill()
+  paintScales(ctx, cx, capTop, createSeededRandom(GRAIN_SEED + 2))
   HOLES.forEach(hl => paintHole(ctx, cx + hl.u * CAP_W, capTop + hl.v * CAP_H, hl))
   ctx.restore()
   ctx.strokeStyle = css(cDark)
   ctx.lineWidth = CONTOUR_W
   ctx.stroke(dome)
+}
+//
+// Dome outline: the two curves sampled and pushed in and out in lumps.
+//
+function domePath(cx, capTop, rimY) {
+  const half = CAP_W / 2
+  const curve = (t, sign) => {
+    const u = 1 - t
+    const p0 = { x: cx + sign * half, y: rimY }
+    const p1 = { x: cx + sign * half * DOME_SIDE_X * 2, y: rimY - CAP_H * DOME_SIDE_Y }
+    const p2 = { x: cx + sign * half * DOME_TOP_X, y: capTop }
+    const p3 = { x: cx, y: capTop }
+    return {
+      x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+      y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
+    }
+  }
+  const pts = []
+  for (let i = 0; i <= DOME_STEPS; i++) pts.push(curve(i / DOME_STEPS, -1))
+  for (let i = DOME_STEPS - 1; i >= 0; i--) pts.push(curve(i / DOME_STEPS, 1))
+  const bumped = pts.map((q, i) => {
+    const s = i / (pts.length - 1)
+    const lump = Math.sin(s * Math.PI * DOME_BUMPS + DOME_BUMP_SEED) * Math.sin(Math.PI * s) * CAP_H * DOME_BUMP
+    const dx = q.x - cx
+    const dy = q.y - rimY
+    const len = Math.hypot(dx, dy) || 1
+    return { x: q.x + dx / len * lump, y: q.y + dy / len * lump }
+  })
+  const path = new Path2D()
+  bumped.forEach((q, i) => (i ? path.lineTo(q.x, q.y) : path.moveTo(q.x, q.y)))
+  path.closePath()
+  return path
+}
+//
+// Rounded scales over the dome (clear of the holes), each lit on top and
+// shaded below, so the cap reads lumpy.
+//
+function paintScales(ctx, cx, capTop, rng) {
+  const [cDark, , , cHigh] = CAVE_PAL.spore.cap
+  for (let i = 0; i < SCALES; i++) {
+    const u = (rng() - HALF) * SCALE_SPAN
+    const v = rng()
+    const x = cx + u * CAP_W
+    const y = capTop + v * CAP_H
+    const r = SCALE_R_MIN + rng() * SCALE_R_RANGE
+    const clear = HOLES.every(h => Math.hypot(cx + h.u * CAP_W - x, capTop + h.v * CAP_H - y) > h.r * HOLE_SIZE + r + SCALE_HOLE_CLEAR)
+    if (!clear) continue
+    ctx.strokeStyle = css(cDark, SCALE_SHADE_ALPHA)
+    ctx.lineWidth = SCALE_SHADE_W
+    ctx.beginPath()
+    ctx.ellipse(x, y, r, r * SCALE_FLAT, 0, 0, Math.PI)
+    ctx.stroke()
+    ctx.strokeStyle = css(cHigh, SCALE_LIT_ALPHA)
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.ellipse(x, y, r, r * SCALE_FLAT, 0, SCALE_LIT_FROM, SCALE_LIT_TO)
+    ctx.stroke()
+  }
 }
 //
 // One hole: dark rim, glowing inside, a bright crescent at its lower edge

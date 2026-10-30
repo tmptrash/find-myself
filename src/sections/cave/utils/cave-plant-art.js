@@ -428,7 +428,8 @@ const THORN_LIT_FROM = 0.15
 const THORN_LIT_TO = 0.75
 const THORN_LIT_SHIFT = 0.22
 const THORN_RIGHT_CHANCE = 0.35
-const THORN_STEP_RIGHT = 5
+const THORN_STEP_DENSE = 7
+const THORN_STEP_DENSE_RANGE = 6
 const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 
@@ -1380,15 +1381,16 @@ function ropeStrandAnchorsFrom(vines, count, rng) {
 // random and its tip curling upward along the trunk.
 //
 function paintThorns(ctx, axis, rng) {
-  paintThornBand(ctx, axis, Layout.PLANT_THORNS, THORN_STEP_MIN, THORN_RIGHT_CHANCE, rng)
-  paintThornBand(ctx, axis, Layout.PLANT_THORNS_RIGHT, THORN_STEP_RIGHT, 1, rng)
+  paintThornBand(ctx, axis, Layout.PLANT_THORNS, THORN_STEP_MIN, THORN_STEP_RANGE, THORN_RIGHT_CHANCE, rng)
+  paintThornBand(ctx, axis, Layout.PLANT_THORNS_DENSE, THORN_STEP_DENSE, THORN_STEP_DENSE_RANGE, 0, rng)
 }
 //
-// Thorns down one band of the trunk: one per step (plus a random part),
+// Thorns down one band of the trunk: one per step (plus a random part up
+// to stepRange),
 // on the right side with the given chance, else on the left.
 //
-function paintThornBand(ctx, axis, t, step, rightChance, rng) {
-  for (let y = t.y1; y < t.y2; y += step + rng() * THORN_STEP_RANGE) {
+function paintThornBand(ctx, axis, t, step, stepRange, rightChance, rng) {
+  for (let y = t.y1; y < t.y2; y += step + rng() * stepRange) {
     const i = axisIndexAtY(axis, y)
     const a = axis[Math.max(0, i - 1)]
     const b = axis[Math.min(axis.length - 1, i + 1)]

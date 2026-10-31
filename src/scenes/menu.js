@@ -31,8 +31,8 @@ import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/for
 // the cursor. A level the player can enter shows its picture (the forest's
 // trampoline mushroom, the cave's glowing mushroom) and, while selected, its
 // description to the right; every other level is a "?" crossed by the red
-// prohibition sign, with no description. Each level owns a backdrop that
-// cross-fades in while it is selected.
+// prohibition sign, with no description. Each level owns a backdrop: on a
+// switch the old one fades out, then the selected one fades in.
 //
 const BACKDROP_FOREST = 'forest'
 const BACKDROP_CAVE = 'cave'
@@ -113,9 +113,12 @@ const MENU_SELECT_PULSE_AMP = 0.06
 const MENU_SELECT_PULSE_SPEED = 2.8
 const MENU_SELECT_SCALE_EASE = 8
 //
-// Fade speeds (per second, eased): backdrops and texts.
+// Backdrop switch: the old level's picture fades out first (seconds), and
+// only once it is gone the new one fades in. Texts fade (per second,
+// eased).
 //
-const BG_FADE_SPEED = 3
+const BG_FADE_OUT_TIME = 0.35
+const BG_FADE_IN_TIME = 0.5
 const TEXT_FADE_SPEED = 6
 const MENU_FADE_EPS = 0.01
 //
@@ -613,16 +616,25 @@ function onUpdate(inst) {
   inst.glowMushrooms.forEach(item => GlowMushroom.onUpdate(item.mushroom, null))
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
-  Object.keys(inst.bgOpacity).forEach(key => {
-    const target = key === level.backdrop ? 1 : 0
-    inst.bgOpacity[key] += (target - inst.bgOpacity[key]) * Math.min(1, dt * BG_FADE_SPEED)
-  })
+  updateBackdropFade(inst, level.backdrop, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
   EarTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
   updateMenuCrawler(inst, dt)
   updateMenuMusic(inst, dt)
+}
+//
+// Switching backdrops one after the other: every other picture fades out
+// first; the selected one fades in only when none of them is left.
+//
+function updateBackdropFade(inst, shown, dt) {
+  const others = Object.keys(inst.bgOpacity).filter(key => key !== shown)
+  others.forEach(key => {
+    inst.bgOpacity[key] = Math.max(0, inst.bgOpacity[key] - dt / BG_FADE_OUT_TIME)
+  })
+  if (others.some(key => inst.bgOpacity[key] > 0)) return
+  inst.bgOpacity[shown] = Math.min(1, inst.bgOpacity[shown] + dt / BG_FADE_IN_TIME)
 }
 //
 // Darting eyes: every so often the hero glances at a new random spot around
@@ -685,8 +697,8 @@ function updateMenuMusic(inst, dt) {
   inst.music.kids.volume = inst.musicT / MENU_KIDS_FADE_IN * MENU_KIDS_VOLUME
 }
 //
-// Night picture under the forest and cave ones; each fades with its own
-// opacity, so a switch cross-fades.
+// Night picture under the forest and cave ones; each is drawn with its own
+// opacity (a switch fades the old one out, then the new one in).
 //
 function drawBackdrops(inst) {
   if (inst.isLeavingScene) return

@@ -2,6 +2,7 @@ import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-para
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 import { bakeForestFootPlants } from './forest-foot-plants.js'
 import { clearPictureRect } from './forest-picture.js'
+
 //
 // The left big tree of forest level 0, cut from assets/forest/left-tree.png
 // (scaled): the tree above ground (crown with its painted apples, the

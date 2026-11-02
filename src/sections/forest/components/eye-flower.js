@@ -2,16 +2,14 @@ import { CFG } from '../../../cfg.js'
 import * as IkChain from '../../../utils/ik-chain.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
-import { drawForestFern } from '../utils/forest-ferns.js'
-import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
-import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
-import { drawSmallMushroomGroupToCanvas } from '../../../utils/draw-small-mushroom.js'
 import { addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/forest-static-bake.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import { forestFloorPainterColors } from './forest-floor.js'
+import { drawForestPlant } from '../utils/forest-plants.js'
+import { drawForestMushroom } from '../utils/forest-mushrooms.js'
 
 //
 // Hill island in the left lake carrying a doll's-eyes bush: a red stalk whose
@@ -1296,22 +1294,22 @@ function paintIsland(ctx, inst) {
   ISLAND_PLANTS.filter(p => p.kind === KIND.PLUME).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
     baseY != null &&
-      drawFeatherPlumeToCanvas(ctx, { x: lakeX1 + p.dx, baseY, height: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.plume })
+      drawForestPlant(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)) })
   })
   for (let x = inst.x1 + ISLAND_TUFT_STEP; x < inst.walkX2; x += ISLAND_TUFT_STEP) {
     const baseY = dryRootY(x)
     baseY != null && rng() < ISLAND_TUFT_CHANCE &&
-      drawGrassTuftToCanvas(ctx, { x, baseY, rng, colors: colors.tuft })
+      drawForestPlant(ctx, { x, baseY, rng })
   }
   ISLAND_PLANTS.filter(p => p.kind === KIND.FERN).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
     baseY != null &&
-      drawForestFern(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.fern })
+      drawForestPlant(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)) })
   })
   ISLAND_PLANTS.filter(p => p.kind === KIND.MUSHROOMS).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
     baseY != null &&
-      drawSmallMushroomGroupToCanvas(ctx, { x: lakeX1 + p.dx, baseY, rng: createSeededRandom(nextSeed(rng)), colors: colors.mushroom })
+      drawForestMushroom(ctx, { x: lakeX1 + p.dx, baseY, rng: createSeededRandom(nextSeed(rng)) })
   })
 }
 

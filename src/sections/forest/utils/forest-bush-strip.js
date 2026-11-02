@@ -6,8 +6,8 @@ import {
   forestHiResBushClustersForTier
 } from './forest-pixel-density.js'
 import { drawForestHiResFoliageCluster } from './forest-parallax-grain.js'
-import { drawForestFern } from './forest-ferns.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
+import { drawForestPlant } from './forest-plants.js'
 //
 // Bush strips of the forest parallax planes, shared by the forest level and
 // the menu backdrop.
@@ -50,10 +50,6 @@ const BUSH_FERN_OFFSET = 0.75
 const BUSH_FERN_SIZE_MIN = 1.05
 const BUSH_FERN_SIZE_RANGE = 0.6
 const BUSH_FERN_SEED_RANGE = 1e9
-const BUSH_FERN_STEM = 0.66
-const BUSH_FERN_DARK = 0.5
-const BUSH_FERN_MID = 0.34
-const BUSH_FERN_LIGHT = 0.14
 
 /**
  * Renders one bush strip: leafy mounds of varying radii centred on the
@@ -116,10 +112,6 @@ function buildLeafyBushMoundSpec(x, baseY, radius, leafSizeScale = 1, leafDensit
   }
   return { x, baseY, radius, leaves }
 }
-function bushFernTone(rgb, shade) {
-  const c = lerpForestRgb(rgb, FOREST_SHADOW, shade)
-  return `rgb(${c.r}, ${c.g}, ${c.b})`
-}
 //
 // One bush leaf — a plain rounded oval, deliberately a different shape than
 // the teardrop tree leaves.
@@ -169,19 +161,8 @@ function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
   ctx.fill()
   mound.leaves.forEach(leaf => drawBushLeaf(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shades[leaf.shadeIdx]))
 }
-function paintBushFernOnto(ctx, x, baseY, size, seed, rgb) {
-  drawForestFern(ctx, {
-    x,
-    baseY,
-    size,
-    rng: createSeededRandom(seed),
-    colors: {
-      stem: bushFernTone(rgb, BUSH_FERN_STEM),
-      dark: bushFernTone(rgb, BUSH_FERN_DARK),
-      mid: bushFernTone(rgb, BUSH_FERN_MID),
-      light: bushFernTone(rgb, BUSH_FERN_LIGHT)
-    }
-  })
+function paintBushFernOnto(ctx, x, baseY, size, seed) {
+  drawForestPlant(ctx, { x, baseY, size, rng: createSeededRandom(seed) })
 }
 //
 // Dark pinnate fern behind a bush mound, poking out above its dome.
@@ -190,7 +171,7 @@ function paintBushStripFern(ctx, mound, rgb) {
   const seed = Math.floor(Math.random() * BUSH_FERN_SEED_RANGE)
   const x = mound.x + (Math.random() * 2 - 1) * mound.radius * BUSH_FERN_OFFSET
   const size = mound.radius * (BUSH_FERN_SIZE_MIN + Math.random() * BUSH_FERN_SIZE_RANGE)
-  paintBushFernOnto(ctx, x, mound.baseY, size, seed, rgb)
+  paintBushFernOnto(ctx, x, mound.baseY, size, seed)
 }
 //
 // Renders one bush strip into its combined canvas: leafy mounds of varying

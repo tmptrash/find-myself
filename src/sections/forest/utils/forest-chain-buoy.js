@@ -1,4 +1,3 @@
-import { drawForestFern, forestFernBounds } from './forest-ferns.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestFloorPainterColors } from '../components/forest-floor.js'
@@ -11,6 +10,7 @@ import {
   ensureStaticDecorSprite,
   isWorldSpanInView
 } from './forest-static-bake.js'
+import { drawForestPlant, forestPlantBounds } from './forest-plants.js'
 //
 // Segmented stalk-eye creatures in the island eye-flower's look: a red,
 // contoured stalk with a lit line and short side stems, topped by a white
@@ -354,7 +354,7 @@ function buoyLeafInFront(angle) {
 function buoyGreeneryBackBounds(buoy) {
   const { x, groundY, baseGreenery: g } = buoy
   const bounds = { x1: x - 44, y1: groundY - 52, x2: x + 44, y2: groundY + 6 }
-  g.ferns.forEach(f => mergeBounds(bounds, forestFernBounds(x, groundY, f.size)))
+  g.ferns.forEach(f => mergeBounds(bounds, forestPlantBounds(x, groundY, f.size)))
   g.leavesBack.forEach(leaf => mergeBounds(bounds, leafBounds(leaf.pts, leaf.w + BUOY_LEAF_CONTOUR_PAD)))
   return bounds
 }
@@ -366,12 +366,11 @@ function buoyGreeneryFrontBounds(buoy) {
 }
 function paintBuoyBaseGreeneryBack(ctx, buoy, colors) {
   const { x, groundY, baseGreenery: g } = buoy
-  g.ferns.forEach(f => drawForestFern(ctx, {
+  g.ferns.forEach(f => drawForestPlant(ctx, {
     x,
     baseY: groundY,
     size: f.size,
-    rng: createSeededRandom(f.paintSeed),
-    colors: colors.fern
+    rng: createSeededRandom(f.paintSeed)
   }))
   g.leavesBack.forEach(leaf => drawBuoyBaseLeafToCanvas(ctx, leaf.pts, leaf.w, colors.leaf))
 }

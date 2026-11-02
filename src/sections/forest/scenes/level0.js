@@ -9,7 +9,6 @@ import { registerForestNativeTeardown } from '../../../utils/engine-switch.js'
 import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
-import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import {
   drawCuteMushroomToCanvas,
   drawCuteMushroomPupilOverlay,
@@ -76,7 +75,8 @@ import {
 } from '../utils/forest-tree-fruit.js'
 import { bakeLeftTree, leftTreeBranch, leftTreeApple } from '../utils/forest-left-tree.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
-import { loadForestFerns } from '../utils/forest-ferns.js'
+import { loadForestPlants } from '../utils/forest-plants.js'
+import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
 import * as Clouds from '../utils/forest-clouds.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '../utils/forest-picture-bushes.js'
 import { loadForestStones, forestBuriedStones, forestGroundStones, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
@@ -135,13 +135,6 @@ const GRASS_ROOT_RGB = forestRgb('groundLoam')
 // Forest contour ink for trees, mushrooms, rocks, letters (not pure black).
 //
 const DECOR_OUTLINE_RGB = forestContourRgb('forest')
-//
-// Cap colour families for the cute decor mushrooms (palette hex sets): the
-// cap tone, its dark counterpart (shading) and a lighter highlight tone.
-//
-const MUSHROOM_CAP_HEX = FOREST_PAL.mushrooms
-const MUSHROOM_CAP_SHADOW_HEX = FOREST_PAL.mushroomsDark
-const MUSHROOM_CAP_LIGHT_HEX = FOREST_PAL.mushroomsLight
 //
 // Cute mushroom palette set (full colour).
 //
@@ -787,15 +780,13 @@ const SKY_DITHER_BAND_COUNT = 7
 //
 const GROUND_STONE_HALF_W_MAX = 68
 //
-// Mushrooms.
+// Decor mushrooms: pictures from forest-mushrooms.js, this tall (a little
+// random); the widest one keeps the trampolines clear.
 //
 const MUSHROOM_COUNT = 4
-const MUSHROOM_CAP_WIDTH_MIN = 16
-const MUSHROOM_CAP_WIDTH_MAX = 32
-const MUSHROOM_STEM_HEIGHT_MIN = 12
-const MUSHROOM_STEM_HEIGHT_MAX = 24
-const MUSHROOM_CAP_W_MIN = MUSHROOM_CAP_WIDTH_MIN
-const MUSHROOM_CAP_W_MAX = MUSHROOM_CAP_WIDTH_MAX
+const MUSHROOM_PICTURE_H_MIN = 22
+const MUSHROOM_PICTURE_H_RANGE = 14
+const MUSHROOM_CAP_W_MAX = forestMushroomBounds(0, 0, MUSHROOM_PICTURE_H_MIN + MUSHROOM_PICTURE_H_RANGE).x2 * 2
 const MUSHROOM_EXTRA_LOWER = 2
 //
 // Mushroom trampoline — right of the L platform. A cute chubby mushroom with
@@ -1127,7 +1118,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await loadForestFerns()
+  await Promise.all([loadForestPlants(), loadForestMushrooms()])
   await bakeLeftTree(k, LEFT_TREE_FOOT)
   await loadForestStones()
   onProgress?.(42)
@@ -1201,7 +1192,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and its knockable apple sit at fixed places on it.
     //
-    await loadForestFerns()
+    await Promise.all([loadForestPlants(), loadForestMushrooms()])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -3668,25 +3659,6 @@ function forestPredatorGroundAt(levelInst) {
 function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas) {
   const objs = []
   const left = LEFT_MARGIN + 60
-  const capColorsRgb = MUSHROOM_CAP_HEX.map(hex => {
-    const c = forestRgb(hex)
-    return [c.r, c.g, c.b]
-  })
-  const capLightRgb = MUSHROOM_CAP_LIGHT_HEX.map(hex => {
-    const c = forestRgb(hex)
-    return [c.r, c.g, c.b]
-  })
-  const capShadowRgb = MUSHROOM_CAP_SHADOW_HEX.map(hex => {
-    const c = forestRgb(hex)
-    return [c.r, c.g, c.b]
-  })
-  const shuffledCapIdx = capColorsRgb.map((_, i) => i)
-  for (let i = shuffledCapIdx.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const tmp = shuffledCapIdx[i]
-    shuffledCapIdx[i] = shuffledCapIdx[j]
-    shuffledCapIdx[j] = tmp
-  }
   //
   // Decor mushrooms stay left of the cave mouth (never above the entrance)
   //
@@ -3700,12 +3672,11 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     Math.abs(x - branchTrampX) <= TRAMP_MUSHROOM_CLEAR_HALF ||
     isCrackDecorExcluded(x, WORLD_W)
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
-    const capW = MUSHROOM_CAP_W_MIN + Math.random() * (MUSHROOM_CAP_W_MAX - MUSHROOM_CAP_W_MIN)
-    const capH = capW * (0.4 + Math.random() * 0.3)
-    const stemH = MUSHROOM_STEM_HEIGHT_MIN + Math.random() * (MUSHROOM_STEM_HEIGHT_MAX - MUSHROOM_STEM_HEIGHT_MIN)
-    const stemW = capW * (0.25 + Math.random() * 0.15)
-    const totalW = Math.ceil(capW + 4)
-    const totalH = Math.ceil(capH + stemH + 4)
+    const size = MUSHROOM_PICTURE_H_MIN + Math.random() * MUSHROOM_PICTURE_H_RANGE
+    const bounds = forestMushroomBounds(0, 0, size)
+    const totalW = Math.ceil(bounds.x2 - bounds.x1)
+    const totalH = Math.ceil(bounds.y2 - bounds.y1)
+    const capW = totalW
     const span = Math.max(40, right - left)
     let posX = left + Math.random() * span
     let safety = 0
@@ -3714,25 +3685,12 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
       safety++
     }
     if (isBadSpot(posX)) continue
-    const mushDrawOpts = {
-      cx: totalW / 2,
-      baseY: totalH - 2,
-      capWidth: capW,
-      capHeight: capH,
-      stemWidth: stemW,
-      stemHeight: stemH
-    }
     //
-    // Cap tones from this mushroom's palette family.
+    // One of the sheet's mushrooms (forest-mushrooms.js), its foot on the
+    // canvas's ground row.
     //
-    const capIdx = shuffledCapIdx[i % shuffledCapIdx.length]
     const mushColorCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, {
-        ...mushDrawOpts,
-        capColor: capColorsRgb[capIdx],
-        capLight: capLightRgb[capIdx],
-        capShadow: capShadowRgb[capIdx]
-      })
+      drawForestMushroom(ctx, { x: -bounds.x1, baseY: -bounds.y1, size, rng: Math.random })
     })
     applyForestGameplaySharpBake(mushColorCanvas, posX * 2 + 2 | 0)
     const baked = decorAtlas.register(mushColorCanvas)

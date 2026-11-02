@@ -11,3 +11,4 @@
 9. **Several bush options to compile into layers for parallax.** (A separate file for this).
 10. **A hill on the right side above the cave with vegetation on it.** (A separate file).
 11. **Create several simple clouds (not rain clouds).**
+12. **Dialog plate for Yes, No dialog**

@@ -10,14 +10,13 @@ import { renderBushStrip } from './forest-bush-strip.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from './forest-picture-trees.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from './forest-picture-bushes.js'
-import { drawForestFern, loadForestFerns } from './forest-ferns.js'
 import { loadForestStones, forestGroundStones, forestBuriedStones } from './forest-stones.js'
 import { loadForestLeftTreePicture, drawLeftTreeToCanvas } from './forest-left-tree.js'
 import { loadForestShoreTree, drawShoreTreeToCanvas } from './forest-shore-tree.js'
-import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
-import { drawSmallMushroomGroupToCanvas, drawSpottedMushroomToCanvas } from '../../../utils/draw-small-mushroom.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
+import { drawForestPlant, loadForestPlants } from './forest-plants.js'
+import { drawForestMushroom, loadForestMushrooms } from './forest-mushrooms.js'
 //
 // Menu backdrop for the forest level, composed from the level's own pieces
 // like one still of the level: the bright day sky and three hazy parallax
@@ -181,7 +180,7 @@ const BURIED_TREE_CLEAR_HALF = 50
  * @returns {Promise<void>}
  */
 export async function loadForestMenuBackdropArt() {
-  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestFerns(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree()])
+  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestPlants(), loadForestMushrooms(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree()])
 }
 
 /**
@@ -346,37 +345,25 @@ function paintStoneGroup(ctx, rng, group, cx, groundY, scale) {
   ctx.restore()
 }
 //
-// Ferns, mushroom groups, spotted mushrooms and the sleeping trampoline
-// mushroom at their spots, then straw tufts thickening toward the edges;
-// nothing grows on the lake.
+// Plants, mushrooms and the sleeping trampoline mushrooms at their spots,
+// then small plants thickening toward the edges; nothing grows on the lake.
 //
 function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
-  const colors = forestFloorPainterColors()
   const shadow = forestContactShadowRgb()
   const onLake = x => x > lake.x1 && x < lake.x2
   FERN_SPOTS.forEach(wx => {
     const x = toX(wx)
     const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
     paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
-    drawForestFern(ctx, { x, baseY: groundY, size, rng, colors: colors.fern })
+    drawForestPlant(ctx, { x, baseY: groundY, size, rng })
   })
   LEVEL_TRAMP_XS.forEach(wx => paintCuteMushroom(ctx, toX(wx), groundY, CUTE_MUSHROOM_W * scale, shadow))
-  MUSHROOM_GROUP_SPOTS.forEach(wx => drawSmallMushroomGroupToCanvas(ctx, {
-    x: toX(wx),
-    baseY: groundY,
-    rng,
-    colors: { ...colors.mushroom, contactShadow: shadow }
-  }))
-  SPOTTED_MUSHROOM_SPOTS.forEach(wx => drawSpottedMushroomToCanvas(ctx, { x: toX(wx), baseY: groundY, colors: colors.spotted }))
-  const tuftColors = {
-    grass: FOREST_PAL.forestFloor.rimDry,
-    dry: FOREST_PAL.forestFloor.grassDry,
-    contactShadow: shadow
-  }
+  MUSHROOM_GROUP_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
+  SPOTTED_MUSHROOM_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   for (let i = 0; i < TUFT_COUNT; i++) {
     const t = Math.pow(rng(), TUFT_EDGE_BIAS) * 0.5
     const x = (i % 2 === 0 ? t : 1 - t) * width
-    onLake(x) || drawGrassTuftToCanvas(ctx, { x, baseY: groundY, rng, colors: tuftColors })
+    onLake(x) || drawForestPlant(ctx, { x, baseY: groundY, rng })
   }
 }
 //

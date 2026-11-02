@@ -27,13 +27,11 @@ import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
-import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (the forest's
-// trampoline mushroom, the cave's glowing mushroom) and, while selected, its
-// description to the right; every other level is a "?" crossed by the red
-// prohibition sign, with no description. Each level owns a backdrop: on a
+// trampoline mushroom, the cave's glowing mushroom); every other level is a
+// "?" crossed by the red prohibition sign. Each level owns a backdrop: on a
 // switch the old one fades out, then the selected one fades in.
 //
 const BACKDROP_FOREST = 'forest'
@@ -50,23 +48,10 @@ const CAVE_FIRST_LESSON = 'lesson-cave.0'
 //
 const MENU_GLOW_MUSHROOM_SCALE = 0.8
 const MENU_GLOW_MUSHROOM_SEED = 23
-const FOREST_DESCRIPTION = [
-  'A gray forest that has forgotten its',
-  'colours. Look closely: the forest looks',
-  'back, and it wakes only for those who',
-  'learn to see.'
-].join('\n')
-const CAVE_DESCRIPTION = [
-  'Below the roots the darkness begins. A',
-  'sleeping mushroom remembers the light:',
-  'wake it, learn the way while it glows,',
-  'and step into the deep before it fades.'
-].join('\n')
 const LEVELS = [
   {
     section: 'forest',
     icon: LEVEL_ICON_MUSHROOM,
-    description: FOREST_DESCRIPTION,
     backdrop: BACKDROP_FOREST,
     dialog: ConfirmDialog.LOOKS.FOREST,
     lessonPrefix: FOREST_LESSON_PREFIX,
@@ -75,38 +60,30 @@ const LEVELS = [
   {
     section: 'cave',
     icon: LEVEL_ICON_GLOW_MUSHROOM,
-    description: CAVE_DESCRIPTION,
     backdrop: BACKDROP_CAVE,
     dialog: ConfirmDialog.LOOKS.CAVE,
     lessonPrefix: CAVE_LESSON_PREFIX,
     firstLesson: CAVE_FIRST_LESSON
   },
-  { section: 'touch', icon: null, description: null, backdrop: BACKDROP_NIGHT },
-  { section: 'word', icon: null, description: null, backdrop: BACKDROP_NIGHT }
+  { section: 'touch', icon: null, backdrop: BACKDROP_NIGHT },
+  { section: 'word', icon: null, backdrop: BACKDROP_NIGHT }
 ]
 //
 // Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
 // column stands at MENU_COLUMN_X_FRAC of the width, centred on
-// MENU_COLUMN_Y_FRAC of the height.
+// MENU_COLUMN_Y_FRAC of the height (the screen's middle).
 //
 const MENU_REF_HEIGHT = 1080
 const MENU_COLUMN_X_FRAC = 0.2
-const MENU_COLUMN_Y_FRAC = 0.42
+const MENU_COLUMN_Y_FRAC = 0.5
 const MENU_ITEM_STEP = 112
 const MENU_HERO_GAP = 118
-const MENU_DESCRIPTION_GAP = 101
-//
-// The baked description keeps extra room under its last line for the drop
-// shadow, so its ink sits above the sprite centre; this pulls it back onto
-// the row centre (icons are centred on their visible art).
-//
-const MENU_DESCRIPTION_INK_SHIFT = 4
 const MENU_HINT_BOTTOM = 26
 //
-// Mouse hover band of one row: from the hero's spot into the description.
+// Mouse hover band of one row: from the hero's spot past the icon.
 //
 const MENU_ROW_LEFT_PAD = 50
-const MENU_ROW_RIGHT_REACH = 260
+const MENU_ROW_RIGHT_REACH = 80
 //
 // Hero glide between rows and the gentle breathing pulse of the selected icon.
 //
@@ -121,7 +98,6 @@ const MENU_SELECT_SCALE_EASE = 8
 //
 const BG_FADE_OUT_TIME = 0.35
 const BG_FADE_IN_TIME = 0.5
-const TEXT_FADE_SPEED = 6
 const MENU_FADE_EPS = 0.01
 //
 // Night backdrop for the levels without their own picture: the darkened
@@ -195,14 +171,12 @@ const PROHIBITED_PULSE_SPEED = 2
 const PROHIBITED_PULSE_AMP = 2
 const PROHIBITED_COLOR = FOREST_PAL.menuProhibited
 //
-// Baked texts: level descriptions (justified) and the key hint (centred),
-// all in the regular font with a dark drop shadow.
+// Baked texts: the key hint (centred), in the regular font with a dark drop
+// shadow.
 //
 const MENU_TEXT_FONT = CFG.visual.fonts.regularFull
 const MENU_TEXT_HEX = CFG.visual.colors.hero.eyeWhite
 const MENU_TEXT_SHADOW_HEX = CFG.visual.colors.outline
-const MENU_DESCRIPTION_SIZE = 22
-const MENU_DESCRIPTION_LINE_SPACING = 6
 //
 // Key hint at the bottom: key names in the hint gold, their meaning in the
 // text cream, pairs spaced apart.
@@ -237,12 +211,6 @@ const MENU_KEY_BACK = 'escape'
 // within this window is the same press.
 //
 const MENU_KEY_REPEAT_GUARD = 0.25
-const MENU_TEXT_SPRITE = 'menu-text'
-//
-// The selected level's description blinks while the hero stands by it.
-//
-const MENU_DESCRIPTION_BLINK_SPEED = 2.5
-const MENU_DESCRIPTION_BLINK_MIN = 0.25
 //
 // The hero's eyes dart around while it waits: a new glance every
 // MENU_GLANCE_MIN..+RANGE seconds at a random spot this far around the hero.
@@ -365,7 +333,6 @@ export function sceneMenu(k) {
     })
     inst.crawler = createMenuCrawler(inst)
     inst.bgOpacity[levels[selected].backdrop] = 1
-    levels[selected].textOpacity = 1
     createMenuMushrooms(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
@@ -391,14 +358,14 @@ export function sceneMenu(k) {
  */
 export async function prewarmMenuAssets(k) {
   recomputeMenuBgLayout(k.width(), k.height())
-  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds()])
+  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt()])
   buildMenuNightSprite(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   CaveMenuBg.prewarm(k, k.width(), k.height())
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
-  await document.fonts?.load?.(`${MENU_DESCRIPTION_SIZE}px ${MENU_TEXT_FONT}`)
+  await document.fonts?.load?.(`${MENU_HINT_SIZE}px ${MENU_TEXT_FONT}`)
   loadMenuAssets(k)
 }
 
@@ -414,12 +381,11 @@ function buildMenuLevel(level, index, layout, progress) {
     y: layout.firstY + index * layout.step,
     completed,
     playable,
-    selectScale: 1,
-    textOpacity: 0
+    selectScale: 1
   }
 }
 //
-// Window-derived layout: column, hero and description X, row Y spacing,
+// Window-derived layout: column and hero X, row Y spacing,
 // hint Y.
 //
 function computeMenuLayout(k) {
@@ -431,7 +397,6 @@ function computeMenuLayout(k) {
     step,
     columnX,
     heroX: columnX - MENU_HERO_GAP * s,
-    descriptionX: columnX + MENU_DESCRIPTION_GAP * s,
     firstY: k.height() * MENU_COLUMN_Y_FRAC - step * (LEVELS.length - 1) / 2,
     hintY: k.height() - MENU_HINT_BOTTOM * s
   }
@@ -599,13 +564,13 @@ function restartLevel(inst) {
 }
 //
 // Row under the mouse: within half a row step of its centre, inside the band
-// from the hero's spot into the description.
+// from the hero's spot past the icon.
 //
 function levelUnderPointer(inst) {
   const { k, layout } = inst
   const mouse = k.mousePos()
   if (mouse.x < layout.heroX - MENU_ROW_LEFT_PAD * layout.s) return null
-  if (mouse.x > layout.descriptionX + MENU_ROW_RIGHT_REACH * layout.s) return null
+  if (mouse.x > layout.columnX + MENU_ROW_RIGHT_REACH * layout.s) return null
   return inst.levels.find(level => Math.abs(mouse.y - level.y) < layout.step / 2) ?? null
 }
 function onUpdate(inst) {
@@ -689,15 +654,13 @@ function updatePointerHover(inst) {
   moved && level && selectLevel(inst, level.index)
 }
 //
-// Selected row: icon breathes, its description fades in; the rest
-// settle back and fade out.
+// Selected row: icon breathes; the rest settle back.
 //
 function updateLevelRow(inst, row, dt) {
   const { k } = inst
   const isSelected = row.index === inst.selected
   const scaleTarget = isSelected ? 1 + MENU_SELECT_PULSE_AMP * Math.sin(k.time() * MENU_SELECT_PULSE_SPEED) : 1
   row.selectScale += (scaleTarget - row.selectScale) * Math.min(1, dt * MENU_SELECT_SCALE_EASE)
-  row.textOpacity += ((isSelected ? 1 : 0) - row.textOpacity) * Math.min(1, dt * TEXT_FADE_SPEED)
 }
 //
 // Fades the birds toward full volume on the forest row, toward silence on
@@ -815,33 +778,17 @@ function drawProhibitedSign(k, cx, cy, scale, color) {
   })
 }
 //
-// Description to the right of the selected row (justified, vertically
-// centred on it, blinking), the key hint centred at the bottom.
+// The key hint centred at the bottom.
 //
 function drawLevelTexts(inst) {
   if (inst.isLeavingScene) return
   const { k, layout } = inst
-  inst.levels.forEach(level => {
-    if (level.textOpacity <= MENU_FADE_EPS || !level.description) return
-    k.drawSprite({
-      sprite: menuTextSpriteName(`description-${level.section}`, MENU_DESCRIPTION_SIZE, layout.s),
-      pos: k.vec2(layout.descriptionX, level.y + MENU_DESCRIPTION_INK_SHIFT * layout.s),
-      anchor: 'left',
-      opacity: level.textOpacity * descriptionBlink(k)
-    })
-  })
   k.drawSprite({
     sprite: menuHintSpriteName(layout.s),
     pos: k.vec2(k.width() / 2, layout.hintY),
     anchor: 'center',
     opacity: MENU_HINT_OPACITY
   })
-}
-//
-// Blink factor of the selected description: a soft on/off pulse.
-//
-function descriptionBlink(k) {
-  return MENU_DESCRIPTION_BLINK_MIN + (1 - MENU_DESCRIPTION_BLINK_MIN) * (0.5 + 0.5 * Math.cos(k.time() * MENU_DESCRIPTION_BLINK_SPEED))
 }
 //
 // Solid cover while leaving — the menu art never flashes during level load.
@@ -931,27 +878,12 @@ function loadMenuAssets(k) {
   loadMenuTextSprites(k)
 }
 //
-// Description / hint / "?" sprites at the window's text scale.
+// Hint / "?" sprites at the window's text scale.
 //
 function loadMenuTextSprites(k) {
   const s = k.height() / MENU_REF_HEIGHT
   loadQuestionMarkSprite(k, s)
   loadMenuHintSprite(k, s)
-  LEVELS.forEach(level => {
-    level.description && loadMenuTextSprite(k, `description-${level.section}`, level.description, MENU_DESCRIPTION_SIZE, s, 'justify')
-  })
-}
-function loadMenuTextSprite(k, key, text, size, s, align) {
-  const name = menuTextSpriteName(key, size, s)
-  if (k.getSprite(name)) return
-  loadForestTextSprite(k, name, text, {
-    fontFamily: MENU_TEXT_FONT,
-    fontSize: Math.round(size * s),
-    fillStyle: MENU_TEXT_HEX,
-    shadowStyle: MENU_TEXT_SHADOW_HEX,
-    align,
-    lineSpacing: Math.round(MENU_DESCRIPTION_LINE_SPACING * s)
-  }, forestUiHash(key))
 }
 //
 // Key hint line: each key in the hint gold, then its meaning in the text
@@ -991,9 +923,6 @@ function loadMenuHintSprite(k, s) {
 }
 function menuHintSpriteName(s) {
   return `${MENU_HINT_SPRITE}-v3-${Math.round(MENU_HINT_SIZE * s)}`
-}
-function menuTextSpriteName(key, size, s) {
-  return `${MENU_TEXT_SPRITE}-v3-${key}-${Math.round(size * s)}`
 }
 //
 // "?" baked into a canvas sized to the glyph's ink box (measured, not the

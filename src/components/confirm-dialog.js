@@ -3,9 +3,12 @@ import { getRGB, parseHex } from '../utils/helper.js'
 import { createSeededRandom } from '../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 import { paintMossStrand } from '../sections/cave/utils/cave-paint.js'
+import { loadPictureImage } from '../sections/forest/utils/forest-picture.js'
 //
 // Global Yes / No confirm dialog, usable from any scene, drawn as a forest
-// signboard: a wooden board with grain and knots hangs on two crooked
+// signboard: a wooden board (the plank picture assets/forest/dialog.png,
+// loaded with this module; until it is in, a drawn board with grain and
+// knots) hangs on two crooked
 // leafy vines from the top of the screen, over a vignette that darkens the
 // scene's edges. The answers are small wooden tags painted on the board (the
 // selected one glows gold and sprouts a leaf); a twig cross in the corner
@@ -74,6 +77,11 @@ const BOARD_LIT_ALPHA = 0.5
 const BOARD_SHADE_H = 9
 const BOARD_SHADE_ALPHA = 0.4
 const BOARD_SEED = 7121
+//
+// The plank picture and the board's rect on it (px).
+//
+const BOARD_PICTURE_URL = 'forest/dialog.png'
+const BOARD_PICTURE_RECT = { x: 32, y: 251, w: 1472, h: 558 }
 //
 // Cave board: a pad leaf — a rounded-square oval (SQUARENESS: superellipse
 // power) scalloped by lobes of uneven depth, its underside showing as a
@@ -258,8 +266,10 @@ const VIGNETTE_INNER = 0.25
 const VIGNETTE_CENTER_ALPHA = 0.7
 const VIGNETTE_EDGE_ALPHA = 0.97
 const BAKE_PAD = 26
-const SPRITE_PREFIX = 'confirm-dialog-v4'
+const SPRITE_PREFIX = 'confirm-dialog-v5'
 const GRAIN_SEED = 8221
+const boardPictureLoad = loadPictureImage(BOARD_PICTURE_URL)
+let boardPicture = null
 const DEG = Math.PI / 180
 
 /**
@@ -310,6 +320,15 @@ export function create(cfg) {
   }
   k.add([k.z(cfg.z), { update: () => onUpdate(inst), draw: () => onDraw(inst) }])
   return inst
+}
+
+/**
+ * Waits for the forest board's plank picture (once per page); dialogs
+ * created before it is in use the drawn board.
+ * @returns {Promise<void>}
+ */
+export async function loadConfirmDialogArt() {
+  boardPicture ??= await boardPictureLoad
 }
 
 /**
@@ -730,15 +749,38 @@ function bakeSprites(k, cfg, s, look, pal) {
   }
 }
 //
-// The signboard: ragged plank outline, wood grain, seams and knots, a lit
-// top edge and a shaded bottom, the dark contour, nails for the vines and the
-// painted question.
+// The signboard: the plank picture (or, until it is in, a ragged plank
+// outline with wood grain, seams and knots, a lit top edge and a shaded
+// bottom and the dark contour), nails for the vines and the painted
+// question.
 //
 function bakeBoard(lines, lineH, s, boardH, pal) {
   const pad = BAKE_PAD * s
   const w = BOARD_W * s
   const canvas = newCanvas(w + pad * 2, boardH + pad * 2)
   const ctx = canvas.getContext('2d')
+  boardPicture ? paintBoardPicture(ctx, pad, w, boardH) : paintDrawnBoard(ctx, pad, w, boardH, s, pal)
+  const attachX = w * VINE_ATTACH_FRAC
+  const nails = [-attachX, attachX]
+  nails.forEach(dx => paintNail(ctx, pad + w / 2 + dx, pad + VINE_NAIL_Y * s, s, pal))
+  paintQuestion(ctx, lines, lineH, pad, w, s, pal)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
+  return canvas
+}
+//
+// The plank picture stretched over the board's rect.
+//
+function paintBoardPicture(ctx, pad, w, boardH) {
+  const r = BOARD_PICTURE_RECT
+  ctx.save()
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(boardPicture, r.x, r.y, r.w, r.h, pad, pad, w, boardH)
+  ctx.restore()
+}
+//
+// The drawn plank: ragged outline, wood grain, seams and knots, the contour.
+//
+function paintDrawnBoard(ctx, pad, w, boardH, s, pal) {
   const rng = createSeededRandom(BOARD_SEED)
   const outline = raggedRectPath(pad, pad, w, boardH, BOARD_CHAMFER * s, BOARD_EDGE_STEP * s, BOARD_EDGE_JITTER * s, rng)
   ctx.fillStyle = pal.wood
@@ -751,12 +793,6 @@ function bakeBoard(lines, lineH, s, boardH, pal) {
   ctx.lineWidth = BOARD_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)
-  const attachX = w * VINE_ATTACH_FRAC
-  const nails = [-attachX, attachX]
-  nails.forEach(dx => paintNail(ctx, pad + w / 2 + dx, pad + VINE_NAIL_Y * s, s, pal))
-  paintQuestion(ctx, lines, lineH, pad, w, s, pal)
-  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
-  return canvas
 }
 //
 // The cave board: the pad leaf's underside band, its top, veins and lit

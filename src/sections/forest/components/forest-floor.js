@@ -1,19 +1,18 @@
-import { drawFeatherPlumeToCanvas, featherPlumeBounds } from '../../../utils/draw-feather-plume.js'
-import { drawForestFern, forestFernBounds } from '../utils/forest-ferns.js'
 import { drawGroundRimToCanvas, groundRimBounds } from '../../../utils/draw-ground-rim.js'
-import { drawSmallMushroomGroupToCanvas, smallMushroomGroupBounds } from '../../../utils/draw-small-mushroom.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestContactShadowRgb, paintForestContactShadow } from '../utils/forest-atmosphere.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/forest-static-bake.js'
 import { loadPictureImage } from '../utils/forest-picture.js'
+import { drawForestPlant, forestPlantBounds } from '../utils/forest-plants.js'
+import { drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
 //
 // Colour-world forest floor dressing from the reference art: the ragged
 // ground rim and one wide mossy hill behind the hero (a picture,
-// assets/forest/hill.png, loaded with this module), ferns and light spike
-// bushes in front of him, and small clusters of ordinary cream mushrooms on
-// the ground. This module only lays the pieces out; the painters live in
-// src/utils/draw-*.js. Everything is baked once per live Kaplay instance into
+// assets/forest/hill.png, loaded with this module), patches of picture
+// plants (forest-plants.js) mostly behind him and some low ones in front of
+// him, and picture mushrooms (forest-mushrooms.js) on the ground. This
+// module only lays the pieces out. Everything is baked once per live Kaplay instance into
 // a few chunk sprites (film grain applied by forest-static-bake), then blitted
 // with one drawSprite per visible chunk — no per-plant objects or draws.
 //
@@ -48,6 +47,14 @@ const FERN_SIZE_MIN = 42
 const FERN_SIZE_RANGE = 22
 const PLUME_H_MIN = 36
 const PLUME_H_RANGE = 20
+//
+// Patch plants grow FOREGROUND_SCALE times the sizes above. Most patches
+// stand behind the hero; FRONT_PATCH_SHARE of them stand in front of him,
+// their plants never taller than FRONT_PLANT_MAX_H (the hero is taller).
+//
+const FOREGROUND_SCALE = 1.2
+const FRONT_PATCH_SHARE = 0.35
+const FRONT_PLANT_MAX_H = 56
 //
 // Ordinary mushroom groups behind the hero.
 //
@@ -106,9 +113,10 @@ export function create(cfg) {
     front: []
   }
   const rng = createSeededRandom(LAYOUT_SEED)
-  const backItems = [...buildRimItems(rimSpans, rng), ...buildBackItems(inst, rng, xMin, xMax)]
+  const patchItems = buildPatchItems(inst, rng, xMin, xMax)
+  const backItems = [...buildRimItems(rimSpans, rng), ...buildBackItems(inst, rng, xMin, xMax), ...patchItems.filter(item => !item.front)]
   inst.back = bakeChunks(inst, backItems, 'back', SEED_BACK)
-  inst.front = bakeChunks(inst, buildFrontItems(inst, rng, xMin, xMax), 'front', SEED_FRONT)
+  inst.front = bakeChunks(inst, patchItems.filter(item => item.front), 'front', SEED_FRONT)
   k.add([k.z(backZ), { draw() { onDraw(inst, 'back') } }])
   k.add([k.z(frontZ), { draw() { onDraw(inst, 'front') } }])
   return inst
@@ -132,7 +140,7 @@ export function onDraw(inst, layer) {
 /**
  * Painter colour contracts of the forest floor, shared with other ground
  * pieces (the lake island) so their surface matches the right-side ground.
- * @returns {Object} Colours keyed by painter (fern, plume, mushroom, spotted, tuft, hill, rim)
+ * @returns {Object} Colours keyed by painter (fern, hill, rim)
  */
 export function forestFloorPainterColors() {
   return buildPainterColors(FOREST_PAL.forestFloor)
@@ -143,10 +151,6 @@ export function forestFloorPainterColors() {
 function buildPainterColors(c) {
   return {
     fern: { contour: c.contour, stem: c.fernDark, dark: c.fernDark, mid: c.fernMid, light: c.fernLight },
-    plume: { contour: c.contour, body: c.plume, light: c.plumeLight, shade: c.plumeShade, stem: c.plumeStem, leaf: c.fernMid },
-    mushroom: { cap: c.mushCap, capLight: c.mushCapLight, gill: c.mushGill, stem: c.mushStem, outline: c.mushOutline },
-    spotted: { cap: c.spotCap, capLight: c.spotCapLight, dot: c.spotDot, stem: c.mushCap, outline: c.mushOutline },
-    tuft: { grass: c.grass, dry: c.grassDry },
     hill: {
       contour: c.contour, stoneDark: c.stoneDark, stone: c.stone, stoneLight: c.stoneLight,
       deep: c.mossDeep, shadow: c.mossShadow, mid: c.mossMid, light: c.mossLight, glint: c.mossGlint,
@@ -183,17 +187,18 @@ function buildBackItems(inst, rng, xMin, xMax) {
   }
   return items
 }
-function buildFrontItems(inst, rng, xMin, xMax) {
+function buildPatchItems(inst, rng, xMin, xMax) {
   const items = []
   let x = xMin + rng() * PATCH_GAP_MIN
   while (x < xMax) {
+    const front = rng() < FRONT_PATCH_SHARE
     const isPlume = rng() < PATCH_PLUME_CHANCE
     const count = isPlume
       ? PATCH_PLUME_COUNT_MIN + Math.floor(rng() * PATCH_PLUME_COUNT_RANGE)
       : PATCH_FERN_COUNT_MIN + Math.floor(rng() * PATCH_FERN_COUNT_RANGE)
     for (let i = 0; i < count; i++) {
       const edge = i === 0 || i === count - 1
-      const plant = buildPatchPlant(inst, rng, x, isPlume, edge)
+      const plant = buildPatchPlant(inst, rng, x, isPlume, edge, front)
       plant && items.push(plant)
       x += PATCH_STEP_MIN + rng() * PATCH_STEP_RANGE
     }
@@ -202,15 +207,17 @@ function buildFrontItems(inst, rng, xMin, xMax) {
   return items
 }
 //
-// One plant of a patch; edge plants are smaller so the patch fades out.
+// One plant of a patch; edge plants are smaller so the patch fades out, and
+// plants in front of the hero stay lower than him.
 //
-function buildPatchPlant(inst, rng, x, isPlume, edge) {
+function buildPatchPlant(inst, rng, x, isPlume, edge, front) {
   const halfW = isPlume ? FRONT_PLUME_HALF_W : FRONT_FERN_HALF_W
-  const base = isPlume ? PLUME_H_MIN + rng() * PLUME_H_RANGE : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
-  const size = edge ? base * PATCH_EDGE_SIZE_MULT : base
+  const base = (isPlume ? PLUME_H_MIN + rng() * PLUME_H_RANGE : FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE) * FOREGROUND_SCALE
+  const grown = edge ? base * PATCH_EDGE_SIZE_MULT : base
+  const size = front ? Math.min(grown, FRONT_PLANT_MAX_H) : grown
   const seed = nextSeed(rng)
   if (isInHill(inst, x, halfW) || !inst.isSpotFree(x, halfW) || isNearAccent(inst, x, halfW)) return null
-  return { kind: isPlume ? KIND.PLUME : KIND.FERN, x, size, seed }
+  return { kind: isPlume ? KIND.PLUME : KIND.FERN, x, size, seed, front }
 }
 function isNearAccent(inst, x, halfW) {
   return inst.accentXs.some(ax => Math.abs(ax - x) < PATCH_ACCENT_CLEAR_HALF + halfW)
@@ -242,9 +249,9 @@ function bakeChunks(inst, items, slot, seedBase) {
 function itemBounds(inst, item) {
   if (item.kind === KIND.RIM) return groundRimBounds(item.x1, item.x2, inst.floorY)
   if (item.kind === KIND.HILL) return hillBounds(inst.hill)
-  if (item.kind === KIND.FERN) return forestFernBounds(item.x, inst.floorY, item.size)
-  if (item.kind === KIND.PLUME) return featherPlumeBounds(item.x, inst.floorY, item.size)
-  return smallMushroomGroupBounds(item.x, inst.floorY)
+  if (item.kind === KIND.FERN) return forestPlantBounds(item.x, inst.floorY, item.size)
+  if (item.kind === KIND.PLUME) return forestPlantBounds(item.x, inst.floorY, item.size)
+  return forestMushroomBounds(item.x, inst.floorY)
 }
 function mergeBounds(a, b) {
   if (!a) return { ...b }
@@ -258,15 +265,15 @@ function paintItem(ctx, inst, item) {
   else if (item.kind === KIND.HILL) paintHill(ctx, inst)
   else if (item.kind === KIND.FERN) {
     paintForestFloorContactShadow(ctx, x, floorY, size * 0.42, 5, colors)
-    drawForestFern(ctx, { x, baseY: floorY, size, rng, colors: colors.fern })
+    drawForestPlant(ctx, { x, baseY: floorY, size, rng })
   }
   else if (item.kind === KIND.PLUME) {
     paintForestFloorContactShadow(ctx, x, floorY, size * 0.22, 4, colors)
-    drawFeatherPlumeToCanvas(ctx, { x, baseY: floorY, height: size, rng, colors: colors.plume })
+    drawForestPlant(ctx, { x, baseY: floorY, size, rng })
   }
   else {
     paintForestFloorContactShadow(ctx, x, floorY, 14, 4.5, colors)
-    drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: { ...colors.mushroom, contactShadow: colors.contactShadow } })
+    drawForestMushroom(ctx, { x, baseY: floorY, rng })
   }
 }
 //

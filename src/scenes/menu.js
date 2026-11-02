@@ -80,6 +80,25 @@ const MENU_ITEM_STEP = 112
 const MENU_HERO_GAP = 118
 const MENU_HINT_BOTTOM = 26
 //
+// Level panel: a vertical rounded card behind the hero and the four level
+// icons (design px): it reaches PANEL_LEFT_PAD left of the hero, PANEL_RIGHT_PAD
+// right of the icons and PANEL_END_SHARE of a row step past the first and
+// last rows. The card is the forest-teal fill at PANEL_FILL_ALPHA, a lit top
+// band fading out over PANEL_LIGHT_SHARE of its height and a dark contour;
+// baked once per live k and window size, film grain included.
+//
+const MENU_PANEL_LEFT_PAD = 68
+const MENU_PANEL_RIGHT_PAD = 78
+const MENU_PANEL_END_SHARE = 0.62
+const MENU_PANEL_RADIUS = 34
+const MENU_PANEL_FILL_ALPHA = 0.84
+const MENU_PANEL_LIGHT_ALPHA = 0.16
+const MENU_PANEL_LIGHT_SHARE = 0.32
+const MENU_PANEL_CONTOUR_W = 3
+const MENU_PANEL_PAD = 4
+const MENU_PANEL_SPRITE = 'menu-level-panel'
+const MENU_PANEL_GRAIN_SEED = 4423
+//
 // Mouse hover band of one row: from the hero's spot past the icon.
 //
 const MENU_ROW_LEFT_PAD = 50
@@ -143,6 +162,7 @@ const MENU_CRAWLER_RETARGET_RANGE = 4
 // Draw layers.
 //
 const MENU_BG_Z = 0
+const MENU_PANEL_Z = 5
 const MENU_ICON_Z = 10
 const MENU_TEXT_Z = 20
 const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
@@ -335,6 +355,8 @@ export function sceneMenu(k) {
     inst.bgOpacity[levels[selected].backdrop] = 1
     createMenuMushrooms(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
+    inst.panel = loadMenuPanel(k, layout)
+    k.add([k.z(MENU_PANEL_Z), { draw: () => drawMenuPanel(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
     k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
     inst.dialogs = Object.fromEntries(Object.values(ConfirmDialog.LOOKS).map(look => [look, createRestartDialog(inst, look)]))
@@ -722,6 +744,58 @@ function drawForestPieces(k, pieces, opacity) {
     pos: k.vec2(piece.x, piece.y),
     opacity
   }))
+}
+//
+// The level panel behind the hero and the icons.
+//
+function drawMenuPanel(inst) {
+  if (inst.isLeavingScene) return
+  const { k, panel } = inst
+  k.drawSprite({ sprite: panel.sprite, pos: k.vec2(panel.x, panel.y) })
+}
+//
+// Bakes the level panel for the current layout (once per live k and window
+// size) and returns its sprite and screen top-left.
+//
+function loadMenuPanel(k, layout) {
+  const s = layout.s
+  const pad = MENU_PANEL_PAD * s
+  const x1 = layout.heroX - MENU_PANEL_LEFT_PAD * s
+  const x2 = layout.columnX + MENU_PANEL_RIGHT_PAD * s
+  const y1 = layout.firstY - layout.step * MENU_PANEL_END_SHARE
+  const y2 = layout.firstY + layout.step * (LEVELS.length - 1 + MENU_PANEL_END_SHARE)
+  const sprite = `${MENU_PANEL_SPRITE}-v2-${k.width()}x${k.height()}`
+  k.getSprite(sprite) || k.loadSprite(sprite, bakeMenuPanel(x2 - x1, y2 - y1, s))
+  return { sprite, x: Math.round(x1 - pad), y: Math.round(y1 - pad) }
+}
+//
+// The panel card: translucent forest-teal fill, a lit band fading down from
+// the top and the dark contour, then film grain.
+//
+function bakeMenuPanel(w, h, s) {
+  const pad = MENU_PANEL_PAD * s
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(w + pad * 2)
+  canvas.height = Math.ceil(h + pad * 2)
+  const ctx = canvas.getContext('2d')
+  const radius = MENU_PANEL_RADIUS * s
+  const card = new Path2D()
+  card.roundRect(pad, pad, w, h, radius)
+  ctx.globalAlpha = MENU_PANEL_FILL_ALPHA
+  ctx.fillStyle = FOREST_PAL.menuPanel
+  ctx.fill(card)
+  const light = ctx.createLinearGradient(0, pad, 0, pad + h * MENU_PANEL_LIGHT_SHARE)
+  light.addColorStop(0, FOREST_PAL.menuPanelLight)
+  light.addColorStop(1, `${FOREST_PAL.menuPanelLight}00`)
+  ctx.globalAlpha = MENU_PANEL_LIGHT_ALPHA
+  ctx.fillStyle = light
+  ctx.fill(card)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = FOREST_PAL.menuPanelContour
+  ctx.lineWidth = MENU_PANEL_CONTOUR_W * s
+  ctx.stroke(card)
+  applyForestFilmGrainToCanvas(canvas, MENU_PANEL_GRAIN_SEED)
+  return canvas
 }
 //
 // Glowing cave mushrooms (body, then the additive halo), "?" glyphs (one

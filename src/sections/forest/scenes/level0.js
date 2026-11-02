@@ -955,6 +955,12 @@ const FOREST_MUSHROOM_WHISTLE_SMOOTH = 7
 //
 const SURFACE_DETECT_Y = 38
 //
+// The hero stands this far under the ground line (his feet sink a little
+// into the grass): the floor colliders' top and his ground spots.
+//
+const HERO_FLOOR_SINK = 2
+const HERO_FLOOR_Y = FLOOR_Y + HERO_FLOOR_SINK
+//
 // Hero pos is above his feet by SURFACE_DETECT_Y; the plant aims at mid-body.
 //
 const FOREST_EYE_FLOWER_HERO_CENTER_DY = 12
@@ -1255,8 +1261,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // it; createMushroomTrampoline() reuses this same value further below.
     //
     const trampX = trampXEarly
-    const heroGroundCenterY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
-    let heroSpawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    const heroGroundCenterY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    let heroSpawnY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     const forestFirstStartGroundSpawnX = computeForestFirstStartGroundSpawnX({
       branchTrampX,
       trampX,
@@ -3329,7 +3335,7 @@ function createLevelBounds(k) {
   const floorW = Math.max(40, floorEndX - LEFT_MARGIN)
   const floor = k.add([
     k.rect(floorW, FLOOR_PHYS_H),
-    k.pos(LEFT_MARGIN, FLOOR_Y),
+    k.pos(LEFT_MARGIN, HERO_FLOOR_Y),
     k.anchor('topleft'),
     k.area(),
     k.body({ isStatic: true }),
@@ -3344,7 +3350,7 @@ function createLevelBounds(k) {
   if (postCaveW > 0) {
     postCaveFloor = k.add([
       k.rect(postCaveW, FLOOR_PHYS_H),
-      k.pos(crack.x2, FLOOR_Y),
+      k.pos(crack.x2, HERO_FLOOR_Y),
       k.anchor('topleft'),
       k.area(),
       k.body({ isStatic: true }),
@@ -5084,7 +5090,7 @@ function applyDrownSinkPose(inst) {
 // World Y where the hero's feet rest on the main floor in the lake band.
 //
 function drownFloorStandY() {
-  return FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  return HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
 }
 //
 // Hero stays behind the lake fill (LAKE_Z) for the whole drowning sequence.
@@ -5271,7 +5277,7 @@ function finishDrowning(inst) {
       const spawnX = isInWaterZone(inst, deathX, deathFootY)
         ? inst.lakeX2 + DROWN_RESPAWN_LAKE_CLEARANCE
         : deathX
-      const spawnY = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      const spawnY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
       persistForestDeathSpawn(inst, spawnX, spawnY)
     }
     inst.k.go('lesson-forest.0')
@@ -6669,12 +6675,12 @@ function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
   // hero up before the box ever touched the floor (endless frozen jump frame).
   //
   const bottomY = forestHeroHitboxBottomY(char)
-  if (bottomY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) return
+  if (bottomY <= HERO_FLOOR_Y + LOG_SNAP_STANDING_MAX) return
   //
   // Feet under the floor line, including a shallow sink beside a mushroom.
   //
-  if (bottomY <= FLOOR_Y + MAIN_GROUND_SINK_RESCUE_MAX) {
-    moveForestHeroTo(char, char.pos.x, char.pos.y - (bottomY - FLOOR_Y))
+  if (bottomY <= HERO_FLOOR_Y + MAIN_GROUND_SINK_RESCUE_MAX) {
+    moveForestHeroTo(char, char.pos.x, char.pos.y - (bottomY - HERO_FLOOR_Y))
     char.vel && char.vel.y > 0 && (char.vel.y = 0)
   }
 }
@@ -7137,7 +7143,7 @@ function launchHeroFromPitCaveMushroom(inst) {
   const char = hero?.character
   if (!char?.pos) return
   const exitX = forestPitCaveExitX(inst)
-  moveForestHeroTo(char, exitX, FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
+  moveForestHeroTo(char, exitX, HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED)
   char.vel.x = 0
   char.hidden = false
   inst._inForestPitCave = false

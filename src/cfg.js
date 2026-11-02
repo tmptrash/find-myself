@@ -773,6 +773,14 @@ export const CFG = {
         //
         menuProhibited: PALETTE.red1,
         //
+        // Menu level panel: a deep forest-teal card (laid over the backdrop
+        // at part opacity) with a dark green-black contour and a soft lit
+        // top band.
+        //
+        menuPanel: PALETTE.teal0,
+        menuPanelContour: PALETTE.gray0,
+        menuPanelLight: PALETTE.cyan3,
+        //
         // Menu key hint: the key names in a warm gold, their meaning in the
         // cream text tone.
         //

@@ -3169,6 +3169,16 @@ function tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX) {
   spots.push({ x, groundY: FLOOR_Y })
   return true
 }
+//
+// Every allowed bomb tree X between x1 and x2 (scan step apart).
+//
+function freeForestEarTreeXs(spots, x1, x2, branchTrampX, trampX, shoreTrunkX) {
+  const free = []
+  for (let x = x1; x <= x2; x += FOREST_EAR_TREE_SCAN_STEP) {
+    forestEarTreeSpotXAllowed(spots, x, branchTrampX, trampX, shoreTrunkX) && free.push(x)
+  }
+  return free
+}
 function buildForestEarTreeSpots(layoutCfg) {
   const branchTrampX = layoutCfg?.branchTrampX ??
     TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
@@ -3186,6 +3196,12 @@ function buildForestEarTreeSpots(layoutCfg) {
   const rightXMax = cave.x1 - FOREST_CAVE_DECOR_CLEAR - FOREST_EAR_TREE_RIGHT_CAVE_MARGIN
   const minSpan = FOREST_EAR_TREE_MIN_GAP * (FOREST_EAR_TREE_RIGHT_COUNT - 1) + 48
   const spots = []
+  //
+  // The right bomb tree always stands right of the right mushroom
+  // trampoline: it takes a free spot there first.
+  //
+  const rightOfTramp = trampX == null ? [] : freeForestEarTreeXs(spots, Math.max(rightXMin, trampX), rightXMax, branchTrampX, trampX, shoreTrunkX)
+  rightOfTramp.length && tryAddForestEarTreeSpot(spots, rightOfTramp[Math.floor(Math.random() * rightOfTramp.length)], branchTrampX, trampX, shoreTrunkX)
   let attempts = 0
   while (spots.length < FOREST_EAR_TREE_RIGHT_COUNT && attempts < 80) {
     attempts += 1
@@ -3199,10 +3215,7 @@ function buildForestEarTreeSpots(layoutCfg) {
   // every allowed X and fill the remaining trees from those.
   //
   while (spots.length < FOREST_EAR_TREE_COUNT) {
-    const free = []
-    for (let x = rightXMin; x <= rightXMax; x += FOREST_EAR_TREE_SCAN_STEP) {
-      forestEarTreeSpotXAllowed(spots, x, branchTrampX, trampX, shoreTrunkX) && free.push(x)
-    }
+    const free = freeForestEarTreeXs(spots, rightXMin, rightXMax, branchTrampX, trampX, shoreTrunkX)
     if (!free.length) break
     const x = free[Math.floor(Math.random() * free.length)]
     tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX)

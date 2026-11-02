@@ -5029,7 +5029,7 @@ function createForestHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX 
     CFG.game.noCeilingTag
   ])
   plat.tag(platTag)
-  plat.onBeforePhysicsResolve(c => isBranchHitFromBelow(c.target, plat) && c.preventResolution())
+  plat.onBeforePhysicsResolve(c => isBranchHitFromBelow(k, c.target, plat) && c.preventResolution())
   const plats = [plat]
   const homes = [{ x: spanX1, y: walkTopY, x2: spanX2 }]
   const startBranchY = walkTopY
@@ -5040,12 +5040,16 @@ function createForestHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX 
   }
 }
 //
-// Whether a body meets a one-way branch collider from below or inside it
-// (rising, or its feet well under the branch top).
+// Whether a body meets a one-way branch collider from below or inside it:
+// rising, or its feet were already well under the branch top one physics
+// step ago (a fast fall carries the feet deep into the collider within a
+// step — that is a landing, not a pass from below).
 //
-function isBranchHitFromBelow(other, plat) {
+function isBranchHitFromBelow(k, other, plat) {
+  if (other.vel.y < 0) return true
   const box = other.worldArea().bbox()
-  return other.vel.y < 0 || box.pos.y + box.height > plat.pos.y + BRANCH_ONE_WAY_TOL
+  const prevFeetY = box.pos.y + box.height - other.vel.y * k.fixedDt()
+  return prevFeetY > plat.pos.y + BRANCH_ONE_WAY_TOL
 }
 //
 // Short chime when a new world segment unlocks.

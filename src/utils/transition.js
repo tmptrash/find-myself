@@ -236,7 +236,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const originalVolume = k.volume()
   k.volume(0)
-  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
+  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
   soundsToStop.forEach(soundName => {
     try {
       const sound = k.getSound(soundName)
@@ -638,7 +638,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (timer === 0 || !inst.soundsStopped) {
         inst.soundsStopped = true
         stopTimeSectionMusic(k)
-        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
+        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
         soundsToStop.forEach(soundName => {
           try {
             const sound = k.getSound(soundName)
@@ -693,9 +693,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           stopTimeSectionMusic(k)
           //
           // Stop all Kaplay sounds except voice-over (xxx-pre files)
-          // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3, menu.mp3
+          // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3
           //
-          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
+          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
           soundsToStop.forEach(soundName => {
             try {
               const sound = k.getSound(soundName)

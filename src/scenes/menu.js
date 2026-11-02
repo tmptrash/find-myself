@@ -263,12 +263,12 @@ const MENU_HERO_LOOK = {
   outlineOnly: false
 }
 //
-// Menu music (relative to CFG.audio.masterVolume): menu.mp3 at once, kids.mp3
-// fading in.
+// Menu sound follows the selected level: the forest level's birds.mp3
+// fades in (over MENU_BIRDS_FADE_SEC) while the forest row is selected and
+// out on any other row (the other levels have no menu sound yet).
 //
-const MENU_MUSIC_VOLUME = CFG.audio.masterVolume * 0.3
-const MENU_KIDS_VOLUME = CFG.audio.masterVolume * 0.4
-const MENU_KIDS_FADE_IN = 4
+const MENU_BIRDS_VOLUME = CFG.audio.backgroundMusic.birds
+const MENU_BIRDS_FADE_SEC = 1.5
 //
 // Section-complete markers saved as lastLesson point at the next section's
 // first lesson (time-complete ends the game: no current lesson).
@@ -336,7 +336,6 @@ export function sceneMenu(k) {
       heroInst,
       heroY: levels[selected].y,
       lastMouse: { x: k.mousePos().x, y: k.mousePos().y },
-      musicT: 0,
       glanceT: 0,
       lastKey: null,
       lastKeyAt: 0,
@@ -700,10 +699,16 @@ function updateLevelRow(inst, row, dt) {
   row.selectScale += (scaleTarget - row.selectScale) * Math.min(1, dt * MENU_SELECT_SCALE_EASE)
   row.textOpacity += ((isSelected ? 1 : 0) - row.textOpacity) * Math.min(1, dt * TEXT_FADE_SPEED)
 }
+//
+// Fades the birds toward full volume on the forest row, toward silence on
+// any other row.
+//
 function updateMenuMusic(inst, dt) {
-  if (inst.musicT >= MENU_KIDS_FADE_IN) return
-  inst.musicT = Math.min(MENU_KIDS_FADE_IN, inst.musicT + dt)
-  inst.music.kids.volume = inst.musicT / MENU_KIDS_FADE_IN * MENU_KIDS_VOLUME
+  const birds = inst.music.birds
+  if (!birds) return
+  const target = inst.levels[inst.selected].backdrop === BACKDROP_FOREST ? MENU_BIRDS_VOLUME : 0
+  const step = MENU_BIRDS_VOLUME * dt / MENU_BIRDS_FADE_SEC
+  birds.volume = birds.volume < target ? Math.min(target, birds.volume + step) : Math.max(target, birds.volume - step)
 }
 //
 // Night picture under the forest and cave ones; each is drawn with its own
@@ -888,10 +893,12 @@ function syncMenuLastLesson() {
   lastLevel !== saved && set('lastLesson', lastLevel)
   return lastLevel
 }
+//
+// The menu's sound tracks, all silent until their level is selected.
+//
 function startMenuMusic(k) {
   return {
-    menu: k.play("menu", { loop: true, volume: MENU_MUSIC_VOLUME }),
-    kids: k.play("kids", { loop: true, volume: 0 })
+    birds: k.play("birds", { loop: true, volume: 0 })
   }
 }
 //
@@ -900,7 +907,7 @@ function startMenuMusic(k) {
 // the tracks are hushed repeatedly for a while.
 //
 function stopMenuMusic(music) {
-  [music.menu, music.kids].forEach(play => {
+  Object.values(music).forEach(play => {
     if (!play) return
     const hush = () => {
       play.volume = 0

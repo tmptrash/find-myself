@@ -143,6 +143,27 @@ export function fallTwigLook(inst, stickLen) {
 }
 
 /**
+ * Paints the tree (roots, then the tree above over them) into a canvas, its
+ * trunk's foot at a point, at a scale (world px per picture px; the menu
+ * backdrop). Paints nothing until loadForestShoreTree() has resolved.
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {{x: number, y: number}} foot - Where the trunk meets the ground
+ * @param {number} scale - Canvas px per picture px
+ */
+export function drawShoreTreeToCanvas(ctx, foot, scale) {
+  if (!sheet) return
+  const crown = cutPicture(sheet, CROWN, scale)
+  clearPictureRect(crown, CROWN, CROWN_CLEAR, scale)
+  ctx.save()
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(sheet, ROOTS.x, ROOTS.y, ROOTS.w, ROOTS.h, foot.x - (ROOTS_X - ROOTS.x) * scale, foot.y - GROUND_TUCK, ROOTS.w * scale, ROOTS.h * scale)
+  ctx.drawImage(crown, foot.x - (FOOT_X - CROWN.x) * scale, foot.y + GROUND_TUCK - (FOOT_Y - CROWN.y) * scale)
+  ctx.restore()
+  crown.width = 0
+  crown.height = 0
+}
+
+/**
  * Draws the shore tree: its roots under the ground line, the tree above and
  * the greens over the seam between them.
  * @param {Object} inst - Shore-tree inst

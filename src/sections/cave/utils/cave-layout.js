@@ -61,7 +61,7 @@ const K = PLATFORM_KIND
 // Rock surfaces. L0 entry ledge, C spore ledge, G the
 // target ledge on the right wall, D the lit floor with the bubble and the
 // air plant. A `style` names a rock ledge look from CAVE_CFG.ledge (baked
-// by cave-ledge.js; visual only). Leaves of the plant are listed
+// by cave-ledge.js; visual only). Leaves of the tree are listed
 // separately (PLANT_LEAVES).
 //
 export const PLATFORMS = [
@@ -71,23 +71,61 @@ export const PLATFORMS = [
   { id: 'D', x1: LAKE_X2, x2: WORLD_W, y: 1720, h: WORLD_H - 1720, kind: K.GROUND, style: 'ground' }
 ]
 //
-// The monster plant: rope foot (bottom in the lake, top at the first
-// leaf), its pad leaves (the top leaf A and the spore leaf T are traps
-// with red mouths that seize the hero; collideInset trims a leaf's collider at both ends
-// where its rim droops; walkDrop sets the hero this much lower into the
-// leaf's top), and the thorny band right of the second leaf.
+// The procedural monster plant, now painted only in the menu picture: rope
+// foot (bottom in the lake, top at the first leaf), its pad leaves (the top
+// leaf A and the spore leaf T are traps with red mouths), and the thorny
+// band right of the second leaf.
 //
 export const PLANT_TRUNK = { x: 742, bottomY: WORLD_H, topY: 470, width: 84 }
 export const LEAF_KIND = {
   TRAP: 'trap',
   LEAF: 'leaf'
 }
-export const PLANT_LEAVES = [
+export const PLANT_ART_LEAVES = [
   { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.TRAP, collideInset: 34 },
   { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF, walkDrop: 10 },
   { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true }
 ]
 export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
+//
+// The level's monster tree is a picture (assets/tree.png, drawn by
+// monster-tree.js), set in the world by its foot: the picture's point under
+// the trunk (foot) goes to the world point TREE_FOOT, scaled (mirror: flip
+// it left to right); the foot sits deep in the lake so the roots spread
+// behind the stones of its basin.
+//
+export const TREE_PICTURE = { url: 'tree.png', w: 1024, h: 1536, scale: 0.95, mirror: false, foot: { x: 480, y: 1450 } }
+export const TREE_FOOT = { x: PLANT_TRUNK.x, y: 1940 }
+//
+// The tree's three big leaves the hero walks on, measured on the picture: the
+// walking line through the middle of the leaf's top face (y) and how far
+// along it (x1–x2), and the bottom of the leaf's near lip (points along x).
+// The hero's feet stand on the walking line; the leaf's part below it
+// (down to the lip) is drawn over him, so he stands in the leaf, his feet
+// whole (walkDrop: how far they sink below the line, 0 = not at all). Every leaf is a
+// plain one for now; `kind: LEAF_KIND.TRAP` on a leaf brings back a red
+// flower on it. The spore swarm's last stop is the spores leaf.
+//
+const TREE_LEAVES_ART = [
+  { id: 'A', x1: 260, x2: 650, y: 160, lip: [[230, 212], [250, 190], [300, 186], [350, 186], [400, 190], [450, 192], [500, 191], [550, 180], [600, 177], [650, 190], [675, 205]] },
+  { id: 'B', x1: 150, x2: 440, y: 604, lip: [[125, 645], [150, 625], [200, 626], [250, 626], [300, 630], [350, 625], [400, 618], [450, 628], [465, 642]] },
+  { id: 'T', x1: 575, x2: 730, y: 942, spores: true, lip: [[560, 975], [575, 952], [600, 958], [650, 963], [700, 958], [730, 948], [745, 968]] }
+]
+const TREE_LEAF_WALK_DROP = 0
+export const PLANT_LEAVES = TREE_LEAVES_ART.map(def => {
+  const a = treePoint(def.x1, def.y)
+  const b = treePoint(def.x2, def.y)
+  return {
+    id: def.id,
+    kind: def.kind ?? LEAF_KIND.LEAF,
+    spores: Boolean(def.spores),
+    x1: Math.round(Math.min(a.x, b.x)),
+    x2: Math.round(Math.max(a.x, b.x)),
+    y: Math.round(a.y),
+    walkDrop: TREE_LEAF_WALK_DROP,
+    lip: def.lip.map(([x, y]) => treePoint(x, y)).sort((p, q) => p.x - q.x)
+  }
+})
 //
 // Extra thorns, densely, on the trunk's left side (by leaf B) from the
 // leaf up to the hero's head (inside the thorny band's hit area).
@@ -102,13 +140,36 @@ export const SPORE_MUSHROOM = { x: 230, y: 1100 }
 export const SPORE_STATIONS = [
   { x: 288, y: 878 },
   { x: 345, y: 955 },
-  { x: 600, y: 1150 }
+  { x: 1000, y: 1380 }
 ]
 //
 // Bubble mushroom and air plant on the lit floor D; the bubble rises to
 // the target ledge G.
 //
 export const BUBBLE_MUSHROOM = { x: 1005, y: 1720, topY: 1250 }
+//
+// Funnel mushroom clusters (decor behind the hero): foot (x on a ledge
+// top, or wall: the side whose rock face it grows from at that height),
+// size, which way they lean (-1 left, 1 right), layout seed.
+//
+export const FUNNEL_MUSHROOMS = [
+  { x: 70, y: 436, scale: 0.9, lean: 1, seed: 1 },
+  { x: 395, y: 1106, scale: 0.75, lean: 1, seed: 2 },
+  { wall: 'left', y: 1500, scale: 0.85, lean: 1, seed: 3 },
+  { wall: 'right', y: 880, scale: 0.9, lean: -1, seed: 4 },
+  { x: 1095, y: 1306, scale: 0.8, lean: -1, seed: 5 }
+]
+//
+// Umbrella plants (decor behind the hero, swaying in the draught): foot
+// (in the lake, on the ground or a ledge), stalk height, pad radius, lean
+// of the stalk's top (share of its height, - left), layout seed.
+//
+export const UMBRELLA_PLANTS = [
+  { x: 150, y: 1850, h: 430, r: 105, lean: 0.25, seed: 1 },
+  { x: 330, y: 1860, h: 180, r: 60, lean: -0.2, seed: 2 },
+  { x: 900, y: 1730, h: 120, r: 55, lean: -0.15, seed: 3 },
+  { x: 120, y: 1106, h: 250, r: 75, lean: 0.3, seed: 4 }
+]
 export const AIR_PLANT = { x1: 1085, x2: 1255, y: 1720 }
 //
 // Deadly stalactites under platforms: count and length range per platform.
@@ -289,8 +350,19 @@ export function dropLandAt(x, fromY) {
 }
 
 /**
- * True when the hero hitbox touches a stalactite or the
- * plant's thorns.
+ * World point of a point on the tree picture.
+ * @param {number} sx - Picture X
+ * @param {number} sy - Picture Y
+ * @returns {{x: number, y: number}}
+ */
+export function treePoint(sx, sy) {
+  const t = TREE_PICTURE
+  const dx = (sx - t.foot.x) * t.scale
+  return { x: TREE_FOOT.x + (t.mirror ? -dx : dx), y: TREE_FOOT.y + (sy - t.foot.y) * t.scale }
+}
+
+/**
+ * True when the hero hitbox touches a stalactite.
  * @param {Array} stalactites - From buildStalactites()
  * @param {number} x - Hero anchor X
  * @param {number} y - Hero anchor Y
@@ -299,9 +371,6 @@ export function dropLandAt(x, fromY) {
 export function hitsSpikes(stalactites, x, y) {
   const feet = y + HERO_FEET_DY
   const top = y + HERO_BODY_DY - HERO_HALF_H
-  const overlapsX = (x1, x2) => x + HERO_HALF_W > x1 && x - HERO_HALF_W < x2
-  const t = PLANT_THORNS
-  if (overlapsX(t.x1, t.x2) && top < t.y2 && feet > t.y1) return true
   return stalactites.some(s => {
     const half = s.w / 2 - STALACTITE_HIT_INSET_X
     const bottom = s.y + s.len * STALACTITE_HIT_LEN_FRAC

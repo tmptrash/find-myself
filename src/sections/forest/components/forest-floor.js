@@ -1,16 +1,16 @@
 import { drawFeatherPlumeToCanvas, featherPlumeBounds } from '../../../utils/draw-feather-plume.js'
-import { drawFernToCanvas, fernBounds } from '../../../utils/draw-fern.js'
-import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
+import { drawForestFern, forestFernBounds } from '../utils/forest-ferns.js'
 import { drawGroundRimToCanvas, groundRimBounds } from '../../../utils/draw-ground-rim.js'
-import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
-import { drawSmallMushroomGroupToCanvas, drawSpottedMushroomToCanvas, smallMushroomGroupBounds } from '../../../utils/draw-small-mushroom.js'
+import { drawSmallMushroomGroupToCanvas, smallMushroomGroupBounds } from '../../../utils/draw-small-mushroom.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestContactShadowRgb, paintForestContactShadow } from '../utils/forest-atmosphere.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/forest-static-bake.js'
+import { loadPictureImage } from '../utils/forest-picture.js'
 //
 // Colour-world forest floor dressing from the reference art: the ragged
-// ground rim and one wide mossy hill behind the hero, ferns and light spike
+// ground rim and one wide mossy hill behind the hero (a picture,
+// assets/forest/hill.png, loaded with this module), ferns and light spike
 // bushes in front of him, and small clusters of ordinary cream mushrooms on
 // the ground. This module only lays the pieces out; the painters live in
 // src/utils/draw-*.js. Everything is baked once per live Kaplay instance into
@@ -19,7 +19,7 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 //
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
-const BAKE_VARIANT = 'v10'
+const BAKE_VARIANT = 'v11'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
@@ -55,22 +55,25 @@ const MUSH_STEP_MIN = 210
 const MUSH_STEP_RANGE = 170
 const MUSH_GROUP_HALF_W = 16
 //
-// Mossy hill footprint and the plants rooted on it (spread by fraction of
-// the hill width, each skipped where the hero needs a clear read).
+// The hill on its picture (px; its bottom row stands on the ground line,
+// HILL_SINK px under it) and its width in the world; the slope climbs to
+// the right edge.
 //
-const HILL_HALF_W = 340
-const HILL_H = 118
-const HILL_PLANT_PAD = 90
-const HILL_PLANT_SINK = 4
-const HILL_PLANT_HALF_W = 14
-//
-// Hill plants in fern patches plus grass tufts — no gold spike bushes on the
-// right mound (they stay in open ground patches only).
-//
-const HILL_FERNS_T = [0.09, 0.15, 0.22, 0.63, 0.7]
-const HILL_TUFT_STEP_T = 0.055
-const HILL_MUSH_T = [0.04, 0.36, 0.68, 0.97]
-const HILL_SPOT_MUSH_T = [0.16, 0.6]
+const HILL_URL = 'forest/hill.png'
+const HILL_RECT = { x: 33, y: 128, w: 1979, h: 555 }
+const HILL_W = 680
+const HILL_SINK = 3
+const HILL_BOUNDS_PAD = 2
+const hillPicture = loadPictureImage(HILL_URL)
+let hillImage = null
+
+/**
+ * Waits for the hill picture (once per page); create() needs it to bake the hill.
+ * @returns {Promise<void>}
+ */
+export async function loadForestFloorHill() {
+  hillImage ??= await hillPicture
+}
 
 /**
  * Creates the forest-floor dressing (ground rim, hill, ferns, spike bushes,
@@ -98,7 +101,7 @@ export function create(cfg) {
     isSpotFree,
     accentXs: cfg.accentXs ?? [],
     colors: { ...forestFloorPainterColors(), contactShadow: forestContactShadowRgb() },
-    hill: { x1: hillX2 - HILL_HALF_W * 2, x2: hillX2, floorY, height: HILL_H },
+    hill: { x1: hillX2 - HILL_W, x2: hillX2, floorY, height: HILL_W * HILL_RECT.h / HILL_RECT.w },
     back: [],
     front: []
   }
@@ -238,8 +241,8 @@ function bakeChunks(inst, items, slot, seedBase) {
 }
 function itemBounds(inst, item) {
   if (item.kind === KIND.RIM) return groundRimBounds(item.x1, item.x2, inst.floorY)
-  if (item.kind === KIND.HILL) return mossyHillBounds(inst.hill, HILL_PLANT_PAD)
-  if (item.kind === KIND.FERN) return fernBounds(item.x, inst.floorY, item.size)
+  if (item.kind === KIND.HILL) return hillBounds(inst.hill)
+  if (item.kind === KIND.FERN) return forestFernBounds(item.x, inst.floorY, item.size)
   if (item.kind === KIND.PLUME) return featherPlumeBounds(item.x, inst.floorY, item.size)
   return smallMushroomGroupBounds(item.x, inst.floorY)
 }
@@ -252,10 +255,10 @@ function paintItem(ctx, inst, item) {
   const { colors, floorY } = inst
   const { x, size } = item
   if (item.kind === KIND.RIM) drawGroundRimToCanvas(ctx, { x1: item.x1, x2: item.x2, floorY, rng, colors: colors.rim })
-  else if (item.kind === KIND.HILL) paintHill(ctx, inst, rng)
+  else if (item.kind === KIND.HILL) paintHill(ctx, inst)
   else if (item.kind === KIND.FERN) {
     paintForestFloorContactShadow(ctx, x, floorY, size * 0.42, 5, colors)
-    drawFernToCanvas(ctx, { x, baseY: floorY, size, rng, colors: colors.fern })
+    drawForestFern(ctx, { x, baseY: floorY, size, rng, colors: colors.fern })
   }
   else if (item.kind === KIND.PLUME) {
     paintForestFloorContactShadow(ctx, x, floorY, size * 0.22, 4, colors)
@@ -267,43 +270,27 @@ function paintItem(ctx, inst, item) {
   }
 }
 //
-// Boulder heap under its moss first, then ferns, grass tufts, mushrooms at the
-// feet and two red spotted accents, as on the reference hill. Plants that
-// would cover a trunk, trampoline or stalk eye are skipped.
+// The hill picture standing on the ground line (nothing if it failed to load).
 //
-function paintHill(ctx, inst, rng) {
-  const { hill, colors, floorY } = inst
-  drawMossyHillToCanvas(ctx, { hill, rng, colors: colors.hill, erodedSoil: true })
-  hillPlantXs(inst, HILL_FERNS_T).forEach(x => {
-    const size = FERN_SIZE_MIN + rng() * FERN_SIZE_RANGE
-    const baseY = hillPlantY(hill, x)
-    paintForestFloorContactShadow(ctx, x, baseY, size * 0.4, 5, colors)
-    drawFernToCanvas(ctx, { x, baseY, size, rng, colors: colors.fern })
-  })
-  hillPlantXs(inst, hillTuftTs()).forEach(x => {
-    const baseY = hillPlantY(hill, x)
-    paintForestFloorContactShadow(ctx, x, baseY, 9, 3.2, colors)
-    drawGrassTuftToCanvas(ctx, { x, baseY, rng, colors: { ...colors.tuft, contactShadow: colors.contactShadow } })
-  })
-  hillPlantXs(inst, HILL_MUSH_T).forEach(x => {
-    paintForestFloorContactShadow(ctx, x, floorY, 14, 4.5, colors)
-    drawSmallMushroomGroupToCanvas(ctx, { x, baseY: floorY, rng, colors: { ...colors.mushroom, contactShadow: colors.contactShadow } })
-  })
-  hillPlantXs(inst, HILL_SPOT_MUSH_T).forEach(x => {
-    paintForestFloorContactShadow(ctx, x, floorY, 12, 4, colors)
-    drawSpottedMushroomToCanvas(ctx, { x, baseY: floorY, colors: colors.spotted })
-  })
+function paintHill(ctx, inst) {
+  const { hill } = inst
+  if (!hillImage) return
+  ctx.save()
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(hillImage, HILL_RECT.x, HILL_RECT.y, HILL_RECT.w, HILL_RECT.h,
+    hill.x1, hill.floorY + HILL_SINK - hill.height, hill.x2 - hill.x1, hill.height)
+  ctx.restore()
 }
-function hillPlantXs(inst, ts) {
-  return ts.map(t => inst.hill.x1 + (inst.hill.x2 - inst.hill.x1) * t).filter(x => inst.isSpotFree(x, HILL_PLANT_HALF_W))
-}
-function hillTuftTs() {
-  const ts = []
-  for (let t = HILL_TUFT_STEP_T; t < 1; t += HILL_TUFT_STEP_T) ts.push(t)
-  return ts
-}
-function hillPlantY(hill, x) {
-  return mossyHillTopY(hill, x) + HILL_PLANT_SINK
+//
+// World rect of the hill picture.
+//
+function hillBounds(hill) {
+  return {
+    x1: hill.x1 - HILL_BOUNDS_PAD,
+    y1: hill.floorY + HILL_SINK - hill.height - HILL_BOUNDS_PAD,
+    x2: hill.x2 + HILL_BOUNDS_PAD,
+    y2: hill.floorY + HILL_SINK + HILL_BOUNDS_PAD
+  }
 }
 function paintForestFloorContactShadow(ctx, x, baseY, rx, ry, colors) {
   colors.contactShadow && paintForestContactShadow(ctx, x, baseY, rx, ry, colors.contactShadow)

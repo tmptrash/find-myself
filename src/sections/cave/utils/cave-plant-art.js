@@ -1,4 +1,3 @@
-import * as Lake from '../../forest/utils/forest-lake.js'
 import * as Layout from './cave-layout.js'
 import { plantShape, axisAt, PLANT_FOOT } from './cave-plant-shape.js'
 import { CAVE_PAL, css, paintMossStrand, paintEdgeFern, smoothPath, polygonBounds, insidePath } from './cave-paint.js'
@@ -36,7 +35,7 @@ const MOSS_MIN_Z = 0.4
 //
 const LEAF_MIN_Z = 0.1
 const LEAF_EVERY = 14
-const LEAF_CHANCE = 0.55
+const LEAF_CHANCE = 0.07
 const LEAF_CLUSTER = 3
 const LEAF_SIZE_MIN = 4
 const LEAF_SIZE_RANGE = 3
@@ -60,21 +59,30 @@ const GAP_W = 0.55
 // them, so each one reads as its own round stem.
 //
 const STEM_CONTOUR_EXTRA = 5
-const STEM_AO_ALPHA = 0.55
+const STEM_AO_ALPHA = 0.7
 const GAP_FROM = 0.04
 const GAP_TO = 0.85
 //
-// Cylinder shading: band widths (share of the strand width) and offsets.
+// Cylinder shading (each vine reads round): the shadow half, a dark core
+// near the shadow edge, a warm lit band and a bright highlight on the light
+// side, and cool cave light bounced on the shadow edge. Band widths are
+// shares of the strand width, offsets across it.
 //
 const CONTOUR_EXTRA = 2.6
-const SHADOW_W = 0.5
-const SHADOW_OFF = 0.26
-const EDGE_W = 0.18
-const EDGE_OFF = 0.42
-const EDGE_ALPHA = 0.7
-const LIT_W = 0.34
-const LIT_OFF = 0.22
-const LIT_ALPHA = 0.7
+const SHADOW_W = 0.55
+const SHADOW_OFF = 0.25
+const EDGE_W = 0.16
+const EDGE_OFF = 0.3
+const EDGE_ALPHA = 0.85
+const LIT_W = 0.32
+const LIT_OFF = 0.2
+const LIT_ALPHA = 0.85
+const HIGH_W = 0.1
+const HIGH_OFF = 0.26
+const HIGH_ALPHA = 0.75
+const BOUNCE_W = 0.08
+const BOUNCE_OFF = 0.43
+const BOUNCE_ALPHA = 0.2
 //
 // Rough silhouette: the contour and base swell and shift by a pixel or two
 // along the strand (noise over the distance along it).
@@ -86,9 +94,9 @@ const ROUGH_SHIFT_SEED = 6.3
 //
 // Soft shadow a near piece casts on what is already painted behind it.
 //
-const AO_W = 1.6
-const AO_OFF = 0.35
-const AO_ALPHA = 0.32
+const AO_W = 1.8
+const AO_OFF = 0.4
+const AO_ALPHA = 0.5
 //
 // Bark on every strand: deep furrows that wave in opposite phase so
 // neighbours meet and part again (diamond plates), then fine short cracks.
@@ -137,7 +145,11 @@ const FIBRES = {
   rim: false,
   light: true
 }
-const FIBRES_PER_DEEP = 2
+//
+// Thin vines keep only a share of their deep grooves (no fine cracks or
+// fibres).
+//
+const THIN_GROOVES = 0.5
 const BARK_REF_W = 44
 const FACE_INSET = 0.92
 const FACE_MIN = 0.12
@@ -161,22 +173,16 @@ const DEEP_MAX = 9
 const FINE_PER_DEEP = 2
 const BARK_TWIST = 0.03
 //
-// Trunk stems and thicker vines carry oak-like bark: a fractal net of fissures laid
-// out around the stem (angle) and along it (point index). Long wandering
-// fissures run along the stem (midpoint displacement sideways), fork into
-// thinner, fainter ones again and again, and short cross breaks split the
-// ridges between them into uneven plates. A second, finer net of short
-// forking micro-cracks breaks the plates up again, and clusters of tiny
-// bark scales (themselves grouped in sub-clusters) sit on them. Grain is
-// almost straight.
+// Trunk stems and thicker vines carry a few long irregular grooves laid
+// out around the stem (angle) and along it (point index), running with the
+// growth (midpoint displacement sideways), forking once now and then.
 //
-// Each net: one fissure per `px` of stem width around it, run length
+// The net: one groove per `px` of stem width around it, run length
 // (points along the stem), sideways drift and wander, subdivision levels,
 // fork depth, line width share.
 //
 const MAIN_TWIST = 0.004
-const OAK_NET = { px: 4.5, runMin: 14, runRange: 34, runAvg: 24, drift: 0.3, wander: 0.6, subdiv: 4, depth: 3, w: 1 }
-const OAK_FINE_NET = { px: 2.2, runMin: 4, runRange: 9, runAvg: 7, drift: 0.5, wander: 0.8, subdiv: 3, depth: 3, w: 0.55 }
+const OAK_NET = { px: 13, runMin: 40, runRange: 60, runAvg: 70, drift: 0.15, wander: 0.35, subdiv: 4, depth: 1, w: 1 }
 //
 // Every vine at least this wide (trunk stems, the branches to the leaves,
 // their brushes, the thicker winding vines) gets the oak bark; thinner
@@ -191,32 +197,10 @@ const OAK_FORK_TURN_RANGE = 0.35
 const OAK_FORK_LEN = 0.35
 const OAK_FORK_LEN_RANGE = 0.3
 const OAK_FADE = 0.62
-const OAK_CROSS_EVERY = 1
-const OAK_CROSS_CHANCE = 0.6
-const OAK_CROSS_SPAN = 0.15
-const OAK_CROSS_SPAN_RANGE = 0.25
-const OAK_CROSS_SAG = 0.6
-const OAK_CROSS_W = 0.55
 const OAK_W = 2.8
 const OAK_MIN_W = 0.5
 const OAK_SHADE_W = 1.3
 const OAK_SHADE_ALPHA = 0.3
-//
-// Bark scales: clusters per point of stem length and per px of width,
-// sub-clusters per cluster, scales per sub-cluster, their spread (points
-// along / angle around, halving each level), size across the stem.
-//
-const SCALE_CLUSTERS = 0.025
-const SCALE_SUBS = 3
-const SCALE_PER_SUB = 4
-const SCALE_SPREAD_V = 4
-const SCALE_SPREAD_U = 0.5
-const SCALE_LEN = 0.09
-const SCALE_LEN_RANGE = 0.08
-const SCALE_TILT = 0.4
-const SCALE_LIT_ALPHA = 0.75
-const SCALE_SHADOW_ALPHA = 0.6
-const SCALE_W = 1
 const TWIST_FLIP_CHANCE = 0.5
 //
 // Broken plates: short cross cracks between neighbouring deep furrows,
@@ -248,7 +232,7 @@ const KNOT_LIT_TO = Math.PI * 1.7
 //
 // Lichen speckles on the bark (rare warm accent).
 //
-const LICHEN_CLUSTERS = 9
+const LICHEN_CLUSTERS = 3
 const LICHEN_DOTS = 6
 const LICHEN_SPREAD = 7
 const LICHEN_R_MIN = 0.8
@@ -257,7 +241,7 @@ const LICHEN_ACROSS = 0.35
 //
 // Ivy patches clinging to the main vine, thicker toward the foot.
 //
-const IVY_PATCHES = 10
+const IVY_PATCHES = 2
 const IVY_LOW_BIAS = 1.6
 const IVY_T_MAX = 0.92
 const IVY_ACROSS = 0.45
@@ -315,10 +299,10 @@ const STEM_PLANT_TILT_MIN = 0.4
 const STEM_PLANT_TILT_RANGE = 0.7
 const STEM_PLANT_EYE_CLEAR = 2.5
 const STEM_PLANT_TRIES = 6
-const FERNS = 12
+const FERNS = 4
 const FERN_SCALE_MIN = 0.45
 const FERN_SCALE_RANGE = 0.3
-const TUFTS = 12
+const TUFTS = 4
 const TUFT_BLADES_MIN = 5
 const TUFT_BLADES_RANGE = 4
 const TUFT_SPREAD = 1.1
@@ -338,21 +322,10 @@ const MOSS_SPREAD = 0.45
 const MOSS_R_MIN = 1.4
 const MOSS_R_RANGE = 3
 //
-// The plant is painted on its own layer (world box below), tinted with the
-// lake's water under the surface and clipped at the lake bed, so its foot
-// stands in the water and grows out of the bed.
+// The plant is painted on its own layer (world box below), for the menu
+// picture.
 //
 const LAYER = { x1: 280, y1: 360, x2: 1040 }
-//
-// The trunk's foot is also drawn in front of the hero (he passes behind
-// it at the bottom): the plant's bake from FRONT_FROM_Y down to the lake
-// surface (the water is drawn over what lies below), fading in over
-// FRONT_FADE px at the top so a jump never shows a hard cut across him.
-//
-const FRONT_FROM_Y = 1480
-const FRONT_FADE = 40
-const MASK_CLEAR = 'rgba(0, 0, 0, 0)'
-const MASK_SOLID = 'rgba(0, 0, 0, 1)'
 //
 // Heaps of stones on the lake bed around the foot (the walls' light-grey
 // rubble, stones of many sizes), lying at random: each at an offset from
@@ -396,7 +369,7 @@ const STONE_FERN_TILT = 0.5
 // Greens over the trunk's foot: very dense at the waterline, thinning as
 // the vines climb (bias pushes picks toward the foot).
 //
-const FOOT_CLUSTERS = 90
+const FOOT_CLUSTERS = 34
 const FOOT_BIAS = 2.4
 const FOOT_T_MAX = 0.42
 const FOOT_ACROSS = 1.3
@@ -406,8 +379,8 @@ const FOOT_SPREAD = 14
 const FOOT_LEAF_MIN = 4.5
 const FOOT_LEAF_RANGE = 3
 const FOOT_HANG = 0.9
-const FOOT_FERNS = 22
-const FOOT_TUFTS = 22
+const FOOT_FERNS = 8
+const FOOT_TUFTS = 8
 const FOOT_FERN_SCALE = 0.45
 const FOOT_FERN_RANGE = 0.35
 const FOOT_TILT = 0.9
@@ -417,55 +390,57 @@ const STEM_PLANT_BIAS = 1.8
 // Short moss strands baked onto the vines (the long ones sway, see
 // plant-strands.js): count, where along the host, length.
 //
-const ROPE_STRANDS = 26
+const ROPE_STRANDS = 10
 const ROPE_STRAND_MIN_Z = 0.2
 const ROPE_STRAND_LEN_MIN = 18
 const ROPE_STRAND_LEN_RANGE = 70
 //
 // Thorns right of the second leaf.
 //
-const THORN_STEP_MIN = 9
-const THORN_STEP_RANGE = 8
-const THORN_LEN_MIN = 12
-const THORN_LEN_RANGE = 16
-const THORN_W_MIN = 5
-const THORN_W_RANGE = 4
+const THORN_STEP_MIN = 20
+const THORN_STEP_RANGE = 14
+const THORN_LEN_MIN = 26
+const THORN_LEN_RANGE = 26
+const THORN_W_MIN = 8
+const THORN_W_RANGE = 5
 const THORN_SINK = 0.42
 const THORN_TILT = 0.45
-const THORN_CURL = 0.3
+const THORN_CURL = 0.65
 const THORN_BELLY = 0.35
 const THORN_CONTOUR_W = 1.2
 const THORN_LIT_FROM = 0.15
 const THORN_LIT_TO = 0.75
 const THORN_LIT_SHIFT = 0.22
 const THORN_RIGHT_CHANCE = 0.35
-const THORN_STEP_DENSE = 7
-const THORN_STEP_DENSE_RANGE = 6
+const THORN_STEP_DENSE = 18
+const THORN_STEP_DENSE_RANGE = 10
+//
+// Light over the whole plant: warm on the left of the trunk, shade on its
+// right (the change spans this many trunk widths around its axis), so the
+// trunk, its branches and its foot read lit from one side.
+//
+const LIGHT_PASS_SPAN = 1.6
+//
+// Up the plant: the top a little warmer and lighter, the foot cooler and
+// darker (sinking into the dark of the cave); soft, no hard beams.
+//
+const TOP_WARM_ALPHA = 0.14
+const FOOT_COOL_ALPHA = 0.22
+const FOOT_COOL_FROM = 0.6
+//
+// Contact shadows: where a root runs over the stones behind it, and where
+// an eye's stalk leaves the trunk (radius per px of width, opacity).
+//
+const ROOT_SHADOW_W = 1.8
+const ROOT_SHADOW_ALPHA = 0.5
+const ROOT_SHADOW_DROP = 0.5
+const STALK_SHADOW_R = 1.3
+const STALK_SHADOW_ALPHA = 0.55
+const LIGHT_WARM_ALPHA = 0.3
+const LIGHT_SHADE_ALPHA = 0.6
 const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 
-/**
- * Paints the whole plant body (no leaves) into a world-sized canvas: on its
- * own layer, tinted under the water line and clipped at the lake bed.
- * @param {CanvasRenderingContext2D} ctx
- * @param {() => number} rng - Seeded random
- * @param {Object} lake - Lake instance (bed line)
- * @returns {{canvas: HTMLCanvasElement, x: number, y: number}} The trunk's
- *   foot down to the lake surface, to draw in front of the hero (canvas at
- *   world x / y)
- */
-export function paintPlant(ctx, rng, lake) {
-  const layer = plantLayerCanvas(rng)
-  const lctx = layer.getContext('2d')
-  Lake.tintUnderwater(lctx, layer.width, layer.height, Layout.LAKE_SURFACE_Y - LAYER.y1)
-  ctx.save()
-  Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
-  ctx.drawImage(layer, LAYER.x1, LAYER.y1)
-  ctx.restore()
-  const front = footFront(layer, lake)
-  layer.width = 0
-  return front
-}
 /**
  * Paints the plant body alone, without the lake (no water tint, no bed
  * clip), for a picture outside the level (the menu).
@@ -490,27 +465,6 @@ function plantLayerCanvas(rng) {
   return layer
 }
 //
-// The plant's bake between FRONT_FROM_Y and the lake surface, clipped at
-// the bed like the bake itself, fading in at the top.
-//
-function footFront(layer, lake) {
-  const canvas = document.createElement('canvas')
-  canvas.width = layer.width
-  canvas.height = Layout.LAKE_SURFACE_Y - FRONT_FROM_Y
-  const ctx = canvas.getContext('2d')
-  ctx.translate(-LAYER.x1, -FRONT_FROM_Y)
-  Lake.clipToBed(ctx, lake, 0, 0, Layout.WORLD_W, Layout.WORLD_H)
-  ctx.drawImage(layer, LAYER.x1, LAYER.y1)
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  const fade = ctx.createLinearGradient(0, 0, 0, FRONT_FADE)
-  fade.addColorStop(0, MASK_CLEAR)
-  fade.addColorStop(1, MASK_SOLID)
-  ctx.globalCompositeOperation = 'destination-in'
-  ctx.fillStyle = fade
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  return { canvas, x: LAYER.x1, y: FRONT_FROM_Y }
-}
-//
 // Everything of the plant, in world coordinates: bed stones behind, the
 // vines back to front, bed stones in front, then the greens.
 //
@@ -523,8 +477,10 @@ function paintPlantLayer(ctx, rng) {
   paintScree(ctx, rng)
   paintBedStones(ctx, backStones, rng)
   paintGaps(ctx, shape.axis)
-  const vines = [...shape.vines, ...shape.eyeStalks].map((pts, i) => prepareVine(pts, rng, i < shape.stemCount))
+  paintRootShadows(ctx, shape.roots)
+  const vines = [...shape.vines, ...shape.eyeStalks, ...shape.roots].map((pts, i) => prepareVine(pts, rng, i < shape.stemCount, i % 2 === 1))
   vines.flatMap(depthPieces).sort((a, b) => a.z - b.z).forEach(piece => paintPiece(ctx, piece, shape.eyes, rng))
+  paintStalkShadows(ctx, shape.eyeStalks)
   paintBedStones(ctx, frontStones, rng)
   paintLichen(ctx, shape.axis, rng)
   paintIvy(ctx, shape.axis, rng)
@@ -532,18 +488,72 @@ function paintPlantLayer(ctx, rng) {
   paintFootFoliage(ctx, shape, rng)
   paintStemPlants(ctx, shape, rng)
   paintRopeStrands(ctx, shape.vines, rng)
+  paintPlantLight(ctx, shape.axis)
   paintThorns(ctx, shape.axis, rng)
 }
-
-/**
- * Points on the plant's near vines where long swaying strands hang from.
- * @param {number} count - How many
- * @param {() => number} rng - Seeded random
- * @returns {Array<{x: number, y: number}>}
- */
-export function ropeStrandAnchors(count, rng) {
-  return ropeStrandAnchorsFrom(plantShape().vines, count, rng)
+//
+// Soft shadow the roots cast on the stones behind them (painted only over
+// what is already there).
+//
+function paintRootShadows(ctx, roots) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-atop'
+  roots.forEach(pts => band(ctx, pts.map(p => ({ ...p, y: p.y + p.w * ROOT_SHADOW_DROP })), ROOT_SHADOW_W, 0, 0, css(CAVE_PAL.plantWood[0], ROOT_SHADOW_ALPHA), ROUND_CAPS))
+  ctx.restore()
 }
+//
+// A soft dark where each eye's stalk leaves the trunk.
+//
+function paintStalkShadows(ctx, stalks) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-atop'
+  stalks.forEach(pts => {
+    const p = pts[0]
+    const r = p.w * STALK_SHADOW_R
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r)
+    g.addColorStop(0, css(CAVE_PAL.plantWood[0], STALK_SHADOW_ALPHA))
+    g.addColorStop(1, css(CAVE_PAL.plantWood[0], 0))
+    ctx.fillStyle = g
+    ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2)
+  })
+  ctx.restore()
+}
+//
+// Warm light from the left, shade to the right, over everything painted
+// so far (strip by strip along the trunk; above its top the last strip's
+// light carries on); then the top a little warmer, the foot cooler.
+//
+function paintPlantLight(ctx, axis) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-atop'
+  for (let i = 1; i < axis.length; i++) {
+    const a = axis[i - 1]
+    const b = axis[i]
+    ctx.fillStyle = sideLight(ctx, a)
+    ctx.fillRect(LAYER.x1, b.y, LAYER.x2 - LAYER.x1, a.y - b.y)
+  }
+  const top = axis[axis.length - 1]
+  ctx.fillStyle = sideLight(ctx, top)
+  ctx.fillRect(LAYER.x1, LAYER.y1, LAYER.x2 - LAYER.x1, top.y - LAYER.y1 + 1)
+  const height = ctx.createLinearGradient(0, LAYER.y1, 0, Layout.LAKE_SURFACE_Y)
+  height.addColorStop(0, css(CAVE_PAL.plantWarm, TOP_WARM_ALPHA))
+  height.addColorStop(FOOT_COOL_FROM, css(CAVE_PAL.plantCool, 0))
+  height.addColorStop(1, css(CAVE_PAL.plantCool, FOOT_COOL_ALPHA))
+  ctx.fillStyle = height
+  ctx.fillRect(LAYER.x1, LAYER.y1, LAYER.x2 - LAYER.x1, Layout.WORLD_H - LAYER.y1)
+  ctx.restore()
+}
+function sideLight(ctx, p) {
+  const half = p.w * LIGHT_PASS_SPAN / 2
+  const shade = CAVE_PAL.plantWood[1]
+  const g = ctx.createLinearGradient(p.x - half, 0, p.x + half, 0)
+  g.addColorStop(0, css(CAVE_PAL.plantWarm, LIGHT_WARM_ALPHA))
+  g.addColorStop(HALF, css(CAVE_PAL.plantWarm, 0))
+  g.addColorStop(HALF, css(shade, 0))
+  g.addColorStop(1, css(shade, LIGHT_SHADE_ALPHA))
+  return g
+}
+
 //
 // Deep shadow inside the stem rope: the gaps between the stems read dark.
 //
@@ -560,16 +570,17 @@ function woodTones(step) {
   return wood.map((tone, i) => (i === 0 ? tone : wood[Math.max(1, i - step)]))
 }
 //
-// A vine ready to paint in pieces: its tones, rough silhouette and bark
-// worked out on the whole vine, so neither restarts at a cut.
+// A vine ready to paint in pieces: its tones (trunk stems khaki wood, every
+// other thin vine greener olive), rough silhouette and bark worked out on
+// the whole vine, so neither restarts at a cut.
 //
-function prepareVine(pts, rng, main) {
+function prepareVine(pts, rng, main, olive) {
   const step = main ? MAIN_STEP : 0
   const maxW = Math.max(...pts.map(p => p.w))
   const deep = Math.max(DEEP_MIN, Math.min(DEEP_MAX, Math.round(maxW / FURROW_PX)))
   const twist = (rng() < TWIST_FLIP_CHANCE ? -1 : 1) * (main ? MAIN_TWIST : BARK_TWIST)
   const bark = maxW >= OAK_MIN_VINE_W ? oakBarkFor(pts, rng, maxW) : barkFor(pts, rng, deep, deep * FINE_PER_DEEP, twist)
-  return { pts, stem: main, tones: woodTones(step), rough: roughen(pts), bark }
+  return { pts, stem: main, tones: !main && olive ? CAVE_PAL.plantVine : woodTones(step), rough: roughen(pts), bark }
 }
 //
 // Index spans of one vine where its depth stays in one band, padded past
@@ -606,22 +617,25 @@ function paintPiece(ctx, piece, eyes, rng) {
   z > AO_MIN_Z && paintOcclusion(ctx, pts, tones[0], caps, vine.stem ? STEM_AO_ALPHA : AO_ALPHA)
   paintCylinder(ctx, pts, rough, tones, caps, vine.stem ? STEM_CONTOUR_EXTRA : CONTOUR_EXTRA)
   paintBarkSpan(ctx, vine.pts, vine.bark, tones, a, b, z > PLATE_MIN_Z, rng)
-  z < 0 && band(ctx, rough, 1, CONTOUR_EXTRA, 0, css(tones[0], DEPTH_SHADE * -z), caps)
+  z < 0 && band(ctx, rough, 1, CONTOUR_EXTRA, 0, css(tones[1], DEPTH_SHADE * -z), caps)
   z > KNOT_MIN_Z && rng() < KNOT_CHANCE && paintPieceKnot(ctx, pts, eyes, tones)
   z > MOSS_MIN_Z && paintMoss(ctx, pts, rng)
   z > LEAF_MIN_Z && paintVineLeaves(ctx, pts, rng)
 }
 //
-// Contour and base on the rough silhouette, then shadow band, dark edge
-// and a soft lit band (bark has no gloss; the light gathers on plate lips).
+// Contour and base on the rough silhouette, then the shadow half, its dark
+// core, the cool bounce on the shadow edge, the warm lit band and its
+// highlight.
 //
 function paintCylinder(ctx, pts, rough, tones, caps, outline = CONTOUR_EXTRA) {
-  const [contour, deep, dark, mid, light] = tones
+  const [contour, deep, dark, mid, light, high] = tones
   band(ctx, rough, 1, outline, 0, css(contour), caps)
   band(ctx, rough, 1, 0, 0, css(mid), caps)
   band(ctx, pts, SHADOW_W, 0, SHADOW_OFF, css(dark), caps)
   band(ctx, pts, EDGE_W, 0, EDGE_OFF, css(deep, EDGE_ALPHA), caps)
+  band(ctx, pts, BOUNCE_W, 0, BOUNCE_OFF, css(CAVE_PAL.plantRim, BOUNCE_ALPHA), caps)
   band(ctx, pts, LIT_W, 0, -LIT_OFF, css(light, LIT_ALPHA), caps)
+  band(ctx, pts, HIGH_W, 0, -HIGH_OFF, css(high, HIGH_ALPHA), caps)
 }
 //
 // Strand points with a lumpy width and a slightly wandering centre.
@@ -701,16 +715,16 @@ function barkFor(pts, rng, deep, fine, twist) {
   const frames = strandFrames(pts)
   return {
     frames,
-    deep: furrowAngles(frames, rng, DEEP_FURROWS, deep, twist),
-    fine: furrowAngles(frames, rng, FINE_FURROWS, fine, twist),
-    fibres: furrowAngles(frames, rng, FIBRES, deep * FIBRES_PER_DEEP, twist),
-    oak: [],
-    scales: null
+    deep: furrowAngles(frames, rng, DEEP_FURROWS, Math.ceil(deep * THIN_GROOVES), twist),
+    fine: [],
+    fibres: [],
+    oak: []
   }
 }
 //
-// Oak bark of a trunk stem: no regular furrows or fibres, only the fissure
-// net between lit plates.
+// Bark of a trunk stem or thick vine: only a few long irregular grooves
+// running with the growth (the form reads by its light and shade, not by
+// fine texture).
 //
 function oakBarkFor(pts, rng, maxW) {
   const len = pts.length
@@ -719,8 +733,7 @@ function oakBarkFor(pts, rng, maxW) {
     deep: [],
     fine: [],
     fibres: [],
-    oak: [...oakFissures(len, maxW, OAK_NET, rng), ...crossBreaks(len, rng), ...oakFissures(len, maxW, OAK_FINE_NET, rng)],
-    scales: barkScales(len, maxW, rng)
+    oak: oakFissures(len, maxW, OAK_NET, rng)
   }
 }
 //
@@ -735,19 +748,6 @@ function oakFissures(len, maxW, net, rng) {
     const v = rng() * len
     const to = { v: Math.min(len - 1, v + net.runMin + rng() * net.runRange), u: u + (rng() - HALF) * net.drift }
     addFissure(lines, { v, u }, to, net, net.depth, net.w, rng)
-  }
-  return lines
-}
-//
-// Short sagging breaks across the ridges, splitting them into plates.
-//
-function crossBreaks(len, rng) {
-  const lines = []
-  for (let v = 0; v < len - 1; v += OAK_CROSS_EVERY) {
-    if (rng() > OAK_CROSS_CHANCE) continue
-    const u = rng() * FULL_TURN
-    const span = OAK_CROSS_SPAN + rng() * OAK_CROSS_SPAN_RANGE
-    lines.push({ pts: [{ v, u }, { v: v + OAK_CROSS_SAG, u: u + span / 2 }, { v, u: u + span }], w: OAK_CROSS_W })
   }
   return lines
 }
@@ -774,56 +774,6 @@ function addFissure(lines, a, b, net, depth, w, rng) {
     const turn = (rng() < HALF ? -1 : 1) * (OAK_FORK_TURN + rng() * OAK_FORK_TURN_RANGE)
     addFissure(lines, from, { v: from.v + len, u: from.u + turn }, net, depth - 1, w * OAK_FADE, rng)
   }
-}
-//
-// Tiny bark scales in clusters of sub-clusters (each level half as spread
-// out), each a short flake across the stem.
-//
-function barkScales(len, maxW, rng) {
-  const scales = []
-  const clusters = Math.round(len * maxW * SCALE_CLUSTERS)
-  for (let c = 0; c < clusters; c++) {
-    const centre = { v: rng() * len, u: rng() * FULL_TURN }
-    for (let s = 0; s < SCALE_SUBS; s++) {
-      const sub = { v: centre.v + (rng() - HALF) * SCALE_SPREAD_V, u: centre.u + (rng() - HALF) * SCALE_SPREAD_U }
-      for (let k = 0; k < SCALE_PER_SUB; k++) {
-        scales.push({
-          v: sub.v + (rng() - HALF) * SCALE_SPREAD_V * HALF,
-          u: sub.u + (rng() - HALF) * SCALE_SPREAD_U * HALF,
-          len: SCALE_LEN + rng() * SCALE_LEN_RANGE,
-          tilt: (rng() - HALF) * SCALE_TILT
-        })
-      }
-    }
-  }
-  return scales.filter(sc => sc.v >= 0 && sc.v < len - 1)
-}
-//
-// Bark scales between two point indices on the visible face: a dark
-// shadow under each flake, its lit upper edge.
-//
-function paintScales(ctx, pts, frames, scales, tones, from, to) {
-  const [contour, , , , light] = tones
-  scales.forEach(sc => {
-    if (sc.v < from || sc.v > to) return
-    const a = onStem(pts, frames, { v: sc.v, u: sc.u - sc.len / 2 })
-    const b = onStem(pts, frames, { v: sc.v + sc.tilt, u: sc.u + sc.len / 2 })
-    if (a.face < FACE_MIN || b.face < FACE_MIN) return
-    const scale = Math.min(1, a.w / BARK_REF_W)
-    const down = { x: -a.g.y, y: a.g.x }
-    const shift = { x: down.x * SCALE_W, y: down.y * SCALE_W }
-    ctx.lineWidth = SCALE_W * scale + RIM_MIN_W
-    ctx.strokeStyle = css(contour, SCALE_SHADOW_ALPHA * a.face)
-    ctx.beginPath()
-    ctx.moveTo(a.x + shift.x, a.y + shift.y)
-    ctx.lineTo(b.x + shift.x, b.y + shift.y)
-    ctx.stroke()
-    ctx.strokeStyle = css(light, SCALE_LIT_ALPHA * a.face)
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
-  })
 }
 //
 // Fissure segments that fall between two point indices, on the visible
@@ -865,7 +815,7 @@ function onStem(pts, frames, at) {
 }
 //
 // Bark between two point indices: deep furrows, broken plates between
-// them, fine cracks, pale fibres, then the oak net and bark scales.
+// them, fine cracks, pale fibres, then the long grooves.
 //
 function paintBarkSpan(ctx, pts, bark, tones, a, b, plates, rng) {
   bark.deep.forEach(row => paintFurrow(ctx, pts, bark.frames, row, tones, DEEP_FURROWS, a, b))
@@ -873,7 +823,6 @@ function paintBarkSpan(ctx, pts, bark, tones, a, b, plates, rng) {
   bark.fine.forEach(row => paintFurrow(ctx, pts, bark.frames, row, tones, FINE_FURROWS, a, b))
   bark.fibres.forEach(row => paintFurrow(ctx, pts, bark.frames, row, tones, FIBRES, a, b))
   paintFissures(ctx, pts, bark.frames, bark.oak, tones, a, b)
-  bark.scales && paintScales(ctx, pts, bark.frames, bark.scales, tones, a, b)
 }
 //
 // Side normal, unit tangent and distance along the strand at every point.
@@ -1366,7 +1315,7 @@ function paintLeafCluster(ctx, x, y, rng) {
 // Height share of a world Y on the plant (0 at the foot, 1 at the top leaf).
 //
 function heightShare(y) {
-  const top = Math.min(...Layout.PLANT_LEAVES.map(l => l.y))
+  const top = Math.min(...Layout.PLANT_ART_LEAVES.map(l => l.y))
   return Math.max(0, Math.min(1, (PLANT_FOOT.y - y) / (PLANT_FOOT.y - top)))
 }
 //
@@ -1497,11 +1446,12 @@ function axisIndexAtY(axis, y) {
   return best
 }
 //
-// One thorn: a tapered hook from a base on the bark along a direction,
-// its tip curling toward `up`; dark rim, lit streak along its upper side.
+// One thorn: a tapered claw from a base on the bark along a direction, its
+// tip curling toward `up`; dark red at the base turning orange-red toward
+// the tip, dark rim, lit streak along its upper side.
 //
 function paintThorn(ctx, base, dir, up, len, w) {
-  const [dark, mid, light] = CAVE_PAL.plantThorn
+  const [dark, deep, mid, light] = CAVE_PAL.plantThorn
   const side = { x: -dir.y, y: dir.x }
   const tip = { x: base.x + dir.x * len + up.x * len * THORN_CURL, y: base.y + dir.y * len + up.y * len * THORN_CURL }
   const mid1 = { x: base.x + dir.x * len * HALF, y: base.y + dir.y * len * HALF }
@@ -1512,7 +1462,10 @@ function paintThorn(ctx, base, dir, up, len, w) {
   ctx.quadraticCurveTo(mid1.x + side.x * w * THORN_BELLY, mid1.y + side.y * w * THORN_BELLY, tip.x, tip.y)
   ctx.quadraticCurveTo(mid1.x - side.x * w * THORN_BELLY, mid1.y - side.y * w * THORN_BELLY, b.x, b.y)
   ctx.closePath()
-  ctx.fillStyle = css(mid)
+  const shade = ctx.createLinearGradient(base.x, base.y, tip.x, tip.y)
+  shade.addColorStop(0, css(deep))
+  shade.addColorStop(1, css(mid))
+  ctx.fillStyle = shade
   ctx.fill()
   ctx.strokeStyle = css(dark)
   ctx.lineWidth = THORN_CONTOUR_W

@@ -1,74 +1,56 @@
 import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y } from './forest-eye-berry.js'
-import { FOREST_PAL, getTreePaletteColor, forestRgb } from './forest-palette.js'
-import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-parallax-grain.js'
-import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
-import { TREE_SEED, collectForestTreeClusterLeaves, paintForestTreeClusterLeaves, paintForestTreeFoliageMask } from './forest-tree.js'
+import { FOREST_PAL, forestRgb } from './forest-palette.js'
 
 //
-// Decorative canopy fruit on the main forest tree (game palette only).
-//
-const FRUIT_SEED_OFFSET = 8803
-const FRUIT_RANDOM_COUNT = 7
+// The knockable apple of the left big forest tree (its picture hangs in the
+// crown; the hero knocks it loose from the start branch), falling, resting
+// and being eaten.
 //
 // Fallen anchor fruit vanishes after this if the centipede never claims it.
 //
 const FRUIT_GROUND_LINGER_SEC = 10
+//
+// Bites on a picture fruit are round, like real bites, taken off the side
+// facing the eater. Each bite moves that side's front line toward the far
+// edge of what is left by an even share of the bites still to come, so the
+// fruit always shrinks from the eater's side and is gone by the last bite,
+// even when a meal is broken off and taken up again from the other side
+// (each side keeps its own line). A bite takes up to BITE_PER_TURN round
+// pieces (radius BITE_R of the fruit's, a little random) out of the bands of
+// the body (BITE_BANDS: heights, shares of its half-height) that still stick
+// out past that line, the most protruding first. The body is sampled on a
+// grid of BITE_GRID x BITE_GRID points (squashed like the drawn fruit); the
+// cut edge shows the pale flesh.
+//
+const BITE_R = 0.42
+const BITE_R_RANGE = 0.12
+const BITE_BANDS = [-0.6, 0, 0.6]
+const BITE_PER_TURN = 2
+const BITE_JITTER_X = 0.08
+const BITE_JITTER_Y = 0.12
+//
+// Past the front line plus this share of the radius nothing of the fruit is
+// left (thin slivers between round bites are cut off too).
+//
+const BITE_LINE_SLACK = 0.18
+const BITE_GRID = 24
+const BITE_SQUASH_Y = 0.92
+const BITE_FLESH_W = 2
 const FRUIT_GROUND_FADE_SEC = 0.9
-const FRUIT_ANCHOR_R = 8.5
 const FRUIT_ANCHOR_HUE = 0.62
 //
-// Fruit hangs from the free tips of thin twigs on a short visible stem.
+// Fruit hangs on a short visible stem.
 //
-const FRUIT_TWIG_TIP_MAX_W = 3.2
-const FRUIT_TIP_STEM_LEN_MIN = 5
-const FRUIT_TIP_STEM_LEN_RANGE = 3
-const FRUIT_TIP_LEAN_MAX = 0.35
 const FRUIT_STEM_W = 1.8
 const FRUIT_STEM_CONTOUR_W = 1
 //
-// The fruit must touch painted foliage (ring cover). Depth = distance to the
-// crown's silhouette: fruit on the front edge is big and bright, fruit deep
-// inside is small, darker and partly hidden behind canopy leaves re-painted
-// on top of it.
+// The knocked apple's ground strip: this far from the trunk and from the
+// branch trampoline's grass clearing.
 //
-const FRUIT_DEPTH_RING_PAD = 5
-const FRUIT_DEPTH_RING_SAMPLES = 16
-const FRUIT_DEPTH_MIN_COVER = 0.3
-const FRUIT_EDGE_DEPTH_PX = 28
-const FRUIT_EDGE_RAYS = 12
-const FRUIT_EDGE_STEP_PX = 3
-const FRUIT_R_NEAR = 11
-const FRUIT_R_DEEP = 5
-const FRUIT_R_JITTER = 0.8
-const FRUIT_R_PROBE = 8
-const FRUIT_HUE_NEAR = 0.8
-const FRUIT_HUE_DEEP = 0.2
-const FRUIT_COVER_DEPTH_MIN = 0.12
-const FRUIT_COVER_FRAC_MIN = 0.2
-const FRUIT_COVER_FRAC_MAX = 0.42
-const FRUIT_COVER_FRAC_JITTER = 0.35
-const FRUIT_COVER_SKIP_CHANCE = 0.35
-const FRUIT_COVER_SIDE_JITTER = 0.8
-const FRUIT_COVER_SIDE_MIN = 0.7
-const FRUIT_COVER_CHORD_SCALE = 1.75
-const FRUIT_COVER_LEAF_REACH = 0.25
-const FRUIT_COVER_LEAF_CENTROID = 0.45
-const FRUIT_COVER_SPRITE = 'forest-tree-fruit-cover'
-const FRUIT_COVER_GRAIN_SEED = 6011
-const FRUIT_COVER_BAKE_PAD = 2
-//
-// Spacing keeps the crown from reading as a polka-dot pattern: no fruit in a
-// vertical stack, none crowded against another.
-//
-const FRUIT_MIN_SPACING = 42
-const FRUIT_STACK_DX = 24
-const FRUIT_STACK_DY = 90
 const ANCHOR_DROP_LEFT_PAD = 16
 const ANCHOR_DROP_RIGHT_PAD = 12
-const ANCHOR_LEAF_TARGET_Y_OFFSET = 48
-const ANCHOR_Y_SCORE_WEIGHT = 0.25
 const FRUIT_STEM_LEN = 4
 const FRUIT_CONTOUR_W = 1.2
 const FRUIT_Z = CFG.visual.zIndex.platforms - 1
@@ -78,7 +60,6 @@ const FRUIT_FALL_GRAVITY = 1650
 // below the floor line) so it nests in the grass instead of hovering above it.
 //
 const FRUIT_GROUND_SINK = 5
-const FRUIT_LEAF_SEED = 9917
 const FRUIT_BOUNCE_RESTITUTION_FIRST = 0.36
 const FRUIT_BOUNCE_RESTITUTION_SECOND = 0.2
 const FRUIT_BOUNCE_MIN_VY = 95
@@ -86,23 +67,6 @@ const FRUIT_BOUNCE_MAX_COUNT = 2
 const FRUIT_LAND_ROLL_SPEED = 46
 const FRUIT_ROLL_FRICTION = 720
 const FRUIT_SETTLE_VX = 5
-const FRUIT_WOOD_SEGMENT_PAD = 10
-const HORIZ_BRANCH_FRUIT_EXCLUDE_X_PAD = 34
-const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_ABOVE = 22
-const HORIZ_BRANCH_FRUIT_EXCLUDE_Y_BELOW = 110
-const ANCHOR_CANOPY_MIN_ABOVE_BRANCH = 40
-const FRUIT_CLUSTER_MIN_CELLS = 5
-const FRUIT_CLUSTER_MIN_SPAN_CELLS = 2
-//
-// Foliage coverage mask: two rings outside the fruit edge. Only near-opaque
-// mask pixels count — anti-aliased leaf rims and faint loose leaves read as
-// air on screen, so a fruit resting on them looked like it was floating.
-//
-const FRUIT_MASK_RING_PADS = [3, 7]
-const FRUIT_MASK_RING_SAMPLES = 12
-const FRUIT_MASK_RING_MIN_COVERED = 12
-const FRUIT_CLUSTER_MIN_NEIGHBOR_AVG = 1.5
-const FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN = 3
 //
 // Keep fallen fruit in front of the right trampoline cap so the centipede's
 // feast stays visible (same cap scale as forest level0 TRAMP_RADIUS).
@@ -110,12 +74,6 @@ const FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN = 3
 const FOREST_RIGHT_TRAMP_CAP_HALF = 38
 const FOREST_FRUIT_TRAMP_ROLL_CLEAR = 16
 const FOREST_FRUIT_TRAMP_HIDE_X_MAX = 148
-const FRUIT_MASK_ALPHA_MIN = 235
-const FRUIT_MASK_SOLID_GRID_STEP = 3
-const FRUIT_MASK_SOLID_GRID_RADIUS = 4
-const FOLIAGE_MASK_CELL_PAD_MULT = 2
-const FRUIT_CANOPY_MIN_ABOVE_BRANCH = 52
-const FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP = 36
 
 /**
  * X centre of the strip between trunk and branch trampoline (for anchor foliage pick).
@@ -161,39 +119,14 @@ export function isForestAnchorFruitGroundX(x, cfg) {
 }
 
 /**
- * Builds fruit attachment points (repeatable anchor on foliage + random canopy spots).
- * @param {Object} treeData - Output from buildForestTree()
- * @param {Object} anchorDropCfg - Trunk/tramp layout for anchor cluster pick
- * @param {number} [anchorDropCfg.minHangY] - Topmost on-screen world Y; fruit above it is never placed
- * @returns {Array<Object>}
+ * The knockable apple hanging in the crown, drawn from a picture (the
+ * crown's other apples are painted into the tree itself).
+ * @param {{x: number, y: number, r: number}} hang - Its body's centre and radius
+ * @param {{sprite: string, w: number, h: number, dx: number, dy: number}} picture - Its sprite, size and top-left offset from the body's centre
+ * @returns {Array<Object>} Fruit spots
  */
-export function buildForestTreeFruitSpots(treeData, anchorDropCfg) {
-  const rng = mulberry32(TREE_SEED + FRUIT_SEED_OFFSET)
-  const hangable = collectHangableTreeFoliage(treeData, anchorDropCfg)
-  if (!hangable.length) return []
-  const cellPx = getTreePaletteColor().foliageClusterCellPx
-  const hang = {
-    treeData,
-    cellPx,
-    mask: buildFoliageMask(treeData, cellPx),
-    minY: anchorDropCfg?.minHangY ?? -Infinity
-  }
-  const tips = collectTwigTipHangs(hang, anchorDropCfg, rng)
-  const anchor = pickAnchorTipHang(tips, anchorDropCfg, treeData.horizBranch) ?? pickAnchorClusterHang(hang, hangable, anchorDropCfg, rng)
-  //
-  // A missing anchor spot only costs the droppable fruit — the rest of the
-  // crown is still hung, so the colour-world tree is never bare.
-  //
-  const spots = anchor ? [anchor] : []
-  const leaves = collectForestTreeClusterLeaves(treeData, getTreePaletteColor())
-  shuffleInPlace(tips, rng)
-  tips.sort((a, b) => Number(b.isTip) - Number(a.isTip))
-  for (const tip of tips) {
-    if (spots.length - (anchor ? 1 : 0) >= FRUIT_RANDOM_COUNT) break
-    if (spots.some(s => fruitSpotsTooClose(s, tip))) continue
-    spots.push(makeTwigFruitSpot(tip, leaves, rng))
-  }
-  return spots
+export function buildFixedForestTreeFruitSpots(hang, picture) {
+  return [{ anchor: true, attached: true, x: hang.x, y: hang.y, r: hang.r, hue: FRUIT_ANCHOR_HUE, vy: 0, leaves: [], picture }]
 }
 
 /**
@@ -227,7 +160,8 @@ export function releaseForestAnchorFruit(levelInst) {
     vy: 0,
     vx: 0,
     rollDir: pickFruitLandRollDir(fruit.x, fruit.y),
-    leaves: fruit.leaves
+    leaves: fruit.leaves,
+    picture: fruit.picture
   })
   return true
 }
@@ -266,6 +200,7 @@ export function restoreFallenAnchorFruit(levelInst, x, floorY) {
     vx: 0,
     rollDir: pickFruitLandRollDir(x, floorY),
     leaves: anchor.leaves,
+    picture: anchor.picture,
     airborne: false,
     settled: true,
     _restFloorY: floorY
@@ -313,16 +248,14 @@ export function tickForestTreeFruits(levelInst, dt, floorY) {
 }
 
 /**
- * Registers a fixed draw layer for tree fruits. Canopy leaves that sit in
- * front of deep fruit are baked once per scene run into one sprite drawn
- * over the fruit, so those apples read as hanging inside the crown.
+ * Registers a fixed draw layer for tree fruits.
  * @param {Object} k - Kaplay inst
  * @param {Object} levelInst - Forest level inst (needs treeFruitSpots)
+ * @param {number} [z=FRUIT_Z] - Draw layer
  */
-export function mountForestTreeFruitLayer(k, levelInst) {
-  levelInst.treeFruitCover = bakeFruitLeafCover(k, levelInst.treeFruitSpots ?? [])
+export function mountForestTreeFruitLayer(k, levelInst, z = FRUIT_Z) {
   k.add([
-    k.z(FRUIT_Z),
+    k.z(z),
     {
       draw() {
         drawForestTreeFruits(levelInst)
@@ -356,6 +289,7 @@ export function drawForestTreeFruits(inst) {
     let op = 1
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
     if (op <= 0.02) return
+    if (fruit.picture) return drawFruitPicture(k, fruit, op)
     const t = fruit.hue ?? 0.5
     const rgb = lerpRgb(bodyA, bodyB, t)
     const col = k.rgb(rgb.r, rgb.g, rgb.b)
@@ -383,8 +317,59 @@ export function drawForestTreeFruits(inst) {
       opacity: op * 0.28
     })
   })
-  const cover = inst.treeFruitCover
-  cover && k.drawSprite({ sprite: FRUIT_COVER_SPRITE, pos: k.vec2(cover.x, cover.y) })
+}
+
+/**
+ * How far what is left of the fruit still reaches from its centre toward
+ * the eater's side (angle 0 = right, PI = left; negative once the bites
+ * have eaten past the centre): a picture fruit's front after its bites, a
+ * drawn fruit's shrinking radius.
+ * @param {Object} fruit - Tree fruit spot
+ * @param {number} angle - Direction from the fruit's centre (radians)
+ * @returns {number}
+ */
+export function getForestFruitReach(fruit, angle) {
+  if (!fruit.picture) return getForestFruitDisplayRadius(fruit)
+  return sideReach(fruit, sideOf(angle))
+}
+
+/**
+ * Takes one bite out of a picture fruit on the side facing the eater: its
+ * front there moves toward the far edge of what is left by an even share of
+ * the bites still to come, and the parts sticking out past it lose a round
+ * piece each, so every bite makes it visibly smaller from that side.
+ * @param {Object} fruit - Tree fruit spot (with a picture)
+ * @param {number} angle - Direction from the fruit toward the eater (0 = right, PI = left)
+ * @param {number} bitesLeft - Bites still to come in this meal, this one included
+ * @param {() => number} rng - Random in [0, 1)
+ */
+export function biteForestPictureFruit(fruit, angle, bitesLeft, rng) {
+  const side = sideOf(angle)
+  const r = fruit.r
+  const near = sideReach(fruit, side)
+  const far = -sideReach(fruit, -side)
+  const line = near - (near - far) / Math.max(1, bitesLeft)
+  const lines = fruit.biteLines ?? {}
+  lines[side] = Math.min(lines[side] ?? Infinity, line + r * BITE_LINE_SLACK)
+  fruit.biteLines = lines
+  const half = r * BITE_SQUASH_Y
+  const band = half * 2 / BITE_BANDS.length
+  const bites = fruit.biteMarks ?? []
+  BITE_BANDS
+    .map(share => ({ y: share * half, front: fruitFront(fruit, side, share * half - band / 2, share * half + band / 2).front }))
+    .filter(b => b.front > line)
+    .sort((a, b) => b.front - a.front)
+    .slice(0, BITE_PER_TURN)
+    .forEach(b => {
+      const br = r * (BITE_R + rng() * BITE_R_RANGE)
+      bites.push({
+        x: side * (line + br + (rng() * 2 - 1) * r * BITE_JITTER_X),
+        y: b.y + (rng() * 2 - 1) * r * BITE_JITTER_Y,
+        r: br
+      })
+    })
+  fruit.biteMarks = bites
+  fruit.biteVersion = (fruit.biteVersion ?? 0) + 1
 }
 
 /**
@@ -392,6 +377,7 @@ export function drawForestTreeFruits(inst) {
  * @returns {number}
  */
 export function getForestFruitDisplayRadius(fruit) {
+  if (fruit.picture) return fruit.r
   const progress = fruit.eatProgress ?? 0
   return fruit.r * (1 - progress * 0.94)
 }
@@ -407,6 +393,108 @@ export function keepForestFruitRestingOnFloor(fruit) {
   fruit.y = fruit._restFloorY - r + FRUIT_GROUND_SINK
 }
 
+//
+// A fruit drawn from its picture: its body's centre on the fruit, always at
+// its full size; eating it only cuts bites out of it.
+//
+function drawFruitPicture(k, fruit, op) {
+  const pic = fruit.picture
+  k.drawSprite({
+    sprite: bittenPicture(k, fruit),
+    pos: k.vec2(fruit.x + pic.dx, fruit.y + pic.dy),
+    width: pic.w,
+    height: pic.h,
+    opacity: op
+  })
+}
+//
+// The fruit's picture with its bites cut out, re-baked only when a new bite
+// is taken (a handful of times per apple).
+//
+function bittenPicture(k, fruit) {
+  const marks = fruit.biteMarks ?? []
+  const version = fruit.biteVersion ?? 0
+  if (!version) return fruit.picture.sprite
+  if (fruit._bitten?.version === version) return fruit._bitten.sprite
+  const src = fruit.picture.canvas
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width
+  canvas.height = src.height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(src, 0, 0)
+  const scale = src.width / fruit.picture.w
+  const cx = -fruit.picture.dx * scale
+  const cy = -fruit.picture.dy * scale
+  Object.entries(fruit.biteLines ?? {}).forEach(([side, at]) => cutPastLine(ctx, cx, Number(side), at * scale, canvas.width))
+  marks.forEach(mark => cutBite(ctx, cx + mark.x * scale, cy + mark.y * scale, mark.r * scale))
+  const sprite = `${fruit.picture.sprite}-bitten-${fruit.biteSeed ?? 0}-${version}`
+  k.loadSprite(sprite, canvas)
+  fruit._bitten = { version, sprite }
+  return sprite
+}
+//
+// Bite side of a direction: 1 = right, -1 = left.
+//
+function sideOf(angle) {
+  return Math.cos(angle) >= 0 ? 1 : -1
+}
+//
+// How far what is left of a picture fruit reaches toward a side: its body
+// past the bites, no further than that side's cut line.
+//
+function sideReach(fruit, side) {
+  return Math.min(fruitFront(fruit, side).front, fruit.biteLines?.[side] ?? Infinity)
+}
+//
+// Everything of the picture past the front line on the eater's side.
+//
+function cutPastLine(ctx, cx, side, at, width) {
+  const x = cx + side * at
+  ctx.clearRect(side > 0 ? x : 0, 0, side > 0 ? width - x : x, ctx.canvas.height)
+}
+//
+// One round bite cut out of the picture, the pale flesh showing along its
+// edge on what is left.
+//
+function cutBite(ctx, x, y, r) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalCompositeOperation = 'source-atop'
+  const flesh = forestRgb(FOREST_PAL.forestTreeFruit.light)
+  ctx.strokeStyle = `rgb(${flesh.r}, ${flesh.g}, ${flesh.b})`
+  ctx.lineWidth = BITE_FLESH_W * 2
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+//
+// What is left of a picture fruit's body, sampled on a grid (offsets from
+// its centre): how far it reaches toward a side (along x), counting only
+// rows between y1 and y2 (all of it by default); -r once nothing is left.
+//
+function fruitFront(fruit, side, y1 = -Infinity, y2 = Infinity) {
+  const r = fruit.r
+  const bites = fruit.biteMarks ?? []
+  let front = -r
+  for (let i = 0; i <= BITE_GRID; i++) {
+    for (let j = 0; j <= BITE_GRID; j++) {
+      const x = (i / BITE_GRID * 2 - 1) * r
+      const y = (j / BITE_GRID * 2 - 1) * r * BITE_SQUASH_Y
+      if (y < y1 || y > y2 || x * side <= front) continue
+      if ((x / r) ** 2 + (y / (r * BITE_SQUASH_Y)) ** 2 > 1) continue
+      if (bites.some(b => (x - b.x) ** 2 + (y - b.y) ** 2 < b.r * b.r)) continue
+      front = x * side
+    }
+  }
+  return { front }
+}
+//
+// Radius a drawn (not picture) fruit is shown at.
+//
 function fruitDisplayRadius(fruit) {
   return getForestFruitDisplayRadius(fruit)
 }
@@ -466,253 +554,6 @@ function buildRaggedFruitPolygon(k, cx, cy, r, biteMarks, seed) {
 }
 
 //
-// Every free twig tip (a segment end no other segment grows from) that can
-// carry a fruit: stem down from the tip, fruit sized by how deep in the
-// crown it hangs.
-//
-function collectTwigTipHangs(hang, anchorDropCfg, rng) {
-  const segs = hang.treeData.branchSegs ?? []
-  const starts = new Set(segs.map(s => `${s.sx},${s.sy}`))
-  const horiz = hang.treeData.horizBranch
-  const canopyMaxY = horiz ? horiz.physY - FRUIT_CANOPY_MIN_ABOVE_BRANCH : Infinity
-  const canopyMaxX = branchTrampX(anchorDropCfg) + FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP
-  const out = []
-  segs.forEach(seg => {
-    if ((seg.w2 ?? seg.w) > FRUIT_TWIG_TIP_MAX_W || seg.ey < hang.minY) return
-    const len = Math.hypot(seg.ex - seg.sx, seg.ey - seg.sy) || 1
-    const lean = Math.max(-FRUIT_TIP_LEAN_MAX, Math.min(FRUIT_TIP_LEAN_MAX, (seg.ex - seg.sx) / len * FRUIT_TIP_LEAN_MAX))
-    const stemLen = FRUIT_TIP_STEM_LEN_MIN + rng() * FRUIT_TIP_STEM_LEN_RANGE
-    const probe = hangFromTip(seg.ex, seg.ey, lean, stemLen, FRUIT_R_PROBE)
-    if (foliageRingCover(hang.mask, probe.x, probe.y, FRUIT_R_PROBE) < FRUIT_DEPTH_MIN_COVER) return
-    const depth = foliageEdgeDepth(hang.mask, probe.x, probe.y)
-    const r = FRUIT_R_NEAR + (FRUIT_R_DEEP - FRUIT_R_NEAR) * depth + (rng() - 0.5) * FRUIT_R_JITTER * 2
-    const pos = hangFromTip(seg.ex, seg.ey, lean, stemLen, r)
-    if (pos.y > canopyMaxY || pos.x > canopyMaxX) return
-    if (horiz && isInHeroBranchFruitExcludeZone(horiz, pos.x, pos.y)) return
-    if (isPointOnTreeWood(hang.treeData, pos.x, pos.y)) return
-    out.push({
-      x: pos.x,
-      y: pos.y,
-      r,
-      depth,
-      inward: foliageInwardSide(hang.mask, pos.x, pos.y),
-      stemX: seg.ex,
-      stemY: seg.ey,
-      isTip: !starts.has(`${seg.ex},${seg.ey}`)
-    })
-  })
-  return out
-}
-//
-// Fruit centre below a twig tip: the stem leans slightly with the twig.
-//
-function hangFromTip(tipX, tipY, lean, stemLen, r) {
-  return {
-    x: tipX + Math.sin(lean) * (stemLen + r),
-    y: tipY + Math.cos(lean) * (stemLen + r)
-  }
-}
-//
-// Share of the ring just outside the fruit that lies on painted leaves.
-//
-function foliageRingCover(mask, x, y, r) {
-  const ringR = r + FRUIT_DEPTH_RING_PAD
-  let covered = 0
-  for (let i = 0; i < FRUIT_DEPTH_RING_SAMPLES; i++) {
-    const a = (i / FRUIT_DEPTH_RING_SAMPLES) * Math.PI * 2
-    isFoliageMaskCovered(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
-  }
-  return covered / FRUIT_DEPTH_RING_SAMPLES
-}
-//
-// 0 on the crown's silhouette, 1 once the nearest gap in the leaves is
-// FRUIT_EDGE_DEPTH_PX away in every direction.
-//
-function foliageEdgeDepth(mask, x, y) {
-  let nearest = FRUIT_EDGE_DEPTH_PX
-  for (let i = 0; i < FRUIT_EDGE_RAYS; i++) {
-    const a = (i / FRUIT_EDGE_RAYS) * Math.PI * 2
-    nearest = Math.min(nearest, foliageRayReach(mask, x, y, a, nearest))
-  }
-  return nearest / FRUIT_EDGE_DEPTH_PX
-}
-//
-// Direction (radians from straight up, clockwise) toward the thickest
-// foliage around a point — cover leaves come from the crown's inner side.
-//
-function foliageInwardSide(mask, x, y) {
-  let sx = 0
-  let sy = 0
-  for (let i = 0; i < FRUIT_EDGE_RAYS; i++) {
-    const a = (i / FRUIT_EDGE_RAYS) * Math.PI * 2
-    const reach = foliageRayReach(mask, x, y, a, FRUIT_EDGE_DEPTH_PX)
-    sx += Math.cos(a) * reach
-    sy += Math.sin(a) * reach
-  }
-  return Math.atan2(sx, -sy)
-}
-function foliageRayReach(mask, x, y, a, maxD) {
-  for (let d = FRUIT_EDGE_STEP_PX; d < maxD; d += FRUIT_EDGE_STEP_PX) {
-    if (!isFoliageMaskCovered(mask, x + Math.cos(a) * d, y + Math.sin(a) * d)) return d
-  }
-  return maxD
-}
-//
-// The anchor fruit drops straight down, so its hang x decides where it lands:
-// keep the twig tip closest to the middle of the trunk–trampoline gap.
-//
-function pickAnchorTipHang(tips, anchorDropCfg, horiz) {
-  const best = pickBestAnchorPos(tips, anchorDropCfg, horiz)
-  if (!best) return null
-  tips.splice(tips.indexOf(best), 1)
-  return {
-    anchor: true,
-    attached: true,
-    x: best.x,
-    y: best.y - best.r + FRUIT_ANCHOR_R,
-    r: FRUIT_ANCHOR_R,
-    hue: FRUIT_ANCHOR_HUE,
-    vy: 0,
-    leaves: [],
-    stemX: best.stemX,
-    stemY: best.stemY
-  }
-}
-//
-// Fallback when no twig tip fits the gap: the old interior-foliage-cell scan.
-// Cells whose fruit would overhang either side of the gap are skipped.
-//
-function pickAnchorClusterHang(hang, hangable, anchorDropCfg, rng) {
-  const cells = []
-  hangable.forEach(leaf => {
-    leaf.cells.forEach(cell => {
-      if (!isFruitClusterCellInterior(leaf.cells, cell)) return
-      const pos = foliageCellCentre(leaf, cell, hang.cellPx)
-      isValidFruitHang(hang, pos.x, pos.y, FRUIT_ANCHOR_R) && cells.push(pos)
-    })
-  })
-  const pos = pickBestAnchorPos(cells, anchorDropCfg, hang.treeData.horizBranch)
-  if (!pos) return null
-  return {
-    anchor: true,
-    attached: true,
-    x: pos.x,
-    y: pos.y,
-    r: FRUIT_ANCHOR_R,
-    hue: FRUIT_ANCHOR_HUE,
-    vy: 0,
-    leaves: makeFruitLeafPair(hashFruitLeafSeed(pos.x, pos.y, FRUIT_ANCHOR_HUE), FRUIT_ANCHOR_R, rng, FRUIT_ANCHOR_HUE)
-  }
-}
-//
-// Lowest score inside the drop gap: distance to the gap middle plus a light
-// pull toward the canopy height just above the hero branch.
-//
-function pickBestAnchorPos(items, anchorDropCfg, horiz) {
-  const { trunkX, trunkHalf, branchTrampX: trampX, trampClearHalf } = anchorDropCfg
-  const gapLeft = trunkX + trunkHalf + ANCHOR_DROP_LEFT_PAD + FRUIT_ANCHOR_R
-  const gapRight = trampX - trampClearHalf - ANCHOR_DROP_RIGHT_PAD - FRUIT_ANCHOR_R
-  const dropX = computeForestAnchorFruitDropX(anchorDropCfg)
-  const ceilingY = horiz ? horiz.physY - ANCHOR_CANOPY_MIN_ABOVE_BRANCH : Infinity
-  const targetY = horiz ? horiz.y - ANCHOR_LEAF_TARGET_Y_OFFSET : 0
-  let best = null
-  let bestScore = Infinity
-  items.forEach(item => {
-    if (item.x < gapLeft || item.x > gapRight || item.y > ceilingY) return
-    const score = Math.abs(item.x - dropX) + Math.abs(item.y - targetY) * ANCHOR_Y_SCORE_WEIGHT
-    if (score >= bestScore) return
-    bestScore = score
-    best = item
-  })
-  return best
-}
-//
-// Ordinary crown fruit: deeper fruit is smaller, darker and some of it gets
-// a leaf cover over one side.
-//
-function makeTwigFruitSpot(tip, leaves, rng) {
-  const coverRoll = rng()
-  const side = keepStemSideOpen(tip.inward + (rng() - 0.5) * FRUIT_COVER_SIDE_JITTER)
-  const depthT = (tip.depth - FRUIT_COVER_DEPTH_MIN) / (1 - FRUIT_COVER_DEPTH_MIN)
-  const covered = depthT > 0 && coverRoll >= FRUIT_COVER_SKIP_CHANCE
-  const frac = FRUIT_COVER_FRAC_MIN + (FRUIT_COVER_FRAC_MAX - FRUIT_COVER_FRAC_MIN) * Math.min(1, depthT + rng() * FRUIT_COVER_FRAC_JITTER)
-  return {
-    attached: true,
-    x: tip.x,
-    y: tip.y,
-    r: tip.r,
-    hue: FRUIT_HUE_NEAR + (FRUIT_HUE_DEEP - FRUIT_HUE_NEAR) * tip.depth,
-    vy: 0,
-    leaves: [],
-    stemX: tip.stemX,
-    stemY: tip.stemY,
-    cover: covered ? collectCoverLeaves(leaves, tip, side, frac) : []
-  }
-}
-//
-// Canopy leaves lying over the chosen side of the fruit, beyond a chord that
-// leaves roughly `frac` of the disc hidden.
-//
-function collectCoverLeaves(leaves, fruit, side, frac) {
-  const dirX = Math.sin(side)
-  const dirY = -Math.cos(side)
-  const chord = fruit.r * (0.5 - frac) * FRUIT_COVER_CHORD_SCALE
-  return leaves.filter(leaf => {
-    const cx = leaf.x + leaf.size * FRUIT_COVER_LEAF_CENTROID * Math.sin(leaf.angle)
-    const cy = leaf.y - leaf.size * FRUIT_COVER_LEAF_CENTROID * Math.cos(leaf.angle)
-    const dx = cx - fruit.x
-    const dy = cy - fruit.y
-    if (Math.hypot(dx, dy) > fruit.r + leaf.size * FRUIT_COVER_LEAF_REACH) return false
-    return dx * dirX + dy * dirY >= chord
-  })
-}
-//
-// Cover never comes straight from above, where it would hide the stem.
-//
-function keepStemSideOpen(side) {
-  const a = Math.atan2(Math.sin(side), Math.cos(side))
-  if (Math.abs(a) >= FRUIT_COVER_SIDE_MIN) return a
-  return a < 0 ? -FRUIT_COVER_SIDE_MIN : FRUIT_COVER_SIDE_MIN
-}
-function fruitSpotsTooClose(a, b) {
-  const dx = Math.abs(a.x - b.x)
-  const dy = Math.abs(a.y - b.y)
-  if (dx < FRUIT_STACK_DX && dy < FRUIT_STACK_DY) return true
-  return Math.hypot(dx, dy) < FRUIT_MIN_SPACING
-}
-//
-// One sprite with every cover leaf, graded like the tree bake so the leaves
-// match the canopy behind them.
-//
-function bakeFruitLeafCover(k, spots) {
-  const leaves = spots.flatMap(s => s.cover ?? [])
-  if (!leaves.length) return null
-  let x1 = Infinity
-  let y1 = Infinity
-  let x2 = -Infinity
-  let y2 = -Infinity
-  leaves.forEach(l => {
-    x1 = Math.min(x1, l.x - l.size)
-    y1 = Math.min(y1, l.y - l.size)
-    x2 = Math.max(x2, l.x + l.size)
-    y2 = Math.max(y2, l.y + l.size)
-  })
-  const ox = Math.floor(x1) - FRUIT_COVER_BAKE_PAD
-  const oy = Math.floor(y1) - FRUIT_COVER_BAKE_PAD
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(x2 - ox) + FRUIT_COVER_BAKE_PAD
-  canvas.height = Math.ceil(y2 - oy) + FRUIT_COVER_BAKE_PAD
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.translate(-ox, -oy)
-  paintForestTreeClusterLeaves(ctx, leaves, getTreePaletteColor().leafOpacity ?? 1)
-  applyForestLayerGradeToCanvas(canvas, {
-    ...FOREST_LAYER_GRADE.material,
-    grainBlockSize: forestFilmGrainBlockPxForTier('gameplay')
-  }, FRUIT_COVER_GRAIN_SEED)
-  k.loadSprite(FRUIT_COVER_SPRITE, canvas)
-  return { x: ox, y: oy }
-}
-//
 // Short stem from the twig tip to the top of the fruit, contoured like it.
 //
 function drawFruitStem(k, fruit, stemCol, contourCol, op) {
@@ -726,238 +567,7 @@ function drawFruitStem(k, fruit, stemCol, contourCol, op) {
   k.drawLine({ p1, p2, width: FRUIT_STEM_W + FRUIT_STEM_CONTOUR_W * 2, color: contourCol, opacity: op })
   k.drawLine({ p1, p2, width: FRUIT_STEM_W, color: stemCol, opacity: op })
 }
-function shuffleInPlace(list, rng) {
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1))
-    const tmp = list[i]
-    list[i] = list[j]
-    list[j] = tmp
-  }
-}
 
-function foliageCellCentre(cluster, cell, cellPx) {
-  return {
-    x: Math.round(cluster.x) + cell.dx * cellPx + cellPx * 0.5,
-    y: Math.round(cluster.y) + cell.dy * cellPx + cellPx * 0.5
-  }
-}
-
-function collectHangableTreeFoliage(treeData, anchorDropCfg) {
-  const cellPx = getTreePaletteColor().foliageClusterCellPx
-  const horiz = treeData.horizBranch
-  const canopyMaxY = horiz ? horiz.physY - FRUIT_CANOPY_MIN_ABOVE_BRANCH : Infinity
-  const canopyMaxX = branchTrampX(anchorDropCfg) + FRUIT_CANOPY_MAX_RIGHT_OF_TRAMP
-  return treeData.leaves.filter(leaf => {
-    if (leaf.type !== 'cluster') return false
-    if (!clusterHasLeafVolume(leaf.cells)) return false
-    if (clusterNeighborAvg(leaf.cells) < FRUIT_CLUSTER_MIN_NEIGHBOR_AVG) return false
-    const c = clusterCentroid(leaf, cellPx)
-    if (c.y > canopyMaxY) return false
-    return c.x <= canopyMaxX
-  })
-}
-function branchTrampX(anchorDropCfg) {
-  return anchorDropCfg?.branchTrampX ?? Infinity
-}
-function clusterCentroid(cluster, cellPx) {
-  const ox = Math.round(cluster.x)
-  const oy = Math.round(cluster.y)
-  let sx = 0
-  let sy = 0
-  const n = cluster.cells.length || 1
-  cluster.cells.forEach(cell => {
-    sx += ox + cell.dx * cellPx
-    sy += oy + cell.dy * cellPx
-  })
-  return { x: sx / n, y: sy / n }
-}
-function isFruitClusterCellInterior(cells, cell) {
-  const set = new Set(cells.map(c => `${c.dx},${c.dy}`))
-  let n = 0
-  set.has(`${cell.dx + 1},${cell.dy}`) && (n += 1)
-  set.has(`${cell.dx - 1},${cell.dy}`) && (n += 1)
-  set.has(`${cell.dx},${cell.dy + 1}`) && (n += 1)
-  set.has(`${cell.dx},${cell.dy - 1}`) && (n += 1)
-  return n >= FRUIT_CLUSTER_INTERIOR_NEIGHBORS_MIN
-}
-function isValidFruitHang(hang, x, y, fruitR) {
-  const { treeData, mask } = hang
-  if (y - fruitR - FRUIT_STEM_LEN < hang.minY) return false
-  if (isPointOnTreeWood(treeData, x, y)) return false
-  const hb = treeData.horizBranch
-  if (hb && isInHeroBranchFruitExcludeZone(hb, x, y)) return false
-  return isFruitCoveredByFoliage(mask, x, y, fruitR)
-}
-//
-// Centre, stem top and nearly the whole ring around the fruit must sit on
-// painted leaves — a fruit on a canopy edge would read as floating in the air.
-//
-function isFruitCoveredByFoliage(mask, x, y, fruitR) {
-  if (!isFoliageMaskSolid(mask, x, y)) return false
-  if (!isFoliageMaskSolid(mask, x, y - fruitR - FRUIT_STEM_LEN)) return false
-  if (!isFoliageMaskSolid(mask, x, y + fruitR * 0.35)) return false
-  for (const pad of FRUIT_MASK_RING_PADS) {
-    const ringR = fruitR + pad
-    let covered = 0
-    for (let i = 0; i < FRUIT_MASK_RING_SAMPLES; i++) {
-      const a = (i / FRUIT_MASK_RING_SAMPLES) * Math.PI * 2
-      isFoliageMaskSolid(mask, x + Math.cos(a) * ringR, y + Math.sin(a) * ringR) && (covered += 1)
-    }
-    if (covered < FRUIT_MASK_RING_MIN_COVERED) return false
-  }
-  for (let i = 0; i < 4; i++) {
-    const a = Math.PI * 0.25 + (i / 4) * Math.PI
-    if (!isFoliageMaskSolid(mask, x + Math.cos(a) * fruitR * 0.85, y + Math.sin(a) * fruitR * 0.85)) return false
-  }
-  return true
-}
-function isFoliageMaskSolid(mask, x, y) {
-  if (!isFoliageMaskCovered(mask, x, y)) return false
-  const step = FRUIT_MASK_SOLID_GRID_STEP
-  const r = FRUIT_MASK_SOLID_GRID_RADIUS
-  for (let oy = -r; oy <= r; oy += step) {
-    for (let ox = -r; ox <= r; ox += step) {
-      if (!isFoliageMaskCovered(mask, x + ox, y + oy)) return false
-    }
-  }
-  return true
-}
-function isFoliageMaskCovered(mask, x, y) {
-  const px = Math.round(x) - mask.x
-  const py = Math.round(y) - mask.y
-  if (px < 0 || py < 0 || px >= mask.w || py >= mask.h) return false
-  return mask.data[(py * mask.w + px) * 4 + 3] > FRUIT_MASK_ALPHA_MIN
-}
-//
-// One CPU-only canvas, read once while the fruit layout is built (never per frame).
-//
-function buildFoliageMask(treeData, cellPx) {
-  const bounds = foliageBounds(treeData, cellPx)
-  const w = Math.max(1, Math.ceil(bounds.x2 - bounds.x1))
-  const h = Math.max(1, Math.ceil(bounds.y2 - bounds.y1))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.translate(-bounds.x1, -bounds.y1)
-  paintForestTreeFoliageMask(ctx, treeData, cellPx)
-  const data = ctx.getImageData(0, 0, w, h).data
-  canvas.width = 0
-  canvas.height = 0
-  return { x: bounds.x1, y: bounds.y1, w, h, data }
-}
-function foliageBounds(treeData, cellPx) {
-  const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
-  const pad = cellPx * FOLIAGE_MASK_CELL_PAD_MULT
-  const grow = (x, y, r) => {
-    bounds.x1 = Math.min(bounds.x1, x - r)
-    bounds.y1 = Math.min(bounds.y1, y - r)
-    bounds.x2 = Math.max(bounds.x2, x + r)
-    bounds.y2 = Math.max(bounds.y2, y + r)
-  }
-  treeData.leaves.forEach(leaf => {
-    if (leaf.type !== 'cluster') {
-      grow(leaf.x, leaf.y, leaf.size)
-      return
-    }
-    leaf.cells.forEach(c => grow(Math.round(leaf.x) + c.dx * cellPx, Math.round(leaf.y) + c.dy * cellPx, pad))
-  })
-  //
-  // Tree segments bake into a world-sized canvas starting at 0,0 — leaves
-  // past its edges are never drawn, so fruit must not hang there either.
-  //
-  bounds.x1 = Math.max(0, Math.floor(bounds.x1))
-  bounds.y1 = Math.max(0, Math.floor(bounds.y1))
-  bounds.x2 = Math.min(CFG.visual.forest.worldWidth, bounds.x2)
-  bounds.y2 = Math.min(CFG.visual.forest.worldHeight, bounds.y2)
-  return bounds
-}
-function clusterHasLeafVolume(cells) {
-  if (cells.length < FRUIT_CLUSTER_MIN_CELLS) return false
-  let minDy = 0
-  let maxDy = 0
-  cells.forEach(c => {
-    minDy = Math.min(minDy, c.dy)
-    maxDy = Math.max(maxDy, c.dy)
-  })
-  return maxDy - minDy >= FRUIT_CLUSTER_MIN_SPAN_CELLS - 1
-}
-function clusterNeighborAvg(cells) {
-  const set = new Set(cells.map(c => `${c.dx},${c.dy}`))
-  let total = 0
-  cells.forEach(c => {
-    let n = 0
-    set.has(`${c.dx + 1},${c.dy}`) && (n += 1)
-    set.has(`${c.dx - 1},${c.dy}`) && (n += 1)
-    set.has(`${c.dx},${c.dy + 1}`) && (n += 1)
-    set.has(`${c.dx},${c.dy - 1}`) && (n += 1)
-    total += n
-  })
-  return total / cells.length
-}
-
-function isInHeroBranchFruitExcludeZone(horizBranch, x, y) {
-  const xMin = Math.min(horizBranch.x1, horizBranch.x2) - HORIZ_BRANCH_FRUIT_EXCLUDE_X_PAD
-  const xMax = Math.max(horizBranch.x1, horizBranch.x2) + HORIZ_BRANCH_FRUIT_EXCLUDE_X_PAD
-  const yTop = horizBranch.physY - HORIZ_BRANCH_FRUIT_EXCLUDE_Y_ABOVE
-  const yBot = horizBranch.y + HORIZ_BRANCH_FRUIT_EXCLUDE_Y_BELOW
-  return x >= xMin && x <= xMax && y >= yTop && y <= yBot
-}
-
-function isPointOnTreeWood(treeData, x, y) {
-  for (const seg of treeData.trunkSegs ?? []) {
-    if (distanceToWoodSegment(x, y, seg) <= FRUIT_WOOD_SEGMENT_PAD) return true
-  }
-  for (const seg of treeData.branchSegs ?? []) {
-    if (distanceToWoodSegment(x, y, seg) <= FRUIT_WOOD_SEGMENT_PAD) return true
-  }
-  return false
-}
-
-function distanceToWoodSegment(px, py, seg) {
-  const half = (seg.w ?? 8) * 0.5
-  const dist = distancePointToSegment(px, py, seg.sx, seg.sy, seg.ex, seg.ey)
-  return dist - half
-}
-
-function distancePointToSegment(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const lenSq = dx * dx + dy * dy
-  if (lenSq < 1e-6) return Math.hypot(px - x1, py - y1)
-  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq
-  t = Math.max(0, Math.min(1, t))
-  const cx = x1 + t * dx
-  const cy = y1 + t * dy
-  return Math.hypot(px - cx, py - cy)
-}
-
-function makeFruitLeafPair(seed, fruitR, rng, hue) {
-  const r = mulberry32(seed >>> 0)
-  const jitter = () => (rng ? rng() : r())
-  const shadeCount = (FOREST_PAL.treeColor.leafShades || [FOREST_PAL.treeColor.leaf]).length
-  const hueSkew = (hue ?? 0.5) * 0.55
-  const angleA = -0.38 - hueSkew - jitter() * 0.35
-  const angleB = 0.22 + hueSkew * 0.85 + jitter() * 0.4
-  const lenA = 4.2 + jitter() * 3.6
-  const lenB = 3.8 + jitter() * 3.2
-  return [
-    {
-      dx: -fruitR * (0.38 + jitter() * 0.22),
-      dy: -fruitR * (0.48 + jitter() * 0.14),
-      len: lenA,
-      angle: angleA,
-      shadeIdx: Math.floor(jitter() * shadeCount)
-    },
-    {
-      dx: fruitR * (0.32 + jitter() * 0.26),
-      dy: -fruitR * (0.52 + jitter() * 0.16),
-      len: lenB,
-      angle: angleB,
-      shadeIdx: Math.floor(jitter() * shadeCount)
-    }
-  ]
-}
 
 function leafRgbFromShadeIdx(shadeIdx) {
   const shades = FOREST_PAL.treeColor.leafShades || [FOREST_PAL.treeColor.leaf]
@@ -1041,9 +651,6 @@ function pickFruitLandRollDir(x, y) {
   return h < 0.42 ? -1 : 1
 }
 
-function hashFruitLeafSeed(x, y, hue) {
-  return (Math.round(x * 3.1) ^ Math.round(y * 5.7) ^ Math.round(hue * 997) ^ FRUIT_LEAF_SEED) >>> 0
-}
 
 function drawFruitLeaf(k, x, y, size, angle, rgb, op) {
   const cos = Math.cos(angle)

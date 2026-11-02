@@ -5,9 +5,12 @@ import * as Layout from '../utils/cave-layout.js'
 import { CAVE_PAL, css, paintMossStrand } from '../utils/cave-paint.js'
 import * as Mouth from './leaf-mouth.js'
 //
-// Leaves of the monster plant: one wide fleshy pad each, which the hero can
-// stand on, with big rounded lobes whose ends and a few folds bend down over
-// the sides. A trap leaf carries a red mouth
+// Leaves of the monster plant. In the level the tree and its leaves are a
+// picture (monster-tree.js); here are their colliders the hero walks on,
+// and the trap mouths (none for now: every leaf is a plain one). The menu
+// picture still paints the procedural plant's leaves (createDecor): one
+// wide fleshy pad each, with big rounded lobes whose ends and a few folds
+// bend down over the sides. A trap leaf carries a red mouth
 // (leaf-mouth.js) in the middle of its pad. Landing on an open mouth makes
 // its own tendrils coil round the hero, lift him, set him on the middle of
 // the mouth and close over him;
@@ -15,7 +18,7 @@ import * as Mouth from './leaf-mouth.js'
 // staying shut (a low bud, a safe step) for a while before it swells,
 // opens again and lets the spores go.
 //
-const SPRITE_PREFIX = 'cave0-leaf-v11'
+const SPRITE_PREFIX = 'cave0-leaf-v13'
 const GRAIN_SEED_BASE = 9900
 const GRAIN_HANG_SEED = 50
 const BAKE_PAD = 6
@@ -130,28 +133,75 @@ const LEAF_HUB_Y = 0.05
 const NAVEL_R = 3.5
 const NAVEL_RIM_W = 1.2
 //
-// Veins: a few main ones from the navel to the rim, each a wandering line
-// (midpoint displacement) that keeps forking into thinner, fainter side
-// veins — a soft branching net rather than clean spokes.
+// Veins: one main vein along the pad through its navel (end to end,
+// wandering), and a few side veins leaving it toward the rim on both
+// sides by turns, each forking once at most — no dense net.
 //
-const LEAF_VEINS = 13
+const LEAF_VEINS = 7
+const MAIN_VEIN_W = 2.4
+const MAIN_VEIN_REACH = 0.85
+const SIDE_VEIN_FROM = 0.12
+const SIDE_VEIN_SPAN = 0.76
+const SIDE_VEIN_TILT = 0.35
 const LEAF_VEIN_JITTER = 0.5
 const LEAF_VEIN_W = 1.4
 const LEAF_VEIN_DARK_ALPHA = 0.32
 const LEAF_VEIN_LIT_ALPHA = 0.22
 const VEIN_WANDER = 0.12
 const VEIN_SUBDIV = 4
-const VEIN_DEPTH = 3
+const VEIN_DEPTH = 2
 const VEIN_FORKS = 2
 const VEIN_FORK_FROM = 0.3
 const VEIN_FORK_SPAN = 0.5
 const VEIN_FORK_ANGLE = 0.6
 const VEIN_FORK_LEN = 0.45
 const VEIN_FADE = 0.65
-const LEAF_SPECKLES = 180
+const LEAF_SPECKLES = 50
 const LEAF_SPECKLE_ALPHA = 0.3
 const LEAF_SPECKLE_R_MIN = 0.5
 const LEAF_SPECKLE_R_RANGE = 1
+//
+// Holes eaten through the pad (the reference's spotted leaves): a few
+// irregular dark holes of different sizes scattered over the top face (on a
+// trap leaf clear of the mouth in the middle), each foreshortened like the
+// face, with the pad's thickness lit along its far (upper) inner edge. Where
+// they may sit: share of the face's radius from its centre (min / range),
+// size (px), how lumpy their outline is, its points.
+//
+const LEAF_HOLES = 7
+const LEAF_HOLE_D_MIN = 0.3
+const LEAF_HOLE_D_MIN_TRAP = 0.5
+const LEAF_HOLE_D_RANGE = 0.6
+const LEAF_HOLE_R_MIN = 2.5
+const LEAF_HOLE_R_RANGE = 4.5
+const LEAF_HOLE_FLAT = 0.6
+const LEAF_HOLE_LUMP = 0.3
+const LEAF_HOLE_STEPS = 10
+const LEAF_HOLE_LIP_ALPHA = 0.8
+const LEAF_HOLE_LIP_W = 1.2
+//
+// Natural damage: a few small tears cut into the rim (a narrow wedge from
+// the edge inward, its edges lit), more on the drooping far side; and a
+// soft fold crease across the face. The pad is also a little lopsided: its
+// far half bulges more to one side (ASYM: share of the radius).
+//
+const LEAF_TEARS = 3
+const TEAR_DEPTH_MIN = 6
+const TEAR_DEPTH_RANGE = 8
+const TEAR_W = 0.06
+const TEAR_FAR_CHANCE = 0.7
+const TEAR_LIP_ALPHA = 0.6
+const FOLD_CREASE_ALPHA = 0.25
+const FOLD_CREASE_W = 3
+const LEAF_ASYM = 0.08
+const TEAR_ANGLE_FROM = 0.15
+const TEAR_ANGLE_SPAN = 0.7
+const TEAR_OUT = 0.05
+const CREASE_ANGLE_FROM = 1.2
+const CREASE_ANGLE_SPAN = 0.6
+const CREASE_REACH = 0.25
+const CREASE_LIT_DX = -1
+const CREASE_LIT_DY = -2
 const LEAF_BACK_RIM_W = 1.5
 const LEAF_BACK_RIM_ALPHA = 0.5
 //
@@ -159,7 +209,7 @@ const LEAF_BACK_RIM_ALPHA = 0.5
 // short ones baked in (one per STRAND_EVERY px), long ones swaying (one
 // per SWAY_EVERY px, see plant-strands.js).
 //
-const LEAF_LOBE_CHANCE = 0.4
+const LEAF_LOBE_CHANCE = 0.2
 const LEAF_LOBE_LEN_MIN = 4
 const LEAF_LOBE_LEN_MAX = 18
 const LEAF_LOBE_W_MIN = 5
@@ -168,7 +218,7 @@ const LOBE_TOP_STEPS = 6
 const LEAF_DROP_CHANCE = 0.3
 const LEAF_DROP_R = 2
 const LEAF_DROP_ALPHA = 0.9
-const STRAND_EVERY = 22
+const STRAND_EVERY = 45
 const STRAND_LEN_MIN = 12
 const STRAND_LEN_RANGE = 90
 const STRAND_SHORT_POW = 1.8
@@ -179,7 +229,7 @@ const STRAND_EDGE_SPAN = 0.88
 // the underside), pinned this far below it so their top bud sits on it.
 //
 const STRAND_PIN = 1
-const SWAY_EVERY = 55
+const SWAY_EVERY = 90
 //
 // Room above the pad inside the bake.
 //
@@ -236,6 +286,13 @@ const GRAB_SQUEEZE_SPEED = 20
 // Colliders along each leaf top.
 //
 const COLLIDE_H = 14
+//
+// Leaves are one-way: the hero passes up through one from below (a jump,
+// the bubble lift) and stands on it from above. Contact is ignored while he
+// is rising or his feet are more than ONE_WAY_TOL below the leaf's top (a
+// fast fall sinks that far in one physics step before it is pushed out).
+//
+const ONE_WAY_TOL = 24
 const LEAF_STATE = {
   OPEN: 'open',
   GRABBING: 'grabbing',
@@ -252,15 +309,13 @@ const NEXT_STATE = {
 const bakedByK = new WeakMap()
 
 /**
- * Creates the plant's leaves and their colliders.
+ * Creates the level's leaf colliders and the trap mouths of trap leaves.
  * @param {Object} k - Kaplay instance
  * @returns {Object} Plant instance
  */
 export function create(k) {
-  const sprites = bakeLeaves(k)
   const leaves = Layout.PLANT_LEAVES.map((def, i) => ({
     ...def,
-    sprites: sprites[def.id],
     body: addCollider(k, def),
     state: S.OPEN,
     timer: 0,
@@ -289,7 +344,7 @@ export function create(k) {
 export function createDecor(cfg) {
   const { k, toScreen, scale } = cfg
   const sprites = bakeLeaves(k)
-  const leaves = Layout.PLANT_LEAVES.map((def, i) => {
+  const leaves = Layout.PLANT_ART_LEAVES.map((def, i) => {
     const sp = sprites[def.id]
     const mouthAt = toScreen((def.x1 + def.x2) / 2, def.y - MOUTH_LIFT)
     const at = toScreen(def.x1 - sp.padX, def.y - sp.lineY)
@@ -347,16 +402,6 @@ export function onDrawDecor(inst, opacity) {
 }
 
 /**
- * World points under the leaves where water drips from (ends of the short
- * moss strands and of dripping slime lobes).
- * @param {Object} inst - Plant instance
- * @returns {Array<{x: number, y: number}>}
- */
-export function dripTips(inst) {
-  return inst.leaves.flatMap(leaf => leaf.sprites.tips.map(t => ({ x: leaf.x1 - leaf.sprites.padX + t.x, y: leaf.y - leaf.sprites.lineY + t.y })))
-}
-
-/**
  * Snaps a trap shut on its prey ('hero' or 'spores').
  * @param {Object} inst - Plant instance
  * @param {string} id - Leaf id
@@ -397,43 +442,19 @@ export function onUpdate(inst, heroInst) {
 }
 
 /**
- * World points under the leaves where long swaying moss strands hang from.
- * @param {Object} inst - Plant instance
- * @returns {Array<{x: number, y: number}>}
- */
-export function strandAnchors(inst) {
-  return inst.leaves.flatMap(leaf => leaf.sprites.anchors.map(t => ({ x: leaf.x1 - leaf.sprites.padX + t.x, y: leaf.y - leaf.sprites.lineY + t.y })))
-}
-
-/**
- * Draws what lies behind the hero: the far half of every leaf and the
- * parts of grabbing tendrils that pass behind him.
+ * Draws the parts of grabbing tendrils that pass behind the hero.
  * @param {Object} inst - Plant instance
  */
 export function onDrawBack(inst) {
-  const k = inst.k
-  inst.leaves.forEach(leaf => {
-    k.drawSprite({ sprite: leaf.sprites.back, pos: k.vec2(leaf.x1 - leaf.sprites.padX, leaf.y - leaf.sprites.lineY) })
-    leaf.mouth && Mouth.onDrawBack(leaf.mouth)
-  })
+  inst.leaves.forEach(leaf => leaf.mouth && Mouth.onDrawBack(leaf.mouth))
 }
 
 /**
- * Draws what lies in front of the hero, back to front: the near part of the
- * leaf's top face, the trap mouth on it, the near rim (raised lobes, lit
- * lip, underside) in front of the mouth, then everything hanging from it.
+ * Draws the trap mouths (in front of the hero, over the leaf picture).
  * @param {Object} inst - Plant instance
  */
 export function onDrawFront(inst) {
-  const k = inst.k
-  inst.leaves.forEach(leaf => {
-    const sp = leaf.sprites
-    const pos = k.vec2(leaf.x1 - sp.padX, leaf.y - sp.lineY)
-    k.drawSprite({ sprite: sp.face, pos })
-    leaf.mouth && Mouth.onDraw(leaf.mouth)
-    k.drawSprite({ sprite: sp.rim, pos })
-    k.drawSprite({ sprite: sp.hang, pos })
-  })
+  inst.leaves.forEach(leaf => leaf.mouth && Mouth.onDraw(leaf.mouth))
 }
 //
 // The hero landed on an open mouth: its tendrils seize him where he stands.
@@ -543,19 +564,32 @@ function decorWait() {
   return DECOR_SNAP_MIN + Math.random() * DECOR_SNAP_RANGE
 }
 //
-// Static body along the leaf top, trimmed at both ends by collideInset and
-// lowered by walkDrop.
+// Static one-way body along the leaf top, trimmed at both ends by
+// collideInset and lowered by walkDrop (tagged so the hero never takes it
+// for a ceiling over his jump).
 //
 function addCollider(k, def) {
   const inset = def.collideInset ?? 0
-  return k.add([
+  const top = def.y + (def.walkDrop ?? 0)
+  const body = k.add([
     k.rect(def.x2 - def.x1 - inset * 2, COLLIDE_H),
-    k.pos(def.x1 + inset, def.y + (def.walkDrop ?? 0)),
+    k.pos(def.x1 + inset, top),
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
-    CFG.game.platformName
+    CFG.game.platformName,
+    CFG.game.noCeilingTag
   ])
+  body.onBeforePhysicsResolve(c => fromBelow(c.target, top) && c.preventResolution())
+  return body
+}
+//
+// Whether a body meets the leaf from below or inside it (rising, or its
+// feet well under the leaf's top).
+//
+function fromBelow(other, top) {
+  const box = other.worldArea().bbox()
+  return other.vel.y < 0 || box.pos.y + box.height > top + ONE_WAY_TOL
 }
 //
 // Per leaf, once per k: the hanging layer (strands, lobes) and the body split
@@ -566,7 +600,7 @@ function bakeLeaves(k) {
   const cached = bakedByK.get(k)
   if (cached) return cached
   const out = {}
-  Layout.PLANT_LEAVES.forEach((def, i) => {
+  Layout.PLANT_ART_LEAVES.forEach((def, i) => {
     const len = def.x2 - def.x1
     const ry = Math.max(LEAF_DEPTH_MIN, Math.min(LEAF_DEPTH_MAX, len * LEAF_DEPTH_SHARE)) / 2
     const padX = Math.ceil(len / 2 * SIDE_ROOM) + BAKE_PAD
@@ -658,7 +692,7 @@ function maskedCopy(src, mask, mode) {
 // along the front) and the underside's lower edge below that.
 //
 function leafGeometry(cx, cy, rx, ry, rng, trap = false) {
-  const geo = { cx, cy, rx, ry, ph1: rng() * Math.PI * 2, ph2: rng() * Math.PI * 2, ph3: rng() * Math.PI * 2 }
+  const geo = { cx, cy, rx, ry, trap, ph1: rng() * Math.PI * 2, ph2: rng() * Math.PI * 2, ph3: rng() * Math.PI * 2, asym: (rng() * 2 - 1) * LEAF_ASYM }
   geo.raises = trap
     ? randomBumps(rng, RAISES_MAX, () => RAISE_FROM + rng() * TRAP_RAISE_SPAN, RAISE_MIN * TRAP_RAISE_SCALE, RAISE_RANGE * TRAP_RAISE_SCALE, RAISE_W_MIN, RAISE_W_RANGE)
     : randomBumps(rng, RAISES_MAX, () => RAISE_FROM + rng() * RAISE_SPAN, RAISE_MIN, RAISE_RANGE, RAISE_W_MIN, RAISE_W_RANGE)
@@ -685,7 +719,8 @@ function leafEdge(geo, a) {
   const s = Math.sin(a)
   const c = Math.cos(a)
   const r = 1 + Math.sin(a * LEAF_WOBBLE_F1 + ph1) * LEAF_WOBBLE_1 + Math.sin(a * LEAF_WOBBLE_F2 + ph2) * LEAF_WOBBLE_2 +
-    SCALLOP_AMP * (Math.abs(Math.sin(a * SCALLOP_F / 2 + ph3)) - HALF) + Math.sin(a * LOBE_F + ph3) * LOBE_AMP
+    SCALLOP_AMP * (Math.abs(Math.sin(a * SCALLOP_F / 2 + ph3)) - HALF) + Math.sin(a * LOBE_F + ph3) * LOBE_AMP +
+    geo.asym * c * Math.max(0, -s)
   const lift = FRONT_LIFT * ry * Math.pow(Math.max(0, s), LIFT_POW)
   const ends = SIDE_DROOP * ry * Math.pow(Math.abs(c), SIDE_DROOP_POW)
   return { x: cx + c * rx * r, y: cy + s * ry * r - lift + ends + bumps(a, geo.folds) - bumps(a, geo.raises) + Math.sin(a * RUFFLE_F + ph1) * RUFFLE_AMP }
@@ -750,6 +785,34 @@ function paintPad(ctx, geo, tones, rng) {
   ctx.strokeStyle = css(tones[0])
   ctx.lineWidth = LEAF_CONTOUR_W
   ctx.stroke(face)
+  paintTears(ctx, geo, tones, rng)
+}
+//
+// A few small tears into the rim: a narrow wedge cut out of the pad from
+// the edge inward (mostly on the far side), its cut edges lit.
+//
+function paintTears(ctx, geo, tones, rng) {
+  const light = tones[4]
+  for (let i = 0; i < LEAF_TEARS; i++) {
+    const far = rng() < TEAR_FAR_CHANCE
+    const a = (far ? Math.PI : 0) + (TEAR_ANGLE_FROM + rng() * TEAR_ANGLE_SPAN) * Math.PI
+    const edge = leafEdge(geo, a)
+    const depth = TEAR_DEPTH_MIN + rng() * TEAR_DEPTH_RANGE
+    const inX = geo.cx - edge.x
+    const inY = geo.cy - edge.y
+    const len = Math.hypot(inX, inY) || 1
+    const tip = { x: edge.x + inX / len * depth, y: edge.y + inY / len * depth * HALF }
+    const e1 = leafEdge(geo, a - TEAR_W)
+    const e2 = leafEdge(geo, a + TEAR_W)
+    const cut = closedPath([e1, tip, e2, { x: edge.x + (edge.x - geo.cx) * TEAR_OUT, y: edge.y + (edge.y - geo.cy) * TEAR_OUT }])
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fill(cut)
+    ctx.restore()
+    ctx.strokeStyle = css(light, TEAR_LIP_ALPHA)
+    ctx.lineWidth = 1
+    strokePolyline(ctx, [e1, tip, e2])
+  }
 }
 //
 // Underside below the near rim: dark flesh deepening downward, ribs
@@ -808,6 +871,8 @@ function paintLeafFace(ctx, face, geo, tones, rng) {
   const hub = { x: cx + rx * LEAF_HUB_X, y: cy + ry * LEAF_HUB_Y }
   paintVeins(ctx, ring, hub, rx, deep, high, rng)
   paintSpeckles(ctx, cx, cy, rx, ry, deep, high, rng)
+  paintHoles(ctx, geo, rng)
+  paintCrease(ctx, geo, deep, high, rng)
   ctx.fillStyle = css(deep)
   ctx.beginPath()
   ctx.ellipse(hub.x, hub.y, NAVEL_R, NAVEL_R * ry / rx * 2, 0, 0, Math.PI * 2)
@@ -827,12 +892,25 @@ function paintLeafFace(ctx, face, geo, tones, rng) {
   strokePolyline(ctx, ring.slice(LEAF_RING_STEPS / 2).map(p => ({ x: p.x, y: p.y + LEAF_BACK_RIM_W })))
 }
 //
-// Veins from the navel toward the rim, each forking into fainter branches.
+// The main vein from end to end through the navel, then side veins from
+// points along it to the rim (alternating near / far side), each forking
+// once at most.
 //
 function paintVeins(ctx, ring, hub, rx, deep, high, rng) {
+  const left = { x: hub.x - rx * MAIN_VEIN_REACH, y: hub.y }
+  const right = { x: hub.x + rx * MAIN_VEIN_REACH, y: hub.y }
+  paintVein(ctx, hub, left, MAIN_VEIN_W, 1, 1, deep, high, rng)
+  paintVein(ctx, hub, right, MAIN_VEIN_W, 1, 1, deep, high, rng)
   for (let i = 0; i < LEAF_VEINS; i++) {
-    const p = ring[Math.floor((i + rng() * LEAF_VEIN_JITTER) / LEAF_VEINS * ring.length) % ring.length]
-    paintVein(ctx, hub, p, LEAF_VEIN_W, 1, VEIN_DEPTH, deep, high, rng)
+    const u = SIDE_VEIN_FROM + SIDE_VEIN_SPAN * (i + rng() * LEAF_VEIN_JITTER) / LEAF_VEINS
+    const from = { x: left.x + (right.x - left.x) * u, y: hub.y }
+    const far = i % 2 === 0
+    const a = (far ? -1 : 1) * Math.PI / 2 + (u - HALF) * Math.PI * SIDE_VEIN_TILT * 2
+    const to = ring.reduce((best, p) => {
+      const d = Math.abs(Math.atan2(p.y - from.y, p.x - from.x) - a)
+      return d < best.d ? { p, d } : best
+    }, { p: ring[0], d: Infinity }).p
+    paintVein(ctx, from, to, LEAF_VEIN_W, 1, VEIN_DEPTH, deep, high, rng)
   }
 }
 //
@@ -886,6 +964,48 @@ function paintSpeckles(ctx, cx, cy, rx, ry, deep, high, rng) {
     ctx.beginPath()
     ctx.arc(cx + Math.cos(a) * rx * d, cy + Math.sin(a) * ry * d, LEAF_SPECKLE_R_MIN + rng() * LEAF_SPECKLE_R_RANGE, 0, Math.PI * 2)
     ctx.fill()
+  }
+}
+//
+// A soft fold crease across the face from the far rim toward the middle,
+// a shaded groove with a lit edge beside it.
+//
+function paintCrease(ctx, geo, deep, high, rng) {
+  const a = Math.PI * (CREASE_ANGLE_FROM + rng() * CREASE_ANGLE_SPAN)
+  const from = leafEdge(geo, a)
+  const to = { x: geo.cx + (from.x - geo.cx) * CREASE_REACH, y: geo.cy + (from.y - geo.cy) * CREASE_REACH }
+  const pts = wanderLine(from, to, VEIN_SUBDIV, rng)
+  ctx.lineWidth = FOLD_CREASE_W
+  ctx.strokeStyle = css(deep, FOLD_CREASE_ALPHA)
+  strokePolyline(ctx, pts)
+  ctx.lineWidth = 1
+  ctx.strokeStyle = css(high, FOLD_CREASE_ALPHA)
+  strokePolyline(ctx, pts.map(p => ({ x: p.x + CREASE_LIT_DX, y: p.y + CREASE_LIT_DY })))
+}
+//
+// Holes eaten through the top face: a lumpy dark oval each, the pad's
+// lit thickness showing inside its far (upper) edge.
+//
+function paintHoles(ctx, geo, rng) {
+  const [contour, , , , light] = CAVE_PAL.leaf3d
+  const from = geo.trap ? LEAF_HOLE_D_MIN_TRAP : LEAF_HOLE_D_MIN
+  for (let i = 0; i < LEAF_HOLES; i++) {
+    const a = rng() * Math.PI * 2
+    const d = from + rng() * LEAF_HOLE_D_RANGE
+    const x = geo.cx + Math.cos(a) * geo.rx * d
+    const y = geo.cy + Math.sin(a) * geo.ry * d
+    const r = LEAF_HOLE_R_MIN + rng() * LEAF_HOLE_R_RANGE
+    const pts = []
+    for (let k = 0; k < LEAF_HOLE_STEPS; k++) {
+      const t = k / LEAF_HOLE_STEPS * Math.PI * 2
+      const m = 1 + (rng() - HALF) * 2 * LEAF_HOLE_LUMP
+      pts.push({ x: x + Math.cos(t) * r * m, y: y + Math.sin(t) * r * LEAF_HOLE_FLAT * m })
+    }
+    ctx.fillStyle = css(contour)
+    ctx.fill(closedPath(pts))
+    ctx.strokeStyle = css(light, LEAF_HOLE_LIP_ALPHA)
+    ctx.lineWidth = LEAF_HOLE_LIP_W
+    strokePolyline(ctx, pts.slice(LEAF_HOLE_STEPS / 2).map(p => ({ x: p.x, y: p.y + LEAF_HOLE_LIP_W })))
   }
 }
 //

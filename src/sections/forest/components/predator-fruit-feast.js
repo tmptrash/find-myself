@@ -2,7 +2,7 @@
 // Predator breaks off to eat a fruit knocked from the big tree, from any distance.
 //
 
-import { getForestFruitDisplayRadius, keepForestFruitRestingOnFloor } from '../utils/forest-tree-fruit.js'
+import { getForestFruitDisplayRadius, getForestFruitReach, keepForestFruitRestingOnFloor, biteForestPictureFruit } from '../utils/forest-tree-fruit.js'
 
 const FEAST_APPROACH_BURST_MULT = 0.72
 const FEAST_APPROACH_SPEED = 280
@@ -20,6 +20,11 @@ const FEAST_BITE_PULLBACK_X = 18
 const FEAST_BITE_PULLBACK_LIFT = 6.5
 const FEAST_CLUSTER_RADIUS = 52
 const FEAST_MAX_FRUIT_EQUIV = 2
+//
+// The snout bites this share of the way into what is left of the fruit on
+// its side (so it touches it bite after bite as it gets smaller).
+//
+const FEAST_BITE_INTO = 0.78
 
 /**
  * @param {Object} pred - Predator inst
@@ -146,6 +151,10 @@ function tickFeastEating(pred, fruit, levelInst, dt) {
   pred.stretch = 1.02 + (phase === 'forward' ? 0.08 * (1 - t) : 0)
   if (pred.feastBitePhaseT < phaseDur) return
   pred.feastBitePhaseT = 0
+  //
+  // Each bite reaches anew to what is left of the fruit on the near side
+  // (the bites so far took it closer to the core).
+  //
   if (phase === 'pause') {
     pred.feastBitePhase = 'forward'
     refreshFeastBitePose(pred, fruit)
@@ -168,8 +177,14 @@ function applyFeastBiteChunk(pred, fruit) {
   const total = pred.feastTotalBites ?? FEAST_BITE_COUNT
   fruit.eatProgress = Math.min(1, pred.feastBitesDone / total)
   fruit.biteCount = (fruit.biteCount ?? 0) + 1
-  pushFruitBiteMark(fruit)
+  pushFruitBiteMark(fruit, facingAngle(pred), total - pred.feastBitesDone + 1)
   keepForestFruitRestingOnFloor(fruit)
+}
+//
+// Direction from the fruit toward the centipede (radians: PI = left).
+//
+function facingAngle(pred) {
+  return pred.dir > 0 ? Math.PI : 0
 }
 
 function feastBitePhaseDuration(phase) {
@@ -199,10 +214,10 @@ function applyFeastBitePose(pred, phase, t) {
 function refreshFeastBitePose(pred, fruit) {
   const head = pred.segments?.[0]
   const headR = head?.radius ?? 11
-  const fruitR = getForestFruitDisplayRadius(fruit)
   facePredatorTowardFruit(pred, fruit)
+  const reach = getForestFruitReach(fruit, facingAngle(pred))
   const forward = headR + FEAST_SNOUT_REACH
-  const biteX = fruit.x - pred.dir * (fruitR * 0.78 + forward)
+  const biteX = fruit.x - pred.dir * (reach * FEAST_BITE_INTO + forward)
   const groundY = pred.groundAt(biteX)
   const biteLift = Math.max(2, Math.min(18, groundY - FEAST_HEAD_RIDE - (fruit.y - FEAST_SNOUT_DROP)))
   pred.feastBitePose = { x: biteX, headLift: biteLift }
@@ -359,9 +374,15 @@ function feastApproachHeadX(pred, fruit) {
   return fruit.x - dir * (fruitR * 0.78 + forward)
 }
 
-function pushFruitBiteMark(fruit) {
+//
+// One bite: a picture fruit loses a piece off the side facing the
+// centipede (bitesLeft: this meal's bites still to come, this one
+// included); a drawn fruit gets a notch anywhere on its rim.
+//
+function pushFruitBiteMark(fruit, facing, bitesLeft) {
   const marks = fruit.biteMarks ?? []
   const rng = mulberry32((fruit.biteSeed ?? 0) + marks.length * 41)
+  if (fruit.picture) return biteForestPictureFruit(fruit, facing, bitesLeft, rng)
   marks.push({
     angle: rng() * Math.PI * 2,
     depth: 0.35 + rng() * 0.35,

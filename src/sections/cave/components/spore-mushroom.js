@@ -5,9 +5,10 @@ import { getRGB } from '../../../utils/helper.js'
 import * as Glow from '../utils/cave-glow.js'
 import { CAVE_PAL, css } from '../utils/cave-paint.js'
 //
-// Spore mushroom: a tall dome cap pierced with glowing holes of different
-// sizes, a lit underside with golden gills and a slim stem rising into its
-// centre. Landing on its cap lets a swarm
+// Spore mushroom: a bell-shaped cap of blue-grey skin (cracked and mottled
+// like old leather, its rim flaring out) pierced with deep holes glowing
+// warm inside, a pale lit underside with gills and a crooked stem rising
+// into its centre. Landing on its cap lets a swarm
 // of spores out to hover above it. Jumping into the swarm moves it:
 //   - straight up from below: it scatters up, then flies home;
 //   - from its right, moving left: it drifts up-left, then flies home;
@@ -15,20 +16,24 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 //     last station it flies into the trap leaf there (the level snaps it).
 // A hovering swarm left alone flies home after a while.
 //
-const SPRITE = 'cave0-spore-mushroom-v6'
+const SPRITE = 'cave0-spore-mushroom-v7'
 const GRAIN_SEED = 9950
 const BAKE_PAD = 8
 //
-// Shape: cap size (a rounded dome: control shares for its sides), the
+// Shape: cap size; the bell (its half-width at a height share v from the
+// rim up: BELL_BODY * (1 - v^BELL_POW)^BELL_ROUND, plus the rim flaring out
+// by BELL_FLARE, fading up over the lowest part, power BELL_FLARE_POW); the
 // underside seen from below (an ellipse with gills from the stem), the stem.
 //
 const SIZE = 0.82
 const CAP_SIZE = 0.68
 const CAP_W = Math.round(168 * CAP_SIZE)
-const CAP_H = Math.round(58 * CAP_SIZE)
-const DOME_SIDE_X = 0.5
-const DOME_SIDE_Y = 0.95
-const DOME_TOP_X = 0.72
+const CAP_H = Math.round(74 * CAP_SIZE)
+const BELL_BODY = 0.86
+const BELL_POW = 2.4
+const BELL_ROUND = 0.5
+const BELL_FLARE = 0.14
+const BELL_FLARE_POW = 6
 const UNDER_RY = Math.round(13 * CAP_SIZE)
 const UNDER_INSET = 4
 const GILL_COUNT = 22
@@ -57,25 +62,34 @@ const STEM_LIT_W = 3
 const STEM_COLLAR = 3
 const CONTOUR_W = 1.8
 //
-// Bumpy cap: the outline swells and dips in lumps (bumps along it, share
-// of the cap size), and rounded scales cover the dome, each lit on top and
-// shaded below.
+// Lumpy bell: the outline swells and dips a little (bumps along it, share
+// of the cap height).
 //
 const DOME_STEPS = 48
 const DOME_BUMPS = 9
-const DOME_BUMP = 0.05
+const DOME_BUMP = 0.04
 const DOME_BUMP_SEED = 1.7
-const SCALES = 46
-const SCALE_R_MIN = 3
-const SCALE_R_RANGE = 4
-const SCALE_FLAT = 0.7
-const SCALE_SHADE_ALPHA = 0.45
-const SCALE_LIT_ALPHA = 0.55
-const SCALE_HOLE_CLEAR = 3
-const SCALE_SPAN = 0.95
-const SCALE_SHADE_W = 1.2
-const SCALE_LIT_FROM = Math.PI * 1.1
-const SCALE_LIT_TO = Math.PI * 1.9
+//
+// Old-leather skin: soft lighter and darker patches, then a net of fine
+// dark cracks wandering over it and forking (each crack a few steps of
+// random turns, forking with a chance, down to a depth), each with a pale
+// lip on its lower side.
+//
+const MOTTLES = 26
+const MOTTLE_R_MIN = 3
+const MOTTLE_R_RANGE = 7
+const MOTTLE_FLAT = 0.6
+const MOTTLE_ALPHA = 0.35
+const CRACKS = 22
+const CRACK_STEPS = 5
+const CRACK_STEP = 4
+const CRACK_TURN = 1.1
+const CRACK_FORK_CHANCE = 0.45
+const CRACK_DEPTH = 2
+const CRACK_W = 0.9
+const CRACK_ALPHA = 0.55
+const CRACK_LIP_ALPHA = 0.3
+const CRACK_SPAN = 0.95
 //
 // Crooked stem like a little tree trunk: its centre line bends side to
 // side (two waves) on its way up.
@@ -97,23 +111,30 @@ const CAP_LIGHT_W = 0.28
 const CAP_LIGHT_H = 0.3
 //
 // Holes in the cap (u: share of the cap width from its centre, v: share of
-// its height from the top, r: radius). Toward the dome's sides they are
-// foreshortened (narrower); each has a dark rim, a glowing inside and a
-// bright crescent at its lower edge.
+// its height from the top, r: radius), big and small in rows down the
+// bell. Toward its sides they are foreshortened (narrower) and tilt with
+// the surface. Each is deep: a dark lip, the shadowed upper inner wall,
+// the lit lower wall, a glowing heart low in it, a bright crescent at its
+// lower edge and the cap's lit edge just under it.
 //
 const HOLES = [
-  { u: -0.08, v: 0.2, r: 12 }, { u: 0.17, v: 0.24, r: 9 }, { u: -0.29, v: 0.4, r: 11 },
-  { u: 0.03, v: 0.48, r: 14 }, { u: 0.3, v: 0.45, r: 12 }, { u: -0.12, v: 0.7, r: 8 },
-  { u: 0.17, v: 0.72, r: 10 }, { u: -0.38, v: 0.68, r: 7 }, { u: 0.4, v: 0.72, r: 7 },
-  { u: -0.22, v: 0.08, r: 5 }, { u: 0.08, v: 0.06, r: 5 }, { u: -0.43, v: 0.88, r: 4 },
-  { u: 0.03, v: 0.86, r: 5 }, { u: 0.29, v: 0.9, r: 4 }, { u: -0.3, v: 0.88, r: 5 }
+  { u: -0.07, v: 0.18, r: 10 }, { u: 0.12, v: 0.2, r: 8 },
+  { u: -0.25, v: 0.38, r: 11 }, { u: 0.02, v: 0.4, r: 15 }, { u: 0.26, v: 0.37, r: 10 },
+  { u: -0.34, v: 0.6, r: 9 }, { u: -0.12, v: 0.62, r: 12 }, { u: 0.14, v: 0.6, r: 13 }, { u: 0.34, v: 0.62, r: 8 },
+  { u: -0.4, v: 0.8, r: 6 }, { u: -0.23, v: 0.82, r: 8 }, { u: 0.02, v: 0.84, r: 9 }, { u: 0.25, v: 0.82, r: 9 }, { u: 0.4, v: 0.8, r: 5 }
 ]
 const HOLE_SQUASH = 0.8
 const HOLE_SIZE = CAP_SIZE
 const HOLE_EDGE_SQUEEZE = 0.9
-const HOLE_RIM = 2
-const HOLE_INNER = 0.68
-const HOLE_CRESCENT = 0.4
+const HOLE_TILT = 1.1
+const HOLE_RIM = 1.6
+const HOLE_WALL = 0.88
+const HOLE_WALL_DROP = 0.14
+const HOLE_INNER = 0.6
+const HOLE_INNER_DROP = 0.22
+const HOLE_CRESCENT = 0.42
+const HOLE_EDGE_LIT_W = 1.2
+const HOLE_EDGE_LIT_ALPHA = 0.7
 const SPORE_HALO_SHARE = 0.6
 const HOLE_GLOW_R = 1.3
 const HOLE_GLOW_OPACITY = 0.35
@@ -132,7 +153,7 @@ const HALF = 0.5
 // it is pushed out, so this is deeper). The collider is thick so such a
 // fall cannot tunnel through it.
 //
-const CAP_COLLIDE_W = 0.92
+const CAP_COLLIDE_W = 0.62
 const CAP_COLLIDE_H = 64
 const CAP_COLLIDE_SINK = 6
 const CAP_COLLIDE_TOL = 6
@@ -639,7 +660,7 @@ function paintUnderside(ctx, cx, rimY) {
   ctx.ellipse(cx, rimY, rx, UNDER_RY, 0, 0, FULL_TURN)
   ctx.fillStyle = css(pal.gill)
   ctx.fill()
-  ctx.strokeStyle = css(pal.hole, GILL_ALPHA)
+  ctx.strokeStyle = css(pal.gillLine, GILL_ALPHA)
   ctx.lineWidth = 1
   for (let i = 1; i < GILL_COUNT; i++) {
     const a = Math.PI * i / GILL_COUNT
@@ -754,50 +775,48 @@ function wander(a, b, rng) {
   return pts
 }
 //
-// The dome: a lumpy outline rising to a flattish top, shade lower right,
-// light upper left, scales, and the glowing holes.
+// The bell: skin, shade lower right, light upper left, mottles and cracks,
+// the deep glowing holes, then the contour.
 //
 function paintCap(ctx, cx, capTop, rimY) {
-  const [cDark, cMid, cLight] = CAVE_PAL.spore.cap
+  const [contour, shade, skin, light] = CAVE_PAL.spore.cap
   const dome = domePath(cx, capTop, rimY)
   ctx.save()
-  ctx.fillStyle = css(cMid)
+  ctx.fillStyle = css(skin)
   ctx.fill(dome)
   ctx.clip(dome)
-  ctx.fillStyle = css(cDark)
+  ctx.fillStyle = css(shade)
   ctx.beginPath()
   ctx.ellipse(cx + CAP_W * CAP_SHADE_SHIFT, rimY, CAP_W * CAP_SHADE_W, CAP_H * CAP_SHADE_H, 0, 0, FULL_TURN)
   ctx.fill()
-  ctx.fillStyle = css(cLight)
+  ctx.fillStyle = css(light)
   ctx.beginPath()
   ctx.ellipse(cx - CAP_W * CAP_LIGHT_SHIFT, capTop + CAP_H * CAP_LIGHT_Y, CAP_W * CAP_LIGHT_W, CAP_H * CAP_LIGHT_H, 0, 0, FULL_TURN)
   ctx.fill()
-  paintScales(ctx, cx, capTop, createSeededRandom(GRAIN_SEED + 2))
+  const rng = createSeededRandom(GRAIN_SEED + 2)
+  paintMottles(ctx, cx, capTop, rng)
+  paintCracks(ctx, cx, capTop, rng)
   HOLES.forEach(hl => paintHole(ctx, cx + hl.u * CAP_W, capTop + hl.v * CAP_H, hl))
   ctx.restore()
-  ctx.strokeStyle = css(cDark)
+  ctx.strokeStyle = css(contour)
   ctx.lineWidth = CONTOUR_W
   ctx.stroke(dome)
 }
 //
-// Dome outline: the two curves sampled and pushed in and out in lumps.
+// Bell outline: its half-width at each height (body rounding up to the
+// top, the rim flaring out at the bottom), pushed in and out in lumps.
 //
 function domePath(cx, capTop, rimY) {
   const half = CAP_W / 2
-  const curve = (t, sign) => {
-    const u = 1 - t
-    const p0 = { x: cx + sign * half, y: rimY }
-    const p1 = { x: cx + sign * half * DOME_SIDE_X * 2, y: rimY - CAP_H * DOME_SIDE_Y }
-    const p2 = { x: cx + sign * half * DOME_TOP_X, y: capTop }
-    const p3 = { x: cx, y: capTop }
-    return {
-      x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
-      y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
-    }
-  }
   const pts = []
-  for (let i = 0; i <= DOME_STEPS; i++) pts.push(curve(i / DOME_STEPS, -1))
-  for (let i = DOME_STEPS - 1; i >= 0; i--) pts.push(curve(i / DOME_STEPS, 1))
+  for (let i = 0; i <= DOME_STEPS; i++) {
+    const v = i / DOME_STEPS
+    pts.push({ x: cx - bellHalf(v) * half, y: rimY - v * (rimY - capTop) })
+  }
+  for (let i = DOME_STEPS - 1; i >= 0; i--) {
+    const v = i / DOME_STEPS
+    pts.push({ x: cx + bellHalf(v) * half, y: rimY - v * (rimY - capTop) })
+  }
   const bumped = pts.map((q, i) => {
     const s = i / (pts.length - 1)
     const lump = Math.sin(s * Math.PI * DOME_BUMPS + DOME_BUMP_SEED) * Math.sin(Math.PI * s) * CAP_H * DOME_BUMP
@@ -812,54 +831,89 @@ function domePath(cx, capTop, rimY) {
   return path
 }
 //
-// Rounded scales over the dome (clear of the holes), each lit on top and
-// shaded below, so the cap reads lumpy.
+// Half-width of the bell (share of the cap's) at a height share from the rim.
 //
-function paintScales(ctx, cx, capTop, rng) {
-  const [cDark, , , cHigh] = CAVE_PAL.spore.cap
-  for (let i = 0; i < SCALES; i++) {
-    const u = (rng() - HALF) * SCALE_SPAN
-    const v = rng()
-    const x = cx + u * CAP_W
-    const y = capTop + v * CAP_H
-    const r = SCALE_R_MIN + rng() * SCALE_R_RANGE
-    const clear = HOLES.every(h => Math.hypot(cx + h.u * CAP_W - x, capTop + h.v * CAP_H - y) > h.r * HOLE_SIZE + r + SCALE_HOLE_CLEAR)
-    if (!clear) continue
-    ctx.strokeStyle = css(cDark, SCALE_SHADE_ALPHA)
-    ctx.lineWidth = SCALE_SHADE_W
+function bellHalf(v) {
+  return BELL_BODY * Math.pow(Math.max(0, 1 - Math.pow(v, BELL_POW)), BELL_ROUND) + BELL_FLARE * Math.pow(1 - v, BELL_FLARE_POW)
+}
+//
+// Soft lighter and darker patches over the skin.
+//
+function paintMottles(ctx, cx, capTop, rng) {
+  const [, shade, , , high] = CAVE_PAL.spore.cap
+  for (let i = 0; i < MOTTLES; i++) {
+    const r = MOTTLE_R_MIN + rng() * MOTTLE_R_RANGE
+    ctx.fillStyle = css(i % 2 ? high : shade, MOTTLE_ALPHA)
     ctx.beginPath()
-    ctx.ellipse(x, y, r, r * SCALE_FLAT, 0, 0, Math.PI)
-    ctx.stroke()
-    ctx.strokeStyle = css(cHigh, SCALE_LIT_ALPHA)
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.ellipse(x, y, r, r * SCALE_FLAT, 0, SCALE_LIT_FROM, SCALE_LIT_TO)
-    ctx.stroke()
+    ctx.ellipse(cx + (rng() - HALF) * CAP_W * CRACK_SPAN, capTop + rng() * CAP_H, r, r * MOTTLE_FLAT, rng() * Math.PI, 0, FULL_TURN)
+    ctx.fill()
   }
 }
 //
-// One hole: dark rim, glowing inside, a bright crescent at its lower edge
-// (the light inside the cap); narrower toward the dome's sides.
+// A net of fine cracks over the skin: each wanders a few steps from a
+// random spot and forks now and then (thinner, shorter), with a pale lip
+// below it.
+//
+function paintCracks(ctx, cx, capTop, rng) {
+  const [contour, , , , high] = CAVE_PAL.spore.cap
+  ctx.lineCap = 'round'
+  for (let i = 0; i < CRACKS; i++) {
+    const from = { x: cx + (rng() - HALF) * CAP_W * CRACK_SPAN, y: capTop + rng() * CAP_H }
+    crack(ctx, from, rng() * FULL_TURN, CRACK_W, CRACK_DEPTH, rng, contour, high)
+  }
+}
+function crack(ctx, from, heading, w, depth, rng, color, lip) {
+  const pts = [from]
+  let h = heading
+  for (let i = 0; i < CRACK_STEPS; i++) {
+    h += (rng() - HALF) * CRACK_TURN
+    const p = pts[pts.length - 1]
+    pts.push({ x: p.x + Math.cos(h) * CRACK_STEP, y: p.y + Math.sin(h) * CRACK_STEP })
+  }
+  ctx.lineWidth = w
+  ctx.strokeStyle = css(lip, CRACK_LIP_ALPHA)
+  ctx.beginPath()
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y + w) : ctx.moveTo(p.x, p.y + w)))
+  ctx.stroke()
+  ctx.strokeStyle = css(color, CRACK_ALPHA)
+  ctx.beginPath()
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+  ctx.stroke()
+  depth > 0 && rng() < CRACK_FORK_CHANCE && crack(ctx, pts[Math.floor(pts.length * HALF)], h + (rng() < HALF ? 1 : -1) * CRACK_TURN, w * HALF, depth - 1, rng, color, lip)
+  depth > 0 && crack(ctx, pts[pts.length - 1], h, w, depth - 1, rng, color, lip)
+}
+//
+// A tilted oval in a hole, dropped toward the hole's lower side.
+//
+function fillOval(ctx, x, y, tilt, fill, rx, ry, drop) {
+  ctx.fillStyle = css(fill)
+  ctx.beginPath()
+  ctx.ellipse(x - Math.sin(tilt) * drop, y + Math.cos(tilt) * drop, rx, ry, tilt, 0, FULL_TURN)
+  ctx.fill()
+}
+//
+// One deep hole (tilted and narrowed toward the bell's sides): dark lip,
+// the shadowed upper wall, the lit lower wall, the glowing heart low in it,
+// a bright crescent at its lower edge and the cap's lit edge under it.
 //
 function paintHole(ctx, x, y, hl) {
   const pal = CAVE_PAL.spore
+  const [contour, , , , high] = pal.cap
   const r = hl.r * HOLE_SIZE
   const rx = r * (1 - Math.abs(hl.u) * 2 * HOLE_EDGE_SQUEEZE * HALF)
   const ry = r * HOLE_SQUASH
-  ctx.fillStyle = css(CAVE_PAL.spore.cap[0])
-  ctx.beginPath()
-  ctx.ellipse(x, y, rx + HOLE_RIM, ry + HOLE_RIM, 0, 0, FULL_TURN)
-  ctx.fill()
-  ctx.fillStyle = css(pal.hole)
-  ctx.beginPath()
-  ctx.ellipse(x, y, rx, ry, 0, 0, FULL_TURN)
-  ctx.fill()
-  ctx.fillStyle = css(pal.holeGlow)
-  ctx.beginPath()
-  ctx.ellipse(x, y + ry * (1 - HOLE_INNER) * HALF, rx * HOLE_INNER, ry * HOLE_INNER, 0, 0, FULL_TURN)
-  ctx.fill()
+  const tilt = hl.u * HOLE_TILT
+  fillOval(ctx, x, y, tilt, contour, rx + HOLE_RIM, ry + HOLE_RIM, 0)
+  fillOval(ctx, x, y, tilt, pal.holeRim, rx, ry, 0)
+  fillOval(ctx, x, y, tilt, pal.hole, rx * HOLE_WALL, ry * HOLE_WALL, ry * HOLE_WALL_DROP)
+  fillOval(ctx, x, y, tilt, pal.holeGlow, rx * HOLE_INNER, ry * HOLE_INNER, ry * HOLE_INNER_DROP)
   ctx.fillStyle = css(pal.spark)
   ctx.beginPath()
-  ctx.ellipse(x, y + ry * HOLE_INNER * HALF, rx * HOLE_CRESCENT, ry * HOLE_CRESCENT * HALF, 0, 0, Math.PI)
+  ctx.ellipse(x, y + ry * HOLE_INNER * HALF, rx * HOLE_CRESCENT, ry * HOLE_CRESCENT * HALF, tilt, 0, Math.PI)
   ctx.fill()
+  ctx.strokeStyle = css(high, HOLE_EDGE_LIT_ALPHA)
+  ctx.lineWidth = HOLE_EDGE_LIT_W
+  ctx.beginPath()
+  ctx.ellipse(x, y, rx + HOLE_RIM + HOLE_EDGE_LIT_W, ry + HOLE_RIM + HOLE_EDGE_LIT_W, tilt, 0, Math.PI)
+  ctx.stroke()
 }

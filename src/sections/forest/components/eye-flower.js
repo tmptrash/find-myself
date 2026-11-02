@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import * as IkChain from '../../../utils/ik-chain.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
-import { drawFernToCanvas } from '../../../utils/draw-fern.js'
+import { drawForestFern } from '../utils/forest-ferns.js'
 import { drawFeatherPlumeToCanvas } from '../../../utils/draw-feather-plume.js'
 import { drawGrassTuftToCanvas } from '../../../utils/draw-grass-tuft.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
@@ -1306,7 +1306,7 @@ function paintIsland(ctx, inst) {
   ISLAND_PLANTS.filter(p => p.kind === KIND.FERN).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
     baseY != null &&
-      drawFernToCanvas(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.fern })
+      drawForestFern(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)), colors: colors.fern })
   })
   ISLAND_PLANTS.filter(p => p.kind === KIND.MUSHROOMS).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)

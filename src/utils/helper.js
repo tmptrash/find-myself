@@ -54,6 +54,22 @@ export function parseHex(colorHex) {
   const b = parseInt(hex.substring(4, 6), 16)
   return [r, g, b]
 }
+
+/**
+ * The items of a list in a random order (Fisher-Yates), the list untouched.
+ * @param {Array} list - Items
+ * @returns {Array} A shuffled copy
+ */
+export function shuffledCopy(list) {
+  const out = list.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const t = out[i]
+    out[i] = out[j]
+    out[j] = t
+  }
+  return out
+}
 //
 // Physical key state tracking (uses KeyboardEvent.code for layout-independent input)
 //

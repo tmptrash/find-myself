@@ -10,34 +10,7 @@ export const FOREST_PIXEL_DENSITY = {
   focal: { clusterCellPx: 2, detailLeavesMin: 1, detailLeavesMax: 2 }
 }
 
-/**
- * Merges a foliage density tier into a forest-tree canvas palette.
- * @param {Object} palette - renderForestTreeIntoContext() palette
- * @param {keyof FOREST_PIXEL_DENSITY} tier
- * @returns {Object}
- */
-export function applyFoliageDensityToPalette(palette, tier) {
-  const d = FOREST_PIXEL_DENSITY[tier] ?? FOREST_PIXEL_DENSITY.midground
-  return {
-    ...palette,
-    foliageClusterCellPx: d.clusterCellPx,
-    foliageDetailLeavesMin: d.detailLeavesMin,
-    foliageDetailLeavesMax: d.detailLeavesMax
-  }
-}
 
-/**
- * buildForestTree() opts for detail-leaf counts at a tier.
- * @param {keyof FOREST_PIXEL_DENSITY} tier
- * @returns {{ foliageDetailLeavesMin: number, foliageDetailLeavesMax: number }}
- */
-export function forestTreeBuildOptsForDensity(tier) {
-  const d = FOREST_PIXEL_DENSITY[tier] ?? FOREST_PIXEL_DENSITY.midground
-  return {
-    foliageDetailLeavesMin: d.detailLeavesMin,
-    foliageDetailLeavesMax: d.detailLeavesMax
-  }
-}
 
 /**
  * Bush oval scale — coarser silhouettes on deeper rows.

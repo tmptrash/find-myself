@@ -9,7 +9,6 @@ import { registerForestNativeTeardown } from '../../../utils/engine-switch.js'
 import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
-import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import {
   drawCuteMushroomToCanvas,
@@ -18,13 +17,7 @@ import {
   TRAMP_FACE_EYE_SCALE
 } from '../utils/cute-mushroom.js'
 import * as Predator from '../components/predator.js'
-import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys } from '../../../utils/helper.js'
-import {
-  buildForestTree,
-  renderForestTreeToCanvas,
-  renderForestTreeIntoContext,
-  TREE_SEED
-} from '../utils/forest-tree.js'
+import { toCanvas, getRGB, createCanvasAtlasBuilder, shuffledCopy, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys } from '../../../utils/helper.js'
 import {
   GROUND_RIGHT_STRIP_COUNT,
   groundRightStripIndexForX,
@@ -35,22 +28,12 @@ import {
   forestCaveEarthDeepRgb,
   forestGroundEarthBottomLayerRgb,
   forestRgb,
-  forestRockShadedDrawPalette,
   forestContourRgb,
   snapToPalette,
   lerpForestRgb,
-  getTreePaletteColor,
-  getForestGameplayTreeVolumeShades,
-  getTreePaletteParallaxCorner,
-  buildDimmedTreePalette,
   getForestLightRgb,
   forestSkyBandRgb
 } from '../utils/forest-palette.js'
-import {
-  applyFoliageDensityToPalette,
-  forestFilmGrainBlockPxForTier,
-  forestTreeBuildOptsForDensity
-} from '../utils/forest-pixel-density.js'
 import {
   applyForestGameplaySharpBake,
   applyForestHudSharpBake,
@@ -80,7 +63,7 @@ import {
   getForestPitCaveTrampolineX
 } from '../utils/forest-level-atmosphere.js'
 import {
-  buildForestTreeFruitSpots,
+  buildFixedForestTreeFruitSpots,
   computeForestAnchorFruitDropX,
   forestAnchorFruitGroundClearSpan,
   isForestAnchorFruitGroundX,
@@ -91,11 +74,17 @@ import {
   restoreFallenAnchorFruit,
   tickForestTreeFruits
 } from '../utils/forest-tree-fruit.js'
+import { bakeLeftTree, leftTreeBranch, leftTreeApple } from '../utils/forest-left-tree.js'
+import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
+import { loadForestFerns } from '../utils/forest-ferns.js'
+import * as Clouds from '../utils/forest-clouds.js'
+import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '../utils/forest-picture-bushes.js'
+import { loadForestStones, forestBuriedStones, forestGroundStones, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as ChainBuoy from '../utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../utils/forest-eye-berry.js'
 import * as ChainEyeTramp from '../utils/forest-chain-eye-trampoline.js'
-import * as EarTree from '../utils/forest-ear-tree.js'
+import * as BombTree from '../utils/forest-bomb-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import * as Lake from '../utils/forest-lake.js'
@@ -105,23 +94,16 @@ import { GROUND_LAYER_FRACS, groundEarthLayersColor, paintLayeredEarthBand } fro
 import * as FlowerGrab from '../components/flower-grab.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/forest-shore-tree.js'
-import { paintForestShoreRock } from '../utils/forest-shore-rock.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as ForestFloor from '../components/forest-floor.js'
 import { paintUndergroundDepthVignette } from '../utils/forest-atmosphere.js'
-import { createSeededRandom } from '../../../utils/seeded-random.js'
 import * as ForestCamera from '../utils/forest-camera.js'
 import {
   applyParallaxPostFxToContext,
   applyForestLayerGradeToCanvas,
   FOREST_LAYER_GRADE
 } from '../utils/forest-parallax-grain.js'
-import {
-  measureCanvasContentBounds,
-  cropCanvasToBounds,
-  releaseCanvas
-} from '../utils/forest-canvas-crop.js'
 //
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
@@ -149,10 +131,6 @@ const GROUND_DARK = forestRgb('groundDark')
 // Dark warm soil tone of the short static root ticks under the grass tufts.
 //
 const GRASS_ROOT_RGB = forestRgb('groundLoam')
-//
-// Cool forest air — parallax trees fade into teal/green sky, not gold (70/20/10).
-//
-const PARALLAX_FOLIAGE_HAZE = forestRgb(FOREST_PAL.forestLift)
 //
 // Forest contour ink for trees, mushrooms, rocks, letters (not pure black).
 //
@@ -184,6 +162,12 @@ const CUTE_MUSH_COLORS = FOREST_PAL.cuteMushroom
 // k.width()/k.height() at scene start (see recomputeForestScreenLayout).
 //
 const TOP_MARGIN = 110
+//
+// Clouds float this far under the playfield top, on their own layer (under
+// every world object, over the parallax forest).
+//
+const FOREST_CLOUD_TOP_GAP = 6
+const FOREST_CLOUD_Z = CFG.visual.zIndex.background
 const BOTTOM_MARGIN = 50
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
@@ -216,7 +200,6 @@ const FLOOR_Y = GROUND_SURFACE_BASE_Y + GROUND_LEVEL_OFFSET
 //
 const PLAYFIELD_EARTH_BOTTOM_Y = PLAYFIELD_BOTTOM_WORLD_Y
 const CAVE_BAND_H = PLAYFIELD_EARTH_BOTTOM_Y - FLOOR_Y
-const TREE_ROOT_MAX_Y = PLAYFIELD_EARTH_BOTTOM_Y
 //
 // Half the extra height (window taller than the 1080 design) added above
 // and below the playfield so it stays vertically centred instead of
@@ -250,51 +233,29 @@ const PLATFORM_HIDE_Y = 9999
 //
 const TREE_X = Math.round(DESIGN_SCREEN_W * 0.5)
 //
-// The trunk geometry extends a few px below the ground so its base cannot
-// leave a gap above the floor line; rendering clips it at the roots' start
-// (ground level), so the trunk is cut exactly by the ground.
+// The left big tree's picture stands with its trunk's foot here (on the
+// ground line, at TREE_X).
 //
-const TREE_TRUNK_BOTTOM_Y = FLOOR_Y
+const LEFT_TREE_FOOT = { x: TREE_X, y: FLOOR_Y }
 //
-// Roots and trunk clip share the visible ground line — the trunk ends flush
-// with the floor and roots continue below without a sunken trunk gap.
+// The plants over the left tree's foot draw in front of the tree, behind its
+// fruit and the hero.
 //
-const TREE_ROOT_START_Y = FLOOR_Y
-const TREE_TOP_Y = 430
+const LEFT_TREE_PLANTS_Z_BELOW = 1.5
 //
-// Main tree trunk wood reads slightly narrower; hero branch width is tuned
-// separately in forest-tree.js (HORIZ_W).
+// The start branch sits ~205 px above the floor — a plain jump tops out just
+// over 150 px at the feet, so it is reachable only via the left mushroom.
 //
-const MAIN_TREE_TRUNK_WIDTH_SCALE = 0.9
-//
-// Hero branch ~205 px above the floor — a plain jump tops out just over
-// 150 px at the feet, so the branch is reachable only via the left mushroom.
-//
-const MAIN_TREE_HERO_BRANCH_FRAC = 0.5
-const MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN = 0
-const MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX = 0
-//
-// The tree is painted in world space onto a full 3000x1080 canvas, but the
-// trunk and canopy only cover a slice of it. Cropping the bake to that slice
-// (and drawing the sprite at the crop offset) keeps the same pixels on
-// screen while shrinking the quad the GPU has to blend across the viewport.
-//
-const TREE_CROP_PAD = 2
-//
-// Crop offsets of the monolithic tree bake, keyed by the live Kaplay
-// instance — a resolution-mode swap rebakes into a fresh sprite registry, so
-// these must never survive into the next engine (see the native-resolution
-// notes in .cursorrules).
-//
-const monolithicTreeOffsets = new WeakMap()
 const TRUNK_EXCLUDE_HALF = 50
-const TREE_FRUIT_VIEW_TOP_PAD = 16
 //
 // The east ground starts this far past the branch trampoline's grass
 // clearing; the stalk eyes, ear-trees and east rocks are laid out from there.
 //
 const EAST_GROUND_TRAMP_GAP = 42
 const FOREST_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
+//
+// Bomb trees stand behind the hero and the bomb's burst shards.
+//
 const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
@@ -334,11 +295,6 @@ const HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD =
 // patrol bounds of its own.
 //
 const HERO_PREDATOR_RESPAWN_FALLBACK_SPAN = 200
-//
-// Rock rim — green-brown shadow tone (not neutral gray).
-//
-const ROCK_OUTLINE_RGB = DECOR_OUTLINE_RGB
-const ROCK_OUTLINE_WIDTH = 1.4
 //
 // Parallax background — sky baked into the far row plus 2 forest planes (each
 // scrolling at its own speed), then a static ground/underground strip at
@@ -419,8 +375,6 @@ const parallaxOffscreenByK = new WeakMap()
 // Parallax depth blur radii live in forest-focus-depth.js (background → nearground).
 // Static ground / gameplay sprites stay sharp at bake time.
 //
-const TREE_COLOR_SPRITE_NAME = 'forest0-tree-color-v10'
-const TREE_COLOR_GRAIN_SEED = 6002
 //
 // Horizontal branch platform.
 //
@@ -436,6 +390,11 @@ const SPAWN_MODE_CAVE = 'cave'
 // Anti-tunnel band below the start branch — catches falls before lake-floor snap
 //
 const BRANCH_SNAP_BELOW = 88
+//
+// A body whose feet are this far under a branch top meets it from below and
+// passes through.
+//
+const BRANCH_ONE_WAY_TOL = 12
 const HERO_BRANCH_FRACTION = 0.20
 //
 // Respawn point at the lower-right ground — used after a death once the
@@ -455,19 +414,6 @@ const LOG_COLLISION_DROP_Y = 2
 //
 const RIGHT_PLAT_OFFSET_X = 100
 //
-// Background forest — three planes of big trees baked and drawn fully
-// OPAQUE. Depth comes from colour: the far and mid rows sit on their own
-// palette swatches (one step darker than the sky), the near colour-world
-// row keeps green foliage with a light haze blend.
-//
-const PAR_L1_COLOR_BLEND = 0.14
-const PAR_MID_COLOR_BLEND = 0.34
-//
-// Near-row foliage leans slightly toward the warm sky haze (leaf-only blend)
-// while green stays the leading colour — kept low so parallax stays muted.
-//
-const PAR_L1_LEAF_WARM_BLEND = 0.08
-//
 // Reference corner tree families — left/right from playfield midline; top/bottom
 // from canopy row (far + mid = upper pair, near = lower pair on screen).
 //
@@ -485,15 +431,18 @@ const PAR_TREE_CORNER_KEYS = [
 const PAR_BIG_GROUND_SINK = 8
 const PAR_TRUNK_BOTTOM_Y = FLOOR_Y + PAR_BIG_GROUND_SINK
 //
-// The plane holds a handful of BIG trees built with the same forest-tree
-// generator as the main tree (wider trunks, no roots, no hero branch), all
-// baked onto one shared full-screen canvas per mode, drawn behind the main tree.
+// The near row holds a handful of big picture trees.
 //
 const PAR_BIG_TREE_COUNT = 14
-const PAR_BIG_SEED_BASE = 40000
+//
+// Picture trees (forest-picture-trees.js) per parallax row, back to front:
+// how many and at what scale (world px per picture px).
+//
+const PAR_SKY_TREE_COUNT = 52
+const PAR_SKY_TREE_SCALE = 0.62
 const PAR_FAR_TREE_COUNT = 17
-const PAR_FAR_SEED_BASE = 50000
-const PAR_BIG_SEED_STEP = 101
+const PAR_MID_TREE_SCALE = 0.8
+const PAR_NEAR_TREE_SCALE = 0.96
 //
 // Three overlapping canopy bands: each deeper row starts lower so the strips
 // stack with shared height. A sky gap above the nearest band stays bare.
@@ -508,29 +457,6 @@ const PAR_NEAR_BAND_BOTTOM = PAR_NEAR_BAND_TOP + PAR_LEAF_BAND_H_NEAR
 const PAR_MID_BAND_TOP = PAR_NEAR_BAND_BOTTOM - PAR_LEAF_TIER_OVERLAP
 const PAR_MID_BAND_BOTTOM = PAR_MID_BAND_TOP + PAR_LEAF_BAND_H_MID
 const PAR_FAR_BAND_TOP = PAR_MID_BAND_BOTTOM - PAR_LEAF_TIER_OVERLAP
-//
-// Trunk apex sits above each row's canopy so branches sprout inside the
-// band. The margin has to clear the crown clusters buildForestTree grows from
-// the trunk apex (three stubs 28-50px long, see forest-tree.js) — the old
-// 42/35/28 margins were smaller than that reach, so at unlucky random rolls
-// a tree's own crown (not just the safety clip) could already poke past its
-// row's intended band, including the near row punching into the sky gap.
-//
-const PAR_BIG_TOP_MIN_Y = PAR_NEAR_BAND_TOP - 120
-const PAR_BIG_TOP_RANGE = 28
-const PAR_FAR_TOP_MIN_Y = PAR_MID_BAND_TOP - 70
-const PAR_FAR_TOP_RANGE = 18
-const PAR_BIG_WIDTH_SCALE_MIN = 0.96
-const PAR_BIG_WIDTH_SCALE_RANGE = 0.06
-//
-// East-half canopy thinning: leaves past CANOPY_THIN_RIM (normalised crown
-// radius) are the silhouette and stay; inside, noise patches of about
-// CANOPY_THIN_CELL_PX open where the noise falls under the hole threshold.
-//
-const CANOPY_THIN_RIM = 0.78
-const CANOPY_THIN_CELL_PX = 64
-const CANOPY_THIN_CLUSTER_HOLE = 0.44
-const CANOPY_THIN_DETAIL_HOLE = 0.5
 //
 // Pull parallax trunks toward the main tree; nearer rows hug the centre more.
 //
@@ -550,16 +476,13 @@ const PAR_TREE_STEP_RANGE_FRAC = 0.9
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is taller — three readable ground-level tiers.
+// The near and middle strips are hedges of picture bushes
+// (forest-picture-bushes.js) at these scales (world px per sheet px); the
+// farthest one is drawn at BUSH_FARTHEST_HEIGHT_SCALE.
 //
-const BUSH_NEAR_HEIGHT_SCALE = 0.78
-const BUSH_FAR_HEIGHT_SCALE = 1.18
+const PAR_NEAR_BUSH_SCALE = 0.36
+const PAR_MID_BUSH_SCALE = 0.56
 const BUSH_FARTHEST_HEIGHT_SCALE = 1.55
-//
-// Pinnate ferns tucked into the two nearest bush rows (reference detail);
-// the per-row value is the average fern count per mound.
-//
-const BUSH_FERNS_NEAR = 1.8
-const BUSH_FERNS_MID = 1.4
 const PAR_FARTHEST_BAND_TOP = PAR_FAR_BAND_TOP
 //
 // World-Y crop for one parallax tree row (crowns + trunks down to ground).
@@ -604,26 +527,28 @@ const WALL_BORDER_R = OUTER.r
 const WALL_BORDER_G = OUTER.g
 const WALL_BORDER_B = OUTER.b
 //
-// Two rocks bracket the lake's tree-side end — water sits between them.
+// Ground stones (forest-stones.js: the mossy ones, the ones with plants and
+// the bits of wall) scattered at random along the whole strip the centipede
+// runs on.
 //
-const WATER_END_ROCK_BEFORE_X = 32
-const WATER_END_ROCK_AFTER_X = 14
+const GROUND_STONE_COUNT = 26
 //
-// Shore rock horizontal stretch — extended to the right so it fully covers
-// the right edge of the lake.
+// Every GROUND_STONE_FRONT_EVERY-th stone stands in front of the hero (under
+// the grass blades), smaller (GROUND_STONE_FRONT_SIZE of the others) and
+// sunk GROUND_STONE_FRONT_SINK px deeper so it never hides him whole.
 //
-const SHORE_ROCK_WIDTH_SCALE = 2.2
+const GROUND_STONE_FRONT_EVERY = 4
+const GROUND_STONE_FRONT_SIZE = 0.6
+const GROUND_STONE_FRONT_SINK = 3
 //
-// Scatter rocks across the lower-right part of the playfield, grouped into
-// a few clusters rather than spread uniformly (same idea as the left
-// 6-rock cluster near the tree).
+// A ground stone's bottom sinks this far (px, plus a little random) under
+// the ground line; narrower ones than GROUND_STONE_SMALL_W count as small
+// decor for the strip reveal.
 //
-const RIGHT_ROCK_COUNT = 16
-const RIGHT_ROCK_CLUSTER_COUNT = 6
-const RIGHT_ROCK_CLUSTER_SPREAD_MIN = 28
-const RIGHT_ROCK_CLUSTER_SPREAD_RANGE = 36
-const EAST_ROCK_INSET = 6
-const EAST_ROCK_COUNT = 34
+const GROUND_STONE_SINK = 2
+const GROUND_STONE_SINK_RANGE = 3
+const GROUND_STONE_SMALL_W = 32
+const GROUND_STONE_Z = 7
 //
 // Forest HUD row — the (empty) section label's top Y is derived from the FPS
 // row's vertical CENTER (FOREST_HUD_FPS_TOP_Y) so the small hero / life icons
@@ -822,12 +747,18 @@ const PIT_CAVE_HERO_FOREGROUND_Z = GRASS_Z + 14
 //
 const FOREST_FLOOR_BACK_Z = 6.5
 const FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
+const GROUND_STONE_FRONT_Z = FOREST_FLOOR_FRONT_Z - 0.5
 const FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 const FOREST_EAR_TREE_ROOTS_Z = GRASS_Z + 1
 const FOREST_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
+const FOREST_FALL_TWIG_FRONT_Z = FOREST_EAR_TREE_TRUNK_OVERLAY_Z - 0.5
 const FOREST_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
 const FOREST_SPIKY_TOMATO_Z = FOREST_EAR_TREE_BRANCHES_Z + 0.5
+//
+// The knocked apple falls and lies in front of everything on the ground.
+//
+const FOREST_FRUIT_Z = FOREST_SPIKY_TOMATO_Z + 0.5
 const TOMATO_BURST_HERO_SAFE_RADIUS = 100
 const TOMATO_BURST_HERO_SAFE_SEC = 3.2
 const FOREST_EAR_TREE_COUNT = 2
@@ -852,12 +783,9 @@ const EARTH_STATIC_BAKE_GRAIN_BLOCK_PX = 2
 //
 const SKY_DITHER_BAND_COUNT = 7
 //
-// Rocks.
+// Half the widest ground stone (forest-stones.js) and some.
 //
-const CLUSTER_ROCK_RADIUS_MIN = 26
-const CLUSTER_ROCK_RADIUS_MAX = 60
-const SCATTER_ROCK_RADIUS_MIN = 10
-const SCATTER_ROCK_RADIUS_MAX = 24
+const GROUND_STONE_HALF_W_MAX = 68
 //
 // Mushrooms.
 //
@@ -889,10 +817,10 @@ const TRAMP_GRASS_CLEAR_HALF = TRAMP_TOTAL_W / 2 + 12
 //
 const TRAMP_MUSHROOM_CLEAR_HALF = TRAMP_TOTAL_W / 2 + MUSHROOM_CAP_W_MAX / 2 + 10
 //
-// Scatter rocks keep clear of the trampoline too — even the widest rock
-// silhouette (radius * 1.3 half-width) never covers the mushroom face.
+// Ground stones keep clear of the trampoline too — even the widest stone
+// never covers the mushroom face.
 //
-const TRAMP_ROCK_CLEAR_HALF = TRAMP_TOTAL_W / 2 + Math.ceil(SCATTER_ROCK_RADIUS_MAX * 1.3) + 10
+const TRAMP_ROCK_CLEAR_HALF = TRAMP_TOTAL_W / 2 + GROUND_STONE_HALF_W_MAX + 10
 //
 // Blinking: random pause between blinks, short eyelid-down hold.
 //
@@ -986,33 +914,16 @@ const WATER_RIGHT_TRIM = 10
 // branch root at the trunk, this far to the left — independent of how long
 // the branch itself is drawn.
 //
-const LAKE_SHORE_ANCHOR_FROM_TRUNK = 200
+const LAKE_SHORE_ANCHOR_FROM_TRUNK = 240
+//
+// The lake's right bank edge is ragged by this much (forest-lake.js).
+//
+const LAKE_BANK_JAG_PX = 22
+//
+// The open water reaches this far right of that anchor (before the trim).
+//
+const LAKE_WATER_PAST_ANCHOR = 110
 const LAKE_Z = 12
-//
-// Tree-side shore rocks baked as one tall rock reaching the lake bed: how
-// steeply the flanks drop, how far past the bed they sink and how much the
-// base spreads outward (bed clip and underwater tint: forest-lake.js).
-//
-const LAKE_SHORE_ROCK_FLANK_EXP = 0.6
-const LAKE_SHORE_ROCK_BED_OVERSHOOT_PX = 14
-const LAKE_SHORE_ROCK_BASE_SPREAD = 1.55
-//
-// Pinch the dry cap and flare the submerged base so the pile is wider at
-// the bed than above the water line.
-//
-const LAKE_SHORE_ROCK_TOP_PINCH = 0.22
-const LAKE_SHORE_ROCK_BOTTOM_FLARE = 2.4
-//
-// The whole merged rock shrinks toward the lake's right shore (between the
-// water core end and the bake end) so it only caps the shoreline instead of
-// reaching far into the lake.
-//
-const LAKE_SHORE_ROCK_SCALE = 0.3
-const LAKE_SHORE_ROCK_ANCHOR_T = 0.5
-//
-// The stone pile rises well above the water line, like a heap against the bank.
-//
-const LAKE_SHORE_ROCK_LIFT_PX = 24
 //
 // Lake layers (see forest-lake.js): the bed and the algae under the water
 // fill. The sprite key keeps the level's baked lake names.
@@ -1034,15 +945,13 @@ const FOREST_DROWN_HERO_CLIP_Z = LAKE_Z + 1
 // The sunk part of a drowning hero is drawn under the see-through water.
 //
 const FOREST_DROWN_HERO_UNDERWATER_Z = LAKE_Z - 0.1
-const PAR_TRUNK_WIDTH_SCALE_NEAR = 0.68
-const PAR_TRUNK_WIDTH_SCALE_MID = 0.76
 //
 // Blocks every bootstrap yield frame until zone visibility and camera are ready.
 //
 const FOREST_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 //
-// Tree-side lake cap rocks must draw above swaying grass or the blades hide
-// the shore caps when the left ground decor opens with the lake.
+// The stone pile on the lake's tree-side bank draws above the swaying grass
+// and the water fill.
 //
 const SHORE_END_ROCK_Z = GRASS_Z + 1
 //
@@ -1218,17 +1127,9 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  const treeData = buildForestTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
-    ...forestTreeBuildOptsForDensity('nearground'),
-    foliageDetailLeavesMin: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN,
-    foliageDetailLeavesMax: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX,
-    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
-    structuredCrown: true
-  })
-  scaleForestTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
-  onProgress?.(12)
-  await yieldForGpu(1)
-  bakeMonolithicForestTreeSprites(k, treeData)
+  await loadForestFerns()
+  await bakeLeftTree(k, LEFT_TREE_FOOT)
+  await loadForestStones()
   onProgress?.(42)
   await yieldForGpu(1)
   onProgress?.(55)
@@ -1296,26 +1197,22 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // (async bootstrap yields to the engine between setup steps).
     //
     zones._sceneRef = { zones }
-    const treeData = buildForestTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, TREE_ROOT_MAX_Y, TREE_ROOT_START_Y, {
-    ...forestTreeBuildOptsForDensity('nearground'),
-    foliageDetailLeavesMin: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MIN,
-    foliageDetailLeavesMax: MAIN_TREE_FOLIAGE_DETAIL_LEAVES_MAX,
-    heroBranchFrac: MAIN_TREE_HERO_BRANCH_FRAC,
-    structuredCrown: true
-  })
-    scaleForestTreeTrunkWidths(treeData, MAIN_TREE_TRUNK_WIDTH_SCALE)
+    //
+    // The left big tree is a picture (forest-left-tree.js); its start branch
+    // and its knockable apple sit at fixed places on it.
+    //
+    await loadForestFerns()
+    const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT)
+    if (forestInitStale(session)) return
+    const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
     const treeFruitAnchorCfg = buildForestTreeFruitAnchorCfg()
-    !forestTreeSpritesPrewarmed(k) && bakeMonolithicForestTreeSprites(k, treeData)
-    //
-    // One build per scene run — it paints the whole crown into a canvas and
-    // reads it back, so it never runs from a per-frame path.
-    //
-    const treeFruitSpots = buildForestTreeFruitSpots(treeData, treeFruitAnchorCfg)
+    const treeFruitSpots = leftTree ? buildFixedForestTreeFruitSpots(leftTreeApple(LEFT_TREE_FOOT), leftTree.apple) : []
     if (await forestBootstrapPause(bootstrap, 14, session)) return
     //
     // The underground decor spec is baked into the combined static earth band.
     //
     if (!forestParallaxSpritesPrewarmed(k)) {
+      await loadForestStones()
       await buildParallaxSprites(k, forestUndergroundSpec(k), async (done, total) => {
         const pct = 15 + Math.round(6 * (done - 1) / Math.max(1, total - 1))
         if (await forestBootstrapPause(bootstrap, pct, session)) return
@@ -1325,14 +1222,24 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     if (await forestBootstrapPause(bootstrap, 20, session)) return
     if (await forestBootstrapPause(bootstrap, 24, session)) return
     //
-    // Main tree: one full colour sprite, cropped to its artwork and drawn at
-    // the crop offset that puts it back on its world position.
+    // Left big tree: the tree above ground on the ground line, its roots in
+    // the earth under it, plants over the seam at its foot (none if the
+    // picture failed to load).
     //
-    const treeBake = monolithicTreeBakeOffset(k)
-    const treeObj = k.add([
-      k.sprite(TREE_COLOR_SPRITE_NAME),
-      k.pos(treeBake.x, treeBake.y),
+    const treeObj = leftTree && k.add([
+      k.sprite(leftTree.crown.sprite),
+      k.pos(leftTree.crown.x, leftTree.crown.y),
       k.z(CFG.visual.zIndex.platforms - 2)
+    ])
+    leftTree && k.add([
+      k.sprite(leftTree.roots.sprite),
+      k.pos(leftTree.roots.x, leftTree.roots.y),
+      k.z(CFG.visual.zIndex.platforms - 2)
+    ])
+    leftTree && k.add([
+      k.sprite(leftTree.plants.sprite),
+      k.pos(leftTree.plants.x, leftTree.plants.y),
+      k.z(CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW)
     ])
     const floorBounds = createLevelBounds(k)
     if (await forestBootstrapPause(bootstrap, 27, session)) return
@@ -1350,7 +1257,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const rightZoneBaseXEarly = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const trampXEarly = rightZoneBaseXEarly + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const earTreeSpots = buildForestEarTreeSpots({ branchTrampX, trampX: trampXEarly })
-    const eastGroundRockMinX = forestEastGroundStartX()
     const rightZoneBaseX = rightZoneBaseXEarly
     //
     // Right mushroom trampoline's X — computed early (same reason as
@@ -1460,8 +1366,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
     const lakeShoreAnchorX = horizBranch.x2 - LAKE_SHORE_ANCHOR_FROM_TRUNK
-    const clusterCenterX = lakeShoreAnchorX + 40
-    const waterX2 = clusterCenterX + CLUSTER_ROCK_RADIUS_MAX + 10 - WATER_RIGHT_TRIM
+    const waterX2 = lakeShoreAnchorX + LAKE_WATER_PAST_ANCHOR - WATER_RIGHT_TRIM
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
       colors: FOREST_PAL.cuteMushroomRed,
@@ -1486,8 +1391,9 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // a single texture bind instead of each piece forcing its own
     // bindTexture/useProgram GPU state change.
     //
+    await loadForestStones()
     const decorAtlas = createCanvasAtlasBuilder()
-    const rockObjs = createForestRocks(k, lakeShoreAnchorX, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX)
+    const rockObjs = createForestRocks(k, decorAtlas, computeForestPredatorPatrolBounds(lakeX2), forestAnchorFruitGroundClearSpan(treeFruitAnchorCfg))
     const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
     decorAtlas.build(k)
     if (await forestBootstrapPause(bootstrap, 54, session)) return
@@ -1516,7 +1422,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
         ))
     }
     if (await forestBootstrapPause(bootstrap, 62, session)) return
-    const waterLayer = createWater(k, lakeX1, waterX2, zones, rockObjs)
+    const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     if (await forestBootstrapPause(bootstrap, 72, session)) return
     if (await forestBootstrapPause(bootstrap, 74, session)) return
@@ -1663,7 +1569,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     predator.levelInst = inst
     predator.landAt = (x) => forestPredatorGroundAt(inst, x)
     predator.canHuntHero = () => forestPredatorCanHuntHero(inst)
-    mountForestTreeFruitLayer(k, inst)
+    mountForestTreeFruitLayer(k, inst, FOREST_FRUIT_Z)
     inst.treeX = TREE_X
     inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
     inst.floorY = FLOOR_Y
@@ -1679,6 +1585,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     tagGroundPlatform(inst.eyeFlower.collider, sound, heroInst)
     createForestHorizFallTwigLayer(k, inst)
+    await Clouds.loadForestClouds()
+    createForestCloudLayer(k, Clouds.create({ k, x1: LEFT_MARGIN, x2: WORLD_W - RIGHT_MARGIN, topY: TOP_MARGIN + FOREST_CLOUD_TOP_GAP }))
     if (await forestBootstrapPause(bootstrap, 87, session)) return
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
@@ -1736,6 +1644,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       earthBottomY: PLAYFIELD_EARTH_BOTTOM_Y
     })
     const shoreTreeLayout = ShoreTree.buildForestShoreTreeLayout(chainBuoySpots, FLOOR_Y)
+    await ShoreTree.loadForestShoreTree()
     inst.shoreTree = shoreTreeLayout ? ShoreTree.create({ k, layout: shoreTreeLayout }) : null
     const shoreBranch = inst.shoreTree?.treeData?.horizBranch
     if (shoreBranch) {
@@ -1754,7 +1663,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
         k,
         branchX1: shoreBranch.x1,
         branchX2: shoreBranch.x2,
-        branchY: shorePlatBundle.homes[0].y
+        branchY: shorePlatBundle.homes[0].y,
+        look: ShoreTree.fallTwigLook(inst.shoreTree, HorizFallTwig.HORIZ_FALL_TWIG_STICK_LEN)
       })
       inst.shoreFallTwigs.onCycleReset = () => {
         inst._shoreBranchLandingCount = 0
@@ -1767,7 +1677,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       ...ChainEyeTramp.createChainEyeTrampStates()
     }
     inst.chainEyeBounceAir = null
-    inst.earTrees = EarTree.create({ k, spots: earTreeSpots })
+    await BombTree.loadForestBombTrees()
+    inst.earTrees = BombTree.create({ k, spots: earTreeSpots })
     inst.spikyTomatoes = SpikyTomato.create({
       k,
       earTrees: inst.earTrees,
@@ -1781,6 +1692,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     createForestShoreTreeLayer(k, inst)
     const forestFloorBlockers = buildForestFloorBlockers(trampX, branchTrampX, chainBuoySpots, shoreTreeLayout, earTreeSpots, treeFruitAnchorCfg)
     const caveLeftX = getForestCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
+    await ForestFloor.loadForestFloorHill()
     inst.forestFloor = ForestFloor.create({
       k,
       floorY: FLOOR_Y,
@@ -2371,13 +2283,6 @@ function syncForestWorldBirdsVolume(inst) {
 //
 function ignoreForestBirdsAudioError() {}
 //
-// Hermite ease for meditation colour preview (0 at start, 1 at timer zero).
-//
-function smoothstep01(t) {
-  const x = Math.max(0, Math.min(1, t))
-  return x * x * (3 - 2 * x)
-}
-//
 // True when world X lies in the early ground-peek band after G — the
 // LEFT_MARGIN..mouth-shelf span of the surface decor (rocks, mushrooms,
 // grass).
@@ -2394,24 +2299,9 @@ function applyZoneVisibility(inst) {
   inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
   syncPitCaveTrampolineDrawLayer(inst)
   inst.rockObjs.forEach(o => {
-    if (o._lakeShoreEnd || o._lakeMerged) {
-      //
-      // Cap rocks (and the cluster merged into them) are painted in
-      // drawLakeShoreRocksWorld so they always sit above the lake fill and
-      // parallax ground band.
-      //
-      o.hidden = true
-      o.pos.y = PLATFORM_HIDE_Y
-      return
-    }
     const wxRock = o._decorWorldX ?? o._homeX ?? 0
     if (isForestOpenPitMouthWorldX(inst.pit, wxRock)) {
       setDecorObjVisible(o, false)
-      return
-    }
-    if (o._side === 'left') {
-      const showLeft = o._waterCluster ? z.water : leftGroundOpen
-      setDecorObjVisible(o, showLeft, inst.leftDecorFade ?? 1)
       return
     }
     const rightOp = forestRightDecorOpacity(inst, o)
@@ -2448,10 +2338,14 @@ function isForestGrassLayerVisible(inst) {
 function setDecorObjVisible(obj, visible, opacity = 1) {
   const show = visible && opacity > 0.04
   obj.hidden = !show
-  if (obj._homeY != null) {
-    obj.pos.y = show ? obj._homeY : PLATFORM_HIDE_Y
-  }
-  obj._homeX != null && show && (obj.pos.x = obj._homeX)
+  const x = show && obj._homeX != null ? obj._homeX : obj.pos.x
+  const y = obj._homeY == null ? obj.pos.y : (show ? obj._homeY : PLATFORM_HIDE_Y)
+  //
+  // moveTo, not a pos.x / pos.y write: only it marks Kaplay's cached
+  // transform stale. An in-place write once a frame has drawn the decor
+  // hidden left it drawn off-screen for good (entering from the menu).
+  //
+  obj.moveTo(x, y)
   obj.opacity = show ? opacity : 1
 }
 //
@@ -2504,17 +2398,32 @@ function syncShoreBranchPlatform(inst) {
   plat.pos.x = home.x
   plat.pos.y = home.y
 }
+//
+// The stick on the centipede's back draws under the hero; the hanging,
+// falling and lying twigs behind the right big tree but over everything
+// on the ground, so they always show.
+//
+//
+// Clouds drift over the parallax forest (drawn in the scene's onDraw, before
+// every object) and behind the level's big trees.
+//
+function createForestCloudLayer(k, clouds) {
+  k.add([k.z(FOREST_CLOUD_Z), { draw() { Clouds.onDraw(clouds) } }])
+}
 function createForestHorizFallTwigLayer(k, inst) {
   k.add([
     k.z(HorizFallTwig.HORIZ_FALL_TWIG_DRAW_Z),
     {
       draw() {
-        if (!inst.shoreFallTwigs) return
-        HorizFallTwig.onDraw(
-          inst.shoreFallTwigs,
-          1,
-          forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN)
-        )
+        inst.shoreFallTwigs && HorizFallTwig.onDraw(inst.shoreFallTwigs, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN), true)
+      }
+    }
+  ])
+  k.add([
+    k.z(FOREST_FALL_TWIG_FRONT_Z),
+    {
+      draw() {
+        inst.shoreFallTwigs && HorizFallTwig.onDraw(inst.shoreFallTwigs, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
   ])
@@ -2601,50 +2510,23 @@ function createForestShoreTreeLayer(k, inst) {
 }
 function createForestEarTreeLayer(k, inst) {
   k.add([
-    k.z(FOREST_EAR_TREE_Z),
-    {
-      draw() {
-        if (!inst.earTrees) return
-        const c = EarTree.earTreeColors(k)
-        EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
-      }
-    }
-  ])
-  k.add([
     k.z(FOREST_EAR_TREE_ROOTS_Z),
     {
       draw() {
-        if (!inst.earTrees) return
-        const c = EarTree.earTreeColors(k)
-        EarTree.onDrawRoots(inst.earTrees, c.root, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
+        inst.earTrees && BombTree.onDrawRoots(inst.earTrees, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
   ])
   k.add([
-    k.z(FOREST_EAR_TREE_TRUNK_OVERLAY_Z),
+    k.z(FOREST_EAR_TREE_Z),
     {
       draw() {
-        if (!inst.earTrees) return
-        const c = EarTree.earTreeColors(k)
-        EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.barkShades, c.outline, 1,
-          forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
-      }
-    }
-  ])
-  k.add([
-    k.z(FOREST_EAR_TREE_BRANCHES_Z),
-    {
-      draw() {
-        if (!inst.earTrees) return
-        const c = EarTree.earTreeColors(k)
-        EarTree.onDrawBranches(inst.earTrees, c.bark, c.barkShades, c.outline, c.leaves, 1,
-          forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
+        inst.earTrees && BombTree.onDrawTrees(inst.earTrees, 1, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
   ])
   //
-  // Above both trunk passes (under-hero and above-grass) and the branches —
-  // the crown top must stay hidden behind the tomato sitting on it.
+  // Above the trees — the fork must stay hidden behind the bomb sitting in it.
   //
   k.add([
     k.z(FOREST_SPIKY_TOMATO_Z),
@@ -2691,10 +2573,13 @@ function buildParallaxTreeXs(count, gameLeft, gameRight, focusX = null, focusBia
 // corner palettes by playfield quadrant and canopy row.
 //
 async function buildParallaxSprites(k, undergroundSpec, onStep) {
+  await loadForestPictureTrees()
+  await loadForestPictureBushes()
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
   bakeParallaxLayer(k, BG_PAR_TREE3_COLOR, PAR_SKY_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     PAR_SKY_WORLD_Y, PAR_SKY_WORLD_H, (ctx, pad) => {
       renderSkyBand(ctx)
+      drawForestPictureTrees(ctx, TREE_SHEET.FAR, buildParallaxTreeXs(PAR_SKY_TREE_COUNT, LEFT_MARGIN - pad, WORLD_W - RIGHT_MARGIN + pad), PAR_TRUNK_BOTTOM_Y, PAR_SKY_TREE_SCALE)
       bakeParallaxBushes(ctx, pad, {
         cornerBandTop: PAR_FARTHEST_BAND_TOP,
         foliageDensityTier: 'background',
@@ -2705,53 +2590,14 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   onStep && await onStep(1, 4)
   bakeParallaxLayer(k, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_MID_BAND_TOP), parTreeRowWorldH(PAR_MID_BAND_TOP), (ctx, pad) => {
-      bakeParallaxTrees(ctx, pad, {
-        count: PAR_FAR_TREE_COUNT,
-        seedBase: PAR_FAR_SEED_BASE,
-        topMinY: PAR_FAR_TOP_MIN_Y,
-        topRange: PAR_FAR_TOP_RANGE,
-        bandTop: PAR_MID_BAND_TOP,
-        foliageDensityTier: 'midground',
-        colorBlend: PAR_MID_COLOR_BLEND,
-        flatLeaves: true,
-        leafDarken: 0.14,
-        uniformWood: true,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_MID,
-        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_MID
-      })
-      bakeParallaxBushes(ctx, pad, {
-        cornerBandTop: PAR_MID_BAND_TOP,
-        foliageDensityTier: 'midground',
-        colorFlat: false,
-        ferns: BUSH_FERNS_MID,
-        heightScale: BUSH_FAR_HEIGHT_SCALE
-      })
+      drawForestPictureTrees(ctx, TREE_SHEET.MID, buildParallaxTreeXs(PAR_FAR_TREE_COUNT, LEFT_MARGIN - pad, WORLD_W - RIGHT_MARGIN + pad, TREE_X, PAR_TREE_FOCUS_BIAS_MID), PAR_TRUNK_BOTTOM_Y, PAR_MID_TREE_SCALE)
+      drawForestPictureBushes(ctx, BUSH_SHEET.MID, LEFT_MARGIN - pad, WORLD_W - RIGHT_MARGIN + pad, FLOOR_Y, PAR_MID_BUSH_SCALE)
     }, { blurRadius: forestDepthBlurRadiusPx('midground'), grade: FOREST_LAYER_GRADE.mid })
   onStep && await onStep(2, 4)
   bakeParallaxLayer(k, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED,
     parTreeRowWorldY(PAR_BIG_BAND_TOP), parTreeRowWorldH(PAR_BIG_BAND_TOP), (ctx, pad) => {
-      bakeParallaxTrees(ctx, pad, {
-        count: PAR_BIG_TREE_COUNT,
-        seedBase: PAR_BIG_SEED_BASE,
-        topMinY: PAR_BIG_TOP_MIN_Y,
-        topRange: PAR_BIG_TOP_RANGE,
-        bandTop: PAR_NEAR_BAND_TOP,
-        foliageDensityTier: 'nearground',
-        colorBlend: PAR_L1_COLOR_BLEND,
-        flatLeaves: false,
-        leafDarken: 0,
-        uniformWood: false,
-        leafWarmBlend: PAR_L1_LEAF_WARM_BLEND,
-        treeFocusBias: PAR_TREE_FOCUS_BIAS_NEAR,
-        trunkWidthScale: PAR_TRUNK_WIDTH_SCALE_NEAR
-      })
-      bakeParallaxBushes(ctx, pad, {
-        cornerBandTop: PAR_NEAR_BAND_TOP,
-        foliageDensityTier: 'nearground',
-        colorFlat: false,
-        ferns: BUSH_FERNS_NEAR,
-        heightScale: BUSH_NEAR_HEIGHT_SCALE
-      })
+      drawForestPictureTrees(ctx, TREE_SHEET.MID, buildParallaxTreeXs(PAR_BIG_TREE_COUNT, LEFT_MARGIN - pad, WORLD_W - RIGHT_MARGIN + pad, TREE_X, PAR_TREE_FOCUS_BIAS_NEAR), PAR_TRUNK_BOTTOM_Y, PAR_NEAR_TREE_SCALE)
+      drawForestPictureBushes(ctx, BUSH_SHEET.NEAR, LEFT_MARGIN - pad, WORLD_W - RIGHT_MARGIN + pad, FLOOR_Y, PAR_NEAR_BUSH_SCALE)
     }, { blurRadius: forestDepthBlurRadiusPx('nearground'), grade: FOREST_LAYER_GRADE.near })
   onStep && await onStep(3, 4)
   const staticColor = document.createElement('canvas')
@@ -2785,18 +2631,6 @@ function renderSkyBand(ctx) {
     const bandH = Math.ceil(t1 * skyHeight - t0 * skyHeight) + 1
     ctx.fillRect(LEFT_MARGIN, y, GAME_W, bandH)
   }
-}
-//
-// Renders one tree row into a parallax canvas with horizontal bleed.
-//
-function bakeParallaxTrees(ctx, pad, planeCfg) {
-  const treeLeft = LEFT_MARGIN - pad
-  const treeRight = WORLD_W - RIGHT_MARGIN + pad
-  renderForestTreePlane(ctx, {
-    ...planeCfg,
-    treeX1: treeLeft,
-    treeX2: treeRight
-  })
 }
 //
 // Renders one bush row into a parallax canvas with horizontal bleed.
@@ -2969,129 +2803,6 @@ function parallaxCornerLeafRgb(treeX, bandTop) {
   return forestRgb(corner.leaf)
 }
 //
-// Renders one parallax plane into its combined canvas: each tree uses the
-// same forest-tree generator as the main tree (default trunk taper, fractal
-// branches, crown clusters). Only trunk height and a light width scale differ
-// per row so the forest sits lower without a flat canopy fill band.
-//
-function renderForestTreePlane(ctx, planeCfg) {
-  const {
-    count, seedBase, topMinY, topRange,
-    colorBase, colorBlend, flatLeaves, leafDarken, uniformWood,
-    leafWarmBlend = 0,
-    colorPal: colorPalOverride,
-    bandTop = PAR_NEAR_BAND_TOP,
-    treeX1 = LEFT_MARGIN,
-    treeX2 = WORLD_W - RIGHT_MARGIN,
-    treeFocusBias = 0,
-    trunkWidthScale = 1,
-    foliageDensityTier = 'midground'
-  } = planeCfg
-  const treeDensityOpts = forestTreeBuildOptsForDensity(foliageDensityTier)
-  const treeXs = buildParallaxTreeXs(count, treeX1, treeX2, TREE_X, treeFocusBias)
-  treeXs.forEach((treeX, i) => {
-    //
-    // Each tree picks one of the four corner colour families.
-    //
-    const colorPal = colorPalOverride || buildDimmedTreePalette(
-      colorBase || getTreePaletteParallaxCorner(parallaxForestCornerKey(treeX, bandTop)),
-      PARALLAX_FOLIAGE_HAZE,
-      colorBlend,
-      flatLeaves,
-      leafDarken,
-      uniformWood,
-      leafWarmBlend
-    )
-    const trunkTopY = topMinY + Math.random() * topRange
-    const treeSeed = TREE_SEED + seedBase + i * PAR_BIG_SEED_STEP
-    const treeData = buildForestTree(
-      treeSeed,
-      Math.round(treeX),
-      PAR_TRUNK_BOTTOM_Y,
-      Math.round(trunkTopY),
-      PAR_TRUNK_BOTTOM_Y,
-      PAR_TRUNK_BOTTOM_Y,
-      { includeRoots: false, includeHeroBranch: false, ...treeDensityOpts }
-    )
-    //
-    // Slight width scale so a row of main-style trees does not overpower the hero tree.
-    //
-    const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
-    scaleForestTreeWidths(treeData, widthScale)
-    treeX >= (LEFT_MARGIN + WORLD_W - RIGHT_MARGIN) * 0.5 && thinForestTreeCanopy(treeData, treeSeed)
-    trunkWidthScale < 1 && scaleForestTreeTrunkWidths(treeData, trunkWidthScale)
-    const colorPalDraw = applyFoliageDensityToPalette(colorPal, foliageDensityTier)
-    renderForestTreeIntoContext(ctx, treeData, colorPalDraw, WORLD_W, WORLD_H)
-  })
-}
-//
-// Opens irregular holes inside an east-half canopy so branches and the haze
-// behind show through. Leaves near the crown's outer edge always stay, so the
-// silhouette is kept; inside it a smooth 2D noise picks whole patches to drop
-// (clusters and their small detail leaves together), never a uniform sieve.
-//
-function thinForestTreeCanopy(treeData, seed) {
-  const leaves = treeData.leaves
-  if (!leaves?.length) return
-  const xs = leaves.map(l => l.x)
-  const ys = leaves.map(l => l.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const cx = (minX + maxX) * 0.5
-  const cy = (minY + maxY) * 0.5
-  const halfW = Math.max(1, (maxX - minX) * 0.5)
-  const halfH = Math.max(1, (maxY - minY) * 0.5)
-  treeData.leaves = leaves.filter(leaf => {
-    const d = Math.hypot((leaf.x - cx) / halfW, (leaf.y - cy) / halfH)
-    if (d > CANOPY_THIN_RIM) return true
-    const n = canopyThinNoise01(leaf.x / CANOPY_THIN_CELL_PX, leaf.y / CANOPY_THIN_CELL_PX, seed)
-    return n >= (leaf.type === 'detail' ? CANOPY_THIN_DETAIL_HOLE : CANOPY_THIN_CLUSTER_HOLE)
-  })
-}
-function canopyThinNoise01(u, v, seed) {
-  const iu = Math.floor(u)
-  const iv = Math.floor(v)
-  const fu = smoothstep01(u - iu)
-  const fv = smoothstep01(v - iv)
-  const corner = (a, b) => SoilSeam.seamHash01(a * 57.31 + b * 113.17 + seed * 0.013)
-  const top = corner(iu, iv) + (corner(iu + 1, iv) - corner(iu, iv)) * fu
-  const bottom = corner(iu, iv + 1) + (corner(iu + 1, iv + 1) - corner(iu, iv + 1)) * fu
-  return top + (bottom - top) * fv
-}
-//
-// Scales trunk and branch widths of a forest tree (geometry stays the same).
-//
-function scaleForestTreeWidths(treeData, scale) {
-  treeData.trunkSegs.forEach(seg => {
-    seg.w *= scale
-    seg.w2 *= scale
-  })
-  treeData.branchSegs.forEach(seg => {
-    seg.w *= scale
-    seg.w2 != null && (seg.w2 *= scale)
-  })
-}
-//
-// Narrows only the main trunk wood — hero branch width stays in forest-tree.js.
-//
-function scaleForestTreeTrunkWidths(treeData, scale) {
-  treeData.trunkSegs.forEach(seg => {
-    seg.w *= scale
-    seg.w2 *= scale
-  })
-}
-//
-// Earth / bark / stone bakes — stronger film grain where texture is expected.
-//
-function applyForestMaterialBake(canvas, seedOffset = 0, densityTier = 'gameplay') {
-  applyForestLayerGradeToCanvas(canvas, {
-    ...FOREST_LAYER_GRADE.material,
-    grainBlockSize: forestFilmGrainBlockPxForTier(densityTier)
-  }, seedOffset)
-}
-//
 // Underground decor spec that dresses up the root-zone earth band: buried
 // rocks, cracks, pebble clusters, hanging rootlets and a fossil spiral. It is
 // generated once per live Kaplay instance and baked into the combined static
@@ -3113,7 +2824,8 @@ function forestUndergroundLayout() {
     bottomY: PLAYFIELD_EARTH_BOTTOM_Y,
     treeX: TREE_X,
     treeClearHalf: TRUNK_EXCLUDE_HALF,
-    skipRootlet: rx => rx >= cave.x1 - FOREST_UG_CAVE_ROOTLET_CLEAR_L && rx <= cave.x2 + FOREST_UG_CAVE_ROOTLET_CLEAR_R
+    skipRootlet: rx => rx >= cave.x1 - FOREST_UG_CAVE_ROOTLET_CLEAR_L && rx <= cave.x2 + FOREST_UG_CAVE_ROOTLET_CLEAR_R,
+    stones: forestBuriedStones()
   }
 }
 function forestUndergroundSpec(k) {
@@ -3452,9 +3164,9 @@ function forestEarTreeXOnFixedStalkEye(x, trampX) {
   const eyeXs = [layout.firstX, layout.secondX, forestPrizeEyeX(trampX)]
   return eyeXs.some(eyeX => Math.abs(x - eyeX) < FOREST_EAR_TREE_STALK_EYE_CLEAR_HALF)
 }
-function tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX, heightTier) {
+function tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX) {
   if (!forestEarTreeSpotXAllowed(spots, x, branchTrampX, trampX, shoreTrunkX)) return false
-  spots.push(EarTree.buildSpot(x, FLOOR_Y, heightTier))
+  spots.push({ x, groundY: FLOOR_Y })
   return true
 }
 function buildForestEarTreeSpots(layoutCfg) {
@@ -3472,7 +3184,6 @@ function buildForestEarTreeSpots(layoutCfg) {
   //
   const rightXMin = forestEastGroundStartX() + FOREST_EAR_TREE_EAST_GAP
   const rightXMax = cave.x1 - FOREST_CAVE_DECOR_CLEAR - FOREST_EAR_TREE_RIGHT_CAVE_MARGIN
-  const rightHeightTiers = ['short', 'tall']
   const minSpan = FOREST_EAR_TREE_MIN_GAP * (FOREST_EAR_TREE_RIGHT_COUNT - 1) + 48
   const spots = []
   let attempts = 0
@@ -3480,7 +3191,7 @@ function buildForestEarTreeSpots(layoutCfg) {
     attempts += 1
     if (rightXMax <= rightXMin + minSpan) break
     const x = rightXMin + Math.random() * (rightXMax - rightXMin)
-    tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX, rightHeightTiers[spots.length])
+    tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX)
   }
   //
   // The free windows between the shore tree, stalk-eyes and the mushroom are
@@ -3494,7 +3205,7 @@ function buildForestEarTreeSpots(layoutCfg) {
     }
     if (!free.length) break
     const x = free[Math.floor(Math.random() * free.length)]
-    tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX, rightHeightTiers[spots.length % rightHeightTiers.length])
+    tryAddForestEarTreeSpot(spots, x, branchTrampX, trampX, shoreTrunkX)
   }
   spots.sort((a, b) => a.x - b.x)
   return spots
@@ -3870,147 +3581,63 @@ function forestGrassTint(zones, blade) {
   return op >= 1 ? GRASS_GREEN : { ...GRASS_GREEN, opacity: op }
 }
 //
-// Rocks — flat value 5 silhouettes.
+// Ground stones — the sheet's ground stones (forestGroundStones()), each
+// round of them in a new random order, scattered at random along the whole
+// strip the centipede runs on (one stone per even share of it, anywhere in
+// that share), a few of them in front of the hero; none but small ones on
+// the strip where the knocked apple lands (appleSpan). The strip ends short of
+// the cave mouth, so no stone lies above the entrance; none in the crack's
+// decor gap either.
 //
-function createForestRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas, eastGroundRockMinX) {
+function createForestRocks(k, decorAtlas, bounds, appleSpan) {
   const objs = []
-  const clusterCenterX = treeBaseLeftX + 40
-  for (let i = 0; i < 10; i++) {
-    const radius = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN)
-    const angle = (Math.PI / 5) * i
-    const spread = 35 + Math.random() * 25
-    const cx = clusterCenterX + Math.cos(angle) * spread * 0.5
-    objs.push(placeRock(k, cx, radius, 'left', true, 7, 1, decorAtlas, zones))
-  }
-  //
-  // Tree-side end of the lake — two rocks with the water edge between them.
-  //
-  const endRockR = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN) * 0.85
-  //
-  // Sits right beside the tree trunk sprite — a higher z than the trunk's
-  // full-world canvas (z = platforms - 2) guarantees it always renders on
-  // top, regardless of scene-graph insertion order at equal z values.
-  //
-  const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE, decorAtlas, zones)
-  shoreRockBefore._lakeShoreEnd = true
-  shoreRockBefore._shoreTreeSide = true
-  objs.push(shoreRockBefore)
-  const endRockR2 = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN) * 0.75
-  const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9, decorAtlas, zones)
-  shoreRockAfter._lakeShoreEnd = true
-  objs.push(shoreRockAfter)
-  //
-  // Right side — a few small clusters spread across the whole lower-right
-  // ground (same jittered-around-a-center technique as the left 6-rock
-  // cluster above, just smaller groups), never in front of the trampoline
-  // mushroom (resampled out of its zone). Scatter rocks stay left of the
-  // cave mouth (no stone above the entrance).
-  //
-  const rightEdge = getCrackZone(WORLD_W, FLOOR_Y).x1 - 40
-  const nearTramp = (x) => Math.abs(x - trampX) <= TRAMP_ROCK_CLEAR_HALF ||
-    Math.abs(x - branchTrampX) <= TRAMP_ROCK_CLEAR_HALF
-  const badRock = (x) => nearTramp(x) || isCrackDecorExcluded(x, WORLD_W)
-  const rightSpan = Math.max(40, rightEdge - TREE_X - 80)
-  const rightClusterCenters = []
-  for (let c = 0; c < RIGHT_ROCK_CLUSTER_COUNT; c++) {
-    const t = (c + 0.5) / RIGHT_ROCK_CLUSTER_COUNT
-    rightClusterCenters.push(TREE_X + 80 + rightSpan * t + (Math.random() * 2 - 1) * rightSpan * 0.08)
-  }
-  for (let i = 0; i < RIGHT_ROCK_COUNT; i++) {
-    const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
-    const clusterCenterX = rightClusterCenters[i % RIGHT_ROCK_CLUSTER_COUNT]
-    const clusterSpread = RIGHT_ROCK_CLUSTER_SPREAD_MIN + Math.random() * RIGHT_ROCK_CLUSTER_SPREAD_RANGE
-    let cx = clusterCenterX + (Math.random() * 2 - 1) * clusterSpread
-    let safety = 0
-    while (badRock(cx) && safety < 40) {
-      cx = clusterCenterX + (Math.random() * 2 - 1) * clusterSpread
-      safety++
-    }
-    if (badRock(cx)) continue
-    const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas, zones)
-    objs.push(rock)
-  }
-  //
-  // Extra scatter on the east ground strip (branch trampoline → crack mouth).
-  //
-  if (eastGroundRockMinX != null) {
-    const eastLeft = eastGroundRockMinX + EAST_ROCK_INSET
-    const crackZone = getCrackZone(WORLD_W, FLOOR_Y)
-    const eastRockClear = (x) => nearTramp(x) || x >= crackZone.x1 - 52
-    const eastSpan = Math.max(50, rightEdge - eastLeft)
-    for (let i = 0; i < EAST_ROCK_COUNT; i++) {
-      const t = (i + 0.5) / EAST_ROCK_COUNT
-      const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
-      let cx = eastLeft + eastSpan * t + (Math.random() - 0.5) * eastSpan * 0.22
-      let safety = 0
-      while (eastRockClear(cx) && safety < 48) {
-        cx = eastLeft + Math.random() * eastSpan
-        safety++
-      }
-      if (eastRockClear(cx) || cx < eastLeft) continue
-      const rock = placeRock(k, cx, radius, 'right', false, 7, 0.85 + Math.random() * 0.35, decorAtlas, zones)
-      objs.push(rock)
-    }
+  const stones = forestGroundStones()
+  if (!stones.length) return objs
+  const step = (bounds.maxX - bounds.minX) / GROUND_STONE_COUNT
+  let round = []
+  for (let i = 0; i < GROUND_STONE_COUNT; i++) {
+    round.length || (round = shuffledCopy(stones))
+    const x = bounds.minX + step * (i + Math.random())
+    const front = i % GROUND_STONE_FRONT_EVERY === GROUND_STONE_FRONT_EVERY - 1
+    const obj = isCrackDecorExcluded(x, WORLD_W) ? null : placeGroundStone(k, x, round.pop(), decorAtlas, bounds, front, appleSpan)
+    obj && objs.push(obj)
   }
   return objs
 }
 //
-// Pre-renders a shaded rock sprite (shared decor atlas).
+// One ground stone (shared decor atlas) standing on the ground line, sunk a
+// little into it, wholly inside the strip, behind the hero or (front)
+// smaller and in front of him; off the draw list until its ground strip
+// opens. Null for a big stone that would lie on the apple's strip.
 //
-function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthScale = 1, decorAtlas, zones) {
-  const totalW = Math.ceil(radius * 2.6 * widthScale)
-  const totalH = Math.ceil(radius * 1.9)
-  const cx = totalW / (2 * widthScale)
-  const cy = totalH * 0.56
-  const randSink = Math.random() * 3
-  const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
-  const posY = FLOOR_Y - croppedH
-  const verts = buildRockVertices(radius)
-  const palette = forestRockShadedDrawPalette()
-  const bakeRock = (seedOffset) => {
-    const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
-      ctx.scale(widthScale, 1)
-      drawRockToCanvas(ctx, {
-        cx, cy, radius, verts, palette,
-        skipShadow: true, skipTexture: false,
-        outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
-        outlineWidth: ROCK_OUTLINE_WIDTH,
-        outlineAlpha: 1
-      })
-    })
-    applyForestMaterialBake(canvas, seedOffset)
-    return canvas
-  }
-  const baked = decorAtlas.register(bakeRock(worldX * 3 | 0))
-  const bakedLakeCap = decorAtlas.register(bakeRock(worldX * 3 + 1 | 0))
+function placeGroundStone(k, x, stone, decorAtlas, bounds, front, appleSpan) {
+  const canvas = bakeForestGroundStone(stone, Math.random, x * 3 | 0, front ? GROUND_STONE_FRONT_SIZE : 1)
+  const half = canvas.width / 2
+  const worldX = Math.max(bounds.minX + half, Math.min(bounds.maxX - half, x))
+  const onAppleStrip = worldX + half >= appleSpan.x1 && worldX - half <= appleSpan.x2
+  if (onAppleStrip && canvas.width >= GROUND_STONE_SMALL_W) return null
+  const posX = Math.round(worldX - half)
+  const sink = GROUND_STONE_SINK + Math.random() * GROUND_STONE_SINK_RANGE + (front ? GROUND_STONE_FRONT_SINK : 0)
+  const posY = Math.round(FLOOR_Y + sink - canvas.height)
   const obj = k.add([
-    k.pos(worldX - totalW / 2, posY),
-    k.z(z),
+    k.pos(posX, posY),
+    k.z(front ? GROUND_STONE_FRONT_Z : GROUND_STONE_Z),
     {
       opacity: 1,
       color: k.rgb(255, 255, 255),
-      _baked: baked,
-      _bakedLakeCap: bakedLakeCap,
+      _baked: decorAtlas.register(canvas),
       draw() {
         if (this.hidden) return
         drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
       }
     }
   ])
-  obj._side = side
-  obj._waterCluster = waterCluster
-  obj._homeX = worldX - totalW / 2
+  obj._homeX = posX
   obj._homeY = posY
   obj._decorWorldX = worldX
-  obj._detailRank = radius < 16 ? 'small' : 'large'
-  if (z === SHORE_END_ROCK_Z || waterCluster) {
-    obj._rockWidthScale = widthScale
-    obj._rockVerts = verts
-    obj._lakeBakeW = totalW
-    obj._rockBakeCy = cy
-  }
+  obj._detailRank = canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large'
   obj.hidden = true
-  obj.pos.y = PLATFORM_HIDE_Y
+  obj.moveTo(posX, PLATFORM_HIDE_Y)
   return obj
 }
 //
@@ -4305,7 +3932,7 @@ function onUpdateTrampolineBlink(k, state) {
 // Water — see-through fill bounded by the wave polygon, over the bed layer
 // (murk, sandy bed, pebbles) and the swaying algae.
 //
-function createWater(k, x1, x2Core, zones, rockObjs) {
+function createWater(k, x1, x2Core, zones) {
   const lake = Lake.create({
     k,
     x1,
@@ -4313,9 +3940,11 @@ function createWater(k, x1, x2Core, zones, rockObjs) {
     surfaceY: WATER_SURFACE_Y,
     floorY: FLOOR_Y,
     spriteKey: LAKE_SPRITE_KEY,
-    waterStartX: EyeFlower.islandShoreWorldX(x1, WATER_SURFACE_Y)
+    waterStartX: EyeFlower.islandShoreWorldX(x1, WATER_SURFACE_Y),
+    bedStones: forestLakeBedStones(),
+    bankJag: LAKE_BANK_JAG_PX
   })
-  rockObjs && bakeLakeShoreRockFullSprites(k, lake, rockObjs)
+  lake.stonePile = bakeForestLakeStonePile(k, lake, WATER_SURFACE_Y)
   lake.x2Bake = x1 + lake.bakeSpan
   zones._lake = lake
   k.add([
@@ -4367,81 +3996,6 @@ function createLakeShoreRockLayer(k, zones) {
       }
     }
   ])
-}
-//
-// Bakes the tree-side shore cap rocks and the water-edge rock cluster as ONE
-// mossy rock sprite: all silhouettes merge into a single outline, their
-// lower halves pulled down
-// (and spread outward) until they sink into the lake bed. Everything below
-// the bed / bank line is clipped away (the earth band sits in front), and
-// the part under the water line is tinted with the water colour so it reads
-// as submerged but stays opaque. The sprite hangs on the tree-side rock.
-//
-function bakeLakeShoreRockFullSprites(k, lake, rockObjs) {
-  const rocks = rockObjs.filter(o => (o._lakeShoreEnd || o._waterCluster) && o._rockVerts)
-  const main = rocks.find(o => o._shoreTreeSide)
-  if (!main) return
-  const anchorX = lake.x1 + lake.coreSpan + (lake.bakeSpan - lake.coreSpan) * LAKE_SHORE_ROCK_ANCHOR_T
-  const loops = rocks.map(rock => lakeShoreRockWorldLoop(lake, rock, anchorX))
-  const pts = loops.flat()
-  const pad = ROCK_OUTLINE_WIDTH * 2
-  const x0 = Math.floor(Math.min(...pts.map(p => p.x)) - pad)
-  const y0 = Math.floor(Math.min(...pts.map(p => p.y)) - pad)
-  const width = Math.ceil(Math.max(...pts.map(p => p.x)) + pad) - x0
-  const height = Math.ceil(Math.max(...pts.map(p => p.y)) + pad) - y0
-  const waterY = WATER_SURFACE_Y - y0
-  const canvas = toCanvas({ width, height, pixelRatio: 1 }, (ctx) => {
-    ctx.save()
-    Lake.clipToBed(ctx, lake, x0, y0, width, height)
-    paintForestShoreRock(ctx, {
-      loops: loops.map(loop => loop.map(p => ({ x: p.x - x0, y: p.y - y0 }))),
-      waterY,
-      rng: createSeededRandom((main._decorWorldX * 13 | 0) + Lake.LAKE_BAKE_GEOMETRY_VERSION),
-      outlineWidth: ROCK_OUTLINE_WIDTH
-    })
-    ctx.restore()
-    Lake.tintUnderwater(ctx, width, height, waterY)
-  })
-  applyForestLayerGradeToCanvas(canvas, FOREST_LAYER_GRADE.decor, (main._decorWorldX * 7 | 0) + 91)
-  const name = `forest0-lake-shore-rock-v${Lake.LAKE_BAKE_GEOMETRY_VERSION}-${main._decorWorldX | 0}`
-  k.loadSprite(name, canvas)
-  canvas.width = 0
-  canvas.height = 0
-  rocks.forEach(rock => { rock._lakeMerged = true })
-  main._lakeFullSprite = { name, x: x0, y: y0, width, height }
-}
-//
-// Sunk outline of one shore rock in world coordinates, scaled toward the
-// shore anchor (x) and the ground line (y) before sinking into the bed.
-//
-function lakeShoreRockWorldLoop(lake, rock, anchorX) {
-  const ox = anchorX + (rock._homeX + rock._lakeBakeW / 2 - anchorX) * LAKE_SHORE_ROCK_SCALE
-  const oy = FLOOR_Y + (rock._homeY + rock._rockBakeCy - FLOOR_Y) * LAKE_SHORE_ROCK_SCALE - LAKE_SHORE_ROCK_LIFT_PX
-  const ws = rock._rockWidthScale
-  return lakeShoreRockSunkVerts(lake, rock, ox, oy).map(v => ({ x: ox + v.x * ws, y: oy + v.y }))
-}
-//
-// Scaled lower-half rock verts pulled down past the bed under each vertex
-// (the bed clip trims the overshoot) and spread outward on the way down, so
-// the rock widens into the bed like a pile and leaves no water gap under it.
-//
-function lakeShoreRockSunkVerts(lake, rock, ox, oy) {
-  const ws = rock._rockWidthScale
-  const verts = rock._rockVerts.map(v => ({ x: v.x * LAKE_SHORE_ROCK_SCALE, y: v.y * LAKE_SHORE_ROCK_SCALE }))
-  const minY = Math.min(...verts.map(v => v.y))
-  const maxLowerY = Math.max(...verts.map(v => v.y))
-  const ySpan = Math.max(1, maxLowerY - minY)
-  return verts.map(v => {
-    const depthT = (v.y - minY) / ySpan
-    const topNarrow = 1 - LAKE_SHORE_ROCK_TOP_PINCH * (1 - depthT)
-    let x = v.x * topNarrow
-    let y = v.y
-    if (v.y <= 0) return { x, y }
-    const reach = Math.pow(v.y / maxLowerY, LAKE_SHORE_ROCK_FLANK_EXP)
-    x = x * (1 + LAKE_SHORE_ROCK_BASE_SPREAD * reach * LAKE_SHORE_ROCK_BOTTOM_FLARE)
-    const bedY = Lake.bedWorldY(lake, ox + x * ws) + LAKE_SHORE_ROCK_BED_OVERSHOOT_PX - oy
-    return { x, y: Math.max(y, y + (bedY - y) * reach) }
-  })
 }
 //
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
@@ -5058,23 +4612,14 @@ function drawForestPitMouthEarthGapFill(inst, k) {
   })
 }
 //
-// Paints tree-side lake cap rocks when the water zone is open: one merged
-// mossy rock reaching the lake bed (the other shore rocks are part of it).
+// Paints the stone pile on the lake's tree-side bank when the water zone is
+// open (above the grass and the water fill; it reaches down to the bed).
 //
 function drawLakeShoreRocksWorld(inst) {
-  const z = inst.zones
-  if (!z.water) return
+  const pile = inst.zones._lake?.stonePile
+  if (!inst.zones.water || !pile) return
   const k = inst.k
-  const white = k.rgb(255, 255, 255)
-  inst.rockObjs.forEach(o => {
-    if (!o._lakeShoreEnd) return
-    const full = o._lakeFullSprite
-    if (full) {
-      k.drawSprite({ sprite: full.name, pos: k.vec2(full.x, full.y), width: full.width, height: full.height, color: white })
-      return
-    }
-    o._lakeMerged || drawDecorAtlasSprite(k, o._bakedLakeCap, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
-  })
+  k.drawSprite({ sprite: pile.name, pos: k.vec2(pile.x, pile.y), width: pile.width, height: pile.height })
 }
 //
 // Top HUD platform strip — sits below HUD letters (z = ui - 1).
@@ -5456,7 +5001,9 @@ function syncBranchPlatHome(inst) {
   plat.pos.y = home.y
 }
 //
-// One or more static colliders that follow a curved horizontal branch.
+// One or more static colliders that follow a curved horizontal branch. The
+// collider is one-way: the hero passes up through it from below (no bump of
+// the head) and lands on it from above.
 //
 function createForestHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX = null, hideY = null) {
   const segs = horizBranch.platSegs ?? [{
@@ -5478,9 +5025,11 @@ function createForestHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX 
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
-    CFG.game.platformName
+    CFG.game.platformName,
+    CFG.game.noCeilingTag
   ])
   plat.tag(platTag)
+  plat.onBeforePhysicsResolve(c => isBranchHitFromBelow(c.target, plat) && c.preventResolution())
   const plats = [plat]
   const homes = [{ x: spanX1, y: walkTopY, x2: spanX2 }]
   const startBranchY = walkTopY
@@ -5489,6 +5038,14 @@ function createForestHorizBranchPlatforms(k, horizBranch, platTag, dropY, hideX 
     homes,
     startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: startBranchY }
   }
+}
+//
+// Whether a body meets a one-way branch collider from below or inside it
+// (rising, or its feet well under the branch top).
+//
+function isBranchHitFromBelow(other, plat) {
+  const box = other.worldArea().bbox()
+  return other.vel.y < 0 || box.pos.y + box.height > plat.pos.y + BRANCH_ONE_WAY_TOL
 }
 //
 // Short chime when a new world segment unlocks.
@@ -5525,14 +5082,6 @@ function syncForestFpsHudVisibility(inst) {
   }
   FpsCounter.setVisible(inst.fpsCounter, true)
   layoutForestFpsHud(inst)
-}
-//
-// Lake shore / water-cluster rocks must appear the moment the lake opens.
-//
-function forceWaterEdgeRocksVisible(inst) {
-  inst.rockObjs.forEach(o => {
-    o._waterCluster && !o._lakeMerged && setDecorObjVisible(o, true)
-  })
 }
 //
 // Pins the hero to the manual sink tween (body is removed for the sequence).
@@ -5691,7 +5240,6 @@ function startDrowning(inst) {
   Sound.stopWaterStepsLoop(inst.sound)
   Sound.playWaterStepsOnce(inst.sound, WATER_STEPS_VOLUME)
   revealWaterZone(inst)
-  forceWaterEdgeRocksVisible(inst)
   inst.footParticles && ForestFootParticles.clear(inst.footParticles)
   const char = inst.heroInst.character
   destroyStrayForestHeroBody(inst.k, char)
@@ -5893,11 +5441,14 @@ function resolveForestPredatorRespawnX(deathX, deathY, pred) {
   const push = HERO_PREDATOR_RESPAWN_MIN_FROM_HEAD
   const awayFromDeath = deathX <= predX ? -1 : 1
   let away = -(pred.dir || awayFromDeath)
+  //
+  // Behind the crawler there must be the full runway: wedged against the
+  // lake (or the far end of its strip) the hero could neither run nor jump
+  // over it, so he comes back on its other side, the roomier one.
+  //
+  const room = side => (side < 0 ? predX - minX : maxX - predX)
+  room(away) < push && room(-away) > room(away) && (away = -away)
   let spawnX = clampForestPredatorRespawnX(predX + away * push, minX, maxX)
-  if (Math.abs(spawnX - predX) < push * 0.55) {
-    away = -away
-    spawnX = clampForestPredatorRespawnX(predX + away * push, minX, maxX)
-  }
   spawnX = slideForestPredatorRespawnClearOfBody(pred, spawnX, footY, away, minX, maxX)
   if (Predator.overlapsHeroHitbox(pred, spawnX, footY)) {
     away = -away
@@ -6049,7 +5600,6 @@ function nudgeForestHeroSpawnAwayFromTrampolines(cfg) {
 //
 function revealWaterZone(inst) {
   if (inst.zones.water) {
-    forceWaterEdgeRocksVisible(inst)
     applyZoneVisibility(inst)
     return
   }
@@ -6059,7 +5609,6 @@ function revealWaterZone(inst) {
   revealGroundDecorLeft(inst, true)
   revealLeftShoreRock(inst)
   syncForestAtmosphereZones(inst)
-  forceWaterEdgeRocksVisible(inst)
   applyZoneVisibility(inst)
 }
 //
@@ -6352,7 +5901,7 @@ function onUpdate(inst) {
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
     ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
-  inst.earTrees && EarTree.onUpdate(inst.earTrees, k.dt())
+  inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
   const grounded = char.isGrounded?.() ?? false
@@ -6697,49 +6246,10 @@ function onBranchTrampolineBounce(inst) {
   inst.expectBranchWoodLandSound = true
 }
 //
-// True when the main tree sprite was baked during the pre-level transition.
-//
-function forestTreeSpritesPrewarmed(k) {
-  return Boolean(k.getSprite(TREE_COLOR_SPRITE_NAME))
-}
-//
 // True when parallax static layer exists from prewarm.
 //
 function forestParallaxSpritesPrewarmed(k) {
   return Boolean(k.getSprite(BG_STATIC_COLOR) && k.getSprite(BG_PAR_TREE1_COLOR))
-}
-//
-// Bakes the full colour tree as one sprite cropped to its artwork. The crop
-// offset is stashed for the tree object to draw at (see
-// monolithicTreeBakeOffset).
-//
-function bakeMonolithicForestTreeSprites(k, treeData) {
-  const palette = {
-    ...getTreePaletteColor(),
-    woodVolume: getForestGameplayTreeVolumeShades()
-  }
-  const colorCanvas = renderForestTreeToCanvas(treeData, palette, WORLD_W, WORLD_H)
-  const bounds = measureCanvasContentBounds(colorCanvas, TREE_CROP_PAD)
-  monolithicTreeOffsets.set(k, { x: bounds?.x ?? 0, y: bounds?.y ?? 0 })
-  loadCroppedForestTreeSprite(k, TREE_COLOR_SPRITE_NAME, colorCanvas, bounds, TREE_COLOR_GRAIN_SEED)
-}
-//
-// Loads one monolithic tree canvas cropped to its artwork, with film grain
-// baked in afterwards (grain only touches opaque pixels, so cropping first
-// changes nothing visually and scans far fewer pixels).
-//
-function loadCroppedForestTreeSprite(k, name, canvas, bounds, grainSeed) {
-  const cropped = bounds ? cropCanvasToBounds(canvas, bounds) : canvas
-  bounds && releaseCanvas(canvas)
-  applyForestMaterialBake(cropped, grainSeed)
-  k.loadSprite(name, cropped)
-  releaseCanvas(cropped)
-}
-//
-// Crop offset of the monolithic tree sprites for the live Kaplay instance.
-//
-function monolithicTreeBakeOffset(k) {
-  return monolithicTreeOffsets.get(k) || { x: 0, y: 0 }
 }
 //
 // Soft right-ground opacity: opened land is solid, the unknown fades out.
@@ -6826,15 +6336,6 @@ function isBranchTrampolineVisible(z) {
   return Boolean(z?.branchTrampRevealed)
 }
 //
-// Camera Y is pinned to the design centre, so a window shorter than the
-// design crops the top of the world, and the top HUD bar covers another
-// TOP_MARGIN below that. Fruit hung above this line was never on screen.
-//
-function forestTreeFruitMinHangY() {
-  const viewTop = Math.round(DESIGN_SCREEN_H / 2) - Math.min(SCREEN_H, DESIGN_SCREEN_H) / 2
-  return viewTop + TOP_MARGIN + TREE_FRUIT_VIEW_TOP_PAD
-}
-//
 // Layout for anchor-fruit placement on the main tree canopy.
 //
 function buildForestTreeFruitAnchorCfg() {
@@ -6842,8 +6343,7 @@ function buildForestTreeFruitAnchorCfg() {
     trunkX: TREE_X,
     trunkHalf: TRUNK_EXCLUDE_HALF,
     branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
-    trampClearHalf: TRAMP_GRASS_CLEAR_HALF,
-    minHangY: forestTreeFruitMinHangY()
+    trampClearHalf: TRAMP_GRASS_CLEAR_HALF
   }
 }
 //
@@ -7094,6 +6594,11 @@ function forestHeroHitboxBottomY(char) {
 // Catches the hero on the shore tree horizontal branch (same band logic as start branch).
 //
 function snapHeroToShoreBranch(inst, char, heroX, footY) {
+  //
+  // Only a hero who was over the branch top last frame is caught.
+  //
+  const prevFootY = inst._shoreBranchPrevFootY ?? footY
+  inst._shoreBranchPrevFootY = footY
   const home = inst.shoreBranchPlatHome
   if (!home || inst.drowning) return
   const x2 = home.x2 ?? home.x
@@ -7114,8 +6619,9 @@ function snapHeroToShoreBranch(inst, char, heroX, footY) {
     inst._shoreBranchTunnelArmed = true
     return
   }
+  const wasAbove = prevFootY <= platTop + LOG_SNAP_TOLERANCE
   const inCatchBand = footY >= platTop - LOG_HOVER_BAND && footY <= platTop + BRANCH_SNAP_BELOW
-  if (!inCatchBand) {
+  if (!inCatchBand || !wasAbove) {
     inst._shoreBranchTunnelArmed = true
     return
   }
@@ -7124,6 +6630,12 @@ function snapHeroToShoreBranch(inst, char, heroX, footY) {
   settleHeroOnLog(inst, char, platTop)
 }
 function snapHeroToStartBranch(inst, char, heroX, footY) {
+  //
+  // Only a hero who was over the branch top last frame is caught (one that
+  // jumps up through the branch from below is not pulled onto it).
+  //
+  const prevFootY = inst._startBranchPrevFootY ?? footY
+  inst._startBranchPrevFootY = footY
   if (!inst.startBranch || inst.drowning) return
   if (!isHeroOverStartBranchX(inst, heroX)) {
     inst._startBranchTunnelArmed = true
@@ -7142,8 +6654,9 @@ function snapHeroToStartBranch(inst, char, heroX, footY) {
     inst._startBranchTunnelArmed = true
     return
   }
+  const wasAbove = prevFootY <= platTop + LOG_SNAP_TOLERANCE
   const inCatchBand = footY >= platTop - LOG_HOVER_BAND && footY <= platTop + BRANCH_SNAP_BELOW
-  if (!inCatchBand) {
+  if (!inCatchBand || !wasAbove) {
     inst._startBranchTunnelArmed = true
     return
   }

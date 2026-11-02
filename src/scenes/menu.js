@@ -10,12 +10,14 @@ import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { bindPointerActivate } from '../utils/pointer-activate.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
-import { generateForestMenuBackdrop, forestMenuLayout, bakeForestMenuShorePile } from '../sections/forest/utils/forest-menu-bg.js'
+import { generateForestMenuBackdrop, forestMenuLayout, loadForestMenuBackdropArt } from '../sections/forest/utils/forest-menu-bg.js'
+import { bakeForestLakeStonePile } from '../sections/forest/utils/forest-stones.js'
+import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../sections/forest/utils/forest-palette.js'
 import * as Lake from '../sections/forest/utils/forest-lake.js'
-import * as EarTree from '../sections/forest/utils/forest-ear-tree.js'
+import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
 import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
@@ -134,13 +136,18 @@ const MENU_NIGHT_ALPHA = 0.35
 //
 const MENU_BG_EDGE_OVERSCAN = 1
 const MENU_FOREST_LAYER_SPRITE = 'menu-forest-layer'
-const MENU_SHORE_PILE_SPRITE = 'menu-shore-pile'
 //
 // Live decor of the forest backdrop without its own fade (stalk eyes, the
 // crawler) shows once the forest backdrop is mostly in.
 //
 const MENU_FOREST_LIVE_MIN_OPACITY = 0.5
 const MENU_LAKE_SPRITE_KEY = 'menu'
+//
+// The lake's right bank edge is ragged like the level's (px), and the
+// level's clouds drift this far under the screen top.
+//
+const MENU_LAKE_BANK_JAG = 22
+const MENU_CLOUD_TOP = 24
 //
 // Swaying grass along the forest ground: the level's grass tone shifting
 // toward warm gold per blade, so the field reads yellow; none on the lake.
@@ -341,10 +348,11 @@ export function sceneMenu(k) {
       forestPieces,
       forestEyes: ChainBuoy.create({ k, spots: forestLayout.eyeSpots, earthBottomY: k.height() }),
       lake: createMenuLake(k, forestLayout),
-      earTrees: EarTree.create({
+      earTrees: BombTree.create({
         k,
-        spots: forestLayout.earTreeSpots.map(spot => EarTree.buildSpot(spot.x, forestLayout.groundY, spot.tier))
+        spots: forestLayout.earTreeSpots.map(spot => ({ x: spot.x, groundY: forestLayout.groundY }))
       }),
+      clouds: Clouds.create({ k, x1: 0, x2: k.width(), topY: MENU_CLOUD_TOP }),
       crawlerT: 0
     }
     inst.shorePile = loadMenuShorePile(k, inst.lake)
@@ -384,6 +392,7 @@ export function sceneMenu(k) {
  */
 export async function prewarmMenuAssets(k) {
   recomputeMenuBgLayout(k.width(), k.height())
+  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds()])
   buildMenuNightSprite(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
@@ -619,7 +628,7 @@ function onUpdate(inst) {
   updateBackdropFade(inst, level.backdrop, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
-  EarTree.onUpdate(inst.earTrees, dt)
+  BombTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
   updateMenuCrawler(inst, dt)
   updateMenuMusic(inst, dt)
@@ -717,24 +726,25 @@ function drawBackdrops(inst) {
   cave > MENU_FADE_EPS && CaveMenuBg.onDraw(inst.caveBg, cave)
 }
 //
-// The forest goes back to front like the level: baked back layers, the
-// lake (bed, algae, water), the stone pile over its shallows, ear-tree
-// trunks, grass, ear-tree roots / trunk tops / crowns with their spiky
-// bombs, then the stalk eyes once the forest is mostly in.
+// The forest goes back to front like the level: baked sky and parallax
+// rows, the drifting clouds, the baked front scene, the lake (bed, algae,
+// water), the stone pile over its shallows, grass, the bomb trees' roots
+// and trees with their bombs, then the stalk eyes once the forest is mostly
+// in.
 //
 function drawForestBackdrop(inst, forest) {
   const { k } = inst
-  drawForestPieces(k, inst.forestPieces, forest)
+  const pieces = inst.forestPieces
+  drawForestPieces(k, pieces.slice(0, -1), forest)
+  Clouds.onDraw(inst.clouds, forest)
+  drawForestPieces(k, pieces.slice(-1), forest)
   Lake.drawBed(k, inst.lake, forest)
   Lake.drawAlgae(k, inst.lake, forest)
   Lake.drawFill(k, inst.lake, forest)
-  k.drawSprite({ sprite: inst.shorePile.sprite, pos: k.vec2(inst.shorePile.x, inst.shorePile.y), opacity: forest })
-  const c = EarTree.earTreeColors(k)
-  EarTree.onDrawTrunks(inst.earTrees, c.bark, c.barkShades, c.outline, forest)
+  inst.shorePile.sprite && k.drawSprite({ sprite: inst.shorePile.sprite, pos: k.vec2(inst.shorePile.x, inst.shorePile.y), opacity: forest })
   Grass.draw(inst.grass)
-  EarTree.onDrawRoots(inst.earTrees, c.root, forest)
-  EarTree.onDrawTrunksAboveGrass(inst.earTrees, c.bark, c.barkShades, c.outline, forest)
-  EarTree.onDrawBranches(inst.earTrees, c.bark, c.barkShades, c.outline, c.leaves, forest)
+  BombTree.onDrawRoots(inst.earTrees, forest)
+  BombTree.onDrawTrees(inst.earTrees, forest)
   SpikyTomato.onDraw(inst.tomatoes, forest)
   forest > MENU_FOREST_LIVE_MIN_OPACITY && ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(k))
 }
@@ -1046,17 +1056,16 @@ function loadMenuForestLayerSprites(k) {
   return pieces
 }
 //
-// The lake's tree-side stone pile (shaped by the live lake's bed), drawn over
-// the water; baked once per k and window size.
+// The lake's tree-side stone pile, the level's own (shaped by the live
+// lake's bed), drawn over the water; baked once per k and window size.
 //
 const menuShorePileByK = new WeakMap()
 function loadMenuShorePile(k, lake) {
-  const sprite = `${MENU_SHORE_PILE_SPRITE}-${k.width()}x${k.height()}`
+  const key = `${k.width()}x${k.height()}`
   const cached = menuShorePileByK.get(k)
-  if (cached?.sprite === sprite) return cached
-  const pile = bakeForestMenuShorePile(lake, k.height())
-  k.loadSprite(sprite, pile.canvas)
-  const placed = { sprite, x: pile.x, y: pile.y }
+  if (cached?.key === key) return cached
+  const pile = bakeForestLakeStonePile(k, lake, lake.surfaceY)
+  const placed = { key, sprite: pile?.name, x: pile?.x ?? 0, y: pile?.y ?? 0 }
   menuShorePileByK.set(k, placed)
   return placed
 }
@@ -1072,7 +1081,8 @@ function createMenuLake(k, forestLayout) {
     x2Core: lake.x2Core,
     surfaceY: lake.surfaceY,
     floorY: groundY,
-    spriteKey: `${MENU_LAKE_SPRITE_KEY}-${k.width()}x${k.height()}`
+    spriteKey: `${MENU_LAKE_SPRITE_KEY}-${k.width()}x${k.height()}`,
+    bankJag: MENU_LAKE_BANK_JAG
   })
 }
 //

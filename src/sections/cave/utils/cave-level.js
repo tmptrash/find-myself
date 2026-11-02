@@ -18,8 +18,11 @@ import * as Water from '../components/cave-water.js'
 import * as WallEye from '../components/wall-eye.js'
 import * as Drips from '../components/cave-drips.js'
 import * as GiantPlant from '../components/giant-plant.js'
+import * as MonsterTree from '../components/monster-tree.js'
 import * as PlantStrands from '../components/plant-strands.js'
 import * as SporeMushroom from '../components/spore-mushroom.js'
+import * as FunnelMushroom from '../components/funnel-mushroom.js'
+import * as UmbrellaPlant from '../components/umbrella-plant.js'
 import * as BubbleLift from '../components/bubble-lift.js'
 import * as AirPlant from '../components/air-plant.js'
 import * as Layout from './cave-layout.js'
@@ -29,7 +32,6 @@ import * as Darkness from './cave-darkness.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
 import * as Shaft from './cave-shaft.js'
-import { ropeStrandAnchors } from './cave-plant-art.js'
 import { CAVE_PAL, caveShadeColor } from './cave-paint.js'
 //
 // Cave lesson 0 — the hero drops in from the forest above into a dim shaft.
@@ -91,13 +93,8 @@ const Z_FRONT_FX = CFG.visual.zIndex.player + 1
 //
 const Z_LEAF_FRONT = CFG.visual.zIndex.player + 0.5
 //
-// Long moss strands swaying in the draught: how many hang off the vines
-// (more hang from the leaves' edges, drawn with the leaves' near half),
-// their seeds.
+// Seed of the vines swaying in the draught under the rock ledges.
 //
-const ROPE_SWAY_STRANDS = 9
-const STRAND_SEED = 4411
-const LEAF_STRAND_SEED = 4412
 const LEDGE_STRAND_SEED = 4413
 //
 // Contraptions: keys that jump out of a bubble, air aim above the cup,
@@ -123,7 +120,6 @@ const UNDER_PLANT_LIFT = 8
 // Visible drips: which harmless stalactites drip, pan and hearing ranges.
 //
 const DECOR_DRIP_EVERY = 3
-const LEAF_DRIP_EVERY = 5
 const DROP_PAN_RANGE = 600
 const DROP_HEAR_RANGE = 700
 //
@@ -189,8 +185,11 @@ export function create(k) {
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
     lantern: Mushroom.create({ k, ...Layout.DORMANT_MUSHROOM, kind: Mushroom.MUSHROOM_KIND.DORMANT }),
     litMushrooms: createLitMushrooms(k),
+    tree: MonsterTree.create({ k }),
     plant: GiantPlant.create(k),
     spores: SporeMushroom.create({ k, ...Layout.SPORE_MUSHROOM, stations: Layout.SPORE_STATIONS }),
+    funnels: FunnelMushroom.create({ k, spots: Layout.FUNNEL_MUSHROOMS }),
+    umbrellas: UmbrellaPlant.create({ k, spots: Layout.UMBRELLA_PLANTS }),
     bubble,
     airPlant: AirPlant.create({ k, ...Layout.AIR_PLANT, target: { x: bubble.cup.x, y: bubble.cup.y - AIR_TARGET_LIFT } }),
     platformByBody: new Map(),
@@ -207,8 +206,6 @@ export function create(k) {
     fps: null
   }
   inst.wallEyes = WallEye.create({ k, parallax: inst.parallax })
-  inst.ropeStrands = PlantStrands.create({ k, anchors: ropeStrandAnchors(ROPE_SWAY_STRANDS, createSeededRandom(STRAND_SEED)), seed: STRAND_SEED })
-  inst.leafStrands = PlantStrands.create({ k, anchors: GiantPlant.strandAnchors(inst.plant), seed: LEAF_STRAND_SEED })
   inst.ledgeStrands = PlantStrands.create({ k, anchors: inst.terrain.swayAnchors, seed: LEDGE_STRAND_SEED })
   inst.backMushrooms = createBackMushrooms(inst)
   inst.drips = Drips.create({ k, tips: dripTips(inst), onLand: (x, y, water) => onDropLand(inst, x, y, water) })
@@ -243,9 +240,8 @@ function onUpdate(inst) {
   Drips.onUpdate(inst.drips)
   CaveSound.onUpdate(inst.caveSound, dt, focus.y)
   const gust = CaveSound.gust(inst.caveSound)
-  PlantStrands.onUpdate(inst.ropeStrands, gust)
-  PlantStrands.onUpdate(inst.leafStrands, gust)
   PlantStrands.onUpdate(inst.ledgeStrands, gust)
+  UmbrellaPlant.onUpdate(inst.umbrellas, gust)
   View.follow(inst.view, focus.x, focus.y, focus.vy)
   inst.fps && FpsCounter.onUpdate(inst.fps)
 }
@@ -547,6 +543,9 @@ function drawWorld(inst) {
   drawBackMushrooms(inst, r)
   Parallax.onDraw(inst.parallax, r.left, r.top, NEAR_ROWS)
   Water.onDrawBed(inst.water)
+  FunnelMushroom.onDraw(inst.funnels, r.top, r.bottom)
+  UmbrellaPlant.onDraw(inst.umbrellas, r.top, r.bottom)
+  MonsterTree.onDrawBack(inst.tree)
 }
 function drawWorldFront(inst) {
   const r = View.worldRect(inst.view)
@@ -554,7 +553,6 @@ function drawWorldFront(inst) {
   inst.litMushrooms.filter(m => m.behindGrass).forEach(m => Mushroom.onDraw(m))
   Terrain.onDraw(inst.terrain, r.top, r.bottom)
   GiantPlant.onDrawBack(inst.plant)
-  PlantStrands.onDraw(inst.ropeStrands, r.top, r.bottom)
   PlantStrands.onDraw(inst.ledgeStrands, r.top, r.bottom)
   SporeMushroom.onDraw(inst.spores)
   BubbleLift.onDraw(inst.bubble)
@@ -578,6 +576,8 @@ function drawLights(inst) {
   Mushroom.onDrawHalo(inst.lantern)
   Water.onDrawGlints(inst.water)
   SporeMushroom.onDrawGlow(inst.spores)
+  FunnelMushroom.onDrawGlow(inst.funnels, r.top, r.bottom)
+  UmbrellaPlant.onDrawGlow(inst.umbrellas, r.top, r.bottom)
   Fireflies.onDraw(inst.fireflies, r.top, r.bottom)
   Drips.onDraw(inst.drips, r.top, r.bottom)
 }
@@ -655,27 +655,22 @@ function drawBackMushrooms(inst, r) {
   })
 }
 //
-// In front of the hero: the plant's foot (with its eyes there), the
-// leaves' near half, the long strands swaying from their edges, the rock
-// ledges' front greens.
+// In front of the hero: the tree leaves' near parts (his feet sink into
+// them), trap mouths, the rock ledges' front greens.
 //
 function drawPlantFront(inst) {
   const r = View.worldRect(inst.view)
-  Terrain.onDrawPlantFoot(inst.terrain, r.top, r.bottom)
-  WallEye.onDrawWallBelow(inst.wallEyes, r, inst.terrain.plantFoot.y)
+  MonsterTree.onDrawFront(inst.tree)
   GiantPlant.onDrawFront(inst.plant)
-  PlantStrands.onDraw(inst.leafStrands, r.top, r.bottom)
   Terrain.onDrawFront(inst.terrain, r.top, r.bottom)
 }
 //
-// Drops fall from every deadly stalactite, every few harmless ones, and
-// every few strands and slime lobes hanging under the plant's leaves.
+// Drops fall from every deadly stalactite and every few harmless ones.
 //
 function dripTips(inst) {
   const deadly = inst.stalactites.map(s => ({ x: s.x, y: s.y + s.len }))
-  const leaves = GiantPlant.dripTips(inst.plant).filter((tip, i) => i % LEAF_DRIP_EVERY === 0)
   const decor = inst.terrain.decorTips.filter((tip, i) => i % DECOR_DRIP_EVERY === 0)
-  return [...deadly, ...decor, ...leaves]
+  return [...deadly, ...decor]
 }
 //
 // Landing drop sound: panned toward its side of the hero, quieter with

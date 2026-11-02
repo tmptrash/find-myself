@@ -5,7 +5,6 @@ import { getRGB } from '../../../utils/helper.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import * as Layout from '../utils/cave-layout.js'
 import * as Parallax from '../utils/cave-parallax.js'
-import { plantShape } from '../utils/cave-plant-shape.js'
 import { CAVE_PAL, css, caveShadeColor } from '../utils/cave-paint.js'
 //
 // Stalk eyes in the forest look, grown out of the cave: a knot with thin
@@ -104,7 +103,6 @@ export function create(cfg) {
     const angle = spot.side === 'left' ? -STALK_TILT : Math.PI + STALK_TILT
     return newEye(k, edgeX - side * WALL_INSET, spot.y, Math.round(spot.r * WALL_R_SCALE), angle, -side * STALK_CURVE, STALK_LEN_WALL)
   })
-  plantShape().eyes.forEach(spot => wall.push({ ...newEye(k, spot.x, spot.y, spot.r, 0, 0, 0), embedded: true }))
   const rng = createSeededRandom(GRAIN_SEED_BASE)
   const back = (STALK_EYES ? Parallax.backEyeAnchors(parallax) : []).map(a => {
     const r = BACK_R_MIN + Math.round(rng() * BACK_R_RANGE)
@@ -166,16 +164,6 @@ export function onDrawWall(inst, view, opacity = 1) {
   drawEyes(inst, inst.wall.filter(eye => inView(eye, view)), inst.colors, null, opacity)
 }
 
-/**
- * Plant eyes from a height down, drawn again over the plant's foot that
- * covers the hero.
- * @param {Object} inst - Eyes instance
- * @param {{top: number, bottom: number}} view - Visible world rect
- * @param {number} fromY - World Y the redrawn band starts at
- */
-export function onDrawWallBelow(inst, view, fromY) {
-  drawEyes(inst, inst.wall.filter(eye => eye.embedded && eye.tipY >= fromY && inView(eye, view)), inst.colors, null)
-}
 //
 // Eyes instance: colours (the back row's shaded) and one polygon batch.
 //

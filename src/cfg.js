@@ -273,21 +273,21 @@ export const CFG = {
         //
         forestLift: PALETTE.teal1,
         //
-        // Forest sky — dark green-teal foundation (#18332F / #23483B / #2B5944 →
-        // palette greens/teals). Stays darker than canopy foliage; dawn gold
-        // lives in forestSkyDawnGlow and the lower sky band only.
+        // Forest sky — a bright day: light blue overhead, pale blue-mint in
+        // the middle, sunlit pale yellow at the horizon; dawn gold lives in
+        // forestSkyDawnGlow and the lower sky band only.
         //
-        forestSkyZenith: PALETTE.teal1,
-        forestSkyMid: PALETTE.teal3,
-        forestSkyHorizon: PALETTE.gray5,
+        forestSkyZenith: PALETTE.blue4,
+        forestSkyMid: PALETTE.blue5,
+        forestSkyHorizon: PALETTE.gold5,
         //
-        // Depth-grade pivots: far rows dissolve into warm sunlit air, mid rows
-        // into cool sage, the near row keeps nearly its own tones.
+        // Depth-grade pivots: far rows dissolve into bright daylight air, mid
+        // rows into light sage, the near row keeps nearly its own tones.
         //
         forestHaze: {
-          far: PALETTE.gray5,
-          mid: PALETTE.teal3,
-          near: PALETTE.slate2
+          far: PALETTE.blue5,
+          mid: PALETTE.slate4,
+          near: PALETTE.slate3
         },
         //
         // FOREST light — warm gold as colour (not gray brightness). Use sparingly:
@@ -843,31 +843,79 @@ export const CFG = {
           // ledges, green-black near masses.
           //
           backTint: { far: PALETTE.blue1, mid: PALETTE.teal2, near: PALETTE.gray0 },
+          //
+          // Monster plant: dark warm brown wood (contour, deep, dark, mid,
+          // light, highlight) with soft golden-brown lit ridges, every other
+          // thick vine muted olive; cool cave light bounced on their shadow
+          // edges; warm light at the top, cool dark at the foot; muted
+          // olive moss.
+          //
           plantMoss: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4],
           plantLichen: PALETTE.gold2,
-          plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.orange0, PALETTE.gold1],
+          plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.sand1, PALETTE.gold0, PALETTE.gold2],
+          plantVine: [PALETTE.gray0, PALETTE.rose0, PALETTE.sand0, PALETTE.green0, PALETTE.sand2, PALETTE.gold2],
+          plantRim: PALETTE.cyan3,
+          plantWarm: PALETTE.gold3,
+          plantCool: PALETTE.teal0,
           plantIvy: [PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
           eyeGlint: PALETTE.gray7,
           plantStone: [PALETTE.gray0, PALETTE.gray1, PALETTE.sand0, PALETTE.sand1],
           plantStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5],
           plantRosette: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.teal2],
-          plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.red4],
+          plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.orange1, PALETTE.red4],
           leaf: [PALETTE.gray0, PALETTE.green0, PALETTE.green3, PALETTE.green5, PALETTE.gold5],
           leafMoss: [PALETTE.gray0, PALETTE.green1, PALETTE.green2],
-          leaf3d: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.green5, PALETTE.gold5],
-          trapLeaf3d: [PALETTE.gray0, PALETTE.rose0, PALETTE.red0, PALETTE.red1, PALETTE.red3, PALETTE.red4, PALETTE.gold5],
+          leaf3d: [PALETTE.gray0, PALETTE.sand0, PALETTE.green0, PALETTE.green1, PALETTE.green5, PALETTE.gold5, PALETTE.gold4],
+          trapLeaf3d: [PALETTE.gray0, PALETTE.rose0, PALETTE.orange0, PALETTE.red2, PALETTE.red3, PALETTE.red4, PALETTE.gold5],
           trapLeaf: [PALETTE.gray0, PALETTE.rose0, PALETTE.red0, PALETTE.red2, PALETTE.red4],
           trapTooth: [PALETTE.gray0, PALETTE.gray6, PALETTE.gray7],
           leafSlime: PALETTE.green3,
           spore: {
-            cap: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate2, PALETTE.slate3],
-            hole: PALETTE.gold1,
-            holeGlow: PALETTE.gold4,
-            gill: PALETTE.gold3,
+            cap: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate2, PALETTE.slate3, PALETTE.slate4], // Contour, shade, skin, light, highlight
+            holeRim: PALETTE.orange0,  // Deep upper wall of a hole
+            hole: PALETTE.orange3,     // Lit lower wall of a hole
+            holeGlow: PALETTE.gold4,   // Glowing heart of a hole
+            gill: PALETTE.gold5,       // Pale lit underside
+            gillLine: PALETTE.orange4, // Its gills
             spark: PALETTE.gold5,
             swarm: PALETTE.red1,       // Spores out of the mushroom: red glow
             swarmCore: PALETTE.red4,   // and a warm pale core
             stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3]
+          },
+          //
+          // Funnel mushrooms (chanterelle clusters): warm peach trumpets
+          // whose stalks run smoothly into the caps, darker false gills
+          // down their outside, the inside pale at the lip and darkening
+          // into a deep hole; the stalks dark woody brown where they meet
+          // at the foot, pale cream higher up; a soft orange halo.
+          //
+          funnel: {
+            contour: PALETTE.rose0,
+            shade: PALETTE.orange2,
+            body: PALETTE.red4,
+            light: PALETTE.rose4,
+            inside: PALETTE.rose4,
+            throat: PALETTE.orange0,
+            hole: PALETTE.rose0,
+            glow: PALETTE.orange3,
+            stemBase: PALETTE.sand0,
+            stemMid: PALETTE.gold0,
+            stem: PALETTE.orange5
+          },
+          //
+          // Umbrella plants: a slim golden stalk holding a wide pale pad
+          // seen from below, golden veins fanning from its centre, a pale
+          // glow at its heart.
+          //
+          umbrella: {
+            contour: PALETTE.gray0,
+            top: PALETTE.cyan4,
+            under: PALETTE.cyan4,
+            rim: PALETTE.cyan5,
+            heart: PALETTE.gold5,
+            vein: PALETTE.gold2,
+            glow: PALETTE.cyan5,
+            stalk: [PALETTE.gray0, PALETTE.gold1, PALETTE.gold3, PALETTE.gold5]
           },
           bubble: {
             rim: PALETTE.cyan5,

@@ -1,5 +1,4 @@
 import { CFG } from '../../../cfg.js'
-import { applyFoliageDensityToPalette } from './forest-pixel-density.js'
 
 //
 // Forest section palette — every colour on lesson-forest.0 must come from the
@@ -59,20 +58,6 @@ export function forestContourRgb(role = 'forest') {
   return forestRgb(FOREST_PAL.forestContour[role])
 }
 
-/**
- * drawRockToCanvas palette for forest floor rocks (shadow / mid / light).
- * @returns {{ fillR: number, fillG: number, fillB: number, lightR: number, lightG: number, lightB: number, darkR: number, darkG: number, darkB: number }}
- */
-export function forestRockShadedDrawPalette() {
-  const shadow = forestRgb(FOREST_PAL.forestRock.shadow)
-  const mid = forestRgb(FOREST_PAL.forestRock.mid)
-  const light = forestRgb(FOREST_PAL.forestRock.light)
-  return {
-    fillR: mid.r, fillG: mid.g, fillB: mid.b,
-    lightR: light.r, lightG: light.g, lightB: light.b,
-    darkR: shadow.r, darkG: shadow.g, darkB: shadow.b
-  }
-}
 
 /**
  * Samples the forest sky gradient (dark teal zenith → mid → hazy horizon)
@@ -139,13 +124,6 @@ export function snapToPalette(c) {
   return { r: best.r, g: best.g, b: best.b }
 }
 
-/**
- * Main-tree colour palette with nearground parallax-matched foliage.
- * @returns {Object}
- */
-export function getTreePaletteColor() {
-  return getTreePaletteColorForCorner(GAMEPLAY_TREE_FOLIAGE_KEY)
-}
 
 /**
  * Colour main-tree palette with nearground parallax foliage for one screen corner.
@@ -171,223 +149,15 @@ export function lerpForestRgb(a, b, t) {
   return snapToPalette(mixed)
 }
 
-/**
- * Groove / highlight tones for gameplay-tree bark (main, shore, lip-trees).
- * @returns {{ dark: { r: number, g: number, b: number }, highlight: { r: number, g: number, b: number } }}
- */
-export function getForestGameplayTreeBarkShades() {
-  const bark = FOREST_PAL.forestTreeBark
-  return {
-    dark: forestRgb(bark.groove),
-    highlight: forestRgb(bark.highlight)
-  }
-}
 
-/**
- * Root relief tones for the gameplay trees (fill, lit edge, contour).
- * @returns {{ fill: Object, lit: Object, contour: Object }}
- */
-export function getForestGameplayTreeRootShades() {
-  const bark = FOREST_PAL.forestTreeBark
-  return {
-    fill: forestRgb(bark.root),
-    lit: forestRgb(bark.rootLit),
-    contour: forestRgb(bark.rootContour)
-  }
-}
 
-/**
- * Side-light tones for the gameplay trees' volume pass (sun from the left).
- * @returns {{ lit: Object, rim: Object, shade: Object, deep: Object }}
- */
-export function getForestGameplayTreeVolumeShades() {
-  const bark = FOREST_PAL.forestTreeBark
-  return {
-    lit: forestRgb(bark.lit),
-    rim: forestRgb(bark.rim),
-    shade: forestRgb(bark.shade),
-    deep: forestRgb(bark.deep)
-  }
-}
 
-export function getTreePaletteColorForCorner(parallaxCornerKey) {
-  return {
-    ...getTreePaletteWithNearParallaxFoliage(
-      getTreePaletteFromForestTreeEntry(FOREST_PAL.treeColor),
-      parallaxCornerKey
-    ),
-    //
-    // Gameplay trees keep full bark passes; parallax rows stay flat (woodMassStyle).
-    //
-    woodMassStyle: false,
-    //
-    // Roots get the contour / fill / lit-edge relief in their own warm tones.
-    //
-    rootRelief: getForestGameplayTreeRootShades(),
-    barkShades: getForestGameplayTreeBarkShades()
-  }
-}
 
-/**
- * Copies nearground parallax leaf tones onto a trunk palette (main tree).
- * @param {Object} trunkPalette - Base tree palette (colour trunk)
- * @param {string} parallaxCornerKey - FOREST_PAL parallaxTreeCorner* key
- * @returns {Object}
- */
-export function getTreePaletteWithNearParallaxFoliage(trunkPalette, parallaxCornerKey = 'parallaxTreeCornerTL') {
-  const lit = applyFoliageDensityToPalette(trunkPalette, 'nearground')
-  const entry = FOREST_PAL[parallaxCornerKey]
-  const near = applyFoliageDensityToPalette(getTreePaletteFromForestTreeEntry(entry), 'nearground')
-  return {
-    ...lit,
-    leafR: near.leafR,
-    leafG: near.leafG,
-    leafB: near.leafB,
-    leafShades: near.leafShades,
-    leafVein: near.leafVein,
-    leafOpacity: near.leafOpacity,
-    noLeafDetails: near.noLeafDetails,
-    sprigLeaves: Boolean(entry.sprigLeaves)
-  }
-}
 
-/**
- * Parallax forest tree palette for one screen-corner quadrant (see cfg parallaxTreeCorner*).
- * @param {string} cornerKey - One of parallaxTreeCornerTL/TR/BL/BR on FOREST_PAL
- * @returns {Object} Canvas RGB palette for renderForestTreeToCanvas()
- */
-export function getTreePaletteParallaxCorner(cornerKey) {
-  return getTreePaletteFromForestTreeEntry(FOREST_PAL[cornerKey])
-}
 
-function getTreePaletteFromForestTreeEntry(t) {
-  const root = forestRgb(t.root)
-  const trunk = forestRgb(t.trunk)
-  const branch = forestRgb(t.branch)
-  const leaf = forestRgb(t.leaf)
-  return {
-    rootR: root.r, rootG: root.g, rootB: root.b,
-    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
-    branchR: branch.r, branchG: branch.g, branchB: branch.b,
-    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
-    leafOpacity: 1,
-    leafShades: massLeafShadesFromEntry(t),
-    //
-    // Wood uses trunk / branch / shadow only — no bark micro-texture pass.
-    //
-    barkShades: {
-      dark: forestRgb(FOREST_PAL.bark.dark),
-      highlight: forestRgb(FOREST_PAL.bark.highlight)
-    },
-    leafVein: forestRgb((t.leafShades && t.leafShades[0]) || t.leaf),
-    woodOutline: forestContourRgb('forest'),
-    woodMassStyle: true,
-    noLeafDetails: true
-  }
-}
 
-function massLeafShadesFromEntry(t) {
-  const hexes = t.leafShades || [t.leaf, t.leaf, t.leaf]
-  const shadow = hexes[0]
-  const base = hexes[Math.min(1, hexes.length - 1)]
-  const light = hexes[Math.min(2, hexes.length - 1)]
-  return [forestRgb(shadow), forestRgb(base), forestRgb(light)]
-}
 
-/**
- * Builds a dimmed background variant of a tree palette: every tone is blended
- * toward the given backdrop colour. Distant trees painted with this palette
- * stay fully OPAQUE — reduced brightness comes from the colours themselves,
- * never from draw transparency.
- * @param {Object} base - Palette from getTreePaletteParallaxCorner()/Color()
- * @param {{r: number, g: number, b: number}} bg - Backdrop colour to blend toward
- * @param {number} blend - Blend amount 0..1 (0 = base tones, 1 = backdrop)
- * @param {boolean} [flatLeaves=false] - Paint ALL leaves with one single tone
- * @param {number} [leafDarken=0] - Extra push of the foliage toward the darkest
- *   swatch so heavily blended leaves still differ slightly from the backdrop
- * @param {boolean} [uniformWood=false] - Collapse the WHOLE tree to the blended
- *   trunk tone: leaves, branches and bark all match the trunk exactly, so the
- *   tree reads as one flat silhouette (2nd+ background rows)
- * @param {number} [leafWarmBlend=0] - Extra leaf-only blend toward the backdrop
- *   (keep 0 for FOREST 70/20/10 — gold/orange stay rare accents)
- * @returns {Object} Canvas RGB palette for renderForestTreeToCanvas()
- */
-export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false, leafWarmBlend = 0) {
-  const mix = (r, g, b) => snapToPalette({
-    r: Math.round(r + (bg.r - r) * blend),
-    g: Math.round(g + (bg.g - g) * blend),
-    b: Math.round(b + (bg.b - b) * blend)
-  })
-  const mixRgb = (c) => mix(c.r, c.g, c.b)
-  //
-  // Extra leaf-only push toward the backdrop tone (orange haze warms the
-  // foliage while green stays the leading colour).
-  //
-  const warmRgb = (c) => snapToPalette({
-    r: Math.round(c.r + (bg.r - c.r) * leafWarmBlend),
-    g: Math.round(c.g + (bg.g - c.g) * leafWarmBlend),
-    b: Math.round(c.b + (bg.b - c.b) * leafWarmBlend)
-  })
-  const root = mix(base.rootR, base.rootG, base.rootB)
-  const trunk = mix(base.trunkR, base.trunkG, base.trunkB)
-  const branch = uniformWood ? trunk : mix(base.branchR, base.branchG, base.branchB)
-  const leaf = uniformWood ? trunk : warmRgb(darkenRgb(mix(base.leafR, base.leafG, base.leafB), leafDarken))
-  const darkenLeafRgb = (c) => warmRgb(darkenRgb(mixRgb(c), leafDarken))
-  return {
-    rootR: root.r, rootG: root.g, rootB: root.b,
-    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
-    branchR: branch.r, branchG: branch.g, branchB: branch.b,
-    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
-    leafOpacity: 1,
-    //
-    // flatLeaves collapses the foliage to a single tone (far background rows).
-    //
-    leafShades: flatLeaves ? [leaf] : (base.leafShades ?? [leaf]).map(darkenLeafRgb),
-    //
-    // Uniform wood keeps the bark texture invisible: both crack tones equal
-    // the trunk tone, so the silhouette stays one flat colour.
-    //
-    barkShades: uniformWood ? { dark: trunk, highlight: trunk } : {
-      dark: mixRgb(base.barkShades?.dark ?? root),
-      highlight: mixRgb(base.barkShades?.highlight ?? leaf)
-    },
-    //
-    // Background trees stay clean: plain leaves (no vein) and no outline.
-    //
-    leafVein: mixRgb(base.leafVein ?? root),
-    noLeafDetails: base.noLeafDetails ?? true,
-    woodMassStyle: base.woodMassStyle ?? false,
-    woodOutline: base.woodOutline,
-    branchesOverTrunk: base.branchesOverTrunk
-  }
-}
 
-/**
- * Bark shading tones for pixel-art trunk texture.
- * @returns {{ dark: string, mid: string, light: string, highlight: string }}
- */
-export function getTreeBarkPalette() {
-  const b = FOREST_PAL.bark
-  return {
-    dark: b.dark,
-    mid: b.mid,
-    light: b.light,
-    highlight: b.highlight
-  }
-}
-//
-// Blends a palette tone toward the darkest swatch (void), then snaps back
-// onto a real palette entry so the fill never invents a new colour.
-//
-function darkenRgb(c, t) {
-  if (t <= 0) return c
-  const v = forestRgb('forestShadow')
-  return snapToPalette({
-    r: Math.round(c.r + (v.r - c.r) * t),
-    g: Math.round(c.g + (v.g - c.g) * t),
-    b: Math.round(c.b + (v.b - c.b) * t)
-  })
-}
 function nearestPaletteSwatch(c) {
   let best = PALETTE_RGBS[0]
   let bestD = Infinity

@@ -124,6 +124,11 @@ const LAKE_BED_BOULDER_MID_FRAC = 0.9
 const LAKE_BED_BOULDER_LIGHT_SHIFT = 0.3
 const LAKE_BED_BOULDER_LIGHT_FRAC = 0.45
 //
+// Pictured bed stones (when a lake has them) sink this share of their
+// height into the sand.
+//
+const LAKE_BED_STONE_SINK = 0.2
+//
 // Sunken snag: a branch lying on the floor in the shallower left half, with
 // two short side twigs (fractions along it, angle, length fraction).
 //
@@ -223,6 +228,19 @@ const LAKE_BED_PROFILE = [
 const LAKE_BED_HUMP_PX = 4
 const LAKE_BED_HUMP_WAVELENGTH = 58
 const LAKE_BED_HUMP_SEED = 77.3
+//
+// Optional ragged right bank (cfg.bankJag px): from LAKE_BANK_JAG_FROM_U
+// along the bed the bottom line gets a short-wave noise plus sharp
+// sample-and-hold steps (LAKE_BANK_JAG_STEP_SHARE of it), ramping in over
+// LAKE_BANK_JAG_RAMP_U, so the steep bank reads as a cut, broken edge
+// instead of one smooth slope.
+//
+const LAKE_BANK_JAG_FROM_U = 0.86
+const LAKE_BANK_JAG_RAMP_U = 0.03
+const LAKE_BANK_JAG_WAVE = 9
+const LAKE_BANK_JAG_STEP_SHARE = 0.6
+const LAKE_BANK_JAG_SEED = 41.7
+const LAKE_BANK_JAG_STEP_INDEX = 23
 
 /**
  * Bakes the lake (water frames and bed layer, once per k and sprite key)
@@ -235,11 +253,16 @@ const LAKE_BED_HUMP_SEED = 77.3
  * @param {number} cfg.floorY - Ground line (world Y)
  * @param {string} cfg.spriteKey - Sprite name prefix, unique per caller (layouts differ)
  * @param {number} [cfg.waterStartX=cfg.x1] - Where the water starts (e.g. an island's shore)
+ * @param {Array<{t: number, depth: number, canvas: HTMLCanvasElement, w: number, h: number}>} [cfg.bedStones] -
+ *   Pictured stones lying on the bed instead of the drawn boulders: where along the open water
+ *   (0..1), how far down the bed face (0 = far rim, 1 = front edge), picture and world size
+ * @param {number} [cfg.bankJag=0] - How ragged the right bank's edge is (px)
  * @returns {Object} Lake inst: geometry (canvas-local frame at x1 / originY) plus algae
  */
 export function create(cfg) {
   const { k } = cfg
   const lake = bakeLakeWaterSprites(k, cfg)
+  lake.bedStones = cfg.bedStones ?? null
   bakeLakeBedSprite(k, lake)
   lake.algae = buildLakeAlgae(k, lake)
   return lake
@@ -317,6 +340,7 @@ export function drawFill(k, lake, opacity = 1) {
 export function lakeBottomLocalY(lake, localX) {
   return bottomLocalY(lake, localX)
 }
+
 
 /**
  * Sand / earth contact line on the bed (canvas-local Y).
@@ -434,7 +458,7 @@ function bakeLakeWaterSprites(k, cfg) {
   const islandShoreLocalX = (cfg.waterStartX ?? x1) - x1
   const waterSpritePrefix = `${spriteKey}-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
   const bedSprite = `${spriteKey}-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-  const geom = { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, waterSpritePrefix, bedSprite }
+  const geom = { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, waterSpritePrefix, bedSprite, bankJag: cfg.bankJag ?? 0 }
   //
   // Frames already loaded on this k (menu revisit) are reused as they are.
   //
@@ -532,8 +556,19 @@ function bottomLocalY(lake, localX) {
   if (u <= 0 || u >= 1) return lake.topMargin
   const shape = lakeBedProfileAt(u)
   const hump = SoilSeam.seamValueNoise(localX / LAKE_BED_HUMP_WAVELENGTH, LAKE_BED_HUMP_SEED) * LAKE_BED_HUMP_PX
-  const depth = (LAKE_BED_MAX_DEPTH + hump) * shape
+  const depth = (LAKE_BED_MAX_DEPTH + hump) * shape + bankJagAt(lake, localX, u)
   return lake.topMargin + Math.min(LAKE_BED_MAX_DEPTH, Math.max(0, depth))
+}
+//
+// Ragged offset of the right bank's bottom line at canvas-local X (0 off
+// the bank or without cfg.bankJag).
+//
+function bankJagAt(lake, localX, u) {
+  if (!lake.bankJag || u <= LAKE_BANK_JAG_FROM_U) return 0
+  const ramp = Math.min(1, (u - LAKE_BANK_JAG_FROM_U) / LAKE_BANK_JAG_RAMP_U)
+  const wave = SoilSeam.seamValueNoise(localX / LAKE_BANK_JAG_WAVE, LAKE_BANK_JAG_SEED)
+  const step = SoilSeam.seamJag(lake.x1 + localX, LAKE_BANK_JAG_STEP_INDEX)
+  return (wave * (1 - LAKE_BANK_JAG_STEP_SHARE) + step * LAKE_BANK_JAG_STEP_SHARE) * lake.bankJag * ramp
 }
 //
 // Depth fraction at u: smoothstep between neighbouring profile keypoints.
@@ -599,7 +634,7 @@ function bakeLakeBedSprite(k, lake) {
   ctx.clip(murkPath)
   paintLakeBedPebbles(ctx, lake, colors)
   paintLakeBedSnag(ctx, lake, colors)
-  paintLakeBedBoulders(ctx, lake, colors)
+  lake.bedStones ? paintLakeBedStones(ctx, lake) : paintLakeBedBoulders(ctx, lake, colors)
   ctx.restore()
   paintLakeBedFrontEdge(ctx, lake, step, floorY, colors)
   applyForestGameplaySharpBake(canvas, LAKE_BED_GRAIN_SEED)
@@ -759,6 +794,18 @@ function paintLakeBedBoulders(ctx, lake, colors) {
     const top = lakeBedTopLocalY(lake, cx)
     const baseY = top + (bottomLocalY(lake, cx) - top) * LAKE_BED_BOULDER_DEPTH_FRAC
     paintLakeBoulder(ctx, cx, baseY - spec.r * LAKE_BED_BOULDER_SQUASH * (1 - LAKE_BED_BOULDER_SINK), spec, colors)
+  }
+}
+//
+// Pictured stones on the floor, sunk a little into the sand layer.
+//
+function paintLakeBedStones(ctx, lake) {
+  ctx.imageSmoothingQuality = 'high'
+  for (const stone of lake.bedStones) {
+    const cx = lakeWaterLocalX(lake, stone.t)
+    const top = lakeBedTopLocalY(lake, cx)
+    const baseY = top + (bottomLocalY(lake, cx) - top) * stone.depth
+    ctx.drawImage(stone.canvas, cx - stone.w / 2, baseY - stone.h * (1 - LAKE_BED_STONE_SINK), stone.w, stone.h)
   }
 }
 //

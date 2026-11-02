@@ -1,65 +1,23 @@
 import { CFG } from '../../../cfg.js'
-import { FOREST_PAL, getTreePaletteColor, forestRgb } from './forest-palette.js'
-import * as PolyBatch from '../../../utils/poly-batch.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import { beginIslandShoreRetreat } from '../components/predator-move.js'
 import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
 
 //
-// Dry twigs hung under the shore tree's horizontal branch — they drop on the
-// second hero landing on that branch, then regrow after a pause with fade-in.
+// The broken branch hung under the shore tree's horizontal branch (its
+// picture comes with the tree, forest-shore-tree.js) — it drops on the
+// second hero landing on that branch, then regrows after a pause with
+// fade-in. TWIG_MAIN_LEN is the length of its stick (along its middle line
+// from under the cut stump), TWIG_MAIN_W its thickness; it hangs at
+// TWIG_HANG_ANGLE (as drawn), the start of its middle line this far under
+// the branch top, so the stump reaches up into the branch.
 //
-const TWIG_ATTACH_BELOW_BRANCH = 5
-const TWIG_MAIN_LEN = 52
-const TWIG_MAIN_W = 6
-const TWIG_OUTLINE_PAD = 2
-//
-// Darker strip along the underside gives the thick stick a second wood tone.
-//
-const TWIG_UNDERSIDE_OFFSET = TWIG_MAIN_W * 0.22
-const TWIG_UNDERSIDE_W = TWIG_MAIN_W * 0.4
-const TWIG_SIDE_W = 2.6
-const TWIG_SIDE_OUTLINE_PAD = 1.2
-//
-// Side twigs in the stick's local frame: `at` is the fraction of the main
-// length, `angle` the heading off the main axis (negative = up while lying),
-// `len` the twig length in px.
-//
-const TWIG_SIDES = [
-  { at: 0.3, angle: -0.75, len: 15 },
-  { at: 0.62, angle: -0.45, len: 17 },
-  { at: 0.82, angle: 0.6, len: 11 }
-]
-const TWIG_TIP_LEAF_ANGLE = 0.3
-//
-// Leaves around every twig tip: `turn` off the twig heading, `back` px back
-// from the tip along the twig, `size` leaf length in px.
-//
-const TWIG_LEAF_CLUSTER = [
-  { turn: -0.7, back: 4, size: 6 },
-  { turn: 0.15, back: 0, size: 8 },
-  { turn: 0.85, back: 6, size: 5 }
-]
-//
-// Asymmetric leaf (base at the origin, tip at +X, fuller on the -Y side),
-// fan-triangulated from the base vertex.
-//
-const LEAF_SHAPE = [
-  [0, 0], [0.18, -0.3], [0.46, -0.42], [0.76, -0.3],
-  [1, 0], [0.72, 0.19], [0.42, 0.25], [0.16, 0.15]
-]
-const LEAF_INDICES = [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 7]
-//
-// Shadow, base and light layers of one leaf (leaf units), each tone index
-// maps to the colour tree palette's leafShades.
-//
-const LEAF_TONES = [
-  { scale: 1, dx: 0, dy: 0 },
-  { scale: 0.76, dx: 0.1, dy: -0.07 },
-  { scale: 0.38, dx: 0.24, dy: -0.14 }
-]
-const TWIG_HANG_ANGLE = 0.72
+const TWIG_ATTACH_BELOW_BRANCH = 15
+const TWIG_MAIN_LEN = 64
+const TWIG_MAIN_W = 10
+const RAD_TO_DEG = 180 / Math.PI
+const TWIG_HANG_ANGLE = 0.41
 const TWIG_FALL_GRAVITY = 1900
 const TWIG_GROUND_LINGER_SEC = 5
 const TWIG_FADE_SEC = 0.85
@@ -96,10 +54,11 @@ const TWIG_FALL_SUBSTEPS = 5
 const TWIG_RIDE_PLAT_H = 8
 const TWIG_RIDE_PLAT_HALF_W = TWIG_MAIN_LEN * 0.46
 //
-// Over the centipede, under the hero, the mushrooms and the big trees.
+// The stick on the centipede's back: over the centipede, under the hero, the
+// mushrooms and the big trees (the level draws hanging, falling and lying
+// twigs on a front layer of its own).
 //
 const TWIG_Z = CFG.visual.zIndex.player - 0.5
-const TWIG_OUTLINE = FOREST_PAL.forestContour.platform
 const PLATFORM_HIDE_X = -500
 const PLATFORM_HIDE_Y = -5000
 
@@ -110,19 +69,19 @@ const PLATFORM_HIDE_Y = -5000
  * @param {number} cfg.branchX1 - Branch platform left
  * @param {number} cfg.branchX2 - Branch platform right
  * @param {number} cfg.branchY - Branch walk surface Y
+ * @param {{sprite: string, anchorX: number, anchorY: number}|null} cfg.look - The broken branch's sprite,
+ *   its stick along +X from the cut end (anchor: the cut end, Kaplay anchor units)
  * @returns {Object} Twig inst
  */
 export function create(cfg) {
-  const { k, branchX1, branchX2, branchY } = cfg
+  const { k, branchX1, branchX2, branchY, look } = cfg
   const inst = {
     k,
     branchX1,
     branchX2,
     branchY,
     twigs: [],
-    batch: PolyBatch.create(),
-    colors: null,
-    leafPts: LEAF_SHAPE.map(() => [0, 0]),
+    look,
     dropped: false,
     regrowing: false,
     respawnWait: 0,
@@ -286,24 +245,31 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 }
 
 /**
- * Draws the leafy twigs in the big tree's wood and leaf tones.
+ * Draws the broken branch from its picture (the stick on the centipede
+ * squeezes through zero width as it turns).
  * @param {Object} inst - Twig inst
  * @param {number} opacity - Scene fade multiplier
  * @param {{x1: number, x2: number}|null} view - Camera cull span
+ * @param {boolean} [mounted=false] - Draw only the stick on the centipede's back (else only the others)
  */
-export function onDraw(inst, opacity, view) {
-  if (!inst?.twigs?.length || opacity <= 0) return
+export function onDraw(inst, opacity, view, mounted = false) {
+  const look = inst?.look
+  if (!look || !inst.twigs.length || opacity <= 0) return
   const k = inst.k
-  inst.colors ??= buildTwigColors(k)
-  const batch = inst.batch
   inst.twigs.forEach(twig => {
-    if (twig.phase === 'gone') return
+    if (twig.phase === 'gone' || (twig.phase === 'predatorMount') !== mounted) return
     if (view && (twig.x < view.x1 - 80 || twig.x > view.x2 + 80)) return
     const op = opacity * twig.alpha
     if (op <= 0.001) return
-    PolyBatch.reset(batch)
-    addTwigGeometry(batch, twig, inst.colors, inst.leafPts)
-    PolyBatch.flush(batch, k, op)
+    const sx = twig.phase === 'predatorMount' ? twig.face : 1
+    k.drawSprite({
+      sprite: look.sprite,
+      pos: k.vec2(twig.x, twig.y),
+      anchor: k.vec2(look.anchorX, look.anchorY),
+      angle: twig.rot * RAD_TO_DEG,
+      scale: k.vec2(sx, 1),
+      opacity: op
+    })
   })
 }
 
@@ -424,6 +390,11 @@ export function snapHeroPredatorTwigRide(inst, char, hero) {
 }
 
 export const HORIZ_FALL_TWIG_DRAW_Z = TWIG_Z
+//
+// World length of the broken branch's stick from its cut end (the shore
+// tree bakes its picture at this length).
+//
+export const HORIZ_FALL_TWIG_STICK_LEN = TWIG_MAIN_LEN
 
 const HERO_SURFACE_DETECT_Y = 38
 const HERO_LOG_SNAP_EMBED = 1
@@ -914,89 +885,10 @@ function hideRidePlatform(inst) {
     : (plat.pos.x = PLATFORM_HIDE_X, plat.pos.y = PLATFORM_HIDE_Y)
 }
 
-//
-// Geometry is built in the stick's local frame (main axis = +X) and mapped to
-// the world with a rotation plus an X squeeze (the mounted stick's turn).
-//
-function addTwigGeometry(batch, twig, colors, leafPts) {
-  const sx = twig.phase === 'predatorMount' ? twig.face : 1
-  //
-  // Painter's order inside one batch: every outline first, so the wood of
-  // the side twigs joins the main stick without a contour seam.
-  //
-  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W + TWIG_OUTLINE_PAD, colors.outline)
-  TWIG_SIDES.forEach(side => addSideTwig(batch, twig, sx, side, TWIG_SIDE_W + TWIG_SIDE_OUTLINE_PAD, colors.outline))
-  addTwigLine(batch, twig, sx, 0, 0, TWIG_MAIN_LEN, 0, TWIG_MAIN_W, colors.wood)
-  addTwigLine(batch, twig, sx, 0, TWIG_UNDERSIDE_OFFSET, TWIG_MAIN_LEN, TWIG_UNDERSIDE_OFFSET,
-    TWIG_UNDERSIDE_W, colors.woodDark)
-  TWIG_SIDES.forEach(side => addSideTwig(batch, twig, sx, side, TWIG_SIDE_W, colors.woodDark))
-  TWIG_SIDES.forEach(side => addLeafCluster(batch, twig, sx,
-    side.at * TWIG_MAIN_LEN + Math.cos(side.angle) * side.len, Math.sin(side.angle) * side.len,
-    side.angle, colors.leaves, leafPts))
-  addLeafCluster(batch, twig, sx, TWIG_MAIN_LEN, 0, TWIG_TIP_LEAF_ANGLE, colors.leaves, leafPts)
-}
 
-function addSideTwig(batch, twig, sx, side, w, color) {
-  const ax = side.at * TWIG_MAIN_LEN
-  addTwigLine(batch, twig, sx, ax, 0,
-    ax + Math.cos(side.angle) * side.len, Math.sin(side.angle) * side.len, w, color)
-}
 
-function addLeafCluster(batch, twig, sx, tipX, tipY, heading, leafColors, leafPts) {
-  const cos = Math.cos(heading)
-  const sin = Math.sin(heading)
-  TWIG_LEAF_CLUSTER.forEach(leaf => addLeaf(batch, twig, sx,
-    tipX - cos * leaf.back, tipY - sin * leaf.back, heading + leaf.turn, leaf.size, leafColors, leafPts))
-}
 
-//
-// Leaf vertices go through the same local → world map as the stick, so the
-// leaves rotate with the fall and squeeze with the mounted turn.
-//
-function addLeaf(batch, twig, sx, ox, oy, angle, size, leafColors, leafPts) {
-  const cos = Math.cos(angle)
-  const sin = Math.sin(angle)
-  LEAF_TONES.forEach((tone, toneIdx) => {
-    for (let i = 0; i < LEAF_SHAPE.length; i++) {
-      const px = (LEAF_SHAPE[i][0] * tone.scale + tone.dx) * size
-      const py = (LEAF_SHAPE[i][1] * tone.scale + tone.dy) * size
-      const lx = ox + px * cos - py * sin
-      const ly = oy + px * sin + py * cos
-      leafPts[i][0] = twigWorldX(twig, sx, lx, ly)
-      leafPts[i][1] = twigWorldY(twig, lx, ly)
-    }
-    //
-    // Points are already in world space: identity origin, scale and rotation.
-    //
-    PolyBatch.addShape(batch, leafPts, LEAF_INDICES, 0, 0, 1, 1, 1, 0, leafColors[toneIdx])
-  })
-}
 
-//
-// Twig tones from the colour tree palette (built once per inst — the
-// palette is static and the inst lives on one Kaplay instance).
-//
-function buildTwigColors(k) {
-  const pal = getTreePaletteColor()
-  const outlineRgb = forestRgb(TWIG_OUTLINE)
-  return {
-    wood: k.rgb(pal.branchR, pal.branchG, pal.branchB),
-    woodDark: k.rgb(pal.trunkR, pal.trunkG, pal.trunkB),
-    leaves: pal.leafShades.map(c => k.rgb(c.r, c.g, c.b)),
-    outline: k.rgb(outlineRgb.r, outlineRgb.g, outlineRgb.b)
-  }
-}
 
-function addTwigLine(batch, twig, sx, ax, ay, bx, by, w, color) {
-  PolyBatch.addLine(batch,
-    twigWorldX(twig, sx, ax, ay), twigWorldY(twig, ax, ay),
-    twigWorldX(twig, sx, bx, by), twigWorldY(twig, bx, by), w, color)
-}
 
-function twigWorldX(twig, sx, lx, ly) {
-  return twig.x + sx * (lx * Math.cos(twig.rot) - ly * Math.sin(twig.rot))
-}
 
-function twigWorldY(twig, lx, ly) {
-  return twig.y + lx * Math.sin(twig.rot) + ly * Math.cos(twig.rot)
-}

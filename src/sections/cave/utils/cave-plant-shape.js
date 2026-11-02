@@ -47,15 +47,16 @@ const STEP_PX = 6
 // under the top leaf.
 //
 const STEMS = [
-  { phase: 0, share: 0.42 },
-  { phase: Math.PI * 2 / 3, share: 0.38 },
-  { phase: Math.PI * 4 / 3, share: 0.34 }
+  { phase: 0, share: 0.5 },
+  { phase: Math.PI * 2 / 3, share: 0.44 },
+  { phase: Math.PI * 4 / 3, share: 0.4 }
 ]
 const STEM_TWISTS = 2.4
 const STEM_ORBIT = 0.42
 const STEM_MERGE = 0.12
 //
-// Thin vines winding around the main one: twist phase / turns (sign =
+// A few thick vines winding around the trunk stems (the reference's big
+// interlaced forms, not a net of thin lines): twist phase / turns (sign =
 // direction), width at the foot and at the top (each thins evenly with
 // height), height span, and the leaf it peels off to (null: none). Each
 // lies on the main vine's bark (its centre circles at the main radius plus
@@ -63,14 +64,9 @@ const STEM_MERGE = 0.12
 // out on the other side.
 //
 const WRAPS = [
-  { phase: 0, twists: 2.2, w0: 18, w1: 8, from: 0, to: 1, leaf: null },
-  { phase: 2.1, twists: 2.2, w0: 18, w1: 9, from: 0, to: 1, leaf: 'B' },
-  { phase: 4.2, twists: 2.2, w0: 16, w1: 8, from: 0, to: 1, leaf: 'T' },
-  { phase: 1, twists: 2.6, w0: 16, w1: 8, from: 0, to: 1, leaf: null },
-  { phase: 3, twists: -2.8, w0: 11, w1: 5, from: 0.02, to: 0.95, leaf: null },
-  { phase: 5, twists: -3.4, w0: 9, w1: 4, from: 0.1, to: 1, leaf: null },
-  { phase: 0.6, twists: 3.8, w0: 8, w1: 4, from: 0.15, to: 0.8, leaf: null },
-  { phase: 3.9, twists: -4.2, w0: 7, w1: 4, from: 0.3, to: 1, leaf: null }
+  { phase: 0, twists: 1.6, w0: 26, w1: 12, from: 0, to: 0.92, leaf: null },
+  { phase: 2.1, twists: 2.2, w0: 24, w1: 12, from: 0, to: 1, leaf: 'B' },
+  { phase: 4.2, twists: 2.2, w0: 22, w1: 11, from: 0, to: 1, leaf: 'T' }
 ]
 const WRAP_STAND = 0.15
 const VINE_TAPER_POW = 1
@@ -156,6 +152,27 @@ const EYE_STALK_W0 = 1.1
 const EYE_STALK_W_MAX = 0.35
 const EYE_STALK_W1 = 0.8
 const EYE_STALK_STEPS = 14
+//
+// Roots spreading from the trunk's foot into the stones and the lake
+// (uneven in thickness and direction, not symmetric): where each ends
+// from the foot (dx, below the lake surface: drop), its width at the foot,
+// depth (front ones pass before the trunk, back ones behind) and how far
+// out it first runs before turning down (share of dx).
+//
+const ROOTS = [
+  { dx: -165, drop: 46, w: 30, z: 0.7, out: 0.55 },
+  { dx: -95, drop: 92, w: 20, z: -0.5, out: 0.35 },
+  { dx: 120, drop: 34, w: 26, z: 0.6, out: 0.6 },
+  { dx: 200, drop: 80, w: 15, z: -0.4, out: 0.5 }
+]
+const ROOT_FROM_T = 0.06
+const ROOT_START_ACROSS = 0.35
+const ROOT_DIP = 18
+const ROOT_FALL = 0.45
+const ROOT_TIP_W = 3
+const ROOT_STEPS = 22
+const ROOT_LUMP = 0.12
+const ROOT_LUMP_FREQ = 3
 const FULL_TURN = Math.PI * 2
 let cached = null
 
@@ -166,19 +183,21 @@ let cached = null
  *   width at the foot), t}; stemCount:
  *   how many of the vines (first) are trunk stems; vines: arrays of points
  *   {x, y, w, z} (stems, wrapping vines, brush fingers); eyeStalks: the
- *   eyes' stalks (points like the vines); eyes: {x, y, r} at the stalk ends
+ *   eyes' stalks (points like the vines); roots: the roots at the foot
+ *   (points like the vines); eyes: {x, y, r} at the stalk ends
  */
 export function plantShape() {
   if (cached) return cached
   const axis = axisPoints()
-  const topLeaf = Layout.PLANT_LEAVES.find(isTopLeaf)
+  const topLeaf = Layout.PLANT_ART_LEAVES.find(isTopLeaf)
   const topT = axisShareAtY(axis, topLeaf.y + TOP_HUB_DROP)
   const stems = STEMS.map(def => stemPoints(def, axis, topT))
   const wraps = WRAPS.map(def => wrapPoints(def, axis))
-  const leafVines = WRAPS.map((def, i) => ({ leaf: Layout.PLANT_LEAVES.find(l => l.id === def.leaf), pts: wraps[i] })).filter(v => v.leaf)
+  const leafVines = WRAPS.map((def, i) => ({ leaf: Layout.PLANT_ART_LEAVES.find(l => l.id === def.leaf), pts: wraps[i] })).filter(v => v.leaf)
   const brushes = [{ leaf: topLeaf, pts: stems[0] }, ...leafVines].flatMap(b => brushPoints(b.pts[b.pts.length - 1], b.leaf))
   const stalks = EYES.map((def, i) => eyeStalk(axis, def, i))
-  cached = { axis, stemCount: stems.length, vines: [...stems, ...wraps, ...brushes], eyeStalks: stalks.map(e => e.pts), eyes: stalks.map(e => e.eye) }
+  const roots = ROOTS.map((def, i) => rootPoints(axis, def, i))
+  cached = { axis, stemCount: stems.length, vines: [...stems, ...wraps, ...brushes], eyeStalks: stalks.map(e => e.pts), roots, eyes: stalks.map(e => e.eye) }
   return cached
 }
 
@@ -204,7 +223,7 @@ export function axisAt(axis, t) {
 //
 function axisPoints() {
   const footY = PLANT_FOOT.y
-  const topLeaf = Layout.PLANT_LEAVES.find(isTopLeaf)
+  const topLeaf = Layout.PLANT_ART_LEAVES.find(isTopLeaf)
   const topY = topLeaf.y + AXIS_TOP_UNDER
   const span = footY - topY
   const baseX = PLANT_FOOT.x
@@ -234,7 +253,7 @@ function trunkBend(t) {
 // The top leaf is the highest one: the plant ends under it.
 //
 function isTopLeaf(leaf) {
-  return leaf.y === Math.min(...Layout.PLANT_LEAVES.map(l => l.y))
+  return leaf.y === Math.min(...Layout.PLANT_ART_LEAVES.map(l => l.y))
 }
 //
 // One trunk stem up to the top leaf's hub: circling the axis with the other
@@ -256,7 +275,7 @@ function stemPoints(def, axis, toT) {
 // there) and bends up to the hub under the leaf.
 //
 function wrapPoints(def, axis) {
-  const leaf = def.leaf && Layout.PLANT_LEAVES.find(l => l.id === def.leaf)
+  const leaf = def.leaf && Layout.PLANT_ART_LEAVES.find(l => l.id === def.leaf)
   const peelT = leaf ? axisShareAtY(axis, leaf.y + PEEL_DROP) : def.to
   const side = leaf ? Math.sign((leaf.x1 + leaf.x2) / 2 - Layout.PLANT_TRUNK.x) || 1 : 1
   const phase = leaf ? side * PEEL_ANGLE - peelT * def.twists * FULL_TURN : def.phase
@@ -343,6 +362,23 @@ function cubicPoints(p0, p1, p2, p3, steps, widthAt, depthAt) {
     })
   }
   return pts
+}
+//
+// One root: from the trunk's side near its foot, out sideways first, then
+// bending down into the stones and the water, thinning to a tip, its
+// width swelling and pinching along it.
+//
+function rootPoints(axis, def, i) {
+  const p = axisAt(axis, ROOT_FROM_T)
+  const side = Math.sign(def.dx)
+  const start = { x: p.x + side * p.w * ROOT_START_ACROSS, y: p.y }
+  const end = { x: PLANT_FOOT.x + def.dx, y: Layout.LAKE_SURFACE_Y + def.drop }
+  const c1 = { x: start.x + def.dx * def.out, y: start.y + ROOT_DIP }
+  const c2 = { x: end.x - def.dx * (1 - def.out) * ROOT_FALL, y: end.y - def.drop * ROOT_FALL }
+  return cubicPoints(start, c1, c2, end, ROOT_STEPS, t => {
+    const lump = 1 + Math.sin(t * ROOT_LUMP_FREQ * FULL_TURN + i) * ROOT_LUMP
+    return (def.w + (ROOT_TIP_W - def.w) * t) * lump
+  }, () => def.z)
 }
 //
 // One eye's stalk from the trunk's face out and up (in front of the

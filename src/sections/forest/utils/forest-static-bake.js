@@ -64,24 +64,6 @@ export function isWorldSpanInView(x1, x2, view) {
 }
 
 /**
- * World extent of a root-segment list, padded by each segment's stroke width.
- * @param {Array<{startX: number, startY: number, endX: number, endY: number, width: number}>} segs - Root segments
- * @param {number} [minWidth=0] - Minimum stroke width used when painting
- * @returns {{x1: number, y1: number, x2: number, y2: number}}
- */
-export function rootSegmentsBounds(segs, minWidth = 0) {
-  const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
-  segs.forEach(seg => {
-    const r = Math.max(minWidth, seg.width)
-    bounds.x1 = Math.min(bounds.x1, seg.startX - r, seg.endX - r)
-    bounds.y1 = Math.min(bounds.y1, seg.startY - r, seg.endY - r)
-    bounds.x2 = Math.max(bounds.x2, seg.startX + r, seg.endX + r)
-    bounds.y2 = Math.max(bounds.y2, seg.startY + r, seg.endY + r)
-  })
-  return bounds
-}
-
-/**
  * CSS colour string for a {r, g, b} triplet (also accepts Kaplay colours).
  * @param {{r: number, g: number, b: number}} c - Colour
  * @returns {string}

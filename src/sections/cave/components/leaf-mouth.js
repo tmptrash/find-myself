@@ -12,7 +12,7 @@ import { CAVE_PAL, css } from '../utils/cave-paint.js'
 // frames are baked once per live k and picked by the trap's state; while
 // open it stays still while its tendrils sway, harder when prey is near.
 //
-const SPRITE_PREFIX = 'cave0-mouth-v4'
+const SPRITE_PREFIX = 'cave0-mouth-v5'
 const GRAIN_SEED = 9400
 const FRAMES = 8
 const BAKE_W = 2.2
@@ -23,12 +23,12 @@ const CENTER_Y = 0.62
 // far they reach open (out / up) and where their tips meet shut.
 //
 const TENDRILS = 11
-const TENDRIL_JITTER = 0.35
+const TENDRIL_JITTER = 0.75
 const RING_RX = 0.55
 const RING_RY = 0.24
 const TENDRIL_W = 0.17
 const TENDRIL_LEN_MIN = 0.85
-const TENDRIL_LEN_RANGE = 0.35
+const TENDRIL_LEN_RANGE = 0.6
 const OPEN_OUT = 0.6
 const OPEN_UP = 0.55
 const OPEN_CURL = 0.18
@@ -59,6 +59,19 @@ const TEETH = 16
 const TOOTH_LEN = 0.12
 const TOOTH_W = 0.07
 const TOOTH_REACH = 0.7
+//
+// Teeth differ in size around the ring (a fixed pattern, so every baked
+// frame shows the same teeth): length share from MIN up by RANGE.
+//
+const TOOTH_SIZE_MIN = 0.6
+const TOOTH_SIZE_RANGE = 0.9
+const TOOTH_SIZE_STEP = 2.7
+//
+// Petals darken toward their base, where they leave the lip (share of
+// the petal's length the shade covers, its opacity).
+//
+const PETAL_BASE_SHADE = 0.4
+const PETAL_BASE_ALPHA = 0.6
 //
 // Green collar where the mouth leaves the pad.
 //
@@ -135,7 +148,7 @@ const bakedByK = new WeakMap()
  */
 export function create(cfg) {
   const { k, x, y, r, seed = 1 } = cfg
-  const [contour, , dark, mid, light, high] = CAVE_PAL.trapLeaf3d
+  const [contour, deep, dark, mid, light, high] = CAVE_PAL.trapLeaf3d
   const tendrils = tendrilLayout(createSeededRandom(seed))
   return {
     k,
@@ -152,7 +165,7 @@ export function create(cfg) {
     lines: [],
     batch: PolyBatch.create(),
     opacity: 1,
-    grabRgb: { contour: getRGB(k, contour), dark: getRGB(k, dark), mid: getRGB(k, mid), light: getRGB(k, light), high: getRGB(k, high) },
+    grabRgb: { contour: getRGB(k, contour), deep: getRGB(k, deep), dark: getRGB(k, dark), mid: getRGB(k, mid), light: getRGB(k, light), high: getRGB(k, high) },
     phase: createSeededRandom(seed)() * FULL_TURN
   }
 }
@@ -339,12 +352,22 @@ function drawLines(inst, front) {
       const body = Math.sin(inst.tendrils[i].a) < 0 ? grabRgb.dark : grabRgb.mid
       addTaperedPass(batch, run, a.w + GRAB_OUTLINE, b.w + GRAB_OUTLINE, grabRgb.contour)
       addTaperedPass(batch, run, a.w, b.w, body)
+      run[0] === pts[0] && addBaseShade(batch, run, grabRgb.deep)
       addTaperedPass(batch, run.map(p => ({ x: p.x - 1, y: p.y - 1 })), a.w * GRAB_LIT_SHARE, 1, grabRgb.light)
     })
     const tip = pts[pts.length - 1]
     tip.front === front && PolyBatch.addDisc(batch, tip.x, tip.y, TIP_R, grabRgb.high)
   })
   PolyBatch.flush(batch, k, inst.opacity)
+}
+//
+// The shaded base of a live petal: its first part again, darker, thinning
+// out along it.
+//
+function addBaseShade(batch, run, color) {
+  const n = Math.max(2, Math.round(run.length * PETAL_BASE_SHADE))
+  const part = run.slice(0, n)
+  addTaperedPass(batch, part, part[0].w, part[part.length - 1].w * HALF, color)
 }
 //
 // Consecutive points on one side of the prey, each run sharing its end
@@ -470,10 +493,11 @@ function paintCollar(ctx, cx, cy, r, rng) {
   }
 }
 //
-// Fleshy lip ring, then the dark recessed throat with a faint inner glow.
+// Fleshy lip ring, then the dark recessed throat, only faintly lit deep
+// inside.
 //
 function paintThroat(ctx, cx, cy, r, open) {
-  const [contour, deep, dark, mid, light] = CAVE_PAL.trapLeaf3d
+  const [contour, deep, , mid, light] = CAVE_PAL.trapLeaf3d
   const rx = r * (THROAT_MIN + THROAT_RANGE * open)
   const ry = rx * THROAT_SQUASH
   const lip = r * LIP_W
@@ -490,8 +514,8 @@ function paintThroat(ctx, cx, cy, r, open) {
   ctx.ellipse(cx, cy, rx + lip / 2, ry + lip * THROAT_SQUASH / 2, 0, Math.PI, FULL_TURN)
   ctx.stroke()
   const g = ctx.createRadialGradient(cx, cy + ry * THROAT_GLOW, 0, cx, cy, rx)
-  g.addColorStop(0, css(dark))
-  g.addColorStop(THROAT_GLOW, css(deep))
+  g.addColorStop(0, css(deep))
+  g.addColorStop(THROAT_GLOW, css(contour))
   g.addColorStop(1, css(contour))
   ctx.fillStyle = g
   ctx.beginPath()
@@ -500,15 +524,16 @@ function paintThroat(ctx, cx, cy, r, open) {
   open > TEETH_FROM && paintTeeth(ctx, cx, cy, rx, ry, r)
 }
 //
-// A ring of pale pointed teeth around the throat's rim, pointing in toward
-// its centre; the far ones (upper half) in shade.
+// A ring of pale pointed teeth of different sizes around the throat's
+// rim, pointing in toward its centre; the far ones (upper half) in shade.
 //
 function paintTeeth(ctx, cx, cy, rx, ry, r) {
   const [contour, tooth, lit] = CAVE_PAL.trapTooth
-  const len = r * TOOTH_LEN
-  const half = r * TOOTH_W / 2
   for (let i = 0; i < TEETH; i++) {
     const a = (i + HALF) / TEETH * FULL_TURN
+    const size = TOOTH_SIZE_MIN + TOOTH_SIZE_RANGE * (HALF + HALF * Math.sin(i * TOOTH_SIZE_STEP))
+    const len = r * TOOTH_LEN * size
+    const half = r * TOOTH_W / 2 * size
     const base = { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry }
     const toC = { x: cx - base.x, y: cy - base.y }
     const d = Math.hypot(toC.x, toC.y) || 1
@@ -557,6 +582,14 @@ function paintTendril(ctx, cx, cy, r, open, td) {
   path.closePath()
   ctx.fillStyle = css(s < 0 ? dark : mid)
   ctx.fill(path)
+  ctx.save()
+  ctx.clip(path)
+  const shade = ctx.createLinearGradient(base.x, base.y, tip.x, tip.y)
+  shade.addColorStop(0, css(contour, PETAL_BASE_ALPHA))
+  shade.addColorStop(PETAL_BASE_SHADE, css(contour, 0))
+  ctx.fillStyle = shade
+  ctx.fill(path)
+  ctx.restore()
   ctx.strokeStyle = css(light)
   ctx.lineWidth = r * TENDRIL_W * TENDRIL_LIT_W
   ctx.beginPath()

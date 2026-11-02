@@ -8,7 +8,8 @@ import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js
 // stone groups, sediment streaks, voids, warm pebbles, grit, shells, bones,
 // coins, bottles and worms. The layout object places it: band span and
 // depth, the big tree (whose root zone keeps less small decor), an optional
-// extra zone that gets guaranteed decor, and an optional rootlet filter.
+// extra zone that gets guaranteed decor, an optional rootlet filter and
+// optional pictured stones that replace every drawn stone.
 //
 // Decor keeps this far in from the band's left / right ends.
 //
@@ -74,26 +75,20 @@ const UG_STREAK_LEN_MIN = 30
 const UG_STREAK_LEN_RANGE = 110
 const UG_STREAK_PX = 1.5
 const UG_STREAK_ALPHA = 0.4
-const UG_POCKET_COUNT = 30
-const UG_POCKET_R_MIN = 2.5
-const UG_POCKET_R_RANGE = 5
-const UG_POCKET_LIP_ALPHA = 0.55
-const UG_POCKET_VOID_ALPHA = 0.7
 const UG_WARM_PEBBLE_COUNT = 160
 const UG_WARM_PEBBLE_R_MIN = 1.2
 const UG_WARM_PEBBLE_R_RANGE = 1.6
 const UG_WARM_PEBBLE_TOP_FRAC = 0.45
 //
 // East of the main tree the roots carry the underground: most small pink
-// pebbles, grit specks and grit-lipped pockets are dropped there, and the
+// pebbles and grit specks are dropped there, and the
 // few surviving pebbles grow so they read as stones, not noise.
 //
 const UG_RIGHT_WARM_PEBBLE_KEEP = 0.12
 const UG_RIGHT_WARM_PEBBLE_R_MULT = 1.9
 const UG_RIGHT_GRIT_KEEP = 0.35
-const UG_RIGHT_POCKET_KEEP = 0.4
 //
-// Small decor (pebbles, grit, pockets, shells, bones, coins, worms) is cut
+// Small decor (pebbles, grit, shells, bones, coins, worms) is cut
 // to about half across the band and thinned harder under the central tree
 // so its big roots stay the read. Rocks, boulders and roots are untouched.
 //
@@ -107,6 +102,24 @@ const UG_GRIT_ALPHA = 0.55
 const UG_BONE_KNOB_R = 2.3
 const UG_BONE_KNOB_SPLIT = 1.7
 const UG_BONE_SHAFT_PX = 2.4
+//
+// Pictured stones (layout.stones, smallest first) replace the drawn rocks,
+// pebble clusters, boulder piles and warm pebbles: UG_PIC_STONE_COUNT of
+// them, more the deeper (the depth share is the square root of a random, so
+// their number grows with depth). Near the top only the smallest
+// UG_PIC_STONE_REACH_TOP of the list may be picked, at the bottom all of
+// it; each is scaled by UG_PIC_STONE_SCALE (a little random, and up to
+// UG_PIC_STONE_DEEP_GROW bigger at the bottom), some mirrored, and kept
+// apart from the earlier ones (UG_PIC_STONE_GAP of their sizes, a few tries).
+//
+const UG_PIC_STONE_COUNT = 150
+const UG_PIC_STONE_SCALE = 0.2
+const UG_PIC_STONE_SCALE_JITTER = 0.2
+const UG_PIC_STONE_DEEP_GROW = 0.6
+const UG_PIC_STONE_REACH_TOP = 0.35
+const UG_PIC_STONE_GAP = 0.7
+const UG_PIC_STONE_ATTEMPTS = 8
+const UG_PIC_STONE_MIRROR_SHARE = 0.5
 
 /**
  * Builds a random buried-decor layout for an earth band.
@@ -119,6 +132,7 @@ const UG_BONE_SHAFT_PX = 2.4
  * @param {number} layout.treeX - Big tree trunk X
  * @param {number} layout.treeClearHalf - Half-width of the trunk zone
  * @param {function(number): boolean} [layout.skipRootlet] - True drops a hair-root at that X
+ * @param {Array<HTMLCanvasElement>} [layout.stones] - Stone pictures (smallest first) buried instead of the drawn stones
  * @returns {Object} Decor spec (carries its layout)
  */
 export function buildUndergroundSpec(layout) {
@@ -253,13 +267,6 @@ function buildSpec(layout) {
   for (let i = 0; i < UG_STREAK_COUNT; i++) {
     streaks.push({ x: randX(), y: randY(), len: UG_STREAK_LEN_MIN + Math.random() * UG_STREAK_LEN_RANGE, tilt: (Math.random() - 0.5) * 0.06 })
   }
-  const pockets = []
-  for (let i = 0; i < UG_POCKET_COUNT; i++) {
-    const r = UG_POCKET_R_MIN + Math.random() * UG_POCKET_R_RANGE
-    const x = randX()
-    keepOnRight(x, UG_RIGHT_POCKET_KEEP) && keepUndergroundSmallDecor(layout, x) &&
-      pockets.push({ x, y: randY(), rx: r * (1.2 + Math.random() * 0.6), ry: r })
-  }
   const warmPebbles = []
   const topsoilY2 = layout.surfaceY + layout.bandH * UG_WARM_PEBBLE_TOP_FRAC
   for (let i = 0; i < UG_WARM_PEBBLE_COUNT; i++) {
@@ -315,10 +322,43 @@ function buildSpec(layout) {
     }
     worms.push(pts)
   }
+  const pictured = layout.stones?.length > 0
   return {
-    rocks, cracks, pebbles, rootlets, fossils, boulderPiles, grit, streaks, pockets, warmPebbles,
+    rocks: pictured ? [] : rocks,
+    cracks,
+    pebbles: pictured ? [] : pebbles,
+    rootlets,
+    fossils,
+    boulderPiles: pictured ? [] : boulderPiles,
+    grit,
+    streaks,
+    warmPebbles: pictured ? [] : warmPebbles,
+    pictureStones: pictured ? buildUndergroundPictureStones(layout.stones, randX, areaY1, areaY2) : [],
     shells, bones, coins, bottles, worms, skeleton: null, layout
   }
+}
+//
+// The pictured stones spread over the band, denser and bigger with depth.
+//
+function buildUndergroundPictureStones(pictures, randX, y1, y2) {
+  const placed = []
+  for (let i = 0; i < UG_PIC_STONE_COUNT; i++) {
+    const t = Math.sqrt(Math.random())
+    const reach = UG_PIC_STONE_REACH_TOP + (1 - UG_PIC_STONE_REACH_TOP) * t
+    const canvas = pictures[Math.floor(Math.random() * reach * pictures.length)]
+    const scale = UG_PIC_STONE_SCALE * (1 + (Math.random() * 2 - 1) * UG_PIC_STONE_SCALE_JITTER) * (1 + UG_PIC_STONE_DEEP_GROW * t)
+    const w = canvas.width * scale
+    const h = canvas.height * scale
+    const r = Math.max(w, h) / 2
+    const y = y1 + h / 2 + t * Math.max(0, y2 - y1 - h)
+    for (let attempt = 0; attempt < UG_PIC_STONE_ATTEMPTS; attempt++) {
+      const x = randX()
+      if (!placed.every(p => Math.hypot(p.x - x, p.y - y) >= (p.r + r) * UG_PIC_STONE_GAP)) continue
+      placed.push({ canvas, x, y, w, h, r, mirror: Math.random() < UG_PIC_STONE_MIRROR_SHARE })
+      break
+    }
+  }
+  return placed
 }
 //
 // One loose group of slate stones in the deep clay — spaced apart (only a
@@ -411,6 +451,7 @@ function renderSpec(ctx, spec, tones) {
   const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
   const lightCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
   tones.stone && paintUndergroundSediment(ctx, spec, tones, deepCss)
+  paintUndergroundPictureStones(ctx, layout, spec.pictureStones)
   //
   // Buried rocks — flat single-tone silhouettes, no outline.
   //
@@ -595,12 +636,10 @@ function strokeUndergroundFossil(ctx, fossil) {
   ctx.stroke()
 }
 //
-// Sediment streaks along the strata and dark voids with a lit lower lip,
-// painted first so every other buried feature sits on top of them.
+// Sediment streaks along the strata, painted first so every other buried
+// feature sits on top of them.
 //
 function paintUndergroundSediment(ctx, spec, tones, deepCss) {
-  const lipCss = `rgb(${tones.grit.r}, ${tones.grit.g}, ${tones.grit.b})`
-  const voidCss = `rgb(${tones.contour.r}, ${tones.contour.g}, ${tones.contour.b})`
   ctx.strokeStyle = deepCss
   ctx.lineWidth = UG_STREAK_PX
   ctx.lineCap = 'round'
@@ -610,18 +649,6 @@ function paintUndergroundSediment(ctx, spec, tones, deepCss) {
     ctx.moveTo(streak.x, streak.y)
     ctx.quadraticCurveTo(streak.x + streak.len * 0.5, streak.y - 2, streak.x + streak.len, streak.y + streak.len * streak.tilt)
     ctx.stroke()
-  })
-  spec.pockets?.forEach(pocket => {
-    ctx.globalAlpha = UG_POCKET_LIP_ALPHA
-    ctx.fillStyle = lipCss
-    ctx.beginPath()
-    ctx.ellipse(pocket.x, pocket.y + 1.5, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = UG_POCKET_VOID_ALPHA
-    ctx.fillStyle = voidCss
-    ctx.beginPath()
-    ctx.ellipse(pocket.x, pocket.y, pocket.rx, pocket.ry, 0, 0, Math.PI * 2)
-    ctx.fill()
   })
   ctx.globalAlpha = 1
 }
@@ -637,6 +664,19 @@ function paintUndergroundWarmPebbles(ctx, layout, pebbles, tones) {
       ctx.fill()
     })
   })
+}
+//
+// Pictured buried stones, fading with depth like the other large masses.
+//
+function paintUndergroundPictureStones(ctx, layout, stones) {
+  stones?.forEach(stone => paintUndergroundDecorAtDepth(ctx, layout, stone.y, true, () => {
+    ctx.save()
+    ctx.imageSmoothingQuality = 'high'
+    ctx.translate(stone.x, stone.y)
+    stone.mirror && ctx.scale(-1, 1)
+    ctx.drawImage(stone.canvas, -stone.w / 2, -stone.h / 2, stone.w, stone.h)
+    ctx.restore()
+  }))
 }
 //
 // Dark slate stones in the deep clay: contour, body, soft lit cap, speckles.

@@ -6,7 +6,7 @@ import {
   forestHiResBushClustersForTier
 } from './forest-pixel-density.js'
 import { drawForestHiResFoliageCluster } from './forest-parallax-grain.js'
-import { drawFernToCanvas } from '../../../utils/draw-fern.js'
+import { drawForestFern } from './forest-ferns.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 //
 // Bush strips of the forest parallax planes, shared by the forest level and
@@ -170,7 +170,7 @@ function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
   mound.leaves.forEach(leaf => drawBushLeaf(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shades[leaf.shadeIdx]))
 }
 function paintBushFernOnto(ctx, x, baseY, size, seed, rgb) {
-  drawFernToCanvas(ctx, {
+  drawForestFern(ctx, {
     x,
     baseY,
     size,

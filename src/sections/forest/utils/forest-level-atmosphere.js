@@ -84,11 +84,16 @@ const MIDGE_LAKE_TOP = 62
 const MIDGE_LAKE_BOTTOM = 22
 //
 // A caught midge comes back unseen: after a while, somewhere else in its
-// role's band, swelling from nothing over MIDGE_REGROW_SEC.
+// role's band, swelling from nothing over MIDGE_REGROW_SEC. A lake midge
+// comes back in the band's shore-side MIDGE_LAKE_RESPAWN_SHARE, where the
+// bug hunting from the shore reaches, and swells slowly
+// (MIDGE_LAKE_REGROW_SEC): the swarm by it fills in again bit by bit.
 //
 const MIDGE_RESPAWN_MIN_SEC = 2.5
 const MIDGE_RESPAWN_RANGE_SEC = 3
 const MIDGE_REGROW_SEC = 1.6
+const MIDGE_LAKE_RESPAWN_SHARE = 0.5
+const MIDGE_LAKE_REGROW_SEC = 3
 const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 //
 // Cave floor spot (share of the crack zone width) where the ground portal opens.
@@ -367,7 +372,7 @@ export function updateForestMidges(ctrl, dt, worldLife = 0) {
       tickCaughtMidge(m, bounds, dt)
       continue
     }
-    m.grow = Math.min(1, m.grow + dt / MIDGE_REGROW_SEC)
+    m.grow = Math.min(1, m.grow + dt / (m.role === 'lake' ? MIDGE_LAKE_REGROW_SEC : MIDGE_REGROW_SEC))
     m.driftVx += Math.sin(t * m.freqDriftX + m.phase) * 18 * dt * move
     m.driftVy += Math.cos(t * m.freqDriftY + m.phaseY) * 14 * dt * move
     m.driftVx *= 0.98
@@ -612,14 +617,15 @@ function makeMidge(x, y, role) {
 }
 //
 // A caught midge waits out of sight, then turns up at a random spot of its
-// band, still too small to see.
+// band (a lake one on the band's shore side), still too small to see.
 //
 function tickCaughtMidge(m, bounds, dt) {
   m.respawnLeft -= dt
   if (m.respawnLeft > 0) return
   m.caught = false
   m.grow = 0
-  m.x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX)
+  const share = m.role === 'lake' ? MIDGE_LAKE_RESPAWN_SHARE : 1
+  m.x = bounds.maxX - Math.random() * (bounds.maxX - bounds.minX) * share
   m.y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY)
 }
 function midgeRoleVisible(ctrl, role) {

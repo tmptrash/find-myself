@@ -180,6 +180,15 @@ export function fallingWater(inst) {
 }
 
 /**
+ * Where the flower's bubble hangs (and its water falls) across the ground.
+ * @param {Object|null} inst - Flower inst
+ * @returns {number|null} World X of the flower's heart (null without a flower)
+ */
+export function dropX(inst) {
+  return inst ? inst.heartX : null
+}
+
+/**
  * The falling water hits something on its way down and bursts right away,
  * splashing onto the ground under it.
  * @param {Object} inst - Flower inst

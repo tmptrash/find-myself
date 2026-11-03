@@ -60,20 +60,22 @@ const WATER_FLOWER = {
 // Lengths in world px, times in seconds, speeds in px/s, angles in radians.
 //
 const APPLE_BUG = {
-  shellWidth: 50,                   // Shell picture width
-  holeWidth: 190,                   // Burrow picture width (its hole fits the bug)
-  bodyLift: 18,                     // Body's origin over the ground at rest
+  shellWidth: 60,                   // Shell picture width
+  holeWidth: 228,                   // Burrow picture width (its hole fits the bug)
+  bodyLift: 18.6,                   // Body's origin (hips) over the ground at rest: knees bent out at the shell's rim
   //
   // It moves in dashes: speed rises and falls over each dash (peak speed),
   // with a pause and a new pose between them. dashStart skips that share
   // of the speed's rise, so a dash starts that fast at once (0.5: at peak).
   //
   stroll: { speed: 130, dashMin: 0.16, dashMax: 0.32, pauseMin: 0.15, pauseMax: 0.55 },
-  run: { speed: 105, dashMin: 0.3, dashMax: 0.5, pauseMin: 0.05, pauseMax: 0.12 },  // ~55 px/s: for an apple and home with it
+  fetch: { speed: 190, dashMin: 0.22, dashMax: 0.36, pauseMin: 0.03, pauseMax: 0.08 },  // ~110 px/s: on its way to an apple
+  dart: { speed: 340, dashMin: 0.45, dashMax: 0.55, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Past the flower's drop: for the apple at once
+  run: { speed: 105, dashMin: 0.3, dashMax: 0.5, pauseMin: 0.05, pauseMax: 0.12 },  // ~55 px/s: home with an apple
   flee: { speed: 300, dashMin: 0.45, dashMax: 0.7, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Scared of the water: no stops
   turnDuration: 0.08,               // A quick hop round
   stepDuration: 0.085,
-  stepLift: 3.6,
+  stepLift: 3.24,
   //
   // Burrow: how long it hides after dashing into the dark hole.
   //
@@ -84,13 +86,14 @@ const APPLE_BUG = {
   scaredHideMax: 18,
   appleHideMin: 5,                  // After it took an apple home
   appleHideMax: 8,
+  crawlerFearReach: 150,            // A crawler eating this near sends it home; it keeps this far from one while out
   lakeShare: 0.6,                   // Share of its outings spent hunting at the lake
   //
   // Lake hunt: it stands lakeStandGap past the lake's edge, its front feet
   // still on the flat ground before the bank dips to the water, and
   // catches midges over the lake with its tongue.
   //
-  lakeStandGap: 100,
+  lakeStandGap: 108,
   huntMin: 7,
   huntMax: 12,
   tongueReach: 140,

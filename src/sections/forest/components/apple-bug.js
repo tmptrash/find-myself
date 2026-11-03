@@ -59,10 +59,10 @@ const ARRIVE_DIST = 0.5
 // down is positive) and leans its nose down a little while dashing; it
 // snaps to them fast (POSE_SNAP per second), bobbing over each dash.
 //
-const POSE_LIFT_RANGE = 1.4
+const POSE_LIFT_RANGE = 1.26
 const POSE_PITCH_RANGE = 0.06
 const DASH_LEAN = 0.05
-const DASH_BOB = 0.8
+const DASH_BOB = 0.96
 const POSE_SNAP = 16
 const HEAD_SNAP = 12
 const HEAD_RANGE = 0.12
@@ -74,10 +74,10 @@ const HEAD_GRAB_DIP = 0.4
 // SETTLE_TRIGGER at rest), landing STEP_LEAD ahead while moving. The tarsus
 // leans TARSUS_TILT outwards from the foot.
 //
-const FOOT_SPREAD = 16
-const STEP_TRIGGER = 4.2
-const SETTLE_TRIGGER = 1.4
-const STEP_LEAD = 3.6
+const FOOT_SPREAD = 14.4
+const STEP_TRIGGER = 3.7
+const SETTLE_TRIGGER = 1.26
+const STEP_LEAD = 3.24
 const TARSUS_TILT = 0.4
 const IK_SLACK = 0.01
 //
@@ -115,7 +115,7 @@ const TONGUE_FORK_LEN_DIFF = 1.1
 const TONGUE_FORK_ANGLE = 0.45
 const TONGUE_FORK_ANGLE_DIFF = 0.12
 const TONGUE_MIN_AHEAD = 6
-const FLICK_LEN = 10
+const FLICK_LEN = 12
 const FLICK_OUT = 0.07
 const FLICK_BACK = 0.1
 const FLICK_WAIT_MIN = 1.8
@@ -123,19 +123,21 @@ const FLICK_WAIT_MAX = 4
 //
 // Apple: it is held this share of its radius in front of the mouth and a
 // little lower; the bug grabs it over GRAB_DURATION. Inside, it comes out
-// for an apple after APPLE_NOTICE_DELAY (unless it hides scared).
+// for an apple after APPLE_NOTICE_DELAY (unless it hides scared). It darts
+// once it is DROP_PASS_PAD past the flower's drop.
 //
 const APPLE_HOLD_AHEAD = 0.55
 const APPLE_HOLD_DROP = 0.15
 const GRAB_DURATION = 0.28
 const APPLE_NOTICE_DELAY = 0.5
+const DROP_PASS_PAD = 6
 //
 // Startle when the water hits it: it jerks STARTLE_JERK px towards the
 // burrow at once (already facing it, nose up by STARTLE_NOSE_UP), its
 // feet left behind to scramble after it, and a hop.
 //
-const STARTLE_HOP = 6
-const STARTLE_JERK = 9
+const STARTLE_HOP = 7.2
+const STARTLE_JERK = 11
 const STARTLE_NOSE_UP = -0.22
 //
 // A turn is a quick hop round: the body never goes flat, it narrows to
@@ -143,7 +145,7 @@ const STARTLE_NOSE_UP = -0.22
 // feet landing where the new way needs them.
 //
 const TURN_MIN_WIDTH = 0.55
-const TURN_HOP = 3
+const TURN_HOP = 3.6
 const TURN_NOSE_UP = -0.12
 //
 // The burrow's doorway is DOOR_DX from the hole's middle on either side.
@@ -153,13 +155,13 @@ const TURN_NOSE_UP = -0.12
 // RUSH_FADE_START on, and ends DEEP_ZOOM of its size, DEEP_RISE px higher.
 // Coming out runs the same dash backwards.
 //
-const DOOR_DX = 44
+const DOOR_DX = 53
 const RUSH_DURATION = 0.17
 const RUSH_EASE_POWER = 3
 const RUSH_DARK_END = 0.55
 const RUSH_FADE_START = 0.4
 const DEEP_ZOOM = 0.84
-const DEEP_RISE = 4
+const DEEP_RISE = 4.8
 //
 // Burrow: clear ground on each side of its picture.
 //
@@ -242,6 +244,8 @@ export function create(cfg) {
     tongue: { phase: TONGUE.IDLE, t: 0, out: 0, back: 0, prey: null, caught: null, tipX: 0, tipY: 0, waitLeft: 0, seed: 0 },
     flickLeft: randomIn(FLICK_WAIT_MIN, FLICK_WAIT_MAX),
     fruit: null,
+    appleFrom: 0,
+    darting: false,
     carrying: false
   }
   inst.x = inst.mouthX
@@ -282,7 +286,8 @@ export function holeClearSpan(holeX) {
 }
 
 //
-// The bug's behaviour, its motion and pose, its legs, then the water check.
+// The bug's behaviour, its motion and pose, its legs, then what it fears:
+// the flower's water and a crawler eating near it.
 //
 function onUpdate(inst) {
   const dt = Math.min(MAX_FRAME_DT, inst.k.dt())
@@ -294,6 +299,7 @@ function onUpdate(inst) {
   updateLegs(inst, dt)
   updateTongue(inst, dt)
   checkWater(inst)
+  checkCrawler(inst)
 }
 function updateBehaviour(inst, dt) {
   switch (inst.state) {
@@ -311,13 +317,14 @@ function updateBehaviour(inst, dt) {
 }
 //
 // Hidden in the burrow; an apple by the tree calls it out early unless it
-// is hiding scared. It picks what to do next before it comes out.
+// is hiding scared. It stays in while a crawler eats round its grounds, and
+// picks what to do next before it comes out.
 //
 function tickInside(inst, dt) {
   inst.hideLeft -= dt
   const apple = findApple(inst)
   apple && !inst.scared && (inst.hideLeft = Math.min(inst.hideLeft, APPLE_NOTICE_DELAY))
-  if (inst.hideLeft > 0) return
+  if (inst.hideLeft > 0 || crawlerOnGrounds(inst)) return
   inst.scared = false
   inst.plan = findApple(inst) ? PLANS.APPLE : Math.random() < PARAMS.lakeShare ? PLANS.LAKE : PLANS.WANDER
   const dir = inst.plan === PLANS.LAKE ? -1 : 1
@@ -343,7 +350,7 @@ function tickEmerge(inst, dt) {
     return
   }
   inst.stateLeft = randomIn(PARAMS.wanderMin, PARAMS.wanderMax)
-  inst.goalX = randomIn(inst.wanderX1, inst.wanderX2)
+  inst.goalX = wanderGoal(inst)
   inst.state = STATES.WANDER
 }
 //
@@ -369,7 +376,7 @@ function tickWander(inst, dt) {
   if (claimApple(inst)) return
   inst.stateLeft -= dt
   if (inst.stateLeft <= 0) return goHome(inst)
-  walk(inst, dt, PARAMS.stroll) && (inst.goalX = randomIn(inst.wanderX1, inst.wanderX2))
+  walk(inst, dt, PARAMS.stroll) && (inst.goalX = wanderGoal(inst))
   inst.flickLeft -= dt
   inst.flickLeft <= 0 && inst.tongue.phase === TONGUE.IDLE && flickTongue(inst)
 }
@@ -391,8 +398,9 @@ function tickSink(inst, dt) {
   inst.state = STATES.INSIDE
 }
 //
-// Runs for its apple (wherever it rolls) and grabs it once it lies still;
-// it gives up if the apple is gone or the crawler is already eating it.
+// Runs for its apple (wherever it rolls), turns to face it if it came down
+// behind it and grabs it once it lies still; it gives up if the apple is
+// gone or the crawler is already eating it.
 //
 function tickApple(inst, dt) {
   const fruit = inst.fruit
@@ -402,7 +410,26 @@ function tickApple(inst, dt) {
   }
   const dir = Math.sign(fruit.x - inst.x) || inst.facing
   inst.goalX = fruit.x - dir * (inst.bug.mouth.x + fruit.r * APPLE_HOLD_AHEAD)
-  walk(inst, dt, PARAMS.run) && fruit.settled && startGrab(inst)
+  !inst.darting && passedDrop(inst, dir) && startDart(inst)
+  if (!walk(inst, dt, inst.darting ? PARAMS.dart : PARAMS.fetch)) return
+  if (inst.facing !== dir) return startTurn(inst, dir)
+  inst.turnT >= 1 && fruit.settled && startGrab(inst)
+}
+//
+// On its way to an apple it hurries; once the flower's drop is behind it
+// (the spot it fears), it darts for the apple. An apple on its own side of
+// the drop it just hurries to.
+//
+function passedDrop(inst, dir) {
+  const x = WaterFlower.dropX(inst.flower)
+  if (x === null) return false
+  const startedBefore = (x - inst.appleFrom) * dir > 0
+  return startedBefore && (inst.x - x) * dir > DROP_PASS_PAD
+}
+function startDart(inst) {
+  inst.darting = true
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
 }
 function tickGrab(inst, dt) {
   inst.headTarget = HEAD_GRAB_DIP
@@ -480,9 +507,11 @@ function startGrab(inst) {
   inst.state = STATES.GRAB
 }
 //
-// The first free apple falling or lying by the tree.
+// The first free apple falling or lying by the tree; none while a crawler
+// is eating (it does not go near one).
 //
 function findApple(inst) {
+  if (PredatorFeast.predatorMealX(inst.predator) !== null) return null
   return inst.levelInst.treeFruitSpots?.find(fruit => isAppleFree(inst, fruit) &&
     fruit.x >= inst.appleX1 && fruit.x <= inst.appleX2) ?? null
 }
@@ -497,6 +526,8 @@ function claimApple(inst) {
   const fruit = findApple(inst)
   if (!fruit) return false
   inst.fruit = fruit
+  inst.appleFrom = inst.x
+  inst.darting = false
   retractTongue(inst)
   inst.dash.active = false
   inst.dash.pauseLeft = 0
@@ -568,6 +599,45 @@ function nearShell(inst, water) {
   const xb = inst.x + inst.f * box.x2
   const gap = Math.max(0, Math.min(xa, xb) - water.x, water.x - Math.max(xa, xb))
   return gap - water.r <= PARAMS.waterScareReach
+}
+//
+// A crawler eating near it: it drops what it is doing (an apple in its
+// mouth it keeps, it is going home anyway) and runs into the burrow.
+//
+function checkCrawler(inst) {
+  const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
+    inst.state === STATES.HOME || inst.state === STATES.APPLE || inst.state === STATES.GRAB
+  if (!watchful || inst.opacity < 1) return
+  const mealX = PredatorFeast.predatorMealX(inst.predator)
+  if (mealX === null || Math.abs(mealX - inst.x) > PARAMS.crawlerFearReach) return
+  inst.fruit && releaseApple(inst)
+  retractTongue(inst)
+  inst.headTarget = 0
+  inst.nextHide = randomIn(PARAMS.hideMin, PARAMS.hideMax)
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.FLEE
+}
+//
+// A crawler eating anywhere it goes out to (shore stand to the far apples,
+// and its fear reach round them).
+//
+function crawlerOnGrounds(inst) {
+  const mealX = PredatorFeast.predatorMealX(inst.predator)
+  if (mealX === null) return false
+  return mealX >= inst.standX - PARAMS.crawlerFearReach && mealX <= inst.appleX2 + PARAMS.crawlerFearReach
+}
+//
+// A stroll spot, kept out of a crawler's fear reach on the bug's own side
+// of where it eats.
+//
+function wanderGoal(inst) {
+  const x = randomIn(inst.wanderX1, inst.wanderX2)
+  const mealX = PredatorFeast.predatorMealX(inst.predator)
+  if (mealX === null) return x
+  const side = Math.sign(inst.x - mealX) || -1
+  const edge = mealX + side * PARAMS.crawlerFearReach
+  return side < 0 ? Math.min(x, edge) : Math.max(x, edge)
 }
 //
 // Motion: dashes towards the goal (turning sharply first if it lies behind),

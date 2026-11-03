@@ -56,6 +56,16 @@ export function isPredatorEatingFruit(pred, fruit) {
 }
 
 /**
+ * Where the crawler is biting into a fruit, while it eats (not on its way).
+ * @param {Object} pred - Predator inst
+ * @returns {number|null} World X of the fruit it eats (null while it does not)
+ */
+export function predatorMealX(pred) {
+  if (pred?.state !== 'feast' || pred.feastPhase !== 'eat' || !pred.feastFruit) return null
+  return pred.feastFruit.x
+}
+
+/**
  * Drops the current meal (e.g. when a burst scares the crawler away).
  * @param {Object} pred - Predator inst
  */

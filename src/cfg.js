@@ -443,13 +443,12 @@ export const CFG = {
           mossLight: PALETTE.gold4     // Its lit top clumps
         },
         //
-        // Apple bug by the left big tree: the green-black contour round its
-        // parts, its snake-like tongue (a darker fork at the tip), its soft
-        // belly under the shell, the tint that pushes its far legs back and
-        // the dark it turns as it dashes into its burrow.
+        // Apple bug by the left big tree: its snake-like tongue (a darker
+        // fork at the tip), its soft belly under the shell, the tint that
+        // pushes its far legs back and the dark it turns as it dashes into
+        // its burrow.
         //
         appleBug: {
-          outline: PALETTE.gray0,
           tongue: PALETTE.pink1,
           tongueFork: PALETTE.pink0,
           belly: PALETTE.rose0,

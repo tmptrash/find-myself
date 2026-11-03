@@ -158,7 +158,7 @@ function buildPainterColors(c) {
     },
     rim: {
       soil: c.rimSoil, earth: c.rimEarth, moss: c.rimMoss, mossLight: c.rimMossLight,
-      dry: c.rimDry, dryLight: c.rimDryLight, pebble: c.rimPebble, contour: c.contour
+      dry: c.rimDry, dryLight: c.rimDryLight
     }
   }
 }

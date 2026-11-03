@@ -422,6 +422,23 @@ export const CFG = {
           algaeDark: PALETTE.green0
         },
         //
+        // Water flower by the left big tree: a cloudy bubble (milky skin and
+        // a light rim, so it reads against the dark teal trunks behind it)
+        // holding pale blue water, and a dark warm wet-soil tone for the
+        // soaked ground.
+        //
+        waterFlower: {
+          skin: PALETTE.gray6,         // Milky haze of the bubble's skin
+          skinRim: PALETTE.gray6,      // Its light outline
+          highlight: PALETTE.gray7,    // Light caught on the skin
+          water: PALETTE.blue4,        // Water inside the bubble
+          waterSurface: PALETTE.gray6, // Line of the water's surface
+          droplet: PALETTE.blue5,      // Spray and splash drops
+          puddle: PALETTE.blue3,       // Shallow puddle on the ground
+          puddleGlint: PALETTE.blue5,  // Its top glint
+          wetSoil: PALETTE.rose0       // Darkened wet earth
+        },
+        //
         // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
         // while gray ellipses stay for the monochrome reveal.
         //
@@ -635,7 +652,6 @@ export const CFG = {
           rimMossLight: PALETTE.green3, // Lit moss along the ground line
           rimDry: PALETTE.gold2,       // Dry litter patches along the ground line
           rimDryLight: PALETTE.gold4,  // Sunlit litter specks
-          rimPebble: PALETTE.slate2,   // Pebbles poking out of the lip
           shaft: PALETTE.gold5         // Diagonal sunlight shafts
         },
         //

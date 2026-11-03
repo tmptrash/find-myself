@@ -22,6 +22,14 @@ const STONE_SHADOW_RY = 4
 // A stone's bottom sinks this share of its height into the ground.
 //
 const STONE_SINK_SHARE = 0.15
+//
+// For the clear span a plant counts by its footprint on the ground: this
+// share of its height each side of its base; tufts and small mushrooms at
+// their tallest default size.
+//
+const FOOTPRINT_SHARE = 0.35
+const TUFT_MAX_SIZE = 22
+const MUSHROOM_MAX_SIZE = 26
 
 /**
  * Bakes the greens round one trunk's foot.
@@ -37,10 +45,11 @@ const STONE_SINK_SHARE = 0.15
  * @param {number[]} [cfg.mushrooms=[]] - Small mushroom groups (x from the foot)
  * @param {number[]} [cfg.spotted=[]] - Spotted mushrooms (x from the foot)
  * @param {Array<{x: number, canvas: HTMLCanvasElement, w: number, h: number}>} [cfg.stones=[]] - Pictured stones (x from the foot, world size)
+ * @param {{x1: number, x2: number}} [cfg.clear] - Ground span (x from the foot) left bare: nothing reaching into it is drawn
  * @returns {{sprite: string, dx: number, dy: number}} Sprite and its top-left from the foot
  */
 export function bakeForestFootPlants(k, cfg) {
-  const { below, seed, ferns, tufts, mushrooms = [], spotted = [], stones = [] } = cfg
+  const { below, seed, ferns, tufts, mushrooms = [], spotted = [], stones = [], clear = null } = cfg
   const reach = plantsReach(ferns, tufts)
   const halfW = Math.ceil(Math.max(cfg.halfW, reach.halfW))
   const above = Math.ceil(Math.max(cfg.above, reach.above))
@@ -54,19 +63,25 @@ export function bakeForestFootPlants(k, cfg) {
   const cx = halfW
   const baseY = above
   ferns.forEach(f => {
+    if (inClear(f.x, f.size * FOOTPRINT_SHARE, clear)) return
     paintForestContactShadow(ctx, cx + f.x, baseY, f.size * FERN_SHADOW_RX, FERN_SHADOW_RY, shadow)
     drawForestPlant(ctx, { x: cx + f.x, baseY, size: f.size, rng })
   })
   stones.forEach(s => {
+    if (inClear(s.x, s.w / 2, clear)) return
     paintForestContactShadow(ctx, cx + s.x, baseY, s.w * STONE_SHADOW_RX, STONE_SHADOW_RY, shadow)
     ctx.drawImage(s.canvas, cx + s.x - s.w / 2, baseY - s.h * (1 - STONE_SINK_SHARE), s.w, s.h)
   })
   mushrooms.forEach(x => {
+    if (inClear(x, MUSHROOM_MAX_SIZE * FOOTPRINT_SHARE, clear)) return
     paintForestContactShadow(ctx, cx + x, baseY, MUSH_SHADOW_RX, MUSH_SHADOW_RY, shadow)
     drawForestMushroom(ctx, { x: cx + x, baseY, rng })
   })
-  spotted.forEach(x => drawForestMushroom(ctx, { x: cx + x, baseY, rng }))
+  spotted.forEach(x => {
+    inClear(x, MUSHROOM_MAX_SIZE * FOOTPRINT_SHARE, clear) || drawForestMushroom(ctx, { x: cx + x, baseY, rng })
+  })
   for (let x = tufts.from; x <= tufts.to; x += tufts.step) {
+    if (inClear(x, TUFT_MAX_SIZE * FOOTPRINT_SHARE, clear)) continue
     paintForestContactShadow(ctx, cx + x, baseY, TUFT_SHADOW_RX, TUFT_SHADOW_RY, shadow)
     drawForestPlant(ctx, { x: cx + x, baseY, rng })
   }
@@ -76,6 +91,12 @@ export function bakeForestFootPlants(k, cfg) {
   }, seed)
   k.loadSprite(cfg.name, canvas)
   return { sprite: cfg.name, dx: -halfW, dy: -above }
+}
+//
+// Whether a footprint (base x, half width) reaches into the clear span.
+//
+function inClear(x, half, clear) {
+  return Boolean(clear) && x + half > clear.x1 && x - half < clear.x2
 }
 //
 // How far the plants reach from the foot (half-width, height above the

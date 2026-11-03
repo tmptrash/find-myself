@@ -4,6 +4,7 @@ import { cutPicture, loadPictureImage, wipePictureFringe } from './forest-pictur
 import { bakeForestFootPlants } from './forest-foot-plants.js'
 import { STONE_KIND, forestGroundStones } from './forest-stones.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
+import * as TreeJolt from './forest-tree-jolt.js'
 //
 // The bomb trees of forest level 0, cut from assets/forest/bombs.png (its
 // stray backdrop fringe wiped): two pale-trunked trees with red blossoms,
@@ -51,11 +52,9 @@ const TREE_SCALE = 0.38
 const BOMB_SCALE = 0.22
 const GROUND_TUCK = 2
 //
-// Landing jolt: the tree swings round its foot for SHAKE_DURATION s at
-// SHAKE_FREQ rad/s, up to SHAKE_MAX_RAD, dying out.
+// Landing jolt (utils/forest-tree-jolt.js): the tree swings round its foot
+// by up to SHAKE_MAX_RAD.
 //
-const SHAKE_DURATION = 0.6
-const SHAKE_FREQ = 30
 const SHAKE_MAX_RAD = 0.07
 const RAD_TO_DEG = 180 / Math.PI
 const VIEW_PAD = 20
@@ -106,7 +105,7 @@ export async function loadForestBombTrees() {
  */
 export function create(cfg) {
   const { k, spots } = cfg
-  const trees = spots.map((spot, i) => ({ x: spot.x, groundY: spot.groundY, look: TREES[i % TREES.length], lookIndex: i % TREES.length, sprites: null, shakeT: 0 }))
+  const trees = spots.map((spot, i) => ({ x: spot.x, groundY: spot.groundY, look: TREES[i % TREES.length], lookIndex: i % TREES.length, sprites: null, jolt: TreeJolt.create() }))
   const inst = { k, trees }
   ensureSprites(inst)
   return inst
@@ -118,7 +117,7 @@ export function create(cfg) {
  * @param {number} dt - Frame delta
  */
 export function onUpdate(inst, dt) {
-  inst.trees.forEach(tree => { tree.shakeT > 0 && (tree.shakeT = Math.max(0, tree.shakeT - dt)) })
+  inst.trees.forEach(tree => TreeJolt.onUpdate(tree.jolt, dt))
 }
 
 /**
@@ -128,7 +127,7 @@ export function onUpdate(inst, dt) {
  */
 export function shake(inst, index) {
   const tree = inst.trees[index]
-  tree && (tree.shakeT = SHAKE_DURATION)
+  tree && TreeJolt.start(tree.jolt)
 }
 
 /**
@@ -287,9 +286,7 @@ function bakePart(k, rect, scale, id) {
 // Current jolt swing of a tree (radians).
 //
 function shakeAngle(tree) {
-  if (!(tree.shakeT > 0)) return 0
-  const decay = tree.shakeT / SHAKE_DURATION
-  return Math.sin((SHAKE_DURATION - tree.shakeT) * SHAKE_FREQ) * SHAKE_MAX_RAD * decay
+  return TreeJolt.angle(tree.jolt, SHAKE_MAX_RAD)
 }
 //
 // True when a world X span is (near) the visible range.

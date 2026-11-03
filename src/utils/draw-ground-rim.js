@@ -1,8 +1,8 @@
 //
 // Canvas2D ragged ground rim: replaces a ruler-straight ground line with the
 // reference's busy edge — a dark wavy soil lip, crumbly earth lumps, patches
-// of moss and dry litter that change colour along the run, pebbles poking
-// out and a few fallen twigs. The walkable line itself stays at floorY.
+// of moss and dry litter that change colour along the run, and a few
+// fallen twigs. The walkable line itself stays at floorY.
 //
 const RIM_STEP = 3
 const RIM_LIP_DEPTH_MIN = 2
@@ -26,12 +26,6 @@ const RIM_LUMP_SPACING_MIN = 10
 const RIM_LUMP_SPACING_RANGE = 22
 const RIM_LUMP_R_MIN = 1.5
 const RIM_LUMP_R_RANGE = 2.5
-const RIM_PEBBLE_SPACING_MIN = 36
-const RIM_PEBBLE_SPACING_RANGE = 70
-const RIM_PEBBLE_RX_MIN = 2.5
-const RIM_PEBBLE_RX_RANGE = 3.5
-const RIM_PEBBLE_RY_FRAC = 0.62
-const RIM_PEBBLE_OUTLINE_PX = 1
 const RIM_TWIG_SPACING_MIN = 70
 const RIM_TWIG_SPACING_RANGE = 120
 const RIM_TWIG_LEN_MIN = 6
@@ -55,15 +49,12 @@ const RIM_BOUNDS_DOWN = 12
  * @param {string} opts.colors.mossLight - Lit moss specks
  * @param {string} opts.colors.dry - Dry litter patches
  * @param {string} opts.colors.dryLight - Sunlit litter specks
- * @param {string} opts.colors.pebble - Pebbles
- * @param {string} opts.colors.contour - Pebble contour
  */
 export function drawGroundRimToCanvas(ctx, opts) {
   const { x1, x2, floorY, rng, colors } = opts
   paintSoilLip(ctx, x1, x2, floorY, rng, colors.soil)
   paintLumps(ctx, x1, x2, floorY, rng, colors.earth)
   paintPatches(ctx, x1, x2, floorY, rng, colors)
-  paintPebbles(ctx, x1, x2, floorY, rng, colors)
   paintTwigs(ctx, x1, x2, floorY, rng, colors.soil)
 }
 
@@ -138,18 +129,6 @@ function paintPatch(ctx, px1, px2, floorY, rng, base, light) {
   ctx.fillStyle = light
   for (let i = 0; i < tops.length; i += Math.max(1, Math.round(RIM_SPECK_SPACING / RIM_STEP))) {
     rng() < 0.6 && ctx.fillRect(Math.round(tops[i].x), Math.round(tops[i].y), RIM_SPECK_PX, RIM_SPECK_PX - 1)
-  }
-}
-function paintPebbles(ctx, x1, x2, floorY, rng, colors) {
-  ctx.lineWidth = RIM_PEBBLE_OUTLINE_PX
-  ctx.strokeStyle = colors.contour
-  ctx.fillStyle = colors.pebble
-  for (let x = x1 + rng() * RIM_PEBBLE_SPACING_MIN; x < x2; x += RIM_PEBBLE_SPACING_MIN + rng() * RIM_PEBBLE_SPACING_RANGE) {
-    const rx = RIM_PEBBLE_RX_MIN + rng() * RIM_PEBBLE_RX_RANGE
-    ctx.beginPath()
-    ctx.ellipse(x, floorY + 1, rx, rx * RIM_PEBBLE_RY_FRAC, (rng() - 0.5) * 0.4, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
   }
 }
 function paintTwigs(ctx, x1, x2, floorY, rng, color) {

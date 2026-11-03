@@ -63,9 +63,9 @@ const FOOT_BAKE_BELOW = 12
 const FOOT_SEED = 6040
 //
 // The start branch's walkable top on the picture: its flat stretch from
-// where it leaves the leafy tip to the trunk.
+// where it leaves the leafy tip on into the trunk, up to the trunk's middle.
 //
-const BRANCH = { x1: 280, x2: 535, y: 669 }
+const BRANCH = { x1: 280, x2: 586, y: 669 }
 //
 // The branch's platform sits this much lower (world px) than its top on the
 // picture, so the hero's feet rest in the bark, not on its lit edge.
@@ -120,12 +120,13 @@ export function drawLeftTreeToCanvas(ctx, foot, scale) {
  * Bakes the tree's parts once per live k (waits for the picture to load).
  * @param {Object} k - Kaplay instance
  * @param {{x: number, y: number}} foot - World point where the trunk meets the ground
+ * @param {{x1: number, x2: number}} [clear] - World ground span the foot plants leave bare
  * @returns {Promise<{crown: Object, roots: Object, plants: Object, apple: Object}|null>} Each
  *   part's sprite and world top-left (plants: the greens over the trunk's foot); the apple's
  *   sprite, its canvas, size and offset of its top-left from its body's centre (null if the
  *   picture failed to load)
  */
-export async function bakeLeftTree(k, foot) {
+export async function bakeLeftTree(k, foot, clear = null) {
   const cached = bakedByK.get(k)
   if (cached) return cached
   const img = await image
@@ -134,7 +135,7 @@ export async function bakeLeftTree(k, foot) {
   const roots = bakePart(k, img, ROOTS, 'roots').name
   const apple = bakePart(k, img, APPLE, 'apple')
   const out = {
-    plants: bakeFootPlants(k, foot),
+    plants: bakeFootPlants(k, foot, clear),
     crown: { sprite: crown, x: Math.round(foot.x - (TRUNK_X - CROWN.x) * SCALE), y: Math.round(foot.y - CROWN.h * SCALE + GROUND_TUCK) },
     roots: { sprite: roots, x: Math.round(foot.x - (ROOTS_X - ROOTS.x) * SCALE), y: foot.y - GROUND_TUCK },
     apple: {
@@ -197,9 +198,10 @@ function bakePart(k, img, part, id, clear = null) {
 }
 //
 // The plants over the trunk's foot on one canvas (ground line at its
-// FOOT_BAKE_ABOVE row), graded and grained like the forest floor.
+// FOOT_BAKE_ABOVE row), graded and grained like the forest floor; none in
+// the clear span.
 //
-function bakeFootPlants(k, foot) {
+function bakeFootPlants(k, foot, clear) {
   const plants = bakeForestFootPlants(k, {
     name: `${SPRITE_PREFIX}-foot-plants`,
     halfW: FOOT_BAKE_HALF_W,
@@ -209,7 +211,8 @@ function bakeFootPlants(k, foot) {
     ferns: FOOT_FERNS,
     tufts: { from: FOOT_TUFT_FROM, to: FOOT_TUFT_TO, step: FOOT_TUFT_STEP },
     mushrooms: FOOT_MUSHROOMS,
-    spotted: FOOT_SPOTTED
+    spotted: FOOT_SPOTTED,
+    clear: clear && { x1: clear.x1 - foot.x, x2: clear.x2 - foot.x }
   })
   return { sprite: plants.sprite, x: foot.x + plants.dx, y: foot.y + plants.dy }
 }

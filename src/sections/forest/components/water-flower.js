@@ -12,12 +12,13 @@ import { FOREST_PAL } from '../utils/forest-palette.js'
 // stem grows a clear bubble of water out of its heart. The bubble swells and
 // hangs lower until it is full size. A hero landing by the stem shakes the
 // whole plant round its foot, like the bomb trees to the right; a full-size
-// bubble tears off once the shake has died down. It falls, bursts on the
-// ground, and its water spreads into a puddle that soaks into the soil.
-// After a while a new bubble starts growing.
+// bubble tears off once the shake has died down. Its skin pops as it tears
+// off and only its water falls, splashes on the ground and spreads into a
+// puddle that soaks into the soil. After a while a new bubble starts growing.
 //
-// While it hangs the bubble is drawn behind the picture, so the front petals
-// cover its top; once it falls it is drawn in front of the plant.
+// While it hangs the bubble (and its popping skin) is drawn behind the
+// picture, so the front petals cover its top; the falling water is drawn in
+// front of the plant.
 //
 export const STATES = {
   GROWING: 'growing',
@@ -48,10 +49,11 @@ const SLOSH_GAIN = 0.35
 const SLOSH_MAX = 0.5
 const WAVE_SPEED = 3.2
 //
-// Burst: the skin's ring flies apart this long; the water lands in a few
-// spots across the burst span.
+// The torn-off skin's ring flies apart this long; the falling water has no
+// skin left and lands in a few spots across the burst span.
 //
 const POP_DURATION = 0.2
+const BARE_WATER = 0
 const BURST_SPOTS = 5
 const BUBBLE_WATER = 1
 const DETACH_DRIP_VOLUME = 0.12
@@ -68,7 +70,8 @@ const pictureByK = new WeakMap()
 
 /**
  * Creates the flower on the ground line with an empty heart; its first
- * bubble starts growing right away. Needs load(k) to have resolved first.
+ * bubble starts growing startDelay seconds later. Needs load(k) to have
+ * resolved first.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - World X of the stem's foot
@@ -94,6 +97,8 @@ export function create(cfg) {
     picture,
     footPos: k.vec2(x, y),
     footAnchor: k.vec2(picture.anchor.x, picture.anchor.y),
+    rootsPos: k.vec2(x + picture.roots.dx, y + picture.roots.dy),
+    spotPos: k.vec2(x, y + picture.spot.dy),
     heartX: x + picture.heart.x,
     heartY: y + picture.heart.y,
     jolt: TreeJolt.create(),
@@ -101,11 +106,11 @@ export function create(cfg) {
     dropLeft: 0,
     bubble: WaterBubble.create(k, COLORS),
     ground: GroundWater.create({ k, groundY: y, params: PARAMS, colors: COLORS }),
-    state: STATES.GROWING,
+    state: STATES.GONE,
     time: 0,
     clock: OrganicMotion.createClock(PHYSICS_STEP, MAX_FRAME_DT),
     growth: 0,
-    regrowLeft: 0,
+    regrowLeft: PARAMS.startDelay,
     sway: OrganicMotion.create(),
     wobble: OrganicMotion.create(),
     centre: { x: 0, y: 0 },
@@ -166,6 +171,24 @@ export function clearSpan(x) {
 }
 
 /**
+ * The water falling from the flower, while it falls.
+ * @param {Object|null} inst - Flower inst
+ * @returns {{x: number, y: number, r: number}|null} Its centre and radius (world px)
+ */
+export function fallingWater(inst) {
+  return inst?.state === STATES.FALLING ? inst.fall : null
+}
+
+/**
+ * The falling water hits something on its way down and bursts right away,
+ * splashing onto the ground under it.
+ * @param {Object} inst - Flower inst
+ */
+export function burstFallingWater(inst) {
+  inst.state === STATES.FALLING && burst(inst)
+}
+
+/**
  * Reports a hero landing on the ground. Near the stem's foot it shakes the
  * plant and the hanging bubble; a full-size bubble tears off and falls once
  * the shake has died down (shakeDropDelay).
@@ -203,29 +226,32 @@ function onUpdate(inst) {
   GroundWater.onUpdate(inst.ground, dt)
 }
 //
-// A hanging bubble first (the front petals cover its top), the plant, then
-// a falling bubble in front of it.
+// The roots under the ground, a hanging bubble or its popping skin (the
+// front petals cover their top), the plant, the moss spot over its joint
+// with the roots, then the falling water in front of them. The roots and
+// the spot stay put while the plant shakes.
 //
 function onDraw(inst) {
-  const { state } = inst
+  const { state, pop } = inst
   const hanging = state === STATES.GROWING || state === STATES.RIPE
+  inst.k.drawSprite({ sprite: inst.picture.roots.sprite, pos: inst.rootsPos })
   hanging && drawHanging(inst)
+  WaterBubble.drawPop(inst.bubble, pop.x, pop.y, pop.r, pop.t)
   inst.k.drawSprite({
     sprite: inst.picture.sprite,
     pos: inst.footPos,
     anchor: inst.footAnchor,
     angle: inst.shakeAngle * RAD_TO_DEG
   })
+  inst.k.drawSprite({ sprite: inst.picture.spot.sprite, pos: inst.spotPos, anchor: 'center' })
   state === STATES.FALLING && drawFalling(inst)
 }
 //
 // Spilt water on its own layer, in front of the ground plants round the
-// tree's foot: wet soil and puddle, the burst ring, splash drops.
+// tree's foot: wet soil and puddle, splash drops.
 //
 function onDrawSpiltWater(inst) {
-  const { pop } = inst
   GroundWater.drawSoil(inst.ground)
-  WaterBubble.drawPop(inst.bubble, pop.x, pop.y, pop.r, pop.t)
   GroundWater.drawSplash(inst.ground)
 }
 //
@@ -311,35 +337,36 @@ function drawHanging(inst) {
 function drawFalling(inst) {
   const { fall } = inst
   WaterBubble.draw(inst.bubble, fall.x, fall.y, fall.r, fallStretch(inst), 0, PARAMS.bubbleWaterFill, 0,
-    inst.time * WAVE_SPEED)
+    inst.time * WAVE_SPEED, BARE_WATER)
 }
 function fallStretch(inst) {
   return 1 + inst.wobble.value + Math.min(PARAMS.fallMaxStretch, inst.fall.vy * PARAMS.fallStretch)
 }
 //
-// Torn off where it hangs: the neck snaps back into the skin as a wobble.
+// Torn off where it hangs: the skin pops there and its ring flies apart,
+// the water it held starts falling with a wobble from the snapped neck.
 //
 function detach(inst) {
+  const { fall, pop } = inst
   const r = hangingRadius(inst)
-  hangingCentre(inst, r, 1 + inst.wobble.value, inst.fall)
-  inst.fall.vy = 0
-  inst.fall.r = r
+  hangingCentre(inst, r, 1 + inst.wobble.value, fall)
+  fall.vy = 0
+  fall.r = r
+  pop.x = fall.x
+  pop.y = fall.y
+  pop.r = r
+  pop.t = 0
   inst.wobble.velocity -= PARAMS.landingWobbleKick
   inst.state = STATES.FALLING
   playSfx(inst, Sound.playDripSound, DETACH_DRIP_VOLUME)
 }
 //
-// The skin bursts on the ground: its ring flies apart, the water slaps down
-// and runs out with a crown throwing drops, lands across the burst span and
-// the roots there drink.
+// The water hits the ground: it slaps down and runs out with a crown
+// throwing drops, lands across the burst span and the roots there drink.
 //
 function burst(inst) {
-  const { fall, pop, groundY } = inst
+  const { fall } = inst
   const halfW = fall.r * PARAMS.burstSpread
-  pop.x = fall.x
-  pop.y = groundY - fall.r
-  pop.r = fall.r
-  pop.t = 0
   for (let i = 0; i < BURST_SPOTS; i++) {
     const u = BURST_SPOTS > 1 ? i / (BURST_SPOTS - 1) * 2 - 1 : 0
     GroundWater.addWater(inst.ground, fall.x + halfW * u, BUBBLE_WATER / BURST_SPOTS)

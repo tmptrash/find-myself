@@ -22,7 +22,7 @@ import { drawForestMushroom } from '../utils/forest-mushrooms.js'
 // mirrored: a flat crest under the frame, then a long slope that slides into
 // the lake instead of a cut bank.
 //
-const ISLAND_W = 360
+const ISLAND_W = 225
 const ISLAND_OFFSCREEN_W = 80
 const ISLAND_ABOVE_WATER = 28
 const ISLAND_BELOW_WATER = 30
@@ -37,7 +37,7 @@ const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v9'
+const ISLAND_BAKE_KEY = 'v10'
 const ISLAND_BAKE_BELOW_WATER = 10
 //
 // Rock-to-soil seam: centred this far under the water line so even its
@@ -59,11 +59,11 @@ const KIND = { FERN: 'fern', PLUME: 'plume', MUSHROOMS: 'mushrooms' }
 const ISLAND_PLANTS = [
   { kind: KIND.FERN, dx: -34, size: 60 },
   { kind: KIND.PLUME, dx: -6, size: 42 },
-  { kind: KIND.FERN, dx: 14, size: 48 },
-  { kind: KIND.PLUME, dx: 84, size: 36 },
-  { kind: KIND.FERN, dx: 106, size: 52 },
-  { kind: KIND.MUSHROOMS, dx: 128 },
-  { kind: KIND.PLUME, dx: 138, size: 30 }
+  { kind: KIND.FERN, dx: 7, size: 48 },
+  { kind: KIND.PLUME, dx: 42, size: 36 },
+  { kind: KIND.FERN, dx: 53, size: 52 },
+  { kind: KIND.MUSHROOMS, dx: 64 },
+  { kind: KIND.PLUME, dx: 69, size: 30 }
 ]
 const ISLAND_TUFT_STEP = 13
 const ISLAND_TUFT_CHANCE = 0.55
@@ -93,15 +93,17 @@ const STAND_X_SLACK = 6
 const STAND_ABOVE = 14
 const STAND_BELOW = 14
 //
-// Open water kept between the island edge and a swimming centipede's head.
+// A swimming centipede's head stops this far past the island's waterline
+// point, so its snout rests right against the slope.
 //
-const PREDATOR_CLEAR_X = 28
+const PREDATOR_CLEAR_X = 10
 //
-// Past the collider the grab still takes the hero anywhere up to the
-// centipede's stop line: a short hop off the stick lands in that strip with
-// the body against the painted shore, and it must read as "on the island".
+// Past the collider the grab still takes the hero anywhere up to a little
+// past the centipede's stop line: a short hop off the stick lands in that
+// strip with the body against the painted shore, and it must read as "on
+// the island".
 //
-const BANK_BODY_REACH = PREDATOR_CLEAR_X
+const BANK_BODY_REACH = 28
 //
 // Hero body height: feet below the collider top by less than this put the
 // body against the collider's right side.
@@ -110,7 +112,7 @@ const SIDE_WALL_HERO_H = 74
 //
 // Plant root just right of the frame, so the flower and its buds are on screen.
 //
-const PLANT_BASE_DX = ISLAND_OFFSCREEN_W + 44
+const PLANT_BASE_DX = ISLAND_OFFSCREEN_W + 22
 const PLANT_BASE_SINK = 2
 //
 // Whole bush leans toward the hero as he approaches (0 = standing like an

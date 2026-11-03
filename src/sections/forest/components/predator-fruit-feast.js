@@ -46,6 +46,16 @@ export function getPredatorFeastLookTarget(pred) {
 }
 
 /**
+ * True while the crawler is biting into a fruit (not only on its way to it).
+ * @param {Object} pred - Predator inst
+ * @param {Object} fruit - Tree fruit spot
+ * @returns {boolean}
+ */
+export function isPredatorEatingFruit(pred, fruit) {
+  return pred?.state === 'feast' && pred.feastPhase === 'eat' && Boolean(pred.feastCluster?.includes(fruit))
+}
+
+/**
  * Drops the current meal (e.g. when a burst scares the crawler away).
  * @param {Object} pred - Predator inst
  */
@@ -89,7 +99,7 @@ export function tickPredatorFruitFeast(pred, levelInst, dt) {
 
 function tickActiveFeast(pred, levelInst, dt) {
   const fruit = pred.feastFruit
-  if (!fruit || fruit.removed) {
+  if (!fruit || fruit.removed || fruit.carried) {
     endFeast(pred, levelInst)
     return
   }
@@ -335,7 +345,7 @@ function findNearestFeastFruit(levelInst, pred) {
 }
 
 function isFruitFeastEligible(fruit) {
-  if (fruit.removed || fruit.attached || fruit.beingEaten) return false
+  if (fruit.removed || fruit.attached || fruit.beingEaten || fruit.carried) return false
   return true
 }
 

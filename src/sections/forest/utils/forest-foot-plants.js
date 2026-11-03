@@ -45,7 +45,8 @@ const MUSHROOM_MAX_SIZE = 26
  * @param {number[]} [cfg.mushrooms=[]] - Small mushroom groups (x from the foot)
  * @param {number[]} [cfg.spotted=[]] - Spotted mushrooms (x from the foot)
  * @param {Array<{x: number, canvas: HTMLCanvasElement, w: number, h: number}>} [cfg.stones=[]] - Pictured stones (x from the foot, world size)
- * @param {{x1: number, x2: number}} [cfg.clear] - Ground span (x from the foot) left bare: nothing reaching into it is drawn
+ * @param {{x1: number, x2: number}|Array<{x1: number, x2: number}>} [cfg.clear] - Ground span or spans (x from
+ *   the foot) left bare: nothing reaching into them is drawn
  * @returns {{sprite: string, dx: number, dy: number}} Sprite and its top-left from the foot
  */
 export function bakeForestFootPlants(k, cfg) {
@@ -93,10 +94,12 @@ export function bakeForestFootPlants(k, cfg) {
   return { sprite: cfg.name, dx: -halfW, dy: -above }
 }
 //
-// Whether a footprint (base x, half width) reaches into the clear span.
+// Whether a footprint (base x, half width) reaches into a clear span.
 //
 function inClear(x, half, clear) {
-  return Boolean(clear) && x + half > clear.x1 && x - half < clear.x2
+  if (!clear) return false
+  const spans = Array.isArray(clear) ? clear : [clear]
+  return spans.some(span => x + half > span.x1 && x - half < span.x2)
 }
 //
 // How far the plants reach from the foot (half-width, height above the

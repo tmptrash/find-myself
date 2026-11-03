@@ -4,9 +4,10 @@ import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y }
 import { FOREST_PAL, forestRgb } from './forest-palette.js'
 
 //
-// The knockable apple of the left big forest tree (its picture hangs in the
-// crown; the hero knocks it loose from the start branch), falling, resting
-// and being eaten.
+// The apples of the left big forest tree: the tree starts bare and every
+// watering of its roots grows one more apple in the crown (drawn from a
+// picture), up to one on each of its hangs. A ripe one is what the hero
+// knocks loose from the start branch; it falls, rests and is eaten.
 //
 // Fallen anchor fruit vanishes after this if the centipede never claims it.
 //
@@ -39,7 +40,21 @@ const BITE_GRID = 24
 const BITE_SQUASH_Y = 0.92
 const BITE_FLESH_W = 2
 const FRUIT_GROUND_FADE_SEC = 0.9
-const FRUIT_ANCHOR_HUE = 0.62
+//
+// A watering sprouts its apple this long after it. The apple swells from
+// its stem over APPLE_GROW_SEC (from APPLE_GROW_FROM of its size, a little
+// past it before it settles), fading in over the first APPLE_FADE_IN share
+// of that, and turns from green to red over APPLE_RIPEN_SEC from
+// APPLE_RIPEN_AFTER on; only a ripe apple can be knocked down.
+//
+const APPLE_SPROUT_DELAY = 3
+const APPLE_GROW_SEC = 2.4
+const APPLE_GROW_FROM = 0.12
+const APPLE_GROW_OVERSHOOT = 1.2
+const APPLE_FADE_IN = 0.25
+const APPLE_RIPEN_AFTER = 1.2
+const APPLE_RIPEN_SEC = 3
+const APPLE_RIPE_AGE = Math.max(APPLE_GROW_SEC, APPLE_RIPEN_AFTER + APPLE_RIPEN_SEC)
 //
 // Fruit hangs on a short visible stem.
 //
@@ -119,14 +134,55 @@ export function isForestAnchorFruitGroundX(x, cfg) {
 }
 
 /**
- * The knockable apple hanging in the crown, drawn from a picture (the
- * crown's other apples are painted into the tree itself).
- * @param {{x: number, y: number, r: number}} hang - Its body's centre and radius
- * @param {{sprite: string, w: number, h: number, dx: number, dy: number}} picture - Its sprite, size and top-left offset from the body's centre
- * @returns {Array<Object>} Fruit spots
+ * The tree's apple crop: where apples grow and the picture they are drawn
+ * from. The tree starts bare; apples come with waterForestTreeApples().
+ * @param {Array<{x: number, y: number, r: number}>} hangs - Their bodies' centres (in the order they come) and radius
+ * @param {{sprite: string, unripe: string, w: number, h: number, dx: number, dy: number}} picture - Its ripe and
+ *   young sprites, size and top-left offset from the body's centre
+ * @returns {Object} Crop inst (levelInst.treeApples)
  */
-export function buildFixedForestTreeFruitSpots(hang, picture) {
-  return [{ anchor: true, attached: true, x: hang.x, y: hang.y, r: hang.r, hue: FRUIT_ANCHOR_HUE, vy: 0, leaves: [], picture }]
+export function createForestTreeApples(hangs, picture) {
+  return { hangs, picture, sprouts: [] }
+}
+
+/**
+ * The roots were watered: one more apple sprouts APPLE_SPROUT_DELAY later,
+ * unless every hang already has an apple on it or on its way.
+ * @param {Object} levelInst - Forest level inst (needs treeApples)
+ */
+export function waterForestTreeApples(levelInst) {
+  const crop = levelInst.treeApples
+  if (!crop || getForestTreeAppleCount(levelInst) >= crop.hangs.length) return
+  crop.sprouts.push(APPLE_SPROUT_DELAY)
+}
+
+/**
+ * Apples on the tree and on their way (saved level state).
+ * @param {Object} levelInst - Forest level inst
+ * @returns {number}
+ */
+export function getForestTreeAppleCount(levelInst) {
+  const onTree = levelInst.treeFruitSpots?.filter(f => f.attached).length ?? 0
+  return onTree + (levelInst.treeApples?.sprouts.length ?? 0)
+}
+
+/**
+ * Hangs saved apples back on the tree, already ripe.
+ * @param {Object} levelInst - Forest level inst (needs treeApples)
+ * @param {number} count - How many
+ */
+export function restoreForestTreeApples(levelInst, count) {
+  if (!levelInst.treeApples) return
+  for (let i = 0; i < count; i++) sproutTreeApple(levelInst, APPLE_RIPE_AGE)
+}
+
+/**
+ * True while a ripe apple hangs on the tree (one the branch can knock down).
+ * @param {Object} levelInst - Forest level inst
+ * @returns {boolean}
+ */
+export function hasForestRipeTreeApple(levelInst) {
+  return levelInst.treeFruitSpots?.some(isRipeTreeApple) ?? false
 }
 
 /**
@@ -141,28 +197,20 @@ export function hasForestAnchorFruitDropInWorld(levelInst) {
 }
 
 /**
- * Spawns the one falling anchor apple (start-branch knock). No second drop until
- * the centipede has eaten the current one.
+ * Knocks the oldest ripe apple off the tree (start-branch knock). No second
+ * drop until the centipede has eaten the current one.
  * @param {Object} levelInst - Forest level inst
  * @returns {boolean} True when an apple was knocked loose
  */
 export function releaseForestAnchorFruit(levelInst) {
   if (hasForestAnchorFruitDropInWorld(levelInst)) return false
-  const fruit = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
+  const fruit = levelInst.treeFruitSpots?.find(isRipeTreeApple)
   if (!fruit) return false
-  levelInst.treeFruitSpots.push({
-    fromAnchorDrop: true,
-    attached: false,
-    x: fruit.x,
-    y: fruit.y,
-    r: fruit.r,
-    hue: fruit.hue,
-    vy: 0,
-    vx: 0,
-    rollDir: pickFruitLandRollDir(fruit.x, fruit.y),
-    leaves: fruit.leaves,
-    picture: fruit.picture
-  })
+  fruit.attached = false
+  fruit.fromAnchorDrop = true
+  fruit.vy = 0
+  fruit.vx = 0
+  fruit.rollDir = pickFruitLandRollDir(fruit.x, fruit.y)
   return true
 }
 
@@ -174,7 +222,7 @@ export function releaseForestAnchorFruit(levelInst) {
  * @returns {{x: number, floorY: number}|null}
  */
 export function getFallenAnchorFruit(levelInst, floorY) {
-  const fruit = levelInst.treeFruitSpots?.find(f => f.fromAnchorDrop && !f.removed && !f.beingEaten)
+  const fruit = levelInst.treeFruitSpots?.find(f => f.fromAnchorDrop && !f.removed && !f.beingEaten && !f.carried)
   return fruit ? { x: fruit.x, floorY: fruit.settled ? (fruit._restFloorY ?? floorY) : floorY } : null
 }
 
@@ -186,21 +234,19 @@ export function getFallenAnchorFruit(levelInst, floorY) {
  * @param {number} floorY - Ground surface Y
  */
 export function restoreFallenAnchorFruit(levelInst, x, floorY) {
-  if (hasForestAnchorFruitDropInWorld(levelInst)) return
-  const anchor = levelInst.treeFruitSpots?.find(f => f.anchor && f.attached)
-  if (!anchor) return
+  const crop = levelInst.treeApples
+  if (!crop || hasForestAnchorFruitDropInWorld(levelInst)) return
+  const r = crop.hangs[0].r
   levelInst.treeFruitSpots.push({
     fromAnchorDrop: true,
     attached: false,
     x,
-    y: floorY - anchor.r + FRUIT_GROUND_SINK,
-    r: anchor.r,
-    hue: anchor.hue,
+    y: floorY - r + FRUIT_GROUND_SINK,
+    r,
     vy: 0,
     vx: 0,
     rollDir: pickFruitLandRollDir(x, floorY),
-    leaves: anchor.leaves,
-    picture: anchor.picture,
+    picture: crop.picture,
     airborne: false,
     settled: true,
     _restFloorY: floorY
@@ -208,19 +254,20 @@ export function restoreFallenAnchorFruit(levelInst, x, floorY) {
 }
 
 /**
- * Steps falling fruit physics.
+ * Grows the tree's apples and steps falling fruit physics.
  * @param {Object} levelInst - Forest level inst
  * @param {number} dt - Frame delta
  * @param {number} floorY - Ground surface Y
  */
 export function tickForestTreeFruits(levelInst, dt, floorY) {
+  growTreeApples(levelInst, dt)
   const spots = levelInst.treeFruitSpots
   if (!spots?.length || floorY == null) return
   const now = levelInst.k?.time?.() ?? 0
   let prune = false
   spots.forEach(fruit => {
     if (fruit.removed) return
-    if (fruit.attached) return
+    if (fruit.attached || fruit.carried) return
     if (!fruit.settled) {
       stepFallingFruit(fruit, dt, floorY, levelInst)
       return
@@ -242,8 +289,75 @@ export function tickForestTreeFruits(levelInst, dt, floorY) {
   })
   prune && (levelInst.treeFruitSpots = spots.filter(f => !f.removed))
   spots.forEach(fruit => {
-    if (fruit.removed || fruit.attached || fruit.beingEaten) return
+    if (fruit.removed || fruit.attached || fruit.beingEaten || fruit.carried) return
     if (fruit.settled) nudgeForestFruitClearOfRightTramp(levelInst, fruit)
+  })
+}
+
+/**
+ * A creature picks a fallen fruit up: the fruit layer stops drawing it and
+ * its physics stop until it is dropped or taken away for good.
+ * @param {Object} fruit - Tree fruit spot (fallen)
+ */
+export function carryForestFruit(fruit) {
+  fruit.carried = true
+}
+
+/**
+ * A carried fruit is dropped from a point: it falls straight down and rests
+ * on the ground again (no bounce).
+ * @param {Object} fruit - Carried tree fruit spot
+ * @param {number} x - World X it drops from
+ * @param {number} y - World Y of its centre when dropped
+ */
+export function dropForestCarriedFruit(fruit, x, y) {
+  Object.assign(fruit, {
+    carried: false,
+    settled: false,
+    airborne: true,
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    bounceCount: FRUIT_BOUNCE_MAX_COUNT,
+    _restFloorY: null,
+    settledAt: null
+  })
+}
+
+/**
+ * A carried fruit is taken away for good (it leaves the level's fruit list
+ * on the next tick).
+ * @param {Object} levelInst - Forest level inst
+ * @param {Object} fruit - Carried tree fruit spot
+ */
+export function removeForestCarriedFruit(levelInst, fruit) {
+  fruit.removed = true
+  levelInst.treeFruitSpots = levelInst.treeFruitSpots.filter(f => !f.removed)
+}
+
+/**
+ * Draws a fallen fruit (bites and all) with its body's centre at a point,
+ * for a creature carrying it.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} fruit - Tree fruit spot with a picture
+ * @param {number} x - World X of its body's centre
+ * @param {number} y - World Y of its body's centre
+ * @param {Object} [look] - How the carrier shows it
+ * @param {number} [look.zoom=1] - Size factor round its centre
+ * @param {number} [look.opacity=1] - Opacity
+ * @param {Object} [look.color] - Tint (Kaplay color), none by default
+ */
+export function drawForestFruitAt(k, fruit, x, y, { zoom = 1, opacity = 1, color = null } = {}) {
+  const pic = fruit.picture
+  if (!pic) return
+  k.drawSprite({
+    sprite: bittenPicture(k, fruit),
+    pos: k.vec2(x + pic.dx * zoom, y + pic.dy * zoom),
+    width: pic.w * zoom,
+    height: pic.h * zoom,
+    opacity,
+    ...(color ? { color } : {})
   })
 }
 
@@ -278,14 +392,9 @@ export function drawForestTreeFruits(inst) {
   const shadeRgb = forestRgb(fruitPal.shade)
   const contourRgb = forestRgb(fruitPal.contour)
   const stem = forestRgb(FOREST_PAL.treeColor.root)
-  //
-  // The tree copy of the anchor apple regrows only after the fallen one is eaten.
-  //
-  const anchorDropInWorld = hasForestAnchorFruitDropInWorld(inst)
   spots.forEach(fruit => {
-    if (fruit.removed) return
+    if (fruit.removed || fruit.carried) return
     if (fruit.feastDrawHidden) return
-    if (fruit.anchor && fruit.attached && anchorDropInWorld) return
     let op = 1
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
     if (op <= 0.02) return
@@ -394,10 +503,11 @@ export function keepForestFruitRestingOnFloor(fruit) {
 }
 
 //
-// A fruit drawn from its picture: its body's centre on the fruit, always at
-// its full size; eating it only cuts bites out of it.
+// A fruit drawn from its picture: its body's centre on the fruit, at its
+// full size once off the tree; eating it only cuts bites out of it.
 //
 function drawFruitPicture(k, fruit, op) {
+  if (fruit.attached) return drawTreeApple(k, fruit, op)
   const pic = fruit.picture
   k.drawSprite({
     sprite: bittenPicture(k, fruit),
@@ -406,6 +516,63 @@ function drawFruitPicture(k, fruit, op) {
     height: pic.h,
     opacity: op
   })
+}
+//
+// An apple on the tree swells from its stem (the picture's top stays put)
+// and its green copy gives way to the red one as it ripens.
+//
+function drawTreeApple(k, fruit, op) {
+  const pic = fruit.picture
+  const age = fruit.age
+  const s = appleGrowScale(age)
+  const fade = op * Math.min(1, age / (APPLE_GROW_SEC * APPLE_FADE_IN))
+  const ripe = clamp01((age - APPLE_RIPEN_AFTER) / APPLE_RIPEN_SEC)
+  const pos = k.vec2(fruit.x + pic.dx * s, fruit.y + pic.dy)
+  const width = pic.w * s
+  const height = pic.h * s
+  ripe < 1 && k.drawSprite({ sprite: pic.unripe, pos, width, height, opacity: fade })
+  ripe > 0 && k.drawSprite({ sprite: pic.sprite, pos, width, height, opacity: fade * ripe })
+}
+//
+// Size share of a growing apple: an ease-out that goes a little past full
+// size and settles back.
+//
+function appleGrowScale(age) {
+  const u = clamp01(age / APPLE_GROW_SEC) - 1
+  const ease = 1 + (APPLE_GROW_OVERSHOOT + 1) * u * u * u + APPLE_GROW_OVERSHOOT * u * u
+  return APPLE_GROW_FROM + (1 - APPLE_GROW_FROM) * ease
+}
+//
+// Sprouts due apples and ages the ones on the tree.
+//
+function growTreeApples(levelInst, dt) {
+  const crop = levelInst.treeApples
+  if (!crop) return
+  const { sprouts } = crop
+  let left = 0
+  for (const due of sprouts) {
+    const t = due - dt
+    t > 0 ? (sprouts[left++] = t) : sproutTreeApple(levelInst, 0)
+  }
+  sprouts.length = left
+  levelInst.treeFruitSpots.forEach(f => f.attached && (f.age = Math.min(APPLE_RIPE_AGE, f.age + dt)))
+}
+//
+// A new apple on the first free hang, already this old.
+//
+function sproutTreeApple(levelInst, age) {
+  const { hangs, picture } = levelInst.treeApples
+  const spots = levelInst.treeFruitSpots
+  const slot = hangs.findIndex((_, i) => !spots.some(f => f.attached && f.slot === i))
+  if (slot < 0) return
+  const { x, y, r } = hangs[slot]
+  spots.push({ attached: true, slot, x, y, r, picture, age })
+}
+function isRipeTreeApple(fruit) {
+  return fruit.attached && fruit.age >= APPLE_RIPE_AGE
+}
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v))
 }
 //
 // The fruit's picture with its bites cut out, re-baked only when a new bite

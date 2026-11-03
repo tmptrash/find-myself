@@ -6,7 +6,7 @@ import { forestRgb } from './forest-palette.js'
 // standing in its lower part under one pale surface line that ripples a
 // little and stays level while the bubble swings, a light rim and two
 // glints. While it hangs, its top is pulled up into a short neck that ends
-// inside the flower.
+// inside the flower. Once the skin has popped only the water is drawn.
 //
 const OUTLINE_SEGMENTS = 28
 const NECK_POW = 6                // Higher: the neck is a narrower point
@@ -43,7 +43,7 @@ const RIM_OPACITY = 0.75
 const GLINT_OPACITY = 0.9
 const SPARK_OPACITY = 0.7
 //
-// Burst: the skin's ring flies apart and fades.
+// Pop: the skin's ring flies apart and fades.
 //
 const POP_GROWTH = 0.9
 const POP_WIDTH = 1.4
@@ -85,12 +85,13 @@ export function create(k, colors) {
  * @param {number} fill - Share of its height the water stands at
  * @param {number} slope - Tilt of the water's surface (dy per dx)
  * @param {number} wave - Phase of the surface ripples (radians, grows with time)
+ * @param {number} [skin=1] - Share of the skin (its fill, rim and glint) still there; 0 is bare water
  */
-export function draw(inst, cx, cy, r, stretch, neck, fill, slope, wave) {
+export function draw(inst, cx, cy, r, stretch, neck, fill, slope, wave, skin = 1) {
   if (r < MIN_RADIUS) return
   buildOutline(inst, cx, cy, r, stretch, neck)
   const ry = r * stretch
-  drawFan(inst, inst.outline, inst.outline.length, inst.colors.skin, SKIN_OPACITY)
+  skin > 0 && drawFan(inst, inst.outline, inst.outline.length, inst.colors.skin, SKIN_OPACITY * skin)
   const level = cy + ry - 2 * ry * fill
   const n = clipBelow(inst, level, cx, slope)
   if (inst.crossings === 2) {
@@ -100,19 +101,19 @@ export function draw(inst, cx, cy, r, stretch, neck, fill, slope, wave) {
   } else {
     drawFan(inst, inst.clipped, n, inst.colors.water, WATER_OPACITY)
   }
-  drawRim(inst, cx, cy, RIM_WIDTH, inst.colors.skinRim, RIM_OPACITY)
-  drawOval(inst, cx + GLINT_X * r, cy + GLINT_Y * ry, GLINT_RX * r, GLINT_RY * r, GLINT_ANGLE,
-    inst.colors.highlight, GLINT_OPACITY)
+  drawRim(inst, cx, cy, RIM_WIDTH, inst.colors.skinRim, RIM_OPACITY * skin)
+  skin > 0 && drawOval(inst, cx + GLINT_X * r, cy + GLINT_Y * ry, GLINT_RX * r, GLINT_RY * r, GLINT_ANGLE,
+    inst.colors.highlight, GLINT_OPACITY * skin)
   drawOval(inst, cx + SPARK_X * r, cy + SPARK_Y * ry, SPARK_R * r, SPARK_R * r, 0,
     inst.colors.highlight, SPARK_OPACITY)
 }
 
 /**
- * Draws the burst skin's ring flying apart.
+ * Draws the popped skin's ring flying apart.
  * @param {Object} inst - Bubble inst
- * @param {number} cx - World X of the burst
- * @param {number} cy - World Y of the burst
- * @param {number} r - Bubble radius at the burst
+ * @param {number} cx - World X of the pop
+ * @param {number} cy - World Y of the pop
+ * @param {number} r - Bubble radius at the pop
  * @param {number} t - Progress 0..1
  */
 export function drawPop(inst, cx, cy, r, t) {

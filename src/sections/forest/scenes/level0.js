@@ -62,7 +62,11 @@ import {
   getForestPitCaveTrampolineX
 } from '../utils/forest-level-atmosphere.js'
 import {
-  buildFixedForestTreeFruitSpots,
+  createForestTreeApples,
+  waterForestTreeApples,
+  getForestTreeAppleCount,
+  restoreForestTreeApples,
+  hasForestRipeTreeApple,
   computeForestAnchorFruitDropX,
   forestAnchorFruitGroundClearSpan,
   isForestAnchorFruitGroundX,
@@ -73,8 +77,9 @@ import {
   restoreFallenAnchorFruit,
   tickForestTreeFruits
 } from '../utils/forest-tree-fruit.js'
-import { bakeLeftTree, leftTreeBranch, leftTreeApple } from '../utils/forest-left-tree.js'
+import { bakeLeftTree, leftTreeBranch, leftTreeApples } from '../utils/forest-left-tree.js'
 import * as WaterFlower from '../components/water-flower.js'
+import * as AppleBug from '../components/apple-bug.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
 import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
@@ -239,9 +244,11 @@ const LEFT_TREE_PLANTS_Z_BELOW = 1.5
 //
 // The water flower stands on the ground line right of the left tree's trunk,
 // its flower hanging back over the trunk so the bubble hangs in front of
-// the trunk's middle: it draws over the tree, under the plants at its foot.
+// it, WATER_FLOWER_SHIFT right of the trunk's middle: it draws over the
+// tree, under the plants at its foot.
 //
-const WATER_FLOWER_X = WaterFlower.footXUnderHeart(LEFT_TREE_FOOT.x)
+const WATER_FLOWER_SHIFT = 15
+const WATER_FLOWER_X = WaterFlower.footXUnderHeart(LEFT_TREE_FOOT.x) + WATER_FLOWER_SHIFT
 const WATER_FLOWER_Z_UNDER_PLANTS = 0.2
 const WATER_FLOWER_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW - WATER_FLOWER_Z_UNDER_PLANTS
 //
@@ -257,6 +264,18 @@ const WATER_FLOWER_CLEAR_SPAN = WaterFlower.clearSpan(WATER_FLOWER_X)
 const WATER_FLOWER_SPILT_Z_ABOVE_PLANTS = 0.1
 const WATER_FLOWER_SPILT_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW +
   WATER_FLOWER_SPILT_Z_ABOVE_PLANTS
+//
+// The apple bug's burrow sits on the ground line between the lake and the
+// left tree's trunk; its picture draws over the tree, just under the water
+// flower (the bug itself at BUG_Z, by the shore's stone pile). Its ground
+// stays free of plants, stones and grass.
+//
+const BUG_HOLE_FROM_TRUNK = 125
+const BUG_HOLE_X = LEFT_TREE_FOOT.x - BUG_HOLE_FROM_TRUNK
+const BUG_HOLE_UNDER_FLOWER = 0.1
+const BUG_HOLE_BACK_Z = WATER_FLOWER_Z - BUG_HOLE_UNDER_FLOWER
+const BUG_HOLE_CLEAR_SPAN = AppleBug.holeClearSpan(BUG_HOLE_X)
+const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 // Water spilt within this distance of the left tree's foot reaches its
 // roots (they spread about this far to its right, under the flower).
@@ -719,12 +738,6 @@ const FOREST_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 // Drowning — land on the lake floor, then sink under the fill.
 //
 const WATER_SURFACE_Y = FLOOR_Y - 8
-//
-// How far the fleeing head stops from the left playfield edge before it turns.
-// The stick swings to the other side of the head, so the hero needs this much
-// room or he slides under the side frame and off the stick.
-//
-const PREDATOR_FLEE_LEFT_EDGE_PAD = 170
 const PREDATOR_GROUND_CLEARANCE = 0
 const PREDATOR_STICK_EXTRA_LIFT = 4
 //
@@ -937,7 +950,7 @@ const WATER_RIGHT_TRIM = 10
 // tree's trunk foot, this far to the left — independent of how long the
 // branch and its platform are.
 //
-const LAKE_SHORE_ANCHOR_FROM_TRUNK = 266
+const LAKE_SHORE_ANCHOR_FROM_TRUNK = 384
 //
 // The lake's right bank edge is ragged by this much (forest-lake.js).
 //
@@ -977,6 +990,11 @@ const FOREST_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 // and the water fill.
 //
 const SHORE_END_ROCK_Z = GRASS_Z + 1
+//
+// The apple bug draws in front of that pile (it hunts by the lake right in
+// front of it).
+//
+const BUG_Z = SHORE_END_ROCK_Z + 0.5
 //
 // Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
 //
@@ -1156,8 +1174,8 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k)])
-  await bakeLeftTree(k, LEFT_TREE_FOOT, WATER_FLOWER_CLEAR_SPAN)
+  await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k)])
+  await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
   await loadForestStones()
   onProgress?.(42)
   await yieldForGpu(1)
@@ -1228,14 +1246,14 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     zones._sceneRef = { zones }
     //
     // The left big tree is a picture (forest-left-tree.js); its start branch
-    // and its knockable apple sit at fixed places on it.
+    // and the hangs its watered apples grow on sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k)])
-    const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, WATER_FLOWER_CLEAR_SPAN)
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k)])
+    const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
     const treeFruitAnchorCfg = buildForestTreeFruitAnchorCfg()
-    const treeFruitSpots = leftTree ? buildFixedForestTreeFruitSpots(leftTreeApple(LEFT_TREE_FOOT), leftTree.apple) : []
+    const treeApples = leftTree ? createForestTreeApples(leftTreeApples(LEFT_TREE_FOOT), leftTree.apple) : null
     if (await forestBootstrapPause(bootstrap, 14, session)) return
     //
     // The underground decor spec is baked into the combined static earth band.
@@ -1439,7 +1457,11 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       zones,
       sfx: sound,
       water: { x1: lakeX1, x2: lakeX2, surfaceY: WATER_SURFACE_Y },
-      fleeLeftX: LEFT_MARGIN + PREDATOR_FLEE_LEFT_EDGE_PAD
+      //
+      // A left flight swims for the lake's far end; the eye flower's island
+      // stops it first, the snout right against the island's slope.
+      //
+      fleeLeftX: lakeX1
     })
     if (zones.predatorAwake) {
       isForestSpawnTooCloseToPredator(predator, heroSpawnX, heroSpawnY) &&
@@ -1559,7 +1581,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       forestFirstStartGroundSpawnX,
       logHoverFrames: 0,
       wasGrounded: false,
-      leftTreeRootWater: { amount: 0, x: TREE_X },
       wasGroundedOnBranch: false,
       expectBranchWoodLandSound: false,
       wasHeroRunning: false,
@@ -1586,12 +1607,13 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       branchPlat,
       branchPlatHome,
       branchPlatSegs: branchPlatBundle,
-      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X }),
+      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, lakeX2 }),
       pit: null,
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
       ],
-      treeFruitSpots,
+      treeFruitSpots: [],
+      treeApples,
       treeFruitAnchorCfg,
       branchTrampX,
       _startBranchLandingCount: 0,
@@ -1612,7 +1634,20 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       waterZ: WATER_FLOWER_SPILT_Z,
       sfx: sound,
       rootArea: { x1: LEFT_TREE_FOOT.x - LEFT_TREE_ROOT_HALF, x2: LEFT_TREE_FOOT.x + LEFT_TREE_ROOT_HALF },
-      onSoilWatered: (position, amount) => recordForestLeftTreeRootWater(inst, position, amount)
+      onSoilWatered: () => waterForestTreeApples(inst)
+    })
+    inst.appleBug = AppleBug.create({
+      k,
+      holeX: BUG_HOLE_X,
+      groundY: FLOOR_Y,
+      lakeX2,
+      treeX: TREE_X,
+      levelInst: inst,
+      midges: inst.midges,
+      flower: inst.waterFlower,
+      predator,
+      backZ: BUG_HOLE_BACK_Z,
+      z: BUG_Z
     })
     inst.eyeFlower = EyeFlower.create({
       k,
@@ -1963,13 +1998,15 @@ function persistForestOnLeave(inst) {
 }
 //
 // World state that survives a reload: branch / bomb-tree landing counts, the
-// knocked apple on the ground and the stick on the centipede's back.
+// apples grown on the left tree, the knocked apple on the ground and the
+// stick on the centipede's back.
 //
 function persistForestLevelState(inst) {
   set(KEY_LEVEL_STATE, {
     startBranchLandings: inst._startBranchLandingCount ?? 0,
     shoreBranchLandings: inst._shoreBranchLandingCount ?? 0,
     tomatoHits: inst.spikyTomatoes ? SpikyTomato.getHits(inst.spikyTomatoes) : [],
+    treeApples: getForestTreeAppleCount(inst),
     fallenApple: getFallenAnchorFruit(inst, FLOOR_Y),
     twigOnPredator: HorizFallTwig.isTwigOnPredator(inst.shoreFallTwigs)
   })
@@ -1983,6 +2020,7 @@ function restoreForestLevelState(inst) {
   inst._startBranchLandingCount = state.startBranchLandings ?? 0
   inst._shoreBranchLandingCount = state.shoreBranchLandings ?? 0
   inst.spikyTomatoes && SpikyTomato.restoreHits(inst.spikyTomatoes, state.tomatoHits)
+  restoreForestTreeApples(inst, state.treeApples ?? 0)
   state.fallenApple && restoreFallenAnchorFruit(inst, state.fallenApple.x, state.fallenApple.floorY)
   state.twigOnPredator && inst.zones?.predatorAwake &&
     HorizFallTwig.restoreTwigOnPredator(inst.shoreFallTwigs, inst.predator)
@@ -2523,7 +2561,7 @@ function buildForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTreeLayo
     ...(earTreeSpots ?? []).map(s => ({ x: s.x, half: EAR_TREE_TRUNK_GRASS_CLEAR_HALF }))
   ]
   treeFruitAnchorCfg && blockers.push(forestAnchorFruitForestFloorBlocker(treeFruitAnchorCfg))
-  blockers.push(spanBlocker(WATER_FLOWER_CLEAR_SPAN))
+  LEFT_TREE_CLEAR_SPANS.forEach(span => blockers.push(spanBlocker(span)))
   shoreTreeLayout && blockers.push({ x: shoreTreeLayout.x, half: FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF })
   return blockers
 }
@@ -3550,7 +3588,7 @@ function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, ear
     (x >= branchL && x <= branchR) ||
     earTreeExcluded(x) ||
     (treeFruitAnchorCfg && isForestAnchorFruitGroundX(x, treeFruitAnchorCfg)) ||
-    (x >= WATER_FLOWER_CLEAR_SPAN.x1 && x <= WATER_FLOWER_CLEAR_SPAN.x2) ||
+    LEFT_TREE_CLEAR_SPANS.some(span => x >= span.x1 && x <= span.x2) ||
     isCrackGrassExcluded(x, WORLD_W)
   const grass = Grass.create({
     k,
@@ -3676,8 +3714,7 @@ function placeGroundStone(k, x, stone, decorAtlas, bounds, front, appleSpan) {
   const worldX = Math.max(bounds.minX + half, Math.min(bounds.maxX - half, x))
   const onAppleStrip = worldX + half >= appleSpan.x1 && worldX - half <= appleSpan.x2
   if (onAppleStrip && canvas.width >= GROUND_STONE_SMALL_W) return null
-  const flower = WATER_FLOWER_CLEAR_SPAN
-  if (worldX + half >= flower.x1 && worldX - half <= flower.x2) return null
+  if (LEFT_TREE_CLEAR_SPANS.some(span => worldX + half >= span.x1 && worldX - half <= span.x2)) return null
   const posX = Math.round(worldX - half)
   const sink = GROUND_STONE_SINK + Math.random() * GROUND_STONE_SINK_RANGE + (front ? GROUND_STONE_FRONT_SINK : 0)
   const posY = Math.round(FLOOR_Y + sink - canvas.height)
@@ -3728,7 +3765,7 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
   const isBadSpot = (x) => (x >= waterX1 && x <= waterX2) ||
     Math.abs(x - trampX) <= TRAMP_MUSHROOM_CLEAR_HALF ||
     Math.abs(x - branchTrampX) <= TRAMP_MUSHROOM_CLEAR_HALF ||
-    (x >= WATER_FLOWER_CLEAR_SPAN.x1 - MUSHROOM_FLOWER_CLEAR_PAD && x <= WATER_FLOWER_CLEAR_SPAN.x2 + MUSHROOM_FLOWER_CLEAR_PAD) ||
+    LEFT_TREE_CLEAR_SPANS.some(span => x >= span.x1 - MUSHROOM_FLOWER_CLEAR_PAD && x <= span.x2 + MUSHROOM_FLOWER_CLEAR_PAD) ||
     isCrackDecorExcluded(x, WORLD_W)
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
     const size = MUSHROOM_PICTURE_H_MIN + Math.random() * MUSHROOM_PICTURE_H_RANGE
@@ -6200,14 +6237,6 @@ function tickForestWaterFlowerLanding(inst, char, grounded, justLanded) {
   WaterFlower.onHeroLanded(inst.waterFlower, char.pos.x)
 }
 //
-// Water a burst bubble spilt onto the left tree's roots. Kept for the
-// tree's own growth logic; the flower only reports it.
-//
-function recordForestLeftTreeRootWater(inst, position, amount) {
-  inst.leftTreeRootWater.amount += amount
-  inst.leftTreeRootWater.x = position.x
-}
-//
 // Tomato burst on the ground — camera jolt, and a nearby centipede bolts away.
 //
 function onForestTomatoExplode(inst, x, y) {
@@ -6229,9 +6258,10 @@ function grantForestTomatoBurstHeroSafety(inst, burstX, burstY) {
   inst.touchDeathGraceUntil = inst.k.time() + TOMATO_BURST_HERO_SAFE_SEC
 }
 //
-// Left big tree: every second landing on its branch knocks the anchor apple
-// loose. Landings while the last apple still waits for the centipede do not count,
-// nor does the hero first touching down where he spawns (level start, respawn).
+// Left big tree: every second landing on its branch knocks a ripe apple
+// loose. Landings while the tree has no ripe apple or the last apple still
+// waits for the centipede do not count, nor does the hero first touching
+// down where he spawns (level start, respawn).
 //
 function tickForestStartBranchFatigue(inst, char, grounded, justLanded) {
   if (!inst.heroSettledAfterSpawn) {
@@ -6240,7 +6270,7 @@ function tickForestStartBranchFatigue(inst, char, grounded, justLanded) {
   }
   if (!justLanded || !grounded || !isHeroOnStartBranch(inst, char)) return
   triggerForestBranchLandingShake(inst)
-  if (hasForestAnchorFruitDropInWorld(inst)) return
+  if (hasForestAnchorFruitDropInWorld(inst) || !hasForestRipeTreeApple(inst)) return
   inst._startBranchLandingCount = (inst._startBranchLandingCount || 0) + 1
   if (inst._startBranchLandingCount < FOREST_BRANCH_LANDINGS_TO_DROP) return
   releaseForestAnchorFruit(inst) && (inst._startBranchLandingCount = 0)

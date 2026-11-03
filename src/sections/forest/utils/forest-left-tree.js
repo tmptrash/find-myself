@@ -2,41 +2,52 @@ import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-para
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 import { bakeForestFootPlants } from './forest-foot-plants.js'
 import { clearPictureRect } from './forest-picture.js'
+import { FOREST_PAL, forestRgb } from './forest-palette.js'
 
 //
 // The left big tree of forest level 0, cut from assets/forest/left-tree.png
-// (scaled): the tree above ground (crown with its painted apples, the
-// trunk) stands on the ground line, its roots go under it into the earth.
-// The loose apple on the right of the picture hangs in the crown and is the
-// one the hero knocks loose from the start branch (the long low left
-// branch). The picture starts loading with this module (game boot); bakes
-// are once per live k.
+// (scaled): the tree above ground (a bare crown, the trunk) stands on the
+// ground line, its roots go under it into the earth. The loose apple on the
+// right of the picture is the one apples growing in the crown are drawn
+// from (also a green copy of it for young ones); the hero knocks them loose
+// from the start branch (the long low left branch). The picture starts
+// loading with this module (game boot); bakes are once per live k.
 //
 const URL = 'forest/left-tree.png'
 const SCALE = 0.47
-const SPRITE_PREFIX = 'forest0-left-tree-v5'
+const SPRITE_PREFIX = 'forest0-left-tree-v6'
 const GRAIN_SEED = 6002
 //
 // Parts of the picture (px): the tree above ground (TRUNK_X: its trunk's
 // middle at the bottom), the roots, the loose apple and its round body.
 //
-const CROWN = { x: 0, y: 0, w: 1041, h: 1013 }
-const TRUNK_X = 589.5
-const ROOTS = { x: 0, y: 1055, w: 992, h: 369 }
-const ROOTS_X = 590
-const APPLE = { x: 821, y: 746, w: 116, h: 136 }
-const APPLE_BODY = { x: 869.5, y: 831.5, r: 45 }
+const CROWN = { x: 0, y: 0, w: 1048, h: 1019 }
+const TRUNK_X = 594.5
+const ROOTS = { x: 0, y: 1061, w: 992, h: 369 }
+const ROOTS_X = 595.5
+const APPLE = { x: 828, y: 750, w: 116, h: 136 }
+const APPLE_BODY = { x: 877, y: 837, r: 45 }
 //
 // The loose apple sits beside the trunk inside the crown's part of the
 // picture; this corner (right of the trunk, under the foliage) holds
 // nothing else, so it is wiped out of the crown with the apple's faint halo.
 //
-const CROWN_CLEAR = { x: 680, y: 680, w: 361, h: 333 }
+const CROWN_CLEAR = { x: 680, y: 680, w: 368, h: 339 }
 //
-// The loose apple is drawn larger than the apples painted in the crown;
-// it is shrunk by this much so it hangs among them at their size.
+// The loose apple is drawn large on the picture; it is shrunk by this much
+// so it hangs in the crown at the size of a real apple on such a tree.
 //
 const APPLE_SIZE = 0.37
+//
+// The young apple's copy: the picture's red (how far red stands above green
+// and blue, in RED_SPAN steps it turns fully green) is redrawn in greens by
+// its brightness (the red channel from RED_DARK to RED_LIGHT runs from the
+// green shade over the body to the lit green); leaf and stem stay as they are.
+//
+const UNRIPE_RED_FROM = 20
+const UNRIPE_RED_SPAN = 60
+const UNRIPE_RED_DARK = 120
+const UNRIPE_RED_LIGHT = 225
 //
 // The trunk's bottom and the roots' top overlap the ground line by this
 // much (world px), so no seam shows between them.
@@ -65,18 +76,20 @@ const FOOT_SEED = 6040
 // The start branch's walkable top on the picture: its flat stretch from
 // where it leaves the leafy tip on into the trunk, up to the trunk's middle.
 //
-const BRANCH = { x1: 280, x2: 586, y: 669 }
+const BRANCH = { x1: 284, x2: 590, y: 673 }
 //
 // The branch's platform sits this much lower (world px) than its top on the
 // picture, so the hero's feet rest in the bark, not on its lit edge.
 //
 const BRANCH_DROP = 2
 //
-// Where the loose apple hangs on the picture (its body's centre): in the
-// lower right of the crown, clear of the painted apples, over the strip of
-// ground it drops onto.
+// Where apples grow on the picture (their bodies' centres), in the order
+// they come: under the foliage in the lower right of the crown, over the
+// strip of ground a knocked apple drops onto.
 //
-const APPLE_HANG = { x: 810, y: 525 }
+const APPLE_HANGS = [
+  { x: 814, y: 530 }, { x: 760, y: 470 }, { x: 870, y: 470 }, { x: 845, y: 395 }, { x: 790, y: 410 }
+]
 const image = loadImage(URL)
 const bakedByK = new WeakMap()
 let picture = null
@@ -120,11 +133,11 @@ export function drawLeftTreeToCanvas(ctx, foot, scale) {
  * Bakes the tree's parts once per live k (waits for the picture to load).
  * @param {Object} k - Kaplay instance
  * @param {{x: number, y: number}} foot - World point where the trunk meets the ground
- * @param {{x1: number, x2: number}} [clear] - World ground span the foot plants leave bare
+ * @param {Array<{x1: number, x2: number}>} [clear] - World ground spans the foot plants leave bare
  * @returns {Promise<{crown: Object, roots: Object, plants: Object, apple: Object}|null>} Each
  *   part's sprite and world top-left (plants: the greens over the trunk's foot); the apple's
- *   sprite, its canvas, size and offset of its top-left from its body's centre (null if the
- *   picture failed to load)
+ *   sprite, its young green copy's sprite, its canvas, size and offset of its top-left from
+ *   its body's centre (null if the picture failed to load)
  */
 export async function bakeLeftTree(k, foot, clear = null) {
   const cached = bakedByK.get(k)
@@ -140,6 +153,7 @@ export async function bakeLeftTree(k, foot, clear = null) {
     roots: { sprite: roots, x: Math.round(foot.x - (ROOTS_X - ROOTS.x) * SCALE), y: foot.y - GROUND_TUCK },
     apple: {
       sprite: apple.name,
+      unripe: bakeUnripeApple(k, apple.canvas),
       canvas: apple.canvas,
       w: APPLE.w * SCALE * APPLE_SIZE,
       h: APPLE.h * SCALE * APPLE_SIZE,
@@ -167,13 +181,13 @@ export function leftTreeBranch(foot) {
 }
 
 /**
- * Where the loose apple hangs in the world (its body's centre) and its
- * body's radius.
+ * Where apples grow in the world (their bodies' centres, in the order they
+ * come) and their bodies' radius.
  * @param {{x: number, y: number}} foot - World point where the trunk meets the ground
- * @returns {{x: number, y: number, r: number}}
+ * @returns {Array<{x: number, y: number, r: number}>}
  */
-export function leftTreeApple(foot) {
-  return { ...toWorld(foot, APPLE_HANG.x, APPLE_HANG.y), r: APPLE_BODY.r * SCALE * APPLE_SIZE }
+export function leftTreeApples(foot) {
+  return APPLE_HANGS.map(hang => ({ ...toWorld(foot, hang.x, hang.y), r: APPLE_BODY.r * SCALE * APPLE_SIZE }))
 }
 //
 // One part of the picture on its own canvas at world size (minus an
@@ -197,9 +211,49 @@ function bakePart(k, img, part, id, clear = null) {
   return { name, canvas }
 }
 //
+// The young apple: a copy of the baked (graded, grained) apple with its red
+// redrawn in palette greens, so its grain stays.
+//
+function bakeUnripeApple(k, src) {
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width
+  canvas.height = src.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(src, 0, 0)
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const ramp = ['unripeShade', 'unripe', 'unripeLight'].map(key => forestRgb(FOREST_PAL.forestTreeFruit[key]))
+  const px = image.data
+  for (let i = 0; i < px.length; i += 4) {
+    const w = clamp01((px[i] - Math.max(px[i + 1], px[i + 2]) - UNRIPE_RED_FROM) / UNRIPE_RED_SPAN)
+    if (w <= 0) continue
+    const green = rampColor(ramp, clamp01((px[i] - UNRIPE_RED_DARK) / (UNRIPE_RED_LIGHT - UNRIPE_RED_DARK)))
+    px[i] += (green.r - px[i]) * w
+    px[i + 1] += (green.g - px[i + 1]) * w
+    px[i + 2] += (green.b - px[i + 2]) * w
+  }
+  ctx.putImageData(image, 0, 0)
+  const name = `${SPRITE_PREFIX}-apple-unripe`
+  k.loadSprite(name, canvas)
+  return name
+}
+//
+// A colour along three stops (dark, middle, light) at t in 0..1.
+//
+function rampColor(ramp, t) {
+  const u = t * (ramp.length - 1)
+  const i = Math.min(ramp.length - 2, Math.floor(u))
+  const f = u - i
+  const a = ramp[i]
+  const b = ramp[i + 1]
+  return { r: a.r + (b.r - a.r) * f, g: a.g + (b.g - a.g) * f, b: a.b + (b.b - a.b) * f }
+}
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v))
+}
+//
 // The plants over the trunk's foot on one canvas (ground line at its
 // FOOT_BAKE_ABOVE row), graded and grained like the forest floor; none in
-// the clear span.
+// the clear spans.
 //
 function bakeFootPlants(k, foot, clear) {
   const plants = bakeForestFootPlants(k, {
@@ -212,7 +266,7 @@ function bakeFootPlants(k, foot, clear) {
     tufts: { from: FOOT_TUFT_FROM, to: FOOT_TUFT_TO, step: FOOT_TUFT_STEP },
     mushrooms: FOOT_MUSHROOMS,
     spotted: FOOT_SPOTTED,
-    clear: clear && { x1: clear.x1 - foot.x, x2: clear.x2 - foot.x }
+    clear: clear && clear.map(span => ({ x1: span.x1 - foot.x, x2: span.x2 - foot.x }))
   })
   return { sprite: plants.sprite, x: foot.x + plants.dx, y: foot.y + plants.dy }
 }

@@ -436,7 +436,26 @@ export const CFG = {
           droplet: PALETTE.blue5,      // Spray and splash drops
           puddle: PALETTE.blue3,       // Shallow puddle on the ground
           puddleGlint: PALETTE.blue5,  // Its top glint
-          wetSoil: PALETTE.rose0       // Darkened wet earth
+          wetSoil: PALETTE.rose0,      // Darkened wet earth
+          mossRim: PALETTE.green1,     // Dark edge of the moss spot at the stem's foot
+          mossShade: PALETTE.gold2,    // Its shaded clumps
+          moss: PALETTE.green5,        // Its body, like the stem's moss
+          mossLight: PALETTE.gold4     // Its lit top clumps
+        },
+        //
+        // Apple bug by the left big tree: the green-black contour round its
+        // parts, its snake-like tongue (a darker fork at the tip), its soft
+        // belly under the shell, the tint that pushes its far legs back and
+        // the dark it turns as it dashes into its burrow.
+        //
+        appleBug: {
+          outline: PALETTE.gray0,
+          tongue: PALETTE.pink1,
+          tongueFork: PALETTE.pink0,
+          belly: PALETTE.rose0,
+          bellyLight: PALETTE.brown1,
+          farTint: PALETTE.gray6,
+          deep: PALETTE.gray0
         },
         //
         // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
@@ -553,7 +572,10 @@ export const CFG = {
           body: PALETTE.red2,          // Lit apple face
           light: PALETTE.red3,         // Brighter variation on some fruit
           shade: PALETTE.red0,         // Full-disk underside shadow
-          contour: PALETTE.gray0       // Dark rim
+          contour: PALETTE.gray0,      // Dark rim
+          unripeShade: PALETTE.green0, // Young apple: its red shadows turned green
+          unripe: PALETTE.green2,      // Young apple: its red body turned green
+          unripeLight: PALETTE.green4  // Young apple: its lit red turned green
         },
         //
         // Eye-flower on the lake island: a red stalk of white eye-berries

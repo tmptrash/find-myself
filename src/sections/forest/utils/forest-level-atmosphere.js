@@ -73,6 +73,22 @@ const MIDGE_Z = 14
 const MIDGE_DRAW_CULL_PAD = 48
 const MIDGE_PIT_SPREAD_X = 36
 const MIDGE_PIT_SPREAD_Y = 26
+//
+// A small swarm hangs over the lake's tree-side end (the apple bug hunts
+// it from the shore): its band, from the lake's right edge and the floor.
+//
+const MIDGE_LAKE_COUNT = 9
+const MIDGE_LAKE_SPAN = 100
+const MIDGE_LAKE_PAST_EDGE = 6
+const MIDGE_LAKE_TOP = 62
+const MIDGE_LAKE_BOTTOM = 22
+//
+// A caught midge comes back unseen: after a while, somewhere else in its
+// role's band, swelling from nothing over MIDGE_REGROW_SEC.
+//
+const MIDGE_RESPAWN_MIN_SEC = 2.5
+const MIDGE_RESPAWN_RANGE_SEC = 3
+const MIDGE_REGROW_SEC = 1.6
 const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 //
 // Cave floor spot (share of the crack zone width) where the ground portal opens.
@@ -223,6 +239,7 @@ export function isCrackDecorExcluded(x, screenW) {
  * @param {number} screenW - Screen width
  * @param {Object} [opts] - Options
  * @param {number} [opts.treeX] - Trunk centre (splits left/right field)
+ * @param {number} [opts.lakeX2] - Lake's right edge (a small swarm hangs over that end)
  * @returns {Object} Midges controller
  */
 export function createForestMidges(k, floorY, screenW, opts = {}) {
@@ -255,8 +272,22 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
       'field'
     ))
   }
+  const lake = opts.lakeX2 == null ? null : {
+    minX: opts.lakeX2 - MIDGE_LAKE_SPAN,
+    maxX: opts.lakeX2 + MIDGE_LAKE_PAST_EDGE,
+    minY: floorY - MIDGE_LAKE_TOP,
+    maxY: floorY - MIDGE_LAKE_BOTTOM
+  }
+  for (let i = 0; lake && i < MIDGE_LAKE_COUNT; i++) {
+    midges.push(makeMidge(
+      lake.minX + Math.random() * (lake.maxX - lake.minX),
+      lake.minY + Math.random() * (lake.maxY - lake.minY),
+      'lake'
+    ))
+  }
   const ctrl = {
     midges,
+    lake,
     treeX,
     floorY,
     screenW,
@@ -332,6 +363,11 @@ export function updateForestMidges(ctrl, dt, worldLife = 0) {
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
     const bounds = boundsForRole(ctrl, m.role)
+    if (m.caught) {
+      tickCaughtMidge(m, bounds, dt)
+      continue
+    }
+    m.grow = Math.min(1, m.grow + dt / MIDGE_REGROW_SEC)
     m.driftVx += Math.sin(t * m.freqDriftX + m.phase) * 18 * dt * move
     m.driftVy += Math.cos(t * m.freqDriftY + m.phaseY) * 14 * dt * move
     m.driftVx *= 0.98
@@ -345,6 +381,49 @@ export function updateForestMidges(ctrl, dt, worldLife = 0) {
     if (m.y > bounds.maxY) { m.y = bounds.maxY; m.driftVy = -Math.abs(m.driftVy) }
   }
 }
+/**
+ * The nearest grown midge in front of a point and within reach (a hunter
+ * picks its prey), or null.
+ * @param {Object} ctrl - Midges controller
+ * @param {number} x - Hunter's mouth X
+ * @param {number} y - Hunter's mouth Y
+ * @param {number} reach - Farthest distance
+ * @param {number} dir - Side to look at (1 = right, -1 = left)
+ * @param {number} minAhead - Least distance ahead along that side
+ * @returns {Object|null} Midge
+ */
+export function findForestMidgeNear(ctrl, x, y, reach, dir, minAhead) {
+  let best = null
+  let bestDist = reach
+  for (const m of ctrl?.midges ?? []) {
+    if (m.caught || m.grow < 1 || !midgeRoleVisible(ctrl, m.role)) continue
+    if ((m.x - x) * dir < minAhead) continue
+    const d = Math.hypot(m.x - x, m.y - y)
+    d < bestDist && (bestDist = d, best = m)
+  }
+  return best
+}
+
+/**
+ * The midges' fill, for a midge drawn elsewhere (one on a hunter's tongue).
+ * @param {Object} k - Kaplay instance
+ * @param {Object} ctrl - Midges controller
+ * @returns {Object} Kaplay colour
+ */
+export function forestMidgeColor(k, ctrl) {
+  return midgeDrawColor(k, ctrl, ctrl.midgeRgb || forestRgb('void'))
+}
+
+/**
+ * A midge is caught: it stops drawing and flying, and comes back elsewhere
+ * after a while (the swarm never thins out).
+ * @param {Object} m - Midge
+ */
+export function catchForestMidge(m) {
+  m.caught = true
+  m.respawnLeft = MIDGE_RESPAWN_MIN_SEC + Math.random() * MIDGE_RESPAWN_RANGE_SEC
+}
+
 /**
  * Sets up the always-open cave pit at the right edge of the playfield.
  * @param {Object} cfg - Setup config
@@ -525,10 +604,26 @@ function makeMidge(x, y, role) {
     freqWanderX: MIDGE_FREQ_WANDER_X_BASE * freqMul(),
     freqWanderY: MIDGE_FREQ_WANDER_Y_BASE * freqMul(),
     driftVx: (Math.random() - 0.5) * 14,
-    driftVy: (Math.random() - 0.5) * 10
+    driftVy: (Math.random() - 0.5) * 10,
+    grow: 1,
+    caught: false,
+    respawnLeft: 0
   }
 }
+//
+// A caught midge waits out of sight, then turns up at a random spot of its
+// band, still too small to see.
+//
+function tickCaughtMidge(m, bounds, dt) {
+  m.respawnLeft -= dt
+  if (m.respawnLeft > 0) return
+  m.caught = false
+  m.grow = 0
+  m.x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX)
+  m.y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY)
+}
 function midgeRoleVisible(ctrl, role) {
+  if (role === 'lake') return true
   if (role === 'pit') return ctrl.showPit
   if (role === 'fieldLeft') return ctrl.showLeft
   if (role === 'fieldRight') return ctrl.showRight || ctrl.spreadAfterPit
@@ -536,6 +631,7 @@ function midgeRoleVisible(ctrl, role) {
   return false
 }
 function boundsForRole(ctrl, role) {
+  if (role === 'lake') return ctrl.lake
   if (role === 'pit') return ctrl.spreadAfterPit ? ctrl.fieldAll : ctrl.pit
   if (role === 'fieldLeft') return ctrl.fieldLeft
   if (role === 'fieldRight') return ctrl.fieldRight
@@ -570,9 +666,9 @@ function drawForestMidges(k, ctrl) {
   PolyBatch.reset(batch)
   const color = midgeDrawColor(k, ctrl, base)
   for (const m of ctrl.midges) {
-    if (!midgeRoleVisible(ctrl, m.role)) continue
+    if (m.caught || !midgeRoleVisible(ctrl, m.role)) continue
     if (m.x < minX || m.x > maxX) continue
-    PolyBatch.addDisc(batch, m.x, m.y, m.radius, color)
+    PolyBatch.addDisc(batch, m.x, m.y, m.radius * m.grow, color)
   }
   PolyBatch.flush(batch, k, life)
 }

@@ -1,7 +1,7 @@
-import { CFG } from '../../../cfg.js'
-import { getRGB } from '../../../utils/helper.js'
-import { get } from '../../../utils/progress.js'
-import * as Hero from '../../../components/hero.js'
+import { CFG } from '../cfg.js'
+import { getRGB } from '../utils/helper.js'
+import { get } from '../utils/progress.js'
+import * as Hero from './hero.js'
 import {
   EYE_HUD_BLINK_SEQUENCE,
   EYE_HUD_DISPLAY_SCALE_MUL,
@@ -18,7 +18,7 @@ import {
   mountLifeHudPupilDrawer,
   syncLifeHudEyeSprite,
   tickEyeHudBlink
-} from '../../../utils/eye-hud.js'
+} from '../utils/eye-hud.js'
 
 export { bindEyeHudLookAtHero }
 //
@@ -112,13 +112,13 @@ const FALLING_LETTER_UNDER_C_RATIO = 0.72
 const WOBBLE_SPEED = 2.5
 const WOBBLE_AMPLITUDE = 4
 /**
- * Creates touch section level indicator (letters "TOUCH") with small hero and life icons
+ * Creates the level HUD: an optional section label row with small hero and life icons
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.levelNumber - Current level number (0-4)
  * @param {string} config.activeColor - Color for completed levels (hex)
  * @param {string} config.inactiveColor - Color for future levels (hex)
- * @param {string} config.completedColor - Color for already completed levels (hex, default: touch antiHero color)
+ * @param {string} [config.completedColor] - Color for already completed levels (hex)
  * @param {string} [config.heroBodyColor] - Body color for small hero icon (hex), defaults to activeColor
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
@@ -135,7 +135,7 @@ export function create(config) {
     levelNumber,
     activeColor,
     inactiveColor,
-    completedColor = CFG.visual.colors.sections.touch.antiHero,
+    completedColor,
     heroBodyColor = activeColor,
     topPlatformHeight,
     sideWallWidth,
@@ -178,7 +178,7 @@ export function create(config) {
     const letterLevel = i
     //
     // Determine color based on level status:
-    // - Completed levels (< current level): use completedColor (touch antiHero color - brown)
+    // - Completed levels (< current level): use completedColor
     // - Current level: use activeColor (hero color - yellow)
     // - Future levels: use inactiveColor (gray)
     //
@@ -297,8 +297,6 @@ export function create(config) {
   const smallHeroY = sectionLabelY != null
     ? sectionLabelY + fontSize / 2 + SMALL_HERO_Y_ADJUST
     : topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
-  const isTouchComplete = get('touch.completed', false)
-  const isWordComplete = get('word.completed', false)
   const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8 *
     EYE_HUD_DISPLAY_SCALE_MUL
   const lifeHalfDisplayW = (EYE_HUD_FRAME_WIDTH * lifeImageScale) * 0.5
@@ -326,8 +324,6 @@ export function create(config) {
       outlineColor: heroOutlineColor,
       eyeWhiteColor: heroEyeWhiteColor,
       postBakeCanvas: heroPostBakeCanvas,
-      addMouth: isWordComplete,
-      addArms: isTouchComplete,
       //
       // HUD indicator hero is purely decorative — never let it whistle or
       // emit floating notes during gameplay.

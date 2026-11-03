@@ -1,10 +1,10 @@
 import { CFG } from '../cfg.js'
-import { parseHex, bindStartGameKeys } from '../utils/helper.js'
+import { parseHex, getColor, bindStartGameKeys } from '../utils/helper.js'
 import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
-import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
+import * as NoMouse from '../utils/no-mouse.js'
 import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN, buildHeroSpritePrefix } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
@@ -540,7 +540,13 @@ export function sceneReady(k) {
       departureFade: 1,
       eyeFinalFade: 0
     }
-    const bgPlane = addBackground(k, CFG.visual.colors.ready.background)
+    const bgPlane = k.add([
+      k.rect(k.width(), k.height()),
+      getColor(k, CFG.visual.colors.ready.background),
+      k.pos(0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.background)
+    ])
     //
     // Combined static background — the darkened menu-bg picture plus the
     // bottom description text, baked once into a single full-screen sprite.
@@ -706,8 +712,14 @@ export function sceneReady(k) {
       goToMenuAfterAssets(k)
     }
     const startGameInputCancel = bindStartGameKeys(k, () => exitToMenu())
-    k.onMousePress(exitToMenu)
-    k.onSceneLeave(() => startGameInputCancel.cancel())
+    //
+    // A left click goes to the menu too (the mouse itself stays hidden).
+    //
+    const stopMouse = NoMouse.onMousePress(exitToMenu)
+    k.onSceneLeave(() => {
+      startGameInputCancel.cancel()
+      stopMouse()
+    })
   })
 }
 //

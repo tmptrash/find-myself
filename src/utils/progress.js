@@ -1,19 +1,13 @@
 import { prop, setProp } from './helper.js'
 /**
  * Progress tracking using localStorage.
- * All section-specific properties are namespaced under their section key:
- *   touch.completed, touch.lifeDeducted, touch.trapActive,
- *   word.completed, word.lesson4LetterInstructionsCount,
- *   time.completed, time.lesson3SnowballInstructionsCount, etc.
- * Global properties: lastLevel, heroScore, lifeScore, sounds
+ * Section-specific properties are namespaced under their section key
+ * (e.g. forest.completed, cave.completed).
+ * Global properties: lastLesson, heroScore, lifeScore, sounds
  */
 const STORAGE_KEY = 'rootward'
 const LEGACY_STORAGE_KEY = 'find-yourself'
-const SECTIONS = ['forest', 'word', 'touch', 'feel', 'mind', 'time']
-//
-// Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
-//
-const TIME_SCENE_MAX_INDEX = 3
+const SECTIONS = ['forest', 'cave']
 //
 // The forest section used to be called "glow": saves written before the
 // rename still carry the old scene names.
@@ -25,8 +19,7 @@ const FOREST_COMPLETE = 'forest-complete'
 
 /**
  * Maps stale saved scene names to current ones: pre-rename glow scenes to
- * their forest names, invalid time scenes (e.g. lesson-time.4) to the last
- * valid level.
+ * their forest names.
  * @param {string|null} sceneName
  * @returns {string|null}
  */
@@ -36,10 +29,7 @@ export function normalizeSceneName(sceneName) {
   if (sceneName.startsWith(LEGACY_FOREST_LESSON_PREFIX)) {
     return FOREST_LESSON_PREFIX + sceneName.slice(LEGACY_FOREST_LESSON_PREFIX.length)
   }
-  if (!sceneName.startsWith('lesson-time.')) return sceneName
-  const index = parseInt(sceneName.replace('lesson-time.', ''), 10)
-  if (Number.isNaN(index) || index <= TIME_SCENE_MAX_INDEX) return sceneName
-  return `lesson-time.${TIME_SCENE_MAX_INDEX}`
+  return sceneName
 }
 //
 // Default progress with section objects
@@ -55,7 +45,8 @@ function createDefault() {
   return progress
 }
 //
-// Migrate old flat format (section: boolean) to new nested format (section: { completed })
+// Make sure every section has its { completed } object (older saves hold
+// a bare boolean, or lack the section altogether)
 //
 function migrate(data) {
   let changed = false
@@ -65,38 +56,6 @@ function migrate(data) {
       changed = true
     }
   })
-  //
-  // Move old flat keys into their section namespace
-  //
-  if (data.lifeDeducted !== undefined) {
-    data.touch.lifeDeducted = data.lifeDeducted
-    data.touch.trapActive = data.lifeDeducted
-    delete data.lifeDeducted
-    changed = true
-  }
-  if (data.level4LetterInstructionsCount !== undefined) {
-    data.word.lesson4LetterInstructionsCount = data.level4LetterInstructionsCount
-    delete data.level4LetterInstructionsCount
-    changed = true
-  }
-  if (data.level3SnowballInstructionsCount !== undefined) {
-    data.time.lesson3SnowballInstructionsCount = data.level3SnowballInstructionsCount
-    delete data.level3SnowballInstructionsCount
-    changed = true
-  }
-  if (data.level3GlowInstructionsCount !== undefined) {
-    data.touch.lesson3GlowInstructionsCount = data.level3GlowInstructionsCount
-    delete data.level3GlowInstructionsCount
-    changed = true
-  }
-  //
-  // Migrate old conversations.monsterSeen to touch.monsterSeen
-  //
-  if (data.conversations?.monsterSeen !== undefined) {
-    data.touch.monsterSeen = data.conversations.monsterSeen
-    delete data.conversations
-    changed = true
-  }
   if (changed) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }
     catch (_) {}

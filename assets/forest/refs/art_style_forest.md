@@ -1,10 +1,20 @@
 # Find Myself — Forest Art Style
 
-Version: 1.2 (sprite sheet rectangular cropping rules)
+Version: 1.3 (general rules split from Forest-specific rules)
 Source of truth: approved Forest gameplay screenshots (04–05).
 
+This file has two parts:
+- **Part A — General rules.** Shared by every level of Find Myself; the same text lives in every level's style file (e.g. `art_style_cave0.md`). Change it in all files at once.
+- **Part B — Forest-specific rules.** Apply only to the Forest level.
+
+When Part B conflicts with Part A, Part B wins for this level.
+
+---
+
+# Part A — General rules (all levels)
+
 ## Purpose and priority
-Create images belonging to the Forest environment of Find Myself. Match the visual language of the supplied gameplay references, not their exact layout. Never copy screenshot UI, FPS text, borders, or object arrangements.
+Create images belonging to one level (environment) of Find Myself. Match the visual language of that level's supplied gameplay references, not their exact layout. Never copy screenshot UI, FPS text, borders, or object arrangements.
 
 ## Mandatory asset export rules
 - **Transparent background is required for every generated standalone game asset.** Export as a PNG with a real alpha channel (RGBA); all pixels outside the actual artwork must have alpha = 0.
@@ -16,29 +26,15 @@ Create images belonging to the Forest environment of Find Myself. Match the visu
 
 ## Shared visual DNA
 - **Format:** handcrafted, richly layered 2D side-view game illustration; clean readable silhouettes with substantial small organic detail. Not pixel art, 3D render, photorealism, anime, or glossy mobile-game clip art.
-- **Mood:** quiet, enchanted, exploratory, slightly uncanny. Nature feels alive and mysterious. Avoid gratuitous horror, aggressive fantasy ornament, or cheerful toy-like styling.
+- **Mood:** quiet, enchanted, exploratory, slightly uncanny. Nature feels alive and mysterious. Avoid gratuitous horror, aggressive fantasy ornament, or cheerful toy-like styling. A level may shift this mood (darker, more tense) only as its own section describes.
 - **Shape language:** asymmetric, organic, gently irregular; avoid perfectly geometric outlines, repeated identical leaves/stones, and mechanically even spacing. Shapes are deliberately readable at gameplay scale.
 - **Edges:** mostly well-defined silhouette edges with restrained dark contouring and internal linework; not uniformly thick black outlines. Softer edges and lower contrast in distant layers.
 - **Depth:** strong foreground/midground/background separation through overlap, atmospheric desaturation, scale, contrast and detail density. Playable ground is visually distinct from distant scenery.
 - **Detail:** many small forms nested inside a few clear large masses. Concentrate detail around important silhouettes and surfaces; allow broad calm regions so the player remains visible.
 - **Lighting:** controlled and localized. Ambient light establishes each biome; small emissive points, reflected color, selective highlights, and shaded undersides give depth. Do not illuminate everything equally.
-- **Color:** flexible, environment-specific color harmony rather than one fixed palette. Cave uses cool deep blue/teal shadows with warm orange-gold wood and vivid yellow-green leaves; forest uses blue-green foliage, muted warm grey/olive mist and earthy brown soil. Do not lock colors to exact hex values.
+- **Color:** flexible, environment-specific color harmony rather than one fixed palette; each level's section names its own harmony. Do not lock colors to exact hex values.
 - **Hero readability:** small white, black-outlined, simple upright character with two eyes and short legs, no visible arms in the references. Keep surrounding detail and value contrast from swallowing the hero.
 - **Environmental motifs:** vegetation, fungi, roots, tiny glowing particles, and eye-like organic forms. Their scale and prominence should follow the scene, not be inserted everywhere.
-
-## Forest biome — references 04–05
-### Visual construction
-- Wide horizontal side-scrolling woodland, layered tree trunks and large canopies.
-- Canopies consist of dense clusters of small, irregular leaf-like color patches, creating an almost stippled, cut-paper impression rather than individual photorealistic leaves.
-- Foreground trees use muted brown/red trunks with fine bark strokes; more distant trunks become simplified blue-green silhouettes.
-- Background recedes into warm grey-green haze with soft blurred woodland shapes. The nearest canopy is darker, more saturated turquoise/teal.
-- Ground is a clear horizontal gameplay line with low grasses, shrub clusters, mushrooms and occasional thin red-stemmed eye plants.
-- A broad soil cross-section fills the lower portion: dusty reddish-brown strata, restrained horizontal streaks, embedded stones and exposed, branching root systems. Root networks are drawn as delicate overlapping dark lines, not thick tubes.
-- Organic decorations may be strange (stalk eyes, multi-eyed plants) but remain visually integrated into the woodland.
-### Forest-specific rules
-- Prefer relatively flat fills and subtle layered tonal variation over strong specular shine.
-- Let canopies create dense texture; keep the central playable corridor comparatively uncluttered.
-- Avoid turning the forest into a cave palette or adding strong golden highlights to every plant.
 
 ## Shared material grammar
 | Material | Shape | Surface treatment | Light / shadow |
@@ -67,9 +63,32 @@ Create images belonging to the Forest environment of Find Myself. Match the visu
 - Inconsistent lighting directions within a single scene.
 
 ## Reference usage
-- Use the Forest screenshots (04–05) as the primary reference for this environment.
+- Use the level's own screenshots as the primary reference for its environment.
 - Match shape language, edge treatment, material rendering, detail density, depth and lighting hierarchy before exact RGB colors.
 - If a specific request conflicts with these guidelines, follow that request while retaining other visual principles.
+
+---
+
+# Part B — Forest-specific rules
+
+## Forest biome — references 04–05
+### Color
+- Forest uses blue-green foliage, muted warm grey/olive mist and earthy brown soil.
+### Visual construction
+- Wide horizontal side-scrolling woodland, layered tree trunks and large canopies.
+- Canopies consist of dense clusters of small, irregular leaf-like color patches, creating an almost stippled, cut-paper impression rather than individual photorealistic leaves.
+- Foreground trees use muted brown/red trunks with fine bark strokes; more distant trunks become simplified blue-green silhouettes.
+- Background recedes into warm grey-green haze with soft blurred woodland shapes. The nearest canopy is darker, more saturated turquoise/teal.
+- Ground is a clear horizontal gameplay line with low grasses, shrub clusters, mushrooms and occasional thin red-stemmed eye plants.
+- A broad soil cross-section fills the lower portion: dusty reddish-brown strata, restrained horizontal streaks, embedded stones and exposed, branching root systems. Root networks are drawn as delicate overlapping dark lines, not thick tubes.
+- Organic decorations may be strange (stalk eyes, multi-eyed plants) but remain visually integrated into the woodland.
+### Forest-specific rules
+- Prefer relatively flat fills and subtle layered tonal variation over strong specular shine.
+- Let canopies create dense texture; keep the central playable corridor comparatively uncluttered.
+- Avoid turning the forest into a cave palette or adding strong golden highlights to every plant.
+
+## Forest reference usage
+- Use the Forest screenshots (04–05) as the primary reference for this environment.
 
 ## Suggested prompt attachment text
 "Use art_style_forest.md and the attached Forest gameplay references as art-direction guides. Create an original Forest asset matching the established silhouettes, materials, colors, depth and detail density. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"

@@ -64,9 +64,7 @@ const LEVELS = [
     dialog: ConfirmDialog.LOOKS.CAVE,
     lessonPrefix: CAVE_LESSON_PREFIX,
     firstLesson: CAVE_FIRST_LESSON
-  },
-  { section: 'touch', icon: null, backdrop: BACKDROP_NIGHT },
-  { section: 'word', icon: null, backdrop: BACKDROP_NIGHT }
+  }
 ]
 //
 // Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
@@ -187,8 +185,6 @@ const PROHIBITED_RING_SEGMENTS = 36
 const PROHIBITED_RING_WIDTH = 5
 const PROHIBITED_SLASH_WIDTH = 7
 const PROHIBITED_SLASH_REACH = 0.72
-const PROHIBITED_PULSE_SPEED = 2
-const PROHIBITED_PULSE_AMP = 2
 const PROHIBITED_COLOR = FOREST_PAL.menuProhibited
 //
 // Baked texts: the key hint (centred), in the regular font with a dark drop
@@ -259,13 +255,10 @@ const MENU_BIRDS_VOLUME = CFG.audio.backgroundMusic.birds
 const MENU_BIRDS_FADE_SEC = 1.5
 //
 // Section-complete markers saved as lastLesson point at the next section's
-// first lesson (time-complete ends the game: no current lesson).
+// first lesson.
 //
 const MENU_COMPLETE_NEXT_LESSON = {
-  'word-complete': 'lesson-time.0',
-  'time-complete': null,
-  'touch-complete': 'lesson-word.0',
-  'forest-complete': 'lesson-touch.0'
+  'forest-complete': CAVE_FIRST_LESSON
 }
 const MENU_SCENE_GUARD_DELAY = 0.2
 const MENU_PREWARM_YIELD_FRAMES = 2
@@ -435,7 +428,7 @@ function createMenuMushrooms(inst) {
       k,
       z: MENU_ICON_Z,
       getPose: () => {
-        pose.scale = inst.layout.s
+        pose.scale = inst.layout.s * level.selectScale
         return pose
       },
       getLookAt: () => inst.heroInst.character.pos,
@@ -608,7 +601,10 @@ function onUpdate(inst) {
   //
   const hero = inst.heroInst.character
   hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
-  inst.glowMushrooms.forEach(item => GlowMushroom.onUpdate(item.mushroom, null))
+  inst.glowMushrooms.forEach(item => {
+    GlowMushroom.setStill(item.mushroom, item.level.index !== inst.selected)
+    GlowMushroom.onUpdate(item.mushroom, null)
+  })
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
@@ -676,11 +672,12 @@ function updatePointerHover(inst) {
   moved && level && selectLevel(inst, level.index)
 }
 //
-// Selected row: icon breathes; the rest settle back.
+// Selected playable row: icon breathes; the rest (and locked rows) settle
+// back.
 //
 function updateLevelRow(inst, row, dt) {
   const { k } = inst
-  const isSelected = row.index === inst.selected
+  const isSelected = row.index === inst.selected && row.playable
   const scaleTarget = isSelected ? 1 + MENU_SELECT_PULSE_AMP * Math.sin(k.time() * MENU_SELECT_PULSE_SPEED) : 1
   row.selectScale += (scaleTarget - row.selectScale) * Math.min(1, dt * MENU_SELECT_SCALE_EASE)
 }
@@ -810,11 +807,10 @@ function drawLevelIcons(inst) {
   locked.forEach(level => k.drawSprite({
     sprite: questionMarkSpriteName(layout.s),
     pos: k.vec2(layout.columnX + MENU_QUESTION_MARK_NUDGE_X * layout.s, level.y),
-    anchor: 'center',
-    scale: k.vec2(level.selectScale, level.selectScale)
+    anchor: 'center'
   }))
   const color = getRGB(k, PROHIBITED_COLOR)
-  locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s * level.selectScale, color))
+  locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s, color))
 }
 //
 // Cave icon: its visible art (cap top to ground) centred on the row; it
@@ -823,7 +819,7 @@ function drawLevelIcons(inst) {
 function drawGlowMushroomIcon(inst, item) {
   const { layout } = inst
   const { level, mushroom } = item
-  const scale = MENU_GLOW_MUSHROOM_SCALE * layout.s
+  const scale = MENU_GLOW_MUSHROOM_SCALE * layout.s * level.selectScale
   GlowMushroom.setPose(mushroom, layout.columnX, level.y + GlowMushroom.visibleHeight(mushroom, scale) / 2, scale)
   GlowMushroom.onDraw(mushroom)
   GlowMushroom.onDrawHalo(mushroom)
@@ -832,7 +828,7 @@ function drawGlowMushroomIcon(inst, item) {
 // Red ring with the diagonal slash over a locked level.
 //
 function drawProhibitedSign(k, cx, cy, scale, color) {
-  const r = (PROHIBITED_RING_RADIUS + Math.sin(k.time() * PROHIBITED_PULSE_SPEED) * PROHIBITED_PULSE_AMP) * scale
+  const r = PROHIBITED_RING_RADIUS * scale
   for (let i = 0; i < PROHIBITED_RING_SEGMENTS; i++) {
     const a1 = (i / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
     const a2 = ((i + 1) / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
@@ -910,7 +906,11 @@ function syncMenuLastLesson() {
   }
   const saved = get('lastLesson', null)
   const normalized = normalizeSceneName(saved)
-  const lastLevel = normalized in MENU_COMPLETE_NEXT_LESSON ? MENU_COMPLETE_NEXT_LESSON[normalized] : normalized
+  const next = normalized in MENU_COMPLETE_NEXT_LESSON ? MENU_COMPLETE_NEXT_LESSON[normalized] : normalized
+  //
+  // A save from a removed level (word / touch / time) has no scene to resume.
+  //
+  const lastLevel = LEVELS.some(level => next?.startsWith(level.lessonPrefix)) ? next : null
   lastLevel !== saved && set('lastLesson', lastLevel)
   return lastLevel
 }

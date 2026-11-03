@@ -187,6 +187,18 @@ export function setFade(inst, fade) {
 }
 
 /**
+ * Holds a mushroom still or lets it live: a still one never squats (a squat
+ * under way is dropped) and its halo stops breathing (an unselected menu
+ * icon).
+ * @param {Object} inst - Mushroom instance
+ * @param {boolean} still - True holds it still
+ */
+export function setStill(inst, still) {
+  inst.still = still
+  still && (inst.mainIdle = newIdle(), inst.babyIdle = newIdle())
+}
+
+/**
  * Moves and rescales a mushroom (the menu icon breathes with its row).
  * @param {Object} inst - Mushroom instance
  * @param {number} x - Stem base X
@@ -234,8 +246,8 @@ export function onUpdate(inst, heroInst) {
   const dt = inst.k.dt()
   inst.squash = Math.max(0, inst.squash - inst.squash * SQUASH_DECAY * dt)
   inst.cooldown = Math.max(0, inst.cooldown - dt)
-  tickIdle(inst.mainIdle, dt)
-  tickIdle(inst.babyIdle, dt)
+  inst.still || tickIdle(inst.mainIdle, dt)
+  inst.still || tickIdle(inst.babyIdle, dt)
   releaseFloat(inst)
   if (inst.kind !== MUSHROOM_KIND.DORMANT) return false
   updateLight(inst)
@@ -270,7 +282,7 @@ export function lightStep(inst) {
 export function onDrawHalo(inst) {
   if (inst.light <= 0) return
   const k = inst.k
-  const breath = 1 + Math.sin(k.time() * HALO_BREATH_SPEED + inst.phase) * HALO_BREATH_AMP
+  const breath = inst.still ? 1 : 1 + Math.sin(k.time() * HALO_BREATH_SPEED + inst.phase) * HALO_BREATH_AMP
   const r = inst.capW * HALO_RADIUS_FRAC * (inst.kind === MUSHROOM_KIND.DORMANT ? DORMANT_HALO_SCALE : 1)
   Glow.drawGlow(k, inst.x, inst.capTopY + inst.capW * CAP_H_FRAC, r, inst.haloRgb, inst.haloOpacity * inst.light * breath * inst.fade)
 }

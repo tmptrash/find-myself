@@ -30,7 +30,7 @@
 //
 import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
-import * as OrganicParallax from '../sections/touch/utils/organic-parallax-tree.js'
+import * as OrganicParallax from './organic-parallax-tree.js'
 import { drawMushroomToCanvas } from './draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from './draw-rock.js'
 import { drawMoonToCanvas } from './draw-moon.js'

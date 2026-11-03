@@ -1,7 +1,4 @@
-import * as CityBackground from '../sections/time/components/city-background.js'
 import * as BootLoader from './boot-loader.js'
-import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
-import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { waitForForestLevel0Bootstrap } from '../sections/forest/scenes/level0.js'
@@ -9,28 +6,23 @@ import { RESOLUTION_MODE } from './game-engine.js'
 import { finishReadyTvIntroNow } from './ready-tv-power-on.js'
 
 const READY_SCENE_NAME = 'ready'
+const FOREST_LEVEL0_SCENE = 'lesson-forest.0'
+const FOREST_SCENE_PREFIX = 'lesson-forest'
 //
-// City sprite names used by time levels — tracked so we can compare pack keys.
+// Asset packs: the forest level bakes its own heavy art; every other scene
+// (ready, menu, cave, forest-complete) builds its sprites inside the scene.
 //
-const TIME_LEVEL0_PLATFORM_BOTTOM = 250
-const TIME_LEVEL1_PLATFORM_BOTTOM = 150
-const TIME_LEVEL2_PLATFORM_BOTTOM = 150
-const TIME_LEVEL3_LOWER_CORRIDOR_Y = 680
-const TIME_LEVEL3_CORRIDOR_HEIGHT = 180
-//
-// City background sprite names for each time pack.
-// When entering any time level, the city backgrounds of ALL OTHER time levels
-// are squashed (replaced with a 1×1 placeholder) so their GPU textures become
-// eligible for GC before the new level's heavy canvas generation starts.
-// This prevents VRAM accumulation across level transitions, which caused
-// WebGL context loss on time level 1 and 2 entry.
-//
-const TIME_CITY_SPRITE = {
-  'time-0': 'city-background',
-  'time-1': 'city-background-level1',
-  'time-2': 'city-background-level2',
-  'time-3': 'city-background-level3'
+const PACK = {
+  HUB: 'hub',
+  FOREST: 'forest'
 }
+//
+// Loader bar share reached once a hub pack is "loaded".
+//
+const HUB_LOADER_BAR_PCT = 80
+const LOADER_START_BAR_PCT = 5
+const LOADER_DONE_BAR_PCT = 100
+const LOADER_YIELD_FRAMES = 2
 //
 // Pack key active when the last prepareSceneAssets completed.
 //
@@ -42,166 +34,15 @@ let activePackKey = null
 let prepareCancelNonce = 0
 //
 // After this many ms with no completion, reveal the DOM loader.
-// Short packs (hub/touch) finish well under this threshold.
+// Short hub packs finish well under this threshold.
 //
 const LOADER_REVEAL_DELAY_MS = 2000
-//
-// Registry for sprites loaded exclusively by time level 3.
-// Squashed (replaced with 1×1 canvas) when the pack changes away from time-3
-// so their GPU texture objects become eligible for GC.
-//
-const time3SpriteRegistry = new Set()
-
-/**
- * Register a sprite as belonging to the time-3 pack so it is squashed on pack exit.
- * Called by time level 3 for every sprite it loads.
- * @param {string} name - Kaplay sprite asset id
- */
-export function registerTime3Sprite(name) {
-  time3SpriteRegistry.add(name)
-}
 
 /**
  * Invalidate async asset preparation started for a level transition (e.g. Esc to menu).
  */
 export function bumpPrepareCancelNonce() {
   prepareCancelNonce++
-}
-
-/**
- * Scene name → asset pack id.
- * @param {string} sceneName
- * @returns {string}
- */
-export function sceneToPackKey(sceneName) {
-  if (!sceneName) return 'hub'
-  if (sceneName === 'word-complete' || sceneName === 'time-complete' || sceneName === 'touch-complete') {
-    return 'hub'
-  }
-  if (sceneName.startsWith('lesson-forest')) return 'forest'
-  if (sceneName.startsWith('forest-complete')) return 'hub'
-  if (sceneName.startsWith('lesson-word')) return 'word'
-  if (sceneName.startsWith('lesson-time')) return `time-${sceneName.split('.')[1]}`
-  if (sceneName.startsWith('lesson-touch')) return `touch-${sceneName.split('.')[1]}`
-  return 'hub'
-}
-
-async function loadTimeCityForLevel(k, sceneName) {
-  //
-  // onProgress is called inside preloadCityBackground between the draw phase
-  // and the blur phase (and again after blur). It updates the loader bar so the
-  // user sees gradual progress, and yields rAF frames so the browser can repaint.
-  //
-  const onProgress = async (pct) => {
-    BootLoader.setLoaderBarPct(pct)
-    await BootLoader.yieldForGpu(2)
-  }
-  if (sceneName === 'lesson-time.0') {
-    await CityBackground.preloadCityBackground(
-      k, TIME_LEVEL0_PLATFORM_BOTTOM, 'city-background',
-      false, false, true, 2.0, true, true, onProgress, true
-    )
-    return
-  }
-  if (sceneName === 'lesson-time.1') {
-    await CityBackground.preloadCityBackground(
-      k, TIME_LEVEL1_PLATFORM_BOTTOM, 'city-background-level1',
-      false, false, true, 0.6, true, true, onProgress, true
-    )
-    return
-  }
-  if (sceneName === 'lesson-time.2') {
-    await CityBackground.preloadCityBackground(
-      k, TIME_LEVEL2_PLATFORM_BOTTOM, 'city-background-level2',
-      false, true, true, 0.4, true, true, onProgress, true
-    )
-    return
-  }
-  if (sceneName === 'lesson-time.3') {
-    const groundLine = k.height() - (TIME_LEVEL3_LOWER_CORRIDOR_Y + TIME_LEVEL3_CORRIDOR_HEIGHT)
-    //
-    // No trees and no sun for level 3 — keeps VRAM lower and matches the snowy aesthetic.
-    //
-    await CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false, onProgress, true)
-    //
-    // Register city bg so it gets squashed when leaving time-3.
-    //
-    registerTime3Sprite('city-background-level3')
-  }
-}
-
-/**
- * Load GPU-heavy assets for the given pack. Loader bar may already be visible.
- * @param {Object} k
- * @param {string} packKey
- * @param {string} sceneName
- */
-async function applyPack(k, packKey, sceneName) {
-  //
-  // When switching away from time-3, squash its large sprites so the GPU texture
-  // objects become orphaned and eligible for GC. This reduces VRAM pressure when
-  // entering time-3 on a second or subsequent visit.
-  //
-  if (packKey !== 'time-3' && time3SpriteRegistry.size > 0) {
-    for (const name of time3SpriteRegistry) {
-      squashSpriteReleaseGpu(k, name)
-    }
-    time3SpriteRegistry.clear()
-  }
-  if (packKey === 'hub' || packKey.startsWith('touch-')) {
-    //
-    // Touch and hub scenes generate their own sprites inside the scene body — nothing to pre-load.
-    //
-    BootLoader.setLoaderBarPct(80)
-    await BootLoader.yieldForGpu(2)
-    return
-  }
-  if (packKey === 'forest') {
-    //
-    // Forest GPU work runs in prewarmForestLevel0HeavyAssets — no bar jump here.
-    //
-    return
-  }
-  if (packKey === 'word') {
-    BootLoader.setLoaderBarPct(40)
-    await BootLoader.yieldForGpu(1)
-    //
-    // Blade sprites use dynamic import to avoid a circular dependency chain.
-    //
-    const Blades = await import('../sections/word/components/blades.js')
-    const WordConsciousnessArt = await import('../sections/word/utils/word-consciousness-art.js')
-    Blades.loadSprites(k)
-    WordConsciousnessArt.loadBrainSprite(k)
-    BootLoader.setLoaderBarPct(85)
-    await BootLoader.yieldForGpu(3)
-    return
-  }
-  if (packKey.startsWith('time-')) {
-    //
-    // Squash city backgrounds of every other time level before generating the
-    // new one. Each city background is a 1920×1080 GPU texture (~8 MB); letting
-    // them accumulate across level transitions can push VRAM past the browser
-    // budget and trigger WebGL context loss on level 1 and 2 entry.
-    //
-    Object.entries(TIME_CITY_SPRITE).forEach(([pack, spriteName]) => {
-      pack !== packKey && squashSpriteReleaseGpu(k, spriteName)
-    })
-    BootLoader.setLoaderBarPct(20)
-    //
-    // Yield extra frames after squashing so the browser can flush pending GPU
-    // work and give GC a chance to reclaim old texture memory before the new
-    // city background drawing starts.
-    //
-    await BootLoader.yieldForGpu(3)
-    //
-    // loadTimeCityForLevel is async: it draws the canvas (~65 ms), yields, blurs
-    // (~130 ms), yields, then calls k.loadSprite. onProgress inside the function
-    // updates the bar from 55 → 85 % with repaints between each phase.
-    //
-    await loadTimeCityForLevel(k, sceneName)
-    BootLoader.setLoaderBarPct(95)
-    await BootLoader.yieldForGpu(2)
-  }
 }
 
 /**
@@ -227,30 +68,15 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
   // First hub attach after boot: loader is already visible at 100% from the boot sequence —
   // hide it quickly without a progress flash.
   //
-  const quietFirstHub = activePackKey === null && packKey === 'hub'
-  //
-  // Time packs call createCityBackgroundSprite which is synchronous and blocks the JS
-  // thread for several seconds. Show the loader and yield frames so the browser can
-  // repaint before we hand the thread to the canvas generator.
-  //
-  const isTimePack = packKey.startsWith('time-')
-  const isForestPack = packKey === 'forest'
+  const quietFirstHub = activePackKey === null && packKey === PACK.HUB
   let loaderShown = false
   let loaderTimer = null
   if (!quietFirstHub && !deferLoaderReveal) {
-    BootLoader.setLoaderBarPct(5)
-    if (isTimePack) {
+    BootLoader.setLoaderBarPct(LOADER_START_BAR_PCT)
+    if (packKey === PACK.FOREST) {
       BootLoader.showLoader()
       loaderShown = true
-      //
-      // Two rAF frames so the browser actually paints the loader before the sync block.
-      //
-      await BootLoader.yieldForGpu(2)
-      if (nonceAtStart !== prepareCancelNonce) return
-    } else if (isForestPack) {
-      BootLoader.showLoader()
-      loaderShown = true
-      await BootLoader.yieldForGpu(2)
+      await BootLoader.yieldForGpu(LOADER_YIELD_FRAMES)
       if (nonceAtStart !== prepareCancelNonce) return
     } else {
       loaderTimer = setTimeout(() => {
@@ -261,14 +87,14 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
     }
   }
   try {
-    await applyPack(k, packKey, sceneName)
+    await applyPack(packKey)
     if (nonceAtStart !== prepareCancelNonce) return
-    if (loaderShown) BootLoader.setLoaderBarPct(100)
+    loaderShown && BootLoader.setLoaderBarPct(LOADER_DONE_BAR_PCT)
     activePackKey = packKey
   } finally {
-    if (loaderTimer) clearTimeout(loaderTimer)
-    if (loaderShown && !retainLoader) BootLoader.hideLoader()
-    if (quietFirstHub && !retainLoader) BootLoader.hideLoader()
+    loaderTimer && clearTimeout(loaderTimer)
+    loaderShown && !retainLoader && BootLoader.hideLoader()
+    quietFirstHub && !retainLoader && BootLoader.hideLoader()
   }
 }
 
@@ -277,17 +103,13 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
  */
 export function onEngineResolutionSwapped() {
   activePackKey = null
-  time3SpriteRegistry.clear()
 }
 
 /**
- * Enter the scene. Native-resolution scenes (Forest, touch lesson 0) run on a
- * differently sized engine than the one passed in — ensureEngineForScene transparently
- * swaps to it first, tearing down and rebooting the whole Kaplay instance
- * when needed (see engine-switch.js). Touch procedural sprites from the
- * previous level are drained from the registry (no GPU free — GC handles
- * memory) so the new scene can re-register the same names without stale
- * tracking state.
+ * Enter the scene. A scene on the other resolution mode (forest-complete runs
+ * on the fixed engine) needs a differently sized engine than the one passed
+ * in — ensureEngineForScene transparently swaps to it first, tearing down and
+ * rebooting the whole Kaplay instance when needed (see engine-switch.js).
  * @param {Object} k
  * @param {string} sceneName
  * @param {Function} [afterGo]
@@ -299,33 +121,18 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   })
   //
   // A swapped-in engine starts with nothing beyond its core boot assets
-  // loaded — any pack/registry bookkeeping from the previous engine no
-  // longer describes what is actually resident on the GPU.
+  // loaded — any pack bookkeeping from the previous engine no longer
+  // describes what is actually resident on the GPU.
   //
   switched && onEngineResolutionSwapped()
-  //
-  // Pack prep may have run on the outgoing engine (e.g. menu native → time fixed).
-  // Reload on the live instance so scene sprites like city-background exist.
-  //
   switched && await prepareSceneAssets(liveK, sceneName, { deferLoaderReveal: true })
-  //
-  // Paint canvas immediately so the previous scene (menu) does not flash for a frame
-  //
-  if (sceneName.startsWith('lesson-touch')) {
-    liveK.setBackground(liveK.rgb(26, 26, 26))
-    liveK.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
-  }
-  //
-  // Clear Touch sprite tracking so next scene starts with a clean registry list.
-  //
-  drainTrackedTouchSpriteNames()
   //
   // The page-load TV snow and its hiss belong to the first "ready" screen only.
   //
   sceneName !== READY_SCENE_NAME && finishReadyTvIntroNow()
   setActiveSceneName(sceneName)
   liveK.go(sceneName)
-  sceneName === 'lesson-forest.0' && await waitForForestLevel0Bootstrap()
+  sceneName === FOREST_LEVEL0_SCENE && await waitForForestLevel0Bootstrap()
   afterGo?.(liveK)
 }
 
@@ -357,12 +164,12 @@ export function goAfterPreparingAssets(k, sceneName, afterGo) {
  */
 export function goToMenuAfterAssets(k) {
   //
-  // Only pre-show the loader when an actual engine swap is coming — menu now
-  // shares the native engine with Forest/touch lesson 0, so leaving one of
-  // those straight into menu needs no swap at all. Checking the CURRENT mode
-  // alone (rather than whether it differs from menu's target mode) used to
-  // retain a loader that ensureEngineForScene's same-mode early return would
-  // then never hide, freezing the screen.
+  // Only pre-show the loader when an actual engine swap is coming — menu
+  // shares the native engine with Forest and Cave, so leaving one of those
+  // straight into menu needs no swap at all. Checking the CURRENT mode alone
+  // (rather than whether it differs from menu's target mode) used to retain
+  // a loader that ensureEngineForScene's same-mode early return would then
+  // never hide, freezing the screen.
   //
   const modeChanging = resolutionModeForScene('menu') !== getActiveResolutionMode()
   if (modeChanging) {
@@ -372,4 +179,19 @@ export function goToMenuAfterAssets(k) {
   return prepareSceneAssetsThenEnterScene(k, 'menu', undefined, {
     retainLoader: modeChanging
   })
+}
+//
+// Scene name → asset pack id.
+//
+function sceneToPackKey(sceneName) {
+  return sceneName?.startsWith(FOREST_SCENE_PREFIX) ? PACK.FOREST : PACK.HUB
+}
+//
+// Loads the GPU-heavy assets of a pack. Forest GPU work runs in
+// prewarmForestLevel0HeavyAssets, so only the hub moves the loader bar.
+//
+async function applyPack(packKey) {
+  if (packKey === PACK.FOREST) return
+  BootLoader.setLoaderBarPct(HUB_LOADER_BAR_PCT)
+  await BootLoader.yieldForGpu(LOADER_YIELD_FRAMES)
 }

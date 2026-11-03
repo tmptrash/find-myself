@@ -8,7 +8,7 @@ import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerForestNativeTeardown } from '../../../utils/engine-switch.js'
 import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
-import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
+import * as LevelIndicator from '../../../components/lesson-indicator.js'
 import {
   drawCuteMushroomToCanvas,
   drawCuteMushroomPupilOverlay,

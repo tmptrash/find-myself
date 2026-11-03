@@ -3,27 +3,11 @@ import { CFG } from "../cfg.js"
 import { sceneReady } from "../scenes/ready.js"
 import { sceneForestHeroFramesPreview } from "../scenes/forest-hero-frames-preview.js"
 import { sceneMenu } from "../scenes/menu.js"
-import { sceneLesson0 } from "../sections/word/scenes/lesson0.js"
-import { sceneLesson1 } from "../sections/word/scenes/lesson1.js"
-import { sceneLesson2 } from "../sections/word/scenes/lesson2.js"
-import { sceneLesson3 } from "../sections/word/scenes/lesson3.js"
-import { sceneLesson4 } from "../sections/word/scenes/lesson4.js"
-import { sceneWordComplete } from "../sections/word/scenes/word-complete.js"
 import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
 import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
 import { sceneCaveLevel0 } from "../sections/cave/scenes/level0.js"
-import { sceneLesson0 as sceneTouchLevel0 } from "../sections/touch/scenes/lesson0.js"
-import { sceneLesson1 as sceneTouchLevel1 } from "../sections/touch/scenes/lesson1.js"
-import { sceneLesson2 as sceneTouchLevel2 } from "../sections/touch/scenes/lesson2.js"
-import { sceneLesson3 as sceneTouchLevel3 } from "../sections/touch/scenes/lesson3.js"
-import { sceneTouchComplete } from "../sections/touch/scenes/touch-complete.js"
-import { sceneLesson0 as sceneTimeLevel0 } from "../sections/time/scenes/lesson0.js"
-import { sceneLesson1 as sceneTimeLevel1 } from "../sections/time/scenes/lesson1.js"
-import { sceneLesson2 as sceneTimeLevel2 } from "../sections/time/scenes/lesson2.js"
-import { sceneLesson3 as sceneTimeLevel3 } from "../sections/time/scenes/lesson3.js"
-import { sceneTimeComplete } from "../sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "../components/hero.js"
-import { prepareDesaturatedLifeSprite } from "../sections/touch/components/lesson-indicator.js"
+import { prepareDesaturatedLifeSprite } from "../components/lesson-indicator.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
@@ -426,25 +410,9 @@ function buildSetupTasks(k) {
     () => sceneReady(k),
     () => sceneForestHeroFramesPreview(k),
     () => sceneMenu(k),
-    () => sceneLesson0(k),
-    () => sceneLesson1(k),
-    () => sceneLesson2(k),
-    () => sceneLesson3(k),
-    () => sceneLesson4(k),
-    () => sceneWordComplete(k),
     () => sceneForestLevel0(k),
     () => sceneForestComplete(k),
-    () => sceneCaveLevel0(k),
-    () => sceneTouchLevel0(k),
-    () => sceneTouchLevel1(k),
-    () => sceneTouchLevel2(k),
-    () => sceneTouchLevel3(k),
-    () => sceneTouchComplete(k),
-    () => sceneTimeLevel0(k),
-    () => sceneTimeLevel1(k),
-    () => sceneTimeLevel2(k),
-    () => sceneTimeLevel3(k),
-    () => sceneTimeComplete(k)
+    () => sceneCaveLevel0(k)
   ]
 }
 /**

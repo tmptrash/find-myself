@@ -1,11 +1,10 @@
 import { CFG } from '../cfg.js'
 import { parseHex, onPhysicalKeyPress, releasePhysicalKeys, resetPhysicalInputLayer } from './helper.js'
-import { setSectionCompleted, set, normalizeSceneName } from './progress.js'
+import { set, normalizeSceneName } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
 import * as Hero from '../components/hero.js'
-import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce, onEngineResolutionSwapped } from './lesson-assets.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
 import * as BootLoader from './boot-loader.js'
@@ -24,61 +23,31 @@ import { focusGameCanvas } from './canvas-focus.js'
  */
 // TODO: complete this by two items arrays
 const LEVEL_TRANSITIONS = {
-  'menu': 'lesson-word.0',
-  'menu-time': 'lesson-time.0',
-  'menu-touch': 'lesson-touch.0',
   'menu-forest': 'lesson-forest.0',
   'menu-cave': 'lesson-cave.0',
   'lesson-forest.0': 'lesson-cave.0',
-  'lesson-cave.0': 'lesson-touch.0',
-  'forest-complete': 'lesson-touch.0',
-  'lesson-word.0': 'lesson-word.1',
-  'lesson-word.1': 'lesson-word.2',
-  'lesson-word.2': 'lesson-word.3',
-  'lesson-word.3': 'lesson-word.4',
-  'lesson-word.4': 'word-complete',
-  'word-complete': 'menu',
-  'lesson-time.0': 'lesson-time.1',
-  'lesson-time.1': 'lesson-time.2',
-  'lesson-time.2': 'lesson-time.3',
-  'lesson-time.3': 'time-complete',
-  'time-complete': 'menu',
-  'lesson-touch.0': 'lesson-touch.1',
-  'lesson-touch.1': 'lesson-touch.2',
-  'lesson-touch.2': 'lesson-touch.3',
-  'lesson-touch.3': 'touch-complete',
-  'touch-complete': 'menu'
+  'lesson-cave.0': 'menu',
+  'forest-complete': 'menu'
 }
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)
-// Format: [text, sound_id, hold_duration] or just text (for touch section)
+// Format: [text, sound_id, hold_duration] or just text
 const LEVEL_SUBTITLES = {
   'menu': '',
-  'menu-time': '',
-  'menu-touch': '',
   'menu-forest': '',
   'menu-cave': '',
   'lesson-forest.0': '',
   'lesson-cave.0': '',
-  'forest-complete': '',
-  'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
-  'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
-  'lesson-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
-  'lesson-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
-  'lesson-word.4': ['Thoughts you can\'t stop, no matter how hard you try...', 'word4-pre', 5.5],
-  'lesson-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
-  'lesson-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
-  'lesson-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
-  'lesson-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
-  'lesson-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
-  'lesson-touch.1': '',
-  'lesson-touch.2': '',
-  'lesson-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
+  'forest-complete': ''
 }
 
 //
 // Pre-level phrase must draw above the opaque transition overlay (see below).
 //
+//
+// Kaplay sounds silenced the moment a transition starts.
+//
+const TRANSITION_SOUNDS_TO_STOP = ['breath']
 const TRANSITION_OVERLAY_Z = CFG.visual.zIndex.ui + 2600
 const TRANSITION_SUBTITLE_Z = TRANSITION_OVERLAY_Z + 20
 const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
@@ -91,7 +60,6 @@ const FOREST_PREWARM_BAR_START = 5
 const FOREST_PREWARM_BAR_END = 38
 const FOREST_BOOTSTRAP_BAR_START = FOREST_PREWARM_BAR_END
 const FOREST_BOOTSTRAP_BAR_END = 100
-const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
 //
 // Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)
 // usually finishes well under this window — the DOM loader only reveals
@@ -109,17 +77,12 @@ const SUBTITLE_LINE_SPACING = 12     // Extra vertical pixels between subtitle l
 // Approximate monospace char width ratio for subtitle / hint width matching
 //
 const HINT_CHAR_WIDTH_RATIO = 0.55
+const HINT_Y_OFFSET_EM = 1.9
 //
 // Subtitle colors per section (matches anti-hero hover color in menu scene)
 //
-const TIME_SUBTITLE_COLOR = '#FF8C00'
 const SECTION_SUBTITLE_COLORS = {
-  forest: FOREST_PAL.heroBodyGray,
-  time: TIME_SUBTITLE_COLOR,
-  word: CFG.visual.colors.sections.word.body,
-  touch: CFG.visual.colors.sections.touch.body,
-  feel: CFG.visual.colors.sections.feel.body,
-  mind: CFG.visual.colors.sections.mind.body
+  forest: FOREST_PAL.heroBodyGray
 }
 const DEFAULT_SUBTITLE_COLOR = '#6B8E9F'
 
@@ -138,7 +101,7 @@ export function getNextLevel(currentLevel) {
  * Looks up which "menu-to-section" key produces targetLevel and replays
  * the transition from there so the subtitle is shown again.
  * @param {Object} k - Kaplay instance
- * @param {string} targetLevel - Target level to go to (e.g., 'lesson-time.0')
+ * @param {string} targetLevel - Target level to go to (e.g., 'lesson-forest.0')
  */
 export function showTransitionToLevel(k, targetLevel) {
   targetLevel = normalizeSceneName(targetLevel)
@@ -148,7 +111,7 @@ export function showTransitionToLevel(k, targetLevel) {
   }
   //
   // Find the key whose transition chain starts at targetLevel.
-  // E.g. if targetLevel is 'lesson-time.0', previousLevel is 'menu-time'.
+  // E.g. if targetLevel is 'lesson-forest.0', previousLevel is 'menu-forest'.
   //
   const previousLevel = getPreviousLevel(targetLevel)
   if (previousLevel) {
@@ -169,40 +132,12 @@ export function showTransitionToLevel(k, targetLevel) {
  * User can press Space, ENTER or click mouse to skip the transition and go directly to next level
  * 
  * @param {Object} k - Kaplay instance
- * @param {string} currentLevel - Current level name (e.g., 'lesson-word.0' or 'menu')
+ * @param {string} currentLevel - Current level name (e.g., 'lesson-forest.0' or 'menu-forest')
  * @param {Function} onComplete - Callback when transition completes
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
   const nextLevel = LEVEL_TRANSITIONS[currentLevel] || null
   let transitionK = k
-  //
-  // Check if section is completed (last level of section going to completion screen)
-  //
-  if (nextLevel === 'word-complete' || nextLevel === 'time-complete' || nextLevel === 'touch-complete') {
-    //
-    // Extract section name from level name (e.g., 'lesson-word.4' -> 'word')
-    //
-    const sectionMatch = currentLevel.match(/(?:level|lesson)-(\w+)\.\d+/)
-    if (sectionMatch) {
-      const sectionName = sectionMatch[1]
-      setSectionCompleted(sectionName)
-    }
-    //
-    // Save completion screen as lastLevel so continue returns to menu
-    //
-    //
-    // Set lastLevel to the first level of the NEXT section
-    //
-    if (nextLevel === 'word-complete') set('lastLesson', 'lesson-time.0')
-    if (nextLevel === 'time-complete') set('lastLesson', null)
-    if (nextLevel === 'touch-complete') set('lastLesson', 'lesson-word.0')
-    //
-    // Go directly to completion screen without transition overlay
-    //
-    goAfterPreparingAssets(k, nextLevel)
-    return
-  }
-  
   if (!nextLevel) {
     // No transition defined, go directly
     onComplete?.()
@@ -213,11 +148,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // survive k.go unless cleared here before the transition registers its own.
   //
   resetPhysicalInputLayer()
-  //
-  // IMMEDIATELY stop all background sounds when transition starts
-  // This prevents sounds from playing during transition text
-  //
-  stopTimeSectionMusic(k)
   //
   // Mute procedural sounds and suspend AudioContext to silence all active oscillators
   //
@@ -236,7 +166,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const originalVolume = k.volume()
   k.volume(0)
-  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
+  const soundsToStop = TRANSITION_SOUNDS_TO_STOP
   soundsToStop.forEach(soundName => {
     try {
       const sound = k.getSound(soundName)
@@ -266,16 +196,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // If so, start with black_pause phase since overlay is already opaque (no slow fade)
   //
   const isFromLevel = currentLevel !== 'menu' && isLessonScene(currentLevel)
-  const isFromMenuTime = currentLevel === 'menu-time'
-  const isFromMenuTouch = currentLevel === 'menu-touch'
   const isFromMenuForest = currentLevel === 'menu-forest'
   const isFromMenuCave = currentLevel === 'menu-cave'
-  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuForest || isFromMenuCave
+  const isFromMenuSection = isFromMenuForest || isFromMenuCave
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
   const isForestPrelevel = needsEarlyAssetLoad && nextLevel === FOREST_PRELEVEL_SCENE
-  const isNativePrelevel = isForestPrelevel ||
-    (needsEarlyAssetLoad && nextLevel === TOUCH_L0_PRELEVEL_SCENE)
+  const isNativePrelevel = isForestPrelevel
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   //
   // Native-resolution scenes: pack prep + heavy prewarm run behind the
@@ -410,7 +337,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionK.volume(inst.originalVolume)
     Sound.unmuteProceduralSounds()
     Sound.resumeGlobalAudio()
-    stopTimeSectionMusic()
     inst.tooltipSuppressed && Tooltip.unsuppressAll()
     inst.tooltipSuppressed = false
     Hero.unsuppressIdleVocalization()
@@ -637,8 +563,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       //
       if (timer === 0 || !inst.soundsStopped) {
         inst.soundsStopped = true
-        stopTimeSectionMusic(k)
-        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
+        const soundsToStop = TRANSITION_SOUNDS_TO_STOP
         soundsToStop.forEach(soundName => {
           try {
             const sound = k.getSound(soundName)
@@ -688,14 +613,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
 
         if (subtitle) {
           //
-          // Stop all music and sound effects, keep only voice-over (xxx-pre files)
-          //
-          stopTimeSectionMusic(k)
-          //
           // Stop all Kaplay sounds except voice-over (xxx-pre files)
-          // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3
           //
-          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'boss']
+          const soundsToStop = TRANSITION_SOUNDS_TO_STOP
           soundsToStop.forEach(soundName => {
             try {
               const sound = k.getSound(soundName)
@@ -779,7 +699,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           if (hintText) {
             const hintSize = textSize * 0.55
-            const hintYOffset = nextLevel === 'lesson-touch.0' ? textSize * 2.35 : textSize * 1.9
+            const hintYOffset = textSize * HINT_Y_OFFSET_EM
             const hintY = textY + hintYOffset
             const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
             if (useForestGrain) {
@@ -1097,14 +1017,14 @@ function playCRTShutdownSound(k) {
 
 /**
  * Extracts section name from level identifier and returns matching subtitle color
- * @param {string} level - Level name (e.g., 'lesson-word.2', 'menu-touch')
+ * @param {string} level - Level name (e.g., 'lesson-forest.0', 'menu-cave')
  * @returns {string} Hex color string for that section's subtitle
  */
 function getSectionSubtitleColor(level) {
   if (!level) return DEFAULT_SUBTITLE_COLOR
   //
-  // Extract section from level name (handles 'lesson-word.2', 'level-word.2'
-  // and 'menu-touch' formats)
+  // Extract section from level name (handles 'lesson-forest.0',
+  // 'level-forest.0' and 'menu-cave' formats)
   //
   const match = level.match(/^(?:lesson-|level-|menu-)(\w+)/)
   const section = match ? match[1] : null

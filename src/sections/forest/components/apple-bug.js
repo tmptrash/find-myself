@@ -285,6 +285,30 @@ export function holeClearSpan(holeX) {
   return { x1: holeX + place.dx - HOLE_CLEAR_PAD, x2: holeX + place.dx + place.w + HOLE_CLEAR_PAD }
 }
 
+/**
+ * The bomb it fears (the one nearest its burrow) burst: out in the open it
+ * jerks towards the burrow and runs in (an apple in its mouth goes with
+ * it); either way it stays in a little while (bombHideMin..bombHideMax).
+ * Already on its way in or out of the burrow, it carries on.
+ * @param {Object|null} inst - Bug inst
+ */
+export function onBombBurst(inst) {
+  if (!inst || inst.state === STATES.EMERGE || inst.state === STATES.SINK || inst.state === STATES.FLEE) return
+  const hide = randomIn(PARAMS.bombHideMin, PARAMS.bombHideMax)
+  if (inst.state === STATES.INSIDE) {
+    inst.hideLeft = Math.max(inst.hideLeft, hide)
+    return
+  }
+  !inst.carrying && inst.fruit && releaseApple(inst)
+  retractTongue(inst)
+  startle(inst)
+  inst.headTarget = 0
+  inst.nextHide = hide
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.FLEE
+}
+
 //
 // The bug's behaviour, its motion and pose, its legs, then what it fears:
 // the flower's water and a crawler eating near it.

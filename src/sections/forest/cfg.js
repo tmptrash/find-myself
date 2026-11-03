@@ -86,6 +86,8 @@ const APPLE_BUG = {
   scaredHideMax: 18,
   appleHideMin: 5,                  // After it took an apple home
   appleHideMax: 8,
+  bombHideMin: 2,                   // After the burst of the bomb nearest its burrow (a short scare)
+  bombHideMax: 4,
   crawlerFearReach: 150,            // A crawler eating this near sends it home; it keeps this far from one while out
   lakeShare: 0.6,                   // Share of its outings spent hunting at the lake
   //

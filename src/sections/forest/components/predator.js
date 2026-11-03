@@ -74,6 +74,7 @@ const SWIM_SHORE_RAMP_PX = 56
  * @param {{x1: number, x2: number, surfaceY: number}} [cfg.water] - Lake span the crawler can swim across
  * @param {number} [cfg.fleeLeftX] - Far-left swim target when fleeing left
  * @param {number} [cfg.homeX] - Roam-home X when the hero is off the ground line
+ * @param {{x1: number, x2: number, z: number}} [cfg.frontSpan] - While any body part is within x1..x2 it draws at z (in front of a big prop there)
  * @returns {Object} Predator inst
  */
 export function create(cfg) {
@@ -90,6 +91,7 @@ export function create(cfg) {
     water: cfg.water ?? null,
     fleeLeftX: cfg.fleeLeftX ?? cfg.minX,
     homeX: cfg.homeX ?? cfg.x,
+    frontSpan: cfg.frontSpan ?? null,
     swimming: false,
     fleePath: null,
     hero: cfg.hero,
@@ -150,6 +152,7 @@ export function update(inst, dt) {
   tickLegs(inst, dt, hurry)
   tickEyes(inst, dt, lookTarget)
   inst.y = inst.segments[0].y
+  syncDrawZ(inst)
 }
 
 /**
@@ -275,7 +278,17 @@ function predatorBodyCenterX(inst) {
   if (!segs?.length) return inst.x
   return (segs[0].x + segs[segs.length - 1].x) * 0.5
 }
-
+//
+// The whole body switches layer at once — a half-switched body would split
+// across the prop.
+//
+function syncDrawZ(inst) {
+  const span = inst.frontSpan
+  if (!span) return
+  const inFront = inst.segments.some(seg => seg.x >= span.x1 && seg.x <= span.x2)
+  const z = inFront ? span.z : DRAW_Z
+  inst.obj.z !== z && (inst.obj.z = z)
+}
 function syncFootstepAudibility(inst) {
   const sfx = inst.sfx
   if (!sfx?.predatorFootGain) return

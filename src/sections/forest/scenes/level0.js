@@ -282,6 +282,11 @@ const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 const LEFT_TREE_ROOT_HALF = 180
 //
+// The centipede passes in front of the left big tree (above its trunk, under
+// the plants at its foot); elsewhere it stays behind the hero.
+//
+const PREDATOR_LEFT_TREE_FRONT_Z = CFG.visual.zIndex.platforms - 1.75
+//
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
 //
@@ -1461,7 +1466,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       // A left flight swims for the lake's far end; the eye flower's island
       // stops it first, the snout right against the island's slope.
       //
-      fleeLeftX: lakeX1
+      fleeLeftX: lakeX1,
+      frontSpan: {
+        x1: LEFT_TREE_FOOT.x - LEFT_TREE_ROOT_HALF,
+        x2: LEFT_TREE_FOOT.x + LEFT_TREE_ROOT_HALF,
+        z: PREDATOR_LEFT_TREE_FRONT_Z
+      }
     })
     if (zones.predatorAwake) {
       isForestSpawnTooCloseToPredator(predator, heroSpawnX, heroSpawnY) &&
@@ -6243,6 +6253,19 @@ function onForestTomatoExplode(inst, x, y) {
   triggerForestCameraShake(inst)
   grantForestTomatoBurstHeroSafety(inst, x, y)
   inst.predator && !inst.predator.obj?.hidden && Predator.startFlee(inst.predator, x)
+  isAppleBugBomb(inst, x) && AppleBug.onBombBurst(inst.appleBug)
+}
+//
+// The apple bug only fears the bomb of the tree nearest its burrow (a bomb
+// falls straight down from its fork, so the burst marks its tree).
+//
+function isAppleBugBomb(inst, burstX) {
+  const trees = inst.earTrees?.trees
+  if (!inst.appleBug || !trees?.length) return false
+  return nearestForestTree(trees, burstX) === nearestForestTree(trees, BUG_HOLE_X)
+}
+function nearestForestTree(trees, x) {
+  return trees.reduce((best, tree) => (Math.abs(tree.x - x) < Math.abs(best.x - x) ? tree : best))
 }
 //
 // A burst under the hero used to overlap with flee touch-kill — keep him alive

@@ -74,6 +74,7 @@ import {
   tickForestTreeFruits
 } from '../utils/forest-tree-fruit.js'
 import { bakeLeftTree, leftTreeBranch, leftTreeApple } from '../utils/forest-left-tree.js'
+import * as WaterMushroom from '../components/water-mushroom.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
 import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
@@ -235,6 +236,12 @@ const LEFT_TREE_FOOT = { x: TREE_X, y: FLOOR_Y }
 // fruit and the hero.
 //
 const LEFT_TREE_PLANTS_Z_BELOW = 1.5
+//
+// The water mushroom stands on the ground line just right of the left tree's
+// foot, behind the hero like the level's other ground decor.
+//
+const WATER_MUSHROOM_OFFSET_X = 96
+const WATER_MUSHROOM_Z = CFG.visual.zIndex.player - 1
 //
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
@@ -1198,7 +1205,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and its knockable apple sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms()])
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterMushroom.load(k)])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -1238,6 +1245,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k.pos(leftTree.plants.x, leftTree.plants.y),
       k.z(CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW)
     ])
+    WaterMushroom.create({
+      k,
+      x: LEFT_TREE_FOOT.x + WATER_MUSHROOM_OFFSET_X,
+      y: LEFT_TREE_FOOT.y,
+      z: WATER_MUSHROOM_Z
+    })
     const floorBounds = createLevelBounds(k)
     if (await forestBootstrapPause(bootstrap, 27, session)) return
     const floorPlat = floorBounds.floor

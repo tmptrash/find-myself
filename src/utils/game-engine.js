@@ -392,7 +392,6 @@ function buildSetupTasks(k) {
   return [
     () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Regular.ttf"),
     () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
-    () => k.loadSprite("life", "./life.png"),
     () => k.loadSprite("eye-hud-0", "./eye_0.png"),
     () => k.loadSprite("eye-hud-1", "./eye_1.png"),
     () => k.loadSprite("eye-hud-2", "./eye_2.png"),

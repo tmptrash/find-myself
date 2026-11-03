@@ -1,6 +1,6 @@
 # Find Myself — Forest Art Style
 
-Version: 1.3 (general rules split from Forest-specific rules)
+Version: 1.4 (analog, non-mechanical rule added to the general rules)
 Source of truth: approved Forest gameplay screenshots (04–05).
 
 This file has two parts:
@@ -36,6 +36,15 @@ Create images belonging to one level (environment) of Find Myself. Match the vis
 - **Hero readability:** small white, black-outlined, simple upright character with two eyes and short legs, no visible arms in the references. Keep surrounding detail and value contrast from swallowing the hero.
 - **Environmental motifs:** vegetation, fungi, roots, tiny glowing particles, and eye-like organic forms. Their scale and prominence should follow the scene, not be inserted everywhere.
 
+## Analog, not mechanical
+The style is analog, like everything in nature: made by hand and grown, never stamped out by a rule or a machine. Controlled irregularity beats precision. If a viewer can spot the rule that placed something (a grid, a copy-paste, a mirrored half, even steps), roughen it.
+- **Never exact:** no perfectly repeated, mirrored, aligned or evenly spaced elements, no perfect symmetry, no ruler-straight lines, no perfect circles or arcs. Horizontals are slightly uneven, curves wander, edges vary in weight along their length.
+- **Every instance differs:** two things of one kind differ in size, tilt, proportion, tone and wear. Clusters have uneven counts and uneven gaps. Break any rhythm that starts to feel regular.
+- **Colour and light drift:** surfaces shift gradually in hue and value (mottling, stains, patches of wear, uneven wetness, soft light falloff) instead of flat uniform fills or hard stepped gradients. The same material is a little warmer here and cooler there.
+- **Analog texture:** grain, soft bleed and paint-like variation, as in film or gouache. Not tiled patterns, uniform digital noise, or sterile pixel-perfect vector edges.
+- **Living motion:** idle and ambient animation has organic timing: eased starts and stops, a slightly different beat each cycle, offset phases between neighbours. Nothing moves in lockstep like a metronome, and loops do not read as a loop.
+- **Structured, not random:** irregularity follows how the thing grows (branching, weathering, flow of water, pull of light). Pure noise looks as artificial as pure order.
+
 ## Shared material grammar
 | Material | Shape | Surface treatment | Light / shadow |
 | --- | --- | --- | --- |
@@ -61,6 +70,7 @@ Create images belonging to one level (environment) of Find Myself. Match the vis
 - Oversaturated rainbow palettes, uniformly bright backgrounds, noisy details with no visual hierarchy.
 - Generic fantasy props unrelated to the approved screenshots.
 - Inconsistent lighting directions within a single scene.
+- Mechanical regularity: copy-pasted, mirrored or grid-spaced elements, perfect symmetry, ruler-straight lines, perfect circles, uniform sizes, lockstep animation, flat digital gradients.
 
 ## Reference usage
 - Use the level's own screenshots as the primary reference for its environment.
@@ -91,4 +101,4 @@ Create images belonging to one level (environment) of Find Myself. Match the vis
 - Use the Forest screenshots (04–05) as the primary reference for this environment.
 
 ## Suggested prompt attachment text
-"Use art_style_forest.md and the attached Forest gameplay references as art-direction guides. Create an original Forest asset matching the established silhouettes, materials, colors, depth and detail density. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"
+"Use art_style_forest.md and the attached Forest gameplay references as art-direction guides. Create an original Forest asset matching the established silhouettes, materials, colors, depth and detail density. The look is analog and organic like nature, never mechanical: nothing exactly repeated, symmetric or evenly spaced. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"

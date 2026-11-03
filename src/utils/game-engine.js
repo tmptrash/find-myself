@@ -15,7 +15,6 @@ import { installLevelFadeIn } from "./transition.js"
 import { setFocusCanvas, focusGameCanvas } from "./canvas-focus.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
-import { resetLessonHelpPanelState } from "./lesson-help.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -251,14 +250,6 @@ function unlockKaplayAudioOnFirstGesture(k) {
 export function teardownEngine(k) {
   if (!k) return
   resetPhysicalInputLayer()
-  //
-  // A help/letter-dialog panel mid-fade (or still open) when this engine
-  // gets torn down never reaches the scene-scoped onUpdate branch that
-  // clears its open flag — leaving isAnyPanelOpen() stuck true and jump
-  // (its only caller, via attemptHeroJump) silently blocked everywhere for
-  // the rest of the session, including levels that never touch a panel.
-  //
-  resetLessonHelpPanelState()
   const canvas = k.canvas
   if (canvas) {
     canvas.removeEventListener('webglcontextlost', onWebGLContextLost, false)
@@ -421,46 +412,11 @@ function buildSetupTasks(k) {
  */
 function buildSoundTasks(k) {
   const sounds = [
+    ['birds', './sounds/birds.mp3'],
     ['time', './sounds/time.mp3'],
-    ['time0', './sounds/time0.mp3'],
-    ['time0-pre', './sounds/time0-pre.mp3'],
-    ['time0-kids', './sounds/time0-kids.mp3'],
-    ['time1-pre', './sounds/time1-pre.mp3'],
-    ['time2-pre', './sounds/time2-pre.mp3'],
-    ['time3-pre', './sounds/time3-pre.mp3'],
-    ['word', './sounds/word.mp3'],
-    ['breath', './sounds/breath.mp3'],
-    ['word0-pre', './sounds/word0-pre.mp3'],
-    ['word1-pre', './sounds/word1-pre.mp3'],
-    ['word2-pre', './sounds/word2-pre.mp3'],
-    ['word3-pre', './sounds/word3-pre.mp3'],
-    ['word4-pre', './sounds/word4-pre.mp3'],
-    ['birds', './sounds/birds.mp3'],
-    ['clock', './sounds/clock.mp3'],
     ['touch', './sounds/touch.mp3'],
-    ['touch0-t', './sounds/touch0-t.mp3'],
-    ['touch0-o', './sounds/touch0-o.mp3'],
-    ['touch0-u', './sounds/touch0-u.mp3'],
-    ['touch0-ch', './sounds/touch0-ch.mp3'],
-    ['touch1-t', './sounds/touch1-t.mp3'],
-    ['touch1-o', './sounds/touch1-o.mp3'],
-    ['touch1-u', './sounds/touch1-u.mp3'],
-    ['touch1-ch', './sounds/touch1-ch.mp3'],
-    ['touch1-end', './sounds/touch1-end.mp3'],
-    ['touch2-t', './sounds/touch2-t.mp3'],
-    ['touch2-o', './sounds/touch2-o.mp3'],
-    ['touch2-u', './sounds/touch2-u.mp3'],
-    ['touch2-c', './sounds/touch2-c.mp3'],
-    ['touch2-h', './sounds/touch2-h.mp3'],
-    ['touch0-pre', './sounds/touch0-pre.mp3'],
-    ['touch3-pre', './sounds/touch3-pre.mp3'],
-    ['crow0', './sounds/crow0.mp3'],
-    ['frog', './sounds/frog.mp3'],
-    ['life', './sounds/life.mp3'],
-    ['boss', './sounds/boss.mp3'],
-    ['water', './sounds/water.mp3'],
+    ['word', './sounds/word.mp3'],
     ['water-steps', './sounds/water-steps.mp3'],
-    ['birds', './sounds/birds.mp3'],
     ['whisper', './sounds/whisper.mp3']
   ]
   return sounds.map(([name, path]) => () => k.loadSound(name, path))

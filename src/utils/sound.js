@@ -2057,22 +2057,6 @@ export function playDeathSound(instance) {
  * @param {Object} instance - Sound instance
  */
 /**
- * Play life sound (death sound effect).
- * Uses a native HTMLAudioElement instead of k.play() so the laugh survives
- * Kaplay scene transitions — k.go() stops Kaplay-managed sounds but never
- * touches browser-native Audio nodes.
- * @param {Object} _k - Kaplay instance (kept for API compatibility, not used)
- */
-export function playLifeSound(_k) {
-  try {
-    const audio = new Audio('./sounds/life.mp3')
-    audio.volume = 0.85
-    audio.play().catch(() => {})
-  } catch (_) {
-    _k?.play?.('life', { volume: 0.7 })
-  }
-}
-/**
  * Play victory sound (ascending bright tones)
  * @param {Object} instance - Sound instance
  */
@@ -4723,16 +4707,6 @@ function playWaterStepsLoopOnce(instance, volume) {
   })
 }
 /**
- * Footsteps / wading: prefers Kaplay-loaded water.mp3 (assets/sounds/water.mp3).
- *
- * @param {Object} k - Kaplay instance
- * @param {number} [volume=0.4] - Playback volume 0..1
- */
-export function playWaterFootstepKaplay(k, volume = 0.4) {
-  if (globalMuteProceduralSounds) return
-  k?.play?.('water', { volume: Math.min(1, Math.max(0.05, volume)) })
-}
-/**
  * Tiny dry leaf settling crunch (touch L1 floor landing).
  *
  * @param {Object} instance - Sound instance from create()
@@ -5342,17 +5316,6 @@ export function playBirdChirpSound(instance) {
 //
 // frog.mp3 ambient croak volume
 //
-const FROG_MP3_VOLUME_MIN = 0.45
-const FROG_MP3_VOLUME_RANGE = 0.2
-/**
- * Plays frog croak from preloaded frog.mp3
- * @param {Object} k - Kaplay instance
- */
-export function playFrogSound(k) {
-  if (globalMuteProceduralSounds) return
-  const volume = FROG_MP3_VOLUME_MIN + Math.random() * FROG_MP3_VOLUME_RANGE
-  k?.play?.('frog', { volume })
-}
 /**
  * Plays a distant car pass-by sound (low rumble + Doppler whoosh) for night ambience
  * @param {Object} instance - Sound instance

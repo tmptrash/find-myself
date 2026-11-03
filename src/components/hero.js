@@ -2,7 +2,6 @@ import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
-import { isAnyPanelOpen } from '../utils/lesson-help.js'
 import { createColorChangeSparkles } from '../utils/hero-particles.js'
 import { smoothHeroContourSteps } from '../utils/hero-contour-aa.js'
 import {
@@ -4687,11 +4686,9 @@ function pollJumpInput(inst) {
 //
 function attemptHeroJump(inst) {
   //
-  // controllable=false / open letter panels: Space closes the dialog and must
-  // not start a crouch→jump (especially on forest wood platforms after O).
+  // controllable=false: no crouch→jump.
   //
   if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
-  if (isAnyPanelOpen()) return
   //
   // Dialog Space must not chain into a jump — wait until jump keys are up
   //

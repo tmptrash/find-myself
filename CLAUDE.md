@@ -458,7 +458,7 @@ function onAnnihilationCollide(inst) {
 
 ## 10. File Structure
 
-Sections currently in the game: `feel`, `forest`, `memory`, `stress`, `time`, `touch`, `word`. Each follows the same internal layout shown below for `word/`.
+Sections currently in the game: `forest`, `cave`. Each follows the same internal layout (`components/`, `scenes/`, `utils/`) shown below, which uses the former `word/` section as its example.
 
 ```
 src/

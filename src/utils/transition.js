@@ -44,10 +44,6 @@ const LEVEL_SUBTITLES = {
 //
 // Pre-level phrase must draw above the opaque transition overlay (see below).
 //
-//
-// Kaplay sounds silenced the moment a transition starts.
-//
-const TRANSITION_SOUNDS_TO_STOP = ['breath']
 const TRANSITION_OVERLAY_Z = CFG.visual.zIndex.ui + 2600
 const TRANSITION_SUBTITLE_Z = TRANSITION_OVERLAY_Z + 20
 const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
@@ -166,18 +162,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const originalVolume = k.volume()
   k.volume(0)
-  const soundsToStop = TRANSITION_SOUNDS_TO_STOP
-  soundsToStop.forEach(soundName => {
-    try {
-      const sound = k.getSound(soundName)
-      if (sound) {
-        sound.stop()
-        sound.paused = true
-      }
-    } catch (e) {
-      // Sound not found or already stopped
-    }
-  })
   //
   // Save progress for next level immediately (before showing transition)
   // This ensures progress is saved even if user interrupts transition with ESC
@@ -256,7 +240,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
     soundName: null,
     textSound: null,
-    soundsStopped: false,
     originalVolume: originalVolume,
     postAssetPreparePhase,
     assetPrepareDone: !needsEarlyAssetLoad,
@@ -558,23 +541,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       (inst.subtitlePointerGrace = Math.max(0, inst.subtitlePointerGrace - k.dt()))
     
     if (phase === 'fade_to_black') {
-      //
-      // Stop all background sounds immediately when transition starts
-      //
-      if (timer === 0 || !inst.soundsStopped) {
-        inst.soundsStopped = true
-        const soundsToStop = TRANSITION_SOUNDS_TO_STOP
-        soundsToStop.forEach(soundName => {
-          try {
-            const sound = k.getSound(soundName)
-            if (sound) {
-              sound.stop()
-            }
-          } catch (e) {
-            // Sound not found or already stopped
-          }
-        })
-      }
       // Fade overlay from transparent to opaque
       const progress = Math.min(timer / FADE_TO_BLACK_DURATION, 1)
       overlay.opacity = progress
@@ -612,20 +578,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
 
         if (subtitle) {
-          //
-          // Stop all Kaplay sounds except voice-over (xxx-pre files)
-          //
-          const soundsToStop = TRANSITION_SOUNDS_TO_STOP
-          soundsToStop.forEach(soundName => {
-            try {
-              const sound = k.getSound(soundName)
-              if (sound) {
-                sound.stop()
-              }
-            } catch (e) {
-              // Sound not found or already stopped
-            }
-          })
           //
           // Stop global background music if playing
           //

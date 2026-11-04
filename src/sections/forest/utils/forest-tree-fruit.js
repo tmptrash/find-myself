@@ -56,6 +56,17 @@ const APPLE_RIPEN_AFTER = 1.2
 const APPLE_RIPEN_SEC = 3
 const APPLE_RIPE_AGE = Math.max(APPLE_GROW_SEC, APPLE_RIPEN_AFTER + APPLE_RIPEN_SEC)
 //
+// The apple a branch landing shook but did not knock off swings on its
+// stem: each landing kicks it (rad/s, the other way each time, ~0.15 rad
+// out), a spring (1/s²) pulls it back and damping (1/s) calms it within a
+// few swings; under APPLE_SWING_REST it hangs still.
+//
+const APPLE_SWING_KICK = 0.8
+const APPLE_SWING_STIFFNESS = 30
+const APPLE_SWING_DAMPING = 2.2
+const APPLE_SWING_REST = 0.002
+const RAD_TO_DEG = 180 / Math.PI
+//
 // Fruit hangs on a short visible stem.
 //
 const FRUIT_STEM_W = 1.8
@@ -204,7 +215,7 @@ export function hasForestAnchorFruitDropInWorld(levelInst) {
  */
 export function releaseForestAnchorFruit(levelInst) {
   if (hasForestAnchorFruitDropInWorld(levelInst)) return false
-  const fruit = levelInst.treeFruitSpots?.find(isRipeTreeApple)
+  const fruit = nextAnchorFruit(levelInst)
   if (!fruit) return false
   fruit.attached = false
   fruit.fromAnchorDrop = true
@@ -212,6 +223,19 @@ export function releaseForestAnchorFruit(levelInst) {
   fruit.vx = 0
   fruit.rollDir = pickFruitLandRollDir(fruit.x, fruit.y)
   return true
+}
+
+/**
+ * A start-branch landing that does not knock the apple off yet: the apple
+ * that falls next swings a little left and right on its stem and settles.
+ * @param {Object} levelInst - Forest level inst
+ */
+export function swingForestAnchorFruit(levelInst) {
+  const fruit = nextAnchorFruit(levelInst)
+  if (!fruit) return
+  fruit.swingDir = -(fruit.swingDir || -1)
+  fruit.swingVel = (fruit.swingVel ?? 0) + APPLE_SWING_KICK * fruit.swingDir
+  fruit.swingAngle ??= 0
 }
 
 /**
@@ -528,11 +552,23 @@ function drawTreeApple(k, fruit, op) {
   const s = appleGrowScale(age)
   const fade = op * Math.min(1, age / (APPLE_GROW_SEC * APPLE_FADE_IN))
   const ripe = clamp01((age - APPLE_RIPEN_AFTER) / APPLE_RIPEN_SEC)
-  const pos = k.vec2(fruit.x + pic.dx * s, fruit.y + pic.dy)
   const width = pic.w * s
   const height = pic.h * s
-  ripe < 1 && k.drawSprite({ sprite: pic.unripe, pos, width, height, opacity: fade })
-  ripe > 0 && k.drawSprite({ sprite: pic.sprite, pos, width, height, opacity: fade * ripe })
+  const swing = fruit.swingAngle ?? 0
+  if (swing === 0) {
+    const pos = k.vec2(fruit.x + pic.dx * s, fruit.y + pic.dy)
+    ripe < 1 && k.drawSprite({ sprite: pic.unripe, pos, width, height, opacity: fade })
+    ripe > 0 && k.drawSprite({ sprite: pic.sprite, pos, width, height, opacity: fade * ripe })
+    return
+  }
+  //
+  // Swinging: turned round its stem, the top of the picture over the apple.
+  //
+  const pos = k.vec2(fruit.x, fruit.y + pic.dy)
+  const anchor = k.vec2(-2 * pic.dx / pic.w - 1, -1)
+  const angle = swing * RAD_TO_DEG
+  ripe < 1 && k.drawSprite({ sprite: pic.unripe, pos, anchor, angle, width, height, opacity: fade })
+  ripe > 0 && k.drawSprite({ sprite: pic.sprite, pos, anchor, angle, width, height, opacity: fade * ripe })
 }
 //
 // Size share of a growing apple: an ease-out that goes a little past full
@@ -557,6 +593,25 @@ function growTreeApples(levelInst, dt) {
   }
   sprouts.length = left
   levelInst.treeFruitSpots.forEach(f => f.attached && (f.age = Math.min(APPLE_RIPE_AGE, f.age + dt)))
+  levelInst.treeFruitSpots.forEach(f => f.attached && f.swingVel != null && stepAppleSwing(f, dt))
+}
+//
+// A swinging apple is a damped pendulum round its stem; once it has all
+// but stopped it hangs still again.
+//
+function stepAppleSwing(fruit, dt) {
+  const accel = -APPLE_SWING_STIFFNESS * fruit.swingAngle - APPLE_SWING_DAMPING * fruit.swingVel
+  fruit.swingVel += accel * dt
+  fruit.swingAngle += fruit.swingVel * dt
+  if (Math.abs(fruit.swingAngle) > APPLE_SWING_REST || Math.abs(fruit.swingVel) > APPLE_SWING_REST) return
+  fruit.swingAngle = 0
+  fruit.swingVel = null
+}
+//
+// The ripe apple the start branch knocks off next (the oldest one).
+//
+function nextAnchorFruit(levelInst) {
+  return levelInst.treeFruitSpots?.find(isRipeTreeApple) ?? null
 }
 //
 // A new apple on the first free hang, already this old.

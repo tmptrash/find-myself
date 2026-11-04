@@ -71,6 +71,7 @@ import {
   mountForestTreeFruitLayer,
   hasForestAnchorFruitDropInWorld,
   releaseForestAnchorFruit,
+  swingForestAnchorFruit,
   getFallenAnchorFruit,
   restoreFallenAnchorFruit,
   tickForestTreeFruits
@@ -6176,7 +6177,10 @@ function tickForestStartBranchFatigue(inst, char, grounded, justLanded) {
   triggerForestBranchLandingShake(inst)
   if (hasForestAnchorFruitDropInWorld(inst) || !hasForestRipeTreeApple(inst)) return
   inst._startBranchLandingCount = (inst._startBranchLandingCount || 0) + 1
-  if (inst._startBranchLandingCount < FOREST_BRANCH_LANDINGS_TO_DROP) return
+  if (inst._startBranchLandingCount < FOREST_BRANCH_LANDINGS_TO_DROP) {
+    swingForestAnchorFruit(inst)
+    return
+  }
   releaseForestAnchorFruit(inst) && (inst._startBranchLandingCount = 0)
 }
 //

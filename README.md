@@ -1,6 +1,6 @@
 # rootward
 
-A quiet hand-drawn 2D platformer about going down to face your fear.
+A quiet 2D platformer about going down to face your fear.
 
 **[Play online](https://find-myself.netlify.app/)**
 

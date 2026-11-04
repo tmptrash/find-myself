@@ -100,6 +100,25 @@ export function onHeroLanded(inst, heroX) {
 }
 
 /**
+ * One tree's bomb (its live x/y follow the fork or the fall).
+ * @param {Object} inst - Bomb inst
+ * @param {number} index - Bomb tree index
+ * @returns {Object|null} The bomb
+ */
+export function bombAt(inst, index) {
+  return inst?.tomatoes[index] ?? null
+}
+
+/**
+ * Whether a bomb still hangs in its fork (not falling, not regrowing).
+ * @param {Object} bomb - Bomb from bombAt()
+ * @returns {boolean}
+ */
+export function isBombHanging(bomb) {
+  return bomb.state === STATE_HANG
+}
+
+/**
  * Jolts each hanging bomb has taken so far (0 for fallen ones) — saved level state.
  * @param {Object} inst - Bomb inst
  * @returns {number[]}

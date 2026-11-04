@@ -43,6 +43,7 @@ import { CAVE_PAL, caveShadeColor } from './cave-paint.js'
 export const SCENE_NAME = 'lesson-cave.0'
 const KEY_LAST_LESSON = 'lastLesson'
 const KEY_SAFE_SPOT = 'cave.safeSpot'
+const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once the hero got here
 //
 // Draw order: world art, darkness, glows/fireflies, then the hero (player z).
 //
@@ -160,6 +161,7 @@ const HERO_OUTLINE_COLOR = CFG.visual.colors.outline
  */
 export function create(k) {
   set(KEY_LAST_LESSON, SCENE_NAME)
+  get(KEY_REACHED, false) || set(KEY_REACHED, true)
   CanvasBackdrop.applyCanvasBackdrop(k, CAVE_PAL.frame)
   k.setGravity(CFG.game.gravity)
   const view = View.create(k)

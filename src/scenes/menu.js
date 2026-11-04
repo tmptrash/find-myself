@@ -31,17 +31,21 @@ import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
 import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
+import * as QuestionDrift from '../components/question-drift.js'
 import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (the forest's
 // trampoline mushroom, the cave's glowing mushroom); every other level is a
-// "?" crossed by the red prohibition sign. Each level owns a backdrop: on a
-// switch the old one fades out, then the selected one fades in.
+// "?" crossed by the red prohibition sign. A level hidden until reached
+// shows a plain "?" until the hero has got there, over a black backdrop of
+// drifting "?" glyphs. Each level owns a backdrop: on a switch the old one
+// fades out, then the selected one fades in.
 //
 const BACKDROP_FOREST = 'forest'
 const BACKDROP_CAVE = 'cave'
 const BACKDROP_NIGHT = 'night'
+const BACKDROP_MYSTERY = 'mystery'
 const LEVEL_ICON_MUSHROOM = 'mushroom'
 const LEVEL_ICON_GLOW_MUSHROOM = 'glowMushroom'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
@@ -65,6 +69,7 @@ const LEVELS = [
   {
     section: 'cave',
     icon: LEVEL_ICON_GLOW_MUSHROOM,
+    hiddenUntilReached: true,
     backdrop: BACKDROP_CAVE,
     dialog: ConfirmDialog.LOOKS.CAVE,
     lessonPrefix: CAVE_LESSON_PREFIX,
@@ -113,6 +118,13 @@ const MENU_HERO_EASE = 12
 const MENU_SELECT_PULSE_AMP = 0.06
 const MENU_SELECT_PULSE_SPEED = 2.8
 const MENU_SELECT_SCALE_EASE = 8
+//
+// A selected "?" (a level not reached or locked) rocks side to side round
+// its centre (degrees, radians per second); off the row it settles upright.
+//
+const MENU_QUESTION_ROCK_AMP = 12
+const MENU_QUESTION_ROCK_SPEED = 3.2
+const MENU_QUESTION_ROCK_EASE = 8
 //
 // Backdrop switch: the old level's picture fades out first (seconds), and
 // only once it is gone the new one fades in. Texts fade (per second,
@@ -346,8 +358,17 @@ export function sceneMenu(k) {
       lastKeyAt: 0,
       isLeavingScene: false,
       sceneReady: false,
-      bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0 },
+      bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0, [BACKDROP_MYSTERY]: 0 },
       caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height() }),
+      mysteryBg: QuestionDrift.create({
+        k,
+        width: k.width(),
+        height: k.height(),
+        s: layout.s,
+        sprite: questionMarkSpriteName(layout.s),
+        color: CFG.visual.colors.menu.mysteryBg,
+        shadowColor: CFG.visual.colors.menu.mysteryShadow
+      }),
       forestLayout,
       forestPieces,
       forestEyes: ChainBuoy.create({ k, spots: forestLayout.eyeSpots, earthBottomY: k.height() }),
@@ -415,15 +436,22 @@ export async function prewarmMenuAssets(k) {
 // Per-level row state: position, what it shows and whether it can be entered.
 //
 function buildMenuLevel(level, index, layout, progress) {
-  const completed = Boolean(progress[level.section]?.completed)
+  const section = progress[level.section]
+  const completed = Boolean(section?.completed)
   const playable = Boolean(level.icon)
+  const reached = completed || Boolean(section?.reached) || Boolean(progress.lastLesson?.startsWith(level.lessonPrefix))
+  const mystery = Boolean(level.hiddenUntilReached) && !reached
   return {
     ...level,
     index,
     y: layout.firstY + index * layout.step,
     completed,
+    reached,
+    mystery,
+    backdrop: mystery ? BACKDROP_MYSTERY : level.backdrop,
     playable,
-    selectScale: 1
+    selectScale: 1,
+    questionAngle: 0
   }
 }
 //
@@ -462,7 +490,7 @@ function createMenuMushrooms(inst) {
       isVisible: () => !inst.isLeavingScene
     })
   })
-  inst.glowMushrooms = inst.levels.filter(level => level.icon === LEVEL_ICON_GLOW_MUSHROOM).map(level => ({
+  inst.glowMushrooms = inst.levels.filter(level => level.icon === LEVEL_ICON_GLOW_MUSHROOM && !level.mystery).map(level => ({
     level,
     mushroom: GlowMushroom.create({ k, x: inst.layout.columnX, y: level.y, seed: MENU_GLOW_MUSHROOM_SEED, moss: false })
   }))
@@ -598,7 +626,7 @@ function isRepeatedKeyPress(inst, key) {
 function restartLevel(inst) {
   const level = inst.levels[inst.selected]
   if (inst.isLeavingScene || !level.playable) return
-  set(level.section, { completed: level.completed })
+  set(level.section, { completed: level.completed, ...(level.hiddenUntilReached && level.reached ? { reached: true } : {}) })
   set('lastLesson', level.firstLesson)
   beginMenuSceneLeave(inst)
   stopMenuMusic(inst.music)
@@ -636,6 +664,7 @@ function onUpdate(inst) {
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
+  inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
   BombTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
@@ -730,14 +759,20 @@ function updatePointerHover(inst) {
   moved && level && selectLevel(inst, level.index)
 }
 //
-// Selected playable row: icon breathes; the rest (and locked rows) settle
-// back.
+// Selected playable row: icon breathes; a selected "?" rocks; the rest
+// settle back.
 //
 function updateLevelRow(inst, row, dt) {
   const { k } = inst
   const isSelected = row.index === inst.selected && row.playable
   const scaleTarget = isSelected ? 1 + MENU_SELECT_PULSE_AMP * Math.sin(k.time() * MENU_SELECT_PULSE_SPEED) : 1
   row.selectScale += (scaleTarget - row.selectScale) * Math.min(1, dt * MENU_SELECT_SCALE_EASE)
+  const rocking = row.index === inst.selected && showsQuestionMark(row)
+  const angleTarget = rocking ? MENU_QUESTION_ROCK_AMP * Math.sin(k.time() * MENU_QUESTION_ROCK_SPEED) : 0
+  row.questionAngle += (angleTarget - row.questionAngle) * Math.min(1, dt * MENU_QUESTION_ROCK_EASE)
+}
+function showsQuestionMark(level) {
+  return !level.icon || level.mystery
 }
 //
 // Fades the birds toward full volume on the forest row, toward silence on
@@ -751,7 +786,7 @@ function updateMenuMusic(inst, dt) {
   birds.volume = birds.volume < target ? Math.min(target, birds.volume + step) : Math.max(target, birds.volume - step)
 }
 //
-// Night picture under the forest and cave ones; each is drawn with its own
+// Night picture under the forest, cave and "?" ones; each is drawn with its own
 // opacity (a switch fades the old one out, then the new one in).
 //
 function drawBackdrops(inst) {
@@ -769,6 +804,8 @@ function drawBackdrops(inst) {
   forest > MENU_FADE_EPS && drawForestBackdrop(inst, forest)
   const cave = inst.bgOpacity[BACKDROP_CAVE]
   cave > MENU_FADE_EPS && CaveMenuBg.onDraw(inst.caveBg, cave)
+  const mystery = inst.bgOpacity[BACKDROP_MYSTERY]
+  mystery > MENU_FADE_EPS && QuestionDrift.onDraw(inst.mysteryBg, mystery)
 }
 //
 // The forest goes back to front like the level: baked sky and parallax
@@ -853,19 +890,21 @@ function bakeMenuPanel(w, h, s) {
   return canvas
 }
 //
-// Glowing cave mushrooms (body, then the additive halo), "?" glyphs (one
-// sprite pass), then the prohibition rings and slashes (one primitive pass)
-// — the forest mushroom icon draws itself.
+// Glowing cave mushrooms (body, then the additive halo), "?" glyphs for
+// locked levels and ones not reached yet (one sprite pass), then the
+// prohibition rings and slashes over the locked ones (one primitive pass) —
+// the forest mushroom icon draws itself.
 //
 function drawLevelIcons(inst) {
   if (inst.isLeavingScene) return
   const { k, layout } = inst
   inst.glowMushrooms.forEach(item => drawGlowMushroomIcon(inst, item))
   const locked = inst.levels.filter(level => !level.icon)
-  locked.forEach(level => k.drawSprite({
+  inst.levels.filter(showsQuestionMark).forEach(level => k.drawSprite({
     sprite: questionMarkSpriteName(layout.s),
     pos: k.vec2(layout.columnX + MENU_QUESTION_MARK_NUDGE_X * layout.s, level.y),
-    anchor: 'center'
+    anchor: 'center',
+    angle: level.questionAngle
   }))
   const color = getRGB(k, PROHIBITED_COLOR)
   locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s, color))

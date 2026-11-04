@@ -152,7 +152,9 @@ export const CFG = {
       outline: "#000000",
       // Splash/menu colors
       menu: {
-        platformColor: "#1A1A1A"       // Platform color (for menu background)
+        platformColor: "#1A1A1A",      // Platform color (for menu background)
+        mysteryBg: "#161616",          // Near-black backdrop of a level not reached yet (lit enough for shadows)
+        mysteryShadow: "#000000"       // Shadows of its drifting "?" glyphs
       },
       //
       // DOM loader: the Forest chain-buoy stalk-eye lying on its side (same inks

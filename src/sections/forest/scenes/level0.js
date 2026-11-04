@@ -80,6 +80,7 @@ import { bakeLeftTree, leftTreeBranch, leftTreeApples } from '../utils/forest-le
 import * as WaterFlower from '../components/water-flower.js'
 import * as AppleBug from '../components/apple-bug.js'
 import * as DropHint from '../utils/forest-drop-hint.js'
+import * as HeroGaze from '../utils/forest-hero-gaze.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
 import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
@@ -272,6 +273,17 @@ const BUG_HOLE_BACK_Z = WATER_FLOWER_Z - BUG_HOLE_UNDER_FLOWER
 const BUG_TUNNEL_UNDER_HOLE = 0.1
 const BUG_TUNNEL_Z = BUG_HOLE_BACK_Z - BUG_TUNNEL_UNDER_HOLE
 const BUG_HOLE_CLEAR_SPAN = AppleBug.holeClearSpan(BUG_HOLE_X)
+//
+// The hero and the centipede pass in front of the burrow's picture but
+// under the water flower and the plants at the left tree's foot. The hero
+// is lifted there only while his body overlaps the burrow, which stands
+// well left of the trunk, so the trunk still covers him.
+//
+const BUG_HOLE_FRONT_Z_ABOVE = 0.05
+const BUG_HOLE_FRONT_Z = BUG_HOLE_BACK_Z + BUG_HOLE_FRONT_Z_ABOVE
+const BUG_HOLE_HERO_HALF_W = 24
+const BUG_HOLE_HERO_FRONT_X1 = BUG_HOLE_CLEAR_SPAN.x1 - BUG_HOLE_HERO_HALF_W
+const BUG_HOLE_HERO_FRONT_X2 = BUG_HOLE_CLEAR_SPAN.x2 + BUG_HOLE_HERO_HALF_W
 const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 // Water spilt within this distance of the left tree's foot reaches its
@@ -279,12 +291,11 @@ const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 const LEFT_TREE_ROOT_HALF = 180
 //
-// The centipede passes in front of the left big tree's trunk but behind the
-// apple bug's burrow and the plants at the tree's foot; elsewhere it stays
+// The centipede passes in front of the left big tree's trunk and the apple
+// bug's burrow but behind the plants at the tree's foot; elsewhere it stays
 // behind the hero.
 //
-const PREDATOR_UNDER_BUG_HOLE = 0.05
-const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_BACK_Z - PREDATOR_UNDER_BUG_HOLE
+const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_FRONT_Z
 //
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
@@ -977,10 +988,10 @@ const SHORE_END_ROCK_Z = GRASS_Z + 1
 //
 const BUG_Z = SHORE_END_ROCK_Z + 0.5
 //
-// The drop hint's move time: the hero counts as running once he moved more
-// than this (world px) since the last frame.
+// The hero counts as moving (drop hint's move time, gaze glance) once he
+// moved more than this (world px) since the last frame.
 //
-const DROP_HINT_MOVE_EPS = 0.5
+const HERO_STILL_EPS = 0.5
 //
 // Decor mushrooms lean with the heroine's idle whistle
 //
@@ -1739,6 +1750,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       groundY: FLOOR_Y,
       onExplode: (x, y) => onForestTomatoExplode(inst, x, y)
     })
+    inst.heroGaze = createForestHeroGaze(inst)
     createForestChainBuoyLayer(k, zones)
     createForestEarTreeLayer(k, inst)
     createForestShoreTreeLayer(k, inst)
@@ -2456,6 +2468,7 @@ function tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
   jumpStarted && triggerForestBranchLandingShake(inst)
   if (justLanded && grounded && onShore) {
     triggerForestBranchLandingShake(inst)
+    inst.heroGaze && HeroGaze.onShoreBranchLanded(inst.heroGaze)
     const twigs = inst.shoreFallTwigs
     if (!twigs.dropped && !twigs.regrowing) {
       inst._shoreBranchLandingCount = (inst._shoreBranchLandingCount || 0) + 1
@@ -5983,6 +5996,7 @@ function onUpdate(inst) {
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
   tickForestWaterFlowerLanding(inst, char, grounded, justLanded)
   updateForestDropHint(inst, char, grounded)
+  inst.heroGaze && HeroGaze.onUpdate(inst.heroGaze, heroX, isForestHeroStill(inst, char, grounded))
   updateForestMidges(inst.midges, k.dt(), 1)
   updateForestPit(inst.pit, char)
   refreshForestPitFloorJumpState(inst, char, grounded, footY)
@@ -6121,12 +6135,34 @@ function tickForestWaterFlowerLanding(inst, char, grounded, justLanded) {
     DropHint.onHeroShookDrop(inst.dropHint)
 }
 //
+// The idle hero's gaze guide: the flower, the right big tree's branch, then
+// the bomb of the rightmost bomb tree.
+//
+function createForestHeroGaze(inst) {
+  const trees = inst.earTrees?.trees ?? []
+  const bombIndex = trees.reduce((best, tree, i) => (best < 0 || tree.x > trees[best].x ? i : best), -1)
+  return HeroGaze.create({
+    hero: inst.heroInst,
+    flower: inst.waterFlower,
+    dropHint: inst.dropHint,
+    rightZoneX: inst.branchTrampState?.x ?? null,
+    shoreBranch: inst.shoreTree?.treeData?.horizBranch ?? null,
+    bombs: inst.spikyTomatoes,
+    bombIndex
+  })
+}
+//
 // The drop hint counts only time the hero actually runs or jumps.
 //
 function updateForestDropHint(inst, char, grounded) {
-  if (!inst.dropHint) return
-  const moving = !grounded || Math.abs(char.pos.x - inst.lastHeroX) > DROP_HINT_MOVE_EPS
-  DropHint.onUpdate(inst.dropHint, inst.k.dt(), moving)
+  inst.dropHint && DropHint.onUpdate(inst.dropHint, inst.k.dt(), !isForestHeroStill(inst, char, grounded))
+}
+//
+// Standing still: on a surface and not moved since the last frame (after a
+// run or a landing alike).
+//
+function isForestHeroStill(inst, char, grounded) {
+  return grounded && Math.abs(char.pos.x - inst.lastHeroX) <= HERO_STILL_EPS
 }
 //
 // Tomato burst on the ground — camera jolt, and a nearby centipede bolts away.
@@ -7058,6 +7094,8 @@ function syncHeroTrampDrawOrder(inst) {
   //
   const behindLeftTree = onBranch || inst.branchTrampBounceAir
   behindLeftTree && (targetZ = CFG.visual.zIndex.platforms - 3)
+  !behindLeftTree && ch.pos.x > BUG_HOLE_HERO_FRONT_X1 && ch.pos.x < BUG_HOLE_HERO_FRONT_X2 &&
+    (targetZ = BUG_HOLE_FRONT_Z)
   onBranchCap &&
     (targetZ = CFG.visual.zIndex.platforms + 2)
   !onBranch && rightInFront &&

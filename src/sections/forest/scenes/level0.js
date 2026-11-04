@@ -78,6 +78,7 @@ import {
 import { bakeLeftTree, leftTreeBranch, leftTreeApples } from '../utils/forest-left-tree.js'
 import * as WaterFlower from '../components/water-flower.js'
 import * as AppleBug from '../components/apple-bug.js'
+import * as DropHint from '../utils/forest-drop-hint.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../utils/forest-picture-trees.js'
 import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
@@ -975,6 +976,11 @@ const SHORE_END_ROCK_Z = GRASS_Z + 1
 //
 const BUG_Z = SHORE_END_ROCK_Z + 0.5
 //
+// The drop hint's move time: the hero counts as running once he moved more
+// than this (world px) since the last frame.
+//
+const DROP_HINT_MOVE_EPS = 0.5
+//
 // Decor mushrooms lean with the heroine's idle whistle
 //
 const FOREST_MUSHROOM_WHISTLE_AMP_DEG = 14
@@ -1618,6 +1624,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       tunnelZ: BUG_TUNNEL_Z,
       z: BUG_Z
     })
+    inst.dropHint = DropHint.create({ bug: inst.appleBug })
     inst.eyeFlower = EyeFlower.create({
       k,
       x: EyeFlower.islandWorldX(lakeX1),
@@ -3238,8 +3245,8 @@ function buildForestEarTreeSpots(layoutCfg) {
   return spots
 }
 //
-// Whisper volume from hero distance to the eye-flower root (2D, so the tree
-// branch above the lake counts as well).
+// Whisper volume from how far the hero has crossed the lake toward the
+// eye-flower's island (see EyeFlower.whisperProximity).
 //
 function resetForestPlantWhisperProximityState(inst) {
   if (!inst.plantWhisperProximityState) return
@@ -3261,7 +3268,7 @@ function updateForestPlantWhisperSound(inst, char) {
     fadeOutForestPlantWhisper(inst)
     return
   }
-  const proximity = EyeFlower.whisperProximity(inst.eyeFlower, char.pos.x, char.pos.y)
+  const proximity = EyeFlower.whisperProximity(inst.eyeFlower, char.pos.x)
   const whisperMax = CFG.audio.backgroundMusic.whisper ?? FOREST_PLANT_WHISPER_MAX_VOLUME
   const vol = whisperMax * proximity
   if (vol <= 0.001) {
@@ -5236,6 +5243,7 @@ function finishDrowning(inst) {
   const char = inst.heroInst?.character
   char && (char.hidden = true)
   bumpForestLifeHudOnDeath(inst)
+  inst.dropHint && DropHint.onHeroDeath(inst.dropHint)
   inst.k.wait(DROWN_RESTART_DELAY, () => {
     //
     // A fall straight from the start branch always returns the hero to that
@@ -5350,6 +5358,7 @@ function forestTouchDeathLeafPalette() {
 //
 function finishForestTouchDeath(inst, cause, deathX, deathY) {
   bumpForestLifeHudOnDeath(inst)
+  inst.dropHint && DropHint.onHeroDeath(inst.dropHint)
   inst.touchDeathCount = (inst.touchDeathCount || 0) + 1
   if (cause === 'predator') {
     inst.predatorDeathCount = (inst.predatorDeathCount || 0) + 1
@@ -5972,6 +5981,7 @@ function onUpdate(inst) {
   tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
   tickForestWaterFlowerLanding(inst, char, grounded, justLanded)
+  updateForestDropHint(inst, char, grounded)
   updateForestMidges(inst.midges, k.dt(), 1)
   updateForestPit(inst.pit, char)
   refreshForestPitFloorJumpState(inst, char, grounded, footY)
@@ -6106,7 +6116,16 @@ function tickForestTomatoTreeLanding(inst, char, grounded, justLanded) {
 function tickForestWaterFlowerLanding(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded) return
   if (!isOnForestMainGroundFoot(char.pos.y + SURFACE_DETECT_Y)) return
-  WaterFlower.onHeroLanded(inst.waterFlower, char.pos.x)
+  WaterFlower.onHeroLanded(inst.waterFlower, char.pos.x) && inst.dropHint &&
+    DropHint.onHeroShookDrop(inst.dropHint)
+}
+//
+// The drop hint counts only time the hero actually runs or jumps.
+//
+function updateForestDropHint(inst, char, grounded) {
+  if (!inst.dropHint) return
+  const moving = !grounded || Math.abs(char.pos.x - inst.lastHeroX) > DROP_HINT_MOVE_EPS
+  DropHint.onUpdate(inst.dropHint, inst.k.dt(), moving)
 }
 //
 // Tomato burst on the ground — camera jolt, and a nearby centipede bolts away.

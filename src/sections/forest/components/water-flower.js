@@ -66,6 +66,11 @@ const BURST_SPLASH_VOLUME = 0.32
 const CLEAR_PAD = 14
 const PUDDLE_REACH = 1.4
 const RAD_TO_DEG = 180 / Math.PI
+//
+// The moment the bubble is full it flashes once: its brightness swells and
+// fades over RIPE_FLASH_DURATION.
+//
+const RIPE_FLASH_DURATION = 0.35
 const pictureByK = new WeakMap()
 
 /**
@@ -116,6 +121,8 @@ export function create(cfg) {
     centre: { x: 0, y: 0 },
     fall: { x: 0, y: 0, vy: 0, r: 0 },
     pop: { x: 0, y: 0, r: 0, t: 1 },
+    flash: 1,
+    ripeSpot: { x: 0, y: 0, r: 0 },
     wateredPos: { x: 0, y }
   }
   const obj = k.add([
@@ -210,6 +217,41 @@ export function burstFallingWater(inst) {
 }
 
 /**
+ * Whether a full-size bubble hangs in the flower and is not already
+ * shaken loose.
+ * @param {Object|null} inst - Flower inst
+ * @returns {boolean}
+ */
+export function isRipe(inst) {
+  return inst?.state === STATES.RIPE && !(inst.dropLeft > 0)
+}
+
+/**
+ * Where the full-size bubble hangs now.
+ * @param {Object} inst - Flower inst
+ * @returns {{x: number, y: number, r: number}} Its centre and radius (world px, reused object)
+ */
+export function ripeSpot(inst) {
+  const spot = inst.ripeSpot
+  spot.r = hangingRadius(inst)
+  hangingCentre(inst, spot.r, 1 + inst.wobble.value, spot)
+  return spot
+}
+
+/**
+ * Something bit the full-size bubble: the plant jolts and the bubble tears
+ * off at once.
+ * @param {Object|null} inst - Flower inst
+ * @returns {boolean} Whether a bubble tore off
+ */
+export function pierce(inst) {
+  if (!isRipe(inst)) return false
+  TreeJolt.start(inst.jolt)
+  detach(inst)
+  return true
+}
+
+/**
  * Reports a hero landing on the ground. Near the stem's foot it shakes the
  * plant and the hanging bubble; a full-size bubble tears off and falls once
  * the shake has died down (shakeDropDelay).
@@ -244,6 +286,7 @@ function onUpdate(inst) {
   updateGrowth(inst, dt)
   updateDrop(inst, dt)
   inst.pop.t = Math.min(1, inst.pop.t + dt / POP_DURATION)
+  inst.flash = Math.min(1, inst.flash + dt / RIPE_FLASH_DURATION)
   GroundWater.onUpdate(inst.ground, dt)
 }
 //
@@ -320,7 +363,7 @@ function stepFall(inst, h) {
 function updateGrowth(inst, dt) {
   if (inst.state === STATES.GROWING) {
     inst.growth = Math.min(1, inst.growth + dt / PARAMS.bubbleGrowDuration)
-    inst.growth >= 1 && (inst.state = STATES.RIPE)
+    inst.growth >= 1 && ripen(inst)
     return
   }
   if (inst.state !== STATES.GONE) return
@@ -328,6 +371,10 @@ function updateGrowth(inst, dt) {
   if (inst.regrowLeft > 0) return
   inst.growth = 0
   inst.state = STATES.GROWING
+}
+function ripen(inst) {
+  inst.state = STATES.RIPE
+  inst.flash = 0
 }
 function hangingRadius(inst) {
   const g = 1 - inst.growth
@@ -354,6 +401,7 @@ function drawHanging(inst) {
   const slosh = Math.max(-SLOSH_MAX, Math.min(SLOSH_MAX, -inst.sway.velocity * SLOSH_GAIN))
   WaterBubble.draw(inst.bubble, c.x, c.y, r, stretch, neck, PARAMS.bubbleWaterFill, slosh,
     inst.time * WAVE_SPEED)
+  inst.flash < 1 && WaterBubble.drawFlash(inst.bubble, Math.sin(Math.PI * inst.flash))
 }
 function drawFalling(inst) {
   const { fall } = inst

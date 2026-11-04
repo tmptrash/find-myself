@@ -4,9 +4,7 @@ A quiet hand-drawn 2D platformer about going down to face your fear.
 
 **[Play online](https://find-myself.netlify.app/)**
 
-![Menu](assets/screenshots/menu.png)
-
-![Forest](assets/screenshots/glow.png)
+![Forest](assets/screenshots/forest.png)
 
 ## Concept
 

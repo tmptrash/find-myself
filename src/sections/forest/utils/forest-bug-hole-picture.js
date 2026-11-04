@@ -15,10 +15,10 @@ const GRAIN_SEED = 6401
 // stands GROUND_SINK world px lower than it), the hole's width at the
 // ground and the middle of the doorway's left bottom stone across.
 //
-const PICTURE = { x: 146, y: 438, w: 967, h: 422 }
-const GROUND_Y = 851
-const HOLE_SPAN = { x1: 490, x2: 817 }
-const LEFT_STONE_X = 450
+const PICTURE = { x: 0, y: 333, w: 1254, h: 569 }
+const GROUND_Y = 884
+const HOLE_SPAN = { x1: 455, x2: 826 }
+const LEFT_STONE_X = 418
 const GROUND_SINK = 1
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()

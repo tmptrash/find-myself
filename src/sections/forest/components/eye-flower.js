@@ -238,10 +238,11 @@ const BLADE_ROOT_PHASE = 0.15
 const BLADE_TIP_PHASE = 0.98
 const BLADE_MIDRIB_FRAC = 0.35
 //
-// Whisper grows as the hero approaches the flower head (loudest at closest range).
+// Whisper is silent until the hero is past the lake's middle (from its east
+// shore) and grows to full by the island's water edge.
 //
-const WHISPER_FAR = 1400
-const WHISPER_NEAR = 450
+const WHISPER_START_LAKE_FRAC = 0.5
+const WHISPER_MIN_RAMP = 1
 //
 // Grab sequence (timeline in flower-grab.js). Four front blades turn into
 // tentacles: they coil back, whip out on curved paths one after another, wrap
@@ -426,6 +427,7 @@ export function create(cfg) {
     colliderWalkX2,
     colliderTopY,
     shoreX: hillXWhereTopReaches(hill, waterY),
+    whisperStartX: cfg.lakeX1 + lakeSpan * WHISPER_START_LAKE_FRAC,
     baseX,
     baseY,
     collider,
@@ -687,17 +689,17 @@ export function surfaceY(inst, x) {
 }
 
 /**
- * 0..1 whisper loudness for a hero at (x, y): rises as he nears the flower
- * head and peaks at the closest approach (same far/near band as before).
+ * 0..1 whisper loudness for a hero at world X: silent east of the lake's
+ * middle, rising as he crosses toward the island, full from its water edge
+ * on (at any height, so the branch over the lake counts too).
  * @param {Object|null} inst - Eye-flower inst
  * @param {number} x - World X
- * @param {number} y - World Y
  * @returns {number}
  */
-export function whisperProximity(inst, x, y) {
+export function whisperProximity(inst, x) {
   if (!inst?.visible) return 0
-  const head = inst.head
-  return smoothstep(WHISPER_FAR, WHISPER_NEAR, Math.hypot(x - head.x, y - head.y))
+  const startX = Math.max(inst.whisperStartX, inst.shoreX + WHISPER_MIN_RAMP)
+  return smoothstep(startX, inst.shoreX, x)
 }
 
 /**

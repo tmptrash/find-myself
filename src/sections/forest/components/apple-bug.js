@@ -52,7 +52,9 @@ const STATES = {
   APPLE: 'apple',
   GRAB: 'grab',
   CARRY: 'carry',
-  FLEE: 'flee'
+  FLEE: 'flee',
+  TO_DROP: 'toDrop',
+  BITE: 'bite'
 }
 const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL,
   STATES.STORE, STATES.EAT, STATES.OUT, STATES.VANISH])
@@ -153,6 +155,15 @@ const APPLE_HOLD_DROP = 0.15
 const GRAB_DURATION = 0.28
 const APPLE_NOTICE_DELAY = 0.5
 const DROP_PASS_PAD = 6
+//
+// Biting the flower's full bubble (when the level asks for it): it stops
+// with its mouth BITE_REACH of the bubble's radius off its centre, aims its
+// head at it and bites over BITE_DURATION, the bubble tearing off at
+// BITE_AT of it.
+//
+const BITE_REACH = 0.7
+const BITE_DURATION = 0.3
+const BITE_AT = 0.5
 //
 // Startle when the water hits it: it jerks STARTLE_JERK px towards the
 // burrow at once (already facing it, nose up by STARTLE_NOSE_UP), its
@@ -308,6 +319,9 @@ export function create(cfg) {
     darting: false,
     carrying: false,
     rushingOut: false,
+    dropBiteWanted: false,
+    dropBitten: false,
+    dropBites: 0,
     loose: []
   }
   inst.x = inst.mouthX
@@ -361,6 +375,18 @@ export async function load(k) {
 export function holeClearSpan(holeX) {
   const place = HolePicture.layout(PARAMS.holeWidth)
   return { x1: holeX + place.dx - HOLE_CLEAR_PAD, x2: holeX + place.dx + place.w + HOLE_CLEAR_PAD }
+}
+
+/**
+ * Asks it (or stops asking it) to bite the flower's next full bubble: out
+ * in the open and with no apple to fetch, it walks up to the bubble and
+ * bites it off; the falling water scares it into the burrow as usual.
+ * Each bite counts in inst.dropBites.
+ * @param {Object|null} inst - Bug inst
+ * @param {boolean} wanted - True to ask for bites
+ */
+export function wantDropBite(inst, wanted) {
+  inst && (inst.dropBiteWanted = wanted)
 }
 
 /**
@@ -427,6 +453,8 @@ function updateBehaviour(inst, dt) {
     case STATES.GRAB: return tickGrab(inst, dt)
     case STATES.CARRY: return tickCarry(inst, dt)
     case STATES.FLEE: return tickFlee(inst, dt)
+    case STATES.TO_DROP: return tickToDrop(inst, dt)
+    case STATES.BITE: return tickBite(inst, dt)
   }
 }
 //
@@ -471,7 +499,7 @@ function tickEmerge(inst, dt) {
 // it has had enough.
 //
 function tickHunt(inst, dt) {
-  if (claimApple(inst)) return
+  if (claimApple(inst) || startToDrop(inst)) return
   inst.stateLeft -= dt
   if (inst.stateLeft <= 0 && inst.tongue.phase === TONGUE.IDLE) return startOuting(inst)
   inst.goalX = inst.standX
@@ -486,7 +514,7 @@ function tickHunt(inst, dt) {
 // the air with its tongue.
 //
 function tickWander(inst, dt) {
-  if (claimApple(inst)) return
+  if (claimApple(inst) || startToDrop(inst)) return
   inst.stateLeft -= dt
   if (inst.stateLeft <= 0) return startOuting(inst)
   walk(inst, dt, PARAMS.stroll) && (inst.goalX = wanderGoal(inst))
@@ -741,6 +769,57 @@ function tickFlee(inst, dt) {
   goToDoor(inst, dt, PARAMS.flee, inst.nextHide)
 }
 //
+// Asked to bite the flower's bubble and one hangs full: off to it.
+//
+function startToDrop(inst) {
+  if (!inst.dropBiteWanted || !WaterFlower.isRipe(inst.flower)) return false
+  retractTongue(inst)
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.TO_DROP
+  return true
+}
+//
+// Hurries up to the bubble, its mouth by it, and faces it; an apple comes
+// first, and a bubble gone (shaken loose) sends it off again.
+//
+function tickToDrop(inst, dt) {
+  if (claimApple(inst)) return
+  if (!inst.dropBiteWanted || !WaterFlower.isRipe(inst.flower)) return startOuting(inst)
+  const drop = WaterFlower.ripeSpot(inst.flower)
+  const dir = Math.sign(drop.x - inst.x) || inst.facing
+  inst.goalX = drop.x - dir * (inst.bug.mouth.x * inst.zoom + drop.r * BITE_REACH)
+  if (!walk(inst, dt, PARAMS.fetch)) return
+  if (inst.facing !== dir) return startTurn(inst, dir)
+  if (inst.turnT < 1) return
+  inst.stateLeft = BITE_DURATION
+  inst.dropBitten = false
+  inst.state = STATES.BITE
+}
+//
+// Head aimed at the bubble, it bites it off; the water falling right by it
+// then scares it into the burrow (checkWater).
+//
+function tickBite(inst, dt) {
+  inst.stateLeft -= dt
+  if (!inst.dropBitten) {
+    const drop = WaterFlower.ripeSpot(inst.flower)
+    const mouth = mouthWorld(inst)
+    const aim = Math.atan2(drop.y - mouth.y, (drop.x - mouth.x) * inst.facing)
+    inst.headTarget = Math.max(-HEAD_AIM_MAX, Math.min(HEAD_AIM_MAX, aim))
+  }
+  !inst.dropBitten && inst.stateLeft <= BITE_DURATION * (1 - BITE_AT) && biteDrop(inst)
+  if (inst.stateLeft > 0) return
+  inst.headTarget = 0
+  startOuting(inst)
+}
+function biteDrop(inst) {
+  inst.dropBitten = true
+  if (!WaterFlower.pierce(inst.flower)) return
+  inst.dropBites += 1
+  inst.dropBiteWanted = false
+}
+//
 // Done with what it was doing out there: on to the next outing (lake or
 // stroll) instead of going in.
 //
@@ -904,7 +983,8 @@ function nearShell(inst, water) {
 //
 function checkCrawler(inst) {
   const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
-    inst.state === STATES.APPLE || inst.state === STATES.GRAB
+    inst.state === STATES.APPLE || inst.state === STATES.GRAB ||
+    inst.state === STATES.TO_DROP || inst.state === STATES.BITE
   if (!watchful || inst.opacity < 1) return
   const mealX = PredatorFeast.predatorMealX(inst.predator)
   if (mealX === null || Math.abs(mealX - inst.x) > PARAMS.crawlerFearReach) return

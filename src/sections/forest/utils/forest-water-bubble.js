@@ -49,6 +49,10 @@ const POP_GROWTH = 0.9
 const POP_WIDTH = 1.4
 const POP_OPACITY = 0.8
 const MIN_RADIUS = 0.6
+//
+// Flash: the highlight colour over the whole bubble at its peak.
+//
+const FLASH_OPACITY = 0.75
 
 /**
  * Creates the bubble's drawing state (reused point buffers, colours).
@@ -106,6 +110,16 @@ export function draw(inst, cx, cy, r, stretch, neck, fill, slope, wave, skin = 1
     inst.colors.highlight, GLINT_OPACITY * skin)
   drawOval(inst, cx + SPARK_X * r, cy + SPARK_Y * ry, SPARK_R * r, SPARK_R * r, 0,
     inst.colors.highlight, SPARK_OPACITY)
+}
+
+/**
+ * Brightens the whole bubble last drawn by draw() (same outline), for a
+ * flash.
+ * @param {Object} inst - Bubble inst
+ * @param {number} amount - Flash strength 0..1
+ */
+export function drawFlash(inst, amount) {
+  amount > 0 && drawFan(inst, inst.outline, inst.outline.length, inst.colors.highlight, FLASH_OPACITY * amount)
 }
 
 /**

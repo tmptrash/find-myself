@@ -61,7 +61,7 @@ const WATER_FLOWER = {
 //
 const APPLE_BUG = {
   shellWidth: 60,                   // Shell picture width
-  holeWidth: 228,                   // Burrow picture width (its hole fits the bug)
+  holeWidth: 200,                   // Burrow picture width (its hole fits the bug)
   bodyLift: 18.6,                   // Body's origin (hips) over the ground at rest: knees bent out at the shell's rim
   //
   // It moves in dashes: speed rises and falls over each dash (peak speed),
@@ -71,7 +71,7 @@ const APPLE_BUG = {
   stroll: { speed: 130, dashMin: 0.16, dashMax: 0.32, pauseMin: 0.15, pauseMax: 0.55 },
   fetch: { speed: 190, dashMin: 0.22, dashMax: 0.36, pauseMin: 0.03, pauseMax: 0.08 },  // ~110 px/s: on its way to an apple
   dart: { speed: 340, dashMin: 0.45, dashMax: 0.55, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Past the flower's drop: for the apple at once
-  run: { speed: 105, dashMin: 0.3, dashMax: 0.5, pauseMin: 0.05, pauseMax: 0.12 },  // ~55 px/s: home with an apple
+  run: { speed: 300, dashMin: 0.4, dashMax: 0.6, pauseMin: 0.01, pauseMax: 0.04, dashStart: 0.5 },  // Home with an apple: hurries to hide it
   flee: { speed: 300, dashMin: 0.45, dashMax: 0.7, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Scared of the water: no stops
   turnDuration: 0.08,               // A quick hop round
   stepDuration: 0.085,
@@ -129,7 +129,19 @@ const APPLE_BUG = {
   eatBites: 8
 }
 
+//
+// Hint for a hero who never shook the water flower's bubble loose himself
+// (utils/forest-drop-hint.js): after this many deaths or this long on the
+// move the apple bug bites the bubble off for him, up to `bites` times.
+//
+const DROP_HINT = {
+  deaths: 5,
+  moveSeconds: 30,
+  bites: 3
+}
+
 export const FOREST_CFG = {
   waterFlower: WATER_FLOWER,
-  appleBug: APPLE_BUG
+  appleBug: APPLE_BUG,
+  dropHint: DROP_HINT
 }

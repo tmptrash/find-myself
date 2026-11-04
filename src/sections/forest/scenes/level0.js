@@ -276,14 +276,17 @@ const BUG_HOLE_CLEAR_SPAN = AppleBug.holeClearSpan(BUG_HOLE_X)
 //
 // The hero and the centipede pass in front of the burrow's picture but
 // under the water flower and the plants at the left tree's foot. The hero
-// is lifted there only while his body overlaps the burrow, which stands
-// well left of the trunk, so the trunk still covers him.
+// is lifted there only while his body overlaps the burrow, and never past
+// the bare ground between the burrow's last plants and the trunk (his
+// centre this far left of the trunk's middle), so the trunk always covers
+// him and the swap happens where he overlaps neither.
 //
 const BUG_HOLE_FRONT_Z_ABOVE = 0.05
 const BUG_HOLE_FRONT_Z = BUG_HOLE_BACK_Z + BUG_HOLE_FRONT_Z_ABOVE
 const BUG_HOLE_HERO_HALF_W = 24
+const BUG_HOLE_HERO_TRUNK_GAP = 44
 const BUG_HOLE_HERO_FRONT_X1 = BUG_HOLE_CLEAR_SPAN.x1 - BUG_HOLE_HERO_HALF_W
-const BUG_HOLE_HERO_FRONT_X2 = BUG_HOLE_CLEAR_SPAN.x2 + BUG_HOLE_HERO_HALF_W
+const BUG_HOLE_HERO_FRONT_X2 = LEFT_TREE_FOOT.x - BUG_HOLE_HERO_TRUNK_GAP
 const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 // Water spilt within this distance of the left tree's foot reaches its
@@ -2470,6 +2473,7 @@ function tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
     triggerForestBranchLandingShake(inst)
     inst.heroGaze && HeroGaze.onShoreBranchLanded(inst.heroGaze)
     const twigs = inst.shoreFallTwigs
+    HorizFallTwig.shakeHorizFallTwigs(twigs)
     if (!twigs.dropped && !twigs.regrowing) {
       inst._shoreBranchLandingCount = (inst._shoreBranchLandingCount || 0) + 1
       inst._shoreBranchLandingCount >= FOREST_BRANCH_LANDINGS_TO_DROP &&

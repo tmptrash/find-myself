@@ -25,6 +25,15 @@ const TWIG_RESPAWN_PAUSE_SEC = 2.5
 const TWIG_REGROW_FADE_SEC = 0.75
 const TWIG_ROT_SPEED = 2.4
 //
+// Every hero landing on the branch shakes the hanging stick round its cut
+// end: a kick (rad/s) into a stiff, quickly damped spring, so it trembles
+// for a moment and settles back to its hang.
+//
+const TWIG_SHAKE_KICK = 3
+const TWIG_SHAKE_STIFFNESS = 400
+const TWIG_SHAKE_DAMPING = 6
+const TWIG_SHAKE_REST = 0.002
+//
 // The near end of a mounted stick is pinned this far behind the head centre;
 // the stick never follows the lagging body segments, so its length on the back
 // stays the same however far the centipede stretches.
@@ -87,6 +96,7 @@ export function create(cfg) {
     respawnWait: 0,
     regrowT: 0,
     onCycleReset: null,
+    shake: { angle: 0, velocity: 0 },
     ridePlat: makeRidePlatform(k)
   }
   resetTwigsToHang(inst)
@@ -108,6 +118,17 @@ export function dropHorizFallTwigs(inst) {
     twig.vx = (twig.seed - 0.5) * 28
     twig.rotVel = (twig.seed - 0.5) * TWIG_ROT_SPEED
   })
+}
+
+/**
+ * Shakes the hanging stick (a hero landing on the branch); each landing adds
+ * a fresh kick, alternating its side.
+ * @param {Object} inst - Twig inst
+ */
+export function shakeHorizFallTwigs(inst) {
+  if (!inst || inst.dropped || inst.regrowing) return
+  const side = inst.shake.velocity > 0 ? -1 : 1
+  inst.shake.velocity += TWIG_SHAKE_KICK * side
 }
 
 /**
@@ -221,6 +242,7 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
   inst.predator = predator ?? inst.predator ?? null
   inst._heroChar = heroChar ?? inst._heroChar ?? null
   inst.twigs.forEach(twig => stepTwig(twig, dt, floorY, predator, inst))
+  stepShake(inst.shake, dt)
   syncRidePlatform(inst)
   if (inst.regrowing) {
     inst.regrowT += dt / TWIG_REGROW_FADE_SEC
@@ -262,11 +284,12 @@ export function onDraw(inst, opacity, view, mounted = false) {
     const op = opacity * twig.alpha
     if (op <= 0.001) return
     const sx = twig.phase === 'predatorMount' ? twig.face : 1
+    const shake = twig.phase === 'idle' ? inst.shake.angle : 0
     k.drawSprite({
       sprite: look.sprite,
       pos: k.vec2(twig.x, twig.y),
       anchor: k.vec2(look.anchorX, look.anchorY),
-      angle: twig.rot * RAD_TO_DEG,
+      angle: (twig.rot + shake) * RAD_TO_DEG,
       scale: k.vec2(sx, 1),
       opacity: op
     })
@@ -883,6 +906,18 @@ function hideRidePlatform(inst) {
   typeof plat.moveTo === 'function'
     ? plat.moveTo(PLATFORM_HIDE_X, PLATFORM_HIDE_Y)
     : (plat.pos.x = PLATFORM_HIDE_X, plat.pos.y = PLATFORM_HIDE_Y)
+}
+//
+// Damped spring of the landing shake (semi-implicit Euler); it snaps to
+// rest once nearly still.
+//
+function stepShake(shake, dt) {
+  if (shake.angle === 0 && shake.velocity === 0) return
+  shake.velocity += (-TWIG_SHAKE_STIFFNESS * shake.angle - TWIG_SHAKE_DAMPING * shake.velocity) * dt
+  shake.angle += shake.velocity * dt
+  if (Math.abs(shake.angle) > TWIG_SHAKE_REST || Math.abs(shake.velocity) > TWIG_SHAKE_REST) return
+  shake.angle = 0
+  shake.velocity = 0
 }
 
 

@@ -40,12 +40,12 @@ const CAVE_MOUTH_GROUND_LINE_TRIM_LEFT = 12
 // Shorten the mouth lip shelf from the left and widen the cave entrance by the
 // same amount.
 //
-export const CAVE_MOUTH_ENTRANCE_EXPAND_LEFT = 42
+const CAVE_MOUTH_ENTRANCE_EXPAND_LEFT = 42
 //
 // Pre-collapse earth-band cutout extends this far past the crack zone on the
 // right — smaller values tuck the painted mouth gap toward the pit opening.
 //
-export const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
+const CAVE_MOUTH_MAIN_FLOOR_INSET = 22
 //
 // 2/3 field midges spread along the playfield width, 1/3 at the cave mouth
 //
@@ -543,15 +543,6 @@ export function drawForestPitCaveForegroundDecor(k, pit) {
     layout.contourRocks?.filter(rock => !rock.straddleMouthGround),
     layout.pebbles
   ])
-}
-/**
- * Forces the cave interior bake to rebuild (layout change).
- * @param {Object|null} pit - Pit state
- */
-export function invalidateForestPitCaveInteriorBake(pit) {
-  if (!pit) return
-  pit._caveSpriteReady = false
-  pit._caveBakeRocksKey = null
 }
 /**
  * Seam-cover rocks — drawn last so earth/static cannot hide them.
@@ -1508,7 +1499,7 @@ function getForestPitMouthWalkShelf(zone) {
 // Painted ground / baked cave mouth top edge — shorter on the left than the
 // invisible walk shelf so the lip line does not overshoot the stand collider.
 //
-export function getForestPitMouthGroundLineSpan(zone) {
+function getForestPitMouthGroundLineSpan(zone) {
   const shelf = getForestPitMouthWalkShelf(zone)
   const rightX = shelf.x + shelf.w
   const minSpan = 6
@@ -1516,30 +1507,11 @@ export function getForestPitMouthGroundLineSpan(zone) {
   return { leftX, rightX }
 }
 //
-// Left edge of the invisible mouth walk shelf and sealed crack lid collider.
-//
-export function getForestCaveMouthWalkShelfLeftX(zone) {
-  return getForestPitMouthWalkShelf(zone).x
-}
-//
 // Main playfield floor draw and mouth earth-band cutout (collapsed) — trimmed
 // ground line, not the full walk shelf span.
 //
 export function getForestCaveMouthFloorLeftX(zone) {
   return getForestPitMouthGroundLineSpan(zone).leftX
-}
-//
-// Right edge of the painted mouth ground line (matches walk shelf right).
-//
-export function getForestCaveMouthFloorRightX(zone) {
-  return getForestPitMouthGroundLineSpan(zone).rightX
-}
-//
-// Walk shelf span at the cave mouth — matches the invisible lip collider.
-//
-export function getForestPitMouthWalkShelfSpan(zone) {
-  const shelf = getForestPitMouthWalkShelf(zone)
-  return { leftX: shelf.x, rightX: shelf.x + shelf.w }
 }
 //
 // Earth-band / static-band cutout for the open pit (full interior width).
@@ -1567,7 +1539,7 @@ export function getForestPitFloorCollider(zone) {
  * @param {Object} zone - Pit / crack zone from getCrackZone
  * @returns {{ leftX: number, rightX: number }}
  */
-export function getForestPitEarthBandMouthCutout(zone, tightMouth = false) {
+function getForestPitEarthBandMouthCutout(zone, tightMouth = false) {
   if (tightMouth) return getForestPitMouthGroundLineSpan(zone)
   const lipLeft = getForestCaveMouthFloorLeftX(zone)
   const { innerX } = getForestPitFloorCollider(zone)

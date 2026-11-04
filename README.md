@@ -8,10 +8,6 @@ A philosophical hi-bit pixel-art platformer about perception, self-discovery, an
 
 ![Glow](assets/screenshots/glow.png)
 
-![Touch](assets/screenshots/touch0.png)
-
-![Touch](assets/screenshots/touch1.png)
-
 ## Description
 
 **rootward** is a narrative 2D platformer where gameplay is built around psychological growth instead of traditional progression.
@@ -55,7 +51,6 @@ The word itself becomes the mechanic.
 Examples:
 
 * **GLOW** — discovering curiosity and perception.
-* **TOUCH** — learning connection through interaction with the environment.
 * Future sections introduce new concepts in the same way.
 
 Collecting every letter changes the world around the player.

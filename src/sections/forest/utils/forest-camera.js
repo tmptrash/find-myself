@@ -1,48 +1,41 @@
 //
-// Forest level camera — scrolls a 3000×1080 world horizontally through a fixed
-// viewport window (playfield between the HUD bar and the bottom screen margin).
+// Forest level camera — one world pixel is always one screen pixel. The
+// playfield (a fixed world rectangle) fills the whole screen and the camera
+// follows the hero across it on every axis where the screen is smaller than
+// the playfield. On an axis where the screen is larger, the playfield sits
+// centred with void around it and the camera stands still on that axis.
 //
 // Kaplay uses a *center-anchored* camera: cam.pos is the world point drawn at
-// the canvas centre. The playfield window is inset (top HUD + side margins +
-// bottom strip), so fixedCamY is chosen once so the full map height fits the
-// window without ever scrolling vertically.
+// the canvas centre.
 //
+const FOLLOW_Y_RATE = 8
 
 /**
  * Creates the forest camera controller.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
- * @param {number} cfg.viewW - Visible world width through the playfield window
- * @param {number} cfg.viewH - Visible world height through the playfield window
- * @param {number} cfg.worldW - Full world width
- * @param {number} cfg.leftMargin - World/playfield inset on the left
- * @param {number} cfg.rightMargin - World/playfield inset on the right
- * @param {number} [cfg.fixedCamY] - World Y drawn at screen vertical centre.
- *   Defaults to the live screen's own centre (world height fills whatever
- *   window height there is); pass a fixed design-resolution half-height
- *   instead to keep the world pinned to its design layout and let a
- *   taller-than-design window grow as pure letterbox padding above/below.
+ * @param {number} cfg.playX - World X of the playfield's left edge
+ * @param {number} cfg.playY - World Y of the playfield's top edge
+ * @param {number} cfg.playW - Playfield width (world px, fixed)
+ * @param {number} cfg.playH - Playfield height (world px, fixed)
  * @returns {Object} Camera instance
  */
 export function create(cfg) {
-  const { k, viewW, viewH, worldW, leftMargin, rightMargin, fixedCamY: fixedCamYOverride } = cfg
-  //
-  // Keep the world origin aligned with the screen origin: screen centre is
-  // the fixed vertical camera anchor since the world height already matches
-  // the playfield window (top HUD bar + bottom strip are screen-space only).
-  //
-  const fixedCamY = fixedCamYOverride ?? Math.round(k.height() / 2)
-  const halfViewW = viewW / 2
+  const { k, playX, playY, playW, playH } = cfg
+  const rect = playfieldScreenRect(k.width(), k.height(), playW, playH)
+  const viewW = rect.x2 - rect.x1
+  const viewH = rect.y2 - rect.y1
+  const minCamX = playX - rect.x1 + k.width() / 2
+  const minCamY = playY - rect.y1 + k.height() / 2
   return {
     k,
     viewW,
     viewH,
-    worldW,
-    leftMargin,
-    rightMargin,
-    fixedCamY,
-    minCamX: leftMargin + halfViewW,
-    maxCamX: worldW - rightMargin - halfViewW,
+    minCamX,
+    maxCamX: minCamX + playW - viewW,
+    minCamY,
+    maxCamY: minCamY + playH - viewH,
+    camY: minCamY,
     //
     // 1 = full playfield; higher values zoom in (Kaplay camScale).
     //
@@ -54,6 +47,23 @@ export function create(cfg) {
     shakeOffsetY: 0
   }
 }
+
+/**
+ * Where the playfield shows on screen: the whole screen on an axis where the
+ * playfield is larger than the screen, centred (whole pixels) where it is
+ * smaller.
+ * @param {number} screenW - Live screen width
+ * @param {number} screenH - Live screen height
+ * @param {number} playW - Playfield width (world px)
+ * @param {number} playH - Playfield height (world px)
+ * @returns {Object} Screen rectangle { x1, y1, x2, y2 }
+ */
+export function playfieldScreenRect(screenW, screenH, playW, playH) {
+  const x1 = Math.max(0, Math.round((screenW - playW) / 2))
+  const y1 = Math.max(0, Math.round((screenH - playH) / 2))
+  return { x1, y1, x2: x1 + Math.min(screenW, playW), y2: y1 + Math.min(screenH, playH) }
+}
+
 /**
  * Starts a short screen shake on the playfield camera.
  * @param {Object} inst - Camera instance
@@ -65,6 +75,7 @@ export function triggerShake(inst, amplitude, durationSec) {
   inst.shakeDuration = durationSec
   inst.shakeElapsed = 0
 }
+
 /**
  * Advances shake decay; call once per frame before followHero.
  * @param {Object} inst - Camera instance
@@ -82,44 +93,35 @@ export function updateShake(inst, dt) {
   inst.shakeOffsetX = (Math.random() - 0.5) * 2 * amp
   inst.shakeOffsetY = (Math.random() - 0.5) * 2 * amp
 }
+
 /**
- * Follows the hero horizontally only; vertical camera position stays fixed so
- * jumps never scroll the map up or down.
+ * Follows the hero: at once horizontally, eased vertically (only where the
+ * screen is shorter than the playfield), never past the playfield's edges.
  * @param {Object} inst - Camera instance from create()
  * @param {number} heroX - Hero world X (anchor centre)
- * @param {number} [_heroY] - Unused; kept for call-site compatibility
+ * @param {number} heroY - Hero world Y (anchor centre)
  * @param {boolean} [pixelAlignX=true] - Snap cam X so the hero outline stays crisp
  */
-export function followHero(inst, heroX, _heroY, pixelAlignX = true) {
-  const zoom = inst.zoom || 1
-  const halfViewW = inst.viewW / (2 * zoom)
-  const minCamX = inst.leftMargin + halfViewW
-  const maxCamX = inst.worldW - inst.rightMargin - halfViewW
-  const desiredCamX = Math.max(minCamX, Math.min(maxCamX, heroX))
-  const desiredCamY = inst.fixedCamY
-  const shakeX = inst.shakeOffsetX ?? 0
-  const shakeY = inst.shakeOffsetY ?? 0
-  const k = inst.k
-  const camX = pixelAlignX
-    ? alignCamXForSubject(k, heroX, desiredCamX + shakeX)
-    : desiredCamX + shakeX
-  const camY = desiredCamY + shakeY
-  k.camPos(camX, camY)
+export function followHero(inst, heroX, heroY, pixelAlignX = true) {
+  const targetY = clampCamY(inst, heroY)
+  inst.camY += (targetY - inst.camY) * Math.min(1, inst.k.dt() * FOLLOW_Y_RATE)
+  placeCamera(inst, heroX, pixelAlignX)
 }
+
 /**
- * Pixel-aligns only camera X so a subject stays crisp during scripted pans
- * while camera Y remains fixed (letter peek, intro hold).
- * @param {Object} k - Kaplay instance
- * @param {number} subjectX - World X of the subject to pixel-align
- * @param {number} desiredCamX - Target camera X before alignment
- * @param {number} camY - Camera Y to keep unchanged
+ * Puts the camera straight onto the hero (spawn, respawn, teleports).
+ * @param {Object} inst - Camera instance from create()
+ * @param {number} heroX - Hero world X (anchor centre)
+ * @param {number} heroY - Hero world Y (anchor centre)
  */
-export function setCamPosForPixelAlignedSubjectX(k, subjectX, desiredCamX, camY) {
-  k.camPos(alignCamXForSubject(k, subjectX, desiredCamX), camY)
+export function snapToHero(inst, heroX, heroY) {
+  inst.camY = clampCamY(inst, heroY)
+  placeCamera(inst, heroX, true)
 }
+
 /**
- * Nudges the hero onto the vertical screen-pixel grid without moving the
- * camera — keeps the map from bobbing vertically during jumps.
+ * Nudges the hero onto the vertical screen-pixel grid — keeps his outline
+ * crisp whatever the camera does vertically.
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {number} camY - Current camera world Y
@@ -147,6 +149,22 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
   return -pad + scroll * (1 - speed)
 }
 //
+// Sets the camera at the hero's X (clamped) and the eased camera Y, both on
+// the whole-pixel grid, plus the shake.
+//
+function placeCamera(inst, heroX, pixelAlignX) {
+  const k = inst.k
+  const desiredCamX = Math.max(inst.minCamX, Math.min(inst.maxCamX, heroX))
+  const camX = pixelAlignX && desiredCamX === heroX
+    ? alignCamXForSubject(k, heroX, desiredCamX)
+    : alignCamToGrid(k.width(), desiredCamX)
+  const camY = alignCamToGrid(k.height(), inst.camY)
+  k.camPos(camX + (inst.shakeOffsetX ?? 0), camY + (inst.shakeOffsetY ?? 0))
+}
+function clampCamY(inst, y) {
+  return Math.max(inst.minCamY, Math.min(inst.maxCamY, y))
+}
+//
 // Kaplay maps world to screen as (subject - camPos) + screenSize/2. When the
 // window is an odd width the screen centre is fractional (e.g. 960.5), so
 // camPos === subject still lands the hero on a half-pixel column and the 1 px
@@ -156,4 +174,12 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 function alignCamXForSubject(k, subjectX, desiredCamX) {
   const halfW = k.width() / 2
   return subjectX + halfW - Math.round(subjectX - desiredCamX + halfW)
+}
+//
+// Camera position whose world-to-screen offset is a whole number of pixels,
+// so the world itself lands on the screen-pixel grid.
+//
+function alignCamToGrid(screenSize, cam) {
+  const half = screenSize / 2
+  return half - Math.round(half - cam)
 }

@@ -103,7 +103,7 @@ export function tickLegs(inst, dt, hurry) {
  * @param {Object} leg
  * @returns {{ x: number, y: number }}
  */
-export function hipOf(inst, leg) {
+function hipOf(inst, leg) {
   const seg = inst.segments[leg.seg]
   const next = inst.segments[Math.min(inst.segments.length - 1, leg.seg + 1)]
   const tx = next.x - seg.x

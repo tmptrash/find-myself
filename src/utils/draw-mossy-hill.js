@@ -158,25 +158,6 @@ export function mossyHillBounds(hill, plantPad) {
   }
 }
 
-/**
- * Paints one hill boulder (same stone look as the hill heap) and optionally
- * a small moss patch on its upper rim, so other rock piles can match it.
- * @param {CanvasRenderingContext2D} ctx
- * @param {Object} opts
- * @param {number} opts.cx - Boulder centre X
- * @param {number} opts.cy - Boulder centre Y
- * @param {number} opts.rx - Horizontal radius
- * @param {number} opts.ry - Vertical radius
- * @param {() => number} opts.rng - Seeded random in [0, 1)
- * @param {Object} opts.colors - Hill colours (see drawMossyHillToCanvas)
- * @param {boolean} [opts.mossPatch=false] - Add the moss patch on top
- */
-export function drawMossyBoulderToCanvas(ctx, opts) {
-  const { cx, cy, rx, ry, rng, colors, mossPatch = false } = opts
-  const rock = { cx, cy, rx, ry, verts: buildRockOutline(rng) }
-  paintRock(ctx, rock, rng, colors)
-  mossPatch && paintRockMossPatch(ctx, rock, rng, colors)
-}
 
 /**
  * Paints one moss tuft like the ones poking above the hill crest.
@@ -187,7 +168,7 @@ export function drawMossyBoulderToCanvas(ctx, opts) {
  * @param {() => number} rng - Seeded random in [0, 1)
  * @param {Object} colors - Hill colours (see drawMossyHillToCanvas)
  */
-export function drawMossyTuftToCanvas(ctx, x, y, r, rng, colors) {
+function drawMossyTuftToCanvas(ctx, x, y, r, rng, colors) {
   const a = rng() * Math.PI * 2
   paintClover(ctx, x, y, r + HILL_CONTOUR_PX, a, colors.contour)
   paintClover(ctx, x, y, r, a, colors.shadow)

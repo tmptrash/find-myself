@@ -1,8 +1,6 @@
 //
-// Procedural tree-root segment grower — extracted from the touch L1
-// tree-roots component so the same organic root algorithm can produce
-// roots both for the in-game L1 musical-roots tree AND for the
-// ready/menu background composite.
+// Procedural tree-root segment grower for the roots of the ready/menu
+// background composite.
 //
 // The growth is recursive: every "root" is a chain of step-sized
 // segments that randomly wobble; with small probabilities it also

@@ -65,7 +65,7 @@ export function create(cfg) {
  * closed-eyes hold.
  * @param {Object} inst - Menu mushroom inst
  */
-export function onUpdate(inst) {
+function onUpdate(inst) {
   inst.blinkTimer -= inst.k.dt()
   if (inst.blinkTimer > 0) return
   inst.blinking = !inst.blinking
@@ -76,7 +76,7 @@ export function onUpdate(inst) {
  * Draws the mushroom centred on the icon pose, then its live pupils.
  * @param {Object} inst - Menu mushroom inst
  */
-export function onDraw(inst) {
+function onDraw(inst) {
   if (!inst.isVisible()) return
   const { k } = inst
   const pose = inst.getPose()

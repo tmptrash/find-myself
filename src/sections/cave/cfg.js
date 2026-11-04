@@ -148,7 +148,6 @@ export const CAVE_CFG = {
   // near side masses darkest. Stone sizes per row (bigger far away).
   //
   parallax: {
-    mid: BACK_MID,
     near: BACK_NEAR,
     //
     // Looks of the mid row's ledges (a ledge's bridge and paired ledge take

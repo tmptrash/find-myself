@@ -21,7 +21,7 @@ const RUN_FRAME_COUNT = 8
  * @param {Object} inst - Hero inst
  * @returns {number}
  */
-export function heroFootWorldY(inst) {
+function heroFootWorldY(inst) {
   return inst.character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
 }
 
@@ -29,7 +29,7 @@ export function heroFootWorldY(inst) {
  * Landing dust burst at the hero's feet.
  * @param {Object} inst - Hero inst
  */
-export function spawnHeroLandingDust(inst) {
+function spawnHeroLandingDust(inst) {
   spawnHeroDustParticles(inst, inst.character.pos.x, heroFootWorldY(inst), 'splash')
 }
 
@@ -38,7 +38,7 @@ export function spawnHeroLandingDust(inst) {
  * @param {Object} inst - Hero inst
  * @param {number} direction - -1 left, 1 right
  */
-export function spawnHeroRunStartDust(inst, direction) {
+function spawnHeroRunStartDust(inst, direction) {
   spawnHeroDustParticles(inst, inst.character.pos.x, heroFootWorldY(inst), 'run', direction)
 }
 
@@ -50,7 +50,7 @@ export function spawnHeroRunStartDust(inst, direction) {
  * @param {'splash'|'run'} type
  * @param {number} [direction=1]
  */
-export function spawnHeroDustParticles(inst, footX, footY, type = 'splash', direction = 1) {
+function spawnHeroDustParticles(inst, footX, footY, type = 'splash', direction = 1) {
   const { k } = inst
   for (let i = 0; i < DUST_PARTICLE_COUNT; i++) {
     let side
@@ -99,7 +99,7 @@ export function spawnHeroDustParticles(inst, footX, footY, type = 'splash', dire
  * Alternating footprint at the hero's current foot position.
  * @param {Object} inst - Hero inst
  */
-export function spawnHeroFootprint(inst) {
+function spawnHeroFootprint(inst) {
   if (inst.suppressFootprints) return
   if (!inst.character?.pos) return
   if (!inst.footprints) inst.footprints = []
@@ -208,6 +208,6 @@ export function bindDefaultHeroFootFx(inst, cfg) {
     h.sfx && Sound.playLandSound(h.sfx, h.stepSoundScene)
   })
   inst.onPlayJumpLandSound = inst.onPlayJumpLandSound || (h => {
-    h.sfx && Sound.playJumpSound(h.sfx, h.stepSoundScene)
+    h.sfx && Sound.playJumpSound(h.sfx)
   })
 }

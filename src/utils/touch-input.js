@@ -23,24 +23,6 @@ export function isTouchDevice() {
   return touchDeviceCached
 }
 
-/**
- * Converts browser client coordinates to Kaplay game space
- * @param {Object} k - Kaplay instance
- * @param {number} clientX - Client X
- * @param {number} clientY - Client Y
- * @returns {{ x: number, y: number }}
- */
-export function clientToGame(k, clientX, clientY) {
-  const canvas = k.canvas
-  if (!canvas) return { x: 0, y: 0 }
-  const rect = canvas.getBoundingClientRect()
-  const scaleX = k.width() / rect.width
-  const scaleY = k.height() / rect.height
-  return {
-    x: (clientX - rect.left) * scaleX,
-    y: (clientY - rect.top) * scaleY
-  }
-}
 
 /**
  * Registers global Kaplay touch hooks so tooltip hit-testing tracks active fingers
@@ -56,23 +38,12 @@ export function initTouchInput(k) {
   k.onTouchEnd(onKaplayTouchEnd)
 }
 
-/**
- * Primary pointer for legacy single-point checks (first active touch or mouse)
- * @param {Object} k - Kaplay instance
- * @returns {{ x: number, y: number }}
- */
-export function getPointerPos(k) {
-  if (isTouchDevice() && touchPositions.size > 0) {
-    return touchPositions.values().next().value
-  }
-  return k.mousePos()
-}
 
 /**
  * All active touch positions in game space (empty on non-touch devices)
  * @returns {Array<{ x: number, y: number }>}
  */
-export function getTouchPositions() {
+function getTouchPositions() {
   return [...touchPositions.values()]
 }
 

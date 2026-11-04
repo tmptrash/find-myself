@@ -69,40 +69,8 @@ export function consumeSteps(clock, dt) {
   return steps
 }
 
-/**
- * Creates an eased ramp holding one value.
- * @param {number} [value=0] - Held value
- * @returns {Object} Ramp inst
- */
-export function createRamp(value = 0) {
-  return { from: value, to: value, startAt: 0, rise: 1 }
-}
 
-/**
- * Retargets a ramp. It starts from wherever it is at `now`, so a target
- * never jumps — only how it eases changes.
- * @param {Object} ramp - Ramp inst
- * @param {number} to - New value
- * @param {number} now - Current time (s)
- * @param {number} delay - Wait before easing starts (s)
- * @param {number} rise - Easing length (s)
- */
-export function setRamp(ramp, to, now, delay, rise) {
-  ramp.from = rampValue(ramp, now)
-  ramp.to = to
-  ramp.startAt = now + delay
-  ramp.rise = Math.max(rise, Number.EPSILON)
-}
 
-/**
- * A ramp's value at a time (smootherstep easing: zero speed at both ends).
- * @param {Object} ramp - Ramp inst
- * @param {number} t - Time (s)
- * @returns {number}
- */
-export function rampValue(ramp, t) {
-  return ramp.from + (ramp.to - ramp.from) * smootherstep((t - ramp.startAt) / ramp.rise)
-}
 
 /**
  * Smooth, deterministic, non-repeating drift in about -1..1.

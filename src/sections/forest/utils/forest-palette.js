@@ -5,7 +5,6 @@ import { CFG } from '../../../cfg.js'
 // game-wide palette aliases (CFG.visual.colors.palette).
 //
 export const FOREST_PAL = CFG.visual.colors.palette
-export const GAMEPLAY_TREE_FOLIAGE_KEY = 'gameplayTreeFoliage'
 //
 // Lower sky fraction that picks up dawn gold (between the trunks, not zenith).
 //

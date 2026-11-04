@@ -1,7 +1,7 @@
 //
 // Pure Canvas2D drawing primitive for the warm-amber moon used by the
-// touch L3 sky background, the ready / menu background composite and
-// any other scene that wants the same celestial body.
+// ready / menu background composite and any other scene that wants the
+// same celestial body.
 //
 // The moon = soft radial halo + solid disc (warm amber) + a handful of
 // darker craters clipped to the disc. All sizes/positions are

@@ -382,7 +382,7 @@ export function mountForestTreeFruitLayer(k, levelInst, z = FRUIT_Z) {
  * Draws fruits when the main tree is visible.
  * @param {Object} inst - Forest level inst
  */
-export function drawForestTreeFruits(inst) {
+function drawForestTreeFruits(inst) {
   const spots = inst.treeFruitSpots
   if (!spots?.length) return
   const k = inst.k

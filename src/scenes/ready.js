@@ -1,11 +1,10 @@
 import { CFG } from '../cfg.js'
 import { parseHex, getColor, bindStartGameKeys } from '../utils/helper.js'
-import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
-import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN, buildHeroSpritePrefix } from '../components/hero.js'
+import { loadHeroSprites, HEROES, buildHeroSpritePrefix } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
@@ -263,13 +262,6 @@ const READY_EYE_RAISE_PX = 50
 let LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK - READY_EYE_RAISE_PX
 const LIFE_OPACITY = 1.0
 //
-// Hero offset preserved from the original layout (hero stood ~83 px
-// left of the monster centre) so the hero still reads as standing in
-// front of the monster's mouth, just now centred on the canvas.
-//
-const HERO_OFFSET_FROM_LIFE_CENTER_X = -260
-const HERO_X = Math.round(LIFE_X + LIFE_WIDTH / 2 + HERO_OFFSET_FROM_LIFE_CENTER_X)
-//
 // The hero sprite canvas (96×96) has ~12 px of empty padding below
 // the legs, so when the sprite is drawn with its BOTTOM at HERO_Y the
 // visible feet end above HERO_Y at the illustration display scale.
@@ -277,32 +269,15 @@ const HERO_X = Math.round(LIFE_X + LIFE_WIDTH / 2 + HERO_OFFSET_FROM_LIFE_CENTER
 // ON the black horizon strip rather than floating above it.
 //
 const HERO_FEET_PADDING = 17
-const HERO_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING
-//
-// Central illustration hero render size — matches the menu scene's
-// native SPRITE_SIZE (96 px) so the hero in front of the monster
-// reads at the same scale as the section anti-heroes orbiting the
-// menu. Distinct from the tiny two-heroes icon below the description.
-//
-const HERO_ILLUSTRATION_SPRITE_SIZE = 96
 //
 // Hero sprite names (loaded in index.js at game start).
 // HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
 //
 //
-// Hero in the ready scene now takes the touch section's identity steel
-// teal (`#5A8898`) — the cool half of the silver/teal complementary
-// pair and the same colour the anti-hero (and touch-completed hero)
-// wear throughout every touch level. Keeps the on-boarding hero in
-// chromatic agreement with the very first section the player enters.
+// Hero in the ready scene wears steel teal (`#5A8898`) — the cool half
+// of the silver/teal complementary pair.
 //
 const HERO_READY_BODY_COLOR = '#5A8898'
-//
-// The CENTRAL hero illustration uses a richer sprite variant that
-// adds a mouth, two visible arms and a wrist watch on top of the
-// plain hero body.
-//
-const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 //
 // Anti-hero color in the duality icon is the warm complement of the
 // hero's steel teal — a vibrant orange that, paired with the teal
@@ -398,28 +373,6 @@ const HERO_EYE_PUPIL_SHIFT = 2
 const HERO_N_GROUND_LIFT_PX = 3
 let HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING - HERO_N_SPRITE_SIZE / 2 - HERO_N_GROUND_LIFT_PX
 //
-// Idle notes for hero-n while he waits with closed eyes — the same melody
-// the in-game hero hums, with rising note glyphs above his head. Values
-// mirror the IDLE_NOTE_* constants in components/hero.js (mouth offset
-// scaled to the 80 px title-hero size).
-//
-const HERO_N_NOTE_GLYPHS = ['♪', '♫', '♩', '♬']
-const HERO_N_NOTE_LIFETIME = 2.2
-const HERO_N_NOTE_RISE_SPEED = 28
-const HERO_N_NOTE_DRIFT_AMPLITUDE = 16
-const HERO_N_NOTE_DRIFT_FREQ = 1.4
-const HERO_N_NOTE_FONT_SIZE = 22
-const HERO_N_NOTE_OFFSET_Y = -23
-//
-// Notes emerge to the LEFT of the head so the stream never covers the face.
-//
-const HERO_N_NOTE_OFFSET_X = -14
-const HERO_N_VOCAL_DELAY = 2.0
-//
-// Mouth notes + idle hum stay off through the word section (see menu hero too).
-//
-const HERO_N_IDLE_VOCAL_ENABLED = false
-//
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
 // upper half of the canvas stays clean for the hint, title and the
@@ -489,8 +442,8 @@ function recomputeReadyLayout(k) {
 export function sceneReady(k) {
   k.scene('ready', async () => {
     //
-    // Ready now shares the native-resolution engine with menu, Forest and
-    // touch lesson 0 — recompute the whole baked-background + layout state
+    // Ready shares the native-resolution engine with menu, Forest and
+    // Cave — recompute the whole baked-background + layout state
     // from the live window size before anything below reads it.
     //
     recomputeReadyLayout(k)
@@ -1057,10 +1010,6 @@ function createReadyHero() {
     heroWakeTimer: 0,
     heroGone: false,
     heroDepartStartX: null,
-    heroNotes: [],
-    heroNoteTimer: 0,
-    heroMelodyIndex: 0,
-    heroIdleTime: 0,
     heroLookLeftDone: false,
     heroLookLeftTimer: 0
   }
@@ -1245,7 +1194,6 @@ function updateReadyHero(k, hero, spiderState, state, sound, dt) {
     state.mouseStillTime += dt
   }
   updateHeroN(k, hero, state, sound, dt)
-  HERO_N_IDLE_VOCAL_ENABLED && updateHeroNNotes(hero, sound, dt)
   if (hero.heroGone) {
     state.heroGoneTime += dt
     if (state.heroGoneTime >= HERO_N_GONE_MENU_DELAY && !state.heroGoneExited) {
@@ -1332,52 +1280,6 @@ function readyTitleOpacity() {
 function readyEyeOpacity(spiderState) {
   const fade = spiderState?.eyeFinalFade ?? 0
   return Math.max(0, 1 - fade)
-}
-//
-// Idle singing for hero-n: while he stands with closed eyes the same melody
-// the in-game hero hums plays note by note, each pitch paired with a rising
-// glyph above his head. Interruptions restart the melody from the top.
-//
-function updateHeroNNotes(spider, sound, dt) {
-  if (!HERO_N_IDLE_VOCAL_ENABLED) return
-  //
-  // Age + drift existing notes so they fade out naturally in any phase.
-  //
-  for (const note of spider.heroNotes) {
-    note.age += dt
-    note.x = note.baseX + Math.sin((note.age + note.driftPhase) * HERO_N_NOTE_DRIFT_FREQ * Math.PI * 2) * HERO_N_NOTE_DRIFT_AMPLITUDE * (note.age / HERO_N_NOTE_LIFETIME)
-    note.y -= HERO_N_NOTE_RISE_SPEED * dt
-  }
-  spider.heroNotes = spider.heroNotes.filter(n => n.age < HERO_N_NOTE_LIFETIME)
-  if (spider.heroPhase !== 'idle' || spider.heroGone) {
-    spider.heroIdleTime = 0
-    spider.heroMelodyIndex = 0
-    spider.heroNoteTimer = 0
-    return
-  }
-  //
-  // Only sing after a short warm-up, like the in-game hero.
-  //
-  spider.heroIdleTime += dt
-  if (spider.heroIdleTime < HERO_N_VOCAL_DELAY) return
-  spider.heroNoteTimer -= dt
-  if (spider.heroNoteTimer > 0) return
-  const [frequency, beats] = IDLE_MELODY[spider.heroMelodyIndex % IDLE_MELODY.length]
-  spider.heroNotes.push({
-    baseX: spider.heroX + HERO_N_NOTE_OFFSET_X,
-    x: spider.heroX + HERO_N_NOTE_OFFSET_X,
-    y: spider.heroY + HERO_N_NOTE_OFFSET_Y,
-    age: 0,
-    driftPhase: Math.random(),
-    glyph: HERO_N_NOTE_GLYPHS[Math.floor(Math.random() * HERO_N_NOTE_GLYPHS.length)]
-  })
-  Sound.playIdleHumNote(sound, {
-    frequency,
-    duration: beats * IDLE_MELODY_BEAT * IDLE_MELODY_SUSTAIN,
-    whistleMode: true
-  })
-  spider.heroNoteTimer = beats * IDLE_MELODY_BEAT + IDLE_MELODY_GAP
-  spider.heroMelodyIndex = (spider.heroMelodyIndex + 1) % IDLE_MELODY.length
 }
 //
 // Hero departure state machine: watch the eye → run bursts / pauses, with
@@ -1519,7 +1421,6 @@ function drawTitleHero(k, spider) {
   }
   closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy)
   !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy)
-  drawHeroNNotes(k, spider)
 }
 //
 // Matches hero.js run-lean side-eye anchor in 96px sprite space.
@@ -1683,25 +1584,6 @@ function resolveHeroFrameSuffix(spider) {
     return '_closed'
   }
   return '_0_0'
-}
-//
-// Draws the rising melody note glyphs above the idle hero-n's head.
-//
-function drawHeroNNotes(k, spider, departureFade = 1) {
-  if (!HERO_N_IDLE_VOCAL_ENABLED || !spider.heroNotes?.length) return
-  const fontName = CFG?.visual?.fonts?.regularFull
-  for (const note of spider.heroNotes) {
-    const fade = Math.max(0, Math.min(1, 1 - note.age / HERO_N_NOTE_LIFETIME))
-    k.drawText({
-      text: note.glyph,
-      pos: k.vec2(note.x, note.y),
-      size: HERO_N_NOTE_FONT_SIZE,
-      anchor: 'center',
-      color: k.rgb(255, 255, 255),
-      opacity: fade * 0.85 * departureFade,
-      font: fontName
-    })
-  }
 }
 //
 // Overlays one open eye (the right one) on the closed-eyes sprite during the

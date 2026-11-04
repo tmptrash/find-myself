@@ -17,7 +17,7 @@ const GRADE_NEUTRAL_PIVOT = { r: 128, g: 128, b: 128 }
 //
 // Shared film-grain look for every forest bake (matches the near parallax row).
 //
-export const FOREST_FILM_GRAIN = {
+const FOREST_FILM_GRAIN = {
   strength: 6,
   blockSize: 1,
   seed: 43011
@@ -38,30 +38,6 @@ export function applyForestFilmGrainToCanvas(canvas, seedOffset = 0, opts = {}) 
   ))
 }
 
-/**
- * Nearest-neighbour down/upscale — sharp foreground pixels after vector bakes.
- * @param {HTMLCanvasElement} canvas
- * @param {number} cellPx - Block size in source pixels (2 = focal tier)
- */
-export function applyForestCanvasPixelate(canvas, cellPx) {
-  if (!canvas?.width || !cellPx || cellPx <= 1) return
-  const w = canvas.width
-  const h = canvas.height
-  const sw = Math.max(1, Math.ceil(w / cellPx))
-  const sh = Math.max(1, Math.ceil(h / cellPx))
-  const down = document.createElement('canvas')
-  down.width = sw
-  down.height = sh
-  const dctx = down.getContext('2d')
-  dctx.imageSmoothingEnabled = false
-  dctx.drawImage(canvas, 0, 0, sw, sh)
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.imageSmoothingEnabled = false
-  ctx.clearRect(0, 0, w, h)
-  ctx.drawImage(down, 0, 0, w, h)
-  down.width = 0
-  down.height = 0
-}
 
 /**
  * Blurs then adds the standard forest film grain to a parallax forest canvas.

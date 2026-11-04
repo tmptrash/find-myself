@@ -95,7 +95,7 @@ export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
 // behind the stones of its basin.
 //
 export const TREE_PICTURE = { url: 'tree.png', w: 1024, h: 1536, scale: 0.95, mirror: false, foot: { x: 480, y: 1450 } }
-export const TREE_FOOT = { x: PLANT_TRUNK.x, y: 1940 }
+const TREE_FOOT = { x: PLANT_TRUNK.x, y: 1940 }
 //
 // The tree's three big leaves the hero walks on, measured on the picture: the
 // walking line through the middle of the leaf's top face (y) and how far

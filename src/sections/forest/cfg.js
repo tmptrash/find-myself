@@ -113,7 +113,21 @@ const APPLE_BUG = {
   // Apples it notices: falling or lying this far left and right of the trunk.
   //
   appleLeft: 200,
-  appleRight: 300
+  appleRight: 300,
+  //
+  // The burrow's tunnel under the ground: tunnelDelay after it dashed into
+  // the hole it shows up in the cave's left rounded end, runs to the far end, stands
+  // there a while (or stores / eats the apple it brought) and runs back.
+  //
+  tunnelWidth: 450,                 // Tunnel picture width: the full-size bug fits its narrow middle
+  tunnelDepth: 60,                  // Soil strip between the ground (the burrow's doorway) and the cave's top stones
+  tunnelDelay: 0.4,
+  tunnelDark: 0.45,                 // How dark the bug and its apples look underground
+  tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
+  tunnelRestMin: 1,                 // Stands at the far end this long when it brought nothing
+  tunnelRestMax: 2,
+  pileMax: 3,                       // Apples stored at the far end; with that many there it eats the next one
+  eatBites: 8
 }
 
 export const FOREST_CFG = {

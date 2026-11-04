@@ -7,9 +7,6 @@ const LANDING_COUNT = 10
 const PARTICLE_Z = 19
 const GRAVITY = 540
 const CRUMBLE_GRAVITY = 920
-const CRUMBLE_DRIFT_X = 95
-const CRUMBLE_DROP_SPEED_MIN = 25
-const CRUMBLE_DROP_SPEED_EXTRA = 85
 const CRUMBLE_HORIZONTAL_DRAG_PER_SEC = 0.22
 const CRUMBLE_GROUND_BOUNCE_UP_MIN = 28
 const CRUMBLE_GROUND_BOUNCE_UP_EXTRA = 48
@@ -20,11 +17,6 @@ const CRUMBLE_GROUND_SCATTER_SETTLE_SPEED = 14
 const CRUMBLE_GROUND_SCATTER_MIN_SEC = 0.2
 const CRUMBLE_GROUND_LINGER = 0.38
 const CRUMBLE_GROUND_FADE = 0.5
-const CAPTION_CRUMBLE_GROUND_CONTACT_LEAD = 14
-const CAPTION_CRUMBLE_BULK_SIZE_PAD = 3
-const CAPTION_CRUMBLE_BULK_VY_FRAC = 0.5
-const CAPTION_CRUMBLE_BULK_MIN_SEC = 0.05
-const CAPTION_CRUMBLE_BULK_MAX_SEC = 1.2
 const LANDING_SPEED_MIN = 90
 const LANDING_SPEED_RANGE = 140
 //
@@ -63,8 +55,7 @@ const BURST_ANGLE_MIN_DEG = 15
 const BURST_ANGLE_RANGE_DEG = 150
 //
 // Leaf-shaped burst (hero death) — teardrop leaves instead of dust squares,
-// tumbling outward with their own spin. Sized and timed like the touch
-// section's own death-leaf burst (lesson1.js) so it reads as a clear
+// tumbling outward with their own spin, so it reads as a clear
 // "the hero scattered into leaves" beat rather than a quick dust puff —
 // big enough to read at a glance and slow-falling enough (reduced gravity)
 // to stay on screen through the death countdown.
@@ -77,8 +68,7 @@ const LEAF_GRAVITY_SCALE = 0.55
 //
 // Once past the initial outward burst, leaves settle into a gentle
 // wind-blown flutter down to the ground instead of continuing to
-// accelerate — same fall character as the touch section's own falling
-// leaves (see falling-leaf.js): a capped descent speed plus a side-to-side
+// accelerate: a capped descent speed plus a side-to-side
 // sine sway, so they visibly drift down and land rather than just hanging
 // mid-air fading out on a timer.
 //
@@ -182,75 +172,7 @@ export function spawnLeafBurst(inst, x, y, colors, count, groundY = null) {
     pushLeafBurstParticle(inst, x, y, palette[Math.floor(Math.random() * palette.length)], groundY)
   }
 }
-//
-// Earth crumbs sampled inside a tilted rectangle — used when the G caption
-// dissolves into soil instead of a plain opacity fade.
-//
-//
-// When the bulk of the spawn box (mid height, mean drop speed) reaches groundY.
-//
-export function estimateCaptionCrumbleBulkGroundSec(spawnMidY, groundY) {
-  const dist = Math.max(0, groundY - spawnMidY - CAPTION_CRUMBLE_BULK_SIZE_PAD)
-  if (dist <= 0) return CAPTION_CRUMBLE_BULK_MIN_SEC
-  const vy0 = CRUMBLE_DROP_SPEED_MIN + CRUMBLE_DROP_SPEED_EXTRA * CAPTION_CRUMBLE_BULK_VY_FRAC
-  const g = CRUMBLE_GRAVITY
-  const disc = vy0 * vy0 + 2 * g * dist
-  if (disc <= 0) return CAPTION_CRUMBLE_BULK_MIN_SEC
-  const t = (-vy0 + Math.sqrt(disc)) / g
-  return Math.max(
-    CAPTION_CRUMBLE_BULK_MIN_SEC,
-    Math.min(CAPTION_CRUMBLE_BULK_MAX_SEC, t)
-  )
-}
 
-export function spawnEarthCrumbleFromRegion(inst, cfg) {
-  if (!inst) return
-  const {
-    centerX,
-    centerY,
-    halfW,
-    halfH,
-    tiltDeg = 0,
-    colors,
-    count = 80,
-    groundY = null,
-    onGroundHit = null,
-    captionCrumble = false
-  } = cfg
-  inst._crumbleGroundHitCb = onGroundHit
-  inst._crumbleGroundHitFired = false
-  const palette = Array.isArray(colors) ? colors : [colors || forestRgb('decorGray')]
-  const rad = tiltDeg * Math.PI / 180
-  const cos = Math.cos(rad)
-  const sin = Math.sin(rad)
-  for (let i = 0; i < count; i++) {
-    const lx = (Math.random() * 2 - 1) * halfW
-    const ly = (Math.random() * 2 - 1) * halfH
-    const wx = centerX + lx * cos - ly * sin
-    const wy = centerY + lx * sin + ly * cos
-    const c = palette[Math.floor(Math.random() * palette.length)]
-    const side = Math.random() < 0.5 ? -1 : 1
-    inst.particles.push({
-      x: wx,
-      y: wy,
-      vx: side * Math.random() * CRUMBLE_DRIFT_X,
-      vy: CRUMBLE_DROP_SPEED_MIN + Math.random() * CRUMBLE_DROP_SPEED_EXTRA,
-      life: Infinity,
-      age: 0,
-      fadeFrom: null,
-      size: 2 + Math.random() * 5,
-      r: c.r,
-      g: c.g,
-      b: c.b,
-      crumbleGround: true,
-      captionCrumble,
-      groundY,
-      landed: false,
-      scatterDone: false,
-      scatterTime: 0
-    })
-  }
-}
 //
 // Earth bursting out of the ground at (x, groundY): crumbs or pebbles thrown
 // up inside a cone (tiltDeg leans it, + = right), falling back to groundY —
@@ -281,7 +203,6 @@ export function spawnSoilBurst(inst, cfg) {
       g: c.g,
       b: c.b,
       crumbleGround: true,
-      captionCrumble: false,
       groundY,
       drag: cfg.drag ?? CRUMBLE_HORIZONTAL_DRAG_PER_SEC,
       surfaceAt: cfg.surfaceAt,
@@ -399,8 +320,7 @@ function updateCrumbleParticle(inst, p, dt) {
   p.vx *= Math.pow(p.drag ?? CRUMBLE_HORIZONTAL_DRAG_PER_SEC, dt)
   p.x += p.vx * dt
   p.y += p.vy * dt
-  const contactLead = p.captionCrumble ? CAPTION_CRUMBLE_GROUND_CONTACT_LEAD : 0
-  const floorLine = p.groundY != null ? p.groundY - p.size - contactLead : null
+  const floorLine = p.groundY != null ? p.groundY - p.size : null
   if (floorLine != null && p.y >= floorLine) {
     p.y = p.groundY - p.size
     p.landed = true
@@ -471,8 +391,7 @@ function crumbleOpacity(p) {
 // Leaf particle — bursts outward same as dust, but once the outward
 // velocity decays past the fall-speed cap it settles into a slow,
 // wind-blown flutter (capped fall speed + side sway) down to groundY, then
-// lingers briefly, spinning down, before fading out — same fall/settle
-// character as the touch section's own falling leaves.
+// lingers briefly, spinning down, before fading out.
 //
 function updateLeafParticle(p, dt) {
   if (p.landed) {

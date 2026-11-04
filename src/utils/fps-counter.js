@@ -125,31 +125,6 @@ export function onUpdate(inst) {
     layoutAtScreenCenterX(inst, inst.layoutCenterX ?? inst.k.width() / 2)
 }
 /**
- * Get current level time in seconds
- * @param {Object} inst - FPS counter instance
- * @returns {number} Level time in seconds
- */
-export function getLevelTime(inst) {
-  return inst.levelTime
-}
-/**
- * Shows or hides the FPS counter HUD (timer slot follows when present).
- * @param {Object} inst - FPS counter instance
- * @param {boolean} visible - Whether the HUD is visible
- */
-export function setVisible(inst, visible) {
-  if (!inst) return
-  const opacity = visible ? 0.7 : 0
-  inst.fpsText.opacity = opacity
-  inst.fpsTextOutlines.forEach(outline => {
-    outline.exists?.() && (outline.opacity = opacity)
-  })
-  inst.timerText && (inst.timerText.opacity = opacity)
-  inst.timerTextOutlines?.forEach(outline => {
-    outline.exists?.() && (outline.opacity = opacity)
-  })
-}
-/**
  * Pins FPS HUD nodes to screen space (same as FOREST label / scoreboard).
  * @param {Object} inst - FPS counter instance
  */
@@ -259,7 +234,7 @@ function layoutHudRow(k, texts) {
     t.main.pos.x = centerX
     const outlineOffsets = buildOutlineOffsets(HUD_OUTLINE_OFFSET)
     t.outlineNodes.forEach((outline, oi) => {
-      const [dx, dy] = outlineOffsets[oi]
+      const [dx, ] = outlineOffsets[oi]
       outline.pos.x = centerX + dx
     })
     cursorX += t.main.width + (i === 0 ? HUD_GAP_AFTER_FPS : HUD_GAP)

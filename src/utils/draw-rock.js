@@ -2,10 +2,7 @@
 // Pure Canvas2D drawing primitives for procedurally-generated rocks
 // (irregular quadratic-Bezier silhouettes with vertical gradient body,
 // scattered mottling blotches, crack lines, sheen highlight, contact
-// shadow and outline stroke). Shared between Touch L0's main rock
-// sprites (`buildSingleRock`), the touch section floor-rock utility
-// (`floor-rocks.js`) and the ready/menu background generator so every
-// rock in the game uses the same silhouette + shading pipeline.
+// shadow and outline stroke) for the ready/menu background generator.
 //
 const BASE_R = 76
 const BASE_G = 76

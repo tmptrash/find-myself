@@ -20,7 +20,7 @@ import { FOREST_PAL } from '../utils/forest-palette.js'
 // picture, so the front petals cover its top; the falling water is drawn in
 // front of the plant.
 //
-export const STATES = {
+const STATES = {
   GROWING: 'growing',
   RIPE: 'ripe',
   FALLING: 'falling',

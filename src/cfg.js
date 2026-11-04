@@ -108,23 +108,6 @@ const PALETTE = {
   pink4: '#d69a94',
   pink5: '#dab9aa'
 }
-//
-// Deep merge function to combine nested objects
-// Used for merging section-specific configs with global config
-//
-export function deepMerge(target, source) {
-  const result = { ...target }
-  
-  for (const key in source) {
-    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      result[key] = deepMerge(result[key] || {}, source[key])
-    } else {
-      result[key] = source[key]
-    }
-  }
-  
-  return result
-}
 
 export const CFG = {
   //
@@ -154,27 +137,19 @@ export const CFG = {
       height: 1080
     },
     //
-    // Forest section world — wider than the viewport; the level scrolls a camera
-    // through a fixed on-screen playfield window (see forest-camera.js).
+    // Forest section world — wider than the viewport; the camera shows the
+    // part of the fixed playfield round the hero (see forest-camera.js).
     //
     forest: {
       worldWidth: 3000,
-      worldHeight: 1080
+      playfieldHeight: 1117         // Playfield height inside the world's walls: fills a 1728x1117 screen
     },
     fonts: {
-      regular: 'jetbrains',
-      thin: 'jetbrains-thin',
       regularFull: "'JetBrains Mono'",
       thinFull: "'JetBrains Mono Thin'"
     },
     colors: {
-      background: "#000000",
       outline: "#000000",
-      // Common colors
-      levelIndicator: {
-        active: "#DC143C",             // Red for active/completed levels
-        inactive: "#555555"            // Gray for inactive/future levels
-      },
       // Splash/menu colors
       menu: {
         platformColor: "#1A1A1A"       // Platform color (for menu background)
@@ -204,28 +179,11 @@ export const CFG = {
       ready: {
         background: "#1A2530",
         //
-        // Menu ring anti-heroes for locked / uncompleted sections — rim
-        // close to the scene background so hollow silhouettes stay subtle.
-        //
-        uncompletedSectionOutline: PALETTE.gray0,
-        //
         // Shared draw-moon body — warm cream (palette snap of L3 amber disc).
         //
         moon: PALETTE.orange5,
-        fireflies: "#F4C040",
         hint: "#809AA8",
-        text: "#9AB5C4",
-        title: "#E07020",
-        emphasis: "#F4C040",
-        ghostWords: "#3E708A",
-        //
-        // Page-load CRT power-on: cool phosphor line + halo, gray snow ramp.
-        //
-        tvPowerOn: {
-          lineCore: PALETTE.gray7,
-          lineHalo: PALETTE.blue5,
-          snow: [PALETTE.gray0, PALETTE.gray1, PALETTE.gray2, PALETTE.gray3, PALETTE.gray4, PALETTE.gray5, PALETTE.gray6, PALETTE.gray7]
-        }
+        text: "#9AB5C4"
       },
       // Hero colors (for procedural generation)
       hero: {
@@ -239,10 +197,6 @@ export const CFG = {
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000"            // Pupil
       },
-      //
-      // Section colors (body color for each game section)
-      // word section color is also in its local config (src/sections/word/cfg.js)
-      //
       //
       // Game-wide palette. Semantic aliases only — every value is a reference
       // into the single PALETTE constant at the top of this file (no literals).
@@ -267,11 +221,6 @@ export const CFG = {
         // Playfield frame — neutral darkest gray so no green rims the play zone.
         //
         playfieldOuter: PALETTE.gray0,
-        midGray: PALETTE.green1,
-        //
-        // Zenith lift for parallax sky gradients and colour-world canopy air.
-        //
-        forestLift: PALETTE.teal1,
         //
         // Forest sky — a bright day: light blue overhead, pale blue-mint in
         // the middle, sunlit pale yellow at the horizon; dawn gold lives in
@@ -297,22 +246,13 @@ export const CFG = {
         forestLightCore: PALETTE.gold3,
         forestLightMid: PALETTE.gold4,
         forestLightBright: PALETTE.gold5,
-        forestSkyDawnGlow: PALETTE.gold3,
         //
         // Cold forest shadow (green-blue), not neutral gray — for foliage depth.
         //
         forestShadow: PALETTE.teal0,
         lightGray: PALETTE.gray6,
         brightLight: PALETTE.gray7,
-        //
-        // Whole gray ramp, dark to light — monochrome (gray-phase) bakes such
-        // as the idle menu forest.
-        //
-        grayRamp: [PALETTE.gray0, PALETTE.gray1, PALETTE.gray2, PALETTE.gray3, PALETTE.gray4, PALETTE.gray5, PALETTE.gray6, PALETTE.gray7],
         heroBodyGray: PALETTE.gray6,
-        heroOutline: PALETTE.gray0,
-        letterFill: PALETTE.gray6,
-        letterOutline: PALETTE.gray0,
         //
         // Lighter outline used across the Forest level's own hero/decor/rock
         // silhouettes in place of the harsher, near-black heroOutline/void —
@@ -329,33 +269,8 @@ export const CFG = {
           platform: PALETTE.brown0,
           gameplay: PALETTE.gray0
         },
-        //
-        // Hologram portal (ground portal): blue analog projection.
-        //
-        holoDoor: {
-          mouth: PALETTE.gray0,
-          core: PALETTE.gray7,
-          edge: PALETTE.blue5,
-          glow: PALETTE.blue3,
-          band: PALETTE.blue1,
-          field: PALETTE.blue2,
-          spark: PALETTE.blue4
-        },
-        //
-        // Soft gray rim for low-priority decor (captions, muted props).
-        //
-        forestOutlineLight: PALETTE.gray2,
         decorGray: PALETTE.gray5,
-        dialogFill: PALETTE.gray1,
-        dialogText: PALETTE.gray6,
-        dialogBorder: PALETTE.gray3,
         hudScore: PALETTE.gray5,
-        //
-        // Warm cream — soft highlight/shadow tone reused wherever a warm
-        // near-white reads better than a cold gray (e.g. death-prompt shadow
-        // in the colour world).
-        //
-        warmCream: PALETTE.sand5,
         //
         // Predatory crawler — cool forest shadow (teal/green), pale eye,
         // dark red pupil. Shears stay bark-brown so they read as horn, not UI.
@@ -368,25 +283,6 @@ export const CFG = {
         predatorEye: PALETTE.sand5,
         predatorPupil: PALETTE.red0,
         predatorHorn: PALETTE.brown1,
-        //
-        // Stalk-eye decor — warm luminous sclera in the cool forest (FOREST =
-        // seeing). Refs #162A25 / #E8D8B0 / #17201D / #F5E8C9 → nearest
-        // palette swatches; contour is green-black, not pure black.
-        //
-        eyeCreature: {
-          body: PALETTE.gray0,
-          sclera: PALETTE.gold5,
-          pupil: PALETTE.green0,
-          highlight: PALETTE.red5,
-          contour: PALETTE.green0
-        },
-        //
-        // Foreground grass blades — warm straw gold, a different hue family
-        // from the near bush layer's leaf green (treeColor.leaf), so the
-        // blades never blend into the bushes standing right behind them and
-        // read as dry autumn grass under the amber canopy.
-        //
-        grassGreen: PALETTE.teal4,
         water: PALETTE.cyan2,
         //
         // Lake paint over the base water fill, all at low opacity so the
@@ -457,35 +353,6 @@ export const CFG = {
           deep: PALETTE.gray0
         },
         //
-        // Branch teleport spiral — cool cyan/teal reads on the warm forest haze
-        // while gray ellipses stay for the monochrome reveal.
-        //
-        branchPortal: {
-          spiralBright: PALETTE.cyan3,
-          spiralMid: PALETTE.teal4,
-          haze: PALETTE.gold5,
-          depth: PALETTE.teal3
-        },
-        //
-        // L pickup caption body — warm pale sand on the post-L teal forest so
-        // the phrase stays readable once the ground and parallax colour in.
-        //
-        captionLetterLInk: PALETTE.sand5,
-        //
-        // G pickup caption body — slightly lighter than decorGray so the phrase
-        // reads on the flat prelude without competing with the white G glyph.
-        //
-        captionLetterGInk: PALETTE.gray5,
-        //
-        // O pickup caption on the colour forest — was the exact same pale
-        // sand5 as the highlighted "O" glyph fill (warmCream below), so the
-        // body text and the letter barely read as distinct and the whole
-        // caption looked washed out. Now a darker, richer soil tone (same
-        // family as the chernozem ground layer) for real contrast against
-        // both the pale letter and the forest backdrop.
-        //
-        captionObservationInk: PALETTE.sand0,
-        //
         // Colour-world earth band under the ground line stays in the green/teal
         // void family; warmHaze is cool parallax air (gold dawn is sky-only).
         //
@@ -506,24 +373,6 @@ export const CFG = {
         groundLoam: PALETTE.brown0,
         gold: PALETTE.gold4,
         //
-        // Terracotta decor + cute mushrooms — refs #B86B4A / #D48A57 / #6D4038
-        // (nearest palette orange2 / orange3 / brown0).
-        //
-        forestMushroom: {
-          cap: PALETTE.orange2,
-          light: PALETTE.orange3,
-          shadow: PALETTE.brown0
-        },
-        //
-        // Floor / cave rocks — green-brown stone (not neutral decor gray).
-        // Refs #4C5146 / #646657 / #77705A → gray1 / sand1 / sand2.
-        //
-        forestRock: {
-          shadow: PALETTE.gray1,
-          mid: PALETTE.sand1,
-          light: PALETTE.sand2
-        },
-        //
         // Pit cave interior: muted reddish-brown stones with a warm lit cap,
         // dark soil shade, and the deepest warm brown for the recessed back.
         //
@@ -538,31 +387,6 @@ export const CFG = {
         // Scatter caps — same family, slight hue steps (no cool rainbow caps).
         //
         mushrooms: [PALETTE.orange2, PALETTE.brown1, PALETTE.orange2, PALETTE.brown2],
-        mushroomsDark: [PALETTE.brown0, PALETTE.brown0, PALETTE.brown0, PALETTE.brown0],
-        mushroomsLight: [PALETTE.orange3, PALETTE.brown2, PALETTE.orange3, PALETTE.orange2],
-        //
-        // Visual grammar: life, hazard, oddity, "pay attention" — trampolines,
-        // ear-tree leaves. Slightly richer cap than forestMushroom, not neon.
-        //
-        forestAttention: {
-          //
-          // Ear-tree (bomb tree) look: pale cream wood — the only light trunk
-          // in the level, so with its dark contour it reads apart from the
-          // teal forest, brown soil / roots and the rose apple bark — under
-          // deep crimson leaves (red = danger).
-          //
-          leaf: PALETTE.red0,          // Ear-tree leaf body
-          leafLight: PALETTE.red2,     // Lit half of the leaf
-          leafVein: PALETTE.mauve0,    // Leaf rim and midrib
-          stem: PALETTE.sand4,         // Ear-tree trunk and limbs
-          stemLight: PALETTE.sand5,    // Bark plates catching the light on the left flank
-          stemShade: PALETTE.sand2,    // Shaded right flank and limb undersides
-          stemFissure: PALETTE.sand0,  // Bark fissures
-          mushroomCap: PALETTE.red2,
-          mushroomCapDark: PALETTE.brown0,
-          mushroomCapLight: PALETTE.orange3,
-          blush: PALETTE.red3
-        },
         //
         // Canopy apples on the main tree — warm reds with a shaded underside
         // (same ball stack as forestEyeFlower berries).
@@ -642,24 +466,12 @@ export const CFG = {
           fernMid: PALETTE.teal1,      // Front fronds
           fernLight: PALETTE.teal2,    // Lit leaflets
           plume: PALETTE.green5,       // Light spike face
-          plumeLight: PALETTE.gold5,   // Lit chevrons on the spike
-          plumeShade: PALETTE.gold3,   // Spike rim, midrib, shaded chevrons
-          plumeStem: PALETTE.green3,   // Short spike stalks
-          mushCap: PALETTE.mauve5,     // Cream cap
-          mushCapLight: PALETTE.gray7, // Cap highlight
-          mushGill: PALETTE.sand3,     // Shaded cap underside
-          mushStem: PALETTE.sand5,     // Slender stem
-          mushOutline: PALETTE.brown0, // Mushroom contour
-          spotCap: PALETTE.red1,       // Rare red spotted cap on the hill
-          spotCapLight: PALETTE.red3,  // Red cap highlight
-          spotDot: PALETTE.gray7,      // Red cap spots
           mossDeep: PALETTE.teal0,     // Cool shadow under the moss
           mossShadow: PALETTE.green0,  // Moss shadow mass
           mossMid: PALETTE.green1,     // Moss base mass
           mossLight: PALETTE.green2,   // Sunlit clover clumps
           mossGlint: PALETTE.green3,   // Rare brightest moss tips
           grass: PALETTE.green1,       // Hill grass blades
-          grassDry: PALETTE.gold3,     // Dry straw blades
           stone: PALETTE.sand1,        // Warm grey-brown boulders that make up the hill
           stoneLight: PALETTE.sand2,   // Boulder lit face (upper left)
           stoneDark: PALETTE.sand0,    // Boulder shadow face and gaps between stones
@@ -674,44 +486,6 @@ export const CFG = {
           rimDry: PALETTE.gold2,       // Dry litter patches along the ground line
           rimDryLight: PALETTE.gold4,  // Sunlit litter specks
           shaft: PALETTE.gold5         // Diagonal sunlight shafts
-        },
-        //
-        // Dry-stone pile at the right end of the lake: distinct faceted warm
-        // grey stones lit from the upper left, in two depth layers — far
-        // stones darker and duller, near stones lighter.
-        //
-        forestShoreRock: {
-          //
-          // Deepest layer: a solid dark backing inside the pile silhouette
-          // plus small dark stones, so no water shows between the stones.
-          //
-          back: {
-            fill: PALETTE.gray1,       // Solid backing behind every stone
-            contour: PALETTE.gray0,    // Stone outline
-            crevice: PALETTE.gray0,    // Cracks
-            shadow: PALETTE.gray0,     // Lower-right facets
-            faces: [PALETTE.gray1, PALETTE.sand0, PALETTE.gray1], // Stone body tones
-            light: PALETTE.gray2,      // Upper-left facets
-            glint: PALETTE.sand1       // Thin lit edge along the top
-          },
-          far: {
-            contour: PALETTE.gray0,    // Stone outline
-            crevice: PALETTE.gray0,    // Cracks
-            shadow: PALETTE.gray1,     // Lower-right facets
-            faces: [PALETTE.gray2, PALETTE.sand1, PALETTE.gray2], // Stone body tones
-            light: PALETTE.gray3,      // Upper-left facets
-            glint: PALETTE.sand2       // Thin lit edge along the top
-          },
-          near: {
-            contour: PALETTE.gray0,    // Stone outline
-            crevice: PALETTE.gray1,    // Cracks
-            shadow: PALETTE.gray2,     // Lower-right facets
-            faces: [PALETTE.gray3, PALETTE.sand2, PALETTE.gray3, PALETTE.gray4], // Stone body tones (warm grey mix)
-            light: PALETTE.gray4,      // Upper-left facets
-            glint: PALETTE.gray5,      // Thin lit edge along the top
-            moss: PALETTE.green1,      // Rare moss specks on dry stones
-            mossLight: PALETTE.green2  // Lit moss speck edge
-          }
         },
         //
         // Extra colour-world underground props (cobble beds, voids, pebbles, grit).
@@ -737,14 +511,8 @@ export const CFG = {
           outline: PALETTE.brown0,
           spike: PALETTE.gold1,
           stem: PALETTE.sand0,
-          petal: PALETTE.red5,        // Flower-like petals around the bud
-          petalLight: PALETTE.gray7,  // Petal midrib highlight
-          stamen: PALETTE.gold4       // Pollen dot on the bud
+          petal: PALETTE.red5        // Flower-like petals around the bud
         },
-        //
-        // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
-        //
-        decorOutline: PALETTE.gray1,
         //
         // Neutral gray wood steps — wood-landing dust tone.
         //
@@ -753,34 +521,6 @@ export const CFG = {
           trunk: PALETTE.gray1,
           branch: PALETTE.gray2,
           leaf: PALETTE.gray3
-        },
-        //
-        // Colour-world main tree: dark brown wood with juicy green foliage —
-        // matches the foreground trees of the reference forest picture.
-        //
-        //
-        // Grooves / highlights for the two gameplay brown trees (main + shore).
-        //
-        forestTreeBark: {
-          groove: PALETTE.rose0,
-          highlight: PALETTE.orange4,
-          //
-          // Gameplay-tree volume: the sun from the left lights a wide flank
-          // band; the right flank is a light rose wash so the shade stays a
-          // warm mid brown instead of a dark one.
-          //
-          lit: PALETTE.orange2,
-          rim: PALETTE.rose2,
-          shade: PALETTE.rose1,
-          deep: PALETTE.rose1,
-          //
-          // Root relief (reference lake tree): the same dark earth tone as
-          // the bomb-tree roots, so they stay part of the soil, with a soft
-          // contour and a lit upper edge in the topsoil tone.
-          //
-          root: PALETTE.rose0,
-          rootLit: PALETTE.brown1,
-          rootContour: PALETTE.rose0
         },
         //
         // Warm rust-brown wood like the reference lake tree.
@@ -878,9 +618,6 @@ export const CFG = {
         cave: {
           darkness: PALETTE.gray0,
           frame: PALETTE.gray0,
-          backWall: [PALETTE.gray0, PALETTE.teal0, PALETTE.cyan0, PALETTE.blue0],
-          backWallStreak: [PALETTE.gray0, PALETTE.cyan1],
-          backEarth: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.brown1],
           backVineDark: [PALETTE.gray0, PALETTE.gray0, PALETTE.gray0],
           backHaze: { far: PALETTE.teal0, mid: PALETTE.cyan0, near: PALETTE.gray0 },
           //
@@ -904,17 +641,13 @@ export const CFG = {
           plantCool: PALETTE.teal0,
           plantIvy: [PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
           eyeGlint: PALETTE.gray7,
-          plantStone: [PALETTE.gray0, PALETTE.gray1, PALETTE.sand0, PALETTE.sand1],
           plantStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5],
           plantRosette: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.teal2],
           plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.orange1, PALETTE.red4],
           leaf: [PALETTE.gray0, PALETTE.green0, PALETTE.green3, PALETTE.green5, PALETTE.gold5],
-          leafMoss: [PALETTE.gray0, PALETTE.green1, PALETTE.green2],
           leaf3d: [PALETTE.gray0, PALETTE.sand0, PALETTE.green0, PALETTE.green1, PALETTE.green5, PALETTE.gold5, PALETTE.gold4],
           trapLeaf3d: [PALETTE.gray0, PALETTE.rose0, PALETTE.orange0, PALETTE.red2, PALETTE.red3, PALETTE.red4, PALETTE.gold5],
-          trapLeaf: [PALETTE.gray0, PALETTE.rose0, PALETTE.red0, PALETTE.red2, PALETTE.red4],
           trapTooth: [PALETTE.gray0, PALETTE.gray6, PALETTE.gray7],
-          leafSlime: PALETTE.green3,
           spore: {
             cap: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate2, PALETTE.slate3, PALETTE.slate4], // Contour, shade, skin, light, highlight
             holeRim: PALETTE.orange0,  // Deep upper wall of a hole
@@ -983,7 +716,6 @@ export const CFG = {
             vein: PALETTE.rose0,
             knot: PALETTE.rose0
           },
-          backGlow: PALETTE.cyan3,
           glowCore: PALETTE.gray7,
           rock: [PALETTE.gray0, PALETTE.gray1, PALETTE.slate1, PALETTE.slate2],
           rockRim: PALETTE.slate3,
@@ -1000,42 +732,9 @@ export const CFG = {
           mushroomCap: PALETTE.cyan3,
           mushroomGill: PALETTE.cyan2,
           water: PALETTE.cyan0,
-          waterDeep: PALETTE.slate0,
-          waterLine: PALETTE.blue3,
-          waterGlint: PALETTE.cyan5,
           firefly: PALETTE.gold4,
           fireflyCore: PALETTE.gold5,
           heroSpark: [PALETTE.cyan5, PALETTE.gold5, PALETTE.cyan4]
-        },
-        //
-        // Cool air target when parallax trees soften into the sky (not gold).
-        //
-        warmHaze: PALETTE.teal2,
-        //
-        // Eye-intro umbrella stroller — grays only, each part on its own value
-        // step so the tube frame, fabric, strap and wheels stay readable.
-        //
-        forestStroller: {
-          outline: PALETTE.gray0,      // Ink contour around every part
-          tube: PALETTE.gray6,         // Near-side aluminium tube
-          tubeShade: PALETTE.gray4,    // Near tube underside
-          tubeGlint: PALETTE.gray7,    // Thin metal highlight
-          farTube: PALETTE.gray4,      // Far-side tube (in shadow)
-          farTubeShade: PALETTE.gray2, // Far tube underside
-          fabric: PALETTE.gray3,       // Back sling
-          fabricLight: PALETTE.gray4,  // Seat pan facing up
-          fabricShade: PALETTE.gray2,  // Hem and folds
-          strap: PALETTE.gray6,        // Lap and crotch strap
-          buckle: PALETTE.gray4,       // Strap buckle
-          grip: PALETTE.gray3,         // Foam handle grips
-          gripRib: PALETTE.gray1,      // Grip ribbing
-          plate: PALETTE.gray3,        // Footrest plate
-          plateLight: PALETTE.gray5,   // Footrest top edge
-          tire: PALETTE.gray1,         // Near wheel tyres
-          rim: PALETTE.gray4,          // Near wheel discs
-          hub: PALETTE.gray6,          // Wheel hubs and rivets
-          farTire: PALETTE.gray0,      // Far wheel tyres
-          farRim: PALETTE.gray3        // Far wheel discs
         },
         //
         // Parallax forest quadrants — all cool turquoise / blue so the
@@ -1069,22 +768,6 @@ export const CFG = {
           branch: PALETTE.gray1,
           leaf: PALETTE.teal1,
           leafShades: [PALETTE.cyan0, PALETTE.teal1, PALETTE.cyan2]
-        },
-        //
-        // Crowns of the two gameplay trees (main + shore): sunlit green, so
-        // the playable trees stand out in front of the all-blue parallax.
-        //
-        gameplayTreeFoliage: {
-          root: PALETTE.green0,
-          trunk: PALETTE.gray1,
-          branch: PALETTE.gray1,
-          leaf: PALETTE.green3,
-          leafShades: [PALETTE.green1, PALETTE.green2, PALETTE.green4],
-          //
-          // Star leaves (reference apple tree): every leaf unit is a small
-          // flat star of round leaflets around one joint.
-          //
-          sprigLeaves: true
         },
         //
         // Branch trampoline — standard forestMushroom terracotta (unusual beat,
@@ -1143,30 +826,8 @@ export const CFG = {
         log: {
           bark: PALETTE.brown2,
           barkLight: PALETTE.brown3,
-          barkDark: PALETTE.brown0,
           ring: PALETTE.sand2,
-          ringDark: PALETTE.brown1,
           core: PALETTE.sand3
-        }
-      },
-      sections: {
-        forest: {
-          body: PALETTE.gold3  // Gold from the game palette — perception through colour
-        },
-        word: {
-          body: '#DC143C'      // Crimson red - matches anti-hero and WORDS indicator
-        },
-        touch: {
-          body: '#5A8898'      // Steel teal — complementary to silver hero; matches in-game touch anti-hero
-        },
-        feel: {
-          body: '#FF69B4'      // Hot pink - emotions, passion, feelings
-        },
-        mind: {
-          body: '#D2B48C'      // Tan/Sepia - old, faded, nostalgic
-        },
-        time: {
-          body: '#4169E1'      // Royal blue - eternal, flowing, deep
         }
       }
     },
@@ -1175,15 +836,10 @@ export const CFG = {
     //
     zIndex: {
       background: -100,
-      flyingWords: -25,  // Between near_front (-1) and mid_depth (-50)
       platforms: 16,  // High z-index so platforms are always on top
       player: 10,
       playerShadow: 9,
-      playerAbove: 11,
-      assemblyParticles: 101,
-      eyePupil: 1,
-      ui: 100,
-      blades: 14  // Just below platforms, above everything else including huge words
+      ui: 100
     }
   },
   audio: {
@@ -1197,31 +853,14 @@ export const CFG = {
       mid: MASTER_VOLUME * 0.056,
       high: MASTER_VOLUME * 0.028,
       noise: MASTER_VOLUME * 0.484,
-      blip: MASTER_VOLUME * 0.149,
       fadeInTime: 0.5
     },
     //
     // Background music volumes for different sections
     //
     backgroundMusic: {
-      volume: MASTER_VOLUME * 0.143,  // Default fallback volume
-      kids: MASTER_VOLUME * 0.143,
-      time: MASTER_VOLUME * 0.143,
-      clock: MASTER_VOLUME * 0.143,
-      touch: MASTER_VOLUME * 0.4,
-      word: MASTER_VOLUME * 0.3,
-      breath: MASTER_VOLUME * 0.15, // breath.mp3 (parallel with word in word section)
       birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for forest level
-      whisper: MASTER_VOLUME * 0.38,  // whisper.mp3 near forest lip-trees
-      forestLetterDialog: MASTER_VOLUME * 0.85,
-      //
-      // Touch lesson 0 letter dialog voice-overs (louder than forest)
-      //
-      touchLetterDialog: Math.min(1, MASTER_VOLUME * 1.35),
-      //
-      // Volume multiplier applied to level BGM while a letter VO dialog is open
-      //
-      dialogMusicDuck: 0.18
+      whisper: MASTER_VOLUME * 0.38  // whisper.mp3 near forest lip-trees
     },
     //
     // Level sound effects
@@ -1256,14 +895,7 @@ export const CFG = {
       // Centipede leg taps (fractions of `step`): noise patter and low thump.
       //
       predatorFootNoise: 0.44,
-      predatorFootThump: 0.16,
-      //
-      // Ready CRT power-on — TV hiss fading to silence (duration set in ready.js).
-      //
-      readyTvHiss: MASTER_VOLUME * 0.19,
-      readyTvClick: MASTER_VOLUME * 0.32,
-      readyTvDegauss: MASTER_VOLUME * 0.22,
-      readyTvWhine: MASTER_VOLUME * 0.008
+      predatorFootThump: 0.16
       }
     }
 }

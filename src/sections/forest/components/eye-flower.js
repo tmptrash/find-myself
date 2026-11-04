@@ -243,10 +243,6 @@ const BLADE_MIDRIB_FRAC = 0.35
 const WHISPER_FAR = 1400
 const WHISPER_NEAR = 450
 //
-// Spawn east of the branch trampoline must clear this whisper falloff band.
-//
-const WHISPER_SPAWN_X_MARGIN = 12
-//
 // Grab sequence (timeline in flower-grab.js). Four front blades turn into
 // tentacles: they coil back, whip out on curved paths one after another, wrap
 // around the hero and drag him under; the stem rears, lunges and wobbles on
@@ -711,41 +707,6 @@ export function whisperProximity(inst, x, y) {
  */
 export function setWhisper(inst, amount) {
   inst && (inst.whisper = amount)
-}
-/**
- * Rest pose of the flower head before gameplay lean (for spawn layout).
- * @param {number} lakeX1 - Lake left edge
- * @param {number} waterSurfaceY - Lake surface Y
- * @returns {{ x: number, y: number }}
- */
-export function estimatePlantHeadWorldPos(lakeX1, waterSurfaceY) {
-  const centreX = islandWorldX(lakeX1)
-  const x1 = centreX - ISLAND_W * 0.5
-  const hill = {
-    x1,
-    x2: x1 + ISLAND_W,
-    floorY: waterSurfaceY + ISLAND_BELOW_WATER,
-    height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
-    peakLeft: true,
-    plateau: ISLAND_PLATEAU_FRAC
-  }
-  const baseX = x1 + PLANT_BASE_DX
-  const baseY = mossyHillTopY(hill, baseX) + PLANT_BASE_SINK
-  return { x: baseX, y: baseY - STEM_LEN }
-}
-/**
- * Minimum hero centre X on the ground line so plant whisper is silent.
- * @param {number} lakeX1 - Lake left edge
- * @param {number} waterSurfaceY - Lake surface Y
- * @param {number} heroY - Hero centre Y at spawn
- * @returns {number}
- */
-export function minHeroXOutsidePlantWhisper(lakeX1, waterSurfaceY, heroY) {
-  const head = estimatePlantHeadWorldPos(lakeX1, waterSurfaceY)
-  const dy = heroY - head.y
-  const absDy = Math.min(Math.abs(dy), WHISPER_FAR - 1)
-  const minDx = Math.sqrt(WHISPER_FAR * WHISPER_FAR - absDy * absDy)
-  return head.x + minDx + WHISPER_SPAWN_X_MARGIN
 }
 
 //

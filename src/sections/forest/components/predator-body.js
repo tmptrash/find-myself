@@ -17,7 +17,6 @@ const SPACING = BODY_LENGTH / (SEGMENT_COUNT - 1)
 //
 const SWIM_MAX_GAP_STRETCH = 1.1
 
-export { SPACING as PREDATOR_SPINE_SPACING }
 
 /**
  * Builds the spine parked on the ground at x.

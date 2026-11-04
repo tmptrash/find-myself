@@ -39,7 +39,7 @@ const LAKE_WAVE_SECOND_FREQ = 1.6
 //
 // Baked lake surface frames (painted water + grain), drawn untinted.
 //
-export const LAKE_BAKE_GEOMETRY_VERSION = 15
+const LAKE_BAKE_GEOMETRY_VERSION = 15
 const LAKE_BAKE_FRAME_COUNT = 24
 export const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 //
@@ -84,7 +84,7 @@ const LAKE_BED_BACK_WOBBLE_SEED = 12.9
 const LAKE_BED_RIM_PX = 2
 const LAKE_BED_EDGE_PX = 2
 const LAKE_BED_SEAM_INDEX = 5
-export const LAKE_BED_FLOOR_OVERLAP_PX = 2
+const LAKE_BED_FLOOR_OVERLAP_PX = 2
 const LAKE_BED_SLOPE_PROBE_PX = 3
 const LAKE_BED_SAND_MAX_SLOPE = 0.55
 const LAKE_BED_GRAVEL_COUNT = 140
@@ -212,7 +212,7 @@ const LAKE_RIPPLE_PX = 1
 // Keypoints are (u along the water, depth fraction); smoothstep between them
 // flattens every keypoint into a ledge. Small humps break the regularity.
 //
-export const LAKE_BED_MAX_DEPTH = LAKE_FULL_SINK_DEPTH
+const LAKE_BED_MAX_DEPTH = LAKE_FULL_SINK_DEPTH
 const LAKE_BED_PROFILE = [
   { u: 0, d: 0 },
   { u: 0.05, d: 0.2 },
@@ -310,7 +310,7 @@ export function drawAlgae(k, lake, opacity = 1) {
  * @param {Object} lake - Lake inst
  * @returns {string}
  */
-export function fillFrameSprite(k, lake) {
+function fillFrameSprite(k, lake) {
   const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
   return lake.waterSpritePrefix + frame
 }
@@ -342,16 +342,6 @@ export function lakeBottomLocalY(lake, localX) {
 }
 
 
-/**
- * Sand / earth contact line on the bed (canvas-local Y).
- * @param {Object} lake - Lake inst
- * @param {number} localX - Canvas-local X
- * @param {number} floorY - Canvas-local floor Y
- * @returns {number}
- */
-export function lakeBedSeamLocalY(lake, localX, floorY) {
-  return bedSeamLocalY(lake, localX, floorY)
-}
 
 /**
  * Surface wave offset at fraction t of the core span, at a time.
@@ -369,7 +359,7 @@ export function lakeWaveOffsetAt(t, time) {
  * @param {Object} lake - Lake inst
  * @returns {number}
  */
-export function bedFloorLocalY(lake) {
+function bedFloorLocalY(lake) {
   return lake.topMargin + lake.floorY - lake.surfaceY + LAKE_BED_FLOOR_OVERLAP_PX
 }
 
@@ -433,7 +423,7 @@ export function tintUnderwater(ctx, width, height, waterY) {
  * @param {number} alpha - 0..1
  * @returns {string}
  */
-export function hexWithAlpha(hex, alpha) {
+function hexWithAlpha(hex, alpha) {
   return hex + Math.round(alpha * 255).toString(16).padStart(2, '0')
 }
 

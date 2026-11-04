@@ -23,7 +23,6 @@ const HERO_BODY_COLOR = FOREST_PAL.heroBodyGray
 const HERO_HOLLOW_OUTLINE_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
 const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
 const HERO_FILLED_OUTLINE_COLOR = CFG.visual.colors.outline
-export const FOREST_HERO_FRAMES_STRIP_Z = CFG.visual.zIndex.ui + 12
 
 const FOREST_HERO_FRAME_STRIP_SPECS = [
   {
@@ -68,39 +67,12 @@ const FOREST_HERO_FRAME_STRIP_SPECS = [
   }
 ]
 
-/**
- * Ensures forest hero run/jump bakes exist and attaches a top HUD strip to the scene.
- * @param {Object} k - Kaplay instance
- * @param {Object} sceneInst - Forest level scene inst
- * @param {number} maxHeightPx - Vertical budget (playfield top margin)
- */
-export function createForestHeroFramesStripHud(k, sceneInst, maxHeightPx) {
-  const blocks = bakeForestHeroFrameStripBlocks(k)
-  const levelHeroScale = sceneInst.heroInst?.character?.scale?.x ?? 1
-  sceneInst.heroFramesStrip = {
-    k,
-    blocks,
-    maxHeightPx,
-    levelHeroScale,
-    displayPx: forestHeroStripFrameDisplayPx(k, levelHeroScale)
-  }
-  recomputeForestHeroFramesStripLayout(sceneInst.heroFramesStrip)
-  k.add([
-    k.fixed(),
-    k.z(FOREST_HERO_FRAMES_STRIP_Z),
-    {
-      draw() {
-        drawForestHeroFramesStripHud(sceneInst.heroFramesStrip)
-      }
-    }
-  ])
-}
 
 /**
  * Recomputes frame size so all sections fit inside maxHeightPx.
  * @param {Object} stripInst - heroFramesStrip on scene inst
  */
-export function forestHeroStripFrameDisplayPx(k, levelHeroScale = 1) {
+function forestHeroStripFrameDisplayPx(k, levelHeroScale = 1) {
   const maxCols = HERO_RUN_FRAME_COUNT
   const usableW = k.width() - SIDE_PAD_PX * 2 - FRAME_GAP_PX * (maxCols - 1)
   const fitW = Math.floor(usableW / maxCols)

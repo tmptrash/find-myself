@@ -228,8 +228,7 @@ function buildBranchCluster(pivotX, pivotY, angle, length, thickness, palette) {
     pivotY,
     swayPhase: Math.random() * Math.PI * 2,
     swaySpeed: 0.7 + Math.random() * 0.6,
-    swayAmount: 0.6 + Math.random() * 1,
-    smoothedAngleDeg: null
+    swayAmount: 0.6 + Math.random() * 1
   }
 }
 

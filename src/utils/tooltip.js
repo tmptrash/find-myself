@@ -46,10 +46,6 @@ const STACK_GAP = 8
 //
 const activeTooltipRects = []
 let lastRegistryFrame = -1
-//
-// Global suppression flag: when true, all tooltips are hidden
-//
-let globalSuppressed = false
 
 /**
  * Creates a tooltip system that shows a speech-bubble hint when the mouse
@@ -122,19 +118,7 @@ export function destroy(inst) {
   inst.updateHandler?.cancel()
 }
 
-/**
- * Suppresses all tooltips globally (e.g. during life deduction animation)
- */
-export function suppressAll() {
-  globalSuppressed = true
-}
 
-/**
- * Restores normal tooltip behavior after suppression
- */
-export function unsuppressAll() {
-  globalSuppressed = false
-}
 //
 // Resolve pointer position for hit-testing (screen space or world space).
 //
@@ -443,15 +427,6 @@ function onUpdate(inst) {
   //
   // In forceVisible mode, skip hover detection entirely.
   // The caller manages activeTarget, frozenX/Y, and opacity directly.
-  //
-  if (globalSuppressed) {
-    inst.opacity = Math.max(0, inst.opacity - k.dt() * FADE_SPEED)
-    if (inst.opacity <= 0) inst.activeTarget = null
-    refreshLayout(inst)
-    return
-  }
-  //
-  // Forced-visible tooltips skip hover detection but still respect suppression above
   //
   if (inst.forceVisible) {
     inst.activeTarget && syncFrozenScreenPos(inst, inst.activeTarget)

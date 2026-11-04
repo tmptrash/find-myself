@@ -15,7 +15,7 @@
 //     silhouettes sits behind a near/front layer of taller near-black
 //     silhouettes. Both clusters frame the empty central UI zone.
 //   - Each front-layer tree owns its own underground roots, generated
-//     with the touch L1 root algorithm (`grow-tree-root.js`). A small
+//     with the shared root algorithm (`grow-tree-root.js`). A small
 //     lateral angle bias is applied per segment so the roots start as
 //     a straight continuation of the trunk and gradually curl toward
 //     the centre of the canvas as they descend.
@@ -90,8 +90,8 @@ let CENTER_X = Math.round(CANVAS_W / 2)
 const SIDE_CLUSTER_WIDTH = 360
 const SIDE_CLUSTER_MARGIN = 20
 //
-// Cloud puff palette — shared by the Touch L0 cloud band and the
-// ready scene's drifting cloud overlay. The farthest tree row tints
+// Cloud puff palette — shared with the ready scene's drifting cloud
+// overlay. The farthest tree row tints
 // toward this cool-teal triplet so distant silhouettes merge with
 // the sky mass.
 //
@@ -249,8 +249,7 @@ const ROCK_GROUND_SINK = 5
 //
 const ROCK_EDGE_BIAS = 2.5
 //
-// Moon — uses the shared L3 moon primitive (`draw-moon.js`) so the
-// celestial body is visually identical to the touch L3 night-sky moon.
+// Moon — drawn by the shared moon primitive (`draw-moon.js`).
 // Anchored to the top-right corner by a FIXED pixel margin (not a ratio of
 // CANVAS_W/H) so it sits the same distance from the corner at any
 // resolution, per the side-decoration rule below.
@@ -509,9 +508,7 @@ export function drawMenuMoon(ctx) {
   ctx.arc(MOON_CENTER_X, MOON_CENTER_Y, haloOuterR, 0, Math.PI * 2)
   ctx.fill()
   //
-  // Moon body + built-in halo. Delegates to the shared L3 moon
-  // primitive so the celestial disc + craters are visually identical
-  // to the touch L3 night-sky moon.
+  // Moon body + built-in halo, drawn by the shared moon primitive.
   //
   drawMoonToCanvas(ctx, {
     cx: MOON_CENTER_X,

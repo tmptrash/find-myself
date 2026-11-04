@@ -436,7 +436,7 @@ function camDropTarget(inst) {
   if (inst.beat !== BEAT.DESCEND && inst.beat !== BEAT.FADE) return 0
   const k = inst.k
   const viewH = k.height()
-  const viewTop = (inst.camera?.fixedCamY ?? viewH * 0.5) - viewH * 0.5
+  const viewTop = (inst.camera?.camY ?? viewH * 0.5) - viewH * 0.5
   return Math.max(0, Math.min(CAM_DROP_MAX, inst.heroY - viewTop - viewH * CAM_FOLLOW_FRAC))
 }
 //

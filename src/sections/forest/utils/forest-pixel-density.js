@@ -2,7 +2,7 @@
 // Forest visual pixel-density tiers — one pixel universe, different attention
 // levels (background 8–12px clusters … focal 1–2px). Not uniform detail.
 //
-export const FOREST_PIXEL_DENSITY = {
+const FOREST_PIXEL_DENSITY = {
   background: { clusterCellPx: 14, detailLeavesMin: 0, detailLeavesMax: 0 },
   midground: { clusterCellPx: 10, detailLeavesMin: 0, detailLeavesMax: 1 },
   nearground: { clusterCellPx: 9, detailLeavesMin: 1, detailLeavesMax: 1 },

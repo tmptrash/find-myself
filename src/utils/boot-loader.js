@@ -18,7 +18,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
 //
 const LOADER_PANEL_BG_OVER_CRT = 'rgba(14, 20, 26, 0.97)'
 const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10px 60px rgba(0, 0, 0, 0.95)'
-const LOADER_UI_FADE_SEC = 0.32
 //
 // Stalk-eye geometry (SVG user units = CSS px): the Forest chain-buoy eye-berry
 // lying on its side. Coral stalk, side spikes on each joint, ivory berry
@@ -159,7 +158,7 @@ export function setLoaderBarCreepBoost(boosted) {
 /**
  * Builds the loader panel (caption + eye on a stalk) if it is missing.
  */
-export function ensureLoaderStructure() {
+function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   const svg = document.getElementById(LOADER_EYE_ID)
@@ -174,26 +173,6 @@ export function ensureLoaderStructure() {
  */
 export function setLoaderHideHandler(handler) {
   loaderHideHandler = handler
-}
-/**
- * Grows the stalk to full length, then fades the loader UI out and hides it —
- * the full-screen backdrop (if any) is left to the caller. The pupil keeps
- * watching during the hold and the fade.
- * @param {number} holdSec - How long the full stalk stays visible before fading
- * @returns {Promise<void>}
- */
-export function completeAndFadeOutLoaderUi(holdSec) {
-  const loaderEl = document.getElementById('loader')
-  if (!loaderEl) return Promise.resolve()
-  return growStalkToEnd().then(() => wait(holdSec)).then(() => {
-    loaderEl.style.transition = `opacity ${LOADER_UI_FADE_SEC}s ease-out`
-    loaderEl.style.opacity = '0'
-    return wait(LOADER_UI_FADE_SEC)
-  }).then(() => {
-    loaderEl.style.transition = ''
-    finishHideLoader()
-    loaderEl.style.opacity = '1'
-  })
 }
 /**
  * Shows the full-screen loader and takes the mouse cursor away until it hides.
@@ -232,7 +211,7 @@ export function showLoader(opts = {}) {
 /**
  * Opaque loader backdrop again after the CRT intro canvas is removed.
  */
-export function restoreLoaderDefaultBackdrop() {
+function restoreLoaderDefaultBackdrop() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl || loaderEl.style.display !== 'flex') return
   loaderEl.style.background = LOADER_BG_OPAQUE

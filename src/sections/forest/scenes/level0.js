@@ -35,13 +35,11 @@ import {
 } from '../utils/forest-palette.js'
 import {
   applyForestGameplaySharpBake,
-  applyForestHudSharpBake,
   forestDepthBlurRadiusPx
 } from '../utils/forest-focus-depth.js'
 import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
-import * as FpsCounter from '../../../utils/fps-counter.js'
 import {
   createForestMidges,
   updateForestMidges,
@@ -147,27 +145,30 @@ const DECOR_OUTLINE_RGB = forestContourRgb('forest')
 const CUTE_MUSH_COLORS = FOREST_PAL.cuteMushroom
 //
 // Layout. Forest runs on its own native-resolution engine (see game-engine.js /
-// engine-switch.js) so the playfield always fills the real window horizontally
-// (the world scrolls under a camera, see WORLD_W) — but every element's own
-// position is still laid out against the fixed CFG.visual.screen /
-// CFG.visual.forest design resolution (1920x1080 view / 3000x1080 world),
-// exactly like the other (letterboxed, 1920x1080) scenes: laying elements out
-// against the live window size would drift them apart on any monitor wider
-// or taller than the design resolution. SCREEN_W/SCREEN_H (the real, live
-// window size) and the handful of values that genuinely need to track it —
-// the camera viewport width, the HUD row's vertical offset when the window
-// is taller than design, and screen-space chrome that must reach the true
-// edges of the window — are `let` bindings recomputed from the live
-// k.width()/k.height() at scene start (see recomputeForestScreenLayout).
+// engine-switch.js): one world pixel is one screen pixel, never scaled. The
+// playfield is a fixed world rectangle (GAME_W x GAME_H inside the walls of
+// the world) laid out against the fixed CFG.visual.screen /
+// CFG.visual.forest design resolution — laying elements out against the live
+// window size would drift them apart on other monitors. The playfield fills
+// the whole screen and the camera shows the part of it round the hero; only
+// on an axis where the screen is larger than the playfield does it sit
+// centred, framed by void (rounded corners once it is smaller on both axes).
+// SCREEN_W/SCREEN_H (the real, live window size) and what tracks it — the
+// visible world width and the playfield's screen rectangle — are `let`
+// bindings recomputed from the live k.width()/k.height() at scene start (see
+// recomputeForestScreenLayout).
 //
-const TOP_MARGIN = 110
+// The margins are the world's walls round the playfield (never on screen
+// unless the screen is larger than the playfield).
+//
+const BOTTOM_MARGIN = 50
+const TOP_MARGIN = BOTTOM_MARGIN
 //
 // Clouds float this far under the playfield top, on their own layer (under
 // every world object, over the parallax forest).
 //
 const FOREST_CLOUD_TOP_GAP = 6
 const FOREST_CLOUD_Z = CFG.visual.zIndex.background
-const BOTTOM_MARGIN = 50
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
 const FLOOR_PHYS_H = 20
@@ -176,22 +177,21 @@ const DESIGN_SCREEN_H = CFG.visual.screen.height
 let SCREEN_W = DESIGN_SCREEN_W
 let SCREEN_H = DESIGN_SCREEN_H
 const WORLD_W = CFG.visual.forest.worldWidth
-const WORLD_H = CFG.visual.forest.worldHeight
-let VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
-//
-// Vertical view height stays pinned to the design height — on a taller-
-// than-design window the extra height becomes void letterbox padding
-// (VOID_PAD_Y) above and below instead of stretching the playfield.
-//
-const VIEW_H = DESIGN_SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
 const GAME_W = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
+const GAME_H = CFG.visual.forest.playfieldHeight
+const WORLD_H = TOP_MARGIN + GAME_H + BOTTOM_MARGIN
+//
+// Visible world width — the screen's, or the whole playfield's on a screen
+// wider than it.
+//
+let VIEW_W = Math.min(SCREEN_W, GAME_W)
 const GROUND_SURFACE_BASE_Y = 680
 //
 // Ground line sits lower in the playfield; the dark earth band below it
 // fills the rest of the playfield down to the 50 px bottom margin.
 //
 const GROUND_LEVEL_OFFSET = 115
-const PLAYFIELD_BOTTOM_WORLD_Y = TOP_MARGIN + VIEW_H
+const PLAYFIELD_BOTTOM_WORLD_Y = TOP_MARGIN + GAME_H
 const FLOOR_Y = GROUND_SURFACE_BASE_Y + GROUND_LEVEL_OFFSET
 //
 // Dark earth band runs from the ground line to the playfield bottom (50 px
@@ -200,21 +200,12 @@ const FLOOR_Y = GROUND_SURFACE_BASE_Y + GROUND_LEVEL_OFFSET
 const PLAYFIELD_EARTH_BOTTOM_Y = PLAYFIELD_BOTTOM_WORLD_Y
 const CAVE_BAND_H = PLAYFIELD_EARTH_BOTTOM_Y - FLOOR_Y
 //
-// Half the extra height (window taller than the 1080 design) added above
-// and below the playfield so it stays vertically centred instead of
-// hugging the top of a tall window. Zero at (or below) the design height.
+// Where the playfield shows on screen ({ x1, y1, x2, y2 }): the whole screen,
+// or a centred window on an axis where the screen is larger. It only frames
+// with rounded corners once the screen is larger on both axes.
 //
-let VOID_PAD_Y = 0
-//
-// Screen Y where the top void/HUD strip begins — VOID_PAD_Y on a tall
-// window, 0 at (or below) design height.
-//
-let PLAYFIELD_TOP_Y = 0
-//
-// Playfield bottom on screen — 50 px void strip below the rounded window,
-// pushed down by VOID_PAD_Y so the whole playfield stays centred.
-//
-let PLAYFIELD_BOTTOM_Y = DESIGN_SCREEN_H - BOTTOM_MARGIN
+let PLAYFIELD_SCREEN = ForestCamera.playfieldScreenRect(SCREEN_W, SCREEN_H, GAME_W, GAME_H)
+let PLAYFIELD_ROUNDED = false
 let forestPlayfieldCornerObjs = null
 //
 // Original 1920-wide layout; right-side gameplay shifts by this amount into
@@ -267,13 +258,17 @@ const WATER_FLOWER_SPILT_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BE
 //
 // The apple bug's burrow sits on the ground line between the lake and the
 // left tree's trunk; its picture draws over the tree, just under the water
-// flower (the bug itself at BUG_Z, by the shore's stone pile). Its ground
-// stays free of plants, stones and grass.
+// flower (the bug itself at BUG_Z, by the shore's stone pile). Its tunnel
+// lies under a layer of soil below the burrow and draws over the tree's
+// roots and under the burrow's picture. Its ground stays free of plants,
+// stones and grass.
 //
 const BUG_HOLE_FROM_TRUNK = 125
 const BUG_HOLE_X = LEFT_TREE_FOOT.x - BUG_HOLE_FROM_TRUNK
 const BUG_HOLE_UNDER_FLOWER = 0.1
 const BUG_HOLE_BACK_Z = WATER_FLOWER_Z - BUG_HOLE_UNDER_FLOWER
+const BUG_TUNNEL_UNDER_HOLE = 0.1
+const BUG_TUNNEL_Z = BUG_HOLE_BACK_Z - BUG_TUNNEL_UNDER_HOLE
 const BUG_HOLE_CLEAR_SPAN = AppleBug.holeClearSpan(BUG_HOLE_X)
 const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
@@ -594,31 +589,10 @@ const GROUND_STONE_SINK_RANGE = 3
 const GROUND_STONE_SMALL_W = 32
 const GROUND_STONE_Z = 7
 //
-// Forest HUD row — the (empty) section label's top Y is derived from the FPS
-// row's vertical CENTER (FOREST_HUD_FPS_TOP_Y) so the small hero / life icons
-// fall into place from that Y via LevelIndicator's own sectionLabelY-relative
-// offsets.
+// The life eye sits inside the playfield's top-right corner, this far in from
+// both playfield edges so it clears the rounded corner.
 //
-const FOREST_HUD_LABEL_FONT_SIZE = 48
-//
-// Same canvas metrics as lesson-indicator's bakeHudLetterCanvas
-// (fontSize * 1.2 + pad * 2 tall), which the icon offsets assume.
-//
-const FOREST_HUD_LABEL_CANVAS_PAD = 4
-const FOREST_HUD_LABEL_BAKED_HALF_H =
-  (FOREST_HUD_LABEL_FONT_SIZE * 1.2 + FOREST_HUD_LABEL_CANVAS_PAD * 2) / 2
-//
-// HUD row lives inside the top void strip (above the playfield). FPS/label
-// share one vertical centre so FPS, small hero and life sit on one line.
-// Screen-space, so both get VOID_PAD_Y added in recomputeForestScreenLayout to
-// stay inside the (possibly pushed-down) top void strip on a tall window.
-//
-let FOREST_HUD_FPS_TOP_Y = 55
-let FOREST_HUD_LABEL_TOP_Y = FOREST_HUD_FPS_TOP_Y - FOREST_HUD_LABEL_BAKED_HALF_H
-//
-// Neutral HUD grey for HUD text — palette gray5.
-//
-const HUD_SCORE_COLOR_SETTLED = forestRgb('hudScore')
+const FOREST_EYE_HUD_INSET = 24
 //
 // Skip lake fill when the camera is well off the water span.
 //
@@ -628,10 +602,8 @@ const LAKE_SURFACE_CULL_MARGIN = 48
 //
 const FOREST_DECOR_CULL_MARGIN = 64
 //
-// Hero body / outline tones for lesson-forest.0 — lighter than the shared
-// heroOutline (menu.js still uses that one directly for its own hero).
+// Hero body tone for lesson-forest.0.
 //
-const HERO_OUTLINE_COLOR = FOREST_PAL.forestContour.gameplay
 const HERO_BODY_COLOR = FOREST_PAL.heroBodyGray
 //
 // Forest hero: white body, dark rim, two open eyes from the first frame.
@@ -757,7 +729,7 @@ const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
 const DROWN_RESTART_DELAY = 1.1
 const WATER_STEPS_VOLUME = 0.42
 //
-// Life HUD flash on drowning death (same timing as touch lesson 0).
+// Life HUD flash on drowning death.
 //
 const LIFE_FLASH_COUNT = 20
 const LIFE_FLASH_INTERVAL = 0.05
@@ -1001,7 +973,7 @@ const SHORE_END_ROCK_Z = GRASS_Z + 1
 //
 const BUG_Z = SHORE_END_ROCK_Z + 0.5
 //
-// Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
+// Decor mushrooms lean with the heroine's idle whistle
 //
 const FOREST_MUSHROOM_WHISTLE_AMP_DEG = 14
 const FOREST_MUSHROOM_WHISTLE_SMOOTH = 7
@@ -1020,7 +992,7 @@ const HERO_FLOOR_Y = FLOOR_Y + HERO_FLOOR_SINK
 //
 const FOREST_EYE_FLOWER_HERO_CENTER_DY = 12
 //
-// Eye-flower grab ends the level: hand-off into the touch section.
+// Eye-flower grab ends the level: hand-off into the cave.
 //
 const FLOWER_GRAB_TRANSITION_FROM = 'lesson-forest.0'
 const FLOWER_GRAB_NEXT_LESSON = 'lesson-cave.0'
@@ -1110,7 +1082,7 @@ export function setForestLevel0BootstrapReporter(reporter, slice = { start: 38, 
   forestLevel0BootstrapLocalMax = 0
   setLoaderBarCreepBoost(true)
 }
-export function clearForestLevel0BootstrapReporter() {
+function clearForestLevel0BootstrapReporter() {
   forestLevel0BootstrapReporter = null
   setLoaderBarCreepBoost(false)
 }
@@ -1238,7 +1210,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const stopForestLoopAudio = () => {
       leaveForestBirdsLoopAudio()
       Sound.setEarTreeWhisperVolume(0)
-      Sound.stopRainSound(sound)
       Sound.stopTrampWaterStepsLoop(sound)
       Sound.stopWaterStepsLoop(sound)
     }
@@ -1309,21 +1280,18 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const rightZoneBaseXEarly = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
     const trampXEarly = rightZoneBaseXEarly + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const earTreeSpots = buildForestEarTreeSpots({ branchTrampX, trampX: trampXEarly })
-    const rightZoneBaseX = rightZoneBaseXEarly
     //
     // Right mushroom trampoline's X — computed early (same reason as
     // rightZoneBaseX above) so the spawn-clearance check right after can see
     // it; createMushroomTrampoline() reuses this same value further below.
     //
     const trampX = trampXEarly
-    const heroGroundCenterY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     let heroSpawnY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     const forestFirstStartGroundSpawnX = computeForestFirstStartGroundSpawnX({
       branchTrampX,
       trampX,
       branchTrampVisible: isBranchTrampolineVisible(zones),
-      trampVisible: isRightTrampolineVisible(zones),
-      heroGroundCenterY
+      trampVisible: isRightTrampolineVisible(zones)
     })
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
@@ -1331,8 +1299,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
     const lastSpawnY = get(KEY_LAST_SPAWN_Y, null)
     //
-    // Default start: on the ground right of the left mushroom, outside the
-    // island flower's whisper. A saved pose (ground, branch, tree, cave) from
+    // Default start: on the ground between the water flower and the left
+    // mushroom, outside the island flower's whisper. A saved pose (ground, branch, tree, cave) from
     // a menu exit or reload is restored as is.
     //
     let heroSpawnX = forestFirstStartGroundSpawnX
@@ -1363,9 +1331,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     sound._forestSfxMuted = false
     sound.forestSfxGain && (sound.forestSfxGain.gain.value = 1)
-    Sound.stopRainSound(sound)
     k.onSceneLeave(() => {
-      Sound.stopRainSound(sound)
       Sound.stopAmbient(sound)
       k.camScale(1)
     })
@@ -1405,7 +1371,14 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     Hero.spawn(heroInst, { instant: true })
     spawnElevated && holdForestHeroForElevatedSpawn(heroInst)
     forestLevel0LiveHeroChar = heroInst.character
-    snapForestCameraToHero(k, heroInst)
+    const camera = ForestCamera.create({
+      k,
+      playX: LEFT_MARGIN,
+      playY: TOP_MARGIN,
+      playW: GAME_W,
+      playH: GAME_H
+    })
+    snapForestCameraToHero(camera, heroInst)
     if (await forestBootstrapPause(bootstrap, 29, session)) return
     if (await forestBootstrapPause(bootstrap, 30, session)) return
     if (await forestBootstrapPause(bootstrap, 36, session)) return
@@ -1492,8 +1465,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const goldRgb = getRGB(k, FOREST_GOLD_HEX)
     const levelIndicator = createForestLevelIndicator(k)
     LevelIndicator.bindEyeHudLookAtHero(levelIndicator, heroInst)
-    pinForestHudFixed(levelIndicator)
-    LevelIndicator.revealLifeHud(levelIndicator, false)
+    LevelIndicator.revealLifeHud(levelIndicator)
     set(KEY_LIFE_SHOWN, true)
     if (await forestBootstrapPause(bootstrap, 76, session)) return
     if (await forestBootstrapPause(bootstrap, 78, session)) return
@@ -1525,29 +1497,10 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       CFG.game.platformName
     ])
     if (await forestBootstrapPause(bootstrap, 84, session)) return
-    const camera = ForestCamera.create({
-      k,
-      viewW: VIEW_W,
-      viewH: VIEW_H,
-      worldW: WORLD_W,
-      worldH: WORLD_H,
-      leftMargin: LEFT_MARGIN,
-      rightMargin: RIGHT_MARGIN,
-      topMargin: TOP_MARGIN,
-      playfieldBottomY: PLAYFIELD_BOTTOM_Y,
-      //
-      // Pinned to the design height's own centre (not the live window's) so
-      // the world stays laid out at its design position — a taller window
-      // grows as letterbox padding above/below instead of revealing more
-      // world vertically. See recomputeForestScreenLayout / VOID_PAD_Y.
-      //
-      fixedCamY: Math.round(DESIGN_SCREEN_H / 2)
-    })
     if (await forestBootstrapPause(bootstrap, 86, session)) return
     const inst = {
       k,
       camera,
-      cameraIntroPlaying: false,
       sound,
       birdsMusic,
       heroInst,
@@ -1571,7 +1524,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
         trampX
       },
       waterLayer,
-      pitDrawLayer: null,
       pitCaveHeroForeground: false,
       pitCaveTrampWasAboveCap: false,
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
@@ -1601,10 +1553,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       drownFromStartBranch: false,
       levelIndicator,
       goldRgb,
-      //
-      // Tracks whether the playable hero has left outline-only mode.
-      //
-      fpsCounter: null,
       //
       // Speech bubble for the controls hint (introLock: it is on screen).
       //
@@ -1657,6 +1605,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       flower: inst.waterFlower,
       predator,
       backZ: BUG_HOLE_BACK_Z,
+      tunnelZ: BUG_TUNNEL_Z,
       z: BUG_Z
     })
     inst.eyeFlower = EyeFlower.create({
@@ -1680,7 +1629,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     if (await forestBootstrapPause(bootstrap, 89, session)) return
     applyZoneVisibility(inst)
     revealWaterZone(inst)
-    syncForestFpsHudVisibility(inst)
     maybeStartForestCameraIntro(inst)
     updateForestCamera(inst)
     updatePlayfieldBorderColors(inst)
@@ -1864,7 +1812,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
 }
 //
 // Fixed overlay drawn on top of every world layer so nothing bleeds into the
-// HUD bar, side margins, bottom strip or outside the rounded window.
+// void round the playfield (on a screen larger than it) or past its rounded
+// corners.
 //
 function createPlayfieldFrameOverlay(k, inst) {
   k.add([
@@ -1966,17 +1915,14 @@ function finishForestIntro(inst) {
   inst.introHintOnComplete = null
 }
 //
-// Playfield chrome inset so the hint bubble pins to the game window, not the void.
+// Playfield inset so the hint bubble pins to the game window, not the void.
 //
 function forestTooltipClampInset() {
   return {
-    left: LEFT_MARGIN,
-    right: RIGHT_MARGIN,
-    //
-    // HUD icons sit in the top void strip above PLAYFIELD_TOP_Y + TOP_MARGIN.
-    //
-    top: PLAYFIELD_TOP_Y,
-    bottom: SCREEN_H - PLAYFIELD_BOTTOM_Y
+    left: PLAYFIELD_SCREEN.x1,
+    right: SCREEN_W - PLAYFIELD_SCREEN.x2,
+    top: PLAYFIELD_SCREEN.y1,
+    bottom: SCREEN_H - PLAYFIELD_SCREEN.y2
   }
 }
 //
@@ -2117,7 +2063,7 @@ function applyForestCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCave) {
   if (!ch?.exists?.()) return
   ch.pos.x = heroSpawnX
   ch.pos.y = inst.pit?.collapsed ? getForestPitHeroStandY(inst.pit) : heroSpawnY
-  snapForestCameraToHero(inst.k, inst.heroInst)
+  snapForestCameraToHero(inst.camera, inst.heroInst)
 }
 //
 // Tree branches and other raised platforms are built later in the bootstrap,
@@ -2141,7 +2087,7 @@ function releaseForestHeroOnElevatedSpawn(inst, heroSpawnY) {
   char.pos.y = heroSpawnY
   char.vel && (char.vel.x = 0, char.vel.y = 0)
   char.gravityScale = 1
-  snapForestCameraToHero(inst.k, inst.heroInst)
+  snapForestCameraToHero(inst.camera, inst.heroInst)
 }
 //
 // Remembers whether the hero was on the start branch or the ground so the
@@ -2181,52 +2127,15 @@ function persistForestDeathSpawn(inst, deathX, deathY) {
   writeForestLastSpawnKeys(inst, deathX, deathY)
 }
 //
-// Pins the Forest HUD nodes to screen space so they stay under the top bar
-// while the world camera scrolls.
-//
-function pinForestHudFixed(indicator) {
-  if (!indicator) return
-  const pin = (obj) => obj?.exists?.() && (obj.fixed = true)
-  indicator.letterObjects?.forEach(pin)
-  indicator.letterOutlineObjects?.forEach(pin)
-  indicator.scoreboardNodes?.forEach(pin)
-}
-//
-// Pins the FPS counter to the top-centre of the screen.
-//
-function layoutForestFpsHud(inst) {
-  const fps = inst.fpsCounter
-  if (!fps) return
-  FpsCounter.pinScreenFixed(fps)
-  FpsCounter.layoutAtScreenCenterX(fps, inst.k.width() / 2)
-}
-//
-// Creates the forest HUD row — life/eye icon only, no section label.
+// Creates the forest HUD — the life eye, tucked into the playfield's
+// top-right corner.
 //
 function createForestLevelIndicator(k) {
-  //
-  // The HUD small hero mirrors the playable hero: whitish body with grey eye
-  // whites — it stays white even once the world colours.
-  //
-  const indicator = LevelIndicator.create({
+  return LevelIndicator.create({
     k,
-    levelNumber: -1,
-    sectionLabel: '',
-    heroBodyColor: HERO_BODY_COLOR,
-    heroOutlineColor: HERO_OUTLINE_COLOR,
-    heroEyeWhiteColor: HERO_BODY_COLOR,
-    heroPostBakeCanvas: applyForestHudSharpBake,
-    hudPostBakeCanvas: applyForestHudSharpBake,
-    hudScoreFlat: false,
-    topPlatformHeight: TOP_MARGIN,
-    sideWallWidth: LEFT_MARGIN,
-    sectionLabelY: FOREST_HUD_LABEL_TOP_Y,
-    hideScoreboard: true,
-    hideLifeScore: true,
-    lifeHudPlayfieldRightX: SCREEN_W - RIGHT_MARGIN
+    lifeHudPlayfieldRightX: PLAYFIELD_SCREEN.x2 - FOREST_EYE_HUD_INSET,
+    lifeHudPlayfieldTopY: PLAYFIELD_SCREEN.y1 + FOREST_EYE_HUD_INSET
   })
-  pinForestHudFixed(indicator)
-  return indicator
 }
 //
 // HTML5 loop for birds.mp3 — Kaplay k.play().stop() does not reliably restart
@@ -2676,7 +2585,6 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
       bakeParallaxBushes(ctx, pad, {
         cornerBandTop: PAR_FARTHEST_BAND_TOP,
         foliageDensityTier: 'background',
-        colorFlat: false,
         heightScale: BUSH_FARTHEST_HEIGHT_SCALE
       })
     }, { blurRadius: forestDepthBlurRadiusPx('background'), grade: FOREST_LAYER_GRADE.far })
@@ -3457,7 +3365,7 @@ function createLevelBounds(k) {
   return { floor, postCaveFloor, walls }
 }
 //
-// Rounded corners — one baked mask sprite per corner, rotated like lesson-time.2.
+// Rounded corners — one baked mask sprite per corner, rotated into place.
 //
 function createRoundedCorners(k) {
   loadPlayfieldCornerSprites(k)
@@ -3474,20 +3382,22 @@ function createRoundedCorners(k) {
   updatePlayfieldCornerPositions()
 }
 //
-// Screen-space anchor for each playfield corner mask (matches time lesson2 layout).
+// Screen-space anchor for each playfield corner mask.
 //
 function playfieldCornerPositions() {
-  const topY = PLAYFIELD_TOP_Y + TOP_MARGIN - CORNER_RADIUS
-  const bottomY = PLAYFIELD_BOTTOM_Y + CORNER_RADIUS
-  const leftX = LEFT_MARGIN - CORNER_RADIUS
-  const rightX = SCREEN_W - RIGHT_MARGIN + CORNER_RADIUS
+  const topY = PLAYFIELD_SCREEN.y1 - CORNER_RADIUS
+  const bottomY = PLAYFIELD_SCREEN.y2 + CORNER_RADIUS
+  const leftX = PLAYFIELD_SCREEN.x1 - CORNER_RADIUS
+  const rightX = PLAYFIELD_SCREEN.x2 + CORNER_RADIUS
   return { topY, bottomY, leftX, rightX }
 }
 //
-// Repositions all four rounded-corner masks after a native-resolution relayout.
+// Repositions all four rounded-corner masks after a native-resolution relayout
+// (shown only while the whole playfield is a window inside the screen).
 //
 function updatePlayfieldCornerPositions() {
   if (!forestPlayfieldCornerObjs?.length || forestPlayfieldCornerObjs.length < 4) return
+  forestPlayfieldCornerObjs.forEach(corner => { corner.hidden = !PLAYFIELD_ROUNDED })
   const { topY, bottomY, leftX, rightX } = playfieldCornerPositions()
   forestPlayfieldCornerObjs[0].pos.x = leftX
   forestPlayfieldCornerObjs[0].pos.y = topY
@@ -3509,7 +3419,7 @@ function loadPlayfieldCornerSprites(k) {
   outerCanvas.height = 0
 }
 //
-// Quarter-circle cut-out corner canvas — same geometry as time lesson2.
+// Quarter-circle cut-out corner canvas.
 //
 function makeRoundedCornerCanvas(radius, colorHex) {
   const rgb = forestRgb(colorHex)
@@ -4654,7 +4564,7 @@ function onDrawWorld(inst) {
 function drawPlayfieldBottomCornerOverlay(inst) {
   const k = inst.k
   const transitionOverlay = k._transitionOverlay
-  if (transitionOverlay?.exists?.() && transitionOverlay.opacity > 0.02) return
+  if (!PLAYFIELD_ROUNDED || (transitionOverlay?.exists?.() && transitionOverlay.opacity > 0.02)) return
   const { bottomY, leftX, rightX } = playfieldCornerPositions()
   drawPlayfieldCornerMask(k, leftX, bottomY, 270)
   drawPlayfieldCornerMask(k, rightX, bottomY, 180)
@@ -4699,43 +4609,28 @@ function drawLakeShoreRocksWorld(inst) {
   k.drawSprite({ sprite: pile.name, pos: k.vec2(pile.x, pile.y), width: pile.width, height: pile.height })
 }
 //
-// Top HUD platform strip — sits below HUD letters (z = ui - 1).
+// Void above the playfield (only on a screen taller than it) — sits below
+// the HUD (z = ui - 1).
 //
 function drawPlayfieldTopBar(inst) {
   const k = inst.k
-  const outerColor = k.rgb(OUTER.r, OUTER.g, OUTER.b)
-  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: PLAYFIELD_TOP_Y + TOP_MARGIN, color: outerColor, fixed: true })
+  drawPlayfieldVoidRect(k, 0, 0, SCREEN_W, PLAYFIELD_SCREEN.y1)
 }
 //
-// Side and bottom pillarbox — masks world bleeding past the rounded window.
-// Both bars reach their real screen edge, covering the letterbox padding
-// too on a taller-than-design window.
+// Void below and beside the playfield (only on an axis where the screen is
+// larger than it) — masks the world's walls and whatever lies past them.
 //
 function drawPlayfieldSideChrome(inst) {
   const k = inst.k
-  const outerColor = k.rgb(OUTER.r, OUTER.g, OUTER.b)
-  k.drawRect({
-    pos: k.vec2(0, PLAYFIELD_BOTTOM_Y),
-    width: SCREEN_W,
-    height: SCREEN_H - PLAYFIELD_BOTTOM_Y,
-    color: outerColor,
-    fixed: true
-  })
-  k.drawRect({
-    pos: k.vec2(0, PLAYFIELD_TOP_Y + TOP_MARGIN),
-    width: LEFT_MARGIN,
-    height: VIEW_H,
-    color: outerColor,
-    fixed: true
-  })
-  k.drawRect({
-    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, PLAYFIELD_TOP_Y + TOP_MARGIN),
-    width: RIGHT_MARGIN,
-    height: VIEW_H,
-    color: outerColor,
-    fixed: true
-  })
+  const { x1, y1, x2, y2 } = PLAYFIELD_SCREEN
+  drawPlayfieldVoidRect(k, 0, y2, SCREEN_W, SCREEN_H - y2)
+  drawPlayfieldVoidRect(k, 0, y1, x1, y2 - y1)
+  drawPlayfieldVoidRect(k, x2, y1, SCREEN_W - x2, y2 - y1)
   drawPlayfieldBottomCornerOverlay(inst)
+}
+function drawPlayfieldVoidRect(k, x, y, w, h) {
+  if (w <= 0 || h <= 0) return
+  k.drawRect({ pos: k.vec2(x, y), width: w, height: h, color: k.rgb(OUTER.r, OUTER.g, OUTER.b), fixed: true })
 }
 //
 // Tints border walls with the playfield border tone.
@@ -5136,35 +5031,6 @@ function playSegmentRevealSound(inst) {
   Sound.playLetterPickupSoft(inst.sound)
 }
 //
-// Shows the top-centre FPS HUD when any top-bar element is visible.
-//
-function isForestTopHudElementVisible(inst) {
-  const li = inst.levelIndicator
-  if (!li) return false
-  if (CFG.debug?.showPerformanceHud) return true
-  return true
-}
-//
-// Creates or hides the FPS counter based on visible HUD chrome.
-//
-function syncForestFpsHudVisibility(inst) {
-  if (!CFG.debug?.showPerformanceHud && !isForestTopHudElementVisible(inst)) {
-    inst.fpsCounter && FpsCounter.setVisible(inst.fpsCounter, false)
-    return
-  }
-  if (!inst.fpsCounter) {
-    inst.fpsCounter = FpsCounter.create({
-      k: inst.k,
-      topY: FOREST_HUD_FPS_TOP_Y,
-      textColor: inst.k.rgb(HUD_SCORE_COLOR_SETTLED.r, HUD_SCORE_COLOR_SETTLED.g, HUD_SCORE_COLOR_SETTLED.b),
-      outlineColor: inst.k.rgb(VOID.r, VOID.g, VOID.b),
-      postBakeCanvas: applyForestHudSharpBake
-    })
-  }
-  FpsCounter.setVisible(inst.fpsCounter, true)
-  layoutForestFpsHud(inst)
-}
-//
 // Pins the hero to the manual sink tween (body is removed for the sequence).
 //
 function applyDrownSinkPose(inst) {
@@ -5391,11 +5257,10 @@ function bumpForestLifeHudOnDeath(inst) {
   if (!inst.levelIndicator) {
     inst.levelIndicator = createForestLevelIndicator(inst.k)
   }
-  syncForestFpsHudVisibility(inst)
   if (!inst.levelIndicator?.lifeRevealed) return
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
-    LevelIndicator.syncLifeHudGrey(inst.levelIndicator, false)
+    LevelIndicator.restoreLifeHud(inst.levelIndicator)
     inst.levelIndicator._lifeFlashLock = true
     const originalColor = inst.levelIndicator.lifeImage.sprite.color
     flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0)
@@ -5625,29 +5490,17 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.trampBounceAir = false
   inst.branchTrampBounceAir = false
   registerForestTrampolineLateBounce(inst)
-  snapForestCameraToHero(k, fresh)
+  snapForestCameraToHero(inst.camera, fresh)
 }
 //
-// First-visit ground X: right of the branch tramp, outside the island
-// flower whisper, then the same trampoline nudge as the hero spawn.
-// Light shafts stay anchored here for the whole level.
+// First-visit ground X: between the water flower and the branch tramp, just
+// left of the tramp's bounce cap plus spawn clearance (the flower's plant
+// reaches almost that far), then the same trampoline nudge as the hero
+// spawn. Light shafts stay anchored here for the whole level.
 //
 function computeForestFirstStartGroundSpawnX(cfg) {
-  const {
-    branchTrampX,
-    trampX,
-    branchTrampVisible,
-    trampVisible,
-    heroGroundCenterY
-  } = cfg
-  const branchTrampSpawnClearX =
-    branchTrampX + TRAMP_RADIUS + TRAMP_ADJACENT_X + HERO_TRAMPOLINE_SPAWN_CLEARANCE
-  const whisperSilentSpawnX = EyeFlower.minHeroXOutsidePlantWhisper(
-    LEFT_MARGIN,
-    WATER_SURFACE_Y,
-    heroGroundCenterY
-  )
-  const x = Math.max(branchTrampSpawnClearX, whisperSilentSpawnX)
+  const { branchTrampX, trampX, branchTrampVisible, trampVisible } = cfg
+  const x = branchTrampX - TRAMP_RADIUS - TRAMP_ADJACENT_X - HERO_TRAMPOLINE_SPAWN_CLEARANCE
   return nudgeForestHeroSpawnAwayFromTrampolines({
     spawnX: x,
     spawnOnBranch: false,
@@ -5856,19 +5709,13 @@ function maybeStartForestCameraIntro(inst) {
   const k = inst.k
   k.camScale(1)
   set(KEY_CAMERA_INTRO_DONE, true)
-  snapForestCameraToHero(k, inst.heroInst)
+  snapForestCameraToHero(inst.camera, inst.heroInst)
   updateForestCamera(inst)
 }
-function snapForestCameraToHero(k, heroInst) {
+function snapForestCameraToHero(camera, heroInst) {
   const ch = heroInst?.character
-  if (!ch?.pos) return
-  const half = VIEW_W / 2
-  const minX = LEFT_MARGIN + half
-  const maxX = WORLD_W - RIGHT_MARGIN - half
-  const camX = Math.max(minX, Math.min(maxX, ch.pos.x))
-  ForestCamera.setCamPosForPixelAlignedSubjectX(
-    k, ch.pos.x, camX, Math.round(DESIGN_SCREEN_H / 2)
-  )
+  if (!ch?.pos || !camera) return
+  ForestCamera.snapToHero(camera, ch.pos.x, ch.pos.y)
 }
 //
 // Full-screen void curtain — async bootstrap yields to the engine between
@@ -5940,14 +5787,12 @@ function onUpdate(inst) {
   )
   if (inst.touchDeathHandled) {
     inst.footParticles && ForestFootParticles.onUpdate(inst.footParticles, k.dt())
-    inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
     return
   }
   if (FlowerGrab.isActive(inst.flowerGrab)) {
     updateForestFlowerGrabFrame(inst)
     return
   }
-  inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
   updateForestIntroHint(inst, k.dt())
   if (inst._mushroomLeanActive) {
     updateMushroomWhistleLean(inst)
@@ -6194,14 +6039,13 @@ function tryStartForestFlowerGrab(inst) {
 }
 //
 // While the flower drags the hero away the level only runs the sequence,
-// particles, whisper, FPS and camera. The camera follows him a little way
+// particles, whisper and camera. The camera follows him a little way
 // down the root tunnel on top of its regular horizontal follow.
 //
 function updateForestFlowerGrabFrame(inst) {
   const k = inst.k
   FlowerGrab.onUpdate(inst.flowerGrab, k.dt())
   inst.footParticles && ForestFootParticles.onUpdate(inst.footParticles, k.dt())
-  inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
   updateForestPlantWhisperSound(inst, inst.heroInst.character)
   updateForestCamera(inst)
   const drop = FlowerGrab.cameraDropY(inst.flowerGrab)
@@ -7000,8 +6844,8 @@ function beginDrownSinkTween(inst) {
   }
 }
 //
-// Flashes life icon gold/white on drowning death (touch lesson 0 pattern
-// recoloured to the forest gold — perception happens through colour here).
+// Flashes life icon gold/white on drowning death (forest gold — perception
+// happens through colour here).
 //
 function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
@@ -7287,7 +7131,7 @@ function launchHeroFromPitCaveMushroom(inst) {
   hero.postLandAirLock = 0
   hero.canJump = false
   inst._pitMushroomBranchLaunchLatch = true
-  snapForestCameraToHero(inst.k, inst.heroInst)
+  snapForestCameraToHero(inst.camera, inst.heroInst)
   updateForestCamera(inst)
   inst.sound && !inst.sound._forestSfxMuted && Sound.playJumpSound(inst.sound)
   applyZoneVisibility(inst)
@@ -7296,21 +7140,17 @@ function launchHeroFromPitCaveMushroom(inst) {
 //
 // Forest runs on its own native-resolution engine, so the real window size is
 // only known once that engine is booted — refreshes SCREEN_W/SCREEN_H and the
-// handful of values that legitimately track the live window (camera viewport
-// width, vertical letterbox padding on a taller-than-design window, and the
-// screen-space HUD/chrome Y's that ride on that padding) right at scene
-// start, before any layout math runs. Every element's own world position
+// handful of values that legitimately track the live window (the visible
+// world width and the playfield's screen rectangle the HUD and the void
+// frame hang off) right at scene start, before any layout math runs. Every element's own world position
 // (TREE_X and everything derived from it) stays pinned to the fixed design
 // resolution instead — see the Layout comment near TOP_MARGIN/SCREEN_W above.
 //
 function recomputeForestScreenLayout(k) {
   SCREEN_W = k.width()
   SCREEN_H = k.height()
-  VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
-  VOID_PAD_Y = Math.max(0, Math.round((SCREEN_H - DESIGN_SCREEN_H) / 2))
-  PLAYFIELD_TOP_Y = VOID_PAD_Y
-  PLAYFIELD_BOTTOM_Y = VOID_PAD_Y + DESIGN_SCREEN_H - BOTTOM_MARGIN
-  FOREST_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
-  FOREST_HUD_LABEL_TOP_Y = FOREST_HUD_FPS_TOP_Y - FOREST_HUD_LABEL_BAKED_HALF_H
+  VIEW_W = Math.min(SCREEN_W, GAME_W)
+  PLAYFIELD_SCREEN = ForestCamera.playfieldScreenRect(SCREEN_W, SCREEN_H, GAME_W, GAME_H)
+  PLAYFIELD_ROUNDED = PLAYFIELD_SCREEN.x1 > 0 && PLAYFIELD_SCREEN.y1 > 0
   updatePlayfieldCornerPositions()
 }

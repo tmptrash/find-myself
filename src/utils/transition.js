@@ -1,8 +1,7 @@
 import { CFG } from '../cfg.js'
-import { parseHex, onPhysicalKeyPress, releasePhysicalKeys, resetPhysicalInputLayer } from './helper.js'
+import { parseHex, onPhysicalKeyPress, resetPhysicalInputLayer } from './helper.js'
 import { set, normalizeSceneName } from './progress.js'
 import * as Sound from './sound.js'
-import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
 import * as Hero from '../components/hero.js'
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce, onEngineResolutionSwapped } from './lesson-assets.js'
@@ -13,15 +12,11 @@ import {
   setForestLevel0BootstrapReporter
 } from '../sections/forest/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
-import { loadForestTextSprite, forestUiHash } from '../sections/forest/utils/forest-ui-bake.js'
-import { FOREST_PAL } from '../sections/forest/utils/forest-palette.js'
-import { bindPointerActivate } from './pointer-activate.js'
 import { focusGameCanvas } from './canvas-focus.js'
 
 /**
  * Level transition configuration - maps current level to next level
  */
-// TODO: complete this by two items arrays
 const LEVEL_TRANSITIONS = {
   'menu-forest': 'lesson-forest.0',
   'menu-cave': 'lesson-cave.0',
@@ -29,73 +24,34 @@ const LEVEL_TRANSITIONS = {
   'lesson-cave.0': 'menu',
   'forest-complete': 'menu'
 }
-
-// Subtitles shown BEFORE entering each level (shifted forward by one)
-// Format: [text, sound_id, hold_duration] or just text
-const LEVEL_SUBTITLES = {
-  'menu': '',
-  'menu-forest': '',
-  'menu-cave': '',
-  'lesson-forest.0': '',
-  'lesson-cave.0': '',
-  'forest-complete': ''
-}
-
 //
-// Pre-level phrase must draw above the opaque transition overlay (see below).
+// The opaque overlay draws above every scene object while the next level
+// loads behind it.
 //
 const TRANSITION_OVERLAY_Z = CFG.visual.zIndex.ui + 2600
-const TRANSITION_SUBTITLE_Z = TRANSITION_OVERLAY_Z + 20
-const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
-const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
-const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level text
-const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
-const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
+const BLACK_PAUSE_DURATION = 0.5     // Black screen hold before the level loads
+const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black from a non-level scene
+const ESCAPE_ARM_DELAY = 0.3         // Esc only escapes to the menu after this long
 const FOREST_PRELEVEL_SCENE = 'lesson-forest.0'
 const FOREST_PREWARM_BAR_START = 5
 const FOREST_PREWARM_BAR_END = 38
 const FOREST_BOOTSTRAP_BAR_START = FOREST_PREWARM_BAR_END
 const FOREST_BOOTSTRAP_BAR_END = 100
 //
-// Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)
-// usually finishes well under this window — the DOM loader only reveals
-// itself if loading actually runs longer, so a fast load just shows the
-// plain opaque (near-black) transition overlay instead of a loader flash.
+// Loader bar steps while the forest's pack, engine swap and heavy bakes run.
 //
-const NATIVE_PRELEVEL_LOADER_DELAY_MS = 2000
-const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
-const SKIP_TEXT_FADE_DURATION = 0.35 // Fast fade out when the player skips the text
-const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
+const FOREST_LOAD_PACK_PCT = 5
+const FOREST_LOAD_PACKED_PCT = 12
+const FOREST_LOAD_ENGINE_PCT = 18
+const FOREST_LOAD_ENGINE_READY_PCT = 28
+const FOREST_LOAD_PREWARM_LEAD_PCT = 7
 const SCENE_FADE_IN_DURATION = 0.5   // Duration of fade-in overlay when entering new scene
-const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
-const SUBTITLE_LINE_SPACING = 12     // Extra vertical pixels between subtitle lines
-//
-// Approximate monospace char width ratio for subtitle / hint width matching
-//
-const HINT_CHAR_WIDTH_RATIO = 0.55
-const HINT_Y_OFFSET_EM = 1.9
-//
-// Subtitle colors per section (matches anti-hero hover color in menu scene)
-//
-const SECTION_SUBTITLE_COLORS = {
-  forest: FOREST_PAL.heroBodyGray
-}
-const DEFAULT_SUBTITLE_COLOR = '#6B8E9F'
 
 /**
- * Get next level name
- * @param {string} currentLevel - Current level name
- * @returns {string|null} Next level name or null if not found
- */
-export function getNextLevel(currentLevel) {
-  return LEVEL_TRANSITIONS[currentLevel] || null
-}
-
-/**
- * Show the pre-level subtitle transition, then navigate to the saved level.
+ * Show the pre-level transition, then navigate to the saved level.
  * Called when the player resumes from the menu with a saved game.
  * Looks up which "menu-to-section" key produces targetLevel and replays
- * the transition from there so the subtitle is shown again.
+ * the transition from there.
  * @param {Object} k - Kaplay instance
  * @param {string} targetLevel - Target level to go to (e.g., 'lesson-forest.0')
  */
@@ -117,25 +73,22 @@ export function showTransitionToLevel(k, targetLevel) {
   }
 }
 /**
- * Creates a fade to black transition effect between levels
- * Shows subtitle BEFORE entering the next level
- * 1. Fade to black (0.8s)
- * 2. Black screen pause (0.5s)
- * 3. Subtitle text appears (fade in 1s, hold 2s, fade out 1s)
- * 4. Final pause (0.3s)
- * 5. Load new level
- * 
- * User can press Space, ENTER or click mouse to skip the transition and go directly to next level
- * 
+ * Fades to black and loads the next level behind an opaque overlay:
+ * 1. Prepare the next level's assets (forest: pack, engine swap, heavy bakes)
+ * 2. Fade to black (0.8s) unless the overlay starts opaque
+ * 3. Black screen pause (0.5s)
+ * 4. Load new level
+ *
+ * Esc during the transition goes back to the menu instead.
+ *
  * @param {Object} k - Kaplay instance
  * @param {string} currentLevel - Current level name (e.g., 'lesson-forest.0' or 'menu-forest')
- * @param {Function} onComplete - Callback when transition completes
+ * @param {Function} onComplete - Callback when there is no next level
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
   const nextLevel = LEVEL_TRANSITIONS[currentLevel] || null
   let transitionK = k
   if (!nextLevel) {
-    // No transition defined, go directly
     onComplete?.()
     return
   }
@@ -150,22 +103,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   Sound.muteProceduralSounds()
   Sound.suspendGlobalAudio()
   //
-  // Suppress any active hero idle vocalization (visual notes + whistle).
-  // Notes are drawn at z=9999 — without this, the menu hero's music
-  // glyphs float over the pre-level subtitle text. Re-enabled when the
-  // next scene actually starts (see finalizeTransitionToLevel below) or
-  // if the transition is skipped/escaped.
+  // Suppress any active hero idle vocalization (visual notes + whistle) until
+  // the next scene starts or the transition is escaped.
   //
   Hero.suppressIdleVocalization()
-  //
-  // Store original volume and mute all sounds
-  //
   const originalVolume = k.volume()
   k.volume(0)
   //
-  // Save progress for next level immediately (before showing transition)
-  // This ensures progress is saved even if user interrupts transition with ESC
-  // But DON'T save progress for transitions from menu/menu-time/menu-touch, as these are entry points
+  // Save progress for next level immediately (before the transition), so it
+  // is saved even if the player interrupts it with Esc. Plain menu entries
+  // are not lessons and save nothing.
   //
   const isLessonScene = (s) => s.startsWith('level-') || s.startsWith('lesson-')
   const isLevelToLevelTransition = isLessonScene(currentLevel) && isLessonScene(nextLevel)
@@ -173,130 +120,62 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   if (isLevelToLevelTransition || isMenuToLevelTransition) {
     set('lastLesson', nextLevel)
   }
-  
   let timer = 0
   //
-  // Check if transitioning from a level or a menu-section entry (not from menu)
-  // If so, start with black_pause phase since overlay is already opaque (no slow fade)
+  // From a level, the menu or a menu-section entry the overlay starts opaque
+  // (no slow fade): the transition opens on the black pause.
   //
   const isFromLevel = currentLevel !== 'menu' && isLessonScene(currentLevel)
-  const isFromMenuForest = currentLevel === 'menu-forest'
-  const isFromMenuCave = currentLevel === 'menu-cave'
-  const isFromMenuSection = isFromMenuForest || isFromMenuCave
-  const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
+  const isFromMenuSection = currentLevel === 'menu-forest' || currentLevel === 'menu-cave'
+  const startsOpaque = currentLevel === 'menu' || isFromLevel || isFromMenuSection
+  const postAssetPreparePhase = startsOpaque ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
   const isForestPrelevel = needsEarlyAssetLoad && nextLevel === FOREST_PRELEVEL_SCENE
-  const isNativePrelevel = isForestPrelevel
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
-  //
-  // Native-resolution scenes: pack prep + heavy prewarm run behind the
-  // already-opaque overlay below with no subtitle yet. Reveal the DOM loader
-  // only if that work is still running after NATIVE_PRELEVEL_LOADER_DELAY_MS
-  // — cancelNativePrelevelLoaderTimer() below stops this before it fires
-  // whenever the load finishes first, so fast loads stay a plain black
-  // screen instead of flashing the loader.
-  //
-  let nativePrelevelLoaderTimer = null
   if (isForestPrelevel) {
     BootLoader.showLoader()
     BootLoader.setLoaderBarPct(0)
-  } else if (isNativePrelevel) {
-    nativePrelevelLoaderTimer = setTimeout(() => {
-      nativePrelevelLoaderTimer = null
-      BootLoader.showLoader()
-      BootLoader.setLoaderBarPct(0)
-    }, NATIVE_PRELEVEL_LOADER_DELAY_MS)
   }
-  const cancelNativePrelevelLoaderTimer = () => {
-    if (nativePrelevelLoaderTimer) {
-      clearTimeout(nativePrelevelLoaderTimer)
-      nativePrelevelLoaderTimer = null
-    }
-  }
-  
-  // Instance object to store text reference
   const inst = {
-    textObj: null,
-    outlineTexts: null,
-    hintTextObj: null,
-    hintOutlineTexts: null,
-    preTextObj: null,
-    preTextOutlines: null,
     skipped: false,
     skipEnabled: false,
     skipEnableTimer: 0,
-    //
-    // True only while the subtitle is on screen and the player may skip it
-    // (text_fade_in / text_hold). Prevents Space/click from the menu
-    // button from dismissing the phrase before it appears.
-    //
-    subtitleSkipOpen: false,
-    //
-    // Pointer skip arms only once the subtitle has finished fading in, so a
-    // mouse-up from the menu button cannot dismiss the phrase immediately.
-    //
-    subtitleClickOpen: false,
-    subtitlePointerGrace: 0,
-    textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
-    soundName: null,
-    textSound: null,
-    originalVolume: originalVolume,
+    originalVolume,
     postAssetPreparePhase,
     assetPrepareDone: !needsEarlyAssetLoad,
     assetPreparePromise: null,
-    tooltipSuppressed: false,
     entered: false,
     skipInputCancels: []
   }
   //
-  // Hide all in-game tooltips for the entire pre-level transition. We also
-  // hide the touch run/jump buttons so the controls don't sit on top of the
-  // subtitle text — they are re-created by the next level scene.
+  // The touch run/jump buttons hide for the whole transition; the next level
+  // scene re-creates them.
   //
-  const preLevelSubtitle = LEVEL_SUBTITLES[nextLevel]
-  if ((isLevelToLevelTransition || isMenuToLevelTransition) && preLevelSubtitle) {
-    Tooltip.suppressAll()
-    inst.tooltipSuppressed = true
-  }
   TouchControls.setVisible(false)
-  
   //
-  // Set background to menu color when transitioning from a level or a
-  // menu-section entry.
-  // Sync both Kaplay clear color and CSS letterbox bars to eliminate stripes.
+  // From a level or a menu-section entry the backdrop takes the menu colour
+  // too, so Kaplay's clear colour and the CSS letterbox bars match.
   //
   const transitionBgHex = CFG.visual.colors.menu.platformColor
   const [bgR, bgG, bgB] = parseHex(transitionBgHex)
   if (isFromLevel || isFromMenuSection) {
     CanvasBackdrop.applyCanvasBackdrop(transitionK, transitionBgHex)
   }
-  //
-  // Create overlay matching menu background color
-  // Starts fully opaque if from a level or a menu-section entry,
-  // transparent otherwise
-  //
-  const initialOverlayOpacity = isFromLevel || isFromMenuSection ? 1 : (currentLevel === 'menu' ? 1 : 0)
   let overlay = transitionK.add([
     transitionK.rect(transitionK.width(), transitionK.height()),
     transitionK.pos(0, 0),
     transitionK.color(bgR, bgG, bgB),
-    k.opacity(initialOverlayOpacity),
+    k.opacity(startsOpaque ? 1 : 0),
     k.z(TRANSITION_OVERLAY_Z),
     k.fixed()
   ])
   transitionK._transitionOverlay = overlay
-  
   let transitionInterval = null
-  
-  const endTransitionInput = (k, opts = {}) => {
+  const endTransitionInput = (k) => {
     transitionInterval?.cancel?.()
     transitionInterval = null
     cancelTransitionSkipInput(inst)
     resetPhysicalInputLayer()
-    if (opts.keepOverlay) {
-      k.transitionCleanup = null
-      return
-    }
     if (k.transitionCleanup) {
       const cleanup = k.transitionCleanup
       k.transitionCleanup = null
@@ -306,72 +185,56 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     overlay?.exists?.() && k.destroy(overlay)
     k._transitionOverlay === overlay && (k._transitionOverlay = null)
   }
-  
   const escapeToMenu = () => {
     if (inst.skipped) return
     if (phase !== 'asset_prepare' && !inst.skipEnabled) return
     inst.skipped = true
     bumpPrepareCancelNonce()
     endTransitionInput(transitionK)
-    if (isNativePrelevel) {
-      cancelNativePrelevelLoaderTimer()
-      BootLoader.hideLoader()
-    }
+    isForestPrelevel && BootLoader.hideLoader()
     transitionK.volume(inst.originalVolume)
     Sound.unmuteProceduralSounds()
     Sound.resumeGlobalAudio()
-    inst.tooltipSuppressed && Tooltip.unsuppressAll()
-    inst.tooltipSuppressed = false
     Hero.unsuppressIdleVocalization()
     goToMenuAfterAssets(transitionK)
   }
-  
   const bindTransitionEngine = (liveK) => {
     transitionInterval?.cancel?.()
     cancelTransitionSkipInput(inst)
     transitionInterval = liveK.onUpdate(updateTransition)
-    installTransitionSkipInput(liveK, inst, skipTransition, escapeToMenu)
+    installTransitionEscapeInput(liveK, inst, escapeToMenu)
     liveK.transitionCleanup = () => {
       transitionInterval.cancel()
       cancelTransitionSkipInput(inst)
       overlay.exists() && liveK.destroy(overlay)
       if (liveK._transitionOverlay === overlay) liveK._transitionOverlay = null
-      inst.textObj && inst.textObj.exists() && liveK.destroy(inst.textObj)
-      inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && liveK.destroy(o))
-      inst.hintTextObj && inst.hintTextObj.exists() && liveK.destroy(inst.hintTextObj)
-      inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && liveK.destroy(o))
-      stopTransitionVoiceover(inst)
-      inst.tooltipSuppressed && Tooltip.unsuppressAll()
-      inst.tooltipSuppressed = false
       liveK.transitionCleanup = null
     }
   }
-  
-  if (isNativePrelevel) {
-    inst.assetPreparePromise = prepareNativePrelevelAssets()
+  if (isForestPrelevel) {
+    inst.assetPreparePromise = prepareForestPrelevelAssets()
   } else if (needsEarlyAssetLoad) {
     inst.assetPreparePromise = prepareSceneAssets(transitionK, nextLevel).then(() => {
       inst.assetPrepareDone = true
     })
   }
-  
-  async function prepareNativePrelevelAssets() {
+  async function prepareForestPrelevelAssets() {
     const reportLoad = (pct) => BootLoader.setLoaderBarPct(pct)
     try {
-      reportLoad(5)
+      reportLoad(FOREST_LOAD_PACK_PCT)
       await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true, deferLoaderReveal: true })
       if (inst.skipped) return
-      reportLoad(12)
+      reportLoad(FOREST_LOAD_PACKED_PCT)
       await BootLoader.yieldForGpu(1)
       if (inst.skipped) return
       transitionInterval?.cancel?.()
       transitionInterval = null
       overlay.exists() && transitionK.destroy(overlay)
       transitionK._transitionOverlay = null
-      reportLoad(18)
+      reportLoad(FOREST_LOAD_ENGINE_PCT)
       await ensureEngineForScene(nextLevel, { loaderDuringBoot: true })
       if (inst.skipped) return
-      reportLoad(28)
+      reportLoad(FOREST_LOAD_ENGINE_READY_PCT)
       await BootLoader.yieldForGpu(1)
       if (inst.skipped) return
       onEngineResolutionSwapped()
@@ -386,63 +249,29 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         transitionK.fixed()
       ])
       transitionK._transitionOverlay = overlay
-      if (nextLevel === FOREST_PRELEVEL_SCENE) {
-        setForestLevel0BootstrapReporter(reportLoad, {
-          start: FOREST_BOOTSTRAP_BAR_START,
-          end: FOREST_BOOTSTRAP_BAR_END
-        })
-        reportLoad(FOREST_PREWARM_BAR_START + 7)
-        await prewarmForestLevel0HeavyAssets(transitionK, bakedPct => {
-          const t = Math.min(100, Math.max(0, bakedPct)) / 100
-          reportLoad(FOREST_PREWARM_BAR_START + Math.round(
-            (FOREST_PREWARM_BAR_END - FOREST_PREWARM_BAR_START) * t
-          ))
-        })
-        reportLoad(FOREST_PREWARM_BAR_END)
-      }
+      setForestLevel0BootstrapReporter(reportLoad, {
+        start: FOREST_BOOTSTRAP_BAR_START,
+        end: FOREST_BOOTSTRAP_BAR_END
+      })
+      reportLoad(FOREST_PREWARM_BAR_START + FOREST_LOAD_PREWARM_LEAD_PCT)
+      await prewarmForestLevel0HeavyAssets(transitionK, bakedPct => {
+        const t = Math.min(100, Math.max(0, bakedPct)) / 100
+        reportLoad(FOREST_PREWARM_BAR_START + Math.round(
+          (FOREST_PREWARM_BAR_END - FOREST_PREWARM_BAR_START) * t
+        ))
+      })
+      reportLoad(FOREST_PREWARM_BAR_END)
     } finally {
       !inst.skipped && (inst.assetPrepareDone = true)
     }
   }
-  
-  const destroyTransitionSubtitleText = (k) => {
-    stopTransitionVoiceover(inst)
-    if (inst.textObj) {
-      inst.textObj.exists() && k.destroy(inst.textObj)
-      inst.textObj = null
-    }
-    if (inst.outlineTexts) {
-      inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
-      inst.outlineTexts = null
-    }
-    if (inst.hintTextObj) {
-      inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
-      inst.hintTextObj = null
-    }
-    if (inst.hintOutlineTexts) {
-      inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
-      inst.hintOutlineTexts = null
-    }
-    if (inst.preTextObj) {
-      inst.preTextObj.exists() && k.destroy(inst.preTextObj)
-      inst.preTextObj = null
-    }
-    if (inst.preTextOutlines) {
-      inst.preTextOutlines.forEach(o => o.exists() && k.destroy(o))
-      inst.preTextOutlines = null
-    }
-  }
-  
-  const finalizeTransitionToLevel = (afterGo) => {
+  const finalizeTransitionToLevel = () => {
     const enter = async () => {
       if (inst.entered) return
       inst.entered = true
       cancelTransitionSkipInput(inst)
       transitionInterval?.cancel?.()
       transitionInterval = null
-      destroyTransitionSubtitleText(transitionK)
-      inst.tooltipSuppressed && Tooltip.unsuppressAll()
-      inst.tooltipSuppressed = false
       Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
       transitionK.volume(inst.originalVolume)
@@ -453,7 +282,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       try {
         await enterPreparedScene(transitionK, nextLevel, () => {
           isForestPrelevel && BootLoader.setLoaderBarPct(100)
-          afterGo?.(transitionK)
           overlay?.exists?.() && transitionK.destroy(overlay)
           transitionK._transitionOverlay === overlay && (transitionK._transitionOverlay = null)
           BootLoader.hideLoader()
@@ -468,419 +296,36 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
     enter()
   }
-  
-  // Function to skip transition and go directly to next level
-  const skipTransition = () => {
-    if (inst.skipped) return
-    //
-    // Only the visible subtitle may be skipped — never the black pause or
-    // fade-to-black that precedes it.
-    //
-    if (phase !== 'text_fade_in' && phase !== 'text_hold') return
-    inst.skipped = true
-    inst.subtitleSkipOpen = false
-    inst.subtitleClickOpen = false
-    //
-    // If the pre-level phrase is still on screen, stop the voice-over
-    // immediately and run a quick fade-out into the next scene.
-    //
-    if (phase === 'text_fade_in' || phase === 'text_hold') {
-      stopTransitionVoiceover(inst)
-      inst.fastTextFade = true
-      inst.textFadeFrom = inst.textObj ? inst.textObj.opacity : 1
-      phase = 'text_fade_out'
+  const updateTransition = () => {
+    const k = transitionK
+    if (!inst.skipEnabled) {
+      inst.skipEnableTimer += k.dt()
+      inst.skipEnableTimer >= ESCAPE_ARM_DELAY && (inst.skipEnabled = true)
+    }
+    if (phase === 'asset_prepare') {
+      if (!inst.assetPrepareDone) return
+      BootLoader.hideLoader()
+      phase = inst.postAssetPreparePhase
       timer = 0
       return
     }
-    
-    // Clean up
+    timer += k.dt()
+    if (phase === 'fade_to_black') {
+      const progress = Math.min(timer / FADE_TO_BLACK_DURATION, 1)
+      overlay.opacity = progress
+      if (progress < 1) return
+      phase = 'black_pause'
+      timer = 0
+      return
+    }
+    if (timer < BLACK_PAUSE_DURATION) return
     transitionInterval?.cancel?.()
-    stopTransitionVoiceover(inst)
-    inst.tooltipSuppressed && Tooltip.unsuppressAll()
-    inst.tooltipSuppressed = false
-    //
-    // Restore volume, unmute procedural sounds, and resume AudioContext
-    //
-    transitionK.volume(inst.originalVolume)
-    Sound.unmuteProceduralSounds()
-    Sound.resumeGlobalAudio()
+    BootLoader.hideLoader()
     //
     // Go to next level — fade-in comes from installLevelFadeIn(k.go).
-    // Keep the hold overlay until k.go so the previous scene cannot flash.
     //
     finalizeTransitionToLevel()
   }
-  
-  const updateTransition = () => {
-    const k = transitionK
-    //
-    // Brief arm delay for Esc only (not subtitle skip).
-    //
-    if (!inst.skipEnabled) {
-      inst.skipEnableTimer += k.dt()
-      if (inst.skipEnableTimer >= 0.3) {
-        inst.skipEnabled = true
-      }
-    }
-    if (phase === 'asset_prepare') {
-      if (inst.assetPrepareDone) {
-        if (isNativePrelevel) {
-          cancelNativePrelevelLoaderTimer()
-          isForestPrelevel && BootLoader.hideLoader()
-        } else {
-          BootLoader.hideLoader()
-        }
-        phase = inst.postAssetPreparePhase
-        timer = 0
-      }
-      return
-    }
-    
-    timer += k.dt()
-    inst.subtitlePointerGrace > 0 &&
-      (inst.subtitlePointerGrace = Math.max(0, inst.subtitlePointerGrace - k.dt()))
-    
-    if (phase === 'fade_to_black') {
-      // Fade overlay from transparent to opaque
-      const progress = Math.min(timer / FADE_TO_BLACK_DURATION, 1)
-      overlay.opacity = progress
-      
-      if (progress >= 1) {
-        phase = 'black_pause'
-        timer = 0
-      }
-    } else if (phase === 'black_pause') {
-      // Pause with black screen before text appears
-      const pauseDur = BLACK_PAUSE_DURATION
-      if (timer >= pauseDur) {
-        phase = 'text_fade_in'
-        timer = 0
-        BootLoader.hideLoader()
-        
-        // Create subtitle text for NEXT level (the one we're transitioning TO)
-        const subtitleEntry = LEVEL_SUBTITLES[nextLevel]
-        const subtitle = Array.isArray(subtitleEntry) ? subtitleEntry[0] : subtitleEntry
-        const soundName = Array.isArray(subtitleEntry) ? subtitleEntry[1] : null
-        const textHoldDuration = Array.isArray(subtitleEntry) ? subtitleEntry[2] : DEFAULT_TEXT_HOLD_DURATION
-        const hintText = Array.isArray(subtitleEntry) ? subtitleEntry[3] : null
-        //
-        // Optional gray text shown ABOVE the main subtitle (index 4)
-        //
-        const preText = Array.isArray(subtitleEntry) ? subtitleEntry[4] : null
-        //
-        // Optional Y-multiplier override for the pre-text gap (index 5).
-        // Smaller value = pre-text sits closer to the main subtitle.
-        // Defaults to 3.2 which works for multi-line subtitles.
-        //
-        const preTextYMult = Array.isArray(subtitleEntry) && subtitleEntry[5] != null ? subtitleEntry[5] : 3.2
-
-        inst.soundName = soundName
-        inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
-
-        if (subtitle) {
-          //
-          // Stop global background music if playing
-          //
-          const soundInst = Sound.create()
-          Sound.stopBackgroundMusic(soundInst)
-          //
-          // Get color based on section (matches anti-hero hover color in menu)
-          //
-          const levelColorHex = getSectionSubtitleColor(nextLevel)
-          const useForestGrain = nextLevel === FOREST_PRELEVEL_SCENE
-          const [r, g, b] = parseHex(levelColorHex)
-          const textSize = k.height() * 0.04
-          const textX = k.width() / 2
-          const textY = k.height() / 2
-          const outlineOffsets = [
-            [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
-          ]
-          if (useForestGrain) {
-            const mainName = `forest-trans-main-${forestUiHash(subtitle)}`
-            loadForestTextSprite(k, mainName, subtitle, {
-              fontFamily: TRANSITION_FONT,
-              fontSize: textSize,
-              fillStyle: `rgb(${r},${g},${b})`,
-              shadowStyle: '#000000',
-              shadowOffsetX: TEXT_OUTLINE_OFFSET,
-              shadowOffsetY: TEXT_OUTLINE_OFFSET,
-              align: 'center',
-              lineSpacing: SUBTITLE_LINE_SPACING
-            }, 7700)
-            inst.textObj = k.add([
-              k.sprite(mainName),
-              k.pos(textX, textY),
-              k.anchor('center'),
-              k.color(k.rgb(255, 255, 255)),
-              k.opacity(0),
-              k.z(TRANSITION_SUBTITLE_Z + 1),
-              k.fixed()
-            ])
-            inst.outlineTexts = []
-          } else {
-          //
-          // Drop shadow (single black copy offset right+down) — the same
-          // text shadow style the forest level uses.
-          //
-          const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
-            k.pos(textX + dx, textY + dy),
-            k.anchor("center"),
-            k.color(0, 0, 0),
-            k.opacity(0),
-            k.z(TRANSITION_SUBTITLE_Z),
-            k.fixed()
-          ]))
-          //
-          // Create main colored text above outlines
-          //
-          const textObj = k.add([
-            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
-            k.pos(textX, textY),
-            k.anchor("center"),
-            k.color(r, g, b),
-            k.opacity(0),
-            k.z(TRANSITION_SUBTITLE_Z + 1),
-            k.fixed()
-          ])
-          inst.textObj = textObj
-          inst.outlineTexts = outlineTexts
-          }
-          //
-          // Optional small hint text below the main subtitle
-          //
-          if (hintText) {
-            const hintSize = textSize * 0.55
-            const hintYOffset = textSize * HINT_Y_OFFSET_EM
-            const hintY = textY + hintYOffset
-            const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
-            if (useForestGrain) {
-              const hintName = `forest-trans-hint-${forestUiHash(wrappedHint)}`
-              loadForestTextSprite(k, hintName, wrappedHint, {
-                fontFamily: TRANSITION_FONT,
-                fontSize: hintSize,
-                fillStyle: 'rgb(140,140,140)',
-                shadowStyle: '#000000',
-                shadowOffsetX: TEXT_OUTLINE_OFFSET,
-                shadowOffsetY: TEXT_OUTLINE_OFFSET,
-                align: 'center',
-                lineSpacing: SUBTITLE_LINE_SPACING * 0.5
-              }, 7701)
-              inst.hintTextObj = k.add([
-                k.sprite(hintName),
-                k.pos(textX, hintY),
-                k.anchor('center'),
-                k.color(k.rgb(255, 255, 255)),
-                k.opacity(0),
-                k.z(TRANSITION_SUBTITLE_Z + 1),
-                k.fixed()
-              ])
-              inst.hintOutlineTexts = []
-            } else {
-            const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-              k.text(wrappedHint, { size: hintSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
-              k.pos(textX + dx, hintY + dy),
-              k.anchor("center"),
-              k.color(0, 0, 0),
-              k.opacity(0),
-              k.z(TRANSITION_SUBTITLE_Z),
-              k.fixed()
-            ]))
-            const hintTextObj = k.add([
-              k.text(wrappedHint, { size: hintSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
-              k.pos(textX, hintY),
-              k.anchor("center"),
-              k.color(140, 140, 140),
-              k.opacity(0),
-              k.z(TRANSITION_SUBTITLE_Z + 1),
-              k.fixed()
-            ])
-            inst.hintTextObj = hintTextObj
-            inst.hintOutlineTexts = hintOutlineTexts
-            }
-          }
-          //
-          // Optional gray pre-text shown BELOW the main subtitle.
-          // Smaller than the subtitle, same neutral gray as hint text.
-          //
-          if (preText) {
-            const preTextSize = textSize * 0.62
-            const preTextY = textY + textSize * preTextYMult
-            if (useForestGrain) {
-              const preName = `forest-trans-pre-${forestUiHash(preText)}`
-              loadForestTextSprite(k, preName, preText, {
-                fontFamily: TRANSITION_FONT,
-                fontSize: preTextSize,
-                fillStyle: 'rgb(140,140,140)',
-                shadowStyle: '#000000',
-                shadowOffsetX: TEXT_OUTLINE_OFFSET,
-                shadowOffsetY: TEXT_OUTLINE_OFFSET,
-                align: 'center',
-                lineSpacing: SUBTITLE_LINE_SPACING * 0.5
-              }, 7702)
-              inst.preTextObj = k.add([
-                k.sprite(preName),
-                k.pos(textX, preTextY),
-                k.anchor('center'),
-                k.color(k.rgb(255, 255, 255)),
-                k.opacity(0),
-                k.z(TRANSITION_SUBTITLE_Z + 1),
-                k.fixed()
-              ])
-              inst.preTextOutlines = []
-            } else {
-            const preTextOutlines = outlineOffsets.map(([dx, dy]) => k.add([
-              k.text(preText, { size: preTextSize, align: 'center', lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
-              k.pos(textX + dx, preTextY + dy),
-              k.anchor('center'),
-              k.color(0, 0, 0),
-              k.opacity(0),
-              k.z(TRANSITION_SUBTITLE_Z),
-              k.fixed()
-            ]))
-            const preTextObj = k.add([
-              k.text(preText, { size: preTextSize, align: 'center', lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
-              k.pos(textX, preTextY),
-              k.anchor('center'),
-              k.color(140, 140, 140),
-              k.opacity(0),
-              k.z(TRANSITION_SUBTITLE_Z + 1),
-              k.fixed()
-            ])
-            inst.preTextObj = preTextObj
-            inst.preTextOutlines = preTextOutlines
-            }
-          }
-          inst.subtitleSkipOpen = true
-          inst.subtitleClickOpen = true
-          inst.subtitlePointerGrace = 0.35
-          releasePhysicalKeys(['Space', 'Enter'])
-        } else {
-          // No subtitle, go to next level immediately
-          transitionInterval?.cancel?.()
-          stopTransitionVoiceover(inst)
-          inst.tooltipSuppressed && Tooltip.unsuppressAll()
-          inst.tooltipSuppressed = false
-          //
-          // Restore volume and unmute procedural sounds before going to next level
-          //
-          k.volume(inst.originalVolume)
-          Sound.unmuteProceduralSounds()
-          Sound.resumeGlobalAudio()
-          finalizeTransitionToLevel()
-        }
-      }
-    } else if (phase === 'text_fade_in') {
-      //
-      // Start level related description sound before it starts
-      //
-      if (!inst.textSound && inst.soundName) {
-        // Restore volume to play transition sound (xxx-pre.mp3)
-        k.volume(inst.originalVolume)
-        inst.textSound = Sound.playInScene(k, inst.soundName, CFG.audio.backgroundMusic.words)
-        // Don't mute again - let the transition sound play
-      }
-      // Fade in text
-      const progress = Math.min(timer / TEXT_FADE_IN_DURATION, 1)
-      if (inst.textObj) {
-        inst.textObj.opacity = progress
-        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = progress })
-      }
-      if (inst.hintTextObj) {
-        inst.hintTextObj.opacity = progress
-        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = progress })
-      }
-      if (inst.preTextObj) {
-        inst.preTextObj.opacity = progress
-        inst.preTextOutlines && inst.preTextOutlines.forEach(o => { o.opacity = progress })
-      }
-      
-      if (progress >= 1) {
-        phase = 'text_hold'
-        inst.subtitleClickOpen = true
-        timer = 0
-      }
-    } else if (phase === 'text_hold') {
-      // Hold text visible
-      if (timer >= inst.textHoldDuration) {
-        inst.subtitleSkipOpen = false
-        inst.subtitleClickOpen = false
-        phase = 'text_fade_out'
-        timer = 0
-      }
-    } else if (phase === 'text_fade_out') {
-      //
-      // Fade out text. A skip runs the same fade, only faster and starting
-      // from the opacity the text had at the moment of the skip.
-      //
-      const fadeDuration = inst.fastTextFade ? SKIP_TEXT_FADE_DURATION : TEXT_FADE_OUT_DURATION
-      const fadeFrom = inst.textFadeFrom ?? 1
-      const progress = Math.min(timer / fadeDuration, 1)
-      const fadeOpacity = fadeFrom * (1 - progress)
-      if (inst.textObj) {
-        inst.textObj.opacity = fadeOpacity
-        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = fadeOpacity })
-      }
-      if (inst.hintTextObj) {
-        inst.hintTextObj.opacity = fadeOpacity
-        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = fadeOpacity })
-      }
-      if (inst.preTextObj) {
-        inst.preTextObj.opacity = fadeOpacity
-        inst.preTextOutlines && inst.preTextOutlines.forEach(o => { o.opacity = fadeOpacity })
-      }
-      
-      if (progress >= 1) {
-        // Clean up text and outlines
-        if (inst.textObj) {
-          inst.textObj.exists() && k.destroy(inst.textObj)
-          inst.textObj = null
-        }
-        if (inst.outlineTexts) {
-          inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
-          inst.outlineTexts = null
-        }
-        if (inst.hintTextObj) {
-          inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
-          inst.hintTextObj = null
-        }
-        if (inst.hintOutlineTexts) {
-          inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
-          inst.hintOutlineTexts = null
-        }
-        if (inst.preTextObj) {
-          inst.preTextObj.exists() && k.destroy(inst.preTextObj)
-          inst.preTextObj = null
-        }
-        if (inst.preTextOutlines) {
-          inst.preTextOutlines.forEach(o => o.exists() && k.destroy(o))
-          inst.preTextOutlines = null
-        }
-        
-        phase = 'final_pause'
-        timer = 0
-      }
-    } else if (phase === 'final_pause') {
-      // Short pause after text fades out before loading new level
-      if (timer >= FINAL_PAUSE_DURATION) {
-        transitionInterval?.cancel?.()
-        stopTransitionVoiceover(inst)
-        inst.tooltipSuppressed && Tooltip.unsuppressAll()
-        inst.tooltipSuppressed = false
-        //
-        // Restore volume and unmute procedural sounds before going to next level
-        //
-        k.volume(inst.originalVolume)
-        Sound.unmuteProceduralSounds()
-        Sound.resumeGlobalAudio()
-        //
-        // Go to next level — fade-in comes from installLevelFadeIn(k.go)
-        //
-        finalizeTransitionToLevel()
-      }
-    }
-  }
-  
   const ensureTransitionEngineBound = () => {
     if (inst.skipped) return
     transitionInterval?.cancel?.()
@@ -888,127 +333,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionK = getActiveEngine()
     bindTransitionEngine(transitionK)
   }
-  if (isNativePrelevel) {
-    const nativePrepare = inst.assetPreparePromise
-    inst.assetPreparePromise = nativePrepare?.finally?.(() => {
+  if (isForestPrelevel) {
+    const forestPrepare = inst.assetPreparePromise
+    inst.assetPreparePromise = forestPrepare?.finally?.(() => {
       ensureTransitionEngineBound()
     }) ?? Promise.resolve().then(ensureTransitionEngineBound)
   } else {
     bindTransitionEngine(transitionK)
   }
-  
-  // Return cleanup function
-  return () => {
-    transitionInterval?.cancel?.()
-    cancelTransitionSkipInput(inst)
-    overlay && overlay.exists() && transitionK.destroy(overlay)
-    inst.textObj && inst.textObj.exists() && transitionK.destroy(inst.textObj)
-    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
-    inst.hintTextObj && inst.hintTextObj.exists() && transitionK.destroy(inst.hintTextObj)
-    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
-    stopTransitionVoiceover(inst)
-    inst.tooltipSuppressed && Tooltip.unsuppressAll()
-    inst.tooltipSuppressed = false
-  }
-}
-
-/**
- * Play CRT TV shutdown sound effect
- * @param {Object} k - Kaplay instance
- */
-function playCRTShutdownSound(k) {
-  //
-  // We need access to AudioContext, so we'll create a simple version
-  // In a real implementation, this would use the Sound module
-  //
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    const now = audioContext.currentTime
-    //
-    // High frequency sweep down (the "whine")
-    //
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-    
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(8000, now)
-    oscillator.frequency.exponentialRampToValueAtTime(100, now + 0.3)
-    
-    gainNode.gain.setValueAtTime(0.3, now)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4)
-    
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-    
-    oscillator.start(now)
-    oscillator.stop(now + 0.4)
-    //
-    // Low "thump" at the end
-    //
-    const thump = audioContext.createOscillator()
-    const thumpGain = audioContext.createGain()
-    
-    thump.type = 'sine'
-    thump.frequency.setValueAtTime(60, now + 0.5)
-    
-    thumpGain.gain.setValueAtTime(0, now + 0.5)
-    thumpGain.gain.linearRampToValueAtTime(0.4, now + 0.52)
-    thumpGain.gain.exponentialRampToValueAtTime(0.01, now + 0.7)
-    
-    thump.connect(thumpGain)
-    thumpGain.connect(audioContext.destination)
-    
-    thump.start(now + 0.5)
-    thump.stop(now + 0.7)
-  } catch (e) {
-    //
-    // Silently fail if audio context is not available
-    //
-  }
-}
-
-/**
- * Extracts section name from level identifier and returns matching subtitle color
- * @param {string} level - Level name (e.g., 'lesson-forest.0', 'menu-cave')
- * @returns {string} Hex color string for that section's subtitle
- */
-function getSectionSubtitleColor(level) {
-  if (!level) return DEFAULT_SUBTITLE_COLOR
-  //
-  // Extract section from level name (handles 'lesson-forest.0',
-  // 'level-forest.0' and 'menu-cave' formats)
-  //
-  const match = level.match(/^(?:lesson-|level-|menu-)(\w+)/)
-  const section = match ? match[1] : null
-  return SECTION_SUBTITLE_COLORS[section] || DEFAULT_SUBTITLE_COLOR
-}
-
-//
-// Wraps hint copy so no line is wider than the longest main-subtitle line
-//
-function wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize) {
-  const subtitleLines = subtitle.split('\n')
-  let maxLen = 0
-  for (const line of subtitleLines) {
-    if (line.length > maxLen) maxLen = line.length
-  }
-  const maxWidth = maxLen * textSize * HINT_CHAR_WIDTH_RATIO
-  const charWidth = hintSize * HINT_CHAR_WIDTH_RATIO
-  const maxChars = Math.max(16, Math.floor(maxWidth / charWidth))
-  const words = hintText.split(' ')
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word
-    if (candidate.length > maxChars && current) {
-      lines.push(current)
-      current = word
-    } else {
-      current = candidate
-    }
-  }
-  current && lines.push(current)
-  return lines.join('\n')
 }
 
 /**
@@ -1020,7 +352,7 @@ function wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize) {
  * @param {number} [g=0] - Green component of overlay color
  * @param {number} [b=0] - Blue component of overlay color
  */
-export function createSceneFadeIn(k, r = 0, g = 0, b = 0) {
+function createSceneFadeIn(k, r = 0, g = 0, b = 0) {
   const fadeOverlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
@@ -1075,14 +407,6 @@ function getPreviousLevel(targetLevel) {
   return null
 }
 //
-// Stops the pre-level voice-over immediately (Space / Enter / Esc skip).
-//
-function stopTransitionVoiceover(inst) {
-  inst?.textSound?.stop()
-  inst && (inst.textSound = null)
-  Sound.stopSubtitleSound()
-}
-//
 // Drops every skip-input listener registered for one transition run.
 //
 function cancelTransitionSkipInput(inst) {
@@ -1090,31 +414,13 @@ function cancelTransitionSkipInput(inst) {
   inst && (inst.skipInputCancels = [])
 }
 //
-// Space/Enter/Esc skip and pointer activate — rebound on every engine swap
-// (Forest pre-level reboots Kaplay mid-transition). Physical key listeners sit
-// on window so they keep working even when the canvas never received focus;
-// Kaplay onKeyPress is kept as a backup on the live instance.
+// Esc back to the menu — rebound on every engine swap (Forest pre-level
+// reboots Kaplay mid-transition). The physical key listener sits on window
+// so it keeps working even when the canvas never received focus; Kaplay
+// onKeyPress is kept as a backup on the live instance.
 //
-function installTransitionSkipInput(k, inst, onSkip, onEscape) {
+function installTransitionEscapeInput(k, inst, onEscape) {
   cancelTransitionSkipInput(inst)
-  const trySkipKey = () => {
-    if (!inst.subtitleSkipOpen || inst.skipped) return
-    onSkip()
-  }
-  const trySkipClick = () => {
-    if (!inst.subtitleClickOpen || inst.skipped || inst.subtitlePointerGrace > 0) return false
-    onSkip()
-    return true
-  }
-  const tryEscape = () => {
-    onEscape()
-  }
-  inst.skipInputCancels.push(onPhysicalKeyPress('Space', trySkipKey))
-  inst.skipInputCancels.push(onPhysicalKeyPress('Enter', trySkipKey))
-  inst.skipInputCancels.push(onPhysicalKeyPress('Escape', tryEscape))
-  inst.skipInputCancels.push(k.onKeyPress('space', trySkipKey))
-  inst.skipInputCancels.push(k.onKeyPress(' ', trySkipKey))
-  inst.skipInputCancels.push(k.onKeyPress('enter', trySkipKey))
-  inst.skipInputCancels.push(k.onKeyPress('escape', tryEscape))
-  inst.skipInputCancels.push(bindPointerActivate(k, trySkipClick))
+  inst.skipInputCancels.push(onPhysicalKeyPress('Escape', onEscape))
+  inst.skipInputCancels.push(k.onKeyPress('escape', onEscape))
 }

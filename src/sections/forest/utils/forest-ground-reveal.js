@@ -16,7 +16,7 @@ export function groundRightStripIndexForX(x, stripStartX, stripEndX) {
 //
 // World X of the rightmost fully opened strip edge (start of the unknown).
 //
-export function groundRightExploredEdgeX(stripMax, stripStartX, stripEndX) {
+function groundRightExploredEdgeX(stripMax, stripStartX, stripEndX) {
   if (stripMax < 0) return stripStartX
   const span = stripEndX - stripStartX
   if (span <= 0) return stripStartX

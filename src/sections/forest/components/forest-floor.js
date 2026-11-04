@@ -127,7 +127,7 @@ export function create(cfg) {
  * @param {Object} inst - Forest-floor inst
  * @param {'back'|'front'} layer - Which layer to draw
  */
-export function onDraw(inst, layer) {
+function onDraw(inst, layer) {
   const opacity = inst.getOpacity()
   if (opacity < MIN_DRAW_OPACITY) return
   const view = viewXRange(inst.k)

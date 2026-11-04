@@ -63,7 +63,6 @@ const BUSH_FERN_SEED_RANGE = 1e9
  * @param {number} stripCfg.heightScale - Mound radius scale
  * @param {{r: number, g: number, b: number}} [stripCfg.colorRgb] - Mound tone
  * @param {function(number): Object} [stripCfg.colorAt] - Mound tone by X (overrides colorRgb)
- * @param {boolean} [stripCfg.colorFlat] - Leaves take the exact dome tone
  * @param {number} [stripCfg.ferns=0] - Average ferns per mound
  * @param {string} [stripCfg.foliageDensityTier='midground'] - Pixel density tier
  * @param {boolean} [stripCfg.hiResClusters] - Force hi-res clusters on / off
@@ -148,12 +147,10 @@ function drawHiResBushClusters(ctx, mound, baseRgb, foliageDensityTier = 'neargr
 //
 // Paints one prebuilt mound spec: a solid dome in the base tone (keeps the
 // silhouette closed) and the leaf scatter with brightness-only shade
-// variation resolved from the shade index of each leaf. With `flat` set all
-// leaves take the exact dome tone, so the mound reads as one flat colour
-// (the 2nd+ colour-world strips have no leaf details).
+// variation resolved from the shade index of each leaf.
 //
-function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
-  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => flat ? rgb : lerpForestRgb(rgb, FOREST_SHADOW, t))
+function drawLeafyBushMound(ctx, mound, rgb) {
+  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => lerpForestRgb(rgb, FOREST_SHADOW, t))
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
   ctx.arc(mound.x, mound.baseY, mound.radius, Math.PI, 0)
@@ -182,7 +179,7 @@ function paintBushStripFern(ctx, mound, rgb) {
 //
 function renderStrip(ctx, stripCfg) {
   const {
-    colorRgb, colorFlat, heightScale, hiResClusters,
+    colorRgb, heightScale, hiResClusters,
     ferns = 0,
     foliageDensityTier = 'midground',
     colorAt = null,
@@ -209,7 +206,7 @@ function renderStrip(ctx, stripCfg) {
     const useHiResClusters = hiResClusters ?? forestHiResBushClustersForTier(foliageDensityTier)
     const fernCount = Math.floor(ferns) + (Math.random() < ferns % 1 ? 1 : 0)
     for (let f = 0; f < fernCount; f++) paintBushStripFern(ctx, mound, moundColorRgb)
-    drawLeafyBushMound(ctx, mound, moundColorRgb, colorFlat)
+    drawLeafyBushMound(ctx, mound, moundColorRgb)
     useHiResClusters && drawHiResBushClusters(ctx, mound, moundColorRgb, foliageDensityTier)
     //
     // Advance less than a radius so each mound overlaps the next one.

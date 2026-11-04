@@ -105,22 +105,6 @@ export function show(inst, text, duration, opts = {}) {
   startHint(inst, text, duration)
 }
 
-/**
- * Starts a chain of hints — the first shows immediately, the rest follow.
- * @param {Object} inst - Hero hint inst
- * @param {Array<{text: string, duration: number, pauseBefore?: number}>} hints - Hints to chain
- * @param {Function} [onComplete] - Called once the whole chain has finished
- */
-export function queue(inst, hints, onComplete = null) {
-  const list = [...hints]
-  const first = list.shift()
-  inst.queue = list
-  inst.onQueueEmpty = onComplete
-  inst.ignoreMovementDismiss = false
-  inst.dismissDistance = HINT_DISMISS_DISTANCE
-  inst.dismissOnJump = true
-  first && startQueuedHint(inst, first)
-}
 
 /**
  * Hides the current hint and empties the queue (no completion callback).

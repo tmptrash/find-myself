@@ -118,24 +118,3 @@ export function set(path, val) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)) }
   catch (_) {}
 }
-/**
- * Mark section as completed
- * @param {string} section - Section name
- */
-export function setSectionCompleted(section) {
-  set(section + '.completed', true)
-}
-/**
- * Save sound status
- * @param {string} soundName - Name of the sound (not a filename)
- * @param {boolean} status - Sound play status
- */
-export function setSoundStatus(soundName, status) {
-  set('sounds.' + soundName, status)
-}
-/**
- * Reset all progress (for testing)
- */
-export function resetProgress() {
-  delete localStorage[STORAGE_KEY]
-}

@@ -1,56 +1,12 @@
 import { CFG } from '../../../cfg.js'
 import { forestRgb } from '../../forest/utils/forest-palette.js'
 import { drawFernToCanvas } from '../../../utils/draw-fern.js'
-import * as Layout from './cave-layout.js'
 //
 // Shared Canvas2D painters for the cave bakes (terrain tiles, parallax rows,
 // platforms): stony rock masses, moss rims, stalactites, stalagmites
 // and dark ferns. Every colour comes from CFG.visual.colors.palette.cave.
 //
 export const CAVE_PAL = CFG.visual.colors.palette.cave
-//
-// Stones packed inside a rock mass: radius range, vertex count and how
-// densely they fill the mass (1 = stone areas sum to the mass area).
-//
-const STONE_R_MIN = 6
-const STONE_R_RANGE = 13
-const STONE_VERTS_MIN = 6
-const STONE_VERTS_RANGE = 4
-const STONE_RADIUS_JITTER = 0.35
-const STONE_FLATTEN_Y = 0.78
-const STONE_FILL_DENSITY = 1.25
-const STONE_TONE_WEIGHTS = [0.22, 0.48, 0.3]
-const STONE_LIT_ALPHA = 0.55
-const STONE_LIT_W = 1.6
-//
-// Lit rim arc on each stone: radius share and upper-left angle span.
-//
-const STONE_LIT_RADIUS = 0.72
-const STONE_LIT_ARC_FROM = Math.PI * 1.05
-const STONE_LIT_ARC_TO = Math.PI * 1.6
-const STONE_CONTOUR_ALPHA = 0.75
-const STONE_CONTOUR_W = 1
-const MASS_CONTOUR_W = 2.4
-//
-// Rock mass inner occlusion: wide dark stroke kept inside the outline.
-//
-const MASS_OCCLUSION_W = 16
-const MASS_OCCLUSION_ALPHA = 0.32
-//
-// Moss rim lumps along a walkable top edge.
-//
-const MOSS_STEP = 5
-const MOSS_RX_MIN = 3
-const MOSS_RX_RANGE = 4
-const MOSS_RY_MIN = 2
-const MOSS_RY_RANGE = 2
-const MOSS_LIGHT_CHANCE = 0.45
-const MOSS_SPECK_CHANCE = 0.12
-const MOSS_LIGHT_SHIFT = 0.3
-const MOSS_LIGHT_SIZE = 0.55
-const MOSS_DRIP_CHANCE = 0.1
-const MOSS_DRIP_LEN_MIN = 3
-const MOSS_DRIP_LEN_RANGE = 7
 //
 // Spikes (reference: long knobbly cones): lumpy sides with drip rings, a
 // slightly curved tip, lit left face, shaded right, a pale streak, and a
@@ -78,15 +34,6 @@ const SPIKE_STREAK_TO = 0.7
 const SPIKE_STREAK_SHIFT = 0.22
 const SPIKE_CONTOUR_W = 1.5
 //
-// Stones breaking a rock mass outline: spacing, chance, size, how far they
-// sit inside the mass (so walkable tops only get small bumps).
-//
-const EDGE_STONE_STEP = 9
-const EDGE_STONE_CHANCE = 0.65
-const EDGE_STONE_R_MIN = 3
-const EDGE_STONE_R_RANGE = 4
-const EDGE_STONE_INSET = 0.55
-//
 // Ferns: size range when sprouting from rock edges.
 //
 const FERN_SIZE_MIN = 22
@@ -112,34 +59,6 @@ const CROWN_LEAVES_RANGE = 3
 const CROWN_LEAF_SCALE = 1.7
 const CROWN_SPREAD = 2.2
 const CROWN_LEAF_REACH = 0.8
-//
-// Boulders: smooth lumpy outline, lit cap, shaded side, a crack, moss tufts.
-//
-const BOULDER_VERTS = 14
-const BOULDER_WOBBLE = 0.12
-const BOULDER_FLATTEN = 0.72
-const BOULDER_LIT_SHIFT = 0.28
-const BOULDER_LIT_SCALE = 0.62
-const BOULDER_SHADE_SHIFT = 0.3
-const BOULDER_SHADE_SCALE = 0.75
-const BOULDER_CRACK_W = 1.2
-const BOULDER_CRACK_SEGS = 3
-const BOULDER_CRACK_WANDER = 0.5
-const BOULDER_GLINT_SHIFT = 0.4
-const BOULDER_GLINT_RX = 0.2
-const BOULDER_GLINT_RY = 0.15
-const BOULDER_MOSS_SPAN = 0.7
-//
-// Platform slabs: no straight edges — a faint wave on the walkable top,
-// rounded ends, ragged sides on grounds.
-//
-const PLATFORM_END_R = 7
-const PLATFORM_END_STEP = 0.5
-const PLATFORM_EDGE_STEP = 6
-const PLATFORM_TOP_WAVE = 1.2
-const PLATFORM_SIDE_RAGGED = 6
-const PLATFORM_BOTTOM_JAG = 4
-const PLATFORM_BOTTOM_JAG_FREQ = 3
 //
 // Moss strands (the reference's hanging leafy threads): a thin stem curving
 // slightly, small leaflets packed along it on alternating sides, pointing
@@ -177,70 +96,7 @@ export function css(hex, alpha = 1) {
 }
 
 
-/**
- * Paints a stony rock mass: base fill, packed stones in 3 tones with a lit
- * upper rim, inner occlusion and a dark contour.
- * @param {CanvasRenderingContext2D} ctx
- * @param {Array<{x: number, y: number}>} pts - Mass outline
- * @param {() => number} rng - Seeded random
- * @param {Object} [opts]
- * @param {string[]} [opts.tones] - Four tones dark → light (defaults to cave rock)
- * @param {number} [opts.stoneScale=1] - Stone size multiplier (bigger = farther clusters)
- * @param {boolean} [opts.contour=true] - Draw the outer contour
- * @param {boolean} [opts.edgeStones=false] - Break the outline with stones
- * @param {boolean} [opts.smooth=false] - Round every outline corner (no sharp angles)
- */
-export function paintRockMass(ctx, pts, rng, opts = {}) {
-  const tones = opts.tones ?? CAVE_PAL.rock
-  const stoneScale = opts.stoneScale ?? 1
-  const bounds = polygonBounds(pts)
-  const path = opts.smooth ? smoothPath(pts) : polygonPath(pts)
-  ctx.save()
-  ctx.fillStyle = css(tones[1])
-  ctx.fill(path)
-  ctx.clip(path)
-  const meanR = (STONE_R_MIN + STONE_R_RANGE / 2) * stoneScale
-  const count = Math.ceil(bounds.w * bounds.h / (Math.PI * meanR * meanR) * STONE_FILL_DENSITY)
-  for (let i = 0; i < count; i++) {
-    const x = bounds.x + rng() * bounds.w
-    const y = bounds.y + rng() * bounds.h
-    const r = (STONE_R_MIN + rng() * STONE_R_RANGE) * stoneScale
-    insidePath(ctx, path, x, y) && paintStone(ctx, x, y, r, rng, tones)
-  }
-  ctx.strokeStyle = css(tones[0], MASS_OCCLUSION_ALPHA)
-  ctx.lineWidth = MASS_OCCLUSION_W
-  ctx.stroke(path)
-  ctx.restore()
-  if (opts.contour === false) return
-  ctx.strokeStyle = css(CAVE_PAL.contour)
-  ctx.lineWidth = MASS_CONTOUR_W
-  ctx.lineJoin = 'round'
-  ctx.stroke(path)
-  opts.edgeStones && paintEdgeStones(ctx, pts, path, rng, tones)
-}
 
-/**
- * Moss rim along a walkable top edge (2–3 tones, a few short drips).
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} x1 - Rim start X
- * @param {number} x2 - Rim end X
- * @param {(x: number) => number} topAt - Edge Y at X
- * @param {() => number} rng - Seeded random
- * @param {string[]} [tones] - Base / light / speck moss tones
- */
-export function paintMossRim(ctx, x1, x2, topAt, rng, tones = CAVE_PAL.moss) {
-  const [base, light, speck] = tones
-  for (let x = x1; x <= x2; x += MOSS_STEP) {
-    const y = topAt(x)
-    const rx = MOSS_RX_MIN + rng() * MOSS_RX_RANGE
-    const ry = MOSS_RY_MIN + rng() * MOSS_RY_RANGE
-    ctx.fillStyle = css(base)
-    fillEllipse(ctx, x, y + 1, rx, ry)
-    rng() < MOSS_DRIP_CHANCE && ctx.fillRect(Math.round(x), y + 1, 1, MOSS_DRIP_LEN_MIN + rng() * MOSS_DRIP_LEN_RANGE)
-    rng() < MOSS_LIGHT_CHANCE && (ctx.fillStyle = css(light), fillEllipse(ctx, x - rx * MOSS_LIGHT_SHIFT, y - ry * MOSS_LIGHT_SHIFT, rx * MOSS_LIGHT_SIZE, ry * MOSS_LIGHT_SIZE))
-    rng() < MOSS_SPECK_CHANCE && (ctx.fillStyle = css(speck), ctx.fillRect(Math.round(x), Math.round(y - 1), 1, 1))
-  }
-}
 
 /**
  * Stone spike (stalactite when dir = 1, stalagmite when dir = -1).
@@ -434,99 +290,7 @@ export function paintMossStrand(ctx, x, y, len, rng, opts = {}) {
   return { x: tip.x, y: tip.y + STRAND_DROP_R * 2 }
 }
 
-/**
- * Smooth lumpy boulder sitting on a ground line: base tone, lit cap toward
- * the upper left, shaded lower right, one crack and a moss tuft on top.
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} cx - Centre X
- * @param {number} groundY - Ground line it rests on
- * @param {number} r - Radius
- * @param {() => number} rng - Seeded random
- * @param {string[]} tones - Dark / base / light / highlight tones
- * @param {string[]} [mossTones] - Moss tones for the top tuft
- */
-export function paintBoulder(ctx, cx, groundY, r, rng, tones, mossTones = CAVE_PAL.moss) {
-  const cy = groundY - r * BOULDER_FLATTEN * (1 - BOULDER_WOBBLE)
-  const pts = []
-  const phase = rng() * FULL_TURN
-  for (let i = 0; i < BOULDER_VERTS; i++) {
-    const a = i / BOULDER_VERTS * FULL_TURN
-    const rr = r * (1 + Math.sin(a * 2 + phase) * BOULDER_WOBBLE + (rng() - 0.5) * BOULDER_WOBBLE)
-    pts.push({ x: cx + Math.cos(a) * rr, y: Math.min(groundY, cy + Math.sin(a) * rr * BOULDER_FLATTEN) })
-  }
-  const path = smoothPath(pts)
-  ctx.save()
-  ctx.fillStyle = css(tones[1])
-  ctx.fill(path)
-  ctx.clip(path)
-  ctx.fillStyle = css(tones[0])
-  fillEllipse(ctx, cx + r * BOULDER_SHADE_SHIFT, cy + r * BOULDER_SHADE_SHIFT, r * BOULDER_SHADE_SCALE, r * BOULDER_SHADE_SCALE * BOULDER_FLATTEN)
-  ctx.fillStyle = css(tones[2])
-  fillEllipse(ctx, cx - r * BOULDER_LIT_SHIFT, cy - r * BOULDER_LIT_SHIFT, r * BOULDER_LIT_SCALE, r * BOULDER_LIT_SCALE * BOULDER_FLATTEN)
-  ctx.fillStyle = css(tones[3])
-  fillEllipse(ctx, cx - r * BOULDER_GLINT_SHIFT, cy - r * BOULDER_GLINT_SHIFT, r * BOULDER_GLINT_RX, r * BOULDER_GLINT_RY)
-  ctx.strokeStyle = css(tones[0])
-  ctx.lineWidth = BOULDER_CRACK_W
-  ctx.beginPath()
-  let px = cx + (rng() - 0.5) * r
-  let py = cy - r * BOULDER_FLATTEN
-  ctx.moveTo(px, py)
-  for (let i = 0; i < BOULDER_CRACK_SEGS; i++) {
-    px += (rng() - 0.5) * r * BOULDER_CRACK_WANDER
-    py += r * BOULDER_FLATTEN / BOULDER_CRACK_SEGS
-    ctx.lineTo(px, py)
-  }
-  ctx.stroke()
-  ctx.restore()
-  ctx.strokeStyle = css(CAVE_PAL.contour)
-  ctx.lineWidth = MASS_CONTOUR_W
-  ctx.stroke(path)
-  const half = r * BOULDER_MOSS_SPAN / 2
-  paintMossRim(ctx, cx - half, cx + half, x => cy - Math.sqrt(Math.max(0, r * r - (x - cx) * (x - cx))) * BOULDER_FLATTEN, rng, mossTones)
-}
 
-/**
- * Platform slab in the gameplay look: flat walkable top with rounded
- * corners, the shared tapered wavy underside (Layout.platformBottomAt), a
- * stony body and a moss rim.
- * @param {CanvasRenderingContext2D} ctx
- * @param {Object} p - Platform ({x1, x2, y, h, kind} like Layout.PLATFORMS)
- * @param {() => number} rng - Seeded random
- * @param {Object} [opts]
- * @param {string[]} [opts.tones] - Rock tones
- * @param {string[]} [opts.mossTones] - Moss tones
- * @param {number} [opts.stoneScale=1] - Stone size multiplier
- * @param {number} [opts.mossX1] - Moss rim start (defaults to the art start)
- * @param {number} [opts.mossX2] - Moss rim end (defaults to the art end)
- * @returns {(x: number) => number} Underside Y at X
- */
-export function paintPlatformSlab(ctx, p, rng, opts = {}) {
-  const { x1, x2 } = Layout.platformArtSpan(p)
-  const bottomAt = x => Layout.platformBottomAt(p, x)
-  const isGround = p.kind === Layout.PLATFORM_KIND.GROUND
-  const r = isGround ? PLATFORM_END_R : Math.max(PLATFORM_END_R, (Math.min(bottomAt(x1), bottomAt(x2)) - p.y) / 2)
-  const seed = rng() * FULL_TURN
-  const top = sampleEdge(x1 + r, x2 - r, PLATFORM_EDGE_STEP, x => ({ x, y: p.y + Layout.profileNoise(x, seed) * PLATFORM_TOP_WAVE }))
-  const end = (cx, sign) => sampleEdge(-HALF_TURN / 2, HALF_TURN / 2, PLATFORM_END_STEP, a => ({
-    x: cx + sign * Math.cos(a) * r,
-    y: p.y + r + Math.sin(a) * r
-  }))
-  const deepY = Layout.WORLD_H + Layout.WALL_COLLIDE_W
-  const side = (sx, sign, from, to) => sampleEdge(from, to, PLATFORM_EDGE_STEP, y => ({
-    x: sx + sign * Layout.profileNoise(y, seed + sx) * PLATFORM_SIDE_RAGGED,
-    y
-  }))
-  const pts = isGround
-    ? [...top, ...end(x2 - r, 1), ...side(x2, 1, p.y + r * 2, deepY), ...side(x1, -1, deepY, p.y + r * 2), ...end(x1 + r, -1).reverse()]
-    : [...top, ...end(x2 - r, 1), ...sampleEdge(x2 - r, x1 + r, PLATFORM_EDGE_STEP, x => ({
-        x,
-        y: Math.max(p.y + r * 2, bottomAt(x)) + Layout.profileNoise(x * PLATFORM_BOTTOM_JAG_FREQ, seed) * PLATFORM_BOTTOM_JAG
-      })), ...end(x1 + r, -1).reverse()]
-  const topAt = x => p.y + Layout.profileNoise(x, seed) * PLATFORM_TOP_WAVE
-  paintRockMass(ctx, pts, rng, { tones: opts.tones, stoneScale: opts.stoneScale, edgeStones: true, smooth: true })
-  paintMossRim(ctx, opts.mossX1 ?? x1, opts.mossX2 ?? x2, topAt, rng, opts.mossTones)
-  return bottomAt
-}
 
 /**
  * Kaplay colour that multiplies art into the cave shade (darker background
@@ -555,71 +319,6 @@ export function sampleEdge(from, to, step, at) {
   for (let v = from; dir > 0 ? v < to : v > to; v += step * dir) out.push(at(v))
   out.push(at(to))
   return out
-}
-//
-// One packed stone: irregular polygon in a weighted tone, lit top-left rim
-// and a thin contour.
-//
-function paintStone(ctx, x, y, r, rng, tones) {
-  const verts = STONE_VERTS_MIN + Math.floor(rng() * STONE_VERTS_RANGE)
-  const pts = []
-  const turn = rng() * FULL_TURN
-  for (let i = 0; i < verts; i++) {
-    const a = turn + i / verts * FULL_TURN
-    const rr = r * (1 - STONE_RADIUS_JITTER / 2 + rng() * STONE_RADIUS_JITTER)
-    pts.push({ x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr * STONE_FLATTEN_Y })
-  }
-  const path = polygonPath(pts)
-  ctx.fillStyle = css(tones[pickWeighted(rng, STONE_TONE_WEIGHTS)])
-  ctx.fill(path)
-  ctx.strokeStyle = css(tones[0], STONE_CONTOUR_ALPHA)
-  ctx.lineWidth = STONE_CONTOUR_W
-  ctx.stroke(path)
-  const litR = r * STONE_LIT_RADIUS
-  ctx.beginPath()
-  ctx.ellipse(x, y, litR, litR * STONE_FLATTEN_Y, 0, STONE_LIT_ARC_FROM, STONE_LIT_ARC_TO)
-  ctx.strokeStyle = css(tones[3], STONE_LIT_ALPHA)
-  ctx.lineWidth = STONE_LIT_W
-  ctx.stroke()
-  return path
-}
-//
-// Index from cumulative weights.
-//
-function pickWeighted(rng, weights) {
-  let t = rng()
-  for (let i = 0; i < weights.length; i++) {
-    t -= weights[i]
-    if (t <= 0) return i
-  }
-  return weights.length - 1
-}
-//
-// Stones sitting on the outline of a mass (mostly inside it), so its edge
-// reads as a broken line of rocks rather than a clean cut.
-//
-function paintEdgeStones(ctx, pts, path, rng, tones) {
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i]
-    const b = pts[(i + 1) % pts.length]
-    const len = Math.hypot(b.x - a.x, b.y - a.y)
-    for (let d = 0; d < len; d += EDGE_STONE_STEP) {
-      if (rng() > EDGE_STONE_CHANCE) continue
-      const t = d / len
-      const r = EDGE_STONE_R_MIN + rng() * EDGE_STONE_R_RANGE
-      const nx = -(b.y - a.y) / len
-      const ny = (b.x - a.x) / len
-      let x = a.x + (b.x - a.x) * t
-      let y = a.y + (b.y - a.y) * t
-      const inward = insidePath(ctx, path, x + nx * r, y + ny * r) ? 1 : -1
-      x += nx * r * EDGE_STONE_INSET * inward
-      y += ny * r * EDGE_STONE_INSET * inward
-      const stone = paintStone(ctx, x, y, r, rng, tones)
-      ctx.strokeStyle = css(CAVE_PAL.contour)
-      ctx.lineWidth = STONE_CONTOUR_W
-      ctx.stroke(stone)
-    }
-  }
 }
 //
 // Fan of bigger leaves around a vine's root point, spreading downward.
@@ -676,15 +375,6 @@ export function smoothPath(pts) {
 export function insidePath(ctx, path, x, y) {
   const m = ctx.getTransform()
   return ctx.isPointInPath(path, m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f)
-}
-//
-// Closed polygon as a reusable Path2D (fill, clip, hit test, stroke).
-//
-function polygonPath(pts) {
-  const path = new Path2D()
-  pts.forEach((p, i) => (i === 0 ? path.moveTo(p.x, p.y) : path.lineTo(p.x, p.y)))
-  path.closePath()
-  return path
 }
 /**
  * Fills an axis-aligned ellipse in the current fill style.

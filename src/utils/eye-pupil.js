@@ -20,7 +20,7 @@ const PUPIL_DEFAULT_RGB = { r: 0, g: 0, b: 0 }
 //
 // Top lid coverage per blink frame (0 = open, 1 = shut).
 //
-export const EYE_LID_COVER_BY_FRAME = [0, 0.56, 1]
+const EYE_LID_COVER_BY_FRAME = [0, 0.56, 1]
 const PUPIL_ARC_STEPS = 18
 //
 // @param {number} frameHeight - Display height of one eye frame in world px
@@ -36,7 +36,7 @@ export function eyeDisplayScaleFromHeight(frameHeight) {
  * @param {number} displayScale
  * @returns {{ x: number, y: number }}
  */
-export function computeEyePupilWorldPos(eyeCenterX, eyeCenterY, targetX, targetY, displayScale) {
+function computeEyePupilWorldPos(eyeCenterX, eyeCenterY, targetX, targetY, displayScale) {
   const scleraX = eyeCenterX + SCLERA_OFFSET_X * displayScale
   const scleraY = eyeCenterY + SCLERA_OFFSET_Y * displayScale
   const maxOff = PUPIL_MAX_OFFSET * displayScale
@@ -81,7 +81,6 @@ export function drawTrackingEyePupil(k, cfg) {
   } = cfg
   const cover = EYE_LID_COVER_BY_FRAME[frameIndex] ?? 0
   if (cover >= 0.995 || opacity <= 0.01) return
-  const scleraX = centerX + SCLERA_OFFSET_X * displayScale
   const scleraY = centerY + SCLERA_OFFSET_Y * displayScale
   const ry = SCLERA_RADIUS_Y * displayScale
   const lidY = scleraY - ry + cover * 2 * ry

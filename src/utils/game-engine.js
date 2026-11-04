@@ -7,7 +7,6 @@ import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
 import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
 import { sceneCaveLevel0 } from "../sections/cave/scenes/level0.js"
 import { loadHeroSprites, HEROES } from "../components/hero.js"
-import { prepareDesaturatedLifeSprite } from "../components/lesson-indicator.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
@@ -19,14 +18,13 @@ import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
 //
 // The engine can boot in two resolution modes:
 // - FIXED: legacy virtual canvas at CFG.visual.screen (1920x1080), stretched
-//   to fit the window via Kaplay's letterbox. Used by the remaining lessons
-//   (word/touch 1+/time, forest-complete) whose baked art assumes that exact
-//   aspect ratio.
+//   to fit the window via Kaplay's letterbox. Used by forest-complete and the
+//   dev hero-frames preview.
 // - NATIVE: canvas (and Kaplay's internal coordinate space) matches the real
 //   window resolution 1:1 — no internal offscreen buffer, no stretch, so
 //   hairline art (the hero's 1px outline) never aliases regardless of the
-//   user's monitor. Used by "ready", "menu", the Forest level and touch lesson
-//   0 — the whole hub flow shares one engine with no swap between them —
+//   user's monitor. Used by "ready", "menu", Forest and Cave — the whole
+//   hub flow shares one engine with no swap between them —
 //   whose own layout adapts to whatever width/height that turns out to be.
 //
 export const RESOLUTION_MODE = {
@@ -199,7 +197,6 @@ export async function bootEngine(resolutionMode) {
       resolve()
     })
   })
-  await prepareDesaturatedLifeSprite(k)
   if (k.canvas && !BootLoader.isLoaderVisible()) {
     k.canvas.style.visibility = 'visible'
     focusGameCanvas()
@@ -412,9 +409,6 @@ function buildSetupTasks(k) {
 function buildSoundTasks(k) {
   const sounds = [
     ['birds', './sounds/birds.mp3'],
-    ['time', './sounds/time.mp3'],
-    ['touch', './sounds/touch.mp3'],
-    ['word', './sounds/word.mp3'],
     ['water-steps', './sounds/water-steps.mp3'],
     ['whisper', './sounds/whisper.mp3']
   ]

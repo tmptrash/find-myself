@@ -136,7 +136,7 @@ export const cfg = {
 
 ### Color Configuration Rules
 - **Global colors** (hero, platform, UI elements) → `src/cfg.js`
-- **Section-specific colors** (blades, killer letters, section backgrounds) → `src/sections/{section}/cfg.js`
+- **Section-specific colors** (cave ledges, forest props, section backgrounds) → `src/sections/{section}/cfg.js`
 - **Never hardcode colors** in component files
 - Use `getColor(k, CFG.visual.colors.colorName)` helper to apply colors
 
@@ -159,13 +159,12 @@ export const CFG = {
 
 #### Example: Section Config
 ```javascript
-// src/sections/word/cfg.js
-export const WORD_CFG = {
+// src/sections/cave/cfg.js
+export const CAVE_CFG = {
   visual: {
     colors: {
       background: "#3E3E3E",     // Section-specific background
-      blades: "#6B8E9F",         // Section-specific blades color
-      killerLetter: "#6B8E9F"    // Section-specific killer letter color
+      ledge: "#6B8E9F"           // Section-specific ledge color
     }
   }
 }
@@ -174,10 +173,10 @@ export const WORD_CFG = {
 #### Example: Using Colors in Components
 ```javascript
 // Good: Use color from config
-const bladeColor = getColor(k, CFG.visual.colors.blades)
+const ledgeColor = getColor(k, CAVE_CFG.visual.colors.ledge)
 
 // Bad: Hardcoded color
-const bladeColor = k.rgb(107, 142, 159)  // ❌ Never do this
+const ledgeColor = k.rgb(107, 142, 159)  // ❌ Never do this
 ```
 
 ---
@@ -197,15 +196,15 @@ export function sceneMenu(k) {
   })
 }
 
-export function sceneLevel1(k) {
-  k.scene("level-word.1", () => {
+export function sceneForestLevel0(k) {
+  k.scene("lesson-forest.0", () => {
     // Scene implementation
   })
 }
 ```
 
 ### Collision Detection
-- Use string tags: `"platform"`, `"annihilation"`, `"player"`
+- Use string tags: `"platform"`, `"player"`
 - Add tags with `character.use("tagName")`
 - Listen with `character.onCollide("tagName", callback)`
 
@@ -225,7 +224,7 @@ Hero.create({ type: Hero.HEROES.HERO })
 ## 5. Naming Conventions
 
 ### Functions
-- **Scene functions**: `sceneMenu()`, `sceneReady()`, `sceneLevel1()`
+- **Scene functions**: `sceneMenu()`, `sceneReady()`, `sceneForestLevel0()`
 - **Private functions**: `camelCase` (e.g., `updateHeroMovement()`, `drawBackground()`)
 - **Exported functions**: `camelCase` (e.g., `create()`, `loadSprites()`)
 
@@ -237,9 +236,9 @@ Hero.create({ type: Hero.HEROES.HERO })
 - **Constants**: `UPPER_CASE` (e.g., `HERO_SCALE`, `COLLISION_WIDTH`)
 
 ### Files
-- **Scenes**: `menu.js`, `ready.js`, `level-word.1.js`
-- **Components**: `hero.js`, `button.js`
-- **Utilities**: `helper.js`, `sound.js`, `scene.js`
+- **Scenes**: `menu.js`, `ready.js`, `level0.js`
+- **Components**: `hero.js`, `grass.js`
+- **Utilities**: `helper.js`, `sound.js`, `transition.js`
 - File names should be in singular form
 
 ---
@@ -438,17 +437,17 @@ const value = a ? b ? c : d : e ? f : g
 ### Early Returns
 ```javascript
 // Good: Guard clauses
-function onAnnihilationCollide(inst) {
-  if (inst.isAnnihilating) return
+function onDeath(inst) {
+  if (inst.isDying) return
 
-  inst.isAnnihilating = true
+  inst.isDying = true
   // ... rest of logic
 }
 
 // Bad: Deep nesting
-function onAnnihilationCollide(inst) {
-  if (!inst.isAnnihilating) {
-    inst.isAnnihilating = true
+function onDeath(inst) {
+  if (!inst.isDying) {
+    inst.isDying = true
     // ... deep nested logic
   }
 }
@@ -458,49 +457,50 @@ function onAnnihilationCollide(inst) {
 
 ## 10. File Structure
 
-Sections currently in the game: `forest`, `cave`. Each follows the same internal layout (`components/`, `scenes/`, `utils/`) shown below, which uses the former `word/` section as its example.
+Sections currently in the game: `forest`, `cave`. Each follows the same internal layout (`components/`, `scenes/`, `utils/`) shown below.
 
 ```
 src/
-├── index.js                          # Entry point, Kaplay initialization
+├── index.js                          # Entry point, boots the Kaplay engine
 ├── cfg.js                            # Global configuration data
 ├── components/                       # Reusable game components
 │   ├── hero.js                       # Hero/anti-hero component
-│   └── moving-platform.js            # Moving platform with trap logic
-├── scenes/                           # Top-level scenes (menu, ready)
+│   ├── grass.js                      # Grass tufts field
+│   ├── confirm-dialog.js             # Yes/no dialog
+│   └── lesson-indicator.js           # Life eye HUD
+├── scenes/                           # Top-level scenes
 │   ├── menu.js                       # sceneMenu() - Main menu
-│   └── ready.js                      # sceneReady() - Story/intro screen
+│   ├── ready.js                      # sceneReady() - Story/intro screen
+│   └── forest-hero-frames-preview.js # Dev scene (/?scene=dev-forest-hero-frames)
 ├── sections/                         # Game sections organized by name
-│   ├── word/                         # "Words like blades" section
-│   │   ├── components/               # Word section specific components
-│   │   │   ├── blades.js             # Blade spikes (static & animated)
-│   │   │   ├── blade-arm.js          # Moving blade arm obstacle
-│   │   │   └── flying-words.js       # Atmospheric flying words/letters
-│   │   ├── scenes/                   # Word section levels
-│   │   │   ├── level0.js             # Level 0 - Introduction
-│   │   │   ├── level1.js             # Level 1
-│   │   │   ├── level2.js             # Level 2
-│   │   │   ├── level3.js             # Level 3
-│   │   │   ├── level4.js             # Level 4 (final)
-│   │   │   └── word-complete.js      # Section completion scene
-│   │   └── utils/                    # Word section utilities
-│   │       └── scene.js              # Level initialization helper
-│   ├── touch/, time/, forest/,
-│   │   feel/, stress/, memory/       # Same components/scenes/utils layout
+│   ├── forest/
+│   │   ├── cfg.js                    # Forest section config
+│   │   ├── components/               # Forest-specific components
+│   │   ├── scenes/
+│   │   │   ├── level0.js             # lesson-forest.0
+│   │   │   └── forest-complete.js    # Section completion scene
+│   │   └── utils/                    # Forest-specific utilities
+│   └── cave/
+│       ├── cfg.js                    # Cave section config
+│       ├── components/               # Cave-specific components
+│       ├── scenes/
+│       │   └── level0.js             # lesson-cave.0
+│       └── utils/                    # Cave-specific utilities
 └── utils/                            # Global utility functions
+    ├── game-engine.js                # Kaplay boot (FIXED / NATIVE modes)
+    ├── engine-switch.js              # Live engine + resolution mode per scene
     ├── helper.js                     # Color helpers, key checks
     ├── sound.js                      # Audio (Web Audio API + background music)
-    ├── particles.js                  # Firefly particle system
-    ├── connection.js                 # Lightning effect between heroes
     ├── progress.js                   # Game progress tracking (localStorage)
-    └── transition.js                 # Level transition & subtitle system
+    └── transition.js                 # Level transitions
 
 assets/
 ├── fonts/                            # Custom fonts
 │   ├── JetBrainsMono-Regular.ttf
 │   ├── JetBrainsMono-Thin.ttf
 │   └── jetbrains-mono.css
-├── word.mp3                          # Background music for word section
+├── forest/, cave0/                   # Section art (pictures, refs)
+├── sounds/                           # birds, water-steps, whisper .mp3
 └── cursor.css                        # Custom cursor styles
 ```
 
@@ -510,24 +510,22 @@ assets/
 
 ### Naming Convention
 All localStorage keys must be prefixed by section name, separated by dots:
-- `touch.` — Touch section data (e.g. `touch.level0BonusCollected`, `touch.lifeHintShown`)
-- `time.` — Time section data (e.g. `time.level0BonusCollected`, `time.lifeHintShown`)
-- `word.` — Word section data (e.g. `word.completed`)
-- Top-level keys without prefix — Global game state (e.g. `heroScore`, `lifeScore`, `lastLevel`)
+- `forest.` — Forest section data (e.g. `forest.lifeShown`, `forest.completed`)
+- `cave.` — Cave section data (e.g. `cave.safeSpot`)
+- Top-level keys without prefix — Global game state (e.g. `heroScore`, `lifeScore`, `lastLesson`)
 
 ### Example
 ```javascript
 // Good: section-prefixed keys
-set('touch.level0BonusCollected', true)
-set('time.lifeHintShown', true)
-get('word.completed', false)
+set('forest.lifeShown', true)
+get('cave.safeSpot', null)
 
 // Good: global keys (no prefix needed)
 set('heroScore', 5)
-set('lastLevel', 'level-time.1')
+set('lastLesson', 'lesson-cave.0')
 
 // Bad: unprefixed section-specific key
-set('level0BonusCollected', true)  // ❌ Missing section prefix
+set('lifeShown', true)  // ❌ Missing section prefix
 ```
 
 ### Write frequency
@@ -638,19 +636,20 @@ Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (po
 ## 14. Pixel-Perfect Native-Resolution Levels
 
 ### Why this exists
-Every scene except Forest and touch lesson 0 runs on a **fixed 1920x1080 virtual canvas** that Kaplay
+The old levels ran on a **fixed 1920x1080 virtual canvas** that Kaplay
 letterboxes (stretches via CSS) to fit the real window. That stretch is smooth/
 anti-aliased, so on any window size where the stretch factor isn't a clean
 integer (almost every real monitor), hairline art — most noticeably the hero's
 1px black outline — blends into its background and flickers depending on which
 side of a source pixel the scaled edge lands on.
 
-The Forest level (`src/sections/forest/scenes/level0.js`) and touch lesson 0
-(`src/sections/touch/scenes/lesson0.js`) instead boot their own
-Kaplay instance in **native resolution**: the canvas (and every
+`ready`, `menu`, Forest (`src/sections/forest/scenes/level0.js`) and Cave
+(`src/sections/cave/scenes/level0.js`) instead share one Kaplay instance in
+**native resolution**: the canvas (and every
 `k.width()`/`k.height()` read afterwards) matches the real window size 1:1,
 with no internal offscreen buffer and no stretch. This is the pattern to reuse
-for any future level that needs the same pixel-perfect rendering.
+for every future level. Only `forest-complete` and the dev hero-frames preview
+still use the fixed canvas.
 
 ### How it works
 - `src/utils/game-engine.js` exports `RESOLUTION_MODE = { FIXED, NATIVE }` and
@@ -672,10 +671,28 @@ for any future level that needs the same pixel-perfect rendering.
   resize of the existing instance — Kaplay's coordinate space is baked in at
   `kaplay()` call time.
 
+### Fullscreen, no frames, 1 world px = 1 screen px
+- A native-resolution level fills the **whole window** — no rounded play area,
+  no decorative frame, no letterbox padding around the playfield.
+- The **playfield has a fixed world size** (Forest: `GAME_W` × `GAME_H`, i.e. the
+  world minus its wall margins). All gameplay logic works in that fixed world
+  space and never depends on the window size.
+- The camera never scales (`camScale` stays 1): one world pixel is always one
+  screen pixel. Layout is resolved **per axis** (`forest-camera.js`):
+  - Window smaller than the playfield on an axis → the player sees only part of
+    it; the camera follows the hero on that axis, clamped to the playfield edges.
+  - Window larger than the playfield on an axis → the playfield is centred on
+    that axis, the camera is fixed there and the leftover band is plain void
+    colour (`PLAYFIELD_SCREEN` in `level0.js`).
+- Only when the window is larger than the **whole** playfield on both axes is
+  the game drawn as a centred window with rounded corners (`PLAYFIELD_ROUNDED`).
+- Screen-space UI (eye HUD, tooltips) anchors to `PLAYFIELD_SCREEN`, so it stays
+  inside the visible playfield in every case.
+
 ### Rules for writing a native-resolution level
 - Register the scene's name prefix in `resolutionModeForScene()`
   (`engine-switch.js`) so the engine swap happens automatically on entry
-  (Forest: `lesson-forest`, touch lesson 0: `lesson-touch.0`).
+  (Forest: `lesson-forest`, Cave: `lesson-cave`).
 - Never hardcode `CFG.visual.screen.width/height` for layout in a
   native-resolution scene — the real window size is unknown until the scene
   actually starts. Instead:
@@ -705,9 +722,9 @@ Every canvas-baked sprite or texture in the game must carry the same film-grain 
 ### Bake-time grain (preferred)
 
 - Import `applyForestFilmGrainToCanvas` from `src/sections/forest/utils/forest-parallax-grain.js`.
-- Run it **once per baked canvas** before `k.loadSprite()` — either call it directly after drawing, or pass it as `postBakeCanvas` / `heroPostBakeCanvas` / `hudPostBakeCanvas` so `commitHeroBakedSprite` applies it automatically.
+- Run it **once per baked canvas** before `k.loadSprite()` — either call it directly after drawing, or pass it as `postBakeCanvas` so `commitHeroBakedSprite` applies it automatically.
 - Use a **unique `seedOffset` per sprite** (name hash, index, world position) so grain tiles do not align across instances.
-- Constants live in `FOREST_FILM_GRAIN` in the same module; caption-sized text may use `applyGlowCaptionGrainToCanvas` / `GLOW_CAPTION_FILM_GRAIN`.
+- Constants live in `FOREST_FILM_GRAIN` in the same module.
 
 ### Scene overlay grain
 
@@ -838,7 +855,7 @@ These rules complement sections 3, 13, 14, and 15. They describe **how procedura
 ## Notes
 
 - Follow these patterns consistently across the codebase
-- When in doubt, reference existing components (`hero.js`, `spikes.js`, `moving-platform.js`, `sound.js`)
+- When in doubt, reference existing components (`hero.js`, `grass.js`, `sound.js`)
 - Prioritize readability and maintainability
 
 ---

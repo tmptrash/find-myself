@@ -1,8 +1,7 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, parseHex, toCanvas } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
-import { createColorChangeSparkles } from '../utils/hero-particles.js'
 import { smoothHeroContourSteps } from '../utils/hero-contour-aa.js'
 import {
   bindDefaultHeroFootFx,
@@ -32,10 +31,6 @@ const COLLISION_OFFSET_X = 0
 //
 const COLLISION_OFFSET_Y = 3
 //
-// Extra hover hit area to the left of the physics box (tooltip targeting).
-//
-const HERO_HOVER_HIT_PAD_LEFT = 10
-//
 // Hero parameters — scale 1 since sprites are already at display resolution
 //
 const HERO_SCALE = 1
@@ -47,7 +42,6 @@ const HERO_BAKE_SUFFIX_OUTLINE_ONLY = '_outline'
 const HERO_BAKE_SUFFIX_BODY_ONLY = '_bodyonly'
 const HERO_BAKE_SUFFIX_NONE = '_nobake'
 const RUN_ANIM_SPEED = 0.03333
-const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
 //
 // Run cycle — 8 frames like the reference sheet. Each leg loops around the
 // same stride circle half a cycle apart: it plants at the front, sweeps
@@ -157,21 +151,6 @@ const JUMP_AIR_HEAD_H = [24, 18, 14, 18, 24]
 const JUMP_AIR_BODY_H = [24, 16, 10, 16, 24]
 const JUMP_AIR_TOP_Y = [8, 14, 18, 14, 8]
 //
-// Confusion key set — each control key (kaplay name + physical code) that the
-// word level 4 confusion platform can remap to moveLeft / moveRight / jump.
-// Arrows (left/right/up) and letters (a/d/w) are shuffled independently; space
-// is reassigned to one of the three actions.
-//
-const CONFUSION_KEYS = [
-  { name: 'left', phys: 'ArrowLeft' },
-  { name: 'right', phys: 'ArrowRight' },
-  { name: 'up', phys: 'ArrowUp' },
-  { name: 'a', phys: 'KeyA' },
-  { name: 'd', phys: 'KeyD' },
-  { name: 'w', phys: 'KeyW' },
-  { name: 'space', phys: 'Space' }
-]
-//
 // Jump — 7 frames like the reference sheet: crouch, stretch take-off,
 // rising, peak with the legs tucked up, early descent, full-leg descent and
 // the landing crouch (held briefly right after touching the ground).
@@ -243,15 +222,15 @@ const IDLE_VOCALIZATION_DELAY = 2.0
 // stream reads as one synchronized tune. Only the hero is heard — the
 // anti-hero produces visual notes but stays silent.
 //
-export const IDLE_MELODY = [
+const IDLE_MELODY = [
   [659.25, 1], [784.0, 1], [880.0, 1.5], [784.0, 0.5],
   [659.25, 1], [587.33, 1], [523.25, 2],
   [587.33, 1], [659.25, 1], [784.0, 1.5], [659.25, 0.5],
   [587.33, 1], [523.25, 1], [587.33, 2]
 ]
-export const IDLE_MELODY_BEAT = 0.42          // Seconds per beat
-export const IDLE_MELODY_GAP = 0.1            // Silence inserted between notes
-export const IDLE_MELODY_SUSTAIN = 0.9        // Fraction of the beat the tone rings
+const IDLE_MELODY_BEAT = 0.42          // Seconds per beat
+const IDLE_MELODY_GAP = 0.1            // Silence inserted between notes
+const IDLE_MELODY_SUSTAIN = 0.9        // Fraction of the beat the tone rings
 //
 // How fast the per-note lean pulse decays (for mushrooms / other listeners)
 //
@@ -263,10 +242,6 @@ const WHISTLE_PULSE_DECAY = 2.8
 // would otherwise float over the subtitle text).
 //
 let idleVocalizationSuppressed = false
-//
-// Death animation timing
-//
-const DEATH_ANIMATION_DURATION = 0.4
 //
 // Corner radii for rounded body parts — tuned for smooth cartoon look at 96px
 //
@@ -367,12 +342,6 @@ const PUPIL_RADIUS = 2
 const EYE_OFFSET_X_LEFT = 9
 const EYE_OFFSET_X_RIGHT = 21
 const EYE_OFFSET_Y = 9
-//
-// Head left edge and crouch head top in sprite px — must match the base pose
-// values in the sprite generator (headX / crouch headY).
-//
-const EYE_LINE_HEAD_X = 33
-const JUMP_CROUCH_HEAD_Y = 45
 const EYE_PUPIL_SHIFT = 2
 const PUPIL_SIDE_SHIFT = 2
 //
@@ -476,7 +445,7 @@ export function create(config) {
     drawBodyFill,          // Legacy alias for drawBakeBody
     outlineOnly = false,   // Legacy: rim without body (drawBakeOutline && !drawBakeBody)
     hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
-    ambient = false,       // Decorative background character — no annihilation tag
+    ambient = false,       // Decorative background character — no collision area
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
     eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
@@ -699,14 +668,11 @@ export function create(config) {
     eyesClosedIdleOnly: false,
     awakeOverride: false, // When true, idle vocalization is paused (hero forced awake)
     lookAtPos: null,
-    isAnnihilating: false,
     isDying: false,
     isSubmerging: false,  // Forest lake sink — scene drives Y; skip physics/anim pipeline
     isSpawned: false,   // Flag to prevent controls before spawn completes
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
-    controlsReversed: false,  // Flag for control inversion (time section level 3)
-    annihilationLocked: false, // When true, touching the anti-hero does not annihilate
     //
     // Base collision-box params (in local sprite space) cached so the jump
     // leg-tuck can shrink the box from the bottom and restore it on landing.
@@ -732,7 +698,6 @@ export function create(config) {
     // After a letter dialog closes on Space, ignore jump until jump keys are released
     //
     jumpKeyReleaseGate: false,
-    confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     jumpDisabled: false,      // Flag to block only jumping while movement stays free (e.g. intro hints)
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
@@ -873,8 +838,6 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Generate unique prefix for this sprite variant
   //
-  const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
-  const pupilKey = pupil ? String(pupil).replace('#', '') : ''
   const noEyesFlag = Boolean(noEyes)
   const prefixBakeOpts = {
     type: heroType,
@@ -973,51 +936,6 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   isHeroIdleGridPresentOnK(k, prefix) && markHeroSpritePrefixReadyOnK(k, prefix)
   inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
 }
-/**
- * Death effect with particle explosion
- * @param {Object} inst - Hero instance
- * @param {Function} onComplete - Callback when death animation completes
- * @param {Object} [opts] - Options
- * @param {boolean} [opts.suppressParticles] - Skip body/eye particles (scene provides custom ones)
- * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. forest leaf-burst deaths)
- */
-export function death(inst, onComplete, opts = {}) {
-  if (inst.isDying) return
-  inst.isDying = true
-  const { k, character, sfx } = inst
-  const centerX = character.pos.x
-  const centerY = character.pos.y
-  //
-  // Apply slow motion effect
-  //
-  !opts.skipSlowMotion && applySlowMotion(inst)
-  //
-  // Stop control and play sound
-  //
-  character.paused = true
-  inst.controllable = false
-  sfx && Sound.playDeathSound(sfx)
-  if (!opts.suppressParticles) {
-  //
-  // Create body particles explosion
-  //
-  createBodyParticles(inst, centerX, centerY)
-  //
-  // Create eye particles
-  //
-  createEyeParticles(inst, centerX, centerY)
-  }
-  //
-  // Hide character immediately
-  //
-  if (character.exists()) {
-    k.destroy(character)
-  }
-  //
-  // Wait for particles to finish + additional pause before callback
-  //
-  k.wait(DEATH_ANIMATION_DURATION, () => onComplete?.())
-}
 
 /**
  * Sets a world position for the hero to look at. When set, eyes
@@ -1042,43 +960,6 @@ export function setAwakeOverride(inst, awake) {
   inst.awakeOverride = !!awake
 }
 
-/**
- * Current eye line of the hero sprite relative to the character centre, in
- * sprite px (multiply by the character scale for world px). Follows the head
- * through idle, run and every jump frame, and mirrors with the facing.
- * @param {Object} inst - Hero instance
- * @returns {{ x: number, y: number, sideView: boolean }} Offset and whether the face is in profile
- */
-export function getEyeLineOffset(inst) {
-  const air = Boolean(inst.jumpPhase && inst.jumpPhase !== 'none')
-  const sideView = air || Boolean(inst.isRunning)
-  let headY = IDLE_HEAD_Y
-  if (air) {
-    const frame = inst.jumpFrame ?? 0
-    const crouch = frame === 0 || frame >= JUMP_AIR_TOP_Y.length + 1
-    headY = crouch ? JUMP_CROUCH_HEAD_Y : JUMP_AIR_TOP_Y[frame - 1]
-  }
-  const dir = inst.direction === -1 ? -1 : 1
-  if (sideView) {
-    //
-    // Same anchor the baked run/jump frame paints its single eye at
-    // (run frames bob and lean the torso, so the eye moves with them).
-    //
-    const run = !air
-    run && (headY += runBodyBobPx(inst.runFrame ?? 0))
-    const eye = sideViewEyePos(EYE_LINE_HEAD_X, headY, headY + IDLE_HEAD_HEIGHT + IDLE_BODY_HEIGHT, run ? 'run' : 'jump')
-    return {
-      x: (eye.x - SPRITE_SIZE / 2) * dir,
-      y: eye.y - SPRITE_SIZE / 2,
-      sideView
-    }
-  }
-  return {
-    x: (EYE_LINE_HEAD_X + EYE_OFFSET_X_CYCLOPS - SPRITE_SIZE / 2) * dir,
-    y: headY + EYE_OFFSET_Y - SPRITE_SIZE / 2,
-    sideView
-  }
-}
 
 /**
  * Toggles the calm "closed eyes" look. While enabled the idle animation holds a
@@ -1089,7 +970,7 @@ export function getEyeLineOffset(inst) {
  * @param {Object} [opts]
  * @param {boolean} [opts.idleOnly=false] - Close eyes only while idle (allow run)
  */
-export function setEyesClosed(inst, closed, opts = {}) {
+function setEyesClosed(inst, closed, opts = {}) {
   inst.eyesClosed = !!closed
   inst.eyesClosedIdleOnly = closed ? !!opts.idleOnly : false
   //
@@ -1106,24 +987,6 @@ export function setEyesClosed(inst, closed, opts = {}) {
   inst.eyesClosedBySinging = false
 }
 
-/**
- * Arms a one-shot gate so the next jump waits until jump keys are released.
- * Used after letter dialogs closed with Space so the same press cannot crouch.
- * @param {Object} inst - Hero instance
- */
-export function armJumpKeyReleaseGate(inst) {
-  if (!inst) return
-  inst.jumpKeyReleaseGate = true
-  inst.jumpKeyReleaseHold = 0
-  inst.isSquashing = false
-  inst.squashTimer = 0
-  inst.landSquashTimer = 0
-  inst.jumpPhase = 'none'
-  inst.wasJumping = false
-  inst.jumpCeilingBonk = false
-  syncPlatformLanding(inst)
-  inst.canJump = false
-}
 
 /**
  * Puts the hero into calm meditation pose: closed eyes, idle frame, jump/run
@@ -1151,7 +1014,6 @@ export function enterCalmPose(inst) {
  * @returns {string}
  */
 export function getActiveSpriteKey(inst) {
-  const prefix = inst.spritePrefix || inst.type
   if (inst.currentEyeSprite) return inst.currentEyeSprite
   if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst, inst.jumpFrame ?? 0)
   if (inst.isRunning) return heroRunSpriteName(inst, inst.runFrame ?? 0)
@@ -1180,41 +1042,6 @@ export function applyCalmIdleSprite(inst) {
   useHeroSprite(inst, closedName)
 }
 
-/**
- * Recolours an existing anti-hero's body at runtime, rebaking its sprites and
- * swapping the visible sprite, then plays a sparkle + sound flourish. Mirrors
- * the touch level 1 grey→active transformation so other sections can reuse it.
- * @param {Object} inst - Anti-hero instance
- * @param {string} bodyColorHex - New body colour (hex, with or without leading #)
- */
-export function recolorAntiHero(inst, bodyColorHex) {
-  const { k } = inst
-  if (!inst.character?.exists?.()) return
-  inst.bodyColor = bodyColorHex
-  const newHex = String(bodyColorHex).replace('#', '')
-  const outlineHex = String(inst.outlineColor || CFG.visual.colors.outline).replace('#', '')
-  //
-  // Rebuild the sprite prefix with the new body colour, keeping feature flags
-  //
-  inst.spritePrefix = `${inst.type}_${newHex}_${outlineHex}${inst.addMouth ? '_mouth' : ''}${inst.addArms ? '_arms' : ''}${inst.addWatch ? '_watch' : ''}`
-  loadHeroSprites(inst)
-  //
-  // Wait a frame for the sprites to bake, then swap the visible sprite and flourish
-  //
-  k.wait(0.05, () => {
-    if (!inst.character?.exists?.()) return
-    try {
-      inst.character.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
-    } catch (error) {
-      //
-      // Sprite not ready — the tint fallback below still snaps to the new colour
-      //
-    }
-    inst.character.color = k.rgb(255, 255, 255)
-    createColorChangeSparkles(inst, bodyColorHex)
-    inst.sfx && Sound.playMouthSound(inst.sfx)
-  })
-}
 
 /**
  * Globally suppresses idle vocalization (visual notes + whistle sounds)
@@ -1234,24 +1061,6 @@ export function unsuppressIdleVocalization() {
   idleVocalizationSuppressed = false
 }
 
-/**
- * Forces the hero into the squat (jump-frame-0) pose for a short duration.
- * Used to make the hero visibly cower when something startles him, e.g. a
- * bug crawling onto his feet. Only affects controllable, grounded heroes
- * and is suppressed while annihilating or dying.
- * @param {Object} inst - Hero instance
- * @param {number} duration - Crouch hold time in seconds
- */
-export function crouch(inst, duration = 0.4) {
-  if (!inst || inst.isAnnihilating || inst.isDying) return
-  if (!inst.character?.exists?.()) return
-  //
-  // Extend existing crouch instead of restarting, so repeated bug taps
-  // keep the pose smooth.
-  //
-  inst.crouchTimer = Math.max(inst.crouchTimer || 0, duration)
-  inst.isCrouching = true
-}
 /**
  * Reveals the hero at the spawn point with invulnerability and clean jump state.
  * @param {Object} inst - Hero instance
@@ -1286,10 +1095,6 @@ function onUpdate(inst) {
   // Virtual jump button (touch devices)
   //
   TouchControls.processVirtualJump()
-  //
-  // Skip updates during annihilation (but allow paused for post-absorption idle)
-  //
-  if (inst.isAnnihilating) return
   //
   // Lake drowning in forest — position/opacity are driven by the scene sink tween.
   //
@@ -1347,31 +1152,6 @@ function onUpdate(inst) {
       isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
     }
     //
-    // Apply control inversion if flag is set (for time section level 3)
-    //
-    if (inst.controlsReversed) {
-      const temp = isMovingLeft
-      isMovingLeft = isMovingRight
-      isMovingRight = temp
-    }
-    //
-    // Apply confusion key map if set (word level 4 confusion platform).
-    // Each remapped key that resolves to a movement action drives that movement;
-    // jump-mapped keys are handled separately in setupControls.
-    //
-    if (inst.confusionMap) {
-      const km = inst.confusionMap.keyMap
-      isMovingLeft = false
-      isMovingRight = false
-      CONFUSION_KEYS.forEach(entry => {
-        const action = km[entry.name]
-        if (action !== 'moveLeft' && action !== 'moveRight') return
-        const keys = entry.phys ? [entry.name, entry.phys] : [entry.name]
-        if (!isAnyKeyDown(inst.k, keys)) return
-        action === 'moveLeft' ? (isMovingLeft = true) : (isMovingRight = true)
-      })
-    }
-    //
     // Apply movement only once per frame, prioritizing last pressed direction
     //
     if (isMovingLeft && !isMovingRight) {
@@ -1382,24 +1162,20 @@ function onUpdate(inst) {
       inst.direction = 1
     }
     //
-    // Store effective movement so the animation system can use it even when
-    // confused remapping routes non-standard keys (up/down/space) into movement
+    // Effective movement this frame, read by idle vocalization and the
+    // horizontal-fall twig
     //
     inst._effectivelyMoving = isMovingLeft || isMovingRight
     pollJumpInput(inst)
   }
   //
   // Determine movement state; requires spawn so keys don't trigger sounds before hero appears.
-  // When confusion is active, use the stored effective flag instead of raw key state so the
-  // run animation plays correctly for any key that resolves to horizontal movement.
   //
   const isMoving = inst.isSpawned && !inst.controlsDisabled && (
-    inst.confusionMap
-      ? (inst._effectivelyMoving === true)
-      : (TouchControls.needsTouchControls()
-          ? (TouchControls.isMoveLeftHeld() || TouchControls.isMoveRightHeld()
-            || isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
-          : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight)))
+    TouchControls.needsTouchControls()
+      ? (TouchControls.isMoveLeftHeld() || TouchControls.isMoveRightHeld()
+        || isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
+      : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
   )
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
@@ -1485,7 +1261,6 @@ function onUpdate(inst) {
       inst.isCrouching = false
     } else {
       inst.isCrouching = true
-      const prefix = inst.spritePrefix || inst.type
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
         useHeroSprite(inst, heroJumpSpriteName(inst, 0))
@@ -1514,7 +1289,6 @@ function onUpdate(inst) {
       return
     }
     inst.squashTimer += inst.k.dt()
-    const prefix = inst.spritePrefix || inst.type
     //
     // Switch between frame 0 (squash) and frame 1 (stretch) while on ground
     //
@@ -1648,10 +1422,6 @@ function onUpdate(inst) {
       // Head into a branch/platform: full standing height and fall (no tucked pose)
       //
       resolveJumpCeilingBonk(inst)
-      //
-      // Jumping - update animation based on velocity (position in jump arc)
-      //
-      const prefix = inst.spritePrefix || inst.type
       const velocity = inst.character.vel.y
       let targetFrame = inst.jumpFrame
       if (inst.jumpCeilingBonk) {
@@ -1708,7 +1478,6 @@ function onUpdate(inst) {
       if (realJump) {
         inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
-        const prefix = inst.spritePrefix || inst.type
         useHeroSprite(inst, heroJumpSpriteName(inst, 6))
         inst.currentEyeSprite = null
       } else {
@@ -1767,12 +1536,6 @@ function onUpdate(inst) {
   }
 
   if (isMoving) {
-    //
-    // Running - switch frames smoothly (time-based animation)
-    //
-    // Only reset animation if starting from idle (not from jump)
-    //
-    const prefix = inst.spritePrefix || inst.type
     if (!inst.isRunning && !inst.wasJumping) {
       inst.runFrame = 0
       inst.runTimer = 0
@@ -1917,7 +1680,7 @@ function updateIdleAnimation(inst) {
     //
     // Always re-apply: run frames swap the sprite without clearing
     // currentEyeSprite, so a stale closedName match left the hero frozen
-    // on a sideways run frame after keys were released (touch L1 end music).
+    // on a sideways run frame after keys were released.
     //
     useHeroSprite(inst, closedName)
     return
@@ -1983,7 +1746,6 @@ function updateIdleAnimation(inst) {
 // Slow run cycle for distant background walkers — avoids idle/run sprite fighting
 //
 function updateAmbientWalkAnimation(inst) {
-      const prefix = inst.spritePrefix || inst.type
   inst.runTimer += inst.k.dt()
   if (inst.runTimer >= inst.ambientRunSpeed) {
     inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
@@ -2019,7 +1781,7 @@ function canVocalize(inst) {
   if (inst.awakeOverride) return false
   if (!inst.idleVocalization) return false
   if (!inst.character?.exists?.()) return false
-  if (inst.isAnnihilating || inst.isDying) return false
+  if (inst.isDying) return false
   if (inst.controlsDisabled) return false
   if (inst.isRunning || inst.wasJumping) return false
   //
@@ -2200,25 +1962,6 @@ function drawIdleNotes(k, inst) {
   }
 }
 /**
- * Bakes shared mouth-note glyphs once per Kaplay instance (e.g. forest spirit whistle).
- * @param {Object} k - Kaplay inst
- * @param {Function} [postBake] - Optional canvas grade hook
- */
-export function ensureIdleNoteGlyphs(k, postBake) {
-  ensureIdleNoteGlyphSprites(k, postBake)
-}
-/**
- * Draws ephemeral music-note particles in world space.
- * @param {Object} k - Kaplay inst
- * @param {Array} notes - { x, y, age, glyph, angle, ... }
- */
-export function drawFloatingMusicNotes(k, notes) {
-  drawIdleNotes(k, {
-    idleNotes: notes,
-    idleNotePostBake: k._idleNoteGlyphMap ? true : null
-  })
-}
-/**
  * Handle collision with platform
  * @param {Object} inst - Hero instance
  */
@@ -2248,56 +1991,8 @@ function onCollisionPlatform(inst) {
   }
 }
 
-/**
- * Points a character's pupils toward a world position.
- * @param {Object} inst - Hero or anti-hero instance
- * @param {number} worldX - Target world X
- * @param {number} worldY - Target world Y
- */
-export function setEyesLookingAt(inst, worldX, worldY) {
-  const pos = inst.character?.pos
-  if (!pos?.exists?.()) return
-  const dx = worldX - pos.x
-  const dy = worldY - pos.y
-  inst.eyeOffsetX = dx > 8 ? 1 : dx < -8 ? -1 : 0
-  inst.eyeOffsetY = dy > 8 ? 1 : dy < -8 ? -1 : 0
-  inst.character.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
-}
 
-/**
- * Forces pupils toward a face-to-face partner even when the heroes stand very close.
- * @param {Object} inst - Hero or anti-hero instance
- * @param {number} partnerX - Partner world X
- * @param {number} partnerY - Partner world Y
- */
-export function setEyesLookingAtPartner(inst, partnerX, partnerY) {
-  const pos = inst.character?.pos
-  if (!pos?.exists?.()) return
-  const dx = partnerX - pos.x
-  const dy = partnerY - pos.y
-  //
-  // Always pick a horizontal gaze direction; vertical only when clearly above/below
-  //
-  inst.eyeOffsetX = dx >= 0 ? 1 : -1
-  inst.eyeOffsetY = dy > 6 ? 1 : dy < -6 ? -1 : 0
-  inst.character.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
-}
 
-/**
- * Temporarily hides baked sprite arms (used during touch L3 hand-hold draw).
- * @param {Object} inst - Hero or anti-hero instance
- * @param {boolean} hidden - When true, swap to a no-arms sprite
- */
-export function setArmsHidden(inst, hidden) {
-  if (hidden) {
-    inst._savedAddArms === undefined && (inst._savedAddArms = inst.addArms)
-    inst.addArms = false
-  } else if (inst._savedAddArms !== undefined) {
-    inst.addArms = inst._savedAddArms
-    inst._savedAddArms = undefined
-  }
-  refreshHeroSpriteForArms(inst)
-}
 
 /**
  * Resets jump tuck and animation after manual platform snap (log platforms).
@@ -2308,7 +2003,6 @@ export function syncPlatformLanding(inst) {
   if (!char?.exists?.()) return
   resetAirborneState(inst)
   inst.canJump = true
-  const prefix = inst.spritePrefix || inst.type
   useHeroSprite(inst, getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0))
 }
 
@@ -2318,27 +2012,13 @@ export function syncPlatformLanding(inst) {
  */
 export function snapPosToPixels(inst) {
   const ch = inst?.character
-  if (!ch?.pos || inst?.isAnnihilating) return
+  if (!ch?.pos) return
   ch.pos.x = Math.round(ch.pos.x)
   if (!inst?.isSubmerging) {
     ch.pos.y = Math.round(ch.pos.y)
   }
 }
 
-/**
- * Faces a character toward its partner and holds the idle frame during hand-hold.
- * @param {Object} inst - Hero or anti-hero instance
- * @param {number} partnerX - Partner world X
- */
-export function forceIdleFacingPartner(inst, partnerX) {
-  const ch = inst.character
-  if (!ch?.exists?.()) return
-  inst.isRunning = false
-  inst.wasJumping = false
-  inst.jumpPhase = 'none'
-  ch.flipX = ch.pos.x > partnerX
-  ch.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
-}
 
 
 //
@@ -2454,7 +2134,7 @@ function heroBakeEyeDiscs(headX, headY, bodyBottom, animation) {
  * @param {boolean} [opts.outlineOnly] - Legacy: rim without body
  * @returns {{ drawBakeOutline: boolean, drawBakeBody: boolean }}
  */
-export function resolveHeroBakeLayers(opts = {}) {
+function resolveHeroBakeLayers(opts = {}) {
   if (opts.drawBakeOutline !== undefined || opts.drawBakeBody !== undefined) {
     return {
       drawBakeOutline: opts.drawBakeOutline !== false,
@@ -2557,10 +2237,9 @@ function drawHeroBakeContour(ctx, bake) {
   const { colors, rim, legOlW, showArms, animation, frame } = bake
   const { OL } = colors
   const {
-    headX, headY, headHeight, bodyHeight, bodyH, bodyBottom,
+    headX, headY, headHeight, bodyHeight, bodyBottom,
     leftArmY, rightArmY, leanRad, leanPivotX, leanPivotY,
-    jumpLegBend, leftLegX, rightLegX, leftLegY, rightLegY,
-    leftLegHeight, rightLegHeight, leftLegOutlineTop, rightLegOutlineTop,
+    jumpLegBend, leftLegX, rightLegX, leftLegHeight, rightLegHeight, leftLegOutlineTop, rightLegOutlineTop,
     leftLegOutlineH, rightLegOutlineH, runLegsMerged,
     jumpBackHipX, jumpFrontHipX, jumpHipTop, jumpBackH, jumpFrontH,
     jumpBackBend, jumpFrontBend, jumpBackBottomX, jumpFrontBottomX,
@@ -2617,10 +2296,10 @@ function drawHeroBakeContour(ctx, bake) {
 // Hero bake layer 2 — interior body fill (torso, arms, legs, hip bridges).
 //
 function drawHeroBakeBodyFill(ctx, bake) {
-  const { colors, rim, legOlW, showArms, animation, addWatch } = bake
-  const { BL, OL } = colors
+  const { colors, rim, showArms, animation, addWatch } = bake
+  const { BL } = colors
   const {
-    headX, headY, bodyH, headHeight, bodyHeight, bodyBottom,
+    headX, headY, bodyH, bodyBottom,
     leftArmY, rightArmY, leanRad, leanPivotX, leanPivotY,
     jumpLegBend, leftLegX, rightLegX, leftLegY, rightLegY,
     leftLegHeight, rightLegHeight, leftLegOutlineTop,
@@ -2785,8 +2464,7 @@ function punchOutlineOnlyInterior(ctx, cfg) {
   const {
     headX, headY, bodyH, showArms, leftArmY, rightArmY,
     leanRad, leanPivotX, leanPivotY,
-    noEyes, animation, eyeOffsetX, eyeOffsetY,
-    jumpLegBend, leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
+    noEyes, animation, jumpLegBend, leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
     jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, jumpFrontHipX, jumpFrontH, jumpFrontBend,
     bodyBottom, rim
   } = cfg
@@ -2920,15 +2598,12 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let headY = IDLE_HEAD_Y
   let bodyY = IDLE_BODY_Y
   let headX = 33
-  let bodyX = 33
   let bodyHeight = IDLE_BODY_HEIGHT
   let headHeight = IDLE_HEAD_HEIGHT
   let leftArmY = 40
   let rightArmY = 40
   let leftLegY = IDLE_LEG_Y
   let rightLegY = IDLE_LEG_Y
-  let leftArmX = 25
-  let rightArmX = 65
   let leftLegX = 33
   let rightLegX = 54
   let legHeight = IDLE_LEG_HEIGHT
@@ -3004,8 +2679,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       leftLegY = bodyY + bodyHeight - 2
       rightLegY = leftLegY
     }
-    leftArmX = 25
-    rightArmX = 65
     leftLegHeight = legHeight
     rightLegHeight = legHeight
   }
@@ -3199,118 +2872,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
   }
 }
-//
-// Adds arms to hero sprites immediately (touch level 3 annihilation)
-//
-function applyHeroArms(inst) {
-  inst.addArms = true
-  refreshHeroSpriteForArms(inst)
-}
-//
-// Rebuilds the visible sprite after addArms toggles.
-//
-function refreshHeroSpriteForArms(inst) {
-  const bodyColorClean = String(inst.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
-  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-  const hasMouth = inst.addMouth
-  const hasWatch = inst.addWatch
-  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}${inst.addArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
-  loadHeroSprites(inst)
-  inst.character?.use?.(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
-}
-//
-// Reads Kaplay's transformed area AABB (anchor-aware, jump tuck included).
-//
-function applyHeroHoverHitPad(aabb) {
-  const padLeft = HERO_HOVER_HIT_PAD_LEFT
-  const left = aabb.left - padLeft
-  const w = aabb.w + padLeft
-  return {
-    ...aabb,
-    left,
-    w,
-    x: left + w * 0.5
-  }
-}
-function heroWorldAreaAabb(ch) {
-  if (!ch?.worldArea || !ch?.pos) return null
-  try {
-    const shape = ch.worldArea()
-    const box = shape?.bbox?.() ?? shape
-    if (!box?.width || !box?.height) return null
-    const left = box.pos?.x ?? box.x ?? 0
-    const top = box.pos?.y ?? box.y ?? 0
-    const w = box.width
-    const h = box.height
-    return {
-      left,
-      top,
-      w,
-      h,
-      x: left + w * 0.5,
-      y: top + h * 0.5
-    }
-  } catch (_) {
-    return null
-  }
-}
-/**
- * World-space hover zone matching Kaplay's live area() hitbox (worldArea()).
- * @param {Object} heroInst - Hero inst
- * @returns {{ x: number, y: number, w: number, h: number, left: number, top: number, pointerX: number, pointerY: number }}
- */
-export function getHeroCollisionHoverZone(heroInst) {
-  const ch = heroInst?.character
-  if (!ch?.pos) {
-    return {
-      x: -1000,
-      y: -1000,
-      w: COLLISION_WIDTH,
-      h: COLLISION_HEIGHT,
-      left: -1000,
-      top: -1000,
-      pointerX: -1000,
-      pointerY: -1000
-    }
-  }
-  const fromWorldArea = heroWorldAreaAabb(ch)
-  if (fromWorldArea) {
-    return applyHeroHoverHitPad({
-      ...fromWorldArea,
-      pointerX: ch.pos.x,
-      pointerY: fromWorldArea.top
-    })
-  }
-  const sx = ch.scale?.x ?? 1
-  const sy = ch.scale?.y ?? 1
-  let ox = heroInst.collisionBaseOffsetX ?? COLLISION_OFFSET_X
-  let oy = heroInst.collisionBaseOffsetY ?? COLLISION_OFFSET_Y
-  let w = heroInst.collisionBaseWidth ?? COLLISION_WIDTH
-  let h = heroInst.collisionBaseHeight ?? COLLISION_HEIGHT
-  const shape = ch.area?.shape
-  if (shape?.width != null && shape?.height != null) {
-    w = shape.width
-    h = shape.height
-    ox = shape.pos?.x ?? ox
-    oy = shape.pos?.y ?? oy
-  }
-  w *= sx
-  h *= sy
-  ox *= sx
-  oy *= sy
-  const left = ch.pos.x + ox - w * 0.5
-  const top = ch.pos.y + oy - h * 0.5
-  return applyHeroHoverHitPad({
-    x: left + w * 0.5,
-    y: top + h * 0.5,
-    w,
-    h,
-    left,
-    top,
-    pointerX: ch.pos.x,
-    pointerY: top
-  })
-}
 
 //
 // Idle sprite prefix for this hero's baked colour set.
@@ -3325,7 +2886,7 @@ function heroIdleSpritePrefix(inst) {
  * @param {number} eyeY - Eye Y offset (-1, 0, 1)
  * @returns {string} Sprite name
  */
-export function getSpriteName(inst, eyeX = 0, eyeY = 0) {
+function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   //
   // Always round eye coordinates to ensure sprite names are clean integers
   //
@@ -3335,207 +2896,10 @@ export function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   return `${prefix}_${roundedX}_${roundedY}`
 }
 
-/**
- * Apply slow motion effect
- * @param {Object} inst - Hero instance
- */
-function applySlowMotion(inst) {
-  const { k } = inst
-  const originalTimeScale = k.timeScale ?? 1
-  const slowMotionScale = 0.1
-  const slowMotionDuration = 0.5
-  k.timeScale = slowMotionScale
-  k.wait(slowMotionDuration, () => {
-    k.timeScale = originalTimeScale
-  })
-}
 
-/**
- * Get particle colors for hero type
- * @param {Object} inst - Hero instance
- * @returns {Array<string>} Array of color hex strings
- */
-function getParticleColors(inst) {
-  //
-  // Death shards stay filled with body hues plus thin outline only — never solid outline blobs.
-  //
-  const isTimeSection = inst.stepSoundScene && inst.stepSoundScene.startsWith('lesson-time.')
-  if (isTimeSection) {
-    const { type } = inst
-    return type === HEROES.HERO
-      ? deathParticlePaletteFromHex('#8B5A50')
-      : deathParticlePaletteFromHex('#FF8C00')
-  }
-  const colors = CFG.visual.colors
-  return inst.type === HEROES.HERO
-    ? deathParticlePaletteFromHex(inst.bodyColor || colors.hero.body)
-    : deathParticlePaletteFromHex(colors.antiHero.body)
-}
 
-/**
- * Builds four body-tone hex shades from one hero colour (no outline-only shards).
- *
- * @param {string} hex - Hero fill hex
- * @returns {string[]} Four palette strings for particle bodies
- */
-function deathParticlePaletteFromHex(hex) {
-  const [r, g, b] = parseHex(hex)
-  const clamp = (v) => Math.max(18, Math.min(248, Math.round(v)))
-  const toHex = (rr, gg, bb) => `#${clamp(rr).toString(16).padStart(2, '0')}${clamp(gg).toString(16).padStart(2, '0')}${clamp(bb).toString(16).padStart(2, '0')}`
-  return [
-    toHex(r, g, b),
-    toHex(r * 0.88, g * 0.88, b * 0.88),
-    toHex(r * 0.72, g * 0.72, b * 0.72),
-    toHex(Math.min(255, r * 1.08), Math.min(255, g * 1.06), Math.min(255, b * 1.04))
-  ]
-}
 
-/**
- * Create body particles for death explosion
- * @param {Object} inst - Hero instance
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @returns {Array} Array of particle objects
- */
-function createBodyParticles(inst, centerX, centerY) {
-  const { k } = inst
-  const particleColors = getParticleColors(inst)
-  const particleCount = 16
-  const particles = []
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
-    const speed = k.rand(150, 350)
-    const pSize = k.rand(4, 8)
-    const oSize = pSize + 2
-    const colorHex = k.choose(particleColors)
-    const [r, g, b] = parseHex(colorHex)
-    const rotation = k.rand(0, 360)
-    //
-    // Create invisible body for physics
-    //
-    const particleZ = inst.deathParticleZ ?? 20
-    const body = k.add([
-      k.rect(pSize, pSize),
-      k.pos(centerX, centerY),
-      k.anchor('center'),
-      k.rotate(rotation),
-      k.z(CFG.visual.zIndex.playerShadow),
-      k.area(),
-      k.body(),
-      k.opacity(0)
-    ])
-    //
-    // Create visual particle that follows the body
-    //
-    const particle = k.add([
-      k.pos(centerX, centerY),
-      k.anchor('center'),
-      k.rotate(rotation),
-      k.z(particleZ),
-      k.opacity(1),
-      {
-        draw() {
-          //
-          // Draw black outline first
-          //
-          k.drawRect({
-            width: oSize,
-            height: oSize,
-            pos: k.vec2(0, 0),
-            anchor: 'center',
-            color: getRGB(k, CFG.visual.colors.outline)
-          })
-          //
-          // Draw colored particle on top
-          //
-          k.drawRect({
-            width: pSize,
-            height: pSize,
-            pos: k.vec2(0, 0),
-            anchor: 'center',
-            color: k.rgb(r, g, b)
-          })
-        }
-      }
-    ])
-    //
-    // Set initial velocity
-    //
-    body.vel.x = Math.cos(angle) * speed
-    body.vel.y = Math.sin(angle) * speed
-    particle.lifetime = 0
-    particle.rotSpeed = k.rand(-540, 540)
-    particle.maxLifetime = 2.0
-    particle.body = body
-    //
-    // Update particle
-    //
-    particle.onUpdate(() => onUpdateDeathBodyParticle(particle, k))
-    particles.push(particle)
-  }
-  return particles
-}
 
-/**
- * Create eye particles for death explosion
- * @param {Object} inst - Hero instance
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @returns {Array} Array of eye particle objects
- */
-function createEyeParticles(inst, centerX, centerY) {
-  const { k } = inst
-  const eyeWhiteSize = 3 * RENDER_SCALE
-  const pupilSize = 1 * RENDER_SCALE
-  const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
-  const particles = []
-  //
-  // Check if we're in time section for grayscale eyes
-  //
-  const isTimeSection = inst.stepSoundScene && inst.stepSoundScene.startsWith('lesson-time.')
-  const eyeWhiteColor = isTimeSection ? [200, 200, 200] : [255, 255, 255]
-  const pupilColor = isTimeSection ? [100, 100, 100] : [0, 0, 0]
-  for (let i = 0; i < 2; i++) {
-    const angle = eyeAngles[i]
-    const speed = k.rand(150, 350)
-    //
-    // Eye background (white or light gray)
-    //
-    const eyeZ = inst.deathParticleZ ?? 20
-    const eyeWhite = k.add([
-      k.rect(eyeWhiteSize, eyeWhiteSize),
-      k.pos(centerX, centerY),
-      k.color(eyeWhiteColor[0], eyeWhiteColor[1], eyeWhiteColor[2]),
-      k.anchor('center'),
-      k.z(eyeZ),
-      k.area(),
-      k.body()
-    ])
-    //
-    // Pupil (black or dark gray)
-    //
-    const pupil = eyeWhite.add([
-      k.rect(pupilSize, pupilSize),
-      k.pos(0, 0),
-      k.color(pupilColor[0], pupilColor[1], pupilColor[2]),
-      k.anchor('center'),
-      k.z(eyeZ + CFG.visual.zIndex.eyePupil)
-    ])
-    //
-    // Set initial velocity
-    //
-    eyeWhite.vel.x = Math.cos(angle) * speed
-    eyeWhite.vel.y = Math.sin(angle) * speed
-    eyeWhite.lifetime = 0
-    eyeWhite.maxLifetime = 2.0
-    //
-    // Update eye
-    //
-    eyeWhite.onUpdate(() => onUpdateDeathEyeParticle(eyeWhite, pupil, k))
-    particles.push(eyeWhite)
-  }
-  return particles
-}
 
 //
 // Draws a filled rectangle with only the two bottom corners rounded.
@@ -4596,7 +3960,6 @@ function resolveJumpCeilingBonk(inst) {
   inst.jumpCollisionTuck = -1
   inst.jumpCollisionLift = -1
   syncJumpCollision(inst)
-  const prefix = inst.spritePrefix || inst.type
   inst.jumpFrame = 5
   useHeroSprite(inst, heroJumpSpriteName(inst, 5))
 }
@@ -4619,7 +3982,6 @@ function isHeadAgainstCeiling(inst, airborneOk = false) {
   const platforms = [...inst.k.get(CFG.game.platformName), ...inst.k.get('platform')]
   for (const obj of platforms) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
-    if (obj.is?.('annihilation')) continue
     if (obj.is?.('startBranch')) continue
     if (obj.is?.(CFG.game.noCeilingTag)) continue
     //
@@ -4663,21 +4025,11 @@ function isJumpCeilingBlocked(inst) {
 // needs isAnyKeyDown, which already drives left/right reliably.
 //
 function pollJumpInput(inst) {
-  if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || !inst.controllable) {
+  if (!inst.isSpawned || inst.controlsDisabled || !inst.controllable) {
     inst.jumpPollHeld = false
     return
   }
-  let jumpDown = false
-  if (inst.confusionMap) {
-    const km = inst.confusionMap.keyMap
-    jumpDown = CONFUSION_KEYS.some(entry => {
-      if (km[entry.name] !== 'jump') return false
-      const keys = entry.phys ? [entry.name, entry.phys] : [entry.name]
-      return isAnyKeyDown(inst.k, keys)
-    })
-  } else {
-    jumpDown = isAnyKeyDown(inst.k, CFG.controls.jump)
-  }
+  const jumpDown = isAnyKeyDown(inst.k, CFG.controls.jump)
   jumpDown && !inst.jumpPollHeld && attemptHeroJump(inst)
   inst.jumpPollHeld = jumpDown
 }
@@ -4688,7 +4040,7 @@ function attemptHeroJump(inst) {
   //
   // controllable=false: no crouch→jump.
   //
-  if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
+  if (!inst.isSpawned || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
   //
   // Dialog Space must not chain into a jump — wait until jump keys are up
   //
@@ -4698,7 +4050,6 @@ function attemptHeroJump(inst) {
     inst.isSquashing = true
     inst.squashTimer = 0
     inst.jumpFrame = 0
-    const prefix = inst.spritePrefix || inst.type
     useHeroSprite(inst, heroJumpSpriteName(inst, 0))
   }
 }
@@ -4924,36 +4275,4 @@ function bakeIdleNoteGlyphCanvas(glyph, fontFamily) {
   ctx.fillStyle = '#ffffff'
   ctx.fillText(glyph, canvas.width / 2, canvas.height / 2)
   return canvas
-}
-//
-// Private death-particle update helpers
-//
-function onUpdateDeathBodyParticle(particle, k) {
-  particle.lifetime += k.dt()
-  particle.pos = particle.body.pos
-  particle.angle = particle.body.angle
-  particle.body.vel.x *= 0.98
-  particle.body.angle += particle.rotSpeed * k.dt()
-  const fadeStartTime = 1.0
-  if (particle.lifetime > fadeStartTime) {
-    const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
-    particle.opacity = Math.max(0, 1 - fadeProgress)
-  }
-  if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
-    k.destroy(particle.body)
-    k.destroy(particle)
-  }
-}
-function onUpdateDeathEyeParticle(eyeWhite, pupil, k) {
-  eyeWhite.lifetime += k.dt()
-  eyeWhite.vel.x *= 0.98
-  pupil.opacity = eyeWhite.opacity
-  const fadeStartTime = 1.0
-  if (eyeWhite.lifetime > fadeStartTime) {
-    const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
-    eyeWhite.opacity = Math.min(1, Math.max(0, 1 - fadeProgress))
-  }
-  if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
-    k.destroy(eyeWhite)
-  }
 }

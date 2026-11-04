@@ -12,12 +12,13 @@ const SPRITE = 'forest0-bug-hole-v2'
 const GRAIN_SEED = 6401
 //
 // On the picture (px): the burrow's box, the ground line (the picture
-// stands GROUND_SINK world px lower than it) and the hole's width at the
-// ground.
+// stands GROUND_SINK world px lower than it), the hole's width at the
+// ground and the middle of the doorway's left bottom stone across.
 //
 const PICTURE = { x: 146, y: 438, w: 967, h: 422 }
 const GROUND_Y = 851
 const HOLE_SPAN = { x1: 490, x2: 817 }
+const LEFT_STONE_X = 450
 const GROUND_SINK = 1
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()
@@ -55,8 +56,8 @@ export async function load(k, width) {
  * needed, so the level can plan around it before the bake).
  * @param {number} width - World px across the picture
  * @returns {Object} Scale, size, the picture's top-left from its middle on the
- *   ground line and the hole's span from it, world px
- *   ({ scale, w, h, dx, dy, hole: { x1, x2 } })
+ *   ground line, the hole's span and the doorway's left stone from it,
+ *   world px ({ scale, w, h, dx, dy, hole: { x1, x2 }, leftStoneX })
  */
 export function layout(width) {
   const scale = width / PICTURE.w
@@ -67,6 +68,7 @@ export function layout(width) {
     h: PICTURE.h * scale,
     dx: -width * 0.5,
     dy: (PICTURE.y - GROUND_Y) * scale + GROUND_SINK,
-    hole: { x1: (HOLE_SPAN.x1 - mid) * scale, x2: (HOLE_SPAN.x2 - mid) * scale }
+    hole: { x1: (HOLE_SPAN.x1 - mid) * scale, x2: (HOLE_SPAN.x2 - mid) * scale },
+    leftStoneX: (LEFT_STONE_X - mid) * scale
   }
 }

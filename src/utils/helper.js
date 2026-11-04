@@ -99,7 +99,7 @@ window.addEventListener('keyup', (e) => {
 // stuck "held" flag after menu / transition / engine swap — if Space stays in
 // physicalKeysDown, onPhysicalKeyPress never fires again and jump appears dead.
 //
-export const GAME_PHYSICAL_KEY_CODES = [
+const GAME_PHYSICAL_KEY_CODES = [
   'Space',
   'Enter',
   'Escape',
@@ -114,7 +114,7 @@ export const GAME_PHYSICAL_KEY_CODES = [
 //
 // Drops specific keys from the physical held set (does not remove listeners).
 //
-export function releasePhysicalKeys(codes) {
+function releasePhysicalKeys(codes) {
   codes.forEach(code => physicalKeysDown.delete(code))
 }
 //
@@ -350,113 +350,6 @@ export function setProp(path, val, obj = {}) {
   keys.slice(0, -1).forEach(k => obj = obj[k] ??= {})
   obj[keys.pop()] = val
 }
-/**
- * Convert hex color to RGB object
- * @param {string} hex - Hex color string (e.g. "#ff0000" or "ff0000")
- * @returns {Object} RGB object with r, g, b properties
- */
-export function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null
-}
 
-/**
- * Convert RGB values to hex color string
- * @param {number} r - Red value (0-255)
- * @param {number} g - Green value (0-255)
- * @param {number} b - Blue value (0-255)
- * @returns {string} Hex color string with # prefix
- */
-export function rgbToHex(r, g, b) {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
-}
 
-//
-// Blur parameters: radius controls softness, passes = 2 gives a good
-// Gaussian approximation for scenic backgrounds (cities, trees).
-//
-const BOX_BLUR_RADIUS = 5
-const BOX_BLUR_PASSES = 2
 
-/**
- * Apply a fast in-place box blur to a canvas using a sliding-window algorithm.
- * Runs in O(width × height) regardless of radius. Two passes approximate a
- * Gaussian well enough for atmospheric background sprites (buildings, trees).
- * Works well with both GPU-backed and CPU-backed canvases; for a GPU-backed
- * canvas the one-time getImageData read-back takes ~20–40 ms on most hardware.
- * @param {CanvasRenderingContext2D} ctx - 2D context of the canvas to blur
- * @param {number} width  - Canvas pixel width
- * @param {number} height - Canvas pixel height
- */
-export function applyBoxBlur(ctx, width, height) {
-  const imageData = ctx.getImageData(0, 0, width, height)
-  const data = imageData.data
-  const tmp = new Uint8ClampedArray(data.length)
-  for (let pass = 0; pass < BOX_BLUR_PASSES; pass++) {
-    blurHorizontal(data, tmp, width, height, BOX_BLUR_RADIUS)
-    blurVertical(tmp, data, width, height, BOX_BLUR_RADIUS)
-  }
-  ctx.putImageData(imageData, 0, 0)
-}
-//
-// Sliding-window horizontal blur: src → dst.
-// Initialises the running sum for the window centred at x = 0,
-// then each step adds the incoming right-edge pixel and removes the outgoing
-// left-edge pixel — O(1) per pixel regardless of radius.
-//
-function blurHorizontal(src, dst, w, h, radius) {
-  for (let y = 0; y < h; y++) {
-    const rowOffset = y * w
-    let r = 0, g = 0, b = 0, a = 0
-    const initEnd = Math.min(radius, w - 1)
-    for (let x = 0; x <= initEnd; x++) {
-      const i = (rowOffset + x) * 4
-      r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]
-    }
-    for (let x = 0; x < w; x++) {
-      const cnt = Math.min(x + radius, w - 1) - Math.max(0, x - radius) + 1
-      const o = (rowOffset + x) * 4
-      dst[o] = r / cnt; dst[o + 1] = g / cnt; dst[o + 2] = b / cnt; dst[o + 3] = a / cnt
-      if (x >= radius) {
-        const ri = (rowOffset + x - radius) * 4
-        r -= src[ri]; g -= src[ri + 1]; b -= src[ri + 2]; a -= src[ri + 3]
-      }
-      const addX = x + radius + 1
-      if (addX < w) {
-        const ai = (rowOffset + addX) * 4
-        r += src[ai]; g += src[ai + 1]; b += src[ai + 2]; a += src[ai + 3]
-      }
-    }
-  }
-}
-//
-// Sliding-window vertical blur: src → dst.
-//
-function blurVertical(src, dst, w, h, radius) {
-  for (let x = 0; x < w; x++) {
-    let r = 0, g = 0, b = 0, a = 0
-    const initEnd = Math.min(radius, h - 1)
-    for (let y = 0; y <= initEnd; y++) {
-      const i = (y * w + x) * 4
-      r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]
-    }
-    for (let y = 0; y < h; y++) {
-      const cnt = Math.min(y + radius, h - 1) - Math.max(0, y - radius) + 1
-      const o = (y * w + x) * 4
-      dst[o] = r / cnt; dst[o + 1] = g / cnt; dst[o + 2] = b / cnt; dst[o + 3] = a / cnt
-      if (y >= radius) {
-        const ri = ((y - radius) * w + x) * 4
-        r -= src[ri]; g -= src[ri + 1]; b -= src[ri + 2]; a -= src[ri + 3]
-      }
-      const addY = y + radius + 1
-      if (addY < h) {
-        const ai = (addY * w + x) * 4
-        r += src[ai]; g += src[ai + 1]; b += src[ai + 2]; a += src[ai + 3]
-      }
-    }
-  }
-}

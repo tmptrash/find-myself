@@ -6,13 +6,13 @@ import {
 // HUD life-icon eye sprites (replaces life.png teacher creature).
 //
 export const EYE_HUD_OPEN_SPRITE = 'eye-hud-0'
-export const EYE_HUD_FRAME_SPRITES = ['eye-hud-0', 'eye-hud-1', 'eye-hud-2']
+const EYE_HUD_FRAME_SPRITES = ['eye-hud-0', 'eye-hud-1', 'eye-hud-2']
 export const EYE_HUD_FRAME_HEIGHT = 239
 export const EYE_HUD_FRAME_WIDTH = 201
-export const EYE_HUD_BLINK_SEQUENCE = [0, 1, 2, 1, 0]
-export const EYE_HUD_BLINK_FRAME_DURATION = 0.09
-export const EYE_HUD_BLINK_INTERVAL_MIN = 10
-export const EYE_HUD_BLINK_INTERVAL_MAX = 20
+const EYE_HUD_BLINK_SEQUENCE = [0, 1, 2, 1, 0]
+const EYE_HUD_BLINK_FRAME_DURATION = 0.09
+const EYE_HUD_BLINK_INTERVAL_MIN = 10
+const EYE_HUD_BLINK_INTERVAL_MAX = 20
 //
 // HUD display is 20% smaller than the previous life-icon scale.
 //
@@ -20,24 +20,15 @@ export const EYE_HUD_DISPLAY_SCALE_MUL = 0.8
 //
 // Ready scene: eye_x at 2× native, then −40% → 1.2× native pixels.
 //
-export const READY_EYE_DISPLAY_SCALE_MUL = 2 * 0.6
+const READY_EYE_DISPLAY_SCALE_MUL = 2 * 0.6
 export const READY_EYE_DISPLAY_WIDTH = Math.round(EYE_HUD_FRAME_WIDTH * READY_EYE_DISPLAY_SCALE_MUL)
 export const READY_EYE_DISPLAY_HEIGHT = Math.round(EYE_HUD_FRAME_HEIGHT * READY_EYE_DISPLAY_SCALE_MUL)
 /**
  * @param {number} frameIndex - 0..2
- * @param {boolean} desat
  * @returns {string}
  */
-export function eyeHudSpriteForFrame(frameIndex, desat) {
-  const base = EYE_HUD_FRAME_SPRITES[frameIndex] ?? EYE_HUD_OPEN_SPRITE
-  return desat ? `${base}-desat` : base
-}
-/**
- * @param {string} spriteName
- * @returns {boolean}
- */
-export function eyeHudSpriteIsDesat(spriteName) {
-  return Boolean(spriteName?.endsWith('-desat'))
+function eyeHudSpriteForFrame(frameIndex) {
+  return EYE_HUD_FRAME_SPRITES[frameIndex] ?? EYE_HUD_OPEN_SPRITE
 }
 /**
  * @param {Object} k - Kaplay instance
@@ -109,11 +100,6 @@ export function tickEyeHudBlink(inst, dt) {
   if (!sprite.exists?.()) return
   if (inst._lifeFlashLock) return
   const state = inst.eyeHudBlink
-  const useDesat = inst._eyeHudGrey || inst.scoreboardGreyLife
-  if (useDesat && k._lifeDesatReady !== true) {
-    inst.lifeRevealed && setLifeHudEyeHidden(inst, true)
-    return
-  }
   inst.lifeRevealed && setLifeHudEyeHidden(inst, false)
   if (!state.playing) {
     inst._eyeHudFrameIndex = 0
@@ -145,11 +131,8 @@ export function tickEyeHudBlink(inst, dt) {
  * @param {Object} inst - Level indicator instance
  * @param {Object} drawHost - Kaplay object (pos, color, opacity, hidden)
  */
-export function drawHudAnimatedEye(k, inst, drawHost) {
-  if (!inst) return
-  const useDesat = inst._eyeHudGrey || inst.scoreboardGreyLife
-  if (useDesat && k._lifeDesatReady !== true) return
-  if (drawHost.hidden) return
+function drawHudAnimatedEye(k, inst, drawHost) {
+  if (!inst || drawHost.hidden) return
   const frameIndex = inst._eyeHudFrameIndex ?? 0
   const scale = inst._eyeHudDisplayScale ?? 1
   const h = EYE_HUD_FRAME_HEIGHT * scale
@@ -199,7 +182,7 @@ export function drawReadySceneEye(k, cfg) {
     targetY,
     opacity = 1
   } = cfg
-  const spriteName = eyeHudSpriteForFrame(frameIndex, false)
+  const spriteName = eyeHudSpriteForFrame(frameIndex)
   if (!k.getSprite(spriteName)) return
   k.drawSprite({
     sprite: spriteName,
@@ -230,17 +213,15 @@ export function applyEyeHudFrame(inst, frameIndex) {
   syncLifeHudEyeSprite(inst)
 }
 /**
- * Swaps the Kaplay sprite on the life HUD object to match blink frame / grey bake.
+ * Swaps the Kaplay sprite on the life HUD object to match the blink frame.
  * @param {Object} inst - Level indicator instance
  */
 export function syncLifeHudEyeSprite(inst) {
   const spriteObj = inst?.lifeImage?.sprite
   const k = inst?.k
   if (!spriteObj?.exists?.() || !k) return
-  const useDesat = inst._eyeHudGrey || inst.scoreboardGreyLife
-  if (useDesat && k._lifeDesatReady !== true) return
   const frameIndex = inst._eyeHudFrameIndex ?? 0
-  const spriteName = eyeHudSpriteForFrame(frameIndex, useDesat)
+  const spriteName = eyeHudSpriteForFrame(frameIndex)
   if (inst._lifeSpriteName === spriteName) return
   if (!k.getSprite(spriteName)) return
   spriteObj.use(k.sprite(spriteName))
@@ -250,7 +231,7 @@ export function syncLifeHudEyeSprite(inst) {
  * @param {Object} k
  * @param {Object} state
  */
-export function scheduleNextEyeHudBlink(k, state) {
+function scheduleNextEyeHudBlink(k, state) {
   state.playing = false
   state.seqStep = 0
   state.stepTimer = 0

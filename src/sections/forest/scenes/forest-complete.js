@@ -4,7 +4,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { forestRgb } from '../utils/forest-palette.js'
 //
 // Completion marker — shown briefly before returning to menu.
-// Sets section as completed and routes to touch section.
+// Sets section as completed and routes back to the menu.
 //
 const FOREST_COMPLETE_DELAY = 2.5
 const FOREST_COMPLETE_TEXT = 'The world is now visible.'

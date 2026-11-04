@@ -1,7 +1,6 @@
 //
 // Pure Canvas2D drawing primitive for a single mushroom (cap + stem +
-// highlight + dots) used both by Touch L0 mushroom sprite generation
-// and by the ready/menu background generator. Keeps a single source
+// highlight + dots) used by the ready/menu background generator. Keeps a single source
 // of truth for the mushroom silhouette so on-screen mushrooms and
 // background mushrooms stay visually identical.
 //

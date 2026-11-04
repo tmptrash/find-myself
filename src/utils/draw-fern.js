@@ -32,8 +32,6 @@ const FERN_CONTOUR_PX = 1.2
 const FERN_LIGHT_CHANCE = 0.35
 const FERN_LIGHT_MIN_T = 0.5
 const FERN_BACK_FROND_SHARE = 0.5
-const FERN_BOUNDS_SPREAD = 0.8
-const FERN_BOUNDS_PAD = 6
 
 /**
  * Paints one fern clump rooted at (x, baseY).
@@ -75,17 +73,6 @@ export function drawFernToCanvas(ctx, opts) {
   })
 }
 
-/**
- * Conservative world bounds of a fern clump (for bake canvases).
- * @param {number} x - Base X
- * @param {number} baseY - Base Y
- * @param {number} size - Tallest frond length
- * @returns {{x1: number, y1: number, x2: number, y2: number}}
- */
-export function fernBounds(x, baseY, size) {
-  const reach = size + FERN_BOUNDS_PAD
-  return { x1: x - reach * FERN_BOUNDS_SPREAD, y1: baseY - reach, x2: x + reach * FERN_BOUNDS_SPREAD, y2: baseY + FERN_BOUNDS_PAD }
-}
 //
 // Stem curve plus every leaflet (centre, half-length, half-width, angle).
 // The two leaflets of a pair sit a little apart along the stem, and lean up

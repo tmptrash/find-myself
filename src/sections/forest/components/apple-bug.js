@@ -1,5 +1,6 @@
 import * as BugPicture from '../utils/forest-apple-bug-picture.js'
 import * as HolePicture from '../utils/forest-bug-hole-picture.js'
+import * as TunnelPicture from '../utils/forest-bug-tunnel-picture.js'
 import * as WaterFlower from './water-flower.js'
 import * as PredatorFeast from './predator-fruit-feast.js'
 import * as TreeFruit from '../utils/forest-tree-fruit.js'
@@ -27,8 +28,22 @@ import { getRGB } from '../../../utils/helper.js'
 // darkens, fades out, shrinks a little and rises (it is going deeper), and
 // it comes out the same way backwards. The burrow's picture draws behind it.
 //
+// Under the burrow, past a strip of soil, lies a cave: a moment after it
+// went in, the bug shows up in the cave's left end, runs along its floor to
+// the far end and stands there a while. An apple it brought it stores in a pile
+// there, or eats bite by bite once the pile is full; then it turns and runs
+// back up, and later comes out of the burrow as before.
+//
 const STATES = {
   INSIDE: 'inside',
+  DOWN: 'down',
+  APPEAR: 'appear',
+  TUNNEL: 'tunnel',
+  REST: 'rest',
+  STORE: 'store',
+  EAT: 'eat',
+  OUT: 'out',
+  VANISH: 'vanish',
   EMERGE: 'emerge',
   HUNT: 'hunt',
   WANDER: 'wander',
@@ -39,6 +54,8 @@ const STATES = {
   CARRY: 'carry',
   FLEE: 'flee'
 }
+const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL, STATES.REST,
+  STATES.STORE, STATES.EAT, STATES.OUT, STATES.VANISH])
 const PLANS = {
   LAKE: 'lake',
   WANDER: 'wander',
@@ -163,6 +180,26 @@ const RUSH_FADE_START = 0.4
 const DEEP_ZOOM = 0.84
 const DEEP_RISE = 4.8
 //
+// Tunnel: it shows up and leaves over TUNNEL_FADE (lit from the dark and
+// back), full size like the apples there; its body follows the floor's
+// slope measured SLOPE_SPAN to either side. It puts an apple down over
+// PUT_DURATION. The pile's places are in apple radii from the pile's spot
+// (the third on top of the two), an apple it eats lies EAT_DX radii before
+// the pile, and it bites every BITE_CYCLE (head down for its first half),
+// creeping up to what is left of the apple, its mouth BITE_INTO into it.
+//
+const TUNNEL_FADE = 0.2
+const SLOPE_SPAN = 12
+const PUT_DURATION = 0.3
+const PILE_SLOTS = [{ dx: 0, up: 0 }, { dx: -1.9, up: 0 }, { dx: -0.95, up: 1.7 }]
+const PILE_SIZE = Math.min(PARAMS.pileMax, PILE_SLOTS.length)
+const EAT_DX = -4.4
+const BITE_CYCLE = 0.55
+const BITE_INTO = 0.8
+const EAT_CREEP = 6
+const APPLE_FLOOR_SINK = 1
+const EATER_ON_LEFT = Math.PI
+//
 // Burrow: clear ground on each side of its picture.
 //
 const HOLE_CLEAR_PAD = 10
@@ -182,6 +219,7 @@ const pictureByK = new WeakMap()
  * @param {Object} [cfg.flower] - Water flower inst (its falling water scares the bug)
  * @param {Object} [cfg.predator] - Crawler inst (the bug leaves an apple it eats)
  * @param {number} cfg.backZ - Draw layer of the burrow's picture
+ * @param {number} cfg.tunnelZ - Draw layer of the tunnel under the burrow (and the apples in it)
  * @param {number} cfg.z - Draw layer of the bug
  * @returns {Object|null} Bug inst (null if its pictures are not baked)
  */
@@ -189,14 +227,31 @@ export function create(cfg) {
   const { k, holeX, groundY, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null } = cfg
   const baked = pictureByK.get(k)
   if (!baked) return null
-  const { bug, hole } = baked
+  const { bug, hole, tunnel } = baked
+  const mouthX = holeX + (hole.hole.x1 + hole.hole.x2) * 0.5
+  const tunnelX = holeX + hole.leftStoneX
+  const tunnelTopY = groundY + PARAMS.tunnelDepth
   const inst = {
     k,
     bug,
     hole,
+    tunnel,
     holeX,
     groundY,
-    mouthX: holeX + (hole.hole.x1 + hole.hole.x2) * 0.5,
+    surfaceY: groundY,
+    mouthX,
+    tunnelPos: k.vec2(Math.round(tunnelX + tunnel.dx), Math.round(tunnelTopY + tunnel.dy)),
+    tunnelFloor: tunnel.floor.map(p => ({ x: tunnelX + p.x, y: tunnelTopY + p.y })),
+    tunnelEndX: tunnelX + tunnel.endX,
+    pileX: tunnelX + tunnel.pileX,
+    floor: null,
+    slope: 0,
+    slopeCos: 1,
+    pile: [],
+    put: null,
+    meal: null,
+    bitesLeft: 0,
+    biteT: 0,
     standX: lakeX2 + PARAMS.lakeStandGap,
     wanderX1: holeX + hole.hole.x2,
     wanderX2: treeX + PARAMS.wanderReach,
@@ -251,6 +306,7 @@ export function create(cfg) {
   inst.x = inst.mouthX
   inst.goalX = inst.mouthX
   inst.legs = bug.legs.map((leg, i) => createLeg(inst, leg, i))
+  k.add([k.pos(0, 0), k.z(cfg.tunnelZ), { draw() { onDrawTunnel(inst) } }])
   k.add([k.pos(0, 0), k.z(cfg.backZ), { draw() { onDrawBack(inst) } }])
   const obj = k.add([k.pos(0, 0), k.z(cfg.z), { draw() { onDraw(inst) } }])
   obj.onUpdate(() => onUpdate(inst))
@@ -259,17 +315,21 @@ export function create(cfg) {
 }
 
 /**
- * Bakes the bug's parts and its burrow once per live k (waits for both
- * pictures to load).
+ * Bakes the bug's parts, its burrow and the tunnel under it once per live k
+ * (waits for the pictures to load).
  * @param {Object} k - Kaplay instance
- * @returns {Promise<Object|null>} Both bakes (null if either failed to load)
+ * @returns {Promise<Object|null>} The bakes (null if any failed to load)
  */
 export async function load(k) {
   const cached = pictureByK.get(k)
   if (cached) return cached
-  const [bug, hole] = await Promise.all([BugPicture.load(k, PARAMS.shellWidth), HolePicture.load(k, PARAMS.holeWidth)])
-  if (!bug || !hole) return null
-  const out = { bug, hole }
+  const [bug, hole, tunnel] = await Promise.all([
+    BugPicture.load(k, PARAMS.shellWidth),
+    HolePicture.load(k, PARAMS.holeWidth),
+    TunnelPicture.load(k, PARAMS.tunnelWidth)
+  ])
+  if (!bug || !hole || !tunnel) return null
+  const out = { bug, hole, tunnel }
   pictureByK.set(k, out)
   return out
 }
@@ -288,14 +348,15 @@ export function holeClearSpan(holeX) {
 /**
  * The bomb it fears (the one nearest its burrow) burst: out in the open it
  * jerks towards the burrow and runs in (an apple in its mouth goes with
- * it); either way it stays in a little while (bombHideMin..bombHideMax).
+ * it); either way (in the tunnel too) it stays in a little while
+ * (bombHideMin..bombHideMax).
  * Already on its way in or out of the burrow, it carries on.
  * @param {Object|null} inst - Bug inst
  */
 export function onBombBurst(inst) {
   if (!inst || inst.state === STATES.EMERGE || inst.state === STATES.SINK || inst.state === STATES.FLEE) return
   const hide = randomIn(PARAMS.bombHideMin, PARAMS.bombHideMax)
-  if (inst.state === STATES.INSIDE) {
+  if (UNDERGROUND.has(inst.state)) {
     inst.hideLeft = Math.max(inst.hideLeft, hide)
     return
   }
@@ -310,24 +371,36 @@ export function onBombBurst(inst) {
 }
 
 //
-// The bug's behaviour, its motion and pose, its legs, then what it fears:
-// the flower's water and a crawler eating near it.
+// The bug's behaviour, the ground under it, its motion and pose, its legs,
+// then (out in the open) what it fears: the flower's water and a crawler
+// eating near it. Its hiding time runs all the while it is underground.
 //
 function onUpdate(inst) {
   const dt = Math.min(MAX_FRAME_DT, inst.k.dt())
   inst.time += dt
+  UNDERGROUND.has(inst.state) && (inst.hideLeft -= dt)
   updateBehaviour(inst, dt)
-  if (inst.state === STATES.INSIDE) return
+  if (inst.state === STATES.INSIDE || inst.state === STATES.DOWN) return
+  updateFloor(inst)
   updateTurn(inst, dt)
   updatePose(inst, dt)
   updateLegs(inst, dt)
   updateTongue(inst, dt)
+  if (inst.floor) return
   checkWater(inst)
   checkCrawler(inst)
 }
 function updateBehaviour(inst, dt) {
   switch (inst.state) {
-    case STATES.INSIDE: return tickInside(inst, dt)
+    case STATES.INSIDE: return tickInside(inst)
+    case STATES.DOWN: return tickDown(inst, dt)
+    case STATES.APPEAR: return tickAppear(inst, dt)
+    case STATES.TUNNEL: return tickTunnel(inst, dt)
+    case STATES.REST: return tickRest(inst, dt)
+    case STATES.STORE: return tickStore(inst, dt)
+    case STATES.EAT: return tickEat(inst, dt)
+    case STATES.OUT: return tickOut(inst, dt)
+    case STATES.VANISH: return tickVanish(inst, dt)
     case STATES.EMERGE: return tickEmerge(inst, dt)
     case STATES.HUNT: return tickHunt(inst, dt)
     case STATES.WANDER: return tickWander(inst, dt)
@@ -344,8 +417,7 @@ function updateBehaviour(inst, dt) {
 // is hiding scared. It stays in while a crawler eats round its grounds, and
 // picks what to do next before it comes out.
 //
-function tickInside(inst, dt) {
-  inst.hideLeft -= dt
+function tickInside(inst) {
   const apple = findApple(inst)
   apple && !inst.scared && (inst.hideLeft = Math.min(inst.hideLeft, APPLE_NOTICE_DELAY))
   if (inst.hideLeft > 0 || crawlerOnGrounds(inst)) return
@@ -409,16 +481,168 @@ function tickHome(inst, dt) {
   goToDoor(inst, dt, PARAMS.stroll, randomIn(PARAMS.hideMin, PARAMS.hideMax))
 }
 //
-// The dash from the doorway into the dark; what it carries goes in with it.
+// The dash from the doorway into the dark; an apple in its mouth goes in
+// with it (it leaves the level for the tunnel).
 //
 function tickSink(inst, dt) {
   const u = tickRush(inst, dt)
   updateDepth(inst, u, true)
   if (u < 1) return
   inst.carrying && TreeFruit.removeForestCarriedFruit(inst.levelInst, inst.fruit)
-  inst.fruit && releaseApple(inst)
-  inst.carrying = false
+  !inst.carrying && inst.fruit && releaseApple(inst)
   inst.hideLeft = inst.nextHide
+  inst.stateLeft = PARAMS.tunnelDelay
+  inst.state = STATES.DOWN
+}
+function tickDown(inst, dt) {
+  inst.stateLeft -= dt
+  inst.stateLeft <= 0 && enterTunnel(inst)
+}
+//
+// It shows up in the cave's left rounded end facing along it, lit from the dark.
+//
+function enterTunnel(inst) {
+  inst.floor = inst.tunnelFloor
+  inst.x = inst.tunnelEndX
+  inst.goalX = inst.tunnelEndX
+  inst.facing = 1
+  inst.f = 1
+  inst.turnT = 1
+  inst.turnFlipped = true
+  inst.zoom = 1
+  inst.rise = 0
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  updateFloor(inst)
+  inst.legs.forEach(leg => plantLeg(inst, leg))
+  inst.stateLeft = TUNNEL_FADE
+  setTunnelLight(inst, 0)
+  inst.state = STATES.APPEAR
+}
+function tickAppear(inst, dt) {
+  inst.stateLeft -= dt
+  setTunnelLight(inst, 1 - Math.max(0, inst.stateLeft) / TUNNEL_FADE)
+  inst.stateLeft <= 0 && (inst.state = STATES.TUNNEL)
+}
+//
+// Lit from the dark (u from 0 to 1): it shows dark first, then lightens to
+// the tunnel's own dimness.
+//
+function setTunnelLight(inst, u) {
+  inst.opacity = Math.min(1, u * 2)
+  inst.dark = 1 - (1 - PARAMS.tunnelDark) * u
+}
+//
+// Down the tunnel to the far end: with nothing it stands there a while, an
+// apple it stores in the pile or (the pile full) puts down and eats.
+//
+function tickTunnel(inst, dt) {
+  inst.goalX = tunnelStopX(inst)
+  if (!walk(inst, dt, PARAMS.tunnel) || inst.turnT < 1) return
+  if (inst.carrying) return startPut(inst, inst.pile.length >= PILE_SIZE)
+  inst.stateLeft = randomIn(PARAMS.tunnelRestMin, PARAMS.tunnelRestMax)
+  inst.state = STATES.REST
+}
+function tickRest(inst, dt) {
+  inst.stateLeft -= dt
+  inst.stateLeft <= 0 && (inst.state = STATES.OUT)
+}
+//
+// Where it stops at the far end: its mouth (and the apple held in front of
+// it) over the spot the apple goes to.
+//
+function tunnelStopX(inst) {
+  const hold = inst.carrying ? inst.fruit.r * inst.zoom * APPLE_HOLD_AHEAD : 0
+  return tunnelSpot(inst).x - inst.bug.mouth.x * inst.zoom - hold
+}
+//
+// The pile's next place for an apple it brings; before the pile for one it
+// eats or when it brings nothing to a pile; right by the end wall when it
+// brings nothing to an empty one.
+//
+function tunnelSpot(inst) {
+  const count = inst.pile.length
+  if (inst.carrying) return count < PILE_SIZE ? pileSpot(inst, count, inst.fruit.r) : eatSpot(inst, inst.fruit.r)
+  return count ? eatSpot(inst, inst.pile[0].fruit.r) : pileSpot(inst, 0, 0)
+}
+function pileSpot(inst, i, r) {
+  const slot = PILE_SLOTS[i]
+  const x = inst.pileX + slot.dx * r
+  return { x, y: floorY(inst.tunnelFloor, x) - r * (1 + slot.up) + APPLE_FLOOR_SINK }
+}
+function eatSpot(inst, r) {
+  const x = inst.pileX + EAT_DX * r
+  return { x, y: floorY(inst.tunnelFloor, x) - r + APPLE_FLOOR_SINK }
+}
+//
+// Lowers its head and sets the apple down from its mouth to its spot.
+//
+function startPut(inst, eat) {
+  const spot = eat ? eatSpot(inst, inst.fruit.r) : pileSpot(inst, inst.pile.length, inst.fruit.r)
+  inst.put = { ...spot, eat }
+  inst.stateLeft = PUT_DURATION
+  inst.headTarget = HEAD_GRAB_DIP
+  inst.state = STATES.STORE
+}
+function tickStore(inst, dt) {
+  inst.stateLeft -= dt
+  if (inst.stateLeft > 0) return
+  const { fruit, put } = inst
+  inst.carrying = false
+  inst.fruit = null
+  inst.put = null
+  inst.headTarget = 0
+  if (put.eat) return startEat(inst, fruit, put)
+  inst.pile.push({ fruit, x: put.x, y: put.y })
+  inst.state = STATES.OUT
+}
+function startEat(inst, fruit, spot) {
+  inst.meal = { fruit, x: spot.x, y: spot.y }
+  inst.bitesLeft = PARAMS.eatBites
+  inst.biteT = 0
+  inst.state = STATES.EAT
+}
+//
+// Bite by bite like the crawler: it creeps up to what is left of the apple,
+// dips its head and takes a piece off its near side as the head comes up;
+// the last bite finishes it.
+//
+function tickEat(inst, dt) {
+  const { meal } = inst
+  const reach = TreeFruit.getForestFruitReach(meal.fruit, EATER_ON_LEFT)
+  const biteX = meal.x - reach * BITE_INTO - inst.bug.mouth.x * inst.zoom
+  inst.x += (biteX - inst.x) * Math.min(1, dt * EAT_CREEP)
+  inst.vx = 0
+  const half = BITE_CYCLE * 0.5
+  const wasDown = inst.biteT < half
+  inst.biteT += dt
+  inst.headTarget = inst.biteT < half ? HEAD_GRAB_DIP : 0
+  wasDown && inst.biteT >= half && takeBite(inst)
+  if (inst.biteT < BITE_CYCLE) return
+  inst.biteT = 0
+  if (inst.bitesLeft > 0) return
+  inst.meal = null
+  inst.state = STATES.OUT
+}
+function takeBite(inst) {
+  const { fruit } = inst.meal
+  fruit.picture && TreeFruit.biteForestPictureFruit(fruit, EATER_ON_LEFT, inst.bitesLeft, Math.random)
+  inst.bitesLeft -= 1
+}
+//
+// Back to the cave's left end (turning first), and away into the dark.
+//
+function tickOut(inst, dt) {
+  inst.goalX = inst.tunnelEndX
+  if (!walk(inst, dt, PARAMS.tunnel) || inst.turnT < 1) return
+  inst.stateLeft = TUNNEL_FADE
+  inst.state = STATES.VANISH
+}
+function tickVanish(inst, dt) {
+  inst.stateLeft -= dt
+  setTunnelLight(inst, Math.max(0, inst.stateLeft) / TUNNEL_FADE)
+  if (inst.stateLeft > 0) return
+  inst.floor = null
   inst.state = STATES.INSIDE
 }
 //
@@ -664,6 +888,37 @@ function wanderGoal(inst) {
   return side < 0 ? Math.min(x, edge) : Math.max(x, edge)
 }
 //
+// The ground under it: flat outside; in the tunnel the floor's height and
+// slope round it, the body raised so it stands its usual height off a slope.
+//
+function updateFloor(inst) {
+  if (!inst.floor) {
+    inst.groundY = inst.surfaceY
+    inst.slope = 0
+    inst.slopeCos = 1
+    return
+  }
+  const y1 = floorY(inst.floor, inst.x - SLOPE_SPAN)
+  const y2 = floorY(inst.floor, inst.x + SLOPE_SPAN)
+  inst.slope = Math.atan2(y2 - y1, SLOPE_SPAN * 2)
+  inst.slopeCos = Math.cos(inst.slope)
+  inst.groundY = floorY(inst.floor, inst.x) - inst.lift * inst.zoom * (1 / inst.slopeCos - 1)
+}
+function floorAt(inst, x) {
+  return inst.floor ? floorY(inst.floor, x) : inst.surfaceY
+}
+//
+// Height of a walking line (points left to right) at x, flat past its ends.
+//
+function floorY(floor, x) {
+  const i = floor.findIndex(p => p.x >= x)
+  if (i === 0) return floor[0].y
+  if (i < 0) return floor[floor.length - 1].y
+  const a = floor[i - 1]
+  const b = floor[i]
+  return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
+}
+//
 // Motion: dashes towards the goal (turning sharply first if it lies behind),
 // a pause and a new pose after each. True once it stands at the goal.
 //
@@ -691,7 +946,8 @@ function walk(inst, dt, mode) {
   dash.t += dt
   const u = Math.min(1, dash.t / dash.dur)
   const start = mode.dashStart ?? 0
-  const step = Math.min(Math.abs(gap), mode.speed * Math.sin(Math.PI * (start + (1 - start) * u)) * dt)
+  const speed = mode.speed * inst.slopeCos
+  const step = Math.min(Math.abs(gap), speed * Math.sin(Math.PI * (start + (1 - start) * u)) * dt)
   inst.x += dir * step
   inst.vx = dir * step / dt
   if (u < 1 && Math.abs(inst.goalX - inst.x) > ARRIVE_DIST) return false
@@ -729,7 +985,8 @@ function updateTurn(inst, dt) {
 }
 //
 // Height, pitch and head snap to the pose; a dash leans the nose down and
-// bobs the body, a startle hop falls back.
+// bobs the body, a startle hop falls back, and on a slope the body lies
+// along it (nose down going downhill).
 //
 function updatePose(inst, dt) {
   const { dash } = inst
@@ -738,9 +995,10 @@ function updatePose(inst, dt) {
   const lean = (dash.active ? DASH_LEAN : 0) + turning
   const bob = dash.active ? Math.sin(Math.PI * 2 * u) * DASH_BOB : 0
   const snap = Math.min(1, dt * POSE_SNAP)
+  const slope = inst.slope * (Math.sign(inst.f) || inst.facing)
   inst.hop = Math.max(0, inst.hop - dt * POSE_SNAP)
   inst.lift += (inst.liftTarget + bob + inst.hop - inst.lift) * snap
-  inst.pitch += (inst.pitchTarget + lean - inst.pitch) * snap
+  inst.pitch += (inst.pitchTarget + lean + slope - inst.pitch) * snap
   inst.head += (inst.headTarget - inst.head) * Math.min(1, dt * HEAD_SNAP)
   const sway = ANTENNA_SWAY * Math.sin(inst.time * ANTENNA_SPEED)
   inst.antenna += (sway - Math.abs(inst.vx) * ANTENNA_DRAG - inst.antenna) * Math.min(1, dt * ANTENNA_SNAP)
@@ -767,9 +1025,16 @@ function createLeg(inst, leg, i) {
   return out
 }
 function plantLeg(inst, leg) {
-  leg.footX = inst.x + inst.facing * leg.rest
+  leg.footX = inst.x + inst.facing * legRest(inst, leg)
   leg.footLift = 0
   leg.stepping = false
+}
+//
+// A foot's rest spot across from the body's origin: in the tunnel it is
+// closer across on a slope (it lies along it).
+//
+function legRest(inst, leg) {
+  return inst.floor ? leg.rest * inst.zoom * inst.slopeCos : leg.rest
 }
 function updateLegs(inst, dt) {
   const sgn = Math.sign(inst.f) || inst.facing
@@ -778,7 +1043,7 @@ function updateLegs(inst, dt) {
   inst.legs.forEach(leg => leg.stepping && stepLeg(inst, leg, dt, sgn, lead))
   for (const leg of inst.legs) {
     if (leg.stepping) continue
-    const lag = Math.abs((leg.footX - inst.x) * sgn - leg.rest)
+    const lag = Math.abs((leg.footX - inst.x) * sgn - legRest(inst, leg))
     if (lag <= (moving ? STEP_TRIGGER : SETTLE_TRIGGER)) continue
     if (inst.legs.some(other => other.stepping && other.group !== leg.group)) continue
     leg.stepping = true
@@ -788,7 +1053,7 @@ function updateLegs(inst, dt) {
 }
 function stepLeg(inst, leg, dt, sgn, lead) {
   leg.stepT = Math.min(1, leg.stepT + dt / PARAMS.stepDuration)
-  leg.toX = inst.x + sgn * leg.rest + lead
+  leg.toX = inst.x + sgn * legRest(inst, leg) + lead
   leg.footX = leg.fromX + (leg.toX - leg.fromX) * leg.stepT
   leg.footLift = Math.sin(Math.PI * leg.stepT) * PARAMS.stepLift
   leg.stepT >= 1 && (leg.stepping = false, leg.footLift = 0)
@@ -894,6 +1159,19 @@ function mouthWorld(inst) {
   return toWorld(inst, headPoint(inst, inst.bug.mouth, { x: 0, y: 0 }))
 }
 //
+// The tunnel under the burrow, the apples stored at its far end and one
+// being eaten, dim like the bug down there.
+//
+function onDrawTunnel(inst) {
+  inst.k.drawSprite({ sprite: inst.tunnel.sprite, pos: inst.tunnelPos })
+  inst.pile.forEach(item => drawTunnelApple(inst, item))
+  inst.meal && drawTunnelApple(inst, inst.meal)
+}
+function drawTunnelApple(inst, { fruit, x, y }) {
+  TreeFruit.drawForestFruitAt(inst.k, fruit, x, y)
+  TreeFruit.drawForestFruitAt(inst.k, fruit, x, y, { opacity: PARAMS.tunnelDark, color: inst.deepColor })
+}
+//
 // The burrow's picture behind the bug.
 //
 function onDrawBack(inst) {
@@ -906,7 +1184,7 @@ function onDrawBack(inst) {
 // goes last.
 //
 function onDraw(inst) {
-  if (inst.state === STATES.INSIDE) return
+  if (inst.state === STATES.INSIDE || inst.state === STATES.DOWN) return
   const sgn = Math.sign(inst.f) || inst.facing
   const legs = inst.legs.map(leg => solveLeg(inst, leg, sgn))
   inst.dark < 1 && drawBody(inst, legs, { opacity: inst.opacity, color: null, farColor: inst.farTint })
@@ -960,7 +1238,8 @@ function drawAntenna(inst, part, at, mirror, phase, look) {
 function solveLeg(inst, leg, sgn) {
   const [femur, tibia, tarsus] = leg.pieces
   const hip = bodyPoint(inst, leg.hip, { x: 0, y: 0 })
-  const foot = { x: (leg.footX - inst.x) * sgn / inst.zoom, y: inst.lift - leg.footLift }
+  const floorDy = (floorAt(inst, leg.footX) - inst.groundY) / inst.zoom
+  const foot = { x: (leg.footX - inst.x) * sgn / inst.zoom, y: inst.lift - leg.footLift + floorDy }
   const tilt = leg.place * TARSUS_TILT
   const ankle = { x: foot.x - Math.sin(tilt) * tarsus.len, y: foot.y - Math.cos(tilt) * tarsus.len }
   const dx = ankle.x - hip.x
@@ -986,11 +1265,20 @@ function drawLeg(inst, leg, joints, look, color) {
     drawPart(inst, piece, from, Math.atan2(to.y - from.y, to.x - from.x) - piece.axis, 1, look, color)
   }
 }
+//
+// The apple in front of its mouth; while it puts one down, on its way from
+// there to its spot.
+//
 function drawCarried(inst, look) {
   const mouth = mouthWorld(inst)
   const r = inst.fruit.r * inst.zoom
-  TreeFruit.drawForestFruitAt(inst.k, inst.fruit, mouth.x + inst.f * r * APPLE_HOLD_AHEAD, mouth.y + r * APPLE_HOLD_DROP,
-    { zoom: inst.zoom, opacity: look.opacity, color: look.color })
+  const put = inst.put
+  const u = put ? 1 - Math.max(0, inst.stateLeft) / PUT_DURATION : 0
+  const holdX = mouth.x + inst.f * r * APPLE_HOLD_AHEAD
+  const holdY = mouth.y + r * APPLE_HOLD_DROP
+  const x = put ? holdX + (put.x - holdX) * u : holdX
+  const y = put ? holdY + (put.y - holdY) * u : holdY
+  TreeFruit.drawForestFruitAt(inst.k, inst.fruit, x, y, { zoom: inst.zoom, opacity: look.opacity, color: look.color })
 }
 //
 // The tongue from the mouth towards its tip (as far out as it is): bent,

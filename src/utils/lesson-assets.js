@@ -3,9 +3,7 @@ import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { waitForForestLevel0Bootstrap } from '../sections/forest/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
-import { finishReadyTvIntroNow } from './ready-tv-power-on.js'
 
-const READY_SCENE_NAME = 'ready'
 const FOREST_LEVEL0_SCENE = 'lesson-forest.0'
 const FOREST_SCENE_PREFIX = 'lesson-forest'
 //
@@ -126,10 +124,6 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   //
   switched && onEngineResolutionSwapped()
   switched && await prepareSceneAssets(liveK, sceneName, { deferLoaderReveal: true })
-  //
-  // The page-load TV snow and its hiss belong to the first "ready" screen only.
-  //
-  sceneName !== READY_SCENE_NAME && finishReadyTvIntroNow()
   setActiveSceneName(sceneName)
   liveK.go(sceneName)
   sceneName === FOREST_LEVEL0_SCENE && await waitForForestLevel0Bootstrap()

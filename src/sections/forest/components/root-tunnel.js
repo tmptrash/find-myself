@@ -419,7 +419,7 @@ export function spineX(inst, y) {
  * @param {number} y - World Y
  * @returns {number}
  */
-export function halfWidth(inst, y) {
+function halfWidth(inst, y) {
   const p = probe(inst, y)
   return (p.r - p.l) * 0.5
 }

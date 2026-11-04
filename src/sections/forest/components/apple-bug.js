@@ -548,7 +548,7 @@ function tickAppear(inst, dt) {
 //
 function setTunnelLight(inst, u) {
   inst.opacity = Math.min(1, u * 2)
-  inst.dark = 1 - (1 - PARAMS.tunnelDark) * u
+  inst.dark = 1 - (1 - PARAMS.tunnelBugDark) * u
 }
 //
 // Down the tunnel to the far end: its apple it stores in the pile or (the

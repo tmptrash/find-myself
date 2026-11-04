@@ -277,10 +277,12 @@ const LEFT_TREE_CLEAR_SPANS = [WATER_FLOWER_CLEAR_SPAN, BUG_HOLE_CLEAR_SPAN]
 //
 const LEFT_TREE_ROOT_HALF = 180
 //
-// The centipede passes in front of the left big tree (above its trunk, under
-// the plants at its foot); elsewhere it stays behind the hero.
+// The centipede passes in front of the left big tree's trunk but behind the
+// apple bug's burrow and the plants at the tree's foot; elsewhere it stays
+// behind the hero.
 //
-const PREDATOR_LEFT_TREE_FRONT_Z = CFG.visual.zIndex.platforms - 1.75
+const PREDATOR_UNDER_BUG_HOLE = 0.05
+const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_BACK_Z - PREDATOR_UNDER_BUG_HOLE
 //
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
@@ -5405,6 +5407,11 @@ function resolveForestPredatorRespawnX(deathX, deathY, pred) {
   //
   const room = side => (side < 0 ? predX - minX : maxX - predX)
   room(away) < push && room(-away) > room(away) && (away = -away)
+  //
+  // Killed on its right the hero always comes back on its left: the crawler
+  // chases anyone on its right at full speed, so a right respawn is a trap.
+  //
+  deathX > predX && (away = -1)
   let spawnX = clampForestPredatorRespawnX(predX + away * push, minX, maxX)
   spawnX = slideForestPredatorRespawnClearOfBody(pred, spawnX, footY, away, minX, maxX)
   if (Predator.overlapsHeroHitbox(pred, spawnX, footY)) {
@@ -7020,16 +7027,15 @@ function syncHeroTrampDrawOrder(inst) {
   const onBranchCap = isOnBranchTrampolineCap(inst, ch)
   onBranch && !onBranchCap && inst.branchTrampBounceAir &&
     (inst.branchTrampBounceAir = false)
-  const branchTrampBoost = inst.branchTrampBounceAir || onBranchCap
   const rightInFront = inst.trampBounceAir
   let targetZ = CFG.visual.zIndex.player
   //
-  // On the start branch the canopy must always cover the hero; only the
-  // branch-trampoline bounce lifts him above the cap draw layer briefly.
+  // The left tree covers the hero on the branch and in the whole flight of a
+  // branch-trampoline bounce; only standing on the cap lifts him above it.
   //
-  onBranch && !branchTrampBoost &&
-    (targetZ = CFG.visual.zIndex.platforms - 3)
-  branchTrampBoost &&
+  const behindLeftTree = onBranch || inst.branchTrampBounceAir
+  behindLeftTree && (targetZ = CFG.visual.zIndex.platforms - 3)
+  onBranchCap &&
     (targetZ = CFG.visual.zIndex.platforms + 2)
   !onBranch && rightInFront &&
     (targetZ = CFG.visual.zIndex.player + 2)

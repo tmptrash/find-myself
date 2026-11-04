@@ -121,7 +121,8 @@ const APPLE_BUG = {
   tunnelWidth: 450,                 // Tunnel picture width: the full-size bug fits its narrow middle
   tunnelDepth: 60,                  // Soil strip between the ground (the burrow's doorway) and the cave's top stones
   tunnelDelay: 0.4,
-  tunnelDark: 0.45,                 // How dark the bug and its apples look underground
+  tunnelDark: 0.45,                 // How dark the apples stored underground look
+  tunnelBugDark: 0.72,              // How dark the bug itself looks underground
   tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
   tunnelRush: { speed: 340, dashMin: 0.45, dashMax: 0.6, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // An apple fell up there: back out at once
   pileMax: 3,                       // Apples stored at the far end; with that many there it eats the next one

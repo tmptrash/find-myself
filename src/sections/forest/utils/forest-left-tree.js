@@ -92,6 +92,7 @@ const APPLE_HANGS = [
 ]
 const image = loadImage(URL)
 const bakedByK = new WeakMap()
+const appleByK = new WeakMap()
 let picture = null
 
 /**
@@ -146,23 +147,50 @@ export async function bakeLeftTree(k, foot, clear = null) {
   if (!img) return null
   const crown = bakePart(k, img, CROWN, 'crown', CROWN_CLEAR).name
   const roots = bakePart(k, img, ROOTS, 'roots').name
-  const apple = bakePart(k, img, APPLE, 'apple')
   const out = {
     plants: bakeFootPlants(k, foot, clear),
     crown: { sprite: crown, x: Math.round(foot.x - (TRUNK_X - CROWN.x) * SCALE), y: Math.round(foot.y - CROWN.h * SCALE + GROUND_TUCK) },
     roots: { sprite: roots, x: Math.round(foot.x - (ROOTS_X - ROOTS.x) * SCALE), y: foot.y - GROUND_TUCK },
-    apple: {
-      sprite: apple.name,
-      unripe: bakeUnripeApple(k, apple.canvas),
-      canvas: apple.canvas,
-      w: APPLE.w * SCALE * APPLE_SIZE,
-      h: APPLE.h * SCALE * APPLE_SIZE,
-      dx: (APPLE.x - APPLE_BODY.x) * SCALE * APPLE_SIZE,
-      dy: (APPLE.y - APPLE_BODY.y) * SCALE * APPLE_SIZE
-    }
+    apple: await bakeLeftTreeApple(k)
   }
   bakedByK.set(k, out)
   return out
+}
+
+/**
+ * Bakes only the tree's apple (ripe and young) once per live k, for a scene
+ * that paints the tree itself (the menu backdrop).
+ * @param {Object} k - Kaplay instance
+ * @returns {Promise<Object|null>} The apple's sprite, its young green copy's sprite, its
+ *   canvas, size and offset of its top-left from its body's centre (null if the picture
+ *   failed to load)
+ */
+export async function bakeLeftTreeApple(k) {
+  const cached = appleByK.get(k)
+  if (cached) return cached
+  const img = await image
+  if (!img) return null
+  const apple = bakePart(k, img, APPLE, 'apple')
+  const out = {
+    sprite: apple.name,
+    unripe: bakeUnripeApple(k, apple.canvas),
+    canvas: apple.canvas,
+    w: APPLE.w * SCALE * APPLE_SIZE,
+    h: APPLE.h * SCALE * APPLE_SIZE,
+    dx: (APPLE.x - APPLE_BODY.x) * SCALE * APPLE_SIZE,
+    dy: (APPLE.y - APPLE_BODY.y) * SCALE * APPLE_SIZE
+  }
+  appleByK.set(k, out)
+  return out
+}
+
+/**
+ * Sync read of the apple bakeLeftTreeApple() made on this k.
+ * @param {Object} k - Kaplay instance
+ * @returns {Object|null}
+ */
+export function leftTreeApplePicture(k) {
+  return appleByK.get(k) ?? null
 }
 
 /**
@@ -184,10 +212,11 @@ export function leftTreeBranch(foot) {
  * Where apples grow in the world (their bodies' centres, in the order they
  * come) and their bodies' radius.
  * @param {{x: number, y: number}} foot - World point where the trunk meets the ground
+ * @param {number} [scale=1] - Size of the tree relative to the level's (the menu paints it scaled)
  * @returns {Array<{x: number, y: number, r: number}>}
  */
-export function leftTreeApples(foot) {
-  return APPLE_HANGS.map(hang => ({ ...toWorld(foot, hang.x, hang.y), r: APPLE_BODY.r * SCALE * APPLE_SIZE }))
+export function leftTreeApples(foot, scale = 1) {
+  return APPLE_HANGS.map(hang => ({ ...toWorld(foot, hang.x, hang.y, scale), r: APPLE_BODY.r * SCALE * APPLE_SIZE }))
 }
 //
 // One part of the picture on its own canvas at world size (minus an
@@ -274,8 +303,9 @@ function bakeFootPlants(k, foot, clear) {
 // World point of a point on the picture (above the ground line: the trunk's
 // bottom on the picture is the foot).
 //
-function toWorld(foot, px, py) {
-  return { x: foot.x + (px - TRUNK_X) * SCALE, y: foot.y + (py - (CROWN.y + CROWN.h)) * SCALE }
+function toWorld(foot, px, py, scale = 1) {
+  const s = SCALE * scale
+  return { x: foot.x + (px - TRUNK_X) * s, y: foot.y + (py - (CROWN.y + CROWN.h)) * s }
 }
 //
 // The picture as an image (null if it fails to load).

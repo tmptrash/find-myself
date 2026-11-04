@@ -245,6 +245,8 @@ export function isCrackDecorExcluded(x, screenW) {
  * @param {Object} [opts] - Options
  * @param {number} [opts.treeX] - Trunk centre (splits left/right field)
  * @param {number} [opts.lakeX2] - Lake's right edge (a small swarm hangs over that end)
+ * @param {boolean} [opts.lakeOnly=false] - Only the swarm over the lake (no cave mouth or field midges)
+ * @param {number} [opts.z=MIDGE_Z] - Draw layer
  * @returns {Object} Midges controller
  */
 export function createForestMidges(k, floorY, screenW, opts = {}) {
@@ -258,7 +260,9 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
   const fieldMaxX = zone.x1 - 16
   const fieldSpan = Math.max(40, fieldMaxX - fieldMinX)
   const midges = []
-  for (let i = 0; i < MIDGE_PIT_COUNT; i++) {
+  const pitCount = opts.lakeOnly ? 0 : MIDGE_PIT_COUNT
+  const fieldCount = opts.lakeOnly ? 0 : MIDGE_FIELD_COUNT
+  for (let i = 0; i < pitCount; i++) {
     midges.push(makeMidge(
       pitCx + (Math.random() - 0.5) * MIDGE_PIT_SPREAD_X * 2,
       pitCy + (Math.random() - 0.5) * MIDGE_PIT_SPREAD_Y * 2,
@@ -269,8 +273,8 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
   // Even horizontal bands with jitter so the swarm reads across the whole
   // walkable width, not clustered on one side.
   //
-  for (let i = 0; i < MIDGE_FIELD_COUNT; i++) {
-    const slot = (i + Math.random()) / MIDGE_FIELD_COUNT
+  for (let i = 0; i < fieldCount; i++) {
+    const slot = (i + Math.random()) / fieldCount
     midges.push(makeMidge(
       fieldMinX + slot * fieldSpan,
       minY + Math.random() * (maxY - minY),
@@ -327,7 +331,7 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
     midgeBatch: PolyBatch.create()
   }
   k.add([
-    k.z(MIDGE_Z),
+    k.z(opts.z ?? MIDGE_Z),
     {
       draw() {
         drawForestMidges(k, ctrl)

@@ -20,6 +20,11 @@ import * as Lake from '../sections/forest/utils/forest-lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
 import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
+import * as AppleBug from '../sections/forest/components/apple-bug.js'
+import * as WaterFlower from '../sections/forest/components/water-flower.js'
+import * as TreeFruit from '../sections/forest/utils/forest-tree-fruit.js'
+import { bakeLeftTreeApple, leftTreeApplePicture, leftTreeApples } from '../sections/forest/utils/forest-left-tree.js'
+import { createForestMidges, updateForestMidges } from '../sections/forest/utils/forest-level-atmosphere.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import * as Grass from '../components/grass.js'
 import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
@@ -156,6 +161,25 @@ const MENU_GRASS_HUE_VARY_SKEW = 0.5
 //
 const MENU_CRAWLER_RETARGET_MIN = 2.5
 const MENU_CRAWLER_RETARGET_RANGE = 4
+//
+// The apple tree lives as in the level: apples hang in its crown
+// (MENU_TREE_APPLES at first), one drops every MENU_APPLE_DROP_MIN..+RANGE
+// seconds while none lies on the ground and a new one grows in its place.
+// The apple bug lives in its burrow by the tree (its cave under it), the
+// water flower stands at the trunk (MENU_WATER_FLOWER_SHIFT design px right
+// of it) and midges hang over the lake for the bug's tongue. All of it draws
+// over the baked forest, under the level panel.
+//
+const MENU_TREE_APPLES = 3
+const MENU_APPLE_DROP_MIN = 5
+const MENU_APPLE_DROP_RANGE = 6
+const MENU_WATER_FLOWER_SHIFT = 15
+const MENU_BUG_TUNNEL_Z = 1
+const MENU_BUG_HOLE_Z = 2
+const MENU_WATER_FLOWER_Z = 2.5
+const MENU_FRUIT_Z = 3
+const MENU_BUG_Z = 3.5
+const MENU_MIDGE_Z = 4
 //
 // Draw layers.
 //
@@ -333,7 +357,9 @@ export function sceneMenu(k) {
         spots: forestLayout.earTreeSpots.map(spot => ({ x: spot.x, groundY: forestLayout.groundY }))
       }),
       clouds: Clouds.create({ k, x1: 0, x2: k.width(), topY: MENU_CLOUD_TOP }),
-      crawlerT: 0
+      crawlerT: 0,
+      forestLife: null,
+      closed: false
     }
     inst.shorePile = loadMenuShorePile(k, inst.lake)
     inst.grass = createMenuGrass(inst)
@@ -345,6 +371,7 @@ export function sceneMenu(k) {
       groundY: forestLayout.groundY
     })
     inst.crawler = createMenuCrawler(inst)
+    startMenuForestLife(inst)
     inst.bgOpacity[levels[selected].backdrop] = 1
     createMenuMushrooms(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
@@ -373,7 +400,7 @@ export function sceneMenu(k) {
  */
 export async function prewarmMenuAssets(k) {
   recomputeMenuBgLayout(k.width(), k.height())
-  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt()])
+  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt(), loadMenuForestLife(k)])
   buildMenuNightSprite(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
@@ -613,6 +640,7 @@ function onUpdate(inst) {
   BombTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
   updateMenuCrawler(inst, dt)
+  updateMenuForestLife(inst, dt)
   updateMenuMusic(inst, dt)
 }
 //
@@ -654,6 +682,36 @@ function updateMenuCrawler(inst, dt) {
     crawler.homeX = crawler.minX + Math.random() * (crawler.maxX - crawler.minX)
   }
   Predator.update(crawler, dt)
+}
+//
+// The tree's apples, the bug, the flower and the midges live all the while;
+// they show with the forest only (the midges fade with it).
+//
+function updateMenuForestLife(inst, dt) {
+  const life = inst.forestLife
+  if (!life) return
+  const forest = inst.bgOpacity[BACKDROP_FOREST]
+  const hidden = forest < MENU_FOREST_LIVE_MIN_OPACITY
+  AppleBug.setHidden(life.bug, hidden)
+  WaterFlower.setHidden(life.flower, hidden)
+  life.fruitLayer.hidden = hidden
+  updateForestMidges(life.midges, dt, forest)
+  TreeFruit.tickForestTreeFruits(life.orchard, dt, inst.forestLayout.groundY)
+  updateMenuAppleDrop(life, dt)
+}
+//
+// Nobody knocks the apples down in the menu: while none lies on the ground
+// one drops on its own every so often and a new one starts growing.
+//
+function updateMenuAppleDrop(life, dt) {
+  if (TreeFruit.hasForestAnchorFruitDropInWorld(life.orchard)) return
+  life.dropLeft -= dt
+  if (life.dropLeft > 0) return
+  life.dropLeft = nextMenuAppleDrop()
+  TreeFruit.releaseForestAnchorFruit(life.orchard) && TreeFruit.waterForestTreeApples(life.orchard)
+}
+function nextMenuAppleDrop() {
+  return MENU_APPLE_DROP_MIN + Math.random() * MENU_APPLE_DROP_RANGE
 }
 //
 // A touch sliding over a row selects it (the game takes no mouse; touches
@@ -875,6 +933,7 @@ function beginMenuSceneLeave(inst) {
   inst.heroInst.character.hidden = true
 }
 function onMenuLeave(inst) {
+  inst.closed = true
   inst.keyCancels.forEach(c => c?.cancel?.())
   inst.startCancel.cancel()
   inst.backCancel.cancel()
@@ -1134,6 +1193,57 @@ function createMenuCrawler(inst) {
     hero: inst.heroInst,
     canHuntHero: () => false
   })
+}
+//
+// The forest's live life is created once its pictures are baked on this k
+// (prewarmed at boot; a fresh engine bakes them on the first visit), unless
+// the menu is gone by then.
+//
+function startMenuForestLife(inst) {
+  loadMenuForestLife(inst.k).then(ready => ready && !inst.closed && createMenuForestLife(inst))
+}
+function loadMenuForestLife(k) {
+  return Promise.all([AppleBug.load(k), WaterFlower.load(k), bakeLeftTreeApple(k)]).then(baked => baked.every(Boolean))
+}
+//
+// The level's apple tree crop on the menu's tree (its "level" for the
+// bug), the midges over the lake, the water flower at the trunk and the
+// apple bug in its burrow.
+//
+function createMenuForestLife(inst) {
+  const { k, forestLayout } = inst
+  const { groundY, lake, appleTreeX, bugHoleX, scale } = forestLayout
+  const hangs = leftTreeApples({ x: appleTreeX, y: groundY }, scale)
+  const orchard = { k, treeFruitSpots: [], treeApples: TreeFruit.createForestTreeApples(hangs, leftTreeApplePicture(k)) }
+  TreeFruit.restoreForestTreeApples(orchard, MENU_TREE_APPLES)
+  const midges = createForestMidges(k, groundY, k.width(), { treeX: appleTreeX, lakeX2: lake.x2, lakeOnly: true, z: MENU_MIDGE_Z })
+  const flower = WaterFlower.create({
+    k,
+    x: WaterFlower.footXUnderHeart(appleTreeX) + Math.round(MENU_WATER_FLOWER_SHIFT * scale),
+    y: groundY,
+    z: MENU_WATER_FLOWER_Z
+  })
+  inst.forestLife = {
+    orchard,
+    midges,
+    flower,
+    fruitLayer: TreeFruit.mountForestTreeFruitLayer(k, orchard, MENU_FRUIT_Z),
+    bug: AppleBug.create({
+      k,
+      holeX: bugHoleX,
+      groundY,
+      lakeX2: lake.x2,
+      treeX: appleTreeX,
+      levelInst: orchard,
+      midges,
+      flower,
+      predator: inst.crawler,
+      backZ: MENU_BUG_HOLE_Z,
+      tunnelZ: MENU_BUG_TUNNEL_Z,
+      z: MENU_BUG_Z
+    }),
+    dropLeft: nextMenuAppleDrop()
+  }
 }
 //
 // Night backdrop: scene base colour plus the darkened menu-bg forest, baked

@@ -388,16 +388,12 @@ let TITLE_TEXT_X = CENTER_X
 const TITLE_TEXT_Y = 130
 //
 // Description block geometry. Three-line narrative block vertically
-// centred between the horizon line and the bottom hint. The last line
-// has two icons embedded inline between its words.
-//
-//
-// New description: 5 lines of narrative text, no icons
+// centred between the horizon line and the bottom hint.
 //
 const READY_DESC_LINES = [
-  'At the beginning, I move without',
-  'seeing. The journey begins when',
-  'I learn to look...'
+  'Fear lives in each of us,',
+  'but only a few dare to meet',
+  'it face to face...'
 ]
 const BLOCK_LINE_COUNT = 5
 const TEXT_FONT_SIZE = 36

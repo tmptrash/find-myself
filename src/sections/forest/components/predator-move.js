@@ -16,7 +16,7 @@ const LUNGE_DURATION = 0.36
 
 //
 // A hero who jumps over the crawler (seen on one side, lands on the other)
-// is chased down: a sprint faster than his run, so he cannot reach the next
+// or ends up to its right is chased down: a sprint faster than his run, so he cannot reach the next
 // mushroom. A hop during the chase does not shake it off — it keeps running
 // at his last seen x until the chase times out.
 //
@@ -368,13 +368,20 @@ function hunt(inst, dt, hero, speed, charge) {
 
 //
 // Remembers which side the hero was last seen on; reappearing on the other
-// side nearby means he jumped over, which starts the chase.
+// side nearby means he jumped over, which starts the chase. A hero to its
+// right is chased all the while (he must not outrun it that way).
 //
 function trackJumpOver(inst, hero, dx, dist) {
   if (Math.abs(dx) < PURSUIT_SIDE_MIN_DX) return
   const side = Math.sign(dx)
-  const jumpedOver = inst.heroSide != null && side !== inst.heroSide && dist <= PURSUIT_TRIGGER_RADIUS
-  jumpedOver && (inst.pursuitT = PURSUIT_DURATION, inst.orientKick = true)
+  const near = dist <= PURSUIT_TRIGGER_RADIUS
+  const jumpedOver = inst.heroSide != null && side !== inst.heroSide && near
+  const onRight = side > 0 && near
+  if (jumpedOver || onRight) {
+    const starting = jumpedOver || inst.pursuitT <= 0
+    starting && (inst.orientKick = true)
+    inst.pursuitT = PURSUIT_DURATION
+  }
   inst.heroSide = side
   inst.heroLastX = hero.x
 }

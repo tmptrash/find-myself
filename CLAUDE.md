@@ -127,13 +127,6 @@ export const cfg = {
 - Always use hex strings: `"FF8C00"` (not arrays or objects)
 - Include descriptive comments
 
-### Fixed palette (96 swatches)
-- **Every colour in the game must come from the fixed 96-swatch game palette** — no ad-hoc RGB, no colours outside the set
-- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families). It is sampled from the forest level reference art: muted teal/green forest, warm brown earth, cream highlights, gold light, soft red/orange accents
-- Semantic aliases in `CFG.visual.colors.palette` must reference `PALETTE.*` keys only — never raw hex literals
-- Brightness / fade may use opacity on a palette colour; do not invent new hex values by lerping unless the result is snapped back to the nearest palette swatch (see `snapToPalette()` in `forest-palette.js`)
-- New colours: pick the closest existing swatch or add a named alias in `cfg.js` that points at an existing `PALETTE` entry — do not add colours that are not in `PALETTE`
-
 ### Color Configuration Rules
 - **Global colors** (hero, platform, UI elements) → `src/cfg.js`
 - **Section-specific colors** (cave ledges, forest props, section backgrounds) → `src/sections/{section}/cfg.js`
@@ -765,7 +758,7 @@ These rules complement sections 3, 13, 14, and 15. They describe **how procedura
 - Avoid grey-green, grey-brown, grey-violet, and grey-beige as the default look.
 - **Grey is for materials**: stone, some soil, metal, UI — not for “forest green” or “tree shadow.”
 - Shadows read as **cool hue** (green-blue, blue-violet) from the palette, not flat neutral grey.
-- Rocks and ruins: **tinted** stone (green/brown/warm grey from `PALETTE`), not pure neutral grey fills.
+- Rocks and ruins: **tinted** stone (green/brown/warm grey), not pure neutral grey fills.
 - Deepest darks: **very dark hue** (green-black, blue-black), not `#000000`, unless a section explicitly needs void black.
 
 ### Light

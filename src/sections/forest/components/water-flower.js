@@ -134,6 +134,18 @@ export function create(cfg) {
 }
 
 /**
+ * Hides or shows the flower and its spilt water (it goes on living while
+ * hidden).
+ * @param {Object|null} inst - Flower inst
+ * @param {boolean} hidden - True to hide
+ */
+export function setHidden(inst, hidden) {
+  if (!inst) return
+  inst.obj.hidden = hidden
+  inst.waterObj.hidden = hidden
+}
+
+/**
  * Bakes the flower's picture once per live k (waits for it to load).
  * @param {Object} k - Kaplay instance
  * @returns {Promise<Object|null>} Baked picture (null if it failed to load)

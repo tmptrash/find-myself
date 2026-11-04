@@ -77,13 +77,12 @@ const APPLE_BUG = {
   stepDuration: 0.085,
   stepLift: 3.24,
   //
-  // Burrow: how long it hides after dashing into the dark hole.
+  // Burrow: it goes in only with an apple or when something scares it.
   //
-  hideMin: 3,
+  hideMin: 3,                       // At the start and after a crawler sent it in
   hideMax: 6,
   waterScareReach: 70,              // The flower's water falling this near the shell (across) scares it too
-  scaredHideMin: 14,                // After the flower's water hit it or fell near it
-  scaredHideMax: 18,
+  scaredHide: 1,                    // After the flower's water hit it or fell near it: in and straight out again
   appleHideMin: 5,                  // After it took an apple home
   appleHideMax: 8,
   bombHideMin: 2,                   // After the burst of the bomb nearest its burrow (a short scare)
@@ -116,16 +115,15 @@ const APPLE_BUG = {
   appleRight: 300,
   //
   // The burrow's tunnel under the ground: tunnelDelay after it dashed into
-  // the hole it shows up in the cave's left rounded end, runs to the far end, stands
-  // there a while (or stores / eats the apple it brought) and runs back.
+  // the hole with an apple it shows up in the cave's left rounded end, runs to
+  // the far end, stores or eats the apple and runs back.
   //
   tunnelWidth: 450,                 // Tunnel picture width: the full-size bug fits its narrow middle
   tunnelDepth: 60,                  // Soil strip between the ground (the burrow's doorway) and the cave's top stones
   tunnelDelay: 0.4,
   tunnelDark: 0.45,                 // How dark the bug and its apples look underground
   tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
-  tunnelRestMin: 1,                 // Stands at the far end this long when it brought nothing
-  tunnelRestMax: 2,
+  tunnelRush: { speed: 340, dashMin: 0.45, dashMax: 0.6, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // An apple fell up there: back out at once
   pileMax: 3,                       // Apples stored at the far end; with that many there it eats the next one
   eatBites: 8
 }

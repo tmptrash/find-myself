@@ -366,9 +366,10 @@ export function drawForestFruitAt(k, fruit, x, y, { zoom = 1, opacity = 1, color
  * @param {Object} k - Kaplay inst
  * @param {Object} levelInst - Forest level inst (needs treeFruitSpots)
  * @param {number} [z=FRUIT_Z] - Draw layer
+ * @returns {Object} The layer's game object
  */
 export function mountForestTreeFruitLayer(k, levelInst, z = FRUIT_Z) {
-  k.add([
+  return k.add([
     k.z(z),
     {
       draw() {

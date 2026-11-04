@@ -8,6 +8,10 @@
 // Kaplay uses a *center-anchored* camera: cam.pos is the world point drawn at
 // the canvas centre.
 //
+// With a vertical rest the camera stays at the height it has for a hero at
+// restY and only rises by as much as he climbs above riseY (higher than the
+// rest, e.g. a high branch).
+//
 const FOLLOW_Y_RATE = 8
 
 /**
@@ -18,10 +22,12 @@ const FOLLOW_Y_RATE = 8
  * @param {number} cfg.playY - World Y of the playfield's top edge
  * @param {number} cfg.playW - Playfield width (world px, fixed)
  * @param {number} cfg.playH - Playfield height (world px, fixed)
+ * @param {{restY: number, riseY: number}} [cfg.rest] - Hero Y the camera keeps to and the hero Y
+ *   above which it rises with him (none: it follows him everywhere)
  * @returns {Object} Camera instance
  */
 export function create(cfg) {
-  const { k, playX, playY, playW, playH } = cfg
+  const { k, playX, playY, playW, playH, rest = null } = cfg
   const rect = playfieldScreenRect(k.width(), k.height(), playW, playH)
   const viewW = rect.x2 - rect.x1
   const viewH = rect.y2 - rect.y1
@@ -36,6 +42,7 @@ export function create(cfg) {
     minCamY,
     maxCamY: minCamY + playH - viewH,
     camY: minCamY,
+    rest,
     //
     // 1 = full playfield; higher values zoom in (Kaplay camScale).
     //
@@ -96,14 +103,16 @@ export function updateShake(inst, dt) {
 
 /**
  * Follows the hero: at once horizontally, eased vertically (only where the
- * screen is shorter than the playfield), never past the playfield's edges.
+ * screen is shorter than the playfield, and with a vertical rest only above
+ * its riseY), never past the playfield's edges.
  * @param {Object} inst - Camera instance from create()
  * @param {number} heroX - Hero world X (anchor centre)
  * @param {number} heroY - Hero world Y (anchor centre)
  * @param {boolean} [pixelAlignX=true] - Snap cam X so the hero outline stays crisp
+ * @param {boolean} [freeY=false] - Follow him vertically everywhere (ignore the rest)
  */
-export function followHero(inst, heroX, heroY, pixelAlignX = true) {
-  const targetY = clampCamY(inst, heroY)
+export function followHero(inst, heroX, heroY, pixelAlignX = true, freeY = false) {
+  const targetY = clampCamY(inst, followY(inst, heroY, freeY))
   inst.camY += (targetY - inst.camY) * Math.min(1, inst.k.dt() * FOLLOW_Y_RATE)
   placeCamera(inst, heroX, pixelAlignX)
 }
@@ -113,9 +122,10 @@ export function followHero(inst, heroX, heroY, pixelAlignX = true) {
  * @param {Object} inst - Camera instance from create()
  * @param {number} heroX - Hero world X (anchor centre)
  * @param {number} heroY - Hero world Y (anchor centre)
+ * @param {boolean} [freeY=false] - Follow him vertically everywhere (ignore the rest)
  */
-export function snapToHero(inst, heroX, heroY) {
-  inst.camY = clampCamY(inst, heroY)
+export function snapToHero(inst, heroX, heroY, freeY = false) {
+  inst.camY = clampCamY(inst, followY(inst, heroY, freeY))
   placeCamera(inst, heroX, true)
 }
 
@@ -160,6 +170,15 @@ function placeCamera(inst, heroX, pixelAlignX) {
     : alignCamToGrid(k.width(), desiredCamX)
   const camY = alignCamToGrid(k.height(), inst.camY)
   k.camPos(camX + (inst.shakeOffsetX ?? 0), camY + (inst.shakeOffsetY ?? 0))
+}
+//
+// The hero Y the camera centres on: his own, or the rest height raised by
+// how far he is above riseY.
+//
+function followY(inst, heroY, freeY) {
+  const { rest } = inst
+  if (!rest || freeY) return heroY
+  return rest.restY + Math.min(0, heroY - rest.riseY)
 }
 function clampCamY(inst, y) {
   return Math.max(inst.minCamY, Math.min(inst.maxCamY, y))

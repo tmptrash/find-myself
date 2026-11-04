@@ -12,16 +12,17 @@ import { getRGB } from '../../../utils/helper.js'
 //
 // The apple bug: a six-legged bug under a leafy shell living in a burrow
 // between the lake and the left big tree. It hides in the burrow for a while,
-// comes out and either catches midges over the lake with its long forked
-// tongue from the shore (it is afraid of the water and never steps in) or
-// strolls round the tree's foot, then goes back in. It moves in jerky dashes
+// comes out and, turn by turn, catches midges over the lake with its long
+// forked tongue from the shore (it is afraid of the water and never steps
+// in) or strolls round the tree's foot. It goes back in only with an apple
+// or when something scares it. It moves in jerky dashes
 // with a new pose after each, its legs stepping in two alternating tripods,
 // every leg placed by inverse kinematics from its hip to its foot.
 //
 // An apple falling or lying by the tree makes it turn sharply and run for
 // it; it grabs the apple in its mouth and carries it home. The flower's
 // falling water hitting it on its way scares it: it turns, drops what it
-// carries and flees home, where it hides longer. A crawler may race it for
+// carries and flees into the burrow, and comes straight out again. A crawler may race it for
 // the same apple until the bug has it in its mouth.
 //
 // It goes into the burrow with a dash from the doorway: on its way in it
@@ -29,17 +30,17 @@ import { getRGB } from '../../../utils/helper.js'
 // it comes out the same way backwards. The burrow's picture draws behind it.
 //
 // Under the burrow, past a strip of soil, lies a cave: a moment after it
-// went in, the bug shows up in the cave's left end, runs along its floor to
-// the far end and stands there a while. An apple it brought it stores in a pile
-// there, or eats bite by bite once the pile is full; then it turns and runs
-// back up, and later comes out of the burrow as before.
+// went in with an apple, the bug shows up in the cave's left end, runs along
+// its floor to the far end and stores the apple in a pile there, or eats it
+// bite by bite once the pile is full; then it turns and runs back up, and
+// later comes out of the burrow as before. An apple falling up there sends it
+// rushing back out at once: one in its mouth it drops where it stands.
 //
 const STATES = {
   INSIDE: 'inside',
   DOWN: 'down',
   APPEAR: 'appear',
   TUNNEL: 'tunnel',
-  REST: 'rest',
   STORE: 'store',
   EAT: 'eat',
   OUT: 'out',
@@ -47,15 +48,19 @@ const STATES = {
   EMERGE: 'emerge',
   HUNT: 'hunt',
   WANDER: 'wander',
-  HOME: 'home',
   SINK: 'sink',
   APPLE: 'apple',
   GRAB: 'grab',
   CARRY: 'carry',
   FLEE: 'flee'
 }
-const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL, STATES.REST,
+const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL,
   STATES.STORE, STATES.EAT, STATES.OUT, STATES.VANISH])
+//
+// In the cave (and not on its way in or out of the dark) it hears an apple
+// fall up there.
+//
+const TUNNEL_ALERT = new Set([STATES.TUNNEL, STATES.STORE, STATES.EAT, STATES.OUT])
 const PLANS = {
   LAKE: 'lake',
   WANDER: 'wander',
@@ -301,17 +306,30 @@ export function create(cfg) {
     fruit: null,
     appleFrom: 0,
     darting: false,
-    carrying: false
+    carrying: false,
+    rushingOut: false,
+    loose: []
   }
   inst.x = inst.mouthX
   inst.goalX = inst.mouthX
   inst.legs = bug.legs.map((leg, i) => createLeg(inst, leg, i))
-  k.add([k.pos(0, 0), k.z(cfg.tunnelZ), { draw() { onDrawTunnel(inst) } }])
-  k.add([k.pos(0, 0), k.z(cfg.backZ), { draw() { onDrawBack(inst) } }])
+  const tunnelObj = k.add([k.pos(0, 0), k.z(cfg.tunnelZ), { draw() { onDrawTunnel(inst) } }])
+  const backObj = k.add([k.pos(0, 0), k.z(cfg.backZ), { draw() { onDrawBack(inst) } }])
   const obj = k.add([k.pos(0, 0), k.z(cfg.z), { draw() { onDraw(inst) } }])
   obj.onUpdate(() => onUpdate(inst))
   inst.obj = obj
+  inst.layers = [tunnelObj, backObj, obj]
   return inst
+}
+
+/**
+ * Hides or shows the bug, its burrow and the tunnel (it goes on living
+ * while hidden).
+ * @param {Object|null} inst - Bug inst
+ * @param {boolean} hidden - True to hide
+ */
+export function setHidden(inst, hidden) {
+  inst?.layers.forEach(layer => { layer.hidden = hidden })
 }
 
 /**
@@ -391,12 +409,12 @@ function onUpdate(inst) {
   checkCrawler(inst)
 }
 function updateBehaviour(inst, dt) {
+  TUNNEL_ALERT.has(inst.state) && !inst.rushingOut && findApple(inst) && rushOutOfTunnel(inst)
   switch (inst.state) {
     case STATES.INSIDE: return tickInside(inst)
     case STATES.DOWN: return tickDown(inst, dt)
     case STATES.APPEAR: return tickAppear(inst, dt)
     case STATES.TUNNEL: return tickTunnel(inst, dt)
-    case STATES.REST: return tickRest(inst, dt)
     case STATES.STORE: return tickStore(inst, dt)
     case STATES.EAT: return tickEat(inst, dt)
     case STATES.OUT: return tickOut(inst, dt)
@@ -404,7 +422,6 @@ function updateBehaviour(inst, dt) {
     case STATES.EMERGE: return tickEmerge(inst, dt)
     case STATES.HUNT: return tickHunt(inst, dt)
     case STATES.WANDER: return tickWander(inst, dt)
-    case STATES.HOME: return tickHome(inst, dt)
     case STATES.SINK: return tickSink(inst, dt)
     case STATES.APPLE: return tickApple(inst, dt)
     case STATES.GRAB: return tickGrab(inst, dt)
@@ -456,7 +473,7 @@ function tickEmerge(inst, dt) {
 function tickHunt(inst, dt) {
   if (claimApple(inst)) return
   inst.stateLeft -= dt
-  if (inst.stateLeft <= 0 && inst.tongue.phase === TONGUE.IDLE) return goHome(inst)
+  if (inst.stateLeft <= 0 && inst.tongue.phase === TONGUE.IDLE) return startOuting(inst)
   inst.goalX = inst.standX
   if (!walk(inst, dt, PARAMS.stroll)) return
   if (inst.facing !== -1) return startTurn(inst, -1)
@@ -471,26 +488,27 @@ function tickHunt(inst, dt) {
 function tickWander(inst, dt) {
   if (claimApple(inst)) return
   inst.stateLeft -= dt
-  if (inst.stateLeft <= 0) return goHome(inst)
+  if (inst.stateLeft <= 0) return startOuting(inst)
   walk(inst, dt, PARAMS.stroll) && (inst.goalX = wanderGoal(inst))
   inst.flickLeft -= dt
   inst.flickLeft <= 0 && inst.tongue.phase === TONGUE.IDLE && flickTongue(inst)
 }
-function tickHome(inst, dt) {
-  if (claimApple(inst)) return
-  goToDoor(inst, dt, PARAMS.stroll, randomIn(PARAMS.hideMin, PARAMS.hideMax))
-}
 //
 // The dash from the doorway into the dark; an apple in its mouth goes in
-// with it (it leaves the level for the tunnel).
+// with it (it leaves the level for the tunnel). Without one it only hides
+// in the burrow and does not go down to the cave.
 //
 function tickSink(inst, dt) {
   const u = tickRush(inst, dt)
   updateDepth(inst, u, true)
   if (u < 1) return
-  inst.carrying && TreeFruit.removeForestCarriedFruit(inst.levelInst, inst.fruit)
-  !inst.carrying && inst.fruit && releaseApple(inst)
   inst.hideLeft = inst.nextHide
+  if (!inst.carrying) {
+    inst.fruit && releaseApple(inst)
+    inst.state = STATES.INSIDE
+    return
+  }
+  TreeFruit.removeForestCarriedFruit(inst.levelInst, inst.fruit)
   inst.stateLeft = PARAMS.tunnelDelay
   inst.state = STATES.DOWN
 }
@@ -533,37 +551,29 @@ function setTunnelLight(inst, u) {
   inst.dark = 1 - (1 - PARAMS.tunnelDark) * u
 }
 //
-// Down the tunnel to the far end: with nothing it stands there a while, an
-// apple it stores in the pile or (the pile full) puts down and eats.
+// Down the tunnel to the far end: its apple it stores in the pile or (the
+// pile full) puts down and eats.
 //
 function tickTunnel(inst, dt) {
   inst.goalX = tunnelStopX(inst)
   if (!walk(inst, dt, PARAMS.tunnel) || inst.turnT < 1) return
-  if (inst.carrying) return startPut(inst, inst.pile.length >= PILE_SIZE)
-  inst.stateLeft = randomIn(PARAMS.tunnelRestMin, PARAMS.tunnelRestMax)
-  inst.state = STATES.REST
-}
-function tickRest(inst, dt) {
-  inst.stateLeft -= dt
-  inst.stateLeft <= 0 && (inst.state = STATES.OUT)
+  startPut(inst, inst.pile.length >= PILE_SIZE)
 }
 //
 // Where it stops at the far end: its mouth (and the apple held in front of
 // it) over the spot the apple goes to.
 //
 function tunnelStopX(inst) {
-  const hold = inst.carrying ? inst.fruit.r * inst.zoom * APPLE_HOLD_AHEAD : 0
+  const hold = inst.fruit.r * inst.zoom * APPLE_HOLD_AHEAD
   return tunnelSpot(inst).x - inst.bug.mouth.x * inst.zoom - hold
 }
 //
-// The pile's next place for an apple it brings; before the pile for one it
-// eats or when it brings nothing to a pile; right by the end wall when it
-// brings nothing to an empty one.
+// The pile's next place for the apple it brings; before the pile for one it
+// eats.
 //
 function tunnelSpot(inst) {
   const count = inst.pile.length
-  if (inst.carrying) return count < PILE_SIZE ? pileSpot(inst, count, inst.fruit.r) : eatSpot(inst, inst.fruit.r)
-  return count ? eatSpot(inst, inst.pile[0].fruit.r) : pileSpot(inst, 0, 0)
+  return count < PILE_SIZE ? pileSpot(inst, count, inst.fruit.r) : eatSpot(inst, inst.fruit.r)
 }
 function pileSpot(inst, i, r) {
   const slot = PILE_SLOTS[i]
@@ -634,7 +644,7 @@ function takeBite(inst) {
 //
 function tickOut(inst, dt) {
   inst.goalX = inst.tunnelEndX
-  if (!walk(inst, dt, PARAMS.tunnel) || inst.turnT < 1) return
+  if (!walk(inst, dt, inst.rushingOut ? PARAMS.tunnelRush : PARAMS.tunnel) || inst.turnT < 1) return
   inst.stateLeft = TUNNEL_FADE
   inst.state = STATES.VANISH
 }
@@ -643,7 +653,39 @@ function tickVanish(inst, dt) {
   setTunnelLight(inst, Math.max(0, inst.stateLeft) / TUNNEL_FADE)
   if (inst.stateLeft > 0) return
   inst.floor = null
+  inst.rushingOut && (inst.hideLeft = 0)
+  inst.rushingOut = false
   inst.state = STATES.INSIDE
+}
+//
+// An apple fell up there: an apple it is putting down lands on its spot, one
+// in its mouth it drops on the floor where it stands, a meal it leaves; then
+// it runs back to the cave's left end fast and comes straight out for it.
+//
+function rushOutOfTunnel(inst) {
+  inst.put ? finishPut(inst) : inst.carrying && dropInTunnel(inst)
+  inst.meal && inst.loose.push(inst.meal)
+  inst.meal = null
+  inst.headTarget = 0
+  inst.rushingOut = true
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.OUT
+}
+function finishPut(inst) {
+  const { fruit, put } = inst
+  const item = { fruit, x: put.x, y: put.y }
+  put.eat ? inst.loose.push(item) : inst.pile.push(item)
+  inst.carrying = false
+  inst.fruit = null
+  inst.put = null
+}
+function dropInTunnel(inst) {
+  const { fruit } = inst
+  const x = mouthWorld(inst).x + inst.f * fruit.r * APPLE_HOLD_AHEAD
+  inst.loose.push({ fruit, x, y: floorY(inst.tunnelFloor, x) - fruit.r + APPLE_FLOOR_SINK })
+  inst.carrying = false
+  inst.fruit = null
 }
 //
 // Runs for its apple (wherever it rolls), turns to face it if it came down
@@ -654,7 +696,7 @@ function tickApple(inst, dt) {
   const fruit = inst.fruit
   if (!isAppleFree(inst, fruit)) {
     releaseApple(inst)
-    return goHome(inst)
+    return startOuting(inst)
   }
   const dir = Math.sign(fruit.x - inst.x) || inst.facing
   inst.goalX = fruit.x - dir * (inst.bug.mouth.x + fruit.r * APPLE_HOLD_AHEAD)
@@ -684,7 +726,7 @@ function tickGrab(inst, dt) {
   inst.stateLeft -= dt
   if (!isAppleFree(inst, inst.fruit)) {
     releaseApple(inst)
-    return goHome(inst)
+    return startOuting(inst)
   }
   if (inst.stateLeft > 0) return
   TreeFruit.carryForestFruit(inst.fruit)
@@ -698,8 +740,16 @@ function tickCarry(inst, dt) {
 function tickFlee(inst, dt) {
   goToDoor(inst, dt, PARAMS.flee, inst.nextHide)
 }
-function goHome(inst) {
-  inst.state = STATES.HOME
+//
+// Done with what it was doing out there: on to the next outing (lake or
+// stroll) instead of going in.
+//
+function startOuting(inst) {
+  const lake = Math.random() < PARAMS.lakeShare
+  inst.plan = lake ? PLANS.LAKE : PLANS.WANDER
+  inst.stateLeft = lake ? randomIn(PARAMS.huntMin, PARAMS.huntMax) : randomIn(PARAMS.wanderMin, PARAMS.wanderMax)
+  !lake && (inst.goalX = wanderGoal(inst))
+  inst.state = lake ? STATES.HUNT : STATES.WANDER
 }
 //
 // Runs to the doorway on its own side of the hole, faces the hole and
@@ -806,7 +856,7 @@ function checkWater(inst) {
   retractTongue(inst)
   startle(inst)
   inst.scared = true
-  inst.nextHide = randomIn(PARAMS.scaredHideMin, PARAMS.scaredHideMax)
+  inst.nextHide = PARAMS.scaredHide
   inst.dash.active = false
   inst.dash.pauseLeft = 0
   inst.state = STATES.FLEE
@@ -854,7 +904,7 @@ function nearShell(inst, water) {
 //
 function checkCrawler(inst) {
   const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
-    inst.state === STATES.HOME || inst.state === STATES.APPLE || inst.state === STATES.GRAB
+    inst.state === STATES.APPLE || inst.state === STATES.GRAB
   if (!watchful || inst.opacity < 1) return
   const mealX = PredatorFeast.predatorMealX(inst.predator)
   if (mealX === null || Math.abs(mealX - inst.x) > PARAMS.crawlerFearReach) return
@@ -920,7 +970,9 @@ function floorY(floor, x) {
 }
 //
 // Motion: dashes towards the goal (turning sharply first if it lies behind),
-// a pause and a new pose after each. True once it stands at the goal.
+// a pause and a new pose after each. True once it stands at the goal. Up
+// on the ground it never goes past its shore spot into the lake; the cave
+// below may reach further left.
 //
 function walk(inst, dt, mode) {
   const { dash } = inst
@@ -929,7 +981,7 @@ function walk(inst, dt, mode) {
     dash.pauseLeft = Math.max(0, dash.pauseLeft - dt)
     return false
   }
-  inst.goalX = Math.max(inst.standX, inst.goalX)
+  !inst.floor && (inst.goalX = Math.max(inst.standX, inst.goalX))
   const gap = inst.goalX - inst.x
   if (Math.abs(gap) <= ARRIVE_DIST) return true
   const dir = Math.sign(gap)
@@ -1159,12 +1211,13 @@ function mouthWorld(inst) {
   return toWorld(inst, headPoint(inst, inst.bug.mouth, { x: 0, y: 0 }))
 }
 //
-// The tunnel under the burrow, the apples stored at its far end and one
-// being eaten, dim like the bug down there.
+// The tunnel under the burrow, the apples stored at its far end, those it
+// dropped on its way and one being eaten, dim like the bug down there.
 //
 function onDrawTunnel(inst) {
   inst.k.drawSprite({ sprite: inst.tunnel.sprite, pos: inst.tunnelPos })
   inst.pile.forEach(item => drawTunnelApple(inst, item))
+  inst.loose.forEach(item => drawTunnelApple(inst, item))
   inst.meal && drawTunnelApple(inst, inst.meal)
 }
 function drawTunnelApple(inst, { fruit, x, y }) {

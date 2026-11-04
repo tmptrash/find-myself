@@ -17,6 +17,7 @@ import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { drawForestPlant, loadForestPlants } from './forest-plants.js'
 import { drawForestMushroom, loadForestMushrooms } from './forest-mushrooms.js'
+import { FOREST_CFG } from '../cfg.js'
 //
 // Menu backdrop for the forest level, composed from the level's own pieces
 // like one still of the level: the bright day sky and three hazy parallax
@@ -27,8 +28,9 @@ import { drawForestMushroom, loadForestMushrooms } from './forest-mushrooms.js'
 // stones, ferns and mushrooms on the ground and the picture stones buried in
 // the soil. The left third stays calm for the menu column. Layout values are
 // design px at REF_HEIGHT and scale with the screen height. The lake water,
-// grass, bomb trees, stalk eyes, clouds and the crawler are live (see
-// forestMenuLayout). The pictures must be loaded first
+// grass, bomb trees, stalk eyes, clouds, the crawler, the apple tree's
+// apples, the water flower, the apple bug with its burrow and cave and the
+// midges over the lake are live (see forestMenuLayout). The pictures must be loaded first
 // (loadForestMenuBackdropArt).
 //
 const LAYOUT_SEED = 61027
@@ -37,13 +39,23 @@ const REF_HEIGHT = 1080
 // The backdrop is the level's opening view: everything stands where it
 // stands in the level (world X, as laid out by forest level0), mapped to the
 // screen at the layout scale with world X MENU_WORLD_X0 on the screen's left
-// edge; the ground line sits where the level's camera shows it.
+// edge; the ground line sits where the level's camera shows it. The scene
+// is squeezed at the screen's height, but the apple bug's burrow keeps the
+// level's size, so everything east of the lake moves right until the
+// burrow's picture stands BUG_HOLE_LAKE_GAP px clear of the lake.
 //
 const GROUND_Y_FRAC = 0.755
 const MENU_WORLD_X0 = 430
 const LEVEL_LAKE_X1 = 100
 const LEVEL_LAKE_X2_CORE = 794
 const LEVEL_LEFT_TREE_X = 960
+//
+// The apple bug's burrow stands this far left of the apple tree's trunk,
+// as in the level.
+//
+const LEVEL_BUG_HOLE_X = LEVEL_LEFT_TREE_X - 125
+const BUG_HOLE_LAKE_GAP = 24
+const BUG_HOLE_HALF_W = FOREST_CFG.appleBug.holeWidth * 0.5
 const LEVEL_BRANCH_TRAMP_X = 1155
 const LEVEL_RIGHT_TRAMP_X = 2300
 const LEVEL_TRAMP_XS = [LEVEL_BRANCH_TRAMP_X, LEVEL_RIGHT_TRAMP_X]
@@ -54,7 +66,12 @@ const LEVEL_TRAMP_XS = [LEVEL_BRANCH_TRAMP_X, LEVEL_RIGHT_TRAMP_X]
 //
 const LEVEL_RIGHT_TREE_X = 1737
 const LEVEL_RIGHT_TREE_SCALE = 0.528
-const LEVEL_BOMB_TREE_XS = [1339, 2560]
+//
+// The left bomb tree stands right by the right trampoline, on its left (as
+// close as the level lets its trunk to the cap).
+//
+const LEVEL_BOMB_TREE_TRAMP_CLEAR = 100
+const LEVEL_BOMB_TREE_XS = [LEVEL_RIGHT_TRAMP_X - LEVEL_BOMB_TREE_TRAMP_CLEAR, 2560]
 const LEVEL_CRAWLER_MAX_X = 2614
 //
 // Sky: a smooth gradient through palette stops of the level's sky ramp,
@@ -188,8 +205,9 @@ export async function loadForestMenuBackdropArt() {
  * the spots of the live decor standing on the ground.
  * @param {number} width - Screen width
  * @param {number} height - Screen height
- * @returns {Object} groundY, lake {x1, x2Core, x2, surfaceY}, eyeSpots,
- *   earTreeSpots [{x}] (the bomb trees), crawler {minX, maxX}
+ * @returns {Object} groundY, scale (of the baked scene to the level), lake {x1, x2Core, x2, surfaceY},
+ *   eyeSpots, earTreeSpots [{x}] (the bomb trees), crawler {minX, maxX}, appleTreeX (its trunk),
+ *   bugHoleX (the apple bug's burrow)
  */
 export function forestMenuLayout(width, height) {
   const groundY = Math.round(height * GROUND_Y_FRAC)
@@ -198,6 +216,9 @@ export function forestMenuLayout(width, height) {
   const x2Core = toX(LEVEL_LAKE_X2_CORE)
   return {
     groundY,
+    scale: height / REF_HEIGHT,
+    appleTreeX: toX(LEVEL_LEFT_TREE_X),
+    bugHoleX: toX(LEVEL_BUG_HOLE_X),
     lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
     eyeSpots: LEVEL_EYES.map(eye => ({ ...eye, x: toX(eye.x), groundY })),
     earTreeSpots: LEVEL_BOMB_TREE_XS.map(x => ({ x: toX(x) })),
@@ -383,11 +404,15 @@ function paintCuteMushroom(ctx, x, groundY, width, shadow) {
   })
 }
 //
-// Level world X → screen X at the layout scale for a screen height.
+// Level world X → screen X at the layout scale for a screen height, the
+// east bank shifted clear of the burrow.
 //
 function menuWorldToScreenX(height) {
   const s = height / REF_HEIGHT
-  return wx => Math.round((wx - MENU_WORLD_X0) * s)
+  const scaled = wx => (wx - MENU_WORLD_X0) * s
+  const lakeEnd = scaled(LEVEL_LAKE_X2_CORE) + Lake.LAKE_SHORE_EXTEND_PX
+  const shift = Math.max(0, lakeEnd + BUG_HOLE_LAKE_GAP + BUG_HOLE_HALF_W - scaled(LEVEL_BUG_HOLE_X))
+  return wx => Math.round(scaled(wx) + (wx > LEVEL_LAKE_X2_CORE ? shift : 0))
 }
 //
 // Copy of the painted pixels of a canvas trimmed to their alpha bounding

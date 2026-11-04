@@ -1371,12 +1371,20 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     Hero.spawn(heroInst, { instant: true })
     spawnElevated && holdForestHeroForElevatedSpawn(heroInst)
     forestLevel0LiveHeroChar = heroInst.character
+    //
+    // The camera keeps the height it has for the hero on the ground and only
+    // rises once he climbs above the start branch.
+    //
     const camera = ForestCamera.create({
       k,
       playX: LEFT_MARGIN,
       playY: TOP_MARGIN,
       playW: GAME_W,
-      playH: GAME_H
+      playH: GAME_H,
+      rest: {
+        restY: HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED,
+        riseY: branchPlatBundle.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      }
     })
     snapForestCameraToHero(camera, heroInst)
     if (await forestBootstrapPause(bootstrap, 29, session)) return
@@ -2063,7 +2071,7 @@ function applyForestCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCave) {
   if (!ch?.exists?.()) return
   ch.pos.x = heroSpawnX
   ch.pos.y = inst.pit?.collapsed ? getForestPitHeroStandY(inst.pit) : heroSpawnY
-  snapForestCameraToHero(inst.camera, inst.heroInst)
+  snapForestCameraToHero(inst.camera, inst.heroInst, true)
 }
 //
 // Tree branches and other raised platforms are built later in the bootstrap,
@@ -3198,9 +3206,12 @@ function buildForestEarTreeSpots(layoutCfg) {
   const minSpan = FOREST_EAR_TREE_MIN_GAP * (FOREST_EAR_TREE_RIGHT_COUNT - 1) + 48
   const spots = []
   //
-  // The right bomb tree always stands right of the right mushroom
-  // trampoline: it takes a free spot there first.
+  // The left bomb tree stands right by the right mushroom trampoline, on its
+  // left (the nearest free spot there); the right one takes a free spot
+  // right of the trampoline after it.
   //
+  const leftOfTramp = trampX == null ? [] : freeForestEarTreeXs(spots, rightXMin, Math.min(rightXMax, trampX), branchTrampX, trampX, shoreTrunkX)
+  leftOfTramp.length && tryAddForestEarTreeSpot(spots, leftOfTramp[leftOfTramp.length - 1], branchTrampX, trampX, shoreTrunkX)
   const rightOfTramp = trampX == null ? [] : freeForestEarTreeXs(spots, Math.max(rightXMin, trampX), rightXMax, branchTrampX, trampX, shoreTrunkX)
   rightOfTramp.length && tryAddForestEarTreeSpot(spots, rightOfTramp[Math.floor(Math.random() * rightOfTramp.length)], branchTrampX, trampX, shoreTrunkX)
   let attempts = 0
@@ -5698,7 +5709,7 @@ function updateForestCamera(inst) {
     ? stepForestRideCameraX(inst, inst.predator?.x ?? ch.pos.x)
     : (inst._rideCamX = null, ch.pos.x)
   const pixelAlignCamX = !ridingStick && !inPitCave && grounded
-  ForestCamera.followHero(inst.camera, followX, ch.pos.y, pixelAlignCamX)
+  ForestCamera.followHero(inst.camera, followX, ch.pos.y, pixelAlignCamX, inPitCave)
   !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick &&
     ForestCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
@@ -5712,10 +5723,10 @@ function maybeStartForestCameraIntro(inst) {
   snapForestCameraToHero(inst.camera, inst.heroInst)
   updateForestCamera(inst)
 }
-function snapForestCameraToHero(camera, heroInst) {
+function snapForestCameraToHero(camera, heroInst, inPitCave = false) {
   const ch = heroInst?.character
   if (!ch?.pos || !camera) return
-  ForestCamera.snapToHero(camera, ch.pos.x, ch.pos.y)
+  ForestCamera.snapToHero(camera, ch.pos.x, ch.pos.y, inPitCave)
 }
 //
 // Full-screen void curtain — async bootstrap yields to the engine between

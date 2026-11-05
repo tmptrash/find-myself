@@ -88,9 +88,12 @@ const DESCEND_SWAY_SPEED = 6.5
 const HERO_EXIT_PAD = 120
 //
 // Tunnel: kept clear of the island ends so it never cuts the lake water,
-// leaning away from the lake; it reaches below the deepest view.
+// leaning away from the lake; it reaches below the deepest view. The shore
+// side needs less room than the frame side since the tunnel leans away
+// from it, which keeps the hole well inside the view.
 //
 const TUNNEL_EDGE_CLEAR = 90
+const TUNNEL_SHORE_CLEAR = 45
 const TUNNEL_EXTRA_DEPTH = 80
 const TUNNEL_SEED = 52021
 const TUNNEL_OPEN_SEC = 0.16
@@ -216,7 +219,7 @@ export function start(inst) {
   inst.heroX = char.pos.x
   inst.heroY = char.pos.y
   inst.side = char.pos.x >= flower.baseX ? 1 : -1
-  inst.holeX = Math.max(flower.x1 + TUNNEL_EDGE_CLEAR, Math.min(inst.startX - inst.side * PULL_TOWARD_PLANT, flower.shoreX - TUNNEL_EDGE_CLEAR))
+  inst.holeX = Math.max(flower.x1 + TUNNEL_EDGE_CLEAR, Math.min(inst.startX - inst.side * PULL_TOWARD_PLANT, flower.shoreX - TUNNEL_SHORE_CLEAR))
   inst.groundY = Math.min(EyeFlower.soilLineY(flower, inst.holeX), flower.waterY - GROUND_BELOW_WATER)
   inst.flipX = char.flipX
   inst.prey.scale = char.scale?.x ?? 1

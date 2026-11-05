@@ -67,29 +67,32 @@ const CLEAR_PAD = 14
 const PUDDLE_REACH = 1.4
 const RAD_TO_DEG = 180 / Math.PI
 //
-// The moment the bubble is full it flashes once: its brightness swells and
-// fades over RIPE_FLASH_DURATION.
+// The moment the bubble is full it flashes RIPE_FLASH_COUNT times: each
+// time its brightness swells and fades over RIPE_FLASH_ONE_SEC.
 //
-const RIPE_FLASH_DURATION = 0.35
+const RIPE_FLASH_COUNT = 2
+const RIPE_FLASH_ONE_SEC = 0.35
+const RIPE_FLASH_DURATION = RIPE_FLASH_ONE_SEC * RIPE_FLASH_COUNT
 const pictureByK = new WeakMap()
 
 /**
  * Creates the flower on the ground line with an empty heart; its first
- * bubble starts growing startDelay seconds later. Needs load(k) to have
- * resolved first.
+ * bubble starts growing startDelay seconds later (0: at once). Needs
+ * load(k) to have resolved first.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - World X of the stem's foot
  * @param {number} cfg.y - World Y of the ground line
  * @param {number} cfg.z - Draw layer of the plant and its bubble
  * @param {number} [cfg.waterZ=cfg.z] - Draw layer of the spilt water (puddle, drops, burst ring)
+ * @param {number} [cfg.startDelay] - Seconds before the first bubble (the level's start pause)
  * @param {Object} [cfg.sfx] - Sound inst
  * @param {{x1: number, x2: number}} [cfg.rootArea] - Ground span that counts as the tree's roots
  * @param {Function} [cfg.onSoilWatered] - (position, amount) when a burst waters the roots
  * @returns {Object|null} Flower inst (null if the picture is not baked)
  */
 export function create(cfg) {
-  const { k, x, y, z, waterZ = z, sfx = null, rootArea = null, onSoilWatered = null } = cfg
+  const { k, x, y, z, waterZ = z, sfx = null, rootArea = null, onSoilWatered = null, startDelay = PARAMS.startDelay } = cfg
   const picture = pictureByK.get(k)
   if (!picture) return null
   const inst = {
@@ -115,7 +118,7 @@ export function create(cfg) {
     time: 0,
     clock: OrganicMotion.createClock(PHYSICS_STEP, MAX_FRAME_DT),
     growth: 0,
-    regrowLeft: PARAMS.startDelay,
+    regrowLeft: startDelay,
     sway: OrganicMotion.create(),
     wobble: OrganicMotion.create(),
     centre: { x: 0, y: 0 },
@@ -401,7 +404,7 @@ function drawHanging(inst) {
   const slosh = Math.max(-SLOSH_MAX, Math.min(SLOSH_MAX, -inst.sway.velocity * SLOSH_GAIN))
   WaterBubble.draw(inst.bubble, c.x, c.y, r, stretch, neck, PARAMS.bubbleWaterFill, slosh,
     inst.time * WAVE_SPEED)
-  inst.flash < 1 && WaterBubble.drawFlash(inst.bubble, Math.sin(Math.PI * inst.flash))
+  inst.flash < 1 && WaterBubble.drawFlash(inst.bubble, Math.abs(Math.sin(Math.PI * RIPE_FLASH_COUNT * inst.flash)))
 }
 function drawFalling(inst) {
   const { fall } = inst

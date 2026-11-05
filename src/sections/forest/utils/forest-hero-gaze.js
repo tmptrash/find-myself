@@ -69,7 +69,8 @@ export function onUpdate(inst, heroX, still) {
   inst.wasStill = still
   !still && (inst.phase = PHASE_FREE)
   inst.phase !== PHASE_FREE && tickGlance(inst, heroX)
-  Hero.setLookAtPos(inst.hero, glanceSpot(inst, heroX))}
+  Hero.setLookAtPos(inst.hero, glanceSpot(inst, heroX))
+}
 
 /**
  * The hero landed on the right big tree's branch: from now on he no longer
@@ -115,8 +116,8 @@ function tickGlance(inst, heroX) {
 //
 function glanceSpot(inst, heroX) {
   if (inst.phase === PHASE_TARGET) return lookTarget(inst, heroX)
-  if (inst.phase === PHASE_FREE) return null
-  const pos = inst.hero.character.pos
+  const pos = inst.hero.character?.pos
+  if (inst.phase === PHASE_FREE || !pos) return null
   inst.centerSpot.x = pos.x
   inst.centerSpot.y = pos.y
   return inst.centerSpot

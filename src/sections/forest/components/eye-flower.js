@@ -22,7 +22,7 @@ import { drawForestMushroom } from '../utils/forest-mushrooms.js'
 // mirrored: a flat crest under the frame, then a long slope that slides into
 // the lake instead of a cut bank.
 //
-const ISLAND_W = 225
+const ISLAND_W = 275
 const ISLAND_OFFSCREEN_W = 80
 const ISLAND_ABOVE_WATER = 28
 const ISLAND_BELOW_WATER = 30
@@ -37,7 +37,7 @@ const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v10'
+const ISLAND_BAKE_KEY = 'v11'
 const ISLAND_BAKE_BELOW_WATER = 10
 //
 // Rock-to-soil seam: centred this far under the water line so even its

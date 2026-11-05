@@ -16,7 +16,7 @@ const WATER_FLOWER = {
   bubbleGrowDuration: 12.5,         // With regrowDelay: 15 s from a burst to the next full bubble
   bubbleWaterFill: 0.5,             // Share of the bubble's height the water stands at
   regrowDelay: 2.5,                 // Bare flower this long after a burst
-  startDelay: 10,                   // Bare flower this long after the level starts
+  startDelay: 10,                   // Bare flower this long the first time the game starts
   //
   // Hanging motion: a slow sway round the flower and a soft wobble of the
   // skin; landings nearby kick both.
@@ -130,6 +130,34 @@ const APPLE_BUG = {
 }
 
 //
+// Propeller bud "Valera" (components/propeller-bud.js): a rooted leafy cone
+// with a seed propeller over its head that flies on from stop to stop ahead
+// of the hero and at last off the level for good. The whole creature,
+// propeller included, stands about 70px. Lengths in world px, times in
+// seconds, speeds in px/s.
+//
+const PROPELLER_BUD = {
+  headSize: 34,                     // Head width (the rest of its picture scales with it)
+  wakeReach: 420,                   // Hero this near: it wakes and its pupils follow him now and then
+  sleepReach: 560,                  // Hero farther on its perch: it falls asleep (pupils gone, breathing)
+  fleeReach: 260,                   // Hero this near at a ground stop: it flies on to the next one before he reaches it
+  propFrameSec: 0.01,               // Every propeller frame shows this long while it spins
+  //
+  // The propeller drives the arc in jerks. The body hangs under it and
+  // squashes when the pull of a dash, a turn or a stop loads it.
+  //
+  flySpeed: 320,
+  flyAccel: 700,                    // How fast that speed may change along the arc
+  landDuration: 0.55,               // Descent onto the spot while the body is still swinging
+  //
+  // Roots: two paws grow down into the ground after it sits (or curl onto
+  // a branch) and pull back in before it takes off.
+  //
+  rootGrow: 0.7,
+  rootRetract: 0.3
+}
+
+//
 // Hint for a hero who never shook the water flower's bubble loose himself
 // (utils/forest-drop-hint.js): after this many deaths or this long on the
 // move the apple bug bites the bubble off for him, up to `bites` times.
@@ -143,5 +171,6 @@ const DROP_HINT = {
 export const FOREST_CFG = {
   waterFlower: WATER_FLOWER,
   appleBug: APPLE_BUG,
+  propellerBud: PROPELLER_BUD,
   dropHint: DROP_HINT
 }

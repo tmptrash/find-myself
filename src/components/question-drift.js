@@ -6,9 +6,16 @@ import { getRGB } from '../utils/helper.js'
 // pace and casting a black shadow down-right (one light for all). A glyph
 // leaving one edge comes back in at the opposite one.
 //
+// The glyphs spread evenly: the screen (with its wrap band) is cut into a
+// grid of about GLYPH_COUNT cells, one glyph at a random spot of each. They
+// all drift one shared way, each only a little off it in heading and
+// speed, so the even spread holds instead of clumping over time.
+//
 const GLYPH_COUNT = 18
-const DRIFT_SPEED_MIN = 8            // px/s at the reference height
-const DRIFT_SPEED_RANGE = 14
+const CELL_JITTER = 0.5              // Share of a cell a glyph may sit anywhere in
+const DRIFT_SPEED_MIN = 12           // px/s at the reference height
+const DRIFT_SPEED_RANGE = 6
+const DRIFT_HEADING_SPREAD = 0.35    // rad either side of the shared heading
 const SPIN_SPEED_MAX = 40            // deg/s either way
 const SPIN_CHANGE_MIN = 2            // Seconds before a glyph picks a new spin
 const SPIN_CHANGE_RANGE = 4
@@ -48,7 +55,7 @@ export function create(cfg) {
     sprite,
     color,
     shadowColor,
-    glyphs: Array.from({ length: GLYPH_COUNT }, () => createGlyph(k, width, height, s))
+    glyphs: createGlyphs(k, width, height, s)
   }
 }
 
@@ -91,17 +98,39 @@ export function onDraw(inst, opacity) {
   }))
 }
 //
+// Grid over the screen and its wrap band, its cells as close to square as
+// the screen's aspect allows.
+//
+function createGlyphs(k, width, height, s) {
+  const spanW = width + EDGE_MARGIN * 2
+  const spanH = height + EDGE_MARGIN * 2
+  const cols = Math.max(1, Math.round(Math.sqrt(GLYPH_COUNT * spanW / spanH)))
+  const rows = Math.max(1, Math.round(GLYPH_COUNT / cols))
+  const cellW = spanW / cols
+  const cellH = spanH / rows
+  const sharedHeading = Math.random() * Math.PI * 2
+  const glyphs = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = -EDGE_MARGIN + cellW * (col + 0.5 + (Math.random() - 0.5) * CELL_JITTER)
+      const y = -EDGE_MARGIN + cellH * (row + 0.5 + (Math.random() - 0.5) * CELL_JITTER)
+      glyphs.push(createGlyph(k, x, y, s, sharedHeading))
+    }
+  }
+  return glyphs
+}
+//
 // Kaplay's drawSprite skips the draw when its scale is a plain number, so
 // each glyph keeps its own vec2 (and its tint as a ready colour).
 //
-function createGlyph(k, width, height, s) {
-  const heading = Math.random() * Math.PI * 2
+function createGlyph(k, x, y, s, sharedHeading) {
+  const heading = sharedHeading + (Math.random() * 2 - 1) * DRIFT_HEADING_SPREAD
   const speed = (DRIFT_SPEED_MIN + Math.random() * DRIFT_SPEED_RANGE) * s
   const scale = SCALE_MIN + Math.random() * SCALE_RANGE
   const level = Math.round((BRIGHTNESS_MIN + Math.random() * BRIGHTNESS_RANGE) * CHANNEL_MAX)
   return {
-    x: Math.random() * width,
-    y: Math.random() * height,
+    x,
+    y,
     vx: Math.cos(heading) * speed,
     vy: Math.sin(heading) * speed,
     angle: Math.random() * FULL_TURN_DEG,

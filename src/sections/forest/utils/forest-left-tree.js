@@ -197,14 +197,15 @@ export function leftTreeApplePicture(k) {
  * The start branch in the world, in the shape the level's branch platform
  * takes (one flat walkable top).
  * @param {{x: number, y: number}} foot - World point where the trunk meets the ground
+ * @param {number} [scale=1] - Size of the tree relative to the level's (the menu paints it scaled)
  * @returns {{x1: number, x2: number, y: number, physY: number, platSegs: Array<{x1: number, x2: number, y: number}>}}
  */
-export function leftTreeBranch(foot) {
-  const a = toWorld(foot, BRANCH.x1, BRANCH.y)
-  const b = toWorld(foot, BRANCH.x2, BRANCH.y)
+export function leftTreeBranch(foot, scale = 1) {
+  const a = toWorld(foot, BRANCH.x1, BRANCH.y, scale)
+  const b = toWorld(foot, BRANCH.x2, BRANCH.y, scale)
   const x1 = Math.round(a.x)
   const x2 = Math.round(b.x)
-  const y = Math.round(a.y) + BRANCH_DROP
+  const y = Math.round(a.y + BRANCH_DROP * scale)
   return { x1, x2, y, physY: y, platSegs: [{ x1, x2, y }] }
 }
 

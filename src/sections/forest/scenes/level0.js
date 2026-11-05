@@ -103,6 +103,8 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/forest-shore-tree.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
+import * as PropellerBud from '../components/propeller-bud.js'
+import { FOREST_CFG } from '../cfg.js'
 import * as ForestFloor from '../components/forest-floor.js'
 import { paintUndergroundDepthVignette } from '../utils/forest-atmosphere.js'
 import * as ForestCamera from '../utils/forest-camera.js'
@@ -678,6 +680,7 @@ const KEY_REVEALED_GROUND_DECOR_LEFT = 'forest.revealedGroundDecorLeft'
 const KEY_GROUND_RIGHT_STRIP_MAX = 'forest.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'forest.leftShoreRock'
 const KEY_LIFE_SHOWN = 'forest.lifeShown'
+const KEY_FLOWER_SEEN = 'forest.flowerSeen'
 const KEY_INTRO_SHOWN = 'forest.introShown'
 const KEY_LEVEL_STATE = 'forest.levelState'
 const KEY_CAMERA_INTRO_DONE = 'forest.cameraIntroDone'
@@ -787,6 +790,27 @@ const FOREST_SPIKY_TOMATO_Z = FOREST_EAR_TREE_BRANCHES_Z + 0.5
 // The knocked apple falls and lies in front of everything on the ground.
 //
 const FOREST_FRUIT_Z = FOREST_SPIKY_TOMATO_Z + 0.5
+//
+// Propeller bud: in front of the trees like the bombs, its roots with the
+// bomb trees' under the ground. Its stops, in order: the left big tree's
+// branch (PROPELLER_BUD_START_SHARE of the way in from its leafy tip), the
+// right big tree's branch (PROPELLER_BUD_BRANCH_SHARE of the way out from
+// the trunk), the ground PROPELLER_BUD_BOMB_TREE_GAP px left of the right
+// bomb tree, and the lake's island (PROPELLER_BUD_ISLAND_SHARE of the way
+// from the eye flower to the island's walkable end), which it leaves once
+// the hero rides the centipede within PROPELLER_BUD_ISLAND_REACH px of it
+// or steps on the island. Then it flies off PROPELLER_BUD_EXIT_PAST px past
+// the world's right edge, PROPELLER_BUD_EXIT_RISE px over the ground.
+//
+const PROPELLER_BUD_Z = FOREST_SPIKY_TOMATO_Z
+const PROPELLER_BUD_ROOTS_Z = FOREST_EAR_TREE_ROOTS_Z
+const PROPELLER_BUD_START_SHARE = 0.3
+const PROPELLER_BUD_BRANCH_SHARE = 0.4
+const PROPELLER_BUD_BOMB_TREE_GAP = 70
+const PROPELLER_BUD_ISLAND_SHARE = 1
+const PROPELLER_BUD_ISLAND_REACH = 200
+const PROPELLER_BUD_EXIT_PAST = 200
+const PROPELLER_BUD_EXIT_RISE = 220
 const TOMATO_BURST_HERO_SAFE_RADIUS = 100
 const TOMATO_BURST_HERO_SAFE_SEC = 3.2
 const FOREST_EAR_TREE_COUNT = 2
@@ -1174,7 +1198,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k)])
+  await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
   await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
   await loadForestStones()
   onProgress?.(42)
@@ -1235,6 +1259,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       Sound.setEarTreeWhisperVolume(0)
       Sound.stopTrampWaterStepsLoop(sound)
       Sound.stopWaterStepsLoop(sound)
+      Sound.stopPropellerHum(sound)
     }
     const zones = loadForestZones()
     if (await forestBootstrapPause(bootstrap, 6, session)) return
@@ -1247,7 +1272,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and the hangs its watered apples grow on sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k)])
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -1615,6 +1640,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     inst.treeX = TREE_X
     inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
     inst.floorY = FLOOR_Y
+    const flowerSeen = get(KEY_FLOWER_SEEN, false)
     inst.waterFlower = WaterFlower.create({
       k,
       x: WATER_FLOWER_X,
@@ -1622,9 +1648,11 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       z: WATER_FLOWER_Z,
       waterZ: WATER_FLOWER_SPILT_Z,
       sfx: sound,
+      startDelay: flowerSeen ? 0 : FOREST_CFG.waterFlower.startDelay,
       rootArea: { x1: LEFT_TREE_FOOT.x - LEFT_TREE_ROOT_HALF, x2: LEFT_TREE_FOOT.x + LEFT_TREE_ROOT_HALF },
       onSoilWatered: () => waterForestTreeApples(inst)
     })
+    flowerSeen || set(KEY_FLOWER_SEEN, true)
     inst.appleBug = AppleBug.create({
       k,
       holeX: BUG_HOLE_X,
@@ -1754,6 +1782,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       onExplode: (x, y) => onForestTomatoExplode(inst, x, y)
     })
     inst.heroGaze = createForestHeroGaze(inst)
+    inst.propellerBud = createForestPropellerBud(inst)
     createForestChainBuoyLayer(k, zones)
     createForestEarTreeLayer(k, inst)
     createForestShoreTreeLayer(k, inst)
@@ -1987,8 +2016,9 @@ function persistForestOnLeave(inst) {
 }
 //
 // World state that survives a reload: branch / bomb-tree landing counts, the
-// apples grown on the left tree, the knocked apple on the ground and the
-// stick on the centipede's back.
+// apples grown on the left tree, the knocked apple on the ground, the
+// stick on the centipede's back and the propeller bud's stop (read back
+// when the bud is made).
 //
 function persistForestLevelState(inst) {
   set(KEY_LEVEL_STATE, {
@@ -1997,7 +2027,8 @@ function persistForestLevelState(inst) {
     tomatoHits: inst.spikyTomatoes ? SpikyTomato.getHits(inst.spikyTomatoes) : [],
     treeApples: getForestTreeAppleCount(inst),
     fallenApple: getFallenAnchorFruit(inst, FLOOR_Y),
-    twigOnPredator: HorizFallTwig.isTwigOnPredator(inst.shoreFallTwigs)
+    twigOnPredator: HorizFallTwig.isTwigOnPredator(inst.shoreFallTwigs),
+    propellerBudStop: inst.propellerBud ? PropellerBud.stopIndex(inst.propellerBud) : inst.propellerBudSavedStop ?? 0
   })
 }
 //
@@ -6154,6 +6185,71 @@ function createForestHeroGaze(inst) {
     bombs: inst.spikyTomatoes,
     bombIndex
   })
+}
+//
+// The propeller bud runs from the hero along its stops (see
+// PROPELLER_BUD_START_SHARE) and starts from the one saved last time.
+//
+function createForestPropellerBud(inst) {
+  const stops = buildForestPropellerBudStops(inst)
+  inst.propellerBudSavedStop = get(KEY_LEVEL_STATE, null)?.propellerBudStop ?? 0
+  return PropellerBud.create({
+    k: inst.k,
+    stops,
+    exit: { x: WORLD_W + PROPELLER_BUD_EXIT_PAST, y: FLOOR_Y - PROPELLER_BUD_EXIT_RISE },
+    startStop: inst.propellerBudSavedStop,
+    getHeroPos: () => inst.heroInst?.character?.pos ?? null,
+    isVisible: () => isRightTrampolineVisible(inst.zones),
+    sound: inst.sound,
+    z: PROPELLER_BUD_Z,
+    rootsZ: PROPELLER_BUD_ROOTS_Z
+  })
+}
+//
+// The bud's stops in order; one whose place is missing from the level is
+// left out.
+//
+function buildForestPropellerBudStops(inst) {
+  const perch = PropellerBud.PERCH
+  const stops = []
+  const start = inst.startBranch
+  start && stops.push({
+    x: start.x1 + (start.x2 - start.x1) * PROPELLER_BUD_START_SHARE,
+    y: start.y,
+    perch: perch.BRANCH,
+    heroOn: () => isHeroOnStartBranch(inst, inst.heroInst?.character)
+  })
+  const shore = inst.shoreTree?.treeData?.horizBranch
+  shore && stops.push({
+    x: shore.x1 + (shore.x2 - shore.x1) * PROPELLER_BUD_BRANCH_SHARE,
+    y: shore.physY,
+    perch: perch.BRANCH,
+    heroOn: () => isHeroOnShoreBranch(inst, inst.heroInst?.character)
+  })
+  const trees = inst.earTrees?.trees ?? []
+  const bombTree = trees.length ? trees.reduce((best, tree) => (tree.x > best.x ? tree : best)) : null
+  bombTree && stops.push({ x: bombTree.x - PROPELLER_BUD_BOMB_TREE_GAP, y: FLOOR_Y, perch: perch.GROUND })
+  const flower = inst.eyeFlower
+  if (!flower) return stops
+  const islandX = flower.baseX + (flower.walkX2 - flower.baseX) * PROPELLER_BUD_ISLAND_SHARE
+  stops.push({
+    x: islandX,
+    y: EyeFlower.surfaceY(flower, islandX),
+    perch: perch.GROUND,
+    heroOn: () => isHeroAtForestIsland(inst, islandX)
+  })
+  return stops
+}
+//
+// The hero rides the centipede up to the island or is on it already.
+//
+function isHeroAtForestIsland(inst, islandX) {
+  const char = inst.heroInst?.character
+  if (!char?.pos) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (EyeFlower.containsHero(inst.eyeFlower, char.pos.x, footY)) return true
+  return HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char) &&
+    Math.abs(char.pos.x - islandX) < PROPELLER_BUD_ISLAND_REACH
 }
 //
 // The drop hint counts only time the hero actually runs or jumps.

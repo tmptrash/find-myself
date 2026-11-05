@@ -164,6 +164,20 @@ export function drawShoreTreeToCanvas(ctx, foot, scale) {
 }
 
 /**
+ * The landing branch's flat top where drawShoreTreeToCanvas() paints it.
+ * @param {{x: number, y: number}} foot - Where the trunk meets the ground
+ * @param {number} scale - Canvas px per picture px
+ * @returns {{x1: number, x2: number, y: number}} x1 at the trunk, x2 at the leafy tip
+ */
+export function shoreTreeBranchOnCanvas(foot, scale) {
+  return {
+    x1: Math.round(foot.x + (BRANCH.x1 - FOOT_X) * scale),
+    x2: Math.round(foot.x + (BRANCH.x2 - FOOT_X) * scale),
+    y: Math.round(foot.y + GROUND_TUCK - (FOOT_Y - BRANCH.y) * scale)
+  }
+}
+
+/**
  * Draws the shore tree: its roots under the ground line, the tree above and
  * the greens over the seam between them.
  * @param {Object} inst - Shore-tree inst

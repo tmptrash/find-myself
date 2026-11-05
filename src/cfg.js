@@ -355,6 +355,19 @@ export const CFG = {
           deep: PALETTE.gray0
         },
         //
+        // Propeller bud: a cream eye with a brown iris and a dark pupil, a
+        // bark stick, root-paws the warm brown of the bomb trees' roots.
+        //
+        propellerBud: {
+          pupil: PALETTE.gray7,        // Light pupils darting in its black eyes
+          stick: PALETTE.brown1,       // Bark of the branch-like stalk to the propeller
+          stickDark: PALETTE.rose0,    // Its rim and shaded fibres
+          stickLight: PALETTE.brown3,  // Its lit fibres and knot
+          root: PALETTE.brown1,
+          rootDark: PALETTE.brown0,
+          rootLight: PALETTE.rose1
+        },
+        //
         // Colour-world earth band under the ground line stays in the green/teal
         // void family; warmHaze is cool parallax air (gold dawn is sky-only).
         //

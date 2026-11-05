@@ -22,6 +22,7 @@ import * as Predator from '../sections/forest/components/predator.js'
 import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
 import * as AppleBug from '../sections/forest/components/apple-bug.js'
 import * as WaterFlower from '../sections/forest/components/water-flower.js'
+import * as PropellerBud from '../sections/forest/components/propeller-bud.js'
 import * as TreeFruit from '../sections/forest/utils/forest-tree-fruit.js'
 import { bakeLeftTreeApple, leftTreeApplePicture, leftTreeApples } from '../sections/forest/utils/forest-left-tree.js'
 import { createForestMidges, updateForestMidges } from '../sections/forest/utils/forest-level-atmosphere.js'
@@ -38,7 +39,8 @@ import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '..
 // the cursor. A level the player can enter shows its picture (the forest's
 // trampoline mushroom, the cave's glowing mushroom); every other level is a
 // "?" crossed by the red prohibition sign. A level hidden until reached
-// shows a plain "?" until the hero has got there, over a black backdrop of
+// shows a plain "?" (and cannot be entered) until the hero has got there,
+// over a black backdrop of
 // drifting "?" glyphs. Each level owns a backdrop: on a switch the old one
 // fades out, then the selected one fades in.
 //
@@ -192,6 +194,18 @@ const MENU_WATER_FLOWER_Z = 2.5
 const MENU_FRUIT_Z = 3
 const MENU_BUG_Z = 3.5
 const MENU_MIDGE_Z = 4
+//
+// Valera the propeller bud flies to and fro between the two big trees'
+// branches, resting MENU_BUD_REST seconds on each: on the left one
+// MENU_BUD_LEFT_SHARE of the way in from its leafy tip, on the right one
+// MENU_BUD_RIGHT_SHARE of the way out from the trunk (as in the level).
+// It is drawn at the backdrop's scale, in front of the trees.
+//
+const MENU_BUD_REST = { min: 3, max: 10 }
+const MENU_BUD_LEFT_SHARE = 0.3
+const MENU_BUD_RIGHT_SHARE = 0.4
+const MENU_BUD_Z = 3.6
+const MENU_BUD_ROOTS_Z = MENU_BUG_TUNNEL_Z
 //
 // Draw layers.
 //
@@ -438,9 +452,9 @@ export async function prewarmMenuAssets(k) {
 function buildMenuLevel(level, index, layout, progress) {
   const section = progress[level.section]
   const completed = Boolean(section?.completed)
-  const playable = Boolean(level.icon)
   const reached = completed || Boolean(section?.reached) || Boolean(progress.lastLesson?.startsWith(level.lessonPrefix))
   const mystery = Boolean(level.hiddenUntilReached) && !reached
+  const playable = Boolean(level.icon) && !mystery
   return {
     ...level,
     index,
@@ -621,12 +635,19 @@ function isRepeatedKeyPress(inst, key) {
 }
 //
 // "Yes" in the restart dialog: the selected level's saved state is cleared
-// (its completed mark stays) and it starts from its first lesson.
+// (its completed mark stays) and it starts from its first lesson. Every
+// level after it is forgotten whole, so it is a "?" again until reached.
 //
 function restartLevel(inst) {
   const level = inst.levels[inst.selected]
   if (inst.isLeavingScene || !level.playable) return
-  set(level.section, { completed: level.completed, ...(level.hiddenUntilReached && level.reached ? { reached: true } : {}) })
+  const fresh = { completed: level.completed, ...(level.hiddenUntilReached && level.reached ? { reached: true } : {}) }
+  //
+  // A restart is not the first start: the forest flower fills at once.
+  //
+  level.section === 'forest' && (fresh.flowerSeen = true)
+  set(level.section, fresh)
+  inst.levels.slice(level.index + 1).forEach(later => set(later.section, { completed: false }))
   set('lastLesson', level.firstLesson)
   beginMenuSceneLeave(inst)
   stopMenuMusic(inst.music)
@@ -1242,12 +1263,12 @@ function startMenuForestLife(inst) {
   loadMenuForestLife(inst.k).then(ready => ready && !inst.closed && createMenuForestLife(inst))
 }
 function loadMenuForestLife(k) {
-  return Promise.all([AppleBug.load(k), WaterFlower.load(k), bakeLeftTreeApple(k)]).then(baked => baked.every(Boolean))
+  return Promise.all([AppleBug.load(k), WaterFlower.load(k), bakeLeftTreeApple(k), PropellerBud.load(k)]).then(baked => baked.every(Boolean))
 }
 //
 // The level's apple tree crop on the menu's tree (its "level" for the
-// bug), the midges over the lake, the water flower at the trunk and the
-// apple bug in its burrow.
+// bug), the midges over the lake, the water flower at the trunk, the
+// apple bug in its burrow and Valera on the big trees' branches.
 //
 function createMenuForestLife(inst) {
   const { k, forestLayout } = inst
@@ -1281,8 +1302,44 @@ function createMenuForestLife(inst) {
       tunnelZ: MENU_BUG_TUNNEL_Z,
       z: MENU_BUG_Z
     }),
+    bud: createMenuPropellerBud(inst),
     dropLeft: nextMenuAppleDrop()
   }
+}
+//
+// Valera between the two branches (see MENU_BUD_REST), in its own space:
+// the backdrop's screen px over its scale. It wakes for a menu hero near
+// and shows with the forest only.
+//
+function createMenuPropellerBud(inst) {
+  const { k, forestLayout } = inst
+  const { leftBranch, rightBranch, scale } = forestLayout
+  const toBud = v => v / scale
+  return PropellerBud.create({
+    k,
+    stops: [
+      {
+        x: toBud(leftBranch.x1 + (leftBranch.x2 - leftBranch.x1) * MENU_BUD_LEFT_SHARE),
+        y: toBud(leftBranch.y),
+        perch: PropellerBud.PERCH.BRANCH
+      },
+      {
+        x: toBud(rightBranch.x1 + (rightBranch.x2 - rightBranch.x1) * MENU_BUD_RIGHT_SHARE),
+        y: toBud(rightBranch.y),
+        perch: PropellerBud.PERCH.BRANCH
+      }
+    ],
+    rest: MENU_BUD_REST,
+    scale,
+    getHeroPos: () => menuHeroInBudSpace(inst),
+    isVisible: () => !inst.isLeavingScene && inst.bgOpacity[BACKDROP_FOREST] >= MENU_FOREST_LIVE_MIN_OPACITY,
+    z: MENU_BUD_Z,
+    rootsZ: MENU_BUD_ROOTS_Z
+  })
+}
+function menuHeroInBudSpace(inst) {
+  const pos = inst.heroInst.character?.pos
+  return pos ? { x: pos.x / inst.forestLayout.scale, y: pos.y / inst.forestLayout.scale } : null
 }
 //
 // Night backdrop: scene base colour plus the darkened menu-bg forest, baked

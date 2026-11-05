@@ -44,7 +44,6 @@ const STATES = {
   STORE: 'store',
   EAT: 'eat',
   OUT: 'out',
-  VANISH: 'vanish',
   EMERGE: 'emerge',
   HUNT: 'hunt',
   WANDER: 'wander',
@@ -57,7 +56,7 @@ const STATES = {
   BITE: 'bite'
 }
 const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL,
-  STATES.STORE, STATES.EAT, STATES.OUT, STATES.VANISH])
+  STATES.STORE, STATES.EAT, STATES.OUT])
 //
 // In the cave (and not on its way in or out of the dark) it hears an apple
 // fall up there.
@@ -196,15 +195,32 @@ const RUSH_FADE_START = 0.4
 const DEEP_ZOOM = 0.84
 const DEEP_RISE = 4.8
 //
-// Tunnel: it shows up and leaves over TUNNEL_FADE (lit from the dark and
-// back), full size like the apples there; its body follows the floor's
+// Tunnel: full size like the apples there; its body follows the floor's
 // slope measured SLOPE_SPAN to either side. It puts an apple down over
 // PUT_DURATION. The pile's places are in apple radii from the pile's spot
 // (the third on top of the two), an apple it eats lies EAT_DX radii before
 // the pile, and it bites every BITE_CYCLE (head down for its first half),
 // creeping up to what is left of the apple, its mouth BITE_INTO into it.
 //
-const TUNNEL_FADE = 0.2
+// It comes into and leaves the tunnel through a "portal": a vertical line
+// at the cave's left end (where its rear sits at that end). Crossing it, it
+// is fully seen right of the PORTAL_FADE_W band, fades across it in
+// PORTAL_STRIPS steps and is gone left of the line — so going out its front
+// goes first, coming in its front shows first. Going out, the last
+// PORTAL_DIVE_DIST before its rear (and trailing legs, PORTAL_EXIT_PAD) is
+// past the line it darts (PORTAL_DIVE_DURATION, braking like the burrow's
+// dash); coming in it darts the same distance out of the dark from just
+// behind the line and walks on. PORTAL_REACH: how far ahead of its origin
+// its head and antennae reach; PORTAL_MASK_H covers the bug above and below
+// its ground.
+//
+const PORTAL_FADE_W = 80
+const PORTAL_STRIPS = 16
+const PORTAL_EXIT_PAD = 10
+const PORTAL_REACH = 60
+const PORTAL_MASK_H = 200
+const PORTAL_DIVE_DIST = 90
+const PORTAL_DIVE_DURATION = 0.15
 const SLOPE_SPAN = 12
 const PUT_DURATION = 0.3
 const PILE_SLOTS = [{ dx: 0, up: 0 }, { dx: -1.9, up: 0 }, { dx: -0.95, up: 1.7 }]
@@ -259,6 +275,7 @@ export function create(cfg) {
     tunnelPos: k.vec2(Math.round(tunnelX + tunnel.dx), Math.round(tunnelTopY + tunnel.dy)),
     tunnelFloor: tunnel.floor.map(p => ({ x: tunnelX + p.x, y: tunnelTopY + p.y })),
     tunnelEndX: tunnelX + tunnel.endX,
+    portalX: tunnelX + tunnel.endX + bug.shellBox.x1,
     pileX: tunnelX + tunnel.pileX,
     floor: null,
     slope: 0,
@@ -292,7 +309,8 @@ export function create(cfg) {
     dark: 0,
     zoom: DEEP_ZOOM,
     rise: DEEP_RISE,
-    rush: { t: 0, fromX: 0, toX: 0 },
+    rush: { t: 0, dur: RUSH_DURATION, fromX: 0, toX: 0 },
+    diving: false,
     time: 0,
     x: 0,
     goalX: 0,
@@ -444,7 +462,6 @@ function updateBehaviour(inst, dt) {
     case STATES.STORE: return tickStore(inst, dt)
     case STATES.EAT: return tickEat(inst, dt)
     case STATES.OUT: return tickOut(inst, dt)
-    case STATES.VANISH: return tickVanish(inst, dt)
     case STATES.EMERGE: return tickEmerge(inst, dt)
     case STATES.HUNT: return tickHunt(inst, dt)
     case STATES.WANDER: return tickWander(inst, dt)
@@ -545,12 +562,13 @@ function tickDown(inst, dt) {
   inst.stateLeft <= 0 && enterTunnel(inst)
 }
 //
-// It shows up in the cave's left rounded end facing along it, lit from the dark.
+// It darts out of the dark through the portal at the cave's left rounded
+// end, facing along the cave, its head just behind the line at first.
 //
 function enterTunnel(inst) {
   inst.floor = inst.tunnelFloor
-  inst.x = inst.tunnelEndX
-  inst.goalX = inst.tunnelEndX
+  inst.x = inst.portalX - PORTAL_REACH
+  inst.goalX = inst.x + PORTAL_DIVE_DIST
   inst.facing = 1
   inst.f = 1
   inst.turnT = 1
@@ -561,22 +579,13 @@ function enterTunnel(inst) {
   inst.dash.pauseLeft = 0
   updateFloor(inst)
   inst.legs.forEach(leg => plantLeg(inst, leg))
-  inst.stateLeft = TUNNEL_FADE
-  setTunnelLight(inst, 0)
+  inst.opacity = 1
+  inst.dark = PARAMS.tunnelBugDark
+  startRush(inst, inst.goalX, PORTAL_DIVE_DURATION)
   inst.state = STATES.APPEAR
 }
 function tickAppear(inst, dt) {
-  inst.stateLeft -= dt
-  setTunnelLight(inst, 1 - Math.max(0, inst.stateLeft) / TUNNEL_FADE)
-  inst.stateLeft <= 0 && (inst.state = STATES.TUNNEL)
-}
-//
-// Lit from the dark (u from 0 to 1): it shows dark first, then lightens to
-// the tunnel's own dimness.
-//
-function setTunnelLight(inst, u) {
-  inst.opacity = Math.min(1, u * 2)
-  inst.dark = 1 - (1 - PARAMS.tunnelBugDark) * u
+  tickRush(inst, dt) >= 1 && (inst.state = STATES.TUNNEL)
 }
 //
 // Down the tunnel to the far end: its apple it stores in the pile or (the
@@ -668,18 +677,22 @@ function takeBite(inst) {
   inst.bitesLeft -= 1
 }
 //
-// Back to the cave's left end (turning first), and away into the dark.
+// Back to the cave's left end (turning first) and on through the portal,
+// wiped out into the dark as it goes, the last stretch in a dart.
 //
 function tickOut(inst, dt) {
-  inst.goalX = inst.tunnelEndX
-  if (!walk(inst, dt, inst.rushingOut ? PARAMS.tunnelRush : PARAMS.tunnel) || inst.turnT < 1) return
-  inst.stateLeft = TUNNEL_FADE
-  inst.state = STATES.VANISH
+  inst.diving ? tickOutDive(inst, dt) : tickOutWalk(inst, dt)
 }
-function tickVanish(inst, dt) {
-  inst.stateLeft -= dt
-  setTunnelLight(inst, Math.max(0, inst.stateLeft) / TUNNEL_FADE)
-  if (inst.stateLeft > 0) return
+function tickOutWalk(inst, dt) {
+  inst.goalX = inst.portalX + inst.bug.shellBox.x1 * inst.zoom - PORTAL_EXIT_PAD
+  walk(inst, dt, inst.rushingOut ? PARAMS.tunnelRush : PARAMS.tunnel)
+  if (inst.turnT < 1 || inst.facing > 0 || inst.x - inst.goalX > PORTAL_DIVE_DIST) return
+  inst.diving = true
+  startRush(inst, inst.goalX, PORTAL_DIVE_DURATION)
+}
+function tickOutDive(inst, dt) {
+  if (tickRush(inst, dt) < 1) return
+  inst.diving = false
   inst.floor = null
   inst.rushingOut && (inst.hideLeft = 0)
   inst.rushingOut = false
@@ -846,8 +859,9 @@ function goToDoor(inst, dt, mode, hide) {
   startRush(inst, inst.mouthX)
   inst.state = STATES.SINK
 }
-function startRush(inst, toX) {
+function startRush(inst, toX, dur = RUSH_DURATION) {
   inst.rush.t = 0
+  inst.rush.dur = dur
   inst.rush.fromX = inst.x
   inst.rush.toX = toX
   inst.dash.active = false
@@ -859,7 +873,7 @@ function startRush(inst, toX) {
 //
 function tickRush(inst, dt) {
   const { rush } = inst
-  rush.t = Math.min(1, rush.t + dt / RUSH_DURATION)
+  rush.t = Math.min(1, rush.t + dt / rush.dur)
   const eased = 1 - Math.pow(1 - rush.t, RUSH_EASE_POWER)
   const x = rush.fromX + (rush.toX - rush.fromX) * eased
   inst.vx = (x - inst.x) / dt
@@ -1320,9 +1334,41 @@ function onDraw(inst) {
   if (inst.state === STATES.INSIDE || inst.state === STATES.DOWN) return
   const sgn = Math.sign(inst.f) || inst.facing
   const legs = inst.legs.map(leg => solveLeg(inst, leg, sgn))
-  inst.dark < 1 && drawBody(inst, legs, { opacity: inst.opacity, color: null, farColor: inst.farTint })
-  inst.dark > 0 && drawBody(inst, legs, { opacity: inst.opacity * inst.dark, color: inst.deepColor, farColor: inst.deepColor })
+  isAtPortal(inst) ? drawThroughPortal(inst, legs) : drawLooks(inst, legs, 1)
   inst.tongue.phase !== TONGUE.IDLE && drawTongue(inst)
+}
+//
+// Its own colours, then the dark of where it is over them, both faded by fade.
+//
+function drawLooks(inst, legs, fade) {
+  const opacity = inst.opacity * fade
+  inst.dark < 1 && drawBody(inst, legs, { opacity, color: null, farColor: inst.farTint })
+  inst.dark > 0 && drawBody(inst, legs, { opacity: opacity * inst.dark, color: inst.deepColor, farColor: inst.deepColor })
+}
+function isAtPortal(inst) {
+  return inst.floor === inst.tunnelFloor && inst.x < inst.portalX + PORTAL_FADE_W + PORTAL_REACH
+}
+//
+// The portal wipe: the bug drawn once per vertical strip of the fade band,
+// each masked to its strip and fainter towards the line, and once more
+// masked to everything right of the band; nothing of it left of the line.
+//
+function drawThroughPortal(inst, legs) {
+  const { k } = inst
+  const top = inst.groundY - PORTAL_MASK_H
+  const stripW = PORTAL_FADE_W / PORTAL_STRIPS
+  for (let i = 0; i < PORTAL_STRIPS; i++) {
+    const x = inst.portalX + stripW * i
+    k.drawMasked(
+      () => drawLooks(inst, legs, (i + 0.5) / PORTAL_STRIPS),
+      () => k.drawRect({ pos: k.vec2(x, top), width: stripW, height: PORTAL_MASK_H * 2 })
+    )
+  }
+  const shownX = inst.portalX + PORTAL_FADE_W
+  k.drawMasked(
+    () => drawLooks(inst, legs, 1),
+    () => k.drawRect({ pos: k.vec2(shownX, top), width: PORTAL_MASK_H * 2, height: PORTAL_MASK_H * 2 })
+  )
 }
 //
 // Far legs and antenna, belly, head, near legs, shell and near antenna from

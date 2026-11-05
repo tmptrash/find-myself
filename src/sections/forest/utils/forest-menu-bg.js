@@ -11,8 +11,8 @@ import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTone
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from './forest-picture-trees.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from './forest-picture-bushes.js'
 import { loadForestStones, forestGroundStones, forestBuriedStones } from './forest-stones.js'
-import { loadForestLeftTreePicture, drawLeftTreeToCanvas } from './forest-left-tree.js'
-import { loadForestShoreTree, drawShoreTreeToCanvas } from './forest-shore-tree.js'
+import { loadForestLeftTreePicture, drawLeftTreeToCanvas, leftTreeBranch } from './forest-left-tree.js'
+import { loadForestShoreTree, drawShoreTreeToCanvas, shoreTreeBranchOnCanvas } from './forest-shore-tree.js'
 import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { drawForestPlant, loadForestPlants } from './forest-plants.js'
@@ -207,16 +207,20 @@ export async function loadForestMenuBackdropArt() {
  * @param {number} height - Screen height
  * @returns {Object} groundY, scale (of the baked scene to the level), lake {x1, x2Core, x2, surfaceY},
  *   eyeSpots, earTreeSpots [{x}] (the bomb trees), crawler {minX, maxX}, appleTreeX (its trunk),
- *   bugHoleX (the apple bug's burrow)
+ *   bugHoleX (the apple bug's burrow), leftBranch {x1 (leafy tip), x2, y} and rightBranch
+ *   {x1 (trunk), x2, y}: the flat tops of the two big trees' branches
  */
 export function forestMenuLayout(width, height) {
   const groundY = Math.round(height * GROUND_Y_FRAC)
   const toX = menuWorldToScreenX(height)
   const x1 = toX(LEVEL_LAKE_X1)
   const x2Core = toX(LEVEL_LAKE_X2_CORE)
+  const scale = height / REF_HEIGHT
   return {
     groundY,
-    scale: height / REF_HEIGHT,
+    scale,
+    leftBranch: leftTreeBranch({ x: toX(LEVEL_LEFT_TREE_X), y: groundY }, scale),
+    rightBranch: shoreTreeBranchOnCanvas({ x: toX(LEVEL_RIGHT_TREE_X), y: groundY }, LEVEL_RIGHT_TREE_SCALE * scale),
     appleTreeX: toX(LEVEL_LEFT_TREE_X),
     bugHoleX: toX(LEVEL_BUG_HOLE_X),
     lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },

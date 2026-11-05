@@ -81,6 +81,22 @@ const FLOWER_GULP_PEBBLE_GAIN = 0.07
 const FLOWER_SFX_ATTACK_SEC = 0.012
 const FLOWER_SFX_FLOOR = 0.0001
 //
+// Forest propeller bud in flight: a looped band of noise chopped by its
+// blades (PROP_HUM_BLADE_HZ, times the spin rate) over a soft low hum.
+// The level follows the volume asked each frame (PROP_HUM_SMOOTH s), and
+// PROP_HUM_RELEASE s after it drops to 0 the nodes are let go.
+//
+const PROP_HUM_GAIN = 0.16
+const PROP_HUM_NOISE_SEC = 2
+const PROP_HUM_BAND_HZ = 820
+const PROP_HUM_BAND_Q = 0.9
+const PROP_HUM_BLADE_HZ = 34
+const PROP_HUM_CHOP_DEPTH = 0.45
+const PROP_HUM_TONE_HZ = 96
+const PROP_HUM_TONE_GAIN = 0.22
+const PROP_HUM_SMOOTH = 0.08
+const PROP_HUM_RELEASE = 0.5
+//
 // Jump: an upward sine sweep fading out over JUMP_SWEEP_DURATION.
 //
 const JUMP_SWEEP_DURATION = 0.12
@@ -1405,6 +1421,43 @@ export function stopTrampWaterStepsLoop(instance) {
   instance._trampWaterStepsHandle = null
 }
 /**
+ * Forest propeller bud's whirr, called every frame: starts the loop when
+ * asked to be heard, follows the volume and the spin rate, and lets the
+ * loop go a moment after the volume falls to 0.
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} volume - 0..1 (0 while it does not spin or is out of earshot)
+ * @param {number} rate - Spin rate (1 = cruise; higher whirrs faster)
+ */
+export function setPropellerHum(instance, volume, rate) {
+  if (!instance) return
+  const muted = globalMuteProceduralSounds || instance._forestSfxMuted
+  const level = muted ? 0 : volume
+  level > 0 && !instance._propellerHum && startPropellerHum(instance)
+  const hum = instance._propellerHum
+  if (!hum) return
+  const now = hum.ctx.currentTime
+  hum.master.gain.setTargetAtTime(level * PROP_HUM_GAIN, now, PROP_HUM_SMOOTH)
+  hum.chopLfo.frequency.setTargetAtTime(PROP_HUM_BLADE_HZ * rate, now, PROP_HUM_SMOOTH)
+  hum.tone.frequency.setTargetAtTime(PROP_HUM_TONE_HZ * rate, now, PROP_HUM_SMOOTH)
+  if (level > 0) {
+    hum.quietSince = null
+    return
+  }
+  hum.quietSince ??= now
+  now - hum.quietSince > PROP_HUM_RELEASE && stopPropellerHum(instance)
+}
+/**
+ * Stops the propeller bud's whirr at once (level leave / teardown).
+ * @param {Object} instance - Sound instance from create()
+ */
+export function stopPropellerHum(instance) {
+  const hum = instance?._propellerHum
+  if (!hum) return
+  instance._propellerHum = null
+  hum.sources.forEach(node => node.stop())
+  hum.master.disconnect()
+}
+/**
  * Forest eye-flower notices the hero: a short trembling rustle of its blades.
  * @param {Object} instance - Sound instance from create()
  */
@@ -1632,6 +1685,46 @@ function createReadyTvNoiseBuffer(ctx, seconds) {
   const data = buffer.getChannelData(0)
   for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1
   return buffer
+}
+//
+// The whirr's nodes: looped noise through a band, chopped by a blade-rate
+// LFO, plus a quiet low triangle, all into the forest SFX bus at silence.
+//
+function startPropellerHum(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const noise = ctx.createBufferSource()
+  noise.buffer = createReadyTvNoiseBuffer(ctx, PROP_HUM_NOISE_SEC)
+  noise.loop = true
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.value = PROP_HUM_BAND_HZ
+  band.Q.value = PROP_HUM_BAND_Q
+  const chop = ctx.createGain()
+  chop.gain.value = 1 - PROP_HUM_CHOP_DEPTH
+  const chopLfo = ctx.createOscillator()
+  chopLfo.frequency.value = PROP_HUM_BLADE_HZ
+  const chopDepth = ctx.createGain()
+  chopDepth.gain.value = PROP_HUM_CHOP_DEPTH
+  const tone = ctx.createOscillator()
+  tone.type = 'triangle'
+  tone.frequency.value = PROP_HUM_TONE_HZ
+  const toneGain = ctx.createGain()
+  toneGain.gain.value = PROP_HUM_TONE_GAIN
+  const master = ctx.createGain()
+  master.gain.value = 0
+  chopLfo.connect(chopDepth)
+  chopDepth.connect(chop.gain)
+  noise.connect(band)
+  band.connect(chop)
+  chop.connect(master)
+  tone.connect(toneGain)
+  toneGain.connect(chop)
+  master.connect(instance.forestSfxGain ?? ctx.destination)
+  noise.start()
+  chopLfo.start()
+  tone.start()
+  instance._propellerHum = { ctx, master, chopLfo, tone, sources: [noise, chopLfo, tone], quietSince: null }
 }
 //
 // Audio context ready for a one-shot procedural sound (null while muted or suspended).

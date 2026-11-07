@@ -134,17 +134,6 @@ export function forestAnchorFruitGroundClearSpan(cfg) {
 }
 
 /**
- * True when world X lies in the anchor-apple ground strip (no grass / ferns).
- * @param {number} x - World X
- * @param {Object} cfg - Same layout object as computeForestAnchorFruitDropX
- * @returns {boolean}
- */
-export function isForestAnchorFruitGroundX(x, cfg) {
-  const { x1, x2 } = forestAnchorFruitGroundClearSpan(cfg)
-  return x >= x1 && x <= x2
-}
-
-/**
  * The tree's apple crop: where apples grow and the picture they are drawn
  * from. The tree starts bare; apples come with waterForestTreeApples().
  * @param {Array<{x: number, y: number, r: number}>} hangs - Their bodies' centres (in the order they come) and radius

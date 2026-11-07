@@ -211,16 +211,6 @@ export function getCrackZone(screenW, floorY) {
   return { x1, x2, floorY, width: CRACK_ZONE_W, depth: PIT_DEPTH }
 }
 /**
- * True when a grass blade X sits over the crack band (keep that strip bare).
- * @param {number} x - World X
- * @param {number} screenW - Screen width
- * @returns {boolean}
- */
-export function isCrackGrassExcluded(x, screenW) {
-  const zone = getCrackZone(screenW, 0)
-  return x >= zone.x1 - 8 && x <= zone.x2 + 8
-}
-/**
  * True when decor (mushroom / rock) should stay clear of the cave mouth.
  * @param {number} x - World X
  * @param {number} screenW - Screen width

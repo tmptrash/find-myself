@@ -38,7 +38,6 @@ import {
   applyForestHudSharpBake,
   forestDepthBlurRadiusPx
 } from '../utils/forest-focus-depth.js'
-import * as Grass from '../../../components/grass.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import {
@@ -52,7 +51,6 @@ import {
   drawForestPit,
   drawForestPitCaveForegroundDecor,
   drawForestPitCaveSeamCoverRocks,
-  isCrackGrassExcluded,
   isCrackDecorExcluded,
   getCrackZone,
   getForestPitHeroStandY,
@@ -70,7 +68,6 @@ import {
   hasForestRipeTreeApple,
   computeForestAnchorFruitDropX,
   forestAnchorFruitGroundClearSpan,
-  isForestAnchorFruitGroundX,
   mountForestTreeFruitLayer,
   hasForestAnchorFruitDropInWorld,
   releaseForestAnchorFruit,
@@ -123,28 +120,11 @@ import {
 //
 const VOID = forestRgb('void')
 const OUTER = forestRgb('playfieldOuter')
-//
-// Warm orange grass — same half-brightness front-row foliage tone as menu.js
-//
-const GRASS_GREEN = forestRgb(FOREST_PAL.treeColor.leafShades[0])
-//
-// Yellow-brown foreground grass from L onward (same straw as the G peek band).
-//
-const GRASS_WARM = forestRgb(FOREST_PAL.gold)
-//
-// Shifts blades toward a deeper autumn tone on top of the per-blade straw tint.
-//
-const FOREST_GRASS_HUE_VARY_MAX = 1
-const FOREST_GRASS_HUE_VARY_SKEW = 1
 const FOREST_GOLD_HEX = FOREST_PAL.gold
 //
 // Colour-world backdrop split: sky above the ground line, dark earth below.
 //
 const GROUND_DARK = forestRgb('groundDark')
-//
-// Dark warm soil tone of the short static root ticks under the grass tufts.
-//
-const GRASS_ROOT_RGB = forestRgb('groundLoam')
 //
 // Forest contour ink for trees, mushrooms, rocks, letters (not pure black).
 //
@@ -259,8 +239,8 @@ const WATER_FLOWER_X = WaterFlower.footXUnderHeart(LEFT_TREE_FOOT.x) + WATER_FLO
 const WATER_FLOWER_Z_UNDER_PLANTS = 0.2
 const WATER_FLOWER_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW - WATER_FLOWER_Z_UNDER_PLANTS
 //
-// Ground round the flower and its puddle stays free of plants, stones,
-// grass and decor mushrooms, so the flower and its bubble read by the tree.
+// Ground round the flower and its puddle stays free of plants, stones
+// and decor mushrooms, so the flower and its bubble read by the tree.
 //
 const WATER_FLOWER_CLEAR_SPAN = WaterFlower.clearSpan(WATER_FLOWER_X)
 //
@@ -276,8 +256,8 @@ const WATER_FLOWER_SPILT_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BE
 // left tree's trunk; its picture draws over the tree, just under the water
 // flower (the bug itself at BUG_Z, by the shore's stone pile). Its tunnel
 // lies under a layer of soil below the burrow and draws over the tree's
-// roots and under the burrow's picture. Its ground stays free of plants,
-// stones and grass.
+// roots and under the burrow's picture. Its ground stays free of plants
+// and stones.
 //
 const BUG_HOLE_FROM_TRUNK = 125
 const BUG_HOLE_X = LEFT_TREE_FOOT.x - BUG_HOLE_FROM_TRUNK
@@ -318,7 +298,7 @@ const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_FRONT_Z
 //
 const TRUNK_EXCLUDE_HALF = 50
 //
-// The east ground starts this far past the branch trampoline's grass
+// The east ground starts this far past the branch trampoline's decor
 // clearing; the stalk eyes, ear-trees and east rocks are laid out from there.
 //
 const EAST_GROUND_TRAMP_GAP = 42
@@ -609,7 +589,7 @@ const GROUND_STONE_COUNT = 26
 const groundStonePlansByK = new WeakMap()
 //
 // Every GROUND_STONE_FRONT_EVERY-th stone stands in front of the hero (under
-// the grass blades), smaller (GROUND_STONE_FRONT_SIZE of the others) and
+// the front floor plants), smaller (GROUND_STONE_FRONT_SIZE of the others) and
 // sunk GROUND_STONE_FRONT_SINK px deeper so it never hides him whole.
 //
 const GROUND_STONE_FRONT_EVERY = 4
@@ -779,28 +759,27 @@ const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
 const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 //
-// Grass grows in tufts: baked blade sprites (several silhouette variants,
-// tinted at draw time) clustered around random tuft centres instead of an
-// even spread across the ground.
+// Front ground layer: the base the forest-floor front decor, the bomb trees'
+// roots and trunks and the cave hero blit stack on.
 //
-const GRASS_Z = 20
+const GROUND_FRONT_Z = 20
 //
 // Pit-cave hero blit — above trampoline bake (player + 22) and forest-floor front decor.
 //
-const PIT_CAVE_HERO_FOREGROUND_Z = GRASS_Z + 14
+const PIT_CAVE_HERO_FOREGROUND_Z = GROUND_FRONT_Z + 14
 //
 // Colour-world forest floor: hill and cream mushrooms behind the hero (under
-// the decor mushrooms at z 7), ferns and plumes in front of him under grass.
+// the decor mushrooms at z 7), ferns and plumes in front of him.
 //
 const FOREST_FLOOR_BACK_Z = 6.5
-const FOREST_FLOOR_FRONT_Z = GRASS_Z - 1
+const FOREST_FLOOR_FRONT_Z = GROUND_FRONT_Z - 1
 const GROUND_STONE_FRONT_Z = FOREST_FLOOR_FRONT_Z - 0.5
 const FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
 const FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
-const FOREST_EAR_TREE_ROOTS_Z = GRASS_Z + 1
-const FOREST_EAR_TREE_TRUNK_OVERLAY_Z = GRASS_Z + 2
+const FOREST_EAR_TREE_ROOTS_Z = GROUND_FRONT_Z + 1
+const FOREST_EAR_TREE_TRUNK_OVERLAY_Z = GROUND_FRONT_Z + 2
 const FOREST_FALL_TWIG_FRONT_Z = FOREST_EAR_TREE_TRUNK_OVERLAY_Z - 0.5
-const FOREST_EAR_TREE_BRANCHES_Z = GRASS_Z + 3
+const FOREST_EAR_TREE_BRANCHES_Z = GROUND_FRONT_Z + 3
 const FOREST_SPIKY_TOMATO_Z = FOREST_EAR_TREE_BRANCHES_Z + 0.5
 //
 // The knocked apple falls and lies in front of everything on the ground.
@@ -830,7 +809,6 @@ const PROPELLER_BUD_EXIT_RISE = 220
 const TOMATO_BURST_HERO_SAFE_RADIUS = 100
 const TOMATO_BURST_HERO_SAFE_SEC = 3.2
 const FOREST_EAR_TREE_COUNT = 2
-const GRASS_TUFT_COUNT = 22
 //
 // Right-ground discovery fades into the unknown instead of cutting on a strip.
 //
@@ -878,10 +856,10 @@ const TRAMP_W = Math.round(70 * TRAMP_SIZE_SCALE)
 const TRAMP_TOTAL_W = TRAMP_W + 4
 const TRAMP_TOTAL_H = Math.ceil(TRAMP_W * CUTE_MUSHROOM_ASPECT) + 4
 //
-// No grass grows in front of the trampoline mushroom — blades this close to
-// its centre are skipped so nothing covers the face.
+// Ground decor keeps this clear of the trampoline mushroom's centre so
+// nothing covers its face.
 //
-const TRAMP_GRASS_CLEAR_HALF = TRAMP_TOTAL_W / 2 + 12
+const TRAMP_GROUND_CLEAR_HALF = TRAMP_TOTAL_W / 2 + 12
 //
 // Small decor mushrooms keep the same distance from the trampoline centre —
 // wide enough that even the widest cap never overlaps the trampoline face.
@@ -1021,10 +999,10 @@ const FOREST_DROWN_HERO_UNDERWATER_Z = LAKE_Z - 0.1
 //
 const FOREST_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 //
-// The stone pile on the lake's tree-side bank draws above the swaying grass
-// and the water fill.
+// The stone pile on the lake's tree-side bank draws above the front floor
+// decor and the water fill.
 //
-const SHORE_END_ROCK_Z = GRASS_Z + 1
+const SHORE_END_ROCK_Z = GROUND_FRONT_Z + 1
 //
 // The apple bug draws in front of that pile (it hunts by the lake right in
 // front of it).
@@ -1046,7 +1024,7 @@ const FOREST_MUSHROOM_WHISTLE_SMOOTH = 7
 const SURFACE_DETECT_Y = 38
 //
 // The hero stands this far under the ground line (his feet sink a little
-// into the grass): the floor colliders' top and his ground spots.
+// into the ground): the floor colliders' top and his ground spots.
 //
 const HERO_FLOOR_SINK = 2
 const HERO_FLOOR_Y = FLOOR_Y + HERO_FLOOR_SINK
@@ -1472,11 +1450,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
     //
-    // Computed here (before grass) so the grass field can exclude the same
-    // spots the ear-trees will actually plant at - see EAR_TREE_TRUNK_GRASS_CLEAR_HALF.
-    //
-    const grassLayer = createForestGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones, earTreeSpots, treeFruitAnchorCfg)
-    //
     // Rocks and mushrooms bake one or two canvases per instance (dozens of
     // decor pieces total). Registering them all into one shared atlas (built
     // right after both are placed) means every decor sprite on screen shares
@@ -1576,7 +1549,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       treeData,
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
       wallObjs: floorBounds.walls,
-      grassLayer,
       rockObjs,
       mushObjs,
       predator,
@@ -2375,16 +2347,6 @@ function syncForestWorldBirdsVolume(inst) {
 // Autoplay rejections are retried by the next frame's sync.
 //
 function ignoreForestBirdsAudioError() {}
-//
-// True when world X lies in the early ground-peek band after G — the
-// LEFT_MARGIN..mouth-shelf span of the surface decor (rocks, mushrooms,
-// grass).
-//
-function isForestWorldXInGroundPeekZone(inst, worldX) {
-  if (worldX == null || !inst.zones?.predatorAwake) return false
-  const floorEndX = getForestCaveMouthFloorLeftX(getCrackZone(WORLD_W, FLOOR_Y))
-  return worldX >= LEFT_MARGIN && worldX <= floorEndX
-}
 function applyZoneVisibility(inst) {
   const z = inst.zones
   const leftGroundOpen = z.groundDecorLeft
@@ -2414,15 +2376,10 @@ function applyZoneVisibility(inst) {
     const rightOp = forestRightDecorOpacity(inst, o)
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
-  inst.grassLayer.layer.hidden = !isForestGrassLayerVisible(inst)
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   syncForestMidgeDrawColor(inst)
   syncForestPredatorVisibility(inst)
-}
-function isForestGrassLayerVisible(inst) {
-  const z = inst.zones
-  return z.groundDecorLeft || z.groundRightStripMax >= 0
 }
 //
 // Shows or hides a floor decor sprite — moves off-screen when hidden so nothing
@@ -2574,7 +2531,7 @@ function buildForestFloorBlockers(trampX, branchTrampX, buoySpots, shoreTreeLayo
     { x: trampX, half: TRAMP_MUSHROOM_CLEAR_HALF },
     { x: branchTrampX, half: TRAMP_MUSHROOM_CLEAR_HALF },
     ...(buoySpots ?? []).map(s => ({ x: s.x, half: FOREST_FLOOR_STALK_EYE_CLEAR_HALF })),
-    ...(earTreeSpots ?? []).map(s => ({ x: s.x, half: EAR_TREE_TRUNK_GRASS_CLEAR_HALF }))
+    ...(earTreeSpots ?? []).map(s => ({ x: s.x, half: EAR_TREE_TRUNK_CLEAR_HALF }))
   ]
   treeFruitAnchorCfg && blockers.push(forestAnchorFruitForestFloorBlocker(treeFruitAnchorCfg))
   LEFT_TREE_CLEAR_SPANS.forEach(span => blockers.push(spanBlocker(span)))
@@ -2970,15 +2927,12 @@ const FOREST_SHORE_TREE_EAR_TREE_CLEAR_HALF = 210
 const FOREST_EAR_TREE_MUSHROOM_TRAMP_CLEAR_HALF = 100
 const FOREST_EAR_TREE_STALK_EYE_CLEAR_HALF = 110
 //
-// Keeps grass blades from spawning over an ear-tree's trunk footprint - the
-// trunk polygon (z = player - 1) sits BELOW the grass layer (GRASS_Z = 20),
-// so an unexcluded blade fully hides it, leaving only the branches (which
-// reach up and out past the grass silhouette) visible - looking exactly like
-// "floating branches" or "no trunk at all". Covers the widest possible trunk
-// base (EAR_TREE_TRUNK_W_BASE * max trunkWScale * base taper mult + wobble +
-// outline pad) plus a blade's own half-width.
+// Front floor decor keeps clear of an ear-tree's trunk footprint (it draws
+// over the trunk and would hide it). Covers the widest possible trunk base
+// (EAR_TREE_TRUNK_W_BASE * max trunkWScale * base taper mult + wobble +
+// outline pad) plus a little slack.
 //
-const EAR_TREE_TRUNK_GRASS_CLEAR_HALF = 26
+const EAR_TREE_TRUNK_CLEAR_HALF = 26
 const FOREST_PLANT_WHISPER_MAX_VOLUME = 0.42
 //
 // Minimum change in proximity (0..1) per frame to count as moving toward or
@@ -3400,13 +3354,13 @@ function maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded) {
   }
 }
 //
-// X where the east ground starts (past the branch trampoline's grass
+// X where the east ground starts (past the branch trampoline's decor
 // clearing) — a pure function of TREE_X and fixed offsets, so it can be
 // computed this early in the bootstrap.
 //
 function forestEastGroundStartX() {
   const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
-  return branchTrampX + TRAMP_GRASS_CLEAR_HALF + EAST_GROUND_TRAMP_GAP
+  return branchTrampX + TRAMP_GROUND_CLEAR_HALF + EAST_GROUND_TRAMP_GAP
 }
 //
 // Physics boundary walls, ceiling, and floor.
@@ -3447,7 +3401,7 @@ function createLevelBounds(k) {
     CFG.game.platformName
   ])
   //
-  // Ground strip past the cave mouth — grass and decor continue to the edge.
+  // Ground strip past the cave mouth — decor continues to the edge.
   //
   const postCaveW = Math.max(0, WORLD_W - RIGHT_MARGIN - crack.x2)
   let postCaveFloor = null
@@ -3586,116 +3540,6 @@ function tagWoodPlatform(platform, sound, heroInst) {
     sound._l2Surface = 'wood'
     sound._forestSurface = 'wood'
   })
-}
-//
-// Swaying grass — the shared Grass component, excluding water, trunk, the
-// trampoline mushroom band, the anchor-apple landing strip, and every
-// ear-tree's trunk footprint (so no blade ever covers its face). The tint
-// callback also hides blades of unexplored ground sides.
-//
-function createForestGrass(k, waterX1, waterX2, trampX, branchTrampX, zones, earTreeSpots, treeFruitAnchorCfg) {
-  const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
-  const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
-  const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
-  const trampR = trampX + TRAMP_GRASS_CLEAR_HALF
-  const branchL = branchTrampX - TRAMP_GRASS_CLEAR_HALF
-  const branchR = branchTrampX + TRAMP_GRASS_CLEAR_HALF
-  const earTreeExcluded = (x) => (earTreeSpots ?? []).some(spot =>
-    x >= spot.x - EAR_TREE_TRUNK_GRASS_CLEAR_HALF && x <= spot.x + EAR_TREE_TRUNK_GRASS_CLEAR_HALF)
-  const excluded = (x) => (x >= waterX1 && x <= waterX2) ||
-    (x >= trunkL && x <= trunkR) ||
-    (x >= trampL && x <= trampR) ||
-    (x >= branchL && x <= branchR) ||
-    earTreeExcluded(x) ||
-    (treeFruitAnchorCfg && isForestAnchorFruitGroundX(x, treeFruitAnchorCfg)) ||
-    LEFT_TREE_CLEAR_SPANS.some(span => x >= span.x1 && x <= span.x2) ||
-    isCrackGrassExcluded(x, WORLD_W)
-  const grass = Grass.create({
-    k,
-    floorY: FLOOR_Y,
-    left: LEFT_MARGIN + 20,
-    right: WORLD_W - RIGHT_MARGIN - 20,
-    tuftCount: GRASS_TUFT_COUNT,
-    z: GRASS_Z,
-    excluded,
-    postBakeCanvas: applyForestGameplaySharpBake,
-    getTint: (blade) => forestGrassTint(zones, blade),
-    roots: true,
-    getRootColor: forestGrassRootColor,
-    getRootVisible: (worldX) => forestGrassRootVisible(zones, worldX),
-    hueVaryMax: FOREST_GRASS_HUE_VARY_MAX,
-    hueVarySkew: FOREST_GRASS_HUE_VARY_SKEW
-  })
-  grass.layer.hidden = true
-  return grass
-}
-//
-// Grass tint for the ground-peek band (through the cave mouth) — warm straw.
-//
-function forestGroundPeekGrassTint(sc, blade) {
-  if (!isForestWorldXInGroundPeekZone(sc, blade.x)) return null
-  return GRASS_WARM
-}
-//
-// Short static root ticks under ground grass tufts — dark loam tone.
-//
-function forestGrassRootColor() {
-  return GRASS_ROOT_RGB
-}
-//
-// Grass roots stay visible for every explored ground strip — unlike blades,
-// they must not fade with forestRightWorldOpacity while the hero walks in.
-//
-function forestGrassRootVisible(zones, worldX) {
-  const sc = zones._sceneRef
-  if (!sc) return false
-  const lakeX1 = zones._lakeX1
-  const lakeX2 = zones._lakeX2
-  if (lakeX1 != null && lakeX2 != null && worldX >= lakeX1 && worldX <= lakeX2) return false
-  if (isForestOpenPitMouthWorldX(sc.pit, worldX)) return false
-  if (isForestWorldXInGroundPeekZone(sc, worldX)) return true
-  const side = worldX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-  if (side === 'left') return zones.groundDecorLeft
-  return (zones.groundRightStripMax ?? -1) >= 0
-}
-//
-// Resolves the tint of one grass blade for the current frame: null while the
-// blade's ground side is unexplored or off camera, otherwise grass green.
-//
-function forestGrassTint(zones, blade) {
-  const sc = zones._sceneRef
-  if (!sc) return null
-  const lakeX1 = zones._lakeX1
-  const lakeX2 = zones._lakeX2
-  if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
-    return null
-  }
-  if (isForestOpenPitMouthWorldX(sc.pit, blade.x)) return null
-  const peekTint = forestGroundPeekGrassTint(sc, blade)
-  if (peekTint) return peekTint
-  if (sc.k) {
-    if (sc._grassCullFrame !== sc.k.time()) {
-      sc._grassCullFrame = sc.k.time()
-      const camX = sc.k.camPos().x
-      const zoom = sc.camera?.zoom || 1
-      const half = (sc.camera?.viewW || VIEW_W) / (2 * zoom) + 48
-      sc._grassCullMinX = camX - half
-      sc._grassCullMaxX = camX + half
-    }
-    if (blade.x < sc._grassCullMinX || blade.x > sc._grassCullMaxX) return null
-  }
-  if (zones.groundDecorRight) return GRASS_GREEN
-  const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-  if (side === 'left') {
-    if (!zones.groundDecorLeft) return null
-    const leftFade = sc.leftDecorFade ?? 1
-    if (leftFade < 0.04) return null
-    return leftFade >= 1 ? GRASS_GREEN : { ...GRASS_GREEN, opacity: leftFade }
-  }
-  const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
-  const op = forestRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
-  if (op < 0.04) return null
-  return op >= 1 ? GRASS_GREEN : { ...GRASS_GREEN, opacity: op }
 }
 //
 // Ground stones — the sheet's ground stones (forestGroundStones()), each
@@ -4105,7 +3949,7 @@ function isLakeLayerVisible(k, zones, lake) {
   return !!zones.water && isLakeFillInCameraView(k, zones._sceneRef, lake.x1, lake.x2Bake)
 }
 //
-// Draws lake cap rocks above grass and the water fill (sprites stay off-screen).
+// Draws lake cap rocks above the front floor decor and the water fill (sprites stay off-screen).
 //
 function createLakeShoreRockLayer(k, zones) {
   return k.add([
@@ -4782,7 +4626,7 @@ function drawForestPitMouthEarthGapFill(inst, k) {
 }
 //
 // Paints the stone pile on the lake's tree-side bank when the water zone is
-// open (above the grass and the water fill; it reaches down to the bed).
+// open (above the front floor decor and the water fill; it reaches down to the bed).
 //
 function drawLakeShoreRocksWorld(inst) {
   const pile = inst.zones._lake?.stonePile
@@ -6589,7 +6433,7 @@ function buildForestTreeFruitAnchorCfg() {
     trunkX: TREE_X,
     trunkHalf: TRUNK_EXCLUDE_HALF,
     branchTrampX: TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X,
-    trampClearHalf: TRAMP_GRASS_CLEAR_HALF
+    trampClearHalf: TRAMP_GROUND_CLEAR_HALF
   }
 }
 //
@@ -7401,7 +7245,7 @@ function forestPitCaveExitX(inst) {
     trunkX,
     trunkHalf,
     branchTrampX,
-    trampClearHalf: TRAMP_GRASS_CLEAR_HALF
+    trampClearHalf: TRAMP_GROUND_CLEAR_HALF
   })
 }
 function launchHeroFromPitCaveMushroom(inst) {

@@ -83,6 +83,20 @@ export async function loadForestFloorHill() {
 }
 
 /**
+ * Paints the level's mossy hill onto a canvas (the menu backdrop): its peak
+ * side at x2, standing on the ground line, at the given scale of its level
+ * size. Needs loadForestFloorHill first.
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {number} x2 - X of the hill's right (peak) edge
+ * @param {number} floorY - Ground line Y
+ * @param {number} [scale=1] - Size relative to the level's hill
+ */
+export function paintForestFloorHill(ctx, x2, floorY, scale = 1) {
+  const w = HILL_W * scale
+  paintHillPicture(ctx, { x1: x2 - w, x2, floorY, height: w * HILL_RECT.h / HILL_RECT.w }, scale)
+}
+
+/**
  * Creates the forest-floor dressing (ground rim, hill, ferns, spike bushes,
  * mushrooms) and its two draw layers — one behind the hero, one in front.
  * @param {Object} cfg - Configuration
@@ -280,12 +294,14 @@ function paintItem(ctx, inst, item) {
 // The hill picture standing on the ground line (nothing if it failed to load).
 //
 function paintHill(ctx, inst) {
-  const { hill } = inst
+  paintHillPicture(ctx, inst.hill, 1)
+}
+function paintHillPicture(ctx, hill, scale) {
   if (!hillImage) return
   ctx.save()
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(hillImage, HILL_RECT.x, HILL_RECT.y, HILL_RECT.w, HILL_RECT.h,
-    hill.x1, hill.floorY + HILL_SINK - hill.height, hill.x2 - hill.x1, hill.height)
+    hill.x1, hill.floorY + HILL_SINK * scale - hill.height, hill.x2 - hill.x1, hill.height)
   ctx.restore()
 }
 //

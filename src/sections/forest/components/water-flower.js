@@ -6,6 +6,7 @@ import * as TreeJolt from '../utils/forest-tree-jolt.js'
 import * as Sound from '../../../utils/sound.js'
 import { FOREST_CFG } from '../cfg.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
+import * as EarthMerge from '../utils/forest-earth-merge.js'
 
 //
 // The water flower by the left big tree: a red flower hanging from a mossy
@@ -156,6 +157,16 @@ export function setHidden(inst, hidden) {
 }
 
 /**
+ * The flower's roots as a static layer for the merged earth sprite
+ * (forest-earth-merge.js).
+ * @param {Object} inst - Water flower inst
+ * @returns {Array<{sprite: string, x: number, y: number}>}
+ */
+export function undergroundLayers(inst) {
+  return [{ sprite: inst.picture.roots.sprite, x: inst.rootsPos.x, y: inst.rootsPos.y }]
+}
+
+/**
  * Bakes the flower's picture once per live k (waits for it to load).
  * @param {Object} k - Kaplay instance
  * @returns {Promise<Object|null>} Baked picture (null if it failed to load)
@@ -301,7 +312,7 @@ function onUpdate(inst) {
 function onDraw(inst) {
   const { state, pop } = inst
   const hanging = state === STATES.GROWING || state === STATES.RIPE
-  inst.k.drawSprite({ sprite: inst.picture.roots.sprite, pos: inst.rootsPos })
+  EarthMerge.isMerged(inst, inst.picture.roots.sprite) || inst.k.drawSprite({ sprite: inst.picture.roots.sprite, pos: inst.rootsPos })
   hanging && drawHanging(inst)
   WaterBubble.drawPop(inst.bubble, pop.x, pop.y, pop.r, pop.t)
   inst.k.drawSprite({

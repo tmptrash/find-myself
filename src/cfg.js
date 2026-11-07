@@ -224,6 +224,11 @@ export const CFG = {
         //
         playfieldOuter: PALETTE.gray0,
         //
+        // Debug FPS readout in the corner — quiet grey with a dark drop shadow.
+        //
+        fpsHudText: PALETTE.gray4,
+        fpsHudShadow: PALETTE.gray0,
+        //
         // Forest sky — a bright day: light blue overhead, pale blue-mint in
         // the middle, sunlit pale yellow at the horizon; dawn gold lives in
         // forestSkyDawnGlow and the lower sky band only.
@@ -343,7 +348,7 @@ export const CFG = {
         //
         // Apple bug by the left big tree: its snake-like tongue (a darker
         // fork at the tip), its soft belly under the shell, the tint that
-        // pushes its far legs back and the dark it turns as it dashes into
+        // pushes its far legs back and the dark it turns as it runs into
         // its burrow.
         //
         appleBug: {

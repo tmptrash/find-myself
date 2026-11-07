@@ -186,17 +186,46 @@ function getTargetDim(value) {
   return typeof value === 'function' ? value() : value
 }
 //
-// Measure text dimensions using Kaplay's formatText for precise sizing
+// Measure text dimensions using Kaplay's formatText for precise sizing.
+// Formatting lays out every glyph, so the size is kept until the label or
+// its font changes instead of being measured again every frame.
 //
-function measureText(k, text, font) {
-  const fmt = k.formatText({
+function measureText(inst, text) {
+  const cached = inst._measured
+  if (cached && cached.text === text && cached.font === inst.font) return cached
+  const fmt = inst.k.formatText({
     text,
     size: FONT_SIZE,
-    font,
+    font: inst.font,
     align: "center",
     lineSpacing: LINE_SPACING
   })
-  return { width: fmt.width, height: fmt.height }
+  inst._measured = { text, font: inst.font, width: fmt.width, height: fmt.height }
+  return inst._measured
+}
+//
+// The label laid out once per text and opacity (k.drawText formats the
+// whole string again on every call); only its position changes per frame.
+//
+function labelFormat(inst, text) {
+  const key = `${inst.opacity}|${text}`
+  if (inst._labelKey === key && inst._labelFont === inst.font) return inst._labelFmt
+  const { k } = inst
+  inst._labelFmt = k.formatText({
+    text,
+    size: FONT_SIZE,
+    font: inst.font,
+    align: "center",
+    lineSpacing: LINE_SPACING,
+    pos: k.vec2(0, 0),
+    anchor: "center",
+    color: k.rgb(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B),
+    opacity: inst.opacity,
+    fixed: true
+  })
+  inst._labelKey = key
+  inst._labelFont = inst.font
+  return inst._labelFmt
 }
 //
 // Ear sits on its own bubble; a neighbour with higher z covers this ear
@@ -238,21 +267,10 @@ function onDraw(inst) {
     inst.opacity,
     layout.showBelow
   )
-  k.drawText({
-    text: layout.labelText,
-    size: FONT_SIZE,
-    font: inst.font,
-    align: "center",
-    lineSpacing: LINE_SPACING,
-    pos: k.vec2(
-      Math.round(layout.bubbleX + layout.bubbleW / 2),
-      Math.round(layout.bubbleY + layout.bubbleH / 2)
-    ),
-    anchor: "center",
-    color: k.rgb(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B),
-    opacity: inst.opacity,
-    fixed: true
-  })
+  const label = labelFormat(inst, layout.labelText)
+  label.opt.pos.x = Math.round(layout.bubbleX + layout.bubbleW / 2)
+  label.opt.pos.y = Math.round(layout.bubbleY + layout.bubbleH / 2)
+  k.drawFormattedText(label)
 }
 //
 // Resolves bubble geometry for this frame and registers it for stacking.
@@ -298,7 +316,7 @@ function refreshLayout(inst) {
     bubbleW = Math.round(target.iconW + BUBBLE_PADDING_X * 2)
     bubbleH = Math.round(target.iconH + BUBBLE_PADDING_Y * 2)
   } else {
-    const { width: textW, height: textH } = measureText(k, labelText, inst.font)
+    const { width: textW, height: textH } = measureText(inst, labelText)
     bubbleW = Math.round(textW + BUBBLE_PADDING_X * 2)
     bubbleH = Math.round(textH + BUBBLE_PADDING_Y * 2)
   }

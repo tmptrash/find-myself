@@ -2,6 +2,7 @@ import { FOREST_PAL } from './forest-palette.js'
 import { applyForestGameplaySharpBake } from './forest-focus-depth.js'
 import * as SoilSeam from './forest-soil-seam.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as PolyBatch from '../../../utils/poly-batch.js'
 //
 // Forest lake, shared by the forest level and the menu backdrop: a
 // see-through water body baked as an animated wave cycle, over a static bed
@@ -287,21 +288,23 @@ export function drawBed(k, lake, opacity = 1) {
 /**
  * Sways and draws the algae: slow sway with the bend growing toward the tip
  * and lagging behind the base; fronds also ripple along their length. All
- * leaf polygons first, then the frond midribs, to keep the primitive batch
- * unbroken.
+ * leaf polygons first, then the frond midribs, all in one batched polygon
+ * (one draw call instead of one or two per blade).
  * @param {Object} k - Kaplay inst
  * @param {Object} lake - Lake inst
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawAlgae(k, lake, opacity = 1) {
   const time = k.time()
-  for (const blade of lake.algae.blades) {
+  const { blades, indices, batch } = lake.algae
+  for (const blade of blades) {
     updateLakeAlgaeBlade(blade, time)
-    k.drawPolygon({ pts: blade.poly, indices: lake.algae.indices, color: blade.color, opacity })
+    PolyBatch.addPolygon(batch, blade.poly, indices, blade.color)
   }
-  for (const blade of lake.algae.blades) {
-    blade.isFrond && k.drawLines({ pts: blade.spine, width: LAKE_ALGAE_MIDRIB_PX, color: blade.midrib, opacity })
+  for (const blade of blades) {
+    blade.isFrond && PolyBatch.addPolyline(batch, blade.spine, LAKE_ALGAE_MIDRIB_PX, blade.midrib)
   }
+  PolyBatch.flush(batch, k, opacity)
 }
 
 /**
@@ -894,7 +897,7 @@ function buildLakeAlgae(k, lake) {
       })
     }
   }
-  return { blades: fronds, indices: lakeAlgaeStripIndices() }
+  return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create() }
 }
 //
 // Triangle strip between the left and right edges of a leaf polygon (left

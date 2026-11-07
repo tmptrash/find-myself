@@ -4,6 +4,7 @@ import { clearPictureRect, cutPicture, loadPictureImage } from './forest-picture
 import { isWorldSpanInView } from './forest-static-bake.js'
 import { bakeForestFootPlants } from './forest-foot-plants.js'
 import { STONE_KIND, forestGroundStones } from './forest-stones.js'
+import * as EarthMerge from './forest-earth-merge.js'
 //
 // The right big tree (shore accent left of the chain-buoy eyes), cut from
 // assets/forest/right-tree.png: the tree above ground stands on the ground line, its roots go under it, and
@@ -131,6 +132,17 @@ export function create(cfg) {
 }
 
 /**
+ * The tree's roots as a static layer for the merged earth sprite
+ * (forest-earth-merge.js).
+ * @param {Object} inst - Shore-tree inst
+ * @returns {Array<{sprite: string, x: number, y: number}>}
+ */
+export function undergroundLayers(inst) {
+  const roots = bakeSprites(inst)?.roots
+  return roots ? [{ sprite: roots.sprite, x: roots.x, y: roots.y }] : []
+}
+
+/**
  * The broken branch's sprite for forest-horiz-fall-twig.js: its stick's
  * middle line runs along +X from under the cut stump, which is its anchor
  * (Kaplay anchor units), at the length the twig module expects.
@@ -189,7 +201,7 @@ export function onDraw(inst, opacity = 1, view = null) {
   if (!baked) return
   const k = inst.k
   const { crown, roots, plants } = baked
-  isWorldSpanInView(roots.x - CULL_PAD, roots.x + roots.w + CULL_PAD, view) &&
+  isWorldSpanInView(roots.x - CULL_PAD, roots.x + roots.w + CULL_PAD, view) && !EarthMerge.isMerged(inst, roots.sprite) &&
     k.drawSprite({ sprite: roots.sprite, pos: k.vec2(roots.x, roots.y), opacity })
   if (!isWorldSpanInView(crown.x - CULL_PAD, crown.x + crown.w + CULL_PAD, view)) return
   k.drawSprite({ sprite: crown.sprite, pos: k.vec2(crown.x, crown.y), opacity })

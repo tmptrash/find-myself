@@ -103,6 +103,35 @@ export function addShape(inst, shape, indices, ox, oy, sx, sy, cos, sin, color) 
 }
 
 /**
+ * Adds a polygon given in world coordinates with its own triangle indices.
+ * @param {Object} inst - Batch inst
+ * @param {Array<{x: number, y: number}>} pts - World vertices
+ * @param {number[]} indices - Triangle indices into pts
+ * @param {Object} color - Kaplay colour
+ */
+export function addPolygon(inst, pts, indices, color) {
+  const base = inst.count
+  pts.forEach((p, i) => setVertex(inst, base + i, p.x, p.y, color))
+  indices.forEach(i => inst.indices.push(base + i))
+  inst.count += pts.length
+}
+
+/**
+ * Adds a polyline with round joints (the geometry k.drawLines draws by
+ * default): a quad per segment and a disc at every inner point.
+ * @param {Object} inst - Batch inst
+ * @param {Array<{x: number, y: number}>} pts - World points
+ * @param {number} width - Line width
+ * @param {Object} color - Kaplay colour
+ */
+export function addPolyline(inst, pts, width, color) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    addLine(inst, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, width, color)
+    i > 0 && addDisc(inst, pts[i].x, pts[i].y, width * 0.5, color)
+  }
+}
+
+/**
  * Draws everything collected so far in one call and clears the batch.
  * @param {Object} inst - Batch inst
  * @param {Object} k - Kaplay instance

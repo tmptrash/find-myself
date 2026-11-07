@@ -62,6 +62,10 @@ const BURST_ANGLE_RANGE_DEG = 150
 //
 const LEAF_SIZE_MIN = 10
 const LEAF_SIZE_RANGE = 9
+//
+// Leaf sprites are baked per half pixel of size (see ensureForestLeafSprite).
+//
+const LEAF_SIZE_STEPS_PER_PX = 2
 const LEAF_ROT_SPEED_RANGE = 420
 const LEAF_BEZIER_STEPS = 6
 const LEAF_GRAVITY_SCALE = 0.55
@@ -156,6 +160,21 @@ export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   for (let i = 0; i < count; i++) {
     pushParticle(inst, footX, footY, color, LANDING_SPEED_MIN, LANDING_SPEED_RANGE, true)
   }
+}
+/**
+ * Bakes now (at level load) every leaf sprite a burst of these colours can
+ * use, one per size step, so the burst itself (a death, a bomb) never bakes
+ * mid-game.
+ * @param {Object} inst - Particles inst
+ * @param {Array<{r: number, g: number, b: number}>} colors - Burst palette
+ */
+export function prewarmLeafBurst(inst, colors) {
+  const steps = Math.round(LEAF_SIZE_RANGE * LEAF_SIZE_STEPS_PER_PX)
+  colors.forEach(c => {
+    for (let i = 0; i <= steps; i++) {
+      ensureForestLeafSprite(inst.k, LEAF_SIZE_MIN + i / LEAF_SIZE_STEPS_PER_PX, c.r, c.g, c.b)
+    }
+  })
 }
 //
 // Leaf-shaped radial burst (e.g. forest touch deaths) — wide arc with
@@ -527,7 +546,7 @@ function forestLeafSpriteCache(k) {
   return cache
 }
 function ensureForestLeafSprite(k, size, r, g, b) {
-  const sizeKey = Math.round(size * 2) / 2
+  const sizeKey = Math.round(size * LEAF_SIZE_STEPS_PER_PX) / LEAF_SIZE_STEPS_PER_PX
   const name = FOREST_LEAF_SPRITE_PREFIX +
     String(sizeKey).replace('.', '_') + '_' + r + '_' + g + '_' + b
   const cache = forestLeafSpriteCache(k)

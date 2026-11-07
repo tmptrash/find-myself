@@ -1,5 +1,4 @@
 import * as BugPicture from '../utils/forest-apple-bug-picture.js'
-import * as HolePicture from '../utils/forest-bug-hole-picture.js'
 import * as TunnelPicture from '../utils/forest-bug-tunnel-picture.js'
 import * as WaterFlower from './water-flower.js'
 import * as PredatorFeast from './predator-fruit-feast.js'
@@ -7,6 +6,7 @@ import * as TreeFruit from '../utils/forest-tree-fruit.js'
 import * as Atmosphere from '../utils/forest-level-atmosphere.js'
 import { FOREST_CFG } from '../cfg.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
+import * as EarthMerge from '../utils/forest-earth-merge.js'
 import { getRGB } from '../../../utils/helper.js'
 
 //
@@ -25,21 +25,21 @@ import { getRGB } from '../../../utils/helper.js'
 // carries and flees into the burrow, and comes straight out again. A crawler may race it for
 // the same apple until the bug has it in its mouth.
 //
-// It goes into the burrow with a dash from the doorway: on its way in it
-// darkens, fades out, shrinks a little and rises (it is going deeper), and
-// it comes out the same way backwards. The burrow's picture draws behind it.
+// Its burrow is a shaft going down from a mouth on the ground into a cave,
+// and it lives in the cave: it starts the level there and rests there
+// between outings, always in sight. It runs to the mouth, tips over its lip
+// head first and walks down the shaft's wall, turns onto the cave's floor at
+// the bottom, and climbs back up the same way, head up, to come out.
 //
-// Under the burrow, past a strip of soil, lies a cave: a moment after it
-// went in with an apple, the bug shows up in the cave's left end, runs along
-// its floor to the far end and stores the apple in a pile there, or eats it
-// bite by bite once the pile is full; then it turns and runs back up, and
-// later comes out of the burrow as before. An apple falling up there sends it
-// rushing back out at once: one in its mouth it drops where it stands.
+// With an apple it runs along the cave's floor to the far end and stores
+// the apple in a pile there, or eats it bite by bite once the pile is full,
+// then rests. An apple falling up there sends it rushing back out at once:
+// one in its mouth it drops where it stands.
 //
 const STATES = {
-  INSIDE: 'inside',
-  DOWN: 'down',
-  APPEAR: 'appear',
+  REST: 'rest',
+  DESCEND: 'descend',
+  ASCEND: 'ascend',
   TUNNEL: 'tunnel',
   STORE: 'store',
   EAT: 'eat',
@@ -55,8 +55,12 @@ const STATES = {
   TO_DROP: 'toDrop',
   BITE: 'bite'
 }
-const UNDERGROUND = new Set([STATES.INSIDE, STATES.DOWN, STATES.APPEAR, STATES.TUNNEL,
+const UNDERGROUND = new Set([STATES.REST, STATES.DESCEND, STATES.ASCEND, STATES.TUNNEL,
   STATES.STORE, STATES.EAT, STATES.OUT])
+//
+// Its hiding time runs while it is down in the cave.
+//
+const IN_CAVE = new Set([STATES.REST, STATES.TUNNEL, STATES.STORE, STATES.EAT])
 //
 // In the cave (and not on its way in or out of the dark) it hears an apple
 // fall up there.
@@ -180,20 +184,28 @@ const TURN_MIN_WIDTH = 0.55
 const TURN_HOP = 3.6
 const TURN_NOSE_UP = -0.12
 //
-// The burrow's doorway is DOOR_DX from the hole's middle on either side.
-// From there it darts in over RUSH_DURATION (at once at full speed, then
-// braking hard, RUSH_EASE_POWER): it gets
-// fully dark over the first RUSH_DARK_END share of the dash, fades out from
-// RUSH_FADE_START on, and ends DEEP_ZOOM of its size, DEEP_RISE px higher.
-// Coming out runs the same dash backwards.
+// It runs in at an even speed from DOOR_DX either side of the mouth's
+// middle to the lip on its own side over RUN_IN_DURATION, and hops out from
+// the lip to the doorway in climbOutHop (cfg).
+//
+// On the shaft's wall its body keeps its height off the wall (the walk is
+// the usual one, turned onto the wall). Going in, it tips over the lip round
+// its corner, walks down and at the bottom turns round its middle onto the
+// cave's floor (each turn as long a walk as a quarter circle of its height);
+// climbing out it does the same backwards, head up, in one fast jerk. It darkens to the cave's
+// dark over the first WALL_DARK_DEPTH px below the ground.
 //
 const DOOR_DX = 53
-const RUSH_DURATION = 0.17
-const RUSH_EASE_POWER = 3
-const RUSH_DARK_END = 0.55
-const RUSH_FADE_START = 0.4
-const DEEP_ZOOM = 0.84
-const DEEP_RISE = 4.8
+const RUN_IN_DURATION = 0.2
+const QUARTER_TURN = Math.PI / 2
+const WALL_DARK_DEPTH = 30
+//
+// At the shaft's foot it turns round a point as far from the wall and the
+// floor as its front reaches (its head, shell or front feet, plus
+// FRONT_REACH_PAD), so nothing of it goes past the wall while it turns.
+//
+const FRONT_REACH_PAD = 12
+const FAR_AWAY = 1e6
 //
 // Tunnel: full size like the apples there; its body follows the floor's
 // slope measured SLOPE_SPAN to either side. It puts an apple down over
@@ -202,25 +214,6 @@ const DEEP_RISE = 4.8
 // the pile, and it bites every BITE_CYCLE (head down for its first half),
 // creeping up to what is left of the apple, its mouth BITE_INTO into it.
 //
-// It comes into and leaves the tunnel through a "portal": a vertical line
-// at the cave's left end (where its rear sits at that end). Crossing it, it
-// is fully seen right of the PORTAL_FADE_W band, fades across it in
-// PORTAL_STRIPS steps and is gone left of the line — so going out its front
-// goes first, coming in its front shows first. Going out, the last
-// PORTAL_DIVE_DIST before its rear (and trailing legs, PORTAL_EXIT_PAD) is
-// past the line it darts (PORTAL_DIVE_DURATION, braking like the burrow's
-// dash); coming in it darts the same distance out of the dark from just
-// behind the line and walks on. PORTAL_REACH: how far ahead of its origin
-// its head and antennae reach; PORTAL_MASK_H covers the bug above and below
-// its ground.
-//
-const PORTAL_FADE_W = 80
-const PORTAL_STRIPS = 16
-const PORTAL_EXIT_PAD = 10
-const PORTAL_REACH = 60
-const PORTAL_MASK_H = 200
-const PORTAL_DIVE_DIST = 90
-const PORTAL_DIVE_DURATION = 0.15
 const SLOPE_SPAN = 12
 const PUT_DURATION = 0.3
 const PILE_SLOTS = [{ dx: 0, up: 0 }, { dx: -1.9, up: 0 }, { dx: -0.95, up: 1.7 }]
@@ -238,8 +231,9 @@ const HOLE_CLEAR_PAD = 10
 const pictureByK = new WeakMap()
 
 /**
- * Creates the bug inside its burrow (it comes out after a short while) and
- * the burrow's picture. Needs load(k) to have resolved first.
+ * Creates the bug resting in the cave under its burrow (it comes out after
+ * a short while) and the burrow's picture. Needs load(k) to have resolved
+ * first.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.holeX - World X of the burrow's middle on the ground line
@@ -250,8 +244,7 @@ const pictureByK = new WeakMap()
  * @param {Object} [cfg.midges] - Midges controller (prey over the lake)
  * @param {Object} [cfg.flower] - Water flower inst (its falling water scares the bug)
  * @param {Object} [cfg.predator] - Crawler inst (the bug leaves an apple it eats)
- * @param {number} cfg.backZ - Draw layer of the burrow's picture
- * @param {number} cfg.tunnelZ - Draw layer of the tunnel under the burrow (and the apples in it)
+ * @param {number} cfg.tunnelZ - Draw layer of the burrow (and the apples in its cave)
  * @param {number} cfg.z - Draw layer of the bug
  * @returns {Object|null} Bug inst (null if its pictures are not baked)
  */
@@ -259,23 +252,26 @@ export function create(cfg) {
   const { k, holeX, groundY, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null } = cfg
   const baked = pictureByK.get(k)
   if (!baked) return null
-  const { bug, hole, tunnel } = baked
-  const mouthX = holeX + (hole.hole.x1 + hole.hole.x2) * 0.5
-  const tunnelX = holeX + hole.leftStoneX
-  const tunnelTopY = groundY + PARAMS.tunnelDepth
+  const { bug, tunnel } = baked
+  const mouthX = holeX + (tunnel.mouth.x1 + tunnel.mouth.x2) * 0.5
+  const tunnelX = holeX
+  const tunnelTopY = groundY
   const inst = {
     k,
     bug,
-    hole,
     tunnel,
     holeX,
     groundY,
     surfaceY: groundY,
     mouthX,
+    tunnelX,
     tunnelPos: k.vec2(Math.round(tunnelX + tunnel.dx), Math.round(tunnelTopY + tunnel.dy)),
     tunnelFloor: tunnel.floor.map(p => ({ x: tunnelX + p.x, y: tunnelTopY + p.y })),
-    tunnelEndX: tunnelX + tunnel.endX,
-    portalX: tunnelX + tunnel.endX + bug.shellBox.x1,
+    restX: tunnelX + tunnel.restX,
+    mouthX1: tunnelX + tunnel.mouth.x1,
+    mouthX2: tunnelX + tunnel.mouth.x2,
+    wallFloor: [{ x: -FAR_AWAY, y: groundY }, { x: FAR_AWAY, y: groundY }],
+    wall: null,
     pileX: tunnelX + tunnel.pileX,
     floor: null,
     slope: 0,
@@ -286,7 +282,7 @@ export function create(cfg) {
     bitesLeft: 0,
     biteT: 0,
     standX: lakeX2 + PARAMS.lakeStandGap,
-    wanderX1: holeX + hole.hole.x2,
+    wanderX1: holeX + tunnel.lip.x2,
     wanderX2: treeX + PARAMS.wanderReach,
     appleX1: treeX - PARAMS.appleLeft,
     appleX2: treeX + PARAMS.appleRight,
@@ -294,23 +290,20 @@ export function create(cfg) {
     midges,
     flower,
     predator,
-    holePos: k.vec2(Math.round(holeX + hole.dx), Math.round(groundY + hole.dy)),
     farTint: getRGB(k, COLORS.farTint),
     tongueColor: getRGB(k, COLORS.tongue),
     forkColor: getRGB(k, COLORS.tongueFork),
     deepColor: getRGB(k, COLORS.deep),
-    state: STATES.INSIDE,
+    state: STATES.REST,
     plan: PLANS.WANDER,
     hideLeft: randomIn(PARAMS.hideMin, PARAMS.hideMax),
     nextHide: 0,
     scared: false,
     stateLeft: 0,
-    opacity: 0,
-    dark: 0,
-    zoom: DEEP_ZOOM,
-    rise: DEEP_RISE,
-    rush: { t: 0, dur: RUSH_DURATION, fromX: 0, toX: 0 },
-    diving: false,
+    dark: PARAMS.tunnelBugDark,
+    zoom: 1,
+    rise: 0,
+    rush: { t: 0, dur: RUN_IN_DURATION, fromX: 0, toX: 0 },
     time: 0,
     x: 0,
     goalX: 0,
@@ -342,15 +335,17 @@ export function create(cfg) {
     dropBites: 0,
     loose: []
   }
-  inst.x = inst.mouthX
-  inst.goalX = inst.mouthX
+  inst.x = inst.restX
+  inst.goalX = inst.restX
+  inst.floor = inst.tunnelFloor
+  updateFloor(inst)
   inst.legs = bug.legs.map((leg, i) => createLeg(inst, leg, i))
+  inst.frontReach = Math.max(bug.shellBox.x2, bug.mouth.x, ...inst.legs.map(leg => leg.rest)) + FRONT_REACH_PAD
   const tunnelObj = k.add([k.pos(0, 0), k.z(cfg.tunnelZ), { draw() { onDrawTunnel(inst) } }])
-  const backObj = k.add([k.pos(0, 0), k.z(cfg.backZ), { draw() { onDrawBack(inst) } }])
   const obj = k.add([k.pos(0, 0), k.z(cfg.z), { draw() { onDraw(inst) } }])
   obj.onUpdate(() => onUpdate(inst))
   inst.obj = obj
-  inst.layers = [tunnelObj, backObj, obj]
+  inst.layers = [tunnelObj, obj]
   return inst
 }
 
@@ -365,6 +360,16 @@ export function setHidden(inst, hidden) {
 }
 
 /**
+ * The burrow's tunnel picture as a static layer for the merged earth sprite
+ * (forest-earth-merge.js); the apples in it stay live.
+ * @param {Object} inst - Apple bug inst
+ * @returns {Array<{sprite: string, x: number, y: number}>}
+ */
+export function undergroundLayers(inst) {
+  return [{ sprite: inst.tunnel.sprite, x: inst.tunnelPos.x, y: inst.tunnelPos.y }]
+}
+
+/**
  * Bakes the bug's parts, its burrow and the tunnel under it once per live k
  * (waits for the pictures to load).
  * @param {Object} k - Kaplay instance
@@ -373,13 +378,12 @@ export function setHidden(inst, hidden) {
 export async function load(k) {
   const cached = pictureByK.get(k)
   if (cached) return cached
-  const [bug, hole, tunnel] = await Promise.all([
+  const [bug, tunnel] = await Promise.all([
     BugPicture.load(k, PARAMS.shellWidth),
-    HolePicture.load(k, PARAMS.holeWidth),
     TunnelPicture.load(k, PARAMS.tunnelWidth)
   ])
-  if (!bug || !hole || !tunnel) return null
-  const out = { bug, hole, tunnel }
+  if (!bug || !tunnel) return null
+  const out = { bug, tunnel }
   pictureByK.set(k, out)
   return out
 }
@@ -391,8 +395,8 @@ export async function load(k) {
  * @returns {{x1: number, x2: number}}
  */
 export function holeClearSpan(holeX) {
-  const place = HolePicture.layout(PARAMS.holeWidth)
-  return { x1: holeX + place.dx - HOLE_CLEAR_PAD, x2: holeX + place.dx + place.w + HOLE_CLEAR_PAD }
+  const { lip } = TunnelPicture.layout(PARAMS.tunnelWidth)
+  return { x1: holeX + lip.x1 - HOLE_CLEAR_PAD, x2: holeX + lip.x2 + HOLE_CLEAR_PAD }
 }
 
 /**
@@ -440,14 +444,14 @@ export function onBombBurst(inst) {
 function onUpdate(inst) {
   const dt = Math.min(MAX_FRAME_DT, inst.k.dt())
   inst.time += dt
-  UNDERGROUND.has(inst.state) && (inst.hideLeft -= dt)
+  IN_CAVE.has(inst.state) && (inst.hideLeft -= dt)
   updateBehaviour(inst, dt)
-  if (inst.state === STATES.INSIDE || inst.state === STATES.DOWN) return
   updateFloor(inst)
   updateTurn(inst, dt)
   updatePose(inst, dt)
   updateLegs(inst, dt)
   updateTongue(inst, dt)
+  inst.wall && updateWall(inst)
   if (inst.floor) return
   checkWater(inst)
   checkCrawler(inst)
@@ -455,9 +459,9 @@ function onUpdate(inst) {
 function updateBehaviour(inst, dt) {
   TUNNEL_ALERT.has(inst.state) && !inst.rushingOut && findApple(inst) && rushOutOfTunnel(inst)
   switch (inst.state) {
-    case STATES.INSIDE: return tickInside(inst)
-    case STATES.DOWN: return tickDown(inst, dt)
-    case STATES.APPEAR: return tickAppear(inst, dt)
+    case STATES.REST: return tickRest(inst)
+    case STATES.DESCEND: return tickDescend(inst, dt)
+    case STATES.ASCEND: return tickAscend(inst, dt)
     case STATES.TUNNEL: return tickTunnel(inst, dt)
     case STATES.STORE: return tickStore(inst, dt)
     case STATES.EAT: return tickEat(inst, dt)
@@ -475,32 +479,24 @@ function updateBehaviour(inst, dt) {
   }
 }
 //
-// Hidden in the burrow; an apple by the tree calls it out early unless it
+// Resting in the cave; an apple by the tree calls it out early unless it
 // is hiding scared. It stays in while a crawler eats round its grounds, and
-// picks what to do next before it comes out.
+// picks what to do next before it goes up.
 //
-function tickInside(inst) {
+function tickRest(inst) {
   const apple = findApple(inst)
   apple && !inst.scared && (inst.hideLeft = Math.min(inst.hideLeft, APPLE_NOTICE_DELAY))
   if (inst.hideLeft > 0 || crawlerOnGrounds(inst)) return
   inst.scared = false
   inst.plan = findApple(inst) ? PLANS.APPLE : Math.random() < PARAMS.lakeShare ? PLANS.LAKE : PLANS.WANDER
-  const dir = inst.plan === PLANS.LAKE ? -1 : 1
-  inst.facing = dir
-  inst.f = dir
-  inst.turnT = 1
-  inst.turnFlipped = true
-  inst.x = inst.mouthX
-  inst.goalX = inst.mouthX
-  inst.legs.forEach(leg => plantLeg(inst, leg))
-  startRush(inst, inst.mouthX + dir * DOOR_DX)
-  updateDepth(inst, 0, false)
-  inst.state = STATES.EMERGE
+  inst.rushingOut = inst.plan === PLANS.APPLE
+  inst.state = STATES.OUT
 }
+//
+// Out of the shaft at its lip: on to the doorway, then off to its plan.
+//
 function tickEmerge(inst, dt) {
-  const u = tickRush(inst, dt)
-  updateDepth(inst, 1 - u, false)
-  if (u < 1) return
+  if (tickRush(inst, dt) < 1) return
   if (inst.plan === PLANS.APPLE && claimApple(inst)) return
   if (inst.plan === PLANS.LAKE) {
     inst.stateLeft = randomIn(PARAMS.huntMin, PARAMS.huntMax)
@@ -539,53 +535,35 @@ function tickWander(inst, dt) {
   inst.flickLeft <= 0 && inst.tongue.phase === TONGUE.IDLE && flickTongue(inst)
 }
 //
-// The dash from the doorway into the dark; an apple in its mouth goes in
-// with it (it leaves the level for the tunnel). Without one it only hides
-// in the burrow and does not go down to the cave.
+// The run from the doorway to the lip; an apple in its mouth goes in with
+// it (it leaves the level for the cave). Then down the wall.
 //
 function tickSink(inst, dt) {
-  const u = tickRush(inst, dt)
-  updateDepth(inst, u, true)
-  if (u < 1) return
+  if (tickRush(inst, dt) < 1) return
   inst.hideLeft = inst.nextHide
-  if (!inst.carrying) {
-    inst.fruit && releaseApple(inst)
-    inst.state = STATES.INSIDE
-    return
-  }
-  TreeFruit.removeForestCarriedFruit(inst.levelInst, inst.fruit)
-  inst.stateLeft = PARAMS.tunnelDelay
-  inst.state = STATES.DOWN
-}
-function tickDown(inst, dt) {
-  inst.stateLeft -= dt
-  inst.stateLeft <= 0 && enterTunnel(inst)
+  inst.carrying ? TreeFruit.removeForestCarriedFruit(inst.levelInst, inst.fruit) : inst.fruit && releaseApple(inst)
+  startWall(inst, false)
+  inst.state = STATES.DESCEND
 }
 //
-// It darts out of the dark through the portal at the cave's left rounded
-// end, facing along the cave, its head just behind the line at first.
+// Down the shaft's wall and onto the cave's floor: with an apple on to the
+// far end, without one to rest.
 //
-function enterTunnel(inst) {
-  inst.floor = inst.tunnelFloor
-  inst.x = inst.portalX - PORTAL_REACH
-  inst.goalX = inst.x + PORTAL_DIVE_DIST
-  inst.facing = 1
-  inst.f = 1
-  inst.turnT = 1
-  inst.turnFlipped = true
-  inst.zoom = 1
-  inst.rise = 0
-  inst.dash.active = false
-  inst.dash.pauseLeft = 0
-  updateFloor(inst)
-  inst.legs.forEach(leg => plantLeg(inst, leg))
-  inst.opacity = 1
-  inst.dark = PARAMS.tunnelBugDark
-  startRush(inst, inst.goalX, PORTAL_DIVE_DURATION)
-  inst.state = STATES.APPEAR
+function tickDescend(inst, dt) {
+  if (!walk(inst, dt, PARAMS.tunnel)) return
+  leaveWall(inst)
+  inst.state = inst.carrying ? STATES.TUNNEL : STATES.REST
 }
-function tickAppear(inst, dt) {
-  tickRush(inst, dt) >= 1 && (inst.state = STATES.TUNNEL)
+//
+// Up the shaft's wall to the lip, then the run to the doorway.
+//
+function tickAscend(inst, dt) {
+  if (!walk(inst, dt, PARAMS.climbOut)) return
+  leaveWall(inst)
+  inst.rushingOut && (inst.hideLeft = 0)
+  inst.rushingOut = false
+  startRush(inst, inst.mouthX + inst.facing * DOOR_DX, PARAMS.climbOutHop)
+  inst.state = STATES.EMERGE
 }
 //
 // Down the tunnel to the far end: its apple it stores in the pile or (the
@@ -641,7 +619,7 @@ function tickStore(inst, dt) {
   inst.headTarget = 0
   if (put.eat) return startEat(inst, fruit, put)
   inst.pile.push({ fruit, x: put.x, y: put.y })
-  inst.state = STATES.OUT
+  inst.state = STATES.REST
 }
 function startEat(inst, fruit, spot) {
   inst.meal = { fruit, x: spot.x, y: spot.y }
@@ -669,7 +647,7 @@ function tickEat(inst, dt) {
   inst.biteT = 0
   if (inst.bitesLeft > 0) return
   inst.meal = null
-  inst.state = STATES.OUT
+  inst.state = STATES.REST
 }
 function takeBite(inst) {
   const { fruit } = inst.meal
@@ -677,26 +655,18 @@ function takeBite(inst) {
   inst.bitesLeft -= 1
 }
 //
-// Back to the cave's left end (turning first) and on through the portal,
-// wiped out into the dark as it goes, the last stretch in a dart.
+// Back to the foot of the shaft's left wall, its front just short of the
+// wall, facing it; a short crouch, then up the wall in one jerk.
 //
 function tickOut(inst, dt) {
-  inst.diving ? tickOutDive(inst, dt) : tickOutWalk(inst, dt)
-}
-function tickOutWalk(inst, dt) {
-  inst.goalX = inst.portalX + inst.bug.shellBox.x1 * inst.zoom - PORTAL_EXIT_PAD
-  walk(inst, dt, inst.rushingOut ? PARAMS.tunnelRush : PARAMS.tunnel)
-  if (inst.turnT < 1 || inst.facing > 0 || inst.x - inst.goalX > PORTAL_DIVE_DIST) return
-  inst.diving = true
-  startRush(inst, inst.goalX, PORTAL_DIVE_DURATION)
-}
-function tickOutDive(inst, dt) {
-  if (tickRush(inst, dt) < 1) return
-  inst.diving = false
-  inst.floor = null
-  inst.rushingOut && (inst.hideLeft = 0)
-  inst.rushingOut = false
-  inst.state = STATES.INSIDE
+  inst.goalX = inst.mouthX1 + inst.frontReach
+  if (!walk(inst, dt, inst.rushingOut ? PARAMS.tunnelRush : PARAMS.tunnel)) return
+  if (inst.facing !== -1) return startTurn(inst, -1)
+  if (inst.turnT < 1) return
+  startWall(inst, true)
+  inst.dash.active = false
+  inst.dash.pauseLeft = PARAMS.climbOutCrouch
+  inst.state = STATES.ASCEND
 }
 //
 // An apple fell up there: an apple it is putting down lands on its spot, one
@@ -844,11 +814,12 @@ function startOuting(inst) {
   inst.state = lake ? STATES.HUNT : STATES.WANDER
 }
 //
-// Runs to the doorway on its own side of the hole, faces the hole and
-// dashes in without its usual pause, to hide there for `hide` seconds.
+// Runs to the doorway left of the burrow (from either side), faces the
+// mouth and runs in without its usual pause, so it always goes down with
+// its feet on the left wall; it stays in for `hide` seconds.
 //
 function goToDoor(inst, dt, mode, hide) {
-  const side = Math.sign(inst.x - inst.mouthX) || 1
+  const side = -1
   inst.goalX = inst.mouthX + side * DOOR_DX
   const arrived = Math.abs(inst.goalX - inst.x) <= ARRIVE_DIST
   if (!arrived && !walk(inst, dt, mode)) return
@@ -856,10 +827,10 @@ function goToDoor(inst, dt, mode, hide) {
   if (inst.turnT < 1) return
   retractTongue(inst)
   inst.nextHide = hide
-  startRush(inst, inst.mouthX)
+  startRush(inst, side < 0 ? inst.mouthX1 : inst.mouthX2, RUN_IN_DURATION)
   inst.state = STATES.SINK
 }
-function startRush(inst, toX, dur = RUSH_DURATION) {
+function startRush(inst, toX, dur) {
   inst.rush.t = 0
   inst.rush.dur = dur
   inst.rush.fromX = inst.x
@@ -868,30 +839,93 @@ function startRush(inst, toX, dur = RUSH_DURATION) {
   inst.dash.pauseLeft = 0
 }
 //
-// Moves it along the dash, quick at first and braking at the end; returns
-// how far along the dash it is (0..1).
+// Moves it along the run at an even speed; returns how far along it is
+// (0..1).
 //
 function tickRush(inst, dt) {
   const { rush } = inst
   rush.t = Math.min(1, rush.t + dt / rush.dur)
-  const eased = 1 - Math.pow(1 - rush.t, RUSH_EASE_POWER)
-  const x = rush.fromX + (rush.toX - rush.fromX) * eased
+  const x = rush.fromX + (rush.toX - rush.fromX) * rush.t
   inst.vx = (x - inst.x) / dt
   inst.x = x
   return rush.t
 }
 //
-// How deep in the burrow it is (0 at the doorway, 1 inside): darkness,
-// opacity, size and rise follow. Going in it darkens before it fades, so
-// only a dark shape vanishes; coming out it shows dark first and lightens.
+// Onto the shaft's wall (down from the lip, or up from the cave's floor):
+// its usual walk on a flat stand-in ground, turned onto the wall as it is
+// drawn. Going down its feet take the wall under the lip it stands on;
+// going up, the left wall it faces at the bottom. Walking on, it turns
+// round the lip's corner, goes along the wall and turns round in place at
+// the bottom.
 //
-function updateDepth(inst, depth, goingIn) {
-  const darkEnd = goingIn ? RUSH_DARK_END : 1 - RUSH_FADE_START
-  const fadeStart = goingIn ? RUSH_FADE_START : 1 - RUSH_DARK_END
-  inst.dark = Math.min(1, depth / darkEnd)
-  inst.opacity = 1 - Math.max(0, (depth - fadeStart) / (1 - fadeStart))
-  inst.zoom = 1 + (DEEP_ZOOM - 1) * depth
-  inst.rise = DEEP_RISE * depth
+function startWall(inst, up) {
+  const dir = inst.facing
+  const side = up ? dir : -dir
+  const reach = inst.frontReach
+  const wallX = side < 0 ? inst.mouthX1 : inst.mouthX2
+  const footX = wallX - side * reach
+  const floorB = floorY(inst.tunnelFloor, footX)
+  const drop = floorB - reach - inst.surfaceY
+  const turn = PARAMS.bodyLift * QUARTER_TURN
+  const footTurn = reach * QUARTER_TURN
+  inst.wall = { up, dir, side, wallX, footX, floorB, drop, turn, footTurn, fromX: inst.x, cx: 0, cy: 0, a: 0 }
+  inst.floor = inst.wallFloor
+  inst.goalX = inst.x + dir * (turn + drop + footTurn)
+  updateFloor(inst)
+  updateWall(inst)
+}
+//
+// Off the wall: on the cave's floor at the foot of the wall it came down
+// (in the cave's dark), or on the ground at the lip it climbed to.
+//
+function leaveWall(inst) {
+  const { wall } = inst
+  inst.wall = null
+  inst.floor = wall.up ? null : inst.tunnelFloor
+  inst.x = wall.up ? wall.wallX : wall.footX
+  inst.goalX = inst.x
+  inst.dark = wall.up ? 0 : PARAMS.tunnelBugDark
+  updateFloor(inst)
+  inst.legs.forEach(leg => plantLeg(inst, leg))
+}
+//
+// Where its feet touch (the point under its body on the stand-in ground)
+// and how far it is turned, from how far it has walked: at the lip's corner
+// while it turns round it, sliding along the wall, then at the bottom round
+// a point its front's reach off the wall and the floor (going up, the same
+// the other way round). It darkens as it goes down.
+//
+function updateWall(inst) {
+  const w = inst.wall
+  const walked = (inst.x - w.fromX) * w.dir
+  const s = w.up ? w.turn + w.drop + w.footTurn - walked : walked
+  const full = (w.up ? -w.dir : w.dir) * QUARTER_TURN
+  if (s < w.turn) {
+    w.a = full * Math.max(0, s) / w.turn
+    w.cx = w.wallX
+    w.cy = inst.surfaceY
+  } else if (s < w.turn + w.drop) {
+    w.a = full
+    w.cx = w.wallX
+    w.cy = inst.surfaceY + s - w.turn
+  } else {
+    const reach = inst.frontReach
+    w.a = full * (1 - Math.min(1, (s - w.turn - w.drop) / w.footTurn))
+    w.cx = w.footX - reach * Math.sin(w.a)
+    w.cy = w.floorB - reach + reach * Math.cos(w.a)
+  }
+  inst.dark = PARAMS.tunnelBugDark * Math.min(1, Math.max(0, w.cy - inst.surfaceY) / WALL_DARK_DEPTH)
+}
+//
+// A point of its stand-in walk turned onto the wall.
+//
+function wallPoint(inst, x, y) {
+  const w = inst.wall
+  const dx = x - inst.x
+  const dy = y - (inst.groundY - inst.rise)
+  const c = Math.cos(w.a)
+  const s = Math.sin(w.a)
+  return inst.k.vec2(w.cx + dx * c - dy * s, w.cy + dx * s + dy * c)
 }
 function startGrab(inst) {
   inst.stateLeft = GRAB_DURATION
@@ -934,7 +968,7 @@ function releaseApple(inst) {
 // to hide longer.
 //
 function checkWater(inst) {
-  if (inst.state === STATES.SINK || inst.state === STATES.FLEE || inst.opacity < 1) return
+  if (inst.state === STATES.SINK || inst.state === STATES.FLEE) return
   const water = WaterFlower.fallingWater(inst.flower)
   if (!water) return
   const hit = hitsShell(inst, water)
@@ -999,7 +1033,7 @@ function checkCrawler(inst) {
   const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
     inst.state === STATES.APPLE || inst.state === STATES.GRAB ||
     inst.state === STATES.TO_DROP || inst.state === STATES.BITE
-  if (!watchful || inst.opacity < 1) return
+  if (!watchful) return
   const mealX = PredatorFeast.predatorMealX(inst.predator)
   if (mealX === null || Math.abs(mealX - inst.x) > PARAMS.crawlerFearReach) return
   inst.fruit && releaseApple(inst)
@@ -1294,12 +1328,20 @@ function headPoint(inst, p, out) {
   return out
 }
 //
-// Bug-local point to world: mirrored by facing, sized by depth round the
-// ground under the bug.
+// Bug-local point to world: mirrored by facing, round the ground under the
+// bug, turned onto the shaft's wall while it is on it.
 //
 function toWorld(inst, p) {
+  const v = toStandIn(inst, p)
+  return inst.wall ? wallPoint(inst, v.x, v.y) : inst.k.vec2(v.x, v.y)
+}
+//
+// Bug-local point to world as if it stood on its ground (on the wall: on
+// the stand-in ground, not yet turned onto the wall).
+//
+function toStandIn(inst, p) {
   const { zoom } = inst
-  return inst.k.vec2(inst.x + inst.f * p.x * zoom, inst.groundY - inst.rise + (p.y - inst.lift) * zoom)
+  return { x: inst.x + inst.f * p.x * zoom, y: inst.groundY - inst.rise + (p.y - inst.lift) * zoom }
 }
 function mouthWorld(inst) {
   return toWorld(inst, headPoint(inst, inst.bug.mouth, { x: 0, y: 0 }))
@@ -1309,7 +1351,7 @@ function mouthWorld(inst) {
 // dropped on its way and one being eaten, dim like the bug down there.
 //
 function onDrawTunnel(inst) {
-  inst.k.drawSprite({ sprite: inst.tunnel.sprite, pos: inst.tunnelPos })
+  EarthMerge.isMerged(inst, inst.tunnel.sprite) || inst.k.drawSprite({ sprite: inst.tunnel.sprite, pos: inst.tunnelPos })
   inst.pile.forEach(item => drawTunnelApple(inst, item))
   inst.loose.forEach(item => drawTunnelApple(inst, item))
   inst.meal && drawTunnelApple(inst, inst.meal)
@@ -1319,56 +1361,15 @@ function drawTunnelApple(inst, { fruit, x, y }) {
   TreeFruit.drawForestFruitAt(inst.k, fruit, x, y, { opacity: PARAMS.tunnelDark, color: inst.deepColor })
 }
 //
-// The burrow's picture behind the bug.
-//
-function onDrawBack(inst) {
-  inst.k.drawSprite({ sprite: inst.hole.sprite, pos: inst.holePos })
-}
-//
-// The bug as it is, then (in the burrow's doorway) the same shapes in the
-// dark colour over it as deep as it is in the dark; a fully dark bug skips
-// the first pass so nothing lit shows through while it fades. The tongue
-// goes last.
+// The bug in its own colours, then the dark of where it is over them (in
+// the cave, a little darker than up on the ground); the tongue goes last.
 //
 function onDraw(inst) {
-  if (inst.state === STATES.INSIDE || inst.state === STATES.DOWN) return
   const sgn = Math.sign(inst.f) || inst.facing
   const legs = inst.legs.map(leg => solveLeg(inst, leg, sgn))
-  isAtPortal(inst) ? drawThroughPortal(inst, legs) : drawLooks(inst, legs, 1)
+  inst.dark < 1 && drawBody(inst, legs, { opacity: 1, color: null, farColor: inst.farTint })
+  inst.dark > 0 && drawBody(inst, legs, { opacity: inst.dark, color: inst.deepColor, farColor: inst.deepColor })
   inst.tongue.phase !== TONGUE.IDLE && drawTongue(inst)
-}
-//
-// Its own colours, then the dark of where it is over them, both faded by fade.
-//
-function drawLooks(inst, legs, fade) {
-  const opacity = inst.opacity * fade
-  inst.dark < 1 && drawBody(inst, legs, { opacity, color: null, farColor: inst.farTint })
-  inst.dark > 0 && drawBody(inst, legs, { opacity: opacity * inst.dark, color: inst.deepColor, farColor: inst.deepColor })
-}
-function isAtPortal(inst) {
-  return inst.floor === inst.tunnelFloor && inst.x < inst.portalX + PORTAL_FADE_W + PORTAL_REACH
-}
-//
-// The portal wipe: the bug drawn once per vertical strip of the fade band,
-// each masked to its strip and fainter towards the line, and once more
-// masked to everything right of the band; nothing of it left of the line.
-//
-function drawThroughPortal(inst, legs) {
-  const { k } = inst
-  const top = inst.groundY - PORTAL_MASK_H
-  const stripW = PORTAL_FADE_W / PORTAL_STRIPS
-  for (let i = 0; i < PORTAL_STRIPS; i++) {
-    const x = inst.portalX + stripW * i
-    k.drawMasked(
-      () => drawLooks(inst, legs, (i + 0.5) / PORTAL_STRIPS),
-      () => k.drawRect({ pos: k.vec2(x, top), width: stripW, height: PORTAL_MASK_H * 2 })
-    )
-  }
-  const shownX = inst.portalX + PORTAL_FADE_W
-  k.drawMasked(
-    () => drawLooks(inst, legs, 1),
-    () => k.drawRect({ pos: k.vec2(shownX, top), width: PORTAL_MASK_H * 2, height: PORTAL_MASK_H * 2 })
-  )
 }
 //
 // Far legs and antenna, belly, head, near legs, shell and near antenna from
@@ -1398,7 +1399,7 @@ function drawPart(inst, part, at, angle, mirror, look, color = look.color) {
     height: part.tile.tileH,
     pos: toWorld(inst, at),
     anchor: inst.k.vec2(part.anchor.x, part.anchor.y),
-    angle: sgn * angle * RAD_TO_DEG,
+    angle: (sgn * angle + (inst.wall ? inst.wall.a : 0)) * RAD_TO_DEG,
     scale: inst.k.vec2(inst.f * mirror * inst.zoom, inst.zoom),
     opacity: look.opacity,
     ...(color ? { color } : {})
@@ -1449,15 +1450,16 @@ function drawLeg(inst, leg, joints, look, color) {
 // there to its spot.
 //
 function drawCarried(inst, look) {
-  const mouth = mouthWorld(inst)
   const r = inst.fruit.r * inst.zoom
   const put = inst.put
   const u = put ? 1 - Math.max(0, inst.stateLeft) / PUT_DURATION : 0
+  const mouth = toStandIn(inst, headPoint(inst, inst.bug.mouth, { x: 0, y: 0 }))
   const holdX = mouth.x + inst.f * r * APPLE_HOLD_AHEAD
   const holdY = mouth.y + r * APPLE_HOLD_DROP
   const x = put ? holdX + (put.x - holdX) * u : holdX
   const y = put ? holdY + (put.y - holdY) * u : holdY
-  TreeFruit.drawForestFruitAt(inst.k, inst.fruit, x, y, { zoom: inst.zoom, opacity: look.opacity, color: look.color })
+  const at = inst.wall ? wallPoint(inst, x, y) : { x, y }
+  TreeFruit.drawForestFruitAt(inst.k, inst.fruit, at.x, at.y, { zoom: inst.zoom, opacity: look.opacity, color: look.color })
 }
 //
 // The tongue from the mouth towards its tip (as far out as it is): bent,

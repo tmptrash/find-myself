@@ -236,6 +236,11 @@ const GROUND_STONES = [
 const sheet = loadPictureImage(URL)
 const groundSheet = loadPictureImage(GROUND_URL)
 let cuts = null
+//
+// The lake's stone pile, baked once per live k and place (a scene restart
+// reuses it).
+//
+const pileByK = new WeakMap()
 let groundCuts = null
 
 /**
@@ -321,6 +326,14 @@ export function forestLakeBedStones() {
  */
 export function bakeForestLakeStonePile(k, lake, waterY) {
   if (!cuts) return null
+  const key = `${lake.x1}|${lake.bakeSpan}|${waterY}`
+  const cached = pileByK.get(k)
+  if (cached?.key === key && k.getSprite(cached.pile.name)) return cached.pile
+  const pile = bakeLakeStonePile(k, lake, waterY)
+  pileByK.set(k, { key, pile })
+  return pile
+}
+function bakeLakeStonePile(k, lake, waterY) {
   const footX = lake.x1 + lake.bakeSpan
   const xa = Math.round(footX + PILE_FROM_X)
   const xb = Math.round(footX + PILE_TO_X)

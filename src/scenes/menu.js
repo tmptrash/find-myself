@@ -189,7 +189,6 @@ const MENU_APPLE_DROP_MIN = 5
 const MENU_APPLE_DROP_RANGE = 6
 const MENU_WATER_FLOWER_SHIFT = 15
 const MENU_BUG_TUNNEL_Z = 1
-const MENU_BUG_HOLE_Z = 2
 const MENU_WATER_FLOWER_Z = 2.5
 const MENU_FRUIT_Z = 3
 const MENU_BUG_Z = 3.5
@@ -1298,7 +1297,6 @@ function createMenuForestLife(inst) {
       midges,
       flower,
       predator: inst.crawler,
-      backZ: MENU_BUG_HOLE_Z,
       tunnelZ: MENU_BUG_TUNNEL_Z,
       z: MENU_BUG_Z
     }),

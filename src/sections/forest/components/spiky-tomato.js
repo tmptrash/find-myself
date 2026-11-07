@@ -60,6 +60,7 @@ export function create(cfg) {
       growT: 1
     }
   })
+  particles && ForestFootParticles.prewarmLeafBurst(particles, burstPalette())
   return {
     k,
     earTrees,
@@ -171,11 +172,16 @@ function explodeTomato(inst, tomato) {
   tomato.regrowTimer = TOMATO_REGROW_SEC
   const x = tomato.x
   const y = inst.groundY - bombHalfHeight(inst, tomato)
-  const c = FOREST_PAL.forestTomato
-  const palette = [c.body, c.light, c.petal, c.spike].map(forestRgb)
-  ForestFootParticles.spawnLeafBurst(inst.particles, x, y, palette, TOMATO_BURST_COUNT, inst.groundY)
+  ForestFootParticles.spawnLeafBurst(inst.particles, x, y, burstPalette(), TOMATO_BURST_COUNT, inst.groundY)
   inst.sfx && !inst.sfx._forestSfxMuted && Sound.playForestTomatoExplosion(inst.sfx)
   inst.onExplode?.(x, y)
+}
+//
+// The burst's leaves take the bomb's own colours.
+//
+function burstPalette() {
+  const c = FOREST_PAL.forestTomato
+  return [c.body, c.light, c.petal, c.spike].map(forestRgb)
 }
 function resetTomatoInFork(tomato, inst) {
   tomato.state = STATE_HANG

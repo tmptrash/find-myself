@@ -26,11 +26,16 @@ const glyphAtlasByK = new WeakMap()
  * @param {number} [config.topY=55] - Vertical position (pixels from top)
  * @param {Object} [config.textColor] - Optional Kaplay rgb for the numerals
  * @param {Object} [config.outlineColor] - Optional Kaplay rgb for the drop shadow
+ * @param {Function} [config.postBakeCanvas] - Grade/grain pass for the baked glyph atlas
+ * @param {number} [config.fontScale=1] - Label size relative to the default HUD font
+ * @param {boolean} [config.fpsOnly=false] - Never add the debug object / draw-call counts
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null } = config
+  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null, fontScale = 1, fpsOnly = false } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const fontSize = Math.round(HUD_FONT_SIZE * fontScale)
+  const stats = !fpsOnly && Boolean(CFG.debug?.showPerformanceHud)
   //
   // HUD numerals (FPS + timer) share the same neutral grey as the
   // section indicator inactive letters and the top-right scoreboard so
@@ -38,16 +43,16 @@ export function create(config) {
   //
   const HUD_TEXT_GREY = textColor || k.rgb(176, 176, 176)
   const HUD_OUTLINE = outlineColor || k.rgb(0, 0, 0)
-  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
+  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //
   // Optional elapsed level timer
   //
   let timerText = null
   if (showTimer) {
-    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
+    timerText = createOutlinedHudText(k, 'time: 00:00', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   }
   layoutHudRow(k, [fpsText, timerText])
-  if (CFG.debug?.showPerformanceHud) {
+  if (stats) {
     const numObjects = k.get('*').length
     const drawCalls = countKaplayDrawCalls(k)
     setOutlinedHudText(fpsText, `FPS: 30  obj: ${numObjects}  dc: ${drawCalls}`)
@@ -62,15 +67,16 @@ export function create(config) {
     timerText: timerText?.main ?? null,
     timerTextOutlines: timerText?.outlineNodes ?? [],
     postBakeCanvas,
+    stats,
     updateTimer: 0,
     fpsSum: 0,
     fpsCount: 0,
     levelTime: 0,
     debugUpdateTimer: 0,
-    cachedObjCount: CFG.debug?.showPerformanceHud ? k.get('*').length : 0,
-    cachedDrawCalls: CFG.debug?.showPerformanceHud ? countKaplayDrawCalls(k) : 0
+    cachedObjCount: stats ? k.get('*').length : 0,
+    cachedDrawCalls: stats ? countKaplayDrawCalls(k) : 0
   }
-  CFG.debug?.showPerformanceHud && layoutAtScreenCenterX(inst, k.width() / 2)
+  stats && layoutAtScreenCenterX(inst, k.width() / 2)
   return inst
 }
 /**
@@ -102,7 +108,7 @@ export function onUpdate(inst) {
   //
   // Update display once per second
   //
-  if (CFG.debug?.showPerformanceHud) {
+  if (inst.stats) {
     inst.debugUpdateTimer += frameDt
     if (inst.debugUpdateTimer >= 0.25) {
       inst.debugUpdateTimer = 0
@@ -113,7 +119,7 @@ export function onUpdate(inst) {
   if (inst.updateTimer >= 1.0) {
     const averageFps = Math.round(inst.fpsSum / inst.fpsCount)
     const fpsLabel = `FPS: ${averageFps.toString().padStart(2, ' ')}`
-    const hudText = CFG.debug?.showPerformanceHud
+    const hudText = inst.stats
       ? `${fpsLabel}  obj: ${inst.cachedObjCount}  dc: ${inst.cachedDrawCalls}`
       : fpsLabel
     setOutlinedHudText(fpsHud, hudText)
@@ -121,7 +127,8 @@ export function onUpdate(inst) {
     inst.fpsSum = 0
     inst.fpsCount = 0
   }
-  CFG.debug?.showPerformanceHud &&
+  if (inst.leftX != null) return layoutAtScreenLeftX(inst, inst.leftX)
+  inst.stats &&
     layoutAtScreenCenterX(inst, inst.layoutCenterX ?? inst.k.width() / 2)
 }
 /**
@@ -135,6 +142,17 @@ export function pinScreenFixed(inst) {
   inst.fpsTextOutlines.forEach(pin)
   inst.timerText && pin(inst.timerText)
   inst.timerTextOutlines?.forEach(pin)
+}
+/**
+ * Keeps the FPS row's left edge at a fixed screen X (the label's width
+ * changes with its digits, so it is laid out again on every update).
+ * @param {Object} inst - FPS counter instance
+ * @param {number} leftX - Screen-space left edge X
+ */
+export function layoutAtScreenLeftX(inst, leftX) {
+  if (!inst?.fpsHud) return
+  inst.leftX = leftX
+  layoutAtScreenCenterX(inst, leftX + inst.fpsHud.main.width / 2)
 }
 /**
  * Centers the FPS row at a fixed screen X (between HUD slots).
@@ -168,12 +186,12 @@ export function layoutAtScreenCenterX(inst, centerX) {
 //
 // Creates HUD text with a single drop-shadow copy (forest-level style).
 //
-function createOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas = null) {
+function createOutlinedHudText(k, text, font, fontSize, color, topY, outlineColor, postBakeCanvas = null) {
   if (postBakeCanvas) {
-    return createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas)
+    return createBakedOutlinedHudText(k, text, font, fontSize, color, topY, outlineColor, postBakeCanvas)
   }
   const outlineNodes = buildOutlineOffsets(HUD_OUTLINE_OFFSET).map(([dx, dy]) => k.add([
-    k.text(text, { size: HUD_FONT_SIZE, font }),
+    k.text(text, { size: fontSize, font }),
     k.pos(0, topY + dy),
     k.anchor('center'),
     k.z(CFG.visual.zIndex.ui),
@@ -181,7 +199,7 @@ function createOutlinedHudText(k, text, font, color, topY, outlineColor, postBak
     k.opacity(0.7)
   ]))
   const main = k.add([
-    k.text(text, { size: HUD_FONT_SIZE, font }),
+    k.text(text, { size: fontSize, font }),
     k.pos(0, topY),
     k.anchor('center'),
     k.z(CFG.visual.zIndex.ui + 1),
@@ -243,7 +261,7 @@ function layoutHudRow(k, texts) {
 //
 // Baked HUD text path — shadow + fill on one canvas, then postBakeCanvas grain.
 //
-function createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas) {
+function createBakedOutlinedHudText(k, text, font, fontSize, color, topY, outlineColor, postBakeCanvas) {
   const node = {
     k,
     main: null,
@@ -251,6 +269,7 @@ function createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, po
     bakedHolder: true,
     postBakeCanvas,
     font,
+    fontSize,
     color,
     outlineColor,
     topY,
@@ -273,7 +292,7 @@ function syncBakedHudText(node, text) {
 // Draws outlined HUD text to a canvas and loads it as a Kaplay sprite.
 //
 function rebuildBakedHudTextNode(node, text, centerX) {
-  const { k, font, color, outlineColor, topY, postBakeCanvas } = node
+  const { k, font, fontSize, color, outlineColor, topY, postBakeCanvas } = node
   node.layoutCenterX = centerX
   node.lastText = text
   //
@@ -282,10 +301,10 @@ function rebuildBakedHudTextNode(node, text, centerX) {
   // does not stall on the GPU.
   //
   const atlas = postBakeCanvas
-    ? fpsGlyphAtlas(k, font, color, outlineColor, postBakeCanvas)
+    ? fpsGlyphAtlas(k, font, fontSize, color, outlineColor, postBakeCanvas)
     : null
-  const canvas = bakeFpsHudTextCanvas(text, font, color, outlineColor, atlas)
-  const spriteName = 'fps-hud-bake-' + fpsHudTextHash(text)
+  const canvas = bakeFpsHudTextCanvas(text, font, fontSize, color, outlineColor, atlas)
+  const spriteName = `fps-hud-bake-${fontSize}-${fpsHudTextHash(text)}`
   k.loadSprite(spriteName, canvas)
   node.measuredW = canvas.width
   canvas.width = 0
@@ -308,24 +327,24 @@ function rebuildBakedHudTextNode(node, text, centerX) {
 //
 // Renders FPS HUD label with a single drop-shadow copy onto a canvas.
 //
-function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor, atlas = null) {
+function bakeFpsHudTextCanvas(text, fontFamily, fontSize, fillColor, outlineColor, atlas = null) {
   if (atlas) return composeFpsHudTextCanvas(text, atlas)
   const pad = 4
   const off = HUD_OUTLINE_OFFSET
   const probe = document.createElement('canvas').getContext('2d')
-  probe.font = `${HUD_FONT_SIZE}px ${fontFamily}`
+  probe.font = `${fontSize}px ${fontFamily}`
   const textW = probe.measureText(text).width
   //
   // Symmetric padding so the drop shadow does not pull the baked label right
   // when the sprite is anchored at the canvas centre.
   //
   const w = Math.ceil(textW + pad * 2 + off * 2)
-  const h = Math.ceil(HUD_FONT_SIZE * 1.2 + pad * 2 + off * 2)
+  const h = Math.ceil(fontSize * 1.2 + pad * 2 + off * 2)
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, w)
   canvas.height = Math.max(1, h)
   const ctx = canvas.getContext('2d')
-  ctx.font = `${HUD_FONT_SIZE}px ${fontFamily}`
+  ctx.font = `${fontSize}px ${fontFamily}`
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'center'
   const cx = canvas.width / 2 - off / 2
@@ -368,27 +387,27 @@ function countKaplayDrawCalls(k) {
 //
 // One graded glyph atlas per live Kaplay instance and colour pair.
 //
-function fpsGlyphAtlas(k, font, fillColor, outlineColor, postBakeCanvas) {
+function fpsGlyphAtlas(k, font, fontSize, fillColor, outlineColor, postBakeCanvas) {
   let byKey = glyphAtlasByK.get(k)
   if (!byKey) {
     byKey = new Map()
     glyphAtlasByK.set(k, byKey)
   }
-  const key = `${font}|${rgbToCss(fillColor)}|${rgbToCss(outlineColor)}`
+  const key = `${font}|${fontSize}|${rgbToCss(fillColor)}|${rgbToCss(outlineColor)}`
   const cached = byKey.get(key)
   if (cached) return cached
-  const atlas = bakeFpsGlyphAtlas(font, fillColor, outlineColor, postBakeCanvas)
+  const atlas = bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanvas)
   byKey.set(key, atlas)
   return atlas
 }
 //
 // Draws every HUD glyph once, then runs the section grain/grade pass.
 //
-function bakeFpsGlyphAtlas(font, fillColor, outlineColor, postBakeCanvas) {
+function bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanvas) {
   const probe = document.createElement('canvas').getContext('2d')
-  probe.font = `${HUD_FONT_SIZE}px ${font}`
+  probe.font = `${fontSize}px ${font}`
   const off = HUD_OUTLINE_OFFSET
-  const cellH = Math.ceil(HUD_FONT_SIZE * 1.2 + off)
+  const cellH = Math.ceil(fontSize * 1.2 + off)
   const cells = new Map()
   const layout = []
   let x = 0
@@ -402,7 +421,7 @@ function bakeFpsGlyphAtlas(font, fillColor, outlineColor, postBakeCanvas) {
   canvas.width = Math.max(1, x)
   canvas.height = cellH
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.font = `${HUD_FONT_SIZE}px ${font}`
+  ctx.font = `${fontSize}px ${font}`
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
   const cy = cellH / 2 - off / 2

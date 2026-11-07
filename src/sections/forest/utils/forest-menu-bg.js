@@ -1,6 +1,8 @@
 import { FOREST_PAL, forestRgb, forestSkyBandRgb } from './forest-palette.js'
 import { groundEarthLayersColor, paintLayeredEarthBand } from './forest-earth-band.js'
-import { forestFloorPainterColors } from '../components/forest-floor.js'
+import { forestFloorPainterColors, loadForestFloorHill, paintForestFloorHill } from '../components/forest-floor.js'
+import { getCrackZone, paintForestPitStill } from './forest-level-atmosphere.js'
+import { CFG } from '../../../cfg.js'
 import { forestContactShadowRgb, paintForestContactShadow, paintUndergroundDepthVignette } from './forest-atmosphere.js'
 import { applyForestFilmGrainToCanvas, applyParallaxPostFxToContext, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
 import { forestDepthBlurRadiusPx } from './forest-focus-depth.js'
@@ -18,6 +20,7 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { drawForestPlant, loadForestPlants } from './forest-plants.js'
 import { drawForestMushroom, loadForestMushrooms } from './forest-mushrooms.js'
 import { FOREST_CFG } from '../cfg.js'
+import * as TunnelPicture from './forest-bug-tunnel-picture.js'
 //
 // Menu backdrop for the forest level, composed from the level's own pieces
 // like one still of the level: the bright day sky and three hazy parallax
@@ -26,7 +29,8 @@ import { FOREST_CFG } from '../cfg.js'
 // roots in the layered soil, the level's lake to its left (its stone pile on
 // the tree-side bank is baked by the menu from forest-stones.js), mossy
 // stones, ferns and mushrooms on the ground and the picture stones buried in
-// the soil. The left third stays calm for the menu column. Layout values are
+// the soil, and at the right end the level's hill with the open cave under
+// it. The left third stays calm for the menu column. Layout values are
 // design px at REF_HEIGHT and scale with the screen height. The lake water,
 // grass, bomb trees, stalk eyes, clouds, the crawler, the apple tree's
 // apples, the water flower, the apple bug with its burrow and cave and the
@@ -42,7 +46,7 @@ const REF_HEIGHT = 1080
 // edge; the ground line sits where the level's camera shows it. The scene
 // is squeezed at the screen's height, but the apple bug's burrow keeps the
 // level's size, so everything east of the lake moves right until the
-// burrow's picture stands BUG_HOLE_LAKE_GAP px clear of the lake.
+// burrow's mouth stands BUG_HOLE_LAKE_GAP px clear of the lake.
 //
 const GROUND_Y_FRAC = 0.755
 const MENU_WORLD_X0 = 430
@@ -55,7 +59,8 @@ const LEVEL_LEFT_TREE_X = 960
 //
 const LEVEL_BUG_HOLE_X = LEVEL_LEFT_TREE_X - 125
 const BUG_HOLE_LAKE_GAP = 24
-const BUG_HOLE_HALF_W = FOREST_CFG.appleBug.holeWidth * 0.5
+const BUG_HOLE_LIP = TunnelPicture.layout(FOREST_CFG.appleBug.tunnelWidth).lip
+const BUG_HOLE_HALF_W = Math.max(-BUG_HOLE_LIP.x1, BUG_HOLE_LIP.x2)
 const LEVEL_BRANCH_TRAMP_X = 1155
 const LEVEL_RIGHT_TRAMP_X = 2300
 const LEVEL_TRAMP_XS = [LEVEL_BRANCH_TRAMP_X, LEVEL_RIGHT_TRAMP_X]
@@ -73,6 +78,19 @@ const LEVEL_RIGHT_TREE_SCALE = 0.528
 const LEVEL_BOMB_TREE_TRAMP_CLEAR = 100
 const LEVEL_BOMB_TREE_XS = [LEVEL_RIGHT_TRAMP_X - LEVEL_BOMB_TREE_TRAMP_CLEAR, 2560]
 const LEVEL_CRAWLER_MAX_X = 2614
+//
+// The level's right end: its mossy hill climbs to the world's right edge and
+// the open cave lies under it. The cave keeps the level's size, like the
+// burrow, so its rocks and void are the level's own; it is placed by its
+// left edge. LEVEL_FLOOR_Y is the level's ground line (its layout is built
+// in those world coordinates).
+//
+const LEVEL_WORLD_W = CFG.visual.forest.worldWidth
+const LEVEL_FLOOR_Y = 795
+//
+// The sleeping trampoline mushroom on the cave's floor, at the level's size.
+//
+const CAVE_MUSHROOM_W = 49
 //
 // Sky: a smooth gradient through palette stops of the level's sky ramp,
 // toned by the far row's grade like the level's sky (baked into that row). It runs a little below
@@ -197,7 +215,7 @@ const BURIED_TREE_CLEAR_HALF = 50
  * @returns {Promise<void>}
  */
 export async function loadForestMenuBackdropArt() {
-  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestPlants(), loadForestMushrooms(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree()])
+  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestPlants(), loadForestMushrooms(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree(), loadForestFloorHill()])
 }
 
 /**
@@ -264,9 +282,10 @@ export function generateForestMenuBackdrop(cfg) {
 }
 
 //
-// The front scene from one seeded stream: soil band, ground stones and the
-// ground rim (open over the lake), the apple tree with its roots over the
-// soil, then the ground plants and mushrooms over its foot.
+// The front scene from one seeded stream: soil band, the cave and the hill
+// over it, ground stones and the ground rim (open over the lake), the apple
+// tree with its roots over the soil, then the ground plants and mushrooms
+// over its foot.
 //
 function paintFrontScene(ctx, width, height, layout, scale) {
   const { groundY, lake } = layout
@@ -274,6 +293,8 @@ function paintFrontScene(ctx, width, height, layout, scale) {
   paintLayeredEarthBand(ctx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
   paintBuriedDecor(ctx, width, height, layout, scale)
   const toX = menuWorldToScreenX(height)
+  paintCave(ctx, width, groundY, toX)
+  paintForestFloorHill(ctx, toX(LEVEL_WORLD_W), groundY, scale)
   STONE_GROUPS.forEach(group => paintStoneGroup(ctx, rng, group, toX(group.x), groundY, scale))
   const rimColors = forestFloorPainterColors().rim
   drawGroundRimToCanvas(ctx, { x1: 0, x2: lake.x1, floorY: groundY, rng, colors: rimColors })
@@ -281,6 +302,21 @@ function paintFrontScene(ctx, width, height, layout, scale) {
   drawLeftTreeToCanvas(ctx, { x: toX(LEVEL_LEFT_TREE_X), y: groundY }, scale)
   drawShoreTreeToCanvas(ctx, { x: toX(LEVEL_RIGHT_TREE_X), y: groundY }, LEVEL_RIGHT_TREE_SCALE * scale)
   paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale)
+}
+//
+// The level's open cave, moved from its place in the level to the menu's
+// ground line with its crack's left edge where the level's world X maps, and the
+// sleeping trampoline mushroom on its floor. Its void runs on to the screen's
+// right edge (the level's world wall hides where it ends).
+//
+function paintCave(ctx, width, groundY, toX) {
+  const zoneX1 = getCrackZone(LEVEL_WORLD_W, LEVEL_FLOOR_Y).x1
+  const dx = toX(zoneX1) - zoneX1
+  ctx.save()
+  ctx.translate(dx, groundY - LEVEL_FLOOR_Y)
+  const cave = paintForestPitStill(ctx, LEVEL_WORLD_W, LEVEL_FLOOR_Y, width - dx)
+  paintCuteMushroom(ctx, cave.trampX, cave.bottomY, CAVE_MUSHROOM_W, forestContactShadowRgb())
+  ctx.restore()
 }
 //
 // The level's buried decor (picture stones, cracks, hair-roots under the

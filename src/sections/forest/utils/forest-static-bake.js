@@ -8,6 +8,30 @@ import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
 const STATIC_BAKE_PAD = 2
 const STATIC_BAKE_SPRITE_PREFIX = 'forest-static-decor'
 const spriteSerialByK = new WeakMap()
+const holdersByK = new WeakMap()
+
+/**
+ * A bake holder for ensureStaticDecorSprite that lives as long as the live
+ * Kaplay instance, not as the object drawn: a scene restart (a new buoy,
+ * flower or pit object at the same place) finds its bakes ready instead of
+ * baking them again mid-game.
+ * @param {Object} k - Kaplay instance
+ * @param {string} id - Stable id of the drawing's owner (kind and place)
+ * @returns {Object} Holder
+ */
+export function staticBakeHolder(k, id) {
+  let holders = holdersByK.get(k)
+  if (!holders) {
+    holders = new Map()
+    holdersByK.set(k, holders)
+  }
+  let holder = holders.get(id)
+  if (!holder) {
+    holder = {}
+    holders.set(id, holder)
+  }
+  return holder
+}
 
 /**
  * Returns a baked sprite for one static drawing, baking it on first use.

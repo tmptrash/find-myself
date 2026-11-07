@@ -5,6 +5,7 @@ import { bakeForestFootPlants } from './forest-foot-plants.js'
 import { STONE_KIND, forestGroundStones } from './forest-stones.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import * as TreeJolt from './forest-tree-jolt.js'
+import * as EarthMerge from './forest-earth-merge.js'
 //
 // The bomb trees of forest level 0, cut from assets/forest/bombs.png (its
 // stray backdrop fringe wiped): two pale-trunked trees with red blossoms,
@@ -112,6 +113,19 @@ export function create(cfg) {
 }
 
 /**
+ * Every tree's roots as static layers for the merged earth sprite
+ * (forest-earth-merge.js).
+ * @param {Object} inst - Bomb tree inst
+ * @returns {Array<{sprite: string, x: number, y: number}>}
+ */
+export function undergroundLayers(inst) {
+  ensureSprites(inst)
+  return inst.trees
+    .filter(tree => tree.sprites?.roots)
+    .map(tree => ({ sprite: tree.sprites.roots.sprite, x: tree.x - tree.sprites.roots.footX, y: tree.groundY - GROUND_TUCK }))
+}
+
+/**
  * Advances the landing jolts.
  * @param {Object} inst - Bomb tree inst
  * @param {number} dt - Frame delta
@@ -194,7 +208,7 @@ export function onDrawRoots(inst, opacity = 1, view = null) {
   const k = inst.k
   inst.trees.forEach(tree => {
     const s = tree.sprites?.roots
-    if (!s) return
+    if (!s || EarthMerge.isMerged(inst, s.sprite)) return
     const x = tree.x - s.footX
     inView(x, x + s.w, view) && k.drawSprite({ sprite: s.sprite, pos: k.vec2(x, tree.groundY - GROUND_TUCK), opacity })
   })

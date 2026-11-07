@@ -19,13 +19,13 @@ import { createCanvasAtlasBuilder } from '../../../utils/helper.js'
 //
 const URL = 'forest/propeller.png'
 const GRAIN_SEED = 7301
-const BODY = { x: 298, y: 646, w: 345, h: 396 }
-const HEAD = { x: 838, y: 716, w: 269, h: 246 }
-const HEAD_MID = { x: 972, y: 839 }
+const BODY = { x: 300, y: 645, w: 342, h: 400 }
+const HEAD = { x: 836, y: 713, w: 276, h: 250 }
+const HEAD_MID = { x: 973, y: 839 }
 const HEAD_R = 120
-const FEET = { x: 471, y: 985 }
-const HEAD_AT = { x: 458, y: 613 }
-const CROWN_Y = 497
+const FEET = { x: 471, y: 989 }
+const HEAD_AT = { x: 460, y: 613 }
+const CROWN_Y = 495
 const NECK_Y = 715
 //
 // The painted black eyes on the head (sheet px): where a pupil rests, how
@@ -36,8 +36,8 @@ const NECK_Y = 715
 // of clear room for its soft edge and drawn 1:1.
 //
 const EYES = [
-  { x: 957, y: 872, rx: 15, ry: 7, pr: 8 },
-  { x: 1071, y: 874, rx: 5, ry: 8, pr: 7 }
+  { x: 958, y: 872, rx: 15, ry: 7, pr: 8 },
+  { x: 1072, y: 874, rx: 5, ry: 8, pr: 7 }
 ]
 const PUPIL_PAD = 1
 //
@@ -45,12 +45,12 @@ const PUPIL_PAD = 1
 // hub's middle on the sheet. The propeller draws at PROP_SCALE of the bud.
 //
 const PROP_FRAMES = [
-  { x: 64, y: 132, w: 403, h: 96, hub: { x: 265, y: 180 } },
-  { x: 554, y: 68, w: 343, h: 225, hub: { x: 724, y: 176 } },
-  { x: 1097, y: 31, w: 215, h: 298, hub: { x: 1200, y: 176 } },
-  { x: 209, y: 307, w: 99, h: 323, hub: { x: 258, y: 464 } },
-  { x: 620, y: 315, w: 206, h: 300, hub: { x: 723, y: 463 } },
-  { x: 1017, y: 354, w: 335, h: 228, hub: { x: 1184, y: 462 } }
+  { x: 62, y: 132, w: 403, h: 98, hub: { x: 266, y: 184 } },
+  { x: 552, y: 67, w: 341, h: 226, hub: { x: 725, y: 179 } },
+  { x: 1092, y: 30, w: 220, h: 300, hub: { x: 1204, y: 178 } },
+  { x: 203, y: 306, w: 108, h: 329, hub: { x: 262, y: 464 } },
+  { x: 615, y: 316, w: 213, h: 306, hub: { x: 726, y: 462 } },
+  { x: 1012, y: 355, w: 342, h: 231, hub: { x: 1186, y: 463 } }
 ]
 const PROP_SCALE = 0.875
 const image = loadPictureImage(URL)

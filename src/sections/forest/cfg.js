@@ -61,7 +61,6 @@ const WATER_FLOWER = {
 //
 const APPLE_BUG = {
   shellWidth: 60,                   // Shell picture width
-  holeWidth: 200,                   // Burrow picture width (its hole fits the bug)
   bodyLift: 18.6,                   // Body's origin (hips) over the ground at rest: knees bent out at the shell's rim
   //
   // It moves in dashes: speed rises and falls over each dash (peak speed),
@@ -114,17 +113,24 @@ const APPLE_BUG = {
   appleLeft: 200,
   appleRight: 300,
   //
-  // The burrow's tunnel under the ground: tunnelDelay after it dashed into
-  // the hole with an apple it shows up in the cave's left rounded end, runs to
-  // the far end, stores or eats the apple and runs back.
+  // The burrow: a shaft from a mouth on the ground down into a cave.
+  // tunnelDelay after it ran into the mouth with an apple it shows up in the
+  // cave's left end, runs to the far end, stores or eats the apple and runs
+  // back.
   //
-  tunnelWidth: 450,                 // Tunnel picture width: the full-size bug fits its narrow middle
-  tunnelDepth: 60,                  // Soil strip between the ground (the burrow's doorway) and the cave's top stones
+  tunnelWidth: 518,                 // Burrow picture width: the full-size bug fits the cave's narrow middle
   tunnelDelay: 0.4,
   tunnelDark: 0.45,                 // How dark the apples stored underground look
-  tunnelBugDark: 0.72,              // How dark the bug itself looks underground
+  tunnelBugDark: 0.25,              // How dark the bug itself looks underground (a little darker than up top)
   tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
   tunnelRush: { speed: 340, dashMin: 0.45, dashMax: 0.6, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // An apple fell up there: back out at once
+  //
+  // Out of the burrow in one jerk: a short crouch at the shaft's foot, then
+  // up the wall in a single fast dash and a quick hop past the lip.
+  //
+  climbOutCrouch: 0.14,
+  climbOut: { speed: 620, dashMin: 0.6, dashMax: 0.6, pauseMin: 0, pauseMax: 0, dashStart: 0.5 },
+  climbOutHop: 0.1,                 // Seconds from the lip to the doorway beside it
   pileMax: 3,                       // Apples stored at the far end; with that many there it eats the next one
   eatBites: 8
 }

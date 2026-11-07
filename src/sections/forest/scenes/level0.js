@@ -35,6 +35,7 @@ import {
 } from '../utils/forest-palette.js'
 import {
   applyForestGameplaySharpBake,
+  applyForestHudSharpBake,
   forestDepthBlurRadiusPx
 } from '../utils/forest-focus-depth.js'
 import * as Grass from '../../../components/grass.js'
@@ -45,6 +46,8 @@ import {
   updateForestMidges,
   syncForestMidgesZones,
   createForestPit,
+  prewarmForestPit,
+  forestPitEarthSpan,
   updateForestPit,
   drawForestPit,
   drawForestPitCaveForegroundDecor,
@@ -88,6 +91,7 @@ import * as Clouds from '../utils/forest-clouds.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '../utils/forest-picture-bushes.js'
 import { loadForestStones, forestBuriedStones, forestGroundStones, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as ChainBuoy from '../utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../utils/forest-eye-berry.js'
 import * as ChainEyeTramp from '../utils/forest-chain-eye-trampoline.js'
@@ -101,6 +105,7 @@ import { GROUND_LAYER_FRACS, groundEarthLayersColor, paintLayeredEarthBand } fro
 import * as FlowerGrab from '../components/flower-grab.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/forest-shore-tree.js'
+import * as EarthMerge from '../utils/forest-earth-merge.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as PropellerBud from '../components/propeller-bud.js'
@@ -237,6 +242,12 @@ const LEFT_TREE_FOOT = { x: TREE_X, y: FLOOR_Y }
 // fruit and the hero.
 //
 const LEFT_TREE_PLANTS_Z_BELOW = 1.5
+//
+// Debug FPS readout in the screen's top-left corner, grey.
+//
+const FPS_HUD_LEFT_X = 24
+const FPS_HUD_TOP_Y = 44
+const FPS_HUD_FONT_SCALE = 0.7
 //
 // The water flower stands on the ground line right of the left tree's trunk,
 // its flower hanging back over the trunk so the bubble hangs in front of
@@ -377,6 +388,10 @@ const PAR_SKY_WORLD_Y = TOP_MARGIN
 const PAR_SKY_WORLD_H = FLOOR_Y - TOP_MARGIN
 const PAR_STATIC_WORLD_Y = FLOOR_Y
 const PAR_STATIC_WORLD_H = CAVE_BAND_H
+//
+// The plain earth band, drawn until (or if) the merged earth sprite exists.
+//
+const FOREST_PLAIN_EARTH = { sprite: BG_STATIC_COLOR, y: PAR_STATIC_WORLD_Y, h: PAR_STATIC_WORLD_H }
 //
 // Layer follow speeds — fraction of camera scroll (1.0 = locked to the world).
 // One speed per depth row, shared by that row's trees and bushes (they sit on
@@ -588,9 +603,10 @@ const WALL_BORDER_B = OUTER.b
 //
 // Ground stones (forest-stones.js: the mossy ones, the ones with plants and
 // the bits of wall) scattered at random along the whole strip the centipede
-// runs on.
+// runs on; where they lie and their baked pictures are kept per live k.
 //
 const GROUND_STONE_COUNT = 26
+const groundStonePlansByK = new WeakMap()
 //
 // Every GROUND_STONE_FRONT_EVERY-th stone stands in front of the hero (under
 // the grass blades), smaller (GROUND_STONE_FRONT_SIZE of the others) and
@@ -1293,18 +1309,13 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     if (await forestBootstrapPause(bootstrap, 20, session)) return
     if (await forestBootstrapPause(bootstrap, 24, session)) return
     //
-    // Left big tree: the tree above ground on the ground line, its roots in
-    // the earth under it, plants over the seam at its foot (none if the
-    // picture failed to load).
+    // Left big tree: the tree above ground on the ground line, plants over
+    // the seam at its foot (none if the picture failed to load). Its roots
+    // go into the merged earth sprite (mergeForestEarth).
     //
     const treeObj = leftTree && k.add([
       k.sprite(leftTree.crown.sprite),
       k.pos(leftTree.crown.x, leftTree.crown.y),
-      k.z(CFG.visual.zIndex.platforms - 2)
-    ])
-    leftTree && k.add([
-      k.sprite(leftTree.roots.sprite),
-      k.pos(leftTree.roots.x, leftTree.roots.y),
       k.z(CFG.visual.zIndex.platforms - 2)
     ])
     leftTree && k.add([
@@ -1663,7 +1674,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       midges: inst.midges,
       flower: inst.waterFlower,
       predator,
-      backZ: BUG_HOLE_BACK_Z,
       tunnelZ: BUG_TUNNEL_Z,
       z: BUG_Z
     })
@@ -1676,7 +1686,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       lakeX2,
       reachTriggerX: TREE_X,
       getHeroPos: () => forestEyeFlowerHeroPos(inst),
-      isVisible: () => isForestEyeFlowerVisible(inst)
+      isVisible: () => isForestEyeFlowerVisible(inst),
+      getView: () => forestCameraViewXRange(k, inst, 0)
     })
     tagGroundPlatform(inst.eyeFlower.collider, sound, heroInst)
     createForestHorizFallTwigLayer(k, inst)
@@ -1706,9 +1717,22 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       groundColor: GROUND_DARK
     })
     inst.pit.sceneRef = inst
+    prewarmForestPit(k, inst.pit)
     applyForestCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     setupForestPitCaveTrampoline(inst)
     inst.footParticles = ForestFootParticles.create({ k })
+    inst.fps = FpsCounter.create({
+      k,
+      topY: FPS_HUD_TOP_Y,
+      postBakeCanvas: applyForestHudSharpBake,
+      fontScale: FPS_HUD_FONT_SCALE,
+      fpsOnly: true,
+      textColor: getRGB(k, FOREST_PAL.fpsHudText),
+      outlineColor: getRGB(k, FOREST_PAL.fpsHudShadow)
+    })
+    FpsCounter.pinScreenFixed(inst.fps)
+    FpsCounter.layoutAtScreenLeftX(inst.fps, FPS_HUD_LEFT_X)
+    ForestFootParticles.prewarmLeafBurst(inst.footParticles, forestTouchDeathLeafPalette())
     inst.flowerGrab = FlowerGrab.create({
       k,
       flower: inst.eyeFlower,
@@ -1737,6 +1761,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       platformXMargin: FOREST_CHAIN_BUOY_PLATFORM_X_MARGIN,
       earthBottomY: PLAYFIELD_EARTH_BOTTOM_Y
     })
+    ChainBuoy.prewarm(inst.chainBuoys)
     const shoreTreeLayout = ShoreTree.buildForestShoreTreeLayout(chainBuoySpots, FLOOR_Y)
     await ShoreTree.loadForestShoreTree()
     inst.shoreTree = shoreTreeLayout ? ShoreTree.create({ k, layout: shoreTreeLayout }) : null
@@ -1802,6 +1827,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       backZ: FOREST_FLOOR_BACK_Z,
       frontZ: FOREST_FLOOR_FRONT_Z
     })
+    inst.earth = mergeForestEarth(inst, leftTree)
+    leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
+      k.sprite(leftTree.roots.sprite),
+      k.pos(leftTree.roots.x, leftTree.roots.y),
+      k.z(CFG.visual.zIndex.platforms - 2)
+    ])
     if (await forestBootstrapPause(bootstrap, 93, session)) return
     syncForestAtmosphereZones(inst)
     inst.midges.worldLife = 1
@@ -3676,44 +3707,69 @@ function forestGrassTint(zones, blade) {
 // above the entrance; none in the crack's decor gap either.
 //
 function createForestRocks(k, decorAtlas, bounds, appleSpan) {
-  const objs = []
+  let plans = groundStonePlansByK.get(k)
+  if (!plans) {
+    plans = planForestRocks(bounds, appleSpan)
+    groundStonePlansByK.set(k, plans)
+  }
+  return plans.map(plan => placeGroundStone(k, plan, decorAtlas))
+}
+//
+// Where the stones lie and their baked pictures, chosen and baked once per
+// live k: a scene restart lays the same stones again instead of baking
+// them all over in one frame.
+//
+function planForestRocks(bounds, appleSpan) {
+  const plans = []
   const stones = forestGroundStones()
-  if (!stones.length) return objs
+  if (!stones.length) return plans
   const step = (bounds.maxX - bounds.minX) / GROUND_STONE_COUNT
   let round = []
   for (let i = 0; i < GROUND_STONE_COUNT; i++) {
     round.length || (round = shuffledCopy(stones))
     const x = bounds.minX + step * (i + Math.random())
     const front = i % GROUND_STONE_FRONT_EVERY === GROUND_STONE_FRONT_EVERY - 1
-    const obj = isCrackDecorExcluded(x, WORLD_W) ? null : placeGroundStone(k, x, round.pop(), decorAtlas, bounds, front, appleSpan)
-    obj && objs.push(obj)
+    const plan = isCrackDecorExcluded(x, WORLD_W) ? null : planGroundStone(x, round.pop(), bounds, front, appleSpan)
+    plan && plans.push(plan)
   }
-  return objs
+  return plans
 }
 //
-// One ground stone (shared decor atlas) standing on the ground line, sunk a
-// little into it, wholly inside the strip, behind the hero or (front)
-// smaller and in front of him; off the draw list until its ground strip
-// opens. Null for a big stone that would lie on the apple's strip, and for
+// One ground stone standing on the ground line, sunk a little into it,
+// wholly inside the strip, behind the hero or (front) smaller and in front
+// of him. Null for a big stone that would lie on the apple's strip, and for
 // any stone on the water flower's clear span.
 //
-function placeGroundStone(k, x, stone, decorAtlas, bounds, front, appleSpan) {
+function planGroundStone(x, stone, bounds, front, appleSpan) {
   const canvas = bakeForestGroundStone(stone, Math.random, x * 3 | 0, front ? GROUND_STONE_FRONT_SIZE : 1)
   const half = canvas.width / 2
   const worldX = Math.max(bounds.minX + half, Math.min(bounds.maxX - half, x))
   const onAppleStrip = worldX + half >= appleSpan.x1 && worldX - half <= appleSpan.x2
   if (onAppleStrip && canvas.width >= GROUND_STONE_SMALL_W) return null
   if (LEFT_TREE_CLEAR_SPANS.some(span => worldX + half >= span.x1 && worldX - half <= span.x2)) return null
-  const posX = Math.round(worldX - half)
   const sink = GROUND_STONE_SINK + Math.random() * GROUND_STONE_SINK_RANGE + (front ? GROUND_STONE_FRONT_SINK : 0)
-  const posY = Math.round(FLOOR_Y + sink - canvas.height)
+  return {
+    canvas,
+    front,
+    worldX,
+    posX: Math.round(worldX - half),
+    posY: Math.round(FLOOR_Y + sink - canvas.height)
+  }
+}
+//
+// A planned stone in the shared decor atlas (a copy of its picture: the
+// atlas build clears what it is given), off the draw list until its ground
+// strip opens.
+//
+function placeGroundStone(k, plan, decorAtlas) {
+  const { canvas, front, posX, posY } = plan
   const obj = k.add([
     k.pos(posX, posY),
     k.z(front ? GROUND_STONE_FRONT_Z : GROUND_STONE_Z),
     {
       opacity: 1,
       color: k.rgb(255, 255, 255),
-      _baked: decorAtlas.register(canvas),
+      _baked: decorAtlas.register(copyCanvas(canvas)),
       draw() {
         if (this.hidden) return
         drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
@@ -3722,11 +3778,18 @@ function placeGroundStone(k, x, stone, decorAtlas, bounds, front, appleSpan) {
   ])
   obj._homeX = posX
   obj._homeY = posY
-  obj._decorWorldX = worldX
+  obj._decorWorldX = plan.worldX
   obj._detailRank = canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large'
   obj.hidden = true
   obj.moveTo(posX, PLATFORM_HIDE_Y)
   return obj
+}
+function copyCanvas(src) {
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width
+  canvas.height = src.height
+  canvas.getContext('2d').drawImage(src, 0, 0)
+  return canvas
 }
 //
 // Flat ground line for the centipede. Up is a smaller Y.
@@ -3944,9 +4007,11 @@ function drawOneTrampLeg(k, hipX, floorY, stride, legC, footC, scale = 1) {
   })
 }
 //
-// Bakes one static PNG variant of the trampoline mushroom (with face).
+// Bakes one static PNG variant of the trampoline mushroom (with face),
+// once per live k (a scene restart reuses it).
 //
 function bakeTrampolineVariant(k, name, colors, eyesOpen) {
+  if (k.getSprite(name)) return
   const canvas = toCanvas({ width: TRAMP_TOTAL_W, height: TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
     drawCuteMushroomToCanvas(ctx, {
       cx: TRAMP_TOTAL_W / 2,
@@ -4260,7 +4325,7 @@ function visibleWorldXRange(inst, extraPad = PARALLAX_DRAW_CULL_PAD) {
 //
 // Draws only the on-screen slice of a world-anchored sprite (0..WORLD_W).
 //
-function drawWorldSpriteClipped(k, inst, sprite, opacity = 1) {
+function drawWorldSpriteClipped(k, inst, earth, opacity = 1) {
   const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
   const clipLeft = Math.max(0, visLeft)
   const clipRight = Math.min(WORLD_W, visRight)
@@ -4269,24 +4334,24 @@ function drawWorldSpriteClipped(k, inst, sprite, opacity = 1) {
   if (cutout && cutout.leftX < clipRight && cutout.rightX > clipLeft) {
     const leftEnd = Math.min(clipRight, cutout.leftX)
     leftEnd > clipLeft + 1 &&
-      drawWorldSpriteSlice(k, clipLeft, leftEnd, sprite, opacity)
+      drawWorldSpriteSlice(k, clipLeft, leftEnd, earth, opacity)
     const rightStart = Math.max(clipLeft, cutout.rightX)
     clipRight > rightStart + 1 &&
-      drawWorldSpriteSlice(k, rightStart, clipRight, sprite, opacity)
+      drawWorldSpriteSlice(k, rightStart, clipRight, earth, opacity)
     return
   }
-  drawWorldSpriteSlice(k, clipLeft, clipRight, sprite, opacity)
+  drawWorldSpriteSlice(k, clipLeft, clipRight, earth, opacity)
 }
 //
-// One horizontal slice of the baked static underground band.
+// One horizontal slice of the earth sprite ({sprite, y, h}: world top, height).
 //
-function drawWorldSpriteSlice(k, x1, x2, sprite, opacity = 1) {
+function drawWorldSpriteSlice(k, x1, x2, earth, opacity = 1) {
   const w = x2 - x1
   const opts = {
-    sprite,
-    pos: k.vec2(x1, PAR_STATIC_WORLD_Y),
+    sprite: earth.sprite,
+    pos: k.vec2(x1, earth.y),
     width: w,
-    height: PAR_STATIC_WORLD_H,
+    height: earth.h,
     quad: { x: x1 / WORLD_W, y: 0, w: w / WORLD_W, h: 1 },
     anchor: 'topleft'
   }
@@ -4400,12 +4465,33 @@ function drawParallaxLayer(inst, layer) {
 // blit is equivalent to drawing those layers directly at a quarter of the
 // fill cost.
 //
+// Those layers only move with the camera, so the framebuffer is redrawn
+// only when the camera, the window or the near row's top changes: while the
+// view stands still the frame never switches render targets (on Apple GPUs
+// a target switch mid-frame flushes and reloads the screen's tiles, which
+// held a still level under 120 FPS).
+//
 function drawForestParallaxBackdropOffscreen(inst) {
   const k = inst.k
-  inst._parOffscreen = forestParallaxOffscreenCanvas(k)
-  inst._parOccluderY = parallaxNearOccluderWorldY(inst)
-  inst._drawParBackdrop ??= () => drawForestParallaxBackdropLayers(inst)
-  inst._parOffscreen.draw(inst._drawParBackdrop)
+  const offscreen = forestParallaxOffscreenCanvas(k)
+  const occluderY = parallaxNearOccluderWorldY(inst)
+  const cam = k.camPos()
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const key = inst._parBackdropKey ??= { canvas: null, x: NaN, y: NaN, zoom: NaN, occluderY: NaN }
+  const stale = key.canvas !== offscreen || key.x !== cam.x || key.y !== cam.y || key.zoom !== zoom ||
+    key.occluderY !== occluderY
+  inst._parOffscreen = offscreen
+  inst._parOccluderY = occluderY
+  if (stale) {
+    key.canvas = offscreen
+    key.x = cam.x
+    key.y = cam.y
+    key.zoom = zoom
+    key.occluderY = occluderY
+    inst._drawParBackdrop ??= () => drawForestParallaxBackdropLayers(inst)
+    offscreen.draw(inst._drawParBackdrop)
+  }
   drawForestParallaxBackdropBlit(inst)
 }
 //
@@ -4552,7 +4638,7 @@ function drawForestPitCutoutBelowFloorFill(inst, k) {
   // (film grain included).
   //
   if (k.getSprite(BG_STATIC_COLOR)) {
-    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, BG_STATIC_COLOR)
+    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, inst.earth ?? FOREST_PLAIN_EARTH)
     return
   }
   const rgb = forestPitBelowCaveEarthRgb()
@@ -4570,27 +4656,54 @@ function forestPitBelowCaveEarthRgb() {
   return forestGroundEarthBottomLayerRgb()
 }
 //
-// Horizontal slice of the baked underground band (wavy strata + grain).
+// Horizontal and vertical slice of the earth sprite ({sprite, y, h}).
 //
-function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, sprite, opacity = 1) {
+function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, earth, opacity = 1) {
   const w = x2 - x1
   const h = y2 - y1
   if (w <= 0 || h <= 0) return
   const opts = {
-    sprite,
+    sprite: earth.sprite,
     pos: k.vec2(x1, y1),
     width: w,
     height: h,
     quad: {
       x: x1 / WORLD_W,
-      y: (y1 - PAR_STATIC_WORLD_Y) / PAR_STATIC_WORLD_H,
+      y: (y1 - earth.y) / earth.h,
       w: w / WORLD_W,
-      h: h / PAR_STATIC_WORLD_H
+      h: h / earth.h
     },
     anchor: 'topleft'
   }
   opacity < 0.999 && (opts.opacity = opacity)
   k.drawSprite(opts)
+}
+//
+// Merges the earth band and the static decor under the ground line into one
+// sprite (forest-earth-merge.js), back to front in the order their z drew
+// them: buoy stalks, left tree roots, the bug's tunnel, the flower's roots,
+// bomb tree roots, shore tree roots. Decor over the open cave stays apart.
+//
+function mergeForestEarth(inst, leftTree) {
+  const k = inst.k
+  const pitSpan = forestPitEarthSpan(k, inst.pit)
+  const leftRoots = leftTree ? [{ sprite: leftTree.roots.sprite, x: leftTree.roots.x, y: leftTree.roots.y }] : []
+  const earth = EarthMerge.create({
+    k,
+    band: BG_STATIC_COLOR,
+    bandY: PAR_STATIC_WORLD_Y,
+    layers: [
+      ...ChainBuoy.undergroundLayers(inst.chainBuoys),
+      ...leftRoots,
+      ...AppleBug.undergroundLayers(inst.appleBug),
+      ...WaterFlower.undergroundLayers(inst.waterFlower),
+      ...BombTree.undergroundLayers(inst.earTrees),
+      ...(inst.shoreTree ? ShoreTree.undergroundLayers(inst.shoreTree) : [])
+    ],
+    excludeSpans: pitSpan ? [pitSpan] : []
+  })
+  EarthMerge.markMerged([inst.chainBuoys, inst.appleBug, inst.waterFlower, inst.earTrees, inst.shoreTree], earth)
+  return earth
 }
 //
 // Cave rocks/pebbles/seams — last world pass so earth-band fills never clip them.
@@ -4621,7 +4734,7 @@ function onDrawWorld(inst) {
   //
   drawForestParallaxBackdropOffscreen(inst)
   drawParallaxLayer(inst, PAR_LAYER_NEAR)
-  drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
+  drawWorldSpriteClipped(k, inst, inst.earth ?? FOREST_PLAIN_EARTH, 1)
   drawForestPitMouthEarthGapFill(inst, k)
   drawForestPitCutoutBelowFloorFill(inst, k)
   //
@@ -5839,6 +5952,7 @@ function syncForestHeroTrampolinePads(inst, char, heroX, footY) {
 //
 function onUpdate(inst) {
   const k = inst.k
+  inst.fps && FpsCounter.onUpdate(inst.fps)
   inst.zones._sceneRef = inst
   EyeFlower.syncVisible(inst.eyeFlower)
   if (inst._forestBirdsBootstrapKick) {

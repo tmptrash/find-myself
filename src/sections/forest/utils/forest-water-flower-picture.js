@@ -9,12 +9,12 @@ import { FOREST_PAL } from './forest-palette.js'
 // ground and curving over to the left, where its red flower hangs open,
 // painted with its front petals only, so a bubble drawn behind the picture
 // seems to grow out of the flower's heart; its roots go under the ground.
-// Cut from assets/forest/water_mushroom.png and baked at world size once
+// Cut from assets/forest/water_flower.png and baked at world size once
 // per live k. The picture starts loading with this module (game boot).
 //
-const URL = 'forest/water_mushroom.png'
-const SPRITE = 'forest0-water-flower-v2'
-const ROOTS_SPRITE = 'forest0-water-flower-roots-v1'
+const URL = 'forest/water_flower.png'
+const SPRITE = 'forest0-water-flower-v3'
+const ROOTS_SPRITE = 'forest0-water-flower-roots-v2'
 const GRAIN_SEED = 6301
 const ROOTS_GRAIN_SEED = 6302
 //
@@ -25,17 +25,17 @@ const ROOTS_GRAIN_SEED = 6302
 // the bubble's top sits inside the bell. The whole plant stands
 // GROUND_SINK world px lower than the ground line.
 //
-const PLANT = { x: 300, y: 183, w: 775, h: 730 }
-const GROUND_Y = 907
-const STEM_FOOT_X = 735.5
-const FLOWER_HEART = { x: 465, y: 622 }
+const PLANT = { x: 300, y: 175, w: 777, h: 730 }
+const GROUND_Y = 899
+const STEM_FOOT_X = 728
+const FLOWER_HEART = { x: 466, y: 624 }
 const GROUND_SINK = 1
 //
 // The roots under the stem (their top row at the box's top, centred on the
 // stem's foot; the thin seam line between them and the stem is left out)
 // reach this many world px up over the ground line.
 //
-const ROOTS = { x: 432, y: 917, w: 597, h: 249 }
+const ROOTS = { x: 403, y: 929, w: 624, h: 237 }
 const ROOTS_TUCK = 1
 //
 // A flat spot of yellow moss lies on the ground in front of the stem's

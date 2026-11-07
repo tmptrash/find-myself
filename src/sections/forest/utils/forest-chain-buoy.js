@@ -8,9 +8,11 @@ import {
   cssRgb,
   drawStaticDecorSprite,
   ensureStaticDecorSprite,
+  staticBakeHolder,
   isWorldSpanInView
 } from './forest-static-bake.js'
 import { drawForestPlant, forestPlantBounds } from './forest-plants.js'
+import * as EarthMerge from './forest-earth-merge.js'
 //
 // Segmented stalk-eye creatures in the island eye-flower's look: a red,
 // contoured stalk with a lit line and short side stems, topped by a white
@@ -175,6 +177,35 @@ export function triggerBuoyLandBlink(buoy) {
 }
 
 /**
+ * Bakes every buoy's underground stalk and base greenery now (at level
+ * load) instead of on its first frame on screen, which hitched the game as
+ * the hero ran up to a buoy.
+ * @param {Object} inst - Chain-buoy inst
+ */
+export function prewarm(inst) {
+  const greeneryColors = buoyGreeneryPainterColors()
+  inst.buoys.forEach(buoy => {
+    bakeBuoyUndergroundStem(inst.k, buoy)
+    bakeBuoyBaseGreeneryBack(inst.k, buoy, greeneryColors)
+    bakeBuoyBaseGreeneryFront(inst.k, buoy, greeneryColors)
+  })
+}
+
+/**
+ * The shown buoys' underground stalks as static layers for the merged earth
+ * sprite (forest-earth-merge.js), back to front.
+ * @param {Object} inst - Chain-buoy inst
+ * @returns {Array<{sprite: string, x: number, y: number, opacity: number}>}
+ */
+export function undergroundLayers(inst) {
+  return inst.buoys
+    .filter(buoy => isBuoyShown(inst, buoy))
+    .map(buoy => bakeBuoyUndergroundStem(inst.k, buoy))
+    .filter(Boolean)
+    .map(baked => ({ sprite: baked.sprite, x: baked.x, y: baked.y, opacity: BUOY_UNDERGROUND_OPACITY }))
+}
+
+/**
  * Draws every chain-buoy stalk-eye — stalk contours, stalk fills, lit
  * lines, then eyes.
  * @param {Object} inst - Chain-buoy inst
@@ -184,9 +215,7 @@ export function triggerBuoyLandBlink(buoy) {
 export function onDraw(inst, colors, view = null) {
   const k = inst.k
   const visible = inst.buoys.filter(buoy =>
-    isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) &&
-    (buoy.prizeEye ||
-      !chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)))
+    isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) && isBuoyShown(inst, buoy))
   //
   // All root sprites first, then every stalk and eye in one batched polygon —
   // interleaving sprite blits with primitives would flush the GPU batch once
@@ -194,7 +223,7 @@ export function onDraw(inst, colors, view = null) {
   // a stalk where a side stem branches off.
   //
   const greeneryColors = buoyGreeneryPainterColors()
-  visible.forEach(buoy => drawBuoyUndergroundStem(k, buoy))
+  visible.forEach(buoy => drawBuoyUndergroundStem(inst, buoy))
   visible.forEach(buoy => drawBuoyBaseGreeneryBack(k, buoy, greeneryColors))
   const chains = visible.map(buoy => buildBuoyChainPoints(buoy, inst.time))
   const batch = inst.bodyBatch
@@ -238,15 +267,31 @@ function buildBuoyUndergroundPoints(x, groundY, earthBottomY, segLen, seed) {
 //
 // Baked underground stalk — same tapered passes as the stem above ground.
 //
-function drawBuoyUndergroundStem(k, buoy) {
+function drawBuoyUndergroundStem(inst, buoy) {
+  const baked = bakeBuoyUndergroundStem(inst.k, buoy)
+  baked && !EarthMerge.isMerged(inst, baked.sprite) && drawStaticDecorSprite(inst.k, baked, BUOY_UNDERGROUND_OPACITY)
+}
+//
+// Buoys under a wood platform stay hidden, except the one holding the prize eye.
+//
+function isBuoyShown(inst, buoy) {
+  return buoy.prizeEye || !chainBuoyXUnderWoodPlatform(buoy.x, inst.woodPlatformBands, inst.platformXMargin)
+}
+function bakeBuoyUndergroundStem(k, buoy) {
   const pts = buoy.undergroundPts
-  if (!pts || pts.length < 2) return
+  if (!pts || pts.length < 2) return null
   const inks = buoyUndergroundStemColors()
   const key = colorKey(inks.contour, inks.stem, inks.stemLight)
-  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, buoy, BUOY_UNDERGROUND_BAKE_SLOT, key,
+  return ensureStaticDecorSprite(k, buoyBakeHolder(k, buoy), BUOY_UNDERGROUND_BAKE_SLOT, key,
     buoyUndergroundStemBounds(pts, buoy.segmentWidth),
     ctx => paintBuoyUndergroundStem(ctx, pts, buoy.segmentWidth, inks),
-    buoy.x * BUOY_UNDERGROUND_GRAIN_SEED), BUOY_UNDERGROUND_OPACITY)
+    buoy.x * BUOY_UNDERGROUND_GRAIN_SEED)
+}
+//
+// Bakes are kept per live k and buoy place, so a scene restart reuses them.
+//
+function buoyBakeHolder(k, buoy) {
+  return staticBakeHolder(k, `chain-buoy-${buoy.x}`)
 }
 function buoyUndergroundStemColors() {
   const pal = FOREST_PAL.forestEyeFlower
@@ -299,22 +344,28 @@ function paintTaperedPassCanvas(ctx, pts, wBase, wTip, colorCss) {
 // right-leaning blades over the stalk foot (eye still draws last).
 //
 function drawBuoyBaseGreeneryBack(k, buoy, colors) {
+  drawStaticDecorSprite(k, bakeBuoyBaseGreeneryBack(k, buoy, colors))
+}
+function bakeBuoyBaseGreeneryBack(k, buoy, colors) {
   const g = buoy.baseGreenery
-  if (!g?.ferns?.length && !g?.leavesBack?.length) return
+  if (!g?.ferns?.length && !g?.leavesBack?.length) return null
   const key = `${buoyGreeneryColorKey(colors)}|back`
-  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, buoy, BUOY_GREENERY_BACK_BAKE_SLOT, key,
+  return ensureStaticDecorSprite(k, buoyBakeHolder(k, buoy), BUOY_GREENERY_BACK_BAKE_SLOT, key,
     buoyGreeneryBackBounds(buoy),
     ctx => paintBuoyBaseGreeneryBack(ctx, buoy, colors),
-    buoy.x * BUOY_GREENERY_GRAIN_SEED))
+    buoy.x * BUOY_GREENERY_GRAIN_SEED)
 }
 function drawBuoyBaseGreeneryFront(k, buoy, colors) {
+  drawStaticDecorSprite(k, bakeBuoyBaseGreeneryFront(k, buoy, colors))
+}
+function bakeBuoyBaseGreeneryFront(k, buoy, colors) {
   const g = buoy.baseGreenery
-  if (!g?.leavesFront?.length) return
+  if (!g?.leavesFront?.length) return null
   const key = `${buoyGreeneryColorKey(colors)}|front`
-  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, buoy, BUOY_GREENERY_FRONT_BAKE_SLOT, key,
+  return ensureStaticDecorSprite(k, buoyBakeHolder(k, buoy), BUOY_GREENERY_FRONT_BAKE_SLOT, key,
     buoyGreeneryFrontBounds(buoy),
     ctx => paintBuoyBaseGreeneryFront(ctx, buoy, colors),
-    buoy.x * BUOY_GREENERY_GRAIN_SEED + 17))
+    buoy.x * BUOY_GREENERY_GRAIN_SEED + 17)
 }
 function buildBuoyBaseGreenery(x, groundY, seed) {
   const rng = createSeededRandom(BUOY_GREENERY_LAYOUT_SEED + Math.floor(seed * 1000) + Math.floor(x))

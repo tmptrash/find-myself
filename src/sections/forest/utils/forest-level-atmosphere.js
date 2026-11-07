@@ -6,7 +6,7 @@ import {
   forestRgb
 } from './forest-palette.js'
 import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite } from './forest-static-bake.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite, staticBakeHolder } from './forest-static-bake.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 //
 // Midges + right-edge crack pit for the forest level
@@ -540,13 +540,8 @@ export function drawForestPit(k, pit) {
  */
 export function drawForestPitCaveForegroundDecor(k, pit) {
   if (!pit?.wallProfile?.mouth) return
-  const layout = pit.wallProfile
-  drawBakedCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, [
-    layout.wallRocks?.filter(rock => !rock.straddleMouthGround),
-    layout.backgroundRocks,
-    layout.contourRocks?.filter(rock => !rock.straddleMouthGround),
-    layout.pebbles
-  ])
+  drawStaticDecorSprite(k, bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED,
+    caveForegroundRockGroups(pit.wallProfile)))
 }
 /**
  * Seam-cover rocks — drawn last so earth/static cannot hide them.
@@ -555,23 +550,105 @@ export function drawForestPitCaveForegroundDecor(k, pit) {
  */
 export function drawForestPitCaveSeamCoverRocks(k, pit) {
   if (!pit?.wallProfile?.mouth) return
+  drawStaticDecorSprite(k, bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED,
+    caveSeamRockGroups(pit.wallProfile)))
+}
+
+/**
+ * Builds the cave's layout and bakes its interior and rocks now (at level
+ * load) instead of the first time the cave comes on screen, which hitched
+ * the game as the hero ran up to it. The bakes are kept per live k, so a
+ * scene restart reuses them.
+ * @param {Object} k - Kaplay instance
+ * @param {Object|null} pit - Pit state
+ */
+export function prewarmForestPit(k, pit) {
+  if (!pit) return
+  ensureCaveLayout(pit)
+  bakeCaveInteriorSprite(k, pit)
+  if (!pit.wallProfile?.mouth) return
+  bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(pit.wallProfile))
+  bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(pit.wallProfile))
+}
+
+/**
+ * Paints the open cave as the level shows it — the void over its cutout of
+ * the earth, the interior and the rocks round its mouth — onto a canvas in
+ * the level's world coordinates (translate the context to place it). A still
+ * for the menu backdrop: no physics, nothing live.
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {number} worldW - Level world width (the cave sits at its right end)
+ * @param {number} floorY - Level ground line Y
+ * @param {number} [voidToX=0] - The level's world wall hides the cave's right edge; past
+ *   the world (the menu) its void runs on to this X instead of ending in a seam
+ * @returns {{x1: number, x2: number, trampX: number, bottomY: number}} The cave's span, where its mushroom stands and its floor
+ */
+export function paintForestPitStill(ctx, worldW, floorY, voidToX = 0) {
+  const zone = getCrackZone(worldW, floorY)
+  const layout = buildCaveSceneLayout(zone, floorY)
+  const pal = buildCavePalette()
+  const cut = getForestPitEarthBandMouthCutout(zone, false)
+  ctx.fillStyle = `rgb(${pal.void.r},${pal.void.g},${pal.void.b})`
+  ctx.fillRect(cut.leftX, floorY, Math.max(cut.rightX, voidToX) - cut.leftX, zone.depth)
+  layout.mouth && paintCaveInterior(ctx, layout, pal)
+  layout.mouth && [...caveForegroundRockGroups(layout), ...caveSeamRockGroups(layout)]
+    .forEach(rocks => paintCanvasRocks(ctx, rocks, pal, floorY, true))
+  return { x1: cut.leftX, x2: cut.rightX, trampX: zone.x1 + zone.width * PIT_CAVE_TRAMP_ZONE_T, bottomY: floorY + zone.depth }
+}
+
+/**
+ * World X span the open cave covers in the earth: its cutout and the baked
+ * rocks drawn over the earth around its mouth. Static decor inside it cannot
+ * be merged into the earth sprite — the cave and its rocks draw over the
+ * earth but under that decor.
+ * @param {Object} k - Kaplay instance
+ * @param {Object|null} pit - Pit state
+ * @returns {{x1: number, x2: number}|null}
+ */
+export function forestPitEarthSpan(k, pit) {
+  if (!pit?.zone) return null
+  const cut = getForestPitEarthBandMouthCutoutForPit(pit)
+  const span = { x1: cut.leftX, x2: cut.rightX }
   const layout = pit.wallProfile
-  drawBakedCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, [
+  const rocks = layout?.mouth ? [
+    bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(layout)),
+    bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(layout))
+  ] : []
+  rocks.filter(Boolean).forEach(baked => {
+    span.x1 = Math.min(span.x1, baked.x)
+    span.x2 = Math.max(span.x2, baked.x + baked.w)
+  })
+  return span
+}
+function caveForegroundRockGroups(layout) {
+  return [
+    layout.wallRocks?.filter(rock => !rock.straddleMouthGround),
+    layout.backgroundRocks,
+    layout.contourRocks?.filter(rock => !rock.straddleMouthGround),
+    layout.pebbles
+  ]
+}
+function caveSeamRockGroups(layout) {
+  return [
     layout.wallRocks?.filter(rock => rock.straddleMouthGround),
     layout.contourRocks?.filter(rock => rock.straddleMouthGround)
-  ])
+  ]
 }
 //
-// Bakes rock groups once per layout + decor mode and blits the result. Each
-// group keeps its own fill/shade alternation, same as drawCaveLayoutRocks.
+// Bakes rock groups once per layout + decor mode (kept per live k and pit
+// place). Each group keeps its own fill/shade alternation, same as
+// drawCaveLayoutRocks.
 //
-function drawBakedCaveRockGroups(k, pit, slot, grainSeed, groups) {
+function bakeCaveRockGroups(k, pit, slot, grainSeed, groups) {
   const bounds = caveRockGroupsBounds(groups, pit.floorY)
-  if (!bounds) return
+  if (!bounds) return null
   const pal = buildCavePalette()
-  drawStaticDecorSprite(k, ensureStaticDecorSprite(k, pit.wallProfile, slot, CAVE_ROCK_BAKE_KEY_TONE, bounds,
+  return ensureStaticDecorSprite(k, pitBakeHolder(k, pit), slot, CAVE_ROCK_BAKE_KEY_TONE, bounds,
     ctx => groups.forEach(rocks => paintCanvasRocks(ctx, rocks, pal, pit.floorY, true)),
-    pit.zone.x1 * grainSeed))
+    pit.zone.x1 * grainSeed)
+}
+function pitBakeHolder(k, pit) {
+  return staticBakeHolder(k, `forest-pit-${pit.zone.x1}`)
 }
 function caveRockGroupsBounds(groups, floorY) {
   const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
@@ -684,13 +761,7 @@ function midgeDrawColor(k, ctrl, base) {
   return ctrl._midgeColor
 }
 function drawCaveInteriorRockStyle(k, pit) {
-  const { zone, floorY } = pit
-  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
-    pit.wallProfile = buildCaveSceneLayout(zone, floorY)
-    pit._caveSpriteReady = false
-    pit._caveBakeRocksKey = null
-    pit.collapsed && refreshForestPitMouthWalkShelf(pit)
-  }
+  ensureCaveLayout(pit)
   ensureForestPitMouthWalkShelf(pit)
   bakeCaveInteriorSprite(k, pit)
   if (pit._caveSpriteReady) {
@@ -708,6 +779,17 @@ function drawCaveInteriorRockStyle(k, pit) {
 // per frame otherwise. Rebaked on a layout change (see
 // invalidateForestPitCaveInteriorBake).
 //
+//
+// The cave's rock layout (seeded by its place), rebuilt when the layout
+// version changes.
+//
+function ensureCaveLayout(pit) {
+  if (pit.wallProfile && pit.wallProfile.version === CAVE_LAYOUT_VERSION) return
+  pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
+  pit._caveSpriteReady = false
+  pit._caveBakeRocksKey = null
+  pit.collapsed && refreshForestPitMouthWalkShelf(pit)
+}
 function bakeCaveInteriorSprite(k, pit) {
   const zone = pit.zone
   const layout = pit.wallProfile
@@ -739,12 +821,34 @@ function bakeCaveInteriorSprite(k, pit) {
   const h = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
   pit._caveSpriteW = w
   pit._caveSpriteH = h
+  //
+  // Baked already on this k (an earlier run of the scene): reuse it.
+  //
+  const holder = pitBakeHolder(k, pit)
+  if (holder.caveKey === bakeKey && holder.caveVersion === CAVE_LAYOUT_VERSION && k.getSprite(CAVE_INTERIOR_SPRITE)) {
+    markCaveInteriorBaked(pit, bakeKey)
+    return
+  }
   const pal = buildCavePalette()
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
   ctx.translate(-ox, -oy)
+  paintCaveInterior(ctx, layout, pal)
+  applyForestFilmGrainToCanvas(canvas, zone.x1)
+  k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  holder.caveKey = bakeKey
+  holder.caveVersion = CAVE_LAYOUT_VERSION
+  markCaveInteriorBaked(pit, bakeKey)
+}
+//
+// The cave's void, its depth shading, background rocks, pebbles and the
+// seam-cover rocks, in world coordinates.
+//
+function paintCaveInterior(ctx, layout, pal) {
   const voidPts = caveMouthPts(layout.mouth, layout.interiorWallEdge)
   fillCanvasPoly(ctx, voidPts, pal.void)
   paintCaveDepthShading(ctx, voidPts, layout.mouth, pal)
@@ -767,10 +871,8 @@ function bakeCaveInteriorSprite(k, pit) {
     const seamContourRocks = layout.contourRocks.filter(rock => rock.straddleMouthGround)
     paintCanvasRocks(ctx, seamContourRocks, pal, groundY)
   }
-  applyForestFilmGrainToCanvas(canvas, zone.x1)
-  k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
-  canvas.width = 0
-  canvas.height = 0
+}
+function markCaveInteriorBaked(pit, bakeKey) {
   pit._caveSpriteReady = true
   pit._caveBakeRocksKey = bakeKey
   pit._caveBakeLayoutVersion = CAVE_LAYOUT_VERSION

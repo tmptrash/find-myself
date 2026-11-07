@@ -72,6 +72,11 @@ const HUE_VARY_SKEW = 3
 //
 const BLADE_ATLAS_SPRITE = 'grass-blade-atlas'
 //
+// The post-bake the blade atlas was last baked with on each live k: a scene
+// restart with the same look reuses the atlas instead of baking it again.
+//
+const bladeAtlasPostBakeByK = new WeakMap()
+//
 // Each variant is baked twice — upright and mirrored — so a blade picks its
 // flip by atlas cell instead of the flipX draw flag, which would mirror the
 // quad's UV window and sample a neighbouring cell.
@@ -400,6 +405,9 @@ function rootFanBounds(lines) {
 // variant mirrored. Blades are tinted at draw time, so the atlas stays white.
 //
 function loadBladeSprites(k, postBakeCanvas) {
+  const look = postBakeCanvas ?? null
+  if (bladeAtlasPostBakeByK.get(k) === look && k.getSprite(BLADE_ATLAS_SPRITE)) return
+  bladeAtlasPostBakeByK.set(k, look)
   const atlas = document.createElement('canvas')
   atlas.width = BLADE_ATLAS_W
   atlas.height = BLADE_ATLAS_H

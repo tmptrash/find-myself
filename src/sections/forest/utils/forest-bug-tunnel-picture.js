@@ -3,45 +3,46 @@ import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-para
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 
 //
-// Picture of the apple bug's tunnel under its burrow: a stone-lined cave
-// with its left rounded end under the hole, dipping to a narrow middle and
-// rising to its right rounded end, cut from assets/forest/tunnel.png and
-// baked at world size once per live k. It lies under a layer of soil, apart
-// from the burrow's picture.
+// Picture of the apple bug's burrow: a shaft going down from its mouth on
+// the ground into a cave dug in the soil, with crumbly earth edges, a ribbed
+// back wall and a pebbly floor running from its narrow left end (under the
+// shaft) down to the wide right end, cut from assets/forest/tunnel.png and
+// baked at world size once per live k.
 //
 const URL = 'forest/tunnel.png'
-const SPRITE = 'forest0-bug-tunnel'
+const SPRITE = 'forest0-bug-tunnel-v3'
 const GRAIN_SEED = 6417
 //
-// On the picture (px): the part kept (the whole cave), the anchor the cave
-// is placed by (the middle of its leftmost stone across, the top of its
-// stones down: it stands under the burrow's left doorway stone), the line
-// the bug's feet walk along from the left end through the narrow middle to
-// the right end (a little over the stones' tops, so in the narrow middle its
-// back rather brushes the stones above than its feet tread on the ones
-// below), where it shows up and vanishes (in the left end, its back clear
-// of the wall) and where the apples it stores lie at the right end.
+// On the picture (px): the part kept (the whole burrow), the anchor it is
+// placed by (the middle of the shaft's mouth across, the flat top of the
+// mouth's earth lip down: it lies on the ground line), the mouth's inner
+// span and its lip's outer span, the line the bug's feet walk along the
+// cave's floor from the left end to the right end (between the back wall's
+// foot and the floor's front edge, past the pebbles), where it rests in the
+// cave (clear of the shaft's foot, where the cave is tall enough for it)
+// and where the apples it stores lie at the right end.
 //
-const PICTURE = { x: 262, y: 458, w: 1120, h: 410 }
-const ANCHOR = { x: 298, y: 464 }
-const END_X = 465
+const PICTURE = { x: 88, y: 272, w: 1288, h: 552 }
+const ANCHOR = { x: 218, y: 284 }
+const MOUTH = { x1: 158, x2: 278 }
+const LIP = { x1: 95, x2: 339 }
+const REST_X = 420
 const FLOOR = [
-  { x: 370, y: 648 },
-  { x: 400, y: 652 },
-  { x: 440, y: 682 },
-  { x: 500, y: 704 },
-  { x: 560, y: 740 },
-  { x: 640, y: 748 },
-  { x: 720, y: 764 },
-  { x: 800, y: 778 },
-  { x: 900, y: 774 },
-  { x: 1000, y: 782 },
-  { x: 1100, y: 760 },
-  { x: 1160, y: 742 },
-  { x: 1220, y: 712 },
-  { x: 1290, y: 700 }
+  { x: 130, y: 545 },
+  { x: 200, y: 560 },
+  { x: 300, y: 592 },
+  { x: 400, y: 632 },
+  { x: 500, y: 660 },
+  { x: 600, y: 680 },
+  { x: 700, y: 694 },
+  { x: 800, y: 704 },
+  { x: 900, y: 702 },
+  { x: 1000, y: 700 },
+  { x: 1100, y: 702 },
+  { x: 1180, y: 706 },
+  { x: 1250, y: 700 }
 ]
-const PILE_X = 1250
+const PILE_X = 1170
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()
 
@@ -74,24 +75,28 @@ export async function load(k, width) {
 }
 
 /**
- * Where the tunnel sits round its anchor: the middle of its leftmost stone
- * across, the top of its stones down (no picture needed).
+ * Where the burrow sits round its anchor (the middle of its mouth on the
+ * ground line; no picture needed, so the level can plan around it).
  * @param {number} width - World px across the picture
- * @returns {Object} Scale, size, the picture's top-left, the feet's walking
- *   line, where the bug shows up and vanishes and the apples' spot at the
- *   far end, all world px from the anchor
- *   ({ scale, w, h, dx, dy, floor: [{x, y}], endX, pileX })
+ * @returns {Object} Scale, size, the picture's top-left, the mouth's span
+ *   and its earth lip's span on the ground, the feet's walking line in the
+ *   cave, where the bug rests there and the apples' spot at the far end,
+ *   all world px from the anchor
+ *   ({ scale, w, h, dx, dy, mouth: {x1, x2}, lip: {x1, x2}, floor: [{x, y}], restX, pileX })
  */
-function layout(width) {
+export function layout(width) {
   const scale = width / PICTURE.w
+  const across = x => (x - ANCHOR.x) * scale
   return {
     scale,
     w: width,
     h: PICTURE.h * scale,
-    dx: (PICTURE.x - ANCHOR.x) * scale,
+    dx: across(PICTURE.x),
     dy: (PICTURE.y - ANCHOR.y) * scale,
-    floor: FLOOR.map(p => ({ x: (p.x - ANCHOR.x) * scale, y: (p.y - ANCHOR.y) * scale })),
-    endX: (END_X - ANCHOR.x) * scale,
-    pileX: (PILE_X - ANCHOR.x) * scale
+    mouth: { x1: across(MOUTH.x1), x2: across(MOUTH.x2) },
+    lip: { x1: across(LIP.x1), x2: across(LIP.x2) },
+    floor: FLOOR.map(p => ({ x: across(p.x), y: (p.y - ANCHOR.y) * scale })),
+    restX: across(REST_X),
+    pileX: across(PILE_X)
   }
 }

@@ -3,6 +3,7 @@ import * as Sound from '../../../utils/sound.js'
 import { FOREST_CFG } from '../cfg.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as PolyBatch from '../../../utils/poly-batch.js'
 
 //
 // Propeller bud ("Valera"): a leafy cone with a hooded head and a seed
@@ -76,7 +77,7 @@ const HUM_RATE_PER_V = 0.0009
 // against the push (BEND_ACCEL px/s² per rad, up to BEND_MAX). Both are
 // underdamped springs, so a dash or a turn leaves the body jiggling.
 //
-const STICK_SHARE = 1.45
+const STICK_SHARE = 1.15
 const ROPE_FROM_W = 26
 const ROPE_FROM_V = 0.045
 const ROPE_MAX = 20
@@ -279,6 +280,7 @@ export function create(cfg) {
     k,
     look,
     stops,
+    batch: PolyBatch.create(),
     exit,
     rest,
     stop: startStop,
@@ -897,6 +899,7 @@ function drawLegs(inst, dropY) {
   legs.forEach(leg => drawLegPass(inst, leg, ROOT_OUTLINE, inst.rootDarkColor))
   legs.forEach(leg => drawLegPass(inst, leg, 0, inst.rootColor))
   legs.forEach(leg => drawLegLit(inst, leg))
+  PolyBatch.flush(inst.batch, inst.k)
 }
 function grownLeg(inst, leg, grow, r, dropY) {
   const world = leg.pts.map(p => toWorld(inst, { x: p.x * r, y: p.y * r + dropY }))
@@ -918,12 +921,11 @@ function knobWidth(leg, i) {
   return into ? into[2] * SIZE : 0
 }
 function drawLegPass(inst, leg, extraW, color) {
-  const { k } = inst
-  leg.segs.forEach(seg => k.drawLine({ p1: k.vec2(seg.p1.x, seg.p1.y), p2: k.vec2(seg.p2.x, seg.p2.y), width: seg.w + extraW, color }))
-  leg.knobs.forEach(knob => k.drawCircle({ pos: k.vec2(knob.p.x, knob.p.y), radius: knob.r + extraW * 0.5, color }))
+  const { batch } = inst
+  leg.segs.forEach(seg => PolyBatch.addLine(batch, seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y, seg.w + extraW, color))
+  leg.knobs.forEach(knob => PolyBatch.addDisc(batch, knob.p.x, knob.p.y, knob.r + extraW * 0.5, color))
 }
 function drawLegLit(inst, leg) {
-  const { k } = inst
   leg.segs.forEach(seg => {
     if (seg.w < LIT_MIN_W) return
     const dx = seg.p2.x - seg.p1.x
@@ -933,12 +935,8 @@ function drawLegLit(inst, leg) {
     const flip = -dy + dx > 0 ? -1 : 1
     const ox = -dy / len * seg.w * LIT_SHIFT * flip
     const oy = dx / len * seg.w * LIT_SHIFT * flip
-    k.drawLine({
-      p1: k.vec2(seg.p1.x + ox, seg.p1.y + oy),
-      p2: k.vec2(seg.p2.x + ox, seg.p2.y + oy),
-      width: Math.max(LIT_MIN_LINE, seg.w * LIT_W_SHARE),
-      color: inst.rootLightColor
-    })
+    PolyBatch.addLine(inst.batch, seg.p1.x + ox, seg.p1.y + oy, seg.p2.x + ox, seg.p2.y + oy,
+      Math.max(LIT_MIN_LINE, seg.w * LIT_W_SHARE), inst.rootLightColor)
   })
 }
 //
@@ -1027,6 +1025,7 @@ function drawStick(inst) {
   drawStalkBody(inst, spine, 0, inst.stickColor)
   STALK_FIBRES.forEach(fibre => drawStalkFibre(inst, spine, fibre))
   drawStalkDetails(inst, spine)
+  PolyBatch.flush(inst.batch, inst.k)
   return tip
 }
 //
@@ -1054,11 +1053,10 @@ function stalkSpine(base, mid, tip) {
   return spine
 }
 function drawStalkBody(inst, spine, extraW, color) {
-  const { k } = inst
   for (let i = 1; i < spine.length; i++) {
     const p = spine[i - 1]
     const q = spine[i]
-    k.drawLine({ p1: k.vec2(p.x, p.y), p2: k.vec2(q.x, q.y), width: (p.w + q.w) / 2 + extraW, color })
+    PolyBatch.addLine(inst.batch, p.x, p.y, q.x, q.y, (p.w + q.w) / 2 + extraW, color)
   }
 }
 //
@@ -1066,29 +1064,28 @@ function drawStalkBody(inst, spine, extraW, color) {
 // length), light on the sunny half, dark on the other.
 //
 function drawStalkFibre(inst, spine, fibre) {
-  const { k } = inst
   const pts = spine.map(p => {
     const off = Math.sin(p.u * Math.PI * 2 * STALK_TWISTS + fibre.phase) * p.w * STALK_FIBRE_REACH
-    return k.vec2(p.x + p.nx * off, p.y + p.ny * off)
+    return { x: p.x + p.nx * off, y: p.y + p.ny * off }
   })
-  k.drawLines({ pts, width: STALK_FIBRE_W, color: fibre.light ? inst.stickLightColor : inst.stickDarkColor })
+  PolyBatch.addPolyline(inst.batch, pts, STALK_FIBRE_W, fibre.light ? inst.stickLightColor : inst.stickDarkColor)
 }
 //
 // A knot bulging from the stalk and a short twig stub off its side.
 //
 function drawStalkDetails(inst, spine) {
-  const { k } = inst
+  const { batch } = inst
   const knot = spineAt(spine, STALK_KNOT_AT)
   const stub = spineAt(spine, STALK_STUB_AT)
   const kx = knot.x + knot.nx * knot.w * STALK_KNOT_SHIFT
   const ky = knot.y + knot.ny * knot.w * STALK_KNOT_SHIFT
   const sx = stub.x - stub.nx * STALK_STUB_LEN
   const sy = stub.y - stub.ny * STALK_STUB_LEN - STALK_STUB_RISE
-  k.drawLine({ p1: k.vec2(stub.x, stub.y), p2: k.vec2(sx, sy), width: STALK_STUB_W + STALK_OUTLINE, color: inst.stickDarkColor })
-  k.drawLine({ p1: k.vec2(stub.x, stub.y), p2: k.vec2(sx, sy), width: STALK_STUB_W, color: inst.stickColor })
-  k.drawCircle({ pos: k.vec2(kx, ky), radius: knot.w * STALK_KNOT_R + STALK_OUTLINE * 0.5, color: inst.stickDarkColor })
-  k.drawCircle({ pos: k.vec2(kx, ky), radius: knot.w * STALK_KNOT_R, color: inst.stickColor })
-  k.drawCircle({ pos: k.vec2(kx - STALK_KNOT_LIT, ky - STALK_KNOT_LIT), radius: knot.w * STALK_KNOT_R * 0.45, color: inst.stickLightColor })
+  PolyBatch.addLine(batch, stub.x, stub.y, sx, sy, STALK_STUB_W + STALK_OUTLINE, inst.stickDarkColor)
+  PolyBatch.addLine(batch, stub.x, stub.y, sx, sy, STALK_STUB_W, inst.stickColor)
+  PolyBatch.addDisc(batch, kx, ky, knot.w * STALK_KNOT_R + STALK_OUTLINE * 0.5, inst.stickDarkColor)
+  PolyBatch.addDisc(batch, kx, ky, knot.w * STALK_KNOT_R, inst.stickColor)
+  PolyBatch.addDisc(batch, kx - STALK_KNOT_LIT, ky - STALK_KNOT_LIT, knot.w * STALK_KNOT_R * 0.45, inst.stickLightColor)
 }
 function spineAt(spine, u) {
   return spine[Math.round(u * (spine.length - 1))]

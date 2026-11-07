@@ -62,9 +62,13 @@ const WEBGL_LOST_RELOAD_MS_INGAME = 2500
 // Setting preserveDrawingBuffer:false lets the driver discard the backbuffer
 // after each composite, which is the documented WebGL recommendation for
 // games and dramatically reduces VRAM pressure.
+// antialias:false keeps the canvas without MSAA: native-resolution frames are
+// drawn straight onto it (Kaplay patch), and they must look exactly like the
+// old non-multisampled offscreen frame and skip the per-frame MSAA resolve.
 //
 const WEBGL_CONTEXT_OPTS_OVERRIDE = {
   preserveDrawingBuffer: false,
+  antialias: false,
   failIfMajorPerformanceCaveat: false
 }
 //

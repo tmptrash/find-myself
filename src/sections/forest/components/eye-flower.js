@@ -5,7 +5,7 @@ import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite } from '../utils/forest-static-bake.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite, staticBakeHolder } from '../utils/forest-static-bake.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import { forestFloorPainterColors } from './forest-floor.js'
 import { drawForestPlant } from '../utils/forest-plants.js'
@@ -378,6 +378,11 @@ const GRAB_SINK_DEPTH = 300
 //
 const CLIP_SEG = { ax: 0, ay: 0, bx: 0, by: 0, cut: false }
 const COIL_PT = { x: 0, y: 0, front: false }
+//
+// The plant is skipped while every point of it is this far off the visible
+// span (its widest blade or berry stays inside the pad).
+//
+const DRAW_CULL_PAD = 24
 
 /**
  * Creates the island, its walkable collider and the eye-flower plant.
@@ -390,6 +395,7 @@ const COIL_PT = { x: 0, y: 0, front: false }
  * @param {number} cfg.reachTriggerX - Big tree X: stretched blades and the flower head never pass just short of it
  * @param {function(): ({x: number, y: number}|null)} cfg.getHeroPos - Hero body centre
  * @param {function(): boolean} cfg.isVisible - True while the island exists (colour world + lake)
+ * @param {function(): ({x1: number, x2: number}|null)} [cfg.getView] - Visible world X span (null: always draw)
  * @returns {Object} Eye-flower inst
  */
 export function create(cfg) {
@@ -435,6 +441,7 @@ export function create(cfg) {
     stemReachMaxX,
     getHeroPos: cfg.getHeroPos,
     isVisible: cfg.isVisible,
+    getView: cfg.getView ?? null,
     visible: false,
     open: 0,
     lean: 0,
@@ -477,6 +484,7 @@ export function create(cfg) {
       }
     }
   ])
+  bakeIsland(inst)
   return inst
 }
 
@@ -1053,7 +1061,7 @@ function blendArc(rest, lean, amount) {
 
 function onDraw(inst) {
   const sink = grabSink(inst)
-  if (!inst.visible || sink >= GRAB_SINK_DEPTH) return
+  if (!inst.visible || sink >= GRAB_SINK_DEPTH || !isPlantInView(inst)) return
   const batch = inst.batch
   inst.blades.forEach(blade => addBlade(inst, blade))
   addStalk(inst)
@@ -1061,6 +1069,19 @@ function onDraw(inst) {
   PolyBatch.flush(batch, inst.k, 1, sink, sinkFloorY(inst, sink))
 }
 
+//
+// Whether any point of the stalk, blades or berries comes near the visible
+// span (the plant reaches far when it stretches for the hero).
+//
+function isPlantInView(inst) {
+  const view = inst.getView?.()
+  if (!view) return true
+  const x1 = view.x1 - DRAW_CULL_PAD
+  const x2 = view.x2 + DRAW_CULL_PAD
+  const inView = p => p.x >= x1 && p.x <= x2
+  return inst.stemPts.some(inView) || inst.blades.some(blade => blade.pts.some(inView)) ||
+    inst.berries.some(berry => berry.pts.some(inView))
+}
 //
 // Eased-in depth the plant has sunk to (0 until the pull starts).
 //
@@ -1188,10 +1209,15 @@ function drawGrabFront(inst) {
 }
 
 function drawIsland(inst) {
-  if (!inst.visible) return
-  const baked = ensureStaticDecorSprite(inst.k, inst, ISLAND_BAKE_SLOT, ISLAND_BAKE_KEY, islandBounds(inst),
-    ctx => paintIsland(ctx, inst), ISLAND_BAKE_SEED)
-  drawStaticDecorSprite(inst.k, baked)
+  inst.visible && drawStaticDecorSprite(inst.k, bakeIsland(inst))
+}
+//
+// The island is baked as the flower is created (not on its first frame on
+// screen) and kept per live k and place, so a scene restart reuses it.
+//
+function bakeIsland(inst) {
+  return ensureStaticDecorSprite(inst.k, staticBakeHolder(inst.k, `eye-flower-island-${inst.x}`), ISLAND_BAKE_SLOT,
+    ISLAND_BAKE_KEY, islandBounds(inst), ctx => paintIsland(ctx, inst), ISLAND_BAKE_SEED)
 }
 
 function islandBounds(inst) {

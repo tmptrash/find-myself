@@ -347,15 +347,13 @@ export const CFG = {
         },
         //
         // Apple bug by the left big tree: its snake-like tongue (a darker
-        // fork at the tip), its soft belly under the shell, the tint that
+        // fork at the tip), the tint that
         // pushes its far legs back and the dark it turns as it runs into
         // its burrow.
         //
         appleBug: {
           tongue: PALETTE.pink1,
           tongueFork: PALETTE.pink0,
-          belly: PALETTE.rose0,
-          bellyLight: PALETTE.brown1,
           farTint: PALETTE.gray6,
           deep: PALETTE.gray0
         },

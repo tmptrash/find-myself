@@ -206,6 +206,12 @@ const MENU_BUD_RIGHT_SHARE = 0.4
 const MENU_BUD_Z = 3.6
 const MENU_BUD_ROOTS_Z = MENU_BUG_TUNNEL_Z
 //
+// Valera's propeller whirr in the backdrop: no hero walks near it there, so
+// it whirrs as if the hero stood this near (loudness goes with its square:
+// about half of its full whirr) whenever it flies.
+//
+const MENU_BUD_HUM_LEVEL = 0.7
+//
 // Draw layers.
 //
 const MENU_BG_Z = 0
@@ -337,7 +343,7 @@ export function sceneMenu(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     const music = startMenuMusic(k)
-    registerEngineTeardown(() => stopMenuMusic(music))
+    registerEngineTeardown(() => stopMenuLoops(music, sound))
     loadMenuAssets(k)
     const layout = computeMenuLayout(k)
     const levels = LEVELS.map((level, i) => buildMenuLevel(level, i, layout, progress))
@@ -607,7 +613,7 @@ function onBackKey(inst) {
     ConfirmDialog.close(inst.dialog)
     return
   }
-  stopMenuMusic(inst.music)
+  stopMenuLoops(inst.music, inst.sound)
   goAfterPreparingAssets(inst.k, "ready")
 }
 //
@@ -619,7 +625,7 @@ function enterLevel(inst, level) {
   const saved = get('lastLesson', null)
   const lesson = saved?.startsWith(level.lessonPrefix) ? saved : level.firstLesson
   beginMenuSceneLeave(inst)
-  stopMenuMusic(inst.music)
+  stopMenuLoops(inst.music, inst.sound)
   showTransitionToLevel(inst.k, lesson)
 }
 //
@@ -649,7 +655,7 @@ function restartLevel(inst) {
   inst.levels.slice(level.index + 1).forEach(later => set(later.section, { completed: false }))
   set('lastLesson', level.firstLesson)
   beginMenuSceneLeave(inst)
-  stopMenuMusic(inst.music)
+  stopMenuLoops(inst.music, inst.sound)
   showTransitionToLevel(inst.k, level.firstLesson)
 }
 //
@@ -998,8 +1004,16 @@ function onMenuLeave(inst) {
   inst.backCancel.cancel()
   inst.pointerCancel?.cancel()
   CanvasBackdrop.clearCanvasBackdrop(inst.k)
-  stopMenuMusic(inst.music)
+  stopMenuLoops(inst.music, inst.sound)
   inst.heroInst.character.destroy()
+}
+//
+// Stops the menu's looping sounds: its music and Valera's propeller whirr
+// (the bud's own update, which would fade it out, stops with the scene).
+//
+function stopMenuLoops(music, sound) {
+  stopMenuMusic(music)
+  Sound.stopPropellerHum(sound)
 }
 //
 // True while a live pre-level transition overlay owns input. Clears a stale
@@ -1331,6 +1345,8 @@ function createMenuPropellerBud(inst) {
     scale,
     getHeroPos: () => menuHeroInBudSpace(inst),
     isVisible: () => !inst.isLeavingScene && inst.bgOpacity[BACKDROP_FOREST] >= MENU_FOREST_LIVE_MIN_OPACITY,
+    sound: inst.sound,
+    humFloor: MENU_BUD_HUM_LEVEL,
     z: MENU_BUD_Z,
     rootsZ: MENU_BUD_ROOTS_Z
   })

@@ -1,104 +1,96 @@
 import { loadPictureImage, cutSheetPieces } from './forest-picture.js'
 import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-parallax-grain.js'
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
-import { FOREST_PAL } from './forest-palette.js'
 import { createCanvasAtlasBuilder } from '../../../utils/helper.js'
 
 //
-// Parts of the apple bug cut from assets/forest/apple_bug.png: its leafy
-// shell, head, two antennae and eighteen leg pieces (six legs of femur,
-// tibia and tarsus), baked at world size into one atlas once per live k,
-// graded and grained like the forest's other baked material, plus a soft
-// belly drawn under the shell. The picture starts loading with this module
-// (game boot).
+// Parts of the apple bug cut from assets/forest/apple_bug.png: its hood of
+// leaves, round body, mossy head, two antennae and twelve leg pieces (six
+// legs of a thigh and a foot), baked at world size into one atlas once per
+// live k and graded and grained like the forest's other baked material.
+// The picture starts loading with this module (game boot).
 //
 // Every part sits in the sheet's own px as the assembled bug faces right,
-// seen from its side: the shell where it is on the sheet, the head's box
-// moved to HEAD_AT so the back of the head tucks in under the shell's front
-// flap and the face (one eye) sticks out in front of it. The body's origin
-// (at the hips) is where the bug's local frame starts; it is x forward, y
-// down.
+// seen from its side: the leaf hood where it is on the sheet, the body's box
+// moved to BODY_AT under the hood (its belly shows below the hood's rim) and
+// the head's box moved to HEAD_AT so the head looks out of the hood's open
+// front. The body's origin (low in the body, under the hips) is where the bug's local
+// frame starts; it is x forward, y down.
 //
 const URL = 'forest/apple_bug.png'
 const GRAIN_SEED = 6501
-const SHELL = { x: 753, y: 130, w: 415, h: 325 }
-const HEAD = { x: 1223, y: 223, w: 224, h: 161 }
-const HEAD_AT = { x: 1040, y: 292 }
-const BODY_ORIGIN = { x: 957, y: 411 }
+const SHELL = { x: 46, y: 160, w: 561, h: 307 }
+const SHELL_AT = { x: 46, y: 160 }
+const BODY = { x: 602, y: 241, w: 343, h: 207 }
+const BODY_AT = { x: 250, y: 290 }
+const HEAD = { x: 963, y: 239, w: 250, h: 204 }
+const HEAD_AT = { x: 515, y: 268 }
+const BODY_ORIGIN = { x: 420, y: 480 }
 //
 // On the head's box (sheet px): the neck at the back of the head it turns
 // round, the mouth low on its front the tongue comes out of and the bases
-// of the near and far antennae on its crown above the eye (the far one a
-// little further back).
+// of the near and far antennae on its crown (the far one a little further
+// back).
 //
-const NECK = { x: 1262, y: 311 }
-const MOUTH = { x: 1429, y: 365 }
-const ANTENNA_NEAR_ON_HEAD = { x: 1387, y: 255 }
-const ANTENNA_FAR_ON_HEAD = { x: 1344, y: 241 }
+const NECK = { x: 995, y: 350 }
+const MOUTH = { x: 1200, y: 405 }
+const ANTENNA_NEAR_ON_HEAD = { x: 1125, y: 262 }
+const ANTENNA_FAR_ON_HEAD = { x: 1085, y: 252 }
 //
-// Antennae: the near one rises from its base and bends forward; the far one
-// is painted bending back, so it is drawn mirrored.
+// Antennae: both rise from their base at the lower end and bend forward
+// (the far one lower and flatter).
 //
-const ANTENNA_NEAR = { x: 1203, y: 417, w: 113, h: 113, base: { x: 1214, y: 522 } }
-const ANTENNA_FAR = { x: 1355, y: 418, w: 108, h: 113, base: { x: 1450, y: 523 } }
+const ANTENNA_NEAR = { x: 1239, y: 237, w: 162, h: 193, base: { x: 1257, y: 414 } }
+const ANTENNA_FAR = { x: 1312, y: 301, w: 177, h: 133, base: { x: 1327, y: 418 } }
 //
-// Leg pieces, one column per leg (femur, tibia, tarsus): box, proximal joint
-// a and distal joint b on the sheet.
+// Leg pieces, one column per leg (thigh, curled foot): box, proximal joint
+// a and distal joint b on the sheet. The foot's b is its tip on the ground.
 //
 const LEG_PIECES = [
   [
-    { x: 138, y: 607, w: 105, h: 103, a: { x: 225, y: 624 }, b: { x: 153, y: 695 } },
-    { x: 130, y: 706, w: 83, h: 110, a: { x: 155, y: 720 }, b: { x: 193, y: 800 } },
-    { x: 148, y: 813, w: 72, h: 93, a: { x: 204, y: 823 }, b: { x: 162, y: 892 } }
+    { x: 175, y: 541, w: 158, h: 161, a: { x: 299, y: 569 }, b: { x: 197, y: 670 } },
+    { x: 199, y: 774, w: 89, h: 107, a: { x: 262, y: 797 }, b: { x: 221, y: 877 } }
   ],
   [
-    { x: 319, y: 607, w: 93, h: 103, a: { x: 392, y: 621 }, b: { x: 335, y: 695 } },
-    { x: 319, y: 711, w: 78, h: 96, a: { x: 338, y: 724 }, b: { x: 380, y: 793 } },
-    { x: 336, y: 806, w: 65, h: 100, a: { x: 384, y: 817 }, b: { x: 350, y: 891 } }
+    { x: 383, y: 540, w: 153, h: 164, a: { x: 500, y: 566 }, b: { x: 406, y: 674 } },
+    { x: 403, y: 774, w: 94, h: 108, a: { x: 471, y: 799 }, b: { x: 426, y: 879 } }
   ],
   [
-    { x: 537, y: 607, w: 97, h: 103, a: { x: 615, y: 623 }, b: { x: 552, y: 695 } },
-    { x: 537, y: 708, w: 85, h: 105, a: { x: 557, y: 722 }, b: { x: 605, y: 798 } },
-    { x: 554, y: 812, w: 71, h: 94, a: { x: 609, y: 823 }, b: { x: 567, y: 892 } }
+    { x: 584, y: 540, w: 153, h: 162, a: { x: 700, y: 566 }, b: { x: 606, y: 672 } },
+    { x: 612, y: 774, w: 89, h: 107, a: { x: 675, y: 798 }, b: { x: 633, y: 877 } }
   ],
   [
-    { x: 739, y: 607, w: 69, h: 101, a: { x: 785, y: 618 }, b: { x: 756, y: 695 } },
-    { x: 734, y: 707, w: 93, h: 95, a: { x: 751, y: 724 }, b: { x: 810, y: 786 } },
-    { x: 769, y: 805, w: 60, h: 101, a: { x: 810, y: 815 }, b: { x: 782, y: 891 } }
+    { x: 793, y: 540, w: 150, h: 162, a: { x: 907, y: 568 }, b: { x: 815, y: 672 } },
+    { x: 817, y: 776, w: 90, h: 106, a: { x: 880, y: 800 }, b: { x: 838, y: 878 } }
   ],
   [
-    { x: 962, y: 607, w: 95, h: 102, a: { x: 1038, y: 623 }, b: { x: 976, y: 694 } },
-    { x: 962, y: 708, w: 80, h: 104, a: { x: 982, y: 722 }, b: { x: 1024, y: 797 } },
-    { x: 971, y: 811, w: 74, h: 95, a: { x: 1029, y: 822 }, b: { x: 985, y: 892 } }
+    { x: 1002, y: 540, w: 153, h: 163, a: { x: 1119, y: 567 }, b: { x: 1024, y: 673 } },
+    { x: 1024, y: 774, w: 88, h: 108, a: { x: 1086, y: 797 }, b: { x: 1047, y: 878 } }
   ],
   [
-    { x: 1169, y: 607, w: 85, h: 102, a: { x: 1234, y: 621 }, b: { x: 1184, y: 695 } },
-    { x: 1166, y: 707, w: 86, h: 96, a: { x: 1183, y: 723 }, b: { x: 1235, y: 788 } },
-    { x: 1191, y: 804, w: 69, h: 102, a: { x: 1241, y: 815 }, b: { x: 1204, y: 891 } }
+    { x: 1214, y: 540, w: 166, h: 163, a: { x: 1344, y: 567 }, b: { x: 1235, y: 671 } },
+    { x: 1250, y: 774, w: 89, h: 108, a: { x: 1313, y: 797 }, b: { x: 1272, y: 878 } }
   ]
 ]
 //
-// The six legs rear to front, near side then far side: hip under the shell
+// The legs are baked this much smaller than the sheet draws them next to
+// the body: slim, short legs that keep the bug low over the ground.
+//
+const LEG_SCALE = 0.55
+//
+// The six legs rear to front, near side then far side: hip high in the body
 // (assembled px), the column of pieces it is drawn from and its place along
 // the body (-1 rear, 0 middle, 1 front).
 //
 const MID_PLACE = -0.25
 const LEGS = [
-  { hip: { x: 856, y: 416 }, column: 0, place: -1, far: false },
-  { hip: { x: 955, y: 419 }, column: 2, place: MID_PLACE, far: false },
-  { hip: { x: 1052, y: 414 }, column: 4, place: 1, far: false },
-  { hip: { x: 889, y: 405 }, column: 1, place: -1, far: true },
-  { hip: { x: 988, y: 408 }, column: 3, place: MID_PLACE, far: true },
-  { hip: { x: 1083, y: 403 }, column: 5, place: 1, far: true }
+  { hip: { x: 300, y: 435 }, column: 0, place: -1, far: false },
+  { hip: { x: 420, y: 440 }, column: 2, place: MID_PLACE, far: false },
+  { hip: { x: 540, y: 435 }, column: 4, place: 1, far: false },
+  { hip: { x: 325, y: 422 }, column: 1, place: -1, far: true },
+  { hip: { x: 445, y: 427 }, column: 3, place: MID_PLACE, far: true },
+  { hip: { x: 565, y: 422 }, column: 5, place: 1, far: true }
 ]
-//
-// The belly under the shell (assembled px) and its lit upper half's share.
-//
-const BELLY = { x: 962, y: 407, rx: 129, ry: 32 }
-const BELLY_LIGHT_SHRINK = 0.72
-const BELLY_LIGHT_LIFT = 0.35
-const BELLY_PAD = 2
-const COLORS = FOREST_PAL.appleBug
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()
 
@@ -109,8 +101,8 @@ const bakedByK = new WeakMap()
  * bug's local frame (world px from the body's origin, x forward, y down).
  * @param {Object} k - Kaplay instance
  * @param {number} shellWidth - World px across the shell
- * @returns {Promise<Object|null>} Baked parts: shell, belly and head round
- *   the body's origin and the neck, antennae round their bases, legs (hip,
+ * @returns {Promise<Object|null>} Baked parts: shell and body round the
+ *   body's origin, the head round the neck, antennae round their bases, legs (hip,
  *   place, far, pieces round their proximal joints with their axis angle and
  *   length), the neck, mouth and antenna bases, and the shell's box (null if
  *   the picture failed to load)
@@ -122,24 +114,24 @@ export async function load(k, shellWidth) {
   if (!img) return null
   const scale = shellWidth / SHELL.w
   const pieces = LEG_PIECES.flat()
-  const rects = [SHELL, HEAD, ANTENNA_NEAR, ANTENNA_FAR, ...pieces]
+  const piecesPerLeg = LEG_PIECES[0].length
+  const rects = [SHELL, BODY, HEAD, ANTENNA_NEAR, ANTENNA_FAR, ...pieces]
   const cuts = cutSheetPieces(img, rects)
   const atlas = createCanvasAtlasBuilder()
+  const firstLegPart = rects.length - pieces.length
   const parts = cuts.map((cut, i) => {
-    const canvas = scalePart(cut, scale, GRAIN_SEED + i)
+    const canvas = scalePart(cut, i >= firstLegPart ? scale * LEG_SCALE : scale, GRAIN_SEED + i)
     return { tile: atlas.register(canvas), rect: rects[i] }
   })
-  const bellyTile = atlas.register(bakeBelly(scale))
   atlas.build(k)
   const head = headToAssembled
   const out = {
     scale,
-    shell: { tile: parts[0].tile, anchor: anchorOf(parts[0], SHELL, BODY_ORIGIN) },
-    head: { tile: parts[1].tile, anchor: anchorOf(parts[1], HEAD_AT, head(NECK)) },
-    antennaNear: { tile: parts[2].tile, anchor: anchorOf(parts[2], ANTENNA_NEAR, ANTENNA_NEAR.base) },
-    antennaFar: { tile: parts[3].tile, anchor: anchorOf(parts[3], ANTENNA_FAR, ANTENNA_FAR.base) },
-    belly: { tile: bellyTile, anchor: { x: 0, y: 0 } },
-    bellyAt: toLocal(BELLY, scale),
+    shell: { tile: parts[0].tile, anchor: anchorOf(parts[0], SHELL_AT, BODY_ORIGIN) },
+    body: { tile: parts[1].tile, anchor: anchorOf(parts[1], BODY_AT, BODY_ORIGIN) },
+    head: { tile: parts[2].tile, anchor: anchorOf(parts[2], HEAD_AT, head(NECK)) },
+    antennaNear: { tile: parts[3].tile, anchor: anchorOf(parts[3], ANTENNA_NEAR, ANTENNA_NEAR.base) },
+    antennaFar: { tile: parts[4].tile, anchor: anchorOf(parts[4], ANTENNA_FAR, ANTENNA_FAR.base) },
     neck: toLocal(head(NECK), scale),
     mouth: toLocal(head(MOUTH), scale),
     antennaNearAt: toLocal(head(ANTENNA_NEAR_ON_HEAD), scale),
@@ -149,7 +141,7 @@ export async function load(k, shellWidth) {
       hip: toLocal(leg.hip, scale),
       place: leg.place,
       far: leg.far,
-      pieces: LEG_PIECES[leg.column].map((piece, i) => legPiece(piece, parts[4 + leg.column * 3 + i], scale))
+      pieces: LEG_PIECES[leg.column].map((piece, i) => legPiece(piece, parts[firstLegPart + leg.column * piecesPerLeg + i], scale * LEG_SCALE))
     }))
   }
   bakedByK.set(k, out)
@@ -171,32 +163,6 @@ function scalePart(cut, scale, seed) {
     ...FOREST_LAYER_GRADE.material,
     grainBlockSize: forestFilmGrainBlockPxForTier('gameplay')
   }, seed)
-  return canvas
-}
-//
-// The belly: a dark oval with a lighter, smaller one on its upper half.
-//
-function bakeBelly(scale) {
-  const rx = BELLY.rx * scale
-  const ry = BELLY.ry * scale
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(rx * 2 + BELLY_PAD * 2)
-  canvas.height = Math.ceil(ry * 2 + BELLY_PAD * 2)
-  const ctx = canvas.getContext('2d')
-  const cx = canvas.width * 0.5
-  const cy = canvas.height * 0.5
-  ctx.fillStyle = COLORS.belly
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = COLORS.bellyLight
-  ctx.beginPath()
-  ctx.ellipse(cx, cy - ry * BELLY_LIGHT_LIFT, rx * BELLY_LIGHT_SHRINK, ry * BELLY_LIGHT_SHRINK, 0, 0, Math.PI * 2)
-  ctx.fill()
-  applyForestLayerGradeToCanvas(canvas, {
-    ...FOREST_LAYER_GRADE.material,
-    grainBlockSize: forestFilmGrainBlockPxForTier('gameplay')
-  }, GRAIN_SEED - 1)
   return canvas
 }
 //
@@ -230,6 +196,6 @@ function toLocal(p, scale) {
   return { x: (p.x - BODY_ORIGIN.x) * scale, y: (p.y - BODY_ORIGIN.y) * scale }
 }
 function shellBox(scale) {
-  const a = toLocal(SHELL, scale)
+  const a = toLocal(SHELL_AT, scale)
   return { x1: a.x, y1: a.y, x2: a.x + SHELL.w * scale, y2: a.y + SHELL.h * scale }
 }

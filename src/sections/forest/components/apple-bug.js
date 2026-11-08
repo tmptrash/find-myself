@@ -98,14 +98,12 @@ const HEAD_GRAB_DIP = 0.4
 //
 // Legs: a foot rests FOOT_SPREAD from its hip along the body (rear legs
 // back, front legs forward) and steps once it lags STEP_TRIGGER behind (or
-// SETTLE_TRIGGER at rest), landing STEP_LEAD ahead while moving. The tarsus
-// leans TARSUS_TILT outwards from the foot.
+// SETTLE_TRIGGER at rest), landing STEP_LEAD ahead while moving.
 //
-const FOOT_SPREAD = 14.4
+const FOOT_SPREAD = 5.6
 const STEP_TRIGGER = 3.7
 const SETTLE_TRIGGER = 1.26
 const STEP_LEAD = 3.24
-const TARSUS_TILT = 0.4
 const IK_SLACK = 0.01
 //
 // Antennae sway on their bases and swing back while it runs.
@@ -1372,14 +1370,15 @@ function onDraw(inst) {
   inst.tongue.phase !== TONGUE.IDLE && drawTongue(inst)
 }
 //
-// Far legs and antenna, belly, head, near legs, shell and near antenna from
-// one atlas, then the apple it carries, all in one look.
+// Far legs and antenna, body, head, near legs, the leaf hood over the body
+// (the head looks out of its open front) and near antenna from one atlas, then the apple it
+// carries, all in one look.
 //
 function drawBody(inst, legs, look) {
   const { bug } = inst
   legs.forEach((joints, i) => inst.legs[i].far && drawLeg(inst, inst.legs[i], joints, look, look.farColor))
-  drawAntenna(inst, bug.antennaFar, bug.antennaFarAt, -1, ANTENNA_FAR_PHASE, look)
-  drawPart(inst, bug.belly, bodyPoint(inst, bug.bellyAt, { x: 0, y: 0 }), inst.pitch, 1, look)
+  drawAntenna(inst, bug.antennaFar, bug.antennaFarAt, 1, ANTENNA_FAR_PHASE, look)
+  drawPart(inst, bug.body, { x: 0, y: 0 }, inst.pitch, 1, look)
   drawPart(inst, bug.head, bodyPoint(inst, bug.neck, { x: 0, y: 0 }), inst.pitch + inst.head, 1, look)
   legs.forEach((joints, i) => !inst.legs[i].far && drawLeg(inst, inst.legs[i], joints, look, look.color))
   drawPart(inst, bug.shell, { x: 0, y: 0 }, inst.pitch, 1, look)
@@ -1410,20 +1409,18 @@ function drawAntenna(inst, part, at, mirror, phase, look) {
   drawPart(inst, part, headPoint(inst, at, { x: 0, y: 0 }), inst.pitch + inst.head + wave, mirror, look)
 }
 //
-// Inverse kinematics of one leg in the bug's local frame (unmirrored): the
-// tarsus leans out from the foot to the ankle, then hip, knee and ankle
-// solve as two bones with the knee out on the leg's own side (front legs
-// forward, the others back), which is also its upper side.
+// Inverse kinematics of one leg in the bug's local frame (unmirrored): hip,
+// knee and sole solve as two bones with the knee out on the leg's own side
+// (front legs forward, the others back), which is also its upper side: the
+// thigh from the hip, the foot from the knee down to its sole.
 //
 function solveLeg(inst, leg, sgn) {
-  const [femur, tibia, tarsus] = leg.pieces
+  const [femur, tibia] = leg.pieces
   const hip = bodyPoint(inst, leg.hip, { x: 0, y: 0 })
   const floorDy = (floorAt(inst, leg.footX) - inst.groundY) / inst.zoom
   const foot = { x: (leg.footX - inst.x) * sgn / inst.zoom, y: inst.lift - leg.footLift + floorDy }
-  const tilt = leg.place * TARSUS_TILT
-  const ankle = { x: foot.x - Math.sin(tilt) * tarsus.len, y: foot.y - Math.cos(tilt) * tarsus.len }
-  const dx = ankle.x - hip.x
-  const dy = ankle.y - hip.y
+  const dx = foot.x - hip.x
+  const dy = foot.y - hip.y
   const reach = Math.hypot(dx, dy)
   const d = Math.max(Math.abs(femur.len - tibia.len) + IK_SLACK, Math.min(femur.len + tibia.len - IK_SLACK, reach))
   const base = Math.atan2(dy, dx)
@@ -1433,9 +1430,9 @@ function solveLeg(inst, leg, sgn) {
   const kneeB = { x: hip.x + Math.cos(base - bend) * femur.len, y: hip.y + Math.sin(base - bend) * femur.len }
   const side = leg.place > 0 ? 1 : -1
   const knee = (kneeA.x - kneeB.x) * side > 0 ? kneeA : kneeB
-  const shin = Math.atan2(ankle.y - knee.y, ankle.x - knee.x)
-  const heel = { x: knee.x + Math.cos(shin) * tibia.len, y: knee.y + Math.sin(shin) * tibia.len }
-  return [hip, knee, heel, foot]
+  const shin = Math.atan2(foot.y - knee.y, foot.x - knee.x)
+  const sole = { x: knee.x + Math.cos(shin) * tibia.len, y: knee.y + Math.sin(shin) * tibia.len }
+  return [hip, knee, sole]
 }
 function drawLeg(inst, leg, joints, look, color) {
   for (let i = 0; i < leg.pieces.length; i++) {

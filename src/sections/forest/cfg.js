@@ -60,8 +60,8 @@ const WATER_FLOWER = {
 // Lengths in world px, times in seconds, speeds in px/s, angles in radians.
 //
 const APPLE_BUG = {
-  shellWidth: 60,                   // Shell picture width
-  bodyLift: 18.6,                   // Body's origin (hips) over the ground at rest: knees bent out at the shell's rim
+  shellWidth: 57,                   // Leaf hood picture width (the whole bug, hood to head, is ~74 long)
+  bodyLift: 6.6,                    // Body's origin over the ground at rest: legs set high in the body, belly low
   //
   // It moves in dashes: speed rises and falls over each dash (peak speed),
   // with a pause and a new pose between them. dashStart skips that share

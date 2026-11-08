@@ -6,8 +6,9 @@ import { loadPictureImage, pictureFringeAlpha } from './forest-picture.js'
 //
 // Stones of forest level 0, cut from assets/forest/stones.png (its stray
 // backdrop fringe wiped). Bare stones lie in the lake (a pile on the
-// tree-side bank, a few on the bed); mossy ones, the ones with plants and
-// the bits of dry-stone wall stand on the ground. The stones buried in the
+// tree-side bank, a few on the bed); mossy ones and the ones with plants
+// stand on the ground. The sheet's row of rectangular dry-stone wall pieces
+// is not used. The stones buried in the
 // earth band come from assets/forest/stones_ground.png. The sheets start
 // loading with this module (game boot) and are cut once per page; sprites
 // are baked per live k.
@@ -21,9 +22,10 @@ const GROUND_URL = 'forest/stones_ground.png'
 //
 const CROP_PAD = 2
 const SOLID_SHARE = 0.5
-export const STONE_KIND = { BARE: 'bare', MOSSY: 'mossy', WALL: 'wall' }
+export const STONE_KIND = { BARE: 'bare', MOSSY: 'mossy' }
 //
-// The stones on the sheet (px), left to right, row by row.
+// The stones on the sheet (px), left to right, row by row (the lake's
+// lists below pick them by their index here).
 //
 const STONES = [
   { x: 12, y: 6, w: 379, h: 228, kind: STONE_KIND.MOSSY },
@@ -46,14 +48,6 @@ const STONES = [
   { x: 1434, y: 420, w: 231, h: 97, kind: STONE_KIND.MOSSY },
   { x: 1681, y: 422, w: 186, h: 96, kind: STONE_KIND.MOSSY },
   { x: 1881, y: 403, w: 278, h: 117, kind: STONE_KIND.MOSSY },
-  { x: 402, y: 535, w: 303, h: 88, kind: STONE_KIND.WALL },
-  { x: 715, y: 536, w: 213, h: 86, kind: STONE_KIND.WALL },
-  { x: 938, y: 536, w: 240, h: 84, kind: STONE_KIND.WALL },
-  { x: 1190, y: 537, w: 409, h: 79, kind: STONE_KIND.WALL },
-  { x: 1616, y: 529, w: 241, h: 85, kind: STONE_KIND.WALL },
-  { x: 1866, y: 532, w: 293, h: 79, kind: STONE_KIND.WALL },
-  { x: 13, y: 524, w: 187, h: 137, kind: STONE_KIND.WALL },
-  { x: 209, y: 524, w: 185, h: 117, kind: STONE_KIND.WALL },
   { x: 13, y: 693, w: 31, h: 20, kind: STONE_KIND.BARE },
   { x: 51, y: 687, w: 43, h: 26, kind: STONE_KIND.BARE },
   { x: 105, y: 674, w: 68, h: 40, kind: STONE_KIND.BARE },
@@ -105,7 +99,7 @@ const LAKE_SCALE = 0.3
 // the lower stones are drawn over the ones resting on them. Everything under the bed
 // is clipped away, everything under the water line is tinted with the water.
 //
-const LAKE_PILE = [44, 43, 9, 45, 42, 37, 38, 35, 33, 34, 39]
+const LAKE_PILE = [36, 35, 9, 37, 34, 29, 30, 27, 25, 26, 31]
 const PILE_REUSE_SCALES = [0.85, 0.7, 1, 0.6]
 const PILE_GAP_WEIGHT = 1.6
 const PILE_OVER_WEIGHT = 1.2
@@ -122,7 +116,7 @@ const PILE_TOP_LEFT_DOWN = 74
 const PILE_TOP_RIGHT_DOWN = -24
 const PILE_SINK = 3
 const PILE_SOLID_ALPHA = 128
-const PILE_FILL = [28, 29, 30, 40, 41, 31, 32, 36]
+const PILE_FILL = [20, 21, 22, 32, 33, 23, 24, 28]
 const PILE_FILL_SCALE = 0.32
 const PILE_FILL_STEP = 0.55
 const PILE_FILL_JITTER = 0.3
@@ -136,14 +130,14 @@ const LAKE_PILE_GRAIN_SEED = 7310
 // face (0 = far rim, 1 = front edge).
 //
 const LAKE_BED = [
-  { id: 36, t: 0.63, depth: 0.7 },
-  { id: 31, t: 0.55, depth: 0.75 },
-  { id: 40, t: 0.58, depth: 0.9 },
-  { id: 41, t: 0.5, depth: 0.9 },
-  { id: 30, t: 0.45, depth: 0.8 },
-  { id: 29, t: 0.66, depth: 0.85 },
-  { id: 32, t: 0.3, depth: 0.7 },
-  { id: 28, t: 0.15, depth: 0.85 }
+  { id: 28, t: 0.63, depth: 0.7 },
+  { id: 23, t: 0.55, depth: 0.75 },
+  { id: 32, t: 0.58, depth: 0.9 },
+  { id: 33, t: 0.5, depth: 0.9 },
+  { id: 22, t: 0.45, depth: 0.8 },
+  { id: 21, t: 0.66, depth: 0.85 },
+  { id: 24, t: 0.3, depth: 0.7 },
+  { id: 20, t: 0.15, depth: 0.85 }
 ]
 //
 // The buried stones on their sheet (px), smallest first.
@@ -267,8 +261,8 @@ export function forestBuriedStones() {
 }
 
 /**
- * The stones that stand on the ground (mossy ones, the ones with plants and
- * the bits of wall), cut at sheet size; empty until loadForestStones() has
+ * The stones that stand on the ground (mossy ones and the ones with
+ * plants), cut at sheet size; empty until loadForestStones() has
  * resolved.
  * @returns {Array<{canvas: HTMLCanvasElement, kind: string}>}
  */

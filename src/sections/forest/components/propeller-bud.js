@@ -266,6 +266,7 @@ const pictureByK = new WeakMap()
  * @param {Function} cfg.getHeroPos - () => {x, y} of the hero's middle, or null
  * @param {Function} [cfg.isVisible] - () => boolean; hidden and still while false
  * @param {Object} [cfg.sound] - Sound instance for its propeller's whirr
+ * @param {number} [cfg.humFloor=0] - Least loudness (0..1) of the whirr however far the hero is (a backdrop where no hero walks by)
  * @param {number} cfg.z - Draw layer of the bud
  * @param {number} cfg.rootsZ - Draw layer of its roots under the ground
  * @returns {Object|null} Bud inst (null if its picture is not baked, it has no stops or it is gone)
@@ -287,6 +288,7 @@ export function create(cfg) {
     getHeroPos,
     isVisible,
     sound: cfg.sound,
+    humFloor: cfg.humFloor ?? 0,
     routeMinX: Math.min(...spanXs) - ROUTE_MARGIN,
     routeMaxX: Math.max(...spanXs) + ROUTE_MARGIN,
     stickColor: getRGB(k, COLORS.stick),
@@ -766,12 +768,13 @@ function updateFacing(inst, hero) {
   Math.abs(hero.x - inst.x) > FACE_HERO_DEAD && (inst.facing = Math.sign(hero.x - inst.x))
 }
 //
-// Whirr while the propeller turns, louder the nearer the hero.
+// Whirr while the propeller turns, louder the nearer the hero (never under
+// humFloor).
 //
 function updateHum(inst, hero) {
   if (!inst.sound) return
   const spinning = inst.spin || inst.frame !== 0
-  const near = hero ? Math.max(0, 1 - heroDistance(inst, hero) / HUM_HEAR_REACH) : 0
+  const near = Math.max(inst.humFloor, hero ? 1 - heroDistance(inst, hero) / HUM_HEAR_REACH : 0)
   const speed = airborne(inst) ? Math.hypot(inst.prop.vx, inst.prop.vy) : 0
   Sound.setPropellerHum(inst.sound, spinning && inst.isVisible() ? near * near : 0, 1 + speed * HUM_RATE_PER_V)
 }

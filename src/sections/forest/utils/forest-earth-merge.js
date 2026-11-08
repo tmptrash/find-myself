@@ -1,6 +1,6 @@
 //
 // Bakes the static earth band and the static sprites drawn over it under the
-// ground line (tree roots, the bug's burrow, flower roots, buoy stalks) into
+// ground line (tree roots, the bug's burrow, buoy stalks) into
 // one sprite, once per live Kaplay instance. Each of those sprites otherwise
 // covers its rect of the screen again every frame on top of the band.
 //

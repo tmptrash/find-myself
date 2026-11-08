@@ -100,7 +100,7 @@ const HEAD_GRAB_DIP = 0.4
 // back, front legs forward) and steps once it lags STEP_TRIGGER behind (or
 // SETTLE_TRIGGER at rest), landing STEP_LEAD ahead while moving.
 //
-const FOOT_SPREAD = 5.6
+const FOOT_SPREAD = 5.4
 const STEP_TRIGGER = 3.7
 const SETTLE_TRIGGER = 1.26
 const STEP_LEAD = 3.24
@@ -157,9 +157,9 @@ const GRAB_DURATION = 0.28
 const APPLE_NOTICE_DELAY = 0.5
 const DROP_PASS_PAD = 6
 //
-// Biting the flower's full bubble (when the level asks for it): it stops
-// with its mouth BITE_REACH of the bubble's radius off its centre, aims its
-// head at it and bites over BITE_DURATION, the bubble tearing off at
+// Biting the flower's full drop (when the level asks for it): it stops
+// with its mouth BITE_REACH of the drop's radius off its centre, aims its
+// head at it and bites over BITE_DURATION, the drop tearing off at
 // BITE_AT of it.
 //
 const BITE_REACH = 0.7
@@ -337,7 +337,7 @@ export function create(cfg) {
   inst.goalX = inst.restX
   inst.floor = inst.tunnelFloor
   updateFloor(inst)
-  inst.legs = bug.legs.map((leg, i) => createLeg(inst, leg, i))
+  inst.legs = bug.legs.map(leg => createLeg(inst, leg))
   inst.frontReach = Math.max(bug.shellBox.x2, bug.mouth.x, ...inst.legs.map(leg => leg.rest)) + FRONT_REACH_PAD
   const tunnelObj = k.add([k.pos(0, 0), k.z(cfg.tunnelZ), { draw() { onDrawTunnel(inst) } }])
   const obj = k.add([k.pos(0, 0), k.z(cfg.z), { draw() { onDraw(inst) } }])
@@ -398,8 +398,8 @@ export function holeClearSpan(holeX) {
 }
 
 /**
- * Asks it (or stops asking it) to bite the flower's next full bubble: out
- * in the open and with no apple to fetch, it walks up to the bubble and
+ * Asks it (or stops asking it) to bite the flower's next full drop: out
+ * in the open and with no apple to fetch, it walks up to the drop and
  * bites it off; the falling water scares it into the burrow as usual.
  * Each bite counts in inst.dropBites.
  * @param {Object|null} inst - Bug inst
@@ -750,7 +750,7 @@ function tickFlee(inst, dt) {
   goToDoor(inst, dt, PARAMS.flee, inst.nextHide)
 }
 //
-// Asked to bite the flower's bubble and one hangs full: off to it.
+// Asked to bite the flower's drop and one hangs full: off to it.
 //
 function startToDrop(inst) {
   if (!inst.dropBiteWanted || !WaterFlower.isRipe(inst.flower)) return false
@@ -761,8 +761,8 @@ function startToDrop(inst) {
   return true
 }
 //
-// Hurries up to the bubble, its mouth by it, and faces it; an apple comes
-// first, and a bubble gone (shaken loose) sends it off again.
+// Hurries up to the drop, its mouth by it, and faces it; an apple comes
+// first, and a drop gone (shaken loose) sends it off again.
 //
 function tickToDrop(inst, dt) {
   if (claimApple(inst)) return
@@ -778,7 +778,7 @@ function tickToDrop(inst, dt) {
   inst.state = STATES.BITE
 }
 //
-// Head aimed at the bubble, it bites it off; the water falling right by it
+// Head aimed at the drop, it bites it off; the water falling right by it
 // then scares it into the burrow (checkWater).
 //
 function tickBite(inst, dt) {
@@ -1182,15 +1182,13 @@ function updatePose(inst, dt) {
   inst.antenna += (sway - Math.abs(inst.vx) * ANTENNA_DRAG - inst.antenna) * Math.min(1, dt * ANTENNA_SNAP)
 }
 //
-// Legs in two tripods (near rear, far middle, near front; and the other
-// three): a lagging foot steps only while no leg of the other tripod is in
-// the air, landing a little ahead of its rest spot.
+// Legs in two step groups (the picture's: neighbours on a side alternate):
+// a lagging foot steps only while no leg of the other group is in the air,
+// landing a little ahead of its rest spot.
 //
-function createLeg(inst, leg, i) {
-  const group = (i % 3 + (leg.far ? 1 : 0)) % 2
+function createLeg(inst, leg) {
   const out = {
     ...leg,
-    group,
     rest: leg.hip.x + leg.place * FOOT_SPREAD,
     footX: 0,
     footLift: 0,
@@ -1356,7 +1354,7 @@ function onDrawTunnel(inst) {
 }
 function drawTunnelApple(inst, { fruit, x, y }) {
   TreeFruit.drawForestFruitAt(inst.k, fruit, x, y)
-  TreeFruit.drawForestFruitAt(inst.k, fruit, x, y, { opacity: PARAMS.tunnelDark, color: inst.deepColor })
+  TreeFruit.drawForestFruitAt(inst.k, fruit, x, y, { opacity: PARAMS.tunnelBugDark, color: inst.deepColor })
 }
 //
 // The bug in its own colours, then the dark of where it is over them (in

@@ -6,11 +6,12 @@ import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 // Picture of the apple bug's burrow: a shaft going down from its mouth on
 // the ground into a cave dug in the soil, with crumbly earth edges, a ribbed
 // back wall and a pebbly floor running from its narrow left end (under the
-// shaft) down to the wide right end, cut from assets/forest/tunnel.png and
-// baked at world size once per live k.
+// shaft) down to the wide right end, ferns, mushrooms and stones along its
+// back, cut from assets/forest/tunnel.png and baked at world size once per
+// live k.
 //
 const URL = 'forest/tunnel.png'
-const SPRITE = 'forest0-bug-tunnel-v3'
+const SPRITE = 'forest0-bug-tunnel-v4'
 const GRAIN_SEED = 6417
 //
 // On the picture (px): the part kept (the whole burrow), the anchor it is
@@ -22,27 +23,30 @@ const GRAIN_SEED = 6417
 // cave (clear of the shaft's foot, where the cave is tall enough for it)
 // and where the apples it stores lie at the right end.
 //
-const PICTURE = { x: 88, y: 272, w: 1288, h: 552 }
-const ANCHOR = { x: 218, y: 284 }
-const MOUTH = { x1: 158, x2: 278 }
-const LIP = { x1: 95, x2: 339 }
-const REST_X = 420
+const PICTURE = { x: 24, y: 61, w: 1701, h: 746 }
+const ANCHOR = { x: 196, y: 78 }
+const MOUTH = { x1: 125, x2: 268 }
+const LIP = { x1: 27, x2: 371 }
+const REST_X = 450
 const FLOOR = [
-  { x: 130, y: 545 },
-  { x: 200, y: 560 },
-  { x: 300, y: 592 },
-  { x: 400, y: 632 },
-  { x: 500, y: 660 },
-  { x: 600, y: 680 },
-  { x: 700, y: 694 },
-  { x: 800, y: 704 },
-  { x: 900, y: 702 },
-  { x: 1000, y: 700 },
-  { x: 1100, y: 702 },
-  { x: 1180, y: 706 },
-  { x: 1250, y: 700 }
+  { x: 150, y: 470 },
+  { x: 200, y: 490 },
+  { x: 300, y: 520 },
+  { x: 400, y: 555 },
+  { x: 500, y: 590 },
+  { x: 600, y: 625 },
+  { x: 700, y: 648 },
+  { x: 800, y: 660 },
+  { x: 900, y: 665 },
+  { x: 1000, y: 668 },
+  { x: 1100, y: 665 },
+  { x: 1200, y: 660 },
+  { x: 1300, y: 656 },
+  { x: 1400, y: 655 },
+  { x: 1500, y: 650 },
+  { x: 1580, y: 645 }
 ]
-const PILE_X = 1170
+const PILE_X = 1460
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()
 

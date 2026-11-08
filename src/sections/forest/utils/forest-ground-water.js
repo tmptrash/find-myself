@@ -38,7 +38,7 @@ const CROWN_WIDTH = 3.5
 const CROWN_DECAY = 7
 //
 // Soaking away: the drain speeds up with the water left, plus a floor so
-// the last film goes too; the norm makes a full bubble's puddle last about
+// the last film goes too; the norm makes a full drop's puddle last about
 // soilAbsorptionDuration.
 //
 const ABSORB_EXP = 3
@@ -141,7 +141,7 @@ export function create(cfg) {
       puddleGlint: kColor(k, colors.puddleGlint),
       wetSoil: kColor(k, colors.wetSoil),
       splash: kColor(k, colors.droplet),
-      water: kColor(k, colors.water)
+      water: kColor(k, colors.drop)
     },
     volume: 0,
     cx: 0,

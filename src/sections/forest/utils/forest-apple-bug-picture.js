@@ -5,72 +5,52 @@ import { createCanvasAtlasBuilder } from '../../../utils/helper.js'
 
 //
 // Parts of the apple bug cut from assets/forest/apple_bug.png: its hood of
-// leaves, round body, mossy head, two antennae and twelve leg pieces (six
-// legs of a thigh and a foot), baked at world size into one atlas once per
-// live k and graded and grained like the forest's other baked material.
-// The picture starts loading with this module (game boot).
+// leaves, long body, mossy one-eyed head, two antennae and one leg (a thigh
+// and a foot) that every one of its eight legs is drawn from, baked at
+// world size into one atlas once per live k and graded and grained like the
+// forest's other baked material. The picture starts loading with this
+// module (game boot).
 //
 // Every part sits in the sheet's own px as the assembled bug faces right,
-// seen from its side: the leaf hood where it is on the sheet, the body's box
+// seen from its side: the leaf hood's box moved to SHELL_AT (down onto the
+// body's back, its front arch over the back of the head), the body's box
 // moved to BODY_AT under the hood (its belly shows below the hood's rim) and
 // the head's box moved to HEAD_AT so the head looks out of the hood's open
-// front. The body's origin (low in the body, under the hips) is where the bug's local
-// frame starts; it is x forward, y down.
+// front. The body's origin (low in the body, under the hips) is where the
+// bug's local frame starts; it is x forward, y down.
 //
 const URL = 'forest/apple_bug.png'
 const GRAIN_SEED = 6501
-const SHELL = { x: 46, y: 160, w: 561, h: 307 }
-const SHELL_AT = { x: 46, y: 160 }
-const BODY = { x: 602, y: 241, w: 343, h: 207 }
-const BODY_AT = { x: 250, y: 290 }
-const HEAD = { x: 963, y: 239, w: 250, h: 204 }
-const HEAD_AT = { x: 515, y: 268 }
-const BODY_ORIGIN = { x: 420, y: 480 }
+const SHELL = { x: 64, y: 119, w: 596, h: 323 }
+const SHELL_AT = { x: 64, y: 154 }
+const BODY = { x: 654, y: 215, w: 499, h: 214 }
+const BODY_AT = { x: 150, y: 280 }
+const HEAD = { x: 1178, y: 211, w: 271, h: 218 }
+const HEAD_AT = { x: 555, y: 250 }
+const BODY_ORIGIN = { x: 395, y: 480 }
 //
 // On the head's box (sheet px): the neck at the back of the head it turns
 // round, the mouth low on its front the tongue comes out of and the bases
 // of the near and far antennae on its crown (the far one a little further
 // back).
 //
-const NECK = { x: 995, y: 350 }
-const MOUTH = { x: 1200, y: 405 }
-const ANTENNA_NEAR_ON_HEAD = { x: 1125, y: 262 }
-const ANTENNA_FAR_ON_HEAD = { x: 1085, y: 252 }
+const NECK = { x: 1215, y: 330 }
+const MOUTH = { x: 1430, y: 385 }
+const ANTENNA_NEAR_ON_HEAD = { x: 1345, y: 232 }
+const ANTENNA_FAR_ON_HEAD = { x: 1300, y: 225 }
 //
 // Antennae: both rise from their base at the lower end and bend forward
 // (the far one lower and flatter).
 //
-const ANTENNA_NEAR = { x: 1239, y: 237, w: 162, h: 193, base: { x: 1257, y: 414 } }
-const ANTENNA_FAR = { x: 1312, y: 301, w: 177, h: 133, base: { x: 1327, y: 418 } }
+const ANTENNA_NEAR = { x: 1481, y: 230, w: 155, h: 170, base: { x: 1498, y: 384 } }
+const ANTENNA_FAR = { x: 1551, y: 287, w: 159, h: 127, base: { x: 1565, y: 398 } }
 //
-// Leg pieces, one column per leg (thigh, curled foot): box, proximal joint
-// a and distal joint b on the sheet. The foot's b is its tip on the ground.
+// The leg's pieces (thigh, curled foot): box, proximal joint a and distal
+// joint b on the sheet. The foot's b is its tip on the ground.
 //
 const LEG_PIECES = [
-  [
-    { x: 175, y: 541, w: 158, h: 161, a: { x: 299, y: 569 }, b: { x: 197, y: 670 } },
-    { x: 199, y: 774, w: 89, h: 107, a: { x: 262, y: 797 }, b: { x: 221, y: 877 } }
-  ],
-  [
-    { x: 383, y: 540, w: 153, h: 164, a: { x: 500, y: 566 }, b: { x: 406, y: 674 } },
-    { x: 403, y: 774, w: 94, h: 108, a: { x: 471, y: 799 }, b: { x: 426, y: 879 } }
-  ],
-  [
-    { x: 584, y: 540, w: 153, h: 162, a: { x: 700, y: 566 }, b: { x: 606, y: 672 } },
-    { x: 612, y: 774, w: 89, h: 107, a: { x: 675, y: 798 }, b: { x: 633, y: 877 } }
-  ],
-  [
-    { x: 793, y: 540, w: 150, h: 162, a: { x: 907, y: 568 }, b: { x: 815, y: 672 } },
-    { x: 817, y: 776, w: 90, h: 106, a: { x: 880, y: 800 }, b: { x: 838, y: 878 } }
-  ],
-  [
-    { x: 1002, y: 540, w: 153, h: 163, a: { x: 1119, y: 567 }, b: { x: 1024, y: 673 } },
-    { x: 1024, y: 774, w: 88, h: 108, a: { x: 1086, y: 797 }, b: { x: 1047, y: 878 } }
-  ],
-  [
-    { x: 1214, y: 540, w: 166, h: 163, a: { x: 1344, y: 567 }, b: { x: 1235, y: 671 } },
-    { x: 1250, y: 774, w: 89, h: 108, a: { x: 1313, y: 797 }, b: { x: 1272, y: 878 } }
-  ]
+  { x: 174, y: 504, w: 135, h: 163, a: { x: 275, y: 529 }, b: { x: 199, y: 636 } },
+  { x: 194, y: 675, w: 69, h: 126, a: { x: 231, y: 694 }, b: { x: 224, y: 794 } }
 ]
 //
 // The legs are baked this much smaller than the sheet draws them next to
@@ -78,18 +58,20 @@ const LEG_PIECES = [
 //
 const LEG_SCALE = 0.55
 //
-// The six legs rear to front, near side then far side: hip high in the body
-// (assembled px), the column of pieces it is drawn from and its place along
-// the body (-1 rear, 0 middle, 1 front).
+// Its eight legs, four a side, rear to front, near side then far side: hip
+// high in the body (assembled px), place along the body (-1 rear, 0 middle,
+// 1 front) and step group (neighbours on a side and the legs across from
+// them step in turn).
 //
-const MID_PLACE = -0.25
 const LEGS = [
-  { hip: { x: 300, y: 435 }, column: 0, place: -1, far: false },
-  { hip: { x: 420, y: 440 }, column: 2, place: MID_PLACE, far: false },
-  { hip: { x: 540, y: 435 }, column: 4, place: 1, far: false },
-  { hip: { x: 325, y: 422 }, column: 1, place: -1, far: true },
-  { hip: { x: 445, y: 427 }, column: 3, place: MID_PLACE, far: true },
-  { hip: { x: 565, y: 422 }, column: 5, place: 1, far: true }
+  { hip: { x: 230, y: 445 }, place: -1, far: false, group: 0 },
+  { hip: { x: 340, y: 445 }, place: -0.4, far: false, group: 1 },
+  { hip: { x: 450, y: 445 }, place: 0.3, far: false, group: 0 },
+  { hip: { x: 560, y: 445 }, place: 1, far: false, group: 1 },
+  { hip: { x: 255, y: 433 }, place: -1, far: true, group: 1 },
+  { hip: { x: 365, y: 433 }, place: -0.4, far: true, group: 0 },
+  { hip: { x: 475, y: 433 }, place: 0.3, far: true, group: 1 },
+  { hip: { x: 585, y: 433 }, place: 1, far: true, group: 0 }
 ]
 const image = loadPictureImage(URL)
 const bakedByK = new WeakMap()
@@ -103,7 +85,7 @@ const bakedByK = new WeakMap()
  * @param {number} shellWidth - World px across the shell
  * @returns {Promise<Object|null>} Baked parts: shell and body round the
  *   body's origin, the head round the neck, antennae round their bases, legs (hip,
- *   place, far, pieces round their proximal joints with their axis angle and
+ *   place, far, step group, the shared pieces round their proximal joints with their axis angle and
  *   length), the neck, mouth and antenna bases, and the shell's box (null if
  *   the picture failed to load)
  */
@@ -113,17 +95,16 @@ export async function load(k, shellWidth) {
   const img = await image
   if (!img) return null
   const scale = shellWidth / SHELL.w
-  const pieces = LEG_PIECES.flat()
-  const piecesPerLeg = LEG_PIECES[0].length
-  const rects = [SHELL, BODY, HEAD, ANTENNA_NEAR, ANTENNA_FAR, ...pieces]
+  const rects = [SHELL, BODY, HEAD, ANTENNA_NEAR, ANTENNA_FAR, ...LEG_PIECES]
   const cuts = cutSheetPieces(img, rects)
   const atlas = createCanvasAtlasBuilder()
-  const firstLegPart = rects.length - pieces.length
+  const firstLegPart = rects.length - LEG_PIECES.length
   const parts = cuts.map((cut, i) => {
     const canvas = scalePart(cut, i >= firstLegPart ? scale * LEG_SCALE : scale, GRAIN_SEED + i)
     return { tile: atlas.register(canvas), rect: rects[i] }
   })
   atlas.build(k)
+  const legPieces = LEG_PIECES.map((piece, i) => legPiece(piece, parts[firstLegPart + i], scale * LEG_SCALE))
   const head = headToAssembled
   const out = {
     scale,
@@ -141,7 +122,8 @@ export async function load(k, shellWidth) {
       hip: toLocal(leg.hip, scale),
       place: leg.place,
       far: leg.far,
-      pieces: LEG_PIECES[leg.column].map((piece, i) => legPiece(piece, parts[firstLegPart + leg.column * piecesPerLeg + i], scale * LEG_SCALE))
+      group: leg.group,
+      pieces: legPieces
     }))
   }
   bakedByK.set(k, out)

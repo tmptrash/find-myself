@@ -7,7 +7,7 @@ import { STONE_KIND, forestGroundStones } from './forest-stones.js'
 import * as EarthMerge from './forest-earth-merge.js'
 //
 // The right big tree (shore accent left of the chain-buoy eyes), cut from
-// assets/forest/right-tree.png: the tree above ground stands on the ground line, its roots go under it, and
+// assets/forest/right_tree.png: the tree above ground stands on the ground line, its roots go under it, and
 // its long branch to the right is the one the hero lands on after the
 // leftmost stalk-eye. The picture is scaled so that branch's top sits where
 // the layout wants the landing; the level builds the branch platform from
@@ -16,8 +16,8 @@ import * as EarthMerge from './forest-earth-merge.js'
 // grass hide the seam where the trunk meets its roots. The picture starts
 // loading with this module (game boot); sprites are baked once per live k.
 //
-const URL = 'forest/right-tree.png'
-const SPRITE_PREFIX = 'forest0-right-tree-v5'
+const URL = 'forest/right_tree.png'
+const SPRITE_PREFIX = 'forest0-right-tree-v6'
 const GRAIN_SEED = 7700
 const SHORE_TREE_LEFT_OF_EYE = 175
 const SHORE_TREE_BRANCH_ABOVE_EYE = 96
@@ -28,31 +28,31 @@ const SHORE_TREE_FIRST_EYE_ROLE = 'chainTrampFirst'
 // bottom row, FOOT_X: the trunk's middle there, FOOT_HALF_W: half its width
 // there) and its roots (ROOTS_X: the middle of their top).
 //
-const CROWN = { x: 182, y: 13, w: 620, h: 988 }
-const FOOT_X = 391
-const FOOT_Y = 994
-const FOOT_HALF_W = 63
-const ROOTS = { x: 640, y: 551, w: 809, h: 384 }
-const ROOTS_X = 1049
+const CROWN = { x: 162, y: 9, w: 624, h: 1001 }
+const FOOT_X = 393
+const FOOT_Y = 1004
+const FOOT_HALF_W = 65
+const ROOTS = { x: 629, y: 566, w: 830, h: 405 }
+const ROOTS_X = 1057
 //
 // The roots' left part reaches into the tree's rect under its crown; that
 // corner holds nothing else and is wiped out of the tree.
 //
-const CROWN_CLEAR = { x: 636, y: 540, w: 166, h: 461 }
+const CROWN_CLEAR = { x: 626, y: 555, w: 160, h: 455 }
 //
 // The landing branch on the picture: its flat top from the trunk to the
 // leafy tip; its middle line lies BRANCH_HALF_W world px under that top.
 //
-const BRANCH = { x1: 440, x2: 600, y: 240 }
+const BRANCH = { x1: 440, x2: 605, y: 254 }
 const BRANCH_HALF_W = 4
 //
 // The broken branch on the picture: its rect, the point on its stick's
 // middle line under the cut stump and the stick's end at the leaves (the
 // stick's axis runs between the two; the stump rises above the first).
 //
-const FALL_TWIG = { x: 890, y: 300, w: 196, h: 114 }
-const FALL_TWIG_CUT = { x: 910, y: 332 }
-const FALL_TWIG_AXIS_END = { x: 1025, y: 382 }
+const FALL_TWIG = { x: 885, y: 311, w: 209, h: 127 }
+const FALL_TWIG_CUT = { x: 905, y: 345 }
+const FALL_TWIG_AXIS_END = { x: 1027, y: 399 }
 //
 // The trunk's foot and the roots' top overlap the ground line by this much.
 //

@@ -224,10 +224,9 @@ export const CFG = {
         //
         playfieldOuter: PALETTE.gray0,
         //
-        // Debug FPS readout in the corner — quiet grey with a dark drop shadow.
+        // Debug FPS readout in the corner — dark grey, no shadow.
         //
-        fpsHudText: PALETTE.gray4,
-        fpsHudShadow: PALETTE.gray0,
+        fpsHudText: PALETTE.gray2,
         //
         // Forest sky — a bright day: light blue overhead, pale blue-mint in
         // the middle, sunlit pale yellow at the horizon; dawn gold lives in
@@ -325,17 +324,15 @@ export const CFG = {
           algaeDark: PALETTE.green0
         },
         //
-        // Water flower by the left big tree: a cloudy bubble (milky skin and
-        // a light rim, so it reads against the dark teal trunks behind it)
-        // holding pale blue water, and a dark warm wet-soil tone for the
-        // soaked ground.
+        // Water flower by the left big tree: a soft, see-through
+        // light-turquoise drop (pale top, deeper belly, a white glint), and a
+        // dark warm wet-soil tone for the soaked ground.
         //
         waterFlower: {
-          skin: PALETTE.gray6,         // Milky haze of the bubble's skin
-          skinRim: PALETTE.gray6,      // Its light outline
-          highlight: PALETTE.gray7,    // Light caught on the skin
-          water: PALETTE.blue4,        // Water inside the bubble
-          waterSurface: PALETTE.gray6, // Line of the water's surface
+          dropLight: PALETTE.blue5,    // Pale top of the light-turquoise drop
+          drop: PALETTE.cyan3,         // Its turquoise body
+          dropDeep: PALETTE.cyan2,     // Deeper turquoise under its belly
+          dropGlint: PALETTE.gray7,    // Small white glint
           droplet: PALETTE.blue5,      // Spray and splash drops
           puddle: PALETTE.blue3,       // Shallow puddle on the ground
           puddleGlint: PALETTE.blue5,  // Its top glint
@@ -354,7 +351,7 @@ export const CFG = {
         appleBug: {
           tongue: PALETTE.pink1,
           tongueFork: PALETTE.pink0,
-          farTint: PALETTE.gray6,
+          farTint: PALETTE.gray4,      // Its far legs, well darker than the near ones
           deep: PALETTE.gray0
         },
         //
@@ -786,51 +783,6 @@ export const CFG = {
           branch: PALETTE.gray1,
           leaf: PALETTE.teal1,
           leafShades: [PALETTE.cyan0, PALETTE.teal1, PALETTE.cyan2]
-        },
-        //
-        // Branch trampoline — standard forestMushroom terracotta (unusual beat,
-        // same saturation as decor). Gray set mirrors inside the gray family.
-        //
-        cuteMushroom: {
-          body: PALETTE.sand5,
-          bodyShade: PALETTE.sand3,
-          cap: PALETTE.orange2,
-          capDark: PALETTE.brown0,
-          capLight: PALETTE.orange3,
-          spot: PALETTE.sand5,
-          outline: PALETTE.gray0,
-          face: PALETTE.brown0,
-          blush: PALETTE.orange4
-        },
-        //
-        // Right ground + pit cave trampolines — forestAttention (richer, not brighter).
-        //
-        cuteMushroomRed: {
-          body: PALETTE.sand5,
-          bodyShade: PALETTE.sand3,
-          cap: PALETTE.red2,
-          capDark: PALETTE.brown0,
-          capLight: PALETTE.orange3,
-          spot: PALETTE.sand5,
-          outline: PALETTE.gray0,
-          face: PALETTE.brown0,
-          blush: PALETTE.red3
-        },
-        //
-        // Menu ring forest icon: same mushroom, but it sits on the dark menu
-        // backdrop with no forest light around it, so the cap and stem run
-        // brighter and more saturated than in the level.
-        //
-        cuteMushroomMenu: {
-          body: PALETTE.gray7,
-          bodyShade: PALETTE.sand4,
-          cap: PALETTE.orange1,
-          capDark: PALETTE.orange0,
-          capLight: PALETTE.rose4,
-          spot: PALETTE.gray7,
-          outline: PALETTE.gray0,
-          face: PALETTE.brown0,
-          blush: PALETTE.pink3
         },
         bark: {
           dark: PALETTE.teal0,

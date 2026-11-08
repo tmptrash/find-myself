@@ -214,7 +214,7 @@ export async function bootEngine(resolutionMode) {
 // That context boots suspended and only resumes inside a real k.play() call —
 // every earlier sound in the game happens to be either procedural or started
 // paused (e.g. birds.mp3), so the very first unpaused k.play() (typically
-// forest's water-steps.mp3 on the first drowning) can race the async
+// forest's water_steps.mp3 on the first drowning) can race the async
 // AudioContext.resume() and play silently. Firing a silent, immediately
 // stopped k.play() inside the user's very first keyboard/pointer gesture on
 // the page resumes it synchronously within a trusted gesture handler, well
@@ -391,8 +391,8 @@ function onWebGLContextRestored() {}
  */
 function buildSetupTasks(k) {
   return [
-    () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Regular.ttf"),
-    () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
+    () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono_Regular.ttf"),
+    () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono_Thin.ttf"),
     () => k.loadSprite("eye-hud-0", "./eye_0.png"),
     () => k.loadSprite("eye-hud-1", "./eye_1.png"),
     () => k.loadSprite("eye-hud-2", "./eye_2.png"),
@@ -413,7 +413,7 @@ function buildSetupTasks(k) {
 function buildSoundTasks(k) {
   const sounds = [
     ['birds', './sounds/birds.mp3'],
-    ['water-steps', './sounds/water-steps.mp3'],
+    ['water-steps', './sounds/water_steps.mp3'],
     ['whisper', './sounds/whisper.mp3']
   ]
   return sounds.map(([name, path]) => () => k.loadSound(name, path))

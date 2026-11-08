@@ -13,13 +13,13 @@ import * as PolyBatch from '../../../utils/poly-batch.js'
 // wakes and its light pupils dart about the black eyes, coming back to him
 // now and then. Once he gets to its stop (a branch stop: he stands on it;
 // a ground stop: he comes close, or its own check says so), it pulls its
-// paws in and flies on to the next stop, darting and hovering like a
-// hummingbird on the way. From the last one it flies off to its exit and
+// paws in and flies on to the next stop, gliding along one smooth,
+// looping arc on the way. From the last one it flies off to its exit and
 // is gone for good (with no exit it goes round its stops; a resting bud
 // leaves each one after a random rest instead). In the air the propeller is the
 // moving point and the body hangs under it on a slack rope, so the body
 // trails the propeller, bows the rope, and squashes under the pull of a
-// dash, a turn or a stop. The head is drawn turned right; flying left, the
+// turn or a stop. The head is drawn turned right; flying left, the
 // whole bud is mirrored.
 //
 const STATES = {
@@ -75,7 +75,7 @@ const HUM_RATE_PER_V = 0.0009
 // (SQUASH_ACCEL px/s² for a full squash, up to SQUASH_MAX) and a light
 // load stretches it; a push across the rope bends it round its neck
 // against the push (BEND_ACCEL px/s² per rad, up to BEND_MAX). Both are
-// underdamped springs, so a dash or a turn leaves the body jiggling.
+// underdamped springs, so a turn or a stop leaves the body jiggling.
 //
 const STICK_SHARE = 1.15
 const ROPE_FROM_W = 26
@@ -139,19 +139,18 @@ const PROP_TILT_MAX = 0.18
 const PROP_TILT_SNAP = 4
 const FRAME_COUNT = 6
 //
-// Hummingbird flight of the hub: a lift, then ROUTE_MIN..MAX hover points
-// it darts between, each leg an upward arc bowed LEG_ARC_MIN..MAX of its
-// length (sampled in LEG_ARC_STEPS straight bits; a leg that is level
-// past LEG_ARC_LEVEL bulges up, a steeper one to a random side), hanging at
-// each one for HOVER_MIN..MAX s with a small bob, and at last a hover
-// LAND_CLEAR px over the spot. A hover point lies WANDER_X px either side
-// of the straight way and anywhere from the lower end up to RISE_MAX px
-// over the higher one, but never more than ROUTE_HEADROOM px over the
+// Flight of the hub: a lift, then ROUTE_MIN..MAX waypoints and at last a
+// hover LAND_CLEAR px over the spot, all joined into one smooth curve
+// (centripetal Catmull-Rom through them, SPLINE_STEPS straight bits per
+// span) that it flies without stopping. A waypoint lies WANDER_X px either
+// side of the straight way and anywhere from the lower end up to RISE_MAX
+// px over the higher one, but never more than ROUTE_HEADROOM px over the
 // hover above the higher of its two stops or ROUTE_LIFT_ROOM px over the
 // lift, whichever is higher (so it stays in view); with BACKTRACK_CHANCE it
-// is BACK_MIN..MAX px the other way instead. The route stays within
-// ROUTE_MARGIN px of its spots. Speed eases out over FLIGHT_RAMP px, and
-// a leg counts as finished once it is slower than FLIGHT_STOP_V.
+// is BACK_MIN..MAX px the other way instead, so it still loops about. The
+// route stays within ROUTE_MARGIN px of its spots. Speed builds up and
+// eases off along the curve (flyAccel) and slows over the last FLIGHT_RAMP
+// px, never under FLIGHT_MIN_V, so it glides in rather than jerks.
 //
 const TAKEOFF_LIFT = 84
 const ROUTE_MIN = 2
@@ -164,32 +163,13 @@ const BACKTRACK_CHANCE = 0.35
 const BACK_MIN = 80
 const BACK_MAX = 200
 const ROUTE_MARGIN = 120
-const LEG_ARC_MIN = 0.22
-const LEG_ARC_MAX = 0.42
-const LEG_ARC_STEPS = 10
-const LEG_ARC_LEVEL = 0.3
-const HOVER_MIN = 0.25
-const HOVER_MAX = 0.8
-const HOVER_BOB_X = 3
-const HOVER_BOB_Y = 4
-const HOVER_BOB_WX = 9
-const HOVER_BOB_WY = 13
+const SPLINE_STEPS = 16
+const SPLINE_ALPHA = 0.5
+const SPLINE_EPS = 1e-4
 const LAND_CLEAR = 28
-const FLIGHT_RAMP = 40
-const FLIGHT_STOP_V = 24
-const FLIGHT_ARRIVE = 8
-//
-// The flight goes in jerks: every DASH_WAIT_MIN..MAX s a dash of DASH_SEC
-// drives the hub at DASH_BOOST of flySpeed with DASH_ACCEL times flyAccel;
-// between dashes it eases back to DASH_LULL of flySpeed. The sharp speed
-// swings are what squash and bend the soft body.
-//
-const DASH_WAIT_MIN = 0.18
-const DASH_WAIT_MAX = 0.42
-const DASH_SEC = 0.16
-const DASH_BOOST = 1.9
-const DASH_LULL = 0.45
-const DASH_ACCEL = 4
+const FLIGHT_RAMP = 150
+const FLIGHT_MIN_V = 90
+const FLIGHT_ARRIVE = 2
 //
 // Light pupils in the painted black eyes dart like an insect's: a new
 // spot every DART_MIN..MAX s (snapping there at EYE_SNAP), and with a hero
@@ -321,14 +301,8 @@ export function create(cfg) {
     bendV: 0,
     propTilt: 0,
     curve: null,
-    route: [],
-    hoverAt: null,
-    hoverLeft: 0,
-    hoverT: 0,
     landFrom: null,
     landT: 0,
-    dashT: 0,
-    dashWait: 0,
     spin: false,
     frame: 0,
     frameT: 0,
@@ -452,18 +426,14 @@ function startFlight(inst) {
   inst.ay = 0
   inst.hang = 0
   inst.hangW = 0
-  inst.dashT = DASH_SEC
-  inst.dashWait = randomIn(DASH_WAIT_MIN, DASH_WAIT_MAX)
-  const lift = { x: inst.prop.x, y: inst.prop.y - TAKEOFF_LIFT }
-  inst.route = buildRoute(inst, lift)
-  inst.hoverLeft = 0
-  inst.curve = legTo(inst, lift)
+  const start = { x: inst.prop.x, y: inst.prop.y }
+  const lift = { x: start.x, y: start.y - TAKEOFF_LIFT }
+  inst.curve = curveOf(splineThrough([start, lift, ...buildRoute(inst, lift)]))
   inst.state = STATES.FLY
 }
 //
-// Hover points after the lift: a few darting stops round the way (now and
-// then back the other way), then the hover over the spot (or the exit
-// point itself).
+// Waypoints after the lift: a few points round the way (now and then back
+// the other way), then the hover over the spot (or the exit point itself).
 //
 function buildRoute(inst, lift) {
   const end = flightEnd(inst)
@@ -484,28 +454,39 @@ function buildRoute(inst, lift) {
   return route
 }
 //
-// One dart from the hub to the next hover point along an arc bulging
-// upwards (a mostly vertical leg bulges to a random side).
+// A smooth curve through the points (centripetal Catmull-Rom, so it never
+// loops or cusps on uneven spacing), sampled in SPLINE_STEPS bits per span.
+// The ends are mirrored so the curve leaves and reaches them head-on.
 //
-function legTo(inst, to) {
-  const from = { x: inst.prop.x, y: inst.prop.y }
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy) || 1
-  const nx = -dy / len
-  const ny = dx / len
-  const side = Math.abs(ny) > LEG_ARC_LEVEL ? -Math.sign(ny) : (Math.random() < 0.5 ? -1 : 1)
-  const bow = side * len * randomIn(LEG_ARC_MIN, LEG_ARC_MAX)
-  const ctrl = { x: (from.x + to.x) / 2 + nx * bow * 2, y: (from.y + to.y) / 2 + ny * bow * 2 }
-  const pts = []
-  for (let i = 0; i <= LEG_ARC_STEPS; i++) {
-    const u = i / LEG_ARC_STEPS
-    const a = (1 - u) * (1 - u)
-    const b = 2 * u * (1 - u)
-    const c = u * u
-    pts.push({ x: a * from.x + b * ctrl.x + c * to.x, y: a * from.y + b * ctrl.y + c * to.y })
+function splineThrough(points) {
+  const ext = [mirror(points[1], points[0]), ...points, mirror(points[points.length - 2], points[points.length - 1])]
+  const pts = [points[0]]
+  for (let i = 1; i < ext.length - 2; i++) {
+    for (let j = 1; j <= SPLINE_STEPS; j++) pts.push(catmullRom(ext[i - 1], ext[i], ext[i + 1], ext[i + 2], j / SPLINE_STEPS))
   }
-  return curveOf(pts)
+  return pts
+}
+function mirror(p, about) {
+  return { x: about.x * 2 - p.x, y: about.y * 2 - p.y }
+}
+function catmullRom(p0, p1, p2, p3, u) {
+  const t1 = knot(p0, p1)
+  const t2 = t1 + knot(p1, p2)
+  const t3 = t2 + knot(p2, p3)
+  const t = t1 + (t2 - t1) * u
+  const a1 = lerpAt(p0, p1, 0, t1, t)
+  const a2 = lerpAt(p1, p2, t1, t2, t)
+  const a3 = lerpAt(p2, p3, t2, t3, t)
+  const b1 = lerpAt(a1, a2, 0, t2, t)
+  const b2 = lerpAt(a2, a3, t1, t3, t)
+  return lerpAt(b1, b2, t1, t2, t)
+}
+function knot(a, b) {
+  return Math.max(SPLINE_EPS, Math.pow(Math.hypot(b.x - a.x, b.y - a.y), SPLINE_ALPHA))
+}
+function lerpAt(a, b, ta, tb, t) {
+  const u = (t - ta) / (tb - ta)
+  return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }
 }
 function curveOf(pts) {
   const lens = []
@@ -532,25 +513,15 @@ function pointAlong(curve, s) {
   return curve.pts[curve.pts.length - 1]
 }
 //
-// Darts along a leg, hovers at its end, then darts on to the next hover
-// point; after the last one it lands. The hang steps off the hub's real
-// frame-to-frame velocity, so every sharp stop sets the body swinging.
+// Glides along the whole curve, then lands (or is gone at the exit). The
+// hang steps off the hub's real frame-to-frame velocity, so the body sways
+// through the turns.
 //
 function tickFly(inst, dt) {
-  inst.hoverLeft > 0 ? stepHover(inst, dt) : stepPropAlong(inst, dt)
+  stepPropAlong(inst, dt)
   stepHang(inst, dt, 0)
   applyHang(inst)
-  if (inst.hoverLeft > 0) {
-    inst.hoverLeft -= dt
-    inst.hoverLeft <= 0 && (inst.curve = legTo(inst, inst.route.shift()))
-    return
-  }
-  const arrived = inst.curve.total - inst.curve.s <= FLIGHT_ARRIVE && inst.curve.v <= FLIGHT_STOP_V
-  if (!arrived) return
-  if (inst.route.length) {
-    startHover(inst)
-    return
-  }
+  if (inst.curve.total - inst.curve.s > FLIGHT_ARRIVE) return
   inst.goal.perch === PERCH.EXIT ? leave(inst) : startLand(inst)
 }
 //
@@ -562,57 +533,22 @@ function leave(inst) {
   inst.sound && Sound.stopPropellerHum(inst.sound)
   inst.layers.forEach(layer => layer.destroy())
 }
-//
-// Hanging in the air with a quick little bob, like a hummingbird.
-//
-function startHover(inst) {
-  inst.hoverAt = { x: inst.prop.x, y: inst.prop.y }
-  inst.hoverT = 0
-  inst.hoverLeft = randomIn(HOVER_MIN, HOVER_MAX)
-}
-function stepHover(inst, dt) {
-  const { prop, hoverAt } = inst
-  inst.hoverT += dt
-  const x = hoverAt.x + Math.sin(inst.hoverT * HOVER_BOB_WX) * HOVER_BOB_X
-  const y = hoverAt.y + Math.sin(inst.hoverT * HOVER_BOB_WY) * HOVER_BOB_Y
-  prop.vx = (x - prop.x) / dt
-  prop.vy = (y - prop.y) / dt
-  prop.x = x
-  prop.y = y
-}
 function stepPropAlong(inst, dt) {
   const { curve, prop } = inst
   const remain = curve.total - curve.s
-  const dashing = tickDash(inst, dt)
   //
-  // Dashes and lulls swing the speed; flyAccel eases the start. The ramp
-  // only bleeds speed off before the end, so the stop is what sets the
-  // body swinging.
+  // Cruise speed, eased off over the last FLIGHT_RAMP px (smoothstep, so
+  // the slowing itself starts and ends softly); flyAccel limits the change.
   //
-  const rampOut = Math.min(1, Math.max(remain, 0) / FLIGHT_RAMP)
-  const want = PARAMS.flySpeed * (dashing ? DASH_BOOST : DASH_LULL) * rampOut
-  const accel = PARAMS.flyAccel * (dashing ? DASH_ACCEL : 1)
-  curve.v += clamp(want - curve.v, accel * dt)
+  const rampOut = smoothstep(Math.min(1, Math.max(remain, 0) / FLIGHT_RAMP))
+  const want = Math.max(FLIGHT_MIN_V, PARAMS.flySpeed * rampOut)
+  curve.v += clamp(want - curve.v, PARAMS.flyAccel * dt)
   curve.s = Math.min(curve.total, curve.s + curve.v * dt)
   const p = pointAlong(curve, curve.s)
   prop.vx = (p.x - prop.x) / dt
   prop.vy = (p.y - prop.y) / dt
   prop.x = p.x
   prop.y = p.y
-}
-//
-// True while a dash runs; the next one starts after a short random lull.
-//
-function tickDash(inst, dt) {
-  if (inst.dashT > 0) {
-    inst.dashT -= dt
-    return true
-  }
-  inst.dashWait -= dt
-  if (inst.dashWait > 0) return false
-  inst.dashWait = randomIn(DASH_WAIT_MIN, DASH_WAIT_MAX)
-  inst.dashT = DASH_SEC
-  return true
 }
 function startLand(inst) {
   inst.landFrom = { x: inst.prop.x, y: inst.prop.y }
@@ -720,7 +656,7 @@ function updateRope(inst, dt) {
 //
 // Soft body: extra tension along the rope (a hard pull or a fast swing)
 // shortens it, a light load lengthens it, and a push across the rope bends
-// its bottom back against the push. Springs, so it jiggles after a dash.
+// its bottom back against the push. Springs, so it jiggles after a turn.
 //
 function updateSquash(inst, dt) {
   let squashTarget = 0
@@ -756,7 +692,7 @@ function updatePropTilt(inst, dt) {
   inst.propTilt += (target - inst.propTilt) * Math.min(1, dt * PROP_TILT_SNAP)
 }
 //
-// Faces the way the hub flies (a hover keeps the last side); on a perch
+// Faces the way the hub flies (while slow it keeps the last side); on a perch
 // it turns its head to a hero coming near.
 //
 function updateFacing(inst, hero) {

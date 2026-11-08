@@ -1304,7 +1304,7 @@ export function playSplashSound(instance, volume = 0.3) {
   hissNoise.stop(now + 0.14)
 }
 //
-// Forest shallow water — replay water-steps.mp3 while wading until hero leaves water.
+// Forest shallow water — replay water_steps.mp3 while wading until hero leaves water.
 // Each take gets a random playback speed and volume so the chained loop never
 // sounds mechanical.
 //
@@ -1339,7 +1339,7 @@ export function stopWaterStepsLoop(instance) {
   instance._waterStepsLoopActive = false
 }
 //
-// Plain HTML5 Audio pool for water-steps.mp3 — deliberately bypasses
+// Plain HTML5 Audio pool for water_steps.mp3 — deliberately bypasses
 // Kaplay's own sound system. Kaplay resolves a named sound through its own
 // asset registry and its own internal AudioContext (both independent from
 // this module and from each other's load timing) and can silently no-op a
@@ -1349,7 +1349,7 @@ export function stopWaterStepsLoop(instance) {
 // once unlocked by any prior user gesture on the page (see
 // unlockWaterStepsAudio below), plays reliably every time.
 //
-const WATER_STEPS_URL = './sounds/water-steps.mp3'
+const WATER_STEPS_URL = './sounds/water_steps.mp3'
 const WATER_STEPS_POOL_SIZE = 2
 let waterStepsPool = null
 let waterStepsPoolIndex = 0

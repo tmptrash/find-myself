@@ -15,7 +15,7 @@ import { bakeForestLakeStonePile } from '../sections/forest/utils/forest-stones.
 import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
-import { FOREST_PAL, forestRgb } from '../sections/forest/utils/forest-palette.js'
+import { FOREST_PAL } from '../sections/forest/utils/forest-palette.js'
 import * as Lake from '../sections/forest/utils/forest-lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
@@ -26,9 +26,7 @@ import * as PropellerBud from '../sections/forest/components/propeller-bud.js'
 import * as TreeFruit from '../sections/forest/utils/forest-tree-fruit.js'
 import { bakeLeftTreeApple, leftTreeApplePicture, leftTreeApples } from '../sections/forest/utils/forest-left-tree.js'
 import { createForestMidges, updateForestMidges } from '../sections/forest/utils/forest-level-atmosphere.js'
-import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
-import * as Grass from '../components/grass.js'
-import * as MenuMushroom from '../sections/forest/components/menu-mushroom.js'
+import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
 import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
@@ -37,7 +35,7 @@ import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '..
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (the forest's
-// trampoline mushroom, the cave's glowing mushroom); every other level is a
+// stalk-eye, the cave's glowing mushroom); every other level is a
 // "?" crossed by the red prohibition sign. A level hidden until reached
 // shows a plain "?" (and cannot be entered) until the hero has got there,
 // over a black backdrop of
@@ -48,7 +46,7 @@ const BACKDROP_FOREST = 'forest'
 const BACKDROP_CAVE = 'cave'
 const BACKDROP_NIGHT = 'night'
 const BACKDROP_MYSTERY = 'mystery'
-const LEVEL_ICON_MUSHROOM = 'mushroom'
+const LEVEL_ICON_EYE_STALK = 'eyeStalk'
 const LEVEL_ICON_GLOW_MUSHROOM = 'glowMushroom'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
 const FOREST_FIRST_LESSON = 'lesson-forest.0'
@@ -62,7 +60,7 @@ const MENU_GLOW_MUSHROOM_SEED = 23
 const LEVELS = [
   {
     section: 'forest',
-    icon: LEVEL_ICON_MUSHROOM,
+    icon: LEVEL_ICON_EYE_STALK,
     backdrop: BACKDROP_FOREST,
     dialog: ConfirmDialog.LOOKS.FOREST,
     lessonPrefix: FOREST_LESSON_PREFIX,
@@ -161,15 +159,6 @@ const MENU_LAKE_SPRITE_KEY = 'menu'
 const MENU_LAKE_BANK_JAG = 22
 const MENU_CLOUD_TOP = 24
 //
-// Swaying grass along the forest ground: the level's grass tone shifting
-// toward warm gold per blade, so the field reads yellow; none on the lake.
-//
-const MENU_GRASS_TUFT_COUNT = 40
-const MENU_GRASS_EDGE_INSET = 20
-const MENU_GRASS_RGB = forestRgb(FOREST_PAL.treeColor.leafShades[0])
-const MENU_GRASS_HUE_VARY_MAX = 1
-const MENU_GRASS_HUE_VARY_SKEW = 0.5
-//
 // The crawler roams the ground east of the lake, heading for a new random
 // spot every few seconds; it never hunts the menu hero.
 //
@@ -177,16 +166,22 @@ const MENU_CRAWLER_RETARGET_MIN = 2.5
 const MENU_CRAWLER_RETARGET_RANGE = 4
 //
 // The apple tree lives as in the level: apples hang in its crown
-// (MENU_TREE_APPLES at first), one drops every MENU_APPLE_DROP_MIN..+RANGE
-// seconds while none lies on the ground and a new one grows in its place.
-// The apple bug lives in its burrow by the tree (its cave under it), the
-// water flower stands at the trunk (MENU_WATER_FLOWER_SHIFT design px right
-// of it) and midges hang over the lake for the bug's tongue. All of it draws
-// over the baked forest, under the level panel.
+// (MENU_TREE_APPLES at first). The water flower at the trunk
+// (MENU_WATER_FLOWER_SHIFT design px right of it) grows its drop from the
+// start (MENU_FLOWER_START_DELAY); once it is full it falls on its own
+// after MENU_FLOWER_WAIT_MIN..+RANGE s, waters the tree, a new apple grows
+// and MENU_APPLE_FALL_AFTER s later an apple falls (again MENU_APPLE_RETRY
+// s later while one still lies on the ground); then the next drop. The
+// apple bug lives in its burrow by the tree (its cave under it) and midges
+// hang over the lake for the bug's tongue. All of it draws over the baked
+// forest, under the level panel.
 //
 const MENU_TREE_APPLES = 3
-const MENU_APPLE_DROP_MIN = 5
-const MENU_APPLE_DROP_RANGE = 6
+const MENU_FLOWER_START_DELAY = 1
+const MENU_FLOWER_WAIT_MIN = 1
+const MENU_FLOWER_WAIT_RANGE = 2
+const MENU_APPLE_FALL_AFTER = 7
+const MENU_APPLE_RETRY = 2
 const MENU_WATER_FLOWER_SHIFT = 15
 const MENU_BUG_TUNNEL_Z = 1
 const MENU_WATER_FLOWER_Z = 2.5
@@ -402,7 +397,6 @@ export function sceneMenu(k) {
       closed: false
     }
     inst.shorePile = loadMenuShorePile(k, inst.lake)
-    inst.grass = createMenuGrass(inst)
     inst.tomatoes = SpikyTomato.create({
       k,
       earTrees: inst.earTrees,
@@ -413,7 +407,7 @@ export function sceneMenu(k) {
     inst.crawler = createMenuCrawler(inst)
     startMenuForestLife(inst)
     inst.bgOpacity[levels[selected].backdrop] = 1
-    createMenuMushrooms(inst)
+    createMenuEyeStalks(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
     inst.panel = loadMenuPanel(k, layout)
     k.add([k.z(MENU_PANEL_Z), { draw: () => drawMenuPanel(inst) }])
@@ -491,14 +485,14 @@ function computeMenuLayout(k) {
   }
 }
 //
-// The forest icon is the level's trampoline mushroom; it watches the hero
-// and blinks on its own (no size pulse on selection).
+// The forest icon is one of the level's stalk-eyes cut short; its pupil
+// follows the hero (no size pulse on selection).
 //
-function createMenuMushrooms(inst) {
+function createMenuEyeStalks(inst) {
   const { k } = inst
-  inst.levels.filter(level => level.icon === LEVEL_ICON_MUSHROOM).forEach(level => {
+  inst.levels.filter(level => level.icon === LEVEL_ICON_EYE_STALK).forEach(level => {
     const pose = { x: inst.layout.columnX, y: level.y, scale: 1 }
-    MenuMushroom.create({
+    MenuEyeStalk.create({
       k,
       z: MENU_ICON_Z,
       getPose: () => {
@@ -752,21 +746,40 @@ function updateMenuForestLife(inst, dt) {
   life.fruitLayer.hidden = hidden
   updateForestMidges(life.midges, dt, forest)
   TreeFruit.tickForestTreeFruits(life.orchard, dt, inst.forestLayout.groundY)
-  updateMenuAppleDrop(life, dt)
+  updateMenuWaterCycle(life, dt)
 }
 //
-// Nobody knocks the apples down in the menu: while none lies on the ground
-// one drops on its own every so often and a new one starts growing.
+// Nobody shakes the flower or knocks the apples down in the menu: a full
+// drop falls on its own after a short wait; once it has watered the tree
+// (onMenuDropLanded) an apple falls a little later.
 //
-function updateMenuAppleDrop(life, dt) {
-  if (TreeFruit.hasForestAnchorFruitDropInWorld(life.orchard)) return
-  life.dropLeft -= dt
-  if (life.dropLeft > 0) return
-  life.dropLeft = nextMenuAppleDrop()
-  TreeFruit.releaseForestAnchorFruit(life.orchard) && TreeFruit.waterForestTreeApples(life.orchard)
+function updateMenuWaterCycle(life, dt) {
+  if (life.appleLeft > 0) {
+    life.appleLeft -= dt
+    life.appleLeft <= 0 && dropMenuApple(life)
+    return
+  }
+  if (!WaterFlower.isRipe(life.flower)) return
+  life.flowerWait -= dt
+  if (life.flowerWait > 0) return
+  life.flowerWait = nextMenuFlowerWait()
+  WaterFlower.pierce(life.flower)
 }
-function nextMenuAppleDrop() {
-  return MENU_APPLE_DROP_MIN + Math.random() * MENU_APPLE_DROP_RANGE
+//
+// The drop splashed down by the tree: a new apple starts growing, and an
+// apple falls once it has had time to ripen.
+//
+function onMenuDropLanded(inst) {
+  const life = inst.forestLife
+  if (!life) return
+  TreeFruit.waterForestTreeApples(life.orchard)
+  life.appleLeft = MENU_APPLE_FALL_AFTER
+}
+function dropMenuApple(life) {
+  TreeFruit.releaseForestAnchorFruit(life.orchard) || (life.appleLeft = MENU_APPLE_RETRY)
+}
+function nextMenuFlowerWait() {
+  return MENU_FLOWER_WAIT_MIN + Math.random() * MENU_FLOWER_WAIT_RANGE
 }
 //
 // A touch sliding over a row selects it (the game takes no mouse; touches
@@ -836,7 +849,7 @@ function drawBackdrops(inst) {
 //
 // The forest goes back to front like the level: baked sky and parallax
 // rows, the drifting clouds, the baked front scene, the lake (bed, algae,
-// water), the stone pile over its shallows, grass, the bomb trees' roots
+// water), the stone pile over its shallows, the bomb trees' roots
 // and trees with their bombs, then the stalk eyes once the forest is mostly
 // in.
 //
@@ -850,7 +863,6 @@ function drawForestBackdrop(inst, forest) {
   Lake.drawAlgae(k, inst.lake, forest)
   Lake.drawFill(k, inst.lake, forest)
   inst.shorePile.sprite && k.drawSprite({ sprite: inst.shorePile.sprite, pos: k.vec2(inst.shorePile.x, inst.shorePile.y), opacity: forest })
-  Grass.draw(inst.grass)
   BombTree.onDrawRoots(inst.earTrees, forest)
   BombTree.onDrawTrees(inst.earTrees, forest)
   SpikyTomato.onDraw(inst.tomatoes, forest)
@@ -1228,30 +1240,6 @@ function createMenuLake(k, forestLayout) {
   })
 }
 //
-// Swaying grass along the forest ground (drawn manually inside the backdrop
-// pass), fading with the forest.
-//
-function createMenuGrass(inst) {
-  const { k, forestLayout } = inst
-  const { lake } = forestLayout
-  return Grass.create({
-    k,
-    floorY: forestLayout.groundY,
-    left: MENU_GRASS_EDGE_INSET,
-    right: k.width() - MENU_GRASS_EDGE_INSET,
-    tuftCount: MENU_GRASS_TUFT_COUNT,
-    excluded: x => x >= lake.x1 && x <= lake.x2,
-    postBakeCanvas: applyForestGameplaySharpBake,
-    getTint: () => menuGrassTint(inst),
-    hueVaryMax: MENU_GRASS_HUE_VARY_MAX,
-    hueVarySkew: MENU_GRASS_HUE_VARY_SKEW
-  })
-}
-function menuGrassTint(inst) {
-  const opacity = inst.bgOpacity[BACKDROP_FOREST]
-  return opacity > MENU_FADE_EPS ? { ...MENU_GRASS_RGB, opacity } : null
-}
-//
 // The level's crawler on the ground east of the lake; it never hunts.
 //
 function createMenuCrawler(inst) {
@@ -1294,7 +1282,10 @@ function createMenuForestLife(inst) {
     k,
     x: WaterFlower.footXUnderHeart(appleTreeX) + Math.round(MENU_WATER_FLOWER_SHIFT * scale),
     y: groundY,
-    z: MENU_WATER_FLOWER_Z
+    z: MENU_WATER_FLOWER_Z,
+    startDelay: MENU_FLOWER_START_DELAY,
+    rootArea: { x1: 0, x2: k.width() },
+    onSoilWatered: () => onMenuDropLanded(inst)
   })
   inst.forestLife = {
     orchard,
@@ -1315,7 +1306,8 @@ function createMenuForestLife(inst) {
       z: MENU_BUG_Z
     }),
     bud: createMenuPropellerBud(inst),
-    dropLeft: nextMenuAppleDrop()
+    flowerWait: nextMenuFlowerWait(),
+    appleLeft: 0
   }
 }
 //

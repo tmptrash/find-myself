@@ -286,7 +286,7 @@ export function showFatalLoaderError(message) {
   if (!loaderEl) return
   stopLoaderBarAnimation()
   eye = null
-  loaderEl.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
+  loaderEl.innerHTML = `<div style="color:#fff;font-family:${CFG.visual.fonts.regularFull};text-align:center;padding:24px">${message}</div>`
   loaderEl.style.display = 'flex'
 }
 

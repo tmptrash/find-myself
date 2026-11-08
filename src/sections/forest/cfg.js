@@ -4,22 +4,21 @@
 //
 // Water flower by the left big tree (components/water-flower.js). Lengths in
 // world px, times in seconds, speeds in px/s; the water volume is the share
-// of one full bubble.
+// of one full drop.
 //
 const WATER_FLOWER = {
   height: 107,                      // Picture height, stem's foot to the top leaf
   //
-  // Bubble growing out of the flower: it swells from nothing and hangs lower
-  // as it grows, then stops at its full size.
+  // Drop growing out of the flower's bell: it starts tiny, swells and draws
+  // out longer as it fills, then stops at its full size.
   //
-  bubbleMaxRadius: 19,
-  bubbleGrowDuration: 12.5,         // With regrowDelay: 15 s from a burst to the next full bubble
-  bubbleWaterFill: 0.5,             // Share of the bubble's height the water stands at
+  dropMaxRadius: 12,                // Belly radius of a full drop
+  dropGrowDuration: 12.5,           // With regrowDelay: 15 s from a burst to the next full drop
   regrowDelay: 2.5,                 // Bare flower this long after a burst
   startDelay: 10,                   // Bare flower this long the first time the game starts
   //
   // Hanging motion: a slow sway round the flower and a soft wobble of the
-  // skin; landings nearby kick both.
+  // drop; landings nearby kick both.
   //
   swayAmplitude: 0.05,              // Idle sway (radians)
   swaySpeed: 0.7,
@@ -31,11 +30,11 @@ const WATER_FLOWER = {
   landingWobbleKick: 2.2,           // Squash speed a landing adds (share/s)
   //
   // Landing trigger: the whole plant shakes round its stem's foot like the
-  // bomb trees, and a full-size bubble falls once the shake has died down.
+  // bomb trees, and a full-size drop falls once the shake has died down.
   //
   landingRadius: 56,                // Max distance from the stem's foot to the hero's landing X
   shakeMaxAngle: 0.05,              // Plant's swing at the start of the shake (radians)
-  shakeDropDelay: 0.5,              // From the landing to the bubble tearing off
+  shakeDropDelay: 0.5,              // From the landing to the drop tearing off
   //
   // Fall and burst.
   //
@@ -49,7 +48,7 @@ const WATER_FLOWER = {
   // Ground water.
   //
   puddleSpreadSpeed: 26,
-  puddleWidth: 26,                  // Puddle half width for one full bubble
+  puddleWidth: 26,                  // Puddle half width for one full drop
   puddleThickness: 3.2,
   soilAbsorptionDuration: 3.5,
   soilDryingDuration: 9
@@ -60,8 +59,8 @@ const WATER_FLOWER = {
 // Lengths in world px, times in seconds, speeds in px/s, angles in radians.
 //
 const APPLE_BUG = {
-  shellWidth: 57,                   // Leaf hood picture width (the whole bug, hood to head, is ~74 long)
-  bodyLift: 6.6,                    // Body's origin over the ground at rest: legs set high in the body, belly low
+  shellWidth: 58,                   // Leaf hood picture width (the whole bug, hood to head, is ~74 long)
+  bodyLift: 6.3,                    // Body's origin over the ground at rest: legs set high in the body, belly low
   //
   // It moves in dashes: speed rises and falls over each dash (peak speed),
   // with a pause and a new pose between them. dashStart skips that share
@@ -120,7 +119,6 @@ const APPLE_BUG = {
   //
   tunnelWidth: 518,                 // Burrow picture width: the full-size bug fits the cave's narrow middle
   tunnelDelay: 0.4,
-  tunnelDark: 0.45,                 // How dark the apples stored underground look
   tunnelBugDark: 0.25,              // How dark the bug itself looks underground (a little darker than up top)
   tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
   tunnelRush: { speed: 340, dashMin: 0.45, dashMax: 0.6, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // An apple fell up there: back out at once
@@ -149,11 +147,11 @@ const PROPELLER_BUD = {
   fleeReach: 260,                   // Hero this near at a ground stop: it flies on to the next one before he reaches it
   propFrameSec: 0.01,               // Every propeller frame shows this long while it spins
   //
-  // The propeller drives the arc in jerks. The body hangs under it and
-  // squashes when the pull of a dash, a turn or a stop loads it.
+  // The propeller glides along one smooth arc. The body hangs under it and
+  // squashes when the pull of a turn or a stop loads it.
   //
-  flySpeed: 320,
-  flyAccel: 700,                    // How fast that speed may change along the arc
+  flySpeed: 260,                    // Cruise speed along the arc
+  flyAccel: 260,                    // How fast that speed may change (a soft start and slow-down)
   landDuration: 0.55,               // Descent onto the spot while the body is still swinging
   //
   // Roots: two paws grow down into the ground after it sits (or curl onto
@@ -164,9 +162,9 @@ const PROPELLER_BUD = {
 }
 
 //
-// Hint for a hero who never shook the water flower's bubble loose himself
+// Hint for a hero who never shook the water flower's drop loose himself
 // (utils/forest-drop-hint.js): after this many deaths or this long on the
-// move the apple bug bites the bubble off for him, up to `bites` times.
+// move the apple bug bites the drop off for him, up to `bites` times.
 //
 const DROP_HINT = {
   deaths: 5,

@@ -5,41 +5,32 @@ import { hash01 } from './forest-organic-motion.js'
 import { FOREST_PAL } from './forest-palette.js'
 
 //
-// Picture of the water flower: a bare mossy stem rising straight out of the
-// ground and curving over to the left, where its red flower hangs open,
-// painted with its front petals only, so a bubble drawn behind the picture
-// seems to grow out of the flower's heart; its roots go under the ground.
-// Cut from assets/forest/water_flower.png and baked at world size once
-// per live k. The picture starts loading with this module (game boot).
+// Picture of the water flower: a smooth stem rising out of two leaves on
+// the ground and arching over to the left, where its leafy bell hangs open
+// downwards, so a bubble drawn behind the picture seems to grow out of the
+// bell's mouth. Cut from assets/forest/water_flower.png and baked at world
+// size once per live k. The picture starts loading with this module (game
+// boot).
 //
 const URL = 'forest/water_flower.png'
-const SPRITE = 'forest0-water-flower-v3'
-const ROOTS_SPRITE = 'forest0-water-flower-roots-v2'
+const SPRITE = 'forest0-water-flower-v4'
 const GRAIN_SEED = 6301
-const ROOTS_GRAIN_SEED = 6302
 //
 // On the picture (px): the plant's box, the ground line (the stem's cut
 // end sinks a little below it), the stem's foot and the flower's heart,
-// where the bubble hangs from: the mouth of the bell between the side
-// petals' lower edges, up behind the middle petal that hangs below it, so
-// the bubble's top sits inside the bell. The whole plant stands
-// GROUND_SINK world px lower than the ground line.
+// where the bubble hangs from: the middle of the bell's mouth between its
+// lowest petals, a little up inside, so the bubble's top sits inside the
+// bell. The whole plant stands GROUND_SINK world px lower than the ground
+// line.
 //
-const PLANT = { x: 300, y: 175, w: 777, h: 730 }
-const GROUND_Y = 899
-const STEM_FOOT_X = 728
-const FLOWER_HEART = { x: 466, y: 624 }
+const PLANT = { x: 296, y: 224, w: 852, h: 829 }
+const GROUND_Y = 1043
+const STEM_FOOT_X = 765
+const FLOWER_HEART = { x: 465, y: 505 }
 const GROUND_SINK = 1
 //
-// The roots under the stem (their top row at the box's top, centred on the
-// stem's foot; the thin seam line between them and the stem is left out)
-// reach this many world px up over the ground line.
-//
-const ROOTS = { x: 403, y: 929, w: 624, h: 237 }
-const ROOTS_TUCK = 1
-//
 // A flat spot of yellow moss lies on the ground in front of the stem's
-// foot and covers the joint of the stem and its roots: a ring of beads
+// foot, between its two leaves: a ring of beads
 // (world px, centred SPOT_DROP below the ground line) in a dark rim,
 // shaded, body and lit tones, the lit ones on its upper half only.
 //
@@ -69,9 +60,8 @@ const bakedByK = new WeakMap()
  * @param {number} height - World px from the picture's bottom to its top
  * @returns {Promise<Object|null>} layout(height) plus the sprite name and the
  *   stem's foot as its anchor ({ x, y } in -1..1 across the sprite), to draw
- *   it rotated round the foot, the roots' sprite with its top-left from the
- *   foot ({ sprite, dx, dy }, world px) and the moss spot's sprite with its
- *   centre below the foot ({ sprite, dy }) (null if the picture failed to load)
+ *   it rotated round the foot, and the moss spot's sprite with its centre
+ *   below the foot ({ sprite, dy }) (null if the picture failed to load)
  */
 export async function load(k, height) {
   const cached = bakedByK.get(k)
@@ -81,14 +71,12 @@ export async function load(k, height) {
   const scale = height / PLANT.h
   const clean = wipePictureFringe(img)
   const canvas = bakePart(k, clean, PLANT, scale, SPRITE, GRAIN_SEED)
-  bakePart(k, clean, ROOTS, scale, ROOTS_SPRITE, ROOTS_GRAIN_SEED)
   clean.width = 0
   clean.height = 0
   const place = layout(height)
-  const roots = { sprite: ROOTS_SPRITE, dx: Math.round((ROOTS.x - STEM_FOOT_X) * scale), dy: -ROOTS_TUCK }
   bakeSpot(k)
   const spot = { sprite: SPOT_SPRITE, dy: SPOT_DROP }
-  const out = { ...place, sprite: SPRITE, anchor: footAnchor(place, canvas), roots, spot }
+  const out = { ...place, sprite: SPRITE, anchor: footAnchor(place, canvas), spot }
   bakedByK.set(k, out)
   return out
 }

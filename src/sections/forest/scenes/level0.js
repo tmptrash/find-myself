@@ -9,12 +9,7 @@ import { registerForestNativeTeardown } from '../../../utils/engine-switch.js'
 import { yieldForGpu, setLoaderBarPct, setLoaderBarCreepBoost } from '../../../utils/boot-loader.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../../components/lesson-indicator.js'
-import {
-  drawCuteMushroomToCanvas,
-  drawCuteMushroomPupilOverlay,
-  CUTE_MUSHROOM_ASPECT,
-  TRAMP_FACE_EYE_SCALE
-} from '../utils/cute-mushroom.js'
+import * as TrampMushroom from '../utils/forest-tramp-mushroom.js'
 import * as Predator from '../components/predator.js'
 import { toCanvas, getRGB, createCanvasAtlasBuilder, shuffledCopy, bindBackToMenuKeys, bindStartGameKeys, releaseGamePhysicalKeys } from '../../../utils/helper.js'
 import {
@@ -130,10 +125,6 @@ const GROUND_DARK = forestRgb('groundDark')
 //
 const DECOR_OUTLINE_RGB = forestContourRgb('forest')
 //
-// Cute mushroom palette set (full colour).
-//
-const CUTE_MUSH_COLORS = FOREST_PAL.cuteMushroom
-//
 // Layout. Forest runs on its own native-resolution engine (see game-engine.js /
 // engine-switch.js): one world pixel is one screen pixel, never scaled. The
 // playfield is a fixed world rectangle (GAME_W x GAME_H inside the walls of
@@ -230,7 +221,7 @@ const FPS_HUD_TOP_Y = 44
 const FPS_HUD_FONT_SCALE = 0.7
 //
 // The water flower stands on the ground line right of the left tree's trunk,
-// its flower hanging back over the trunk so the bubble hangs in front of
+// its flower hanging back over the trunk so the drop hangs in front of
 // it, WATER_FLOWER_SHIFT right of the trunk's middle: it draws over the
 // tree, under the plants at its foot.
 //
@@ -240,11 +231,11 @@ const WATER_FLOWER_Z_UNDER_PLANTS = 0.2
 const WATER_FLOWER_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BELOW - WATER_FLOWER_Z_UNDER_PLANTS
 //
 // Ground round the flower and its puddle stays free of plants, stones
-// and decor mushrooms, so the flower and its bubble read by the tree.
+// and decor mushrooms, so the flower and its drop read by the tree.
 //
 const WATER_FLOWER_CLEAR_SPAN = WaterFlower.clearSpan(WATER_FLOWER_X)
 //
-// Its bubble bursts among the plants over the left tree's foot, which draw
+// Its drop bursts among the plants over the left tree's foot, which draw
 // in front of the hero; the spilt water draws just over them so the burst
 // and the puddle stay visible.
 //
@@ -847,14 +838,21 @@ const MUSHROOM_CAP_W_MAX = forestMushroomBounds(0, 0, MUSHROOM_PICTURE_H_MIN + M
 const MUSHROOM_FLOWER_CLEAR_PAD = 14
 const MUSHROOM_EXTRA_LOWER = 2
 //
-// Mushroom trampoline — right of the L platform. A cute chubby mushroom with
-// a blushy face; the eyes blink by swapping pre-baked open/closed variants.
+// Mushroom trampolines — mushroom pictures (forest-tramp-mushroom.js): the
+// red one with a face for both on the ground, the orange one in the cave,
+// all baked to the same cap height and squashed as the hero lands on them.
 //
 const TRAMP_SIZE_SCALE = 0.7
 const TRAMP_CAP_W = Math.round(56 * TRAMP_SIZE_SCALE)
 const TRAMP_W = Math.round(70 * TRAMP_SIZE_SCALE)
 const TRAMP_TOTAL_W = TRAMP_W + 4
-const TRAMP_TOTAL_H = Math.ceil(TRAMP_W * CUTE_MUSHROOM_ASPECT) + 4
+//
+// Sink the trampoline sprite a few px into the ground so it does not float;
+// TRAMP_TOTAL_H is then how high its cap's top stands over the ground.
+//
+const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE) + 2
+const TRAMP_CAP_TOP_H = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.RED, TRAMP_TOTAL_W)
+const TRAMP_TOTAL_H = Math.round(TRAMP_CAP_TOP_H - TRAMP_SINK_Y)
 //
 // Ground decor keeps this clear of the trampoline mushroom's centre so
 // nothing covers its face.
@@ -870,13 +868,6 @@ const TRAMP_MUSHROOM_CLEAR_HALF = TRAMP_TOTAL_W / 2 + MUSHROOM_CAP_W_MAX / 2 + 1
 // never covers the mushroom face.
 //
 const TRAMP_ROCK_CLEAR_HALF = TRAMP_TOTAL_W / 2 + GROUND_STONE_HALF_W_MAX + 10
-//
-// Blinking: random pause between blinks, short eyelid-down hold.
-//
-const TRAMP_BLINK_SPRITE_SUFFIX = '-blink'
-const TRAMP_BLINK_MIN_INTERVAL = 2.5
-const TRAMP_BLINK_MAX_INTERVAL = 6
-const TRAMP_BLINK_DURATION = 0.14
 //
 // Launch velocity — noticeably higher than a normal jump, not a separate physics mode
 //
@@ -916,7 +907,10 @@ const TRAMP_NEAR_X = TRAMP_RADIUS + 80
 //
 const TRAMP_SNAP_BELOW = 48
 const TRAMP_SQUASH_MAX = 0.35
-const TRAMP_SPRITE = 'forest0-trampoline-v4'
+//
+// Share of its height the picture loses at full squash.
+//
+const TRAMP_SQUASH_DRAW = 0.35
 const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
@@ -942,17 +936,6 @@ const FOREST_PREDATOR_HERO_VERTICAL_BAND_PX = 46
 // Keeps the invisible cap alive briefly after a shaky on-cap read (prevents yank to hide Y).
 //
 const TRAMP_CAP_PAD_LATCH_SEC = 0.28
-//
-// Colour-phase outlines for ground decor (appear after O). Each decor object
-// bakes a second "-o" sprite variant with a thin dark rim in a tone derived
-// from the object itself (dark palette neighbour of its fill colour).
-//
-const DECOR_OUTLINE_SUFFIX = '-o'
-const TRAMP_OUTLINE_SPRITE = TRAMP_SPRITE + DECOR_OUTLINE_SUFFIX
-//
-// Sink the trampoline sprite 2 px into the ground so it does not float.
-//
-const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE) + 2
 //
 // Lake. The right edge is trimmed a little so the water ends just before
 // the shore rock instead of poking past it.
@@ -1192,7 +1175,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+  await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
   await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
   await loadForestStones()
   onProgress?.(42)
@@ -1266,7 +1249,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and the hangs its watered apples grow on sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -1439,12 +1422,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const waterX2 = lakeShoreAnchorX + LAKE_WATER_PAST_ANCHOR - WATER_RIGHT_TRIM
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
-      colors: FOREST_PAL.cuteMushroomRed,
-      spriteKey: 'right'
+      mushroom: TrampMushroom.TRAMP_MUSHROOM.RED
     })
     const branchTrampBundle = createMushroomTrampoline(k, branchTrampX, FLOOR_Y, zones, {
       gateBranchTramp: true,
-      drawZ: CFG.visual.zIndex.platforms + 2
+      drawZ: CFG.visual.zIndex.platforms + 2,
+      mushroom: TrampMushroom.TRAMP_MUSHROOM.RED
     })
     if (await forestBootstrapPause(bootstrap, 44, session)) return
     const lakeX1 = LEFT_MARGIN
@@ -1700,7 +1683,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       fontScale: FPS_HUD_FONT_SCALE,
       fpsOnly: true,
       textColor: getRGB(k, FOREST_PAL.fpsHudText),
-      outlineColor: getRGB(k, FOREST_PAL.fpsHudShadow)
+      shadow: false
     })
     FpsCounter.pinScreenFixed(inst.fps)
     FpsCounter.layoutAtScreenLeftX(inst.fps, FPS_HUD_LEFT_X)
@@ -3719,21 +3702,16 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
   return objs
 }
 //
-// Mushroom trampoline — the cute chubby mushroom with a blushy face. Two
-// pre-baked variants cover both eye states; the eyes blink by sprite swap.
+// Mushroom trampoline — a mushroom picture (opts.mushroom, one of
+// TrampMushroom.TRAMP_MUSHROOM) with its cap TRAMP_CAP_TOP_H over its foot.
+// It squashes down as the hero lands on it (state.squash) and shakes while
+// it endures.
 //
 function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
   const pitCaveTramp = Boolean(opts.pitCaveTramp)
   const gateBranchTramp = Boolean(opts.gateBranchTramp)
-  //
-  // Each trampoline mushroom gets its own cap-colour family (opts.colors,
-  // opts.spriteKey) so the branch/right/pit characters read as distinct
-  // little guys instead of three identical orange caps.
-  //
-  const colorColors = opts.colors ?? CUTE_MUSH_COLORS
-  const colorSpriteBase = TRAMP_OUTLINE_SPRITE + (opts.spriteKey ? `-${opts.spriteKey}` : '')
-  bakeTrampolineVariant(k, colorSpriteBase, colorColors, true)
-  bakeTrampolineVariant(k, colorSpriteBase + TRAMP_BLINK_SPRITE_SUFFIX, colorColors, false)
+  const mushroom = opts.mushroom ?? TrampMushroom.TRAMP_MUSHROOM.RED
+  const sprite = TrampMushroom.bake(k, mushroom, TrampMushroom.widthForCapHeight(mushroom, TRAMP_CAP_TOP_H))
   const state = {
     squash: 0,
     cooldown: 0,
@@ -3743,8 +3721,6 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     pitCaveTramp,
     hasLegs: false,
     walkPhase: 0,
-    blinking: false,
-    blinkTimer: TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL),
     leanAngle: 0
   }
   const colliderHome = { x: trampX - TRAMP_CAP_W / 2, y: floorY - TRAMP_TOTAL_H }
@@ -3752,66 +3728,43 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     k.z(opts.drawZ ?? 6),
     {
       draw() {
-        const sc = zones._sceneRef
-        if (pitCaveTramp) {
-          if (!isPitCaveTrampolineVisible(sc)) return
-        } else if (gateBranchTramp) {
-          if (!isBranchTrampolineVisible(zones)) return
-        } else if (!isRightTrampolineVisible(zones)) {
-          return
-        }
-        //
-        // A blink swaps to the closed-eyes variant of the sprite set.
-        //
-        const untinted = k.rgb(255, 255, 255)
-        const enduring = Boolean(state.enduring)
-        const angle = enduring ? 0 : (state.leanAngle || 0)
-        const drawX = state.x + (state.endureShakeX || 0)
-        const scaleY = enduring
-          ? (state.endureScaleY || 1)
-          : (state.squash > 0.01 ? 1 - state.squash * 0.35 : 1)
-        const eyesClosed = enduring || state.blinking
-        const colorEyes = eyesClosed ? colorSpriteBase + TRAMP_BLINK_SPRITE_SUFFIX : colorSpriteBase
-        state.hasLegs && drawTrampolineLegs(k, state, floorY)
-        const drawTrampSprite = (sprite, opacity, color) => {
-          k.drawSprite({
-            sprite,
-            pos: k.vec2(drawX, floorY + TRAMP_SINK_Y),
-            anchor: 'bot',
-            scale: k.vec2(1, scaleY),
-            angle,
-            color,
-            opacity
-          })
-        }
-        const drawTrampPupils = () => {
-          if (eyesClosed) return
-          const hero = sc?.heroInst?.character
-          drawCuteMushroomPupilOverlay(k, {
-            cx: drawX,
-            baseY: floorY + TRAMP_SINK_Y,
-            width: TRAMP_W,
-            eyeScale: TRAMP_FACE_EYE_SCALE,
-            angle,
-            scaleY,
-            lookX: hero?.pos?.x,
-            lookY: hero?.pos?.y
-          })
-        }
-        drawTrampSprite(colorEyes, 1, untinted)
-        drawTrampPupils()
+        drawTrampoline(k, zones, state, sprite, { pitCaveTramp, gateBranchTramp })
       }
     }
   ])
-  drawLayer.onUpdate(() => {
-    onUpdateTrampolineBlink(k, state)
-  })
   drawLayer.hidden = pitCaveTramp
     ? !isPitCaveTrampolineVisible(zones._sceneRef)
     : gateBranchTramp
       ? !isBranchTrampolineVisible(zones)
       : !isRightTrampolineVisible(zones)
   return { state, drawLayer, colliderHome, gateBranchTramp, pitCaveTramp }
+}
+//
+// The mushroom picture standing on its foot, squashed down while the
+// landing presses it (or by the endure shake), leaning with its state.
+//
+function drawTrampoline(k, zones, state, sprite, kind) {
+  if (!sprite) return
+  if (kind.pitCaveTramp) {
+    if (!isPitCaveTrampolineVisible(zones._sceneRef)) return
+  } else if (kind.gateBranchTramp) {
+    if (!isBranchTrampolineVisible(zones)) return
+  } else if (!isRightTrampolineVisible(zones)) {
+    return
+  }
+  const enduring = Boolean(state.enduring)
+  const angle = enduring ? 0 : (state.leanAngle || 0)
+  const scaleY = enduring
+    ? (state.endureScaleY || 1)
+    : (state.squash > 0.01 ? 1 - state.squash * TRAMP_SQUASH_DRAW : 1)
+  state.hasLegs && drawTrampolineLegs(k, state, state.floorY)
+  k.drawSprite({
+    sprite,
+    pos: k.vec2(state.x + (state.endureShakeX || 0), state.floorY + TRAMP_SINK_Y),
+    anchor: 'bot',
+    scale: k.vec2(1, scaleY),
+    angle
+  })
 }
 //
 // Walking legs — alternating stride with a short shin kick
@@ -3849,49 +3802,6 @@ function drawOneTrampLeg(k, hipX, floorY, stride, legC, footC, scale = 1) {
     radiusY: 2.4 * scale,
     color: footC
   })
-}
-//
-// Bakes one static PNG variant of the trampoline mushroom (with face),
-// once per live k (a scene restart reuses it).
-//
-function bakeTrampolineVariant(k, name, colors, eyesOpen) {
-  if (k.getSprite(name)) return
-  const canvas = toCanvas({ width: TRAMP_TOTAL_W, height: TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
-    drawCuteMushroomToCanvas(ctx, {
-      cx: TRAMP_TOTAL_W / 2,
-      baseY: TRAMP_TOTAL_H - 2,
-      width: TRAMP_W,
-      colors,
-      withFace: true,
-      eyesOpen,
-      eyeScale: TRAMP_FACE_EYE_SCALE,
-      dynamicPupils: eyesOpen,
-      simpleShade: true
-    })
-  })
-  applyForestGameplaySharpBake(canvas, name.length * 13)
-  k.loadSprite(name, canvas)
-  canvas.width = 0
-  canvas.height = 0
-}
-//
-// Advances the trampoline blink cycle: long random pause with open eyes,
-// then a short closed-eyes hold.
-//
-function onUpdateTrampolineBlink(k, state) {
-  if (state.enduring) {
-    state.blinking = true
-    return
-  }
-  state.blinkTimer -= k.dt()
-  if (state.blinkTimer > 0) return
-  if (state.blinking) {
-    state.blinking = false
-    state.blinkTimer = TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL)
-  } else {
-    state.blinking = true
-    state.blinkTimer = TRAMP_BLINK_DURATION
-  }
 }
 //
 // Water — see-through fill bounded by the wave polygon, over the bed layer
@@ -4525,7 +4435,7 @@ function drawWorldSpriteBandSlice(k, x1, x2, y1, y2, earth, opacity = 1) {
 //
 // Merges the earth band and the static decor under the ground line into one
 // sprite (forest-earth-merge.js), back to front in the order their z drew
-// them: buoy stalks, left tree roots, the bug's tunnel, the flower's roots,
+// them: buoy stalks, left tree roots, the bug's tunnel,
 // bomb tree roots, shore tree roots. Decor over the open cave stays apart.
 //
 function mergeForestEarth(inst, leftTree) {
@@ -4540,13 +4450,12 @@ function mergeForestEarth(inst, leftTree) {
       ...ChainBuoy.undergroundLayers(inst.chainBuoys),
       ...leftRoots,
       ...AppleBug.undergroundLayers(inst.appleBug),
-      ...WaterFlower.undergroundLayers(inst.waterFlower),
       ...BombTree.undergroundLayers(inst.earTrees),
       ...(inst.shoreTree ? ShoreTree.undergroundLayers(inst.shoreTree) : [])
     ],
     excludeSpans: pitSpan ? [pitSpan] : []
   })
-  EarthMerge.markMerged([inst.chainBuoys, inst.appleBug, inst.waterFlower, inst.earTrees, inst.shoreTree], earth)
+  EarthMerge.markMerged([inst.chainBuoys, inst.appleBug, inst.earTrees, inst.shoreTree], earth)
   return earth
 }
 //
@@ -6119,7 +6028,7 @@ function tickForestTomatoTreeLanding(inst, char, grounded, justLanded) {
 }
 //
 // A ground landing by the water flower's stem shakes the flower; a full-size
-// bubble falls once the shake dies down.
+// drop falls once the shake dies down.
 //
 function tickForestWaterFlowerLanding(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded) return
@@ -7192,8 +7101,7 @@ function setupForestPitCaveTrampoline(inst) {
   const bundle = createMushroomTrampoline(k, trampX, pitFloorY, inst.zones, {
     pitCaveTramp: true,
     drawZ: CFG.visual.zIndex.player + 22,
-    colors: FOREST_PAL.cuteMushroom,
-    spriteKey: 'pit'
+    mushroom: TrampMushroom.TRAMP_MUSHROOM.ORANGE
   })
   inst.pitCaveTrampBundle = bundle
   inst.pitCaveTrampState = bundle.state

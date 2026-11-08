@@ -26,13 +26,14 @@ const glyphAtlasByK = new WeakMap()
  * @param {number} [config.topY=55] - Vertical position (pixels from top)
  * @param {Object} [config.textColor] - Optional Kaplay rgb for the numerals
  * @param {Object} [config.outlineColor] - Optional Kaplay rgb for the drop shadow
+ * @param {boolean} [config.shadow=true] - Draw the drop shadow under the label
  * @param {Function} [config.postBakeCanvas] - Grade/grain pass for the baked glyph atlas
  * @param {number} [config.fontScale=1] - Label size relative to the default HUD font
  * @param {boolean} [config.fpsOnly=false] - Never add the debug object / draw-call counts
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null, fontScale = 1, fpsOnly = false } = config
+  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null, fontScale = 1, fpsOnly = false, shadow = true } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   const fontSize = Math.round(HUD_FONT_SIZE * fontScale)
   const stats = !fpsOnly && Boolean(CFG.debug?.showPerformanceHud)
@@ -42,7 +43,7 @@ export function create(config) {
   // every quiet HUD slot reads as one consistent colour.
   //
   const HUD_TEXT_GREY = textColor || k.rgb(176, 176, 176)
-  const HUD_OUTLINE = outlineColor || k.rgb(0, 0, 0)
+  const HUD_OUTLINE = shadow ? outlineColor || k.rgb(0, 0, 0) : null
   const fpsText = createOutlinedHudText(k, 'FPS: 30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //
   // Optional elapsed level timer
@@ -184,13 +185,14 @@ export function layoutAtScreenCenterX(inst, centerX) {
   })
 }
 //
-// Creates HUD text with a single drop-shadow copy (forest-level style).
+// Creates HUD text with a single drop-shadow copy (forest-level style); no
+// shadow when outlineColor is null.
 //
 function createOutlinedHudText(k, text, font, fontSize, color, topY, outlineColor, postBakeCanvas = null) {
   if (postBakeCanvas) {
     return createBakedOutlinedHudText(k, text, font, fontSize, color, topY, outlineColor, postBakeCanvas)
   }
-  const outlineNodes = buildOutlineOffsets(HUD_OUTLINE_OFFSET).map(([dx, dy]) => k.add([
+  const outlineNodes = (outlineColor ? buildOutlineOffsets(HUD_OUTLINE_OFFSET) : []).map(([dx, dy]) => k.add([
     k.text(text, { size: fontSize, font }),
     k.pos(0, topY + dy),
     k.anchor('center'),
@@ -349,8 +351,10 @@ function bakeFpsHudTextCanvas(text, fontFamily, fontSize, fillColor, outlineColo
   ctx.textAlign = 'center'
   const cx = canvas.width / 2 - off / 2
   const cy = canvas.height / 2 - off / 2
-  ctx.fillStyle = rgbToCss(outlineColor)
-  ctx.fillText(text, cx + off, cy + off)
+  if (outlineColor) {
+    ctx.fillStyle = rgbToCss(outlineColor)
+    ctx.fillText(text, cx + off, cy + off)
+  }
   ctx.fillStyle = rgbToCss(fillColor)
   ctx.fillText(text, cx, cy)
   return canvas
@@ -393,7 +397,7 @@ function fpsGlyphAtlas(k, font, fontSize, fillColor, outlineColor, postBakeCanva
     byKey = new Map()
     glyphAtlasByK.set(k, byKey)
   }
-  const key = `${font}|${fontSize}|${rgbToCss(fillColor)}|${rgbToCss(outlineColor)}`
+  const key = `${font}|${fontSize}|${rgbToCss(fillColor)}|${outlineColor ? rgbToCss(outlineColor) : 'none'}`
   const cached = byKey.get(key)
   if (cached) return cached
   const atlas = bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanvas)
@@ -425,11 +429,13 @@ function bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanv
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
   const cy = cellH / 2 - off / 2
-  const shadow = rgbToCss(outlineColor)
+  const shadow = outlineColor ? rgbToCss(outlineColor) : null
   const fill = rgbToCss(fillColor)
   layout.forEach(cell => {
-    ctx.fillStyle = shadow
-    ctx.fillText(cell.ch, cell.x + off, cy + off)
+    if (shadow) {
+      ctx.fillStyle = shadow
+      ctx.fillText(cell.ch, cell.x + off, cy + off)
+    }
     ctx.fillStyle = fill
     ctx.fillText(cell.ch, cell.x, cy)
     cells.set(cell.ch, { x: cell.x, w: cell.cellW, advance: cell.advance })

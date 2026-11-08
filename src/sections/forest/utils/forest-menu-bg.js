@@ -6,7 +6,7 @@ import { CFG } from '../../../cfg.js'
 import { forestContactShadowRgb, paintForestContactShadow, paintUndergroundDepthVignette } from './forest-atmosphere.js'
 import { applyForestFilmGrainToCanvas, applyParallaxPostFxToContext, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
 import { forestDepthBlurRadiusPx } from './forest-focus-depth.js'
-import { TRAMP_FACE_EYE_SCALE, drawCuteMushroomToCanvas } from './cute-mushroom.js'
+import * as TrampMushroom from './forest-tramp-mushroom.js'
 import * as Lake from './forest-lake.js'
 import { renderBushStrip } from './forest-bush-strip.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
@@ -63,14 +63,17 @@ const BUG_HOLE_LIP = TunnelPicture.layout(FOREST_CFG.appleBug.tunnelWidth).lip
 const BUG_HOLE_HALF_W = Math.max(-BUG_HOLE_LIP.x1, BUG_HOLE_LIP.x2)
 const LEVEL_BRANCH_TRAMP_X = 1155
 const LEVEL_RIGHT_TRAMP_X = 2300
-const LEVEL_TRAMP_XS = [LEVEL_BRANCH_TRAMP_X, LEVEL_RIGHT_TRAMP_X]
+const LEVEL_TRAMPS = [
+  { x: LEVEL_BRANCH_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.RED },
+  { x: LEVEL_RIGHT_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.RED }
+]
 //
 // The big trees are their pictures at the level's size: the left (apple)
 // tree at its own level scale, the right tree at the scale the level fits
 // it to.
 //
 const LEVEL_RIGHT_TREE_X = 1737
-const LEVEL_RIGHT_TREE_SCALE = 0.528
+const LEVEL_RIGHT_TREE_SCALE = 0.531
 //
 // The left bomb tree stands right by the right trampoline, on its left (as
 // close as the level lets its trunk to the cap).
@@ -88,9 +91,9 @@ const LEVEL_CRAWLER_MAX_X = 2614
 const LEVEL_WORLD_W = CFG.visual.forest.worldWidth
 const LEVEL_FLOOR_Y = 795
 //
-// The sleeping trampoline mushroom on the cave's floor, at the level's size.
+// The trampoline mushroom on the cave's floor, at the level's size.
 //
-const CAVE_MUSHROOM_W = 49
+const CAVE_MUSHROOM_W = 53
 //
 // Sky: a smooth gradient through palette stops of the level's sky ramp,
 // toned by the far row's grade like the level's sky (baked into that row). It runs a little below
@@ -187,10 +190,10 @@ const TUFT_EDGE_BIAS = 1.6
 const MUSHROOM_GROUP_SPOTS = [1060, 1660, 2230, 2700]
 const SPOTTED_MUSHROOM_SPOTS = [1080, 1790]
 //
-// The level's two trampoline mushrooms, asleep, where they stand in the
-// level and at its size (design px) — the warm accents of the ground plane.
+// The level's two trampoline mushrooms, where they stand in the level and
+// at its size (design px) — the warm accents of the ground plane.
 //
-const CUTE_MUSHROOM_W = 49
+const TRAMP_MUSHROOM_W = 53
 const CONTACT_SHADOW_RY = 4.5
 //
 // Live decor (level world X): the stalk eyes as the level plants them
@@ -215,7 +218,7 @@ const BURIED_TREE_CLEAR_HALF = 50
  * @returns {Promise<void>}
  */
 export async function loadForestMenuBackdropArt() {
-  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestPlants(), loadForestMushrooms(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree(), loadForestFloorHill()])
+  await Promise.all([loadForestPictureTrees(), loadForestPictureBushes(), loadForestPlants(), loadForestMushrooms(), loadForestStones(), loadForestLeftTreePicture(), loadForestShoreTree(), loadForestFloorHill(), TrampMushroom.load()])
 }
 
 /**
@@ -306,7 +309,7 @@ function paintFrontScene(ctx, width, height, layout, scale) {
 //
 // The level's open cave, moved from its place in the level to the menu's
 // ground line with its crack's left edge where the level's world X maps, and the
-// sleeping trampoline mushroom on its floor. Its void runs on to the screen's
+// trampoline mushroom on its floor. Its void runs on to the screen's
 // right edge (the level's world wall hides where it ends).
 //
 function paintCave(ctx, width, groundY, toX) {
@@ -315,7 +318,7 @@ function paintCave(ctx, width, groundY, toX) {
   ctx.save()
   ctx.translate(dx, groundY - LEVEL_FLOOR_Y)
   const cave = paintForestPitStill(ctx, LEVEL_WORLD_W, LEVEL_FLOOR_Y, width - dx)
-  paintCuteMushroom(ctx, cave.trampX, cave.bottomY, CAVE_MUSHROOM_W, forestContactShadowRgb())
+  paintTrampMushroom(ctx, TrampMushroom.TRAMP_MUSHROOM.ORANGE, cave.trampX, cave.bottomY, CAVE_MUSHROOM_W, forestContactShadowRgb())
   ctx.restore()
 }
 //
@@ -406,7 +409,7 @@ function paintStoneGroup(ctx, rng, group, cx, groundY, scale) {
   ctx.restore()
 }
 //
-// Plants, mushrooms and the sleeping trampoline mushrooms at their spots,
+// Plants, mushrooms and the trampoline mushrooms at their spots,
 // then small plants thickening toward the edges; nothing grows on the lake.
 //
 function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
@@ -418,7 +421,7 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
     paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
     drawForestPlant(ctx, { x, baseY: groundY, size, rng })
   })
-  LEVEL_TRAMP_XS.forEach(wx => paintCuteMushroom(ctx, toX(wx), groundY, CUTE_MUSHROOM_W * scale, shadow))
+  LEVEL_TRAMPS.forEach(tramp => paintTrampMushroom(ctx, tramp.mushroom, toX(tramp.x), groundY, TRAMP_MUSHROOM_W * scale, shadow))
   MUSHROOM_GROUP_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   SPOTTED_MUSHROOM_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   for (let i = 0; i < TUFT_COUNT; i++) {
@@ -428,20 +431,14 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
   }
 }
 //
-// The level's trampoline mushroom with its face, eyes closed (asleep).
+// A trampoline mushroom picture over its contact shadow, its cap as high as
+// the red one's at `width` (the level bakes them all to one cap height).
 //
-function paintCuteMushroom(ctx, x, groundY, width, shadow) {
-  paintForestContactShadow(ctx, x, groundY, width * 0.45, CONTACT_SHADOW_RY, shadow)
-  drawCuteMushroomToCanvas(ctx, {
-    cx: x,
-    baseY: groundY,
-    width,
-    colors: FOREST_PAL.cuteMushroomMenu,
-    withFace: true,
-    eyesOpen: false,
-    eyeScale: TRAMP_FACE_EYE_SCALE,
-    simpleShade: true
-  })
+function paintTrampMushroom(ctx, mushroom, x, groundY, width, shadow) {
+  const capH = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.RED, width)
+  const w = TrampMushroom.widthForCapHeight(mushroom, capH)
+  paintForestContactShadow(ctx, x, groundY, w * 0.45, CONTACT_SHADOW_RY, shadow)
+  TrampMushroom.paint(ctx, mushroom, x, groundY, w)
 }
 //
 // Level world X → screen X at the layout scale for a screen height, the

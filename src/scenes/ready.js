@@ -8,6 +8,7 @@ import { loadHeroSprites, HEROES, buildHeroSpritePrefix } from '../components/he
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
+  loadMenuBackgroundArt,
   recomputeMenuBgLayout,
   drawMenuMoon,
   MENU_BG_GROUND_Y,
@@ -16,10 +17,8 @@ import {
   MENU_BG_CANVAS_H,
   MENU_BG_MOON_CENTER_X,
   MENU_BG_MOON_CENTER_Y,
-  MENU_BG_MOON_HALO_KEEPOUT,
-  MENU_BG_FRONT_LEAF_RGB
+  MENU_BG_MOON_HALO_KEEPOUT
 } from '../utils/menu-bg-generator.js'
-import * as Grass from '../components/grass.js'
 import { drawForestFilmGrainWorldPatch } from '../sections/forest/utils/forest-parallax-grain.js'
 import {
   READY_EYE_DISPLAY_HEIGHT,
@@ -52,7 +51,7 @@ let HINT_Y = CFG.visual.screen.height - HINT_BOTTOM_MARGIN
 // well above the central monster illustration.
 //
 const INSTRUCTIONS_TITLE = 'rootward'
-const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
+const TITLE_FONT_FAMILY = CFG.visual.fonts.regularFull
 //
 // Keeps the glyph-to-hero size ratio of the original 76px title at the
 // hero's native 96px bake resolution: 76 * (96 / 80) = 91.2.
@@ -88,11 +87,20 @@ const TITLE_OUTLINE_OFFSETS = [
 const READY_LETTER_CANVAS_SIZE = Math.ceil(TITLE_FONT_SIZE * 1.5)
 const READY_LETTER_CANVAS_CENTER = READY_LETTER_CANVAS_SIZE / 2
 const TITLE_FLICKER_SPEED = 1.5
-const TITLE_FLICKER_MIN = 0.7
+const TITLE_FLICKER_MIN = 0.85
 const TITLE_FLICKER_MAX = 1.0
 //
-// Layout z-layers. Background pieces (clouds, stars, fireflies,
-// grass) stack between the baked menu-bg sprite and the foreground
+// The title glows: a soft moon-tone halo baked round every glyph (the
+// glyph filled and blurred TITLE_GLOW_BLUR px, stacked TITLE_GLOW_PASSES
+// times for strength) under its rim, at TITLE_GLOW_OPACITY of the title's
+// own flickering opacity.
+//
+const TITLE_GLOW_BLUR = 4
+const TITLE_GLOW_PASSES = 1
+const TITLE_GLOW_OPACITY = 0.22
+//
+// Layout z-layers. Background pieces (clouds, stars, fireflies)
+// stack between the baked menu-bg sprite and the foreground
 // illustration; foreground UI (text, title, spiders, hint) sits on
 // top of everything.
 //
@@ -125,11 +133,6 @@ const Z_FIREFLIES = CFG.visual.zIndex.background + 7
 const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
 const Z_TITLE = 15
 const Z_SPIDER = 50
-//
-// Grass renders ABOVE the spider/hero layer, so the hero-n running right
-// along the horizon passes BEHIND the blades before leaving the screen.
-//
-const Z_GRASS = Z_SPIDER + 5
 const Z_HINT = 100
 const Z_FILM_GRAIN = Z_HINT + 5
 //
@@ -177,13 +180,13 @@ const MOON_ZONE_MARGIN = 40
 // vector and twinkles independently. The vertical clamp uses the
 // front-tree silhouette top from menu-bg-generator (`FIREFLY_MIN_Y`).
 //
-const FIREFLY_COUNT = 14
+const FIREFLY_COUNT = 40
 //
 // Design-reference top of the sky band (front-tree canopy). Kept as a ratio
 // of the reference screen height so it scales with GROUND_Y the same way at
 // any resolution instead of clipping the firefly band on shorter windows.
 //
-const FIREFLY_MIN_Y_RATIO = 450 / CFG.visual.screen.height
+const FIREFLY_MIN_Y_RATIO = 320 / CFG.visual.screen.height
 const FIREFLY_EDGE_INSET = 80
 let FIREFLY_MIN_Y = FIREFLY_MIN_Y_RATIO * CFG.visual.screen.height
 let FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
@@ -205,36 +208,6 @@ const FIREFLY_COLOR_R = 244
 const FIREFLY_COLOR_G = 192
 const FIREFLY_COLOR_B = 96
 //
-// Grass is excluded from the central horizontal band where the
-// monster illustration stands (matches the keep-out used by rocks /
-// mushrooms in `menu-bg-generator.js`). The field itself is the shared
-// Grass component (same tufts as the forest level) tinted forest-grass green.
-//
-const GRASS_CENTER_KEEPOUT_HALF = 400
-const GRASS_TUFT_COUNT = 44
-const GRASS_EDGE_INSET = 30
-//
-// Density gradient: the further from the screen centre, the more grass. The
-// weight ramps from 0 at the keep-out edge to 1 at the very screen edge, so
-// the probability keeps growing across the whole strip instead of
-// saturating partway out. Computed from the live canvas width inside
-// recomputeReadyLayout() rather than frozen at import time.
-//
-let GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
-//
-// The blades take the SAME tone as the near-row forest foliage: the
-// palette tree-leaf green pushed toward the warm haze by the combined
-// near-row blend of the forest level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
-//
-//
-// Grass matches the warm yellow-orange foliage of the front-row side trees,
-// at half brightness so it doesn't overpower the night scene
-//
-const GRASS_TINT = {
-  r: Math.round(MENU_BG_FRONT_LEAF_RGB.r / 2),
-  g: Math.round(MENU_BG_FRONT_LEAF_RGB.g / 2),
-  b: Math.round(MENU_BG_FRONT_LEAF_RGB.b / 2)
-}
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
 // few seconds; owl hoots are sparse and atmospheric.
@@ -425,7 +398,6 @@ function recomputeReadyLayout(k) {
   FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
   FIREFLY_MIN_X = FIREFLY_EDGE_INSET
   FIREFLY_MAX_X = MENU_BG_CANVAS_W - FIREFLY_EDGE_INSET
-  GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
   LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
   LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK - READY_EYE_RAISE_PX
   HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING - HERO_N_SPRITE_SIZE / 2 - HERO_N_GROUND_LIFT_PX
@@ -449,6 +421,11 @@ export function sceneReady(k) {
     if (document.fonts && document.fonts.ready) {
       try { await document.fonts.ready } catch {}
     }
+    //
+    // The forest pictures the baked background is made of (trees, stones,
+    // mushrooms).
+    //
+    await loadMenuBackgroundArt()
     //
     // Hero illustration is steel teal (cool half of the complementary
     // pair); the anti-hero in the duality icon below is vibrant orange
@@ -524,27 +501,6 @@ export function sceneReady(k) {
       draw() { drawFireflyField(k, fireflyField) }
     }])
     //
-    // Swaying grass tufts along the horizon strip — the shared Grass
-    // component (the same baked blades as the forest level), skipping the
-    // central keep-out band around the monster illustration. The density
-    // weight grows with the distance from the centre, so the field thickens
-    // towards the screen edges.
-    //
-    Grass.create({
-      k,
-      floorY: MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT,
-      left: GRASS_EDGE_INSET,
-      right: MENU_BG_CANVAS_W - GRASS_EDGE_INSET,
-      tuftCount: GRASS_TUFT_COUNT,
-      z: Z_GRASS,
-      excluded: (x) => Math.abs(x - CENTER_X) <= GRASS_CENTER_KEEPOUT_HALF,
-      density: (x) => Math.min(1, (Math.abs(x - CENTER_X) - GRASS_CENTER_KEEPOUT_HALF) / GRASS_DENSITY_RAMP),
-      getTint: (blade) => ({
-        ...GRASS_TINT,
-        opacity: readySceneDepartureOpacity(spiderState)
-      })
-    })
-    //
     // Ambient cricket + owl sounds — random intervals scheduled by
     // local timer state. Sounds stay silent until the first user
     // gesture unlocks the audio context (web audio policy).
@@ -596,6 +552,7 @@ export function sceneReady(k) {
     titleLetters.forEach(li => {
       bakeReadyLetterSprite(k, li.char)
       bakeReadyLetterShadowSprite(k, li.char)
+      bakeReadyLetterGlowSprite(k, li.char)
     })
     const hero = createReadyHero()
     readyEyeState.hero = hero
@@ -713,7 +670,7 @@ function buildReadyStaticSprite(k) {
   // Bottom description block — centred lines with a glow-style drop shadow
   // (single black copy offset right+down).
   //
-  ctx.font = `${TEXT_FONT_SIZE}px 'JetBrains Mono Thin', 'JetBrains Mono', monospace`
+  ctx.font = `${TEXT_FONT_SIZE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   let cursorY = DESCRIPTION_START_Y + 40
@@ -797,6 +754,29 @@ function bakeReadyLetterSprite(k, char) {
 //
 function readyLetterShadowSpriteName(char) {
   return `ready-letter-shadow-${char.charCodeAt(0)}`
+}
+//
+// Soft moon-tone halo for a single title glyph.
+//
+function readyLetterGlowSpriteName(char) {
+  return `ready-letter-glow-${char.charCodeAt(0)}`
+}
+function bakeReadyLetterGlowSprite(k, char) {
+  const canvas = document.createElement('canvas')
+  canvas.width = READY_LETTER_CANVAS_SIZE
+  canvas.height = READY_LETTER_CANVAS_SIZE
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = TITLE_OUTLINE_COLOR
+  ctx.filter = `blur(${TITLE_GLOW_BLUR}px)`
+  for (let i = 0; i < TITLE_GLOW_PASSES; i++) {
+    TITLE_OUTLINE_OFFSETS.forEach(([dx, dy]) => ctx.fillText(char, READY_LETTER_CANVAS_CENTER + dx, READY_LETTER_CANVAS_CENTER + dy))
+  }
+  k.loadSprite(readyLetterGlowSpriteName(char), canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 function bakeReadyLetterShadowSprite(k, char) {
   const ring = bakeReadyTitleHollowRing(
@@ -933,7 +913,8 @@ function onDrawMoon(k, spiderState) {
 // no extra runtime glow pass is needed.
 //
 //
-// Draws every fixed title letter (heroes are drawn on the hero layer).
+// Draws every fixed title letter — its glow, shadow, then rim (heroes are
+// drawn on the hero layer).
 //
 function onDrawTitle(k, spiderState, titleLetters) {
   const flicker = spiderState.titleFlicker ?? 1
@@ -942,7 +923,16 @@ function onDrawTitle(k, spiderState, titleLetters) {
     if (op <= 0.001) continue
     const shadowPos = k.vec2(letter.x + TITLE_SHADOW_OFFSET, letter.y + TITLE_SHADOW_OFFSET)
     const pos = k.vec2(letter.x, letter.y)
-  k.drawSprite({
+    k.drawSprite({
+      sprite: readyLetterGlowSpriteName(letter.char),
+      pos,
+      anchor: 'center',
+      width: READY_LETTER_CANVAS_SIZE,
+      height: READY_LETTER_CANVAS_SIZE,
+      opacity: op * TITLE_GLOW_OPACITY,
+      fixed: true
+    })
+    k.drawSprite({
       sprite: readyLetterShadowSpriteName(letter.char),
       pos: shadowPos,
       anchor: 'center',
@@ -1053,7 +1043,7 @@ function measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontF
 }
 
 //
-// ────────── Animated overlay helpers (clouds / fireflies / grass / ambient sound) ──────────
+// ────────── Animated overlay helpers (clouds / fireflies / ambient sound) ──────────
 //
 // Each helper pair (`create…` + `update…` / `draw…`) builds its data
 // once on scene enter and then updates/draws it per frame. State stays
@@ -1256,7 +1246,7 @@ function updateReadyDepartureFade(k, runner, spiderState) {
   spiderState.eyeFinalFade = 0
 }
 //
-// Backdrop fade while the hero walks right — stars, moon, grass, hint, baked
+// Backdrop fade while the hero walks right — stars, moon, hint, baked
 // bg and description. Fireflies, title and centre eye stay bright (the eye
 // leaves on the final beat; fireflies and title never fade).
 //

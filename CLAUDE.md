@@ -489,11 +489,11 @@ src/
 
 assets/
 ├── fonts/                            # Custom fonts
-│   ├── JetBrainsMono-Regular.ttf
-│   ├── JetBrainsMono-Thin.ttf
-│   └── jetbrains-mono.css
+│   ├── JetBrainsMono_Regular.ttf
+│   ├── JetBrainsMono_Thin.ttf
+│   └── jetbrains_mono.css
 ├── forest/, cave0/                   # Section art (pictures, refs)
-├── sounds/                           # birds, water-steps, whisper .mp3
+├── sounds/                           # birds, water_steps, whisper .mp3
 └── cursor.css                        # Custom cursor styles
 ```
 

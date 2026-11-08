@@ -5,7 +5,7 @@ import { clearPictureRect } from './forest-picture.js'
 import { FOREST_PAL, forestRgb } from './forest-palette.js'
 
 //
-// The left big tree of forest level 0, cut from assets/forest/left-tree.png
+// The left big tree of forest level 0, cut from assets/forest/left_tree.png
 // (scaled): the tree above ground (a bare crown, the trunk) stands on the
 // ground line, its roots go under it into the earth. The loose apple on the
 // right of the picture is the one apples growing in the crown are drawn
@@ -13,7 +13,7 @@ import { FOREST_PAL, forestRgb } from './forest-palette.js'
 // from the start branch (the long low left branch). The picture starts
 // loading with this module (game boot); bakes are once per live k.
 //
-const URL = 'forest/left-tree.png'
+const URL = 'forest/left_tree.png'
 const SCALE = 0.47
 const SPRITE_PREFIX = 'forest0-left-tree-v6'
 const GRAIN_SEED = 6002

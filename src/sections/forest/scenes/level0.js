@@ -2450,7 +2450,6 @@ function tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded) {
   jumpStarted && triggerForestBranchLandingShake(inst)
   if (justLanded && grounded && onShore) {
     triggerForestBranchLandingShake(inst)
-    inst.heroGaze && HeroGaze.onShoreBranchLanded(inst.heroGaze)
     const twigs = inst.shoreFallTwigs
     HorizFallTwig.shakeHorizFallTwigs(twigs)
     if (!twigs.dropped && !twigs.regrowing) {
@@ -5864,7 +5863,7 @@ function onUpdate(inst) {
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
   tickForestWaterFlowerLanding(inst, char, grounded, justLanded)
   updateForestDropHint(inst, char, grounded)
-  inst.heroGaze && HeroGaze.onUpdate(inst.heroGaze, heroX, isForestHeroStill(inst, char, grounded))
+  inst.heroGaze && HeroGaze.onUpdate(inst.heroGaze, hero, isForestHeroStill(inst, char, grounded))
   updateForestMidges(inst.midges, k.dt(), 1)
   updateForestPit(inst.pit, char)
   refreshForestPitFloorJumpState(inst, char, grounded, footY)
@@ -6003,21 +6002,10 @@ function tickForestWaterFlowerLanding(inst, char, grounded, justLanded) {
     DropHint.onHeroShookDrop(inst.dropHint)
 }
 //
-// The idle hero's gaze guide: the flower, the right big tree's branch, then
-// the bomb of the rightmost bomb tree.
+// The idle hero's gaze guide: the nearest stalk-eye, then the player.
 //
 function createForestHeroGaze(inst) {
-  const trees = inst.earTrees?.trees ?? []
-  const bombIndex = trees.reduce((best, tree, i) => (best < 0 || tree.x > trees[best].x ? i : best), -1)
-  return HeroGaze.create({
-    hero: inst.heroInst,
-    flower: inst.waterFlower,
-    dropHint: inst.dropHint,
-    rightZoneX: inst.branchTrampState?.x ?? null,
-    shoreBranch: inst.shoreTree?.treeData?.horizBranch ?? null,
-    bombs: inst.spikyTomatoes,
-    bombIndex
-  })
+  return HeroGaze.create({ buoys: inst.chainBuoys })
 }
 //
 // The propeller bud runs from the hero along its stops (see

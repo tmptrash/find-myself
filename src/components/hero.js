@@ -520,7 +520,7 @@ export function getActiveSpriteKey(inst) {
   if (inst.currentEyeSprite) return inst.currentEyeSprite
   if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst.jumpFrame ?? 0)
   if (inst.isRunning) return heroRunSpriteName(inst.runFrame ?? 0)
-  return heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)
+  return idleLookSpriteName(inst)
 }
 
 /**
@@ -1182,7 +1182,7 @@ function updateIdleAnimation(inst) {
     //
     // Instantly switch to current idle sprite
     //
-    useHeroSprite(inst, heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX, inst.eyeOffsetY))
+    useHeroSprite(inst, idleLookSpriteName(inst))
   }
   //
   // Eye animation: look along the direction to lookAtPos if set (straight
@@ -1216,7 +1216,7 @@ function updateIdleAnimation(inst) {
   //
   // Switch to the baked look sprite nearest the smoothed offset
   //
-  const spriteName = heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX, inst.eyeOffsetY)
+  const spriteName = idleLookSpriteName(inst)
   //
   // Update sprite only if eye position changed
   //
@@ -1486,7 +1486,7 @@ export function syncPlatformLanding(inst) {
   if (!char?.exists?.()) return
   resetAirborneState(inst)
   inst.canJump = true
-  useHeroSprite(inst, heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0))
+  useHeroSprite(inst, idleLookSpriteName(inst))
 }
 
 /**
@@ -1540,6 +1540,14 @@ function heroFrameSpriteNames() {
     ...Array.from({ length: RUN_FRAME_COUNT }, (_, f) => `${P}-run-${f}`),
     ...Array.from({ length: JUMP_FRAME_COUNT }, (_, f) => `${P}-jump-${f}`)
   ]
+}
+//
+// Idle sprite for the smoothed look offset. The sprite is mirrored while the
+// hero faces left, so the look is mirrored too — the pupils keep pointing at
+// their target whichever way he faces.
+//
+function idleLookSpriteName(inst) {
+  return heroLookSpriteName(HERO_SPRITE_PREFIX, (inst.eyeOffsetX ?? 0) * inst.direction, inst.eyeOffsetY ?? 0)
 }
 //
 // Kaplay contact, or a level-owned carrier that pins the hero every frame

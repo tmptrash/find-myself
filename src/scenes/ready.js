@@ -4,7 +4,7 @@ import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
-import { loadHeroSprites, HEROES, buildHeroSpritePrefix } from '../components/hero.js'
+import { loadHeroSprites, HERO_SPRITE_PREFIX, heroLookSpriteName, heroWinkSpriteName } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
@@ -243,36 +243,17 @@ const LIFE_OPACITY = 1.0
 //
 const HERO_FEET_PADDING = 17
 //
-// Hero sprite names (loaded in index.js at game start).
-// HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
-//
-//
-// Hero in the ready scene wears steel teal (`#5A8898`) — the cool half
-// of the silver/teal complementary pair.
-//
-const HERO_READY_BODY_COLOR = '#5A8898'
-//
-// Anti-hero color in the duality icon is the warm complement of the
-// hero's steel teal — a vibrant orange that, paired with the teal
-// hero on the same row, visualises the "you vs shadow self" duality
-// through a textbook complementary colour pair.
-//
-const ANTIHERO_READY_BODY_COLOR = '#E07020'
-//
 // Lone hero rendered at its native 96px bake resolution (1:1 pixel scale).
-// It stands on the ground line just right of the centre eye, in one fixed
-// body colour for the whole scene (no section-colour reveal).
+// It stands on the ground line HERO_WATCH_GAP_X right of the centre eye
+// (HERO_CHAR_WIDTH is the hero's body width).
 //
 const HERO_N_SPRITE_SIZE = 96
 const HERO_WATCH_GAP_X = 40
-const HERO_BODY_COLOR = CFG.visual.colors.palette.heroBodyGray
-const HERO_BAKE_OPTS = {
-  type: HEROES.HERO,
-  bodyColor: HERO_BODY_COLOR,
-  outlineColor: CFG.visual.colors.outline,
-  noEyes: true
-}
-const HERO_N_SPRITE_PREFIX = buildHeroSpritePrefix(HERO_BAKE_OPTS)
+const HERO_CHAR_WIDTH = 30
+//
+// Height of the hero's eyes in its 96 px sprite (the watch aims from there).
+//
+const HERO_EYE_CANVAS_Y = 28
 //
 // Departure sequence. The hero watches the eye until the input has rested
 // for HERO_N_MOUSE_STILL_DELAY seconds, then walks off-screen right in short
@@ -319,23 +300,6 @@ const HERO_N_WAKE_PUPIL_FREQ = 0.7
 const HERO_N_LOOK_LEFT_TRIGGER_MARGIN = 80
 const HERO_N_LOOK_LEFT_DURATION = 5
 const HERO_N_LOOK_LEFT_RUN_FRAME = 2
-//
-// Geometry of the hero's eyes inside the 96 px sprite canvas (mirrors the
-// head/eye constants in components/hero.js), scaled to the 80 px title-hero
-// display size. Used to overlay a single open eye on the closed-eyes sprite
-// during the wake-up sequence.
-//
-const HERO_SPRITE_CANVAS_SIZE = 96
-const HERO_N_SPRITE_SCALE = HERO_N_SPRITE_SIZE / HERO_SPRITE_CANVAS_SIZE
-const HERO_HEAD_X = 33
-const HERO_HEAD_Y = 18
-const HERO_EYE_LEFT_X = HERO_HEAD_X + 9
-const HERO_EYE_RIGHT_X = HERO_HEAD_X + 21
-const HERO_EYE_CANVAS_Y = HERO_HEAD_Y + 9
-const HERO_EYE_RING_RADIUS = 5
-const HERO_EYE_WHITE_RADIUS = 4
-const HERO_EYE_PUPIL_RADIUS = 2
-const HERO_EYE_PUPIL_SHIFT = 2
 //
 // Now drawn at the native 96px bake resolution (see HERO_N_SPRITE_SIZE),
 // the same scale as the central illustration hero, so the lone hero
@@ -427,30 +391,9 @@ export function sceneReady(k) {
     //
     await loadMenuBackgroundArt()
     //
-    // Hero illustration is steel teal (cool half of the complementary
-    // pair); the anti-hero in the duality icon below is vibrant orange
-    // (warm half). Loading both up-front guarantees the icon row has
-    // its complementary sprite ready before draw.
+    // Hero frames (shared by every hero; a no-op once baked on this k)
     //
-    //
-    // Plain hero variant — used by the small "two heroes" icon below
-    // the description. Keeps the icon readable at small sizes.
-    //
-    loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
-    //
-    // Eyeless body bake for the lone hero — eyes are drawn on top so they
-    // can look at the centre eye, close while idle and follow the walk.
-    //
-    loadHeroSprites({ k, ...HERO_BAKE_OPTS })
-    //
-    // Richer hero variant for the CENTRAL illustration — adds mouth,
-    // both arms and a wrist watch on top of the plain body. Loaded
-    // alongside the plain variant so both sprites coexist; the
-    // illustration draw selects this one via the `_mouth_arms_watch`
-    // prefix suffix.
-    //
-    loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, true, true, true)
-    loadHeroSprites(k, HEROES.ANTIHERO, ANTIHERO_READY_BODY_COLOR, null, false, false, false)
+    loadHeroSprites(k)
     CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.get("word-pile-text").forEach(obj => obj.destroy())
@@ -1385,202 +1328,40 @@ function startHeroNBurst(spider) {
   spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
 }
 //
-// Draws the lone hero: eyeless body bake plus overlaid eyes that watch the
-// centre eye, close while idle and follow the walk direction.
+// Draws the lone hero: its baked frame for the current phase, eyes and all.
 //
 function drawTitleHero(k, spider) {
   if (spider.heroGone) return
-  const cx = spider.heroX
-  const cy = spider.heroY
   k.drawSprite({
-    sprite: `${HERO_N_SPRITE_PREFIX}${resolveHeroFrameSuffix(spider)}`,
-    pos: k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2),
+    sprite: heroFrameName(spider),
+    pos: k.vec2(spider.heroX - HERO_N_SPRITE_SIZE / 2, spider.heroY - HERO_N_SPRITE_SIZE / 2),
     width: HERO_N_SPRITE_SIZE,
     height: HERO_N_SPRITE_SIZE,
     flipX: spider.heroPhase === 'lookLeft'
   })
-  const closedIdleFace =
-    spider.heroPhase === 'idle' || spider.heroPhase === 'wakeBothEyes'
-  if (spider.heroPhase === 'wakeOneEye') {
-    drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_LEFT_X)
-    drawHeroWakeEye(k, spider, cx, cy)
-  }
-  closedIdleFace && drawHeroTitleClosedEyeContours(k, spider, cx, cy)
-  !closedIdleFace && drawHeroTitleFilledEyes(k, spider, cx, cy)
 }
 //
-// Matches hero.js run-lean side-eye anchor in 96px sprite space.
+// Sprite for the current phase: a mid-stride running pose (both legs
+// clearly apart) held and mirrored to face left, the run cycle, shut eyes
+// while idling, one eye open glancing left and right while waking, pupils
+// on the centre eye while watching it, and straight ahead while pausing.
 //
-const HERO_CANVAS_HEAD_X = 33
-const HERO_CANVAS_HEAD_Y = 18
-const HERO_CANVAS_BODY_BOTTOM = HERO_CANVAS_HEAD_Y + 24 + 24
-const HERO_RUN_LEAN_RAD = 0.2
-const HERO_CHAR_WIDTH = 30
-const HERO_PUPIL_SIDE_SHIFT = 2
-const HERO_RUN_BODY_BOB = 4
-//
-// Vertical bob baked into each run frame (matches hero.js createFrame run bob).
-//
-function readyHeroRunFrameBobPx(frame) {
-  const phase = frame / HERO_N_RUN_FRAME_COUNT
-  return Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * HERO_RUN_BODY_BOB)
-}
-//
-// Side-view eye position for the title runner's run frames (mirrored when facing left).
-//
-function readyHeroSideEyeCanvasPos(facingLeft, runFrame = 0) {
-  const headX = HERO_CANVAS_HEAD_X
-  const headY = HERO_CANVAS_HEAD_Y + readyHeroRunFrameBobPx(runFrame)
-  const localX = headX + 21
-  const localY = headY + 9
-  const pivotX = headX + HERO_CHAR_WIDTH / 2
-  const dx = localX - pivotX
-  const dy = localY - HERO_CANVAS_BODY_BOTTOM
-  const cos = Math.cos(HERO_RUN_LEAN_RAD)
-  const sin = Math.sin(HERO_RUN_LEAN_RAD)
-  let x = pivotX + dx * cos - dy * sin
-  const y = HERO_CANVAS_BODY_BOTTOM + dx * sin + dy * cos
-  if (facingLeft) {
-    const center = HERO_SPRITE_CANVAS_SIZE / 2
-    x = 2 * center - x
-  }
-  return { x, y }
-}
-//
-// One white/black eye disc for the filled title runner (body is noEyes bake).
-//
-function drawHeroTitleEyeDisc(k, ex, ey, pupilDx, pupilDy, scale, opacity) {
-  k.drawCircle({
-    pos: k.vec2(ex, ey),
-    radius: HERO_EYE_RING_RADIUS * scale,
-        color: k.rgb(0, 0, 0),
-    opacity
-  })
-  k.drawCircle({
-    pos: k.vec2(ex, ey),
-    radius: HERO_EYE_WHITE_RADIUS * scale,
-    color: k.rgb(255, 255, 255),
-    opacity
-  })
-  k.drawCircle({
-    pos: k.vec2(ex + pupilDx, ey + pupilDy),
-    radius: HERO_EYE_PUPIL_RADIUS * scale,
-    color: k.rgb(0, 0, 0),
-    opacity
-  })
-}
-//
-// Runner eyes — side profile while moving, front pair while paused idle.
-//
-function drawHeroTitleFilledEyes(k, spider, cx, cy, departureFade = 1) {
-  if (departureFade <= 0.001) return
-  if (spider.heroPhase === 'wakeOneEye') return
-  const s = HERO_N_SPRITE_SCALE
-  const baseX = cx - HERO_N_SPRITE_SIZE / 2
-  const baseY = cy - HERO_N_SPRITE_SIZE / 2
-  const facingLeft = spider.heroPhase === 'lookLeft'
-  const sideView =
-    spider.heroPhase === 'run' ||
-    spider.heroPhase === 'finalWalk' ||
-    spider.heroPhase === 'lookLeft'
-  if (sideView) {
-    const { x, y } = readyHeroSideEyeCanvasPos(facingLeft, spider.heroRunFrame ?? 0)
-    const pupilDx = (facingLeft ? -HERO_PUPIL_SIDE_SHIFT : HERO_PUPIL_SIDE_SHIFT) * s
-    drawHeroTitleEyeDisc(
-      k,
-      baseX + x * s,
-      baseY + y * s,
-      pupilDx,
-      0,
-      s,
-      departureFade
-    )
-    return
-  }
-  if (spider.heroPhase === 'watch') {
-    drawHeroWatchEyes(k, baseX, baseY, s, departureFade)
-    return
-  }
-  if (spider.heroPhase !== 'pause') return
-  const eyeY = baseY + HERO_EYE_CANVAS_Y * s
-  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
-    drawHeroTitleEyeDisc(k, baseX + eyeX * s, eyeY, 0, 0, s, departureFade)
-  }
-}
-//
-// Front eye pair with both pupils turned toward the centre eye while the
-// hero waits beside it.
-//
-function drawHeroWatchEyes(k, baseX, baseY, scale, opacity) {
-  const eyeY = baseY + HERO_EYE_CANVAS_Y * scale
-  const dx = LIFE_X + LIFE_WIDTH / 2 - (baseX + HERO_SPRITE_CANVAS_SIZE * scale / 2)
-  const dy = LIFE_Y + LIFE_HEIGHT / 2 - eyeY
-  const len = Math.hypot(dx, dy) || 1
-  const shift = HERO_EYE_PUPIL_SHIFT * scale
-  for (const eyeX of [HERO_EYE_LEFT_X, HERO_EYE_RIGHT_X]) {
-    drawHeroTitleEyeDisc(k, baseX + eyeX * scale, eyeY, dx / len * shift, dy / len * shift, scale, opacity)
-  }
-}
-//
-// Closed-eye rings while the runner idles and hums (noEyes body bake).
-//
-function drawHeroTitleClosedEyeContours(k, spider, cx, cy, departureFade = 1) {
-  if (departureFade <= 0.001) return
+function heroFrameName(spider) {
+  const P = HERO_SPRITE_PREFIX
   const phase = spider.heroPhase
-  if (phase !== 'idle' && phase !== 'wakeBothEyes') return
-  drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_LEFT_X, departureFade)
-  drawHeroTitleSingleClosedEye(k, cx, cy, HERO_EYE_RIGHT_X, departureFade)
+  if (phase === 'lookLeft') return `${P}-run-${HERO_N_LOOK_LEFT_RUN_FRAME}`
+  if (phase === 'run' || phase === 'finalWalk') return `${P}-run-${spider.heroRunFrame}`
+  if (phase === 'idle' || phase === 'wakeBothEyes') return `${P}_closed`
+  if (phase === 'wakeOneEye') return heroWinkSpriteName(P, Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2))
+  if (phase === 'watch') return heroWatchSpriteName(spider)
+  return `${P}_0_0`
 }
 //
-// One closed eye — black ring filled with the body colour (eyelid).
+// Pupils turned toward the centre eye while the hero waits beside it.
 //
-function drawHeroTitleSingleClosedEye(k, cx, cy, eyeCanvasX, departureFade = 1) {
-  if (departureFade <= 0.001) return
-  const s = HERO_N_SPRITE_SCALE
-  const ex = cx - HERO_N_SPRITE_SIZE / 2 + eyeCanvasX * s
-  const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
-  const bodyRgb = parseHex(HERO_BODY_COLOR)
-  const contour = k.rgb(0, 0, 0)
-  const pos = k.vec2(ex, ey)
-  k.drawCircle({
-    pos,
-    radius: HERO_EYE_RING_RADIUS * s,
-    color: contour,
-    opacity: departureFade
-  })
-  k.drawCircle({
-    pos,
-    radius: HERO_EYE_WHITE_RADIUS * s,
-    color: k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2]),
-    opacity: departureFade
-  })
-}
-//
-// Frame-name suffix shared by every title-hero sprite variant, driven by
-// the current phase (run / closed-eyes idle / neutral default).
-//
-function resolveHeroFrameSuffix(spider) {
-  //
-  // A mid-stride running pose (both legs clearly apart), held and mirrored
-  // to face left — not the neutral idle stance.
-  //
-  if (spider.heroPhase === 'lookLeft') return `-run-${HERO_N_LOOK_LEFT_RUN_FRAME}`
-  if (spider.heroPhase === 'run' || spider.heroPhase === 'finalWalk') return `-run-${spider.heroRunFrame}`
-  if (spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye' || spider.heroPhase === 'wakeBothEyes') {
-    return '_closed'
-  }
-  return '_0_0'
-}
-//
-// Overlays one open eye (the right one) on the closed-eyes sprite during the
-// wake-up step: black ring, white eyeball and a pupil that wanders left and
-// right while the hero checks whether the coast is clear.
-//
-function drawHeroWakeEye(k, spider, cx, cy, departureFade = 1) {
-  if (departureFade <= 0.001) return
-  const s = HERO_N_SPRITE_SCALE
-  const ex = cx - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_RIGHT_X * s
-  const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
-  const pupilDx = Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2) * HERO_EYE_PUPIL_SHIFT * s
-  drawHeroTitleEyeDisc(k, ex, ey, pupilDx, 0, s, departureFade)
+function heroWatchSpriteName(spider) {
+  const dx = LIFE_X + LIFE_WIDTH / 2 - spider.heroX
+  const dy = LIFE_Y + LIFE_HEIGHT / 2 - (spider.heroY - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y)
+  const len = Math.hypot(dx, dy) || 1
+  return heroLookSpriteName(HERO_SPRITE_PREFIX, dx / len, dy / len)
 }

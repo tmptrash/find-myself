@@ -187,15 +187,8 @@ export const CFG = {
         hint: "#809AA8",
         text: "#9AB5C4"
       },
-      // Hero colors (for procedural generation)
+      // Hero eye colors (pupils painted into the idle frames, menu text white)
       hero: {
-        body: "#FF8C00",               // Orange body color
-        eyeWhite: "#FFFFFF",           // Eye white
-        eyePupil: "#000000"            // Pupil
-      },
-      // Anti-hero colors
-      antiHero: {
-        body: "#8B5A50",               // Reddish-brown
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000"            // Pupil
       },

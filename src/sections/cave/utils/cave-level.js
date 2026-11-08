@@ -10,7 +10,7 @@ import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerNativeTeardown } from '../../../utils/engine-switch.js'
 import { bindBackToMenuKeys, releaseGamePhysicalKeys, getRGB } from '../../../utils/helper.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
-import { applyForestGameplaySharpBake, applyForestHudSharpBake } from '../../forest/utils/forest-focus-depth.js'
+import { applyForestHudSharpBake } from '../../forest/utils/forest-focus-depth.js'
 import * as Mushroom from '../components/glow-mushroom.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as HangingPlant from '../components/hanging-plant.js'
@@ -151,8 +151,6 @@ const NEAR_ROWS = ['near']
 //
 const HASH_MULT = 31
 const HASH_SEED = 7
-const HERO_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
-const HERO_OUTLINE_COLOR = CFG.visual.colors.outline
 
 /**
  * Builds the whole cave level inside the active scene.
@@ -455,16 +453,11 @@ function spawnHero(inst, pose) {
     type: Hero.HEROES.HERO,
     controllable: true,
     sfx: inst.sfx,
-    bodyColor: HERO_BODY_COLOR,
-    outlineColor: HERO_OUTLINE_COLOR,
-    eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-    pupilColor: CFG.visual.colors.hero.eyePupil,
     stepSoundScene: SCENE_NAME,
     suppressDust: true,
     suppressFootprints: true,
     airAnimDuringFlicker: true,
     runDuringFlicker: true,
-    postBakeCanvas: applyForestGameplaySharpBake,
     idleVocalization: null
   })
   hero.onPlayStepSound = h => playHeroStep(inst, h, false)

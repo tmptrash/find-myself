@@ -1,8 +1,5 @@
 import { CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { HERO_BAKE_SPRITE_SIZE, HERO_RUN_FRAME_COUNT, HERO_JUMP_FRAME_COUNT } from '../../../components/hero.js'
-import { FOREST_PAL } from './forest-palette.js'
-import { applyForestGameplaySharpBake } from './forest-focus-depth.js'
 
 //
 // Run + jump frame reference strip for lesson-forest.0 (top-centred HUD).
@@ -19,65 +16,18 @@ const STRIP_TOP_PAD_PX = 6
 const LABEL_FONT_SIZE = 11
 const LABEL_GAP_PX = 3
 const LABEL_COLOR = '#a8a8a8'
-const HERO_BODY_COLOR = FOREST_PAL.heroBodyGray
-const HERO_HOLLOW_OUTLINE_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
-const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
-const HERO_FILLED_OUTLINE_COLOR = CFG.visual.colors.outline
-
-const FOREST_HERO_FRAME_STRIP_SPECS = [
-  {
-    label: 'hollow',
-    bake: {
-      type: Hero.HEROES.HERO,
-      bodyColor: HERO_BODY_COLOR,
-      outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
-      outlineOnly: true,
-      noEyes: true,
-      pupilColor: HERO_HOLLOW_OUTLINE_COLOR,
-      transparentEyeInterior: true,
-      postBakeCanvas: applyForestGameplaySharpBake
-    }
-  },
-  {
-    label: 'hollow + eyes',
-    bake: {
-      type: Hero.HEROES.HERO,
-      bodyColor: HERO_BODY_COLOR,
-      outlineColor: HERO_HOLLOW_OUTLINE_COLOR,
-      outlineOnly: true,
-      noEyes: false,
-      pupilColor: HERO_HOLLOW_OUTLINE_COLOR,
-      transparentEyeInterior: true,
-      postBakeCanvas: applyForestGameplaySharpBake
-    }
-  },
-  {
-    label: 'filled',
-    bake: {
-      type: Hero.HEROES.HERO,
-      bodyColor: HERO_FILLED_BODY_COLOR,
-      outlineColor: HERO_FILLED_OUTLINE_COLOR,
-      outlineOnly: false,
-      noEyes: false,
-      eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-      pupilColor: CFG.visual.colors.hero.eyePupil,
-      transparentEyeInterior: false,
-      postBakeCanvas: applyForestGameplaySharpBake
-    }
-  }
-]
-
+const STRIP_LABEL = 'hero'
 
 /**
  * Recomputes frame size so all sections fit inside maxHeightPx.
  * @param {Object} stripInst - heroFramesStrip on scene inst
  */
 function forestHeroStripFrameDisplayPx(k, levelHeroScale = 1) {
-  const maxCols = HERO_RUN_FRAME_COUNT
+  const maxCols = Hero.HERO_RUN_FRAME_COUNT
   const usableW = k.width() - SIDE_PAD_PX * 2 - FRAME_GAP_PX * (maxCols - 1)
   const fitW = Math.floor(usableW / maxCols)
   const targetPx = Math.round(
-    HERO_BAKE_SPRITE_SIZE * levelHeroScale * STRIP_FRAME_SIZE_VS_LEVEL_HERO
+    Hero.HERO_BAKE_SPRITE_SIZE * levelHeroScale * STRIP_FRAME_SIZE_VS_LEVEL_HERO
   )
   return Math.min(targetPx, fitW)
 }
@@ -100,8 +50,8 @@ export function recomputeForestHeroFramesStripLayout(stripInst) {
 export function drawForestHeroFramesStripHud(stripInst) {
   if (!stripInst?.visibleBlocks?.length) return
   const { k, visibleBlocks, displayPx, maxHeightPx } = stripInst
-  const maxCols = HERO_RUN_FRAME_COUNT
-  const jumpColOffset = Math.floor((maxCols - HERO_JUMP_FRAME_COUNT) / 2)
+  const maxCols = Hero.HERO_RUN_FRAME_COUNT
+  const jumpColOffset = Math.floor((maxCols - Hero.HERO_JUMP_FRAME_COUNT) / 2)
   const cellStep = displayPx + FRAME_GAP_PX
   const rowWidth = maxCols * cellStep - FRAME_GAP_PX
   const startX = (k.width() - rowWidth) / 2
@@ -120,20 +70,16 @@ export function drawForestHeroFramesStripHud(stripInst) {
       font: CFG.visual.fonts.regularFull
     })
     y += LABEL_FONT_SIZE + LABEL_GAP_PX
-    drawForestHeroFrameStripRow(k, block.prefix, 'run', HERO_RUN_FRAME_COUNT, 0, startX, y, displayPx, cellStep)
+    drawForestHeroFrameStripRow(k, block.prefix, 'run', Hero.HERO_RUN_FRAME_COUNT, 0, startX, y, displayPx, cellStep)
     y += displayPx + ROW_GAP_PX
-    drawForestHeroFrameStripRow(k, block.prefix, 'jump', HERO_JUMP_FRAME_COUNT, jumpColOffset, startX, y, displayPx, cellStep)
+    drawForestHeroFrameStripRow(k, block.prefix, 'jump', Hero.HERO_JUMP_FRAME_COUNT, jumpColOffset, startX, y, displayPx, cellStep)
     y += displayPx + SECTION_GAP_PX
   }
 }
 
 export function bakeForestHeroFrameStripBlocks(k) {
-  return FOREST_HERO_FRAME_STRIP_SPECS.map(spec => {
-    const bake = { k, ...spec.bake }
-    Hero.loadHeroSprites(bake)
-    const prefix = Hero.buildHeroSpritePrefix(bake)
-    return { label: spec.label, prefix }
-  })
+  Hero.loadHeroSprites(k)
+  return [{ label: STRIP_LABEL, prefix: Hero.HERO_SPRITE_PREFIX }]
 }
 
 function drawForestHeroFrameStripRow(k, prefix, anim, frameCount, colOffset, startX, y, displayPx, cellStep) {

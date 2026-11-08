@@ -6,7 +6,7 @@ import { sceneMenu } from "../scenes/menu.js"
 import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
 import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
 import { sceneCaveLevel0 } from "../sections/cave/scenes/level0.js"
-import { loadHeroSprites, HEROES } from "../components/hero.js"
+import { loadHeroSprites, loadHeroPicture } from "../components/hero.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
@@ -156,6 +156,11 @@ export async function bootEngine(resolutionMode) {
   setFocusCanvas(k.canvas ?? null)
   focusGameCanvas()
   installLevelFadeIn(k)
+  //
+  // Hero frames are cut from a picture sheet — it must be decoded before
+  // the setup tasks bake them
+  //
+  await loadHeroPicture()
   const setupTasks = buildSetupTasks(k)
   const soundTasks = buildSoundTasks(k)
   totalTasks = setupTasks.length + soundTasks.length
@@ -396,8 +401,7 @@ function buildSetupTasks(k) {
     () => k.loadSprite("eye-hud-0", "./eye_0.png"),
     () => k.loadSprite("eye-hud-1", "./eye_1.png"),
     () => k.loadSprite("eye-hud-2", "./eye_2.png"),
-    () => loadHeroSprites(k, HEROES.HERO),
-    () => loadHeroSprites(k, HEROES.ANTIHERO),
+    () => loadHeroSprites(k),
     () => sceneReady(k),
     () => sceneForestHeroFramesPreview(k),
     () => sceneMenu(k),

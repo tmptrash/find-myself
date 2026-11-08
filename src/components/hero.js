@@ -1,8 +1,9 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, parseHex, toCanvas } from '../utils/helper.js'
+import { isAnyKeyDown } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
-import { smoothHeroContourSteps } from '../utils/hero-contour-aa.js'
+import * as HeroPicture from '../utils/hero-picture.js'
+import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import {
   bindDefaultHeroFootFx,
   updateHeroFootprints,
@@ -11,14 +12,21 @@ import {
   playHeroLandFx
 } from '../utils/hero-foot-fx.js'
 //
-// Sprite rendering: 96x96 at scale 1 for crisp 1px outlines
+// Hero frames are cut from the picture sheet (hero-picture.js) into 96 px
+// sprites drawn at scale 1, so one sprite pixel is one screen pixel.
 //
-const SPRITE_SIZE = 96
-const RENDER_SCALE = 1
+const SPRITE_SIZE = HeroPicture.FRAME_SIZE
 //
 // Exported bake dimensions for debug / HUD consumers.
 //
 export const HERO_BAKE_SPRITE_SIZE = SPRITE_SIZE
+//
+// Every hero shares one baked frame set under this sprite-name prefix. All
+// frames take the gameplay grain with one seed, so swapping frames (or the
+// pupils moving) never shimmers the body.
+//
+export const HERO_SPRITE_PREFIX = 'hero'
+const HERO_GRAIN_SEED = 7300
 //
 // Collision box parameters (in 96x96 local sprite space)
 //
@@ -34,129 +42,22 @@ const COLLISION_OFFSET_Y = 3
 // Hero parameters — scale 1 since sprites are already at display resolution
 //
 const HERO_SCALE = 1
-const DEFAULT_OUTLINE_RIM = 2
-//
-// Sprite-prefix tags for optional baked layers (outline shell / body fill).
-//
-const HERO_BAKE_SUFFIX_OUTLINE_ONLY = '_outline'
-const HERO_BAKE_SUFFIX_BODY_ONLY = '_bodyonly'
-const HERO_BAKE_SUFFIX_NONE = '_nobake'
 const RUN_ANIM_SPEED = 0.03333
-//
-// Run cycle — 8 frames like the reference sheet. Each leg loops around the
-// same stride circle half a cycle apart: it plants at the front, sweeps
-// back along the ground, then lifts (shorter leg, raised foot) and swings
-// forward. All values are in 96px sprite space.
-//
-const RUN_FRAME_COUNT = 8
+const RUN_FRAME_COUNT = HeroPicture.RUN_FRAME_COUNT
 export const HERO_RUN_FRAME_COUNT = RUN_FRAME_COUNT
-const RUN_LEG_CENTER_X = 43
-const RUN_LEG_SPREAD = 11
-const RUN_LEG_HEIGHT = 18
-const RUN_LEG_LIFT_SHORTEN = 7
-const RUN_LEG_LIFT_RAISE = 9
-const RUN_FOOT_Y = 84
-const RUN_BODY_BOB = 4
-//
-// Forward lean while running: torso rotates around the hips so the head
-// leads. Legs stay unrotated (planted) and clamped to the body side lines
-// so they never trail past the spine (flipX mirrors left runs).
-//
-const RUN_LEAN_RAD = 0.2
-//
-// How far legs tuck up into the torso so there is never a gap at the crotch
-//
-const LEG_INTO_BODY = 2
-//
-// Leg outline black rim starts this many px below the body bottom edge so the
-// inner vertical stroke never climbs into the torso on single-leg run frames.
-//
-//
-// Run uses the same 1 px gap as idle / jump-0 so side outlines run the full
-// leg height at uniform fill width (an 8 px gap left the hip looking wider
-// and un-outlined).
-//
-//
-// Side-view run: nudge the trailing (smaller-X) leg 1 px toward the facing
-// direction so its outline does not peek past the body on the plant frame.
-//
-const RUN_TRAILING_LEG_X_NUDGE = 1
-//
-// Centered single-leg run frames (2 and 6): drop the vertical outline so it
-// does not climb into the leaned torso.
-//
-const RUN_CENTER_LEG_OUTLINE_INSET = 1
-//
-// Hip shelf overlap into the torso bottom rim — closes the 1 px gap between the
-// leaned back vertical and the horizontal leg connector.
-//
-const HIP_SHELF_BODY_OVERLAP = 1
-//
-// Run frames that rebuild the silhouette rim from an eroded interior mask so
-// the 2 px outline is continuous and softly anti-aliased on the outer edge.
-//
-const RUN_PASS_FRAME = 1
-const RUN_CENTER_STRIDE_FRAME = 2
-const RUN_SWING_FRAME = 3
-const RUN_PLANT_FRAME = 4
-const RUN_MIRROR_SWING_FRAME = 5
-//
-// Second stride half — bake with the same hip/contour rules as frames 3 and 4.
-//
-const RUN_LATE_CENTER_STRIDE_FRAME = 6
-const RUN_LATE_SWING_FRAME = 7
-const RUN_CENTER_STRIDE_FRAMES = new Set([RUN_CENTER_STRIDE_FRAME, RUN_LATE_CENTER_STRIDE_FRAME])
-const RUN_HIP_PATCH_FRAMES = new Set([
-  RUN_PASS_FRAME, RUN_CENTER_STRIDE_FRAME, RUN_SWING_FRAME, RUN_PLANT_FRAME, RUN_MIRROR_SWING_FRAME,
-  RUN_LATE_CENTER_STRIDE_FRAME, RUN_LATE_SWING_FRAME
-])
-const RUN_SMOOTH_CONTOUR_FRAMES = new Set([
-  0, RUN_PASS_FRAME, RUN_CENTER_STRIDE_FRAME, RUN_SWING_FRAME, RUN_PLANT_FRAME, RUN_MIRROR_SWING_FRAME,
-  RUN_LATE_CENTER_STRIDE_FRAME, RUN_LATE_SWING_FRAME
-])
-const SMOOTH_RUN_FRAME0_ALPHA_MIN = 128
-const SMOOTH_RUN_FRAME0_AA_PX = 2
-//
-// Run hip dent fill: rows checked around the body bottom, max inward edge
-// step per row, and the deepest dent still treated as a burr.
-//
-const RUN_HIP_NOTCH_ABOVE_PX = 4
-const RUN_HIP_NOTCH_BELOW_PX = 8
-const RUN_HIP_NOTCH_TAPER = 0.5
-const RUN_HIP_NOTCH_MAX_DEPTH_PX = 3
-//
-// Hollow run bakes: peel body-fill colour within this RGB distance of BL.
-//
-const BAKE_BODY_STRIP_TOLERANCE = 4
 //
 // Ignore airborne flicker shorter than this — prevents run↔squat loops when
 // the hitbox briefly loses contact with a platform mid-stride
 //
 const MIN_AIR_TIME_FOR_JUMP = 0.06
 //
-// Idle silhouette totals (head + torso). Jump frames compress toward the
-// peak and expand back to these values on the way down.
+// Jump — 7 frames like the sheet: crouch, stretch take-off, rising, peak
+// with the legs tucked up, early descent, full-leg descent and the landing
+// crouch (held briefly right after touching the ground).
 //
-const IDLE_HEAD_HEIGHT = 24
-const IDLE_BODY_HEIGHT = 24
-const IDLE_HEAD_Y = 18
-const IDLE_BODY_Y = 42
-const IDLE_LEG_Y = 66
-const IDLE_LEG_HEIGHT = 18
-//
-// Jump air-body compression (frames 1→3 ascent, 3→5 descent). Peak is the
-// shortest; early ascent / late descent match idle proportions.
-//
-const JUMP_AIR_HEAD_H = [24, 18, 14, 18, 24]
-const JUMP_AIR_BODY_H = [24, 16, 10, 16, 24]
-const JUMP_AIR_TOP_Y = [8, 14, 18, 14, 8]
-//
-// Jump — 7 frames like the reference sheet: crouch, stretch take-off,
-// rising, peak with the legs tucked up, early descent, full-leg descent and
-// the landing crouch (held briefly right after touching the ground).
-//
-const JUMP_FRAME_COUNT = 7
+const JUMP_FRAME_COUNT = HeroPicture.JUMP_FRAME_COUNT
 export const HERO_JUMP_FRAME_COUNT = JUMP_FRAME_COUNT
+
 const LAND_SQUASH_TIME = 0.08
 const JUMP_SQUASH_TIME = 0.03
 const JUMP_CEILING_CLEARANCE = 44
@@ -243,155 +144,31 @@ const WHISTLE_PULSE_DECAY = 2.8
 //
 let idleVocalizationSuppressed = false
 //
-// Corner radii for rounded body parts — tuned for smooth cartoon look at 96px
+// Idle look directions: the pupils wander between straight ahead and
+// LOOK_DIRECTIONS points round the eye (every 30°). A look offset shorter
+// than LOOK_CENTRE_RADIUS reads as straight ahead, and so does a lookAtPos
+// nearer than LOOK_AT_DEAD_ZONE px. A wink (one eye open, ready scene)
+// looks left, ahead or right.
 //
-const HEAD_CORNER_RADIUS = 12
-const ARM_CORNER_RADIUS = 4
-const LEG_CORNER_RADIUS = 4
-//
-// Fillet that softens the 90 degree corner where the horizontal crotch seam
-// meets the vertical inner leg outlines.
-//
-const CROTCH_SEAM_FILLET_R = 3
-//
-// Idle-only crotch fillet — wider rounding at the inner leg junctions.
-//
-const IDLE_CROTCH_SEAM_FILLET_R = 5
-//
-// Airborne jump frames: knees tuck slightly forward while the feet stay
-// under the body (human jump tuck). Positive bend = knee forward in sprite
-// px; foot ends near the hip so heels read as pulled under the butt.
-//
-const JUMP_LEG_BEND = [0, 4, 6, 8, 6, 3, 0]
-//
-// Front leg uses a lighter tuck so the two legs stay distinguishable
-//
-const JUMP_FRONT_LEG_BEND_RATIO = 0.7
-const LEG_FILL_WIDTH = 9
-//
-// Height of the torso-width clip band right below the body bottom for bent
-// jump legs — only tall enough to hide the burr where the stroke exits the
-// hip. Boxing the whole leg length to torso width (rather than just this
-// band) clips off the outline rim on the side the leg swings past the torso,
-// leaving the white fill bare against the transparent background — a visible
-// hole partway down the leg.
-//
-const JUMP_LEG_HIP_BURR_CLIP_H = 3
-//
-// How far bent jump legs start inside the torso so the round hip join is
-// fully covered by the body fill (no outline burr at the crotch).
-//
-const JUMP_LEG_HIP_OVERLAP = 10
-//
-// Bent-jump crotch seam insets — keep the horizontal connector short so it
-// does not dive into the front (facing) leg outline at peak tuck.
-//
-const JUMP_BENT_CROTCH_SEAM_BACK_TRIM = 1
-const JUMP_BENT_CROTCH_SEAM_FRONT_TRIM = 4
-//
-// Bent leg curve shape: knee sits at 42% of the leg length and the foot keeps
-// 12% of the knee offset. Shared by the stroke and the hip shelf solver.
-//
-const BENT_LEG_KNEE_T = 0.42
-const BENT_LEG_FOOT_T = 0.12
-const BENT_LEG_SOLVE_EPS = 1e-6
-//
-// Hip notch fill under bent jump legs: rows scanned below the body bottom and
-// the smallest inset (px) that still counts as a notch.
-//
-const BENT_LEG_NOTCH_SCAN_PX = 12
-const BENT_LEG_NOTCH_MIN_PX = 0.25
-//
-// Back hip join repair on the final bent-jump pixels: rows around the body
-// bottom, rows looked at above/below when closing sub-pixel dents, how fast
-// the leg may step out past the torso line per row, and the alpha range
-// that counts as partial edge coverage.
-//
-const BACK_HIP_REPAIR_ABOVE_PX = 2
-const BACK_HIP_REPAIR_BELOW_PX = 8
-const BACK_HIP_CLOSE_ROWS = 4
-const BACK_HIP_OUT_TAPER_PX = 0.4
-const BACK_HIP_PARTIAL_ALPHA_MIN = 8
-const BACK_HIP_FULL_ALPHA_MIN = 250
-const BACK_HIP_INK_TOL_SQ = 60 * 60 * 3
-//
-// Bent-jump crotch corners: the torso rim band under the seam can poke past
-// the inner leg rim. At most this many px are cleared per side; the first
-// one keeps CROTCH_CORNER_AA_INK of its ink as rounding AA.
-//
-const CROTCH_CORNER_MAX_PX = 3
-const CROTCH_CORNER_AA_INK = 0.25
-const CROTCH_CORNER_MATCH_TOL_SQ = 16 * 16 * 3
-//
-// Character width (head + body have same width, no shoulder bulge in new design)
-//
-const CHAR_WIDTH = 30
-//
-// Arm dimensions: each arm is exactly half of a full leg pill, cut vertically.
-// ARM_HALF_W is the fill half-width (half of leg fill width 9, rounded up).
-// ARM_H equals the default leg height so proportions match perfectly.
-//
-const ARM_HALF_W = 5
-const ARM_H = 28
-//
-// Eye geometry constants (all in 96px sprite coordinates)
-//
-const EYE_RING_RADIUS = 5
-const EYE_WHITE_RADIUS = 4
-const PUPIL_RADIUS = 2
-const EYE_OFFSET_X_LEFT = 9
-const EYE_OFFSET_X_RIGHT = 21
-const EYE_OFFSET_Y = 9
-const EYE_PUPIL_SHIFT = 2
-const PUPIL_SIDE_SHIFT = 2
-//
-// Side-view run/jump eye anchor. Run applies RUN_LEAN_RAD so the eye stays on
-// the forward face of the leaned head (same local slot as jump).
-//
-function sideViewEyePos(headX, headY, bodyBottom, animation) {
-  const localX = headX + EYE_OFFSET_X_RIGHT
-  const localY = headY + EYE_OFFSET_Y
-  if (animation !== 'run') {
-    return { x: localX, y: localY }
-  }
-  const pivotX = headX + CHAR_WIDTH / 2
-  const dx = localX - pivotX
-  const dy = localY - bodyBottom
-  const cos = Math.cos(RUN_LEAN_RAD)
-  const sin = Math.sin(RUN_LEAN_RAD)
-  return {
-    x: pivotX + dx * cos - dy * sin,
-    y: bodyBottom + dx * sin + dy * cos
-  }
-}
-//
-// Contact bob: the body sits lowest when a foot plants (phase 0 / 0.5)
-// and rises through the passing poses.
-//
-function runBodyBobPx(frame) {
-  const phase = frame / RUN_FRAME_COUNT
-  return Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * RUN_BODY_BOB)
-}
+const LOOK_DIRECTIONS = 12
+const LOOK_STEP_RAD = Math.PI * 2 / LOOK_DIRECTIONS
+const LOOK_CENTRE_RADIUS = 0.5
+const LOOK_AT_DEAD_ZONE = 20
+const LOOK_AHEAD = { x: 0, y: 0 }
+const LOOK_VECTORS = Array.from({ length: LOOK_DIRECTIONS }, (_, i) => ({ x: Math.cos(i * LOOK_STEP_RAD), y: Math.sin(i * LOOK_STEP_RAD) }))
+const LOOK_TARGETS = [LOOK_AHEAD, ...LOOK_VECTORS]
+const WINK_SIDES = [-1, 0, 1]
 
 export const HEROES = {
   HERO: 'hero',
   ANTIHERO: 'antiHero'
 }
 //
-// Sprite-prefix bundles fully baked on each live Kaplay instance. Kaplay's
-// asset lookup can outlive a torn-down engine (see engine-switch.js), so
+// Live Kaplay instances whose hero frames are fully baked. Kaplay's asset
+// lookup can outlive a torn-down engine (see engine-switch.js), so
 // k.getSprite() alone must not skip loadHeroSprites on a fresh k.
 //
-const heroSpritePrefixesReadyFor = new WeakMap()
-//
-// Per-canvas bake metadata (rim width, eye discs) for the contour step pass
-// that runs in commitHeroBakedSprite after grain and rim repair.
-//
-const heroBakeFrameMeta = new WeakMap()
-//
-// Eye ring margin kept out of the contour step pass (px beyond the ring).
-//
-const CONTOUR_AA_EYE_MARGIN_PX = 1.5
+const heroFramesBakedFor = new WeakSet()
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -412,9 +189,7 @@ const CONTOUR_AA_EYE_MARGIN_PX = 1.5
  * @param {boolean} [config.isStatic=false] - If true, no physics/gravity is applied
  * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
  *   decorative hero left at its default scrolls with the world instead
- * @param {boolean} [config.drawBakeOutline] - Bake silhouette rim (defaults true; colour from outlineColor)
- * @param {boolean} [config.drawBakeBody] - Bake interior body fill (defaults true unless outlineOnly)
- * @param {string} [config.outlineColor] - Rim colour for drawHeroBakeContour when drawBakeOutline is true
+ * @param {Function} [config.idleNotePostBake] - Grain pass for baked mouth-note glyphs
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -430,31 +205,16 @@ export function create(config) {
     stepSoundScene = null,
     airAnimDuringFlicker = false,
     runDuringFlicker = false,
-    bodyColor = null,      // Custom body color (hex string)
-    outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
     suppressDust = false,  // Disable landing and run-start dust for this hero
     suppressFootprints = false, // Leave no footprints while running
     isStatic = false,      // If true, no physics (for indicators / decorative heroes)
     fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
-    addMouth = false,      // If true, add black horizontal mouth line (only for idle)
-    addArms = false,       // If true, add simple vertical arms
-    addWatch = false,      // If true, draw small watch on right wrist (requires addArms)
-    drawBakeOutline,       // Bake the silhouette rim (defaults true)
-    drawBakeBody,          // Bake interior body fill
-    drawBodyFill,          // Legacy alias for drawBakeBody
-    outlineOnly = false,   // Legacy: rim without body (drawBakeOutline && !drawBakeBody)
     hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
     ambient = false,       // Decorative background character — no collision area
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
-    eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
-    pupilColor = null,     // Override pupil fill (null = use outline colour)
-    transparentEyeInterior = false, // Hollow forest/menu eyes: ring + pupil only, clear socket
-    noEyes = false,        // Bake idle/run/jump without eye whites or pupils (forest eyeless intro)
-    postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
-    idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
-    outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
+    idleNotePostBake = null // Optional grain pass for baked mouth-note glyphs
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -465,124 +225,13 @@ export function create(config) {
   //
   const defaultVocalization = type === HEROES.ANTIHERO ? 'sleeping' : 'humming'
   const idleVocalization = config.idleVocalization !== undefined ? config.idleVocalization : defaultVocalization
-
-  const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
-  //
-  // Ensure colors are strings and remove # symbols
-  //
-  const effectiveBodyColor = String(bodyColor ?? defaultBodyColor).replace('#', '')
-  const effectiveOutlineColor = String(outlineColor ?? CFG.visual.colors.outline).replace('#', '')
-  const bakeLayers = resolveHeroBakeLayers({ drawBakeOutline, drawBakeBody, drawBodyFill, outlineOnly })
-  //
-  // Load sprites for this hero configuration.
-  // This will use cached sprites if already loaded
-  // Pass colors with # for loadHeroSprites (it will handle removal internally)
-  //
-  try {
-    const bodyColorWithHash = bodyColor ?? defaultBodyColor
-    const outlineColorWithHash = outlineColor ?? CFG.visual.colors.outline
-    loadHeroSprites({
-      k,
-      type,
-      bodyColor: bodyColorWithHash,
-      outlineColor: outlineColorWithHash,
-      addMouth,
-      addArms,
-      addWatch,
-      drawBakeOutline: bakeLayers.drawBakeOutline,
-      drawBakeBody: bakeLayers.drawBakeBody,
-      eyeWhiteColor,
-      pupilColor,
-      transparentEyeInterior,
-      noEyes,
-      postBakeCanvas,
-      outlineRimPx,
-      character: null  // Marker to indicate this is an inst-like object
-    })
-  } catch (error) {
-    console.error('Failed to load hero sprites:', error)
-  }
-  //
-  // Generate sprite prefix based on customization (colors already have # removed)
-  //
-  const spritePrefix = buildHeroSpritePrefix({
-    type,
-    bodyColor: effectiveBodyColor,
-    outlineColor: effectiveOutlineColor,
-    addMouth,
-    addArms,
-    addWatch,
-    drawBakeOutline: bakeLayers.drawBakeOutline,
-    drawBakeBody: bakeLayers.drawBakeBody,
-    eyeWhiteColor,
-    pupilColor,
-    transparentEyeInterior,
-    noEyes,
-    outlineRimPx
-  })
-  const spriteName = `${spritePrefix}_0_0`
-
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
   const collisionOffsetY = COLLISION_OFFSET_Y - hitboxPadding
   const collisionWidth = COLLISION_WIDTH + hitboxPadding * 2
   const collisionHeight = COLLISION_HEIGHT + hitboxPadding * 2
-
-  //
-  // Ensure sprite is loaded before using it
-  //
-  let spriteComponent
-  try {
-    const existingSprite = k.getSprite(spriteName)
-    if (existingSprite) {
-      spriteComponent = k.sprite(spriteName)
-    } else {
-      //
-      // Sprite not found, try to load it now
-      //
-      loadHeroSprites({
-        k,
-        type,
-        bodyColor: effectiveBodyColor,
-        outlineColor: effectiveOutlineColor,
-        addMouth,
-        addArms,
-        addWatch,
-        drawBakeOutline: bakeLayers.drawBakeOutline,
-        drawBakeBody: bakeLayers.drawBakeBody,
-        eyeWhiteColor,
-        pupilColor,
-        transparentEyeInterior,
-        noEyes,
-        postBakeCanvas,
-        outlineRimPx
-      })
-      //
-      // Try to use the sprite (it should be loaded now)
-      //
-      spriteComponent = k.sprite(spriteName)
-    }
-  } catch (error) {
-    //
-      // Fallback: use default sprite name or rectangle placeholder
-      //
-    const defaultSpriteName = `${type}_0_0`
-    try {
-      const defaultSprite = k.getSprite(defaultSpriteName)
-      if (defaultSprite) {
-        spriteComponent = k.sprite(defaultSpriteName)
-      } else {
-        spriteComponent = k.rect(SPRITE_SIZE * RENDER_SCALE, SPRITE_SIZE * RENDER_SCALE)
-      }
-    } catch (fallbackError) {
-      //
-      // If everything fails, use rectangle placeholder
-      //
-      spriteComponent = k.rect(SPRITE_SIZE * RENDER_SCALE, SPRITE_SIZE * RENDER_SCALE)
-    }
-  }
-
+  loadHeroSprites(k)
   const character = k.add([
-    spriteComponent,
+    k.sprite(`${HERO_SPRITE_PREFIX}_0_0`),
     k.pos(x, y),
     //
     // Ambient decorative characters skip collision detection — they only move via manual
@@ -619,23 +268,8 @@ export function create(config) {
     stepSoundScene,
     airAnimDuringFlicker,
     runDuringFlicker,
-    bodyColor: effectiveBodyColor,        // Store effective body color (not null)
-    outlineColor: effectiveOutlineColor,  // Store effective outline color for re-baking
-    addMouth,                             // Feature flags persisted for runtime recolour
-    addArms,
-    addWatch,
-    drawBakeOutline: bakeLayers.drawBakeOutline,
-    drawBakeBody: bakeLayers.drawBakeBody,
-    drawBodyFill: bakeLayers.drawBakeBody,
-    outlineOnly: bakeLayers.drawBakeOutline && !bakeLayers.drawBakeBody,
-    eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
-    pupilColor: pupilColor ? String(pupilColor).replace('#', '') : null,
-    transparentEyeInterior: Boolean(transparentEyeInterior),
-    postBakeCanvas,                       // Forest film grain on baked hero frames
     idleNotePostBake,                     // Forest film grain on baked mouth-note glyphs
-    outlineRimPx,                         // Baked silhouette rim width (px)
-    noEyes,                               // Eyeless forest intro — no eye whites in baked frames
-    spritePrefix,
+    spritePrefix: HERO_SPRITE_PREFIX,
     dustColor,
     suppressDust,
     suppressFootprints,
@@ -761,180 +395,49 @@ export function create(config) {
 }
 
 /**
- * Loads sprites for hero or anti-hero with customizable parameters
- * Can be called with inst object or individual parameters
- * @param {Object} inst - Hero instance or Kaplay instance
- * @param {string} [type] - Hero type (HERO or ANTIHERO) - required if first param is k
- * @param {string} [bodyColor=null] - Body color in hex format (null = use default from config)
- * @param {string} [outlineColor=null] - Outline color in hex format (null = use default from config)
- * @param {boolean} [addMouth=false] - Add mouth to idle sprites
- * @param {boolean} [addArms=false] - Add arms to sprites
- * @param {boolean} [addWatch=false] - Add watch on right wrist
+ * Waits for the hero picture sheet — await once before the first
+ * loadHeroSprites() (engine boot).
+ * @returns {Promise<void>}
  */
-export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColor = null, addMouth = false, addArms = false, addWatch = false) {
-  //
-  // Determine if called with inst or individual parameters
-  //
-  let k, heroType, color, outline, mouth, arms, watch, bakeLayers, eyeWhite, pupil, transparentInterior, noEyes, postBakeCanvas, outlineRimPx, bakeSeed
+export function loadHeroPicture() {
+  return HeroPicture.load()
+}
 
-  if (inst.k && inst.type !== undefined) {
-    //
-    // Called with inst-like object (has k and type properties)
-    //
-    k = inst.k
-    heroType = inst.type
-    color = inst.bodyColor
-    outline = inst.outlineColor
-    mouth = inst.addMouth || false
-    arms = inst.addArms || false
-    watch = inst.addWatch || false
-    bakeLayers = resolveHeroBakeLayers(inst)
-    eyeWhite = inst.eyeWhiteColor || null
-    pupil = inst.pupilColor || null
-    transparentInterior = inst.transparentEyeInterior || false
-    noEyes = inst.noEyes || false
-    postBakeCanvas = inst.postBakeCanvas || null
-    outlineRimPx = inst.outlineRimPx || DEFAULT_OUTLINE_RIM
-  } else {
-    //
-    // Called with individual parameters (for preloading)
-    //
-    k = inst
-    heroType = type
-    color = bodyColor
-    outline = outlineColor
-    mouth = addMouth
-    arms = addArms
-    watch = addWatch
-    bakeLayers = resolveHeroBakeLayers({ drawBakeOutline: true, drawBakeBody: true })
-    eyeWhite = null
-    pupil = null
-    transparentInterior = false
-    noEyes = false
-    postBakeCanvas = null
-    outlineRimPx = DEFAULT_OUTLINE_RIM
-  }
-  bakeSeed = 0
-  //
-  // Use default colors from config if not provided
-  //
-  let effectiveBodyColor = color || (heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
-  let effectiveOutlineColor = outline || CFG.visual.colors.outline
-  //
-  // Ensure colors are valid strings
-  //
-  if (!effectiveBodyColor || typeof effectiveBodyColor !== 'string') {
-    effectiveBodyColor = heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
-  }
-  if (!effectiveOutlineColor || typeof effectiveOutlineColor !== 'string') {
-    effectiveOutlineColor = CFG.visual.colors.outline
-  }
-  //
-  // Remove # from colors for prefix (colors are normalized in createFrame via getHex)
-  // Ensure colors are strings before calling replace
-  //
-  const bodyColorForPrefix = String(effectiveBodyColor).replace('#', '')
-  const outlineColorForPrefix = String(effectiveOutlineColor).replace('#', '')
-  //
-  // Generate unique prefix for this sprite variant
-  //
-  const noEyesFlag = Boolean(noEyes)
-  const prefixBakeOpts = {
-    type: heroType,
-    bodyColor: bodyColorForPrefix,
-    outlineColor: outlineColorForPrefix,
-    addMouth: mouth,
-    addArms: arms,
-    addWatch: watch,
-    drawBakeOutline: bakeLayers.drawBakeOutline,
-    drawBakeBody: bakeLayers.drawBakeBody,
-    eyeWhiteColor: eyeWhite,
-    pupilColor: pupil,
-    transparentEyeInterior: transparentInterior,
-    noEyes: noEyesFlag,
-    outlineRimPx
-  }
-  const prefix = buildHeroSpritePrefix(prefixBakeOpts)
-  //
-  // Skip only when this exact k already finished baking the full bundle
-  // (idle grid + closed frame + run/jump), not when a stale global name exists.
-  //
-  if (isHeroSpritePrefixReadyOnK(k, prefix)) {
-    inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
-    return
-  }
-  //
-  // Load all eye variants (9 positions) for idle animation
-  //
-  for (let x = -1; x <= 1; x++) {
-    for (let y = -1; y <= 1; y++) {
-      const spriteName = `${prefix}_${x}_${y}`
-      try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
-        //
-        // createFrame now returns an HTMLCanvasElement (was a data URL string).
-        // Ensure we got a valid sprite source before passing to loadSprite.
-        //
-        spriteData && commitHeroBakedSprite(
-          k, spriteName, spriteData, postBakeCanvas, bakeSeed++,
-          heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
-        )
-      } catch (error) {
-        //
-        // Skip this sprite if there's an error creating it
-        //
-      }
-    }
-  }
-  //
-  // Closed-eyes idle frame (eyes filled with the body colour, no pupils) used
-  // when the hero is calm. Baked once as `${prefix}_closed`.
-  //
-  try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, true, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
-    closedData && commitHeroBakedSprite(
-      k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++,
-      heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
-    )
-      } catch (error) {
-        //
-        // Skip this sprite if there's an error creating it
-        //
-  }
-  //
-  // Load jump animation frames (3 frames)
-  //
-  for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
-      spriteData && commitHeroBakedSprite(
-        k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
-        heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
-      )
-    } catch (error) {
-      //
-      // Skip this sprite if there's an error creating it
-      //
-    }
-  }
-  //
-  // Load run frames (3 frames)
-  //
-  for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, false, watch, false, eyeWhite, outlineRimPx, pupil, transparentInterior, noEyesFlag, bakeLayers)
-      spriteData && commitHeroBakedSprite(
-        k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++,
-        heroBakeCrispRimColors(bakeLayers, effectiveOutlineColor, effectiveBodyColor)
-      )
-    } catch (error) {
-      //
-      // Skip this sprite if there's an error creating it
-      //
-    }
-  }
-  isHeroIdleGridPresentOnK(k, prefix) && markHeroSpritePrefixReadyOnK(k, prefix)
-  inst.k && inst.type !== undefined && (inst.spritePrefix = prefix)
+/**
+ * Bakes the hero's frames (idle looks, closed eyes, winks, run, jump) into
+ * a live Kaplay instance once; every hero and anti-hero shares them.
+ * Does nothing until loadHeroPicture() has resolved.
+ * @param {Object} k - Kaplay instance
+ */
+export function loadHeroSprites(k) {
+  if (heroFramesBakedFor.has(k)) return
+  bakeHeroFrames(k)
+  isHeroFrameSetPresentOnK(k) && heroFramesBakedFor.add(k)
+}
+
+/**
+ * Idle sprite whose pupils look along (x, y): straight ahead when the
+ * offset is short, else the nearest of the baked look directions.
+ * @param {string} prefix - Hero sprite prefix (HERO_SPRITE_PREFIX)
+ * @param {number} x - Look offset X (-1..1, + right)
+ * @param {number} y - Look offset Y (-1..1, + down)
+ * @returns {string} Sprite name
+ */
+export function heroLookSpriteName(prefix, x, y) {
+  if (Math.hypot(x, y) < LOOK_CENTRE_RADIUS) return `${prefix}_0_0`
+  const step = Math.round(Math.atan2(y, x) / LOOK_STEP_RAD)
+  return `${prefix}_look_${(step + LOOK_DIRECTIONS) % LOOK_DIRECTIONS}`
+}
+
+/**
+ * Wink sprite: left eye shut, right eye open looking left (-1), ahead (0)
+ * or right (1); a fractional side picks the nearest.
+ * @param {string} prefix - Hero sprite prefix (HERO_SPRITE_PREFIX)
+ * @param {number} side - Pupil side, -1..1
+ * @returns {string} Sprite name
+ */
+export function heroWinkSpriteName(prefix, side) {
+  return `${prefix}_wink_${Math.round(Math.max(-1, Math.min(1, side)))}`
 }
 
 /**
@@ -1015,12 +518,9 @@ export function enterCalmPose(inst) {
  */
 export function getActiveSpriteKey(inst) {
   if (inst.currentEyeSprite) return inst.currentEyeSprite
-  if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst, inst.jumpFrame ?? 0)
-  if (inst.isRunning) return heroRunSpriteName(inst, inst.runFrame ?? 0)
-  const idlePrefix = heroIdleSpritePrefix(inst)
-  const eyeX = Math.round(inst.eyeOffsetX ?? 0)
-  const eyeY = Math.round(inst.eyeOffsetY ?? 0)
-  return `${idlePrefix}_${eyeX}_${eyeY}`
+  if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst.jumpFrame ?? 0)
+  if (inst.isRunning) return heroRunSpriteName(inst.runFrame ?? 0)
+  return heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)
 }
 
 /**
@@ -1032,8 +532,7 @@ export function applyCalmIdleSprite(inst) {
   if (!ch?.exists?.()) return
   inst.isRunning = false
   inst.wasJumping = false
-  const prefix = heroIdleSpritePrefix(inst)
-  const closedName = `${prefix}_closed`
+  const closedName = `${HERO_SPRITE_PREFIX}_closed`
   //
   // Re-applying the sprite every frame (forest drowning) would remount Kaplay
   // components and fight the scene-driven sink tween.
@@ -1078,13 +577,11 @@ export function spawn(inst, _opts = {}) {
   inst.spawnLandGrace = 0.35
 }
 
-function heroRunSpriteName(inst, frame) {
-  const prefix = inst.spritePrefix || inst.type
-  return `${prefix}-run-${frame}`
+function heroRunSpriteName(frame) {
+  return `${HERO_SPRITE_PREFIX}-run-${frame}`
 }
-function heroJumpSpriteName(inst, frame) {
-  const prefix = inst.spritePrefix || inst.type
-  return `${prefix}-jump-${frame}`
+function heroJumpSpriteName(frame) {
+  return `${HERO_SPRITE_PREFIX}-jump-${frame}`
 }
 /**
  * Update character animation and state
@@ -1263,7 +760,7 @@ function onUpdate(inst) {
       inst.isCrouching = true
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        useHeroSprite(inst, heroJumpSpriteName(inst, 0))
+        useHeroSprite(inst, heroJumpSpriteName(0))
       }
       inst.character.flipX = inst.direction === -1
       return
@@ -1298,7 +795,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        useHeroSprite(inst, heroJumpSpriteName(inst, 0))
+        useHeroSprite(inst, heroJumpSpriteName(0))
       }
     } else {
       //
@@ -1308,7 +805,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 1) {
         inst.jumpFrame = 1
-        useHeroSprite(inst, heroJumpSpriteName(inst, 1))
+        useHeroSprite(inst, heroJumpSpriteName(1))
       }
     }
     //
@@ -1442,7 +939,7 @@ function onUpdate(inst) {
     }
     if (targetFrame !== inst.jumpFrame) {
       inst.jumpFrame = targetFrame
-        useHeroSprite(inst, heroJumpSpriteName(inst, targetFrame))
+        useHeroSprite(inst, heroJumpSpriteName(targetFrame))
     }
       syncJumpCollision(inst)
     if (!inst.wasJumping) {
@@ -1478,7 +975,7 @@ function onUpdate(inst) {
       if (realJump) {
         inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
-        useHeroSprite(inst, heroJumpSpriteName(inst, 6))
+        useHeroSprite(inst, heroJumpSpriteName(6))
         inst.currentEyeSprite = null
       } else {
         inst.wasJumping = false
@@ -1540,7 +1037,7 @@ function onUpdate(inst) {
       inst.runFrame = 0
       inst.runTimer = 0
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, 0)))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(0)))
       //
       // Create dust particles when starting to run (skip in water)
       //
@@ -1551,7 +1048,7 @@ function onUpdate(inst) {
       //
       inst.wasJumping = false
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, inst.runFrame)))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(inst.runFrame)))
     }
 
     inst.isRunning = true
@@ -1559,7 +1056,7 @@ function onUpdate(inst) {
     if (inst.runTimer > RUN_ANIM_SPEED) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
       inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(inst, inst.runFrame)))
+      inst.character.use(inst.k.sprite(heroRunSpriteName(inst.runFrame)))
       inst.runTimer = 0
       //
       // Step sound + footprint on the contact frames (a foot plants on the
@@ -1660,23 +1157,12 @@ function syncJumpCollision(inst) {
  */
 function updateIdleAnimation(inst) {
   //
-  // Eyeless intro: hold the neutral idle cell — no wander or tracking sprites.
-  //
-  if (inst.noEyes) {
-    inst.isRunning = false
-    inst.wasJumping = false
-    const prefix = inst.spritePrefix || inst.type
-    useHeroSprite(inst, `${prefix}_0_0`)
-    return
-  }
-  //
   // Calm: hold the closed-eyes idle frame and skip all eye wander/tracking
   //
   if (inst.eyesClosed) {
     inst.isRunning = false
     inst.wasJumping = false
-    const prefix = heroIdleSpritePrefix(inst)
-    const closedName = `${prefix}_closed`
+    const closedName = `${HERO_SPRITE_PREFIX}_closed`
     //
     // Always re-apply: run frames swap the sprite without clearing
     // currentEyeSprite, so a stale closedName match left the hero frozen
@@ -1696,27 +1182,29 @@ function updateIdleAnimation(inst) {
     //
     // Instantly switch to current idle sprite
     //
-    const roundedX = Math.round(inst.eyeOffsetX)
-    const roundedY = Math.round(inst.eyeOffsetY)
-    const spriteName = getSpriteName(inst, roundedX, roundedY)
-    useHeroSprite(inst, spriteName)
+    useHeroSprite(inst, heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX, inst.eyeOffsetY))
   }
   //
-  // Eye animation: track lookAtPos if set, otherwise random wander
+  // Eye animation: look along the direction to lookAtPos if set (straight
+  // ahead when it is close), otherwise wander between straight ahead and
+  // the look directions round the eye
   //
   if (inst.lookAtPos) {
     const heroPos = inst.character?.pos
     if (heroPos) {
       const dx = inst.lookAtPos.x - heroPos.x
       const dy = inst.lookAtPos.y - heroPos.y
-      inst.targetEyeX = dx > 20 ? 1 : dx < -20 ? -1 : 0
-      inst.targetEyeY = dy > 20 ? 1 : dy < -20 ? -1 : 0
+      const dist = Math.hypot(dx, dy)
+      const far = dist > LOOK_AT_DEAD_ZONE
+      inst.targetEyeX = far ? dx / dist : 0
+      inst.targetEyeY = far ? dy / dist : 0
     }
   } else {
     inst.eyeTimer += inst.k.dt()
     if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
-      inst.targetEyeX = inst.k.choose([-1, 0, 1])
-      inst.targetEyeY = inst.k.choose([-1, 0, 1])
+      const look = inst.k.choose(LOOK_TARGETS)
+      inst.targetEyeX = look.x
+      inst.targetEyeY = look.y
       inst.eyeTimer = 0
     }
   }
@@ -1726,14 +1214,9 @@ function updateIdleAnimation(inst) {
   inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
   inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
   //
-  // Round for pixel-art style
+  // Switch to the baked look sprite nearest the smoothed offset
   //
-  const roundedX = Math.round(inst.eyeOffsetX)
-  const roundedY = Math.round(inst.eyeOffsetY)
-  //
-  // Switch to preloaded sprite with eyes
-  //
-  const spriteName = getSpriteName(inst, roundedX, roundedY)
+  const spriteName = heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX, inst.eyeOffsetY)
   //
   // Update sprite only if eye position changed
   //
@@ -1751,7 +1234,7 @@ function updateAmbientWalkAnimation(inst) {
     inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
     inst.runTimer = 0
   }
-  const runSprite = heroRunSpriteName(inst, inst.runFrame)
+  const runSprite = heroRunSpriteName(inst.runFrame)
   if (inst.currentEyeSprite !== runSprite) {
     useHeroSprite(inst, runSprite)
   }
@@ -2003,7 +1486,7 @@ export function syncPlatformLanding(inst) {
   if (!char?.exists?.()) return
   resetAirborneState(inst)
   inst.canJump = true
-  useHeroSprite(inst, getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0))
+  useHeroSprite(inst, heroLookSpriteName(HERO_SPRITE_PREFIX, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0))
 }
 
 /**
@@ -2020,1905 +1503,60 @@ export function snapPosToPixels(inst) {
 }
 
 
-
 //
-// Cuts a transparent socket through baked pixels so hollow eyes read as see-through.
+// Bakes the hero's frames from the picture sheet into the live k: the idle
+// stance looking straight ahead and in every look direction, with both eyes
+// shut and winking (right eye open), then the run and jump frames.
 //
-function punchHeroEyeSocket(ctx, cx, eyeY) {
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  ctx.beginPath()
-  ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
+function bakeHeroFrames(k) {
+  const P = HERO_SPRITE_PREFIX
+  commitHeroFrame(k, `${P}_0_0`, HeroPicture.bakeIdleFrame([LOOK_AHEAD, LOOK_AHEAD]))
+  LOOK_VECTORS.forEach((look, i) => commitHeroFrame(k, `${P}_look_${i}`, HeroPicture.bakeIdleFrame([look, look])))
+  commitHeroFrame(k, `${P}_closed`, HeroPicture.bakeIdleFrame([null, null]))
+  WINK_SIDES.forEach(side => commitHeroFrame(k, heroWinkSpriteName(P, side), HeroPicture.bakeIdleFrame([null, { x: side, y: 0 }])))
+  for (let f = 0; f < RUN_FRAME_COUNT; f++) commitHeroFrame(k, `${P}-run-${f}`, HeroPicture.bakeRunFrame(f))
+  for (let f = 0; f < JUMP_FRAME_COUNT; f++) commitHeroFrame(k, `${P}-jump-${f}`, HeroPicture.bakeJumpFrame(f))
 }
 //
-// Paints one baked hero eye — ring + optional pupil; interior may stay clear.
+// Grains one baked frame and hands it to Kaplay.
 //
-function paintHeroEye(ctx, cx, eyeY, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL) {
-  if (eyesClosed && transparentInterior) {
-    //
-    // Hollow hero: shut socket reads as an outline arc only (no body-colour fill).
-    //
-    ctx.strokeStyle = OL
-    ctx.lineWidth = 1.6
-    ctx.beginPath()
-    ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-    ctx.stroke()
-    return
-  }
-  if (transparentInterior) {
-    ctx.fillStyle = OL
-    ctx.beginPath()
-    ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.save()
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.fillStyle = '#000000'
-    ctx.beginPath()
-    ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
-    ctx.fillStyle = PL
-    ctx.beginPath()
-    ctx.arc(cx + pupilDx, eyeY + pupilDy, PUPIL_RADIUS, 0, Math.PI * 2)
-    ctx.fill()
-    return
-  }
-  ctx.fillStyle = OL
-  ctx.beginPath()
-  ctx.arc(cx, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = eyesClosed ? BL : EW
-  ctx.beginPath()
-  ctx.arc(cx, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-  ctx.fill()
-  if (!eyesClosed) {
-    ctx.fillStyle = PL
-    ctx.beginPath()
-    ctx.arc(cx + pupilDx, eyeY + pupilDy, PUPIL_RADIUS, 0, Math.PI * 2)
-    ctx.fill()
-  }
+function commitHeroFrame(k, spriteName, canvas) {
+  if (!canvas) return
+  applyForestGameplaySharpBake(canvas, HERO_GRAIN_SEED)
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
-// Paints both eyes for one baked frame.
+// Every baked hero frame name, for the "fully baked on this k" check.
 //
-function paintHeroEyesAtFrame(ctx, cfg) {
-  const {
-    headX, headY, bodyBottom, animation, eyeOffsetX, eyeOffsetY, eyesClosed,
-    OL, PL, EW, BL, transparentInterior, punchSocket
-  } = cfg
-  const paintOne = (cx, cy, pupilDx, pupilDy) => {
-    punchSocket && punchHeroEyeSocket(ctx, cx, cy)
-    paintHeroEye(ctx, cx, cy, pupilDx, pupilDy, OL, PL, eyesClosed, transparentInterior, EW, BL)
-  }
-  if (animation === 'run' || animation === 'jump') {
-    const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
-    paintOne(x, y, PUPIL_SIDE_SHIFT, 0)
-    return
-  }
-  const eyeY = headY + EYE_OFFSET_Y
-  heroIdleEyeXs(headX).forEach(x => paintOne(
-    x,
-    eyeY,
-    eyeOffsetX * EYE_PUPIL_SHIFT,
-    eyeOffsetY * EYE_PUPIL_SHIFT
-  ))
-}
-//
-// Front-view eye centres: left and right sockets.
-//
-function heroIdleEyeXs(headX) {
-  return [headX + EYE_OFFSET_X_LEFT, headX + EYE_OFFSET_X_RIGHT]
-}
-//
-// Eye ring discs (same anchors as paintHeroEyesAtFrame) that the contour step
-// pass must leave alone.
-//
-function heroBakeEyeDiscs(headX, headY, bodyBottom, animation) {
-  const r = EYE_RING_RADIUS + CONTOUR_AA_EYE_MARGIN_PX
-  if (animation === 'run' || animation === 'jump') {
-    const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
-    return [{ x, y, r }]
-  }
-  const eyeY = headY + EYE_OFFSET_Y
-  return heroIdleEyeXs(headX).map(x => ({ x, y: eyeY, r }))
-}
-/**
- * Resolves which baked layers to paint from create()/loadHeroSprites options.
- * @param {Object} opts
- * @param {boolean} [opts.drawBakeOutline] - Silhouette rim (defaults true)
- * @param {boolean} [opts.drawBakeBody] - Interior body fill
- * @param {boolean} [opts.drawBodyFill] - Legacy alias for drawBakeBody
- * @param {boolean} [opts.outlineOnly] - Legacy: rim without body
- * @returns {{ drawBakeOutline: boolean, drawBakeBody: boolean }}
- */
-function resolveHeroBakeLayers(opts = {}) {
-  if (opts.drawBakeOutline !== undefined || opts.drawBakeBody !== undefined) {
-    return {
-      drawBakeOutline: opts.drawBakeOutline !== false,
-      drawBakeBody: Boolean(opts.drawBakeBody)
-    }
-  }
-  const drawBakeBody = opts.drawBodyFill !== undefined
-    ? Boolean(opts.drawBodyFill)
-    : !Boolean(opts.outlineOnly)
-  return {
-    drawBakeOutline: true,
-    drawBakeBody
-  }
-}
-//
-// Sprite-prefix layer tag for a bake-layer combination.
-//
-function heroBakeLayersSuffix(layers) {
-  const { drawBakeOutline, drawBakeBody } = layers
-  if (drawBakeOutline && drawBakeBody) return ''
-  if (drawBakeOutline && !drawBakeBody) return HERO_BAKE_SUFFIX_OUTLINE_ONLY
-  if (!drawBakeOutline && drawBakeBody) return HERO_BAKE_SUFFIX_BODY_ONLY
-  return HERO_BAKE_SUFFIX_NONE
-}
-/**
- * Builds the baked hero sprite prefix for a colour + layer configuration.
- * @param {Object} opts - Bake options (type, colours, flags, rim)
- * @returns {string} Sprite name prefix
- */
-export function buildHeroSpritePrefix(opts) {
-  const type = opts.type ?? HEROES.HERO
-  const bodyColorForPrefix = String(
-    opts.bodyColor ?? (type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
-  ).replace('#', '')
-  const outlineColorForPrefix = String(opts.outlineColor ?? CFG.visual.colors.outline).replace('#', '')
-  const layers = resolveHeroBakeLayers(opts)
-  const eyeWhiteKey = opts.eyeWhiteColor ? String(opts.eyeWhiteColor).replace('#', '') : ''
-  const pupilKey = opts.pupilColor ? String(opts.pupilColor).replace('#', '') : ''
-  const noEyesFlag = Boolean(opts.noEyes)
-  const rimSuffix = heroSpriteRimSuffix(opts.outlineRimPx ?? DEFAULT_OUTLINE_RIM)
-  return `${type}_${bodyColorForPrefix}_${outlineColorForPrefix}${opts.addMouth ? '_mouth' : ''}${opts.addArms ? '_arms' : ''}${opts.addWatch ? '_watch' : ''}${heroBakeLayersSuffix(layers)}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${pupilKey ? '_pu' + pupilKey : ''}${opts.transparentEyeInterior ? '_tei' : ''}${noEyesFlag ? '_noeyes' : ''}${rimSuffix}`
-}
-//
-// Run hollow bakes need body fill during the pipeline so hip/crotch patches and
-// smooth contour see the same opaque mask as filled run frames; punch removes
-// the interior after the outer rim is built.
-//
-function needsRunBakeBodyGlue(drawBakeOutline, drawBakeBody, animation) {
-  return drawBakeOutline && !drawBakeBody && animation === 'run'
-}
-//
-// Paints optional bake layers — contour rim, body fill, then shared finish.
-//
-function paintHeroBakeLayers(ctx, bake) {
-  const { drawBakeOutline, drawBakeBody, bakeBodyForPipeline } = bake
-  if (drawBakeBody && !drawBakeOutline) {
-    paintBodyOnlyBakeInterior(ctx, bake)
-              return
-            }
-  drawBakeOutline && drawHeroBakeContour(ctx, bake)
-  bakeBodyForPipeline && drawHeroBakeBodyFill(ctx, bake)
-  finalizeHeroBakeFrame(ctx, bake)
-}
-//
-// Body-only bakes mirror the hollow glue pipeline, then keep only the eroded
-// interior fill so the overlay matches the outline shell at every opacity.
-//
-function paintBodyOnlyBakeInterior(ctx, bake) {
-  const glueBake = {
-    ...bake,
-    drawBakeOutline: true,
-    drawBakeBody: false,
-    bakeBodyForPipeline: true,
-    bodyOnlyExtract: true
-  }
-  drawHeroBakeContour(ctx, glueBake)
-  drawHeroBakeBodyFill(ctx, glueBake)
-  finalizeHeroBakeFrame(ctx, glueBake)
-  extractBakeInteriorBodyFill(ctx, bake.rim)
-}
-//
-// Strips the outer rim band from a glue bake, leaving only interior body fill.
-//
-function extractBakeInteriorBodyFill(ctx, rim) {
-  const w = SPRITE_SIZE
-  const h = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  const opaque = buildBakeOpaqueMask(px, w, h, SMOOTH_RUN_FRAME0_ALPHA_MIN)
-  const interior = erodeBakeMaskChebyshev(opaque, w, h, rim)
-  for (let idx = 0; idx < interior.length; idx++) {
-    !interior[idx] && (px[idx * 4 + 3] = 0)
-  }
-  ctx.putImageData(img, 0, 0)
-}
-//
-// Hero bake contour — silhouette rim (legs, torso shell, arms, hip shelves).
-//
-function drawHeroBakeContour(ctx, bake) {
-  const { colors, rim, legOlW, showArms, animation, frame } = bake
-  const { OL } = colors
-  const {
-    headX, headY, headHeight, bodyHeight, bodyBottom,
-    leftArmY, rightArmY, leanRad, leanPivotX, leanPivotY,
-    jumpLegBend, leftLegX, rightLegX, leftLegHeight, rightLegHeight, leftLegOutlineTop, rightLegOutlineTop,
-    leftLegOutlineH, rightLegOutlineH, runLegsMerged,
-    jumpBackHipX, jumpFrontHipX, jumpHipTop, jumpBackH, jumpFrontH,
-    jumpBackBend, jumpFrontBend, jumpBackBottomX, jumpFrontBottomX,
-    hipShelfY, hipShelfH, clipLegsUnderBody
-  } = bake
-  ctx.fillStyle = OL
-  clipLegsUnderBody && ctx.save()
-  clipLegsUnderBody && clipBentLegBox(ctx, headX, bodyBottom, rim, jumpLegBend !== 0)
-  if (jumpLegBend !== 0) {
-    strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW)
-    strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW)
-  } else {
-    fillRoundedRectBottom(ctx, leftLegX - rim, leftLegOutlineTop, legOlW, Math.max(2, leftLegOutlineH + rim), LEG_CORNER_RADIUS + rim)
-    fillRoundedRectBottom(ctx, rightLegX - rim, rightLegOutlineTop, legOlW, Math.max(2, rightLegOutlineH + rim), LEG_CORNER_RADIUS + rim)
-    animation === 'run' && runLegsMerged && leftLegHeight !== rightLegHeight && trimRunMergedStrideOutlineSpur(
-      ctx, leftLegX, rightLegX, leftLegOutlineTop, rightLegOutlineTop, legOlW, rim
-    )
-  }
-  clipLegsUnderBody && ctx.restore()
-  leanRad && ctx.save()
-  leanRad && (ctx.translate(leanPivotX, leanPivotY), ctx.rotate(leanRad), ctx.translate(-leanPivotX, -leanPivotY))
-  ctx.fillStyle = OL
-  showArms && fillHalfPillLeft(ctx, headX - rim - ARM_HALF_W, leftArmY - rim, ARM_HALF_W + rim, ARM_H + rim * 2, ARM_CORNER_RADIUS + rim)
-  showArms && fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY - rim, ARM_HALF_W + rim, ARM_H + rim * 2, ARM_CORNER_RADIUS + rim)
-  fillRoundedRectTop(ctx, headX - rim, headY - rim, CHAR_WIDTH + rim * 2, headHeight + bodyHeight + rim * 2, HEAD_CORNER_RADIUS + rim)
-  leanRad && ctx.restore()
-  jumpLegBend !== 0 && ctx.save()
-  jumpLegBend !== 0 && clipBentLegBox(ctx, headX, bodyBottom, rim, true)
-  jumpLegBend !== 0 && (ctx.fillStyle = OL, strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW), strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW))
-  jumpLegBend !== 0 && ctx.restore()
-  jumpLegBend !== 0 && (ctx.fillStyle = OL, fillBentLegHipNotches(ctx, bake, 'outline'))
-  if (animation === 'run' || jumpLegBend !== 0) {
-    const shelfL = jumpLegBend !== 0
-      ? Math.min(jumpBackBottomX, jumpFrontBottomX) - legOlW / 2
-      : Math.min(leftLegX, rightLegX) - rim
-    const shelfR = jumpLegBend !== 0
-      ? Math.max(jumpBackBottomX, jumpFrontBottomX) + legOlW / 2
-      : Math.max(leftLegX, rightLegX) - rim + legOlW
-    if (leanRad) {
-      ctx.save()
-      ctx.translate(leanPivotX, leanPivotY)
-      ctx.rotate(leanRad)
-      ctx.translate(-leanPivotX, -leanPivotY)
-      const drawRunHipPatchHipShelves = !(animation === 'run' && RUN_HIP_PATCH_FRAMES.has(frame))
-      drawHipShelves(ctx, OL, headX, hipShelfY, hipShelfH, shelfL, shelfR, rim, drawRunHipPatchHipShelves, drawRunHipPatchHipShelves)
-      ctx.restore()
-    } else {
-      const drawRunHipPatchHipShelves = !(animation === 'run' && RUN_HIP_PATCH_FRAMES.has(frame))
-      drawHipShelves(ctx, OL, headX, hipShelfY, hipShelfH, shelfL, shelfR, rim, drawRunHipPatchHipShelves, drawRunHipPatchHipShelves)
-    }
-  }
-}
-//
-// Hero bake layer 2 — interior body fill (torso, arms, legs, hip bridges).
-//
-function drawHeroBakeBodyFill(ctx, bake) {
-  const { colors, rim, showArms, animation, addWatch } = bake
-  const { BL } = colors
-  const {
-    headX, headY, bodyH, bodyBottom,
-    leftArmY, rightArmY, leanRad, leanPivotX, leanPivotY,
-    jumpLegBend, leftLegX, rightLegX, leftLegY, rightLegY,
-    leftLegHeight, rightLegHeight, leftLegOutlineTop,
-    jumpBackHipX, jumpFrontHipX, jumpHipTop, jumpBackH, jumpFrontH,
-    jumpBackBend, jumpFrontBend
-  } = bake
-  leanRad && ctx.save()
-  leanRad && (ctx.translate(leanPivotX, leanPivotY), ctx.rotate(leanRad), ctx.translate(-leanPivotX, -leanPivotY))
-  ctx.fillStyle = BL
-  showArms && fillHalfPillLeft(ctx, headX - ARM_HALF_W, leftArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
-  showArms && fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
-  fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, bodyH, HEAD_CORNER_RADIUS)
-  animation === 'idle' && carveIdleTorsoCrotchGap(ctx, leftLegX, rightLegX, bodyBottom, rim)
-  leanRad && ctx.restore()
-  ctx.fillStyle = BL
-  if (jumpLegBend !== 0) {
-    ctx.save()
-    clipBentLegBox(ctx, headX, bodyBottom, rim, true)
-    strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, Math.max(1, jumpBackH - rim), jumpBackBend, LEG_FILL_WIDTH)
-    strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
-    ctx.restore()
-    fillBentLegHipNotches(ctx, bake, 'body')
-  } else {
-    fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
-    fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
-    const sealTop = bodyBottom - LEG_INTO_BODY
-    const sealH = LEG_INTO_BODY + 2
-    const sealLeftW = Math.max(LEG_FILL_WIDTH, Math.min(leftLegX, rightLegX) - headX)
-    const sealRightW = Math.max(LEG_FILL_WIDTH, headX + CHAR_WIDTH - Math.max(leftLegX, rightLegX) - LEG_FILL_WIDTH)
-    ctx.fillRect(headX, sealTop, sealLeftW, sealH)
-    ctx.fillRect(headX + CHAR_WIDTH - sealRightW, sealTop, sealRightW, sealH)
-    animation === 'idle' && fillIdleCrotchBodyGap(ctx, leftLegX, rightLegX, leftLegOutlineTop, bodyBottom, rim)
-  }
-  addWatch && animation === 'idle' && (ctx.fillStyle = '#FFFFFF', ctx.fillRect(headX + CHAR_WIDTH + 1, rightArmY + ARM_H - 6, 3, 3))
-}
-//
-// Shared bake finish — crotch, run patches, smooth contour, optional hollow punch, eyes.
-//
-function finalizeHeroBakeFrame(ctx, bake) {
-  const {
-    drawBakeOutline, drawBakeBody, bakeBodyForPipeline, bodyOnlyExtract, colors, rim, legOlW, animation, frame, noEyes,
-    eyeOffsetX, eyeOffsetY, eyesClosed, transparentEyeInterior, addMouth,
-    headX, headY, bodyBottom, bodyH, showArms, leftArmY, rightArmY,
-    leanRad, leanPivotX, leanPivotY, jumpLegBend,
-    leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
-    leftLegOutlineTop, rightLegOutlineTop, runLegsMerged,
-    jumpBackHipX, jumpFrontHipX, jumpHipTop, jumpBackH, jumpFrontH,
-    jumpBackBend, jumpFrontBend, jumpBackBottomX, jumpFrontBottomX,
-    hipShelfY, hipShelfH, runUnifiedHipSeam
-  } = bake
-  const { OL, BL, PL, EW } = colors
-  drawBakeOutline && drawHeroCrotchOutline(ctx, {
-    OL,
-    jumpLegBend,
-    jumpBackBottomX,
-    jumpFrontBottomX,
-    bodyBottom,
-    animation,
-    leftLegX,
-    rightLegX,
-    rim,
-    runLegsMerged,
-    leftLegOutlineTop,
-    legOlW,
-    runCrotchSeamY: runUnifiedHipSeam ? hipShelfY : leftLegOutlineTop
-  })
-  drawBakeOutline && animation === 'run' && patchRunFrameBakeGaps(ctx, {
-    BL,
-    OL,
-    drawBakeBody: bakeBodyForPipeline,
-    headX,
-    bodyBottom,
-    rim,
-    hipShelfY,
-    hipShelfH,
-    leftLegX,
-    rightLegX,
-    leftLegHeight,
-    rightLegHeight,
-    leftLegOutlineTop,
-    rightLegOutlineTop,
-    legOlW,
-    runLegsMerged,
-    frame
-  })
-  const runHollowFromGlue = drawBakeOutline && !drawBakeBody && bakeBodyForPipeline &&
-    animation === 'run' && !bodyOnlyExtract
-  drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame) && fillRunHipNotches(ctx, bodyBottom, BL, rim)
-  drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame) && applySmoothRunFrame0Contour(ctx, { OL, BL, rim })
-  runHollowFromGlue && clearBakeInteriorByErosion(ctx, rim)
-  !runHollowFromGlue && !bodyOnlyExtract && drawBakeOutline && !drawBakeBody && punchOutlineOnlyInterior(ctx, {
-    headX,
-    headY,
-    bodyH,
-    showArms,
-    leftArmY,
-    rightArmY,
-    leanRad,
-    leanPivotX,
-    leanPivotY,
-    noEyes,
-    animation,
-    eyeOffsetX,
-    eyeOffsetY,
-    jumpLegBend,
-    leftLegX,
-    leftLegY,
-    leftLegHeight,
-    rightLegX,
-    rightLegY,
-    rightLegHeight,
-    jumpBackHipX,
-    jumpHipTop,
-    jumpBackH,
-    jumpBackBend,
-    jumpFrontHipX,
-    jumpFrontH,
-    jumpFrontBend,
-    bodyBottom,
-    rim,
-    legOlW
-  })
-  drawBakeOutline && !drawBakeBody && bakeBodyForPipeline && !bodyOnlyExtract &&
-    !bakeColorsMatch(OL, BL) && stripBakeBodyFillFromCanvas(ctx, BL, BAKE_BODY_STRIP_TOLERANCE)
-  drawBakeOutline && !bodyOnlyExtract && addMouth && animation === 'idle' && (ctx.strokeStyle = OL, ctx.lineWidth = 2, ctx.lineCap = 'round', ctx.beginPath(), ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI), ctx.stroke())
-  heroBakeFrameMeta.set(ctx.canvas, {
-    rim,
-    eyeDiscs: noEyes ? [] : heroBakeEyeDiscs(headX, headY, bodyBottom, animation),
-    rebuiltRim: drawBakeOutline && animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame),
-    backHip: drawBakeOutline && jumpLegBend !== 0
-      ? {
-          y0: bodyBottom - BACK_HIP_REPAIR_ABOVE_PX,
-          y1: Math.min(bodyBottom + BACK_HIP_REPAIR_BELOW_PX, Math.floor(jumpHipTop + jumpBackH - legOlW / 2) + 1) // one row into the foot cap
-        }
-      : null,
-    crotch: drawBakeOutline && jumpLegBend !== 0
-      ? { seamY: Math.round(bodyBottom), gapX: Math.round((jumpBackBottomX + jumpFrontBottomX) / 2) }
-      : null
-  })
-  !bodyOnlyExtract && !noEyes && paintHeroEyesAtFrame(ctx, {
-    headX,
-    headY,
-    bodyBottom,
-    animation,
-    eyeOffsetX,
-    eyeOffsetY,
-    eyesClosed,
-    OL,
-    PL,
-    EW,
-    BL,
-    transparentInterior: transparentEyeInterior === true ||
-      (drawBakeOutline && !drawBakeBody && transparentEyeInterior !== false),
-    punchSocket: drawBakeBody && transparentEyeInterior
-  })
-}
-//
-// Cuts transparent holes through outline-only bakes so the silhouette reads
-// as a hollow contour instead of a solid fill in the outline colour.
-//
-function punchOutlineOnlyInterior(ctx, cfg) {
-  const {
-    headX, headY, bodyH, showArms, leftArmY, rightArmY,
-    leanRad, leanPivotX, leanPivotY,
-    noEyes, animation, jumpLegBend, leftLegX, leftLegY, leftLegHeight, rightLegX, rightLegY, rightLegHeight,
-    jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, jumpFrontHipX, jumpFrontH, jumpFrontBend,
-    bodyBottom, rim
-  } = cfg
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  if (leanRad) {
-    ctx.save()
-    ctx.translate(leanPivotX, leanPivotY)
-    ctx.rotate(leanRad)
-    ctx.translate(-leanPivotX, -leanPivotY)
-  }
-  if (showArms) {
-    fillHalfPillLeft(ctx, headX - ARM_HALF_W, leftArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
-    fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
-  }
-  fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, bodyH, HEAD_CORNER_RADIUS)
-  if (leanRad) {
-    ctx.restore()
-  }
-  if (!noEyes) {
-    if (animation === 'run' || animation === 'jump') {
-      const { x, y } = sideViewEyePos(headX, headY, bodyBottom, animation)
-      ctx.beginPath()
-      ctx.arc(x, y, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-      ctx.fill()
-    } else {
-      const eyeY = headY + EYE_OFFSET_Y
-      heroIdleEyeXs(headX).forEach(x => {
-        ctx.beginPath()
-        ctx.arc(x, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-      })
-    }
-  }
-  if (jumpLegBend !== 0) {
-    ctx.save()
-    clipBentLegBox(ctx, headX, bodyBottom, rim, true)
-    strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, Math.max(1, jumpBackH - rim), jumpBackBend, LEG_FILL_WIDTH)
-    strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
-    ctx.restore()
-    fillBentLegHipNotches(ctx, cfg, 'body')
-                  } else {
-    fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
-    fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
-  }
-  ctx.restore()
-}
-//
-// Clears every pixel inside the eroded silhouette interior — turns a filled run
-// bake into a hollow shell while preserving the outer rim from smooth contour.
-//
-function clearBakeInteriorByErosion(ctx, rim) {
-  const w = SPRITE_SIZE
-  const h = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  const opaque = buildBakeOpaqueMask(px, w, h, SMOOTH_RUN_FRAME0_ALPHA_MIN)
-  const interior = erodeBakeMaskChebyshev(opaque, w, h, rim)
-  for (let idx = 0; idx < interior.length; idx++) {
-    interior[idx] && (px[idx * 4 + 3] = 0)
-  }
-  ctx.putImageData(img, 0, 0)
-}
-//
-// Erases glue body-fill pixels left inside the hollow shell — hip/crotch BL
-// patches and AA fringe that sit outside the erosion interior mask.
-//
-function stripBakeBodyFillFromCanvas(ctx, bodyColorHex, tolerance = 0) {
-  const hex = String(bodyColorHex).replace('#', '')
-  const tr = parseInt(hex.substring(0, 2), 16)
-  const tg = parseInt(hex.substring(2, 4), 16)
-  const tb = parseInt(hex.substring(4, 6), 16)
-  const w = SPRITE_SIZE
-  const h = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  for (let i = 0; i < px.length; i += 4) {
-    if (px[i + 3] === 0) continue
-    Math.abs(px[i] - tr) <= tolerance
-      && Math.abs(px[i + 1] - tg) <= tolerance
-      && Math.abs(px[i + 2] - tb) <= tolerance
-      && (px[i + 3] = 0)
-  }
-  ctx.putImageData(img, 0, 0)
-}
-
-/**
- * Universal function for character creation
- * Single function for hero and anti-hero
- * @param {string} type - Character type: 'hero' or 'antiHero'
- * @param {string} animation - Animation type: 'idle', 'run', 'jump'
- * @param {number} frame - Frame number (for animations)
- * @param {number} eyeOffsetX - Pupil X offset
- * @param {number} eyeOffsetY - Pupil Y offset
- * @param {string} [customBodyColor] - Custom body color in hex format
- * @param {string} [customOutlineColor] - Custom outline color in hex format
- * @param {boolean} [addMouth=false] - Add horizontal mouth line (only for idle animation)
- * @param {boolean} [addArms=false] - Add simple vertical arms
- * @param {boolean} [outlineOnly=false] - When true, skip body fill (hollow shell)
- * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
- * @returns {string} Base64 encoded sprite data
- */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM, pupilColor = null, transparentEyeInterior = false, noEyes = false, bakeLayers = null) {
-  //
-  // Choose body color - custom or default
-  //
-  let bodyColor
-
-  if (customBodyColor) {
-    bodyColor = customBodyColor
-  } else {
-    const colors = type === HEROES.HERO ? CFG.visual.colors.hero : CFG.visual.colors.antiHero
-    bodyColor = colors.body
-  }
-  //
-  // Ensure bodyColor is a valid string
-  //
-  if (!bodyColor || typeof bodyColor !== 'string') {
-    const colors = type === HEROES.HERO ? CFG.visual.colors.hero : CFG.visual.colors.antiHero
-    bodyColor = colors.body || '#FF8C00'
-  }
-  //
-  // Choose outline color - custom or default (black)
-  //
-  const outlineColorRaw = customOutlineColor || CFG.visual.colors.outline
-  const outlineColor = String(outlineColorRaw || '#000000').replace('#', '')
-  //
-  // Base parameters for different animations
-  //
-  let headY = IDLE_HEAD_Y
-  let bodyY = IDLE_BODY_Y
-  let headX = 33
-  let bodyHeight = IDLE_BODY_HEIGHT
-  let headHeight = IDLE_HEAD_HEIGHT
-  let leftArmY = 40
-  let rightArmY = 40
-  let leftLegY = IDLE_LEG_Y
-  let rightLegY = IDLE_LEG_Y
-  let leftLegX = 33
-  let rightLegX = 54
-  let legHeight = IDLE_LEG_HEIGHT
-  let leftLegHeight = legHeight
-  let rightLegHeight = legHeight
-  //
-  // Run animation: 8-frame stride cycle (reference sheet). The two legs run
-  // the SAME loop half a cycle apart — plant at the front, sweep back along
-  // the ground, lift and swing forward. The body dips slightly on the
-  // contact poses. Step sound plays on the contact frames (0 and 4).
-  //
-  if (animation === 'run') {
-    const phase = frame / RUN_FRAME_COUNT
-    const left = runLegPose(phase)
-    const right = runLegPose(phase + 0.5)
-    leftLegX = left.x
-    leftLegY = left.y
-    leftLegHeight = left.height
-    rightLegX = right.x
-    rightLegY = right.y
-    rightLegHeight = right.height
-    //
-    // Contact bob: the body sits lowest when a foot plants (phase 0 / 0.5)
-    // and rises through the passing poses.
-    //
-    const bob = runBodyBobPx(frame)
-    headY += bob
-    bodyY += bob
-    leftArmY += bob
-    rightArmY += bob
-  }
-  //
-  // Jump animation — crouch / air arc / land. Air frames compress the
-  // torso smoothly toward the peak and expand back to idle length on
-  // the way down (symmetric). Outer hip lines stay flush with the legs.
-  //
-  if (animation === 'jump') {
-    if (frame === 0 || frame === 6) {
-      //
-      // Ground crouch (take-off anticipation / landing hold)
-      //
-      headY = 45
-      headHeight = 15
-      bodyY = 60
-      bodyHeight = 12
-      leftArmY = 63
-      rightArmY = 63
-      rightLegY = 72
-      rightLegX = 54
-      leftLegY = 72
-      leftLegX = 33
-      legHeight = 12
-    } else {
-      //
-      // Air frames 1..5 map onto JUMP_AIR_* tables (index 0..4).
-      // Body shortens toward the peak (frame 3) and lengthens again.
-      //
-      const air = frame - 1
-      headHeight = JUMP_AIR_HEAD_H[air]
-      bodyHeight = JUMP_AIR_BODY_H[air]
-      headY = JUMP_AIR_TOP_Y[air]
-      bodyY = headY + headHeight
-      leftArmY = bodyY + 2
-      rightArmY = bodyY + 2
-      //
-      // Legs stay flush with the body sides (no hip dimples) and tuck
-      // shorter near the peak, extending again on descent
-      //
-      const peakTuck = air === 2 ? 10 : air === 1 || air === 3 ? 14 : IDLE_LEG_HEIGHT
-      legHeight = peakTuck
-      leftLegX = 33
-      rightLegX = 54
-      leftLegY = bodyY + bodyHeight - 2
-      rightLegY = leftLegY
-    }
-    leftLegHeight = legHeight
-    rightLegHeight = legHeight
-  }
-  //
-  // Tuck legs into the torso so the crotch never shows a gap
-  //
-  leftLegY -= LEG_INTO_BODY
-  rightLegY -= LEG_INTO_BODY
-  leftLegHeight += LEG_INTO_BODY
-  rightLegHeight += LEG_INTO_BODY
-  //
-  // Bent air legs curve toward the facing direction, so both hips move back by
-  // that drift: without it the front leg outline bulges past the body side at
-  // the hip instead of flowing into it.
-  //
-  const airLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
-  if (airLegBend !== 0) {
-    const airBodyBottom = headY + headHeight + bodyHeight
-    const airHipTop = airBodyBottom - JUMP_LEG_HIP_OVERLAP
-    const airFrontH = Math.max(1, rightLegY + rightLegHeight - airHipTop)
-    const airStrokeW = LEG_FILL_WIDTH + outlineRimPx * 2
-    const airDrift = bentLegCenterXAtY(0, airHipTop, airFrontH, airLegBend * JUMP_FRONT_LEG_BEND_RATIO, airStrokeW, airBodyBottom)
-    leftLegX -= Math.round(airDrift)
-    rightLegX -= Math.round(airDrift)
-  }
-  //
-  // Create sprite using toCanvas
-  //
-  try {
-    return toCanvas({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: RENDER_SCALE }, (ctx) => {
-      ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
-      const OL = getHex(outlineColor)
-      const BL = getHex(bodyColor)
-      const PL = getHex(
-        pupilColor
-          ? String(pupilColor).replace('#', '')
-          : CFG.visual.colors.hero.eyePupil.replace('#', '')
-      )
-      const EW = getHex(
-        eyeWhiteColor
-          ? String(eyeWhiteColor).replace('#', '')
-          : CFG.visual.colors.hero.eyeWhite.replace('#', '')
-      )
-      const rim = outlineRimPx
-      const legOlW = LEG_FILL_WIDTH + rim * 2
-      //
-      // Arms are drawn only in idle mode (hidden during run and jump).
-      // Fully rounded (pill) shape — shoulder top mirrors the arm bottom curvature.
-      //
-      const showArms = addArms && animation !== 'run' && animation !== 'jump'
-      //
-      // Flat crotch on every pose: body side lines run straight into the outer
-      // leg edges (no rounded belly / hip dimples).
-      //
-      const bodyH = headHeight + bodyHeight + 1
-      //
-      // Run lean: rotate only the torso around the hips. Legs stay planted
-      // (unrotated) and clamped to the body sides so they never trail past
-      // the spine — rotating legs with the body made the run look like a squat.
-      //
-      const leanRad = animation === 'run' ? RUN_LEAN_RAD : 0
-      const leanPivotX = headX + CHAR_WIDTH / 2
-      const leanPivotY = headY + headHeight + bodyHeight
-      if (animation === 'run') {
-        leftLegX = Math.max(headX, Math.min(leftLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
-        rightLegX = Math.max(headX, Math.min(rightLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
-        const maxLegX = headX + CHAR_WIDTH - LEG_FILL_WIDTH
-        //
-        // Trailing leg (the one further back): shift 1 px toward the facing
-        // direction so the outline sits on the body edge, not past it.
-        //
-        if (leftLegX < rightLegX) {
-          leftLegX = Math.min(leftLegX + RUN_TRAILING_LEG_X_NUDGE, maxLegX)
-        } else if (rightLegX < leftLegX) {
-          rightLegX = Math.min(rightLegX + RUN_TRAILING_LEG_X_NUDGE, maxLegX)
-        }
-      }
-      //
-      // Step 1: leg outlines — start at the body bottom so inner black edges
-      // never climb into the torso (only a tiny tuck seals the crotch join)
-      //
-      const bodyBottom = headY + headHeight + bodyHeight
-      //
-      // Same leg-outline anchor for hollow and filled bakes — only colour differs.
-      //
-      const legOutlineGap = animation === 'run' ? rim : 0
-      const runLegsMerged = animation === 'run' && Math.abs(leftLegX - rightLegX) <= 1
-      const centerOutlineInset = runLegsMerged ? RUN_CENTER_LEG_OUTLINE_INSET : 0
-      const leftLegOutlineTop = Math.max(leftLegY, bodyBottom + legOutlineGap + centerOutlineInset)
-      const rightLegOutlineTop = Math.max(rightLegY, bodyBottom + legOutlineGap + centerOutlineInset)
-      const leftLegOutlineH = leftLegHeight - (leftLegOutlineTop - leftLegY)
-      const rightLegOutlineH = rightLegHeight - (rightLegOutlineTop - rightLegY)
-      const layers = bakeLayers || resolveHeroBakeLayers({ outlineOnly })
-      const { drawBakeOutline, drawBakeBody } = layers
-      const bakeBodyForPipeline = drawBakeBody || needsRunBakeBodyGlue(drawBakeOutline, drawBakeBody, animation)
-      const jumpLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
-      //
-      // Bent jump legs: hip anchor, lengths, bends and the X where each stroke
-      // crosses the body bottom — shared by the outline stroke, the fill
-      // stroke, the crotch cover and the hip shelves.
-      //
-      const jumpHipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
-      const jumpBackBend = jumpLegBend
-      const jumpFrontBend = jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO
-      const jumpBackH = Math.max(1, leftLegY + leftLegHeight - jumpHipTop)
-      const jumpFrontH = Math.max(1, rightLegY + rightLegHeight - jumpHipTop)
-      const jumpBackHipX = leftLegX + LEG_FILL_WIDTH / 2
-      const jumpFrontHipX = rightLegX + LEG_FILL_WIDTH / 2
-      const jumpBackBottomX = bentLegCenterXAtY(jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW, bodyBottom)
-      const jumpFrontBottomX = bentLegCenterXAtY(jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW, bodyBottom)
-      //
-      // Hip shelf line: bent air legs meet the torso rim right on the body
-      // bottom. Run frames 0–2 share one hip-seam Y (bodyBottom + rim) so the
-      // back shelf, crotch seam and front shelf stay level across the stride.
-      //
-      const runUnifiedHipSeam = animation === 'run' && RUN_SMOOTH_CONTOUR_FRAMES.has(frame)
-      const hipShelfY = jumpLegBend !== 0
-        ? bodyBottom
-        : (animation === 'run'
-          ? (runUnifiedHipSeam ? bodyBottom + rim : bodyBottom)
-          : Math.min(leftLegOutlineTop, rightLegOutlineTop))
-      const hipShelfH = rim
-      //
-      // Clip outlines to below the unrotated torso so inner black never climbs
-      // into the body, while the visible shaft keeps its rim on both sides.
-      // Bent air legs clip to the torso sides as well: their swinging stroke
-      // crosses the body lines around the hip, which reads as a burr on the
-      // back and a thickened edge in front.
-      //
-      const clipLegsUnderBody = animation === 'run' || jumpLegBend !== 0
-      const bake = {
-        drawBakeOutline,
-        drawBakeBody,
-        bakeBodyForPipeline,
-        animation,
-        frame,
-    noEyes,
-    eyesClosed,
-        eyeOffsetX,
-        eyeOffsetY,
-        transparentEyeInterior,
-        addMouth,
-        addWatch,
-        colors: { OL, BL, PL, EW },
-        rim,
-        legOlW,
-        showArms,
-        bodyH,
-        headX,
-        headY,
-        headHeight,
-        bodyHeight,
-        bodyBottom,
-        leftArmY,
-        rightArmY,
-        leanRad,
-        leanPivotX,
-        leanPivotY,
-        jumpLegBend,
-        leftLegX,
-        leftLegY,
-        leftLegHeight,
-        rightLegX,
-        rightLegY,
-        rightLegHeight,
-        leftLegOutlineTop,
-        rightLegOutlineTop,
-        leftLegOutlineH,
-        rightLegOutlineH,
-        runLegsMerged,
-        jumpBackHipX,
-        jumpFrontHipX,
-        jumpHipTop,
-        jumpBackH,
-        jumpFrontH,
-        jumpBackBend,
-        jumpFrontBend,
-        jumpBackBottomX,
-        jumpFrontBottomX,
-        hipShelfY,
-        hipShelfH,
-        runUnifiedHipSeam,
-        clipLegsUnderBody
-      }
-      paintHeroBakeLayers(ctx, bake)
-    })
-  } catch (error) {
-    //
-    // Fallback: return a minimal valid data URL (1x1 transparent pixel)
-    //
-    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-  }
-}
-
-//
-// Idle sprite prefix for this hero's baked colour set.
-//
-function heroIdleSpritePrefix(inst) {
-  return inst.spritePrefix || inst.type
-}
-/**
- * Get sprite name for character (supports custom colors)
- * @param {Object} inst - Hero instance
- * @param {number} eyeX - Eye X offset (-1, 0, 1)
- * @param {number} eyeY - Eye Y offset (-1, 0, 1)
- * @returns {string} Sprite name
- */
-function getSpriteName(inst, eyeX = 0, eyeY = 0) {
-  //
-  // Always round eye coordinates to ensure sprite names are clean integers
-  //
-  const roundedX = Math.round(eyeX)
-  const roundedY = Math.round(eyeY)
-  const prefix = heroIdleSpritePrefix(inst)
-  return `${prefix}_${roundedX}_${roundedY}`
-}
-
-
-
-
-
-
-//
-// Draws a filled rectangle with only the two bottom corners rounded.
-// One leg pose on the 8-frame run cycle: x sweeps between the front and
-// back stops on a cosine, and while the leg swings forward (negative half
-// of the sine) it lifts — the pill shortens and the foot rises off the
-// ground line. On the stance half the foot stays planted on RUN_FOOT_Y.
-//
-function runLegPose(phase) {
-  const angle = Math.PI * 2 * phase
-  const lift = Math.max(0, -Math.sin(angle))
-  const height = RUN_LEG_HEIGHT - Math.round(lift * RUN_LEG_LIFT_SHORTEN)
-  const footY = RUN_FOOT_Y - Math.round(lift * RUN_LEG_LIFT_RAISE)
-  return {
-    x: Math.round(RUN_LEG_CENTER_X + Math.cos(angle) * RUN_LEG_SPREAD),
-    y: footY - height,
-    height
-  }
-}
-//
-// Flat top connects seamlessly to the flat bottom of body outline/fill,
-// eliminating the body-to-leg gap visible in all animation frames.
-// Caller sets ctx.fillStyle before calling.
-//
-//
-// Draws one bent jump leg as a thick round-capped stroke along a quadratic
-// curve: the hip stays put while the foot swings sideways by `bend` px, so
-// the leg reads as a smooth rounded knee instead of a broken pill.
-// Uses the current ctx.fillStyle as the stroke colour.
-// @param {CanvasRenderingContext2D} ctx - Canvas context
-// @param {number} cx - Leg center X at the hip
-// @param {number} topY - Leg top Y (flush with the body bottom)
-// @param {number} h - Total leg length
-// @param {number} bend - Knee forward offset (positive = toward facing direction)
-// @param {number} width - Stroke thickness (fill or outline width)
-//
-function strokeBentLeg(ctx, cx, topY, h, bend, width) {
-  const half = width / 2
-  //
-  // Butt cap at the hip (body covers this end); round disc only at the foot
-  // so the hip join never sprouts a round-cap burr outside the torso.
-  //
-  const startY = topY
-  const endY = Math.max(startY + 1, topY + h - half)
-  const kneeX = cx + bend
-  const footX = cx + bend * BENT_LEG_FOOT_T
-  const kneeY = topY + h * BENT_LEG_KNEE_T
-  ctx.strokeStyle = ctx.fillStyle
-  ctx.lineWidth = width
-  ctx.lineCap = 'butt'
-  ctx.lineJoin = 'round'
-  ctx.beginPath()
-  ctx.moveTo(cx, startY)
-  ctx.quadraticCurveTo(kneeX, kneeY, footX, endY)
-  ctx.stroke()
-  //
-  // Rounded foot tip (same fill colour as the stroke)
-  //
-  ctx.beginPath()
-  ctx.arc(footX, endY, half, 0, Math.PI * 2)
-  ctx.fill()
-}
-//
-// 1 px black line between the inner thigh edges at the body bottom, filleted
-// into the leg outlines on both ends.
-//
-function drawCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, bodyBottom, rim = DEFAULT_OUTLINE_RIM) {
-  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
-  const innerR = Math.max(leftLegX, rightLegX)
-  //
-  // The seam spans the fill edges, but it must round into the outline edges —
-  // those sit `rim` px further into the gap on both sides.
-  //
-  drawSeamBetweenLegs(ctx, outlineColor, innerL, innerR, bodyBottom, innerL + rim, innerR - rim, rim)
-}
-//
-// Idle crotch outline — horizontal seam at the top inner leg corners where the
-// vertical inner walls begin (first vertical-to-horizontal transition on the
-// inside of each leg), with fillets into the legs below.
-//
-function drawIdleCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, leftLegOutlineTop, rim = DEFAULT_OUTLINE_RIM) {
-  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
-  const innerR = Math.max(leftLegX, rightLegX)
-  const filletL = innerL + rim
-  const filletR = innerR - rim
-  if (filletR <= filletL) return
-  const seamY = leftLegOutlineTop
-  ctx.fillStyle = outlineColor
-  ctx.fillRect(filletL, seamY, filletR - filletL, rim)
-  const r = Math.min(IDLE_CROTCH_SEAM_FILLET_R, Math.max(0, (filletR - filletL) / 2))
-  fillConcaveCorner(ctx, filletL, seamY + rim, r, 1, 1)
-  fillConcaveCorner(ctx, filletR, seamY + rim, r, -1, 1)
-}
-//
-// Body fill between idle legs — same shallow band as run crotch patches, from
-// the torso seal down to the inner top leg corners.
-//
-function fillIdleCrotchBodyGap(ctx, leftLegX, rightLegX, leftLegOutlineTop, bodyBottom, rim) {
-  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
-  const innerR = Math.max(leftLegX, rightLegX)
-  if (innerR <= innerL) return
-  const sealTop = bodyBottom - LEG_INTO_BODY
-  const h = leftLegOutlineTop + rim - sealTop
-  h > 0 && ctx.fillRect(innerL, sealTop, innerR - innerL, h)
-}
-//
-// Removes the torso body-fill row that would otherwise sit above the idle
-// crotch seam inside the leg gap (reads as a dark fringe over the outline).
-//
-function carveIdleTorsoCrotchGap(ctx, leftLegX, rightLegX, bodyBottom, rim) {
-  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
-  const innerR = Math.max(leftLegX, rightLegX)
-  const filletL = innerL + rim
-  const filletR = innerR - rim
-  if (filletR <= filletL) return
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(filletL, bodyBottom - rim, filletR - filletL, rim * 2 + 1)
-  ctx.restore()
-}
-//
-// Horizontal seam between the two legs plus a fillet at each end, so the seam
-// curves into the vertical inner leg outlines instead of meeting them at a
-// hard right angle.
-//
-function drawSeamBetweenLegs(ctx, outlineColor, seamL, seamR, y, filletL, filletR, thickness = DEFAULT_OUTLINE_RIM, useFillets = true) {
-  if (seamR <= seamL) return
-  ctx.fillStyle = outlineColor
-  ctx.fillRect(seamL, y, seamR - seamL, thickness)
-  if (!useFillets) return
-  const r = Math.min(CROTCH_SEAM_FILLET_R, Math.max(0, (filletR - filletL) / 2))
-  fillConcaveCorner(ctx, filletL, y + thickness, r, 1, 1)
-  fillConcaveCorner(ctx, filletR, y + thickness, r, -1, 1)
-}
-//
-// Fills the concave corner at (x, y) whose arms run along +sx and +sy, minus
-// the quarter disc of radius r — the classic fillet that rounds an inner
-// right angle. Caller sets ctx.fillStyle.
-//
-function fillConcaveCorner(ctx, x, y, r, sx, sy) {
-  if (r <= 0) return
-  const arcX = x + sx * r
-  const arcY = y + sy * r
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(arcX, y)
-  ctx.arc(arcX, arcY, r, sy > 0 ? -Math.PI / 2 : Math.PI / 2, sx > 0 ? Math.PI : 0, sx * sy > 0)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Thresholds for antialiasBakeOutlineRim — light pixels are body fill, faint
-// pixels are outside the silhouette, everything in between is rim fringe.
-//
-const BAKE_OUTSIDE_ALPHA_MAX = 32
-const BAKE_BODY_COLOR_MATCH_SQ = 50 * 50 * 3
-const BAKE_LIGHT_FRINGE_LUM_MIN = 110
-//
-// Repairs rim fringe from each silhouette edge inward: tints stray light pixels
-// to outline colour, keeps partial alpha on the outermost edge for smooth AA,
-// and solidifies only the inner rim band.
-//
-function antialiasBakeOutlineRim(ctx, outlineHex, bodyHex) {
-  const ohex = String(outlineHex).replace('#', '')
-  const bhex = String(bodyHex).replace('#', '')
-  const or = parseInt(ohex.substring(0, 2), 16)
-  const og = parseInt(ohex.substring(2, 4), 16)
-  const ob = parseInt(ohex.substring(4, 6), 16)
-  const br = parseInt(bhex.substring(0, 2), 16)
-  const bg = parseInt(bhex.substring(2, 4), 16)
-  const bb = parseInt(bhex.substring(4, 6), 16)
-  const w = SPRITE_SIZE
-  const h = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  const isOutside = (i) => px[i + 3] < BAKE_OUTSIDE_ALPHA_MAX
-  const isBody = (i) => {
-    if (px[i + 3] < BAKE_OUTSIDE_ALPHA_MAX) return false
-    const dr = px[i] - br
-    const dg = px[i + 1] - bg
-    const db = px[i + 2] - bb
-    return dr * dr + dg * dg + db * db <= BAKE_BODY_COLOR_MATCH_SQ
-  }
-  const luminanceAt = (i) => 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-  const repairRimPixel = (x, y, i) => {
-    const outerEdge = hasBakeLowAlphaNeighbor(px, w, h, x, y)
-    const lightFringe = luminanceAt(i) >= BAKE_LIGHT_FRINGE_LUM_MIN
-    px[i] = or
-    px[i + 1] = og
-    px[i + 2] = ob
-    if (!outerEdge || lightFringe) {
-      px[i + 3] = 255
-    }
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4
-      if (isOutside(i)) continue
-      if (isBody(i)) break
-      repairRimPixel(x, y, i)
-    }
-    for (let x = w - 1; x >= 0; x--) {
-      const i = (y * w + x) * 4
-      if (isOutside(i)) continue
-      if (isBody(i)) break
-      repairRimPixel(x, y, i)
-    }
-  }
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
-      const i = (y * w + x) * 4
-      if (isOutside(i)) continue
-      if (isBody(i)) break
-      repairRimPixel(x, y, i)
-    }
-    for (let y = h - 1; y >= 0; y--) {
-      const i = (y * w + x) * 4
-      if (isOutside(i)) continue
-      if (isBody(i)) break
-      repairRimPixel(x, y, i)
-    }
-  }
-  ctx.putImageData(img, 0, 0)
-}
-//
-// True when a pixel borders transparency — the outer AA edge of the silhouette.
-//
-function hasBakeLowAlphaNeighbor(px, w, h, x, y) {
-  if (x <= 0 || y <= 0 || x >= w - 1 || y >= h - 1) return true
-  const neighbors = [
-    (y * w + (x - 1)) * 4,
-    (y * w + (x + 1)) * 4,
-    ((y - 1) * w + x) * 4,
-    ((y + 1) * w + x) * 4
+function heroFrameSpriteNames() {
+  const P = HERO_SPRITE_PREFIX
+  return [
+    `${P}_0_0`,
+    `${P}_closed`,
+    ...LOOK_VECTORS.map((_, i) => `${P}_look_${i}`),
+    ...WINK_SIDES.map(side => heroWinkSpriteName(P, side)),
+    ...Array.from({ length: RUN_FRAME_COUNT }, (_, f) => `${P}-run-${f}`),
+    ...Array.from({ length: JUMP_FRAME_COUNT }, (_, f) => `${P}-jump-${f}`)
   ]
-  for (let n = 0; n < neighbors.length; n++) {
-    const ni = neighbors[n]
-    if (px[ni + 3] < BAKE_OUTSIDE_ALPHA_MAX) return true
-  }
-  return false
 }
 //
-// Clips drawing to the area under the body line. Bent air legs are also boxed
-// into the torso side lines for a short band right at the hip so a swinging
-// leg never sticks out past the body there — the rest of the leg's length is
-// left unrestricted so its outline rim stays intact as it swings wider below
-// the hip.
-//
-function clipBentLegBox(ctx, headX, bodyBottom, rim, boxedToBodySides) {
-  ctx.beginPath()
-  if (boxedToBodySides) {
-    const x = headX - rim
-    const w = CHAR_WIDTH + rim * 2
-    const bandH = Math.min(JUMP_LEG_HIP_BURR_CLIP_H, SPRITE_SIZE - bodyBottom)
-    ctx.rect(x, bodyBottom, w, bandH)
-    const restH = SPRITE_SIZE - bodyBottom - bandH
-    restH > 0 && ctx.rect(0, bodyBottom + bandH, SPRITE_SIZE, restH)
-  } else {
-    ctx.rect(0, bodyBottom, SPRITE_SIZE, SPRITE_SIZE - bodyBottom)
-  }
-  ctx.clip()
-}
-//
-// Crotch outline — one shared path for hollow and filled silhouettes.
-//
-function drawHeroCrotchOutline(ctx, cfg) {
-  const {
-    OL, jumpLegBend, jumpBackBottomX, jumpFrontBottomX, bodyBottom,
-    animation, leftLegX, rightLegX, rim, runLegsMerged,
-    leftLegOutlineTop, legOlW, runCrotchSeamY
-  } = cfg
-  ctx.fillStyle = OL
-  if (jumpLegBend !== 0) {
-    const crotchBackX = Math.min(jumpBackBottomX, jumpFrontBottomX)
-    const crotchFrontX = Math.max(jumpBackBottomX, jumpFrontBottomX)
-    const seamL = crotchBackX + LEG_FILL_WIDTH / 2 + JUMP_BENT_CROTCH_SEAM_BACK_TRIM
-    const seamR = crotchFrontX - LEG_FILL_WIDTH / 2 - JUMP_BENT_CROTCH_SEAM_FRONT_TRIM
-    drawSeamBetweenLegs(
-      ctx, OL,
-      seamL, seamR, bodyBottom,
-      crotchBackX + legOlW / 2, crotchFrontX - legOlW / 2,
-      rim,
-      false
-    )
-  } else if (animation === 'idle') {
-    drawIdleCrotchSeam(ctx, OL, leftLegX, rightLegX, leftLegOutlineTop, rim)
-  } else if (animation === 'jump') {
-    drawCrotchSeam(ctx, OL, leftLegX, rightLegX, bodyBottom, rim)
-  } else if (animation === 'run' && !runLegsMerged) {
-    const backX = Math.min(leftLegX, rightLegX)
-    const frontX = Math.max(leftLegX, rightLegX)
-    const gapL = backX - rim + legOlW
-    const gapR = frontX - rim
-    const seamY = runCrotchSeamY ?? leftLegOutlineTop
-    drawSeamBetweenLegs(ctx, OL, gapL, gapR, seamY, gapL, gapR, rim, false)
-  }
-}
-//
-// Outer back-leg outline merged into the spine as one L-corner (plant frame).
-//
-function patchRunBackHipLCorner(ctx, cfg) {
-  const {
-    OL, drawBakeBody, headX, rim, hipShelfY, hipShelfH,
-    leftLegX, rightLegX, leftLegOutlineTop, BL
-  } = cfg
-  const backX = Math.min(leftLegX, rightLegX)
-  const bodyL = headX - rim
-  const backLegOutlineL = backX - rim
-  const shelfPatchY = hipShelfY - HIP_SHELF_BODY_OVERLAP
-  const backPatchH = leftLegOutlineTop + rim - shelfPatchY
-  if (backLegOutlineL <= bodyL) return
-  const strayLegColH = hipShelfY - shelfPatchY
-  if (strayLegColH > 0) {
-    ctx.save()
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.fillStyle = '#000000'
-    ctx.fillRect(backLegOutlineL, shelfPatchY, rim, strayLegColH)
-    ctx.restore()
-  }
-  drawBakeBody && (ctx.fillStyle = BL, ctx.fillRect(bodyL, shelfPatchY, backLegOutlineL - bodyL + rim, backPatchH))
-  ctx.fillStyle = OL
-  ctx.fillRect(bodyL, shelfPatchY, rim, backPatchH)
-  ctx.fillRect(bodyL, hipShelfY, backLegOutlineL - bodyL + rim, hipShelfH)
-}
-//
-// Every run frame: crotch / merged-hip body fills + back spine L-corner.
-//
-function patchRunFrameBakeGaps(ctx, cfg) {
-  const {
-    BL, OL, drawBakeBody, headX, bodyBottom, rim, hipShelfY, hipShelfH,
-    leftLegX, rightLegX, leftLegHeight, rightLegHeight, leftLegOutlineTop,
-    runLegsMerged, frame
-  } = cfg
-  const backX = Math.min(leftLegX, rightLegX)
-  const frontX = Math.max(leftLegX, rightLegX)
-  const bodyL = headX - rim
-  const backLegOutlineL = backX - rim
-  const sealTop = bodyBottom - LEG_INTO_BODY
-  const crotchL = backX + LEG_FILL_WIDTH
-  const crotchR = frontX
-  const crotchH = leftLegOutlineTop + rim - sealTop
-  const shelfPatchY = hipShelfY - HIP_SHELF_BODY_OVERLAP
-  const shelfPatchH = hipShelfH + HIP_SHELF_BODY_OVERLAP + 1
-  //
-  // Spread stride: body-fill void between the two hip-bridge rects.
-  //
-  if (!runLegsMerged && drawBakeBody && crotchR > crotchL && crotchH > 0) {
-    ctx.fillStyle = BL
-    ctx.fillRect(crotchL, sealTop, crotchR - crotchL, crotchH)
-  }
-  //
-  // Centre stride with unequal leg lengths: hip attach void in the leg column.
-  //
-  if (runLegsMerged && leftLegHeight !== rightLegHeight) {
-    const hipFillH = leftLegOutlineTop + rim - sealTop + 1
-    drawBakeBody && hipFillH > 0 && (ctx.fillStyle = BL, ctx.fillRect(leftLegX, sealTop - 1, LEG_FILL_WIDTH + rim, hipFillH))
-    !RUN_CENTER_STRIDE_FRAMES.has(frame) && (ctx.fillStyle = OL, ctx.fillRect(leftLegX + LEG_FILL_WIDTH, sealTop - 1, rim, rim + 1))
-  }
-  //
-  // Back hip: flush leg uses a narrow spine shelf, offset leg uses one L-corner.
-  //
-  if (RUN_HIP_PATCH_FRAMES.has(frame)) {
-    frame === RUN_PLANT_FRAME && backLegOutlineL <= bodyL
-      ? patchRunFrame4FlushBackSpine(ctx, cfg)
-      : patchRunFrame1BackHip(ctx, cfg)
-    patchRunFrame1FrontHipCorner(ctx, cfg)
-  } else if (backLegOutlineL <= bodyL + 1) {
-    drawBakeBody && (ctx.fillStyle = BL, ctx.fillRect(bodyL, shelfPatchY, 1, shelfPatchH))
-    ctx.fillStyle = OL
-    ctx.fillRect(bodyL, shelfPatchY, rim + 1, shelfPatchH)
-  } else {
-    patchRunBackHipLCorner(ctx, cfg)
-  }
-}
-//
-// Run frame 1: spine-only back hip — no horizontal L-shelf that reads as inner spurs.
-//
-function patchRunFrame1BackHip(ctx, cfg) {
-  const {
-    OL, BL, drawBakeBody, headX, rim, hipShelfY,
-    leftLegX, rightLegX
-  } = cfg
-  const backX = Math.min(leftLegX, rightLegX)
-  const bodyL = headX - rim
-  const backLegOutlineL = backX - rim
-  const shelfPatchY = hipShelfY - HIP_SHELF_BODY_OVERLAP
-  const spineTopH = hipShelfY - shelfPatchY
-  const hipShelfW = backLegOutlineL - bodyL + rim
-  const strayLegColH = hipShelfY - shelfPatchY
-  if (backLegOutlineL > bodyL && strayLegColH > 0) {
-    ctx.save()
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.fillStyle = '#000000'
-    ctx.fillRect(backLegOutlineL, shelfPatchY, rim, strayLegColH)
-    ctx.restore()
-  }
-  drawBakeBody && (ctx.fillStyle = BL, ctx.fillRect(bodyL, shelfPatchY, hipShelfW, spineTopH + rim))
-  ctx.fillStyle = OL
-  ctx.fillRect(bodyL, shelfPatchY, rim, spineTopH)
-  ctx.fillRect(bodyL, hipShelfY, hipShelfW, rim)
-}
-//
-// Run frame 1: redraw the front hip shelf once at rim thickness — removes stacked corner OL.
-//
-function patchRunFrame1FrontHipCorner(ctx, cfg) {
-  const { OL, BL, drawBakeBody, headX, rim, hipShelfY, leftLegX, rightLegX, legOlW } = cfg
-  const frontX = Math.max(leftLegX, rightLegX)
-  const bodyR = headX + CHAR_WIDTH + rim
-  const legR = frontX - rim + legOlW
-  const shelfW = bodyR - legR
-  if (shelfW <= 0) return
-  const shelfBandH = rim + HIP_SHELF_BODY_OVERLAP + 1
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(legR, hipShelfY - HIP_SHELF_BODY_OVERLAP, shelfW, shelfBandH)
-  ctx.restore()
-  drawBakeBody && (ctx.fillStyle = BL, ctx.fillRect(legR - rim, hipShelfY - HIP_SHELF_BODY_OVERLAP, shelfW + rim, HIP_SHELF_BODY_OVERLAP))
-  ctx.fillStyle = OL
-  ctx.fillRect(legR, hipShelfY, shelfW, rim)
-}
-//
-// Run frame 4 (flush back leg): erase stacked spine OL, then one straight rim-wide
-// vertical — no inward taper so the back edge stays flush down to the hip seam.
-//
-function patchRunFrame4FlushBackSpine(ctx, cfg) {
-  const { OL, BL, drawBakeBody, headX, rim, hipShelfY } = cfg
-  const bodyL = headX - rim
-  const shelfPatchY = hipShelfY - HIP_SHELF_BODY_OVERLAP
-  const bandH = hipShelfY + rim - shelfPatchY
-  const spineTopH = hipShelfY - shelfPatchY
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(bodyL, shelfPatchY, rim + 1, bandH)
-  ctx.restore()
-  drawBakeBody && (ctx.fillStyle = BL, ctx.fillRect(bodyL, shelfPatchY, rim, bandH))
-  ctx.fillStyle = OL
-  ctx.fillRect(bodyL, shelfPatchY, rim, spineTopH)
-  ctx.fillRect(bodyL, hipShelfY, rim, rim)
-}
-//
-// Rebuilds run frame 0 with a continuous 2 px outline ring derived from an
-// eroded interior mask and a Euclidean distance field (soft outer AA).
-//
-function applySmoothRunFrame0Contour(ctx, cfg) {
-  const { OL, BL, rim } = cfg
-  const w = SPRITE_SIZE
-  const h = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  const opaque = buildBakeOpaqueMask(px, w, h, SMOOTH_RUN_FRAME0_ALPHA_MIN)
-  const interior = erodeBakeMaskChebyshev(opaque, w, h, rim)
-  const maxDist = rim + SMOOTH_RUN_FRAME0_AA_PX + 1
-  const dist = computeBakeExteriorDistEuclidean(interior, w, h, maxDist)
-  const rimHex = bakeColorsMatch(OL, BL) ? getHex(CFG.visual.colors.outline) : OL
-  const ohex = String(rimHex).replace('#', '')
-  const or = parseInt(ohex.substring(0, 2), 16)
-  const og = parseInt(ohex.substring(2, 4), 16)
-  const ob = parseInt(ohex.substring(4, 6), 16)
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = y * w + x
-      const i = idx * 4
-      if (interior[idx]) continue
-      const d = dist[idx]
-      const alpha = smoothRunFrame0RimAlpha(d, rim, SMOOTH_RUN_FRAME0_AA_PX)
-      if (alpha <= 0) {
-        px[i + 3] = 0
-        continue
-      }
-      px[i] = or
-      px[i + 1] = og
-      px[i + 2] = ob
-      px[i + 3] = alpha
-    }
-  }
-  ctx.putImageData(img, 0, 0)
-}
-//
-// Leaned run torsos end in a back corner that can sit outside the vertical
-// leg below it, so the silhouette dents inward right under the hip. Before
-// the rim is rebuilt, fill that dent with a wedge that lets the edge move
-// inward at most RUN_HIP_NOTCH_TAPER px per row. Deep dents (the bare torso
-// bottom on single-leg frames) are left alone.
-//
-function fillRunHipNotches(ctx, bodyBottom, bodyHex, rim) {
-  const w = SPRITE_SIZE
-  const img = ctx.getImageData(0, 0, w, SPRITE_SIZE)
-  const px = img.data
-  const y0 = Math.max(0, bodyBottom - RUN_HIP_NOTCH_ABOVE_PX)
-  const y1 = Math.min(SPRITE_SIZE - 1, bodyBottom + RUN_HIP_NOTCH_BELOW_PX)
-  const rgb = parseHex(String(bodyHex))
-  const lefts = []
-  for (let y = y0; y <= y1; y++) lefts.push(runSilhouetteEdgeX(px, w, y))
-  fillRunHipNotchLeft(px, w, y0, lefts, rgb, rim)
-  ctx.putImageData(img, 0, 0)
-}
-//
-// First opaque column from the left; -1 when the row is empty.
-//
-function runSilhouetteEdgeX(px, w, y) {
-  for (let x = 0; x < w; x++) {
-    if (px[(y * w + x) * 4 + 3] >= SMOOTH_RUN_FRAME0_ALPHA_MIN) return x
-  }
-  return -1
-}
-//
-// Applies the inward taper limit to the left edge and paints the wedge in
-// body colour when every dent stays within RUN_HIP_NOTCH_MAX_DEPTH_PX.
-//
-function fillRunHipNotchLeft(px, w, y0, edges, rgb, rim) {
-  const limits = []
-  let prev = null
-  let deepest = 0
-  for (let r = 0; r < edges.length; r++) {
-    const edge = edges[r]
-    if (edge < 0) {
-      limits.push(null)
-      prev = null
-      continue
-    }
-    const limit = prev === null ? edge : Math.min(edge, prev + RUN_HIP_NOTCH_TAPER)
-    limits.push(limit)
-    deepest = Math.max(deepest, edge - limit)
-    prev = limit
-  }
-  if (deepest > RUN_HIP_NOTCH_MAX_DEPTH_PX) return
-  for (let r = 0; r < edges.length; r++) {
-    if (limits[r] === null) continue
-    const from = Math.round(limits[r])
-    if (from === edges[r]) continue
-    //
-    // The old rim under the wedge becomes interior too — the rebuild only
-    // repaints pixels outside the eroded interior.
-    //
-    const to = edges[r] + Math.ceil(rim)
-    const y = y0 + r
-    for (let x = from; x < to; x++) {
-      const i = (y * w + x) * 4
-      px[i] = rgb[0]
-      px[i + 1] = rgb[1]
-      px[i + 2] = rgb[2]
-      px[i + 3] = 255
-    }
-  }
-}
-//
-// True for pixels whose alpha clears the bake silhouette threshold.
-//
-function buildBakeOpaqueMask(px, w, h, alphaMin) {
-  const mask = new Uint8Array(w * h)
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4
-      mask[y * w + x] = px[i + 3] >= alphaMin ? 1 : 0
-    }
-  }
-  return mask
-}
-//
-// Chebyshev erosion — one iteration peels one layer of the 8-connected shell.
-//
-function erodeBakeMaskChebyshev(mask, w, h, iterations) {
-  let cur = mask
-  for (let it = 0; it < iterations; it++) {
-    const next = new Uint8Array(w * h)
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = y * w + x
-        if (!cur[idx]) continue
-        let solid = true
-        for (let dy = -1; dy <= 1 && solid; dy++) {
-          for (let dx = -1; dx <= 1 && solid; dx++) {
-            const nx = x + dx
-            const ny = y + dy
-            if (nx < 0 || ny < 0 || nx >= w || ny >= h || !cur[ny * w + nx]) solid = false
-          }
-        }
-        next[idx] = solid ? 1 : 0
-      }
-    }
-    cur = next
-  }
-  return cur
-}
-//
-// Euclidean distance from each pixel to the nearest interior pixel (capped).
-//
-function computeBakeExteriorDistEuclidean(interior, w, h, maxDist) {
-  const dist = new Float32Array(w * h)
-  dist.fill(maxDist + 1)
-  const r = Math.ceil(maxDist)
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = y * w + x
-      if (interior[idx]) {
-        dist[idx] = 0
-        continue
-      }
-      let best = maxDist + 1
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          const nx = x + dx
-          const ny = y + dy
-          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
-          if (!interior[ny * w + nx]) continue
-          const d = Math.sqrt(dx * dx + dy * dy)
-          if (d < best) best = d
-        }
-      }
-      dist[idx] = best
-    }
-  }
-  return dist
-}
-//
-// Solid rim inside `rimPx`, linear falloff across `aaPx` beyond it.
-//
-function smoothRunFrame0RimAlpha(dist, rimPx, aaPx) {
-  if (dist <= rimPx) return 255
-  if (dist >= rimPx + aaPx) return 0
-  const t = (dist - rimPx) / aaPx
-  return Math.round(255 * (1 - t))
-}
-//
-// True when two bake hex colours are the same (ignoring optional # prefix).
-//
-function bakeColorsMatch(a, b) {
-  const norm = (c) => String(c).replace('#', '').toLowerCase()
-  return norm(a) === norm(b)
-}
-//
-// Center-stride run frames (2 and 6): erase the lifted leg outline band that
-// sits above the planted leg top — reads as an inner vertical spur into the hip.
-//
-function trimRunMergedStrideOutlineSpur(ctx, leftLegX, rightLegX, leftOutlineTop, rightOutlineTop, legOlW, rim) {
-  const liftedTop = Math.min(leftOutlineTop, rightOutlineTop)
-  const plantedTop = Math.max(leftOutlineTop, rightOutlineTop)
-  if (liftedTop >= plantedTop) return
-  const mergedLegX = leftLegX <= rightLegX ? leftLegX : rightLegX
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(mergedLegX - rim, liftedTop, legOlW, plantedTop - liftedTop)
-  ctx.restore()
-}
-//
-// Body-bottom outline from a torso side to the nearest leg outline edge.
-//
-function drawHipShelves(ctx, outlineColor, headX, y, thickness, legLeftEdge, legRightEdge, rim, drawLeft, drawRight) {
-  const bodyL = headX - rim
-  const bodyR = headX + CHAR_WIDTH + rim
-  //
-  // Snap to whole pixels: a sub-pixel wide shelf renders as an antialiased
-  // smear that bleeds one column outside the silhouette.
-  //
-  const legL = Math.round(legLeftEdge)
-  const legR = Math.round(legRightEdge)
-  ctx.fillStyle = outlineColor
-  drawLeft && legL > bodyL && ctx.fillRect(bodyL, y - HIP_SHELF_BODY_OVERLAP, legL - bodyL, thickness + HIP_SHELF_BODY_OVERLAP)
-  drawRight && bodyR > legR && ctx.fillRect(legR, y - HIP_SHELF_BODY_OVERLAP, bodyR - legR, thickness + HIP_SHELF_BODY_OVERLAP)
-}
-//
-// Bent jump legs leave the torso a little inside the body side lines, which
-// carves a 1 px notch into the silhouette right under the hip. Fills that
-// notch row by row so the side line runs straight into the leg: `layer`
-// 'outline' paints the rim on the side line, 'body' paints the interior
-// between that rim and the leg fill (also used to punch hollow bakes).
-//
-function fillBentLegHipNotches(ctx, bake, layer) {
-  const {
-    headX, rim, bodyBottom, legOlW,
-    jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend,
-    jumpFrontHipX, jumpFrontH, jumpFrontBend
-  } = bake
-  const sideL = headX - rim
-  const sideR = headX + CHAR_WIDTH + rim
-  const half = legOlW / 2
-  const backIsLeft = jumpBackHipX <= jumpFrontHipX
-  const leftLeg = backIsLeft
-    ? [jumpBackHipX, jumpBackH, jumpBackBend]
-    : [jumpFrontHipX, jumpFrontH, jumpFrontBend]
-  const rightLeg = backIsLeft
-    ? [jumpFrontHipX, jumpFrontH, jumpFrontBend]
-    : [jumpBackHipX, jumpBackH, jumpBackBend]
-  //
-  // Stop above the rounded foot cap — below it the silhouette is meant to
-  // curve inward.
-  //
-  const leftEnd = Math.min(bodyBottom + BENT_LEG_NOTCH_SCAN_PX, jumpHipTop + leftLeg[1] - legOlW)
-  const rightEnd = Math.min(bodyBottom + BENT_LEG_NOTCH_SCAN_PX, jumpHipTop + rightLeg[1] - legOlW)
-  for (let y = bodyBottom; y < leftEnd; y++) {
-    const edge = bentLegCenterXAtY(leftLeg[0], jumpHipTop, leftLeg[1], leftLeg[2], legOlW, y + 0.5) - half
-    if (edge <= sideL + BENT_LEG_NOTCH_MIN_PX) break
-    const rimEnd = Math.ceil(edge + rim)
-    layer === 'outline'
-      ? ctx.fillRect(sideL, y, rimEnd - sideL, 1)
-      : ctx.fillRect(sideL + rim, y, rimEnd + 1 - (sideL + rim), 1)
-  }
-  for (let y = bodyBottom; y < rightEnd; y++) {
-    const edge = bentLegCenterXAtY(rightLeg[0], jumpHipTop, rightLeg[1], rightLeg[2], legOlW, y + 0.5) + half
-    if (edge >= sideR - BENT_LEG_NOTCH_MIN_PX) break
-    const rimStart = Math.floor(edge - rim)
-    layer === 'outline'
-      ? ctx.fillRect(rimStart, y, sideR - rimStart, 1)
-      : ctx.fillRect(rimStart - 1, y, sideR - rim - (rimStart - 1), 1)
-  }
-}
-//
-// The back bent leg crosses the torso side line at a sub-pixel offset, so
-// the final rim there dents in, bumps out and thins from 2 px to 1 px. On
-// the final pixels: close sub-pixel dents and trim single-row bumps in the
-// left edge profile, then lay exactly `rim` px of outline along that edge —
-// the old rim behind a closed dent goes back to body (or hollow interior).
-//
-function repairBentBackHipJoin(ctx, meta, colors) {
-  const { width: w, height: h } = ctx.canvas
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  const { rim, backHip } = meta
-  const ink = parseHex(String(colors.outline))
-  const body = colors.hollow ? null : parseHex(String(colors.body))
-  const scanY0 = Math.max(0, backHip.y0 - BACK_HIP_CLOSE_ROWS)
-  const scanY1 = Math.min(h - 1, backHip.y1 + BACK_HIP_CLOSE_ROWS)
-  const edges = []
-  for (let y = scanY0; y <= scanY1; y++) edges.push(subpixelLeftEdge(px, w, y))
-  const opened = edges.map((edge, r) => openedBackHipEdge(edges, r))
-  let prev = null
-  for (let y = Math.max(0, backHip.y0); y <= Math.min(h - 1, backHip.y1); y++) {
-    const r = y - scanY0
-    if (edges[r] === null) {
-      prev = null
-      continue
-    }
-    const closed = Math.min(opened[r], closedBackHipEdge(opened, r))
-    const edge = prev === null ? closed : Math.max(closed, prev - BACK_HIP_OUT_TAPER_PX)
-    prev = edge
-    const inkEnd = rowInkEndX(px, w, y, Math.floor(edges[r]), ink)
-    edge > edges[r] && eraseRowCoverage(px, w, y, edges[r], edge)
-    paintInteriorCoverage(px, w, y, edge + rim, Math.min(Math.max(inkEnd, edges[r] + rim), edge + rim + 1), body)
-    paintRimCoverage(px, w, y, edge, edge + rim, ink)
-  }
-  ctx.putImageData(img, 0, 0)
-}
-//
-// First column at or after `x` (past any partial edge pixels) that is no
-// longer opaque outline colour.
-//
-function rowInkEndX(px, w, y, x, ink) {
-  let end = Math.max(0, x)
-  while (end < w && px[(y * w + end) * 4 + 3] < BACK_HIP_FULL_ALPHA_MIN) end++
-  while (end < w) {
-    const i = (y * w + end) * 4
-    const dr = px[i] - ink[0]
-    const dg = px[i + 1] - ink[1]
-    const db = px[i + 2] - ink[2]
-    if (px[i + 3] < BACK_HIP_FULL_ALPHA_MIN || dr * dr + dg * dg + db * db > BACK_HIP_INK_TOL_SQ) break
-    end++
-  }
-  return end
-}
-//
-// Left silhouette edge in sub-pixel units: the first fully opaque column
-// minus the coverage of the partial pixels in front of it; null when empty.
-//
-function subpixelLeftEdge(px, w, y) {
-  let partial = 0
-  for (let x = 0; x < w; x++) {
-    const a = px[(y * w + x) * 4 + 3]
-    if (a >= BACK_HIP_FULL_ALPHA_MIN) return x - partial / 255
-    a > BACK_HIP_PARTIAL_ALPHA_MIN && (partial += a)
-  }
-  return null
-}
-//
-// 1D closing of the edge profile: a row sitting inside the outermost edge
-// both just above and just below it may move out to the nearer of the two.
-//
-function closedBackHipEdge(edges, r) {
-  let above = Infinity
-  let below = Infinity
-  for (let d = 1; d <= BACK_HIP_CLOSE_ROWS; d++) {
-    edges[r - d] !== null && edges[r - d] !== undefined && (above = Math.min(above, edges[r - d]))
-    edges[r + d] !== null && edges[r + d] !== undefined && (below = Math.min(below, edges[r + d]))
-  }
-  return Math.max(above, below)
-}
-//
-// Single-row bumps that stick out past both neighbouring rows are pulled back
-// to the more outward neighbour.
-//
-function openedBackHipEdge(edges, r) {
-  const up = edges[r - 1]
-  const down = edges[r + 1]
-  if (edges[r] === null || up === null || up === undefined || down === null || down === undefined) return edges[r]
-  return Math.max(edges[r], Math.min(up, down))
-}
-//
-// Pulls the silhouette in from x0 to x1: alpha is capped at each pixel's
-// coverage to the right of the new edge.
-//
-function eraseRowCoverage(px, w, y, x0, x1) {
-  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
-    const cov = Math.max(0, Math.min(1, x + 1 - x1))
-    const i = (y * w + x) * 4 + 3
-    px[i] = Math.min(px[i], Math.round(cov * 255))
-  }
-}
-//
-// Turns surplus rim past the new inner edge back into interior: body colour
-// on filled bakes, transparency on hollow ones (`body` null).
-//
-function paintInteriorCoverage(px, w, y, x0, x1, body) {
-  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
-    const c = Math.min(x + 1, x1) - Math.max(x, x0)
-    if (c <= 0) continue
-    const i = (y * w + x) * 4
-    if (!body) {
-      px[i + 3] = Math.round(px[i + 3] * (1 - c))
-      continue
-    }
-    for (let ch = 0; ch < 3; ch++) px[i + ch] = Math.round(body[ch] * c + px[i + ch] * (1 - c))
-  }
-}
-//
-// Raises outline coverage over [x0, x1) of one row to the exact per-pixel
-// overlap. Alpha takes the max (the outer AA pixel already holds its share),
-// colour moves toward ink by the overlap, so both band ends stay soft.
-//
-function paintRimCoverage(px, w, y, x0, x1, ink) {
-  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) {
-    const c = Math.min(x + 1, x1) - Math.max(x, x0)
-    if (c <= 0) continue
-    const i = (y * w + x) * 4
-    const a = px[i + 3] / 255
-    const share = a > 0 ? c : 1
-    for (let ch = 0; ch < 3; ch++) {
-      px[i + ch] = Math.round(ink[ch] * share + px[i + ch] * (1 - share))
-    }
-    px[i + 3] = Math.round(Math.max(a, c) * 255)
-  }
-}
-//
-// Bent-jump legs leave the torso rim band (the row right above the leg gap)
-// poking past the inner leg rim into the body as a 1–3 px tooth. Replaces
-// that tooth with whatever sits one row lower (body, or hollow interior) and
-// keeps a faint ink tint on the first pixel so the corner reads rounded.
-//
-function repairBentCrotchCorners(ctx, meta, outlineHex) {
-  const { width: w, height: h } = ctx.canvas
-  const { seamY, gapX } = meta.crotch
-  const gapY = seamY + meta.rim
-  if (gapY >= h || gapX < 0 || gapX >= w) return
-  const img = ctx.getImageData(0, 0, w, h)
-  const px = img.data
-  if (px[(gapY * w + gapX) * 4 + 3] >= BACK_HIP_PARTIAL_ALPHA_MIN) return
-  const ink = parseHex(String(outlineHex))
-  clearCrotchCornerTooth(px, w, gapY, gapX, 1, ink)
-  clearCrotchCornerTooth(px, w, gapY, gapX, -1, ink)
-  ctx.putImageData(img, 0, 0)
-}
-//
-// Walks from the gap through the inner leg rim on row `gapY`, then clears the
-// tooth on the row above while the pixel below is clean interior.
-//
-function clearCrotchCornerTooth(px, w, gapY, gapX, dir, ink) {
-  const inside = x => x >= 0 && x < w
-  let x = gapX
-  while (inside(x) && px[(gapY * w + x) * 4 + 3] < BACK_HIP_FULL_ALPHA_MIN) x += dir
-  while (inside(x) && isOpaqueInk(px, (gapY * w + x) * 4, ink)) x += dir
-  for (let n = 0; n < CROTCH_CORNER_MAX_PX && inside(x); n++, x += dir) {
-    const i = ((gapY - 1) * w + x) * 4
-    const below = (gapY * w + x) * 4
-    const belowA = px[below + 3]
-    if (isOpaqueInk(px, below, ink) || (belowA >= BACK_HIP_PARTIAL_ALPHA_MIN && belowA < BACK_HIP_FULL_ALPHA_MIN)) return
-    if (pixelsMatch(px, i, below)) return
-    lerpPixelPremultiplied(px, i, below, n === 0 ? 1 - CROTCH_CORNER_AA_INK : 1)
-  }
-}
-
-function isOpaqueInk(px, i, ink) {
-  const dr = px[i] - ink[0]
-  const dg = px[i + 1] - ink[1]
-  const db = px[i + 2] - ink[2]
-  return px[i + 3] >= BACK_HIP_FULL_ALPHA_MIN && dr * dr + dg * dg + db * db <= BACK_HIP_INK_TOL_SQ
-}
-//
-// Both clear, or both opaque and close in colour.
-//
-function pixelsMatch(px, i, j) {
-  const ai = px[i + 3]
-  const aj = px[j + 3]
-  if (ai < BACK_HIP_PARTIAL_ALPHA_MIN && aj < BACK_HIP_PARTIAL_ALPHA_MIN) return true
-  if (ai < BACK_HIP_FULL_ALPHA_MIN || aj < BACK_HIP_FULL_ALPHA_MIN) return false
-  const dr = px[i] - px[j]
-  const dg = px[i + 1] - px[j + 1]
-  const db = px[i + 2] - px[j + 2]
-  return dr * dr + dg * dg + db * db <= CROTCH_CORNER_MATCH_TOL_SQ
-}
-
-function lerpPixelPremultiplied(px, i, j, t) {
-  const a = px[i + 3]
-  const aj = px[j + 3]
-  const na = a + (aj - a) * t
-  px[i + 3] = Math.round(na)
-  if (na <= 0) return
-  for (let c = 0; c < 3; c++) px[i + c] = Math.round((px[i + c] * a * (1 - t) + px[j + c] * aj * t) / na)
-}
-//
-// X centre of a bent jump leg stroke at a given Y — solves the same quadratic
-// the stroke follows, so hip shelves meet the drifted leg exactly.
-//
-function bentLegCenterXAtY(cx, topY, h, bend, width, y) {
-  const y0 = topY
-  const y1 = topY + h * BENT_LEG_KNEE_T
-  const y2 = Math.max(topY + 1, topY + h - width / 2)
-  const a = y0 - 2 * y1 + y2
-  const b = 2 * (y1 - y0)
-  const c = y0 - y
-  let t = 0
-  if (Math.abs(a) < BENT_LEG_SOLVE_EPS) {
-    t = b === 0 ? 0 : -c / b
-  } else {
-    const disc = b * b - 4 * a * c
-    if (disc < 0) return cx
-    const root = Math.sqrt(disc)
-    const t1 = (-b + root) / (2 * a)
-    const t2 = (-b - root) / (2 * a)
-    t = t1 >= 0 && t1 <= 1 ? t1 : t2
-  }
-  t = Math.max(0, Math.min(1, t))
-  return cx + bend * (2 * (1 - t) * t + BENT_LEG_FOOT_T * t * t)
-}
-//
-// Flat top connects seamlessly to the flat bottom of body outline/fill,
-// eliminating the body-to-leg gap visible in all animation frames.
-// Caller sets ctx.fillStyle before calling.
-//
-function fillRoundedRectBottom(ctx, x, y, w, h, r) {
-  const cr = Math.min(r, w / 2, h / 2)
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(x + w, y)
-  ctx.lineTo(x + w, y + h - cr)
-  ctx.arcTo(x + w, y + h, x, y + h, cr)
-  ctx.lineTo(x + cr, y + h)
-  ctx.arcTo(x, y + h, x, y, cr)
-  ctx.lineTo(x, y)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Draws a filled rectangle with only the two top corners rounded.
-// Bottom corners are flat so the shape connects to legs without narrowing.
-// Caller sets ctx.fillStyle before calling.
-//
-function fillRoundedRectTop(ctx, x, y, w, h, r) {
-  const cr = Math.min(r, w / 2, h)
-  ctx.beginPath()
-  ctx.moveTo(x + cr, y)
-  ctx.arcTo(x + w, y, x + w, y + h, cr)
-  ctx.lineTo(x + w, y + h)
-  ctx.lineTo(x, y + h)
-  ctx.arcTo(x, y, x + w, y, cr)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Draws the left half of a vertical pill: flat right side, rounded left/top/bottom.
-// Used for the left arm — flat side is placed flush against the body left outline so
-// the arm merges into the torso without any visible gap or separator.
-// Caller sets ctx.fillStyle before calling.
-//
-function fillHalfPillLeft(ctx, x, y, w, h, r) {
-  const cr = Math.min(r, w, h / 2)
-  ctx.beginPath()
-  ctx.moveTo(x + w, y)
-  ctx.lineTo(x + w, y + h)
-  ctx.lineTo(x + cr, y + h)
-  ctx.arcTo(x, y + h, x, y, cr)
-  ctx.lineTo(x, y + cr)
-  ctx.arcTo(x, y, x + w, y, cr)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Draws the right half of a vertical pill: flat left side, rounded right/top/bottom.
-// Used for the right arm — flat side is placed flush against the body right outline so
-// the arm merges into the torso without any visible gap or separator.
-// Caller sets ctx.fillStyle before calling.
-//
-function fillHalfPillRight(ctx, x, y, w, h, r) {
-  const cr = Math.min(r, w, h / 2)
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(x + w - cr, y)
-  ctx.arcTo(x + w, y, x + w, y + h, cr)
-  ctx.lineTo(x + w, y + h - cr)
-  ctx.arcTo(x + w, y + h, x, y + h, cr)
-  ctx.lineTo(x, y + h)
-  ctx.closePath()
-  ctx.fill()
+// Kaplay contact, or a level-owned carrier that pins the hero every frame
+// (e.g. a stick riding a creature) — its teleported collider loses contact
+// most frames. A rising hero is never grounded, so a launch is not undone:
+// Kaplay keeps the platform one physics step after a launch, and counting
+// that as ground flashed the idle stance between the crouch and the stretch.
+//
+function isHeroGrounded(inst) {
+  const ch = inst.character
+  if ((ch?.vel?.y ?? 0) < 0) return false
+  return Boolean(ch?.isGrounded?.() || inst.carrierGrounded)
 }
 //
 // Aborts a blocked pre-jump squash so the hero returns to idle instead of
 // staying stuck in the squat frame under a low platform ceiling.
 //
-//
-// Kaplay contact, or a level-owned carrier that pins the hero every frame
-// (e.g. a stick riding a creature) — its teleported collider loses contact
-// most frames. A rising hero is never grounded, so a launch is not undone.
-//
-function isHeroGrounded(inst) {
-  const ch = inst.character
-  if (ch?.isGrounded?.()) return true
-  return Boolean(inst.carrierGrounded) && (ch?.vel?.y ?? 0) >= 0
-}
 function cancelJumpSquash(inst) {
   inst.isSquashing = false
   inst.squashTimer = 0
@@ -3961,7 +1599,7 @@ function resolveJumpCeilingBonk(inst) {
   inst.jumpCollisionLift = -1
   syncJumpCollision(inst)
   inst.jumpFrame = 5
-  useHeroSprite(inst, heroJumpSpriteName(inst, 5))
+  useHeroSprite(inst, heroJumpSpriteName(5))
 }
 //
 // True when a platform underside sits against / just above the hero's head.
@@ -4050,7 +1688,7 @@ function attemptHeroJump(inst) {
     inst.isSquashing = true
     inst.squashTimer = 0
     inst.jumpFrame = 0
-    useHeroSprite(inst, heroJumpSpriteName(inst, 0))
+    useHeroSprite(inst, heroJumpSpriteName(0))
   }
 }
 //
@@ -4075,37 +1713,10 @@ function getPlatformWorldRect(obj) {
   return { left, top, right: left + w, bottom: top + h }
 }
 //
-// True when every idle eye cell and the closed frame exist on this k.
+// True when every hero frame is registered on this Kaplay instance.
 //
-function isHeroIdleGridPresentOnK(k, prefix) {
-  try {
-    if (!k.getSprite(`${prefix}_closed`)) return false
-    for (let x = -1; x <= 1; x++) {
-      for (let y = -1; y <= 1; y++) {
-        if (!k.getSprite(`${prefix}_${x}_${y}`)) return false
-      }
-    }
-    return true
-  } catch (_) {
-    return false
-  }
-}
-//
-// Parses the sprite-prefix segment from a baked hero sprite name.
-//
-function parseHeroSpritePrefix(spriteName) {
-  if (!spriteName || typeof spriteName !== 'string') return null
-  const baseName = spriteName
-  if (baseName.endsWith('_closed')) {
-    return baseName.slice(0, -'_closed'.length)
-  }
-  const idle = baseName.match(/^(.+)_-?\d+_-?\d+$/)
-  if (idle) return idle[1]
-  const run = baseName.match(/^(.+)-run-\d+$/)
-  if (run) return run[1]
-  const jump = baseName.match(/^(.+)-jump-\d+$/)
-  if (jump) return jump[1]
-  return null
+function isHeroFrameSetPresentOnK(k) {
+  return heroFrameSpriteNames().every(name => heroSpriteExistsOnK(k, name))
 }
 //
 // True when a sprite name is registered on this Kaplay instance.
@@ -4118,119 +1729,22 @@ function heroSpriteExistsOnK(k, spriteName) {
   }
 }
 //
-// Rebakes the prefix bundle on the live k when a frame is missing.
+// Rebakes the frame set on the live k when a frame is missing.
 //
 function ensureHeroSpriteOnK(inst, spriteName) {
   if (heroSpriteExistsOnK(inst.k, spriteName)) return
-  const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
-  heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
-  const override = inst.bakeByPrefix?.[prefix]
-  if (override) {
-    loadHeroSprites({
-      k: inst.k,
-      type: inst.type,
-      bodyColor: override.bodyColor,
-      outlineColor: override.outlineColor,
-      addMouth: override.addMouth,
-      addArms: override.addArms,
-      addWatch: override.addWatch,
-      ...resolveHeroBakeLayers(override)
-    })
-    return
-  }
-  loadHeroSprites(inst)
+  heroFramesBakedFor.delete(inst.k)
+  loadHeroSprites(inst.k)
 }
 //
-// Applies a hero sprite by name; falls back to the neutral idle cell if missing.
+// Applies a hero sprite by name; falls back to the straight-ahead idle frame if missing.
 //
 function useHeroSprite(inst, spriteName) {
   ensureHeroSpriteOnK(inst, spriteName)
-  const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
-  const fallback = `${prefix}_0_0`
-  const applySprite = (name) => {
-    if (!heroSpriteExistsOnK(inst.k, name)) return false
-    inst.character.use(inst.k.sprite(name))
-    inst.currentEyeSprite = name
-    return true
-  }
-  if (applySprite(spriteName)) return
-  heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
-  loadHeroSprites(inst)
-  if (applySprite(spriteName)) return
-  applySprite(fallback)
-}
-//
-// Loads one baked hero frame, optionally running a scene post-bake pass first.
-//
-function commitHeroBakedSprite(k, spriteName, canvas, postBake, seedOffset, crispRimColors) {
-  if (!canvas) return
-  try {
-    postBake?.(canvas, seedOffset)
-    //
-    // Film grain can re-brighten the outline rim; repair filled silhouettes
-    // after grain while keeping a soft AA edge on the outer contour.
-    //
-    const skipRimAntialias = /-run-[01234567](-pcl)?$/.test(spriteName) && !crispRimColors?.hollow
-    const bakeCtx = canvas.getContext('2d')
-    crispRimColors && !skipRimAntialias && antialiasBakeOutlineRim(
-      bakeCtx,
-      getHex(crispRimColors.outline),
-      getHex(crispRimColors.body)
-    )
-    const meta = heroBakeFrameMeta.get(canvas)
-    crispRimColors && meta?.backHip && repairBentBackHipJoin(bakeCtx, meta, {
-      outline: getHex(crispRimColors.outline),
-      body: getHex(crispRimColors.body),
-      hollow: crispRimColors.hollow
-    })
-    crispRimColors && meta?.crotch && repairBentCrotchCorners(bakeCtx, meta, getHex(crispRimColors.outline))
-    crispRimColors && meta && smoothHeroContourSteps(bakeCtx, {
-      outlineHex: getHex(crispRimColors.outline),
-      bodyHex: getHex(crispRimColors.body),
-      rim: meta.rim,
-      excludeDiscs: meta.eyeDiscs,
-      tolerant: meta.rebuiltRim
-    })
-    k.loadSprite(spriteName, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  } catch (loadError) {
-    //
-    // Skip this sprite if loading fails
-    //
-  }
-}
-//
-// Sprite-prefix suffix for non-default baked outline rim widths.
-//
-function heroSpriteRimSuffix(outlineRimPx = DEFAULT_OUTLINE_RIM) {
-  return outlineRimPx > DEFAULT_OUTLINE_RIM ? `_or${outlineRimPx}` : ''
-}
-//
-// Crisp-rim repair colours for commitHeroBakedSprite — filled silhouettes and
-// hollow outline shells (hollow run keeps AA after film grain).
-//
-function heroBakeCrispRimColors(bakeLayers, outlineColor, bodyColor) {
-  if (!bakeLayers.drawBakeOutline) return null
-  if (bakeLayers.drawBakeBody) return { outline: outlineColor, body: bodyColor }
-  return { outline: outlineColor, body: bodyColor, hollow: true }
-}
-//
-// Records a fully baked prefix bundle for the given Kaplay instance.
-//
-function markHeroSpritePrefixReadyOnK(k, prefix) {
-  let ready = heroSpritePrefixesReadyFor.get(k)
-  if (!ready) {
-    ready = new Set()
-    heroSpritePrefixesReadyFor.set(k, ready)
-  }
-  ready.add(prefix)
-}
-//
-// Whether loadHeroSprites already completed for this k + prefix.
-//
-function isHeroSpritePrefixReadyOnK(k, prefix) {
-  return heroSpritePrefixesReadyFor.get(k)?.has(prefix) ?? false
+  const name = heroSpriteExistsOnK(inst.k, spriteName) ? spriteName : `${HERO_SPRITE_PREFIX}_0_0`
+  if (!heroSpriteExistsOnK(inst.k, name)) return
+  inst.character.use(inst.k.sprite(name))
+  inst.currentEyeSprite = name
 }
 //
 // Bakes mouth-note glyphs once per Kaplay instance for forest grain.

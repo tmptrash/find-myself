@@ -286,17 +286,6 @@ const MENU_GLANCE_RANGE = 0.9
 const MENU_GLANCE_REACH_X = 220
 const MENU_GLANCE_REACH_Y = 160
 //
-// The hero cursor — the white forest hero at its usual size.
-//
-const MENU_HERO_LOOK = {
-  type: Hero.HEROES.HERO,
-  bodyColor: CFG.visual.colors.hero.eyeWhite,
-  outlineColor: CFG.visual.colors.outline,
-  eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-  pupilColor: CFG.visual.colors.hero.eyePupil,
-  outlineOnly: false
-}
-//
 // Menu sound follows the selected level: the forest level's birds.mp3
 // fades in (over MENU_BIRDS_FADE_SEC) while the forest row is selected and
 // out on any other row (the other levels have no menu sound yet).
@@ -347,7 +336,7 @@ export function sceneMenu(k) {
       k,
       x: layout.heroX,
       y: levels[selected].y,
-      ...MENU_HERO_LOOK,
+      type: Hero.HEROES.HERO,
       controllable: false,
       isStatic: true,
       idleVocalization: null,
@@ -1092,7 +1081,7 @@ function stopMenuMusic(music) {
 function loadMenuAssets(k) {
   buildMenuNightSprite(k)
   loadMenuForestLayerSprites(k)
-  Hero.loadHeroSprites({ k, ...MENU_HERO_LOOK })
+  Hero.loadHeroSprites(k)
   loadMenuTextSprites(k)
 }
 //

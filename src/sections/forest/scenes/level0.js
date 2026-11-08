@@ -613,16 +613,6 @@ const FOREST_DECOR_CULL_MARGIN = 64
 //
 const HERO_BODY_COLOR = FOREST_PAL.heroBodyGray
 //
-// Forest hero: white body, dark rim, two open eyes from the first frame.
-//
-const HERO_FILLED_BODY_COLOR = String(CFG.visual.colors.hero.eyeWhite).replace('#', '')
-const HERO_FILLED_OUTLINE_COLOR = CFG.visual.colors.outline
-const HERO_EYE_BAKE_COLORS = {
-  eyeWhiteColor: CFG.visual.colors.hero.eyeWhite,
-  pupilColor: CFG.visual.colors.hero.eyePupil,
-  transparentEyeInterior: false
-}
-//
 // Zone persistence keys (forest.* prefix).
 //
 const KEY_REVEALED_WATER = 'forest.revealedWater'
@@ -1200,15 +1190,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   //
   // Hero frames bake here so the spawn never hitches the main thread.
   //
-  Hero.loadHeroSprites({
-    k,
-    type: Hero.HEROES.HERO,
-    ...HERO_EYE_BAKE_COLORS,
-    bodyColor: HERO_FILLED_BODY_COLOR,
-    outlineColor: HERO_FILLED_OUTLINE_COLOR,
-    outlineOnly: false,
-    postBakeCanvas: applyForestGameplaySharpBake
-  })
+  Hero.loadHeroSprites(k)
   onProgress?.(90)
   await yieldForGpu(1)
   onProgress?.(100)
@@ -1361,17 +1343,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      bodyColor: HERO_FILLED_BODY_COLOR,
-      outlineColor: HERO_FILLED_OUTLINE_COLOR,
-      ...HERO_EYE_BAKE_COLORS,
-      outlineOnly: false,
       footFx: false,
       stepSoundScene: 'lesson-forest.0',
       suppressFootprints: true,
       airAnimDuringFlicker: true,
       runDuringFlicker: true,
       suppressDust: true,
-      postBakeCanvas: applyForestGameplaySharpBake,
       //
       // No idle humming until the level's late-game beats — keeps the early
       // world quiet while the hero learns to see.
@@ -5077,16 +5054,6 @@ function registerDrownLateSink(inst) {
   })
 }
 //
-// Rebakes closed-eye sprites with hollow sockets before the first-G lake sink.
-//
-function ensureForestHollowDrownClosedEyes(inst) {
-  if (inst.zones?.predatorAwake) return
-  const hero = inst.heroInst
-  if (!hero?.outlineOnly || hero.transparentEyeInterior) return
-  hero.transparentEyeInterior = true
-  Hero.loadHeroSprites(hero)
-}
-//
 // Slow sink then sad death sound and level restart; water stays revealed.
 //
 function startDrowning(inst) {
@@ -5110,7 +5077,6 @@ function startDrowning(inst) {
   // enterCalmPose clears any mid-air jump/run frame so the hero never rests
   // on the water surface sideways.
   //
-  ensureForestHollowDrownClosedEyes(inst)
   Hero.enterCalmPose(inst.heroInst)
   Hero.applyCalmIdleSprite(inst.heroInst)
   //

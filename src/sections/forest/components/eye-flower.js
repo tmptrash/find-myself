@@ -238,10 +238,10 @@ const BLADE_ROOT_PHASE = 0.15
 const BLADE_TIP_PHASE = 0.98
 const BLADE_MIDRIB_FRAC = 0.35
 //
-// Whisper is silent until the hero is past the lake's middle (from its east
-// shore) and grows to full by the island's water edge.
+// Whisper starts as the hero crosses the lake's right (east) edge and grows
+// evenly the farther left he goes, to full by the island's water edge.
 //
-const WHISPER_START_LAKE_FRAC = 0.5
+const WHISPER_START_LAKE_FRAC = 1
 const WHISPER_MIN_RAMP = 1
 //
 // Grab sequence (timeline in flower-grab.js). Four front blades turn into
@@ -698,7 +698,7 @@ export function surfaceY(inst, x) {
 
 /**
  * 0..1 whisper loudness for a hero at world X: silent east of the lake's
- * middle, rising as he crosses toward the island, full from its water edge
+ * right edge, rising evenly as he goes left toward the island, full from its water edge
  * on (at any height, so the branch over the lake counts too).
  * @param {Object|null} inst - Eye-flower inst
  * @param {number} x - World X
@@ -707,7 +707,7 @@ export function surfaceY(inst, x) {
 export function whisperProximity(inst, x) {
   if (!inst?.visible) return 0
   const startX = Math.max(inst.whisperStartX, inst.shoreX + WHISPER_MIN_RAMP)
-  return smoothstep(startX, inst.shoreX, x)
+  return Math.min(1, Math.max(0, (startX - x) / (startX - inst.shoreX)))
 }
 
 /**

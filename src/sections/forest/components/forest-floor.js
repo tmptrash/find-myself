@@ -124,6 +124,8 @@ export function create(cfg) {
     accentXs: cfg.accentXs ?? [],
     colors: { ...forestFloorPainterColors(), contactShadow: forestContactShadowRgb() },
     hill: { x1: hillX2 - HILL_W, x2: hillX2, floorY, height: HILL_W * HILL_RECT.h / HILL_RECT.w },
+    backZ,
+    frontZ,
     items: [],
     back: [],
     front: []
@@ -143,7 +145,8 @@ export function create(cfg) {
  * Lays the floor's pieces into the level's ground line, each painted alone
  * once: the rim's soil lip and lumps as the ground's own surface, its moss
  * and litter cushions and every other piece no taller than the hero's leg
- * bulging it up; taller ones are left out.
+ * bulging it up where they show; taller ones only hide what they are drawn
+ * over (each at its layer's z).
  * @param {Object} inst - Forest-floor inst
  * @param {Object} groundLine - Ground line inst (forest-ground-line.js)
  */
@@ -289,10 +292,11 @@ function itemBounds(inst, item) {
 //
 function addItemToGroundLine(inst, item, groundLine) {
   const b = itemBounds(inst, item)
+  const z = item.front ? inst.frontZ : inst.backZ
   if (item.kind !== KIND.RIM) {
     const canvas = itemCanvas(b)
     paintItem(canvas.getContext('2d'), inst, item)
-    ForestGroundLine.addPiece(groundLine, canvas, b.x1, b.y1)
+    ForestGroundLine.addPiece(groundLine, canvas, b.x1, b.y1, z)
     releaseCanvas(canvas)
     return
   }
@@ -302,8 +306,8 @@ function addItemToGroundLine(inst, item, groundLine) {
   const parts = { ground: ground.getContext('2d'), cushions: cushions.getContext('2d'), twigs: twigs.getContext('2d') }
   const { colors, floorY } = inst
   drawGroundRimToCanvas(parts.ground, { x1: item.x1, x2: item.x2, floorY, rng: createSeededRandom(item.seed), colors: colors.rim, parts })
-  ForestGroundLine.addGround(groundLine, ground, b.x1, b.y1)
-  ForestGroundLine.addPiece(groundLine, cushions, b.x1, b.y1)
+  ForestGroundLine.addGround(groundLine, ground, b.x1, b.y1, z)
+  ForestGroundLine.addPiece(groundLine, cushions, b.x1, b.y1, z)
   releaseCanvas(ground)
   releaseCanvas(cushions)
   releaseCanvas(twigs)

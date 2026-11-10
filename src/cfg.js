@@ -187,6 +187,7 @@ export const CFG = {
         hint: "#809AA8",
         text: "#9AB5C4"
       },
+      debugGroundLine: "#FF0000",      // TEMPORARY: forest ground line debug draw
       // Hero eye colors (pupils painted into the idle frames, menu text white)
       hero: {
         eyeWhite: "#FFFFFF",           // Eye white

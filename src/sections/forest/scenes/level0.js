@@ -614,6 +614,10 @@ const GROUND_PEBBLE_H_RANGE = 6
 const GROUND_PEBBLE_SINK = 1
 const GROUND_PEBBLE_SINK_RANGE = 2
 //
+// TEMPORARY: z of the ground line debug draw (over everything)
+//
+const GROUND_LINE_DEBUG_Z = 100000
+//
 // The life eye sits inside the playfield's top-right corner, this far in from
 // both playfield edges so it clears the rounded corner.
 //
@@ -1787,6 +1791,10 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       frontZ: FOREST_FLOOR_FRONT_Z
     })
     ForestFloor.addToGroundLine(inst.forestFloor, groundLine)
+    //
+    // TEMPORARY: red debug draw of the ground line the feet stand on
+    //
+    ForestGroundLine.DEBUG_DRAW && k.add([k.z(GROUND_LINE_DEBUG_Z), { draw() { drawForestGroundLineDebug(inst) } }])
     Hero.setSurfaceRay(heroInst, ForestGroundLine.raycast.bind(null, groundLine))
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
@@ -3628,7 +3636,8 @@ function placeGroundStonePlan(canvas, x, bounds, front, appleSpan, sink) {
 // atlas build clears what it is given), off the draw list until its ground
 // strip opens. A stone no taller than the hero's leg becomes part of the
 // ground line (the feet step on it), so it lies behind the hero even when
-// planned in front; a taller one is left out of the line.
+// planned in front; a taller one only hides the line's pieces it stands in
+// front of.
 //
 function placeGroundStone(k, plan, decorAtlas, groundLine) {
   const { canvas, front, posX, posY } = plan
@@ -3653,7 +3662,7 @@ function placeGroundStone(k, plan, decorAtlas, groundLine) {
   obj._detailRank = canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large'
   obj.hidden = true
   obj.moveTo(posX, PLATFORM_HIDE_Y)
-  ForestGroundLine.addPiece(groundLine, canvas, posX, posY, obj)
+  ForestGroundLine.addPiece(groundLine, canvas, posX, posY, z, obj)
   return obj
 }
 function copyCanvas(src) {
@@ -3662,6 +3671,13 @@ function copyCanvas(src) {
   canvas.height = src.height
   canvas.getContext('2d').drawImage(src, 0, 0)
   return canvas
+}
+//
+// TEMPORARY: the ground line in red across the visible part of the floor.
+//
+function drawForestGroundLineDebug(inst) {
+  const view = forestCameraViewXRange(inst.k, inst, 0)
+  view && ForestGroundLine.drawDebug(inst.groundLine, inst.k, Math.max(LEFT_MARGIN, view.x1), view.x2)
 }
 //
 // Flat ground line for the centipede. Up is a smaller Y.
@@ -3744,9 +3760,9 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     obj.pos.y = PLATFORM_HIDE_Y
     //
     // A mushroom no taller than the hero's leg bulges the ground line; a
-    // taller one is left out of it
+    // taller one only hides what it stands in front of
     //
-    ForestGroundLine.addPiece(groundLine, mushColorCanvas, baseX - totalW / 2, baseY - totalH, obj)
+    ForestGroundLine.addPiece(groundLine, mushColorCanvas, baseX - totalW / 2, baseY - totalH, MUSHROOM_Z, obj)
     objs.push(obj)
   }
   return objs

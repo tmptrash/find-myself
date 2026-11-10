@@ -1,140 +1,188 @@
-# Find Myself — Cave0 Art Style
+# Find Myself — арт-стиль Cave0
 
-Version: 2.1 (analog, non-mechanical rule added to the general rules)
-Source of truth: approved Cave0 gameplay screenshots (01–03).
+Версия: 2.2 (общие правила дополнены рекомендациями стиля Forest, которые не зависят от уровня)
+Источник истины: утверждённые игровые скриншоты Cave0 (01–03).
 
-This file has two parts:
-- **Part A — General rules.** Shared by every level of Find Myself; the same text lives in every level's style file (e.g. `art_style_forest.md`). Change it in all files at once.
-- **Part B — Cave0-specific rules.** Apply only to the Cave0 level.
+Файл состоит из двух частей:
+- **Часть A — общие правила.** Общие для всех уровней Find Myself; тот же текст лежит в файле стиля каждого уровня (например, `art_style_forest.md`). Меняйте его во всех файлах сразу.
+- **Часть B — правила только для Cave0.** Действуют только на уровне Cave0.
 
-When Part B conflicts with Part A, Part B wins for this level.
+Если часть B противоречит части A, на этом уровне побеждает часть B.
 
 ---
 
-# Part A — General rules (all levels)
+# Часть A — общие правила (все уровни)
 
-## Purpose and priority
-Create images belonging to one level (environment) of Find Myself. Match the visual language of that level's supplied gameplay references, not their exact layout. Never copy screenshot UI, FPS text, borders, or object arrangements.
+## Назначение и приоритет
+Создавайте изображения, принадлежащие одному уровню (окружению) Find Myself. Повторяйте визуальный язык игровых референсов этого уровня, а не их точную компоновку. Никогда не копируйте со скриншотов интерфейс, текст FPS, рамки или расстановку объектов.
 
-## Mandatory asset export rules
-- **Transparent background is required for every generated standalone game asset.** Export as a PNG with a real alpha channel (RGBA); all pixels outside the actual artwork must have alpha = 0.
-- **Never render a backdrop:** no solid-color background, painted scenery, gradient, stage, ground plane, checkerboard pattern, shadow cast onto a backdrop, or decorative frame. A checkerboard may appear in an editor preview only, never baked into the PNG.
-- Preserve clean, smooth antialiased edges with transparency; avoid colored halos and stray opaque pixels around silhouettes.
-- If one image contains multiple asset variants or detachable components, arrange them compactly to maximize the number of useful variations within the available canvas. Keep the transparent gaps between neighboring elements as small as possible while still ensuring that no silhouettes overlap or touch and that each asset can be reliably cropped programmatically. Avoid excessive margins, unused empty areas, and decorative spacing. Do not add labels, captions, or UI to the image.
-- **Mandatory rectangular sprite slicing:** When a PNG contains multiple object variants, assign each variant its own dedicated, non-overlapping axis-aligned rectangular region (sprite cell). The entire visible silhouette of each variant, including every leaf, branch, root, shadow and antialiased edge, must fit completely inside its own rectangle. No pixels belonging to one object may extend into another object's rectangle, and no pair of objects may interlock, overlap, or require an irregular crop mask. Arrange rectangular regions in clean rows or columns, with the smallest practical fully transparent gutters between them; preserve enough clearance to crop any region independently using a simple `x, y, width, height` rectangle without capturing any pixels of neighboring objects. Do not draw cell borders or labels.
-- Draw only the requested objects. These rules apply to foreground, background/parallax, scenery, plants, rocks, trees, roots and other isolated game assets alike. A complete background scene is an exception **only when explicitly requested**.
+## Обязательные правила экспорта ассетов
+- **Прозрачный фон обязателен для каждого отдельного игрового ассета.** Экспорт в PNG с настоящим альфа-каналом (RGBA); у всех пикселей вне самого рисунка alpha = 0.
+- **Никогда не рисуйте подложку:** никакого сплошного фона, нарисованного пейзажа, градиента, сцены, плоскости земли, шахматки, тени на подложке или декоративной рамки. Шахматка допустима только в превью редактора и никогда не запекается в PNG.
+- Сохраняйте чистые, гладкие сглаженные края с прозрачностью; без цветных ореолов и случайных непрозрачных пикселей вокруг силуэтов.
+- Если одно изображение содержит несколько вариантов ассета или отделяемых частей, располагайте их компактно, чтобы уместить на холсте как можно больше полезных вариантов. Прозрачные промежутки между соседними элементами делайте как можно меньше, но так, чтобы силуэты не перекрывались и не касались, и каждый ассет можно было надёжно вырезать программно. Без лишних полей, пустых областей и декоративных отступов. Не добавляйте на изображение подписи, надписи или интерфейс.
+- **Обязательная нарезка на прямоугольники:** если PNG содержит несколько вариантов объекта, у каждого варианта своя отдельная, не пересекающаяся с другими прямоугольная область со сторонами по осям (ячейка спрайта). Весь видимый силуэт варианта, включая каждый лист, ветку, корень, тень и сглаженный край, полностью помещается в свой прямоугольник. Ни один пиксель одного объекта не заходит в прямоугольник другого; никакие два объекта не сцепляются, не перекрываются и не требуют вырезания по неровной маске. Располагайте области ровными рядами или колонками, с минимально возможными полностью прозрачными промежутками; оставляйте достаточный зазор, чтобы любую область можно было вырезать отдельно простым прямоугольником `x, y, width, height`, не захватив пикселей соседей. Не рисуйте границы ячеек и подписи.
+- Рисуйте только запрошенные объекты. Правила одинаково относятся к переднему плану, фону/параллаксу, декорациям, растениям, камням, деревьям, корням и другим отдельным игровым ассетам. Полная фоновая сцена — исключение **только по явному запросу**.
+- **Частичные правки:** если задача требует сохранить существующие части без изменений, меняйте только запрошенную область, а не перерисовывайте ассет целиком.
+- **Ассеты с ригом / анимацией:** каждую независимо движущуюся часть держите отдельно, с точками крепления и порядком слоёв, удобными для программной анимации. Не придумывайте видимые отверстия, шарниры или суставы без запроса.
+- **Кадры анимации на одном листе:** у каждого кадра своя прямоугольная ячейка, и все кадры имеют один масштаб и одну привязку (одна линия земли и одна опорная точка, например глаз или центр тела), чтобы анимация не дёргалась при смене кадров.
 
-## Shared visual DNA
-- **Format:** handcrafted, richly layered 2D side-view game illustration; clean readable silhouettes with substantial small organic detail. Not pixel art, 3D render, photorealism, anime, or glossy mobile-game clip art.
-- **Mood:** quiet, enchanted, exploratory, slightly uncanny. Nature feels alive and mysterious. Avoid gratuitous horror, aggressive fantasy ornament, or cheerful toy-like styling. A level may shift this mood (darker, more tense) only as its own section describes.
-- **Shape language:** asymmetric, organic, gently irregular; avoid perfectly geometric outlines, repeated identical leaves/stones, and mechanically even spacing. Shapes are deliberately readable at gameplay scale.
-- **Edges:** mostly well-defined silhouette edges with restrained dark contouring and internal linework; not uniformly thick black outlines. Softer edges and lower contrast in distant layers.
-- **Depth:** strong foreground/midground/background separation through overlap, atmospheric desaturation, scale, contrast and detail density. Playable ground is visually distinct from distant scenery.
-- **Detail:** many small forms nested inside a few clear large masses. Concentrate detail around important silhouettes and surfaces; allow broad calm regions so the player remains visible.
-- **Lighting:** controlled and localized. Ambient light establishes each biome; small emissive points, reflected color, selective highlights, and shaded undersides give depth. Do not illuminate everything equally.
-- **Color:** flexible, environment-specific color harmony rather than one fixed palette; each level's section names its own harmony. Do not lock colors to exact hex values.
-- **Hero readability:** small white, black-outlined, simple upright character with two eyes and short legs, no visible arms in the references. Keep surrounding detail and value contrast from swallowing the hero.
-- **Environmental motifs:** vegetation, fungi, roots, tiny glowing particles, and eye-like organic forms. Their scale and prominence should follow the scene, not be inserted everywhere.
+## Общая визуальная ДНК
+- **Формат:** рукотворная, богато многослойная 2D-иллюстрация для игры с видом сбоку; чистые читаемые силуэты с обилием мелких органических деталей. Не пиксель-арт, не 3D-рендер, не фотореализм, не аниме и не глянцевый клипарт мобильных игр.
+- **Настроение:** тихое, волшебное, исследовательское, слегка жутковатое. Природа кажется живой и загадочной. Избегайте нарочитого хоррора, агрессивного фэнтезийного орнамента и весёлой игрушечной стилистики. Уровень может сдвигать настроение (темнее, напряжённее) только так, как описано в его собственном разделе.
+- **Язык форм:** асимметричный, органичный, слегка неровный; избегайте идеально геометричных контуров, повторяющихся одинаковых листьев/камней и механически равных интервалов. Формы намеренно читаемы в игровом масштабе.
+- **Края:** в основном чётко определённые края силуэта со сдержанным тёмным контуром и внутренними линиями; не равномерно толстая чёрная обводка. В дальних слоях края мягче и контраст ниже.
+- **Глубина:** сильное разделение переднего, среднего и заднего планов через перекрытие, атмосферное обесцвечивание, масштаб, контраст и плотность деталей. Игровая поверхность визуально отличается от дальних декораций.
+- **Детализация:** много мелких форм внутри нескольких ясных крупных масс. Сосредоточьте детали вокруг важных силуэтов и поверхностей; оставляйте широкие спокойные области, чтобы игрок оставался заметен.
+- **Освещение:** контролируемое и локальное. Окружающий свет задаёт каждый биом; мелкие светящиеся точки, отражённый цвет, выборочные блики и затенённые низы дают глубину. Не освещайте всё одинаково.
+- **Цвет:** гибкая цветовая гармония своего окружения, а не одна фиксированная палитра; раздел каждого уровня называет свою гармонию. Не привязывайте цвета к точным hex-значениям.
+- **Читаемость героя:** маленький белый простой прямоходящий персонаж с чёрной обводкой, двумя глазами и короткими ногами, без видимых рук на референсах. Не давайте окружающим деталям и контрасту «проглотить» героя.
+- **Мотивы окружения:** растительность, грибы, корни, крошечные светящиеся частицы и органические формы, похожие на глаза. Их масштаб и заметность подчиняются сцене; не вставляйте их повсюду.
 
-## Analog, not mechanical
-The style is analog, like everything in nature: made by hand and grown, never stamped out by a rule or a machine. Controlled irregularity beats precision. If a viewer can spot the rule that placed something (a grid, a copy-paste, a mirrored half, even steps), roughen it.
-- **Never exact:** no perfectly repeated, mirrored, aligned or evenly spaced elements, no perfect symmetry, no ruler-straight lines, no perfect circles or arcs. Horizontals are slightly uneven, curves wander, edges vary in weight along their length.
-- **Every instance differs:** two things of one kind differ in size, tilt, proportion, tone and wear. Clusters have uneven counts and uneven gaps. Break any rhythm that starts to feel regular.
-- **Colour and light drift:** surfaces shift gradually in hue and value (mottling, stains, patches of wear, uneven wetness, soft light falloff) instead of flat uniform fills or hard stepped gradients. The same material is a little warmer here and cooler there.
-- **Analog texture:** grain, soft bleed and paint-like variation, as in film or gouache. Not tiled patterns, uniform digital noise, or sterile pixel-perfect vector edges.
-- **Living motion:** idle and ambient animation has organic timing: eased starts and stops, a slightly different beat each cycle, offset phases between neighbours. Nothing moves in lockstep like a metronome, and loops do not read as a loop.
-- **Structured, not random:** irregularity follows how the thing grows (branching, weathering, flow of water, pull of light). Pure noise looks as artificial as pure order.
+## Аналоговое, а не механическое
+Стиль аналоговый, как всё в природе: сделан руками и вырос, а не отштампован правилом или машиной. Контролируемая неровность лучше точности. Если зритель может заметить правило, по которому что-то расставлено (сетку, копирование, отзеркаленную половину, равные шаги), — сделайте грубее.
+- **Никогда не точно:** никаких идеально повторённых, отзеркаленных, выровненных или равномерно расставленных элементов, никакой идеальной симметрии, линий по линейке, идеальных окружностей и дуг. Горизонтали слегка неровные, кривые блуждают, толщина края меняется по длине.
+- **Каждый экземпляр отличается:** два предмета одного вида различаются размером, наклоном, пропорциями, тоном и износом. В группах неровное количество и неровные промежутки. Ломайте любой ритм, который начинает казаться регулярным.
+- **Цвет и свет плывут:** поверхности постепенно меняют оттенок и светлоту (пятнистость, разводы, следы износа, неравномерная влажность, мягкое затухание света) вместо плоских ровных заливок и жёстких ступенчатых градиентов. Один и тот же материал здесь чуть теплее, там чуть холоднее.
+- **Аналоговая фактура:** зерно, мягкое растекание и живописные вариации, как на плёнке или в гуаши. Не тайловые узоры, не равномерный цифровой шум и не стерильные векторные края с точностью до пикселя.
+- **Живое движение:** idle и фоновая анимация имеют органичный тайминг: плавные начала и остановки, немного другой ритм в каждом цикле, сдвинутые фазы у соседей. Ничто не движется синхронно, как метроном, и цикл не читается как цикл.
+- **Структурно, а не случайно:** неровность следует тому, как вещь растёт (ветвление, выветривание, течение воды, тяга к свету). Чистый шум выглядит так же искусственно, как чистый порядок.
+- **Исключения ради геймплея:** неровность никогда не ломает геймплей. Поверхности, по которым ходят, сохраняют ясную, читаемую верхнюю линию (ровную или с пологим уклоном, как требует рельеф); не искривляйте поверхность коллизии только ради органичности. Допустимы чистые срезы в местах стыка модульных спрайтов, круглые глаза и простые читаемые формы интерактивных объектов.
+- **Ощущение анимации:** движение плавно разгоняется и тормозит, с небольшим замахом и дотягиванием. Это правило для движения; не искажайте статичные иллюстрации, чтобы его изобразить.
 
-## Shared material grammar
-| Material | Shape | Surface treatment | Light / shadow |
+## Отрисовка в игровом масштабе
+- **Матовые, мягко затенённые поверхности:** объём создаётся тонкой внутренней светотенью и живописными тоновыми пятнами, а не реалистичными зеркальными бликами. Глянцевые влажные акценты редки и намеренны.
+- **Чистота в игровом размере:** зерно и живописные вариации остаются тонкими; ассет должен читаться чистым и гладким в своём реальном экранном размере. Без сильного акварельного растекания, гранжа, агрессивной грязи, шумного аэрографа и наложенных фототекстур.
+- **Толщина контура зависит от важности:** контуры окружения выборочные и приглушённые; герой — намеренное высококонтрастное исключение и обведён чётче всего вокруг.
+- **Глубина через слои, а не размытие:** самые дальние слои теряют детали, контраст и насыщенность за счёт атмосферы уровня (дымка, темнота, туман). Никогда не размывайте всё; передний план и игровые спрайты остаются чёткими.
+- **Световые акценты редки:** мелкие световые точки, светлячки или споры изредка оживляют сцену. Никаких больших ореолов bloom и никакой одноцветной заливки светом на весь кадр.
+
+## Цветовая иерархия
+- Описывайте цвет как **отношения между семействами цветов**, а не фиксированными hex-значениями.
+- Одно доминирующее семейство несёт большую часть сцены; более тёплое или яркое семейство отмечает несколько локальных акцентов; «заземляющее» семейство держит низ кадра. Раздел уровня называет свои семейства.
+- Не делайте все объекты одинаково насыщенными, а все листья одинаково яркими. Всплески насыщенности и контраста — только для акцентов и интерактивных объектов.
+- Дальние декорации никогда не спорят по контрасту или насыщенности с интерактивным объектом переднего плана.
+
+## Листва и органические массы
+- Крона, куст или ковёр мха читаются **сначала как одна масса**, а уже потом как мелкие мазки, из которых они сложены (мазки листвы, лопасти, прожилки, пучки).
+- Каждая масса использует несколько близких оттенков: темнее снизу и внутри, светлые пятна сверху, несколько более ярких акцентов на открытых краях.
+- Мелкие мазки различаются размером, группировкой, ориентацией и интервалами, но складываются в цельные группы: не равномерные векторные точки и не случайный шум из баллончика.
+- Силуэты мягко неровные, не колючие, не геометричные и не орнаментально симметричные. Массы могут перекрываться и скрывать собственные ветки.
+- Акцентные растения переднего плана могут быть ярче и детальнее; фоновые сохраняют более тёмные, простые массы и упрощённые стволы.
+- Корни сужаются от толстых у основания к множеству тонких ветвящихся прядей, с естественной разницей в плотности и размере. Камни — стилизованные неровные глыбы с несколькими широкими гранями, в невысоких кучах разного размера, не отполированные и не одинаковые.
+
+## Масштаб и новые существа
+- Держите единую логику масштаба: перед утверждением сравнивайте каждое новое растение или существо с героем, ближайшими грибами и травой.
+- Необычное существо может выделяться формой или поведением, но разделяет с игрой материал, обработку контура, сдержанную светотень и масштаб.
+- Мелкие детали экосистемы (грибы, цветы, глаза на ножках, искорки жизни) остаются компактными и читаемыми; они украшают мир, а не доминируют в нём.
+
+## Общая грамматика материалов
+| Материал | Форма | Обработка поверхности | Свет / тень |
 | --- | --- | --- | --- |
-| Rock | Angular, uneven, clustered polygons | Several grey/teal values, cracks, narrow seams | Bright upper facets; dark recesses |
-| Leaf / canopy | Organic, asymmetric clusters | Overlapping color patches or veins depending on biome | Selected edge highlights; darker undersides |
-| Wood / trunk | Curving tapering branches, natural forks | Fine longitudinal strokes, overlapping bands | One consistent light direction; deep creases |
-| Moss / grass | Small irregular tufts, broken bands | Multiple nearby green values, not uniform carpet | Subtle highlights at exposed tips |
-| Roots / vines | Thin tapering, bending paths | Branching, sparse knots/leaves | Low contrast when distant |
-| Mushrooms | Recognizable stylized cap/stem or funnel form | Soft radial striation and localized color shifts | Subtle center depression or rim highlight |
-| Atmosphere | Large indistinct masses | Layered muted gradients / mottling | Low contrast, never competing with foreground |
+| Камень | Угловатые неровные многоугольники в группах | Несколько значений серого/сине-зелёного, трещины, узкие швы | Светлые верхние грани; тёмные углубления |
+| Лист / крона | Органичные асимметричные группы | Перекрывающиеся цветовые пятна или прожилки, в зависимости от биома | Выборочные блики по краям; более тёмные низы |
+| Дерево / ствол | Изогнутые сужающиеся ветви, естественные развилки | Тонкие продольные штрихи, перекрывающиеся полосы | Одно постоянное направление света; глубокие складки |
+| Мох / трава | Мелкие неровные пучки, прерывистые полосы | Несколько близких значений зелёного, не ровный ковёр | Тонкие блики на открытых кончиках |
+| Корни / лианы | Тонкие сужающиеся изгибающиеся линии | Ветвление, редкие узлы/листья | Низкий контраст на расстоянии |
+| Грибы | Узнаваемая стилизованная форма шляпки/ножки или воронки | Мягкая радиальная штриховка и локальные смены цвета | Тонкое углубление в центре или блик по краю |
+| Атмосфера | Крупные нечёткие массы | Многослойные приглушённые градиенты / пятнистость | Низкий контраст, никогда не спорит с передним планом |
 
-## Composition for gameplay
-1. Readable playable silhouettes come before decorative complexity.
-2. Make jump targets, ledge tops, hazards and interactable forms easy to distinguish.
-3. Reserve negative space around the character and important routes.
-4. Design at the target on-screen size, not only zoomed-in illustration scale.
-5. For standalone assets, isolate the requested subject and avoid inventing UI, player, background, or extra props unless requested.
+## Композиция для геймплея
+1. Читаемые игровые силуэты важнее декоративной сложности.
+2. Цели прыжков, верх уступов, опасности и интерактивные формы должны легко различаться.
+3. Оставляйте свободное пространство вокруг персонажа и важных маршрутов.
+4. Рисуйте под целевой экранный размер, а не только в увеличенном масштабе иллюстрации.
+5. Для отдельных ассетов изолируйте запрошенный объект и не придумывайте интерфейс, игрока, фон или лишний реквизит без запроса.
+6. Не размещайте насыщенные детали прямо за героем и в ключевых зонах прыжков и приземлений.
+7. Выделяйте важные объекты формой, движением и локальным контрастом, а не свечением в стиле интерфейса, обводкой или всплесками насыщенности.
+8. Держите ясную иерархию крупных форм: большие массы, затем их опоры (стволы, каменные тела), затем полоса низких растений, затем земля или подземелье.
+9. Повторяйте визуальную грамматику референсов, но никогда не точные позиции их объектов.
 
-## Explicit avoid list
-- Pixel-art dithering, chunky pixels, voxel or low-poly 3D appearance.
-- Photographic textures, realistic PBR materials, heavy bloom or lens effects.
-- Uniform black strokes around every detail, excessively smooth vector clip art, repetitive procedural stamping.
-- Oversaturated rainbow palettes, uniformly bright backgrounds, noisy details with no visual hierarchy.
-- Generic fantasy props unrelated to the approved screenshots.
-- Inconsistent lighting directions within a single scene.
-- Mechanical regularity: copy-pasted, mirrored or grid-spaced elements, perfect symmetry, ruler-straight lines, perfect circles, uniform sizes, lockstep animation, flat digital gradients.
+## Явный список того, чего избегать
+- Дизеринг пиксель-арта, крупные пиксели, воксели или вид низкополигонального 3D.
+- Фотографические текстуры, реалистичные PBR-материалы, сильный bloom или эффекты объектива.
+- Одинаковая чёрная обводка вокруг каждой детали, чрезмерно гладкий векторный клипарт, повторяющийся процедурный штамп.
+- Перенасыщенные радужные палитры, равномерно яркие фоны, шумные детали без визуальной иерархии.
+- Типовой фэнтезийный реквизит, не связанный с утверждёнными скриншотами.
+- Несогласованные направления света в пределах одной сцены.
+- Механическая регулярность: скопированные, отзеркаленные или расставленные по сетке элементы, идеальная симметрия, линии по линейке, идеальные окружности, одинаковые размеры, синхронная анимация, плоские цифровые градиенты.
+- Мягкие или размытые спрайты переднего плана; сильное акварельное растекание или грязь в игровом масштабе.
+- Настолько густой напочвенный покров, что он скрывает игрока или линию игровой поверхности.
+- Произвольное искривление поверхности, по которой ходят, только ради органичности.
 
-## Reference usage
-- Use the level's own screenshots as the primary reference for its environment.
-- Match shape language, edge treatment, material rendering, detail density, depth and lighting hierarchy before exact RGB colors.
-- If a specific request conflicts with these guidelines, follow that request while retaining other visual principles.
+## Использование референсов
+- Используйте собственные скриншоты уровня как главный референс его окружения.
+- Сначала совпадайте по языку форм, обработке краёв, отрисовке материалов, плотности деталей, глубине и иерархии света, и только потом по точным RGB-цветам.
+- Если конкретный запрос противоречит этим рекомендациям, следуйте запросу, сохраняя остальные визуальные принципы.
+- Если написанное правило даёт результат, заметно отличающийся от утверждённых скриншотов, следуйте скриншотам.
+
+## Чек-лист приёмки (любой уровень)
+1. Можно ли поставить элемент рядом с объектами на утверждённых скриншотах уровня, не изменив их вид?
+2. Использует ли он ту же матовую, мягко затенённую, слегка фактурную иллюстрацию, а не реалистичную, глянцевую или с тяжёлой обводкой?
+3. Принадлежит ли его цвет цветовой гармонии уровня и своему месту в цветовой иерархии (доминирующий, акцентный или заземляющий)?
+4. Подходят ли размер деталей, резкость краёв и контраст его слою глубины и экранному размеру?
+5. Показывают ли органические формы контролируемую, осмысленную вариативность, а не клоны или случайный шум?
+6. Читается ли он во время игры, особенно рядом с маленьким белым героем?
+7. Для отдельного ассета: действительно ли фон прозрачный и лежит ли каждая часть или кадр в своей прямоугольной ячейке для вырезания?
 
 ---
 
-# Part B — Cave0-specific rules
+# Часть B — правила только для Cave0
 
-## Place in the cave descent
-- Cave0 is **the first of three cave depths**. It is the shallowest and gentlest one: the world under the surface is only beginning to open up.
-- Leave room for the deeper levels to escalate: they become darker, more luminous, stranger and more hostile. Do not use up that escalation in Cave0 — no extreme darkness, dense glow, grotesque creatures or threatening forms.
-- The surface is still close. Its traces belong to the look: light from above, roots coming down through the ceiling, soil and moss on upper ledges.
+## Место в спуске по пещере
+- Cave0 — **первая из трёх глубин пещеры**. Самая мелкая и мягкая: подземный мир только начинает открываться.
+- Оставляйте место для нарастания на более глубоких уровнях: там темнее, больше свечения, страннее и враждебнее. Не расходуйте это нарастание в Cave0 — никакой предельной темноты, плотного свечения, гротескных существ или угрожающих форм.
+- Поверхность ещё близко. Её следы — часть облика: свет сверху, корни, спускающиеся через потолок, земля и мох на верхних уступах.
 
-## Mood
-- Calm, curious, damp and alive: a hidden place rather than a scary one.
-- **The atmosphere is not yet strongly oppressive or frightening.** Keep open breathing space in compositions and readable mid-values. No claustrophobic black masses pressing in from every side.
-- Uncanny details (eye-like forms, odd fungi) are quiet and curious, not menacing.
+## Настроение
+- Спокойное, любопытное, сырое и живое: скорее потаённое место, чем страшное.
+- **Атмосфера ещё не давит и не пугает.** Оставляйте в композиции открытое пространство для «дыхания» и читаемые средние тона. Никаких клаустрофобных чёрных масс, давящих со всех сторон.
+- Жутковатые детали (формы, похожие на глаза, странные грибы) тихие и любопытные, а не угрожающие.
 
-## Living closed ecosystem
-- The animals and plants of Cave0 form a **closed ecosystem that lives its own life**, independent of the hero. Every creature has a place in it: what it eats, where it rests, what grows on it or around it.
-- Show these links visually: grazers near the moss and fungi they feed on, small predators near their prey's paths, plants growing on shells, nests or droppings, fungi on dead roots, life gathered around water and light.
-- Creatures are **minimally aggressive towards the hero** compared with the deeper levels. They are **usually busy with themselves** — feeding, cleaning, sleeping, building, drinking, gathering, tending their young — rather than watching or hunting the hero.
-- Poses and expressions are relaxed, absorbed, or at most mildly curious. Avoid bared teeth, charging poses, spikes aimed outward and eyes glaring at the viewer.
-- Hazards must still read clearly as hazards (see Part A, Composition). They come from the place itself (sharp rock, a creature guarding its food, a falling drop), not from hostility.
+## Живая замкнутая экосистема
+- Животные и растения Cave0 образуют **замкнутую экосистему, которая живёт своей жизнью** независимо от героя. У каждого существа в ней своё место: что оно ест, где отдыхает, что растёт на нём или вокруг него.
+- Показывайте эти связи визуально: травоядные рядом со мхом и грибами, которыми питаются, мелкие хищники у троп своей добычи, растения на раковинах, гнёздах или помёте, грибы на мёртвых корнях, жизнь, собравшаяся вокруг воды и света.
+- Существа **минимально агрессивны к герою** по сравнению с более глубокими уровнями. Они **обычно заняты собой** — едят, чистятся, спят, строят, пьют, собирают, ухаживают за детёнышами, — а не следят за героем и не охотятся на него.
+- Позы и выражения расслабленные, увлечённые или в крайнем случае слегка любопытные. Избегайте оскаленных зубов, поз атаки, торчащих наружу шипов и глаз, сверлящих зрителя.
+- Опасности всё равно должны ясно читаться как опасности (см. часть A, «Композиция»). Они исходят от самого места (острый камень, существо, охраняющее еду, падающая капля), а не от враждебности.
 
-## Water
-- Water is everywhere in Cave0 and is one of its main motifs:
-  - **Lakes:** calm and blue-green, with a clean thin surface highlight and partly visible submerged roots and rocks.
-  - **Small waterfalls:** thin, narrow streams falling from ledges and cracks into pools, with a little foam and spray at the bottom. Never wide or roaring cascades.
-  - **Dripping water:** drops falling from stalactites, roots and ledges; wet streaks on rock; small puddles and ripples where the drops land.
-- Wet surfaces get a few small, cool highlights. Do not make every stone glossy.
-- Life clusters near water: moss, fungi, small creatures drinking or feeding.
+## Вода
+- Вода в Cave0 повсюду и является одним из главных мотивов:
+  - **Озёра:** спокойные, сине-зелёные, с чистым тонким бликом поверхности и частично видимыми подводными корнями и камнями.
+  - **Небольшие водопады:** тонкие узкие струйки, падающие с уступов и из трещин в водоёмы, с небольшой пеной и брызгами внизу. Никогда не широкие и не ревущие каскады.
+  - **Капающая вода:** капли падают со сталактитов, корней и уступов; мокрые потёки на камне; маленькие лужицы и круги там, куда падают капли.
+- Мокрые поверхности получают несколько небольших холодных бликов. Не делайте глянцевым каждый камень.
+- Жизнь скапливается у воды: мох, грибы, мелкие существа пьют или кормятся.
 
-## Light from the surface
-- **Occasionally**, shafts of daylight break through cracks in the ceiling. They are rare, soft-edged, slightly warm or neutral beams, with dust or droplets floating in them.
-- Where a beam lands it can wake the place up: brighter moss, a small plant reaching towards it, a creature warming itself.
-- Beams never cover the playable route like fog and never compete with the hero or hazards.
+## Свет с поверхности
+- **Изредка** сквозь трещины в потолке пробиваются лучи дневного света. Это редкие лучи с мягкими краями, слегка тёплые или нейтральные, с плавающими в них пылинками или капельками.
+- Там, куда падает луч, место может оживать: более яркий мох, маленькое растение, тянущееся к свету, греющееся существо.
+- Лучи никогда не закрывают игровой маршрут как туман и не спорят с героем или опасностями.
 
-## Glow budget
-- **Glowing elements are still few.** Bioluminescence is a rare accent: a few small cyan fungi, sparse floating light specks, an occasional glowing creature detail.
-- Most light comes from cool ambient cave light, water reflections and the occasional surface beam, not from emissive objects.
-- Never make a whole asset glow by default. Glow is something the deeper levels develop.
+## Бюджет свечения
+- **Светящихся элементов всё ещё мало.** Биолюминесценция — редкий акцент: несколько маленьких голубых грибов, редкие плавающие световые точки, изредка светящаяся деталь существа.
+- Большая часть света — холодный окружающий свет пещеры, отражения воды и редкий луч с поверхности, а не светящиеся объекты.
+- Никогда не делайте весь ассет светящимся по умолчанию. Свечение развивают более глубокие уровни.
 
-## Cave0 biome — references 01–03
-### Color
-- Cave uses cool deep blue/teal shadows with warm orange-gold wood and vivid yellow-green leaves.
-### Visual construction
-- Deep cavern with dark navy, petroleum-blue and green-blue negative space, softly mottled rock atmosphere, and dim distant ledges.
-- Strong rocky frame and platforms: irregular polygonal grey stones of many sizes, visible dark cracks, small black gaps, selective light grey faces, patches of teal-dark rock and tiny moss/grass clusters.
-- Platforms have clear horizontal or gently sloped playable upper surfaces, substantial rock bodies, and visually broken undersides. Hanging vines/roots may fall below, but are not themselves implied as walkable surfaces.
-- Distant platforms use darker, less contrasty green stone clusters and soft detail, not the same bright foreground-rock texture.
-- Central landmark is a giant twisting golden-orange organic trunk, with intertwined branches, warm directional highlights, dark seams, attached smaller leaves, and broad bright yellow-green leaf platforms with visible veins, torn/holed edges and darker undersides.
-- Secondary plants include salmon/peach funnel mushrooms along cliff walls, pale mint/teal parasol-like stalk plants, tiny cyan bioluminescent fungi, thin hanging vines and small floating light specks.
-- Water, where present, is calm and blue-green with a clean thin surface highlight and partially visible submerged roots/rocks.
-### Cave-specific rules
-- Maintain a clear contrast between cool cavern atmosphere and selected luminous warm vegetation.
-- The bright tree is a focal point, not a requirement that every asset must glow or be golden.
-- Foreground stone texture can be densely articulated; avoid equally dense treatment of the distant background.
-- Preserve believable structural layering: rock mass, moss, hanging growth, atmosphere, then distant structures.
+## Биом Cave0 — референсы 01–03
+### Цвет
+- В пещере холодные глубокие синие/сине-зелёные тени с тёплым оранжево-золотым деревом и яркими жёлто-зелёными листьями.
+### Визуальное построение
+- Глубокая пещера с тёмно-синим, нефтяно-синим и зелёно-синим негативным пространством, мягко пятнистой каменной атмосферой и тусклыми дальними уступами.
+- Мощная каменная рамка и платформы: неровные многоугольные серые камни разных размеров, заметные тёмные трещины, мелкие чёрные зазоры, выборочные светло-серые грани, участки тёмного сине-зелёного камня и крошечные пучки мха/травы.
+- У платформ ясная горизонтальная или пологая игровая верхняя поверхность, массивное каменное тело и визуально изломанный низ. Свисающие лианы/корни могут спускаться ниже, но сами не подразумеваются как поверхность для ходьбы.
+- Дальние платформы — более тёмные, менее контрастные зеленоватые группы камней с мягкой детализацией, а не та же яркая фактура камня переднего плана.
+- Центральный ориентир — гигантский извивающийся золотисто-оранжевый органический ствол с переплетёнными ветвями, тёплыми направленными бликами, тёмными швами, прикреплёнными листьями поменьше и широкими яркими жёлто-зелёными листьями-платформами с видимыми прожилками, рваными/дырявыми краями и более тёмным низом.
+- Второстепенные растения: лососево-персиковые грибы-воронки вдоль стен утёсов, бледно-мятные/сине-зелёные растения на стеблях, похожие на зонтики, крошечные голубые биолюминесцентные грибы, тонкие свисающие лианы и мелкие плавающие световые точки.
+- Вода, где она есть, спокойная, сине-зелёная, с чистым тонким бликом поверхности и частично видимыми подводными корнями/камнями.
+### Правила, специфичные для пещеры
+- Сохраняйте ясный контраст между холодной атмосферой пещеры и отдельными светящимися тёплыми растениями.
+- Яркое дерево — это акцент, а не требование, чтобы каждый ассет светился или был золотым.
+- Фактура камня переднего плана может быть плотно проработанной; не прорабатывайте так же плотно дальний фон.
+- Сохраняйте правдоподобное слоистое строение: каменная масса, мох, свисающая растительность, атмосфера, затем дальние структуры.
 
-## Cave0 reference usage
-- Use the Cave0 screenshots (01–03) as the primary reference for this environment.
+## Использование референсов Cave0
+- Используйте скриншоты Cave0 (01–03) как главный референс этого окружения.
 
-## Suggested prompt attachment text
-"Use art_style_cave0.md and the attached Cave0 gameplay references as art-direction guides. Create an original Cave0 asset matching the established silhouettes, materials, colors, depth and detail density. Cave0 is the first and gentlest of three cave depths: calm and alive, with a closed ecosystem whose creatures are busy with themselves, water (lakes, thin waterfalls, drips), rare light shafts from the surface and only a few glowing accents. The look is analog and organic like nature, never mechanical: nothing exactly repeated, symmetric or evenly spaced. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"
+## Рекомендуемый текст для промпта
+«Используй art_style_cave0.md и приложенные игровые референсы Cave0 как руководство по арт-дирекшену. Создай оригинальный ассет Cave0, совпадающий с установленными силуэтами, материалами, цветами, глубиной и плотностью деталей. Cave0 — первая и самая мягкая из трёх глубин пещеры: спокойная и живая, с замкнутой экосистемой, существа которой заняты собой, с водой (озёра, тонкие водопады, капель), редкими лучами света с поверхности и лишь несколькими светящимися акцентами. Облик аналоговый и органичный, как природа, никогда не механический: ничего точно повторённого, симметричного или равномерно расставленного. Исключи интерфейс, отладочные оверлеи и незапрошенные объекты. [Опиши объект, размеры, композицию. Прозрачный фон PNG RGBA обязателен. Если запрошено несколько вариантов, каждый должен помещаться в независимую прямоугольную область для вырезания со сторонами по осям, не касаясь соседних областей.]»

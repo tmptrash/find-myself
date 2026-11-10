@@ -22,7 +22,7 @@ const QUAD_INDICES = [0, 1, 2, 0, 2, 3]
  * @returns {Object} Batch inst
  */
 export function create() {
-  return { pts: [], colors: [], indices: [], count: 0 }
+  return { pts: [], colors: [], opacities: [], fades: false, indices: [], count: 0 }
 }
 
 /**
@@ -32,6 +32,7 @@ export function create() {
 export function reset(inst) {
   inst.count = 0
   inst.indices.length = 0
+  inst.fades = false
 }
 
 /**
@@ -56,6 +57,29 @@ export function addLine(inst, x1, y1, x2, y2, width, color) {
   setVertex(inst, base + 1, x2 + nx, y2 + ny, color)
   setVertex(inst, base + 2, x2 - nx, y2 - ny, color)
   setVertex(inst, base + 3, x1 - nx, y1 - ny, color)
+  QUAD_INDICES.forEach(i => inst.indices.push(base + i))
+  inst.count += 4
+}
+
+/**
+ * Adds a quad from its top edge (left, right) to its bottom edge (right, left).
+ * @param {Object} inst - Batch inst
+ * @param {number} x1 - Top-left X
+ * @param {number} y1 - Top-left Y
+ * @param {number} x2 - Top-right X
+ * @param {number} y2 - Top-right Y
+ * @param {number} x3 - Bottom-right X
+ * @param {number} y3 - Bottom-right Y
+ * @param {number} x4 - Bottom-left X
+ * @param {number} y4 - Bottom-left Y
+ * @param {Object} color - Kaplay colour
+ */
+export function addQuad(inst, x1, y1, x2, y2, x3, y3, x4, y4, color) {
+  const base = inst.count
+  setVertex(inst, base, x1, y1, color)
+  setVertex(inst, base + 1, x2, y2, color)
+  setVertex(inst, base + 2, x3, y3, color)
+  setVertex(inst, base + 3, x4, y4, color)
   QUAD_INDICES.forEach(i => inst.indices.push(base + i))
   inst.count += 4
 }
@@ -132,30 +156,62 @@ export function addPolyline(inst, pts, width, color) {
 }
 
 /**
+ * Fades the vertices added since a mark by their height: clear at y0,
+ * opaque at y1, clear again at y2 (linear in between, clear outside).
+ * Opacity is linear in y across every triangle, so the fade is exact.
+ * @param {Object} inst - Batch inst
+ * @param {number} from - First vertex index to fade (inst.count before adding them)
+ * @param {number} y0 - Fade-in start (clear)
+ * @param {number} y1 - Fully opaque
+ * @param {number} y2 - Fade-out end (clear)
+ */
+export function fadeBand(inst, from, y0, y1, y2) {
+  for (let i = from; i < inst.count; i++) {
+    const y = inst.pts[i].y
+    inst.opacities[i] = y < y1 ? clamp01((y - y0) / (y1 - y0)) : clamp01((y2 - y) / (y2 - y1))
+  }
+  inst.fades = true
+}
+
+/**
  * Draws everything collected so far in one call and clears the batch.
  * @param {Object} inst - Batch inst
  * @param {Object} k - Kaplay instance
  * @param {number} [opacity=1] - Shared opacity
  * @param {number} [shiftY=0] - Moves every vertex down by this many px
  * @param {number} [maxY=Infinity] - Vertices below this line (after the shift) are flattened onto it
+ * @param {number} [minY=-Infinity] - Vertices above this line (after the shift) are flattened onto it
  */
-export function flush(inst, k, opacity = 1, shiftY = 0, maxY = Infinity) {
+export function flush(inst, k, opacity = 1, shiftY = 0, maxY = Infinity, minY = -Infinity) {
   if (inst.count >= 3 && inst.indices.length) {
     inst.pts.length = inst.count
     inst.colors.length = inst.count
-    if (shiftY !== 0 || maxY < Infinity) shiftVertices(inst.pts, shiftY, maxY)
+    if (shiftY !== 0 || maxY < Infinity || minY > -Infinity) shiftVertices(inst.pts, shiftY, maxY, minY)
     k.drawPolygon({
       pts: inst.pts,
       colors: inst.colors,
       indices: inst.indices,
-      ...(opacity < 1 ? { opacity } : {})
+      ...polygonOpacity(inst, opacity)
     })
   }
   reset(inst)
 }
-function shiftVertices(pts, shiftY, maxY) {
+//
+// Shared opacity, or per-vertex opacities (the shared one folded in) once a
+// vertex of this batch fades.
+//
+function polygonOpacity(inst, opacity) {
+  if (!inst.fades) return opacity < 1 ? { opacity } : {}
+  inst.opacities.length = inst.count
+  opacity < 1 && inst.opacities.forEach((o, i) => { inst.opacities[i] = o * opacity })
+  return { opacities: inst.opacities }
+}
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v))
+}
+function shiftVertices(pts, shiftY, maxY, minY) {
   pts.forEach(p => {
-    p.y = Math.min(p.y + shiftY, maxY)
+    p.y = Math.max(minY, Math.min(p.y + shiftY, maxY))
   })
 }
 function discSegmentCount(radius) {
@@ -178,4 +234,5 @@ function setVertex(inst, i, x, y, color) {
   p.x = x
   p.y = y
   inst.colors[i] = color
+  inst.opacities[i] = 1
 }

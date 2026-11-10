@@ -190,7 +190,26 @@ export const CFG = {
       // Hero eye colors (pupils painted into the idle frames, menu text white)
       hero: {
         eyeWhite: "#FFFFFF",           // Eye white
-        eyePupil: "#000000"            // Pupil
+        eyePupil: "#000000",           // Pupil
+        //
+        // Live running legs: contours sampled from the leg pieces of
+        // hero.png. The near leg takes the run body's own colour and both
+        // legs' joins its tone there (sampled from the bake; the fallbacks
+        // only until it is); the far leg is the sheet's grey one, toned
+        // down to the graded body.
+        //
+        legNear: {
+          outline: "#5C564E",          // Contour
+          joinFallback: "#C8BEB0",     // Body tone at the join before it is sampled
+          bodyFallback: "#DDD4C6"      // Body colour (near leg) before it is sampled
+        },
+        legFar: {
+          outline: "#474542",          // Contour
+          shade: "#6C6B68",            // Fill sides
+          mid: "#85837F",              // Between sides and core
+          core: "#8C8883",             // Lit core
+          streak: "#7E7C78"            // Fur streaks
+        }
       },
       //
       // Game-wide palette. Semantic aliases only — every value is a reference

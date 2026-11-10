@@ -3887,20 +3887,7 @@ function drawForestPitCaveHeroForeground(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
-  const k = inst.k
-  const sprite = Hero.getActiveSpriteKey(hero)
-  if (!k.getSprite(sprite)) return
-  const scale = char.scale?.x ?? 1
-  const fullH = Hero.HERO_BAKE_SPRITE_SIZE * scale
-  k.drawSprite({
-    sprite,
-    pos: char.pos,
-    anchor: 'center',
-    width: fullH,
-    height: fullH,
-    flipX: char.flipX,
-    opacity: char.opacity ?? 1
-  })
+  Hero.drawHero(hero)
 }
 //
 // Draws only the hero pixels above the lake surface (default sprite stays hidden).

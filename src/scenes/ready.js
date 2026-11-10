@@ -4,7 +4,7 @@ import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
-import { loadHeroSprites, HERO_SPRITE_PREFIX, heroLookSpriteName, heroWinkSpriteName } from '../components/hero.js'
+import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
@@ -497,7 +497,7 @@ export function sceneReady(k) {
       bakeReadyLetterShadowSprite(k, li.char)
       bakeReadyLetterGlowSprite(k, li.char)
     })
-    const hero = createReadyHero()
+    const hero = createReadyHero(k)
     readyEyeState.hero = hero
     k.add([k.pos(0, 0), k.z(Z_TITLE), { draw() { onDrawTitle(k, spiderState, titleLetters) } }])
     //
@@ -926,8 +926,9 @@ function resolveReadyEyeLookTarget(hero) {
 //
 // Lone hero state — starts on the ground line right of the eye, watching it.
 //
-function createReadyHero() {
+function createReadyHero(k) {
   return {
+    heroLegs: createRunLegs(k),
     heroPhase: 'watch',
     heroX: LIFE_X + LIFE_WIDTH + HERO_WATCH_GAP_X + HERO_CHAR_WIDTH / 2,
     heroY: HERO_N_GROUND_CENTER_Y,
@@ -1328,29 +1329,47 @@ function startHeroNBurst(spider) {
   spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
 }
 //
-// Draws the lone hero: its baked frame for the current phase, eyes and all.
+// Draws the lone hero: running on live legs, else its baked frame for the
+// current phase, eyes and all.
 //
 function drawTitleHero(k, spider) {
   if (spider.heroGone) return
+  const phase = spider.heroPhase
+  if (phase === 'run' || phase === 'finalWalk' || phase === 'lookLeft') {
+    drawTitleRunner(k, spider)
+    return
+  }
   k.drawSprite({
     sprite: heroFrameName(spider),
     pos: k.vec2(spider.heroX - HERO_N_SPRITE_SIZE / 2, spider.heroY - HERO_N_SPRITE_SIZE / 2),
     width: HERO_N_SPRITE_SIZE,
-    height: HERO_N_SPRITE_SIZE,
-    flipX: spider.heroPhase === 'lookLeft'
+    height: HERO_N_SPRITE_SIZE
   })
 }
 //
-// Sprite for the current phase: a mid-stride running pose (both legs
-// clearly apart) held and mirrored to face left, the run cycle, shut eyes
-// while idling, one eye open glancing left and right while waking, pupils
-// on the centre eye while watching it, and straight ahead while pausing.
+// The running hero on its live legs: the gait follows the burst's frame
+// clock smoothly; facing left it holds one mid-stride pose (both legs
+// clearly apart).
+//
+function drawTitleRunner(k, spider) {
+  const lookLeft = spider.heroPhase === 'lookLeft'
+  const frame = lookLeft ? HERO_N_LOOK_LEFT_RUN_FRAME : spider.heroRunFrame + spider.heroFrameTimer / HERO_N_RUN_FRAME_TIME
+  drawRunningHero(k, spider.heroLegs, {
+    x: spider.heroX,
+    y: spider.heroY,
+    facing: lookLeft ? -1 : 1,
+    phase: frame / HERO_N_RUN_FRAME_COUNT,
+    groundY: spider.heroY + HERO_FEET_OFFSET_Y
+  })
+}
+//
+// Standing sprite for the current phase: shut eyes while idling, one eye
+// open glancing left and right while waking, pupils on the centre eye while
+// watching it, and straight ahead while pausing.
 //
 function heroFrameName(spider) {
   const P = HERO_SPRITE_PREFIX
   const phase = spider.heroPhase
-  if (phase === 'lookLeft') return `${P}-run-${HERO_N_LOOK_LEFT_RUN_FRAME}`
-  if (phase === 'run' || phase === 'finalWalk') return `${P}-run-${spider.heroRunFrame}`
   if (phase === 'idle' || phase === 'wakeBothEyes') return `${P}_closed`
   if (phase === 'wakeOneEye') return heroWinkSpriteName(P, Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2))
   if (phase === 'watch') return heroWatchSpriteName(spider)

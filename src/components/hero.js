@@ -3,6 +3,7 @@ import { isAnyKeyDown } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
 import * as HeroPicture from '../utils/hero-picture.js'
+import * as HeroLegs from '../utils/hero-legs.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import {
   bindDefaultHeroFootFx,
@@ -42,9 +43,16 @@ const COLLISION_OFFSET_Y = 3
 // Hero parameters — scale 1 since sprites are already at display resolution
 //
 const HERO_SCALE = 1
-const RUN_ANIM_SPEED = 0.03333
-const RUN_FRAME_COUNT = HeroPicture.RUN_FRAME_COUNT
-export const HERO_RUN_FRAME_COUNT = RUN_FRAME_COUNT
+//
+// Running: the hitbox shows a blank sprite while a pass of its own draws
+// the leg-less run body over the live IK legs (hero-legs.js). A foot plants
+// RUN_STEPS_PER_CYCLE times per gait cycle. HERO_FEET_OFFSET_Y is the feet
+// line below the hero's centre.
+//
+const RUN_BODY_SPRITE = `${HERO_SPRITE_PREFIX}-run-body`
+const RUN_BLANK_SPRITE = `${HERO_SPRITE_PREFIX}-run-blank`
+const RUN_STEPS_PER_CYCLE = 2
+export const HERO_FEET_OFFSET_Y = HeroPicture.FEET_Y - SPRITE_SIZE / 2
 //
 // Ignore airborne flicker shorter than this — prevents run↔squat loops when
 // the hitbox briefly loses contact with a platform mid-stride
@@ -169,6 +177,11 @@ export const HEROES = {
 // k.getSprite() alone must not skip loadHeroSprites on a fresh k.
 //
 const heroFramesBakedFor = new WeakSet()
+//
+// The run body's colours by the near leg, sampled from its bake per live
+// Kaplay instance (the legs' fills take them).
+//
+const runBodyTonesFor = new WeakMap()
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -212,8 +225,6 @@ export function create(config) {
     fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
     hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
     ambient = false,       // Decorative background character — no collision area
-    ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
-    ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
     idleNotePostBake = null // Optional grain pass for baked mouth-note glyphs
   } = config
   //
@@ -268,7 +279,6 @@ export function create(config) {
     stepSoundScene,
     airAnimDuringFlicker,
     runDuringFlicker,
-    idleNotePostBake,                     // Forest film grain on baked mouth-note glyphs
     spritePrefix: HERO_SPRITE_PREFIX,
     dustColor,
     suppressDust,
@@ -277,8 +287,10 @@ export function create(config) {
     jumpForce: config.jumpForce ?? CFG.game.jumpForce,
     direction: 1,
     canJump: true,
-    runFrame: 0,
-    runTimer: 0,
+    runPhase: 0,      // Gait phase 0..1 while running
+    runPoseOn: false, // The run pass draws the body and live legs this frame
+    legs: HeroLegs.create(k, runBodyTonesFor.get(k) ?? null),
+    surfaceCandidates: [], // Platforms the leg rays test this frame
     isRunning: false,
     wasJumping: false,
     jumpFrame: 0,     // Current jump animation frame
@@ -347,16 +359,31 @@ export function create(config) {
     idleMelodyIndex: 0,
     idleStillTime: 0,
     whistlePulse: 0,
-    whistleLeanSide: 1,
-    ambientWalk,
-    ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
+    whistleLeanSide: 1
   }
+  inst.groundAt = surfaceBelow.bind(null, inst)
   idleNotePostBake && ensureIdleNoteGlyphSprites(k, idleNotePostBake)
   //
   // Collision handlers require k.area() — skipped for ambient decorative characters
   //
   character.onCollide?.(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
+  //
+  // Run pass at the hero's z (after the hitbox in draw order): poses the
+  // legs on the surfaces under them once the hitbox has moved, then draws
+  // them and the run body while running.
+  //
+  k.add([
+    k.z(CFG.visual.zIndex.player),
+    {
+      update() {
+        poseRunLegs(inst, this)
+      },
+      draw() {
+        drawRunPass(inst)
+      }
+    }
+  ])
   controllable && setupControls(inst)
   bindDefaultHeroFootFx(inst, config)
   //
@@ -506,21 +533,58 @@ export function enterCalmPose(inst) {
   inst.jumpFrame = 0
   inst.isRunning = false
   inst.wasJumping = false
-  inst.runFrame = 0
-  inst.runTimer = 0
+  inst.runPhase = 0
   applyCalmIdleSprite(inst)
 }
 
 /**
- * Returns the kaplay sprite key currently shown on the hero character.
+ * Draws the hero as it looks this frame (the run pose while running, else
+ * its current sprite) — for passes that hide the hitbox sprite and redraw
+ * the hero themselves.
  * @param {Object} inst - Hero instance
- * @returns {string}
  */
-export function getActiveSpriteKey(inst) {
-  if (inst.currentEyeSprite) return inst.currentEyeSprite
-  if (inst.jumpPhase && inst.jumpPhase !== 'none') return heroJumpSpriteName(inst.jumpFrame ?? 0)
-  if (inst.isRunning) return heroRunSpriteName(inst.runFrame ?? 0)
-  return idleLookSpriteName(inst)
+export function drawHero(inst) {
+  const ch = inst.character
+  if (!ch?.exists?.()) return
+  if (inst.runPoseOn) {
+    drawRunPose(inst)
+    return
+  }
+  inst.k.drawSprite({
+    sprite: inst.currentEyeSprite ?? `${HERO_SPRITE_PREFIX}_0_0`,
+    pos: ch.pos,
+    anchor: 'center',
+    flipX: ch.flipX,
+    opacity: ch.opacity ?? 1
+  })
+}
+
+/**
+ * Legs for drawRunningHero() (one per drawn runner).
+ * @param {Object} k - Kaplay instance
+ * @returns {Object} Legs inst
+ */
+export function createRunLegs(k) {
+  return HeroLegs.create(k, runBodyTonesFor.get(k) ?? null)
+}
+
+/**
+ * Draws a running hero that is not a hero inst (title runner, frame
+ * sheets): its live legs on a flat ground line and the run body over them.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} legs - From createRunLegs()
+ * @param {Object} cfg
+ * @param {number} cfg.x - Centre X
+ * @param {number} cfg.y - Centre Y
+ * @param {number} cfg.facing - 1 right, -1 left
+ * @param {number} cfg.phase - Gait phase 0..1
+ * @param {number} cfg.groundY - Ground line Y under the feet
+ * @param {number} [cfg.opacity=1] - Shared opacity
+ */
+export function drawRunningHero(k, legs, cfg) {
+  const { x, y, facing, phase, groundY, opacity = 1 } = cfg
+  HeroLegs.pose(legs, { x, y, facing, phase, groundAt: flatGroundAt.bind(null, groundY), dt: 0 })
+  drawRunBodyOverLegs(k, legs, x, y, facing, opacity)
 }
 
 /**
@@ -577,9 +641,6 @@ export function spawn(inst, _opts = {}) {
   inst.spawnLandGrace = 0.35
 }
 
-function heroRunSpriteName(frame) {
-  return `${HERO_SPRITE_PREFIX}-run-${frame}`
-}
 function heroJumpSpriteName(frame) {
   return `${HERO_SPRITE_PREFIX}-jump-${frame}`
 }
@@ -630,7 +691,7 @@ function onUpdate(inst) {
   // For non-controllable characters (like in menu), always use idle animation
   //
   if (!inst.controllable) {
-    inst.ambientWalk ? updateAmbientWalkAnimation(inst) : updateIdleAnimation(inst)
+    updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
     snapPosToPixels(inst)
     return
@@ -943,8 +1004,7 @@ function onUpdate(inst) {
     }
       syncJumpCollision(inst)
     if (!inst.wasJumping) {
-      inst.runFrame = 0
-      inst.runTimer = 0
+      inst.runPhase = 0
       inst.isRunning = false
       inst.wasJumping = true
       inst.jumpPhase = 'jumping'
@@ -1034,36 +1094,20 @@ function onUpdate(inst) {
 
   if (isMoving) {
     if (!inst.isRunning && !inst.wasJumping) {
-      inst.runFrame = 0
-      inst.runTimer = 0
-      inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(0)))
+      inst.runPhase = 0
       //
       // Create dust particles when starting to run (skip in water)
       //
       !inst.suppressDust && inst.onSpawnRunStartDust?.(inst, inst.direction)
-    } else if (inst.wasJumping) {
-      //
-      // Just landed - continue with current frame, just update sprite
-      //
-      inst.wasJumping = false
-      inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(inst.runFrame)))
     }
-
+    //
+    // Running (also straight out of a landing): the run pass draws the
+    // body and legs over a blank hitbox sprite
+    //
+    inst.wasJumping = false
     inst.isRunning = true
-    inst.runTimer += inst.k.dt()
-    if (inst.runTimer > RUN_ANIM_SPEED) {
-      inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
-      inst.currentEyeSprite = null
-      inst.character.use(inst.k.sprite(heroRunSpriteName(inst.runFrame)))
-      inst.runTimer = 0
-      //
-      // Step sound + footprint on the contact frames (a foot plants on the
-      // ground twice per 8-frame cycle — frames 0 and 4)
-      //
-      inst.runFrame % (RUN_FRAME_COUNT / 2) === 0 && playHeroRunStepFx(inst, inst.runFrame)
-    }
+    inst.currentEyeSprite !== RUN_BLANK_SPRITE && useHeroSprite(inst, RUN_BLANK_SPRITE)
+    advanceRunPhase(inst)
   } else {
     //
     // Idle - with eye animation
@@ -1177,8 +1221,7 @@ function updateIdleAnimation(inst) {
   if (inst.isRunning || inst.wasJumping) {
     inst.isRunning = false
     inst.wasJumping = false
-    inst.runFrame = 0
-    inst.runTimer = 0
+    inst.runPhase = 0
     //
     // Instantly switch to current idle sprite
     //
@@ -1222,21 +1265,6 @@ function updateIdleAnimation(inst) {
   //
   if (inst.currentEyeSprite !== spriteName) {
     useHeroSprite(inst, spriteName)
-  }
-}
-
-//
-// Slow run cycle for distant background walkers — avoids idle/run sprite fighting
-//
-function updateAmbientWalkAnimation(inst) {
-  inst.runTimer += inst.k.dt()
-  if (inst.runTimer >= inst.ambientRunSpeed) {
-    inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
-    inst.runTimer = 0
-  }
-  const runSprite = heroRunSpriteName(inst.runFrame)
-  if (inst.currentEyeSprite !== runSprite) {
-    useHeroSprite(inst, runSprite)
   }
 }
 
@@ -1504,9 +1532,85 @@ export function snapPosToPixels(inst) {
 
 
 //
+// Moves the gait on; a foot plants RUN_STEPS_PER_CYCLE times a cycle (step
+// sound + footprint each time).
+//
+function advanceRunPhase(inst) {
+  const before = Math.floor(inst.runPhase * RUN_STEPS_PER_CYCLE)
+  inst.runPhase = (inst.runPhase + inst.k.dt() / HeroLegs.RUN_CYCLE_SEC) % 1
+  Math.floor(inst.runPhase * RUN_STEPS_PER_CYCLE) !== before && playHeroRunStepFx(inst, 0)
+}
+//
+// Poses the legs while the hitbox shows the blank run sprite: the pass
+// follows the hitbox's z, gathers the platforms the leg rays may hit, and
+// the body snaps to its surface height on the first run frame.
+//
+function poseRunLegs(inst, pass) {
+  const ch = inst.character
+  const on = inst.currentEyeSprite === RUN_BLANK_SPRITE && Boolean(ch?.exists?.())
+  const dt = inst.runPoseOn ? inst.k.dt() : 0
+  inst.runPoseOn = on
+  if (!on) return
+  pass.z = ch.z
+  inst.surfaceCandidates = inst.k.get(CFG.game.platformName)
+  HeroLegs.pose(inst.legs, { x: ch.pos.x, y: ch.pos.y, facing: inst.direction, phase: inst.runPhase, groundAt: inst.groundAt, dt })
+}
+function drawRunPass(inst) {
+  const ch = inst.character
+  if (!inst.runPoseOn || !ch?.exists?.() || ch.hidden) return
+  drawRunPose(inst)
+}
+function drawRunPose(inst) {
+  const ch = inst.character
+  drawRunBodyOverLegs(inst.k, inst.legs, ch.pos.x, ch.pos.y, inst.direction, ch.opacity ?? 1)
+}
+//
+// The far leg and the near leg's contour, the run body over their hips
+// (moved with the legs' bob and surface shift), then the near leg's fill
+// over the body's bottom contour.
+//
+function drawRunBodyOverLegs(k, legs, x, y, facing, opacity) {
+  HeroLegs.drawBehind(legs, opacity)
+  k.drawSprite({
+    sprite: RUN_BODY_SPRITE,
+    pos: k.vec2(x, y + legs.bodyDy),
+    anchor: 'center',
+    flipX: facing === -1,
+    opacity
+  })
+  HeroLegs.drawFront(legs, opacity)
+}
+//
+// Surface Y under a point: a ray HeroLegs.RAY_DEPTH px straight down,
+// raycast against each platform around it (a cheap box test skips the far
+// ones); the nearest top face it hits, null when there is none.
+//
+function surfaceBelow(inst, x, fromY) {
+  const k = inst.k
+  const origin = k.vec2(x, fromY)
+  const ray = k.vec2(0, HeroLegs.RAY_DEPTH)
+  let best = null
+  for (const obj of inst.surfaceCandidates) {
+    if (obj === inst.character || obj.hidden || !obj.exists?.() || !obj.worldArea) continue
+    const rect = getPlatformWorldRect(obj)
+    if (rect && (x < rect.left || x > rect.right || rect.bottom < fromY || rect.top > fromY + HeroLegs.RAY_DEPTH)) continue
+    const hit = obj.worldArea().raycast(origin, ray)
+    if (!hit || hit.normal.y >= 0 || (best && hit.fraction >= best.fraction)) continue
+    best = hit
+  }
+  return best ? best.point.y : null
+}
+//
+// A flat ground line for runners drawn outside a level (bound to its Y).
+//
+function flatGroundAt(groundY) {
+  return groundY
+}
+//
 // Bakes the hero's frames from the picture sheet into the live k: the idle
 // stance looking straight ahead and in every look direction, with both eyes
-// shut and winking (right eye open), then the run and jump frames.
+// shut and winking (right eye open), the leg-less run body with the blank
+// hitbox sprite it runs under, then the jump frames.
 //
 function bakeHeroFrames(k) {
   const P = HERO_SPRITE_PREFIX
@@ -1514,15 +1618,33 @@ function bakeHeroFrames(k) {
   LOOK_VECTORS.forEach((look, i) => commitHeroFrame(k, `${P}_look_${i}`, HeroPicture.bakeIdleFrame([look, look])))
   commitHeroFrame(k, `${P}_closed`, HeroPicture.bakeIdleFrame([null, null]))
   WINK_SIDES.forEach(side => commitHeroFrame(k, heroWinkSpriteName(P, side), HeroPicture.bakeIdleFrame([null, { x: side, y: 0 }])))
-  for (let f = 0; f < RUN_FRAME_COUNT; f++) commitHeroFrame(k, `${P}-run-${f}`, HeroPicture.bakeRunFrame(f))
+  commitHeroFrame(k, RUN_BODY_SPRITE, HeroPicture.bakeRunBody(), runBodyGraded)
+  commitHeroFrame(k, RUN_BLANK_SPRITE, blankFrame())
   for (let f = 0; f < JUMP_FRAME_COUNT; f++) commitHeroFrame(k, `${P}-jump-${f}`, HeroPicture.bakeJumpFrame(f))
 }
 //
-// Grains one baked frame and hands it to Kaplay.
+// An empty sprite-sized canvas (the hitbox sprite while the run pass draws).
 //
-function commitHeroFrame(k, spriteName, canvas) {
+function blankFrame() {
+  const canvas = document.createElement('canvas')
+  canvas.width = SPRITE_SIZE
+  canvas.height = SPRITE_SIZE
+  return canvas
+}
+//
+// The finished run body bake: note its colours by the near leg.
+//
+function runBodyGraded(k, canvas) {
+  runBodyTonesFor.set(k, HeroLegs.sampleBodyTones(canvas))
+}
+//
+// Grains one baked frame, lets the caller read the finished pixels, and
+// hands it to Kaplay.
+//
+function commitHeroFrame(k, spriteName, canvas, onGraded = null) {
   if (!canvas) return
   applyForestGameplaySharpBake(canvas, HERO_GRAIN_SEED)
+  onGraded?.(k, canvas)
   k.loadSprite(spriteName, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -1537,7 +1659,8 @@ function heroFrameSpriteNames() {
     `${P}_closed`,
     ...LOOK_VECTORS.map((_, i) => `${P}_look_${i}`),
     ...WINK_SIDES.map(side => heroWinkSpriteName(P, side)),
-    ...Array.from({ length: RUN_FRAME_COUNT }, (_, f) => `${P}-run-${f}`),
+    RUN_BODY_SPRITE,
+    RUN_BLANK_SPRITE,
     ...Array.from({ length: JUMP_FRAME_COUNT }, (_, f) => `${P}-jump-${f}`)
   ]
 }

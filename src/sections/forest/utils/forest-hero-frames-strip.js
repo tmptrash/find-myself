@@ -17,13 +17,17 @@ const LABEL_FONT_SIZE = 11
 const LABEL_GAP_PX = 3
 const LABEL_COLOR = '#a8a8a8'
 const STRIP_LABEL = 'hero'
+//
+// The run row shows the live-leg gait at RUN_POSE_COUNT evenly spaced phases.
+//
+const RUN_POSE_COUNT = 8
 
 /**
  * Recomputes frame size so all sections fit inside maxHeightPx.
  * @param {Object} stripInst - heroFramesStrip on scene inst
  */
 function forestHeroStripFrameDisplayPx(k, levelHeroScale = 1) {
-  const maxCols = Hero.HERO_RUN_FRAME_COUNT
+  const maxCols = RUN_POSE_COUNT
   const usableW = k.width() - SIDE_PAD_PX * 2 - FRAME_GAP_PX * (maxCols - 1)
   const fitW = Math.floor(usableW / maxCols)
   const targetPx = Math.round(
@@ -50,7 +54,7 @@ export function recomputeForestHeroFramesStripLayout(stripInst) {
 export function drawForestHeroFramesStripHud(stripInst) {
   if (!stripInst?.visibleBlocks?.length) return
   const { k, visibleBlocks, displayPx, maxHeightPx } = stripInst
-  const maxCols = Hero.HERO_RUN_FRAME_COUNT
+  const maxCols = RUN_POSE_COUNT
   const jumpColOffset = Math.floor((maxCols - Hero.HERO_JUMP_FRAME_COUNT) / 2)
   const cellStep = displayPx + FRAME_GAP_PX
   const rowWidth = maxCols * cellStep - FRAME_GAP_PX
@@ -70,7 +74,7 @@ export function drawForestHeroFramesStripHud(stripInst) {
       font: CFG.visual.fonts.regularFull
     })
     y += LABEL_FONT_SIZE + LABEL_GAP_PX
-    drawForestHeroFrameStripRow(k, block.prefix, 'run', Hero.HERO_RUN_FRAME_COUNT, 0, startX, y, displayPx, cellStep)
+    drawForestHeroRunPoseRow(k, block.legs, startX, y, displayPx, cellStep)
     y += displayPx + ROW_GAP_PX
     drawForestHeroFrameStripRow(k, block.prefix, 'jump', Hero.HERO_JUMP_FRAME_COUNT, jumpColOffset, startX, y, displayPx, cellStep)
     y += displayPx + SECTION_GAP_PX
@@ -79,9 +83,22 @@ export function drawForestHeroFramesStripHud(stripInst) {
 
 export function bakeForestHeroFrameStripBlocks(k) {
   Hero.loadHeroSprites(k)
-  return [{ label: STRIP_LABEL, prefix: Hero.HERO_SPRITE_PREFIX }]
+  return [{ label: STRIP_LABEL, prefix: Hero.HERO_SPRITE_PREFIX, legs: Hero.createRunLegs(k) }]
 }
 
+//
+// The run gait at evenly spaced phases, each pose scaled into its cell.
+//
+function drawForestHeroRunPoseRow(k, legs, startX, y, displayPx, cellStep) {
+  const scale = displayPx / Hero.HERO_BAKE_SPRITE_SIZE
+  for (let f = 0; f < RUN_POSE_COUNT; f++) {
+    k.pushTransform()
+    k.pushTranslate(k.vec2(startX + f * cellStep + displayPx / 2, y + displayPx / 2))
+    k.pushScale(k.vec2(scale, scale))
+    Hero.drawRunningHero(k, legs, { x: 0, y: 0, facing: 1, phase: f / RUN_POSE_COUNT, groundY: Hero.HERO_FEET_OFFSET_Y })
+    k.popTransform()
+  }
+}
 function drawForestHeroFrameStripRow(k, prefix, anim, frameCount, colOffset, startX, y, displayPx, cellStep) {
   for (let f = 0; f < frameCount; f++) {
     const x = startX + (colOffset + f) * cellStep

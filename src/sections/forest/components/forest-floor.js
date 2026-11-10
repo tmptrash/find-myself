@@ -6,6 +6,7 @@ import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } fro
 import { loadPictureImage } from '../utils/forest-picture.js'
 import { drawForestPlant, forestPlantBounds } from '../utils/forest-plants.js'
 import { drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
+import * as ForestGroundLine from '../utils/forest-ground-line.js'
 //
 // Colour-world forest floor dressing from the reference art: the ragged
 // ground rim and one wide mossy hill behind the hero (a picture,
@@ -123,17 +124,31 @@ export function create(cfg) {
     accentXs: cfg.accentXs ?? [],
     colors: { ...forestFloorPainterColors(), contactShadow: forestContactShadowRgb() },
     hill: { x1: hillX2 - HILL_W, x2: hillX2, floorY, height: HILL_W * HILL_RECT.h / HILL_RECT.w },
+    items: [],
     back: [],
     front: []
   }
   const rng = createSeededRandom(LAYOUT_SEED)
   const patchItems = buildPatchItems(inst, rng, xMin, xMax)
   const backItems = [...buildRimItems(rimSpans, rng), ...buildBackItems(inst, rng, xMin, xMax), ...patchItems.filter(item => !item.front)]
+  inst.items = [...backItems, ...patchItems.filter(item => item.front)]
   inst.back = bakeChunks(inst, backItems, 'back', SEED_BACK)
   inst.front = bakeChunks(inst, patchItems.filter(item => item.front), 'front', SEED_FRONT)
   k.add([k.z(backZ), { draw() { onDraw(inst, 'back') } }])
   k.add([k.z(frontZ), { draw() { onDraw(inst, 'front') } }])
   return inst
+}
+
+/**
+ * Lays the floor's pieces into the level's ground line, each painted alone
+ * once: the rim's soil lip and lumps as the ground's own surface, its moss
+ * and litter cushions and every other piece no taller than the hero's leg
+ * bulging it up; taller ones are left out.
+ * @param {Object} inst - Forest-floor inst
+ * @param {Object} groundLine - Ground line inst (forest-ground-line.js)
+ */
+export function addToGroundLine(inst, groundLine) {
+  inst.items.forEach(item => addItemToGroundLine(inst, item, groundLine))
 }
 
 /**
@@ -266,6 +281,46 @@ function itemBounds(inst, item) {
   if (item.kind === KIND.FERN) return forestPlantBounds(item.x, inst.floorY, item.size)
   if (item.kind === KIND.PLUME) return forestPlantBounds(item.x, inst.floorY, item.size)
   return forestMushroomBounds(item.x, inst.floorY)
+}
+//
+// One piece painted alone on a canvas of its bounds, then scanned. The rim
+// splits into the ground's surface (soil lip, lumps) and its low cushions;
+// its twigs are too thin to step on and go nowhere.
+//
+function addItemToGroundLine(inst, item, groundLine) {
+  const b = itemBounds(inst, item)
+  if (item.kind !== KIND.RIM) {
+    const canvas = itemCanvas(b)
+    paintItem(canvas.getContext('2d'), inst, item)
+    ForestGroundLine.addPiece(groundLine, canvas, b.x1, b.y1)
+    releaseCanvas(canvas)
+    return
+  }
+  const ground = itemCanvas(b)
+  const cushions = itemCanvas(b)
+  const twigs = itemCanvas(b)
+  const parts = { ground: ground.getContext('2d'), cushions: cushions.getContext('2d'), twigs: twigs.getContext('2d') }
+  const { colors, floorY } = inst
+  drawGroundRimToCanvas(parts.ground, { x1: item.x1, x2: item.x2, floorY, rng: createSeededRandom(item.seed), colors: colors.rim, parts })
+  ForestGroundLine.addGround(groundLine, ground, b.x1, b.y1)
+  ForestGroundLine.addPiece(groundLine, cushions, b.x1, b.y1)
+  releaseCanvas(ground)
+  releaseCanvas(cushions)
+  releaseCanvas(twigs)
+}
+//
+// A blank canvas over bounds b, already shifted to world coordinates.
+//
+function itemCanvas(b) {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(b.x2 - b.x1)
+  canvas.height = Math.ceil(b.y2 - b.y1)
+  canvas.getContext('2d').translate(-b.x1, -b.y1)
+  return canvas
+}
+function releaseCanvas(canvas) {
+  canvas.width = 0
+  canvas.height = 0
 }
 function mergeBounds(a, b) {
   if (!a) return { ...b }

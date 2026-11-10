@@ -271,6 +271,24 @@ export function forestGroundStones() {
 }
 
 /**
+ * The bare stones (no moss, no plants), cut at sheet size — the source of
+ * the small pebbles on the ground; empty until loadForestStones() has
+ * resolved.
+ * @returns {Array<{canvas: HTMLCanvasElement, kind: string}>}
+ */
+export function forestBareStones() {
+  return (cuts ?? []).filter(s => s.kind === STONE_KIND.BARE)
+}
+
+/**
+ * The world px per sheet px of a ground stone before its random tweak.
+ * @returns {number}
+ */
+export function forestGroundStoneScale() {
+  return GROUND_SCALE
+}
+
+/**
  * One ground stone at world size (its sheet size times the ground scale and
  * a random tweak), graded and grained like the forest's baked material.
  * @param {{canvas: HTMLCanvasElement}} stone - A cut stone

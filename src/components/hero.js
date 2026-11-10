@@ -52,7 +52,22 @@ const HERO_SCALE = 1
 const RUN_BODY_SPRITE = `${HERO_SPRITE_PREFIX}-run-body`
 const RUN_BLANK_SPRITE = `${HERO_SPRITE_PREFIX}-run-blank`
 const RUN_STEPS_PER_CYCLE = 2
+//
+// Blinking (startBlink): the hero flickers BLINK_HZ times a second between
+// full opacity and BLINK_LOW_OPACITY.
+//
+const BLINK_HZ = 8
+const BLINK_LOW_OPACITY = 0.25
 export const HERO_FEET_OFFSET_Y = HeroPicture.FEET_Y - SPRITE_SIZE / 2
+//
+// Every frame is drawn by the hero's own pass over a blank hitbox sprite, so
+// a standing hero can stand on the level's ground line too: the idle body on
+// its own live legs (HeroLegs.poseStand, each foot on the surface under it),
+// the crouch frames shifted the way a running body is, measured under the
+// same two feet (HeroLegs.standShift); both eased at the run's rate from the
+// height the body had, so stopping never makes it jump; in the air a crouch
+// eases back to the hitbox.
+//
 //
 // Ignore airborne flicker shorter than this — prevents run↔squat loops when
 // the hitbox briefly loses contact with a platform mid-stride
@@ -182,6 +197,11 @@ const heroFramesBakedFor = new WeakSet()
 // Kaplay instance (the legs' fills take them).
 //
 const runBodyTonesFor = new WeakMap()
+//
+// The idle body's colours by its right leg, likewise (both standing legs
+// take them).
+//
+const idleBodyTonesFor = new WeakMap()
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -242,7 +262,7 @@ export function create(config) {
   const collisionHeight = COLLISION_HEIGHT + hitboxPadding * 2
   loadHeroSprites(k)
   const character = k.add([
-    k.sprite(`${HERO_SPRITE_PREFIX}_0_0`),
+    k.sprite(RUN_BLANK_SPRITE),
     k.pos(x, y),
     //
     // Ambient decorative characters skip collision detection — they only move via manual
@@ -263,6 +283,7 @@ export function create(config) {
     //
     ...(fixed ? [k.fixed()] : (isStatic ? [] : [k.body()])),
     k.anchor("center"),
+    k.opacity(1),
     k.scale(scale),
     k.z(CFG.visual.zIndex.player),
   ])
@@ -289,8 +310,13 @@ export function create(config) {
     canJump: true,
     runPhase: 0,      // Gait phase 0..1 while running
     runPoseOn: false, // The run pass draws the body and live legs this frame
+    standDy: 0,       // Standing frames' shift onto the ground line (px)
+    blinkLeft: 0,     // Seconds of blinking left (startBlink)
     legs: HeroLegs.create(k, runBodyTonesFor.get(k) ?? null),
+    standLegs: HeroLegs.create(k, idleBodyTonesFor.get(k) ?? null, { standing: true }),
+    standLegsOn: false, // The idle body stands on its live legs this frame
     surfaceCandidates: [], // Platforms the leg rays test this frame
+    surfaceRay: null, // Optional (x, fromY, depth) => surface Y | null — a level's ground line for the feet
     isRunning: false,
     wasJumping: false,
     jumpFrame: 0,     // Current jump animation frame
@@ -369,18 +395,20 @@ export function create(config) {
   character.onCollide?.(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   //
-  // Run pass at the hero's z (after the hitbox in draw order): poses the
-  // legs on the surfaces under them once the hitbox has moved, then draws
-  // them and the run body while running.
+  // The hero's draw pass at its z (after the hitbox in draw order): once the
+  // hitbox has moved it poses the running legs, or shifts a standing frame
+  // onto the ground line, then draws the hero.
   //
   k.add([
     k.z(CFG.visual.zIndex.player),
+    ...(fixed ? [k.fixed()] : []),
     {
       update() {
-        poseRunLegs(inst, this)
+        tickBlink(inst)
+        poseHero(inst, this)
       },
       draw() {
-        drawRunPass(inst)
+        drawHeroPass(inst)
       }
     }
   ])
@@ -546,17 +574,89 @@ export function enterCalmPose(inst) {
 export function drawHero(inst) {
   const ch = inst.character
   if (!ch?.exists?.()) return
-  if (inst.runPoseOn) {
-    drawRunPose(inst)
+  if (inst.runPoseOn) drawRunPose(inst)
+  else if (inst.standLegsOn) drawIdlePose(inst)
+  else drawStanding(inst)
+}
+
+/**
+ * Makes the hero blink (flicker in and out) for a while — e.g. the safe
+ * moment after a respawn.
+ * @param {Object} inst - Hero instance
+ * @param {number} seconds - How long to blink
+ */
+export function startBlink(inst, seconds) {
+  inst.blinkLeft = seconds
+}
+
+/**
+ * Whether the hero is blinking (its opacity is the blink's, not to be reset).
+ * @param {Object} inst - Hero instance
+ * @returns {boolean}
+ */
+export function isBlinking(inst) {
+  return (inst?.blinkLeft ?? 0) > 0
+}
+
+/**
+ * Gives the hero's running feet an extra surface to stand on besides the
+ * platforms: a level's ground line, raycast straight down per foot. The
+ * nearest surface under a foot wins.
+ * @param {Object} inst - Hero instance
+ * @param {function(number, number, number): (number|null)|null} ray - (x, fromY, depth) => surface Y or null; null drops it
+ */
+export function setSurfaceRay(inst, ray) {
+  inst.surfaceRay = ray
+}
+
+/**
+ * Legs for drawStandingHero() (one per drawn standing hero).
+ * @param {Object} k - Kaplay instance
+ * @returns {Object} Legs inst
+ */
+export function createStandLegs(k) {
+  return HeroLegs.create(k, idleBodyTonesFor.get(k) ?? null, { standing: true })
+}
+
+/**
+ * Draws a standing hero that is not a hero inst (title scene, a grabbed or
+ * drowning hero): an idle sprite on its live legs, its feet on a flat ground
+ * line, or dangling with no ground.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} legs - From createStandLegs()
+ * @param {Object} cfg
+ * @param {number} cfg.x - Centre X
+ * @param {number} cfg.y - Centre Y
+ * @param {string} cfg.sprite - Idle sprite name
+ * @param {boolean} [cfg.flipX=false] - Mirror the body
+ * @param {number|null} [cfg.groundY=null] - Ground line Y under the feet, null to let them dangle
+ * @param {number} [cfg.opacity=1] - Shared opacity
+ */
+export function drawStandingHero(k, legs, cfg) {
+  const { x, y, sprite, flipX = false, opacity = 1 } = cfg
+  poseStandingLegs(legs, x, y, cfg.groundY ?? null)
+  drawBodyOverStandLegs(k, legs, sprite, x, y, flipX, opacity)
+}
+
+/**
+ * Draws only a standing hero's legs, behind or in front of a body the
+ * caller draws itself between the two calls (a clipped one).
+ * @param {Object} legs - From createStandLegs()
+ * @param {Object} cfg
+ * @param {number} cfg.x - Centre X
+ * @param {number} cfg.y - Centre Y
+ * @param {number|null} [cfg.groundY=null] - Ground line Y under the feet, null to let them dangle
+ * @param {number} [cfg.opacity=1] - Shared opacity
+ * @param {boolean} front - The part over the body (else the one behind it)
+ */
+export function drawStandingHeroLegs(legs, cfg, front) {
+  const opacity = cfg.opacity ?? 1
+  if (front) {
+    HeroLegs.drawFront(legs, opacity)
     return
   }
-  inst.k.drawSprite({
-    sprite: inst.currentEyeSprite ?? `${HERO_SPRITE_PREFIX}_0_0`,
-    pos: ch.pos,
-    anchor: 'center',
-    flipX: ch.flipX,
-    opacity: ch.opacity ?? 1
-  })
+  poseStandingLegs(legs, cfg.x, cfg.y, cfg.groundY ?? null)
+  HeroLegs.drawBehind(legs, opacity)
 }
 
 /**
@@ -1532,6 +1632,16 @@ export function snapPosToPixels(inst) {
 
 
 //
+// Counts the blink down, flickering the hero's opacity; full again at its end.
+//
+function tickBlink(inst) {
+  const ch = inst.character
+  if (!ch?.exists?.() || inst.blinkLeft <= 0) return
+  inst.blinkLeft = Math.max(0, inst.blinkLeft - inst.k.dt())
+  const low = Math.floor(inst.blinkLeft * BLINK_HZ * 2) % 2 === 1
+  ch.opacity = inst.blinkLeft > 0 && low ? BLINK_LOW_OPACITY : 1
+}
+//
 // Moves the gait on; a foot plants RUN_STEPS_PER_CYCLE times a cycle (step
 // sound + footprint each time).
 //
@@ -1545,20 +1655,90 @@ function advanceRunPhase(inst) {
 // follows the hitbox's z, gathers the platforms the leg rays may hit, and
 // the body snaps to its surface height on the first run frame.
 //
-function poseRunLegs(inst, pass) {
+function poseHero(inst, pass) {
   const ch = inst.character
-  const on = inst.currentEyeSprite === RUN_BLANK_SPRITE && Boolean(ch?.exists?.())
+  if (!ch?.exists?.()) return
+  pass.z = ch.z
+  const on = inst.currentEyeSprite === RUN_BLANK_SPRITE
   const dt = inst.runPoseOn ? inst.k.dt() : 0
   inst.runPoseOn = on
-  if (!on) return
-  pass.z = ch.z
+  if (!on) {
+    isIdleSprite(inst.currentEyeSprite) ? poseIdle(inst) : poseStanding(inst)
+    return
+  }
+  inst.standLegsOn = false
   inst.surfaceCandidates = inst.k.get(CFG.game.platformName)
   HeroLegs.pose(inst.legs, { x: ch.pos.x, y: ch.pos.y, facing: inst.direction, phase: inst.runPhase, groundAt: inst.groundAt, dt })
+  inst.standDy = inst.legs.bodyDy
 }
-function drawRunPass(inst) {
+//
+// The idle body on its live legs: each foot on the surface under it, the
+// body eased from wherever it stood a frame ago (a run's or a crouch's
+// height), so switching frames never makes it jump.
+//
+function poseIdle(inst) {
   const ch = inst.character
-  if (!inst.runPoseOn || !ch?.exists?.() || ch.hidden) return
-  drawRunPose(inst)
+  inst.standLegsOn || (inst.standLegs.shift = inst.standDy)
+  inst.standLegsOn = true
+  inst.surfaceCandidates = inst.k.get(CFG.game.platformName)
+  HeroLegs.poseStand(inst.standLegs, { x: ch.pos.x, y: ch.pos.y, groundAt: inst.groundAt, dt: inst.k.dt() })
+  inst.standDy = inst.standLegs.bodyDy
+}
+function isIdleSprite(name) {
+  return Boolean(name?.startsWith(`${HERO_SPRITE_PREFIX}_`))
+}
+//
+// A standing frame's shift onto the level's ground line: the mean rise of
+// the line under both feet while on the ground, eased; none in the air.
+//
+function poseStanding(inst) {
+  const ch = inst.character
+  inst.standLegsOn = false
+  let target = 0
+  if (inst.surfaceRay && isHeroGrounded(inst)) {
+    inst.surfaceCandidates = inst.k.get(CFG.game.platformName)
+    target = HeroLegs.standShift(ch.pos.x, ch.pos.y, inst.direction, inst.groundAt)
+  }
+  inst.standDy += (target - inst.standDy) * Math.min(1, inst.k.dt() * HeroLegs.SURFACE_SHIFT_RATE)
+}
+function drawHeroPass(inst) {
+  const ch = inst.character
+  if (!ch?.exists?.() || ch.hidden) return
+  drawHero(inst)
+}
+//
+// The current standing / jumping frame, shifted onto the ground line.
+//
+function drawStanding(inst) {
+  const ch = inst.character
+  inst.k.drawSprite({
+    sprite: inst.currentEyeSprite ?? `${HERO_SPRITE_PREFIX}_0_0`,
+    pos: inst.k.vec2(ch.pos.x, ch.pos.y + inst.standDy),
+    anchor: 'center',
+    flipX: ch.flipX,
+    scale: ch.scale,
+    opacity: ch.opacity ?? 1
+  })
+}
+function drawIdlePose(inst) {
+  const ch = inst.character
+  drawBodyOverStandLegs(inst.k, inst.standLegs, inst.currentEyeSprite, ch.pos.x, ch.pos.y, ch.flipX, ch.opacity ?? 1)
+}
+//
+// The standing legs' contours, the idle body over their hips (moved with
+// their surface shift), then their fills over its bottom contour.
+//
+function drawBodyOverStandLegs(k, legs, sprite, x, y, flipX, opacity) {
+  HeroLegs.drawBehind(legs, opacity)
+  k.drawSprite({ sprite, pos: k.vec2(x, y + legs.bodyDy), anchor: 'center', flipX, opacity })
+  HeroLegs.drawFront(legs, opacity)
+}
+//
+// A standing pair posed at once on a flat ground line (or dangling).
+//
+function poseStandingLegs(legs, x, y, groundY) {
+  const groundAt = groundY === null ? noGroundAt : flatGroundAt.bind(null, groundY)
+  HeroLegs.poseStand(legs, { x, y, groundAt, dt: 0 })
 }
 function drawRunPose(inst) {
   const ch = inst.character
@@ -1583,7 +1763,8 @@ function drawRunBodyOverLegs(k, legs, x, y, facing, opacity) {
 //
 // Surface Y under a point: a ray HeroLegs.RAY_DEPTH px straight down,
 // raycast against each platform around it (a cheap box test skips the far
-// ones); the nearest top face it hits, null when there is none.
+// ones) and against the level's ground line if it gave one; the nearest
+// surface it hits, null when there is none.
 //
 function surfaceBelow(inst, x, fromY) {
   const k = inst.k
@@ -1598,13 +1779,19 @@ function surfaceBelow(inst, x, fromY) {
     if (!hit || hit.normal.y >= 0 || (best && hit.fraction >= best.fraction)) continue
     best = hit
   }
-  return best ? best.point.y : null
+  const line = inst.surfaceRay?.(x, fromY, HeroLegs.RAY_DEPTH) ?? null
+  const platform = best ? best.point.y : null
+  if (line === null) return platform
+  return platform === null ? line : Math.min(line, platform)
 }
 //
 // A flat ground line for runners drawn outside a level (bound to its Y).
 //
 function flatGroundAt(groundY) {
   return groundY
+}
+function noGroundAt() {
+  return null
 }
 //
 // Bakes the hero's frames from the picture sheet into the live k: the idle
@@ -1614,7 +1801,7 @@ function flatGroundAt(groundY) {
 //
 function bakeHeroFrames(k) {
   const P = HERO_SPRITE_PREFIX
-  commitHeroFrame(k, `${P}_0_0`, HeroPicture.bakeIdleFrame([LOOK_AHEAD, LOOK_AHEAD]))
+  commitHeroFrame(k, `${P}_0_0`, HeroPicture.bakeIdleFrame([LOOK_AHEAD, LOOK_AHEAD]), idleBodyGraded)
   LOOK_VECTORS.forEach((look, i) => commitHeroFrame(k, `${P}_look_${i}`, HeroPicture.bakeIdleFrame([look, look])))
   commitHeroFrame(k, `${P}_closed`, HeroPicture.bakeIdleFrame([null, null]))
   WINK_SIDES.forEach(side => commitHeroFrame(k, heroWinkSpriteName(P, side), HeroPicture.bakeIdleFrame([null, { x: side, y: 0 }])))
@@ -1636,6 +1823,12 @@ function blankFrame() {
 //
 function runBodyGraded(k, canvas) {
   runBodyTonesFor.set(k, HeroLegs.sampleBodyTones(canvas))
+}
+//
+// The finished idle body bake: note its colours by its right leg.
+//
+function idleBodyGraded(k, canvas) {
+  idleBodyTonesFor.set(k, HeroLegs.sampleBodyTones(canvas, HeroPicture.IDLE_HIP_POINTS[1]))
 }
 //
 // Grains one baked frame, lets the caller read the finished pixels, and
@@ -1868,13 +2061,13 @@ function ensureHeroSpriteOnK(inst, spriteName) {
   loadHeroSprites(inst.k)
 }
 //
-// Applies a hero sprite by name; falls back to the straight-ahead idle frame if missing.
+// Picks the frame the hero's pass draws (the hitbox keeps its blank sprite);
+// falls back to the straight-ahead idle frame if missing.
 //
 function useHeroSprite(inst, spriteName) {
   ensureHeroSpriteOnK(inst, spriteName)
   const name = heroSpriteExistsOnK(inst.k, spriteName) ? spriteName : `${HERO_SPRITE_PREFIX}_0_0`
   if (!heroSpriteExistsOnK(inst.k, name)) return
-  inst.character.use(inst.k.sprite(name))
   inst.currentEyeSprite = name
 }
 //

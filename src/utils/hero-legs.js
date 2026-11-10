@@ -3,13 +3,28 @@ import * as PolyBatch from './poly-batch.js'
 import { parseHex } from './helper.js'
 import * as HeroPicture from './hero-picture.js'
 //
-// The hero's running legs, drawn live under the leg-less run body
+// The hero's legs, drawn live under the leg-less run body and idle body
 // (hero-picture.js): two short fat legs, each bent by two-bone IK from its
 // hip on the body to a foot planted on the surface a downward ray finds
-// under it. They look like the legs of the hero sheet: a dark contour, a
-// fill that rounds from shaded sides to a light core, and faint fur streaks;
-// the far leg is the sheet's grey one and goes behind the body and the near
-// leg with its whole contour.
+// under it. A running pair walks in profile (pose); a standing pair stands
+// apart under the front-facing idle body, each foot on its own surface,
+// knees bowed outwards (poseStand), and both legs are near ones (the body's
+// own colour).
+//
+// A standing pair's feet stand right under their hips. The body sits at the
+// mean height of their surfaces, held
+// where every leg stays between STAND_MIN_LEN px (hip to foot) and its full
+// reach — so on a slope or a stone one knee folds more than the other. Seen
+// from the front, a folding knee mostly comes forward, so it shows only
+// STAND_KNEE_SHARE of its bend sideways;
+// where the feet's surfaces differ too much for both, the higher foot wins
+// (it never pokes into the body) and the lower one hangs short of its
+// surface.
+//
+// The legs look like the old legs of the hero sheet: a dark contour, a fill
+// that rounds from shaded sides to a light core, and faint fur streaks; a
+// running pair's far leg is the sheet's grey one and goes behind the body
+// and the near leg with its whole contour.
 //
 // Both legs grow out of the body like the legs of the sheet: their
 // contours are drawn behind the body, so their sides carry the body's
@@ -18,9 +33,20 @@ import * as HeroPicture from './hero-picture.js'
 // leg joins (between the legs it stays, as the crotch). Over each fill
 // lies a veil of the body's own tone at the join (sampled from the bake,
 // see sampleBodyTones) in the fill's shape, faded by height alone: from
-// clear FADE_IN px above the fill's start to opaque at it, then clear again
-// BLEND_DEPTH px below — so at any swing the body runs into the leg with no
-// edge, and the leg's own shading and edges only come up below the join.
+// clear FADE_IN px above the fill's start to opaque at it, opaque on down to
+// the body's bottom contour (CONTOUR_COVER px lower), then clear again
+// BLEND_DEPTH px below that — so at any swing the body runs into the leg
+// with no edge: whatever of a slanted leg's shaded side lies inside the
+// body's silhouette takes the body's tone, and the leg's own shading and
+// edges only come up below the join. A running pair's veil stays inside the
+// run body's silhouette (sampled from its bake, VEIL_INSET px in from its
+// edge on every row), so where a leg swings out past the body's rounded
+// corner the veil never paints over the body's outline. A running pair's
+// veils stay opaque RUN_VEIL_HOLD px longer and fade over RUN_BLEND_DEPTH px
+// (the far leg, the sheet's grey one, over FAR_BLEND_DEPTH): a running leg
+// folds its knee up close to the join, and the edges of its shaded bands
+// there would otherwise come up through a short fade in row-by-row steps,
+// reading as grey dashes into the body.
 // The top flares out by up to FLARE px a side (a fillet curve), so the
 // body's outline bends into the leg's outline instead of meeting it at a
 // corner. The joined part is cut in level slices from the fill's start, so
@@ -30,7 +56,18 @@ import * as HeroPicture from './hero-picture.js'
 // leg takes the body's own colour (sampled from its lit lower part, above
 // the shaded bottom): NEAR_*_SHADE darken it for the leg's bands and
 // streaks; the far leg's are the sheet's grey ones.
-// FLARE_SLICES steps draw the fillet.
+// FLARE_SLICES steps draw the fillet. A standing pair's hips sit close to
+// the idle body's rounded bottom corners, so their fillets flare only
+// STAND_FLARE px a side: the corners' outline bends into the legs' outline
+// instead of meeting a top wider than the body there; their veils are only
+// LEG_W wide, so a whole pixel of contour always rings them where the leg
+// runs out past the body's corner (polygons are drawn without
+// antialiasing). Behind the body each contour also
+// rises CONTOUR_RISE px above the fill's start at its top width: hidden by
+// the body, it shows only where the body's bottom corners round off inside
+// the veil's reach, carrying the body's outline on into the leg's with no
+// light step between them (a running pair's contours do not rise: past the
+// run body's rounded back corner a risen one would poke out).
 //
 // The engine draws polygons without antialiasing, so the legs fake it like
 // the baked body's soft edge: a HALO_W wider contour at HALO_OPACITY under
@@ -52,9 +89,14 @@ const HIP_TUCK = 4
 const CONTOUR_COVER = 3
 const FADE_IN = 3
 const BLEND_DEPTH = 6
+const RUN_VEIL_HOLD = 2
+const RUN_BLEND_DEPTH = 9
+const FAR_BLEND_DEPTH = 12
 const FLARE = 3
 const FLARE_LEN = 8
 const FLARE_SLICES = 4
+const STAND_FLARE = 1.5
+const CONTOUR_RISE = FADE_IN + 1
 const NEAR_MID_SHADE = 0.97
 const NEAR_SIDE_SHADE = 0.9
 const NEAR_STREAK_SHADE = 0.94
@@ -64,6 +106,8 @@ const BODY_SAMPLE_HALF_W = 3
 const BODY_SAMPLE_TOP = 12
 const BODY_SAMPLE_BOTTOM = 8
 const RGBA = 4
+const SOLID_ALPHA = 128
+const VEIL_INSET = 2
 const HALO_W = 1.2
 const HALO_OPACITY = 0.45
 const EDGE_W = LEG_W + LEG_OUTLINE
@@ -72,44 +116,68 @@ const CONTOUR_W = LEG_W + LEG_OUTLINE * 2
 const FOOT_R = LEG_W / 2 + LEG_OUTLINE
 const REACH = BONE_LEN * 2 - 0.01
 const MIN_REACH = 2
+const STAND_MIN_LEN = 6
+const STAND_KNEE_SHARE = 0.3
 //
 // Gait, one cycle per RUN_CYCLE_SEC, the legs half a cycle apart: a foot
 // plants STRIDE/2 ahead of its hip, slides back along the surface for the
 // STANCE_SHARE of the cycle to STRIDE/2 behind it, then lifts up to LIFT
-// and swings forward. The body dips BOB px each time a foot plants.
+// and swings forward — never so high that the foot's top comes within
+// FOOT_CLEAR px of the body's bottom contour (a foot kicked up behind would
+// poke out past the body's rounded back corner). The body bobs BOB px round its standing height (half
+// up, half down) each step, so on stopping it settles where it ran.
 //
 export const RUN_CYCLE_SEC = 0.2667
 const STRIDE = 14
 const LIFT = 5
+const FOOT_CLEAR = 1
 const STANCE_SHARE = 0.5
 const BOB = 1.5
-//
-// The body follows the surface under the planted feet: it sinks or rises
-// by the mean height of their surfaces against the hitbox's ground line, up
-// to SURFACE_SHIFT_MAX px, easing there at SURFACE_SHIFT_RATE per second.
-// A ray looks RAY_DEPTH px down from the hip; with nothing under a foot it
-// hangs at full reach.
-//
-const SURFACE_SHIFT_MAX = 6
-const SURFACE_SHIFT_RATE = 14
-export const RAY_DEPTH = REACH + FOOT_R + 24
 const HALF = HeroPicture.FRAME_SIZE / 2
-const LEG_COUNT = HeroPicture.RUN_HIP_POINTS.length
+//
+// For surfaces built for the feet: how high a leg's top (where it joins the
+// body) stands over the feet line, and half a foot's width.
+//
+export const LEG_TOP_HEIGHT = HeroPicture.FEET_Y - Math.min(...HeroPicture.RUN_HIP_POINTS.map(hip => hip.y))
+export const FOOT_HALF_W = FOOT_R
+//
+// The body follows the surface under the planted feet: it moves by the mean
+// height of their surfaces against the hitbox's ground line — up by as much
+// as anything built for the feet can stand (LEG_TOP_HEIGHT and
+// SURFACE_RISE_SLACK px), down by at most SURFACE_SINK_MAX px — easing there
+// at SURFACE_SHIFT_RATE per second. A ray looks RAY_DEPTH px down from the
+// hip; with nothing under a foot it hangs at full reach.
+//
+const SURFACE_RISE_SLACK = 2
+export const SURFACE_RISE_MAX = LEG_TOP_HEIGHT + SURFACE_RISE_SLACK
+export const SURFACE_SINK_MAX = 6
+export const SURFACE_SHIFT_RATE = 14
+export const RAY_DEPTH = REACH + FOOT_R + 24
 const FAR_LEG = 0
 const NEAR_LEG = 1
 
 /**
- * Creates one hero's running legs (pose state and draw batch).
+ * Creates one hero's legs (pose state and draw batch): a running pair by
+ * default, a standing pair under the idle body with opts.standing.
  * @param {Object} k - Kaplay instance
- * @param {{join: Object, body: Object}|null} tones - Run body colours from sampleBodyTones()
+ * @param {{join: Object, body: Object}|null} tones - Body colours from sampleBodyTones()
+ * @param {Object} [opts]
+ * @param {boolean} [opts.standing=false] - Legs of the idle body (both near ones)
  * @returns {Object} Legs inst
  */
-export function create(k, tones) {
+export function create(k, tones, opts = {}) {
+  const standing = Boolean(opts.standing)
+  const hips = standing ? HeroPicture.IDLE_HIP_POINTS : HeroPicture.RUN_HIP_POINTS
   return {
     k,
+    hips,
     batch: PolyBatch.create(),
-    ...legColorSets(k, tones),
-    legs: Array.from({ length: LEG_COUNT }, () => ({ hx: 0, hy: 0, kx: 0, ky: 0, fx: 0, fy: 0 })),
+    ...legColorSets(k, tones, standing),
+    silhouette: standing ? null : tones?.silhouette ?? null,
+    bodyX: 0,
+    bodyTop: 0,
+    facing: 1,
+    legs: hips.map((_, i) => legShape(standing, !standing && i === FAR_LEG)),
     bodyDy: 0,
     shift: 0,
     ground: [],
@@ -118,22 +186,24 @@ export function create(k, tones) {
 }
 
 /**
- * The run body's colours by the near leg, from the finished (graded) bake:
+ * A body's colours by a near leg and its silhouette, from the finished
+ * (graded) bake:
  * join — the mean of the body's row right above where the legs' fills start
  * (TONE_SAMPLE_ROW px up from the bottom contour; the veil takes it, so a
  * fill carries the body on without a step — the body darkens fast towards
  * its bottom outline); body — the mean of the body's lit lower part above
  * that shading (BODY_SAMPLE_TOP..BODY_SAMPLE_BOTTOM px up), the near leg's
  * own colour.
- * @param {HTMLCanvasElement} canvas - Run body bake, FRAME_SIZE square
+ * @param {HTMLCanvasElement} canvas - Run or idle body bake, FRAME_SIZE square
+ * @param {{x: number, y: number}} [hip] - The hip to sample by (the run body's near hip)
  * @returns {{join: {r: number, g: number, b: number}, body: {r: number, g: number, b: number}}}
  */
-export function sampleBodyTones(canvas) {
-  const hip = HeroPicture.RUN_HIP_POINTS[NEAR_LEG]
+export function sampleBodyTones(canvas, hip = HeroPicture.RUN_HIP_POINTS[NEAR_LEG]) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   return {
     join: meanColor(ctx, hip.x - TONE_SAMPLE_HALF_W, hip.y - TONE_SAMPLE_ROW, TONE_SAMPLE_HALF_W * 2 + 1, 1),
-    body: meanColor(ctx, hip.x - BODY_SAMPLE_HALF_W, hip.y - BODY_SAMPLE_TOP, BODY_SAMPLE_HALF_W * 2 + 1, BODY_SAMPLE_TOP - BODY_SAMPLE_BOTTOM + 1)
+    body: meanColor(ctx, hip.x - BODY_SAMPLE_HALF_W, hip.y - BODY_SAMPLE_TOP, BODY_SAMPLE_HALF_W * 2 + 1, BODY_SAMPLE_TOP - BODY_SAMPLE_BOTTOM + 1),
+    silhouette: sampleSilhouette(ctx, canvas.width, canvas.height)
   }
 }
 
@@ -152,10 +222,11 @@ export function sampleBodyTones(canvas) {
 export function pose(inst, cfg) {
   const { x, y, facing, phase, groundAt, dt } = cfg
   const flatGround = y + HeroPicture.FEET_Y - HALF
+  const count = inst.hips.length
   let sum = 0
   let planted = 0
-  HeroPicture.RUN_HIP_POINTS.forEach((hip, i) => {
-    const gait = legGait(phase + i / LEG_COUNT)
+  inst.hips.forEach((hip, i) => {
+    const gait = legGait(phase + i / count)
     const leg = inst.legs[i]
     leg.fx = x + (hip.x - HALF + gait.ahead) * facing
     const ground = groundAt(leg.fx, y + hip.y - HALF)
@@ -165,29 +236,98 @@ export function pose(inst, cfg) {
     sum += ground - flatGround
     planted++
   })
-  const target = planted ? Math.max(-SURFACE_SHIFT_MAX, Math.min(SURFACE_SHIFT_MAX, sum / planted)) : 0
+  const target = planted ? clampShift(sum / planted) : 0
   inst.shift = dt > 0 ? inst.shift + (target - inst.shift) * Math.min(1, dt * SURFACE_SHIFT_RATE) : target
-  inst.bodyDy = inst.shift + BOB * (0.5 + 0.5 * Math.cos(phase * Math.PI * 2 * LEG_COUNT))
-  HeroPicture.RUN_HIP_POINTS.forEach((hip, i) => {
+  inst.bodyDy = inst.shift + BOB * 0.5 * Math.cos(phase * Math.PI * 2 * count)
+  inst.bodyX = x
+  inst.bodyTop = y + inst.bodyDy - HALF
+  inst.facing = facing
+  inst.hips.forEach((hip, i) => {
     const leg = inst.legs[i]
     leg.hx = x + (hip.x - HALF) * facing
     leg.hy = y + hip.y - HALF - HIP_TUCK + inst.bodyDy
     const ground = inst.ground[i]
-    const footY = ground === null ? leg.hy + REACH : ground - FOOT_R - inst.lift[i]
+    const lifted = ground === null ? leg.hy + REACH : ground - FOOT_R - inst.lift[i]
+    const footY = ground === null ? lifted : Math.max(lifted, Math.min(ground - FOOT_R, leg.hy + HIP_TUCK + FOOT_R + FOOT_CLEAR))
     solveKnee(leg, leg.fx, footY, facing)
   })
 }
 
 /**
- * Draws what goes under the run body: both legs' contours with their soft
- * halo (world space).
+ * Poses a standing pair under the idle body: each foot right under its hip
+ * on its own surface, the body at their mean height within what both legs
+ * can bridge, each knee bowed outwards by IK.
+ * @param {Object} inst - Legs inst (standing)
+ * @param {Object} cfg
+ * @param {number} cfg.x - Hero centre X (world)
+ * @param {number} cfg.y - Hero centre Y (world, hitbox position)
+ * @param {function(number, number): (number|null)} cfg.groundAt - Surface Y under (x, from y), null when none
+ * @param {number} cfg.dt - Seconds since the last pose (0 snaps the body to its height)
+ */
+export function poseStand(inst, cfg) {
+  const { x, y, groundAt, dt } = cfg
+  const flatGround = y + HeroPicture.FEET_Y - HALF
+  let sum = 0
+  let planted = 0
+  let low = -Infinity
+  let high = Infinity
+  inst.hips.forEach((hip, i) => {
+    const leg = inst.legs[i]
+    leg.fx = x + hip.x - HALF
+    const ground = groundAt(leg.fx, y + hip.y - HALF)
+    inst.ground[i] = ground
+    if (ground === null) return
+    const span = ground - FOOT_R - (y + hip.y - HALF - HIP_TUCK)
+    low = Math.max(low, span - REACH)
+    high = Math.min(high, span - STAND_MIN_LEN)
+    sum += ground - flatGround
+    planted++
+  })
+  const mean = planted ? sum / planted : 0
+  const target = clampShift(low > high ? high : Math.max(low, Math.min(high, mean)))
+  inst.shift = dt > 0 ? inst.shift + (target - inst.shift) * Math.min(1, dt * SURFACE_SHIFT_RATE) : target
+  inst.bodyDy = inst.shift
+  inst.hips.forEach((hip, i) => {
+    const leg = inst.legs[i]
+    leg.hx = x + hip.x - HALF
+    leg.hy = y + hip.y - HALF - HIP_TUCK + inst.bodyDy
+    const ground = inst.ground[i]
+    solveKnee(leg, leg.fx, ground === null ? leg.hy + REACH : ground - FOOT_R, Math.sign(hip.x - HALF) || 1, STAND_KNEE_SHARE)
+  })
+}
+
+/**
+ * How far a standing body moves onto the surface: the same measure a running
+ * body takes, with both feet planted right under their hips.
+ * @param {number} x - Hitbox centre X
+ * @param {number} y - Hitbox centre Y
+ * @param {number} facing - 1 right, -1 left
+ * @param {function(number, number): (number|null)} groundAt - Surface Y under (x, from y), null when none
+ * @returns {number} Shift in px (up is negative)
+ */
+export function standShift(x, y, facing, groundAt) {
+  const flatGround = y + HeroPicture.FEET_Y - HALF
+  let sum = 0
+  let planted = 0
+  HeroPicture.RUN_HIP_POINTS.forEach(hip => {
+    const ground = groundAt(x + (hip.x - HALF) * facing, y + hip.y - HALF)
+    if (ground === null) return
+    sum += ground - flatGround
+    planted++
+  })
+  return planted ? clampShift(sum / planted) : 0
+}
+
+/**
+ * Draws what goes under the body: both legs' contours with their soft halo
+ * (world space).
  * @param {Object} inst - Legs inst
  * @param {number} [opacity=1] - Shared opacity
  */
 export function drawBehind(inst, opacity = 1) {
-  inst.legs.forEach((leg, i) => addJoinedTube(inst.batch, leg, fillStartY(leg), CONTOUR_W + HALO_W, inst.colors[i].outline))
+  inst.legs.forEach((leg, i) => addRisenContour(inst.batch, leg, CONTOUR_W + HALO_W, inst.colors[i].outline))
   PolyBatch.flush(inst.batch, inst.k, opacity * HALO_OPACITY)
-  inst.legs.forEach((leg, i) => addJoinedTube(inst.batch, leg, fillStartY(leg), CONTOUR_W, inst.colors[i].outline))
+  inst.legs.forEach((leg, i) => addRisenContour(inst.batch, leg, CONTOUR_W, inst.colors[i].outline))
   PolyBatch.flush(inst.batch, inst.k, opacity)
 }
 
@@ -214,6 +354,26 @@ export function drawFront(inst, opacity = 1) {
   drawFill(inst, near, nearColors, opacity)
 }
 //
+// One leg's pose state and its join's shape (fillet, veil, contour cap).
+//
+function legShape(standing, far) {
+  return {
+    hx: 0, hy: 0, kx: 0, ky: 0, fx: 0, fy: 0,
+    flare: standing ? STAND_FLARE : FLARE,
+    veilW: standing ? LEG_W : EDGE_W,
+    veilHold: standing ? 0 : RUN_VEIL_HOLD,
+    veilFade: veilFadeDepth(standing, far),
+    rise: standing ? CONTOUR_RISE : 0
+  }
+}
+function veilFadeDepth(standing, far) {
+  if (standing) return BLEND_DEPTH
+  return far ? FAR_BLEND_DEPTH : RUN_BLEND_DEPTH
+}
+function clampShift(shift) {
+  return Math.max(-SURFACE_RISE_MAX, Math.min(SURFACE_SINK_MAX, shift))
+}
+//
 // Where a leg is in the gait at a phase: on the surface sliding back
 // (stance) or lifted swinging forward with eased speed.
 //
@@ -226,10 +386,11 @@ function legGait(phase) {
 }
 //
 // Two-bone IK: the foot pulled within reach of the hip, the knee off the
-// hip–foot line towards the facing side (legs bend forward), never up in
-// the join with the body.
+// hip–foot line towards the facing side (running legs bend forward,
+// standing ones outwards by bendShare of the bend), never up in the join
+// with the body.
 //
-function solveKnee(leg, footX, footY, facing) {
+function solveKnee(leg, footX, footY, facing, bendShare = 1) {
   let dx = footX - leg.hx
   let dy = footY - leg.hy
   let d = Math.hypot(dx, dy)
@@ -247,7 +408,7 @@ function solveKnee(leg, footX, footY, facing) {
   const midY = leg.hy + uy * reach / 2
   const rise = ux * side
   const minKneeY = fillStartY(leg) + FLARE_LEN
-  const bend = kneeBend(reach, rise, midY, minKneeY)
+  const bend = kneeBend(reach, rise, midY, minKneeY) * bendShare
   leg.kx = leg.hx + ux * reach / 2 - uy * bend * side
   leg.ky = midY + rise * bend
 }
@@ -286,11 +447,29 @@ function drawFill(inst, leg, colors, opacity) {
   addStreak(batch, leg, flare.x, flare.y, LEG_W * STREAK_OFFSET_SHARE, colors.streak)
   addStreak(batch, leg, flare.x, flare.y, -LEG_W * STREAK_OFFSET_SHARE, colors.streak)
   PolyBatch.flush(batch, inst.k, opacity, 0, Infinity, startY)
-  const top = EDGE_W + flareExtra(0)
-  addLevelSlice(batch, leg, startY - FADE_IN, startY, top, top, colors.tone)
-  addJoinedTube(batch, leg, startY, EDGE_W, colors.tone)
-  PolyBatch.fadeBand(batch, 0, startY - FADE_IN, startY, startY + BLEND_DEPTH)
+  const top = topWidth(leg, leg.veilW)
+  const clip = inst.silhouette && bodyInside.bind(null, inst)
+  addLevelSlice(batch, leg, startY - FADE_IN, startY, top, top, colors.tone, clip)
+  addJoinedTube(batch, leg, startY, leg.veilW, colors.tone, clip)
+  const held = startY + CONTOUR_COVER + leg.veilHold
+  PolyBatch.fadeBand(batch, 0, startY - FADE_IN, startY, held + leg.veilFade, held)
   PolyBatch.flush(batch, inst.k, opacity, 0, Infinity, startY - FADE_IN)
+}
+//
+// A leg's contour behind the body: its joined tube and (a standing leg's)
+// a cap of the tube's top width leg.rise px up from the fill's start.
+//
+function addRisenContour(batch, leg, width, color) {
+  const startY = fillStartY(leg)
+  const top = topWidth(leg, width)
+  leg.rise > 0 && addLevelSlice(batch, leg, startY - leg.rise, startY, top, top, color)
+  addJoinedTube(batch, leg, startY, width, color)
+}
+//
+// A layer's width at the top of the join (the fillet's).
+//
+function topWidth(leg, width) {
+  return width + flareExtra(leg, 0)
 }
 //
 // A leg's tube where it joins the body, cut into horizontal slices
@@ -300,7 +479,7 @@ function drawFill(inst, leg, colors, opacity) {
 // none over FLARE_LEN. From the fillet's end the tube runs on round-jointed
 // to the knee and foot.
 //
-function addJoinedTube(batch, leg, startY, width, color) {
+function addJoinedTube(batch, leg, startY, width, color, clip = null) {
   const end = flareEnd(leg, startY)
   for (let i = 0; i < FLARE_SLICES; i++) {
     const t0 = i / FLARE_SLICES
@@ -308,8 +487,8 @@ function addJoinedTube(batch, leg, startY, width, color) {
     addLevelSlice(
       batch, leg,
       startY + (end.y - startY) * t0, startY + (end.y - startY) * t1,
-      width + flareExtra(t0), width + flareExtra(t1),
-      color
+      width + flareExtra(leg, t0), width + flareExtra(leg, t1),
+      color, clip
     )
   }
   PolyBatch.addDisc(batch, end.x, end.y, width / 2, color)
@@ -322,14 +501,45 @@ function addJoinedTube(batch, leg, startY, width, color) {
 // One level slice of the upper bone between two heights: horizontal edges
 // centred on the bone, as wide as the tube there (not widened for the
 // bone's slant, so the joined top never pokes out past the body's
-// silhouette — the round knee and the bone below restore the full width).
+// silhouette — the round knee and the bone below restore the full width),
+// each edge cut to clip(y)'s span where it gives one.
 //
-function addLevelSlice(batch, leg, y0, y1, width0, width1, color) {
-  const x0 = boneXAt(leg, y0)
-  const x1 = boneXAt(leg, y1)
-  const h0 = width0 / 2
-  const h1 = width1 / 2
-  PolyBatch.addQuad(batch, x0 - h0, y0, x0 + h0, y0, x1 + h1, y1, x1 - h1, y1, color)
+function addLevelSlice(batch, leg, y0, y1, width0, width1, color, clip = null) {
+  const top = clippedSpan(boneXAt(leg, y0), width0 / 2, clip?.(y0))
+  const bottom = clippedSpan(boneXAt(leg, y1), width1 / 2, clip?.(y1))
+  PolyBatch.addQuad(batch, top.left, y0, top.right, y0, bottom.right, y1, bottom.left, y1, color)
+}
+function clippedSpan(x, half, span) {
+  if (!span) return { left: x - half, right: x + half }
+  const left = Math.max(x - half, span.left)
+  return { left, right: Math.max(left, Math.min(x + half, span.right)) }
+}
+//
+// The inside of the run body at a world height (VEIL_INSET px in from its
+// edges, mirrored when it faces left), null below or above it.
+//
+function bodyInside(inst, y) {
+  const row = inst.silhouette[Math.floor(y - inst.bodyTop)]
+  if (!row) return null
+  const [l, r] = inst.facing === 1 ? [row.left, row.right + 1] : [HeroPicture.FRAME_SIZE - row.right - 1, HeroPicture.FRAME_SIZE - row.left]
+  return { left: inst.bodyX - HALF + l + VEIL_INSET, right: inst.bodyX - HALF + r - VEIL_INSET }
+}
+//
+// Each row's leftmost and rightmost solid pixel of a body bake (null where
+// the row is empty).
+//
+function sampleSilhouette(ctx, w, h) {
+  const px = ctx.getImageData(0, 0, w, h).data
+  return Array.from({ length: h }, (_, y) => {
+    let left = -1
+    let right = -1
+    for (let x = 0; x < w; x++) {
+      if (px[(y * w + x) * RGBA + 3] < SOLID_ALPHA) continue
+      left < 0 && (left = x)
+      right = x
+    }
+    return left < 0 ? null : { left, right }
+  })
 }
 //
 // The upper bone's x at a height.
@@ -339,11 +549,11 @@ function boneXAt(leg, y) {
   return drop > 1e-6 ? leg.hx + (leg.kx - leg.hx) * (y - leg.hy) / drop : leg.hx
 }
 //
-// Extra width of the fillet across its length (0 at the start, 1 at its
+// Extra width of a leg's fillet across its length (0 at the start, 1 at its
 // end): a squared falloff, so it curves into the leg's side.
 //
-function flareExtra(t) {
-  return FLARE * 2 * (1 - t) * (1 - t)
+function flareExtra(leg, t) {
+  return leg.flare * 2 * (1 - t) * (1 - t)
 }
 //
 // Where the fillet ends: FLARE_LEN down the upper bone from the fill's start
@@ -389,11 +599,12 @@ function meanColor(ctx, x, y, w, h) {
 }
 //
 // Colour sets per leg (back hip first): the near leg's bands are the body's
-// own colour darkened, the far leg's the sheet's greys; the edge band sits
-// halfway between the contour and the sides, and every set carries the
-// join tone for its veil (cfg's fallbacks if the body has not been sampled).
+// own colour darkened, the far leg's the sheet's greys (a standing pair has
+// two near legs); the edge band sits halfway between the contour and the
+// sides, and every set carries the join tone for its veil (cfg's fallbacks
+// if the body has not been sampled).
 //
-function legColorSets(k, tones) {
+function legColorSets(k, tones, standing) {
   const hero = CFG.visual.colors.hero
   const join = tones?.join ?? hexRgb(hero.legNear.joinFallback)
   const body = tones?.body ?? hexRgb(hero.legNear.bodyFallback)
@@ -412,7 +623,7 @@ function legColorSets(k, tones) {
     streak: hexRgb(hero.legFar.streak)
   }
   const colors = []
-  colors[FAR_LEG] = legKColors(k, join, far)
+  colors[FAR_LEG] = legKColors(k, join, standing ? near : far)
   colors[NEAR_LEG] = legKColors(k, join, near)
   return { colors }
 }

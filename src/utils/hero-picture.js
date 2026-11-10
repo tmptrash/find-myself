@@ -1,12 +1,18 @@
 import { CFG } from '../cfg.js'
 import { loadPictureImage } from '../sections/forest/utils/forest-picture.js'
+import { parseHex } from './helper.js'
 //
 // The hero's frames cut from assets/hero.png: the leg-less run body (top
-// row, first figure — the leg pieces beside it are ignored, the running
-// legs are drawn live by hero-legs.js), the jump (bottom row, first 7
-// frames) and the idle stance (the last frame of the bottom row, its eye
-// rings empty — the pupils are painted into them here). The sheet starts
-// loading with this module (game boot).
+// row, first figure — the leg pieces beside it are ignored), the jump
+// (bottom row, first 7 frames) and the idle body (the last frame of the
+// bottom row cut off under its crotch, IDLE.bottomY — its painted legs are
+// dropped; its eye rings are empty, the pupils are painted into them here).
+// The legs of the run and the idle stance are drawn live by hero-legs.js.
+// The sheet starts loading with this module (game boot).
+//
+// A sheet exported on an opaque paper background (or with the paper's white
+// left in its figures' soft edge) is keyed out once on load (see
+// keyOutBackground).
 //
 // Every frame lands in the hero's FRAME_SIZE sprite canvas at PICTURE_SCALE,
 // and is registered so the hero never jitters between frames:
@@ -17,8 +23,10 @@ import { loadPictureImage } from '../sections/forest/utils/forest-picture.js'
 //     RUN_BODY_BOTTOM_Y, so the running hero stands about as tall as the
 //     idle one while the live legs still reach FEET_Y slightly bent;
 //   - jump frames share their row's ground line, so the airborne poses keep
-//     the lift the sheet gives them; the idle stance stands on its own feet;
-//   - the idle stance is centred on IDLE_CENTER_X.
+//     the lift the sheet gives them;
+//   - the idle body is centred on IDLE_CENTER_X with its bottom on
+//     RUN_BODY_BOTTOM_Y too, scaled (IDLE_SCALE) to stand as tall as the run
+//     body, so both stand on the same live legs at the same height.
 //
 const URL = 'hero.png'
 export const FRAME_SIZE = 96
@@ -32,14 +40,16 @@ const JUMP_EYE_X = 56.5
 const IDLE_CENTER_X = 48
 //
 // Sheet boxes (with a little clear margin round each figure) and anchors in
-// sheet px: eyeX is the centre of the frame's eye ring, footY the bottom of
-// its feet, bottomY the bottom of the run body. RUN_HIPS are where the legs
-// join the run body (on its bottom contour), on its flat stretch — far
-// enough from its rounded corners that each leg's flared top stays
-// inside the body's silhouette. JUMP_GROUND_Y is the jump row's
-// ground line (its crouches).
+// sheet px: eyeX is the centre of the frame's eye ring, topY / bottomY the
+// top and bottom of a leg-less body (the idle one's bottom is the cut under
+// its crotch outline), centerX the idle body's middle. RUN_HIPS / IDLE_HIPS
+// are where the legs join a body (on its bottom contour): the run's on its
+// flat stretch — far enough from its rounded corners that each leg's flared
+// top stays inside the body's silhouette; the idle's in the middle of its
+// painted legs, so the live ones carry its sides on down. JUMP_GROUND_Y is
+// the jump row's ground line (its crouches).
 //
-const RUN_BODY = { x: 78, y: 121, w: 101, h: 143, eyeX: 151.4, bottomY: 261 }
+const RUN_BODY = { x: 78, y: 121, w: 101, h: 143, eyeX: 151.4, topY: 124, bottomY: 261 }
 const RUN_HIPS = [{ x: 110, y: 260 }, { x: 128, y: 260 }]
 const JUMP_GROUND_Y = 631
 const JUMP = [
@@ -51,7 +61,8 @@ const JUMP = [
   { x: 1445, y: 435, w: 97, h: 180, eyeX: 1513.2 },
   { x: 1713, y: 510, w: 101, h: 124, eyeX: 1785.7 }
 ]
-const IDLE = { x: 1986, y: 473, w: 92, h: 160, centerX: 2031.5, footY: 630 }
+const IDLE = { x: 1986, y: 473, w: 92, h: 129, centerX: 2031.5, topY: 476, bottomY: 602 }
+const IDLE_HIPS = [{ x: 2007, y: 601 }, { x: 2056, y: 601 }]
 //
 // The idle eyes (ring centres, left then right) and the pupil painted into
 // them, measured from the run/jump eyes: a near-black disc of PUPIL_R that
@@ -67,8 +78,8 @@ const GLINT_Y = -2.8
 const GLINT_R = 1.9
 const GLINT_CUT = 0.7
 //
-// The run body's belly is painted darkening towards its bottom; next to the
-// live legs (drawn in the body's own colour) that reads as a dark band. In
+// The bodies' bellies are painted darkening towards their bottom; next to
+// the live legs (drawn in the body's own colour) that reads as a dark band. In
 // the bottom BELLY_LIFT_BAND px above each column's bottom edge, the body's
 // inside takes the colour of that column's pixel just above the band (the
 // sideways shading stays, the grain pass adds texture back); pixels darker
@@ -78,24 +89,50 @@ const BELLY_LIFT_BAND = 10
 const BELLY_INSIDE_SHARE = 0.75
 const OPAQUE_ALPHA = 128
 const RGBA = 4
-export const JUMP_FRAME_COUNT = JUMP.length
 //
-// Where the legs meet the run body's bottom contour, in FRAME_SIZE canvas
-// px (back hip first).
+// Keying the paper out: it is light (KEY_PAPER_MIN_LUM and up) and neutral
+// (red and blue within KEY_NEUTRAL_SPREAD), the body is warm and the
+// outline dark, so a flood from the sheet's border over paper pixels stops
+// at every figure's outline. From there the outline's soft outer edge (a mix
+// of outline and paper) is followed inwards up to KEY_EDGE_PX px, while it
+// is lighter than KEY_EDGE_CORE_LUM — the outline's dark core stops it.
+// Paper and edge pixels lighter than that core become the outline colour
+// (CFG hero.sheetEdge), as opaque as they are darker than KEY_PAPER_LUM (and
+// no more than they were) — a clean soft edge darker than that is kept:
+// the edge stays soft, no light rim is left round a figure — also on a sheet
+// exported with a clear background whose edge still holds the paper's white.
+//
+const KEY_PAPER_MIN_LUM = 215
+const KEY_PAPER_LUM = 250
+const KEY_NEUTRAL_SPREAD = 12
+const KEY_EDGE_PX = 3
+const KEY_EDGE_CORE_LUM = 110
+const RGB = 3
+export const JUMP_FRAME_COUNT = JUMP.length
+const IDLE_SCALE = RUN_SCALE * (RUN_BODY.bottomY - RUN_BODY.topY) / (IDLE.bottomY - IDLE.topY)
+//
+// Where the legs meet the bodies' bottom contour, in FRAME_SIZE canvas px
+// (run: back hip first; idle: left hip first).
 //
 export const RUN_HIP_POINTS = RUN_HIPS.map(hip => ({
   x: RUN_EYE_X + (hip.x - RUN_BODY.eyeX) * RUN_SCALE,
   y: RUN_BODY_BOTTOM_Y - (RUN_BODY.bottomY - hip.y) * RUN_SCALE
 }))
+export const IDLE_HIP_POINTS = IDLE_HIPS.map(hip => ({
+  x: IDLE_CENTER_X + (hip.x - IDLE.centerX) * IDLE_SCALE,
+  y: RUN_BODY_BOTTOM_Y - (IDLE.bottomY - hip.y) * IDLE_SCALE
+}))
 const sheet = loadPictureImage(URL)
 let picture = null
 
 /**
- * Waits for the hero sheet (once per page).
+ * Waits for the hero sheet and keys its paper out (once per page).
  * @returns {Promise<void>}
  */
 export async function load() {
-  picture ??= await sheet
+  if (picture) return
+  const img = await sheet
+  picture ??= img && keyOutBackground(img)
 }
 
 /**
@@ -143,10 +180,91 @@ export function bakeIdleFrame(pupils) {
   ))
   pupil.width = 0
   pupil.height = 0
-  const canvas = bakeBox(work, { x: 0, y: 0, w: IDLE.w, h: IDLE.h }, IDLE_CENTER_X - (IDLE.centerX - IDLE.x) * PICTURE_SCALE, FEET_Y - (IDLE.footY - IDLE.y) * PICTURE_SCALE)
+  const canvas = bakeBox(work, { x: 0, y: 0, w: IDLE.w, h: IDLE.h }, IDLE_CENTER_X - (IDLE.centerX - IDLE.x) * IDLE_SCALE, RUN_BODY_BOTTOM_Y - (IDLE.bottomY - IDLE.y) * IDLE_SCALE, IDLE_SCALE)
   work.width = 0
   work.height = 0
+  liftBellyShading(canvas)
   return canvas
+}
+//
+// The sheet on a canvas with its paper keyed out (an already transparent
+// sheet passes through: its clear pixels count as paper too).
+//
+function keyOutBackground(img) {
+  const canvas = document.createElement('canvas')
+  canvas.width = img.width
+  canvas.height = img.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(img, 0, 0)
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const paper = floodPaper(image)
+  followSoftEdge(image, paper)
+  const edge = parseHex(CFG.visual.colors.hero.sheetEdge)
+  const edgeLum = (edge[0] + edge[1] + edge[2]) / RGB
+  const px = image.data
+  paper.forEach((isPaper, j) => {
+    const i = j * RGBA
+    if (!isPaper || px[i + 3] === 0) return
+    const lum = (px[i] + px[i + 1] + px[i + 2]) / RGB
+    if (lum < KEY_EDGE_CORE_LUM) return
+    const alpha = Math.round(255 * Math.max(0, Math.min(1, (KEY_PAPER_LUM - lum) / (KEY_PAPER_LUM - edgeLum))))
+    px[i] = edge[0]
+    px[i + 1] = edge[1]
+    px[i + 2] = edge[2]
+    px[i + 3] = Math.min(px[i + 3], alpha)
+  })
+  ctx.putImageData(image, 0, 0)
+  return canvas
+}
+//
+// Which pixels are paper: those reached from the sheet's border through
+// clear, or light and neutral, pixels.
+//
+function floodPaper(image) {
+  const { width: w, height: h, data: px } = image
+  const paper = new Uint8Array(w * h)
+  const stack = []
+  for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x)
+  for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1)
+  while (stack.length) {
+    const j = stack.pop()
+    if (paper[j] || !isPaperPixel(px, j * RGBA)) continue
+    paper[j] = 1
+    const x = j % w
+    x > 0 && stack.push(j - 1)
+    x < w - 1 && stack.push(j + 1)
+    j >= w && stack.push(j - w)
+    j < w * (h - 1) && stack.push(j + w)
+  }
+  return paper
+}
+//
+// Marks the outline's soft outer edge as paper too: ring by ring inwards
+// from the paper, over pixels lighter than the outline's core.
+//
+function followSoftEdge(image, paper) {
+  const { width: w, height: h, data: px } = image
+  let ring = []
+  paper.forEach((isPaper, j) => isPaper && ring.push(j))
+  for (let step = 0; step < KEY_EDGE_PX && ring.length; step++) {
+    const next = []
+    ring.forEach(j => {
+      const x = j % w
+      const around = [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w]
+      around.forEach(n => {
+        if (n < 0 || n >= w * h || paper[n]) return
+        const i = n * RGBA
+        if ((px[i] + px[i + 1] + px[i + 2]) / RGB < KEY_EDGE_CORE_LUM) return
+        paper[n] = 1
+        next.push(n)
+      })
+    })
+    ring = next
+  }
+}
+function isPaperPixel(px, i) {
+  if (px[i + 3] < OPAQUE_ALPHA) return true
+  return (px[i] + px[i + 1] + px[i + 2]) / RGB >= KEY_PAPER_MIN_LUM && Math.abs(px[i] - px[i + 2]) <= KEY_NEUTRAL_SPREAD
 }
 //
 // A sheet box scaled into a fresh FRAME_SIZE canvas with its top-left at (x, y).
@@ -161,7 +279,7 @@ function bakeBox(source, box, x, y, scale = PICTURE_SCALE) {
   return canvas
 }
 //
-// Evens out the run body's darkening belly bottom, column by column.
+// Evens out a body's darkening belly bottom, column by column.
 //
 function liftBellyShading(canvas) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })

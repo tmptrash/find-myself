@@ -4,7 +4,7 @@ import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
-import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero } from '../components/hero.js'
+import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero, createStandLegs, drawStandingHero } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
@@ -929,6 +929,7 @@ function resolveReadyEyeLookTarget(hero) {
 function createReadyHero(k) {
   return {
     heroLegs: createRunLegs(k),
+    heroStandLegs: createStandLegs(k),
     heroPhase: 'watch',
     heroX: LIFE_X + LIFE_WIDTH + HERO_WATCH_GAP_X + HERO_CHAR_WIDTH / 2,
     heroY: HERO_N_GROUND_CENTER_Y,
@@ -1329,8 +1330,8 @@ function startHeroNBurst(spider) {
   spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
 }
 //
-// Draws the lone hero: running on live legs, else its baked frame for the
-// current phase, eyes and all.
+// Draws the lone hero on live legs: running, else its baked idle frame for
+// the current phase (eyes and all) standing on them.
 //
 function drawTitleHero(k, spider) {
   if (spider.heroGone) return
@@ -1339,11 +1340,11 @@ function drawTitleHero(k, spider) {
     drawTitleRunner(k, spider)
     return
   }
-  k.drawSprite({
+  drawStandingHero(k, spider.heroStandLegs, {
+    x: spider.heroX,
+    y: spider.heroY,
     sprite: heroFrameName(spider),
-    pos: k.vec2(spider.heroX - HERO_N_SPRITE_SIZE / 2, spider.heroY - HERO_N_SPRITE_SIZE / 2),
-    width: HERO_N_SPRITE_SIZE,
-    height: HERO_N_SPRITE_SIZE
+    groundY: spider.heroY + HERO_FEET_OFFSET_Y
   })
 }
 //

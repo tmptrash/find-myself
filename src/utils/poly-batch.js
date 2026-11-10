@@ -157,18 +157,21 @@ export function addPolyline(inst, pts, width, color) {
 
 /**
  * Fades the vertices added since a mark by their height: clear at y0,
- * opaque at y1, clear again at y2 (linear in between, clear outside).
- * Opacity is linear in y across every triangle, so the fade is exact.
+ * opaque from y1 down to y1End, clear again at y2 (linear in between, clear
+ * outside). Opacity is linear in y across every triangle, so the fade is
+ * exact for triangles that do not straddle y1 or y1End.
  * @param {Object} inst - Batch inst
  * @param {number} from - First vertex index to fade (inst.count before adding them)
  * @param {number} y0 - Fade-in start (clear)
- * @param {number} y1 - Fully opaque
+ * @param {number} y1 - Fully opaque from here
  * @param {number} y2 - Fade-out end (clear)
+ * @param {number} [y1End=y1] - Fully opaque down to here
  */
-export function fadeBand(inst, from, y0, y1, y2) {
+export function fadeBand(inst, from, y0, y1, y2, y1End = y1) {
   for (let i = from; i < inst.count; i++) {
     const y = inst.pts[i].y
-    inst.opacities[i] = y < y1 ? clamp01((y - y0) / (y1 - y0)) : clamp01((y2 - y) / (y2 - y1))
+    if (y < y1) inst.opacities[i] = clamp01((y - y0) / (y1 - y0))
+    else inst.opacities[i] = y <= y1End ? 1 : clamp01((y2 - y) / (y2 - y1End))
   }
   inst.fades = true
 }

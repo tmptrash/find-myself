@@ -49,13 +49,18 @@ const RIM_BOUNDS_DOWN = 12
  * @param {string} opts.colors.mossLight - Lit moss specks
  * @param {string} opts.colors.dry - Dry litter patches
  * @param {string} opts.colors.dryLight - Sunlit litter specks
+ * @param {Object} [opts.parts] - Separate targets per part, painted with the
+ *   same random run as the whole rim: {ground, cushions, twigs} contexts
+ *   (ground = soil lip and lumps, cushions = moss and litter patches); a
+ *   missing one falls back to ctx
  */
 export function drawGroundRimToCanvas(ctx, opts) {
-  const { x1, x2, floorY, rng, colors } = opts
-  paintSoilLip(ctx, x1, x2, floorY, rng, colors.soil)
-  paintLumps(ctx, x1, x2, floorY, rng, colors.earth)
-  paintPatches(ctx, x1, x2, floorY, rng, colors)
-  paintTwigs(ctx, x1, x2, floorY, rng, colors.soil)
+  const { x1, x2, floorY, rng, colors, parts = {} } = opts
+  const ground = parts.ground ?? ctx
+  paintSoilLip(ground, x1, x2, floorY, rng, colors.soil)
+  paintLumps(ground, x1, x2, floorY, rng, colors.earth)
+  paintPatches(parts.cushions ?? ctx, x1, x2, floorY, rng, colors)
+  paintTwigs(parts.twigs ?? ctx, x1, x2, floorY, rng, colors.soil)
 }
 
 /**

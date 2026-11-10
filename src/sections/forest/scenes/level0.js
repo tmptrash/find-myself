@@ -81,7 +81,7 @@ import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
 import * as Clouds from '../utils/forest-clouds.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '../utils/forest-picture-bushes.js'
-import { loadForestStones, forestBuriedStones, forestGroundStones, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
+import { loadForestStones, forestBuriedStones, forestGroundStones, forestBareStones, forestGroundStoneScale, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as ChainBuoy from '../utils/forest-chain-buoy.js'
@@ -103,6 +103,7 @@ import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as PropellerBud from '../components/propeller-bud.js'
 import { FOREST_CFG } from '../cfg.js'
 import * as ForestFloor from '../components/forest-floor.js'
+import * as ForestGroundLine from '../utils/forest-ground-line.js'
 import { paintUndergroundDepthVignette } from '../utils/forest-atmosphere.js'
 import * as ForestCamera from '../utils/forest-camera.js'
 import {
@@ -303,7 +304,14 @@ const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1
 //
 const FOREST_HERO_HITBOX_HALF_W = 15
 const HERO_TOUCH_DEATH_RESPAWN_CLEARANCE = 32
-const TOUCH_DEATH_RESPAWN_GRACE_SEC = 0.5
+//
+// After the hero dies and comes back (a respawn on the spot, or the level
+// restarted after drowning — KEY_RESPAWN_GRACE carries that over), he blinks
+// for RESPAWN_GRACE_SEC: nothing can kill him and nothing reacts to him (the
+// centipede does not hunt, the water flower does not grab, landings do not
+// jolt the bomb trees).
+//
+const RESPAWN_GRACE_SEC = 2
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -596,6 +604,16 @@ const GROUND_STONE_SINK_RANGE = 3
 const GROUND_STONE_SMALL_W = 32
 const GROUND_STONE_Z = 7
 //
+// Small pebbles (bare stones shrunk to GROUND_PEBBLE_H_MIN..+RANGE px tall)
+// scattered along the same strip, sunk GROUND_PEBBLE_SINK..+RANGE px: they
+// stay under the top of the hero's leg, so the feet step onto them.
+//
+const GROUND_PEBBLE_COUNT = 34
+const GROUND_PEBBLE_H_MIN = 6
+const GROUND_PEBBLE_H_RANGE = 6
+const GROUND_PEBBLE_SINK = 1
+const GROUND_PEBBLE_SINK_RANGE = 2
+//
 // The life eye sits inside the playfield's top-right corner, this far in from
 // both playfield edges so it clears the rounded corner.
 //
@@ -665,6 +683,7 @@ const KEY_RESPAWN_NEAR_TREE = 'forest.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'forest.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'forest.lastSpawnX'
 const KEY_LAST_SPAWN_Y = 'forest.lastSpawnY'
+const KEY_RESPAWN_GRACE = 'forest.respawnGrace'
 //
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
@@ -827,6 +846,7 @@ const MUSHROOM_CAP_W_MAX = forestMushroomBounds(0, 0, MUSHROOM_PICTURE_H_MIN + M
 //
 const MUSHROOM_FLOWER_CLEAR_PAD = 14
 const MUSHROOM_EXTRA_LOWER = 2
+const MUSHROOM_Z = 7
 //
 // Mushroom trampolines — mushroom pictures (forest-tramp-mushroom.js): the
 // red one with a face for both on the ground, the orange one in the cave,
@@ -1418,8 +1438,13 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     await loadForestStones()
     const decorAtlas = createCanvasAtlasBuilder()
-    const rockObjs = createForestRocks(k, decorAtlas, computeForestPredatorPatrolBounds(lakeX2), forestAnchorFruitGroundClearSpan(treeFruitAnchorCfg))
-    const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
+    //
+    // The ground line under the hero's feet: low pieces lying on the ground
+    // (stones, mushrooms, the floor's rim) are laid into it as they are made.
+    //
+    const groundLine = ForestGroundLine.create(HERO_FLOOR_Y)
+    const rockObjs = createForestRocks(k, decorAtlas, computeForestPredatorPatrolBounds(lakeX2), forestAnchorFruitGroundClearSpan(treeFruitAnchorCfg), groundLine)
+    const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas, groundLine)
     decorAtlas.build(k)
     if (await forestBootstrapPause(bootstrap, 54, session)) return
     const predatorPatrolBounds = computeForestPredatorPatrolBounds(lakeX2)
@@ -1504,6 +1529,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       sound,
       birdsMusic,
       heroInst,
+      groundLine,
       zones,
       treeObj,
       treeData,
@@ -1516,6 +1542,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       touchDeathCount: 0,
       predatorDeathCount: 0,
       touchDeathGraceUntil: 0,
+      respawnGraceUntil: 0,
       touchDeathRespawnWait: null,
       forestHeroCreateCfg,
       heroSpawnNudge: {
@@ -1759,6 +1786,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       backZ: FOREST_FLOOR_BACK_Z,
       frontZ: FOREST_FLOOR_FRONT_Z
     })
+    ForestFloor.addToGroundLine(inst.forestFloor, groundLine)
+    Hero.setSurfaceRay(heroInst, ForestGroundLine.raycast.bind(null, groundLine))
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
       k.sprite(leftTree.roots.sprite),
@@ -1771,6 +1800,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     inst.pendingForestIntro = !get(KEY_INTRO_SHOWN, false)
     applyZoneVisibility(inst)
     restoreForestLevelState(inst)
+    get(KEY_RESPAWN_GRACE, false) && startForestRespawnGrace(inst)
     spawnElevated && releaseForestHeroOnElevatedSpawn(inst, heroSpawnY)
     bindForestUnloadPersist(inst)
     Hero.suppressIdleVocalization()
@@ -3509,13 +3539,13 @@ function tagWoodPlatform(platform, sound, heroInst) {
 // flower. The strip ends short of the cave mouth, so no stone lies
 // above the entrance; none in the crack's decor gap either.
 //
-function createForestRocks(k, decorAtlas, bounds, appleSpan) {
+function createForestRocks(k, decorAtlas, bounds, appleSpan, groundLine) {
   let plans = groundStonePlansByK.get(k)
   if (!plans) {
     plans = planForestRocks(bounds, appleSpan)
     groundStonePlansByK.set(k, plans)
   }
-  return plans.map(plan => placeGroundStone(k, plan, decorAtlas))
+  return plans.map(plan => placeGroundStone(k, plan, decorAtlas, groundLine))
 }
 //
 // Where the stones lie and their baked pictures, chosen and baked once per
@@ -3535,7 +3565,34 @@ function planForestRocks(bounds, appleSpan) {
     const plan = isCrackDecorExcluded(x, WORLD_W) ? null : planGroundStone(x, round.pop(), bounds, front, appleSpan)
     plan && plans.push(plan)
   }
+  return [...plans, ...planForestPebbles(bounds, appleSpan)]
+}
+//
+// The small pebbles, one per even step along the strip with a random place
+// inside it, cycling through the bare stones in random order.
+//
+function planForestPebbles(bounds, appleSpan) {
+  const plans = []
+  const stones = forestBareStones()
+  if (!stones.length) return plans
+  const step = (bounds.maxX - bounds.minX) / GROUND_PEBBLE_COUNT
+  let round = []
+  for (let i = 0; i < GROUND_PEBBLE_COUNT; i++) {
+    round.length || (round = shuffledCopy(stones))
+    const x = bounds.minX + step * (i + Math.random())
+    const plan = isCrackDecorExcluded(x, WORLD_W) ? null : planGroundPebble(x, round.pop(), bounds, appleSpan)
+    plan && plans.push(plan)
+  }
   return plans
+}
+//
+// One pebble: a bare stone baked at a random height under the hero's leg.
+//
+function planGroundPebble(x, stone, bounds, appleSpan) {
+  const height = GROUND_PEBBLE_H_MIN + Math.random() * GROUND_PEBBLE_H_RANGE
+  const sizeMul = height / (stone.canvas.height * forestGroundStoneScale())
+  const canvas = bakeForestGroundStone(stone, Math.random, x * 3 | 0, sizeMul)
+  return placeGroundStonePlan(canvas, x, bounds, false, appleSpan, GROUND_PEBBLE_SINK + Math.random() * GROUND_PEBBLE_SINK_RANGE)
 }
 //
 // One ground stone standing on the ground line, sunk a little into it,
@@ -3545,12 +3602,19 @@ function planForestRocks(bounds, appleSpan) {
 //
 function planGroundStone(x, stone, bounds, front, appleSpan) {
   const canvas = bakeForestGroundStone(stone, Math.random, x * 3 | 0, front ? GROUND_STONE_FRONT_SIZE : 1)
+  const sink = GROUND_STONE_SINK + Math.random() * GROUND_STONE_SINK_RANGE + (front ? GROUND_STONE_FRONT_SINK : 0)
+  return placeGroundStonePlan(canvas, x, bounds, front, appleSpan, sink)
+}
+//
+// A baked stone's place on the ground line round x, sunk sink px, or null
+// where it may not lie.
+//
+function placeGroundStonePlan(canvas, x, bounds, front, appleSpan, sink) {
   const half = canvas.width / 2
   const worldX = Math.max(bounds.minX + half, Math.min(bounds.maxX - half, x))
   const onAppleStrip = worldX + half >= appleSpan.x1 && worldX - half <= appleSpan.x2
   if (onAppleStrip && canvas.width >= GROUND_STONE_SMALL_W) return null
   if (LEFT_TREE_CLEAR_SPANS.some(span => worldX + half >= span.x1 && worldX - half <= span.x2)) return null
-  const sink = GROUND_STONE_SINK + Math.random() * GROUND_STONE_SINK_RANGE + (front ? GROUND_STONE_FRONT_SINK : 0)
   return {
     canvas,
     front,
@@ -3562,13 +3626,17 @@ function planGroundStone(x, stone, bounds, front, appleSpan) {
 //
 // A planned stone in the shared decor atlas (a copy of its picture: the
 // atlas build clears what it is given), off the draw list until its ground
-// strip opens.
+// strip opens. A stone no taller than the hero's leg becomes part of the
+// ground line (the feet step on it), so it lies behind the hero even when
+// planned in front; a taller one is left out of the line.
 //
-function placeGroundStone(k, plan, decorAtlas) {
+function placeGroundStone(k, plan, decorAtlas, groundLine) {
   const { canvas, front, posX, posY } = plan
+  const low = ForestGroundLine.isLowPiece(groundLine, canvas, posY)
+  const z = front && !low ? GROUND_STONE_FRONT_Z : GROUND_STONE_Z
   const obj = k.add([
     k.pos(posX, posY),
-    k.z(front ? GROUND_STONE_FRONT_Z : GROUND_STONE_Z),
+    k.z(z),
     {
       opacity: 1,
       color: k.rgb(255, 255, 255),
@@ -3585,6 +3653,7 @@ function placeGroundStone(k, plan, decorAtlas) {
   obj._detailRank = canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large'
   obj.hidden = true
   obj.moveTo(posX, PLATFORM_HIDE_Y)
+  ForestGroundLine.addPiece(groundLine, canvas, posX, posY, obj)
   return obj
 }
 function copyCanvas(src) {
@@ -3606,7 +3675,7 @@ function forestPredatorGroundAt(levelInst) {
 //
 // Mushrooms — value 5, excluded from water zone.
 //
-function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas) {
+function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas, groundLine) {
   const objs = []
   const left = LEFT_MARGIN + 60
   //
@@ -3652,7 +3721,7 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     const baseY = FLOOR_Y + MUSHROOM_EXTRA_LOWER
     const obj = k.add([
       k.pos(baseX, baseY),
-      k.z(7),
+      k.z(MUSHROOM_Z),
       {
         opacity: 1,
         color: k.rgb(255, 255, 255),
@@ -3673,6 +3742,11 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     obj.leanAngle = 0
     obj.hidden = true
     obj.pos.y = PLATFORM_HIDE_Y
+    //
+    // A mushroom no taller than the hero's leg bulges the ground line; a
+    // taller one is left out of it
+    //
+    ForestGroundLine.addPiece(groundLine, mushColorCanvas, baseX - totalW / 2, baseY - totalH, obj)
     objs.push(obj)
   }
   return objs
@@ -3943,7 +4017,8 @@ function drawForestDrownHeroClipped(inst) {
 }
 //
 // Part of the drowning hero below the wave, under the water fill so it reads
-// through the tint (the part above is drawn by drawForestDrownHeroClipped).
+// through the tint (the part above is drawn by drawForestDrownHeroClipped),
+// and his dangling legs whole (they hang lowest, so they go under first).
 //
 function drawForestDrownHeroUnderwater(inst) {
   if (!inst.forestDrownHeroClipLock) return
@@ -3959,9 +4034,10 @@ function drawForestDrownHeroUnderwater(inst) {
   const surfaceY = Math.max(topY, lakeSurfaceWorldYAt(inst, char.pos.x))
   const bottomY = Math.min(topY + fullH, lake.originY + Lake.lakeBottomLocalY(lake, char.pos.x - lake.x1))
   const visibleH = bottomY - surfaceY
-  if (visibleH <= 0) return
-  const quadY = (surfaceY - topY) / fullH
-  k.drawSprite({
+  const legs = { x: char.pos.x, y: char.pos.y, opacity: char.opacity ?? 1 }
+  inst.drownHeroLegs ??= Hero.createStandLegs(k)
+  Hero.drawStandingHeroLegs(inst.drownHeroLegs, legs, false)
+  visibleH > 0 && k.drawSprite({
     sprite,
     pos: k.vec2(char.pos.x, surfaceY + visibleH * 0.5),
     anchor: 'center',
@@ -3969,8 +4045,9 @@ function drawForestDrownHeroUnderwater(inst) {
     height: visibleH,
     flipX: char.flipX,
     opacity: char.opacity ?? 1,
-    quad: { x: 0, y: quadY, w: 1, h: visibleH / fullH }
+    quad: { x: 0, y: (surfaceY - topY) / fullH, w: 1, h: visibleH / fullH }
   })
+  Hero.drawStandingHeroLegs(inst.drownHeroLegs, legs, true)
 }
 //
 // Detects which surface the hero stands on.
@@ -5134,6 +5211,7 @@ function finishDrowning(inst) {
       const spawnY = HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
       persistForestDeathSpawn(inst, spawnX, spawnY)
     }
+    set(KEY_RESPAWN_GRACE, true)
     inst.k.go('lesson-forest.0')
   })
 }
@@ -5177,6 +5255,19 @@ function checkForestTouchDeath(inst, heroX, heroFootY) {
     triggerForestTouchDeath(inst, 'predator')
     return
   }
+}
+//
+// The hero's safe blinking moment after he comes back from a death (see
+// RESPAWN_GRACE_SEC); the flag carried over a restart is used up here.
+//
+function startForestRespawnGrace(inst) {
+  set(KEY_RESPAWN_GRACE, false)
+  inst.respawnGraceUntil = inst.k.time() + RESPAWN_GRACE_SEC
+  inst.touchDeathGraceUntil = Math.max(inst.touchDeathGraceUntil ?? 0, inst.respawnGraceUntil)
+  inst.heroInst && Hero.startBlink(inst.heroInst, RESPAWN_GRACE_SEC)
+}
+function isForestRespawnGrace(inst) {
+  return inst.k.time() < (inst.respawnGraceUntil ?? 0)
 }
 //
 // Touching the predator or falling on the spikes is fatal — the hero
@@ -5359,6 +5450,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
     y: pose.y,
   })
   Hero.spawn(fresh, { instant: true })
+  Hero.setSurfaceRay(fresh, ForestGroundLine.raycast.bind(null, inst.groundLine))
   fresh.onPlayStepSound = stepSound
   fresh.onPlayLandSound = landSound
   inst.heroInst = fresh
@@ -5377,7 +5469,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   inst.forestDrownHeroClipLock = false
   inst.drownSinkTween?.cancel?.()
   inst.drownSinkTween = null
-  inst.touchDeathGraceUntil = inst.k.time() + TOUCH_DEATH_RESPAWN_GRACE_SEC
+  startForestRespawnGrace(inst)
   inst.lastHeroX = pose.x
   inst.wasGrounded = false
   inst.heroSettledAfterSpawn = false
@@ -5791,7 +5883,7 @@ function onUpdate(inst) {
   syncBranchPlatHome(inst)
   char.hidden && !inst.forestDrownHeroClipLock && !inst.pitCaveHeroForeground &&
     (char.hidden = false)
-  typeof char.opacity === 'number' && char.opacity < 1 &&
+  typeof char.opacity === 'number' && char.opacity < 1 && !Hero.isBlinking(hero) &&
     (char.opacity = 1)
   snapHeroToLogPlatforms(inst, char)
   !isOnForestLakeDryFooting(inst, heroX, footY) && HorizFallTwig.snapHeroPredatorTwigRide(inst.shoreFallTwigs, char, inst.heroInst)
@@ -5919,6 +6011,7 @@ function syncForestPredatorPatrolBounds(inst) {
 //
 function tryStartForestFlowerGrab(inst) {
   if (!inst.flowerGrab || FlowerGrab.isActive(inst.flowerGrab)) return false
+  if (isForestRespawnGrace(inst)) return false
   const char = inst.heroInst?.character
   if (!char?.pos) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -5960,6 +6053,7 @@ function forestPredatorCanHuntHero(inst) {
   const char = inst.heroInst?.character
   const pred = inst.predator
   if (!char?.pos || inst.drowning || inst.deathHandled || !pred) return false
+  if (isForestRespawnGrace(inst)) return false
   if (FlowerGrab.isActive(inst.flowerGrab)) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -5975,6 +6069,7 @@ function triggerForestBranchLandingShake(inst) {
 //
 function tickForestTomatoTreeLanding(inst, char, grounded, justLanded) {
   if (!justLanded || !grounded || !inst.spikyTomatoes) return
+  if (isForestRespawnGrace(inst)) return
   if (!isOnForestMainGroundFoot(char.pos.y + SURFACE_DETECT_Y)) return
   SpikyTomato.onHeroLanded(inst.spikyTomatoes, char.pos.x)
 }

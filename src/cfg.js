@@ -117,7 +117,7 @@ export const CFG = {
     showPerformanceHud: true
   },
   game: {
-    moveSpeed: 300,
+    moveSpeed: 230,     // Hero run speed (px/s)
     jumpForce: 640,
     gravity: 2000,
     platformName: "platform",
@@ -191,6 +191,7 @@ export const CFG = {
       hero: {
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000",           // Pupil
+        sheetEdge: "#4D4740",          // hero.png's outline, for the soft edge left where its paper background is keyed out
         //
         // Live running legs: contours sampled from the leg pieces of
         // hero.png. The near leg takes the run body's own colour and both

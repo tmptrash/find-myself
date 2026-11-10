@@ -179,6 +179,7 @@ export function create(cfg) {
     inTunnel: false,
     tunnel: null,
     sprites: null,
+    heroLegs: null,
     flipX: false,
     impactDone: false,
     holeOpening: false,
@@ -224,6 +225,7 @@ export function start(inst) {
   inst.flipX = char.flipX
   inst.prey.scale = char.scale?.x ?? 1
   inst.sprites = heroSprites(inst, hero)
+  inst.heroLegs ??= Hero.createStandLegs(inst.k)
   inst.descendToY = inst.earthBottomY + CAM_DROP_MAX + HERO_EXIT_PAD
   inst.tunnel = RootTunnel.create({
     k: inst.k,
@@ -529,22 +531,25 @@ function heroSprites(inst, hero) {
 }
 
 //
-// Grabbed hero: rotated with the dangle and squashed by the coils.
+// Grabbed hero: rotated with the dangle and squashed by the coils, his live
+// legs hanging free.
 //
 function drawHero(inst) {
   if (!inst.started || !inst.heroVisible || !inst.sprites) return
   const k = inst.k
   const caught = inst.beat !== BEAT.AWARE && inst.beat !== BEAT.STRIKE
-  const size = Hero.HERO_BAKE_SPRITE_SIZE * inst.prey.scale
-  k.drawSprite({
+  const scale = inst.prey.scale
+  k.pushTransform()
+  k.pushTranslate(k.vec2(inst.heroX, inst.heroY))
+  k.pushRotate(inst.swing.v * 180 / Math.PI)
+  k.pushScale(k.vec2(scale * (1 - inst.squash.v), scale * (1 + inst.squash.v * SQUASH_Y_GAIN)))
+  Hero.drawStandingHero(k, inst.heroLegs, {
+    x: 0,
+    y: 0,
     sprite: caught ? inst.sprites.closed : inst.sprites.open,
-    pos: k.vec2(inst.heroX, inst.heroY),
-    anchor: 'center',
-    width: size * (1 - inst.squash.v),
-    height: size * (1 + inst.squash.v * SQUASH_Y_GAIN),
-    flipX: inst.flipX,
-    angle: inst.swing.v * 180 / Math.PI
+    flipX: inst.flipX
   })
+  k.popTransform()
 }
 function addFadeOverlay(inst) {
   const k = inst.k

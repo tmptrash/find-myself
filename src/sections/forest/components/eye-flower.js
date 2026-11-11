@@ -5,7 +5,7 @@ import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
 import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite, staticBakeHolder } from '../utils/forest-static-bake.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView, staticBakeHolder } from '../utils/forest-static-bake.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import { forestFloorPainterColors } from './forest-floor.js'
 import { drawForestPlant } from '../utils/forest-plants.js'
@@ -237,6 +237,12 @@ const BLADE_SWAY_SPEED = 1.3
 const BLADE_ROOT_PHASE = 0.15
 const BLADE_TIP_PHASE = 0.98
 const BLADE_MIDRIB_FRAC = 0.35
+const BLADE_MITER_MIN = 0.55
+const BLADE_EPS = 1e-6
+const BLADE_HALF_PROFILE = Array.from({ length: BLADE_SEGMENTS + 1 }, (_, i) => {
+  const u = i / BLADE_SEGMENTS
+  return 0.5 * Math.sin(Math.PI * (BLADE_ROOT_PHASE + (BLADE_TIP_PHASE - BLADE_ROOT_PHASE) * u))
+})
 //
 // Whisper starts as the hero crosses the lake's right (east) edge and grows
 // evenly the farther left he goes, to full by the island's water edge.
@@ -442,7 +448,9 @@ export function create(cfg) {
     getHeroPos: cfg.getHeroPos,
     isVisible: cfg.isVisible,
     getView: cfg.getView ?? null,
+    viewScratch: { x1: 0, x2: 0 },
     visible: false,
+    posed: false,
     open: 0,
     lean: 0,
     leanHero: { x: baseX, y: baseY },
@@ -729,14 +737,18 @@ function onUpdate(inst) {
   const t = inst.k.time()
   const hero = inst.getHeroPos()
   const heroDist = hero ? Math.hypot(hero.x - inst.baseX, hero.y - inst.baseY) : Infinity
+  const targetLean = smoothstep(LEAN_FAR, LEAN_NEAR, heroDist)
   inst.whisperLevel = approach(inst.whisperLevel, inst.whisper, MOUTH_WHISPER_SPEED * dt)
-  inst.lean = approach(inst.lean, smoothstep(LEAN_FAR, LEAN_NEAR, heroDist), LEAN_SPEED * dt)
+  inst.lean = approach(inst.lean, targetLean, LEAN_SPEED * dt)
   tickLeanHeroAim(inst, hero, dt)
   const headDist = hero ? Math.hypot(hero.x - inst.head.x, hero.y - inst.head.y) : Infinity
-  inst.open = approach(inst.open, smoothstep(OPEN_FAR, OPEN_NEAR, headDist), OPEN_SPEED * dt)
+  const targetOpen = smoothstep(OPEN_FAR, OPEN_NEAR, headDist)
+  inst.open = approach(inst.open, targetOpen, OPEN_SPEED * dt)
+  if (inst.posed && inst.lean === 0 && inst.open === 0 && targetLean === 0 && targetOpen === 0 && !isPlantInView(inst)) return
   updateStem(inst, hero, t)
-  inst.berries.forEach(berry => updateBerry(inst, berry, t))
-  inst.blades.forEach(blade => updateBlade(inst, blade, hero, t))
+  for (let i = 0; i < inst.berries.length; i++) updateBerry(inst, inst.berries[i], t)
+  for (let i = 0; i < inst.blades.length; i++) updateBlade(inst, inst.blades[i], hero, t)
+  inst.posed = true
 }
 
 //
@@ -1063,24 +1075,55 @@ function onDraw(inst) {
   const sink = grabSink(inst)
   if (!inst.visible || sink >= GRAB_SINK_DEPTH || !isPlantInView(inst)) return
   const batch = inst.batch
-  inst.blades.forEach(blade => addBlade(inst, blade))
+  for (let i = 0; i < inst.blades.length; i++) addBlade(inst, inst.blades[i])
   addStalk(inst)
-  inst.berries.forEach(berry => addBerry(inst, berry))
+  for (let i = 0; i < inst.berries.length; i++) addBerry(inst, inst.berries[i])
   PolyBatch.flush(batch, inst.k, 1, sink, sinkFloorY(inst, sink))
 }
-
+//
+// Visible world X span from the caller's callback or the live Kaplay camera.
+//
+function flowerViewRange(inst) {
+  if (inst.getView) return inst.getView()
+  const k = inst.k
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom)
+  const out = inst.viewScratch
+  out.x1 = camX - half
+  out.x2 = camX + half
+  return out
+}
 //
 // Whether any point of the stalk, blades or berries comes near the visible
 // span (the plant reaches far when it stretches for the hero).
 //
 function isPlantInView(inst) {
-  const view = inst.getView?.()
+  const view = flowerViewRange(inst)
   if (!view) return true
   const x1 = view.x1 - DRAW_CULL_PAD
   const x2 = view.x2 + DRAW_CULL_PAD
-  const inView = p => p.x >= x1 && p.x <= x2
-  return inst.stemPts.some(inView) || inst.blades.some(blade => blade.pts.some(inView)) ||
-    inst.berries.some(berry => berry.pts.some(inView))
+  if (!inst.posed) return inst.x2 >= x1 && inst.x1 <= x2
+  const stem = inst.stemPts
+  for (let i = 0; i < stem.length; i++) {
+    if (stem[i].x >= x1 && stem[i].x <= x2) return true
+  }
+  const blades = inst.blades
+  for (let b = 0; b < blades.length; b++) {
+    const pts = blades[b].pts
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].x >= x1 && pts[i].x <= x2) return true
+    }
+  }
+  const berries = inst.berries
+  for (let b = 0; b < berries.length; b++) {
+    const pts = berries[b].pts
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].x >= x1 && pts[i].x <= x2) return true
+    }
+  }
+  return false
 }
 //
 // Eased-in depth the plant has sunk to (0 until the pull starts).
@@ -1157,6 +1200,10 @@ function addBlade(inst, blade, batch = inst.batch, mask = null) {
 // `mask` keeps only the flagged segments (coils drawn over the hero).
 //
 function addBladePass(batch, pts, wMax, color, clipY = null, mask = null) {
+  if (clipY == null && !mask) {
+    addSmoothBladeRibbon(batch, pts, wMax, color)
+    return
+  }
   const last = pts.length - 1
   for (let i = 0; i < last; i++) {
     if (mask && !mask[i]) continue
@@ -1167,6 +1214,71 @@ function addBladePass(batch, pts, wMax, color, clipY = null, mask = null) {
     PolyBatch.addLine(batch, seg.ax, seg.ay, seg.bx, seg.by, w, color)
     !seg.cut && PolyBatch.addDisc(batch, seg.bx, seg.by, w * 0.5, color)
   }
+}
+//
+// Continuous mitered ribbon for unclipped blades — 2 vertices per spine node
+// instead of a quad + multi-segment disc per segment.
+//
+function addSmoothBladeRibbon(batch, pts, wMax, color) {
+  const n = pts.length
+  if (n < 2) return
+  const last = n - 1
+  const base = batch.count
+  const bPts = batch.pts
+  const bColors = batch.colors
+  const bOps = batch.opacities
+  let prevNx = 0
+  let prevNy = 0
+  for (let i = 0; i < n; i++) {
+    const cur = pts[i]
+    let nx1 = prevNx
+    let ny1 = prevNy
+    if (i < last) {
+      const next = pts[i + 1]
+      const dx = next.x - cur.x
+      const dy = next.y - cur.y
+      const len = Math.hypot(dx, dy)
+      if (len > BLADE_EPS) {
+        nx1 = -dy / len
+        ny1 = dx / len
+      }
+    }
+    let nx = nx1
+    let ny = ny1
+    if (i > 0 && i < last) {
+      const sx = prevNx + nx1
+      const sy = prevNy + ny1
+      const sl = Math.hypot(sx, sy)
+      if (sl > BLADE_EPS) {
+        const mx = sx / sl
+        const my = sy / sl
+        const scale = 1 / Math.max(BLADE_MITER_MIN, mx * nx1 + my * ny1)
+        nx = mx * scale
+        ny = my * scale
+      }
+    }
+    prevNx = nx1
+    prevNy = ny1
+    const half = wMax * (BLADE_HALF_PROFILE[i] ?? 0.25)
+    const v0 = base + i * 2
+    const v1 = v0 + 1
+    const p0 = bPts[v0] ?? (bPts[v0] = { x: 0, y: 0 })
+    const p1 = bPts[v1] ?? (bPts[v1] = { x: 0, y: 0 })
+    p0.x = cur.x + nx * half
+    p0.y = cur.y + ny * half
+    p1.x = cur.x - nx * half
+    p1.y = cur.y - ny * half
+    bColors[v0] = color
+    bColors[v1] = color
+    bOps[v0] = 1
+    bOps[v1] = 1
+  }
+  const indices = batch.indices
+  for (let i = 0; i < last; i++) {
+    const a = base + i * 2
+    indices.push(a, a + 2, a + 3, a, a + 3, a + 1)
+  }
+  batch.count = base + n * 2
 }
 
 //
@@ -1209,15 +1321,21 @@ function drawGrabFront(inst) {
 }
 
 function drawIsland(inst) {
-  inst.visible && drawStaticDecorSprite(inst.k, bakeIsland(inst))
+  if (!inst.visible) return
+  const baked = bakeIsland(inst)
+  if (!baked || !isWorldSpanInView(baked.x, baked.x + baked.w, flowerViewRange(inst))) return
+  drawStaticDecorSprite(inst.k, baked)
 }
 //
 // The island is baked as the flower is created (not on its first frame on
 // screen) and kept per live k and place, so a scene restart reuses it.
 //
 function bakeIsland(inst) {
-  return ensureStaticDecorSprite(inst.k, staticBakeHolder(inst.k, `eye-flower-island-${inst.x}`), ISLAND_BAKE_SLOT,
+  if (inst._islandBake && inst._islandBakeK === inst.k) return inst._islandBake
+  inst._islandBakeK = inst.k
+  inst._islandBake = ensureStaticDecorSprite(inst.k, staticBakeHolder(inst.k, `eye-flower-island-${inst.x}`), ISLAND_BAKE_SLOT,
     ISLAND_BAKE_KEY, islandBounds(inst), ctx => paintIsland(ctx, inst), ISLAND_BAKE_SEED)
+  return inst._islandBake
 }
 
 function islandBounds(inst) {

@@ -261,7 +261,13 @@ export function create(cfg) {
     k,
     look,
     stops,
+    scale,
     batch: PolyBatch.create(),
+    posScratch: k.vec2(0, 0),
+    anchorScratch: k.vec2(0, 0),
+    scaleScratch: k.vec2(1, 1),
+    spineScratch: Array.from({ length: ROPE_SEGMENTS + 1 }, () => ({ x: 0, y: 0, nx: 0, ny: 0, w: 0, u: 0 })),
+    fibreScratch: Array.from({ length: ROPE_SEGMENTS + 1 }, () => ({ x: 0, y: 0 })),
     exit,
     rest,
     stop: startStop,
@@ -820,25 +826,34 @@ function buildLegs(shape) {
     knobs: shape.knobs
   }))
 }
+function isBudInView(inst) {
+  const k = inst.k
+  const camX = k.camPos().x
+  const camScale = k.camScale?.()
+  const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
+  const half = k.width() / (2 * zoom) + 80
+  const worldX = (airborne(inst) ? inst.prop.x : inst.x) * inst.scale
+  return worldX >= camX - half && worldX <= camX + half
+}
 //
 // The two legs under the ground as far as they have grown.
 //
 function onDrawRoots(inst) {
-  if (!inst.isVisible() || airborne(inst) || inst.perch !== PERCH.GROUND || inst.rootGrow <= 0) return
-  drawLegs(inst, ROOT_TUCK)
+  if (!inst.isVisible() || airborne(inst) || inst.perch !== PERCH.GROUND || inst.rootGrow <= 0 || !isBudInView(inst)) return
+  queueLegs(inst, ROOT_TUCK)
+  PolyBatch.flush(inst.batch, inst.k)
 }
 //
 // Dark rim, then the root brown, then a lit line on the thick parts
 // (towards the sun, up-left); knobbed knees and ankles once grown to.
 //
-function drawLegs(inst, dropY) {
+function queueLegs(inst, dropY) {
   const r = inst.look.headR
   const grow = inst.rootGrow * LEG_LEVELS
   const legs = inst.legs.map(leg => grownLeg(inst, leg, grow, r, dropY))
-  legs.forEach(leg => drawLegPass(inst, leg, ROOT_OUTLINE, inst.rootDarkColor))
-  legs.forEach(leg => drawLegPass(inst, leg, 0, inst.rootColor))
-  legs.forEach(leg => drawLegLit(inst, leg))
-  PolyBatch.flush(inst.batch, inst.k)
+  for (let i = 0; i < legs.length; i++) drawLegPass(inst, legs[i], ROOT_OUTLINE, inst.rootDarkColor)
+  for (let i = 0; i < legs.length; i++) drawLegPass(inst, legs[i], 0, inst.rootColor)
+  for (let i = 0; i < legs.length; i++) drawLegLit(inst, legs[i])
 }
 function grownLeg(inst, leg, grow, r, dropY) {
   const world = leg.pts.map(p => toWorld(inst, { x: p.x * r, y: p.y * r + dropY }))
@@ -884,12 +899,12 @@ function drawLegLit(inst, leg) {
 // sits on the hub. Body and head mirror to the side it faces.
 //
 function onDraw(inst) {
-  if (!inst.isVisible()) return
+  if (!inst.isVisible() || !isBudInView(inst)) return
   const { look } = inst
   drawBody(inst)
   drawTile(inst, look.head, headWorld(inst), inst.tilt, inst.facing, 1)
   drawPupils(inst)
-  inst.perch === PERCH.BRANCH && !airborne(inst) && inst.rootGrow > 0 && drawLegs(inst, 0)
+  inst.perch === PERCH.BRANCH && !airborne(inst) && inst.rootGrow > 0 && queueLegs(inst, 0)
   const tip = drawStick(inst)
   drawTile(inst, look.frames[inst.frame], tip, inst.propTilt + inst.breath * BREATH_PROP_TILT, 1, 1)
 }
@@ -898,20 +913,24 @@ function onDraw(inst) {
 // baked disc lands on whole pixels so the crisp texture stays 1:1 round.
 //
 function drawPupils(inst) {
-  const { k, eye } = inst
+  const { k, eye, posScratch } = inst
   if (eye.open <= 0) return
-  inst.look.eyes.forEach(spot => {
+  const eyes = inst.look.eyes
+  for (let i = 0; i < eyes.length; i++) {
+    const spot = eyes[i]
     const p = toWorld(inst, { x: spot.at.x * inst.facing + eye.x * spot.rx, y: spot.at.y + eye.y * spot.ry })
     const { pupil } = spot
+    posScratch.x = Math.round(p.x - pupil.tileW / 2)
+    posScratch.y = Math.round(p.y - pupil.tileH / 2)
     k.drawSprite({
       sprite: pupil.name,
       quad: pupil.quad,
       width: pupil.tileW,
       height: pupil.tileH,
-      pos: k.vec2(Math.round(p.x - pupil.tileW / 2), Math.round(p.y - pupil.tileH / 2)),
+      pos: posScratch,
       opacity: eye.open
     })
-  })
+  }
 }
 //
 // The leafy body, squashed or stretched round its neck (where the head
@@ -927,15 +946,21 @@ function drawBody(inst) {
   drawTile(inst, look.body, toWorld(inst, feet), inst.tilt + inst.bend, sx * inst.facing, sy)
 }
 function drawTile(inst, part, pos, angle, sx, sy) {
-  const { k } = inst
+  const { k, posScratch, anchorScratch, scaleScratch } = inst
+  posScratch.x = pos.x
+  posScratch.y = pos.y
+  anchorScratch.x = part.anchor.x
+  anchorScratch.y = part.anchor.y
+  scaleScratch.x = sx
+  scaleScratch.y = sy
   k.drawSprite({
     sprite: part.tile.name,
     quad: part.tile.quad,
     width: part.tile.tileW,
     height: part.tile.tileH,
-    pos: k.vec2(pos.x, pos.y),
-    anchor: k.vec2(part.anchor.x, part.anchor.y),
-    scale: k.vec2(sx, sy),
+    pos: posScratch,
+    anchor: anchorScratch,
+    scale: scaleScratch,
     angle: angle * RAD_TO_DEG
   })
 }
@@ -959,10 +984,10 @@ function drawStick(inst) {
     x: (base.x + tip.x) / 2 - dy / len * bow,
     y: (base.y + tip.y) / 2 + dx / len * bow
   }
-  const spine = stalkSpine(base, mid, tip)
+  const spine = stalkSpine(inst, base, mid, tip)
   drawStalkBody(inst, spine, STALK_OUTLINE, inst.stickDarkColor)
   drawStalkBody(inst, spine, 0, inst.stickColor)
-  STALK_FIBRES.forEach(fibre => drawStalkFibre(inst, spine, fibre))
+  for (let i = 0; i < STALK_FIBRES.length; i++) drawStalkFibre(inst, spine, STALK_FIBRES[i])
   drawStalkDetails(inst, spine)
   PolyBatch.flush(inst.batch, inst.k)
   return tip
@@ -970,8 +995,8 @@ function drawStick(inst) {
 //
 // Points along the stalk's curve with their normal and width.
 //
-function stalkSpine(base, mid, tip) {
-  const spine = []
+function stalkSpine(inst, base, mid, tip) {
+  const spine = inst.spineScratch
   for (let i = 0; i <= ROPE_SEGMENTS; i++) {
     const u = i / ROPE_SEGMENTS
     const a = (1 - u) * (1 - u)
@@ -980,14 +1005,13 @@ function stalkSpine(base, mid, tip) {
     const tx = 2 * (1 - u) * (mid.x - base.x) + 2 * u * (tip.x - mid.x)
     const ty = 2 * (1 - u) * (mid.y - base.y) + 2 * u * (tip.y - mid.y)
     const tl = Math.hypot(tx, ty) || 1
-    spine.push({
-      x: a * base.x + b * mid.x + c * tip.x,
-      y: a * base.y + b * mid.y + c * tip.y,
-      nx: -ty / tl,
-      ny: tx / tl,
-      w: STALK_W_BASE + (STALK_W_TIP - STALK_W_BASE) * u,
-      u
-    })
+    const pt = spine[i]
+    pt.x = a * base.x + b * mid.x + c * tip.x
+    pt.y = a * base.y + b * mid.y + c * tip.y
+    pt.nx = -ty / tl
+    pt.ny = tx / tl
+    pt.w = STALK_W_BASE + (STALK_W_TIP - STALK_W_BASE) * u
+    pt.u = u
   }
   return spine
 }
@@ -1003,11 +1027,14 @@ function drawStalkBody(inst, spine, extraW, color) {
 // length), light on the sunny half, dark on the other.
 //
 function drawStalkFibre(inst, spine, fibre) {
-  const pts = spine.map(p => {
+  const pts = inst.fibreScratch
+  for (let i = 0; i < spine.length; i++) {
+    const p = spine[i]
     const off = Math.sin(p.u * Math.PI * 2 * STALK_TWISTS + fibre.phase) * p.w * STALK_FIBRE_REACH
-    return { x: p.x + p.nx * off, y: p.y + p.ny * off }
-  })
-  PolyBatch.addPolyline(inst.batch, pts, STALK_FIBRE_W, fibre.light ? inst.stickLightColor : inst.stickDarkColor)
+    pts[i].x = p.x + p.nx * off
+    pts[i].y = p.y + p.ny * off
+  }
+  PolyBatch.addTaperedRibbon(inst.batch, pts, STALK_FIBRE_W, STALK_FIBRE_W, fibre.light ? inst.stickLightColor : inst.stickDarkColor, false)
 }
 //
 // A knot bulging from the stalk and a short twig stub off its side.

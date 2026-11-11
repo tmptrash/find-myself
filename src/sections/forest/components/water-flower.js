@@ -286,7 +286,16 @@ function onUpdate(inst) {
 // foot, then the falling drop in front of them. The spot stays put while
 // the plant shakes.
 //
+function isFlowerInView(inst) {
+  const k = inst.k
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom) + 80
+  return inst.x >= camX - half && inst.x <= camX + half
+}
 function onDraw(inst) {
+  if (!isFlowerInView(inst)) return
   const { state } = inst
   const hanging = state === STATES.GROWING || state === STATES.RIPE
   hanging && drawHanging(inst)
@@ -304,6 +313,7 @@ function onDraw(inst) {
 // tree's foot: wet soil and puddle, splash drops.
 //
 function onDrawSpiltWater(inst) {
+  if (!isFlowerInView(inst)) return
   GroundWater.drawSoil(inst.ground)
   GroundWater.drawSplash(inst.ground)
 }

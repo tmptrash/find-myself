@@ -400,19 +400,36 @@ function drawForestTreeFruits(inst) {
   const spots = inst.treeFruitSpots
   if (!spots?.length) return
   const k = inst.k
-  const fruitPal = FOREST_PAL.forestTreeFruit
-  const bodyA = forestRgb(fruitPal.body)
-  const bodyB = forestRgb(fruitPal.light)
-  const shadeRgb = forestRgb(fruitPal.shade)
-  const contourRgb = forestRgb(fruitPal.contour)
-  const stem = forestRgb(FOREST_PAL.treeColor.root)
-  spots.forEach(fruit => {
-    if (fruit.removed || fruit.carried) return
-    if (fruit.feastDrawHidden) return
+  const camX = k.camPos().x
+  const camScale = k.camScale?.()
+  const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
+  const half = k.width() / (2 * zoom) + 48
+  const minX = camX - half
+  const maxX = camX + half
+  let fallbackColors = null
+  for (let i = 0; i < spots.length; i++) {
+    const fruit = spots[i]
+    if (fruit.removed || fruit.carried || fruit.feastDrawHidden) continue
+    if (fruit.x < minX || fruit.x > maxX) continue
     let op = 1
     fruit.fadeOutStarted && (op *= Math.max(0, 1 - (fruit.fadeOutT ?? 0) / FRUIT_GROUND_FADE_SEC))
-    if (op <= 0.02) return
-    if (fruit.picture) return drawFruitPicture(k, fruit, op)
+    if (op <= 0.02) continue
+    if (fruit.picture) {
+      drawFruitPicture(k, fruit, op)
+      continue
+    }
+    if (!fallbackColors) {
+      const fruitPal = FOREST_PAL.forestTreeFruit
+      fallbackColors = {
+        bodyA: forestRgb(fruitPal.body),
+        bodyB: forestRgb(fruitPal.light),
+        shadeRgb: forestRgb(fruitPal.shade),
+        contourRgb: forestRgb(fruitPal.contour),
+        stem: forestRgb(FOREST_PAL.treeColor.root),
+        highlight: forestRgb(fruitPal.light)
+      }
+    }
+    const { bodyA, bodyB, shadeRgb, contourRgb, stem, highlight } = fallbackColors
     const t = fruit.hue ?? 0.5
     const rgb = lerpRgb(bodyA, bodyB, t)
     const col = k.rgb(rgb.r, rgb.g, rgb.b)
@@ -428,7 +445,6 @@ function drawForestTreeFruits(inst) {
     const contourCol = k.rgb(contourRgb.r, contourRgb.g, contourRgb.b)
     fruit.attached && drawFruitStem(k, fruit, stemCol, contourCol, op)
     drawFruitBody(k, fruit, col, shadeCol, contourCol, op)
-    const highlight = forestRgb(fruitPal.light)
     const bodyR = fruitDisplayRadius(fruit)
     bodyR > 2 && k.drawCircle({
       pos: k.vec2(
@@ -439,7 +455,7 @@ function drawForestTreeFruits(inst) {
       color: k.rgb(highlight.r, highlight.g, highlight.b),
       opacity: op * 0.28
     })
-  })
+  }
 }
 
 /**

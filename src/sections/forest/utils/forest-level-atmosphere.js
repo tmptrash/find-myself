@@ -529,9 +529,8 @@ export function drawForestPit(k, pit) {
  * @param {Object} pit - Pit state
  */
 export function drawForestPitCaveForegroundDecor(k, pit) {
-  if (!pit?.wallProfile?.mouth) return
-  drawStaticDecorSprite(k, bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED,
-    caveForegroundRockGroups(pit.wallProfile)))
+  if (!pit?.wallProfile?.mouth || !isPitInCameraView(pit)) return
+  drawStaticDecorSprite(k, ensurePitRockBakes(k, pit).fg)
 }
 /**
  * Seam-cover rocks — drawn last so earth/static cannot hide them.
@@ -539,9 +538,8 @@ export function drawForestPitCaveForegroundDecor(k, pit) {
  * @param {Object} pit - Pit state
  */
 export function drawForestPitCaveSeamCoverRocks(k, pit) {
-  if (!pit?.wallProfile?.mouth) return
-  drawStaticDecorSprite(k, bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED,
-    caveSeamRockGroups(pit.wallProfile)))
+  if (!pit?.wallProfile?.mouth || !isPitInCameraView(pit)) return
+  drawStaticDecorSprite(k, ensurePitRockBakes(k, pit).seam)
 }
 
 /**
@@ -556,9 +554,7 @@ export function prewarmForestPit(k, pit) {
   if (!pit) return
   ensureCaveLayout(pit)
   bakeCaveInteriorSprite(k, pit)
-  if (!pit.wallProfile?.mouth) return
-  bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(pit.wallProfile))
-  bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(pit.wallProfile))
+  pit.wallProfile?.mouth && ensurePitRockBakes(k, pit)
 }
 
 /**
@@ -599,16 +595,31 @@ export function forestPitEarthSpan(k, pit) {
   if (!pit?.zone) return null
   const cut = getForestPitEarthBandMouthCutoutForPit(pit)
   const span = { x1: cut.leftX, x2: cut.rightX }
-  const layout = pit.wallProfile
-  const rocks = layout?.mouth ? [
-    bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(layout)),
-    bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(layout))
-  ] : []
+  const bakes = pit.wallProfile?.mouth ? ensurePitRockBakes(k, pit) : null
+  const rocks = bakes ? [bakes.fg, bakes.seam] : []
   rocks.filter(Boolean).forEach(baked => {
     span.x1 = Math.min(span.x1, baked.x)
     span.x2 = Math.max(span.x2, baked.x + baked.w)
   })
   return span
+}
+function isPitInCameraView(pit) {
+  const sc = pit?.sceneRef
+  if (!sc?.k || !pit.zone || !sc.camera?.viewW) return true
+  const camX = sc.k.camPos().x
+  const zoom = sc.camera.zoom || 1
+  const half = sc.camera.viewW / (2 * zoom) + PIT_DRAW_CULL_MARGIN
+  return pit.zone.x2 >= camX - half && pit.zone.x1 <= camX + half
+}
+function ensurePitRockBakes(k, pit) {
+  if (pit._rockBakeK === k && pit._rockBakes) return pit._rockBakes
+  const layout = pit.wallProfile
+  pit._rockBakeK = k
+  pit._rockBakes = {
+    fg: bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(layout)),
+    seam: bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(layout))
+  }
+  return pit._rockBakes
 }
 function caveForegroundRockGroups(layout) {
   return [

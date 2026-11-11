@@ -111,16 +111,26 @@ export function create(cfg) {
   const { k, spots, woodPlatformBands, platformXMargin, earthBottomY } = cfg
   const buoys = spots.map((spot, i) => {
     const segmentWidth = spot.segmentWidth ?? BUOY_SEGMENT_WIDTH_DEFAULT
+    const segmentCount = spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT
+    const swayAmp = spot.swayAmp ?? BUOY_SWAY_AMP_DEFAULT
+    const seed = spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2)
+    const armLenBase = segmentWidth * BUOY_SIDE_ARM_LEN_MULT
+    const horizScales = Array.from({ length: segmentCount }, (_, s) =>
+      swayAmp * Math.pow(BUOY_SWAY_HORIZ_GROWTH, s) * BUOY_SWAY_HORIZ_MULT)
+    const armDx = Array.from({ length: segmentCount + 1 }, (_, s) => {
+      const side = s % 2 === 0 ? -1 : 1
+      return side * (armLenBase + Math.sin(seed * 2.3 + s * 1.17) * segmentWidth * 0.35)
+    })
     return {
       x: spot.x,
       groundY: spot.groundY,
       prizeEye: Boolean(spot.prizeEye),
       chainTrampRole: spot.chainTrampRole ?? null,
-      seed: spot.seed ?? (spot.x * 0.041 + i * 1.7) % (Math.PI * 2),
-      segmentCount: spot.segmentCount ?? BUOY_SEGMENT_COUNT_DEFAULT,
+      seed,
+      segmentCount,
       segmentLen: spot.segmentLen ?? BUOY_SEGMENT_LEN_DEFAULT,
       segmentWidth,
-      swayAmp: spot.swayAmp ?? BUOY_SWAY_AMP_DEFAULT,
+      swayAmp,
       swaySpeed: spot.swaySpeed ?? BUOY_SWAY_SPEED_DEFAULT,
       swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
       eyeRadius: spot.eyeRadius,
@@ -131,6 +141,13 @@ export function create(cfg) {
       landHoldPending: false,
       blinkGap: randomBuoyBlinkGap(),
       wasHeroOnCap: false,
+      horizScales,
+      armDx,
+      chainPts: Array.from({ length: segmentCount + 1 }, () => ({ x: spot.x, y: spot.groundY })),
+      _bakeK: null,
+      _bakedStem: null,
+      _bakedBack: null,
+      _bakedFront: null,
       undergroundPts: buildBuoyUndergroundPoints(
         spot.x,
         spot.groundY,
@@ -145,6 +162,8 @@ export function create(cfg) {
     k,
     earthBottomY,
     buoys,
+    visibleScratch: [],
+    pupilScratch: { x: 0, y: 0 },
     woodPlatformBands: woodPlatformBands ?? [],
     platformXMargin: platformXMargin ?? 36,
     time: 0,
@@ -183,12 +202,9 @@ export function triggerBuoyLandBlink(buoy) {
  * @param {Object} inst - Chain-buoy inst
  */
 export function prewarm(inst) {
-  const greeneryColors = buoyGreeneryPainterColors()
-  inst.buoys.forEach(buoy => {
-    bakeBuoyUndergroundStem(inst.k, buoy)
-    bakeBuoyBaseGreeneryBack(inst.k, buoy, greeneryColors)
-    bakeBuoyBaseGreeneryFront(inst.k, buoy, greeneryColors)
-  })
+  for (let i = 0; i < inst.buoys.length; i++) {
+    ensureBuoyBakes(inst.k, inst.buoys[i])
+  }
 }
 
 /**
@@ -200,42 +216,45 @@ export function prewarm(inst) {
 export function undergroundLayers(inst) {
   return inst.buoys
     .filter(buoy => isBuoyShown(inst, buoy))
-    .map(buoy => bakeBuoyUndergroundStem(inst.k, buoy))
+    .map(buoy => ensureBuoyBakes(inst.k, buoy).stem)
     .filter(Boolean)
     .map(baked => ({ sprite: baked.sprite, x: baked.x, y: baked.y, opacity: BUOY_UNDERGROUND_OPACITY }))
 }
 
 /**
- * Draws every chain-buoy stalk-eye — stalk contours, stalk fills, lit
- * lines, then eyes.
+ * Draws every chain-buoy stalk-eye — back greenery sprites, then all stalks
+ * and eyes in a single batched polygon, then front base greenery sprites
+ * (base leaves never reach eye height, so front greenery batches cleanly with
+ * subsequent sprite layers while keeping one polygon flush).
  * @param {Object} inst - Chain-buoy inst
  * @param {Object} colors - forestEyeBerryColors()
  * @param {{x1: number, x2: number}|null} [view=null] - Visible world X range for culling
  */
 export function onDraw(inst, colors, view = null) {
   const k = inst.k
-  const visible = inst.buoys.filter(buoy =>
-    isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) && isBuoyShown(inst, buoy))
-  //
-  // All root sprites first, then every stalk and eye in one batched polygon —
-  // interleaving sprite blits with primitives would flush the GPU batch once
-  // per buoy. Every contour goes under every fill, so no outline cuts across
-  // a stalk where a side stem branches off.
-  //
-  const greeneryColors = buoyGreeneryPainterColors()
-  visible.forEach(buoy => drawBuoyUndergroundStem(inst, buoy))
-  visible.forEach(buoy => drawBuoyBaseGreeneryBack(k, buoy, greeneryColors))
-  const chains = visible.map(buoy => buildBuoyChainPoints(buoy, inst.time))
+  const visible = inst.visibleScratch
+  visible.length = 0
+  const all = inst.buoys
+  for (let i = 0; i < all.length; i++) {
+    const buoy = all[i]
+    if (isWorldSpanInView(buoy.x - BUOY_CULL_PAD, buoy.x + BUOY_CULL_PAD, view) && isBuoyShown(inst, buoy)) {
+      ensureBuoyBakes(k, buoy)
+      buildBuoyChainPoints(buoy, inst.time)
+      visible.push(buoy)
+    }
+  }
+  const n = visible.length
+  if (!n) return
+  for (let i = 0; i < n; i++) drawBuoyUndergroundStem(inst, visible[i])
+  for (let i = 0; i < n; i++) drawStaticDecorSprite(k, visible[i]._bakedBack)
   const batch = inst.bodyBatch
   PolyBatch.reset(batch)
-  visible.forEach((buoy, i) => addBuoyBody(batch, buoy, chains[i], colors.contour, BUOY_CONTOUR_PAD))
-  visible.forEach((buoy, i) => addBuoyBody(batch, buoy, chains[i], colors.stem, 0))
-  visible.forEach((buoy, i) => addBuoyStalk(batch, buoy, chains[i], colors.stemLight, 0, BUOY_STALK_LIGHT_FRAC))
+  for (let i = 0; i < n; i++) addBuoyBody(batch, visible[i], visible[i].chainPts, colors.contour, BUOY_CONTOUR_PAD)
+  for (let i = 0; i < n; i++) addBuoyBody(batch, visible[i], visible[i].chainPts, colors.stem, 0)
+  for (let i = 0; i < n; i++) addBuoyStalk(batch, visible[i], visible[i].chainPts, colors.stemLight, 0, BUOY_STALK_LIGHT_FRAC)
+  for (let i = 0; i < n; i++) addBuoyEye(inst, batch, visible[i], visible[i].chainPts, colors, inst.lookX, inst.lookY)
   PolyBatch.flush(batch, k)
-  visible.forEach(buoy => drawBuoyBaseGreeneryFront(k, buoy, greeneryColors))
-  PolyBatch.reset(batch)
-  visible.forEach((buoy, i) => addBuoyEye(batch, buoy, chains[i], colors, inst.lookX, inst.lookY))
-  PolyBatch.flush(batch, k)
+  for (let i = 0; i < n; i++) drawStaticDecorSprite(k, visible[i]._bakedFront)
 }
 //
 // Wobbly polyline from the ground anchor to the earth-band floor (root-like,
@@ -264,11 +283,20 @@ function buildBuoyUndergroundPoints(x, groundY, earthBottomY, segLen, seed) {
   last.y = earthBottomY
   return points
 }
+function ensureBuoyBakes(k, buoy) {
+  if (buoy._bakeK === k) return { stem: buoy._bakedStem, back: buoy._bakedBack, front: buoy._bakedFront }
+  const greeneryColors = buoyGreeneryPainterColors()
+  buoy._bakeK = k
+  buoy._bakedStem = bakeBuoyUndergroundStem(k, buoy)
+  buoy._bakedBack = bakeBuoyBaseGreeneryBack(k, buoy, greeneryColors)
+  buoy._bakedFront = bakeBuoyBaseGreeneryFront(k, buoy, greeneryColors)
+  return { stem: buoy._bakedStem, back: buoy._bakedBack, front: buoy._bakedFront }
+}
 //
 // Baked underground stalk — same tapered passes as the stem above ground.
 //
 function drawBuoyUndergroundStem(inst, buoy) {
-  const baked = bakeBuoyUndergroundStem(inst.k, buoy)
+  const baked = buoy._bakedStem
   baked && !EarthMerge.isMerged(inst, baked.sprite) && drawStaticDecorSprite(inst.k, baked, BUOY_UNDERGROUND_OPACITY)
 }
 //
@@ -544,13 +572,19 @@ export function getChainBuoyEyePos(buoy, time = 0) {
 function buildBuoyChainPoints(buoy, time) {
   let x = buoy.x
   let y = buoy.groundY
-  const points = [{ x, y }]
+  const points = buoy.chainPts
+  points[0].x = x
+  points[0].y = y
+  const scales = buoy.horizScales
+  const basePhase = time * buoy.swaySpeed + buoy.seed
+  const lag = buoy.swayLag
+  const segLen = buoy.segmentLen
   for (let i = 0; i < buoy.segmentCount; i++) {
-    const phase = time * buoy.swaySpeed + buoy.seed - i * buoy.swayLag
-    const horizScale = buoy.swayAmp * Math.pow(BUOY_SWAY_HORIZ_GROWTH, i) * BUOY_SWAY_HORIZ_MULT
-    x += Math.sin(phase) * horizScale
-    y -= buoy.segmentLen
-    points.push({ x, y })
+    x += Math.sin(basePhase - i * lag) * scales[i]
+    y -= segLen
+    const pt = points[i + 1]
+    pt.x = x
+    pt.y = y
   }
   return points
 }
@@ -574,25 +608,24 @@ function addBuoyStalk(batch, buoy, points, color, pad, frac) {
 //
 function addBuoySideArms(batch, buoy, points, color, pad) {
   const segmentWidth = buoy.segmentWidth
-  const armLenBase = segmentWidth * BUOY_SIDE_ARM_LEN_MULT
   const ballR = segmentWidth * BUOY_SIDE_BALL_RADIUS_MULT + pad * 0.5
+  const armDx = buoy.armDx
+  const armDrop = segmentWidth * BUOY_SIDE_ARM_DROP
+  const armW = segmentWidth * 0.72 + pad
   for (let i = 1; i < points.length - 1; i++) {
-    const side = i % 2 === 0 ? -1 : 1
-    const wobble = Math.sin(buoy.seed * 2.3 + i * 1.17) * segmentWidth * 0.35
-    const armLen = armLenBase + wobble
     const px = points[i].x
     const py = points[i].y
-    const tipX = px + side * armLen
-    const tipY = py + segmentWidth * BUOY_SIDE_ARM_DROP
-    PolyBatch.addLine(batch, px, py, tipX, tipY, segmentWidth * 0.72 + pad, color)
+    const tipX = px + armDx[i]
+    const tipY = py + armDrop
+    PolyBatch.addLine(batch, px, py, tipX, tipY, armW, color)
     PolyBatch.addDisc(batch, tipX, tipY, ballR, color)
   }
 }
-function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
+function addBuoyEye(inst, batch, buoy, points, colors, heroX, heroY) {
   const eye = points[points.length - 1]
   const scleraR = buoy.eyeRadius ?? BUOY_EYE_RADIUS
   const pupilR = buoy.pupilRadius ?? BUOY_PUPIL_RADIUS
-  const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY, scleraR, pupilR)
+  const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY, scleraR, pupilR, inst.pupilScratch)
   addLiddedEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA, buoy.lidClose)
 }
 //
@@ -601,12 +634,18 @@ function addBuoyEye(batch, buoy, points, colors, heroX, heroY) {
 function chainBuoyXUnderWoodPlatform(x, bands, margin) {
   return (bands ?? []).some(b => x >= b.x1 - margin && x <= b.x2 + margin)
 }
-function buoyPupilPos(eyeX, eyeY, heroX, heroY, scleraR = BUOY_EYE_RADIUS, pupilR = BUOY_PUPIL_RADIUS) {
-  if (heroX == null || heroY == null) return { x: eyeX, y: eyeY }
+function buoyPupilPos(eyeX, eyeY, heroX, heroY, scleraR = BUOY_EYE_RADIUS, pupilR = BUOY_PUPIL_RADIUS, out = { x: 0, y: 0 }) {
+  if (heroX == null || heroY == null) {
+    out.x = eyeX
+    out.y = eyeY
+    return out
+  }
   const dx = heroX - eyeX
   const dy = heroY - eyeY
   const dist = Math.hypot(dx, dy) || 1
   const maxOff = scleraR - pupilR - BUOY_PUPIL_MARGIN
   const t = Math.min(1, maxOff / dist)
-  return { x: eyeX + dx * t, y: eyeY + dy * t }
+  out.x = eyeX + dx * t
+  out.y = eyeY + dy * t
+  return out
 }

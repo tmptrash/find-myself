@@ -37,7 +37,6 @@ const HERO_HIT_HALF_W = 15
 const HERO_HIT_H = 69
 const SHEAR_REACH = 18
 const SHEAR_OPEN = 8
-const TRI = [0, 1, 2]
 const SNOUT_REACH = 7
 const SNOUT_DROP = 2.4
 const SNOUT_HALF = 4.1
@@ -112,6 +111,16 @@ export function create(cfg) {
     orientKick: false,
     lungeT: 0,
     batch: PolyBatch.create(),
+    colors: {
+      contour: rgb(cfg.k, FOREST_PAL.predatorContour),
+      back: rgb(cfg.k, FOREST_PAL.predatorBack),
+      belly: rgb(cfg.k, FOREST_PAL.predatorBelly),
+      moss: rgb(cfg.k, FOREST_PAL.predatorMoss),
+      leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
+      eye: rgb(cfg.k, FOREST_PAL.predatorEye),
+      pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
+      horn: rgb(cfg.k, FOREST_PAL.predatorHorn)
+    },
     footHearable: false
   }
   inst.groundAt = x => predatorSurfaceAt(inst, x)
@@ -305,29 +314,47 @@ function syncFootstepAudibility(inst) {
   Sound.setForestPredatorFootGain(sfx, hearable ? 1 : 0)
 }
 
+function isPredatorInView(inst) {
+  const segs = inst.segments
+  if (!segs?.length) return true
+  const k = inst.k
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom) + 40
+  const minV = camX - half
+  const maxV = camX + half
+  for (let i = 0; i < segs.length; i++) {
+    const x = segs[i].x
+    if (x >= minV && x <= maxV) return true
+  }
+  return false
+}
+
 function drawPredator(inst) {
+  if (!isPredatorInView(inst)) return
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const contour = rgb(k, FOREST_PAL.predatorContour)
-  const back = rgb(k, FOREST_PAL.predatorBack)
-  const belly = rgb(k, FOREST_PAL.predatorBelly)
-  const moss = rgb(k, FOREST_PAL.predatorMoss)
-  const leg = rgb(k, FOREST_PAL.predatorLeg)
-  const eye = rgb(k, FOREST_PAL.predatorEye)
-  const pupil = rgb(k, FOREST_PAL.predatorPupil)
-  const horn = rgb(k, FOREST_PAL.predatorHorn)
+  const { contour, back, belly, moss, leg, eye, pupil, horn } = inst.colors
   //
   // Far-side legs sit behind the body, near-side legs are drawn over it.
   //
-  inst.legs.forEach(limb => limb.side !== NEAR_SIDE && drawLeg(inst, batch, limb, contour, leg))
+  const legs = inst.legs
+  for (let i = 0; i < legs.length; i++) {
+    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
+  }
   drawBodySegments(inst, batch, contour, belly, back, moss)
-  inst.legs.forEach(limb => limb.side === NEAR_SIDE && drawLeg(inst, batch, limb, contour, leg))
-  inst.spikeAt.forEach(index => {
+  for (let i = 0; i < legs.length; i++) {
+    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
+  }
+  const spikes = inst.spikeAt
+  for (let i = 0; i < spikes.length; i++) {
+    const index = spikes[i]
     const seg = inst.segments[index]
     const prev = inst.segments[index + 1]
     prev && drawBackSpike(batch, seg, prev, contour, back)
-  })
+  }
   drawTailShears(inst, batch, contour, horn)
   drawHead(inst, batch, contour, back, eye, pupil)
   PolyBatch.flush(batch, k, 1)
@@ -432,11 +459,13 @@ function drawTailShears(inst, batch, contour, horn) {
 }
 
 function addSpikeTri(batch, bx, by, tx, ty, nx, ny, half, height, color) {
-  PolyBatch.addShape(batch, [
-    [bx - tx * half, by - ty * half],
-    [bx + nx * height, by + ny * height],
-    [bx + tx * half, by + ty * half]
-  ], TRI, 0, 0, 1, 1, 1, 0, color)
+  PolyBatch.addTriangle(
+    batch,
+    bx - tx * half, by - ty * half,
+    bx + nx * height, by + ny * height,
+    bx + tx * half, by + ty * half,
+    color
+  )
 }
 
 function heroHitbox(inst, heroX, heroFootY) {

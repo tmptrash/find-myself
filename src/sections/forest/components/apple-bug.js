@@ -331,7 +331,10 @@ export function create(cfg) {
     dropBiteWanted: false,
     dropBitten: false,
     dropBites: 0,
-    loose: []
+    loose: [],
+    posScratch: k.vec2(0, 0),
+    anchorScratch: k.vec2(0, 0),
+    scaleScratch: k.vec2(1, 1)
   }
   inst.x = inst.restX
   inst.goalX = inst.restX
@@ -1342,14 +1345,22 @@ function toStandIn(inst, p) {
 function mouthWorld(inst) {
   return toWorld(inst, headPoint(inst, inst.bug.mouth, { x: 0, y: 0 }))
 }
+function isBugSpanInView(k, x1, x2) {
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom) + 80
+  return x2 >= camX - half && x1 <= camX + half
+}
 //
 // The tunnel under the burrow, the apples stored at its far end, those it
 // dropped on its way and one being eaten, dim like the bug down there.
 //
 function onDrawTunnel(inst) {
+  if (!isBugSpanInView(inst.k, inst.tunnelPos.x - 40, inst.tunnelPos.x + 280)) return
   EarthMerge.isMerged(inst, inst.tunnel.sprite) || inst.k.drawSprite({ sprite: inst.tunnel.sprite, pos: inst.tunnelPos })
-  inst.pile.forEach(item => drawTunnelApple(inst, item))
-  inst.loose.forEach(item => drawTunnelApple(inst, item))
+  for (let i = 0; i < inst.pile.length; i++) drawTunnelApple(inst, inst.pile[i])
+  for (let i = 0; i < inst.loose.length; i++) drawTunnelApple(inst, inst.loose[i])
   inst.meal && drawTunnelApple(inst, inst.meal)
 }
 function drawTunnelApple(inst, { fruit, x, y }) {
@@ -1361,6 +1372,8 @@ function drawTunnelApple(inst, { fruit, x, y }) {
 // the cave, a little darker than up on the ground); the tongue goes last.
 //
 function onDraw(inst) {
+  const reach = inst.frontReach + 120
+  if (!isBugSpanInView(inst.k, inst.x - reach, inst.x + reach)) return
   const sgn = Math.sign(inst.f) || inst.facing
   const legs = inst.legs.map(leg => solveLeg(inst, leg, sgn))
   inst.dark < 1 && drawBody(inst, legs, { opacity: 1, color: null, farColor: inst.farTint })
@@ -1389,15 +1402,23 @@ function drawBody(inst, legs, look) {
 //
 function drawPart(inst, part, at, angle, mirror, look, color = look.color) {
   const sgn = Math.sign(inst.f) || inst.facing
+  const { posScratch, anchorScratch, scaleScratch } = inst
+  const w = toWorld(inst, at)
+  posScratch.x = w.x
+  posScratch.y = w.y
+  anchorScratch.x = part.anchor.x
+  anchorScratch.y = part.anchor.y
+  scaleScratch.x = inst.f * mirror * inst.zoom
+  scaleScratch.y = inst.zoom
   inst.k.drawSprite({
     sprite: part.tile.name,
     quad: part.tile.quad,
     width: part.tile.tileW,
     height: part.tile.tileH,
-    pos: toWorld(inst, at),
-    anchor: inst.k.vec2(part.anchor.x, part.anchor.y),
+    pos: posScratch,
+    anchor: anchorScratch,
     angle: (sgn * angle + (inst.wall ? inst.wall.a : 0)) * RAD_TO_DEG,
-    scale: inst.k.vec2(inst.f * mirror * inst.zoom, inst.zoom),
+    scale: scaleScratch,
     opacity: look.opacity,
     ...(color ? { color } : {})
   })

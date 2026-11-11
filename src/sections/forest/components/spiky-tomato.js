@@ -194,11 +194,19 @@ function drawTomato(inst, tomato, opacity) {
   const look = BombTree.getBombLook(inst.earTrees, tomato.index)
   if (!look) return
   const k = inst.k
+  const camX = k.camPos().x
+  const camScale = k.camScale?.()
+  const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
+  const half = k.width() / (2 * zoom) + look.w
+  if (tomato.x < camX - half || tomato.x > camX + half) return
   const pulseSpeed = TOMATO_PULSE_SPEED + tomato.hits * TOMATO_PULSE_SPEED_PER_HIT
   const scale = tomatoGrowScale(tomato) * (1 + Math.sin(inst.time * pulseSpeed + tomato.index) * TOMATO_PULSE_AMP)
+  const pos = inst._posScratch ?? (inst._posScratch = k.vec2(0, 0))
+  pos.x = tomato.x
+  pos.y = tomato.y
   k.drawSprite({
     sprite: look.sprite,
-    pos: k.vec2(tomato.x, tomato.y),
+    pos,
     anchor: 'center',
     angle: tomato.spin * RAD_TO_DEG,
     width: look.w * scale,

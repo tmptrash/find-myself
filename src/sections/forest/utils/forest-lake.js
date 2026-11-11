@@ -179,6 +179,15 @@ const LAKE_ALGAE_SWAY_MUL_MIN = 0.65
 const LAKE_ALGAE_SWAY_MUL_RANGE = 0.75
 const LAKE_ALGAE_WAVE_PX = 1.6
 const LAKE_ALGAE_WAVE_FREQ = 9
+const LAKE_ALGAE_CULL_PAD = 24
+const LAKE_ALGAE_COS_LAG = Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, (_, s) => {
+  const u = s / LAKE_ALGAE_SEGMENTS
+  return Math.cos(u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
+})
+const LAKE_ALGAE_SIN_LAG = Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, (_, s) => {
+  const u = s / LAKE_ALGAE_SEGMENTS
+  return Math.sin(u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
+})
 const LAKE_REFLECTION_ALPHA = 0.3
 const LAKE_REFLECTION_CORE_FRAC = 0.55
 const LAKE_REFLECTION_PASS_ALPHA = 0.5
@@ -264,6 +273,7 @@ export function create(cfg) {
   const { k } = cfg
   const lake = bakeLakeWaterSprites(k, cfg)
   lake.bedStones = cfg.bedStones ?? null
+  lake.drawPos = k.vec2(lake.x1, lake.originY)
   bakeLakeBedSprite(k, lake)
   lake.algae = buildLakeAlgae(k, lake)
   return lake
@@ -276,9 +286,10 @@ export function create(cfg) {
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawBed(k, lake, opacity = 1) {
+  if (!isLakeInView(k, lake)) return
   k.drawSprite({
     sprite: lake.bedSprite,
-    pos: k.vec2(lake.x1, lake.originY),
+    pos: lake.drawPos,
     width: lake.canvasW,
     height: lake.canvasH,
     opacity
@@ -295,14 +306,25 @@ export function drawBed(k, lake, opacity = 1) {
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawAlgae(k, lake, opacity = 1) {
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom)
+  const minX = camX - half - LAKE_ALGAE_CULL_PAD
+  const maxX = camX + half + LAKE_ALGAE_CULL_PAD
+  if (lake.x1 + lake.canvasW < minX || lake.x1 > maxX) return
   const time = k.time()
-  const { blades, indices, batch } = lake.algae
-  for (const blade of blades) {
+  const { blades, indices, batch, visible } = lake.algae
+  visible.length = 0
+  for (let i = 0; i < blades.length; i++) {
+    const blade = blades[i]
+    if (blade.x < minX || blade.x > maxX) continue
     updateLakeAlgaeBlade(blade, time)
     PolyBatch.addPolygon(batch, blade.poly, indices, blade.color)
+    blade.isFrond && visible.push(blade)
   }
-  for (const blade of blades) {
-    blade.isFrond && PolyBatch.addPolyline(batch, blade.spine, LAKE_ALGAE_MIDRIB_PX, blade.midrib)
+  for (let i = 0; i < visible.length; i++) {
+    PolyBatch.addTaperedRibbon(batch, visible[i].spine, LAKE_ALGAE_MIDRIB_PX, LAKE_ALGAE_MIDRIB_PX, visible[i].midrib, false)
   }
   PolyBatch.flush(batch, k, opacity)
 }
@@ -325,9 +347,10 @@ function fillFrameSprite(k, lake) {
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawFill(k, lake, opacity = 1) {
+  if (!isLakeInView(k, lake)) return
   k.drawSprite({
     sprite: fillFrameSprite(k, lake),
-    pos: k.vec2(lake.x1, lake.originY),
+    pos: lake.drawPos,
     width: lake.canvasW,
     height: lake.canvasH,
     opacity
@@ -881,23 +904,48 @@ function buildLakeAlgae(k, lake) {
       const h = Math.min(kind.hMin + rng() * kind.hRange, rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX)
       if (h < LAKE_ALGAE_MIN_H) continue
       const width = kind.wMin + rng() * kind.wRange
+      const isFrond = tuft.kind === 'frond'
+      const lean = (rng() * 2 - 1) * kind.lean
+      const phase = rng() * Math.PI * 2
+      const worldX = lake.x1 + x
+      const worldY = lake.originY + rootY
+      const baseX = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
+      const baseY = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
+      const halfW = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
+      for (let s = 0; s <= LAKE_ALGAE_SEGMENTS; s++) {
+        const u = s / LAKE_ALGAE_SEGMENTS
+        const ripple = isFrond ? Math.sin(u * LAKE_ALGAE_WAVE_FREQ + phase) * LAKE_ALGAE_WAVE_PX * u : 0
+        baseX[s] = worldX + ripple + lean * h * u
+        baseY[s] = worldY - h * u
+        halfW[s] = width * (1 - (1 - LAKE_ALGAE_TIP_W_FRAC) * u) * 0.5
+      }
       fronds.push({
-        x: lake.x1 + x,
-        y: lake.originY + rootY,
+        x: worldX,
+        y: worldY,
         h,
         width,
-        isFrond: tuft.kind === 'frond',
-        lean: (rng() * 2 - 1) * kind.lean,
-        phase: rng() * Math.PI * 2,
+        isFrond,
+        lean,
+        phase,
         swayMul: LAKE_ALGAE_SWAY_MUL_MIN + rng() * LAKE_ALGAE_SWAY_MUL_RANGE,
         color: tones[Math.floor(rng() * tones.length)],
         midrib: tones[tones.length - 1],
-        spine: Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, () => k.vec2(0, 0)),
-        poly: Array.from({ length: (LAKE_ALGAE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
+        baseX,
+        baseY,
+        halfW,
+        spine: Array.from({ length: LAKE_ALGAE_SEGMENTS + 1 }, () => ({ x: 0, y: 0 })),
+        poly: Array.from({ length: (LAKE_ALGAE_SEGMENTS + 1) * 2 }, () => ({ x: 0, y: 0 }))
       })
     }
   }
-  return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create() }
+  return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create(), visible: [] }
+}
+function isLakeInView(k, lake) {
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom)
+  return lake.x1 + lake.canvasW >= camX - half && lake.x1 <= camX + half
 }
 //
 // Triangle strip between the left and right edges of a leaf polygon (left
@@ -913,21 +961,22 @@ function lakeAlgaeStripIndices() {
   return indices
 }
 function updateLakeAlgaeBlade(blade, time) {
-  const swayRate = LAKE_ALGAE_SWAY_SPEED * blade.swayMul
-  const last = blade.poly.length - 1
+  const baseAngle = time * LAKE_ALGAE_SWAY_SPEED * blade.swayMul + blade.phase
+  const sinA = Math.sin(baseAngle)
+  const cosA = Math.cos(baseAngle)
+  const { baseX, baseY, halfW, spine, poly } = blade
+  const last = poly.length - 1
   for (let s = 0; s <= LAKE_ALGAE_SEGMENTS; s++) {
-    const u = s / LAKE_ALGAE_SEGMENTS
-    const sway = Math.sin(time * swayRate + blade.phase - u * LAKE_ALGAE_SWAY_LAG) * LAKE_ALGAE_SWAY_PX * u * u
-    const ripple = blade.isFrond ? Math.sin(u * LAKE_ALGAE_WAVE_FREQ + blade.phase) * LAKE_ALGAE_WAVE_PX * u : 0
-    const x = blade.x + sway + ripple + blade.lean * blade.h * u
-    const y = blade.y - blade.h * u
-    const half = blade.width * (1 - (1 - LAKE_ALGAE_TIP_W_FRAC) * u) * 0.5
-    blade.spine[s].x = x
-    blade.spine[s].y = y
-    blade.poly[s].x = x - half
-    blade.poly[s].y = y
-    blade.poly[last - s].x = x + half
-    blade.poly[last - s].y = y
+    const sway = sinA * LAKE_ALGAE_COS_LAG[s] - cosA * LAKE_ALGAE_SIN_LAG[s]
+    const x = baseX[s] + sway
+    const y = baseY[s]
+    const half = halfW[s]
+    spine[s].x = x
+    spine[s].y = y
+    poly[s].x = x - half
+    poly[s].y = y
+    poly[last - s].x = x + half
+    poly[last - s].y = y
   }
 }
 //

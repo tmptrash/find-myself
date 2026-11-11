@@ -22,6 +22,10 @@ const BERRY_LID_OVERHANG = 2
 const BERRY_LID_COLUMNS = 24
 const BERRY_LID_EDGE_W = 1.1
 const BERRY_RING_SEGMENTS = 32
+const BERRY_RING_UNIT = Array.from({ length: BERRY_RING_SEGMENTS }, (_, i) => {
+  const a = (i / BERRY_RING_SEGMENTS) * Math.PI * 2
+  return { x: Math.cos(a), y: Math.sin(a) }
+})
 const COLOR_KEYS = ['contour', 'berry', 'berryShade', 'pupil', 'stem', 'stemLight']
 const colorCache = new WeakMap()
 
@@ -109,12 +113,7 @@ export function addLiddedEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors
  * @param {Object} color - Kaplay rgb
  */
 export function addTaperedPass(batch, pts, wBase, wTip, color) {
-  const last = pts.length - 1
-  for (let i = 0; i < last; i++) {
-    const w = wBase + (wTip - wBase) * (i / last)
-    PolyBatch.addLine(batch, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, w, color)
-    PolyBatch.addDisc(batch, pts[i + 1].x, pts[i + 1].y, w * 0.5, color)
-  }
+  PolyBatch.addTaperedRibbon(batch, pts, wBase, wTip, color, true)
 }
 
 //
@@ -122,9 +121,9 @@ export function addTaperedPass(batch, pts, wBase, wTip, color) {
 //
 function addContourRing(batch, x, y, ringR, w, color) {
   for (let i = 0; i < BERRY_RING_SEGMENTS; i++) {
-    const a0 = (i / BERRY_RING_SEGMENTS) * Math.PI * 2
-    const a1 = ((i + 1) / BERRY_RING_SEGMENTS) * Math.PI * 2
-    PolyBatch.addLine(batch, x + Math.cos(a0) * ringR, y + Math.sin(a0) * ringR, x + Math.cos(a1) * ringR, y + Math.sin(a1) * ringR, w, color)
+    const u0 = BERRY_RING_UNIT[i]
+    const u1 = BERRY_RING_UNIT[(i + 1) % BERRY_RING_SEGMENTS]
+    PolyBatch.addLine(batch, x + u0.x * ringR, y + u0.y * ringR, x + u1.x * ringR, y + u1.y * ringR, w, color)
   }
 }
 function addBerryBall(batch, x, y, r, colors, contourW) {

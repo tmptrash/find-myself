@@ -399,7 +399,7 @@ export function create(config) {
   // hitbox has moved it poses the running legs, or shifts a standing frame
   // onto the ground line, then draws the hero.
   //
-  k.add([
+  const drawLayer = k.add([
     k.z(CFG.visual.zIndex.player),
     ...(fixed ? [k.fixed()] : []),
     {
@@ -414,39 +414,64 @@ export function create(config) {
   ])
   controllable && setupControls(inst)
   bindDefaultHeroFootFx(inst, config)
+  const auxLayers = [drawLayer]
   //
   // Footprint renderer: a single fixed entity that draws and ages footprints
   // for this hero. Drawn behind the player so prints sit on the ground.
   //
-  k.add([
-    k.z(FOOTPRINT_Z),
-    {
-      update() {
-        updateHeroFootprints(inst)
-      },
-      draw() {
-        drawHeroFootprints(k, inst)
+  if (footFx && !suppressFootprints) {
+    auxLayers.push(k.add([
+      k.z(FOOTPRINT_Z),
+      {
+        update() {
+          updateHeroFootprints(inst)
+        },
+        draw() {
+          drawHeroFootprints(k, inst)
+        }
       }
-    }
-  ])
+    ]))
+  }
   //
   // Idle vocalization renderer: drifts music notes above the hero's mouth.
   // Drawn slightly above the player (z = IDLE_NOTE_Z) so notes never hide
   // behind the sprite while it animates.
   //
-  k.add([
-    k.z(IDLE_NOTE_Z),
-    {
-      update() {
-        onUpdateIdleNotes(inst)
-      },
-      draw() {
-        drawIdleNotes(k, inst)
+  if (idleVocalization) {
+    auxLayers.push(k.add([
+      k.z(IDLE_NOTE_Z),
+      {
+        update() {
+          onUpdateIdleNotes(inst)
+        },
+        draw() {
+          drawIdleNotes(k, inst)
+        }
       }
-    }
-  ])
+    ]))
+  }
+  inst.auxLayers = auxLayers
 
   return inst
+}
+
+/**
+ * Destroys the hero character and all auxiliary render layers so an in-place
+ * respawn never leaks orphaned update/draw objects into the scene tree.
+ * @param {Object|null} inst - Hero instance
+ */
+export function destroy(inst) {
+  if (!inst) return
+  const { k, character, auxLayers } = inst
+  if (character?.exists?.()) k.destroy(character)
+  inst.character = null
+  if (auxLayers) {
+    for (let i = 0; i < auxLayers.length; i++) {
+      const layer = auxLayers[i]
+      layer?.exists?.() && k.destroy(layer)
+    }
+    auxLayers.length = 0
+  }
 }
 
 /**

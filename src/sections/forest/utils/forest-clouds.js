@@ -1,4 +1,4 @@
-import { shuffledCopy } from '../../../utils/helper.js'
+import { createCanvasAtlasBuilder, shuffledCopy } from '../../../utils/helper.js'
 import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
 import { cutPicture, loadPictureImage } from './forest-picture.js'
 //
@@ -11,7 +11,6 @@ import { cutPicture, loadPictureImage } from './forest-picture.js'
 // (game boot); sprites are baked once per live k.
 //
 const URL = 'forest/clouds.png'
-const SPRITE_PREFIX = 'forest0-cloud-v1'
 const GRAIN_SEED = 7900
 const SPECK_ALPHA = 48
 //
@@ -82,7 +81,7 @@ export function create(cfg) {
       y: topY + Math.random() * CLOUD_BAND_H
     }
   })
-  return { k, clouds, start, span }
+  return { k, clouds, start, span, posScratch: k.vec2(0, 0) }
 }
 
 /**
@@ -97,30 +96,44 @@ export function onDraw(inst, opacity = 1) {
   if (!sprites) return
   const camX = k.camPos().x
   const halfView = k.width() / 2 / (k.camScale().x || 1) + VIEW_PAD
+  const minX = camX - halfView
+  const maxX = camX + halfView
   const t = k.time()
-  inst.clouds.forEach(cloud => {
+  const pos = inst.posScratch
+  const clouds = inst.clouds
+  for (let i = 0; i < clouds.length; i++) {
+    const cloud = clouds[i]
     const s = sprites[cloud.look]
-    const w = s.w * cloud.scale
+    const w = s.tileW * cloud.scale
     const x = inst.start + ((cloud.offset + cloud.speed * t) % inst.span)
-    if (x + w < camX - halfView || x > camX + halfView) return
-    k.drawSprite({ sprite: s.sprite, pos: k.vec2(x, cloud.y), width: w, height: s.h * cloud.scale, opacity })
-  })
+    if (x + w < minX || x > maxX) continue
+    pos.x = x
+    pos.y = cloud.y
+    k.drawSprite({
+      sprite: s.name,
+      quad: s.quad,
+      pos,
+      width: w,
+      height: s.tileH * cloud.scale,
+      ...(opacity < 1 ? { opacity } : {})
+    })
+  }
 }
 //
-// Every cloud of the sheet as a grained sprite; once per live k (null until
-// the sheet has loaded).
+// Every cloud of the sheet packed into one grained atlas sprite per live k
+// so all visible clouds submit in a single GPU batch.
 //
 function bakeSprites(k) {
   if (!sheet) return null
   const cached = bakedByK.get(k)
   if (cached) return cached
+  const atlas = createCanvasAtlasBuilder()
   const out = CLOUDS.map((rect, i) => {
     const canvas = cutPicture(sheet, rect, 1)
     applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + i)
-    const sprite = `${SPRITE_PREFIX}-${i}`
-    k.loadSprite(sprite, canvas)
-    return { sprite, w: canvas.width, h: canvas.height }
+    return atlas.register(canvas)
   })
+  atlas.build(k)
   bakedByK.set(k, out)
   return out
 }

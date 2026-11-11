@@ -1250,7 +1250,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // Draw callbacks on decor/tramps read zones._sceneRef before inst exists
     // (async bootstrap yields to the engine between setup steps).
     //
-    zones._sceneRef = { zones }
+    zones._sceneRef = { k, zones }
     //
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and the hangs its watered apples grow on sit at fixed places on it.
@@ -1654,6 +1654,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       getView: () => forestCameraViewXRange(k, inst, 0)
     })
     tagGroundPlatform(inst.eyeFlower.collider, sound, heroInst)
+    createGroundDecorAtlasLayers(k, inst, rockObjs, mushObjs)
     createForestHorizFallTwigLayer(k, inst)
     await Clouds.loadForestClouds()
     createForestCloudLayer(k, Clouds.create({ k, x1: LEFT_MARGIN, x2: WORLD_W - RIGHT_MARGIN, topY: TOP_MARGIN + FOREST_CLOUD_TOP_GAP }))
@@ -3644,27 +3645,70 @@ function placeGroundStone(k, plan, decorAtlas, groundLine) {
   const { canvas, front, posX, posY } = plan
   const low = ForestGroundLine.isLowPiece(groundLine, canvas, posY)
   const z = front && !low ? GROUND_STONE_FRONT_Z : GROUND_STONE_Z
-  const obj = k.add([
-    k.pos(posX, posY),
-    k.z(z),
+  const obj = {
+    pos: { x: posX, y: PLATFORM_HIDE_Y },
+    z,
+    hidden: true,
+    opacity: 1,
+    color: k.rgb(255, 255, 255),
+    angle: 0,
+    anchor: 'topleft',
+    _baked: decorAtlas.register(copyCanvas(canvas)),
+    _homeX: posX,
+    _homeY: posY,
+    _decorWorldX: plan.worldX,
+    _cullX1: posX,
+    _cullX2: posX + canvas.width,
+    _detailRank: canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large',
+    exists() {
+      return true
+    },
+    moveTo(nx, ny) {
+      this.pos.x = nx
+      this.pos.y = ny
+    }
+  }
+  ForestGroundLine.addPiece(groundLine, canvas, posX, posY, z, obj)
+  return obj
+}
+//
+// Two batched draw layers (z = 7 behind hero, z = 18.5 in front) for all
+// shared-atlas ground stones and mushrooms, replacing ~50 individual Kaplay
+// game objects in the scene tree while keeping exact painter's order.
+//
+function createGroundDecorAtlasLayers(k, inst, rockObjs, mushObjs) {
+  const posScratch = k.vec2(0, 0)
+  const backItems = [
+    ...rockObjs.filter(o => o.z === GROUND_STONE_Z),
+    ...mushObjs
+  ]
+  const frontItems = rockObjs.filter(o => o.z === GROUND_STONE_FRONT_Z)
+  k.add([
+    k.z(GROUND_STONE_Z),
     {
-      opacity: 1,
-      color: k.rgb(255, 255, 255),
-      _baked: decorAtlas.register(copyCanvas(canvas)),
       draw() {
-        if (this.hidden) return
-        drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+        drawGroundDecorAtlasList(k, inst, backItems, posScratch)
       }
     }
   ])
-  obj._homeX = posX
-  obj._homeY = posY
-  obj._decorWorldX = plan.worldX
-  obj._detailRank = canvas.width < GROUND_STONE_SMALL_W ? 'small' : 'large'
-  obj.hidden = true
-  obj.moveTo(posX, PLATFORM_HIDE_Y)
-  ForestGroundLine.addPiece(groundLine, canvas, posX, posY, z, obj)
-  return obj
+  frontItems.length > 0 && k.add([
+    k.z(GROUND_STONE_FRONT_Z),
+    {
+      draw() {
+        drawGroundDecorAtlasList(k, inst, frontItems, posScratch)
+      }
+    }
+  ])
+}
+function drawGroundDecorAtlasList(k, inst, items, posScratch) {
+  const { left, right } = visibleWorldXRange(inst)
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.hidden || item._cullX2 < left || item._cullX1 > right) continue
+    posScratch.x = item.pos.x
+    posScratch.y = item.pos.y
+    drawDecorAtlasSprite(k, item._baked, posScratch, item.anchor, item.angle, item.opacity, item.color)
+  }
 }
 function copyCanvas(src) {
   const canvas = document.createElement('canvas')
@@ -3736,29 +3780,33 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     //
     const baseX = posX
     const baseY = FLOOR_Y + MUSHROOM_EXTRA_LOWER
-    const obj = k.add([
-      k.pos(baseX, baseY),
-      k.z(MUSHROOM_Z),
-      {
-        opacity: 1,
-        color: k.rgb(255, 255, 255),
-        angle: 0,
-        _baked: baked,
-        draw() {
-          if (this.hidden) return
-          drawDecorAtlasSprite(k, this._baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
-        }
+    const halfW = totalW * 0.5
+    const obj = {
+      pos: { x: baseX, y: PLATFORM_HIDE_Y },
+      z: MUSHROOM_Z,
+      hidden: true,
+      opacity: 1,
+      color: k.rgb(255, 255, 255),
+      angle: 0,
+      leanAngle: 0,
+      anchor: 'bot',
+      _baked: baked,
+      _side: posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left',
+      _decorWorldX: posX,
+      _homeX: baseX,
+      _homeY: baseY,
+      _cullX1: baseX - halfW - 6,
+      _cullX2: baseX + halfW + 6,
+      _detailRank: capW < 28 ? 'small' : 'large',
+      _glowPhase: Math.random() * Math.PI * 2,
+      exists() {
+        return true
+      },
+      moveTo(nx, ny) {
+        this.pos.x = nx
+        this.pos.y = ny
       }
-    ])
-    obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-    obj._decorWorldX = posX
-    obj._homeX = baseX
-    obj._homeY = baseY
-    obj._detailRank = capW < 28 ? 'small' : 'large'
-    obj._glowPhase = Math.random() * Math.PI * 2
-    obj.leanAngle = 0
-    obj.hidden = true
-    obj.pos.y = PLATFORM_HIDE_Y
+    }
     //
     // A mushroom no taller than the hero's leg bulges the ground line; a
     // taller one only hides what it stands in front of
@@ -3819,17 +3867,25 @@ function drawTrampoline(k, zones, state, sprite, kind) {
   } else if (!isRightTrampolineVisible(zones)) {
     return
   }
+  const view = forestCameraViewXRange(k, zones._sceneRef, TRAMP_CAP_W)
+  if (view && (state.x < view.x1 || state.x > view.x2)) return
   const enduring = Boolean(state.enduring)
   const angle = enduring ? 0 : (state.leanAngle || 0)
   const scaleY = enduring
     ? (state.endureScaleY || 1)
     : (state.squash > 0.01 ? 1 - state.squash * TRAMP_SQUASH_DRAW : 1)
   state.hasLegs && drawTrampolineLegs(k, state, state.floorY)
+  const pos = state._posScratch ?? (state._posScratch = k.vec2(0, 0))
+  const scaleVec = state._scaleScratch ?? (state._scaleScratch = k.vec2(1, 1))
+  pos.x = state.x + (state.endureShakeX || 0)
+  pos.y = state.floorY + TRAMP_SINK_Y
+  scaleVec.x = 1
+  scaleVec.y = scaleY
   k.drawSprite({
     sprite,
-    pos: k.vec2(state.x + (state.endureShakeX || 0), state.floorY + TRAMP_SINK_Y),
+    pos,
     anchor: 'bot',
-    scale: k.vec2(1, scaleY),
+    scale: scaleVec,
     angle
   })
 }
@@ -4127,7 +4183,8 @@ function forestEyeFlowerHeroPos(inst) {
 // Visible world X span for culling full-width baked layers to the viewport.
 //
 function visibleWorldXRange(inst, extraPad = PARALLAX_DRAW_CULL_PAD) {
-  const k = inst.k
+  const k = inst?.k
+  if (!k) return { left: -Infinity, right: Infinity }
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
   const half = (inst.camera?.viewW || VIEW_W) / (2 * zoom) + extraPad
@@ -4427,6 +4484,8 @@ function drawForestPitInteriorVoidBackdrop(inst, k) {
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
   const { leftX, rightX } = getForestPitEarthBandMouthCutoutForPit(pit)
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
+  if (rightX <= visLeft || leftX >= visRight) return
   const w = rightX - leftX
   const interiorH = pit.zone.depth
   const voidRgb = forestCaveEarthDeepRgb()
@@ -4444,18 +4503,22 @@ function drawForestPitCutoutBelowFloorFill(inst, k) {
   const bandEndY = pit.floorY + CAVE_BAND_H
   if (bandEndY <= bottomY) return
   const { leftX, rightX } = getForestPitEarthBandMouthCutoutForPit(pit)
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
+  const clipLeft = Math.max(leftX, visLeft)
+  const clipRight = Math.min(rightX, visRight)
+  if (clipRight <= clipLeft) return
   //
   // Prefer the same baked static-earth slice the strip left of the cave uses
   // (film grain included).
   //
   if (k.getSprite(BG_STATIC_COLOR)) {
-    drawWorldSpriteBandSlice(k, leftX, rightX, bottomY, bandEndY, inst.earth ?? FOREST_PLAIN_EARTH)
+    drawWorldSpriteBandSlice(k, clipLeft, clipRight, bottomY, bandEndY, inst.earth ?? FOREST_PLAIN_EARTH)
     return
   }
   const rgb = forestPitBelowCaveEarthRgb()
   k.drawRect({
-    pos: k.vec2(leftX, bottomY),
-    width: rightX - leftX,
+    pos: k.vec2(clipLeft, bottomY),
+    width: clipRight - clipLeft,
     height: bandEndY - bottomY,
     color: k.rgb(rgb.r, rgb.g, rgb.b)
   })
@@ -4545,8 +4608,8 @@ function onDrawWorld(inst) {
   drawForestParallaxBackdropOffscreen(inst)
   drawParallaxLayer(inst, PAR_LAYER_NEAR)
   drawWorldSpriteClipped(k, inst, inst.earth ?? FOREST_PLAIN_EARTH, 1)
-  drawForestPitMouthEarthGapFill(inst, k)
   drawForestPitCutoutBelowFloorFill(inst, k)
+  drawForestPitMouthEarthGapFill(inst, k)
   //
   // Last in onDrawWorld — earth/static/parallax must not repaint over the pit;
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
@@ -4564,41 +4627,54 @@ function drawPlayfieldBottomCornerOverlay(inst) {
 //
 // Flat earth in the pit mouth cutout (earth band only) — matches the strip
 // left of the cave; drawn in onDrawWorld before the pit void, not over the
-// cave interior in onDraw.
+// cave interior in onDraw. When the baked earth slice already covers the band
+// below the pit floor and drawForestPitPass paints the void, both rects are
+// redundant and skipped so no extra primitive batch is emitted.
 //
 function drawForestPitMouthEarthGapFill(inst, k) {
   if (!inst.zones.predatorAwake) return
   const pit = inst.pit
   if (!pit?.collapsed || !pit.zone) return
   const { leftX, rightX } = getForestPitEarthBandMouthCutoutForPit(pit)
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
+  if (rightX <= visLeft || leftX >= visRight) return
   const w = rightX - leftX
   if (w <= 0) return
   const interiorH = Math.min(pit.zone.depth, CAVE_BAND_H)
   const belowH = CAVE_BAND_H - interiorH
-  const voidRgb = forestCaveEarthDeepRgb()
-  const bottomRgb = forestPitBelowCaveEarthRgb()
-  interiorH > 0 && k.drawRect({
-    pos: k.vec2(leftX, FLOOR_Y),
-    width: w,
-    height: interiorH,
-    color: k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
-  })
-  belowH > 0 && k.drawRect({
-    pos: k.vec2(leftX, FLOOR_Y + interiorH),
-    width: w,
-    height: belowH,
-    color: k.rgb(bottomRgb.r, bottomRgb.g, bottomRgb.b)
-  })
+  if (!inst._forestPitDrawInOnDrawWorld && interiorH > 0) {
+    const voidRgb = forestCaveEarthDeepRgb()
+    k.drawRect({
+      pos: k.vec2(leftX, FLOOR_Y),
+      width: w,
+      height: interiorH,
+      color: k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
+    })
+  }
+  if (!k.getSprite(BG_STATIC_COLOR) && belowH > 0) {
+    const bottomRgb = forestPitBelowCaveEarthRgb()
+    k.drawRect({
+      pos: k.vec2(leftX, FLOOR_Y + interiorH),
+      width: w,
+      height: belowH,
+      color: k.rgb(bottomRgb.r, bottomRgb.g, bottomRgb.b)
+    })
+  }
 }
 //
 // Paints the stone pile on the lake's tree-side bank when the water zone is
 // open (above the front floor decor and the water fill; it reaches down to the bed).
 //
 function drawLakeShoreRocksWorld(inst) {
-  const pile = inst.zones._lake?.stonePile
-  if (!inst.zones.water || !pile) return
-  const k = inst.k
-  k.drawSprite({ sprite: pile.name, pos: k.vec2(pile.x, pile.y), width: pile.width, height: pile.height })
+  const k = inst?.k
+  const pile = inst?.zones?._lake?.stonePile
+  if (!k || !inst.zones.water || !pile) return
+  const { left, right } = visibleWorldXRange(inst)
+  if (pile.x + pile.width < left || pile.x > right) return
+  const pos = pile._posScratch ?? (pile._posScratch = k.vec2(pile.x, pile.y))
+  pos.x = pile.x
+  pos.y = pile.y
+  k.drawSprite({ sprite: pile.name, pos, width: pile.width, height: pile.height })
 }
 //
 // Void above the playfield (only on a screen taller than it) — sits below
@@ -5317,9 +5393,8 @@ function triggerForestTouchDeath(inst, cause) {
   hero.controllable = false
   hero.controlsDisabled = true
   destroyStrayForestHeroBody(inst.k, char)
-  char.exists() && inst.k.destroy(char)
+  Hero.destroy(hero)
   forestLevel0LiveHeroChar = null
-  hero.character = null
   triggerForestCameraShake(inst)
   spawnForestTouchDeathBurst(inst, deathX, deathY)
   finishForestTouchDeath(inst, cause, deathX, deathY)
@@ -5471,7 +5546,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   const stepSound = prev?.onPlayStepSound
   const landSound = prev?.onPlayLandSound
   destroyStrayForestHeroBody(k)
-  prev?.character?.exists?.() && k.destroy(prev.character)
+  Hero.destroy(prev)
   const fresh = Hero.create({
     ...cfg,
     k,
@@ -6976,40 +7051,87 @@ function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
   k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1))
 }
 //
-// Gold square particles radiating from life icon on drowning death.
+// Gold square particles radiating from life icon on death — batched on one
+// fixed layer instead of spawning 16 Kaplay game objects per death.
 //
 function createLifeParticlesOnDrownDeath(k, levelIndicator) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   const lifeX = levelIndicator.lifeImage.sprite.pos.x
   const lifeY = levelIndicator.lifeImage.sprite.pos.y
-  const tone = forestRgb(FOREST_GOLD_HEX)
+  let pool = levelIndicator._lifeBurstPool
+  if (!pool || pool.k !== k) {
+    const tone = forestRgb(FOREST_GOLD_HEX)
+    pool = {
+      k,
+      list: [],
+      posScratch: k.vec2(0, 0),
+      color: k.rgb(tone.r, tone.g, tone.b)
+    }
+    levelIndicator._lifeBurstPool = pool
+    k.add([
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.fixed(),
+      {
+        update() {
+          updateDrownLifeParticlePool(pool)
+        },
+        draw() {
+          drawDrownLifeParticlePool(pool)
+        }
+      }
+    ])
+  }
   for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
     const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
     const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
     const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
     const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
-    const particle = k.add([
-      k.rect(size, size),
-      k.pos(lifeX, lifeY),
-      k.color(tone.r, tone.g, tone.b),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 10),
-      k.anchor('center'),
-      k.fixed()
-    ])
-    const vx = Math.cos(angle) * speed
-    const vy = Math.sin(angle) * speed
-    particle.onUpdate(() => onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime))
+    pool.list.push({
+      x: lifeX,
+      y: lifeY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size,
+      lifetime,
+      elapsed: 0
+    })
   }
 }
-//
-// Ages a single life-icon burst particle.
-//
-function onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime) {
-  particle._elapsed = (particle._elapsed ?? 0) + k.dt()
-  particle.moveBy(vx * k.dt(), vy * k.dt())
-  particle.opacity = 1 - particle._elapsed / lifetime
-  particle._elapsed >= lifetime && particle.destroy?.()
+function updateDrownLifeParticlePool(pool) {
+  const list = pool.list
+  if (!list.length) return
+  const dt = pool.k.dt()
+  let write = 0
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]
+    p.elapsed += dt
+    if (p.elapsed >= p.lifetime) continue
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    list[write++] = p
+  }
+  list.length = write
+}
+function drawDrownLifeParticlePool(pool) {
+  const list = pool.list
+  if (!list.length) return
+  const { k, posScratch, color } = pool
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]
+    const opacity = 1 - p.elapsed / p.lifetime
+    if (opacity <= 0.01) continue
+    posScratch.x = p.x
+    posScratch.y = p.y
+    k.drawRect({
+      pos: posScratch,
+      width: p.size,
+      height: p.size,
+      anchor: 'center',
+      color,
+      opacity,
+      fixed: true
+    })
+  }
 }
 //
 // Spawns a landing/run-start dust burst tinted to the surface under the

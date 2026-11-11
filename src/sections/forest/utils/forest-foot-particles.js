@@ -115,6 +115,9 @@ export function create(cfg) {
   const inst = {
     k,
     particles: [],
+    posScratch: k.vec2(0, 0),
+    whiteColor: k.rgb(255, 255, 255),
+    colorCache: new Map(),
     drawHook: null
   }
   inst.drawHook = k.add([
@@ -131,9 +134,11 @@ export function create(cfg) {
 // Ages and moves every live foot particle
 //
 export function onUpdate(inst, dt) {
-  if (!inst?.particles?.length) return
-  for (let i = inst.particles.length - 1; i >= 0; i--) {
-    const p = inst.particles[i]
+  const list = inst?.particles
+  if (!list?.length) return
+  let write = 0
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]
     p.age += dt
     if (p.shape === 'leaf') {
       updateLeafParticle(p, dt)
@@ -142,8 +147,9 @@ export function onUpdate(inst, dt) {
     } else {
       updateDustParticle(p, dt)
     }
-    p.age >= p.life && inst.particles.splice(i, 1)
+    if (p.age < p.life) list[write++] = p
   }
+  list.length = write
 }
 //
 // Clears all live foot burst particles (e.g. water landing before drowning).
@@ -461,31 +467,59 @@ function buildLeafPoints(k, size) {
   leafPointsCache.set(key, pts)
   return pts
 }
+function particleColor(inst, r, g, b) {
+  const key = ((r & 255) << 16) | ((g & 255) << 8) | (b & 255)
+  let c = inst.colorCache.get(key)
+  if (!c) {
+    c = inst.k.rgb(r, g, b)
+    inst.colorCache.set(key, c)
+  }
+  return c
+}
 function drawParticles(inst) {
+  const list = inst.particles
+  const n = list.length
+  if (!n) return
   const k = inst.k
-  for (const p of inst.particles) {
+  const camX = k.camPos().x
+  const scale = k.camScale?.()
+  const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
+  const half = k.width() / (2 * zoom) + 32
+  const minX = camX - half
+  const maxX = camX + half
+  const pos = inst.posScratch
+  let hasLeaves = false
+  //
+  // Pass 1: all rect particles together so primitives never alternate with leaf sprites.
+  //
+  for (let i = 0; i < n; i++) {
+    const p = list[i]
     if (p.shape === 'leaf') {
-      drawLeafParticle(k, p, leafOpacity(p))
+      hasLeaves = true
       continue
     }
-    if (p.crumbleGround) {
-      k.drawRect({
-        pos: k.vec2(p.x, p.y),
-        width: p.size,
-        height: p.size,
-        color: k.rgb(p.r, p.g, p.b),
-        opacity: crumbleOpacity(p)
-      })
-      continue
-    }
-    const opacity = Math.max(0, 1 - p.age / p.life)
+    if (p.x < minX || p.x > maxX) continue
+    const opacity = p.crumbleGround ? crumbleOpacity(p) : Math.max(0, 1 - p.age / p.life)
+    if (opacity <= 0.005) continue
+    pos.x = p.x
+    pos.y = p.y
     k.drawRect({
-      pos: k.vec2(p.x, p.y),
+      pos,
       width: p.size,
       height: p.size,
-      color: k.rgb(p.r, p.g, p.b),
+      color: particleColor(inst, p.r, p.g, p.b),
       opacity
     })
+  }
+  if (!hasLeaves) return
+  //
+  // Pass 2: all baked leaf sprites together.
+  //
+  for (let i = 0; i < n; i++) {
+    const p = list[i]
+    if (p.shape !== 'leaf' || p.x < minX || p.x > maxX) continue
+    const opacity = leafOpacity(p)
+    opacity > 0.005 && drawLeafParticle(inst, p, opacity)
   }
 }
 //
@@ -512,17 +546,21 @@ function leafOpacity(p) {
   if (p.fadeFrom == null) return 1
   return Math.max(0, 1 - (p.age - p.fadeFrom) / LEAF_GROUND_FADE)
 }
-function drawLeafParticle(k, p, opacity) {
+function drawLeafParticle(inst, p, opacity) {
+  const k = inst.k
   const baked = ensureForestLeafSprite(k, p.size, p.r, p.g, p.b)
   if (baked && k.getSprite(baked.name)) {
+    const pos = inst.posScratch
+    pos.x = p.x
+    pos.y = p.y
     k.drawSprite({
       sprite: baked.name,
-      pos: k.vec2(p.x, p.y),
+      pos,
       anchor: 'center',
       angle: p.angle,
       width: baked.w,
       height: baked.h,
-      color: k.rgb(255, 255, 255),
+      color: inst.whiteColor,
       opacity
     })
     return
@@ -531,7 +569,7 @@ function drawLeafParticle(k, p, opacity) {
   const cos = Math.cos(rad)
   const sin = Math.sin(rad)
   const pts = p.pts.map(pt => k.vec2(p.x + pt.x * cos - pt.y * sin, p.y + pt.x * sin + pt.y * cos))
-  k.drawPolygon({ pts, color: k.rgb(p.r, p.g, p.b), opacity })
+  k.drawPolygon({ pts, color: particleColor(inst, p.r, p.g, p.b), opacity })
 }
 //
 // Bakes a coloured leaf sprite with grain for one size + RGB key — same bake

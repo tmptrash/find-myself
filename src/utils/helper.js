@@ -307,30 +307,42 @@ export function createCanvasAtlasBuilder() {
   }
   const build = (k) => {
     if (!entries.length) return
-    const pad = 1
-    let atlasW = pad
-    let atlasH = 0
+    const pad = 2
+    const maxRowW = 2048
+    let cursorX = pad
+    let cursorY = pad
+    let rowH = 0
+    let atlasW = 0
     entries.forEach(e => {
-      atlasW += e.canvas.width + pad
-      atlasH = Math.max(atlasH, e.canvas.height)
+      const w = e.canvas.width
+      const h = e.canvas.height
+      if (cursorX > pad && cursorX + w + pad > maxRowW) {
+        cursorX = pad
+        cursorY += rowH + pad
+        rowH = 0
+      }
+      e.cellX = cursorX
+      e.cellY = cursorY
+      cursorX += w + pad
+      rowH = Math.max(rowH, h)
+      atlasW = Math.max(atlasW, cursorX)
     })
+    const atlasH = cursorY + rowH + pad
     const atlasCanvas = document.createElement('canvas')
     atlasCanvas.width = atlasW
     atlasCanvas.height = atlasH
     const ctx = atlasCanvas.getContext('2d')
     const atlasName = `canvas-atlas-${canvasAtlasBakeId++}`
-    let cursorX = pad
     entries.forEach(e => {
       const w = e.canvas.width
       const h = e.canvas.height
-      ctx.drawImage(e.canvas, cursorX, 0)
+      ctx.drawImage(e.canvas, e.cellX, e.cellY)
       Object.assign(e.placeholder, {
         name: atlasName,
         tileW: w,
         tileH: h,
-        quad: { x: cursorX / atlasW, y: 0, w: w / atlasW, h: h / atlasH }
+        quad: { x: e.cellX / atlasW, y: e.cellY / atlasH, w: w / atlasW, h: h / atlasH }
       })
-      cursorX += w + pad
     })
     k.loadSprite(atlasName, atlasCanvas)
     entries.forEach(e => { e.canvas.width = 0; e.canvas.height = 0 })

@@ -98,6 +98,14 @@ const MUSHROOM_SINK = 3
 const FIREFLY_COUNT = 30
 const HALF_PI = Math.PI / 2
 const roomByK = new WeakMap()
+//
+// A canvas of zero width or height cannot be loaded as a sprite: the screen
+// is taken as at least this big, and the floor band always keeps at least
+// this many rows (on a short window the ceiling band would reach the
+// screen's bottom).
+//
+const MIN_SCREEN_PX = 2
+const MIN_FLOOR_PX = 1
 
 /**
  * Builds the cave menu backdrop for a screen size (bakes are reused per
@@ -110,8 +118,8 @@ const roomByK = new WeakMap()
  */
 export function create(cfg) {
   const { k, width, height } = cfg
-  const w = Math.round(width)
-  const h = Math.round(height)
+  const w = Math.max(MIN_SCREEN_PX, Math.round(width))
+  const h = Math.max(MIN_SCREEN_PX, Math.round(height))
   const place = plantPlacement(w, h)
   const floorY = h * FLOOR_Y
   const room = bakeRoom(k, w, h, place)
@@ -236,7 +244,7 @@ function bakeRoom(k, w, h, place) {
 // floor band.
 //
 function roomPieces(w, h, plantBox) {
-  const ceilB = Math.min(h, Math.ceil(h * CEIL_DEPTH * (1 + FACE_WANDER) + CEIL_VINE_MIN + CEIL_VINE_RANGE + OUTSIDE_PAD))
+  const ceilB = Math.min(h - MIN_FLOOR_PX, Math.ceil(h * CEIL_DEPTH * (1 + FACE_WANDER) + CEIL_VINE_MIN + CEIL_VINE_RANGE + OUTSIDE_PAD))
   const floorT = Math.max(ceilB, Math.floor(h * FLOOR_Y - GRASS_REACH))
   const wallW = Math.ceil(w * WALL_DEPTH * (1 + FACE_WANDER) + FERN_REACH)
   const px1 = Math.max(wallW, Math.floor(plantBox.x1))

@@ -173,7 +173,7 @@ export function create(k, tones, opts = {}) {
     hips,
     batch: PolyBatch.create(),
     ...legColorSets(k, tones, standing),
-    silhouette: standing ? null : tones?.silhouette ?? null,
+    silhouette: tones?.silhouette ?? null,
     bodyX: 0,
     bodyTop: 0,
     facing: 1,
@@ -287,6 +287,9 @@ export function poseStand(inst, cfg) {
   const target = clampShift(low > high ? high : Math.max(low, Math.min(high, mean)))
   inst.shift = dt > 0 ? inst.shift + (target - inst.shift) * Math.min(1, dt * SURFACE_SHIFT_RATE) : target
   inst.bodyDy = inst.shift
+  inst.bodyX = x
+  inst.bodyTop = y + inst.bodyDy - HALF
+  inst.facing = 1
   inst.hips.forEach((hip, i) => {
     const leg = inst.legs[i]
     leg.hx = x + hip.x - HALF
@@ -434,21 +437,25 @@ function fillStartY(leg) {
 // A leg's fill from its start level: the soft edge band, shaded sides, mid
 // tone, lit core and two fur streaks from the fillet's end (nothing of them
 // above the start), then the veil of the body's tone over them, faded by
-// height from FADE_IN above the start.
+// height from FADE_IN above the start. The fill also stays inside the
+// body's silhouette while it runs within the body's rows (like the veil):
+// where a leg's top reaches the body's rounded corner, its light edge band
+// and shaded side would otherwise lie over the body's outline as grey
+// dashes into the body, or poke a pixel out past it.
 //
 function drawFill(inst, leg, colors, opacity) {
   const batch = inst.batch
   const startY = fillStartY(leg)
-  addJoinedTube(batch, leg, startY, EDGE_W, colors.edge)
-  addJoinedTube(batch, leg, startY, LEG_W, colors.shade)
-  addJoinedTube(batch, leg, startY, LEG_W * LEG_MID_SHARE, colors.mid)
-  addJoinedTube(batch, leg, startY, LEG_W * LEG_CORE_SHARE, colors.core)
+  const clip = inst.silhouette && bodyInside.bind(null, inst)
+  addJoinedTube(batch, leg, startY, EDGE_W, colors.edge, clip)
+  addJoinedTube(batch, leg, startY, LEG_W, colors.shade, clip)
+  addJoinedTube(batch, leg, startY, LEG_W * LEG_MID_SHARE, colors.mid, clip)
+  addJoinedTube(batch, leg, startY, LEG_W * LEG_CORE_SHARE, colors.core, clip)
   const flare = flareEnd(leg, startY)
   addStreak(batch, leg, flare.x, flare.y, LEG_W * STREAK_OFFSET_SHARE, colors.streak)
   addStreak(batch, leg, flare.x, flare.y, -LEG_W * STREAK_OFFSET_SHARE, colors.streak)
   PolyBatch.flush(batch, inst.k, opacity, 0, Infinity, startY)
   const top = topWidth(leg, leg.veilW)
-  const clip = inst.silhouette && bodyInside.bind(null, inst)
   addLevelSlice(batch, leg, startY - FADE_IN, startY, top, top, colors.tone, clip)
   addJoinedTube(batch, leg, startY, leg.veilW, colors.tone, clip)
   const held = startY + CONTOUR_COVER + leg.veilHold
@@ -515,7 +522,7 @@ function clippedSpan(x, half, span) {
   return { left, right: Math.max(left, Math.min(x + half, span.right)) }
 }
 //
-// The inside of the run body at a world height (VEIL_INSET px in from its
+// The inside of the body at a world height (VEIL_INSET px in from its
 // edges, mirrored when it faces left), null below or above it.
 //
 function bodyInside(inst, y) {

@@ -36,6 +36,61 @@ const ENTER_LABEL = 'Enter'
 
 
 /**
+ * Renders a plain centred hint line with its outline shadows.
+ * @param {Object} cfg
+ * @param {Object} cfg.k - Kaplay instance
+ * @param {number} cfg.centerX - Horizontal center of the line
+ * @param {number} cfg.y - Y position
+ * @param {string} cfg.text - The line
+ * @param {number} cfg.fontSize - Font size
+ * @param {string} [cfg.font] - Optional font family
+ * @param {Array<number>} [cfg.color] - Text color [r, g, b]
+ * @param {Array<number>} [cfg.outlineColor] - Outline color [r, g, b]
+ * @param {Array<Array<number>>} [cfg.outlineOffsets] - Outline offsets
+ * @param {number} [cfg.z] - Base z index (outline uses z-1)
+ * @returns {Object} { setOpacity(op), destroy() }
+ */
+export function renderHintLine(cfg) {
+  const {
+    k,
+    centerX,
+    y,
+    text: line,
+    fontSize,
+    font,
+    color = [HINT_TEXT_R, HINT_TEXT_G, HINT_TEXT_B],
+    outlineColor = [HINT_OUTLINE_R, HINT_OUTLINE_G, HINT_OUTLINE_B],
+    outlineOffsets = HINT_OUTLINE_OFFSETS,
+    z = CFG.visual.zIndex.ui
+  } = cfg
+  const textOpts = font ? { size: fontSize, font } : { size: fontSize }
+  const outlines = outlineOffsets.map(([dx, dy]) => k.add([
+    k.text(line, textOpts),
+    k.pos(centerX + dx, y + dy),
+    k.anchor('center'),
+    k.color(outlineColor[0], outlineColor[1], outlineColor[2]),
+    k.z(z - 1)
+  ]))
+  const text = k.add([
+    k.text(line, textOpts),
+    k.pos(centerX, y),
+    k.anchor('center'),
+    k.color(color[0], color[1], color[2]),
+    k.z(z)
+  ])
+  return {
+    setOpacity(op) {
+      text.opacity = op
+      outlines.forEach(o => (o.opacity = op))
+    },
+    destroy() {
+      text.exists?.() && text.destroy()
+      outlines.forEach(o => o.exists?.() && o.destroy())
+    }
+  }
+}
+
+/**
  * Renders a horizontal hint line composed of three parts: prefix + Enter + suffix.
  * Desktop draws the full sentence as a single text with outline shadows. Touch
  * devices keep the same text but replace the middle "Enter" word with a tappable
@@ -76,33 +131,7 @@ export function renderHintWithEnter(cfg) {
   //
   // Desktop: single text + outline shadows (existing visual style).
   //
-  if (!touchMode) {
-    const fullText = prefix + ENTER_LABEL + suffix
-    const outlines = outlineOffsets.map(([dx, dy]) => k.add([
-      k.text(fullText, textOpts),
-      k.pos(centerX + dx, y + dy),
-      k.anchor('center'),
-      k.color(outlineColor[0], outlineColor[1], outlineColor[2]),
-      k.z(z - 1)
-    ]))
-    const text = k.add([
-      k.text(fullText, textOpts),
-      k.pos(centerX, y),
-      k.anchor('center'),
-      k.color(color[0], color[1], color[2]),
-      k.z(z)
-    ])
-    return {
-      setOpacity(op) {
-        text.opacity = op
-        outlines.forEach(o => (o.opacity = op))
-      },
-      destroy() {
-        text.exists?.() && text.destroy()
-        outlines.forEach(o => o.exists?.() && o.destroy())
-      }
-    }
-  }
+  if (!touchMode) return renderHintLine({ ...cfg, text: prefix + ENTER_LABEL + suffix })
   //
   // Touch: render prefix + Enter button + suffix laid out horizontally.
   // Measure widths via a probe so the three parts line up without overlap.

@@ -33,6 +33,11 @@ const ARROW_MARGIN_X = 36
 const JUMP_ARROW_MARGIN_X = 36
 const CIRCLE_RADIUS = 62
 //
+// Levels fill the whole screen: the buttons sit this far above its bottom
+// edge (and ARROW_MARGIN_X / JUMP_ARROW_MARGIN_X in from its sides).
+//
+const CONTROL_BOTTOM_MARGIN = 36
+//
 // Touch hit area is much larger than the visible circle (especially horizontally)
 // so fingers can land near a button without missing it. Vertical padding stays
 // modest to avoid stealing taps from the play area above/below.
@@ -125,25 +130,21 @@ export function setVisible(visible) {
 }
 
 /**
- * Creates arrow buttons below the game area for touch devices
- * @param {Object} config - Configuration
- * @param {Object} config.k - Kaplay instance
- * @param {number} config.floorY - Top Y of bottom platform / game floor
- * @param {number} config.leftMargin - Left game-area inset
- * @param {number} config.rightMargin - Right game-area inset
+ * Creates the run and jump buttons along the bottom of the screen on touch
+ * devices (screen space: the levels fill the whole window)
+ * @param {Object} k - Kaplay instance
  * @returns {Object|null} Touch controls instance
  */
-export function create(config) {
+export function create(k) {
   if (!needsTouchControls()) return null
-  const { k, floorY, leftMargin, rightMargin } = config
   //
   // Canvas-level CSS so the browser never scrolls/zooms on game touches
   //
   k.canvas && (k.canvas.style.touchAction = 'none')
-  const centerY = (floorY + k.height()) / 2 + 5
-  const leftX = leftMargin + ARROW_MARGIN_X + CIRCLE_RADIUS
+  const centerY = k.height() - CONTROL_BOTTOM_MARGIN - CIRCLE_RADIUS
+  const leftX = ARROW_MARGIN_X + CIRCLE_RADIUS
   const rightX = leftX + ARROW_CENTER_GAP
-  const jumpX = k.width() - rightMargin - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
+  const jumpX = k.width() - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
   //
   // Fresh scene mount — clear stale fingers; hero re-registers jump on spawn
   //

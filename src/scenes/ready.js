@@ -5,7 +5,8 @@ import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
 import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero, createStandLegs, drawStandingHero } from '../components/hero.js'
-import { renderHintWithEnter } from '../utils/touch-tap-button.js'
+import { renderHintWithEnter, renderHintLine } from '../utils/touch-tap-button.js'
+import { isTouchDevice } from '../utils/touch-input.js'
 import {
   generateMenuBackgroundCanvas,
   loadMenuBackgroundArt,
@@ -37,6 +38,10 @@ const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 const HINT_FONT_SIZE = 20
+//
+// Phones and tablets have no keys to press: a tap anywhere starts the game.
+//
+const TOUCH_HINT = 'tap anywhere to start'
 //
 // Fixed pixel margin from the bottom edge (matches the moon's fixed-margin
 // corner anchoring) so the hint sits the same distance off the bottom at
@@ -473,21 +478,13 @@ export function sceneReady(k) {
       k.z(Z_TITLE)
     ])
     //
-    // Hint text — desktop renders the full line; touch devices keep the same
-    // surrounding text and replace the "Enter" word with a tappable button.
+    // Hint text — the keys on desktop, a tap anywhere on touch devices.
     //
     const hintRgb = parseHex(CFG.visual.colors.ready.hint)
-    const hint = renderHintWithEnter({
-      k,
-      centerX,
-      y: HINT_Y,
-      prefix: 'press Space or ',
-      suffix: ' to start',
-      fontSize: HINT_FONT_SIZE,
-      color: hintRgb,
-      z: Z_HINT,
-      onTap: () => exitToMenu()
-    })
+    const hintCfg = { k, centerX, y: HINT_Y, fontSize: HINT_FONT_SIZE, color: hintRgb, z: Z_HINT }
+    const hint = isTouchDevice()
+      ? renderHintLine({ ...hintCfg, text: TOUCH_HINT })
+      : renderHintWithEnter({ ...hintCfg, prefix: 'press Space or ', suffix: ' to start', onTap: () => exitToMenu() })
     //
     // Title letter layout — every glyph is a static baked letter.
     //
@@ -556,11 +553,19 @@ export function sceneReady(k) {
     //
     // Controls
     //
+    let leaving = false
     const exitToMenu = () => {
+      if (leaving) return
+      leaving = true
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     }
     const startGameInputCancel = bindStartGameKeys(k, () => exitToMenu())
+    //
+    // On a phone or tablet a tap anywhere goes to the menu (the corner HUD
+    // buttons are page elements over the canvas, so their taps never get here).
+    //
+    isTouchDevice() && k.onTouchEnd(exitToMenu)
     //
     // A left click goes to the menu too (the mouse itself stays hidden).
     //

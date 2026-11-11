@@ -2,7 +2,8 @@ import { CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
-import { initTouchInput } from '../../../utils/touch-input.js'
+import { initTouchInput, isTouchDevice } from '../../../utils/touch-input.js'
+import { hudLeftWorldX } from '../../../utils/fullscreen.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerForestNativeTeardown } from '../../../utils/engine-switch.js'
@@ -215,7 +216,9 @@ const LEFT_TREE_FOOT = { x: TREE_X, y: FLOOR_Y }
 //
 const LEFT_TREE_PLANTS_Z_BELOW = 1.5
 //
-// Debug FPS readout in the screen's top-left corner, grey.
+// Debug FPS readout in the screen's top-left corner, grey: its left edge at
+// FPS_HUD_LEFT_X on desktop; on a touch device it lines up with the corner
+// HUD buttons under it (fullscreen.js).
 //
 const FPS_HUD_LEFT_X = 24
 const FPS_HUD_TOP_Y = 44
@@ -414,6 +417,13 @@ const PAR_COLUMN_W = 128
 // edges), safe on any WebGL GPU.
 //
 const PAR_TILE_W = PAR_COLUMN_W * 16
+//
+// Tiles that size share a texture atlas with other sprites: each is baked
+// with a PAR_TILE_PAD px border repeating its edge pixels, and drawn from
+// inside it, so sampling at a drawn rect's edge (a scaled phone screen) never
+// picks up a neighbour sprite's texels as a thin line.
+//
+const PAR_TILE_PAD = 1
 //
 // Fully opaque alpha — rows below a near-row column's solid run hide every
 // farther layer, so those rows are trimmed from sky/far/mid draws.
@@ -1712,7 +1722,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       shadow: false
     })
     FpsCounter.pinScreenFixed(inst.fps)
-    FpsCounter.layoutAtScreenLeftX(inst.fps, FPS_HUD_LEFT_X)
+    FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_HUD_LEFT_X)
     ForestFootParticles.prewarmLeafBurst(inst.footParticles, forestTouchDeathLeafPalette())
     inst.flowerGrab = FlowerGrab.create({
       k,
@@ -2742,14 +2752,28 @@ function bakeParallaxLayer(k, name, speed, maxScroll, horizBleed, worldY, worldH
 //
 function loadParallaxTiles(k, name, canvas) {
   for (let i = 0; i * PAR_TILE_W < canvas.width; i++) {
+    const w = Math.min(PAR_TILE_W, canvas.width - i * PAR_TILE_W)
     const tile = document.createElement('canvas')
-    tile.width = Math.min(PAR_TILE_W, canvas.width - i * PAR_TILE_W)
-    tile.height = canvas.height
-    tile.getContext('2d').drawImage(canvas, -i * PAR_TILE_W, 0)
+    tile.width = w + PAR_TILE_PAD * 2
+    tile.height = canvas.height + PAR_TILE_PAD * 2
+    const ctx = tile.getContext('2d')
+    ctx.drawImage(canvas, i * PAR_TILE_W, 0, w, canvas.height, PAR_TILE_PAD, PAR_TILE_PAD, w, canvas.height)
+    extrudeTileEdges(ctx, tile.width, tile.height)
     k.loadSprite(parallaxTileName(name, i), tile)
     tile.width = 0
     tile.height = 0
   }
+}
+//
+// Repeats a padded tile's outermost pixels into its PAR_TILE_PAD border.
+//
+function extrudeTileEdges(ctx, w, h) {
+  const p = PAR_TILE_PAD
+  const c = ctx.canvas
+  ctx.drawImage(c, p, p, w - p * 2, 1, p, 0, w - p * 2, p)
+  ctx.drawImage(c, p, h - p - 1, w - p * 2, 1, p, h - p, w - p * 2, p)
+  ctx.drawImage(c, p, 0, 1, h, 0, 0, p, h)
+  ctx.drawImage(c, w - p - 1, 0, 1, h, w - p, 0, p, h)
 }
 function parallaxTileName(name, index) {
   return `${name}-${index}`
@@ -4330,13 +4354,14 @@ function drawParallaxColumnRun(k, slice, x0, x1, y0, y1) {
 function drawParallaxTileRun(k, slice, tile, x0, x1, y0, y1) {
   const w = x1 - x0
   const h = y1 - y0
-  const tileW = Math.min(PAR_TILE_W, slice.spriteW - tile * PAR_TILE_W)
+  const texW = Math.min(PAR_TILE_W, slice.spriteW - tile * PAR_TILE_W) + PAR_TILE_PAD * 2
+  const texH = slice.worldH + PAR_TILE_PAD * 2
   const opts = {
     sprite: parallaxTileName(slice.sprite, tile),
     pos: k.vec2(slice.drawX + tile * PAR_TILE_W + x0, slice.worldY + y0),
     width: w,
     height: h,
-    quad: { x: x0 / tileW, y: y0 / slice.worldH, w: w / tileW, h: h / slice.worldH },
+    quad: { x: (x0 + PAR_TILE_PAD) / texW, y: (y0 + PAR_TILE_PAD) / texH, w: w / texW, h: h / texH },
     anchor: 'topleft'
   }
   slice.opacity < 0.999 && (opts.opacity = slice.opacity)

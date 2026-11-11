@@ -406,6 +406,13 @@ function applyReadyViewScale(k) {
   setTreeRootScale(k, VIEW_SCALE)
   k.onSceneLeave(() => setTreeRootScale(k, 1))
 }
+//
+// The overscan in view px: a whole screen pixel past each edge however far
+// the scene is scaled down (a fixed view px would shrink below one there).
+//
+function edgeOverscan() {
+  return Math.ceil(READY_BG_EDGE_OVERSCAN / VIEW_SCALE)
+}
 function setTreeRootScale(k, scale) {
   const root = k.getTreeRoot()
   root.scale === undefined && root.use(k.scale(1))
@@ -622,9 +629,9 @@ function onDrawBg(k, spiderState) {
   if (op <= 0.001) return
   k.drawSprite({
     sprite: READY_STATIC_SPRITE,
-    pos: k.vec2(-READY_BG_EDGE_OVERSCAN, -READY_BG_EDGE_OVERSCAN),
-    width: VIEW_W + READY_BG_EDGE_OVERSCAN * 2,
-    height: VIEW_H + READY_BG_EDGE_OVERSCAN * 2,
+    pos: k.vec2(-edgeOverscan(), -edgeOverscan()),
+    width: VIEW_W + edgeOverscan() * 2,
+    height: VIEW_H + edgeOverscan() * 2,
     opacity: op
   })
 }
@@ -884,7 +891,7 @@ function drawStarField(k, stars, spiderState) {
 function onDrawMoon(k, spiderState) {
   const op = spiderState?.departureFade ?? 1
   if (op <= 0.001) return
-  const over = READY_BG_EDGE_OVERSCAN
+  const over = edgeOverscan()
   k.drawSprite({
     sprite: READY_MOON_SPRITE,
     pos: k.vec2(-over, -over),

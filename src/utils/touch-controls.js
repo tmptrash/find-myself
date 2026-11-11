@@ -46,6 +46,15 @@ const CONTROL_BOTTOM_MARGIN = 36
 //
 const CONTROLS_FULL_W = 640
 //
+// Held upright (taller than wide) the run arrows stand side by side at the
+// left, ARROW_PAIR_GAP_UPRIGHT apart, the jump button still at the right;
+// that layout needs CONTROLS_FULL_W_UPRIGHT. The arrows' hit areas reach only
+// halfway to each other there.
+//
+const ARROW_PAIR_GAP_UPRIGHT = 24
+const ARROW_CENTER_GAP_UPRIGHT = CIRCLE_RADIUS * 2 + ARROW_PAIR_GAP_UPRIGHT
+const CONTROLS_FULL_W_UPRIGHT = 500
+//
 // Touch hit area is much larger than the visible circle (especially horizontally)
 // so fingers can land near a button without missing it. Vertical padding stays
 // modest to avoid stealing taps from the play area above/below.
@@ -166,10 +175,13 @@ export function create(k) {
   // Canvas-level CSS so the browser never scrolls/zooms on game touches
   //
   k.canvas && (k.canvas.style.touchAction = 'none')
-  const scale = Math.min(1, k.width() / CONTROLS_FULL_W)
+  const upright = k.height() > k.width()
+  const centerGap = upright ? ARROW_CENTER_GAP_UPRIGHT : ARROW_CENTER_GAP
+  const scale = Math.min(1, k.width() / (upright ? CONTROLS_FULL_W_UPRIGHT : CONTROLS_FULL_W))
   const centerY = k.height() - (CONTROL_BOTTOM_MARGIN + CIRCLE_RADIUS) * scale
   const leftX = (ARROW_MARGIN_X + CIRCLE_RADIUS) * scale
-  const rightX = leftX + ARROW_CENTER_GAP * scale
+  const rightX = leftX + centerGap * scale
+  const arrowHalfW = Math.min(HIT_HALF_WIDTH, centerGap / 2)
   const jumpX = k.width() - (JUMP_ARROW_MARGIN_X + CIRCLE_RADIUS) * scale
   //
   // Fresh scene mount — clear stale fingers. The jump handler stays: levels
@@ -191,9 +203,9 @@ export function create(k) {
     visible: true
   }
   bakeButtonSprites(k)
-  activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left', scale))
-  activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right', scale))
-  activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump', scale))
+  activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left', scale, arrowHalfW))
+  activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right', scale, arrowHalfW))
+  activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump', scale, HIT_HALF_WIDTH))
   registerKaplayHandlers(k)
   return activeInst
 }
@@ -201,7 +213,7 @@ export function create(k) {
 //
 // Creates one virtual arrow button drawable
 //
-function createArrowButton(k, x, y, type, scale) {
+function createArrowButton(k, x, y, type, scale, hitHalfW) {
   const drawScale = k.vec2(scale, scale)
   k.add([
     k.z(CONTROL_Z),
@@ -212,7 +224,7 @@ function createArrowButton(k, x, y, type, scale) {
       }
     }
   ])
-  return { x, y, halfW: HIT_HALF_WIDTH * scale, halfH: HIT_HALF_HEIGHT * scale, type }
+  return { x, y, halfW: hitHalfW * scale, halfH: HIT_HALF_HEIGHT * scale, type }
 }
 
 //

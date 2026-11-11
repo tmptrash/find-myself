@@ -12,7 +12,7 @@ import { renderBushStrip } from './forest-bush-strip.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from './forest-picture-trees.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from './forest-picture-bushes.js'
-import { loadForestStones, forestGroundStones, forestBuriedStones } from './forest-stones.js'
+import { loadForestStones, forestGroundStones, forestBareStones, forestBuriedStones, forestGroundStoneScale, bakeForestGroundStone } from './forest-stones.js'
 import { loadForestLeftTreePicture, drawLeftTreeToCanvas, leftTreeBranch } from './forest-left-tree.js'
 import { loadForestShoreTree, drawShoreTreeToCanvas, shoreTreeBranchOnCanvas } from './forest-shore-tree.js'
 import { drawGroundRimToCanvas } from '../../../utils/draw-ground-rim.js'
@@ -160,23 +160,36 @@ const RGBA_STRIDE = 4
 //
 const LAKE_SURFACE_LIFT = 8
 //
-// Ground stones like the level's: the sheet's mossy stones, stones with
-// plants and bits of wall, in small groups (level world X, how many, spread
-// in design px; none on the apple's strip by the tree), each at the level's
-// ground stone size (a little random) and sunk STONE_SINK design px into the
-// soil.
+// Ground stones as the level scatters them along the centipede's strip
+// (from the lake's bank to the cave): the level's ground stones (mossy,
+// with plants, bits of wall) one per GROUND_STONE_STEP world px, every
+// GROUND_STONE_SMALL_EVERY-th one smaller, and the small bare pebbles one per
+// PEBBLE_STEP world px, PEBBLE_H_MIN..+RANGE px tall — each baked like the
+// level's, at a random spot in its step, sunk into the soil, and clear of
+// the burrow, the trunks and the trampolines (STONE_CLEAR, world X and half
+// widths).
 //
-const STONE_GROUPS = [
-  { x: 1260, count: 2, spread: 50 },
-  { x: 1520, count: 2, spread: 60 },
-  { x: 1860, count: 2, spread: 50 },
-  { x: 2180, count: 2, spread: 60 },
-  { x: 2440, count: 1, spread: 20 },
-  { x: 2680, count: 2, spread: 50 }
+const GROUND_STONE_STEP = 70
+const GROUND_STONE_SMALL_EVERY = 4
+const GROUND_STONE_SMALL_SIZE = 0.6
+const GROUND_STONE_SINK = 2
+const GROUND_STONE_SINK_RANGE = 3
+const PEBBLE_STEP = 53
+const PEBBLE_H_MIN = 6
+const PEBBLE_H_RANGE = 6
+const PEBBLE_SINK = 1
+const PEBBLE_SINK_RANGE = 2
+const STONE_STRIP_LAKE_PAD = 60
+const STONE_STRIP_CAVE_PAD = 40
+const STONE_SEED = 61029
+const STONE_GRAIN_SEED = 7760
+const STONE_CLEAR = [
+  { x: LEVEL_BUG_HOLE_X, half: 40 },
+  { x: LEVEL_LEFT_TREE_X, half: 60 },
+  { x: LEVEL_RIGHT_TREE_X, half: 40 },
+  { x: LEVEL_BRANCH_TRAMP_X, half: 35 },
+  { x: LEVEL_RIGHT_TRAMP_X, half: 35 }
 ]
-const STONE_SCALE = 0.34
-const STONE_SCALE_JITTER = 0.15
-const STONE_SINK = 3
 //
 // Ground plants (level world X): fern patches over both big trees' feet
 // (hiding the seams of their trunks and roots) and along the ground, straw
@@ -298,7 +311,7 @@ function paintFrontScene(ctx, width, height, layout, scale) {
   const toX = menuWorldToScreenX(height)
   paintCave(ctx, width, groundY, toX)
   paintForestFloorHill(ctx, toX(LEVEL_WORLD_W), groundY, scale)
-  STONE_GROUPS.forEach(group => paintStoneGroup(ctx, rng, group, toX(group.x), groundY, scale))
+  paintGroundStones(ctx, toX, groundY, scale)
   const rimColors = forestFloorPainterColors().rim
   drawGroundRimToCanvas(ctx, { x1: 0, x2: lake.x1, floorY: groundY, rng, colors: rimColors })
   drawGroundRimToCanvas(ctx, { x1: lake.x2, x2: width, floorY: groundY, rng, colors: rimColors })
@@ -391,22 +404,55 @@ function paintParallaxRow(row, width, height, groundY) {
   return canvas
 }
 //
-// A small group of the level's ground stone pictures around one spot.
+// The level's ground stones and pebbles along the strip from the lake's
+// bank to the cave (see GROUND_STONE_STEP).
 //
-function paintStoneGroup(ctx, rng, group, cx, groundY, scale) {
-  const stones = forestGroundStones()
-  if (!stones.length) return
+function paintGroundStones(ctx, toX, groundY, scale) {
+  const rng = createSeededRandom(STONE_SEED)
+  const x1 = LEVEL_LAKE_X2_CORE + STONE_STRIP_LAKE_PAD
+  const x2 = getCrackZone(LEVEL_WORLD_W, LEVEL_FLOOR_Y).x1 - STONE_STRIP_CAVE_PAD
   ctx.save()
   ctx.imageSmoothingQuality = 'high'
-  for (let i = 0; i < group.count; i++) {
-    const stone = stones[Math.floor(rng() * stones.length)].canvas
-    const s = STONE_SCALE * scale * (1 + (rng() * 2 - 1) * STONE_SCALE_JITTER)
-    const w = stone.width * s
-    const h = stone.height * s
-    const x = cx + (rng() - 0.5) * group.spread * scale
-    ctx.drawImage(stone, x - w / 2, groundY + STONE_SINK * scale - h, w, h)
-  }
+  scatterStones(forestGroundStones(), x1, x2, GROUND_STONE_STEP, rng)
+    .forEach(spot => paintGroundStone(ctx, groundStoneSizing(spot, rng), rng, toX, groundY, scale))
+  scatterStones(forestBareStones(), x1, x2, PEBBLE_STEP, rng)
+    .forEach(spot => paintGroundStone(ctx, pebbleSizing(spot, rng), rng, toX, groundY, scale))
   ctx.restore()
+}
+function groundStoneSizing(spot, rng) {
+  const small = spot.index % GROUND_STONE_SMALL_EVERY === GROUND_STONE_SMALL_EVERY - 1
+  return { ...spot, sizeMul: small ? GROUND_STONE_SMALL_SIZE : 1, sink: GROUND_STONE_SINK + rng() * GROUND_STONE_SINK_RANGE }
+}
+function pebbleSizing(spot, rng) {
+  const height = PEBBLE_H_MIN + rng() * PEBBLE_H_RANGE
+  return { ...spot, sizeMul: height / (spot.stone.canvas.height * forestGroundStoneScale()), sink: PEBBLE_SINK + rng() * PEBBLE_SINK_RANGE }
+}
+//
+// One spot per step (level world X) at random inside it, cycling through
+// the stones in a shuffled order; none on a clear span.
+//
+function scatterStones(stones, x1, x2, step, rng) {
+  if (!stones.length) return []
+  const spots = []
+  let round = []
+  for (let index = 0, x0 = x1; x0 < x2; index++, x0 += step) {
+    round.length || (round = shuffledStones(stones, rng))
+    const stone = round.pop()
+    const x = x0 + rng() * step
+    STONE_CLEAR.some(c => Math.abs(x - c.x) < c.half) || spots.push({ stone, x, index })
+  }
+  return spots
+}
+function shuffledStones(stones, rng) {
+  return stones.map(stone => ({ stone, order: rng() })).sort((a, b) => a.order - b.order).map(e => e.stone)
+}
+function paintGroundStone(ctx, spot, rng, toX, groundY, scale) {
+  const canvas = bakeForestGroundStone(spot.stone, rng, STONE_GRAIN_SEED + Math.round(spot.x), spot.sizeMul)
+  const w = canvas.width * scale
+  const h = canvas.height * scale
+  ctx.drawImage(canvas, toX(spot.x) - w / 2, groundY + spot.sink * scale - h, w, h)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Plants, mushrooms and the trampoline mushrooms at their spots,

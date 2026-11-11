@@ -52,7 +52,7 @@ export function create(config) {
   //
   const HUD_TEXT_GREY = isTouchDevice() ? getRGB(k, CFG.visual.colors.palette.fpsHudTextTouch) : textColor || k.rgb(176, 176, 176)
   const HUD_OUTLINE = shadow ? outlineColor || k.rgb(0, 0, 0) : null
-  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
+  const fpsText = createOutlinedHudText(k, 'FPS:30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //
   // Optional elapsed level timer
   //
@@ -64,7 +64,7 @@ export function create(config) {
   if (stats) {
     const numObjects = k.get('*').length
     const drawCalls = countKaplayDrawCalls(k)
-    setOutlinedHudText(fpsText, `FPS: 30  obj: ${numObjects}  dc: ${drawCalls}`)
+    setOutlinedHudText(fpsText, `FPS:30  obj: ${numObjects}  dc: ${drawCalls}`)
   }
   const inst = {
     k,
@@ -127,7 +127,7 @@ export function onUpdate(inst) {
   }
   if (inst.updateTimer >= 1.0) {
     const averageFps = Math.round(inst.fpsSum / inst.fpsCount)
-    const fpsLabel = `FPS: ${averageFps.toString().padStart(2, ' ')}`
+    const fpsLabel = `FPS:${averageFps}`
     const hudText = inst.stats
       ? `${fpsLabel}  obj: ${inst.cachedObjCount}  dc: ${inst.cachedDrawCalls}`
       : fpsLabel

@@ -10,7 +10,11 @@ import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-pa
 //
 const BTN_Z = 10000
 const BTN_HEIGHT = 44
-const BTN_MARGIN = 10
+//
+// The buttons' (and on touch devices the levels' FPS readout's) distance
+// from the screen's left edge, CSS px.
+//
+const BTN_MARGIN = 16
 //
 // The stack starts below the levels' FPS readout in the top-left corner
 // (its text runs down to about 55 px), so it stays visible.
@@ -109,6 +113,16 @@ export function createFullscreenButton(k) {
   }
 }
 
+/**
+ * World X of the buttons' left edge in a level (CSS px → the engine's world
+ * px), for HUD text that lines up with them.
+ * @param {Object} k - Kaplay instance
+ * @returns {number}
+ */
+export function hudLeftWorldX(k) {
+  return BTN_MARGIN * k.width() / window.innerWidth
+}
+
 //
 // Builds a fixed-position HUD button anchored to the top-left of the viewport.
 //
@@ -121,7 +135,7 @@ function createHudButton(opts) {
   btn.style.cssText = [
     'position:fixed',
     `top:${top}px`,
-    `left:${safeLeft(BTN_MARGIN)}`,
+    `left:${BTN_MARGIN}px`,
     `width:${width}px`,
     `height:${BTN_HEIGHT}px`,
     `z-index:${BTN_Z}`,
@@ -235,13 +249,6 @@ function toggleFullscreen() {
   target.requestFullscreen?.() || target.webkitRequestFullscreen?.()
 }
 //
-// A left offset clear of a phone's notch / Dynamic Island in landscape (the
-// page is laid out under it: viewport-fit=cover in index.html).
-//
-function safeLeft(px) {
-  return `calc(${px}px + env(safe-area-inset-left, 0px))`
-}
-//
 // The fullscreen button's icon follows the page's fullscreen state.
 //
 function fullscreenIcon() {
@@ -288,7 +295,7 @@ function installHintCss() {
   return [
     'position:fixed',
     `top:${BTN_TOP}px`,
-    `left:${safeLeft(BTN_MARGIN * 2 + FULLSCREEN_BTN_WIDTH)}`,
+    `left:${BTN_MARGIN * 2 + FULLSCREEN_BTN_WIDTH}px`,
     `width:${INSTALL_HINT_WIDTH}px`,
     `padding:${INSTALL_HINT_PAD}px`,
     `z-index:${BTN_Z}`,

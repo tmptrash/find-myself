@@ -114,6 +114,15 @@ const PILE_SHORE_X = 0
 const PILE_LAND_FROM_X = -6
 const PILE_TOP_LEFT_DOWN = 74
 const PILE_TOP_RIGHT_DOWN = -24
+//
+// The pile's water-side flank: a stone there rests no further left than a
+// slope rising PILE_FLANK_SLOPE px per px from the bed at PILE_FLANK_OUT px
+// left of the pile's start, so the end stones settle in steps instead of a
+// stack with one straight side (where the bed is flat under the pile's end
+// — the menu's lake — they all took the same leftmost spot).
+//
+const PILE_FLANK_OUT = 25
+const PILE_FLANK_SLOPE = 3
 const PILE_SINK = 3
 const PILE_SOLID_ALPHA = 128
 const PILE_FILL = [20, 21, 22, 32, 33, 23, 24, 28]
@@ -353,14 +362,16 @@ function bakeLakeStonePile(k, lake, waterY) {
   const surface = new Map()
   const surfaceAt = x => surface.get(x) ?? Lake.bedWorldY(lake, x)
   const stones = []
+  const flankX = xa - PILE_FLANK_OUT
+  const flank = { x: flankX, bed: Lake.bedWorldY(lake, flankX) }
   const phases = [
-    { shapes: pileStoneShapes(), x1: xa, x2: Math.round(footX + PILE_SHORE_X), forced: LAKE_PILE.length },
-    { shapes: PILE_LAND.map(id => pileStoneShape(cuts[id].canvas, LAKE_SCALE)), x1: Math.round(footX + PILE_LAND_FROM_X), x2: xb, forced: 0 }
+    { shapes: pileStoneShapes(), x1: xa, x2: Math.round(footX + PILE_SHORE_X), forced: LAKE_PILE.length, flank },
+    { shapes: PILE_LAND.map(id => pileStoneShape(cuts[id].canvas, LAKE_SCALE)), x1: Math.round(footX + PILE_LAND_FROM_X), x2: xb, forced: 0, flank: null }
   ]
   phases.forEach(phase => phase.shapes.forEach((shape, i) => {
     if (stones.length >= PILE_MAX_STONES) return
     const forced = i < phase.forced
-    const drop = bestPileDrop(shape, phase.x1, phase.x2, target, surfaceAt, forced ? Infinity : PILE_MAX_GAP)
+    const drop = bestPileDrop(shape, phase.x1, phase.x2, target, surfaceAt, forced ? Infinity : PILE_MAX_GAP, phase.flank)
     if (!drop || (!forced && drop.room < PILE_FULL_ROOM)) return
     stones.push(settlePileStone(shape, drop, surfaceAt, surface))
   }))
@@ -458,18 +469,20 @@ function pileStoneShape(src, scale) {
 //
 // Where a stone dropped with its left edge at each spot along its stretch
 // (its right edge never past that stretch's end, at most maxGap px of empty
-// space under it on average; null if no spot qualifies)
+// space under it on average; with a flank, never left of the flank's slope at
+// the stone's bottom height; null if no spot qualifies)
 // would come to rest (y: its top), how much room under the slope it covers
 // there, how much empty space it leaves under itself and how far it sticks
 // out over the slope (all per column); the spot that fills most and leaves
 // and sticks out least wins.
 //
-function bestPileDrop(shape, xa, xb, target, surfaceAt, maxGap) {
+function bestPileDrop(shape, xa, xb, target, surfaceAt, maxGap, flank) {
   let best = null
   for (let left = xa - Math.round(shape.w / 2); left <= xb - shape.w; left++) {
     let y = Infinity
     shape.cols.forEach((col, c) => { col && (y = Math.min(y, surfaceAt(left + c) - col.bottom)) })
     y += PILE_SINK
+    if (flank && left < flank.x + Math.max(0, flank.bed - (y + shape.h)) / PILE_FLANK_SLOPE) continue
     let room = 0
     let gap = 0
     let over = 0

@@ -38,12 +38,13 @@ export const RESOLUTION_MODE = {
 //
 const KAPLAY_INIT_MAX_ATTEMPTS = 5
 //
-// Phones in landscape: a native-resolution level keeps 1 world px per CSS px,
-// and a phone's window is only ~350-450 CSS px tall and changes with the
-// browser bar and fullscreen. On a touch device whose window is shorter than
-// SMALL_VIEW_MAX_H, the world is scaled (Kaplay `scale`) so the window shows
-// SMALL_VIEW_WORLD_H world px top to bottom, with or without fullscreen (the
-// hero keeps one size on screen). The
+// Phones: a native-resolution level keeps 1 world px per CSS px, and a
+// phone's window is only ~350-450 CSS px across its short side, which
+// changes with the browser bar and fullscreen. On a touch device whose
+// window's short side is under SMALL_VIEW_MAX_H, the world is scaled (Kaplay
+// `scale`) so that side shows SMALL_VIEW_WORLD_H world px — the window's
+// height in landscape, its width held upright — so the hero keeps one size on
+// screen with or without fullscreen and in either orientation. The
 // canvas buffer gets 1 / scale px per CSS px (`pixelDensity`), so one world
 // px is still one buffer px and hairline art stays whole. A window resize
 // reboots the engine (window-resize.js), so the choice follows rotation and
@@ -51,8 +52,8 @@ const KAPLAY_INIT_MAX_ATTEMPTS = 5
 //
 const SMALL_VIEW_MAX_H = 600
 //
-// A rotating phone can report a near-zero height for a moment; the scale
-// never goes below this view height's (the size settles and reboots again).
+// A rotating phone can report a near-zero size for a moment; the scale never
+// goes below this short side's (the size settles and reboots again).
 //
 const SMALL_VIEW_MIN_H = 200
 const SMALL_VIEW_WORLD_H = 562
@@ -365,8 +366,8 @@ function buildKaplayOpts(resolutionMode, canvas) {
 // World px per CSS px for a native-resolution engine (see SMALL_VIEW_MAX_H).
 //
 function nativeWorldScale() {
-  const h = window.innerHeight
-  return TouchInput.isTouchDevice() && h < SMALL_VIEW_MAX_H ? Math.max(h, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H : 1
+  const side = Math.min(window.innerWidth, window.innerHeight)
+  return TouchInput.isTouchDevice() && side < SMALL_VIEW_MAX_H ? Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H : 1
 }
 /**
  * Create a canvas whose getContext("webgl"|"webgl2") merges in our safer

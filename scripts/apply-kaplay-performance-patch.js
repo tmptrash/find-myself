@@ -4,8 +4,11 @@ import { join } from 'node:path'
 //
 // Kaplay performance patches (see CLAUDE.md §13). Plain string replacements
 // instead of patch-package so Linux CI and Netlify caches do not break on
-// minified one-line diffs. Each patch carries its own marker, so a file that
-// already has the older patches still receives the newer ones.
+// minified one-line diffs. Each patch carries its own markers (any one of
+// them means it is in), so a file that already has the older patches still
+// receives the newer ones, and running the script again over a patched file
+// (npm install over a cached node_modules, e.g. on Netlify) changes nothing.
+// A patch whose text a later patch rewrites also lists that patch's marker.
 //
 const KAPLAY_DIST = join('node_modules', 'kaplay', 'dist')
 const DIST_FILES = ['kaplay.mjs', 'kaplay.cjs']
@@ -106,15 +109,20 @@ const TYPED_QUEUE_OLD =
   '(e!==this.curPrimitive||s!==this.curTex||o!==this.curShader||this.curUniform!=i&&!ln(this.curUniform,i)||a!==this.curBlend||u!==this.curFixed||this.vqueue.length+r.length>this.maxVertices||this.iqueue.length+n.length>this.maxIndices)&&(this.flush(c,m),this.setBlend(a));let f=this.vqueue.length/this.stride,p=r.length;for(let g=0;g<p;g++)this.vqueue.push(r[g]);p=n.length;for(let g=0;g<p;g++)this.iqueue.push(n[g]+f);this.curPrimitive=e,this.curShader=o,this.curTex=s,this.curUniform=i,this.curFixed=u}flush(e,r){if(!this.curPrimitive||!this.curShader||this.vqueue.length===0||this.iqueue.length===0)return;let n=this.ctx.gl;this.ctx.pushArrayBuffer(this.glVBuf),this._vScratch&&this._vScratch.length>=this.vqueue.length||(this._vScratch=new Float32Array(this.vqueue.length)),this._vScratch.set(this.vqueue),n.bufferData(n.ARRAY_BUFFER,this._vScratch.subarray(0,this.vqueue.length),n.DYNAMIC_DRAW),this.ctx.pushElementArrayBuffer(this.glIBuf),this._iScratch&&this._iScratch.length>=this.iqueue.length||(this._iScratch=new Uint16Array(this.iqueue.length)),this._iScratch.set(this.iqueue),n.bufferData(n.ELEMENT_ARRAY_BUFFER,this._iScratch.subarray(0,this.iqueue.length),n.DYNAMIC_DRAW),this.ctx.setVertexFormat(this.vertexFormat),this.curShader.bind(),this.curUniform&&this.curShader.send(this.curUniform),this.curShader.send({width:e,height:r,camera:this.curFixed?yr:Pt(),transform:yr}),this.curTex?.bind(),n.drawElements(this.curPrimitive,this.iqueue.length,n.UNSIGNED_SHORT,0),this.curTex?.unbind(),this.curShader.unbind(),this.ctx.popArrayBuffer(),this.ctx.popElementArrayBuffer(),this.vqueue.length=0,this.iqueue.length=0,this.numDraws++}'
 const TYPED_QUEUE_NEW =
   'let _vl=this._vqLen||0,_il=this._iqLen||0;(e!==this.curPrimitive||s!==this.curTex||o!==this.curShader||this.curUniform!=i&&!ln(this.curUniform,i)||a!==this.curBlend||u!==this.curFixed||_vl+r.length>this.maxVertices||_il+n.length>this.maxIndices)&&(this.flush(c,m),this.setBlend(a),_vl=0,_il=0);let _vn=_vl+r.length,_in=_il+n.length,vb=this._vScratch;if(!vb||vb.length<_vn){let nv=new Float32Array(Math.max(this.maxVertices,_vn*2));vb&&_vl>0&&nv.set(vb.subarray(0,_vl)),vb=this._vScratch=nv}let ib=this._iScratch;if(!ib||ib.length<_in){let ni=new Uint16Array(Math.max(this.maxIndices,_in*2));ib&&_il>0&&ni.set(ib.subarray(0,_il)),ib=this._iScratch=ni}vb.set(r,_vl);let f=_vl/this.stride,p=n.length;for(let g=0;g<p;g++)ib[_il+g]=n[g]+f;this._vqLen=_vn,this._iqLen=_in,this.curPrimitive=e,this.curShader=o,this.curTex=s,this.curUniform=i,this.curFixed=u}flush(e,r){let vl=this._vqLen||0,il=this._iqLen||0;if(!this.curPrimitive||!this.curShader||vl===0||il===0)return;let n=this.ctx.gl;this.ctx.pushArrayBuffer(this.glVBuf),n.bufferData(n.ARRAY_BUFFER,this._vScratch.subarray(0,vl),n.DYNAMIC_DRAW),this.ctx.pushElementArrayBuffer(this.glIBuf),n.bufferData(n.ELEMENT_ARRAY_BUFFER,this._iScratch.subarray(0,il),n.DYNAMIC_DRAW),this.ctx.setVertexFormat(this.vertexFormat),this.curShader.bind(),this.curUniform&&this.curShader.send(this.curUniform),this.curShader.send({width:e,height:r,camera:this.curFixed?yr:Pt(),transform:yr}),this.curTex?.bind(),n.drawElements(this.curPrimitive,il,n.UNSIGNED_SHORT,0),this.curTex?.unbind(),this.curShader.unbind(),this.ctx.popArrayBuffer(),this.ctx.popElementArrayBuffer(),this._vqLen=0,this._iqLen=0,this.numDraws++}'
+//
+// The typed queues rewrite the push-limit patch's line, so their marker
+// stands for both.
+//
+const TYPED_QUEUE_MARKER = 'this._vqLen'
 
 const PATCHES = [
-  { marker: '_vScratch', pairs: [[FLUSH_OLD, FLUSH_NEW], [UNIFORM_OLD, UNIFORM_NEW]] },
-  { marker: 'e._direct', pairs: [[FRAME_START_OLD, FRAME_START_NEW], [FRAME_END_OLD, FRAME_END_NEW]] },
-  { marker: 'let o=t.indices;o||', pairs: [[POLY_FAN_OLD, POLY_FAN_NEW]] },
-  { marker: 'this.vqueue.length+r.length>this.maxVertices', pairs: [[PUSH_LIMIT_OLD, PUSH_LIMIT_NEW]] },
-  { marker: 'ze({fast:1,', pairs: [[POLY_FAST_SE_OLD, POLY_FAST_SE_NEW], [POLY_FAST_ZE_OLD, POLY_FAST_ZE_NEW]] },
+  { markers: ['_vScratch'], pairs: [[FLUSH_OLD, FLUSH_NEW], [UNIFORM_OLD, UNIFORM_NEW]] },
+  { markers: ['e._direct'], pairs: [[FRAME_START_OLD, FRAME_START_NEW], [FRAME_END_OLD, FRAME_END_NEW]] },
+  { markers: ['let o=t.indices;o||'], pairs: [[POLY_FAN_OLD, POLY_FAN_NEW]] },
+  { markers: ['this.vqueue.length+r.length>this.maxVertices', TYPED_QUEUE_MARKER], pairs: [[PUSH_LIMIT_OLD, PUSH_LIMIT_NEW]] },
+  { markers: ['ze({fast:1,'], pairs: [[POLY_FAST_SE_OLD, POLY_FAST_SE_NEW], [POLY_FAST_ZE_OLD, POLY_FAST_ZE_NEW]] },
   {
-    marker: 'l.gfx._zeBuf',
+    markers: ['l.gfx._zeBuf'],
     pairs: [
       [ZERO_ALLOC_SE_OLD, ZERO_ALLOC_SE_NEW],
       [ZERO_ALLOC_ZE_OLD, ZERO_ALLOC_ZE_NEW],
@@ -122,7 +130,7 @@ const PATCHES = [
       [ZERO_ALLOC_IL_OLD, ZERO_ALLOC_IL_NEW]
     ]
   },
-  { marker: 'this._vqLen', pairs: [[TYPED_QUEUE_OLD, TYPED_QUEUE_NEW]] }
+  { markers: [TYPED_QUEUE_MARKER], pairs: [[TYPED_QUEUE_OLD, TYPED_QUEUE_NEW]] }
 ]
 
 for (const name of DIST_FILES) {
@@ -133,9 +141,9 @@ for (const name of DIST_FILES) {
   }
   let src = readFileSync(path, 'utf8')
   for (const patch of PATCHES) {
-    if (src.includes(patch.marker)) continue
+    if (patch.markers.some(marker => src.includes(marker))) continue
     if (!patch.pairs.every(([from]) => src.includes(from))) {
-      console.error(`apply-kaplay-performance-patch: unexpected ${name} (${patch.marker}) — cannot patch`)
+      console.error(`apply-kaplay-performance-patch: unexpected ${name} (${patch.markers[0]}) — cannot patch`)
       process.exit(1)
     }
     for (const [from, to] of patch.pairs) src = src.replace(from, to)

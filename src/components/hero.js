@@ -53,11 +53,11 @@ const RUN_BODY_SPRITE = `${HERO_SPRITE_PREFIX}-run-body`
 const RUN_BLANK_SPRITE = `${HERO_SPRITE_PREFIX}-run-blank`
 const RUN_STEPS_PER_CYCLE = 2
 //
-// Blinking (startBlink): the hero flickers BLINK_HZ times a second between
-// full opacity and BLINK_LOW_OPACITY.
+// Blinking (startBlink): the hero's opacity pulses smoothly BLINK_HZ times a
+// second down to BLINK_LOW_OPACITY and back — a calm fade, not a flicker.
 //
-const BLINK_HZ = 8
-const BLINK_LOW_OPACITY = 0.25
+const BLINK_HZ = 2.5
+const BLINK_LOW_OPACITY = 0.45
 export const HERO_FEET_OFFSET_Y = HeroPicture.FEET_Y - SPRITE_SIZE / 2
 //
 // Every frame is drawn by the hero's own pass over a blank hitbox sprite, so
@@ -1632,14 +1632,15 @@ export function snapPosToPixels(inst) {
 
 
 //
-// Counts the blink down, flickering the hero's opacity; full again at its end.
+// Counts the blink down, pulsing the hero's opacity by a cosine of the time
+// left, so it is full again exactly at its end.
 //
 function tickBlink(inst) {
   const ch = inst.character
   if (!ch?.exists?.() || inst.blinkLeft <= 0) return
   inst.blinkLeft = Math.max(0, inst.blinkLeft - inst.k.dt())
-  const low = Math.floor(inst.blinkLeft * BLINK_HZ * 2) % 2 === 1
-  ch.opacity = inst.blinkLeft > 0 && low ? BLINK_LOW_OPACITY : 1
+  const wave = 0.5 + 0.5 * Math.cos(inst.blinkLeft * BLINK_HZ * Math.PI * 2)
+  ch.opacity = BLINK_LOW_OPACITY + (1 - BLINK_LOW_OPACITY) * wave
 }
 //
 // Moves the gait on; a foot plants RUN_STEPS_PER_CYCLE times a cycle (step

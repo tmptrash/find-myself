@@ -1562,6 +1562,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
+      branchJumpBehind: false,
       trampBounceAir: false,
       trampState: trampBundle.state,
       branchTrampState: branchTrampBundle.state,
@@ -4728,6 +4729,18 @@ function syncTrampBounceAirForLakeFloor(inst, heroX, footY) {
 //
 // True when hero X sits over the invisible start branch span
 //
+//
+// Whether the hero stays behind the left tree for a jump off its branch:
+// from the branch until he lands off it, or while in the air over the
+// branch with his feet above its top.
+//
+function isHeroBranchJumpBehind(inst, ch, onBranch) {
+  if (onBranch) return true
+  if (ch.isGrounded?.()) return false
+  if (inst.branchJumpBehind) return true
+  const footY = ch.pos.y + SURFACE_DETECT_Y
+  return isHeroOverStartBranchX(inst, ch.pos.x) && footY <= inst.startBranch.y
+}
 function isHeroOverStartBranchX(inst, heroX) {
   const branch = inst.startBranch
   if (!branch) return false
@@ -7108,10 +7121,13 @@ function syncHeroTrampDrawOrder(inst) {
   const rightInFront = inst.trampBounceAir
   let targetZ = CFG.visual.zIndex.player
   //
-  // The left tree covers the hero on the branch and in the whole flight of a
+  // The left tree covers the hero on the branch, in the whole flight of a
+  // jump from it (until he lands somewhere else) and in the air over the
+  // branch on his way onto it, and in the whole flight of a
   // branch-trampoline bounce; only standing on the cap lifts him above it.
   //
-  const behindLeftTree = onBranch || inst.branchTrampBounceAir
+  inst.branchJumpBehind = isHeroBranchJumpBehind(inst, ch, onBranch)
+  const behindLeftTree = onBranch || inst.branchJumpBehind || inst.branchTrampBounceAir
   behindLeftTree && (targetZ = CFG.visual.zIndex.platforms - 3)
   !behindLeftTree && ch.pos.x > BUG_HOLE_HERO_FRONT_X1 && ch.pos.x < BUG_HOLE_HERO_FRONT_X2 &&
     (targetZ = BUG_HOLE_FRONT_Z)

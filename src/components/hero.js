@@ -223,6 +223,8 @@ const idleBodyTonesFor = new WeakMap()
  * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
  *   decorative hero left at its default scrolls with the world instead
  * @param {Function} [config.idleNotePostBake] - Grain pass for baked mouth-note glyphs
+ * @param {number} [config.drawScale=1] - Draws the whole hero (body and live legs) this much
+ *   smaller or bigger round its centre; the hitbox stays as it is (a menu cursor hero)
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -234,6 +236,7 @@ export function create(config) {
     controllable = type === HEROES.HERO,
     sfx = null,
     scale = HERO_SCALE,
+    drawScale = 1,
     footFx = true,
     stepSoundScene = null,
     airAnimDuringFlicker = false,
@@ -291,6 +294,7 @@ export function create(config) {
     character,
     k,
     type,
+    drawScale,
     controllable,
     isStatic,
     fixed,
@@ -1730,7 +1734,17 @@ function poseStanding(inst) {
 function drawHeroPass(inst) {
   const ch = inst.character
   if (!ch?.exists?.() || ch.hidden) return
+  if (inst.drawScale === 1) {
+    drawHero(inst)
+    return
+  }
+  const k = inst.k
+  k.pushTransform()
+  k.pushTranslate(k.vec2(ch.pos.x, ch.pos.y))
+  k.pushScale(k.vec2(inst.drawScale, inst.drawScale))
+  k.pushTranslate(k.vec2(-ch.pos.x, -ch.pos.y))
   drawHero(inst)
+  k.popTransform()
 }
 //
 // The current standing / jumping frame, shifted onto the ground line.

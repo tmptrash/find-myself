@@ -82,6 +82,12 @@ const LEVELS = [
 // MENU_COLUMN_Y_FRAC of the height (the screen's middle).
 //
 const MENU_REF_HEIGHT = 1080
+//
+// On short views (a phone in landscape) the hero cursor shrinks with the
+// layout like the level icons; on taller ones it stays at 1:1 so its pixel
+// art stays crisp.
+//
+const MENU_COMPACT_MAX_H = 700
 const MENU_COLUMN_X_FRAC = 0.2
 const MENU_COLUMN_Y_FRAC = 0.5
 const MENU_ITEM_STEP = 112
@@ -342,7 +348,8 @@ export function sceneMenu(k) {
       controllable: false,
       isStatic: true,
       idleVocalization: null,
-      sfx: sound
+      sfx: sound,
+      drawScale: menuHeroDrawScale(k, layout)
     })
     Hero.setAwakeOverride(heroInst, true)
     const forestLayout = forestMenuLayout(k.width(), k.height())
@@ -453,6 +460,9 @@ function menuBakeSize(k) {
   return `${Math.round(k.width())}x${Math.round(k.height())}`
 }
 
+function menuHeroDrawScale(k, layout) {
+  return k.height() < MENU_COMPACT_MAX_H ? layout.s : 1
+}
 //
 // Per-level row state: position, what it shows and whether it can be entered.
 //

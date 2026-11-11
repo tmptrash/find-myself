@@ -1,0 +1,13 @@
+{
+  "name": "rootward",
+  "short_name": "rootward",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1A2530",
+  "theme_color": "#1A2530",
+  "icons": [
+    { "src": "icon.png", "sizes": "239x292", "type": "image/png" }
+  ]
+}

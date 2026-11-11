@@ -348,6 +348,20 @@ const TEXT_LINE_HEIGHT = 50
 const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
 let AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
 let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
+const DESC_FIRST_LINE_OFFSET = 40
+//
+// Short views (a phone in landscape shows ~560 world px top to bottom): the
+// hero is drawn at READY_COMPACT_HERO_SCALE round his feet, and the
+// description sits right under the ground strip (DESC_GROUND_GAP below it,
+// DESC_HINT_GAP above the hint), its type shrunk until its lines fit there.
+//
+const READY_COMPACT_MAX_H = 700
+const READY_COMPACT_HERO_SCALE = 0.7
+const DESC_GROUND_GAP = 16
+const DESC_HINT_GAP = 12
+let HERO_DRAW_SCALE = 1
+let TEXT_SCALE = 1
+let DESC_FIRST_LINE_Y = DESCRIPTION_START_Y + DESC_FIRST_LINE_OFFSET
 //
 // Narrative body copy — cool teal-gray (ready.text) on the deep teal frame.
 //
@@ -374,6 +388,24 @@ function recomputeReadyLayout(k) {
   TITLE_TEXT_X = CENTER_X
   AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
   DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
+  const compact = k.height() < READY_COMPACT_MAX_H
+  HERO_DRAW_SCALE = compact ? READY_COMPACT_HERO_SCALE : 1
+  TEXT_SCALE = compact ? compactTextScale() : 1
+  DESC_FIRST_LINE_Y = compact
+    ? Math.round(compactDescriptionTop() + TEXT_FONT_SIZE * TEXT_SCALE / 2)
+    : DESCRIPTION_START_Y + DESC_FIRST_LINE_OFFSET
+}
+//
+// Compact description: its lines between the ground strip and the hint, the
+// type shrunk (never grown) until they fit.
+//
+function compactDescriptionTop() {
+  return MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT + DESC_GROUND_GAP
+}
+function compactTextScale() {
+  const bottom = HINT_Y - HINT_FONT_SIZE / 2 - DESC_HINT_GAP
+  const natural = (READY_DESC_LINES.length - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
+  return Math.min(1, (bottom - compactDescriptionTop()) / natural)
 }
 
 export function sceneReady(k) {
@@ -618,16 +650,16 @@ function buildReadyStaticSprite(k) {
   // Bottom description block — centred lines with a glow-style drop shadow
   // (single black copy offset right+down).
   //
-  ctx.font = `${TEXT_FONT_SIZE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
+  ctx.font = `${TEXT_FONT_SIZE * TEXT_SCALE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  let cursorY = DESCRIPTION_START_Y + 40
+  let cursorY = DESC_FIRST_LINE_Y
   for (const line of READY_DESC_LINES) {
     ctx.fillStyle = '#000000'
     ctx.fillText(line, CENTER_X + READY_TEXT_SHADOW_OFFSET, cursorY + READY_TEXT_SHADOW_OFFSET)
     ctx.fillStyle = CFG.visual.colors.ready.text
     ctx.fillText(line, CENTER_X, cursorY)
-    cursorY += TEXT_LINE_HEIGHT
+    cursorY += TEXT_LINE_HEIGHT * TEXT_SCALE
   }
   k.loadSprite(READY_STATIC_SPRITE, canvas)
   canvas.width = 0
@@ -1340,6 +1372,18 @@ function startHeroNBurst(spider) {
 //
 function drawTitleHero(k, spider) {
   if (spider.heroGone) return
+  //
+  // Scaled round the point under his feet, so he stays on the ground.
+  //
+  const footY = spider.heroY + HERO_FEET_OFFSET_Y
+  k.pushTransform()
+  k.pushTranslate(k.vec2(spider.heroX, footY))
+  k.pushScale(k.vec2(HERO_DRAW_SCALE, HERO_DRAW_SCALE))
+  k.pushTranslate(k.vec2(-spider.heroX, -footY))
+  drawTitleHeroPose(k, spider)
+  k.popTransform()
+}
+function drawTitleHeroPose(k, spider) {
   const phase = spider.heroPhase
   if (phase === 'run' || phase === 'finalWalk' || phase === 'lookLeft') {
     drawTitleRunner(k, spider)

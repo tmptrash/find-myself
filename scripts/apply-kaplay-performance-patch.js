@@ -110,6 +110,22 @@ const TYPED_QUEUE_OLD =
 const TYPED_QUEUE_NEW =
   'let _vl=this._vqLen||0,_il=this._iqLen||0;(e!==this.curPrimitive||s!==this.curTex||o!==this.curShader||this.curUniform!=i&&!ln(this.curUniform,i)||a!==this.curBlend||u!==this.curFixed||_vl+r.length>this.maxVertices||_il+n.length>this.maxIndices)&&(this.flush(c,m),this.setBlend(a),_vl=0,_il=0);let _vn=_vl+r.length,_in=_il+n.length,vb=this._vScratch;if(!vb||vb.length<_vn){let nv=new Float32Array(Math.max(this.maxVertices,_vn*2));vb&&_vl>0&&nv.set(vb.subarray(0,_vl)),vb=this._vScratch=nv}let ib=this._iScratch;if(!ib||ib.length<_in){let ni=new Uint16Array(Math.max(this.maxIndices,_in*2));ib&&_il>0&&ni.set(ib.subarray(0,_il)),ib=this._iScratch=ni}vb.set(r,_vl);let f=_vl/this.stride,p=n.length;for(let g=0;g<p;g++)ib[_il+g]=n[g]+f;this._vqLen=_vn,this._iqLen=_in,this.curPrimitive=e,this.curShader=o,this.curTex=s,this.curUniform=i,this.curFixed=u}flush(e,r){let vl=this._vqLen||0,il=this._iqLen||0;if(!this.curPrimitive||!this.curShader||vl===0||il===0)return;let n=this.ctx.gl;this.ctx.pushArrayBuffer(this.glVBuf),n.bufferData(n.ARRAY_BUFFER,this._vScratch.subarray(0,vl),n.DYNAMIC_DRAW),this.ctx.pushElementArrayBuffer(this.glIBuf),n.bufferData(n.ELEMENT_ARRAY_BUFFER,this._iScratch.subarray(0,il),n.DYNAMIC_DRAW),this.ctx.setVertexFormat(this.vertexFormat),this.curShader.bind(),this.curUniform&&this.curShader.send(this.curUniform),this.curShader.send({width:e,height:r,camera:this.curFixed?yr:Pt(),transform:yr}),this.curTex?.bind(),n.drawElements(this.curPrimitive,il,n.UNSIGNED_SHORT,0),this.curTex?.unbind(),this.curShader.unbind(),this.ctx.popArrayBuffer(),this.ctx.popElementArrayBuffer(),this._vqLen=0,this._iqLen=0,this.numDraws++}'
 //
+// World size from a fractional `scale`: drawingBuffer / pixelDensity / scale
+// lands a hair off a whole number (1949.9999…) whenever pixelDensity is not
+// a power of two, though the game sets pixelDensity = 1 / scale so it is
+// meant to be the buffer size exactly (game-engine.js scales a phone's
+// world). Rounded at boot and on every resize, so k.width() / k.height()
+// stay whole.
+//
+const WORLD_SIZE_BOOT_OLD =
+  'width:e.width??o.drawingBufferWidth/n/e.scale,height:e.height??o.drawingBufferHeight/n/e.scale,'
+const WORLD_SIZE_BOOT_NEW =
+  'width:e.width??Math.round(o.drawingBufferWidth/n/e.scale),height:e.height??Math.round(o.drawingBufferHeight/n/e.scale),'
+const WORLD_SIZE_RESIZE_OLD =
+  'l.gfx.width=l.gfx.ggl.gl.drawingBufferWidth/l.gfx.pixelDensity/l.globalOpt.scale,l.gfx.height=l.gfx.ggl.gl.drawingBufferHeight/l.gfx.pixelDensity/l.globalOpt.scale)'
+const WORLD_SIZE_RESIZE_NEW =
+  'l.gfx.width=Math.round(l.gfx.ggl.gl.drawingBufferWidth/l.gfx.pixelDensity/l.globalOpt.scale),l.gfx.height=Math.round(l.gfx.ggl.gl.drawingBufferHeight/l.gfx.pixelDensity/l.globalOpt.scale))'
+//
 // The typed queues rewrite the push-limit patch's line, so their marker
 // stands for both.
 //
@@ -130,7 +146,11 @@ const PATCHES = [
       [ZERO_ALLOC_IL_OLD, ZERO_ALLOC_IL_NEW]
     ]
   },
-  { markers: [TYPED_QUEUE_MARKER], pairs: [[TYPED_QUEUE_OLD, TYPED_QUEUE_NEW]] }
+  { markers: [TYPED_QUEUE_MARKER], pairs: [[TYPED_QUEUE_OLD, TYPED_QUEUE_NEW]] },
+  {
+    markers: ['??Math.round(o.drawingBufferWidth/n/e.scale)'],
+    pairs: [[WORLD_SIZE_BOOT_OLD, WORLD_SIZE_BOOT_NEW], [WORLD_SIZE_RESIZE_OLD, WORLD_SIZE_RESIZE_NEW]]
+  }
 ]
 
 for (const name of DIST_FILES) {

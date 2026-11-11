@@ -37,6 +37,19 @@ export const RESOLUTION_MODE = {
 // e.g. right after HMR reload, or right after tearing down a previous engine).
 //
 const KAPLAY_INIT_MAX_ATTEMPTS = 5
+//
+// Phones in landscape: a native-resolution level keeps 1 world px per CSS px,
+// and a phone's window is only ~350-450 CSS px tall, so the hero fills a
+// fifth of the screen. On a touch device whose window is shorter than
+// SMALL_VIEW_MAX_H, the world is scaled (Kaplay `scale`) so the window shows
+// SMALL_VIEW_WORLD_H world px top to bottom, with or without fullscreen. The
+// canvas buffer gets 1 / scale px per CSS px (`pixelDensity`), so one world
+// px is still one buffer px and hairline art stays whole. A window resize
+// reboots the engine (window-resize.js), so the choice follows rotation and
+// fullscreen.
+//
+const SMALL_VIEW_MAX_H = 600
+const SMALL_VIEW_WORLD_H = 900
 const KAPLAY_INIT_RETRY_BASE_MS = 200
 const KAPLAY_INIT_RETRY_STEP_MS = 400
 //
@@ -332,7 +345,8 @@ function buildKaplayOpts(resolutionMode, canvas) {
     canvas
   }
   if (resolutionMode === RESOLUTION_MODE.NATIVE) {
-    return { ...base, letterbox: false }
+    const scale = nativeWorldScale()
+    return { ...base, letterbox: false, scale, pixelDensity: 1 / scale }
   }
   return {
     ...base,
@@ -340,6 +354,13 @@ function buildKaplayOpts(resolutionMode, canvas) {
     height: CFG.visual.screen.height,
     letterbox: true
   }
+}
+//
+// World px per CSS px for a native-resolution engine (see SMALL_VIEW_MAX_H).
+//
+function nativeWorldScale() {
+  const h = window.innerHeight
+  return TouchInput.isTouchDevice() && h < SMALL_VIEW_MAX_H ? h / SMALL_VIEW_WORLD_H : 1
 }
 /**
  * Create a canvas whose getContext("webgl"|"webgl2") merges in our safer

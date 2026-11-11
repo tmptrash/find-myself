@@ -4,7 +4,7 @@ import { parseHex } from './helper.js'
 import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 
 //
-// Top-left HUD buttons for touch devices: fullscreen toggle + Esc shortcut.
+// Top-left HUD buttons for touch devices: fullscreen toggle + back (Esc) button.
 // The Esc button dispatches a synthetic KeyboardEvent('Escape') on the Kaplay
 // canvas so existing onKeyPress('escape') handlers fire unchanged.
 //
@@ -18,9 +18,7 @@ const BTN_MARGIN = 10
 const BTN_TOP = 66
 const BTN_GAP = 8
 const FULLSCREEN_BTN_WIDTH = 44
-const FULLSCREEN_BTN_FONT_SIZE = 18
 const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
-const ESC_BTN_FONT_SIZE = 16
 //
 // The levels' look, as the on-screen run / jump buttons (cfg
 // colors.touchControls): a see-through green-black face with film grain
@@ -35,13 +33,23 @@ const BTN_LABEL_CONTOUR_PX = 1
 const BTN_GRAIN_TILE = 64
 const BTN_GRAIN_SEED = 9200
 let grainTileUrl = null
-const FULLSCREEN_BTN_LABEL = '[ ]'
-const ESC_BTN_LABEL = 'Esc'
+//
+// Icons any phone user knows, drawn in the label colour (currentColor) and
+// ringed by the dark contour: the four-corner frame for fullscreen (corners
+// turned in while in fullscreen, to leave it) and a left arrow for back
+// (the Esc key).
+//
+const ICON_PX = 24
+const ICON_STROKE_W = 2.5
+const ICON_SVG_HEAD = `<svg width="${ICON_PX}" height="${ICON_PX}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${ICON_STROKE_W}" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto">`
+const ICON_FULLSCREEN_ENTER = `${ICON_SVG_HEAD}<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>`
+const ICON_FULLSCREEN_EXIT = `${ICON_SVG_HEAD}<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>`
+const ICON_BACK = `${ICON_SVG_HEAD}<path d="M19 12H5M11 6l-6 6 6 6"/></svg>`
 //
 // iPhone browsers (all WebKit) have no fullscreen for a page, only for
 // video. The one way to lose the browser bars there is the game opened from
 // the Home Screen (manifest.webmanifest, apple-mobile-web-app-capable in
-// index.html): then the [ ] button is not needed and is left out; in the
+// index.html): then the fullscreen button is not needed and is left out; in the
 // browser it shows how to get there (INSTALL_HINT_TEXT, in the buttons'
 // look, gone on a tap or after INSTALL_HINT_MS).
 //
@@ -73,13 +81,14 @@ export function createFullscreenButton(k) {
   const standalone = isStandalone()
   if (!fullscreenBtn && !standalone) {
     fullscreenBtn = createHudButton({
-      label: FULLSCREEN_BTN_LABEL,
+      icon: fullscreenIcon(),
       ariaLabel: 'Toggle fullscreen',
       width: FULLSCREEN_BTN_WIDTH,
-      fontSize: FULLSCREEN_BTN_FONT_SIZE,
       top: BTN_TOP,
       onClick: toggleFullscreen
     })
+    document.addEventListener('fullscreenchange', syncFullscreenIcon)
+    document.addEventListener('webkitfullscreenchange', syncFullscreenIcon)
   } else if (fullscreenBtn) {
     applyHudButtonReleased(fullscreenBtn)
   }
@@ -89,10 +98,9 @@ export function createFullscreenButton(k) {
   //
   if (!escBtn && k) {
     escBtn = createHudButton({
-      label: ESC_BTN_LABEL,
-      ariaLabel: 'Press Escape',
+      icon: ICON_BACK,
+      ariaLabel: 'Back',
       width: ESC_BTN_WIDTH,
-      fontSize: ESC_BTN_FONT_SIZE,
       top: standalone ? BTN_TOP : BTN_TOP + BTN_HEIGHT + BTN_GAP,
       onClick: () => dispatchEscape(kaplayRef)
     })
@@ -105,10 +113,10 @@ export function createFullscreenButton(k) {
 // Builds a fixed-position HUD button anchored to the top-left of the viewport.
 //
 function createHudButton(opts) {
-  const { label, ariaLabel, width, fontSize, top, onClick } = opts
+  const { icon, ariaLabel, width, top, onClick } = opts
   const btn = document.createElement('button')
   btn.type = 'button'
-  btn.textContent = label
+  btn.innerHTML = icon
   btn.setAttribute('aria-label', ariaLabel)
   btn.style.cssText = [
     'position:fixed',
@@ -117,13 +125,11 @@ function createHudButton(opts) {
     `width:${width}px`,
     `height:${BTN_HEIGHT}px`,
     `z-index:${BTN_Z}`,
-    `font-size:${fontSize}px`,
-    `font-family:${CFG.visual.fonts.regularFull.replace(/'/g, '')}`,
     'border-radius:8px',
     `opacity:${BTN_OPACITY}`,
     'background-color:transparent',
     `background-image:url(${buttonGrainTile()})`,
-    `text-shadow:${labelContour()}`,
+    `filter:${iconContour()}`,
     'cursor:pointer',
     'padding:0',
     'line-height:1',
@@ -234,6 +240,25 @@ function toggleFullscreen() {
 //
 function safeLeft(px) {
   return `calc(${px}px + env(safe-area-inset-left, 0px))`
+}
+//
+// The fullscreen button's icon follows the page's fullscreen state.
+//
+function fullscreenIcon() {
+  return document.fullscreenElement || document.webkitFullscreenElement ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER
+}
+function syncFullscreenIcon() {
+  fullscreenBtn && (fullscreenBtn.innerHTML = fullscreenIcon())
+}
+//
+// The dark contour round an icon: one sharp drop shadow per side (the
+// button's rim is drawn by its border, so a filter on the whole button only
+// rings the icon lines and the rim itself, both dark-edged in the level art).
+//
+function iconContour() {
+  const c = CFG.visual.colors.touchControls.contour
+  const d = BTN_LABEL_CONTOUR_PX
+  return [[d, 0], [-d, 0], [0, d], [0, -d]].map(([x, y]) => `drop-shadow(${x}px ${y}px 0 ${c})`).join(' ')
 }
 function isStandalone() {
   return navigator.standalone === true || STANDALONE_QUERIES.some(q => window.matchMedia(q).matches)

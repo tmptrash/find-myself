@@ -57,6 +57,12 @@ const SMALL_VIEW_MAX_H = 600
 //
 const SMALL_VIEW_MIN_H = 200
 const SMALL_VIEW_WORLD_H = 562
+//
+// Held upright, the screen never shows more world px top to bottom than the
+// forest playfield is tall, so the level fills the whole screen (no void
+// band over its sky); the hero comes out a little bigger than in landscape.
+//
+const UPRIGHT_MAX_WORLD_H = CFG.visual.forest.playfieldHeight
 const KAPLAY_INIT_RETRY_BASE_MS = 200
 const KAPLAY_INIT_RETRY_STEP_MS = 400
 //
@@ -366,8 +372,12 @@ function buildKaplayOpts(resolutionMode, canvas) {
 // World px per CSS px for a native-resolution engine (see SMALL_VIEW_MAX_H).
 //
 function nativeWorldScale() {
-  const side = Math.min(window.innerWidth, window.innerHeight)
-  return TouchInput.isTouchDevice() && side < SMALL_VIEW_MAX_H ? Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H : 1
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const side = Math.min(w, h)
+  if (!TouchInput.isTouchDevice() || side >= SMALL_VIEW_MAX_H) return 1
+  const scale = Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H
+  return h > w ? Math.max(scale, h / UPRIGHT_MAX_WORLD_H) : scale
 }
 /**
  * Create a canvas whose getContext("webgl"|"webgl2") merges in our safer

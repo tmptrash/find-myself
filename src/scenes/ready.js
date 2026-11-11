@@ -353,10 +353,13 @@ let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEI
 // scene is laid out in a view READY_VIEW_H world px tall (as on a desktop
 // window) and the whole scene tree is scaled down to the screen (the tree
 // root's scale, so screen-fixed pieces shrink too) — everything fits, at the
-// screen's full resolution. VIEW_W / VIEW_H are the laid-out view.
+// screen's full resolution. Narrow views (a phone held upright) are laid out
+// at least READY_VIEW_MIN_W wide the same way, so the title and the
+// description lines fit across. VIEW_W / VIEW_H are the laid-out view.
 //
 const READY_COMPACT_MAX_H = 700
 const READY_VIEW_H = 900
+const READY_VIEW_MIN_W = 820
 let VIEW_SCALE = 1
 let VIEW_W = CFG.visual.screen.width
 let VIEW_H = CFG.visual.screen.height
@@ -373,7 +376,8 @@ let VIEW_H = CFG.visual.screen.height
  * @param {Object} k - Kaplay inst
  */
 function recomputeReadyLayout(k) {
-  VIEW_SCALE = k.height() < READY_COMPACT_MAX_H ? k.height() / READY_VIEW_H : 1
+  const shortScale = k.height() < READY_COMPACT_MAX_H ? k.height() / READY_VIEW_H : 1
+  VIEW_SCALE = Math.min(shortScale, k.width() / READY_VIEW_MIN_W, 1)
   VIEW_W = Math.round(k.width() / VIEW_SCALE)
   VIEW_H = Math.round(k.height() / VIEW_SCALE)
   recomputeMenuBgLayout(VIEW_W, VIEW_H)
@@ -392,9 +396,10 @@ function recomputeReadyLayout(k) {
 }
 //
 // Scales the whole scene tree to the screen (see READY_VIEW_H); back to 1:1
-// when the scene is left (menu and the levels share this engine). The scale
-// component stays on the root once added — removing it would leave the
-// root's last transform in place.
+// when the scene is left (menu and the levels share this engine). The root
+// gets a scale component, set through its setter: that marks the root's
+// transform stale, so the engine rebuilds it with the scale (a matrix written
+// by hand is overwritten by the next rebuild).
 //
 function applyReadyViewScale(k) {
   if (VIEW_SCALE === 1) return
@@ -403,7 +408,8 @@ function applyReadyViewScale(k) {
 }
 function setTreeRootScale(k, scale) {
   const root = k.getTreeRoot()
-  root.scale === undefined ? root.use(k.scale(scale)) : (root.scale = k.vec2(scale, scale))
+  root.scale === undefined && root.use(k.scale(1))
+  root.scale = k.vec2(scale, scale)
 }
 
 export function sceneReady(k) {

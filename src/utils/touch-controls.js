@@ -39,6 +39,13 @@ const CIRCLE_RADIUS = 62
 //
 const CONTROL_BOTTOM_MARGIN = 36
 //
+// The full layout needs a screen this wide (both arrows, the jump button and
+// the gaps between them). On a narrower one (a phone held upright) the whole
+// layout — sizes, margins, gaps and hit areas — shrinks by width /
+// CONTROLS_FULL_W, still along the bottom edge.
+//
+const CONTROLS_FULL_W = 640
+//
 // Touch hit area is much larger than the visible circle (especially horizontally)
 // so fingers can land near a button without missing it. Vertical padding stays
 // modest to avoid stealing taps from the play area above/below.
@@ -159,10 +166,11 @@ export function create(k) {
   // Canvas-level CSS so the browser never scrolls/zooms on game touches
   //
   k.canvas && (k.canvas.style.touchAction = 'none')
-  const centerY = k.height() - CONTROL_BOTTOM_MARGIN - CIRCLE_RADIUS
-  const leftX = ARROW_MARGIN_X + CIRCLE_RADIUS
-  const rightX = leftX + ARROW_CENTER_GAP
-  const jumpX = k.width() - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
+  const scale = Math.min(1, k.width() / CONTROLS_FULL_W)
+  const centerY = k.height() - (CONTROL_BOTTOM_MARGIN + CIRCLE_RADIUS) * scale
+  const leftX = (ARROW_MARGIN_X + CIRCLE_RADIUS) * scale
+  const rightX = leftX + ARROW_CENTER_GAP * scale
+  const jumpX = k.width() - (JUMP_ARROW_MARGIN_X + CIRCLE_RADIUS) * scale
   //
   // Fresh scene mount — clear stale fingers. The jump handler stays: levels
   // create their hero (which registers it) before these controls, and every
@@ -179,12 +187,13 @@ export function create(k) {
     rightX,
     jumpX,
     centerY,
+    scale,
     visible: true
   }
   bakeButtonSprites(k)
-  activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left'))
-  activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right'))
-  activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump'))
+  activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left', scale))
+  activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right', scale))
+  activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump', scale))
   registerKaplayHandlers(k)
   return activeInst
 }
@@ -192,28 +201,30 @@ export function create(k) {
 //
 // Creates one virtual arrow button drawable
 //
-function createArrowButton(k, x, y, type) {
+function createArrowButton(k, x, y, type, scale) {
+  const drawScale = k.vec2(scale, scale)
   k.add([
     k.z(CONTROL_Z),
     k.fixed(),
     {
       draw() {
-        drawControlButton(k, x, y, type)
+        drawControlButton(k, x, y, type, drawScale)
       }
     }
   ])
-  return { x, y, halfW: HIT_HALF_WIDTH, halfH: HIT_HALF_HEIGHT, type }
+  return { x, y, halfW: HIT_HALF_WIDTH * scale, halfH: HIT_HALF_HEIGHT * scale, type }
 }
 
 //
 // Draws one baked button.
 //
-function drawControlButton(k, cx, cy, type) {
+function drawControlButton(k, cx, cy, type, scale) {
   if (!activeInst?.visible) return
   k.drawSprite({
     sprite: buttonSpriteName(type),
     pos: k.vec2(cx, cy),
     anchor: 'center',
+    scale,
     opacity: BUTTON_OPACITY
   })
 }

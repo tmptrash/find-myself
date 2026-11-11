@@ -78,17 +78,20 @@ const LEVELS = [
   }
 ]
 //
-// Layout in design px at MENU_REF_HEIGHT, scaled with the window height; the
-// column stands at MENU_COLUMN_X_FRAC of the width, centred on
-// MENU_COLUMN_Y_FRAC of the height (the screen's middle).
+// Layout in design px at MENU_REF_HEIGHT, scaled with the window height (and
+// with the width on a narrow window — a phone held upright — so the key hint
+// fits across at MENU_REF_WIDTH); the column stands at MENU_COLUMN_X_FRAC of
+// the width, never so far left that the level panel leaves the screen
+// (MENU_PANEL_MIN_MARGIN), centred on MENU_COLUMN_Y_FRAC of the height.
 //
 const MENU_REF_HEIGHT = 1080
+const MENU_REF_WIDTH = 760
+const MENU_PANEL_MIN_MARGIN = 12
 //
-// On short views (a phone in landscape) the hero cursor shrinks with the
-// layout like the level icons; on taller ones it stays at 1:1 so its pixel
-// art stays crisp.
+// On small layouts (a phone) the hero cursor shrinks with the layout like the
+// level icons; on larger ones it stays at 1:1 so its pixel art stays crisp.
 //
-const MENU_COMPACT_MAX_H = 700
+const MENU_COMPACT_MAX_S = 700 / MENU_REF_HEIGHT
 const MENU_COLUMN_X_FRAC = 0.2
 const MENU_COLUMN_Y_FRAC = 0.5
 const MENU_ITEM_STEP = 112
@@ -350,7 +353,7 @@ export function sceneMenu(k) {
       isStatic: true,
       idleVocalization: null,
       sfx: sound,
-      drawScale: menuHeroDrawScale(k, layout)
+      drawScale: menuHeroDrawScale(layout)
     })
     Hero.setAwakeOverride(heroInst, true)
     const forestLayout = forestMenuLayout(k.width(), k.height())
@@ -461,8 +464,8 @@ function menuBakeSize(k) {
   return `${Math.round(k.width())}x${Math.round(k.height())}`
 }
 
-function menuHeroDrawScale(k, layout) {
-  return k.height() < MENU_COMPACT_MAX_H ? layout.s : 1
+function menuHeroDrawScale(layout) {
+  return layout.s < MENU_COMPACT_MAX_S ? layout.s : 1
 }
 //
 // Per-level row state: position, what it shows and whether it can be entered.
@@ -491,9 +494,10 @@ function buildMenuLevel(level, index, layout, progress) {
 // hint Y.
 //
 function computeMenuLayout(k) {
-  const s = k.height() / MENU_REF_HEIGHT
+  const s = Math.min(k.height() / MENU_REF_HEIGHT, k.width() / MENU_REF_WIDTH)
   const step = MENU_ITEM_STEP * s
-  const columnX = Math.round(k.width() * MENU_COLUMN_X_FRAC)
+  const panelReach = (MENU_HERO_GAP + MENU_PANEL_LEFT_PAD + MENU_PANEL_PAD) * s + MENU_PANEL_MIN_MARGIN
+  const columnX = Math.round(Math.max(k.width() * MENU_COLUMN_X_FRAC, panelReach))
   return {
     s,
     step,
@@ -1136,7 +1140,7 @@ function loadMenuAssets(k) {
 // Hint / "?" sprites at the window's text scale.
 //
 function loadMenuTextSprites(k) {
-  const s = k.height() / MENU_REF_HEIGHT
+  const s = computeMenuLayout(k).s
   loadQuestionMarkSprite(k, s)
   loadMenuHintSprite(k, s)
 }

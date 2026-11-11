@@ -50,6 +50,11 @@ const KAPLAY_INIT_MAX_ATTEMPTS = 5
 // fullscreen.
 //
 const SMALL_VIEW_MAX_H = 600
+//
+// A rotating phone can report a near-zero height for a moment; the scale
+// never goes below this view height's (the size settles and reboots again).
+//
+const SMALL_VIEW_MIN_H = 200
 const SMALL_VIEW_WORLD_H = 562
 const KAPLAY_INIT_RETRY_BASE_MS = 200
 const KAPLAY_INIT_RETRY_STEP_MS = 400
@@ -361,7 +366,7 @@ function buildKaplayOpts(resolutionMode, canvas) {
 //
 function nativeWorldScale() {
   const h = window.innerHeight
-  return TouchInput.isTouchDevice() && h < SMALL_VIEW_MAX_H ? h / SMALL_VIEW_WORLD_H : 1
+  return TouchInput.isTouchDevice() && h < SMALL_VIEW_MAX_H ? Math.max(h, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H : 1
 }
 /**
  * Create a canvas whose getContext("webgl"|"webgl2") merges in our safer

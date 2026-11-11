@@ -9,6 +9,11 @@ import { isTouchDevice } from './touch-input.js'
 const BTN_Z = 10000
 const BTN_HEIGHT = 44
 const BTN_MARGIN = 10
+//
+// The stack starts below the levels' FPS readout in the top-left corner
+// (its text runs down to about 55 px), so it stays visible.
+//
+const BTN_TOP = 66
 const BTN_GAP = 8
 const FULLSCREEN_BTN_WIDTH = 44
 const FULLSCREEN_BTN_FONT_SIZE = 18
@@ -44,7 +49,7 @@ export function createFullscreenButton(k) {
       ariaLabel: 'Toggle fullscreen',
       width: FULLSCREEN_BTN_WIDTH,
       fontSize: FULLSCREEN_BTN_FONT_SIZE,
-      top: BTN_MARGIN,
+      top: BTN_TOP,
       onClick: toggleFullscreen
     })
   } else {
@@ -60,7 +65,7 @@ export function createFullscreenButton(k) {
       ariaLabel: 'Press Escape',
       width: ESC_BTN_WIDTH,
       fontSize: ESC_BTN_FONT_SIZE,
-      top: BTN_MARGIN + BTN_HEIGHT + BTN_GAP,
+      top: BTN_TOP + BTN_HEIGHT + BTN_GAP,
       onClick: () => dispatchEscape(kaplayRef)
     })
   } else if (escBtn) {

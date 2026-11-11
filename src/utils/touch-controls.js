@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { isTouchDevice, setTouchPoint, removeTouchPoint } from './touch-input.js'
+import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 
 //
 // Virtual movement state — read by hero each frame
@@ -44,11 +45,28 @@ const CONTROL_BOTTOM_MARGIN = 36
 //
 const HIT_HALF_WIDTH = 112
 const HIT_HALF_HEIGHT = 90
-const CIRCLE_GRAY_R = 38
-const CIRCLE_GRAY_G = 38
-const CIRCLE_GRAY_B = 38
-const CIRCLE_OPACITY = 0.72
-const ARROW_OUTLINE_SHIFT = 4
+//
+// Buttons in the levels' own look (cfg colors.touchControls), baked once per
+// live k: a see-through green-black disc with a dark rim and a faint light
+// glint inside it, a cream arrow (ARROW_BAKE_SCALE of the hit arrow's size)
+// in two tones — a shaded bevel ARROW_BEVEL px deep along its lower edges —
+// ringed by the green-black contour, film grain over all. The whole button is drawn
+// at BUTTON_OPACITY so the level shows through.
+//
+const BUTTON_OPACITY = 0.55
+const DISC_ALPHA = 0.6
+const RIM_W = 3
+const GLINT_W = 1.5
+const GLINT_INSET = 4.5
+const GLINT_ALPHA = 0.35
+const ARROW_CONTOUR_W = 5
+const ARROW_BAKE_SCALE = 0.72
+const ARROW_BEVEL = 3
+const BAKE_PAD = 2
+const BUTTON_TYPES = ['left', 'right', 'jump']
+const BUTTON_SPRITE_PREFIX = 'touch-control'
+const BUTTON_GRAIN_SEED = 9100
+const bakedForK = new WeakSet()
 const CONTROL_Z = CFG.visual.zIndex.ui + 250
 //
 // Sentinel identifier for the desktop mouse fallback slot
@@ -163,6 +181,7 @@ export function create(k) {
     centerY,
     visible: true
   }
+  bakeButtonSprites(k)
   activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left'))
   activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right'))
   activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump'))
@@ -187,49 +206,93 @@ function createArrowButton(k, x, y, type) {
 }
 
 //
-// Draws gray circle with white arrow and black outline
+// Draws one baked button.
 //
 function drawControlButton(k, cx, cy, type) {
   if (!activeInst?.visible) return
-  k.drawCircle({
+  k.drawSprite({
+    sprite: buttonSpriteName(type),
     pos: k.vec2(cx, cy),
-    radius: CIRCLE_RADIUS,
-    color: k.rgb(CIRCLE_GRAY_R, CIRCLE_GRAY_G, CIRCLE_GRAY_B),
-    opacity: CIRCLE_OPACITY
+    anchor: 'center',
+    opacity: BUTTON_OPACITY
   })
-  drawArrowShape(k, cx, cy, type, k.rgb(0, 0, 0), 1, ARROW_OUTLINE_SHIFT)
-  drawArrowShape(k, cx, cy, type, k.rgb(0, 0, 0), 1, -ARROW_OUTLINE_SHIFT)
-  drawArrowShape(k, cx, cy, type, k.rgb(255, 255, 255), 1, 0)
 }
-
+function buttonSpriteName(type) {
+  return `${BUTTON_SPRITE_PREFIX}-${type}`
+}
 //
-// Draws a directional arrow polygon (left, right, or up)
+// Bakes the three button sprites once per live k (a fresh engine has an
+// empty sprite registry).
 //
-function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
-  const half = ARROW_SIZE / 2
-  const ox = outlineOffset
-  const oy = outlineOffset
-  let pts
-  if (type === 'left') {
-    pts = [
-      k.vec2(cx + half * 0.35 + ox, cy - half + oy),
-      k.vec2(cx - half * 0.55 + ox, cy + oy),
-      k.vec2(cx + half * 0.35 + ox, cy + half + oy)
-    ]
-  } else if (type === 'right') {
-    pts = [
-      k.vec2(cx - half * 0.35 + ox, cy - half + oy),
-      k.vec2(cx + half * 0.55 + ox, cy + oy),
-      k.vec2(cx - half * 0.35 + ox, cy + half + oy)
-    ]
-  } else {
-    pts = [
-      k.vec2(cx - half + ox, cy + half * 0.35 + oy),
-      k.vec2(cx + ox, cy - half * 0.55 + oy),
-      k.vec2(cx + half + ox, cy + half * 0.35 + oy)
-    ]
-  }
-  k.drawPolygon({ pts, color, opacity })
+function bakeButtonSprites(k) {
+  if (bakedForK.has(k)) return
+  bakedForK.add(k)
+  BUTTON_TYPES.forEach((type, i) => k.loadSprite(buttonSpriteName(type), bakeButton(type, BUTTON_GRAIN_SEED + i)))
+}
+function bakeButton(type, seed) {
+  const colors = CFG.visual.colors.touchControls
+  const size = (CIRCLE_RADIUS + BAKE_PAD) * 2
+  const c = size / 2
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  ctx.globalAlpha = DISC_ALPHA
+  ctx.fillStyle = colors.disc
+  ctx.beginPath()
+  ctx.arc(c, c, CIRCLE_RADIUS, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+  ctx.lineWidth = RIM_W
+  ctx.strokeStyle = colors.rim
+  ctx.beginPath()
+  ctx.arc(c, c, CIRCLE_RADIUS - RIM_W / 2, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = GLINT_ALPHA
+  ctx.lineWidth = GLINT_W
+  ctx.strokeStyle = colors.glint
+  ctx.beginPath()
+  ctx.arc(c, c, CIRCLE_RADIUS - GLINT_INSET, Math.PI, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = 1
+  paintArrow(ctx, c, type, colors)
+  applyForestFilmGrainToCanvas(canvas, seed)
+  return canvas
+}
+//
+// The arrow: contour stroked under it, the shade fill, then the cream fill
+// raised by the bevel (both cut to the arrow), so only its lower edges show
+// the shade.
+//
+function paintArrow(ctx, c, type, colors) {
+  const pts = arrowPoints(type).map(([x, y]) => [c + x, c + y])
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = ARROW_CONTOUR_W
+  ctx.strokeStyle = colors.contour
+  traceArrow(ctx, pts)
+  ctx.stroke()
+  ctx.fillStyle = colors.arrowShade
+  ctx.fill()
+  ctx.save()
+  ctx.clip()
+  traceArrow(ctx, pts.map(([x, y]) => [x, y - ARROW_BEVEL]))
+  ctx.fillStyle = colors.arrow
+  ctx.fill()
+  ctx.restore()
+}
+function traceArrow(ctx, pts) {
+  ctx.beginPath()
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+  ctx.closePath()
+}
+//
+// Arrow corners round the button's centre (left, right, or up for jump).
+//
+function arrowPoints(type) {
+  const half = ARROW_SIZE / 2 * ARROW_BAKE_SCALE
+  if (type === 'left') return [[half * 0.35, -half], [-half * 0.55, 0], [half * 0.35, half]]
+  if (type === 'right') return [[-half * 0.35, -half], [half * 0.55, 0], [-half * 0.35, half]]
+  return [[-half, half * 0.35], [0, -half * 0.55], [half, half * 0.35]]
 }
 
 //

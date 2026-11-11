@@ -157,6 +157,19 @@ export const CFG = {
         mysteryShadow: "#000000"       // Shadows of its drifting "?" glyphs
       },
       //
+      // On-screen run / jump buttons on touch devices, in the levels' own
+      // inks: green-black disc and contours, a cream arrow with a warm grey
+      // shaded part, a faint slate glint on the rim.
+      //
+      touchControls: {
+        disc: PALETTE.gray0,
+        rim: PALETTE.gray0,
+        glint: PALETTE.slate3,
+        arrow: PALETTE.gray7,
+        arrowShade: PALETTE.gray6,
+        contour: PALETTE.gray0
+      },
+      //
       // DOM loader: the Forest chain-buoy stalk-eye lying on its side (same inks
       // as forestEyeFlower — red stalk, white berry, gray contour and pupil).
       //

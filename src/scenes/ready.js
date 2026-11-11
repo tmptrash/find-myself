@@ -45,8 +45,8 @@ const TOUCH_HINT = 'tap anywhere to start'
 //
 // Fixed pixel margin from the bottom edge (matches the moon's fixed-margin
 // corner anchoring) so the hint sits the same distance off the bottom at
-// any resolution. Recomputed by recomputeReadyLayout() from the live
-// k.height() — every `let` below this comment is resolution-derived and
+// any resolution. Recomputed by recomputeReadyLayout() from the laid-out
+// view height (VIEW_H) — every `let` below this comment is resolution-derived and
 // updated the same way, mirroring Forest's recomputeForestScreenLayout pattern.
 //
 const HINT_BOTTOM_MARGIN = 35
@@ -348,20 +348,18 @@ const TEXT_LINE_HEIGHT = 50
 const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
 let AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
 let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
-const DESC_FIRST_LINE_OFFSET = 40
 //
 // Short views (a phone in landscape shows ~560 world px top to bottom): the
-// hero is drawn at READY_COMPACT_HERO_SCALE round his feet, and the
-// description sits right under the ground strip (DESC_GROUND_GAP below it,
-// DESC_HINT_GAP above the hint), its type shrunk until its lines fit there.
+// scene is laid out in a view READY_VIEW_H world px tall (as on a desktop
+// window) and the whole scene tree is scaled down to the screen (the tree
+// root's scale, so screen-fixed pieces shrink too) — everything fits, at the
+// screen's full resolution. VIEW_W / VIEW_H are the laid-out view.
 //
 const READY_COMPACT_MAX_H = 700
-const READY_COMPACT_HERO_SCALE = 0.7
-const DESC_GROUND_GAP = 16
-const DESC_HINT_GAP = 12
-let HERO_DRAW_SCALE = 1
-let TEXT_SCALE = 1
-let DESC_FIRST_LINE_Y = DESCRIPTION_START_Y + DESC_FIRST_LINE_OFFSET
+const READY_VIEW_H = 900
+let VIEW_SCALE = 1
+let VIEW_W = CFG.visual.screen.width
+let VIEW_H = CFG.visual.screen.height
 //
 // Narrative body copy — cool teal-gray (ready.text) on the deep teal frame.
 //
@@ -375,9 +373,12 @@ let DESC_FIRST_LINE_Y = DESCRIPTION_START_Y + DESC_FIRST_LINE_OFFSET
  * @param {Object} k - Kaplay inst
  */
 function recomputeReadyLayout(k) {
-  recomputeMenuBgLayout(k.width(), k.height())
-  HINT_Y = k.height() - HINT_BOTTOM_MARGIN
-  FIREFLY_MIN_Y = FIREFLY_MIN_Y_RATIO * k.height()
+  VIEW_SCALE = k.height() < READY_COMPACT_MAX_H ? k.height() / READY_VIEW_H : 1
+  VIEW_W = Math.round(k.width() / VIEW_SCALE)
+  VIEW_H = Math.round(k.height() / VIEW_SCALE)
+  recomputeMenuBgLayout(VIEW_W, VIEW_H)
+  HINT_Y = VIEW_H - HINT_BOTTOM_MARGIN
+  FIREFLY_MIN_Y = FIREFLY_MIN_Y_RATIO * VIEW_H
   FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
   FIREFLY_MIN_X = FIREFLY_EDGE_INSET
   FIREFLY_MAX_X = MENU_BG_CANVAS_W - FIREFLY_EDGE_INSET
@@ -388,24 +389,21 @@ function recomputeReadyLayout(k) {
   TITLE_TEXT_X = CENTER_X
   AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
   DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
-  const compact = k.height() < READY_COMPACT_MAX_H
-  HERO_DRAW_SCALE = compact ? READY_COMPACT_HERO_SCALE : 1
-  TEXT_SCALE = compact ? compactTextScale() : 1
-  DESC_FIRST_LINE_Y = compact
-    ? Math.round(compactDescriptionTop() + TEXT_FONT_SIZE * TEXT_SCALE / 2)
-    : DESCRIPTION_START_Y + DESC_FIRST_LINE_OFFSET
 }
 //
-// Compact description: its lines between the ground strip and the hint, the
-// type shrunk (never grown) until they fit.
+// Scales the whole scene tree to the screen (see READY_VIEW_H); back to 1:1
+// when the scene is left (menu and the levels share this engine). The scale
+// component stays on the root once added — removing it would leave the
+// root's last transform in place.
 //
-function compactDescriptionTop() {
-  return MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT + DESC_GROUND_GAP
+function applyReadyViewScale(k) {
+  if (VIEW_SCALE === 1) return
+  setTreeRootScale(k, VIEW_SCALE)
+  k.onSceneLeave(() => setTreeRootScale(k, 1))
 }
-function compactTextScale() {
-  const bottom = HINT_Y - HINT_FONT_SIZE / 2 - DESC_HINT_GAP
-  const natural = (READY_DESC_LINES.length - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
-  return Math.min(1, (bottom - compactDescriptionTop()) / natural)
+function setTreeRootScale(k, scale) {
+  const root = k.getTreeRoot()
+  root.scale === undefined ? root.use(k.scale(scale)) : (root.scale = k.vec2(scale, scale))
 }
 
 export function sceneReady(k) {
@@ -416,6 +414,7 @@ export function sceneReady(k) {
     // from the live window size before anything below reads it.
     //
     recomputeReadyLayout(k)
+    applyReadyViewScale(k)
     //
     // Wait for @font-face fonts to finish loading before any canvas text sampling.
     //
@@ -437,7 +436,7 @@ export function sceneReady(k) {
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
     k.flyingWordsInstance = null
-    const centerX = k.width() / 2
+    const centerX = VIEW_W / 2
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     const spiderState = {
@@ -447,7 +446,7 @@ export function sceneReady(k) {
       eyeFinalFade: 0
     }
     const bgPlane = k.add([
-      k.rect(k.width(), k.height()),
+      k.rect(VIEW_W, VIEW_H),
       getColor(k, CFG.visual.colors.ready.background),
       k.pos(0, 0),
       k.fixed(),
@@ -578,7 +577,7 @@ export function sceneReady(k) {
         draw() {
           const op = spiderState.departureFade ?? 1
           if (op <= 0.001) return
-          drawForestFilmGrainWorldPatch(k, 0, 0, k.width(), k.height(), 0.14 * op)
+          drawForestFilmGrainWorldPatch(k, 0, 0, VIEW_W, VIEW_H, 0.14 * op)
         }
       }
     ])
@@ -618,8 +617,8 @@ function onDrawBg(k, spiderState) {
   k.drawSprite({
     sprite: READY_STATIC_SPRITE,
     pos: k.vec2(-READY_BG_EDGE_OVERSCAN, -READY_BG_EDGE_OVERSCAN),
-    width: k.width() + READY_BG_EDGE_OVERSCAN * 2,
-    height: k.height() + READY_BG_EDGE_OVERSCAN * 2,
+    width: VIEW_W + READY_BG_EDGE_OVERSCAN * 2,
+    height: VIEW_H + READY_BG_EDGE_OVERSCAN * 2,
     opacity: op
   })
 }
@@ -650,16 +649,16 @@ function buildReadyStaticSprite(k) {
   // Bottom description block — centred lines with a glow-style drop shadow
   // (single black copy offset right+down).
   //
-  ctx.font = `${TEXT_FONT_SIZE * TEXT_SCALE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
+  ctx.font = `${TEXT_FONT_SIZE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  let cursorY = DESC_FIRST_LINE_Y
+  let cursorY = DESCRIPTION_START_Y + 40
   for (const line of READY_DESC_LINES) {
     ctx.fillStyle = '#000000'
     ctx.fillText(line, CENTER_X + READY_TEXT_SHADOW_OFFSET, cursorY + READY_TEXT_SHADOW_OFFSET)
     ctx.fillStyle = CFG.visual.colors.ready.text
     ctx.fillText(line, CENTER_X, cursorY)
-    cursorY += TEXT_LINE_HEIGHT * TEXT_SCALE
+    cursorY += TEXT_LINE_HEIGHT
   }
   k.loadSprite(READY_STATIC_SPRITE, canvas)
   canvas.width = 0
@@ -775,8 +774,8 @@ function bakeReadyLetterShadowSprite(k, char) {
 // uses (re-entering the scene rebuilds the field).
 //
 function createStarField(k) {
-  const w = k.width()
-  const h = k.height()
+  const w = VIEW_W
+  const h = VIEW_H
   const stars = []
   //
   // Moon-zone repulsion: stars whose centre falls within
@@ -1219,7 +1218,7 @@ function updateReadyDepartureFade(k, runner, spiderState) {
     spiderState.eyeFinalFade = 0
     return
   }
-  const fadeEndX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
+  const fadeEndX = VIEW_W - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
   const span = fadeEndX - runner.heroDepartStartX
   if (span <= 0) return
   const progress = Math.min(1, ((runner.heroX - runner.heroDepartStartX) / span) * 1.65)
@@ -1306,7 +1305,7 @@ function updateHeroN(k, spider, state, sound, dt) {
       spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0 &&
         Sound.playStepSound(sound, HERO_N_STEP_SOUND_LEVEL)
     }
-    const lookLeftX = k.width() - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
+    const lookLeftX = VIEW_W - HERO_N_LOOK_LEFT_TRIGGER_MARGIN
     if (!spider.heroLookLeftDone && spider.heroX >= lookLeftX) {
       spider.heroPhase = 'lookLeft'
       spider.heroLookLeftDone = true
@@ -1339,7 +1338,7 @@ function updateHeroN(k, spider, state, sound, dt) {
       spider.heroRunFrame % (HERO_N_RUN_FRAME_COUNT / 2) === 0 &&
         Sound.playStepSound(sound, HERO_N_STEP_SOUND_LEVEL)
     }
-    spider.heroX >= k.width() + HERO_N_SPRITE_SIZE * 0.5 && (spider.heroGone = true)
+    spider.heroX >= VIEW_W + HERO_N_SPRITE_SIZE * 0.5 && (spider.heroGone = true)
     return
   }
 }
@@ -1372,18 +1371,6 @@ function startHeroNBurst(spider) {
 //
 function drawTitleHero(k, spider) {
   if (spider.heroGone) return
-  //
-  // Scaled round the point under his feet, so he stays on the ground.
-  //
-  const footY = spider.heroY + HERO_FEET_OFFSET_Y
-  k.pushTransform()
-  k.pushTranslate(k.vec2(spider.heroX, footY))
-  k.pushScale(k.vec2(HERO_DRAW_SCALE, HERO_DRAW_SCALE))
-  k.pushTranslate(k.vec2(-spider.heroX, -footY))
-  drawTitleHeroPose(k, spider)
-  k.popTransform()
-}
-function drawTitleHeroPose(k, spider) {
   const phase = spider.heroPhase
   if (phase === 'run' || phase === 'finalWalk' || phase === 'lookLeft') {
     drawTitleRunner(k, spider)

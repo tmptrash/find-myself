@@ -399,6 +399,14 @@ const PARALLAX_DRAW_CULL_PAD = 48
 //
 const PAR_COLUMN_W = 128
 //
+// A parallax layer spans the whole world plus its scroll padding (over
+// 6000 px) — wider than many mobile GPUs take as one texture (often 4096),
+// which leaves the texture empty and draws it black. Each layer is baked
+// into tiles this wide (whole columns, so column runs only split at tile
+// edges), safe on any WebGL GPU.
+//
+const PAR_TILE_W = PAR_COLUMN_W * 16
+//
 // Fully opaque alpha — rows below a near-row column's solid run hide every
 // farther layer, so those rows are trimmed from sky/far/mid draws.
 //
@@ -2717,9 +2725,26 @@ function bakeParallaxLayer(k, name, speed, maxScroll, horizBleed, worldY, worldH
   drawFn(ctx, pad)
   postFxCfg && applyParallaxPostFxToContext(ctx, canvasW, canvasH, postFxCfg)
   parallaxColumnBoundsMap(k).set(name, measureParallaxColumnBounds(canvas, name === PAR_LAYER_NEAR.color))
-  k.loadSprite(name, canvas)
+  loadParallaxTiles(k, name, canvas)
   canvas.width = 0
   canvas.height = 0
+}
+//
+// Loads a baked parallax canvas as PAR_TILE_W wide tile sprites.
+//
+function loadParallaxTiles(k, name, canvas) {
+  for (let i = 0; i * PAR_TILE_W < canvas.width; i++) {
+    const tile = document.createElement('canvas')
+    tile.width = Math.min(PAR_TILE_W, canvas.width - i * PAR_TILE_W)
+    tile.height = canvas.height
+    tile.getContext('2d').drawImage(canvas, -i * PAR_TILE_W, 0)
+    k.loadSprite(parallaxTileName(name, i), tile)
+    tile.width = 0
+    tile.height = 0
+  }
+}
+function parallaxTileName(name, index) {
+  return `${name}-${index}`
 }
 //
 // Column bounds registry for the live Kaplay instance (created on demand).
@@ -4280,18 +4305,30 @@ function drawParallaxColumns(k, slice, cols, sx0, sx1, yLimit) {
   drawParallaxColumnRun(k, slice, runX, sx1, runY0, runY1)
 }
 //
-// One sprite-space rectangle [x0, x1) × [y0, y1) of a parallax layer.
+// One sprite-space rectangle [x0, x1) × [y0, y1) of a parallax layer, cut
+// at its tiles' edges.
 //
 function drawParallaxColumnRun(k, slice, x0, x1, y0, y1) {
   if (x1 <= x0 || y1 <= y0) return
+  const last = Math.floor((x1 - 1) / PAR_TILE_W)
+  for (let t = Math.floor(x0 / PAR_TILE_W); t <= last; t++) {
+    const tileX = t * PAR_TILE_W
+    drawParallaxTileRun(k, slice, t, Math.max(x0, tileX) - tileX, Math.min(x1, tileX + PAR_TILE_W) - tileX, y0, y1)
+  }
+}
+//
+// One rectangle inside one tile (tile-space x0..x1).
+//
+function drawParallaxTileRun(k, slice, tile, x0, x1, y0, y1) {
   const w = x1 - x0
   const h = y1 - y0
+  const tileW = Math.min(PAR_TILE_W, slice.spriteW - tile * PAR_TILE_W)
   const opts = {
-    sprite: slice.sprite,
-    pos: k.vec2(slice.drawX + x0, slice.worldY + y0),
+    sprite: parallaxTileName(slice.sprite, tile),
+    pos: k.vec2(slice.drawX + tile * PAR_TILE_W + x0, slice.worldY + y0),
     width: w,
     height: h,
-    quad: { x: x0 / slice.spriteW, y: y0 / slice.worldH, w: w / slice.spriteW, h: h / slice.worldH },
+    quad: { x: x0 / tileW, y: y0 / slice.worldH, w: w / tileW, h: h / slice.worldH },
     anchor: 'topleft'
   }
   slice.opacity < 0.999 && (opts.opacity = slice.opacity)
@@ -6388,7 +6425,7 @@ function onBranchTrampolineBounce(inst) {
 // True when parallax static layer exists from prewarm.
 //
 function forestParallaxSpritesPrewarmed(k) {
-  return Boolean(k.getSprite(BG_STATIC_COLOR) && k.getSprite(BG_PAR_TREE1_COLOR))
+  return Boolean(k.getSprite(BG_STATIC_COLOR) && k.getSprite(parallaxTileName(BG_PAR_TREE1_COLOR, 0)))
 }
 //
 // Soft right-ground opacity: opened land is solid, the unknown fades out.

@@ -15,7 +15,7 @@ import { bakeForestLakeStonePile } from '../sections/forest/utils/forest-stones.
 import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
-import { FOREST_PAL } from '../sections/forest/utils/forest-palette.js'
+import { FOREST_PAL, getForestLightRgb } from '../sections/forest/utils/forest-palette.js'
 import * as Lake from '../sections/forest/utils/forest-lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
@@ -188,6 +188,7 @@ const MENU_WATER_FLOWER_Z = 2.5
 const MENU_FRUIT_Z = 3
 const MENU_BUG_Z = 3.5
 const MENU_MIDGE_Z = 4
+const MENU_MIDGE_LIGHT = 'bright'
 //
 // Valera the propeller bud flies to and fro between the two big trees'
 // branches, resting MENU_BUD_REST seconds on each: on the left one
@@ -1267,6 +1268,10 @@ function createMenuForestLife(inst) {
   const orchard = { k, treeFruitSpots: [], treeApples: TreeFruit.createForestTreeApples(hangs, leftTreeApplePicture(k)) }
   TreeFruit.restoreForestTreeApples(orchard, MENU_TREE_APPLES)
   const midges = createForestMidges(k, groundY, k.width(), { treeX: appleTreeX, lakeX2: lake.x2, lakeOnly: true, z: MENU_MIDGE_Z })
+  //
+  // The level's warm gold (left unset, midges fall back to the void green).
+  //
+  midges.midgeRgb = getForestLightRgb(MENU_MIDGE_LIGHT)
   const flower = WaterFlower.create({
     k,
     x: WaterFlower.footXUnderHeart(appleTreeX) + Math.round(MENU_WATER_FLOWER_SHIFT * scale),

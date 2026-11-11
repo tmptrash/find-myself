@@ -146,13 +146,14 @@ export function create(k) {
   const rightX = leftX + ARROW_CENTER_GAP
   const jumpX = k.width() - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
   //
-  // Fresh scene mount — clear stale fingers; hero re-registers jump on spawn
+  // Fresh scene mount — clear stale fingers. The jump handler stays: levels
+  // create their hero (which registers it) before these controls, and every
+  // new hero registers its own.
   //
   movementSlots.clear()
   virtualLeft.active = false
   virtualRight.active = false
   jumpPulse = false
-  jumpHandler = null
   activeInst = {
     k,
     buttons: [],

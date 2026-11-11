@@ -26,10 +26,10 @@ let touchMoveHook = null
 let mouseDownHook = null
 let mouseUpHook = null
 //
-// On-screen control layout (50% larger than base, wide gap between left/right)
+// On-screen control layout (50% larger than base, a clear gap between left/right)
 //
 const ARROW_SIZE = 108
-const ARROW_CENTER_GAP = 260
+const ARROW_CENTER_GAP = 190
 const ARROW_MARGIN_X = 36
 const JUMP_ARROW_MARGIN_X = 36
 const CIRCLE_RADIUS = 62
@@ -44,7 +44,7 @@ const CONTROL_BOTTOM_MARGIN = 36
 // layout — sizes, margins, gaps and hit areas — shrinks by width /
 // CONTROLS_FULL_W, still along the bottom edge.
 //
-const CONTROLS_FULL_W = 640
+const CONTROLS_FULL_W = 570
 //
 // Held upright (taller than wide) the run arrows stand side by side at the
 // left, ARROW_PAIR_GAP_UPRIGHT apart, the jump button still at the right;

@@ -50,6 +50,13 @@ const REF_HEIGHT = 1080
 //
 const GROUND_Y_FRAC = 0.755
 const MENU_WORLD_X0 = 430
+//
+// Held upright the screen shows far less of the world across, nearly all of
+// it lake: the left edge moves east (never west of MENU_WORLD_X0) so the lake
+// fills only UPRIGHT_LAKE_SHARE of the width and more of the land east of it
+// shows.
+//
+const UPRIGHT_LAKE_SHARE = 0.3
 const LEVEL_LAKE_X1 = 100
 const LEVEL_LAKE_X2_CORE = 794
 const LEVEL_LEFT_TREE_X = 960
@@ -246,7 +253,7 @@ export async function loadForestMenuBackdropArt() {
  */
 export function forestMenuLayout(width, height) {
   const groundY = Math.round(height * GROUND_Y_FRAC)
-  const toX = menuWorldToScreenX(height)
+  const toX = menuWorldToScreenX(width, height)
   const x1 = toX(LEVEL_LAKE_X1)
   const x2Core = toX(LEVEL_LAKE_X2_CORE)
   const scale = height / REF_HEIGHT
@@ -308,7 +315,7 @@ function paintFrontScene(ctx, width, height, layout, scale) {
   const rng = createSeededRandom(LAYOUT_SEED)
   paintLayeredEarthBand(ctx, groundEarthLayersColor(), 0, groundY, width, height - groundY)
   paintBuriedDecor(ctx, width, height, layout, scale)
-  const toX = menuWorldToScreenX(height)
+  const toX = menuWorldToScreenX(width, height)
   paintCave(ctx, width, groundY, toX)
   paintForestFloorHill(ctx, toX(LEVEL_WORLD_W), groundY, scale)
   paintGroundStones(ctx, toX, groundY, scale)
@@ -346,7 +353,7 @@ function paintBuriedDecor(ctx, width, height, layout, scale) {
     surfaceY: layout.groundY,
     bandH: height - layout.groundY,
     bottomY: height,
-    treeX: menuWorldToScreenX(height)(LEVEL_LEFT_TREE_X),
+    treeX: menuWorldToScreenX(width, height)(LEVEL_LEFT_TREE_X),
     treeClearHalf: BURIED_TREE_CLEAR_HALF * scale,
     stones: forestBuriedStones()
   })
@@ -487,12 +494,14 @@ function paintTrampMushroom(ctx, mushroom, x, groundY, width, shadow) {
   TrampMushroom.paint(ctx, mushroom, x, groundY, w)
 }
 //
-// Level world X → screen X at the layout scale for a screen height, the
-// east bank shifted clear of the burrow.
+// Level world X → screen X at the layout scale for a screen size (the left
+// edge moved east held upright, see UPRIGHT_LAKE_SHARE), the east bank
+// shifted clear of the burrow.
 //
-function menuWorldToScreenX(height) {
+function menuWorldToScreenX(width, height) {
   const s = height / REF_HEIGHT
-  const scaled = wx => (wx - MENU_WORLD_X0) * s
+  const x0 = height > width ? Math.max(MENU_WORLD_X0, LEVEL_LAKE_X2_CORE - width / s * UPRIGHT_LAKE_SHARE) : MENU_WORLD_X0
+  const scaled = wx => (wx - x0) * s
   const lakeEnd = scaled(LEVEL_LAKE_X2_CORE) + Lake.LAKE_SHORE_EXTEND_PX
   const shift = Math.max(0, lakeEnd + BUG_HOLE_LAKE_GAP + BUG_HOLE_HALF_W - scaled(LEVEL_BUG_HOLE_X))
   return wx => Math.round(scaled(wx) + (wx > LEVEL_LAKE_X2_CORE ? shift : 0))

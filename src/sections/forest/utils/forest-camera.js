@@ -58,7 +58,10 @@ export function create(cfg) {
 /**
  * Where the playfield shows on screen: the whole screen on an axis where the
  * playfield is larger than the screen, centred (whole pixels) where it is
- * smaller.
+ * smaller — except a screen narrower than the playfield and taller than it
+ * (a phone held upright): there it stands on the screen's bottom edge, so
+ * the void is only above the sky and the on-screen buttons stay over the
+ * ground.
  * @param {number} screenW - Live screen width
  * @param {number} screenH - Live screen height
  * @param {number} playW - Playfield width (world px)
@@ -67,7 +70,8 @@ export function create(cfg) {
  */
 export function playfieldScreenRect(screenW, screenH, playW, playH) {
   const x1 = Math.max(0, Math.round((screenW - playW) / 2))
-  const y1 = Math.max(0, Math.round((screenH - playH) / 2))
+  const slack = Math.max(0, screenH - playH)
+  const y1 = screenW < playW ? slack : Math.round(slack / 2)
   return { x1, y1, x2: x1 + Math.min(screenW, playW), y2: y1 + Math.min(screenH, playH) }
 }
 

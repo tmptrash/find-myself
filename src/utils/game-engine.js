@@ -39,17 +39,18 @@ export const RESOLUTION_MODE = {
 const KAPLAY_INIT_MAX_ATTEMPTS = 5
 //
 // Phones in landscape: a native-resolution level keeps 1 world px per CSS px,
-// and a phone's window is only ~350-450 CSS px tall, so the hero fills a
-// fifth of the screen. On a touch device whose window is shorter than
+// and a phone's window is only ~350-450 CSS px tall and changes with the
+// browser bar and fullscreen. On a touch device whose window is shorter than
 // SMALL_VIEW_MAX_H, the world is scaled (Kaplay `scale`) so the window shows
-// SMALL_VIEW_WORLD_H world px top to bottom, with or without fullscreen. The
+// SMALL_VIEW_WORLD_H world px top to bottom, with or without fullscreen (the
+// hero keeps one size on screen). The
 // canvas buffer gets 1 / scale px per CSS px (`pixelDensity`), so one world
 // px is still one buffer px and hairline art stays whole. A window resize
 // reboots the engine (window-resize.js), so the choice follows rotation and
 // fullscreen.
 //
 const SMALL_VIEW_MAX_H = 600
-const SMALL_VIEW_WORLD_H = 900
+const SMALL_VIEW_WORLD_H = 450
 const KAPLAY_INIT_RETRY_BASE_MS = 200
 const KAPLAY_INIT_RETRY_STEP_MS = 400
 //

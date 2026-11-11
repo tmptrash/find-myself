@@ -1,5 +1,7 @@
 import { CFG } from '../cfg.js'
 import { isTouchDevice } from './touch-input.js'
+import { parseHex } from './helper.js'
+import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 
 //
 // Top-left HUD buttons for touch devices: fullscreen toggle + Esc shortcut.
@@ -19,12 +21,20 @@ const FULLSCREEN_BTN_WIDTH = 44
 const FULLSCREEN_BTN_FONT_SIZE = 18
 const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 const ESC_BTN_FONT_SIZE = 16
-const BTN_BG = 'rgba(26, 26, 26, 0.92)'
-const BTN_COLOR = '#FFFFFF'
-const BTN_BORDER = '2px solid rgba(58, 58, 58, 0.95)'
-const BTN_PRESSED_BG = 'rgba(26, 26, 26, 0.92)'
-const BTN_PRESSED_COLOR = '#B8E4FF'
-const BTN_PRESSED_BORDER = '2px solid rgba(72, 130, 168, 0.95)'
+//
+// The levels' look, as the on-screen run / jump buttons (cfg
+// colors.touchControls): a see-through green-black face with film grain
+// (a small baked tile), a dark rim, a cream label ringed by the dark
+// contour; pressed, the rim lights up in the slate glint and the label
+// shades. The whole button shows at BTN_OPACITY.
+//
+const BTN_OPACITY = 0.8
+const BTN_FACE_ALPHA = 0.6
+const BTN_BORDER_W = 2
+const BTN_LABEL_CONTOUR_PX = 1
+const BTN_GRAIN_TILE = 64
+const BTN_GRAIN_SEED = 9200
+let grainTileUrl = null
 const FULLSCREEN_BTN_LABEL = '[ ]'
 const ESC_BTN_LABEL = 'Esc'
 
@@ -92,6 +102,10 @@ function createHudButton(opts) {
     `font-size:${fontSize}px`,
     `font-family:${CFG.visual.fonts.regularFull.replace(/'/g, '')}`,
     'border-radius:8px',
+    `opacity:${BTN_OPACITY}`,
+    'background-color:transparent',
+    `background-image:url(${buttonGrainTile()})`,
+    `text-shadow:${labelContour()}`,
     'cursor:pointer',
     'padding:0',
     'line-height:1',
@@ -136,21 +150,49 @@ function createHudButton(opts) {
 }
 
 //
-// Pressed HUD button styling (dark fill, light blue label and outline)
+// Pressed HUD button styling (shaded label, rim lit in the slate glint)
 //
 function applyHudButtonPressed(btn) {
-  btn.style.backgroundColor = BTN_PRESSED_BG
-  btn.style.color = BTN_PRESSED_COLOR
-  btn.style.border = BTN_PRESSED_BORDER
+  const colors = CFG.visual.colors.touchControls
+  btn.style.color = colors.arrowShade
+  btn.style.border = `${BTN_BORDER_W}px solid ${colors.glint}`
 }
 
 //
-// Default HUD button styling — dark fill, light label, light outline
+// Default HUD button styling — cream label, dark rim
 //
 function applyHudButtonReleased(btn) {
-  btn.style.backgroundColor = BTN_BG
-  btn.style.color = BTN_COLOR
-  btn.style.border = BTN_BORDER
+  const colors = CFG.visual.colors.touchControls
+  btn.style.color = colors.arrow
+  btn.style.border = `${BTN_BORDER_W}px solid ${colors.rim}`
+}
+//
+// The button face: the disc colour at BTN_FACE_ALPHA with film grain, baked
+// once into a repeating tile.
+//
+function buttonGrainTile() {
+  if (grainTileUrl) return grainTileUrl
+  const canvas = document.createElement('canvas')
+  canvas.width = BTN_GRAIN_TILE
+  canvas.height = BTN_GRAIN_TILE
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = cssRgba(CFG.visual.colors.touchControls.disc, BTN_FACE_ALPHA)
+  ctx.fillRect(0, 0, BTN_GRAIN_TILE, BTN_GRAIN_TILE)
+  applyForestFilmGrainToCanvas(canvas, BTN_GRAIN_SEED)
+  grainTileUrl = canvas.toDataURL()
+  return grainTileUrl
+}
+//
+// A dark contour round the label: one shadow per side.
+//
+function labelContour() {
+  const c = CFG.visual.colors.touchControls.contour
+  const d = BTN_LABEL_CONTOUR_PX
+  return [[d, 0], [-d, 0], [0, d], [0, -d]].map(([x, y]) => `${x}px ${y}px 0 ${c}`).join(',')
+}
+function cssRgba(hex, alpha) {
+  const [r, g, b] = parseHex(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 //

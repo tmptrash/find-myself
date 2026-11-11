@@ -302,6 +302,7 @@ const MENU_COMPLETE_NEXT_LESSON = {
 }
 const MENU_SCENE_GUARD_DELAY = 0.2
 const MENU_PREWARM_YIELD_FRAMES = 2
+const menuPrewarmedSize = new WeakMap()
 const MENU_LEAVE_BG_HEX = '#1A1A1A'
 const MENU_HUSH_INTERVAL_MS = 200
 const MENU_HUSH_DURATION_MS = 8000
@@ -423,6 +424,7 @@ export function sceneMenu(k) {
  * @returns {Promise<void>} Resolves when every bake is loaded into k
  */
 export async function prewarmMenuAssets(k) {
+  const size = menuBakeSize(k)
   recomputeMenuBgLayout(k.width(), k.height())
   await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt(), loadMenuForestLife(k)])
   buildMenuNightSprite(k)
@@ -433,6 +435,22 @@ export async function prewarmMenuAssets(k) {
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   await document.fonts?.load?.(`${MENU_HINT_SIZE}px ${MENU_TEXT_FONT}`)
   loadMenuAssets(k)
+  menuPrewarmedSize.set(k, size)
+}
+
+/**
+ * Whether the menu's bakes are ready for this live k at its current screen
+ * size (the window may have changed since — a tablet's browser bar, the
+ * fullscreen button — and then the menu would bake everything again while
+ * entering, freezing the screen).
+ * @param {Object} k - Kaplay inst
+ * @returns {boolean}
+ */
+export function isMenuPrewarmed(k) {
+  return menuPrewarmedSize.get(k) === menuBakeSize(k)
+}
+function menuBakeSize(k) {
+  return `${Math.round(k.width())}x${Math.round(k.height())}`
 }
 
 //

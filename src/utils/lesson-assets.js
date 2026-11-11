@@ -3,6 +3,7 @@ import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { waitForForestLevel0Bootstrap } from '../sections/forest/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
+import { isMenuPrewarmed, prewarmMenuAssets } from '../scenes/menu.js'
 
 const FOREST_LEVEL0_SCENE = 'lesson-forest.0'
 const FOREST_SCENE_PREFIX = 'lesson-forest'
@@ -156,7 +157,7 @@ export function goAfterPreparingAssets(k, sceneName, afterGo) {
  * Navigate to the menu scene, releasing current pack.
  * @param {Object} k
  */
-export function goToMenuAfterAssets(k) {
+export async function goToMenuAfterAssets(k) {
   //
   // Only pre-show the loader when an actual engine swap is coming — menu
   // shares the native engine with Forest and Cave, so leaving one of those
@@ -166,13 +167,35 @@ export function goToMenuAfterAssets(k) {
   // never hide, freezing the screen.
   //
   const modeChanging = resolutionModeForScene('menu') !== getActiveResolutionMode()
-  if (modeChanging) {
+  //
+  // On the same engine, a menu not baked for the current screen size (the
+  // window changed since boot) is baked again under the loader first — else
+  // its bakes run inside the scene change and the screen freezes for seconds.
+  //
+  const rebake = !modeChanging && !isMenuPrewarmed(k)
+  if (modeChanging || rebake) {
     BootLoader.showLoader()
     BootLoader.setLoaderBarPct(0)
   }
-  return prepareSceneAssetsThenEnterScene(k, 'menu', undefined, {
+  rebake && await rebakeMenu(k)
+  return prepareSceneAssetsThenEnterScene(k, 'menu', rebake ? hideLoaderOnceShown : undefined, {
     retainLoader: modeChanging
   })
+}
+//
+// Lets the loader paint, then bakes the menu for the current size.
+//
+async function rebakeMenu(k) {
+  await BootLoader.yieldForGpu(LOADER_YIELD_FRAMES)
+  await prewarmMenuAssets(k)
+  BootLoader.setLoaderBarPct(LOADER_DONE_BAR_PCT)
+}
+//
+// Hides the loader once the entered scene has drawn its first frames.
+//
+async function hideLoaderOnceShown() {
+  await BootLoader.yieldForGpu(LOADER_YIELD_FRAMES)
+  BootLoader.hideLoader()
 }
 //
 // Scene name → asset pack id.

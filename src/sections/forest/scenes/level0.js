@@ -285,6 +285,14 @@ const LEFT_TREE_ROOT_HALF = 180
 //
 const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_FRONT_Z
 //
+// The centipede, the stick on its back and the hero riding it are one group
+// among the level's objects: the stick draws just over the centipede's
+// current layer and the rider just over the stick, wherever the centipede
+// switches layer (in front of the left tree or behind the hero's plane).
+//
+const PREDATOR_STICK_DZ = 0.01
+const PREDATOR_RIDER_DZ = 0.02
+//
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
 //
@@ -2469,7 +2477,7 @@ function createForestCloudLayer(k, clouds) {
   k.add([k.z(FOREST_CLOUD_Z), { draw() { Clouds.onDraw(clouds) } }])
 }
 function createForestHorizFallTwigLayer(k, inst) {
-  k.add([
+  inst.predatorStickLayer = k.add([
     k.z(HorizFallTwig.HORIZ_FALL_TWIG_DRAW_Z),
     {
       draw() {
@@ -7266,6 +7274,7 @@ function syncForestBranchJumpReady(inst, char, grounded) {
 // Draw the hero above log platforms while bouncing on a trampoline.
 //
 function syncHeroTrampDrawOrder(inst) {
+  syncPredatorStickDrawOrder(inst)
   const ch = inst.heroInst?.character
   if (!ch) return
   if (inst.drowning) {
@@ -7295,19 +7304,27 @@ function syncHeroTrampDrawOrder(inst) {
   !onBranch && rightInFront &&
     (targetZ = CFG.visual.zIndex.player + 2)
   //
-  // On the centipede's stick he passes behind both trampoline caps.
+  // On the centipede's stick he rides in its group, just over the stick
+  // (behind both trampoline caps, like the centipede itself).
   //
-  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, ch)) {
-    const nearRight = inst.trampState && Math.abs(ch.pos.x - inst.trampState.x) < TRAMP_NEAR_X
-    const nearBranch = inst.branchTrampState && Math.abs(ch.pos.x - inst.branchTrampState.x) < TRAMP_NEAR_X
-    nearRight && (targetZ = Math.min(targetZ, CFG.visual.zIndex.player))
-    nearBranch && (targetZ = Math.min(targetZ, CFG.visual.zIndex.platforms + 1))
-  }
+  const predatorZ = inst.predator?.obj?.z
+  predatorZ !== undefined && HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, ch) &&
+    (targetZ = predatorZ + PREDATOR_RIDER_DZ)
   const footY = ch.pos.y + SURFACE_DETECT_Y
   !inst.pitCaveHeroForeground &&
     isHeroInsideForestPitCave(inst, ch.pos.x, ch.pos.y, footY) &&
     (targetZ = CFG.visual.zIndex.player + 24)
   ch.z !== targetZ && (ch.z = targetZ)
+}
+//
+// The stick on the centipede's back keeps to the centipede's current layer.
+//
+function syncPredatorStickDrawOrder(inst) {
+  const layer = inst.predatorStickLayer
+  const predatorZ = inst.predator?.obj?.z
+  if (!layer || predatorZ === undefined) return
+  const z = predatorZ + PREDATOR_STICK_DZ
+  layer.z !== z && (layer.z = z)
 }
 //
 // Pit cave mushroom trampoline — same exit as the old ground portal: the hero

@@ -1,4 +1,6 @@
 import { CFG } from '../cfg.js'
+import { getRGB } from './helper.js'
+import { isTouchDevice } from './touch-input.js'
 
 //
 // HUD typography for the FPS counter and level timer.
@@ -10,6 +12,12 @@ const HUD_FONT_SIZE = 28
 const HUD_GAP = 18
 const HUD_GAP_AFTER_FPS = 28
 const HUD_OUTLINE_OFFSET = 1
+//
+// The readout is drawn faint on desktop; on phones and tablets it is solid
+// black (cfg fpsHudTextTouch), so fully opaque.
+//
+const HUD_OPACITY = 0.7
+const HUD_TOUCH_OPACITY = 1
 //
 // Glyphs the FPS / timer labels can show. Baked once per engine so a
 // once-per-second label change copies cells instead of re-grading pixels.
@@ -42,7 +50,7 @@ export function create(config) {
   // section indicator inactive letters and the top-right scoreboard so
   // every quiet HUD slot reads as one consistent colour.
   //
-  const HUD_TEXT_GREY = textColor || k.rgb(176, 176, 176)
+  const HUD_TEXT_GREY = isTouchDevice() ? getRGB(k, CFG.visual.colors.palette.fpsHudTextTouch) : textColor || k.rgb(176, 176, 176)
   const HUD_OUTLINE = shadow ? outlineColor || k.rgb(0, 0, 0) : null
   const fpsText = createOutlinedHudText(k, 'FPS: 30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //
@@ -198,7 +206,7 @@ function createOutlinedHudText(k, text, font, fontSize, color, topY, outlineColo
     k.anchor('center'),
     k.z(CFG.visual.zIndex.ui),
     k.color(outlineColor),
-    k.opacity(0.7)
+    k.opacity(hudOpacity())
   ]))
   const main = k.add([
     k.text(text, { size: fontSize, font }),
@@ -206,7 +214,7 @@ function createOutlinedHudText(k, text, font, fontSize, color, topY, outlineColo
     k.anchor('center'),
     k.z(CFG.visual.zIndex.ui + 1),
     k.color(color),
-    k.opacity(0.7)
+    k.opacity(hudOpacity())
   ])
   return { main, outlineNodes }
 }
@@ -313,7 +321,7 @@ function rebuildBakedHudTextNode(node, text, centerX) {
   canvas.height = 0
   const prevMain = node.main
   const wasFixed = prevMain?.fixed
-  const wasOpacity = prevMain?.opacity ?? 0.7
+  const wasOpacity = prevMain?.opacity ?? hudOpacity()
   prevMain?.exists?.() && k.destroy(prevMain)
   node.main = k.add([
     k.sprite(spriteName),
@@ -358,6 +366,9 @@ function bakeFpsHudTextCanvas(text, fontFamily, fontSize, fillColor, outlineColo
   ctx.fillStyle = rgbToCss(fillColor)
   ctx.fillText(text, cx, cy)
   return canvas
+}
+function hudOpacity() {
+  return isTouchDevice() ? HUD_TOUCH_OPACITY : HUD_OPACITY
 }
 //
 // Stable hash for FPS HUD sprite names.

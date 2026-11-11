@@ -255,6 +255,11 @@ export const CFG = {
         //
         fpsHudText: PALETTE.gray2,
         //
+        // The same readout on phones and tablets: black, readable over the
+        // bright sky behind the corner buttons.
+        //
+        fpsHudTextTouch: "#000000",
+        //
         // Forest sky — a bright day: light blue overhead, pale blue-mint in
         // the middle, sunlit pale yellow at the horizon; dawn gold lives in
         // forestSkyDawnGlow and the lower sky band only.

@@ -334,6 +334,17 @@ export function stopIndex(inst) {
 }
 
 /**
+ * True while the bud is taking off, flying, landing or settling its roots
+ * (not while it sits or is gone).
+ * @param {Object} inst - Bud inst
+ * @returns {boolean}
+ */
+export function isMoving(inst) {
+  return inst.state === STATES.ROOTS_IN || inst.state === STATES.FLY ||
+    inst.state === STATES.LAND || inst.state === STATES.ROOTS_OUT
+}
+
+/**
  * Where the bud's head is in the world (for others to look at), written into
  * out; null while it is hidden.
  * @param {Object} inst - Bud inst

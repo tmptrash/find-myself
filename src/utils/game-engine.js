@@ -58,15 +58,6 @@ const SMALL_VIEW_MAX_H = 600
 const SMALL_VIEW_MIN_H = 200
 const SMALL_VIEW_WORLD_H = 562
 //
-// A short window (browser bar showing) is wider for its height than the
-// fullscreen one, so at the same world height it would show more world across
-// and need a wider canvas buffer: about a fifth more pixels to fill and more
-// decor to draw, enough to drop a 120 FPS phone to ~70. The world never shows
-// more than this many px across; the scale rises instead (the hero ends up
-// about as big as in fullscreen, a little less of the level shows above and below).
-//
-const SMALL_VIEW_MAX_WORLD_W = 1250
-//
 // Held upright, the screen never shows more world px top to bottom than the
 // forest playfield is tall, so the level fills the whole screen (no void
 // band over its sky); the hero comes out a little bigger than in landscape.
@@ -403,7 +394,7 @@ function nativeWorldScale() {
   const h = window.innerHeight
   const side = Math.min(w, h)
   if (!TouchInput.isTouchDevice() || side >= SMALL_VIEW_MAX_H) return 1
-  const scale = Math.max(Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H, w / SMALL_VIEW_MAX_WORLD_W)
+  const scale = Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H
   return h > w ? Math.max(scale, h / UPRIGHT_MAX_WORLD_H) : scale
 }
 /**

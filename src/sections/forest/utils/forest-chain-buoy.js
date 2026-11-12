@@ -231,13 +231,14 @@ export function create(cfg) {
  * @param {number} heroY - Hero world Y
  * @param {number} dt - Frame delta
  * @param {Array<{x: number, y: number}>} [sights=[]] - Other things worth watching (world points)
+ * @param {boolean} [seesHero=true] - False: the eyes do not look at the hero (he is unseen)
  */
-export function onUpdate(inst, heroX, heroY, dt, sights = []) {
+export function onUpdate(inst, heroX, heroY, dt, sights = [], seesHero = true) {
   inst.time += dt
   const prevHeroX = inst.prevHeroX ?? heroX
   inst.buoys.forEach(buoy => {
     updateBuoyBlink(buoy, dt)
-    updateBuoyGaze(inst, buoy, heroX, heroY, sights, dt)
+    updateBuoyGaze(inst, buoy, seesHero ? heroX : null, heroY, sights, dt)
     updateBuoyJolt(buoy, prevHeroX, heroX, heroY, dt)
   })
   inst.prevHeroX = heroX

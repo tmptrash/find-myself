@@ -71,6 +71,7 @@ let installHintTimer = null
 let fullscreenBtn = null
 let escBtn = null
 let kaplayRef = null
+let backVisible = true
 
 /**
  * Creates top-left fullscreen + Esc shortcut buttons on touch devices
@@ -110,9 +111,20 @@ export function createFullscreenButton(k) {
       top: standalone ? BTN_TOP : BTN_TOP + BTN_HEIGHT + BTN_GAP,
       onClick: () => dispatchEscape(kaplayRef)
     })
+    setBackVisible(backVisible)
   } else if (escBtn) {
     applyHudButtonReleased(escBtn)
   }
+}
+
+/**
+ * Shows or hides the Back button (a scene it leads nowhere from hides it).
+ * Fullscreen stays. Safe before the button exists: the choice is applied on creation.
+ * @param {boolean} visible - True to show
+ */
+export function setBackVisible(visible) {
+  backVisible = visible
+  escBtn && (escBtn.style.display = visible ? '' : 'none')
 }
 
 /**

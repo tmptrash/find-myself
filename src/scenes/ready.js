@@ -4,6 +4,7 @@ import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
+import * as Fullscreen from '../utils/fullscreen.js'
 import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero, createStandLegs, drawStandingHero } from '../components/hero.js'
 import { renderHintWithEnter, renderHintLine } from '../utils/touch-tap-button.js'
 import { isTouchDevice } from '../utils/touch-input.js'
@@ -451,6 +452,11 @@ export function sceneReady(k) {
     loadHeroSprites(k)
     CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
+    //
+    // Ready is the first screen: Back would lead nowhere
+    //
+    Fullscreen.setBackVisible(false)
+    k.onSceneLeave(() => Fullscreen.setBackVisible(true))
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())

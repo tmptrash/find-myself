@@ -36,12 +36,23 @@ const LAKE_WAVE_FREQ = 0.85
 const LAKE_WAVE_AMP = 3
 const LAKE_WAVE_PHASE_SCALE = 4
 const LAKE_WAVE_SECOND_AMP = 1.2
-const LAKE_WAVE_SECOND_FREQ = 1.6
+const LAKE_WAVE_SECOND_FREQ = 1.7
 //
 // Baked lake surface frames (painted water + grain), drawn untinted.
 //
-const LAKE_BAKE_GEOMETRY_VERSION = 15
-const LAKE_BAKE_FRAME_COUNT = 24
+const LAKE_BAKE_GEOMETRY_VERSION = 16
+//
+// Only the band under the surface moves (waves, ripples, reflections), so each
+// frame bakes just that band and the many frames stay cheap; the water below
+// it is one still sprite. The band is deeper than the longest reflection.
+// All wave frequencies are whole multiples of LAKE_WAVE_FREQ, so the cycle
+// loops without a jump.
+//
+const LAKE_BAKE_FRAME_COUNT = 120
+const LAKE_DYNAMIC_BAND_PX = 56
+const LAKE_STILL_SPRITE_SUFFIX = 'still'
+const LAKE_STILL_SEED = 5000
+const LAKE_FRAME_SEED = 5001
 export const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
 //
 // Lake paint: every layer is a low-opacity palette swatch over the base
@@ -70,10 +81,10 @@ const LAKE_SURFACE_SECOND_LINE_ALPHA = 0.55
 // Inner surface line uses its own wave frequencies and a time lag so the two
 // bright lines and the band between them do not stay parallel.
 //
-const LAKE_SURFACE_INNER_WAVE_FREQ = 1.12
+const LAKE_SURFACE_INNER_WAVE_FREQ = 0.85
 const LAKE_SURFACE_INNER_WAVE_AMP = 2.6
 const LAKE_SURFACE_INNER_WAVE_PHASE_SCALE = 3.4
-const LAKE_SURFACE_INNER_SECOND_FREQ = 2.05
+const LAKE_SURFACE_INNER_SECOND_FREQ = 1.7
 const LAKE_SURFACE_INNER_SECOND_AMP = 1.35
 const LAKE_SURFACE_INNER_TIME_LAG = 0.48
 const LAKE_BED_SEGMENTS = 160
@@ -274,6 +285,7 @@ export function create(cfg) {
   const lake = bakeLakeWaterSprites(k, cfg)
   lake.bedStones = cfg.bedStones ?? null
   lake.drawPos = k.vec2(lake.x1, lake.originY)
+  lake.stillPos = k.vec2(lake.x1, lake.originY + LAKE_DYNAMIC_BAND_PX)
   bakeLakeBedSprite(k, lake)
   lake.algae = buildLakeAlgae(k, lake)
   return lake
@@ -352,7 +364,14 @@ export function drawFill(k, lake, opacity = 1) {
     sprite: fillFrameSprite(k, lake),
     pos: lake.drawPos,
     width: lake.canvasW,
-    height: lake.canvasH,
+    height: LAKE_DYNAMIC_BAND_PX,
+    opacity
+  })
+  k.drawSprite({
+    sprite: lake.waterSpritePrefix + LAKE_STILL_SPRITE_SUFFIX,
+    pos: lake.stillPos,
+    width: lake.canvasW,
+    height: lake.canvasH - LAKE_DYNAMIC_BAND_PX,
     opacity
   })
 }
@@ -479,53 +498,82 @@ function bakeLakeWaterSprites(k, cfg) {
   // Frames already loaded on this k (menu revisit) are reused as they are.
   //
   if (k.getSprite(waterSpritePrefix + 0)) return geom
+  bakeLakeStillSprite(k, geom)
   for (let f = 0; f < LAKE_BAKE_FRAME_COUNT; f++) {
-    const time = (f / LAKE_BAKE_FRAME_COUNT) * LAKE_BAKE_CYCLE
     const canvas = document.createElement('canvas')
     canvas.width = canvasW
-    canvas.height = canvasH
-    const ctx = canvas.getContext('2d')
-    //
-    // The water starts at the island's shore: further left the island's rocks
-    // hold the water line, so no surface strip runs across them.
-    //
-    const waterSpan = bakeSpan - islandShoreLocalX
-    const surfaceTop = buildLakeSurfaceLinePts(geom, time, waveOffsetAt)
-    const surfaceInner = buildLakeSurfaceLinePts(geom, time + LAKE_SURFACE_INNER_TIME_LAG, lakeSurfaceInnerWaveOffsetAt)
-    const pts = [...surfaceTop]
-    for (let i = LAKE_SEGMENTS; i >= 0; i--) {
-      const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-      pts.push([localX, bottomLocalY(geom, localX)])
-    }
-    const bodyY = topMargin + LAKE_OPAQUE_SKIN_PX
-    const body = ctx.createLinearGradient(0, bodyY, 0, bodyY + LAKE_BODY_FADE_PX)
-    body.addColorStop(0, FOREST_PAL.water)
-    body.addColorStop(1, hexWithAlpha(FOREST_PAL.water, LAKE_BODY_ALPHA))
-    ctx.fillStyle = body
-    ctx.beginPath()
-    ctx.moveTo(pts[0][0], pts[0][1])
-    for (let p = 1; p < pts.length; p++) {
-      ctx.lineTo(pts[p][0], pts[p][1])
-    }
-    ctx.closePath()
-    ctx.fill()
-    ctx.save()
-    ctx.clip()
-    const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time }
-    paintLakeGradient(paint)
-    paintLakeReflections(paint)
-    paintLakeShoreRipples(paint, islandShoreLocalX, 1)
-    paintLakeShoreRipples(paint, coreSpan, -1)
-    paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner)
-    ctx.restore()
-    strokeLakeSurfaceLine(ctx, surfaceTop, 0, FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_LINE_PX)
-    strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
-    applyForestGameplaySharpBake(canvas, 5000 + f)
+    canvas.height = LAKE_DYNAMIC_BAND_PX
+    paintLakeWaterFrame(canvas, geom, (f / LAKE_BAKE_FRAME_COUNT) * LAKE_BAKE_CYCLE, LAKE_FRAME_SEED + f)
     k.loadSprite(waterSpritePrefix + f, canvas)
     canvas.width = 0
     canvas.height = 0
   }
   return geom
+}
+//
+// The still water under the moving band: a full frame at time 0, cut below
+// the band (nothing moves down there).
+//
+function bakeLakeStillSprite(k, geom) {
+  const { canvasW, canvasH, waterSpritePrefix } = geom
+  const full = document.createElement('canvas')
+  full.width = canvasW
+  full.height = canvasH
+  paintLakeWaterFrame(full, geom, 0, LAKE_STILL_SEED)
+  const still = document.createElement('canvas')
+  still.width = canvasW
+  still.height = canvasH - LAKE_DYNAMIC_BAND_PX
+  still.getContext('2d').drawImage(full, 0, LAKE_DYNAMIC_BAND_PX, canvasW, still.height, 0, 0, canvasW, still.height)
+  k.loadSprite(waterSpritePrefix + LAKE_STILL_SPRITE_SUFFIX, still)
+  full.width = 0
+  full.height = 0
+  still.width = 0
+  still.height = 0
+}
+//
+// Paints the water at one moment into the canvas (whose top rows are the
+// lake's top rows; a shorter canvas just clips the lower water).
+//
+function paintLakeWaterFrame(canvas, geom, time, seed) {
+  const { coreSpan, bakeSpan, topMargin, canvasW, islandShoreLocalX } = geom
+  const canvasH = canvas.height
+  const ctx = canvas.getContext('2d')
+  //
+  // The water starts at the island's shore: further left the island's rocks
+  // hold the water line, so no surface strip runs across them.
+  //
+  const waterSpan = bakeSpan - islandShoreLocalX
+  const surfaceTop = buildLakeSurfaceLinePts(geom, time, waveOffsetAt)
+  const surfaceInner = buildLakeSurfaceLinePts(geom, time + LAKE_SURFACE_INNER_TIME_LAG, lakeSurfaceInnerWaveOffsetAt)
+  const pts = [...surfaceTop]
+  for (let i = LAKE_SEGMENTS; i >= 0; i--) {
+    const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
+    pts.push([localX, bottomLocalY(geom, localX)])
+  }
+  const bodyY = topMargin + LAKE_OPAQUE_SKIN_PX
+  const body = ctx.createLinearGradient(0, bodyY, 0, bodyY + LAKE_BODY_FADE_PX)
+  body.addColorStop(0, FOREST_PAL.water)
+  body.addColorStop(1, hexWithAlpha(FOREST_PAL.water, LAKE_BODY_ALPHA))
+  ctx.fillStyle = body
+  ctx.beginPath()
+  ctx.moveTo(pts[0][0], pts[0][1])
+  for (let p = 1; p < pts.length; p++) {
+    ctx.lineTo(pts[p][0], pts[p][1])
+  }
+  ctx.closePath()
+  ctx.fill()
+  ctx.save()
+  ctx.clip()
+  const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time }
+  paintLakeGradient(paint)
+  paintLakeReflections(paint)
+  paintLakeShoreRipples(paint, islandShoreLocalX, 1)
+  paintLakeShoreRipples(paint, coreSpan, -1)
+  paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner)
+  ctx.restore()
+  strokeLakeSurfaceLine(ctx, surfaceTop, 0, FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_LINE_PX)
+  strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
+  applyForestGameplaySharpBake(canvas, seed)
 }
 //
 // Light band between the top surface line and the inner line (each has its

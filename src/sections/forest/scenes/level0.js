@@ -103,6 +103,7 @@ import * as EarthMerge from '../utils/forest-earth-merge.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as PropellerBud from '../components/propeller-bud.js'
+import * as BudCine from '../utils/forest-bud-cine.js'
 import { FOREST_CFG } from '../cfg.js'
 import * as ForestFloor from '../components/forest-floor.js'
 import * as ForestGrass from '../utils/forest-grass.js'
@@ -991,7 +992,7 @@ const FOREST_BRANCH_JUMP_SHAKE_DURATION = 0.2
 const FOREST_BRANCH_LANDINGS_TO_DROP = 2
 const PREDATOR_LAKE_EDGE_PAD = 28
 const PREDATOR_CAVE_MOUTH_PAD = 24
-// How far left of the big tree's trunk the idle centipede roams
+// How far left of the right big (shore) tree's trunk the idle centipede roams
 const PREDATOR_ROAM_PAST_TREE_PX = 90
 //
 // Predator only tracks the hero when feet sit on the same ground band (branch / cave / air are other planes).
@@ -1508,7 +1509,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k,
       x: trampX,
       homeX: trampX,
-      roamLeftX: TREE_X - PREDATOR_ROAM_PAST_TREE_PX,
+      roamLeftX: predatorRoamLeftX(trampX),
       dir: -1,
       minX: predatorPatrolBounds.minX,
       maxX: predatorPatrolBounds.maxX,
@@ -1828,6 +1829,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     inst.heroGaze = createForestHeroGaze(inst)
     inst.propellerBud = createForestPropellerBud(inst)
+    inst.budCine = inst.propellerBud ? BudCine.create({ bud: inst.propellerBud }) : null
     createForestChainBuoyLayer(k, zones)
     createForestEarTreeLayer(k, inst)
     createForestShoreTreeLayer(k, inst)
@@ -4315,7 +4317,7 @@ function isForestEyeFlowerVisible(inst) {
 //
 function forestEyeFlowerHeroPos(inst) {
   const char = inst.heroInst?.character
-  if (!char?.pos || inst.drowning || inst.deathHandled) return null
+  if (!char?.pos || inst.drowning || inst.deathHandled || isForestHeroUnseen(inst)) return null
   return { x: char.pos.x, y: char.pos.y + FOREST_EYE_FLOWER_HERO_CENTER_DY }
 }
 //
@@ -5553,6 +5555,7 @@ function checkForestTouchDeath(inst, heroX, heroFootY) {
   //
   if (shouldDrownInWater(inst, heroX, heroFootY)) return
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
+  if (isForestHeroUnseen(inst)) return
   if (inst.shoreFallTwigs?.riderLocked) return
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
   if (isOnForestLakeDryFooting(inst, heroX, heroFootY)) return
@@ -5988,9 +5991,14 @@ function updateForestCamera(inst) {
   const followX = ridingStick
     ? stepForestRideCameraX(inst, inst.predator?.x ?? ch.pos.x)
     : (inst._rideCamX = null, ch.pos.x)
-  const pixelAlignCamX = !ridingStick && !inPitCave && grounded
-  ForestCamera.followHero(inst.camera, followX, ch.pos.y, pixelAlignCamX, inPitCave)
-  !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick &&
+  //
+  // While Valera flies the camera leaves the hero for the bud (see forest-bud-cine.js).
+  //
+  const filmView = inst.budCineView ??= { x: 0, y: 0 }
+  const filmed = BudCine.focusPoint(inst.budCine, followX, ch.pos.y, filmView) > 0
+  const pixelAlignCamX = !ridingStick && !inPitCave && grounded && !filmed
+  ForestCamera.followHero(inst.camera, filmView.x, filmView.y, pixelAlignCamX, inPitCave || filmed)
+  !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick && !filmed &&
     ForestCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
 //
@@ -6073,6 +6081,7 @@ function onUpdate(inst) {
   inst.spikyTomatoes && SpikyTomato.onUpdate(inst.spikyTomatoes, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
+  inst.budCine && BudCine.onUpdate(inst.budCine, k.dt(), !inst.deathHandled && !inst.drowning)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
@@ -6120,7 +6129,7 @@ function onUpdate(inst) {
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
-    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud))
+    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud), !isForestHeroUnseen(inst))
   inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
@@ -6243,7 +6252,7 @@ function onUpdate(inst) {
   syncForestWorldBirdsVolume(inst)
   syncForestPredatorVisibility(inst)
   syncForestPitCaveFlag(inst)
-  justLanded && AppleBug.onHeroLanded(inst.appleBug, heroX)
+  justLanded && !isForestHeroUnseen(inst) && AppleBug.onHeroLanded(inst.appleBug, heroX)
   tickForestStartBranchFatigue(inst, char, grounded, justLanded)
   tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
@@ -6283,6 +6292,13 @@ function onUpdate(inst) {
 //
 // Predator patrol strip — between the lake's east edge and the cave mouth.
 //
+//
+// The idle centipede's roam strip starts a little left of the right big (shore) tree.
+//
+function predatorRoamLeftX(trampX) {
+  const shoreTrunkX = forestShoreTreeTrunkXFromTramp(trampX)
+  return shoreTrunkX == null ? null : shoreTrunkX - PREDATOR_ROAM_PAST_TREE_PX
+}
 function computeForestPredatorPatrolBounds(lakeX2) {
   const crack = getCrackZone(WORLD_W, FLOOR_Y)
   const caveMouthX = getForestCaveMouthFloorLeftX(crack)
@@ -6369,11 +6385,14 @@ function finishForestFlowerGrab(k) {
   set(KEY_LAST_LESSON, FLOWER_GRAB_NEXT_LESSON)
   createLevelTransition(k, FLOWER_GRAB_TRANSITION_FROM)
 }
+function isForestHeroUnseen(inst) {
+  return BudCine.isHeroUnseen(inst.budCine)
+}
 function forestPredatorCanHuntHero(inst) {
   const char = inst.heroInst?.character
   const pred = inst.predator
   if (!char?.pos || inst.drowning || inst.deathHandled || !pred) return false
-  if (isForestRespawnGrace(inst)) return false
+  if (isForestRespawnGrace(inst) || isForestHeroUnseen(inst)) return false
   if (FlowerGrab.isActive(inst.flowerGrab)) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -6421,7 +6440,7 @@ function createForestPropellerBud(inst) {
     stops,
     exit: { x: WORLD_W + PROPELLER_BUD_EXIT_PAST, y: FLOOR_Y - PROPELLER_BUD_EXIT_RISE },
     startStop: inst.propellerBudSavedStop,
-    getHeroPos: () => inst.heroInst?.character?.pos ?? null,
+    getHeroPos: () => isForestHeroUnseen(inst) ? null : inst.heroInst?.character?.pos ?? null,
     isVisible: () => isRightTrampolineVisible(inst.zones),
     sound: inst.sound,
     z: PROPELLER_BUD_Z,

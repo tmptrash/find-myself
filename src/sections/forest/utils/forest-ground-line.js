@@ -36,6 +36,7 @@ const RGBA = 4
 const MAX_HEIGHT = HeroLegs.LEG_TOP_HEIGHT
 const SMOOTH_R = 1
 const FOOT_SUPPORT_HALF = 3
+const WALKER_RAY_PAD = 4
 const KIND = { GROUND: 'ground', PIECE: 'piece', COVER: 'cover' }
 //
 // TEMPORARY debug: with DEBUG_DRAW on, the level draws the line in red
@@ -122,6 +123,19 @@ export function raycast(inst, x, fromY, depth) {
   return best
 }
 
+/**
+ * Surface Y under a world X for a walker other than the hero (the apple
+ * bug, the crawler): a ray cast with raycast() from above the tallest thing
+ * that bulges the line down to a little under the ground line.
+ * @param {Object} inst - Ground line inst
+ * @param {number} x - World X
+ * @param {number} flatY - Surface Y where the line has nothing (the walker's flat ground)
+ * @returns {number} Surface Y
+ */
+export function surfaceY(inst, x, flatY) {
+  const fromY = inst.floorY - MAX_HEIGHT - WALKER_RAY_PAD
+  return raycast(inst, x, fromY, MAX_HEIGHT + WALKER_RAY_PAD * 2) ?? flatY
+}
 
 /**
  * TEMPORARY debug: draws the ground line across [x1, x2] in red.

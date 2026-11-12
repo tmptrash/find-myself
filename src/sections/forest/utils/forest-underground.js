@@ -1,5 +1,5 @@
 import { FOREST_PAL, forestRgb } from './forest-palette.js'
-import { GROUND_LAYER_FRACS } from './forest-earth-band.js'
+import { GROUND_LAYER_FRACS, groundEarthLayersColor } from './forest-earth-band.js'
 import { forestUndergroundLargeFeatureAlpha, forestUndergroundSmallDetailAlpha } from './forest-atmosphere.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 //
@@ -112,7 +112,7 @@ const UG_BONE_SHAFT_PX = 2.4
 // UG_PIC_STONE_DEEP_GROW bigger at the bottom), some mirrored, and kept
 // apart from the earlier ones (UG_PIC_STONE_GAP of their sizes, a few tries).
 //
-const UG_PIC_STONE_COUNT = 150
+const UG_PIC_STONE_COUNT = 100
 const UG_PIC_STONE_SCALE = 0.2
 const UG_PIC_STONE_SCALE_JITTER = 0.2
 const UG_PIC_STONE_DEEP_GROW = 0.6
@@ -120,6 +120,30 @@ const UG_PIC_STONE_REACH_TOP = 0.35
 const UG_PIC_STONE_GAP = 0.7
 const UG_PIC_STONE_ATTEMPTS = 8
 const UG_PIC_STONE_MIRROR_SHARE = 0.5
+//
+// Elements (layout.elements: bones, fossils, shells, seeds...) take the place
+// of some of those stones: UG_ELEMENT_COUNT of them, picked at random from the
+// sheet, lie once each somewhere in the soil,
+// at any depth, UG_ELEMENT_SCALE of its sheet size (a little random, a little
+// bigger deeper), turned up to UG_ELEMENT_TURN either way, some mirrored, kept
+// UG_ELEMENT_GAP of their sizes from what lies near it. They take the soil's
+// colour at their depth: multiplied by it (UG_ELEMENT_MULTIPLY of the way
+// from white) and then tinted with it (UG_ELEMENT_BLEND), so a pale bone sits
+// in dark chernozem as a dim one and in the deep clay as a warm one. The
+// strata's seams blend over UG_SOIL_SEAM_BLEND of the band's height.
+//
+const UG_ELEMENT_COUNT = 40
+const UG_ELEMENT_SCALE = 0.26
+const UG_ELEMENT_SCALE_JITTER = 0.2
+const UG_ELEMENT_DEEP_GROW = 0.45
+const UG_ELEMENT_TURN = 1.1
+const UG_ELEMENT_GAP = 0.8
+const UG_ELEMENT_ATTEMPTS = 40
+const UG_ELEMENT_MIRROR_SHARE = 0.5
+const UG_ELEMENT_MULTIPLY = 0.55
+const UG_ELEMENT_BLEND = 0.22
+const UG_SOIL_SEAM_BLEND = 0.05
+const COLOR_MAX = 255
 
 /**
  * Builds a random buried-decor layout for an earth band.
@@ -133,6 +157,7 @@ const UG_PIC_STONE_MIRROR_SHARE = 0.5
  * @param {number} layout.treeClearHalf - Half-width of the trunk zone
  * @param {function(number): boolean} [layout.skipRootlet] - True drops a hair-root at that X
  * @param {Array<HTMLCanvasElement>} [layout.stones] - Stone pictures (smallest first) buried instead of the drawn stones
+ * @param {Array<HTMLCanvasElement>} [layout.elements] - Element pictures (bones, fossils...), each buried once among the stones
  * @returns {Object} Decor spec (carries its layout)
  */
 export function buildUndergroundSpec(layout) {
@@ -323,6 +348,8 @@ function buildSpec(layout) {
     worms.push(pts)
   }
   const pictured = layout.stones?.length > 0
+  const placed = []
+  const elements = layout.elements?.length ? buildUndergroundElements(layout.elements, randX, areaY1, areaY2, placed) : []
   return {
     rocks: pictured ? [] : rocks,
     cracks,
@@ -333,15 +360,56 @@ function buildSpec(layout) {
     grit,
     streaks,
     warmPebbles: pictured ? [] : warmPebbles,
-    pictureStones: pictured ? buildUndergroundPictureStones(layout.stones, randX, areaY1, areaY2) : [],
+    pictureStones: pictured ? buildUndergroundPictureStones(layout.stones, randX, areaY1, areaY2, placed) : [],
+    elements,
     shells, bones, coins, bottles, worms, skeleton: null, layout
   }
 }
 //
+// A random UG_ELEMENT_COUNT of the elements, each once at a random depth, in the first free spot of a few
+// tries (it goes in anyway on the last one).
+//
+function buildUndergroundElements(pictures, randX, y1, y2, placed) {
+  const out = []
+  pickRandom(pictures, UG_ELEMENT_COUNT).forEach(canvas => {
+    const t = Math.random()
+    const scale = UG_ELEMENT_SCALE * (1 + (Math.random() * 2 - 1) * UG_ELEMENT_SCALE_JITTER) * (1 + UG_ELEMENT_DEEP_GROW * t)
+    const w = canvas.width * scale
+    const h = canvas.height * scale
+    const r = Math.max(w, h) / 2
+    const y = y1 + r + t * Math.max(0, y2 - y1 - r * 2)
+    let x = randX()
+    for (let attempt = 0; attempt < UG_ELEMENT_ATTEMPTS; attempt++) {
+      x = randX()
+      if (placed.every(p => Math.hypot(p.x - x, p.y - y) >= (p.r + r) * UG_ELEMENT_GAP)) break
+    }
+    placed.push({ x, y, r })
+    out.push({
+      canvas, x, y, w, h,
+      angle: (Math.random() * 2 - 1) * UG_ELEMENT_TURN,
+      mirror: Math.random() < UG_ELEMENT_MIRROR_SHARE
+    })
+  })
+  return out
+}
+//
+// count items of the list, chosen at random (a partial shuffle of a copy).
+//
+function pickRandom(list, count) {
+  const pool = [...list]
+  for (let i = 0; i < Math.min(count, pool.length); i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i))
+    const picked = pool[j]
+    pool[j] = pool[i]
+    pool[i] = picked
+  }
+  return pool.slice(0, count)
+}
+//
 // The pictured stones spread over the band, denser and bigger with depth.
 //
-function buildUndergroundPictureStones(pictures, randX, y1, y2) {
-  const placed = []
+function buildUndergroundPictureStones(pictures, randX, y1, y2, placed) {
+  const stones = []
   for (let i = 0; i < UG_PIC_STONE_COUNT; i++) {
     const t = Math.sqrt(Math.random())
     const reach = UG_PIC_STONE_REACH_TOP + (1 - UG_PIC_STONE_REACH_TOP) * t
@@ -354,11 +422,13 @@ function buildUndergroundPictureStones(pictures, randX, y1, y2) {
     for (let attempt = 0; attempt < UG_PIC_STONE_ATTEMPTS; attempt++) {
       const x = randX()
       if (!placed.every(p => Math.hypot(p.x - x, p.y - y) >= (p.r + r) * UG_PIC_STONE_GAP)) continue
-      placed.push({ canvas, x, y, w, h, r, mirror: Math.random() < UG_PIC_STONE_MIRROR_SHARE })
+      const stone = { canvas, x, y, w, h, r, mirror: Math.random() < UG_PIC_STONE_MIRROR_SHARE }
+      placed.push(stone)
+      stones.push(stone)
       break
     }
   }
-  return placed
+  return stones
 }
 //
 // One loose group of slate stones in the deep clay — spaced apart (only a
@@ -452,6 +522,7 @@ function renderSpec(ctx, spec, tones) {
   const lightCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
   tones.stone && paintUndergroundSediment(ctx, spec, tones, deepCss)
   paintUndergroundPictureStones(ctx, layout, spec.pictureStones)
+  paintUndergroundElements(ctx, layout, spec.elements)
   //
   // Buried rocks — flat single-tone silhouettes, no outline.
   //
@@ -677,6 +748,68 @@ function paintUndergroundPictureStones(ctx, layout, stones) {
     ctx.drawImage(stone.canvas, -stone.w / 2, -stone.h / 2, stone.w, stone.h)
     ctx.restore()
   }))
+}
+//
+// The elements, each in the soil colour of its depth.
+//
+function paintUndergroundElements(ctx, layout, elements) {
+  elements?.forEach(element => paintUndergroundDecorAtDepth(ctx, layout, element.y, true, () => {
+    ctx.save()
+    ctx.translate(element.x, element.y)
+    ctx.rotate(element.angle)
+    element.mirror && ctx.scale(-1, 1)
+    ctx.drawImage(soilTintedElement(element, soilColorAt(layout, element.y)), -element.w / 2, -element.h / 2)
+    ctx.restore()
+  }))
+}
+//
+// The element at its drawn size, multiplied and tinted with the soil colour.
+//
+function soilTintedElement(element, soil) {
+  const w = Math.max(1, Math.round(element.w))
+  const h = Math.max(1, Math.round(element.h))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(element.canvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.fillStyle = rgbCss(mixRgb({ r: COLOR_MAX, g: COLOR_MAX, b: COLOR_MAX }, soil, UG_ELEMENT_MULTIPLY))
+  ctx.fillRect(0, 0, w, h)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(element.canvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.globalAlpha = UG_ELEMENT_BLEND
+  ctx.fillStyle = rgbCss(soil)
+  ctx.fillRect(0, 0, w, h)
+  return canvas
+}
+//
+// The soil's colour at world Y: the stratum there (the strata's heights are
+// shares of the band), blended with its neighbour near a seam.
+//
+function soilColorAt(layout, y) {
+  const layers = groundEarthLayersColor()
+  const depth = Math.min(1, Math.max(0, (y - layout.surfaceY) / layout.bandH))
+  let top = 0
+  for (let i = 0; i < layers.length; i++) {
+    const bottom = i < layers.length - 1 ? top + layers[i].frac : 1
+    if (i === layers.length - 1 || depth < bottom + UG_SOIL_SEAM_BLEND) {
+      if (i < layers.length - 1 && depth > bottom - UG_SOIL_SEAM_BLEND) {
+        return mixRgb(layers[i].rgb, layers[i + 1].rgb, (depth - bottom + UG_SOIL_SEAM_BLEND) / (UG_SOIL_SEAM_BLEND * 2))
+      }
+      return layers[i].rgb
+    }
+    top = bottom
+  }
+  return layers[layers.length - 1].rgb
+}
+function mixRgb(a, b, t) {
+  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t }
+}
+function rgbCss(c) {
+  return `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`
 }
 //
 // Dark slate stones in the deep clay: contour, body, soft lit cap, speckles.

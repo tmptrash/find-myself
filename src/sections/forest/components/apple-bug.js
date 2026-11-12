@@ -6,6 +6,7 @@ import * as TreeFruit from '../utils/forest-tree-fruit.js'
 import * as Atmosphere from '../utils/forest-level-atmosphere.js'
 import { FOREST_CFG } from '../cfg.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
+import * as GroundLine from '../utils/forest-ground-line.js'
 import * as EarthMerge from '../utils/forest-earth-merge.js'
 import { getRGB } from '../../../utils/helper.js'
 
@@ -54,10 +55,11 @@ const STATES = {
   FLEE: 'flee',
   TO_DROP: 'toDrop',
   BITE: 'bite',
-  DODGE: 'dodge'
+  DODGE: 'dodge',
+  PEEK: 'peek'
 }
 const UNDERGROUND = new Set([STATES.REST, STATES.DESCEND, STATES.ASCEND, STATES.TUNNEL,
-  STATES.STORE, STATES.EAT, STATES.OUT])
+  STATES.STORE, STATES.EAT, STATES.OUT, STATES.PEEK])
 //
 // Its hiding time runs while it is down in the cave.
 //
@@ -94,6 +96,18 @@ const FIELD_WANDER_PAST = 220
 const CRAWLER_NEAR_FEAR = 130
 const HERO_LAND_SCARE = 120
 const HERO_DODGE_DIST = 110
+//
+// The states it keeps watch in out in the open (a crawler it sees there
+// makes it freeze, crouch or run), and the stages of that wariness.
+//
+const WATCHFUL = new Set([STATES.HUNT, STATES.WANDER, STATES.APPLE, STATES.GRAB,
+  STATES.TO_DROP, STATES.BITE, STATES.DODGE])
+const WARY = { FREEZE: 'freeze', CROUCH: 'crouch' }
+//
+// Peeking out of the burrow after a scare: it rises to the lip, looks, and
+// ducks back down for a while if a crawler is near.
+//
+const PEEK_PHASE = { LOOK: 'look', BACK: 'back', HIDE: 'hide', RISE: 'rise' }
 const TONGUE = {
   IDLE: 'idle',
   OUT: 'out',
@@ -236,6 +250,10 @@ const FAR_AWAY = 1e6
 // creeping up to what is left of the apple, its mouth BITE_INTO into it.
 //
 const SLOPE_SPAN = 12
+//
+// How fast (per second) its body settles to the ground line's height under it.
+//
+const SURFACE_SNAP = 18
 const PUT_DURATION = 0.3
 const PILE_SLOTS = [{ dx: 0, up: 0 }, { dx: -1.9, up: 0 }, { dx: -0.95, up: 1.7 }]
 const PILE_SIZE = Math.min(PARAMS.pileMax, PILE_SLOTS.length)
@@ -259,6 +277,7 @@ const pictureByK = new WeakMap()
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.holeX - World X of the burrow's middle on the ground line
  * @param {number} cfg.groundY - World Y of the ground line
+ * @param {Object} cfg.groundLine - Level's ground line (raycast under its feet, like the hero's)
  * @param {number} cfg.lakeX2 - World X of the lake's right edge (it hunts from past it)
  * @param {number} cfg.treeX - World X of the left big tree's trunk
  * @param {number} [cfg.fieldTrampX] - World X of the left trampoline mushroom (it also hunts past it)
@@ -271,7 +290,7 @@ const pictureByK = new WeakMap()
  * @returns {Object|null} Bug inst (null if its pictures are not baked)
  */
 export function create(cfg) {
-  const { k, holeX, groundY, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null, fieldTrampX = null } = cfg
+  const { k, holeX, groundY, groundLine, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null, fieldTrampX = null } = cfg
   const baked = pictureByK.get(k)
   if (!baked) return null
   const { bug, tunnel } = baked
@@ -284,6 +303,7 @@ export function create(cfg) {
     tunnel,
     holeX,
     groundY,
+    groundLine,
     surfaceY: groundY,
     mouthX,
     tunnelX,
@@ -325,6 +345,12 @@ export function create(cfg) {
     hideLeft: randomIn(PARAMS.hideMin, PARAMS.hideMax),
     nextHide: 0,
     scared: false,
+    fled: false,
+    peekWanted: false,
+    peeked: false,
+    peek: { phase: PEEK_PHASE.LOOK, left: 0 },
+    wary: null,
+    crawlerDist: null,
     stateLeft: 0,
     dark: PARAMS.tunnelBugDark,
     zoom: 1,
@@ -386,6 +412,15 @@ export function create(cfg) {
  */
 export function setHidden(inst, hidden) {
   inst?.layers.forEach(layer => { layer.hidden = hidden })
+}
+
+/**
+ * Whether the bug is out on the ground (not in its tunnel or on the shaft wall).
+ * @param {Object|null} inst - Bug inst
+ * @returns {boolean}
+ */
+export function isOnSurface(inst) {
+  return !!inst && !inst.floor
 }
 
 /**
@@ -473,6 +508,8 @@ export function onBombBurst(inst) {
   const hide = randomIn(PARAMS.bombHideMin, PARAMS.bombHideMax)
   if (UNDERGROUND.has(inst.state)) {
     inst.hideLeft = Math.max(inst.hideLeft, hide)
+    inst.fled = true
+    inst.state === STATES.PEEK && (inst.peek.phase = PEEK_PHASE.BACK)
     return
   }
   !inst.carrying && inst.fruit && releaseApple(inst)
@@ -480,6 +517,7 @@ export function onBombBurst(inst) {
   startle(inst)
   inst.headTarget = 0
   inst.nextHide = hide
+  inst.fled = true
   inst.dash.active = false
   inst.dash.pauseLeft = 0
   inst.state = STATES.FLEE
@@ -495,7 +533,7 @@ function onUpdate(inst) {
   inst.time += dt
   IN_CAVE.has(inst.state) && (inst.hideLeft -= dt)
   updateBehaviour(inst, dt)
-  updateFloor(inst)
+  updateFloor(inst, dt)
   updateTurn(inst, dt)
   updatePose(inst, dt)
   updateLegs(inst, dt)
@@ -503,9 +541,10 @@ function onUpdate(inst) {
   inst.wall && updateWall(inst)
   if (inst.floor) return
   checkWater(inst)
-  checkCrawler(inst)
+  checkCrawler(inst, dt)
 }
 function updateBehaviour(inst, dt) {
+  if (inst.wary && WATCHFUL.has(inst.state)) return tickWary(inst)
   TUNNEL_ALERT.has(inst.state) && !inst.rushingOut && findApple(inst) && rushOutOfTunnel(inst)
   switch (inst.state) {
     case STATES.REST: return tickRest(inst)
@@ -526,6 +565,7 @@ function updateBehaviour(inst, dt) {
     case STATES.TO_DROP: return tickToDrop(inst, dt)
     case STATES.BITE: return tickBite(inst, dt)
     case STATES.DODGE: return tickDodge(inst, dt)
+    case STATES.PEEK: return tickPeek(inst, dt)
   }
 }
 //
@@ -540,6 +580,9 @@ function tickRest(inst) {
   inst.scared = false
   inst.plan = findApple(inst) ? PLANS.APPLE : pickOutingPlan(inst)
   inst.rushingOut = inst.plan === PLANS.APPLE
+  inst.peekWanted = inst.fled && !inst.rushingOut
+  inst.peeked = false
+  inst.fled = false
   inst.state = STATES.OUT
 }
 //
@@ -608,12 +651,97 @@ function tickDescend(inst, dt) {
 // Up the shaft's wall to the lip, then the run to the doorway.
 //
 function tickAscend(inst, dt) {
+  const peeking = inst.peekWanted && !inst.peeked
+  peeking && (inst.goalX = wallXAt(inst.wall, peekS(inst)))
   if (!walk(inst, dt, PARAMS.climbOut)) return
+  if (peeking) return startPeek(inst)
   leaveWall(inst)
   inst.rushingOut && (inst.hideLeft = 0)
   inst.rushingOut = false
+  inst.peekWanted = false
   startRush(inst, inst.mouthX + inst.facing * DOOR_DX, PARAMS.climbOutHop)
   inst.state = STATES.EMERGE
+}
+//
+// Its head just over the lip: it looks round for a while, then goes on out.
+// A crawler near sends it down the wall to hide, and it comes up to look
+// again. Moves along the wall at an even PARAMS.peekSpeed.
+//
+function startPeek(inst) {
+  inst.peeked = true
+  inst.peek.phase = PEEK_PHASE.LOOK
+  inst.peek.left = randomIn(PARAMS.peekMin, PARAMS.peekMax)
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.PEEK
+}
+function tickPeek(inst, dt) {
+  const { peek, wall } = inst
+  inst.vx = 0
+  inst.dash.active = false
+  const danger = crawlerAround(inst, PARAMS.peekFearReach)
+  switch (peek.phase) {
+    case PEEK_PHASE.LOOK:
+      if (danger) {
+        peek.phase = PEEK_PHASE.BACK
+        return
+      }
+      peek.left -= dt
+      if (peek.left > 0) return
+      inst.goalX = wallXAt(wall, 0)
+      inst.state = STATES.ASCEND
+      return
+    case PEEK_PHASE.BACK:
+      if (!slideOnWall(inst, dt, peekS(inst) + PARAMS.peekDive)) return
+      peek.phase = PEEK_PHASE.HIDE
+      peek.left = randomIn(PARAMS.peekHideMin, PARAMS.peekHideMax)
+      return
+    case PEEK_PHASE.HIDE:
+      peek.left -= dt
+      peek.left <= 0 && (peek.phase = PEEK_PHASE.RISE)
+      return
+    case PEEK_PHASE.RISE:
+      if (danger) {
+        peek.phase = PEEK_PHASE.BACK
+        return
+      }
+      if (!slideOnWall(inst, dt, peekS(inst))) return
+      peek.phase = PEEK_PHASE.LOOK
+      peek.left = randomIn(PARAMS.peekMin, PARAMS.peekMax)
+  }
+}
+//
+// How far along its way up the wall it stands when only its head shows over
+// the lip: the mouth PARAMS.peekHeadOut over the ground.
+//
+function peekS(inst) {
+  const w = inst.wall
+  return Math.min(w.turn + w.drop, w.turn + inst.bug.mouth.x * inst.zoom - PARAMS.peekHeadOut)
+}
+//
+// The wall x for a way-up progress s (0 at the lip, w.total at the floor).
+//
+function wallXAt(w, s) {
+  return w.fromX + w.dir * (w.total - s)
+}
+//
+// Slides along the wall to progress s at PARAMS.peekSpeed; true once there.
+//
+function slideOnWall(inst, dt, s) {
+  const w = inst.wall
+  const cur = w.total - (inst.x - w.fromX) * w.dir
+  const step = Math.sign(s - cur) * Math.min(Math.abs(s - cur), PARAMS.peekSpeed * dt)
+  const x = wallXAt(w, cur + step)
+  inst.vx = (x - inst.x) / dt
+  inst.x = x
+  return Math.abs(s - cur) <= ARRIVE_DIST
+}
+//
+// Any crawler segment within reach of the bug, seen or not (it hears it
+// through the ground).
+//
+function crawlerAround(inst, reach) {
+  return Boolean(crawlerHead(inst)) && inst.predator.segments.some(seg => Math.abs(seg.x - inst.x) <= reach)
 }
 //
 // Down the tunnel to the far end: its apple it stores in the pile or (the
@@ -940,7 +1068,7 @@ function startWall(inst, up) {
   const drop = floorB - reach - inst.surfaceY
   const turn = PARAMS.bodyLift * QUARTER_TURN
   const footTurn = reach * QUARTER_TURN
-  inst.wall = { up, dir, side, wallX, footX, floorB, drop, turn, footTurn, fromX: inst.x, cx: 0, cy: 0, a: 0 }
+  inst.wall = { up, dir, side, wallX, footX, floorB, drop, turn, footTurn, total: turn + drop + footTurn, fromX: inst.x, cx: 0, cy: 0, a: 0 }
   inst.floor = inst.wallFloor
   inst.goalX = inst.x + dir * (turn + drop + footTurn)
   updateFloor(inst)
@@ -953,6 +1081,7 @@ function startWall(inst, up) {
 function leaveWall(inst) {
   const { wall } = inst
   inst.wall = null
+  wall.up && (inst.peekWanted = false)
   inst.floor = wall.up ? null : inst.tunnelFloor
   inst.x = wall.up ? wall.wallX : wall.footX
   inst.goalX = inst.x
@@ -1055,6 +1184,7 @@ function checkWater(inst) {
   retractTongue(inst)
   startle(inst)
   inst.scared = true
+  inst.fled = true
   inst.nextHide = PARAMS.scaredHide
   inst.dash.active = false
   inst.dash.pauseLeft = 0
@@ -1098,24 +1228,76 @@ function nearShell(inst, water) {
   return gap - water.r <= PARAMS.waterScareReach
 }
 //
-// A crawler eating near it: it drops what it is doing (an apple in its
-// mouth it keeps, it is going home anyway) and runs into the burrow.
+// A crawler it can see (in front of it only; one behind its back does not
+// exist for it) coming closer: it stops, then presses itself to the ground,
+// then runs into the burrow; at once if it is close, closing in fast or just
+// came into sight near. One eating near it sends it home too, an apple in
+// its mouth it keeps (it is going home anyway).
 //
-function checkCrawler(inst) {
-  const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
-    inst.state === STATES.APPLE || inst.state === STATES.GRAB ||
-    inst.state === STATES.TO_DROP || inst.state === STATES.BITE || inst.state === STATES.DODGE
-  if (!watchful) return
+function checkCrawler(inst, dt) {
+  if (!WATCHFUL.has(inst.state)) {
+    inst.wary = null
+    inst.crawlerDist = null
+    return
+  }
+  const dist = seenCrawlerDist(inst)
+  const prev = inst.crawlerDist
+  inst.crawlerDist = dist
   const mealX = PredatorFeast.predatorMealX(inst.predator)
-  const eatingNear = mealX !== null && Math.abs(mealX - inst.x) <= PARAMS.crawlerFearReach
-  if (!eatingNear && !crawlerNear(inst)) return
+  const eatingNear = mealX !== null && isInFront(inst, mealX) && Math.abs(mealX - inst.x) <= PARAMS.crawlerFearReach
+  const sudden = dist !== null && dist <= PARAMS.crawlerCrouchReach &&
+    (prev === null || (prev - dist) / dt > PARAMS.crawlerSuddenSpeed)
+  if (eatingNear || sudden || (dist !== null && dist <= CRAWLER_NEAR_FEAR)) return fleeFromCrawler(inst)
+  if (dist === null || dist > PARAMS.crawlerFreezeReach) {
+    inst.wary && newPose(inst)
+    inst.wary = null
+    return
+  }
+  inst.wary = dist <= PARAMS.crawlerCrouchReach ? WARY.CROUCH : WARY.FREEZE
+}
+function fleeFromCrawler(inst) {
   inst.fruit && releaseApple(inst)
   retractTongue(inst)
+  inst.wary = null
   inst.headTarget = 0
+  inst.fled = true
   inst.nextHide = randomIn(PARAMS.hideMin, PARAMS.hideMax)
   inst.dash.active = false
   inst.dash.pauseLeft = 0
   inst.state = STATES.FLEE
+}
+//
+// Stands still, its tongue in, pressed to the ground when the crawler is
+// closer.
+//
+function tickWary(inst) {
+  inst.vx = 0
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  retractTongue(inst)
+  inst.liftTarget = PARAMS.bodyLift - (inst.wary === WARY.CROUCH ? PARAMS.crouchDrop : 0)
+  inst.pitchTarget = 0
+  inst.headTarget = 0
+}
+//
+// Whether a world x lies in front of the bug (the way it faces).
+//
+function isInFront(inst, x) {
+  return (x - inst.x) * inst.facing >= 0
+}
+//
+// How far the nearest crawler segment in front of it is; null when none is
+// (no crawler out, or all of it behind the bug).
+//
+function seenCrawlerDist(inst) {
+  if (!crawlerHead(inst)) return null
+  let best = null
+  for (const seg of inst.predator.segments) {
+    if (!isInFront(inst, seg.x)) continue
+    const d = Math.abs(seg.x - inst.x)
+    best = best === null ? d : Math.min(best, d)
+  }
+  return best
 }
 //
 // A crawler eating anywhere it goes out to (shore stand to the far apples,
@@ -1150,13 +1332,6 @@ function crawlerHead(inst) {
   return pred.segments[0]
 }
 //
-// Any part of the centipede within CRAWLER_NEAR_FEAR of the bug.
-//
-function crawlerNear(inst) {
-  if (!crawlerHead(inst)) return false
-  return inst.predator.segments.some(seg => Math.abs(seg.x - inst.x) <= CRAWLER_NEAR_FEAR)
-}
-//
 // Dashing aside from where the hero landed; then back to its hunt or stroll.
 //
 function tickDodge(inst, dt) {
@@ -1169,9 +1344,15 @@ function tickDodge(inst, dt) {
 // The ground under it: flat outside; in the tunnel the floor's height and
 // slope round it, the body raised so it stands its usual height off a slope.
 //
-function updateFloor(inst) {
+function updateFloor(inst, dt = 1) {
   if (!inst.floor) {
-    inst.groundY = inst.surfaceY
+    //
+    // Out in the open the body rides the line the hero's feet use: the mean
+    // of its surface under the front and rear feet, eased so a stone's edge
+    // does not jerk it.
+    //
+    const target = (surfaceAt(inst, inst.x - FOOT_SPREAD) + surfaceAt(inst, inst.x + FOOT_SPREAD)) * 0.5
+    inst.groundY += (target - inst.groundY) * Math.min(1, dt * SURFACE_SNAP)
     inst.slope = 0
     inst.slopeCos = 1
     return
@@ -1182,8 +1363,15 @@ function updateFloor(inst) {
   inst.slopeCos = Math.cos(inst.slope)
   inst.groundY = floorY(inst.floor, inst.x) - inst.lift * inst.zoom * (1 / inst.slopeCos - 1)
 }
+//
+// The ground line's surface under a world X (raycast), flat where it has
+// nothing.
+//
+function surfaceAt(inst, x) {
+  return inst.groundLine ? GroundLine.surfaceY(inst.groundLine, x, inst.surfaceY) : inst.surfaceY
+}
 function floorAt(inst, x) {
-  return inst.floor ? floorY(inst.floor, x) : inst.surfaceY
+  return inst.floor ? floorY(inst.floor, x) : surfaceAt(inst, x)
 }
 //
 // Height of a walking line (points left to right) at x, flat past its ends.

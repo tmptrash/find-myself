@@ -549,6 +549,18 @@ export const CFG = {
           shaft: PALETTE.gold5         // Diagonal sunlight shafts
         },
         //
+        // Grass tufts on the ground: three body tones, a lit edge and (rarely) a
+        // dry golden tip; no contour.
+        //
+        forestGrass: {
+          shade: PALETTE.green0,       // Dark blade body
+          base: PALETTE.green1,        // Main blade body
+          light: PALETTE.green2,       // Sunlit blade body
+          lit: PALETTE.green3,         // Lit edge down the blade
+          tip: PALETTE.green4,         // Pale blade tip
+          dry: PALETTE.gold2           // Rare dry golden tip
+        },
+        //
         // Extra colour-world underground props (cobble beds, voids, pebbles, grit).
         //
         forestUnderground: {

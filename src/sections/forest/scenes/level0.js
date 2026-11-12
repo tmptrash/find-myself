@@ -104,6 +104,8 @@ import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as PropellerBud from '../components/propeller-bud.js'
 import { FOREST_CFG } from '../cfg.js'
 import * as ForestFloor from '../components/forest-floor.js'
+import * as ForestGrass from '../utils/forest-grass.js'
+import { forestBuriedElements } from '../utils/forest-ground-element.js'
 import * as ForestGroundLine from '../utils/forest-ground-line.js'
 import { paintUndergroundDepthVignette } from '../utils/forest-atmosphere.js'
 import * as ForestCamera from '../utils/forest-camera.js'
@@ -805,6 +807,17 @@ const FOREST_FLOOR_BACK_Z = 6.5
 const FOREST_FLOOR_FRONT_Z = GROUND_FRONT_Z - 1
 const GROUND_STONE_FRONT_Z = FOREST_FLOOR_FRONT_Z - 0.5
 const FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
+//
+// Grass: in front of the hero, the bug and the centipede; it ends before the
+// hill. Things on the ground bend it within
+// their reach (px); the hero counts as on the ground within GRASS_FOOT_TOL
+// of the floor.
+//
+const GRASS_HILL_GAP = 12
+const GRASS_HERO_REACH = 20
+const GRASS_BUG_REACH = 30
+const GRASS_PREDATOR_REACH = 26
+const GRASS_FOOT_TOL = 14
 const FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 const FOREST_EAR_TREE_ROOTS_Z = GROUND_FRONT_Z + 1
 const FOREST_EAR_TREE_TRUNK_OVERLAY_Z = GROUND_FRONT_Z + 2
@@ -1036,6 +1049,7 @@ const SHORE_END_ROCK_Z = GROUND_FRONT_Z + 1
 // front of it).
 //
 const BUG_Z = SHORE_END_ROCK_Z + 0.5
+const GRASS_Z = BUG_Z + 0.2
 //
 // The hero counts as moving (drop hint's move time, gaze glance) once he
 // moved more than this (world px) since the last frame.
@@ -1490,7 +1504,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       dir: -1,
       minX: predatorPatrolBounds.minX,
       maxX: predatorPatrolBounds.maxX,
-      groundAt: () => FLOOR_Y - PREDATOR_GROUND_CLEARANCE,
+      groundAt: x => ForestGroundLine.surfaceY(groundLine, x, FLOOR_Y) - PREDATOR_GROUND_CLEARANCE,
       hero: heroInst,
       zones,
       sfx: sound,
@@ -1663,6 +1677,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k,
       holeX: BUG_HOLE_X,
       groundY: FLOOR_Y,
+      groundLine,
       lakeX2,
       treeX: TREE_X,
       levelInst: inst,
@@ -1830,6 +1845,14 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     ForestGroundLine.DEBUG_DRAW && k.add([k.z(GROUND_LINE_DEBUG_Z), { draw() { drawForestGroundLineDebug(inst) } }])
     Hero.setSurfaceRay(heroInst, ForestGroundLine.raycast.bind(null, groundLine))
+    inst.grass = ForestGrass.create({
+      k,
+      x1: TREE_X + TRUNK_EXCLUDE_HALF,
+      x2: inst.forestFloor.hill.x1 - GRASS_HILL_GAP,
+      isSpotFree: (x, halfW) => isForestFloorSpotFree(inst, forestFloorBlockers, x, halfW),
+      baseY: x => ForestGroundLine.surfaceY(groundLine, x, FLOOR_Y)
+    })
+    createForestGrassLayer(k, inst)
     window.__lvl = inst
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
@@ -2497,6 +2520,34 @@ function syncShoreBranchPlatform(inst) {
 function createForestCloudLayer(k, clouds) {
   k.add([k.z(FOREST_CLOUD_Z), { draw() { Clouds.onDraw(clouds) } }])
 }
+function createForestGrassLayer(k, inst) {
+  k.add([
+    k.z(GRASS_Z),
+    {
+      draw() {
+        ForestGrass.onDraw(inst.grass, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
+      }
+    }
+  ])
+}
+//
+// Reports the hero, the apple bug and the centipede's segments that are on
+// the ground to the grass (in a fixed order, so it can tell their speeds),
+// then lets it swing.
+//
+function tickForestGrass(inst, dt) {
+  const grass = inst.grass
+  if (!grass) return
+  ForestGrass.beginMovers(grass)
+  const char = inst.heroInst?.character
+  const heroOnFloor = char?.pos && char.pos.y + SURFACE_DETECT_Y >= FLOOR_Y - GRASS_FOOT_TOL
+  ForestGrass.addMover(grass, char?.pos?.x ?? 0, heroOnFloor ? GRASS_HERO_REACH : 0)
+  const bug = inst.appleBug
+  ForestGrass.addMover(grass, bug?.x ?? 0, AppleBug.isOnSurface(bug) ? GRASS_BUG_REACH : 0)
+  const predator = inst.predator
+  !predator?.obj?.hidden && predator?.segments.forEach(seg => ForestGrass.addMover(grass, seg.x, GRASS_PREDATOR_REACH))
+  ForestGrass.onUpdate(grass, dt, forestCameraViewXRange(grass.k, inst, FOREST_DECOR_CULL_MARGIN))
+}
 function createForestHorizFallTwigLayer(k, inst) {
   inst.predatorStickLayer = k.add([
     k.z(HorizFallTwig.HORIZ_FALL_TWIG_DRAW_Z),
@@ -2942,7 +2993,8 @@ function forestUndergroundLayout() {
     treeX: TREE_X,
     treeClearHalf: TRUNK_EXCLUDE_HALF,
     skipRootlet: rx => rx >= cave.x1 - FOREST_UG_CAVE_ROOTLET_CLEAR_L && rx <= cave.x2 + FOREST_UG_CAVE_ROOTLET_CLEAR_R,
-    stones: forestBuriedStones()
+    stones: forestBuriedStones(),
+    elements: forestBuriedElements()
   }
 }
 function forestUndergroundSpec(k) {
@@ -5984,6 +6036,7 @@ function onUpdate(inst) {
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
+  tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character
   )

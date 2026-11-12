@@ -66,8 +66,8 @@ const APPLE_BUG = {
   // with a pause and a new pose between them. dashStart skips that share
   // of the speed's rise, so a dash starts that fast at once (0.5: at peak).
   //
-  stroll: { speed: 130, dashMin: 0.16, dashMax: 0.32, pauseMin: 0.15, pauseMax: 0.55 },
-  fetch: { speed: 190, dashMin: 0.22, dashMax: 0.36, pauseMin: 0.03, pauseMax: 0.08 },  // ~110 px/s: on its way to an apple
+  stroll: { speed: 130, dashMin: 0.9, dashMax: 1.8, pauseMin: 0.3, pauseMax: 0.8 },  // Long even runs, few stops
+  fetch: { speed: 190, dashMin: 0.5, dashMax: 0.9, pauseMin: 0.03, pauseMax: 0.08 },  // ~110 px/s: on its way to an apple
   dart: { speed: 340, dashMin: 0.45, dashMax: 0.55, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Past the flower's drop: for the apple at once
   run: { speed: 300, dashMin: 0.4, dashMax: 0.6, pauseMin: 0.01, pauseMax: 0.04, dashStart: 0.5 },  // Home with an apple: hurries to hide it
   flee: { speed: 300, dashMin: 0.45, dashMax: 0.7, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // Scared of the water: no stops
@@ -86,6 +86,30 @@ const APPLE_BUG = {
   bombHideMin: 2,                   // After the burst of the bomb nearest its burrow (a short scare)
   bombHideMax: 4,
   crawlerFearReach: 150,            // A crawler eating this near sends it home; it keeps this far from one while out
+  //
+  // A crawler it can see (in front of it) coming closer: within
+  // crawlerFreezeReach it stops, within crawlerCrouchReach it presses itself
+  // to the ground (body lower by crouchDrop), closer than that (or one
+  // closing in faster than crawlerSuddenSpeed, or turning to find one close
+  // by) it runs into the burrow.
+  //
+  crawlerFreezeReach: 300,
+  crawlerCrouchReach: 210,
+  crawlerSuddenSpeed: 380,
+  crouchDrop: 2.4,
+  //
+  // Coming out of a scare it only puts its head over the lip, waits
+  // peekMin..peekMax and goes on out; a crawler within peekFearReach sends
+  // it back down for peekHideMin..peekHideMax before it looks again.
+  //
+  peekMin: 1.2,
+  peekMax: 2.2,
+  peekFearReach: 340,
+  peekHideMin: 1.5,
+  peekHideMax: 3,
+  peekHeadOut: 14,                  // How far the mouth shows over the lip while it peeks
+  peekDive: 34,                     // How far down the wall it slides when it ducks
+  peekSpeed: 90,
   lakeShare: 0.6,                   // Share of its outings spent hunting at the lake
   //
   // Lake hunt: it stands lakeStandGap past the lake's edge, its front feet
@@ -120,7 +144,7 @@ const APPLE_BUG = {
   tunnelWidth: 518,                 // Burrow picture width: the full-size bug fits the cave's narrow middle
   tunnelDelay: 0.4,
   tunnelBugDark: 0.25,              // How dark the bug itself looks underground (a little darker than up top)
-  tunnel: { speed: 170, dashMin: 0.25, dashMax: 0.4, pauseMin: 0.04, pauseMax: 0.12 },
+  tunnel: { speed: 170, dashMin: 0.5, dashMax: 0.9, pauseMin: 0.04, pauseMax: 0.12 },
   tunnelRush: { speed: 340, dashMin: 0.45, dashMax: 0.6, pauseMin: 0, pauseMax: 0.02, dashStart: 0.5 },  // An apple fell up there: back out at once
   //
   // Out of the burrow in one jerk: a short crouch at the shaft's foot, then

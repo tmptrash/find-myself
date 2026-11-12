@@ -9,6 +9,7 @@ import { forestDepthBlurRadiusPx } from './forest-focus-depth.js'
 import * as TrampMushroom from './forest-tramp-mushroom.js'
 import * as Lake from './forest-lake.js'
 import { renderBushStrip } from './forest-bush-strip.js'
+import { forestBuriedElements } from './forest-ground-element.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from './forest-picture-trees.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from './forest-picture-bushes.js'
@@ -360,7 +361,8 @@ function paintBuriedDecor(ctx, width, height, layout, scale) {
     bottomY: height,
     treeX: menuWorldToScreenX(width, height)(LEVEL_LEFT_TREE_X),
     treeClearHalf: BURIED_TREE_CLEAR_HALF * scale,
-    stones: forestBuriedStones()
+    stones: forestBuriedStones(),
+    elements: forestBuriedElements()
   })
   renderUndergroundSpec(ctx, spec, undergroundStaticEarthTones())
   paintUndergroundDepthVignette(ctx, 0, layout.groundY, width, height - layout.groundY)

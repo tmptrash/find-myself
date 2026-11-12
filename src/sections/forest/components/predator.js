@@ -57,14 +57,16 @@ const CLUMPS = [{ dx: -0.35, dy: -0.7, r: 0.22 }, { dx: 0.1, dy: -0.82, r: 0.26 
 //
 // Back spikes: a pale horn thorn (THORN_H) on every SPIKE_AT plate (shares of
 // the body), standing out of the moss; on every SPROUT_EVERY-th of them it
-// rises from a sprout of two pointed leaves (SPROUT_LEAF_LEN, spread
-// SPROUT_SPREAD rad), its tip well over them.
+// stands between a sprout of two pointed leaves (SPROUT_LEAF_LEN, spread
+// SPROUT_SPREAD rad), one on each side of it, SPROUT_SIDE_GAP px off its
+// middle so the thorn never hides them.
 //
 const SPIKE_AT = [0.16, 0.26, 0.36, 0.46, 0.56, 0.66, 0.76, 0.86]
 const SPROUT_EVERY = 3
 const SPROUT_LEAF_LEN = 7
 const SPROUT_LEAF_HALF = 2.4
-const SPROUT_SPREAD = 0.75
+const SPROUT_SPREAD = 0.95
+const SPROUT_SIDE_GAP = 3.2
 const THORN_H = 10
 const THORN_HALF = 2
 //
@@ -502,7 +504,7 @@ function addPlate(inst, batch, seg, colors) {
 }
 //
 // A back spike on a plate's top, standing square to the body: its leaves
-// first (on a sprout plate), then the pale thorn rising over them.
+// beside it (on a sprout plate), then the pale thorn between them.
 //
 function drawSpike(inst, batch, seg, prev, sprout, colors) {
   const dx = seg.x - prev.x
@@ -522,7 +524,7 @@ function drawSpike(inst, batch, seg, prev, sprout, colors) {
   for (const side of [-1, 1]) {
     if (!sprout) break
     const a = Math.atan2(ny, nx) + side * SPROUT_SPREAD
-    addLeaf(batch, bx, by, Math.cos(a), Math.sin(a), colors)
+    addLeaf(batch, bx + tx * side * SPROUT_SIDE_GAP, by + ty * side * SPROUT_SIDE_GAP, Math.cos(a), Math.sin(a), colors)
   }
   addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF + 1, THORN_H + 1.4, colors.contour)
   addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF, THORN_H, colors.thorn)

@@ -56,6 +56,31 @@ const WANDER_RANGE_SEC = 3
 const WANDER_DIST = 80
 const LOOK_EASE_RATE = 5
 const BUOY_BLINK_MAX_INTERVAL = 20
+//
+// The hero running past a stalk knocks its foot: the stalk is soft, so the
+// knock runs up it as a wave (a chain of springs, one per joint: each joint
+// pulled back to the ground line by JOLT_ANCHOR and towards its neighbours
+// by JOLT_LINK, lighter and so livelier by JOLT_LIGHTER per joint up, damped
+// by JOLT_DAMPING; drawn JOLT_GAIN_FOOT times at the foot up to JOLT_GAIN_TIP
+// times at the eye). The kick (JOLT_IMPULSE px/s at the foot) reaches the eye
+// as a whip that throws the stalk off its sway, then dies away in about a
+// second. Only a hero at ground level (within JOLT_HERO_BAND of his standing
+// height, a frame's move no longer than JOLT_MAX_STEP) knocks it, and not
+// again within JOLT_COOLDOWN.
+//
+const JOLT_IMPULSE = 230
+const JOLT_GAIN_FOOT = 0.25
+const JOLT_GAIN_TIP = 2.4
+const JOLT_ANCHOR = 12
+const JOLT_LINK = 70
+const JOLT_LIGHTER = 0.35
+const JOLT_DAMPING = 3.4
+const JOLT_SUBSTEPS = 2
+const JOLT_HERO_BAND = 46
+const JOLT_HERO_FOOT_DROP = 38
+const JOLT_MAX_STEP = 80
+const JOLT_COOLDOWN = 0.6
+const JOLT_MAX_DT = 0.05
 const BUOY_BLINK_SEC = 0.32
 //
 // Hero landed on the eye cap — hold the lid closed briefly before reopening.
@@ -150,6 +175,9 @@ export function create(cfg) {
       swayLag: spot.swayLag ?? BUOY_SEGMENT_LAG_DEFAULT,
       eyeRadius: spot.eyeRadius,
       pupilRadius: spot.pupilRadius,
+      joltD: new Array(segmentCount).fill(0),
+      joltV: new Array(segmentCount).fill(0),
+      joltCool: 0,
       lidClose: 0,
       blinkLeft: 0,
       landHoldLeft: 0,
@@ -189,6 +217,7 @@ export function create(cfg) {
     woodPlatformBands: woodPlatformBands ?? [],
     platformXMargin: platformXMargin ?? 36,
     time: 0,
+    prevHeroX: null,
     bodyBatch: PolyBatch.create()
   }
 }
@@ -203,10 +232,13 @@ export function create(cfg) {
  */
 export function onUpdate(inst, heroX, heroY, dt, sights = []) {
   inst.time += dt
+  const prevHeroX = inst.prevHeroX ?? heroX
   inst.buoys.forEach(buoy => {
     updateBuoyBlink(buoy, dt)
     updateBuoyGaze(inst, buoy, heroX, heroY, sights, dt)
+    updateBuoyJolt(buoy, prevHeroX, heroX, heroY, dt)
   })
+  inst.prevHeroX = heroX
 }
 /**
  * The things worth watching for onUpdate's sights: the centipede's head
@@ -655,6 +687,37 @@ export function getChainBuoyEyePos(buoy, time = 0) {
   const points = buildBuoyChainPoints(buoy, time)
   return points[points.length - 1]
 }
+//
+// The knock: a hero crossing the stalk's foot at ground level kicks the
+// spring along his way; then the spring settles.
+//
+function updateBuoyJolt(buoy, prevX, heroX, heroY, dt) {
+  buoy.joltCool = Math.max(0, buoy.joltCool - dt)
+  const crossed = (prevX - buoy.x) * (heroX - buoy.x) <= 0 && prevX !== heroX
+  const onGround = Math.abs(heroY + JOLT_HERO_FOOT_DROP - buoy.groundY) <= JOLT_HERO_BAND
+  if (crossed && onGround && buoy.joltCool <= 0 && Math.abs(heroX - prevX) <= JOLT_MAX_STEP) {
+    buoy.joltV[0] += Math.sign(heroX - prevX) * JOLT_IMPULSE
+    buoy.joltCool = JOLT_COOLDOWN
+  }
+  const step = Math.min(dt, JOLT_MAX_DT) / JOLT_SUBSTEPS
+  for (let n = 0; n < JOLT_SUBSTEPS; n++) stepBuoyJolt(buoy, step)
+}
+//
+// One step of the joints' spring chain (the foot joint's lower neighbour is
+// the still ground, the eye's upper neighbour is nothing: it swings free).
+//
+function stepBuoyJolt(buoy, dt) {
+  const d = buoy.joltD
+  const v = buoy.joltV
+  const last = d.length - 1
+  for (let i = 0; i <= last; i++) {
+    const below = i === 0 ? 0 : d[i - 1]
+    const link = (below - d[i]) + (i === last ? 0 : d[i + 1] - d[i])
+    const lighter = 1 + i * JOLT_LIGHTER
+    v[i] += (-JOLT_ANCHOR * d[i] + JOLT_LINK * lighter * link - JOLT_DAMPING * v[i]) * dt
+  }
+  for (let i = 0; i <= last; i++) d[i] += v[i] * dt
+}
 function buildBuoyChainPoints(buoy, time) {
   let x = buoy.x
   let y = buoy.groundY
@@ -669,7 +732,7 @@ function buildBuoyChainPoints(buoy, time) {
     x += Math.sin(basePhase - i * lag) * scales[i]
     y -= segLen
     const pt = points[i + 1]
-    pt.x = x
+    pt.x = x + buoy.joltD[i] * (JOLT_GAIN_FOOT + (JOLT_GAIN_TIP - JOLT_GAIN_FOOT) * (i + 1) / buoy.segmentCount)
     pt.y = y
   }
   return points

@@ -3,6 +3,7 @@ import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
 import * as Lake from './forest-lake.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { loadPictureImage, pictureFringeAlpha } from './forest-picture.js'
+import { loadForestGroundElements } from './forest-ground-element.js'
 //
 // Stones of forest level 0, cut from assets/forest/stones.png (its stray
 // backdrop fringe wiped). Bare stones lie in the lake (a pile on the
@@ -247,13 +248,14 @@ const pileByK = new WeakMap()
 let groundCuts = null
 
 /**
- * Cuts the stones out of the sheet (once per page; waits for it to load).
+ * Cuts the stones out of the sheet (once per page; waits for it to load) —
+ * and the buried elements (bones, fossils...) out of theirs.
  * @returns {Promise<Array<{canvas: HTMLCanvasElement, kind: string}>|null>} Stones in
  *   sheet order at sheet size (null if the sheet failed to load)
  */
 export async function loadForestStones() {
   if (cuts) return cuts
-  const [img, groundImg] = await Promise.all([sheet, groundSheet])
+  const [img, groundImg] = await Promise.all([sheet, groundSheet, loadForestGroundElements()])
   groundImg && (groundCuts ??= cutSheet(groundImg, GROUND_STONES).map(c => c.canvas))
   if (!img) return null
   cuts ??= cutSheet(img, STONES)

@@ -3,14 +3,18 @@ import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as Sound from '../../../utils/sound.js'
 import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 //
-// Pulsing bomb flower sitting in the fork of each bomb tree (its picture
+// Slowly turning bomb flower sitting in the fork of each bomb tree (its picture
 // comes with the tree, utils/forest-bomb-tree.js). Landing near a tree jolts
 // it; enough jolts drop the bomb, which spins down and bursts into shards on
 // the ground like the hero's leaf death.
 //
-const TOMATO_PULSE_SPEED = 3.4
-const TOMATO_PULSE_SPEED_PER_HIT = 2.2
-const TOMATO_PULSE_AMP = 0.07
+// Each hanging bomb turns at its own rate (TURN_MIN..TURN_MIN + TURN_RANGE
+// rad/s, every other one the opposite way), a little faster after every jolt.
+//
+const TOMATO_TURN_MIN = 0.22
+const TOMATO_TURN_RANGE = 0.5
+const TOMATO_TURN_PER_HIT = 0.6
+const TOMATO_TURN_SEED_STEP = 0.618
 //
 // Landing radius around the trunk and how many jolts shake the bomb loose.
 //
@@ -56,6 +60,7 @@ export function create(cfg) {
       y: seat.y,
       vy: 0,
       spin: 0,
+      turnRate: (TOMATO_TURN_MIN + ((index * TOMATO_TURN_SEED_STEP + TOMATO_TURN_SEED_STEP) % 1) * TOMATO_TURN_RANGE) * (index % 2 === 0 ? 1 : -1),
       regrowTimer: 0,
       growT: 1
     }
@@ -68,19 +73,17 @@ export function create(cfg) {
     sfx,
     groundY,
     onExplode,
-    time: 0,
     tomatoes
   }
 }
 
 /**
- * Advances the pulse, keeps hanging bombs in their rocking forks and drops
- * falling ones until they burst on the ground.
+ * Turns the hanging bombs in their rocking forks and drops falling ones
+ * until they burst on the ground.
  * @param {Object} inst - Bomb inst
  * @param {number} dt - Frame delta
  */
 export function onUpdate(inst, dt) {
-  inst.time += dt
   inst.tomatoes.forEach(tomato => updateTomato(inst, tomato, dt))
 }
 
@@ -131,6 +134,7 @@ export function onDraw(inst, opacity = 1) {
 function updateTomato(inst, tomato, dt) {
   if (tomato.state === STATE_HANG) {
     tomato.growT < 1 && (tomato.growT = Math.min(1, tomato.growT + dt / TOMATO_GROW_SEC))
+    tomato.spin += tomato.turnRate * (1 + tomato.hits * TOMATO_TURN_PER_HIT) * dt
     const seat = BombTree.getCrownTop(inst.earTrees, tomato.index)
     seat && (tomato.x = seat.x, tomato.y = seat.y)
     return
@@ -168,7 +172,6 @@ function resetTomatoInFork(tomato, inst) {
   tomato.state = STATE_HANG
   tomato.hits = 0
   tomato.vy = 0
-  tomato.spin = 0
   tomato.regrowTimer = 0
   tomato.growT = 0
   const seat = BombTree.getCrownTop(inst.earTrees, tomato.index)
@@ -187,8 +190,8 @@ function tomatoGrowScale(tomato) {
   return TOMATO_GROW_MIN_SCALE + (1 - TOMATO_GROW_MIN_SCALE) * eased
 }
 //
-// The bomb flower picture, pulsing faster with every jolt, growing back after
-// a burst and spinning while it falls.
+// The bomb flower picture, turning slowly while it hangs (faster with every
+// jolt), growing back after a burst and spinning while it falls.
 //
 function drawTomato(inst, tomato, opacity) {
   const look = BombTree.getBombLook(inst.earTrees, tomato.index)
@@ -199,8 +202,7 @@ function drawTomato(inst, tomato, opacity) {
   const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
   const half = k.width() / (2 * zoom) + look.w
   if (tomato.x < camX - half || tomato.x > camX + half) return
-  const pulseSpeed = TOMATO_PULSE_SPEED + tomato.hits * TOMATO_PULSE_SPEED_PER_HIT
-  const scale = tomatoGrowScale(tomato) * (1 + Math.sin(inst.time * pulseSpeed + tomato.index) * TOMATO_PULSE_AMP)
+  const scale = tomatoGrowScale(tomato)
   const pos = inst._posScratch ?? (inst._posScratch = k.vec2(0, 0))
   pos.x = tomato.x
   pos.y = tomato.y

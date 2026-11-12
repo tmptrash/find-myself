@@ -41,6 +41,12 @@ const HERO_BLIND_STATES = ['feast', 'flee', 'coast']
 const ROAM_SPEEDS = [0, 18, 34, 52, 74]
 const ROAM_HOME_WANDER_PX = 72
 //
+// With a roam strip (roamLeftX..homeX) the crawler walks to random spots of it
+// instead of lingering at home, a little faster so it crosses the strip.
+//
+const ROAM_STRIP_SPEEDS = [0, 34, 52, 74, 110]
+const ROAM_GOAL_ARRIVE_PX = 24
+//
 // Near home a heading flip waits at least this long after the previous one —
 // back-to-back flips read as twitching in place.
 //
@@ -317,12 +323,15 @@ function finishFlee(inst) {
 function tickRoamHome(inst, dt) {
   inst.state = 'search'
   inst.burst -= dt
-  const home = inst.homeX
+  const strip = inst.roamLeftX != null && inst.homeX != null
+  strip && pickRoamGoal(inst)
+  const home = strip ? inst.roamGoalX : inst.homeX
   const dx = home == null ? 0 : home - inst.x
-  const away = home != null && Math.abs(dx) > ROAM_HOME_WANDER_PX
+  const away = home != null && (strip || Math.abs(dx) > ROAM_HOME_WANDER_PX)
   inst.roamTurnCooldown = Math.max(0, (inst.roamTurnCooldown ?? 0) - dt)
   if (inst.burst <= 0) {
-    inst.speedTarget = ROAM_SPEEDS[Math.floor(Math.random() * ROAM_SPEEDS.length)]
+    const speeds = strip ? ROAM_STRIP_SPEEDS : ROAM_SPEEDS
+    inst.speedTarget = speeds[Math.floor(Math.random() * speeds.length)]
     inst.burst = 0.2 + Math.random() * 0.7
     if (!inst.holdFacing) {
       if (away) inst.dir = Math.sign(dx) || inst.dir
@@ -341,6 +350,16 @@ function tickRoamHome(inst, dt) {
   softenHeadPose(inst, dt)
 }
 
+//
+// Picks a new random spot of the roam strip once the current one is reached.
+//
+function pickRoamGoal(inst) {
+  const left = clamp(inst.roamLeftX, inst.minX, inst.maxX)
+  const right = clamp(inst.homeX, left, inst.maxX)
+  const stale = inst.roamGoalX == null || inst.roamGoalX < left || inst.roamGoalX > right
+  if (!stale && Math.abs(inst.roamGoalX - inst.x) > ROAM_GOAL_ARRIVE_PX) return
+  inst.roamGoalX = left + Math.random() * (right - left)
+}
 
 //
 // Heads for the hero's x clamped to the patrol strip. Close to it (or with the

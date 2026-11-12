@@ -20,6 +20,13 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+    /* The page never scrolls or zooms by touch: without this a windowed mobile browser
+       runs scroll / pull-to-refresh / URL-bar gesture handling on every touch drag */
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
     background-color: #000000 !important;
   }
   body {

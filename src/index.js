@@ -6,6 +6,7 @@ import { installWindowResizeReboot } from "./utils/window-resize.js"
 import { prewarmMenuAssets } from "./scenes/menu.js"
 import * as NoMouse from "./utils/no-mouse.js"
 import * as SoftwareCanvas from "./utils/software-canvas.js"
+import * as PerfReadout from "./utils/perf-readout.js"
 //
 // Force dark background for all elements
 //
@@ -35,6 +36,7 @@ if (!import.meta.hot?.data.gameBooted) {
 async function boot() {
   SoftwareCanvas.create()
   NoMouse.create()
+  PerfReadout.create()
   const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)

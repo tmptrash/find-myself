@@ -47,9 +47,10 @@ const DRAW_Z = CFG.visual.zIndex.player - 1
 //
 //
 // In a rage the thorns lay back against the way it runs (tangent lean added
-// to the unit normal, scaled by inst.anger).
+// to the unit normal, scaled by inst.anger; the tip direction stays unit
+// length so the thorn bends instead of stretching).
 //
-const THORN_RAGE_BACK = 1.1
+const THORN_RAGE_BACK = 2.4
 const PLATE_R = 1.05
 const PLATE_RIM = 1.4
 const DOME_RISE = 0.28
@@ -504,8 +505,9 @@ function drawSpike(inst, batch, seg, prev, sprout, colors, index) {
   const tall = THORN_H * (THORN_H_MIN + THORN_H_RANGE * thornHash(index, THORN_HASH_H))
   const wide = THORN_HALF * (THORN_W_MIN + THORN_W_RANGE * thornHash(index, THORN_HASH_W))
   const lean = (thornHash(index, THORN_HASH_L) * 2 - 1) * THORN_LEAN - inst.anger * THORN_RAGE_BACK
-  const lx = nx + tx * lean
-  const ly = ny + ty * lean
+  const leanLen = Math.hypot(1, lean)
+  const lx = (nx + tx * lean) / leanLen
+  const ly = (ny + ty * lean) / leanLen
   addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide + 1, tall + 1.4, colors.contour)
   addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide, tall, colors.thorn)
 }

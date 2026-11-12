@@ -28,14 +28,15 @@ const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 // colors.touchControls): a see-through green-black face with film grain
 // (a small baked tile), a dark rim, a cream label ringed by the dark
 // contour; pressed, the rim lights up in the slate glint and the label
-// shades. The whole button shows at BTN_OPACITY.
+// shades. Only the face and the rim are see-through (BTN_FACE_ALPHA,
+// BTN_RIM_ALPHA): the icon stays solid.
 //
-const BTN_OPACITY = 0.8
+const BTN_RIM_ALPHA = 0.45
 //
 // The buttons' face is mostly see-through (their icons stay solid); the
 // Home Screen hint's text box keeps a denser face to stay readable.
 //
-const BTN_FACE_ALPHA = 0.3
+const BTN_FACE_ALPHA = 0.15
 const INSTALL_HINT_FACE_ALPHA = 0.6
 const BTN_BORDER_W = 2
 const BTN_LABEL_CONTOUR_PX = 1
@@ -145,7 +146,6 @@ function createHudButton(opts) {
     `height:${BTN_HEIGHT}px`,
     `z-index:${BTN_Z}`,
     'border-radius:8px',
-    `opacity:${BTN_OPACITY}`,
     'background-color:transparent',
     `background-image:url(${buttonGrainTile(BTN_FACE_ALPHA)})`,
     `filter:${iconContour()}`,
@@ -198,7 +198,7 @@ function createHudButton(opts) {
 function applyHudButtonPressed(btn) {
   const colors = CFG.visual.colors.touchControls
   btn.style.color = colors.arrowShade
-  btn.style.border = `${BTN_BORDER_W}px solid ${colors.glint}`
+  btn.style.border = `${BTN_BORDER_W}px solid ${cssRgba(colors.glint, BTN_RIM_ALPHA)}`
 }
 
 //
@@ -207,7 +207,7 @@ function applyHudButtonPressed(btn) {
 function applyHudButtonReleased(btn) {
   const colors = CFG.visual.colors.touchControls
   btn.style.color = colors.arrow
-  btn.style.border = `${BTN_BORDER_W}px solid ${colors.rim}`
+  btn.style.border = `${BTN_BORDER_W}px solid ${cssRgba(colors.rim, BTN_RIM_ALPHA)}`
 }
 //
 // A face: the disc colour at an alpha with film grain, baked once per alpha
@@ -309,7 +309,6 @@ function installHintCss() {
     'line-height:1.35',
     `font-family:${CFG.visual.fonts.regularFull.replace(/'/g, '')}`,
     'border-radius:8px',
-    `opacity:${BTN_OPACITY}`,
     'background-color:transparent',
     `background-image:url(${buttonGrainTile(INSTALL_HINT_FACE_ALPHA)})`,
     `color:${colors.arrow}`,

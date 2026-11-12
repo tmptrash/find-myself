@@ -13,6 +13,17 @@
 // rest, e.g. a high branch).
 //
 const FOLLOW_Y_RATE = 8
+//
+// Look-ahead on a screen held upright (taller than wide): the camera leads
+// the running hero by LEAD_SHARE of the view's width in the way he runs, so
+// more of the level shows ahead of him and he drifts toward the trailing
+// edge. The lead eases in at LEAD_RATE per second, stays when he stops and
+// swings over when he turns; a move under LEAD_MOVE_EPS px a frame does not
+// count as running.
+//
+const LEAD_SHARE = 0.22
+const LEAD_RATE = 2.2
+const LEAD_MOVE_EPS = 0.5
 
 /**
  * Creates the forest camera controller.
@@ -47,6 +58,9 @@ export function create(cfg) {
     // 1 = full playfield; higher values zoom in (Kaplay camScale).
     //
     zoom: 1,
+    leadX: 0,
+    leadDir: 0,
+    lastHeroX: null,
     shakeAmp: 0,
     shakeDuration: 0,
     shakeElapsed: 0,
@@ -130,6 +144,9 @@ export function followHero(inst, heroX, heroY, pixelAlignX = true, freeY = false
  */
 export function snapToHero(inst, heroX, heroY, freeY = false) {
   inst.camY = clampCamY(inst, followY(inst, heroY, freeY))
+  inst.leadX = 0
+  inst.leadDir = 0
+  inst.lastHeroX = heroX
   placeCamera(inst, heroX, true)
 }
 
@@ -168,12 +185,26 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 //
 function placeCamera(inst, heroX, pixelAlignX) {
   const k = inst.k
-  const desiredCamX = Math.max(inst.minCamX, Math.min(inst.maxCamX, heroX))
-  const camX = pixelAlignX && desiredCamX === heroX
+  const aimX = heroX + updateLead(inst, heroX)
+  const desiredCamX = Math.max(inst.minCamX, Math.min(inst.maxCamX, aimX))
+  const camX = pixelAlignX && desiredCamX === aimX
     ? alignCamXForSubject(k, heroX, desiredCamX)
     : alignCamToGrid(k.width(), desiredCamX)
   const camY = alignCamToGrid(k.height(), inst.camY)
   k.camPos(camX + (inst.shakeOffsetX ?? 0), camY + (inst.shakeOffsetY ?? 0))
+}
+//
+// The camera's look-ahead this frame (see LEAD_SHARE): none unless the
+// screen is held upright.
+//
+function updateLead(inst, heroX) {
+  const k = inst.k
+  const moved = inst.lastHeroX === null ? 0 : heroX - inst.lastHeroX
+  inst.lastHeroX = heroX
+  Math.abs(moved) > LEAD_MOVE_EPS && (inst.leadDir = Math.sign(moved))
+  const target = k.height() > k.width() ? inst.leadDir * inst.viewW * LEAD_SHARE : 0
+  inst.leadX += (target - inst.leadX) * Math.min(1, k.dt() * LEAD_RATE)
+  return inst.leadX
 }
 //
 // The hero Y the camera centres on: his own, or the rest height raised by

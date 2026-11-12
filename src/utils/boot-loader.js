@@ -24,6 +24,13 @@ const LOADER_PANEL_SHADOW_OVER_CRT = '0 0 0 1px rgba(216, 228, 236, 0.18), 0 10p
 // with a shaded side and a teal pupil.
 //
 const EYE_VIEW_W = 360
+//
+// On a narrow screen (a phone held upright) the stalk-eye never takes more
+// than LOADER_MAX_VW of the screen's width, nor the panel's side padding
+// more than LOADER_SIDE_PAD_VW (the SVG keeps its proportions).
+//
+const LOADER_MAX_VW = 62
+const LOADER_SIDE_PAD_VW = 5
 const EYE_VIEW_H = 96
 const STALK_ROOT_X = 14
 const STALK_Y = EYE_VIEW_H / 2
@@ -338,7 +345,7 @@ function buildLoaderPanel() {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '28px 40px',
+    padding: `28px min(40px, ${LOADER_SIDE_PAD_VW}vw)`,
     borderRadius: '8px',
     background: 'transparent'
   })
@@ -359,6 +366,8 @@ function buildLoaderEyeSvg(colors) {
   })
   svg.dataset.revision = String(LOADER_EYE_REVISION)
   svg.style.overflow = 'visible'
+  svg.style.width = `min(${EYE_VIEW_W}px, ${LOADER_MAX_VW}vw)`
+  svg.style.height = 'auto'
   const stalkContour = svgEl('path', strokeAttrs(colors.contour, STALK_SEGMENT_W + LOADER_OUTLINE_W * 2))
   const stalkBody = svgEl('path', strokeAttrs(colors.stem, STALK_SEGMENT_W))
   const spikesContour = svgEl('path', strokeAttrs(colors.contour, SPIKE_W + LOADER_OUTLINE_W * 2))

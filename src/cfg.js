@@ -157,14 +157,14 @@ export const CFG = {
         mysteryShadow: "#000000"       // Shadows of its drifting "?" glyphs
       },
       //
-      // On-screen run / jump buttons on touch devices, in the levels' own
-      // inks: green-black disc and contours, a cream arrow with a warm grey
-      // shaded part, a faint slate glint on the rim.
+      // On-screen buttons on touch devices (run / jump, fullscreen, back), in
+      // the levels' own inks: a see-through green-black face, cream icons
+      // (a warm grey while pressed) with green-black contours, a green-black
+      // rim on the Home Screen hint.
       //
       touchControls: {
         disc: PALETTE.gray0,
         rim: PALETTE.gray0,
-        glint: PALETTE.slate3,
         arrow: PALETTE.gray7,
         arrowShade: PALETTE.gray6,
         contour: PALETTE.gray0

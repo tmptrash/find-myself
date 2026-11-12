@@ -62,22 +62,15 @@ const CONTROLS_FULL_W_UPRIGHT = 500
 const HIT_HALF_WIDTH = 112
 const HIT_HALF_HEIGHT = 90
 //
-// Buttons in the levels' own look (cfg colors.touchControls), baked once per
-// live k: a see-through green-black disc with a dark rim and a faint light
-// glint inside it, a cream arrow (ARROW_BAKE_SCALE of the hit arrow's size)
-// in two tones — a shaded bevel ARROW_BEVEL px deep along its lower edges —
-// ringed by the green-black contour, film grain over all. The whole button is drawn
-// at BUTTON_OPACITY so the level shows through.
+// Buttons in the look of the corner HUD buttons (fullscreen.js; cfg
+// colors.touchControls), baked once per live k: a barely-there green-black
+// disc (DISC_ALPHA) with film grain and no rim, and a flat cream arrow
+// (ARROW_BAKE_SCALE of the hit arrow's size) ringed by a thin green-black
+// contour, solid — only the disc is see-through.
 //
-const BUTTON_OPACITY = 0.55
-const DISC_ALPHA = 0.6
-const RIM_W = 3
-const GLINT_W = 1.5
-const GLINT_INSET = 4.5
-const GLINT_ALPHA = 0.35
-const ARROW_CONTOUR_W = 5
+const DISC_ALPHA = 0.1
+const ARROW_CONTOUR_W = 3
 const ARROW_BAKE_SCALE = 0.72
-const ARROW_BEVEL = 3
 const BAKE_PAD = 2
 const BUTTON_TYPES = ['left', 'right', 'jump']
 const BUTTON_SPRITE_PREFIX = 'touch-control'
@@ -241,8 +234,7 @@ function drawControlButton(k, cx, cy, type, scale) {
     sprite: buttonSpriteName(type),
     pos: k.vec2(cx, cy),
     anchor: 'center',
-    scale,
-    opacity: BUTTON_OPACITY
+    scale
   })
 }
 function buttonSpriteName(type) {
@@ -271,26 +263,12 @@ function bakeButton(type, seed) {
   ctx.arc(c, c, CIRCLE_RADIUS, 0, Math.PI * 2)
   ctx.fill()
   ctx.globalAlpha = 1
-  ctx.lineWidth = RIM_W
-  ctx.strokeStyle = colors.rim
-  ctx.beginPath()
-  ctx.arc(c, c, CIRCLE_RADIUS - RIM_W / 2, 0, Math.PI * 2)
-  ctx.stroke()
-  ctx.globalAlpha = GLINT_ALPHA
-  ctx.lineWidth = GLINT_W
-  ctx.strokeStyle = colors.glint
-  ctx.beginPath()
-  ctx.arc(c, c, CIRCLE_RADIUS - GLINT_INSET, Math.PI, Math.PI * 2)
-  ctx.stroke()
-  ctx.globalAlpha = 1
-  paintArrow(ctx, c, type, colors)
   applyForestFilmGrainToCanvas(canvas, seed)
+  paintArrow(ctx, c, type, colors)
   return canvas
 }
 //
-// The arrow: contour stroked under it, the shade fill, then the cream fill
-// raised by the bevel (both cut to the arrow), so only its lower edges show
-// the shade.
+// The arrow: its contour stroked, then the flat cream fill over it.
 //
 function paintArrow(ctx, c, type, colors) {
   const pts = arrowPoints(type).map(([x, y]) => [c + x, c + y])
@@ -299,14 +277,8 @@ function paintArrow(ctx, c, type, colors) {
   ctx.strokeStyle = colors.contour
   traceArrow(ctx, pts)
   ctx.stroke()
-  ctx.fillStyle = colors.arrowShade
-  ctx.fill()
-  ctx.save()
-  ctx.clip()
-  traceArrow(ctx, pts.map(([x, y]) => [x, y - ARROW_BEVEL]))
   ctx.fillStyle = colors.arrow
   ctx.fill()
-  ctx.restore()
 }
 function traceArrow(ctx, pts) {
   ctx.beginPath()

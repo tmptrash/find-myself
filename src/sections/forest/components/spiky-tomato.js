@@ -21,6 +21,10 @@ const TOMATO_TURN_SEED_STEP = 0.618
 const TOMATO_LAND_RADIUS = 120
 const TOMATO_HITS_TO_DROP = 2
 //
+// The centipede brushes a tree when it crosses this far from the trunk.
+//
+const TOMATO_PREDATOR_TOUCH_RADIUS = 55
+//
 // Free fall from the fork, then a shard burst on the ground line.
 //
 const TOMATO_GRAVITY = 1800
@@ -62,7 +66,8 @@ export function create(cfg) {
       spin: 0,
       turnRate: (TOMATO_TURN_MIN + ((index * TOMATO_TURN_SEED_STEP + TOMATO_TURN_SEED_STEP) % 1) * TOMATO_TURN_RANGE) * (index % 2 === 0 ? 1 : -1),
       regrowTimer: 0,
-      growT: 1
+      growT: 1,
+      predatorInside: false
     }
   })
   particles && ForestFootParticles.prewarmLeafBurst(particles, burstPalette())
@@ -96,11 +101,22 @@ export function onUpdate(inst, dt) {
 export function onHeroLanded(inst, heroX) {
   const tomato = inst.tomatoes.find(t =>
     t.state === STATE_HANG && Math.abs(inst.earTrees.trees[t.index].x - heroX) <= TOMATO_LAND_RADIUS)
-  if (!tomato) return
-  BombTree.shake(inst.earTrees, tomato.index)
-  inst.sfx && !inst.sfx._forestSfxMuted && Sound.playForestEarTreeShake(inst.sfx)
-  tomato.hits += 1
-  tomato.hits >= TOMATO_HITS_TO_DROP && (tomato.state = STATE_FALL)
+  tomato && joltTomato(inst, tomato)
+}
+
+/**
+ * The centipede is at predX: each time it enters a tree's trunk zone it
+ * jolts that tree like a hero's landing does.
+ * @param {Object} inst - Bomb inst
+ * @param {number} predX - Centipede world X
+ */
+export function onPredatorPass(inst, predX) {
+  inst.tomatoes.forEach(tomato => {
+    const inside = Math.abs(inst.earTrees.trees[tomato.index].x - predX) <= TOMATO_PREDATOR_TOUCH_RADIUS
+    const entered = inside && !tomato.predatorInside
+    tomato.predatorInside = inside
+    entered && tomato.state === STATE_HANG && joltTomato(inst, tomato)
+  })
 }
 
 /**
@@ -130,6 +146,15 @@ export function restoreHits(inst, hits) {
  */
 export function onDraw(inst, opacity = 1) {
   inst.tomatoes.forEach(tomato => tomato.state !== STATE_GONE && drawTomato(inst, tomato, opacity))
+}
+//
+// One jolt: the tree rocks, and enough of them shake the bomb loose.
+//
+function joltTomato(inst, tomato) {
+  BombTree.shake(inst.earTrees, tomato.index)
+  inst.sfx && !inst.sfx._forestSfxMuted && Sound.playForestEarTreeShake(inst.sfx)
+  tomato.hits += 1
+  tomato.hits >= TOMATO_HITS_TO_DROP && (tomato.state = STATE_FALL)
 }
 function updateTomato(inst, tomato, dt) {
   if (tomato.state === STATE_HANG) {

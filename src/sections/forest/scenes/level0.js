@@ -6083,6 +6083,7 @@ function onUpdate(inst) {
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.budCine && BudCine.onUpdate(inst.budCine, k.dt(), !inst.deathHandled && !inst.drowning)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
+  inst.spikyTomatoes && inst.predator && !inst.predator.obj?.hidden && SpikyTomato.onPredatorPass(inst.spikyTomatoes, inst.predator.x)
   tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character

@@ -7,7 +7,7 @@
 //
 // Rage: how angry each state is (0..1) and how fast the face follows it.
 //
-const ANGER_BY_STATE = { hunt: 0.8, lunge: 1 }
+const ANGER_BY_STATE = { stalk: 0.6, hunt: 0.85, lunge: 1 }
 const ANGER_EASE = 10
 
 const SPOTS = [

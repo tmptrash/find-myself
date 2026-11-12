@@ -13,7 +13,7 @@ const FEAST_APPROACH_SPEED = 280
 //
 const FEAST_LIFT_MIN = 2
 const FEAST_LIFT_MAX = 18
-const FEAST_BITE_FORWARD_PX = 10
+const FEAST_BITE_FORWARD_PX = 8
 const FEAST_BITE_DROP_PX = 12
 const FEAST_APPROACH_SNAP_GAP = 36
 const FEAST_APPROACH_SNAP_DIST = 58
@@ -30,7 +30,7 @@ const FEAST_MAX_FRUIT_EQUIV = 2
 // The snout bites this share of the way into what is left of the fruit on
 // its side (so it touches it bite after bite as it gets smaller).
 //
-const FEAST_BITE_INTO = 0.78
+const FEAST_BITE_INTO = 0.92
 
 /**
  * @param {Object} pred - Predator inst

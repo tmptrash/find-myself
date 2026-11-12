@@ -104,11 +104,13 @@ const CHEW_HZ = 2.6
 //
 const ANTENNAE = [
   {
-    ctrl: [[0.73, -0.17], [1.0, -0.53], [1.4, -0.87], [1.87, -1.1], [2.33, -1.2], [2.87, -0.97], [3.4, -0.3]],
+    ctrl: [[0.55, -0.75], [0.45, -1.2], [0, -1.5], [-0.7, -1.55], [-1.5, -1.35], [-2.2, -1], [-2.9, -0.6], [-3.4, -0.1]],
+    pressed: [[0.55, -0.75], [0.4, -1], [0, -1.12], [-0.55, -1.1], [-1.1, -0.95], [-1.6, -0.7], [-2.1, -0.5], [-2.5, -0.3]],
     phase: 1.7
   },
   {
-    ctrl: [[0.3, -0.27], [0.4, -0.77], [0.63, -1.3], [1.0, -1.77], [1.47, -2.07], [2.0, -2.15], [2.53, -1.9], [2.93, -1.53]],
+    ctrl: [[0.15, -0.8], [0.05, -1.25], [-0.5, -1.55], [-1.2, -1.55], [-2, -1.3], [-2.7, -0.9], [-3.3, -0.4], [-3.7, 0.1]],
+    pressed: [[0.15, -0.8], [0, -1.05], [-0.45, -1.15], [-1, -1.1], [-1.5, -0.95], [-2, -0.75], [-2.5, -0.55], [-2.9, -0.35]],
     phase: 0
   }
 ]
@@ -124,6 +126,10 @@ const ANTENNA_SWAY_Y = 0.14
 const ANTENNA_SWAY_WAVE = 2.4
 const SPAN_STEPS = 4
 const ANTENNA_SHAPES = ANTENNAE.map(a => sampleCurve(a.ctrl))
+const ANTENNA_PRESSED_SHAPES = ANTENNAE.map(a => sampleCurve(a.pressed))
+const ANTENNA_PRESSED_SWAY = 0.3
+const ANTENNA_IDLE_SWAY = 0.5
+const ANTENNA_RUN_SPEED = 250
 const MANDIBLE_SHAPES = MANDIBLES.map(m => sampleCurve(m.ctrl.map(([f, y]) => [f, MANDIBLE_Y0 + (y - MANDIBLE_Y0) * MANDIBLE_Y_SCALE])))
 
 /**
@@ -294,9 +300,12 @@ function addMandibleTooth(batch, pts, index, halfWidth, view, mandible, colors) 
 // Both antennae: swayed curves with rings and a pale tip
 function drawAntennae(inst, batch, view, colors) {
   const t = inst.k.time() * ANTENNA_SWAY_HZ * Math.PI * 2
+  const run = Math.min(1, Math.abs(inst.vx) / ANTENNA_RUN_SPEED)
+  const amp = (ANTENNA_IDLE_SWAY + (1 - ANTENNA_IDLE_SWAY) * run) * (1 + (ANTENNA_PRESSED_SWAY - 1) * inst.anger)
   ANTENNAE.forEach((a, i) => {
     const buf = inst.headScratch.antennae[i]
-    placeCurve(ANTENNA_SHAPES[i], buf.all, view, { sway: { t: t + a.phase } })
+    const press = { shape: ANTENNA_PRESSED_SHAPES[i], mix: inst.anger }
+    placeCurve(ANTENNA_SHAPES[i], buf.all, view, { sway: { t: t + a.phase, amp }, press })
     const wBase = ANTENNA_W_BASE * view.r
     const wTip = ANTENNA_W_TIP * view.r
     PolyBatch.addTaperedRibbon(batch, buf.all, wBase + ANTENNA_RIM_PX * 2, wTip + ANTENNA_RIM_PX * 2, colors.contour, false)
@@ -350,13 +359,17 @@ function addCurveRing(batch, pts, index, width, thickness, color) {
 
 // Writes a sampled shape into world points: optionally swayed (antennae) or turned about a pivot (mandibles)
 function placeCurve(shape, out, view, motion) {
-  const { pivot, angle = 0, sway } = motion
+  const { pivot, angle = 0, sway, press } = motion
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
   for (let i = 0; i < shape.length; i++) {
     const p = shape[i]
     let f = p.f
     let y = p.y
+    if (press) {
+      f += (press.shape[i].f - f) * press.mix
+      y += (press.shape[i].y - y) * press.mix
+    }
     if (pivot) {
       const dx = f - pivot.f
       const dy = y - pivot.y
@@ -365,8 +378,8 @@ function placeCurve(shape, out, view, motion) {
     }
     if (sway) {
       const w = p.u * p.u
-      f += Math.cos(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_F * w
-      y += Math.sin(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_Y * w
+      f += Math.cos(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_F * w * sway.amp
+      y += Math.sin(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_Y * w * sway.amp
     }
     out[i].x = view.x + view.dir * f * view.r
     out[i].y = view.y + y * view.r

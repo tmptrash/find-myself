@@ -10,8 +10,13 @@ const STEP_LIFT = 7
 const FOOT_SOUND_GAP = 0.055
 const REACH = 16
 const PLANT_BEHIND = 11
-const FAR_HIP_DROP = 2
-const NEAR_HIP_DROP = 4
+//
+// Hips sit on the body at a fixed share of the way along the spine (leg.at),
+// this far down the plate's radius, so they stretch and heave with the body
+// and never slide along it.
+//
+const FAR_HIP_DROP = 0.25
+const NEAR_HIP_DROP = 0.5
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -61,6 +66,8 @@ export function tickLegs(inst, dt, hurry) {
     const hip = hipOf(inst, leg)
     leg.hipX = hip.x
     leg.hipY = hip.y
+    leg.bodyY = hip.bodyY
+    leg.bodyR = hip.bodyR
     if (leg.swing > 0) {
       leg.swing += dt * (hurry ? 9 : 4.2 + leg.haste)
       if (leg.swing >= 1) {
@@ -98,26 +105,25 @@ export function tickLegs(inst, dt, hurry) {
 }
 
 /**
- * World position of a leg hip on its body segment.
+ * World position of a leg hip on the body: at its fixed share of the way along
+ * the spine, between two plates, a little below the plate's middle.
  * @param {Object} inst
  * @param {Object} leg
- * @returns {{ x: number, y: number }}
+ * @returns {{ x: number, y: number, bodyY: number, bodyR: number }}
  */
 function hipOf(inst, leg) {
-  const seg = inst.segments[leg.seg]
-  const next = inst.segments[Math.min(inst.segments.length - 1, leg.seg + 1)]
-  const tx = next.x - seg.x
-  const ty = next.y - seg.y
-  const len = Math.hypot(tx, ty) || 1
-  const nx = -ty / len
-  //
-  // Near-side hips sit lower on the flank so those legs read in front of
-  // the body instead of hiding behind the far pair.
-  //
+  const from = Math.floor(leg.at)
+  const seg = inst.segments[from]
+  const next = inst.segments[Math.min(inst.segments.length - 1, from + 1)]
+  const t = leg.at - from
+  const bodyY = seg.y + (next.y - seg.y) * t
+  const bodyR = seg.radius + (next.radius - seg.radius) * t
   const drop = leg.side > 0 ? NEAR_HIP_DROP : FAR_HIP_DROP
   return {
-    x: seg.x + nx * leg.side * (seg.radius * 0.55),
-    y: seg.y + drop
+    x: seg.x + (next.x - seg.x) * t,
+    y: bodyY + bodyR * drop,
+    bodyY,
+    bodyR
   }
 }
 

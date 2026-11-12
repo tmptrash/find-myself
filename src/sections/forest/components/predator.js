@@ -39,16 +39,14 @@ const DRAW_Z = CFG.visual.zIndex.player - 1
 // Look (draw only — hit tests use the spine), after the reference picture:
 // a mossy centipede. The body is a row of domed shell plates, tail first so
 // each nearer plate overlaps the one behind and its contour arc marks the
-// joint: a brown underside band (BELLY_DROP under the plate's middle, its
-// radius BELLY_R of the plate's) under a green moss dome (PLATE_R of the
-// segment's radius, lifted DOME_RISE of it) with a darker lower half and a
-// few light moss clumps on top (CLUMPS, as shares of the radius). The
-// joints are bridged so a stretched charge never shows gaps.
+// joint: a green moss dome (PLATE_R of the segment's radius, lifted
+// DOME_RISE of it) with a darker lower half and a few light moss clumps on
+// top (CLUMPS, as shares of the radius). The joints are bridged so a
+// stretched charge never shows gaps. Legs start at the dome's lower side, at
+// fixed places along the spine.
 //
 const PLATE_R = 1.05
 const PLATE_RIM = 1.4
-const BELLY_R = 0.8
-const BELLY_DROP = 0.3
 const DOME_RISE = 0.28
 const DOME_SHADE_DROP = 0.3
 const DOME_LIT_R = 0.62
@@ -196,7 +194,6 @@ export function create(cfg) {
       shellShade: rgb(cfg.k, FOREST_PAL.predatorShellShade),
       shellLight: rgb(cfg.k, FOREST_PAL.predatorShellLight),
       clump: rgb(cfg.k, FOREST_PAL.predatorMossClump),
-      belly: rgb(cfg.k, FOREST_PAL.predatorBelly),
       bellyShade: rgb(cfg.k, FOREST_PAL.predatorBellyShade),
       leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
       legFar: rgb(cfg.k, FOREST_PAL.predatorLegFar),
@@ -340,12 +337,12 @@ function initLegs(inst) {
   inst.legs = []
   for (let i = 0; i < LEG_PAIRS; i++) {
     const span = Math.max(1, inst.segments.length - LEG_FIRST_SEG - LEG_TAIL_FREE)
-    const seg = LEG_FIRST_SEG + Math.min(span - 1, Math.floor(i * span / LEG_PAIRS))
+    const at = LEG_FIRST_SEG + (i + 0.5) * span / LEG_PAIRS
     for (const side of [-1, 1]) {
       const hipX = inst.x - inst.dir * (10 + i * 7)
       const footX = hipX + side * 8 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
       inst.legs.push({
-        seg,
+        at,
         side,
         front: i < 3,
         reach: 0.85 + Math.random() * 0.3,
@@ -462,16 +459,12 @@ function drawBodySegments(inst, batch, colors) {
   for (let i = segs.length - 1; i > 0; i--) addPlate(inst, batch, segs[i], colors)
 }
 //
-// One plate: the brown underside band, then the moss dome (shaded lower
+// One plate: the moss dome (shaded lower
 // half, lit top, light clumps).
 //
 function addPlate(inst, batch, seg, colors) {
   const r = seg.radius * PLATE_R
   const dir = inst.dir
-  const by = seg.y + r * BELLY_DROP
-  const br = r * BELLY_R
-  PolyBatch.addDisc(batch, seg.x, by, br, colors.contour)
-  PolyBatch.addDisc(batch, seg.x, by, br - PLATE_RIM, colors.belly)
   const dy = seg.y - r * DOME_RISE
   PolyBatch.addDisc(batch, seg.x, dy, r, colors.contour)
   PolyBatch.addDisc(batch, seg.x, dy, r - PLATE_RIM, colors.shellShade)
@@ -590,8 +583,7 @@ function addClaw(batch, x1, y1, x2, y2, dir, w, tipPad, color) {
 // stays above the edge.
 //
 function frontLegFrom(inst, limb, knee, foot) {
-  const seg = inst.segments[limb.seg]
-  const edgeY = seg.y + seg.radius * PLATE_R * NEAR_LEG_FROM
+  const edgeY = limb.bodyY + limb.bodyR * PLATE_R * NEAR_LEG_FROM
   if (knee.kneeY > edgeY) return { ...pointAtY(limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, edgeY), thigh: true }
   if (foot.y <= edgeY) return null
   return { ...pointAtY(knee.kneeX, knee.kneeY, foot.x, foot.y, edgeY), thigh: false }

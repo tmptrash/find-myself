@@ -22,7 +22,19 @@ const SWIM_MAX_GAP_STRETCH = 1.1
 //
 export const HEAD_RIDE = 12
 const BODY_RIDE = 5
-
+//
+// Gait bob: while it runs the body heaves up and down on its legs in sharp
+// beats (one per stride, GAIT_PHASE_PER_PX rad per px run), a wave that
+// reaches each segment later (GAIT_SEGMENT_LAG rad). The head heaves the
+// most; the bob fades in with speed (full at GAIT_FULL_SPEED px/s).
+//
+const GAIT_PHASE_PER_PX = 0.3
+const GAIT_SEGMENT_LAG = 0.55
+const GAIT_HEAD_AMP = 2.6
+const GAIT_BODY_AMP = 1.7
+const GAIT_FULL_SPEED = 90
+const GAIT_GAIN_EASE = 8
+const GAIT_BEAT_POWER = 2.2
 
 /**
  * Builds the spine parked on the ground at x.
@@ -30,6 +42,8 @@ const BODY_RIDE = 5
  */
 export function initBody(inst) {
   inst.segments = []
+  inst.gaitPhase = 0
+  inst.gaitGain = 0
   for (let i = 0; i < SEGMENT_COUNT; i++) {
     const x = inst.x - inst.dir * SPACING * i
     inst.segments.push({
@@ -70,8 +84,9 @@ export function tickBody(inst, dt) {
   if (applyBlendedRideTurn(inst)) return
   const head = inst.segments[0]
   const ride0 = ride(inst, 0)
+  tickGait(inst, dt)
   head.x = inst.x
-  head.y = inst.groundAt(inst.x) - ride0 - inst.headLift
+  head.y = inst.groundAt(inst.x) - ride0 - inst.headLift - gaitLift(inst, 0)
   const gap = SPACING * inst.stretch
   const followBase = 1 - Math.exp(-dt * (inst.spineFollowRate ?? 9))
   const maxGap = inst.swimming ? SPACING * Math.max(1, inst.stretch) * SWIM_MAX_GAP_STRETCH : Infinity
@@ -80,7 +95,7 @@ export function tickBody(inst, dt) {
     const seg = inst.segments[i]
     const aim = inst.dir
     const wantX = prev.x - aim * gap
-    const wantY = inst.groundAt(wantX) - ride(inst, i) - inst.headLift * (1 - i / inst.segments.length)
+    const wantY = inst.groundAt(wantX) - ride(inst, i) - inst.headLift * (1 - i / inst.segments.length) - gaitLift(inst, i)
     const along = i / (inst.segments.length - 1)
     const follow = followBase * (1 - along * 0.4)
     seg.x += (wantX - seg.x) * follow
@@ -88,6 +103,20 @@ export function tickBody(inst, dt) {
     const off = seg.x - prev.x
     Math.abs(off) > maxGap && (seg.x = prev.x + Math.sign(off) * maxGap)
   }
+}
+
+// Advances the stride by the distance run and eases the bob in and out with speed
+function tickGait(inst, dt) {
+  const speed = inst.swimming ? 0 : Math.abs(inst.vx)
+  inst.gaitPhase += speed * dt * GAIT_PHASE_PER_PX
+  inst.gaitGain += (Math.min(1, speed / GAIT_FULL_SPEED) - inst.gaitGain) * Math.min(1, dt * GAIT_GAIN_EASE)
+}
+
+// How far a segment is heaved up this frame: a sharp beat per stride, later down the body
+function gaitLift(inst, index) {
+  const beat = 0.5 + 0.5 * Math.sin(inst.gaitPhase - index * GAIT_SEGMENT_LAG)
+  const amp = index === 0 ? GAIT_HEAD_AMP : GAIT_BODY_AMP
+  return amp * inst.gaitGain * Math.pow(beat, GAIT_BEAT_POWER)
 }
 
 function ride(inst, index) {

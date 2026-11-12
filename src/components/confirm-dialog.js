@@ -51,6 +51,11 @@ const PHASE_BREAK = 'break'
 // ragged outline (vertex step and jitter, chamfered corners).
 //
 const BOARD_W = 640
+//
+// The board never takes more than this share of the screen width, so it
+// fits an upright phone.
+//
+const BOARD_MAX_SCREEN_SHARE = 0.92
 const BOARD_PAD_TOP = 48
 const BOARD_PAD_BOTTOM = 40
 const BOARD_EDGE_STEP = 40
@@ -289,7 +294,7 @@ const DEG = Math.PI / 180
  */
 export function create(cfg) {
   const { k } = cfg
-  const s = k.height() / REF_HEIGHT
+  const s = Math.min(k.height() / REF_HEIGHT, k.width() * BOARD_MAX_SCREEN_SHARE / BOARD_W)
   const look = cfg.look ?? LOOKS.FOREST
   const pal = PALETTES[look]
   const sprites = bakeSprites(k, cfg, s, look, pal)

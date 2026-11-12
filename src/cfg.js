@@ -321,7 +321,6 @@ export const CFG = {
         predatorShellShade: PALETTE.green0,
         predatorShellLight: PALETTE.green2,
         predatorMossClump: PALETTE.green4,
-        predatorBelly: PALETTE.rose1,
         predatorBellyShade: PALETTE.rose0,
         predatorLeg: PALETTE.orange2,
         predatorLegFar: PALETTE.rose1,

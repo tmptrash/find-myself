@@ -280,6 +280,7 @@ const DEG = Math.PI / 180
  * @param {string} cfg.yesLabel - Label of the confirming tag
  * @param {string} cfg.noLabel - Label of the cancelling tag
  * @param {Function} cfg.onYes - Called once "Yes" has played its break
+ * @param {Function} [cfg.onNo] - Called when "No" is chosen (not for the cross or Esc)
  * @param {Function} [cfg.onSelect] - Called when the highlighted tag changes
  * @param {number} cfg.z - Draw layer
  * @param {boolean} [cfg.defaultYes=false] - Highlight "Yes" when the dialog opens
@@ -298,6 +299,7 @@ export function create(cfg) {
     pal,
     sprites,
     onYes: cfg.onYes,
+    onNo: cfg.onNo,
     onSelect: cfg.onSelect,
     phase: PHASE_CLOSED,
     defaultChoice: cfg.defaultYes ? CHOICE_YES : CHOICE_NO,
@@ -380,7 +382,8 @@ export function moveSelection(inst, delta) {
 
 /**
  * Confirms the highlighted tag: "Yes" breaks the board into leaves (the
- * action follows), "No" jolts the camera lightly and pulls the board up.
+ * action follows), "No" jolts the camera lightly, pulls the board up and
+ * calls onNo.
  * @param {Object} inst - Dialog inst
  */
 export function confirm(inst) {
@@ -391,6 +394,7 @@ export function confirm(inst) {
   }
   inst.k.shake(NO_SHAKE)
   close(inst)
+  inst.onNo?.()
 }
 
 /**

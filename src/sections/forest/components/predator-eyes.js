@@ -4,6 +4,12 @@
 // hero once the creature has noticed them.
 //
 
+//
+// Rage: how angry each state is (0..1) and how fast the face follows it.
+//
+const ANGER_BY_STATE = { hunt: 0.8, lunge: 1 }
+const ANGER_EASE = 10
+
 const SPOTS = [
   { x: 1, y: -0.1 },
   { x: 0.2, y: 0.8 },
@@ -20,6 +26,7 @@ export function initEyes(inst) {
   inst.eyes = [
     { bias: 0.15, hold: 0.12, px: 0.2, py: -0.15 }
   ]
+  inst.anger = 0
 }
 
 /**
@@ -28,6 +35,7 @@ export function initEyes(inst) {
  * @param {{ x: number, y: number }|null} hero
  */
 export function tickEyes(inst, dt, hero) {
+  inst.anger += ((ANGER_BY_STATE[inst.state] ?? 0) - inst.anger) * Math.min(1, dt * ANGER_EASE)
   const lock = inst.state === 'stalk' || inst.state === 'hunt' || inst.state === 'lunge' || inst.state === 'feast'
   inst.eyes.forEach(eye => {
     if (lock && hero) {

@@ -2,16 +2,22 @@
 // Predator breaks off to eat a fruit knocked from the big tree, from any distance.
 //
 
+import { HEAD_RIDE } from './predator-body.js'
 import { getForestFruitDisplayRadius, getForestFruitReach, keepForestFruitRestingOnFloor, biteForestPictureFruit } from '../utils/forest-tree-fruit.js'
 
 const FEAST_APPROACH_BURST_MULT = 0.72
 const FEAST_APPROACH_SPEED = 280
-const FEAST_SNOUT_REACH = 7
-const FEAST_SNOUT_DROP = 2.4
+//
+// Where the mandible tips close, measured from the head's centre: this far
+// forward and this far down (the head hangs them to the fruit's height).
+//
+const FEAST_LIFT_MIN = 2
+const FEAST_LIFT_MAX = 18
+const FEAST_BITE_FORWARD_PX = 10
+const FEAST_BITE_DROP_PX = 12
 const FEAST_APPROACH_SNAP_GAP = 36
 const FEAST_APPROACH_SNAP_DIST = 58
 const FEAST_APPROACH_MAX_SEC = 14
-const FEAST_HEAD_RIDE = 15
 const FEAST_BITE_COUNT = 10
 const FEAST_BITE_FORWARD_SEC = 0.28
 const FEAST_BITE_BACK_SEC = 0.34
@@ -232,20 +238,25 @@ function applyFeastBitePose(pred, phase, t) {
 }
 
 function refreshFeastBitePose(pred, fruit) {
-  const head = pred.segments?.[0]
-  const headR = head?.radius ?? 11
   facePredatorTowardFruit(pred, fruit)
   const reach = getForestFruitReach(fruit, facingAngle(pred))
-  const forward = headR + FEAST_SNOUT_REACH
-  const biteX = fruit.x - pred.dir * (reach * FEAST_BITE_INTO + forward)
+  const biteX = fruit.x - pred.dir * (reach * FEAST_BITE_INTO + FEAST_BITE_FORWARD_PX)
   const groundY = pred.groundAt(biteX)
-  const biteLift = Math.max(2, Math.min(18, groundY - FEAST_HEAD_RIDE - (fruit.y - FEAST_SNOUT_DROP)))
+  const biteLift = feastHeadLift(pred, groundY, fruit)
   pred.feastBitePose = { x: biteX, headLift: biteLift }
 }
 
 function alignFeastApproachHeadLift(pred, fruit) {
   const groundY = pred.groundAt(pred.x)
-  pred.headLift = Math.max(2, Math.min(18, groundY - FEAST_HEAD_RIDE - (fruit.y - FEAST_SNOUT_DROP)))
+  pred.headLift = feastHeadLift(pred, groundY, fruit)
+}
+//
+// How high the head is lifted so the closing mandible tips meet the fruit's
+// centre height.
+//
+function feastHeadLift(pred, groundY, fruit) {
+  const headRide = HEAD_RIDE + pred.bodyClear
+  return Math.max(FEAST_LIFT_MIN, Math.min(FEAST_LIFT_MAX, groundY - headRide - (fruit.y - FEAST_BITE_DROP_PX)))
 }
 
 function smoothstep(t) {
@@ -372,10 +383,9 @@ function facePredatorTowardFruit(pred, fruit) {
 function predatorSnoutPoint(pred) {
   const head = pred.segments?.[0]
   if (!head) return null
-  const forward = head.radius + FEAST_SNOUT_REACH
   return {
-    x: pred.x + pred.dir * forward,
-    y: head.y + FEAST_SNOUT_DROP
+    x: pred.x + pred.dir * FEAST_BITE_FORWARD_PX,
+    y: head.y + FEAST_BITE_DROP_PX
   }
 }
 
@@ -387,11 +397,9 @@ function snoutToFruitSurfaceGap(pred, fruit) {
 }
 
 function feastApproachHeadX(pred, fruit) {
-  const head = pred.segments?.[0]
-  const forward = (head?.radius ?? 11) + FEAST_SNOUT_REACH
   const fruitR = getForestFruitDisplayRadius(fruit)
   const dir = fruit.x >= pred.x ? 1 : -1
-  return fruit.x - dir * (fruitR * 0.78 + forward)
+  return fruit.x - dir * (fruitR * 0.78 + FEAST_BITE_FORWARD_PX)
 }
 
 //

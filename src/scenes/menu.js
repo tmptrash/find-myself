@@ -373,6 +373,7 @@ export function sceneMenu(k) {
       glanceT: 0,
       lastKey: null,
       lastKeyAt: 0,
+      continueOnNo: false,
       isLeavingScene: false,
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0, [BACKDROP_MYSTERY]: 0 },
@@ -573,6 +574,14 @@ function onStartKey(inst, key) {
     return
   }
   if (!level.playable) return
+  openRestartDialog(inst, level, false)
+}
+//
+// Drops the level's restart board. A board raised by a click (continueOnNo)
+// also answers "No" by continuing the level, because the click meant "play".
+//
+function openRestartDialog(inst, level, continueOnNo) {
+  inst.continueOnNo = continueOnNo
   inst.dialog = inst.dialogs[level.dialog ?? ConfirmDialog.LOOKS.FOREST]
   ConfirmDialog.open(inst.dialog)
 }
@@ -587,6 +596,7 @@ function createRestartDialog(inst, look) {
     yesLabel: MENU_RESTART_YES,
     noLabel: MENU_RESTART_NO,
     onYes: () => restartLevel(inst),
+    onNo: () => inst.continueOnNo && enterLevel(inst, inst.levels[inst.selected]),
     defaultYes: true,
     onSelect: () => Sound.playMenuClickSound(inst.sound),
     z: MENU_DIALOG_Z,
@@ -612,7 +622,9 @@ function selectLevel(inst, index) {
   Sound.playMenuClickSound(inst.sound)
 }
 //
-// A click on a row selects it and enters it; a click elsewhere does nothing.
+// A click or tap on a row selects it and asks whether to start that level
+// over (Yes) or continue it (No) when it has saved progress; otherwise it
+// enters at once. A click elsewhere continues the last level.
 //
 function onPointerActivate(inst) {
   if (inst.isLeavingScene) return false
@@ -623,8 +635,20 @@ function onPointerActivate(inst) {
   const level = levelUnderPointer(inst)
   if (!level) return continueOnTouchOutsidePanel(inst)
   selectLevel(inst, level.index)
-  enterLevel(inst, level)
+  askRestartOrEnter(inst, level)
   return true
+}
+//
+// A level with saved progress asks first; a fresh one just starts.
+//
+function askRestartOrEnter(inst, level) {
+  if (!level.playable || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
+  const saved = get('lastLesson', null)
+  if (!saved?.startsWith(level.lessonPrefix)) {
+    enterLevel(inst, level)
+    return
+  }
+  openRestartDialog(inst, level, true)
 }
 //
 // A click or tap anywhere off the level panel continues the level last

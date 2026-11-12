@@ -24,19 +24,15 @@ const BTN_GAP = 8
 const FULLSCREEN_BTN_WIDTH = 44
 const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 //
-// The levels' look, as the on-screen run / jump buttons (cfg
-// colors.touchControls): a see-through green-black face with film grain
-// (a small baked tile), a dark rim, a cream label ringed by the dark
-// contour; pressed, the rim lights up in the slate glint and the label
-// shades. Only the face and the rim are see-through (BTN_FACE_ALPHA,
-// BTN_RIM_ALPHA): the icon stays solid.
+// The levels' look (cfg colors.touchControls): a cream icon ringed by the
+// dark contour (on the icon alone) over a barely-there green-black face
+// with film grain and no rim — the button itself is see-through, the icon
+// stays solid. Pressed, the face firms up to BTN_PRESSED_FACE_ALPHA and the
+// icon shades. The Home Screen hint's text box keeps a denser face to stay
+// readable.
 //
-const BTN_RIM_ALPHA = 0.45
-//
-// The buttons' face is mostly see-through (their icons stay solid); the
-// Home Screen hint's text box keeps a denser face to stay readable.
-//
-const BTN_FACE_ALPHA = 0.15
+const BTN_FACE_ALPHA = 0.1
+const BTN_PRESSED_FACE_ALPHA = 0.3
 const INSTALL_HINT_FACE_ALPHA = 0.6
 const BTN_BORDER_W = 2
 const BTN_LABEL_CONTOUR_PX = 1
@@ -51,7 +47,7 @@ const grainTileUrls = new Map()
 //
 const ICON_PX = 24
 const ICON_STROKE_W = 2.5
-const ICON_SVG_HEAD = `<svg width="${ICON_PX}" height="${ICON_PX}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${ICON_STROKE_W}" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto">`
+const ICON_SVG_HEAD = `<svg width="${ICON_PX}" height="${ICON_PX}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${ICON_STROKE_W}" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;filter:${iconContour()}">`
 const ICON_FULLSCREEN_ENTER = `${ICON_SVG_HEAD}<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>`
 const ICON_FULLSCREEN_EXIT = `${ICON_SVG_HEAD}<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>`
 const ICON_BACK = `${ICON_SVG_HEAD}<path d="M19 12H5M11 6l-6 6 6 6"/></svg>`
@@ -148,7 +144,7 @@ function createHudButton(opts) {
     'border-radius:8px',
     'background-color:transparent',
     `background-image:url(${buttonGrainTile(BTN_FACE_ALPHA)})`,
-    `filter:${iconContour()}`,
+    'border:none',
     'cursor:pointer',
     'padding:0',
     'line-height:1',
@@ -193,21 +189,19 @@ function createHudButton(opts) {
 }
 
 //
-// Pressed HUD button styling (shaded label, rim lit in the slate glint)
+// Pressed HUD button styling (shaded icon, firmer face)
 //
 function applyHudButtonPressed(btn) {
-  const colors = CFG.visual.colors.touchControls
-  btn.style.color = colors.arrowShade
-  btn.style.border = `${BTN_BORDER_W}px solid ${cssRgba(colors.glint, BTN_RIM_ALPHA)}`
+  btn.style.color = CFG.visual.colors.touchControls.arrowShade
+  btn.style.backgroundImage = `url(${buttonGrainTile(BTN_PRESSED_FACE_ALPHA)})`
 }
 
 //
-// Default HUD button styling — cream label, dark rim
+// Default HUD button styling — cream icon, see-through face
 //
 function applyHudButtonReleased(btn) {
-  const colors = CFG.visual.colors.touchControls
-  btn.style.color = colors.arrow
-  btn.style.border = `${BTN_BORDER_W}px solid ${cssRgba(colors.rim, BTN_RIM_ALPHA)}`
+  btn.style.color = CFG.visual.colors.touchControls.arrow
+  btn.style.backgroundImage = `url(${buttonGrainTile(BTN_FACE_ALPHA)})`
 }
 //
 // A face: the disc colour at an alpha with film grain, baked once per alpha

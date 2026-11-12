@@ -121,13 +121,14 @@ const IMPACT_SHAKE_SEC = 0.5
 const SQUEEZE_SHAKE = 2.5
 const SQUEEZE_SHAKE_SEC = 0.2
 //
-// Until the pull the grabbed hero is drawn just above the island (its baked
-// greenery sits above the player plane and would swallow him), under the
-// flower's front coils (eye-flower GRAB_FRONT_Z). From the pull on the
-// tunnel layer draws him between its back and front strands. The fade
-// covers everything in the level.
+// Until the pull the grabbed hero is drawn just behind the island (its
+// front and baked greenery cover his feet, as they do while he jumps onto
+// it — drawn over it he popped in front on landing), under the flower's
+// front coils (eye-flower GRAB_FRONT_Z). From the pull on the tunnel layer
+// draws him between its back and front strands. The fade covers everything
+// in the level.
 //
-const HERO_Z = 11.92
+const HERO_Z = 11.78
 const FADE_Z = CFG.visual.zIndex.ui * 20
 
 /**

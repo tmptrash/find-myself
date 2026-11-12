@@ -366,8 +366,8 @@ const GRAB_CLOSE_SPEED = 0.7
 const GRAB_BLADE_TILT_FOLLOW = 0.6
 //
 // Coils that pass in front of the hero draw over him; the grabbed hero is
-// drawn just above the island and its torn-earth hole (flower-grab), so the
-// coils sit above that, still under the lake fill.
+// drawn just behind the island (flower-grab), so the coils sit above both,
+// still under the lake fill.
 //
 const GRAB_FRONT_Z = ISLAND_Z + 0.18
 //

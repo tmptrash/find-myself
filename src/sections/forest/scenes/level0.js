@@ -6183,7 +6183,19 @@ function syncForestPredatorPatrolBounds(inst) {
   pred.x > pred.maxX && (pred.x = pred.maxX)
 }
 //
-// Hero on the island means grabbed — however he got there and whatever the
+// A hero jumping onto the island is taken only once he lands on it: standing
+// on something, or falling with his feet down to the island's top
+// (ISLAND_LAND_SLACK px above it). Rising through the island's band from the
+// centipede's stick he is still in mid-air over the water — a grab there
+// froze him over the lake short of the island.
+//
+const ISLAND_LAND_SLACK = 4
+function isHeroLandingOnIsland(inst, char, footY) {
+  if (char.isGrounded?.()) return true
+  return (char.vel?.y ?? 0) >= 0 && footY >= inst.eyeFlower.colliderTopY - ISLAND_LAND_SLACK
+}
+//
+// Hero landed on the island means grabbed — however he got there and whatever the
 // physics, stick or input state says. Runs first in the level update, before
 // the stick, the centipede and the lake checks can move or drown him.
 //
@@ -6194,6 +6206,7 @@ function tryStartForestFlowerGrab(inst) {
   if (!char?.pos) return false
   const footY = char.pos.y + SURFACE_DETECT_Y
   if (!EyeFlower.containsHero(inst.eyeFlower, char.pos.x, footY)) return false
+  if (!isHeroLandingOnIsland(inst, char, footY)) return false
   //
   // The bank strip reaches the centipede's head: a rider still on the stick
   // there has not left it yet.

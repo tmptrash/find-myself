@@ -86,6 +86,7 @@ import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '..
 import { loadForestStones, forestBuriedStones, forestGroundStones, forestBareStones, forestGroundStoneScale, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as PerfProbe from '../../../utils/perf-probe.js'
 import * as ChainBuoy from '../utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../utils/forest-eye-berry.js'
 import * as ChainEyeTramp from '../utils/forest-chain-eye-trampoline.js'
@@ -1054,6 +1055,14 @@ const SHORE_END_ROCK_Z = GROUND_FRONT_Z + 1
 const BUG_Z = SHORE_END_ROCK_Z + 0.5
 const GRASS_Z = BUG_Z + 0.2
 //
+// Layers the debug probe (?perf=1) can switch off to measure their frame cost.
+//
+const PERF_LAYER_GRASS = 'grass'
+const PERF_LAYER_WALL_STONES = 'cave wall stones'
+const PERF_LAYER_FRONT_STONES = 'cave front stones'
+const PERF_LAYER_CAVE_HERO = 'cave hero fg'
+const PERF_LAYERS = [PERF_LAYER_GRASS, PERF_LAYER_WALL_STONES, PERF_LAYER_FRONT_STONES, PERF_LAYER_CAVE_HERO]
+//
 // The hero counts as moving (drop hint's move time, gaze glance) once he
 // moved more than this (world px) since the last frame.
 //
@@ -1857,6 +1866,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     createForestGrassLayer(k, inst)
     window.__lvl = inst
+    inst.perf = PerfProbe.create({ k, layers: PERF_LAYERS })
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
       k.sprite(leftTree.roots.sprite),
@@ -1928,7 +1938,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k.z(PIT_CAVE_HERO_FOREGROUND_Z),
       {
         draw() {
-          drawForestPitCaveHeroForeground(inst)
+          PerfProbe.isOff(inst.perf, PERF_LAYER_CAVE_HERO) || drawForestPitCaveHeroForeground(inst)
         }
       }
     ])
@@ -1936,7 +1946,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k.z(PIT_CAVE_WALL_STONES_Z),
       {
         draw() {
-          inst.pit && drawForestPitCaveRocksOverEarthBand(inst)
+          inst.pit && !PerfProbe.isOff(inst.perf, PERF_LAYER_WALL_STONES) && drawForestPitCaveRocksOverEarthBand(inst)
         }
       }
     ])
@@ -1944,7 +1954,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       k.z(PIT_CAVE_FRONT_STONES_Z),
       {
         draw() {
-          inst.pit && drawForestPitCaveFrontStones(k, inst.pit)
+          inst.pit && !PerfProbe.isOff(inst.perf, PERF_LAYER_FRONT_STONES) && drawForestPitCaveFrontStones(k, inst.pit)
         }
       }
     ])
@@ -2544,7 +2554,7 @@ function createForestGrassLayer(k, inst) {
     k.z(GRASS_Z),
     {
       draw() {
-        ForestGrass.onDraw(inst.grass, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
+        PerfProbe.isOff(inst.perf, PERF_LAYER_GRASS) || ForestGrass.onDraw(inst.grass, forestCameraViewXRange(k, inst, FOREST_DECOR_CULL_MARGIN))
       }
     }
   ])

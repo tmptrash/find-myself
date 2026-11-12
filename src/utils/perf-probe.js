@@ -7,6 +7,8 @@ const P50 = 0.5
 const P95 = 0.95
 const PANEL_REFRESH_MS = 500
 const PANEL_STYLE = 'position:fixed;top:8px;right:8px;z-index:99999;background:#000c;color:#fff;font:12px monospace;padding:6px;border-radius:6px;display:flex;flex-direction:column;gap:4px'
+const DOM_LAYER = 'dom overlay'
+const KEEP_TAGS = ['CANVAS', 'SCRIPT']
 const OFF_STYLE = 'opacity:0.45;text-decoration:line-through'
 
 /**
@@ -29,7 +31,8 @@ export function create(cfg) {
   const stats = document.createElement('div')
   panel.appendChild(stats)
   const inst = { off: new Set(), samples: [], stats, panel, lastT: 0, lastShow: 0, rafId: 0, alive: true }
-  layers.forEach(name => panel.appendChild(createToggle(inst, name)))
+  const all = [...layers, DOM_LAYER]
+  all.forEach(name => panel.appendChild(createToggle(inst, name)))
   document.body.appendChild(panel)
   inst.rafId = requestAnimationFrame(t => onFrame(inst, t))
   k.onSceneLeave(() => destroy(inst))
@@ -90,4 +93,12 @@ function toggleLayer(inst, btn, name) {
   const wasOff = inst.off.delete(name)
   wasOff || inst.off.add(name)
   btn.style.cssText = wasOff ? '' : OFF_STYLE
+  name === DOM_LAYER && setDomOverlay(inst, wasOff)
+}
+
+// Hides or shows every page element except the canvas and the panel, to measure the cost of DOM over WebGL
+function setDomOverlay(inst, visible) {
+  Array.from(document.body.children)
+    .filter(el => el !== inst.panel && !KEEP_TAGS.includes(el.tagName))
+    .forEach(el => { el.style.visibility = visible ? '' : 'hidden' })
 }

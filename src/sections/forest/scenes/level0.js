@@ -1057,11 +1057,28 @@ const GRASS_Z = BUG_Z + 0.2
 //
 // Layers the debug probe (?perf=1) can switch off to measure their frame cost.
 //
-const PERF_LAYER_GRASS = 'grass'
+const PERF_LAYER_GRASS = 'grass draw'
+const PERF_LAYER_GRASS_TICK = 'grass update'
 const PERF_LAYER_WALL_STONES = 'cave wall stones'
 const PERF_LAYER_FRONT_STONES = 'cave front stones'
 const PERF_LAYER_CAVE_HERO = 'cave hero fg'
-const PERF_LAYERS = [PERF_LAYER_GRASS, PERF_LAYER_WALL_STONES, PERF_LAYER_FRONT_STONES, PERF_LAYER_CAVE_HERO]
+const PERF_LAYER_CAVE_PASS = 'cave pass'
+const PERF_LAYER_PREDATOR = 'centipede'
+const PERF_LAYER_BUG = 'apple bug'
+const PERF_LAYER_BUOY_DRAW = 'buoys draw'
+const PERF_LAYER_BUOY_TICK = 'buoys update'
+const PERF_LAYER_BACKDROP = 'backdrop offscreen'
+const PERF_LAYER_SKY_UNDERLAY = 'sky underlay'
+const PERF_LAYER_NEAR_ROW = 'near trees row'
+const PERF_LAYER_EARTH = 'earth sprite'
+const PERF_LAYER_CLOUDS = 'clouds'
+const PERF_LAYER_FPS = 'fps hud'
+const PERF_LAYERS = [
+  PERF_LAYER_GRASS, PERF_LAYER_GRASS_TICK, PERF_LAYER_WALL_STONES, PERF_LAYER_FRONT_STONES,
+  PERF_LAYER_CAVE_HERO, PERF_LAYER_CAVE_PASS, PERF_LAYER_PREDATOR, PERF_LAYER_BUG,
+  PERF_LAYER_BUOY_DRAW, PERF_LAYER_BUOY_TICK, PERF_LAYER_BACKDROP, PERF_LAYER_SKY_UNDERLAY,
+  PERF_LAYER_NEAR_ROW, PERF_LAYER_EARTH, PERF_LAYER_CLOUDS, PERF_LAYER_FPS
+]
 //
 // The hero counts as moving (drop hint's move time, gaze glance) once he
 // moved more than this (world px) since the last frame.
@@ -1716,7 +1733,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     createGroundDecorAtlasLayers(k, inst, rockObjs, mushObjs)
     createForestHorizFallTwigLayer(k, inst)
     await Clouds.loadForestClouds()
-    createForestCloudLayer(k, Clouds.create({ k, x1: LEFT_MARGIN, x2: WORLD_W - RIGHT_MARGIN, topY: TOP_MARGIN + FOREST_CLOUD_TOP_GAP }))
+    createForestCloudLayer(k, inst, Clouds.create({ k, x1: LEFT_MARGIN, x2: WORLD_W - RIGHT_MARGIN, topY: TOP_MARGIN + FOREST_CLOUD_TOP_GAP }))
     if (await forestBootstrapPause(bootstrap, 87, session)) return
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
@@ -2510,7 +2527,7 @@ function createForestChainBuoyLayer(k, zones) {
     {
       draw() {
         const sc = zones._sceneRef
-        if (!sc?.chainBuoys) return
+        if (!sc?.chainBuoys || PerfProbe.isOff(sc.perf, PERF_LAYER_BUOY_DRAW)) return
         const c = forestChainBuoyColors(k)
         ChainBuoy.onDraw(sc.chainBuoys, c, forestCameraViewXRange(k, sc, FOREST_DECOR_CULL_MARGIN))
       }
@@ -2546,8 +2563,8 @@ function syncShoreBranchPlatform(inst) {
 // Clouds drift over the parallax forest (drawn in the scene's onDraw, before
 // every object) and behind the level's big trees.
 //
-function createForestCloudLayer(k, clouds) {
-  k.add([k.z(FOREST_CLOUD_Z), { draw() { Clouds.onDraw(clouds) } }])
+function createForestCloudLayer(k, inst, clouds) {
+  k.add([k.z(FOREST_CLOUD_Z), { draw() { PerfProbe.isOff(inst.perf, PERF_LAYER_CLOUDS) || Clouds.onDraw(clouds) } }])
 }
 function createForestGrassLayer(k, inst) {
   k.add([
@@ -4762,16 +4779,16 @@ function onDrawWorld(inst) {
   // onto its trees). Parallax tree sprites extend below the ground line, so
   // the baked static earth+underground sprite covers that bleed in one draw.
   //
-  drawForestParallaxBackdropOffscreen(inst)
-  drawParallaxLayer(inst, PAR_LAYER_NEAR)
-  drawWorldSpriteClipped(k, inst, inst.earth ?? FOREST_PLAIN_EARTH, 1)
+  PerfProbe.isOff(inst.perf, PERF_LAYER_BACKDROP) || drawForestParallaxBackdropOffscreen(inst)
+  PerfProbe.isOff(inst.perf, PERF_LAYER_NEAR_ROW) || drawParallaxLayer(inst, PAR_LAYER_NEAR)
+  PerfProbe.isOff(inst.perf, PERF_LAYER_EARTH) || drawWorldSpriteClipped(k, inst, inst.earth ?? FOREST_PLAIN_EARTH, 1)
   drawForestPitCutoutBelowFloorFill(inst, k)
   drawForestPitMouthEarthGapFill(inst, k)
   //
   // Last in onDrawWorld — earth/static/parallax must not repaint over the pit;
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
   //
-  inst._forestPitDrawInOnDrawWorld && inst.pit && drawForestPitPass(inst)
+  inst._forestPitDrawInOnDrawWorld && inst.pit && !PerfProbe.isOff(inst.perf, PERF_LAYER_CAVE_PASS) && drawForestPitPass(inst)
 }
 function drawPlayfieldBottomCornerOverlay(inst) {
   const k = inst.k
@@ -4848,7 +4865,7 @@ function drawPlayfieldTopBar(inst) {
 // layer's blurred edges fade into the same colour instead of a dark seam.
 //
 function drawSkyUnderlay(inst) {
-  if (PLAYFIELD_ROUNDED) return
+  if (PLAYFIELD_ROUNDED || PerfProbe.isOff(inst.perf, PERF_LAYER_SKY_UNDERLAY)) return
   const k = inst.k
   k.drawRect({ pos: k.vec2(0, 0), width: k.width(), height: k.height(), color: skyTopColor(inst), fixed: true })
 }
@@ -6045,6 +6062,7 @@ function syncForestHeroTrampolinePads(inst, char, heroX, footY) {
 function onUpdate(inst) {
   const k = inst.k
   inst.fps && FpsCounter.onUpdate(inst.fps)
+  inst.perf && applyPerfHidden(inst)
   inst.zones._sceneRef = inst
   EyeFlower.syncVisible(inst.eyeFlower)
   if (inst._forestBirdsBootstrapKick) {
@@ -6064,7 +6082,7 @@ function onUpdate(inst) {
   inst.shoreFallTwigs && HorizFallTwig.tickTwigPredatorRide(inst.shoreFallTwigs, k.dt())
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
-  tickForestGrass(inst, k.dt())
+  PerfProbe.isOff(inst.perf, PERF_LAYER_GRASS_TICK) || tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
     inst.shoreFallTwigs, k.dt(), FLOOR_Y, inst.predator, inst.heroInst?.character
   )
@@ -6110,7 +6128,7 @@ function onUpdate(inst) {
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
-    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud))
+    !PerfProbe.isOff(inst.perf, PERF_LAYER_BUOY_TICK) && ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud))
   inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
@@ -7602,4 +7620,16 @@ function recomputeForestScreenLayout(k) {
   PLAYFIELD_SCREEN = ForestCamera.playfieldScreenRect(SCREEN_W, SCREEN_H, GAME_W, GAME_H)
   PLAYFIELD_ROUNDED = PLAYFIELD_SCREEN.x1 > 0 && PLAYFIELD_SCREEN.y1 > 0
   updatePlayfieldCornerPositions()
+}
+//
+// Debug probe only: hides or shows the objects that draw themselves (the
+// centipede, the apple bug and the HUD counter) to match the probe's switches.
+//
+function applyPerfHidden(inst) {
+  const hideBug = PerfProbe.isOff(inst.perf, PERF_LAYER_BUG)
+  const hideFps = PerfProbe.isOff(inst.perf, PERF_LAYER_FPS)
+  inst.predator && (inst.predator.obj.hidden = PerfProbe.isOff(inst.perf, PERF_LAYER_PREDATOR))
+  inst.appleBug.layers.forEach(obj => { obj.hidden = hideBug })
+  inst.fps.fpsText && (inst.fps.fpsText.hidden = hideFps)
+  inst.fps.fpsTextOutlines?.forEach(obj => { obj.hidden = hideFps })
 }

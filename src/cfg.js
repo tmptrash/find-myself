@@ -312,10 +312,10 @@ export const CFG = {
         //
         // Predatory crawler — a mossy centipede: an olive moss shell in three
         // tones (shade, base, lit top) with light moss clumps, a reddish-brown
-        // underside, head, antennae, fangs and claw legs (the far side a
-        // shade darker), pale horn thorns on its back (some over leaf
-        // sprouts), a crocodile snout with a red maw and pale teeth, a cream
-        // googly eye with a dark pupil, all ringed by the green-black contour.
+        // underside, a rust head with two angry cream eyes under brow ridges,
+        // long ringed antennae, golden-fanged mandibles and claw legs (the far
+        // side a shade darker), pale horn thorns on its back (some over leaf
+        // sprouts), all ringed by the green-black contour.
         //
         predatorShell: PALETTE.green1,
         predatorShellShade: PALETTE.green0,
@@ -329,9 +329,8 @@ export const CFG = {
         predatorLeaf: PALETTE.green2,
         predatorLeafLight: PALETTE.green4,
         predatorThorn: PALETTE.sand4,
-        predatorMaw: PALETTE.red0,          // Open crocodile mouth inside
-        predatorThroat: PALETTE.rose0,      // Its depth
-        predatorTooth: PALETTE.gray7,
+        predatorFang: PALETTE.orange4,      // Golden mandible fangs and antenna tips
+        predatorBrow: PALETTE.orange0,      // Dark rust brow ridges and nose
         predatorContour: PALETTE.gray0,
         predatorEye: PALETTE.gray7,
         predatorPupil: PALETTE.gray0,

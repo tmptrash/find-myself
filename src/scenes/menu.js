@@ -8,6 +8,7 @@ import { getProgress, get, set, normalizeSceneName } from "../utils/progress.js"
 import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { bindPointerActivate } from '../utils/pointer-activate.js'
+import * as NoMouse from '../utils/no-mouse.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
 import { generateForestMenuBackdrop, forestMenuLayout, loadForestMenuBackdropArt } from '../sections/forest/utils/forest-menu-bg.js'
@@ -280,6 +281,7 @@ const MENU_RESTART_YES = 'Yes'
 const MENU_RESTART_NO = 'No'
 const MENU_DIALOG_Z = CFG.visual.zIndex.ui + 10
 const MENU_KEY_RESTART = 'enter'
+const MENU_KEY_START = 'space'
 const MENU_KEY_BACK = 'escape'
 //
 // Space / Enter / Esc are heard twice per press (window keydown before the
@@ -551,6 +553,7 @@ function bindMenuInput(inst) {
   ]
   inst.startCancel = bindStartGameKeys(k, key => onStartKey(inst, key))
   inst.pointerCancel = bindPointerActivate(k, () => onPointerActivate(inst))
+  inst.mouseCancel = NoMouse.onMousePress(point => onMousePress(inst, point))
   inst.backCancel = bindBackToMenuKeys(k, () => onBackKey(inst))
 }
 //
@@ -636,9 +639,22 @@ function continueOnTouchOutsidePanel(inst) {
   return true
 }
 function isPointerOnPanel(inst) {
-  const { panel } = inst
   const pointer = inst.k.mousePos()
-  return pointer.x >= panel.x && pointer.x <= panel.x + panel.w && pointer.y >= panel.y && pointer.y <= panel.y + panel.h
+  return isPointOnPanel(inst, pointer.x, pointer.y)
+}
+function isPointOnPanel(inst, x, y) {
+  const { panel } = inst
+  return x >= panel.x && x <= panel.x + panel.w && y >= panel.y && y <= panel.y + panel.h
+}
+//
+// The mouse never reaches Kaplay (see no-mouse.js), so its click comes with
+// the page point: off the level panel it does what Space does.
+//
+function onMousePress(inst, point) {
+  const rect = inst.k.canvas.getBoundingClientRect()
+  const x = (point.x - rect.left) * inst.k.width() / rect.width
+  const y = (point.y - rect.top) * inst.k.height() / rect.height
+  isPointOnPanel(inst, x, y) || onStartKey(inst, MENU_KEY_START)
 }
 function onBackKey(inst) {
   if (!inst.sceneReady || inst.isLeavingScene || isMenuTransitionBlocking(inst.k)) return
@@ -1055,6 +1071,7 @@ function onMenuLeave(inst) {
   inst.startCancel.cancel()
   inst.backCancel.cancel()
   inst.pointerCancel?.cancel()
+  inst.mouseCancel?.()
   CanvasBackdrop.clearCanvasBackdrop(inst.k)
   stopMenuLoops(inst.music, inst.sound)
   inst.heroInst.character.destroy()

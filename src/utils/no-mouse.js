@@ -42,7 +42,7 @@ export function create() {
 /**
  * Calls fn on every left mouse press (the press itself still goes nowhere
  * else and no cursor shows).
- * @param {Function} fn - Called with no arguments
+ * @param {function({x: number, y: number}): void} fn - Called with the press point (page CSS px)
  * @returns {Function} Stops the calls
  */
 export function onMousePress(fn) {
@@ -67,5 +67,5 @@ function onMouse(inst, e) {
   e.cancelable && e.preventDefault()
   if (e.type !== PRESS_EVENT && e.type !== POINTER_PRESS_EVENT) return
   focusGameCanvas()
-  e.type === POINTER_PRESS_EVENT && e.button === LEFT_BUTTON && [...pressListeners].forEach(fn => fn())
+  e.type === POINTER_PRESS_EVENT && e.button === LEFT_BUTTON && [...pressListeners].forEach(fn => fn({ x: e.clientX, y: e.clientY }))
 }

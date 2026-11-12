@@ -16,6 +16,12 @@ const SPACING = BODY_LENGTH / (SEGMENT_COUNT - 1)
 // (the body read as stretched back to the shore), so gaps are capped there.
 //
 const SWIM_MAX_GAP_STRETCH = 1.1
+//
+// How high the head's and a body segment's centre ride above the ground; the
+// head is carried higher so its mandibles hang down to the ground.
+//
+const HEAD_RIDE = 12
+const BODY_RIDE = 5
 
 
 /**
@@ -85,7 +91,7 @@ export function tickBody(inst, dt) {
 }
 
 function ride(inst, index) {
-  const segR = index === 0 ? 8 : 5
+  const segR = index === 0 ? HEAD_RIDE : BODY_RIDE
   return segR + inst.bodyClear
 }
 

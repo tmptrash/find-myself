@@ -5,6 +5,7 @@ import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
 import { initEyes, tickEyes } from './predator-eyes.js'
+import { initHead, drawHead } from './predator-head.js'
 import { tickMove, startFleeMove } from './predator-move.js'
 import {
   cancelPredatorFeast,
@@ -93,35 +94,6 @@ const LEG_KNEE_W = 3.6
 const LEG_BOW = 1.6
 const LEG_RIM = 1.2
 //
-// Head: a round brown head (HEAD_R_MULT of the head segment's radius) with
-// one big googly eye, two long segmented antennae (ANTENNA_LEN, ANTENNA_SEGS
-// bends) swaying at ANTENNA_SWAY_HZ, and a crocodile's snout in front of it:
-// an upper jaw SNOUT_LEN long (UPPER_JAW_H0 thick at the head, UPPER_JAW_H1
-// at its tip) over a lower jaw (LOWER_JAW_H0..H1) opening JAW_DROP rad —
-// nearly shut at rest, a little open while it stalks and hunts, wide in a
-// lunge, and chewing (CHEW_MIN..CHEW_MAX at CHEW_HZ) while it eats — a red
-// maw between them, and
-// JAW_TEETH pale teeth on each jaw pointing into the gap, the two rows
-// interlocking.
-//
-const HEAD_R_MULT = 0.95
-const SNOUT_LEN = 17
-const SNOUT_HINGE = 0.45
-const SNOUT_HINGE_DROP = 0.3
-const UPPER_JAW_H0 = 6.5
-const UPPER_JAW_H1 = 3.2
-const LOWER_JAW_H0 = 5
-const LOWER_JAW_H1 = 2.4
-const JAW_DROP = { rest: 0.05, stalk: 0.14, hunt: 0.2, lunge: 0.62 }
-const CHEW_MIN = 0.06
-const CHEW_MAX = 0.5
-const CHEW_HZ = 2.6
-const UPPER_JAW_LIFT = 0.06
-const JAW_TEETH = 4
-const TOOTH_H = 3
-const TOOTH_HALF = 1.3
-const NOSTRIL_R = 0.9
-//
 // Tail: two big curved shear claws (TAIL_CLAW_LEN, TAIL_CLAW_W thick at the
 // base) spreading back from the last plate.
 //
@@ -144,18 +116,6 @@ const SNOUT_HALF = 4.1
 // front without crossing the plates.
 //
 const NEAR_LEG_FROM = 0.72
-const ANTENNA_LEN = 24
-const ANTENNA_W = 1.6
-const ANTENNA_SEGS = 6
-const ANTENNA_SWAY_HZ = 1.3
-const ANTENNA_SWAY = 0.2
-const ANTENNA_BEAD_R = 1.3
-const ANTENNAE = [{ angle: -0.75, phase: 0 }, { angle: -1.15, phase: 1.7 }]
-const EYE_RIM_R = 5.6
-const EYE_R = 4.4
-const EYE_GLINT_R = 1
-const PUPIL_W = 1.6
-const PUPIL_H = 3.2
 //
 // Hero must be within this horizontal span of the body to hear foot taps.
 //
@@ -244,9 +204,8 @@ export function create(cfg) {
       leaf: rgb(cfg.k, FOREST_PAL.predatorLeaf),
       leafLight: rgb(cfg.k, FOREST_PAL.predatorLeafLight),
       thorn: rgb(cfg.k, FOREST_PAL.predatorThorn),
-      maw: rgb(cfg.k, FOREST_PAL.predatorMaw),
-      throat: rgb(cfg.k, FOREST_PAL.predatorThroat),
-      tooth: rgb(cfg.k, FOREST_PAL.predatorTooth),
+      fang: rgb(cfg.k, FOREST_PAL.predatorFang),
+      brow: rgb(cfg.k, FOREST_PAL.predatorBrow),
       eye: rgb(cfg.k, FOREST_PAL.predatorEye),
       pupil: rgb(cfg.k, FOREST_PAL.predatorPupil)
     },
@@ -260,6 +219,7 @@ export function create(cfg) {
   ))
   initLegs(inst)
   initEyes(inst)
+  initHead(inst)
   inst.obj = cfg.k.add([
     cfg.k.z(DRAW_Z),
     {
@@ -643,117 +603,6 @@ function pointAtY(x1, y1, x2, y2, y) {
   if (y <= Math.min(y1, y2) || y1 === y2) return { x: y1 < y2 ? x1 : x2, y: Math.min(y1, y2) }
   const t = Math.min(1, (y - y1) / (y2 - y1))
   return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
-}
-//
-// Antennae, the round head, the crocodile snout in front of it, then the eye.
-//
-function drawHead(inst, batch, colors) {
-  const head = inst.segments[0]
-  const dir = inst.dir
-  const r = head.radius * HEAD_R_MULT
-  drawAntennae(inst, batch, head, r, colors)
-  PolyBatch.addDisc(batch, head.x, head.y, r, colors.contour)
-  PolyBatch.addDisc(batch, head.x, head.y, r - PLATE_RIM, colors.legFar)
-  PolyBatch.addDisc(batch, head.x + dir * 0.6, head.y - 0.8, r - PLATE_RIM - 1.2, colors.leg)
-  PolyBatch.addDisc(batch, head.x + dir * r * 0.2, head.y - r * 0.45, r * 0.28, colors.legLight)
-  drawSnout(inst, batch, head, r, colors)
-  const eye = inst.eyes[0]
-  if (!eye) return
-  const lookX = dir * clamp(eye.px, -1.1, 1.1) * 1.4
-  const lookY = clamp(eye.py, -1.1, 1.1) * 1.1
-  addEye(batch, head.x + dir * eye.ox, head.y + eye.oy, 1, lookX, lookY, dir, colors)
-}
-function addEye(batch, x, y, s, lookX, lookY, dir, colors) {
-  PolyBatch.addDisc(batch, x, y, EYE_RIM_R * s, colors.contour)
-  PolyBatch.addDisc(batch, x, y, EYE_R * s, colors.eye)
-  PolyBatch.addLine(batch, x + lookX * s, y + lookY * s - PUPIL_H * s, x + lookX * s, y + lookY * s + PUPIL_H * s, PUPIL_W * s, colors.pupil)
-  PolyBatch.addDisc(batch, x + lookX * s - dir * 0.8, y + lookY * s - 0.9, EYE_GLINT_R * s * 0.6, colors.eye)
-}
-//
-// The crocodile snout: the red maw between the jaws, the jaws' bodies, then
-// the teeth along their inner edges (the lower row half a step behind the
-// upper so they interlock) and a nostril on the upper jaw's tip.
-//
-function drawSnout(inst, batch, head, r, colors) {
-  const dir = inst.dir
-  const drop = jawDrop(inst)
-  const hx = head.x + dir * r * SNOUT_HINGE
-  const hy = head.y + r * SNOUT_HINGE_DROP
-  const up = { x: hx + dir * Math.cos(UPPER_JAW_LIFT) * SNOUT_LEN, y: hy - Math.sin(UPPER_JAW_LIFT) * SNOUT_LEN }
-  const low = { x: hx + dir * Math.cos(drop) * SNOUT_LEN * 0.9, y: hy + Math.sin(drop) * SNOUT_LEN * 0.9 }
-  PolyBatch.addTriangle(batch, hx - dir * 2, hy, up.x, up.y + 1, low.x, low.y - 1, colors.contour)
-  PolyBatch.addTriangle(batch, hx, hy, up.x - dir * 1, up.y + 1.5, low.x - dir * 1, low.y - 1.5, colors.throat)
-  PolyBatch.addTriangle(batch, hx + dir * 3, hy, up.x - dir * 2, up.y + 2, low.x - dir * 2, low.y - 2, colors.maw)
-  addTeeth(batch, hx, hy, up, 1, 0, colors)
-  addTeeth(batch, hx, hy, low, -1, 0.5, colors)
-  addJawBand(batch, hx, hy, up, -UPPER_JAW_H0, -UPPER_JAW_H1, colors)
-  addJawBand(batch, hx, hy, low, LOWER_JAW_H0, LOWER_JAW_H1, colors)
-  PolyBatch.addDisc(batch, up.x - dir * 2.5, up.y - UPPER_JAW_H1 + 0.5, NOSTRIL_R, colors.contour)
-}
-//
-// How far the lower jaw hangs open this frame (see JAW_DROP).
-//
-function jawDrop(inst) {
-  if (inst.state === 'feast' && inst.feastPhase !== 'eat') return JAW_DROP.hunt
-  if (inst.state !== 'feast') return JAW_DROP[inst.state] ?? JAW_DROP.rest
-  const chew = 0.5 + 0.5 * Math.sin(inst.k.time() * CHEW_HZ * Math.PI * 2)
-  return CHEW_MIN + (CHEW_MAX - CHEW_MIN) * chew
-}
-//
-// A jaw's body from the hinge to its tip along its inner edge, h0 thick at
-// the hinge and h1 at the tip (negative: over the edge), in the head's
-// browns with a lit outer rim.
-//
-function addJawBand(batch, hx, hy, tip, h0, h1, colors) {
-  const quad = (pad, a, b, color) => PolyBatch.addQuad(batch,
-    hx, hy - Math.sign(h0) * pad * 0.5, tip.x, tip.y - Math.sign(h1) * pad * 0.5,
-    tip.x, tip.y + h1 * b + Math.sign(h1) * pad, hx, hy + h0 * a + Math.sign(h0) * pad, color)
-  quad(PLATE_RIM, 1, 1, colors.contour)
-  PolyBatch.addDisc(batch, tip.x, tip.y + h1 / 2, Math.abs(h1) / 2 + PLATE_RIM, colors.contour)
-  quad(0, 1, 1, colors.leg)
-  PolyBatch.addDisc(batch, tip.x, tip.y + h1 / 2, Math.abs(h1) / 2, colors.leg)
-  quad(0, 0.45, 0.45, colors.legFar)
-}
-//
-// Pale teeth along a jaw's inner edge, pointing into the maw (into: +1 down
-// from the upper jaw, -1 up from the lower), offset by a share of a step.
-//
-function addTeeth(batch, hx, hy, tip, into, offset, colors) {
-  const dx = tip.x - hx
-  const dy = tip.y - hy
-  const len = Math.hypot(dx, dy) || 1
-  const tx = dx / len
-  const ty = dy / len
-  for (let i = 0; i < JAW_TEETH; i++) {
-    const t = (i + 0.5 + offset) / (JAW_TEETH + 0.5)
-    const bx = hx + dx * t
-    const by = hy + dy * t
-    PolyBatch.addTriangle(batch, bx - tx * (TOOTH_HALF + 0.7), by - ty * (TOOTH_HALF + 0.7), bx, by + into * (TOOTH_H + 1), bx + tx * (TOOTH_HALF + 0.7), by + ty * (TOOTH_HALF + 0.7), colors.contour)
-    PolyBatch.addTriangle(batch, bx - tx * TOOTH_HALF, by - ty * TOOTH_HALF, bx, by + into * TOOTH_H, bx + tx * TOOTH_HALF, by + ty * TOOTH_HALF, colors.tooth)
-  }
-}
-//
-// Two long segmented antennae from the crown, bending back as they go and
-// swaying, a bead at every joint.
-//
-function drawAntennae(inst, batch, head, r, colors) {
-  const t = inst.k.time() * ANTENNA_SWAY_HZ * Math.PI * 2
-  for (const a of ANTENNAE) {
-    let x = head.x + inst.dir * r * 0.35
-    let y = head.y - r * 0.7
-    let angle = a.angle + Math.sin(t + a.phase) * ANTENNA_SWAY
-    const step = ANTENNA_LEN / ANTENNA_SEGS
-    for (let i = 0; i < ANTENNA_SEGS; i++) {
-      const nx = x + inst.dir * Math.cos(angle) * step
-      const ny = y + Math.sin(angle) * step
-      PolyBatch.addLine(batch, x, y, nx, ny, ANTENNA_W + PLATE_RIM * 2, colors.contour)
-      PolyBatch.addLine(batch, x, y, nx, ny, ANTENNA_W, colors.leg)
-      PolyBatch.addDisc(batch, nx, ny, ANTENNA_BEAD_R, colors.legFar)
-      x = nx
-      y = ny
-      angle += 0.17
-    }
-  }
 }
 //
 // Two curved claws spreading back from the last plate.

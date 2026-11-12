@@ -31,12 +31,17 @@ const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 // shades. The whole button shows at BTN_OPACITY.
 //
 const BTN_OPACITY = 0.8
-const BTN_FACE_ALPHA = 0.6
+//
+// The buttons' face is mostly see-through (their icons stay solid); the
+// Home Screen hint's text box keeps a denser face to stay readable.
+//
+const BTN_FACE_ALPHA = 0.3
+const INSTALL_HINT_FACE_ALPHA = 0.6
 const BTN_BORDER_W = 2
 const BTN_LABEL_CONTOUR_PX = 1
 const BTN_GRAIN_TILE = 64
 const BTN_GRAIN_SEED = 9200
-let grainTileUrl = null
+const grainTileUrls = new Map()
 //
 // Icons any phone user knows, drawn in the label colour (currentColor) and
 // ringed by the dark contour: the four-corner frame for fullscreen (corners
@@ -142,7 +147,7 @@ function createHudButton(opts) {
     'border-radius:8px',
     `opacity:${BTN_OPACITY}`,
     'background-color:transparent',
-    `background-image:url(${buttonGrainTile()})`,
+    `background-image:url(${buttonGrainTile(BTN_FACE_ALPHA)})`,
     `filter:${iconContour()}`,
     'cursor:pointer',
     'padding:0',
@@ -205,20 +210,21 @@ function applyHudButtonReleased(btn) {
   btn.style.border = `${BTN_BORDER_W}px solid ${colors.rim}`
 }
 //
-// The button face: the disc colour at BTN_FACE_ALPHA with film grain, baked
-// once into a repeating tile.
+// A face: the disc colour at an alpha with film grain, baked once per alpha
+// into a repeating tile.
 //
-function buttonGrainTile() {
-  if (grainTileUrl) return grainTileUrl
+function buttonGrainTile(alpha) {
+  if (grainTileUrls.has(alpha)) return grainTileUrls.get(alpha)
   const canvas = document.createElement('canvas')
   canvas.width = BTN_GRAIN_TILE
   canvas.height = BTN_GRAIN_TILE
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = cssRgba(CFG.visual.colors.touchControls.disc, BTN_FACE_ALPHA)
+  ctx.fillStyle = cssRgba(CFG.visual.colors.touchControls.disc, alpha)
   ctx.fillRect(0, 0, BTN_GRAIN_TILE, BTN_GRAIN_TILE)
   applyForestFilmGrainToCanvas(canvas, BTN_GRAIN_SEED)
-  grainTileUrl = canvas.toDataURL()
-  return grainTileUrl
+  const url = canvas.toDataURL()
+  grainTileUrls.set(alpha, url)
+  return url
 }
 //
 // A dark contour round the label: one shadow per side.
@@ -305,7 +311,7 @@ function installHintCss() {
     'border-radius:8px',
     `opacity:${BTN_OPACITY}`,
     'background-color:transparent',
-    `background-image:url(${buttonGrainTile()})`,
+    `background-image:url(${buttonGrainTile(INSTALL_HINT_FACE_ALPHA)})`,
     `color:${colors.arrow}`,
     `border:${BTN_BORDER_W}px solid ${colors.rim}`,
     `text-shadow:${labelContour()}`,

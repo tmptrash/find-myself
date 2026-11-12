@@ -144,6 +144,11 @@ const BURIED_NIGHT = 0.3
 //
 const MOON_MARGIN_RIGHT = 220
 const MOON_MARGIN_TOP = 220
+//
+// On a canvas taller than wide (a phone held upright) the moon hangs this
+// much lower, clear of the title centred above it.
+//
+const UPRIGHT_MOON_DROP = 110
 let MOON_CENTER_X = CANVAS_W - MOON_MARGIN_RIGHT
 let MOON_CENTER_Y = MOON_MARGIN_TOP
 const MOON_RADIUS = 72
@@ -203,7 +208,7 @@ export function recomputeMenuBgLayout(width, height) {
   GROUND_Y = Math.round(CANVAS_H * 0.66)
   CENTER_X = Math.round(CANVAS_W / 2)
   MOON_CENTER_X = CANVAS_W - MOON_MARGIN_RIGHT
-  MOON_CENTER_Y = MOON_MARGIN_TOP
+  MOON_CENTER_Y = MOON_MARGIN_TOP + (CANVAS_H > CANVAS_W ? UPRIGHT_MOON_DROP : 0)
   MENU_BG_GROUND_Y = GROUND_Y
   MENU_BG_CANVAS_W = CANVAS_W
   MENU_BG_CANVAS_H = CANVAS_H

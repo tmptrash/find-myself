@@ -42,6 +42,9 @@ const HINT_FONT_SIZE = 20
 // Phones and tablets have no keys to press: a tap anywhere starts the game.
 //
 const TOUCH_HINT = 'tap anywhere to start'
+const TOUCH_HINT_SPRITE = 'ready-touch-hint'
+const TOUCH_HINT_SHADOW_OFFSET = 1
+const TOUCH_HINT_PAD = 4
 //
 // Fixed pixel margin from the bottom edge (matches the moon's fixed-margin
 // corner anchoring) so the hint sits the same distance off the bottom at
@@ -527,7 +530,7 @@ export function sceneReady(k) {
     const hintRgb = parseHex(CFG.visual.colors.ready.hint)
     const hintCfg = { k, centerX, y: HINT_Y, fontSize: HINT_FONT_SIZE, color: hintRgb, z: Z_HINT }
     const hint = isTouchDevice()
-      ? renderHintLine({ ...hintCfg, text: TOUCH_HINT })
+      ? createTouchHint(hintCfg)
       : renderHintWithEnter({ ...hintCfg, prefix: 'press Space or ', suffix: ' to start', onTap: () => exitToMenu() })
     //
     // Title letter layout — every glyph is a static baked letter.
@@ -643,10 +646,7 @@ function onDrawBg(k, spiderState) {
 // description block with its drop shadow.
 //
 function buildReadyStaticSprite(k) {
-  const canvas = document.createElement('canvas')
-  canvas.width = MENU_BG_CANVAS_W
-  canvas.height = MENU_BG_CANVAS_H
-  const ctx = canvas.getContext('2d')
+  const { canvas, ctx } = newBakeCanvas(MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
   //
   // Base fill + the darkened background picture.
   //
@@ -673,21 +673,64 @@ function buildReadyStaticSprite(k) {
     ctx.fillText(line, CENTER_X, cursorY)
     cursorY += TEXT_LINE_HEIGHT
   }
-  k.loadSprite(READY_STATIC_SPRITE, canvas)
+  k.loadSprite(READY_STATIC_SPRITE, canvas, bakeSpriteOpts())
   canvas.width = 0
   canvas.height = 0
+}
+//
+// The touch hint line: a live text at 1:1, or on a scaled-down view a smooth
+// bake of it (like the description), with the same setOpacity.
+//
+function createTouchHint(cfg) {
+  if (VIEW_SCALE === 1) return renderHintLine({ ...cfg, text: TOUCH_HINT })
+  const { k, centerX, y, fontSize, color, z } = cfg
+  const font = `${fontSize}px ${CFG.visual.fonts.regularFull}`
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = font
+  const w = Math.ceil(probe.measureText(TOUCH_HINT).width) + TOUCH_HINT_PAD * 2
+  const h = fontSize + TOUCH_HINT_PAD * 2
+  const { canvas, ctx } = newBakeCanvas(w, h)
+  ctx.font = font
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#000000'
+  ctx.fillText(TOUCH_HINT, w / 2 + TOUCH_HINT_SHADOW_OFFSET, h / 2 + TOUCH_HINT_SHADOW_OFFSET)
+  ctx.fillStyle = `rgb(${color.join(',')})`
+  ctx.fillText(TOUCH_HINT, w / 2, h / 2)
+  k.loadSprite(TOUCH_HINT_SPRITE, canvas, bakeSpriteOpts())
+  const hint = { k, x: centerX, y, w, h, opacity: 1 }
+  k.add([k.z(z), { draw() { drawTouchHint(hint) } }])
+  return { setOpacity: op => (hint.opacity = op) }
+}
+function drawTouchHint(hint) {
+  hint.k.drawSprite({ sprite: TOUCH_HINT_SPRITE, pos: hint.k.vec2(hint.x, hint.y), anchor: 'center', width: hint.w, height: hint.h, opacity: hint.opacity })
+}
+//
+// A canvas for a bake of w × h view px. On a scaled-down view it holds the
+// picture at the screen's own resolution (the context pre-scaled), and the
+// sprite samples smoothly (bakeSpriteOpts): text and the title rim keep
+// their rounded, anti-aliased edges instead of losing every other pixel to
+// the engine's nearest-neighbour minification.
+//
+function newBakeCanvas(w, h) {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(w * VIEW_SCALE))
+  canvas.height = Math.max(1, Math.round(h * VIEW_SCALE))
+  const ctx = canvas.getContext('2d')
+  ctx.scale(canvas.width / w, canvas.height / h)
+  return { canvas, ctx }
+}
+function bakeSpriteOpts() {
+  return { sliceX: 1, sliceY: 1, anims: {}, ...(VIEW_SCALE < 1 ? { filter: 'linear' } : {}) }
 }
 //
 // Bakes the menu moon onto a transparent full-screen sprite so the ready
 // scene can draw it above the star field (same geometry as the menu bg).
 //
 function buildReadyMoonSprite(k) {
-  const canvas = document.createElement('canvas')
-  canvas.width = MENU_BG_CANVAS_W
-  canvas.height = MENU_BG_CANVAS_H
-  const ctx = canvas.getContext('2d')
+  const { canvas, ctx } = newBakeCanvas(MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
   drawMenuMoon(ctx)
-  k.loadSprite(READY_MOON_SPRITE, canvas)
+  k.loadSprite(READY_MOON_SPRITE, canvas, bakeSpriteOpts())
   canvas.width = 0
   canvas.height = 0
 }
@@ -706,10 +749,7 @@ function buildReadyMoonSprite(k) {
 // rim's punched-out hole as a solid black fill instead of true transparency.
 //
 function bakeReadyTitleHollowRing(w, h, text, x, y, color) {
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
+  const { canvas, ctx } = newBakeCanvas(w, h)
   ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -737,7 +777,7 @@ function bakeReadyLetterSprite(k, char) {
     READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE, char,
     READY_LETTER_CANVAS_CENTER, READY_LETTER_CANVAS_CENTER, TITLE_OUTLINE_COLOR
   )
-  k.loadSprite(readyLetterSpriteName(char), ring)
+  k.loadSprite(readyLetterSpriteName(char), ring, bakeSpriteOpts())
   ring.width = 0
   ring.height = 0
 }
@@ -754,10 +794,7 @@ function readyLetterGlowSpriteName(char) {
   return `ready-letter-glow-${char.charCodeAt(0)}`
 }
 function bakeReadyLetterGlowSprite(k, char) {
-  const canvas = document.createElement('canvas')
-  canvas.width = READY_LETTER_CANVAS_SIZE
-  canvas.height = READY_LETTER_CANVAS_SIZE
-  const ctx = canvas.getContext('2d')
+  const { canvas, ctx } = newBakeCanvas(READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE)
   ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -766,7 +803,7 @@ function bakeReadyLetterGlowSprite(k, char) {
   for (let i = 0; i < TITLE_GLOW_PASSES; i++) {
     TITLE_OUTLINE_OFFSETS.forEach(([dx, dy]) => ctx.fillText(char, READY_LETTER_CANVAS_CENTER + dx, READY_LETTER_CANVAS_CENTER + dy))
   }
-  k.loadSprite(readyLetterGlowSpriteName(char), canvas)
+  k.loadSprite(readyLetterGlowSpriteName(char), canvas, bakeSpriteOpts())
   canvas.width = 0
   canvas.height = 0
 }
@@ -775,7 +812,7 @@ function bakeReadyLetterShadowSprite(k, char) {
     READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE, char,
     READY_LETTER_CANVAS_CENTER, READY_LETTER_CANVAS_CENTER, '#000000'
   )
-  k.loadSprite(readyLetterShadowSpriteName(char), ring)
+  k.loadSprite(readyLetterShadowSpriteName(char), ring, bakeSpriteOpts())
   ring.width = 0
   ring.height = 0
 }

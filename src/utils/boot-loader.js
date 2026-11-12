@@ -287,14 +287,17 @@ export function yieldForGpu(frames = DEFAULT_GPU_YIELD_FRAMES) {
 /**
  * Replaces the loader with an error message and gives the cursor back.
  * @param {string} message
+ * @param {Object} [opts]
+ * @param {Function} [opts.onTap] - Called on a tap / click anywhere on the message screen
  */
-export function showFatalLoaderError(message) {
+export function showFatalLoaderError(message, opts = {}) {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   stopLoaderBarAnimation()
   eye = null
   loaderEl.innerHTML = `<div style="color:#fff;font-family:${CFG.visual.fonts.regularFull};text-align:center;padding:24px">${message}</div>`
   loaderEl.style.display = 'flex'
+  opts.onTap && loaderEl.addEventListener('click', opts.onTap, { once: true })
 }
 
 //

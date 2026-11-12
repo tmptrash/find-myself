@@ -1,6 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import * as IkChain from '../../../utils/ik-chain.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
+import * as HeroLegs from '../../../utils/hero-legs.js'
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { drawMossyHillToCanvas, mossyHillBounds, mossyHillTopY } from '../../../utils/draw-mossy-hill.js'
 import { addEyeBerry, addTaperedPass } from '../utils/forest-eye-berry.js'
@@ -78,11 +79,13 @@ const PLANT_Z = CFG.visual.zIndex.player - 0.5
 //
 const COLLIDER_H = 10
 //
-// Walkable box extends past the hill crest on the right; its top edge aligns
-// with the lake surface so the hero lands at the waterline on the slope.
+// Walkable box extends past the hill crest on the right. Its top sits under
+// the island's crest by no more than a hero's leg (the lake surface lies
+// deeper still): a hero landing on the island sinks into its greenery at
+// most to his hips, not with half his body.
 //
 const COLLIDER_EXTEND_RIGHT = 52
-const COLLIDER_DROP = ISLAND_ABOVE_WATER
+const COLLIDER_DROP = Math.min(ISLAND_ABOVE_WATER, HeroLegs.LEG_TOP_HEIGHT)
 //
 // Painted soil line (grab hole, landing crumbs) sits this far under the
 // mossy crest, above the waterline collider.

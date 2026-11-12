@@ -79,6 +79,26 @@ const ASSET_LOAD_CONCURRENCY = 4
 const WEBGL_LOST_RELOAD_MS_AFTER_BOOT = 6000
 const WEBGL_LOST_RELOAD_MS_INGAME = 2500
 //
+// A reload loop on repeated context losses gets the site's WebGL blocked by
+// the browser (Chrome stops giving it a context until it restarts). Past
+// WEBGL_LOST_MAX_RELOADS automatic reloads within WEBGL_LOST_WINDOW_MS the
+// page waits for a tap instead (the times live in sessionStorage).
+//
+const WEBGL_LOST_MAX_RELOADS = 2
+const WEBGL_LOST_WINDOW_MS = 60000
+const WEBGL_LOST_RELOADS_KEY = 'webglLostReloads'
+const WEBGL_LOST_TAP_HINT = 'Graphics stopped responding. Close other tabs, then tap to reload. If it keeps happening, restart the browser.'
+const WEBGL_UNAVAILABLE_HINT = 'WebGL is not available right now. Close other tabs or restart the browser, then tap to reload.'
+//
+// An engine's WebGL context is released explicitly when it is torn down
+// (WEBGL_lose_context), RELEASE_DELAY_FRAMES frames later so the stopped
+// engine never draws on a lost context — leaving it to the garbage collector
+// piles up live contexts on every engine swap (each rotation of a phone)
+// until the browser drops them.
+//
+const RELEASE_DELAY_FRAMES = 2
+const glByCanvas = new WeakMap()
+//
 // WebGL context options we force onto Kaplay's canvas. By default Kaplay asks
 // for { preserveDrawingBuffer: true } which keeps a persistent GPU backbuffer
 // every frame — on heavy scenes this balloons GPU memory and is the most
@@ -169,7 +189,7 @@ export async function bootEngine(resolutionMode) {
   try {
     k = await initKaplayWithRetry(resolutionMode)
   } catch (err) {
-    BootLoader.showFatalLoaderError('WebGL is not available in this browser. Please reload the page or try a different browser.')
+    BootLoader.showFatalLoaderError(WEBGL_UNAVAILABLE_HINT, { onTap: reloadPage })
     throw err
   }
   TouchInput.initTouchInput(k)
@@ -283,10 +303,7 @@ export function teardownEngine(k) {
   if (!k) return
   resetPhysicalInputLayer()
   const canvas = k.canvas
-  if (canvas) {
-    canvas.removeEventListener('webglcontextlost', onWebGLContextLost, false)
-    canvas.removeEventListener('webglcontextrestored', onWebGLContextRestored, false)
-  }
+  canvas && detachContextListeners(canvas)
   //
   // k.quit() unbinds GL state, destroys the renderer and removes the canvas
   // itself, but only on the next "frameEnd" event — remove it from the DOM
@@ -300,6 +317,7 @@ export function teardownEngine(k) {
     //
   }
   canvas?.remove()
+  canvas && releaseContextLater(canvas)
   activeCanvas === canvas && (activeCanvas = null)
   webglLostReloadScheduled = false
 }
@@ -391,10 +409,10 @@ function createPatchedCanvas() {
   const canvas = document.createElement('canvas')
   const originalGetContext = canvas.getContext.bind(canvas)
   canvas.getContext = function patchedGetContext(type, opts) {
-    if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
-      opts = { ...(opts || {}), ...WEBGL_CONTEXT_OPTS_OVERRIDE }
-    }
-    return originalGetContext(type, opts)
+    if (type !== 'webgl' && type !== 'webgl2' && type !== 'experimental-webgl') return originalGetContext(type, opts)
+    const gl = originalGetContext(type, { ...(opts || {}), ...WEBGL_CONTEXT_OPTS_OVERRIDE })
+    gl && glByCanvas.set(canvas, gl)
+    return gl
   }
   //
   // Recover from GPU process crash / driver reset. Calling preventDefault()
@@ -416,11 +434,33 @@ function onWebGLContextLost(e) {
   // VRAM pinned → initKaplayWithRetry fails → misleading "WebGL not available".
   //
   const delayMs = kaplayBootReachedOnLoad ? WEBGL_LOST_RELOAD_MS_INGAME : WEBGL_LOST_RELOAD_MS_AFTER_BOOT
+  if (!noteContextLossReload()) {
+    BootLoader.showFatalLoaderError(WEBGL_LOST_TAP_HINT, { onTap: reloadPage })
+    return
+  }
   const hint = kaplayBootReachedOnLoad
     ? 'Graphics context lost. Reloading…'
     : 'GPU was overloaded while loading assets. Waiting before reload…'
   BootLoader.showFatalLoaderError(hint)
-  setTimeout(() => location.reload(), delayMs)
+  setTimeout(reloadPage, delayMs)
+}
+//
+// Records one automatic reload for a lost context; false when the recent
+// ones already reached WEBGL_LOST_MAX_RELOADS (the page then waits for a tap).
+//
+function noteContextLossReload() {
+  try {
+    const now = Date.now()
+    const recent = JSON.parse(sessionStorage.getItem(WEBGL_LOST_RELOADS_KEY) || '[]').filter(t => now - t < WEBGL_LOST_WINDOW_MS)
+    if (recent.length >= WEBGL_LOST_MAX_RELOADS) return false
+    sessionStorage.setItem(WEBGL_LOST_RELOADS_KEY, JSON.stringify([...recent, now]))
+    return true
+  } catch (_) {
+    //
+    // No sessionStorage (private mode, blocked site data): reload as before
+    //
+    return true
+  }
 }
 //
 // WebGL context restored: in our flow we always reload on loss, so this is
@@ -517,8 +557,34 @@ function updateLoaderBarFromKaplayProgress(k) {
  * so their dead WebGL contexts can be released by the browser).
  */
 function removeStaleCanvases() {
-  const stale = document.querySelectorAll('canvas')
-  stale.forEach(c => c.remove())
+  document.querySelectorAll('canvas').forEach(c => {
+    detachContextListeners(c)
+    c.remove()
+    releaseContext(c)
+  })
+}
+function detachContextListeners(canvas) {
+  canvas.removeEventListener('webglcontextlost', onWebGLContextLost, false)
+  canvas.removeEventListener('webglcontextrestored', onWebGLContextRestored, false)
+}
+//
+// Gives a canvas's WebGL context back to the browser right away.
+//
+function releaseContext(canvas) {
+  const gl = glByCanvas.get(canvas)
+  if (!gl) return
+  glByCanvas.delete(canvas)
+  gl.isContextLost() || gl.getExtension('WEBGL_lose_context')?.loseContext()
+}
+function releaseContextLater(canvas, frames = RELEASE_DELAY_FRAMES) {
+  if (frames <= 0) {
+    releaseContext(canvas)
+    return
+  }
+  requestAnimationFrame(() => releaseContextLater(canvas, frames - 1))
+}
+function reloadPage() {
+  location.reload()
 }
 /**
  * Register a one-time window blur listener that dispatches synthetic keyup

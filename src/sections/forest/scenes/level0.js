@@ -439,6 +439,8 @@ const PAR_ALPHA_OPAQUE = 255
 // half resolution quarters their fill cost without visible softening.
 //
 const PAR_OFFSCREEN_SCALE = 0.5
+// Frames the view must stand still before the backdrop is cached in its framebuffer
+const PAR_STILL_FRAMES = 3
 //
 // Extra pixels below the near-row occluder so the cropped backdrop blit
 // still covers the seam where the nearer trees become opaque.
@@ -4507,11 +4509,12 @@ function drawParallaxLayer(inst, layer) {
 // blit is equivalent to drawing those layers directly at a quarter of the
 // fill cost.
 //
-// Those layers only move with the camera, so the framebuffer is redrawn
-// only when the camera, the window or the near row's top changes: while the
-// view stands still the frame never switches render targets (on Apple GPUs
-// a target switch mid-frame flushes and reloads the screen's tiles, which
-// held a still level under 120 FPS).
+// Those layers only move with the camera. While the camera moves (a window
+// smaller than the playfield follows the hero) they are drawn straight to the
+// screen: switching the render target every frame flushes and reloads the
+// screen's tiles on Apple and mobile GPUs and drops the frame rate. Once the
+// view has stood still for PAR_STILL_FRAMES the framebuffer is drawn once and
+// only blitted from then on.
 //
 function drawForestParallaxBackdropOffscreen(inst) {
   const k = inst.k
@@ -4520,7 +4523,7 @@ function drawForestParallaxBackdropOffscreen(inst) {
   const cam = k.camPos()
   const scale = k.camScale?.()
   const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
-  const key = inst._parBackdropKey ??= { canvas: null, x: NaN, y: NaN, zoom: NaN, occluderY: NaN }
+  const key = inst._parBackdropKey ??= { canvas: null, x: NaN, y: NaN, zoom: NaN, occluderY: NaN, still: 0, cached: false }
   const stale = key.canvas !== offscreen || key.x !== cam.x || key.y !== cam.y || key.zoom !== zoom ||
     key.occluderY !== occluderY
   inst._parOffscreen = offscreen
@@ -4531,10 +4534,24 @@ function drawForestParallaxBackdropOffscreen(inst) {
     key.y = cam.y
     key.zoom = zoom
     key.occluderY = occluderY
+    key.still = 0
+    key.cached = false
+  }
+  key.still++
+  if (!key.cached && key.still >= PAR_STILL_FRAMES) {
     inst._drawParBackdrop ??= () => drawForestParallaxBackdropLayers(inst)
     offscreen.draw(inst._drawParBackdrop)
+    key.cached = true
   }
-  drawForestParallaxBackdropBlit(inst)
+  key.cached ? drawForestParallaxBackdropBlit(inst) : drawForestParallaxBackdropDirect(inst)
+}
+//
+// Moving view: the backdrop layers go straight to the screen, same camera.
+//
+function drawForestParallaxBackdropDirect(inst) {
+  drawSkyUnderlay(inst)
+  drawParallaxLayer(inst, PAR_LAYER_FAR)
+  drawParallaxLayer(inst, PAR_LAYER_MID)
 }
 //
 // Blits the half-resolution backdrop. The near row hides everything below

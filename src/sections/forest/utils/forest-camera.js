@@ -16,14 +16,22 @@ const FOLLOW_Y_RATE = 8
 //
 // Look-ahead on a screen held upright (taller than wide): the camera leads
 // the running hero by LEAD_SHARE of the view's width in the way he runs, so
-// more of the level shows ahead of him and he drifts toward the trailing
-// edge. The lead eases in at LEAD_RATE per second, stays when he stops and
-// swings over when he turns; a move under LEAD_MOVE_EPS px a frame does not
-// count as running.
+// more of the level shows ahead of him and he sits toward the trailing edge.
+// The lead never moves while he stands. It takes a new way only after he
+// has run that way for LEAD_TURN_HOLD seconds (a step or a turn on the spot
+// changes nothing), and then shifts only as he runs: LEAD_CATCH px of lead
+// per px he covers, ramping in over LEAD_RAMP seconds and slowing down
+// within LEAD_SOFT px of where it is going — so he drifts across the screen
+// to the other side over a run instead of the view jumping. A move under
+// LEAD_MOVE_EPS px a frame does not count as running.
 //
 const LEAD_SHARE = 0.22
-const LEAD_RATE = 2.2
 const LEAD_MOVE_EPS = 0.5
+const LEAD_TURN_HOLD = 0.35
+const LEAD_CATCH = 0.5
+const LEAD_RAMP = 0.4
+const LEAD_SOFT = 40
+const LEAD_SOFT_MIN = 0.15
 
 /**
  * Creates the forest camera controller.
@@ -60,6 +68,8 @@ export function create(cfg) {
     zoom: 1,
     leadX: 0,
     leadDir: 0,
+    runDir: 0,
+    runTime: 0,
     lastHeroX: null,
     shakeAmp: 0,
     shakeDuration: 0,
@@ -146,6 +156,8 @@ export function snapToHero(inst, heroX, heroY, freeY = false) {
   inst.camY = clampCamY(inst, followY(inst, heroY, freeY))
   inst.leadX = 0
   inst.leadDir = 0
+  inst.runDir = 0
+  inst.runTime = 0
   inst.lastHeroX = heroX
   placeCamera(inst, heroX, true)
 }
@@ -201,10 +213,27 @@ function updateLead(inst, heroX) {
   const k = inst.k
   const moved = inst.lastHeroX === null ? 0 : heroX - inst.lastHeroX
   inst.lastHeroX = heroX
-  Math.abs(moved) > LEAD_MOVE_EPS && (inst.leadDir = Math.sign(moved))
-  const target = k.height() > k.width() ? inst.leadDir * inst.viewW * LEAD_SHARE : 0
-  inst.leadX += (target - inst.leadX) * Math.min(1, k.dt() * LEAD_RATE)
+  if (k.height() <= k.width()) {
+    inst.leadX = 0
+    return 0
+  }
+  if (Math.abs(moved) <= LEAD_MOVE_EPS) return inst.leadX
+  trackRun(inst, Math.sign(moved), k.dt())
+  const delta = inst.leadDir * inst.viewW * LEAD_SHARE - inst.leadX
+  const ramp = Math.min(1, Math.max(0, inst.runTime - LEAD_TURN_HOLD) / LEAD_RAMP)
+  const soft = Math.max(LEAD_SOFT_MIN, Math.min(1, Math.abs(delta) / LEAD_SOFT))
+  const step = Math.abs(moved) * LEAD_CATCH * ramp * soft
+  inst.leadX += Math.sign(delta) * Math.min(Math.abs(delta), step)
   return inst.leadX
+}
+//
+// How long the hero has been running his current way; the lead takes that
+// way once he has kept to it LEAD_TURN_HOLD seconds.
+//
+function trackRun(inst, dir, dt) {
+  inst.runTime = dir === inst.runDir ? inst.runTime + dt : 0
+  inst.runDir = dir
+  inst.runTime >= LEAD_TURN_HOLD && (inst.leadDir = dir)
 }
 //
 // The hero Y the camera centres on: his own, or the rest height raised by

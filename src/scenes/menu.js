@@ -16,7 +16,6 @@ import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, getForestLightRgb } from '../sections/forest/utils/forest-palette.js'
-import { isTouchDevice } from '../utils/touch-input.js'
 import * as Lake from '../sections/forest/utils/forest-lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
@@ -534,8 +533,8 @@ function createMenuEyeStalks(inst) {
 //
 // Keyboard and mouse bindings. Menu: up/down (w/s) choose, Space enters the
 // selected level, Enter asks to restart it, Esc goes back; hover
-// selects a row, a click enters it; on a touch device a tap off the level
-// panel continues the last level. While the dialog is open every key and
+// selects a row, a click enters it; a click or tap off the level panel
+// continues the last level. While the dialog is open every key and
 // click goes to it instead.
 //
 function bindMenuInput(inst) {
@@ -625,11 +624,11 @@ function onPointerActivate(inst) {
   return true
 }
 //
-// On a phone or tablet a tap anywhere off the level panel continues the
-// level last played (the selected one when nothing is saved yet).
+// A click or tap anywhere off the level panel continues the level last
+// played (the selected one when nothing is saved yet).
 //
 function continueOnTouchOutsidePanel(inst) {
-  if (!isTouchDevice() || isPointerOnPanel(inst)) return false
+  if (isPointerOnPanel(inst)) return false
   const saved = get('lastLesson', null)
   const level = inst.levels.find(row => saved?.startsWith(row.lessonPrefix)) ?? inst.levels[inst.selected]
   selectLevel(inst, level.index)

@@ -1830,6 +1830,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     ForestGroundLine.DEBUG_DRAW && k.add([k.z(GROUND_LINE_DEBUG_Z), { draw() { drawForestGroundLineDebug(inst) } }])
     Hero.setSurfaceRay(heroInst, ForestGroundLine.raycast.bind(null, groundLine))
+    window.__lvl = inst
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
       k.sprite(leftTree.roots.sprite),

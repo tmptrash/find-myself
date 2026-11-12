@@ -123,6 +123,7 @@ const Z_SCENERY = CFG.visual.zIndex.background + 4
 //
 const READY_STATIC_SPRITE = 'ready-static-bg'
 const READY_MOON_SPRITE = 'ready-moon'
+const READY_DESC_SPRITE = 'ready-description'
 const READY_BG_DARKEN_ALPHA = 0.5
 const READY_TEXT_SHADOW_OFFSET = 1
 //
@@ -476,6 +477,7 @@ export function sceneReady(k) {
     //
     buildReadyStaticSprite(k)
     k.add([k.pos(0, 0), k.z(Z_SCENERY), { draw() { onDrawBg(k, spiderState) } }])
+    k.add([k.pos(0, 0), k.z(Z_SCENERY + 0.5), { draw() { onDrawDescription(k) } }])
     //
     // Twinkling star field overlaid on the baked menu-bg so the ready
     // scene gets a living night sky on top of the static composition.
@@ -572,10 +574,7 @@ export function sceneReady(k) {
         hintFlickerTime = 0
       }
       const hintOp = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * (hintFlickerTime / HINT_FLICKER_DURATION)
-      //
-      // The hint stays while everything else fades with the hero's departure.
-      //
-      hint.setOpacity(hintOp)
+      hint.setOpacity(hintOp * (spiderState.departureFade ?? 1))
       //
       // Title subtle flicker
       //
@@ -644,6 +643,13 @@ function onDrawBg(k, spiderState) {
   })
 }
 //
+// The description under the ground stays while everything else fades with
+// the hero's departure (its own sprite, drawn at full opacity).
+//
+function onDrawDescription(k) {
+  k.drawSprite({ sprite: READY_DESC_SPRITE, pos: k.vec2(0, 0), width: VIEW_W, height: VIEW_H })
+}
+//
 // Bakes every static element of the ready scene into ONE full-screen
 // canvas and loads it as a sprite: the scene background colour, the
 // menu-bg picture (moon, tree layers, rocks, roots, mushrooms) at the
@@ -672,8 +678,15 @@ function buildReadyStaticSprite(k) {
   bgCanvas.height = 0
   //
   // Bottom description block — centred lines with a glow-style drop shadow
-  // (single black copy offset right+down).
+  // (single black copy offset right+down), on its own sprite.
   //
+  k.loadSprite(READY_STATIC_SPRITE, canvas, bakeSpriteOpts())
+  canvas.width = 0
+  canvas.height = 0
+  buildReadyDescriptionSprite(k)
+}
+function buildReadyDescriptionSprite(k) {
+  const { canvas, ctx } = newBakeCanvas(MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
   ctx.font = `${TEXT_FONT_SIZE}px ${CFG.visual.fonts.thinFull}, ${CFG.visual.fonts.regularFull}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -685,7 +698,7 @@ function buildReadyStaticSprite(k) {
     ctx.fillText(line, CENTER_X, cursorY)
     cursorY += TEXT_LINE_HEIGHT
   }
-  k.loadSprite(READY_STATIC_SPRITE, canvas, bakeSpriteOpts())
+  k.loadSprite(READY_DESC_SPRITE, canvas, bakeSpriteOpts())
   canvas.width = 0
   canvas.height = 0
 }

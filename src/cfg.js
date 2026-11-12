@@ -310,17 +310,31 @@ export const CFG = {
         decorGray: PALETTE.gray5,
         hudScore: PALETTE.gray5,
         //
-        // Predatory crawler — cool forest shadow (teal/green), pale eye,
-        // dark red pupil. Shears stay bark-brown so they read as horn, not UI.
+        // Predatory crawler — a mossy centipede: an olive moss shell in three
+        // tones (shade, base, lit top) with light moss clumps, a reddish-brown
+        // underside, head, antennae, fangs and claw legs (the far side a
+        // shade darker), pale horn thorns on its back (some over leaf
+        // sprouts), a crocodile snout with a red maw and pale teeth, a cream
+        // googly eye with a dark pupil, all ringed by the green-black contour.
         //
-        predatorBack: PALETTE.teal0,
-        predatorBelly: PALETTE.green0,
-        predatorMoss: PALETTE.teal1,
+        predatorShell: PALETTE.green1,
+        predatorShellShade: PALETTE.green0,
+        predatorShellLight: PALETTE.green2,
+        predatorMossClump: PALETTE.green4,
+        predatorBelly: PALETTE.rose1,
+        predatorBellyShade: PALETTE.rose0,
+        predatorLeg: PALETTE.orange2,
+        predatorLegFar: PALETTE.rose1,
+        predatorLegLight: PALETTE.red4,
+        predatorLeaf: PALETTE.green2,
+        predatorLeafLight: PALETTE.green4,
+        predatorThorn: PALETTE.sand4,
+        predatorMaw: PALETTE.red0,          // Open crocodile mouth inside
+        predatorThroat: PALETTE.rose0,      // Its depth
+        predatorTooth: PALETTE.gray7,
         predatorContour: PALETTE.gray0,
-        predatorLeg: PALETTE.teal0,
-        predatorEye: PALETTE.sand5,
-        predatorPupil: PALETTE.red0,
-        predatorHorn: PALETTE.brown1,
+        predatorEye: PALETTE.gray7,
+        predatorPupil: PALETTE.gray0,
         water: PALETTE.cyan2,
         //
         // Lake paint over the base water fill, all at low opacity so the

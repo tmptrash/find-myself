@@ -20,6 +20,12 @@ import * as Sound from '../../../utils/sound.js'
 //
 const LEG_PAIRS = 12
 //
+// Leg pairs run from the first plate behind the head (LEG_FIRST_SEG) to
+// LEG_TAIL_FREE plates short of the tail.
+//
+const LEG_FIRST_SEG = 1
+const LEG_TAIL_FREE = 2
+//
 // Near-side legs start half a stride ahead so the two rows alternate.
 //
 const NEAR_SIDE = 1
@@ -28,18 +34,112 @@ const NEAR_STEP_DELAY = 0.08
 const THIGH = 11
 const SHIN = 13
 const DRAW_Z = CFG.visual.zIndex.player - 1
+//
+// Look (draw only — hit tests use the spine), after the reference picture:
+// a mossy centipede. The body is a row of domed shell plates, tail first so
+// each nearer plate overlaps the one behind and its contour arc marks the
+// joint: a brown underside band (BELLY_DROP under the plate's middle, its
+// radius BELLY_R of the plate's) under a green moss dome (PLATE_R of the
+// segment's radius, lifted DOME_RISE of it) with a darker lower half and a
+// few light moss clumps on top (CLUMPS, as shares of the radius). The
+// joints are bridged so a stretched charge never shows gaps.
+//
+const PLATE_R = 1.05
+const PLATE_RIM = 1.4
+const BELLY_R = 0.8
+const BELLY_DROP = 0.3
+const DOME_RISE = 0.28
+const DOME_SHADE_DROP = 0.3
+const DOME_LIT_R = 0.62
+const DOME_LIT_RISE = 0.28
+const BRIDGE_W = 1.45
+const CLUMPS = [{ dx: -0.35, dy: -0.7, r: 0.22 }, { dx: 0.1, dy: -0.82, r: 0.26 }, { dx: 0.5, dy: -0.62, r: 0.2 }]
+//
+// Back spikes: a pale horn thorn (THORN_H) on every SPIKE_AT plate (shares of
+// the body), standing out of the moss; on every SPROUT_EVERY-th of them it
+// rises from a sprout of two pointed leaves (SPROUT_LEAF_LEN, spread
+// SPROUT_SPREAD rad), its tip well over them.
+//
 const SPIKE_AT = [0.16, 0.26, 0.36, 0.46, 0.56, 0.66, 0.76, 0.86]
-const SPIKE_H = 10
-const SPIKE_HALF = 2.75
-const SPIKE_OUTLINE_HALF_PAD = 1
-const SPIKE_OUTLINE_H_PAD = 1.4
+const SPROUT_EVERY = 3
+const SPROUT_LEAF_LEN = 7
+const SPROUT_LEAF_HALF = 2.4
+const SPROUT_SPREAD = 0.75
+const THORN_H = 10
+const THORN_HALF = 2
+//
+// Legs: sharp, curved brown claws — a short thigh from the hip, then the
+// shin tapering from LEG_KNEE_W to a point at the foot, bowed LEG_BOW px.
+// Far-side legs are a shade darker.
+//
+const LEG_THIGH_W = 3
+const LEG_KNEE_W = 3.6
+const LEG_BOW = 1.6
+const LEG_RIM = 1.2
+//
+// Head: a round brown head (HEAD_R_MULT of the head segment's radius) with
+// one big googly eye, two long segmented antennae (ANTENNA_LEN, ANTENNA_SEGS
+// bends) swaying at ANTENNA_SWAY_HZ, and a crocodile's snout in front of it:
+// an upper jaw SNOUT_LEN long (UPPER_JAW_H0 thick at the head, UPPER_JAW_H1
+// at its tip) over a lower jaw (LOWER_JAW_H0..H1) opening JAW_DROP rad —
+// nearly shut at rest, a little open while it stalks and hunts, wide in a
+// lunge, and chewing (CHEW_MIN..CHEW_MAX at CHEW_HZ) while it eats — a red
+// maw between them, and
+// JAW_TEETH pale teeth on each jaw pointing into the gap, the two rows
+// interlocking.
+//
+const HEAD_R_MULT = 0.95
+const SNOUT_LEN = 17
+const SNOUT_HINGE = 0.45
+const SNOUT_HINGE_DROP = 0.3
+const UPPER_JAW_H0 = 6.5
+const UPPER_JAW_H1 = 3.2
+const LOWER_JAW_H0 = 5
+const LOWER_JAW_H1 = 2.4
+const JAW_DROP = { rest: 0.05, stalk: 0.14, hunt: 0.2, lunge: 0.62 }
+const CHEW_MIN = 0.06
+const CHEW_MAX = 0.5
+const CHEW_HZ = 2.6
+const UPPER_JAW_LIFT = 0.06
+const JAW_TEETH = 4
+const TOOTH_H = 3
+const TOOTH_HALF = 1.3
+const NOSTRIL_R = 0.9
+//
+// Tail: two big curved shear claws (TAIL_CLAW_LEN, TAIL_CLAW_W thick at the
+// base) spreading back from the last plate.
+//
+const TAIL_CLAW_LEN = 24
+const TAIL_CLAW_W = 5
+const TAIL_CLAW_OPEN = 0.45
+const TAIL_CLAW_BEND = 0.5
+//
+// Hit reach past the tail (its claws), as the old tail shears had.
+//
+const SHEAR_REACH = 18
 const HERO_HIT_HALF_W = 15
 const HERO_HIT_H = 69
-const SHEAR_REACH = 18
-const SHEAR_OPEN = 8
 const SNOUT_REACH = 7
 const SNOUT_DROP = 2.4
 const SNOUT_HALF = 4.1
+//
+// Near-side legs are drawn over the shell from its lower edge
+// (NEAR_LEG_FROM of the plate's radius under its middle), so they read in
+// front without crossing the plates.
+//
+const NEAR_LEG_FROM = 0.72
+const ANTENNA_LEN = 24
+const ANTENNA_W = 1.6
+const ANTENNA_SEGS = 6
+const ANTENNA_SWAY_HZ = 1.3
+const ANTENNA_SWAY = 0.2
+const ANTENNA_BEAD_R = 1.3
+const ANTENNAE = [{ angle: -0.75, phase: 0 }, { angle: -1.15, phase: 1.7 }]
+const EYE_RIM_R = 5.6
+const EYE_R = 4.4
+const EYE_GLINT_R = 1
+const PUPIL_W = 1.6
+const PUPIL_H = 3.2
 //
 // Hero must be within this horizontal span of the body to hear foot taps.
 //
@@ -113,13 +213,23 @@ export function create(cfg) {
     batch: PolyBatch.create(),
     colors: {
       contour: rgb(cfg.k, FOREST_PAL.predatorContour),
-      back: rgb(cfg.k, FOREST_PAL.predatorBack),
+      shell: rgb(cfg.k, FOREST_PAL.predatorShell),
+      shellShade: rgb(cfg.k, FOREST_PAL.predatorShellShade),
+      shellLight: rgb(cfg.k, FOREST_PAL.predatorShellLight),
+      clump: rgb(cfg.k, FOREST_PAL.predatorMossClump),
       belly: rgb(cfg.k, FOREST_PAL.predatorBelly),
-      moss: rgb(cfg.k, FOREST_PAL.predatorMoss),
+      bellyShade: rgb(cfg.k, FOREST_PAL.predatorBellyShade),
       leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
+      legFar: rgb(cfg.k, FOREST_PAL.predatorLegFar),
+      legLight: rgb(cfg.k, FOREST_PAL.predatorLegLight),
+      leaf: rgb(cfg.k, FOREST_PAL.predatorLeaf),
+      leafLight: rgb(cfg.k, FOREST_PAL.predatorLeafLight),
+      thorn: rgb(cfg.k, FOREST_PAL.predatorThorn),
+      maw: rgb(cfg.k, FOREST_PAL.predatorMaw),
+      throat: rgb(cfg.k, FOREST_PAL.predatorThroat),
+      tooth: rgb(cfg.k, FOREST_PAL.predatorTooth),
       eye: rgb(cfg.k, FOREST_PAL.predatorEye),
-      pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
-      horn: rgb(cfg.k, FOREST_PAL.predatorHorn)
+      pupil: rgb(cfg.k, FOREST_PAL.predatorPupil)
     },
     footHearable: false
   }
@@ -250,8 +360,8 @@ export function startFlee(inst, fromX) {
 function initLegs(inst) {
   inst.legs = []
   for (let i = 0; i < LEG_PAIRS; i++) {
-    const span = Math.max(1, inst.segments.length - 5)
-    const seg = 2 + Math.min(span - 1, Math.floor(i * span / LEG_PAIRS))
+    const span = Math.max(1, inst.segments.length - LEG_FIRST_SEG - LEG_TAIL_FREE)
+    const seg = LEG_FIRST_SEG + Math.min(span - 1, Math.floor(i * span / LEG_PAIRS))
     for (const side of [-1, 1]) {
       const hipX = inst.x - inst.dir * (10 + i * 7)
       const footX = hipX + side * 8 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
@@ -336,46 +446,108 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const { contour, back, belly, moss, leg, eye, pupil, horn } = inst.colors
+  const colors = inst.colors
   //
-  // Far-side legs sit behind the body, near-side legs are drawn over it.
+  // Far-side legs come out from under the shell; near-side ones go over it
+  // from its lower edge.
   //
   const legs = inst.legs
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
+    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.legFar, false)
   }
-  drawBodySegments(inst, batch, contour, belly, back, moss)
+  drawTailClaws(inst, batch, colors)
+  drawBodySegments(inst, batch, colors)
+  const sprouts = inst.spikeAt
+  for (let i = 0; i < sprouts.length; i++) {
+    const seg = inst.segments[sprouts[i]]
+    const prev = inst.segments[sprouts[i] + 1]
+    prev && drawSpike(inst, batch, seg, prev, i % SPROUT_EVERY === 1, colors)
+  }
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
+    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.leg, true)
   }
-  const spikes = inst.spikeAt
-  for (let i = 0; i < spikes.length; i++) {
-    const index = spikes[i]
-    const seg = inst.segments[index]
-    const prev = inst.segments[index + 1]
-    prev && drawBackSpike(batch, seg, prev, contour, back)
-  }
-  drawTailShears(inst, batch, contour, horn)
-  drawHead(inst, batch, contour, back, eye, pupil)
+  drawHead(inst, batch, colors)
   PolyBatch.flush(batch, k, 1)
 }
-
-function drawBodySegments(inst, batch, contour, belly, back, moss) {
-  for (let i = inst.segments.length - 1; i >= 0; i--) {
-    const seg = inst.segments[i]
-    const prev = inst.segments[i + 1]
-    if (prev) {
-      PolyBatch.addLine(batch, prev.x, prev.y + 1, seg.x, seg.y + 1, seg.radius * 1.7, contour)
-      PolyBatch.addLine(batch, prev.x, prev.y + 2, seg.x, seg.y + 2, seg.radius * 1.15, belly)
-      PolyBatch.addLine(batch, prev.x, prev.y - 1, seg.x, seg.y - 1, seg.radius * 0.85, back)
-    }
-    PolyBatch.addDisc(batch, seg.x, seg.y, seg.radius * 0.72, contour)
-    PolyBatch.addDisc(batch, seg.x, seg.y - 1, seg.radius * 0.5, back)
-    seg.moss && PolyBatch.addDisc(batch, seg.x + inst.dir * 2, seg.y - seg.radius * 0.35, 2.2, moss)
+//
+// The body: joints bridged in the belly brown, then the plates tail to head.
+//
+function drawBodySegments(inst, batch, colors) {
+  const segs = inst.segments
+  for (let i = segs.length - 1; i > 0; i--) {
+    const seg = segs[i - 1]
+    const prev = segs[i]
+    PolyBatch.addLine(batch, prev.x, prev.y, seg.x, seg.y, seg.radius * BRIDGE_W, colors.contour)
+    PolyBatch.addLine(batch, prev.x, prev.y + 1, seg.x, seg.y + 1, seg.radius * BRIDGE_W - PLATE_RIM * 2, colors.bellyShade)
   }
+  for (let i = segs.length - 1; i > 0; i--) addPlate(inst, batch, segs[i], colors)
+}
+//
+// One plate: the brown underside band, then the moss dome (shaded lower
+// half, lit top, light clumps).
+//
+function addPlate(inst, batch, seg, colors) {
+  const r = seg.radius * PLATE_R
+  const dir = inst.dir
+  const by = seg.y + r * BELLY_DROP
+  const br = r * BELLY_R
+  PolyBatch.addDisc(batch, seg.x, by, br, colors.contour)
+  PolyBatch.addDisc(batch, seg.x, by, br - PLATE_RIM, colors.belly)
+  const dy = seg.y - r * DOME_RISE
+  PolyBatch.addDisc(batch, seg.x, dy, r, colors.contour)
+  PolyBatch.addDisc(batch, seg.x, dy, r - PLATE_RIM, colors.shellShade)
+  PolyBatch.addDisc(batch, seg.x, dy - r * DOME_SHADE_DROP * 0.5, r - PLATE_RIM - r * DOME_SHADE_DROP * 0.5, colors.shell)
+  PolyBatch.addDisc(batch, seg.x + dir * r * 0.1, dy - r * DOME_LIT_RISE, r * DOME_LIT_R * 0.6, colors.shellLight)
+  for (const c of CLUMPS) PolyBatch.addDisc(batch, seg.x + dir * c.dx * r, dy + c.dy * r * 0.8, Math.max(1, c.r * r), colors.clump)
+}
+//
+// A back spike on a plate's top, standing square to the body: its leaves
+// first (on a sprout plate), then the pale thorn rising over them.
+//
+function drawSpike(inst, batch, seg, prev, sprout, colors) {
+  const dx = seg.x - prev.x
+  const dy = seg.y - prev.y
+  const len = Math.hypot(dx, dy) || 1
+  let nx = -dy / len
+  let ny = dx / len
+  if (ny > 0) {
+    nx = -nx
+    ny = -ny
+  }
+  const tx = dx / len
+  const ty = dy / len
+  const r = seg.radius * PLATE_R
+  const bx = seg.x + nx * r * (1 + DOME_RISE) * 0.85
+  const by = seg.y + ny * r * (1 + DOME_RISE) * 0.85
+  for (const side of [-1, 1]) {
+    if (!sprout) break
+    const a = Math.atan2(ny, nx) + side * SPROUT_SPREAD
+    addLeaf(batch, bx, by, Math.cos(a), Math.sin(a), colors)
+  }
+  addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF + 1, THORN_H + 1.4, colors.contour)
+  addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF, THORN_H, colors.thorn)
+}
+//
+// One pointed leaf from a base along (ux, uy): a contour, the leaf, a light
+// midrib half.
+//
+function addLeaf(batch, bx, by, ux, uy, colors) {
+  const px = -uy
+  const py = ux
+  const tipX = bx + ux * SPROUT_LEAF_LEN
+  const tipY = by + uy * SPROUT_LEAF_LEN
+  const midX = bx + ux * SPROUT_LEAF_LEN * 0.45
+  const midY = by + uy * SPROUT_LEAF_LEN * 0.45
+  const leaf = (half, color) => {
+    PolyBatch.addTriangle(batch, bx, by, midX + px * half, midY + py * half, tipX, tipY, color)
+    PolyBatch.addTriangle(batch, bx, by, tipX, tipY, midX - px * half, midY - py * half, color)
+  }
+  leaf(SPROUT_LEAF_HALF + PLATE_RIM, colors.contour)
+  leaf(SPROUT_LEAF_HALF, colors.leaf)
+  PolyBatch.addTriangle(batch, bx, by, midX + px * SPROUT_LEAF_HALF * 0.8, midY + py * SPROUT_LEAF_HALF * 0.8, tipX, tipY, colors.leafLight)
 }
 
-function drawLeg(inst, batch, limb, contour, leg) {
+function drawLeg(inst, batch, limb, colors, fill, front) {
   const foot = footNow(inst, limb)
   let bend = limb.side
   let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * limb.reach, SHIN * limb.reach, bend)
@@ -388,73 +560,190 @@ function drawLeg(inst, batch, limb, contour, leg) {
   // A folded shin can still cross the ground line. Keep the joint on it.
   //
   knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 2.4, contour)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.8, contour)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 1.3, leg)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.05, leg)
-  PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, 1.5, contour)
-  PolyBatch.addDisc(batch, foot.x, foot.y, 1.35, contour)
+  const from = front ? frontLegFrom(inst, limb, knee, foot) : { x: limb.hipX, y: limb.hipY, thigh: true }
+  if (!from) return
+  if (from.thigh) {
+    PolyBatch.addLine(batch, from.x, from.y, knee.kneeX, knee.kneeY, LEG_THIGH_W + LEG_RIM * 2, colors.contour)
+    PolyBatch.addLine(batch, from.x, from.y, knee.kneeX, knee.kneeY, LEG_THIGH_W, fill)
+  }
+  const kx = from.thigh ? knee.kneeX : from.x
+  const ky = from.thigh ? knee.kneeY : from.y
+  addClaw(batch, kx, ky, foot.x, foot.y, inst.dir, LEG_KNEE_W + LEG_RIM * 2, LEG_RIM, colors.contour)
+  addClaw(batch, kx, ky, foot.x, foot.y, inst.dir, LEG_KNEE_W, 0, fill)
 }
-
-function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
+//
+// A curved claw from (x1, y1) tapering to a point at (x2, y2), bowed
+// LEG_BOW px towards the way the body faces; tipPad keeps a contour's
+// point a little past the fill's.
+//
+function addClaw(batch, x1, y1, x2, y2, dir, w, tipPad, color) {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len = Math.hypot(dx, dy) || 1
+  const px = -dy / len
+  const py = dx / len
+  const bow = Math.sign(px * dir) * LEG_BOW || LEG_BOW
+  const mx = (x1 + x2) / 2 + px * bow
+  const my = (y1 + y2) / 2 + py * bow
+  const tx = x2 + dx / len * tipPad
+  const ty = y2 + dy / len * tipPad
+  const h = w / 2
+  PolyBatch.addQuad(batch, x1 + px * h, y1 + py * h, mx + px * h * 0.55, my + py * h * 0.55, mx - px * h * 0.55, my - py * h * 0.55, x1 - px * h, y1 - py * h, color)
+  PolyBatch.addTriangle(batch, mx + px * h * 0.55, my + py * h * 0.55, tx, ty, mx - px * h * 0.55, my - py * h * 0.55, color)
+  PolyBatch.addDisc(batch, x1, y1, h, color)
+}
+//
+// Where a near-side leg shows from over the shell (only below its lower
+// edge, NEAR_LEG_FROM): from the edge along the thigh when the knee is
+// below it, else along the shin (thigh: false); null when the whole leg
+// stays above the edge.
+//
+function frontLegFrom(inst, limb, knee, foot) {
+  const seg = inst.segments[limb.seg]
+  const edgeY = seg.y + seg.radius * PLATE_R * NEAR_LEG_FROM
+  if (knee.kneeY > edgeY) return { ...pointAtY(limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, edgeY), thigh: true }
+  if (foot.y <= edgeY) return null
+  return { ...pointAtY(knee.kneeX, knee.kneeY, foot.x, foot.y, edgeY), thigh: false }
+}
+//
+// The point of a line at height y (clamped to the line's ends).
+//
+function pointAtY(x1, y1, x2, y2, y) {
+  if (y <= Math.min(y1, y2) || y1 === y2) return { x: y1 < y2 ? x1 : x2, y: Math.min(y1, y2) }
+  const t = Math.min(1, (y - y1) / (y2 - y1))
+  return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
+}
+//
+// Antennae, the round head, the crocodile snout in front of it, then the eye.
+//
+function drawHead(inst, batch, colors) {
   const head = inst.segments[0]
   const dir = inst.dir
-  const snoutX = head.x + dir * (head.radius + SNOUT_REACH)
-  const snoutY = head.y + SNOUT_DROP
-  PolyBatch.addLine(batch, head.x, head.y + 1, snoutX, snoutY, 8.2, contour)
-  PolyBatch.addLine(batch, head.x, head.y + 0.4, snoutX - dir * 1, snoutY - 0.4, 4.4, back)
-  PolyBatch.addLine(batch, head.x + dir * 3, head.y + 3.2, snoutX, snoutY + 1.6, 3.4, contour)
-  PolyBatch.addLine(batch, snoutX - dir * 1.2, snoutY + 0.6, snoutX - dir * 2.4, snoutY + 6.2, 1.6, contour)
-  PolyBatch.addLine(batch, snoutX + dir * 2.2, snoutY + 0.4, snoutX + dir * 0.6, snoutY + 5.4, 1.45, contour)
-  PolyBatch.addDisc(batch, snoutX, snoutY, 2.2, contour)
+  const r = head.radius * HEAD_R_MULT
+  drawAntennae(inst, batch, head, r, colors)
+  PolyBatch.addDisc(batch, head.x, head.y, r, colors.contour)
+  PolyBatch.addDisc(batch, head.x, head.y, r - PLATE_RIM, colors.legFar)
+  PolyBatch.addDisc(batch, head.x + dir * 0.6, head.y - 0.8, r - PLATE_RIM - 1.2, colors.leg)
+  PolyBatch.addDisc(batch, head.x + dir * r * 0.2, head.y - r * 0.45, r * 0.28, colors.legLight)
+  drawSnout(inst, batch, head, r, colors)
   const eye = inst.eyes[0]
   if (!eye) return
-  const ex = head.x + dir * eye.ox
-  const ey = head.y + eye.oy
-  PolyBatch.addLine(batch, ex - dir * 6, ey - 3.4, ex + dir * 4.4, ey - 0.8, 2.8, contour)
-  PolyBatch.addDisc(batch, ex, ey, 5.6, contour)
-  PolyBatch.addDisc(batch, ex, ey, 4.35, eyeColor)
-  const px = ex + dir * clamp(eye.px, -1.1, 1.1) * 1.15
-  const py = ey + clamp(eye.py, -1.1, 1.1) * 0.7
-  PolyBatch.addLine(batch, px, py - 2.8, px, py + 2.8, 1.45, pupilColor)
+  const lookX = dir * clamp(eye.px, -1.1, 1.1) * 1.4
+  const lookY = clamp(eye.py, -1.1, 1.1) * 1.1
+  addEye(batch, head.x + dir * eye.ox, head.y + eye.oy, 1, lookX, lookY, dir, colors)
 }
-
-function drawBackSpike(batch, seg, prev, contour, fill) {
-  const dx = seg.x - prev.x
-  const dy = seg.y - prev.y
+function addEye(batch, x, y, s, lookX, lookY, dir, colors) {
+  PolyBatch.addDisc(batch, x, y, EYE_RIM_R * s, colors.contour)
+  PolyBatch.addDisc(batch, x, y, EYE_R * s, colors.eye)
+  PolyBatch.addLine(batch, x + lookX * s, y + lookY * s - PUPIL_H * s, x + lookX * s, y + lookY * s + PUPIL_H * s, PUPIL_W * s, colors.pupil)
+  PolyBatch.addDisc(batch, x + lookX * s - dir * 0.8, y + lookY * s - 0.9, EYE_GLINT_R * s * 0.6, colors.eye)
+}
+//
+// The crocodile snout: the red maw between the jaws, the jaws' bodies, then
+// the teeth along their inner edges (the lower row half a step behind the
+// upper so they interlock) and a nostril on the upper jaw's tip.
+//
+function drawSnout(inst, batch, head, r, colors) {
+  const dir = inst.dir
+  const drop = jawDrop(inst)
+  const hx = head.x + dir * r * SNOUT_HINGE
+  const hy = head.y + r * SNOUT_HINGE_DROP
+  const up = { x: hx + dir * Math.cos(UPPER_JAW_LIFT) * SNOUT_LEN, y: hy - Math.sin(UPPER_JAW_LIFT) * SNOUT_LEN }
+  const low = { x: hx + dir * Math.cos(drop) * SNOUT_LEN * 0.9, y: hy + Math.sin(drop) * SNOUT_LEN * 0.9 }
+  PolyBatch.addTriangle(batch, hx - dir * 2, hy, up.x, up.y + 1, low.x, low.y - 1, colors.contour)
+  PolyBatch.addTriangle(batch, hx, hy, up.x - dir * 1, up.y + 1.5, low.x - dir * 1, low.y - 1.5, colors.throat)
+  PolyBatch.addTriangle(batch, hx + dir * 3, hy, up.x - dir * 2, up.y + 2, low.x - dir * 2, low.y - 2, colors.maw)
+  addTeeth(batch, hx, hy, up, 1, 0, colors)
+  addTeeth(batch, hx, hy, low, -1, 0.5, colors)
+  addJawBand(batch, hx, hy, up, -UPPER_JAW_H0, -UPPER_JAW_H1, colors)
+  addJawBand(batch, hx, hy, low, LOWER_JAW_H0, LOWER_JAW_H1, colors)
+  PolyBatch.addDisc(batch, up.x - dir * 2.5, up.y - UPPER_JAW_H1 + 0.5, NOSTRIL_R, colors.contour)
+}
+//
+// How far the lower jaw hangs open this frame (see JAW_DROP).
+//
+function jawDrop(inst) {
+  if (inst.state === 'feast' && inst.feastPhase !== 'eat') return JAW_DROP.hunt
+  if (inst.state !== 'feast') return JAW_DROP[inst.state] ?? JAW_DROP.rest
+  const chew = 0.5 + 0.5 * Math.sin(inst.k.time() * CHEW_HZ * Math.PI * 2)
+  return CHEW_MIN + (CHEW_MAX - CHEW_MIN) * chew
+}
+//
+// A jaw's body from the hinge to its tip along its inner edge, h0 thick at
+// the hinge and h1 at the tip (negative: over the edge), in the head's
+// browns with a lit outer rim.
+//
+function addJawBand(batch, hx, hy, tip, h0, h1, colors) {
+  const quad = (pad, a, b, color) => PolyBatch.addQuad(batch,
+    hx, hy - Math.sign(h0) * pad * 0.5, tip.x, tip.y - Math.sign(h1) * pad * 0.5,
+    tip.x, tip.y + h1 * b + Math.sign(h1) * pad, hx, hy + h0 * a + Math.sign(h0) * pad, color)
+  quad(PLATE_RIM, 1, 1, colors.contour)
+  PolyBatch.addDisc(batch, tip.x, tip.y + h1 / 2, Math.abs(h1) / 2 + PLATE_RIM, colors.contour)
+  quad(0, 1, 1, colors.leg)
+  PolyBatch.addDisc(batch, tip.x, tip.y + h1 / 2, Math.abs(h1) / 2, colors.leg)
+  quad(0, 0.45, 0.45, colors.legFar)
+}
+//
+// Pale teeth along a jaw's inner edge, pointing into the maw (into: +1 down
+// from the upper jaw, -1 up from the lower), offset by a share of a step.
+//
+function addTeeth(batch, hx, hy, tip, into, offset, colors) {
+  const dx = tip.x - hx
+  const dy = tip.y - hy
   const len = Math.hypot(dx, dy) || 1
-  let nx = -dy / len
-  let ny = dx / len
-  if (ny > 0) {
-    nx = -nx
-    ny = -ny
-  }
   const tx = dx / len
   const ty = dy / len
-  const bx = seg.x + nx * seg.radius * 0.28
-  const by = seg.y + ny * seg.radius * 0.28
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF + SPIKE_OUTLINE_HALF_PAD, SPIKE_H + SPIKE_OUTLINE_H_PAD, contour)
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF, SPIKE_H, fill)
+  for (let i = 0; i < JAW_TEETH; i++) {
+    const t = (i + 0.5 + offset) / (JAW_TEETH + 0.5)
+    const bx = hx + dx * t
+    const by = hy + dy * t
+    PolyBatch.addTriangle(batch, bx - tx * (TOOTH_HALF + 0.7), by - ty * (TOOTH_HALF + 0.7), bx, by + into * (TOOTH_H + 1), bx + tx * (TOOTH_HALF + 0.7), by + ty * (TOOTH_HALF + 0.7), colors.contour)
+    PolyBatch.addTriangle(batch, bx - tx * TOOTH_HALF, by - ty * TOOTH_HALF, bx, by + into * TOOTH_H, bx + tx * TOOTH_HALF, by + ty * TOOTH_HALF, colors.tooth)
+  }
 }
-
-function drawTailShears(inst, batch, contour, horn) {
+//
+// Two long segmented antennae from the crown, bending back as they go and
+// swaying, a bead at every joint.
+//
+function drawAntennae(inst, batch, head, r, colors) {
+  const t = inst.k.time() * ANTENNA_SWAY_HZ * Math.PI * 2
+  for (const a of ANTENNAE) {
+    let x = head.x + inst.dir * r * 0.35
+    let y = head.y - r * 0.7
+    let angle = a.angle + Math.sin(t + a.phase) * ANTENNA_SWAY
+    const step = ANTENNA_LEN / ANTENNA_SEGS
+    for (let i = 0; i < ANTENNA_SEGS; i++) {
+      const nx = x + inst.dir * Math.cos(angle) * step
+      const ny = y + Math.sin(angle) * step
+      PolyBatch.addLine(batch, x, y, nx, ny, ANTENNA_W + PLATE_RIM * 2, colors.contour)
+      PolyBatch.addLine(batch, x, y, nx, ny, ANTENNA_W, colors.leg)
+      PolyBatch.addDisc(batch, nx, ny, ANTENNA_BEAD_R, colors.legFar)
+      x = nx
+      y = ny
+      angle += 0.17
+    }
+  }
+}
+//
+// Two curved claws spreading back from the last plate.
+//
+function drawTailClaws(inst, batch, colors) {
   const tail = inst.segments[inst.segments.length - 1]
   const prev = inst.segments[inst.segments.length - 2]
   if (!tail || !prev) return
-  const dx = tail.x - prev.x
-  const dy = tail.y - prev.y
-  const len = Math.hypot(dx, dy) || 1
-  const tx = dx / len
-  const ty = dy / len
-  const nx = -ty
-  const ny = tx
-  const ox = tail.x + tx * tail.radius * 0.35
-  const oy = tail.y + ty * tail.radius * 0.2
+  const back = Math.atan2(tail.y - prev.y, tail.x - prev.x)
   for (const side of [-1, 1]) {
-    const ex = ox + tx * SHEAR_REACH + nx * side * SHEAR_OPEN
-    const ey = oy + ty * SHEAR_REACH + ny * side * SHEAR_OPEN
-    PolyBatch.addLine(batch, ox, oy, ex, ey, 3.6, contour)
-    PolyBatch.addLine(batch, ox, oy, ex, ey, 1.7, horn)
+    const a = back + side * TAIL_CLAW_OPEN * 0.4 - Math.PI * 0.08
+    const mx = tail.x + Math.cos(a) * TAIL_CLAW_LEN * 0.55
+    const my = tail.y + Math.sin(a) * TAIL_CLAW_LEN * 0.55
+    const tipA = a + side * TAIL_CLAW_BEND + (side < 0 ? TAIL_CLAW_OPEN : 0)
+    const tx = mx + Math.cos(tipA) * TAIL_CLAW_LEN * 0.5
+    const ty = my + Math.sin(tipA) * TAIL_CLAW_LEN * 0.5
+    const fill = side < 0 ? colors.leg : colors.legFar
+    addClaw(batch, tail.x, tail.y, mx, my, inst.dir, TAIL_CLAW_W + LEG_RIM * 2, 0, colors.contour)
+    addClaw(batch, mx, my, tx, ty, inst.dir, TAIL_CLAW_W * 0.8 + LEG_RIM * 2, LEG_RIM, colors.contour)
+    addClaw(batch, tail.x, tail.y, mx, my, inst.dir, TAIL_CLAW_W, 0, fill)
+    addClaw(batch, mx, my, tx, ty, inst.dir, TAIL_CLAW_W * 0.8, 0, fill)
   }
 }
 

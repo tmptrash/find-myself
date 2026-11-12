@@ -27,10 +27,10 @@ const FOLLOW_Y_RATE = 8
 //
 const LEAD_SHARE = 0.22
 const LEAD_MOVE_EPS = 0.5
-const LEAD_TURN_HOLD = 0.8
-const LEAD_CATCH = 0.2
-const LEAD_RAMP = 1.2
-const LEAD_SOFT = 90
+const LEAD_TURN_HOLD = 0.4
+const LEAD_CATCH = 0.45
+const LEAD_RAMP = 0.5
+const LEAD_SOFT = 60
 const LEAD_SOFT_MIN = 0.15
 
 /**

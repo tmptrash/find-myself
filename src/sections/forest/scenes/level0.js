@@ -1899,7 +1899,11 @@ async function initForestLevel0Scene(k, bootstrap, session) {
         }
       }
     ])
-    await forestBootstrapPause(bootstrap, 100, session)
+    if (await forestBootstrapPause(bootstrap, 100, session)) return
+    //
+    // The run / jump buttons show once the whole level is built.
+    //
+    TouchControls.setVisible(true)
 }
 //
 // Fixed overlay drawn on top of every world layer so nothing bleeds into the

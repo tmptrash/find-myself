@@ -83,7 +83,11 @@ const BUTTON_TYPES = ['left', 'right', 'jump']
 const BUTTON_SPRITE_PREFIX = 'touch-control'
 const BUTTON_GRAIN_SEED = 9100
 const bakedForK = new WeakSet()
-const CONTROL_Z = CFG.visual.zIndex.ui + 250
+//
+// Under the level's entry fade (ui + 100, transition.js), so the buttons
+// fade in with the level's picture instead of showing over the black.
+//
+const CONTROL_Z = CFG.visual.zIndex.ui + 90
 //
 // Sentinel identifier for the desktop mouse fallback slot
 //
@@ -165,7 +169,8 @@ export function setVisible(visible) {
 
 /**
  * Creates the run and jump buttons along the bottom of the screen on touch
- * devices (screen space: the levels fill the whole window)
+ * devices (screen space: the levels fill the whole window), hidden: the level
+ * shows them with setVisible(true) once its picture is built
  * @param {Object} k - Kaplay instance
  * @returns {Object|null} Touch controls instance
  */
@@ -200,7 +205,7 @@ export function create(k) {
     jumpX,
     centerY,
     scale,
-    visible: true
+    visible: false
   }
   bakeButtonSprites(k)
   activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left', scale, arrowHalfW))

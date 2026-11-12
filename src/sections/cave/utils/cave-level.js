@@ -214,6 +214,7 @@ export function create(k) {
   createHud(inst)
   initTouchInput(k)
   TouchControls.create(k)
+  TouchControls.setVisible(true)
   addDrawLayers(inst)
   BUBBLE_EXIT_KEYS.forEach(key => k.onKeyPress(key, () => BubbleLift.jumpOut(inst.bubble)))
   k.onUpdate(() => onUpdate(inst))

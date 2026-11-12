@@ -112,7 +112,7 @@ const UG_BONE_SHAFT_PX = 2.4
 // UG_PIC_STONE_DEEP_GROW bigger at the bottom), some mirrored, and kept
 // apart from the earlier ones (UG_PIC_STONE_GAP of their sizes, a few tries).
 //
-const UG_PIC_STONE_COUNT = 100
+const UG_PIC_STONE_COUNT = 45
 const UG_PIC_STONE_SCALE = 0.2
 const UG_PIC_STONE_SCALE_JITTER = 0.2
 const UG_PIC_STONE_DEEP_GROW = 0.6
@@ -123,8 +123,8 @@ const UG_PIC_STONE_MIRROR_SHARE = 0.5
 //
 // Elements (layout.elements: bones, fossils, shells, seeds...) take the place
 // of some of those stones: UG_ELEMENT_COUNT of them, picked at random from the
-// sheet, lie once each somewhere in the soil,
-// at any depth, UG_ELEMENT_SCALE of its sheet size (a little random, a little
+// sheet, lie once each in the soil, more of them the deeper, at
+// UG_ELEMENT_SCALE of its sheet size (a little random, a little
 // bigger deeper), turned up to UG_ELEMENT_TURN either way, some mirrored, kept
 // UG_ELEMENT_GAP of their sizes from what lies near it. They take the soil's
 // colour at their depth: multiplied by it (UG_ELEMENT_MULTIPLY of the way
@@ -132,7 +132,9 @@ const UG_PIC_STONE_MIRROR_SHARE = 0.5
 // in dark chernozem as a dim one and in the deep clay as a warm one. The
 // strata's seams blend over UG_SOIL_SEAM_BLEND of the band's height.
 //
-const UG_ELEMENT_COUNT = 40
+const UG_ELEMENT_COUNT = 100
+const UG_ELEMENT_TOP_SHARE = 0.22
+const UG_ELEMENT_TOP_REACH = 0.36
 const UG_ELEMENT_SCALE = 0.26
 const UG_ELEMENT_SCALE_JITTER = 0.2
 const UG_ELEMENT_DEEP_GROW = 0.45
@@ -366,13 +368,16 @@ function buildSpec(layout) {
   }
 }
 //
-// A random UG_ELEMENT_COUNT of the elements, each once at a random depth, in the first free spot of a few
+// A random UG_ELEMENT_COUNT of the elements, each once, deeper ones more
+// often than shallow ones (the depth share is the square root of a random),
+// except UG_ELEMENT_TOP_SHARE of them that go evenly into the topmost layer
+// (the first UG_ELEMENT_TOP_REACH of the depth) so it is not bare, in the first free spot of a few
 // tries (it goes in anyway on the last one).
 //
 function buildUndergroundElements(pictures, randX, y1, y2, placed) {
   const out = []
   pickRandom(pictures, UG_ELEMENT_COUNT).forEach(canvas => {
-    const t = Math.random()
+    const t = Math.random() < UG_ELEMENT_TOP_SHARE ? Math.random() * UG_ELEMENT_TOP_REACH : Math.sqrt(Math.random())
     const scale = UG_ELEMENT_SCALE * (1 + (Math.random() * 2 - 1) * UG_ELEMENT_SCALE_JITTER) * (1 + UG_ELEMENT_DEEP_GROW * t)
     const w = canvas.width * scale
     const h = canvas.height * scale

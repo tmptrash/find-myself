@@ -70,6 +70,20 @@ const SPROUT_SIDE_GAP = 3.2
 const THORN_H = 10
 const THORN_HALF = 2
 //
+// No two thorns alike: each (by its number) is THORN_H_MIN..+RANGE times as
+// tall, THORN_W_MIN..+RANGE times as wide and its tip leans up to THORN_LEAN
+// along the body.
+//
+const THORN_H_MIN = 0.75
+const THORN_H_RANGE = 0.6
+const THORN_W_MIN = 0.85
+const THORN_W_RANGE = 0.4
+const THORN_LEAN = 0.28
+const THORN_HASH_H = 12.9898
+const THORN_HASH_W = 78.233
+const THORN_HASH_L = 37.719
+const THORN_HASH_MUL = 43758.5453
+//
 // Legs: sharp, curved brown claws — a short thigh from the hip, then the
 // shin tapering from LEG_KNEE_W to a point at the foot, bowed LEG_BOW px.
 // Far-side legs are a shade darker.
@@ -463,7 +477,7 @@ function drawPredator(inst) {
   for (let i = 0; i < sprouts.length; i++) {
     const seg = inst.segments[sprouts[i]]
     const prev = inst.segments[sprouts[i] + 1]
-    prev && drawSpike(inst, batch, seg, prev, i % SPROUT_EVERY === 1, colors)
+    prev && drawSpike(inst, batch, seg, prev, i % SPROUT_EVERY === 1, colors, i)
   }
   for (let i = 0; i < legs.length; i++) {
     legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.leg, true)
@@ -506,7 +520,7 @@ function addPlate(inst, batch, seg, colors) {
 // A back spike on a plate's top, standing square to the body: its leaves
 // beside it (on a sprout plate), then the pale thorn between them.
 //
-function drawSpike(inst, batch, seg, prev, sprout, colors) {
+function drawSpike(inst, batch, seg, prev, sprout, colors, index) {
   const dx = seg.x - prev.x
   const dy = seg.y - prev.y
   const len = Math.hypot(dx, dy) || 1
@@ -526,8 +540,20 @@ function drawSpike(inst, batch, seg, prev, sprout, colors) {
     const a = Math.atan2(ny, nx) + side * SPROUT_SPREAD
     addLeaf(batch, bx + tx * side * SPROUT_SIDE_GAP, by + ty * side * SPROUT_SIDE_GAP, Math.cos(a), Math.sin(a), colors)
   }
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF + 1, THORN_H + 1.4, colors.contour)
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, THORN_HALF, THORN_H, colors.thorn)
+  const tall = THORN_H * (THORN_H_MIN + THORN_H_RANGE * thornHash(index, THORN_HASH_H))
+  const wide = THORN_HALF * (THORN_W_MIN + THORN_W_RANGE * thornHash(index, THORN_HASH_W))
+  const lean = (thornHash(index, THORN_HASH_L) * 2 - 1) * THORN_LEAN
+  const lx = nx + tx * lean
+  const ly = ny + ty * lean
+  addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide + 1, tall + 1.4, colors.contour)
+  addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide, tall, colors.thorn)
+}
+//
+// A fixed pseudo-random 0..1 for a thorn's number.
+//
+function thornHash(index, salt) {
+  const x = Math.sin((index + 1) * salt) * THORN_HASH_MUL
+  return x - Math.floor(x)
 }
 //
 // One pointed leaf from a base along (ux, uy): a contour, the leaf, a light

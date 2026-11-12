@@ -47,6 +47,7 @@ import {
   drawForestPit,
   drawForestPitCaveForegroundDecor,
   drawForestPitCaveSeamCoverRocks,
+  drawForestPitCaveFrontStones,
   isCrackDecorExcluded,
   getCrackZone,
   getForestPitHeroStandY,
@@ -324,7 +325,7 @@ const HERO_TOUCH_DEATH_RESPAWN_CLEARANCE = 32
 // centipede does not hunt, the water flower does not grab, landings do not
 // jolt the bomb trees).
 //
-const RESPAWN_GRACE_SEC = 2
+const RESPAWN_GRACE_SEC = 3
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -799,6 +800,7 @@ const GROUND_FRONT_Z = 20
 // Pit-cave hero blit — above trampoline bake (player + 22) and forest-floor front decor.
 //
 const PIT_CAVE_HERO_FOREGROUND_Z = GROUND_FRONT_Z + 14
+const PIT_CAVE_FRONT_STONES_Z = PIT_CAVE_HERO_FOREGROUND_Z + 1
 //
 // Colour-world forest floor: hill and cream mushrooms behind the hero (under
 // the decor mushrooms at z 7), ferns and plumes in front of him.
@@ -820,6 +822,7 @@ const GRASS_PREDATOR_REACH = 26
 const GRASS_FOOT_TOL = 14
 const FOREST_FLOOR_SHORE_TRUNK_CLEAR_HALF = 30
 const FOREST_EAR_TREE_ROOTS_Z = GROUND_FRONT_Z + 1
+const PIT_CAVE_WALL_STONES_Z = FOREST_EAR_TREE_ROOTS_Z + 0.5
 const FOREST_EAR_TREE_TRUNK_OVERLAY_Z = GROUND_FRONT_Z + 2
 const FOREST_FALL_TWIG_FRONT_Z = FOREST_EAR_TREE_TRUNK_OVERLAY_Z - 0.5
 const FOREST_EAR_TREE_BRANCHES_Z = GROUND_FRONT_Z + 3
@@ -1926,6 +1929,22 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       {
         draw() {
           drawForestPitCaveHeroForeground(inst)
+        }
+      }
+    ])
+    k.add([
+      k.z(PIT_CAVE_WALL_STONES_Z),
+      {
+        draw() {
+          inst.pit && drawForestPitCaveRocksOverEarthBand(inst)
+        }
+      }
+    ])
+    k.add([
+      k.z(PIT_CAVE_FRONT_STONES_Z),
+      {
+        draw() {
+          inst.pit && drawForestPitCaveFrontStones(k, inst.pit)
         }
       }
     ])
@@ -4708,7 +4727,7 @@ function mergeForestEarth(inst, leftTree) {
   return earth
 }
 //
-// Cave rocks/pebbles/seams — last world pass so earth-band fills never clip them.
+// Cave rocks/pebbles/seams — a layer over the tree roots (z PIT_CAVE_WALL_STONES_Z), so earth-band fills never clip them.
 //
 function drawForestPitCaveRocksOverEarthBand(inst) {
   const pit = inst.pit
@@ -4717,11 +4736,10 @@ function drawForestPitCaveRocksOverEarthBand(inst) {
   drawForestPitCaveSeamCoverRocks(inst.k, pit)
 }
 //
-// Main draw — world layers, then pit cave mouth rocks over the earth band.
+// Main draw — the world layers (the cave's stones are their own layer).
 //
 function onDraw(inst) {
   onDrawWorld(inst)
-  drawForestPitCaveRocksOverEarthBand(inst)
 }
 //
 // World-layer draw pass (everything that scrolls with the camera).
@@ -7477,7 +7495,7 @@ function setupForestPitCaveTrampoline(inst) {
   const trampX = getForestPitCaveTrampolineX(pit) ?? pit.portalX
   const bundle = createMushroomTrampoline(k, trampX, pitFloorY, inst.zones, {
     pitCaveTramp: true,
-    drawZ: CFG.visual.zIndex.player + 22,
+    drawZ: PIT_CAVE_FRONT_STONES_Z - 0.5,
     mushroom: TrampMushroom.TRAMP_MUSHROOM.CAVE
   })
   inst.pitCaveTrampBundle = bundle

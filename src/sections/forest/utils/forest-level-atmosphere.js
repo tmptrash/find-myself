@@ -8,6 +8,9 @@ import {
 import { applyForestFilmGrainToCanvas } from './forest-parallax-grain.js'
 import { drawStaticDecorSprite, ensureStaticDecorSprite, staticBakeHolder } from './forest-static-bake.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
+import { forestBuriedStones } from './forest-stones.js'
+import { drawForestPlant } from './forest-plants.js'
+import { createSeededRandom } from '../../../utils/seeded-random.js'
 //
 // Midges + right-edge crack pit for the forest level
 //
@@ -28,14 +31,17 @@ const PIT_FLOOR_EXTRA_W_LEFT = 18
 //
 const PIT_FLOOR_EXTRA_W_RIGHT = PIT_WALL_W
 //
-// Invisible lip shelf at the cave mouth.
+// The ground ends at the cave's west wall, which stands CAVE_WALL_COLLIDER_SHARE
+// of the wall block's width in from the floor's west end; the mouth span
+// keeps at least CAVE_MOUTH_SPAN_MIN px of width.
 //
-const PIT_MOUTH_WALK_SHELF_W = 22
+const CAVE_WALL_COLLIDER_SHARE = 0.35
+const CAVE_MOUTH_SPAN_MIN = 6
 //
-// Painted ground / earth-band mouth line sits this far right of the walk
-// shelf's left edge (shorter lip than the invisible stand collider).
+// The right wall is nearly straight: its wobble is scaled by this, so the
+// stones along it hug the edge.
 //
-const CAVE_MOUTH_GROUND_LINE_TRIM_LEFT = 12
+const CAVE_RIGHT_WALL_WOBBLE = 0.2
 //
 // Shorten the mouth lip shelf from the left and widen the cave entrance by the
 // same amount.
@@ -109,7 +115,7 @@ const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 //
 const PIT_CAVE_TRAMP_ZONE_T = 0.82
 const PIT_DRAW_CULL_MARGIN = 80
-const CAVE_LAYOUT_VERSION = 72
+const CAVE_LAYOUT_VERSION = 76
 //
 // Interior decor kept sparse: a few larger stones on the floor and in the
 // void rather than dozens of small fragments.
@@ -118,10 +124,6 @@ const CAVE_FLOOR_PEBBLE_COUNT_MIN = 5
 const CAVE_FLOOR_PEBBLE_COUNT_RANGE = 4
 const CAVE_FLOOR_PEBBLE_R_MIN = 5
 const CAVE_FLOOR_PEBBLE_R_RANGE = 5
-const CAVE_BG_ROCK_COUNT_MIN = 6
-const CAVE_BG_ROCK_COUNT_RANGE = 4
-const CAVE_BG_ROCK_R_MIN = 7
-const CAVE_BG_ROCK_R_RANGE = 8
 //
 // Lit cap on each stone body: a shrunken copy shifted up-left.
 //
@@ -173,18 +175,61 @@ const CAVE_ANCHOR_CLEAR_HALF_W = 73
 const CAVE_INTERIOR_EXTEND_LEFT = 132
 const CAVE_LEFT_BLOCK_W = 12
 //
-// Wall rocks: fewer, larger stones along each wall — still wide enough to
-// hide the void / earth join.
+// The stone ring: a close, unbroken row of stones round the cave — up the
+// left wall, along the floor and down the right wall. Each stone (radius
+// CAVE_RING_R_MIN..+RANGE) sits CAVE_RING_STEP of its radius after the last
+// along the outline, a CAVE_RING_OUT share of its radius outside it (on the
+// right wall CAVE_RING_RIGHT_OUT); none rises above the ground line by more
+// than a fifth of its radius.
 //
-const CAVE_WALL_ROCK_STEP = 5
-const CAVE_WALL_ROCK_LAYERS = 2
-const CAVE_WALL_ROCK_R_MIN = 9
-const CAVE_WALL_ROCK_R_RANGE = 10
+const CAVE_RING_R_MIN = 8
+const CAVE_RING_R_RANGE = 5
+const CAVE_RING_STEP = 0.85
+const CAVE_RING_OUT = 0.4
+const CAVE_RING_RIGHT_OUT = 0.6
+const CAVE_RING_FLOOR_OUT = 0.3
+const CAVE_RING_MIN_DEPTH = 0.8
 //
 // Only every Nth cave stone gets the lit reddish-brown body; the rest take
 // the dark soil tone so stones read as embedded, not as pink confetti.
 //
 const CAVE_ROCK_LIT_EVERY = 3
+//
+// The cave's rocks are the underground's picture stones (forestBuriedStones)
+// when they are loaded: each fits its rock's diameter times STONE_FIT, picked
+// and mirrored by a hash of its place so the cave looks the same every time.
+// The stones along the cave's floor are baked apart (CAVE_FRONT_BAKE_SLOT)
+// and drawn in front of the hero.
+//
+const CAVE_STONE_FIT = 1.3
+const CAVE_STONE_PICK_X = 0.37
+const CAVE_STONE_PICK_Y = 1.13
+const CAVE_STONE_MIRROR_SALT = 17.3
+const CAVE_STONE_MIRROR_SHARE = 0.5
+//
+// Behind the wall and floor stones lie CAVE_BACK_STONE_COUNT more stones
+// (radius CAVE_BACK_STONE_R_MIN..+RANGE) spread over the void, darkened
+// CAVE_BACK_STONE_DARKEN toward the void colour so they stay in the back.
+//
+const CAVE_BACK_STONE_COUNT = 16
+const CAVE_BACK_STONE_R_MIN = 7
+const CAVE_BACK_STONE_R_RANGE = 8
+const CAVE_BACK_STONE_TOP_PAD = 24
+const CAVE_BACK_STONE_BOTTOM_PAD = 14
+const CAVE_BACK_STONE_DARKEN = 0.6
+const CAVE_FRONT_BAKE_SLOT = 'caveFrontRocks'
+const CAVE_FRONT_GRAIN_SEED = 0.57
+//
+// A few small grass plants (forest-plants.js) round the foot of the cave's
+// mushroom, in the front bake so they stand over its stem.
+//
+const CAVE_TUFT_COUNT = 5
+const CAVE_TUFT_SPREAD = 20
+const CAVE_TUFT_DROP = 7
+const CAVE_TUFT_SIZE_MIN = 9
+const CAVE_TUFT_SIZE_RANGE = 7
+const CAVE_TUFT_SEED = 6131
+const CAVE_TUFT_SEED_STEP = 977
 //
 // Versioned so a CAVE_LAYOUT_VERSION bump (any change to the cave geometry
 // generator) always forces a fresh bake. Forest and menu share one native
@@ -473,7 +518,6 @@ export function createForestPit(cfg) {
     pitFloor: null,
     pitWalls: [],
     pitLeftWall: null,
-    pitMouthWalkShelf: null,
     wallProfile: null
   }
   openPitPhysics(pit)
@@ -557,6 +601,17 @@ export function drawForestPitCaveForegroundDecor(k, pit) {
   drawStaticDecorSprite(k, ensurePitRockBakes(k, pit).fg)
 }
 /**
+ * The stones along the cave's floor — draw them above the hero, so his feet
+ * stand behind them.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} pit - Pit state
+ */
+export function drawForestPitCaveFrontStones(k, pit) {
+  if (!pit?.wallProfile?.mouth || !isPitInCameraView(pit)) return
+  drawStaticDecorSprite(k, ensurePitRockBakes(k, pit).front)
+}
+
+/**
  * Seam-cover rocks — drawn last so earth/static cannot hide them.
  * @param {Object} k - Kaplay instance
  * @param {Object} pit - Pit state
@@ -601,7 +656,7 @@ export function paintForestPitStill(ctx, worldW, floorY, voidToX = 0) {
   ctx.fillStyle = `rgb(${pal.void.r},${pal.void.g},${pal.void.b})`
   ctx.fillRect(cut.leftX, floorY, Math.max(cut.rightX, voidToX) - cut.leftX, zone.depth)
   layout.mouth && paintCaveInterior(ctx, layout, pal)
-  layout.mouth && [...caveForegroundRockGroups(layout), ...caveSeamRockGroups(layout)]
+  layout.mouth && [...caveForegroundRockGroups(layout), ...caveSeamRockGroups(layout), ...caveFrontRockGroups(layout)]
     .forEach(rocks => paintCanvasRocks(ctx, rocks, pal, floorY, true))
   return { x1: cut.leftX, x2: cut.rightX, trampX: zone.x1 + zone.width * PIT_CAVE_TRAMP_ZONE_T, bottomY: floorY + zone.depth }
 }
@@ -620,7 +675,7 @@ export function forestPitEarthSpan(k, pit) {
   const cut = getForestPitEarthBandMouthCutoutForPit(pit)
   const span = { x1: cut.leftX, x2: cut.rightX }
   const bakes = pit.wallProfile?.mouth ? ensurePitRockBakes(k, pit) : null
-  const rocks = bakes ? [bakes.fg, bakes.seam] : []
+  const rocks = bakes ? [bakes.fg, bakes.seam, bakes.front] : []
   rocks.filter(Boolean).forEach(baked => {
     span.x1 = Math.min(span.x1, baked.x)
     span.x2 = Math.max(span.x2, baked.x + baked.w)
@@ -641,6 +696,7 @@ function ensurePitRockBakes(k, pit) {
   pit._rockBakeK = k
   pit._rockBakes = {
     fg: bakeCaveRockGroups(k, pit, CAVE_FOREGROUND_BAKE_SLOT, CAVE_FOREGROUND_GRAIN_SEED, caveForegroundRockGroups(layout)),
+    front: bakeCaveRockGroups(k, pit, CAVE_FRONT_BAKE_SLOT, CAVE_FRONT_GRAIN_SEED, caveFrontRockGroups(layout)),
     seam: bakeCaveRockGroups(k, pit, CAVE_SEAM_BAKE_SLOT, CAVE_SEAM_GRAIN_SEED, caveSeamRockGroups(layout))
   }
   return pit._rockBakes
@@ -648,10 +704,34 @@ function ensurePitRockBakes(k, pit) {
 function caveForegroundRockGroups(layout) {
   return [
     layout.wallRocks?.filter(rock => !rock.straddleMouthGround),
-    layout.backgroundRocks,
-    layout.contourRocks?.filter(rock => !rock.straddleMouthGround),
+    layout.contourRocks?.filter(rock => !rock.straddleMouthGround && !rock.front),
     layout.pebbles
   ]
+}
+function caveFrontRockGroups(layout) {
+  return [layout.contourRocks?.filter(rock => rock.front), layout.trampPlants]
+}
+//
+// The grass plants at the foot of the cave's mushroom, shaped like rocks
+// (position, radius, verts) so the bake's bounds cover them.
+//
+function buildCaveTrampPlants(zone, bottomY) {
+  const trampX = zone.x1 + zone.width * PIT_CAVE_TRAMP_ZONE_T
+  const plants = []
+  for (let i = 0; i < CAVE_TUFT_COUNT; i++) {
+    const seed = CAVE_TUFT_SEED + i * CAVE_TUFT_SEED_STEP
+    const size = CAVE_TUFT_SIZE_MIN + caveSeed01(seed) * CAVE_TUFT_SIZE_RANGE
+    plants.push({
+      plant: true,
+      seed,
+      size,
+      x: trampX + (caveSeed01(seed + 1) * 2 - 1) * CAVE_TUFT_SPREAD,
+      y: bottomY + CAVE_TUFT_DROP,
+      radius: size,
+      verts: buildRockVertices(size)
+    })
+  }
+  return plants
 }
 function caveSeamRockGroups(layout) {
   return [
@@ -788,7 +868,6 @@ function midgeDrawColor(k, ctrl, base) {
 }
 function drawCaveInteriorRockStyle(k, pit) {
   ensureCaveLayout(pit)
-  ensureForestPitMouthWalkShelf(pit)
   bakeCaveInteriorSprite(k, pit)
   if (pit._caveSpriteReady) {
     drawCaveInteriorBakedSprite(k, pit)
@@ -814,7 +893,6 @@ function ensureCaveLayout(pit) {
   pit.wallProfile = buildCaveSceneLayout(pit.zone, pit.floorY)
   pit._caveSpriteReady = false
   pit._caveBakeRocksKey = null
-  pit.collapsed && refreshForestPitMouthWalkShelf(pit)
 }
 function bakeCaveInteriorSprite(k, pit) {
   const zone = pit.zone
@@ -971,10 +1049,72 @@ function paintCanvasRocks(ctx, rocks, pal, floorY = null, roundOrigin = false) {
     if (floorY != null && !isCaveRockOnOrBelowGround(rock, floorY)) return
     const rx = roundOrigin ? Math.round(rock.x) : rock.x
     const ry = roundOrigin ? Math.round(rock.y) : rock.y
+    if (rock.plant) {
+      drawForestPlant(ctx, { x: rx, baseY: ry, size: rock.size, rng: createSeededRandom(rock.seed) })
+      return
+    }
+    if (paintPictureRock(ctx, rock, rx, ry, pal)) return
     const lit = idx % CAVE_ROCK_LIT_EVERY === 0
     fillCanvasPoly(ctx, rock.verts.map(v => ({ x: rx + v.x, y: ry + v.y })), lit ? pal.stone : pal.stoneShade)
     lit && fillCanvasPoly(ctx, caveRockCapPts(rock, rx, ry), pal.stoneLight)
   })
+}
+//
+// A rock as one of the underground's picture stones; false when none is
+// loaded (the caller paints the polygon).
+//
+function paintPictureRock(ctx, rock, rx, ry, pal) {
+  const stones = forestBuriedStones()
+  if (!stones.length) return false
+  const pick = caveSeed01(rock.x * CAVE_STONE_PICK_X + rock.y * CAVE_STONE_PICK_Y)
+  const canvas = stones[Math.floor(pick * stones.length)]
+  const scale = rock.radius * 2 * CAVE_STONE_FIT / Math.max(canvas.width, canvas.height)
+  const w = Math.max(1, Math.round(canvas.width * scale))
+  const h = Math.max(1, Math.round(canvas.height * scale))
+  ctx.save()
+  ctx.imageSmoothingQuality = 'high'
+  ctx.translate(rx, ry)
+  caveSeed01(pick * CAVE_STONE_MIRROR_SALT) < CAVE_STONE_MIRROR_SHARE && ctx.scale(-1, 1)
+  ctx.drawImage(rock.dark ? darkenedStone(canvas, w, h, pal) : canvas, -w / 2, -h / 2, w, h)
+  ctx.restore()
+  return true
+}
+//
+// The stone at w x h with the void colour laid over its own pixels only.
+//
+function darkenedStone(canvas, w, h, pal) {
+  const out = document.createElement('canvas')
+  out.width = w
+  out.height = h
+  const ctx = out.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(canvas, 0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.globalAlpha = CAVE_BACK_STONE_DARKEN
+  ctx.fillStyle = `rgb(${pal.void.r},${pal.void.g},${pal.void.b})`
+  ctx.fillRect(0, 0, w, h)
+  return out
+}
+//
+// Dark stones scattered over the void behind the wall stones.
+//
+function buildCaveBackStones(mouth, floorY, bottomY, seed, interiorLeft) {
+  const rocks = []
+  const x1 = interiorLeft
+  const x2 = mouth.right[0].x
+  for (let i = 0; i < CAVE_BACK_STONE_COUNT; i++) {
+    const radius = CAVE_BACK_STONE_R_MIN + caveSeed01(seed + i * 8.3) * CAVE_BACK_STONE_R_RANGE
+    const y1 = floorY + CAVE_BACK_STONE_TOP_PAD
+    const y2 = bottomY - CAVE_BACK_STONE_BOTTOM_PAD
+    rocks.push({
+      dark: true,
+      x: x1 + caveSeed01(seed + i * 5.1) * (x2 - x1),
+      y: y1 + caveSeed01(seed + i * 3.7) * (y2 - y1),
+      radius,
+      verts: buildRockVertices(radius)
+    })
+  }
+  return rocks
 }
 //
 // Lit cap: the stone outline shrunk and nudged toward the upper left light.
@@ -1138,7 +1278,7 @@ function buildCaveSceneLayout(zone, floorY) {
   // decorative void floor that has no collider (reads as floating rocks).
   //
   const { innerX: floorColliderInnerX } = getForestPitFloorCollider(zone)
-  const wallColliderLeftX = floorColliderInnerX - CAVE_LEFT_BLOCK_W * 0.35
+  const wallColliderLeftX = floorColliderInnerX - CAVE_LEFT_BLOCK_W * CAVE_WALL_COLLIDER_SHARE
   const floorTopRightX = zone.x2 - CAVE_MOUTH_INSET
   const floorTop = clampHorizProfile(
     buildJaggedFloorTop(interiorLeft, floorTopRightX, bottomY, seed),
@@ -1171,25 +1311,12 @@ function buildCaveSceneLayout(zone, floorY) {
   // base X is clamped — clamp every point here so the void fill polygon
   // (caveMouthPts / drawCaveVoidFill, both built straight from this edge)
   // never bleeds dark past the collider into the uncollided gray ground,
-  // matching the same boundary appendCaveWallRocks's minX already respects.
+  // matching the real collider's boundary.
   //
   const interiorLeftEdge = buildCaveMouthEdge(wallColliderLeftX, floorY, bottomY, seed + 550, -1)
     .map(p => ({ x: Math.max(p.x, wallColliderLeftX), y: p.y }))
-  appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
-  //
-  // Same treatment on the interior's own west wall (outwardSign -1, bulging
-  // toward the gray decor outside the cave) — this is the true vertical seam
-  // between the dark void and the plain gray earth band west of the cave
-  // (distinct from the mouth/ground-line seam the Interior*Seam* rocks below
-  // cover, which sits further east at cutLeft). Without this the west edge
-  // was a bare jagged fill line with nothing hiding the black/gray join.
-  // Clamped to wallColliderLeftX so the column never bulges past the real
-  // collider into the decorative, uncollided void floor to its left.
-  //
-  appendCaveWallRocks(wallRocks, interiorLeftEdge, -1, seed + 2400, floorY, bottomY, floorY, wallColliderLeftX)
-  const backgroundRocks = buildCaveBackgroundRocks(mouth, floorY, bottomY, seed + 1200, interiorLeft)
-  const contourRocks = buildCaveContourRocks(mouth, floorY, bottomY, seed + 1500, interiorWallX)
-  appendCaveMouthCeilingLipRocks(contourRocks, zone, floorY, seed + 1520)
+  const backgroundRocks = buildCaveBackStones(mouth, floorY, bottomY, seed + 1200, interiorLeft)
+  const contourRocks = buildCaveStoneRing(mouth, interiorLeftEdge, floorY, bottomY, seed + 1500)
   //
   // Seam cover rocks share the same west-wall clamp so their cover column
   // (which otherwise floors at cutLeft, further west than the collider)
@@ -1201,6 +1328,7 @@ function buildCaveSceneLayout(zone, floorY) {
   appendCaveInteriorSeamEndCapRocks(wallRocks, interiorLeftEdge, floorY, bottomY, seamCutLeft, seed + 2291, zone)
   return {
     version: CAVE_LAYOUT_VERSION,
+    trampPlants: buildCaveTrampPlants(zone, bottomY),
     pebbles,
     wallRocks,
     backgroundRocks,
@@ -1210,22 +1338,6 @@ function buildCaveSceneLayout(zone, floorY) {
     interiorWallEdge: interiorLeftEdge,
     bottomY
   }
-}
-//
-// Scattered interior rocks on the void floor/walls so the pit is not a flat fill.
-//
-function buildCaveBackgroundRocks(mouth, floorY, bottomY, seed, interiorLeft = null) {
-  const rocks = []
-  const x1 = (interiorLeft ?? mouth.left[0].x) + 8
-  const x2 = mouth.right[0].x - 8
-  const count = CAVE_BG_ROCK_COUNT_MIN + Math.floor(caveSeed01(seed) * CAVE_BG_ROCK_COUNT_RANGE)
-  for (let i = 0; i < count; i++) {
-    const px = x1 + caveSeed01(seed + i * 2.9) * (x2 - x1)
-    const py = floorY + 14 + caveSeed01(seed + i * 5.1) * (bottomY - floorY - 28)
-    const radius = CAVE_BG_ROCK_R_MIN + caveSeed01(seed + i * 8.3) * CAVE_BG_ROCK_R_RANGE
-    rocks.push({ x: px, y: py, radius, verts: buildRockVertices(radius) })
-  }
-  return rocks
 }
 //
 // Lip rocks straddle the mouth polygon edges so straight bake/crop lines disappear.
@@ -1368,102 +1480,51 @@ function caveMouthGroundTopEdge(mouth, leftEdge) {
   //
   return { x1: leftEdge[0].x, x2: mouth.right[0].x }
 }
-function appendCaveMouthCeilingLipRocks(rocks, zone, floorY, seed) {
-  const span = getForestPitMouthGroundLineSpan(zone)
-  const lipSeed = span.leftX * 0.041 + floorY * 0.002
-  const topEdge = buildJaggedHorizontalEdge(span.leftX, span.rightX, floorY, lipSeed)
-  topEdge.forEach((p, i) => {
-    const radius = 7 + caveSeed01(seed + i * 3.4) * 18
-    rocks.push({
-      x: p.x + (caveSeed01(seed + i * 5.9) - 0.5) * 10,
-      y: p.y + radius * 0.42,
-      radius,
-      straddleMouthGround: true,
-      verts: buildRockVertices(radius)
-    })
-  })
-}
-function buildCaveContourRocks(mouth, floorY, bottomY, seed, interiorWallX = null) {
+//
+// The stone ring round the cave (see CAVE_RING_*): the left wall from the
+// top down, the floor left to right, the right wall from the bottom up; the
+// floor stones are flagged front (drawn over the hero).
+//
+function buildCaveStoneRing(mouth, leftEdge, floorY, bottomY, seed) {
+  const floor = buildJaggedHorizontalEdge(leftEdge[leftEdge.length - 1].x, mouth.right[mouth.right.length - 1].x, bottomY, seed + 500)
   const rocks = []
-  const lipSeed = mouth.left[0].x * 0.037
-  const bottomEdge = buildJaggedHorizontalEdge(
-    mouth.right[mouth.right.length - 1].x, mouth.left[mouth.left.length - 1].x, mouth.bottomY, lipSeed + 500
-  )
-  bottomEdge.forEach((p, i) => {
-    const radius = 5 + caveSeed01(seed + 300 + i * 3.8) * 12
+  let n = 0
+  const lay = (outline, outX, outY, front) => walkOutline(outline, seed + n * 31, (x, y, radius) => {
+    n++
     rocks.push({
-      x: p.x + (caveSeed01(seed + 400 + i * 5.5) - 0.5) * 12,
-      y: p.y + radius * 0.25,
+      front,
+      straddleMouthGround: y < floorY + radius,
+      x: x + outX * radius,
+      y: Math.max(y + outY * radius, floorY + radius * CAVE_RING_MIN_DEPTH),
       radius,
       verts: buildRockVertices(radius)
     })
   })
-  const edgeStride = 2
-  if (interiorWallX == null) {
-    mouth.left.forEach((p, i) => {
-      if (i % edgeStride !== 0) return
-      if (p.y < floorY + 6) return
-      const radius = 5 + caveSeed01(seed + 700 + i * 2.1) * 11
-      rocks.push({
-        x: p.x - radius * 0.55,
-        y: p.y + (caveSeed01(seed + 800 + i) - 0.5) * 10,
-        radius,
-        verts: buildRockVertices(radius)
-      })
-    })
-  }
-  mouth.right.forEach((p, i) => {
-    if (i % edgeStride !== 0) return
-    const radius = 5 + caveSeed01(seed + 900 + i * 2.4) * 11
-    rocks.push({
-      x: p.x + radius * 0.55,
-      y: p.y + (caveSeed01(seed + 1000 + i) - 0.5) * 10,
-      radius,
-      verts: buildRockVertices(radius)
-    })
-  })
+  lay(leftEdge, -CAVE_RING_OUT, 0, false)
+  lay(floor, 0, CAVE_RING_FLOOR_OUT, true)
+  lay([...mouth.right].reverse(), CAVE_RING_RIGHT_OUT, 0, false)
   return rocks
 }
 //
-// Stacks ground-style rock silhouettes along a ragged cave wall edge.
+// Calls place(x, y, radius) at stone-sized steps along a polyline.
 //
-function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY, minGroundY = floorY, minX = null) {
-  if (!edge?.length) return
-  for (let layer = 0; layer < CAVE_WALL_ROCK_LAYERS; layer++) {
-    const layerSeed = seed + layer * 137
-    for (let i = 0; i < edge.length; i += CAVE_WALL_ROCK_STEP) {
-      const p = edge[i]
-      const radius = CAVE_WALL_ROCK_R_MIN + caveSeed01(layerSeed + i * 3.17) * CAVE_WALL_ROCK_R_RANGE
-      //
-      // Allowed to go slightly negative (rock drifts inward, straddling the
-      // wall line into the void) instead of always sitting outward — a
-      // uniformly positive depth made the wall read as one crisp edge with
-      // rocks stacked neatly behind it.
-      //
-      const depth = -38 + layer * 12 + caveSeed01(layerSeed + i * 7.9) * 42
-      const yJ = (caveSeed01(layerSeed + i * 11.3) - 0.5) * 14
-      //
-      // Clamp to [floorY + radius, bottomY - radius - 2] — never above ground
-      // (floorY) and never past the pit's own bottom — while keeping p.y's
-      // natural spread down the wall so rocks cover its full depth instead
-      // of collapsing onto one band right at the ground line.
-      //
-      const y = Math.max(minGroundY + radius, Math.min(bottomY - radius - 2, p.y + yJ))
-      const straddleMouthGround = p.y < floorY + radius
-      //
-      // minX (west wall only): never let a rock drift past the real
-      // collider edge into the uncollided decorative void floor.
-      //
-      let x = p.x + outwardSign * depth
-      minX != null && (x = Math.max(x, minX))
-      wallRocks.push({
-        x,
-        y,
-        radius,
-        straddleMouthGround,
-        verts: buildRockVertices(radius)
-      })
+function walkOutline(outline, seed, place) {
+  let i = 0
+  let carried = 0
+  for (let seg = 0; seg < outline.length - 1; seg++) {
+    const a = outline[seg]
+    const b = outline[seg + 1]
+    const len = Math.hypot(b.x - a.x, b.y - a.y)
+    let at = carried
+    for (;;) {
+      const radius = CAVE_RING_R_MIN + caveSeed01(seed + i * 3.3) * CAVE_RING_R_RANGE
+      if (at > len) break
+      const t = len > 0 ? at / len : 0
+      place(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, radius)
+      at += radius * CAVE_RING_STEP
+      i++
     }
+    carried = at - len
   }
 }
 //
@@ -1496,7 +1557,9 @@ function buildJaggedFloorTop(x1, x2, bottomY, seed) {
 //
 function buildCaveMouth(zone, floorY, bottomY, seed) {
   const left = buildCaveMouthEdge(zone.x1 + CAVE_MOUTH_INSET, floorY, bottomY, seed + 50, 1)
-  const right = buildCaveMouthEdge(zone.x2 - CAVE_MOUTH_INSET, floorY, bottomY, seed + 350, -1)
+  const rightBase = zone.x2 - CAVE_MOUTH_INSET
+  const right = buildCaveMouthEdge(rightBase, floorY, bottomY, seed + 350, -1)
+    .map(p => ({ x: rightBase + (p.x - rightBase) * CAVE_RIGHT_WALL_WOBBLE, y: p.y }))
   return { left, right, floorY, bottomY }
 }
 //
@@ -1617,26 +1680,14 @@ function getPitCaveAnchorX(zone) {
   return innerX + PIT_CAVE_ANCHOR_FLOOR_PAD
 }
 //
-// Walkable mouth lip above the pit drop — short span ending at the anchor.
-//
-function getForestPitMouthWalkShelf(zone) {
-  const anchorX = getPitCaveAnchorX(zone)
-  const mouthCapX = zone.x1 + CAVE_MOUTH_INSET + 6
-  const rightX = Math.min(anchorX + 4, mouthCapX)
-  const w = PIT_MOUTH_WALK_SHELF_W
-  const x = rightX - w
-  return { x, w }
-}
-//
-// Painted ground / baked cave mouth top edge — shorter on the left than the
-// invisible walk shelf so the lip line does not overshoot the stand collider.
+// The mouth's ground line: the surface ends exactly at the cave's west wall
+// (no lip or ceiling over the cave), so the opening is a plain rectangle.
+// rightX only gives the span a small width for the seam stones.
 //
 function getForestPitMouthGroundLineSpan(zone) {
-  const shelf = getForestPitMouthWalkShelf(zone)
-  const rightX = shelf.x + shelf.w
-  const minSpan = 6
-  const leftX = Math.min(rightX - minSpan, shelf.x + CAVE_MOUTH_GROUND_LINE_TRIM_LEFT)
-  return { leftX, rightX }
+  const { innerX } = getForestPitFloorCollider(zone)
+  const leftX = innerX - CAVE_LEFT_BLOCK_W * CAVE_WALL_COLLIDER_SHARE
+  return { leftX, rightX: leftX + CAVE_MOUTH_SPAN_MIN }
 }
 //
 // Main playfield floor draw and mouth earth-band cutout (collapsed) — trimmed
@@ -1683,7 +1734,7 @@ function getForestPitEarthBandMouthCutout(zone, tightMouth = false) {
   // collider), so the flat earth-gap fill showed through there as a bare
   // untextured sliver next to the cave's west wall.
   //
-  const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * 0.35)
+  const leftX = Math.min(lipLeft, innerX - CAVE_LEFT_BLOCK_W * CAVE_WALL_COLLIDER_SHARE)
   const rightX = zone.x2 + CAVE_MOUTH_MAIN_FLOOR_INSET
   return { leftX, rightX }
 }
@@ -1743,37 +1794,11 @@ function openPitPhysics(pit) {
   const wallH = bottomY - floorY
   pit.pitLeftWall = k.add([
     k.rect(CAVE_LEFT_BLOCK_W, wallH),
-    k.pos(innerX - CAVE_LEFT_BLOCK_W * 0.35, floorY),
+    k.pos(innerX - CAVE_LEFT_BLOCK_W * (1 + CAVE_WALL_COLLIDER_SHARE), floorY),
     k.anchor('topleft'),
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
     CFG.game.platformName
   ])
-  refreshForestPitMouthWalkShelf(pit)
-}
-//
-// Recreates the short mouth lip collider (layout bumps or saves before v51).
-//
-function refreshForestPitMouthWalkShelf(pit) {
-  if (!pit?.collapsed || !pit.k || !pit.zone) return
-  const { k, zone, floorY } = pit
-  pit.pitMouthWalkShelf?.destroy?.()
-  pit.pitMouthWalkShelf = null
-  const shelf = getForestPitMouthWalkShelf(zone)
-  pit.pitMouthWalkShelf = k.add([
-    k.rect(shelf.w, 16),
-    k.pos(shelf.x, floorY),
-    k.anchor('topleft'),
-    k.area(),
-    k.body({ isStatic: true }),
-    k.opacity(0),
-    CFG.game.platformName
-  ])
-}
-function ensureForestPitMouthWalkShelf(pit) {
-  if (!pit?.collapsed || !pit.pitFloor) return
-  if (pit._mouthShelfLayoutVer === CAVE_LAYOUT_VERSION && pit.pitMouthWalkShelf) return
-  refreshForestPitMouthWalkShelf(pit)
-  pit._mouthShelfLayoutVer = CAVE_LAYOUT_VERSION
 }

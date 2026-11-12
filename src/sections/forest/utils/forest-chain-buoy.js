@@ -66,9 +66,11 @@ const BUOY_BLINK_MAX_INTERVAL = 20
 // as a whip that throws the stalk off its sway, then dies away in about a
 // second. Only a hero at ground level (within JOLT_HERO_BAND of his standing
 // height, a frame's move no longer than JOLT_MAX_STEP) knocks it, and not
-// again within JOLT_COOLDOWN.
+// again within JOLT_COOLDOWN. A hero landing on the eye kicks its top joint
+// (JOLT_TOP_IMPULSE px/s, a random way), and the wave runs down the stalk.
 //
 const JOLT_IMPULSE = 230
+const JOLT_TOP_IMPULSE = 170
 const JOLT_GAIN_FOOT = 0.25
 const JOLT_GAIN_TIP = 2.4
 const JOLT_ANCHOR = 12
@@ -259,11 +261,14 @@ export function collectSights(inst, predator, bud) {
 }
 
 /**
- * Closes a stalk-eye for BUOY_LAND_BLINK_HOLD_SEC (hero landed on its cap).
+ * Closes a stalk-eye for BUOY_LAND_BLINK_HOLD_SEC (hero landed on its cap) and
+ * jolts the stalk from its top.
  * @param {Object} buoy - One chain-buoy entry
  */
 export function triggerBuoyLandBlink(buoy) {
-  if (!buoy || buoy.landHoldLeft > 0) return
+  if (!buoy) return
+  buoy.joltV[buoy.joltV.length - 1] += (Math.random() < 0.5 ? -1 : 1) * JOLT_TOP_IMPULSE
+  if (buoy.landHoldLeft > 0) return
   const closing = buoy.blinkLeft > BUOY_BLINK_SEC * 0.5
   closing || (buoy.blinkLeft = BUOY_BLINK_SEC * (1 - Math.asin(Math.min(1, buoy.lidClose ?? 0)) / Math.PI))
   buoy.landHoldPending = true

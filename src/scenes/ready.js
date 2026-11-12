@@ -110,9 +110,11 @@ const TITLE_GLOW_OPACITY = 0.22
 // Layout z-layers. Background pieces (clouds, stars, fireflies)
 // stack between the baked menu-bg sprite and the foreground
 // illustration; foreground UI (text, title, spiders, hint) sits on
-// top of everything.
+// top of everything. The baked scenery (trees, soil, ground decor, description) stands over
+// the sky's stars and the moon, so the moon hangs behind the trees; the
+// sky itself is the plain background plane under them.
 //
-const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
+const Z_SCENERY = CFG.visual.zIndex.background + 4
 //
 // Combined static background — ONE baked full-screen image holding every
 // static element of the scene: the darkened menu-bg picture (moon, all tree
@@ -473,7 +475,7 @@ export function sceneReady(k) {
     // bottom description text, baked once into a single full-screen sprite.
     //
     buildReadyStaticSprite(k)
-    k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k, spiderState) } }])
+    k.add([k.pos(0, 0), k.z(Z_SCENERY), { draw() { onDrawBg(k, spiderState) } }])
     //
     // Twinkling star field overlaid on the baked menu-bg so the ready
     // scene gets a living night sky on top of the static composition.
@@ -570,7 +572,10 @@ export function sceneReady(k) {
         hintFlickerTime = 0
       }
       const hintOp = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * (hintFlickerTime / HINT_FLICKER_DURATION)
-      hint.setOpacity(hintOp * (spiderState.departureFade ?? 1))
+      //
+      // The hint stays while everything else fades with the hero's departure.
+      //
+      hint.setOpacity(hintOp)
       //
       // Title subtle flicker
       //
@@ -652,10 +657,17 @@ function buildReadyStaticSprite(k) {
   //
   ctx.fillStyle = CFG.visual.colors.ready.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  const bgCanvas = generateMenuBackgroundCanvas(undefined, { skipMoon: true })
+  const bgCanvas = generateMenuBackgroundCanvas(undefined, { skipMoon: true, clearSky: true })
   ctx.globalAlpha = READY_BG_DARKEN_ALPHA
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1
+  //
+  // Only the scenery stays: the sky is cut away (transparent) so the stars
+  // and the moon drawn under this sprite show through it.
+  //
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(bgCanvas, 0, 0)
+  ctx.globalCompositeOperation = 'source-over'
   bgCanvas.width = 0
   bgCanvas.height = 0
   //

@@ -186,19 +186,15 @@ const HERO_HOLD_MAX = 1.4
 const EYE_LOOK_FULL = 90
 const EYE_OPEN_SPEED = 2.5
 //
-// Asleep on its perch it breathes once every BREATH_SEC: the body swells
-// (BREATH_GROW taller, BREATH_WIDEN wider round its neck), the stalk's tip
-// sways BREATH_TIP_X px and sinks BREATH_TIP_Y px, bowing BREATH_BOW px,
-// and the propeller rocks BREATH_PROP_TILT rad. Falling asleep and waking
-// take SLEEP_FADE_SEC.
+// Asleep on its perch it breathes once every BREATH_SEC with its stalk
+// alone — the body stays still: the stalk's tip leans BREATH_TIP_X px to
+// the side, bowing BREATH_BOW px, and the propeller tips over BREATH_PROP_TILT
+// rad. Falling asleep and waking take SLEEP_FADE_SEC.
 //
 const BREATH_SEC = 2.2
-const BREATH_GROW = 0.035
-const BREATH_WIDEN = 0.025
 const BREATH_TIP_X = 1.5 * SIZE
-const BREATH_TIP_Y = 1.8 * SIZE
 const BREATH_BOW = 1.6 * SIZE
-const BREATH_PROP_TILT = 0.06
+const BREATH_PROP_TILT = 0.09
 const SLEEP_FADE_SEC = 1.2
 //
 // Two root-legs (the right one given; the left mirrors it). Points are
@@ -335,6 +331,21 @@ export function create(cfg) {
  */
 export function stopIndex(inst) {
   return inst.stop
+}
+
+/**
+ * Where the bud's head is in the world (for others to look at), written into
+ * out; null while it is hidden.
+ * @param {Object} inst - Bud inst
+ * @param {{x: number, y: number}} out - Point to fill
+ * @returns {{x: number, y: number}|null}
+ */
+export function headPos(inst, out) {
+  if (!inst.isVisible()) return null
+  const head = headWorld(inst)
+  out.x = head.x * inst.scale
+  out.y = head.y * inst.scale
+  return out
 }
 
 /**
@@ -935,12 +946,12 @@ function drawPupils(inst) {
 //
 // The leafy body, squashed or stretched round its neck (where the head
 // sits, so it stays on the head) and bent round that neck by the push
-// across; asleep, it swells with each breath.
+// across.
 //
 function drawBody(inst) {
   const { look } = inst
-  const sy = 1 - inst.squash + inst.breath * BREATH_GROW
-  const sx = 1 + inst.squash * SQUASH_WIDEN + inst.breath * BREATH_WIDEN
+  const sy = 1 - inst.squash
+  const sx = 1 + inst.squash * SQUASH_WIDEN
   const reach = -look.neckY * sy
   const feet = { x: -Math.sin(inst.bend) * reach, y: look.neckY + Math.cos(inst.bend) * reach }
   drawTile(inst, look.body, toWorld(inst, feet), inst.tilt + inst.bend, sx * inst.facing, sy)
@@ -974,7 +985,7 @@ function drawStick(inst) {
   const base = toWorld(inst, { x: 0, y: headTopLocal(inst) })
   const tip = airborne(inst) ? inst.prop : {
     x: base.x + inst.breath * BREATH_TIP_X,
-    y: base.y - stickLen(inst) + inst.breath * BREATH_TIP_Y
+    y: base.y - stickLen(inst)
   }
   const bow = inst.rope + inst.breath * BREATH_BOW
   const dx = tip.x - base.x

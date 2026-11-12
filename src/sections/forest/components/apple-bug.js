@@ -53,7 +53,8 @@ const STATES = {
   CARRY: 'carry',
   FLEE: 'flee',
   TO_DROP: 'toDrop',
-  BITE: 'bite'
+  BITE: 'bite',
+  DODGE: 'dodge'
 }
 const UNDERGROUND = new Set([STATES.REST, STATES.DESCEND, STATES.ASCEND, STATES.TUNNEL,
   STATES.STORE, STATES.EAT, STATES.OUT])
@@ -68,9 +69,31 @@ const IN_CAVE = new Set([STATES.REST, STATES.TUNNEL, STATES.STORE, STATES.EAT])
 const TUNNEL_ALERT = new Set([STATES.TUNNEL, STATES.STORE, STATES.EAT, STATES.OUT])
 const PLANS = {
   LAKE: 'lake',
+  FIELD: 'field',
   WANDER: 'wander',
   APPLE: 'apple'
 }
+//
+// With a trampoline mushroom east of the tree its grounds reach on past it:
+// it strolls up to FIELD_WANDER_PAST px beyond the mushroom's foot, and
+// FIELD_SHARE of its outings without an apple it hunts out there instead of
+// over the lake — standing a random FIELD_STAND_MIN..FIELD_STAND_MAX px past
+// the foot, facing on east, catching the midges there.
+//
+const FIELD_SHARE = 0.4
+const FIELD_STAND_MIN = 40
+const FIELD_STAND_MAX = 200
+const FIELD_WANDER_PAST = 220
+//
+// What else it fears out in the open: the centipede itself coming within
+// CRAWLER_NEAR_FEAR px (any part of it) sends it home, and its strolls keep
+// that far from the centipede's head; the hero landing within
+// HERO_LAND_SCARE px makes it dash HERO_DODGE_DIST px aside, away from him,
+// then go back to what it was doing (him just walking by does not).
+//
+const CRAWLER_NEAR_FEAR = 130
+const HERO_LAND_SCARE = 120
+const HERO_DODGE_DIST = 110
 const TONGUE = {
   IDLE: 'idle',
   OUT: 'out',
@@ -238,6 +261,7 @@ const pictureByK = new WeakMap()
  * @param {number} cfg.groundY - World Y of the ground line
  * @param {number} cfg.lakeX2 - World X of the lake's right edge (it hunts from past it)
  * @param {number} cfg.treeX - World X of the left big tree's trunk
+ * @param {number} [cfg.fieldTrampX] - World X of the left trampoline mushroom (it also hunts past it)
  * @param {Object} cfg.levelInst - Forest level inst (its treeFruitSpots are the apples)
  * @param {Object} [cfg.midges] - Midges controller (prey over the lake)
  * @param {Object} [cfg.flower] - Water flower inst (its falling water scares the bug)
@@ -247,7 +271,7 @@ const pictureByK = new WeakMap()
  * @returns {Object|null} Bug inst (null if its pictures are not baked)
  */
 export function create(cfg) {
-  const { k, holeX, groundY, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null } = cfg
+  const { k, holeX, groundY, lakeX2, treeX, levelInst, midges = null, flower = null, predator = null, fieldTrampX = null } = cfg
   const baked = pictureByK.get(k)
   if (!baked) return null
   const { bug, tunnel } = baked
@@ -280,8 +304,12 @@ export function create(cfg) {
     bitesLeft: 0,
     biteT: 0,
     standX: lakeX2 + PARAMS.lakeStandGap,
+    fieldTrampX,
+    dodgeBack: null,
+    huntX: lakeX2 + PARAMS.lakeStandGap,
+    huntFacing: -1,
     wanderX1: holeX + tunnel.lip.x2,
-    wanderX2: treeX + PARAMS.wanderReach,
+    wanderX2: Math.max(treeX + PARAMS.wanderReach, fieldTrampX === null ? -Infinity : fieldTrampX + FIELD_WANDER_PAST),
     appleX1: treeX - PARAMS.appleLeft,
     appleX2: treeX + PARAMS.appleRight,
     levelInst,
@@ -413,6 +441,26 @@ export function wantDropBite(inst, wanted) {
 }
 
 /**
+ * The hero landed at heroX: hunting or strolling within HERO_LAND_SCARE of
+ * him, the bug dashes HERO_DODGE_DIST aside, away from him (no further than
+ * its grounds' ends), then goes back to what it was doing.
+ * @param {Object|null} inst - Bug inst
+ * @param {number} heroX - Where the hero landed (world X)
+ */
+export function onHeroLanded(inst, heroX) {
+  if (!inst || (inst.state !== STATES.HUNT && inst.state !== STATES.WANDER)) return
+  if (Math.abs(heroX - inst.x) > HERO_LAND_SCARE) return
+  const side = Math.sign(inst.x - heroX) || 1
+  const away = Math.max(inst.wanderX1, Math.min(inst.wanderX2, inst.x + side * HERO_DODGE_DIST))
+  retractTongue(inst)
+  inst.dodgeBack = inst.state
+  inst.goalX = away
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  inst.state = STATES.DODGE
+}
+
+/**
  * The bomb it fears (the one nearest its burrow) burst: out in the open it
  * jerks towards the burrow and runs in (an apple in its mouth goes with
  * it); either way (in the tunnel too) it stays in a little while
@@ -477,6 +525,7 @@ function updateBehaviour(inst, dt) {
     case STATES.FLEE: return tickFlee(inst, dt)
     case STATES.TO_DROP: return tickToDrop(inst, dt)
     case STATES.BITE: return tickBite(inst, dt)
+    case STATES.DODGE: return tickDodge(inst, dt)
   }
 }
 //
@@ -489,7 +538,7 @@ function tickRest(inst) {
   apple && !inst.scared && (inst.hideLeft = Math.min(inst.hideLeft, APPLE_NOTICE_DELAY))
   if (inst.hideLeft > 0 || crawlerOnGrounds(inst)) return
   inst.scared = false
-  inst.plan = findApple(inst) ? PLANS.APPLE : Math.random() < PARAMS.lakeShare ? PLANS.LAKE : PLANS.WANDER
+  inst.plan = findApple(inst) ? PLANS.APPLE : pickOutingPlan(inst)
   inst.rushingOut = inst.plan === PLANS.APPLE
   inst.state = STATES.OUT
 }
@@ -499,9 +548,8 @@ function tickRest(inst) {
 function tickEmerge(inst, dt) {
   if (tickRush(inst, dt) < 1) return
   if (inst.plan === PLANS.APPLE && claimApple(inst)) return
-  if (inst.plan === PLANS.LAKE) {
-    inst.stateLeft = randomIn(PARAMS.huntMin, PARAMS.huntMax)
-    inst.state = STATES.HUNT
+  if (inst.plan === PLANS.LAKE || inst.plan === PLANS.FIELD) {
+    startHunt(inst)
     return
   }
   inst.stateLeft = randomIn(PARAMS.wanderMin, PARAMS.wanderMax)
@@ -509,16 +557,17 @@ function tickEmerge(inst, dt) {
   inst.state = STATES.WANDER
 }
 //
-// Walks to its spot on the shore, faces the lake and catches midges until
-// it has had enough.
+// Walks to its hunting spot (on the shore facing the lake, or past the
+// trampoline mushroom facing east), and catches midges until it has had
+// enough.
 //
 function tickHunt(inst, dt) {
   if (claimApple(inst) || startToDrop(inst)) return
   inst.stateLeft -= dt
   if (inst.stateLeft <= 0 && inst.tongue.phase === TONGUE.IDLE) return startOuting(inst)
-  inst.goalX = inst.standX
+  inst.goalX = inst.huntX
   if (!walk(inst, dt, PARAMS.stroll)) return
-  if (inst.facing !== -1) return startTurn(inst, -1)
+  if (inst.facing !== inst.huntFacing) return startTurn(inst, inst.huntFacing)
   if (inst.turnT < 1 || inst.tongue.phase !== TONGUE.IDLE) return
   inst.tongue.waitLeft -= dt
   inst.tongue.waitLeft <= 0 && shootTongue(inst)
@@ -808,11 +857,33 @@ function biteDrop(inst) {
 // stroll) instead of going in.
 //
 function startOuting(inst) {
-  const lake = Math.random() < PARAMS.lakeShare
-  inst.plan = lake ? PLANS.LAKE : PLANS.WANDER
-  inst.stateLeft = lake ? randomIn(PARAMS.huntMin, PARAMS.huntMax) : randomIn(PARAMS.wanderMin, PARAMS.wanderMax)
-  !lake && (inst.goalX = wanderGoal(inst))
-  inst.state = lake ? STATES.HUNT : STATES.WANDER
+  inst.plan = pickOutingPlan(inst)
+  if (inst.plan !== PLANS.WANDER) {
+    startHunt(inst)
+    return
+  }
+  inst.stateLeft = randomIn(PARAMS.wanderMin, PARAMS.wanderMax)
+  inst.goalX = wanderGoal(inst)
+  inst.state = STATES.WANDER
+}
+//
+// An outing without an apple: past the trampoline (FIELD_SHARE, when there
+// is one), over the lake (lakeShare of the rest) or a stroll.
+//
+function pickOutingPlan(inst) {
+  if (inst.fieldTrampX !== null && Math.random() < FIELD_SHARE) return PLANS.FIELD
+  return Math.random() < PARAMS.lakeShare ? PLANS.LAKE : PLANS.WANDER
+}
+//
+// Off to hunt where the plan says: the lake's shore facing west, or past
+// the trampoline facing east.
+//
+function startHunt(inst) {
+  const field = inst.plan === PLANS.FIELD
+  inst.huntX = field ? inst.fieldTrampX + randomIn(FIELD_STAND_MIN, FIELD_STAND_MAX) : inst.standX
+  inst.huntFacing = field ? 1 : -1
+  inst.stateLeft = randomIn(PARAMS.huntMin, PARAMS.huntMax)
+  inst.state = STATES.HUNT
 }
 //
 // Runs to the doorway left of the burrow (from either side), faces the
@@ -1033,10 +1104,11 @@ function nearShell(inst, water) {
 function checkCrawler(inst) {
   const watchful = inst.state === STATES.HUNT || inst.state === STATES.WANDER ||
     inst.state === STATES.APPLE || inst.state === STATES.GRAB ||
-    inst.state === STATES.TO_DROP || inst.state === STATES.BITE
+    inst.state === STATES.TO_DROP || inst.state === STATES.BITE || inst.state === STATES.DODGE
   if (!watchful) return
   const mealX = PredatorFeast.predatorMealX(inst.predator)
-  if (mealX === null || Math.abs(mealX - inst.x) > PARAMS.crawlerFearReach) return
+  const eatingNear = mealX !== null && Math.abs(mealX - inst.x) <= PARAMS.crawlerFearReach
+  if (!eatingNear && !crawlerNear(inst)) return
   inst.fruit && releaseApple(inst)
   retractTongue(inst)
   inst.headTarget = 0
@@ -1056,15 +1128,42 @@ function crawlerOnGrounds(inst) {
 }
 //
 // A stroll spot, kept out of a crawler's fear reach on the bug's own side
-// of where it eats.
+// of where it eats (or of where its head is, out walking).
 //
 function wanderGoal(inst) {
   const x = randomIn(inst.wanderX1, inst.wanderX2)
   const mealX = PredatorFeast.predatorMealX(inst.predator)
-  if (mealX === null) return x
-  const side = Math.sign(inst.x - mealX) || -1
-  const edge = mealX + side * PARAMS.crawlerFearReach
+  const head = crawlerHead(inst)
+  const fearX = mealX ?? head?.x ?? null
+  if (fearX === null) return x
+  const reach = mealX === null ? CRAWLER_NEAR_FEAR : PARAMS.crawlerFearReach
+  const side = Math.sign(inst.x - fearX) || -1
+  const edge = fearX + side * reach
   return side < 0 ? Math.min(x, edge) : Math.max(x, edge)
+}
+//
+// The centipede's head while it is out and shown (null otherwise).
+//
+function crawlerHead(inst) {
+  const pred = inst.predator
+  if (!pred?.segments?.length || pred.obj?.hidden) return null
+  return pred.segments[0]
+}
+//
+// Any part of the centipede within CRAWLER_NEAR_FEAR of the bug.
+//
+function crawlerNear(inst) {
+  if (!crawlerHead(inst)) return false
+  return inst.predator.segments.some(seg => Math.abs(seg.x - inst.x) <= CRAWLER_NEAR_FEAR)
+}
+//
+// Dashing aside from where the hero landed; then back to its hunt or stroll.
+//
+function tickDodge(inst, dt) {
+  if (!walk(inst, dt, PARAMS.flee)) return
+  inst.state = inst.dodgeBack ?? STATES.WANDER
+  inst.dodgeBack = null
+  inst.state === STATES.WANDER && (inst.goalX = wanderGoal(inst))
 }
 //
 // The ground under it: flat outside; in the tunnel the floor's height and

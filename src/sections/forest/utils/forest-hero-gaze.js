@@ -6,7 +6,7 @@ import * as ChainBuoy from './forest-chain-buoy.js'
 // one for LOOK_EYE_SEC, then straight at the player for LOOK_PLAYER_SEC, and
 // repeats that while he stays. Anywhere else his eyes wander on their own.
 //
-const LOOK_REACH = 360             // Hero to stalk-eye cap (world px)
+const LOOK_REACH = ChainBuoy.HERO_LOOK_REACH  // Hero to stalk-eye cap (world px), the same reach the eyes look back in
 const LOOK_EYE_SEC = 4             // Looking at the nearest stalk-eye
 const LOOK_PLAYER_SEC = 1          // Then straight at the player
 const LOOK_CYCLE_SEC = LOOK_EYE_SEC + LOOK_PLAYER_SEC

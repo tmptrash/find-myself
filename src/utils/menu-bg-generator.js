@@ -96,6 +96,11 @@ const TREE_ROWS = [
   { sheet: TREE_SHEET.MID, scale: 1.05, gap: 300, tier: 'nearground', grade: 'near', night: 0.2, bushSheet: BUSH_SHEET.NEAR, bushScale: 0.34 }
 ]
 const TREE_SINK = 4
+//
+// The level's depth blur reads too soft on the ready screen's still rows:
+// each row takes READY_BLUR_SHARE of its tier's blur.
+//
+const READY_BLUR_SHARE = 0.45
 const TREE_JITTER = 0.35
 const TREE_TAPER = 0.4
 const TREE_CLEAR_HALF = 290
@@ -130,6 +135,12 @@ const DECOR_NIGHT = 0.22
 const SOIL_NIGHT = 0.35
 const RIM_NIGHT = 0.12
 const RIM_SCALE = 2
+//
+// Its moss and litter cushions (and twigs) sink into the rim's dark soil
+// lip by design, which reads as soil here: they are painted apart and laid
+// CUSHION_LIFT rim px higher, their bottoms on the lip's top.
+//
+const CUSHION_LIFT = 3
 const BURIED_COUNT = 12
 const BURIED_SCALE = 0.3
 const BURIED_TOP = 40
@@ -224,6 +235,10 @@ export function recomputeMenuBgLayout(width, height) {
  * @param {string} [bgFillHex] - Sky/underground fill colour; pass the
  *   calling scene's backdrop hex so the plain bands above and below the
  *   composition blend into the scene background (no top/bottom strips)
+ * @param {Object} [opts]
+ * @param {boolean} [opts.skipMoon=false] - Leave the moon out
+ * @param {boolean} [opts.clearSky=false] - Leave the sky transparent (the caller draws the sky,
+ *   stars and moon behind the scenery)
  * @returns {HTMLCanvasElement}
  */
 export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX, opts = {}) {
@@ -243,7 +258,7 @@ export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX, op
   // Grass, fireflies and clouds are intentionally NOT painted here — the
   // `ready` scene renders them as animated overlays.
   //
-  drawSky(ctx, bgFillR, bgFillG, bgFillB)
+  opts.clearSky || drawSky(ctx, bgFillR, bgFillG, bgFillB)
   !skipMoon && drawMenuMoon(ctx)
   TREE_ROWS.slice(0, FRONT_ROW).forEach(row => paintTreeRow(ctx, row, s, night))
   paintSoil(ctx, night)
@@ -274,14 +289,28 @@ function paintSoil(ctx, night) {
 //
 // The forest level's ragged ground rim (soil lip, lumps, moss and litter
 // patches, twigs) along the whole ground line, painted RIM_SCALE times
-// larger (it reads at the backdrop's size), tinted towards the night.
+// larger (it reads at the backdrop's size), its cushions raised onto the lip
+// (CUSHION_LIFT), tinted towards the night.
 //
 function paintGroundRim(ctx, night) {
   const layer = newLayer()
   const lctx = layer.getContext('2d')
+  const cushions = newLayer()
+  const cctx = cushions.getContext('2d')
   lctx.scale(RIM_SCALE, RIM_SCALE)
-  drawGroundRimToCanvas(lctx, { x1: 0, x2: CANVAS_W / RIM_SCALE, floorY: GROUND_Y / RIM_SCALE, rng: Math.random, colors: forestFloorPainterColors().rim })
+  cctx.scale(RIM_SCALE, RIM_SCALE)
+  drawGroundRimToCanvas(lctx, {
+    x1: 0,
+    x2: CANVAS_W / RIM_SCALE,
+    floorY: GROUND_Y / RIM_SCALE,
+    rng: Math.random,
+    colors: forestFloorPainterColors().rim,
+    parts: { cushions: cctx, twigs: cctx }
+  })
   lctx.setTransform(1, 0, 0, 1, 0, 0)
+  lctx.drawImage(cushions, 0, -CUSHION_LIFT * RIM_SCALE)
+  cushions.width = 0
+  cushions.height = 0
   composeTinted(ctx, layer, night, RIM_NIGHT)
 }
 /**
@@ -344,7 +373,7 @@ function paintTreeRow(ctx, row, s, night) {
   lctx.fillRect(0, GROUND_Y + HORIZON_LINE_HEIGHT, CANVAS_W, CANVAS_H)
   lctx.globalCompositeOperation = 'source-over'
   applyParallaxPostFxToContext(lctx, CANVAS_W, CANVAS_H, {
-    blurRadius: forestDepthBlurRadiusPx(row.tier),
+    blurRadius: forestDepthBlurRadiusPx(row.tier) * READY_BLUR_SHARE,
     grade: FOREST_LAYER_GRADE[row.grade]
   })
   composeTinted(ctx, layer, night, row.night)

@@ -67,6 +67,17 @@ const BURST_SPLASH_VOLUME = 0.32
 const CLEAR_PAD = 14
 const PUDDLE_REACH = 1.4
 const RAD_TO_DEG = 180 / Math.PI
+//
+// Now and then (every SIGH_GAP_MIN..+SIGH_GAP_RANGE seconds) the plant
+// sighs: over SIGH_SEC it straightens a little round its foot (SIGH_ANGLE
+// rad, the way that lifts its bell), quick to rise and slow to sink back;
+// the bell's heart, and the drop hanging from it, go along.
+//
+const SIGH_GAP_MIN = 10
+const SIGH_GAP_RANGE = 8
+const SIGH_SEC = 2.6
+const SIGH_RISE_SHARE = 0.35
+const SIGH_ANGLE = 0.07
 const pictureByK = new WeakMap()
 
 /**
@@ -104,6 +115,8 @@ export function create(cfg) {
     heartY: y + picture.heart.y,
     jolt: TreeJolt.create(),
     shakeAngle: 0,
+    sighWait: SIGH_GAP_MIN + Math.random() * SIGH_GAP_RANGE,
+    sighT: null,
     dropLeft: 0,
     drop: WaterDrop.create(k, COLORS),
     ground: GroundWater.create({ k, groundY: y, params: PARAMS, colors: COLORS }),
@@ -335,11 +348,32 @@ function stepSprings(inst, h) {
 //
 function updateShake(inst, dt) {
   TreeJolt.onUpdate(inst.jolt, dt)
-  const a = TreeJolt.angle(inst.jolt, PARAMS.shakeMaxAngle)
+  const a = TreeJolt.angle(inst.jolt, PARAMS.shakeMaxAngle) + sighAngle(inst, dt)
   const { x, y } = inst.picture.heart
   inst.shakeAngle = a
   inst.heartX = inst.x + x * Math.cos(a) - y * Math.sin(a)
   inst.heartY = inst.groundY + x * Math.sin(a) + y * Math.cos(a)
+}
+//
+// The sigh's turn this frame (see SIGH_GAP_MIN): a smooth rise over
+// SIGH_RISE_SHARE of it, then a slower ease back.
+//
+function sighAngle(inst, dt) {
+  if (inst.sighT === null) {
+    inst.sighWait -= dt
+    inst.sighWait <= 0 && (inst.sighT = 0)
+    return 0
+  }
+  inst.sighT += dt / SIGH_SEC
+  if (inst.sighT >= 1) {
+    inst.sighT = null
+    inst.sighWait = SIGH_GAP_MIN + Math.random() * SIGH_GAP_RANGE
+    return 0
+  }
+  const t = inst.sighT
+  const u = t < SIGH_RISE_SHARE ? t / SIGH_RISE_SHARE : 1 - (t - SIGH_RISE_SHARE) / (1 - SIGH_RISE_SHARE)
+  const lift = -Math.sign(inst.picture.heart.x || 1)
+  return lift * SIGH_ANGLE * u * u * (3 - 2 * u)
 }
 //
 // A shaken full-size drop holds on until the shake has died down.

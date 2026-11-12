@@ -71,8 +71,8 @@ const BUG_HOLE_HALF_W = Math.max(-BUG_HOLE_LIP.x1, BUG_HOLE_LIP.x2)
 const LEVEL_BRANCH_TRAMP_X = 1155
 const LEVEL_RIGHT_TRAMP_X = 2300
 const LEVEL_TRAMPS = [
-  { x: LEVEL_BRANCH_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.RED },
-  { x: LEVEL_RIGHT_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.RED }
+  { x: LEVEL_BRANCH_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.BRANCH },
+  { x: LEVEL_RIGHT_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.RIGHT }
 ]
 //
 // The big trees are their pictures at the level's size: the left (apple)
@@ -214,6 +214,10 @@ const SPOTTED_MUSHROOM_SPOTS = [1080, 1790]
 // at its size (design px) — the warm accents of the ground plane.
 //
 const TRAMP_MUSHROOM_W = 53
+//
+// Their feet sink this far (design px) into the soil, as in the level.
+//
+const TRAMP_MUSHROOM_SINK = 2
 const CONTACT_SHADOW_RY = 4.5
 //
 // Live decor (level world X): the stalk eyes as the level plants them
@@ -248,7 +252,7 @@ export async function loadForestMenuBackdropArt() {
  * @param {number} height - Screen height
  * @returns {Object} groundY, scale (of the baked scene to the level), lake {x1, x2Core, x2, surfaceY},
  *   eyeSpots, earTreeSpots [{x}] (the bomb trees), crawler {minX, maxX}, appleTreeX (its trunk),
- *   bugHoleX (the apple bug's burrow), leftBranch {x1 (leafy tip), x2, y} and rightBranch
+ *   bugHoleX (the apple bug's burrow), branchTrampX (the left trampoline mushroom), leftBranch {x1 (leafy tip), x2, y} and rightBranch
  *   {x1 (trunk), x2, y}: the flat tops of the two big trees' branches
  */
 export function forestMenuLayout(width, height) {
@@ -264,6 +268,7 @@ export function forestMenuLayout(width, height) {
     rightBranch: shoreTreeBranchOnCanvas({ x: toX(LEVEL_RIGHT_TREE_X), y: groundY }, LEVEL_RIGHT_TREE_SCALE * scale),
     appleTreeX: toX(LEVEL_LEFT_TREE_X),
     bugHoleX: toX(LEVEL_BUG_HOLE_X),
+    branchTrampX: toX(LEVEL_BRANCH_TRAMP_X),
     lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
     eyeSpots: LEVEL_EYES.map(eye => ({ ...eye, x: toX(eye.x), groundY })),
     earTreeSpots: LEVEL_BOMB_TREE_XS.map(x => ({ x: toX(x) })),
@@ -338,7 +343,7 @@ function paintCave(ctx, width, groundY, toX) {
   ctx.save()
   ctx.translate(dx, groundY - LEVEL_FLOOR_Y)
   const cave = paintForestPitStill(ctx, LEVEL_WORLD_W, LEVEL_FLOOR_Y, width - dx)
-  paintTrampMushroom(ctx, TrampMushroom.TRAMP_MUSHROOM.ORANGE, cave.trampX, cave.bottomY, CAVE_MUSHROOM_W, forestContactShadowRgb())
+  paintTrampMushroom(ctx, TrampMushroom.TRAMP_MUSHROOM.CAVE, cave.trampX, cave.bottomY, CAVE_MUSHROOM_W, forestContactShadowRgb())
   ctx.restore()
 }
 //
@@ -474,7 +479,7 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
     paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
     drawForestPlant(ctx, { x, baseY: groundY, size, rng })
   })
-  LEVEL_TRAMPS.forEach(tramp => paintTrampMushroom(ctx, tramp.mushroom, toX(tramp.x), groundY, TRAMP_MUSHROOM_W * scale, shadow))
+  LEVEL_TRAMPS.forEach(tramp => paintTrampMushroom(ctx, tramp.mushroom, toX(tramp.x), groundY + TRAMP_MUSHROOM_SINK * scale, TRAMP_MUSHROOM_W * scale, shadow))
   MUSHROOM_GROUP_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   SPOTTED_MUSHROOM_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   for (let i = 0; i < TUFT_COUNT; i++) {
@@ -485,10 +490,10 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
 }
 //
 // A trampoline mushroom picture over its contact shadow, its cap as high as
-// the red one's at `width` (the level bakes them all to one cap height).
+// the branch one's at `width` (the level bakes them all to one cap height).
 //
 function paintTrampMushroom(ctx, mushroom, x, groundY, width, shadow) {
-  const capH = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.RED, width)
+  const capH = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.BRANCH, width)
   const w = TrampMushroom.widthForCapHeight(mushroom, capH)
   paintForestContactShadow(ctx, x, groundY, w * 0.45, CONTACT_SHADOW_RY, shadow)
   TrampMushroom.paint(ctx, mushroom, x, groundY, w)

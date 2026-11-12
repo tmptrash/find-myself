@@ -186,8 +186,8 @@ function parkPad(char, pad) {
   pad.pos.y = PLATFORM_HIDE_Y
 }
 //
-// Closes stalk-eyes when the hero's feet first touch the cap (chain tramp
-// pair and the tall prize eye east of the mushroom).
+// Closes stalk-eyes (and lets them huff) when the hero's feet first touch the
+// cap (chain tramp pair and the tall prize eye east of the mushroom).
 //
 function updateStalkEyeLandBlinks(inst) {
   const char = inst.heroInst?.character
@@ -196,19 +196,25 @@ function updateStalkEyeLandBlinks(inst) {
   const footY = char.pos.y + CHAIN_EYE_FOOT_DETECT_Y
   const time = inst.chainBuoys.time ?? 0
   const chain = inst.chainEyeTramp
-  chain && tryStalkEyeLandBlink(findChainBuoy(inst, CHAIN_EYE_ROLE_SECOND), chain.secondPad, chain.second, heroX, footY, char, time)
-  chain && tryStalkEyeLandBlink(findChainBuoy(inst, CHAIN_EYE_ROLE_FIRST), chain.firstPad, chain.first, heroX, footY, char, time)
+  const sound = inst.sound && !inst.sound._forestSfxMuted ? inst.sound : null
+  chain && tryStalkEyeLandBlink(findChainBuoy(inst, CHAIN_EYE_ROLE_SECOND), chain.secondPad, chain.second, heroX, footY, char, time, sound)
+  chain && tryStalkEyeLandBlink(findChainBuoy(inst, CHAIN_EYE_ROLE_FIRST), chain.firstPad, chain.first, heroX, footY, char, time, sound)
   const prize = inst.chainBuoys.buoys?.find(b => b.prizeEye)
-  prize && tryStalkEyeLandBlink(prize, null, prize, heroX, footY, char, time)
+  prize && tryStalkEyeLandBlink(prize, null, prize, heroX, footY, char, time, sound)
 }
-function tryStalkEyeLandBlink(buoy, pad, latch, heroX, footY, char, time) {
+//
+// On the first touch of the cap the eye shuts and huffs ("hmph").
+//
+function tryStalkEyeLandBlink(buoy, pad, latch, heroX, footY, char, time, sound) {
   if (!buoy || !latch) return
   const cap = buoyCapState(buoy, time)
   const onCap = isHeroAtChainEyeCap(heroX, footY, cap, char, pad)
   const was = latch.wasOnCap ?? latch.wasHeroOnCap ?? false
   if (latch.wasOnCap !== undefined) latch.wasOnCap = onCap
   else latch.wasHeroOnCap = onCap
-  onCap && !was && triggerBuoyLandBlink(buoy)
+  if (!onCap || was) return
+  triggerBuoyLandBlink(buoy)
+  sound && Sound.playStalkEyeHmph(sound)
 }
 function buoyCapState(buoy, time) {
   const eye = getChainBuoyEyePos(buoy, time)

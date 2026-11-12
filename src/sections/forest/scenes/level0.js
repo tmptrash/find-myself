@@ -857,7 +857,10 @@ const EARTH_STATIC_BAKE_GRAIN_BLOCK_PX = 2
 //
 // Sky bake uses stacked palette bands instead of a smooth CSS gradient.
 //
-const SKY_DITHER_BAND_COUNT = 7
+const SKY_FLAT_MIX = 0.07
+const SKY_TOP_SAMPLE_INSET = 14
+const SKY_TOP_SAMPLE_STEP = 16
+const skyTopRgbByK = new WeakMap()
 //
 // Half the widest ground stone (forest-stones.js) and some.
 //
@@ -878,8 +881,8 @@ const MUSHROOM_FLOWER_CLEAR_PAD = 14
 const MUSHROOM_EXTRA_LOWER = 2
 const MUSHROOM_Z = 7
 //
-// Mushroom trampolines — mushroom pictures (forest-tramp-mushroom.js): the
-// red one with a face for both on the ground, the orange one in the cave,
+// Mushroom trampolines — mushroom pictures (forest-tramp-mushroom.js), one
+// per trampoline (by the branch, on the ground to the right, in the cave),
 // all baked to the same cap height and squashed as the hero lands on them.
 //
 const TRAMP_SIZE_SCALE = 0.7
@@ -887,11 +890,13 @@ const TRAMP_CAP_W = Math.round(56 * TRAMP_SIZE_SCALE)
 const TRAMP_W = Math.round(70 * TRAMP_SIZE_SCALE)
 const TRAMP_TOTAL_W = TRAMP_W + 4
 //
-// Sink the trampoline sprite a few px into the ground so it does not float;
+// Sink the trampoline sprite a few px into the ground so it does not float
+// (TRAMP_EXTRA_SINK of it lowers the newer pictures' feet into the soil);
 // TRAMP_TOTAL_H is then how high its cap's top stands over the ground.
 //
-const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE) + 2
-const TRAMP_CAP_TOP_H = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.RED, TRAMP_TOTAL_W)
+const TRAMP_EXTRA_SINK = 2
+const TRAMP_SINK_Y = Math.round(2 * TRAMP_SIZE_SCALE) + 2 + TRAMP_EXTRA_SINK
+const TRAMP_CAP_TOP_H = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.BRANCH, TRAMP_TOTAL_W)
 const TRAMP_TOTAL_H = Math.round(TRAMP_CAP_TOP_H - TRAMP_SINK_Y)
 //
 // Ground decor keeps this clear of the trampoline mushroom's centre so
@@ -1449,12 +1454,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     const waterX2 = lakeShoreAnchorX + LAKE_WATER_PAST_ANCHOR - WATER_RIGHT_TRIM
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
-      mushroom: TrampMushroom.TRAMP_MUSHROOM.RED
+      mushroom: TrampMushroom.TRAMP_MUSHROOM.RIGHT
     })
     const branchTrampBundle = createMushroomTrampoline(k, branchTrampX, FLOOR_Y, zones, {
       gateBranchTramp: true,
       drawZ: CFG.visual.zIndex.platforms + 2,
-      mushroom: TrampMushroom.TRAMP_MUSHROOM.RED
+      mushroom: TrampMushroom.TRAMP_MUSHROOM.BRANCH
     })
     if (await forestBootstrapPause(bootstrap, 44, session)) return
     const lakeX1 = LEFT_MARGIN
@@ -1622,7 +1627,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       branchPlat,
       branchPlatHome,
       branchPlatSegs: branchPlatBundle,
-      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, lakeX2 }),
+      midges: createForestMidges(k, FLOOR_Y, WORLD_W, { treeX: TREE_X, lakeX2, trampX: branchTrampX }),
       pit: null,
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
@@ -1664,6 +1669,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       midges: inst.midges,
       flower: inst.waterFlower,
       predator,
+      fieldTrampX: branchTrampX,
       tunnelZ: BUG_TUNNEL_Z,
       z: BUG_Z
     })
@@ -2231,7 +2237,7 @@ function createForestLevelIndicator(k) {
   return LevelIndicator.create({
     k,
     lifeHudPlayfieldRightX: PLAYFIELD_SCREEN.x2 - FOREST_EYE_HUD_INSET,
-    lifeHudPlayfieldTopY: PLAYFIELD_SCREEN.y1 + FOREST_EYE_HUD_INSET
+    lifeHudPlayfieldTopY: (PLAYFIELD_ROUNDED ? PLAYFIELD_SCREEN.y1 : 0) + FOREST_EYE_HUD_INSET
   })
 }
 //
@@ -2701,20 +2707,14 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   onStep && await onStep(4, 4)
 }
 //
-// Paints the dark green-teal sky band with golden dawn at the trunk line.
+// Paints the sky in one even colour (the top of the level's sky ramp): the
+// ramp's palette-snapped steps read as stripes across the screen, and the
+// band over a tall screen's playfield carries the same colour on.
 //
 function renderSkyBand(ctx) {
-  const skyHeight = FLOOR_Y - TOP_MARGIN
-  const bands = SKY_DITHER_BAND_COUNT
-  for (let b = 0; b < bands; b++) {
-    const t0 = b / bands
-    const t1 = (b + 1) / bands
-    const c = forestSkyBandRgb((t0 + t1) * 0.5)
-    ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
-    const y = TOP_MARGIN + t0 * skyHeight
-    const bandH = Math.ceil(t1 * skyHeight - t0 * skyHeight) + 1
-    ctx.fillRect(LEFT_MARGIN, y, GAME_W, bandH)
-  }
+  const c = forestSkyBandRgb(SKY_FLAT_MIX)
+  ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
+  ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, FLOOR_Y - TOP_MARGIN)
 }
 //
 // Renders one bush row into a parallax canvas with horizontal bleed.
@@ -2747,6 +2747,7 @@ function bakeParallaxLayer(k, name, speed, maxScroll, horizBleed, worldY, worldH
   drawFn(ctx, pad)
   postFxCfg && applyParallaxPostFxToContext(ctx, canvasW, canvasH, postFxCfg)
   parallaxColumnBoundsMap(k).set(name, measureParallaxColumnBounds(canvas, name === PAR_LAYER_NEAR.color))
+  name === BG_PAR_TREE3_COLOR && skyTopRgbByK.set(k, sampleSkyTop(canvas, worldY))
   loadParallaxTiles(k, name, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -3886,7 +3887,7 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
 function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
   const pitCaveTramp = Boolean(opts.pitCaveTramp)
   const gateBranchTramp = Boolean(opts.gateBranchTramp)
-  const mushroom = opts.mushroom ?? TrampMushroom.TRAMP_MUSHROOM.RED
+  const mushroom = opts.mushroom ?? TrampMushroom.TRAMP_MUSHROOM.BRANCH
   const sprite = TrampMushroom.bake(k, mushroom, TrampMushroom.widthForCapHeight(mushroom, TRAMP_CAP_TOP_H))
   const state = {
     squash: 0,
@@ -4495,6 +4496,7 @@ function forestWorldToScreenY(inst, worldY) {
 //
 function drawForestParallaxBackdropLayers(inst) {
   inst._parOffscreen.clear()
+  drawSkyUnderlay(inst)
   drawParallaxLayer(inst, PAR_LAYER_FAR)
   drawParallaxLayer(inst, PAR_LAYER_MID)
 }
@@ -4751,12 +4753,46 @@ function drawLakeShoreRocksWorld(inst) {
   k.drawSprite({ sprite: pile.name, pos, width: pile.width, height: pile.height })
 }
 //
-// Void above the playfield (only on a screen taller than it) — sits below
-// the HUD (z = ui - 1).
+// Above the playfield (only on a screen taller than it): the void round a
+// playfield shown as a rounded window (otherwise the sky underlay shows
+// there) — sits below the HUD (z = ui - 1).
 //
 function drawPlayfieldTopBar(inst) {
+  PLAYFIELD_ROUNDED && drawPlayfieldVoidRect(inst.k, 0, 0, SCREEN_W, PLAYFIELD_SCREEN.y1)
+}
+//
+// The backdrop pass starts from a whole screen of the sky's finished colour
+// (unless the playfield shows as a rounded window): the sky goes on over a
+// tall screen's playfield (the clouds drift there too), and the sky
+// layer's blurred edges fade into the same colour instead of a dark seam.
+//
+function drawSkyUnderlay(inst) {
+  if (PLAYFIELD_ROUNDED) return
   const k = inst.k
-  drawPlayfieldVoidRect(k, 0, 0, SCREEN_W, PLAYFIELD_SCREEN.y1)
+  k.drawRect({ pos: k.vec2(0, 0), width: k.width(), height: k.height(), color: skyTopColor(inst), fixed: true })
+}
+function skyTopColor(inst) {
+  if (inst._skyTopColor) return inst._skyTopColor
+  const c = skyTopRgbByK.get(inst.k) ?? forestSkyBandRgb(SKY_FLAT_MIX)
+  inst._skyTopColor = inst.k.rgb(c.r, c.g, c.b)
+  return inst._skyTopColor
+}
+//
+// The finished (blurred, graded) sky's colour SKY_TOP_SAMPLE_INSET px under
+// its top edge, averaged across the layer — read once from the bake.
+//
+function sampleSkyTop(canvas, worldY) {
+  const y = Math.max(0, Math.round(TOP_MARGIN - worldY + SKY_TOP_SAMPLE_INSET))
+  const row = canvas.getContext('2d').getImageData(0, y, canvas.width, 1).data
+  const sum = { r: 0, g: 0, b: 0, n: 0 }
+  for (let i = 0; i < row.length; i += 4 * SKY_TOP_SAMPLE_STEP) {
+    if (row[i + 3] < 250) continue
+    sum.r += row[i]
+    sum.g += row[i + 1]
+    sum.b += row[i + 2]
+    sum.n++
+  }
+  return sum.n ? { r: sum.r / sum.n, g: sum.g / sum.n, b: sum.b / sum.n } : null
 }
 //
 // Void below and beside the playfield (only on an axis where the screen is
@@ -5992,7 +6028,7 @@ function onUpdate(inst) {
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
-    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt())
+    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud))
   inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
@@ -6115,6 +6151,7 @@ function onUpdate(inst) {
   syncForestWorldBirdsVolume(inst)
   syncForestPredatorVisibility(inst)
   syncForestPitCaveFlag(inst)
+  justLanded && AppleBug.onHeroLanded(inst.appleBug, heroX)
   tickForestStartBranchFatigue(inst, char, grounded, justLanded)
   tickForestShoreBranchTwigs(inst, char, hero, grounded, justLanded)
   tickForestTomatoTreeLanding(inst, char, grounded, justLanded)
@@ -7387,7 +7424,7 @@ function setupForestPitCaveTrampoline(inst) {
   const bundle = createMushroomTrampoline(k, trampX, pitFloorY, inst.zones, {
     pitCaveTramp: true,
     drawZ: CFG.visual.zIndex.player + 22,
-    mushroom: TrampMushroom.TRAMP_MUSHROOM.ORANGE
+    mushroom: TrampMushroom.TRAMP_MUSHROOM.CAVE
   })
   inst.pitCaveTrampBundle = bundle
   inst.pitCaveTrampState = bundle.state

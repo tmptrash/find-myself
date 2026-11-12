@@ -845,6 +845,39 @@ These rules complement sections 3, 13, 14, and 15. They describe **how procedura
 
 ---
 
+## 17. Phones & Tablets (touch devices, both orientations)
+
+The game must work on phones and tablets in **landscape and portrait**, not only on desktop. Every change — a new scene, level, HUD element, input, bake or layout — is checked on touch devices too, before it is called done.
+
+### Detecting the device
+- Use `isTouchDevice()` from `src/utils/touch-input.js` (cached, refreshed on the media query's `change`). Never call `matchMedia` or read `navigator` per frame.
+- Orientation = `k.height() > k.width()` (upright). Decide per scene start / engine boot, not per frame, unless the code is a per-frame layout already.
+
+### World scale and layout
+- `nativeWorldScale()` in `src/utils/game-engine.js` scales the world on touch devices by the screen's **short side** (`SMALL_VIEW_WORLD_H` world px across it), so the hero has one on-screen size in both orientations; upright it never shows more than the forest playfield's height (`UPRIGHT_MAX_WORLD_H`). Do not add per-scene zooms that fight it.
+- A window resize, rotation or fullscreen change reboots the engine (`src/utils/window-resize.js`, loader shown at once). Layout constants are recomputed in the scene's `recomputeLayout(k)`; never cache screen sizes in module state across engines.
+- Scenes that are laid out for a desktop-sized view (ready) scale their whole tree to fit a short or narrow screen (`READY_VIEW_H`, `READY_VIEW_MIN_W`); menus scale their layout by both height and width (`MENU_REF_HEIGHT`, `MENU_REF_WIDTH`) so panels and hint lines stay on screen.
+- Text and hairline art baked for a scaled-down view are baked at the screen's real resolution and drawn with `filter: 'linear'` (see `newBakeCanvas` / `bakeSpriteOpts` in `ready.js`); never let nearest-neighbour minification shred text.
+- Textures stay **≤ 2048 px** on a side (many mobile GPUs refuse 4096+, the texture then draws black). Split wide bakes into tiles (see `PAR_TILE_W` in forest `level0.js`).
+
+### Camera
+- Upright (portrait), a level's camera leads the hero: it sits toward the trailing edge so more of the level shows ahead of him (`LEAD_SHARE` in `src/sections/forest/utils/forest-camera.js`). The lead moves only while he runs, takes a new way only after `LEAD_TURN_HOLD` of running that way, and eases over by distance run (`LEAD_CATCH`, `LEAD_RAMP`, `LEAD_SOFT`) — never snap it. Every new level's camera follows the same rules.
+- Upright, the playfield stands on the screen's bottom edge (`playfieldScreenRect`); the band above it shows the level's own sky, never a void bar.
+
+### Touch input and HUD
+- Run/jump buttons: `src/utils/touch-controls.js`. They are created hidden and shown by the level once its picture is built (`setVisible(true)`), sit under the level's entry fade, shrink on narrow screens, and upright the two run arrows stand together at the left. Their face is see-through; the icon stays solid.
+- Fullscreen / back buttons: `src/utils/fullscreen.js` (DOM, left edge `BTN_MARGIN`, the levels' FPS readout lines up with them via `hudLeftWorldX`). iPhone has no page fullscreen: the button explains Add to Home Screen; in standalone mode it is hidden.
+- Every action reachable by keyboard must also be reachable by touch (a tap target, or a tap anywhere where that is the only action — ready, menu outside the level panel).
+- Keyboard-only hints get a touch wording on touch devices.
+
+### WebGL on devices
+- Release a torn-down engine's WebGL context explicitly (`WEBGL_lose_context`, see `teardownEngine`); never leave contexts for the garbage collector.
+- Never auto-reload in a loop on context loss (the browser then blocks WebGL for the site); keep the capped reload in `game-engine.js`.
+
+### How to check
+- Emulate in Puppeteer with `isMobile: true, hasTouch: true` and real CSS sizes and DPRs — e.g. iPhone 17 Pro 402×874 @3 (and 874×402), Samsung S26 Ultra 384×832 @3.75, Lenovo Tab P11 Pro 800×1280 @2 (and 1280×800). Send touches with CDP `Input.dispatchTouchEvent`.
+- Check portrait and landscape, a rotation between them, the scene entry (no half-built frames), and that nothing is cut off at the screen edges.
+
 ## Notes
 
 - Follow these patterns consistently across the codebase

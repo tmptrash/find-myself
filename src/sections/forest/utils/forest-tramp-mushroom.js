@@ -1,10 +1,12 @@
 import { loadPictureImage } from './forest-picture.js'
 import { applyForestGameplaySharpBake } from './forest-focus-depth.js'
 //
-// The trampoline mushrooms' pictures: the two top-left mushrooms of
-// assets/forest/big_mushrooms.png — a red spotted one with a little painted
-// face (the trampolines on the ground) and an orange spotted one (the
-// trampoline in the cave). Baked once per live k at the trampolines' cap height; the
+// The trampoline mushrooms' pictures from assets/forest/big_mushrooms.png
+// (a 6 × 4 sheet, counted row by row): the 4th — a wide cream parasol — for
+// the first trampoline (by the left tree's branch), the 14th — a flat cream
+// cap with brown spots — for the second (on the ground to the right), the
+// 5th — a small brown one on a tall stem — for the third (in the cave).
+// Baked once per live k at the trampolines' cap height; the
 // level squashes the sprite as the hero lands. The sheet starts loading
 // with this module (game boot).
 //
@@ -14,16 +16,17 @@ import { applyForestGameplaySharpBake } from './forest-focus-depth.js'
 // background (the mushroom's dark contour stops the fill).
 //
 const URL = 'forest/big_mushrooms.png'
-const SPRITE_PREFIX = 'forest0-tramp-mushroom-v2'
+const SPRITE_PREFIX = 'forest0-tramp-mushroom-v3'
 const GRAIN_SEED = 7180
 //
 // Each mushroom: its box on the sheet, the row of its stem's foot and the
 // top row of its cap (sheet px).
 //
-export const TRAMP_MUSHROOM = { RED: 0, ORANGE: 1 }
+export const TRAMP_MUSHROOM = { BRANCH: 0, RIGHT: 1, CAVE: 2 }
 const MUSHROOMS = [
-  { x: 63, y: 114, w: 177, h: 163, baseY: 274, capTopY: 117 },
-  { x: 305, y: 129, w: 151, h: 139, baseY: 265, capTopY: 132 }
+  { x: 758, y: 127, w: 183, h: 148, baseY: 274, capTopY: 130 },
+  { x: 259, y: 609, w: 220, h: 130, baseY: 738, capTopY: 612 },
+  { x: 1025, y: 130, w: 112, h: 145, baseY: 274, capTopY: 133 }
 ]
 //
 // Background key: a pixel this light whose channels differ by less than

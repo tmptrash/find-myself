@@ -48,6 +48,26 @@ const TOMATO_BLAST_SHARD_FREQ_RANGE = 1800
 const TOMATO_BLAST_SHARD_DURATION = 0.05
 const TOMATO_BLAST_SHARD_GAIN = 0.035
 //
+// A stalk-eye's indignant "hmph!" when the hero lands on it: a voiced buzz
+// (a sawtooth and its octave, quieter) through a mouth-like band-pass that
+// opens as the pitch jumps up from STALK_EYE_HMPH_F0 to STALK_EYE_HMPH_PEAK
+// by STALK_EYE_HMPH_RISE_SEC, then drops to STALK_EYE_HMPH_F1, wobbling at
+// STALK_EYE_HMPH_WOBBLE_HZ by STALK_EYE_HMPH_WOBBLE_HZ_DEPTH Hz.
+//
+const STALK_EYE_HMPH_SEC = 0.36
+const STALK_EYE_HMPH_RISE_SEC = 0.11
+const STALK_EYE_HMPH_F0 = 190
+const STALK_EYE_HMPH_PEAK = 300
+const STALK_EYE_HMPH_F1 = 150
+const STALK_EYE_HMPH_WOBBLE_HZ = 9
+const STALK_EYE_HMPH_WOBBLE_HZ_DEPTH = 14
+const STALK_EYE_HMPH_FORMANT_START = 620
+const STALK_EYE_HMPH_FORMANT_PEAK = 980
+const STALK_EYE_HMPH_FORMANT_END = 520
+const STALK_EYE_HMPH_Q = 3.5
+const STALK_EYE_HMPH_GAIN = 0.16
+const STALK_EYE_HMPH_OCTAVE_GAIN = 0.35
+//
 // Forest eye-flower grab: a leafy shiver when it notices the hero, a wet
 // squeeze when the tentacles close, and a heavy earth gulp when it drags
 // him under (sub thump, low rumble and a rattle of pebbles).
@@ -1524,6 +1544,38 @@ export function playFlowerSqueeze(instance) {
   tone.stop(end)
 }
 /**
+ * A stalk-eye's indignant "hmph!" — the hero just landed on it.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playStalkEyeHmph(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const now = ctx.currentTime
+  const peakAt = now + STALK_EYE_HMPH_RISE_SEC
+  const end = now + STALK_EYE_HMPH_SEC
+  const mouth = ctx.createBiquadFilter()
+  mouth.type = 'bandpass'
+  mouth.Q.value = STALK_EYE_HMPH_Q
+  mouth.frequency.setValueAtTime(STALK_EYE_HMPH_FORMANT_START, now)
+  mouth.frequency.linearRampToValueAtTime(STALK_EYE_HMPH_FORMANT_PEAK, peakAt)
+  mouth.frequency.exponentialRampToValueAtTime(STALK_EYE_HMPH_FORMANT_END, end)
+  const env = createFlowerEnvelope(ctx, now, STALK_EYE_HMPH_GAIN, STALK_EYE_HMPH_SEC)
+  mouth.connect(env)
+  env.connect(ctx.destination)
+  const wobble = ctx.createOscillator()
+  wobble.frequency.value = STALK_EYE_HMPH_WOBBLE_HZ
+  const wobbleDepth = ctx.createGain()
+  wobbleDepth.gain.value = STALK_EYE_HMPH_WOBBLE_HZ_DEPTH
+  wobble.connect(wobbleDepth)
+  const voices = [1, 2].map(mult => hmphVoice(ctx, mouth, wobbleDepth, mult, now, peakAt, end))
+  wobble.start(now)
+  wobble.stop(end)
+  voices.forEach(osc => {
+    osc.start(now)
+    osc.stop(end)
+  })
+}
+/**
  * Forest eye-flower drags the hero underground: sub thump, falling rumble and
  * a scatter of pebble ticks.
  * @param {Object} instance - Sound instance from create()
@@ -1743,6 +1795,23 @@ function createFlowerEnvelope(ctx, at, peak, duration) {
   env.gain.linearRampToValueAtTime(peak, at + FLOWER_SFX_ATTACK_SEC)
   env.gain.exponentialRampToValueAtTime(FLOWER_SFX_FLOOR, at + duration)
   return env
+}
+//
+// One voice of the stalk-eye's "hmph": a sawtooth at mult × the pitch
+// contour (the octave quieter), wobbled, into the mouth filter.
+//
+function hmphVoice(ctx, mouth, wobbleDepth, mult, now, peakAt, end) {
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(STALK_EYE_HMPH_F0 * mult, now)
+  osc.frequency.exponentialRampToValueAtTime(STALK_EYE_HMPH_PEAK * mult, peakAt)
+  osc.frequency.exponentialRampToValueAtTime(STALK_EYE_HMPH_F1 * mult, end)
+  wobbleDepth.connect(osc.frequency)
+  const level = ctx.createGain()
+  level.gain.value = mult === 1 ? 1 : STALK_EYE_HMPH_OCTAVE_GAIN
+  osc.connect(level)
+  level.connect(mouth)
+  return osc
 }
 //
 // One pebble knocking on another — a tiny band-passed noise click.

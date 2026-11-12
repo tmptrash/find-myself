@@ -726,7 +726,7 @@ function onUpdate(inst) {
   updateBackdropFade(inst, level.backdrop, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
   inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
-  ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt)
+  ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud))
   BombTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
   updateMenuCrawler(inst, dt)
@@ -1314,11 +1314,11 @@ function loadMenuForestLife(k) {
 //
 function createMenuForestLife(inst) {
   const { k, forestLayout } = inst
-  const { groundY, lake, appleTreeX, bugHoleX, scale } = forestLayout
+  const { groundY, lake, appleTreeX, bugHoleX, branchTrampX, scale } = forestLayout
   const hangs = leftTreeApples({ x: appleTreeX, y: groundY }, scale)
   const orchard = { k, treeFruitSpots: [], treeApples: TreeFruit.createForestTreeApples(hangs, leftTreeApplePicture(k)) }
   TreeFruit.restoreForestTreeApples(orchard, MENU_TREE_APPLES)
-  const midges = createForestMidges(k, groundY, k.width(), { treeX: appleTreeX, lakeX2: lake.x2, lakeOnly: true, z: MENU_MIDGE_Z })
+  const midges = createForestMidges(k, groundY, k.width(), { treeX: appleTreeX, lakeX2: lake.x2, trampX: branchTrampX, lakeOnly: true, z: MENU_MIDGE_Z })
   //
   // The level's warm gold (left unset, midges fall back to the void green).
   //
@@ -1347,6 +1347,7 @@ function createMenuForestLife(inst) {
       midges,
       flower,
       predator: inst.crawler,
+      fieldTrampX: branchTrampX,
       tunnelZ: MENU_BUG_TUNNEL_Z,
       z: MENU_BUG_Z
     }),

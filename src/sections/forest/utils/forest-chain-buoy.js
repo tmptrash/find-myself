@@ -13,6 +13,7 @@ import {
 } from './forest-static-bake.js'
 import { drawForestPlant, forestPlantBounds } from './forest-plants.js'
 import * as EarthMerge from './forest-earth-merge.js'
+import { headPos as budHeadPos } from '../components/propeller-bud.js'
 //
 // Segmented stalk-eye creatures in the island eye-flower's look: a red,
 // contoured stalk with a lit line and short side stems, topped by a white
@@ -40,6 +41,20 @@ const BUOY_PUPIL_MARGIN = 0.75
 //
 const BUOY_EYE_CONTOUR_EXTRA = 1.5
 const BUOY_BLINK_MIN_INTERVAL = 10
+//
+// Where a stalk-eye looks: at the hero once he is within HERO_LOOK_REACH of
+// it (the same reach in which he looks at it, forest-hero-gaze.js), else at
+// the nearest of the things worth watching (the centipede, the propeller
+// bud) within SIGHT_REACH, else about — a new random way every
+// WANDER_MIN_SEC..+WANDER_RANGE_SEC, WANDER_DIST px off the eye. Its pupil
+// glides to the new spot at LOOK_EASE_RATE per second.
+//
+export const HERO_LOOK_REACH = 360
+const SIGHT_REACH = 420
+const WANDER_MIN_SEC = 1.5
+const WANDER_RANGE_SEC = 3
+const WANDER_DIST = 80
+const LOOK_EASE_RATE = 5
 const BUOY_BLINK_MAX_INTERVAL = 20
 const BUOY_BLINK_SEC = 0.32
 //
@@ -141,6 +156,11 @@ export function create(cfg) {
       landHoldPending: false,
       blinkGap: randomBuoyBlinkGap(),
       wasHeroOnCap: false,
+      lookX: null,
+      lookY: null,
+      target: { x: 0, y: 0 },
+      wanderLeft: 0,
+      wanderAngle: Math.random() * Math.PI * 2,
       horizScales,
       armDx,
       chainPts: Array.from({ length: segmentCount + 1 }, () => ({ x: spot.x, y: spot.groundY })),
@@ -164,6 +184,8 @@ export function create(cfg) {
     buoys,
     visibleScratch: [],
     pupilScratch: { x: 0, y: 0 },
+    sights: [],
+    budSight: { x: 0, y: 0 },
     woodPlatformBands: woodPlatformBands ?? [],
     platformXMargin: platformXMargin ?? 36,
     time: 0,
@@ -172,18 +194,38 @@ export function create(cfg) {
 }
 
 /**
- * Advances per-buoy sway time and blink timers.
+ * Advances per-buoy sway time, blink timers and gaze (see HERO_LOOK_REACH).
  * @param {Object} inst - Chain-buoy inst
- * @param {number} heroX - Hero world X (pupil gaze)
- * @param {number} heroY - Hero world Y (pupil gaze)
+ * @param {number} heroX - Hero world X
+ * @param {number} heroY - Hero world Y
  * @param {number} dt - Frame delta
+ * @param {Array<{x: number, y: number}>} [sights=[]] - Other things worth watching (world points)
  */
-export function onUpdate(inst, heroX, heroY, dt) {
+export function onUpdate(inst, heroX, heroY, dt, sights = []) {
   inst.time += dt
-  inst.lookX = heroX
-  inst.lookY = heroY
-  inst.buoys.forEach(buoy => updateBuoyBlink(buoy, dt))
+  inst.buoys.forEach(buoy => {
+    updateBuoyBlink(buoy, dt)
+    updateBuoyGaze(inst, buoy, heroX, heroY, sights, dt)
+  })
 }
+/**
+ * The things worth watching for onUpdate's sights: the centipede's head
+ * while it shows and the propeller bud's head while it shows.
+ * @param {Object} inst - Chain-buoy inst
+ * @param {Object|null} predator - Predator inst (its head is segments[0])
+ * @param {Object|null} bud - Propeller bud inst
+ * @returns {Array<{x: number, y: number}>}
+ */
+export function collectSights(inst, predator, bud) {
+  const sights = inst.sights
+  sights.length = 0
+  const head = predator?.segments?.[0]
+  head && !predator.obj?.hidden && sights.push(head)
+  const budHead = bud && budHeadPos(bud, inst.budSight)
+  budHead && sights.push(budHead)
+  return sights
+}
+
 /**
  * Closes a stalk-eye for BUOY_LAND_BLINK_HOLD_SEC (hero landed on its cap).
  * @param {Object} buoy - One chain-buoy entry
@@ -252,7 +294,7 @@ export function onDraw(inst, colors, view = null) {
   for (let i = 0; i < n; i++) addBuoyBody(batch, visible[i], visible[i].chainPts, colors.contour, BUOY_CONTOUR_PAD)
   for (let i = 0; i < n; i++) addBuoyBody(batch, visible[i], visible[i].chainPts, colors.stem, 0)
   for (let i = 0; i < n; i++) addBuoyStalk(batch, visible[i], visible[i].chainPts, colors.stemLight, 0, BUOY_STALK_LIGHT_FRAC)
-  for (let i = 0; i < n; i++) addBuoyEye(inst, batch, visible[i], visible[i].chainPts, colors, inst.lookX, inst.lookY)
+  for (let i = 0; i < n; i++) addBuoyEye(inst, batch, visible[i], visible[i].chainPts, colors, visible[i].lookX, visible[i].lookY)
   PolyBatch.flush(batch, k)
   for (let i = 0; i < n; i++) drawStaticDecorSprite(k, visible[i]._bakedFront)
 }
@@ -553,6 +595,50 @@ function updateBuoyBlink(buoy, dt) {
   buoy.blinkLeft = BUOY_BLINK_SEC
   buoy.blinkGap = randomBuoyBlinkGap()
 }
+//
+// Eases one stalk-eye's look towards what it watches this frame.
+//
+function updateBuoyGaze(inst, buoy, heroX, heroY, sights, dt) {
+  const eye = getChainBuoyEyePos(buoy, inst.time)
+  const target = pickBuoyTarget(buoy, eye.x, eye.y, heroX, heroY, sights, dt)
+  if (buoy.lookX === null) {
+    buoy.lookX = target.x
+    buoy.lookY = target.y
+    return
+  }
+  const t = Math.min(1, dt * LOOK_EASE_RATE)
+  buoy.lookX += (target.x - buoy.lookX) * t
+  buoy.lookY += (target.y - buoy.lookY) * t
+}
+function pickBuoyTarget(buoy, eyeX, eyeY, heroX, heroY, sights, dt) {
+  const target = buoy.target
+  if (heroX != null && Math.hypot(heroX - eyeX, heroY - eyeY) < HERO_LOOK_REACH) {
+    target.x = heroX
+    target.y = heroY
+    return target
+  }
+  let best = SIGHT_REACH
+  let sight = null
+  for (const s of sights) {
+    const d = Math.hypot(s.x - eyeX, s.y - eyeY)
+    if (d >= best) continue
+    best = d
+    sight = s
+  }
+  if (sight) {
+    target.x = sight.x
+    target.y = sight.y
+    return target
+  }
+  buoy.wanderLeft -= dt
+  if (buoy.wanderLeft <= 0) {
+    buoy.wanderAngle = Math.random() * Math.PI * 2
+    buoy.wanderLeft = WANDER_MIN_SEC + Math.random() * WANDER_RANGE_SEC
+  }
+  target.x = eyeX + Math.cos(buoy.wanderAngle) * WANDER_DIST
+  target.y = eyeY + Math.sin(buoy.wanderAngle) * WANDER_DIST
+  return target
+}
 function randomBuoyBlinkGap() {
   return BUOY_BLINK_MIN_INTERVAL + Math.random() * (BUOY_BLINK_MAX_INTERVAL - BUOY_BLINK_MIN_INTERVAL)
 }
@@ -629,7 +715,7 @@ function addBuoyEye(inst, batch, buoy, points, colors, heroX, heroY) {
   addLiddedEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA, buoy.lidClose)
 }
 //
-// Clamps the pupil inside the sclera so it always points at the hero.
+// Clamps the pupil inside the sclera so it points at what the eye watches.
 //
 function chainBuoyXUnderWoodPlatform(x, bands, margin) {
   return (bands ?? []).some(b => x >= b.x1 - margin && x <= b.x2 + margin)

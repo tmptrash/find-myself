@@ -78,6 +78,15 @@ const MIDGE_PIT_SPREAD_Y = 26
 // it from the shore): its band, from the lake's right edge and the floor.
 //
 const MIDGE_LAKE_COUNT = 9
+//
+// A small swarm past the left trampoline mushroom (where the apple bug also
+// hunts): MIDGE_TRAMP_COUNT midges from MIDGE_TRAMP_FROM to MIDGE_TRAMP_TO px
+// right of its foot, at the lake swarm's heights; always shown, and like
+// every swarm it comes back after a catch.
+//
+const MIDGE_TRAMP_COUNT = 6
+const MIDGE_TRAMP_FROM = 60
+const MIDGE_TRAMP_TO = 190
 const MIDGE_LAKE_SPAN = 100
 const MIDGE_LAKE_PAST_EDGE = 6
 const MIDGE_LAKE_TOP = 62
@@ -235,7 +244,8 @@ export function isCrackDecorExcluded(x, screenW) {
  * @param {Object} [opts] - Options
  * @param {number} [opts.treeX] - Trunk centre (splits left/right field)
  * @param {number} [opts.lakeX2] - Lake's right edge (a small swarm hangs over that end)
- * @param {boolean} [opts.lakeOnly=false] - Only the swarm over the lake (no cave mouth or field midges)
+ * @param {number} [opts.trampX] - Left trampoline mushroom's X (a small swarm hangs past it)
+ * @param {boolean} [opts.lakeOnly=false] - Only the lake and trampoline swarms (no cave mouth or field midges)
  * @param {number} [opts.z=MIDGE_Z] - Draw layer
  * @returns {Object} Midges controller
  */
@@ -284,9 +294,23 @@ export function createForestMidges(k, floorY, screenW, opts = {}) {
       'lake'
     ))
   }
+  const tramp = opts.trampX == null ? null : {
+    minX: opts.trampX + MIDGE_TRAMP_FROM,
+    maxX: opts.trampX + MIDGE_TRAMP_TO,
+    minY: floorY - MIDGE_LAKE_TOP,
+    maxY: floorY - MIDGE_LAKE_BOTTOM
+  }
+  for (let i = 0; tramp && i < MIDGE_TRAMP_COUNT; i++) {
+    midges.push(makeMidge(
+      tramp.minX + Math.random() * (tramp.maxX - tramp.minX),
+      tramp.minY + Math.random() * (tramp.maxY - tramp.minY),
+      'tramp'
+    ))
+  }
   const ctrl = {
     midges,
     lake,
+    tramp,
     treeX,
     floorY,
     screenW,
@@ -702,7 +726,7 @@ function tickCaughtMidge(m, bounds, dt) {
   m.y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY)
 }
 function midgeRoleVisible(ctrl, role) {
-  if (role === 'lake') return true
+  if (role === 'lake' || role === 'tramp') return true
   if (role === 'pit') return ctrl.showPit
   if (role === 'fieldLeft') return ctrl.showLeft
   if (role === 'fieldRight') return ctrl.showRight || ctrl.spreadAfterPit
@@ -711,6 +735,7 @@ function midgeRoleVisible(ctrl, role) {
 }
 function boundsForRole(ctrl, role) {
   if (role === 'lake') return ctrl.lake
+  if (role === 'tramp') return ctrl.tramp
   if (role === 'pit') return ctrl.spreadAfterPit ? ctrl.fieldAll : ctrl.pit
   if (role === 'fieldLeft') return ctrl.fieldLeft
   if (role === 'fieldRight') return ctrl.fieldRight

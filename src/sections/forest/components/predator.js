@@ -113,12 +113,6 @@ const SNOUT_REACH = 7
 const SNOUT_DROP = 2.4
 const SNOUT_HALF = 4.1
 //
-// Near-side legs are drawn over the shell from its lower edge
-// (NEAR_LEG_FROM of the plate's radius under its middle), so they read in
-// front without crossing the plates.
-//
-const NEAR_LEG_FROM = 0.72
-//
 // Hero must be within this horizontal span of the body to hear foot taps.
 //
 const FOOT_HEAR_RANGE_X = 360
@@ -351,6 +345,7 @@ function initLegs(inst) {
         reach: 0.85 + Math.random() * 0.3,
         haste: Math.random() * 1.4,
         jitter: Math.random() * 4,
+        lead: 0,
         swing: 0,
         swingFromX: footX,
         swingFromY: inst.groundAt(footX),
@@ -432,7 +427,7 @@ function drawPredator(inst) {
   //
   const legs = inst.legs
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.legFar, false)
+    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.legFar)
   }
   drawTailClaws(inst, batch, colors)
   drawBodySegments(inst, batch, colors)
@@ -443,7 +438,7 @@ function drawPredator(inst) {
     prev && drawSpike(inst, batch, seg, prev, i % SPROUT_EVERY === 1, colors, i)
   }
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.leg, true)
+    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.leg)
   }
   drawHead(inst, batch, colors)
   PolyBatch.flush(batch, k, 1)
@@ -535,7 +530,7 @@ function addLeaf(batch, bx, by, ux, uy, colors) {
   PolyBatch.addTriangle(batch, bx, by, midX + px * SPROUT_LEAF_HALF * 0.8, midY + py * SPROUT_LEAF_HALF * 0.8, tipX, tipY, colors.leafLight)
 }
 
-function drawLeg(inst, batch, limb, colors, fill, front) {
+function drawLeg(inst, batch, limb, colors, fill) {
   const foot = footNow(inst, limb)
   let bend = limb.side
   const lenScale = limb.reach * inst.stretch
@@ -549,16 +544,10 @@ function drawLeg(inst, batch, limb, colors, fill, front) {
   // A folded shin can still cross the ground line. Keep the joint on it.
   //
   knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
-  const from = front ? frontLegFrom(inst, limb, knee, foot) : { x: limb.hipX, y: limb.hipY, thigh: true }
-  if (!from) return
-  if (from.thigh) {
-    PolyBatch.addLine(batch, from.x, from.y, knee.kneeX, knee.kneeY, LEG_THIGH_W + LEG_RIM * 2, colors.contour)
-    PolyBatch.addLine(batch, from.x, from.y, knee.kneeX, knee.kneeY, LEG_THIGH_W, fill)
-  }
-  const kx = from.thigh ? knee.kneeX : from.x
-  const ky = from.thigh ? knee.kneeY : from.y
-  addClaw(batch, kx, ky, foot.x, foot.y, inst.dir, LEG_KNEE_W + LEG_RIM * 2, LEG_RIM, colors.contour)
-  addClaw(batch, kx, ky, foot.x, foot.y, inst.dir, LEG_KNEE_W, 0, fill)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W + LEG_RIM * 2, colors.contour)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W, fill)
+  addClaw(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, inst.dir, LEG_KNEE_W + LEG_RIM * 2, LEG_RIM, colors.contour)
+  addClaw(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, inst.dir, LEG_KNEE_W, 0, fill)
 }
 //
 // A curved claw from (x1, y1) tapering to a point at (x2, y2), bowed
@@ -580,26 +569,6 @@ function addClaw(batch, x1, y1, x2, y2, dir, w, tipPad, color) {
   PolyBatch.addQuad(batch, x1 + px * h, y1 + py * h, mx + px * h * 0.55, my + py * h * 0.55, mx - px * h * 0.55, my - py * h * 0.55, x1 - px * h, y1 - py * h, color)
   PolyBatch.addTriangle(batch, mx + px * h * 0.55, my + py * h * 0.55, tx, ty, mx - px * h * 0.55, my - py * h * 0.55, color)
   PolyBatch.addDisc(batch, x1, y1, h, color)
-}
-//
-// Where a near-side leg shows from over the shell (only below its lower
-// edge, NEAR_LEG_FROM): from the edge along the thigh when the knee is
-// below it, else along the shin (thigh: false); null when the whole leg
-// stays above the edge.
-//
-function frontLegFrom(inst, limb, knee, foot) {
-  const edgeY = limb.bodyY + limb.bodyR * PLATE_R * NEAR_LEG_FROM
-  if (knee.kneeY > edgeY) return { ...pointAtY(limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, edgeY), thigh: true }
-  if (foot.y <= edgeY) return null
-  return { ...pointAtY(knee.kneeX, knee.kneeY, foot.x, foot.y, edgeY), thigh: false }
-}
-//
-// The point of a line at height y (clamped to the line's ends).
-//
-function pointAtY(x1, y1, x2, y2, y) {
-  if (y <= Math.min(y1, y2) || y1 === y2) return { x: y1 < y2 ? x1 : x2, y: Math.min(y1, y2) }
-  const t = Math.min(1, (y - y1) / (y2 - y1))
-  return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
 }
 //
 // Two curved claws spreading back from the last plate.

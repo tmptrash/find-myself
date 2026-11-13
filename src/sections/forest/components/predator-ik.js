@@ -9,13 +9,22 @@ import * as Sound from '../../../utils/sound.js'
 const STEP_LIFT = 7
 const FOOT_SOUND_GAP = 0.055
 const REACH = 16
+//
+// A step gets quicker with the body's speed (SWING_SPEED_GAIN per px/s), so a
+// running leg is back on the ground in time; above RUN_NO_WAIT_SPEED legs
+// step the moment they are behind, without the idle stagger.
+//
+const SWING_SPEED_GAIN = 0.03
+const RUN_NO_WAIT_SPEED = 60
 const PLANT_BEHIND = 11
 //
-// A hip sits on its plate's lower side: this share of the plate's radius
-// forward (near row) or back (far row), and this share below its centre.
+// A hip sits on its plate's flank, shares of the plate's radius from its
+// centre (side: forward, down: below the centre). The near row starts on the
+// visible face of the dome and is drawn over it; the far row starts lower and
+// further back, behind the plate.
 //
-const HIP_SIDE_SHARE = 0.6
-const HIP_DOWN_SHARE = 0.55
+const NEAR_HIP = { side: 0.1, down: 0.12 }
+const FAR_HIP = { side: -0.35, down: 0.5 }
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -65,10 +74,10 @@ export function tickLegs(inst, dt, hurry) {
     const hip = hipOf(inst, leg)
     leg.hipX = hip.x
     leg.hipY = hip.y
-    leg.bodyY = hip.bodyY
-    leg.bodyR = hip.bodyR
     if (leg.swing > 0) {
-      leg.swing += dt * (hurry ? 9 : 4.2 + leg.haste)
+      const rate = swingRate(leg, hurry, speed)
+      leg.swing += dt * rate
+      leg.plantX = landingX(inst, leg, hip.x, (1 - leg.swing) / rate)
       if (leg.swing >= 1) {
         leg.swing = 0
         leg.footX = leg.plantX
@@ -83,14 +92,12 @@ export function tickLegs(inst, dt, hurry) {
     const fidget = speed < 3 && inst.idleTime > leg.fidgetAt
     const retarget = hurry && leg.front && inst.orientKick
     if (behind || fidget || retarget) {
-      if (leg.stepWait > 0 && !retarget) {
+      if (leg.stepWait > 0 && !retarget && speed < RUN_NO_WAIT_SPEED) {
         leg.stepWait -= dt
         return
       }
-      const lead = ((hurry ? 14 : 8) + leg.jitter) * inst.stretch
-      const side = leg.side * (7 + leg.jitter * 0.3)
-      leg.plantX = hip.x + dir * lead + (Math.random() - 0.5) * 3
-      leg.plantX += side * 0.15
+      leg.lead = ((hurry ? 14 : 8) + leg.jitter) * inst.stretch + leg.side * (7 + leg.jitter * 0.3) * 0.15 + (Math.random() - 0.5) * 3
+      leg.plantX = landingX(inst, leg, hip.x, 1 / swingRate(leg, hurry, speed))
       leg.swingFromX = leg.footX
       leg.swingFromY = leg.footY
       leg.swing = 0.01
@@ -103,22 +110,30 @@ export function tickLegs(inst, dt, hurry) {
   inst.orientKick = false
 }
 
+// How fast a swing advances (1 = a whole step per second)
+function swingRate(leg, hurry, speed) {
+  return (hurry ? 9 : 4.2 + leg.haste) + speed * SWING_SPEED_GAIN
+}
+
+// Where the foot should land: ahead of the hip by the leg's lead, plus the way the body travels before the foot arrives
+function landingX(inst, leg, hipX, secondsLeft) {
+  return hipX + inst.dir * leg.lead + inst.vx * secondsLeft
+}
+
 /**
- * World position of a leg hip: on the lower side of its plate's dome, the
- * near row toward the front and the far row toward the back. The offsets are
- * shares of the plate's radius from the plate's own centre, so a hip keeps its
- * place on its plate however the body stretches or heaves.
+ * World position of a leg hip on the flank of its plate. The offsets come from
+ * the plate's own centre, so a hip keeps its place on its plate however the
+ * body stretches or heaves.
  * @param {Object} inst
  * @param {Object} leg
- * @returns {{ x: number, y: number, bodyY: number, bodyR: number }}
+ * @returns {{ x: number, y: number }}
  */
 function hipOf(inst, leg) {
   const seg = inst.segments[leg.seg]
+  const hip = leg.side > 0 ? NEAR_HIP : FAR_HIP
   return {
-    x: seg.x + inst.dir * leg.side * seg.radius * HIP_SIDE_SHARE,
-    y: seg.y + seg.radius * HIP_DOWN_SHARE,
-    bodyY: seg.y,
-    bodyR: seg.radius
+    x: seg.x + inst.dir * seg.radius * hip.side,
+    y: seg.y + seg.radius * hip.down
   }
 }
 
@@ -135,7 +150,7 @@ export function footNow(inst, leg) {
     return { x: leg.footX, y }
   }
   const t = Math.min(1, leg.swing)
-  const x = leg.swingFromX + (leg.plantX - leg.swingFromX) * t
+  const x = leg.swingFromX + (leg.plantX - leg.swingFromX) * t * t * (3 - 2 * t)
   const ground = inst.groundAt(x)
   const start = Math.min(leg.swingFromY, inst.groundAt(leg.swingFromX))
   const end = ground

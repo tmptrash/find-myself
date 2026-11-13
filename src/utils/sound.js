@@ -85,6 +85,18 @@ const FLOWER_SQUEEZE_NOISE_GAIN = 0.2
 const FLOWER_SQUEEZE_TONE_START = 170
 const FLOWER_SQUEEZE_TONE_END = 70
 const FLOWER_SQUEEZE_TONE_GAIN = 0.16
+//
+// A trampoline mushroom snapping back wide after an idle squeeze: a soft
+// rubbery "plop" (a sine rising TRAMP_SNAP_TONE_START→END Hz) over a short
+// muffled tick of noise, both quiet.
+//
+const TRAMP_SNAP_SEC = 0.14
+const TRAMP_SNAP_TONE_START = 120
+const TRAMP_SNAP_TONE_END = 260
+const TRAMP_SNAP_TONE_GAIN = 0.1
+const TRAMP_SNAP_TICK_SEC = 0.05
+const TRAMP_SNAP_TICK_LP = 900
+const TRAMP_SNAP_TICK_GAIN = 0.05
 const FLOWER_GULP_SEC = 0.9
 const FLOWER_GULP_THUMP_START = 110
 const FLOWER_GULP_THUMP_END = 28
@@ -1542,6 +1554,36 @@ export function playFlowerSqueeze(instance) {
   tone.start(now)
   noise.stop(end)
   tone.stop(end)
+}
+/**
+ * A trampoline mushroom snaps back wide after an idle squeeze: a small plop.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playTrampMushroomSnap(instance) {
+  const ctx = runningProceduralContext(instance)
+  if (!ctx) return
+  const now = ctx.currentTime
+  const end = now + TRAMP_SNAP_SEC
+  const tone = ctx.createOscillator()
+  tone.type = 'sine'
+  tone.frequency.setValueAtTime(TRAMP_SNAP_TONE_START, now)
+  tone.frequency.exponentialRampToValueAtTime(TRAMP_SNAP_TONE_END, end)
+  const toneEnv = createFlowerEnvelope(ctx, now, TRAMP_SNAP_TONE_GAIN, TRAMP_SNAP_SEC)
+  tone.connect(toneEnv)
+  toneEnv.connect(ctx.destination)
+  const tick = ctx.createBufferSource()
+  tick.buffer = createReadyTvNoiseBuffer(ctx, TRAMP_SNAP_TICK_SEC)
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.value = TRAMP_SNAP_TICK_LP
+  const tickEnv = createFlowerEnvelope(ctx, now, TRAMP_SNAP_TICK_GAIN, TRAMP_SNAP_TICK_SEC)
+  tick.connect(lp)
+  lp.connect(tickEnv)
+  tickEnv.connect(ctx.destination)
+  tone.start(now)
+  tick.start(now)
+  tone.stop(end)
+  tick.stop(now + TRAMP_SNAP_TICK_SEC)
 }
 /**
  * A stalk-eye's indignant "hmph!" — the hero just landed on it.

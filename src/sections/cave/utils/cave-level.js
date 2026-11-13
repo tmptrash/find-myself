@@ -459,7 +459,8 @@ function spawnHero(inst, pose) {
     suppressFootprints: true,
     airAnimDuringFlicker: true,
     runDuringFlicker: true,
-    idleVocalization: null
+    idleVocalization: null,
+    dozes: true
   })
   hero.onPlayStepSound = h => playHeroStep(inst, h, false)
   //

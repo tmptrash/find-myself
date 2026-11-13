@@ -4,12 +4,10 @@ import { FOREST_PAL } from '../utils/forest-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
 import { tickLegs, solveLeg, footNow } from './predator-ik.js'
-import { initEyes, tickEyes } from './predator-eyes.js'
-import { initHead, drawHead } from './predator-head.js'
+import { initHead, tickHead, drawHead } from './predator-head.js'
 import { tickMove, startFleeMove } from './predator-move.js'
 import {
   cancelPredatorFeast,
-  getPredatorFeastLookTarget,
   isPredatorFeasting,
   tickPredatorFruitFeast
 } from './predator-fruit-feast.js'
@@ -179,7 +177,6 @@ export function create(cfg) {
     burst: 0.2,
     stretch: 1,
     headLift: 0,
-    lookBack: false,
     bodyClear: 7,
     idleTime: 0,
     wobblePhase: Math.random() * 6,
@@ -199,10 +196,9 @@ export function create(cfg) {
       leaf: rgb(cfg.k, FOREST_PAL.predatorLeaf),
       leafLight: rgb(cfg.k, FOREST_PAL.predatorLeafLight),
       thorn: rgb(cfg.k, FOREST_PAL.predatorThorn),
-      fang: rgb(cfg.k, FOREST_PAL.predatorFang),
+      maw: rgb(cfg.k, FOREST_PAL.predatorMaw),
       brow: rgb(cfg.k, FOREST_PAL.predatorBrow),
-      eye: rgb(cfg.k, FOREST_PAL.predatorEye),
-      pupil: rgb(cfg.k, FOREST_PAL.predatorPupil)
+      eye: rgb(cfg.k, FOREST_PAL.predatorEye)
     },
     footHearable: false
   }
@@ -213,7 +209,6 @@ export function create(cfg) {
     Math.max(2, Math.round(t * (inst.segments.length - 1)))
   ))
   initLegs(inst)
-  initEyes(inst)
   initHead(inst)
   inst.obj = cfg.k.add([
     cfg.k.z(DRAW_Z),
@@ -237,13 +232,12 @@ export function update(inst, dt) {
   syncFootstepAudibility(inst)
   const feasting = isPredatorFeasting(inst)
   const hero = feasting ? null : heroPoint(inst)
-  const lookTarget = feasting ? (getPredatorFeastLookTarget(inst) ?? hero) : hero
   tickMove(inst, dt, hero)
   tickBody(inst, dt)
   const hurry = inst.state === 'lunge' ||
     (feasting && (inst.feastPhase === 'approach' || inst.feastBitePhase === 'forward'))
   tickLegs(inst, dt, hurry)
-  tickEyes(inst, dt, lookTarget)
+  tickHead(inst, dt)
   inst.y = inst.segments[0].y
   syncDrawZ(inst)
 }

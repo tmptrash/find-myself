@@ -36,6 +36,44 @@ const KEY_LIGHT = 190
 const KEY_GREY = 14
 const KEY_ALPHA = 8
 const RGBA = 4
+//
+// A trampoline squashes down by up to SQUASH_MAX as the hero lands on it
+// (drawn 1 - squash × SQUASH_DRAW tall) and springs back at SQUASH_RELAX per
+// second. Left alone it now and then (every IDLE_SQUEEZE_MIN..+RANGE
+// seconds) narrows slowly towards its middle, by up to IDLE_SQUEEZE_MAX of
+// its width over IDLE_SQUEEZE_IN_SEC (eased in and out), then snaps back
+// wide: a damped spring (IDLE_SNAP_HZ, dying at IDLE_SNAP_DAMP per second)
+// that overshoots a little and settles in IDLE_SNAP_SEC — looks only, its
+// collider stays.
+//
+export const SQUASH_MAX = 0.35
+export const SQUASH_DRAW = 0.35
+export const SQUASH_RELAX = 4
+const IDLE_SQUEEZE_MIN = 4
+const IDLE_SQUEEZE_RANGE = 6
+const IDLE_SQUEEZE_MAX = 0.12
+const IDLE_SQUEEZE_IN_SEC = 1.6
+const IDLE_SNAP_HZ = 3.6
+const IDLE_SNAP_DAMP = 12
+const IDLE_SNAP_SEC = 0.4
+const SQUEEZE_PHASE = { IN: 1, SNAP: 2 }
+//
+// A squeeze is drawn from a baked sheet of squeezed pictures, not by scaling
+// the sprite (nearest scaling drops whole pixel columns and the mushroom's
+// texture ripples): each frame narrows the picture row by row, smoothly
+// resampled, by nothing at the stem's foot up to the frame's squeeze at the
+// cap's top, towards the mushroom's own middle (half way between its
+// leftmost and rightmost pixels solid from MIDDLE_ALPHA) — so the foot never
+// moves and both sides come in evenly. Frames go SQUEEZE_STEP apart, from
+// SQUEEZE_WIDE_FRAMES steps wider (the snap's overshoot) to IDLE_SQUEEZE_MAX
+// narrower, laid out SQUEEZE_COLS a row.
+//
+const SQUEEZE_STEP = 0.01
+const SQUEEZE_WIDE_FRAMES = 3
+const SQUEEZE_FRAMES = SQUEEZE_WIDE_FRAMES + Math.round(IDLE_SQUEEZE_MAX / SQUEEZE_STEP) + 1
+const SQUEEZE_COLS = 4
+const SQUEEZE_SUFFIX = '-squeeze'
+const MIDDLE_ALPHA = 128
 const sheet = loadPictureImage(URL)
 let cuts = null
 
@@ -48,6 +86,26 @@ export async function load() {
   if (cuts) return
   const img = await sheet
   cuts ??= img && MUSHROOMS.map(box => cutKeyed(img, box))
+}
+
+/**
+ * Counts a trampoline down to its next idle squeeze and runs it (not while
+ * it springs back or cools down from a bounce; a landing cuts it short).
+ * @param {{squash: number, cooldown?: number}|null} state - Trampoline state
+ * @param {number} dt - Seconds since the last frame
+ * @returns {boolean} True on the frame it snaps back wide (for its sound)
+ */
+export function tickIdleSqueeze(state, dt) {
+  if (!state) return false
+  state.idleSqueezeIn ??= IDLE_SQUEEZE_MIN + Math.random() * IDLE_SQUEEZE_RANGE
+  if (state.idleSqueezePhase) return advanceSqueeze(state, dt)
+  if (state.squash > 0 || state.cooldown > 0) return false
+  state.idleSqueezeIn -= dt
+  if (state.idleSqueezeIn > 0) return false
+  state.idleSqueezePhase = SQUEEZE_PHASE.IN
+  state.idleSqueezeT = 0
+  state.idleSqueezeIn = IDLE_SQUEEZE_MIN + Math.random() * IDLE_SQUEEZE_RANGE
+  return false
 }
 
 /**
@@ -90,11 +148,32 @@ export function bake(k, kind, width) {
   canvas.width = w
   canvas.height = Math.round((box.baseY - box.y) / box.w * w)
   paint(canvas.getContext('2d'), kind, w / 2, canvas.height, w)
+  const middleX = measureMiddle(canvas)
   applyForestGameplaySharpBake(canvas, GRAIN_SEED + kind)
   k.loadSprite(name, canvas)
+  bakeSqueezeSheet(k, name + SQUEEZE_SUFFIX, canvas, middleX)
   canvas.width = 0
   canvas.height = 0
   return name
+}
+
+/**
+ * What to draw for a trampoline this frame: its plain sprite, or a frame of
+ * its squeeze sheet while it squeezes (same picture centre and bottom, so
+ * both draw with anchor 'bot' at one spot).
+ * @param {string} sprite - From bake()
+ * @param {Object} state - Trampoline state
+ * @param {{sprite: string, frame: number}} out - Written and returned
+ * @returns {{sprite: string, frame: number}}
+ */
+export function squeezeLook(sprite, state, out) {
+  out.sprite = sprite
+  out.frame = 0
+  if (!state.idleSqueezePhase) return out
+  const step = Math.round(squeezeOf(state) / SQUEEZE_STEP) + SQUEEZE_WIDE_FRAMES
+  out.sprite = sprite + SQUEEZE_SUFFIX
+  out.frame = Math.max(0, Math.min(SQUEEZE_FRAMES - 1, step))
+  return out
 }
 
 /**
@@ -162,4 +241,80 @@ function isBackground(px, o) {
   const hi = Math.max(px[o], px[o + 1], px[o + 2])
   const lo = Math.min(px[o], px[o + 1], px[o + 2])
   return hi > KEY_LIGHT && hi - lo < KEY_GREY
+}
+//
+// Half way between the leftmost and rightmost solid pixels of a picture.
+//
+function measureMiddle(canvas) {
+  const w = canvas.width
+  const px = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, canvas.height).data
+  let left = w
+  let right = -1
+  for (let i = 0; i < w * canvas.height; i++) {
+    if (px[i * RGBA + 3] < MIDDLE_ALPHA) continue
+    left = Math.min(left, i % w)
+    right = Math.max(right, i % w)
+  }
+  return right < 0 ? w / 2 : (left + right + 1) / 2
+}
+//
+// The squeeze sheet: every frame resamples each row of the picture narrower
+// (or wider) about middleX, by its squeeze times the row's height share.
+//
+function bakeSqueezeSheet(k, name, canvas, middleX) {
+  const w = canvas.width
+  const h = canvas.height
+  const pad = Math.ceil(w * SQUEEZE_WIDE_FRAMES * SQUEEZE_STEP / 2) + 1
+  const cellW = w + pad * 2
+  const rows = Math.ceil(SQUEEZE_FRAMES / SQUEEZE_COLS)
+  const sheetCanvas = document.createElement('canvas')
+  sheetCanvas.width = cellW * SQUEEZE_COLS
+  sheetCanvas.height = h * rows
+  const ctx = sheetCanvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  for (let f = 0; f < SQUEEZE_FRAMES; f++) {
+    const squeeze = (f - SQUEEZE_WIDE_FRAMES) * SQUEEZE_STEP
+    const cellX = (f % SQUEEZE_COLS) * cellW + pad
+    const cellY = Math.floor(f / SQUEEZE_COLS) * h
+    for (let y = 0; y < h; y++) {
+      const scaleX = 1 - squeeze * (h - 1 - y) / Math.max(1, h - 1)
+      ctx.drawImage(canvas, 0, y, w, 1, cellX + middleX * (1 - scaleX), cellY + y, w * scaleX, 1)
+    }
+  }
+  k.loadSprite(name, sheetCanvas, { sliceX: SQUEEZE_COLS, sliceY: rows })
+  sheetCanvas.width = 0
+  sheetCanvas.height = 0
+}
+//
+// One frame of a running squeeze: slowly in, then the snap back; a landing
+// cuts it short. True on the frame it snaps.
+//
+function advanceSqueeze(state, dt) {
+  state.idleSqueezeT += dt
+  if (state.squash > 0) {
+    state.idleSqueezePhase = null
+    return false
+  }
+  if (state.idleSqueezePhase === SQUEEZE_PHASE.IN) {
+    if (state.idleSqueezeT < IDLE_SQUEEZE_IN_SEC) return false
+    state.idleSqueezePhase = SQUEEZE_PHASE.SNAP
+    state.idleSqueezeT = 0
+    return true
+  }
+  state.idleSqueezeT >= IDLE_SNAP_SEC && (state.idleSqueezePhase = null)
+  return false
+}
+//
+// How much narrower a trampoline's cap is this frame (share of its width;
+// below 0 while it overshoots wide).
+//
+function squeezeOf(state) {
+  if (state.idleSqueezePhase === SQUEEZE_PHASE.IN) {
+    const u = state.idleSqueezeT / IDLE_SQUEEZE_IN_SEC
+    return IDLE_SQUEEZE_MAX * u * u * (3 - 2 * u)
+  }
+  if (state.idleSqueezePhase !== SQUEEZE_PHASE.SNAP) return 0
+  const t = state.idleSqueezeT
+  return IDLE_SQUEEZE_MAX * Math.exp(-IDLE_SNAP_DAMP * t) * Math.cos(Math.PI * 2 * IDLE_SNAP_HZ * t)
 }

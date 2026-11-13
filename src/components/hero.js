@@ -181,6 +181,16 @@ const LOOK_AHEAD = { x: 0, y: 0 }
 const LOOK_VECTORS = Array.from({ length: LOOK_DIRECTIONS }, (_, i) => ({ x: Math.cos(i * LOOK_STEP_RAD), y: Math.sin(i * LOOK_STEP_RAD) }))
 const LOOK_TARGETS = [LOOK_AHEAD, ...LOOK_VECTORS]
 const WINK_SIDES = [-1, 0, 1]
+//
+// Dozing off (heroes created with `dozes`): standing still on the ground for
+// DOZE_DELAY_SEC, the hero first looks straight ahead (DOZE_LOOK_SEC), then
+// his lids close slowly over DOZE_CLOSE_SEC through the DOZE_LIDS frames
+// (how far each has closed) until his eyes are shut. Any move wakes him.
+//
+const DOZE_DELAY_SEC = 5
+const DOZE_LOOK_SEC = 0.4
+const DOZE_CLOSE_SEC = 1.2
+const DOZE_LIDS = [0.25, 0.33, 0.41, 0.49, 0.57, 0.65, 0.73, 0.82]
 
 export const HEROES = {
   HERO: 'hero',
@@ -223,6 +233,7 @@ const idleBodyTonesFor = new WeakMap()
  * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
  *   decorative hero left at its default scrolls with the world instead
  * @param {Function} [config.idleNotePostBake] - Grain pass for baked mouth-note glyphs
+ * @param {boolean} [config.dozes=false] - Standing still a while, the hero slowly closes his eyes
  * @param {number} [config.drawScale=1] - Draws the whole hero (body and live legs) this much
  *   smaller or bigger round its centre; the hitbox stays as it is (a menu cursor hero)
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
@@ -248,7 +259,8 @@ export function create(config) {
     fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
     hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
     ambient = false,       // Decorative background character — no collision area
-    idleNotePostBake = null // Optional grain pass for baked mouth-note glyphs
+    idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
+    dozes = false          // Standing still a while, the hero dozes off
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -316,6 +328,8 @@ export function create(config) {
     runPoseOn: false, // The run pass draws the body and live legs this frame
     standDy: 0,       // Standing frames' shift onto the ground line (px)
     blinkLeft: 0,     // Seconds of blinking left (startBlink)
+    dozes,            // Dozes off standing still (see DOZE_DELAY_SEC)
+    dozeT: 0,         // Seconds he has stood still on the ground
     legs: HeroLegs.create(k, runBodyTonesFor.get(k) ?? null),
     standLegs: HeroLegs.create(k, idleBodyTonesFor.get(k) ?? null, { standing: true }),
     standLegsOn: false, // The idle body stands on its live legs this frame
@@ -609,6 +623,30 @@ export function drawHero(inst) {
 }
 
 /**
+ * How far the hero has dozed off: 0 awake, rising to 1 as his eyes shut
+ * (heroes created with `dozes` only).
+ * @param {Object} inst - Hero instance
+ * @returns {number}
+ */
+export function dozeShare(inst) {
+  if (!inst?.dozes) return 0
+  const doze = inst.dozeT - DOZE_DELAY_SEC
+  return Math.max(0, Math.min(1, doze / (DOZE_LOOK_SEC + DOZE_CLOSE_SEC)))
+}
+
+/**
+ * Lets the hero doze off standing still, or keeps him awake (waking him
+ * if he dozes).
+ * @param {Object} inst - Hero instance
+ * @param {boolean} dozes - False: his eyes stay open
+ */
+export function setDozes(inst, dozes) {
+  if (!inst || inst.dozes === dozes) return
+  inst.dozes = dozes
+  inst.dozeT = 0
+}
+
+/**
  * Makes the hero blink (flicker in and out) for a while — e.g. the safe
  * moment after a respawn.
  * @param {Object} inst - Hero instance
@@ -868,6 +906,7 @@ function onUpdate(inst) {
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //
   const isGrounded = isHeroGrounded(inst)
+  inst.dozes && tickDoze(inst, isMoving, isGrounded)
   //
   // Tick land-FX debounce so a grounded flicker can't double-fire dust/sound
   //
@@ -1356,6 +1395,7 @@ function updateIdleAnimation(inst) {
     //
     useHeroSprite(inst, idleLookSpriteName(inst))
   }
+  if (updateDozeEyes(inst)) return
   //
   // Eye animation: look along the direction to lookAtPos if set (straight
   // ahead when it is close), otherwise wander between straight ahead and
@@ -1844,6 +1884,7 @@ function bakeHeroFrames(k) {
   commitHeroFrame(k, `${P}_0_0`, HeroPicture.bakeIdleFrame([LOOK_AHEAD, LOOK_AHEAD]), idleBodyGraded)
   LOOK_VECTORS.forEach((look, i) => commitHeroFrame(k, `${P}_look_${i}`, HeroPicture.bakeIdleFrame([look, look])))
   commitHeroFrame(k, `${P}_closed`, HeroPicture.bakeIdleFrame([null, null]))
+  DOZE_LIDS.forEach((lid, i) => commitHeroFrame(k, dozeSpriteName(i), HeroPicture.bakeIdleFrame([LOOK_AHEAD, LOOK_AHEAD], lid)))
   WINK_SIDES.forEach(side => commitHeroFrame(k, heroWinkSpriteName(P, side), HeroPicture.bakeIdleFrame([null, { x: side, y: 0 }])))
   commitHeroFrame(k, RUN_BODY_SPRITE, HeroPicture.bakeRunBody(), runBodyGraded)
   commitHeroFrame(k, RUN_BLANK_SPRITE, blankFrame())
@@ -1890,6 +1931,7 @@ function heroFrameSpriteNames() {
   return [
     `${P}_0_0`,
     `${P}_closed`,
+    ...DOZE_LIDS.map((_, i) => dozeSpriteName(i)),
     ...LOOK_VECTORS.map((_, i) => `${P}_look_${i}`),
     ...WINK_SIDES.map(side => heroWinkSpriteName(P, side)),
     RUN_BODY_SPRITE,
@@ -2153,4 +2195,37 @@ function bakeIdleNoteGlyphCanvas(glyph, fontFamily) {
   ctx.fillStyle = '#ffffff'
   ctx.fillText(glyph, canvas.width / 2, canvas.height / 2)
   return canvas
+}
+//
+// Counts how long the hero has stood still on the ground (spawned, not
+// jumping, eyes not shut by something else); anything else wakes him.
+//
+function tickDoze(inst, isMoving, isGrounded) {
+  const still = inst.isSpawned && !isMoving && isGrounded && inst.jumpPhase === 'none' && !inst.isSquashing && !inst.eyesClosed
+  inst.dozeT = still ? inst.dozeT + inst.k.dt() : 0
+}
+//
+// A dozing hero's eyes: first they ease to straight ahead, then the lids
+// close frame by frame. False while he is awake.
+//
+function updateDozeEyes(inst) {
+  const doze = inst.dozes ? inst.dozeT - DOZE_DELAY_SEC : -1
+  if (doze < 0) return false
+  const closing = (doze - DOZE_LOOK_SEC) / DOZE_CLOSE_SEC
+  let name
+  if (closing < 0) {
+    inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, 0, EYE_LERP_SPEED)
+    inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, 0, EYE_LERP_SPEED)
+    name = idleLookSpriteName(inst)
+  } else {
+    name = closing >= 1 ? `${HERO_SPRITE_PREFIX}_closed` : dozeSpriteName(Math.min(DOZE_LIDS.length - 1, Math.floor(closing * DOZE_LIDS.length)))
+  }
+  inst.currentEyeSprite !== name && useHeroSprite(inst, name)
+  return true
+}
+//
+// The baked frame of the i-th DOZE_LIDS lid.
+//
+function dozeSpriteName(i) {
+  return `${HERO_SPRITE_PREFIX}_doze_${i}`
 }

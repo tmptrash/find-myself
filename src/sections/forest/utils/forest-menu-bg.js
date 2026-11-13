@@ -1,4 +1,4 @@
-import { FOREST_PAL, forestRgb, forestSkyBandRgb } from './forest-palette.js'
+import { FOREST_PAL, forestRgb, forestFlatSkyRgb } from './forest-palette.js'
 import { groundEarthLayersColor, paintLayeredEarthBand } from './forest-earth-band.js'
 import { forestFloorPainterColors, loadForestFloorHill, paintForestFloorHill } from '../components/forest-floor.js'
 import { getCrackZone, paintForestPitStill } from './forest-level-atmosphere.js'
@@ -103,11 +103,10 @@ const LEVEL_FLOOR_Y = 795
 //
 const CAVE_MUSHROOM_W = 53
 //
-// Sky: a smooth gradient through palette stops of the level's sky ramp,
-// toned by the far row's grade like the level's sky (baked into that row). It runs a little below
-// the ground line so the soil band always covers its lower edge.
+// Sky: the level's even sky colour, toned by the far row's grade like the
+// level's sky. It runs a little below the ground line so the soil band
+// always covers its lower edge.
 //
-const SKY_STOP_COUNT = 6
 const SKY_GROUND_OVERLAP = 8
 //
 // Parallax rows behind the scene — as many as the level has (far, mid,
@@ -253,7 +252,7 @@ export async function loadForestMenuBackdropArt() {
  * @param {number} height - Screen height
  * @returns {Object} groundY, scale (of the baked scene to the level), lake {x1, x2Core, x2, surfaceY},
  *   eyeSpots, earTreeSpots [{x}] (the bomb trees), crawler {minX, maxX}, appleTreeX (its trunk),
- *   bugHoleX (the apple bug's burrow), branchTrampX (the left trampoline mushroom), leftBranch {x1 (leafy tip), x2, y} and rightBranch
+ *   tramps [{x, footY, kind, width}] (the ground trampolines, drawn live), bugHoleX (the apple bug's burrow), branchTrampX (the left trampoline mushroom), leftBranch {x1 (leafy tip), x2, y} and rightBranch
  *   {x1 (trunk), x2, y}: the flat tops of the two big trees' branches
  */
 export function forestMenuLayout(width, height) {
@@ -273,6 +272,7 @@ export function forestMenuLayout(width, height) {
     lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
     eyeSpots: LEVEL_EYES.map(eye => ({ ...eye, x: toX(eye.x), groundY })),
     earTreeSpots: LEVEL_BOMB_TREE_XS.map(x => ({ x: toX(x) })),
+    tramps: menuTrampSpots(toX, groundY, scale),
     crawler: { minX: x2Core + Lake.LAKE_SHORE_EXTEND_PX + CRAWLER_LAKE_PAD, maxX: Math.min(width, toX(LEVEL_CRAWLER_MAX_X)) }
   }
 }
@@ -368,22 +368,15 @@ function paintBuriedDecor(ctx, width, height, layout, scale) {
   paintUndergroundDepthVignette(ctx, 0, layout.groundY, width, height - layout.groundY)
 }
 //
-// Smooth sky gradient through palette-snapped stops of the level's ramp.
+// The level's even sky colour over the whole sky canvas.
 //
 function paintSkyCanvas(width, height) {
   const canvas = newCanvas(width, height)
   const ctx = canvas.getContext('2d')
-  const gradient = ctx.createLinearGradient(0, 0, 0, height)
-  skyGradientStops().forEach((c, i) => gradient.addColorStop(i / (SKY_STOP_COUNT - 1), `rgb(${c.r}, ${c.g}, ${c.b})`))
-  ctx.fillStyle = gradient
+  const c = forestFlatSkyRgb()
+  ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
   ctx.fillRect(0, 0, width, height)
   return canvas
-}
-//
-// Palette-snapped sky stops, top to bottom.
-//
-function skyGradientStops() {
-  return Array.from({ length: SKY_STOP_COUNT }, (_, i) => forestSkyBandRgb(i / (SKY_STOP_COUNT - 1)))
 }
 //
 // One full-width parallax row: evenly spread picture trees, bushes along
@@ -481,7 +474,7 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
     paintForestContactShadow(ctx, x, groundY, size * 0.42, CONTACT_SHADOW_RY, shadow)
     drawForestPlant(ctx, { x, baseY: groundY, size, rng })
   })
-  LEVEL_TRAMPS.forEach(tramp => paintTrampMushroom(ctx, tramp.mushroom, toX(tramp.x), groundY + TRAMP_MUSHROOM_SINK * scale, TRAMP_MUSHROOM_W * scale, shadow))
+  menuTrampSpots(toX, groundY, scale).forEach(t => paintForestContactShadow(ctx, t.x, t.footY, t.width * 0.45, CONTACT_SHADOW_RY, shadow))
   MUSHROOM_GROUP_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   SPOTTED_MUSHROOM_SPOTS.forEach(wx => drawForestMushroom(ctx, { x: toX(wx), baseY: groundY, rng }))
   for (let i = 0; i < TUFT_COUNT; i++) {
@@ -495,10 +488,29 @@ function paintGroundPlants(ctx, rng, width, groundY, lake, toX, scale) {
 // the branch one's at `width` (the level bakes them all to one cap height).
 //
 function paintTrampMushroom(ctx, mushroom, x, groundY, width, shadow) {
-  const capH = TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.BRANCH, width)
-  const w = TrampMushroom.widthForCapHeight(mushroom, capH)
+  const w = trampWidth(mushroom, width)
   paintForestContactShadow(ctx, x, groundY, w * 0.45, CONTACT_SHADOW_RY, shadow)
   TrampMushroom.paint(ctx, mushroom, x, groundY, w)
+}
+//
+// A trampoline picture's width with its cap as high as the branch one's at
+// `width` (the level bakes them all to one cap height).
+//
+function trampWidth(mushroom, width) {
+  return TrampMushroom.widthForCapHeight(mushroom, TrampMushroom.capHeight(TrampMushroom.TRAMP_MUSHROOM.BRANCH, width))
+}
+//
+// The two ground trampolines in the menu: where they stand, their picture
+// and width (the menu draws them live, squatting now and then like the
+// level's; only their contact shadows are baked).
+//
+function menuTrampSpots(toX, groundY, scale) {
+  return LEVEL_TRAMPS.map(t => ({
+    x: toX(t.x),
+    footY: groundY + TRAMP_MUSHROOM_SINK * scale,
+    kind: t.mushroom,
+    width: Math.round(trampWidth(t.mushroom, TRAMP_MUSHROOM_W * scale))
+  }))
 }
 //
 // Level world X → screen X at the layout scale for a screen size (the left

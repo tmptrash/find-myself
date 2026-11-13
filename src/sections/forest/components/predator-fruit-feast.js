@@ -41,17 +41,6 @@ export function isPredatorFeasting(pred) {
 }
 
 /**
- * @param {Object} pred - Predator inst
- * @returns {{ x: number, y: number }|null}
- */
-export function getPredatorFeastLookTarget(pred) {
-  const fruit = pred?.feastFruit
-  if (!fruit || fruit.removed) return null
-  const pt = predatorSnoutPoint(pred)
-  return pt ?? { x: fruit.x, y: fruit.y }
-}
-
-/**
  * True while the crawler is biting into a fruit (not only on its way to it).
  * @param {Object} pred - Predator inst
  * @param {Object} fruit - Tree fruit spot
@@ -129,7 +118,6 @@ function tickActiveFeast(pred, levelInst, dt) {
 function tickFeastApproach(pred, fruit, dt) {
   pred.feastApproachT = (pred.feastApproachT ?? 0) + dt
   facePredatorTowardFruit(pred, fruit)
-  pred.lookBack = false
   const gap = snoutToFruitSurfaceGap(pred, fruit)
   const notice = fruitFeastNoticeDist(pred, fruit)
   if (gap <= FEAST_APPROACH_SNAP_GAP || notice < FEAST_APPROACH_SNAP_DIST || pred.feastApproachT >= FEAST_APPROACH_MAX_SEC) {
@@ -279,7 +267,6 @@ function beginFeast(pred, fruit, levelInst) {
   pred.feastBitePose = null
   pred.feastApproachT = 0
   facePredatorTowardFruit(pred, fruit)
-  pred.lookBack = false
   pred.orientKick = true
   pred.speedTarget = FEAST_APPROACH_SPEED
   pred.vx = pred.dir * FEAST_APPROACH_SPEED * FEAST_APPROACH_BURST_MULT

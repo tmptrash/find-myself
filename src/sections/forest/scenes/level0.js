@@ -27,7 +27,7 @@ import {
   snapToPalette,
   lerpForestRgb,
   getForestLightRgb,
-  forestSkyBandRgb
+  forestFlatSkyRgb
 } from '../utils/forest-palette.js'
 import {
   applyForestGameplaySharpBake,
@@ -35,6 +35,7 @@ import {
   forestDepthBlurRadiusPx
 } from '../utils/forest-focus-depth.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
+import * as DreamBubble from '../components/dream-bubble.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import {
   createForestMidges,
@@ -324,9 +325,10 @@ const HERO_TOUCH_DEATH_RESPAWN_CLEARANCE = 32
 // restarted after drowning — KEY_RESPAWN_GRACE carries that over), he blinks
 // for RESPAWN_GRACE_SEC: nothing can kill him and nothing reacts to him (the
 // centipede does not hunt, the water flower does not grab, landings do not
-// jolt the bomb trees).
+// jolt the bomb trees). He blinks only for the first RESPAWN_BLINK_SEC of it.
 //
 const RESPAWN_GRACE_SEC = 3
+const RESPAWN_BLINK_SEC = 2
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -721,6 +723,12 @@ const KEY_LAST_SPAWN_X = 'forest.lastSpawnX'
 const KEY_LAST_SPAWN_Y = 'forest.lastSpawnY'
 const KEY_RESPAWN_GRACE = 'forest.respawnGrace'
 //
+// The centipede leaves the hero alone until he first reaches the right big
+// (shore) tree's trunk; from then on (kept across deaths) it hunts him over
+// the whole ground.
+//
+const KEY_PREDATOR_HUNTS = 'forest.predatorHunts'
+//
 // Feet may rise above the mouth lip while jumping inside the collapsed pit.
 //
 const PIT_CAVE_AIR_ABOVE_LIP = 210
@@ -873,10 +881,6 @@ const TOPSOIL_ORGANIC_SEED = 41827
 const TOPSOIL_ORGANIC_ALPHA = 0.42
 const EARTH_STATIC_BAKE_GRAIN = 0.26
 const EARTH_STATIC_BAKE_GRAIN_BLOCK_PX = 2
-//
-// Sky bake uses stacked palette bands instead of a smooth CSS gradient.
-//
-const SKY_FLAT_MIX = 0.07
 const SKY_TOP_SAMPLE_INSET = 14
 const SKY_TOP_SAMPLE_STEP = 16
 const skyTopRgbByK = new WeakMap()
@@ -970,11 +974,11 @@ const TRAMP_NEAR_X = TRAMP_RADIUS + 80
 // Anti-tunnel band below the cap when jumping onto the mushroom
 //
 const TRAMP_SNAP_BELOW = 48
-const TRAMP_SQUASH_MAX = 0.35
+const TRAMP_SQUASH_MAX = TrampMushroom.SQUASH_MAX
 //
 // Share of its height the picture loses at full squash.
 //
-const TRAMP_SQUASH_DRAW = 0.35
+const TRAMP_SQUASH_DRAW = TrampMushroom.SQUASH_DRAW
 const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
@@ -1242,7 +1246,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+  await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
   await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
   await loadForestStones()
   onProgress?.(42)
@@ -1308,7 +1312,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and the hangs its watered apples grow on sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -1431,7 +1435,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       // world quiet while the hero learns to see.
       //
       idleVocalization: null,
-      idleNotePostBake: applyForestGameplaySharpBake
+      idleNotePostBake: applyForestGameplaySharpBake,
+      dozes: true
     }
     const heroInst = Hero.create({
       k,
@@ -1642,6 +1647,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       // Speech bubble for the controls hint (introLock: it is on screen).
       //
       heroHint: HeroHint.create({ k, heroInst, clampInset: forestTooltipClampInset() }),
+      dreamBubble: DreamBubble.create({ k, heroInst }),
       pendingForestIntro: false,
       introHintDelayRemaining: 0,
       introLock: false,
@@ -1665,6 +1671,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     predator.levelInst = inst
     predator.landAt = (x) => forestPredatorGroundAt(inst, x)
     predator.canHuntHero = () => forestPredatorCanHuntHero(inst)
+    inst.predatorHunts = get(KEY_PREDATOR_HUNTS, false)
     mountForestTreeFruitLayer(k, inst, FOREST_FRUIT_Z)
     inst.treeX = TREE_X
     inst.trunkExcludeHalf = TRUNK_EXCLUDE_HALF
@@ -1863,7 +1870,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       baseY: x => ForestGroundLine.surfaceY(groundLine, x, FLOOR_Y)
     })
     createForestGrassLayer(k, inst)
-    window.__lvl = inst
     inst.earth = mergeForestEarth(inst, leftTree)
     leftTree && !inst.earth?.merged.has(leftTree.roots.sprite) && k.add([
       k.sprite(leftTree.roots.sprite),
@@ -2790,7 +2796,7 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
 // band over a tall screen's playfield carries the same colour on.
 //
 function renderSkyBand(ctx) {
-  const c = forestSkyBandRgb(SKY_FLAT_MIX)
+  const c = forestFlatSkyRgb()
   ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`
   ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, FLOOR_Y - TOP_MARGIN)
 }
@@ -4012,6 +4018,7 @@ function drawTrampoline(k, zones, state, sprite, kind) {
   if (view && (state.x < view.x1 || state.x > view.x2)) return
   const enduring = Boolean(state.enduring)
   const angle = enduring ? 0 : (state.leanAngle || 0)
+  const look = TrampMushroom.squeezeLook(sprite, state, state._lookScratch ?? (state._lookScratch = { sprite, frame: 0 }))
   const scaleY = enduring
     ? (state.endureScaleY || 1)
     : (state.squash > 0.01 ? 1 - state.squash * TRAMP_SQUASH_DRAW : 1)
@@ -4023,12 +4030,23 @@ function drawTrampoline(k, zones, state, sprite, kind) {
   scaleVec.x = 1
   scaleVec.y = scaleY
   k.drawSprite({
-    sprite,
+    sprite: enduring ? sprite : look.sprite,
+    frame: enduring ? 0 : look.frame,
     pos,
     anchor: 'bot',
     scale: scaleVec,
     angle
   })
+}
+//
+// A trampoline's idle squeeze; its snap back is heard only while it shows
+// on screen.
+//
+function tickTrampIdleSqueeze(k, inst, state, visible) {
+  if (!TrampMushroom.tickIdleSqueeze(state, k.dt()) || !visible) return
+  const view = forestCameraViewXRange(k, inst, 0)
+  const onScreen = !view || (state.x > view.x1 && state.x < view.x2)
+  onScreen && Sound.playTrampMushroomSnap(inst.sound)
 }
 //
 // Walking legs — alternating stride with a short shin kick
@@ -4866,7 +4884,7 @@ function drawSkyUnderlay(inst) {
 }
 function skyTopColor(inst) {
   if (inst._skyTopColor) return inst._skyTopColor
-  const c = skyTopRgbByK.get(inst.k) ?? forestSkyBandRgb(SKY_FLAT_MIX)
+  const c = skyTopRgbByK.get(inst.k) ?? forestFlatSkyRgb()
   inst._skyTopColor = inst.k.rgb(c.r, c.g, c.b)
   return inst._skyTopColor
 }
@@ -5573,7 +5591,7 @@ function startForestRespawnGrace(inst) {
   set(KEY_RESPAWN_GRACE, false)
   inst.respawnGraceUntil = inst.k.time() + RESPAWN_GRACE_SEC
   inst.touchDeathGraceUntil = Math.max(inst.touchDeathGraceUntil ?? 0, inst.respawnGraceUntil)
-  inst.heroInst && Hero.startBlink(inst.heroInst, RESPAWN_GRACE_SEC)
+  inst.heroInst && Hero.startBlink(inst.heroInst, RESPAWN_BLINK_SEC)
 }
 function isForestRespawnGrace(inst) {
   return inst.k.time() < (inst.respawnGraceUntil ?? 0)
@@ -5763,6 +5781,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   fresh.onPlayLandSound = landSound
   inst.heroInst = fresh
   inst.heroHint && (inst.heroHint.heroInst = fresh)
+  inst.dreamBubble && (inst.dreamBubble.heroInst = fresh)
   inst.flowerGrab && (inst.flowerGrab.heroInst = fresh)
   inst.pit && (inst.pit.heroInst = fresh)
   inst.predator && (inst.predator.hero = fresh)
@@ -6109,11 +6128,14 @@ function onUpdate(inst) {
     (inst.branchTrampState.cooldown = Math.max(0, inst.branchTrampState.cooldown - k.dt()))
   inst.pitCaveTrampState?.cooldown > 0 &&
     (inst.pitCaveTrampState.cooldown = Math.max(0, inst.pitCaveTrampState.cooldown - k.dt()))
-  inst.trampState.squash > 0 && (inst.trampState.squash = Math.max(0, inst.trampState.squash - k.dt() * 4))
+  tickTrampIdleSqueeze(k, inst, inst.trampState, isRightTrampolineVisible(inst.zones))
+  tickTrampIdleSqueeze(k, inst, inst.branchTrampState, isBranchTrampolineVisible(inst.zones))
+  tickTrampIdleSqueeze(k, inst, inst.pitCaveTrampState, isPitCaveTrampolineVisible(inst))
+  inst.trampState.squash > 0 && (inst.trampState.squash = Math.max(0, inst.trampState.squash - k.dt() * TrampMushroom.SQUASH_RELAX))
   inst.branchTrampState?.squash > 0 &&
-    (inst.branchTrampState.squash = Math.max(0, inst.branchTrampState.squash - k.dt() * 4))
+    (inst.branchTrampState.squash = Math.max(0, inst.branchTrampState.squash - k.dt() * TrampMushroom.SQUASH_RELAX))
   inst.pitCaveTrampState?.squash > 0 &&
-    (inst.pitCaveTrampState.squash = Math.max(0, inst.pitCaveTrampState.squash - k.dt() * 4))
+    (inst.pitCaveTrampState.squash = Math.max(0, inst.pitCaveTrampState.squash - k.dt() * TrampMushroom.SQUASH_RELAX))
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
@@ -6130,8 +6152,13 @@ function onUpdate(inst) {
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
   inst.chainBuoys &&
-    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud), !isForestHeroUnseen(inst))
+    ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud), !isForestHeroUnseen(inst), inst.predator)
   inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
+  //
+  // No dozing off while a hint (the controls one at the start) is up or
+  // still to come: the dream's timer starts once it is gone.
+  //
+  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), !isHeroOnStartBranch(inst, char), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
   const grounded = char.isGrounded?.() ?? false
@@ -6393,6 +6420,7 @@ function forestPredatorCanHuntHero(inst) {
   const char = inst.heroInst?.character
   const pred = inst.predator
   if (!char?.pos || inst.drowning || inst.deathHandled || !pred) return false
+  if (!hasForestPredatorHuntBegun(inst, char.pos.x)) return false
   if (isForestRespawnGrace(inst) || isForestHeroUnseen(inst)) return false
   if (FlowerGrab.isActive(inst.flowerGrab)) return false
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, char)) return false
@@ -6400,6 +6428,18 @@ function forestPredatorCanHuntHero(inst) {
   if (isOnForestLakeDryFooting(inst, char.pos.x, footY)) return false
   const predatorGroundY = pred.groundAt(char.pos.x)
   return Math.abs(footY - predatorGroundY) <= FOREST_PREDATOR_HERO_VERTICAL_BAND_PX
+}
+//
+// Whether the centipede hunts yet: once the hero has reached the shore tree's
+// trunk, for good.
+//
+function hasForestPredatorHuntBegun(inst, heroX) {
+  if (inst.predatorHunts) return true
+  const trunkX = inst.shoreTree?.x
+  if (trunkX != null && heroX < trunkX) return false
+  inst.predatorHunts = true
+  set(KEY_PREDATOR_HUNTS, true)
+  return true
 }
 function triggerForestBranchLandingShake(inst) {
   inst.camera && ForestCamera.triggerShake(inst.camera, FOREST_BRANCH_JUMP_SHAKE_AMP, FOREST_BRANCH_JUMP_SHAKE_DURATION)

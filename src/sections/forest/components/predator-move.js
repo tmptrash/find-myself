@@ -340,7 +340,6 @@ function tickRoamHome(inst, dt) {
         inst.roamTurnCooldown = ROAM_TURN_MIN_INTERVAL_SEC + Math.random() * ROAM_TURN_INTERVAL_RANGE_SEC
       }
     }
-    inst.lookBack = Math.random() < 0.16
     inst.headLift = Math.random() < 0.2 ? 3 + Math.random() * 3 : 0
   } else if (away && !inst.holdFacing && Math.sign(dx) !== 0 && Math.sign(dx) !== inst.dir &&
     Math.random() < dt * 1.6) {
@@ -575,18 +574,15 @@ function applyRideFacingLock(inst) {
   if (inst.state === 'flee') {
     inst.holdFacing = false
     syncTwigRideDirFromPredator(inst)
-    inst.lookBack = false
     return
   }
   if (twigs.rideTurnPending) {
     inst.holdFacing = true
-    inst.lookBack = false
     return
   }
   twigs.rideDir == null && (twigs.rideDir = inst.dir)
   inst.holdFacing = true
   inst.dir = twigs.rideDir
-  inst.lookBack = false
 }
 function syncTwigRideDirFromPredator(inst) {
   const twigs = inst.levelInst?.shoreFallTwigs
@@ -596,7 +592,6 @@ function syncTwigRideDirFromPredator(inst) {
 
 function tickRideLockedMove(inst, dt) {
   inst.state = 'search'
-  inst.lookBack = false
   inst.headLift = 0
   inst.speedTarget = RIDE_WALK_SPEED
   easeSpeed(inst, dt, RIDE_SPEED_EASE)
@@ -610,6 +605,5 @@ function clamp(v, lo, hi) {
 function enter(inst, state, time) {
   inst.state = state
   inst.stateTime = time
-  state === 'search' && (inst.lookBack = false)
   state === 'lunge' && (inst.orientKick = true)
 }

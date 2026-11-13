@@ -58,6 +58,19 @@ export function forestContourRgb(role = 'forest') {
 }
 
 
+//
+// Where on the sky ramp the even sky colour is taken (near its top).
+//
+const FLAT_SKY_MIX = 0.07
+/**
+ * The forest's even sky colour (the top of its sky ramp): the level's sky and
+ * the menu's forest backdrop are one flat colour, never stepped bands.
+ * @returns {{ r: number, g: number, b: number }} Palette-snapped colour
+ */
+export function forestFlatSkyRgb() {
+  return forestSkyBandRgb(FLAT_SKY_MIX)
+}
+
 /**
  * Samples the forest sky gradient (dark teal zenith → mid → hazy horizon)
  * with dawn gold rising in the lower band. Shared by the level's sky bake

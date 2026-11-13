@@ -78,6 +78,17 @@ const GLINT_Y = -2.8
 const GLINT_R = 1.9
 const GLINT_CUT = 0.7
 //
+// A lid closing over an open eye (the hero dozing off): its edge is a
+// LID_LINE_W stroke across the ring (EYE_RING_R, the ring line's middle)
+// sagging LID_SAG at the middle; the pupil shows only below it. At lid 0
+// the edge stands EYE_INNER_R above the eye's centre, at 1 as far below.
+// Sheet px.
+//
+const EYE_RING_R = 9.8
+const EYE_INNER_R = 8.5
+const LID_LINE_W = 2.2
+const LID_SAG = 2
+//
 // The bodies' bellies are painted darkening towards their bottom; next to
 // the live legs (drawn in the body's own colour) that reads as a dark band. In
 // the bottom BELLY_LIFT_BAND px above each column's bottom edge, the body's
@@ -161,11 +172,13 @@ export function bakeJumpFrame(frame) {
  * The idle stance in a FRAME_SIZE canvas with a pupil painted into each
  * open eye (null until load() has resolved). A pupil is a look direction
  * {x, y} of length 0..1 (0: straight ahead, 1: against the eye's rim);
- * null keeps that eye shut (its empty ring reads as a closed lid).
+ * null keeps that eye shut (its empty ring reads as a closed lid). A lid
+ * above 0 closes over both open eyes that far (1: down to the ring's bottom).
  * @param {Array<{x: number, y: number}|null>} pupils - Left eye, right eye
+ * @param {number} [lid=0] - How far the lids have closed (0..1)
  * @returns {HTMLCanvasElement|null}
  */
-export function bakeIdleFrame(pupils) {
+export function bakeIdleFrame(pupils, lid = 0) {
   if (!picture) return null
   const work = document.createElement('canvas')
   work.width = IDLE.w
@@ -173,11 +186,7 @@ export function bakeIdleFrame(pupils) {
   const ctx = work.getContext('2d')
   ctx.drawImage(picture, IDLE.x, IDLE.y, IDLE.w, IDLE.h, 0, 0, IDLE.w, IDLE.h)
   const pupil = bakePupil()
-  pupils.forEach((look, i) => look && ctx.drawImage(
-    pupil,
-    IDLE_EYES[i].x - IDLE.x + look.x * PUPIL_TRAVEL - pupil.width / 2,
-    IDLE_EYES[i].y - IDLE.y + look.y * PUPIL_TRAVEL - pupil.height / 2
-  ))
+  pupils.forEach((look, i) => look && paintEye(ctx, pupil, IDLE_EYES[i].x - IDLE.x, IDLE_EYES[i].y - IDLE.y, look, lid))
   pupil.width = 0
   pupil.height = 0
   const canvas = bakeBox(work, { x: 0, y: 0, w: IDLE.w, h: IDLE.h }, IDLE_CENTER_X - (IDLE.centerX - IDLE.x) * IDLE_SCALE, RUN_BODY_BOTTOM_Y - (IDLE.bottomY - IDLE.y) * IDLE_SCALE, IDLE_SCALE)
@@ -302,6 +311,37 @@ function liftBellyColumn(px, x) {
     px[i + 1] = px[ref + 1]
     px[i + 2] = px[ref + 2]
   }
+}
+//
+// One open eye's pupil, under its lid when the lid has started closing:
+// the pupil is clipped to below the lid's edge, and the edge is drawn.
+//
+function paintEye(ctx, pupil, cx, cy, look, lid) {
+  const px = cx + look.x * PUPIL_TRAVEL - pupil.width / 2
+  const py = cy + look.y * PUPIL_TRAVEL - pupil.height / 2
+  if (lid <= 0) {
+    ctx.drawImage(pupil, px, py)
+    return
+  }
+  const lidY = cy - EYE_INNER_R + lid * EYE_INNER_R * 2
+  const halfW = Math.sqrt(Math.max(0, EYE_RING_R * EYE_RING_R - (lidY - cy) * (lidY - cy)))
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(cx - halfW, lidY)
+  ctx.quadraticCurveTo(cx, lidY + LID_SAG * 2, cx + halfW, lidY)
+  ctx.lineTo(cx + EYE_RING_R, cy + EYE_RING_R)
+  ctx.lineTo(cx - EYE_RING_R, cy + EYE_RING_R)
+  ctx.closePath()
+  ctx.clip()
+  ctx.drawImage(pupil, px, py)
+  ctx.restore()
+  ctx.strokeStyle = CFG.visual.colors.hero.eyeLid
+  ctx.lineWidth = LID_LINE_W
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(cx - halfW, lidY)
+  ctx.quadraticCurveTo(cx, lidY + LID_SAG * 2, cx + halfW, lidY)
+  ctx.stroke()
 }
 //
 // One pupil at sheet scale, centred in its canvas: the dark disc with the

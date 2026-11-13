@@ -66,7 +66,9 @@ const BUOY_BLINK_MAX_INTERVAL = 20
 // as a whip that throws the stalk off its sway, then dies away in about a
 // second. Only a hero at ground level (within JOLT_HERO_BAND of his standing
 // height, a frame's move no longer than JOLT_MAX_STEP) knocks it, and not
-// again within JOLT_COOLDOWN. A hero landing on the eye kicks its top joint
+// again within JOLT_COOLDOWN. The centipede's head crossing a foot knocks
+// it the same way while it crawls on land (head within JOLT_CRAWLER_BAND of
+// the stalk's ground line). A hero landing on the eye kicks its top joint
 // (JOLT_TOP_IMPULSE px/s, a random way), and the wave runs down the stalk.
 //
 const JOLT_IMPULSE = 230
@@ -80,6 +82,7 @@ const JOLT_DAMPING = 3.4
 const JOLT_SUBSTEPS = 2
 const JOLT_HERO_BAND = 46
 const JOLT_HERO_FOOT_DROP = 38
+const JOLT_CRAWLER_BAND = 90
 const JOLT_MAX_STEP = 80
 const JOLT_COOLDOWN = 0.6
 const JOLT_MAX_DT = 0.05
@@ -232,16 +235,23 @@ export function create(cfg) {
  * @param {number} dt - Frame delta
  * @param {Array<{x: number, y: number}>} [sights=[]] - Other things worth watching (world points)
  * @param {boolean} [seesHero=true] - False: the eyes do not look at the hero (he is unseen)
+ * @param {Object|null} [predator=null] - Centipede inst whose head knocks the stalks too
  */
-export function onUpdate(inst, heroX, heroY, dt, sights = [], seesHero = true) {
+export function onUpdate(inst, heroX, heroY, dt, sights = [], seesHero = true, predator = null) {
   inst.time += dt
   const prevHeroX = inst.prevHeroX ?? heroX
+  const crawler = crawlerHead(predator)
+  const prevCrawlerX = inst.prevCrawlerX ?? crawler?.x
   inst.buoys.forEach(buoy => {
     updateBuoyBlink(buoy, dt)
     updateBuoyGaze(inst, buoy, seesHero ? heroX : null, heroY, sights, dt)
-    updateBuoyJolt(buoy, prevHeroX, heroX, heroY, dt)
+    buoy.joltCool = Math.max(0, buoy.joltCool - dt)
+    knockBuoy(buoy, prevHeroX, heroX, Math.abs(heroY + JOLT_HERO_FOOT_DROP - buoy.groundY) <= JOLT_HERO_BAND)
+    crawler && knockBuoy(buoy, prevCrawlerX, crawler.x, Math.abs(crawler.y - buoy.groundY) <= JOLT_CRAWLER_BAND)
+    updateBuoyJolt(buoy, dt)
   })
   inst.prevHeroX = heroX
+  inst.prevCrawlerX = crawler?.x ?? null
 }
 /**
  * The things worth watching for onUpdate's sights: the centipede's head
@@ -694,17 +704,26 @@ export function getChainBuoyEyePos(buoy, time = 0) {
   return points[points.length - 1]
 }
 //
-// The knock: a hero crossing the stalk's foot at ground level kicks the
-// spring along his way; then the spring settles.
+// The knock: the hero (or the centipede's head) crossing the stalk's foot
+// at ground level kicks the spring along its way.
 //
-function updateBuoyJolt(buoy, prevX, heroX, heroY, dt) {
-  buoy.joltCool = Math.max(0, buoy.joltCool - dt)
-  const crossed = (prevX - buoy.x) * (heroX - buoy.x) <= 0 && prevX !== heroX
-  const onGround = Math.abs(heroY + JOLT_HERO_FOOT_DROP - buoy.groundY) <= JOLT_HERO_BAND
-  if (crossed && onGround && buoy.joltCool <= 0 && Math.abs(heroX - prevX) <= JOLT_MAX_STEP) {
-    buoy.joltV[0] += Math.sign(heroX - prevX) * JOLT_IMPULSE
-    buoy.joltCool = JOLT_COOLDOWN
-  }
+function knockBuoy(buoy, prevX, x, onGround) {
+  if (!onGround || buoy.joltCool > 0 || prevX === x || Math.abs(x - prevX) > JOLT_MAX_STEP) return
+  if ((prevX - buoy.x) * (x - buoy.x) > 0) return
+  buoy.joltV[0] += Math.sign(x - prevX) * JOLT_IMPULSE
+  buoy.joltCool = JOLT_COOLDOWN
+}
+//
+// The centipede's head while it crawls on land in sight (null otherwise).
+//
+function crawlerHead(predator) {
+  if (!predator || predator.obj?.hidden || predator.swimming) return null
+  return predator.segments?.[0] ?? null
+}
+//
+// After a knock the spring settles.
+//
+function updateBuoyJolt(buoy, dt) {
   const step = Math.min(dt, JOLT_MAX_DT) / JOLT_SUBSTEPS
   for (let n = 0; n < JOLT_SUBSTEPS; n++) stepBuoyJolt(buoy, step)
 }

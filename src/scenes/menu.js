@@ -21,6 +21,7 @@ import * as Lake from '../sections/forest/utils/forest-lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
 import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
+import * as TrampMushroom from '../sections/forest/utils/forest-tramp-mushroom.js'
 import * as AppleBug from '../sections/forest/components/apple-bug.js'
 import * as WaterFlower from '../sections/forest/components/water-flower.js'
 import * as PropellerBud from '../sections/forest/components/propeller-bud.js'
@@ -409,6 +410,7 @@ export function sceneMenu(k) {
       groundY: forestLayout.groundY
     })
     inst.crawler = createMenuCrawler(inst)
+    inst.menuTramps = createMenuTramps(k, forestLayout)
     startMenuForestLife(inst)
     inst.bgOpacity[levels[selected].backdrop] = 1
     createMenuEyeStalks(inst)
@@ -765,7 +767,7 @@ function onUpdate(inst) {
   updateBackdropFade(inst, level.backdrop, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
   inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
-  ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud))
+  ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud), true, inst.crawler)
   BombTree.onUpdate(inst.earTrees, dt)
   SpikyTomato.onUpdate(inst.tomatoes, dt)
   updateMenuCrawler(inst, dt)
@@ -821,6 +823,7 @@ function updateMenuForestLife(inst, dt) {
   if (!life) return
   const forest = inst.bgOpacity[BACKDROP_FOREST]
   const hidden = forest < MENU_FOREST_LIVE_MIN_OPACITY
+  inst.menuTramps.forEach(t => updateMenuTramp(inst, t, dt, hidden))
   AppleBug.setHidden(life.bug, hidden)
   WaterFlower.setHidden(life.flower, hidden)
   life.fruitLayer.hidden = hidden
@@ -939,6 +942,7 @@ function drawForestBackdrop(inst, forest) {
   drawForestPieces(k, pieces.slice(0, -1), forest)
   Clouds.onDraw(inst.clouds, forest)
   drawForestPieces(k, pieces.slice(-1), forest)
+  inst.menuTramps.forEach(t => drawMenuTramp(k, t, forest))
   Lake.drawBed(k, inst.lake, forest)
   Lake.drawAlgae(k, inst.lake, forest)
   Lake.drawFill(k, inst.lake, forest)
@@ -1335,6 +1339,26 @@ function createMenuCrawler(inst) {
     hero: inst.heroInst,
     canHuntHero: () => false
   })
+}
+//
+// The two ground trampolines, live like the level's: swaying now and
+// then on their own (their contact shadows are baked into the backdrop).
+//
+function createMenuTramps(k, forestLayout) {
+  return forestLayout.tramps.map(t => {
+    const sprite = TrampMushroom.bake(k, t.kind, t.width)
+    return { ...t, sprite, squash: 0, pos: k.vec2(t.x, t.footY), scale: k.vec2(1, 1), look: { sprite, frame: 0 } }
+  })
+}
+function updateMenuTramp(inst, tramp, dt, hidden) {
+  tramp.squash > 0 && (tramp.squash = Math.max(0, tramp.squash - dt * TrampMushroom.SQUASH_RELAX))
+  TrampMushroom.tickIdleSqueeze(tramp, dt) && !hidden && Sound.playTrampMushroomSnap(inst.sound)
+}
+function drawMenuTramp(k, tramp, opacity) {
+  if (!tramp.sprite) return
+  const look = TrampMushroom.squeezeLook(tramp.sprite, tramp, tramp.look)
+  tramp.scale.y = 1 - tramp.squash * TrampMushroom.SQUASH_DRAW
+  k.drawSprite({ sprite: look.sprite, frame: look.frame, pos: tramp.pos, anchor: 'bot', scale: tramp.scale, opacity })
 }
 //
 // The forest's live life is created once its pictures are baked on this k

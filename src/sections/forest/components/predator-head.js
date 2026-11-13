@@ -1,11 +1,12 @@
 import * as PolyBatch from '../../../utils/poly-batch.js'
 
 //
-// The centipede's head, after the reference picture: a rust-brown dome seen
-// three-quarters on, two angry cream eyes under heavy brow ridges (the far one
-// small at the front edge), a dark nose with tiny teeth, two thick curved
-// mandibles that end in golden fangs, and two long ringed antennae arching
-// forward over the face.
+// The centipede's head, after the reference picture: a round rust-brown head
+// seen three-quarters on, two blank, angry cream eyes (no pupils) under heavy
+// brow ridges slanting down to the middle (the far eye smaller at the front
+// edge), a small frowning mouth between them that gapes when it attacks or
+// chews, and two thick curved brown pincers under it, hooking in towards each
+// other, each with a spur on its inner edge.
 //
 // Shapes are written in head units (fwd, y): fwd grows toward the way the
 // centipede faces, y grows down, and one unit is the head's radius (`r`).
@@ -22,27 +23,17 @@ const HEAD_LIGHT = { f: 0.1, y: -0.5, rx: 0.5, ry: 0.2 }
 const ELLIPSE_STEPS = 26
 const ELLIPSE_INDICES = Array.from({ length: ELLIPSE_STEPS - 2 }, (_, i) => [0, i + 1, i + 2]).flat()
 //
-// Eyes: far one first. The pupil rests a little toward the front and follows
-// the creature's look (eye.px / eye.py, about -1..1). In a rage (inst.anger,
-// 0..1) the upper lid comes down by up to EYE_SQUINT of the eye's height.
-// browFrom / browTo (deg, -90 = straight up) bound the arc of its brow, from
-// the outer end to the inner one; inner is the way the inner end lies (+1 front).
+// Eyes: far one first, blank cream almonds. In a rage (inst.anger, 0..1) the
+// upper lid comes down by up to EYE_SQUINT of the eye's height. browFrom /
+// browTo (deg, -90 = straight up) bound the arc of its brow, from the outer
+// end to the inner one; inner is the way the inner end lies (+1 front).
 //
 const EYES = [
-  { f: 0.7, y: 0.3, rx: 0.25, ry: 0.23, pupilRx: 0.12, pupilRy: 0.16, lookScale: 0.58, browFrom: -35, browTo: -165, inner: -1 },
-  { f: -0.15, y: 0.22, rx: 0.4, ry: 0.36, pupilRx: 0.19, pupilRy: 0.24, lookScale: 1, browFrom: -172, browTo: -25, inner: 1 }
+  { f: 0.68, y: 0.14, rx: 0.28, ry: 0.24, browFrom: -35, browTo: -165, inner: -1 },
+  { f: 0.0, y: 0.08, rx: 0.4, ry: 0.32, browFrom: -172, browTo: -25, inner: 1 }
 ]
 const EYE_RIM_PX = 0.9
-const EYE_SQUINT = 0.55
-const PUPIL_FIT = 0.85
-const PUPIL_REST_F = 0.1
-const PUPIL_LOOK_F = 0.12
-const PUPIL_LOOK_Y = 0.08
-const PUPIL_LOOK_MAX = 1.1
-const GLINT_RX = 0.05
-const GLINT_RY = 0.06
-const GLINT_DF = -0.04
-const GLINT_DY = -0.07
+const EYE_SQUINT = 0.35
 //
 // Brow ridges: an arc around the top of each eye, thick at the outer end and
 // thin at the inner one, with a lit edge. Calm, they stand off the eye with a
@@ -54,21 +45,25 @@ const BROW_W_OUTER = 0.26
 const BROW_W_INNER = 0.14
 const BROW_GAP = 0.12
 const BROW_GAP_PRESSED = 0.02
-const BROW_TILT_CALM = 0.14
+const BROW_TILT_CALM = 0.45
 const BROW_TILT_ANGRY = 0.75
 const BROW_LOWER = 0.1
 const BROW_RIM_PX = 0.7
 const BROW_LIT_PX = 0.45
 const BROW_LIT_SHARE = 0.3
 //
-// The nose bump and the tiny teeth hanging under it.
+// The frowning mouth: a short arc from MOUTH_F0 to MOUTH_F1 at MOUTH_Y, its
+// middle MOUTH_ARCH higher; as the jaws drop past MOUTH_OPEN_FROM it gapes
+// into a dark oval up to MOUTH_OPEN_RY tall.
 //
-const NOSE = [{ f: 0.26, y: 0.5 }, { f: 0.64, y: 0.5 }, { f: 0.45, y: 0.76 }]
-const NOSE_RIM_PX = 0.6
-const TEETH_FS = [0.3, 0.45, 0.6]
-const TEETH_TOP_Y = 0.72
-const TEETH_BOTTOM_Y = 0.92
-const TEETH_HALF_F = 0.05
+const MOUTH_F0 = 0.14
+const MOUTH_F1 = 0.66
+const MOUTH_Y = 0.56
+const MOUTH_ARCH = 0.1
+const MOUTH_STEPS = 6
+const MOUTH_W = 0.1
+const MOUTH_OPEN_FROM = 0.12
+const MOUTH_OPEN_RY = 0.2
 //
 // Mandibles: control points of the arm and its fang, squashed vertically so the
 // tips just reach the ground under a raised head. The far one (at the front)
@@ -82,9 +77,9 @@ const MANDIBLE_FANG_BASE_SHARE = 0.95
 const MANDIBLE_TOOTH_BASE_SHARE = 0.7
 const MANDIBLE_JOINT_AT = 0.38
 const MANDIBLE_JOINT_PX = 0.6
-const MANDIBLE_TEETH_AT = [0.5, 0.64]
-const MANDIBLE_TOOTH_LEN = 0.16
-const MANDIBLE_TOOTH_HALF = 0.05
+const MANDIBLE_TEETH_AT = [0.66]
+const MANDIBLE_TOOTH_LEN = 0.22
+const MANDIBLE_TOOTH_HALF = 0.09
 const JAW_OPEN_GAIN = 0.9
 const MANDIBLES = [
   { ctrl: [[0.9, 0.55], [1.03, 1.03], [1.1, 1.3], [1.0, 1.43], [0.8, 1.51]], wBase: 0.34, wEnd: 0.21, open: -1, inner: -1 },
@@ -98,38 +93,13 @@ const JAW_DROP = { rest: 0.05, stalk: 0.14, feastApproach: 0.2, angry: 0.85 }
 const CHEW_MIN = 0.06
 const CHEW_MAX = 0.5
 const CHEW_HZ = 2.6
-//
-// Antennae: the far one first. Both rise from the forehead and arc forward,
-// ringed, tapering to a pale curved tip; they sway a little.
-//
-const ANTENNAE = [
-  {
-    ctrl: [[0.55, -0.75], [0.45, -1.2], [0, -1.5], [-0.7, -1.55], [-1.5, -1.35], [-2.2, -1], [-2.9, -0.6], [-3.4, -0.1]],
-    pressed: [[0.55, -0.75], [0.4, -1], [0, -1.12], [-0.55, -1.1], [-1.1, -0.95], [-1.6, -0.7], [-2.1, -0.5], [-2.5, -0.3]],
-    phase: 1.7
-  },
-  {
-    ctrl: [[0.15, -0.8], [0.05, -1.25], [-0.5, -1.55], [-1.2, -1.55], [-2, -1.3], [-2.7, -0.9], [-3.3, -0.4], [-3.7, 0.1]],
-    pressed: [[0.15, -0.8], [0, -1.05], [-0.45, -1.15], [-1, -1.1], [-1.5, -0.95], [-2, -0.75], [-2.5, -0.55], [-2.9, -0.35]],
-    phase: 0
-  }
-]
-const ANTENNA_W_BASE = 0.27
-const ANTENNA_W_TIP = 0.04
-const ANTENNA_RIM_PX = 0.7
-const ANTENNA_TIP_FROM = 0.86
-const ANTENNA_RINGS = 9
-const ANTENNA_RING_PX = 0.55
-const ANTENNA_SWAY_HZ = 1.3
-const ANTENNA_SWAY_F = 0.07
-const ANTENNA_SWAY_Y = 0.14
-const ANTENNA_SWAY_WAVE = 2.4
 const SPAN_STEPS = 4
-const ANTENNA_SHAPES = ANTENNAE.map(a => sampleCurve(a.ctrl))
-const ANTENNA_PRESSED_SHAPES = ANTENNAE.map(a => sampleCurve(a.pressed))
-const ANTENNA_PRESSED_SWAY = 0.3
-const ANTENNA_IDLE_SWAY = 0.5
-const ANTENNA_RUN_SPEED = 250
+//
+// Rage (inst.anger, 0..1) by state, eased at ANGER_EASE per second: it
+// drives the squint, the brows, the gaping mouth and the pincers.
+//
+const ANGER_BY_STATE = { stalk: 0.6, hunt: 0.85, lunge: 1 }
+const ANGER_EASE = 10
 const MANDIBLE_SHAPES = MANDIBLES.map(m => sampleCurve(m.ctrl.map(([f, y]) => [f, MANDIBLE_Y0 + (y - MANDIBLE_Y0) * MANDIBLE_Y_SCALE])))
 
 /**
@@ -138,19 +108,28 @@ const MANDIBLE_SHAPES = MANDIBLES.map(m => sampleCurve(m.ctrl.map(([f, y]) => [f
  * @param {Object} inst - Predator inst
  */
 export function initHead(inst) {
+  inst.anger = 0
   inst.headScratch = {
     view: { x: 0, y: 0, dir: 1, r: 1 },
     brows: EYES.map(() => Array.from({ length: BROW_STEPS + 1 }, () => ({ x: 0, y: 0 }))),
+    mouth: Array.from({ length: MOUTH_STEPS + 1 }, () => ({ x: 0, y: 0 })),
     ellipse: Array.from({ length: ELLIPSE_STEPS }, () => ({ x: 0, y: 0 })),
-    antennae: ANTENNA_SHAPES.map(shape => buildCurveBuffer(shape, ANTENNA_TIP_FROM)),
     mandibles: MANDIBLE_SHAPES.map(shape => buildCurveBuffer(shape, MANDIBLE_FANG_FROM))
   }
 }
 
 /**
- * Draws the head into the body's batch: dome, antennae, eyes, brows, nose,
- * then the mandibles in front. The look follows inst.eyes, the squint, brows
- * and jaws follow inst.anger.
+ * Eases the head's rage towards the one its state carries.
+ * @param {Object} inst - Predator inst
+ * @param {number} dt - Seconds since the last frame
+ */
+export function tickHead(inst, dt) {
+  inst.anger += ((ANGER_BY_STATE[inst.state] ?? 0) - inst.anger) * Math.min(1, dt * ANGER_EASE)
+}
+
+/**
+ * Draws the head into the body's batch: dome, eyes, brows, mouth, then the
+ * pincers in front. The squint, brows and jaws follow inst.anger.
  * @param {Object} inst - Predator inst
  * @param {Object} batch - PolyBatch the body is drawn into
  * @param {Object} colors - Predator colours
@@ -163,10 +142,9 @@ export function drawHead(inst, batch, colors) {
   view.dir = inst.dir
   view.r = head.radius * HEAD_R_MULT
   drawDome(inst, batch, view, colors)
-  drawAntennae(inst, batch, view, colors)
   drawEyes(inst, batch, view, colors)
   drawBrows(inst, batch, view, colors)
-  drawNose(batch, view, colors)
+  drawMouth(inst, batch, view, colors)
   drawMandibles(inst, batch, view, colors)
 }
 
@@ -181,23 +159,15 @@ function drawDome(inst, batch, view, colors) {
   addEllipse(inst, batch, headX(view, HEAD_LIGHT.f), y + HEAD_LIGHT.y * r, HEAD_LIGHT.rx * r, HEAD_LIGHT.ry * r, colors.legLight)
 }
 
-// Both eyes: contour, cream, a pupil that follows the look, a glint. A rage lowers the upper lid, the lower edge stays.
+// Both eyes: blank cream ovals in a contour. A rage lowers the upper lid, the lower edge stays.
 function drawEyes(inst, batch, view, colors) {
-  const eye = inst.eyes[0]
-  const lookF = Math.max(-PUPIL_LOOK_MAX, Math.min(PUPIL_LOOK_MAX, eye.px))
-  const lookY = Math.max(-PUPIL_LOOK_MAX, Math.min(PUPIL_LOOK_MAX, eye.py))
   const { r } = view
   for (const e of EYES) {
     const cx = headX(view, e.f)
     const cy = view.y + eyeCenterY(e, inst.anger) * r
     const ry = eyeRy(e, inst.anger) * r
-    const pupilF = e.f + (PUPIL_REST_F + lookF * PUPIL_LOOK_F) * e.lookScale
-    const pupilY = cy + lookY * PUPIL_LOOK_Y * r * e.lookScale
-    const pupilRy = Math.min(e.pupilRy * r, ry * PUPIL_FIT)
     addEllipse(inst, batch, cx, cy, e.rx * r + EYE_RIM_PX, ry + EYE_RIM_PX, colors.contour)
     addEllipse(inst, batch, cx, cy, e.rx * r, ry, colors.eye)
-    addEllipse(inst, batch, headX(view, pupilF), pupilY, e.pupilRx * r, pupilRy, colors.pupil)
-    addEllipse(inst, batch, headX(view, pupilF + GLINT_DF), pupilY + GLINT_DY * r, GLINT_RX * r, GLINT_RY * r, colors.eye)
   }
 }
 
@@ -238,36 +208,41 @@ function drawBrows(inst, batch, view, colors) {
   })
 }
 
-// The nose bump with its tiny teeth under it
-function drawNose(batch, view, colors) {
+// The frowning mouth; it gapes (a dark oval) as the jaws drop
+function drawMouth(inst, batch, view, colors) {
   const { r } = view
-  const at = i => [headX(view, NOSE[i].f), view.y + NOSE[i].y * r]
-  const [ax, ay] = at(0)
-  const [bx, by] = at(1)
-  const [cx, cy] = at(2)
-  PolyBatch.addTriangle(batch, ax, ay, bx, by, cx, cy, colors.contour)
-  PolyBatch.addTriangle(batch, ax + view.dir * NOSE_RIM_PX, ay + NOSE_RIM_PX, bx - view.dir * NOSE_RIM_PX, by + NOSE_RIM_PX, cx, cy - NOSE_RIM_PX, colors.brow)
-  for (const f of TEETH_FS) {
-    const x = headX(view, f)
-    const half = TEETH_HALF_F * r
-    PolyBatch.addTriangle(batch, x - half, view.y + TEETH_TOP_Y * r, x + half, view.y + TEETH_TOP_Y * r, x, view.y + TEETH_BOTTOM_Y * r, colors.contour)
+  const open = Math.max(0, jawDrop(inst) - MOUTH_OPEN_FROM) / (1 - MOUTH_OPEN_FROM)
+  if (open > 0) {
+    const cx = headX(view, (MOUTH_F0 + MOUTH_F1) / 2)
+    const ry = MOUTH_OPEN_RY * Math.min(1, open) * r
+    const rx = (MOUTH_F1 - MOUTH_F0) / 2 * r
+    addEllipse(inst, batch, cx, view.y + MOUTH_Y * r, rx + EYE_RIM_PX, ry + EYE_RIM_PX, colors.contour)
+    addEllipse(inst, batch, cx, view.y + MOUTH_Y * r, rx, ry, colors.maw)
+    return
   }
+  const pts = inst.headScratch.mouth
+  for (let i = 0; i <= MOUTH_STEPS; i++) {
+    const u = i / MOUTH_STEPS
+    pts[i].x = headX(view, MOUTH_F0 + (MOUTH_F1 - MOUTH_F0) * u)
+    pts[i].y = view.y + (MOUTH_Y - Math.sin(Math.PI * u) * MOUTH_ARCH) * r
+  }
+  PolyBatch.addTaperedRibbon(batch, pts, MOUTH_W * r, MOUTH_W * r, colors.contour, false)
 }
 
-// Both mandibles: the arm (contour, fill, joint, inner teeth), then the golden fang
+// Both pincers: the arm (contour, fill, joint, inner spur), then the hooked tip
 function drawMandibles(inst, batch, view, colors) {
   const open = jawDrop(inst) * JAW_OPEN_GAIN
   MANDIBLES.forEach((m, i) => {
     const buf = inst.headScratch.mandibles[i]
     const last = buf.all.length - 1
-    placeCurve(MANDIBLE_SHAPES[i], buf.all, view, { pivot: MANDIBLE_SHAPES[i][0], angle: m.open * open })
+    placeCurve(MANDIBLE_SHAPES[i], buf.all, view, MANDIBLE_SHAPES[i][0], m.open * open)
     const armEnd = m.wEnd * view.r
     const fangBase = armEnd * MANDIBLE_FANG_BASE_SHARE
     const rim = MANDIBLE_RIM_PX * 2
     PolyBatch.addTaperedRibbon(batch, buf.first, m.wBase * view.r + rim, armEnd + rim, colors.contour, false)
     PolyBatch.addTaperedRibbon(batch, buf.second, fangBase + rim, 0, colors.contour, false)
     PolyBatch.addTaperedRibbon(batch, buf.first, m.wBase * view.r, armEnd, colors.leg, false)
-    PolyBatch.addTaperedRibbon(batch, buf.second, fangBase, 0, colors.fang, false)
+    PolyBatch.addTaperedRibbon(batch, buf.second, fangBase, 0, colors.leg, false)
     addCurveRing(batch, buf.all, Math.round(MANDIBLE_JOINT_AT * last), mandibleWidth(m, MANDIBLE_JOINT_AT) * view.r, MANDIBLE_JOINT_PX, colors.legFar)
     MANDIBLE_TEETH_AT.forEach(u => addMandibleTooth(batch, buf.all, Math.round(u * last), mandibleWidth(m, u) * view.r * 0.5, view, m, colors))
   })
@@ -279,7 +254,7 @@ function mandibleWidth(mandible, u) {
   return mandible.wEnd * MANDIBLE_FANG_BASE_SHARE * (1 - (u - MANDIBLE_FANG_FROM) / (1 - MANDIBLE_FANG_FROM))
 }
 
-// A tiny dark spike standing out of a mandible's inner edge
+// A spur standing out of a pincer's inner edge: contour, then the brown
 function addMandibleTooth(batch, pts, index, halfWidth, view, mandible, colors) {
   const p = pts[index]
   const next = pts[Math.min(pts.length - 1, index + 1)]
@@ -294,28 +269,9 @@ function addMandibleTooth(batch, pts, index, halfWidth, view, mandible, colors) 
   const reach = halfWidth + MANDIBLE_TOOTH_LEN * view.r
   const bx = p.x + nx * halfWidth * MANDIBLE_TOOTH_BASE_SHARE
   const by = p.y + ny * halfWidth * MANDIBLE_TOOTH_BASE_SHARE
-  PolyBatch.addTriangle(batch, bx - tx * half, by - ty * half, p.x + nx * reach, p.y + ny * reach, bx + tx * half, by + ty * half, colors.contour)
-}
-
-// Both antennae: swayed curves with rings and a pale tip
-function drawAntennae(inst, batch, view, colors) {
-  const t = inst.k.time() * ANTENNA_SWAY_HZ * Math.PI * 2
-  const run = Math.min(1, Math.abs(inst.vx) / ANTENNA_RUN_SPEED)
-  const amp = (ANTENNA_IDLE_SWAY + (1 - ANTENNA_IDLE_SWAY) * run) * (1 + (ANTENNA_PRESSED_SWAY - 1) * inst.anger)
-  ANTENNAE.forEach((a, i) => {
-    const buf = inst.headScratch.antennae[i]
-    const press = { shape: ANTENNA_PRESSED_SHAPES[i], mix: inst.anger }
-    placeCurve(ANTENNA_SHAPES[i], buf.all, view, { sway: { t: t + a.phase, amp }, press })
-    const wBase = ANTENNA_W_BASE * view.r
-    const wTip = ANTENNA_W_TIP * view.r
-    PolyBatch.addTaperedRibbon(batch, buf.all, wBase + ANTENNA_RIM_PX * 2, wTip + ANTENNA_RIM_PX * 2, colors.contour, false)
-    PolyBatch.addTaperedRibbon(batch, buf.all, wBase, wTip, colors.leg, false)
-    for (let ring = 1; ring <= ANTENNA_RINGS; ring++) {
-      const u = ring / (ANTENNA_RINGS + 1)
-      addCurveRing(batch, buf.all, Math.round(u * (buf.all.length - 1)), wBase + (wTip - wBase) * u, ANTENNA_RING_PX, colors.legFar)
-    }
-    PolyBatch.addTaperedRibbon(batch, buf.second, wBase + (wTip - wBase) * ANTENNA_TIP_FROM, wTip, colors.fang, false)
-  })
+  const pad = MANDIBLE_RIM_PX
+  PolyBatch.addTriangle(batch, bx - tx * (half + pad), by - ty * (half + pad), p.x + nx * (reach + pad), p.y + ny * (reach + pad), bx + tx * (half + pad), by + ty * (half + pad), colors.contour)
+  PolyBatch.addTriangle(batch, bx - tx * half, by - ty * half, p.x + nx * reach, p.y + ny * reach, bx + tx * half, by + ty * half, colors.leg)
 }
 
 // How far the jaws hang open this frame (see JAW_DROP): the calm opening grows to the wide one with the rage
@@ -344,7 +300,7 @@ function addEllipse(inst, batch, cx, cy, rx, ry, color) {
   PolyBatch.addPolygon(batch, pts, ELLIPSE_INDICES, color)
 }
 
-// A short band across a curve at a sample: a joint or ring on an antenna or mandible
+// A short band across a curve at a sample: a pincer's joint
 function addCurveRing(batch, pts, index, width, thickness, color) {
   const p = pts[index]
   const a = pts[Math.max(0, index - 1)]
@@ -357,32 +313,15 @@ function addCurveRing(batch, pts, index, width, thickness, color) {
   PolyBatch.addLine(batch, p.x - nx, p.y - ny, p.x + nx, p.y + ny, thickness, color)
 }
 
-// Writes a sampled shape into world points: optionally swayed (antennae) or turned about a pivot (mandibles)
-function placeCurve(shape, out, view, motion) {
-  const { pivot, angle = 0, sway, press } = motion
+// Writes a sampled shape into world points, turned about a pivot (a pincer opening)
+function placeCurve(shape, out, view, pivot, angle) {
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
   for (let i = 0; i < shape.length; i++) {
-    const p = shape[i]
-    let f = p.f
-    let y = p.y
-    if (press) {
-      f += (press.shape[i].f - f) * press.mix
-      y += (press.shape[i].y - y) * press.mix
-    }
-    if (pivot) {
-      const dx = f - pivot.f
-      const dy = y - pivot.y
-      f = pivot.f + dx * cos - dy * sin
-      y = pivot.y + dx * sin + dy * cos
-    }
-    if (sway) {
-      const w = p.u * p.u
-      f += Math.cos(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_F * w * sway.amp
-      y += Math.sin(sway.t + p.u * ANTENNA_SWAY_WAVE) * ANTENNA_SWAY_Y * w * sway.amp
-    }
-    out[i].x = view.x + view.dir * f * view.r
-    out[i].y = view.y + y * view.r
+    const dx = shape[i].f - pivot.f
+    const dy = shape[i].y - pivot.y
+    out[i].x = view.x + view.dir * (pivot.f + dx * cos - dy * sin) * view.r
+    out[i].y = view.y + (pivot.y + dx * sin + dy * cos) * view.r
   }
 }
 

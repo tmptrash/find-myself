@@ -205,6 +205,7 @@ export const CFG = {
       hero: {
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000",           // Pupil
+        eyeLid: "#2D2925",             // Edge of a lid closing over an eye (the eye rings' ink)
         sheetEdge: "#4D4740",          // hero.png's outline, for the soft edge left where its paper background is keyed out
         //
         // Live running legs: contours sampled from the leg pieces of
@@ -312,10 +313,11 @@ export const CFG = {
         //
         // Predatory crawler — a mossy centipede: an olive moss shell in three
         // tones (shade, base, lit top) with light moss clumps, a reddish-brown
-        // underside, a rust head with two angry cream eyes under brow ridges,
-        // long ringed antennae, golden-fanged mandibles and claw legs (the far
-        // side a shade darker), pale horn thorns on its back (some over leaf
-        // sprouts), all ringed by the green-black contour.
+        // underside, a rust head with two blank, angry cream eyes under brow
+        // ridges, a frowning mouth (a dark maw when it gapes), curved pincers
+        // and claw legs (the far side a shade darker), pale horn thorns on
+        // its back (some over leaf sprouts), all ringed by the green-black
+        // contour.
         //
         predatorShell: PALETTE.green1,
         predatorShellShade: PALETTE.green0,
@@ -328,11 +330,11 @@ export const CFG = {
         predatorLeaf: PALETTE.green2,
         predatorLeafLight: PALETTE.green4,
         predatorThorn: PALETTE.sand4,
-        predatorFang: PALETTE.orange4,      // Golden mandible fangs and antenna tips
-        predatorBrow: PALETTE.orange0,      // Dark rust brow ridges and nose
+        predatorBrow: PALETTE.orange0,      // Dark rust brow ridges
+        predatorMaw: PALETTE.rose0,         // Inside the gaping mouth
         predatorContour: PALETTE.gray0,
         predatorEye: PALETTE.gray7,
-        predatorPupil: PALETTE.gray0,
+        dreamFirefly: PALETTE.gray7,       // White fireflies left where the hero's dream bubble bursts
         water: PALETTE.cyan2,
         //
         // Lake paint over the base water fill, all at low opacity so the

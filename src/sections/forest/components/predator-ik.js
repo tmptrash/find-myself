@@ -11,12 +11,11 @@ const FOOT_SOUND_GAP = 0.055
 const REACH = 16
 const PLANT_BEHIND = 11
 //
-// Hips sit on the body at a fixed share of the way along the spine (leg.at),
-// this far down the plate's radius, so they stretch and heave with the body
-// and never slide along it.
+// A hip sits on its plate's lower side: this share of the plate's radius
+// forward (near row) or back (far row), and this share below its centre.
 //
-const FAR_HIP_DROP = 0.25
-const NEAR_HIP_DROP = 0.5
+const HIP_SIDE_SHARE = 0.6
+const HIP_DOWN_SHARE = 0.55
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -79,8 +78,8 @@ export function tickLegs(inst, dt, hurry) {
       return
     }
     const along = dir * (hip.x - leg.footX)
-    const reach = REACH * leg.reach
-    const behind = along > PLANT_BEHIND * leg.reach || Math.hypot(hip.x - leg.footX, hip.y - leg.footY) > reach + 6
+    const reach = REACH * leg.reach * inst.stretch
+    const behind = along > PLANT_BEHIND * leg.reach * inst.stretch || Math.hypot(hip.x - leg.footX, hip.y - leg.footY) > reach + 6
     const fidget = speed < 3 && inst.idleTime > leg.fidgetAt
     const retarget = hurry && leg.front && inst.orientKick
     if (behind || fidget || retarget) {
@@ -88,7 +87,7 @@ export function tickLegs(inst, dt, hurry) {
         leg.stepWait -= dt
         return
       }
-      const lead = (hurry ? 14 : 8) + leg.jitter
+      const lead = ((hurry ? 14 : 8) + leg.jitter) * inst.stretch
       const side = leg.side * (7 + leg.jitter * 0.3)
       leg.plantX = hip.x + dir * lead + (Math.random() - 0.5) * 3
       leg.plantX += side * 0.15
@@ -105,25 +104,21 @@ export function tickLegs(inst, dt, hurry) {
 }
 
 /**
- * World position of a leg hip on the body: at its fixed share of the way along
- * the spine, between two plates, a little below the plate's middle.
+ * World position of a leg hip: on the lower side of its plate's dome, the
+ * near row toward the front and the far row toward the back. The offsets are
+ * shares of the plate's radius from the plate's own centre, so a hip keeps its
+ * place on its plate however the body stretches or heaves.
  * @param {Object} inst
  * @param {Object} leg
  * @returns {{ x: number, y: number, bodyY: number, bodyR: number }}
  */
 function hipOf(inst, leg) {
-  const from = Math.floor(leg.at)
-  const seg = inst.segments[from]
-  const next = inst.segments[Math.min(inst.segments.length - 1, from + 1)]
-  const t = leg.at - from
-  const bodyY = seg.y + (next.y - seg.y) * t
-  const bodyR = seg.radius + (next.radius - seg.radius) * t
-  const drop = leg.side > 0 ? NEAR_HIP_DROP : FAR_HIP_DROP
+  const seg = inst.segments[leg.seg]
   return {
-    x: seg.x + (next.x - seg.x) * t,
-    y: bodyY + bodyR * drop,
-    bodyY,
-    bodyR
+    x: seg.x + inst.dir * leg.side * seg.radius * HIP_SIDE_SHARE,
+    y: seg.y + seg.radius * HIP_DOWN_SHARE,
+    bodyY: seg.y,
+    bodyR: seg.radius
   }
 }
 

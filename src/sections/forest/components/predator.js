@@ -19,13 +19,11 @@ import * as Sound from '../../../utils/sound.js'
 // Low predatory crawler. Pose is computed every frame from the spine, the
 // leg targets and the eye targets — there is no baked walk cycle.
 //
-const LEG_PAIRS = 12
+const LEG_PAIRS = 11
 //
-// Leg pairs run from the first plate behind the head (LEG_FIRST_SEG) to
-// LEG_TAIL_FREE plates short of the tail.
+// One leg pair per plate, from the first plate behind the head.
 //
 const LEG_FIRST_SEG = 1
-const LEG_TAIL_FREE = 2
 //
 // Near-side legs start half a stride ahead so the two rows alternate.
 //
@@ -342,13 +340,12 @@ export function startFlee(inst, fromX) {
 function initLegs(inst) {
   inst.legs = []
   for (let i = 0; i < LEG_PAIRS; i++) {
-    const span = Math.max(1, inst.segments.length - LEG_FIRST_SEG - LEG_TAIL_FREE)
-    const at = LEG_FIRST_SEG + (i + 0.5) * span / LEG_PAIRS
+    const seg = LEG_FIRST_SEG + i
     for (const side of [-1, 1]) {
       const hipX = inst.x - inst.dir * (10 + i * 7)
       const footX = hipX + side * 8 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
       inst.legs.push({
-        at,
+        seg,
         side,
         front: i < 3,
         reach: 0.85 + Math.random() * 0.3,
@@ -541,11 +538,12 @@ function addLeaf(batch, bx, by, ux, uy, colors) {
 function drawLeg(inst, batch, limb, colors, fill, front) {
   const foot = footNow(inst, limb)
   let bend = limb.side
-  let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * limb.reach, SHIN * limb.reach, bend)
+  const lenScale = limb.reach * inst.stretch
+  let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
   const kneeGround = inst.groundAt(knee.kneeX)
   if (knee.kneeY > kneeGround - 1) {
     bend *= -1
-    knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * limb.reach, SHIN * limb.reach, bend)
+    knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
   }
   //
   // A folded shin can still cross the ground line. Keep the joint on it.

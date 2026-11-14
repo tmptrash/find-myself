@@ -1,5 +1,7 @@
+import { getResizeRebootCount } from './window-resize.js'
 // URL flag that turns the readout on (e.g. /?scene=lesson-forest.0&perf=1)
 const URL_FLAG = 'perf'
+const STANDALONE_QUERY = '(display-mode: standalone), (display-mode: fullscreen)'
 const WINDOW_MS = 3000
 const REFRESH_MS = 500
 const MS_PER_SEC = 1000
@@ -47,5 +49,18 @@ function show(inst, t) {
     `fps ${(MS_PER_SEC / avg).toFixed(0)}  p50 ${at(P50)}  p95 ${at(P95)} ms\n` +
     `win ${window.innerWidth}x${window.innerHeight} dpr ${window.devicePixelRatio}\n` +
     `canvas buf ${canvas?.width}x${canvas?.height} css ${rect?.width.toFixed(0)}x${rect?.height.toFixed(0)}\n` +
-    `fullscreen ${Boolean(document.fullscreenElement)}`
+    `fullscreen ${Boolean(document.fullscreenElement)} app ${isApp()} reboots ${getResizeRebootCount()}\n` +
+    `gl ${glRenderer(canvas)}`
+}
+
+// True when started from the Home Screen / installed as an app
+function isApp() {
+  return navigator.standalone === true || window.matchMedia(STANDALONE_QUERY).matches
+}
+
+// The GPU the page really draws with (a software renderer explains a crawl)
+function glRenderer(canvas) {
+  const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl')
+  const info = gl?.getExtension('WEBGL_debug_renderer_info')
+  return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'n/a'
 }

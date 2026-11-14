@@ -299,86 +299,76 @@ function syncBakedHudText(node, text) {
   rebuildBakedHudTextNode(node, text, centerX)
 }
 //
-// Draws outlined HUD text to a canvas and loads it as a Kaplay sprite.
+// Points the HUD label at new text. The glyph atlas is a Kaplay sprite
+// loaded once per live k; the label is one game object that draws each
+// character as a cell of that atlas, so a new string only changes what is
+// drawn — no canvas, no sprite upload (re-uploading a label once a second
+// cost ~165 ms of texture upload a time on phones).
 //
 function rebuildBakedHudTextNode(node, text, centerX) {
   const { k, font, fontSize, color, outlineColor, topY, postBakeCanvas } = node
   node.layoutCenterX = centerX
   node.lastText = text
-  //
-  // Grain and grade run once on the glyph atlas. Composing the label from
-  // those cells never calls getImageData, so the per-second FPS update
-  // does not stall on the GPU.
-  //
-  const atlas = postBakeCanvas
-    ? fpsGlyphAtlas(k, font, fontSize, color, outlineColor, postBakeCanvas)
-    : null
-  const canvas = bakeFpsHudTextCanvas(text, font, fontSize, color, outlineColor, atlas)
-  const spriteName = `fps-hud-bake-${fontSize}-${fpsHudTextHash(text)}`
-  k.loadSprite(spriteName, canvas)
-  node.measuredW = canvas.width
-  canvas.width = 0
-  canvas.height = 0
-  const prevMain = node.main
-  const wasFixed = prevMain?.fixed
-  const wasOpacity = prevMain?.opacity ?? hudOpacity()
-  prevMain?.exists?.() && k.destroy(prevMain)
-  node.main = k.add([
-    k.sprite(spriteName),
-    k.pos(centerX, topY),
-    k.anchor('center'),
-    k.color(k.rgb(255, 255, 255)),
-    k.opacity(wasOpacity),
-    k.z(CFG.visual.zIndex.ui + 1)
-  ])
-  wasFixed && (node.main.fixed = true)
+  const atlas = fpsGlyphAtlas(k, font, fontSize, color, outlineColor, postBakeCanvas)
+  node.atlas = atlas
+  node.glyphs = layoutGlyphs(text, atlas, node.glyphs ?? [])
+  node.measuredW = Math.max(1, Math.ceil(node.glyphs.width + HUD_OUTLINE_OFFSET))
+  if (!node.main?.exists?.()) node.main = addGlyphLabel(k, node, centerX, topY)
   node.main.width = node.measuredW
 }
 //
-// Renders FPS HUD label with a single drop-shadow copy onto a canvas.
+// The label's game object: drawn from the glyph atlas at its centre, at the
+// HUD's layer, faint or solid like the other HUD text.
 //
-function bakeFpsHudTextCanvas(text, fontFamily, fontSize, fillColor, outlineColor, atlas = null) {
-  if (atlas) return composeFpsHudTextCanvas(text, atlas)
-  const pad = 4
-  const off = HUD_OUTLINE_OFFSET
-  const probe = document.createElement('canvas').getContext('2d')
-  probe.font = `${fontSize}px ${fontFamily}`
-  const textW = probe.measureText(text).width
-  //
-  // Symmetric padding so the drop shadow does not pull the baked label right
-  // when the sprite is anchored at the canvas centre.
-  //
-  const w = Math.ceil(textW + pad * 2 + off * 2)
-  const h = Math.ceil(fontSize * 1.2 + pad * 2 + off * 2)
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, w)
-  canvas.height = Math.max(1, h)
-  const ctx = canvas.getContext('2d')
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textBaseline = 'middle'
-  ctx.textAlign = 'center'
-  const cx = canvas.width / 2 - off / 2
-  const cy = canvas.height / 2 - off / 2
-  if (outlineColor) {
-    ctx.fillStyle = rgbToCss(outlineColor)
-    ctx.fillText(text, cx + off, cy + off)
+function addGlyphLabel(k, node, centerX, topY) {
+  const label = k.add([
+    k.pos(centerX, topY),
+    k.opacity(hudOpacity()),
+    k.z(CFG.visual.zIndex.ui + 1),
+    {
+      draw() {
+        drawGlyphLabel(k, node, this)
+      }
+    }
+  ])
+  label.width = node.measuredW
+  return label
+}
+//
+// Each glyph of the label as its cell of the atlas sprite, left to right
+// from the label's left edge (the label is centred on its position).
+//
+function drawGlyphLabel(k, node, label) {
+  const { atlas, glyphs } = node
+  if (!atlas?.sprite) return
+  const left = -node.measuredW / 2
+  const top = -atlas.cellH / 2
+  const pos = atlas.drawPos
+  for (let i = 0; i < glyphs.length; i++) {
+    const g = glyphs[i]
+    pos.x = left + g.x
+    pos.y = top
+    k.drawSprite({ sprite: atlas.sprite, quad: g.cell.quad, width: g.cell.w, height: atlas.cellH, pos, opacity: label.opacity, fixed: label.fixed })
   }
-  ctx.fillStyle = rgbToCss(fillColor)
-  ctx.fillText(text, cx, cy)
-  return canvas
+}
+//
+// Places a string's glyphs along a line (reusing the list), each at the
+// running advance; unknown characters are skipped.
+//
+function layoutGlyphs(text, atlas, glyphs) {
+  glyphs.length = 0
+  let cursor = 0
+  for (const ch of text) {
+    const cell = atlas.cells.get(ch)
+    if (!cell) continue
+    glyphs.push({ cell, x: cursor })
+    cursor += cell.advance
+  }
+  glyphs.width = cursor
+  return glyphs
 }
 function hudOpacity() {
   return isTouchDevice() ? HUD_TOUCH_OPACITY : HUD_OPACITY
-}
-//
-// Stable hash for FPS HUD sprite names.
-//
-function fpsHudTextHash(text) {
-  let h = 0
-  for (let i = 0; i < text.length; i++) {
-    h = (h * 31 + text.charCodeAt(i)) | 0
-  }
-  return h >>> 0
 }
 //
 // Converts Kaplay rgb to a CSS colour string.
@@ -400,7 +390,8 @@ function countKaplayDrawCalls(k) {
   return drawCalls
 }
 //
-// One graded glyph atlas per live Kaplay instance and colour pair.
+// One graded glyph atlas per live Kaplay instance and colour pair, loaded
+// once as a sprite (each glyph a quad of it).
 //
 function fpsGlyphAtlas(k, font, fontSize, fillColor, outlineColor, postBakeCanvas) {
   let byKey = glyphAtlasByK.get(k)
@@ -412,6 +403,12 @@ function fpsGlyphAtlas(k, font, fontSize, fillColor, outlineColor, postBakeCanva
   const cached = byKey.get(key)
   if (cached) return cached
   const atlas = bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanvas)
+  atlas.sprite = `fps-hud-glyphs-${byKey.size}-${fontSize}`
+  k.loadSprite(atlas.sprite, atlas.canvas)
+  atlas.cells.forEach(cell => {
+    cell.quad = k.quad(cell.x / atlas.canvas.width, 0, cell.w / atlas.canvas.width, 1)
+  })
+  atlas.drawPos = k.vec2(0, 0)
   byKey.set(key, atlas)
   return atlas
 }
@@ -453,26 +450,4 @@ function bakeFpsGlyphAtlas(font, fontSize, fillColor, outlineColor, postBakeCanv
   })
   postBakeCanvas?.(canvas, FPS_GLYPH_ATLAS_SEED)
   return { canvas, cells, cellH }
-}
-//
-// Copies pre-graded glyph cells into one label. Cells overlap by the shadow
-// offset so the drop shadow is not clipped and letters keep their advance.
-//
-function composeFpsHudTextCanvas(text, atlas) {
-  const placed = []
-  let cursor = 0
-  for (const ch of text) {
-    const cell = atlas.cells.get(ch)
-    if (!cell) continue
-    placed.push({ cell, x: cursor })
-    cursor += cell.advance
-  }
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.ceil(cursor + HUD_OUTLINE_OFFSET))
-  canvas.height = atlas.cellH
-  const ctx = canvas.getContext('2d')
-  placed.forEach(({ cell, x }) => {
-    ctx.drawImage(atlas.canvas, cell.x, 0, cell.w, atlas.cellH, x, 0, cell.w, atlas.cellH)
-  })
-  return canvas
 }

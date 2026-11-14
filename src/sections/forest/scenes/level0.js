@@ -826,13 +826,6 @@ const PIT_CAVE_FRONT_STONES_Z = PIT_CAVE_HERO_FOREGROUND_Z + 1
 // the decor mushrooms at z 7), ferns and plumes in front of him.
 //
 const FOREST_FLOOR_BACK_Z = 6.5
-//
-// Over the lake the centipede draws behind everything of it and of its banks:
-// the water, the bed with its stones and rim, the island and the floor's
-// stones — just under the floor's back layer (FOREST_FLOOR_BACK_Z), still over
-// the backdrop.
-//
-const PREDATOR_LAKE_BEHIND_Z = FOREST_FLOOR_BACK_Z - 0.1
 const FOREST_FLOOR_FRONT_Z = GROUND_FRONT_Z - 1
 const GROUND_STONE_FRONT_Z = FOREST_FLOOR_FRONT_Z - 0.5
 const FOREST_FLOOR_STALK_EYE_CLEAR_HALF = 22
@@ -1052,6 +1045,12 @@ const LAKE_Z = 12
 //
 const LAKE_BED_Z = 11.6
 const LAKE_ALGAE_Z = 11.7
+//
+// Over the lake the centipede draws just behind the lake's own layers (the
+// bed with its stones and rim, the algae, the island and the water); what
+// of it hangs under the water is cut off at the surface (predator.js).
+//
+const PREDATOR_LAKE_BEHIND_Z = LAKE_BED_Z - 0.1
 const LAKE_SPRITE_KEY = 'forest0'
 //
 // Hair-root clearance around the cave mouth (left / right of the crack zone).

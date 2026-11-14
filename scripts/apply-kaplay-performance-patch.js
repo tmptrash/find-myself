@@ -126,6 +126,27 @@ const WORLD_SIZE_RESIZE_OLD =
 const WORLD_SIZE_RESIZE_NEW =
   'l.gfx.width=Math.round(l.gfx.ggl.gl.drawingBufferWidth/l.gfx.pixelDensity/l.globalOpt.scale),l.gfx.height=Math.round(l.gfx.ggl.gl.drawingBufferHeight/l.gfx.pixelDensity/l.globalOpt.scale))'
 //
+// drawUVQuad(): a fully transparent quad is skipped. The levels keep their
+// invisible colliders (platform pads, walls, ledges: k.rect + k.opacity(0))
+// as drawn game objects; each still went through the vertex packer, broke the
+// batch on its texture and filled its pixels with nothing — long ones across
+// the whole play area every frame.
+//
+const SKIP_CLEAR_QUAD_OLD =
+  'function Fe(t){if(t.width===void 0||t.height===void 0)throw new Error(\'drawUVQuad() requires property "width" and "height".\');if(t.width<=0||t.height<=0)return;'
+const SKIP_CLEAR_QUAD_NEW =
+  'function Fe(t){if(t.width===void 0||t.height===void 0)throw new Error(\'drawUVQuad() requires property "width" and "height".\');if(t.width<=0||t.height<=0||(t.opacity??1)<=0)return;'
+//
+// drawRect() the same way: a rectangle (and its outline) at zero opacity is
+// skipped before its corner points and options are allocated. Kaplay draws
+// rect game objects (the invisible colliders, the full-screen click catcher
+// in utils/pointer-activate.js) through drawRect, not drawUVQuad.
+//
+const SKIP_CLEAR_RECT_OLD =
+  'function ue(t){if(t.width===void 0||t.height===void 0)throw new Error(\'drawRect() requires property "width" and "height".\');if(t.width<=0||t.height<=0)return;'
+const SKIP_CLEAR_RECT_NEW =
+  'function ue(t){if(t.width===void 0||t.height===void 0)throw new Error(\'drawRect() requires property "width" and "height".\');if(t.width<=0||t.height<=0||(t.opacity??1)<=0)return;'
+//
 // The typed queues rewrite the push-limit patch's line, so their marker
 // stands for both.
 //
@@ -147,6 +168,8 @@ const PATCHES = [
     ]
   },
   { markers: [TYPED_QUEUE_MARKER], pairs: [[TYPED_QUEUE_OLD, TYPED_QUEUE_NEW]] },
+  { markers: ['drawUVQuad() requires property "width" and "height".\');if(t.width<=0||t.height<=0||(t.opacity??1)<=0)'], pairs: [[SKIP_CLEAR_QUAD_OLD, SKIP_CLEAR_QUAD_NEW]] },
+  { markers: ['drawRect() requires property "width" and "height".\');if(t.width<=0||t.height<=0||(t.opacity??1)<=0)'], pairs: [[SKIP_CLEAR_RECT_OLD, SKIP_CLEAR_RECT_NEW]] },
   {
     markers: ['??Math.round(o.drawingBufferWidth/n/e.scale)'],
     pairs: [[WORLD_SIZE_BOOT_OLD, WORLD_SIZE_BOOT_NEW], [WORLD_SIZE_RESIZE_OLD, WORLD_SIZE_RESIZE_NEW]]

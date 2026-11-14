@@ -179,6 +179,10 @@ const FOOT_HEAR_RANGE_X = 360
 //
 const FLEE_TRIGGER_RADIUS = 460
 //
+// Over the lake it is drawn only down to this far under the water's surface.
+//
+const WATER_CUT_SINK = 1
+//
 // Swimming body rides half under the water line.
 //
 const SWIM_SURFACE_SINK = 16
@@ -186,6 +190,11 @@ const SWIM_SURFACE_SINK = 16
 // Width inside the shore over which the swim line eases down from the ground.
 //
 const SWIM_SHORE_RAMP_PX = 56
+//
+// Legs this far outside the lake's span are still hidden under its water line
+// (the bed's slope reaches past it).
+//
+const LEG_WATER_PAD_PX = 80
 
 /**
  * Creates the crawler on the ground line.
@@ -227,6 +236,7 @@ export function create(cfg) {
     roamGoalX: null,
     frontSpan: cfg.frontSpan ?? null,
     lakeZ: cfg.lakeBehindZ ?? null,
+    overLake: false,
     feastZ: cfg.feastZ ?? null,
     swimming: false,
     fleePath: null,
@@ -447,7 +457,8 @@ function syncDrawZ(inst) {
   // however it is drawn elsewhere.
   //
   const water = inst.water
-  if (inst.lakeZ != null && water && (inst.swimming || inst.segments.some(seg => seg.x > water.x1 && seg.x < water.x2))) {
+  inst.overLake = Boolean(water) && (inst.swimming || inst.segments.some(seg => seg.x > water.x1 && seg.x < water.x2))
+  if (inst.lakeZ != null && inst.overLake) {
     inst.obj.z !== inst.lakeZ && (inst.obj.z = inst.lakeZ)
     return
   }
@@ -526,6 +537,12 @@ function drawPredator(inst) {
   }
   drawTailShears(inst, batch, contour, horn)
   drawHead(inst, batch, contour, back, eye, pupil)
+  //
+  // Over the lake nothing of it shows under the water: its legs and belly are
+  // cut off at the surface there, so they never stick out over the lake's bed
+  // or the soil of its banks.
+  //
+  inst.overLake && PolyBatch.clampBelow(batch, inst.water.surfaceY + WATER_CUT_SINK, inst.water.x1, inst.water.x2)
   PolyBatch.flush(batch, k, 1)
 }
 
@@ -563,12 +580,38 @@ function drawLeg(inst, batch, limb, contour, leg) {
   // A folded shin can still cross the ground line. Keep the joint on it.
   //
   knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_RIM_W, contour)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, LEG_SHIN_RIM_W, contour)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W, leg)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, LEG_SHIN_W, leg)
-  PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, LEG_KNEE_R, contour)
-  PolyBatch.addDisc(batch, foot.x, foot.y, LEG_FOOT_R, contour)
+  //
+  // Over the lake, and over the slope of its bed on the left, whatever of the
+  // leg is under the water line is hidden by the lake.
+  //
+  const clipY = legWaterLineY(inst, limb.hipX)
+  const kneeEnd = cutAtY(limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, clipY)
+  if (!kneeEnd) return
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, kneeEnd.x, kneeEnd.y, LEG_THIGH_RIM_W, contour)
+  const footEnd = kneeEnd.cut ? null : cutAtY(knee.kneeX, knee.kneeY, foot.x, foot.y, clipY)
+  footEnd && PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, footEnd.x, footEnd.y, LEG_SHIN_RIM_W, contour)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, kneeEnd.x, kneeEnd.y, LEG_THIGH_W, leg)
+  footEnd && PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, footEnd.x, footEnd.y, LEG_SHIN_W, leg)
+  kneeEnd.cut || PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, LEG_KNEE_R, contour)
+  footEnd && !footEnd.cut && PolyBatch.addDisc(batch, foot.x, foot.y, LEG_FOOT_R, contour)
+}
+//
+// Y below which a leg at hipX is under water (Infinity away from the lake).
+//
+function legWaterLineY(inst, hipX) {
+  const water = inst.water
+  if (!water || hipX < water.x1 - LEG_WATER_PAD_PX || hipX > water.x2 + LEG_WATER_PAD_PX) return Infinity
+  return water.surfaceY
+}
+//
+// The end of the segment a→b kept above clipY: b itself, or the point where
+// it dips under (cut: true); null when a is already under.
+//
+function cutAtY(ax, ay, bx, by, clipY) {
+  if (ay > clipY) return null
+  if (by <= clipY) return { x: bx, y: by, cut: false }
+  const t = (clipY - ay) / (by - ay)
+  return { x: ax + (bx - ax) * t, y: clipY, cut: true }
 }
 
 function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {

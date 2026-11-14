@@ -23,6 +23,23 @@ export function create() {
 }
 
 /**
+ * Cuts the batch off below a line over a span of X: every vertex between x1
+ * and x2 that lies lower than maxY is lifted onto it, so whatever hangs
+ * under the line there collapses to nothing (e.g. a swimmer under the water).
+ * @param {Object} inst - Batch inst
+ * @param {number} maxY - The line (world Y)
+ * @param {number} x1 - Left end of the span
+ * @param {number} x2 - Right end of the span
+ */
+export function clampBelow(inst, maxY, x1, x2) {
+  const pts = inst.pts
+  for (let i = 0; i < inst.count; i++) {
+    const p = pts[i]
+    p.y > maxY && p.x > x1 && p.x < x2 && (p.y = maxY)
+  }
+}
+
+/**
  * Clears the batch for a new frame.
  * @param {Object} inst - Batch inst
  */

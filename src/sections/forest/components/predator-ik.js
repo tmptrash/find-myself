@@ -81,6 +81,7 @@ export function solveLeg(hipX, hipY, footX, footY, len1, len2, bendSign) {
  * @param {boolean} hurry - Charge / orient retarget
  */
 export function tickLegs(inst, dt, hurry) {
+  inst.footGroundCache?.clear()
   const dir = inst.dir
   const speed = Math.abs(inst.vx)
   inst.legs.forEach((leg, index) => {
@@ -181,9 +182,20 @@ export function footNow(inst, leg) {
  * @returns {number} Surface Y
  */
 export function footGround(inst, x) {
-  const base = inst.groundAt(x)
-  if (!inst.surfaceRay || inst.swimming) return base
-  return inst.surfaceRay(x, base - FOOT_RAY_UP, FOOT_RAY_DEPTH + FOOT_RAY_UP) ?? base
+  if (!inst.surfaceRay || inst.swimming) return inst.groundAt(x)
+  //
+  // The ray samples whole pixel columns, so one cast per column a frame is
+  // enough: the 32 legs ask for the same few columns many times over
+  // (stepping, swinging, drawing, the knee check).
+  //
+  const col = Math.round(x)
+  const cache = inst.footGroundCache ??= new Map()
+  const hit = cache.get(col)
+  if (hit !== undefined) return hit
+  const base = inst.groundAt(col)
+  const y = inst.surfaceRay(col, base - FOOT_RAY_UP, FOOT_RAY_DEPTH + FOOT_RAY_UP) ?? base
+  cache.set(col, y)
+  return y
 }
 
 // True while a neighbour (same side, next segment) or the opposite leg is mid-step

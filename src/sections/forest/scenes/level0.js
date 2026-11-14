@@ -389,6 +389,15 @@ const BG_PAR_TREE2_COLOR = 'forest0-bg-par-tree2-color'
 const BG_PAR_TREE1_COLOR = 'forest0-bg-par-tree1-color'
 const BG_STATIC_COLOR = 'forest0-bg-static-color-v14'
 //
+// The earth band carried on EDGE_EARTH_W px past the playfield's left side.
+// Only a film's camera (Valera on the island) looks out there, never past it:
+// the camera may pass the edge by up to EDGE_EARTH_W - EDGE_EARTH_CAM_SPARE.
+//
+const BG_EDGE_EARTH = 'forest0-bg-edge-earth'
+const EDGE_EARTH_W = 256
+const EDGE_EARTH_CAM_SPARE = 16
+const EDGE_EARTH_GRAIN_SEED = 9102
+//
 // Cropped parallax sprites only bake the world-Y band they actually paint —
 // a depth row reaches from its own crown band down to the ground line rather
 // than sharing a full 1080px-tall forest canvas. Underground earth (below
@@ -1485,6 +1494,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       playY: TOP_MARGIN,
       playW: GAME_W,
       playH: GAME_H,
+      filmPassLeft: EDGE_EARTH_W - EDGE_EARTH_CAM_SPARE,
       rest: {
         restY: HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED,
         riseY: branchPlatBundle.startBranch.y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
@@ -2816,7 +2826,35 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   k.loadSprite(BG_STATIC_COLOR, staticColor)
   staticColor.width = 0
   staticColor.height = 0
+  bakeEdgeEarth(k)
   onStep && await onStep(4, 4)
+}
+//
+// Bakes the earth band's strip left of the playfield (see EDGE_EARTH_W) with
+// the band's own painters in world coordinates, so its strata seams run on
+// from the band's without a join; no underground decor, the same grade.
+//
+function bakeEdgeEarth(k) {
+  const x0 = LEFT_MARGIN - EDGE_EARTH_W
+  const canvas = document.createElement('canvas')
+  canvas.width = EDGE_EARTH_W
+  canvas.height = PAR_STATIC_WORLD_H
+  const ctx = canvas.getContext('2d')
+  ctx.translate(-x0, -PAR_STATIC_WORLD_Y)
+  const layers = groundEarthLayersColor()
+  paintLayeredEarthBand(ctx, layers, x0, FLOOR_Y, EDGE_EARTH_W, CAVE_BAND_H)
+  paintTopsoilOrganicTexture(ctx, layers, x0, FLOOR_Y, EDGE_EARTH_W, CAVE_BAND_H)
+  const topRgb = layers[0]?.rgb
+  paintUndergroundDepthVignette(ctx, x0, FLOOR_Y, EDGE_EARTH_W, CAVE_BAND_H)
+  topRgb && paintFlatEarthGroundSeal(ctx, topRgb, x0, FLOOR_Y, EDGE_EARTH_W)
+  applyForestLayerGradeToCanvas(canvas, {
+    ...FOREST_LAYER_GRADE.material,
+    grain: EARTH_STATIC_BAKE_GRAIN,
+    grainBlockSize: EARTH_STATIC_BAKE_GRAIN_BLOCK_PX
+  }, EDGE_EARTH_GRAIN_SEED)
+  k.loadSprite(BG_EDGE_EARTH, canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Paints the sky in one even colour (the top of the level's sky ramp): the
@@ -4823,6 +4861,7 @@ function onDrawWorld(inst) {
   drawForestParallaxBackdropOffscreen(inst)
   drawParallaxLayer(inst, PAR_LAYER_NEAR)
   drawWorldSpriteClipped(k, inst, inst.earth ?? FOREST_PLAIN_EARTH, 1)
+  drawEdgeEarth(inst)
   drawForestPitCutoutBelowFloorFill(inst, k)
   drawForestPitMouthEarthGapFill(inst, k)
   //
@@ -4830,6 +4869,15 @@ function onDrawWorld(inst) {
   // pixel-snapped cave bake avoids a shimmering left wall while the hero jumps.
   //
   inst._forestPitDrawInOnDrawWorld && inst.pit && drawForestPitPass(inst)
+}
+//
+// The earth strip left of the playfield, only while the view reaches there.
+//
+function drawEdgeEarth(inst) {
+  const k = inst.k
+  if (visibleWorldXRange(inst, 0).left >= LEFT_MARGIN || !k.getSprite(BG_EDGE_EARTH)) return
+  const pos = inst._edgeEarthPos ??= k.vec2(LEFT_MARGIN - EDGE_EARTH_W, PAR_STATIC_WORLD_Y)
+  k.drawSprite({ sprite: BG_EDGE_EARTH, pos, anchor: 'topleft' })
 }
 function drawPlayfieldBottomCornerOverlay(inst) {
   const k = inst.k

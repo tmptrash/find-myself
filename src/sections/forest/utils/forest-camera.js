@@ -46,6 +46,7 @@ const LEAD_SOFT_MIN = 0.15
  * @param {number} cfg.playY - World Y of the playfield's top edge
  * @param {number} cfg.playW - Playfield width (world px, fixed)
  * @param {number} cfg.playH - Playfield height (world px, fixed)
+ * @param {number} [cfg.filmPassLeft=0] - How far (world px) a film's camera may pass the playfield's left edge (art is laid out there)
  * @param {{restY: number, riseY: number}} [cfg.rest] - Hero Y the camera keeps to and the hero Y
  *   above which it rises with him (none: it follows him everywhere)
  * @returns {Object} Camera instance
@@ -63,6 +64,7 @@ export function create(cfg) {
     viewH,
     minCamX,
     maxCamX: minCamX + playW - viewW,
+    filmPassLeft: cfg.filmPassLeft ?? 0,
     minCamY,
     maxCamY: minCamY + playH - viewH,
     camY: minCamY,
@@ -214,11 +216,12 @@ function placeCamera(inst, heroX, pixelAlignX, filmShare = 0) {
   const aimX = heroX + lead
   const clampedX = Math.max(inst.minCamX, Math.min(inst.maxCamX, aimX))
   //
-  // A film's subject near the playfield's side (Valera on the start branch
-  // or the island) is still centred: the camera may pass the edge as far as
-  // the film has taken over.
+  // A film's subject near the playfield's left side (Valera on the island)
+  // is still centred: as far as the film has taken over, the camera may pass
+  // that edge by up to filmPassLeft, where the level's art carries on.
   //
-  const desiredCamX = clampedX + (aimX - clampedX) * filmShare
+  const filmX = Math.max(inst.minCamX - inst.filmPassLeft, Math.min(inst.maxCamX, aimX))
+  const desiredCamX = clampedX + (filmX - clampedX) * filmShare
   const camX = pixelAlignX && desiredCamX === aimX
     ? alignCamXForSubject(k, heroX, desiredCamX)
     : alignCamToGrid(k.width(), desiredCamX)

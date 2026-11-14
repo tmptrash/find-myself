@@ -166,17 +166,17 @@ export function create(cfg) {
  * it into fireflies when he moves, and drifts the fireflies.
  * @param {Object} inst - Bubble inst
  * @param {number} dt - Seconds since the last frame
- * @param {boolean} allowed - False keeps a new bubble from showing
+ * @param {boolean} allowed - False keeps a new bubble from showing, bursts one that shows and keeps the hero awake (his eyes stay open)
  * @param {boolean} [mayDoze=true] - False keeps the hero awake (his doze timer does not run)
  */
 export function onUpdate(inst, dt, allowed, mayDoze = true) {
   inst.shows >= SHOWS_MAX && !inst.visible && tickAwake(inst, dt)
-  Hero.setDozes(inst.heroInst, inst.visible || (mayDoze && inst.shows < SHOWS_MAX))
+  Hero.setDozes(inst.heroInst, allowed && (inst.visible || (mayDoze && inst.shows < SHOWS_MAX)))
   const doze = Hero.dozeShare(inst.heroInst)
   doze <= 0 && (inst.dreamedThisDoze = false)
   inst.shutT = doze >= 1 ? inst.shutT + dt : 0
   if (inst.visible) {
-    doze < 1 ? burst(inst) : swell(inst, dt)
+    doze < 1 || !allowed ? burst(inst) : swell(inst, dt)
   } else if (allowed && inst.sprite && inst.shutT >= SHOW_DELAY_SEC && !inst.dreamedThisDoze && inst.shows < SHOWS_MAX) {
     startDream(inst)
   }

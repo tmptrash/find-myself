@@ -298,7 +298,16 @@ const PREDATOR_LEFT_TREE_FRONT_Z = BUG_HOLE_FRONT_Z
 // current layer and the rider just over the stick, wherever the centipede
 // switches layer (in front of the left tree or behind the hero's plane).
 //
-const PREDATOR_STICK_DZ = 0.01
+const PREDATOR_STICK_DZ = 0
+//
+// The hero's dream bubble is not drawn while he touches a big tree's trunk
+// (his body reaches DREAM_HERO_HALF_W either side of his middle), nor when it
+// would not fit the screen: it reaches this far right of him (and up, left).
+//
+const DREAM_HERO_HALF_W = 15
+const DREAM_BUBBLE_REACH_RIGHT = 206
+const DREAM_BUBBLE_REACH_LEFT = 0
+const DREAM_BUBBLE_REACH_UP = 240
 const PREDATOR_RIDER_DZ = 0.02
 //
 // The start branch sits ~205 px above the floor — a plain jump tops out just
@@ -1530,6 +1539,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       sfx: sound,
       water: { x1: lakeX1, x2: lakeX2, surfaceY: WATER_SURFACE_Y },
       lakeBehindZ: PREDATOR_LAKE_BEHIND_Z,
+      feastZ: FOREST_FRUIT_Z + 0.1,
       //
       // A left flight swims for the lake's far end; the eye flower's island
       // stops it first, the snout right against the island's slope.
@@ -6110,6 +6120,7 @@ function onUpdate(inst) {
   inst.predator && (inst.predator.homeX = inst.trampState?.x ?? inst.predator.homeX)
   inst.budCine && BudCine.onUpdate(inst.budCine, k.dt(), !inst.deathHandled && !inst.drowning)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
+  syncPredatorStickDrawOrder(inst)
   inst.spikyTomatoes && inst.predator && !inst.predator.obj?.hidden && SpikyTomato.onPredatorPass(inst.spikyTomatoes, inst.predator.x)
   tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
@@ -6166,7 +6177,7 @@ function onUpdate(inst) {
   // No dozing off while a hint (the controls one at the start) is up or
   // still to come: the dream's timer starts once it is gone.
   //
-  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), !isHeroOnStartBranch(inst, char), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
+  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), !isHeroOnStartBranch(inst, char) && !isHeroTouchingBigTreeTrunk(inst, heroX) && isDreamBubbleOnScreen(k, inst, char), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
   const grounded = char.isGrounded?.() ?? false
@@ -6609,6 +6620,36 @@ function tickForestStartBranchFatigue(inst, char, grounded, justLanded) {
     return
   }
   releaseForestAnchorFruit(inst) && (inst._startBranchLandingCount = 0)
+}
+//
+// True when the hero touches a big tree's trunk — the left one (its trunk is
+// TRUNK_EXCLUDE_HALF either side of its middle) or the right, shore one (its
+// own trunk width): his body (DREAM_HERO_HALF_W either side of his middle)
+// overlaps the trunk's span. A trunk stands the whole height he can be at.
+//
+function isHeroTouchingBigTreeTrunk(inst, heroX) {
+  const trunks = [
+    { x: inst.treeX ?? TREE_X, half: inst.trunkExcludeHalf ?? TRUNK_EXCLUDE_HALF },
+    inst.shoreTree && { x: inst.shoreTree.x, half: ShoreTree.trunkHalfWidth(inst.shoreTree) }
+  ]
+  return trunks.some(trunk => trunk && Math.abs(heroX - trunk.x) < trunk.half + DREAM_HERO_HALF_W)
+}
+//
+// True when the whole dream bubble over the hero's head fits in what the
+// camera shows: DREAM_BUBBLE_REACH_RIGHT px right of him, DREAM_BUBBLE_REACH_UP
+// above him (DREAM_BUBBLE_REACH_LEFT left of him), each inside the view.
+//
+function isDreamBubbleOnScreen(k, inst, char) {
+  const cam = inst.camera
+  if (!cam) return true
+  const zoom = cam.zoom || 1
+  const halfW = cam.viewW / (2 * zoom)
+  const halfH = cam.viewH / (2 * zoom)
+  const camPos = k.camPos()
+  const { x, y } = char.pos
+  return x - DREAM_BUBBLE_REACH_LEFT >= camPos.x - halfW &&
+    x + DREAM_BUBBLE_REACH_RIGHT <= camPos.x + halfW &&
+    y - DREAM_BUBBLE_REACH_UP >= camPos.y - halfH
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
@@ -7556,7 +7597,9 @@ function syncHeroTrampDrawOrder(inst) {
   ch.z !== targetZ && (ch.z = targetZ)
 }
 //
-// The stick on the centipede's back keeps to the centipede's current layer.
+// The stick on the centipede's back has exactly the centipede's layer (it is
+// made after it, so it draws over it), re-synced right after the centipede moves
+// so it never lags a frame behind a layer change.
 //
 function syncPredatorStickDrawOrder(inst) {
   const layer = inst.predatorStickLayer

@@ -238,7 +238,6 @@ export function tickMove(inst, dt, hero) {
  * @param {number} dir - Flight direction, -1 left, 1 right
  */
 export function startFleeMove(inst, dir) {
-  if (rideFacingLocked(inst)) return
   const left = dir < 0
   inst.fleePath = left && inst.water
     ? [

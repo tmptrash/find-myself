@@ -37,6 +37,12 @@ const STALK_Y = EYE_VIEW_H / 2
 const STALK_SEGMENT_LEN = 30
 const STALK_SEGMENT_W = 7
 //
+// The stalk itself is drawn through a point every STALK_PATH_STEP px (the spike
+// joints stay every STALK_SEGMENT_LEN px), so the wave bends it smoothly
+// instead of as a chain of straight, angled strips.
+//
+const STALK_PATH_STEP = 2
+//
 // One burgundy outline width per side for the stalk, spikes, balls and eye.
 //
 const LOADER_OUTLINE_W = 0.9
@@ -492,7 +498,7 @@ function drawLoaderEye(dt) {
   const tip = points[points.length - 1]
   const spikeTips = joints.map((p, i) => spikeTipFor(p, i))
   const spikePaths = joints.map((p, i) => linePath(p, spikeTips[i])).join(' ')
-  const stalkPath = pointsToPath(points)
+  const stalkPath = pointsToPath(buildSmoothStalkPoints(STALK_ROOT_X + len))
   eye.stalkContour.setAttribute('d', stalkPath)
   eye.spikesContour.setAttribute('d', spikePaths)
   eye.knotsContour.setAttribute('d', loaderSpikeBallPath(spikeTips, SPIKE_BALL_R + LOADER_OUTLINE_W))
@@ -512,6 +518,17 @@ function drawLoaderEye(dt) {
 function buildStalkPoints(tipX) {
   const points = []
   for (let x = STALK_ROOT_X; x < tipX; x += STALK_SEGMENT_LEN) {
+    points.push({ x, y: stalkYAt(x) })
+  }
+  points.push({ x: tipX, y: stalkYAt(tipX) })
+  return points
+}
+//
+// The stalk's own path: a point every STALK_PATH_STEP px, plus the tip.
+//
+function buildSmoothStalkPoints(tipX) {
+  const points = []
+  for (let x = STALK_ROOT_X; x < tipX; x += STALK_PATH_STEP) {
     points.push({ x, y: stalkYAt(x) })
   }
   points.push({ x: tipX, y: stalkYAt(tipX) })

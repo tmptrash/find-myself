@@ -110,6 +110,15 @@ export async function loadForestShoreTree() {
 }
 
 /**
+ * Half the width of the shore tree's trunk at its foot, in world px.
+ * @param {Object} inst - Shore tree inst
+ * @returns {number}
+ */
+export function trunkHalfWidth(inst) {
+  return FOOT_HALF_W * inst.scale
+}
+
+/**
  * Creates the shore tree: its scale (branch top on the landing line), its
  * landing branch for the level and its sprites (baked once per live k;
  * nothing is drawn until loadForestShoreTree() has resolved).

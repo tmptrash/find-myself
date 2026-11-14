@@ -211,6 +211,7 @@ const SWIM_SHORE_RAMP_PX = 56
  * @param {number} [cfg.fleeLeftX] - Far-left swim target when fleeing left
  * @param {number} [cfg.homeX] - Roam-home X when the hero is off the ground line (the roam strip's right end)
  * @param {number} [cfg.roamLeftX] - Left end of the roam strip; set, the idle crawler walks random spots between it and homeX
+ * @param {number} [cfg.feastZ] - Draw z while it goes for or eats an apple: in front of the fruit
  * @param {number} [cfg.lakeBehindZ] - Draw z while any body part is over the lake (or it swims): behind the water, its bed, its stones and rim
  * @param {{x1: number, x2: number, z: number}} [cfg.frontSpan] - While any body part is within x1..x2 it draws at z (in front of a big prop there)
  * @returns {Object} Predator inst
@@ -233,6 +234,7 @@ export function create(cfg) {
     roamGoalX: null,
     frontSpan: cfg.frontSpan ?? null,
     lakeZ: cfg.lakeBehindZ ?? null,
+    feastZ: cfg.feastZ ?? null,
     swimming: false,
     fleePath: null,
     hero: cfg.hero,
@@ -328,7 +330,7 @@ export function update(inst, dt) {
  * @returns {boolean}
  */
 export function isTouchingHero(inst, heroX, heroFootY) {
-  if (!inst || inst.state === 'coast' || inst.state === 'flee' || inst.obj?.hidden) return false
+  if (!inst || inst.state === 'coast' || inst.obj?.hidden) return false
   return overlapsHeroHitbox(inst, heroX, heroFootY)
 }
 
@@ -455,6 +457,13 @@ function syncDrawZ(inst) {
   const water = inst.water
   if (inst.lakeZ != null && water && (inst.swimming || inst.segments.some(seg => seg.x > water.x1 && seg.x < water.x2))) {
     inst.obj.z !== inst.lakeZ && (inst.obj.z = inst.lakeZ)
+    return
+  }
+  //
+  // Going for or eating an apple, it is in front of the fruit.
+  //
+  if (inst.feastZ != null && inst.state === 'feast') {
+    inst.obj.z !== inst.feastZ && (inst.obj.z = inst.feastZ)
     return
   }
   const span = inst.frontSpan

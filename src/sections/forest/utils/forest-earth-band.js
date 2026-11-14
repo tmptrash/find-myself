@@ -64,23 +64,8 @@ export function groundEarthLayersColor() {
 export function paintLayeredEarthBand(ctx, layers, x0, y0, width, height) {
   let cumFrac = 0
   for (let i = 0; i < layers.length; i++) {
-    const nextFrac = i < layers.length - 1
-      ? cumFrac + layers[i].frac
-      : 1
-    paintWavyBoundedEarthLayer(
-      ctx,
-      layers[i].rgb,
-      layers[i].shade,
-      x0,
-      width,
-      y0,
-      height,
-      cumFrac,
-      nextFrac,
-      i,
-      i < layers.length - 1 ? i + 1 : -1
-    )
-    cumFrac = nextFrac
+    paintWavyBoundedEarthLayer(ctx, layers[i].rgb, layers[i].shade, x0, width, y0, height, cumFrac, i)
+    cumFrac += layers[i].frac
   }
 }
 //
@@ -117,9 +102,13 @@ function groundLayerBoundaryY(x, y0, height, cumFrac, layerIndex) {
   return y0 + height * cumFrac + groundLayerInteriorBoundaryWave(x, layerIndex)
 }
 //
-// Fills one soil stratum between two wavy horizontal curves (top + bottom).
+// Fills one soil stratum from its wavy top curve down to the band's flat
+// bottom; the next stratum is painted over it from its own top curve. Two
+// strata that only met along a shared curve would each antialias that edge,
+// leaving it half see-through: the backdrop behind the band then showed
+// through as a light contour along every seam while the camera moved.
 //
-function paintWavyBoundedEarthLayer(ctx, rgb, shade, x0, width, y0, height, topFrac, bottomFrac, topLayerIndex, bottomLayerIndex) {
+function paintWavyBoundedEarthLayer(ctx, rgb, shade, x0, width, y0, height, topFrac, topLayerIndex) {
   const steps = Math.max(2, Math.ceil(width / GROUND_LAYER_SAMPLE_PX))
   ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
   ctx.beginPath()
@@ -129,14 +118,8 @@ function paintWavyBoundedEarthLayer(ctx, rgb, shade, x0, width, y0, height, topF
     const y = groundLayerBoundaryY(x, y0, height, topFrac, topLayerIndex)
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
   }
-  for (let i = steps; i >= 0; i--) {
-    const t = i / steps
-    const x = x0 + t * width
-    const y = bottomLayerIndex < 0
-      ? y0 + height
-      : groundLayerBoundaryY(x, y0, height, bottomFrac, bottomLayerIndex)
-    ctx.lineTo(x, y)
-  }
+  ctx.lineTo(x0 + width, y0 + height)
+  ctx.lineTo(x0, y0 + height)
   ctx.closePath()
   ctx.fill()
   if (!shade) return

@@ -245,6 +245,7 @@ const pictureByK = new WeakMap()
  * @param {number} [cfg.scale=1] - Drawn size (a scene painted smaller than the level); the bud lives in its own space, its stops, exit and hero given there (screen / scale)
  * @param {number} [cfg.startStop=0] - Stop it starts at
  * @param {Function} cfg.getHeroPos - () => {x, y} of the hero's middle, or null
+ * @param {Function} [cfg.getEarPos] - () => {x, y} the whirr is heard from (defaults to getHeroPos): a hero the bud must not notice is still the one who hears it
  * @param {Function} [cfg.isVisible] - () => boolean; hidden and still while false
  * @param {Object} [cfg.sound] - Sound instance for its propeller's whirr
  * @param {number} [cfg.humFloor=0] - Least loudness (0..1) of the whirr however far the hero is (a backdrop where no hero walks by)
@@ -273,6 +274,7 @@ export function create(cfg) {
     rest,
     stop: startStop,
     getHeroPos,
+    getEarPos: cfg.getEarPos ?? getHeroPos,
     isVisible,
     sound: cfg.sound,
     humFloor: cfg.humFloor ?? 0,
@@ -408,7 +410,7 @@ function onUpdate(inst) {
   updateFacing(inst, hero)
   updateSleep(inst, dt, hero)
   updateEyes(inst, dt, hero)
-  updateHum(inst, hero)
+  updateHum(inst, inst.getEarPos())
 }
 function tickState(inst, dt, hero) {
   switch (inst.state) {
@@ -748,13 +750,13 @@ function updateFacing(inst, hero) {
   Math.abs(hero.x - inst.x) > FACE_HERO_DEAD && (inst.facing = Math.sign(hero.x - inst.x))
 }
 //
-// Whirr while the propeller turns, louder the nearer the hero (never under
+// Whirr while the propeller turns, louder the nearer the ear (never under
 // humFloor).
 //
-function updateHum(inst, hero) {
+function updateHum(inst, ear) {
   if (!inst.sound) return
   const spinning = inst.spin || inst.frame !== 0
-  const near = Math.max(inst.humFloor, hero ? 1 - heroDistance(inst, hero) / HUM_HEAR_REACH : 0)
+  const near = Math.max(inst.humFloor, ear ? 1 - heroDistance(inst, ear) / HUM_HEAR_REACH : 0)
   const speed = airborne(inst) ? Math.hypot(inst.prop.vx, inst.prop.vy) : 0
   Sound.setPropellerHum(inst.sound, spinning && inst.isVisible() ? near * near : 0, 1 + speed * HUM_RATE_PER_V)
 }

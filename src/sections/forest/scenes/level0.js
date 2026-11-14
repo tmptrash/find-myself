@@ -310,6 +310,12 @@ const DREAM_BUBBLE_REACH_LEFT = 0
 const DREAM_BUBBLE_REACH_UP = 240
 const PREDATOR_RIDER_DZ = 0.02
 //
+// A trampoline mushroom within this many px (past its cap's half width) of a
+// centipede body part draws TRAMP_UNDER_PREDATOR_DZ under the centipede.
+//
+const TRAMP_PREDATOR_REACH = 40
+const TRAMP_UNDER_PREDATOR_DZ = 0.05
+//
 // The start branch sits ~205 px above the floor — a plain jump tops out just
 // over 150 px at the feet, so it is reachable only via the left mushroom.
 //
@@ -4021,7 +4027,7 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     : gateBranchTramp
       ? !isBranchTrampolineVisible(zones)
       : !isRightTrampolineVisible(zones)
-  return { state, drawLayer, colliderHome, gateBranchTramp, pitCaveTramp }
+  return { state, drawLayer, colliderHome, gateBranchTramp, pitCaveTramp, homeZ: drawLayer.z }
 }
 //
 // The mushroom picture standing on its foot, squashed down while the
@@ -6036,9 +6042,10 @@ function updateForestCamera(inst) {
   // While Valera flies the camera leaves the hero for the bud (see forest-bud-cine.js).
   //
   const filmView = inst.budCineView ??= { x: 0, y: 0 }
-  const filmed = BudCine.focusPoint(inst.budCine, followX, ch.pos.y, filmView) > 0
+  const filmShare = BudCine.focusPoint(inst.budCine, followX, ch.pos.y, filmView)
+  const filmed = filmShare > 0
   const pixelAlignCamX = !ridingStick && !inPitCave && grounded && !filmed
-  ForestCamera.followHero(inst.camera, filmView.x, filmView.y, pixelAlignCamX, inPitCave || filmed)
+  ForestCamera.followHero(inst.camera, filmView.x, filmView.y, pixelAlignCamX, inPitCave || filmed, Math.min(1, filmShare))
   !inst.heroInst?.isSubmerging && !inPitCave && !ridingStick && !filmed &&
     ForestCamera.snapHeroScreenY(inst.k, inst.heroInst, inst.k.camPos().y)
 }
@@ -6125,6 +6132,7 @@ function onUpdate(inst) {
   inst.budCine && BudCine.onUpdate(inst.budCine, k.dt(), !inst.deathHandled && !inst.drowning)
   inst.predator && !inst.predator.obj?.hidden && Predator.update(inst.predator, k.dt())
   syncPredatorStickDrawOrder(inst)
+  syncTrampsBehindPredator(inst)
   inst.spikyTomatoes && inst.predator && !inst.predator.obj?.hidden && SpikyTomato.onPredatorPass(inst.spikyTomatoes, inst.predator.x)
   tickForestGrass(inst, k.dt())
   inst.shoreFallTwigs && HorizFallTwig.onUpdate(
@@ -6512,6 +6520,7 @@ function createForestPropellerBud(inst) {
     exit: { x: WORLD_W + PROPELLER_BUD_EXIT_PAST, y: FLOOR_Y - PROPELLER_BUD_EXIT_RISE },
     startStop: inst.propellerBudSavedStop,
     getHeroPos: () => isForestHeroUnseen(inst) ? null : inst.heroInst?.character?.pos ?? null,
+    getEarPos: () => inst.heroInst?.character?.pos ?? null,
     isVisible: () => isRightTrampolineVisible(inst.zones),
     sound: inst.sound,
     z: PROPELLER_BUD_Z,
@@ -7566,6 +7575,7 @@ function syncForestBranchJumpReady(inst, char, grounded) {
 //
 function syncHeroTrampDrawOrder(inst) {
   syncPredatorStickDrawOrder(inst)
+  syncTrampsBehindPredator(inst)
   const ch = inst.heroInst?.character
   if (!ch) return
   if (inst.drowning) {
@@ -7606,6 +7616,27 @@ function syncHeroTrampDrawOrder(inst) {
     isHeroInsideForestPitCave(inst, ch.pos.x, ch.pos.y, footY) &&
     (targetZ = CFG.visual.zIndex.player + 24)
   ch.z !== targetZ && (ch.z = targetZ)
+}
+//
+// A trampoline mushroom the centipede is at (any body part within
+// TRAMP_PREDATOR_REACH of its cap) draws just under the centipede's layer,
+// whatever layer that is (feasting it rises over the fruit, and drops back
+// once the feast is broken off): the mushroom is always behind it. Away from
+// it the mushroom keeps its own layer.
+//
+function syncTrampsBehindPredator(inst) {
+  const pred = inst.predator
+  const predatorZ = pred && !pred.obj?.hidden ? pred.obj?.z : undefined
+  syncTrampBehindPredator(inst.trampBundle, pred, predatorZ)
+  syncTrampBehindPredator(inst.branchTrampBundle, pred, predatorZ)
+}
+function syncTrampBehindPredator(bundle, pred, predatorZ) {
+  if (!bundle) return
+  const reach = TRAMP_CAP_W / 2 + TRAMP_PREDATOR_REACH
+  const x = bundle.state.x
+  const near = predatorZ !== undefined && pred.segments.some(seg => Math.abs(seg.x - x) < reach)
+  const z = near ? Math.min(bundle.homeZ, predatorZ - TRAMP_UNDER_PREDATOR_DZ) : bundle.homeZ
+  bundle.drawLayer.z !== z && (bundle.drawLayer.z = z)
 }
 //
 // The stick on the centipede's back has exactly the centipede's layer (it is

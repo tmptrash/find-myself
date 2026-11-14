@@ -350,6 +350,7 @@ export function create(cfg) {
     peeked: false,
     peek: { phase: PEEK_PHASE.LOOK, left: 0 },
     wary: null,
+    bombCowerLeft: 0,
     crawlerDist: null,
     stateLeft: 0,
     dark: PARAMS.tunnelBugDark,
@@ -496,10 +497,12 @@ export function onHeroLanded(inst, heroX) {
 }
 
 /**
- * The bomb it fears (the one nearest its burrow) burst: out in the open it
- * jerks towards the burrow and runs in (an apple in its mouth goes with
- * it); either way (in the tunnel too) it stays in a little while
- * (bombHideMin..bombHideMax).
+ * The bomb it fears (the one nearest its burrow) burst. Out in the open,
+ * where it keeps watch, it flinches, presses itself to the ground and
+ * freezes for bombCowerMin..bombCowerMax s (a crawler coming meanwhile is
+ * met as always: see checkCrawler), then goes on with what it was doing.
+ * Carrying an apple home it jerks towards the burrow and runs in; in the
+ * tunnel it stays in a little while (bombHideMin..bombHideMax).
  * Already on its way in or out of the burrow, it carries on.
  * @param {Object|null} inst - Bug inst
  */
@@ -510,6 +513,10 @@ export function onBombBurst(inst) {
     inst.hideLeft = Math.max(inst.hideLeft, hide)
     inst.fled = true
     inst.state === STATES.PEEK && (inst.peek.phase = PEEK_PHASE.BACK)
+    return
+  }
+  if (WATCHFUL.has(inst.state)) {
+    cower(inst)
     return
   }
   !inst.carrying && inst.fruit && releaseApple(inst)
@@ -544,7 +551,7 @@ function onUpdate(inst) {
   checkCrawler(inst, dt)
 }
 function updateBehaviour(inst, dt) {
-  if (inst.wary && WATCHFUL.has(inst.state)) return tickWary(inst)
+  if ((inst.wary || inst.bombCowerLeft > 0) && WATCHFUL.has(inst.state)) return tickWary(inst, dt)
   TUNNEL_ALERT.has(inst.state) && !inst.rushingOut && findApple(inst) && rushOutOfTunnel(inst)
   switch (inst.state) {
     case STATES.REST: return tickRest(inst)
@@ -1237,6 +1244,7 @@ function nearShell(inst, water) {
 function checkCrawler(inst, dt) {
   if (!WATCHFUL.has(inst.state)) {
     inst.wary = null
+    inst.bombCowerLeft = 0
     inst.crawlerDist = null
     return
   }
@@ -1259,6 +1267,7 @@ function fleeFromCrawler(inst) {
   inst.fruit && releaseApple(inst)
   retractTongue(inst)
   inst.wary = null
+  inst.bombCowerLeft = 0
   inst.headTarget = 0
   inst.fled = true
   inst.nextHide = randomIn(PARAMS.hideMin, PARAMS.hideMax)
@@ -1268,16 +1277,31 @@ function fleeFromCrawler(inst) {
 }
 //
 // Stands still, its tongue in, pressed to the ground when the crawler is
-// closer.
+// closer or a bomb has just burst. When the bomb's scare is over (and no
+// crawler holds it) it takes a new pose and goes on.
 //
-function tickWary(inst) {
+function tickWary(inst, dt) {
+  const cowering = inst.bombCowerLeft > 0
+  inst.bombCowerLeft = Math.max(0, inst.bombCowerLeft - dt)
+  cowering && inst.bombCowerLeft === 0 && !inst.wary && newPose(inst)
   inst.vx = 0
   inst.dash.active = false
   inst.dash.pauseLeft = 0
   retractTongue(inst)
-  inst.liftTarget = PARAMS.bodyLift - (inst.wary === WARY.CROUCH ? PARAMS.crouchDrop : 0)
+  inst.liftTarget = PARAMS.bodyLift - (inst.wary === WARY.CROUCH || inst.bombCowerLeft > 0 ? PARAMS.crouchDrop : 0)
   inst.pitchTarget = 0
   inst.headTarget = 0
+}
+//
+// A bomb burst near it out in the open: a flinch, then it crouches and
+// freezes (tickWary) for a while.
+//
+function cower(inst) {
+  inst.bombCowerLeft = randomIn(PARAMS.bombCowerMin, PARAMS.bombCowerMax)
+  inst.hop = STARTLE_HOP
+  inst.dash.active = false
+  inst.dash.pauseLeft = 0
+  retractTongue(inst)
 }
 //
 // Whether a world x lies in front of the bug (the way it faces).

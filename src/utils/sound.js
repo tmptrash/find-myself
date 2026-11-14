@@ -86,17 +86,19 @@ const FLOWER_SQUEEZE_TONE_START = 170
 const FLOWER_SQUEEZE_TONE_END = 70
 const FLOWER_SQUEEZE_TONE_GAIN = 0.16
 //
-// A trampoline mushroom snapping back wide after an idle squeeze: a soft
-// rubbery "plop" (a sine rising TRAMP_SNAP_TONE_START→END Hz) over a short
-// muffled tick of noise, both quiet.
+// A trampoline mushroom snapping back wide after an idle squeeze: a soft,
+// low rubbery "plop" (a sine gliding TRAMP_SNAP_TONE_START→END Hz) over a
+// barely heard muffled puff of noise. Both swell in over TRAMP_SNAP_ATTACK_SEC
+// so the plop has no click at its start.
 //
-const TRAMP_SNAP_SEC = 0.14
-const TRAMP_SNAP_TONE_START = 120
-const TRAMP_SNAP_TONE_END = 260
-const TRAMP_SNAP_TONE_GAIN = 0.1
-const TRAMP_SNAP_TICK_SEC = 0.05
-const TRAMP_SNAP_TICK_LP = 900
-const TRAMP_SNAP_TICK_GAIN = 0.05
+const TRAMP_SNAP_SEC = 0.18
+const TRAMP_SNAP_ATTACK_SEC = 0.03
+const TRAMP_SNAP_TONE_START = 95
+const TRAMP_SNAP_TONE_END = 170
+const TRAMP_SNAP_TONE_GAIN = 0.04
+const TRAMP_SNAP_TICK_SEC = 0.07
+const TRAMP_SNAP_TICK_LP = 450
+const TRAMP_SNAP_TICK_GAIN = 0.012
 const FLOWER_GULP_SEC = 0.9
 const FLOWER_GULP_THUMP_START = 110
 const FLOWER_GULP_THUMP_END = 28
@@ -1568,7 +1570,7 @@ export function playTrampMushroomSnap(instance) {
   tone.type = 'sine'
   tone.frequency.setValueAtTime(TRAMP_SNAP_TONE_START, now)
   tone.frequency.exponentialRampToValueAtTime(TRAMP_SNAP_TONE_END, end)
-  const toneEnv = createFlowerEnvelope(ctx, now, TRAMP_SNAP_TONE_GAIN, TRAMP_SNAP_SEC)
+  const toneEnv = createSoftEnvelope(ctx, now, TRAMP_SNAP_TONE_GAIN, TRAMP_SNAP_SEC)
   tone.connect(toneEnv)
   toneEnv.connect(ctx.destination)
   const tick = ctx.createBufferSource()
@@ -1576,7 +1578,7 @@ export function playTrampMushroomSnap(instance) {
   const lp = ctx.createBiquadFilter()
   lp.type = 'lowpass'
   lp.frequency.value = TRAMP_SNAP_TICK_LP
-  const tickEnv = createFlowerEnvelope(ctx, now, TRAMP_SNAP_TICK_GAIN, TRAMP_SNAP_TICK_SEC)
+  const tickEnv = createSoftEnvelope(ctx, now, TRAMP_SNAP_TICK_GAIN, TRAMP_SNAP_TICK_SEC)
   tick.connect(lp)
   lp.connect(tickEnv)
   tickEnv.connect(ctx.destination)
@@ -1835,6 +1837,17 @@ function createFlowerEnvelope(ctx, at, peak, duration) {
   const env = ctx.createGain()
   env.gain.setValueAtTime(FLOWER_SFX_FLOOR, at)
   env.gain.linearRampToValueAtTime(peak, at + FLOWER_SFX_ATTACK_SEC)
+  env.gain.exponentialRampToValueAtTime(FLOWER_SFX_FLOOR, at + duration)
+  return env
+}
+//
+// The trampoline plop's envelope: like createFlowerEnvelope, but swelling in
+// over TRAMP_SNAP_ATTACK_SEC so the start is soft.
+//
+function createSoftEnvelope(ctx, at, peak, duration) {
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(FLOWER_SFX_FLOOR, at)
+  env.gain.linearRampToValueAtTime(peak, at + TRAMP_SNAP_ATTACK_SEC)
   env.gain.exponentialRampToValueAtTime(FLOWER_SFX_FLOOR, at + duration)
   return env
 }

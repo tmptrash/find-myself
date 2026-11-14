@@ -1,6 +1,14 @@
 import { getResizeRebootCount } from './window-resize.js'
-// URL flag that turns the readout on (e.g. /?scene=lesson-forest.0&perf=1)
+import { get, set } from './progress.js'
+//
+// URL flag that turns the readout on (e.g. /?scene=lesson-forest.0&perf=1).
+// A Home Screen app starts at the manifest's start_url and keeps its own
+// storage, so there the readout is toggled by a tap with TOGGLE_TOUCHES
+// fingers instead and the choice is remembered under PROGRESS_KEY.
+//
 const URL_FLAG = 'perf'
+const PROGRESS_KEY = 'perfReadout'
+const TOGGLE_TOUCHES = 3
 const STANDALONE_QUERY = '(display-mode: standalone), (display-mode: fullscreen)'
 const WINDOW_MS = 3000
 const REFRESH_MS = 500
@@ -10,25 +18,45 @@ const P95 = 0.95
 const STYLE = 'position:fixed;top:4px;right:4px;z-index:99999;background:#000a;color:#fff;font:11px monospace;padding:4px 6px;border-radius:4px;white-space:pre;pointer-events:none'
 
 /**
- * Debug readout (only with `?perf=1`): rAF frame time p50 / p95 over the last
+ * Debug readout (with `?perf=1`, or toggled by a three-finger tap): rAF frame time p50 / p95 over the last
  * seconds plus what the browser gives the page (window size, pixel ratio,
  * canvas buffer and CSS size, fullscreen), so a frame-rate difference between
  * window modes on a device can be traced to its cause. A DOM element outside
  * the canvas, so it costs no GPU time.
- * @returns {Object|null} Readout inst, null when the flag is absent
+ * @returns {Object} Readout inst
  */
 export function create() {
-  if (!new URLSearchParams(window.location.search).has(URL_FLAG)) return null
   const el = document.createElement('div')
   el.style.cssText = STYLE
-  document.body.appendChild(el)
-  const inst = { el, samples: [], lastT: 0, lastShow: 0 }
-  requestAnimationFrame(t => onFrame(inst, t))
+  const inst = { el, samples: [], lastT: 0, lastShow: 0, on: false }
+  window.addEventListener('touchstart', e => onTouchStart(inst, e), { capture: true, passive: true })
+  const startOn = new URLSearchParams(window.location.search).has(URL_FLAG) || get(PROGRESS_KEY, false)
+  startOn && turnOn(inst)
   return inst
+}
+
+// A tap with TOGGLE_TOUCHES fingers flips the readout and remembers it
+function onTouchStart(inst, e) {
+  if (e.touches.length !== TOGGLE_TOUCHES) return
+  inst.on ? turnOff(inst) : turnOn(inst)
+  set(PROGRESS_KEY, inst.on)
+}
+function turnOn(inst) {
+  if (inst.on) return
+  inst.on = true
+  inst.samples.length = 0
+  inst.lastT = 0
+  document.body.appendChild(inst.el)
+  requestAnimationFrame(t => onFrame(inst, t))
+}
+function turnOff(inst) {
+  inst.on = false
+  inst.el.remove()
 }
 
 // Samples one rAF delta, drops old ones and refreshes the text twice a second
 function onFrame(inst, t) {
+  if (!inst.on) return
   inst.lastT && inst.samples.push({ t, dt: t - inst.lastT })
   inst.lastT = t
   while (inst.samples.length && inst.samples[0].t < t - WINDOW_MS) inst.samples.shift()

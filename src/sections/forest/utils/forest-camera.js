@@ -14,6 +14,11 @@
 //
 const FOLLOW_Y_RATE = 8
 //
+// While a film aims the camera, it follows its point vertically this fast
+// (the film's own easing already smooths it).
+//
+const FILM_FOLLOW_Y_RATE = 30
+//
 // Look-ahead on a screen held upright (taller than wide): the camera leads
 // the running hero by LEAD_SHARE of the view's width in the way he runs, so
 // more of the level shows ahead of him and he sits toward the trailing edge.
@@ -139,10 +144,17 @@ export function updateShake(inst, dt) {
  * @param {boolean} [pixelAlignX=true] - Snap cam X so the hero outline stays crisp
  * @param {boolean} [freeY=false] - Follow him vertically everywhere (ignore the rest)
  */
-export function followHero(inst, heroX, heroY, pixelAlignX = true, freeY = false) {
-  const targetY = clampCamY(inst, followY(inst, heroY, freeY))
-  inst.camY += (targetY - inst.camY) * Math.min(1, inst.k.dt() * FOLLOW_Y_RATE)
-  placeCamera(inst, heroX, pixelAlignX)
+export function followHero(inst, heroX, heroY, pixelAlignX = true, freeY = false, filmShare = 0) {
+  //
+  // A film (Valera's flight) aims the camera at something else than the hero:
+  // as far as it has taken over (filmShare 0..1) the camera centres on that
+  // point — no upright look-ahead, and free to rise above the playfield's top
+  // (its sky band shows there) instead of keeping the hero's framing.
+  //
+  const clamped = clampCamY(inst, followY(inst, heroY, freeY))
+  const targetY = filmShare > 0 ? clamped + (Math.min(inst.maxCamY, heroY) - clamped) * filmShare : clamped
+  inst.camY += (targetY - inst.camY) * Math.min(1, inst.k.dt() * (filmShare > 0 ? FILM_FOLLOW_Y_RATE : FOLLOW_Y_RATE))
+  placeCamera(inst, heroX, pixelAlignX, filmShare)
 }
 
 /**
@@ -195,10 +207,18 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 // Sets the camera at the hero's X (clamped) and the eased camera Y, both on
 // the whole-pixel grid, plus the shake.
 //
-function placeCamera(inst, heroX, pixelAlignX) {
+function placeCamera(inst, heroX, pixelAlignX, filmShare = 0) {
   const k = inst.k
-  const aimX = heroX + updateLead(inst, heroX)
-  const desiredCamX = Math.max(inst.minCamX, Math.min(inst.maxCamX, aimX))
+  const lead = filmShare > 0 ? inst.leadX * (1 - filmShare) : updateLead(inst, heroX)
+  filmShare > 0 && (inst.lastHeroX = null)
+  const aimX = heroX + lead
+  const clampedX = Math.max(inst.minCamX, Math.min(inst.maxCamX, aimX))
+  //
+  // A film's subject near the playfield's side (Valera on the start branch
+  // or the island) is still centred: the camera may pass the edge as far as
+  // the film has taken over.
+  //
+  const desiredCamX = clampedX + (aimX - clampedX) * filmShare
   const camX = pixelAlignX && desiredCamX === aimX
     ? alignCamXForSubject(k, heroX, desiredCamX)
     : alignCamToGrid(k.width(), desiredCamX)

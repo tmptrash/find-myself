@@ -47,10 +47,12 @@ const CONTROL_BOTTOM_MARGIN = 36
 const CONTROLS_FULL_W = 570
 //
 // Held upright (taller than wide) the run arrows stand side by side at the
-// left, ARROW_PAIR_GAP_UPRIGHT apart, the jump button still at the right;
-// that layout needs CONTROLS_FULL_W_UPRIGHT. The arrows' hit areas reach only
-// halfway to each other there.
+// left, ARROW_PAIR_GAP_UPRIGHT apart and only ARROW_MARGIN_X_UPRIGHT in from
+// the screen's side, the jump button still at the right; that layout needs
+// CONTROLS_FULL_W_UPRIGHT. The arrows' hit areas reach only halfway to each
+// other there.
 //
+const ARROW_MARGIN_X_UPRIGHT = 8
 const ARROW_PAIR_GAP_UPRIGHT = 24
 const ARROW_CENTER_GAP_UPRIGHT = CIRCLE_RADIUS * 2 + ARROW_PAIR_GAP_UPRIGHT
 const CONTROLS_FULL_W_UPRIGHT = 500
@@ -177,7 +179,7 @@ export function create(k) {
   const centerGap = upright ? ARROW_CENTER_GAP_UPRIGHT : ARROW_CENTER_GAP
   const scale = Math.min(1, k.width() / (upright ? CONTROLS_FULL_W_UPRIGHT : CONTROLS_FULL_W))
   const centerY = k.height() - (CONTROL_BOTTOM_MARGIN + CIRCLE_RADIUS) * scale
-  const leftX = (ARROW_MARGIN_X + CIRCLE_RADIUS) * scale
+  const leftX = ((upright ? ARROW_MARGIN_X_UPRIGHT : ARROW_MARGIN_X) + CIRCLE_RADIUS) * scale
   const rightX = leftX + centerGap * scale
   const arrowHalfW = Math.min(HIT_HALF_WIDTH, centerGap / 2)
   const jumpX = k.width() - (JUMP_ARROW_MARGIN_X + CIRCLE_RADIUS) * scale

@@ -85,6 +85,8 @@ const APPLE_BUG = {
   appleHideMax: 8,
   bombHideMin: 2,                   // After the burst of the bomb nearest its burrow (a short scare)
   bombHideMax: 4,
+  bombCowerMin: 2,                  // Out in the open a burst makes it crouch and freeze this long (s)
+  bombCowerMax: 3.5,
   crawlerFearReach: 150,            // A crawler eating this near sends it home; it keeps this far from one while out
   //
   // A crawler it can see (in front of it) coming closer: within

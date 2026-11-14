@@ -3,8 +3,8 @@ import { getRGB } from '../../../utils/helper.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { initBody, samplePredatorSpineHitPoints, tickBody } from './predator-body.js'
-import { tickLegs, solveLeg, footNow } from './predator-ik.js'
-import { initHead, tickHead, drawHead } from './predator-head.js'
+import { tickLegs, solveLeg, footNow, footGround } from './predator-ik.js'
+import { initEyes, tickEyes } from './predator-eyes.js'
 import { tickMove, startFleeMove } from './predator-move.js'
 import {
   cancelPredatorFeast,
@@ -17,9 +17,9 @@ import * as Sound from '../../../utils/sound.js'
 // Low predatory crawler. Pose is computed every frame from the spine, the
 // leg targets and the eye targets — there is no baked walk cycle.
 //
-const LEG_PAIRS = 11
+const LEG_PAIRS = 16
 //
-// One leg pair per plate, from the first plate behind the head.
+// One leg pair on every segment from LEG_FIRST_SEG.
 //
 const LEG_FIRST_SEG = 1
 //
@@ -28,81 +28,24 @@ const LEG_FIRST_SEG = 1
 const NEAR_SIDE = 1
 const NEAR_FOOT_LEAD = 5
 const NEAR_STEP_DELAY = 0.08
-const THIGH = 11
-const SHIN = 13
+const THIGH = 9
+const SHIN = 10
 const DRAW_Z = CFG.visual.zIndex.player - 1
 //
-// Look (draw only — hit tests use the spine), after the reference picture:
-// a mossy centipede. The body is a row of domed shell plates, tail first so
-// each nearer plate overlaps the one behind and its contour arc marks the
-// joint: a green moss dome (PLATE_R of the segment's radius, lifted
-// DOME_RISE of it) with a darker lower half and a few light moss clumps on
-// top (CLUMPS, as shares of the radius). The joints are bridged so a
-// stretched charge never shows gaps. Legs start at the dome's lower side, at
-// fixed places along the spine.
+// Back spikes: a triangle on each SPIKE_AT segment (shares of the body).
 //
+const SPIKE_AT = [0.12, 0.2, 0.28, 0.36, 0.44, 0.52, 0.6, 0.68, 0.76, 0.84, 0.92]
+const SPIKE_H = 10
+const SPIKE_HALF = 2.75
+const SPIKE_OUTLINE_HALF_PAD = 1
+const SPIKE_OUTLINE_H_PAD = 1.4
 //
-// In a rage the thorns lay back against the way it runs (tangent lean added
-// to the unit normal, scaled by inst.anger; the tip direction stays unit
-// length so the thorn bends instead of stretching).
+// Tail shears (drawn as two horn lines) reach SHEAR_REACH past the tail,
+// opening SHEAR_OPEN.
 //
-const THORN_RAGE_BACK = 2.4
-const PLATE_R = 1.05
-const PLATE_RIM = 1.4
-const DOME_RISE = 0.28
-const DOME_SHADE_DROP = 0.3
-const DOME_LIT_R = 0.62
-const DOME_LIT_RISE = 0.28
-const BRIDGE_W = 1.45
-const CLUMPS = [{ dx: -0.35, dy: -0.7, r: 0.22 }, { dx: 0.1, dy: -0.82, r: 0.26 }, { dx: 0.5, dy: -0.62, r: 0.2 }]
+const SHEAR_OPEN = 8
 //
-// Back spikes: a pale horn thorn (THORN_H) on every SPIKE_AT plate (shares of
-// the body), standing out of the moss; on every SPROUT_EVERY-th of them it
-// stands between a sprout of two pointed leaves (SPROUT_LEAF_LEN, spread
-// SPROUT_SPREAD rad), one on each side of it, SPROUT_SIDE_GAP px off its
-// middle so the thorn never hides them.
-//
-const SPIKE_AT = [0.16, 0.26, 0.36, 0.46, 0.56, 0.66, 0.76, 0.86]
-const SPROUT_EVERY = 3
-const SPROUT_LEAF_LEN = 7
-const SPROUT_LEAF_HALF = 2.4
-const SPROUT_SPREAD = 0.95
-const SPROUT_SIDE_GAP = 3.2
-const THORN_H = 10
-const THORN_HALF = 2
-//
-// No two thorns alike: each (by its number) is THORN_H_MIN..+RANGE times as
-// tall, THORN_W_MIN..+RANGE times as wide and its tip leans up to THORN_LEAN
-// along the body.
-//
-const THORN_H_MIN = 0.75
-const THORN_H_RANGE = 0.6
-const THORN_W_MIN = 0.85
-const THORN_W_RANGE = 0.4
-const THORN_LEAN = 0.28
-const THORN_HASH_H = 12.9898
-const THORN_HASH_W = 78.233
-const THORN_HASH_L = 37.719
-const THORN_HASH_MUL = 43758.5453
-//
-// Legs: sharp, curved brown claws — a short thigh from the hip, then the
-// shin tapering from LEG_KNEE_W to a point at the foot, bowed LEG_BOW px.
-// Far-side legs are a shade darker.
-//
-const LEG_THIGH_W = 3
-const LEG_KNEE_W = 3.6
-const LEG_BOW = 1.6
-const LEG_RIM = 1.2
-//
-// Tail: two big curved shear claws (TAIL_CLAW_LEN, TAIL_CLAW_W thick at the
-// base) spreading back from the last plate.
-//
-const TAIL_CLAW_LEN = 24
-const TAIL_CLAW_W = 5
-const TAIL_CLAW_OPEN = 0.45
-const TAIL_CLAW_BEND = 0.5
-//
-// Hit reach past the tail (its claws), as the old tail shears had.
+// Hit reach past the tail (its shears).
 //
 const SHEAR_REACH = 18
 const HERO_HIT_HALF_W = 15
@@ -185,20 +128,13 @@ export function create(cfg) {
     batch: PolyBatch.create(),
     colors: {
       contour: rgb(cfg.k, FOREST_PAL.predatorContour),
-      shell: rgb(cfg.k, FOREST_PAL.predatorShell),
-      shellShade: rgb(cfg.k, FOREST_PAL.predatorShellShade),
-      shellLight: rgb(cfg.k, FOREST_PAL.predatorShellLight),
-      clump: rgb(cfg.k, FOREST_PAL.predatorMossClump),
-      bellyShade: rgb(cfg.k, FOREST_PAL.predatorBellyShade),
+      back: rgb(cfg.k, FOREST_PAL.predatorBack),
+      belly: rgb(cfg.k, FOREST_PAL.predatorBelly),
+      moss: rgb(cfg.k, FOREST_PAL.predatorMoss),
       leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
-      legFar: rgb(cfg.k, FOREST_PAL.predatorLegFar),
-      legLight: rgb(cfg.k, FOREST_PAL.predatorLegLight),
-      leaf: rgb(cfg.k, FOREST_PAL.predatorLeaf),
-      leafLight: rgb(cfg.k, FOREST_PAL.predatorLeafLight),
-      thorn: rgb(cfg.k, FOREST_PAL.predatorThorn),
-      maw: rgb(cfg.k, FOREST_PAL.predatorMaw),
-      brow: rgb(cfg.k, FOREST_PAL.predatorBrow),
-      eye: rgb(cfg.k, FOREST_PAL.predatorEye)
+      eye: rgb(cfg.k, FOREST_PAL.predatorEye),
+      pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
+      horn: rgb(cfg.k, FOREST_PAL.predatorHorn)
     },
     footHearable: false
   }
@@ -209,7 +145,7 @@ export function create(cfg) {
     Math.max(2, Math.round(t * (inst.segments.length - 1)))
   ))
   initLegs(inst)
-  initHead(inst)
+  initEyes(inst)
   inst.obj = cfg.k.add([
     cfg.k.z(DRAW_Z),
     {
@@ -237,7 +173,7 @@ export function update(inst, dt) {
   const hurry = inst.state === 'lunge' ||
     (feasting && (inst.feastPhase === 'approach' || inst.feastBitePhase === 'forward'))
   tickLegs(inst, dt, hurry)
-  tickHead(inst, dt)
+  tickEyes(inst, dt, hero)
   inst.y = inst.segments[0].y
   syncDrawZ(inst)
 }
@@ -330,8 +266,8 @@ function initLegs(inst) {
   for (let i = 0; i < LEG_PAIRS; i++) {
     const seg = LEG_FIRST_SEG + i
     for (const side of [-1, 1]) {
-      const hipX = inst.x - inst.dir * (10 + i * 7)
-      const footX = hipX + side * 8 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
+      const hipX = inst.segments[seg].x
+      const footX = hipX + side * 4 + (side === NEAR_SIDE ? inst.dir * NEAR_FOOT_LEAD : 0)
       inst.legs.push({
         seg,
         side,
@@ -414,61 +350,91 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const colors = inst.colors
+  const { contour, back, belly, moss, leg, eye, pupil, horn } = inst.colors
   //
-  // Far-side legs come out from under the shell; near-side ones go over it
-  // from its lower edge.
+  // Far-side legs sit behind the body, near-side legs are drawn over it.
   //
   const legs = inst.legs
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.legFar)
+    legs[i].side !== NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
   }
-  drawTailClaws(inst, batch, colors)
-  drawBodySegments(inst, batch, colors)
-  const sprouts = inst.spikeAt
-  for (let i = 0; i < sprouts.length; i++) {
-    const seg = inst.segments[sprouts[i]]
-    const prev = inst.segments[sprouts[i] + 1]
-    prev && drawSpike(inst, batch, seg, prev, i % SPROUT_EVERY === 1, colors, i)
-  }
+  drawBodySegments(inst, batch, contour, belly, back, moss)
   for (let i = 0; i < legs.length; i++) {
-    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], colors, colors.leg)
+    legs[i].side === NEAR_SIDE && drawLeg(inst, batch, legs[i], contour, leg)
   }
-  drawHead(inst, batch, colors)
+  const spikes = inst.spikeAt
+  for (let i = 0; i < spikes.length; i++) {
+    const index = spikes[i]
+    const seg = inst.segments[index]
+    const prev = inst.segments[index + 1]
+    prev && drawBackSpike(batch, seg, prev, contour, back)
+  }
+  drawTailShears(inst, batch, contour, horn)
+  drawHead(inst, batch, contour, back, eye, pupil)
   PolyBatch.flush(batch, k, 1)
 }
-//
-// The body: joints bridged in the belly brown, then the plates tail to head.
-//
-function drawBodySegments(inst, batch, colors) {
-  const segs = inst.segments
-  for (let i = segs.length - 1; i > 0; i--) {
-    const seg = segs[i - 1]
-    const prev = segs[i]
-    PolyBatch.addLine(batch, prev.x, prev.y, seg.x, seg.y, seg.radius * BRIDGE_W, colors.contour)
-    PolyBatch.addLine(batch, prev.x, prev.y + 1, seg.x, seg.y + 1, seg.radius * BRIDGE_W - PLATE_RIM * 2, colors.bellyShade)
+
+function drawBodySegments(inst, batch, contour, belly, back, moss) {
+  for (let i = inst.segments.length - 1; i >= 0; i--) {
+    const seg = inst.segments[i]
+    const prev = inst.segments[i + 1]
+    if (prev) {
+      PolyBatch.addLine(batch, prev.x, prev.y + 1, seg.x, seg.y + 1, seg.radius * 1.7, contour)
+      PolyBatch.addLine(batch, prev.x, prev.y + 2, seg.x, seg.y + 2, seg.radius * 1.15, belly)
+      PolyBatch.addLine(batch, prev.x, prev.y - 1, seg.x, seg.y - 1, seg.radius * 0.85, back)
+    }
+    PolyBatch.addDisc(batch, seg.x, seg.y, seg.radius * 0.72, contour)
+    PolyBatch.addDisc(batch, seg.x, seg.y - 1, seg.radius * 0.5, back)
+    seg.moss && PolyBatch.addDisc(batch, seg.x + inst.dir * 2, seg.y - seg.radius * 0.35, 2.2, moss)
   }
-  for (let i = segs.length - 1; i > 0; i--) addPlate(inst, batch, segs[i], colors)
 }
-//
-// One plate: the moss dome (shaded lower
-// half, lit top, light clumps).
-//
-function addPlate(inst, batch, seg, colors) {
-  const r = seg.radius * PLATE_R
+
+function drawLeg(inst, batch, limb, contour, leg) {
+  const foot = footNow(inst, limb)
+  let bend = limb.side
+  const lenScale = limb.reach * inst.stretch
+  let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
+  const kneeGround = footGround(inst, knee.kneeX)
+  if (knee.kneeY > kneeGround - 1) {
+    bend *= -1
+    knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
+  }
+  //
+  // A folded shin can still cross the ground line. Keep the joint on it.
+  //
+  knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 2.4, contour)
+  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.8, contour)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 1.3, leg)
+  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.05, leg)
+  PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, 1.5, contour)
+  PolyBatch.addDisc(batch, foot.x, foot.y, 1.35, contour)
+}
+
+function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
+  const head = inst.segments[0]
   const dir = inst.dir
-  const dy = seg.y - r * DOME_RISE
-  PolyBatch.addDisc(batch, seg.x, dy, r, colors.contour)
-  PolyBatch.addDisc(batch, seg.x, dy, r - PLATE_RIM, colors.shellShade)
-  PolyBatch.addDisc(batch, seg.x, dy - r * DOME_SHADE_DROP * 0.5, r - PLATE_RIM - r * DOME_SHADE_DROP * 0.5, colors.shell)
-  PolyBatch.addDisc(batch, seg.x + dir * r * 0.1, dy - r * DOME_LIT_RISE, r * DOME_LIT_R * 0.6, colors.shellLight)
-  for (const c of CLUMPS) PolyBatch.addDisc(batch, seg.x + dir * c.dx * r, dy + c.dy * r * 0.8, Math.max(1, c.r * r), colors.clump)
+  const snoutX = head.x + dir * (head.radius + SNOUT_REACH)
+  const snoutY = head.y + SNOUT_DROP
+  PolyBatch.addLine(batch, head.x, head.y + 1, snoutX, snoutY, 8.2, contour)
+  PolyBatch.addLine(batch, head.x, head.y + 0.4, snoutX - dir * 1, snoutY - 0.4, 4.4, back)
+  PolyBatch.addLine(batch, head.x + dir * 3, head.y + 3.2, snoutX, snoutY + 1.6, 3.4, contour)
+  PolyBatch.addLine(batch, snoutX - dir * 1.2, snoutY + 0.6, snoutX - dir * 2.4, snoutY + 6.2, 1.6, contour)
+  PolyBatch.addLine(batch, snoutX + dir * 2.2, snoutY + 0.4, snoutX + dir * 0.6, snoutY + 5.4, 1.45, contour)
+  PolyBatch.addDisc(batch, snoutX, snoutY, 2.2, contour)
+  const eye = inst.eyes[0]
+  if (!eye) return
+  const ex = head.x + dir * eye.ox
+  const ey = head.y + eye.oy
+  PolyBatch.addLine(batch, ex - dir * 6, ey - 3.4, ex + dir * 4.4, ey - 0.8, 2.8, contour)
+  PolyBatch.addDisc(batch, ex, ey, 5.6, contour)
+  PolyBatch.addDisc(batch, ex, ey, 4.35, eyeColor)
+  const px = ex + dir * clamp(eye.px, -1.1, 1.1) * 1.15
+  const py = ey + clamp(eye.py, -1.1, 1.1) * 0.7
+  PolyBatch.addLine(batch, px, py - 2.8, px, py + 2.8, 1.45, pupilColor)
 }
-//
-// A back spike on a plate's top, standing square to the body: its leaves
-// beside it (on a sprout plate), then the pale thorn between them.
-//
-function drawSpike(inst, batch, seg, prev, sprout, colors, index) {
+
+function drawBackSpike(batch, seg, prev, contour, fill) {
   const dx = seg.x - prev.x
   const dy = seg.y - prev.y
   const len = Math.hypot(dx, dy) || 1
@@ -480,110 +446,30 @@ function drawSpike(inst, batch, seg, prev, sprout, colors, index) {
   }
   const tx = dx / len
   const ty = dy / len
-  const r = seg.radius * PLATE_R
-  const bx = seg.x + nx * r * (1 + DOME_RISE) * 0.85
-  const by = seg.y + ny * r * (1 + DOME_RISE) * 0.85
-  for (const side of [-1, 1]) {
-    if (!sprout) break
-    const a = Math.atan2(ny, nx) + side * SPROUT_SPREAD
-    addLeaf(batch, bx + tx * side * SPROUT_SIDE_GAP, by + ty * side * SPROUT_SIDE_GAP, Math.cos(a), Math.sin(a), colors)
-  }
-  const tall = THORN_H * (THORN_H_MIN + THORN_H_RANGE * thornHash(index, THORN_HASH_H))
-  const wide = THORN_HALF * (THORN_W_MIN + THORN_W_RANGE * thornHash(index, THORN_HASH_W))
-  const lean = (thornHash(index, THORN_HASH_L) * 2 - 1) * THORN_LEAN - inst.anger * THORN_RAGE_BACK
-  const leanLen = Math.hypot(1, lean)
-  const lx = (nx + tx * lean) / leanLen
-  const ly = (ny + ty * lean) / leanLen
-  addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide + 1, tall + 1.4, colors.contour)
-  addSpikeTri(batch, bx, by, tx, ty, lx, ly, wide, tall, colors.thorn)
-}
-//
-// A fixed pseudo-random 0..1 for a thorn's number.
-//
-function thornHash(index, salt) {
-  const x = Math.sin((index + 1) * salt) * THORN_HASH_MUL
-  return x - Math.floor(x)
-}
-//
-// One pointed leaf from a base along (ux, uy): a contour, the leaf, a light
-// midrib half.
-//
-function addLeaf(batch, bx, by, ux, uy, colors) {
-  const px = -uy
-  const py = ux
-  const tipX = bx + ux * SPROUT_LEAF_LEN
-  const tipY = by + uy * SPROUT_LEAF_LEN
-  const midX = bx + ux * SPROUT_LEAF_LEN * 0.45
-  const midY = by + uy * SPROUT_LEAF_LEN * 0.45
-  const leaf = (half, color) => {
-    PolyBatch.addTriangle(batch, bx, by, midX + px * half, midY + py * half, tipX, tipY, color)
-    PolyBatch.addTriangle(batch, bx, by, tipX, tipY, midX - px * half, midY - py * half, color)
-  }
-  leaf(SPROUT_LEAF_HALF + PLATE_RIM, colors.contour)
-  leaf(SPROUT_LEAF_HALF, colors.leaf)
-  PolyBatch.addTriangle(batch, bx, by, midX + px * SPROUT_LEAF_HALF * 0.8, midY + py * SPROUT_LEAF_HALF * 0.8, tipX, tipY, colors.leafLight)
+  const bx = seg.x + nx * seg.radius * 0.28
+  const by = seg.y + ny * seg.radius * 0.28
+  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF + SPIKE_OUTLINE_HALF_PAD, SPIKE_H + SPIKE_OUTLINE_H_PAD, contour)
+  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF, SPIKE_H, fill)
 }
 
-function drawLeg(inst, batch, limb, colors, fill) {
-  const foot = footNow(inst, limb)
-  let bend = limb.side
-  const lenScale = limb.reach * inst.stretch
-  let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
-  const kneeGround = inst.groundAt(knee.kneeX)
-  if (knee.kneeY > kneeGround - 1) {
-    bend *= -1
-    knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
-  }
-  //
-  // A folded shin can still cross the ground line. Keep the joint on it.
-  //
-  knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W + LEG_RIM * 2, colors.contour)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W, fill)
-  addClaw(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, inst.dir, LEG_KNEE_W + LEG_RIM * 2, LEG_RIM, colors.contour)
-  addClaw(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, inst.dir, LEG_KNEE_W, 0, fill)
-}
-//
-// A curved claw from (x1, y1) tapering to a point at (x2, y2), bowed
-// LEG_BOW px towards the way the body faces; tipPad keeps a contour's
-// point a little past the fill's.
-//
-function addClaw(batch, x1, y1, x2, y2, dir, w, tipPad, color) {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len = Math.hypot(dx, dy) || 1
-  const px = -dy / len
-  const py = dx / len
-  const bow = Math.sign(px * dir) * LEG_BOW || LEG_BOW
-  const mx = (x1 + x2) / 2 + px * bow
-  const my = (y1 + y2) / 2 + py * bow
-  const tx = x2 + dx / len * tipPad
-  const ty = y2 + dy / len * tipPad
-  const h = w / 2
-  PolyBatch.addQuad(batch, x1 + px * h, y1 + py * h, mx + px * h * 0.55, my + py * h * 0.55, mx - px * h * 0.55, my - py * h * 0.55, x1 - px * h, y1 - py * h, color)
-  PolyBatch.addTriangle(batch, mx + px * h * 0.55, my + py * h * 0.55, tx, ty, mx - px * h * 0.55, my - py * h * 0.55, color)
-  PolyBatch.addDisc(batch, x1, y1, h, color)
-}
-//
-// Two curved claws spreading back from the last plate.
-//
-function drawTailClaws(inst, batch, colors) {
+function drawTailShears(inst, batch, contour, horn) {
   const tail = inst.segments[inst.segments.length - 1]
   const prev = inst.segments[inst.segments.length - 2]
   if (!tail || !prev) return
-  const back = Math.atan2(tail.y - prev.y, tail.x - prev.x)
+  const dx = tail.x - prev.x
+  const dy = tail.y - prev.y
+  const len = Math.hypot(dx, dy) || 1
+  const tx = dx / len
+  const ty = dy / len
+  const nx = -ty
+  const ny = tx
+  const ox = tail.x + tx * tail.radius * 0.35
+  const oy = tail.y + ty * tail.radius * 0.2
   for (const side of [-1, 1]) {
-    const a = back + side * TAIL_CLAW_OPEN * 0.4 - Math.PI * 0.08
-    const mx = tail.x + Math.cos(a) * TAIL_CLAW_LEN * 0.55
-    const my = tail.y + Math.sin(a) * TAIL_CLAW_LEN * 0.55
-    const tipA = a + side * TAIL_CLAW_BEND + (side < 0 ? TAIL_CLAW_OPEN : 0)
-    const tx = mx + Math.cos(tipA) * TAIL_CLAW_LEN * 0.5
-    const ty = my + Math.sin(tipA) * TAIL_CLAW_LEN * 0.5
-    const fill = side < 0 ? colors.leg : colors.legFar
-    addClaw(batch, tail.x, tail.y, mx, my, inst.dir, TAIL_CLAW_W + LEG_RIM * 2, 0, colors.contour)
-    addClaw(batch, mx, my, tx, ty, inst.dir, TAIL_CLAW_W * 0.8 + LEG_RIM * 2, LEG_RIM, colors.contour)
-    addClaw(batch, tail.x, tail.y, mx, my, inst.dir, TAIL_CLAW_W, 0, fill)
-    addClaw(batch, mx, my, tx, ty, inst.dir, TAIL_CLAW_W * 0.8, 0, fill)
+    const ex = ox + tx * SHEAR_REACH + nx * side * SHEAR_OPEN
+    const ey = oy + ty * SHEAR_REACH + ny * side * SHEAR_OPEN
+    PolyBatch.addLine(batch, ox, oy, ex, ey, 3.6, contour)
+    PolyBatch.addLine(batch, ox, oy, ex, ey, 1.7, horn)
   }
 }
 

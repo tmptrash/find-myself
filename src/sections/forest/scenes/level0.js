@@ -1671,6 +1671,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     predator.levelInst = inst
     predator.landAt = (x) => forestPredatorGroundAt(inst, x)
     predator.canHuntHero = () => forestPredatorCanHuntHero(inst)
+    predator.surfaceRay = (x, fromY, depth) => ForestGroundLine.raycast(groundLine, x, fromY, depth)
     inst.predatorHunts = get(KEY_PREDATOR_HUNTS, false)
     mountForestTreeFruitLayer(k, inst, FOREST_FRUIT_Z)
     inst.treeX = TREE_X

@@ -50,9 +50,14 @@ const ROAM_GOAL_ARRIVE_PX = 24
 // Near home a heading flip waits at least this long after the previous one —
 // back-to-back flips read as twitching in place.
 //
-const ROAM_TURN_CHANCE = 0.35
-const ROAM_TURN_MIN_INTERVAL_SEC = 1.6
-const ROAM_TURN_INTERVAL_RANGE_SEC = 1.4
+//
+// Dashes: it picks up and drops speed quickly, like a lizard darting between
+// stops.
+//
+const ROAM_SPEED_EASE = 16
+const ROAM_TURN_CHANCE = 0.5
+const ROAM_TURN_MIN_INTERVAL_SEC = 0.9
+const ROAM_TURN_INTERVAL_RANGE_SEC = 1.2
 //
 // Hunting stops within HUNT_ARRIVE_PX of its target and only turns around for
 // a target more than HUNT_TURN_DEADBAND_PX behind it.
@@ -345,7 +350,7 @@ function tickRoamHome(inst, dt) {
     Math.random() < dt * 1.6) {
     inst.dir = Math.sign(dx)
   }
-  easeSpeed(inst, dt, 8)
+  easeSpeed(inst, dt, ROAM_SPEED_EASE)
   softenHeadPose(inst, dt)
 }
 

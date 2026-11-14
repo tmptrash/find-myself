@@ -6,9 +6,9 @@
 //
 import * as Sound from '../../../utils/sound.js'
 
-const STEP_LIFT = 7
+const STEP_LIFT = 4
 const FOOT_SOUND_GAP = 0.055
-const REACH = 16
+const REACH = 11
 //
 // A step gets quicker with the body's speed (SWING_SPEED_GAIN per px/s), so a
 // running leg is back on the ground in time; above RUN_NO_WAIT_SPEED legs
@@ -16,15 +16,28 @@ const REACH = 16
 //
 const SWING_SPEED_GAIN = 0.03
 const RUN_NO_WAIT_SPEED = 60
-const PLANT_BEHIND = 11
+const PLANT_BEHIND = 6
 //
-// A hip sits on its plate's flank, shares of the plate's radius from its
+// A hip sits on its segment's flank, shares of the segment's radius from its
 // centre (side: forward, down: below the centre). The near row starts on the
-// visible face of the dome and is drawn over it; the far row starts lower and
-// further back, behind the plate.
+// body's visible side and is drawn over it; the far row starts lower and
+// further back, behind the body.
 //
-const NEAR_HIP = { side: 0.1, down: 0.12 }
-const FAR_HIP = { side: -0.35, down: 0.5 }
+const NEAR_HIP = { side: 0.1, down: 0.45 }
+const FAR_HIP = { side: -0.35, down: 0.4 }
+//
+// Like the hero's feet, a foot finds its surface with a ray cast down from
+// FOOT_RAY_UP above the plain ground to FOOT_RAY_DEPTH under it (the level's
+// ground line: stones and mushrooms lift it); swimming, the water level.
+//
+const FOOT_RAY_UP = 26
+const FOOT_RAY_DEPTH = 44
+//
+// A leg never starts a step while the other one of its pair or a neighbour
+// on its own side is mid-step (unless it is already dragging a foot further
+// than DRAG_PX behind), so the legs go one after another.
+//
+const DRAG_PX = 10
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -81,7 +94,7 @@ export function tickLegs(inst, dt, hurry) {
       if (leg.swing >= 1) {
         leg.swing = 0
         leg.footX = leg.plantX
-        leg.footY = inst.groundAt(leg.plantX)
+        leg.footY = footGround(inst, leg.plantX)
         onFootPlant(inst)
       }
       return
@@ -92,11 +105,13 @@ export function tickLegs(inst, dt, hurry) {
     const fidget = speed < 3 && inst.idleTime > leg.fidgetAt
     const retarget = hurry && leg.front && inst.orientKick
     if (behind || fidget || retarget) {
+      const dragging = along > PLANT_BEHIND * leg.reach * inst.stretch + DRAG_PX
+      if (!dragging && neighbourStepping(inst, index)) return
       if (leg.stepWait > 0 && !retarget && speed < RUN_NO_WAIT_SPEED) {
         leg.stepWait -= dt
         return
       }
-      leg.lead = ((hurry ? 14 : 8) + leg.jitter) * inst.stretch + leg.side * (7 + leg.jitter * 0.3) * 0.15 + (Math.random() - 0.5) * 3
+      leg.lead = ((hurry ? 9 : 5) + leg.jitter * 0.5) * inst.stretch + leg.side * 0.8 + (Math.random() - 0.5) * 2
       leg.plantX = landingX(inst, leg, hip.x, 1 / swingRate(leg, hurry, speed))
       leg.swingFromX = leg.footX
       leg.swingFromY = leg.footY
@@ -104,7 +119,7 @@ export function tickLegs(inst, dt, hurry) {
       leg.stepWait = 0.04 + (index % 3) * 0.03 + Math.random() * 0.05
       fidget && (leg.fidgetAt = inst.idleTime + 0.35 + Math.random() * 0.8)
     } else {
-      leg.footY = inst.groundAt(leg.footX)
+      leg.footY = footGround(inst, leg.footX)
     }
   })
   inst.orientKick = false
@@ -121,8 +136,8 @@ function landingX(inst, leg, hipX, secondsLeft) {
 }
 
 /**
- * World position of a leg hip on the flank of its plate. The offsets come from
- * the plate's own centre, so a hip keeps its place on its plate however the
+ * World position of a leg hip on the flank of its segment. The offsets come from
+ * the segment's own centre, so a hip keeps its place on it however the
  * body stretches or heaves.
  * @param {Object} inst
  * @param {Object} leg
@@ -146,16 +161,35 @@ function hipOf(inst, leg) {
  */
 export function footNow(inst, leg) {
   if (leg.swing <= 0) {
-    const y = inst.groundAt(leg.footX)
+    const y = footGround(inst, leg.footX)
     return { x: leg.footX, y }
   }
   const t = Math.min(1, leg.swing)
   const x = leg.swingFromX + (leg.plantX - leg.swingFromX) * t * t * (3 - 2 * t)
-  const ground = inst.groundAt(x)
-  const start = Math.min(leg.swingFromY, inst.groundAt(leg.swingFromX))
+  const ground = footGround(inst, x)
+  const start = Math.min(leg.swingFromY, footGround(inst, leg.swingFromX))
   const end = ground
   const y = start + (end - start) * t - Math.sin(t * Math.PI) * STEP_LIFT * leg.reach
   return { x, y: Math.min(y, ground) }
+}
+
+/**
+ * The surface under a foot at x: the level's ground-line ray (like the
+ * hero's feet), else the plain ground.
+ * @param {Object} inst - Predator inst
+ * @param {number} x - World X
+ * @returns {number} Surface Y
+ */
+export function footGround(inst, x) {
+  const base = inst.groundAt(x)
+  if (!inst.surfaceRay || inst.swimming) return base
+  return inst.surfaceRay(x, base - FOOT_RAY_UP, FOOT_RAY_DEPTH + FOOT_RAY_UP) ?? base
+}
+
+// True while a neighbour (same side, next segment) or the opposite leg is mid-step
+function neighbourStepping(inst, index) {
+  const legs = inst.legs
+  return (legs[index - 2]?.swing ?? 0) > 0 || (legs[index + 2]?.swing ?? 0) > 0 || (legs[index ^ 1]?.swing ?? 0) > 0
 }
 
 function onFootPlant(inst) {

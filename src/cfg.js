@@ -311,29 +311,17 @@ export const CFG = {
         decorGray: PALETTE.gray5,
         hudScore: PALETTE.gray5,
         //
-        // Predatory crawler — a mossy centipede: an olive moss shell in three
-        // tones (shade, base, lit top) with light moss clumps, a reddish-brown
-        // underside, a rust head with two blank, angry cream eyes under brow
-        // ridges, a frowning mouth (a dark maw when it gapes), curved pincers
-        // and claw legs (the far side a shade darker), pale horn thorns on
-        // its back (some over leaf sprouts), all ringed by the green-black
-        // contour.
+        // Predatory crawler — cool forest shadow (teal/green), pale eye,
+        // dark red pupil. Shears stay bark-brown so they read as horn, not UI.
         //
-        predatorShell: PALETTE.green1,
-        predatorShellShade: PALETTE.green0,
-        predatorShellLight: PALETTE.green2,
-        predatorMossClump: PALETTE.green4,
-        predatorBellyShade: PALETTE.rose0,
-        predatorLeg: PALETTE.orange2,
-        predatorLegFar: PALETTE.rose1,
-        predatorLegLight: PALETTE.red4,
-        predatorLeaf: PALETTE.green2,
-        predatorLeafLight: PALETTE.green4,
-        predatorThorn: PALETTE.sand4,
-        predatorBrow: PALETTE.orange0,      // Dark rust brow ridges
-        predatorMaw: PALETTE.rose0,         // Inside the gaping mouth
+        predatorBack: PALETTE.teal0,
+        predatorBelly: PALETTE.green0,
+        predatorMoss: PALETTE.teal1,
         predatorContour: PALETTE.gray0,
-        predatorEye: PALETTE.gray7,
+        predatorLeg: PALETTE.teal0,
+        predatorEye: PALETTE.sand5,
+        predatorPupil: PALETTE.red0,
+        predatorHorn: PALETTE.brown1,
         dreamFirefly: PALETTE.gray7,       // White fireflies left where the hero's dream bubble bursts
         water: PALETTE.cyan2,
         //

@@ -315,6 +315,7 @@ export const CFG = {
         // dark red pupil. Shears stay bark-brown so they read as horn, not UI.
         //
         predatorBack: PALETTE.teal0,
+        predatorSpike: PALETTE.teal2,       // Back thorns, a shade off the back
         predatorBelly: PALETTE.green0,
         predatorMoss: PALETTE.teal1,
         predatorContour: PALETTE.gray0,

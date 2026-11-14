@@ -23,8 +23,8 @@ const PLANT_BEHIND = 6
 // body's visible side and is drawn over it; the far row starts lower and
 // further back, behind the body.
 //
-const NEAR_HIP = { side: 0.1, down: 0.45 }
-const FAR_HIP = { side: -0.35, down: 0.4 }
+const NEAR_HIP = { side: 0.1, down: 0.12 }
+const FAR_HIP = { side: -0.35, down: 0.5 }
 //
 // Like the hero's feet, a foot finds its surface with a ray cast down from
 // FOOT_RAY_UP above the plain ground to FOOT_RAY_DEPTH under it (the level's

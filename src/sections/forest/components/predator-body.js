@@ -5,8 +5,8 @@
 //
 
 //
-// Head-to-tail length: long enough to string the picture blocks along it
-// with soft flesh showing between them (predator.js).
+// Head-to-tail length and the number of body sections along it (one per
+// segment behind the head).
 //
 const SEGMENT_COUNT = 17
 const BODY_LENGTH = 150
@@ -29,11 +29,31 @@ const SPEED_STRETCH_EASE = 8
 //
 const MAX_STRETCH = 1.3
 //
-// A turn is brisk but not instant: for TURN_SEC after the heading flips the spine chases the
-// head at TURN_FOLLOW per second, and the legs are planted afresh.
+// Turning round, the body is inert: every segment chases the one in front,
+// so the far ones turn later than the near ones. A segment still on the
+// wrong side of the one in front arches up by up to FOLD_LIFT px, so the
+// body folds over itself instead of sliding through.
 //
-const TURN_SEC = 0.55
-const TURN_FOLLOW = 12
+const FOLD_LIFT = 5
+//
+// It stands up and squats on its legs: its ride height grows by up to
+// RISE_PX (inst.rise, 0..1). Standing still it rises to look round and
+// drops again every RISE_HOLD_MIN..+RANGE seconds; on the move it keeps
+// low (RISE_RUN). Eased at RISE_EASE per second.
+//
+const RISE_PX = 6
+const RISE_RUN = 0.15
+const RISE_STILL_SPEED = 30
+const RISE_HOLD_MIN = 0.5
+const RISE_HOLD_RANGE = 1.3
+const RISE_EASE = 7
+//
+// Section radii: the head, then the body tapering evenly from BODY_R_FRONT
+// to BODY_R_TAIL.
+//
+const HEAD_R = 11
+const BODY_R_FRONT = 9.2
+const BODY_R_TAIL = 6
 //
 // How high the head's and a body segment's centre ride above the ground; the
 // head is carried higher so its mandibles hang down to the ground.
@@ -63,14 +83,16 @@ export function initBody(inst) {
   inst.gaitPhase = 0
   inst.gaitGain = 0
   inst.speedStretch = 1
-  inst.bodyDir = inst.dir
-  inst.turnLeft = 0
+  inst.rise = 0
+  inst.riseTo = 0
+  inst.riseHold = 0
   for (let i = 0; i < SEGMENT_COUNT; i++) {
     const x = inst.x - inst.dir * SPACING * i
     inst.segments.push({
       x,
       y: inst.groundAt(x) - ride(inst, i),
-      radius: segmentRadius(i)
+      radius: segmentRadius(i),
+      moss: i % 5 === 2
     })
   }
 }
@@ -114,19 +136,19 @@ export function tickBody(inst, dt) {
   const ride0 = ride(inst, 0)
   tickGait(inst, dt)
   tickSpeedStretch(inst, dt)
+  tickRise(inst, dt)
   head.x = inst.x
   head.y = inst.groundAt(inst.x) - ride0 - inst.headLift - gaitLift(inst, 0)
   const gap = SPACING * totalStretch(inst)
-  startTurn(inst, gap)
-  inst.turnLeft = Math.max(0, inst.turnLeft - dt)
-  const followBase = 1 - Math.exp(-dt * (inst.turnLeft > 0 ? TURN_FOLLOW : (inst.spineFollowRate ?? 9)))
+  const followBase = 1 - Math.exp(-dt * (inst.spineFollowRate ?? 9))
   const maxGap = inst.swimming ? SPACING * Math.max(1, inst.stretch) * SWIM_MAX_GAP_STRETCH : Infinity
   for (let i = 1; i < inst.segments.length; i++) {
     const prev = inst.segments[i - 1]
     const seg = inst.segments[i]
     const aim = inst.dir
     const wantX = prev.x - aim * gap
-    const wantY = inst.groundAt(wantX) - ride(inst, i) - inst.headLift * (1 - i / inst.segments.length) - gaitLift(inst, i)
+    const fold = Math.max(0, Math.min(1, 1 - aim * (prev.x - seg.x) / gap))
+    const wantY = inst.groundAt(wantX) - ride(inst, i) - inst.headLift * (1 - i / inst.segments.length) - gaitLift(inst, i) - fold * FOLD_LIFT
     const along = i / (inst.segments.length - 1)
     const follow = followBase * (1 - along * 0.4)
     seg.x += (wantX - seg.x) * follow
@@ -142,19 +164,18 @@ function tickSpeedStretch(inst, dt) {
   inst.speedStretch += (want - inst.speedStretch) * Math.min(1, dt * SPEED_STRETCH_EASE)
 }
 
-// A flipped heading starts a sharp turn: the legs are planted afresh where the mirrored body will lie
-function startTurn(inst, gap) {
-  if (inst.dir === inst.bodyDir) return
-  inst.bodyDir = inst.dir
-  inst.turnLeft = TURN_SEC
-  inst.legs?.forEach(leg => {
-    const seg = inst.segments[leg.seg]
-    const x = inst.x - inst.dir * gap * leg.seg + inst.dir * seg.radius * leg.side * 0.2
-    leg.swing = 0
-    leg.footX = x
-    leg.plantX = x
-    leg.footY = inst.groundAt(x)
-  })
+// Stands up while it is still (now tall, now low), keeps low on the move
+function tickRise(inst, dt) {
+  const still = !inst.swimming && Math.abs(inst.vx) < RISE_STILL_SPEED && inst.state !== 'feast'
+  inst.riseHold -= dt
+  if (!still) {
+    inst.riseTo = RISE_RUN
+    inst.riseHold = 0
+  } else if (inst.riseHold <= 0) {
+    inst.riseTo = inst.riseTo > 0.5 ? Math.random() * 0.3 : 0.7 + Math.random() * 0.3
+    inst.riseHold = RISE_HOLD_MIN + Math.random() * RISE_HOLD_RANGE
+  }
+  inst.rise += (inst.riseTo - inst.rise) * Math.min(1, dt * RISE_EASE)
 }
 
 // Advances the stride by the distance run and eases the bob in and out with speed
@@ -173,7 +194,7 @@ function gaitLift(inst, index) {
 
 function ride(inst, index) {
   const segR = index === 0 ? HEAD_RIDE : BODY_RIDE
-  return segR + inst.bodyClear
+  return segR + inst.bodyClear + (inst.rise ?? 0) * RISE_PX
 }
 
 //
@@ -201,8 +222,6 @@ function applyBlendedRideTurn(inst) {
 }
 
 function segmentRadius(index) {
-  const t = index / (SEGMENT_COUNT - 1)
-  if (t < 0.18) return 11 - t / 0.18 * 2.2
-  if (t < 0.72) return 8.6 - (t - 0.18) * 2.4
-  return 6.4 - (t - 0.72) * 7
+  if (index === 0) return HEAD_R
+  return BODY_R_FRONT + (BODY_R_TAIL - BODY_R_FRONT) * (index - 1) / (SEGMENT_COUNT - 2)
 }

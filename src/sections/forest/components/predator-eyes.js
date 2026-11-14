@@ -1,8 +1,12 @@
 //
-// One large eye on the head. It picks look targets in saccades and locks
-// onto the hero once the creature has noticed them.
+// The centipede's eye and mood: one large eye with a vertical pupil that
+// runs about.
 //
-
+// The pupil darts between look targets in saccades and locks onto the hero
+// once the creature has noticed him. Its rage (inst.anger, 0..1, by state,
+// eased at ANGER_EASE per second) narrows the eye and lays the back spikes
+// down.
+//
 const SPOTS = [
   { x: 1, y: -0.1 },
   { x: 0.2, y: 0.8 },
@@ -11,11 +15,14 @@ const SPOTS = [
   { x: -0.2, y: 0.9 },
   { x: 0.9, y: 0.4 }
 ]
+const ANGER_BY_STATE = { stalk: 0.5, hunt: 0.85, lunge: 1 }
+const ANGER_EASE = 10
 
 /**
  * @param {Object} inst
  */
 export function initEyes(inst) {
+  inst.anger = 0
   inst.eyes = [
     { ox: 3.4, oy: -5.6, bias: 0.15, hold: 0.12, px: 0.2, py: -0.15 }
   ]
@@ -27,6 +34,7 @@ export function initEyes(inst) {
  * @param {{ x: number, y: number }|null} hero
  */
 export function tickEyes(inst, dt, hero) {
+  inst.anger += ((ANGER_BY_STATE[inst.state] ?? 0) - inst.anger) * Math.min(1, dt * ANGER_EASE)
   const lock = inst.state === 'stalk' || inst.state === 'hunt' || inst.state === 'lunge' || inst.state === 'feast'
   inst.eyes.forEach(eye => {
     if (lock && hero) {

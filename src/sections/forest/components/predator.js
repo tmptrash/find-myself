@@ -32,18 +32,64 @@ const THIGH = 9
 const SHIN = 10
 const DRAW_Z = CFG.visual.zIndex.player - 1
 //
-// Back spikes: a triangle on each SPIKE_AT segment (shares of the body).
+// Back spikes: a triangle on each SPIKE_AT segment (shares of the body); in
+// a rage (inst.anger) they lie back along the body by up to SPIKE_PRESS of
+// their height and shrink by SPIKE_SQUASH.
 //
 const SPIKE_AT = [0.12, 0.2, 0.28, 0.36, 0.44, 0.52, 0.6, 0.68, 0.76, 0.84, 0.92]
 const SPIKE_H = 10
 const SPIKE_HALF = 2.75
 const SPIKE_OUTLINE_HALF_PAD = 1
 const SPIKE_OUTLINE_H_PAD = 1.4
+const SPIKE_PRESS = 0.7
 //
-// Tail shears (drawn as two horn lines) reach SHEAR_REACH past the tail,
-// opening SHEAR_OPEN.
+// Each spike stands on the back's top edge (SPIKE_BASE_UP of its segment's
+// radius up), varies up to SPIKE_VARY in height and width and
+// SPIKE_SWEEP_VARY in sweep, shrinks with the radius (SPIKE_TAPER_POW) from
+// SPIKE_REF_R, the radius it was drawn for.
+//
+const SPIKE_BASE_UP = 0.8
+const SPIKE_REF_R = 9.2
+const SPIKE_TAPER_POW = 1.6
+const SPIKE_VARY = 0.22
+const SPIKE_SWEEP = 0.35
+const SPIKE_SWEEP_VARY = 0.2
+const SPIKE_SQUASH = 0.18
+//
+// Legs: a thigh and a shin LEG_THIGH_W and LEG_SHIN_W wide, each ringed by
+// the contour (LEG_THIGH_RIM_W, LEG_SHIN_RIM_W wide), a round knee and foot.
+//
+const LEG_THIGH_W = 2
+const LEG_SHIN_W = 1.7
+const LEG_THIGH_RIM_W = 3.6
+const LEG_SHIN_RIM_W = 3.1
+const LEG_KNEE_R = 2.1
+const LEG_FOOT_R = 1.9
+//
+// The body's seams: a round joint on every segment as wide as the lines
+// that join them (shares of its radius).
+//
+const JOINT_CONTOUR = 0.85
+const JOINT_BELLY = 0.575
+const JOINT_BACK = 0.425
+//
+// Tail shears (two horn lines) reach SHEAR_REACH past the tail, opening
+// SHEAR_OPEN; every TAIL_SNAP_MIN..+RANGE seconds they snap shut twice within
+// TAIL_SNAP_SEC, and much oftener (TAIL_ATTACK_MIN..+RANGE) while it attacks.
 //
 const SHEAR_OPEN = 8
+const TAIL_SNAP_MIN = 2.5
+const TAIL_SNAP_RANGE = 4
+const TAIL_SNAP_SEC = 0.5
+const TAIL_ATTACK_MIN = 0.35
+const TAIL_ATTACK_RANGE = 0.5
+//
+// In a rage the eye's upper lid comes down by up to EYE_SQUINT of the eye.
+//
+const EYE_R = 4.35
+const EYE_SQUINT = 0.42
+const LID_STEPS = 8
+const LID_INDICES = Array.from({ length: LID_STEPS - 1 }, (_, i) => [0, i + 1, i + 2]).flat()
 //
 // Hit reach past the tail (its shears).
 //
@@ -129,6 +175,7 @@ export function create(cfg) {
     colors: {
       contour: rgb(cfg.k, FOREST_PAL.predatorContour),
       back: rgb(cfg.k, FOREST_PAL.predatorBack),
+      spike: rgb(cfg.k, FOREST_PAL.predatorSpike),
       belly: rgb(cfg.k, FOREST_PAL.predatorBelly),
       moss: rgb(cfg.k, FOREST_PAL.predatorMoss),
       leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
@@ -136,6 +183,9 @@ export function create(cfg) {
       pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
       horn: rgb(cfg.k, FOREST_PAL.predatorHorn)
     },
+    tailSnapIn: TAIL_SNAP_MIN + Math.random() * TAIL_SNAP_RANGE,
+    tailSnapLeft: 0,
+    lid: Array.from({ length: LID_STEPS + 1 }, () => ({ x: 0, y: 0 })),
     footHearable: false
   }
   inst.groundAt = x => predatorSurfaceAt(inst, x)
@@ -174,6 +224,7 @@ export function update(inst, dt) {
     (feasting && (inst.feastPhase === 'approach' || inst.feastBitePhase === 'forward'))
   tickLegs(inst, dt, hurry)
   tickEyes(inst, dt, hero)
+  tickTail(inst, dt)
   inst.y = inst.segments[0].y
   syncDrawZ(inst)
 }
@@ -350,7 +401,7 @@ function drawPredator(inst) {
   const k = inst.k
   const batch = inst.batch
   PolyBatch.reset(batch)
-  const { contour, back, belly, moss, leg, eye, pupil, horn } = inst.colors
+  const { contour, back, belly, moss, leg, eye, pupil, horn, spike } = inst.colors
   //
   // Far-side legs sit behind the body, near-side legs are drawn over it.
   //
@@ -367,7 +418,7 @@ function drawPredator(inst) {
     const index = spikes[i]
     const seg = inst.segments[index]
     const prev = inst.segments[index + 1]
-    prev && drawBackSpike(batch, seg, prev, contour, back)
+    prev && drawBackSpike(inst, batch, seg, prev, contour, spike, index)
   }
   drawTailShears(inst, batch, contour, horn)
   drawHead(inst, batch, contour, back, eye, pupil)
@@ -383,8 +434,13 @@ function drawBodySegments(inst, batch, contour, belly, back, moss) {
       PolyBatch.addLine(batch, prev.x, prev.y + 2, seg.x, seg.y + 2, seg.radius * 1.15, belly)
       PolyBatch.addLine(batch, prev.x, prev.y - 1, seg.x, seg.y - 1, seg.radius * 0.85, back)
     }
-    PolyBatch.addDisc(batch, seg.x, seg.y, seg.radius * 0.72, contour)
-    PolyBatch.addDisc(batch, seg.x, seg.y - 1, seg.radius * 0.5, back)
+    //
+    // Round joints as wide as the lines they join, so a bent or stretched
+    // body never opens a wedge-shaped hole at a seam.
+    //
+    PolyBatch.addDisc(batch, seg.x, seg.y + 1, seg.radius * JOINT_CONTOUR, contour)
+    PolyBatch.addDisc(batch, seg.x, seg.y + 2, seg.radius * JOINT_BELLY, belly)
+    PolyBatch.addDisc(batch, seg.x, seg.y - 1, seg.radius * JOINT_BACK, back)
     seg.moss && PolyBatch.addDisc(batch, seg.x + inst.dir * 2, seg.y - seg.radius * 0.35, 2.2, moss)
   }
 }
@@ -403,12 +459,12 @@ function drawLeg(inst, batch, limb, contour, leg) {
   // A folded shin can still cross the ground line. Keep the joint on it.
   //
   knee.kneeY > kneeGround && (knee.kneeY = kneeGround)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 2.4, contour)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.8, contour)
-  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, 1.3, leg)
-  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, 1.05, leg)
-  PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, 1.5, contour)
-  PolyBatch.addDisc(batch, foot.x, foot.y, 1.35, contour)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_RIM_W, contour)
+  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, LEG_SHIN_RIM_W, contour)
+  PolyBatch.addLine(batch, limb.hipX, limb.hipY, knee.kneeX, knee.kneeY, LEG_THIGH_W, leg)
+  PolyBatch.addLine(batch, knee.kneeX, knee.kneeY, foot.x, foot.y, LEG_SHIN_W, leg)
+  PolyBatch.addDisc(batch, knee.kneeX, knee.kneeY, LEG_KNEE_R, contour)
+  PolyBatch.addDisc(batch, foot.x, foot.y, LEG_FOOT_R, contour)
 }
 
 function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
@@ -432,9 +488,28 @@ function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
   const px = ex + dir * clamp(eye.px, -1.1, 1.1) * 1.15
   const py = ey + clamp(eye.py, -1.1, 1.1) * 0.7
   PolyBatch.addLine(batch, px, py - 2.8, px, py + 2.8, 1.45, pupilColor)
+  drawEyeLid(inst, batch, ex, ey, contour, back)
+}
+//
+// The upper lid coming down over the eye in a rage: a cap of the eye in the
+// head's colour with a dark edge.
+//
+function drawEyeLid(inst, batch, ex, ey, contour, back) {
+  const squint = inst.anger * EYE_SQUINT
+  if (squint < 0.02) return
+  const lid = inst.lid
+  const reach = Math.acos(1 - squint * 2)
+  for (let n = 0; n <= LID_STEPS; n++) {
+    const a = -Math.PI / 2 - reach + reach * 2 * n / LID_STEPS
+    lid[n].x = ex + Math.cos(a) * (EYE_R + 1)
+    lid[n].y = ey + Math.sin(a) * (EYE_R + 1)
+  }
+  PolyBatch.addPolygon(batch, lid, LID_INDICES, back)
+  PolyBatch.addLine(batch, lid[0].x, lid[0].y, lid[LID_STEPS].x, lid[LID_STEPS].y, 1.1, contour)
 }
 
-function drawBackSpike(batch, seg, prev, contour, fill) {
+function drawBackSpike(inst, batch, seg, prev, contour, fill, index) {
+  const anger = inst.anger
   const dx = seg.x - prev.x
   const dy = seg.y - prev.y
   const len = Math.hypot(dx, dy) || 1
@@ -446,10 +521,23 @@ function drawBackSpike(batch, seg, prev, contour, fill) {
   }
   const tx = dx / len
   const ty = dy / len
-  const bx = seg.x + nx * seg.radius * 0.28
-  const by = seg.y + ny * seg.radius * 0.28
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF + SPIKE_OUTLINE_HALF_PAD, SPIKE_H + SPIKE_OUTLINE_H_PAD, contour)
-  addSpikeTri(batch, bx, by, tx, ty, nx, ny, SPIKE_HALF, SPIKE_H, fill)
+  //
+  // On the very top edge of the back, each spike a little different (by its
+  // number) and smaller towards the tail; its tip sweeps back along the body
+  // (tx points to the head), and further in a rage.
+  //
+  const bx = seg.x + nx * seg.radius * SPIKE_BASE_UP
+  const by = seg.y + ny * seg.radius * SPIKE_BASE_UP
+  const taper = Math.pow(seg.radius / SPIKE_REF_R, SPIKE_TAPER_POW)
+  const tall = SPIKE_H * taper * (1 - SPIKE_VARY + 2 * SPIKE_VARY * spikeHash(index, 12.9898))
+  const half = SPIKE_HALF * taper * (1 - SPIKE_VARY + 2 * SPIKE_VARY * spikeHash(index, 78.233))
+  const sweep = SPIKE_SWEEP + (spikeHash(index, 37.719) * 2 - 1) * SPIKE_SWEEP_VARY + anger * SPIKE_PRESS
+  const lx = nx - tx * sweep
+  const ly = ny - ty * sweep
+  const ll = Math.hypot(lx, ly) || 1
+  const squash = 1 - anger * SPIKE_SQUASH
+  addSpikeTri(batch, bx, by, tx, ty, lx / ll, ly / ll, half + SPIKE_OUTLINE_HALF_PAD, (tall + SPIKE_OUTLINE_H_PAD) * squash, contour)
+  addSpikeTri(batch, bx, by, tx, ty, lx / ll, ly / ll, half, tall * squash, fill)
 }
 
 function drawTailShears(inst, batch, contour, horn) {
@@ -465,14 +553,23 @@ function drawTailShears(inst, batch, contour, horn) {
   const ny = tx
   const ox = tail.x + tx * tail.radius * 0.35
   const oy = tail.y + ty * tail.radius * 0.2
+  const shut = inst.tailSnapLeft > 0 ? Math.pow(Math.sin(Math.PI * 2 * (1 - inst.tailSnapLeft / TAIL_SNAP_SEC)), 2) : 0
+  const open = SHEAR_OPEN * (1 - shut)
   for (const side of [-1, 1]) {
-    const ex = ox + tx * SHEAR_REACH + nx * side * SHEAR_OPEN
-    const ey = oy + ty * SHEAR_REACH + ny * side * SHEAR_OPEN
+    const ex = ox + tx * SHEAR_REACH + nx * side * open
+    const ey = oy + ty * SHEAR_REACH + ny * side * open
     PolyBatch.addLine(batch, ox, oy, ex, ey, 3.6, contour)
     PolyBatch.addLine(batch, ox, oy, ex, ey, 1.7, horn)
   }
 }
 
+//
+// A fixed pseudo-random 0..1 for a spike's number.
+//
+function spikeHash(index, salt) {
+  const x = Math.sin((index + 1) * salt) * 43758.5453
+  return x - Math.floor(x)
+}
 function addSpikeTri(batch, bx, by, tx, ty, nx, ny, half, height, color) {
   PolyBatch.addTriangle(
     batch,
@@ -481,6 +578,21 @@ function addSpikeTri(batch, bx, by, tx, ty, nx, ny, half, height, color) {
     bx + tx * half, by + ty * half,
     color
   )
+}
+
+//
+// Counts down to the tail shears' next snap and runs it.
+//
+function tickTail(inst, dt) {
+  if (inst.tailSnapLeft > 0) {
+    inst.tailSnapLeft = Math.max(0, inst.tailSnapLeft - dt)
+    return
+  }
+  inst.tailSnapIn -= dt
+  if (inst.tailSnapIn > 0) return
+  const attacking = inst.state === 'hunt' || inst.state === 'lunge'
+  inst.tailSnapIn = attacking ? TAIL_ATTACK_MIN + Math.random() * TAIL_ATTACK_RANGE : TAIL_SNAP_MIN + Math.random() * TAIL_SNAP_RANGE
+  inst.tailSnapLeft = TAIL_SNAP_SEC
 }
 
 function heroHitbox(inst, heroX, heroFootY) {

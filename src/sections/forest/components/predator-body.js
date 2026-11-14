@@ -155,7 +155,21 @@ export function tickBody(inst, dt) {
     seg.y += (wantY - seg.y) * follow
     const off = seg.x - prev.x
     Math.abs(off) > maxGap && (seg.x = prev.x + Math.sign(off) * maxGap)
+    capSegmentDistance(seg, prev)
   }
+}
+
+// However hard the head runs, a segment never lags further behind the one in
+// front than the longest gap (SPACING × MAX_STRETCH), so the body never
+// stretches past MAX_STRETCH of its length
+function capSegmentDistance(seg, prev) {
+  const dx = seg.x - prev.x
+  const dy = seg.y - prev.y
+  const dist = Math.hypot(dx, dy)
+  const cap = SPACING * MAX_STRETCH
+  if (dist <= cap) return
+  seg.x = prev.x + dx * cap / dist
+  seg.y = prev.y + dy * cap / dist
 }
 
 // Stretches the gaps with the speed

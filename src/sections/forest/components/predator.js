@@ -38,7 +38,7 @@ const DRAW_Z = CFG.visual.zIndex.player - 1
 //
 const SPIKE_AT = [0.12, 0.2, 0.28, 0.36, 0.44, 0.52, 0.6, 0.68, 0.76, 0.84, 0.92]
 const SPIKE_H = 10
-const SPIKE_HALF = 2.75
+const SPIKE_HALF = 3.2
 const SPIKE_OUTLINE_HALF_PAD = 1
 const SPIKE_OUTLINE_H_PAD = 1.4
 const SPIKE_PRESS = 0.7
@@ -48,23 +48,47 @@ const SPIKE_PRESS = 0.7
 // SPIKE_SWEEP_VARY in sweep, shrinks with the radius (SPIKE_TAPER_POW) from
 // SPIKE_REF_R, the radius it was drawn for.
 //
-const SPIKE_BASE_UP = 0.8
+const SPIKE_BASE_UP = 0.72
+const SPIKE_SINK = 2.5
+const SPIKE_MID = 0.5
+const SPIKE_MID_WIDTH = 0.78
 const SPIKE_REF_R = 9.2
 const SPIKE_TAPER_POW = 1.6
 const SPIKE_VARY = 0.22
-const SPIKE_SWEEP = 0.35
+const SPIKE_SWEEP = 0.55
 const SPIKE_SWEEP_VARY = 0.2
 const SPIKE_SQUASH = 0.18
 //
 // Legs: a thigh and a shin LEG_THIGH_W and LEG_SHIN_W wide, each ringed by
 // the contour (LEG_THIGH_RIM_W, LEG_SHIN_RIM_W wide), a round knee and foot.
 //
+const LEG_MAX_REACH = 0.96
 const LEG_THIGH_W = 2
 const LEG_SHIN_W = 1.7
 const LEG_THIGH_RIM_W = 3.6
 const LEG_SHIN_RIM_W = 3.1
 const LEG_KNEE_R = 2.1
 const LEG_FOOT_R = 1.9
+//
+// A forked lizard tongue flicks out of the mouth every TONGUE_MIN..+RANGE
+// seconds (TONGUE_HUNT_MIN..+RANGE while it hunts): out to TONGUE_LEN px in
+// the first TONGUE_OUT of its TONGUE_SEC, held, then back in; it shivers by
+// TONGUE_WIGGLE px and forks into two TONGUE_FORK px tines.
+//
+const TONGUE_MIN = 1.5
+const TONGUE_RANGE = 3
+const TONGUE_HUNT_MIN = 0.7
+const TONGUE_HUNT_RANGE = 1.2
+const TONGUE_SEC = 0.55
+const TONGUE_OUT = 0.3
+const TONGUE_HOLD = 0.55
+const TONGUE_LEN = 15
+const TONGUE_DROP = 3.4
+const TONGUE_W = 1.6
+const TONGUE_RIM = 1
+const TONGUE_WIGGLE = 1.4
+const TONGUE_FORK = 3.4
+const TONGUE_WIGGLE_HZ = 38
 //
 // The body's seams: a round joint on every segment as wide as the lines
 // that join them (shares of its radius).
@@ -78,6 +102,16 @@ const JOINT_BACK = 0.425
 // TAIL_SNAP_SEC, and much oftener (TAIL_ATTACK_MIN..+RANGE) while it attacks.
 //
 const SHEAR_OPEN = 8
+//
+// A claw is a ribbon of SHEAR_STEPS points, SHEAR_W thick at its root and
+// pointed (SHEAR_TIP_W) at its tip, ringed by SHEAR_RIM more; it curls in
+// over SHEAR_CURL of a half wave.
+//
+const SHEAR_STEPS = 7
+const SHEAR_W = 4
+const SHEAR_TIP_W = 0.2
+const SHEAR_RIM = 2
+const SHEAR_CURL = 0.65
 const TAIL_SNAP_MIN = 2.5
 const TAIL_SNAP_RANGE = 4
 const TAIL_SNAP_SEC = 0.5
@@ -181,10 +215,14 @@ export function create(cfg) {
       leg: rgb(cfg.k, FOREST_PAL.predatorLeg),
       eye: rgb(cfg.k, FOREST_PAL.predatorEye),
       pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
-      horn: rgb(cfg.k, FOREST_PAL.predatorHorn)
+      horn: rgb(cfg.k, FOREST_PAL.predatorHorn),
+      tongue: rgb(cfg.k, FOREST_PAL.predatorTongue)
     },
     tailSnapIn: TAIL_SNAP_MIN + Math.random() * TAIL_SNAP_RANGE,
     tailSnapLeft: 0,
+    tongueIn: TONGUE_MIN + Math.random() * TONGUE_RANGE,
+    tongueT: 0,
+    shearPts: [0, 1].map(() => Array.from({ length: SHEAR_STEPS }, () => ({ x: 0, y: 0 }))),
     lid: Array.from({ length: LID_STEPS + 1 }, () => ({ x: 0, y: 0 })),
     footHearable: false
   }
@@ -225,6 +263,7 @@ export function update(inst, dt) {
   tickLegs(inst, dt, hurry)
   tickEyes(inst, dt, hero)
   tickTail(inst, dt)
+  tickTongue(inst, dt)
   inst.y = inst.segments[0].y
   syncDrawZ(inst)
 }
@@ -446,9 +485,9 @@ function drawBodySegments(inst, batch, contour, belly, back, moss) {
 }
 
 function drawLeg(inst, batch, limb, contour, leg) {
-  const foot = footNow(inst, limb)
-  let bend = limb.side
   const lenScale = limb.reach * inst.stretch
+  const foot = reachableFoot(inst, limb, (THIGH + SHIN) * lenScale * LEG_MAX_REACH)
+  let bend = limb.side
   let knee = solveLeg(limb.hipX, limb.hipY, foot.x, foot.y, THIGH * lenScale, SHIN * lenScale, bend)
   const kneeGround = footGround(inst, knee.kneeX)
   if (knee.kneeY > kneeGround - 1) {
@@ -472,6 +511,7 @@ function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
   const dir = inst.dir
   const snoutX = head.x + dir * (head.radius + SNOUT_REACH)
   const snoutY = head.y + SNOUT_DROP
+  drawTongue(inst, batch, snoutX, snoutY + TONGUE_DROP)
   PolyBatch.addLine(batch, head.x, head.y + 1, snoutX, snoutY, 8.2, contour)
   PolyBatch.addLine(batch, head.x, head.y + 0.4, snoutX - dir * 1, snoutY - 0.4, 4.4, back)
   PolyBatch.addLine(batch, head.x + dir * 3, head.y + 3.2, snoutX, snoutY + 1.6, 3.4, contour)
@@ -508,6 +548,20 @@ function drawEyeLid(inst, batch, ex, ey, contour, back) {
   PolyBatch.addLine(batch, lid[0].x, lid[0].y, lid[LID_STEPS].x, lid[LID_STEPS].y, 1.1, contour)
 }
 
+//
+// The foot where the leg can really put it: the planted or swinging foot, but
+// never further from the hip than maxReach, so a leg is never drawn
+// stretched (it steps instead).
+//
+function reachableFoot(inst, limb, maxReach) {
+  const foot = footNow(inst, limb)
+  const dx = foot.x - limb.hipX
+  const dy = foot.y - limb.hipY
+  const dist = Math.hypot(dx, dy)
+  if (dist <= maxReach) return foot
+  const k = maxReach / dist
+  return { x: limb.hipX + dx * k, y: limb.hipY + dy * k }
+}
 function drawBackSpike(inst, batch, seg, prev, contour, fill, index) {
   const anger = inst.anger
   const dx = seg.x - prev.x
@@ -522,22 +576,44 @@ function drawBackSpike(inst, batch, seg, prev, contour, fill, index) {
   const tx = dx / len
   const ty = dy / len
   //
-  // On the very top edge of the back, each spike a little different (by its
-  // number) and smaller towards the tail; its tip sweeps back along the body
-  // (tx points to the head), and further in a rage.
+  // Sunk into the top edge of the back (SPIKE_BASE_UP of its segment's
+  // radius up), each spike a little different (by its number) and smaller
+  // towards the tail; it curves back along the body (tx points to the head),
+  // further in a rage.
   //
   const bx = seg.x + nx * seg.radius * SPIKE_BASE_UP
   const by = seg.y + ny * seg.radius * SPIKE_BASE_UP
   const taper = Math.pow(seg.radius / SPIKE_REF_R, SPIKE_TAPER_POW)
-  const tall = SPIKE_H * taper * (1 - SPIKE_VARY + 2 * SPIKE_VARY * spikeHash(index, 12.9898))
+  const tall = SPIKE_H * taper * (1 - SPIKE_VARY + 2 * SPIKE_VARY * spikeHash(index, 12.9898)) * (1 - anger * SPIKE_SQUASH)
   const half = SPIKE_HALF * taper * (1 - SPIKE_VARY + 2 * SPIKE_VARY * spikeHash(index, 78.233))
   const sweep = SPIKE_SWEEP + (spikeHash(index, 37.719) * 2 - 1) * SPIKE_SWEEP_VARY + anger * SPIKE_PRESS
-  const lx = nx - tx * sweep
-  const ly = ny - ty * sweep
-  const ll = Math.hypot(lx, ly) || 1
-  const squash = 1 - anger * SPIKE_SQUASH
-  addSpikeTri(batch, bx, by, tx, ty, lx / ll, ly / ll, half + SPIKE_OUTLINE_HALF_PAD, (tall + SPIKE_OUTLINE_H_PAD) * squash, contour)
-  addSpikeTri(batch, bx, by, tx, ty, lx / ll, ly / ll, half, tall * squash, fill)
+  const shape = { bx, by, tx, ty, nx, ny, half, tall, sweep }
+  addSpike(batch, shape, SPIKE_OUTLINE_HALF_PAD, SPIKE_OUTLINE_H_PAD, contour, contour)
+  addSpike(batch, shape, 0, 0, inst.colors.back, fill)
+}
+//
+// A curved spike: a quad from its foot (the back's own colour, so it grows
+// out of the back with no seam) up to SPIKE_MID of its height, then a
+// triangle to the tip (fill). The back sweep grows with the square of the
+// height, so the spike bends over towards the tail. pad widens and lengthens
+// it for its outline.
+//
+function addSpike(batch, s, padHalf, padH, footColor, tipColor) {
+  const h = s.tall + padH
+  const spot = (u, side, half) => ({
+    x: s.bx + s.nx * h * u - s.tx * s.sweep * h * u * u + s.tx * side * half,
+    y: s.by + s.ny * h * u - s.ty * s.sweep * h * u * u + s.ty * side * half
+  })
+  const half = s.half + padHalf
+  const midHalf = half * SPIKE_MID_WIDTH
+  const sink = SPIKE_SINK
+  const a = { x: s.bx - s.nx * sink - s.tx * half, y: s.by - s.ny * sink - s.ty * half }
+  const b = { x: s.bx - s.nx * sink + s.tx * half, y: s.by - s.ny * sink + s.ty * half }
+  const ml = spot(SPIKE_MID, -1, midHalf)
+  const mr = spot(SPIKE_MID, 1, midHalf)
+  const tip = spot(1, 0, 0)
+  PolyBatch.addQuad(batch, a.x, a.y, b.x, b.y, mr.x, mr.y, ml.x, ml.y, footColor)
+  PolyBatch.addTriangle(batch, ml.x, ml.y, tip.x, tip.y, mr.x, mr.y, tipColor)
 }
 
 function drawTailShears(inst, batch, contour, horn) {
@@ -555,31 +631,60 @@ function drawTailShears(inst, batch, contour, horn) {
   const oy = tail.y + ty * tail.radius * 0.2
   const shut = inst.tailSnapLeft > 0 ? Math.pow(Math.sin(Math.PI * 2 * (1 - inst.tailSnapLeft / TAIL_SNAP_SEC)), 2) : 0
   const open = SHEAR_OPEN * (1 - shut)
-  for (const side of [-1, 1]) {
-    const ex = ox + tx * SHEAR_REACH + nx * side * open
-    const ey = oy + ty * SHEAR_REACH + ny * side * open
-    PolyBatch.addLine(batch, ox, oy, ex, ey, 3.6, contour)
-    PolyBatch.addLine(batch, ox, oy, ex, ey, 1.7, horn)
+  for (let n = 0; n < 2; n++) {
+    const side = n ? 1 : -1
+    const pts = inst.shearPts[n]
+    //
+    // A claw: spreads out and then hooks in towards the other one, so the
+    // pointed tips close on each other.
+    //
+    for (let m = 0; m < pts.length; m++) {
+      const u = m / (pts.length - 1)
+      const along = SHEAR_REACH * u
+      const spread = open * (Math.sin(u * Math.PI * SHEAR_CURL) * 1.1)
+      pts[m].x = ox + tx * along + nx * side * spread
+      pts[m].y = oy + ty * along + ny * side * spread
+    }
+    PolyBatch.addTaperedRibbon(batch, pts, SHEAR_W + SHEAR_RIM, SHEAR_TIP_W + SHEAR_RIM, contour, false)
+    PolyBatch.addTaperedRibbon(batch, pts, SHEAR_W, SHEAR_TIP_W, horn, false)
   }
 }
 
 //
-// A fixed pseudo-random 0..1 for a spike's number.
+// Counts down to the tongue's next flick and runs it.
 //
-function spikeHash(index, salt) {
-  const x = Math.sin((index + 1) * salt) * 43758.5453
-  return x - Math.floor(x)
+function tickTongue(inst, dt) {
+  if (inst.tongueT > 0) {
+    inst.tongueT += dt
+    inst.tongueT >= TONGUE_SEC && (inst.tongueT = 0)
+    return
+  }
+  inst.tongueIn -= dt
+  if (inst.tongueIn > 0) return
+  const hunting = inst.state === 'hunt' || inst.state === 'lunge' || inst.state === 'stalk'
+  inst.tongueIn = hunting ? TONGUE_HUNT_MIN + Math.random() * TONGUE_HUNT_RANGE : TONGUE_MIN + Math.random() * TONGUE_RANGE
+  inst.tongueT = 0.001
 }
-function addSpikeTri(batch, bx, by, tx, ty, nx, ny, half, height, color) {
-  PolyBatch.addTriangle(
-    batch,
-    bx - tx * half, by - ty * half,
-    bx + nx * height, by + ny * height,
-    bx + tx * half, by + ty * half,
-    color
-  )
+//
+// The tongue out of the mouth at (mx, my), shivering, forked at its tip.
+//
+function drawTongue(inst, batch, mx, my) {
+  if (inst.tongueT <= 0) return
+  const u = inst.tongueT / TONGUE_SEC
+  const out = u < TONGUE_OUT ? u / TONGUE_OUT : u < TONGUE_HOLD ? 1 : (1 - u) / (1 - TONGUE_HOLD)
+  const len = TONGUE_LEN * out
+  const dir = inst.dir
+  const wig = Math.sin(inst.tongueT * TONGUE_WIGGLE_HZ) * TONGUE_WIGGLE * out
+  const tx = mx + dir * len
+  const ty = my + wig
+  const { contour, tongue } = inst.colors
+  const fork = TONGUE_FORK * out
+  for (const [pad, color] of [[TONGUE_RIM, contour], [0, tongue]]) {
+    PolyBatch.addLine(batch, mx, my, tx, ty, TONGUE_W + pad * 2, color)
+    PolyBatch.addLine(batch, tx, ty, tx + dir * fork, ty - fork * 0.7, TONGUE_W * 0.8 + pad * 2, color)
+    PolyBatch.addLine(batch, tx, ty, tx + dir * fork, ty + fork * 0.7, TONGUE_W * 0.8 + pad * 2, color)
+  }
 }
-
 //
 // Counts down to the tail shears' next snap and runs it.
 //
@@ -594,7 +699,13 @@ function tickTail(inst, dt) {
   inst.tailSnapIn = attacking ? TAIL_ATTACK_MIN + Math.random() * TAIL_ATTACK_RANGE : TAIL_SNAP_MIN + Math.random() * TAIL_SNAP_RANGE
   inst.tailSnapLeft = TAIL_SNAP_SEC
 }
-
+//
+// A fixed pseudo-random 0..1 for a spike's number.
+//
+function spikeHash(index, salt) {
+  const x = Math.sin((index + 1) * salt) * 43758.5453
+  return x - Math.floor(x)
+}
 function heroHitbox(inst, heroX, heroFootY) {
   const live = liveHeroAabb(inst.hero?.character)
   if (live) return live

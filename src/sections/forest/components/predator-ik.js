@@ -14,9 +14,9 @@ const REACH = 11
 // running leg is back on the ground in time; above RUN_NO_WAIT_SPEED legs
 // step the moment they are behind, without the idle stagger.
 //
-const SWING_SPEED_GAIN = 0.03
+const SWING_SPEED_GAIN = 0.05
 const RUN_NO_WAIT_SPEED = 60
-const PLANT_BEHIND = 6
+const PLANT_BEHIND = 5
 //
 // A hip sits on its segment's flank, shares of the segment's radius from its
 // centre (side: forward, down: below the centre). The near row starts on the
@@ -37,7 +37,7 @@ const FOOT_RAY_DEPTH = 44
 // on its own side is mid-step (unless it is already dragging a foot further
 // than DRAG_PX behind), so the legs go one after another.
 //
-const DRAG_PX = 10
+const DRAG_PX = 5
 
 /**
  * Solves a 2-segment leg. bendSign picks which side the knee folds to.
@@ -101,7 +101,7 @@ export function tickLegs(inst, dt, hurry) {
     }
     const along = dir * (hip.x - leg.footX)
     const reach = REACH * leg.reach * inst.stretch
-    const behind = along > PLANT_BEHIND * leg.reach * inst.stretch || Math.hypot(hip.x - leg.footX, hip.y - leg.footY) > reach + 6
+    const behind = along > PLANT_BEHIND * leg.reach * inst.stretch || Math.hypot(hip.x - leg.footX, hip.y - leg.footY) > reach + 2
     const fidget = speed < 3 && inst.idleTime > leg.fidgetAt
     const retarget = hurry && leg.front && inst.orientKick
     if (behind || fidget || retarget) {
@@ -127,7 +127,7 @@ export function tickLegs(inst, dt, hurry) {
 
 // How fast a swing advances (1 = a whole step per second)
 function swingRate(leg, hurry, speed) {
-  return (hurry ? 9 : 4.2 + leg.haste) + speed * SWING_SPEED_GAIN
+  return (hurry ? 11 : 7 + leg.haste * 0.6) + speed * SWING_SPEED_GAIN
 }
 
 // Where the foot should land: ahead of the hip by the leg's lead, plus the way the body travels before the foot arrives

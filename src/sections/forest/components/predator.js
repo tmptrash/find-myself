@@ -8,6 +8,7 @@ import { initEyes, tickEyes } from './predator-eyes.js'
 import { tickMove, startFleeMove } from './predator-move.js'
 import {
   cancelPredatorFeast,
+  feastMouthOpen,
   isPredatorFeasting,
   tickPredatorFruitFeast
 } from './predator-fruit-feast.js'
@@ -83,12 +84,55 @@ const TONGUE_SEC = 0.55
 const TONGUE_OUT = 0.3
 const TONGUE_HOLD = 0.55
 const TONGUE_LEN = 15
-const TONGUE_DROP = 3.4
+const TONGUE_DROP = 1.2
 const TONGUE_W = 1.6
 const TONGUE_RIM = 1
 const TONGUE_WIGGLE = 1.4
 const TONGUE_FORK = 3.4
 const TONGUE_WIGGLE_HZ = 38
+//
+// The head turns to what it goes for, as if the jaws were an arrow pointing at
+// it: the upper jaw (the head's axis) and the lower one make a sector, and
+// the sector's bisector points at the target, so the head tilts up by half
+// the opening as the mouth opens. Its target is the apple it eats or, attacking, the hero (HEAD_AIM_STATES),
+// within HEAD_PITCH_MAX rad up or down, eased at HEAD_PITCH_EASE per second;
+// otherwise it carries the head level. The upper jaw is part of the head and
+// never moves on its own: only the lower jaw opens, hinged at (HINGE_X,
+// HINGE_Y) off the head's centre, hanging at LOWER_REST rad below the head's
+// axis when shut and swinging LOWER_OPEN rad lower at full open.
+//
+// The mouth is open while it attacks (MOUTH_BY_STATE), open going for an
+// apple and between bites, and snaps shut as the lunge reaches the apple
+// (feastMouthOpen). It opens at MOUTH_OPEN_EASE and shuts at MOUTH_SHUT_EASE
+// per second; no tongue then.
+//
+const HEAD_PITCH_MAX = 1
+const HEAD_PITCH_EASE = 14
+const HEAD_AIM_STATES = ['hunt', 'lunge', 'stalk']
+const HERO_AIM_DY = -28
+const LOWER_REST = 0.04
+const LOWER_OPEN = 0.95
+const HINGE_X = 3
+const HINGE_Y = 3.2
+//
+// The red mouth between the jaws fills MOUTH_FILL of the sector (from the hinge).
+//
+const MOUTH_FILL = 0.72
+const LOWER_W = 3.4
+const LOWER_TIP_W = 0.6
+const MOUTH_OPEN_EASE = 12
+const MOUTH_SHUT_EASE = 40
+//
+// Attacking, it runs with its mouth open (how wide, by state); catching the
+// hero (coast) it snaps shut.
+//
+const MOUTH_BY_STATE = { hunt: 0.8, lunge: 1 }
+//
+// The upper jaw's two fangs (length, thickness, how far back from its tip):
+// the far one (first, drawn first) is smaller and nearer the head, the near
+// one (over it) bigger and further out along the jaw.
+//
+const FANGS = [{ len: 3.8, w: 1.2, back: 3.8 }, { len: 6.2, w: 1.7, back: 1 }]
 //
 // The body's seams: a round joint on every segment as wide as the lines
 // that join them (shares of its radius).
@@ -167,6 +211,7 @@ const SWIM_SHORE_RAMP_PX = 56
  * @param {number} [cfg.fleeLeftX] - Far-left swim target when fleeing left
  * @param {number} [cfg.homeX] - Roam-home X when the hero is off the ground line (the roam strip's right end)
  * @param {number} [cfg.roamLeftX] - Left end of the roam strip; set, the idle crawler walks random spots between it and homeX
+ * @param {number} [cfg.lakeBehindZ] - Draw z while any body part is over the lake (or it swims): behind the water, its bed, its stones and rim
  * @param {{x1: number, x2: number, z: number}} [cfg.frontSpan] - While any body part is within x1..x2 it draws at z (in front of a big prop there)
  * @returns {Object} Predator inst
  */
@@ -187,6 +232,7 @@ export function create(cfg) {
     roamLeftX: cfg.roamLeftX ?? null,
     roamGoalX: null,
     frontSpan: cfg.frontSpan ?? null,
+    lakeZ: cfg.lakeBehindZ ?? null,
     swimming: false,
     fleePath: null,
     hero: cfg.hero,
@@ -216,12 +262,17 @@ export function create(cfg) {
       eye: rgb(cfg.k, FOREST_PAL.predatorEye),
       pupil: rgb(cfg.k, FOREST_PAL.predatorPupil),
       horn: rgb(cfg.k, FOREST_PAL.predatorHorn),
-      tongue: rgb(cfg.k, FOREST_PAL.predatorTongue)
+      tongue: rgb(cfg.k, FOREST_PAL.predatorTongue),
+      mouth: rgb(cfg.k, FOREST_PAL.predatorMouth)
     },
     tailSnapIn: TAIL_SNAP_MIN + Math.random() * TAIL_SNAP_RANGE,
     tailSnapLeft: 0,
     tongueIn: TONGUE_MIN + Math.random() * TONGUE_RANGE,
     tongueT: 0,
+    mouth: 0,
+    headPitch: 0,
+    headPts: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
+    lowJaw: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
     shearPts: [0, 1].map(() => Array.from({ length: SHEAR_STEPS }, () => ({ x: 0, y: 0 }))),
     lid: Array.from({ length: LID_STEPS + 1 }, () => ({ x: 0, y: 0 })),
     footHearable: false
@@ -264,6 +315,7 @@ export function update(inst, dt) {
   tickEyes(inst, dt, hero)
   tickTail(inst, dt)
   tickTongue(inst, dt)
+  tickMouth(inst, dt)
   inst.y = inst.segments[0].y
   syncDrawZ(inst)
 }
@@ -396,8 +448,20 @@ function predatorBodyCenterX(inst) {
 // across the prop.
 //
 function syncDrawZ(inst) {
+  //
+  // Over the lake it is always behind the water and everything of the lake,
+  // however it is drawn elsewhere.
+  //
+  const water = inst.water
+  if (inst.lakeZ != null && water && (inst.swimming || inst.segments.some(seg => seg.x > water.x1 && seg.x < water.x2))) {
+    inst.obj.z !== inst.lakeZ && (inst.obj.z = inst.lakeZ)
+    return
+  }
   const span = inst.frontSpan
-  if (!span) return
+  if (!span) {
+    inst.obj.z !== DRAW_Z && (inst.obj.z = DRAW_Z)
+    return
+  }
   const inFront = inst.segments.some(seg => seg.x >= span.x1 && seg.x <= span.x2)
   const z = inFront ? span.z : DRAW_Z
   inst.obj.z !== z && (inst.obj.z = z)
@@ -509,26 +573,92 @@ function drawLeg(inst, batch, limb, contour, leg) {
 function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
   const head = inst.segments[0]
   const dir = inst.dir
-  const snoutX = head.x + dir * (head.radius + SNOUT_REACH)
-  const snoutY = head.y + SNOUT_DROP
-  drawTongue(inst, batch, snoutX, snoutY + TONGUE_DROP)
-  PolyBatch.addLine(batch, head.x, head.y + 1, snoutX, snoutY, 8.2, contour)
-  PolyBatch.addLine(batch, head.x, head.y + 0.4, snoutX - dir * 1, snoutY - 0.4, 4.4, back)
-  PolyBatch.addLine(batch, head.x + dir * 3, head.y + 3.2, snoutX, snoutY + 1.6, 3.4, contour)
-  PolyBatch.addLine(batch, snoutX - dir * 1.2, snoutY + 0.6, snoutX - dir * 2.4, snoutY + 6.2, 1.6, contour)
-  PolyBatch.addLine(batch, snoutX + dir * 2.2, snoutY + 0.4, snoutX + dir * 0.6, snoutY + 5.4, 1.45, contour)
-  PolyBatch.addDisc(batch, snoutX, snoutY, 2.2, contour)
+  const open = inst.mouth
+  const [p, q] = inst.headPts
+  const snoutF = head.radius + SNOUT_REACH
+  const snoutD = SNOUT_DROP
+  //
+  // Everything of the head is placed in its own frame (forward, down) and
+  // turned with the head's pitch, so the upper jaw points at its target.
+  //
+  headPoint(inst, snoutF, snoutD + TONGUE_DROP, p)
+  drawTongue(inst, batch, p.x, p.y)
+  headPoint(inst, 0, 1, p)
+  headPoint(inst, snoutF, snoutD, q)
+  PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, 8.2, contour)
+  headPoint(inst, 0, 0.4, p)
+  headPoint(inst, snoutF - 1, snoutD - 0.4, q)
+  PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, 4.4, back)
+  drawLowerJaw(inst, batch, snoutF, snoutD + 1.6, open)
+  drawUpperTeeth(inst, batch, snoutF, snoutD, open)
+  headPoint(inst, snoutF, snoutD, p)
+  PolyBatch.addDisc(batch, p.x, p.y, 2.2, contour)
   const eye = inst.eyes[0]
   if (!eye) return
-  const ex = head.x + dir * eye.ox
-  const ey = head.y + eye.oy
-  PolyBatch.addLine(batch, ex - dir * 6, ey - 3.4, ex + dir * 4.4, ey - 0.8, 2.8, contour)
+  headPoint(inst, eye.ox, eye.oy, p)
+  const ex = p.x
+  const ey = p.y
+  headPoint(inst, eye.ox - 6, eye.oy - 3.4, p)
+  headPoint(inst, eye.ox + 4.4, eye.oy - 0.8, q)
+  PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, 2.8, contour)
   PolyBatch.addDisc(batch, ex, ey, 5.6, contour)
   PolyBatch.addDisc(batch, ex, ey, 4.35, eyeColor)
-  const px = ex + dir * clamp(eye.px, -1.1, 1.1) * 1.15
-  const py = ey + clamp(eye.py, -1.1, 1.1) * 0.7
-  PolyBatch.addLine(batch, px, py - 2.8, px, py + 2.8, 1.45, pupilColor)
+  headPoint(inst, eye.ox + clamp(eye.px, -1.1, 1.1) * 1.15, eye.oy + clamp(eye.py, -1.1, 1.1) * 0.7, p)
+  const along = Math.cos(inst.headPitch)
+  const across = Math.sin(inst.headPitch)
+  PolyBatch.addLine(batch, p.x + dir * across * 2.8, p.y - along * 2.8, p.x - dir * across * 2.8, p.y + along * 2.8, 1.45, pupilColor)
   drawEyeLid(inst, batch, ex, ey, contour, back)
+}
+//
+// A point of the head's own frame (forward, down from its centre) in the
+// world, turned with the head's pitch.
+//
+function headPoint(inst, forward, down, out) {
+  const head = inst.segments[0]
+  const c = Math.cos(inst.headPitch)
+  const s = Math.sin(inst.headPitch)
+  out.x = head.x + inst.dir * (forward * c - down * s)
+  out.y = head.y + forward * s + down * c
+}
+//
+// The lower jaw, hinged under the head and tapering away from the hinge to a
+// point; it hangs along the chin when shut and swings down when open, and the
+// dark mouth shows between it and the upper jaw.
+//
+function drawLowerJaw(inst, batch, tipF, tipD, open) {
+  const { contour, belly, mouth } = inst.colors
+  const [p, q] = inst.headPts
+  const length = Math.hypot(tipF - HINGE_X, tipD - HINGE_Y)
+  const angle = Math.atan2(tipD - HINGE_Y, tipF - HINGE_X) + LOWER_REST + open * LOWER_OPEN
+  const jaw = inst.lowJaw
+  headPoint(inst, HINGE_X, HINGE_Y, jaw[0])
+  headPoint(inst, HINGE_X + Math.cos(angle) * length, HINGE_Y + Math.sin(angle) * length, jaw[1])
+  if (open > 0.02) {
+    headPoint(inst, tipF, tipD - 1, p)
+    const hx = jaw[0].x
+    const hy = jaw[0].y
+    PolyBatch.addTriangle(batch, hx, hy, hx + (p.x - hx) * MOUTH_FILL, hy + (p.y - hy) * MOUTH_FILL, hx + (jaw[1].x - hx) * MOUTH_FILL, hy + (jaw[1].y - hy) * MOUTH_FILL, mouth)
+  }
+  PolyBatch.addTaperedRibbon(batch, jaw, LOWER_W + 2, LOWER_TIP_W + 2, contour, false)
+  open > 0.02 && PolyBatch.addTaperedRibbon(batch, jaw, LOWER_W, LOWER_TIP_W, belly, false)
+}
+//
+// The upper jaw's two fangs hanging from its tip: dark when the mouth is
+// shut, cream with a dark ring once it opens.
+//
+function drawUpperTeeth(inst, batch, snoutF, snoutD, open) {
+  const { contour, eye } = inst.colors
+  const [p, q] = inst.headPts
+  FANGS.forEach(fang => {
+    headPoint(inst, snoutF + 1 - fang.back, snoutD + 0.5, p)
+    headPoint(inst, snoutF + 1 - fang.back - fang.len * 0.2, snoutD + 0.5 + fang.len, q)
+    if (open > 0.02) {
+      PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, fang.w + 1.6, contour)
+      PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, fang.w, eye)
+    } else {
+      PolyBatch.addLine(batch, p.x, p.y, q.x, q.y, fang.w, contour)
+    }
+  })
 }
 //
 // The upper lid coming down over the eye in a rage: a cap of the eye in the
@@ -539,8 +669,9 @@ function drawEyeLid(inst, batch, ex, ey, contour, back) {
   if (squint < 0.02) return
   const lid = inst.lid
   const reach = Math.acos(1 - squint * 2)
+  const turn = inst.dir * inst.headPitch
   for (let n = 0; n <= LID_STEPS; n++) {
-    const a = -Math.PI / 2 - reach + reach * 2 * n / LID_STEPS
+    const a = -Math.PI / 2 - reach + reach * 2 * n / LID_STEPS + turn
     lid[n].x = ex + Math.cos(a) * (EYE_R + 1)
     lid[n].y = ey + Math.sin(a) * (EYE_R + 1)
   }
@@ -654,6 +785,10 @@ function drawTailShears(inst, batch, contour, horn) {
 // Counts down to the tongue's next flick and runs it.
 //
 function tickTongue(inst, dt) {
+  if (inst.state === 'feast') {
+    inst.tongueT = 0
+    return
+  }
   if (inst.tongueT > 0) {
     inst.tongueT += dt
     inst.tongueT >= TONGUE_SEC && (inst.tongueT = 0)
@@ -664,6 +799,34 @@ function tickTongue(inst, dt) {
   const hunting = inst.state === 'hunt' || inst.state === 'lunge' || inst.state === 'stalk'
   inst.tongueIn = hunting ? TONGUE_HUNT_MIN + Math.random() * TONGUE_HUNT_RANGE : TONGUE_MIN + Math.random() * TONGUE_RANGE
   inst.tongueT = 0.001
+}
+//
+// The mouth: open while it attacks (MOUTH_BY_STATE), open going for an apple
+// and shut as the bite reaches it (feastMouthOpen), shut otherwise.
+//
+function tickMouth(inst, dt) {
+  const target = inst.state === 'feast' ? feastMouthOpen(inst) : (MOUTH_BY_STATE[inst.state] ?? 0)
+  const rate = target < inst.mouth ? MOUTH_SHUT_EASE : MOUTH_OPEN_EASE
+  inst.mouth += (target - inst.mouth) * Math.min(1, dt * rate)
+  inst.headPitch += (headPitchTarget(inst) - inst.headPitch) * Math.min(1, dt * HEAD_PITCH_EASE)
+}
+//
+// The angle (rad, down positive) of the line from the head to what it goes
+// for, 0 when it goes for nothing.
+//
+function headPitchTarget(inst) {
+  const head = inst.segments[0]
+  let target = null
+  if (inst.state === 'feast') {
+    target = inst.feastFruit
+  } else if (HEAD_AIM_STATES.includes(inst.state)) {
+    const pos = inst.hero?.character?.pos
+    pos && (target = { x: pos.x, y: pos.y + HERO_AIM_DY })
+  }
+  if (!target) return 0
+  const aim = Math.atan2(target.y - head.y, (target.x - head.x) * inst.dir)
+  const gap = LOWER_REST + inst.mouth * LOWER_OPEN
+  return clamp(aim - gap / 2, -HEAD_PITCH_MAX, HEAD_PITCH_MAX)
 }
 //
 // The tongue out of the mouth at (mx, my), shivering, forked at its tip.

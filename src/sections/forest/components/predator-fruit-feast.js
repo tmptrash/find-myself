@@ -14,6 +14,11 @@ const FEAST_APPROACH_SPEED = 280
 const FEAST_LIFT_MIN = 2
 const FEAST_LIFT_MAX = 18
 const FEAST_BITE_FORWARD_PX = 8
+//
+// At each bite the head comes this much nearer the fruit than the approach
+// stops, so the mouth is right at the fruit when the jaws shut.
+//
+const FEAST_BITE_CLOSER_PX = 7
 const FEAST_BITE_DROP_PX = 12
 const FEAST_APPROACH_SNAP_GAP = 36
 const FEAST_APPROACH_SNAP_DIST = 58
@@ -23,6 +28,15 @@ const FEAST_BITE_FORWARD_SEC = 0.28
 const FEAST_BITE_BACK_SEC = 0.34
 const FEAST_BITE_PAUSE_SEC = 0.38
 const FEAST_BITE_PULLBACK_X = 18
+const FEAST_BITE_AIM_MAX = 0.9
+//
+// The jaws are open going for the fruit and at each bite's start; they close
+// over the last (1 - FEAST_MOUTH_CLOSE_FROM) of the forward lunge, so they are
+// shut the moment they reach the fruit (the bite), and open again over the
+// first FEAST_MOUTH_REOPEN of the pull back.
+//
+const FEAST_MOUTH_CLOSE_FROM = 0.55
+const FEAST_MOUTH_REOPEN = 0.8
 const FEAST_BITE_PULLBACK_LIFT = 6.5
 const FEAST_CLUSTER_RADIUS = 52
 const FEAST_MAX_FRUIT_EQUIV = 2
@@ -58,6 +72,22 @@ export function isPredatorEatingFruit(pred, fruit) {
 export function predatorMealX(pred) {
   if (pred?.state !== 'feast' || pred.feastPhase !== 'eat' || !pred.feastFruit) return null
   return pred.feastFruit.x
+}
+
+/**
+ * How open the jaws are while it feasts (0 shut .. 1 wide open): open on the
+ * way to the fruit and between bites, snapping shut as the lunge reaches the
+ * fruit.
+ * @param {Object} pred - Predator inst
+ * @returns {number}
+ */
+export function feastMouthOpen(pred) {
+  if (pred.feastPhase !== 'eat') return 1
+  const phase = pred.feastBitePhase ?? 'pause'
+  const t = Math.min(1, (pred.feastBitePhaseT ?? 0) / feastBitePhaseDuration(phase))
+  if (phase === 'forward') return 1 - smoothstep((t - FEAST_MOUTH_CLOSE_FROM) / (1 - FEAST_MOUTH_CLOSE_FROM))
+  if (phase === 'back') return smoothstep(t / FEAST_MOUTH_REOPEN)
+  return 1
 }
 
 /**
@@ -146,9 +176,17 @@ function beginFeastEatingCycle(pred, fruit) {
   fruit.eatProgress = 0
   keepForestFruitRestingOnFloor(fruit)
   refreshFeastBitePose(pred, fruit)
+  //
+  // The lunge runs along the line from the head to the fruit — the bisector of
+  // the jaws' sector (see predator.js) — so the pulled-back pose lies back
+  // along it: further up when the fruit is lower than the head.
+  //
+  const head = pred.segments[0]
+  const slope = Math.max(-FEAST_BITE_AIM_MAX, Math.min(FEAST_BITE_AIM_MAX, Math.atan2(fruit.y - head.y, Math.abs(fruit.x - head.x) || 1)))
+  const pull = Math.hypot(FEAST_BITE_PULLBACK_X, FEAST_BITE_PULLBACK_LIFT)
   pred.feastRestPose = {
-    x: pred.feastBitePose.x - pred.dir * FEAST_BITE_PULLBACK_X,
-    headLift: pred.feastBitePose.headLift + FEAST_BITE_PULLBACK_LIFT
+    x: pred.feastBitePose.x - pred.dir * pull * Math.cos(slope),
+    headLift: pred.feastBitePose.headLift + pull * Math.sin(slope)
   }
   applyFeastBitePose(pred, 'pause', 0)
   pred.feastApproachT = 0
@@ -228,7 +266,7 @@ function applyFeastBitePose(pred, phase, t) {
 function refreshFeastBitePose(pred, fruit) {
   facePredatorTowardFruit(pred, fruit)
   const reach = getForestFruitReach(fruit, facingAngle(pred))
-  const biteX = fruit.x - pred.dir * (reach * FEAST_BITE_INTO + FEAST_BITE_FORWARD_PX)
+  const biteX = fruit.x - pred.dir * (reach * FEAST_BITE_INTO + FEAST_BITE_FORWARD_PX - FEAST_BITE_CLOSER_PX)
   const groundY = pred.groundAt(biteX)
   const biteLift = feastHeadLift(pred, groundY, fruit)
   pred.feastBitePose = { x: biteX, headLift: biteLift }

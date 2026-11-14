@@ -1032,6 +1032,12 @@ const LAKE_Z = 12
 //
 const LAKE_BED_Z = 11.6
 const LAKE_ALGAE_Z = 11.7
+//
+// Over the lake the centipede draws just behind the lake's own layers (the
+// bed with its stones and rim, the algae and the water) and still over the
+// floor and the decor under them.
+//
+const PREDATOR_LAKE_BEHIND_Z = LAKE_BED_Z - 0.1
 const LAKE_SPRITE_KEY = 'forest0'
 //
 // Hair-root clearance around the cave mouth (left / right of the crack zone).
@@ -1523,6 +1529,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       zones,
       sfx: sound,
       water: { x1: lakeX1, x2: lakeX2, surfaceY: WATER_SURFACE_Y },
+      lakeBehindZ: PREDATOR_LAKE_BEHIND_Z,
       //
       // A left flight swims for the lake's far end; the eye flower's island
       // stops it first, the snout right against the island's slope.

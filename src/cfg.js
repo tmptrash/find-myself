@@ -324,6 +324,7 @@ export const CFG = {
         predatorPupil: PALETTE.red0,
         predatorHorn: PALETTE.brown1,
         predatorTongue: PALETTE.red1,       // Forked lizard tongue
+        predatorMouth: PALETTE.red0,        // Inside the open mouth
         dreamFirefly: PALETTE.gray7,       // White fireflies left where the hero's dream bubble bursts
         water: PALETTE.cyan2,
         //

@@ -126,10 +126,11 @@ export async function load() {
  * @param {Object} cfg - Bubble configuration
  * @param {Object} cfg.k - Kaplay instance
  * @param {Object} cfg.heroInst - Hero instance it dreams over (swap it on respawn)
+ * @param {number} [cfg.z] - Draw z (the level puts it over the big trees); default just over the hero
  * @returns {Object} Bubble inst
  */
 export function create(cfg) {
-  const { k, heroInst } = cfg
+  const { k, heroInst, z = Z } = cfg
   const inst = {
     k,
     heroInst,
@@ -151,7 +152,7 @@ export function create(cfg) {
     anchor: k.vec2(TAIL_X * 2 - 1, TAIL_Y * 2 - 1)
   }
   k.add([
-    k.z(Z),
+    k.z(z),
     {
       draw() {
         onDraw(inst)

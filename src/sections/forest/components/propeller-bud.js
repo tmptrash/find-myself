@@ -129,6 +129,11 @@ const ACCEL_SMOOTH = 12
 const HANG_SETTLE = 0.02
 const HANG_W_SETTLE = 0.2
 const LAND_EXTRA_DAMP = 2.5
+//
+// Share of the landing descent after which the bud counts as practically
+// landed (the film's camera goes to it then).
+//
+const NEARLY_LANDED_AT = 0.8
 const LAND_FORCE_AFTER = 2.4
 //
 // The propeller stays nearly level (a small lean with its speed) while the
@@ -342,6 +347,17 @@ export function stopIndex(inst) {
 export function isMoving(inst) {
   return inst.state === STATES.ROOTS_IN || inst.state === STATES.FLY ||
     inst.state === STATES.LAND || inst.state === STATES.ROOTS_OUT
+}
+
+/**
+ * True once the bud has practically landed: its descent is past
+ * NEARLY_LANDED_AT of the way down, or it is already planting its roots.
+ * @param {Object} inst - Bud inst
+ * @returns {boolean}
+ */
+export function isNearlyLanded(inst) {
+  if (inst.state === STATES.ROOTS_OUT) return true
+  return inst.state === STATES.LAND && inst.landT / PARAMS.landDuration >= NEARLY_LANDED_AT
 }
 
 /**

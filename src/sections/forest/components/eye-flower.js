@@ -29,6 +29,13 @@ const ISLAND_ABOVE_WATER = 28
 const ISLAND_BELOW_WATER = 30
 const ISLAND_PLATEAU_FRAC = 0.58
 //
+// The crest runs on ISLAND_PAST_FRAME_W px further left, past the world's
+// side, so a camera that looks past the playfield's left edge (a film of
+// Valera on the island) finds the island going on, not cut off. Its slope
+// into the lake keeps its width (see buildIslandHill).
+//
+const ISLAND_PAST_FRAME_W = 260
+//
 // Walkable span ends once the slope has dropped this far below the crest, so
 // the hero never hovers over the descending bank.
 //
@@ -38,7 +45,7 @@ const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v11'
+const ISLAND_BAKE_KEY = 'v12'
 const ISLAND_BAKE_BELOW_WATER = 10
 //
 // Rock-to-soil seam: centred this far under the water line so even its
@@ -1107,7 +1114,7 @@ function isPlantInView(inst) {
   if (!view) return true
   const x1 = view.x1 - DRAW_CULL_PAD
   const x2 = view.x2 + DRAW_CULL_PAD
-  if (!inst.posed) return inst.x2 >= x1 && inst.x1 <= x2
+  if (!inst.posed) return inst.x2 >= x1 && inst.hill.x1 <= x2
   const stem = inst.stemPts
   for (let i = 0; i < stem.length; i++) {
     if (stem[i].x >= x1 && stem[i].x <= x2) return true
@@ -1408,7 +1415,7 @@ function paintIsland(ctx, inst) {
     baseY != null &&
       drawForestPlant(ctx, { x: lakeX1 + p.dx, baseY, size: p.size, rng: createSeededRandom(nextSeed(rng)) })
   })
-  for (let x = inst.x1 + ISLAND_TUFT_STEP; x < inst.walkX2; x += ISLAND_TUFT_STEP) {
+  for (let x = inst.hill.x1 + ISLAND_TUFT_STEP; x < inst.walkX2; x += ISLAND_TUFT_STEP) {
     const baseY = dryRootY(x)
     baseY != null && rng() < ISLAND_TUFT_CHANCE &&
       drawForestPlant(ctx, { x, baseY, rng })
@@ -1426,16 +1433,19 @@ function paintIsland(ctx, inst) {
 }
 
 //
-// Mossy hill shape of the island whose left edge is `x1`.
+// Mossy hill shape of the island whose left edge (under the frame) is `x1`:
+// its crest starts ISLAND_PAST_FRAME_W further left, the plateau share grown
+// so the slope stays ISLAND_W × (1 - ISLAND_PLATEAU_FRAC) wide.
 //
 function buildIslandHill(x1, waterY) {
+  const fullW = ISLAND_W + ISLAND_PAST_FRAME_W
   return {
-    x1,
+    x1: x1 - ISLAND_PAST_FRAME_W,
     x2: x1 + ISLAND_W,
     floorY: waterY + ISLAND_BELOW_WATER,
     height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
     peakLeft: true,
-    plateau: ISLAND_PLATEAU_FRAC
+    plateau: 1 - ISLAND_W * (1 - ISLAND_PLATEAU_FRAC) / fullW
   }
 }
 

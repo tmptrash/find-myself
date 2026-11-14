@@ -6237,7 +6237,7 @@ function onUpdate(inst) {
   // No dozing off while a hint (the controls one at the start) is up or
   // still to come: the dream's timer starts once it is gone.
   //
-  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), !isHeroOnStartBranch(inst, char) && !isHeroTouchingBigTreeTrunk(inst, heroX) && isDreamBubbleOnScreen(k, inst, char), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
+  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), isDreamBubbleAllowed(k, inst, char, heroX), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
   const grounded = char.isGrounded?.() ?? false
@@ -6609,6 +6609,15 @@ function buildForestPropellerBudStops(inst) {
     heroOn: () => isHeroAtForestIsland(inst, islandX)
   })
   return stops
+}
+//
+// The dream bubble may show: the camera is on the hero (not away showing
+// where Valera flew), he is off the start branch and clear of the big trees'
+// trunks, and the bubble fits the screen.
+//
+function isDreamBubbleAllowed(k, inst, char, heroX) {
+  return !BudCine.isCameraAway(inst.budCine) && !isHeroOnStartBranch(inst, char) &&
+    !isHeroTouchingBigTreeTrunk(inst, heroX) && isDreamBubbleOnScreen(k, inst, char)
 }
 //
 // The hero rides the centipede up to the island or is on it already.

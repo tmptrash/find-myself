@@ -99,6 +99,16 @@ export function isHeroShielded(inst) {
 }
 
 /**
+ * True while the camera is away from the hero (on its way to the bud, on it,
+ * or on its way back).
+ * @param {Object|null} inst - Film inst
+ * @returns {boolean}
+ */
+export function isCameraAway(inst) {
+  return Boolean(inst) && inst.t > 0
+}
+
+/**
  * Where the camera looks: the hero's point moved toward the bud by the film's
  * progress, plus the swing and the wandering aim of the hands once it is on
  * the bud, written into out.

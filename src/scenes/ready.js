@@ -165,13 +165,7 @@ const STAR_TWINKLE_FREQ_MIN = 0.5
 const STAR_TWINKLE_FREQ_RANGE = 2.4
 const STAR_BASE_ALPHA_MIN = 0.35
 const STAR_BASE_ALPHA_RANGE = 0.45
-const STAR_AMBER_RATIO = 0.62
-const STAR_AMBER_R = 244
-const STAR_AMBER_G = 192
-const STAR_AMBER_B = 96
-const STAR_WHITE_R = 230
-const STAR_WHITE_G = 240
-const STAR_WHITE_B = 250
+const STAR_WHITE = 255
 const STAR_AREA_TOP_RATIO = 0.05
 const STAR_AREA_BOTTOM_RATIO = 0.55
 const STAR_AREA_LEFT_RATIO = 0.03
@@ -904,15 +898,14 @@ function buildStar(x, y, isLarge) {
   const radius = isLarge
     ? STAR_RADIUS_LARGE_MIN + Math.random() * STAR_RADIUS_LARGE_RANGE
     : STAR_RADIUS_SMALL_MIN + Math.random() * STAR_RADIUS_SMALL_RANGE
-  const isAmber = Math.random() < STAR_AMBER_RATIO
   return {
     x,
     y,
     radius,
     isLarge,
-    r: isAmber ? STAR_AMBER_R : STAR_WHITE_R,
-    g: isAmber ? STAR_AMBER_G : STAR_WHITE_G,
-    b: isAmber ? STAR_AMBER_B : STAR_WHITE_B,
+    r: STAR_WHITE,
+    g: STAR_WHITE,
+    b: STAR_WHITE,
     baseAlpha: STAR_BASE_ALPHA_MIN + Math.random() * STAR_BASE_ALPHA_RANGE,
     twinkleFreq: STAR_TWINKLE_FREQ_MIN + Math.random() * STAR_TWINKLE_FREQ_RANGE,
     twinklePhase: Math.random() * Math.PI * 2

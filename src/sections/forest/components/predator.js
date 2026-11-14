@@ -162,13 +162,6 @@ const TAIL_SNAP_SEC = 0.5
 const TAIL_ATTACK_MIN = 0.35
 const TAIL_ATTACK_RANGE = 0.5
 //
-// In a rage the eye's upper lid comes down by up to EYE_SQUINT of the eye.
-//
-const EYE_R = 4.35
-const EYE_SQUINT = 0.42
-const LID_STEPS = 8
-const LID_INDICES = Array.from({ length: LID_STEPS - 1 }, (_, i) => [0, i + 1, i + 2]).flat()
-//
 // Hit reach past the tail (its shears).
 //
 const SHEAR_REACH = 18
@@ -276,7 +269,6 @@ export function create(cfg) {
     headPts: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
     lowJaw: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
     shearPts: [0, 1].map(() => Array.from({ length: SHEAR_STEPS }, () => ({ x: 0, y: 0 }))),
-    lid: Array.from({ length: LID_STEPS + 1 }, () => ({ x: 0, y: 0 })),
     footHearable: false
   }
   inst.groundAt = x => predatorSurfaceAt(inst, x)
@@ -616,7 +608,6 @@ function drawHead(inst, batch, contour, back, eyeColor, pupilColor) {
   const along = Math.cos(inst.headPitch)
   const across = Math.sin(inst.headPitch)
   PolyBatch.addLine(batch, p.x + dir * across * 2.8, p.y - along * 2.8, p.x - dir * across * 2.8, p.y + along * 2.8, 1.45, pupilColor)
-  drawEyeLid(inst, batch, ex, ey, contour, back)
 }
 //
 // A point of the head's own frame (forward, down from its centre) in the
@@ -669,25 +660,6 @@ function drawUpperTeeth(inst, batch, snoutF, snoutD, open) {
     }
   })
 }
-//
-// The upper lid coming down over the eye in a rage: a cap of the eye in the
-// head's colour with a dark edge.
-//
-function drawEyeLid(inst, batch, ex, ey, contour, back) {
-  const squint = inst.anger * EYE_SQUINT
-  if (squint < 0.02) return
-  const lid = inst.lid
-  const reach = Math.acos(1 - squint * 2)
-  const turn = inst.dir * inst.headPitch
-  for (let n = 0; n <= LID_STEPS; n++) {
-    const a = -Math.PI / 2 - reach + reach * 2 * n / LID_STEPS + turn
-    lid[n].x = ex + Math.cos(a) * (EYE_R + 1)
-    lid[n].y = ey + Math.sin(a) * (EYE_R + 1)
-  }
-  PolyBatch.addPolygon(batch, lid, LID_INDICES, back)
-  PolyBatch.addLine(batch, lid[0].x, lid[0].y, lid[LID_STEPS].x, lid[LID_STEPS].y, 1.1, contour)
-}
-
 //
 // The foot where the leg can really put it: the planted or swinging foot, but
 // never further from the hip than maxReach, so a leg is never drawn

@@ -992,7 +992,7 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
 //
-const BRANCH_TRAMP_OFFSET_X = 145
+const BRANCH_TRAMP_OFFSET_X = 125
 const BRANCH_TRAMP_BOOST_MULT = 1.68
 const FOREST_CAMERA_SHAKE_AMP = 5
 const FOREST_CAMERA_SHAKE_DURATION = 0.22

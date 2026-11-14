@@ -69,7 +69,7 @@ const LEVEL_BUG_HOLE_X = LEVEL_LEFT_TREE_X - 125
 const BUG_HOLE_LAKE_GAP = 24
 const BUG_HOLE_LIP = TunnelPicture.layout(FOREST_CFG.appleBug.tunnelWidth).lip
 const BUG_HOLE_HALF_W = Math.max(-BUG_HOLE_LIP.x1, BUG_HOLE_LIP.x2)
-const LEVEL_BRANCH_TRAMP_X = 1155
+const LEVEL_BRANCH_TRAMP_X = 1135
 const LEVEL_RIGHT_TRAMP_X = 2300
 const LEVEL_TRAMPS = [
   { x: LEVEL_BRANCH_TRAMP_X, mushroom: TrampMushroom.TRAMP_MUSHROOM.BRANCH },

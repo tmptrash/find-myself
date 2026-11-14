@@ -4,8 +4,8 @@
 //
 // The pupil darts between look targets in saccades and locks onto the hero
 // once the creature has noticed him. Its rage (inst.anger, 0..1, by state,
-// eased at ANGER_EASE per second) narrows the eye and lays the back spikes
-// down.
+// eased at ANGER_EASE per second) lays the back spikes down; the eye itself
+// stays wide open.
 //
 const SPOTS = [
   { x: 1, y: -0.1 },

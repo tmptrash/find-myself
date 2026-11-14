@@ -879,7 +879,7 @@ export const CFG = {
     //
     backgroundMusic: {
       birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for forest level
-      whisper: MASTER_VOLUME * 0.38  // whisper.mp3 near forest lip-trees
+      whisper: MASTER_VOLUME * 1  // whisper.mp3 by the island eye-flower (loudest right at it)
     },
     //
     // Level sound effects

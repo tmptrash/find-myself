@@ -22,6 +22,7 @@ import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
 import * as Backdrop from './cave-backdrop.js'
+import * as Scene from './cave-scene.js'
 import * as Glow from './cave-glow.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
@@ -57,6 +58,16 @@ const Z_FRAME = CFG.visual.zIndex.ui - 1
 const BODY_ABOVE_WORLD = 400
 const PLATFORM_BODY_H = 16
 //
+// Slopes: under a rise or a fall a solid body sits at its lower end's
+// height, and a narrow step rides under the hero's feet along the slope
+// line (passable from below) whenever his feet are within SLOPE_CATCH px
+// of it; standing on it he is held on the line (downhill too, no hopping).
+//
+const SLOPE_STEP_W = 30
+const SLOPE_STEP_H = 12
+const SLOPE_CATCH = 24
+const PARK_Y = -10000
+//
 // Death and respawn.
 //
 const DEATH_BURST_COUNT = 48
@@ -80,28 +91,23 @@ const DROWN_RESPAWN_DELAY = 0.8
 //
 // The lake's sprites; the water line sits this far over its ground line.
 //
-const LAKE_SPRITE_KEY = 'cave0-v2'
+const LAKE_SPRITE_KEY = 'cave0-v3'
 const LAKE_FLOOR_BELOW_SURFACE = 8
+//
+// The water starts where the floor's bank slope meets its surface.
+//
+const LAKE_SHORE_INSET = 26
 //
 // Ambient fireflies.
 //
 const FIREFLY_COUNT = 44
 //
-// Steady glows of the lit props (teal mushrooms and bulbs, gold crystals)
-// and the daylight falling in through the roots' hole: x, y, radius,
-// opacity, colour key.
+// Steady glows: round every glowing prop (cave-scene.js) and the daylight
+// falling in through the roots' hole: radius, opacity.
 //
-const GLOWS = [
-  { x: 430, y: 532, r: 66, opacity: 0.35, color: 'tealGlow' },
-  { x: 120, y: 1085, r: 60, opacity: 0.35, color: 'tealGlow' },
-  { x: 305, y: 1085, r: 60, opacity: 0.3, color: 'lanternCore' },
-  { x: 410, y: 1092, r: 50, opacity: 0.3, color: 'lanternGlow' },
-  { x: 1575, y: 1105, r: 70, opacity: 0.35, color: 'tealGlow' },
-  { x: 1515, y: 545, r: 50, opacity: 0.35, color: 'lanternGlow' },
-  { x: 1712, y: 562, r: 56, opacity: 0.35, color: 'lanternGlow' },
-  { x: 1680, y: 1105, r: 70, opacity: 0.4, color: 'lanternGlow' },
-  { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 130, opacity: 0.4, color: 'rootLight' }
-]
+const PROP_GLOW_R = 60
+const PROP_GLOW_OPACITY = 0.35
+const HOLE_GLOW = { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 130, opacity: 0.4, color: 'rootLight' }
 //
 // FPS readout over the top-left of the screen (like the forest's; on touch
 // devices lined up with the fullscreen / back buttons).
@@ -140,6 +146,7 @@ function build(k) {
     surfaceY: Layout.LAKE_SURFACE_Y,
     floorY: Layout.LAKE_SURFACE_Y + LAKE_FLOOR_BELOW_SURFACE,
     spriteKey: LAKE_SPRITE_KEY,
+    waterStartX: Layout.LAKE_X1 + LAKE_SHORE_INSET,
     palette: CAVE_CFG.water
   })
   Glow.create(k)
@@ -150,11 +157,11 @@ function build(k) {
     caveSound,
     lake,
     backdrop: Backdrop.create(k, View.windowSize(view)),
-    terrain: Terrain.create({ k, lake }),
+    terrain: Terrain.create({ k }),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
     lantern: Lantern.create({ k, ...Layout.LANTERN }),
     exit: Exit.create({ k }),
-    glows: GLOWS.map(g => ({ ...g, rgb: getRGB(k, CAVE_CFG.colors[g.color]) })),
+    glows: [...Scene.propGlows().map(g => ({ ...g, r: PROP_GLOW_R, opacity: PROP_GLOW_OPACITY })), HOLE_GLOW].map(g => ({ ...g, rgb: getRGB(k, CAVE_CFG.colors[g.color]) })),
     platformByBody: new Map(),
     heroInst: null,
     safe: get(KEY_SAFE_SPOT, null),
@@ -205,6 +212,7 @@ function updateHero(inst, char) {
   // snapping in the air made jumps and falls stutter.
   //
   char.isGrounded() && Hero.snapPosToPixels(inst.heroInst)
+  rideSlope(inst, char)
   trackLanding(inst, char)
   Lantern.onUpdate(inst.lantern, inst.heroInst) && CaveSound.playLanternBounce(inst.caveSound)
   trackSafeSpot(inst, char)
@@ -356,17 +364,48 @@ function playHeroStep(inst, hero, land) {
   hero.sfx && CaveSound.playStoneStep(inst.caveSound, land)
 }
 //
-// Both walls and every platform.
+// Both walls, every flat run and the body under every slope, and the step
+// that rides the slopes.
 //
 function createBodies(inst) {
+  const k = inst.k
   const top = -BODY_ABOVE_WORLD
   const tall = Layout.WORLD_H + BODY_ABOVE_WORLD
-  addSolid(inst.k, 0, top, Layout.WALL_COLLIDE_W, tall)
-  addSolid(inst.k, Layout.WORLD_W - Layout.WALL_COLLIDE_W, top, Layout.WALL_COLLIDE_W, tall)
-  Layout.PLATFORMS.forEach(p => {
-    const h = p.kind === Layout.PLATFORM_KIND.GROUND ? Layout.WORLD_H - p.y : PLATFORM_BODY_H
-    inst.platformByBody.set(addSolid(inst.k, p.x1, p.y, p.x2 - p.x1, h), p)
-  })
+  addSolid(k, 0, top, Layout.WALL_COLLIDE_W, tall)
+  addSolid(k, Layout.WORLD_W - Layout.WALL_COLLIDE_W, top, Layout.WALL_COLLIDE_W, tall)
+  Layout.PLATFORMS.forEach(p => Layout.topSegments(p).forEach(seg => {
+    const y = Math.max(seg.y1, seg.y2)
+    const h = p.kind === Layout.PLATFORM_KIND.GROUND ? Layout.WORLD_H - y : PLATFORM_BODY_H
+    inst.platformByBody.set(addSolid(k, seg.x1, y, seg.x2 - seg.x1, h), p)
+  }))
+  inst.slopeStep = k.add([
+    k.rect(SLOPE_STEP_W, SLOPE_STEP_H),
+    k.pos(0, PARK_Y),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName,
+    CFG.game.noCeilingTag
+  ])
+}
+//
+// Keeps the slope step under the hero's feet on a slope right at his feet,
+// else parks it — but never from under his feet (Kaplay
+// carries a rider along with his platform): past a slope's end he just
+// walks off its edge. Holds a hero standing on it on the line.
+//
+function rideSlope(inst, char) {
+  const step = inst.slopeStep
+  const feetY = char.pos.y + Layout.HERO_FEET_DY
+  const slope = Layout.slopeUnder(char.pos.x, feetY - SLOPE_CATCH)
+  const onStep = char.isGrounded() && char.curPlatform?.() === step
+  if (!slope || slope.y > feetY + SLOPE_CATCH) {
+    onStep || (step.pos = inst.k.vec2(0, PARK_Y))
+    return
+  }
+  step.pos = inst.k.vec2(char.pos.x - SLOPE_STEP_W / 2, slope.y)
+  inst.platformByBody.set(step, slope.platform)
+  onStep && char.vel.y >= 0 && (char.pos.y = slope.y - Layout.HERO_FEET_DY)
 }
 function addSolid(k, x, y, w, h) {
   return k.add([
@@ -387,7 +426,7 @@ function createHud(inst) {
   FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_LEFT_X)
 }
 //
-// Draw passes: the back world (parallax, waterfalls), the terrain with the
+// Draw passes: the back world (parallax), the terrain (the lake's bed in it) with the
 // lantern, the see-through water over the pillars' feet (a drowning hero
 // sinks between them), the additive lights and the screen frame.
 //

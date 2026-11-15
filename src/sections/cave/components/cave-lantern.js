@@ -5,13 +5,14 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
 import * as Glow from '../utils/cave-glow.js'
 //
-// The lantern mushroom (the plants sheet's glowing chanterelle): it stands
+// The lantern mushroom (the plants sheet's big tan mushrooms): it stands
 // dim beside the hero's landing spot. A hero landing on its cap is thrown
 // back up, the cap squashes and springs, and the mushroom lights up — a
 // warm amber halo that fades again over LIGHT_HOLD_SEC. It also serves as
 // the cave's icon in the menu (no cap collider there).
 //
-const SPRITE = 'cave0-lantern-v1'
+const SPRITE = 'cave0-lantern-v2'
+export const LANTERN_PIECE = 'shroom2'
 const GRAIN_SEED = 9300
 //
 // Size: drawn height in world px (its cap top stays within one jump), the
@@ -73,7 +74,7 @@ const bakedFor = new WeakSet()
 export function create(cfg) {
   const { k, x, y } = cfg
   bake(k)
-  const w = Atlas.widthAt('chanterelle', LANTERN_H)
+  const w = Atlas.widthAt(LANTERN_PIECE, LANTERN_H)
   const inst = {
     k,
     x,
@@ -191,13 +192,13 @@ export function onDrawHalo(inst) {
 //
 function bake(k) {
   if (bakedFor.has(k)) return
-  const src = Atlas.piece('chanterelle')
+  const src = Atlas.piece(LANTERN_PIECE)
   if (!src) return
   const h = LANTERN_H * BAKE_SCALE
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(Atlas.widthAt('chanterelle', h))
+  canvas.width = Math.round(Atlas.widthAt(LANTERN_PIECE, h))
   canvas.height = h
-  Atlas.drawPiece(canvas.getContext('2d'), 'chanterelle', canvas.width / 2, h, h)
+  Atlas.drawPiece(canvas.getContext('2d'), LANTERN_PIECE, canvas.width / 2, h, h)
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
   k.loadSprite(SPRITE, canvas, { filter: 'linear' })
   bakedFor.add(k)

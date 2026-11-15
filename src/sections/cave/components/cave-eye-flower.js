@@ -9,8 +9,8 @@ import { closeness, creatureColors, eyeVeins, addVeinedEye, addStalk, addThorns,
 // eye-berry; cream flowers with red hearts sit between them. Every eye
 // watches the hero once he is within WATCH_REACH; the closer he comes the
 // tenser it gets (TENSE_FAR → TENSE_NEAR, eased at TENSE_EASE per second):
-// the stalk leans out at him, sways faster, trembles, and the pupils
-// shrink to points. Drawn live in one polygon batch, just behind the hero.
+// the stalk leans out at him (smoothly, toward whichever side he is on)
+// and sways faster, and the pupils shrink to points. Drawn live in one polygon batch, just behind the hero.
 //
 const Z = CFG.visual.zIndex.player - 0.5
 const WATCH_REACH = 900
@@ -21,8 +21,8 @@ const TENSE_EASE = 1.5
 // Main stalk: segments, length, widths, contour, lit line; at rest it
 // stands up bending a little toward the left (where the hero comes from),
 // swaying STEM_SWAY rad at STEM_SWAY_SPEED; tense, it leans up to LEAN_MAX
-// rad toward the hero and sways TENSE_SWAY_SPEED times as fast, with a
-// tremble of TREMBLE rad at TREMBLE_HZ.
+// rad toward the hero and sways TENSE_SWAY_SPEED times as fast. The lean
+// turns side gradually across LEAN_SIDE_SOFT px either side of the stalk.
 //
 const STEM_SEGMENTS = 14
 const STEM_LEN = 270
@@ -37,8 +37,7 @@ const STEM_SWAY = 0.07
 const STEM_SWAY_SPEED = 0.9
 const TENSE_SWAY_SPEED = 2.2
 const LEAN_MAX = 0.45
-const TREMBLE = 0.025
-const TREMBLE_HZ = 13
+const LEAN_SIDE_SOFT = 160
 //
 // Thorns: on the stalk (between its from / to shares), on the eye stems.
 //
@@ -193,7 +192,7 @@ export function onUpdate(inst) {
   const dist = hero ? Math.hypot(hero.x - inst.x, hero.y - inst.y) : Infinity
   const target = closeness(TENSE_FAR, TENSE_NEAR, dist)
   inst.tension += (target - inst.tension) * Math.min(1, dt * TENSE_EASE)
-  const side = hero ? Math.sign(hero.x - inst.x) || 1 : 0
+  const side = hero ? Math.max(-1, Math.min(1, (hero.x - inst.x) / LEAN_SIDE_SOFT)) : 0
   inst.lean += (side * LEAN_MAX * inst.tension - inst.lean) * Math.min(1, dt * TENSE_EASE)
   inst.time += dt * (1 + (TENSE_SWAY_SPEED - 1) * inst.tension)
   poseStalk(inst)
@@ -203,13 +202,14 @@ export function onUpdate(inst) {
 }
 
 //
-// The stalk: its rest arc plus sway, lean toward the hero and the tremble.
+// The stalk: its rest arc plus sway and the lean toward the hero (the
+// leaning stalk straightens out of its rest bend as far as it leans).
 //
 function poseStalk(inst) {
   const t = inst.time
-  const tremble = Math.sin(inst.k.time() * TREMBLE_HZ * Math.PI * 2) * TREMBLE * inst.tension
-  const angle = STEM_REST_ANGLE + Math.sin(t * STEM_SWAY_SPEED) * STEM_SWAY + inst.lean + tremble
-  fillArc(inst.stemPts, inst.x, inst.y, angle, STEM_REST_BEND * (1 - inst.tension * Math.abs(Math.sign(inst.lean))), STEM_BEND_POW, STEM_LEN / STEM_SEGMENTS)
+  const angle = STEM_REST_ANGLE + Math.sin(t * STEM_SWAY_SPEED) * STEM_SWAY + inst.lean
+  const straighten = Math.min(1, Math.abs(inst.lean) / LEAN_MAX)
+  fillArc(inst.stemPts, inst.x, inst.y, angle, STEM_REST_BEND * (1 - straighten), STEM_BEND_POW, STEM_LEN / STEM_SEGMENTS)
 }
 //
 // Point and heading on the stalk at a share of its length.

@@ -1,128 +1,70 @@
-import { getRGB } from '../../../utils/helper.js'
-import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from './cave-atlas.js'
+import * as Earth from './cave-earth.js'
 import * as Layout from './cave-layout.js'
 //
-// The back of the cave room, in two parallax layers (the reference's dark
-// teal depth): a far layer of terraced rock silhouettes with pale
-// waterfalls and their haze, and a mid layer of darker rock masses with
-// dim moss, glowing mushrooms and nearer waterfalls. Each layer is painted
-// in its own space — as big as the window needs to cross the world at its
-// speed — and baked once per live k, in columns under 2048 px. The falling
-// water is live: streaks run down every fall over the baked body.
+// The back of the cave room in three parallax layers: the far wall — the
+// forest's ground stones pulled deep into the dark, set in dark brown
+// soil — and two layers of distant rock platforms floating in front of
+// it, smaller, dimmer and softer the farther they are. Softness comes
+// from painting a layer small and scaling it up (the wall the softest).
+// The layers move only with the camera — each its share (its speed) of
+// the camera's travel — so where the world in front stands still, so does
+// the back. Each layer is painted in its own space — the window plus its
+// share of the travel — and baked once per live k, in columns under
+// 2048 px.
 //
 const COLORS = CAVE_CFG.backdrop
-const SPRITE_PREFIX = 'cave0-backdrop-v2-'
+const SPRITE_PREFIX = 'cave0-backdrop-v6-'
 const TILE_MAX = 2048
 const GRAIN_SEED = 9100
 //
-// Layer speeds (share of the camera's travel) and their seeds.
+// Layers back to front: speed (share of the travel), seed and what they
+// hold.
 //
+const KIND = { WALL: 'wall', ISLES: 'isles' }
 const LAYERS = [
-  { id: 'far', speed: 0.35, seed: 9101 },
-  { id: 'mid', speed: 0.65, seed: 9102 }
+  { id: 'wall', kind: KIND.WALL, speed: 0.25, seed: 9101, blurDown: 3 },
+  { id: 'far', kind: KIND.ISLES, speed: 0.45, seed: 9102, scaleMin: 0.32, scaleRange: 0.18, shade: COLORS.farIsles, shadeAmount: 0.8, blurDown: 1.5, gap: 240, rows: [0.22, 0.42, 0.62, 0.82] },
+  { id: 'mid', kind: KIND.ISLES, speed: 0.68, seed: 9103, scaleMin: 0.5, scaleRange: 0.25, shade: COLORS.midIsles, shadeAmount: 0.72, blurDown: 1, gap: 380, rows: [0.35, 0.6, 0.85] }
 ]
 //
-// Ridges of each layer, back to front: base height (share of the layer
-// height), wobble, fill and rim colours, and the sheet pieces standing on
-// it (height range, shade toward the ridge colour, spacing).
+// The far wall: stones of mixed sizes scattered at random (see
+// Earth.scatter), pulled toward the shade colour, with dark brown soil
+// showing between them.
 //
-const RIDGES = {
-  far: [
-    { base: 0.4, amp: 40, color: COLORS.far[0], rim: COLORS.farRim, pieces: ['spires', 'slabs', 'stalagmites', 'rockPile'], hMin: 80, hRange: 90, shade: 0.86, gap: 240 },
-    { base: 0.6, amp: 34, color: COLORS.far[1], rim: COLORS.farRim, pieces: ['caveRock', 'spires', 'mossRock'], hMin: 70, hRange: 70, shade: 0.84, gap: 280 },
-    { base: 0.8, amp: 26, color: COLORS.far[2], rim: COLORS.farRim, pieces: [], hMin: 0, hRange: 0, shade: 0, gap: 0 }
-  ],
-  mid: [
-    { base: 0.56, amp: 50, color: COLORS.mid[0], rim: COLORS.midRim, pieces: ['spires', 'vineSpire', 'stalagmites', 'rootBoulder'], hMin: 100, hRange: 90, shade: 0.76, gap: 300 },
-    { base: 0.84, amp: 30, color: COLORS.mid[1], rim: COLORS.midRim, pieces: ['mossBoulder', 'caveMound', 'tealShroomRock', 'rockPile'], hMin: 70, hRange: 60, shade: 0.7, gap: 260 }
-  ]
-}
-const RIDGE_STEP = 8
-const RIDGE_WAVE = 0.004
-const RIDGE_NOISE = 0.013
-const RIDGE_NOISE_SHARE = 0.3
-const RIM_W = 2
-const RIM_ALPHA = 0.55
-const MOSS_W = 4
-const MOSS_ALPHA = 0.55
-const PIECE_SINK = 0.12
-const PIECE_GAP_JITTER = 0.5
+const WALL_SIZES = [
+  { sMin: 0.4, sRange: 0.35, tries: 2 },
+  { sMin: 0.22, sRange: 0.16, tries: 3 },
+  { sMin: 0.1, sRange: 0.1, tries: 4 },
+  { sMin: 0.05, sRange: 0.05, tries: 5 }
+]
+const WALL_CLOSEST = 0.7
+const WALL_SHADE = 0.72
 //
-// Waterfalls per layer: layer X share, the ridge they pour over (they fall
-// to the next one, which hides their foot) and width.
+// Distant platforms: row jitter (share of the layer height), spacing
+// jitter, the kinds of pieces.
 //
-const FALLS = {
-  far: [
-    { u: 0.12, ridge: 0, w: 16 },
-    { u: 0.47, ridge: 1, w: 12 },
-    { u: 0.83, ridge: 0, w: 20 }
-  ],
-  mid: [
-    { u: 0.3, ridge: 0, w: 22 },
-    { u: 0.68, ridge: 0, w: 26 }
-  ]
-}
-const FALL_FOOT_PAD = 24
-const FALL_BODY_ALPHA = { far: 0.28, mid: 0.4 }
-const HAZE_R = 220
-const HAZE_ALPHA = 0.32
-const FOAM_H = 14
-const FOAM_ALPHA = 0.5
-const FOAM_W = 1.4
-//
-// Live streaks: per fall, their speed and length range, opacity.
-//
-const STREAKS_PER_FALL = 6
-const STREAK_SPEED = 150
-const STREAK_LEN_MIN = 26
-const STREAK_LEN_RANGE = 40
-const STREAK_W = 2
-const STREAK_SPREAD = 0.8
-const STREAK_OPACITY = 0.45
-//
-// Distant glowing specks on the far layer.
-//
-const SPECKS = 60
-const SPECK_ALPHA = 0.45
-const SPECK_R = 1.4
-const SPECK_R_MIN = 0.5
-const SPECK_Y_FROM = 0.25
-const SPECK_Y_RANGE = 0.7
-const TAU = Math.PI * 2
-const BYTE_MAX = 255
-const HEX_RADIX = 16
+const ISLE_ROW_JITTER = 0.08
+const ISLE_GAP_JITTER = 0.6
+const ISLE_PIECES = [...Atlas.FLATS, ...Atlas.BLOCKS, ...Atlas.RISES, ...Atlas.FALLS]
 const bakedFor = new WeakSet()
 
 /**
- * Bakes both layers on this k (once) and sets up the live streaks.
+ * Bakes the layers on this k (once).
  * @param {Object} k - Kaplay instance
  * @param {{w: number, h: number}} view - Visible world window size
  * @returns {Object} Backdrop instance
  */
 export function create(k, view) {
-  const rng = createSeededRandom(GRAIN_SEED)
-  return {
-    k,
-    tiles: bakeLayers(k, view),
-    batch: PolyBatch.create(),
-    streakRgb: getRGB(k, COLORS.waterfallLight),
-    streaks: LAYERS.flatMap(layer => FALLS[layer.id].flatMap(fall => Array.from({ length: STREAKS_PER_FALL }, () => ({
-      layer,
-      span: fallSpan(layer, fall, view),
-      x: fall.u * layerSize(layer, view).w + (rng() - 0.5) * fall.w * STREAK_SPREAD,
-      phase: rng(),
-      len: STREAK_LEN_MIN + rng() * STREAK_LEN_RANGE
-    }))))
-  }
+  return { k, tiles: bakeLayers(k, view) }
 }
 
 /**
- * Draws both baked layers for the window whose top-left world point is
- * left / top, then the falling streaks over them.
+ * Draws the baked layers for the window whose top-left world point is
+ * left / top.
  * @param {Object} inst - Backdrop instance
  * @param {{left: number, top: number}} view - Visible world rect
  */
@@ -132,14 +74,11 @@ export function onDraw(inst, view) {
     sprite: tile.name,
     pos: k.vec2(Math.round(view.left * (1 - tile.speed)) + tile.x, Math.round(view.top * (1 - tile.speed)))
   }))
-  const t = k.time()
-  inst.streaks.forEach(streak => addStreak(inst, streak, view, t))
-  PolyBatch.flush(inst.batch, k, STREAK_OPACITY)
 }
 
 /**
- * Paints both layers into a 2D canvas as seen by a window whose top-left
- * world point is rect.x1 / rect.y1 (the forest's peek, the menu picture).
+ * Paints the layers into a 2D canvas as seen by a window over rect (the
+ * forest's peek, the menu picture).
  * @param {CanvasRenderingContext2D} ctx - World-translated context
  * @param {{x1: number, y1: number, x2: number, y2: number}} rect - Window rect
  */
@@ -153,38 +92,12 @@ export function paintBackdrop(ctx, rect) {
   })
 }
 //
-// One streak running down its fall, wrapping to the top.
-//
-function addStreak(inst, streak, view, t) {
-  const { y1, y2 } = streak.span
-  const span = y2 - y1
-  const y = y1 + ((t * STREAK_SPEED / span + streak.phase) % 1) * span
-  const ox = view.left * (1 - streak.layer.speed)
-  const oy = view.top * (1 - streak.layer.speed)
-  PolyBatch.addLine(inst.batch, ox + streak.x, oy + y, ox + streak.x, oy + Math.min(y + streak.len, y2), STREAK_W, inst.streakRgb)
-}
-//
-// Top and foot of a fall in its layer: from the lip of its ridge to just
-// past the next ridge's top (that ridge hides the foot).
-//
-function fallSpan(layer, fall, view) {
-  const size = layerSize(layer, view)
-  const ridges = RIDGES[layer.id]
-  const x = fall.u * size.w
-  const next = ridges[fall.ridge + 1]
-  return {
-    y1: ridgeTop(ridges[fall.ridge], size, layer.seed + fall.ridge, x),
-    y2: next ? ridgeTop(next, size, layer.seed + fall.ridge + 1, x) + FALL_FOOT_PAD : size.h
-  }
-}
-//
-// Layer size: what a window of this size sees while crossing the world at
-// the layer's speed.
+// Layer size: the window plus its share of the camera's travel.
 //
 function layerSize(layer, view) {
   return {
-    w: Math.ceil((Layout.WORLD_W - view.w) * layer.speed + view.w),
-    h: Math.ceil((Layout.WORLD_H - view.h) * layer.speed + view.h)
+    w: Math.ceil(view.w + Math.max(0, Layout.WORLD_W - view.w) * layer.speed),
+    h: Math.ceil(view.h + Math.max(0, Layout.WORLD_H - view.h) * layer.speed)
   }
 }
 //
@@ -214,104 +127,60 @@ function bakeTile(k, tile, view) {
   applyForestFilmGrainToCanvas(canvas, tile.seed)
   k.loadSprite(tile.name, canvas)
 }
+//
+// A layer painted small (blurDown times) on a scratch canvas, then scaled
+// up into place, which softens it.
+//
 function paintLayer(ctx, layer, view) {
   const size = layerSize(layer, view)
   const rng = createSeededRandom(layer.seed)
-  if (layer.id === 'far') {
-    paintRoom(ctx, size)
-    paintHaze(ctx, size, view)
-    paintSpecks(ctx, rng, size)
-  }
-  RIDGES[layer.id].forEach((ridge, i) => {
-    paintRidge(ctx, rng, size, ridge, layer.seed + i)
-    FALLS[layer.id].filter(fall => fall.ridge === i).forEach(fall => paintFall(ctx, layer, fall, view))
-  })
+  const down = layer.blurDown
+  const scratch = document.createElement('canvas')
+  scratch.width = Math.ceil(size.w / down)
+  scratch.height = Math.ceil(size.h / down)
+  const sctx = scratch.getContext('2d')
+  sctx.scale(1 / down, 1 / down)
+  layer.kind === KIND.WALL ? paintWall(sctx, rng, size) : paintIsles(sctx, rng, size, layer)
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(scratch, 0, 0, size.w, size.h)
+  ctx.restore()
 }
 //
-// Room colour: dark under the ceiling, lighter teal low down.
+// The far wall: the forest's ground stones scattered, pulled toward the
+// shade colour, then the soil filled in behind them.
 //
-function paintRoom(ctx, size) {
-  const g = ctx.createLinearGradient(0, 0, 0, size.h)
-  g.addColorStop(0, COLORS.top)
-  g.addColorStop(1, COLORS.bottom)
-  ctx.fillStyle = g
+function paintWall(ctx, rng, size) {
+  Earth.scatter(rng, { x1: 0, y1: 0, w: size.w, h: size.h }, Atlas.GROUND_ROCKS, WALL_SIZES, WALL_CLOSEST, () => true)
+    .forEach(stone => Earth.drawStone(ctx, stone))
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.globalAlpha = WALL_SHADE
+  ctx.fillStyle = COLORS.wallShade
   ctx.fillRect(0, 0, size.w, size.h)
+  ctx.globalCompositeOperation = 'destination-over'
+  ctx.globalAlpha = 1
+  ctx.fillStyle = COLORS.wallSoil
+  ctx.fillRect(0, 0, size.w, size.h)
+  ctx.restore()
 }
-function paintHaze(ctx, size, view) {
-  FALLS.far.forEach(fall => {
-    const x = fall.u * size.w
-    const span = fallSpan(LAYERS[0], fall, view)
-    const y = (span.y1 + span.y2) / 2
-    const g = ctx.createRadialGradient(x, y, 0, x, y, HAZE_R)
-    g.addColorStop(0, hexAlpha(COLORS.haze, HAZE_ALPHA))
-    g.addColorStop(1, hexAlpha(COLORS.haze, 0))
-    ctx.fillStyle = g
-    ctx.fillRect(x - HAZE_R, y - HAZE_R, HAZE_R * 2, HAZE_R * 2)
+//
+// Distant platforms along the layer's rows, dimmed toward its colour.
+//
+function paintIsles(ctx, rng, size, layer) {
+  layer.rows.forEach(row => {
+    for (let x = rng() * layer.gap; x < size.w; x += layer.gap * (1 + (rng() - 0.5) * ISLE_GAP_JITTER)) {
+      const name = ISLE_PIECES[Math.floor(rng() * ISLE_PIECES.length)]
+      const scale = layer.scaleMin + rng() * layer.scaleRange
+      const y = size.h * (row + (rng() - 0.5) * ISLE_ROW_JITTER)
+      Atlas.drawScaled(ctx, name, x, y, scale, rng() < 0.5)
+    }
   })
-}
-function paintSpecks(ctx, rng, size) {
-  ctx.fillStyle = CAVE_CFG.colors.tealGlow
-  ctx.globalAlpha = SPECK_ALPHA
-  for (let i = 0; i < SPECKS; i++) {
-    ctx.beginPath()
-    ctx.arc(rng() * size.w, size.h * (SPECK_Y_FROM + rng() * SPECK_Y_RANGE), SPECK_R * (SPECK_R_MIN + rng()), 0, TAU)
-    ctx.fill()
-  }
-  ctx.globalAlpha = 1
-}
-//
-// A ridge across the layer: a wavy top filled down to the bottom, a lit
-// rim and dim moss on it, and sheet pieces standing along it, shaded into
-// the ridge's colour (silhouettes with a little texture left).
-//
-function paintRidge(ctx, rng, size, ridge, seed) {
-  const topAt = x => ridgeTop(ridge, size, seed, x)
-  for (let x = rng() * ridge.gap; ridge.gap > 0 && x < size.w; x += ridge.gap * (1 - PIECE_GAP_JITTER / 2 + rng() * PIECE_GAP_JITTER)) {
-    const name = ridge.pieces[Math.floor(rng() * ridge.pieces.length)]
-    const h = ridge.hMin + rng() * ridge.hRange
-    Atlas.drawPiece(ctx, name, x, topAt(x) + h * PIECE_SINK, h, { flip: rng() < 0.5, shade: ridge.color, shadeAmount: ridge.shade })
-  }
-  ctx.fillStyle = ridge.color
-  ctx.beginPath()
-  ctx.moveTo(0, size.h)
-  for (let x = 0; x <= size.w + RIDGE_STEP; x += RIDGE_STEP) ctx.lineTo(x, topAt(x))
-  ctx.lineTo(size.w + RIDGE_STEP, size.h)
-  ctx.closePath()
-  ctx.fill()
-  strokeRidge(ctx, size, topAt, COLORS.midMoss, MOSS_W, MOSS_ALPHA)
-  strokeRidge(ctx, size, topAt, ridge.rim, RIM_W, RIM_ALPHA)
-}
-function ridgeTop(ridge, size, seed, x) {
-  return ridge.base * size.h + Math.sin(x * RIDGE_WAVE + seed) * ridge.amp + Math.sin(x * RIDGE_NOISE + seed * 2) * ridge.amp * RIDGE_NOISE_SHARE
-}
-function strokeRidge(ctx, size, topAt, color, width, alpha) {
-  ctx.globalAlpha = alpha
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.beginPath()
-  for (let x = 0; x <= size.w + RIDGE_STEP; x += RIDGE_STEP) ctx.lineTo(x, topAt(x))
-  ctx.stroke()
-  ctx.globalAlpha = 1
-}
-//
-// One fall: a soft pale band with a brighter core and foam at its foot.
-//
-function paintFall(ctx, layer, fall, view) {
-  const size = layerSize(layer, view)
-  const x = fall.u * size.w
-  const { y1, y2 } = fallSpan(layer, fall, view)
-  ctx.globalAlpha = FALL_BODY_ALPHA[layer.id]
-  ctx.fillStyle = COLORS.waterfall
-  ctx.fillRect(x - fall.w / 2, y1, fall.w, y2 - y1)
-  ctx.fillStyle = COLORS.waterfallLight
-  ctx.fillRect(x - fall.w / 6, y1, fall.w / 3, y2 - y1)
-  ctx.globalAlpha = FOAM_ALPHA
-  ctx.fillStyle = COLORS.foam
-  ctx.beginPath()
-  ctx.ellipse(x, y2 - FALL_FOOT_PAD - FOAM_H / 2, fall.w * FOAM_W, FOAM_H / 2, 0, 0, TAU)
-  ctx.fill()
-  ctx.globalAlpha = 1
-}
-function hexAlpha(hex, alpha) {
-  return hex + Math.round(alpha * BYTE_MAX).toString(HEX_RADIX).padStart(2, '0')
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.globalAlpha = layer.shadeAmount
+  ctx.fillStyle = layer.shade
+  ctx.fillRect(0, 0, size.w, size.h)
+  ctx.restore()
 }

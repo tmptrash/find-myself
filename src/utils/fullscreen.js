@@ -79,13 +79,17 @@ let backVisible = true
 // (120 Hz), while a page under the browser's bars — or an installed app
 // opened from its icon, fullscreen by its manifest but not by the API — is
 // held to about 80 fps. A page needs a tap for it, so the first one after
-// the page shows does it. In the browser, leaving fullscreen (the button,
-// the system back gesture) is the player's choice and is kept; an installed
-// app goes back into it on the next tap.
+// the page shows does it. A game on a device stays fullscreen in either
+// orientation: whenever the page has dropped out of it (a rotation in some
+// browsers, the system back gesture, a reload) the next tap brings it
+// back. Only the fullscreen button turns that off. On an iPhone, which has
+// no page fullscreen, the first tap in the browser shows how to start the
+// game from the Home Screen instead (once per page).
 //
 const AUTO_FULLSCREEN_EVENT = 'touchend'
 let autoFullscreenOff = false
 let autoFullscreenInstalled = false
+let installHintShown = false
 
 /**
  * Creates top-left fullscreen + Esc shortcut buttons on touch devices
@@ -292,21 +296,23 @@ function requestPageFullscreen() {
 // See AUTO_FULLSCREEN_EVENT: listens for taps once per page life.
 //
 function installAutoFullscreen() {
-  if (autoFullscreenInstalled || !canRequestFullscreen()) return
+  if (autoFullscreenInstalled) return
   autoFullscreenInstalled = true
   window.addEventListener(AUTO_FULLSCREEN_EVENT, onAutoFullscreenTap, { capture: true, passive: true })
-  document.addEventListener('fullscreenchange', onFullscreenLeft)
 }
 function onAutoFullscreenTap() {
+  if (!canRequestFullscreen()) return showInstallHintOnce()
   if (autoFullscreenOff || document.fullscreenElement || document.webkitFullscreenElement) return
   requestPageFullscreen()
 }
 //
-// Fullscreen left in the browser (not in an installed app): the player
-// chose the browser's bars, the game no longer asks on its own.
+// iPhone browser: the Home Screen hint on the first tap (not in the
+// installed app, which is already fullscreen).
 //
-function onFullscreenLeft() {
-  !document.fullscreenElement && !isStandalone() && (autoFullscreenOff = true)
+function showInstallHintOnce() {
+  if (installHintShown || isStandalone()) return
+  installHintShown = true
+  !installHint && toggleInstallHint()
 }
 //
 // The fullscreen button's icon follows the page's fullscreen state.

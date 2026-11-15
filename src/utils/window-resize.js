@@ -1,6 +1,6 @@
 import * as BootLoader from './boot-loader.js'
 import { rebootIntoActiveScene } from './scene-reboot.js'
-import { fitPageHeight } from './page-height.js'
+import { fitPageSize } from './page-size.js'
 
 //
 // Debounce so dragging a window edge does not reboot on every pixel.
@@ -79,7 +79,7 @@ async function applyWindowResize() {
   }
   lastW = w
   lastH = h
-  fitPageHeight()
+  fitPageSize()
   coverShown = false
   const now = performance.now()
   while (rebootTimes.length && now - rebootTimes[0] > RESIZE_LOOP_WINDOW_MS) rebootTimes.shift()

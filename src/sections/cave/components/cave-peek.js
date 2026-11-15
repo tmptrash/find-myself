@@ -6,7 +6,7 @@ import * as Backdrop from '../utils/cave-backdrop.js'
 import * as Glow from '../utils/cave-glow.js'
 import * as Layout from '../utils/cave-layout.js'
 import * as Scene from '../utils/cave-scene.js'
-import { LANTERN_H } from './cave-lantern.js'
+import { LANTERN_H, LANTERN_PIECE } from './cave-lantern.js'
 //
 // A glimpse of the cave from the forest: when the eye-flower's roots have
 // dragged the hero down their tunnel, its floor gives way and under it
@@ -17,7 +17,7 @@ import { LANTERN_H } from './cave-lantern.js'
 // hole at the tunnel's end, baked once per live k. Nothing of it is drawn
 // before setOpen().
 //
-const SPRITE = 'cave0-peek-v1'
+const SPRITE = 'cave0-peek-v2'
 const GRAIN_SEED = 9500
 //
 // Cave rect painted and the hollow cut from it (cave coordinates): an
@@ -127,8 +127,8 @@ function bake(k) {
   const ctx = canvas.getContext('2d')
   ctx.translate(-RECT.x1, -RECT.y1)
   Backdrop.paintBackdrop(ctx, RECT)
-  Scene.paintTerrain(ctx, RECT, null)
-  Atlas.drawPiece(ctx, 'chanterelle', Layout.LANTERN.x, Layout.LANTERN.y + LANTERN_SINK, LANTERN_H, {
+  Scene.paintTerrain(ctx, RECT)
+  Atlas.drawPiece(ctx, LANTERN_PIECE, Layout.LANTERN.x, Layout.LANTERN.y + LANTERN_SINK, LANTERN_H, {
     shade: CAVE_CFG.colors.frame,
     shadeAmount: LANTERN_SHADE
   })

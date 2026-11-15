@@ -127,7 +127,7 @@ function bake(k, w, h, place) {
     ctx.scale(place.scale, place.scale)
     ctx.translate(-place.x1, -place.y1)
     Backdrop.paintBackdrop(ctx, place)
-    Scene.paintTerrain(ctx, place, null)
+    Scene.paintTerrain(ctx, place)
     ctx.setTransform(1, 0, 0, 1, -tile.x, 0)
     paintShade(ctx, w, h)
     applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + i)

@@ -163,6 +163,11 @@ let kaplayBootReachedOnLoad = false
 //
 let webglLostReloadScheduled = false
 //
+// In-game context loss handler (context-recovery.js): returns true when it
+// recovers the game itself, so no page reload is scheduled.
+//
+let contextLossHandler = null
+//
 // initBlurKeyReset() listens on `window`, independent of any specific Kaplay
 // instance — only ever needs to be installed once per page life.
 //
@@ -258,6 +263,14 @@ export async function bootEngine(resolutionMode) {
   }
   unlockKaplayAudioOnFirstGesture(k)
   return k
+}
+/**
+ * Sets who recovers the game from a WebGL context lost after the first load
+ * (null: the page reloads, see onWebGLContextLost).
+ * @param {Function|null} handler - () => boolean, true when it took the loss over
+ */
+export function setContextLossHandler(handler) {
+  contextLossHandler = handler
 }
 //
 // Kaplay owns its own internal AudioContext, entirely separate from the
@@ -429,6 +442,7 @@ function onWebGLContextLost(e) {
   e.preventDefault()
   if (webglLostReloadScheduled) return
   webglLostReloadScheduled = true
+  if (kaplayBootReachedOnLoad && contextLossHandler?.()) return
   //
   // Integrated GPUs can lose the context under load; reloading too soon leaves
   // VRAM pinned → initKaplayWithRetry fails → misleading "WebGL not available".
@@ -467,6 +481,7 @@ function noteContextLossReload() {
 // kept as a no-op stub for completeness (browsers expect both listeners).
 //
 function onWebGLContextRestored() {}
+
 /**
  * Build the list of synchronous setup tasks (fonts, minimal sprites, scene
  * registration). Identical for every resolution mode so both engines can

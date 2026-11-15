@@ -1,4 +1,5 @@
 import { CFG } from '../../../cfg.js'
+import { createSeededRandom } from '../../../utils/seeded-random.js'
 import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
@@ -394,6 +395,11 @@ const BG_STATIC_COLOR = 'forest0-bg-static-color-v14'
 // the camera may pass the edge by up to EDGE_EARTH_W - EDGE_EARTH_CAM_SPARE.
 //
 const BG_EDGE_EARTH = 'forest0-bg-edge-earth'
+//
+// The rocks' and mushrooms' shared atlas: one stable name, so a level
+// restart reuses the loaded one (see createCanvasAtlasBuilder).
+//
+const FOREST_DECOR_ATLAS = 'forest0-decor-atlas'
 const EDGE_EARTH_W = 256
 const EDGE_EARTH_CAM_SPARE = 16
 const EDGE_EARTH_GRAIN_SEED = 9102
@@ -444,9 +450,10 @@ const PAR_COLUMN_W = 128
 // 6000 px) — wider than many mobile GPUs take as one texture (often 4096),
 // which leaves the texture empty and draws it black. Each layer is baked
 // into tiles this wide (whole columns, so column runs only split at tile
-// edges), safe on any WebGL GPU.
+// edges): with its PAR_TILE_PAD border a tile stays under 2048 px, the size
+// every WebGL GPU takes.
 //
-const PAR_TILE_W = PAR_COLUMN_W * 16
+const PAR_TILE_W = PAR_COLUMN_W * 15
 //
 // Tiles that size share a texture atlas with other sprites: each is baked
 // with a PAR_TILE_PAD px border repeating its edge pixels, and drawn from
@@ -644,6 +651,11 @@ const WALL_BORDER_B = OUTER.b
 //
 const GROUND_STONE_COUNT = 26
 const groundStonePlansByK = new WeakMap()
+//
+// Seed of the decor mushrooms' layout per live k (see forestMushroomRandom).
+//
+const MUSHROOM_SEED_RANGE = 0x7fffffff
+const mushroomSeedByK = new WeakMap()
 //
 // Every GROUND_STONE_FRONT_EVERY-th stone stands in front of the hero (under
 // the front floor plants), smaller (GROUND_STONE_FRONT_SIZE of the others) and
@@ -1534,7 +1546,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // bindTexture/useProgram GPU state change.
     //
     await loadForestStones()
-    const decorAtlas = createCanvasAtlasBuilder()
+    const decorAtlas = createCanvasAtlasBuilder(FOREST_DECOR_ATLAS)
     //
     // The ground line under the hero's feet: low pieces lying on the ground
     // (stones, mushrooms, the floor's rim) are laid into it as they are made.
@@ -3679,6 +3691,7 @@ function updatePlayfieldCornerPositions() {
 // scene entry.
 //
 function loadPlayfieldCornerSprites(k) {
+  if (k.getSprite(CORNER_SPRITE_OUTER)) return
   const outerCanvas = makeRoundedCornerCanvas(CORNER_RADIUS, OUTER_BG_HEX)
   k.loadSprite(CORNER_SPRITE_OUTER, outerCanvas)
   outerCanvas.width = 0
@@ -3947,10 +3960,24 @@ function forestPredatorGroundAt(levelInst) {
   return y
 }
 //
+// The decor mushrooms' random generator: seeded once per live k, so a level
+// restart (a death) lays the same mushrooms again and their shared atlas is
+// reused instead of loaded anew (see createCanvasAtlasBuilder).
+//
+function forestMushroomRandom(k) {
+  let seed = mushroomSeedByK.get(k)
+  if (seed === undefined) {
+    seed = Math.floor(Math.random() * MUSHROOM_SEED_RANGE)
+    mushroomSeedByK.set(k, seed)
+  }
+  return createSeededRandom(seed)
+}
+//
 // Mushrooms — value 5, excluded from water zone.
 //
 function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas, groundLine) {
   const objs = []
+  const rng = forestMushroomRandom(k)
   const left = LEFT_MARGIN + 60
   //
   // Decor mushrooms stay left of the cave mouth (never above the entrance)
@@ -3966,16 +3993,16 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     LEFT_TREE_CLEAR_SPANS.some(span => x >= span.x1 - MUSHROOM_FLOWER_CLEAR_PAD && x <= span.x2 + MUSHROOM_FLOWER_CLEAR_PAD) ||
     isCrackDecorExcluded(x, WORLD_W)
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
-    const size = MUSHROOM_PICTURE_H_MIN + Math.random() * MUSHROOM_PICTURE_H_RANGE
+    const size = MUSHROOM_PICTURE_H_MIN + rng() * MUSHROOM_PICTURE_H_RANGE
     const bounds = forestMushroomBounds(0, 0, size)
     const totalW = Math.ceil(bounds.x2 - bounds.x1)
     const totalH = Math.ceil(bounds.y2 - bounds.y1)
     const capW = totalW
     const span = Math.max(40, right - left)
-    let posX = left + Math.random() * span
+    let posX = left + rng() * span
     let safety = 0
     while (isBadSpot(posX) && safety < 40) {
-      posX = left + Math.random() * span
+      posX = left + rng() * span
       safety++
     }
     if (isBadSpot(posX)) continue
@@ -3984,7 +4011,7 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
     // canvas's ground row.
     //
     const mushColorCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawForestMushroom(ctx, { x: -bounds.x1, baseY: -bounds.y1, size, rng: Math.random })
+      drawForestMushroom(ctx, { x: -bounds.x1, baseY: -bounds.y1, size, rng })
     })
     applyForestGameplaySharpBake(mushColorCanvas, posX * 2 + 2 | 0)
     const baked = decorAtlas.register(mushColorCanvas)
@@ -4011,7 +4038,7 @@ function createForestMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones,
       _cullX1: baseX - halfW - 6,
       _cullX2: baseX + halfW + 6,
       _detailRank: capW < 28 ? 'small' : 'large',
-      _glowPhase: Math.random() * Math.PI * 2,
+      _glowPhase: rng() * Math.PI * 2,
       exists() {
         return true
       },

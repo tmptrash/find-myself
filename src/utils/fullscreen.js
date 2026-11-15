@@ -72,6 +72,20 @@ let fullscreenBtn = null
 let escBtn = null
 let kaplayRef = null
 let backVisible = true
+//
+// On a phone the game enters the browser's fullscreen (the Fullscreen API,
+// as the fullscreen button does) on the first tap: Android Chrome draws a
+// page in API fullscreen straight to the screen at the display's full rate
+// (120 Hz), while a page under the browser's bars — or an installed app
+// opened from its icon, fullscreen by its manifest but not by the API — is
+// held to about 80 fps. A page needs a tap for it, so the first one after
+// the page shows does it. In the browser, leaving fullscreen (the button,
+// the system back gesture) is the player's choice and is kept; an installed
+// app goes back into it on the next tap.
+//
+const AUTO_FULLSCREEN_EVENT = 'touchend'
+let autoFullscreenOff = false
+let autoFullscreenInstalled = false
 
 /**
  * Creates top-left fullscreen + Esc shortcut buttons on touch devices
@@ -81,6 +95,7 @@ let backVisible = true
 export function createFullscreenButton(k) {
   if (!isTouchDevice()) return
   k && (kaplayRef = k)
+  installAutoFullscreen()
   //
   // Fullscreen toggle (top button) — not needed when already started from
   // the Home Screen.
@@ -250,15 +265,48 @@ function cssRgba(hex, alpha) {
 //
 function toggleFullscreen() {
   if (document.fullscreenElement) {
+    autoFullscreenOff = true
     document.exitFullscreen?.()
     return
   }
-  const target = document.documentElement
-  if (!target.requestFullscreen && !target.webkitRequestFullscreen) {
+  if (!canRequestFullscreen()) {
     toggleInstallHint()
     return
   }
-  target.requestFullscreen?.() || target.webkitRequestFullscreen?.()
+  requestPageFullscreen()
+}
+function canRequestFullscreen() {
+  const target = document.documentElement
+  return Boolean(target.requestFullscreen || target.webkitRequestFullscreen)
+}
+//
+// The page's root goes fullscreen (the browser may refuse: no tap, or a
+// browser without it — then nothing changes).
+//
+function requestPageFullscreen() {
+  const target = document.documentElement
+  const request = target.requestFullscreen?.() ?? target.webkitRequestFullscreen?.()
+  request?.catch?.(() => {})
+}
+//
+// See AUTO_FULLSCREEN_EVENT: listens for taps once per page life.
+//
+function installAutoFullscreen() {
+  if (autoFullscreenInstalled || !canRequestFullscreen()) return
+  autoFullscreenInstalled = true
+  window.addEventListener(AUTO_FULLSCREEN_EVENT, onAutoFullscreenTap, { capture: true, passive: true })
+  document.addEventListener('fullscreenchange', onFullscreenLeft)
+}
+function onAutoFullscreenTap() {
+  if (autoFullscreenOff || document.fullscreenElement || document.webkitFullscreenElement) return
+  requestPageFullscreen()
+}
+//
+// Fullscreen left in the browser (not in an installed app): the player
+// chose the browser's bars, the game no longer asks on its own.
+//
+function onFullscreenLeft() {
+  !document.fullscreenElement && !isStandalone() && (autoFullscreenOff = true)
 }
 //
 // The fullscreen button's icon follows the page's fullscreen state.

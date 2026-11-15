@@ -7,6 +7,7 @@ import { prewarmMenuAssets } from "./scenes/menu.js"
 import * as NoMouse from "./utils/no-mouse.js"
 import * as SoftwareCanvas from "./utils/software-canvas.js"
 import * as PerfReadout from "./utils/perf-readout.js"
+import * as ContextRecovery from "./utils/context-recovery.js"
 //
 // Force dark background for all elements
 //
@@ -37,6 +38,7 @@ async function boot() {
   SoftwareCanvas.create()
   NoMouse.create()
   PerfReadout.create()
+  ContextRecovery.create()
   const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)

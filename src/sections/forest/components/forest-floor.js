@@ -2,7 +2,7 @@ import { drawGroundRimToCanvas, groundRimBounds } from '../../../utils/draw-grou
 import { createSeededRandom, nextSeed } from '../../../utils/seeded-random.js'
 import { forestContactShadowRgb, paintForestContactShadow } from '../utils/forest-atmosphere.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
-import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView } from '../utils/forest-static-bake.js'
+import { drawStaticDecorSprite, ensureStaticDecorSprite, isWorldSpanInView, staticBakeHolder } from '../utils/forest-static-bake.js'
 import { loadPictureImage } from '../utils/forest-picture.js'
 import { drawForestPlant, forestPlantBounds } from '../utils/forest-plants.js'
 import { drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
@@ -20,6 +20,7 @@ import * as ForestGroundLine from '../utils/forest-ground-line.js'
 const LAYOUT_SEED = 40213
 const CHUNK_W = 420
 const BAKE_VARIANT = 'v11'
+const BAKE_HOLDER_ID = 'forest-floor'
 const SEED_BACK = 7100
 const SEED_FRONT = 7300
 const VIEW_CULL_PAD = 80
@@ -254,13 +255,23 @@ function buildPatchPlant(inst, rng, x, isPlume, edge, front) {
 function isNearAccent(inst, x, halfW) {
   return inst.accentXs.some(ax => Math.abs(ax - x) < PATCH_ACCENT_CLEAR_HALF + halfW)
 }
+//
+// What a chunk's bake depends on: its items' kinds, places and seeds.
+//
+function chunkSignature(group) {
+  return group.map(item => `${item.kind}@${Math.round(item.x)}#${item.seed}`).join(',')
+}
 function isInHill(inst, x, halfW) {
   return x + halfW >= inst.hill.x1 && x - halfW <= inst.hill.x2
 }
 //
-// Groups items into CHUNK_W-wide strips and bakes each strip once.
+// Groups items into CHUNK_W-wide strips and bakes each strip once per live
+// k: the bakes are held by k (not by this inst, which a level restart makes
+// anew), each keyed by its items, so a restart reuses them instead of loading
+// new sprites into the atlas every time.
 //
 function bakeChunks(inst, items, slot, seedBase) {
+  const holder = staticBakeHolder(inst.k, BAKE_HOLDER_ID)
   const groups = new Map()
   items.forEach(item => {
     const key = Math.floor(item.x / CHUNK_W)
@@ -270,7 +281,7 @@ function bakeChunks(inst, items, slot, seedBase) {
   groups.forEach((group, key) => {
     const bounds = group.reduce((b, item) => mergeBounds(b, itemBounds(inst, item)), null)
     const baked = ensureStaticDecorSprite(
-      inst.k, inst, `${slot}-${key}`, BAKE_VARIANT, bounds,
+      inst.k, holder, `${slot}-${key}`, `${BAKE_VARIANT}:${chunkSignature(group)}`, bounds,
       ctx => group.forEach(item => paintItem(ctx, inst, item)),
       seedBase + key
     )

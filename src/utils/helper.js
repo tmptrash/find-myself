@@ -285,6 +285,14 @@ export function toCanvas({ width, height, pixelRatio = 1, softwareRendering = fa
 // their own texture).
 //
 let canvasAtlasBakeId = 0
+//
+// Named atlases already loaded into a live k: name → layout signature and
+// the cells' quads. A scene restart that bakes the same canvases again then
+// reuses the loaded texture: Kaplay never frees a sprite's space in its
+// texture atlases, so loading it anew on every restart (a death respawns the
+// level) piled up GPU memory until the phone lost its WebGL context.
+//
+const namedAtlasesByK = new WeakMap()
 /**
  * Collects several small pre-baked canvases (e.g. one per decor instance —
  * a rock, a mushroom, in both its gray and outline colour variants) and
@@ -296,9 +304,10 @@ let canvasAtlasBakeId = 0
  * its own bindTexture/useProgram state change every time it draws, which is
  * what actually costs FPS once dozens of individually-baked decor sprites
  * are on screen at once.
+ * @param {string|null} [name=null] - Stable atlas name: a later build with the same canvas sizes on the same k reuses the loaded atlas (its canvases must then be the same pictures, e.g. seeded bakes)
  * @returns {{ register: (canvas: HTMLCanvasElement) => { name: string|null, tileW: number, tileH: number, quad: Object|null }, build: (k: Object) => void }}
  */
-export function createCanvasAtlasBuilder() {
+export function createCanvasAtlasBuilder(name = null) {
   const entries = []
   const register = (canvas) => {
     const placeholder = { name: null, tileW: canvas.width, tileH: canvas.height, quad: null }
@@ -306,7 +315,7 @@ export function createCanvasAtlasBuilder() {
     return placeholder
   }
   const build = (k) => {
-    if (!entries.length) return
+    if (!entries.length || (name && reuseNamedAtlas(k, name, entries))) return
     const pad = 2
     const maxRowW = 2048
     let cursorX = pad
@@ -332,7 +341,7 @@ export function createCanvasAtlasBuilder() {
     atlasCanvas.width = atlasW
     atlasCanvas.height = atlasH
     const ctx = atlasCanvas.getContext('2d')
-    const atlasName = `canvas-atlas-${canvasAtlasBakeId++}`
+    const atlasName = name ?? `canvas-atlas-${canvasAtlasBakeId++}`
     entries.forEach(e => {
       const w = e.canvas.width
       const h = e.canvas.height
@@ -345,11 +354,41 @@ export function createCanvasAtlasBuilder() {
       })
     })
     k.loadSprite(atlasName, atlasCanvas)
+    name && rememberNamedAtlas(k, name, entries)
     entries.forEach(e => { e.canvas.width = 0; e.canvas.height = 0 })
     atlasCanvas.width = 0
     atlasCanvas.height = 0
   }
   return { register, build }
+}
+
+//
+// Fills the placeholders from an atlas of this name already loaded into k
+// with the same canvas sizes; false when there is none (it must be built).
+//
+function reuseNamedAtlas(k, name, entries) {
+  const known = namedAtlasesByK.get(k)?.get(name)
+  if (!known || known.signature !== atlasSignature(entries)) return false
+  entries.forEach((e, i) => {
+    Object.assign(e.placeholder, { ...known.cells[i] })
+    e.canvas.width = 0
+    e.canvas.height = 0
+  })
+  return true
+}
+function rememberNamedAtlas(k, name, entries) {
+  let atlases = namedAtlasesByK.get(k)
+  if (!atlases) {
+    atlases = new Map()
+    namedAtlasesByK.set(k, atlases)
+  }
+  atlases.set(name, {
+    signature: atlasSignature(entries),
+    cells: entries.map(e => ({ ...e.placeholder }))
+  })
+}
+function atlasSignature(entries) {
+  return entries.map(e => `${e.canvas.width}x${e.canvas.height}`).join(',')
 }
 
 export const prop = (path, root = {}) => path.split(".").reduce(

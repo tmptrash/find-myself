@@ -1,10 +1,5 @@
-import { get } from './progress.js'
 import * as BootLoader from './boot-loader.js'
-import { getActiveSceneName, rebootEngineForScene } from './engine-switch.js'
-import {
-  onEngineResolutionSwapped,
-  prepareSceneAssetsThenEnterScene
-} from './lesson-assets.js'
+import { rebootIntoActiveScene } from './scene-reboot.js'
 
 //
 // Debounce so dragging a window edge does not reboot on every pixel.
@@ -92,16 +87,10 @@ async function applyWindowResize() {
   }
   rebootTimes.push(now)
   rebootCount++
-  const sceneName = getActiveSceneName() || get('lastLesson', null) || 'menu'
   resizeBusy = true
-  BootLoader.showLoader()
-  BootLoader.setLoaderBarPct(0)
   try {
-    const k = await rebootEngineForScene(sceneName)
-    onEngineResolutionSwapped()
-    await prepareSceneAssetsThenEnterScene(k, sceneName, undefined, { retainLoader: true })
+    await rebootIntoActiveScene()
   } finally {
-    BootLoader.hideLoader()
     resizeBusy = false
   }
   onWindowResize()

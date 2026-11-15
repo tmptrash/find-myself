@@ -17,7 +17,7 @@ import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
 import { FOREST_PAL, getForestLightRgb } from '../sections/forest/utils/forest-palette.js'
-import * as Lake from '../sections/forest/utils/forest-lake.js'
+import * as Lake from '../components/lake.js'
 import * as BombTree from '../sections/forest/utils/forest-bomb-tree.js'
 import * as Predator from '../sections/forest/components/predator.js'
 import * as SpikyTomato from '../sections/forest/components/spiky-tomato.js'
@@ -29,7 +29,8 @@ import * as TreeFruit from '../sections/forest/utils/forest-tree-fruit.js'
 import { bakeLeftTreeApple, leftTreeApplePicture, leftTreeApples } from '../sections/forest/utils/forest-left-tree.js'
 import { createForestMidges, updateForestMidges } from '../sections/forest/utils/forest-level-atmosphere.js'
 import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
-import * as GlowMushroom from '../sections/cave/components/glow-mushroom.js'
+import * as CaveLantern from '../sections/cave/components/cave-lantern.js'
+import * as CaveAtlas from '../sections/cave/utils/cave-atlas.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import * as QuestionDrift from '../components/question-drift.js'
@@ -37,7 +38,7 @@ import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '..
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (the forest's
-// stalk-eye, the cave's glowing mushroom); every other level is a
+// stalk-eye, the cave's lantern mushroom); every other level is a
 // "?" crossed by the red prohibition sign. A level hidden until reached
 // shows a plain "?" (and cannot be entered) until the hero has got there,
 // over a black backdrop of
@@ -55,10 +56,9 @@ const FOREST_FIRST_LESSON = 'lesson-forest.0'
 const CAVE_LESSON_PREFIX = 'lesson-cave.'
 const CAVE_FIRST_LESSON = 'lesson-cave.0'
 //
-// Cave icon: one of the level's always-lit mushrooms, standing on the row.
+// Cave icon: the level's lantern mushroom, lit, standing on the row.
 //
 const MENU_GLOW_MUSHROOM_SCALE = 0.8
-const MENU_GLOW_MUSHROOM_SEED = 23
 const LEVELS = [
   {
     section: 'forest',
@@ -441,7 +441,7 @@ export function sceneMenu(k) {
 export async function prewarmMenuAssets(k) {
   const size = menuBakeSize(k)
   recomputeMenuBgLayout(k.width(), k.height())
-  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt(), loadMenuForestLife(k)])
+  await Promise.all([loadForestMenuBackdropArt(), Clouds.loadForestClouds(), ConfirmDialog.loadConfirmDialogArt(), loadMenuForestLife(k), CaveAtlas.load()])
   buildMenuNightSprite(k)
   await BootLoader.yieldForGpu(MENU_PREWARM_YIELD_FRAMES)
   loadMenuForestLayerSprites(k)
@@ -532,7 +532,7 @@ function createMenuEyeStalks(inst) {
   })
   inst.glowMushrooms = inst.levels.filter(level => level.icon === LEVEL_ICON_GLOW_MUSHROOM && !level.mystery).map(level => ({
     level,
-    mushroom: GlowMushroom.create({ k, x: inst.layout.columnX, y: level.y, seed: MENU_GLOW_MUSHROOM_SEED, moss: false })
+    mushroom: CaveLantern.create({ k, x: inst.layout.columnX, y: level.y, collide: false, lit: true })
   }))
 }
 //
@@ -759,13 +759,13 @@ function onUpdate(inst) {
   const hero = inst.heroInst.character
   hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
   inst.glowMushrooms.forEach(item => {
-    GlowMushroom.setStill(item.mushroom, item.level.index !== inst.selected)
-    GlowMushroom.onUpdate(item.mushroom, null)
+    CaveLantern.setStill(item.mushroom, item.level.index !== inst.selected)
+    CaveLantern.onUpdate(item.mushroom, null)
   })
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
-  inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg, hero.pos)
+  inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg)
   inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud), true, inst.crawler)
   BombTree.onUpdate(inst.earTrees, dt)
@@ -1039,9 +1039,9 @@ function drawGlowMushroomIcon(inst, item) {
   const { layout } = inst
   const { level, mushroom } = item
   const scale = MENU_GLOW_MUSHROOM_SCALE * layout.s * level.selectScale
-  GlowMushroom.setPose(mushroom, layout.columnX, level.y + GlowMushroom.visibleHeight(mushroom, scale) / 2, scale)
-  GlowMushroom.onDraw(mushroom)
-  GlowMushroom.onDrawHalo(mushroom)
+  CaveLantern.setPose(mushroom, layout.columnX, level.y + CaveLantern.visibleHeight(scale) / 2, scale)
+  CaveLantern.onDraw(mushroom)
+  CaveLantern.onDrawHalo(mushroom)
 }
 //
 // Red ring with the diagonal slash over a locked level.

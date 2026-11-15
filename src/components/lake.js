@@ -1,11 +1,11 @@
-import { FOREST_PAL } from './forest-palette.js'
-import { applyForestGameplaySharpBake } from './forest-focus-depth.js'
-import * as SoilSeam from './forest-soil-seam.js'
-import { getRGB } from '../../../utils/helper.js'
-import * as PolyBatch from '../../../utils/poly-batch.js'
+import { CFG } from '../cfg.js'
+import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
+import * as SoilSeam from '../sections/forest/utils/forest-soil-seam.js'
+import { getRGB } from '../utils/helper.js'
+import * as PolyBatch from '../utils/poly-batch.js'
 //
-// Forest lake, shared by the forest level and the menu backdrop: a
-// see-through water body baked as an animated wave cycle, over a static bed
+// Lake shared by the forest level, the menu backdrop and the cave's
+// underground lake (each with its own palette): a see-through water body baked as an animated wave cycle, over a static bed
 // layer (murk, earthy terraces, sand with gravel, pebbles, a sunken snag,
 // boulders) and live swaying algae rooted on the floor face. The water runs
 // from `waterStartX` (the level's island shore, or the lake's left end) to
@@ -15,6 +15,11 @@ import * as PolyBatch from '../../../utils/poly-batch.js'
 // floor, the water surface sits 8 px above it.
 //
 const LAKE_FULL_SINK_DEPTH = 96
+//
+// Default water colours (the forest lake); a caller may pass its own.
+//
+const PAL = CFG.visual.colors.palette
+const DEFAULT_PALETTE = { water: PAL.water, paint: PAL.waterPaint }
 //
 // Shore rocks sunk into the lake: bed clip sampling step and the water tint
 // on their submerged part (top of the water / near the bed).
@@ -278,6 +283,7 @@ const LAKE_BANK_JAG_STEP_INDEX = 23
  *   Pictured stones lying on the bed instead of the drawn boulders: where along the open water
  *   (0..1), how far down the bed face (0 = far rim, 1 = front edge), picture and world size
  * @param {number} [cfg.bankJag=0] - How ragged the right bank's edge is (px)
+ * @param {{water: string, paint: Object}} [cfg.palette] - Water colours (fill and CFG waterPaint-shaped paint); default the forest lake's
  * @returns {Object} Lake inst: geometry (canvas-local frame at x1 / originY) plus algae
  */
 export function create(cfg) {
@@ -450,12 +456,13 @@ export function clipToBed(ctx, lake, x0, y0, width, height) {
  * @param {number} width - Canvas width
  * @param {number} height - Canvas height
  * @param {number} waterY - Canvas Y of the water line
+ * @param {{water: string, paint: Object}} [palette] - Water colours (default: the forest lake's)
  */
-export function tintUnderwater(ctx, width, height, waterY) {
+export function tintUnderwater(ctx, width, height, waterY, palette = DEFAULT_PALETTE) {
   if (waterY >= height) return
   const tint = ctx.createLinearGradient(0, waterY, 0, height)
-  tint.addColorStop(0, hexWithAlpha(FOREST_PAL.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
-  tint.addColorStop(1, hexWithAlpha(FOREST_PAL.waterPaint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
+  tint.addColorStop(0, hexWithAlpha(palette.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
+  tint.addColorStop(1, hexWithAlpha(palette.paint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
   ctx.globalCompositeOperation = 'source-atop'
   ctx.fillStyle = tint
   ctx.fillRect(0, waterY, width, height - waterY)
@@ -493,7 +500,7 @@ function bakeLakeWaterSprites(k, cfg) {
   const islandShoreLocalX = (cfg.waterStartX ?? x1) - x1
   const waterSpritePrefix = `${spriteKey}-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
   const bedSprite = `${spriteKey}-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-  const geom = { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, waterSpritePrefix, bedSprite, bankJag: cfg.bankJag ?? 0 }
+  const geom = { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, waterSpritePrefix, bedSprite, bankJag: cfg.bankJag ?? 0, pal: cfg.palette ?? DEFAULT_PALETTE }
   //
   // Frames already loaded on this k (menu revisit) are reused as they are.
   //
@@ -551,9 +558,10 @@ function paintLakeWaterFrame(canvas, geom, time, seed) {
     pts.push([localX, bottomLocalY(geom, localX)])
   }
   const bodyY = topMargin + LAKE_OPAQUE_SKIN_PX
+  const pal = geom.pal
   const body = ctx.createLinearGradient(0, bodyY, 0, bodyY + LAKE_BODY_FADE_PX)
-  body.addColorStop(0, FOREST_PAL.water)
-  body.addColorStop(1, hexWithAlpha(FOREST_PAL.water, LAKE_BODY_ALPHA))
+  body.addColorStop(0, pal.water)
+  body.addColorStop(1, hexWithAlpha(pal.water, LAKE_BODY_ALPHA))
   ctx.fillStyle = body
   ctx.beginPath()
   ctx.moveTo(pts[0][0], pts[0][1])
@@ -564,15 +572,15 @@ function paintLakeWaterFrame(canvas, geom, time, seed) {
   ctx.fill()
   ctx.save()
   ctx.clip()
-  const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time }
+  const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time, colors: pal.paint }
   paintLakeGradient(paint)
   paintLakeReflections(paint)
   paintLakeShoreRipples(paint, islandShoreLocalX, 1)
   paintLakeShoreRipples(paint, coreSpan, -1)
-  paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner)
+  paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner, pal.paint)
   ctx.restore()
-  strokeLakeSurfaceLine(ctx, surfaceTop, 0, FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_LINE_PX)
-  strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(FOREST_PAL.waterPaint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
+  strokeLakeSurfaceLine(ctx, surfaceTop, 0, pal.paint.surfaceLine, LAKE_SURFACE_LINE_PX)
+  strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(pal.paint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
   applyForestGameplaySharpBake(canvas, seed)
 }
 //
@@ -591,8 +599,7 @@ function buildLakeSurfaceLinePts(geom, time, waveOffsetAt) {
   }
   return line
 }
-function paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner) {
-  const colors = FOREST_PAL.waterPaint
+function paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner, colors) {
   ctx.beginPath()
   ctx.moveTo(surfaceTop[0][0], surfaceTop[0][1])
   for (let i = 1; i < surfaceTop.length; i++) ctx.lineTo(surfaceTop[i][0], surfaceTop[i][1])
@@ -667,7 +674,7 @@ function lakeBedTopLocalY(lake, localX) {
 //
 function bakeLakeBedSprite(k, lake) {
   if (k.getSprite(lake.bedSprite)) return
-  const colors = FOREST_PAL.waterPaint
+  const colors = lake.pal.paint
   const canvas = document.createElement('canvas')
   canvas.width = lake.canvasW
   canvas.height = lake.canvasH
@@ -935,7 +942,7 @@ function lakeBedBakeRng(seed) {
 function buildLakeAlgae(k, lake) {
   const fronds = []
   const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const palette = FOREST_PAL.waterPaint
+  const palette = lake.pal.paint
   const tones = [palette.algaeDark, palette.algae, palette.algaeLight].map((hex) => {
     const c = getRGB(k, hex)
     return k.rgb(c.r, c.g, c.b)
@@ -1031,8 +1038,7 @@ function updateLakeAlgaeBlade(blade, time) {
 // Calm depth read: a light skin just under the surface, darkening with depth.
 //
 function paintLakeGradient(paint) {
-  const { ctx, topMargin, canvasW, canvasH } = paint
-  const colors = FOREST_PAL.waterPaint
+  const { ctx, topMargin, canvasW, canvasH, colors } = paint
   ctx.globalAlpha = LAKE_SKIN_ALPHA
   const skin = ctx.createLinearGradient(0, topMargin, 0, topMargin + LAKE_SKIN_DEPTH_PX)
   skin.addColorStop(0, colors.light)
@@ -1053,7 +1059,7 @@ function paintLakeGradient(paint) {
 //
 function paintLakeReflections(paint) {
   const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
-  ctx.fillStyle = FOREST_PAL.waterPaint.reflection
+  ctx.fillStyle = paint.colors.reflection
   for (const spot of LAKE_REFLECTIONS) {
     const cx = spot.t * coreSpan
     const surfaceY = topMargin + waveOffsetAt(spot.t, time) * lakeShoreFadeAtLocalX(cx, coreSpan, bakeSpan)
@@ -1078,7 +1084,7 @@ function paintLakeReflections(paint) {
 function paintLakeShoreRipples(paint, shoreLocalX, dir) {
   const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
   const cycleU = time / LAKE_BAKE_CYCLE
-  ctx.fillStyle = FOREST_PAL.waterPaint.ripple
+  ctx.fillStyle = paint.colors.ripple
   for (let i = 0; i < LAKE_RIPPLE_COUNT; i++) {
     const u = (cycleU + i / LAKE_RIPPLE_COUNT) % 1
     const dist = LAKE_RIPPLE_START_PX + u * LAKE_RIPPLE_SPACING_PX * LAKE_RIPPLE_COUNT

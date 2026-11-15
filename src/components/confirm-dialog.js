@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 import { getRGB, parseHex } from '../utils/helper.js'
 import { createSeededRandom } from '../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
-import { paintMossStrand } from '../sections/cave/utils/cave-paint.js'
+import { paintMossStrand } from '../utils/draw-moss-strand.js'
 import { loadPictureImage } from '../sections/forest/utils/forest-picture.js'
 //
 // Global Yes / No confirm dialog, usable from any scene, drawn as a forest

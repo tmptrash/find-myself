@@ -460,6 +460,7 @@ src/
 │   ├── hero.js                       # Hero/anti-hero component
 │   ├── grass.js                      # Grass tufts field
 │   ├── confirm-dialog.js             # Yes/no dialog
+│   ├── lake.js                       # See-through lake (forest lake, cave's underground lake)
 │   └── lesson-indicator.js           # Life eye HUD
 ├── scenes/                           # Top-level scenes
 │   ├── menu.js                       # sceneMenu() - Main menu
@@ -679,7 +680,7 @@ still use the fixed canvas.
     colour (`PLAYFIELD_SCREEN` in `level0.js`).
 - Only when the window is larger than the **whole** playfield on both axes is
   the game drawn as a centred window with rounded corners (`PLAYFIELD_ROUNDED`).
-- Screen-space UI (eye HUD, tooltips) anchors to `PLAYFIELD_SCREEN`, so it stays
+- Screen-space UI (eye HUD) anchors to `PLAYFIELD_SCREEN`, so it stays
   inside the visible playfield in every case.
 
 ### Rules for writing a native-resolution level

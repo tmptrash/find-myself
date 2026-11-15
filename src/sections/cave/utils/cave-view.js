@@ -1,16 +1,14 @@
 import { getRGB } from '../../../utils/helper.js'
 import * as Layout from './cave-layout.js'
-import { CAVE_PAL, css } from './cave-paint.js'
+import { CAVE_CFG } from '../cfg.js'
 //
-// Playfield window and camera of cave lesson 0. The window has the forest
-// margins (HUD bar on top, strips on the sides and bottom) and rounded
-// corners; it is never wider than the 1280 px world and is centred when the
-// screen is wider. The camera follows the hero on both axes and keeps world
-// pixels on whole screen pixels so baked art and the hero outline stay crisp.
+// Playfield window and camera of cave lesson 0. The window fills the whole
+// screen; only on an axis where the screen is bigger than the world is the
+// world centred with a void band beside it, and only when it is bigger on
+// both axes does the window get rounded corners. The camera follows the
+// hero on both axes and keeps world pixels on whole screen pixels so baked
+// art and the hero outline stay crisp.
 //
-const TOP_MARGIN = 110
-const BOTTOM_MARGIN = 50
-const SIDE_MARGIN = 100
 const CORNER_RADIUS = 20
 const CORNER_SPRITE = 'cave0-corner-v1'
 const CORNER_ARC_END = 1.5
@@ -39,22 +37,22 @@ const cornerFor = new WeakSet()
 export function create(k) {
   const screenW = k.width()
   const screenH = k.height()
-  const winW = Math.min(Layout.WORLD_W, screenW - SIDE_MARGIN * 2)
-  const winH = Math.min(Layout.MAX_VIEW_H, screenH - TOP_MARGIN - BOTTOM_MARGIN)
-  const padY = Math.max(0, Math.round((screenH - TOP_MARGIN - BOTTOM_MARGIN - winH) / 2))
+  const winW = Math.min(screenW, Layout.WORLD_W)
+  const winH = Math.min(screenH, Layout.WORLD_H)
   bakeCorner(k)
   return {
     k,
     screenW,
     screenH,
+    rounded: screenW > Layout.WORLD_W && screenH > Layout.WORLD_H,
     winX: Math.round((screenW - winW) / 2),
-    winY: TOP_MARGIN + padY,
+    winY: Math.round((screenH - winH) / 2),
     winW,
     winH,
     camX: winW / 2,
     camY: winH / 2,
     rate: FOLLOW_RATE,
-    frameRgb: getRGB(k, CAVE_PAL.frame)
+    frameRgb: getRGB(k, CAVE_CFG.colors.frame)
   }
 }
 
@@ -99,7 +97,17 @@ export function worldRect(inst) {
 }
 
 /**
- * Screen-space frame around the window: margins plus rounded corners.
+ * Size of the visible world window.
+ * @param {Object} inst - View instance
+ * @returns {{w: number, h: number}}
+ */
+export function windowSize(inst) {
+  return { w: inst.winW, h: inst.winH }
+}
+
+/**
+ * Screen-space void bands beside a world smaller than the screen, rounded
+ * corners when it is smaller on both axes.
  * @param {Object} inst - View instance
  */
 export function onDrawFrame(inst) {
@@ -110,6 +118,7 @@ export function onDrawFrame(inst) {
   rect(0, winY + winH, screenW, screenH - winY - winH)
   rect(0, winY, winX, winH)
   rect(winX + winW, winY, screenW - winX - winW, winH)
+  if (!inst.rounded) return
   const r = CORNER_RADIUS
   const corner = (x, y, angle) => k.drawSprite({ sprite: CORNER_SPRITE, pos: k.vec2(x, y), angle, fixed: true })
   corner(winX - r, winY - r, 0)
@@ -118,14 +127,6 @@ export function onDrawFrame(inst) {
   corner(winX - r, winY + winH + r, ROTATE_BL)
 }
 
-/**
- * Screen Y of the top HUD row (FPS counter).
- * @param {Object} inst - View instance
- * @returns {number}
- */
-export function hudTopY(inst) {
-  return inst.winY - TOP_MARGIN / 2
-}
 //
 // Kaplay camPos is the world point drawn at the screen centre; the window
 // centre is offset from it, and the result is rounded to whole pixels.
@@ -154,7 +155,7 @@ function bakeCorner(k) {
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = css(CAVE_PAL.frame)
+  ctx.fillStyle = CAVE_CFG.colors.frame
   ctx.fillRect(0, 0, size, size)
   ctx.globalCompositeOperation = 'destination-out'
   ctx.beginPath()

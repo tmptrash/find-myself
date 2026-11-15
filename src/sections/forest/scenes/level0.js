@@ -35,7 +35,8 @@ import {
   applyForestHudSharpBake,
   forestDepthBlurRadiusPx
 } from '../utils/forest-focus-depth.js'
-import * as HeroHint from '../../../utils/hero-hint.js'
+import * as StartBubble from '../components/start-bubble.js'
+import * as CaveAtlas from '../../cave/utils/cave-atlas.js'
 import * as DreamBubble from '../components/dream-bubble.js'
 import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import {
@@ -94,7 +95,7 @@ import * as ChainEyeTramp from '../utils/forest-chain-eye-trampoline.js'
 import * as BombTree from '../utils/forest-bomb-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
-import * as Lake from '../utils/forest-lake.js'
+import * as Lake from '../../../components/lake.js'
 import * as Underground from '../utils/forest-underground.js'
 import * as BushStrip from '../utils/forest-bush-strip.js'
 import { GROUND_LAYER_FRACS, groundEarthLayersColor, paintLayeredEarthBand } from '../utils/forest-earth-band.js'
@@ -784,28 +785,14 @@ const FOREST_BIRDS_PLAYBACK_RATE = 1
 const FOREST_BIRDS_COLOR_LOWPASS_HZ = 14000
 let forestBirdsLoopHandle = null
 //
-// Intro advances on deliberate confirm keys — not movement bindings.
-//
-//
-// First-visit controls hint: a speech bubble on the hero with the hot keys.
-// The hero can move while it is up (walking away is one way to close it).
-//
-const HINT_INTRO_TEXT = '\'awd, ←, →, ↑ & space\'\nto move, jump & interact\nwith the world.'
-const HINT_INTRO_DURATION = 18
-//
-// Walking this far from the bubble dismisses it early; the first moments of
-// movement are ignored so spawn settle and camera snap never clear it.
-//
-const FOREST_HINT_DISMISS_DISTANCE = 80
-const FOREST_HINT_MOVEMENT_DISMISS_GRACE = 0.45
-//
-// The hint closes on deliberate confirm keys — not movement bindings.
+// The first-visit controls bubble closes on deliberate confirm keys — not
+// movement bindings.
 //
 const INTRO_ADVANCE_KEY_NAMES = ['space', 'enter']
 //
-// After the opening camera settles, wait this long before showing the hint.
+// After the opening camera settles, wait this long before showing the controls bubble.
 //
-const CAMERA_INTRO_HINT_DELAY = 1
+const CAMERA_INTRO_BUBBLE_DELAY = 1
 const FOREST_PROXIMITY_SOUND_RADIUS = 120
 const FOREST_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 //
@@ -1058,7 +1045,7 @@ const WATER_RIGHT_TRIM = 10
 //
 const LAKE_SHORE_ANCHOR_FROM_TRUNK = 384
 //
-// The lake's right bank edge is ragged by this much (forest-lake.js).
+// The lake's right bank edge is ragged by this much (components/lake.js).
 //
 const LAKE_BANK_JAG_PX = 22
 //
@@ -1067,7 +1054,7 @@ const LAKE_BANK_JAG_PX = 22
 const LAKE_WATER_PAST_ANCHOR = 110
 const LAKE_Z = 12
 //
-// Lake layers (see forest-lake.js): the bed and the algae under the water
+// Lake layers (see components/lake.js): the bed and the algae under the water
 // fill. The sprite key keeps the level's baked lake names.
 //
 const LAKE_BED_Z = 11.6
@@ -1139,6 +1126,7 @@ const FLOWER_GRAB_TRANSITION_FROM = 'lesson-forest.0'
 const FLOWER_GRAB_NEXT_LESSON = 'lesson-cave.0'
 const KEY_FOREST_COMPLETED = 'forest.completed'
 const KEY_LAST_LESSON = 'lastLesson'
+const KEY_CAVE_SAFE_SPOT = 'cave.safeSpot'     // Cleared when the flower drops him in: the cave starts where he landed
 //
 // Slack around a wood surface when deciding "the hero's feet are on wood"
 // for the foot-dust guard — wider than the surface detector's own window so
@@ -1292,7 +1280,7 @@ export async function prewarmForestLevel0HeavyAssets(k, onProgress) {
   recomputeForestScreenLayout(k)
   onProgress?.(5)
   await yieldForGpu(1)
-  await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+  await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), StartBubble.load(), CaveAtlas.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
   await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
   await loadForestStones()
   onProgress?.(42)
@@ -1358,7 +1346,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The left big tree is a picture (forest-left-tree.js); its start branch
     // and the hangs its watered apples grow on sit at fixed places on it.
     //
-    await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
+    await Promise.all([loadForestPlants(), loadForestMushrooms(), TrampMushroom.load(), DreamBubble.load(), StartBubble.load(), CaveAtlas.load(), WaterFlower.load(k), AppleBug.load(k), PropellerBud.load(k)])
     const leftTree = await bakeLeftTree(k, LEFT_TREE_FOOT, LEFT_TREE_CLEAR_SPANS)
     if (forestInitStale(session)) return
     const treeData = { horizBranch: leftTreeBranch(LEFT_TREE_FOOT) }
@@ -1693,14 +1681,14 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       levelIndicator,
       goldRgb,
       //
-      // Speech bubble for the controls hint (introLock: it is on screen).
+      // Thought bubble with the controls (introLock: it is on screen).
       //
-      heroHint: HeroHint.create({ k, heroInst, clampInset: forestTooltipClampInset() }),
+      startBubble: StartBubble.create({ k, heroInst, z: DREAM_BUBBLE_Z }),
       dreamBubble: DreamBubble.create({ k, heroInst, z: DREAM_BUBBLE_Z }),
       pendingForestIntro: false,
-      introHintDelayRemaining: 0,
+      introBubbleDelay: 0,
       introLock: false,
-      introHintOnComplete: null,
+      introBubbleOnComplete: null,
       startBranch: branchPlatBundle.startBranch,
       branchPlat,
       branchPlatHome,
@@ -2055,39 +2043,32 @@ function createPlayfieldFrameOverlay(k, inst) {
   ])
 }
 //
-// Shows the controls hint once the opening delay has passed, and marks it
+// Shows the controls bubble once the opening delay has passed, and marks it
 // shown as soon as the bubble is gone (timer or walk-away fallback).
 //
-function updateForestIntroHint(inst, dt) {
+function updateForestIntroBubble(inst, dt) {
   if (inst.pendingForestIntro) {
-    inst.introHintDelayRemaining += dt
-    if (inst.introHintDelayRemaining < CAMERA_INTRO_HINT_DELAY) return
+    inst.introBubbleDelay += dt
+    if (inst.introBubbleDelay < CAMERA_INTRO_BUBBLE_DELAY) return
     inst.pendingForestIntro = false
-    inst.introHintDelayRemaining = 0
+    inst.introBubbleDelay = 0
     startForestIntro(inst)
   }
-  inst.introLock && !HeroHint.isActive(inst.heroHint) && inst.introHintOnComplete?.()
+  inst.introLock && !StartBubble.isActive(inst.startBubble) && inst.introBubbleOnComplete?.()
 }
 //
-// Plays the controls hint until the player dismisses it (key, click,
+// Plays the controls bubble until the player dismisses it (key, click,
 // timer, or walking away).
 //
 function startForestIntro(inst) {
-  if (get(KEY_INTRO_SHOWN, false)) return
+  if (get(KEY_INTRO_SHOWN, false) || isTouchDevice() || !StartBubble.show(inst.startBubble)) return
   inst.introLock = true
   const introCancels = []
   const cancelIntroInput = () => {
     introCancels.forEach(h => h.cancel())
     introCancels.length = 0
   }
-  HeroHint.show(inst.heroHint, HINT_INTRO_TEXT, HINT_INTRO_DURATION, {
-    dismissOnJump: false,
-    dismissDistance: FOREST_HINT_DISMISS_DISTANCE,
-    dismissHorizontalOnly: true,
-    movementDismissGrace: FOREST_HINT_MOVEMENT_DISMISS_GRACE,
-    forceAbove: true
-  })
-  inst.introHintOnComplete = () => {
+  inst.introBubbleOnComplete = () => {
     cancelIntroInput()
     inst.introLock && finishForestIntro(inst)
   }
@@ -2105,32 +2086,21 @@ function startForestIntro(inst) {
   }))
 }
 //
-// One key press closes the hint immediately.
+// One key press bursts the bubble immediately.
 //
 function advanceForestIntro(inst, introHandlers) {
   introHandlers.cancel()
   if (!inst.introLock) return
-  HeroHint.clear(inst.heroHint)
+  StartBubble.dismiss(inst.startBubble)
   finishForestIntro(inst)
 }
 //
-// Closes the controls hint for good; it never shows again.
+// Closes the controls bubble for good; it never shows again.
 //
 function finishForestIntro(inst) {
   set(KEY_INTRO_SHOWN, true)
   inst.introLock = false
-  inst.introHintOnComplete = null
-}
-//
-// Playfield inset so the hint bubble pins to the game window, not the void.
-//
-function forestTooltipClampInset() {
-  return {
-    left: PLAYFIELD_SCREEN.x1,
-    right: SCREEN_W - PLAYFIELD_SCREEN.x2,
-    top: PLAYFIELD_SCREEN.y1,
-    bottom: SCREEN_H - PLAYFIELD_SCREEN.y2
-  }
+  inst.introBubbleOnComplete = null
 }
 //
 // The whole world is open from the first frame: colour, big tree, lake,
@@ -5863,7 +5833,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   const k = inst.k
   const cfg = inst.forestHeroCreateCfg
   if (!cfg) return
-  inst.heroHint && HeroHint.clear(inst.heroHint)
+  inst.startBubble && StartBubble.dismiss(inst.startBubble)
   releaseGamePhysicalKeys()
   const pose = computeForestTouchDeathRespawnPose(inst, deathX, deathY, cause)
   writeForestLastSpawnKeys(inst, pose.x, pose.y)
@@ -5883,7 +5853,7 @@ function respawnForestHeroAfterTouchDeath(inst, deathX, deathY, cause) {
   fresh.onPlayStepSound = stepSound
   fresh.onPlayLandSound = landSound
   inst.heroInst = fresh
-  inst.heroHint && (inst.heroHint.heroInst = fresh)
+  inst.startBubble && (inst.startBubble.heroInst = fresh)
   inst.dreamBubble && (inst.dreamBubble.heroInst = fresh)
   inst.flowerGrab && (inst.flowerGrab.heroInst = fresh)
   inst.pit && (inst.pit.heroInst = fresh)
@@ -6221,7 +6191,7 @@ function onUpdate(inst) {
     updateForestFlowerGrabFrame(inst)
     return
   }
-  updateForestIntroHint(inst, k.dt())
+  updateForestIntroBubble(inst, k.dt())
   if (inst._mushroomLeanActive) {
     updateMushroomWhistleLean(inst)
     inst._mushroomLeanActive = inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
@@ -6250,7 +6220,7 @@ function onUpdate(inst) {
   //
   hero.suppressDust = true
   //
-  // The hero is playable from the first frame, the controls hint included.
+  // The hero is playable from the first frame, the controls bubble included.
   //
   hero.controllable = true
   hero.controlsDisabled = false
@@ -6261,10 +6231,11 @@ function onUpdate(inst) {
     ChainBuoy.onUpdate(inst.chainBuoys, heroX, char.pos.y, k.dt(), ChainBuoy.collectSights(inst.chainBuoys, inst.predator, inst.propellerBud), !isForestHeroUnseen(inst), inst.predator)
   inst.earTrees && BombTree.onUpdate(inst.earTrees, k.dt())
   //
-  // No dozing off while a hint (the controls one at the start) is up or
-  // still to come: the dream's timer starts once it is gone.
+  // No dozing off while the controls bubble at the start is up or still to
+  // come: the dream's timer starts once it is gone.
   //
-  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), isDreamBubbleAllowed(k, inst, char, heroX), !inst.pendingForestIntro && !HeroHint.isActive(inst.heroHint))
+  inst.dreamBubble && DreamBubble.onUpdate(inst.dreamBubble, k.dt(), isDreamBubbleAllowed(k, inst, char, heroX), !inst.pendingForestIntro && !StartBubble.isActive(inst.startBubble))
+  StartBubble.onUpdate(inst.startBubble, k.dt(), forestBubbleView(k, inst))
   updateForestPlantWhisperSound(inst, char)
   updateForestProximitySound(inst, char)
   const grounded = char.isGrounded?.() ?? false
@@ -6493,18 +6464,21 @@ function tryStartForestFlowerGrab(inst) {
   if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char) &&
     !EyeFlower.isOnIsland(inst.eyeFlower, char.pos.x, footY)) return false
   destroyStrayForestHeroBody(inst.k, char)
+  StartBubble.dismiss(inst.startBubble)
   FlowerGrab.start(inst.flowerGrab)
   HorizFallTwig.releasePredatorAtIsland(inst.shoreFallTwigs, inst)
   return true
 }
 //
 // While the flower drags the hero away the level only runs the sequence,
-// particles, whisper and camera. The camera follows him a little way
-// down the root tunnel on top of its regular horizontal follow.
+// particles, whisper, the bursting controls bubble and camera. The camera
+// follows him a little way down the root tunnel on top of its regular
+// horizontal follow.
 //
 function updateForestFlowerGrabFrame(inst) {
   const k = inst.k
   FlowerGrab.onUpdate(inst.flowerGrab, k.dt())
+  StartBubble.onUpdate(inst.startBubble, k.dt(), forestBubbleView(k, inst))
   inst.footParticles && ForestFootParticles.onUpdate(inst.footParticles, k.dt())
   updateForestPlantWhisperSound(inst, inst.heroInst.character)
   updateForestCamera(inst)
@@ -6512,11 +6486,13 @@ function updateForestFlowerGrabFrame(inst) {
   drop > 0 && k.camPos(k.camPos().x, k.camPos().y + drop)
 }
 //
-// The swallowed hero ends the forest section: he drops into the cave below.
+// The swallowed hero ends the forest section: he drops into the cave below
+// (which then starts where the glimpse showed him land).
 //
 function finishForestFlowerGrab(k) {
   set(KEY_FOREST_COMPLETED, true)
   set(KEY_LAST_LESSON, FLOWER_GRAB_NEXT_LESSON)
+  set(KEY_CAVE_SAFE_SPOT, null)
   createLevelTransition(k, FLOWER_GRAB_TRANSITION_FROM)
 }
 function isForestHeroUnseen(inst) {
@@ -6754,6 +6730,19 @@ function isDreamBubbleOnScreen(k, inst, char) {
   return x - DREAM_BUBBLE_REACH_LEFT >= camPos.x - halfW &&
     x + DREAM_BUBBLE_REACH_RIGHT <= camPos.x + halfW &&
     y - DREAM_BUBBLE_REACH_UP >= camPos.y - halfH
+}
+//
+// What the camera shows of the world (null before the camera exists): the
+// controls bubble keeps inside it.
+//
+function forestBubbleView(k, inst) {
+  const cam = inst.camera
+  if (!cam) return null
+  const zoom = cam.zoom || 1
+  const halfW = cam.viewW / (2 * zoom)
+  const halfH = cam.viewH / (2 * zoom)
+  const camPos = k.camPos()
+  return { left: camPos.x - halfW, top: camPos.y - halfH, right: camPos.x + halfW }
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider

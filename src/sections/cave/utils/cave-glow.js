@@ -1,4 +1,4 @@
-import { CAVE_PAL, css } from './cave-paint.js'
+import { CAVE_CFG } from '../cfg.js'
 //
 // Shared soft radial glow sprite (cream core falling off to transparent).
 // Tinted per draw with a palette colour and drawn additively for mushroom
@@ -8,6 +8,8 @@ const GLOW_SPRITE = 'cave0-glow-v1'
 const GLOW_BAKE_R = 64
 const GLOW_MID_STOP = 0.35
 const GLOW_MID_ALPHA = 0.35
+const BYTE_MAX = 255
+const HEX_RADIX = 16
 const glowReadyFor = new WeakSet()
 
 /**
@@ -23,9 +25,10 @@ export function create(k) {
   canvas.height = size
   const ctx = canvas.getContext('2d')
   const g = ctx.createRadialGradient(GLOW_BAKE_R, GLOW_BAKE_R, 0, GLOW_BAKE_R, GLOW_BAKE_R, GLOW_BAKE_R)
-  g.addColorStop(0, css(CAVE_PAL.glowCore, 1))
-  g.addColorStop(GLOW_MID_STOP, css(CAVE_PAL.glowCore, GLOW_MID_ALPHA))
-  g.addColorStop(1, css(CAVE_PAL.glowCore, 0))
+  const core = CAVE_CFG.colors.glowCore
+  g.addColorStop(0, hexAlpha(core, 1))
+  g.addColorStop(GLOW_MID_STOP, hexAlpha(core, GLOW_MID_ALPHA))
+  g.addColorStop(1, hexAlpha(core, 0))
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
   k.loadSprite(GLOW_SPRITE, canvas)
@@ -55,4 +58,10 @@ export function drawGlow(k, x, y, radius, color, opacity, squashY = 1) {
     opacity,
     blend: k.BlendMode.Add
   })
+}
+//
+// '#rrggbb' with an alpha byte for gradient stops.
+//
+function hexAlpha(hex, alpha) {
+  return hex + Math.round(alpha * BYTE_MAX).toString(HEX_RADIX).padStart(2, '0')
 }

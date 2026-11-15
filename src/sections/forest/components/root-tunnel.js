@@ -222,6 +222,7 @@ const PULL_STRANDS = [
   { side: -1, dx: -4, dy: 30, hug: 0.35, w: 3, sway: 5, phase: 5.2, reach: 240 }
 ]
 const PULL_TIP_BACK = 4
+const TRAIL_END_BACK = 10
 const PULL_SWAY_BASE = 0.35
 const PULL_WAVE_MULT = 1.8
 const ROOTLET_EVERY = 3
@@ -277,6 +278,9 @@ const CRUMB_MAX = 60
  * @param {number} cfg.bottomY - Deepest world Y the cut must reach
  * @param {number} cfg.earthBottomY - World Y where the playfield earth band ends
  * @param {number} cfg.leanDir - -1 leans left with depth, 1 right
+ * @param {number} [cfg.leanPx] - How far the cut leans over its depth (default LEAN_PX)
+ * @param {number} [cfg.deepBottomY] - Earth under the playfield floor is baked down to here (default bottomY)
+ * @param {function(): void} [cfg.drawUnder] - Draws what the cut breaks into (under the cut, over the deep earth)
  * @param {number} cfg.seed - Bake seed
  * @param {function(): void} cfg.drawPrey - Draws the hero between the back and front strands
  * @returns {Object} Root-tunnel inst
@@ -295,6 +299,10 @@ export function create(cfg) {
     bottomY: cfg.bottomY,
     earthBottomY: cfg.earthBottomY,
     leanDir: cfg.leanDir,
+    leanPx: cfg.leanPx ?? LEAN_PX,
+    deepBottomY: cfg.deepBottomY ?? cfg.bottomY,
+    drawUnder: cfg.drawUnder ?? null,
+    released: false,
     seed: cfg.seed,
     surfaceAt: cfg.surfaceAt,
     surfaceTarget: cfg.surfaceTarget,
@@ -395,6 +403,16 @@ export function setDragging(inst, on) {
 }
 
 /**
+ * The roots let the hero go at the cut's end: the coils vanish, the
+ * pulling roots stay behind and the trailing strands hang down to the end.
+ * @param {Object} inst - Root-tunnel inst
+ */
+export function release(inst) {
+  inst.released = true
+  inst.dragging = false
+}
+
+/**
  * Underground darkness over the whole level (0..1, under the HUD).
  * @param {Object} inst - Root-tunnel inst
  * @param {number} v
@@ -478,7 +496,7 @@ function buildSpine(inst, rng) {
     const mouth2 = mouth * mouth
     const wigIn = clamp01((y - inst.groundY) / WIGGLE_IN_PX)
     const wiggle = WIGGLE_AMP * Math.sin(y / WIGGLE_LEN + phase) + WIGGLE_NOISE_AMP * noiseAt(noise.wig, WIGGLE_NOISE_STEP, d)
-    const x = inst.x + inst.leanDir * LEAN_PX * Math.pow(t, LEAN_POW) + wiggle * wigIn
+    const x = inst.x + inst.leanDir * inst.leanPx * Math.pow(t, LEAN_POW) + wiggle * wigIn
     const hw = HW_TOP + (HW_BOTTOM - HW_TOP) * t
     const wall = WALL_TOP + (WALL_BOTTOM - WALL_TOP) * t
     const hwL = Math.max(HW_MIN, hw * (1 + EDGE_NOISE_AMP * noiseAt(noise.left, EDGE_NOISE_STEP, d)) +
@@ -953,7 +971,7 @@ function bakeDeepEarth(inst, rng) {
   const x1 = Math.floor(k.camPos().x - k.width() * 0.5 - DEEP_MARGIN)
   const y1 = Math.floor(inst.earthBottomY)
   const w = Math.ceil(k.width() + DEEP_MARGIN * 2)
-  const h = Math.ceil(inst.bottomY - y1)
+  const h = Math.ceil(inst.deepBottomY - y1)
   if (h <= 0) return false
   const box = { x1, y1, x2: x1 + w, y2: y1 + h, w, h }
   const canvas = toCanvas({ width: w, height: h }, ctx => paintDeepEarth(inst, ctx, rng, box))
@@ -1026,6 +1044,7 @@ function paintLenses(ctx, rng, box, colors) {
 function onDraw(inst) {
   if (inst.open <= 0) return
   drawDeepEarth(inst)
+  inst.drawUnder?.()
   drawCut(inst)
   queueBack(inst)
   PolyBatch.flush(inst.back, inst.k)
@@ -1065,13 +1084,13 @@ function drawCut(inst) {
 function queueBack(inst) {
   const batch = inst.back
   const c = inst.colors
-  inst.pullers.forEach(strand => queuePuller(inst, strand))
+  inst.released || inst.pullers.forEach(strand => queuePuller(inst, strand))
   inst.crumbs.forEach(crumb => PolyBatch.addDisc(batch, crumb.x, crumb.y, crumb.r, crumb.color))
-  COILS.forEach(coil => queueCoilHalf(inst, batch, coil, false, c))
+  inst.released || COILS.forEach(coil => queueCoilHalf(inst, batch, coil, false, c))
 }
 function queueFront(inst) {
   const c = inst.colors
-  COILS.forEach(coil => queueCoilHalf(inst, inst.front, coil, true, c))
+  inst.released || COILS.forEach(coil => queueCoilHalf(inst, inst.front, coil, true, c))
   inst.trail.forEach(strand => queueTrail(inst, strand))
 }
 //
@@ -1132,8 +1151,9 @@ function queueTrail(inst, strand) {
   const c = inst.colors
   const y0 = inst.surfaceY + TURF_H
   const x0 = spineX(inst, y0) + spec.from * halfWidth(inst, y0)
-  const x1 = prey.x + spec.dx * prey.scale
-  const y1 = prey.y + spec.dy * prey.scale
+  const endY = inst.bottomY - TRAIL_END_BACK
+  const x1 = inst.released ? spineX(inst, endY) + spec.dx : prey.x + spec.dx * prey.scale
+  const y1 = inst.released ? endY : prey.y + spec.dy * prey.scale
   fillStrandPath(inst, strand, x0, y0, x1, y1, Math.sign(spec.from), Math.abs(spec.from), false)
   const vine = spec.kind === 'vine'
   queueStrandBody(inst.front, strand.pts, spec.w, vine ? c.vine : c.stem, vine ? c.leafLight : c.stemLight, c.contour)

@@ -121,8 +121,7 @@ export const CFG = {
     jumpForce: 640,
     gravity: 2000,
     platformName: "platform",
-    noCeilingTag: "noJumpCeiling", // Ground-only platforms that never block a jump from below or beside
-    caveDarkness: false   // Cave darkness + lantern mushroom light; off for now (the cave is always lit)
+    noCeilingTag: "noJumpCeiling" // Ground-only platforms that never block a jump from below or beside
   },
   controls: {
     moveLeft: ['left', 'a', 'KeyA'],       // Move left (KeyA = physical key for any layout)
@@ -325,6 +324,7 @@ export const CFG = {
         predatorHorn: PALETTE.brown1,
         predatorTongue: PALETTE.red1,       // Forked lizard tongue
         predatorMouth: PALETTE.red0,        // Inside the open mouth
+        mossStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5], // Hanging moss strand: shadow, stem, leaf, lit leaf, water drop
         dreamFirefly: PALETTE.gray7,       // White fireflies left where the hero's dream bubble bursts
         water: PALETTE.cyan2,
         //
@@ -673,132 +673,6 @@ export const CFG = {
           twig: PALETTE.brown0,
           twigHover: PALETTE.red3,
           backdrop: PALETTE.gray0
-        },
-        //
-        // Cave section — cool blue-teal stone base, brown roots as the earth
-        // band, fluorescent cyan as the one light colour (mushrooms) and rare
-        // gold for fireflies.
-        //
-        cave: {
-          darkness: PALETTE.gray0,
-          frame: PALETTE.gray0,
-          backVineDark: [PALETTE.gray0, PALETTE.gray0, PALETTE.gray0],
-          backHaze: { far: PALETTE.teal0, mid: PALETTE.cyan0, near: PALETTE.gray0 },
-          //
-          // Shade tint per back row: cold blue far wall, teal-green middle
-          // ledges, green-black near masses.
-          //
-          backTint: { far: PALETTE.blue1, mid: PALETTE.teal2, near: PALETTE.gray0 },
-          //
-          // Monster plant: dark warm brown wood (contour, deep, dark, mid,
-          // light, highlight) with soft golden-brown lit ridges, every other
-          // thick vine muted olive; cool cave light bounced on their shadow
-          // edges; warm light at the top, cool dark at the foot; muted
-          // olive moss.
-          //
-          plantMoss: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4],
-          plantLichen: PALETTE.gold2,
-          plantWood: [PALETTE.gray0, PALETTE.rose0, PALETTE.brown0, PALETTE.sand1, PALETTE.gold0, PALETTE.gold2],
-          plantVine: [PALETTE.gray0, PALETTE.rose0, PALETTE.sand0, PALETTE.green0, PALETTE.sand2, PALETTE.gold2],
-          plantRim: PALETTE.cyan3,
-          plantWarm: PALETTE.gold3,
-          plantCool: PALETTE.teal0,
-          plantIvy: [PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green3],
-          eyeGlint: PALETTE.gray7,
-          plantStrand: [PALETTE.teal0, PALETTE.green0, PALETTE.green2, PALETTE.green4, PALETTE.gold5],
-          plantRosette: [PALETTE.gray0, PALETTE.teal0, PALETTE.green0, PALETTE.green1, PALETTE.teal2],
-          plantThorn: [PALETTE.rose0, PALETTE.red0, PALETTE.orange1, PALETTE.red4],
-          leaf: [PALETTE.gray0, PALETTE.green0, PALETTE.green3, PALETTE.green5, PALETTE.gold5],
-          leaf3d: [PALETTE.gray0, PALETTE.sand0, PALETTE.green0, PALETTE.green1, PALETTE.green5, PALETTE.gold5, PALETTE.gold4],
-          trapLeaf3d: [PALETTE.gray0, PALETTE.rose0, PALETTE.orange0, PALETTE.red2, PALETTE.red3, PALETTE.red4, PALETTE.gold5],
-          trapTooth: [PALETTE.gray0, PALETTE.gray6, PALETTE.gray7],
-          spore: {
-            cap: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate2, PALETTE.slate3, PALETTE.slate4], // Contour, shade, skin, light, highlight
-            holeRim: PALETTE.orange0,  // Deep upper wall of a hole
-            hole: PALETTE.orange3,     // Lit lower wall of a hole
-            holeGlow: PALETTE.gold4,   // Glowing heart of a hole
-            gill: PALETTE.gold5,       // Pale lit underside
-            gillLine: PALETTE.orange4, // Its gills
-            spark: PALETTE.gold5,
-            swarm: PALETTE.red1,       // Spores out of the mushroom: red glow
-            swarmCore: PALETTE.red4,   // and a warm pale core
-            stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3]
-          },
-          //
-          // Funnel mushrooms (chanterelle clusters): warm peach trumpets
-          // whose stalks run smoothly into the caps, darker false gills
-          // down their outside, the inside pale at the lip and darkening
-          // into a deep hole; the stalks dark woody brown where they meet
-          // at the foot, pale cream higher up; a soft orange halo.
-          //
-          funnel: {
-            contour: PALETTE.rose0,
-            shade: PALETTE.orange2,
-            body: PALETTE.red4,
-            light: PALETTE.rose4,
-            inside: PALETTE.rose4,
-            throat: PALETTE.orange0,
-            hole: PALETTE.rose0,
-            glow: PALETTE.orange3,
-            stemBase: PALETTE.sand0,
-            stemMid: PALETTE.gold0,
-            stem: PALETTE.orange5
-          },
-          //
-          // Umbrella plants: a slim golden stalk holding a wide pale pad
-          // seen from below, golden veins fanning from its centre, a pale
-          // glow at its heart.
-          //
-          umbrella: {
-            contour: PALETTE.gray0,
-            top: PALETTE.cyan4,
-            under: PALETTE.cyan4,
-            rim: PALETTE.cyan5,
-            heart: PALETTE.gold5,
-            vein: PALETTE.gold2,
-            glow: PALETTE.cyan5,
-            stalk: [PALETTE.gray0, PALETTE.gold1, PALETTE.gold3, PALETTE.gold5]
-          },
-          bubble: {
-            rim: PALETTE.cyan5,
-            fill: PALETTE.cyan4,
-            glint: PALETTE.gray7,
-            core: PALETTE.gold5,
-            stem: [PALETTE.gray0, PALETTE.sand1, PALETTE.sand3, PALETTE.sand5]
-          },
-          airPlant: {
-            body: [PALETTE.gray0, PALETTE.teal1, PALETTE.teal2, PALETTE.teal3, PALETTE.teal4],
-            spot: PALETTE.teal5,
-            mouth: PALETTE.rose0,
-            tooth: PALETTE.gray6,
-            air: PALETTE.gray7
-          },
-          backNear: [PALETTE.gray0, PALETTE.gray0, PALETTE.cyan0, PALETTE.teal0],
-          shaft: PALETTE.gold3,
-          wallEye: {
-            contour: PALETTE.gray0,
-            vein: PALETTE.rose0,
-            knot: PALETTE.rose0
-          },
-          glowCore: PALETTE.gray7,
-          rock: [PALETTE.gray0, PALETTE.gray1, PALETTE.slate1, PALETTE.slate2],
-          rockRim: PALETTE.slate3,
-          contour: PALETTE.gray0,
-          moss: [PALETTE.teal1, PALETTE.teal2, PALETTE.cyan3],
-          plant: [PALETTE.gray0, PALETTE.teal0, PALETTE.cyan1],
-          spike: [PALETTE.gray0, PALETTE.slate1, PALETTE.slate3],
-          glow: PALETTE.cyan4,
-          glowBright: PALETTE.cyan5,
-          glowHalo: PALETTE.cyan3,
-          glowTint: PALETTE.cyan2,
-          mushroomStem: PALETTE.gold5,
-          mushroomStemShade: PALETTE.teal5,
-          mushroomCap: PALETTE.cyan3,
-          mushroomGill: PALETTE.cyan2,
-          water: PALETTE.cyan0,
-          firefly: PALETTE.gold4,
-          fireflyCore: PALETTE.gold5,
-          heroSpark: [PALETTE.cyan5, PALETTE.gold5, PALETTE.cyan4]
         },
         //
         // Parallax forest quadrants — all cool turquoise / blue so the

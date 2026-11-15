@@ -7,7 +7,7 @@ import { forestContactShadowRgb, paintForestContactShadow, paintUndergroundDepth
 import { applyForestFilmGrainToCanvas, applyParallaxPostFxToContext, FOREST_LAYER_GRADE } from './forest-parallax-grain.js'
 import { forestDepthBlurRadiusPx } from './forest-focus-depth.js'
 import * as TrampMushroom from './forest-tramp-mushroom.js'
-import * as Lake from './forest-lake.js'
+import * as Lake from '../../../components/lake.js'
 import { renderBushStrip } from './forest-bush-strip.js'
 import { forestBuriedElements } from './forest-ground-element.js'
 import { buildUndergroundSpec, renderUndergroundSpec, undergroundStaticEarthTones } from './forest-underground.js'

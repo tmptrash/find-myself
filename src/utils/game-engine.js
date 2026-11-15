@@ -14,6 +14,7 @@ import { installLevelFadeIn } from "./transition.js"
 import { setFocusCanvas, focusGameCanvas } from "./canvas-focus.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
+import { fitPageHeight, pageHeight } from "./page-height.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -356,6 +357,12 @@ async function initKaplayWithRetry(resolutionMode) {
     canvas.style.visibility = 'hidden'
     try {
       const k = kaplay(buildKaplayOpts(resolutionMode, canvas))
+      //
+      // Kaplay resets <html> / <body> to 100% height; where that falls
+      // short of the screen (iPhone home-screen app) stretch them again,
+      // and the canvas follows on Kaplay's resize observer.
+      //
+      fitPageHeight()
       activeCanvas = canvas
       return k
     } catch (err) {
@@ -404,7 +411,7 @@ function buildKaplayOpts(resolutionMode, canvas) {
 //
 function nativeWorldScale() {
   const w = window.innerWidth
-  const h = window.innerHeight
+  const h = pageHeight()
   const side = Math.min(w, h)
   if (!TouchInput.isTouchDevice() || side >= SMALL_VIEW_MAX_H) return 1
   const scale = Math.max(side, SMALL_VIEW_MIN_H) / SMALL_VIEW_WORLD_H

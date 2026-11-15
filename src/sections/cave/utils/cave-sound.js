@@ -5,8 +5,9 @@ import { CFG } from '../../../cfg.js'
 // blowing through the cave in irregular gusts (low rush, airy whoosh and a
 // thin whistle in the cracks); a faint rumble; rare distant pebble falls.
 // Everything that should sound far away goes through a cave reverb built
-// from a procedural impulse response. Plus the lantern mushroom's spring
-// and chime and the plant contraptions.
+// from a procedural impulse response. Plus the hero's steps on the mossy
+// earth, the lantern mushroom's spring and chime and the sparkle of his
+// shattering.
 //
 const MASTER_GAIN = CFG.audio.masterVolume
 const NOISE_SECONDS = 6
@@ -128,9 +129,6 @@ const SPLASH_GAIN_RANGE = 0.15
 //
 // Visible drops landing near the hero: pitches and loudness share.
 //
-const LAND_PLINK_PITCH = 1900
-const LAND_PLOP_PITCH = 520
-const LAND_VOLUME = 1.3
 //
 // Distant pebble falls.
 //
@@ -144,20 +142,9 @@ const PEBBLE_GAIN = 0.05
 const PEBBLE_DECAY = 0.05
 const PEBBLE_FADE = 0.8
 //
-// Steps on the plant's fleshy leaves: a soft muffled pat (low-passed noise,
-// slow attack) under a faint leafy rustle; landing is the same, a little
-// longer and fuller. About a third as loud as the normal step.
+// Attack of a soft muffled pat of filtered noise (the rock footfall).
 //
-const LEAF_STEP_TIME = 0.07
-const LEAF_LAND_TIME = 0.11
-const LEAF_PAT_LP = 340
-const LEAF_PAT_GAIN = 0.7
-const LEAF_LAND_GAIN = 1
-const LEAF_PAT_ATTACK = 0.012
-const LEAF_RUSTLE_BAND = 2600
-const LEAF_RUSTLE_Q = 0.7
-const LEAF_RUSTLE_SHARE = 0.06
-const LEAF_PITCH_JITTER = 0.25
+const PAT_ATTACK = 0.012
 //
 // Steps on cave rock: a soft padded footfall, no ringing tone and no
 // reverb (those made it sound like a drum) — a muffled low thump of noise
@@ -179,37 +166,6 @@ const STONE_JITTER = 0.2
 const STONE_LAND_GAIN = 1.25
 const STONE_LAND_TIME = 1.2
 //
-// Landing on the spore mushroom's cap: soft flesh giving way — a low
-// muffled thump with a gentle attack and a short breath of air pushed out
-// through the holes, its filter falling as the cap settles. All noise, no
-// tone and no reverb.
-//
-const CAP_THUD_LP = 170
-const CAP_THUD_GAIN = 0.9
-const CAP_THUD_TIME = 0.11
-const CAP_AIR_FROM = 1400
-const CAP_AIR_TO = 500
-const CAP_AIR_Q = 0.5
-const CAP_AIR_SHARE = 0.12
-const CAP_AIR_TIME = 0.16
-const CAP_JITTER = 0.15
-//
-// A puff of noise: band-passed, its centre sliding from one frequency to
-// another, with a soft attack.
-//
-const PUFF_ATTACK = 0.025
-//
-// Tendrils seizing the hero: a wet slither (noise sweeping down) over a
-// low creak.
-//
-const GRAB_NOISE_FROM = 2400
-const GRAB_NOISE_TO = 600
-const GRAB_NOISE_GAIN = 0.1
-const GRAB_TIME = 0.35
-const GRAB_CREAK = 110
-const GRAB_CREAK_GAIN = 0.12
-const GRAB_CREAK_DROP = 0.7
-//
 // Lantern mushroom: soft spring, rising chime, dim ticks.
 //
 const SPRING_FROM = 170
@@ -220,9 +176,6 @@ const CHIME_FREQS = [880, 1320, 1760, 2217]
 const CHIME_STAGGER = 0.06
 const CHIME_GAIN = 0.05
 const CHIME_DECAY = 1.4
-const DIM_TICK_FREQ = 1980
-const DIM_TICK_GAIN = 0.018
-const DIM_TICK_DECAY = 0.12
 //
 // Hero bursting into fireflies: chirp count, time spread, pitch and decay.
 //
@@ -233,42 +186,6 @@ const SPARK_FREQ_RANGE = 700
 const SPARK_DROP = 0.6
 const SPARK_DECAY = 0.12
 const SPARK_GAIN = 0.05
-//
-// Plant contraptions: trap snap, spore puff, bubble pop, air plant breath.
-//
-const SNAP_FREQ = 140
-const SNAP_GAIN = 0.22
-const SNAP_DECAY = 0.18
-const SNAP_DROP = 0.5
-const SNAP_NOISE_BAND = 900
-const SNAP_NOISE_GAIN = 0.12
-const SNAP_NOISE_DECAY = 0.12
-//
-// Spores puffing out: a dry breath of dust falling in pitch, and a couple
-// of smaller puffs trailing it at uneven steps.
-//
-const SPORE_PUFF_FROM = 2400
-const SPORE_PUFF_TO = 900
-const SPORE_PUFF_Q = 0.6
-const SPORE_PUFF_TIME = 0.4
-const SPORE_PUFF_GAIN = 0.12
-const SPORE_PUFF_TRAIL = 2
-const SPORE_TRAIL_STEP = 0.08
-const SPORE_TRAIL_SHARE = 0.45
-const POP_FREQ = 1400
-const POP_GAIN = 0.06
-const POP_DECAY = 0.07
-const POP_DROP = 0.5
-const POP_NOISE_BAND = 3200
-const POP_NOISE_GAIN = 0.05
-const POP_NOISE_DECAY = 0.05
-const AIR_BAND = 700
-const AIR_Q = 0.6
-const AIR_GAIN = 0.05
-const AIR_SUSTAIN = 0.7
-const AIR_ATTACK = 0.25
-const AIR_RELEASE = 0.8
-const AIR_TIME = 4.5
 const SILENT = 0.0001
 const HALF = 0.5
 
@@ -359,9 +276,6 @@ export function onUpdate(inst, dt, listenerY) {
  * @param {Object} inst - Cave sound instance
  * @returns {number}
  */
-export function gust(inst) {
-  return inst.wind ? inst.wind.level : 0
-}
 
 /**
  * A falling drop hitting stone (plink) or the lake (plop), panned and
@@ -371,26 +285,6 @@ export function gust(inst) {
  * @param {number} near - 0 (far) … 1 (right next to the hero)
  * @param {boolean} water - Lands in the lake
  */
-export function playDropLand(inst, pan, near, water) {
-  if (inst.stopped || inst.ctx.state !== 'running' || near <= 0) return
-  playDrip(inst, { pan, pitch: water ? LAND_PLOP_PITCH : LAND_PLINK_PITCH, plop: water }, near * LAND_VOLUME)
-}
-
-/**
- * The hero stepping or landing on one of the plant's leaves: a soft,
- * quiet, damp pat with a faint rustle.
- * @param {Object} inst - Cave sound instance
- * @param {boolean} land - Landing (a little longer and fuller)
- */
-export function playLeafStep(inst, land) {
-  if (!ready(inst)) return
-  const at = inst.ctx.currentTime
-  const time = land ? LEAF_LAND_TIME : LEAF_STEP_TIME
-  const gain = land ? LEAF_LAND_GAIN : LEAF_PAT_GAIN
-  const lp = LEAF_PAT_LP * (1 + (Math.random() - HALF) * LEAF_PITCH_JITTER)
-  softBurst(inst, inst.brown, at, 'lowpass', lp, 1, time, gain)
-  softBurst(inst, inst.white, at, 'bandpass', LEAF_RUSTLE_BAND, LEAF_RUSTLE_Q, time, gain * LEAF_RUSTLE_SHARE)
-}
 
 /**
  * Short sparkle when the hero shatters into fireflies: a few quick high
@@ -418,18 +312,7 @@ export function playSparkBurst(inst) {
 }
 
 /**
- * A trap leaf snapping shut: a low thump with a short wet rasp.
- * @param {Object} inst - Cave sound instance
- */
-export function playLeafSnap(inst) {
-  if (!ready(inst)) return
-  const at = inst.ctx.currentTime
-  tone(inst, SNAP_FREQ, at, SNAP_GAIN, SNAP_DECAY, false, SNAP_DROP)
-  noiseHit(inst, at, SNAP_NOISE_BAND, SNAP_NOISE_GAIN, SNAP_NOISE_DECAY)
-}
-
-/**
- * The hero stepping or landing on rock: a soft muffled thump with a faint
+ * The hero stepping or landing on the mossy earth: a soft muffled thump with a faint
  * crunch of grit; a landing is the same footfall, a little louder.
  * @param {Object} inst - Cave sound instance
  * @param {boolean} land - Landing (a little louder and longer)
@@ -445,96 +328,6 @@ export function playStoneStep(inst, land) {
   softBurst(inst, inst.brown, at, 'lowpass', STONE_THUD_LP * pitch, 1, time, gain)
   softBurst(inst, inst.white, at, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT_SHARE)
   softBurst(inst, inst.white, later, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT2_SHARE)
-}
-
-/**
- * The hero landing on the spore mushroom's cap: a short dull thump.
- * @param {Object} inst - Cave sound instance
- */
-export function playCapLand(inst) {
-  if (!ready(inst)) return
-  const at = inst.ctx.currentTime
-  const pitch = 1 + (Math.random() - HALF) * CAP_JITTER
-  softBurst(inst, inst.brown, at, 'lowpass', CAP_THUD_LP * pitch, 1, CAP_THUD_TIME, CAP_THUD_GAIN)
-  puff(inst, at, CAP_AIR_FROM * pitch, CAP_AIR_TO * pitch, CAP_AIR_Q, CAP_AIR_TIME, CAP_THUD_GAIN * CAP_AIR_SHARE)
-}
-
-/**
- * A trap's tendrils seizing the hero: a wet slither and a low creak.
- * @param {Object} inst - Cave sound instance
- */
-export function playTendrilGrab(inst) {
-  if (!ready(inst)) return
-  const { ctx } = inst
-  const at = ctx.currentTime
-  const src = ctx.createBufferSource()
-  src.buffer = inst.white
-  const band = ctx.createBiquadFilter()
-  band.type = 'bandpass'
-  band.frequency.setValueAtTime(GRAB_NOISE_FROM, at)
-  band.frequency.exponentialRampToValueAtTime(GRAB_NOISE_TO, at + GRAB_TIME)
-  const g = ctx.createGain()
-  g.gain.setValueAtTime(GRAB_NOISE_GAIN, at)
-  g.gain.exponentialRampToValueAtTime(SILENT, at + GRAB_TIME)
-  src.connect(band)
-  band.connect(g)
-  g.connect(inst.out)
-  src.start(at, Math.random() * NOISE_SECONDS / 2, GRAB_TIME * 2)
-  tone(inst, GRAB_CREAK, at, GRAB_CREAK_GAIN, GRAB_TIME, false, GRAB_CREAK_DROP)
-}
-
-/**
- * Spores leaving the mushroom: a soft dry puff of dust from its holes, a
- * couple of small ones trailing it.
- * @param {Object} inst - Cave sound instance
- */
-export function playSporeRelease(inst) {
-  if (!ready(inst)) return
-  const at = inst.ctx.currentTime
-  puff(inst, at, SPORE_PUFF_FROM, SPORE_PUFF_TO, SPORE_PUFF_Q, SPORE_PUFF_TIME, SPORE_PUFF_GAIN)
-  for (let i = 1; i <= SPORE_PUFF_TRAIL; i++) {
-    const later = at + i * SPORE_TRAIL_STEP * (1 + Math.random())
-    puff(inst, later, SPORE_PUFF_FROM, SPORE_PUFF_TO, SPORE_PUFF_Q, SPORE_PUFF_TIME * SPORE_TRAIL_SHARE, SPORE_PUFF_GAIN * SPORE_TRAIL_SHARE)
-  }
-}
-
-/**
- * A bubble bursting: a tiny high pop.
- * @param {Object} inst - Cave sound instance
- */
-export function playBubblePop(inst) {
-  if (!ready(inst)) return
-  const at = inst.ctx.currentTime
-  tone(inst, POP_FREQ, at, POP_GAIN, POP_DECAY, true, POP_DROP)
-  noiseHit(inst, at, POP_NOISE_BAND, POP_NOISE_GAIN, POP_NOISE_DECAY)
-}
-
-/**
- * The air plant breathing out: a soft band of noise swelling and fading
- * over the blow.
- * @param {Object} inst - Cave sound instance
- */
-export function playAirBlow(inst) {
-  if (!ready(inst)) return
-  const { ctx } = inst
-  const at = ctx.currentTime
-  const src = ctx.createBufferSource()
-  src.buffer = inst.white
-  src.loop = true
-  const band = ctx.createBiquadFilter()
-  band.type = 'bandpass'
-  band.frequency.value = AIR_BAND
-  band.Q.value = AIR_Q
-  const g = ctx.createGain()
-  g.gain.setValueAtTime(SILENT, at)
-  g.gain.linearRampToValueAtTime(AIR_GAIN, at + AIR_ATTACK)
-  g.gain.linearRampToValueAtTime(AIR_GAIN * AIR_SUSTAIN, at + AIR_TIME - AIR_RELEASE)
-  g.gain.linearRampToValueAtTime(SILENT, at + AIR_TIME)
-  src.connect(band)
-  band.connect(g)
-  g.connect(inst.out)
-  src.start(at)
-  src.stop(at + AIR_TIME)
 }
 
 /**
@@ -563,9 +356,6 @@ export function playLanternBounce(inst) {
  * Faint tick as the lantern drops one light step.
  * @param {Object} inst - Cave sound instance
  */
-export function playLanternDim(inst) {
-  inst.ctx.state === 'running' && tone(inst, DIM_TICK_FREQ, inst.ctx.currentTime, DIM_TICK_GAIN, DIM_TICK_DECAY, true)
-}
 
 /**
  * Stops loops and disconnects the bus.
@@ -739,29 +529,7 @@ function softBurst(inst, buffer, at, type, freq, q, time, gain) {
   filter.Q.value = q
   const g = ctx.createGain()
   g.gain.setValueAtTime(0, at)
-  g.gain.linearRampToValueAtTime(gain, at + LEAF_PAT_ATTACK)
-  g.gain.exponentialRampToValueAtTime(SILENT, at + time)
-  src.connect(filter)
-  filter.connect(g)
-  g.connect(inst.out)
-  src.start(at, Math.random() * NOISE_SECONDS / 2, time * 2)
-}
-//
-// A breath of noise: band-passed with its centre sliding from one
-// frequency to another, soft attack, fading out (no click, no tone).
-//
-function puff(inst, at, from, to, q, time, gain) {
-  const { ctx } = inst
-  const src = ctx.createBufferSource()
-  src.buffer = inst.white
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.Q.value = q
-  filter.frequency.setValueAtTime(from, at)
-  filter.frequency.exponentialRampToValueAtTime(to, at + time)
-  const g = ctx.createGain()
-  g.gain.setValueAtTime(0, at)
-  g.gain.linearRampToValueAtTime(gain, at + PUFF_ATTACK)
+  g.gain.linearRampToValueAtTime(gain, at + PAT_ATTACK)
   g.gain.exponentialRampToValueAtTime(SILENT, at + time)
   src.connect(filter)
   filter.connect(g)
@@ -785,27 +553,6 @@ function tone(inst, freq, at, gain, decay, echo, drop = 1) {
   echo && g.connect(inst.send)
   osc.start(at)
   osc.stop(at + decay)
-}
-//
-// One band-passed noise burst (rasp, pop, click), optionally into the
-// cave reverb.
-//
-function noiseHit(inst, at, band, gain, decay, q = 1, echo = false) {
-  const { ctx } = inst
-  const src = ctx.createBufferSource()
-  src.buffer = inst.white
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.frequency.value = band
-  filter.Q.value = q
-  const g = ctx.createGain()
-  g.gain.setValueAtTime(gain, at)
-  g.gain.exponentialRampToValueAtTime(SILENT, at + decay)
-  src.connect(filter)
-  filter.connect(g)
-  g.connect(inst.out)
-  echo && g.connect(inst.send)
-  src.start(at, 0, decay * 2)
 }
 //
 // Looping filtered noise (started at a random offset so layers sharing a

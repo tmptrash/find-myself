@@ -8,11 +8,17 @@ import * as NoMouse from "./utils/no-mouse.js"
 import * as SoftwareCanvas from "./utils/software-canvas.js"
 import * as PerfReadout from "./utils/perf-readout.js"
 import * as ContextRecovery from "./utils/context-recovery.js"
+import { fitPageHeight } from "./utils/page-height.js"
 //
 // Force dark background for all elements
 //
 document.documentElement.style.backgroundColor = '#000000'
 document.body.style.backgroundColor = '#000000'
+//
+// The canvas takes <body>'s size: on an iPhone home-screen app the page
+// must first be stretched over the status bar's share of the screen.
+//
+fitPageHeight()
 //
 // Vite HMR re-runs this module but must not reboot into "ready" or replay TV snow.
 //

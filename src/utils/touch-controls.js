@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { isTouchDevice, setTouchPoint, removeTouchPoint } from './touch-input.js'
+import { isTouchDevice } from './touch-input.js'
 import { applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 
 //
@@ -319,7 +319,6 @@ function registerKaplayHandlers(k) {
 // Each new finger maps to a movement button (held) or fires the jump pulse (one-shot)
 //
 function onKaplayTouchStart(pos, touch) {
-  syncKaplayTouchPoint(pos, touch)
   updateMovementSlotFromTouch(pos, touch, true)
 }
 
@@ -347,10 +346,9 @@ function updateMovementSlotFromTouch(pos, touch, allowJump) {
 }
 
 //
-// Keeps tooltip hit-testing aligned with Kaplay touch coordinates
+// A finger sliding between the run buttons switches the direction it holds
 //
 function onKaplayTouchMove(pos, touch) {
-  syncKaplayTouchPoint(pos, touch)
   updateMovementSlotFromTouch(pos, touch)
 }
 
@@ -358,28 +356,9 @@ function onKaplayTouchMove(pos, touch) {
 // Only the finger that lifted clears its slot — other fingers stay held
 //
 function onKaplayTouchEnd(_pos, touch) {
-  clearKaplayTouchPoint(touch)
   const id = touch?.identifier ?? touch?.id ?? MOUSE_SLOT_ID
   movementSlots.delete(id)
   syncVirtualMovement()
-}
-
-//
-// Mirrors Kaplay touch positions into touch-input for tooltip hover
-//
-function syncKaplayTouchPoint(pos, touch) {
-  if (!isTouchDevice()) return
-  const id = touch?.identifier ?? touch?.id ?? 0
-  setTouchPoint(id, { x: pos.x, y: pos.y })
-}
-
-//
-// Removes Kaplay touch from shared touch-input map
-//
-function clearKaplayTouchPoint(touch) {
-  if (!isTouchDevice()) return
-  const id = touch?.identifier ?? touch?.id ?? 0
-  removeTouchPoint(id)
 }
 
 //

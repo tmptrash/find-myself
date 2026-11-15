@@ -260,11 +260,11 @@ const BLADE_HALF_PROFILE = Array.from({ length: BLADE_SEGMENTS + 1 }, (_, i) => 
 const WHISPER_START_LAKE_FRAC = 1
 const WHISPER_MIN_RAMP = 1
 //
-// Grab sequence (timeline in flower-grab.js). Four front blades turn into
-// tentacles: they coil back, whip out on curved paths one after another, wrap
-// around the hero and drag him under; the stem rears, lunges and wobbles on
-// damped springs. Everything integrates in fixed sub-steps so the motion is
-// the same at any frame rate.
+// Grab sequence (timeline in flower-grab.js). Red vines uncurl from the
+// foot of the bush: they coil back, whip out on curved paths one after
+// another, wind round and round the hero and drag him under; the stem
+// rears, lunges and wobbles on damped springs. Everything integrates in
+// fixed sub-steps so the motion is the same at any frame rate.
 //
 export const GRAB_PHASE = {
   AWARE: 'aware',
@@ -277,29 +277,48 @@ export const GRAB_PHASE = {
 const GRAB_STEP = 1 / 240
 const GRAB_MAX_DT = 1 / 20
 //
-// Per tentacle: source blade, strike delay (staggered, never in sync), band
-// height on the hero body (from his centre, negative = up), coil direction,
-// bow of the reach arc (sign = over / under swing) and wind-up scale.
+// Per vine: root offset from the plant's foot, how it rests curled in the
+// bush (angle, length), strike delay (staggered, never in sync), where its
+// coil starts on the hero body (from his centre, negative = up), coil
+// direction and how many turns it winds, bow of the reach arc (sign =
+// over / under swing), wind-up scale and thickness.
 //
-const GRAB_TENTACLES = [
-  { bladeIndex: 5, delay: 0, bandDY: -14, wrapDir: 1, bow: 0.95, windup: 1 },
-  { bladeIndex: 4, delay: 0.07, bandDY: 2, wrapDir: -1, bow: -0.6, windup: 0.8 },
-  { bladeIndex: 6, delay: 0.13, bandDY: -28, wrapDir: -1, bow: 1.2, windup: 1.2 },
-  { bladeIndex: 3, delay: 0.2, bandDY: 16, wrapDir: 1, bow: -0.85, windup: 0.9 }
+const GRAB_VINES = [
+  { dx: 6, angle: -1.25, restLen: 52, delay: 0, bandDY: -16, wrapDir: 1, turns: 2.4, bow: 0.95, windup: 1, w: 4.5 },
+  { dx: -2, angle: -1.5, restLen: 48, delay: 0.06, bandDY: -4, wrapDir: -1, turns: 2, bow: -0.6, windup: 0.8, w: 4 },
+  { dx: 10, angle: -1.1, restLen: 56, delay: 0.11, bandDY: -20, wrapDir: -1, turns: 1.6, bow: 1.2, windup: 1.2, w: 3.6 },
+  { dx: 2, angle: -1.35, restLen: 46, delay: 0.17, bandDY: 6, wrapDir: 1, turns: 2.2, bow: -0.85, windup: 0.9, w: 4 },
+  { dx: -6, angle: -1.7, restLen: 50, delay: 0.23, bandDY: -10, wrapDir: 1, turns: 1.8, bow: 0.7, windup: 1.1, w: 3.4 }
 ]
 //
-// The last blade segments become the coil; the rest is the IK reach chain.
+// A vine is many short links (plastic, not a rod): the reach part is an IK
+// chain, the last links become the coil round the hero.
 //
-const GRAB_WRAP_SEGMENTS = 5
-const GRAB_REACH_SEGMENTS = BLADE_SEGMENTS - GRAB_WRAP_SEGMENTS
+const GRAB_REACH_SEGMENTS = 24
+const GRAB_WRAP_SEGMENTS = 22
+const GRAB_VINE_SEGMENTS = GRAB_REACH_SEGMENTS + GRAB_WRAP_SEGMENTS
+const GRAB_VINE_LIFT = 4
+const GRAB_VINE_REST_CURL = 0.7
+const GRAB_VINE_TIP_W = 1.6
+const GRAB_VINE_LIGHT_FRAC = 0.35
 //
-// Coil: a band around the body seen slightly from above (flat ellipse) that
-// spirals down a little; segments on its lower half pass in front of him.
+// Soft follow: every reach link chases its solved spot on a spring that is
+// stiff at the root and loose in the middle, so the vine lags, overshoots
+// and ripples; link lengths are then restored (a rope, not rubber).
+//
+const GRAB_SOFT_K_ROOT = 900
+const GRAB_SOFT_K_MID = 140
+const GRAB_SOFT_C = 16
+const GRAB_SOFT_LEN_PASSES = 2
+//
+// Coil: a band around the body seen slightly from above (flat ellipse)
+// that winds down the body over its turns; links on its lower half pass in
+// front of him.
 //
 const GRAB_BAND_RX = 17
 const GRAB_BAND_RY = 5
-const GRAB_BAND_SPIRAL = 7
-const GRAB_WRAP_SWEEP = Math.PI * 1.8
+const GRAB_BAND_SPIRAL = 26
+const TAU = Math.PI * 2
 const GRAB_WRAP_SEC = 0.2
 const GRAB_UNWRAP_SEC = 0.45
 const GRAB_HOLDING_WRAP = 0.85
@@ -337,7 +356,7 @@ const GRAB_LEN_SPRING = { k: 260, c: 24 }
 const GRAB_IK_STIFFNESS = 0.3
 //
 // Reach arc bow per phase: coiled while waiting, straightening under load,
-// almost straight when the tentacles contract.
+// almost straight when the vines contract.
 //
 const GRAB_BOW = { aware: 1.5, strike: 1, lift: 0.55, hold: 0.4, pull: 0.12, release: 1.1 }
 const GRAB_WOBBLE_SPEED = 7
@@ -394,6 +413,7 @@ const GRAB_SINK_DEPTH = 300
 //
 const CLIP_SEG = { ax: 0, ay: 0, bx: 0, by: 0, cut: false }
 const COIL_PT = { x: 0, y: 0, front: false }
+const SOFT_DT = 1 / 240
 //
 // The plant is skipped while every point of it is this far off the visible
 // span (its widest blade or berry stays inside the pad).
@@ -507,16 +527,16 @@ export function create(cfg) {
 }
 
 /**
- * Turns the bush into a hunter: four front blades become tentacles aimed at
+ * Turns the bush into a hunter: red vines uncurl from its foot, aimed at
  * `prey`. From here on the plant is driven by tickGrab() (its own update
  * stops) so the grip and the hero move in the same frame.
  * @param {Object} inst - Eye-flower inst
- * @param {Object} prey - Hero body the tentacles hold, mutated by the caller
+ * @param {Object} prey - Hero body the vines hold, mutated by the caller
  * @param {number} prey.x - Body centre X
  * @param {number} prey.y - Body centre Y
  * @param {number} prey.scale - Hero sprite scale (band size)
  * @param {number} prey.angle - Body rotation in radians
- * @param {number} clipY - Ground line: tentacle parts below it are hidden once the pull starts
+ * @param {number} clipY - Ground line: vine parts below it are hidden once the pull starts
  */
 export function startGrab(inst, prey, clipY) {
   if (inst.grab) return
@@ -533,7 +553,7 @@ export function startGrab(inst, prey, clipY) {
     tilt: { v: 0, vel: 0 },
     stretch: { v: 1, vel: 0 },
     aim: { x: inst.leanHero.x, y: inst.leanHero.y, vx: 0, vy: 0 },
-    tentacles: GRAB_TENTACLES.map(spec => createTentacle(inst, spec, side))
+    vines: GRAB_VINES.map(spec => createVine(inst, spec, side))
   }
 }
 
@@ -550,16 +570,16 @@ export function setGrabPhase(inst, phase) {
   grab.clip = phase === GRAB_PHASE.PULL || phase === GRAB_PHASE.RELEASE
   phase === GRAB_PHASE.STRIKE && (grab.tilt.vel += GRAB_STRIKE_TILT_KICK * grab.side)
   phase === GRAB_PHASE.PULL && (grab.tilt.vel += GRAB_PULL_TILT_KICK * grab.side)
-  phase === GRAB_PHASE.RELEASE && grab.tentacles.forEach(releaseTentacle)
+  phase === GRAB_PHASE.RELEASE && grab.vines.forEach(releaseVine)
 }
 
 /**
- * True once every tentacle has caught the hero and mostly coiled around him.
+ * True once every vine has caught the hero and mostly coiled around him.
  * @param {Object} inst - Eye-flower inst
  * @returns {boolean}
  */
 export function isGrabHolding(inst) {
-  return !!inst.grab?.tentacles.every(tent => tent.caught && tent.wrap >= GRAB_HOLDING_WRAP)
+  return !!inst.grab?.vines.every(tent => tent.caught && tent.wrap >= GRAB_HOLDING_WRAP)
 }
 
 /**
@@ -588,8 +608,9 @@ export function tickGrab(inst, dt) {
   const hero = { x: grab.prey.x, y: grab.prey.y }
   updateStem(inst, hero, t)
   inst.berries.forEach(berry => updateBerry(inst, berry, t))
-  inst.blades.forEach(blade => !blade.tentacle && updateBlade(inst, blade, hero, t))
-  grab.tentacles.forEach(tent => poseTentacle(inst, tent, t))
+  inst.blades.forEach(blade => updateBlade(inst, blade, hero, t))
+  grab.vines.forEach(tent => poseVine(inst, tent, t))
+  for (let left = step; left > 0; left -= SOFT_DT) grab.vines.forEach(tent => softFollow(tent, Math.min(SOFT_DT, left)))
 }
 
 /**
@@ -847,29 +868,30 @@ function updateBlade(inst, blade, hero, t) {
 }
 
 //
-// Tentacle state; its reach chain starts on the blade's current pose so the
-// switch into hunting is seamless.
+// Vine state: it starts curled in the bush at its rest pose, its reach
+// chain on that pose so it uncurls from there.
 //
-function createTentacle(inst, spec, side) {
-  const blade = inst.blades[spec.bladeIndex]
-  blade.tentacle = true
-  const pts = blade.pts
-  const segLen = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
-  const chain = IkChain.create({ segments: GRAB_REACH_SEGMENTS, segLen, x: pts[0].x, y: pts[0].y })
-  chain.pts.forEach((p, i) => {
-    p.x = pts[i].x
-    p.y = pts[i].y
-  })
-  const tip = pts[GRAB_REACH_SEGMENTS]
+function createVine(inst, spec, side) {
+  const rootX = inst.baseX + spec.dx
+  const rootY = inst.baseY - GRAB_VINE_LIFT
+  const segLen = spec.restLen / GRAB_REACH_SEGMENTS
+  const angle = spec.angle * (side > 0 ? 1 : -1) - (side > 0 ? 0 : Math.PI)
+  const chain = IkChain.create({ segments: GRAB_REACH_SEGMENTS, segLen, x: rootX, y: rootY, angle })
+  const pts = makePoints(GRAB_VINE_SEGMENTS + 1)
+  fillArc(pts, rootX, rootY, angle, side * GRAB_VINE_REST_CURL, 1, segLen)
+  const tip = chain.pts[GRAB_REACH_SEGMENTS]
   return {
     ...spec,
-    blade,
     chain,
+    pts,
+    soft: pts.map(p => ({ x: p.x, y: p.y, vx: 0, vy: 0 })),
     rest: makePoints(GRAB_REACH_SEGMENTS + 1),
-    frontMask: new Array(BLADE_SEGMENTS).fill(false),
-    rootX: inst.baseX + blade.dx,
+    frontMask: new Array(GRAB_VINE_SEGMENTS).fill(false),
+    rootX,
+    rootY,
+    restAngle: angle,
     tip: { x: tip.x, y: tip.y, vx: 0, vy: 0 },
-    len: { v: segLen * GRAB_REACH_SEGMENTS, vel: 0 },
+    len: { v: spec.restLen, vel: 0 },
     windupX: tip.x - side * GRAB_WINDUP_BACK * spec.windup,
     windupY: tip.y - GRAB_WINDUP_UP * spec.windup,
     restTipX: tip.x,
@@ -881,19 +903,18 @@ function createTentacle(inst, spec, side) {
 }
 
 //
-// Lets go: the coil unwinds and the tip drifts back to the blade's rest spot.
+// Lets go: the coil unwinds and the tip drifts back to its rest spot.
 //
-function releaseTentacle(tent) {
-  const reach = tent.blade.len * GRAB_REACH_SEGMENTS / BLADE_SEGMENTS
+function releaseVine(tent) {
   tent.caught = false
   tent.released = true
-  tent.restTipX = tent.rootX + Math.cos(tent.blade.angle) * reach
-  tent.restTipY = tent.blade.pts[0].y + Math.sin(tent.blade.angle) * reach
+  tent.restTipX = tent.rootX + Math.cos(tent.restAngle) * tent.restLen
+  tent.restTipY = tent.rootY + Math.sin(tent.restAngle) * tent.restLen
 }
 
 //
 // One fixed sub-step of every grab spring: stem tilt / stretch, the aim the
-// stem leans at, and each tentacle tip and length.
+// stem leans at, and each vine tip and length.
 //
 function stepGrab(inst, h) {
   const grab = inst.grab
@@ -902,14 +923,14 @@ function stepGrab(inst, h) {
   stepSpring(grab.stretch, body.stretch, body.k, body.c, h)
   grab.phase === GRAB_PHASE.HOLD && (grab.tilt.vel += (Math.random() - 0.5) * GRAB_HOLD_TREMBLE * h)
   stepSpring2D(grab.aim, grab.prey.x, Math.min(grab.prey.y, grab.clipY - GRAB_AIM_ABOVE_GROUND), GRAB_AIM_SPRING, h)
-  grab.tentacles.forEach(tent => stepTentacle(inst, tent, h))
+  grab.vines.forEach(tent => stepVine(inst, tent, h))
 }
 
 //
 // Wind-up, curved strike, pinned grip with a tightening coil, or retreat.
-// Once the hero is being hauled every tentacle holds (a late one snaps on).
+// Once the hero is being hauled every vine holds (a late one snaps on).
 //
-function stepTentacle(inst, tent, h) {
+function stepVine(inst, tent, h) {
   const grab = inst.grab
   const phase = grab.phase
   const hauling = phase === GRAB_PHASE.LIFT || phase === GRAB_PHASE.HOLD || phase === GRAB_PHASE.PULL
@@ -926,13 +947,12 @@ function stepTentacle(inst, tent, h) {
     tent.wrap = Math.max(0, tent.wrap - h / GRAB_UNWRAP_SEC)
     stepSpring2D(tip, tent.restTipX, tent.restTipY, GRAB_TIP_SPRING.release, h)
   } else if (phase === GRAB_PHASE.STRIKE && grab.phaseTime >= tent.delay) {
-    strikeTentacle(inst, tent, h)
+    strikeVine(inst, tent, h)
   } else {
     stepSpring2D(tip, tent.windupX, tent.windupY, GRAB_TIP_SPRING.windup, h)
   }
-  const dist = Math.hypot(tip.x - tent.rootX, tip.y - inst.baseY)
-  const restReach = tent.blade.len * GRAB_REACH_SEGMENTS / BLADE_SEGMENTS
-  const target = tent.released ? restReach : Math.max(restReach * LEAN_MIN_LEN_FRAC, dist * GRAB_LEN_SLACK[phase])
+  const dist = Math.hypot(tip.x - tent.rootX, tip.y - tent.rootY)
+  const target = tent.released ? tent.restLen : Math.max(tent.restLen * LEAN_MIN_LEN_FRAC, dist * GRAB_LEN_SLACK[phase])
   stepSpring(tent.len, target, GRAB_LEN_SPRING.k, GRAB_LEN_SPRING.c, h)
   tent.len.v = Math.max(tent.len.v, dist)
 }
@@ -941,14 +961,14 @@ function stepTentacle(inst, tent, h) {
 // Strike: the target slides onto the grip from a sideways offset (curved
 // path), the stiff spring overshoots a touch, and the tip latches on.
 //
-function strikeTentacle(inst, tent, h) {
+function strikeVine(inst, tent, h) {
   const grab = inst.grab
   const since = grab.phaseTime - tent.delay
   const arcT = Math.min(1, since / GRAB_STRIKE_ARC_SEC)
   const gx = COIL_PT.x
   const gy = COIL_PT.y
   const ox = gx - tent.rootX
-  const oy = gy - inst.baseY
+  const oy = gy - tent.rootY
   const d = Math.max(Math.hypot(ox, oy), 1)
   const off = -tent.bow * grab.side * GRAB_STRIKE_ARC_PX * (1 - arcT) * (1 - arcT)
   stepSpring2D(tent.tip, gx - oy / d * off, gy + ox / d * off, GRAB_TIP_SPRING.strike, h)
@@ -957,9 +977,9 @@ function strikeTentacle(inst, tent, h) {
 }
 
 //
-// Point `s` (0 = where the tentacle meets the body, 1 = its tip) along the
-// coil band around the hero, rotated with his body. `front` marks the half
-// of the band that passes in front of him.
+// Point `s` (0 = where the vine meets the body, 1 = its tip) along the
+// coil winding round the hero, rotated with his body. `front` marks the
+// half of each turn that passes in front of him.
 //
 function coilPointInto(out, inst, tent, s) {
   const grab = inst.grab
@@ -967,9 +987,9 @@ function coilPointInto(out, inst, tent, s) {
   const scale = prey.scale
   const wrapE = smoothstep(0, 1, tent.wrap)
   const hauling = grab.phase === GRAB_PHASE.LIFT || grab.phase === GRAB_PHASE.HOLD
-  const pulse = hauling ? GRAB_SQUEEZE_PULSE * (0.5 + 0.5 * Math.sin(grab.time * GRAB_SQUEEZE_PULSE_SPEED + tent.blade.phase)) : 0
+  const pulse = hauling ? GRAB_SQUEEZE_PULSE * (0.5 + 0.5 * Math.sin(grab.time * GRAB_SQUEEZE_PULSE_SPEED + tent.delay * TAU)) : 0
   const squeeze = 1 - GRAB_SQUEEZE * wrapE - pulse
-  const a = (grab.side > 0 ? Math.PI : 0) + tent.wrapDir * s * GRAB_WRAP_SWEEP * wrapE
+  const a = (grab.side > 0 ? Math.PI : 0) + tent.wrapDir * s * tent.turns * TAU * wrapE
   const lx = Math.cos(a) * GRAB_BAND_RX * scale * squeeze
   const ly = (tent.bandDY + Math.sin(a) * GRAB_BAND_RY * squeeze + s * GRAB_BAND_SPIRAL * wrapE) * scale
   const cos = Math.cos(prey.angle)
@@ -981,22 +1001,22 @@ function coilPointInto(out, inst, tent, s) {
 
 //
 // Reach chain solved by IK toward the tip over a bowed rest arc (so it
-// travels in curves, wobbling), then the last segments blend from a free
-// continuation of the blade into the coil around the hero.
+// travels in curves, wobbling), then the coil links blend from a free
+// continuation of the vine into the turns round the hero. These are the
+// targets the soft links chase.
 //
-function poseTentacle(inst, tent, t) {
+function poseVine(inst, tent, t) {
   const grab = inst.grab
   const chain = tent.chain
   const segLen = Math.max(1, tent.len.v / GRAB_REACH_SEGMENTS)
-  const rootY = inst.baseY
   const tip = tent.tip
   IkChain.setSegLen(chain, segLen)
-  const chord = Math.atan2(tip.y - rootY, tip.x - tent.rootX)
-  const wobble = Math.sin(t * GRAB_WOBBLE_SPEED + tent.blade.phase) * GRAB_WOBBLE_AMP
+  const chord = Math.atan2(tip.y - tent.rootY, tip.x - tent.rootX)
+  const wobble = Math.sin(t * GRAB_WOBBLE_SPEED + tent.delay * TAU) * GRAB_WOBBLE_AMP
   const bend = grab.side * tent.bow * GRAB_BOW[grab.phase] * (1 + wobble)
-  fillArc(tent.rest, tent.rootX, rootY, chord - bend * 0.5, bend, 1, segLen)
-  IkChain.solve(chain, tent.rootX, rootY, tip.x, tip.y, { rest: tent.rest, stiffness: GRAB_IK_STIFFNESS })
-  const out = tent.blade.pts
+  fillArc(tent.rest, tent.rootX, tent.rootY, chord - bend * 0.5, bend, 1, segLen)
+  IkChain.solve(chain, tent.rootX, tent.rootY, tip.x, tip.y, { rest: tent.rest, stiffness: GRAB_IK_STIFFNESS })
+  const out = tent.pts
   const cp = chain.pts
   for (let i = 0; i <= GRAB_REACH_SEGMENTS; i++) {
     out[i].x = cp[i].x
@@ -1022,6 +1042,46 @@ function poseTentacle(inst, tent, t) {
     p.y = fy + (COIL_PT.y - fy) * w
     tent.frontMask[GRAB_REACH_SEGMENTS + j - 1] = COIL_PT.front && w > 0.5
   }
+}
+//
+// The drawn vine: every reach link springs toward its solved spot (stiff at
+// the root, loose mid-way), the coil links sit on the body; then the link
+// lengths are restored from the root out.
+//
+function softFollow(tent, h) {
+  const soft = tent.soft
+  const target = tent.pts
+  const last = GRAB_REACH_SEGMENTS
+  soft[0].x = target[0].x
+  soft[0].y = target[0].y
+  for (let i = 1; i < soft.length; i++) {
+    const p = soft[i]
+    const q = target[i]
+    if (i >= last) {
+      p.x = q.x
+      p.y = q.y
+      p.vx = 0
+      p.vy = 0
+      continue
+    }
+    const u = i / last
+    const k = GRAB_SOFT_K_MID + (GRAB_SOFT_K_ROOT - GRAB_SOFT_K_MID) * Math.abs(1 - 2 * u)
+    p.vx += ((q.x - p.x) * k - p.vx * GRAB_SOFT_C) * h
+    p.vy += ((q.y - p.y) * k - p.vy * GRAB_SOFT_C) * h
+    p.x += p.vx * h
+    p.y += p.vy * h
+  }
+  const segLen = Math.max(1, tent.len.v / GRAB_REACH_SEGMENTS)
+  for (let pass = 0; pass < GRAB_SOFT_LEN_PASSES; pass++) {
+    for (let i = 1; i < last; i++) keepLink(soft[i - 1], soft[i], segLen)
+  }
+}
+function keepLink(a, b, len) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const d = Math.hypot(dx, dy) || 1
+  b.x = a.x + dx / d * len
+  b.y = a.y + dy / d * len
 }
 
 //
@@ -1086,6 +1146,7 @@ function onDraw(inst) {
   if (!inst.visible || sink >= GRAB_SINK_DEPTH || !isPlantInView(inst)) return
   const batch = inst.batch
   for (let i = 0; i < inst.blades.length; i++) addBlade(inst, inst.blades[i])
+  inst.grab?.vines.forEach(tent => addVine(inst, tent, batch, null))
   addStalk(inst)
   for (let i = 0; i < inst.berries.length; i++) addBerry(inst, inst.berries[i])
   PolyBatch.flush(batch, inst.k, 1, sink, sinkFloorY(inst, sink))
@@ -1195,28 +1256,50 @@ function whisperPulse(inst) {
 }
 
 //
-// Blade with a leaf-shaped width profile: contour, body, then a lit midrib.
+// Red vine (the stalk's colours), thinning to its tip: contour, body, then
+// a lit line. `mask` keeps only the coil links in front of the hero.
 //
-function addBlade(inst, blade, batch = inst.batch, mask = null) {
+function addVine(inst, tent, batch, mask) {
   const c = inst.colors
   const clipY = inst.grab?.clip ? inst.grab.clipY : null
-  addBladePass(batch, blade.pts, blade.w + CONTOUR_PAD, c.contour, clipY, mask)
-  addBladePass(batch, blade.pts, blade.w, c.leaf, clipY, mask)
-  addBladePass(batch, blade.pts, blade.w * BLADE_MIDRIB_FRAC, c.leafLight, clipY, mask)
+  addVinePass(batch, tent.soft, tent.w + CONTOUR_PAD, GRAB_VINE_TIP_W + CONTOUR_PAD, c.contour, clipY, mask)
+  addVinePass(batch, tent.soft, tent.w, GRAB_VINE_TIP_W, c.stem, clipY, mask)
+  addVinePass(batch, tent.soft, tent.w * GRAB_VINE_LIGHT_FRAC, GRAB_VINE_TIP_W * GRAB_VINE_LIGHT_FRAC, c.stemLight, clipY, mask)
+}
+function addVinePass(batch, pts, wBase, wTip, color, clipY, mask) {
+  const last = pts.length - 1
+  for (let i = 0; i < last; i++) {
+    if (mask && !mask[i]) continue
+    const seg = clipSegment(pts[i], pts[i + 1], clipY)
+    if (!seg) continue
+    const w = wBase + (wTip - wBase) * (i + 0.5) / last
+    PolyBatch.addLine(batch, seg.ax, seg.ay, seg.bx, seg.by, w, color)
+    !seg.cut && PolyBatch.addDisc(batch, seg.bx, seg.by, w * 0.5, color)
+  }
 }
 
 //
-// One width pass along the blade. `clipY` hides what went under the ground,
-// `mask` keeps only the flagged segments (coils drawn over the hero).
+// Blade with a leaf-shaped width profile: contour, body, then a lit midrib.
 //
-function addBladePass(batch, pts, wMax, color, clipY = null, mask = null) {
-  if (clipY == null && !mask) {
+function addBlade(inst, blade) {
+  const c = inst.colors
+  const batch = inst.batch
+  const clipY = inst.grab?.clip ? inst.grab.clipY : null
+  addBladePass(batch, blade.pts, blade.w + CONTOUR_PAD, c.contour, clipY)
+  addBladePass(batch, blade.pts, blade.w, c.leaf, clipY)
+  addBladePass(batch, blade.pts, blade.w * BLADE_MIDRIB_FRAC, c.leafLight, clipY)
+}
+
+//
+// One width pass along the blade. `clipY` hides what went under the ground.
+//
+function addBladePass(batch, pts, wMax, color, clipY) {
+  if (clipY == null) {
     addSmoothBladeRibbon(batch, pts, wMax, color)
     return
   }
   const last = pts.length - 1
   for (let i = 0; i < last; i++) {
-    if (mask && !mask[i]) continue
     const seg = clipSegment(pts[i], pts[i + 1], clipY)
     if (!seg) continue
     const u = (i + 0.5) / last
@@ -1326,7 +1409,7 @@ function drawGrabFront(inst) {
   const grab = inst.grab
   const sink = grabSink(inst)
   if (!inst.visible || !grab || sink >= GRAB_SINK_DEPTH) return
-  grab.tentacles.forEach(tent => tent.wrap > 0 && addBlade(inst, tent.blade, inst.frontBatch, tent.frontMask))
+  grab.vines.forEach(tent => tent.wrap > 0 && addVine(inst, tent, inst.frontBatch, tent.frontMask))
   PolyBatch.flush(inst.frontBatch, inst.k, 1, sink, sinkFloorY(inst, sink))
 }
 

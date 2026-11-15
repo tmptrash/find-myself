@@ -6,14 +6,17 @@ import * as EyeFlower from './eye-flower.js'
 import * as RootTunnel from './root-tunnel.js'
 import * as ForestCamera from '../utils/forest-camera.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
+import * as CavePeek from '../../cave/components/cave-peek.js'
 import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 //
 // Scripted end of the forest level: the hero lands on the lake island, the
 // eye-flower notices him, whips its tentacles around him, hoists him up,
 // hesitates, then yanks him into a crack its roots tear open in the island.
-// The roots drag him down the fresh tunnel, the camera follows a little,
-// the forest light dies and the level fades out; the caller moves on to
-// the next section.
+// The roots drag him a short way down the fresh tunnel, slanting under the
+// lake; there its floor gives way and the cave opens below (CavePeek — the
+// cave level's start, never drawn before this). The roots let go, he drops
+// onto the cave ledge beside the dim lantern mushroom, and the level fades
+// out; the caller moves on to the cave.
 //
 // Beats in order (seconds). The strike lasts until every tentacle holds
 // (or its timeout), the rest are fixed.
@@ -26,6 +29,9 @@ const BEAT = {
   HOLD: 'hold',
   PULL: 'pull',
   DESCEND: 'descend',
+  BREAK: 'break',
+  FALL: 'fall',
+  LAND: 'land',
   FADE: 'fade',
   DONE: 'done'
 }
@@ -35,8 +41,11 @@ const SQUEEZE_SEC = 0.22
 const LIFT_SEC = 0.95
 const HOLD_SEC = 0.45
 const PULL_SEC = 0.24
-const DESCEND_SEC = 2.6
+const DESCEND_SEC = 1.5
+const BREAK_SEC = 0.45
+const LAND_SEC = 1.2
 const FADE_SEC = 1.1
+const FALL_GRAVITY = CFG.game.gravity
 const MAX_DT = 1 / 20
 //
 // Hero body centre sits below his sprite centre (same offset the flower aims at).
@@ -78,23 +87,36 @@ const PULL_TOWARD_PLANT = 10
 const PULL_SINK_FRAC = 0.5
 //
 // Descent: the roots drag him down the winding tunnel in tugs (he springs
-// back a little between them) while he sways, until he is past the bottom
-// of the view.
+// back a little between them) while he sways, to just above its end.
 //
-const DESCEND_JERKS = 5
-const DESCEND_JERK_PX = 10
+const DESCEND_JERKS = 3
+const DESCEND_JERK_PX = 8
 const DESCEND_SWAY = 0.1
 const DESCEND_SWAY_SPEED = 6.5
-const HERO_EXIT_PAD = 120
+const HERO_END_ABOVE_BOTTOM = 30
 //
-// Tunnel: kept clear of the island ends so it never cuts the lake water,
-// leaning away from the lake; it reaches below the deepest view. The shore
-// side needs less room than the frame side since the tunnel leans away
-// from it, which keeps the hole well inside the view.
+// Tunnel: kept clear of the island ends so it never cuts the lake water;
+// it runs TUNNEL_DEPTH down, slanting TUNNEL_LEAN_PX toward the lake deep
+// under its bed, so the cave that opens at its end lies inside the view
+// (the playfield's left edge is close to the island).
 //
 const TUNNEL_EDGE_CLEAR = 90
 const TUNNEL_SHORE_CLEAR = 45
-const TUNNEL_EXTRA_DEPTH = 80
+const TUNNEL_DEPTH = 190
+const TUNNEL_LEAN_PX = 80
+const TUNNEL_LEAN_DIR = 1
+const DEEP_EARTH_PAD = 80
+//
+// Break-through: his struggle hangs him at the end while the floor gives
+// way; the darkness lifts back to DARK_OPEN as the cave's light comes in.
+// He then falls freely onto the ledge and lands with a squash, eyes open.
+//
+const BREAK_WIGGLE = 0.08
+const BREAK_WIGGLE_SPEED = 18
+const BREAK_SHAKE = 4
+const BREAK_SHAKE_SEC = 0.35
+const LAND_SQUASH_KICK = 2.4
+const LAND_DUST_MULT = 1.4
 const TUNNEL_SEED = 52021
 const TUNNEL_OPEN_SEC = 0.16
 const GROUND_BELOW_WATER = 9
@@ -103,9 +125,11 @@ const GROUND_BELOW_WATER = 9
 // on a soft spring, up to a cap; the underground darkness grows meanwhile.
 //
 const CAM_FOLLOW_FRAC = 0.6
-const CAM_DROP_MAX = 300
+const CAM_DROP_MAX = 360
 const CAM_SPRING = { k: 30, c: 11 }
-const DARK_MAX = 0.7
+const CAM_PEEK_PAD = 30
+const DARK_MAX = 0.45
+const DARK_OPEN = 0.12
 //
 // Earth bursts: a big one as the feet break the ground and one where the
 // plant itself goes under. The cones lean toward the open lake (the island
@@ -176,9 +200,11 @@ export function create(cfg) {
     holeX: 0,
     heroX: 0,
     heroY: 0,
-    heroVisible: true,
     inTunnel: false,
     tunnel: null,
+    peek: null,
+    fallVy: 0,
+    landY: 0,
     sprites: null,
     heroLegs: null,
     flipX: false,
@@ -192,6 +218,7 @@ export function create(cfg) {
     splashColor: forestRgb(pal.splash),
     fadeColor: pal.fade
   }
+  CavePeek.prewarm(k)
   k.add([
     k.z(HERO_Z),
     {
@@ -227,16 +254,21 @@ export function start(inst) {
   inst.prey.scale = char.scale?.x ?? 1
   inst.sprites = heroSprites(inst, hero)
   inst.heroLegs ??= Hero.createStandLegs(inst.k)
-  inst.descendToY = inst.earthBottomY + CAM_DROP_MAX + HERO_EXIT_PAD
+  const bottomY = inst.groundY + TUNNEL_DEPTH
+  inst.descendToY = bottomY - HERO_END_ABOVE_BOTTOM
+  inst.peek = CavePeek.create({ k: inst.k, x: inst.holeX + TUNNEL_LEAN_DIR * TUNNEL_LEAN_PX, y: bottomY })
   inst.tunnel = RootTunnel.create({
     k: inst.k,
     x: inst.holeX,
     groundY: inst.groundY,
     surfaceAt: EyeFlower.surfaceY,
     surfaceTarget: flower,
-    bottomY: inst.descendToY + TUNNEL_EXTRA_DEPTH,
+    bottomY,
     earthBottomY: inst.earthBottomY,
-    leanDir: inst.holeX > flower.baseX ? -1 : 1,
+    leanDir: TUNNEL_LEAN_DIR,
+    leanPx: TUNNEL_LEAN_PX,
+    deepBottomY: Math.max(CavePeek.bottomY(inst.peek), inst.earthBottomY + CAM_DROP_MAX) + DEEP_EARTH_PAD,
+    drawUnder: () => CavePeek.onDraw(inst.peek),
     seed: TUNNEL_SEED + Math.round(inst.holeX),
     drawPrey: () => drawHero(inst)
   })
@@ -317,6 +349,15 @@ function updateBeat(inst, step) {
     case BEAT.DESCEND:
       updateDescend(inst)
       break
+    case BEAT.BREAK:
+      updateBreak(inst)
+      break
+    case BEAT.FALL:
+      updateFall(inst, step)
+      break
+    case BEAT.LAND:
+      t >= LAND_SEC && setBeat(inst, BEAT.FADE)
+      break
     case BEAT.FADE:
       updateFade(inst)
       break
@@ -355,9 +396,20 @@ function setBeat(inst, beat) {
       burstSoil(inst, flower.baseX, PLANT_BURST, inst.soilColors)
       EyeFlower.setGrabPhase(flower, EyeFlower.GRAB_PHASE.RELEASE)
       break
+    case BEAT.BREAK:
+      RootTunnel.release(inst.tunnel)
+      inst.camera && ForestCamera.triggerShake(inst.camera, BREAK_SHAKE, BREAK_SHAKE_SEC)
+      inst.sound && Sound.playFlowerEarthGulp(inst.sound)
+      break
+    case BEAT.FALL:
+      inst.fallVy = 0
+      inst.landY = CavePeek.landingY(inst.peek) - HERO_FOOT_DY * inst.prey.scale
+      break
+    case BEAT.LAND:
+      inst.squash.vel -= LAND_SQUASH_KICK
+      inst.footParticles && ForestFootParticles.spawnLanding(inst.footParticles, inst.heroX, CavePeek.landingY(inst.peek), inst.dustColor, LAND_DUST_MULT)
+      break
     case BEAT.FADE:
-      inst.heroVisible = false
-      RootTunnel.setDragging(inst.tunnel, false)
       inst.fade = addFadeOverlay(inst)
       break
     case BEAT.DONE:
@@ -419,7 +471,28 @@ function updateDescend(inst) {
   inst.swing.v = DESCEND_SWAY * Math.sin(t * DESCEND_SWAY_SPEED) * (1 - u * 0.5)
   inst.swing.vel = 0
   RootTunnel.setDarkness(inst.tunnel, DARK_MAX * ease)
-  u >= 1 && setBeat(inst, BEAT.FADE)
+  u >= 1 && setBeat(inst, BEAT.BREAK)
+}
+//
+// The tunnel's floor gives way: the cave opens under him while he hangs
+// kicking at the end, the darkness lifts.
+//
+function updateBreak(inst) {
+  const u = Math.min(1, inst.beatTime / BREAK_SEC)
+  const ease = u * u * (3 - 2 * u)
+  CavePeek.setOpen(inst.peek, ease)
+  RootTunnel.setDarkness(inst.tunnel, DARK_MAX + (DARK_OPEN - DARK_MAX) * ease)
+  inst.swing.v = BREAK_WIGGLE * Math.sin(inst.beatTime * BREAK_WIGGLE_SPEED)
+  u >= 1 && setBeat(inst, BEAT.FALL)
+}
+//
+// Free fall onto the cave ledge; the dangle settles on the way.
+//
+function updateFall(inst, step) {
+  inst.fallVy += FALL_GRAVITY * step
+  inst.heroY = Math.min(inst.landY, inst.heroY + inst.fallVy * step)
+  inst.swing.v *= Math.exp(-PULL_ANGLE_DAMP * step)
+  inst.heroY >= inst.landY && setBeat(inst, BEAT.LAND)
 }
 
 function updateFade(inst) {
@@ -430,20 +503,26 @@ function updateFade(inst) {
 
 function squashTarget(inst) {
   if (inst.beat === BEAT.PULL) return PULL_SQUASH
-  if (inst.beat === BEAT.DESCEND) return DESCEND_SQUASH
+  if (inst.beat === BEAT.DESCEND || inst.beat === BEAT.BREAK) return DESCEND_SQUASH
   const held = inst.beat === BEAT.SQUEEZE || inst.beat === BEAT.LIFT || inst.beat === BEAT.HOLD
   return held ? SQUEEZE_SQUASH : 0
 }
 //
 // The camera only starts following once he is being dragged down; it then
-// keeps him above CAM_FOLLOW_FRAC of the view, never dropping past the cap.
+// keeps him above CAM_FOLLOW_FRAC of the view and, once the cave has opened,
+// sets its ledge just above the view's bottom, never dropping past the cap.
 //
 function camDropTarget(inst) {
-  if (inst.beat !== BEAT.DESCEND && inst.beat !== BEAT.FADE) return 0
+  if (inst.beat === BEAT.FADE) return inst.camDrop.v
+  const below = [BEAT.DESCEND, BEAT.BREAK, BEAT.FALL, BEAT.LAND].includes(inst.beat)
+  if (!below) return 0
   const k = inst.k
   const viewH = k.height()
   const viewTop = (inst.camera?.camY ?? viewH * 0.5) - viewH * 0.5
-  return Math.max(0, Math.min(CAM_DROP_MAX, inst.heroY - viewTop - viewH * CAM_FOLLOW_FRAC))
+  const target = inst.beat === BEAT.DESCEND
+    ? inst.heroY - viewTop - viewH * CAM_FOLLOW_FRAC
+    : CavePeek.landingY(inst.peek) + CAM_PEEK_PAD - viewTop - viewH
+  return Math.max(0, Math.min(CAM_DROP_MAX, target))
 }
 //
 // Tunnel follows the crack opening and the coil grip on the hero.
@@ -536,9 +615,9 @@ function heroSprites(inst, hero) {
 // legs hanging free.
 //
 function drawHero(inst) {
-  if (!inst.started || !inst.heroVisible || !inst.sprites) return
+  if (!inst.started || !inst.sprites) return
   const k = inst.k
-  const caught = inst.beat !== BEAT.AWARE && inst.beat !== BEAT.STRIKE
+  const free = [BEAT.AWARE, BEAT.STRIKE, BEAT.FALL, BEAT.LAND, BEAT.FADE].includes(inst.beat)
   const scale = inst.prey.scale
   k.pushTransform()
   k.pushTranslate(k.vec2(inst.heroX, inst.heroY))
@@ -547,7 +626,7 @@ function drawHero(inst) {
   Hero.drawStandingHero(k, inst.heroLegs, {
     x: 0,
     y: 0,
-    sprite: caught ? inst.sprites.closed : inst.sprites.open,
+    sprite: free ? inst.sprites.open : inst.sprites.closed,
     flipX: inst.flipX
   })
   k.popTransform()

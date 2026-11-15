@@ -1,264 +1,126 @@
 //
-// Cave section configuration. The rock ledge art (cave-ledge.js) is free of
-// the fixed 96-swatch palette by design: its colours are picked for
-// material, light and depth to match the cave reference art.
+// Cave section configuration (lesson-cave.0, reference: the cave painting
+// with the eye-flower, the glowing crevice and the stalk-eye). The cave art
+// is free of the fixed 96-swatch palette by design: its colours are picked
+// to sit with the painted props of assets/cave0/plants.png and stones.png —
+// dark teal void and waterfalls behind, blue-grey rock islands with moss
+// rims and brown roots, gold light where the exit is.
 //
-// A: the wide ledge (the reference's upper-left platform), the base for
-// every rock ledge style. Lengths in px; shares are of the ledge length
-// unless noted.
-//
-const WIDE = {
-  seed: 5150,
-  thick: 120,             // Body thickness at the wall
-  tipShare: 0.4,          // Thickness at the free end (share of thick)
-  topWave: 1.5,           // Walkable top irregularity
-  lobes: 5,               // Rock masses bulging from the underside
-  lobeDepth: 42,
-  lobeWidth: 0.12,
-  overhang: 34,           // How far the top lip juts past the body
-  //
-  // Rubble stones, big to small: radius, its random share (smaller
-  // down to r * (1 - range)), tries per (r x r) of body area.
-  //
-  stones: [
-    { r: 36, range: 0.35, tries: 0.6 },
-    { r: 22, range: 0.4, tries: 1.2 },
-    { r: 12, range: 0.4, tries: 3 },
-    { r: 6, range: 0.4, tries: 0.35 },
-    { r: 3, range: 0.3, tries: 0.15 }
-  ],
-  topMoss: 10,            // Moss thickness on top (it swells and thins along it)
-  frontShare: 0.4,        // Share of top grass and leaves drawn in front of the hero
-  topGrass: 0.35,         // Chance of a grass tuft per top step
-  topLeaves: 0.2,         // Chance of a leaf sprig per top step
-  lipVines: 0.3,          // Chance of a short vine over the lip per step
-  underVines: 0.35,       // Chance of a vine per underside step
-  swayShare: 0.4,         // Share of underside vines that sway in the draught (not baked)
-  ferns: 2,
-  tufts: 7,
-  mushrooms: 2,
-  roots: 5,
-  vines: 3
-}
-//
-// Dark rubble of the back rows nearest the camera (also one of the mid
-// row's ledge looks).
-//
-const BACK_NEAR = {
-  void: '#070a0b',
-  rock: ['#2c3332', '#262c2c', '#202627', '#1b2021', '#161b1c', '#121617'],
-  rockLit: ['#4c5a52', '#414c47', '#363f3c', '#2d3533', '#252c2b'],
-  gaps: ['#0a0e0f', '#0e1314', '#131819', '#181e1e', '#101a12', '#18261a'],
-  stones: [
-    { r: 40, range: 0.35, tries: 0.6 },
-    { r: 24, range: 0.4, tries: 1.4 },
-    { r: 12, range: 0.4, tries: 3 }
-  ]
-}
-//
-// Dark teal rubble of the mid row (also one of its ledge looks).
-//
-const BACK_MID = {
-  void: '#0c1112',
-  rock: ['#5a6864', '#4c5956', '#404b49', '#353e3d', '#2c3434', '#242b2c'],
-  rockLit: ['#90a28e', '#7a8b7e', '#66756d', '#53605b', '#424d4b'],
-  gaps: ['#121819', '#192022', '#20292a', '#29322f', '#1c2a1d', '#2a3f27'],
-  stones: [
-    { r: 30, range: 0.35, tries: 0.6 },
-    { r: 18, range: 0.4, tries: 1.4 },
-    { r: 10, range: 0.4, tries: 3 },
-    { r: 5, range: 0.4, tries: 4 }
-  ]
-}
-//
-// Stone sizes for the mid row's ledge looks: big boulders and fine gravel.
-//
-const BOULDERS = [
-  { r: 52, range: 0.3, tries: 0.6 },
-  { r: 30, range: 0.4, tries: 1 },
-  { r: 14, range: 0.4, tries: 2 },
-  { r: 6, range: 0.4, tries: 3 }
-]
-const GRAVEL = [
-  { r: 18, range: 0.35, tries: 0.8 },
-  { r: 10, range: 0.4, tries: 2 },
-  { r: 5, range: 0.4, tries: 4 },
-  { r: 3, range: 0.3, tries: 6 }
-]
 export const CAVE_CFG = {
-  ledge: {
-    colors: {
-      void: '#121012',          // Darkest crevices, outline
-      rock: [
-        '#b9b6aa',              // Top stones, light warm grey in the light
-        '#a6a398',              // Upper stones, light grey
-        '#908e85',              // Middle stones, grey
-        '#7a7973',              // Lower stones, mid grey
-        '#666763',              // Deep stones, dark grey
-        '#53575a'               // Bottom stones, cool slate in shadow
-      ],
-      gaps: [
-        '#1d1c1b',              // Deep gap, near black
-        '#2c2a28',              // Dark earth
-        '#3d3b38',              // Grey grit
-        '#504e4a',              // Lighter grit
-        '#24301f',              // Moss in shadow
-        '#3e5a2c'               // Moss
-      ],
-      rockLit: [
-        '#ebe6d2',              // Lit edges on top, warm off-white
-        '#d6d1be',              // Upper lit edges
-        '#bdb9aa',              // Middle lit edges
-        '#a2a097',              // Lower lit edges
-        '#878a88'               // Bottom lit edges, cool grey
-      ],
-      moss: [
-        '#14231a',              // Moss shadow, deep green
-        '#24402b',              // Dark teal-green body
-        '#4a6630',              // Muted olive
-        '#6f8c36',              // Natural mid green
-        '#a9b84a',              // Yellow-green on exposed tops
-        '#d6c870'               // Muted golden light on selected patches
-      ],
-      root: ['#21160f', '#3e2a1e', '#6e4c31'],
-      vine: ['#0f1c16', '#1f3a2a', '#3c6236', '#6f9244', '#cfd49a'],
-      mushroom: { stem: '#d8d3b4', cap: '#9fcbb4', gill: '#6c9a8a' },
-      flower: ['#e8e2c4', '#d9c46a', '#b7cfe0']   // Small pale cave flowers: cream, gold, pale blue
-    },
-    wide: WIDE,
-    //
-    // The entry ledge (thinner, fewer plants), the target ledge on the
-    // right wall, and the lit ground: the same look, other shapes.
-    //
-    entry: { ...WIDE, seed: 5160, thick: 96, lobes: 4, ferns: 1, mushrooms: 1 },
-    target: { ...WIDE, seed: 5170, thick: 100, tipShare: 0.5, overhang: 26, lobes: 3 },
-    ground: { ...WIDE, seed: 5180, mushrooms: 1, ferns: 2 },
-    //
-    // Ledges in the back parallax row: the same look (all baked: no live
-    // vines, nothing in front of the hero), long slabs with ragged ends
-    // (endJag / endBulge); the free ones are arched bridges (archRise: how
-    // high the top arches, archMid: thickness left in the middle); each
-    // ledge offsets the seed.
-    //
-    back: { ...WIDE, seed: 5300, vines: 0, swayShare: 0, frontShare: 0, roots: 2, mushrooms: 1, tipShare: 0.85, lobes: 2, lobeDepth: 16, lobeWidth: 0.2, overhang: 10, endJag: 14, endBulge: 18, archRise: 42, archMid: 0.4 }
+  colors: {
+    frame: '#0a1416',           // Window frame and the void round the playfield
+    contour: '#140d0b',         // Dark contour, brown-black
+    glowCore: '#fff6dc',        // Core of every additive glow (tinted per use)
+    firefly: '#f0d470',         // Ambient fireflies, warm gold
+    fireflyCore: '#fff3c0',
+    heroSpark: ['#a6e6d0', '#ffe9a8', '#7fd6c2'],
+    lanternGlow: '#ffb35c',     // Halo of the lantern mushroom, amber
+    lanternCore: '#ffe2a6',
+    tealGlow: '#6fd8c8',        // Halo of the small teal mushrooms and bulbs
+    rootLight: '#d8b06a'        // Daylight spilling in through the roots' hole
   },
   //
-  // Back parallax rows in the same rubble, but dark (the rows are further
-  // pulled into the cave shade when baked): mid ledges and floating rocks,
-  // near side masses darkest. Stone sizes per row (bigger far away).
+  // Back of the cave: a dark teal room lit from the waterfalls. Far rocks
+  // are silhouettes, mid rocks a step darker and warmer; the waterfalls
+  // read as soft pale-teal streaks with foam where they land.
   //
-  parallax: {
-    near: BACK_NEAR,
-    //
-    // Looks of the mid row's ledges (a ledge's bridge and paired ledge take
-    // its look; neighbours always differ): stone tones, all darker than the
-    // gameplay ledges (the row's shade darkens them further), stone sizes,
-    // thickness (thickScale) and shape, and how green they are.
-    //
-    looks: [
-      {
-        name: 'slate',          // Cool blue-grey boulders, thick
-        colors: {
-          void: '#0d1114',
-          rock: ['#7c858a', '#6c757a', '#5d666b', '#4f575c', '#42494e', '#363c41'],
-          rockLit: ['#a6b0b2', '#929c9f', '#7f888b', '#6c7477', '#5a6164'],
-          gaps: ['#121618', '#1a1f22', '#23292c', '#2d3437', '#1b2a20', '#2c4029']
-        },
-        thickScale: 1.2,
-        style: { stones: BOULDERS, lobes: 3, lobeDepth: 26 }
-      },
-      {
-        name: 'moss',           // Green-tinted gravel, overgrown
-        colors: {
-          void: '#0c120e',
-          rock: ['#6b7766', '#5d6858', '#505a4c', '#434c40', '#373f35', '#2c332b'],
-          rockLit: ['#98a68a', '#85937a', '#73806a', '#626d5b', '#525b4c'],
-          gaps: ['#0f1510', '#161e17', '#1f281f', '#283228', '#1d3220', '#2f4d2a']
-        },
-        thickScale: 0.85,
-        style: { stones: GRAVEL, topMoss: 18, topGrass: 0.6, topLeaves: 0.35, lipVines: 0.5, underVines: 0.6, ferns: 3, tufts: 10 }
-      },
-      {
-        name: 'earth',          // Warm brown-grey, bare, rooty, deep lobes
-        colors: {
-          void: '#120e0b',
-          rock: ['#7d7266', '#6d6358', '#5e554b', '#50483f', '#433c34', '#37312b'],
-          rockLit: ['#a89c8a', '#958a79', '#827868', '#706758', '#5e5649'],
-          gaps: ['#17120e', '#201a15', '#2a231c', '#342c24', '#22281a', '#33402a']
-        },
-        thickScale: 1,
-        style: { topMoss: 5, topGrass: 0.15, topLeaves: 0.08, lipVines: 0.1, underVines: 0.15, roots: 8, ferns: 1, tufts: 3, lobes: 3, lobeDepth: 32 }
-      },
-      {
-        name: 'near',           // Near-black boulders
-        colors: BACK_NEAR,
-        thickScale: 1.1,
-        style: { stones: BOULDERS }
-      },
-      {
-        name: 'teal',           // Dark teal gravel, thin and wavy
-        colors: BACK_MID,
-        thickScale: 0.8,
-        style: { stones: GRAVEL, topWave: 3, lobes: 1 }
-      }
-    ],
-    //
-    // The far wall behind the ledges: the same rubble, stones of many
-    // different darknesses (shade drifts in big patches, then varies per
-    // stone), and greens growing on it.
-    //
-    far: {
-      void: '#0a0f10',
-      rock: ['#6a7874', '#5c6a66', '#4f5c59', '#434f4d', '#384342', '#2e3737', '#252d2e'],
-      rockLit: ['#97a99e', '#83958b', '#718279', '#606f69', '#505d59'],
-      gaps: ['#101617', '#151c1d', '#1b2324', '#222b2b', '#18261a', '#253a25'],
-      stones: [
-        { r: 44, range: 0.35, tries: 0.6 },
-        { r: 26, range: 0.4, tries: 1.2 },
-        { r: 14, range: 0.4, tries: 2.2 },
-        { r: 7, range: 0.4, tries: 2.5 }
-      ],
-      greens: ['#0e1a13', '#24412d', '#3f6a44', '#76a058'],   // Shadow, dark, mid, light
-      patchFreq: 0.012,
-      patchShade: 0.3,
-      stoneShade: 0.45,
-      vines: 34,
-      ferns: 26,
-      sprigs: 60,
-      mossStrands: 30
-    },
-    shadeDepth: 160
+  backdrop: {
+    top: '#081619',             // Room colour under the ceiling
+    bottom: '#0f3236',          // Room colour above the lake
+    haze: '#1f5c5b',            // Light haze round the waterfalls
+    far: ['#0e2a2f', '#123338', '#173d40'],
+    farRim: '#2a5a55',          // Lit rims of the far terraces
+    mid: ['#0a1c20', '#0e252a', '#122d31'],
+    midRim: '#24493f',
+    midMoss: '#2f4a22',         // Dim moss on the mid terraces
+    waterfall: '#7fc9bf',
+    waterfallLight: '#c6efe2',
+    foam: '#d9f4ea',
+    ceiling: ['#0c0907', '#16100c', '#21170f'],
+    ceilingRim: '#3b2a1a'
   },
   //
-  // Walls, ceiling and the lake basin in the same rubble: stone sizes (a
-  // bit sparser than the ledges, these areas are big) and how deep into the
-  // rock the stones sink into full shadow.
+  // The cave's ground (reference: the floating rock islands): blue-grey
+  // faceted boulders from the stones sheet packed together with dark gaps
+  // between them, a flat stone cap on every walkable top with a thick
+  // yellow-green moss rim whose strands hang down the face, brown roots
+  // crawling over the stones and stone drips under every overhang.
   //
-  //
-  // Stones at the monster plant's foot (the bed humps and the scree heap)
-  // in the walls' light-grey rubble: many sizes, from boulders to grit,
-  // and how deep under a heap's top they sink into full shadow.
-  //
-  plantFoot: {
-    stones: [
-      { r: 44, range: 0.45, tries: 0.5 },
-      { r: 26, range: 0.45, tries: 1 },
-      { r: 14, range: 0.45, tries: 2.4 },
-      { r: 7, range: 0.4, tries: 0.3 },
-      { r: 3, range: 0.3, tries: 0.1 }
-    ],
-    shadeDepth: 120,
-    shadeMin: 0.05
+  earth: {
+    gap: '#0f171c',             // Dark gaps between the packed stones
+    shade: '#0b1216',           // Depth shade pulled over a mass away from its lit side
+    cap: '#4f626b',             // Flat stone cap on a walkable top
+    capLight: '#7d9097',        // Lit top edge of the cap
+    capDark: '#2c3a41',         // Cracks and the cap's lower edge
+    root: ['#24170f', '#4a3122', '#6b4a33', '#8f6c4b'],
+    moss: ['#2c4116', '#4b6a1c', '#6f8f22', '#98b330', '#c4d150'],
+    mossHang: ['#3e5a18', '#6a8a22', '#9db636'],
+    spike: ['#1d272d', '#2e3c43', '#44565e']
   },
-  rubble: {
-    seed: 5190,
-    stones: [
-      { r: 36, range: 0.35, tries: 0.5 },
-      { r: 22, range: 0.4, tries: 1 },
-      { r: 12, range: 0.4, tries: 2.4 },
-      { r: 6, range: 0.4, tries: 0.3 }
-    ],
-    shadeDepth: 90,
-    shadeMin: 0.15
+  //
+  // The underground lake (components/lake.js) in the cave's teal.
+  //
+  water: {
+    water: '#1d5a5c',
+    paint: {
+      light: '#4f9a92',
+      deep: '#0d2e33',
+      reflection: '#0b2226',
+      ripple: '#a6dccf',
+      murkTop: '#1a4446',
+      murkDeep: '#0b2226',
+      bank: '#1d272d',
+      bed: '#4b3b2a',
+      bedRim: '#7a6646',
+      bedEdge: '#1d120d',
+      bedGravel: '#2a2a2a',
+      pebble: '#3c3f3e',
+      pebbleLight: '#6e7470',
+      stone: '#4a4740',
+      stoneLight: '#7b776a',
+      stoneDark: '#2e2c27',
+      stoneContour: '#140d0b',
+      snag: '#3c1714',
+      snagLight: '#6e2a24',
+      surfaceLine: '#b9eadc',
+      surfaceBand: '#5fb0a2',
+      algae: '#2e5a2c',
+      algaeLight: '#4f8a3a',
+      algaeDark: '#1f3d1e'
+    }
+  },
+  //
+  // The cave's creatures (cave-eye-flower.js, cave-stalk-eye.js): kin of
+  // the forest's doll's-eyes bush and stalk-eyes, but hostile: a darker,
+  // blood-red stalk set with dark thorns tipped bone-pale, and bloodshot
+  // eyes — a pinkish shaded underside, red veins running in from the rim,
+  // a red iris ring tight round a small pupil. Leaves are the cave's moss
+  // greens; the flowers between the eyes cream with a red heart.
+  //
+  creature: {
+    contour: '#1f1517',         // Red-black contour round every part
+    stem: '#7e2b2a',            // Blood-red stalk body
+    stemLight: '#b5493e',       // Lit edge of the stalk
+    thorn: '#4b1d1b',           // Thorn body, dark maroon
+    thornTip: '#d9c7a4',        // Bone-pale thorn tips
+    sclera: '#efe6d2',          // Lit eye white, warm cream
+    scleraShade: '#c99d93',     // Its shaded underside, pinkish (bloodshot)
+    vein: '#b33a37',            // Red veins in the white
+    iris: '#8e2424',            // Red iris ring
+    pupil: '#140d0e',           // Pupil
+    glint: '#fbf6e8',           // Glint on the pupil
+    leaf: '#3e5a2c',            // Blade body, moss green
+    leafLight: '#6f8c36',       // Blade midrib
+    petal: '#e8e2c4',           // Flower petals, cream
+    heart: '#b5403a'            // Flower heart, red
+  },
+  //
+  // The exit between the eye-flower's and the stalk-eye's ledges: warm gold
+  // light rising out of the crevice (discovery), its glow and dust motes.
+  //
+  exit: {
+    glow: '#f0c46a',            // Glow, warm gold
+    core: '#fff1c4',            // Brightest heart of the glow
+    mote: '#ffe7a8'             // Dust motes drifting up in it
   }
 }

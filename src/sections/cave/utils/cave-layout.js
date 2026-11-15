@@ -1,212 +1,97 @@
 //
-// Cave lesson 0 geometry — a fixed 1280 px wide shaft around a giant
-// monster plant. The hero drops in on the top-left ledge (a dormant lantern
-// mushroom in the light shaft), must fall through the gap left of the
-// plant's top flytrap leaf, jump left off the next leaf onto the spore
-// mushroom ledge, lure the spores into the lower flytrap leaf so it closes
-// into a step, cross to the lit floor on the right and ride a bubble, blown
-// up by the air plant, to the target ledge. Below lies the lake.
+// Cave lesson 0 geometry (the reference painting): the hero drops in from
+// the forest through a hole the eye-flower's roots tore in a low part of
+// the ceiling, onto a long earth ledge — a dormant lantern mushroom left of
+// where he lands. Along that ledge grows the hostile eye-flower; past it a
+// crevice — the exit, warm light rising out of it — splits the ledge from
+// the stalk-eye's ledge on the right wall. Below lies the lower cave: an
+// earth floor on the left, an underground lake with earth-and-stone
+// pillars standing in it, and the ground under the exit, so the cave also
+// leads to the crevice from below.
 //
-export const WORLD_W = 1280
-export const WORLD_H = 1960
+export const WORLD_W = 2400
+export const WORLD_H = 1500
 //
-// Tallest visible world band (same height as the forest playfield window).
-//
-export const MAX_VIEW_H = 920
-//
-// Invisible wall bodies along both edges; the baked rock art is wider and
+// Invisible wall bodies along both edges; the painted earth is wider and
 // ragged, so the hero can tuck slightly into its broken outline.
 //
 export const WALL_COLLIDE_W = 56
 //
-// Ceiling band with the shaft opening the hero drops through from the forest.
+// Ceiling: low over the entry alcove, rising to the room's height past it
+// and sinking again toward the right wall (x, underside Y knots).
 //
-export const CEILING_Y = 74
-export const ENTRY_X1 = 150
-export const ENTRY_X2 = 300
+const CEILING_KNOTS = [
+  { x: -60, y: 300 },
+  { x: 180, y: 320 },
+  { x: 470, y: 330 },
+  { x: 640, y: 210 },
+  { x: 820, y: 120 },
+  { x: 1400, y: 95 },
+  { x: 2000, y: 110 },
+  { x: 2240, y: 200 },
+  { x: 2460, y: 260 }
+]
 //
-// Hero enters above the visible world and falls into the shaft.
+// The roots' hole through the ceiling the hero dropped through (the
+// forest's root tunnel ends here, its lower lip at ENTRY_Y); he starts
+// standing on the ledge right under it.
 //
-export const HERO_ENTRY_X = 225
-export const HERO_ENTRY_Y = -90
+export const ENTRY_X = 330
+export const ENTRY_HALF_W = 46
+export const ENTRY_Y = 330
 //
-// Darkness regions (darkness is off for now): the upper part ends here.
+// The underground lake, between the lower floor and the exit ground.
 //
-export const DARK_ZONE_BOTTOM_Y = 1000
-//
-// Lake at the bottom, from the left wall to the lit floor.
-//
-export const LAKE_X1 = 70
-export const LAKE_X2 = 870
-export const LAKE_SURFACE_Y = 1820
+export const LAKE_X1 = 470
+export const LAKE_X2 = 1380
+export const LAKE_SURFACE_Y = 1240
 const LAKE_DROWN_DEPTH = 14
 //
 // Hero feet sit this far below the character anchor.
 //
 const HERO_FEET_DY = 38
-const HERO_HALF_W = 15
-const HERO_HALF_H = 34
-const HERO_BODY_DY = 3
 //
-// Platform kinds: ledge (grows from a wall), small (floating slab), ground
-// (solid down to the world bottom).
+// Platform kinds: ledge (grows from a wall, `wall` names which), pillar
+// (stands up out of the lake), ground (solid down to the world bottom).
 //
 export const PLATFORM_KIND = {
   LEDGE: 'ledge',
-  SMALL: 'small',
+  PILLAR: 'pillar',
   GROUND: 'ground'
 }
 const K = PLATFORM_KIND
 //
-// Rock surfaces. L0 entry ledge, C spore ledge, G the
-// target ledge on the right wall, D the lit floor with the bubble and the
-// air plant. A `style` names a rock ledge look from CAVE_CFG.ledge (baked
-// by cave-ledge.js; visual only). Leaves of the tree are listed
-// separately (PLANT_LEAVES).
+// Walkable surfaces. `thick` is a ledge's earth depth at the wall, `sag`
+// how far its underside hangs lower under its middle (the mass under the
+// eye-flower); pillars are about one run-jump apart (reach ≈ 147 px).
 //
 export const PLATFORMS = [
-  { id: 'L0', x1: 0, x2: 400, y: 430, h: 54, kind: K.LEDGE, wall: 'left', style: 'entry' },
-  { id: 'C', x1: 0, x2: 440, y: 1100, h: 60, kind: K.LEDGE, wall: 'left', style: 'wide' },
-  { id: 'G', x1: 1060, x2: WORLD_W, y: 1300, h: 50, kind: K.LEDGE, wall: 'right', style: 'target' },
-  { id: 'D', x1: LAKE_X2, x2: WORLD_W, y: 1720, h: WORLD_H - 1720, kind: K.GROUND, style: 'ground' }
+  { id: 'upper', x1: 0, x2: 1540, y: 560, kind: K.LEDGE, wall: 'left', thick: 190, tip: 0.55, sag: 120, sagX: 1120, sagW: 300, seed: 11 },
+  { id: 'eyeLedge', x1: 1680, x2: WORLD_W, y: 580, kind: K.LEDGE, wall: 'right', thick: 200, tip: 0.6, sag: 50, sagX: 1900, sagW: 200, seed: 23 },
+  { id: 'floor', x1: 0, x2: LAKE_X1, y: 1110, kind: K.GROUND, bank: 'right', seed: 31 },
+  { id: 'pillar1', x1: 560, x2: 650, y: 1185, kind: K.PILLAR, seed: 41 },
+  { id: 'pillar2', x1: 770, x2: 860, y: 1165, kind: K.PILLAR, seed: 43 },
+  { id: 'pillar3', x1: 980, x2: 1070, y: 1180, kind: K.PILLAR, seed: 47 },
+  { id: 'pillar4', x1: 1190, x2: 1280, y: 1165, kind: K.PILLAR, seed: 53 },
+  { id: 'exitGround', x1: LAKE_X2, x2: WORLD_W, y: 1130, kind: K.GROUND, bank: 'left', seed: 59 }
 ]
 //
-// The procedural monster plant, now painted only in the menu picture: rope
-// foot (bottom in the lake, top at the first leaf), its pad leaves (the top
-// leaf A and the spore leaf T are traps with red mouths), and the thorny
-// band right of the second leaf.
+// The exit: the crevice between the two upper ledges, from their tops down
+// to the exit ground; the light rises from its glow point.
 //
-export const PLANT_TRUNK = { x: 742, bottomY: WORLD_H, topY: 470, width: 84 }
-export const LEAF_KIND = {
-  TRAP: 'trap',
-  LEAF: 'leaf'
-}
-export const PLANT_ART_LEAVES = [
-  { id: 'A', x1: 520, x2: 900, y: 470, kind: LEAF_KIND.TRAP, collideInset: 34 },
-  { id: 'B', x1: 360, x2: 690, y: 800, kind: LEAF_KIND.LEAF, walkDrop: 10 },
-  { id: 'T', x1: 500, x2: 700, y: 1220, kind: LEAF_KIND.TRAP, spores: true }
-]
-export const PLANT_THORNS = { x1: 688, x2: 775, y1: 630, y2: 800 }
+export const EXIT = { x1: 1540, x2: 1680, y1: 560, y2: 1130, glowX: 1610, glowY: 900 }
 //
-// The level's monster tree is a picture (assets/tree.png, drawn by
-// monster-tree.js), set in the world by its foot: the picture's point under
-// the trunk (foot) goes to the world point TREE_FOOT, scaled (mirror: flip
-// it left to right); the foot sits deep in the lake so the roots spread
-// behind the stones of its basin.
+// The hostile eye-flower on the upper ledge, between the hero's landing and
+// the exit; the stalk-eye on its ledge right past the exit; the dormant
+// lantern mushroom left of where the hero lands.
 //
-export const TREE_PICTURE = { url: 'tree.png', w: 1024, h: 1536, scale: 0.95, mirror: false, foot: { x: 480, y: 1450 } }
-const TREE_FOOT = { x: PLANT_TRUNK.x, y: 1940 }
+export const EYE_FLOWER = { x: 1060, y: 560 }
+export const STALK_EYE = { x: 1860, y: 580 }
+export const LANTERN = { x: 215, y: 560 }
 //
-// The tree's three big leaves the hero walks on, measured on the picture: the
-// walking line through the middle of the leaf's top face (y) and how far
-// along it (x1–x2), and the bottom of the leaf's near lip (points along x).
-// The hero's feet stand on the walking line; the leaf's part below it
-// (down to the lip) is drawn over him, so he stands in the leaf, his feet
-// whole (walkDrop: how far they sink below the line, 0 = not at all). Every leaf is a
-// plain one for now; `kind: LEAF_KIND.TRAP` on a leaf brings back a red
-// flower on it. The spore swarm's last stop is the spores leaf.
+// Bounds for ambient fireflies.
 //
-const TREE_LEAVES_ART = [
-  { id: 'A', x1: 260, x2: 650, y: 160, lip: [[230, 212], [250, 190], [300, 186], [350, 186], [400, 190], [450, 192], [500, 191], [550, 180], [600, 177], [650, 190], [675, 205]] },
-  { id: 'B', x1: 150, x2: 440, y: 604, lip: [[125, 645], [150, 625], [200, 626], [250, 626], [300, 630], [350, 625], [400, 618], [450, 628], [465, 642]] },
-  { id: 'T', x1: 575, x2: 730, y: 942, spores: true, lip: [[560, 975], [575, 952], [600, 958], [650, 963], [700, 958], [730, 948], [745, 968]] }
-]
-const TREE_LEAF_WALK_DROP = 0
-export const PLANT_LEAVES = TREE_LEAVES_ART.map(def => {
-  const a = treePoint(def.x1, def.y)
-  const b = treePoint(def.x2, def.y)
-  return {
-    id: def.id,
-    kind: def.kind ?? LEAF_KIND.LEAF,
-    spores: Boolean(def.spores),
-    x1: Math.round(Math.min(a.x, b.x)),
-    x2: Math.round(Math.max(a.x, b.x)),
-    y: Math.round(a.y),
-    walkDrop: TREE_LEAF_WALK_DROP,
-    lip: def.lip.map(([x, y]) => treePoint(x, y)).sort((p, q) => p.x - q.x)
-  }
-})
-//
-// Extra thorns, densely, on the trunk's left side (by leaf B) from the
-// leaf up to the hero's head (inside the thorny band's hit area).
-//
-export const PLANT_THORNS_DENSE = { y1: 712, y2: 800 }
-//
-// Spore mushroom on the left part of ledge C; swarm stations it hovers at:
-// a little right of and above the hero's head on the mushroom, a step to the right, then above
-// the spore trap leaf.
-//
-export const SPORE_MUSHROOM = { x: 230, y: 1100 }
-export const SPORE_STATIONS = [
-  { x: 288, y: 878 },
-  { x: 345, y: 955 },
-  { x: 1000, y: 1380 }
-]
-//
-// Bubble mushroom and air plant on the lit floor D; the bubble rises to
-// the target ledge G.
-//
-export const BUBBLE_MUSHROOM = { x: 1005, y: 1720, topY: 1250 }
-//
-// Funnel mushroom clusters (decor behind the hero): foot (x on a ledge
-// top, or wall: the side whose rock face it grows from at that height),
-// size, which way they lean (-1 left, 1 right), layout seed.
-//
-export const FUNNEL_MUSHROOMS = [
-  { x: 70, y: 436, scale: 0.9, lean: 1, seed: 1 },
-  { x: 395, y: 1106, scale: 0.75, lean: 1, seed: 2 },
-  { wall: 'left', y: 1500, scale: 0.85, lean: 1, seed: 3 },
-  { wall: 'right', y: 880, scale: 0.9, lean: -1, seed: 4 },
-  { x: 1095, y: 1306, scale: 0.8, lean: -1, seed: 5 }
-]
-//
-// Umbrella plants (decor behind the hero, swaying in the draught): foot
-// (in the lake, on the ground or a ledge), stalk height, pad radius, lean
-// of the stalk's top (share of its height, - left), layout seed.
-//
-export const UMBRELLA_PLANTS = [
-  { x: 150, y: 1850, h: 430, r: 105, lean: 0.25, seed: 1 },
-  { x: 330, y: 1860, h: 180, r: 60, lean: -0.2, seed: 2 },
-  { x: 900, y: 1730, h: 120, r: 55, lean: -0.15, seed: 3 },
-  { x: 120, y: 1106, h: 250, r: 75, lean: 0.3, seed: 4 }
-]
-export const AIR_PLANT = { x1: 1085, x2: 1255, y: 1720 }
-//
-// Deadly stalactites under platforms: count and length range per platform.
-//
-const STALACTITE_COUNT_MIN = 3
-const STALACTITE_COUNT_RANGE = 2
-const STALACTITE_LEN_MIN = 38
-const STALACTITE_LEN_RANGE = 30
-//
-// Stalactites hit test: only the upper, thick part of each spike kills.
-//
-const STALACTITE_HIT_INSET_X = 4
-const STALACTITE_HIT_LEN_FRAC = 0.8
-const STALACTITE_W_MIN = 12
-const STALACTITE_W_RANGE = 10
-const STALACTITE_JITTER = 0.4
-const STALACTITE_ROOT_SINK = 7
-//
-// Only the part of a stalactite below its platform's underside kills (the
-// hero standing on the platform never touches it).
-//
-const STALACTITE_HIT_GAP = 4
-//
-// Platform undersides: flat-topped slabs whose bottom tapers toward the
-// ends (small ones) with a wavy edge; ledges run past their wall.
-//
-const PLATFORM_BOTTOM_MIN = 0.5
-const PLATFORM_BOTTOM_WAVE = 0.18
-const PLATFORM_BOTTOM_SEED = 9.3
-const PLATFORM_TAPER_POW = 0.6
-const PLATFORM_BOTTOM_FREQ = 2.2
-const ART_OUTSIDE_PAD = 42
-//
-// Ceiling underside (ragged edge).
-//
-const CEILING_RAGGED_AMP = 16
-const CEILING_SEED = 2.6
+export const FIREFLY_BOUNDS = { x1: 70, y1: 140, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
 //
 // Respawn keeps the hero this far from a platform edge.
 //
@@ -214,14 +99,19 @@ const STAND_EDGE_PAD = 28
 //
 // Wall profile: inset past the collider, ripple amplitude, outcrop bulge.
 //
-const WALL_ART_INSET = 26
-const WALL_RIPPLE_AMP = 30
-const WALL_BULGE_AMP = 40
+const WALL_ART_INSET = 22
+const WALL_RIPPLE_AMP = 26
+const WALL_BULGE_AMP = 36
 const WALL_BULGE_FREQ = 0.37
 const LEFT_WALL_SEED = 1.7
 const LEFT_BULGE_SEED = 4.2
 const RIGHT_WALL_SEED = 3.1
 const RIGHT_BULGE_SEED = 7.9
+//
+// Ceiling underside ripple.
+//
+const CEILING_RAGGED_AMP = 14
+const CEILING_SEED = 2.6
 //
 // Profile noise octaves: wavelength (px), weight and seed multiplier.
 //
@@ -230,153 +120,28 @@ const NOISE_OCTAVES = [
   { len: 41, weight: 0.3, seedMul: 2.3 },
   { len: 13, weight: 0.15, seedMul: 5.1 }
 ]
-//
-// The dormant mushroom on the entry ledge, in the light shaft.
-//
-export const DORMANT_MUSHROOM = { x: 345, y: 430, scale: 1, seed: 11 }
-//
-// Always-lit small mushrooms (x, ground y, scale, light radius).
-//
-export const LIT_MUSHROOMS = [
-  { x: 905, y: 1720, scale: 0.55, seed: 22, light: 150 },
-  { x: 950, y: 1720, scale: 0.4, seed: 23, light: 110 },
-  { x: 1200, y: 1300, scale: 0.5, seed: 24, light: 140 }
-]
-//
-// Single eyes on stalks grown from both walls (side, world Y, radius).
-//
-export const WALL_EYES = [
-  { side: 'left', y: 250, r: 16 },
-  { side: 'right', y: 420, r: 18 },
-  { side: 'left', y: 760, r: 15 },
-  { side: 'right', y: 950, r: 17 },
-  { side: 'left', y: 1450, r: 16 },
-  { side: 'right', y: 1560, r: 15 }
-]
-//
-// Bounds for ambient fireflies.
-//
-export const FIREFLY_BOUNDS = { x1: 70, y1: 120, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
 
 /**
- * Builds the deadly stalactite triangles hanging below platforms. Seeded per
- * platform so the art bake and the hit test share the same spikes.
- * @param {() => number} rngFor - Factory returning a seeded random for a platform id
- * @returns {Array<{x: number, y: number, w: number, len: number}>} Spike base centre, width and length
- */
-export function buildStalactites(rngFor) {
-  const out = []
-  PLATFORMS.filter(p => p.stalactites).forEach(p => {
-    const rng = rngFor(p.id)
-    const count = STALACTITE_COUNT_MIN + Math.floor(rng() * STALACTITE_COUNT_RANGE)
-    const span = p.x2 - p.x1
-    for (let i = 0; i < count; i++) {
-      const t = (i + 0.5) / count
-      const x = p.x1 + span * t + (rng() - 0.5) * span / count * STALACTITE_JITTER
-      const w = STALACTITE_W_MIN + rng() * STALACTITE_W_RANGE
-      const len = STALACTITE_LEN_MIN + rng() * STALACTITE_LEN_RANGE
-      const rootY = Math.min(platformBottomAt(p, x - w / 2), platformBottomAt(p, x + w / 2))
-      const underside = Math.max(platformBottomAt(p, x - w / 2), platformBottomAt(p, x + w / 2))
-      out.push({ x, y: rootY - STALACTITE_ROOT_SINK, w, len, hitTop: underside + STALACTITE_HIT_GAP })
-    }
-  })
-  return out
-}
-
-/**
- * Horizontal span of a platform's art (ledges and grounds run past the
- * world edge into their wall).
- * @param {Object} p - PLATFORMS entry
- * @returns {{x1: number, x2: number}}
- */
-export function platformArtSpan(p) {
-  return {
-    x1: p.x1 <= 0 ? -ART_OUTSIDE_PAD : p.x1,
-    x2: p.x2 >= WORLD_W ? WORLD_W + ART_OUTSIDE_PAD : p.x2
-  }
-}
-
-/**
- * Underside Y of a platform's art at world X (tapered, wavy).
- * @param {Object} p - PLATFORMS entry
- * @param {number} x - World X
- * @returns {number}
- */
-export function platformBottomAt(p, x) {
-  const { x1, x2 } = platformArtSpan(p)
-  const t = Math.max(0, Math.min(1, (x - x1) / (x2 - x1)))
-  const taper = p.kind === PLATFORM_KIND.SMALL ? Math.pow(Math.sin(Math.PI * t), PLATFORM_TAPER_POW) : 1
-  const wave = 1 + profileNoise(x * PLATFORM_BOTTOM_FREQ, PLATFORM_BOTTOM_SEED + p.y) * PLATFORM_BOTTOM_WAVE
-  return p.y + p.h * (PLATFORM_BOTTOM_MIN + (1 - PLATFORM_BOTTOM_MIN) * taper) * wave
-}
-
-/**
- * Ragged lower edge of the ceiling at world X (before the shaft lips).
+ * Ragged underside of the ceiling at world X (the entry hole not cut).
  * @param {number} x - World X
  * @returns {number}
  */
 export function ceilingBottomAt(x) {
-  return CEILING_Y + profileNoise(x, CEILING_SEED) * CEILING_RAGGED_AMP
-}
-
-/**
- * X that keeps a prop of the given half width fully on the platform whose
- * top is at `y` (and off the walls), so nothing sticks out over its edge.
- * @param {number} x - Wanted X
- * @param {number} y - Platform top Y
- * @param {number} halfW - Prop half width
- * @returns {number}
- */
-export function fitOnPlatform(x, y, halfW) {
-  const p = PLATFORMS.filter(q => q.y === y).sort((a, b) => Math.abs((a.x1 + a.x2) / 2 - x) - Math.abs((b.x1 + b.x2) / 2 - x))[0]
-  if (!p) return x
-  const minX = Math.max(p.x1, leftWallX(y)) + halfW
-  const maxX = Math.min(p.x2, rightWallX(y)) - halfW
-  return minX > maxX ? (minX + maxX) / 2 : Math.max(minX, Math.min(maxX, x))
+  const i = Math.max(1, CEILING_KNOTS.findIndex(knot => knot.x >= x))
+  const a = CEILING_KNOTS[i - 1]
+  const b = CEILING_KNOTS[Math.min(i, CEILING_KNOTS.length - 1)]
+  const u = b.x === a.x ? 0 : Math.max(0, Math.min(1, (x - a.x) / (b.x - a.x)))
+  const ease = u * u * (3 - 2 * u)
+  return a.y + (b.y - a.y) * ease + profileNoise(x, CEILING_SEED) * CEILING_RAGGED_AMP
 }
 
 /**
  * Where a drop falling straight down from a point lands: the first
- * platform or leaf top, the lake surface, or the world bottom.
+ * platform top, the lake surface, or the world bottom.
  * @param {number} x - World X
  * @param {number} fromY - World Y the drop falls from
  * @returns {{y: number, water: boolean}}
  */
-export function dropLandAt(x, fromY) {
-  const hits = [...PLATFORMS, ...PLANT_LEAVES].filter(p => x >= p.x1 && x <= p.x2 && p.y > fromY).map(p => ({ y: p.y, water: false }))
-  x > LAKE_X1 && x < LAKE_X2 && LAKE_SURFACE_Y > fromY && hits.push({ y: LAKE_SURFACE_Y, water: true })
-  hits.push({ y: WORLD_H, water: false })
-  return hits.reduce((a, b) => (b.y < a.y ? b : a))
-}
-
-/**
- * World point of a point on the tree picture.
- * @param {number} sx - Picture X
- * @param {number} sy - Picture Y
- * @returns {{x: number, y: number}}
- */
-export function treePoint(sx, sy) {
-  const t = TREE_PICTURE
-  const dx = (sx - t.foot.x) * t.scale
-  return { x: TREE_FOOT.x + (t.mirror ? -dx : dx), y: TREE_FOOT.y + (sy - t.foot.y) * t.scale }
-}
-
-/**
- * True when the hero hitbox touches a stalactite.
- * @param {Array} stalactites - From buildStalactites()
- * @param {number} x - Hero anchor X
- * @param {number} y - Hero anchor Y
- * @returns {boolean}
- */
-export function hitsSpikes(stalactites, x, y) {
-  const feet = y + HERO_FEET_DY
-  const top = y + HERO_BODY_DY - HERO_HALF_H
-  return stalactites.some(s => {
-    const half = s.w / 2 - STALACTITE_HIT_INSET_X
-    const bottom = s.y + s.len * STALACTITE_HIT_LEN_FRAC
-    return x + HERO_HALF_W > s.x - half && x - HERO_HALF_W < s.x + half && top < bottom && feet > s.hitTop
-  })
-}
 
 /**
  * True when the hero has sunk into the lake.
@@ -398,11 +163,11 @@ export function standPoseOn(platform, x) {
   const pad = Math.min(STAND_EDGE_PAD, (platform.x2 - platform.x1) / 2)
   const minX = Math.max(platform.x1, WALL_COLLIDE_W) + pad
   const maxX = Math.min(platform.x2, WORLD_W - WALL_COLLIDE_W) - pad
-  return { x: Math.max(minX, Math.min(maxX, x)), y: platform.y + (platform.walkDrop ?? 0) - HERO_FEET_DY }
+  return { x: Math.max(minX, Math.min(maxX, x)), y: platform.y - HERO_FEET_DY }
 }
 
 /**
- * Seeded value noise for wall profiles (sum of shifted sines).
+ * Seeded value noise for profiles (sum of shifted sines).
  * @param {number} v - Coordinate along the profile
  * @param {number} seed - Profile seed
  * @returns {number} Roughly in [-1, 1]
@@ -412,7 +177,7 @@ export function profileNoise(v, seed) {
 }
 
 /**
- * Inner X of the left wall rock at world Y.
+ * Inner X of the left wall at world Y.
  * @param {number} y - World Y
  * @returns {number}
  */
@@ -422,7 +187,7 @@ export function leftWallX(y) {
 }
 
 /**
- * Inner X of the right wall rock at world Y.
+ * Inner X of the right wall at world Y.
  * @param {number} y - World Y
  * @returns {number}
  */

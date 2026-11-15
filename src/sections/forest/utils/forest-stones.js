@@ -1,6 +1,6 @@
 import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-parallax-grain.js'
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
-import * as Lake from './forest-lake.js'
+import * as Lake from '../../../components/lake.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { loadPictureImage, pictureFringeAlpha } from './forest-picture.js'
 import { loadForestGroundElements } from './forest-ground-element.js'

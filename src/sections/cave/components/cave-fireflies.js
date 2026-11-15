@@ -1,6 +1,6 @@
 import { getRGB } from '../../../utils/helper.js'
 import * as Glow from '../utils/cave-glow.js'
-import { CAVE_PAL } from '../utils/cave-paint.js'
+import { CAVE_CFG } from '../cfg.js'
 //
 // Cave fireflies: slow wandering sparks across the shaft, plus bursts the
 // hero shatters into on a spike hit (they drift apart, flicker and fade).
@@ -48,9 +48,9 @@ export function create(cfg) {
     bounds,
     ambient: [],
     sparks: [],
-    glowRgb: getRGB(k, CAVE_PAL.firefly),
-    coreRgb: getRGB(k, CAVE_PAL.fireflyCore),
-    sparkRgbs: CAVE_PAL.heroSpark.map(hex => getRGB(k, hex))
+    glowRgb: getRGB(k, CAVE_CFG.colors.firefly),
+    coreRgb: getRGB(k, CAVE_CFG.colors.fireflyCore),
+    sparkRgbs: CAVE_CFG.colors.heroSpark.map(hex => getRGB(k, hex))
   }
   for (let i = 0; i < count; i++) {
     inst.ambient.push({

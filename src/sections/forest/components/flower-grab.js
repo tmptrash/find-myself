@@ -183,7 +183,7 @@ export function create(cfg) {
     started: false,
     beat: null,
     beatTime: 0,
-    prey: { x: 0, y: 0, scale: 1, angle: 0 },
+    prey: { x: 0, y: 0, scale: 1, angle: 0, squash: 0 },
     groundY: 0,
     side: 1,
     startX: 0,
@@ -591,6 +591,7 @@ function syncPrey(inst) {
   prey.x = inst.heroX
   prey.y = inst.heroY + HERO_CENTER_DY * prey.scale
   prey.angle = inst.swing.v
+  prey.squash = inst.squash.v
 }
 
 //

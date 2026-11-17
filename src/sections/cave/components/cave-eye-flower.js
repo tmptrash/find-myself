@@ -1,4 +1,3 @@
-import { CFG } from '../../../cfg.js'
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { closeness, creatureColors, eyeVeins, addVeinedEye, addStalk, addThorns, addBlade, fillArc, makePoints } from '../utils/cave-creature-paint.js'
@@ -10,9 +9,11 @@ import { closeness, creatureColors, eyeVeins, addVeinedEye, addStalk, addThorns,
 // watches the hero once he is within WATCH_REACH; the closer he comes the
 // tenser it gets (TENSE_FAR → TENSE_NEAR, eased at TENSE_EASE per second):
 // the stalk leans out at him (smoothly, toward whichever side he is on)
-// and sways faster, and the pupils shrink to points. Drawn live in one polygon batch, just behind the hero.
+// and sways faster, and the pupils shrink to points. Drawn live in one
+// polygon batch at the z the level gives (behind its platform, so its
+// root sits in the soil). Everything is drawn at SCALE of its design size.
 //
-const Z = CFG.visual.zIndex.player - 0.5
+const SCALE = 0.7
 const WATCH_REACH = 900
 const TENSE_FAR = 700
 const TENSE_NEAR = 240
@@ -25,10 +26,10 @@ const TENSE_EASE = 1.5
 // turns side gradually across LEAN_SIDE_SOFT px either side of the stalk.
 //
 const STEM_SEGMENTS = 14
-const STEM_LEN = 270
-const STEM_W_BASE = 11
-const STEM_W_TIP = 5
-const CONTOUR_PAD = 2.4
+const STEM_LEN = 270 * SCALE
+const STEM_W_BASE = 11 * SCALE
+const STEM_W_TIP = 5 * SCALE
+const CONTOUR_PAD = 2.4 * SCALE
 const STEM_LIGHT_FRAC = 0.35
 const STEM_REST_ANGLE = -Math.PI / 2 - 0.12
 const STEM_REST_BEND = -0.9
@@ -41,8 +42,8 @@ const LEAN_SIDE_SOFT = 160
 //
 // Thorns: on the stalk (between its from / to shares), on the eye stems.
 //
-const STALK_THORNS = { step: 17, len: 13, tipLen: 7, from: 0.06, to: 0.95 }
-const STEM_THORNS = { step: 11, len: 6, tipLen: 4, from: 0.15, to: 0.8 }
+const STALK_THORNS = { step: 17 * SCALE, len: 13 * SCALE, tipLen: 7 * SCALE, from: 0.06, to: 0.95 }
+const STEM_THORNS = { step: 11 * SCALE, len: 6 * SCALE, tipLen: 4 * SCALE, from: 0.15, to: 0.8 }
 //
 // Eye-berries on short stems branching off the upper stalk (the forest
 // bush's layout, SIZE times bigger): `at` where the stem leaves the stalk
@@ -50,7 +51,7 @@ const STEM_THORNS = { step: 11, len: 6, tipLen: 4, from: 0.15, to: 0.8 }
 // length, `r` the eye radius. Stems curl up toward the eye and sway on
 // their own. Blades and flowers are SIZE times bigger too.
 //
-const SIZE = 1.35
+const SIZE = 1.35 * SCALE
 const BERRIES = [
   { at: 1, turn: -0.3, len: 32, r: 13, phase: 0.3 },
   { at: 1, turn: 0.45, len: 25, r: 11, phase: 1.1 },
@@ -66,8 +67,8 @@ const BERRIES = [
   { at: 0.52, turn: 0.85, len: 21, r: 7, phase: 1.7 }
 ]
 const BERRY_STEM_SEGMENTS = 4
-const BERRY_STEM_W_BASE = 4.6
-const BERRY_STEM_W_TIP = 3
+const BERRY_STEM_W_BASE = 4.6 * SCALE
+const BERRY_STEM_W_TIP = 3 * SCALE
 const BERRY_STEM_CURL = 0.45
 const BERRY_SWAY = 0.12
 const BERRY_SWAY_SPEED = 1.4
@@ -77,7 +78,7 @@ const BERRY_SWAY_SPEED = 1.4
 // every WANDER_MIN..+RANGE seconds; pupils glide at LOOK_EASE per second;
 // blinks every BLINK_MIN..+RANGE seconds, over BLINK_SEC.
 //
-const EYE_CONTOUR = 1.6
+const EYE_CONTOUR = 1.6 * SCALE
 const EYE_VEINS = 5
 const PUPIL_RELAXED = 0.32
 const PUPIL_TENSE = 0.2
@@ -105,21 +106,22 @@ const PETAL_RX = 0.6
 const PETAL_RY = 0.38
 const HEART_R = 0.35
 const PETAL_SPIN = 0.1
-const FLOWER_STEM_W = 2.5
+const FLOWER_STEM_W = 2.5 * SCALE
 //
-// Blades fanned round the root (`dx` off it, `angle`, `len`, widest `w`);
-// they sway on their own and stiffen outward as the bush tenses.
+// Blades fanned round the root (`dx` off it, `angle`, `len`, widest `w`,
+// `front`: drawn over the stalk); they sway on their own and stiffen
+// outward as the bush tenses.
 //
 const BLADES = [
   { dx: -18, angle: -2.65, len: 82, w: 11, phase: 0.4 },
-  { dx: -12, angle: -2.3, len: 112, w: 12, phase: 1.3 },
+  { dx: -12, angle: -2.3, len: 112, w: 12, phase: 1.3, front: true },
   { dx: -7, angle: -2, len: 76, w: 10, phase: 2.2 },
   { dx: -3, angle: -1.72, len: 128, w: 12, phase: 0.2 },
-  { dx: 2, angle: -1.45, len: 118, w: 13, phase: 0.9 },
+  { dx: 2, angle: -1.45, len: 118, w: 13, phase: 0.9, front: true },
   { dx: 6, angle: -1.2, len: 100, w: 12, phase: 2.8 },
-  { dx: 10, angle: -0.95, len: 90, w: 11, phase: 1.9 },
+  { dx: 10, angle: -0.95, len: 90, w: 11, phase: 1.9, front: true },
   { dx: 14, angle: -0.65, len: 70, w: 10, phase: 3.4 },
-  { dx: 18, angle: -0.4, len: 54, w: 9, phase: 2.6 }
+  { dx: 18, angle: -0.4, len: 54, w: 9, phase: 2.6, front: true }
 ]
 const BLADE_SEGMENTS = 10
 const BLADE_BEND = 0.35
@@ -134,6 +136,7 @@ const CULL_PAD = 260
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - Root X (world)
  * @param {number} cfg.y - Root Y (ground line)
+ * @param {number} cfg.z - Draw z
  * @param {() => ({x: number, y: number}|null)} cfg.getHeroPos - Hero centre, null when there is none
  * @param {() => {left: number, top: number, right: number, bottom: number}} cfg.getView - Visible world rect
  * @returns {Object} Eye-flower inst
@@ -172,7 +175,7 @@ export function create(cfg) {
     eye: { x: 0, y: 0, r: 0, lookX: 0, lookY: 0, pupilR: 0, close: 0, veins: null }
   }
   k.add([
-    k.z(Z),
+    k.z(cfg.z),
     {
       draw() {
         onDraw(inst)
@@ -281,17 +284,19 @@ function poseBlade(inst, blade) {
   fillArc(blade.pts, inst.x + blade.dx, inst.y, blade.angle + sway + out, BLADE_BEND * Math.sign(Math.cos(blade.angle)), 1, blade.len / BLADE_SEGMENTS)
 }
 //
-// Blades, the stalk and stems, thorns, flowers, then the eyes — one batch.
+// The back blades, the stalk and stems, thorns, the front blades, flowers,
+// then the eyes — one batch.
 //
 function onDraw(inst) {
   const view = inst.getView()
   if (inst.x + CULL_PAD < view.left || inst.x - CULL_PAD > view.right || inst.y < view.top || inst.y - STEM_LEN - CULL_PAD > view.bottom) return
   const { batch, colors } = inst
-  inst.blades.forEach(blade => addBlade(batch, blade.pts, blade.w, colors))
+  inst.blades.forEach(blade => blade.front || addBlade(batch, blade.pts, blade.w, colors))
   addStalk(batch, inst.stemPts, STEM_W_BASE, STEM_W_TIP, colors, CONTOUR_PAD, STEM_LIGHT_FRAC)
   inst.berries.forEach(berry => addStalk(batch, berry.pts, BERRY_STEM_W_BASE, BERRY_STEM_W_TIP, colors, CONTOUR_PAD, STEM_LIGHT_FRAC))
   addThorns(batch, inst.stemPts, STEM_W_BASE, STEM_W_TIP, STALK_THORNS, colors)
   inst.berries.forEach(berry => addThorns(batch, berry.pts, BERRY_STEM_W_BASE, BERRY_STEM_W_TIP, STEM_THORNS, colors))
+  inst.blades.forEach(blade => blade.front && addBlade(batch, blade.pts, blade.w, colors))
   inst.flowers.forEach(flower => addFlower(inst, flower))
   const pupil = PUPIL_RELAXED + (PUPIL_TENSE - PUPIL_RELAXED) * inst.tension
   inst.berries.forEach(berry => addEye(inst, berry, pupil))

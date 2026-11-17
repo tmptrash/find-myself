@@ -181,6 +181,311 @@ The style is analog, like everything in nature: made by hand and grown, never st
 - Foreground stone texture can be densely articulated; avoid equally dense treatment of the distant background.
 - Preserve believable structural layering: rock mass, moss, hanging growth, atmosphere, then distant structures.
 
+## Cave0 — Modular Platform Assembly System
+
+### Purpose
+
+Cave0 platforms are assembled programmatically from independent visual assets rather than represented by single, complete images.
+
+The goal is to construct platforms of arbitrary length, thickness, and shape while maintaining continuous materials, invisible transitions, and natural-looking terrain.
+
+The system separates platform geometry, visual materials, decorative objects, and collision geometry.
+
+The assembly process consists of six stages:
+
+1. Soil material filling
+2. Platform geometry and masking
+3. Upper surface integration
+4. Embedded rock placement
+5. Side and bottom edge construction
+6. Final decoration and visual blending
+
+These stages represent construction responsibilities and do not necessarily correspond to separate rendering layers.
+
+---
+
+### 1. Soil Material Filling
+
+The primary body of each platform is filled using a seamless soil texture.
+
+#### Tiling
+
+- Repeat the soil texture horizontally and vertically without stretching.
+- Preserve consistent texture scale across platforms.
+- Use texture coordinates based on world position to maintain visual continuity.
+- Avoid resetting texture coordinates at the beginning of each platform segment.
+- Ensure adjacent repeated textures do not produce visible seams.
+- Support platforms larger than the source texture in either dimension.
+
+#### Texture variation
+
+To reduce noticeable repetition:
+
+- Blend between compatible soil texture variants using irregular masks.
+- Introduce subtle, localized color variations.
+- Avoid obvious repeating patterns and uniform gradients.
+- Preserve consistent material scale and lighting.
+
+The soil should appear as one continuous mass regardless of platform dimensions.
+
+---
+
+### 2. Platform Geometry and Masking
+
+The shape of a platform is defined independently from its visual textures.
+
+#### Geometry
+
+The system must support:
+
+- Arbitrary horizontal platform lengths.
+- Variable platform thickness.
+- Horizontal walkable surfaces.
+- Gently sloped walkable surfaces.
+- Natural irregular undersides.
+- Vertical cliff boundaries.
+- Transitions between horizontal and inclined sections.
+
+Platform geometry may be represented by polygons or equivalent contour-based structures.
+
+#### Masking
+
+Use clipping paths, alpha masks, or equivalent rendering techniques to restrict the soil texture to the platform's geometry.
+
+The platform silhouette determines where soil is visible.
+
+The texture itself must not determine the platform's shape.
+
+#### Collision
+
+Collision geometry must remain independent of decorative artwork.
+
+The collision surface should follow the intended gameplay geometry rather than the exact irregularities of the visible terrain.
+
+---
+
+### 3. Upper Surface Integration
+
+The upper surface is assembled using dedicated soil-edge assets positioned along the platform's walkable contour.
+
+#### Placement
+
+- Align edge segments with the platform's upper boundary.
+- Support horizontal and inclined surfaces.
+- Maintain continuous transitions between adjacent segments.
+- Use small overlaps or transition elements where necessary.
+- Preserve a consistent visual scale.
+
+#### Blending with the main soil
+
+The upper edge must transition naturally into the soil body.
+
+Never place an opaque edge segment over the soil if its lower boundary creates a visible horizontal seam.
+
+Use alpha blending or irregular transition masks.
+
+The transition should:
+
+- Remain fully opaque near the upper surface.
+- Gradually reveal the underlying soil material.
+- Reach complete transparency toward the bottom of the transition region.
+- Follow an organic, irregular boundary rather than a straight line.
+- Avoid noticeable differences in brightness, texture scale, or color.
+
+#### Shared material approach
+
+Whenever possible, use the same soil material for both the main body and the upper edge.
+
+In this approach, the game engine renders the upper surface using the existing soil texture and applies moss as an independent overlay.
+
+This avoids unnecessary transitions between different soil materials.
+
+---
+
+### 4. Embedded Rock Placement
+
+Rocks are placed as independent visual elements inside the soil mass.
+
+The target composition for soil-dominated Cave0 platforms is approximately:
+
+- 80% visible soil.
+- 20% visible rock.
+
+These proportions are approximate and may vary locally.
+
+#### Placement
+
+- Distribute rocks unevenly throughout the platform.
+- Use different rock sizes.
+- Vary orientation and depth.
+- Avoid regular spacing.
+- Allow some rocks to overlap.
+- Concentrate selected rock groups in structurally appropriate regions.
+
+#### Soil integration
+
+Rocks must appear embedded within the earth rather than pasted onto its surface.
+
+The engine should:
+
+1. Position rocks partially inside the soil.
+2. Occlude selected rock edges using soil masks or foreground soil overlays.
+3. Add subtle contact shadows around embedded sections.
+4. Blend the transition between rock and earth.
+5. Ensure exposed rock surfaces remain clearly visible.
+
+#### Connection behavior
+
+Rocks do not need exact geometric connections to neighboring rocks.
+
+The continuous soil layer behind them prevents visible gaps.
+
+Rock overlaps, soil occlusion, and contact shadows are used to hide artificial joins.
+
+Rock placement must not modify gameplay collision unless explicitly configured.
+
+---
+
+### 5. Side and Bottom Edge Construction
+
+The outer boundaries of the platform are constructed using dedicated side and bottom edge elements.
+
+These elements hide the artificial silhouette of the underlying soil mask and create the appearance of naturally eroded terrain.
+
+#### Side boundaries
+
+- Position side-edge elements along the platform's exposed left and right boundaries.
+- Match their orientation to the boundary.
+- Overlap the underlying soil body.
+- Blend their inner edges into the soil material.
+- Preserve a continuous external silhouette.
+
+#### Bottom boundaries
+
+- Position bottom-edge elements along the platform's underside.
+- Vary their sizes and spacing.
+- Use irregular soil fragments and exposed rock sections.
+- Avoid repetitive pointed shapes.
+- Keep the underside visually connected to the soil body.
+
+#### Corners and transitions
+
+Special transition elements may be used where:
+
+- Horizontal boundaries meet vertical cliffs.
+- Inclined surfaces meet horizontal sections.
+- Side edges meet the platform underside.
+- Multiple terrain sections overlap.
+
+#### Seam handling
+
+Use overlapping elements, alpha masks, and small soil overlays to hide visible transitions.
+
+The assembled platform must not reveal rectangular sprite boundaries or abrupt changes in material texture.
+
+---
+
+### 6. Final Decoration and Visual Blending
+
+After the main platform body has been assembled, decorative elements are placed independently.
+
+#### Moss
+
+- Attach moss to exposed upper surfaces.
+- Follow the local surface orientation.
+- Use irregular distribution and spacing.
+- Keep moss primarily on the platform's top surface.
+- Prevent vegetation from obscuring walkable boundaries.
+
+#### Vegetation and fungi
+
+Plants, mushrooms, and other environmental objects are attached to suitable surface locations.
+
+Each attachment should account for:
+
+- Surface orientation.
+- Local position.
+- Object scale.
+- Layering order.
+- Available space.
+- Nearby objects.
+
+#### Additional blending
+
+Small soil fragments, cracks, pebbles, and subtle shadows may be placed at transition areas to improve cohesion.
+
+These additions should reduce visible repetition and seams without overwhelming the underlying material.
+
+#### Deterministic placement
+
+Procedural decoration must use a persistent random seed.
+
+The same platform configuration and seed should always produce the same visual arrangement.
+
+Avoid recalculating randomized positions every frame.
+
+---
+
+### Platform Assembly Pipeline
+
+The recommended assembly sequence is:
+
+1. Load the platform geometry and configuration.
+2. Construct the platform's visual mask.
+3. Fill the platform body with tiled soil material.
+4. Position embedded rocks.
+5. Apply soil occlusion and contact shadows around rocks.
+6. Construct the upper surface using soil-edge elements and blending masks.
+7. Construct exposed side, bottom, and corner boundaries.
+8. Apply additional masks and overlays to hide remaining seams.
+9. Place moss and other decorative objects.
+10. Generate or assign independent collision geometry.
+11. Cache the assembled visual representation when practical.
+
+The actual rendering order may vary depending on masking and occlusion requirements.
+
+---
+
+### Rendering and Performance
+
+Platform construction should be performed when a level is loaded or when its geometry or decoration changes.
+
+Avoid reconstructing static terrain every frame.
+
+Recommended optimizations:
+
+- Cache assembled platforms into textures or offscreen canvases.
+- Use texture atlases for small decorative assets.
+- Batch compatible rendering operations.
+- Reuse loaded textures.
+- Avoid unnecessary intermediate render targets.
+- Support partial reconstruction when only a small platform region changes.
+- Keep static visual geometry separate from interactive objects.
+
+For large levels, consider dividing terrain into independently cached chunks.
+
+---
+
+### Quality Validation
+
+The assembled platform must satisfy the following requirements:
+
+- Soil appears continuous throughout the platform.
+- Repeated textures do not reveal visible seams.
+- Upper surface edges blend naturally into the main soil.
+- Embedded rocks appear physically integrated into the ground.
+- Side and bottom boundaries appear naturally eroded.
+- No rectangular sprite boundaries are visible.
+- Surface transitions remain smooth at gameplay scale.
+- Rock placement appears irregular but structurally plausible.
+- Moss and decorative details do not obscure gameplay.
+- Walkable collision geometry remains independent and predictable.
+- Static platform rendering is efficiently cached.
+
+### Core Principle
+
+**Platform geometry defines the shape. Soil materials fill the shape. Edge elements define the exposed boundaries. Rocks and decorative assets provide visual complexity. Masks, occlusion, and blending make everything appear as one continuous natural formation.**
+
 ## Cave0 reference usage
 - Use the Cave0 screenshots (01–03) as the primary reference for this environment.
 

@@ -2,9 +2,9 @@
 // Cave section configuration (lesson-cave.0, reference: the cave painting
 // with the eye-flower, the glowing crevice and the stalk-eye). The cave art
 // is free of the fixed 96-swatch palette by design: its colours are picked
-// to sit with the painted props of assets/cave0/plants.png and stones.png —
-// dark teal void and waterfalls behind, blue-grey rock islands with moss
-// rims and brown roots, gold light where the exit is.
+// to sit with the painted art of assets/cave0 (its soil block, top strips,
+// edges, stones and plants) — dark teal void behind, warm brown soil, gold
+// light where the exit is.
 //
 export const CAVE_CFG = {
   colors: {
@@ -14,61 +14,47 @@ export const CAVE_CFG = {
     firefly: '#f0d470',         // Ambient fireflies, warm gold
     fireflyCore: '#fff3c0',
     heroSpark: ['#a6e6d0', '#ffe9a8', '#7fd6c2'],
-    lanternGlow: '#ffb35c',     // Halo of the lantern mushroom, amber
-    lanternCore: '#ffe2a6',
+    lanternGlow: '#62d6f0',     // Halo of the blue lantern mushroom, cold blue
+    lanternCore: '#d8f8ff',
     tealGlow: '#6fd8c8',        // Halo of the small teal mushrooms and bulbs
     rootLight: '#d8b06a'        // Daylight spilling in through the roots' hole
   },
   //
-  // Back of the cave: the far wall is the forest's ground stones pulled
-  // deep into the dark teal, set in dark brown soil; in front of it float
-  // distant rock platforms, softened and dimmed toward the room's haze.
+  // Back of the cave: the far wall is the stones of stones.png and
+  // ground_stones.png pulled deep into the dark teal, set in dark brown
+  // soil.
   //
   backdrop: {
     wallSoil: '#2b1d16',        // Dark brown soil between the far wall's stones
-    wallShade: '#071316',       // Colour the far stones are pulled toward
-    farIsles: '#15363b',        // Colour the distant platforms are pulled toward
-    midIsles: '#0f2a2f'         // Nearer distant platforms
+    wallShade: '#071316'        // Colour the far stones are pulled toward
   },
   //
-  // The cave's earth: walkable tops are platforms from the platforms
-  // sheet; under them, in the walls, the ceiling and under the lake, its
-  // loose stones packed in brown soil (the forest's deep earth, a step
-  // darker) that shows between them like mortar.
+  // Stones in front of the hero (cave-front.js): pulled toward the
+  // room's dark, nearer the eye and out of the light.
+  //
+  front: {
+    shade: '#0a1518',
+    shadeAmount: 0.3
+  },
+  //
+  // The cave's soil (its own colours come from the painted soil kit, see
+  // cave-earth.js): the cool depth shade pulled over the walls and the
+  // ceiling, under a laid stone (its contact shadow) and over the plants.
   //
   earth: {
-    soil: ['#3a2822', '#4a342b', '#57402f'],
-    shade: '#0b1216'            // Depth shade pulled over a mass away from its lit side
+    shade: '#0b1216'            // Cool blue-black depth shade
   },
   //
-  // The underground lake (components/lake.js) in the cave's teal.
+  // The lake in the hall's floor (cave-lake.js) in the cave's teal: the
+  // water near its surface and deep down, the surface lines and the band
+  // between them, the dark green the algae on its bed are pulled toward.
   //
   water: {
     water: '#1d5a5c',
     paint: {
-      light: '#4f9a92',
       deep: '#0d2e33',
-      reflection: '#0b2226',
-      ripple: '#a6dccf',
-      murkTop: '#1a4446',
-      murkDeep: '#0b2226',
-      bank: '#1d272d',
-      bed: '#3b3934',
-      bedRim: '#686457',
-      bedEdge: '#1b120b',
-      bedGravel: '#22211e',
-      pebble: '#3c3f3e',
-      pebbleLight: '#6e7470',
-      stone: '#4a4740',
-      stoneLight: '#7b776a',
-      stoneDark: '#2e2c27',
-      stoneContour: '#140d0b',
-      snag: '#3c1714',
-      snagLight: '#6e2a24',
       surfaceLine: '#b9eadc',
       surfaceBand: '#5fb0a2',
-      algae: '#2e5a2c',
-      algaeLight: '#4f8a3a',
       algaeDark: '#1f3d1e'
     }
   },

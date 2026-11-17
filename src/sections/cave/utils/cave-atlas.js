@@ -1,192 +1,501 @@
 import { loadPictureImage } from '../../forest/utils/forest-picture.js'
+import { loadForestGroundElements, forestBuriedElements } from '../../forest/utils/forest-ground-element.js'
 //
-// The cave's painted art: three sheets in assets/cave0 — plants, stones
-// (its crystals) and rock platforms (flat, block, sloped and hanging
-// platforms plus loose stones) — and the forest's ground stones (the
-// cave's far wall), cut into named pieces. The sheets' backgrounds are not
-// clean: faint coloured haze and fringes sit round every piece at low
-// alpha, so its alpha is remapped once (below ALPHA_LO gone, above
-// ALPHA_HI solid). Pieces
-// are plain canvases, cached per page (they do not belong to a Kaplay
-// instance); the bakes that use them carry the grain.
+// The cave's painted art cut into named pieces. The soil the cave is built
+// of: ground_block.png (a block of soil, tiled), ground_top.png (two long
+// top strips the hero walks on), corners.png (the soil's top, side and
+// bottom edges, its corners, a rising and a falling top), ground_stones.png
+// and stones.png (stones laid into the soil), joints_ground_stones.png
+// (arcs that bed a ground stone, heaps at its foot) and joints.png (the
+// same for the stones of stones.png: heaps, long beds, and loose wedges
+// and patches); plants.png (plants growing up, out of a wall sideways and
+// hanging down), platforms.png (short soil platforms hanging in the
+// air); plus the forest's buried elements (bones, fossils,
+// shells: elements_ground.png, cut by the forest).
 //
-const SHEET = { PLANTS: 'plants', STONES: 'stones', PLATFORMS: 'platforms', GROUND_STONES: 'groundStones' }
-const SHEET_URLS = {
-  [SHEET.PLANTS]: 'cave0/plants.png',
-  [SHEET.STONES]: 'cave0/stones.png',
-  [SHEET.PLATFORMS]: 'cave0/platforms.png',
-  [SHEET.GROUND_STONES]: 'forest/stones_ground.png'
+// The sheets are not clean, so each is prepared as it is cut: faint haze
+// and fringes at low alpha are remapped away (below lo gone, above hi
+// solid), the soil sheets' colour is pulled to the block's (their own
+// soil is lighter), the white haze corners.png fades into is turned into
+// transparency, and a stone or a patch keeps only its own island (a
+// neighbour reaching into its box is cleared). Pieces are plain canvases,
+// cached per page (they do not belong to a Kaplay instance); the bakes
+// that use them carry the grain.
+//
+const SHEET = {
+  PLANTS: 'plants',
+  ROCKS: 'rocks',
+  GROUND_STONES: 'groundStones',
+  JOINTS: 'joints',
+  GROUND_JOINTS: 'groundJoints',
+  CORNERS: 'corners',
+  FLOATS: 'floats',
+  TOP: 'top'
 }
-const ALPHA_LO = 40
-const ALPHA_HI = 200
+//
+// Per sheet: its file, its alpha remap [lo, hi], whether its colour is
+// pulled to the soil block's, whether its white haze is turned into
+// transparency (`dewhite`: the outer band in px, see OUTER_SIDES), how much its fades are shortened (alpha to that power: a
+// long soft fade over the textured block reads as a flat veil), and the
+// island a piece keeps: solid from `alpha` up, with `keep` px of soft
+// edge round it.
+//
+const SHEETS = {
+  [SHEET.PLANTS]: { url: 'cave0/plants.png', alpha: [40, 200] },
+  [SHEET.ROCKS]: { url: 'cave0/stones.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.GROUND_STONES]: { url: 'cave0/ground_stones.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.JOINTS]: { url: 'cave0/joints.png', alpha: [6, 170], soil: true, isolate: { alpha: 100, keep: 8 } },
+  [SHEET.GROUND_JOINTS]: { url: 'cave0/joints_ground_stones.png', alpha: [6, 170], soil: true, isolate: { alpha: 100, keep: 8 } },
+  [SHEET.CORNERS]: { url: 'cave0/corners.png', soil: true, dewhite: 30, sharpen: 2.5 },
+  [SHEET.FLOATS]: { url: 'cave0/platforms.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.TOP]: { url: 'cave0/ground_top.png', alpha: [6, 250], soil: true, dewhite: 170, sharpen: 3 }
+}
+const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
+const RGBA = 4
+//
+// Soil colour match: a sheet's soil is its opaque pixels darker than
+// SOIL_LUM_MAX (every SAMPLE_STEP-th pixel read); its mean is pulled onto
+// the block's mean.
+//
+const SOIL_ALPHA_MIN = 240
+const SOIL_LUM_MAX = 130
+const SAMPLE_STEP = 7
+//
+// White haze into transparency: a pixel is read as the sheet's soil mixed
+// with white — its white share from how far its luminance lies above the
+// soil's toward white. Within the sheet's outer band (px) of a piece's
+// ragged outer sides (OUTER_SIDES) an opaque pixel (alpha from HAZE_ALPHA
+// up) is the soil's own lit lump and is kept as it is, less and less so
+// over OUTER_SOFT px past the band. The white is taken
+// out of its colour (the share kept at least WHITE_KEEP) and it loses
+// alpha by (1 - share × WHITE_ALPHA_GAIN)^WHITE_FADE_POW. The top strips'
+// fades are lighter dust and are cleared the same way.
+//
+const HAZE_ALPHA = 240
+const OUTER_SOFT = 30
+const WHITE_FADE_POW = 3
+const WHITE_ALPHA_GAIN = 2
+const WHITE_KEEP = 0.15
+const OUTER_SIDES = {
+  top0: 't',
+  top1: 't',
+  edgeT: 't',
+  edgeL: 'l',
+  edgeR: 'r',
+  edgeB: 'b',
+  slopeUp: 'tr',
+  slopeDown: 'tl',
+  cornerTL: 'tl',
+  cornerTR: 'tr',
+  cornerBL: 'bl',
+  cornerBR: 'br'
+}
+//
+// A soil sheet's see-through pixels (its fades) are lighter dust over
+// nothing; their colour goes toward the block's the more see-through they
+// are: weight 1 - alpha^FADE_POW.
+//
+const FADE_POW = 2.5
+//
+// A pixel this opaque counts as solid in a piece's outline.
+//
+const SOLID_ALPHA = 128
+const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
 //
 // Pieces: sheet, then x, y, w, h of the piece on its sheet (found by
-// cutting the sheet's solid parts into islands). Flat, block and hanging
-// platforms also carry their top line (its Y in the piece) and where it
-// starts and ends (X in the piece); sloped ones the top's left end (Y, X),
-// its right end X and Y.
+// cutting the sheet's solid parts into islands). The soil edges: edgeT /
+// edgeL / edgeR / edgeB have their ragged face on the top / left / right /
+// bottom and fade into the soil on the other side; a corner (cornerTL...)
+// is ragged on its two outer sides; slopeUp / slopeDown are top edges
+// rising / falling to the right. Joints: jointMound (heaps), jointBed
+// (long beds), jointWedge and jointPatch (loose) for stones.png;
+// groundArc (arcs, bedding a stone upside down) and groundHeap (heaps)
+// for ground_stones.png. float: short soil platforms of platforms.png
+// that hang in the air (flat tops), narrowest first.
 //
 const PIECES = {
-  goldCrystals: [SHEET.STONES, 7, 682, 157, 136],
-  flat0: [SHEET.PLATFORMS, 8, 4, 108, 101, 13, 13, 97],
-  flat1: [SHEET.PLATFORMS, 122, 4, 115, 102, 13, 14, 101],
-  flat2: [SHEET.PLATFORMS, 238, 2, 161, 106, 14, 17, 147],
-  flat3: [SHEET.PLATFORMS, 402, 2, 235, 111, 14, 17, 222],
-  flat4: [SHEET.PLATFORMS, 638, 2, 292, 116, 14, 19, 278],
-  flat5: [SHEET.PLATFORMS, 930, 2, 511, 116, 13, 18, 494],
-  flat6: [SHEET.PLATFORMS, 5, 120, 352, 113, 13, 27, 339],
-  flat7: [SHEET.PLATFORMS, 359, 110, 471, 124, 14, 26, 439],
-  flat8: [SHEET.PLATFORMS, 831, 116, 612, 121, 14, 21, 584],
-  block0: [SHEET.PLATFORMS, 3, 237, 174, 124, 14, 19, 161],
-  block1: [SHEET.PLATFORMS, 180, 236, 174, 127, 14, 20, 161],
-  block2: [SHEET.PLATFORMS, 357, 238, 169, 125, 13, 19, 156],
-  block3: [SHEET.PLATFORMS, 530, 237, 175, 125, 13, 19, 160],
-  block4: [SHEET.PLATFORMS, 714, 236, 184, 124, 14, 17, 169],
-  block5: [SHEET.PLATFORMS, 903, 236, 181, 126, 14, 16, 167],
-  block6: [SHEET.PLATFORMS, 1094, 237, 173, 114, 13, 15, 160],
-  block7: [SHEET.PLATFORMS, 1277, 236, 167, 111, 14, 14, 151],
-  cone0: [SHEET.PLATFORMS, 248, 615, 149, 114, 14, 17, 135],
-  cone1: [SHEET.PLATFORMS, 397, 615, 144, 117, 14, 14, 130],
-  cone2: [SHEET.PLATFORMS, 541, 614, 212, 133, 13, 22, 195],
-  cone3: [SHEET.PLATFORMS, 755, 615, 244, 120, 13, 17, 227],
-  cone4: [SHEET.PLATFORMS, 1004, 613, 260, 126, 14, 17, 242],
-  cone5: [SHEET.PLATFORMS, 1267, 614, 175, 124, 14, 18, 159],
-  rise0: [SHEET.PLATFORMS, 4, 367, 176, 100, 39, 19, 157, 20],
-  rise1: [SHEET.PLATFORMS, 179, 351, 226, 124, 53, 18, 207, 19],
-  rise2: [SHEET.PLATFORMS, 406, 347, 241, 121, 55, 18, 222, 20],
-  rise3: [SHEET.PLATFORMS, 638, 334, 337, 138, 8, 12, 317, 21],
-  rise4: [SHEET.PLATFORMS, 968, 334, 477, 142, 8, 19, 457, 20],
-  fall0: [SHEET.PLATFORMS, 7, 469, 366, 125, 23, 18, 346, 49],
-  fall1: [SHEET.PLATFORMS, 373, 466, 300, 123, 23, 18, 281, 52],
-  fall2: [SHEET.PLATFORMS, 675, 472, 346, 133, 23, 19, 333, 63],
-  fall3: [SHEET.PLATFORMS, 1010, 467, 435, 144, 28, 12, 415, 69],
-  rock0: [SHEET.PLATFORMS, 6, 740, 139, 126],
-  rock1: [SHEET.PLATFORMS, 164, 766, 112, 98],
-  rock2: [SHEET.PLATFORMS, 289, 767, 118, 97],
-  rock3: [SHEET.PLATFORMS, 423, 758, 151, 105],
-  rock4: [SHEET.PLATFORMS, 595, 767, 121, 97],
-  rock5: [SHEET.PLATFORMS, 746, 769, 115, 95],
-  rock6: [SHEET.PLATFORMS, 878, 769, 115, 92],
-  rock7: [SHEET.PLATFORMS, 1011, 771, 118, 90],
-  rock8: [SHEET.PLATFORMS, 1145, 763, 117, 102],
-  rock9: [SHEET.PLATFORMS, 1282, 773, 138, 92],
-  rock10: [SHEET.PLATFORMS, 10, 976, 52, 40],
-  rock11: [SHEET.PLATFORMS, 17, 871, 119, 89],
-  rock12: [SHEET.PLATFORMS, 81, 963, 75, 56],
-  rock13: [SHEET.PLATFORMS, 155, 881, 84, 66],
-  rock14: [SHEET.PLATFORMS, 172, 957, 70, 62],
-  rock15: [SHEET.PLATFORMS, 255, 886, 101, 62],
-  rock16: [SHEET.PLATFORMS, 263, 960, 71, 58],
-  rock17: [SHEET.PLATFORMS, 351, 969, 82, 48],
-  rock18: [SHEET.PLATFORMS, 372, 873, 103, 78],
-  rock19: [SHEET.PLATFORMS, 454, 966, 75, 52],
-  rock20: [SHEET.PLATFORMS, 492, 878, 95, 73],
-  rock21: [SHEET.PLATFORMS, 547, 960, 65, 57],
-  rock22: [SHEET.PLATFORMS, 602, 881, 84, 72],
-  rock23: [SHEET.PLATFORMS, 634, 967, 70, 53],
-  rock24: [SHEET.PLATFORMS, 702, 881, 96, 70],
-  rock25: [SHEET.PLATFORMS, 717, 964, 78, 54],
-  rock26: [SHEET.PLATFORMS, 814, 962, 70, 56],
-  rock27: [SHEET.PLATFORMS, 815, 879, 81, 68],
-  rock28: [SHEET.PLATFORMS, 903, 974, 73, 42],
-  rock29: [SHEET.PLATFORMS, 912, 870, 88, 83],
-  rock30: [SHEET.PLATFORMS, 998, 960, 83, 55],
-  rock31: [SHEET.PLATFORMS, 1015, 881, 90, 66],
-  rock32: [SHEET.PLATFORMS, 1099, 966, 66, 49],
-  rock33: [SHEET.PLATFORMS, 1122, 881, 77, 67],
-  rock34: [SHEET.PLATFORMS, 1182, 963, 79, 52],
-  rock35: [SHEET.PLATFORMS, 1218, 876, 106, 70],
-  rock36: [SHEET.PLATFORMS, 1277, 962, 72, 54],
-  rock37: [SHEET.PLATFORMS, 1342, 885, 81, 62],
-  rock38: [SHEET.PLATFORMS, 1367, 964, 69, 49],
-  rock39: [SHEET.PLATFORMS, 13, 1032, 57, 42],
-  rock40: [SHEET.PLATFORMS, 95, 1028, 61, 47],
-  rock41: [SHEET.PLATFORMS, 186, 1028, 61, 47],
-  rock42: [SHEET.PLATFORMS, 270, 1029, 55, 45],
-  rock43: [SHEET.PLATFORMS, 344, 1030, 51, 42],
-  rock44: [SHEET.PLATFORMS, 416, 1026, 53, 47],
-  rock45: [SHEET.PLATFORMS, 492, 1028, 56, 44],
-  rock46: [SHEET.PLATFORMS, 571, 1027, 61, 45],
-  rock47: [SHEET.PLATFORMS, 654, 1033, 46, 36],
-  rock48: [SHEET.PLATFORMS, 723, 1030, 54, 43],
-  rock49: [SHEET.PLATFORMS, 799, 1036, 41, 33],
-  rock50: [SHEET.PLATFORMS, 858, 1029, 50, 43],
-  rock51: [SHEET.PLATFORMS, 930, 1033, 45, 36],
-  rock52: [SHEET.PLATFORMS, 995, 1034, 45, 35],
-  rock53: [SHEET.PLATFORMS, 1061, 1034, 47, 35],
-  rock54: [SHEET.PLATFORMS, 1130, 1034, 44, 34],
-  rock55: [SHEET.PLATFORMS, 1195, 1033, 52, 36],
-  rock56: [SHEET.PLATFORMS, 1269, 1035, 45, 33],
-  rock57: [SHEET.PLATFORMS, 1337, 1035, 39, 32],
-  ground0: [SHEET.GROUND_STONES, 198, 21, 47, 34],
-  ground1: [SHEET.GROUND_STONES, 386, 23, 40, 33],
-  ground2: [SHEET.GROUND_STONES, 770, 21, 46, 37],
-  ground3: [SHEET.GROUND_STONES, 1042, 20, 40, 35],
-  ground4: [SHEET.GROUND_STONES, 1272, 15, 51, 38],
-  ground5: [SHEET.GROUND_STONES, 1348, 21, 50, 34],
-  ground6: [SHEET.GROUND_STONES, 1429, 19, 44, 33],
-  ground7: [SHEET.GROUND_STONES, 1506, 14, 59, 44],
-  ground8: [SHEET.GROUND_STONES, 1588, 13, 59, 45],
-  ground9: [SHEET.GROUND_STONES, 26, 76, 73, 47],
-  ground10: [SHEET.GROUND_STONES, 118, 79, 50, 44],
-  ground11: [SHEET.GROUND_STONES, 205, 78, 57, 48],
-  ground12: [SHEET.GROUND_STONES, 285, 76, 83, 57],
-  ground13: [SHEET.GROUND_STONES, 394, 81, 60, 38],
-  ground14: [SHEET.GROUND_STONES, 482, 81, 58, 42],
-  ground15: [SHEET.GROUND_STONES, 510, 18, 49, 43],
-  ground16: [SHEET.GROUND_STONES, 564, 78, 53, 42],
-  ground17: [SHEET.GROUND_STONES, 658, 78, 57, 45],
-  ground18: [SHEET.GROUND_STONES, 738, 78, 62, 48],
-  ground19: [SHEET.GROUND_STONES, 825, 78, 62, 45],
-  ground20: [SHEET.GROUND_STONES, 918, 75, 85, 48],
-  ground21: [SHEET.GROUND_STONES, 1027, 75, 89, 59],
-  ground22: [SHEET.GROUND_STONES, 1152, 76, 73, 58],
-  ground23: [SHEET.GROUND_STONES, 1251, 72, 89, 60],
-  ground24: [SHEET.GROUND_STONES, 1364, 78, 72, 44],
-  ground25: [SHEET.GROUND_STONES, 1460, 77, 97, 57],
-  ground26: [SHEET.GROUND_STONES, 1577, 79, 67, 48],
-  ground27: [SHEET.GROUND_STONES, 16, 149, 108, 78],
-  ground28: [SHEET.GROUND_STONES, 141, 148, 106, 80],
-  ground29: [SHEET.GROUND_STONES, 264, 151, 95, 64],
-  ground30: [SHEET.GROUND_STONES, 385, 149, 102, 79],
-  ground31: [SHEET.GROUND_STONES, 511, 145, 93, 77],
-  ground32: [SHEET.GROUND_STONES, 631, 143, 103, 73],
-  ground33: [SHEET.GROUND_STONES, 752, 147, 106, 68],
-  ground34: [SHEET.GROUND_STONES, 881, 143, 107, 67],
-  ground35: [SHEET.GROUND_STONES, 1010, 151, 115, 64],
-  ground36: [SHEET.GROUND_STONES, 1141, 151, 114, 69],
-  ground37: [SHEET.GROUND_STONES, 1280, 149, 106, 75],
-  ground38: [SHEET.GROUND_STONES, 1409, 153, 97, 73],
-  ground39: [SHEET.GROUND_STONES, 1524, 147, 132, 79],
-  ground40: [SHEET.GROUND_STONES, 20, 249, 160, 94],
-  ground41: [SHEET.GROUND_STONES, 205, 243, 174, 96],
-  ground42: [SHEET.GROUND_STONES, 399, 247, 139, 93],
-  ground43: [SHEET.GROUND_STONES, 550, 242, 193, 107],
-  ground44: [SHEET.GROUND_STONES, 754, 230, 161, 116],
-  ground45: [SHEET.GROUND_STONES, 930, 228, 150, 131],
-  ground46: [SHEET.GROUND_STONES, 1099, 240, 179, 107],
-  ground47: [SHEET.GROUND_STONES, 1285, 239, 165, 108],
-  ground48: [SHEET.GROUND_STONES, 1465, 242, 176, 107],
-  ground49: [SHEET.GROUND_STONES, 14, 363, 213, 108],
-  ground50: [SHEET.GROUND_STONES, 256, 364, 167, 99],
-  ground51: [SHEET.GROUND_STONES, 448, 370, 177, 93],
-  ground52: [SHEET.GROUND_STONES, 656, 364, 165, 92],
-  ground53: [SHEET.GROUND_STONES, 850, 362, 167, 97],
-  ground54: [SHEET.GROUND_STONES, 1041, 375, 177, 86],
-  ground55: [SHEET.GROUND_STONES, 1244, 363, 164, 98],
-  ground56: [SHEET.GROUND_STONES, 1428, 368, 234, 101],
-  ground57: [SHEET.GROUND_STONES, 11, 480, 234, 151],
-  ground58: [SHEET.GROUND_STONES, 255, 474, 247, 158],
-  ground59: [SHEET.GROUND_STONES, 533, 467, 254, 168],
-  ground60: [SHEET.GROUND_STONES, 816, 473, 264, 147],
-  ground61: [SHEET.GROUND_STONES, 1114, 474, 267, 157],
-  ground62: [SHEET.GROUND_STONES, 1403, 473, 261, 175],
-  ground63: [SHEET.GROUND_STONES, 7, 636, 329, 260],
-  ground64: [SHEET.GROUND_STONES, 338, 655, 281, 237],
-  ground65: [SHEET.GROUND_STONES, 633, 621, 355, 282],
-  ground66: [SHEET.GROUND_STONES, 990, 653, 289, 231],
-  ground67: [SHEET.GROUND_STONES, 1269, 671, 392, 218],
+  top0: [SHEET.TOP, 5, 39, 2162, 306],
+  top1: [SHEET.TOP, 5, 402, 2162, 302],
+  edgeT: [SHEET.CORNERS, 17, 168, 373, 212],
+  edgeL: [SHEET.CORNERS, 420, 75, 179, 378],
+  edgeR: [SHEET.CORNERS, 737, 73, 181, 377],
+  edgeB: [SHEET.CORNERS, 951, 254, 378, 206],
+  slopeUp: [SHEET.CORNERS, 1362, 136, 397, 274],
+  cornerTL: [SHEET.CORNERS, 24, 516, 311, 319],
+  cornerTR: [SHEET.CORNERS, 381, 516, 287, 322],
+  cornerBL: [SHEET.CORNERS, 702, 517, 294, 315],
+  cornerBR: [SHEET.CORNERS, 1032, 523, 290, 307],
+  slopeDown: [SHEET.CORNERS, 1355, 527, 404, 283],
+  rock0: [SHEET.ROCKS, 18, 13, 289, 232],
+  rock1: [SHEET.ROCKS, 349, 29, 133, 78],
+  rock2: [SHEET.ROCKS, 468, 13, 392, 231],
+  rock3: [SHEET.ROCKS, 887, 27, 175, 122],
+  rock4: [SHEET.ROCKS, 1118, 12, 391, 245],
+  rock5: [SHEET.ROCKS, 328, 129, 105, 70],
+  rock6: [SHEET.ROCKS, 754, 173, 209, 114],
+  rock7: [SHEET.ROCKS, 1023, 134, 69, 43],
+  rock8: [SHEET.ROCKS, 205, 233, 160, 81],
+  rock9: [SHEET.ROCKS, 372, 231, 160, 143],
+  rock10: [SHEET.ROCKS, 977, 203, 173, 117],
+  rock11: [SHEET.ROCKS, 20, 282, 162, 106],
+  rock12: [SHEET.ROCKS, 547, 278, 155, 96],
+  rock13: [SHEET.ROCKS, 1183, 241, 114, 91],
+  rock14: [SHEET.ROCKS, 1298, 261, 220, 155],
+  rock15: [SHEET.ROCKS, 136, 339, 211, 174],
+  rock16: [SHEET.ROCKS, 583, 320, 384, 230],
+  rock17: [SHEET.ROCKS, 856, 300, 97, 52],
+  rock18: [SHEET.ROCKS, 1062, 344, 208, 168],
+  rock19: [SHEET.ROCKS, 362, 401, 187, 104],
+  rock20: [SHEET.ROCKS, 967, 362, 81, 49],
+  rock21: [SHEET.ROCKS, 13, 422, 98, 91],
+  rock22: [SHEET.ROCKS, 992, 461, 65, 47],
+  rock23: [SHEET.ROCKS, 1239, 444, 283, 193],
+  rock24: [SHEET.ROCKS, 272, 519, 181, 93],
+  rock25: [SHEET.ROCKS, 490, 535, 92, 64],
+  rock26: [SHEET.ROCKS, 797, 535, 259, 224],
+  rock27: [SHEET.ROCKS, 37, 539, 189, 169],
+  rock28: [SHEET.ROCKS, 563, 576, 227, 129],
+  rock29: [SHEET.ROCKS, 1087, 542, 111, 59],
+  rock30: [SHEET.ROCKS, 241, 636, 76, 69],
+  rock31: [SHEET.ROCKS, 316, 627, 233, 150],
+  rock32: [SHEET.ROCKS, 1072, 631, 201, 114],
+  rock33: [SHEET.ROCKS, 1324, 637, 187, 129],
+  rock34: [SHEET.ROCKS, 22, 744, 289, 234],
+  rock35: [SHEET.ROCKS, 29, 736, 91, 58],
+  rock36: [SHEET.ROCKS, 553, 731, 139, 96],
+  rock37: [SHEET.ROCKS, 723, 720, 69, 55],
+  rock38: [SHEET.ROCKS, 977, 750, 143, 93],
+  rock39: [SHEET.ROCKS, 1222, 740, 99, 53],
+  rock40: [SHEET.ROCKS, 338, 792, 74, 51],
+  rock41: [SHEET.ROCKS, 344, 816, 236, 176],
+  rock42: [SHEET.ROCKS, 606, 816, 203, 142],
+  rock43: [SHEET.ROCKS, 829, 784, 110, 65],
+  rock44: [SHEET.ROCKS, 1209, 784, 304, 215],
+  rock45: [SHEET.ROCKS, 874, 867, 207, 132],
+  rock46: [SHEET.ROCKS, 1097, 841, 128, 80],
+  rock47: [SHEET.ROCKS, 249, 945, 78, 42],
+  rock48: [SHEET.ROCKS, 772, 921, 74, 45],
+  ground0: [SHEET.GROUND_STONES, 8, 9, 259, 202],
+  ground1: [SHEET.GROUND_STONES, 268, 22, 79, 60],
+  ground2: [SHEET.GROUND_STONES, 327, 23, 229, 138],
+  ground3: [SHEET.GROUND_STONES, 573, 16, 54, 39],
+  ground4: [SHEET.GROUND_STONES, 619, 24, 158, 164],
+  ground5: [SHEET.GROUND_STONES, 797, 22, 53, 38],
+  ground6: [SHEET.GROUND_STONES, 843, 9, 181, 136],
+  ground7: [SHEET.GROUND_STONES, 1067, 21, 79, 65],
+  ground8: [SHEET.GROUND_STONES, 1133, 10, 202, 170],
+  ground9: [SHEET.GROUND_STONES, 1363, 23, 90, 62],
+  ground10: [SHEET.GROUND_STONES, 1437, 14, 228, 162],
+  ground11: [SHEET.GROUND_STONES, 1004, 111, 107, 70],
+  ground12: [SHEET.GROUND_STONES, 281, 157, 52, 39],
+  ground13: [SHEET.GROUND_STONES, 530, 121, 81, 62],
+  ground14: [SHEET.GROUND_STONES, 784, 124, 45, 36],
+  ground15: [SHEET.GROUND_STONES, 941, 143, 42, 30],
+  ground16: [SHEET.GROUND_STONES, 1344, 123, 66, 44],
+  ground17: [SHEET.GROUND_STONES, 18, 228, 62, 52],
+  ground18: [SHEET.GROUND_STONES, 177, 214, 97, 66],
+  ground19: [SHEET.GROUND_STONES, 303, 223, 69, 56],
+  ground20: [SHEET.GROUND_STONES, 395, 187, 134, 95],
+  ground21: [SHEET.GROUND_STONES, 575, 194, 89, 75],
+  ground22: [SHEET.GROUND_STONES, 686, 216, 43, 35],
+  ground23: [SHEET.GROUND_STONES, 751, 188, 80, 65],
+  ground24: [SHEET.GROUND_STONES, 847, 179, 94, 79],
+  ground25: [SHEET.GROUND_STONES, 958, 222, 50, 40],
+  ground26: [SHEET.GROUND_STONES, 1032, 203, 94, 71],
+  ground27: [SHEET.GROUND_STONES, 1149, 216, 65, 44],
+  ground28: [SHEET.GROUND_STONES, 1227, 193, 124, 85],
+  ground29: [SHEET.GROUND_STONES, 1374, 184, 141, 91],
+  ground30: [SHEET.GROUND_STONES, 1525, 228, 39, 30],
+  ground31: [SHEET.GROUND_STONES, 1582, 198, 77, 68],
+  ground32: [SHEET.GROUND_STONES, 14, 291, 101, 99],
+  ground33: [SHEET.GROUND_STONES, 102, 240, 48, 39],
+  ground34: [SHEET.GROUND_STONES, 541, 258, 32, 30],
+  ground35: [SHEET.GROUND_STONES, 669, 273, 179, 142],
+  ground36: [SHEET.GROUND_STONES, 872, 281, 78, 68],
+  ground37: [SHEET.GROUND_STONES, 971, 288, 31, 24],
+  ground38: [SHEET.GROUND_STONES, 1125, 287, 97, 70],
+  ground39: [SHEET.GROUND_STONES, 1332, 289, 40, 33],
+  ground40: [SHEET.GROUND_STONES, 1368, 286, 184, 133],
+  ground41: [SHEET.GROUND_STONES, 142, 300, 125, 98],
+  ground42: [SHEET.GROUND_STONES, 285, 302, 38, 33],
+  ground43: [SHEET.GROUND_STONES, 343, 300, 92, 65],
+  ground44: [SHEET.GROUND_STONES, 465, 301, 77, 54],
+  ground45: [SHEET.GROUND_STONES, 575, 298, 85, 59],
+  ground46: [SHEET.GROUND_STONES, 994, 303, 99, 71],
+  ground47: [SHEET.GROUND_STONES, 1255, 311, 56, 42],
+  ground48: [SHEET.GROUND_STONES, 1582, 302, 76, 56],
+  ground49: [SHEET.GROUND_STONES, 14, 414, 70, 51],
+  ground50: [SHEET.GROUND_STONES, 105, 400, 45, 33],
+  ground51: [SHEET.GROUND_STONES, 179, 417, 53, 35],
+  ground52: [SHEET.GROUND_STONES, 271, 372, 116, 88],
+  ground53: [SHEET.GROUND_STONES, 402, 402, 29, 27],
+  ground54: [SHEET.GROUND_STONES, 449, 371, 130, 87],
+  ground55: [SHEET.GROUND_STONES, 604, 392, 48, 36],
+  ground56: [SHEET.GROUND_STONES, 844, 385, 47, 40],
+  ground57: [SHEET.GROUND_STONES, 913, 370, 91, 74],
+  ground58: [SHEET.GROUND_STONES, 1021, 399, 32, 24],
+  ground59: [SHEET.GROUND_STONES, 1079, 373, 78, 61],
+  ground60: [SHEET.GROUND_STONES, 1197, 375, 55, 38],
+  ground61: [SHEET.GROUND_STONES, 1279, 379, 70, 58],
+  ground62: [SHEET.GROUND_STONES, 1551, 386, 39, 32],
+  ground63: [SHEET.GROUND_STONES, 1614, 399, 41, 31],
+  ground64: [SHEET.GROUND_STONES, 63, 468, 142, 101],
+  ground65: [SHEET.GROUND_STONES, 225, 469, 75, 61],
+  ground66: [SHEET.GROUND_STONES, 333, 466, 94, 58],
+  ground67: [SHEET.GROUND_STONES, 528, 464, 106, 84],
+  ground68: [SHEET.GROUND_STONES, 648, 445, 67, 49],
+  ground69: [SHEET.GROUND_STONES, 755, 421, 57, 37],
+  ground70: [SHEET.GROUND_STONES, 812, 453, 133, 114],
+  ground71: [SHEET.GROUND_STONES, 975, 455, 100, 66],
+  ground72: [SHEET.GROUND_STONES, 1106, 458, 54, 41],
+  ground73: [SHEET.GROUND_STONES, 1187, 439, 112, 97],
+  ground74: [SHEET.GROUND_STONES, 1332, 450, 73, 51],
+  ground75: [SHEET.GROUND_STONES, 1439, 423, 86, 63],
+  ground76: [SHEET.GROUND_STONES, 1500, 456, 160, 133],
+  ground77: [SHEET.GROUND_STONES, 16, 493, 37, 27],
+  ground78: [SHEET.GROUND_STONES, 361, 530, 165, 110],
+  ground79: [SHEET.GROUND_STONES, 455, 483, 45, 30],
+  ground80: [SHEET.GROUND_STONES, 724, 491, 66, 41],
+  ground81: [SHEET.GROUND_STONES, 1014, 533, 191, 110],
+  ground82: [SHEET.GROUND_STONES, 1378, 518, 96, 77],
+  ground83: [SHEET.GROUND_STONES, 14, 569, 47, 36],
+  ground84: [SHEET.GROUND_STONES, 166, 565, 79, 53],
+  ground85: [SHEET.GROUND_STONES, 275, 547, 67, 55],
+  ground86: [SHEET.GROUND_STONES, 565, 578, 47, 31],
+  ground87: [SHEET.GROUND_STONES, 631, 545, 120, 84],
+  ground88: [SHEET.GROUND_STONES, 778, 562, 46, 31],
+  ground89: [SHEET.GROUND_STONES, 901, 571, 37, 36],
+  ground90: [SHEET.GROUND_STONES, 954, 550, 44, 35],
+  ground91: [SHEET.GROUND_STONES, 1237, 577, 53, 38],
+  ground92: [SHEET.GROUND_STONES, 1297, 539, 55, 36],
+  ground93: [SHEET.GROUND_STONES, 13, 610, 191, 133],
+  ground94: [SHEET.GROUND_STONES, 224, 631, 72, 51],
+  ground95: [SHEET.GROUND_STONES, 335, 637, 44, 31],
+  ground96: [SHEET.GROUND_STONES, 481, 631, 102, 76],
+  ground97: [SHEET.GROUND_STONES, 614, 642, 37, 27],
+  ground98: [SHEET.GROUND_STONES, 687, 654, 64, 60],
+  ground99: [SHEET.GROUND_STONES, 779, 600, 129, 99],
+  ground100: [SHEET.GROUND_STONES, 943, 625, 69, 48],
+  ground101: [SHEET.GROUND_STONES, 1175, 638, 93, 66],
+  ground102: [SHEET.GROUND_STONES, 1291, 614, 167, 116],
+  ground103: [SHEET.GROUND_STONES, 1480, 611, 37, 28],
+  ground104: [SHEET.GROUND_STONES, 1522, 626, 92, 78],
+  ground105: [SHEET.GROUND_STONES, 1624, 599, 32, 25],
+  ground106: [SHEET.GROUND_STONES, 288, 694, 62, 40],
+  ground107: [SHEET.GROUND_STONES, 382, 671, 71, 57],
+  ground108: [SHEET.GROUND_STONES, 595, 697, 67, 41],
+  ground109: [SHEET.GROUND_STONES, 892, 691, 56, 38],
+  ground110: [SHEET.GROUND_STONES, 973, 693, 93, 82],
+  ground111: [SHEET.GROUND_STONES, 1080, 660, 62, 53],
+  ground112: [SHEET.GROUND_STONES, 1461, 689, 56, 46],
+  ground113: [SHEET.GROUND_STONES, 1625, 675, 36, 27],
+  ground114: [SHEET.GROUND_STONES, 17, 749, 59, 38],
+  ground115: [SHEET.GROUND_STONES, 54, 770, 138, 101],
+  ground116: [SHEET.GROUND_STONES, 186, 744, 38, 32],
+  ground117: [SHEET.GROUND_STONES, 239, 745, 77, 59],
+  ground118: [SHEET.GROUND_STONES, 350, 748, 62, 38],
+  ground119: [SHEET.GROUND_STONES, 448, 735, 113, 81],
+  ground120: [SHEET.GROUND_STONES, 576, 765, 35, 36],
+  ground121: [SHEET.GROUND_STONES, 639, 741, 152, 112],
+  ground122: [SHEET.GROUND_STONES, 800, 727, 71, 53],
+  ground123: [SHEET.GROUND_STONES, 876, 763, 69, 60],
+  ground124: [SHEET.GROUND_STONES, 1080, 747, 50, 35],
+  ground125: [SHEET.GROUND_STONES, 1150, 729, 146, 101],
+  ground126: [SHEET.GROUND_STONES, 1326, 763, 54, 45],
+  ground127: [SHEET.GROUND_STONES, 1406, 747, 64, 51],
+  ground128: [SHEET.GROUND_STONES, 1474, 733, 182, 141],
+  ground129: [SHEET.GROUND_STONES, 212, 824, 41, 28],
+  ground130: [SHEET.GROUND_STONES, 246, 816, 150, 106],
+  ground131: [SHEET.GROUND_STONES, 398, 808, 38, 28],
+  ground132: [SHEET.GROUND_STONES, 527, 829, 86, 71],
+  ground133: [SHEET.GROUND_STONES, 957, 811, 48, 35],
+  ground134: [SHEET.GROUND_STONES, 1020, 803, 138, 115],
+  ground135: [SHEET.GROUND_STONES, 1308, 837, 125, 82],
+  ground136: [SHEET.GROUND_STONES, 13, 871, 60, 38],
+  ground137: [SHEET.GROUND_STONES, 162, 880, 57, 40],
+  ground138: [SHEET.GROUND_STONES, 427, 847, 71, 62],
+  ground139: [SHEET.GROUND_STONES, 625, 874, 56, 46],
+  ground140: [SHEET.GROUND_STONES, 727, 855, 93, 61],
+  ground141: [SHEET.GROUND_STONES, 839, 863, 60, 46],
+  ground142: [SHEET.GROUND_STONES, 918, 862, 75, 48],
+  ground143: [SHEET.GROUND_STONES, 1181, 865, 71, 47],
+  ground144: [SHEET.GROUND_STONES, 1264, 842, 37, 28],
+  ground145: [SHEET.GROUND_STONES, 1455, 880, 36, 27],
+  ground146: [SHEET.GROUND_STONES, 1598, 877, 50, 34],
+  jointMound0: [SHEET.JOINTS, 11, 10, 257, 122],
+  jointMound1: [SHEET.JOINTS, 287, 16, 180, 104],
+  jointMound2: [SHEET.JOINTS, 485, 19, 188, 106],
+  jointMound3: [SHEET.JOINTS, 697, 10, 199, 113],
+  jointMound4: [SHEET.JOINTS, 909, 6, 227, 114],
+  jointMound5: [SHEET.JOINTS, 1155, 22, 171, 99],
+  jointMound6: [SHEET.JOINTS, 1379, 11, 208, 101],
+  jointMound7: [SHEET.JOINTS, 1601, 25, 165, 86],
+  jointMound8: [SHEET.JOINTS, 1226, 75, 250, 133],
+  jointMound9: [SHEET.JOINTS, 23, 142, 161, 92],
+  jointMound10: [SHEET.JOINTS, 196, 135, 151, 86],
+  jointMound11: [SHEET.JOINTS, 365, 139, 145, 92],
+  jointMound12: [SHEET.JOINTS, 530, 127, 144, 100],
+  jointMound13: [SHEET.JOINTS, 688, 136, 104, 77],
+  jointMound14: [SHEET.JOINTS, 811, 137, 172, 74],
+  jointMound15: [SHEET.JOINTS, 1002, 135, 201, 85],
+  jointMound16: [SHEET.JOINTS, 1496, 130, 244, 90],
+  jointBed0: [SHEET.JOINTS, 563, 222, 358, 106],
+  jointBed1: [SHEET.JOINTS, 1308, 222, 453, 104],
+  jointBed2: [SHEET.JOINTS, 11, 251, 546, 115],
+  jointBed3: [SHEET.JOINTS, 934, 250, 364, 109],
+  jointBed4: [SHEET.JOINTS, 348, 337, 557, 117],
+  jointBed5: [SHEET.JOINTS, 853, 346, 542, 127],
+  jointBed6: [SHEET.JOINTS, 1409, 333, 349, 122],
+  jointBed7: [SHEET.JOINTS, 12, 372, 372, 106],
+  jointWedge0: [SHEET.JOINTS, 20, 492, 172, 112],
+  jointWedge1: [SHEET.JOINTS, 178, 521, 166, 58],
+  jointWedge2: [SHEET.JOINTS, 316, 483, 220, 129],
+  jointWedge3: [SHEET.JOINTS, 500, 476, 151, 113],
+  jointWedge4: [SHEET.JOINTS, 612, 524, 192, 74],
+  jointWedge5: [SHEET.JOINTS, 779, 491, 225, 122],
+  jointWedge6: [SHEET.JOINTS, 974, 492, 177, 115],
+  jointWedge7: [SHEET.JOINTS, 1170, 495, 173, 114],
+  jointWedge8: [SHEET.JOINTS, 1366, 476, 187, 126],
+  jointWedge9: [SHEET.JOINTS, 1545, 481, 214, 105],
+  jointPatch0: [SHEET.JOINTS, 14, 614, 380, 189],
+  jointPatch1: [SHEET.JOINTS, 391, 645, 175, 74],
+  jointPatch2: [SHEET.JOINTS, 498, 622, 299, 207],
+  jointPatch3: [SHEET.JOINTS, 826, 630, 122, 67],
+  jointPatch4: [SHEET.JOINTS, 941, 633, 299, 171],
+  jointPatch5: [SHEET.JOINTS, 1204, 636, 73, 46],
+  jointPatch6: [SHEET.JOINTS, 1285, 619, 234, 118],
+  jointPatch7: [SHEET.JOINTS, 1585, 616, 176, 74],
+  jointPatch8: [SHEET.JOINTS, 1437, 694, 320, 175],
+  jointPatch9: [SHEET.JOINTS, 701, 724, 208, 127],
+  jointPatch10: [SHEET.JOINTS, 1138, 754, 273, 113],
+  jointPatch11: [SHEET.JOINTS, 19, 786, 101, 77],
+  jointPatch12: [SHEET.JOINTS, 135, 828, 55, 46],
+  jointPatch13: [SHEET.JOINTS, 200, 815, 79, 57],
+  jointPatch14: [SHEET.JOINTS, 337, 779, 169, 81],
+  jointPatch15: [SHEET.JOINTS, 468, 819, 79, 54],
+  jointPatch16: [SHEET.JOINTS, 896, 803, 103, 64],
+  jointPatch17: [SHEET.JOINTS, 1645, 815, 103, 58],
+  groundArc0: [SHEET.GROUND_JOINTS, 31, 15, 88, 35],
+  groundArc1: [SHEET.GROUND_JOINTS, 144, 17, 75, 31],
+  groundArc2: [SHEET.GROUND_JOINTS, 242, 17, 73, 36],
+  groundArc3: [SHEET.GROUND_JOINTS, 331, 13, 73, 35],
+  groundArc4: [SHEET.GROUND_JOINTS, 421, 15, 91, 39],
+  groundArc5: [SHEET.GROUND_JOINTS, 531, 12, 110, 42],
+  groundArc6: [SHEET.GROUND_JOINTS, 664, 12, 114, 44],
+  groundArc7: [SHEET.GROUND_JOINTS, 796, 11, 103, 44],
+  groundArc8: [SHEET.GROUND_JOINTS, 916, 10, 88, 40],
+  groundArc9: [SHEET.GROUND_JOINTS, 1017, 8, 129, 55],
+  groundArc10: [SHEET.GROUND_JOINTS, 1162, 8, 105, 63],
+  groundArc11: [SHEET.GROUND_JOINTS, 1282, 9, 119, 46],
+  groundArc12: [SHEET.GROUND_JOINTS, 1417, 7, 100, 51],
+  groundArc13: [SHEET.GROUND_JOINTS, 1548, 10, 113, 49],
+  groundArc14: [SHEET.GROUND_JOINTS, 1677, 8, 95, 55],
+  groundArc15: [SHEET.GROUND_JOINTS, 1789, 8, 110, 50],
+  groundArc16: [SHEET.GROUND_JOINTS, 17, 88, 58, 33],
+  groundArc17: [SHEET.GROUND_JOINTS, 92, 78, 85, 42],
+  groundArc18: [SHEET.GROUND_JOINTS, 191, 75, 93, 45],
+  groundArc19: [SHEET.GROUND_JOINTS, 300, 72, 106, 54],
+  groundArc20: [SHEET.GROUND_JOINTS, 422, 74, 111, 48],
+  groundArc21: [SHEET.GROUND_JOINTS, 549, 75, 109, 48],
+  groundArc22: [SHEET.GROUND_JOINTS, 676, 72, 127, 54],
+  groundArc23: [SHEET.GROUND_JOINTS, 817, 73, 153, 60],
+  groundArc24: [SHEET.GROUND_JOINTS, 986, 75, 140, 51],
+  groundArc25: [SHEET.GROUND_JOINTS, 1153, 80, 125, 44],
+  groundArc26: [SHEET.GROUND_JOINTS, 1295, 72, 136, 59],
+  groundArc27: [SHEET.GROUND_JOINTS, 1449, 71, 139, 58],
+  groundArc28: [SHEET.GROUND_JOINTS, 1619, 79, 134, 45],
+  groundArc29: [SHEET.GROUND_JOINTS, 1774, 77, 123, 51],
+  groundArc30: [SHEET.GROUND_JOINTS, 15, 148, 116, 53],
+  groundArc31: [SHEET.GROUND_JOINTS, 147, 149, 103, 52],
+  groundArc32: [SHEET.GROUND_JOINTS, 264, 149, 110, 51],
+  groundArc33: [SHEET.GROUND_JOINTS, 392, 149, 123, 53],
+  groundArc34: [SHEET.GROUND_JOINTS, 531, 149, 126, 52],
+  groundArc35: [SHEET.GROUND_JOINTS, 673, 151, 131, 51],
+  groundArc36: [SHEET.GROUND_JOINTS, 823, 142, 163, 70],
+  groundArc37: [SHEET.GROUND_JOINTS, 999, 146, 149, 67],
+  groundArc38: [SHEET.GROUND_JOINTS, 1165, 153, 154, 61],
+  groundArc39: [SHEET.GROUND_JOINTS, 1333, 147, 177, 64],
+  groundArc40: [SHEET.GROUND_JOINTS, 1525, 149, 175, 64],
+  groundArc41: [SHEET.GROUND_JOINTS, 1713, 148, 184, 66],
+  groundArc42: [SHEET.GROUND_JOINTS, 14, 228, 179, 69],
+  groundArc43: [SHEET.GROUND_JOINTS, 390, 228, 179, 77],
+  groundArc44: [SHEET.GROUND_JOINTS, 586, 224, 201, 89],
+  groundArc45: [SHEET.GROUND_JOINTS, 808, 217, 206, 98],
+  groundArc46: [SHEET.GROUND_JOINTS, 1033, 224, 172, 103],
+  groundArc47: [SHEET.GROUND_JOINTS, 1599, 229, 155, 77],
+  groundArc48: [SHEET.GROUND_JOINTS, 1772, 221, 134, 95],
+  groundArc49: [SHEET.GROUND_JOINTS, 212, 236, 160, 61],
+  groundArc50: [SHEET.GROUND_JOINTS, 1219, 234, 143, 83],
+  groundArc51: [SHEET.GROUND_JOINTS, 1378, 237, 204, 63],
+  groundArc52: [SHEET.GROUND_JOINTS, 14, 322, 109, 72],
+  groundArc53: [SHEET.GROUND_JOINTS, 124, 329, 149, 63],
+  groundArc54: [SHEET.GROUND_JOINTS, 290, 329, 150, 64],
+  groundArc55: [SHEET.GROUND_JOINTS, 457, 326, 194, 84],
+  groundArc56: [SHEET.GROUND_JOINTS, 668, 325, 208, 84],
+  groundArc57: [SHEET.GROUND_JOINTS, 894, 324, 266, 70],
+  groundArc58: [SHEET.GROUND_JOINTS, 1188, 326, 219, 89],
+  groundArc59: [SHEET.GROUND_JOINTS, 1421, 321, 150, 98],
+  groundArc60: [SHEET.GROUND_JOINTS, 1587, 329, 159, 71],
+  groundArc61: [SHEET.GROUND_JOINTS, 1761, 325, 143, 68],
+  groundArc62: [SHEET.GROUND_JOINTS, 13, 411, 185, 96],
+  groundArc63: [SHEET.GROUND_JOINTS, 213, 409, 193, 108],
+  groundArc64: [SHEET.GROUND_JOINTS, 1698, 410, 207, 113],
+  groundArc65: [SHEET.GROUND_JOINTS, 426, 419, 198, 78],
+  groundArc66: [SHEET.GROUND_JOINTS, 642, 416, 218, 85],
+  groundArc67: [SHEET.GROUND_JOINTS, 878, 417, 219, 102],
+  groundArc68: [SHEET.GROUND_JOINTS, 1114, 415, 152, 105],
+  groundArc69: [SHEET.GROUND_JOINTS, 1288, 433, 168, 65],
+  groundArc70: [SHEET.GROUND_JOINTS, 1473, 418, 199, 103],
+  groundArc71: [SHEET.GROUND_JOINTS, 13, 526, 192, 126],
+  groundArc72: [SHEET.GROUND_JOINTS, 212, 510, 237, 157],
+  groundArc73: [SHEET.GROUND_JOINTS, 462, 515, 214, 105],
+  groundArc74: [SHEET.GROUND_JOINTS, 692, 518, 276, 132],
+  groundArc75: [SHEET.GROUND_JOINTS, 960, 520, 276, 174],
+  groundArc76: [SHEET.GROUND_JOINTS, 1238, 519, 276, 164],
+  groundArc77: [SHEET.GROUND_JOINTS, 1531, 524, 202, 142],
+  groundArc78: [SHEET.GROUND_JOINTS, 1732, 535, 175, 117],
+  groundHeap0: [SHEET.GROUND_JOINTS, 534, 649, 212, 70],
+  groundHeap1: [SHEET.GROUND_JOINTS, 17, 669, 185, 55],
+  groundHeap2: [SHEET.GROUND_JOINTS, 226, 687, 97, 44],
+  groundHeap3: [SHEET.GROUND_JOINTS, 347, 655, 161, 66],
+  groundHeap4: [SHEET.GROUND_JOINTS, 776, 669, 168, 59],
+  groundHeap5: [SHEET.GROUND_JOINTS, 1001, 677, 121, 52],
+  groundHeap6: [SHEET.GROUND_JOINTS, 1139, 668, 129, 53],
+  groundHeap7: [SHEET.GROUND_JOINTS, 1305, 667, 147, 54],
+  groundHeap8: [SHEET.GROUND_JOINTS, 1477, 672, 141, 47],
+  groundHeap9: [SHEET.GROUND_JOINTS, 1647, 673, 137, 47],
+  groundHeap10: [SHEET.GROUND_JOINTS, 1791, 679, 103, 39],
+  groundHeap11: [SHEET.GROUND_JOINTS, 17, 768, 61, 34],
+  groundHeap12: [SHEET.GROUND_JOINTS, 90, 756, 87, 45],
+  groundHeap13: [SHEET.GROUND_JOINTS, 188, 756, 100, 46],
+  groundHeap14: [SHEET.GROUND_JOINTS, 302, 752, 142, 51],
+  groundHeap15: [SHEET.GROUND_JOINTS, 468, 740, 199, 67],
+  groundHeap16: [SHEET.GROUND_JOINTS, 691, 738, 213, 69],
+  groundHeap17: [SHEET.GROUND_JOINTS, 927, 740, 222, 70],
+  groundHeap18: [SHEET.GROUND_JOINTS, 1174, 742, 208, 67],
+  groundHeap19: [SHEET.GROUND_JOINTS, 1413, 729, 254, 77],
+  groundHeap20: [SHEET.GROUND_JOINTS, 1696, 743, 197, 62],
+  float0: [SHEET.FLOATS, 1184, 712, 92, 82],
+  float1: [SHEET.FLOATS, 26, 453, 104, 85],
+  float2: [SHEET.FLOATS, 35, 30, 123, 95],
+  float3: [SHEET.FLOATS, 231, 300, 124, 90],
+  float4: [SHEET.FLOATS, 969, 517, 128, 72],
+  float5: [SHEET.FLOATS, 611, 712, 133, 99],
+  float6: [SHEET.FLOATS, 437, 504, 139, 83],
+  float7: [SHEET.FLOATS, 1038, 23, 165, 108],
+  float8: [SHEET.FLOATS, 198, 27, 171, 107],
+  float9: [SHEET.FLOATS, 1206, 291, 177, 116],
+  float10: [SHEET.FLOATS, 15, 306, 177, 123],
+  float11: [SHEET.FLOATS, 1213, 563, 189, 122],
+  float12: [SHEET.FLOATS, 586, 170, 192, 99],
+  float13: [SHEET.FLOATS, 1093, 427, 197, 115],
+  float14: [SHEET.FLOATS, 685, 302, 198, 95],
+  float15: [SHEET.FLOATS, 371, 710, 199, 97],
+  float16: [SHEET.FLOATS, 1111, 160, 203, 119],
+  float17: [SHEET.FLOATS, 1434, 593, 221, 94],
+  float18: [SHEET.FLOATS, 1430, 324, 224, 92],
+  float19: [SHEET.FLOATS, 418, 292, 224, 123],
   grow0: [SHEET.PLANTS, 9, 60, 128, 76],
   grow1: [SHEET.PLANTS, 139, 38, 105, 95],
   grow2: [SHEET.PLANTS, 242, 21, 177, 114],
@@ -291,34 +600,52 @@ const PIECES = {
   tiny21: [SHEET.PLANTS, 1357, 964, 37, 41],
   tiny22: [SHEET.PLANTS, 1410, 964, 43, 42],
   tiny23: [SHEET.PLANTS, 1466, 963, 55, 43]
+
 }
 const sheets = new Map()
 const pieces = new Map()
+const scaledPieces = new Map()
+const shadedPieces = new Map()
+const profiles = new Map()
+const matches = new Map()
+let block = null
+let blockMean = null
 let loading = null
-
 //
-// Platform pieces by kind (flat slabs, chunky blocks, rising and falling
-// slopes, platforms with hanging drips), the loose stones of the platforms
-// sheet and the forest's ground stones. Plants are named by how they grow:
-// up from the ground (grow, shroom, bush, sprout, tiny), out of a wall
-// sideways (side), hanging down (hang).
+// The stones of ground_stones.png and of stones.png, their joints, the top
+// strips. Plants are named by how they grow: up from the ground
+// (grow, shroom, bush, sprout, tiny), out of a wall sideways (side: their
+// root on the left, growing right), hanging down (hang).
 //
-export const FLATS = pieceNames('flat')
-export const BLOCKS = pieceNames('block')
-export const RISES = pieceNames('rise')
-export const FALLS = pieceNames('fall')
-export const CONES = pieceNames('cone')
-export const ROCKS = pieceNames('rock')
 export const GROUND_ROCKS = pieceNames('ground')
+export const ROCKS = pieceNames('rock')
+export const JOINT_MOUNDS = pieceNames('jointMound')
+export const JOINT_BEDS = pieceNames('jointBed')
+export const JOINT_LOOSE = [...pieceNames('jointWedge'), ...pieceNames('jointPatch')]
+export const GROUND_ARCS = pieceNames('groundArc')
+export const GROUND_HEAPS = pieceNames('groundHeap')
+export const TOPS = pieceNames('top')
+export const FLOATS = pieceNames('float')
 
 /**
- * Loads every sheet (once per page).
+ * Names of the pieces called prefix + number (plants by how they grow:
+ * 'grow', 'hang', 'side'...).
+ * @param {string} prefix - Name prefix
+ * @returns {Array<string>}
+ */
+export function pieceNames(prefix) {
+  return Object.keys(PIECES).filter(name => new RegExp(`^${prefix}\\d+$`).test(name))
+}
+
+/**
+ * Loads every sheet and the soil block (once per page).
  * @returns {Promise<void>}
  */
 export function load() {
-  const keys = Object.keys(SHEET_URLS)
-  loading ??= Promise.all(keys.map(key => loadPictureImage(SHEET_URLS[key]))).then(images => {
-    images.forEach((img, i) => img && sheets.set(keys[i], img))
+  const keys = Object.keys(SHEETS)
+  loading ??= Promise.all([...keys.map(key => loadPictureImage(SHEETS[key].url)), loadPictureImage(BLOCK_URL), loadForestGroundElements()]).then(images => {
+    keys.forEach((key, i) => images[i] && sheets.set(key, images[i]))
+    block = images[keys.length]
   })
   return loading
 }
@@ -328,59 +655,104 @@ export function load() {
  * @returns {boolean}
  */
 export function isLoaded() {
-  return sheets.size === Object.keys(SHEET_URLS).length
+  return sheets.size === Object.keys(SHEETS).length && Boolean(block) && forestBuriedElements().length > 0
 }
 
 /**
- * A platform piece's rim in its own pixels: its left end (rimL, top) and
- * right end (rimR, topR — the same as top on a flat one).
- * @param {string} name - PIECES key of a platform
- * @returns {{w: number, h: number, top: number, rimL: number, rimR: number, topR: number}}
+ * The seamless soil block (ground_block.png) every soil mass is tiled
+ * with; null before load().
+ * @returns {HTMLImageElement|null}
  */
-export function platformRim(name) {
-  const [, , , w, h, top, rimL, rimR, topR] = PIECES[name]
-  return { w, h, top, rimL, rimR, topR: topR ?? top }
+export function soilBlock() {
+  return block
 }
 
 /**
- * Draws a piece with its top-left at x / y, scaled, optionally mirrored.
- * @param {CanvasRenderingContext2D} ctx - Target context (world-translated)
+ * Mean colour of the soil block (what the soil sheets are matched to).
+ * @returns {{r: number, g: number, b: number}}
+ */
+export function soilColor() {
+  const [r, g, b] = soilMean()
+  return { r, g, b }
+}
+
+/**
+ * The forest's buried elements (bones, fossils, shells...), cut at sheet
+ * size; empty before load().
+ * @returns {Array<HTMLCanvasElement>}
+ */
+export function elements() {
+  return forestBuriedElements()
+}
+
+/**
+ * A piece's outline per column of its own pixels: the first and the last
+ * solid row (NaN where the column is empty).
  * @param {string} name - PIECES key
- * @param {number} x - Left X
- * @param {number} y - Top Y
- * @param {number} scale - World px per sheet px
- * @param {boolean} [flip=false] - Mirror horizontally (in place)
+ * @returns {{top: Float32Array, bottom: Float32Array}|null}
  */
-export function drawScaled(ctx, name, x, y, scale, flip = false) {
-  drawStretched(ctx, name, x, y, scale, scale, flip)
-}
-
-/**
- * Draws a piece with its top-left at x / y, scaled apart on each axis (a
- * slope fitted to a rise), optionally mirrored.
- * @param {CanvasRenderingContext2D} ctx - Target context (world-translated)
- * @param {string} name - PIECES key
- * @param {number} x - Left X
- * @param {number} y - Top Y
- * @param {number} sx - Horizontal scale
- * @param {number} sy - Vertical scale
- * @param {boolean} [flip=false] - Mirror horizontally (in place)
- */
-export function drawStretched(ctx, name, x, y, sx, sy, flip = false) {
+export function profile(name) {
+  if (profiles.has(name)) return profiles.get(name)
   const src = piece(name)
+  if (!src) return null
+  const { width: w, height: h } = src
+  const data = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data
+  const top = new Float32Array(w).fill(NaN)
+  const bottom = new Float32Array(w).fill(NaN)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * RGBA + 3] < SOLID_ALPHA) continue
+      Number.isNaN(top[x]) && (top[x] = y)
+      bottom[x] = y
+    }
+  }
+  const out = { top, bottom }
+  profiles.set(name, out)
+  return out
+}
+
+/**
+ * Draws columns u…u+w of a piece (optionally mirrored, so column 0 of the
+ * slice is its right end on the sheet), scaled and turned round a pivot
+ * of the slice that lands on x / y.
+ * @param {CanvasRenderingContext2D} ctx - Target context (world-translated)
+ * @param {string} name - PIECES key
+ * @param {Object} slice
+ * @param {number} slice.u - First sheet column of the slice (in the piece)
+ * @param {number} slice.w - Columns in the slice
+ * @param {boolean} [slice.flip=false] - Mirrored
+ * @param {boolean} [slice.flipY=false] - Upside down
+ * @param {number} slice.scale - World px per piece px
+ * @param {number} slice.angle - Turn (radians)
+ * @param {number} slice.px - Pivot X in the slice (piece px, from its left as drawn)
+ * @param {number} slice.py - Pivot Y in the slice (piece px)
+ * @param {number} slice.x - World X of the pivot
+ * @param {number} slice.y - World Y of the pivot
+ * @param {HTMLCanvasElement} [slice.src] - A prepared copy of the piece to draw instead
+ * @param {number} [slice.alpha=1] - Opacity
+ */
+export function drawSlice(ctx, name, slice) {
+  const src = slice.src ?? piece(name)
   if (!src) return
-  const w = src.width * sx
+  const h = src.height
   ctx.save()
+  ctx.globalAlpha = slice.alpha ?? 1
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
-  ctx.translate(flip ? x + w : x, y)
-  flip && ctx.scale(-1, 1)
-  ctx.drawImage(src, 0, 0, w, src.height * sy)
+  ctx.translate(slice.x, slice.y)
+  ctx.rotate(slice.angle)
+  ctx.scale(slice.scale, slice.scale)
+  ctx.translate(-slice.px, -slice.py)
+  slice.flip && ctx.translate(slice.w, 0)
+  slice.flip && ctx.scale(-1, 1)
+  slice.flipY && ctx.translate(0, h)
+  slice.flipY && ctx.scale(1, -1)
+  ctx.drawImage(src, slice.u, 0, slice.w, h, 0, 0, slice.w, h)
   ctx.restore()
 }
 
 /**
- * A cut piece with its haze and fringes removed (null before load()).
+ * A cut piece, prepared for its sheet (null before load()).
  * @param {string} name - PIECES key
  * @returns {HTMLCanvasElement|null}
  */
@@ -389,16 +761,46 @@ export function piece(name) {
   const spec = PIECES[name]
   const img = spec && sheets.get(spec[0])
   if (!img) return null
-  const [, sx, sy, w, h] = spec
+  const [key, sx, sy, w, h] = spec
+  const sheet = SHEETS[key]
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(img, sx, sy, w, h, 0, 0, w, h)
   const image = ctx.getImageData(0, 0, w, h)
-  remapAlpha(image.data)
+  sheet.soil && matchSoil(image.data, soilMatchOf(key), sheet.dewhite && { w, h, sides: OUTER_SIDES[name] ?? '', band: sheet.dewhite })
+  sheet.alpha && remapAlpha(image.data, sheet.alpha)
+  sheet.sharpen && sharpenFades(image.data, sheet.sharpen)
+  sheet.isolate && isolate(image.data, w, h, sheet.isolate)
   ctx.putImageData(image, 0, 0)
   pieces.set(name, canvas)
+  return canvas
+}
+
+/**
+ * A piece resized once to `scale`, maybe mirrored (cached per page), for
+ * bakes that copy it pixel for pixel.
+ * @param {string} name - PIECES key
+ * @param {number} scale - Drawn px per piece px
+ * @param {boolean} [flip=false] - Mirrored
+ * @returns {HTMLCanvasElement|null}
+ */
+export function scaledPiece(name, scale, flip = false) {
+  const key = `${name}@${scale}${flip ? 'f' : ''}`
+  if (scaledPieces.has(key)) return scaledPieces.get(key)
+  const src = piece(name)
+  if (!src) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(src.width * scale))
+  canvas.height = Math.max(1, Math.round(src.height * scale))
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  flip && ctx.translate(canvas.width, 0)
+  flip && ctx.scale(-1, 1)
+  ctx.drawImage(src, 0, 0, canvas.width, canvas.height)
+  scaledPieces.set(key, canvas)
   return canvas
 }
 
@@ -443,7 +845,7 @@ export function drawPiece(ctx, name, x, y, h, opts = {}) {
   const src = piece(name)
   if (!src) return
   const w = widthAt(name, h)
-  const img = opts.shade && opts.shadeAmount > 0 ? shaded(src, opts.shade, opts.shadeAmount) : src
+  const img = opts.shade && opts.shadeAmount > 0 ? shaded(name, src, opts.shade, opts.shadeAmount) : src
   ctx.save()
   ctx.globalAlpha = opts.alpha ?? 1
   ctx.imageSmoothingEnabled = true
@@ -459,20 +861,169 @@ export function drawPiece(ctx, name, x, y, h, opts = {}) {
   ctx.restore()
 }
 //
-// Haze and fringes out: alpha below ALPHA_LO gone, above ALPHA_HI solid.
+// Haze and fringes out: alpha below lo gone, above hi solid.
 //
-function remapAlpha(data) {
-  for (let i = 3; i < data.length; i += 4) {
-    data[i] = Math.max(0, Math.min(BYTE_MAX, (data[i] - ALPHA_LO) * BYTE_MAX / (ALPHA_HI - ALPHA_LO)))
+function remapAlpha(data, [lo, hi]) {
+  for (let i = 3; i < data.length; i += RGBA) {
+    data[i] = Math.max(0, Math.min(BYTE_MAX, (data[i] - lo) * BYTE_MAX / (hi - lo)))
   }
 }
-function pieceNames(prefix) {
-  return Object.keys(PIECES).filter(name => new RegExp(`^${prefix}\\d+$`).test(name))
+//
+// Fades shortened: alpha raised to a power.
+//
+function sharpenFades(data, pow) {
+  for (let i = 3; i < data.length; i += RGBA) data[i] = BYTE_MAX * Math.pow(data[i] / BYTE_MAX, pow)
 }
 //
-// Copy of a piece pulled toward a colour (its silhouette kept).
+// A soil sheet's colour pulled onto the block's, its fades toward the
+// block's colour; with `dewhite`, its white haze turned into transparency
+// over the block's colour.
 //
-function shaded(src, color, amount) {
+function matchSoil(data, match, dewhite) {
+  const target = soilMean()
+  for (let i = 0; i < data.length; i += RGBA) {
+    const t = dewhite ? whiteShare(data, i, match, dewhite) : 0
+    const keep = Math.max(WHITE_KEEP, 1 - t)
+    const alpha = data[i + 3] * Math.pow(Math.max(0, 1 - t * WHITE_ALPHA_GAIN), WHITE_FADE_POW)
+    const toSoil = 1 - Math.pow(alpha / BYTE_MAX, FADE_POW)
+    for (let c = 0; c < 3; c++) {
+      const own = Math.max(0, (data[i + c] - BYTE_MAX * t) / keep) * match.gain[c]
+      data[i + c] = own + (target[c] - own) * toSoil
+    }
+    data[i + 3] = alpha
+  }
+}
+//
+// A pixel's white share (see WHITE_FADE_POW).
+//
+function whiteShare(data, i, match, piece) {
+  const p = i / RGBA
+  const x = p % piece.w
+  const y = (p - x) / piece.w
+  const fromOuter = Math.min(
+    piece.sides.includes('l') ? x : Infinity,
+    piece.sides.includes('r') ? piece.w - 1 - x : Infinity,
+    piece.sides.includes('t') ? y : Infinity,
+    piece.sides.includes('b') ? piece.h - 1 - y : Infinity
+  )
+  const lum = (data[i] + data[i + 1] + data[i + 2]) / 3
+  const share = Math.max(0, Math.min(1, (lum - match.lum) / (BYTE_MAX - match.lum)))
+  if (data[i + 3] < HAZE_ALPHA) return share
+  return share * Math.max(0, Math.min(1, (fromOuter - piece.band) / OUTER_SOFT))
+}
+//
+// A sheet's soil: the per-channel gain that takes its mean onto the
+// block's and its own mean luminance (once per sheet).
+//
+function soilMatchOf(key) {
+  if (matches.has(key)) return matches.get(key)
+  const target = soilMean()
+  const mean = meanSoil(imageData(sheets.get(key)))
+  const match = { gain: mean.map((m, c) => m ? target[c] / m : 1), lum: (mean[0] + mean[1] + mean[2]) / 3 }
+  matches.set(key, match)
+  return match
+}
+function soilMean() {
+  blockMean ??= meanSoil(imageData(block))
+  return blockMean
+}
+function imageData(img) {
+  const canvas = document.createElement('canvas')
+  canvas.width = img.width
+  canvas.height = img.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(img, 0, 0)
+  return ctx.getImageData(0, 0, img.width, img.height).data
+}
+//
+// Mean colour of the opaque, dark (soil) pixels.
+//
+function meanSoil(data) {
+  const sum = [0, 0, 0]
+  let n = 0
+  for (let i = 0; i < data.length; i += RGBA * SAMPLE_STEP) {
+    if (data[i + 3] < SOIL_ALPHA_MIN || (data[i] + data[i + 1] + data[i + 2]) / 3 >= SOIL_LUM_MAX) continue
+    sum[0] += data[i]
+    sum[1] += data[i + 1]
+    sum[2] += data[i + 2]
+    n++
+  }
+  return sum.map(s => n ? s / n : 0)
+}
+//
+// Only the piece's own island stays: the biggest solid island and `keep`
+// px round it; whatever else reaches into the box is cleared.
+//
+function isolate(data, w, h, opts) {
+  const solid = new Uint8Array(w * h)
+  for (let p = 0; p < w * h; p++) solid[p] = data[p * RGBA + 3] >= opts.alpha ? 1 : 0
+  const label = new Int32Array(w * h)
+  let best = 0
+  let bestSize = 0
+  let id = 0
+  for (let p = 0; p < w * h; p++) {
+    if (!solid[p] || label[p]) continue
+    id++
+    const size = floodFill(solid, label, w, h, p, id)
+    size > bestSize && (best = id)
+    bestSize = Math.max(bestSize, size)
+  }
+  const own = new Uint8Array(w * h)
+  for (let p = 0; p < w * h; p++) own[p] = label[p] === best ? 1 : 0
+  const kept = dilate(dilate(own, w, h, opts.keep, 1, w), w, h, opts.keep, w, 1)
+  for (let p = 0; p < w * h; p++) kept[p] || (data[p * RGBA + 3] = 0)
+}
+//
+// Labels the solid island round `start` (8-connected); its size.
+//
+function floodFill(solid, label, w, h, start, id) {
+  const stack = [start]
+  label[start] = id
+  let size = 0
+  while (stack.length) {
+    const p = stack.pop()
+    size++
+    const x = p % w
+    const y = (p - x) / w
+    for (const [dx, dy] of NEIGHBOURS) {
+      const nx = x + dx
+      const ny = y + dy
+      const q = ny * w + nx
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || !solid[q] || label[q]) continue
+      label[q] = id
+      stack.push(q)
+    }
+  }
+  return size
+}
+//
+// A mask grown by r along one axis (step: index distance between
+// neighbours along it, line: between lines across it).
+//
+function dilate(mask, w, h, r, step, line) {
+  const out = new Uint8Array(w * h)
+  const along = step === 1 ? w : h
+  const lines = step === 1 ? h : w
+  for (let l = 0; l < lines; l++) {
+    let last = -Infinity
+    let next = Infinity
+    for (let i = along - 1; i >= 0; i--) {
+      mask[l * line + i * step] && (next = i)
+      out[l * line + i * step] = next - i <= r ? 1 : 0
+    }
+    for (let i = 0; i < along; i++) {
+      mask[l * line + i * step] && (last = i)
+      i - last <= r && (out[l * line + i * step] = 1)
+    }
+  }
+  return out
+}
+//
+// Copy of a piece pulled toward a colour (its silhouette kept), cached.
+//
+function shaded(name, src, color, amount) {
+  const key = `${name}|${color}|${amount}`
+  if (shadedPieces.has(key)) return shadedPieces.get(key)
   const canvas = document.createElement('canvas')
   canvas.width = src.width
   canvas.height = src.height
@@ -482,5 +1033,6 @@ function shaded(src, color, amount) {
   ctx.globalAlpha = amount
   ctx.fillStyle = color
   ctx.fillRect(0, 0, canvas.width, canvas.height)
+  shadedPieces.set(key, canvas)
   return canvas
 }

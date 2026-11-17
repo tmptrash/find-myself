@@ -6,6 +6,7 @@ import * as Backdrop from '../utils/cave-backdrop.js'
 import * as Glow from '../utils/cave-glow.js'
 import * as Layout from '../utils/cave-layout.js'
 import * as Scene from '../utils/cave-scene.js'
+import * as Ground from '../utils/cave-ground.js'
 import { LANTERN_H, LANTERN_PIECE } from './cave-lantern.js'
 //
 // A glimpse of the cave from the forest: when the eye-flower's roots have
@@ -128,7 +129,7 @@ function bake(k) {
   ctx.translate(-RECT.x1, -RECT.y1)
   Backdrop.paintBackdrop(ctx, RECT)
   Scene.paintTerrain(ctx, RECT)
-  Atlas.drawPiece(ctx, LANTERN_PIECE, Layout.LANTERN.x, Layout.LANTERN.y + LANTERN_SINK, LANTERN_H, {
+  Atlas.drawPiece(ctx, LANTERN_PIECE, Layout.LANTERN.x, Ground.topAt(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) + LANTERN_SINK, LANTERN_H, {
     shade: CAVE_CFG.colors.frame,
     shadeAmount: LANTERN_SHADE
   })

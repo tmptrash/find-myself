@@ -313,9 +313,13 @@ const GRAB_SOFT_LEN_PASSES = 2
 //
 // Coil: a band around the body seen slightly from above (flat ellipse)
 // that winds down the body over its turns; links on its lower half pass in
-// front of him.
+// front of him. Across it hugs his contour (GRAB_HERO_HALF_W, the hero's
+// half width with its outline, narrowed as the coils squash him) and
+// turns GRAB_BAND_OUTSIDE px out past it on both sides, so the vine bends
+// round him just outside his edge, never on or inside it.
 //
-const GRAB_BAND_RX = 17
+const GRAB_HERO_HALF_W = 17.5
+const GRAB_BAND_OUTSIDE = 2.5
 const GRAB_BAND_RY = 5
 const GRAB_BAND_SPIRAL = 26
 const TAU = Math.PI * 2
@@ -536,6 +540,7 @@ export function create(cfg) {
  * @param {number} prey.y - Body centre Y
  * @param {number} prey.scale - Hero sprite scale (band size)
  * @param {number} prey.angle - Body rotation in radians
+ * @param {number} [prey.squash=0] - How much he is squeezed thin (his width shrinks by it)
  * @param {number} clipY - Ground line: vine parts below it are hidden once the pull starts
  */
 export function startGrab(inst, prey, clipY) {
@@ -990,7 +995,7 @@ function coilPointInto(out, inst, tent, s) {
   const pulse = hauling ? GRAB_SQUEEZE_PULSE * (0.5 + 0.5 * Math.sin(grab.time * GRAB_SQUEEZE_PULSE_SPEED + tent.delay * TAU)) : 0
   const squeeze = 1 - GRAB_SQUEEZE * wrapE - pulse
   const a = (grab.side > 0 ? Math.PI : 0) + tent.wrapDir * s * tent.turns * TAU * wrapE
-  const lx = Math.cos(a) * GRAB_BAND_RX * scale * squeeze
+  const lx = Math.cos(a) * (GRAB_HERO_HALF_W * (1 - (prey.squash ?? 0)) + GRAB_BAND_OUTSIDE) * scale
   const ly = (tent.bandDY + Math.sin(a) * GRAB_BAND_RY * squeeze + s * GRAB_BAND_SPIRAL * wrapE) * scale
   const cos = Math.cos(prey.angle)
   const sin = Math.sin(prey.angle)

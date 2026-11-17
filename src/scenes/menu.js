@@ -29,16 +29,17 @@ import * as TreeFruit from '../sections/forest/utils/forest-tree-fruit.js'
 import { bakeLeftTreeApple, leftTreeApplePicture, leftTreeApples } from '../sections/forest/utils/forest-left-tree.js'
 import { createForestMidges, updateForestMidges } from '../sections/forest/utils/forest-level-atmosphere.js'
 import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
-import * as CaveLantern from '../sections/cave/components/cave-lantern.js'
+import * as CaveMenuStalkEye from '../sections/cave/components/cave-menu-stalk-eye.js'
 import * as CaveAtlas from '../sections/cave/utils/cave-atlas.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
+import { paintPlate } from '../sections/cave/utils/cave-plate.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import * as QuestionDrift from '../components/question-drift.js'
 import { addForestFilmGrainOverlayLayer, applyForestFilmGrainToCanvas } from '../sections/forest/utils/forest-parallax-grain.js'
 //
 // Level list: a vertical column of levels, the hero standing left of it as
 // the cursor. A level the player can enter shows its picture (the forest's
-// stalk-eye, the cave's lantern mushroom); every other level is a
+// stalk-eye, the cave's thorny stalk-eye); every other level is a
 // "?" crossed by the red prohibition sign. A level hidden until reached
 // shows a plain "?" (and cannot be entered) until the hero has got there,
 // over a black backdrop of
@@ -50,15 +51,11 @@ const BACKDROP_CAVE = 'cave'
 const BACKDROP_NIGHT = 'night'
 const BACKDROP_MYSTERY = 'mystery'
 const LEVEL_ICON_EYE_STALK = 'eyeStalk'
-const LEVEL_ICON_GLOW_MUSHROOM = 'glowMushroom'
+const LEVEL_ICON_CAVE_STALK = 'caveStalk'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
 const FOREST_FIRST_LESSON = 'lesson-forest.0'
 const CAVE_LESSON_PREFIX = 'lesson-cave.'
 const CAVE_FIRST_LESSON = 'lesson-cave.0'
-//
-// Cave icon: the level's lantern mushroom, lit, standing on the row.
-//
-const MENU_GLOW_MUSHROOM_SCALE = 0.8
 const LEVELS = [
   {
     section: 'forest',
@@ -70,7 +67,7 @@ const LEVELS = [
   },
   {
     section: 'cave',
-    icon: LEVEL_ICON_GLOW_MUSHROOM,
+    icon: LEVEL_ICON_CAVE_STALK,
     hiddenUntilReached: true,
     backdrop: BACKDROP_CAVE,
     dialog: ConfirmDialog.LOOKS.CAVE,
@@ -512,28 +509,25 @@ function computeMenuLayout(k) {
   }
 }
 //
-// The forest icon is one of the level's stalk-eyes cut short; its pupil
-// follows the hero (no size pulse on selection).
+// The forest icon is one of the level's stalk-eyes cut short, the cave's
+// one of its thorny stalk-eyes; their pupils follow the hero.
 //
 function createMenuEyeStalks(inst) {
-  const { k } = inst
-  inst.levels.filter(level => level.icon === LEVEL_ICON_EYE_STALK).forEach(level => {
-    const pose = { x: inst.layout.columnX, y: level.y, scale: 1 }
-    MenuEyeStalk.create({
-      k,
-      z: MENU_ICON_Z,
-      getPose: () => {
-        pose.scale = inst.layout.s * level.selectScale
-        return pose
-      },
-      getLookAt: () => inst.heroInst.character.pos,
-      isVisible: () => !inst.isLeavingScene
-    })
-  })
-  inst.glowMushrooms = inst.levels.filter(level => level.icon === LEVEL_ICON_GLOW_MUSHROOM && !level.mystery).map(level => ({
-    level,
-    mushroom: CaveLantern.create({ k, x: inst.layout.columnX, y: level.y, collide: false, lit: true })
-  }))
+  inst.levels.filter(level => level.icon === LEVEL_ICON_EYE_STALK).forEach(level => MenuEyeStalk.create(stalkIconCfg(inst, level)))
+  inst.levels.filter(level => level.icon === LEVEL_ICON_CAVE_STALK && !level.mystery).forEach(level => CaveMenuStalkEye.create(stalkIconCfg(inst, level)))
+}
+function stalkIconCfg(inst, level) {
+  const pose = { x: inst.layout.columnX, y: level.y, scale: 1 }
+  return {
+    k: inst.k,
+    z: MENU_ICON_Z,
+    getPose: () => {
+      pose.scale = inst.layout.s * level.selectScale
+      return pose
+    },
+    getLookAt: () => inst.heroInst.character.pos,
+    isVisible: () => !inst.isLeavingScene
+  }
 }
 //
 // Keyboard and mouse bindings. Menu: up/down (w/s) choose, Space enters the
@@ -589,7 +583,7 @@ function openRestartDialog(inst, level, continueOnNo) {
 }
 //
 // The restart question in one look (each level asks in its own: the forest
-// signboard, the cave's pad leaf).
+// signboard, the cave's soil plate).
 //
 function createRestartDialog(inst, look) {
   return ConfirmDialog.create({
@@ -602,7 +596,8 @@ function createRestartDialog(inst, look) {
     defaultYes: true,
     onSelect: () => Sound.playMenuClickSound(inst.sound),
     z: MENU_DIALOG_Z,
-    look
+    look,
+    paintPlate: look === ConfirmDialog.LOOKS.CAVE && CaveAtlas.isLoaded() ? paintPlate : null
   })
 }
 //
@@ -758,10 +753,6 @@ function onUpdate(inst) {
   //
   const hero = inst.heroInst.character
   hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
-  inst.glowMushrooms.forEach(item => {
-    CaveLantern.setStill(item.mushroom, item.level.index !== inst.selected)
-    CaveLantern.onUpdate(item.mushroom, null)
-  })
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
@@ -1012,15 +1003,13 @@ function bakeMenuPanel(w, h, s) {
   return canvas
 }
 //
-// Glowing cave mushrooms (body, then the additive halo), "?" glyphs for
-// locked levels and ones not reached yet (one sprite pass), then the
-// prohibition rings and slashes over the locked ones (one primitive pass) —
-// the forest mushroom icon draws itself.
+// "?" glyphs for locked levels and ones not reached yet (one sprite pass),
+// then the prohibition rings and slashes over the locked ones (one
+// primitive pass) — the stalk-eye icons draw themselves.
 //
 function drawLevelIcons(inst) {
   if (inst.isLeavingScene) return
   const { k, layout } = inst
-  inst.glowMushrooms.forEach(item => drawGlowMushroomIcon(inst, item))
   const locked = inst.levels.filter(level => !level.icon)
   inst.levels.filter(showsQuestionMark).forEach(level => k.drawSprite({
     sprite: questionMarkSpriteName(layout.s),
@@ -1030,18 +1019,6 @@ function drawLevelIcons(inst) {
   }))
   const color = getRGB(k, PROHIBITED_COLOR)
   locked.filter(level => !level.completed).forEach(level => drawProhibitedSign(k, layout.columnX, level.y, layout.s, color))
-}
-//
-// Cave icon: its visible art (cap top to ground) centred on the row; it
-// lives like in the level (now and then it squats).
-//
-function drawGlowMushroomIcon(inst, item) {
-  const { layout } = inst
-  const { level, mushroom } = item
-  const scale = MENU_GLOW_MUSHROOM_SCALE * layout.s * level.selectScale
-  CaveLantern.setPose(mushroom, layout.columnX, level.y + CaveLantern.visibleHeight(scale) / 2, scale)
-  CaveLantern.onDraw(mushroom)
-  CaveLantern.onDrawHalo(mushroom)
 }
 //
 // Red ring with the diagonal slash over a locked level.

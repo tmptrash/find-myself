@@ -5,14 +5,14 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
 import * as Glow from '../utils/cave-glow.js'
 //
-// The lantern mushroom (the plants sheet's big tan mushrooms): it stands
-// dim beside the hero's landing spot. A hero landing on its cap is thrown
-// back up, the cap squashes and springs, and the mushroom lights up — a
-// warm amber halo that fades again over LIGHT_HOLD_SEC. It also serves as
-// the cave's icon in the menu (no cap collider there).
+// The lantern mushroom (the plants sheet's glowing blue mushrooms): it
+// stands dim beside the hero's landing spot. A hero landing on its cap is
+// thrown back up, the cap squashes and springs, and the mushroom lights up
+// — a cold blue halo that fades again over LIGHT_HOLD_SEC. It also serves as
+// the cave's picture behind the menu (no cap collider there).
 //
-const SPRITE = 'cave0-lantern-v2'
-export const LANTERN_PIECE = 'shroom2'
+const SPRITE = 'cave0-lantern-v3'
+export const LANTERN_PIECE = 'shroom4'
 const GRAIN_SEED = 9300
 //
 // Size: drawn height in world px (its cap top stays within one jump), the
@@ -53,7 +53,7 @@ const HALO_Y_SHARE = 0.62
 const BREATH_SPEED = 1.4
 const BREATH_DEPTH = 0.08
 //
-// Menu icon: it idles, now and then squatting on its own.
+// In the menu's picture it idles, now and then squatting on its own.
 //
 const IDLE_SQUAT_MIN = 3
 const IDLE_SQUAT_RANGE = 4
@@ -67,8 +67,8 @@ const bakedFor = new WeakSet()
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - Foot X
  * @param {number} cfg.y - Foot Y (the ground's top)
- * @param {boolean} [cfg.collide=true] - Give it a walkable cap (false for the menu icon)
- * @param {boolean} [cfg.lit=false] - Start lit (the menu icon)
+ * @param {boolean} [cfg.collide=true] - Give it a walkable cap (false for the menu's picture)
+ * @param {boolean} [cfg.lit=false] - Start lit (the menu's picture)
  * @returns {Object} Lantern instance
  */
 export function create(cfg) {
@@ -85,7 +85,6 @@ export function create(cfg) {
     squash: { v: 0, vel: 0 },
     light: cfg.lit ? 1 : 0,
     litFor: cfg.lit ? 0 : LIGHT_HOLD_SEC,
-    still: false,
     idleIn: IDLE_SQUAT_MIN,
     wasOnCap: false,
     glowRgb: getRGB(k, CAVE_CFG.colors.lanternGlow),
@@ -101,7 +100,7 @@ export function create(cfg) {
  * Runs the squash spring and the light; bounces a hero who landed on the
  * cap. Returns true on the frame of a bounce.
  * @param {Object} inst - Lantern instance
- * @param {Object|null} heroInst - Hero instance (null: the menu icon idles)
+ * @param {Object|null} heroInst - Hero instance (null: the menu's one idles)
  * @returns {boolean}
  */
 export function onUpdate(inst, heroInst) {
@@ -119,7 +118,7 @@ export function onUpdate(inst, heroInst) {
 }
 
 /**
- * Places the mushroom (menu icon): foot at x / y, scaled.
+ * Places the mushroom (the menu's picture): foot at x / y, scaled.
  * @param {Object} inst - Lantern instance
  * @param {number} x - Foot X
  * @param {number} y - Foot Y
@@ -129,24 +128,6 @@ export function setPose(inst, x, y, scale) {
   inst.x = x
   inst.y = y
   inst.scale = scale
-}
-
-/**
- * Height of the drawn mushroom at a scale.
- * @param {number} scale - Size multiplier
- * @returns {number}
- */
-export function visibleHeight(scale) {
-  return LANTERN_H * scale
-}
-
-/**
- * Keeps the menu icon from squatting (a level row that is not selected).
- * @param {Object} inst - Lantern instance
- * @param {boolean} still
- */
-export function setStill(inst, still) {
-  inst.still = still
 }
 
 /**
@@ -227,7 +208,6 @@ function bounce(inst, char) {
 }
 function idle(inst, dt) {
   inst.light = 1
-  if (inst.still) return false
   inst.idleIn -= dt
   if (inst.idleIn > 0) return false
   inst.idleIn = IDLE_SQUAT_MIN + Math.random() * IDLE_SQUAT_RANGE

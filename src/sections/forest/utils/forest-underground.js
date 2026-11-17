@@ -183,6 +183,38 @@ export function renderUndergroundSpec(ctx, spec, tones) {
 export function undergroundStaticEarthTones() {
   return staticEarthTones()
 }
+
+/**
+ * A buried element's picture at a drawn size in the soil's colour:
+ * multiplied by it (UG_ELEMENT_MULTIPLY of the way from white), then
+ * tinted with it (UG_ELEMENT_BLEND), so a pale bone sits in dark soil as a
+ * dim one (the forest's earth band, the cave's soil).
+ * @param {HTMLCanvasElement} picture - Element at sheet size
+ * @param {number} w - Drawn width
+ * @param {number} h - Drawn height
+ * @param {{r: number, g: number, b: number}} soil - Soil colour
+ * @returns {HTMLCanvasElement}
+ */
+export function soilTintedPicture(picture, w, h, soil) {
+  const cw = Math.max(1, Math.round(w))
+  const ch = Math.max(1, Math.round(h))
+  const canvas = document.createElement('canvas')
+  canvas.width = cw
+  canvas.height = ch
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(picture, 0, 0, cw, ch)
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.fillStyle = rgbCss(mixRgb({ r: COLOR_MAX, g: COLOR_MAX, b: COLOR_MAX }, soil, UG_ELEMENT_MULTIPLY))
+  ctx.fillRect(0, 0, cw, ch)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(picture, 0, 0, cw, ch)
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.globalAlpha = UG_ELEMENT_BLEND
+  ctx.fillStyle = rgbCss(soil)
+  ctx.fillRect(0, 0, cw, ch)
+  return canvas
+}
 //
 // Generates the random layout of all underground features once, so both
 // colour variants can be rendered from identical geometry.
@@ -763,32 +795,9 @@ function paintUndergroundElements(ctx, layout, elements) {
     ctx.translate(element.x, element.y)
     ctx.rotate(element.angle)
     element.mirror && ctx.scale(-1, 1)
-    ctx.drawImage(soilTintedElement(element, soilColorAt(layout, element.y)), -element.w / 2, -element.h / 2)
+    ctx.drawImage(soilTintedPicture(element.canvas, element.w, element.h, soilColorAt(layout, element.y)), -element.w / 2, -element.h / 2)
     ctx.restore()
   }))
-}
-//
-// The element at its drawn size, multiplied and tinted with the soil colour.
-//
-function soilTintedElement(element, soil) {
-  const w = Math.max(1, Math.round(element.w))
-  const h = Math.max(1, Math.round(element.h))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(element.canvas, 0, 0, w, h)
-  ctx.globalCompositeOperation = 'multiply'
-  ctx.fillStyle = rgbCss(mixRgb({ r: COLOR_MAX, g: COLOR_MAX, b: COLOR_MAX }, soil, UG_ELEMENT_MULTIPLY))
-  ctx.fillRect(0, 0, w, h)
-  ctx.globalCompositeOperation = 'destination-in'
-  ctx.drawImage(element.canvas, 0, 0, w, h)
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.globalAlpha = UG_ELEMENT_BLEND
-  ctx.fillStyle = rgbCss(soil)
-  ctx.fillRect(0, 0, w, h)
-  return canvas
 }
 //
 // The soil's colour at world Y: the stratum there (the strata's heights are

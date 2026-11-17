@@ -27,8 +27,10 @@ import { loadPictureImage } from '../sections/forest/utils/forest-picture.js'
 // window scale. Sizes are design px at REF_HEIGHT.
 //
 // Looks: the forest signboard (default) or the cave's — a pad leaf of the
-// monster plant hung on two of its stems, small leaves for the answers.
-// Each look has its own palette (CFG `confirmDialog` / `confirmDialogCave`).
+// monster plant hung on two of its stems, small leaves for the answers; or,
+// given a plate painter (cfg.paintPlate), a soil plate and small plates
+// for the answers on the same stems. Each look has its own palette (CFG
+// `confirmDialog` / `confirmDialogCave`).
 //
 export const LOOKS = {
   FOREST: 'forest',
@@ -130,6 +132,14 @@ const PAD_STRAND_FROM = 0.25
 const PAD_STRAND_MIN = 16
 const PAD_STRAND_RANGE = 34
 const PAD_HANG_ROOM = 64
+//
+// A plate board (cave look with a plate painter): its sprites' key mark,
+// how strongly a selected tag is pulled toward the selected colour, how
+// far past a tag its plate is painted before the cut (design px).
+//
+const PLATE_KEY = '-plate'
+const PLATE_SELECTED_TINT = 0.35
+const PLATE_TAG_BLEED = 60
 const PAD_KNOB_R = 6
 const PAD_SEED = 7131
 //
@@ -271,7 +281,7 @@ const VIGNETTE_INNER = 0.25
 const VIGNETTE_CENTER_ALPHA = 0.7
 const VIGNETTE_EDGE_ALPHA = 0.97
 const BAKE_PAD = 26
-const SPRITE_PREFIX = 'confirm-dialog-v5'
+const SPRITE_PREFIX = 'confirm-dialog-v6'
 const GRAIN_SEED = 8221
 const boardPictureLoad = loadPictureImage(BOARD_PICTURE_URL)
 let boardPicture = null
@@ -290,6 +300,8 @@ const DEG = Math.PI / 180
  * @param {number} cfg.z - Draw layer
  * @param {boolean} [cfg.defaultYes=false] - Highlight "Yes" when the dialog opens
  * @param {string} [cfg.look=LOOKS.FOREST] - Look of the board (forest signboard or cave leaf)
+ * @param {Function} [cfg.paintPlate] - Cave look: paints the board and the tags as plates instead of leaves,
+ *   (ctx, x, y, w, h, seed, bare) filling that rect of a canvas (bare: a tag, nothing laid in it)
  * @returns {Object} Dialog inst
  */
 export function create(cfg) {
@@ -715,19 +727,20 @@ function bakeSprites(k, cfg, s, look, pal) {
   const lineH = Math.ceil(QUESTION_SIZE * TEXT_LINE_HEIGHT)
   const questionH = lines.length * lineH + (lines.length - 1) * QUESTION_LINE_GAP
   const boardH = (BOARD_PAD_TOP + questionH + QUESTION_TO_TAGS + TAG_H + BOARD_PAD_BOTTOM) * s
-  const key = `${SPRITE_PREFIX}-${look}-${Math.round(s * 1000)}-${cfg.question.length}`
+  const key = `${SPRITE_PREFIX}-${look}${cfg.paintPlate ? PLATE_KEY : ''}-${Math.round(s * 1000)}-${cfg.question.length}`
   const load = (name, bake) => {
     k.getSprite(name) || k.loadSprite(name, bake())
     return name
   }
   const pad = BAKE_PAD * s
   const hangRoom = cave ? PAD_HANG_ROOM * s : 0
-  const board = load(`${key}-board`, () => (cave ? bakePadBoard(lines, lineH, s, boardH, hangRoom, pal) : bakeBoard(lines, lineH, s, boardH, pal)))
+  const plate = cave ? cfg.paintPlate : null
+  const board = load(`${key}-board`, () => bakeLookBoard(lines, lineH, s, boardH, hangRoom, pal, cave, plate))
   const tagsY = (BOARD_PAD_TOP + questionH + QUESTION_TO_TAGS + TAG_H / 2) * s
   const tagHalfGap = (TAG_W + TAG_GAP) / 2 * s
   const tags = [cfg.yesLabel, cfg.noLabel].map((label, i) => ({
-    normal: load(`${key}-tag-${i}`, () => bakeTag(label, s, false, cave, pal)),
-    selected: load(`${key}-tag-${i}-selected`, () => bakeTag(label, s, true, cave, pal))
+    normal: load(`${key}-tag-${i}`, () => (plate ? bakePlateTag(label, s, false, pal, plate) : bakeTag(label, s, false, cave, pal))),
+    selected: load(`${key}-tag-${i}-selected`, () => (plate ? bakePlateTag(label, s, true, pal, plate) : bakeTag(label, s, true, cave, pal)))
   }))
   const close = {
     normal: load(`${key}-close`, () => bakeClose(s, false, pal)),
@@ -802,6 +815,28 @@ function paintDrawnBoard(ctx, pad, w, boardH, s, pal) {
   ctx.lineWidth = BOARD_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)
+}
+//
+// The board of a look: the forest plank, the cave's pad leaf or, when the
+// cave look is given a plate painter, its plate.
+//
+function bakeLookBoard(lines, lineH, s, boardH, hangRoom, pal, cave, plate) {
+  if (plate) return bakePlateBoard(lines, lineH, s, boardH, hangRoom, pal, plate)
+  return cave ? bakePadBoard(lines, lineH, s, boardH, hangRoom, pal) : bakeBoard(lines, lineH, s, boardH, pal)
+}
+//
+// The cave board as a plate (painted by the caller) with the painted
+// question.
+//
+function bakePlateBoard(lines, lineH, s, boardH, hangRoom, pal, plate) {
+  const pad = BAKE_PAD * s
+  const w = BOARD_W * s
+  const canvas = newCanvas(w + pad * 2, boardH + pad * 2 + hangRoom)
+  const ctx = canvas.getContext('2d')
+  plate(ctx, pad, pad, w, boardH, PAD_SEED)
+  paintQuestion(ctx, lines, lineH, pad, w, s, pal)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
+  return canvas
 }
 //
 // The cave board: the pad leaf's underside band, its top, veins and lit
@@ -1058,6 +1093,47 @@ function bakeTag(label, s, selected, cave, pal) {
   ctx.globalAlpha = BOARD_LIT_ALPHA
   ctx.fillStyle = pal.woodLight
   ctx.fillRect(pad, pad, w, BOARD_LIT_H * s * TAG_LIT_SCALE)
+  ctx.restore()
+  ctx.strokeStyle = pal.contour
+  ctx.lineWidth = TAG_CONTOUR * s
+  ctx.lineJoin = 'round'
+  ctx.stroke(outline)
+  if (selected) {
+    TAG_SPROUT_ANGLES.forEach((angle, i) => paintLeaf(ctx, pad + TAG_SPROUT_X * s, pad + TAG_SPROUT_Y * s, angle,
+      TAG_SPROUT_LEAF * s * (i === 0 ? 1 : TAG_SPROUT_SECOND_SCALE), pal.leaf[i + 1], s, pal))
+  }
+  ctx.font = `${Math.round(TAG_TEXT_SIZE * s)}px ${CFG.visual.fonts.regularFull}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = selected ? pal.tagSelectedText : pal.text
+  ctx.fillText(label, pad + w / 2, pad + h / 2)
+  applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + label.length + (selected ? 1 : 0))
+  return canvas
+}
+//
+// One answer tag as a small plate: the caller's plate painted larger than
+// the tag and cut to the tag's ragged outline (a plate's edge pieces are
+// bigger than a tag), pulled toward the selected colour when selected, a
+// thin contour round it, a sprout of two leaves on its corner when
+// selected, and its painted label.
+//
+function bakePlateTag(label, s, selected, pal, plate) {
+  const pad = BAKE_PAD * s
+  const w = TAG_W * s
+  const h = TAG_H * s
+  const bleed = PLATE_TAG_BLEED * s
+  const canvas = newCanvas(w + pad * 2, h + pad * 2)
+  const ctx = canvas.getContext('2d')
+  const rng = createSeededRandom(GRAIN_SEED + label.length)
+  const outline = raggedRectPath(pad, pad, w, h, BOARD_CHAMFER * s * TAG_CHAMFER_SCALE, BOARD_EDGE_STEP * s * TAG_EDGE_STEP_SCALE, TAG_JITTER * s, rng)
+  ctx.save()
+  ctx.clip(outline)
+  plate(ctx, pad - bleed, pad - bleed, w + bleed * 2, h + bleed * 2, PAD_SEED + label.length, true)
+  if (selected) {
+    ctx.globalAlpha = PLATE_SELECTED_TINT
+    ctx.fillStyle = pal.tagSelected
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
   ctx.restore()
   ctx.strokeStyle = pal.contour
   ctx.lineWidth = TAG_CONTOUR * s

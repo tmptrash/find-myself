@@ -4,9 +4,10 @@ import * as PropellerBud from '../components/propeller-bud.js'
 // Valera's flight as a short film: the camera stays with the hero while the
 // bud flies. Once the bud has practically landed (PropellerBud.isNearlyLanded)
 // the camera leaves the hero for it, stays HOLD_SEC with it and comes back.
-// From take-off until the camera is back the hero still shows but the level's
-// creatures do not see him (see isHeroUnseen), and while the camera is leaving
-// him he cannot be hurt by anything (isHeroShielded).
+// While the bud flies the hero is on his own like any other time; from the
+// camera leaving him until it is back the level's creatures do not see him
+// (see isHeroUnseen), and only while it is leaving him he cannot be hurt by
+// anything (isHeroShielded).
 //
 // The camera flies like one held in hands: over TRAVEL_SEC it eases into the
 // flight, reaches its top speed at the half way point between the hero and the
@@ -18,7 +19,7 @@ import * as PropellerBud from '../components/propeller-bud.js'
 // SWAY_X_HZ / SWAY_Y_HZ (their weights in SWAY_MIX), so his aim never rests dead
 // centre. It stays HOLD_SEC on him so the sway can be seen.
 //
-const HOLD_SEC = 4
+const HOLD_SEC = 2
 const TRAVEL_SEC = 2.2
 const SWING_PX = 28
 const SWING_IN_SEC = 1
@@ -80,12 +81,13 @@ export function onUpdate(inst, dt, heroAlive) {
 }
 
 /**
- * True from the bud's take-off until the camera is back on the hero.
+ * True from the camera leaving the hero for the landed bud until it is back
+ * on him (not while the bud flies).
  * @param {Object|null} inst - Film inst
  * @returns {boolean}
  */
 export function isHeroUnseen(inst) {
-  return Boolean(inst) && inst.phase !== PHASE.IDLE
+  return Boolean(inst) && inst.phase !== PHASE.IDLE && inst.phase !== PHASE.FLY
 }
 
 /**

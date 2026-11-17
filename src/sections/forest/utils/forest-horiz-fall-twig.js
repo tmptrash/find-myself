@@ -63,6 +63,14 @@ const TWIG_FALL_SUBSTEPS = 5
 const TWIG_RIDE_PLAT_H = 8
 const TWIG_RIDE_PLAT_HALF_W = TWIG_MAIN_LEN * 0.46
 //
+// The stick's collider holds only a hero coming down onto it: feet that
+// were more than this far under its top one physics step ago (a hero
+// standing on the ground as the centipede runs at him) pass through it,
+// so the running stick never shoves him along — the centipede's own body
+// reaches him and kills him (or passes through him while he is shielded).
+//
+const TWIG_RIDE_ONE_WAY_TOL = 6
+//
 // The stick on the centipede's back: over the centipede, under the hero, the
 // mushrooms and the big trees (the level draws hanging, falling and lying
 // twigs on a front layer of its own).
@@ -689,15 +697,28 @@ function clampRideOffset(offset) {
 }
 
 function makeRidePlatform(k) {
-  return k.add([
+  const plat = k.add([
     k.rect(TWIG_RIDE_PLAT_HALF_W * 2, TWIG_RIDE_PLAT_H),
     k.pos(PLATFORM_HIDE_X, PLATFORM_HIDE_Y),
     k.anchor('top'),
     k.area({ collisionIgnore: [CFG.game.platformName] }),
     k.body({ isStatic: true }),
     k.opacity(0),
-    CFG.game.platformName
+    CFG.game.platformName,
+    CFG.game.noCeilingTag
   ])
+  plat.onBeforePhysicsResolve(c => isRidePlatformPassed(k, c.target, plat) && c.preventResolution())
+  return plat
+}
+//
+// Whether a body meets the stick's collider from below or from the side:
+// rising, or its feet already under the stick's top one physics step ago.
+//
+function isRidePlatformPassed(k, other, plat) {
+  if (other.vel.y < 0) return true
+  const box = other.worldArea().bbox()
+  const prevFeetY = box.pos.y + box.height - other.vel.y * k.fixedDt()
+  return prevFeetY > plat.pos.y + TWIG_RIDE_ONE_WAY_TOL
 }
 
 function resetTwigsToHang(inst) {

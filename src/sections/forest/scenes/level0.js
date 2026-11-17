@@ -5646,7 +5646,7 @@ function checkForestTouchDeath(inst, heroX, heroFootY) {
   //
   if (shouldDrownInWater(inst, heroX, heroFootY)) return
   if (inst.k.time() < (inst.touchDeathGraceUntil ?? 0)) return
-  if (isForestHeroUnseen(inst)) return
+  if (isForestHeroShielded(inst)) return
   if (inst.shoreFallTwigs?.riderLocked) return
   if (HorizFallTwig.isHeroShieldedByTwig(inst.shoreFallTwigs, inst.heroInst?.character)) return
   if (isOnForestLakeDryFooting(inst, heroX, heroFootY)) return

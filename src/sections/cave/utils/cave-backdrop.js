@@ -1,34 +1,28 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
-import * as Atlas from './cave-atlas.js'
 import * as Earth from './cave-earth.js'
 import * as Layout from './cave-layout.js'
 //
-// The back of the cave room in three parallax layers: the far wall — the
-// forest's ground stones pulled deep into the dark, set in dark brown
-// soil — and two layers of distant rock platforms floating in front of
-// it, smaller, dimmer and softer the farther they are. Softness comes
-// from painting a layer small and scaling it up (the wall the softest).
-// The layers move only with the camera — each its share (its speed) of
-// the camera's travel — so where the world in front stands still, so does
-// the back. Each layer is painted in its own space — the window plus its
-// share of the travel — and baked once per live k, in columns under
-// 2048 px.
+// The back of the cave room: one parallax layer, the far wall — the
+// stones of stones.png and ground_stones.png packed together, pulled deep
+// into the dark, dark brown soil showing between them. It is softened by
+// painting it small and scaling it up. The layer moves only with the
+// camera — its share (its speed) of the camera's travel — so where the
+// world in front stands still, so does the back. It is painted in its own
+// space — the window plus its share of the travel — and baked once per
+// live k, in columns under 2048 px.
 //
 const COLORS = CAVE_CFG.backdrop
-const SPRITE_PREFIX = 'cave0-backdrop-v6-'
+const SPRITE_PREFIX = 'cave0-backdrop-v10-'
 const TILE_MAX = 2048
 const GRAIN_SEED = 9100
 //
-// Layers back to front: speed (share of the travel), seed and what they
-// hold.
+// The layers back to front: speed (share of the travel), seed, how much
+// smaller it is painted.
 //
-const KIND = { WALL: 'wall', ISLES: 'isles' }
 const LAYERS = [
-  { id: 'wall', kind: KIND.WALL, speed: 0.25, seed: 9101, blurDown: 3 },
-  { id: 'far', kind: KIND.ISLES, speed: 0.45, seed: 9102, scaleMin: 0.32, scaleRange: 0.18, shade: COLORS.farIsles, shadeAmount: 0.8, blurDown: 1.5, gap: 240, rows: [0.22, 0.42, 0.62, 0.82] },
-  { id: 'mid', kind: KIND.ISLES, speed: 0.68, seed: 9103, scaleMin: 0.5, scaleRange: 0.25, shade: COLORS.midIsles, shadeAmount: 0.72, blurDown: 1, gap: 380, rows: [0.35, 0.6, 0.85] }
+  { id: 'wall', speed: 0.25, seed: 9101, blurDown: 3 }
 ]
 //
 // The far wall: stones of mixed sizes scattered at random (see
@@ -36,20 +30,12 @@ const LAYERS = [
 // showing between them.
 //
 const WALL_SIZES = [
-  { sMin: 0.4, sRange: 0.35, tries: 2 },
-  { sMin: 0.22, sRange: 0.16, tries: 3 },
-  { sMin: 0.1, sRange: 0.1, tries: 4 },
-  { sMin: 0.05, sRange: 0.05, tries: 5 }
+  { hMin: 36, hRange: 32, density: 7 },
+  { hMin: 20, hRange: 14, density: 40 },
+  { hMin: 9, hRange: 9, density: 380 }
 ]
 const WALL_CLOSEST = 0.7
 const WALL_SHADE = 0.72
-//
-// Distant platforms: row jitter (share of the layer height), spacing
-// jitter, the kinds of pieces.
-//
-const ISLE_ROW_JITTER = 0.08
-const ISLE_GAP_JITTER = 0.6
-const ISLE_PIECES = [...Atlas.FLATS, ...Atlas.BLOCKS, ...Atlas.RISES, ...Atlas.FALLS]
 const bakedFor = new WeakSet()
 
 /**
@@ -140,7 +126,7 @@ function paintLayer(ctx, layer, view) {
   scratch.height = Math.ceil(size.h / down)
   const sctx = scratch.getContext('2d')
   sctx.scale(1 / down, 1 / down)
-  layer.kind === KIND.WALL ? paintWall(sctx, rng, size) : paintIsles(sctx, rng, size, layer)
+  paintWall(sctx, rng, size)
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
@@ -148,11 +134,11 @@ function paintLayer(ctx, layer, view) {
   ctx.restore()
 }
 //
-// The far wall: the forest's ground stones scattered, pulled toward the
+// The far wall: the stones of both sheets scattered, pulled toward the
 // shade colour, then the soil filled in behind them.
 //
 function paintWall(ctx, rng, size) {
-  Earth.scatter(rng, { x1: 0, y1: 0, w: size.w, h: size.h }, Atlas.GROUND_ROCKS, WALL_SIZES, WALL_CLOSEST, () => true)
+  Earth.scatter(rng, { x1: 0, y1: 0, w: size.w, h: size.h }, Earth.soilRocks(), WALL_SIZES, WALL_CLOSEST, () => true)
     .forEach(stone => Earth.drawStone(ctx, stone))
   ctx.save()
   ctx.globalCompositeOperation = 'source-atop'
@@ -162,25 +148,6 @@ function paintWall(ctx, rng, size) {
   ctx.globalCompositeOperation = 'destination-over'
   ctx.globalAlpha = 1
   ctx.fillStyle = COLORS.wallSoil
-  ctx.fillRect(0, 0, size.w, size.h)
-  ctx.restore()
-}
-//
-// Distant platforms along the layer's rows, dimmed toward its colour.
-//
-function paintIsles(ctx, rng, size, layer) {
-  layer.rows.forEach(row => {
-    for (let x = rng() * layer.gap; x < size.w; x += layer.gap * (1 + (rng() - 0.5) * ISLE_GAP_JITTER)) {
-      const name = ISLE_PIECES[Math.floor(rng() * ISLE_PIECES.length)]
-      const scale = layer.scaleMin + rng() * layer.scaleRange
-      const y = size.h * (row + (rng() - 0.5) * ISLE_ROW_JITTER)
-      Atlas.drawScaled(ctx, name, x, y, scale, rng() < 0.5)
-    }
-  })
-  ctx.save()
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.globalAlpha = layer.shadeAmount
-  ctx.fillStyle = layer.shade
   ctx.fillRect(0, 0, size.w, size.h)
   ctx.restore()
 }

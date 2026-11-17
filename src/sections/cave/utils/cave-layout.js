@@ -1,13 +1,12 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 //
 // Cave lesson 0 geometry: the hero drops in from the forest through a hole
-// the eye-flower's roots tore in a low part of the ceiling, onto a soil
-// ledge — a lantern mushroom left of where he lands. A gap splits it from
-// the next ledge, on which the hostile eye-flower grows right at the gap;
-// fall through the gap into the lake hall under the ledges: a soil floor
-// with a wide, deep lake in it; past its right bank small stone platforms
-// climb into the crevice between the eye-flower's ledge and the
-// stalk-eye's — the way up. The stalk-eye's narrow
+// the forest eye-flower's roots tore in a low part of the ceiling, onto a
+// soil ledge — a lantern mushroom left of where he lands. A gap splits it
+// from the middle ledge; fall through the gap into the lake hall under the
+// ledges: a soil floor with a wide, deep lake in it; past its right bank
+// small stone platforms climb into the crevice between the middle ledge
+// and the stalk-eye's — the way up. The stalk-eye's narrow
 // ledge is the top of a solid mass (the old corridor under it is filled
 // in); right past the stalk-eye a shaft drops at the level's right edge,
 // stone steps zigzagging down it into a passage that runs under the lake
@@ -97,12 +96,12 @@ const HALL_FLOOR_Y = 850
 const PASSAGE_TOP_Y = 1260
 const PASSAGE_FLOOR_Y = 1440
 const UPPER_X2 = 400
-const FLOWER_LEDGE_X1 = 465
+export const MID_LEDGE_X1 = 465
 const EYE_LEDGE_X1 = 1780
 const EYE_LEDGE_X2 = 1950
 export const PLATFORMS = [
   { id: 'upper', x1: 0, x2: UPPER_X2, y: 410, kind: K.LEDGE, seed: 11 },
-  { id: 'flowerLedge', x1: FLOWER_LEDGE_X1, x2: 1540, y: 380, top: [[FLOWER_LEDGE_X1, 380], [1300, 380], [1540, 402]], kind: K.LEDGE, seed: 13 },
+  { id: 'midLedge', x1: MID_LEDGE_X1, x2: 1540, y: 380, top: [[MID_LEDGE_X1, 380], [1300, 380], [1540, 402]], kind: K.LEDGE, seed: 13 },
   {
     id: HALL_FLOOR_ID,
     x1: 0,
@@ -140,13 +139,11 @@ export const PLATFORMS = [
 //
 export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1 }
 //
-// The hostile eye-flower on its ledge right at the gap; the stalk-eye on
-// its ledge right past the exit, before the shaft;
-// the dormant lantern mushroom left of where the hero lands (`on` names
-// the platform each stands on; `y` is its base line, the art's own top
-// is cave-ground.js's).
+// The stalk-eye on its ledge right past the exit, before the shaft; the
+// dormant lantern mushroom left of where the hero lands (`on` names the
+// platform each stands on; `y` is its base line, the art's own top is
+// cave-ground.js's).
 //
-export const EYE_FLOWER = { x: FLOWER_LEDGE_X1 + 40, y: 380, on: 'flowerLedge' }
 export const STALK_EYE = { x: 1860, y: 430, on: 'eyeLedge' }
 export const LANTERN = { x: 170, y: 410, on: 'upper' }
 //

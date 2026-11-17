@@ -111,7 +111,6 @@ const WALL_PLATFORM_CLEAR = 40
 // ceiling over it and the ledge the hero lands on).
 //
 const CLEAR = [
-  { x: Layout.EYE_FLOWER.x, r: 110 },
   { x: Layout.STALK_EYE.x, r: 110 },
   { x: Layout.LANTERN.x, r: 70 },
   { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + 50 },

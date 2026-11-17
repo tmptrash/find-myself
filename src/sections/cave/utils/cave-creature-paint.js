@@ -3,8 +3,8 @@ import { getRGB } from '../../../utils/helper.js'
 import { addLiddedEyeBerry, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y, FOREST_SUN_LIT_FRAC } from '../../forest/utils/forest-eye-berry.js'
 import { CAVE_CFG } from '../cfg.js'
 //
-// Shared live look of the cave's hostile eye creatures (the eye-flower and
-// the stalk-eye), drawn into one polygon batch per frame: bloodshot eyes,
+// Shared live look of the cave's hostile stalk-eye (in the level and in
+// the menu's picture), drawn into one polygon batch per frame: bloodshot eyes,
 // thorny contoured stalks and leaf blades. Kin of the forest's eye-berry
 // look (forest-eye-berry.js), with CAVE_CFG.creature colours.
 //
@@ -47,7 +47,7 @@ const THORN_CONTOUR = 1.2
 const BLADE_WIDEST = 0.4
 const BLADE_CONTOUR = 2
 const BLADE_MIDRIB = 0.35
-const COLOR_KEYS = ['contour', 'stem', 'stemLight', 'thorn', 'thornTip', 'sclera', 'scleraShade', 'vein', 'iris', 'pupil', 'glint', 'leaf', 'leafLight', 'petal', 'heart']
+const COLOR_KEYS = ['contour', 'stem', 'stemLight', 'thorn', 'thornTip', 'sclera', 'scleraShade', 'vein', 'iris', 'pupil', 'glint', 'leaf', 'leafLight']
 const colorCache = new WeakMap()
 const lidColors = new WeakMap()
 

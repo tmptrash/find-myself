@@ -1,6 +1,6 @@
 //
 // Cave section configuration (lesson-cave.0, reference: the cave painting
-// with the eye-flower, the glowing crevice and the stalk-eye). The cave art
+// with the glowing crevice and the stalk-eye). The cave art
 // is free of the fixed 96-swatch palette by design: its colours are picked
 // to sit with the painted art of assets/cave0 (its soil block, top strips,
 // edges, stones and plants) — dark teal void behind, warm brown soil, gold
@@ -70,12 +70,11 @@ export const CAVE_CFG = {
     farShade: 0.45
   },
   //
-  // The cave's creatures (cave-eye-flower.js, cave-stalk-eye.js): kin of
-  // the forest's doll's-eyes bush and stalk-eyes, but hostile: a darker,
-  // blood-red stalk set with dark thorns tipped bone-pale, and bloodshot
-  // eyes — a pinkish shaded underside, red veins running in from the rim,
-  // a red iris ring tight round a small pupil. Leaves are the cave's moss
-  // greens; the flowers between the eyes cream with a red heart.
+  // The cave's stalk-eye (cave-stalk-eye.js, cave-menu-stalk-eye.js): kin
+  // of the forest's stalk-eyes, but hostile: a darker, blood-red stalk set
+  // with dark thorns tipped bone-pale, and bloodshot eyes — a pinkish
+  // shaded underside, red veins running in from the rim, a red iris ring
+  // tight round a small pupil. Its leaves are the cave's moss greens.
   //
   creature: {
     contour: '#1f1517',         // Red-black contour round every part
@@ -90,8 +89,6 @@ export const CAVE_CFG = {
     pupil: '#140d0e',           // Pupil
     glint: '#fbf6e8',           // Glint on the pupil
     leaf: '#3e5a2c',            // Blade body, moss green
-    leafLight: '#6f8c36',       // Blade midrib
-    petal: '#e8e2c4',           // Flower petals, cream
-    heart: '#b5403a'            // Flower heart, red
+    leafLight: '#6f8c36'        // Blade midrib
   }
 }

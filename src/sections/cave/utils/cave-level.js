@@ -15,7 +15,6 @@ import { applyForestHudSharpBake } from '../../forest/utils/forest-focus-depth.j
 import { CAVE_CFG } from '../cfg.js'
 import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
-import * as EyeFlower from '../components/cave-eye-flower.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Atlas from './cave-atlas.js'
@@ -31,9 +30,9 @@ import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
 //
 // Cave lesson 0 — the hero drops in from the forest through the hole the
-// eye-flower's roots tore in the ceiling, onto an earth ledge, a dormant
-// lantern mushroom left of him (bounced on, it lights up). Right past the
-// gap the hostile eye-flower watches him. Below lies the lake hall with a
+// forest eye-flower's roots tore in the ceiling, onto an earth ledge, a
+// dormant lantern mushroom left of him (bounced on, it lights up). Below
+// lies the lake hall with a
 // deep lake: stone platforms climb from its right bank into the crevice
 // of the exit, up to the stalk-eye's ledge; past the stalk-eye a shaft of
 // stone steps drops into the passage under the hall (cave-layout.js).
@@ -44,15 +43,14 @@ const KEY_SAFE_SPOT = 'cave.safeSpot'
 const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once the hero got here
 //
 // Draw order: back (parallax), the fireflies (behind the soil: they fly
-// only in the open between the platforms), the eye-flower (behind its
-// ledge, its root in the soil), the drowning hero (behind the soil),
+// only in the open between the platforms), the drowning hero (behind the
+// soil),
 // terrain, the runner insects on it, the lake water, the lantern's halo,
 // the hero and creatures (player z), the stones in front of him, the
 // frame.
 //
 const Z_WORLD = 0
 const Z_FIREFLIES = Z_WORLD + 0.2
-const Z_FLOWER = Z_WORLD + 0.3
 const Z_DROWN_HERO = Z_WORLD + 0.35
 const Z_TERRAIN = Z_WORLD + 0.4
 const Z_RUNNERS = Z_WORLD + 0.5
@@ -60,10 +58,6 @@ const Z_WATER = Z_WORLD + 0.6
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
 const Z_FRAME = CFG.visual.zIndex.ui - 1
-//
-// The eye-flower's root sinks this far into its ledge's top.
-//
-const FLOWER_SINK = 3
 //
 // Static bodies: only the walls (they reach above the world so the entry
 // fall is framed). The platforms are walked on their own top (cave-ground.js): a
@@ -187,8 +181,6 @@ function build(k) {
   }
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
-  const flowerRoot = rootedOn(Layout.EYE_FLOWER)
-  inst.eyeFlower = EyeFlower.create({ k, x: flowerRoot.x, y: flowerRoot.y + FLOWER_SINK, z: Z_FLOWER, getHeroPos, getView })
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
   createBodies(inst)
   spawnHero(inst, startPose(inst))
@@ -211,7 +203,6 @@ function onUpdate(inst) {
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
-  EyeFlower.onUpdate(inst.eyeFlower)
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
   CaveSound.onUpdate(inst.caveSound, k.dt(), focus.y)

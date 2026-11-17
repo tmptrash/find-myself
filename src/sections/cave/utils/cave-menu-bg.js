@@ -19,12 +19,14 @@ const GRAIN_SEED = 9400
 const MIN_SCREEN_PX = 64
 const TILE_MAX = 2048
 //
-// World rect shown: its top and height; the eye-flower's spot sits at
-// FOCUS_SHARE of the screen width (right of the level list).
+// World rect shown: its top and height; the middle ledge's left end
+// (FOCUS_IN px in from it) sits at FOCUS_SHARE of the screen width (right
+// of the level list).
 //
 const VIEW_Y1 = 20
 const VIEW_H = 620
-const FOCUS_X = Layout.EYE_FLOWER.x
+const FOCUS_IN = 40
+const FOCUS_X = Layout.MID_LEDGE_X1 + FOCUS_IN
 const FOCUS_SHARE = 0.68
 //
 // Shade over the bottom: from this share of the height down, reaching
@@ -93,7 +95,7 @@ export function onDraw(inst, opacity) {
 }
 //
 // World → screen: the shown rect's height fills the screen; it is placed so
-// the eye-flower's spot sits at FOCUS_SHARE of the width (kept in the world).
+// FOCUS_X sits at FOCUS_SHARE of the width (kept in the world).
 //
 function placement(w, h) {
   const scale = h / VIEW_H

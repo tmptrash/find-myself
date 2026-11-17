@@ -4,6 +4,7 @@ import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
 import * as Glow from '../utils/cave-glow.js'
+import * as Platform from '../utils/cave-platform.js'
 //
 // The lantern mushroom (the plants sheet's glowing blue mushrooms): it
 // stands dim beside the hero's landing spot. A hero landing on its cap is
@@ -28,6 +29,14 @@ const CAP_W_SHARE = 0.62
 const CAP_TOP_SHARE = 0.9
 const CAP_BODY_H = 10
 const CAP_SINK = 4
+//
+// Its foot stands on the lowest point of the soil under its stems (FOOT_HALF
+// px either side of its middle), FOOT_SINK px into it, so on a slope no
+// stem hangs in the air.
+//
+const FOOT_HALF = 44
+const FOOT_SINK = 4
+const FOOT_STEP = 2
 //
 // Bounce: the throw, the cap's squash spring.
 //
@@ -94,6 +103,19 @@ export function create(cfg) {
   inst.menu || (inst.cap = addCap(inst))
   Glow.create(k)
   return inst
+}
+
+/**
+ * Where the mushroom's foot stands on a platform at X: the lowest soil
+ * under its stems, a little sunk in.
+ * @param {Object} p - PLATFORMS entry
+ * @param {number} x - Foot X
+ * @returns {number} Foot Y
+ */
+export function footYOn(p, x) {
+  let y = -Infinity
+  for (let dx = -FOOT_HALF; dx <= FOOT_HALF; dx += FOOT_STEP) y = Math.max(y, Platform.surfaceAt(p, x + dx))
+  return y + FOOT_SINK
 }
 
 /**

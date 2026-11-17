@@ -79,9 +79,10 @@ function paintSubmersion(ctx) {
   ctx.restore()
 }
 //
-// A side wall from the ceiling down: the world edge to its ragged face
-// (the left wall's face looks right: edgeR pieces; the right wall's
-// edgeL), left unshaded like the platforms.
+// A side wall from the ceiling down: the world edge to its ragged face,
+// edged with the underside's ragged pieces turned on their side (the
+// chain runs up the left wall and down the right one, so their ragged
+// side faces the room), left unshaded like the platforms.
 //
 function paintWall(ctx, dir) {
   const left = dir < 0
@@ -91,7 +92,7 @@ function paintWall(ctx, dir) {
   const inner = face.map(pt => ({ x: pt.x + dir * Earth.CORE_INSET, y: pt.y }))
   const body = {
     core: [{ x: edge, y: WALL_TOP_Y }, ...inner, { x: edge, y: Layout.WORLD_H + ART_PAD }],
-    edges: [{ name: left ? 'edgeR' : 'edgeL', pts: face }]
+    edges: [{ name: 'edgeB', pts: left ? face.slice().reverse() : face }]
   }
   Earth.paintMass(ctx, body, { key: left ? 'wallL' : 'wallR', seed: left ? LEFT_WALL_SEED : RIGHT_WALL_SEED, plain: true })
 }

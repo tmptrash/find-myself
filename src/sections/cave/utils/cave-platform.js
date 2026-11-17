@@ -7,7 +7,7 @@ import * as Layout from './cave-layout.js'
 //
 // - a ledge is a slab of soil hanging in the air: the soil block inside,
 //   a ragged underside (edgeB pieces) along its lobed bottom, at each free
-//   end a ragged face (edgeL / edgeR) with corner pieces top and bottom,
+//   end a ragged face (edgeB pieces on their side) with corner pieces,
 //   the top strips along its base line (Layout) — fading out over the top
 //   corner at a free end, running on into a wall or into the mass it joins
 //   — and a slope piece on each of its rises and falls;
@@ -62,15 +62,17 @@ const END_SHARE = 0.55
 const END_LEAN = 14
 const TAPER_MAX_THICK = 220
 //
-// A free end's face: its points' spacing, two waves of noise (stretch,
+// A free end's face, shaped like an underside (broad lobes and fine ones,
+// nothing sticking out) and edged with the underside's own ragged pieces
+// turned on their side: its points' spacing, two waves of noise (stretch,
 // height, seed), and how far down from the top corner it starts to wave.
 //
 const FACE_STEP = 6
-const FACE_STRETCH = 0.7
-const FACE_AMP = 16
+const FACE_STRETCH = 1.2
+const FACE_AMP = 12
 const FACE_SEED_MUL = 4.1
-const FACE_FINE_STRETCH = 0.3
-const FACE_FINE_AMP = 6
+const FACE_FINE_STRETCH = 0.6
+const FACE_FINE_AMP = 4
 const FACE_FINE_SEED_MUL = 6.7
 const FACE_CALM = 24
 //
@@ -79,6 +81,16 @@ const FACE_CALM = 24
 // under them so no slit shows).
 //
 const END_CORE_INSET = 6
+//
+// The core reaches this close to the underside (the underside's pieces
+// fade into it, so it must fill right up to them, no holes); nothing of
+// a ledge reaches more than ENVELOPE px out of its outline (ENVELOPE_TOP
+// over its top, where the top strips' lumps stand) — a piece's end
+// sticking farther out is cut.
+//
+const UNDER_CORE_INSET = 4
+const ENVELOPE = 10
+const ENVELOPE_TOP = 14
 //
 // A ledge running on under the mass beside it fades out over this many px.
 //
@@ -235,7 +247,7 @@ function ledgeBody(p) {
   const faceL = span.freeL ? facePoints(p, 1, span.x1, baseAt(p, span.x1), joinedBelow ? span.x1 : xl, joinedBelow ? p.faceTo : bottomAt(xl)) : []
   const faceR = span.freeR ? facePoints(p, -1, span.x2, baseAt(p, span.x2), xr, bottomAt(xr)) : []
   const top = line(inL, inR, x => baseAt(p, x) + Earth.TOP_INSET)
-  const under = line(joinedBelow ? underL : inL + leanL, inR - leanR, x => bottomAt(x) - Earth.CORE_INSET).reverse()
+  const under = line(joinedBelow ? underL : inL + leanL, inR - leanR, x => bottomAt(x) - UNDER_CORE_INSET).reverse()
   const coreR = faceR.map(pt => ({ x: pt.x - END_CORE_INSET, y: pt.y }))
   const coreL = faceL.map(pt => ({ x: pt.x + END_CORE_INSET, y: pt.y })).reverse()
   const core = joinedBelow
@@ -243,16 +255,23 @@ function ledgeBody(p) {
     : [...top, ...coreR, ...under, ...coreL]
   const edges = [{ name: 'edgeB', pts: line(underL, xr, bottomAt) }]
   const corners = []
-  span.freeL && edges.push({ name: 'edgeL', pts: faceL })
-  span.freeR && edges.push({ name: 'edgeR', pts: faceR })
+  span.freeL && edges.push({ name: 'edgeB', pts: faceL })
+  span.freeR && edges.push({ name: 'edgeB', pts: faceR.slice().reverse() })
   span.freeL && corners.push({ name: 'cornerTL', x: span.x1, y: baseAt(p, span.x1) })
   span.freeL && !joinedBelow && corners.push({ name: 'cornerBL', x: xl, y: highestUnder(p, xl, 1) })
   span.freeR && corners.push({ name: 'cornerTR', x: span.x2, y: baseAt(p, span.x2) }, { name: 'cornerBR', x: xr, y: highestUnder(p, xr, -1) })
-  return { core, edges, corners, top: topOf(p, span), slopes: slopesOf(p), feathers: joinedBelow ? [joinFeather(p, underL)] : [] }
+  const envelope = [
+    ...line(span.x1, span.x2, x => baseAt(p, x) - ENVELOPE_TOP),
+    ...faceR.map(pt => ({ x: pt.x + ENVELOPE, y: pt.y })),
+    ...line(underL - (joinedBelow ? ENVELOPE : 0), xr, x => bottomAt(x) + ENVELOPE).reverse(),
+    ...(joinedBelow ? [{ x: underL - ENVELOPE, y: p.faceTo }] : []),
+    ...faceL.map(pt => ({ x: pt.x - ENVELOPE, y: pt.y })).reverse()
+  ]
+  return { core, edges, corners, top: topOf(p, span), slopes: slopesOf(p), envelope, feathers: joinedBelow ? [joinFeather(p, underL)] : [] }
 }
 //
 // A free end's face from its top corner (x0, y0) down to its bottom
-// (x1, y1): never a straight cut — it bulges out and in (two waves of
+// (x1, y1): never a straight cut — it waves out and in (two waves of
 // noise, FACE_AMP and FACE_FINE_AMP px), calm right at its top corner
 // (over FACE_CALM px) so the top strips meet it. `inward` is +1 for a left
 // end, -1 for a right one.

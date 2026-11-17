@@ -2,30 +2,33 @@ import * as Layout from './cave-layout.js'
 import * as Platform from './cave-platform.js'
 //
 // The line the hero walks: for every platform the top of its own art as
-// drawn — the soil's lumpy top with the stones half sunk in it, the flat
-// top of a stone platform (cave-platform.js) — scanned once off its layer
-// into
-// one continuous line, a world Y per world column. No invisible platforms
-// stand on it: the hero's feet are raycast onto this line (raycast()),
-// and his body rests on its walking version (walkUnder()): under each column the highest point
-// within the hero's half width either side (he stands on the bumps his
-// feet span, not in the cracks between them), lightly evened and never
-// steeper than WALK_MAX_SLOPE, so a step up a stone's edge is a quick
-// climb, not a jolt.
+// drawn — the soil's lumpy top with the stones half sunk in it, the top of
+// a small soil platform (cave-platform.js) with its pebbles — scanned once
+// off its layer into one continuous line, a world Y per world column. No
+// invisible platforms stand on it: the hero's feet are raycast onto this
+// line (raycast()), and his body rests on its walking version
+// (walkUnder()): under each column the highest point his feet span
+// (WALK_HALF_W either side, so he stands on the bumps under his soles, not
+// in the cracks between them), lightly evened and never steeper than
+// WALK_MAX_SLOPE, so a step up a stone's edge is a quick climb, not a
+// jolt. It reaches only EDGE_REACH px past the art's ends: off a
+// platform's edge with his inner foot no longer over it, he falls.
 //
-const WALK_HALF_W = 15
+const WALK_HALF_W = 9
 const WALK_SMOOTH = 5
+const EDGE_REACH = 6
 //
 // The walking line never climbs or drops steeper than this (px per px):
 // a stone's tall edge becomes a short ramp up to it (the feet still land
 // on the edge itself).
 //
 const WALK_MAX_SLOPE = 0.6
+const WALK_SINK_MAX = 1
 //
 // A falling hero is caught only with at least this much of him over the
 // platform: his centre at most CATCH_OVERHANG px past a line's end.
 //
-const CATCH_OVERHANG = 9
+const CATCH_OVERHANG = EDGE_REACH
 //
 // A foot lands on the highest point under its sole (this many px either
 // side), like the forest's ground line.
@@ -195,8 +198,10 @@ function bridgeGaps(tops) {
 }
 //
 // The walking line over the raw one: the highest point within WALK_HALF_W
-// either side (reaching that far past the ends too), then evened over
-// WALK_SMOOTH either side.
+// either side, then evened over WALK_SMOOTH either side and its slope
+// limited — but never more than WALK_SINK_MAX px under the highest point
+// under his feet (so it never sinks into the ground before a drop, the
+// lake's bank); nothing farther than EDGE_REACH past the art's ends.
 //
 function walkLine(tops) {
   const n = tops.length + WALK_HALF_W * 2
@@ -222,7 +227,23 @@ function walkLine(tops) {
     walk[c] = sum / count
   }
   limitSlope(walk)
+  walk.forEach((y, c) => Number.isNaN(y) || (walk[c] = Math.min(y, high[c] + WALK_SINK_MAX)))
+  clipToReach(walk, tops)
   return walk
+}
+//
+// The walking line only over the art and EDGE_REACH px past it (walk
+// column c lies over raw column c - WALK_HALF_W).
+//
+function clipToReach(walk, tops) {
+  for (let c = 0; c < walk.length; c++) {
+    let near = false
+    for (let d = -EDGE_REACH; d <= EDGE_REACH && !near; d++) {
+      const y = tops[c - WALK_HALF_W + d]
+      near = y !== undefined && !Number.isNaN(y)
+    }
+    near || (walk[c] = NaN)
+  }
 }
 //
 // Lowers the walking line where it climbs steeper than WALK_MAX_SLOPE,

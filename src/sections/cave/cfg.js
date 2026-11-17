@@ -20,13 +20,11 @@ export const CAVE_CFG = {
     rootLight: '#d8b06a'        // Daylight spilling in through the roots' hole
   },
   //
-  // Back of the cave: the far wall is the stones of stones.png and
-  // ground_stones.png pulled deep into the dark teal, set in dark brown
-  // soil.
+  // Back of the cave: the far wall is the soil block studded with ground
+  // stones, pulled deep into the dark teal.
   //
   backdrop: {
-    wallSoil: '#2b1d16',        // Dark brown soil between the far wall's stones
-    wallShade: '#071316'        // Colour the far stones are pulled toward
+    wallShade: '#071316'        // Colour the far wall is pulled toward
   },
   //
   // Stones in front of the hero (cave-front.js): pulled toward the
@@ -46,15 +44,18 @@ export const CAVE_CFG = {
   },
   //
   // The lake in the hall's floor (cave-lake.js) in the cave's teal: the
-  // water near its surface and deep down, the surface lines and the band
-  // between them, the dark green the algae on its bed are pulled toward.
+  // water, its light skin and deep tint, the surface lines and the band
+  // between them, the algae on its bed (dark, base and lit greens).
   //
   water: {
     water: '#1d5a5c',
     paint: {
+      light: '#4f9a92',
       deep: '#0d2e33',
       surfaceLine: '#b9eadc',
       surfaceBand: '#5fb0a2',
+      algae: '#2e5a2c',
+      algaeLight: '#4f8a3a',
       algaeDark: '#1f3d1e'
     }
   },
@@ -82,14 +83,5 @@ export const CAVE_CFG = {
     leafLight: '#6f8c36',       // Blade midrib
     petal: '#e8e2c4',           // Flower petals, cream
     heart: '#b5403a'            // Flower heart, red
-  },
-  //
-  // The exit between the eye-flower's and the stalk-eye's ledges: warm gold
-  // light rising out of the crevice (discovery), its glow and dust motes.
-  //
-  exit: {
-    glow: '#f0c46a',            // Glow, warm gold
-    core: '#fff1c4',            // Brightest heart of the glow
-    mote: '#ffe7a8'             // Dust motes drifting up in it
   }
 }

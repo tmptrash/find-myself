@@ -16,7 +16,6 @@ import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as EyeFlower from '../components/cave-eye-flower.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
-import * as Exit from '../components/cave-exit.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
@@ -32,7 +31,7 @@ import * as View from './cave-view.js'
 // eye-flower's roots tore in the ceiling, onto an earth ledge, a dormant
 // lantern mushroom left of him (bounced on, it lights up). Right past the
 // gap the hostile eye-flower watches him. Below lies the lake hall: stone
-// platforms over a shallow lake climb into the crevice of the exit, up to
+// platforms over a deep lake climb into the crevice of the exit, up to
 // the stalk-eye's ledge; past the stalk-eye a shaft of stone steps drops
 // into the passage under the hall (cave-layout.js).
 //
@@ -43,14 +42,14 @@ const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once 
 const START_PLATFORM = 'upper'
 //
 // Draw order: back (parallax), the eye-flower (behind its ledge, its root
-// in the soil), terrain, the drowning hero, the lake water, the lights,
-// the hero and creatures (player z), the stones in front of him, the
-// frame.
+// in the soil), the drowning hero (behind the soil), terrain, the lake
+// water, the lights, the hero and creatures (player z), the stones in front
+// of him, the frame.
 //
 const Z_WORLD = 0
 const Z_FLOWER = Z_WORLD + 0.3
+const Z_DROWN_HERO = Z_WORLD + 0.35
 const Z_TERRAIN = Z_WORLD + 0.4
-const Z_DROWN_HERO = Z_WORLD + 0.5
 const Z_WATER = Z_WORLD + 0.6
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
@@ -58,7 +57,7 @@ const Z_FRAME = CFG.visual.zIndex.ui - 1
 //
 // The eye-flower's root sinks this far into its ledge's top.
 //
-const FLOWER_SINK = 14
+const FLOWER_SINK = 3
 //
 // Static bodies: only the walls (they reach above the world so the entry
 // fall is framed). The platforms are walked on their own top (cave-ground.js): a
@@ -94,21 +93,19 @@ const FALL_OUT_Y = Layout.WORLD_H + 120
 const LAND_MIN_AIR = 0.12
 const SPLASH_VOLUME = 0.3
 //
-// Drowning (like the forest lake): the hero sinks slowly into the water,
-// then a short silent pause.
+// Drowning (like the forest lake): the hero shuts his eyes in his calm
+// pose and sinks slowly, drawn whole as one picture behind the soil and
+// under the water (seen through it); once he is all down in the lake bed's
+// soil (or after DROWN_MAX_TIME) a short silent pause.
 //
-const DROWN_SINK_SPEED = 48
-const DROWN_TIME = 1.5
+const DROWN_SINK_SPEED = 70
+const DROWN_MAX_TIME = 4
 const DROWN_RESPAWN_DELAY = 0.8
+const HALF = 0.5
 //
 // Ambient fireflies.
 //
 const FIREFLY_COUNT = 44
-//
-// Steady glow: the daylight falling in through the roots' hole (radius,
-// opacity).
-//
-const HOLE_GLOW = { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 130, opacity: 0.4, color: 'rootLight' }
 //
 // FPS readout over the top-left of the screen (like the forest's; on touch
 // devices lined up with the fullscreen / back buttons).
@@ -116,8 +113,6 @@ const HOLE_GLOW = { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 130, opacity: 
 const FPS_LEFT_X = 24
 const FPS_TOP_Y = 44
 const FPS_FONT_SCALE = 0.7
-const GLOW_FLICKER_SPEED = 1.3
-const GLOW_FLICKER = 0.12
 
 /**
  * Builds the whole cave level inside the active scene (once the prop
@@ -152,9 +147,7 @@ function build(k) {
     terrain: Terrain.create({ k }),
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
-    lantern: Lantern.create({ k, ...rootedOn(Layout.LANTERN) }),
-    exit: Exit.create({ k }),
-    glows: [HOLE_GLOW].map(g => ({ ...g, rgb: getRGB(k, CAVE_CFG.colors[g.color]) })),
+    lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
     platformByBody: new Map(),
     heroInst: null,
     safe: get(KEY_SAFE_SPOT, null),
@@ -164,6 +157,7 @@ function build(k) {
     deathX: 0,
     deathY: 0,
     airFor: 0,
+    drownLegs: null,
     fps: null
   }
   const getHeroPos = () => heroPos(inst)
@@ -187,13 +181,12 @@ function build(k) {
 function onUpdate(inst) {
   const k = inst.k
   const char = inst.heroInst?.character
-  if (inst.drown) updateDrown(inst, char)
+  if (inst.drown) updateDrown(inst)
   else if (inst.dead) updateRespawn(inst)
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   EyeFlower.onUpdate(inst.eyeFlower)
   StalkEye.onUpdate(inst.stalkEye)
-  Exit.onUpdate(inst.exit)
   const focus = heroFocus(inst)
   CaveSound.onUpdate(inst.caveSound, k.dt(), focus.y)
   View.follow(inst.view, focus.x, focus.y, focus.vy)
@@ -273,37 +266,59 @@ function killHero(inst) {
   Fireflies.burst(inst.fireflies, inst.deathX, inst.deathY, DEATH_BURST_COUNT)
 }
 //
-// Falling into the lake: controls off, no gravity, a splash; the hero then
-// sinks at a slow steady speed (drawn under the water fill, so it clouds him).
+// Falling into the lake: controls off, no gravity, a splash, the calm
+// pose; the hero then sinks at a slow steady speed (the hero module moves
+// him to his sink point and hides his own picture; drawDrowningHero draws
+// him under the water, behind the soil).
 //
 function startDrown(inst, char) {
   const hero = inst.heroInst
   hero.controllable = false
+  hero.controlsDisabled = true
   hero.isDying = true
+  hero.isSubmerging = true
+  Hero.enterCalmPose(hero)
+  Hero.applyCalmIdleSprite(hero)
   char.gravityScale = 0
   char.vel.x = 0
   char.vel.y = 0
-  char.z = Z_DROWN_HERO
   inst.drown = { t: 0, x: Math.round(char.pos.x), y: char.pos.y }
+  hero.drownSinkX = inst.drown.x
+  hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
   Sound.playSplashSound(inst.sfx, SPLASH_VOLUME)
 }
-function updateDrown(inst, char) {
+function updateDrown(inst) {
   const d = inst.drown
+  const hero = inst.heroInst
   d.t += inst.k.dt()
-  if (char?.exists?.()) {
-    char.vel.x = 0
-    char.vel.y = 0
-    char.moveTo(d.x, d.y + DROWN_SINK_SPEED * d.t)
-  }
-  if (d.t < DROWN_TIME) return
+  hero.drownSinkY = d.y + DROWN_SINK_SPEED * d.t
+  const top = hero.drownSinkY - Hero.HERO_BAKE_SPRITE_SIZE * HALF
+  const bed = Ground.topAt(Layout.PLATFORMS.find(p => p.top && Layout.LAKE_X1 >= p.x1 && Layout.LAKE_X2 <= p.x2), d.x)
+  if (top < bed && d.t < DROWN_MAX_TIME) return
+  const char = hero.character
   inst.deathX = d.x
   inst.deathY = d.y
   char?.exists?.() && inst.k.destroy(char)
-  inst.heroInst.character = null
+  hero.character = null
   inst.drown = null
   inst.dead = true
   inst.respawnAt = inst.k.time() + DROWN_RESPAWN_DELAY
+}
+//
+// The sinking hero: his calm closed-eyes picture on his legs standing as
+// in idle, whole, behind the soil (the lake bed hides what of him has gone
+// into it) and under the water.
+//
+function drawDrowningHero(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!inst.drown || !char?.exists?.()) return
+  const k = inst.k
+  const sprite = `${hero.spritePrefix}_closed`
+  if (!k.getSprite(sprite)) return
+  inst.drownLegs ??= Hero.createStandLegs(k)
+  Hero.drawStandingHero(k, inst.drownLegs, { x: char.pos.x, y: char.pos.y, sprite, flipX: char.flipX, groundY: char.pos.y + Hero.HERO_FEET_OFFSET_Y })
 }
 function updateRespawn(inst) {
   if (inst.k.time() < inst.respawnAt) return
@@ -449,14 +464,15 @@ function createHud(inst) {
   FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_LEFT_X)
 }
 //
-// Draw passes: the back world (parallax), the terrain (the lake's bowl in
-// it) with the lake's algae and the lantern, the see-through water (a
-// drowning hero sinks under it), the additive lights, the stones in front
-// of the hero and the screen frame.
+// Draw passes: the back world (parallax), the drowning hero (behind the
+// soil), the terrain (the lake's bowl in it)
+// with the lake's algae and the lantern, the see-through water, the
+// additive lights, the stones in front of the hero and the screen frame.
 //
 function addDrawLayers(inst) {
   const k = inst.k
   k.add([k.z(Z_WORLD), { draw: () => drawWorld(inst) }])
+  k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_WATER), { draw: () => CaveLake.onDraw(inst.lake, View.worldRect(inst.view)) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
@@ -470,23 +486,16 @@ function drawWorld(inst) {
 function drawTerrain(inst) {
   const view = View.worldRect(inst.view)
   Terrain.onDraw(inst.terrain, view)
-  CaveLake.onDrawAlgae(inst.lake, view)
+  CaveLake.onDrawAlgae(inst.lake)
   Lantern.onDraw(inst.lantern)
 }
 //
-// Every additive glow together: the roots' hole, the lantern's halo, the
-// exit, the fireflies.
+// Every additive glow together: the lantern's halo, the fireflies.
 //
 function drawLights(inst) {
   const view = View.worldRect(inst.view)
-  const t = inst.k.time()
-  inst.glows.forEach((g, i) => drawSteadyGlow(inst.k, g, i, t))
   Lantern.onDrawHalo(inst.lantern)
-  Exit.onDraw(inst.exit, view)
   Fireflies.onDraw(inst.fireflies, view.top, view.bottom)
-}
-function drawSteadyGlow(k, g, i, t) {
-  Glow.drawGlow(k, g.x, g.y, g.r, g.rgb, g.opacity * (1 + Math.sin(t * GLOW_FLICKER_SPEED + i) * GLOW_FLICKER))
 }
 //
 // Esc → menu; ambience stops on scene leave or native engine teardown.

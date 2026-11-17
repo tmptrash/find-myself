@@ -4313,7 +4313,8 @@ function drawForestDrownHeroClipped(inst) {
 //
 // Part of the drowning hero below the wave, under the water fill so it reads
 // through the tint (the part above is drawn by drawForestDrownHeroClipped),
-// and his dangling legs whole (they hang lowest, so they go under first).
+// and his legs whole, standing as in idle (they are lowest, so they go
+// under first).
 //
 function drawForestDrownHeroUnderwater(inst) {
   if (!inst.forestDrownHeroClipLock) return
@@ -4329,7 +4330,7 @@ function drawForestDrownHeroUnderwater(inst) {
   const surfaceY = Math.max(topY, lakeSurfaceWorldYAt(inst, char.pos.x))
   const bottomY = Math.min(topY + fullH, lake.originY + Lake.lakeBottomLocalY(lake, char.pos.x - lake.x1))
   const visibleH = bottomY - surfaceY
-  const legs = { x: char.pos.x, y: char.pos.y, opacity: char.opacity ?? 1 }
+  const legs = { x: char.pos.x, y: char.pos.y, groundY: char.pos.y + Hero.HERO_FEET_OFFSET_Y, opacity: char.opacity ?? 1 }
   inst.drownHeroLegs ??= Hero.createStandLegs(k)
   Hero.drawStandingHeroLegs(inst.drownHeroLegs, legs, false)
   visibleH > 0 && k.drawSprite({

@@ -4,13 +4,16 @@ import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Platform from './cave-platform.js'
 //
-// The cave's plants (plants.png), set by how each one grows:
+// The cave's plants (plants.png and plants2.png, mixed), set by how each
+// one grows:
 // - up from a walkable top (grow, shroom, bush, sprout, tiny) — rooted
 //   on the art's own top;
 // - hanging from a ledge's underside or from the ceiling (hang);
 // - out of a wall or a ledge's free end sideways (side; a side plant's
-//   root is on its left, so it is mirrored on a face that looks left).
-// Every UP_GAP / HANG_GAP / SIDE_GAP px or so (moderately), never at the
+//   root is on its left, so it is mirrored on a face that looks left);
+// - small ones (FLOAT_KINDS) on the small platforms over the lake and in
+//   the shaft.
+// Every UP_GAP / HANG_GAP / SIDE_GAP px or so (densely), never at the
 // creatures, the lantern, the roots' hole or the exit; pulled toward the
 // cave's shade like everything in it. Placed once per page and painted
 // into the terrain bake (behind the hero).
@@ -19,28 +22,33 @@ const SHADE = CAVE_CFG.earth.shade
 const SHADE_AMOUNT = 0.35
 const SEED = 7300
 //
-// Kinds by how they grow: piece prefix, drawn height (world px) and how
-// often one is picked.
+// Kinds by how they grow: piece prefixes (a piece is picked from all of
+// them), drawn height (world px) and how often a kind is picked.
 //
 const UP_KINDS = [
-  { prefix: 'grow', hMin: 40, hRange: 18, weight: 2 },
-  { prefix: 'shroom', hMin: 30, hRange: 14, weight: 1 },
-  { prefix: 'bush', hMin: 34, hRange: 16, weight: 2 },
-  { prefix: 'sprout', hMin: 24, hRange: 10, weight: 2 },
-  { prefix: 'tiny', hMin: 16, hRange: 8, weight: 1 }
+  { prefixes: ['grow'], hMin: 40, hRange: 18, weight: 1 },
+  { prefixes: ['shroom'], hMin: 30, hRange: 14, weight: 1 },
+  { prefixes: ['bush'], hMin: 34, hRange: 16, weight: 1 },
+  { prefixes: ['upB'], hMin: 34, hRange: 20, weight: 4 },
+  { prefixes: ['sprout', 'sproutB'], hMin: 22, hRange: 10, weight: 2 },
+  { prefixes: ['tiny', 'tinyB'], hMin: 14, hRange: 8, weight: 1 }
 ]
-const HANG_LEDGE = { prefix: 'hang', hMin: 55, hRange: 35, weight: 1 }
-const HANG_CEILING = { prefix: 'hang', hMin: 45, hRange: 25, weight: 1 }
-const SIDE = { prefix: 'side', hMin: 45, hRange: 20, weight: 1 }
+const HANG_LEDGE = { prefixes: ['hang', 'hangB'], hMin: 55, hRange: 35, weight: 1 }
+const HANG_CEILING = { prefixes: ['hang', 'hangB'], hMin: 45, hRange: 25, weight: 1 }
+const SIDE = { prefixes: ['side', 'sideB'], hMin: 45, hRange: 20, weight: 1 }
+const FLOAT_KINDS = [
+  { prefixes: ['sprout', 'sproutB'], hMin: 16, hRange: 8, weight: 1 },
+  { prefixes: ['tiny', 'tinyB'], hMin: 12, hRange: 6, weight: 1 }
+]
 //
 // Spacing along a top / an underside / a wall: the least gap and its
 // spread; how far a plant sinks into what it grows from; how far from a
 // free end or a wall it keeps.
 //
-const UP_GAP = 55
-const HANG_GAP = 170
-const SIDE_GAP = 200
-const GAP_RANGE = 100
+const UP_GAP = 32
+const HANG_GAP = 100
+const SIDE_GAP = 110
+const GAP_RANGE = 60
 const UP_SINK = 3
 const HANG_SINK = 10
 const SIDE_SINK = 10
@@ -51,9 +59,14 @@ const WALL_CLEAR = 20
 //
 const END_SIDE_CHANCE = 0.7
 //
-// Plants keep this far from the lake's ends.
+// Plants keep this far from the lake's ends (and its surface's height). A
+// small platform at least FLOAT_PLANT_MIN_W wide gets a plant this often,
+// off its middle by up to FLOAT_PLANT_SPREAD of its width.
 //
 const LAKE_CLEAR = 20
+const FLOAT_PLANT_MIN_W = 60
+const FLOAT_PLANT_CHANCE = 0.75
+const FLOAT_PLANT_SPREAD = 0.3
 //
 // A wall's face is open between the ceiling (WALL_CEIL_CLEAR under it)
 // and the platforms running into it (kept WALL_PLATFORM_CLEAR clear).
@@ -98,12 +111,19 @@ function place() {
   placeUnderCeiling(rng, out)
   placeOnWall(rng, out, -1)
   placeOnWall(rng, out, 1)
+  Layout.PLATFORMS.filter(p => p.kind === Layout.PLATFORM_KIND.FLOAT && p.w >= FLOAT_PLANT_MIN_W).forEach(p => placeOnFloat(rng, out, p))
   return out
+}
+function placeOnFloat(rng, out, p) {
+  if (rng() > FLOAT_PLANT_CHANCE) return
+  const x = p.x + (rng() * 2 - 1) * p.w * FLOAT_PLANT_SPREAD
+  out.push(upright(rng, pickKind(rng, FLOAT_KINDS), x, Platform.surfaceAt(p, x) + UP_SINK))
 }
 function placeOnTop(rng, out, p) {
   const { from, to } = runOf(p)
   for (let x = from + rng() * UP_GAP; x < to; x += UP_GAP + rng() * GAP_RANGE) {
-    isClear(x) && !inLake(x) && out.push(upright(rng, pickKind(rng, UP_KINDS), x, Platform.surfaceAt(p, x) + UP_SINK))
+    const y = Platform.surfaceAt(p, x)
+    isClear(x) && !inLake(x, y) && out.push(upright(rng, pickKind(rng, UP_KINDS), x, y + UP_SINK))
   }
 }
 function placeUnder(rng, out, p) {
@@ -168,17 +188,18 @@ function isClear(x) {
   return CLEAR.every(c => Math.abs(x - c.x) > c.r)
 }
 //
-// Nothing grows up out of the lake's bowl (its algae are the lake's).
+// Nothing grows up out of the lake's bowl or right at its edge (its algae
+// are the lake's); ledges high over it are not in it.
 //
-function inLake(x) {
-  return x > Layout.LAKE_X1 - LAKE_CLEAR && x < Layout.LAKE_X2 + LAKE_CLEAR
+function inLake(x, y) {
+  return x > Layout.LAKE_X1 - LAKE_CLEAR && x < Layout.LAKE_X2 + LAKE_CLEAR && y > Layout.LAKE_SURFACE_Y - LAKE_CLEAR
 }
 function pickKind(rng, kinds) {
   let roll = rng() * kinds.reduce((sum, kind) => sum + kind.weight, 0)
   return kinds.find(kind => (roll -= kind.weight) < 0) ?? kinds[kinds.length - 1]
 }
 function pickName(rng, kind) {
-  const names = Atlas.pieceNames(kind.prefix)
+  const names = kind.prefixes.flatMap(prefix => Atlas.pieceNames(prefix))
   return names[Math.floor(rng() * names.length)]
 }
 //

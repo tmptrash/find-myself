@@ -181,6 +181,10 @@ const LAKE_ALGAE_KINDS = {
   grass: { bladesMin: 4, bladesRange: 3, hMin: 10, hRange: 10, wMin: 1.6, wRange: 1, lean: 0.45, spread: 7 }
 }
 const LAKE_ALGAE_LAYOUT_SEED = 7721
+//
+// A field's blades root up to this far under its bed line.
+//
+const LAKE_ALGAE_FIELD_SINK_PX = 3
 const LAKE_ALGAE_SHORE_CLEAR_PX = 24
 const LAKE_ALGAE_MIN_H = 8
 const LAKE_ALGAE_TOP_CLEAR_PX = 8
@@ -315,24 +319,57 @@ export function drawBed(k, lake, opacity = 1) {
 }
 
 /**
- * Sways and draws the algae: slow sway with the bend growing toward the tip
- * and lagging behind the base; fronds also ripple along their length. All
- * leaf polygons first, then the frond midribs, all in one batched polygon
- * (one draw call instead of one or two per blade).
+ * Sways and draws the lake's algae (drawAlgaeField).
  * @param {Object} k - Kaplay inst
  * @param {Object} lake - Lake inst
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawAlgae(k, lake, opacity = 1) {
+  drawAlgaeField(k, lake.algae, opacity)
+}
+
+/**
+ * Algae of the forest lake's look along another water (the cave's lake):
+ * the same tufts spread from x1 to x2, rooted on its bed.
+ * @param {Object} k - Kaplay inst
+ * @param {Object} cfg
+ * @param {Object} cfg.paint - Palette with algae / algaeLight / algaeDark
+ * @param {number} cfg.x1 - Left end of the water (world)
+ * @param {number} cfg.x2 - Right end of the water (world)
+ * @param {function(number): number} cfg.bedAt - Bed's world Y at a world X
+ * @param {number} cfg.surfaceY - Water surface (world Y)
+ * @returns {Object} Algae field
+ */
+export function createAlgaeField(k, cfg) {
+  const span = cfg.x2 - cfg.x1 - LAKE_ALGAE_SHORE_CLEAR_PX * 2
+  const field = buildAlgae(k, cfg.paint, t => cfg.x1 + LAKE_ALGAE_SHORE_CLEAR_PX + t * span, (x, rng) => {
+    const rootY = cfg.bedAt(x) + rng() * LAKE_ALGAE_FIELD_SINK_PX
+    return { x, y: rootY, room: rootY - cfg.surfaceY - LAKE_OPAQUE_SKIN_PX - LAKE_ALGAE_TOP_CLEAR_PX }
+  })
+  field.x1 = cfg.x1
+  field.x2 = cfg.x2
+  return field
+}
+
+/**
+ * Sways and draws an algae field: slow sway with the bend growing toward
+ * the tip and lagging behind the base; fronds also ripple along their
+ * length. All leaf polygons first, then the frond midribs, in one batched
+ * polygon.
+ * @param {Object} k - Kaplay inst
+ * @param {Object} field - Algae field (a lake's, or createAlgaeField's)
+ * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
+ */
+export function drawAlgaeField(k, field, opacity = 1) {
   const camX = k.camPos().x
   const scale = k.camScale?.()
   const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
   const half = k.width() / (2 * zoom)
   const minX = camX - half - LAKE_ALGAE_CULL_PAD
   const maxX = camX + half + LAKE_ALGAE_CULL_PAD
-  if (lake.x1 + lake.canvasW < minX || lake.x1 > maxX) return
+  if (field.x2 < minX || field.x1 > maxX) return
   const time = k.time()
-  const { blades, indices, batch, visible } = lake.algae
+  const { blades, indices, batch, visible } = field
   visible.length = 0
   for (let i = 0; i < blades.length; i++) {
     const blade = blades[i]
@@ -940,30 +977,43 @@ function lakeBedBakeRng(seed) {
 // they sit "on" the receding floor; heights are capped below the wave band.
 //
 function buildLakeAlgae(k, lake) {
-  const fronds = []
   const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const palette = lake.pal.paint
-  const tones = [palette.algaeDark, palette.algae, palette.algaeLight].map((hex) => {
+  const field = buildAlgae(k, lake.pal.paint, t => lakeWaterLocalX(lake, t), (x, rng) => {
+    const top = lakeBedTopLocalY(lake, x)
+    const rootY = top + (bottomLocalY(lake, x) - top) * (LAKE_ALGAE_ROOT_DEPTH_MIN + rng() * LAKE_ALGAE_ROOT_DEPTH_RANGE)
+    return { x: lake.x1 + x, y: lake.originY + rootY, room: rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX }
+  })
+  field.x1 = lake.x1
+  field.x2 = lake.x1 + lake.canvasW
+  return field
+}
+//
+// Algae tufts along a lake (LAKE_ALGAE_TUFTS): `cxAt(t)` places a tuft,
+// `rootAt(x, rng)` gives a blade's world root and the room it has to grow
+// (it draws from rng once).
+//
+function buildAlgae(k, paint, cxAt, rootAt) {
+  const fronds = []
+  const tones = [paint.algaeDark, paint.algae, paint.algaeLight].map((hex) => {
     const c = getRGB(k, hex)
     return k.rgb(c.r, c.g, c.b)
   })
   const rng = lakeBedBakeRng(LAKE_ALGAE_LAYOUT_SEED)
   for (const tuft of LAKE_ALGAE_TUFTS) {
-    const cx = lakeWaterLocalX(lake, tuft.t)
+    const cx = cxAt(tuft.t)
     const kind = LAKE_ALGAE_KINDS[tuft.kind]
     const count = kind.bladesMin + Math.floor(rng() * kind.bladesRange)
     for (let b = 0; b < count; b++) {
       const x = cx + (rng() * 2 - 1) * kind.spread
-      const top = lakeBedTopLocalY(lake, x)
-      const rootY = top + (bottomLocalY(lake, x) - top) * (LAKE_ALGAE_ROOT_DEPTH_MIN + rng() * LAKE_ALGAE_ROOT_DEPTH_RANGE)
-      const h = Math.min(kind.hMin + rng() * kind.hRange, rootY - murkTop - LAKE_ALGAE_TOP_CLEAR_PX)
+      const root = rootAt(x, rng)
+      const h = Math.min(kind.hMin + rng() * kind.hRange, root.room)
       if (h < LAKE_ALGAE_MIN_H) continue
       const width = kind.wMin + rng() * kind.wRange
       const isFrond = tuft.kind === 'frond'
       const lean = (rng() * 2 - 1) * kind.lean
       const phase = rng() * Math.PI * 2
-      const worldX = lake.x1 + x
-      const worldY = lake.originY + rootY
+      const worldX = root.x
+      const worldY = root.y
       const baseX = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
       const baseY = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
       const halfW = new Float32Array(LAKE_ALGAE_SEGMENTS + 1)
@@ -993,7 +1043,7 @@ function buildLakeAlgae(k, lake) {
       })
     }
   }
-  return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create(), visible: [] }
+  return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create(), visible: [], x1: 0, x2: 0 }
 }
 function isLakeInView(k, lake) {
   const camX = k.camPos().x

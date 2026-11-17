@@ -6,8 +6,7 @@ import * as Backdrop from '../utils/cave-backdrop.js'
 import * as Glow from '../utils/cave-glow.js'
 import * as Layout from '../utils/cave-layout.js'
 import * as Scene from '../utils/cave-scene.js'
-import * as Ground from '../utils/cave-ground.js'
-import { LANTERN_H, LANTERN_PIECE } from './cave-lantern.js'
+import { LANTERN_H, LANTERN_PIECE, footYOn } from './cave-lantern.js'
 //
 // A glimpse of the cave from the forest: when the eye-flower's roots have
 // dragged the hero down their tunnel, its floor gives way and under it
@@ -35,7 +34,6 @@ const CONTOUR_W = 3
 // The lantern mushroom stands dim in it (it lights only when bounced on).
 //
 const LANTERN_SHADE = 0.4
-const LANTERN_SINK = 3
 //
 // Glows inside the hollow: the lantern's faint halo, the teal mushrooms,
 // daylight from the roots' hole (cave x, y, radius, opacity, colour key).
@@ -129,7 +127,7 @@ function bake(k) {
   ctx.translate(-RECT.x1, -RECT.y1)
   Backdrop.paintBackdrop(ctx, RECT)
   Scene.paintTerrain(ctx, RECT)
-  Atlas.drawPiece(ctx, LANTERN_PIECE, Layout.LANTERN.x, Ground.topAt(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) + LANTERN_SINK, LANTERN_H, {
+  Atlas.drawPiece(ctx, LANTERN_PIECE, Layout.LANTERN.x, footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x), LANTERN_H, {
     shade: CAVE_CFG.colors.frame,
     shadeAmount: LANTERN_SHADE
   })

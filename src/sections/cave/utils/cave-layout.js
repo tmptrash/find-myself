@@ -5,9 +5,9 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 // ledge — a lantern mushroom left of where he lands. A gap splits it from
 // the next ledge, on which the hostile eye-flower grows right at the gap;
 // fall through the gap into the lake hall under the ledges: a soil floor
-// with a shallow lake in it, stone platforms hanging over the water that
+// with a deep lake in it, small soil platforms hanging over the water that
 // climb right into the crevice between the eye-flower's ledge and the
-// stalk-eye's — the way up, warm light rising out of it. The stalk-eye's
+// stalk-eye's — the way up. The stalk-eye's
 // ledge is the top of a solid mass (the old corridor under it is filled
 // in); right past the stalk-eye a shaft drops at the level's right edge,
 // stone steps zigzagging down it into a passage that runs under the lake
@@ -47,12 +47,12 @@ export const ENTRY_HALF_W = 46
 export const ENTRY_Y = 330
 //
 // The lake in the hall's floor: between its banks, its surface a little
-// under the banks' top; the floor dips into a shallow bowl under it.
+// under the banks' top; the floor dips into a bowl under it, deep enough to
+// drown in.
 //
 export const LAKE_X1 = 470
 export const LAKE_X2 = 1380
 export const LAKE_SURFACE_Y = 1010
-const LAKE_DROWN_DEPTH = 4
 //
 // Hero feet sit this far below the character anchor.
 //
@@ -83,7 +83,7 @@ const K = PLATFORM_KIND
 // down the shaft.
 //
 const HALL_FLOOR_Y = 1000
-const PASSAGE_TOP_Y = 1170
+const PASSAGE_TOP_Y = 1195
 const PASSAGE_FLOOR_Y = 1400
 const EYE_LEDGE_X1 = 1680
 const EYE_LEDGE_X2 = 1950
@@ -95,7 +95,7 @@ export const PLATFORMS = [
     x1: 0,
     x2: EYE_LEDGE_X1 + 20,
     y: HALL_FLOOR_Y,
-    top: [[0, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [500, 1030], [535, 1052], [700, 1060], [900, 1056], [1150, 1062], [1320, 1052], [1352, 1028], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
+    top: [[0, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [495, 1040], [530, 1080], [620, 1100], [800, 1106], [1000, 1102], [1200, 1106], [1310, 1086], [1350, 1045], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
     bottom: PASSAGE_TOP_Y,
     joinR: true,
     kind: K.LEDGE,
@@ -103,6 +103,7 @@ export const PLATFORMS = [
   },
   { id: 'eyeLedge', x1: EYE_LEDGE_X1, x2: EYE_LEDGE_X2, y: 580, bottom: PASSAGE_TOP_Y, faceTo: HALL_FLOOR_Y, under: 'hallFloor', kind: K.LEDGE, seed: 23 },
   { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, 1392], [820, 1404], [1240, 1394], [1640, 1402], [WORLD_W, 1396]], kind: K.GROUND, seed: 59 },
+  { id: 'lake0', x: 545, y: 935, w: 60, piece: 'float2', kind: K.FLOAT, seed: 40 },
   { id: 'lake1', x: 695, y: 890, w: 160, piece: 'float12', kind: K.FLOAT, seed: 41 },
   { id: 'lake2', x: 840, y: 862, w: 70, piece: 'float1', kind: K.FLOAT, seed: 42 },
   { id: 'lake3', x: 955, y: 840, w: 80, piece: 'float9', kind: K.FLOAT, seed: 43 },
@@ -125,10 +126,10 @@ export const PLATFORMS = [
   { id: 'shaft10', x: 2035, y: 1340, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 }
 ].map(p => (p.kind === K.FLOAT ? { ...p, x1: p.x - p.w / 2, x2: p.x + p.w / 2 } : p))
 //
-// The exit: the crevice between the two upper ledges, from their tops down
-// into the hall under them; the light rises from its glow point.
+// The exit: the crevice between the two upper ledges (its span), from
+// their tops down into the hall under them.
 //
-export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1, y1: 552, y2: 780, glowX: 1610, glowY: 720 }
+export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1 }
 //
 // The hostile eye-flower on its ledge right at the gap; the stalk-eye on
 // its ledge right past the exit, before the shaft;
@@ -144,11 +145,16 @@ export const LANTERN = { x: 215, y: 560, on: 'upper' }
 //
 export const FIREFLY_BOUNDS = { x1: 70, y1: 140, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
 //
-// Wall profile: inset past the collider, a gentle ripple (no outcrops
-// sticking out of the face).
+// Wall profile, shaped like a platform's underside: inset past the
+// collider, broad lobes and fine ones (stretch, height), nothing sticking
+// out of the face.
 //
 const WALL_ART_INSET = 22
-const WALL_RIPPLE_AMP = 16
+const WALL_LOBE_STRETCH = 1.2
+const WALL_LOBE_AMP = 14
+const WALL_FINE_STRETCH = 0.6
+const WALL_FINE_AMP = 5
+const WALL_FINE_SEED = 2.2
 const LEFT_WALL_SEED = 1.7
 const RIGHT_WALL_SEED = 3.1
 //
@@ -227,15 +233,15 @@ export function baseSegments(p) {
 }
 
 /**
- * True when the hero has sunk into the lake (not when he walks the
- * passage under it).
+ * True as soon as the hero's feet touch the lake's water (not when he
+ * walks the passage under it).
  * @param {number} x - Hero anchor X
  * @param {number} y - Hero anchor Y
  * @returns {boolean}
  */
 export function isInLake(x, y) {
   const feet = y + HERO_FEET_DY
-  return x > LAKE_X1 && x < LAKE_X2 && feet > LAKE_SURFACE_Y + LAKE_DROWN_DEPTH && feet < PASSAGE_TOP_Y
+  return x > LAKE_X1 && x < LAKE_X2 && feet > LAKE_SURFACE_Y && feet < PASSAGE_TOP_Y
 }
 
 /**
@@ -254,7 +260,7 @@ export function profileNoise(v, seed) {
  * @returns {number}
  */
 export function leftWallX(y) {
-  return WALL_COLLIDE_W + WALL_ART_INSET + profileNoise(y, LEFT_WALL_SEED) * WALL_RIPPLE_AMP
+  return WALL_COLLIDE_W + WALL_ART_INSET + wallWave(y, LEFT_WALL_SEED)
 }
 
 /**
@@ -263,7 +269,13 @@ export function leftWallX(y) {
  * @returns {number}
  */
 export function rightWallX(y) {
-  return WORLD_W - WALL_COLLIDE_W - WALL_ART_INSET - profileNoise(y, RIGHT_WALL_SEED) * WALL_RIPPLE_AMP
+  return WORLD_W - WALL_COLLIDE_W - WALL_ART_INSET - wallWave(y, RIGHT_WALL_SEED)
+}
+//
+// A wall face's wave at Y (positive: into the room).
+//
+function wallWave(y, seed) {
+  return profileNoise(y / WALL_LOBE_STRETCH, seed) * WALL_LOBE_AMP + profileNoise(y / WALL_FINE_STRETCH, seed + WALL_FINE_SEED) * WALL_FINE_AMP
 }
 //
 // The ceiling's bulges along the world, placed once.

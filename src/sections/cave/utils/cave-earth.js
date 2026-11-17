@@ -137,6 +137,19 @@ const SHADE_FROM = 0.1
 const SHADE_ALPHA = 0.45
 const BYTE_MAX = 255
 const HEX_RADIX = 16
+//
+// The pieces' soft fades (the ends of an edge chain's pieces, a corner's
+// inner side, a slope's low end) would leave see-through wisps and ears
+// standing off a body: once it is assembled, alpha under HAZE_LO is
+// dropped, over HAZE_HI made solid (between, stretched), and any loose
+// island smaller than ISLAND_MIN px (alpha from ISLAND_ALPHA) is cleared.
+//
+const HAZE_LO = 110
+const HAZE_HI = 190
+const ISLAND_ALPHA = 128
+const ISLAND_MIN = 400
+const RGBA = 4
+const NEIGHBOURS = [1, -1, 0, 0]
 const layers = new Map()
 const baselines = new Map()
 let blockTile = null
@@ -154,6 +167,7 @@ const slopesFaded = new Map()
  * @param {Array<{x1: number, x2: number}>} [body.slopes] - Runs where the top rises or falls
  * @param {Array<{x1: number, x2: number, y1: number, y2: number}>} [body.feathers] - Rects where the body fades out, gone at x1, whole at x2
  * @param {boolean} [body.bare=false] - Nothing laid in the core (no stones, patches or elements)
+ * @param {Array<{x: number, y: number}>} [body.envelope] - Outline nothing of the body may reach past
  * @param {number} seed - Body seed
  * @returns {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}}
  */
@@ -172,6 +186,8 @@ export function soilLayer(body, seed) {
   body.corners?.forEach(corner => paintCorner(ctx, corner))
   body.top && paintTopBand(ctx, rng, body.top)
   body.top && body.slopes?.forEach(run => paintSlope(ctx, body.top, run))
+  body.envelope && clipTo(ctx, body.envelope)
+  hardenEdges(ctx, canvas.width, canvas.height)
   body.feathers?.forEach(f => featherOut(ctx, f))
   return { canvas, ctx, x, y }
 }
@@ -212,6 +228,15 @@ export function embedStone(ctx, rng, stone, surfaceY = null) {
   Atlas.drawPiece(ctx, stone.name, stone.x, foot, stone.h, { flip: stone.flip, angle: stone.angle, shade: COLORS.shade, shadeAmount: STONE_SHADE })
   const kind = ground ? JOINT_KIND.ARC : JOINT_KIND.BED
   onTop || drawJoint(ctx, rng, stone.x, w, kind, ground, foot - stone.h * JOINT_UP[kind])
+}
+
+/**
+ * A repeating fill of the soil block (in the soil's own scale).
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @returns {CanvasPattern}
+ */
+export function soilPattern(ctx) {
+  return ctx.createPattern(soilTile(), 'repeat')
 }
 
 /**
@@ -657,6 +682,53 @@ function topNear(top, col) {
     if (!Number.isNaN(top[col - d])) return top[col - d]
   }
   return 0
+}
+//
+// Everything painted cut to an outline.
+//
+function clipTo(ctx, poly) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-in'
+  tracePoly(ctx, poly)
+  ctx.fillStyle = COLORS.shade
+  ctx.fill()
+  ctx.restore()
+}
+//
+// A body's hazy fades cut away and its loose specks cleared (see HAZE_LO).
+//
+function hardenEdges(ctx, w, h) {
+  const image = ctx.getImageData(0, 0, w, h)
+  const data = image.data
+  for (let i = 3; i < data.length; i += RGBA) data[i] = Math.max(0, Math.min(BYTE_MAX, (data[i] - HAZE_LO) * BYTE_MAX / (HAZE_HI - HAZE_LO)))
+  clearSpecks(data, w, h)
+  ctx.putImageData(image, 0, 0)
+}
+//
+// Every solid island smaller than ISLAND_MIN px cleared (4-connected).
+//
+function clearSpecks(data, w, h) {
+  const seen = new Uint8Array(w * h)
+  const stack = []
+  const island = []
+  for (let start = 0; start < w * h; start++) {
+    if (seen[start] || data[start * RGBA + 3] < ISLAND_ALPHA) continue
+    island.length = 0
+    stack.push(start)
+    seen[start] = 1
+    while (stack.length) {
+      const p = stack.pop()
+      island.push(p)
+      const x = p % w
+      for (let n = 0; n < NEIGHBOURS.length; n++) {
+        const q = n < 2 ? (x + NEIGHBOURS[n] >= 0 && x + NEIGHBOURS[n] < w ? p + NEIGHBOURS[n] : -1) : p + (n === 2 ? w : -w)
+        if (q < 0 || q >= w * h || seen[q] || data[q * RGBA + 3] < ISLAND_ALPHA) continue
+        seen[q] = 1
+        stack.push(q)
+      }
+    }
+    island.length < ISLAND_MIN && island.forEach(p => (data[p * RGBA + 3] = 0))
+  }
 }
 //
 // The body faded out across a rect: gone at its x1, whole at its x2.

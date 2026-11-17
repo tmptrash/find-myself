@@ -1,12 +1,14 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
+import * as Atlas from './cave-atlas.js'
 import * as Earth from './cave-earth.js'
 import * as Layout from './cave-layout.js'
 //
-// The back of the cave room: one parallax layer, the far wall — the
-// stones of stones.png and ground_stones.png packed together, pulled deep
-// into the dark, dark brown soil showing between them. It is softened by
+// The back of the cave room: one parallax layer, the far wall — the soil
+// block (ground_block.png) studded with the stones of ground_stones.png,
+// each laid in it as in the platforms, all pulled deep into the dark. It
+// is softened by
 // painting it small and scaling it up. The layer moves only with the
 // camera — its share (its speed) of the camera's travel — so where the
 // world in front stands still, so does the back. It is painted in its own
@@ -14,7 +16,7 @@ import * as Layout from './cave-layout.js'
 // live k, in columns under 2048 px.
 //
 const COLORS = CAVE_CFG.backdrop
-const SPRITE_PREFIX = 'cave0-backdrop-v10-'
+const SPRITE_PREFIX = 'cave0-backdrop-v11-'
 const TILE_MAX = 2048
 const GRAIN_SEED = 9100
 //
@@ -25,17 +27,17 @@ const LAYERS = [
   { id: 'wall', speed: 0.25, seed: 9101, blurDown: 3 }
 ]
 //
-// The far wall: stones of mixed sizes scattered at random (see
-// Earth.scatter), pulled toward the shade colour, with dark brown soil
-// showing between them.
+// The far wall: ground stones of mixed sizes scattered at random over the
+// soil (see Earth.scatter) and laid into it (Earth.embedStone), then all
+// pulled toward the shade colour.
 //
 const WALL_SIZES = [
-  { hMin: 36, hRange: 32, density: 7 },
-  { hMin: 20, hRange: 14, density: 40 },
-  { hMin: 9, hRange: 9, density: 380 }
+  { hMin: 30, hRange: 30, density: 0.6 },
+  { hMin: 14, hRange: 12, density: 2.4 },
+  { hMin: 6, hRange: 6, density: 6 }
 ]
-const WALL_CLOSEST = 0.7
-const WALL_SHADE = 0.72
+const WALL_CLOSEST = 1
+const WALL_SHADE = 0.7
 const bakedFor = new WeakSet()
 
 /**
@@ -134,20 +136,17 @@ function paintLayer(ctx, layer, view) {
   ctx.restore()
 }
 //
-// The far wall: the stones of both sheets scattered, pulled toward the
-// shade colour, then the soil filled in behind them.
+// The far wall: the soil block, the ground stones laid into it, then all
+// pulled toward the shade colour.
 //
 function paintWall(ctx, rng, size) {
-  Earth.scatter(rng, { x1: 0, y1: 0, w: size.w, h: size.h }, Earth.soilRocks(), WALL_SIZES, WALL_CLOSEST, () => true)
-    .forEach(stone => Earth.drawStone(ctx, stone))
+  ctx.fillStyle = Earth.soilPattern(ctx)
+  ctx.fillRect(0, 0, size.w, size.h)
+  Earth.scatter(rng, { x1: 0, y1: 0, w: size.w, h: size.h }, Atlas.GROUND_ROCKS, WALL_SIZES, WALL_CLOSEST, () => true)
+    .forEach(stone => Earth.embedStone(ctx, rng, stone))
   ctx.save()
-  ctx.globalCompositeOperation = 'source-atop'
   ctx.globalAlpha = WALL_SHADE
   ctx.fillStyle = COLORS.wallShade
-  ctx.fillRect(0, 0, size.w, size.h)
-  ctx.globalCompositeOperation = 'destination-over'
-  ctx.globalAlpha = 1
-  ctx.fillStyle = COLORS.wallSoil
   ctx.fillRect(0, 0, size.w, size.h)
   ctx.restore()
 }

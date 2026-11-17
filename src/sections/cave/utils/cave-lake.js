@@ -140,7 +140,7 @@ export function onDraw(inst, view) {
 // banks' soil meets the surface right at its ends).
 //
 function bowlLine() {
-  const floor = Layout.PLATFORMS.find(p => p.top && Layout.LAKE_X1 >= p.x1 && Layout.LAKE_X2 <= p.x2)
+  const floor = Layout.lakeFloor()
   const cols = []
   for (let x = Layout.LAKE_X1 - BANK_REACH; x <= Layout.LAKE_X2 + BANK_REACH; x++) cols.push({ x, y: Ground.topAt(floor, x) })
   const first = cols.findIndex(c => c.y > Layout.LAKE_SURFACE_Y)

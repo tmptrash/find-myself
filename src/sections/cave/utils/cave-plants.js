@@ -8,12 +8,14 @@ import * as Platform from './cave-platform.js'
 // one grows:
 // - up from a walkable top (grow, shroom, bush, sprout, tiny) — rooted
 //   on the art's own top;
-// - hanging from a ledge's underside or from the ceiling (hang);
+// - hanging from a ledge's underside or from the ceiling (hang), with
+//   roots (roots.png) hanging there too, behind every plant;
 // - out of a wall or a ledge's free end sideways (side; a side plant's
 //   root is on its left, so it is mirrored on a face that looks left);
 // - small ones (FLOAT_KINDS) on the small platforms over the lake and in
 //   the shaft.
-// Every UP_GAP / HANG_GAP / SIDE_GAP px or so (densely), never at the
+// About every UP_GAP / HANG_GAP / SIDE_GAP px — in clumps and open
+// stretches, never evenly spaced (nextGap) — never at the
 // creatures, the lantern, the roots' hole or the exit; pulled toward the
 // cave's shade like everything in it. Placed once per page and painted
 // into the terrain bake (behind the hero).
@@ -21,6 +23,12 @@ import * as Platform from './cave-platform.js'
 const SHADE = CAVE_CFG.earth.shade
 const SHADE_AMOUNT = 0.35
 const SEED = 7300
+//
+// How far a hanging plant's top and a root's top sink into what they hang
+// from.
+//
+const HANG_SINK = 10
+const ROOT_SINK = 12
 //
 // Kinds by how they grow: piece prefixes (a piece is picked from all of
 // them), drawn height (world px) and how often a kind is picked.
@@ -33,8 +41,9 @@ const UP_KINDS = [
   { prefixes: ['sprout', 'sproutB'], hMin: 22, hRange: 10, weight: 2 },
   { prefixes: ['tiny', 'tinyB'], hMin: 14, hRange: 8, weight: 1 }
 ]
-const HANG_LEDGE = { prefixes: ['hang', 'hangB'], hMin: 55, hRange: 35, weight: 1 }
-const HANG_CEILING = { prefixes: ['hang', 'hangB'], hMin: 45, hRange: 25, weight: 1 }
+const HANG_LEDGE = { prefixes: ['hang', 'hangB'], hMin: 55, hRange: 35, weight: 1, sink: HANG_SINK }
+const HANG_CEILING = { prefixes: ['hang', 'hangB'], hMin: 45, hRange: 25, weight: 1, sink: HANG_SINK }
+const ROOTS = { prefixes: ['root'], hMin: 45, hRange: 60, weight: 1, sink: ROOT_SINK }
 const SIDE = { prefixes: ['side', 'sideB'], hMin: 45, hRange: 20, weight: 1 }
 const FLOAT_KINDS = [
   { prefixes: ['sprout', 'sproutB'], hMin: 16, hRange: 8, weight: 1 },
@@ -50,7 +59,29 @@ const HANG_GAP = 100
 const SIDE_GAP = 110
 const GAP_RANGE = 60
 const UP_SINK = 3
-const HANG_SINK = 10
+//
+// Roots hang about every ROOT_GAP..+ROOT_GAP_RANGE px under the ledges and
+// the ceiling.
+//
+const ROOT_GAP = 70
+const ROOT_GAP_RANGE = 90
+//
+// Gaps between plants are uneven: most come short — a clump, CLUMP_SHARE
+// ..+CLUMP_RANGE of the usual gap — the rest leave an open stretch,
+// OPEN_SHARE..+OPEN_RANGE of it (skewed toward its short end).
+//
+const CLUMP_CHANCE = 0.6
+const CLUMP_SHARE = 0.25
+const CLUMP_RANGE = 0.6
+const OPEN_SHARE = 1.2
+const OPEN_RANGE = 3
+const HALF = 0.5
+//
+// A plant's root spans this share of its drawn width either side of its
+// middle; the soil under it is read every ROOT_STEP px.
+//
+const ROOT_SHARE = 0.3
+const ROOT_STEP = 2
 const SIDE_SINK = 10
 const END_CLEAR = 30
 const WALL_CLEAR = 20
@@ -59,11 +90,13 @@ const WALL_CLEAR = 20
 //
 const END_SIDE_CHANCE = 0.7
 //
-// Plants keep this far from the lake's ends (and its surface's height). A
-// small platform at least FLOAT_PLANT_MIN_W wide gets a plant this often,
-// off its middle by up to FLOAT_PLANT_SPREAD of its width.
+// Plants keep this far from the lake's ends (and its surface's height);
+// its bowl reaches LAKE_DEPTH px under its surface. A small platform at
+// least FLOAT_PLANT_MIN_W wide gets a plant this often, off its middle by
+// up to FLOAT_PLANT_SPREAD of its width.
 //
 const LAKE_CLEAR = 20
+const LAKE_DEPTH = 300
 const FLOAT_PLANT_MIN_W = 60
 const FLOAT_PLANT_CHANCE = 0.75
 const FLOAT_PLANT_SPREAD = 0.3
@@ -106,6 +139,8 @@ function paintPlant(ctx, rect, pl) {
 function place() {
   const rng = createSeededRandom(SEED)
   const out = []
+  Layout.PLATFORMS.filter(p => p.kind === Layout.PLATFORM_KIND.LEDGE).forEach(p => placeRoots(rng, out, runOf(p), x => Platform.undersideAt(p, x)))
+  placeRoots(rng, out, { from: Layout.WALL_COLLIDE_W + WALL_CLEAR, to: Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR }, Layout.ceilingBottomAt)
   Layout.PLATFORMS.filter(p => p.kind !== Layout.PLATFORM_KIND.FLOAT).forEach(p => placeOnTop(rng, out, p))
   Layout.PLATFORMS.filter(p => p.kind === Layout.PLATFORM_KIND.LEDGE).forEach(p => placeUnder(rng, out, p))
   placeUnderCeiling(rng, out)
@@ -117,19 +152,18 @@ function place() {
 function placeOnFloat(rng, out, p) {
   if (rng() > FLOAT_PLANT_CHANCE) return
   const x = p.x + (rng() * 2 - 1) * p.w * FLOAT_PLANT_SPREAD
-  out.push(upright(rng, pickKind(rng, FLOAT_KINDS), x, Platform.surfaceAt(p, x) + UP_SINK))
+  out.push(upright(rng, pickKind(rng, FLOAT_KINDS), x, groundUnder(p)))
 }
 function placeOnTop(rng, out, p) {
   const { from, to } = runOf(p)
-  for (let x = from + rng() * UP_GAP; x < to; x += UP_GAP + rng() * GAP_RANGE) {
-    const y = Platform.surfaceAt(p, x)
-    isClear(x) && !inLake(x, y) && out.push(upright(rng, pickKind(rng, UP_KINDS), x, y + UP_SINK))
+  for (let x = from + rng() * UP_GAP; x < to; x += nextGap(rng, UP_GAP, GAP_RANGE)) {
+    isClear(x) && !inLake(x, Platform.surfaceAt(p, x)) && out.push(upright(rng, pickKind(rng, UP_KINDS), x, groundUnder(p)))
   }
 }
 function placeUnder(rng, out, p) {
   const { from, to } = runOf(p)
-  for (let x = from + rng() * HANG_GAP; x < to; x += HANG_GAP + rng() * GAP_RANGE) {
-    isClear(x) && out.push(hanging(rng, HANG_LEDGE, x, Platform.undersideAt(p, x) - HANG_SINK))
+  for (let x = from + rng() * HANG_GAP; x < to; x += nextGap(rng, HANG_GAP, GAP_RANGE)) {
+    isClear(x) && out.push(hanging(rng, HANG_LEDGE, x, sx => Platform.undersideAt(p, sx)))
   }
   p.x1 > 0 && rng() < END_SIDE_CHANCE && out.push(sideways(rng, p.x1, ledgeMid(p, p.x1), -1))
   p.x2 < Layout.WORLD_W && !p.joinR && rng() < END_SIDE_CHANCE && out.push(sideways(rng, p.x2, ledgeMid(p, p.x2), 1))
@@ -137,9 +171,18 @@ function placeUnder(rng, out, p) {
 function ledgeMid(p, x) {
   return (Layout.topAt(p, x) + Platform.undersideAt(p, x)) / 2
 }
+//
+// Roots along a run under what they hang from (first, so every plant hangs
+// in front of them).
+//
+function placeRoots(rng, out, run, ceilingAt) {
+  for (let x = run.from + rng() * ROOT_GAP; x < run.to; x += nextGap(rng, ROOT_GAP, ROOT_GAP_RANGE)) {
+    isClear(x) && out.push(hanging(rng, ROOTS, x, ceilingAt))
+  }
+}
 function placeUnderCeiling(rng, out) {
-  for (let x = Layout.WALL_COLLIDE_W + WALL_CLEAR + rng() * HANG_GAP; x < Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR; x += HANG_GAP + rng() * GAP_RANGE) {
-    isClear(x) && out.push(hanging(rng, HANG_CEILING, x, Layout.ceilingBottomAt(x) - HANG_SINK))
+  for (let x = Layout.WALL_COLLIDE_W + WALL_CLEAR + rng() * HANG_GAP; x < Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR; x += nextGap(rng, HANG_GAP, GAP_RANGE)) {
+    isClear(x) && out.push(hanging(rng, HANG_CEILING, x, Layout.ceilingBottomAt))
   }
 }
 //
@@ -149,7 +192,7 @@ function placeUnderCeiling(rng, out) {
 function placeOnWall(rng, out, dir) {
   const faceAt = y => dir < 0 ? Layout.leftWallX(y) : Layout.rightWallX(y)
   wallOpenings(dir).forEach(open => {
-    for (let y = open.y1 + rng() * SIDE_GAP; y < open.y2; y += SIDE_GAP + rng() * GAP_RANGE) out.push(sideways(rng, faceAt(y), y, -dir))
+    for (let y = open.y1 + rng() * SIDE_GAP; y < open.y2; y += nextGap(rng, SIDE_GAP, GAP_RANGE)) out.push(sideways(rng, faceAt(y), y, -dir))
   })
 }
 //
@@ -184,15 +227,24 @@ function runOf(p) {
     to: p.x2 < Layout.WORLD_W ? p.x2 - END_CLEAR : Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR
   }
 }
+//
+// The gap to the next plant: around gap + half its range, short in a
+// clump or long over an open stretch.
+//
+function nextGap(rng, gap, range) {
+  const usual = gap + range * HALF
+  return rng() < CLUMP_CHANCE ? usual * (CLUMP_SHARE + rng() * CLUMP_RANGE) : usual * (OPEN_SHARE + rng() * rng() * OPEN_RANGE)
+}
 function isClear(x) {
   return CLEAR.every(c => Math.abs(x - c.x) > c.r)
 }
 //
 // Nothing grows up out of the lake's bowl or right at its edge (its algae
-// are the lake's); ledges high over it are not in it.
+// are the lake's); ledges high over it and the passage deep under it are
+// not in it.
 //
 function inLake(x, y) {
-  return x > Layout.LAKE_X1 - LAKE_CLEAR && x < Layout.LAKE_X2 + LAKE_CLEAR && y > Layout.LAKE_SURFACE_Y - LAKE_CLEAR
+  return x > Layout.LAKE_X1 - LAKE_CLEAR && x < Layout.LAKE_X2 + LAKE_CLEAR && y > Layout.LAKE_SURFACE_Y - LAKE_CLEAR && y < Layout.LAKE_SURFACE_Y + LAKE_DEPTH
 }
 function pickKind(rng, kinds) {
   let roll = rng() * kinds.reduce((sum, kind) => sum + kind.weight, 0)
@@ -203,21 +255,39 @@ function pickName(rng, kind) {
   return names[Math.floor(rng() * names.length)]
 }
 //
-// A plant standing with its foot at (x, y).
+// The ground a plant stands on over a platform: the lowest soil under its
+// root (half width `half` either side of x), UP_SINK px into it, so no
+// part of its root hangs in the air.
 //
-function upright(rng, kind, x, y) {
+function groundUnder(p) {
+  return (x, half) => {
+    let y = -Infinity
+    for (let dx = -half; dx <= half; dx += ROOT_STEP) y = Math.max(y, Platform.surfaceAt(p, x + dx))
+    return y + UP_SINK
+  }
+}
+//
+// A plant standing on the ground under it at x.
+//
+function upright(rng, kind, x, groundAt) {
   const name = pickName(rng, kind)
   const h = kind.hMin + rng() * kind.hRange
   const w = Atlas.widthAt(name, h)
+  const y = groundAt(x, w * ROOT_SHARE)
   return { name, x, y, h, flip: rng() < 0.5, hang: false, box: { x1: x - w / 2, y1: y - h, x2: x + w / 2, y2: y } }
 }
 //
-// A plant hanging from (x, y).
+// A plant hanging at x from the highest point of what it hangs from over
+// its root (so none of its top hangs in the air), its kind's sink px into
+// it.
 //
-function hanging(rng, kind, x, y) {
+function hanging(rng, kind, x, ceilingAt) {
   const name = pickName(rng, kind)
   const h = kind.hMin + rng() * kind.hRange
   const w = Atlas.widthAt(name, h)
+  let y = Infinity
+  for (let dx = -w * ROOT_SHARE; dx <= w * ROOT_SHARE; dx += ROOT_STEP) y = Math.min(y, ceilingAt(x + dx))
+  y -= kind.sink
   return { name, x, y, h, flip: rng() < 0.5, hang: true, box: { x1: x - w / 2, y1: y, x2: x + w / 2, y2: y + h } }
 }
 //

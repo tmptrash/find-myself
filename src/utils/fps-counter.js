@@ -33,6 +33,7 @@ const glyphAtlasByK = new WeakMap()
  * @param {boolean} [config.showTimer=false] - Whether to show level elapsed timer
  * @param {number} [config.topY=55] - Vertical position (pixels from top)
  * @param {Object} [config.textColor] - Optional Kaplay rgb for the numerals
+ * @param {boolean} [config.textColorOnTouch=false] - Keep textColor on touch devices too (else they use the touch HUD grey)
  * @param {Object} [config.outlineColor] - Optional Kaplay rgb for the drop shadow
  * @param {boolean} [config.shadow=true] - Draw the drop shadow under the label
  * @param {Function} [config.postBakeCanvas] - Grade/grain pass for the baked glyph atlas
@@ -41,7 +42,7 @@ const glyphAtlasByK = new WeakMap()
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null, fontScale = 1, fpsOnly = false, shadow = true } = config
+  const { k, showTimer = false, topY = 55, textColor = null, textColorOnTouch = false, outlineColor = null, postBakeCanvas = null, fontScale = 1, fpsOnly = false, shadow = true } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   const fontSize = Math.round(HUD_FONT_SIZE * fontScale)
   const stats = !fpsOnly && Boolean(CFG.debug?.showPerformanceHud)
@@ -50,7 +51,8 @@ export function create(config) {
   // section indicator inactive letters and the top-right scoreboard so
   // every quiet HUD slot reads as one consistent colour.
   //
-  const HUD_TEXT_GREY = isTouchDevice() ? getRGB(k, CFG.visual.colors.palette.fpsHudTextTouch) : textColor || k.rgb(176, 176, 176)
+  const touchGrey = isTouchDevice() && !(textColor && textColorOnTouch)
+  const HUD_TEXT_GREY = touchGrey ? getRGB(k, CFG.visual.colors.palette.fpsHudTextTouch) : textColor || k.rgb(176, 176, 176)
   const HUD_OUTLINE = shadow ? outlineColor || k.rgb(0, 0, 0) : null
   const fpsText = createOutlinedHudText(k, 'FPS:30', font, fontSize, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //

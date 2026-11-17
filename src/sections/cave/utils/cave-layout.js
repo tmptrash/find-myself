@@ -5,9 +5,9 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 // ledge — a lantern mushroom left of where he lands. A gap splits it from
 // the next ledge, on which the hostile eye-flower grows right at the gap;
 // fall through the gap into the lake hall under the ledges: a soil floor
-// with a deep lake in it, small soil platforms hanging over the water that
-// climb right into the crevice between the eye-flower's ledge and the
-// stalk-eye's — the way up. The stalk-eye's
+// with a wide, deep lake in it; past its right bank small stone platforms
+// climb into the crevice between the eye-flower's ledge and the
+// stalk-eye's — the way up. The stalk-eye's narrow
 // ledge is the top of a solid mass (the old corridor under it is filled
 // in); right past the stalk-eye a shaft drops at the level's right edge,
 // stone steps zigzagging down it into a passage that runs under the lake
@@ -21,38 +21,48 @@ export const WORLD_H = 1520
 //
 export const WALL_COLLIDE_W = 56
 //
-// Ceiling over the upper corridor: a calm base line (x, Y knots, eased
-// between them) — low over the entry alcove, rising and falling gently
+// Ceiling over the upper corridor, a thin band of soil under the top of
+// the world: a calm base line (x, Y knots, eased between them) — low over
+// the entry alcove, rising and falling gently
 // along the way — shaped like a platform's underside (cave-platform.js):
 // broad lobes and fine ones, and soil bulging down here and there.
 //
 const CEILING_KNOTS = [
-  { x: -60, y: 300 },
-  { x: 330, y: 330 },
-  { x: 560, y: 300 },
-  { x: 820, y: 250 },
-  { x: 1100, y: 300 },
-  { x: 1380, y: 310 },
-  { x: 1650, y: 280 },
-  { x: 1950, y: 260 },
-  { x: 2320, y: 270 }
+  { x: -60, y: 150 },
+  { x: 300, y: 180 },
+  { x: 560, y: 150 },
+  { x: 820, y: 100 },
+  { x: 1100, y: 150 },
+  { x: 1380, y: 160 },
+  { x: 1650, y: 130 },
+  { x: 1950, y: 110 },
+  { x: 2320, y: 120 }
 ]
 //
 // The roots' hole through the ceiling the hero dropped through (the
 // forest's root tunnel ends here, its lower lip at ENTRY_Y); he starts
-// standing on the ledge right under it.
+// standing on the ledge right under it (START_PLATFORM). Its sides are no plumb cut: they
+// wander in and out by ENTRY_WAVE_AMP px (and finer by ENTRY_FINE_AMP).
 //
-export const ENTRY_X = 330
+export const ENTRY_X = 300
 export const ENTRY_HALF_W = 46
-export const ENTRY_Y = 330
+export const ENTRY_Y = 180
+export const START_PLATFORM = 'upper'
+const ENTRY_WAVE_STRETCH = 0.5
+const ENTRY_WAVE_AMP = 12
+const ENTRY_FINE_STRETCH = 0.3
+const ENTRY_FINE_AMP = 3
+const ENTRY_SEED = 4.4
+const ENTRY_FINE_SEED = 7.9
 //
 // The lake in the hall's floor: between its banks, its surface a little
-// under the banks' top; the floor dips into a bowl under it, deep enough to
-// drown in.
+// under the banks' top; the floor dips into a deep bowl under it (about
+// 255 px under the surface), deep enough to drown in. Its left bank is
+// just wide enough to catch a hero dropping straight through the gap above.
 //
-export const LAKE_X1 = 470
-export const LAKE_X2 = 1380
-export const LAKE_SURFACE_Y = 1010
+export const LAKE_X1 = 505
+export const LAKE_X2 = 1500
+export const LAKE_SURFACE_Y = 860
 //
 // Hero feet sit this far below the character anchor.
 //
@@ -79,51 +89,50 @@ const K = PLATFORM_KIND
 // platform's). A float is `w` px wide, centred on `x`, its flat top at
 // `y`, cut from piece `piece` of platforms.png.
 // Floats climb within a run-jump of each other (reach ≈ 147 px, rise
-// ≈ 100 px): over the lake from under the gap up into the crevice, and
-// down the shaft.
+// ≈ 100 px): from the lake's right bank up into the crevice, and down the
+// shaft.
 //
-const HALL_FLOOR_Y = 1000
-const PASSAGE_TOP_Y = 1195
-const PASSAGE_FLOOR_Y = 1400
-const EYE_LEDGE_X1 = 1680
+const HALL_FLOOR_ID = 'hallFloor'
+const HALL_FLOOR_Y = 850
+const PASSAGE_TOP_Y = 1260
+const PASSAGE_FLOOR_Y = 1440
+const UPPER_X2 = 400
+const FLOWER_LEDGE_X1 = 465
+const EYE_LEDGE_X1 = 1780
 const EYE_LEDGE_X2 = 1950
 export const PLATFORMS = [
-  { id: 'upper', x1: 0, x2: 600, y: 560, kind: K.LEDGE, seed: 11 },
-  { id: 'flowerLedge', x1: 665, x2: 1540, y: 530, top: [[665, 530], [1300, 530], [1540, 552]], kind: K.LEDGE, seed: 13 },
+  { id: 'upper', x1: 0, x2: UPPER_X2, y: 410, kind: K.LEDGE, seed: 11 },
+  { id: 'flowerLedge', x1: FLOWER_LEDGE_X1, x2: 1540, y: 380, top: [[FLOWER_LEDGE_X1, 380], [1300, 380], [1540, 402]], kind: K.LEDGE, seed: 13 },
   {
-    id: 'hallFloor',
+    id: HALL_FLOOR_ID,
     x1: 0,
     x2: EYE_LEDGE_X1 + 20,
     y: HALL_FLOOR_Y,
-    top: [[0, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [495, 1040], [530, 1080], [620, 1100], [800, 1106], [1000, 1102], [1200, 1106], [1310, 1086], [1350, 1045], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
+    top: [[0, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1350, 1117], [1430, 1072], [1470, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
     bottom: PASSAGE_TOP_Y,
     joinR: true,
     kind: K.LEDGE,
     seed: 31
   },
-  { id: 'eyeLedge', x1: EYE_LEDGE_X1, x2: EYE_LEDGE_X2, y: 580, bottom: PASSAGE_TOP_Y, faceTo: HALL_FLOOR_Y, under: 'hallFloor', kind: K.LEDGE, seed: 23 },
-  { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, 1392], [820, 1404], [1240, 1394], [1640, 1402], [WORLD_W, 1396]], kind: K.GROUND, seed: 59 },
-  { id: 'lake0', x: 545, y: 935, w: 60, piece: 'float2', kind: K.FLOAT, seed: 40 },
-  { id: 'lake1', x: 695, y: 890, w: 160, piece: 'float12', kind: K.FLOAT, seed: 41 },
-  { id: 'lake2', x: 840, y: 862, w: 70, piece: 'float1', kind: K.FLOAT, seed: 42 },
-  { id: 'lake3', x: 955, y: 840, w: 80, piece: 'float9', kind: K.FLOAT, seed: 43 },
-  { id: 'lake4', x: 1062, y: 852, w: 60, piece: 'float0', kind: K.FLOAT, seed: 44 },
-  { id: 'lake5', x: 1150, y: 826, w: 75, piece: 'float6', kind: K.FLOAT, seed: 45 },
-  { id: 'lake6', x: 1275, y: 806, w: 65, piece: 'float13', kind: K.FLOAT, seed: 46 },
-  { id: 'lake7', x: 1400, y: 790, w: 70, piece: 'float10', kind: K.FLOAT, seed: 47 },
-  { id: 'lake8', x: 1555, y: 770, w: 60, piece: 'float14', kind: K.FLOAT, seed: 48 },
-  { id: 'lake9', x: 1640, y: 705, w: 55, piece: 'float2', kind: K.FLOAT, seed: 49 },
-  { id: 'lake10', x: 1575, y: 640, w: 55, piece: 'float11', kind: K.FLOAT, seed: 50 },
-  { id: 'shaft1', x: 2060, y: 655, w: 70, piece: 'float7', kind: K.FLOAT, seed: 61 },
-  { id: 'shaft2', x: 2000, y: 735, w: 60, piece: 'float12', kind: K.FLOAT, seed: 62 },
-  { id: 'shaft3', x: 2105, y: 805, w: 65, piece: 'float5', kind: K.FLOAT, seed: 63 },
-  { id: 'shaft4', x: 2030, y: 880, w: 55, piece: 'float18', kind: K.FLOAT, seed: 64 },
-  { id: 'shaft5', x: 2120, y: 955, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
-  { id: 'shaft6', x: 2010, y: 1030, w: 70, piece: 'float15', kind: K.FLOAT, seed: 66 },
-  { id: 'shaft7', x: 2095, y: 1110, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
-  { id: 'shaft8', x: 2020, y: 1190, w: 65, piece: 'float16', kind: K.FLOAT, seed: 68 },
-  { id: 'shaft9', x: 2110, y: 1270, w: 60, piece: 'float4', kind: K.FLOAT, seed: 69 },
-  { id: 'shaft10', x: 2035, y: 1340, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 }
+  { id: 'eyeLedge', x1: EYE_LEDGE_X1, x2: EYE_LEDGE_X2, y: 430, bottom: PASSAGE_TOP_Y, faceTo: HALL_FLOOR_Y, under: HALL_FLOOR_ID, kind: K.LEDGE, seed: 23 },
+  { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, 1432], [820, 1444], [1240, 1434], [1640, 1442], [WORLD_W, 1436]], kind: K.GROUND, seed: 59 },
+  { id: 'crevice1', x: 1560, y: 770, w: 70, piece: 'float10', kind: K.FLOAT, seed: 47 },
+  { id: 'crevice2', x: 1615, y: 690, w: 60, piece: 'float7', kind: K.FLOAT, seed: 51 },
+  { id: 'crevice3', x: 1665, y: 620, w: 60, piece: 'float14', kind: K.FLOAT, seed: 48 },
+  { id: 'crevice4', x: 1740, y: 555, w: 55, piece: 'float2', kind: K.FLOAT, seed: 49 },
+  { id: 'crevice5', x: 1675, y: 490, w: 55, piece: 'float11', kind: K.FLOAT, seed: 50 },
+  { id: 'shaft1', x: 2060, y: 505, w: 70, piece: 'float7', kind: K.FLOAT, seed: 61 },
+  { id: 'shaft2', x: 2000, y: 585, w: 60, piece: 'float12', kind: K.FLOAT, seed: 62 },
+  { id: 'shaft3', x: 2105, y: 655, w: 65, piece: 'float5', kind: K.FLOAT, seed: 63 },
+  { id: 'shaft4', x: 2030, y: 730, w: 55, piece: 'float18', kind: K.FLOAT, seed: 64 },
+  { id: 'shaft5', x: 2120, y: 805, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
+  { id: 'shaft6', x: 2010, y: 880, w: 70, piece: 'float15', kind: K.FLOAT, seed: 66 },
+  { id: 'shaft7', x: 2095, y: 960, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
+  { id: 'shaft8', x: 2020, y: 1040, w: 65, piece: 'float16', kind: K.FLOAT, seed: 68 },
+  { id: 'shaft9', x: 2110, y: 1120, w: 60, piece: 'float4', kind: K.FLOAT, seed: 69 },
+  { id: 'shaft10', x: 2035, y: 1190, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 },
+  { id: 'shaft11', x: 2115, y: 1275, w: 60, piece: 'float3', kind: K.FLOAT, seed: 71 },
+  { id: 'shaft12', x: 2030, y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 }
 ].map(p => (p.kind === K.FLOAT ? { ...p, x1: p.x - p.w / 2, x2: p.x + p.w / 2 } : p))
 //
 // The exit: the crevice between the two upper ledges (its span), from
@@ -137,13 +146,13 @@ export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1 }
 // the platform each stands on; `y` is its base line, the art's own top
 // is cave-ground.js's).
 //
-export const EYE_FLOWER = { x: 705, y: 530, on: 'flowerLedge' }
-export const STALK_EYE = { x: 1860, y: 580, on: 'eyeLedge' }
-export const LANTERN = { x: 215, y: 560, on: 'upper' }
+export const EYE_FLOWER = { x: FLOWER_LEDGE_X1 + 40, y: 380, on: 'flowerLedge' }
+export const STALK_EYE = { x: 1860, y: 430, on: 'eyeLedge' }
+export const LANTERN = { x: 170, y: 410, on: 'upper' }
 //
 // Bounds for ambient fireflies.
 //
-export const FIREFLY_BOUNDS = { x1: 70, y1: 140, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
+export const FIREFLY_BOUNDS = { x1: 70, y1: 40, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
 //
 // Wall profile, shaped like a platform's underside: inset past the
 // collider, broad lobes and fine ones (stretch, height), nothing sticking
@@ -208,6 +217,20 @@ export function ceilingBottomAt(x) {
 }
 
 /**
+ * X of a side of the roots' hole at world Y: its plumb line wandering in
+ * and out (each side its own wave).
+ * @param {number} y - World Y
+ * @param {number} dir - -1 for the hole's left side, 1 for its right side
+ * @returns {number}
+ */
+export function entrySideX(y, dir) {
+  const seed = ENTRY_SEED + dir
+  return ENTRY_X + dir * ENTRY_HALF_W +
+    profileNoise(y / ENTRY_WAVE_STRETCH, seed) * ENTRY_WAVE_AMP +
+    profileNoise(y / ENTRY_FINE_STRETCH, seed + ENTRY_FINE_SEED) * ENTRY_FINE_AMP
+}
+
+/**
  * A platform's base line Y at world X from its knots (clamped to its
  * span); the hero walks the art's own top (cave-ground.js).
  * @param {Object} p - PLATFORMS entry
@@ -230,6 +253,14 @@ export function topAt(p, x) {
  */
 export function baseSegments(p) {
   return segmentsOf(baseKnots(p))
+}
+
+/**
+ * The platform whose floor holds the lake (its bowl is the lake's bed).
+ * @returns {Object} PLATFORMS entry
+ */
+export function lakeFloor() {
+  return PLATFORMS.find(p => p.id === HALL_FLOOR_ID)
 }
 
 /**

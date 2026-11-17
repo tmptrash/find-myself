@@ -54,10 +54,15 @@ const STONE_INSET = 1.1
 // - in the soil, over its foot at `up` (share of the stone's height up
 //   from its foot): a ground stone lies in an arc turned upside down (its
 //   tips hugging the stone's sides), a stone of stones.png on a long bed
-//   (its middle);
-// - on a top, either kind has a heap of soil behind it, the heap's bottom
-//   HEAP_SINK px under the surface (no contact shadow: the heap grounds
-//   it).
+//   (its middle).
+//
+// A stone resting on a walkable top lies on joints of its own sheet's
+// soil (groundHeap or jointMound), their bottoms HEAP_SINK px under the
+// surface: a heap behind it, REST_JOINT_SPREAD times as wide as an
+// embedded stone's joint, no taller than REST_JOINT_H of the stone, and a
+// low lip of soil over its foot, no taller than REST_LIP_H of it (it beds
+// the stone, it does not bury it); no contact shadow: the joints ground
+// it.
 //
 const STONE_SHADE = 0.3
 const SHADOW_W = 0.65
@@ -67,10 +72,13 @@ const SHADOW_ALPHA = 0.55
 const JOINT_W_MIN = 1.1
 const JOINT_W_RANGE = 0.35
 const JOINT_ALPHA = 0.95
-const JOINT_KIND = { ARC: 'arc', BED: 'bed', HEAP: 'heap' }
-const JOINT_PIVOT = { [JOINT_KIND.ARC]: 0, [JOINT_KIND.BED]: 0.5, [JOINT_KIND.HEAP]: 1 }
+const JOINT_KIND = { ARC: 'arc', BED: 'bed', REST: 'rest' }
+const JOINT_PIVOT = { [JOINT_KIND.ARC]: 0, [JOINT_KIND.BED]: 0.5, [JOINT_KIND.REST]: 1 }
 const JOINT_UP = { [JOINT_KIND.ARC]: 0.6, [JOINT_KIND.BED]: 0.2 }
 const HEAP_SINK = 3
+const REST_JOINT_SPREAD = 1.4
+const REST_JOINT_H = 0.6
+const REST_LIP_H = 0.42
 //
 // Loose soil patches (tries per 100×100 px, width in world px, opacity)
 // and the forest's buried elements (tries, longest side, turn, how
@@ -100,7 +108,9 @@ const EDGE_AXIS = { edgeT: 'x', edgeB: 'x', edgeL: 'y', edgeR: 'y' }
 // strip is cut to, the cross-fade where two meet, the fade-out at a free
 // end (over the corner piece there), the column width copied at a time,
 // how many cuts are tried for the best meeting, the share of a strip whose
-// top sets its base line.
+// top sets its base line. Where a strip ends higher than the next one
+// begins it would leave a step down at its end: the next strip is lifted
+// to its height there and eases back to its own over TOP_REJOIN px.
 //
 const TOP_END_W = 30
 const TOP_END_FADE = 16
@@ -111,6 +121,7 @@ const TOP_COL = 2
 const TOP_TRIES = 16
 const TOP_BASE_FROM = 0.1
 const TOP_BASE_TO = 0.9
+const TOP_REJOIN = 80
 //
 // The slope pieces (slopeUp rising to the right, slopeDown falling): the
 // points of its top this far in from either end (sheet px) are laid on the
@@ -209,25 +220,37 @@ export function paintMass(ctx, body, opts) {
 }
 
 /**
- * Lays a stone into the soil — its contact shadow, the stone (pulled
+ * Lays a stone into the soil: its contact shadow, the stone (pulled
  * toward the shade), an upside-down arc (ground stones) or a long bed
- * (stones.png) over its foot — or on a top: a heap of soil behind it,
- * then the stone.
+ * (stones.png) over its foot.
  * @param {CanvasRenderingContext2D} ctx - Target context
  * @param {function(): number} rng - Seeded random
  * @param {{name: string, x: number, y: number, h: number, flip: boolean, angle: number}} stone - Centred on its point
- * @param {number|null} [surfaceY=null] - The top's Y when it lies half sunk in a walkable top
  */
-export function embedStone(ctx, rng, stone, surfaceY = null) {
+export function embedStone(ctx, rng, stone) {
   const w = Atlas.widthAt(stone.name, stone.h)
   const foot = stone.y + stone.h / 2
   const ground = Atlas.GROUND_ROCKS.includes(stone.name)
-  const onTop = surfaceY !== null
-  onTop && drawJoint(ctx, rng, stone.x, w, JOINT_KIND.HEAP, ground, surfaceY + HEAP_SINK)
-  onTop || paintShadow(ctx, stone.x, foot - stone.h * SHADOW_UP, w * SHADOW_W, stone.h * SHADOW_H)
+  paintShadow(ctx, stone.x, foot - stone.h * SHADOW_UP, w * SHADOW_W, stone.h * SHADOW_H)
   Atlas.drawPiece(ctx, stone.name, stone.x, foot, stone.h, { flip: stone.flip, angle: stone.angle, shade: COLORS.shade, shadeAmount: STONE_SHADE })
   const kind = ground ? JOINT_KIND.ARC : JOINT_KIND.BED
-  onTop || drawJoint(ctx, rng, stone.x, w, kind, ground, foot - stone.h * JOINT_UP[kind])
+  drawJoint(ctx, rng, stone.x, w, kind, ground, foot - stone.h * JOINT_UP[kind])
+}
+
+/**
+ * Rests a stone on a walkable top: a heap of its sheet's soil behind it,
+ * the stone with its foot at `foot`, a low lip of soil over its foot.
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {function(): number} rng - Seeded random
+ * @param {{name: string, x: number, foot: number, h: number, flip: boolean, angle: number}} stone - Its foot's point
+ * @param {number} surfaceY - The top's Y under it
+ */
+export function restStone(ctx, rng, stone, surfaceY) {
+  const w = Atlas.widthAt(stone.name, stone.h)
+  const ground = Atlas.GROUND_ROCKS.includes(stone.name)
+  drawJoint(ctx, rng, stone.x, w * REST_JOINT_SPREAD, JOINT_KIND.REST, ground, surfaceY + HEAP_SINK, stone.h * REST_JOINT_H)
+  Atlas.drawPiece(ctx, stone.name, stone.x, stone.foot, stone.h, { flip: stone.flip, angle: stone.angle, shade: COLORS.shade, shadeAmount: STONE_SHADE })
+  drawJoint(ctx, rng, stone.x, w, JOINT_KIND.REST, ground, surfaceY + HEAP_SINK, stone.h * REST_LIP_H)
 }
 
 /**
@@ -424,7 +447,7 @@ function paintShadow(ctx, x, y, rx, ry) {
 //
 // A joint of a kind for a stone `w` px wide at x, its pivot on y.
 //
-function drawJoint(ctx, rng, x, w, kind, ground, y) {
+function drawJoint(ctx, rng, x, w, kind, ground, y, maxH = Infinity) {
   const names = jointNames(kind, ground)
   const joint = names[Math.floor(rng() * names.length)]
   const src = Atlas.piece(joint)
@@ -433,7 +456,7 @@ function drawJoint(ctx, rng, x, w, kind, ground, y) {
     w: src.width,
     flip: rng() < 0.5,
     flipY: kind === JOINT_KIND.ARC,
-    scale: w * (JOINT_W_MIN + rng() * JOINT_W_RANGE) / src.width,
+    scale: Math.min(w * (JOINT_W_MIN + rng() * JOINT_W_RANGE) / src.width, maxH / src.height),
     angle: 0,
     px: src.width / 2,
     py: src.height * JOINT_PIVOT[kind],
@@ -446,7 +469,7 @@ function drawJoint(ctx, rng, x, w, kind, ground, y) {
 // The joints of a kind for a ground stone or a stone of stones.png.
 //
 function jointNames(kind, ground) {
-  if (kind === JOINT_KIND.HEAP) return ground ? Atlas.GROUND_HEAPS : Atlas.JOINT_MOUNDS
+  if (kind === JOINT_KIND.REST) return ground ? Atlas.GROUND_HEAPS : Atlas.JOINT_MOUNDS
   return kind === JOINT_KIND.ARC ? Atlas.GROUND_ARCS : Atlas.JOINT_BEDS
 }
 //
@@ -545,6 +568,7 @@ function paintTopBand(ctx, rng, top) {
       u: cut.u,
       len: segLen,
       blend: i ? blend : 0,
+      lift: prev ? Math.min(0, cutTop(prev, prev.u + prev.segLen - TOP_COL) - cutTop(cut, cut.u + blend)) : 0,
       fadeIn: i === 0 && top.fadeL,
       fadeOut: i === n - 1 && top.fadeR
     })
@@ -582,8 +606,9 @@ function cutTop(cut, col) {
 }
 //
 // One cut of a strip, a column at a time, each column on the line; its
-// first `blend` px fade in over the strip before it, and it fades in / out
-// over TOP_END_FADE px at a free end.
+// first `blend` px fade in over the strip before it (lifted by `lift` px
+// at the blend's end, easing back after it), and it fades in / out over
+// TOP_END_FADE px at a free end.
 //
 function drawTopSegment(ctx, strip, base, top, seg) {
   ctx.save()
@@ -595,9 +620,19 @@ function drawTopSegment(ctx, strip, base, top, seg) {
     const fadeIn = seg.fadeIn ? Math.min(1, c / TOP_END_FADE) : 1
     const fadeOut = seg.fadeOut ? Math.min(1, (seg.len - c) / TOP_END_FADE) : 1
     ctx.globalAlpha = blend * fadeIn * fadeOut
-    ctx.drawImage(strip, seg.u + c, 0, w, strip.height, x, Math.round(top.at(x + w / 2) - base), w, strip.height)
+    ctx.drawImage(strip, seg.u + c, 0, w, strip.height, x, Math.round(top.at(x + w / 2) - base + rejoinLift(seg, c)), w, strip.height)
   }
   ctx.restore()
+}
+//
+// How far a column of a segment is lifted to meet the strip before it:
+// rising to `lift` over the blend, easing back to none over TOP_REJOIN px.
+//
+function rejoinLift(seg, c) {
+  if (!seg.lift) return 0
+  if (c <= seg.blend) return seg.lift * (seg.blend ? c / seg.blend : 1)
+  const u = Math.min(1, (c - seg.blend) / TOP_REJOIN)
+  return seg.lift * (1 - u * u * (3 - 2 * u))
 }
 //
 // A strip's base line (its top's median over its middle, scaled): the

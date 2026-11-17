@@ -1,4 +1,3 @@
-import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
@@ -7,10 +6,11 @@ import * as Glow from '../utils/cave-glow.js'
 import * as Platform from '../utils/cave-platform.js'
 //
 // The lantern mushroom (the plants sheet's glowing blue mushrooms): it
-// stands dim beside the hero's landing spot. A hero landing on its cap is
-// thrown back up, the cap squashes and springs, and the mushroom lights up
-// — a cold blue halo that fades again over LIGHT_HOLD_SEC. It also serves as
-// the cave's picture behind the menu (no cap collider there).
+// stands dim beside the hero's landing spot. It has no body: the hero
+// walks past it, and a hero falling onto its cap (crossing the cap's top
+// over it) is thrown back up, the cap squashes and springs, and the
+// mushroom lights up — a cold blue halo that fades again over
+// LIGHT_HOLD_SEC. It also serves as the cave's picture behind the menu.
 //
 const SPRITE = 'cave0-lantern-v3'
 export const LANTERN_PIECE = 'shroom4'
@@ -22,12 +22,11 @@ const GRAIN_SEED = 9300
 export const LANTERN_H = 92
 const BAKE_SCALE = 2
 //
-// Walkable cap: its share of the width and its top (share of the height
-// from the foot); a hero passes up through it and lands on top.
+// The cap a falling hero bounces off: its share of the width and its top
+// (share of the height from the foot, CAP_SINK px lower).
 //
 const CAP_W_SHARE = 0.62
 const CAP_TOP_SHARE = 0.9
-const CAP_BODY_H = 10
 const CAP_SINK = 4
 //
 // Its foot stands on the lowest point of the soil under its stems (FOOT_HALF
@@ -76,7 +75,7 @@ const bakedFor = new WeakSet()
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - Foot X
  * @param {number} cfg.y - Foot Y (the ground's top)
- * @param {boolean} [cfg.collide=true] - Give it a walkable cap (false for the menu's picture)
+ * @param {boolean} [cfg.collide=true] - Bounce a hero falling onto its cap (false for the menu's picture)
  * @param {boolean} [cfg.lit=false] - Start lit (the menu's picture)
  * @returns {Object} Lantern instance
  */
@@ -90,17 +89,17 @@ export function create(cfg) {
     y,
     scale: 1,
     w,
-    cap: null,
+    capTop: y - LANTERN_H * CAP_TOP_SHARE + CAP_SINK,
+    capHalfW: w * CAP_W_SHARE / 2,
+    prevBottom: null,
     squash: { v: 0, vel: 0 },
     light: cfg.lit ? 1 : 0,
     litFor: cfg.lit ? 0 : LIGHT_HOLD_SEC,
     idleIn: IDLE_SQUAT_MIN,
-    wasOnCap: false,
     glowRgb: getRGB(k, CAVE_CFG.colors.lanternGlow),
     coreRgb: getRGB(k, CAVE_CFG.colors.lanternCore),
     menu: cfg.collide === false
   }
-  inst.menu || (inst.cap = addCap(inst))
   Glow.create(k)
   return inst
 }
@@ -119,7 +118,7 @@ export function footYOn(p, x) {
 }
 
 /**
- * Runs the squash spring and the light; bounces a hero who landed on the
+ * Runs the squash spring and the light; bounces a hero falling onto the
  * cap. Returns true on the frame of a bounce.
  * @param {Object} inst - Lantern instance
  * @param {Object|null} heroInst - Hero instance (null: the menu's one idles)
@@ -132,9 +131,15 @@ export function onUpdate(inst, heroInst) {
   inst.menu || (inst.light = 1 - Math.pow(inst.litFor / LIGHT_HOLD_SEC, LIGHT_FADE_POW))
   if (inst.menu) return idle(inst, dt)
   const char = heroInst?.character
-  const onCap = !!char?.exists?.() && char.isGrounded?.() && char.curPlatform?.() === inst.cap
-  const landed = onCap && !inst.wasOnCap
-  inst.wasOnCap = onCap
+  if (!char?.exists?.()) {
+    inst.prevBottom = null
+    return false
+  }
+  const box = char.worldArea().bbox()
+  const bottom = box.pos.y + box.height
+  const crossed = inst.prevBottom !== null && inst.prevBottom <= inst.capTop && bottom >= inst.capTop
+  const landed = crossed && (char.vel?.y ?? 0) > 0 && Math.abs(char.pos.x - inst.x) <= inst.capHalfW
+  inst.prevBottom = bottom
   landed && bounce(inst, char)
   return landed
 }
@@ -205,22 +210,6 @@ function bake(k) {
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
   k.loadSprite(SPRITE, canvas, { filter: 'linear' })
   bakedFor.add(k)
-}
-//
-// Static one-way cap body: passable from below, solid from above.
-//
-function addCap(inst) {
-  const k = inst.k
-  const w = inst.w * CAP_W_SHARE
-  return k.add([
-    k.rect(w, CAP_BODY_H),
-    k.pos(inst.x - w / 2, inst.y - LANTERN_H * CAP_TOP_SHARE + CAP_SINK),
-    k.area(),
-    k.body({ isStatic: true }),
-    k.opacity(0),
-    CFG.game.platformName,
-    CFG.game.noCeilingTag
-  ])
 }
 function bounce(inst, char) {
   char.jump(BOUNCE_FORCE)

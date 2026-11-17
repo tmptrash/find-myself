@@ -4,18 +4,21 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
 import * as Backdrop from '../utils/cave-backdrop.js'
 import * as Glow from '../utils/cave-glow.js'
+import * as Ground from '../utils/cave-ground.js'
 import * as Layout from '../utils/cave-layout.js'
 import * as Scene from '../utils/cave-scene.js'
 import { LANTERN_H, LANTERN_PIECE, footYOn } from './cave-lantern.js'
 //
 // A glimpse of the cave from the forest: when the eye-flower's roots have
-// dragged the hero down their tunnel, its floor gives way and under it
-// opens the cave's start — the roots' hole in the ceiling, the room below
-// it, the earth ledge with its moss, the dim lantern mushroom. It is the
-// level's own picture (the same painters), cut out as a ragged hollow in
-// the forest's earth whose top is the cave's own earth ceiling with the
-// hole at the tunnel's end, baked once per live k. Nothing of it is drawn
-// before setOpen().
+// torn the ground open, the cave's start lies under their tunnel — the
+// roots' hole in the ceiling, the room below it, the earth ledge with its
+// moss, the dim lantern mushroom — already there while he is dragged down
+// toward it; the tunnel's floor then gives way and he drops onto the
+// ledge right where the cave level starts him. It is the level's own
+// picture (the same painters), cut out as a ragged hollow in the forest's
+// earth whose top is the cave's own earth ceiling with the hole at the
+// tunnel's end, baked once per live k. Nothing of it is drawn before
+// show().
 //
 const SPRITE = 'cave0-peek-v2'
 const GRAIN_SEED = 9500
@@ -35,12 +38,11 @@ const CONTOUR_W = 3
 //
 const LANTERN_SHADE = 0.4
 //
-// Glows inside the hollow: the lantern's faint halo, the teal mushrooms,
-// daylight from the roots' hole (cave x, y, radius, opacity, colour key).
+// Glows inside the hollow: the lantern's faint halo and daylight from the
+// roots' hole (cave x, y, radius, opacity, colour key).
 //
 const GLOWS = [
   { x: Layout.LANTERN.x, y: Layout.LANTERN.y - 56, r: 46, opacity: 0.25, color: 'lanternGlow' },
-  { x: 430, y: 532, r: 60, opacity: 0.35, color: 'tealGlow' },
   { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 110, opacity: 0.35, color: 'rootLight' }
 ]
 const bakedFor = new WeakSet()
@@ -63,7 +65,8 @@ export function create(cfg) {
     ready: bakedFor.has(k),
     ox: x - Layout.ENTRY_X,
     oy: y - Layout.ENTRY_Y,
-    open: 0,
+    start: Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X),
+    shown: false,
     glows: GLOWS.map(g => ({ ...g, rgb: getRGB(k, CAVE_CFG.colors[g.color]) }))
   }
 }
@@ -78,21 +81,31 @@ export function prewarm(k) {
 }
 
 /**
- * Shows the glimpse (0 hidden … 1 fully open).
+ * Shows the glimpse at once (from the moment the roots tear the ground
+ * open, so the cave is there under the tunnel all the way down).
  * @param {Object} inst - Peek instance
- * @param {number} u - Openness
  */
-export function setOpen(inst, u) {
-  inst.open = Math.max(0, Math.min(1, u))
+export function show(inst) {
+  inst.shown = true
 }
 
 /**
- * Forest Y of the cave ledge's top under the hole (where a falling hero lands).
+ * Forest X where the hero lands on the cave ledge: the spot the cave level
+ * starts him at.
+ * @param {Object} inst - Peek instance
+ * @returns {number}
+ */
+export function landingX(inst) {
+  return inst.start.x + inst.ox
+}
+
+/**
+ * Forest Y of the ledge's walking line at the landing spot (his feet).
  * @param {Object} inst - Peek instance
  * @returns {number}
  */
 export function landingY(inst) {
-  return Layout.PLATFORMS.find(p => p.id === 'upper').y + inst.oy
+  return inst.start.y + Layout.HERO_FEET_DY + inst.oy
 }
 
 /**
@@ -109,10 +122,10 @@ export function bottomY(inst) {
  * @param {Object} inst - Peek instance
  */
 export function onDraw(inst) {
-  if (inst.open <= 0 || !inst.ready) return
+  if (!inst.shown || !inst.ready) return
   const k = inst.k
-  k.drawSprite({ sprite: SPRITE, pos: k.vec2(RECT.x1 + inst.ox, RECT.y1 + inst.oy), opacity: inst.open })
-  inst.glows.forEach(g => Glow.drawGlow(k, g.x + inst.ox, g.y + inst.oy, g.r, g.rgb, g.opacity * inst.open))
+  k.drawSprite({ sprite: SPRITE, pos: k.vec2(RECT.x1 + inst.ox, RECT.y1 + inst.oy) })
+  inst.glows.forEach(g => Glow.drawGlow(k, g.x + inst.ox, g.y + inst.oy, g.r, g.rgb, g.opacity))
 }
 //
 // The cave picture over the rect, the dim lantern, cut to the hollow with

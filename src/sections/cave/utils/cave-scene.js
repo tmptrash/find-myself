@@ -13,10 +13,11 @@ const OUTLINE_STEP = 8
 // Under the lake: everything painted below its surface down to
 // SUBMERSION_INTO_BED px into the bowl's soil sinks into the water tint
 // (the bed, its stones), more so the deeper — only in the columns where
-// the soil lies under the surface (never the banks' soil beside it).
+// the soil lies under the surface (never the banks' soil beside it). The
+// tint reaches down to the deepest point of that (measured off the bed),
+// so it never stops short of the bed anywhere.
 //
 const WATER = CAVE_CFG.water
-const SUBMERSION_DEPTH = 120
 const SUBMERSION_INTO_BED = 30
 const SUBMERSION_TOP_ALPHA = 0.25
 const SUBMERSION_DEEP_ALPHA = 0.6
@@ -33,7 +34,8 @@ const WALL_TOP_Y = 0
 // Nothing of the ceiling (its lowest part with what hangs from it) reaches
 // below this.
 //
-const CEILING_REACH_Y = 460
+const CEILING_REACH_Y = 310
+let submersionBottom = null
 
 /**
  * Paints every solid part of the cave that reaches into a world rect,
@@ -44,7 +46,7 @@ const CEILING_REACH_Y = 460
  * @param {boolean} [withLake=false] - Tint what lies under the lake's surface
  */
 export function paintTerrain(ctx, rect, withLake = false) {
-  const inLake = withLake && overlaps(rect, Layout.LAKE_X1, Layout.LAKE_SURFACE_Y, Layout.LAKE_X2, Layout.LAKE_SURFACE_Y + SUBMERSION_DEPTH)
+  const inLake = withLake && overlaps(rect, Layout.LAKE_X1, Layout.LAKE_SURFACE_Y, Layout.LAKE_X2, deepestSubmersion())
   overlaps(rect, -ART_PAD, WALL_TOP_Y, Layout.WALL_COLLIDE_W * 3, Layout.WORLD_H + ART_PAD) && paintWall(ctx, -1)
   overlaps(rect, Layout.WORLD_W - Layout.WALL_COLLIDE_W * 3, WALL_TOP_Y, Layout.WORLD_W + ART_PAD, Layout.WORLD_H + ART_PAD) && paintWall(ctx, 1)
   paintCeiling(ctx, rect)
@@ -59,8 +61,9 @@ export function paintTerrain(ctx, rect, withLake = false) {
 //
 function paintSubmersion(ctx) {
   const top = Layout.LAKE_SURFACE_Y
-  const floor = Layout.PLATFORMS.find(p => p.top && Layout.LAKE_X1 >= p.x1 && Layout.LAKE_X2 <= p.x2)
-  const g = ctx.createLinearGradient(0, top, 0, top + SUBMERSION_DEPTH)
+  const bottom = deepestSubmersion()
+  const floor = Layout.lakeFloor()
+  const g = ctx.createLinearGradient(0, top, 0, bottom)
   g.addColorStop(0, hexAlpha(WATER.water, SUBMERSION_TOP_ALPHA))
   g.addColorStop(1, hexAlpha(WATER.paint.deep, SUBMERSION_DEEP_ALPHA))
   ctx.save()
@@ -75,8 +78,20 @@ function paintSubmersion(ctx) {
   ctx.clip()
   ctx.globalCompositeOperation = 'source-atop'
   ctx.fillStyle = g
-  ctx.fillRect(Layout.LAKE_X1, top, Layout.LAKE_X2 - Layout.LAKE_X1, SUBMERSION_DEPTH)
+  ctx.fillRect(Layout.LAKE_X1, top, Layout.LAKE_X2 - Layout.LAKE_X1, bottom - top)
   ctx.restore()
+}
+//
+// The lowest Y the tint reaches: SUBMERSION_INTO_BED under the bed's
+// deepest point (measured once per page).
+//
+function deepestSubmersion() {
+  if (submersionBottom !== null) return submersionBottom
+  const floor = Layout.lakeFloor()
+  let bed = Layout.LAKE_SURFACE_Y
+  for (let x = Layout.LAKE_X1; x <= Layout.LAKE_X2; x++) bed = Math.max(bed, Ground.topAt(floor, x))
+  submersionBottom = bed + SUBMERSION_INTO_BED
+  return submersionBottom
 }
 //
 // A side wall from the ceiling down: the world edge to its ragged face,
@@ -98,38 +113,46 @@ function paintWall(ctx, dir) {
 }
 //
 // Ceiling in two soil masses either side of the roots' hole, left
-// unshaded (the platforms' colour): a ragged
-// underside (edgeB) along its line, a ragged lip down each side of the
-// hole and a corner piece where the lip meets the underside.
+// unshaded (the platforms' colour): a ragged underside (edgeB) along its
+// line, a ragged lip down each wandering side of the hole (the
+// underside's pieces turned on their side, as on a ledge's free end, the
+// chain run so their ragged side faces the hole) and a corner piece where
+// the lip meets the underside.
 //
 function paintCeiling(ctx, rect) {
   if (rect.y1 > CEILING_REACH_Y) return
-  const holeL = Layout.ENTRY_X - Layout.ENTRY_HALF_W
-  const holeR = Layout.ENTRY_X + Layout.ENTRY_HALF_W
-  Earth.paintMass(ctx, ceilingBody(-ART_PAD, holeL, 1), { key: 'ceilingL', seed: CEILING_SEED, plain: true })
-  Earth.paintMass(ctx, ceilingBody(holeR, Layout.WORLD_W + ART_PAD, -1), { key: 'ceilingR', seed: CEILING_SEED + 1, plain: true })
+  Earth.paintMass(ctx, ceilingBody(-ART_PAD, 1), { key: 'ceilingL', seed: CEILING_SEED, plain: true })
+  Earth.paintMass(ctx, ceilingBody(Layout.WORLD_W + ART_PAD, -1), { key: 'ceilingR', seed: CEILING_SEED + 1, plain: true })
 }
 //
-// One ceiling mass from x1 to x2; `lip` is the side the hole is on (1:
-// its right end, -1: its left end).
+// One ceiling mass from its outer end `outerX` to the hole; `lip` is the
+// side the hole is on (1: its right end, -1: its left end). The lip runs
+// down the hole's side (Layout.entrySideX) to where the underside meets
+// it.
 //
-function ceilingBody(x1, x2, lip) {
+function ceilingBody(outerX, lip) {
   const top = -ART_PAD
-  const lipX = lip > 0 ? x2 : x1
-  const lipY = Layout.ceilingBottomAt(lipX)
+  const side = -lip
+  const lipY = Layout.ceilingBottomAt(Layout.ENTRY_X + side * Layout.ENTRY_HALF_W)
+  const lipPts = []
+  for (let y = top; y < lipY; y += OUTLINE_STEP) lipPts.push({ x: Layout.entrySideX(y, side), y })
+  lipPts.push({ x: Layout.entrySideX(lipY, side), y: lipY })
+  const lipX = lipPts[lipPts.length - 1].x
+  const [x1, x2] = lip > 0 ? [outerX, lipX] : [lipX, outerX]
   const under = []
   for (let x = x1; x < x2; x += OUTLINE_STEP) under.push({ x, y: Layout.ceilingBottomAt(x) })
   under.push({ x: x2, y: Layout.ceilingBottomAt(x2) })
   const inner = under.map(pt => ({ x: pt.x, y: pt.y - Earth.CORE_INSET }))
-  const lipIn = lipX - lip * Earth.CORE_INSET
+  const lipIn = lipPts.map(pt => ({ x: pt.x - lip * Earth.CORE_INSET, y: pt.y }))
+  const lipInX = lipX - lip * Earth.CORE_INSET
   const core = lip > 0
-    ? [{ x: x1, y: top }, { x: lipIn, y: top }, ...inner.filter(pt => pt.x <= lipIn).reverse()]
-    : [{ x: lipIn, y: top }, { x: x2, y: top }, ...inner.filter(pt => pt.x >= lipIn).reverse()]
+    ? [{ x: x1, y: top }, ...lipIn, ...inner.filter(pt => pt.x <= lipInX).reverse()]
+    : [{ x: x2, y: top }, ...inner.filter(pt => pt.x >= lipInX).reverse(), ...lipIn.reverse()]
   return {
     core,
     edges: [
       { name: 'edgeB', pts: under },
-      { name: lip > 0 ? 'edgeR' : 'edgeL', pts: [{ x: lipX, y: top }, { x: lipX, y: lipY }] }
+      { name: 'edgeB', pts: lip > 0 ? lipPts.slice().reverse() : lipPts }
     ],
     corners: [{ name: lip > 0 ? 'cornerBR' : 'cornerBL', x: lipX, y: lipY }]
   }

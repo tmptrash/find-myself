@@ -16,8 +16,8 @@ export const CAVE_CFG = {
     heroSpark: ['#a6e6d0', '#ffe9a8', '#7fd6c2'],
     lanternGlow: '#62d6f0',     // Halo of the blue lantern mushroom, cold blue
     lanternCore: '#d8f8ff',
-    tealGlow: '#6fd8c8',        // Halo of the small teal mushrooms and bulbs
-    rootLight: '#d8b06a'        // Daylight spilling in through the roots' hole
+    rootLight: '#d8b06a',       // Daylight spilling in through the roots' hole
+    fps: '#ffffff'              // FPS readout
   },
   //
   // Back of the cave: the far wall is the soil block studded with ground
@@ -58,6 +58,16 @@ export const CAVE_CFG = {
       algaeLight: '#4f8a3a',
       algaeDark: '#1f3d1e'
     }
+  },
+  //
+  // The runner insects (cave-runner.js): their painted parts pulled a
+  // little toward the cave's dark (shadeAmount), the far legs and the far
+  // feeler darker still (farShade: how much of their light is taken).
+  //
+  runner: {
+    shade: '#0b1216',
+    shadeAmount: 0.18,
+    farShade: 0.45
   },
   //
   // The cave's creatures (cave-eye-flower.js, cave-stalk-eye.js): kin of

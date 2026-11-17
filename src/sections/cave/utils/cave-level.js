@@ -5,6 +5,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { set, get } from '../../../utils/progress.js'
+import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { initTouchInput, isTouchDevice } from '../../../utils/touch-input.js'
 import { hudLeftWorldX } from '../../../utils/fullscreen.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
@@ -16,6 +17,7 @@ import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as EyeFlower from '../components/cave-eye-flower.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
+import * as Runner from '../components/cave-runner.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
@@ -23,6 +25,7 @@ import * as Backdrop from './cave-backdrop.js'
 import * as Front from './cave-front.js'
 import * as CaveLake from './cave-lake.js'
 import * as Ground from './cave-ground.js'
+import * as Surface from './cave-surface.js'
 import * as Glow from './cave-glow.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
@@ -30,26 +33,29 @@ import * as View from './cave-view.js'
 // Cave lesson 0 — the hero drops in from the forest through the hole the
 // eye-flower's roots tore in the ceiling, onto an earth ledge, a dormant
 // lantern mushroom left of him (bounced on, it lights up). Right past the
-// gap the hostile eye-flower watches him. Below lies the lake hall: stone
-// platforms over a deep lake climb into the crevice of the exit, up to
-// the stalk-eye's ledge; past the stalk-eye a shaft of stone steps drops
-// into the passage under the hall (cave-layout.js).
+// gap the hostile eye-flower watches him. Below lies the lake hall with a
+// deep lake: stone platforms climb from its right bank into the crevice
+// of the exit, up to the stalk-eye's ledge; past the stalk-eye a shaft of
+// stone steps drops into the passage under the hall (cave-layout.js).
 //
 export const SCENE_NAME = 'lesson-cave.0'
 const KEY_LAST_LESSON = 'lastLesson'
 const KEY_SAFE_SPOT = 'cave.safeSpot'
 const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once the hero got here
-const START_PLATFORM = 'upper'
 //
-// Draw order: back (parallax), the eye-flower (behind its ledge, its root
-// in the soil), the drowning hero (behind the soil), terrain, the lake
-// water, the lights, the hero and creatures (player z), the stones in front
-// of him, the frame.
+// Draw order: back (parallax), the fireflies (behind the soil: they fly
+// only in the open between the platforms), the eye-flower (behind its
+// ledge, its root in the soil), the drowning hero (behind the soil),
+// terrain, the runner insects on it, the lake water, the lantern's halo,
+// the hero and creatures (player z), the stones in front of him, the
+// frame.
 //
 const Z_WORLD = 0
+const Z_FIREFLIES = Z_WORLD + 0.2
 const Z_FLOWER = Z_WORLD + 0.3
 const Z_DROWN_HERO = Z_WORLD + 0.35
 const Z_TERRAIN = Z_WORLD + 0.4
+const Z_RUNNERS = Z_WORLD + 0.5
 const Z_WATER = Z_WORLD + 0.6
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
@@ -91,14 +97,17 @@ const FALL_OUT_Y = Layout.WORLD_H + 120
 // flicker over a bump in the ground), seconds.
 //
 const LAND_MIN_AIR = 0.12
-const SPLASH_VOLUME = 0.3
+//
+// The fall into the lake sounds as in the forest: one water-steps take.
+//
+const WATER_STEPS_VOLUME = 0.42
 //
 // Drowning (like the forest lake): the hero shuts his eyes in his calm
 // pose and sinks slowly, drawn whole as one picture behind the soil and
 // under the water (seen through it); once he is all down in the lake bed's
 // soil (or after DROWN_MAX_TIME) a short silent pause.
 //
-const DROWN_SINK_SPEED = 70
+const DROWN_SINK_SPEED = 100
 const DROWN_MAX_TIME = 4
 const DROWN_RESPAWN_DELAY = 0.8
 const HALF = 0.5
@@ -107,12 +116,27 @@ const HALF = 0.5
 //
 const FIREFLY_COUNT = 44
 //
+// Runner insects: how many, spread over the crawl runs at least
+// RUNNER_MIN_RUN px long — one on each, the rest by length (the longer a
+// run, the likelier) — sizes RUNNER_SIZE..+RANGE; seeded so they start in
+// the same places.
+//
+const RUNNER_COUNT = 7
+const RUNNER_MIN_RUN = 250
+const RUNNER_SIZE = 0.85
+const RUNNER_SIZE_RANGE = 0.3
+const RUNNER_SEED = 5150
+//
 // FPS readout over the top-left of the screen (like the forest's; on touch
 // devices lined up with the fullscreen / back buttons).
 //
 const FPS_LEFT_X = 24
 const FPS_TOP_Y = 44
 const FPS_FONT_SCALE = 0.7
+//
+// The touch buttons are a little see-through.
+//
+const CONTROLS_OPACITY = 0.6
 
 /**
  * Builds the whole cave level inside the active scene (once the prop
@@ -147,6 +171,7 @@ function build(k) {
     terrain: Terrain.create({ k }),
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
+    runners: createRunners(k),
     lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
     platformByBody: new Map(),
     heroInst: null,
@@ -169,7 +194,7 @@ function build(k) {
   spawnHero(inst, startPose(inst))
   createHud(inst)
   initTouchInput(k)
-  TouchControls.create(k)
+  TouchControls.create(k, { opacity: CONTROLS_OPACITY })
   TouchControls.setVisible(true)
   addDrawLayers(inst)
   k.onUpdate(() => onUpdate(inst))
@@ -185,6 +210,7 @@ function onUpdate(inst) {
   else if (inst.dead) updateRespawn(inst)
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
+  updateRunners(inst)
   EyeFlower.onUpdate(inst.eyeFlower)
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
@@ -286,7 +312,7 @@ function startDrown(inst, char) {
   hero.drownSinkX = inst.drown.x
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
-  Sound.playSplashSound(inst.sfx, SPLASH_VOLUME)
+  Sound.playWaterStepsOnce(inst.sfx, WATER_STEPS_VOLUME)
 }
 function updateDrown(inst) {
   const d = inst.drown
@@ -294,7 +320,7 @@ function updateDrown(inst) {
   d.t += inst.k.dt()
   hero.drownSinkY = d.y + DROWN_SINK_SPEED * d.t
   const top = hero.drownSinkY - Hero.HERO_BAKE_SPRITE_SIZE * HALF
-  const bed = Ground.topAt(Layout.PLATFORMS.find(p => p.top && Layout.LAKE_X1 >= p.x1 && Layout.LAKE_X2 <= p.x2), d.x)
+  const bed = Ground.topAt(Layout.lakeFloor(), d.x)
   if (top < bed && d.t < DROWN_MAX_TIME) return
   const char = hero.character
   inst.deathX = d.x
@@ -333,7 +359,7 @@ function updateRespawn(inst) {
 //
 function startPose(inst) {
   const saved = inst.safe && Layout.PLATFORMS.find(p => p.id === inst.safe.id)
-  return saved ? Ground.standPoseOn(saved, inst.safe.x) : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === START_PLATFORM), Layout.ENTRY_X)
+  return saved ? Ground.standPoseOn(saved, inst.safe.x) : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
 }
 function spawnHero(inst, pose) {
   const k = inst.k
@@ -457,23 +483,25 @@ function addSolid(k, x, y, w, h) {
 }
 function createHud(inst) {
   const k = inst.k
-  const hud = getRGB(k, CFG.visual.colors.palette.hudScore)
+  const hud = getRGB(k, CAVE_CFG.colors.fps)
   const shadow = getRGB(k, CAVE_CFG.colors.contour)
-  inst.fps = FpsCounter.create({ k, topY: FPS_TOP_Y, textColor: hud, outlineColor: shadow, postBakeCanvas: applyForestHudSharpBake, fontScale: FPS_FONT_SCALE, fpsOnly: true })
+  inst.fps = FpsCounter.create({ k, topY: FPS_TOP_Y, textColor: hud, textColorOnTouch: true, outlineColor: shadow, postBakeCanvas: applyForestHudSharpBake, fontScale: FPS_FONT_SCALE, fpsOnly: true })
   FpsCounter.pinScreenFixed(inst.fps)
   FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_LEFT_X)
 }
 //
-// Draw passes: the back world (parallax), the drowning hero (behind the
-// soil), the terrain (the lake's bowl in it)
+// Draw passes: the back world (parallax), the fireflies and the drowning
+// hero (behind the soil), the terrain (the lake's bowl in it)
 // with the lake's algae and the lantern, the see-through water, the
-// additive lights, the stones in front of the hero and the screen frame.
+// lantern's halo, the stones in front of the hero and the screen frame.
 //
 function addDrawLayers(inst) {
   const k = inst.k
   k.add([k.z(Z_WORLD), { draw: () => drawWorld(inst) }])
+  k.add([k.z(Z_FIREFLIES), { draw: () => drawFireflies(inst) }])
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
+  k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
   k.add([k.z(Z_WATER), { draw: () => CaveLake.onDraw(inst.lake, View.worldRect(inst.view)) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
   k.add([k.z(Z_FRONT), { draw: () => Front.onDraw(inst.front, View.worldRect(inst.view)) }])
@@ -490,11 +518,35 @@ function drawTerrain(inst) {
   Lantern.onDraw(inst.lantern)
 }
 //
-// Every additive glow together: the lantern's halo, the fireflies.
+// The additive glow over the world: the lantern's halo.
 //
 function drawLights(inst) {
-  const view = View.worldRect(inst.view)
   Lantern.onDrawHalo(inst.lantern)
+}
+//
+// The runner insects: one on each long crawl run, the rest on runs
+// picked by their length.
+//
+function createRunners(k) {
+  const rng = createSeededRandom(RUNNER_SEED)
+  const runs = Surface.crawlRuns().filter(run => run.len >= RUNNER_MIN_RUN)
+  const total = runs.reduce((sum, run) => sum + run.len, 0)
+  return Array.from({ length: RUNNER_COUNT }, (_, i) => {
+    let pick = rng() * total
+    const run = runs[i] ?? runs.find(r => (pick -= r.len) < 0) ?? runs[runs.length - 1]
+    return Runner.create({ k, run, s: rng() * run.len, dir: rng() < HALF ? -1 : 1, size: RUNNER_SIZE + rng() * RUNNER_SIZE_RANGE, seed: Math.floor(rng() * RUNNER_SEED) })
+  })
+}
+function updateRunners(inst) {
+  const hero = heroPos(inst)
+  inst.runners.forEach(runner => Runner.onUpdate(runner, hero))
+}
+function drawRunners(inst) {
+  const view = View.worldRect(inst.view)
+  inst.runners.forEach(runner => Runner.onDraw(runner, view))
+}
+function drawFireflies(inst) {
+  const view = View.worldRect(inst.view)
   Fireflies.onDraw(inst.fireflies, view.top, view.bottom)
 }
 //

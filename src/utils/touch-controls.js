@@ -167,9 +167,11 @@ export function setVisible(visible) {
  * devices (screen space: the levels fill the whole window), hidden: the level
  * shows them with setVisible(true) once its picture is built
  * @param {Object} k - Kaplay instance
+ * @param {Object} [opts]
+ * @param {number} [opts.opacity=1] - The buttons' opacity (a level may make them see-through)
  * @returns {Object|null} Touch controls instance
  */
-export function create(k) {
+export function create(k, opts = {}) {
   if (!needsTouchControls()) return null
   //
   // Canvas-level CSS so the browser never scrolls/zooms on game touches
@@ -200,6 +202,7 @@ export function create(k) {
     jumpX,
     centerY,
     scale,
+    opacity: opts.opacity ?? 1,
     visible: false
   }
   bakeButtonSprites(k)
@@ -236,7 +239,8 @@ function drawControlButton(k, cx, cy, type, scale) {
     sprite: buttonSpriteName(type),
     pos: k.vec2(cx, cy),
     anchor: 'center',
-    scale
+    scale,
+    opacity: activeInst.opacity
   })
 }
 function buttonSpriteName(type) {

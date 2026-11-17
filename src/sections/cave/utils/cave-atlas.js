@@ -10,9 +10,13 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // same for the stones of stones.png: heaps, long beds, and loose wedges
 // and patches); plants.png (plants growing up, out of a wall sideways and
 // hanging down) and plants2.png (more of each kind: upB, sideB, hangB,
-// sproutB, tinyB), platforms.png (short soil platforms hanging in the
-// air); plus the forest's buried elements (bones, fossils, shells:
-// elements_ground.png, cut by the forest).
+// sproutB, tinyB), roots.png (roots hanging from soil: root),
+// platforms.png (short soil platforms hanging in the
+// air), runner.png (the runner insect taken apart: its body, head, tail
+// leaf, a feeler — the sheet's straight one; its curled one is not cut —
+// and per pair of legs a hip ball, a thigh, a shin and a clawed foot,
+// rear pair first); plus the forest's buried elements
+// (bones, fossils, shells: elements_ground.png, cut by the forest).
 //
 // The sheets are not clean, so each is prepared as it is cut: faint haze
 // and fringes at low alpha are remapped away (below lo gone, above hi
@@ -26,13 +30,15 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 const SHEET = {
   PLANTS: 'plants',
   PLANTS2: 'plants2',
+  ROOTS: 'roots',
   ROCKS: 'rocks',
   GROUND_STONES: 'groundStones',
   JOINTS: 'joints',
   GROUND_JOINTS: 'groundJoints',
   CORNERS: 'corners',
   FLOATS: 'floats',
-  TOP: 'top'
+  TOP: 'top',
+  RUNNER: 'runner'
 }
 //
 // Per sheet: its file, its alpha remap [lo, hi], whether its colour is
@@ -45,13 +51,15 @@ const SHEET = {
 const SHEETS = {
   [SHEET.PLANTS]: { url: 'cave0/plants.png', alpha: [40, 200] },
   [SHEET.PLANTS2]: { url: 'cave0/plants2.png', alpha: [40, 200], isolate: { alpha: 20, keep: 4 } },
+  [SHEET.ROOTS]: { url: 'cave0/roots.png', alpha: [40, 200], isolate: { alpha: 20, keep: 4 } },
   [SHEET.ROCKS]: { url: 'cave0/stones.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.GROUND_STONES]: { url: 'cave0/ground_stones.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.JOINTS]: { url: 'cave0/joints.png', alpha: [6, 170], soil: true, isolate: { alpha: 100, keep: 8 } },
   [SHEET.GROUND_JOINTS]: { url: 'cave0/joints_ground_stones.png', alpha: [6, 170], soil: true, isolate: { alpha: 100, keep: 8 } },
   [SHEET.CORNERS]: { url: 'cave0/corners.png', soil: true, dewhite: 30, sharpen: 2.5 },
   [SHEET.FLOATS]: { url: 'cave0/platforms.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
-  [SHEET.TOP]: { url: 'cave0/ground_top.png', alpha: [6, 250], soil: true, dewhite: 170, sharpen: 3 }
+  [SHEET.TOP]: { url: 'cave0/ground_top.png', alpha: [6, 250], soil: true, dewhite: 170, sharpen: 3 },
+  [SHEET.RUNNER]: { url: 'cave0/runner.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } }
 }
 const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
@@ -590,6 +598,50 @@ const PIECES = {
   tinyB18: [SHEET.PLANTS2, 1318, 956, 54, 55],
   tinyB19: [SHEET.PLANTS2, 1381, 956, 70, 54],
   tinyB20: [SHEET.PLANTS2, 1459, 955, 67, 55],
+  root0: [SHEET.ROOTS, 34, 37, 204, 257],
+  root1: [SHEET.ROOTS, 269, 35, 147, 241],
+  root2: [SHEET.ROOTS, 449, 34, 201, 205],
+  root3: [SHEET.ROOTS, 674, 36, 111, 215],
+  root4: [SHEET.ROOTS, 816, 36, 119, 254],
+  root5: [SHEET.ROOTS, 964, 39, 172, 189],
+  root6: [SHEET.ROOTS, 1128, 37, 182, 236],
+  root7: [SHEET.ROOTS, 1335, 36, 75, 231],
+  root8: [SHEET.ROOTS, 1443, 36, 190, 244],
+  root9: [SHEET.ROOTS, 35, 307, 117, 110],
+  root10: [SHEET.ROOTS, 187, 308, 73, 133],
+  root11: [SHEET.ROOTS, 287, 307, 147, 141],
+  root12: [SHEET.ROOTS, 464, 308, 91, 116],
+  root13: [SHEET.ROOTS, 577, 306, 153, 150],
+  root14: [SHEET.ROOTS, 770, 307, 73, 95],
+  root15: [SHEET.ROOTS, 869, 307, 161, 166],
+  root16: [SHEET.ROOTS, 1069, 308, 105, 139],
+  root17: [SHEET.ROOTS, 1205, 307, 142, 145],
+  root18: [SHEET.ROOTS, 1384, 308, 65, 86],
+  root19: [SHEET.ROOTS, 1477, 307, 157, 166],
+  root20: [SHEET.ROOTS, 35, 492, 101, 201],
+  root21: [SHEET.ROOTS, 175, 494, 68, 118],
+  root22: [SHEET.ROOTS, 255, 495, 128, 211],
+  root23: [SHEET.ROOTS, 407, 495, 80, 155],
+  root24: [SHEET.ROOTS, 517, 494, 143, 221],
+  root25: [SHEET.ROOTS, 699, 494, 102, 161],
+  root26: [SHEET.ROOTS, 822, 494, 166, 171],
+  root27: [SHEET.ROOTS, 1028, 488, 100, 227],
+  root28: [SHEET.ROOTS, 1163, 491, 74, 89],
+  root29: [SHEET.ROOTS, 1271, 489, 115, 194],
+  root30: [SHEET.ROOTS, 1414, 489, 217, 236],
+  root31: [SHEET.ROOTS, 31, 739, 96, 89],
+  root32: [SHEET.ROOTS, 150, 738, 51, 123],
+  root33: [SHEET.ROOTS, 229, 740, 72, 83],
+  root34: [SHEET.ROOTS, 323, 737, 142, 144],
+  root35: [SHEET.ROOTS, 488, 738, 99, 158],
+  root36: [SHEET.ROOTS, 616, 736, 128, 180],
+  root37: [SHEET.ROOTS, 773, 739, 96, 139],
+  root38: [SHEET.ROOTS, 903, 738, 65, 155],
+  root39: [SHEET.ROOTS, 994, 739, 182, 141],
+  root40: [SHEET.ROOTS, 1183, 740, 67, 88],
+  root41: [SHEET.ROOTS, 1279, 739, 104, 158],
+  root42: [SHEET.ROOTS, 1413, 737, 72, 110],
+  root43: [SHEET.ROOTS, 1505, 739, 137, 123],
   grow0: [SHEET.PLANTS, 9, 60, 128, 76],
   grow1: [SHEET.PLANTS, 139, 38, 105, 95],
   grow2: [SHEET.PLANTS, 242, 21, 177, 114],
@@ -693,8 +745,27 @@ const PIECES = {
   tiny20: [SHEET.PLANTS, 1311, 966, 38, 40],
   tiny21: [SHEET.PLANTS, 1357, 964, 37, 41],
   tiny22: [SHEET.PLANTS, 1410, 964, 43, 42],
-  tiny23: [SHEET.PLANTS, 1466, 963, 55, 43]
-
+  tiny23: [SHEET.PLANTS, 1466, 963, 55, 43],
+  runnerBody: [SHEET.RUNNER, 240, 35, 719, 364],
+  runnerHead: [SHEET.RUNNER, 1042, 224, 188, 176],
+  runnerTail: [SHEET.RUNNER, 52, 228, 175, 113],
+  runnerFeeler: [SHEET.RUNNER, 1190, 52, 232, 172],
+  runnerHip0: [SHEET.RUNNER, 167, 420, 93, 92],
+  runnerHip1: [SHEET.RUNNER, 503, 420, 94, 92],
+  runnerHip2: [SHEET.RUNNER, 827, 420, 93, 92],
+  runnerHip3: [SHEET.RUNNER, 1155, 420, 94, 92],
+  runnerThigh0: [SHEET.RUNNER, 125, 526, 150, 148],
+  runnerThigh1: [SHEET.RUNNER, 440, 518, 177, 182],
+  runnerThigh2: [SHEET.RUNNER, 782, 517, 153, 186],
+  runnerThigh3: [SHEET.RUNNER, 1160, 525, 121, 163],
+  runnerShin0: [SHEET.RUNNER, 98, 698, 93, 152],
+  runnerShin1: [SHEET.RUNNER, 432, 713, 88, 172],
+  runnerShin2: [SHEET.RUNNER, 792, 716, 95, 169],
+  runnerShin3: [SHEET.RUNNER, 1215, 708, 91, 157],
+  runnerFoot0: [SHEET.RUNNER, 44, 868, 128, 167],
+  runnerFoot1: [SHEET.RUNNER, 381, 892, 132, 159],
+  runnerFoot2: [SHEET.RUNNER, 830, 890, 132, 160],
+  runnerFoot3: [SHEET.RUNNER, 1237, 881, 134, 157]
 }
 const sheets = new Map()
 const pieces = new Map()

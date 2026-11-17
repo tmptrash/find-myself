@@ -15,9 +15,12 @@ import * as Layout from './cave-layout.js'
 // - a float is a short stone platform of platforms.png hanging in the air,
 //   its flat top on its line.
 //
-// A ledge's or a ground's top carries stones half sunk in it, a heap of
-// soil behind each, sitting on the art's own surface, so the walking
-// surface is uneven. Each platform is built once per page into its own
+// A ledge's or a ground's top carries clusters of stones — one big, a
+// few small round it — resting on the art's own surface, each on a heap
+// of soil under it. The small ones are baked into the platform, so the
+// walking surface is uneven (the hero walks over them); the big one is
+// only recorded here (frontStones): cave-front.js draws it in front of
+// the hero, who walks behind it. Each platform is built once per page into its own
 // layer; cave-ground.js reads the walkable line off its top.
 //
 const ART_PAD = 40
@@ -105,19 +108,31 @@ const CORNER_REACH = 110
 //
 const SLOPE_MIN_RISE = 10
 //
-// Stones half sunk in the top: spacing with its spread, height (world px,
-// never bigger than on the sheet), the share of it under the soil, turn,
-// how far from a free end the first one sits; a pixel this opaque is the
-// surface they sit on.
+// Stone clusters on the top, CLUSTER_GAP px apart (with its spread): one
+// big stone and SMALL_MIN..+SMALL_RANGE small ones (heights in world px,
+// never bigger than on the sheet), the small ones either side of the big
+// one, from SMALL_NEAR of its half width out to SMALL_SPREAD px past it. Each rests on the surface under its middle, its
+// foot REST_SINK of its height into it (its rounded bottom touches the
+// soil, it is not sunk); turn; how far from a free end the first cluster
+// sits, how far from the lake's banks and from a creature, the lantern or
+// the hero's landing spot; a pixel this opaque is the surface they rest on.
 //
-const SURFACE_GAP = 95
-const SURFACE_GAP_JITTER = 0.9
-const SURFACE_H_MIN = 9
-const SURFACE_H_RANGE = 32
-const SURFACE_SINK_MIN = 0.55
-const SURFACE_SINK_RANGE = 0.2
+const CLUSTER_GAP = 230
+const CLUSTER_GAP_JITTER = 0.6
+const BIG_H_MIN = 30
+const BIG_H_RANGE = 18
+const SMALL_H_MIN = 6
+const SMALL_H_RANGE = 6
+const SMALL_MIN = 2
+const SMALL_RANGE = 2
+const SMALL_NEAR = 0.8
+const SMALL_SPREAD = 22
+const REST_SINK = 0.12
 const SURFACE_TURN = 0.2
-const SURFACE_END_CLEAR = 40
+const SURFACE_END_CLEAR = 50
+const LAKE_CLEAR = 30
+const SPOT_CLEAR = 75
+const SPOTS = [Layout.LANTERN, Layout.EYE_FLOWER, Layout.STALK_EYE, { x: Layout.ENTRY_X, on: Layout.START_PLATFORM }]
 const SOLID_ALPHA = 128
 const RGBA = 4
 const ALPHA_OFFSET = 3
@@ -127,6 +142,7 @@ const ALPHA_OFFSET = 3
 const FLOAT_PAD = 8
 const layers = new Map()
 const bulges = new Map()
+const bigStones = new Map()
 
 /**
  * Paints a platform (its layer, built once per page) where it reaches into
@@ -166,9 +182,18 @@ export function layerOf(p) {
  * @returns {number}
  */
 export function surfaceAt(p, x) {
-  const layer = layerOf(p)
-  const y = layer.surface[Math.round(x - layer.x)]
-  return y === undefined || Number.isNaN(y) ? baseAt(p, x) : y
+  return layerSurfaceAt(layerOf(p), p, x)
+}
+
+/**
+ * The big stones of every platform's clusters, resting on its top (drawn
+ * in front of the hero by cave-front.js); builds the platforms' layers if
+ * they are not yet built.
+ * @returns {Array<{name: string, h: number, x: number, surface: number, foot: number, flip: boolean, angle: number}>}
+ */
+export function frontStones() {
+  Layout.PLATFORMS.forEach(p => layerOf(p))
+  return [...bigStones.values()].flat()
 }
 
 /**
@@ -381,8 +406,8 @@ function line(x1, x2, yAt) {
   return pts
 }
 //
-// Stones of mixed sizes half sunk in the top here and there, on the art's
-// own surface under each, a heap of soil behind each.
+// Clusters of stones resting on the top here and there (none in the lake
+// or by the level's creatures), each stone on the art's own surface.
 //
 function surfaceStones(layer, p) {
   const rng = createSeededRandom(p.seed + 5)
@@ -390,14 +415,44 @@ function surfaceStones(layer, p) {
   const names = Earth.soilRocks()
   const from = span.freeL ? span.x1 + SURFACE_END_CLEAR : Math.max(span.x1, Layout.WALL_COLLIDE_W)
   const to = span.freeR ? span.x2 - SURFACE_END_CLEAR : Math.min(span.x2, Layout.WORLD_W - Layout.WALL_COLLIDE_W)
-  for (let x = from + rng() * SURFACE_GAP; x < to; x += SURFACE_GAP * (1 + (rng() - 0.5) * SURFACE_GAP_JITTER)) {
-    const name = names[Math.floor(rng() * names.length)]
-    const h = Math.min(Atlas.naturalHeight(name), SURFACE_H_MIN + rng() * SURFACE_H_RANGE)
-    const sink = SURFACE_SINK_MIN + rng() * SURFACE_SINK_RANGE
-    const y = layer.surface[Math.round(x - layer.x)]
-    const surface = Number.isNaN(y) || y === undefined ? baseAt(p, x) : y
-    Earth.embedStone(layer.ctx, rng, { name, h, x, y: surface + h * (sink - 0.5), flip: rng() < 0.5, angle: (rng() * 2 - 1) * SURFACE_TURN }, surface)
+  const spots = SPOTS.filter(spot => spot.on === p.id)
+  for (let x = from + rng() * CLUSTER_GAP; x < to; x += CLUSTER_GAP * (1 + (rng() - 0.5) * CLUSTER_GAP_JITTER)) {
+    const clear = !spots.some(spot => Math.abs(spot.x - x) < SPOT_CLEAR) && !(p === Layout.lakeFloor() && x > Layout.LAKE_X1 - LAKE_CLEAR && x < Layout.LAKE_X2 + LAKE_CLEAR)
+    clear && stoneCluster(layer, p, rng, names, x)
   }
+}
+//
+// One cluster round x: the big stone (recorded for the front), the small
+// ones either side of it baked into the platform.
+//
+function stoneCluster(layer, p, rng, names, x) {
+  const big = restingStone(layer, p, rng, names, x, BIG_H_MIN + rng() * BIG_H_RANGE)
+  bigStones.has(p.id) ? bigStones.get(p.id).push(big) : bigStones.set(p.id, [big])
+  const halfW = Atlas.widthAt(big.name, big.h) / 2
+  const count = SMALL_MIN + Math.floor(rng() * (SMALL_RANGE + 1))
+  for (let n = 0; n < count; n++) {
+    const side = n % 2 ? -1 : 1
+    const small = restingStone(layer, p, rng, names, x + side * (halfW * SMALL_NEAR + rng() * (halfW * (1 - SMALL_NEAR) + SMALL_SPREAD)), SMALL_H_MIN + rng() * SMALL_H_RANGE)
+    Earth.restStone(layer.ctx, rng, small, small.surface)
+  }
+}
+//
+// A stone of the given height resting on the surface under x (`surface`
+// the soil's top under it).
+//
+function restingStone(layer, p, rng, names, x, height) {
+  const name = names[Math.floor(rng() * names.length)]
+  const h = Math.min(Atlas.naturalHeight(name), height)
+  const surface = layerSurfaceAt(layer, p, x)
+  return { name, h, x, surface, foot: surface + h * REST_SINK, flip: rng() < 0.5, angle: (rng() * 2 - 1) * SURFACE_TURN }
+}
+//
+// The soil's top in a layer at X (its scanned surface; the base line where
+// a column is empty).
+//
+function layerSurfaceAt(layer, p, x) {
+  const y = layer.surface[Math.round(x - layer.x)]
+  return y === undefined || Number.isNaN(y) ? baseAt(p, x) : y
 }
 //
 // The layer's surface: the first solid pixel down each column (one read

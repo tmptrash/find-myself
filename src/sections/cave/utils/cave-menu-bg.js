@@ -22,7 +22,7 @@ const TILE_MAX = 2048
 // World rect shown: its top and height; the eye-flower's spot sits at
 // FOCUS_SHARE of the screen width (right of the level list).
 //
-const VIEW_Y1 = 170
+const VIEW_Y1 = 20
 const VIEW_H = 620
 const FOCUS_X = Layout.EYE_FLOWER.x
 const FOCUS_SHARE = 0.68

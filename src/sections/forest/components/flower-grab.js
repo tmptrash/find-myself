@@ -13,10 +13,12 @@ import { FOREST_PAL, forestRgb } from '../utils/forest-palette.js'
 // eye-flower notices him, whips its tentacles around him, hoists him up,
 // hesitates, then yanks him into a crack its roots tear open in the island.
 // The roots drag him a short way down the fresh tunnel, slanting under the
-// lake; there its floor gives way and the cave opens below (CavePeek — the
-// cave level's start, never drawn before this). The roots let go, he drops
-// onto the cave ledge beside the dim lantern mushroom, and the level fades
-// out; the caller moves on to the cave.
+// lake, toward the cave that lies under it (CavePeek — the cave level's
+// start, never drawn before the ground tears, there from then on, so the
+// camera following him down shows it under the tunnel); its floor gives
+// way, the roots let go, he drops onto the cave ledge beside the dim
+// lantern mushroom — the very spot the cave level starts him at — and the
+// level fades out; the caller moves on to the cave.
 //
 // Beats in order (seconds). The strike lasts until every tentacle holds
 // (or its timeout), the rest are fixed.
@@ -109,7 +111,8 @@ const DEEP_EARTH_PAD = 80
 //
 // Break-through: his struggle hangs him at the end while the floor gives
 // way; the darkness lifts back to DARK_OPEN as the cave's light comes in.
-// He then falls freely onto the ledge and lands with a squash, eyes open.
+// He then falls freely onto the ledge, drifting over to the cave's start
+// spot on the way, and lands with a squash, eyes open.
 //
 const BREAK_WIGGLE = 0.08
 const BREAK_WIGGLE_SPEED = 18
@@ -204,6 +207,9 @@ export function create(cfg) {
     tunnel: null,
     peek: null,
     fallVy: 0,
+    fallFromX: 0,
+    fallFromY: 0,
+    landX: 0,
     landY: 0,
     sprites: null,
     heroLegs: null,
@@ -388,6 +394,7 @@ function setBeat(inst, beat) {
       inst.pullFromY = inst.heroY
       inst.holeOpening = true
       inst.inTunnel = true
+      CavePeek.show(inst.peek)
       EyeFlower.setGrabPhase(flower, EyeFlower.GRAB_PHASE.PULL)
       break
     case BEAT.DESCEND:
@@ -403,11 +410,14 @@ function setBeat(inst, beat) {
       break
     case BEAT.FALL:
       inst.fallVy = 0
+      inst.fallFromX = inst.heroX
+      inst.fallFromY = inst.heroY
+      inst.landX = CavePeek.landingX(inst.peek)
       inst.landY = CavePeek.landingY(inst.peek) - HERO_FOOT_DY * inst.prey.scale
       break
     case BEAT.LAND:
       inst.squash.vel -= LAND_SQUASH_KICK
-      inst.footParticles && ForestFootParticles.spawnLanding(inst.footParticles, inst.heroX, CavePeek.landingY(inst.peek), inst.dustColor, LAND_DUST_MULT)
+      inst.footParticles && ForestFootParticles.spawnLanding(inst.footParticles, inst.landX, CavePeek.landingY(inst.peek), inst.dustColor, LAND_DUST_MULT)
       break
     case BEAT.FADE:
       inst.fade = addFadeOverlay(inst)
@@ -474,23 +484,25 @@ function updateDescend(inst) {
   u >= 1 && setBeat(inst, BEAT.BREAK)
 }
 //
-// The tunnel's floor gives way: the cave opens under him while he hangs
-// kicking at the end, the darkness lifts.
+// The tunnel's floor gives way under the cave he already sees below while
+// he hangs kicking at the end, the darkness lifts.
 //
 function updateBreak(inst) {
   const u = Math.min(1, inst.beatTime / BREAK_SEC)
   const ease = u * u * (3 - 2 * u)
-  CavePeek.setOpen(inst.peek, ease)
   RootTunnel.setDarkness(inst.tunnel, DARK_MAX + (DARK_OPEN - DARK_MAX) * ease)
   inst.swing.v = BREAK_WIGGLE * Math.sin(inst.beatTime * BREAK_WIGGLE_SPEED)
   u >= 1 && setBeat(inst, BEAT.FALL)
 }
 //
-// Free fall onto the cave ledge; the dangle settles on the way.
+// Free fall onto the cave ledge, drifting over to the landing spot as he
+// drops; the dangle settles on the way.
 //
 function updateFall(inst, step) {
   inst.fallVy += FALL_GRAVITY * step
   inst.heroY = Math.min(inst.landY, inst.heroY + inst.fallVy * step)
+  const u = inst.landY > inst.fallFromY ? (inst.heroY - inst.fallFromY) / (inst.landY - inst.fallFromY) : 1
+  inst.heroX = inst.fallFromX + (inst.landX - inst.fallFromX) * u
   inst.swing.v *= Math.exp(-PULL_ANGLE_DAMP * step)
   inst.heroY >= inst.landY && setBeat(inst, BEAT.LAND)
 }

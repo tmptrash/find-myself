@@ -76,12 +76,29 @@ const MIN_AIR_TIME_FOR_JUMP = 0.06
 //
 // Jump — 7 frames like the sheet: crouch, stretch take-off, rising, peak
 // with the legs tucked up, early descent, full-leg descent and the landing
-// crouch (held briefly right after touching the ground).
+// crouch. The landing crouch is not shown: touching the ground the hero
+// goes straight into idle or the run, his body set on the ground at once —
+// over LAND_SNAP_FRAMES frames, while his hitbox (grown back to full
+// height) settles onto the ground.
+//
+// Caught with his legs still tucked up (landing near the top of a jump,
+// onto a higher platform) he would stand up from the tucked ball to full
+// height in one frame. Instead he unfolds over LAND_UNFOLD_SEC: his tuck
+// runs back to none through the descent frames (UNFOLD_FRAMES, the frame
+// for each tuck share), drawn where that tuck's feet stand on the ground.
+// A tuck that lifts the feet less than LAND_UNFOLD_MIN_RISE px just snaps.
 //
 const JUMP_FRAME_COUNT = HeroPicture.JUMP_FRAME_COUNT
 export const HERO_JUMP_FRAME_COUNT = JUMP_FRAME_COUNT
 
-const LAND_SQUASH_TIME = 0.08
+const LAND_SNAP_FRAMES = 2
+const LAND_UNFOLD_SEC = 0.12
+const LAND_UNFOLD_MIN_RISE = 6
+const UNFOLD_FRAMES = [
+  { minTuck: 0.8, frame: 3 },
+  { minTuck: 0.4, frame: 4 },
+  { minTuck: 0, frame: 5 }
+]
 const JUMP_SQUASH_TIME = 0.03
 const JUMP_CEILING_CLEARANCE = 44
 const JUMP_STRETCH_START = 0.1
@@ -327,6 +344,7 @@ export function create(config) {
     runPhase: 0,      // Gait phase 0..1 while running
     runPoseOn: false, // The run pass draws the body and live legs this frame
     standDy: 0,       // Standing frames' shift onto the ground line (px)
+    bodyY: null,      // World Y the body was drawn at last frame
     blinkLeft: 0,     // Seconds of blinking left (startBlink)
     dozes,            // Dozes off standing still (see DOZE_DELAY_SEC)
     dozeT: 0,         // Seconds he has stood still on the ground
@@ -341,7 +359,10 @@ export function create(config) {
     jumpPhase: 'none', // 'squashing', 'jumping', 'none'
     squashTimer: 0,   // Timer for pre-jump squash animation
     isSquashing: false, // Flag for pre-jump squash
-    landSquashTimer: 0, // Remaining time the landing crouch frame is held
+    landSnapFrames: 0, // Frames left after touchdown in which the body stands on the ground at once
+    landUnfold: 0,    // Tuck share (1 at a jump's top) a hero caught tucked still unfolds from
+    landUnfoldFrom: 1, // Tuck share the unfold started at
+    landUnfoldRise: 0, // How far that tuck had lifted the feet edge (px)
     crouchTimer: 0,   // Remaining time the hero is forced into the squat pose
     isCrouching: false, // True while crouchTimer > 0 and hero is grounded
     eyeOffsetX: 0,
@@ -413,9 +434,10 @@ export function create(config) {
   character.onCollide?.(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   //
-  // The hero's draw pass at its z (after the hitbox in draw order): once the
-  // hitbox has moved it poses the running legs, or shifts a standing frame
-  // onto the ground line, then draws the hero.
+  // The hero's draw pass at its z (after the hitbox in draw order): when it
+  // draws — after every update has moved the hitbox, the level's ground
+  // catching a falling hero too — it poses the running legs, or shifts a
+  // standing frame onto the ground line, then draws the hero.
   //
   const drawLayer = k.add([
     k.z(CFG.visual.zIndex.player),
@@ -423,9 +445,9 @@ export function create(config) {
     {
       update() {
         tickBlink(inst)
-        poseHero(inst, this)
       },
       draw() {
+        poseHero(inst, this)
         drawHeroPass(inst)
       }
     }
@@ -953,9 +975,8 @@ function onUpdate(inst) {
   // While controls are locked (dialog / intro), freeze jump/land poses to idle
   //
   if (inst.controlsDisabled || !inst.controllable) {
-    if (inst.isSquashing || inst.landSquashTimer > 0 || inst.jumpPhase !== 'none') {
+    if (inst.isSquashing || inst.jumpPhase !== 'none') {
       cancelJumpSquash(inst)
-      inst.landSquashTimer = 0
       inst.wasJumping = false
       syncJumpCollision(inst)
       if (isGrounded && !isMoving) {
@@ -968,7 +989,6 @@ function onUpdate(inst) {
     //
     // Air-lock only suppresses false land-crouch — never eat a real jump squash
     //
-    inst.landSquashTimer = 0
     if (inst.jumpPhase !== 'none' && isGrounded) {
       inst.jumpPhase = 'none'
       inst.wasJumping = false
@@ -999,6 +1019,7 @@ function onUpdate(inst) {
   // Handle pre-jump squash animation (only when grounded)
   //
   if (inst.isSquashing && isGrounded) {
+    inst.landUnfold = 0
     //
     // Dialog Space must never finish a crouch→launch on wood platforms
     //
@@ -1069,6 +1090,7 @@ function onUpdate(inst) {
   }
 
   if (!isGrounded) {
+    inst.landUnfold = 0
     //
     // While particles assemble the body still falls under gravity — ignore
     // air time / jump frames so reveal doesn't inherit a stuck land loop.
@@ -1077,7 +1099,6 @@ function onUpdate(inst) {
       inst.airTime = 0
       inst.wasJumping = false
       inst.jumpPhase = 'none'
-      inst.landSquashTimer = 0
       syncJumpCollision(inst)
     } else {
       inst.airTime += inst.k.dt()
@@ -1093,7 +1114,6 @@ function onUpdate(inst) {
         inst.airTime = 0
         inst.jumpPhase = 'none'
         inst.wasJumping = false
-        inst.landSquashTimer = 0
         inst.isSquashing = false
         inst.squashTimer = 0
         inst.jumpCeilingBonk = false
@@ -1186,7 +1206,8 @@ function onUpdate(inst) {
     //
     !inst.isSquashing && (inst.canJump = true)
     //
-    // Only play the landing crouch after a real jump, not a mid-run flicker
+    // A real jump's landing (not a mid-run flicker) locks out brief air
+    // flicker after it; idle or the run below takes over this very frame.
     //
     if (inst.jumpPhase !== 'none') {
       //
@@ -1201,13 +1222,10 @@ function onUpdate(inst) {
       inst.squashTimer = 0
       inst.jumpCeilingBonk = false
       if (realJump) {
-        inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
-        useHeroSprite(inst, heroJumpSpriteName(6))
-        inst.currentEyeSprite = null
+        inst.landSnapFrames = LAND_SNAP_FRAMES
       } else {
         inst.wasJumping = false
-        inst.landSquashTimer = 0
       }
     }
     inst.airTime = 0
@@ -1217,19 +1235,11 @@ function onUpdate(inst) {
     //
     syncJumpCollision(inst)
     //
-    // Hold the landing crouch for a beat unless the player is already
-    // running — the run cycle takes over immediately in that case.
-    // Celebration idleOnly must reach closed-eyes idle after a run, so
-    // land squash must not swallow that transition.
+    // Caught tucked: the unfold's descent frames show before idle or the run
     //
-    if (inst.landSquashTimer > 0) {
-      inst.landSquashTimer -= inst.k.dt()
-      if (!isMoving && inst.landSquashTimer > 0 && !(inst.eyesClosed && inst.eyesClosedIdleOnly)) {
-        inst.character.flipX = inst.direction === -1
-        return
-      }
-      inst.landSquashTimer = 0
-      inst.wasJumping = false
+    if (inst.landUnfold > 0 && unfoldLanding(inst)) {
+      inst.character.flipX = inst.direction === -1
+      return
     }
   }
   //
@@ -1239,7 +1249,6 @@ function onUpdate(inst) {
   if (inst.eyesClosedIdleOnly && inst.eyesClosed && isGrounded && !isMoving && !inst.isSquashing) {
     inst.isRunning = false
     inst.wasJumping = false
-    inst.landSquashTimer = 0
     inst.jumpPhase = 'none'
     updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
@@ -1294,11 +1303,11 @@ function onUpdate(inst) {
 //
 function resetAirborneState(inst) {
   inst.wasJumping = false
+  inst.landUnfold = 0
   inst.jumpFrame = 0
   inst.jumpPhase = 'none'
   inst.isSquashing = false
   inst.squashTimer = 0
-  inst.landSquashTimer = 0
   inst.airTime = 0
   inst.jumpCeilingBonk = false
   //
@@ -1340,9 +1349,7 @@ function syncJumpCollision(inst) {
   const tuckKey = Math.round(tuck * 200) / 200
   const liftKey = Math.round(lift * 2) / 2
   if (tuckKey === inst.jumpCollisionTuck && liftKey === inst.jumpCollisionLift) return
-  const prevHeight = Math.max(8, Math.round(inst.collisionBaseHeight * (1 - (inst.jumpCollisionTuck || 0))))
-  const prevOffsetY = inst.collisionBaseOffsetY - (inst.jumpCollisionLift || 0)
-  const prevBottom = prevOffsetY + prevHeight
+  const prevTuck = Math.max(0, inst.jumpCollisionTuck || 0)
   const scale = 1 - tuck
   inst.jumpCollisionScale = scale
   inst.jumpCollisionLift = liftKey
@@ -1352,15 +1359,32 @@ function syncJumpCollision(inst) {
   // Lift the whole box with the body; shorter height also raises the feet
   //
   const offsetY = inst.collisionBaseOffsetY - liftKey
-  if (grounded) {
-    const sink = (offsetY + height) - prevBottom
-    sink > 0 && ch.moveBy(0, -sink)
-  }
+  const prevBox = grounded ? ch.worldArea().bbox() : null
   area.shape = new inst.k.Rect(
     inst.k.vec2(inst.collisionBaseOffsetX, offsetY),
     inst.collisionBaseWidth,
     height
   )
+  prevBox && keepFeetEdge(inst, prevBox, prevTuck)
+}
+//
+// A grounded hitbox grown back to full height is moved up by as much as
+// its feet edge went down (measured on the box itself: its height changes
+// about its centre), so the feet stay on the ground; a big enough lift
+// starts the tucked landing's unfold.
+//
+function keepFeetEdge(inst, prevBox, prevTuck) {
+  const ch = inst.character
+  const box = ch.worldArea().bbox()
+  const sink = (box.pos.y + box.height) - (prevBox.pos.y + prevBox.height)
+  if (sink <= 0) return
+  ch.moveBy(0, -sink)
+  if (sink < LAND_UNFOLD_MIN_RISE) return
+  const share = prevTuck / JUMP_COLLISION_MAX_TUCK
+  if (share <= inst.landUnfold) return
+  inst.landUnfold = share
+  inst.landUnfoldFrom = share
+  inst.landUnfoldRise = sink
 }
 
 /**
@@ -1729,11 +1753,33 @@ function poseHero(inst, pass) {
   const ch = inst.character
   if (!ch?.exists?.()) return
   pass.z = ch.z
+  posePicture(inst)
+  inst.bodyY = ch.pos.y + (inst.runPoseOn ? inst.legs.bodyDy : inst.standLegsOn ? inst.standLegs.bodyDy : inst.standDy)
+}
+//
+// This frame's picture: a tucked landing's unfold, a hero caught by the
+// ground after his own update ran (still in his fall frame: held where his
+// body was drawn a frame ago — at the caught, sunk-in hitbox it dipped
+// and sprang back up as he landed), idle on his live legs, a standing
+// frame, or the run.
+//
+function posePicture(inst) {
+  const ch = inst.character
+  if (inst.jumpPhase === 'jumping' && inst.bodyY !== null && inst.landUnfold <= 0 && isHeroGrounded(inst)) {
+    holdBody(inst)
+    return
+  }
+  if (inst.landUnfold > 0) {
+    poseUnfold(inst)
+    return
+  }
+  const landed = inst.landSnapFrames > 0
+  landed && inst.landSnapFrames--
   const on = inst.currentEyeSprite === RUN_BLANK_SPRITE
   const dt = inst.runPoseOn ? inst.k.dt() : 0
   inst.runPoseOn = on
   if (!on) {
-    isIdleSprite(inst.currentEyeSprite) ? poseIdle(inst) : poseStanding(inst)
+    isIdleSprite(inst.currentEyeSprite) ? poseIdle(inst, landed) : poseStanding(inst)
     return
   }
   inst.standLegsOn = false
@@ -1744,15 +1790,50 @@ function poseHero(inst, pass) {
 //
 // The idle body on its live legs: each foot on the surface under it, the
 // body eased from wherever it stood a frame ago (a run's or a crouch's
-// height), so switching frames never makes it jump.
+// height), so switching frames never makes it jump. On touchdown it stands
+// on the ground at once: easing down from the air's height read as the
+// body sagging after the landing.
 //
-function poseIdle(inst) {
+function poseIdle(inst, landed) {
   const ch = inst.character
   inst.standLegsOn || (inst.standLegs.shift = inst.standDy)
   inst.standLegsOn = true
   inst.surfaceCandidates = inst.k.get(CFG.game.platformName)
-  HeroLegs.poseStand(inst.standLegs, { x: ch.pos.x, y: ch.pos.y, groundAt: inst.groundAt, dt: inst.k.dt() })
+  HeroLegs.poseStand(inst.standLegs, { x: ch.pos.x, y: ch.pos.y, groundAt: inst.groundAt, dt: landed ? 0 : inst.k.dt() })
   inst.standDy = inst.standLegs.bodyDy
+}
+//
+// A standing frame drawn where the body was last frame.
+//
+function holdBody(inst) {
+  inst.standLegsOn = false
+  inst.runPoseOn = false
+  inst.standDy = inst.bodyY - inst.character.pos.y
+}
+//
+// An unfolding frame stands where its tuck lifted the hitbox's feet: that
+// far under the full-height hitbox, its feet on the ground.
+//
+function poseUnfold(inst) {
+  inst.standLegsOn = false
+  inst.runPoseOn = false
+  inst.standDy = inst.landUnfoldRise * inst.landUnfold / inst.landUnfoldFrom
+}
+//
+// Runs a tucked landing's unfold on; true while it still shows (its
+// descent frame for the tuck left), false once it is done and idle or the
+// run takes over, the body set on the ground at once.
+//
+function unfoldLanding(inst) {
+  inst.landUnfold = Math.max(0, inst.landUnfold - inst.k.dt() / LAND_UNFOLD_SEC)
+  if (inst.landUnfold <= 0) {
+    inst.landSnapFrames = LAND_SNAP_FRAMES
+    return false
+  }
+  const frame = UNFOLD_FRAMES.find(f => inst.landUnfold >= f.minTuck).frame
+  inst.jumpFrame = frame
+  useHeroSprite(inst, heroJumpSpriteName(frame))
+  return true
 }
 function isIdleSprite(name) {
   return Boolean(name?.startsWith(`${HERO_SPRITE_PREFIX}_`))

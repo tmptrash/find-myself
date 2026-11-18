@@ -1,4 +1,4 @@
-import { isTwigPausingPredatorMove } from '../utils/forest-horiz-fall-twig.js'
+import { isTwigPausingPredatorMove, turnRideAround } from '../utils/forest-horiz-fall-twig.js'
 import * as EyeFlower from './eye-flower.js'
 
 //
@@ -532,16 +532,20 @@ function clampPredatorClearOfIsland(inst) {
   inst.vx > 0 && (inst.vx = 0)
 }
 
+//
+// Keeps it within its ground. Facing held (the hero riding its stick), it
+// stops at either end — and, walking into the map's end (the right one;
+// the left one is the lake's shore, where the ride to the island goes on
+// its own way) with him on its back, turns round there (turnRideAround)
+// instead of standing pressed against it.
+//
 function keepInside(inst) {
   clampPredatorClearOfIsland(inst)
   if (inst.holdFacing) {
-    if (inst.x < inst.minX) {
-      inst.x = inst.minX
-      inst.vx = 0
-    } else if (inst.x > inst.maxX) {
-      inst.x = inst.maxX
-      inst.vx = 0
-    }
+    const edge = inst.x < inst.minX ? -1 : inst.x > inst.maxX ? 1 : 0
+    inst.x = clamp(inst.x, inst.minX, inst.maxX)
+    edge && (inst.vx = 0)
+    edge > 0 && inst.dir > 0 && rideFacingLocked(inst) && turnRideAround(inst.levelInst.shoreFallTwigs)
     applyRideFacingLock(inst)
     return
   }

@@ -1,4 +1,5 @@
 import { getRGB } from '../../../utils/helper.js'
+import * as Lead from '../../../utils/camera-lead.js'
 import * as Layout from './cave-layout.js'
 import { CAVE_CFG } from '../cfg.js'
 //
@@ -16,7 +17,10 @@ const CORNER_ARC_END = 1.5
 // Camera: hero sits a little above the window centre (the level descends),
 // smooth follow speed, and a faster catch-up while falling — blended in
 // with the fall speed (between FALL_SPEED_FROM and FALL_SPEED_TO) and eased
-// over time, so the camera never lurches when the rate changes.
+// over time, so the camera never lurches when the rate changes. On a
+// screen held upright it also leads the running hero (camera-lead.js, as
+// in the forest): he sits toward the trailing edge, more of the cave shows
+// ahead of him.
 //
 const LOOK_DOWN_FRAC = 0.12
 const FOLLOW_RATE = 6
@@ -52,6 +56,7 @@ export function create(k) {
     camX: winW / 2,
     camY: winH / 2,
     rate: FOLLOW_RATE,
+    lead: Lead.create(),
     frameRgb: getRGB(k, CAVE_CFG.colors.frame)
   }
 }
@@ -63,6 +68,7 @@ export function create(k) {
  * @param {number} y - World Y
  */
 export function snapTo(inst, x, y) {
+  Lead.reset(inst.lead, x)
   inst.camX = clampX(inst, x)
   inst.camY = clampY(inst, y + inst.winH * LOOK_DOWN_FRAC)
   apply(inst)
@@ -80,7 +86,7 @@ export function follow(inst, x, y, vy) {
   const fall = Math.max(0, Math.min(1, (vy - FALL_SPEED_FROM) / (FALL_SPEED_TO - FALL_SPEED_FROM)))
   inst.rate += (FOLLOW_RATE + (FALL_FOLLOW_RATE - FOLLOW_RATE) * fall - inst.rate) * (1 - Math.exp(-RATE_EASE * dt))
   const t = 1 - Math.exp(-inst.rate * dt)
-  inst.camX += (clampX(inst, x) - inst.camX) * t
+  inst.camX += (clampX(inst, x + Lead.update(inst.lead, inst.k, x, inst.winW)) - inst.camX) * t
   inst.camY += (clampY(inst, y + inst.winH * LOOK_DOWN_FRAC) - inst.camY) * t
   apply(inst)
 }

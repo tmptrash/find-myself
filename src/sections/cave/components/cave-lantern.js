@@ -5,15 +5,16 @@ import * as Atlas from '../utils/cave-atlas.js'
 import * as Glow from '../utils/cave-glow.js'
 import * as Platform from '../utils/cave-platform.js'
 //
-// The lantern mushroom (the plants sheet's glowing blue mushrooms): it
-// stands dim beside the hero's landing spot. It has no body: the hero
-// walks past it, and a hero falling onto its cap (crossing the cap's top
-// over it) is thrown back up, the cap squashes and springs, and the
-// mushroom lights up — a cold blue halo that fades again over
-// LIGHT_HOLD_SEC. It also serves as the cave's picture behind the menu.
+// The lantern mushroom (mushroom.png: a glowing blue mushroom, its cap and
+// stem full of holes): it stands dim beside the hero's landing spot. It
+// has no body: the hero walks past it, and a hero falling onto its cap
+// (crossing the cap's top over it) is thrown back up, the cap squashes and
+// springs, and the mushroom lights up — a cold blue halo that fades again
+// over LIGHT_HOLD_SEC (and its fireflies fly out of its holes,
+// cave-swarm.js). It also serves as the cave's picture behind the menu.
 //
-const SPRITE = 'cave0-lantern-v3'
-export const LANTERN_PIECE = 'shroom4'
+const SPRITE = 'cave0-lantern-v4'
+export const LANTERN_PIECE = 'lantern'
 const GRAIN_SEED = 9300
 //
 // Size: drawn height in world px (its cap top stays within one jump), the
@@ -25,8 +26,8 @@ const BAKE_SCALE = 2
 // The cap a falling hero bounces off: its share of the width and its top
 // (share of the height from the foot, CAP_SINK px lower).
 //
-const CAP_W_SHARE = 0.62
-const CAP_TOP_SHARE = 0.9
+const CAP_W_SHARE = 0.8
+const CAP_TOP_SHARE = 0.95
 const CAP_SINK = 4
 //
 // Its foot stands on the lowest point of the soil under its stems (FOOT_HALF
@@ -67,6 +68,23 @@ const IDLE_SQUAT_MIN = 3
 const IDLE_SQUAT_RANGE = 4
 const IDLE_SQUAT_KICK = 2.5
 const BYTE_MAX = 255
+//
+// Its holes the fireflies live in: where each opens on the picture (shares
+// of its width from the left and of its height from the top) — the big
+// and small ones of the cap, the big ones of the stem.
+//
+const HOLES = [
+  { x: 0.343, y: 0.264 },
+  { x: 0.620, y: 0.177 },
+  { x: 0.111, y: 0.269 },
+  { x: 0.772, y: 0.260 },
+  { x: 0.418, y: 0.107 },
+  { x: 0.713, y: 0.115 },
+  { x: 0.469, y: 0.724 },
+  { x: 0.612, y: 0.837 },
+  { x: 0.326, y: 0.881 }
+]
+const HALF = 0.5
 const bakedFor = new WeakSet()
 
 /**
@@ -115,6 +133,21 @@ export function footYOn(p, x) {
   let y = -Infinity
   for (let dx = -FOOT_HALF; dx <= FOOT_HALF; dx += FOOT_STEP) y = Math.max(y, Platform.surfaceAt(p, x + dx))
   return y + FOOT_SINK
+}
+
+/**
+ * Its holes in the world: where each opens, its cap's top and its middle.
+ * @param {Object} inst - Lantern instance
+ * @returns {{holes: Array<{x: number, y: number}>, x: number, top: number}}
+ */
+export function holes(inst) {
+  const w = inst.w * inst.scale
+  const h = LANTERN_H * inst.scale
+  return {
+    holes: HOLES.map(hole => ({ x: inst.x + (hole.x - HALF) * w, y: inst.y - (1 - hole.y) * h })),
+    x: inst.x,
+    top: inst.y - h
+  }
 }
 
 /**
@@ -190,11 +223,6 @@ export function onDrawHalo(inst) {
   Glow.drawGlow(k, inst.x, cy, r * HALO_CORE_SHARE, inst.coreRgb, HALO_CORE_OPACITY * inst.light)
 }
 
-/**
- * Current light (0 dim … 1 freshly lit).
- * @param {Object} inst - Lantern instance
- * @returns {number}
- */
 //
 // The picture baked once per live k at BAKE_SCALE over its drawn size.
 //

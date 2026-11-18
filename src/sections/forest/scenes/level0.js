@@ -329,9 +329,14 @@ const TRUNK_EXCLUDE_HALF = 50
 const EAST_GROUND_TRAMP_GAP = 42
 const FOREST_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
 //
-// Bomb trees stand behind the hero and the bomb's burst shards.
+// Bomb trees stand behind the hero and the bomb's burst shards, and just
+// behind the centipede's layer (EAR_TREE_UNDER_PREDATOR under it): the
+// centipede, the stick on its back and the hero riding it pass in front of
+// a bomb tree as one group (on the same layer as the centipede the tree
+// covered it and the stick but not the rider).
 //
-const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1
+const EAR_TREE_UNDER_PREDATOR = 0.05
+const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1 - EAR_TREE_UNDER_PREDATOR
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
 //

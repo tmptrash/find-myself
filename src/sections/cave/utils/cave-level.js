@@ -17,6 +17,7 @@ import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
+import * as Swarm from '../components/cave-swarm.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
@@ -31,7 +32,8 @@ import * as View from './cave-view.js'
 //
 // Cave lesson 0 — the hero drops in from the forest through the hole the
 // forest eye-flower's roots tore in the ceiling, onto an earth ledge, a
-// dormant lantern mushroom left of him (bounced on, it lights up). Below
+// dormant lantern mushroom left of him (bounced on, it lights up and its
+// blue fireflies fly out of its holes, shy of the hero). Below
 // lies the lake hall with a
 // deep lake: stone platforms climb from its right bank into the crevice
 // of the exit, up to the stalk-eye's ledge; past the stalk-eye a shaft of
@@ -166,6 +168,7 @@ function build(k) {
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
     runners: createRunners(k),
+    swarm: Swarm.create({ k }),
     lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
     platformByBody: new Map(),
     heroInst: null,
@@ -203,6 +206,7 @@ function onUpdate(inst) {
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
+  Swarm.onUpdate(inst.swarm, heroPos(inst))
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
   CaveSound.onUpdate(inst.caveSound, k.dt(), focus.y)
@@ -218,7 +222,7 @@ function updateHero(inst, char) {
   char.isGrounded() && Hero.snapPosToPixels(inst.heroInst)
   rideGround(inst, char)
   trackLanding(inst, char)
-  Lantern.onUpdate(inst.lantern, inst.heroInst) && CaveSound.playLanternBounce(inst.caveSound)
+  Lantern.onUpdate(inst.lantern, inst.heroInst) && lanternBounce(inst)
   trackSafeSpot(inst, char)
   const { x, y } = char.pos
   if (Layout.isInLake(x, y)) return startDrown(inst, char)
@@ -236,6 +240,14 @@ function trackLanding(inst, char) {
   }
   inst.airFor >= LAND_MIN_AIR && playHeroStep(inst, inst.heroInst, true)
   inst.airFor = 0
+}
+//
+// The hero bounced off the lantern mushroom: its sound, its fireflies
+// coming out of its holes.
+//
+function lanternBounce(inst) {
+  CaveSound.playLanternBounce(inst.caveSound)
+  Swarm.release(inst.swarm, Lantern.holes(inst.lantern))
 }
 function heroFocus(inst) {
   const char = inst.heroInst?.character
@@ -509,10 +521,11 @@ function drawTerrain(inst) {
   Lantern.onDraw(inst.lantern)
 }
 //
-// The additive glow over the world: the lantern's halo.
+// The additive glow over the world: the lantern's halo, its fireflies.
 //
 function drawLights(inst) {
   Lantern.onDrawHalo(inst.lantern)
+  Swarm.onDraw(inst.swarm)
 }
 //
 // The runner insects: one on each long crawl run, the rest on runs

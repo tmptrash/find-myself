@@ -20,14 +20,20 @@ import { drawForestMushroom } from '../utils/forest-mushrooms.js'
 //
 // The island runs off the left edge of the playfield (its left part sits under
 // the frame) and is the same mossy boulder hill as the one right of the tree,
-// mirrored: a flat crest under the frame, then a long slope that slides into
-// the lake instead of a cut bank.
+// mirrored: a flat crest under the frame, then a slope ISLAND_SLOPE_W px
+// wide that slides into the lake instead of a cut bank.
 //
-const ISLAND_W = 275
+// The crest reaches ISLAND_GROW_W px further right than it first did, and
+// the bush, the island's plants and the grab's hole (flower-grab.js) moved
+// right with it: on a phone held sideways its camera cut-out hides the
+// screen's left edge, where they stood.
+//
+const ISLAND_GROW_W = 30
+const ISLAND_W = 275 + ISLAND_GROW_W
 const ISLAND_OFFSCREEN_W = 80
 const ISLAND_ABOVE_WATER = 28
 const ISLAND_BELOW_WATER = 30
-const ISLAND_PLATEAU_FRAC = 0.58
+const ISLAND_SLOPE_W = 116
 //
 // The crest runs on ISLAND_PAST_FRAME_W px further left, past the world's
 // side, so a camera that looks past the playfield's left edge (a film of
@@ -45,7 +51,7 @@ const ISLAND_BAKE_PAD = 4
 const ISLAND_DECOR_UP = 96
 const ISLAND_BAKE_SEED = 0x65796566
 const ISLAND_BAKE_SLOT = 'island'
-const ISLAND_BAKE_KEY = 'v12'
+const ISLAND_BAKE_KEY = 'v13'
 const ISLAND_BAKE_BELOW_WATER = 10
 //
 // Rock-to-soil seam: centred this far under the water line so even its
@@ -61,7 +67,8 @@ const ISLAND_SEAM_SHORE_BLEND = 24
 const ISLAND_GREENERY_ABOVE_WATER = 12
 //
 // Surface dressing, placed by offset from the lake's left edge (negative = under
-// the frame). Same painters and colours as the forest floor right of the tree.
+// the frame; all moved ISLAND_GROW_W right). Same painters and colours as the
+// forest floor right of the tree.
 //
 const KIND = { FERN: 'fern', PLUME: 'plume', MUSHROOMS: 'mushrooms' }
 const ISLAND_PLANTS = [
@@ -120,9 +127,10 @@ const BANK_BODY_REACH = 28
 //
 const SIDE_WALL_HERO_H = 74
 //
-// Plant root just right of the frame, so the flower and its buds are on screen.
+// Plant root just right of the frame (and ISLAND_GROW_W further), so the
+// flower and its buds are on screen.
 //
-const PLANT_BASE_DX = ISLAND_OFFSCREEN_W + 22
+const PLANT_BASE_DX = ISLAND_OFFSCREEN_W + 22 + ISLAND_GROW_W
 const PLANT_BASE_SINK = 2
 //
 // Whole bush leans toward the hero as he approaches (0 = standing like an
@@ -1497,7 +1505,7 @@ function paintIsland(ctx, inst) {
     greeneryMaxY
   })
   cutIslandSeam(ctx, inst)
-  const lakeX1 = inst.x1 + ISLAND_OFFSCREEN_W
+  const lakeX1 = inst.x1 + ISLAND_OFFSCREEN_W + ISLAND_GROW_W
   ISLAND_PLANTS.filter(p => p.kind === KIND.PLUME).forEach(p => {
     const baseY = dryRootY(lakeX1 + p.dx)
     baseY != null &&
@@ -1522,8 +1530,8 @@ function paintIsland(ctx, inst) {
 
 //
 // Mossy hill shape of the island whose left edge (under the frame) is `x1`:
-// its crest starts ISLAND_PAST_FRAME_W further left, the plateau share grown
-// so the slope stays ISLAND_W × (1 - ISLAND_PLATEAU_FRAC) wide.
+// its crest starts ISLAND_PAST_FRAME_W further left, the plateau share set
+// so the slope stays ISLAND_SLOPE_W wide.
 //
 function buildIslandHill(x1, waterY) {
   const fullW = ISLAND_W + ISLAND_PAST_FRAME_W
@@ -1533,7 +1541,7 @@ function buildIslandHill(x1, waterY) {
     floorY: waterY + ISLAND_BELOW_WATER,
     height: ISLAND_ABOVE_WATER + ISLAND_BELOW_WATER,
     peakLeft: true,
-    plateau: 1 - ISLAND_W * (1 - ISLAND_PLATEAU_FRAC) / fullW
+    plateau: 1 - ISLAND_SLOPE_W / fullW
   }
 }
 

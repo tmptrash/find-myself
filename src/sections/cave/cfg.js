@@ -16,6 +16,8 @@ export const CAVE_CFG = {
     heroSpark: ['#a6e6d0', '#ffe9a8', '#7fd6c2'],
     lanternGlow: '#62d6f0',     // Halo of the blue lantern mushroom, cold blue
     lanternCore: '#d8f8ff',
+    swarm: '#5fd8ff',           // The lantern mushroom's fireflies, cold blue
+    swarmCore: '#e6fbff',
     rootLight: '#d8b06a',       // Daylight spilling in through the roots' hole
     fps: '#ffffff'              // FPS readout
   },

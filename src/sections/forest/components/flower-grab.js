@@ -100,9 +100,12 @@ const HERO_END_ABOVE_BOTTOM = 30
 // Tunnel: kept clear of the island ends so it never cuts the lake water;
 // it runs TUNNEL_DEPTH down, slanting TUNNEL_LEAN_PX toward the lake deep
 // under its bed, so the cave that opens at its end lies inside the view
-// (the playfield's left edge is close to the island).
+// (the playfield's left edge is close to the island). Its left clear keeps
+// it 30 px further from that edge than it first did, with the island grown
+// and the bush moved right (eye-flower.js), out from under a phone's
+// camera cut-out held sideways.
 //
-const TUNNEL_EDGE_CLEAR = 90
+const TUNNEL_EDGE_CLEAR = 120
 const TUNNEL_SHORE_CLEAR = 45
 const TUNNEL_DEPTH = 190
 const TUNNEL_LEAN_PX = 80

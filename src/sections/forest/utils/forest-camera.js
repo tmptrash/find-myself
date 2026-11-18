@@ -1,3 +1,4 @@
+import * as Lead from '../../../utils/camera-lead.js'
 //
 // Forest level camera — one world pixel is always one screen pixel. The
 // playfield (a fixed world rectangle) fills the whole screen and the camera
@@ -19,24 +20,9 @@ const FOLLOW_Y_RATE = 8
 //
 const FILM_FOLLOW_Y_RATE = 30
 //
-// Look-ahead on a screen held upright (taller than wide): the camera leads
-// the running hero by LEAD_SHARE of the view's width in the way he runs, so
-// more of the level shows ahead of him and he sits toward the trailing edge.
-// The lead never moves while he stands. It takes a new way only after he
-// has run that way for LEAD_TURN_HOLD seconds (a step or a turn on the spot
-// changes nothing), and then shifts only as he runs: LEAD_CATCH px of lead
-// per px he covers, ramping in over LEAD_RAMP seconds and slowing down
-// within LEAD_SOFT px of where it is going — so he drifts across the screen
-// to the other side over a run instead of the view jumping. A move under
-// LEAD_MOVE_EPS px a frame does not count as running.
+// On a screen held upright the camera leads the running hero (look-ahead,
+// camera-lead.js).
 //
-const LEAD_SHARE = 0.22
-const LEAD_MOVE_EPS = 0.5
-const LEAD_TURN_HOLD = 0.4
-const LEAD_CATCH = 0.45
-const LEAD_RAMP = 0.5
-const LEAD_SOFT = 60
-const LEAD_SOFT_MIN = 0.15
 
 /**
  * Creates the forest camera controller.
@@ -73,11 +59,7 @@ export function create(cfg) {
     // 1 = full playfield; higher values zoom in (Kaplay camScale).
     //
     zoom: 1,
-    leadX: 0,
-    leadDir: 0,
-    runDir: 0,
-    runTime: 0,
-    lastHeroX: null,
+    lead: Lead.create(),
     shakeAmp: 0,
     shakeDuration: 0,
     shakeElapsed: 0,
@@ -168,11 +150,7 @@ export function followHero(inst, heroX, heroY, pixelAlignX = true, freeY = false
  */
 export function snapToHero(inst, heroX, heroY, freeY = false) {
   inst.camY = clampCamY(inst, followY(inst, heroY, freeY))
-  inst.leadX = 0
-  inst.leadDir = 0
-  inst.runDir = 0
-  inst.runTime = 0
-  inst.lastHeroX = heroX
+  Lead.reset(inst.lead, heroX)
   placeCamera(inst, heroX, true)
 }
 
@@ -211,8 +189,8 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 //
 function placeCamera(inst, heroX, pixelAlignX, filmShare = 0) {
   const k = inst.k
-  const lead = filmShare > 0 ? inst.leadX * (1 - filmShare) : updateLead(inst, heroX)
-  filmShare > 0 && (inst.lastHeroX = null)
+  const lead = filmShare > 0 ? inst.lead.leadX * (1 - filmShare) : Lead.update(inst.lead, k, heroX, inst.viewW)
+  filmShare > 0 && (inst.lead.lastX = null)
   const aimX = heroX + lead
   const clampedX = Math.max(inst.minCamX, Math.min(inst.maxCamX, aimX))
   //
@@ -227,36 +205,6 @@ function placeCamera(inst, heroX, pixelAlignX, filmShare = 0) {
     : alignCamToGrid(k.width(), desiredCamX)
   const camY = alignCamToGrid(k.height(), inst.camY)
   k.camPos(camX + (inst.shakeOffsetX ?? 0), camY + (inst.shakeOffsetY ?? 0))
-}
-//
-// The camera's look-ahead this frame (see LEAD_SHARE): none unless the
-// screen is held upright.
-//
-function updateLead(inst, heroX) {
-  const k = inst.k
-  const moved = inst.lastHeroX === null ? 0 : heroX - inst.lastHeroX
-  inst.lastHeroX = heroX
-  if (k.height() <= k.width()) {
-    inst.leadX = 0
-    return 0
-  }
-  if (Math.abs(moved) <= LEAD_MOVE_EPS) return inst.leadX
-  trackRun(inst, Math.sign(moved), k.dt())
-  const delta = inst.leadDir * inst.viewW * LEAD_SHARE - inst.leadX
-  const ramp = Math.min(1, Math.max(0, inst.runTime - LEAD_TURN_HOLD) / LEAD_RAMP)
-  const soft = Math.max(LEAD_SOFT_MIN, Math.min(1, Math.abs(delta) / LEAD_SOFT))
-  const step = Math.abs(moved) * LEAD_CATCH * ramp * soft
-  inst.leadX += Math.sign(delta) * Math.min(Math.abs(delta), step)
-  return inst.leadX
-}
-//
-// How long the hero has been running his current way; the lead takes that
-// way once he has kept to it LEAD_TURN_HOLD seconds.
-//
-function trackRun(inst, dir, dt) {
-  inst.runTime = dir === inst.runDir ? inst.runTime + dt : 0
-  inst.runDir = dir
-  inst.runTime >= LEAD_TURN_HOLD && (inst.leadDir = dir)
 }
 //
 // The hero Y the camera centres on: his own, or the rest height raised by

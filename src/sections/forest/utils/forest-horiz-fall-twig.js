@@ -350,6 +350,17 @@ export function restoreTwigOnPredator(inst, predator) {
 }
 
 /**
+ * The centipede carrying the hero on its stick has walked into the end of
+ * its ground: it turns round the way it turns when he lands on the stick
+ * (a quick wave down its body, the stick and he staying on its back).
+ * @param {Object} inst - Twig inst
+ */
+export function turnRideAround(inst) {
+  if (!inst?.riderLocked || inst.rideTurnPending || !mountedTwig(inst)) return
+  schedulePredatorMountedTurn(inst, false)
+}
+
+/**
  * True while the stick protects the hero from the centipede: standing on it,
  * or airborne after jumping off it and still above the stick.
  * @param {Object} inst - Twig inst

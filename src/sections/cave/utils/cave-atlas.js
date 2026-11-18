@@ -15,8 +15,10 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // air), runner.png (the runner insect taken apart: its body, head, tail
 // leaf, two feelers, and per pair of legs a hip ball, a thigh, a shin and
 // a clawed foot, rear pair first; its neck is a second cut of a shin),
-// mushroom.png (the lantern mushroom, its cap and stem full of holes);
-// plus the forest's buried elements
+// mushroom.png (the lantern mushroom, its cap and stem full of holes),
+// strider.png (the water strider taken apart: its body under its wings,
+// its head with one big eye, a feeler — the sheet's right one, the left
+// one is its mirror —, a bent femur and a straight tibia); plus the forest's buried elements
 // (bones, fossils, shells: elements_ground.png, cut by the forest).
 //
 // The sheets are not clean, so each is prepared as it is cut: faint haze
@@ -40,7 +42,8 @@ const SHEET = {
   FLOATS: 'floats',
   TOP: 'top',
   RUNNER: 'runner',
-  MUSHROOM: 'mushroom'
+  MUSHROOM: 'mushroom',
+  STRIDER: 'strider'
 }
 //
 // Per sheet: its file, its alpha remap [lo, hi], whether its colour is
@@ -62,7 +65,8 @@ const SHEETS = {
   [SHEET.FLOATS]: { url: 'cave0/platforms.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.TOP]: { url: 'cave0/ground_top.png', alpha: [6, 250], soil: true, dewhite: 170, sharpen: 3 },
   [SHEET.RUNNER]: { url: 'cave0/runner.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
-  [SHEET.MUSHROOM]: { url: 'cave0/mushroom.png', alpha: [40, 200] }
+  [SHEET.MUSHROOM]: { url: 'cave0/mushroom.png', alpha: [40, 200] },
+  [SHEET.STRIDER]: { url: 'cave0/strider.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } }
 }
 const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
@@ -771,7 +775,12 @@ const PIECES = {
   runnerFoot1: [SHEET.RUNNER, 376, 900, 103, 135],
   runnerFoot2: [SHEET.RUNNER, 837, 897, 81, 133],
   runnerFoot3: [SHEET.RUNNER, 1245, 894, 101, 132],
-  lantern: [SHEET.MUSHROOM, 33, 43, 1188, 1143]
+  lantern: [SHEET.MUSHROOM, 33, 43, 1188, 1143],
+  striderBody: [SHEET.STRIDER, 104, 50, 648, 296],
+  striderHead: [SHEET.STRIDER, 812, 160, 200, 166],
+  striderFeeler: [SHEET.STRIDER, 1266, 178, 168, 118],
+  striderFemur: [SHEET.STRIDER, 572, 408, 136, 210],
+  striderTibia: [SHEET.STRIDER, 562, 642, 52, 296]
 }
 const sheets = new Map()
 const pieces = new Map()

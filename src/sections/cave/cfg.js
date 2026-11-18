@@ -71,6 +71,50 @@ export const CAVE_CFG = {
     farShade: 0.45
   },
   //
+  // The water striders on the lake (cave-strider.js): as the runners,
+  // their parts pulled a little toward the cave's dark, the far legs and
+  // feeler darker still.
+  //
+  strider: {
+    shade: '#0b1216',
+    shadeAmount: 0.15,
+    farShade: 0.45
+  },
+  //
+  // The lake's fish (cave-fish-paint.js), after the reference: a blue-teal
+  // back with darker blotches and pale blue spots, golden flanks fading to
+  // a cream-orange belly, a warm orange face, a big gold-ringed eye, gold
+  // speckles, see-through blue fins with pale gold rays, a dark contour.
+  // The far side's fin and a fish deep in the water are pulled toward the
+  // cave's dark (farShade, depthShade).
+  //
+  fish: {
+    back: '#24425a',
+    flank: '#4b7d8e',
+    gold: '#b8884b',
+    belly: '#e4b97c',
+    face: '#d6914f',
+    blotch: '#1f364a',
+    spot: '#a6d6e4',
+    speckle: '#f1cf74',
+    sheen: '#dff3f6',
+    gill: '#1b2b33',
+    eyeRing: '#e2b04a',
+    eyeRingDark: '#9a6a22',
+    iris: '#123234',
+    pupil: '#05090a',
+    glint: '#ffffff',
+    mouth: '#2a1712',
+    lip: '#d98b4f',
+    fin: '#6f9fae',
+    finEdge: '#2b4652',
+    finRay: '#ead6a0',
+    contour: '#16242b',
+    splash: '#b9eadc',
+    farShade: 0.35,
+    depthShade: 0.3
+  },
+  //
   // The cave's stalk-eye (cave-stalk-eye.js, cave-menu-stalk-eye.js): kin
   // of the forest's stalk-eyes, but hostile: a darker, blood-red stalk set
   // with dark thorns tipped bone-pale, and bloodshot eyes — a pinkish

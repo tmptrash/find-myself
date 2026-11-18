@@ -130,9 +130,47 @@ export function onDrawAlgae(inst) {
 export function onDraw(inst, view) {
   if (inst.x2 < view.left || inst.x1 > view.right) return
   const k = inst.k
-  const frame = Math.floor((k.time() % CYCLE) / CYCLE * FRAME_COUNT) % FRAME_COUNT
-  k.drawSprite({ sprite: FRAME_SPRITE + frame, pos: inst.framePos })
+  k.drawSprite({ sprite: FRAME_SPRITE + frameNow(k), pos: inst.framePos })
   k.drawSprite({ sprite: BODY_SPRITE, pos: inst.bodyPos })
+}
+
+/**
+ * The water's top line at a world X this moment (the wave of the frame
+ * on screen), for what rides on it.
+ * @param {Object} inst - Lake instance
+ * @param {number} x - World X
+ * @returns {number} World Y of the surface
+ */
+export function surfaceAt(inst, x) {
+  const span = inst.x2 - inst.x1
+  const fade = Math.max(0, Math.min(1, (x - inst.x1) / SHORE_FADE, (inst.x2 - x) / SHORE_FADE))
+  const t = frameNow(inst.k) / FRAME_COUNT * CYCLE
+  return Layout.LAKE_SURFACE_Y + topWave((x - inst.x1) / span, t) * fade
+}
+
+/**
+ * The lake's bed under a world X (the bowl's soil top).
+ * @param {Object} inst - Lake instance
+ * @param {number} x - World X
+ * @returns {number} World Y of the bed
+ */
+export function bottomAt(inst, x) {
+  return bedAt(inst, x)
+}
+
+/**
+ * The water's span (its ends where the banks' soil drops under it).
+ * @param {Object} inst - Lake instance
+ * @returns {{x1: number, x2: number}}
+ */
+export function span(inst) {
+  return { x1: inst.x1, x2: inst.x2 }
+}
+//
+// The band's frame on screen now.
+//
+function frameNow(k) {
+  return Math.floor((k.time() % CYCLE) / CYCLE * FRAME_COUNT) % FRAME_COUNT
 }
 //
 // The bowl under the water: the floor's art top, column by column, from

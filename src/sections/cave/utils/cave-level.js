@@ -17,6 +17,8 @@ import * as Fireflies from '../components/cave-fireflies.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Swarm from '../components/cave-swarm.js'
+import * as Strider from '../components/cave-strider.js'
+import * as Fish from '../components/cave-fish.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
@@ -45,9 +47,10 @@ const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once 
 // Draw order: back (parallax), the fireflies (behind the soil: they fly
 // only in the open between the platforms), the drowning hero (behind the
 // soil),
-// terrain, the runner insects on it, the lake water, the lantern's halo,
-// the hero and creatures (player z), the stones in front of him, the
-// frame.
+// terrain, the runner insects on it, the fish in the lake, the lake
+// water, what is on its surface (the fish's splashes, the water striders),
+// the lantern's halo, the hero and creatures (player z), the stones in
+// front of him, the frame.
 //
 const Z_WORLD = 0
 const Z_FIREFLIES = Z_WORLD + 0.2
@@ -55,6 +58,19 @@ const Z_DROWN_HERO = Z_WORLD + 0.35
 const Z_TERRAIN = Z_WORLD + 0.4
 const Z_RUNNERS = Z_WORLD + 0.5
 const Z_WATER = Z_WORLD + 0.6
+const Z_FISH = Z_WORLD + 0.55
+const Z_LAKE_SURFACE = Z_WORLD + 0.7
+//
+// A fish's splash sounds full within the hero's reach and fades out over
+// SPLASH_HEAR px from him.
+//
+const SPLASH_HEAR = 900
+//
+// A firefly a fish ate lights up again over the lake, from LAKE_SKY_TOP
+// down to LAKE_SKY_LOW px over the surface (where the fish can reach it).
+//
+const LAKE_SKY_TOP = 140
+const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
 const Z_FRAME = CFG.visual.zIndex.ui - 1
@@ -155,6 +171,11 @@ function build(k) {
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
     runners: Runner.createAll(k),
+    striders: Strider.createAll(k, lake),
+    striderFears: [],
+    fish: Fish.createAll(k, lake),
+    fishCtx: null,
+    lakeSky: null,
     swarm: Swarm.create({ k }),
     lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
     platformByBody: new Map(),
@@ -168,6 +189,17 @@ function build(k) {
     airFor: 0,
     drownLegs: null,
     fps: null
+  }
+  const lakeSpan = CaveLake.span(lake)
+  inst.lakeSky = { x1: lakeSpan.x1, x2: lakeSpan.x2, y1: Layout.LAKE_SURFACE_Y - LAKE_SKY_TOP, y2: Layout.LAKE_SURFACE_Y - LAKE_SKY_LOW }
+  inst.fishCtx = {
+    prey: [],
+    swarmPrey: [],
+    swarm: null,
+    threats: [],
+    school: inst.fish,
+    onCatch: prey => onFishCatch(inst, prey),
+    onSplash: (x, strength) => onFishSplash(inst, x, strength)
   }
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
@@ -194,6 +226,7 @@ function onUpdate(inst) {
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
   Swarm.onUpdate(inst.swarm, heroPos(inst), isHeroAirborne(inst))
+  updateLakeLife(inst)
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
   CaveSound.onUpdate(inst.caveSound, k.dt(), focus.y)
@@ -311,6 +344,8 @@ function startDrown(inst, char) {
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
   Sound.playWaterStepsOnce(inst.sfx, WATER_STEPS_VOLUME)
+  inst.striders.forEach(strider => Strider.startle(strider, char.pos.x))
+  inst.fish.forEach(fish => Fish.startle(fish, char.pos.x))
 }
 function updateDrown(inst) {
   const d = inst.drown
@@ -490,8 +525,9 @@ function createHud(inst) {
 //
 // Draw passes: the back world (parallax), the fireflies and the drowning
 // hero (behind the soil), the terrain (the lake's bowl in it)
-// with the lake's algae and the lantern, the see-through water, the
-// lantern's halo, the stones in front of the hero and the screen frame.
+// with the lake's algae and the lantern, the fish, the see-through water,
+// the fish's splashes and the striders on it, the lantern's halo, the
+// stones in front of the hero and the screen frame.
 //
 function addDrawLayers(inst) {
   const k = inst.k
@@ -500,7 +536,9 @@ function addDrawLayers(inst) {
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
+  k.add([k.z(Z_FISH), { draw: () => drawFish(inst) }])
   k.add([k.z(Z_WATER), { draw: () => CaveLake.onDraw(inst.lake, View.worldRect(inst.view)) }])
+  k.add([k.z(Z_LAKE_SURFACE), { draw: () => drawLakeSurface(inst) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
   k.add([k.z(Z_FRONT), { draw: () => Front.onDraw(inst.front, View.worldRect(inst.view)) }])
   k.add([k.z(Z_FRAME), { draw: () => View.onDrawFrame(inst.view) }])
@@ -529,6 +567,67 @@ function updateRunners(inst) {
 function drawRunners(inst) {
   const view = View.worldRect(inst.view)
   inst.runners.forEach(runner => Runner.onDraw(runner, view))
+}
+//
+// The lake's life: the fish hunt every lit firefly (gold or blue), all of
+// them going for the blue swarm while it hangs over the water, and flee
+// the hero in the water; the striders fear everything near the lake
+// that moves — the hero (on the bank, over the water or sinking in it),
+// the runners, the blue swarm, a fish near the surface.
+//
+function updateLakeLife(inst) {
+  const ctx = inst.fishCtx
+  const char = inst.heroInst?.character
+  const hero = !inst.dead && char?.exists?.() ? char.pos : null
+  ctx.prey.length = 0
+  ctx.swarmPrey.length = 0
+  Fireflies.forEachLit(inst.fireflies, f => ctx.prey.push(f))
+  Swarm.forEachFlying(inst.swarm, fly => ctx.swarmPrey.push(fly))
+  ctx.swarmPrey.forEach(fly => ctx.prey.push(fly))
+  ctx.swarm = Swarm.center(inst.swarm)
+  ctx.threats.length = 0
+  inst.drown && hero && ctx.threats.push(hero)
+  inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
+  const fears = inst.striderFears
+  fears.length = 0
+  hero && fears.push(hero)
+  inst.runners.forEach(runner => fears.push(runner.pos))
+  const swarm = Swarm.center(inst.swarm)
+  swarm && fears.push(swarm)
+  inst.fish.forEach(fish => {
+    const head = Fish.surfacePoint(fish)
+    head && fears.push(head)
+  })
+  inst.striders.forEach(strider => Strider.onUpdate(strider, fears, inst.striders))
+}
+//
+// A fish ate a firefly: one of the swarm's, or an ambient one (which
+// lights up again over the lake later).
+//
+function onFishCatch(inst, prey) {
+  inst.swarm.flies.includes(prey) ? Swarm.eat(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
+}
+function onFishSplash(inst, x, strength) {
+  const focus = heroFocus(inst)
+  CaveSound.playFishSplash(inst.caveSound, strength, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+}
+//
+// The fish far to near (deeper in z first).
+//
+function drawFish(inst) {
+  const view = View.worldRect(inst.view)
+  inst.fish.sort((a, b) => Fish.depth(b) - Fish.depth(a))
+  inst.fish.forEach(fish => Fish.onDraw(fish, view))
+}
+//
+// On the surface: the fish's splashes, the striders' water marks, then
+// the striders (each kind in one batch).
+//
+function drawLakeSurface(inst) {
+  const view = View.worldRect(inst.view)
+  inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  inst.striders.forEach(strider => Strider.onDrawWater(strider, view))
+  inst.striders.forEach(strider => Strider.onDraw(strider, view))
 }
 function drawFireflies(inst) {
   const view = View.worldRect(inst.view)

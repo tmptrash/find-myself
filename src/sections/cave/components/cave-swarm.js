@@ -31,9 +31,9 @@ import * as Layout from '../utils/cave-layout.js'
 // soil is close. A hero jumping onto it — in the air over its middle and
 // no longer rising, however fast he runs — does not send it diving: it
 // scatters and sinks slowly to the lake's left edge (see SCATTER_*).
-// There it stays; once the hero has let it be for REST_TIME s it flies
-// home and every firefly goes back into a hole of the mushroom, fading
-// into it.
+// There it stays; once the hero has let it be for REST_TIME s (counted
+// from when it has come down) it flies home and every firefly goes back
+// into a hole of the mushroom, fading into it.
 //
 const COUNT = 16
 const SEED = 6100
@@ -112,6 +112,15 @@ const SCARE_GAP = 0.5
 const HERO_VEL_EASE = 10
 const WORLD_MARGIN = 40
 //
+// The water's level is a floor for all of it: no firefly at large comes
+// within WATER_CLEAR px of the lake's surface height (turned back up
+// there), and the middle stays SPREAD_Y px higher still — over the lake,
+// where the ground under the swarm lies deep under the water, as anywhere.
+//
+const WATER_CLEAR = 10
+const WATER_FLOOR = Layout.LAKE_SURFACE_Y - WATER_CLEAR
+const CENTER_FLOOR = WATER_FLOOR - SPREAD_Y
+//
 // Jumped on (the hero in the air, JUMP_ABOVE px or more over its middle —
 // not a hop off a bump of the ground beside it — and rising no faster than
 // HERO_MOVING px/s — at the top of his jump or coming down, run as fast as
@@ -121,11 +130,14 @@ const WORLD_MARGIN = 40
 // SCATTER_UP rad above level to SCATTER_DOWN below it (nearly level: no
 // higher than the hero's head, not into the ground) — and for SCATTER_TIME s hardly keep together
 // (SCATTER_PULL of their pull), gathering again over REGROUP_TIME s, while
-// the swarm sinks at SINK_SPEED px/s to rest LAKE_EDGE_IN px short of the
-// lake's left edge over the ground there — along at its height first and
-// then down where the soil shuts the straight way. No new scare while it
-// sinks.
+// the swarm sinks at SINK_SPEED px/s to rest LAKE_EDGE_OUT px past the
+// lake's left edge, low over the water (where the lake's fish come for
+// it): along at its height to the open shaft LAKE_SHAFT_IN px short of
+// the lake's left edge, down it, then along over the water (the ledge
+// over the lake's edge shuts the straight way). Its way home goes back up
+// the same shaft. No new scare while it sinks.
 //
+const LAKE_SHAFT_IN = 60
 const JUMP_ABOVE = 20
 const SCATTER_SPEED = 140
 const SCATTER_SPEED_RANGE = 120
@@ -135,7 +147,8 @@ const SCATTER_TIME = 0.6
 const SCATTER_PULL = 0.08
 const REGROUP_TIME = 0.9
 const SINK_SPEED = 110
-const LAKE_EDGE_IN = 60
+const LAKE_EDGE_OUT = 70
+const SHAFT_X = Layout.LAKE_X1 - LAKE_SHAFT_IN
 const ARRIVE_PX = 2
 //
 // Home: after REST_TIME s left alone; the swarm counts as home within
@@ -258,6 +271,35 @@ export function onUpdate(inst, heroPos, airborne = false) {
 }
 
 /**
+ * Calls fn with every firefly flying at large (out of its hole, not on
+ * its way back into it).
+ * @param {Object} inst - Swarm instance
+ * @param {(fly: {x: number, y: number}) => void} fn - Called per firefly
+ */
+export function forEachFlying(inst, fn) {
+  inst.state === STATE.IDLE || inst.flies.forEach(fly => fly.phase === PHASE.FLY && fn(fly))
+}
+
+/**
+ * A firefly is eaten (by a fish): it is gone.
+ * @param {Object} inst - Swarm instance
+ * @param {Object} fly - The firefly (from forEachFlying)
+ */
+export function eat(inst, fly) {
+  fly.phase = PHASE.GONE
+  fly.show = 0
+}
+
+/**
+ * The swarm's middle while it is out (null while its fireflies are home).
+ * @param {Object} inst - Swarm instance
+ * @returns {{x: number, y: number}|null}
+ */
+export function center(inst) {
+  return inst.state === STATE.IDLE ? null : inst.center
+}
+
+/**
  * Draws the fireflies (and the glow of a hole one comes out of) in the
  * additive lights pass.
  * @param {Object} inst - Swarm instance
@@ -354,9 +396,8 @@ function scare(inst, heroPos, airborne) {
 //
 function scatterDown(inst) {
   const rng = inst.rng
-  const target = { x: Layout.LAKE_X1 - LAKE_EDGE_IN, y: inst.center.y }
-  const ground = headCeiling(target)
-  target.y = ground === -Infinity ? inst.center.y : ground + SPREAD_Y
+  const ground = headCeiling({ x: SHAFT_X, y: inst.center.y })
+  const target = { x: Layout.LAKE_X1 + LAKE_EDGE_OUT, y: Math.min(CENTER_FLOOR, ground === -Infinity ? inst.center.y : ground + SPREAD_Y) }
   inst.path = routeTo(inst.center, target)
   inst.anchor.x = target.x
   inst.anchor.y = target.y
@@ -394,7 +435,7 @@ function openRoom(p, dir) {
 //
 function updateState(inst, dt) {
   if (inst.state === STATE.OUT) {
-    inst.calm -= dt
+    inst.calm -= inst.sinking ? 0 : dt
     if (inst.calm > 0) return
     inst.state = STATE.RETURN
     inst.fleeing = false
@@ -424,7 +465,7 @@ function moveCenter(inst, dt) {
   }
   const settled = inst.state === STATE.OUT && !inst.fleeing
   const tx = inst.anchor.x + (settled ? Math.sin(inst.t * WANDER_WX) * WANDER_X : 0)
-  const ty = Math.max(inst.ceilY + SPREAD_Y, inst.anchor.y + (settled ? Math.sin(inst.t * WANDER_WY + 1) * WANDER_Y : 0))
+  const ty = Math.min(CENTER_FLOOR, Math.max(inst.ceilY + SPREAD_Y, inst.anchor.y + (settled ? Math.sin(inst.t * WANDER_WY + 1) * WANDER_Y : 0)))
   const dx = tx - inst.center.x
   const dy = ty - inst.center.y
   const dist = Math.hypot(dx, dy)
@@ -462,14 +503,19 @@ function followPath(inst, dt, speed) {
 }
 //
 // A way from one point to another through open air: straight, or round the
-// soil in two legs — up or down first, then along, or along first — the
-// first that is clear (straight if none is).
+// soil in two legs — up or down first, then along, or along first — or in
+// three by the open shaft left of the lake (along, down or up it, along);
+// the first that is clear (straight if none is).
 //
 function routeTo(from, to) {
-  if (isClear(from, to)) return [{ x: to.x, y: to.y }]
+  const end = { x: to.x, y: to.y }
+  if (isClear(from, to)) return [end]
   const ways = [{ x: from.x, y: to.y }, { x: to.x, y: from.y }]
   const bend = ways.find(p => isClear(from, p) && isClear(p, to))
-  return bend ? [bend, { x: to.x, y: to.y }] : [{ x: to.x, y: to.y }]
+  if (bend) return [bend, end]
+  const top = { x: SHAFT_X, y: from.y }
+  const foot = { x: SHAFT_X, y: to.y }
+  return isClear(from, top) && isClear(top, foot) && isClear(foot, to) ? [top, foot, end] : [end]
 }
 function isClear(a, b) {
   const dx = b.x - a.x
@@ -508,12 +554,14 @@ function updateFly(inst, fly, dt) {
     fly.vx *= drag
     fly.vy *= drag
     steer(inst, fly, dt, fly.show)
+    keepOverWater(fly)
     fly.age >= EMERGE_TIME && (fly.phase = PHASE.FLY)
     return
   }
   if (fly.phase === PHASE.FLY) {
     steer(inst, fly, dt, cohesion(inst))
     keepUnderHead(inst, fly)
+    keepOverWater(fly)
     inst.state === STATE.ENTER && (fly.homeIn -= dt) <= 0 && (fly.phase = PHASE.HOME)
     return
   }
@@ -565,12 +613,24 @@ function keepUnderHead(inst, fly) {
   fly.vy = Math.max(0, fly.vy)
 }
 //
+// A firefly at large never sinks under the water's level (it is turned
+// back up there).
+//
+function keepOverWater(fly) {
+  if (fly.y <= WATER_FLOOR) return
+  fly.y = WATER_FLOOR
+  fly.vy = Math.min(0, fly.vy)
+}
+//
 // The height of a hero's head over the ground under a point (none where
-// no ground lies within GROUND_LOOK px under it).
+// no ground lies within GROUND_LOOK px under it); over the lake the water
+// is the ground.
 //
 function headCeiling(p) {
   const hit = Surface.raycast(p.x, p.y, 0, 1, GROUND_LOOK)
-  return hit ? hit.y - HEAD_HEIGHT : -Infinity
+  const overLake = p.x > Layout.LAKE_X1 && p.x < Layout.LAKE_X2 && p.y < Layout.LAKE_SURFACE_Y
+  const ground = overLake ? Math.min(hit ? hit.y : Infinity, Layout.LAKE_SURFACE_Y) : hit?.y
+  return ground === undefined ? -Infinity : ground - HEAD_HEIGHT
 }
 //
 // Back into its hole on a stiff spring, fading out once it is in.

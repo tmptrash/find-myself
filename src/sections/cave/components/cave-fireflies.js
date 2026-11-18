@@ -31,6 +31,15 @@ const BURST_SPREAD_PX = 14
 const CORE_GLOW_SCALE = 0.32
 const SPARK_FLICKER_MULT = 3
 const FULL_TURN = Math.PI * 2
+//
+// An ambient firefly eaten (by a fish) is gone for EATEN_TIME..+RANGE s,
+// then lights up again — in the box it is given (over the lake, so the
+// lake never runs out of them) or anywhere in the bounds — fading in over
+// RELIGHT_FADE s.
+//
+const EATEN_TIME = 3
+const EATEN_TIME_RANGE = 5
+const RELIGHT_FADE = 1.5
 
 /**
  * Creates the ambient firefly swarm.
@@ -58,7 +67,10 @@ export function create(cfg) {
       y: bounds.y1 + Math.random() * (bounds.y2 - bounds.y1),
       heading: Math.random() * FULL_TURN,
       flickerSpeed: FLICKER_SPEED_MIN + Math.random() * FLICKER_SPEED_RANGE,
-      phase: Math.random() * FULL_TURN
+      phase: Math.random() * FULL_TURN,
+      gone: 0,
+      fade: 1,
+      box: null
     })
   }
   return inst
@@ -92,6 +104,27 @@ export function burst(inst, x, y, count) {
 }
 
 /**
+ * Calls fn with every ambient firefly that is lit (not eaten).
+ * @param {Object} inst - Fireflies instance
+ * @param {(f: {x: number, y: number}) => void} fn - Called per firefly
+ */
+export function forEachLit(inst, fn) {
+  inst.ambient.forEach(f => f.gone > 0 || fn(f))
+}
+
+/**
+ * An ambient firefly is eaten: it goes dark, to light up again in a box
+ * (or anywhere in the bounds).
+ * @param {Object} inst - Fireflies instance
+ * @param {Object} f - The firefly (from forEachLit)
+ * @param {{x1: number, y1: number, x2: number, y2: number}|null} [box=null] - Where it lights up again
+ */
+export function eat(inst, f, box = null) {
+  f.gone = EATEN_TIME + Math.random() * EATEN_TIME_RANGE
+  f.box = box
+}
+
+/**
  * Moves ambient fireflies and ages burst sparks.
  * @param {Object} inst - Fireflies instance
  */
@@ -99,6 +132,11 @@ export function onUpdate(inst) {
   const dt = inst.k.dt()
   const { bounds } = inst
   inst.ambient.forEach(f => {
+    if (f.gone > 0) {
+      relight(f, bounds, dt)
+      return
+    }
+    f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
     f.heading += (Math.random() - 0.5) * AMBIENT_TURN_RATE * FULL_TURN * dt
     f.x += Math.cos(f.heading) * AMBIENT_SPEED * dt
     f.y += Math.sin(f.heading) * AMBIENT_SPEED * dt
@@ -131,8 +169,8 @@ export function onDraw(inst, top, bottom, opacity = 1) {
   const k = inst.k
   const t = k.time()
   inst.ambient.forEach(f => {
-    if (f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
-    const flicker = flickerAt(t, f) * opacity
+    if (f.gone > 0 || f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
+    const flicker = flickerAt(t, f) * opacity * f.fade
     Glow.drawGlow(k, f.x, f.y, AMBIENT_GLOW_R, inst.glowRgb, AMBIENT_OPACITY * flicker)
     Glow.drawGlow(k, f.x, f.y, AMBIENT_CORE_R / CORE_GLOW_SCALE, inst.coreRgb, flicker)
   })
@@ -142,6 +180,19 @@ export function onDraw(inst, top, bottom, opacity = 1) {
     Glow.drawGlow(k, s.x, s.y, s.r, s.color, fade * flicker)
     Glow.drawGlow(k, s.x, s.y, s.r * CORE_GLOW_SCALE, inst.coreRgb, fade)
   })
+}
+//
+// An eaten firefly's dark time runs out: it lights up at a new spot (in
+// its box, else anywhere), fading in.
+//
+function relight(f, bounds, dt) {
+  f.gone -= dt
+  if (f.gone > 0) return
+  const box = f.box ?? bounds
+  f.x = box.x1 + Math.random() * (box.x2 - box.x1)
+  f.y = box.y1 + Math.random() * (box.y2 - box.y1)
+  f.fade = 0
+  f.box = null
 }
 //
 // Brightness 1 → (1 - FLICKER_DEPTH) following a per-light sine.

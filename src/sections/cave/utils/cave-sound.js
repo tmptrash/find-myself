@@ -89,6 +89,12 @@ const DRIP_SOURCES = [
   { y: 2080, pan: -0.4, period: 4.3, pitch: 560, plop: true },
   { y: 2080, pan: 0.55, period: 6.2, pitch: 470, plop: true }
 ]
+//
+// A fish's splash: a lake drop (plop) from the middle, FISH_SPLASH_GAIN
+// times a drip's loudness.
+//
+const FISH_SPLASH = { pan: 0, pitch: 420, plop: true }
+const FISH_SPLASH_GAIN = 2.2
 const DRIP_PERIOD_JITTER = 0.55
 const DRIP_PERIOD_SCALE = 2.5
 const DRIP_VOLUME = 0.12
@@ -277,6 +283,18 @@ export function onUpdate(inst, dt, listenerY) {
 export function setVolume(inst, volume) {
   if (inst.stopped) return
   setSmooth(inst.out.gain, MASTER_GAIN * volume, inst.ctx.currentTime)
+}
+
+/**
+ * A fish breaking the lake's surface: a drop into the lake (a plop) at
+ * its strength, faded by its distance from the hero.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} strength - 0..1 (leaving the water is a small one)
+ * @param {number} near - 0 (far) … 1 (right next to the hero)
+ */
+export function playFishSplash(inst, strength, near) {
+  if (!ready(inst)) return
+  playDrip(inst, FISH_SPLASH, Math.max(DRIP_FAR_FLOOR, near) * strength * FISH_SPLASH_GAIN)
 }
 
 /**

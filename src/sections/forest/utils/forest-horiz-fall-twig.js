@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import { beginIslandShoreRetreat } from '../components/predator-move.js'
-import { samplePredatorSpineHitPoints } from '../components/predator-body.js'
+import { samplePredatorSpineHitPoints, rideTurnWaveAt } from '../components/predator-body.js'
 
 //
 // The broken branch hung under the shore tree's horizontal branch (its
@@ -49,11 +49,16 @@ const TWIG_BACK_REST = TWIG_MAIN_W * 0.5 + 0.5
 //
 const TWIG_TOP_ABOVE_AXIS = TWIG_MAIN_W * 0.5
 //
-// A turn squeezes the stick through zero width instead of tilting it.
+// A turn squeezes the stick through zero width instead of tilting it. A
+// turn with the hero on it is a quick wave down the centipede's body
+// (predator-body.js) over TWIG_RIDE_TURN_DURATION s (at the island,
+// letting him off, TWIG_ISLAND_DISBARK_TURN_DURATION); the stick turns
+// over with the segments under its middle, so it stays on the back.
 //
 const TWIG_TURN_SPEED = 1.15
-const TWIG_RIDE_TURN_DURATION = 0.85
-const TWIG_ISLAND_DISBARK_TURN_DURATION = 1.25
+const TWIG_RIDE_TURN_DURATION = 0.5
+const TWIG_ISLAND_DISBARK_TURN_DURATION = 0.8
+const HALF = 0.5
 const TWIG_RIDE_EDGE_SLACK = 12
 const TWIG_RIDE_EDGE_INSET = 4
 const TWIG_RIDE_SHIELD_BELOW = 6
@@ -584,10 +589,13 @@ function startFleeRideTurn(inst, pred, mounted) {
   pred.holdFacing = true
 }
 
-function rideTurnBlend(inst) {
+//
+// How far the ride turn has gone (0..1, even in time; the body eases each
+// segment along its wave itself).
+//
+function rideTurnProgress(inst) {
   const dur = inst.rideTurnDurationSec ?? TWIG_RIDE_TURN_DURATION
-  const t = Math.min(1, (inst.rideTurnElapsed ?? 0) / dur)
-  return t * t * (3 - 2 * t)
+  return Math.min(1, (inst.rideTurnElapsed ?? 0) / dur)
 }
 
 function tickRideTurn(inst, dt) {
@@ -599,13 +607,13 @@ function tickRideTurn(inst, dt) {
     return
   }
   inst.rideTurnElapsed = (inst.rideTurnElapsed ?? 0) + dt
-  const blend = rideTurnBlend(inst)
+  const blend = rideTurnProgress(inst)
   pred.rideTurnBlend = blend
   pred.rideTurnPoseDir = inst.rideTurnTargetDir
   pred.vx = 0
   pred.holdFacing = true
   inst.rideTurnDisembark && (pred.stretch += (1 - pred.stretch) * Math.min(1, dt * 5))
-  blend >= 0.5 && (pred.dir = inst.rideTurnTargetDir)
+  blend >= HALF && (pred.dir = inst.rideTurnTargetDir)
   if (!mountedTwig(inst)) clearRideTurnPose(inst, pred)
 }
 
@@ -790,7 +798,7 @@ function stepTwig(twig, dt, floorY, predator, inst) {
       }
     }
     placeTwigOnBack(twig, predator, dt, riding, inst.rideDir, inst)
-    inst.rideTurnPending && rideTurnBlend(inst) >= 1 &&
+    inst.rideTurnPending && rideTurnProgress(inst) >= 1 &&
       completeRideTurn(inst, predator)
     return
   }
@@ -859,7 +867,8 @@ function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir, twigInst) {
   if (turning) {
     const from = twigInst.rideTurnFromFace ?? twig.face ?? tailDir
     const to = -(twigInst.rideTurnTargetDir || 1)
-    twig.face = from + (to - from) * rideTurnBlend(twigInst)
+    const under = head.radius + TWIG_BEHIND_HEAD + TWIG_MAIN_LEN * HALF
+    twig.face = from + (to - from) * rideTurnWaveAt(predator, rideTurnProgress(twigInst), under)
     tailDir = to
   } else if (riderLocked && rideDir != null) {
     twig.face = tailDir

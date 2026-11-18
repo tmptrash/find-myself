@@ -36,6 +36,15 @@ const MAX_STRETCH = 1.3
 //
 const FOLD_LIFT = 5
 //
+// Turning round with the hero on its back (the stick turn), it turns the
+// same way, its head held still: the turn runs down the body as a wave —
+// the head's end first, each segment later by its share of RIDE_TURN_WAVE
+// of the turn — each segment crossing over the one in front arched up by
+// up to RIDE_TURN_ARCH px, so the body folds over itself.
+//
+const RIDE_TURN_WAVE = 0.55
+const RIDE_TURN_ARCH = 9
+//
 // It stands up and squats on its legs: its ride height grows by up to
 // RISE_PX (inst.rise, 0..1). Standing still it rises to look round and
 // drops again every RISE_HOLD_MIN..+RANGE seconds; on the move it keeps
@@ -95,6 +104,19 @@ export function initBody(inst) {
       moss: i % 5 === 2
     })
   }
+}
+
+/**
+ * How far a ride turn (progress t, 0..1, even in time) has turned the body
+ * at `dist` px behind the head: 0 not yet … 1 turned, eased.
+ * @param {Object} inst - Predator inst
+ * @param {number} t - Turn progress
+ * @param {number} dist - Distance behind the head along the body (px)
+ * @returns {number}
+ */
+export function rideTurnWaveAt(inst, t, dist) {
+  const n = inst.segments?.length ?? SEGMENT_COUNT
+  return rideTurnWave(t, dist / (SPACING * Math.max(1, inst.stretch ?? 1)), n)
 }
 
 /**
@@ -212,9 +234,9 @@ function ride(inst, index) {
 }
 
 //
-// Stick turn and body turn share one blend: segments slide from the pose
-// captured at landing to the reversed spine, instead of lagging behind a
-// heading that already flipped.
+// The stick turn: every segment moves from the pose captured when the turn
+// began to the reversed spine, each at its own point of the wave (see
+// RIDE_TURN_WAVE), arched up while it crosses over.
 //
 function applyBlendedRideTurn(inst) {
   const from = inst.rideTurnFromSegs
@@ -229,10 +251,20 @@ function applyBlendedRideTurn(inst) {
     const y = inst.groundAt(x) - ride(inst, i) - inst.headLift * (1 - i / Math.max(1, n - 1))
     const seg = inst.segments[i]
     const src = from[i] ?? seg
-    seg.x = src.x + (x - src.x) * t
-    seg.y = src.y + (y - src.y) * t
+    const u = rideTurnWave(t, i, n)
+    seg.x = src.x + (x - src.x) * u
+    seg.y = src.y + (y - src.y) * u - Math.sin(u * Math.PI) * RIDE_TURN_ARCH
   }
   return true
+}
+//
+// A segment's point of the stick turn's wave (index along the body, from
+// the head; it may fall between segments), eased.
+//
+function rideTurnWave(t, index, count) {
+  const at = count > 1 ? Math.min(1, index / (count - 1)) : 0
+  const u = Math.max(0, Math.min(1, (t - at * RIDE_TURN_WAVE) / (1 - RIDE_TURN_WAVE)))
+  return u * u * (3 - 2 * u)
 }
 
 function segmentRadius(index) {

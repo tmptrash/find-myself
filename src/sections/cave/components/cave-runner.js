@@ -10,8 +10,8 @@ import * as Surface from '../utils/cave-surface.js'
 // shin and a clawed foot). It runs over every side of the platforms —
 // tops, sides and undersides (cave-surface.js's crawl runs), never into
 // the lake — the way insects do: short dashes and still pauses, now and
-// then turning back, turning back at a run's end, darting off when the
-// hero comes close.
+// then turning back, turning back at a run's end — and afraid of the
+// hero: once he comes close it bolts away from him, fast.
 //
 // The body rides its run, its hips HIP_LIFT over the surface, turned to
 // the run's slope over its own length (the chord BODY_SPAN either side),
@@ -142,8 +142,13 @@ const KNEE_SLACK = 1
 // Moving (world px, s): dashes at DASH_SPEED..+RANGE for DASH_TIME..+RANGE,
 // pauses for PAUSE_TIME..+RANGE; speeding up at ACCEL, braking at BRAKE; a
 // dash turns back with REVERSE_CHANCE; a run's open end is turned at
-// END_PAD px before it. The hero within FEAR_R px sends it off at
-// FLEE_SPEED for FLEE_TIME. In a pause a leg shifts now and then
+// END_PAD px before it.
+// Fear: the hero within FEAR_R px sends it running from him (the way
+// along the run that leads away; turned only once he is FLEE_DEADBAND px
+// to one side, so it does not dither under him) at FLEE_SPEED, speeding
+// up at FLEE_ACCEL, for as long as he stays near and FLEE_TIME after; run
+// into the end of its run it cowers there instead of turning back toward
+// him (speeds at size 1, scaled with the runner). In a pause a leg shifts now and then
 // (IDLE_STEP..+RANGE s apart, up to IDLE_JITTER sheet px off its spot).
 //
 const DASH_SPEED = 110
@@ -156,9 +161,11 @@ const ACCEL = 1800
 const BRAKE = 2600
 const REVERSE_CHANCE = 0.25
 const END_PAD = 18
-const FEAR_R = 130
-const FLEE_SPEED = 300
-const FLEE_TIME = 0.6
+const FEAR_R = 200
+const FLEE_SPEED = 420
+const FLEE_ACCEL = 5000
+const FLEE_TIME = 0.5
+const FLEE_DEADBAND = 10
 const IDLE_STEP = 0.25
 const IDLE_STEP_RANGE = 0.6
 const IDLE_JITTER = 40
@@ -211,6 +218,7 @@ export function create(cfg) {
     mode: MODE.PAUSE,
     timer: PAUSE_TIME * rng(),
     dashSpeed: 0,
+    fleeing: false,
     idleIn: IDLE_STEP,
     tailPhase: rng(),
     nextGroup: 0,
@@ -304,7 +312,7 @@ function move(inst, dt) {
   inst.timer -= dt
   inst.timer <= 0 && nextMode(inst)
   const want = inst.mode === MODE.DASH ? inst.dashSpeed : 0
-  const rate = want > inst.speed ? ACCEL : BRAKE
+  const rate = want > inst.speed ? (inst.fleeing ? FLEE_ACCEL : ACCEL) : BRAKE
   inst.speed += Math.max(-rate * dt, Math.min(rate * dt, want - inst.speed))
   inst.s += inst.dir * inst.speed * dt
   inst.mode === MODE.PAUSE && fidget(inst, dt)
@@ -313,6 +321,7 @@ function move(inst, dt) {
   if ((inst.s - end) * inst.dir < 0) return
   inst.s = end
   inst.speed = 0
+  if (inst.fleeing) return
   inst.dir = -inst.dir
   pause(inst)
 }
@@ -334,21 +343,24 @@ function nextMode(inst) {
   rng() < REVERSE_CHANCE && (inst.dir = -inst.dir)
 }
 function pause(inst) {
+  inst.fleeing = false
   inst.mode = MODE.PAUSE
   inst.timer = PAUSE_TIME + inst.rng() * PAUSE_TIME_RANGE
 }
 //
-// The hero close by: a dash away from him along the run.
+// The hero close by: a dash away from him along the run, kept up while
+// he stays near.
 //
 function flee(inst, heroPos) {
   const dx = heroPos.x - inst.pos.x
   const dy = heroPos.y - inst.pos.y
-  if (dx * dx + dy * dy > FEAR_R * FEAR_R || (inst.mode === MODE.DASH && inst.dashSpeed >= FLEE_SPEED)) return
-  const along = (dx * inst.at.tx + dy * inst.at.ty) > 0 ? 1 : -1
-  inst.dir = -along
+  if (dx * dx + dy * dy > FEAR_R * FEAR_R) return
+  const along = (dx * inst.at.tx + dy * inst.at.ty) * inst.dir
+  ;(!inst.fleeing || along > FLEE_DEADBAND) && along > 0 && (inst.dir = -inst.dir)
+  inst.fleeing = true
   inst.mode = MODE.DASH
   inst.timer = FLEE_TIME
-  inst.dashSpeed = FLEE_SPEED
+  inst.dashSpeed = FLEE_SPEED * inst.unit / SCALE
 }
 //
 // In a pause one leg shifts a little now and then (while all stand).

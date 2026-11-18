@@ -1,6 +1,5 @@
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
-import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Front from './cave-front.js'
@@ -13,9 +12,9 @@ import * as Scene from './cave-scene.js'
 // spot (back layers, the earth ledge with its moss and props, the ceiling
 // with the roots' hole), painted by the level's own painters scaled to
 // cover the screen and baked once per live k and screen size, with the
-// lantern mushroom glowing on it, the level's runners scurrying over it
-// and its big stones in front (both drawn live in its world, scaled onto
-// the screen), and fireflies drifting over it. The bottom sinks into shade
+// level's runners scurrying over it and its big stones in front (both
+// drawn live in its world, scaled onto the screen), and fireflies
+// drifting over it. The bottom sinks into shade
 // so the menu's key hints stay readable.
 //
 const SPRITE_PREFIX = 'cave0-menu-v4-'
@@ -39,17 +38,6 @@ const FOCUS_SHARE = 0.68
 const SHADE_FROM = 0.72
 const SHADE_ALPHA = 0.85
 const FIREFLY_COUNT = 34
-//
-// The lantern stands behind its ledge's front edge, as if planted in the
-// soil: the soil round its foot (FOOT_PATCH_W px either side of it,
-// FOOT_PATCH_UP over its foot and FOOT_PATCH_DOWN under it, world px) is
-// cut out of the baked picture — its own pixels, only where there is
-// soil, so no seam shows — and drawn again over the mushroom.
-//
-const FOOT_PATCH_W = 70
-const FOOT_PATCH_UP = 40
-const FOOT_PATCH_DOWN = 24
-const FOOT_PATCH_NAME = 'foot'
 const bakedFor = new WeakMap()
 
 /**
@@ -65,19 +53,14 @@ export function create(cfg) {
   const w = Math.max(MIN_SCREEN_PX, Math.round(cfg.width))
   const h = Math.max(MIN_SCREEN_PX, Math.round(cfg.height))
   const place = placement(w, h)
-  const lantern = Lantern.create({ k, x: 0, y: 0, collide: false, lit: true })
-  Lantern.setPose(lantern, toScreenX(place, Layout.LANTERN.x), toScreenY(place, lanternFootY()), place.scale)
   const ready = Atlas.isLoaded()
-  const baked = bake(k, w, h, place)
   return {
     k,
     place,
     world: { left: place.x1, top: place.y1, right: place.x2, bottom: place.y2 },
-    tiles: baked.tiles,
-    footPatch: baked.footPatch,
+    tiles: bake(k, w, h, place),
     front: ready ? Front.create(k) : null,
     runners: ready ? Runner.createAll(k) : [],
-    lantern,
     fireflies: Fireflies.create({ k, bounds: { x1: 0, y1: 0, x2: w, y2: h * SHADE_FROM }, count: FIREFLY_COUNT })
   }
 }
@@ -94,18 +77,16 @@ export function prewarm(k, width, height) {
 }
 
 /**
- * Moves the living parts: the lantern breathes and squats, fireflies wander.
+ * Moves the living parts: the runners scurry, fireflies wander.
  * @param {Object} inst - Backdrop instance
  */
 export function onUpdate(inst) {
-  Lantern.onUpdate(inst.lantern, null)
   inst.runners.forEach(runner => Runner.onUpdate(runner, null))
   Fireflies.onUpdate(inst.fireflies)
 }
 
 /**
- * Draws the picture, the lantern and its halo behind the soil round its
- * foot, the runners and stones, then the fireflies.
+ * Draws the picture, the runners and stones, then the fireflies.
  * @param {Object} inst - Backdrop instance
  * @param {number} opacity - Cross-fade 0 … 1
  */
@@ -113,10 +94,6 @@ export function onDraw(inst, opacity) {
   const k = inst.k
   inst.tiles.forEach(tile => k.drawSprite({ sprite: tile.name, pos: k.vec2(tile.x, 0), opacity }))
   if (opacity < 1) return
-  Lantern.onDraw(inst.lantern)
-  Lantern.onDrawHalo(inst.lantern)
-  const patch = inst.footPatch
-  k.getSprite(patch.name) && k.drawSprite({ sprite: patch.name, pos: k.vec2(patch.x, patch.y) })
   drawWorldLife(inst)
   Fireflies.onDraw(inst.fireflies, -Infinity, Infinity, opacity)
 }
@@ -145,57 +122,8 @@ function placement(w, h) {
   return { scale, x1, y1: VIEW_Y1, x2: x1 + viewW, y2: VIEW_Y1 + VIEW_H }
 }
 //
-// The lantern's foot on its ledge's top, as in the level (its base is
-// hidden behind the soil's front edge, see FOOT_PATCH_*).
-//
-function lanternFootY() {
-  return Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x)
-}
-//
-// The soil patch round the lantern's foot: its world rect and its screen
-// rect (whole px).
-//
-function footPatchRect(place) {
-  const foot = lanternFootY()
-  const world = { x1: Layout.LANTERN.x - FOOT_PATCH_W, y1: foot - FOOT_PATCH_UP, x2: Layout.LANTERN.x + FOOT_PATCH_W, y2: foot + FOOT_PATCH_DOWN }
-  const x = Math.floor(toScreenX(place, world.x1))
-  const y = Math.floor(toScreenY(place, world.y1))
-  return { world, x, y, w: Math.ceil(toScreenX(place, world.x2)) - x, h: Math.ceil(toScreenY(place, world.y2)) - y }
-}
-//
-// Cuts the soil round the lantern's foot out of the baked tiles: their
-// pixels in its rect, kept only where the terrain paints soil.
-//
-function bakeFootPatch(k, name, canvases, place) {
-  const r = footPatchRect(place)
-  if (r.w <= 0 || r.h <= 0) return
-  const patch = document.createElement('canvas')
-  patch.width = r.w
-  patch.height = r.h
-  const pctx = patch.getContext('2d')
-  canvases.forEach(c => pctx.drawImage(c.canvas, c.x - r.x, -r.y))
-  const mask = document.createElement('canvas')
-  mask.width = r.w
-  mask.height = r.h
-  const mctx = mask.getContext('2d')
-  mctx.translate(-r.x, -r.y)
-  mctx.scale(place.scale, place.scale)
-  mctx.translate(-place.x1, -place.y1)
-  Scene.paintTerrain(mctx, r.world)
-  pctx.globalCompositeOperation = 'destination-in'
-  pctx.drawImage(mask, 0, 0)
-  k.loadSprite(name, patch)
-}
-function toScreenX(place, x) {
-  return (x - place.x1) * place.scale
-}
-function toScreenY(place, y) {
-  return (y - place.y1) * place.scale
-}
-//
 // Screen-wide columns, each under the texture limit, painted at screen
-// resolution, and the soil patch round the lantern's foot cut out of
-// them; once per live k and size.
+// resolution; once per live k and size.
 //
 function bake(k, w, h, place) {
   const key = `${w}x${h}`
@@ -203,10 +131,7 @@ function bake(k, w, h, place) {
   const count = Math.ceil(w / TILE_MAX)
   const tileW = Math.ceil(w / count)
   for (let i = 0; i < count; i++) tiles.push({ name: `${SPRITE_PREFIX}${key}-${i}`, x: i * tileW, w: Math.min(tileW, w - i * tileW) })
-  const rect = footPatchRect(place)
-  const footPatch = { name: `${SPRITE_PREFIX}${key}-${FOOT_PATCH_NAME}`, x: rect.x, y: rect.y }
-  if (bakedFor.get(k)?.has(key) || !Atlas.isLoaded()) return { tiles, footPatch }
-  const canvases = []
+  if (bakedFor.get(k)?.has(key) || !Atlas.isLoaded()) return tiles
   tiles.forEach((tile, i) => {
     const canvas = document.createElement('canvas')
     canvas.width = tile.w
@@ -221,12 +146,10 @@ function bake(k, w, h, place) {
     paintShade(ctx, w, h)
     applyForestFilmGrainToCanvas(canvas, GRAIN_SEED + i)
     k.loadSprite(tile.name, canvas)
-    canvases.push({ canvas, x: tile.x })
   })
-  bakeFootPatch(k, footPatch.name, canvases, place)
   bakedFor.has(k) || bakedFor.set(k, new Set())
   bakedFor.get(k).add(key)
-  return { tiles, footPatch }
+  return tiles
 }
 function paintShade(ctx, w, h) {
   const g = ctx.createLinearGradient(0, h * SHADE_FROM, 0, h)

@@ -9,7 +9,7 @@ import * as Platform from '../utils/cave-platform.js'
 // (crossing the cap's top over it) is thrown back up, the cap squashes and
 // springs, and the mushroom lights up — glowing a cold blue, a small halo
 // hugging its outline — and fades again over LIGHT_HOLD_SEC (and its
-// fireflies fly out of its holes, cave-swarm.js). It also serves as the cave's picture behind the menu.
+// fireflies fly out of its holes, cave-swarm.js).
 //
 const SPRITE = 'cave0-lantern-v4'
 const HALO_SPRITE = 'cave0-lantern-halo-v1'
@@ -17,7 +17,7 @@ export const LANTERN_PIECE = 'lantern'
 const GRAIN_SEED = 9300
 //
 // Size: drawn height in world px (its cap top stays within one jump), the
-// bake's resolution over it (crisper when the menu scales it up).
+// bake's resolution over it (crisp where the world is drawn scaled up).
 //
 export const LANTERN_H = 92
 const BAKE_SCALE = 2
@@ -66,12 +66,6 @@ const HALO_LIT_OPACITY = 0.95
 const FULL_TURN = Math.PI * 2
 const BREATH_SPEED = 1.4
 const BREATH_DEPTH = 0.08
-//
-// In the menu's picture it idles, now and then squatting on its own.
-//
-const IDLE_SQUAT_MIN = 3
-const IDLE_SQUAT_RANGE = 4
-const IDLE_SQUAT_KICK = 2.5
 const BYTE_MAX = 255
 //
 // Its holes the fireflies live in: where each opens on the picture (shares
@@ -98,8 +92,6 @@ const bakedFor = new WeakSet()
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - Foot X
  * @param {number} cfg.y - Foot Y (the ground's top)
- * @param {boolean} [cfg.collide=true] - Bounce a hero falling onto its cap (false for the menu's picture)
- * @param {boolean} [cfg.lit=false] - Start lit (the menu's picture)
  * @returns {Object} Lantern instance
  */
 export function create(cfg) {
@@ -110,16 +102,13 @@ export function create(cfg) {
     k,
     x,
     y,
-    scale: 1,
     w,
     capTop: y - LANTERN_H * CAP_TOP_SHARE + CAP_SINK,
     capHalfW: w * CAP_W_SHARE / 2,
     prevBottom: null,
     squash: { v: 0, vel: 0 },
-    light: cfg.lit ? 1 : 0,
-    litFor: cfg.lit ? 0 : LIGHT_HOLD_SEC,
-    idleIn: IDLE_SQUAT_MIN,
-    menu: cfg.collide === false
+    light: 0,
+    litFor: LIGHT_HOLD_SEC
   }
   return inst
 }
@@ -144,12 +133,10 @@ export function footYOn(p, x) {
  * @returns {{holes: Array<{x: number, y: number}>, x: number, top: number, foot: number}}
  */
 export function holes(inst) {
-  const w = inst.w * inst.scale
-  const h = LANTERN_H * inst.scale
   return {
-    holes: HOLES.map(hole => ({ x: inst.x + (hole.x - HALF) * w, y: inst.y - (1 - hole.y) * h })),
+    holes: HOLES.map(hole => ({ x: inst.x + (hole.x - HALF) * inst.w, y: inst.y - (1 - hole.y) * LANTERN_H })),
     x: inst.x,
-    top: inst.y - h,
+    top: inst.y - LANTERN_H,
     foot: inst.y
   }
 }
@@ -158,15 +145,14 @@ export function holes(inst) {
  * Runs the squash spring and the light; bounces a hero falling onto the
  * cap. Returns true on the frame of a bounce.
  * @param {Object} inst - Lantern instance
- * @param {Object|null} heroInst - Hero instance (null: the menu's one idles)
+ * @param {Object|null} heroInst - Hero instance (null: none)
  * @returns {boolean}
  */
 export function onUpdate(inst, heroInst) {
   const dt = inst.k.dt()
   stepSpring(inst.squash, dt)
   inst.litFor = Math.min(LIGHT_HOLD_SEC, inst.litFor + dt)
-  inst.menu || (inst.light = 1 - Math.pow(inst.litFor / LIGHT_HOLD_SEC, LIGHT_FADE_POW))
-  if (inst.menu) return idle(inst, dt)
+  inst.light = 1 - Math.pow(inst.litFor / LIGHT_HOLD_SEC, LIGHT_FADE_POW)
   const char = heroInst?.character
   if (!char?.exists?.()) {
     inst.prevBottom = null
@@ -182,32 +168,18 @@ export function onUpdate(inst, heroInst) {
 }
 
 /**
- * Places the mushroom (the menu's picture): foot at x / y, scaled.
- * @param {Object} inst - Lantern instance
- * @param {number} x - Foot X
- * @param {number} y - Foot Y
- * @param {number} scale - Size multiplier
- */
-export function setPose(inst, x, y, scale) {
-  inst.x = x
-  inst.y = y
-  inst.scale = scale
-}
-
-/**
  * Draws the mushroom (dim or lit tint, squashed by its spring).
  * @param {Object} inst - Lantern instance
  */
 export function onDraw(inst) {
   const k = inst.k
   const tint = Math.round(BYTE_MAX * (DIM_TINT + (1 - DIM_TINT) * inst.light))
-  const s = inst.scale
   k.drawSprite({
     sprite: SPRITE,
     pos: k.vec2(inst.x, inst.y),
     anchor: 'bot',
-    width: inst.w * s * (1 + inst.squash.v * SQUASH_X),
-    height: LANTERN_H * s * (1 - inst.squash.v * SQUASH_Y),
+    width: inst.w * (1 + inst.squash.v * SQUASH_X),
+    height: LANTERN_H * (1 - inst.squash.v * SQUASH_Y),
     color: k.rgb(tint, tint, tint)
   })
 }
@@ -218,10 +190,9 @@ export function onDraw(inst) {
  */
 export function onDrawHalo(inst) {
   const k = inst.k
-  const s = inst.scale
   const breath = 1 + Math.sin(k.time() * BREATH_SPEED) * BREATH_DEPTH
-  const sx = s * (1 + inst.squash.v * SQUASH_X)
-  const sy = s * (1 - inst.squash.v * SQUASH_Y)
+  const sx = 1 + inst.squash.v * SQUASH_X
+  const sy = 1 - inst.squash.v * SQUASH_Y
   k.drawSprite({
     sprite: HALO_SPRITE,
     pos: k.vec2(inst.x, inst.y + HALO_SPREAD * sy),
@@ -286,14 +257,6 @@ function bounce(inst, char) {
   inst.squash.vel += SQUASH_KICK
   inst.litFor = 0
   inst.light = 1
-}
-function idle(inst, dt) {
-  inst.light = 1
-  inst.idleIn -= dt
-  if (inst.idleIn > 0) return false
-  inst.idleIn = IDLE_SQUAT_MIN + Math.random() * IDLE_SQUAT_RANGE
-  inst.squash.vel += IDLE_SQUAT_KICK
-  return false
 }
 function stepSpring(s, dt) {
   s.vel += (-s.v * SQUASH_SPRING.k - s.vel * SQUASH_SPRING.c) * dt

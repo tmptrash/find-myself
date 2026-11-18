@@ -144,12 +144,16 @@ const KNEE_SLACK = 1
 // dash turns back with REVERSE_CHANCE; a run's open end is turned at
 // END_PAD px before it.
 // Fear: the hero within FEAR_R px sends it running from him (the way
-// along the run that leads away; turned only once he is FLEE_DEADBAND px
-// to one side, so it does not dither under him) at FLEE_SPEED, speeding
-// up at FLEE_ACCEL, for as long as he stays near and FLEE_TIME after; run
-// into the end of its run it cowers there instead of turning back toward
-// him (speeds at size 1, scaled with the runner). In a pause a leg shifts now and then
-// (IDLE_STEP..+RANGE s apart, up to IDLE_JITTER sheet px off its spot).
+// along the run whose point FLEE_LOOK px on lies farther from him — round
+// a corner too; turned only once the other way is FLEE_DEADBAND px
+// farther, and never again within FLEE_HOLD s of turning, so it does not
+// dither where both ways first lead nearer him) at FLEE_SPEED, speeding
+// up at FLEE_ACCEL, for as long as he stays near and FLEE_TIME after.
+// Driven into the end of its run (a corner) it bolts back the other way,
+// right past him, and keeps going until he is behind it (its way on leads
+// FLEE_DEADBAND px farther from him) — then it flees on from there (speeds at size 1, scaled with the
+// runner). In a pause a leg shifts now and then (IDLE_STEP..+RANGE s
+// apart, up to IDLE_JITTER sheet px off its spot).
 //
 const DASH_SPEED = 110
 const DASH_SPEED_RANGE = 120
@@ -165,7 +169,9 @@ const FEAR_R = 200
 const FLEE_SPEED = 420
 const FLEE_ACCEL = 5000
 const FLEE_TIME = 0.5
-const FLEE_DEADBAND = 10
+const FLEE_DEADBAND = 6
+const FLEE_LOOK = 120
+const FLEE_HOLD = 0.35
 const IDLE_STEP = 0.25
 const IDLE_STEP_RANGE = 0.6
 const IDLE_JITTER = 40
@@ -219,6 +225,10 @@ export function create(cfg) {
     timer: PAUSE_TIME * rng(),
     dashSpeed: 0,
     fleeing: false,
+    bolting: false,
+    fleeHold: 0,
+    lookOn: {},
+    lookBack: {},
     idleIn: IDLE_STEP,
     tailPhase: rng(),
     nextGroup: 0,
@@ -252,6 +262,7 @@ export function create(cfg) {
  */
 export function onUpdate(inst, heroPos) {
   const dt = inst.k.dt()
+  inst.fleeHold = Math.max(0, inst.fleeHold - dt)
   heroPos && flee(inst, heroPos)
   move(inst, dt)
   inst.tailPhase += dt * (TAIL_HZ + TAIL_RUN_HZ * runShare(inst))
@@ -321,8 +332,11 @@ function move(inst, dt) {
   if ((inst.s - end) * inst.dir < 0) return
   inst.s = end
   inst.speed = 0
-  if (inst.fleeing) return
   inst.dir = -inst.dir
+  if (inst.fleeing) {
+    inst.bolting = true
+    return
+  }
   pause(inst)
 }
 //
@@ -344,19 +358,28 @@ function nextMode(inst) {
 }
 function pause(inst) {
   inst.fleeing = false
+  inst.bolting = false
   inst.mode = MODE.PAUSE
   inst.timer = PAUSE_TIME + inst.rng() * PAUSE_TIME_RANGE
 }
 //
 // The hero close by: a dash away from him along the run, kept up while
-// he stays near.
+// he stays near; a cornered one bolting past him holds its way until he
+// is behind it.
 //
 function flee(inst, heroPos) {
   const dx = heroPos.x - inst.pos.x
   const dy = heroPos.y - inst.pos.y
   if (dx * dx + dy * dy > FEAR_R * FEAR_R) return
-  const along = (dx * inst.at.tx + dy * inst.at.ty) * inst.dir
-  ;(!inst.fleeing || along > FLEE_DEADBAND) && along > 0 && (inst.dir = -inst.dir)
+  const look = FLEE_LOOK * inst.dir
+  const on = Surface.sample(inst.run, inst.s + look, inst.lookOn)
+  const back = Surface.sample(inst.run, inst.s - look, inst.lookBack)
+  const gain = Math.hypot(on.x - heroPos.x, on.y - heroPos.y) - Math.hypot(back.x - heroPos.x, back.y - heroPos.y)
+  inst.bolting && gain > FLEE_DEADBAND && (inst.bolting = false)
+  if (!inst.bolting && inst.fleeHold <= 0 && gain < (inst.fleeing ? -FLEE_DEADBAND : 0)) {
+    inst.dir = -inst.dir
+    inst.fleeHold = FLEE_HOLD
+  }
   inst.fleeing = true
   inst.mode = MODE.DASH
   inst.timer = FLEE_TIME

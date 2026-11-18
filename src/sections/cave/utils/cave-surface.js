@@ -1,18 +1,22 @@
 import * as Layout from './cave-layout.js'
 import * as Platform from './cave-platform.js'
 import * as Ground from './cave-ground.js'
+import * as Scene from './cave-scene.js'
 //
-// Every side of the platforms as a surface a small creature clings to
-// (cave-runner.js): one solid mask of all the platforms' art (their
-// layers; a pixel this opaque is solid), read once per page. Rays cross it
+// Every side of the platforms — and the room's side walls and its ceiling
+// — as a surface a small creature clings to (cave-runner.js): one solid
+// mask of all that soil's art (the platforms' layers and the room's;
+// a pixel this opaque is solid), read once per page. A ledge running into
+// a wall carries on up the wall's face onto the ceiling. Rays cross it
 // in any direction (raycast), and its outline — tops, sides and undersides
 // alike — is traced (marching squares over a grid of CELL px) into crawl
 // runs: lines of points with their outward normal and the tangent along
 // the run, smoothed (SMOOTH points either side, SMOOTH_PASSES times; the
 // tangent over TANGENT_SPAN points either side).
 //
-// A run stops where the outline goes into a wall or the ceiling (WALL_MARGIN
-// px off their faces) or past the world's bottom, under the lake's water
+// A run stops where the outline leaves the world (WALL_MARGIN px inside
+// its edges: the walls' and the ceiling's far sides, the roots' hole up
+// through the ceiling), under the lake's water
 // (WATER_MARGIN px round it), and where there is no room off the surface:
 // solid again within CLEAR px along the normal (checked every CLEAR_STEP
 // px) — a tight gap between two platforms, or a hole inside the soil.
@@ -137,6 +141,7 @@ function solidMask() {
   const h = Layout.WORLD_H + PAD * 2
   const data = new Uint8Array(w * h)
   Layout.PLATFORMS.forEach(p => stampLayer(data, w, h, Platform.layerOf(p)))
+  Scene.roomLayers().forEach(layer => stampLayer(data, w, h, layer))
   mask = { data, w, h }
   return mask
 }
@@ -328,12 +333,12 @@ function splitLoop(m, pts, coarse) {
   return out
 }
 //
-// Whether a point lies inside the room: off the walls, under the ceiling,
-// above the world's bottom, not in the lake's water.
+// Whether a point lies inside the world (WALL_MARGIN px in from its edges)
+// and not in the lake's water.
 //
 function isInRoom(p) {
-  if (p.x < Layout.leftWallX(p.y) + WALL_MARGIN || p.x > Layout.rightWallX(p.y) - WALL_MARGIN) return false
-  if (p.y < Layout.ceilingBottomAt(p.x) + WALL_MARGIN || p.y > Layout.WORLD_H - WALL_MARGIN) return false
+  if (p.x < WALL_MARGIN || p.x > Layout.WORLD_W - WALL_MARGIN) return false
+  if (p.y < WALL_MARGIN || p.y > Layout.WORLD_H - WALL_MARGIN) return false
   return !isUnderWater(p)
 }
 //

@@ -220,9 +220,21 @@ export function soilLayer(body, seed) {
  * @param {boolean} [opts.plain=false] - Left unshaded, the platforms' own colour (the ceiling, the walls)
  */
 export function paintMass(ctx, body, opts) {
+  const layer = massLayerOf(body, opts)
+  ctx.drawImage(layer.canvas, layer.x, layer.y)
+}
+
+/**
+ * A soil mass's layer (built once per page under opts.key): its canvas
+ * (its 2D context reads back fast) and the world point of its top-left.
+ * @param {Object} body - As for paintMass
+ * @param {Object} opts - As for paintMass
+ * @returns {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}}
+ */
+export function massLayerOf(body, opts) {
   const layer = layers.get(opts.key) ?? massLayer(body, opts)
   layers.set(opts.key, layer)
-  ctx.drawImage(layer.canvas, layer.x, layer.y)
+  return layer
 }
 
 /**

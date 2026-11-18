@@ -55,6 +55,15 @@ export function paintTerrain(ctx, rect, withLake = false) {
   inLake && paintSubmersion(ctx)
 }
 
+/**
+ * The room's own soil — both side walls and the ceiling's two masses — as
+ * layers (built once per page), for what clings to them (cave-surface.js).
+ * @returns {Array<{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}>}
+ */
+export function roomLayers() {
+  return [wallMass(-1), wallMass(1), ...ceilingMasses()].map(mass => Earth.massLayerOf(mass.body, mass.opts))
+}
+
 //
 // Everything already painted under the lake's surface between its banks
 // sinks into the water: tinted toward the deep, more so the deeper.
@@ -100,6 +109,13 @@ function deepestSubmersion() {
 // side faces the room), left unshaded like the platforms.
 //
 function paintWall(ctx, dir) {
+  const mass = wallMass(dir)
+  Earth.paintMass(ctx, mass.body, mass.opts)
+}
+//
+// A side wall's soil mass (dir -1: the left one) and how it is laid.
+//
+function wallMass(dir) {
   const left = dir < 0
   const edge = left ? -ART_PAD : Layout.WORLD_W + ART_PAD
   const face = []
@@ -109,7 +125,7 @@ function paintWall(ctx, dir) {
     core: [{ x: edge, y: WALL_TOP_Y }, ...inner, { x: edge, y: Layout.WORLD_H + ART_PAD }],
     edges: [{ name: 'edgeB', pts: left ? face.slice().reverse() : face }]
   }
-  Earth.paintMass(ctx, body, { key: left ? 'wallL' : 'wallR', seed: left ? LEFT_WALL_SEED : RIGHT_WALL_SEED, plain: true })
+  return { body, opts: { key: left ? 'wallL' : 'wallR', seed: left ? LEFT_WALL_SEED : RIGHT_WALL_SEED, plain: true } }
 }
 //
 // Ceiling in two soil masses either side of the roots' hole, left
@@ -121,8 +137,16 @@ function paintWall(ctx, dir) {
 //
 function paintCeiling(ctx, rect) {
   if (rect.y1 > CEILING_REACH_Y) return
-  Earth.paintMass(ctx, ceilingBody(-ART_PAD, 1), { key: 'ceilingL', seed: CEILING_SEED, plain: true })
-  Earth.paintMass(ctx, ceilingBody(Layout.WORLD_W + ART_PAD, -1), { key: 'ceilingR', seed: CEILING_SEED + 1, plain: true })
+  ceilingMasses().forEach(mass => Earth.paintMass(ctx, mass.body, mass.opts))
+}
+//
+// The ceiling's two soil masses and how each is laid.
+//
+function ceilingMasses() {
+  return [
+    { body: ceilingBody(-ART_PAD, 1), opts: { key: 'ceilingL', seed: CEILING_SEED, plain: true } },
+    { body: ceilingBody(Layout.WORLD_W + ART_PAD, -1), opts: { key: 'ceilingR', seed: CEILING_SEED + 1, plain: true } }
+  ]
 }
 //
 // One ceiling mass from its outer end `outerX` to the hole; `lip` is the

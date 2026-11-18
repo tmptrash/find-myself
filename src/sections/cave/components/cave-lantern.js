@@ -1,19 +1,18 @@
-import { getRGB } from '../../../utils/helper.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
-import * as Glow from '../utils/cave-glow.js'
 import * as Platform from '../utils/cave-platform.js'
 //
 // The lantern mushroom (mushroom.png: a glowing blue mushroom, its cap and
 // stem full of holes): it stands dim beside the hero's landing spot. It
 // has no body: the hero walks past it, and a hero falling onto its cap
 // (crossing the cap's top over it) is thrown back up, the cap squashes and
-// springs, and the mushroom lights up — a cold blue halo that fades again
-// over LIGHT_HOLD_SEC (and its fireflies fly out of its holes,
-// cave-swarm.js). It also serves as the cave's picture behind the menu.
+// springs, and the mushroom lights up — glowing a cold blue, a small halo
+// hugging its outline — and fades again over LIGHT_HOLD_SEC (and its
+// fireflies fly out of its holes, cave-swarm.js). It also serves as the cave's picture behind the menu.
 //
 const SPRITE = 'cave0-lantern-v4'
+const HALO_SPRITE = 'cave0-lantern-halo-v1'
 export const LANTERN_PIECE = 'lantern'
 const GRAIN_SEED = 9300
 //
@@ -46,19 +45,25 @@ const SQUASH_SPRING = { k: 220, c: 9 }
 const SQUASH_Y = 0.22
 const SQUASH_X = 0.12
 //
-// Light: dim tint and faint halo at rest; lit, the full colour and a
-// broad halo that fades out over LIGHT_HOLD_SEC (slow at first).
+// Light: dim tint and a faint halo at rest; lit, the full colour and its
+// halo at full, fading out over LIGHT_HOLD_SEC (slow at first). The halo
+// hugs its outline: its silhouette in the lantern's glow colour laid round
+// itself HALO_SPREAD px out, in HALO_RINGS rings of HALO_STEPS copies
+// (each ring fainter, HALO_RING_ALPHA the innermost), its own inside kept
+// at HALO_INSIDE of that (it glows, it is not washed out); breathing a
+// little.
 //
 const DIM_TINT = 0.55
 const LIGHT_HOLD_SEC = 24
 const LIGHT_FADE_POW = 3
-const HALO_DIM_R = 40
-const HALO_LIT_R = 190
-const HALO_DIM_OPACITY = 0.18
-const HALO_LIT_OPACITY = 0.75
-const HALO_CORE_SHARE = 0.35
-const HALO_CORE_OPACITY = 0.5
-const HALO_Y_SHARE = 0.62
+const HALO_SPREAD = 9
+const HALO_RINGS = 6
+const HALO_STEPS = 16
+const HALO_RING_ALPHA = 0.16
+const HALO_INSIDE = 0.35
+const HALO_DIM_OPACITY = 0.12
+const HALO_LIT_OPACITY = 0.95
+const FULL_TURN = Math.PI * 2
 const BREATH_SPEED = 1.4
 const BREATH_DEPTH = 0.08
 //
@@ -114,11 +119,8 @@ export function create(cfg) {
     light: cfg.lit ? 1 : 0,
     litFor: cfg.lit ? 0 : LIGHT_HOLD_SEC,
     idleIn: IDLE_SQUAT_MIN,
-    glowRgb: getRGB(k, CAVE_CFG.colors.lanternGlow),
-    coreRgb: getRGB(k, CAVE_CFG.colors.lanternCore),
     menu: cfg.collide === false
   }
-  Glow.create(k)
   return inst
 }
 
@@ -136,9 +138,10 @@ export function footYOn(p, x) {
 }
 
 /**
- * Its holes in the world: where each opens, its cap's top and its middle.
+ * Its holes in the world: where each opens, its middle, its cap's top
+ * and its foot.
  * @param {Object} inst - Lantern instance
- * @returns {{holes: Array<{x: number, y: number}>, x: number, top: number}}
+ * @returns {{holes: Array<{x: number, y: number}>, x: number, top: number, foot: number}}
  */
 export function holes(inst) {
   const w = inst.w * inst.scale
@@ -146,7 +149,8 @@ export function holes(inst) {
   return {
     holes: HOLES.map(hole => ({ x: inst.x + (hole.x - HALF) * w, y: inst.y - (1 - hole.y) * h })),
     x: inst.x,
-    top: inst.y - h
+    top: inst.y - h,
+    foot: inst.y
   }
 }
 
@@ -216,11 +220,17 @@ export function onDrawHalo(inst) {
   const k = inst.k
   const s = inst.scale
   const breath = 1 + Math.sin(k.time() * BREATH_SPEED) * BREATH_DEPTH
-  const r = (HALO_DIM_R + (HALO_LIT_R - HALO_DIM_R) * inst.light) * s * breath
-  const opacity = HALO_DIM_OPACITY + (HALO_LIT_OPACITY - HALO_DIM_OPACITY) * inst.light
-  const cy = inst.y - LANTERN_H * s * HALO_Y_SHARE
-  Glow.drawGlow(k, inst.x, cy, r, inst.glowRgb, opacity)
-  Glow.drawGlow(k, inst.x, cy, r * HALO_CORE_SHARE, inst.coreRgb, HALO_CORE_OPACITY * inst.light)
+  const sx = s * (1 + inst.squash.v * SQUASH_X)
+  const sy = s * (1 - inst.squash.v * SQUASH_Y)
+  k.drawSprite({
+    sprite: HALO_SPRITE,
+    pos: k.vec2(inst.x, inst.y + HALO_SPREAD * sy),
+    anchor: 'bot',
+    width: (inst.w + HALO_SPREAD * 2) * sx,
+    height: (LANTERN_H + HALO_SPREAD * 2) * sy,
+    opacity: Math.min(1, (HALO_DIM_OPACITY + (HALO_LIT_OPACITY - HALO_DIM_OPACITY) * inst.light) * breath),
+    blend: k.BlendMode.Add
+  })
 }
 
 //
@@ -235,9 +245,41 @@ function bake(k) {
   canvas.width = Math.round(Atlas.widthAt(LANTERN_PIECE, h))
   canvas.height = h
   Atlas.drawPiece(canvas.getContext('2d'), LANTERN_PIECE, canvas.width / 2, h, h)
+  k.loadSprite(HALO_SPRITE, bakeHalo(canvas), { filter: 'linear' })
   applyForestFilmGrainToCanvas(canvas, GRAIN_SEED)
   k.loadSprite(SPRITE, canvas, { filter: 'linear' })
   bakedFor.add(k)
+}
+//
+// The halo round the baked picture: its silhouette in the glow colour,
+// laid round itself in fading rings, its inside dimmed.
+//
+function bakeHalo(picture) {
+  const pad = Math.ceil(HALO_SPREAD * BAKE_SCALE)
+  const sil = document.createElement('canvas')
+  sil.width = picture.width
+  sil.height = picture.height
+  const sctx = sil.getContext('2d')
+  sctx.drawImage(picture, 0, 0)
+  sctx.globalCompositeOperation = 'source-in'
+  sctx.fillStyle = CAVE_CFG.colors.lanternGlow
+  sctx.fillRect(0, 0, sil.width, sil.height)
+  const halo = document.createElement('canvas')
+  halo.width = picture.width + pad * 2
+  halo.height = picture.height + pad * 2
+  const ctx = halo.getContext('2d')
+  for (let ring = 1; ring <= HALO_RINGS; ring++) {
+    const r = pad * ring / HALO_RINGS
+    ctx.globalAlpha = HALO_RING_ALPHA * (1 - (ring - 1) / HALO_RINGS)
+    for (let i = 0; i < HALO_STEPS; i++) {
+      const a = i / HALO_STEPS * FULL_TURN
+      ctx.drawImage(sil, pad + Math.cos(a) * r, pad + Math.sin(a) * r)
+    }
+  }
+  ctx.globalAlpha = 1 - HALO_INSIDE
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.drawImage(sil, pad, pad)
+  return halo
 }
 function bounce(inst, char) {
   char.jump(BOUNCE_FORCE)

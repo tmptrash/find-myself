@@ -2,6 +2,8 @@ import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax
 import { CAVE_CFG } from '../cfg.js'
 import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
+import * as Runner from '../components/cave-runner.js'
+import * as Front from './cave-front.js'
 import * as Atlas from './cave-atlas.js'
 import * as Backdrop from './cave-backdrop.js'
 import * as Layout from './cave-layout.js'
@@ -11,8 +13,10 @@ import * as Scene from './cave-scene.js'
 // spot (back layers, the earth ledge with its moss and props, the ceiling
 // with the roots' hole), painted by the level's own painters scaled to
 // cover the screen and baked once per live k and screen size, with the
-// lantern mushroom glowing on it and fireflies drifting over it. The
-// bottom sinks into shade so the menu's key hints stay readable.
+// lantern mushroom glowing on it, the level's runners scurrying over it
+// and its big stones in front (both drawn live in its world, scaled onto
+// the screen), and fireflies drifting over it. The bottom sinks into shade
+// so the menu's key hints stay readable.
 //
 const SPRITE_PREFIX = 'cave0-menu-v4-'
 const GRAIN_SEED = 9400
@@ -52,9 +56,14 @@ export function create(cfg) {
   const place = placement(w, h)
   const lantern = Lantern.create({ k, x: 0, y: 0, collide: false, lit: true })
   Lantern.setPose(lantern, toScreenX(place, Layout.LANTERN.x), toScreenY(place, Layout.LANTERN.y), place.scale)
+  const ready = Atlas.isLoaded()
   return {
     k,
+    place,
+    world: { left: place.x1, top: place.y1, right: place.x2, bottom: place.y2 },
     tiles: bake(k, w, h, place),
+    front: ready ? Front.create(k) : null,
+    runners: ready ? Runner.createAll(k) : [],
     lantern,
     fireflies: Fireflies.create({ k, bounds: { x1: 0, y1: 0, x2: w, y2: h * SHADE_FROM }, count: FIREFLY_COUNT })
   }
@@ -77,6 +86,7 @@ export function prewarm(k, width, height) {
  */
 export function onUpdate(inst) {
   Lantern.onUpdate(inst.lantern, null)
+  inst.runners.forEach(runner => Runner.onUpdate(runner, null))
   Fireflies.onUpdate(inst.fireflies)
 }
 
@@ -90,8 +100,23 @@ export function onDraw(inst, opacity) {
   inst.tiles.forEach(tile => k.drawSprite({ sprite: tile.name, pos: k.vec2(tile.x, 0), opacity }))
   if (opacity < 1) return
   Lantern.onDraw(inst.lantern)
+  drawWorldLife(inst)
   Lantern.onDrawHalo(inst.lantern)
   Fireflies.onDraw(inst.fireflies, -Infinity, Infinity, opacity)
+}
+//
+// The runners, then the big stones in front of them, in the level's world
+// scaled onto the screen the way the picture is.
+//
+function drawWorldLife(inst) {
+  const k = inst.k
+  const { place } = inst
+  k.pushTransform()
+  k.pushScale(k.vec2(place.scale, place.scale))
+  k.pushTranslate(k.vec2(-place.x1, -place.y1))
+  inst.runners.forEach(runner => Runner.onDraw(runner, inst.world))
+  inst.front && Front.onDraw(inst.front, inst.world)
+  k.popTransform()
 }
 //
 // World → screen: the shown rect's height fills the screen; it is placed so

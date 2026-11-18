@@ -10,7 +10,9 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 // ledge is the top of a solid mass (the old corridor under it is filled
 // in); right past the stalk-eye a shaft drops at the level's right edge,
 // stone steps zigzagging down it into a passage that runs under the lake
-// hall to the left wall (a dead end for now).
+// hall to the left wall. Left of the lake, by the left wall, a second
+// shaft drops from the hall's floor straight down into that passage (the
+// hall's floor starts WEST_SHAFT_X px in from the world's left edge).
 //
 export const WORLD_W = 2260
 export const WORLD_H = 1520
@@ -92,6 +94,7 @@ const K = PLATFORM_KIND
 // shaft.
 //
 const HALL_FLOOR_ID = 'hallFloor'
+const WEST_SHAFT_X = 200
 const HALL_FLOOR_Y = 850
 const PASSAGE_TOP_Y = 1260
 const PASSAGE_FLOOR_Y = 1440
@@ -104,10 +107,10 @@ export const PLATFORMS = [
   { id: 'midLedge', x1: MID_LEDGE_X1, x2: 1540, y: 380, top: [[MID_LEDGE_X1, 380], [1300, 380], [1540, 402]], kind: K.LEDGE, seed: 13 },
   {
     id: HALL_FLOOR_ID,
-    x1: 0,
+    x1: WEST_SHAFT_X,
     x2: EYE_LEDGE_X1 + 20,
     y: HALL_FLOOR_Y,
-    top: [[0, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1350, 1117], [1430, 1072], [1470, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
+    top: [[WEST_SHAFT_X, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1350, 1117], [1430, 1072], [1470, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
     bottom: PASSAGE_TOP_Y,
     joinR: true,
     kind: K.LEDGE,
@@ -145,7 +148,7 @@ export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1 }
 // cave-ground.js's).
 //
 export const STALK_EYE = { x: 1860, y: 430, on: 'eyeLedge' }
-export const LANTERN = { x: 170, y: 410, on: 'upper' }
+export const LANTERN = { x: 145, y: 410, on: 'upper' }
 //
 // Bounds for ambient fireflies.
 //

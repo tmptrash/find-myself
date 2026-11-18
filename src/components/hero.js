@@ -345,6 +345,7 @@ export function create(config) {
     runPoseOn: false, // The run pass draws the body and live legs this frame
     standDy: 0,       // Standing frames' shift onto the ground line (px)
     bodyY: null,      // World Y the body was drawn at last frame
+    poseGrounded: false, // On the ground when the body was last posed
     blinkLeft: 0,     // Seconds of blinking left (startBlink)
     dozes,            // Dozes off standing still (see DOZE_DELAY_SEC)
     dozeT: 0,         // Seconds he has stood still on the ground
@@ -1753,19 +1754,24 @@ function poseHero(inst, pass) {
   const ch = inst.character
   if (!ch?.exists?.()) return
   pass.z = ch.z
-  posePicture(inst)
+  const grounded = isHeroGrounded(inst)
+  posePicture(inst, grounded && !inst.poseGrounded)
+  inst.poseGrounded = grounded
   inst.bodyY = ch.pos.y + (inst.runPoseOn ? inst.legs.bodyDy : inst.standLegsOn ? inst.standLegs.bodyDy : inst.standDy)
 }
 //
 // This frame's picture: a tucked landing's unfold, a hero caught by the
-// ground after his own update ran (still in his fall frame: held where his
-// body was drawn a frame ago — at the caught, sunk-in hitbox it dipped
-// and sprang back up as he landed), idle on his live legs, a standing
-// frame, or the run.
+// ground after his own update ran (`touchdown`: on the ground this frame,
+// in the air the last one; still in his fall frame: held where his body was
+// drawn a frame ago — at the caught, sunk-in hitbox it dipped and sprang
+// back up as he landed; only for that one frame: a hero whose jump state
+// outlives his landing — his update skipped while he is not his player's,
+// on a level's load or in a scene — would stay frozen in the air), idle on
+// his live legs, a standing frame, or the run.
 //
-function posePicture(inst) {
+function posePicture(inst, touchdown) {
   const ch = inst.character
-  if (inst.jumpPhase === 'jumping' && inst.bodyY !== null && inst.landUnfold <= 0 && isHeroGrounded(inst)) {
+  if (touchdown && inst.jumpPhase === 'jumping' && inst.bodyY !== null && inst.landUnfold <= 0) {
     holdBody(inst)
     return
   }

@@ -13,7 +13,7 @@
 // respawn) and drops the lead. Shared by every level camera
 // (forest-camera.js, cave-view.js).
 //
-const LEAD_SHARE = 0.22
+const LEAD_SHARE = 0.32
 const LEAD_MOVE_EPS = 0.5
 const LEAD_TURN_HOLD = 0.4
 const LEAD_CATCH = 0.45

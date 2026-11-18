@@ -5,7 +5,6 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { set, get } from '../../../utils/progress.js'
-import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { initTouchInput, isTouchDevice } from '../../../utils/touch-input.js'
 import { hudLeftWorldX } from '../../../utils/fullscreen.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
@@ -25,7 +24,6 @@ import * as Backdrop from './cave-backdrop.js'
 import * as Front from './cave-front.js'
 import * as CaveLake from './cave-lake.js'
 import * as Ground from './cave-ground.js'
-import * as Surface from './cave-surface.js'
 import * as Glow from './cave-glow.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
@@ -112,17 +110,6 @@ const HALF = 0.5
 //
 const FIREFLY_COUNT = 44
 //
-// Runner insects: how many, spread over the crawl runs at least
-// RUNNER_MIN_RUN px long — one on each, the rest by length (the longer a
-// run, the likelier) — sizes RUNNER_SIZE..+RANGE; seeded so they start in
-// the same places.
-//
-const RUNNER_COUNT = 7
-const RUNNER_MIN_RUN = 250
-const RUNNER_SIZE = 0.85
-const RUNNER_SIZE_RANGE = 0.3
-const RUNNER_SEED = 5150
-//
 // FPS readout over the top-left of the screen (like the forest's; on touch
 // devices lined up with the fullscreen / back buttons).
 //
@@ -167,7 +154,7 @@ function build(k) {
     terrain: Terrain.create({ k }),
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
-    runners: createRunners(k),
+    runners: Runner.createAll(k),
     swarm: Swarm.create({ k }),
     lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
     platformByBody: new Map(),
@@ -206,7 +193,7 @@ function onUpdate(inst) {
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
-  Swarm.onUpdate(inst.swarm, heroPos(inst))
+  Swarm.onUpdate(inst.swarm, heroPos(inst), isHeroAirborne(inst))
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
   CaveSound.onUpdate(inst.caveSound, k.dt(), focus.y)
@@ -261,6 +248,14 @@ function heroFocus(inst) {
 function heroPos(inst) {
   const char = inst.heroInst?.character
   return inst.dead || inst.drown || !char?.exists?.() ? null : char.pos
+}
+//
+// Whether the hero is off the ground: the swarm tells a jump onto it
+// from a push along the ground by it.
+//
+function isHeroAirborne(inst) {
+  const char = inst.heroInst?.character
+  return Boolean(char?.exists?.() && !char.isGrounded())
 }
 //
 // Remembers the last solid platform the hero stood on (respawn point);
@@ -526,20 +521,6 @@ function drawTerrain(inst) {
 function drawLights(inst) {
   Lantern.onDrawHalo(inst.lantern)
   Swarm.onDraw(inst.swarm)
-}
-//
-// The runner insects: one on each long crawl run, the rest on runs
-// picked by their length.
-//
-function createRunners(k) {
-  const rng = createSeededRandom(RUNNER_SEED)
-  const runs = Surface.crawlRuns().filter(run => run.len >= RUNNER_MIN_RUN)
-  const total = runs.reduce((sum, run) => sum + run.len, 0)
-  return Array.from({ length: RUNNER_COUNT }, (_, i) => {
-    let pick = rng() * total
-    const run = runs[i] ?? runs.find(r => (pick -= r.len) < 0) ?? runs[runs.length - 1]
-    return Runner.create({ k, run, s: rng() * run.len, dir: rng() < HALF ? -1 : 1, size: RUNNER_SIZE + rng() * RUNNER_SIZE_RANGE, seed: Math.floor(rng() * RUNNER_SEED) })
-  })
 }
 function updateRunners(inst) {
   const hero = heroPos(inst)

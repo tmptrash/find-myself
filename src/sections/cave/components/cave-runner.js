@@ -194,6 +194,17 @@ const TAIL_RUN_SPEED = 150
 //
 const CULL_MARGIN = 60
 const MODE = { DASH: 'dash', PAUSE: 'pause' }
+//
+// The level's runners (createAll): how many, spread over the crawl runs at
+// least SET_MIN_RUN px long — one on each, the rest by length (the longer
+// a run, the likelier) — sizes SET_SIZE..+RANGE; seeded so they start in
+// the same places (the level and the menu's picture of it alike).
+//
+const SET_COUNT = 7
+const SET_MIN_RUN = 250
+const SET_SIZE = 0.85
+const SET_SIZE_RANGE = 0.3
+const SET_SEED = 5150
 const atlasFor = new WeakMap()
 let atlas = null
 
@@ -253,6 +264,22 @@ export function create(cfg) {
   placeBody(inst)
   inst.legs.forEach(leg => plantAt(inst, leg))
   return inst
+}
+
+/**
+ * Creates the level's runners on its crawl runs (Surface.crawlRuns).
+ * @param {Object} k - Kaplay instance
+ * @returns {Array<Object>} Runner instances
+ */
+export function createAll(k) {
+  const rng = createSeededRandom(SET_SEED)
+  const runs = Surface.crawlRuns().filter(run => run.len >= SET_MIN_RUN)
+  const total = runs.reduce((sum, run) => sum + run.len, 0)
+  return Array.from({ length: SET_COUNT }, (_, i) => {
+    let pick = rng() * total
+    const run = runs[i] ?? runs.find(r => (pick -= r.len) < 0) ?? runs[runs.length - 1]
+    return create({ k, run, s: rng() * run.len, dir: rng() < HALF ? -1 : 1, size: SET_SIZE + rng() * SET_SIZE_RANGE, seed: Math.floor(rng() * SET_SEED) })
+  })
 }
 
 /**

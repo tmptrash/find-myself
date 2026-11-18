@@ -32,6 +32,7 @@ import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
 import * as CaveMenuStalkEye from '../sections/cave/components/cave-menu-stalk-eye.js'
 import * as CaveAtlas from '../sections/cave/utils/cave-atlas.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
+import * as CaveSound from '../sections/cave/utils/cave-sound.js'
 import { paintPlate } from '../sections/cave/utils/cave-plate.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
 import * as QuestionDrift from '../components/question-drift.js'
@@ -298,10 +299,14 @@ const MENU_GLANCE_REACH_Y = 160
 //
 // Menu sound follows the selected level: the forest level's birds.mp3
 // fades in (over MENU_BIRDS_FADE_SEC) while the forest row is selected and
-// out on any other row (the other levels have no menu sound yet).
+// out on any other row; the cave level's own ambience (cave-sound.js: the
+// drips and the draught) fades in the same way on the cave row, its drips
+// heard as from MENU_CAVE_LISTENER_Y of the level (near the upper hall).
 //
 const MENU_BIRDS_VOLUME = CFG.audio.backgroundMusic.birds
 const MENU_BIRDS_FADE_SEC = 1.5
+const MENU_CAVE_FADE_SEC = 1.5
+const MENU_CAVE_LISTENER_Y = 700
 //
 // Section-complete markers saved as lastLesson point at the next section's
 // first lesson.
@@ -338,7 +343,8 @@ export function sceneMenu(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     const music = startMenuMusic(k)
-    registerEngineTeardown(() => stopMenuLoops(music, sound))
+    const caveSound = startMenuCaveSound(sound)
+    registerEngineTeardown(() => stopMenuLoops(music, sound, caveSound))
     loadMenuAssets(k)
     const layout = computeMenuLayout(k)
     const levels = LEVELS.map((level, i) => buildMenuLevel(level, i, layout, progress))
@@ -361,6 +367,8 @@ export function sceneMenu(k) {
       k,
       sound,
       music,
+      caveSound,
+      caveVolume: 0,
       layout,
       levels,
       selected,
@@ -684,7 +692,7 @@ function onBackKey(inst) {
     ConfirmDialog.close(inst.dialog)
     return
   }
-  stopMenuLoops(inst.music, inst.sound)
+  stopMenuLoops(inst.music, inst.sound, inst.caveSound)
   goAfterPreparingAssets(inst.k, "ready")
 }
 //
@@ -696,7 +704,7 @@ function enterLevel(inst, level) {
   const saved = get('lastLesson', null)
   const lesson = saved?.startsWith(level.lessonPrefix) ? saved : level.firstLesson
   beginMenuSceneLeave(inst)
-  stopMenuLoops(inst.music, inst.sound)
+  stopMenuLoops(inst.music, inst.sound, inst.caveSound)
   showTransitionToLevel(inst.k, lesson)
 }
 //
@@ -726,7 +734,7 @@ function restartLevel(inst) {
   inst.levels.slice(level.index + 1).forEach(later => set(later.section, { completed: false }))
   set('lastLesson', level.firstLesson)
   beginMenuSceneLeave(inst)
-  stopMenuLoops(inst.music, inst.sound)
+  stopMenuLoops(inst.music, inst.sound, inst.caveSound)
   showTransitionToLevel(inst.k, level.firstLesson)
 }
 //
@@ -889,14 +897,26 @@ function showsQuestionMark(level) {
 }
 //
 // Fades the birds toward full volume on the forest row, toward silence on
-// any other row.
+// any other row (and the cave ambience on the cave row).
 //
 function updateMenuMusic(inst, dt) {
+  const backdrop = inst.levels[inst.selected].backdrop
+  updateMenuCaveSound(inst, backdrop === BACKDROP_CAVE, dt)
   const birds = inst.music.birds
   if (!birds) return
-  const target = inst.levels[inst.selected].backdrop === BACKDROP_FOREST ? MENU_BIRDS_VOLUME : 0
+  const target = backdrop === BACKDROP_FOREST ? MENU_BIRDS_VOLUME : 0
   const step = MENU_BIRDS_VOLUME * dt / MENU_BIRDS_FADE_SEC
   birds.volume = birds.volume < target ? Math.min(target, birds.volume + step) : Math.max(target, birds.volume - step)
+}
+//
+// Fades the cave's drips and draught in on the cave row, out elsewhere;
+// they only run while they can be heard.
+//
+function updateMenuCaveSound(inst, shown, dt) {
+  const step = dt / MENU_CAVE_FADE_SEC
+  inst.caveVolume = shown ? Math.min(1, inst.caveVolume + step) : Math.max(0, inst.caveVolume - step)
+  CaveSound.setVolume(inst.caveSound, inst.caveVolume)
+  inst.caveVolume > 0 && CaveSound.onUpdate(inst.caveSound, dt, MENU_CAVE_LISTENER_Y)
 }
 //
 // Night picture under the forest, cave and "?" ones; each is drawn with its own
@@ -1078,16 +1098,18 @@ function onMenuLeave(inst) {
   inst.pointerCancel?.cancel()
   inst.mouseCancel?.()
   CanvasBackdrop.clearCanvasBackdrop(inst.k)
-  stopMenuLoops(inst.music, inst.sound)
+  stopMenuLoops(inst.music, inst.sound, inst.caveSound)
   inst.heroInst.character.destroy()
 }
 //
-// Stops the menu's looping sounds: its music and Valera's propeller whirr
-// (the bud's own update, which would fade it out, stops with the scene).
+// Stops the menu's looping sounds: its music, the cave ambience and
+// Valera's propeller whirr (the bud's own update, which would fade it out,
+// stops with the scene).
 //
-function stopMenuLoops(music, sound) {
+function stopMenuLoops(music, sound, caveSound) {
   stopMenuMusic(music)
   Sound.stopPropellerHum(sound)
+  CaveSound.stop(caveSound)
 }
 //
 // True while a live pre-level transition overlay owns input. Clears a stale
@@ -1127,6 +1149,14 @@ function startMenuMusic(k) {
   return {
     birds: k.play("birds", { loop: true, volume: 0 })
   }
+}
+//
+// The cave level's ambience, running silent until the cave row is selected.
+//
+function startMenuCaveSound(sound) {
+  const caveSound = CaveSound.create(sound, 0)
+  CaveSound.startAmbience(caveSound)
+  return caveSound
 }
 //
 // HTML music can resume after pause() if play() resolves late, and then keeps

@@ -8,8 +8,14 @@ import * as Layout from '../utils/cave-layout.js'
 // The lantern mushroom's blue fireflies. They live in its holes: when the
 // hero lands on its cap they fly out of them one after another — each
 // starts as a spark deep in its hole (the hole lighting up round it) and
-// comes out of it outward and up, growing to full size — and gather into
-// a small swarm over the mushroom.
+// comes out of it to the right (a little up), growing to full size — and
+// gather into a small swarm right of the mushroom, never higher than the
+// hero's head: over any ground a firefly at large keeps under HEAD_HEIGHT
+// px above it (the ground under the swarm's middle, found by a ray). That
+// height only ever rises with the ground: driven off a ledge the swarm
+// keeps its height (a push from the side moves it along, never down); only
+// a hero dropping onto it sends it down (see SCATTER_*), and once it has
+// sunk the height is that of the ground it came down to.
 //
 // The swarm keeps together round its middle, but no two of them fly
 // alike: each weaves round the middle on its own looping path (sums of
@@ -19,31 +25,41 @@ import * as Layout from '../utils/cave-layout.js'
 //
 // They are afraid of the hero: once he comes within SCARE_R px of the
 // swarm's middle it bolts the way he is moving (his motion, not where he
-// stands: a hero running in from the left sends it right, one dropping
-// onto it from above sends it down; a hero standing still sends it
-// straight away from him), FLEE_DIST px — or as far as there is open air
-// that way, turning aside up to FLEE_TURNS where the soil is close. There
-// it stays; once the hero has let it be for REST_TIME s it flies home and
-// every firefly goes back into a hole of the mushroom, fading into it.
+// stands: a hero running in from the left sends it right; a hero standing
+// still sends it straight away from him), FLEE_DIST px — or as far as
+// there is open air that way, turning aside up to FLEE_TURNS where the
+// soil is close. A hero jumping onto it — in the air over its middle and
+// no longer rising, however fast he runs — does not send it diving: it
+// scatters and sinks slowly to the lake's left edge (see SCATTER_*).
+// There it stays; once the hero has let it be for REST_TIME s it flies
+// home and every firefly goes back into a hole of the mushroom, fading
+// into it.
 //
 const COUNT = 16
 const SEED = 6100
 //
 // Coming out: the next one leaves EMERGE_GAP s after the last (plus up to
 // EMERGE_JITTER), out of its hole at EMERGE_SPEED..+RANGE px/s, growing
-// over EMERGE_TIME s while its hole glows HOLE_FLASH_R px wide and fades.
-// The swarm gathers HOME_ABOVE px over the mushroom's cap.
+// over EMERGE_TIME s while its hole glows HOLE_FLASH_R px wide and fades;
+// it leaves rightward, EMERGE_UP up for every px right, turned by up to
+// EMERGE_SPREAD rad. The swarm gathers HOME_ASIDE px right of the mushroom
+// (toward the open ledge and the lake), its loops reaching up to the
+// head's height over the mushroom's foot. The ground under the swarm is
+// looked for GROUND_LOOK px down.
 //
 const EMERGE_GAP = 0.07
 const EMERGE_JITTER = 0.08
 const EMERGE_SPEED = 70
 const EMERGE_SPEED_RANGE = 60
-const EMERGE_UP = 0.8
+const EMERGE_UP = 0.35
+const EMERGE_SPREAD = 0.35
 const EMERGE_TIME = 0.4
 const EMERGE_DRAG = 3
 const HOLE_FLASH_R = 9
 const HOLE_FLASH_OPACITY = 0.9
-const HOME_ABOVE = 50
+const HOME_ASIDE = 70
+const HEAD_HEIGHT = 62
+const GROUND_LOOK = 900
 //
 // Keeping together: each one's loop round the middle (SPREAD_X / SPREAD_Y
 // px at most, its two pairs of sines at LOOP_W..+RANGE rad/s), its spring
@@ -96,16 +112,51 @@ const SCARE_GAP = 0.5
 const HERO_VEL_EASE = 10
 const WORLD_MARGIN = 40
 //
+// Jumped on (the hero in the air, JUMP_ABOVE px or more over its middle —
+// not a hop off a bump of the ground beside it — and rising no faster than
+// HERO_MOVING px/s — at the top of his jump or coming down, run as fast as
+// he may; a running jump reaches it still flying more sideways than down):
+// its fireflies scatter —
+// each shoved SCATTER_SPEED..+RANGE px/s its own way, left or right, from
+// SCATTER_UP rad above level to SCATTER_DOWN below it (nearly level: no
+// higher than the hero's head, not into the ground) — and for SCATTER_TIME s hardly keep together
+// (SCATTER_PULL of their pull), gathering again over REGROUP_TIME s, while
+// the swarm sinks at SINK_SPEED px/s to rest LAKE_EDGE_IN px short of the
+// lake's left edge over the ground there — along at its height first and
+// then down where the soil shuts the straight way. No new scare while it
+// sinks.
+//
+const JUMP_ABOVE = 20
+const SCATTER_SPEED = 140
+const SCATTER_SPEED_RANGE = 120
+const SCATTER_UP = 0.15
+const SCATTER_DOWN = 0.12
+const SCATTER_TIME = 0.6
+const SCATTER_PULL = 0.08
+const REGROUP_TIME = 0.9
+const SINK_SPEED = 110
+const LAKE_EDGE_IN = 60
+const ARRIVE_PX = 2
+//
 // Home: after REST_TIME s left alone; the swarm counts as home within
-// HOME_ARRIVE px, and a firefly enters its hole within ENTER_R px of it,
-// fading out over VANISH_TIME s (pulled in on a stiffer spring).
+// HOME_ARRIVE px. Then each firefly goes in at its own moment (up to
+// HOME_STAGGER s after the swarm arrives, flying with it till then) and
+// its own pace — pulled to its hole on its own spring (HOME_SPRING times
+// HOME_PACE..+RANGE, damped HOME_DAMP times HOME_DAMP_MIN..+RANGE) — and,
+// within ENTER_R px of it, fades into it over VANISH_TIME..+RANGE s.
 //
 const REST_TIME = 10
 const HOME_ARRIVE = 24
 const ENTER_R = 5
-const VANISH_TIME = 0.3
+const HOME_STAGGER = 3
+const VANISH_TIME = 0.2
+const VANISH_TIME_RANGE = 0.4
 const HOME_SPRING = 30
+const HOME_PACE = 0.3
+const HOME_PACE_RANGE = 0.9
 const HOME_DAMP = 7
+const HOME_DAMP_MIN = 0.6
+const HOME_DAMP_RANGE = 0.6
 //
 // Look: glow and core radius (px, times each one's size SIZE..+RANGE),
 // glow opacity and its flicker (speed, depth).
@@ -144,10 +195,14 @@ export function create(cfg) {
     center: { x: 0, y: 0 },
     anchor: { x: 0, y: 0 },
     t: 0,
+    ceilY: -Infinity,
     calm: 0,
     fearIn: 0,
     scareIn: 0,
     fleeing: false,
+    sinking: false,
+    path: [],
+    scatterT: null,
     heroLast: null,
     heroVel: { x: 0, y: 0 },
     glowRgb: getRGB(k, CAVE_CFG.colors.swarm),
@@ -159,14 +214,14 @@ export function create(cfg) {
  * The hero landed on the mushroom: its fireflies come out of its holes
  * (unless they are out already).
  * @param {Object} inst - Swarm instance
- * @param {{holes: Array<{x: number, y: number}>, x: number, top: number}} nest - The mushroom's holes (Lantern.holes)
+ * @param {{holes: Array<{x: number, y: number}>, x: number, top: number, foot: number}} nest - The mushroom's holes (Lantern.holes)
  */
 export function release(inst, nest) {
   if (inst.state !== STATE.IDLE) return
   const rng = inst.rng
   inst.nest = nest
-  inst.home.x = nest.x
-  inst.home.y = nest.top - HOME_ABOVE
+  inst.home.x = nest.x + HOME_ASIDE
+  inst.home.y = nest.foot - HEAD_HEIGHT + SPREAD_Y
   inst.center.x = nest.x
   inst.center.y = nest.top
   inst.anchor.x = inst.home.x
@@ -175,6 +230,7 @@ export function release(inst, nest) {
   inst.calm = REST_TIME
   inst.fearIn = FEAR_DELAY
   inst.fleeing = false
+  inst.path = []
   inst.flies = Array.from({ length: COUNT }, (_, i) => newFly(rng, i, nest))
 }
 
@@ -183,16 +239,19 @@ export function release(inst, nest) {
  * the hero, going home.
  * @param {Object} inst - Swarm instance
  * @param {{x: number, y: number}|null} heroPos - The hero's centre (null: none)
+ * @param {boolean} [airborne=false] - The hero is in the air (jumping or falling)
  */
-export function onUpdate(inst, heroPos) {
+export function onUpdate(inst, heroPos, airborne = false) {
   if (inst.state === STATE.IDLE) return
   const dt = inst.k.dt()
   inst.t += dt
   trackHero(inst, heroPos, dt)
   inst.fearIn -= dt
   inst.scareIn -= dt
-  heroPos && inst.fearIn <= 0 && inst.scareIn <= 0 && near(inst.center, heroPos, SCARE_R) && scare(inst, heroPos)
+  inst.scatterT !== null && (inst.scatterT += dt) >= SCATTER_TIME + REGROUP_TIME && (inst.scatterT = null)
+  heroPos && !inst.sinking && inst.fearIn <= 0 && inst.scareIn <= 0 && near(inst.center, heroPos, SCARE_R) && scare(inst, heroPos, airborne)
   updateState(inst, dt)
+  updateCeiling(inst)
   moveCenter(inst, dt)
   inst.flies.forEach(fly => updateFly(inst, fly, dt))
   inst.flies.every(fly => fly.phase === PHASE.GONE) && (inst.state = STATE.IDLE)
@@ -213,8 +272,7 @@ export function onDraw(inst) {
 //
 function newFly(rng, i, nest) {
   const hole = nest.holes[Math.floor(rng() * nest.holes.length)]
-  const side = hole.x - nest.x
-  const out = unit(side / Math.max(1, Math.abs(side)), -EMERGE_UP)
+  const out = turned(unit(1, -EMERGE_UP), (rng() * 2 - 1) * EMERGE_SPREAD)
   const loop = () => LOOP_W + rng() * LOOP_W_RANGE
   return {
     phase: PHASE.WAIT,
@@ -261,13 +319,18 @@ function trackHero(inst, heroPos, dt) {
   inst.heroVel.y += ((heroPos.y - last.y) / dt - inst.heroVel.y) * ease
 }
 //
-// The hero came close: the swarm bolts the way he moves (or from him), as
-// far as the air is open that way or the nearest open way round it.
+// The hero came close: jumped on from above it scatters down, else the
+// swarm bolts the way he moves (or from him), as far as the air is open
+// that way or the nearest open way round it.
 //
-function scare(inst, heroPos) {
+function scare(inst, heroPos, airborne) {
   const v = inst.heroVel
   const moving = Math.hypot(v.x, v.y) > HERO_MOVING
-  const away = moving ? unit(v.x, v.y) : unit(inst.center.x - heroPos.x, inst.center.y - heroPos.y)
+  if (airborne && heroPos.y < inst.center.y - JUMP_ABOVE && v.y > -HERO_MOVING) {
+    scatterDown(inst)
+    return
+  }
+  const away = moving ? pushWay(v) : unit(inst.center.x - heroPos.x, inst.center.y - heroPos.y)
   let best = null
   for (const turn of FLEE_TURNS) {
     const dir = turned(away, turn / DEG)
@@ -277,11 +340,41 @@ function scare(inst, heroPos) {
   }
   inst.anchor.x = inst.center.x + best.dir.x * best.room
   inst.anchor.y = inst.center.y + best.dir.y * best.room
+  inst.anchor.y = Math.max(inst.anchor.y, inst.ceilY + SPREAD_Y)
+  inst.path = []
   inst.state = STATE.OUT
   inst.calm = REST_TIME
   inst.fleeing = true
   inst.scareIn = SCARE_GAP
   inst.flies.forEach(fly => fly.phase === PHASE.HOME && (fly.phase = PHASE.FLY))
+}
+//
+// Dropped on from above: its fireflies scatter every way, and the swarm
+// sinks to the lake's left edge (round the soil where it must).
+//
+function scatterDown(inst) {
+  const rng = inst.rng
+  const target = { x: Layout.LAKE_X1 - LAKE_EDGE_IN, y: inst.center.y }
+  const ground = headCeiling(target)
+  target.y = ground === -Infinity ? inst.center.y : ground + SPREAD_Y
+  inst.path = routeTo(inst.center, target)
+  inst.anchor.x = target.x
+  inst.anchor.y = target.y
+  inst.state = STATE.OUT
+  inst.calm = REST_TIME
+  inst.fleeing = false
+  inst.sinking = true
+  inst.scatterT = 0
+  inst.scareIn = SCARE_GAP
+  inst.flies.forEach(fly => {
+    if (fly.phase !== PHASE.FLY && fly.phase !== PHASE.HOME) return
+    fly.phase = PHASE.FLY
+    const a = -SCATTER_UP + rng() * (SCATTER_UP + SCATTER_DOWN)
+    const side = rng() < HALF ? -1 : 1
+    const speed = SCATTER_SPEED + rng() * SCATTER_SPEED_RANGE
+    fly.vx = Math.cos(a) * side * speed
+    fly.vy = Math.sin(a) * speed
+  })
 }
 //
 // How far the swarm can fly from p along dir: up to FLEE_DIST, short of
@@ -307,20 +400,31 @@ function updateState(inst, dt) {
     inst.fleeing = false
     inst.anchor.x = inst.home.x
     inst.anchor.y = inst.home.y
+    inst.path = routeTo(inst.center, inst.home)
     return
   }
   if (inst.state !== STATE.RETURN || !near(inst.center, inst.home, HOME_ARRIVE)) return
   inst.state = STATE.ENTER
-  inst.flies.forEach(fly => fly.phase === PHASE.FLY && (fly.phase = PHASE.HOME))
+  const rng = inst.rng
+  inst.flies.forEach(fly => {
+    fly.homeIn = rng() * HOME_STAGGER
+    fly.homeSpring = HOME_SPRING * (HOME_PACE + rng() * HOME_PACE_RANGE)
+    fly.homeDamp = HOME_DAMP * (HOME_DAMP_MIN + rng() * HOME_DAMP_RANGE)
+    fly.vanishTime = VANISH_TIME + rng() * VANISH_TIME_RANGE
+  })
 }
 //
 // The middle moves toward where the swarm is to be (drifting round it),
 // fast while it bolts, slowing as it gets there.
 //
 function moveCenter(inst, dt) {
+  if (inst.path.length || inst.sinking) {
+    followPath(inst, dt, inst.sinking ? SINK_SPEED : RETURN_SPEED)
+    return
+  }
   const settled = inst.state === STATE.OUT && !inst.fleeing
   const tx = inst.anchor.x + (settled ? Math.sin(inst.t * WANDER_WX) * WANDER_X : 0)
-  const ty = inst.anchor.y + (settled ? Math.sin(inst.t * WANDER_WY + 1) * WANDER_Y : 0)
+  const ty = Math.max(inst.ceilY + SPREAD_Y, inst.anchor.y + (settled ? Math.sin(inst.t * WANDER_WY + 1) * WANDER_Y : 0))
   const dx = tx - inst.center.x
   const dy = ty - inst.center.y
   const dist = Math.hypot(dx, dy)
@@ -334,6 +438,54 @@ function moveCenter(inst, dt) {
   inst.center.x += dx / dist * step
   inst.center.y += dy / dist * step
   inst.fleeing && dist < SLOW_WITHIN * HALF && (inst.fleeing = false)
+}
+//
+// The middle along its way, point by point, at `speed` (sinking to the
+// lake's edge, or going home).
+//
+function followPath(inst, dt, speed) {
+  const to = inst.path[0]
+  if (!to) {
+    inst.sinking = false
+    return
+  }
+  const dx = to.x - inst.center.x
+  const dy = to.y - inst.center.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < ARRIVE_PX) {
+    inst.path.shift()
+    return
+  }
+  const step = Math.min(dist, speed * dt)
+  inst.center.x += dx / dist * step
+  inst.center.y += dy / dist * step
+}
+//
+// A way from one point to another through open air: straight, or round the
+// soil in two legs — up or down first, then along, or along first — the
+// first that is clear (straight if none is).
+//
+function routeTo(from, to) {
+  if (isClear(from, to)) return [{ x: to.x, y: to.y }]
+  const ways = [{ x: from.x, y: to.y }, { x: to.x, y: from.y }]
+  const bend = ways.find(p => isClear(from, p) && isClear(p, to))
+  return bend ? [bend, { x: to.x, y: to.y }] : [{ x: to.x, y: to.y }]
+}
+function isClear(a, b) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const dist = Math.hypot(dx, dy)
+  return dist < 1 || !Surface.raycast(a.x, a.y, dx / dist, dy / dist, dist)
+}
+//
+// How hard the fireflies keep together: hardly at all right after a
+// scatter, gathering again over REGROUP_TIME.
+//
+function cohesion(inst) {
+  const s = inst.scatterT
+  if (s === null) return 1
+  if (s < SCATTER_TIME) return SCATTER_PULL
+  return Math.min(1, SCATTER_PULL + (s - SCATTER_TIME) / REGROUP_TIME * (1 - SCATTER_PULL))
 }
 //
 // One firefly: waiting in its hole, coming out of it, flying with the
@@ -360,7 +512,9 @@ function updateFly(inst, fly, dt) {
     return
   }
   if (fly.phase === PHASE.FLY) {
-    steer(inst, fly, dt, 1)
+    steer(inst, fly, dt, cohesion(inst))
+    keepUnderHead(inst, fly)
+    inst.state === STATE.ENTER && (fly.homeIn -= dt) <= 0 && (fly.phase = PHASE.HOME)
     return
   }
   homeIn(fly, dt)
@@ -372,7 +526,7 @@ function updateFly(inst, fly, dt) {
 function steer(inst, fly, dt, pull) {
   const t = inst.t
   const tx = inst.center.x + fly.ax * Math.sin(fly.w[0] * t + fly.p[0]) + fly.bx * Math.sin(fly.w[1] * t + fly.p[1])
-  const ty = inst.center.y + fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3])
+  const ty = Math.max(inst.ceilY, inst.center.y + fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3]))
   fly.jitterIn -= dt
   if (fly.jitterIn <= 0) {
     const a = fly.rng() * FULL_TURN
@@ -385,14 +539,48 @@ function steer(inst, fly, dt, pull) {
   move(fly, dt)
 }
 //
+// The head's height the swarm keeps under: over the ground under its
+// middle while it is out (not while it sinks or goes home); it rises with
+// higher ground and never lowers on its own.
+//
+function updateCeiling(inst) {
+  const want = inst.state === STATE.OUT && !inst.sinking ? headCeiling(inst.center) : -Infinity
+  if (want === -Infinity || inst.ceilY === -Infinity || want < inst.ceilY) inst.ceilY = want
+}
+//
+// Which way a moving hero's push sends the swarm: level along his run when
+// he moves more sideways than up or down (a push from the side moves it
+// along, not down), else his way.
+//
+function pushWay(v) {
+  return Math.abs(v.x) >= Math.abs(v.y) ? { x: Math.sign(v.x), y: 0 } : unit(v.x, v.y)
+}
+//
+// A firefly at large never rises over the head's height (it is turned
+// back down there).
+//
+function keepUnderHead(inst, fly) {
+  if (fly.y >= inst.ceilY) return
+  fly.y = inst.ceilY
+  fly.vy = Math.max(0, fly.vy)
+}
+//
+// The height of a hero's head over the ground under a point (none where
+// no ground lies within GROUND_LOOK px under it).
+//
+function headCeiling(p) {
+  const hit = Surface.raycast(p.x, p.y, 0, 1, GROUND_LOOK)
+  return hit ? hit.y - HEAD_HEIGHT : -Infinity
+}
+//
 // Back into its hole on a stiff spring, fading out once it is in.
 //
 function homeIn(fly, dt) {
-  fly.vx += ((fly.hole.x - fly.x) * HOME_SPRING - fly.vx * HOME_DAMP) * dt
-  fly.vy += ((fly.hole.y - fly.y) * HOME_SPRING - fly.vy * HOME_DAMP) * dt
+  fly.vx += ((fly.hole.x - fly.x) * fly.homeSpring - fly.vx * fly.homeDamp) * dt
+  fly.vy += ((fly.hole.y - fly.y) * fly.homeSpring - fly.vy * fly.homeDamp) * dt
   move(fly, dt)
   if (!near(fly, fly.hole, ENTER_R) && fly.show >= 1) return
-  fly.show = Math.max(0, fly.show - dt / VANISH_TIME)
+  fly.show = Math.max(0, fly.show - dt / fly.vanishTime)
   fly.show <= 0 && (fly.phase = PHASE.GONE)
 }
 function move(fly, dt) {

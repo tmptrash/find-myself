@@ -327,16 +327,16 @@ const TRUNK_EXCLUDE_HALF = 50
 // clearing; the stalk eyes, ear-trees and east rocks are laid out from there.
 //
 const EAST_GROUND_TRAMP_GAP = 42
-const FOREST_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1
 //
-// Bomb trees stand behind the hero and the bomb's burst shards, and just
-// behind the centipede's layer (EAR_TREE_UNDER_PREDATOR under it): the
-// centipede, the stick on its back and the hero riding it pass in front of
-// a bomb tree as one group (on the same layer as the centipede the tree
-// covered it and the stick but not the rider).
+// The stalk eyes (chain buoys) and the bomb trees stand behind the hero
+// (and the bomb's burst shards), and just behind the centipede's layer
+// (DECOR_UNDER_PREDATOR under it): the centipede, the stick on its back and
+// the hero riding it pass in front of them as one group (on the same layer
+// as the centipede they covered it and the stick but not the rider).
 //
-const EAR_TREE_UNDER_PREDATOR = 0.05
-const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1 - EAR_TREE_UNDER_PREDATOR
+const DECOR_UNDER_PREDATOR = 0.05
+const FOREST_CHAIN_BUOY_Z = CFG.visual.zIndex.player - 1 - DECOR_UNDER_PREDATOR
+const FOREST_EAR_TREE_Z = CFG.visual.zIndex.player - 1 - DECOR_UNDER_PREDATOR
 //
 // Respawn uses a wider gap than bootstrap spawn — hero body half-width matches hero.js COLLISION_WIDTH.
 //
@@ -2128,11 +2128,16 @@ function loadForestZones() {
 }
 //
 // Persists forest storage keys before scene leave or native engine teardown.
+// Leaving through the island flower (to the cave) keeps the world as it was
+// — the stick on the centipede's back, Valera's stop, the apples — so a
+// return to the forest goes on from there; the hero comes back on the last
+// solid ground he stood on (never the hole he was dragged down, so without
+// such a pose his spawn is left as it was).
 //
 function persistForestOnLeave(inst) {
-  if (FlowerGrab.isActive(inst.flowerGrab)) return
-  persistForestLastSpawn(inst)
   persistForestLevelState(inst)
+  if (FlowerGrab.isActive(inst.flowerGrab) && !inst.safeHeroPose) return
+  persistForestLastSpawn(inst)
 }
 //
 // World state that survives a reload: branch / bomb-tree landing counts, the
@@ -2278,10 +2283,10 @@ function releaseForestHeroOnElevatedSpawn(inst, heroSpawnY) {
 // next visit can resume at the same place (menu exit or level reload).
 //
 function persistForestLastSpawn(inst) {
+  if (inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
   const char = inst.heroInst?.character
-  if (!char?.pos || inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
-  const pose = inst.safeHeroPose
-  pose ? writeForestLastSpawnKeys(inst, pose.x, pose.y) : writeForestLastSpawnKeys(inst, char.pos.x, char.pos.y)
+  const pose = inst.safeHeroPose ?? (char?.pos ? { x: char.pos.x, y: char.pos.y } : null)
+  pose && writeForestLastSpawnKeys(inst, pose.x, pose.y)
 }
 //
 // Stores spawn pose for the next reload (menu exit, death, or scene leave).
@@ -6467,8 +6472,13 @@ function tryStartForestFlowerGrab(inst) {
   // The bank strip reaches the centipede's head: a rider still on the stick
   // there has not left it yet.
   //
-  if (HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char) &&
-    !EyeFlower.isOnIsland(inst.eyeFlower, char.pos.x, footY)) return false
+  const riding = HorizFallTwig.isHeroRidingPredator(inst.shoreFallTwigs, char)
+  if (riding && !EyeFlower.isOnIsland(inst.eyeFlower, char.pos.x, footY)) return false
+  //
+  // Turning round to swim him home (and swimming him there) the centipede
+  // carries its rider over the island: that is no landing on it.
+  //
+  if (riding && (HorizFallTwig.isRideTurning(inst.shoreFallTwigs) || inst.predator?.islandRetreatX != null)) return false
   destroyStrayForestHeroBody(inst.k, char)
   StartBubble.dismiss(inst.startBubble)
   FlowerGrab.start(inst.flowerGrab)

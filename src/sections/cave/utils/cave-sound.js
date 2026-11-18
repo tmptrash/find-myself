@@ -127,9 +127,6 @@ const SPLASH_PITCH_RANGE = 0.6
 const SPLASH_GAIN_MIN = 0.25
 const SPLASH_GAIN_RANGE = 0.15
 //
-// Visible drops landing near the hero: pitches and loudness share.
-//
-//
 // Distant pebble falls.
 //
 const PEBBLE_EVERY_MIN = 16
@@ -192,12 +189,13 @@ const HALF = 0.5
 /**
  * Creates the cave sound bus on the shared AudioContext.
  * @param {Object} sfx - Sound instance from Sound.create()
+ * @param {number} [volume=1] - Starting loudness of the whole bus, 0..1
  * @returns {Object} Cave sound instance
  */
-export function create(sfx) {
+export function create(sfx, volume = 1) {
   const ctx = sfx.audioContext
   const out = ctx.createGain()
-  out.gain.value = MASTER_GAIN
+  out.gain.value = MASTER_GAIN * volume
   out.connect(ctx.destination)
   const reverb = ctx.createConvolver()
   reverb.buffer = reverbImpulse(ctx)
@@ -271,20 +269,15 @@ export function onUpdate(inst, dt, listenerY) {
 }
 
 /**
- * Current draught strength (0 calm … 1 strongest gust), for things that
- * sway in it.
+ * Sets the loudness of the whole cave bus (the menu fades the cave in and
+ * out with its row), smoothed so a frame-by-frame fade never clicks.
  * @param {Object} inst - Cave sound instance
- * @returns {number}
+ * @param {number} volume - 0..1
  */
-
-/**
- * A falling drop hitting stone (plink) or the lake (plop), panned and
- * faded by its distance from the hero.
- * @param {Object} inst - Cave sound instance
- * @param {number} pan - -1 (left) … 1 (right)
- * @param {number} near - 0 (far) … 1 (right next to the hero)
- * @param {boolean} water - Lands in the lake
- */
+export function setVolume(inst, volume) {
+  if (inst.stopped) return
+  setSmooth(inst.out.gain, MASTER_GAIN * volume, inst.ctx.currentTime)
+}
 
 /**
  * Short sparkle when the hero shatters into fireflies: a few quick high
@@ -351,11 +344,6 @@ export function playLanternBounce(inst) {
   osc.stop(now + SPRING_TIME * 2)
   CHIME_FREQS.forEach((freq, i) => tone(inst, freq, now + i * CHIME_STAGGER, CHIME_GAIN, CHIME_DECAY, true))
 }
-
-/**
- * Faint tick as the lantern drops one light step.
- * @param {Object} inst - Cave sound instance
- */
 
 /**
  * Stops loops and disconnects the bus.

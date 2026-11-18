@@ -1,4 +1,4 @@
-import { isTwigPausingPredatorMove, turnRideAround } from '../utils/forest-horiz-fall-twig.js'
+import { isTwigPausingPredatorMove, turnRideAround, turnBackFromIsland } from '../utils/forest-horiz-fall-twig.js'
 import * as EyeFlower from './eye-flower.js'
 
 //
@@ -96,6 +96,12 @@ const ISLAND_TURN_SPINE_FOLLOW_RATE = 3.5
 const RETREAT_PHASE_STOP = 'stop'
 const RETREAT_PHASE_TURN = 'turn'
 const RETREAT_PHASE_SWIM = 'swim'
+//
+// Waiting at the island with the hero still on its stick: after
+// ISLAND_RIDER_WAIT s without him jumping onto the island it turns round
+// and swims him back to the shore.
+//
+const ISLAND_RIDER_WAIT = 5
 //
 // With the hero standing on the stick the crawler keeps one steady walk.
 //
@@ -247,6 +253,7 @@ export function startFleeMove(inst, dir) {
       ]
     : [{ x: left ? inst.minX : inst.maxX, swim: false }]
   inst.dir = dir
+  inst.islandRiderWait = 0
   inst.vx = dir * FLEE_RUN_SPEED * FLEE_JERK_MULT
   inst.headLift = FLEE_HEAD_LIFT
   inst.stretch = FLEE_STRETCH
@@ -295,8 +302,9 @@ function fleeIslandStopX(inst, wp) {
 }
 //
 // Speed falls with the distance left, so the swim brakes to a halt before the
-// island. A rider keeps it waiting there (his jump onto the island starts the turn);
-// alone it rests, turns and swims back to the shore.
+// island. A rider keeps it waiting there (his jump onto the island starts the
+// turn) — for ISLAND_RIDER_WAIT s, then it turns and swims him back; alone it
+// rests, turns and swims back to the shore.
 //
 function tickFleeIslandArrival(inst, dt, stopX) {
   const dist = inst.x - stopX
@@ -311,12 +319,21 @@ function tickFleeIslandArrival(inst, dt, stopX) {
     easeSpeed(inst, dt, ISLAND_STOP_SPEED_EASE)
     inst.x = Math.max(stopX, inst.x + inst.vx * dt)
     !rideFacingLocked(inst) && beginIslandShoreRetreat(inst, true)
+    rideFacingLocked(inst) && waitForRiderAtIsland(inst, dt)
   }
   const ease = Math.min(1, dt * FLEE_POSE_EASE)
   inst.headLift += (0 - inst.headLift) * ease
   inst.stretch += (1 - inst.stretch) * ease
 }
 
+//
+// The rider stays on the stick at the island: once he has kept to it
+// ISLAND_RIDER_WAIT s, it turns and swims him back to the shore.
+//
+function waitForRiderAtIsland(inst, dt) {
+  inst.islandRiderWait = (inst.islandRiderWait ?? 0) + dt
+  inst.islandRiderWait >= ISLAND_RIDER_WAIT && turnBackFromIsland(inst.levelInst.shoreFallTwigs)
+}
 function finishFlee(inst) {
   inst.swimming = false
   inst.fleePath = null
@@ -534,10 +551,9 @@ function clampPredatorClearOfIsland(inst) {
 
 //
 // Keeps it within its ground. Facing held (the hero riding its stick), it
-// stops at either end — and, walking into the map's end (the right one;
-// the left one is the lake's shore, where the ride to the island goes on
-// its own way) with him on its back, turns round there (turnRideAround)
-// instead of standing pressed against it.
+// stops at either end — the map's end on the right, the lake's shore on
+// the left — and, walking into it with him on its back, turns round there
+// (turnRideAround) instead of standing pressed against it.
 //
 function keepInside(inst) {
   clampPredatorClearOfIsland(inst)
@@ -545,7 +561,7 @@ function keepInside(inst) {
     const edge = inst.x < inst.minX ? -1 : inst.x > inst.maxX ? 1 : 0
     inst.x = clamp(inst.x, inst.minX, inst.maxX)
     edge && (inst.vx = 0)
-    edge > 0 && inst.dir > 0 && rideFacingLocked(inst) && turnRideAround(inst.levelInst.shoreFallTwigs)
+    edge && edge === inst.dir && rideFacingLocked(inst) && turnRideAround(inst.levelInst.shoreFallTwigs)
     applyRideFacingLock(inst)
     return
   }

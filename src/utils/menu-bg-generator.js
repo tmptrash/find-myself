@@ -20,7 +20,7 @@
 //     draws them as animated overlays on top of this static base.
 //
 import { CFG } from '../cfg.js'
-import { parseHex } from './helper.js'
+import { parseHex, shuffledCopy } from './helper.js'
 import { drawMoonToCanvas } from './draw-moon.js'
 import { TREE_SHEET, loadForestPictureTrees, drawForestPictureTrees } from '../sections/forest/utils/forest-picture-trees.js'
 import { loadForestStones, forestGroundStones, forestBuriedStones } from '../sections/forest/utils/forest-stones.js'
@@ -108,16 +108,23 @@ const TREE_EDGE_START = -20
 const FRONT_ROW = TREE_ROWS.length - 1
 //
 // Ground decor from the forest's pictures, out of the central zone:
-// STONE_COUNT ground stones (STONE_SCALE of their sheet size, pulled
-// towards the screen edges by STONE_EDGE_BIAS), PLANT_COUNT ferns and
+// STONE_COUNT ground stones (pulled towards the screen edges by
+// STONE_EDGE_BIAS), PLANT_COUNT ferns and
 // plants (PLANT_H_MIN..+RANGE tall) and MUSHROOM_COUNT mushrooms
 // (MUSHROOM_H_MIN..+RANGE tall), all tinted DECOR_NIGHT towards the sky;
-// BURIED_COUNT buried stones (BURIED_SCALE) in the soil a little darker
-// (BURIED_NIGHT), between BURIED_TOP and BURIED_BOTTOM px under the ground
-// line. The soil itself is the level's layered earth, tinted SOIL_NIGHT.
+// BURIED_COUNT buried stones in the soil a little darker (BURIED_NIGHT),
+// between BURIED_TOP and BURIED_BOTTOM px under the ground line. The soil
+// itself is the level's layered earth, tinted SOIL_NIGHT.
+//
+// No two stones of a row are the same picture (each row deals its
+// pictures from a shuffled deck), and a stone grows with its distance from
+// the centre: from *_SCALE_NEAR of its sheet size at the edge of the
+// central zone to *_SCALE_FAR at the screen edge, so the scenery frames
+// the middle with its biggest stones outermost.
 //
 const STONE_COUNT = 6
-const STONE_SCALE = 0.28
+const STONE_SCALE_NEAR = 0.18
+const STONE_SCALE_FAR = 0.42
 const STONE_SINK = 4
 const STONE_EDGE_MARGIN = 140
 const STONE_EDGE_BIAS = 2.5
@@ -142,7 +149,8 @@ const RIM_SCALE = 2
 //
 const CUSHION_LIFT = 3
 const BURIED_COUNT = 12
-const BURIED_SCALE = 0.3
+const BURIED_SCALE_NEAR = 0.2
+const BURIED_SCALE_FAR = 0.45
 const BURIED_TOP = 40
 const BURIED_BOTTOM = 30
 const BURIED_EDGE_MARGIN = 40
@@ -386,15 +394,13 @@ function paintGroundDecor(ctx, s, night) {
   const layer = newLayer()
   const lctx = layer.getContext('2d')
   const reserved = []
-  const stones = forestGroundStones()
+  const stones = shuffledCopy(forestGroundStones().map(stone => stone.canvas))
   for (let i = 0; i < STONE_COUNT && stones.length; i++) {
-    const stone = stones[Math.floor(Math.random() * stones.length)].canvas
-    const w = stone.width * STONE_SCALE * s
-    const h = stone.height * STONE_SCALE * s
-    const x = pickXAvoidingCentre(reserved, STONE_EDGE_MARGIN, w * 0.5, STONE_EDGE_BIAS)
-    if (x == null) continue
-    reserved.push({ x, halfWidth: w * 0.5 })
-    lctx.drawImage(stone, x - w / 2, GROUND_Y + STONE_SINK - h, w, h)
+    const stone = stones[i % stones.length]
+    const spot = placeGrowingStone(reserved, stone, s, { margin: STONE_EDGE_MARGIN, near: STONE_SCALE_NEAR, far: STONE_SCALE_FAR, bias: STONE_EDGE_BIAS })
+    if (!spot) continue
+    reserved.push({ x: spot.x, halfWidth: spot.w * 0.5 })
+    lctx.drawImage(stone, spot.x - spot.w / 2, GROUND_Y + STONE_SINK - spot.h, spot.w, spot.h)
   }
   for (let i = 0; i < PLANT_COUNT; i++) {
     const x = pickXAvoidingCentre(reserved, PLANT_EDGE_MARGIN, PLANT_GAP * s)
@@ -417,22 +423,44 @@ function paintGroundDecor(ctx, s, night) {
 // central zone (where the description text sits).
 //
 function paintBuriedStones(ctx, s, night) {
-  const stones = forestBuriedStones()
+  const stones = shuffledCopy(forestBuriedStones())
   if (!stones.length) return
   const layer = newLayer()
   const lctx = layer.getContext('2d')
   const reserved = []
   for (let i = 0; i < BURIED_COUNT; i++) {
-    const stone = stones[Math.floor(Math.random() * stones.length)]
-    const w = stone.width * BURIED_SCALE * s
-    const h = stone.height * BURIED_SCALE * s
-    const x = pickXAvoidingCentre(reserved, BURIED_EDGE_MARGIN, w * 0.5)
-    if (x == null) continue
-    reserved.push({ x, halfWidth: w * 0.5 })
-    const y = GROUND_Y + BURIED_TOP + Math.random() * Math.max(0, CANVAS_H - GROUND_Y - BURIED_TOP - BURIED_BOTTOM - h)
-    lctx.drawImage(stone, x - w / 2, y, w, h)
+    const stone = stones[i % stones.length]
+    const spot = placeGrowingStone(reserved, stone, s, { margin: BURIED_EDGE_MARGIN, near: BURIED_SCALE_NEAR, far: BURIED_SCALE_FAR, bias: 1 })
+    if (!spot) continue
+    reserved.push({ x: spot.x, halfWidth: spot.w * 0.5 })
+    const y = GROUND_Y + BURIED_TOP + Math.random() * Math.max(0, CANVAS_H - GROUND_Y - BURIED_TOP - BURIED_BOTTOM - spot.h)
+    lctx.drawImage(stone, spot.x - spot.w / 2, y, spot.w, spot.h)
   }
   composeTinted(ctx, layer, night, BURIED_NIGHT)
+}
+//
+// A spot for a stone out of the central zone, its size growing with its
+// distance from the centre: a spot is looked for with room for the stone
+// at its smallest, then kept only if the stone at the size it takes there
+// still clears every stone placed before. Null when none fits.
+//
+function placeGrowingStone(reserved, stone, s, opts) {
+  for (let attempt = 0; attempt < PLACEMENT_MAX_ATTEMPTS; attempt++) {
+    const x = pickXAvoidingCentre(reserved, opts.margin, stone.width * opts.near * s * 0.5, opts.bias)
+    if (x == null) return null
+    const scale = (opts.near + (opts.far - opts.near) * edgeShare(x)) * s
+    const w = stone.width * scale
+    if (reserved.every(r => Math.abs(x - r.x) >= w * 0.5 + r.halfWidth)) return { x, w, h: stone.height * scale }
+  }
+  return null
+}
+//
+// How far out a point lies: 0 at the edge of the central zone, 1 at the
+// screen edge.
+//
+function edgeShare(x) {
+  const span = Math.max(1, CENTER_X - CENTER_KEEPOUT_HALF)
+  return Math.min(1, Math.max(0, (Math.abs(x - CENTER_X) - CENTER_KEEPOUT_HALF) / span))
 }
 function newLayer() {
   const layer = document.createElement('canvas')

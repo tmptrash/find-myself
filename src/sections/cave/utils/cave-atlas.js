@@ -13,9 +13,9 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // sproutB, tinyB), roots.png (roots hanging from soil: root),
 // platforms.png (short soil platforms hanging in the
 // air), runner.png (the runner insect taken apart: its body, head, tail
-// leaf, a feeler — the sheet's straight one; its curled one is not cut —
-// and per pair of legs a hip ball, a thigh, a shin and a clawed foot,
-// rear pair first); plus the forest's buried elements
+// leaf, two feelers, and per pair of legs a hip ball, a thigh, a shin and
+// a clawed foot, rear pair first; its neck is a second cut of a shin);
+// plus the forest's buried elements
 // (bones, fossils, shells: elements_ground.png, cut by the forest).
 //
 // The sheets are not clean, so each is prepared as it is cut: faint haze
@@ -746,26 +746,28 @@ const PIECES = {
   tiny21: [SHEET.PLANTS, 1357, 964, 37, 41],
   tiny22: [SHEET.PLANTS, 1410, 964, 43, 42],
   tiny23: [SHEET.PLANTS, 1466, 963, 55, 43],
-  runnerBody: [SHEET.RUNNER, 240, 35, 719, 364],
-  runnerHead: [SHEET.RUNNER, 1042, 224, 188, 176],
-  runnerTail: [SHEET.RUNNER, 52, 228, 175, 113],
-  runnerFeeler: [SHEET.RUNNER, 1190, 52, 232, 172],
-  runnerHip0: [SHEET.RUNNER, 167, 420, 93, 92],
-  runnerHip1: [SHEET.RUNNER, 503, 420, 94, 92],
-  runnerHip2: [SHEET.RUNNER, 827, 420, 93, 92],
-  runnerHip3: [SHEET.RUNNER, 1155, 420, 94, 92],
-  runnerThigh0: [SHEET.RUNNER, 125, 526, 150, 148],
-  runnerThigh1: [SHEET.RUNNER, 440, 518, 177, 182],
-  runnerThigh2: [SHEET.RUNNER, 782, 517, 153, 186],
-  runnerThigh3: [SHEET.RUNNER, 1160, 525, 121, 163],
-  runnerShin0: [SHEET.RUNNER, 98, 698, 93, 152],
-  runnerShin1: [SHEET.RUNNER, 432, 713, 88, 172],
-  runnerShin2: [SHEET.RUNNER, 792, 716, 95, 169],
-  runnerShin3: [SHEET.RUNNER, 1215, 708, 91, 157],
-  runnerFoot0: [SHEET.RUNNER, 44, 868, 128, 167],
-  runnerFoot1: [SHEET.RUNNER, 381, 892, 132, 159],
-  runnerFoot2: [SHEET.RUNNER, 830, 890, 132, 160],
-  runnerFoot3: [SHEET.RUNNER, 1237, 881, 134, 157]
+  runnerBody: [SHEET.RUNNER, 243, 55, 732, 349],
+  runnerHead: [SHEET.RUNNER, 1051, 234, 184, 168],
+  runnerTail: [SHEET.RUNNER, 53, 237, 181, 102],
+  runnerNeck: [SHEET.RUNNER, 420, 708, 72, 185],
+  runnerFeeler0: [SHEET.RUNNER, 1051, 39, 114, 190],
+  runnerFeeler1: [SHEET.RUNNER, 1204, 61, 182, 164],
+  runnerHip0: [SHEET.RUNNER, 167, 425, 83, 84],
+  runnerHip1: [SHEET.RUNNER, 505, 426, 83, 83],
+  runnerHip2: [SHEET.RUNNER, 829, 425, 83, 84],
+  runnerHip3: [SHEET.RUNNER, 1156, 425, 83, 84],
+  runnerThigh0: [SHEET.RUNNER, 121, 516, 139, 159],
+  runnerThigh1: [SHEET.RUNNER, 439, 520, 165, 171],
+  runnerThigh2: [SHEET.RUNNER, 781, 516, 136, 181],
+  runnerThigh3: [SHEET.RUNNER, 1175, 518, 94, 168],
+  runnerShin0: [SHEET.RUNNER, 93, 696, 73, 181],
+  runnerShin1: [SHEET.RUNNER, 420, 708, 72, 185],
+  runnerShin2: [SHEET.RUNNER, 790, 709, 72, 181],
+  runnerShin3: [SHEET.RUNNER, 1220, 698, 72, 180],
+  runnerFoot0: [SHEET.RUNNER, 52, 890, 95, 132],
+  runnerFoot1: [SHEET.RUNNER, 376, 900, 103, 135],
+  runnerFoot2: [SHEET.RUNNER, 837, 897, 81, 133],
+  runnerFoot3: [SHEET.RUNNER, 1245, 894, 101, 132]
 }
 const sheets = new Map()
 const pieces = new Map()

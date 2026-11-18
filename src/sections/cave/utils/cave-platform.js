@@ -111,11 +111,14 @@ const SLOPE_MIN_RISE = 10
 // Stone clusters on the top, CLUSTER_GAP px apart (with its spread): one
 // big stone and SMALL_MIN..+SMALL_RANGE small ones (heights in world px,
 // never bigger than on the sheet), the small ones either side of the big
-// one, from SMALL_NEAR of its half width out to SMALL_SPREAD px past it. Each rests on the surface under its middle, its
-// foot REST_SINK of its height into it (its rounded bottom touches the
-// soil, it is not sunk); turn; how far from a free end the first cluster
-// sits, how far from the lake's banks and from a creature, the lantern or
-// the hero's landing spot; a pixel this opaque is the surface they rest on.
+// one, from SMALL_NEAR of its half width out to SMALL_SPREAD px past it.
+// Each rests on the lowest soil under its foot (FOOT_SHARE of its half
+// width either side of its middle, read every FOOT_STEP px — on a lumpy
+// top no side of it hangs in the air), its foot REST_SINK of its height
+// into it, bedded, its joints hiding the rest; turn; how far from a free
+// end the first cluster sits, how far from the lake's banks and from a
+// creature, the lantern or the hero's landing spot; a pixel this opaque is
+// the surface they rest on.
 //
 const CLUSTER_GAP = 230
 const CLUSTER_GAP_JITTER = 0.6
@@ -127,7 +130,9 @@ const SMALL_MIN = 2
 const SMALL_RANGE = 2
 const SMALL_NEAR = 0.8
 const SMALL_SPREAD = 22
-const REST_SINK = 0.12
+const REST_SINK = 0.25
+const FOOT_SHARE = 0.8
+const FOOT_STEP = 2
 const SURFACE_TURN = 0.2
 const SURFACE_END_CLEAR = 50
 const LAKE_CLEAR = 30
@@ -143,6 +148,7 @@ const FLOAT_PAD = 8
 const layers = new Map()
 const bulges = new Map()
 const bigStones = new Map()
+const stoneSpans = new Map()
 
 /**
  * Paints a platform (its layer, built once per page) where it reaches into
@@ -189,11 +195,22 @@ export function surfaceAt(p, x) {
  * The big stones of every platform's clusters, resting on its top (drawn
  * in front of the hero by cave-front.js); builds the platforms' layers if
  * they are not yet built.
- * @returns {Array<{name: string, h: number, x: number, surface: number, foot: number, flip: boolean, angle: number}>}
+ * @returns {Array<{name: string, h: number, x: number, p: Object, surface: number, foot: number, flip: boolean, angle: number}>}
  */
 export function frontStones() {
   Layout.PLATFORMS.forEach(p => layerOf(p))
   return [...bigStones.values()].flat()
+}
+
+/**
+ * The stretches of a platform's top its cluster stones and their joints
+ * take (plants keep off them); builds its layer if it is not yet built.
+ * @param {Object} p - PLATFORMS entry
+ * @returns {Array<{x1: number, x2: number}>}
+ */
+export function stoneSpansOn(p) {
+  layerOf(p)
+  return stoneSpans.get(p.id) ?? []
 }
 
 /**
@@ -428,23 +445,35 @@ function surfaceStones(layer, p) {
 function stoneCluster(layer, p, rng, names, x) {
   const big = restingStone(layer, p, rng, names, x, BIG_H_MIN + rng() * BIG_H_RANGE)
   bigStones.has(p.id) ? bigStones.get(p.id).push(big) : bigStones.set(p.id, [big])
+  stoneSpans.has(p.id) || stoneSpans.set(p.id, [])
+  stoneSpans.get(p.id).push(spanOf(big))
   const halfW = Atlas.widthAt(big.name, big.h) / 2
   const count = SMALL_MIN + Math.floor(rng() * (SMALL_RANGE + 1))
   for (let n = 0; n < count; n++) {
     const side = n % 2 ? -1 : 1
     const small = restingStone(layer, p, rng, names, x + side * (halfW * SMALL_NEAR + rng() * (halfW * (1 - SMALL_NEAR) + SMALL_SPREAD)), SMALL_H_MIN + rng() * SMALL_H_RANGE)
-    Earth.restStone(layer.ctx, rng, small, small.surface)
+    Earth.restStone(layer.ctx, rng, small, small.surface, gx => layerSurfaceAt(layer, p, gx))
+    stoneSpans.get(p.id).push(spanOf(small))
   }
 }
 //
-// A stone of the given height resting on the surface under x (`surface`
-// the soil's top under it).
+// The stretch of top a stone and its joints take.
+//
+function spanOf(stone) {
+  const half = Earth.restSpread(Atlas.widthAt(stone.name, stone.h)) / 2
+  return { x1: stone.x - half, x2: stone.x + half }
+}
+//
+// A stone of the given height resting at x on the lowest soil under its
+// foot (`surface`).
 //
 function restingStone(layer, p, rng, names, x, height) {
   const name = names[Math.floor(rng() * names.length)]
   const h = Math.min(Atlas.naturalHeight(name), height)
-  const surface = layerSurfaceAt(layer, p, x)
-  return { name, h, x, surface, foot: surface + h * REST_SINK, flip: rng() < 0.5, angle: (rng() * 2 - 1) * SURFACE_TURN }
+  const half = Atlas.widthAt(name, h) / 2 * FOOT_SHARE
+  let surface = -Infinity
+  for (let dx = -half; dx <= half; dx += FOOT_STEP) surface = Math.max(surface, layerSurfaceAt(layer, p, x + dx))
+  return { name, h, x, p, surface, foot: surface + h * REST_SINK, flip: rng() < 0.5, angle: (rng() * 2 - 1) * SURFACE_TURN }
 }
 //
 // The soil's top in a layer at X (its scanned surface; the base line where

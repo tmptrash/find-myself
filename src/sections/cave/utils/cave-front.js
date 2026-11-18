@@ -100,6 +100,7 @@ function paintCell(ctx, cell, i) {
   ctx.rect(cell.ax, cell.ay, cell.w, cell.h)
   ctx.clip()
   ctx.translate(cell.ax - cell.x, cell.ay - cell.y)
-  Earth.restStone(ctx, createSeededRandom(GRAIN_SEED + i), cell.stone, cell.stone.surface)
+  const stone = cell.stone
+  Earth.restStone(ctx, createSeededRandom(GRAIN_SEED + i), stone, stone.surface, x => Platform.surfaceAt(stone.p, x))
   ctx.restore()
 }

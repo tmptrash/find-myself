@@ -5,8 +5,8 @@ import * as Atlas from '../utils/cave-atlas.js'
 import * as Surface from '../utils/cave-surface.js'
 //
 // The runner: a small insect of runner.png's parts — a body under a leaf
-// shell, a head with one big eye, two beaded feelers, a leaf for a tail
-// and eight legs (four pairs, rear to front; each a hip ball, a thigh, a
+// shell, a head with one big eye on a neck, two feelers, a leaf for a tail
+// (wagging as it runs) and eight legs (four pairs, rear to front; each a hip ball, a thigh, a
 // shin and a clawed foot). It runs over every side of the platforms —
 // tops, sides and undersides (cave-surface.js's crawl runs), never into
 // the lake — the way insects do: short dashes and still pauses, now and
@@ -49,25 +49,36 @@ const HALF = 0.5
 const DEG = 180 / Math.PI
 //
 // The parts (sheet px in their pieces): the body's origin (the middle of
-// its hips' line), the head and the tail by a pivot set at a point of the
-// body, each feeler by its base set at a point of the head.
+// its hips' line), the tail by a pivot set at a point of the body, each
+// feeler by its base set at a point of the head (the far one darker).
 //
-const ORIGIN = { x: 362, y: 319 }
-const HEAD = { piece: 'runnerHead', pivot: { x: 94, y: 88 }, at: { x: 737, y: 252 } }
-const TAIL = { piece: 'runnerTail', pivot: { x: 164, y: 66 }, at: { x: 40, y: 330 } }
-//
-// Both feelers are the sheet's straight one (its curled one reads as a
-// hook at this size): the far one darker, set further back on the head
-// and turned up by `turn` degrees.
-//
-const FEELER = { piece: 'runnerFeeler', pivot: { x: 18, y: 162 } }
+const ORIGIN = { x: 390, y: 305 }
+const TAIL = { piece: 'runnerTail', pivot: { x: 174, y: 53 }, at: { x: 20, y: 250 } }
 const FEELERS = [
-  { at: { x: 92, y: 30 }, turn: -18, far: true, phase: 0 },
-  { at: { x: 126, y: 28 }, turn: 0, far: false, phase: 1.7 }
+  { piece: 'runnerFeeler0', pivot: { x: 16, y: 182 }, at: { x: 62, y: 16 }, far: true, phase: 0 },
+  { piece: 'runnerFeeler1', pivot: { x: 8, y: 155 }, at: { x: 118, y: 12 }, far: false, phase: 1.7 }
 ]
 //
-// Legs, per pair rear to front: the hip on the body (x on the hips'
-// line), the thigh's and the shin's joints in their pieces (p at the
+// The head (its pivot its middle, HEAD_R px its radius) on a neck: the neck
+// leaves the body's front at NECK.at, NECK.angle degrees up from the body's
+// line, and runs NECK_SHARE of the head's radius bare before the head;
+// it is the sheet's straight shin (`piece`, its p and q joints) drawn
+// NECK.thick times as thick, from NECK.sink px inside the body to the
+// head's middle (both ends hidden).
+//
+const HEAD = { piece: 'runnerHead', pivot: { x: 92, y: 84 } }
+const HEAD_R = 86
+const NECK_SHARE = 1.2
+const NECK = { piece: 'runnerNeck', p: { x: 40.2, y: 22.5 }, q: { x: 17.7, y: 159.6 }, at: { x: 636, y: 262 }, angle: -12, thick: 1.4, sink: 40 }
+const NECK_DIR = { x: Math.cos(NECK.angle / DEG), y: Math.sin(NECK.angle / DEG) }
+const NECK_FROM = { x: NECK.at.x - ORIGIN.x - NECK_DIR.x * NECK.sink, y: NECK.at.y - ORIGIN.y - NECK_DIR.y * NECK.sink }
+const HEAD_AT = {
+  x: NECK.at.x - ORIGIN.x + NECK_DIR.x * HEAD_R * (NECK_SHARE + 1),
+  y: NECK.at.y - ORIGIN.y + NECK_DIR.y * HEAD_R * (NECK_SHARE + 1)
+}
+//
+// Legs, per pair rear to front: the hip on the body (the belly narrows to
+// the front, so the front hips sit higher), the thigh's and the shin's joints in their pieces (p at the
 // body's end, q at the far end), the foot's ankle and toe (its claws'
 // tip), the hip ball's middle, and where its toe rests ahead of the hip
 // (x; the far leg FAR_REST_DX further out). A far leg's hip sits FAR_HIP
@@ -75,32 +86,32 @@ const FEELERS = [
 // drawn LEG_SCALE times their size on the sheet (and the hip balls
 // HIP_BALL_SCALE): at the runner's size the painted ones read too short.
 //
-const HIP_X = [177, 332, 482, 627]
+const HIPS = [{ x: 190, y: 306 }, { x: 330, y: 318 }, { x: 470, y: 305 }, { x: 590, y: 272 }]
 const THIGHS = [
-  { p: { x: 118.6, y: 28.2 }, q: { x: 25.5, y: 117.9 } },
-  { p: { x: 141.1, y: 25.9 }, q: { x: 21.8, y: 147.2 } },
-  { p: { x: 115.1, y: 25.0 }, q: { x: 22.0, y: 153.3 } },
-  { p: { x: 39.8, y: 29.7 }, q: { x: 90.6, y: 134.7 } }
+  { p: { x: 117.1, y: 18.8 }, q: { x: 16.8, y: 135.1 } },
+  { p: { x: 143.4, y: 21.3 }, q: { x: 16.5, y: 146.5 } },
+  { p: { x: 110.9, y: 19.5 }, q: { x: 15.7, y: 154.8 } },
+  { p: { x: 30.8, y: 25.9 }, q: { x: 70.0, y: 142.8 } }
 ]
 const SHINS = [
-  { p: { x: 57.8, y: 27.3 }, q: { x: 31.0, y: 122.7 } },
-  { p: { x: 48.0, y: 27.3 }, q: { x: 33.9, y: 143.1 } },
-  { p: { x: 41.2, y: 27.8 }, q: { x: 58.3, y: 139.9 } },
-  { p: { x: 37.3, y: 28.1 }, q: { x: 57.5, y: 128.6 } }
+  { p: { x: 45.0, y: 20.7 }, q: { x: 16.3, y: 157.2 } },
+  { p: { x: 40.2, y: 22.5 }, q: { x: 17.7, y: 159.6 } },
+  { p: { x: 29.2, y: 25.8 }, q: { x: 47.9, y: 154.6 } },
+  { p: { x: 29.5, y: 23.7 }, q: { x: 49.6, y: 155.7 } }
 ]
 const FEET = [
-  { ankle: { x: 102.6, y: 30.3 }, toe: { x: 15.9, y: 162.6 } },
-  { ankle: { x: 104.0, y: 30.0 }, toe: { x: 14.5, y: 148.9 } },
-  { ankle: { x: 27.8, y: 30.9 }, toe: { x: 116.1, y: 150.2 } },
-  { ankle: { x: 27.3, y: 30.3 }, toe: { x: 120.5, y: 145.4 } }
+  { ankle: { x: 76.6, y: 19.0 }, toe: { x: 4, y: 128 } },
+  { ankle: { x: 85.1, y: 21.1 }, toe: { x: 5, y: 131 } },
+  { ankle: { x: 18.8, y: 21.3 }, toe: { x: 74, y: 128 } },
+  { ankle: { x: 18.9, y: 21.2 }, toe: { x: 92, y: 127 } }
 ]
-const HIP_BALL = { x: 46.5, y: 46 }
+const HIP_BALL = { x: 41.5, y: 41.5 }
 const REST_DX = [-250, -100, 90, 240]
 const FAR_HIP = { x: -26, y: -16 }
 const FAR_REST_DX = 30
 const FAR_LIFT = 12
 const PAIRS = 4
-const LEG_SCALE = 1.35
+const LEG_SCALE = 1.15
 const HIP_BALL_SCALE = 1.1
 //
 // Stance (sheet px): the hips' line over the surface, how far past the
@@ -153,13 +164,18 @@ const IDLE_STEP_RANGE = 0.6
 const IDLE_JITTER = 40
 //
 // Feelers swing FEELER_SWING degrees at FEELER_HZ (FEELER_RUN_HZ while it
-// runs); the tail sways TAIL_SWAY degrees at TAIL_HZ.
+// runs). The tail sways TAIL_SWAY degrees at TAIL_HZ at rest; running it
+// wags, up to TAIL_RUN_SWAY degrees more at TAIL_RUN_HZ more by
+// TAIL_RUN_SPEED px/s (world, at size 1).
 //
 const FEELER_SWING = 9
 const FEELER_HZ = 2.2
 const FEELER_RUN_HZ = 5
 const TAIL_SWAY = 4
 const TAIL_HZ = 1.5
+const TAIL_RUN_SWAY = 14
+const TAIL_RUN_HZ = 6
+const TAIL_RUN_SPEED = 150
 //
 // Off-view margin (world px) past which a runner is not drawn.
 //
@@ -196,6 +212,7 @@ export function create(cfg) {
     timer: PAUSE_TIME * rng(),
     dashSpeed: 0,
     idleIn: IDLE_STEP,
+    tailPhase: rng(),
     nextGroup: 0,
     lags: [],
     phase: rng() * Math.PI * 2,
@@ -229,6 +246,7 @@ export function onUpdate(inst, heroPos) {
   const dt = inst.k.dt()
   heroPos && flee(inst, heroPos)
   move(inst, dt)
+  inst.tailPhase += dt * (TAIL_HZ + TAIL_RUN_HZ * runShare(inst))
   placeBody(inst)
   updateLegs(inst, dt)
 }
@@ -263,9 +281,9 @@ function createLegs() {
         pair,
         far: far === 1,
         group: (pair + far) % 2,
-        hipX: HIP_X[pair] - ORIGIN.x + (far ? FAR_HIP.x : 0),
-        hipY: far ? FAR_HIP.y : 0,
-        restX: HIP_X[pair] - ORIGIN.x + REST_DX[pair] + (far ? FAR_HIP.x + Math.sign(REST_DX[pair]) * FAR_REST_DX : 0),
+        hipX: HIPS[pair].x - ORIGIN.x + (far ? FAR_HIP.x : 0),
+        hipY: HIPS[pair].y - ORIGIN.y + (far ? FAR_HIP.y : 0),
+        restX: HIPS[pair].x - ORIGIN.x + REST_DX[pair] + (far ? FAR_HIP.x + Math.sign(REST_DX[pair]) * FAR_REST_DX : 0),
         reach: (boneLength(THIGHS[pair]) + boneLength(SHINS[pair])) * LEG_SCALE,
         foot: { x: 0, y: 0 },
         step: null
@@ -297,6 +315,12 @@ function move(inst, dt) {
   inst.speed = 0
   inst.dir = -inst.dir
   pause(inst)
+}
+//
+// How hard it runs: 0 standing … 1 at TAIL_RUN_SPEED or faster.
+//
+function runShare(inst) {
+  return Math.min(1, inst.speed / (TAIL_RUN_SPEED * inst.unit / SCALE))
 }
 function nextMode(inst) {
   if (inst.mode === MODE.DASH) {
@@ -437,31 +461,43 @@ function stepOn(inst, leg, dt) {
   step.t >= 1 && (leg.step = null)
 }
 //
-// Back to front: the far feeler and the far legs (darker), the tail, the
-// head, the body, the near feeler, the near legs.
+// Back to front: the far feeler and the far legs (darker), the tail
+// (wagging the harder the faster it runs), the neck, the body, the head,
+// the near feeler, the near legs.
 //
 function drawRunner(inst, parts) {
   const t = inst.k.time() + inst.phase
   const hz = inst.speed > 1 ? FEELER_RUN_HZ : FEELER_HZ
-  const headX = HEAD.at.x - ORIGIN.x
-  const headY = HEAD.at.y - ORIGIN.y
-  drawFeeler(inst, parts, FEELERS[0], headX, headY, t * hz)
+  drawFeeler(inst, parts, FEELERS[0], t * hz)
   inst.legs.forEach(leg => leg.far && drawLeg(inst, parts, leg))
-  const sway = Math.sin(t * Math.PI * 2 * TAIL_HZ) * TAIL_SWAY
-  drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, sway, inst.nearColor)
-  drawPart(inst, parts.get(HEAD.piece), headX, headY, HEAD.pivot, 0, inst.nearColor)
+  const wag = Math.sin(inst.tailPhase * Math.PI * 2) * (TAIL_SWAY + TAIL_RUN_SWAY * runShare(inst))
+  drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, wag, inst.nearColor)
+  drawNeck(inst, parts.get(NECK.piece))
   drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, 0, inst.nearColor)
-  drawFeeler(inst, parts, FEELERS[1], headX, headY, t * hz)
+  drawPart(inst, parts.get(HEAD.piece), HEAD_AT.x, HEAD_AT.y, HEAD.pivot, 0, inst.nearColor)
+  drawFeeler(inst, parts, FEELERS[1], t * hz)
   inst.legs.forEach(leg => leg.far || drawLeg(inst, parts, leg))
+}
+//
+// The neck: its piece NECK.thick times as thick and stretched along its
+// own axis to run from inside the body to the head's middle.
+//
+function drawNeck(inst, part) {
+  const len = Math.hypot(HEAD_AT.x - NECK_FROM.x, HEAD_AT.y - NECK_FROM.y)
+  const vx = (NECK.q.x - NECK.p.x) * NECK.thick
+  const vy = NECK.q.y - NECK.p.y
+  const stretch = Math.sqrt(Math.max(0, len * len - vx * vx)) / Math.abs(vy)
+  const turn = Math.atan2(NECK_DIR.y, NECK_DIR.x) - Math.atan2(vy * stretch, vx)
+  drawPart(inst, part, NECK_FROM.x, NECK_FROM.y, NECK.p, turn * DEG, inst.nearColor, NECK.thick, stretch)
 }
 //
 // A feeler on the head, swinging (`cycles`: its swings so far).
 //
-function drawFeeler(inst, parts, feeler, headX, headY, cycles) {
-  const x = headX + feeler.at.x - HEAD.pivot.x
-  const y = headY + feeler.at.y - HEAD.pivot.y
-  const angle = feeler.turn + Math.sin(cycles * Math.PI * 2 + feeler.phase) * FEELER_SWING
-  drawPart(inst, parts.get(FEELER.piece), x, y, FEELER.pivot, angle, feeler.far ? inst.farColor : inst.nearColor)
+function drawFeeler(inst, parts, feeler, cycles) {
+  const x = HEAD_AT.x + feeler.at.x - HEAD.pivot.x
+  const y = HEAD_AT.y + feeler.at.y - HEAD.pivot.y
+  const angle = Math.sin(cycles * Math.PI * 2 + feeler.phase) * FEELER_SWING
+  drawPart(inst, parts.get(feeler.piece), x, y, feeler.pivot, angle, feeler.far ? inst.farColor : inst.nearColor)
 }
 //
 // A leg in the body's frame: its toe from its planted foot, its ankle as
@@ -510,17 +546,18 @@ function drawBone(inst, part, bone, x1, y1, x2, y2, color) {
 }
 //
 // One part at a body-frame point, its pivot there, turned (degrees),
-// `size` times its sheet size; the pivot's anchor made once per pivot.
+// `sx` / `sy` times its sheet width / height; the pivot's anchor made
+// once per pivot.
 //
-function drawPart(inst, part, x, y, pivot, angle, color, size = 1) {
+function drawPart(inst, part, x, y, pivot, angle, color, sx = 1, sy = sx) {
   const k = inst.k
   let anchor = inst.anchors.get(pivot)
   anchor || inst.anchors.set(pivot, (anchor = k.vec2(pivot.x / part.w * 2 - 1, pivot.y / part.h * 2 - 1)))
   k.drawSprite({
     sprite: SPRITE,
     quad: part.quad,
-    width: part.w * size,
-    height: part.h * size,
+    width: part.w * sx,
+    height: part.h * sy,
     pos: inst.v.set(x, y),
     anchor,
     angle,
@@ -540,7 +577,8 @@ function bake(k) {
   atlasFor.set(k, atlas.parts)
 }
 function buildAtlas() {
-  const names = ['runnerBody', HEAD.piece, TAIL.piece, FEELER.piece].concat(
+  const names = ['runnerBody', HEAD.piece, TAIL.piece, NECK.piece].concat(
+    FEELERS.map(feeler => feeler.piece),
     Atlas.pieceNames('runnerHip'),
     Atlas.pieceNames('runnerThigh'),
     Atlas.pieceNames('runnerShin'),

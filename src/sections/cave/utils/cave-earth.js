@@ -62,7 +62,10 @@ const STONE_INSET = 1.1
 // embedded stone's joint, no taller than REST_JOINT_H of the stone, and a
 // low lip of soil over its foot, no taller than REST_LIP_H of it (it beds
 // the stone, it does not bury it); no contact shadow: the joints ground
-// it.
+// it. What of the stone sinks under the soil's top is cut away
+// (GROUND_CUT_DY px under it, the lip hides the cut), so it comes up out
+// of the ground instead of hanging in front of the soil under it; the cut
+// line is read every CUT_STEP px across REST_CUT_REACH of its width.
 //
 const STONE_SHADE = 0.3
 const SHADOW_W = 0.65
@@ -79,6 +82,9 @@ const HEAP_SINK = 3
 const REST_JOINT_SPREAD = 1.4
 const REST_JOINT_H = 0.6
 const REST_LIP_H = 0.42
+const GROUND_CUT_DY = 2
+const CUT_STEP = 2
+const REST_CUT_REACH = 1.5
 //
 // Loose soil patches (tries per 100×100 px, width in world px, opacity)
 // and the forest's buried elements (tries, longest side, turn, how
@@ -238,18 +244,32 @@ export function embedStone(ctx, rng, stone) {
 }
 
 /**
+ * How wide a resting stone's joints spread (the widest of them).
+ * @param {number} w - The stone's drawn width
+ * @returns {number}
+ */
+export function restSpread(w) {
+  return w * REST_JOINT_SPREAD * (JOINT_W_MIN + JOINT_W_RANGE)
+}
+
+/**
  * Rests a stone on a walkable top: a heap of its sheet's soil behind it,
- * the stone with its foot at `foot`, a low lip of soil over its foot.
+ * the stone with its foot at `foot` (cut off under the soil's top), a low
+ * lip of soil over its foot.
  * @param {CanvasRenderingContext2D} ctx - Target context
  * @param {function(): number} rng - Seeded random
  * @param {{name: string, x: number, foot: number, h: number, flip: boolean, angle: number}} stone - Its foot's point
- * @param {number} surfaceY - The top's Y under it
+ * @param {number} surfaceY - The top's Y under it (where its joints stand)
+ * @param {function(number): number} groundAt - The soil's top at a world X
  */
-export function restStone(ctx, rng, stone, surfaceY) {
+export function restStone(ctx, rng, stone, surfaceY, groundAt) {
   const w = Atlas.widthAt(stone.name, stone.h)
   const ground = Atlas.GROUND_ROCKS.includes(stone.name)
   drawJoint(ctx, rng, stone.x, w * REST_JOINT_SPREAD, JOINT_KIND.REST, ground, surfaceY + HEAP_SINK, stone.h * REST_JOINT_H)
+  ctx.save()
+  clipAboveGround(ctx, stone.x - w * REST_CUT_REACH, stone.x + w * REST_CUT_REACH, stone.foot - stone.h * REST_CUT_REACH, groundAt)
   Atlas.drawPiece(ctx, stone.name, stone.x, stone.foot, stone.h, { flip: stone.flip, angle: stone.angle, shade: COLORS.shade, shadeAmount: STONE_SHADE })
+  ctx.restore()
   drawJoint(ctx, rng, stone.x, w, JOINT_KIND.REST, ground, surfaceY + HEAP_SINK, stone.h * REST_LIP_H)
 }
 
@@ -464,6 +484,18 @@ function drawJoint(ctx, rng, x, w, kind, ground, y, maxH = Infinity) {
     y,
     alpha: JOINT_ALPHA
   })
+}
+//
+// Clips drawing to what lies over the soil's top (GROUND_CUT_DY px under
+// it) between x1 and x2, up to `top`.
+//
+function clipAboveGround(ctx, x1, x2, top, groundAt) {
+  ctx.beginPath()
+  ctx.moveTo(x1, top)
+  ctx.lineTo(x2, top)
+  for (let x = x2; x >= x1; x -= CUT_STEP) ctx.lineTo(x, groundAt(x) + GROUND_CUT_DY)
+  ctx.closePath()
+  ctx.clip()
 }
 //
 // The joints of a kind for a ground stone or a stone of stones.png.

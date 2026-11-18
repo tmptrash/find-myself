@@ -15,7 +15,9 @@ import * as Platform from './cave-platform.js'
 // - small ones (FLOAT_KINDS) on the small platforms over the lake and in
 //   the shaft.
 // About every UP_GAP / HANG_GAP / SIDE_GAP px — in clumps and open
-// stretches, never evenly spaced (nextGap) — never at the
+// stretches, never evenly spaced (nextGap) — never on a stone of the
+// platforms' tops: a plant that would stand on one moves on to beside it
+// (STONE_CLEAR px clear of it and its joints) — never at the
 // creatures, the lantern, the roots' hole or the exit; pulled toward the
 // cave's shade like everything in it. Placed once per page and painted
 // into the terrain bake (behind the hero).
@@ -59,6 +61,7 @@ const HANG_GAP = 100
 const SIDE_GAP = 110
 const GAP_RANGE = 60
 const UP_SINK = 3
+const STONE_CLEAR = 6
 //
 // Roots hang about every ROOT_GAP..+ROOT_GAP_RANGE px under the ledges and
 // the ceiling.
@@ -155,9 +158,21 @@ function placeOnFloat(rng, out, p) {
 }
 function placeOnTop(rng, out, p) {
   const { from, to } = runOf(p)
+  const stones = Platform.stoneSpansOn(p)
   for (let x = from + rng() * UP_GAP; x < to; x += nextGap(rng, UP_GAP, GAP_RANGE)) {
-    isClear(x) && !inLake(x, Platform.surfaceAt(p, x)) && out.push(upright(rng, pickKind(rng, UP_KINDS), x, groundUnder(p)))
+    let plant = upright(rng, pickKind(rng, UP_KINDS), x, groundUnder(p))
+    for (let stone = onStone(plant, stones); stone; stone = onStone(plant, stones)) {
+      x = stone.x2 + STONE_CLEAR + (plant.box.x2 - plant.box.x1) / 2
+      plant = movedTo(plant, x, groundUnder(p))
+    }
+    x < to && isClear(x) && !inLake(x, Platform.surfaceAt(p, x)) && out.push(plant)
   }
+}
+//
+// The stone (with its joints) a plant would stand on, if any.
+//
+function onStone(plant, stones) {
+  return stones.find(s => plant.box.x2 > s.x1 - STONE_CLEAR && plant.box.x1 < s.x2 + STONE_CLEAR)
 }
 function placeUnder(rng, out, p) {
   const { from, to } = runOf(p)
@@ -274,6 +289,14 @@ function upright(rng, kind, x, groundAt) {
   const w = Atlas.widthAt(name, h)
   const y = groundAt(x, w * ROOT_SHARE)
   return { name, x, y, h, flip: rng() < 0.5, hang: false, box: { x1: x - w / 2, y1: y - h, x2: x + w / 2, y2: y } }
+}
+//
+// The same standing plant moved to x, on the ground there.
+//
+function movedTo(plant, x, groundAt) {
+  const w = plant.box.x2 - plant.box.x1
+  const y = groundAt(x, w * ROOT_SHARE)
+  return { ...plant, x, y, box: { x1: x - w / 2, y1: y - plant.h, x2: x + w / 2, y2: y } }
 }
 //
 // A plant hanging at x from the highest point of what it hangs from over

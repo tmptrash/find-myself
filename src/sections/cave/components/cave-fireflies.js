@@ -40,6 +40,12 @@ const FULL_TURN = Math.PI * 2
 const EATEN_TIME = 3
 const EATEN_TIME_RANGE = 5
 const RELIGHT_FADE = 1.5
+//
+// Given where the air is open (isOpen), they keep to it: each is placed
+// at an open spot (OPEN_TRIES picks at most) and turns about where its
+// next step would take it into the soil.
+//
+const OPEN_TRIES = 40
 
 /**
  * Creates the ambient firefly swarm.
@@ -47,6 +53,7 @@ const RELIGHT_FADE = 1.5
  * @param {Object} cfg.k - Kaplay instance
  * @param {{x1: number, y1: number, x2: number, y2: number}} cfg.bounds - World box they wander in
  * @param {number} cfg.count - Ambient firefly count
+ * @param {(x: number, y: number) => boolean} [cfg.isOpen] - Open air at a point (else anywhere is)
  * @returns {Object} Fireflies instance
  */
 export function create(cfg) {
@@ -55,6 +62,7 @@ export function create(cfg) {
   const inst = {
     k,
     bounds,
+    isOpen: cfg.isOpen ?? null,
     ambient: [],
     sparks: [],
     glowRgb: getRGB(k, CAVE_CFG.colors.firefly),
@@ -62,9 +70,10 @@ export function create(cfg) {
     sparkRgbs: CAVE_CFG.colors.heroSpark.map(hex => getRGB(k, hex))
   }
   for (let i = 0; i < count; i++) {
+    const spot = openSpot(inst, bounds)
     inst.ambient.push({
-      x: bounds.x1 + Math.random() * (bounds.x2 - bounds.x1),
-      y: bounds.y1 + Math.random() * (bounds.y2 - bounds.y1),
+      x: spot.x,
+      y: spot.y,
       heading: Math.random() * FULL_TURN,
       flickerSpeed: FLICKER_SPEED_MIN + Math.random() * FLICKER_SPEED_RANGE,
       phase: Math.random() * FULL_TURN,
@@ -133,13 +142,19 @@ export function onUpdate(inst) {
   const { bounds } = inst
   inst.ambient.forEach(f => {
     if (f.gone > 0) {
-      relight(f, bounds, dt)
+      relight(inst, f, dt)
       return
     }
     f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
     f.heading += (Math.random() - 0.5) * AMBIENT_TURN_RATE * FULL_TURN * dt
-    f.x += Math.cos(f.heading) * AMBIENT_SPEED * dt
-    f.y += Math.sin(f.heading) * AMBIENT_SPEED * dt
+    const nx = f.x + Math.cos(f.heading) * AMBIENT_SPEED * dt
+    const ny = f.y + Math.sin(f.heading) * AMBIENT_SPEED * dt
+    if (inst.isOpen && !inst.isOpen(nx, ny)) {
+      f.heading += Math.PI
+      return
+    }
+    f.x = nx
+    f.y = ny
     const outX = f.x < bounds.x1 || f.x > bounds.x2
     const outY = f.y < bounds.y1 || f.y > bounds.y2
     outX && (f.heading = Math.PI - f.heading)
@@ -185,14 +200,26 @@ export function onDraw(inst, top, bottom, opacity = 1) {
 // An eaten firefly's dark time runs out: it lights up at a new spot (in
 // its box, else anywhere), fading in.
 //
-function relight(f, bounds, dt) {
+function relight(inst, f, dt) {
   f.gone -= dt
   if (f.gone > 0) return
-  const box = f.box ?? bounds
-  f.x = box.x1 + Math.random() * (box.x2 - box.x1)
-  f.y = box.y1 + Math.random() * (box.y2 - box.y1)
+  const spot = openSpot(inst, f.box ?? inst.bounds)
+  f.x = spot.x
+  f.y = spot.y
   f.fade = 0
   f.box = null
+}
+//
+// A spot in a box, in the open air when that is known (the last pick if
+// none was open).
+//
+function openSpot(inst, box) {
+  let spot = null
+  for (let i = 0; i < OPEN_TRIES; i++) {
+    spot = { x: box.x1 + Math.random() * (box.x2 - box.x1), y: box.y1 + Math.random() * (box.y2 - box.y1) }
+    if (!inst.isOpen || inst.isOpen(spot.x, spot.y)) return spot
+  }
+  return spot
 }
 //
 // Brightness 1 → (1 - FLICKER_DEPTH) following a per-light sine.

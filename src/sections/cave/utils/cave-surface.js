@@ -96,6 +96,16 @@ export function raycast(x, y, dx, dy, maxDist) {
 }
 
 /**
+ * Whether a world point lies in the soil (the platforms' solid mask).
+ * @param {number} x - World X
+ * @param {number} y - World Y
+ * @returns {boolean}
+ */
+export function isSoil(x, y) {
+  return isSolidIn(solidMask(), x, y)
+}
+
+/**
  * The crawl runs over every side of the platforms (traced once per page).
  * @returns {Array<{pts: Array<{x: number, y: number, nx: number, ny: number, tx: number, ty: number}>, s: Float32Array, len: number, closed: boolean}>}
  */

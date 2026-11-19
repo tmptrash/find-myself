@@ -387,12 +387,15 @@ function updateRespawn(inst) {
   inst.dead = false
 }
 //
-// Saved safe platform if any, else the ledge under the roots' hole (where
-// the forest's glimpse of the cave showed him land).
+// Saved safe platform if any (and still a dry spot on it: a save from
+// before the layout changed may lie off it or in the lake), else the
+// ledge under the roots' hole (where the forest's glimpse of the cave
+// showed him land).
 //
 function startPose(inst) {
   const saved = inst.safe && Layout.PLATFORMS.find(p => p.id === inst.safe.id)
-  return saved ? Ground.standPoseOn(saved, inst.safe.x) : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
+  const pose = saved && inst.safe.x >= saved.x1 && inst.safe.x <= saved.x2 ? Ground.standPoseOn(saved, inst.safe.x) : null
+  return pose && !Layout.isInLake(pose.x, pose.y) ? pose : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
 }
 function spawnHero(inst, pose) {
   const k = inst.k

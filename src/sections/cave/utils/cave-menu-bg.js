@@ -7,14 +7,15 @@ import * as Atlas from './cave-atlas.js'
 import * as Backdrop from './cave-backdrop.js'
 import * as Layout from './cave-layout.js'
 import * as Scene from './cave-scene.js'
+import * as Surface from './cave-surface.js'
 //
 // The cave level as the menu's backdrop: the room round the hero's landing
 // spot (back layers, the earth ledge with its moss and props, the ceiling
 // with the roots' hole), painted by the level's own painters scaled to
 // cover the screen and baked once per live k and screen size, with the
-// level's runners scurrying over it and its big stones in front (both
-// drawn live in its world, scaled onto the screen), and fireflies
-// drifting over it. The bottom sinks into shade
+// level's runners scurrying over it, fireflies drifting in the open air
+// between its platforms (never over the soil) and its big stones in front
+// (all drawn live in its world, scaled onto the screen). The bottom sinks into shade
 // so the menu's key hints stay readable.
 //
 const SPRITE_PREFIX = 'cave0-menu-v4-'
@@ -61,7 +62,12 @@ export function create(cfg) {
     tiles: bake(k, w, h, place),
     front: ready ? Front.create(k) : null,
     runners: ready ? Runner.createAll(k) : [],
-    fireflies: Fireflies.create({ k, bounds: { x1: 0, y1: 0, x2: w, y2: h * SHADE_FROM }, count: FIREFLY_COUNT })
+    fireflies: Fireflies.create({
+      k,
+      bounds: { x1: place.x1, y1: place.y1, x2: place.x2, y2: place.y1 + VIEW_H * SHADE_FROM },
+      count: FIREFLY_COUNT,
+      isOpen: ready ? isOpenAir : undefined
+    })
   }
 }
 
@@ -86,7 +92,8 @@ export function onUpdate(inst) {
 }
 
 /**
- * Draws the picture, the runners and stones, then the fireflies.
+ * Draws the picture, then the runners, the fireflies and the stones in
+ * front.
  * @param {Object} inst - Backdrop instance
  * @param {number} opacity - Cross-fade 0 … 1
  */
@@ -95,11 +102,10 @@ export function onDraw(inst, opacity) {
   inst.tiles.forEach(tile => k.drawSprite({ sprite: tile.name, pos: k.vec2(tile.x, 0), opacity }))
   if (opacity < 1) return
   drawWorldLife(inst)
-  Fireflies.onDraw(inst.fireflies, -Infinity, Infinity, opacity)
 }
 //
-// The runners, then the big stones in front of them, in the level's world
-// scaled onto the screen the way the picture is.
+// The runners, the fireflies, then the big stones in front of them, in
+// the level's world scaled onto the screen the way the picture is.
 //
 function drawWorldLife(inst) {
   const k = inst.k
@@ -108,8 +114,15 @@ function drawWorldLife(inst) {
   k.pushScale(k.vec2(place.scale, place.scale))
   k.pushTranslate(k.vec2(-place.x1, -place.y1))
   inst.runners.forEach(runner => Runner.onDraw(runner, inst.world))
+  Fireflies.onDraw(inst.fireflies, inst.world.top, inst.world.bottom)
   inst.front && Front.onDraw(inst.front, inst.world)
   k.popTransform()
+}
+//
+// Open air for the fireflies: not in the soil.
+//
+function isOpenAir(x, y) {
+  return !Surface.isSoil(x, y)
 }
 //
 // World → screen: the shown rect's height fills the screen; it is placed so

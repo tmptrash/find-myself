@@ -69,11 +69,13 @@ const BEAT_HZ_PER_SPEED = 0.035
 const BEAT_VERT = 0.05
 const HOVER_BEAT = 0.25
 //
-// Roaming: a new spot within ROAM_REACH px (and anywhere in z) on getting
-// within ROAM_ARRIVE px or after ROAM_TIME..+RANGE s; on arriving it may
-// hang still (HOVER_CHANCE) for HOVER_TIME..+RANGE s.
+// Roaming: a new spot within ROAM_REACH px (and anywhere in z, ROAM_BED px
+// or more over the bed) on getting within ROAM_ARRIVE px or after
+// ROAM_TIME..+RANGE s; on arriving it may hang still (HOVER_CHANCE) for
+// HOVER_TIME..+RANGE s — in open water only, never resting on the bed.
 //
 const ROAM_REACH = 260
+const ROAM_BED = 30
 const ROAM_ARRIVE = 14
 const ROAM_TIME = 4
 const ROAM_TIME_RANGE = 5
@@ -141,7 +143,12 @@ const MOUTH_EASE = 14
 //
 // Back in the water it keeps ENTRY_KEEP of its speed and dives for
 // DIVE_TIME s. Fear: the hero in the water within FLEE_R px, or a splash
-// (startle) within STARTLE_R, sends it off for FLEE_TIME s.
+// (startle) within STARTLE_R, sends it off FLEE_REACH px away for at most
+// FLEE_TIME s, into the middle of the water (FLEE_DEPTH..+RANGE of the
+// way from the top it keeps to the bed, never against the bed); with less
+// than FLEE_CORNER px of water left that way it slips past the danger
+// instead, along the far side of the depth. Once there, still afraid, it
+// picks a new way.
 //
 const ENTRY_KEEP = 0.45
 const DIVE_TIME = 0.8
@@ -150,6 +157,9 @@ const FLEE_R = 160
 const STARTLE_R = 420
 const FLEE_TIME = 1.6
 const FLEE_REACH = 260
+const FLEE_CORNER = 120
+const FLEE_DEPTH = 0.3
+const FLEE_DEPTH_RANGE = 0.4
 //
 // Fins: the tail fan's least width when edge-on and its extra flex behind
 // the last bone (rad, lagging the beat); the side fins' rest angle and
@@ -195,7 +205,7 @@ const CULL_MARGIN = 60
 //
 // The school (createAll): count, sizes, seed.
 //
-const COUNT = 5
+const COUNT = 6
 const SET_SIZE = 0.9
 const SET_SIZE_RANGE = 0.4
 const SET_SEED = 7420
@@ -407,7 +417,7 @@ function decide(inst, ctx, dt) {
   const threat = ctx.threats.find(t => Math.abs(t.x - head.x) < FLEE_R && Math.abs(t.y - head.y) < FLEE_R)
   if (threat && inst.mode !== MODE.FLEE) flee(inst, threat.x)
   if (inst.mode === MODE.FLEE) {
-    inst.modeT >= FLEE_TIME && toCruise(inst)
+    if (dist3(head, inst.target) < ROAM_ARRIVE || inst.modeT >= FLEE_TIME) toCruise(inst)
     return
   }
   if (inst.mode === MODE.DIVE) {
@@ -455,13 +465,18 @@ function gather(inst, swarm) {
 function flee(inst, fromX) {
   const head = inst.joints[0]
   const away = Math.sign(head.x - fromX) || inst.facing
+  const room = away > 0 ? inst.maxX - head.x : head.x - inst.minX
+  const cornered = room < FLEE_CORNER
+  const way = cornered ? -away : away
+  const x = clamp(head.x + way * FLEE_REACH, inst.minX, inst.maxX)
+  const top = topFor(inst, x, TOP_PAD)
   inst.mode = MODE.FLEE
   inst.modeT = 0
   inst.prey = null
   inst.want = FLEE_SPEED
-  inst.target.x = clamp(head.x + away * FLEE_REACH, inst.minX, inst.maxX)
-  inst.target.y = bottomFor(inst, inst.target.x)
-  inst.target.z = (inst.rng() * 2 - 1) * Z_MAX
+  inst.target.x = x
+  inst.target.y = top + (bottomFor(inst, x) - top) * (FLEE_DEPTH + inst.rng() * FLEE_DEPTH_RANGE)
+  inst.target.z = cornered ? (Math.sign(head.z) || inst.turnSide) * -Z_MAX : (inst.rng() * 2 - 1) * Z_MAX
 }
 //
 // Roaming: on to a new spot when there (or after a while), hanging still
@@ -477,7 +492,7 @@ function roam(inst, dt) {
   }
   const head = inst.joints[0]
   const there = dist3(head, inst.target) < ROAM_ARRIVE
-  if (there && inst.rng() < HOVER_CHANCE) {
+  if (there && head.y < bottomFor(inst, head.x) - ROAM_BED && inst.rng() < HOVER_CHANCE) {
     inst.hoverIn = HOVER_TIME + inst.rng() * HOVER_TIME_RANGE
     return
   }
@@ -487,7 +502,7 @@ function pickRoam(inst) {
   const head = inst.joints[0]
   const x = clamp(head.x + (inst.rng() * 2 - 1) * ROAM_REACH, inst.minX, inst.maxX)
   const top = topFor(inst, x, TOP_PAD)
-  const bottom = bottomFor(inst, x)
+  const bottom = Math.max(top, bottomFor(inst, x) - ROAM_BED)
   inst.target.x = x
   inst.target.y = top + (bottom - top) * inst.rng()
   inst.target.z = (inst.rng() * 2 - 1) * Z_MAX

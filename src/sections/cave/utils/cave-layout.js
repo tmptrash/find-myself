@@ -14,7 +14,7 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 // shaft drops from the hall's floor straight down into that passage (the
 // hall's floor starts WEST_SHAFT_X px in from the world's left edge).
 //
-export const WORLD_W = 2260
+export const WORLD_W = 2760
 export const WORLD_H = 1520
 //
 // Invisible wall bodies along both edges; the painted earth is wider and
@@ -37,7 +37,9 @@ const CEILING_KNOTS = [
   { x: 1380, y: 160 },
   { x: 1650, y: 130 },
   { x: 1950, y: 110 },
-  { x: 2320, y: 120 }
+  { x: 2200, y: 115 },
+  { x: 2500, y: 125 },
+  { x: 2820, y: 120 }
 ]
 //
 // The roots' hole through the ceiling the hero dropped through (the
@@ -62,7 +64,7 @@ const ENTRY_FINE_SEED = 7.9
 // just wide enough to catch a hero dropping straight through the gap above.
 //
 export const LAKE_X1 = 505
-export const LAKE_X2 = 1500
+export const LAKE_X2 = 2120
 export const LAKE_SURFACE_Y = 860
 //
 // Hero feet sit this far below the character anchor.
@@ -90,8 +92,11 @@ const K = PLATFORM_KIND
 // platform's). A float is `w` px wide, centred on `x`, its flat top at
 // `y`, cut from piece `piece` of platforms.png.
 // Floats climb within a run-jump of each other (reach ≈ 147 px, rise
-// ≈ 100 px): from the lake's right bank up into the crevice, and down the
-// shaft.
+// ≈ 100 px): from the lake's right bank up the crevice and down the shaft,
+// both zigzagging between two columns of floats. The middle ledge ends
+// MID_LEDGE_OVER px past the lake (a hero dropping off it lands on the
+// bank), the crevice is CREVICE_W px wide, its columns CREVICE_COL_L and
+// CREVICE_COL_R px in from the ledge's end.
 //
 const HALL_FLOOR_ID = 'hallFloor'
 const WEST_SHAFT_X = 200
@@ -100,17 +105,30 @@ const PASSAGE_TOP_Y = 1260
 const PASSAGE_FLOOR_Y = 1440
 const UPPER_X2 = 400
 export const MID_LEDGE_X1 = 465
-const EYE_LEDGE_X1 = 1780
-const EYE_LEDGE_X2 = 1950
+const MID_LEDGE_OVER = 40
+const MID_LEDGE_X2 = LAKE_X2 + MID_LEDGE_OVER
+const CREVICE_W = 170
+const CREVICE_COL_L = MID_LEDGE_X2 + 40
+const CREVICE_COL_R = MID_LEDGE_X2 + 130
+const EYE_LEDGE_X1 = MID_LEDGE_X2 + CREVICE_W
+const EYE_LEDGE_X2 = EYE_LEDGE_X1 + 170
+//
+// The shaft by the right wall, between the stalk-eye's ledge and the wall:
+// its floats zigzag between a left column SHAFT_L_IN px off the ledge's
+// end and a right one SHAFT_R_IN px in from the world's edge (clear of the
+// wall's ragged face), each float nudged a little off its column.
+//
+const SHAFT_L_IN = 40
+const SHAFT_R_IN = 132
 export const PLATFORMS = [
   { id: 'upper', x1: 0, x2: UPPER_X2, y: 410, kind: K.LEDGE, seed: 11 },
-  { id: 'midLedge', x1: MID_LEDGE_X1, x2: 1540, y: 380, top: [[MID_LEDGE_X1, 380], [1300, 380], [1540, 402]], kind: K.LEDGE, seed: 13 },
+  { id: 'midLedge', x1: MID_LEDGE_X1, x2: MID_LEDGE_X2, y: 380, top: [[MID_LEDGE_X1, 380], [MID_LEDGE_X2 - 240, 380], [MID_LEDGE_X2, 402]], kind: K.LEDGE, seed: 13 },
   {
     id: HALL_FLOOR_ID,
     x1: WEST_SHAFT_X,
     x2: EYE_LEDGE_X1 + 20,
     y: HALL_FLOOR_Y,
-    top: [[WEST_SHAFT_X, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1350, 1117], [1430, 1072], [1470, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
+    top: [[WEST_SHAFT_X, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 30, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
     bottom: PASSAGE_TOP_Y,
     joinR: true,
     kind: K.LEDGE,
@@ -118,36 +136,36 @@ export const PLATFORMS = [
   },
   { id: 'eyeLedge', x1: EYE_LEDGE_X1, x2: EYE_LEDGE_X2, y: 430, bottom: PASSAGE_TOP_Y, faceTo: HALL_FLOOR_Y, under: HALL_FLOOR_ID, kind: K.LEDGE, seed: 23 },
   { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, 1432], [820, 1444], [1240, 1434], [1640, 1442], [WORLD_W, 1436]], kind: K.GROUND, seed: 59 },
-  { id: 'crevice1', x: 1560, y: 770, w: 70, piece: 'float10', kind: K.FLOAT, seed: 47 },
-  { id: 'crevice2', x: 1615, y: 690, w: 60, piece: 'float7', kind: K.FLOAT, seed: 51 },
-  { id: 'crevice3', x: 1665, y: 620, w: 60, piece: 'float14', kind: K.FLOAT, seed: 48 },
-  { id: 'crevice4', x: 1740, y: 555, w: 55, piece: 'float2', kind: K.FLOAT, seed: 49 },
-  { id: 'crevice5', x: 1675, y: 490, w: 55, piece: 'float11', kind: K.FLOAT, seed: 50 },
-  { id: 'shaft1', x: 2060, y: 505, w: 70, piece: 'float7', kind: K.FLOAT, seed: 61 },
-  { id: 'shaft2', x: 2000, y: 585, w: 60, piece: 'float12', kind: K.FLOAT, seed: 62 },
-  { id: 'shaft3', x: 2105, y: 655, w: 65, piece: 'float5', kind: K.FLOAT, seed: 63 },
-  { id: 'shaft4', x: 2030, y: 730, w: 55, piece: 'float18', kind: K.FLOAT, seed: 64 },
-  { id: 'shaft5', x: 2120, y: 805, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
-  { id: 'shaft6', x: 2010, y: 880, w: 70, piece: 'float15', kind: K.FLOAT, seed: 66 },
-  { id: 'shaft7', x: 2095, y: 960, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
-  { id: 'shaft8', x: 2020, y: 1040, w: 65, piece: 'float16', kind: K.FLOAT, seed: 68 },
-  { id: 'shaft9', x: 2110, y: 1120, w: 60, piece: 'float4', kind: K.FLOAT, seed: 69 },
-  { id: 'shaft10', x: 2035, y: 1190, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 },
-  { id: 'shaft11', x: 2115, y: 1275, w: 60, piece: 'float3', kind: K.FLOAT, seed: 71 },
-  { id: 'shaft12', x: 2030, y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 }
+  { id: 'crevice1', x: CREVICE_COL_L, y: 770, w: 70, piece: 'float10', kind: K.FLOAT, seed: 47 },
+  { id: 'crevice2', x: CREVICE_COL_R, y: 690, w: 60, piece: 'float7', kind: K.FLOAT, seed: 51 },
+  { id: 'crevice3', x: CREVICE_COL_L, y: 620, w: 60, piece: 'float14', kind: K.FLOAT, seed: 48 },
+  { id: 'crevice4', x: CREVICE_COL_R, y: 555, w: 55, piece: 'float2', kind: K.FLOAT, seed: 49 },
+  { id: 'crevice5', x: CREVICE_COL_L, y: 490, w: 55, piece: 'float11', kind: K.FLOAT, seed: 50 },
+  { id: 'shaft1', x: shaftR(30), y: 505, w: 60, piece: 'float7', kind: K.FLOAT, seed: 61 },
+  { id: 'shaft2', x: shaftL(0), y: 585, w: 60, piece: 'float12', kind: K.FLOAT, seed: 62 },
+  { id: 'shaft3', x: shaftR(7), y: 655, w: 60, piece: 'float5', kind: K.FLOAT, seed: 63 },
+  { id: 'shaft4', x: shaftL(15), y: 730, w: 55, piece: 'float18', kind: K.FLOAT, seed: 64 },
+  { id: 'shaft5', x: shaftR(0), y: 805, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
+  { id: 'shaft6', x: shaftL(5), y: 880, w: 60, piece: 'float15', kind: K.FLOAT, seed: 66 },
+  { id: 'shaft7', x: shaftR(12), y: 960, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
+  { id: 'shaft8', x: shaftL(10), y: 1040, w: 60, piece: 'float16', kind: K.FLOAT, seed: 68 },
+  { id: 'shaft9', x: shaftR(5), y: 1120, w: 60, piece: 'float4', kind: K.FLOAT, seed: 69 },
+  { id: 'shaft10', x: shaftL(17), y: 1190, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 },
+  { id: 'shaft11', x: shaftR(2), y: 1275, w: 60, piece: 'float3', kind: K.FLOAT, seed: 71 },
+  { id: 'shaft12', x: shaftL(15), y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 }
 ].map(p => (p.kind === K.FLOAT ? { ...p, x1: p.x - p.w / 2, x2: p.x + p.w / 2 } : p))
 //
 // The exit: the crevice between the two upper ledges (its span), from
 // their tops down into the hall under them.
 //
-export const EXIT = { x1: 1540, x2: EYE_LEDGE_X1 }
+export const EXIT = { x1: MID_LEDGE_X2, x2: EYE_LEDGE_X1 }
 //
 // The stalk-eye on its ledge right past the exit, before the shaft; the
 // dormant lantern mushroom left of where the hero lands (`on` names the
 // platform each stands on; `y` is its base line, the art's own top is
 // cave-ground.js's).
 //
-export const STALK_EYE = { x: 1860, y: 430, on: 'eyeLedge' }
+export const STALK_EYE = { x: EYE_LEDGE_X1 + 80, y: 430, on: 'eyeLedge' }
 export const LANTERN = { x: 145, y: 410, on: 'upper' }
 //
 // Bounds for ambient fireflies.
@@ -318,6 +336,16 @@ function placeCeilingBulges() {
     out.push({ x, depth: CEILING_BULGE_DEPTH + rng() * CEILING_BULGE_DEPTH_RANGE, half: CEILING_BULGE_HALF + rng() * CEILING_BULGE_HALF_RANGE })
   }
   return out
+}
+//
+// A shaft float's X in the left or right column, `dx` px toward the
+// shaft's middle.
+//
+function shaftL(dx) {
+  return EYE_LEDGE_X2 + SHAFT_L_IN + dx
+}
+function shaftR(dx) {
+  return WORLD_W - SHAFT_R_IN - dx
 }
 function baseKnots(p) {
   return p.top ?? [[p.x1, p.y], [p.x2, p.y]]

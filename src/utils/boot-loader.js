@@ -1,10 +1,17 @@
 import { FOREST_SUN_LIT_FRAC, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y } from '../sections/forest/utils/forest-eye-berry.js'
+import * as CaveLoaderEye from '../sections/cave/utils/cave-loader-eye.js'
 import { CFG } from '../cfg.js'
 import { focusGameCanvas } from './canvas-focus.js'
+import * as EyeMotion from './loader-eye-motion.js'
 //
 // Shared DOM loader. Fatal errors may replace innerHTML —
-// ensureLoaderStructure() rebuilds the eye before reuse.
+// ensureLoaderStructure() rebuilds the eye before reuse. Its eye follows
+// the scene being loaded (setLoaderScene): the cave's stalk-eye
+// (cave-loader-eye.js) for a cave level (CAVE_SCENE_PREFIX), the forest's
+// chain-buoy stalk-eye for everything else.
 //
+const LOADER_STYLE = { FOREST: 'forest', CAVE: 'cave' }
+const CAVE_SCENE_PREFIX = 'lesson-cave'
 const LOADER_PANEL_ID = 'loader-panel'
 const LOADER_EYE_ID = 'loader-eye'
 //
@@ -77,20 +84,14 @@ const EYE_PUPIL_FRAC = 0.4
 const EYE_PUPIL_R = EYE_R * EYE_PUPIL_FRAC
 const STALK_MAX_LEN = EYE_VIEW_W - STALK_ROOT_X - EYE_R * 2 - EYE_CONTOUR_W * 2
 //
-// Pupil saccades: a quick dart to a random spot, then a hold, as if the eye
-// is tracking something that keeps moving around the screen.
+// How far the pupil looks off the middle (its darts and the blinks:
+// loader-eye-motion.js).
 //
 const PUPIL_MAX_OFFSET = EYE_R - EYE_PUPIL_R - 1
-const PUPIL_DART_RATE = 14
-const PUPIL_HOLD_MIN_SEC = 0.7
-const PUPIL_HOLD_MAX_SEC = 2.2
-const PUPIL_MIN_REACH = 0.35
-const PUPIL_CENTER_CHANCE = 0.15
 //
-// Occasional blink: a stem-coloured lid slides down over the berry with its
-// lower edge bowed into an arc, reaches the bottom, then lifts back.
+// Blink: a stem-coloured lid slides down over the berry with its lower
+// edge bowed into an arc, reaches the bottom, then lifts back.
 //
-const BLINK_SEC = 0.32
 const EYE_LID_BULGE = EYE_R * 0.9
 const EYE_LID_OVERHANG = 2
 const EYE_LID_CLIP_ID = 'loader-eye-lid-clip'
@@ -99,8 +100,6 @@ const EYE_LID_CLIP_ID = 'loader-eye-lid-clip'
 // berry's edge never show through a closed lid.
 //
 const EYE_LID_AA_PAD = 0.5
-const BLINK_GAP_MIN_SEC = 0.9
-const BLINK_GAP_MAX_SEC = 2.1
 const MAX_FRAME_DT = 0.05
 //
 // Optional owner of the hide sequence (CRT intro keeps snow running after the bar finishes).
@@ -142,9 +141,12 @@ const LOADER_Z_OVER_CRT = '10001'
 const LOADER_BG_OPAQUE = '#000000'
 const LOADER_BG_TRANSPARENT = 'transparent'
 //
-// Live SVG nodes and animation state of the loader eye.
+// Live SVG nodes and animation state of the loader eye: the forest's
+// (`eye`) or the cave's (`caveEye`), whichever the style asks for.
 //
 let eye = null
+let caveEye = null
+let loaderStyle = LOADER_STYLE.FOREST
 //
 // Finish run: stalk grows to 100% before hiding; showLoader() bumps the token
 // to cancel a pending hide and keep the same session going.
@@ -169,13 +171,24 @@ export function setLoaderBarCreepBoost(boosted) {
   isLoaderVisible() && startLoaderBarAnimation()
 }
 /**
- * Builds the loader panel (caption + eye on a stalk) if it is missing.
+ * Picks the loader's eye for the scene about to be loaded: the cave's for a
+ * cave level, the forest's otherwise. Takes effect the next time the
+ * loader shows.
+ * @param {string|null} sceneName - Scene being loaded
+ */
+export function setLoaderScene(sceneName) {
+  loaderStyle = sceneName?.startsWith(CAVE_SCENE_PREFIX) ? LOADER_STYLE.CAVE : LOADER_STYLE.FOREST
+}
+/**
+ * Builds the loader panel (caption + eye on a stalk) if it is missing or
+ * shows the other style's eye.
  */
 function ensureLoaderStructure() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   const svg = document.getElementById(LOADER_EYE_ID)
-  if (document.getElementById(LOADER_PANEL_ID) && svg?.dataset.revision === String(LOADER_EYE_REVISION)) return
+  const current = svg?.dataset.revision === String(LOADER_EYE_REVISION) && svg.dataset.style === loaderStyle
+  if (document.getElementById(LOADER_PANEL_ID) && current) return
   loaderEl.innerHTML = ''
   loaderEl.appendChild(buildLoaderPanel())
 }
@@ -301,6 +314,7 @@ export function showFatalLoaderError(message, opts = {}) {
   if (!loaderEl) return
   stopLoaderBarAnimation()
   eye = null
+  caveEye = null
   loaderEl.innerHTML = `<div style="color:#fff;font-family:${CFG.visual.fonts.regularFull};text-align:center;padding:24px">${message}</div>`
   loaderEl.style.display = 'flex'
   opts.onTap && loaderEl.addEventListener('click', opts.onTap, { once: true })
@@ -358,7 +372,12 @@ function buildLoaderPanel() {
     borderRadius: '8px',
     background: 'transparent'
   })
-  panel.appendChild(buildLoaderEyeSvg(colors))
+  eye = null
+  caveEye = loaderStyle === LOADER_STYLE.CAVE ? CaveLoaderEye.create(LOADER_EYE_ID) : null
+  const svg = caveEye ? caveEye.svg : buildLoaderEyeSvg(colors)
+  svg.dataset.revision = String(LOADER_EYE_REVISION)
+  svg.dataset.style = loaderStyle
+  panel.appendChild(svg)
   return panel
 }
 //
@@ -373,7 +392,6 @@ function buildLoaderEyeSvg(colors) {
     height: EYE_VIEW_H,
     viewBox: `0 0 ${EYE_VIEW_W} ${EYE_VIEW_H}`
   })
-  svg.dataset.revision = String(LOADER_EYE_REVISION)
   svg.style.overflow = 'visible'
   svg.style.width = `min(${EYE_VIEW_W}px, ${LOADER_MAX_VW}vw)`
   svg.style.height = 'auto'
@@ -434,13 +452,7 @@ function buildLoaderEyeSvg(colors) {
     lidEdge,
     pupil,
     time: 0,
-    pupilX: 0,
-    pupilY: 0,
-    targetX: 0,
-    targetY: 0,
-    holdLeft: 0,
-    blinkLeft: 0,
-    blinkGap: randomRange(BLINK_GAP_MIN_SEC, BLINK_GAP_MAX_SEC)
+    motion: EyeMotion.create(PUPIL_MAX_OFFSET)
   }
   return svg
 }
@@ -485,13 +497,17 @@ function svgEl(tag, attrs) {
   return el
 }
 //
-// Advances the pupil / blink state and redraws the stalk at the shown progress.
+// Advances the pupil / blink state and redraws the stalk at the shown
+// progress (the cave's eye draws itself).
 //
 function drawLoaderEye(dt) {
+  if (caveEye) {
+    CaveLoaderEye.onDraw(caveEye, dt, loaderBarDisplayPct)
+    return
+  }
   if (!eye) return
   eye.time += dt
-  tickPupilSaccade(dt)
-  const lidClose = tickBlink(dt)
+  const lidClose = EyeMotion.onUpdate(eye.motion, dt)
   const len = STALK_MAX_LEN * loaderBarDisplayPct / 100
   const points = buildStalkPoints(STALK_ROOT_X + len)
   const joints = points.slice(1, -1)
@@ -508,8 +524,8 @@ function drawLoaderEye(dt) {
   eye.stalkBody.setAttribute('d', stalkPath)
   eye.eyeGroup.setAttribute('transform', `translate(${tip.x + EYE_R} ${tip.y})`)
   drawLoaderLid(lidClose)
-  eye.pupil.setAttribute('cx', eye.pupilX.toFixed(2))
-  eye.pupil.setAttribute('cy', eye.pupilY.toFixed(2))
+  eye.pupil.setAttribute('cx', eye.motion.pupilX.toFixed(2))
+  eye.pupil.setAttribute('cy', eye.motion.pupilY.toFixed(2))
 }
 //
 // Joints every segment length plus the partial tip; the wave grows from zero
@@ -580,47 +596,6 @@ function stalkYAt(x) {
 }
 
 //
-// Quick dart toward the current target, hold, then pick a new spot (now and
-// then straight ahead, so it reads as looking around rather than jittering).
-//
-function tickPupilSaccade(dt) {
-  eye.holdLeft -= dt
-  if (eye.holdLeft <= 0) {
-    pickPupilTarget()
-    eye.holdLeft = randomRange(PUPIL_HOLD_MIN_SEC, PUPIL_HOLD_MAX_SEC)
-  }
-  const ease = Math.min(1, dt * PUPIL_DART_RATE)
-  eye.pupilX += (eye.targetX - eye.pupilX) * ease
-  eye.pupilY += (eye.targetY - eye.pupilY) * ease
-}
-
-function pickPupilTarget() {
-  if (Math.random() < PUPIL_CENTER_CHANCE) {
-    eye.targetX = 0
-    eye.targetY = 0
-    return
-  }
-  const angle = Math.random() * Math.PI * 2
-  const reach = PUPIL_MAX_OFFSET * randomRange(PUPIL_MIN_REACH, 1)
-  eye.targetX = Math.cos(angle) * reach
-  eye.targetY = Math.sin(angle) * reach
-}
-//
-// Returns how far the lid is down (0 open, 1 fully closed): a smooth
-// close-then-open over BLINK_SEC.
-//
-function tickBlink(dt) {
-  if (eye.blinkLeft > 0) {
-    eye.blinkLeft = Math.max(0, eye.blinkLeft - dt)
-    return Math.sin(Math.PI * (1 - eye.blinkLeft / BLINK_SEC))
-  }
-  eye.blinkGap -= dt
-  if (eye.blinkGap > 0) return 0
-  eye.blinkLeft = BLINK_SEC
-  eye.blinkGap = randomRange(BLINK_GAP_MIN_SEC, BLINK_GAP_MAX_SEC)
-  return 0
-}
-//
 // Lid lower edge is a downward-bowed arc; its ends start just above the berry
 // (arc middle on the top rim) and end at the bottom rim, so a full blink
 // covers the whole eye.
@@ -638,9 +613,6 @@ function drawLoaderLid(close) {
   eye.lidEdge.setAttribute('d', `M${side} ${edgeY.toFixed(2)} ${arc}`)
 }
 
-function randomRange(min, max) {
-  return min + Math.random() * (max - min)
-}
 //
 // Over CRT snow the panel turns into a solid plate so the caption and the eye
 // never drown in the static.

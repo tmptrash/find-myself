@@ -46,6 +46,7 @@ async function boot() {
   PerfReadout.create()
   ContextRecovery.create()
   const startScene = new URLSearchParams(location.search).get('scene') || 'ready'
+  BootLoader.setLoaderScene(startScene)
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)
   let k

@@ -55,6 +55,7 @@ export function bumpPrepareCancelNonce() {
  *   pack-prep step plus additional work of its own (see native-prelevel handling in transition.js)
  */
 export async function prepareSceneAssets(k, sceneName, opts = {}) {
+  BootLoader.setLoaderScene(sceneName)
   const retainLoader = opts.retainLoader === true
   const deferLoaderReveal = opts.deferLoaderReveal === true
   const packKey = sceneToPackKey(sceneName)

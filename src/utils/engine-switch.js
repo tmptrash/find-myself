@@ -133,6 +133,7 @@ export function resolutionModeForScene(sceneName) {
  * @returns {Promise<{ k: Object, switched: boolean }>}
  */
 export async function ensureEngineForScene(sceneName, opts = {}) {
+  BootLoader.setLoaderScene(sceneName)
   const neededMode = resolutionModeForScene(sceneName)
   if (neededMode === activeResolutionMode && activeEngine) {
     return { k: activeEngine, switched: false }

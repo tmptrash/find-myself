@@ -2,6 +2,7 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
+import * as Layout from '../utils/cave-layout.js'
 import * as Surface from '../utils/cave-surface.js'
 //
 // The runner: a small insect of runner.png's parts — a body under a leaf
@@ -11,7 +12,9 @@ import * as Surface from '../utils/cave-surface.js'
 // tops, sides and undersides (cave-surface.js's crawl runs), never into
 // the lake — the way insects do: short dashes and still pauses, now and
 // then turning back, turning back at a run's end — and afraid of the
-// hero: once he comes close it bolts away from him, fast.
+// hero: once he comes close it bolts away from him, fast. Standing on a
+// top it now and then leaps up at a firefly over it, eating it — or
+// missing it and just landing again.
 //
 // The body rides its run, its hips HIP_LIFT over the surface, turned to
 // the run's slope over its own length (the chord BODY_SPAN either side),
@@ -190,6 +193,78 @@ const TAIL_RUN_SWAY = 14
 const TAIL_RUN_HZ = 6
 const TAIL_RUN_SPEED = 150
 //
+// Hunting fireflies (world px, s). It runs about (patrol) until, on a top
+// (its down within TOP_DOWN of straight down), unafraid and rested
+// (HUNT_REST..+RANGE s since its last hunt), it looks up every WATCH_LOOK
+// s and with WATCH_CHANCE takes to watching a firefly within WATCH_R px
+// along and WATCH_HIGH over it: it tracks it — dashes and pauses as when
+// it runs about, each dash toward the firefly (turning about first if the
+// firefly has got behind it, a dash cut short when it does), still once
+// within STALK_NEAR px of under it — its head turned up to it on its
+// neck, for HUNT_TIME..+RANGE s or until it loses it (LOSE_R px off), is
+// scared or leaves the top. Once the firefly sinks low enough —
+// JUMP_LOW..JUMP_HIGH px over its hips and within JUMP_REACH px along, for
+// AIM_TIME s — it leaps, and the hunt is over: an arc (gravity JUMP_G)
+// whose top takes its head
+// to the firefly — MISS_CHANCE of the leaps aimed MISS_OFF..+RANGE px off,
+// so it misses — landing as far again on along its run (never a leap
+// whose landing falls past the run's end, nor one whose arc, checked at
+// ARC_CHECKS points, runs into the soil). Its legs: it crouches first
+// (its hips CROUCH_DIP sheet px lower over CROUCH_TIME s), then its feet
+// stay planted as it springs off — the legs straightening — for the first
+// PUSH_U of the flight, are drawn up to the body (TUCK of their rest
+// spread and drop) by TUCK_U, and from REACH_U reach out and down for the
+// ground again; landed, it gives at the hips like a spring (kicked down at
+// LAND_KICK sheet px/s, stiffness SPRING_K, damping SPRING_DAMP, at rest
+// within SPRING_REST) on its planted feet. In the air its body turns
+// PITCH_SHARE of the way to its flight (at most PITCH_MAX rad) and bends —
+// its front BODY_BEND degrees up, its tail TAIL_BEND down, eased at
+// BEND_EASE per s — and its neck stretches up to NECK_REACH sheet px
+// toward the firefly; its head within CATCH_R px of a firefly eats it.
+// Watching, its neck only turns toward the firefly (NECK_UP..NECK_DOWN
+// rad off its rest line), easing at NECK_EASE per s.
+//
+const TOP_DOWN = 0.9
+const WATCH_LOOK = 0.5
+const WATCH_CHANCE = 0.6
+const WATCH_R = 240
+const WATCH_HIGH = 320
+const STALK_NEAR = 18
+const HUNT_TIME = 6
+const HUNT_TIME_RANGE = 8
+const HUNT_REST = 2
+const HUNT_REST_RANGE = 4
+const LOSE_R = 340
+const AIM_TIME = 0.15
+const BODY_BEND = 7
+const TAIL_BEND = 22
+const BEND_EASE = 8
+const NECK_REACH = 150
+const NECK_UP = -1.4
+const NECK_DOWN = 0.3
+const NECK_EASE = 10
+const JUMP_LOW = 25
+const JUMP_HIGH = 130
+const JUMP_REACH = 90
+const JUMP_G = 900
+const MISS_CHANCE = 0.35
+const MISS_OFF = 12
+const MISS_OFF_RANGE = 14
+const ARC_CHECKS = 8
+const TUCK = 0.45
+const CROUCH_TIME = 0.12
+const CROUCH_DIP = 110
+const PUSH_U = 0.12
+const TUCK_U = 0.35
+const REACH_U = 0.7
+const LAND_KICK = 2600
+const SPRING_K = 380
+const SPRING_DAMP = 16
+const SPRING_REST = 0.5
+const PITCH_SHARE = 0.5
+const PITCH_MAX = 0.6
+const CATCH_R = 9
+//
 // Off-view margin (world px) past which a runner is not drawn.
 //
 const CULL_MARGIN = 60
@@ -198,13 +273,19 @@ const MODE = { DASH: 'dash', PAUSE: 'pause' }
 // The level's runners (createAll): how many, spread over the crawl runs at
 // least SET_MIN_RUN px long — one on each, the rest by length (the longer
 // a run, the likelier) — sizes SET_SIZE..+RANGE; seeded so they start in
-// the same places (the level and the menu's picture of it alike).
+// the same places (the level and the menu's picture of it alike). The
+// first SET_HUNTERS start on a top in the fireflies' air (its outward
+// normal within TOP_DOWN of straight up, JUMP_HIGH px or more under their
+// highest reach and at most HUNT_BAND px under their lowest), where they
+// will hunt them.
 //
 const SET_COUNT = 7
 const SET_MIN_RUN = 250
 const SET_SIZE = 0.85
 const SET_SIZE_RANGE = 0.3
 const SET_SEED = 5150
+const SET_HUNTERS = 3
+const HUNT_BAND = 120
 const atlasFor = new WeakMap()
 let atlas = null
 
@@ -237,6 +318,17 @@ export function create(cfg) {
     dashSpeed: 0,
     fleeing: false,
     bolting: false,
+    jump: null,
+    dip: 0,
+    dipV: 0,
+    hunt: null,
+    huntRest: HUNT_REST + rng() * HUNT_REST_RANGE,
+    lookIn: WATCH_LOOK,
+    head: { x: HEAD_AT.x, y: HEAD_AT.y },
+    bend: 0,
+    landAt: {},
+    headAt: { x: 0, y: 0 },
+    arcAt: { x: 0, y: 0 },
     fleeHold: 0,
     lookOn: {},
     lookBack: {},
@@ -275,26 +367,43 @@ export function createAll(k) {
   const rng = createSeededRandom(SET_SEED)
   const runs = Surface.crawlRuns().filter(run => run.len >= SET_MIN_RUN)
   const total = runs.reduce((sum, run) => sum + run.len, 0)
+  const tops = huntingTops(runs)
   return Array.from({ length: SET_COUNT }, (_, i) => {
+    const top = i < SET_HUNTERS && tops.length ? tops[Math.floor(rng() * tops.length)] : null
     let pick = rng() * total
-    const run = runs[i] ?? runs.find(r => (pick -= r.len) < 0) ?? runs[runs.length - 1]
-    return create({ k, run, s: rng() * run.len, dir: rng() < HALF ? -1 : 1, size: SET_SIZE + rng() * SET_SIZE_RANGE, seed: Math.floor(rng() * SET_SEED) })
+    const run = top?.run ?? runs[i - SET_HUNTERS] ?? runs.find(r => (pick -= r.len) < 0) ?? runs[runs.length - 1]
+    const s = top ? top.s : rng() * run.len
+    return create({ k, run, s, dir: rng() < HALF ? -1 : 1, size: SET_SIZE + rng() * SET_SIZE_RANGE, seed: Math.floor(rng() * SET_SEED) })
   })
 }
 
 /**
- * Runs the runner on: its dash or pause, its body along the run, its legs.
+ * Runs the runner on: its dash or pause, its body along the run, its legs
+ * — or its leap for a firefly.
  * @param {Object} inst - Runner instance
  * @param {{x: number, y: number}|null} heroPos - The hero's centre (null: none to flee)
+ * @param {Object} [food] - Fireflies it may leap for
+ * @param {Array<{x: number, y: number}>} food.prey - The fireflies
+ * @param {(f: Object) => void} food.onEat - A firefly is eaten
  */
-export function onUpdate(inst, heroPos) {
+export function onUpdate(inst, heroPos, food = null) {
   const dt = inst.k.dt()
   inst.fleeHold = Math.max(0, inst.fleeHold - dt)
+  inst.tailPhase += dt * (TAIL_HZ + TAIL_RUN_HZ * runShare(inst))
+  inst.bend += ((inst.jump && inst.jump.t >= 0 ? 1 : 0) - inst.bend) * Math.min(1, BEND_EASE * dt)
+  if (inst.jump) {
+    const target = inst.jump.f
+    leap(inst, dt, food)
+    aimNeck(inst, target, NECK_REACH, dt)
+    return
+  }
   heroPos && flee(inst, heroPos)
   move(inst, dt)
-  inst.tailPhase += dt * (TAIL_HZ + TAIL_RUN_HZ * runShare(inst))
+  spring(inst, dt)
   placeBody(inst)
   updateLegs(inst, dt)
+  food && watch(inst, dt, food)
+  aimNeck(inst, inst.hunt?.f, 0, dt)
 }
 
 /**
@@ -316,6 +425,257 @@ export function onDraw(inst, view) {
   k.popTransform()
 }
 //
+// Now and then, standing on a top, rested and unafraid: a leap at a
+// firefly over it.
+//
+function watch(inst, dt, food) {
+  inst.huntRest -= dt
+  if (inst.hunt) {
+    stalk(inst, dt)
+    return
+  }
+  inst.lookIn -= dt
+  if (inst.huntRest > 0 || inst.lookIn > 0 || inst.fleeing || inst.d.y < TOP_DOWN) return
+  inst.lookIn = WATCH_LOOK
+  if (inst.rng() > WATCH_CHANCE) return
+  const f = food.prey.find(p => Math.abs(p.x - inst.pos.x) < WATCH_R && inst.pos.y - p.y > 0 && inst.pos.y - p.y < WATCH_HIGH)
+  if (!f) return
+  inst.hunt = { f, t: HUNT_TIME + inst.rng() * HUNT_TIME_RANGE, aim: 0 }
+  inst.timer = 0
+}
+//
+// Hunting: creeping along under the firefly, facing it (waiting at its
+// run's end if the firefly is past it), until it sinks
+// within a leap (held AIM_TIME s); lost, scared or tired of it, back to
+// running about.
+//
+function stalk(inst, dt) {
+  const hunt = inst.hunt
+  const f = hunt.f
+  hunt.t -= dt
+  const dx = f.x - inst.pos.x
+  const dy = inst.pos.y - f.y
+  if (hunt.t <= 0 || inst.fleeing || inst.d.y < TOP_DOWN || Math.hypot(dx, dy) > LOSE_R) {
+    endHunt(inst)
+    return
+  }
+  const behind = inst.mode === MODE.DASH && Math.abs(dx) > STALK_NEAR && towardOf(inst, dx) !== inst.dir
+  behind && (inst.timer = 0)
+  const inReach = Math.abs(dx) < JUMP_REACH && dy > JUMP_LOW && dy < JUMP_HIGH
+  hunt.aim = inReach ? hunt.aim + dt : 0
+  hunt.aim >= AIM_TIME && leapAt(inst, f) && endHunt(inst)
+}
+//
+// The hunt's next move once the last runs out: a dash toward the firefly
+// (turned toward it first), or — under it, or held at its run's end — a
+// pause facing it.
+//
+function huntStep(inst) {
+  const dx = inst.hunt.f.x - inst.pos.x
+  inst.dir = towardOf(inst, dx)
+  const end = inst.dir > 0 ? inst.run.len - END_PAD - 1 : END_PAD + 1
+  const blocked = !inst.run.closed && (inst.s - end) * inst.dir >= 0
+  if (Math.abs(dx) < STALK_NEAR || blocked) {
+    inst.mode = MODE.PAUSE
+    inst.timer = PAUSE_TIME + inst.rng() * PAUSE_TIME_RANGE
+    return
+  }
+  inst.mode = MODE.DASH
+  inst.timer = DASH_TIME + inst.rng() * DASH_TIME_RANGE
+  inst.dashSpeed = (DASH_SPEED + inst.rng() * DASH_SPEED_RANGE) * inst.unit / SCALE
+}
+//
+// Which way along the run leads toward a point dx off it (along X).
+//
+function towardOf(inst, dx) {
+  const at = Surface.sample(inst.run, inst.s, inst.at)
+  return Math.sign(dx * at.tx) || inst.dir
+}
+function endHunt(inst) {
+  inst.hunt = null
+  inst.huntRest = HUNT_REST + inst.rng() * HUNT_REST_RANGE
+}
+//
+// Its head on its neck: at rest as painted; watching a firefly, turned up
+// toward it; leaping, stretched out toward it (up to `reach` sheet px
+// more), easing there.
+//
+function aimNeck(inst, f, reach, dt) {
+  let tx = HEAD_AT.x
+  let ty = HEAD_AT.y
+  if (f) {
+    const from = toWorld(inst, NECK_FROM.x, NECK_FROM.y, inst.arcAt)
+    const wx = f.x - from.x
+    const wy = f.y - from.y
+    const lx = (wx * inst.f.x + wy * inst.f.y) / inst.unit
+    const ly = (wx * inst.d.x + wy * inst.d.y) / inst.unit
+    const rest = Math.atan2(HEAD_AT.y - NECK_FROM.y, HEAD_AT.x - NECK_FROM.x)
+    const turn = Math.max(NECK_UP, Math.min(NECK_DOWN, Math.atan2(ly, Math.max(0, lx)) - rest))
+    const len0 = Math.hypot(HEAD_AT.x - NECK_FROM.x, HEAD_AT.y - NECK_FROM.y)
+    const len = len0 + Math.max(0, Math.min(reach, Math.hypot(lx, ly) - len0 - HEAD_R))
+    tx = NECK_FROM.x + Math.cos(rest + turn) * len
+    ty = NECK_FROM.y + Math.sin(rest + turn) * len
+  }
+  const ease = Math.min(1, NECK_EASE * dt)
+  inst.head.x += (tx - inst.head.x) * ease
+  inst.head.y += (ty - inst.head.y) * ease
+}
+//
+// Off at a firefly: turned toward it, an arc whose top takes its head to
+// it (or off it, a miss), landing as far again on along the run.
+//
+function leapAt(inst, f) {
+  const at = Surface.sample(inst.run, inst.s, inst.at)
+  inst.dir = Math.sign((f.x - inst.pos.x) * at.tx) || inst.dir
+  placeBody(inst)
+  const head = toWorld(inst, inst.head.x, inst.head.y, inst.headAt)
+  const off = inst.rng() < MISS_CHANCE ? MISS_OFF + inst.rng() * MISS_OFF_RANGE : 0
+  const a = inst.rng() * Math.PI * 2
+  const ax = f.x - (head.x - inst.pos.x) + Math.cos(a) * off
+  const ay = f.y - (head.y - inst.pos.y) + Math.sin(a) * off
+  const s1 = inst.s + 2 * (ax - inst.pos.x) / (at.tx || 1)
+  if (!inst.run.closed && (s1 < END_PAD || s1 > inst.run.len - END_PAD)) return
+  const land = Surface.sample(inst.run, s1, inst.landAt)
+  const crouch = CROUCH_DIP * inst.unit
+  const jump = { t: -CROUCH_TIME, T: 0, x0: inst.pos.x + inst.d.x * crouch, y0: inst.pos.y + inst.d.y * crouch, x1: land.x, y1: land.y - HIP_LIFT * inst.unit, h: 0, s1, fx: inst.f.x, fy: inst.f.y, dx: inst.d.x, dy: inst.d.y }
+  jump.h = (jump.y0 + jump.y1) * HALF - ay
+  if (jump.h <= 0 || hitsSoil(inst, jump)) return
+  jump.T = 2 * Math.sqrt(2 * jump.h / JUMP_G)
+  jump.f = f
+  inst.jump = jump
+  inst.speed = 0
+  inst.dip = 0
+  inst.dipV = 0
+  inst.legs.forEach(leg => (leg.step = null))
+  return true
+}
+//
+// Whether a leap's arc runs into the soil.
+//
+function hitsSoil(inst, jump) {
+  for (let i = 1; i < ARC_CHECKS; i++) {
+    const p = arcAt(jump, i / ARC_CHECKS, inst.arcAt)
+    if (Surface.isSoil(p.x, p.y)) return true
+  }
+  return false
+}
+//
+// A leap's point at u (0 take-off … 1 landing).
+//
+function arcAt(jump, u, out) {
+  out.x = jump.x0 + (jump.x1 - jump.x0) * u
+  out.y = jump.y0 + (jump.y1 - jump.y0) * u - 4 * jump.h * u * (1 - u)
+  return out
+}
+//
+// A leap: first the crouch on planted feet; then in the air along the
+// arc, the body turned toward its flight, the legs pushing off, tucked,
+// reaching down again; a firefly at its head is eaten. Landed, it stands
+// on its run again, gives like a spring and rests.
+//
+function leap(inst, dt, food) {
+  const jump = inst.jump
+  if (jump.t < 0) {
+    crouch(inst, jump, dt)
+    return
+  }
+  jump.t = Math.min(jump.T, jump.t + dt)
+  const u = jump.t / jump.T
+  arcAt(jump, u, inst.pos)
+  const vx = (jump.x1 - jump.x0) / jump.T
+  const vy = ((jump.y1 - jump.y0) - 4 * jump.h * (1 - 2 * u)) / jump.T
+  const turn = Math.atan2(jump.fx * vy - jump.fy * vx, jump.fx * vx + jump.fy * vy)
+  const pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, turn * PITCH_SHARE))
+  const c = Math.cos(pitch)
+  const sn = Math.sin(pitch)
+  inst.f.x = jump.fx * c - jump.fy * sn
+  inst.f.y = jump.fx * sn + jump.fy * c
+  inst.d.x = jump.dx * c - jump.dy * sn
+  inst.d.y = jump.dx * sn + jump.dy * c
+  inst.angle = Math.atan2(inst.f.y, inst.f.x) * DEG
+  inst.legs.forEach(leg => flyLeg(inst, leg, u))
+  const head = toWorld(inst, inst.head.x, inst.head.y, inst.headAt)
+  const f = food?.prey.find(p => Math.hypot(p.x - head.x, p.y - head.y) < CATCH_R)
+  f && food.onEat(f)
+  u >= 1 && land(inst)
+}
+function land(inst) {
+  inst.s = inst.jump.s1
+  inst.jump = null
+  inst.dip = 0
+  inst.dipV = LAND_KICK
+  placeBody(inst)
+  inst.legs.forEach(leg => plantAt(inst, leg))
+  pause(inst)
+}
+//
+// Before the leap: its hips sink on its planted feet; at the bottom the
+// feet are kept where they stand for the push-off.
+//
+function crouch(inst, jump, dt) {
+  jump.t = Math.min(0, jump.t + dt)
+  inst.dip = CROUCH_DIP * smooth(1 + jump.t / CROUCH_TIME)
+  placeBody(inst)
+  if (jump.t < 0) return
+  inst.dip = 0
+  inst.legs.forEach(leg => {
+    leg.from.x = leg.foot.x
+    leg.from.y = leg.foot.y
+  })
+}
+//
+// A foot in the air at u of the flight: still on the ground while it
+// pushes off, drawn up to the body, held there, reaching out and down
+// for the landing.
+//
+function flyLeg(inst, leg, u) {
+  const tuck = toWorld(inst, leg.restX * TUCK, HIP_LIFT * TUCK, leg.tuck)
+  if (u < PUSH_U) {
+    leg.foot.x = leg.from.x
+    leg.foot.y = leg.from.y
+    return
+  }
+  if (u < REACH_U) {
+    const e = smooth(Math.min(1, (u - PUSH_U) / (TUCK_U - PUSH_U)))
+    leg.foot.x = leg.from.x + (tuck.x - leg.from.x) * e
+    leg.foot.y = leg.from.y + (tuck.y - leg.from.y) * e
+    return
+  }
+  const reach = toWorld(inst, leg.restX, HIP_LIFT, inst.tmp)
+  const e = smooth((u - REACH_U) / (1 - REACH_U))
+  leg.foot.x = tuck.x + (reach.x - tuck.x) * e
+  leg.foot.y = tuck.y + (reach.y - tuck.y) * e
+}
+//
+// The hips' give after a landing: a damped spring back to standing.
+//
+function spring(inst, dt) {
+  if (inst.dip === 0 && inst.dipV === 0) return
+  inst.dipV += (-SPRING_K * inst.dip - SPRING_DAMP * inst.dipV) * dt
+  inst.dip += inst.dipV * dt
+  if (Math.abs(inst.dip) > SPRING_REST || Math.abs(inst.dipV) > SPRING_REST * SPRING_DAMP) return
+  inst.dip = 0
+  inst.dipV = 0
+}
+//
+// Smoothstep of t (0..1).
+//
+function smooth(t) {
+  return t * t * (3 - 2 * t)
+}
+//
+// Spots on the runs' tops just under the fireflies' air (for hunters).
+//
+function huntingTops(runs) {
+  const high = Layout.FIREFLY_BOUNDS.y1 + JUMP_HIGH
+  const low = Layout.FIREFLY_BOUNDS.y2 + HUNT_BAND
+  const spots = []
+  runs.forEach(run => run.pts.forEach((pt, i) => {
+    pt.ny < -TOP_DOWN && pt.y >= high && pt.y <= low && spots.push({ run, s: run.s[i] })
+  }))
+  return spots
+}
+//
 // The eight legs: pair, near or far, its tripod, its hip and rest spot in
 // the body's frame, its foot (world) and step.
 //
@@ -332,6 +692,8 @@ function createLegs() {
         restX: HIPS[pair].x - ORIGIN.x + REST_DX[pair] + (far ? FAR_HIP.x + Math.sign(REST_DX[pair]) * FAR_REST_DX : 0),
         reach: (boneLength(THIGHS[pair]) + boneLength(SHINS[pair])) * LEG_SCALE,
         foot: { x: 0, y: 0 },
+        from: { x: 0, y: 0 },
+        tuck: { x: 0, y: 0 },
         step: null
       })
     }
@@ -348,7 +710,7 @@ function boneLength(bone) {
 //
 function move(inst, dt) {
   inst.timer -= dt
-  inst.timer <= 0 && nextMode(inst)
+  inst.timer <= 0 && (inst.hunt ? huntStep(inst) : nextMode(inst))
   const want = inst.mode === MODE.DASH ? inst.dashSpeed : 0
   const rate = want > inst.speed ? (inst.fleeing ? FLEE_ACCEL : ACCEL) : BRAKE
   inst.speed += Math.max(-rate * dt, Math.min(rate * dt, want - inst.speed))
@@ -441,7 +803,7 @@ function placeBody(inst) {
   const out = (ty * at.nx - tx * at.ny) >= 0 ? 1 : -1
   const nx = ty * out
   const ny = -tx * out
-  const lift = HIP_LIFT * inst.unit
+  const lift = (HIP_LIFT - inst.dip) * inst.unit
   inst.pos.x = at.x + nx * lift
   inst.pos.y = at.y + ny * lift
   inst.d.x = -nx
@@ -532,11 +894,11 @@ function drawRunner(inst, parts) {
   const hz = inst.speed > 1 ? FEELER_RUN_HZ : FEELER_HZ
   drawFeeler(inst, parts, FEELERS[0], t * hz)
   inst.legs.forEach(leg => leg.far && drawLeg(inst, parts, leg))
-  const wag = Math.sin(inst.tailPhase * Math.PI * 2) * (TAIL_SWAY + TAIL_RUN_SWAY * runShare(inst))
+  const wag = Math.sin(inst.tailPhase * Math.PI * 2) * (TAIL_SWAY + TAIL_RUN_SWAY * runShare(inst)) + TAIL_BEND * inst.bend
   drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, wag, inst.nearColor)
   drawNeck(inst, parts.get(NECK.piece))
-  drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, 0, inst.nearColor)
-  drawPart(inst, parts.get(HEAD.piece), HEAD_AT.x, HEAD_AT.y, HEAD.pivot, 0, inst.nearColor)
+  drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, -BODY_BEND * inst.bend, inst.nearColor)
+  drawPart(inst, parts.get(HEAD.piece), inst.head.x, inst.head.y, HEAD.pivot, 0, inst.nearColor)
   drawFeeler(inst, parts, FEELERS[1], t * hz)
   inst.legs.forEach(leg => leg.far || drawLeg(inst, parts, leg))
 }
@@ -545,19 +907,21 @@ function drawRunner(inst, parts) {
 // own axis to run from inside the body to the head's middle.
 //
 function drawNeck(inst, part) {
-  const len = Math.hypot(HEAD_AT.x - NECK_FROM.x, HEAD_AT.y - NECK_FROM.y)
+  const nx = inst.head.x - NECK_FROM.x
+  const ny = inst.head.y - NECK_FROM.y
+  const len = Math.hypot(nx, ny)
   const vx = (NECK.q.x - NECK.p.x) * NECK.thick
   const vy = NECK.q.y - NECK.p.y
   const stretch = Math.sqrt(Math.max(0, len * len - vx * vx)) / Math.abs(vy)
-  const turn = Math.atan2(NECK_DIR.y, NECK_DIR.x) - Math.atan2(vy * stretch, vx)
+  const turn = Math.atan2(ny, nx) - Math.atan2(vy * stretch, vx)
   drawPart(inst, part, NECK_FROM.x, NECK_FROM.y, NECK.p, turn * DEG, inst.nearColor, NECK.thick, stretch)
 }
 //
 // A feeler on the head, swinging (`cycles`: its swings so far).
 //
 function drawFeeler(inst, parts, feeler, cycles) {
-  const x = HEAD_AT.x + feeler.at.x - HEAD.pivot.x
-  const y = HEAD_AT.y + feeler.at.y - HEAD.pivot.y
+  const x = inst.head.x + feeler.at.x - HEAD.pivot.x
+  const y = inst.head.y + feeler.at.y - HEAD.pivot.y
   const angle = Math.sin(cycles * Math.PI * 2 + feeler.phase) * FEELER_SWING
   drawPart(inst, parts.get(feeler.piece), x, y, feeler.pivot, angle, feeler.far ? inst.farColor : inst.nearColor)
 }

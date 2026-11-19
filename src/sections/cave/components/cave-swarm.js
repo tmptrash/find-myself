@@ -23,13 +23,16 @@ import * as Layout from '../utils/cave-layout.js'
 // gets small random shoves now and then. The middle itself drifts a
 // little round where the swarm stays.
 //
-// They are afraid of the hero: once he comes within SCARE_R px of the
-// swarm's middle it bolts the way he is moving (his motion, not where he
-// stands: a hero running in from the left sends it right; a hero standing
-// still sends it straight away from him), FLEE_DIST px — or as far as
-// there is open air that way, turning aside up to FLEE_TURNS where the
-// soil is close. A hero jumping onto it — in the air over its middle and
-// no longer rising, however fast he runs — does not send it diving: it
+// They shy away from a hero moving at them: while he is within SCARE_R px
+// of the swarm's middle and closing in, the middle keeps drifting on away
+// from him (along his way and off him, as far as there is open air that
+// way, turning aside up to FLEE_TURNS where the soil is close), never
+// faster than it must to keep ahead of him; and each firefly near him
+// swerves off him on its own, so the swarm parts round him in no order. A
+// hero standing still they let be (they may fly through him) — but for
+// one driving them (from the giant's nose), who moves them on even when
+// he stands. A hero jumping onto it — in the air over its middle and no
+// longer rising, however fast he runs — does not send it diving: it
 // scatters and sinks slowly to the lake's left edge (see SCATTER_*).
 // There it stays; once the hero has let it be for REST_TIME s (counted
 // from when it has come down) it flies home and every firefly goes back
@@ -62,9 +65,13 @@ const HEAD_HEIGHT = 62
 const GROUND_LOOK = 900
 //
 // Keeping together: each one's loop round the middle (SPREAD_X / SPREAD_Y
-// px at most, its two pairs of sines at LOOP_W..+RANGE rad/s), its spring
-// (stiffness and damping, each with its spread), its shoves (JITTER_ACC
-// px/s² every JITTER_EVERY..+RANGE s) and its top speed.
+// px at most, its two pairs of sines at LOOP_W..+RANGE rad/s; squeezed,
+// never cut off, where the head's height or the water leaves less room
+// over or under the middle, so they never line up along that edge), its
+// spring (stiffness and damping, each with its spread), its shoves
+// (JITTER_ACC px/s² every JITTER_EVERY..+RANGE s) and its top speed. One
+// that strays over the head's height or down to the water is eased back
+// (EDGE_RATE per s of how far it is out), never set back at once.
 //
 const SPREAD_X = 30
 const SPREAD_Y = 20
@@ -78,38 +85,57 @@ const JITTER_ACC = 160
 const JITTER_EVERY = 0.15
 const JITTER_EVERY_RANGE = 0.3
 const MAX_SPEED = 420
+const EDGE_RATE = 4
+//
+// A firefly a fish snaps at dodges it: shoved DODGE_SPEED..+RANGE px/s up
+// and aside (up to DODGE_SPREAD rad off straight up), then back to the
+// swarm on its spring — never gone.
+//
+const DODGE_SPEED = 160
+const DODGE_SPEED_RANGE = 80
+const DODGE_SPREAD = 0.9
 //
 // The middle: drifts WANDER_X / WANDER_Y px round where it stays (at
 // WANDER_WX / WANDER_WY rad/s); moves at most HOVER_SPEED px/s while it
-// stays, FLEE_SPEED while it bolts, RETURN_SPEED on its way home (slowing
-// over the last SLOW_WITHIN px).
+// stays, while it shies away AVOID_PACE times the hero's closing speed
+// (at least HOVER_SPEED, at most FLEE_SPEED), RETURN_SPEED on its way home
+// (slowing over the last SLOW_WITHIN px), its speed changing by no more
+// than CENTER_ACCEL px/s² (so it never starts or stops at once).
 //
 const WANDER_X = 14
 const WANDER_Y = 9
 const WANDER_WX = 0.45
 const WANDER_WY = 0.7
 const HOVER_SPEED = 60
-const FLEE_SPEED = 380
+const FLEE_SPEED = 300
+const AVOID_PACE = 1.2
+const CENTER_ACCEL = 700
 const RETURN_SPEED = 90
 const SLOW_WITHIN = 40
 //
 // Fear: not before FEAR_DELAY s after they came out (they are seen coming
 // out first); the hero within SCARE_R px of the middle; a hero moving
-// slower than HERO_MOVING px/s counts as standing; the flight's length,
-// how close to soil it ends (WALL_CLEAR px), the least worth taking
-// (FLEE_MIN), the turns tried when the way is shut (degrees), and no new
-// scare within SCARE_GAP s of the last. The hero's motion is eased over
-// HERO_VEL_EASE per second.
+// slower than HERO_MOVING px/s counts as standing; how far ahead the
+// middle aims as it shies away (FLEE_DIST), how close to soil (WALL_CLEAR
+// px), the least worth taking (FLEE_MIN), the turns tried when the way is
+// shut (degrees); its way is looked for anew every AVOID_GAP s. A firefly
+// within FLY_AVOID_R px of a hero moving at it swerves off him at up to
+// FLY_AVOID_ACC px/s² (more the nearer). The hero's motion is eased over
+// HERO_VEL_EASE per second; a jump of more than HERO_JUMP_PX in a frame
+// (he came back to life elsewhere) is no motion.
 //
 const FEAR_DELAY = 1.2
-const SCARE_R = 80
+const SCARE_R = 130
 const HERO_MOVING = 80
-const FLEE_DIST = 170
+const FLEE_DIST = 140
 const WALL_CLEAR = 36
-const FLEE_MIN = 70
+const FLEE_MIN = 50
 const FLEE_TURNS = [0, 40, -40, 80, -80, 120, -120, 180]
-const SCARE_GAP = 0.5
+const AVOID_GAP = 0.1
+const FLY_AVOID_R = 55
+const FLY_AVOID_ACC = 1100
 const HERO_VEL_EASE = 10
+const HERO_JUMP_PX = 100
 const WORLD_MARGIN = 40
 //
 // The water's level is a floor for all of it: no firefly at large comes
@@ -121,7 +147,8 @@ const WATER_CLEAR = 10
 const WATER_FLOOR = Layout.LAKE_SURFACE_Y - WATER_CLEAR
 const CENTER_FLOOR = WATER_FLOOR - SPREAD_Y
 //
-// Jumped on (the hero in the air, JUMP_ABOVE px or more over its middle —
+// Jumped on (the hero in the air within JUMP_R px of its middle and
+// JUMP_ABOVE px or more over it —
 // not a hop off a bump of the ground beside it — and rising no faster than
 // HERO_MOVING px/s — at the top of his jump or coming down, run as fast as
 // he may; a running jump reaches it still flying more sideways than down):
@@ -135,9 +162,10 @@ const CENTER_FLOOR = WATER_FLOOR - SPREAD_Y
 // it): along at its height to the open shaft LAKE_SHAFT_IN px short of
 // the lake's left edge, down it, then along over the water (the ledge
 // over the lake's edge shuts the straight way). Its way home goes back up
-// the same shaft. No new scare while it sinks.
+// the same shaft. It does not shy away while it sinks.
 //
 const LAKE_SHAFT_IN = 60
+const JUMP_R = 80
 const JUMP_ABOVE = 20
 const SCATTER_SPEED = 140
 const SCATTER_SPEED_RANGE = 120
@@ -206,13 +234,17 @@ export function create(cfg) {
     nest: null,
     home: { x: 0, y: 0 },
     center: { x: 0, y: 0 },
+    centerV: { x: 0, y: 0 },
     anchor: { x: 0, y: 0 },
     t: 0,
     ceilY: -Infinity,
     calm: 0,
     fearIn: 0,
-    scareIn: 0,
+    avoidIn: 0,
     fleeing: false,
+    fleeSpeed: HOVER_SPEED,
+    hero: null,
+    driven: false,
     sinking: false,
     path: [],
     scatterT: null,
@@ -248,21 +280,27 @@ export function release(inst, nest) {
 }
 
 /**
- * Runs the swarm on: its flies coming out, keeping together, bolting from
- * the hero, going home.
+ * Runs the swarm on: its flies coming out, keeping together, shying away
+ * from the hero, going home.
  * @param {Object} inst - Swarm instance
  * @param {{x: number, y: number}|null} heroPos - The hero's centre (null: none)
  * @param {boolean} [airborne=false] - The hero is in the air (jumping or falling)
+ * @param {number} [scareR=SCARE_R] - How near him it shies away (farther when he drives it from the giant's nose)
+ * @param {boolean} [driven=false] - He drives it (from the giant's nose): it moves on even while he stands
  */
-export function onUpdate(inst, heroPos, airborne = false) {
+export function onUpdate(inst, heroPos, airborne = false, scareR = SCARE_R, driven = false) {
   if (inst.state === STATE.IDLE) return
   const dt = inst.k.dt()
   inst.t += dt
   trackHero(inst, heroPos, dt)
+  inst.hero = heroPos && inst.fearIn <= 0 && !inst.sinking ? heroPos : null
+  inst.driven = driven
   inst.fearIn -= dt
-  inst.scareIn -= dt
+  inst.avoidIn -= dt
   inst.scatterT !== null && (inst.scatterT += dt) >= SCATTER_TIME + REGROUP_TIME && (inst.scatterT = null)
-  heroPos && !inst.sinking && inst.fearIn <= 0 && inst.scareIn <= 0 && near(inst.center, heroPos, SCARE_R) && scare(inst, heroPos, airborne)
+  inst.hero && airborne && jumpedOn(inst, heroPos) && scatterDown(inst)
+  inst.hero = inst.sinking ? null : inst.hero
+  inst.hero && inst.avoidIn <= 0 && near(inst.center, heroPos, scareR) && shyAway(inst, heroPos)
   updateState(inst, dt)
   updateCeiling(inst)
   moveCenter(inst, dt)
@@ -281,13 +319,17 @@ export function forEachFlying(inst, fn) {
 }
 
 /**
- * A firefly is eaten (by a fish): it is gone.
+ * A fish snaps at a firefly: it dodges, shoved up and aside, and flies
+ * back to the swarm (it is never gone: the swarm lasts as long as the hero
+ * keeps it out over the water).
  * @param {Object} inst - Swarm instance
  * @param {Object} fly - The firefly (from forEachFlying)
  */
 export function eat(inst, fly) {
-  fly.phase = PHASE.GONE
-  fly.show = 0
+  const a = -Math.PI / 2 + (inst.rng() * 2 - 1) * DODGE_SPREAD
+  const speed = DODGE_SPEED + inst.rng() * DODGE_SPEED_RANGE
+  fly.vx += Math.cos(a) * speed
+  fly.vy += Math.sin(a) * speed
 }
 
 /**
@@ -355,24 +397,30 @@ function trackHero(inst, heroPos, dt) {
   }
   const last = inst.heroLast
   inst.heroLast = { x: heroPos.x, y: heroPos.y }
-  if (!last) return
+  if (!last || !near(last, heroPos, HERO_JUMP_PX)) return
   const ease = Math.min(1, dt * HERO_VEL_EASE)
   inst.heroVel.x += ((heroPos.x - last.x) / dt - inst.heroVel.x) * ease
   inst.heroVel.y += ((heroPos.y - last.y) / dt - inst.heroVel.y) * ease
 }
 //
-// The hero came close: jumped on from above it scatters down, else the
-// swarm bolts the way he moves (or from him), as far as the air is open
-// that way or the nearest open way round it.
+// The hero dropping onto it: in the air close over its middle, no longer
+// rising.
 //
-function scare(inst, heroPos, airborne) {
+function jumpedOn(inst, heroPos) {
+  return near(inst.center, heroPos, JUMP_R) && heroPos.y < inst.center.y - JUMP_ABOVE && inst.heroVel.y > -HERO_MOVING
+}
+//
+// The hero close and closing in (or driving it): the middle aims on away
+// from him — along his way and off him — as far as the air is open that
+// way or the nearest open way round it, as fast as it must to keep ahead.
+//
+function shyAway(inst, heroPos) {
   const v = inst.heroVel
-  const moving = Math.hypot(v.x, v.y) > HERO_MOVING
-  if (airborne && heroPos.y < inst.center.y - JUMP_ABOVE && v.y > -HERO_MOVING) {
-    scatterDown(inst)
-    return
-  }
-  const away = moving ? pushWay(v) : unit(inst.center.x - heroPos.x, inst.center.y - heroPos.y)
+  const off = unit(inst.center.x - heroPos.x, inst.center.y - heroPos.y)
+  const closing = v.x * off.x + v.y * off.y
+  if (closing < HERO_MOVING && !inst.driven) return
+  inst.avoidIn = AVOID_GAP
+  const away = awayWay(v, off, heroPos.y > inst.center.y)
   let best = null
   for (const turn of FLEE_TURNS) {
     const dir = turned(away, turn / DEG)
@@ -381,13 +429,12 @@ function scare(inst, heroPos, airborne) {
     if (room >= FLEE_MIN) break
   }
   inst.anchor.x = inst.center.x + best.dir.x * best.room
-  inst.anchor.y = inst.center.y + best.dir.y * best.room
-  inst.anchor.y = Math.max(inst.anchor.y, inst.ceilY + SPREAD_Y)
+  inst.anchor.y = Math.max(inst.center.y + best.dir.y * best.room, inst.ceilY + SPREAD_Y)
   inst.path = []
   inst.state = STATE.OUT
   inst.calm = REST_TIME
   inst.fleeing = true
-  inst.scareIn = SCARE_GAP
+  inst.fleeSpeed = Math.min(FLEE_SPEED, Math.max(HOVER_SPEED, closing * AVOID_PACE))
   inst.flies.forEach(fly => fly.phase === PHASE.HOME && (fly.phase = PHASE.FLY))
 }
 //
@@ -406,7 +453,6 @@ function scatterDown(inst) {
   inst.fleeing = false
   inst.sinking = true
   inst.scatterT = 0
-  inst.scareIn = SCARE_GAP
   inst.flies.forEach(fly => {
     if (fly.phase !== PHASE.FLY && fly.phase !== PHASE.HOME) return
     fly.phase = PHASE.FLY
@@ -461,6 +507,8 @@ function updateState(inst, dt) {
 function moveCenter(inst, dt) {
   if (inst.path.length || inst.sinking) {
     followPath(inst, dt, inst.sinking ? SINK_SPEED : RETURN_SPEED)
+    inst.centerV.x = 0
+    inst.centerV.y = 0
     return
   }
   const settled = inst.state === STATE.OUT && !inst.fleeing
@@ -469,15 +517,23 @@ function moveCenter(inst, dt) {
   const dx = tx - inst.center.x
   const dy = ty - inst.center.y
   const dist = Math.hypot(dx, dy)
-  if (dist < 1) {
+  if (dist < 1 && Math.hypot(inst.centerV.x, inst.centerV.y) < 1) {
     inst.fleeing = false
+    inst.centerV.x = 0
+    inst.centerV.y = 0
     return
   }
-  const top = inst.fleeing ? FLEE_SPEED : inst.state === STATE.OUT ? HOVER_SPEED : RETURN_SPEED
-  const speed = top * Math.min(1, dist / SLOW_WITHIN)
-  const step = Math.min(dist, speed * dt)
-  inst.center.x += dx / dist * step
-  inst.center.y += dy / dist * step
+  const top = inst.fleeing ? inst.fleeSpeed : inst.state === STATE.OUT ? HOVER_SPEED : RETURN_SPEED
+  const want = top * Math.min(1, dist / SLOW_WITHIN)
+  const along = dist > 0 ? want / dist : 0
+  const wx = dx * along - inst.centerV.x
+  const wy = dy * along - inst.centerV.y
+  const dv = Math.hypot(wx, wy)
+  const k = dv > 0 ? Math.min(1, CENTER_ACCEL * dt / dv) : 0
+  inst.centerV.x += wx * k
+  inst.centerV.y += wy * k
+  inst.center.x += inst.centerV.x * dt
+  inst.center.y += inst.centerV.y * dt
   inst.fleeing && dist < SLOW_WITHIN * HALF && (inst.fleeing = false)
 }
 //
@@ -559,6 +615,7 @@ function updateFly(inst, fly, dt) {
     return
   }
   if (fly.phase === PHASE.FLY) {
+    swerve(inst, fly, dt)
     steer(inst, fly, dt, cohesion(inst))
     keepUnderHead(inst, fly)
     keepOverWater(fly)
@@ -568,13 +625,31 @@ function updateFly(inst, fly, dt) {
   homeIn(fly, dt)
 }
 //
+// Off a hero moving at it (or driving the swarm), the nearer the harder;
+// a hero standing still it lets be.
+//
+function swerve(inst, fly, dt) {
+  const hero = inst.hero
+  if (!hero) return
+  const dx = fly.x - hero.x
+  const dy = fly.y - hero.y
+  const d = Math.hypot(dx, dy)
+  if (d >= FLY_AVOID_R || d <= 0) return
+  const v = inst.heroVel
+  const toward = (dx * v.x + dy * v.y) / d
+  if (toward < HERO_MOVING && !inst.driven) return
+  const acc = FLY_AVOID_ACC * (1 - d / FLY_AVOID_R)
+  fly.vx += dx / d * acc * dt
+  fly.vy += dy / d * acc * dt
+}
+//
 // Toward its point on its loop round the middle, on its own spring, with
 // its shoves; `pull` eases the spring in as it comes out of its hole.
 //
 function steer(inst, fly, dt, pull) {
   const t = inst.t
   const tx = inst.center.x + fly.ax * Math.sin(fly.w[0] * t + fly.p[0]) + fly.bx * Math.sin(fly.w[1] * t + fly.p[1])
-  const ty = Math.max(inst.ceilY, inst.center.y + fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3]))
+  const ty = inst.center.y + squeezed(inst, fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3]))
   fly.jitterIn -= dt
   if (fly.jitterIn <= 0) {
     const a = fly.rng() * FULL_TURN
@@ -596,30 +671,38 @@ function updateCeiling(inst) {
   if (want === -Infinity || inst.ceilY === -Infinity || want < inst.ceilY) inst.ceilY = want
 }
 //
-// Which way a moving hero's push sends the swarm: level along his run when
-// he moves more sideways than up or down (a push from the side moves it
-// along, not down), else his way.
+// A loop's height off the middle squeezed into the room there is: over it
+// up to the head's height, under it down to the water.
 //
-function pushWay(v) {
-  return Math.abs(v.x) >= Math.abs(v.y) ? { x: Math.sign(v.x), y: 0 } : unit(v.x, v.y)
+function squeezed(inst, oy) {
+  const room = oy < 0 ? inst.center.y - inst.ceilY : WATER_FLOOR - inst.center.y
+  return oy * Math.min(1, Math.max(0, room) / SPREAD_Y)
 }
 //
-// A firefly at large never rises over the head's height (it is turned
-// back down there).
+// Which way the swarm shies from a hero: along his way and off him (off
+// him alone while he stands: driving it); never down for a hero under it
+// (a push from the side moves it along, not down).
+//
+function awayWay(v, off, below) {
+  const speed = Math.hypot(v.x, v.y)
+  const way = speed > HERO_MOVING ? unit(v.x / speed + off.x, v.y / speed + off.y) : off
+  return below && way.y > 0 ? unit(way.x, 0) : way
+}
+//
+// A firefly at large over the head's height is eased back down.
 //
 function keepUnderHead(inst, fly) {
   if (fly.y >= inst.ceilY) return
-  fly.y = inst.ceilY
-  fly.vy = Math.max(0, fly.vy)
+  fly.vy = Math.max(fly.vy, (inst.ceilY - fly.y) * EDGE_RATE)
 }
 //
-// A firefly at large never sinks under the water's level (it is turned
-// back up there).
+// A firefly at large down at the water is eased back up; it never goes
+// into it.
 //
 function keepOverWater(fly) {
   if (fly.y <= WATER_FLOOR) return
-  fly.y = WATER_FLOOR
-  fly.vy = Math.min(0, fly.vy)
+  fly.vy = Math.min(fly.vy, (WATER_FLOOR - fly.y) * EDGE_RATE)
+  fly.y = Math.min(fly.y, Layout.LAKE_SURFACE_Y)
 }
 //
 // The height of a hero's head over the ground under a point (none where

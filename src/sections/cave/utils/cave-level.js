@@ -19,6 +19,7 @@ import * as Runner from '../components/cave-runner.js'
 import * as Swarm from '../components/cave-swarm.js'
 import * as Strider from '../components/cave-strider.js'
 import * as Fish from '../components/cave-fish.js'
+import * as Giant from '../components/cave-giant.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
 import * as Terrain from './cave-terrain.js'
@@ -30,14 +31,13 @@ import * as Glow from './cave-glow.js'
 import * as CaveSound from './cave-sound.js'
 import * as View from './cave-view.js'
 //
-// Cave lesson 0 — the hero drops in from the forest through the hole the
-// forest eye-flower's roots tore in the ceiling, onto an earth ledge, a
-// dormant lantern mushroom left of him (bounced on, it lights up and its
-// blue fireflies fly out of its holes, shy of the hero). Below
-// lies the lake hall with a
-// deep lake: stone platforms climb from its right bank into the crevice
-// of the exit, up to the stalk-eye's ledge; past the stalk-eye a shaft of
-// stone steps drops into the passage under the hall (cave-layout.js).
+// Cave lesson 0 — the hero drops in from the forest down the tunnel the
+// forest eye-flower's roots tore through the ceiling, onto the lake's left
+// bank, a dormant lantern mushroom left of him (bounced on, it lights up
+// and its blue fireflies fly out of its holes, shy of the hero). A deep
+// lake fills the hall; across it — on the giant's back as it breathes — is
+// the right bank, past it a shaft of stone steps drops into the passage
+// under the hall, where the stalk-eye stands (cave-layout.js).
 //
 export const SCENE_NAME = 'lesson-cave.0'
 const KEY_LAST_LESSON = 'lastLesson'
@@ -45,26 +45,43 @@ const KEY_SAFE_SPOT = 'cave.safeSpot'
 const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once the hero got here
 //
 // Draw order: back (parallax), the fireflies (behind the soil: they fly
-// only in the open between the platforms), the drowning hero (behind the
-// soil),
-// terrain, the runner insects on it, the fish in the lake, the lake
-// water, what is on its surface (the fish's splashes, the water striders),
-// the lantern's halo, the hero and creatures (player z), the stones in
-// front of him, the frame.
+// only in the open between the platforms), the lake's giant and its fish
+// (behind the soil: the bed's walls hide them as they swim in and out),
+// the drowning hero (behind the soil, in front of the giant: he sinks off
+// its back in sight), the runner insects (behind the soil
+// and its plants: they run behind the leaves), terrain, the lake water,
+// what is on its surface (the fish's splashes, the water striders), the
+// lantern's halo, the hero and creatures (player z), the stones in front
+// of him, the frame.
 //
 const Z_WORLD = 0
 const Z_FIREFLIES = Z_WORLD + 0.2
-const Z_DROWN_HERO = Z_WORLD + 0.35
+const Z_DROWN_HERO = Z_WORLD + 0.375
 const Z_TERRAIN = Z_WORLD + 0.4
-const Z_RUNNERS = Z_WORLD + 0.5
+const Z_RUNNERS = Z_WORLD + 0.38
 const Z_WATER = Z_WORLD + 0.6
-const Z_FISH = Z_WORLD + 0.55
+const Z_GIANT = Z_WORLD + 0.36
+const Z_FISH = Z_WORLD + 0.37
 const Z_LAKE_SURFACE = Z_WORLD + 0.7
 //
 // A fish's splash sounds full within the hero's reach and fades out over
 // SPLASH_HEAR px from him.
 //
 const SPLASH_HEAR = 900
+//
+// The giant's breath carries farther: full near the hero, gone BREATH_HEAR
+// px from him.
+//
+const BREATH_HEAR = 2000
+//
+// The giant is lured once LURE_FISH fish or more feed under the blue
+// fireflies over the water (unafraid, within LURE_GATHER px of them along
+// the lake). The hero on its nose drives them from NOSE_SCARE_R px, on
+// even while he stands there.
+//
+const LURE_FISH = 4
+const LURE_GATHER = 180
+const NOSE_SCARE_R = 260
 //
 // A firefly a fish ate lights up again over the lake, from LAKE_SKY_TOP
 // down to LAKE_SKY_LOW px over the surface (where the fish can reach it).
@@ -74,6 +91,21 @@ const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
 const Z_FRAME = CFG.visual.zIndex.ui - 1
+const Z_GIANT_DEBUG = Z_FRAME - 1
+//
+// The giant's dev scene: keys holding it in a state (the hero's x for a
+// surfacing under him), one to let it be, one toggling its debug overlay.
+//
+const GIANT_DEV_KEYS = {
+  1: Giant.COMMAND.IDLE,
+  2: Giant.COMMAND.SLOW,
+  3: Giant.COMMAND.FAST,
+  4: Giant.COMMAND.SURFACE,
+  5: Giant.COMMAND.DIVE,
+  6: Giant.COMMAND.TURN,
+  0: Giant.COMMAND.AUTO
+}
+const GIANT_DEBUG_KEY = 'g'
 //
 // Static bodies: only the walls (they reach above the world so the entry
 // fall is framed). The platforms are walked on their own top (cave-ground.js): a
@@ -95,8 +127,11 @@ const CATCH_EMBED = 2
 const RIDE_SLACK = 16
 const PARK_Y = -10000
 //
-// Death and respawn.
+// Death and respawn. A death at the lake (drowned, or fallen out of the
+// world over it) always brings him back by the blue lantern mushroom,
+// LANTERN_RESPAWN_DX px on from it toward the lake (clear of its cap).
 //
+const LANTERN_RESPAWN_DX = 90
 const DEATH_BURST_COUNT = 48
 const RESPAWN_BURST_COUNT = 14
 const RESPAWN_DELAY = 2.3
@@ -141,17 +176,19 @@ const CONTROLS_OPACITY = 0.6
  * Builds the whole cave level inside the active scene (once the prop
  * sheets are in; a direct start loads them first).
  * @param {Object} k - Kaplay instance
+ * @param {Object} [opts]
+ * @param {boolean} [opts.giantDev=false] - The giant's dev scene: the giant stays in the lake, keys drive its states, its debug overlay toggles
  */
-export function create(k) {
+export function create(k, opts = {}) {
   set(KEY_LAST_LESSON, SCENE_NAME)
   get(KEY_REACHED, false) || set(KEY_REACHED, true)
   CanvasBackdrop.applyCanvasBackdrop(k, CAVE_CFG.colors.frame)
-  Atlas.isLoaded() ? build(k) : Atlas.load().then(() => build(k))
+  Atlas.isLoaded() ? build(k, opts) : Atlas.load().then(() => build(k, opts))
 }
 //
 // Every part of the level, then its update and draw passes.
 //
-function build(k) {
+function build(k, opts) {
   k.setGravity(CFG.game.gravity)
   const view = View.create(k)
   const sfx = Sound.create()
@@ -174,7 +211,10 @@ function build(k) {
     striders: Strider.createAll(k, lake),
     striderFears: [],
     fish: Fish.createAll(k, lake),
+    giant: Giant.create({ k, lake, stay: Boolean(opts.giantDev) }),
+    giantDebug: false,
     fishCtx: null,
+    runnerFood: null,
     lakeSky: null,
     swarm: Swarm.create({ k }),
     lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
@@ -186,6 +226,7 @@ function build(k) {
     respawnAt: 0,
     deathX: 0,
     deathY: 0,
+    lakeDeath: false,
     airFor: 0,
     drownLegs: null,
     fps: null
@@ -201,6 +242,10 @@ function build(k) {
     onCatch: prey => onFishCatch(inst, prey),
     onSplash: (x, strength) => onFishSplash(inst, x, strength)
   }
+  inst.runnerFood = {
+    prey: [],
+    onEat: f => Fireflies.eat(inst.fireflies, f)
+  }
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
@@ -213,6 +258,7 @@ function build(k) {
   addDrawLayers(inst)
   k.onUpdate(() => onUpdate(inst))
   bindLeave(inst)
+  opts.giantDev && bindGiantDev(inst)
 }
 //
 // Per-frame gameplay: hazards, lantern, creatures, ambience and camera.
@@ -225,7 +271,7 @@ function onUpdate(inst) {
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
-  Swarm.onUpdate(inst.swarm, heroPos(inst), isHeroAirborne(inst))
+  driveSwarm(inst)
   updateLakeLife(inst)
   StalkEye.onUpdate(inst.stalkEye)
   const focus = heroFocus(inst)
@@ -245,7 +291,8 @@ function updateHero(inst, char) {
   Lantern.onUpdate(inst.lantern, inst.heroInst) && lanternBounce(inst)
   trackSafeSpot(inst, char)
   const { x, y } = char.pos
-  if (Layout.isInLake(x, y)) return startDrown(inst, char)
+  const held = Giant.holdsUp(inst.giant, x, y + Layout.HERO_FEET_DY)
+  if (Layout.isInLake(x, y) && !held) return startDrown(inst, char)
   y > FALL_OUT_Y && killHero(inst)
 }
 //
@@ -288,7 +335,18 @@ function heroPos(inst) {
 //
 function isHeroAirborne(inst) {
   const char = inst.heroInst?.character
-  return Boolean(char?.exists?.() && !char.isGrounded())
+  return Boolean(char?.exists?.() && char.isGrounded?.() === false)
+}
+//
+// The blue fireflies and the hero: riding the giant, only from its nose
+// does he drive them (farther: NOSE_SCARE_R), anywhere else on its back he
+// leaves them be.
+//
+function driveSwarm(inst) {
+  const pos = heroPos(inst)
+  const riding = pos && Giant.isRidden(inst.giant)
+  const atNose = riding && Giant.riderAtNose(inst.giant, pos.x)
+  Swarm.onUpdate(inst.swarm, riding && !atNose ? null : pos, isHeroAirborne(inst), atNose ? NOSE_SCARE_R : undefined, atNose)
 }
 //
 // Remembers the last solid platform the hero stood on (respawn point);
@@ -312,6 +370,7 @@ function killHero(inst) {
   inst.dead = true
   inst.deathX = char.pos.x
   inst.deathY = char.pos.y
+  inst.lakeDeath = inst.deathX >= Layout.LAKE_X1 && inst.deathX <= Layout.LAKE_X2
   inst.respawnAt = k.time() + RESPAWN_DELAY
   hero.controllable = false
   hero.isDying = true
@@ -339,7 +398,13 @@ function startDrown(inst, char) {
   char.gravityScale = 0
   char.vel.x = 0
   char.vel.y = 0
+  //
+  // No body while he sinks: against the bowl's steep side by a bank its
+  // collision kept pushing him back out, so he sank in jerks.
+  //
+  char.has('body') && char.unuse('body')
   inst.drown = { t: 0, x: Math.round(char.pos.x), y: char.pos.y }
+  inst.lakeDeath = true
   hero.drownSinkX = inst.drown.x
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
@@ -381,7 +446,8 @@ function drawDrowningHero(inst) {
 }
 function updateRespawn(inst) {
   if (inst.k.time() < inst.respawnAt) return
-  const pose = startPose(inst)
+  const pose = inst.lakeDeath ? lanternPose() : startPose(inst)
+  inst.lakeDeath = false
   spawnHero(inst, pose)
   Fireflies.burst(inst.fireflies, pose.x, pose.y, RESPAWN_BURST_COUNT)
   inst.dead = false
@@ -396,6 +462,13 @@ function startPose(inst) {
   const saved = inst.safe && Layout.PLATFORMS.find(p => p.id === inst.safe.id)
   const pose = saved && inst.safe.x >= saved.x1 && inst.safe.x <= saved.x2 ? Ground.standPoseOn(saved, inst.safe.x) : null
   return pose && !Layout.isInLake(pose.x, pose.y) ? pose : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
+}
+//
+// By the blue lantern mushroom, on the lake's side of it.
+//
+function lanternPose() {
+  const floor = Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on)
+  return Ground.standPoseOn(floor, Layout.LANTERN.x + LANTERN_RESPAWN_DX)
 }
 function spawnHero(inst, pose) {
   const k = inst.k
@@ -526,9 +599,9 @@ function createHud(inst) {
   FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_LEFT_X)
 }
 //
-// Draw passes: the back world (parallax), the fireflies and the drowning
-// hero (behind the soil), the terrain (the lake's bowl in it)
-// with the lake's algae and the lantern, the fish, the see-through water,
+// Draw passes: the back world (parallax), the fireflies, the giant and
+// the fish, the drowning hero (behind the soil), the terrain (the lake's
+// bowl in it) with the lake's algae and the lantern, the see-through water,
 // the fish's splashes and the striders on it, the lantern's halo, the
 // stones in front of the hero and the screen frame.
 //
@@ -539,11 +612,13 @@ function addDrawLayers(inst) {
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
+  k.add([k.z(Z_GIANT), { draw: () => Giant.onDraw(inst.giant, View.worldRect(inst.view), drawHeldFish) }])
   k.add([k.z(Z_FISH), { draw: () => drawFish(inst) }])
   k.add([k.z(Z_WATER), { draw: () => CaveLake.onDraw(inst.lake, View.worldRect(inst.view)) }])
   k.add([k.z(Z_LAKE_SURFACE), { draw: () => drawLakeSurface(inst) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
   k.add([k.z(Z_FRONT), { draw: () => Front.onDraw(inst.front, View.worldRect(inst.view)) }])
+  k.add([k.z(Z_GIANT_DEBUG), { draw: () => inst.giantDebug && Giant.onDrawDebug(inst.giant) }])
   k.add([k.z(Z_FRAME), { draw: () => View.onDrawFrame(inst.view) }])
 }
 function drawWorld(inst) {
@@ -563,20 +638,28 @@ function drawLights(inst) {
   Lantern.onDrawHalo(inst.lantern)
   Swarm.onDraw(inst.swarm)
 }
+//
+// The runners: afraid of the hero, now and then leaping for a firefly.
+//
 function updateRunners(inst) {
   const hero = heroPos(inst)
-  inst.runners.forEach(runner => Runner.onUpdate(runner, hero))
+  const food = inst.runnerFood
+  food.prey.length = 0
+  Fireflies.forEachLit(inst.fireflies, f => food.prey.push(f))
+  inst.runners.forEach(runner => Runner.onUpdate(runner, hero, food))
 }
 function drawRunners(inst) {
   const view = View.worldRect(inst.view)
   inst.runners.forEach(runner => Runner.onDraw(runner, view))
 }
 //
-// The lake's life: the fish hunt every lit firefly (gold or blue), all of
-// them going for the blue swarm while it hangs over the water, and flee
-// the hero in the water; the striders fear everything near the lake
-// that moves — the hero (on the bank, over the water or sinking in it),
-// the runners, the blue swarm, a fish near the surface.
+// The lake's life: the giant comes in now and then to eat fish; the fish
+// hunt every lit firefly (gold or blue), all of them going for the blue
+// swarm while it hangs over the water, and flee the hero in the water and
+// the giant (its snout, middle and tail); the striders fear everything
+// near the lake that moves — the hero (on the bank, over the water or
+// sinking in it), the runners, the blue swarm, a fish near the surface,
+// the giant.
 //
 function updateLakeLife(inst) {
   const ctx = inst.fishCtx
@@ -588,8 +671,10 @@ function updateLakeLife(inst) {
   Swarm.forEachFlying(inst.swarm, fly => ctx.swarmPrey.push(fly))
   ctx.swarmPrey.forEach(fly => ctx.prey.push(fly))
   ctx.swarm = Swarm.center(inst.swarm)
+  Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x), lure: lureOf(inst), hero: inst.dead ? null : char })
   ctx.threats.length = 0
   inst.drown && hero && ctx.threats.push(hero)
+  Giant.fearPoints(inst.giant).forEach(p => ctx.threats.push(p))
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
   const fears = inst.striderFears
   fears.length = 0
@@ -601,6 +686,7 @@ function updateLakeLife(inst) {
     const head = Fish.surfacePoint(fish)
     head && fears.push(head)
   })
+  Giant.fearPoints(inst.giant).forEach(p => fears.push(p))
   inst.striders.forEach(strider => Strider.onUpdate(strider, fears, inst.striders))
 }
 //
@@ -610,25 +696,45 @@ function updateLakeLife(inst) {
 function onFishCatch(inst, prey) {
   inst.swarm.flies.includes(prey) ? Swarm.eat(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
 }
+//
+// Where the fish gather under the blue fireflies over the water (if enough
+// of them do), luring the giant.
+//
+function lureOf(inst) {
+  const swarm = inst.fishCtx.swarm
+  return swarm && inst.fish.filter(fish => Fish.feedsAt(fish, swarm.x, LURE_GATHER)).length >= LURE_FISH ? swarm : null
+}
+function onGiantBreath(inst, exhale, x) {
+  const focus = heroFocus(inst)
+  CaveSound.playGiantBreath(inst.caveSound, exhale, 1 - Math.abs(x - focus.x) / BREATH_HEAR)
+}
 function onFishSplash(inst, x, strength) {
   const focus = heroFocus(inst)
   CaveSound.playFishSplash(inst.caveSound, strength, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
 }
 //
-// The fish far to near (deeper in z first).
+// A fish in the giant's jaws: only what sticks out of its mouth.
+//
+function drawHeldFish(fish, view, cut) {
+  Fish.onDraw(fish, view, true, cut)
+}
+//
+// The fish far to near (deeper in z first), then the sand they spill.
 //
 function drawFish(inst) {
   const view = View.worldRect(inst.view)
   inst.fish.sort((a, b) => Fish.depth(b) - Fish.depth(a))
   inst.fish.forEach(fish => Fish.onDraw(fish, view))
+  inst.fish.forEach(fish => Fish.onDrawSand(fish))
 }
 //
-// On the surface: the fish's splashes, the striders' water marks, then
-// the striders (each kind in one batch).
+// On the surface: the fish's splashes, the giant's breath, the striders'
+// water marks, then the striders (each kind in one batch).
 //
 function drawLakeSurface(inst) {
   const view = View.worldRect(inst.view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  Giant.onDrawMist(inst.giant)
   inst.striders.forEach(strider => Strider.onDrawWater(strider, view))
   inst.striders.forEach(strider => Strider.onDraw(strider, view))
 }
@@ -639,6 +745,18 @@ function drawFireflies(inst) {
 //
 // Esc → menu; ambience stops on scene leave or native engine teardown.
 //
+//
+// The giant's dev scene: its state keys and its debug overlay's toggle.
+//
+function bindGiantDev(inst) {
+  const k = inst.k
+  inst.giantDebug = true
+  Object.entries(GIANT_DEV_KEYS).forEach(([key, cmd]) => k.onKeyPress(key, () => giantCommand(inst, cmd)))
+  k.onKeyPress(GIANT_DEBUG_KEY, () => { inst.giantDebug = !inst.giantDebug })
+}
+function giantCommand(inst, cmd) {
+  Giant.command(inst.giant, cmd, inst.heroInst?.character?.pos?.x)
+}
 function bindLeave(inst) {
   const k = inst.k
   const stopAudio = () => CaveSound.stop(inst.caveSound)

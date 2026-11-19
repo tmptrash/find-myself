@@ -1426,11 +1426,26 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // a menu exit or reload is restored as is.
     //
     let heroSpawnX = forestFirstStartGroundSpawnX
+    const groundSpawnY = heroSpawnY
     const hasSavedPose = !respawnNearTree && lastSpawnX != null && lastSpawnY != null && lastSpawnMode
     if (hasSavedPose) {
       heroSpawnX = lastSpawnX
       heroSpawnY = lastSpawnY
     }
+    //
+    // A ground-mode pose saved in the air over a mushroom (left mid-bounce)
+    // would drop the hero onto its cap and bounce him for ever: it is put
+    // down on the ground (and pulled clear of the cap below).
+    //
+    const overTrampoline = hasSavedPose && lastSpawnMode === SPAWN_MODE_GROUND && nudgeForestHeroSpawnAwayFromTrampolines({
+      spawnX: heroSpawnX,
+      spawnOnBranch: false,
+      branchTrampX,
+      trampX,
+      branchTrampVisible: isBranchTrampolineVisible(zones),
+      trampVisible: isRightTrampolineVisible(zones)
+    }) !== heroSpawnX
+    overTrampoline && (heroSpawnY = groundSpawnY)
     const spawnElevated = hasSavedPose && lastSpawnMode !== SPAWN_MODE_CAVE &&
       heroSpawnY + SURFACE_DETECT_Y < FLOOR_Y - LOG_SNAP_STANDING_MAX
     //
@@ -2285,8 +2300,17 @@ function releaseForestHeroOnElevatedSpawn(inst, heroSpawnY) {
 function persistForestLastSpawn(inst) {
   if (inst.drowning || inst.deathHandled || inst.touchDeathHandled) return
   const char = inst.heroInst?.character
-  const pose = inst.safeHeroPose ?? (char?.pos ? { x: char.pos.x, y: char.pos.y } : null)
+  const pose = inst.safeHeroPose ?? (char?.pos ? { x: char.pos.x, y: airborneSpawnY(inst, char) } : null)
   pose && writeForestLastSpawnKeys(inst, pose.x, pose.y)
+}
+//
+// Where a hero left in the air over the ground (mid-jump, mid-bounce on a
+// mushroom) is to come back: on the ground under him, not in the air.
+//
+function airborneSpawnY(inst, char) {
+  const airborne = !(char.isGrounded?.() ?? true) || isOnTrampolineCap(inst, char, inst.trampState) || isOnTrampolineCap(inst, char, inst.branchTrampState)
+  const overGround = char.pos.y + SURFACE_DETECT_Y < FLOOR_Y
+  return airborne && overGround ? HERO_FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED : char.pos.y
 }
 //
 // Stores spawn pose for the next reload (menu exit, death, or scene leave).

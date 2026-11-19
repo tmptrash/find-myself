@@ -50,6 +50,10 @@ const IDLE_CENTER_X = 48
 // the jump row's ground line (its crouches).
 //
 const RUN_BODY = { x: 78, y: 121, w: 101, h: 143, eyeX: 151.4, topY: 124, bottomY: 261 }
+//
+// The clear margin under each jump figure inside its box (sheet px).
+//
+const JUMP_BOX_MARGIN = 3
 const RUN_HIPS = [{ x: 110, y: 260 }, { x: 128, y: 260 }]
 const JUMP_GROUND_Y = 631
 const JUMP = [
@@ -156,6 +160,17 @@ export function bakeRunBody() {
   const canvas = bakeBox(picture, box, RUN_EYE_X - (box.eyeX - box.x) * RUN_SCALE, RUN_BODY_BOTTOM_Y - (box.bottomY - box.y) * RUN_SCALE, RUN_SCALE)
   liftBellyShading(canvas)
   return canvas
+}
+
+/**
+ * How far a jump frame's feet stand over the jump row's ground line once
+ * baked (canvas px: the frame drawn that much lower stands on the ground).
+ * @param {number} frame - Jump frame index
+ * @returns {number}
+ */
+export function jumpFeetLift(frame) {
+  const box = JUMP[frame]
+  return (JUMP_GROUND_Y - (box.y + box.h - JUMP_BOX_MARGIN)) * PICTURE_SCALE
 }
 
 /**

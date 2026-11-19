@@ -24,8 +24,9 @@ import * as Scene from './cave-scene.js'
 // outline (COARSE_SMOOTH points either side), which leans over the notches
 // between the stones of a heap and the lumps of a ragged edge instead of
 // into their sides, and a tight stretch of fewer than TIGHT_BRIDGE points
-// does not cut it. A run shorter than MIN_RUN px is
-// dropped.
+// does not cut it — nor one whose ends lie within TIGHT_BRIDGE_PX of each
+// other (the outline round a small lump or ledge: a runner climbs over
+// it). A run shorter than MIN_RUN px is dropped.
 //
 const SOLID_ALPHA = 128
 const RGBA = 4
@@ -42,6 +43,7 @@ const WATER_MARGIN = 8
 const CLEAR = 30
 const CLEAR_STEP = 6
 const TIGHT_BRIDGE = 24
+const TIGHT_BRIDGE_PX = 40
 const MIN_RUN = 120
 //
 // Marching squares: the outline's segments per cell case (corner bits:
@@ -325,7 +327,7 @@ function setNormals(pts, flip) {
 function splitLoop(m, pts, coarse) {
   const n = pts.length
   const tight = pts.map((p, i) => isTight(m, p.x, p.y, coarse[i].nx, coarse[i].ny))
-  bridgeTight(tight)
+  bridgeTight(tight, pts)
   const ok = pts.map((p, i) => !tight[i] && isInRoom(p))
   const firstBad = ok.indexOf(false)
   if (firstBad < 0) return [runOf(pts, true)]
@@ -361,10 +363,10 @@ function isTight(m, x, y, nx, ny) {
   return false
 }
 //
-// Tight stretches shorter than TIGHT_BRIDGE points round the loop are let
-// through.
+// Tight stretches shorter than TIGHT_BRIDGE points round the loop, or
+// with their ends close together, are let through.
 //
-function bridgeTight(tight) {
+function bridgeTight(tight, pts) {
   const n = tight.length
   const start = tight.indexOf(false)
   if (start < 0) return
@@ -373,7 +375,9 @@ function bridgeTight(tight) {
     if (!tight[i] || tight[(i - 1 + n) % n]) continue
     let len = 0
     while (len < n && tight[(i + len) % n]) len++
-    if (len >= TIGHT_BRIDGE) continue
+    const a = pts[(i - 1 + n) % n]
+    const b = pts[(i + len) % n]
+    if (len >= TIGHT_BRIDGE && Math.hypot(a.x - b.x, a.y - b.y) >= TIGHT_BRIDGE_PX) continue
     for (let d = 0; d < len; d++) tight[(i + d) % n] = false
   }
 }

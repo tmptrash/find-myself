@@ -1,4 +1,5 @@
 import * as BootLoader from './boot-loader.js'
+import { getActiveSceneName } from './engine-switch.js'
 import { rebootIntoActiveScene } from './scene-reboot.js'
 import { fitPageSize } from './page-size.js'
 
@@ -61,6 +62,7 @@ function onWindowResize() {
 function coverCanvas() {
   if (coverShown || resizeBusy) return
   coverShown = true
+  BootLoader.setLoaderScene(getActiveSceneName())
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)
 }

@@ -15,6 +15,7 @@ const FALLBACK_SCENE = 'menu'
  */
 export async function rebootIntoActiveScene() {
   const sceneName = getActiveSceneName() || get('lastLesson', null) || FALLBACK_SCENE
+  BootLoader.setLoaderScene(sceneName)
   BootLoader.showLoader()
   BootLoader.setLoaderBarPct(0)
   try {

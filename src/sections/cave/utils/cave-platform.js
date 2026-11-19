@@ -34,12 +34,17 @@ const TOP_WAVE_STRETCH = 1.6
 const TOP_WAVE_SEED_MUL = 2.9
 //
 // A ledge: its thickness under the top line (unless it gives its
-// underside), how far it runs on into a mass it joins. Its underside is
+// underside) — LEDGE_THICK give or take THICK_AMP, wandering slowly along
+// it (THICK_STRETCH, THICK_SEED_MUL), so no slab is the same depth all
+// along — how far it runs on into a mass it joins. Its underside is
 // never straight: broad lobes and fine ones, and soil bulging down here
 // and there (a bulge every BULGE_GAP..+RANGE px, BULGE_DEPTH..+RANGE deep,
 // BULGE_HALF..+RANGE px either side).
 //
 const LEDGE_THICK = 140
+const THICK_AMP = 65
+const THICK_STRETCH = 1.5
+const THICK_SEED_MUL = 5.3
 const JOIN_PAD = 40
 const LOBE_AMP = 20
 const LOBE_STRETCH = 1.2
@@ -55,14 +60,33 @@ const BULGE_HALF = 55
 const BULGE_HALF_RANGE = 55
 const BULGE_SEED = 9
 //
-// A free end is no square cut: over END_TAPER px the ledge thins to
-// END_SHARE of its depth at the end (rounding), and its face leans in by
-// END_LEAN px toward the bottom. Only ledges up to TAPER_MAX_THICK thick
-// taper (a deep mass keeps its face whole).
+// A free end is no square cut, and no two ends alike (each end's shape is
+// picked from the platform's seed and its side): its top rounds down into
+// the face over END_ROUND..+RANGE px; the face leans in by
+// END_LEAN..+RANGE px toward the bottom and bows out by up to END_BOW px
+// on the way; over END_TAPER..+RANGE px the ledge thins to
+// END_SHARE..+RANGE of its depth at the end (rounding its bottom corner),
+// and its underside curves up into the face too (END_UNDER_ROUND times
+// the top's radius: the only rounding a deep mass's bottom corner gets).
+// Only ledges up to TAPER_MAX_THICK thick taper (a deep mass keeps its
+// face whole). Where a platform runs into a side wall its top rises and
+// its underside comes down into the wall's face (Layout.wallFillet, sized
+// WALL_FILLET_MIN..+RANGE of it by the platform's seed).
 //
-const END_TAPER = 130
-const END_SHARE = 0.55
-const END_LEAN = 14
+const END_ROUND = 22
+const END_ROUND_RANGE = 38
+const END_TAPER = 90
+const END_TAPER_RANGE = 130
+const END_SHARE = 0.35
+const END_SHARE_RANGE = 0.3
+const END_LEAN = 8
+const END_LEAN_RANGE = 34
+const END_BOW = 20
+const END_SEED = 13
+const END_UNDER_ROUND = 1.6
+const WALL_FILLET_MIN = 0.7
+const WALL_FILLET_RANGE = 0.6
+const WALL_FILLET_STEPS = 7
 const TAPER_MAX_THICK = 220
 //
 // A free end's face, shaped like an underside (broad lobes and fine ones,
@@ -149,6 +173,7 @@ const layers = new Map()
 const bulges = new Map()
 const bigStones = new Map()
 const stoneSpans = new Map()
+const endShapes = new Map()
 
 /**
  * Paints a platform (its layer, built once per page) where it reaches into
@@ -221,13 +246,13 @@ export function stoneSpansOn(p) {
  */
 export function undersideAt(p, x) {
   const top = baseAt(p, x)
-  const base = p.bottom ?? top + LEDGE_THICK
+  const base = p.bottom ?? top + LEDGE_THICK + Layout.profileNoise(x / THICK_STRETCH, p.seed * THICK_SEED_MUL) * THICK_AMP
   const shape = p.under ? Layout.PLATFORMS.find(q => q.id === p.under) : p
   const y = base +
     Layout.profileNoise(x / LOBE_STRETCH, shape.seed * LOBE_SEED_MUL) * LOBE_AMP +
     Layout.profileNoise(x / LOBE_FINE_STRETCH, shape.seed * LOBE_FINE_SEED_MUL) * LOBE_FINE_AMP +
     bulgeAt(shape, x)
-  return top + (y - top) * endShare(p, x, base - top)
+  return top + (y - top) * endShare(p, x, base - top) - endRound(p, x, END_UNDER_ROUND) + Layout.wallFillet(x, y, wallScale(p))
 }
 
 /**
@@ -237,7 +262,8 @@ export function undersideAt(p, x) {
  * @returns {number}
  */
 export function baseAt(p, x) {
-  return Layout.topAt(p, x) + Layout.profileNoise(x / TOP_WAVE_STRETCH, p.seed * TOP_WAVE_SEED_MUL) * TOP_WAVE
+  const y = Layout.topAt(p, x) + Layout.profileNoise(x / TOP_WAVE_STRETCH, p.seed * TOP_WAVE_SEED_MUL) * TOP_WAVE
+  return y + endRound(p, x, 1) - Layout.wallFillet(x, y, wallScale(p))
 }
 //
 // The soil body of a platform.
@@ -279,8 +305,8 @@ function ledgeBody(p) {
   const span = artSpan(p)
   const bottomAt = x => undersideAt(p, x)
   const joinedBelow = span.freeL && p.faceTo !== undefined
-  const leanL = span.freeL && !joinedBelow ? END_LEAN : 0
-  const leanR = span.freeR ? END_LEAN : 0
+  const leanL = span.freeL && !joinedBelow ? endShape(p, -1).lean : 0
+  const leanR = span.freeR ? endShape(p, 1).lean : 0
   const underL = joinedBelow ? span.x1 - JOIN_PAD : span.x1 + leanL
   const inL = span.freeL ? span.x1 + END_CORE_INSET : span.x1
   const inR = span.freeR ? span.x2 - END_CORE_INSET : span.x2
@@ -320,6 +346,7 @@ function ledgeBody(p) {
 //
 function facePoints(p, inward, x0, y0, x1, y1) {
   const pts = []
+  const bow = endShape(p, -inward).bow
   const n = Math.max(1, Math.round((y1 - y0) / FACE_STEP))
   for (let i = 0; i <= n; i++) {
     const u = i / n
@@ -327,9 +354,48 @@ function facePoints(p, inward, x0, y0, x1, y1) {
     const calm = Math.min(1, (y - y0) / FACE_CALM)
     const wave = Layout.profileNoise(y / FACE_STRETCH, p.seed * FACE_SEED_MUL + inward) * FACE_AMP +
       Layout.profileNoise(y / FACE_FINE_STRETCH, p.seed * FACE_FINE_SEED_MUL + inward) * FACE_FINE_AMP
-    pts.push({ x: x0 + (x1 - x0) * u + wave * calm * inward, y })
+    pts.push({ x: x0 + (x1 - x0) * u + (wave * calm - bow * Math.sin(Math.PI * u)) * inward, y })
   }
   return pts
+}
+//
+// A free end's own shape (side -1: the left end, 1: the right one), picked
+// once from the platform's seed: how its top rounds down, how its face
+// leans and bows, how it tapers.
+//
+function endShape(p, side) {
+  const key = `${p.id}${side}`
+  if (endShapes.has(key)) return endShapes.get(key)
+  const rng = createSeededRandom(p.seed * END_SEED + side + END_SEED)
+  const shape = {
+    round: END_ROUND + rng() * END_ROUND_RANGE,
+    lean: END_LEAN + rng() * END_LEAN_RANGE,
+    bow: rng() * END_BOW,
+    taper: END_TAPER + rng() * END_TAPER_RANGE,
+    share: END_SHARE + rng() * END_SHARE_RANGE
+  }
+  endShapes.set(key, shape)
+  return shape
+}
+//
+// How far a ledge's top (or underside) curves in at X as it rounds into a
+// free end's face: a quarter circle of the end's radius times `scale`.
+//
+function endRound(p, x, scale) {
+  if (p.kind !== Layout.PLATFORM_KIND.LEDGE) return 0
+  const span = artSpan(p)
+  const fromL = span.freeL ? x - span.x1 : Infinity
+  const fromR = span.freeR ? span.x2 - x : Infinity
+  if (fromL === Infinity && fromR === Infinity) return 0
+  const r = endShape(p, fromL < fromR ? -1 : 1).round * scale
+  const d = Math.max(0, Math.min(fromL, fromR))
+  return d >= r ? 0 : r - Math.sqrt(r * r - (r - d) * (r - d))
+}
+//
+// A platform's own wall-fillet size (by its seed).
+//
+function wallScale(p) {
+  return WALL_FILLET_MIN + (p.seed % WALL_FILLET_STEPS) / WALL_FILLET_STEPS * WALL_FILLET_RANGE
 }
 //
 // A ground: its core from its top down to the world's bottom, wall to
@@ -381,8 +447,10 @@ function endShare(p, x, thick) {
   if (p.kind !== Layout.PLATFORM_KIND.LEDGE || thick > TAPER_MAX_THICK) return 1
   const fromL = p.x1 > 0 && p.faceTo === undefined ? x - p.x1 : Infinity
   const fromR = p.x2 < Layout.WORLD_W && !p.joinR ? p.x2 - x : Infinity
-  const f = Math.max(0, Math.min(1, Math.min(fromL, fromR) / END_TAPER))
-  return END_SHARE + (1 - END_SHARE) * Math.sqrt(1 - (1 - f) * (1 - f))
+  if (fromL === Infinity && fromR === Infinity) return 1
+  const end = endShape(p, fromL < fromR ? -1 : 1)
+  const f = Math.max(0, Math.min(1, Math.min(fromL, fromR) / end.taper))
+  return end.share + (1 - end.share) * Math.sqrt(1 - (1 - f) * (1 - f))
 }
 //
 // Soil bulging down from a ledge's underside at X: the sum of its bulges

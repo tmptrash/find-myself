@@ -92,6 +92,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     onComplete?.()
     return
   }
+  BootLoader.setLoaderScene(nextLevel)
   //
   // Menu-hero jump handlers live on window, not on the Kaplay instance — they
   // survive k.go unless cleared here before the transition registers its own.

@@ -1,21 +1,16 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 //
-// Cave lesson 0 geometry: the hero drops in from the forest through a hole
-// the forest eye-flower's roots tore in a low part of the ceiling, onto a
-// soil ledge — a lantern mushroom left of where he lands. A gap splits it
-// from the middle ledge; fall through the gap into the lake hall under the
-// ledges: a soil floor with a wide, deep lake in it; past its right bank
-// small stone platforms climb into the crevice between the middle ledge
-// and the stalk-eye's — the way up. The stalk-eye's narrow
-// ledge is the top of a solid mass (the old corridor under it is filled
-// in); right past the stalk-eye a shaft drops at the level's right edge,
+// Cave lesson 0 geometry: the hero drops in from the forest down the
+// tunnel the forest eye-flower's roots tore through the thick ceiling by
+// the left wall, onto the lake's left bank — a lantern mushroom left of
+// where he lands. The lake hall: a wide, deep lake between two low banks
+// (BANK_Y, a little over the water: the way across is on the giant's back
+// as it breathes); past the right bank a shaft drops by the right wall,
 // stone steps zigzagging down it into a passage that runs under the lake
-// hall to the left wall. Left of the lake, by the left wall, a second
-// shaft drops from the hall's floor straight down into that passage (the
-// hall's floor starts WEST_SHAFT_X px in from the world's left edge).
+// hall to the left wall, where the stalk-eye stands.
 //
 export const WORLD_W = 2760
-export const WORLD_H = 1520
+export const WORLD_H = 1700
 //
 // Invisible wall bodies along both edges; the painted earth is wider and
 // ragged, so the hero can tuck slightly into its broken outline.
@@ -29,17 +24,18 @@ export const WALL_COLLIDE_W = 56
 // broad lobes and fine ones, and soil bulging down here and there.
 //
 const CEILING_KNOTS = [
-  { x: -60, y: 150 },
-  { x: 300, y: 180 },
-  { x: 560, y: 150 },
-  { x: 820, y: 100 },
-  { x: 1100, y: 150 },
-  { x: 1380, y: 160 },
-  { x: 1650, y: 130 },
-  { x: 1950, y: 110 },
-  { x: 2200, y: 115 },
-  { x: 2500, y: 125 },
-  { x: 2820, y: 120 }
+  { x: -60, y: 520 },
+  { x: 300, y: 550 },
+  { x: 520, y: 480 },
+  { x: 700, y: 380 },
+  { x: 900, y: 340 },
+  { x: 1100, y: 370 },
+  { x: 1380, y: 355 },
+  { x: 1650, y: 330 },
+  { x: 1950, y: 345 },
+  { x: 2200, y: 350 },
+  { x: 2500, y: 370 },
+  { x: 2820, y: 360 }
 ]
 //
 // The roots' hole through the ceiling the hero dropped through (the
@@ -49,8 +45,9 @@ const CEILING_KNOTS = [
 //
 export const ENTRY_X = 300
 export const ENTRY_HALF_W = 46
-export const ENTRY_Y = 180
-export const START_PLATFORM = 'upper'
+export const ENTRY_Y = 550
+const HALL_FLOOR_ID = 'hallFloor'
+export const START_PLATFORM = HALL_FLOOR_ID
 const ENTRY_WAVE_STRETCH = 0.5
 const ENTRY_WAVE_AMP = 12
 const ENTRY_FINE_STRETCH = 0.3
@@ -91,60 +88,35 @@ const K = PLATFORM_KIND
 // on into the mass next to it) and `under` (its underside continues that
 // platform's). A float is `w` px wide, centred on `x`, its flat top at
 // `y`, cut from piece `piece` of platforms.png.
-// Floats climb within a run-jump of each other (reach ≈ 147 px, rise
-// ≈ 100 px): from the lake's right bank up the crevice and down the shaft,
-// both zigzagging between two columns of floats. The middle ledge ends
-// MID_LEDGE_OVER px past the lake (a hero dropping off it lands on the
-// bank), the crevice is CREVICE_W px wide, its columns CREVICE_COL_L and
-// CREVICE_COL_R px in from the ledge's end.
+// Floats step within a run-jump of each other (reach ≈ 147 px, rise
+// ≈ 100 px) down the shaft, zigzagging between two columns of floats.
+// The banks stand BANK_Y high; the left one runs on into the left wall,
+// the right one ends at the shaft (SHAFT_X1).
 //
-const HALL_FLOOR_ID = 'hallFloor'
-const WEST_SHAFT_X = 200
-const HALL_FLOOR_Y = 850
+const BANK_Y = 780
 const PASSAGE_TOP_Y = 1260
-const PASSAGE_FLOOR_Y = 1440
-const UPPER_X2 = 400
-export const MID_LEDGE_X1 = 465
-const MID_LEDGE_OVER = 40
-const MID_LEDGE_X2 = LAKE_X2 + MID_LEDGE_OVER
-const CREVICE_W = 170
-const CREVICE_COL_L = MID_LEDGE_X2 + 40
-const CREVICE_COL_R = MID_LEDGE_X2 + 130
-const EYE_LEDGE_X1 = MID_LEDGE_X2 + CREVICE_W
-const EYE_LEDGE_X2 = EYE_LEDGE_X1 + 170
+const PASSAGE_FLOOR_Y = 1620
+const SHAFT_X1 = 2500
 //
-// The shaft by the right wall, between the stalk-eye's ledge and the wall:
-// its floats zigzag between a left column SHAFT_L_IN px off the ledge's
+// The shaft by the right wall, between the right bank's mass and the wall:
+// its floats zigzag between a left column SHAFT_L_IN px off the bank's
 // end and a right one SHAFT_R_IN px in from the world's edge (clear of the
 // wall's ragged face), each float nudged a little off its column.
 //
 const SHAFT_L_IN = 40
 const SHAFT_R_IN = 132
 export const PLATFORMS = [
-  { id: 'upper', x1: 0, x2: UPPER_X2, y: 410, kind: K.LEDGE, seed: 11 },
-  { id: 'midLedge', x1: MID_LEDGE_X1, x2: MID_LEDGE_X2, y: 380, top: [[MID_LEDGE_X1, 380], [MID_LEDGE_X2 - 240, 380], [MID_LEDGE_X2, 402]], kind: K.LEDGE, seed: 13 },
   {
     id: HALL_FLOOR_ID,
-    x1: WEST_SHAFT_X,
-    x2: EYE_LEDGE_X1 + 20,
-    y: HALL_FLOOR_Y,
-    top: [[WEST_SHAFT_X, HALL_FLOOR_Y], [LAKE_X1, HALL_FLOOR_Y], [530, 935], [572, 1025], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 30, 985], [LAKE_X2, HALL_FLOOR_Y], [EYE_LEDGE_X1 + 20, HALL_FLOOR_Y]],
+    x1: 0,
+    x2: SHAFT_X1,
+    y: BANK_Y,
+    top: [[0, BANK_Y], [LAKE_X1 - 45, BANK_Y], [LAKE_X1 + 10, 880], [LAKE_X1 + 40, 960], [580, 1030], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 35, 985], [LAKE_X2 - 5, 880], [LAKE_X2 + 45, BANK_Y], [SHAFT_X1, BANK_Y]],
     bottom: PASSAGE_TOP_Y,
-    joinR: true,
     kind: K.LEDGE,
     seed: 31
   },
-  { id: 'eyeLedge', x1: EYE_LEDGE_X1, x2: EYE_LEDGE_X2, y: 430, bottom: PASSAGE_TOP_Y, faceTo: HALL_FLOOR_Y, under: HALL_FLOOR_ID, kind: K.LEDGE, seed: 23 },
-  { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, 1432], [820, 1444], [1240, 1434], [1640, 1442], [WORLD_W, 1436]], kind: K.GROUND, seed: 59 },
-  { id: 'crevice1', x: CREVICE_COL_L, y: 770, w: 70, piece: 'float10', kind: K.FLOAT, seed: 47 },
-  { id: 'crevice2', x: CREVICE_COL_R, y: 690, w: 60, piece: 'float7', kind: K.FLOAT, seed: 51 },
-  { id: 'crevice3', x: CREVICE_COL_L, y: 620, w: 60, piece: 'float14', kind: K.FLOAT, seed: 48 },
-  { id: 'crevice4', x: CREVICE_COL_R, y: 555, w: 55, piece: 'float2', kind: K.FLOAT, seed: 49 },
-  { id: 'crevice5', x: CREVICE_COL_L, y: 490, w: 55, piece: 'float11', kind: K.FLOAT, seed: 50 },
-  { id: 'shaft1', x: shaftR(30), y: 505, w: 60, piece: 'float7', kind: K.FLOAT, seed: 61 },
-  { id: 'shaft2', x: shaftL(0), y: 585, w: 60, piece: 'float12', kind: K.FLOAT, seed: 62 },
-  { id: 'shaft3', x: shaftR(7), y: 655, w: 60, piece: 'float5', kind: K.FLOAT, seed: 63 },
-  { id: 'shaft4', x: shaftL(15), y: 730, w: 55, piece: 'float18', kind: K.FLOAT, seed: 64 },
+  { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, PASSAGE_FLOOR_Y - 8], [820, PASSAGE_FLOOR_Y + 4], [1240, PASSAGE_FLOOR_Y - 6], [1640, PASSAGE_FLOOR_Y + 2], [WORLD_W, PASSAGE_FLOOR_Y - 4]], kind: K.GROUND, seed: 59 },
   { id: 'shaft5', x: shaftR(0), y: 805, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
   { id: 'shaft6', x: shaftL(5), y: 880, w: 60, piece: 'float15', kind: K.FLOAT, seed: 66 },
   { id: 'shaft7', x: shaftR(12), y: 960, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
@@ -152,25 +124,22 @@ export const PLATFORMS = [
   { id: 'shaft9', x: shaftR(5), y: 1120, w: 60, piece: 'float4', kind: K.FLOAT, seed: 69 },
   { id: 'shaft10', x: shaftL(17), y: 1190, w: 55, piece: 'float17', kind: K.FLOAT, seed: 70 },
   { id: 'shaft11', x: shaftR(2), y: 1275, w: 60, piece: 'float3', kind: K.FLOAT, seed: 71 },
-  { id: 'shaft12', x: shaftL(15), y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 }
+  { id: 'shaft12', x: shaftL(15), y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 },
+  { id: 'shaft13', x: shaftR(9), y: 1440, w: 60, piece: 'float6', kind: K.FLOAT, seed: 73 },
+  { id: 'shaft14', x: shaftL(8), y: 1525, w: 55, piece: 'float13', kind: K.FLOAT, seed: 74 }
 ].map(p => (p.kind === K.FLOAT ? { ...p, x1: p.x - p.w / 2, x2: p.x + p.w / 2 } : p))
 //
-// The exit: the crevice between the two upper ledges (its span), from
-// their tops down into the hall under them.
-//
-export const EXIT = { x1: MID_LEDGE_X2, x2: EYE_LEDGE_X1 }
-//
-// The stalk-eye on its ledge right past the exit, before the shaft; the
+// The stalk-eye in the passage, short of the foot of the shaft; the
 // dormant lantern mushroom left of where the hero lands (`on` names the
 // platform each stands on; `y` is its base line, the art's own top is
 // cave-ground.js's).
 //
-export const STALK_EYE = { x: EYE_LEDGE_X1 + 80, y: 430, on: 'eyeLedge' }
-export const LANTERN = { x: 145, y: 410, on: 'upper' }
+export const STALK_EYE = { x: 2240, y: PASSAGE_FLOOR_Y, on: 'passage' }
+export const LANTERN = { x: 195, y: BANK_Y, on: HALL_FLOOR_ID }
 //
-// Bounds for ambient fireflies.
+// Bounds for ambient fireflies: the hall under its ceiling.
 //
-export const FIREFLY_BOUNDS = { x1: 70, y1: 40, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
+export const FIREFLY_BOUNDS = { x1: 70, y1: 360, x2: WORLD_W - 70, y2: LAKE_SURFACE_Y - 20 }
 //
 // Wall profile, shaped like a platform's underside: inset past the
 // collider, broad lobes and fine ones (stretch, height), nothing sticking
@@ -203,6 +172,25 @@ const CEILING_BULGE_HALF = 55
 const CEILING_BULGE_HALF_RANGE = 55
 const CEILING_BULGE_SEED = 6161
 //
+// A base line's knots are no sharp bends: each is rounded off by a curve
+// cutting its corner, KNOT_ROUND..+RANGE px along each side of it (picked
+// per knot from the platform's seed, never more than KNOT_SHARE of either
+// segment); a bend gentler than KNOT_STRAIGHT (cosine) stays as it is.
+//
+const KNOT_ROUND = 16
+const KNOT_ROUND_RANGE = 40
+const KNOT_SHARE = 0.45
+const KNOT_STRAIGHT = 0.9995
+const KNOT_SEED = 17
+const KNOT_EPS = 1e-6
+const knotCurves = new Map()
+//
+// Where soil meets a side wall it is no square corner: it curves into the
+// wall's face over a quarter circle WALL_FILLET px round (a floor rising
+// to it, an underside or the ceiling coming down to it).
+//
+const WALL_FILLET = 55
+//
 // Profile noise octaves: wavelength (px), weight and seed multiplier.
 //
 const NOISE_OCTAVES = [
@@ -228,10 +216,26 @@ export function ceilingBottomAt(x) {
     const d = Math.abs(x - c.x) / c.half
     return d >= 1 ? sum : sum + c.depth * (1 + Math.cos(Math.PI * d)) / 2
   }, 0)
-  return a.y + (b.y - a.y) * ease +
+  const y = a.y + (b.y - a.y) * ease +
     profileNoise(x / CEILING_LOBE_STRETCH, CEILING_SEED) * CEILING_LOBE_AMP +
     profileNoise(x / CEILING_FINE_STRETCH, CEILING_FINE_SEED) * CEILING_FINE_AMP +
     bulge
+  return y + wallFillet(x, y)
+}
+
+/**
+ * How far soil at (x, y) curves toward a side wall's face it meets: a
+ * quarter circle WALL_FILLET (times `scale`) round, 0 farther than that
+ * from both walls.
+ * @param {number} x - World X
+ * @param {number} y - World Y of the soil's line there
+ * @param {number} [scale=1] - The fillet's size share
+ * @returns {number} Px toward the open side of the line (up for a floor, down for an underside)
+ */
+export function wallFillet(x, y, scale = 1) {
+  const r = WALL_FILLET * scale
+  const d = Math.max(0, Math.min(x - leftWallX(y), rightWallX(y) - x))
+  return d >= r ? 0 : r - Math.sqrt(r * r - (r - d) * (r - d))
 }
 
 /**
@@ -250,12 +254,15 @@ export function entrySideX(y, dir) {
 
 /**
  * A platform's base line Y at world X from its knots (clamped to its
- * span); the hero walks the art's own top (cave-ground.js).
+ * span), every bend rounded off; the hero walks the art's own top
+ * (cave-ground.js).
  * @param {Object} p - PLATFORMS entry
  * @param {number} x - World X
  * @returns {number}
  */
 export function topAt(p, x) {
+  const curve = curvesOf(p).find(c => x > c.ax && x < c.bx)
+  if (curve) return curveY(curve, x)
   const knots = baseKnots(p)
   const i = Math.max(1, knots.findIndex(k => k[0] >= x))
   const [ax, ay] = knots[i - 1]
@@ -342,13 +349,52 @@ function placeCeilingBulges() {
 // shaft's middle.
 //
 function shaftL(dx) {
-  return EYE_LEDGE_X2 + SHAFT_L_IN + dx
+  return SHAFT_X1 + SHAFT_L_IN + dx
 }
 function shaftR(dx) {
   return WORLD_W - SHAFT_R_IN - dx
 }
 function baseKnots(p) {
   return p.top ?? [[p.x1, p.y], [p.x2, p.y]]
+}
+//
+// The curves rounding a platform's bends (once per platform): each from a
+// point on the segment before its knot to one on the segment after, the
+// knot their control point.
+//
+function curvesOf(p) {
+  if (knotCurves.has(p.id)) return knotCurves.get(p.id)
+  const rng = createSeededRandom(p.seed * KNOT_SEED)
+  const knots = baseKnots(p)
+  const curves = []
+  for (let i = 1; i < knots.length - 1; i++) {
+    const r = KNOT_ROUND + rng() * KNOT_ROUND_RANGE
+    const [px, py] = knots[i - 1]
+    const [kx, ky] = knots[i]
+    const [nx, ny] = knots[i + 1]
+    const la = Math.hypot(kx - px, ky - py)
+    const lb = Math.hypot(nx - kx, ny - ky)
+    if (la < KNOT_EPS || lb < KNOT_EPS) continue
+    const cos = ((kx - px) * (nx - kx) + (ky - py) * (ny - ky)) / (la * lb)
+    if (cos > KNOT_STRAIGHT) continue
+    const ra = Math.min(r, la * KNOT_SHARE) / la
+    const rb = Math.min(r, lb * KNOT_SHARE) / lb
+    curves.push({ ax: kx - (kx - px) * ra, ay: ky - (ky - py) * ra, kx, ky, bx: kx + (nx - kx) * rb, by: ky + (ny - ky) * rb })
+  }
+  knotCurves.set(p.id, curves)
+  return curves
+}
+//
+// A rounding curve's Y at X (its parameter solved from X: the curve runs
+// left to right).
+//
+function curveY(c, x) {
+  const a = c.ax - 2 * c.kx + c.bx
+  const b = 2 * (c.kx - c.ax)
+  const k = c.ax - x
+  const t = Math.abs(a) < KNOT_EPS ? -k / b : (-b + Math.sqrt(Math.max(0, b * b - 4 * a * k))) / (2 * a)
+  const u = 1 - t
+  return u * u * c.ay + 2 * u * t * c.ky + t * t * c.by
 }
 function segmentsOf(knots) {
   return knots.slice(1).map((k, i) => ({ x1: knots[i][0], y1: knots[i][1], x2: k[0], y2: k[1] }))

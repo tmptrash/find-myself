@@ -46,10 +46,12 @@ export const CAVE_CFG = {
   //
   // The lake in the hall's floor (cave-lake.js) in the cave's teal: the
   // water, its light skin and deep tint, the surface lines and the band
-  // between them, the algae on its bed (dark, base and lit greens).
+  // between them, the algae on its bed (dark, base and lit greens), and
+  // `bedShade` the dark teal its bed's stones and plants sink into.
   //
   water: {
     water: '#1d5a5c',
+    bedShade: '#0a2428',
     paint: {
       light: '#4f9a92',
       deep: '#0d2e33',
@@ -86,7 +88,8 @@ export const CAVE_CFG = {
   // a cream-orange belly, a warm orange face, a big gold-ringed eye, gold
   // speckles, see-through blue fins with pale gold rays, a dark contour.
   // The far side's fin and a fish deep in the water are pulled toward the
-  // cave's dark (farShade, depthShade).
+  // cave's dark (farShade, depthShade); `sand` the grains it spills
+  // picking at the lake's bed.
   //
   fish: {
     back: '#24425a',
@@ -111,8 +114,41 @@ export const CAVE_CFG = {
     finRay: '#ead6a0',
     contour: '#16242b',
     splash: '#b9eadc',
+    sand: '#a98e66',
     farShade: 0.35,
     depthShade: 0.3
+  },
+  //
+  // The lake's giant (cave-giant.js): its body (assets/cave0/creature.png)
+  // bent as one skinned mesh, its paddles drawn apart. `length` is its drawn length (world px, the
+  // picture's width); `mesh` the grid (columns, rows) and how wide the
+  // blend across a joint is (share of a bone); `anim` the swim's tuning:
+  // beats per s and the body's and tail's swing at full swim (rad), how
+  // stiffly the body follows the head's pitch (0..1), how far the wave
+  // lags from bone to bone (rad), how quickly it answers a turn (0..1) and
+  // an overall speed of the animation; `mist` the breath's colour; `gape`
+  // the pink back of its open (see-through) mouth, `tooth` and `toothEdge`
+  // its teeth, `blood` what clouds out of its mouth as it eats.
+  //
+  giant: {
+    length: 260,
+    mesh: { cols: 48, rows: 10, blend: 0.6 },
+    anim: {
+      swimFrequency: 0.5,
+      swimAmplitude: 0.12,
+      tailAmplitude: 0.35,
+      bodyStiffness: 0.9,
+      phaseOffset: 0.6,
+      turnResponsiveness: 0.8,
+      animationSpeed: 1
+    },
+    mist: '#e2ece8',
+    gape: '#8a3a46',
+    tooth: '#eee3c4',
+    toothEdge: '#3a2a1c',
+    blood: '#b3202c',
+    debugLine: '#ffffff',
+    debugBones: ['#ff5a5a', '#ffb347', '#ffe066', '#7ddc6e', '#4fc3f7', '#9575cd', '#f06292']
   },
   //
   // The cave's stalk-eye (cave-stalk-eye.js, cave-menu-stalk-eye.js): kin

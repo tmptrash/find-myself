@@ -10,7 +10,8 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // same for the stones of stones.png: heaps, long beds, and loose wedges
 // and patches); plants.png (plants growing up, out of a wall sideways and
 // hanging down) and plants2.png (more of each kind: upB, sideB, hangB,
-// sproutB, tinyB), roots.png (roots hanging from soil: root),
+// sproutB, tinyB), roots.png (roots hanging from soil, a clod of it at
+// each one's top: root),
 // platforms.png (short soil platforms hanging in the
 // air), runner.png (the runner insect taken apart: its body, head, tail
 // leaf, two feelers, and per pair of legs a hip ball, a thigh, a shin and
@@ -18,7 +19,10 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // mushroom.png (the lantern mushroom, its cap and stem full of holes),
 // strider.png (the water strider taken apart: its body under its wings,
 // its head with one big eye, a feeler — the sheet's right one, the left
-// one is its mirror —, a bent femur and a straight tibia); plus the forest's buried elements
+// one is its mirror —, a bent femur and a straight tibia), creature.png
+// (the lake's giant taken apart: its body — bent as a mesh — with the
+// sockets of its paddles, and the front and the hind paddle); plus the
+// forest's buried elements
 // (bones, fossils, shells: elements_ground.png, cut by the forest).
 //
 // The sheets are not clean, so each is prepared as it is cut: faint haze
@@ -43,7 +47,8 @@ const SHEET = {
   TOP: 'top',
   RUNNER: 'runner',
   MUSHROOM: 'mushroom',
-  STRIDER: 'strider'
+  STRIDER: 'strider',
+  CREATURE: 'creature'
 }
 //
 // Per sheet: its file, its alpha remap [lo, hi], whether its colour is
@@ -66,10 +71,12 @@ const SHEETS = {
   [SHEET.TOP]: { url: 'cave0/ground_top.png', alpha: [6, 250], soil: true, dewhite: 170, sharpen: 3 },
   [SHEET.RUNNER]: { url: 'cave0/runner.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.MUSHROOM]: { url: 'cave0/mushroom.png', alpha: [40, 200] },
-  [SHEET.STRIDER]: { url: 'cave0/strider.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } }
+  [SHEET.STRIDER]: { url: 'cave0/strider.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.CREATURE]: { url: 'cave0/creature.png', alpha: [8, 240] }
 }
 const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
+const HALF_SHARE = 0.5
 const RGBA = 4
 //
 // Soil colour match: a sheet's soil is its opaque pixels darker than
@@ -605,50 +612,50 @@ const PIECES = {
   tinyB18: [SHEET.PLANTS2, 1318, 956, 54, 55],
   tinyB19: [SHEET.PLANTS2, 1381, 956, 70, 54],
   tinyB20: [SHEET.PLANTS2, 1459, 955, 67, 55],
-  root0: [SHEET.ROOTS, 34, 37, 204, 257],
-  root1: [SHEET.ROOTS, 269, 35, 147, 241],
-  root2: [SHEET.ROOTS, 449, 34, 201, 205],
-  root3: [SHEET.ROOTS, 674, 36, 111, 215],
-  root4: [SHEET.ROOTS, 816, 36, 119, 254],
-  root5: [SHEET.ROOTS, 964, 39, 172, 189],
-  root6: [SHEET.ROOTS, 1128, 37, 182, 236],
-  root7: [SHEET.ROOTS, 1335, 36, 75, 231],
-  root8: [SHEET.ROOTS, 1443, 36, 190, 244],
-  root9: [SHEET.ROOTS, 35, 307, 117, 110],
-  root10: [SHEET.ROOTS, 187, 308, 73, 133],
-  root11: [SHEET.ROOTS, 287, 307, 147, 141],
-  root12: [SHEET.ROOTS, 464, 308, 91, 116],
-  root13: [SHEET.ROOTS, 577, 306, 153, 150],
-  root14: [SHEET.ROOTS, 770, 307, 73, 95],
-  root15: [SHEET.ROOTS, 869, 307, 161, 166],
-  root16: [SHEET.ROOTS, 1069, 308, 105, 139],
-  root17: [SHEET.ROOTS, 1205, 307, 142, 145],
-  root18: [SHEET.ROOTS, 1384, 308, 65, 86],
-  root19: [SHEET.ROOTS, 1477, 307, 157, 166],
-  root20: [SHEET.ROOTS, 35, 492, 101, 201],
-  root21: [SHEET.ROOTS, 175, 494, 68, 118],
-  root22: [SHEET.ROOTS, 255, 495, 128, 211],
-  root23: [SHEET.ROOTS, 407, 495, 80, 155],
-  root24: [SHEET.ROOTS, 517, 494, 143, 221],
-  root25: [SHEET.ROOTS, 699, 494, 102, 161],
-  root26: [SHEET.ROOTS, 822, 494, 166, 171],
-  root27: [SHEET.ROOTS, 1028, 488, 100, 227],
-  root28: [SHEET.ROOTS, 1163, 491, 74, 89],
-  root29: [SHEET.ROOTS, 1271, 489, 115, 194],
-  root30: [SHEET.ROOTS, 1414, 489, 217, 236],
-  root31: [SHEET.ROOTS, 31, 739, 96, 89],
-  root32: [SHEET.ROOTS, 150, 738, 51, 123],
-  root33: [SHEET.ROOTS, 229, 740, 72, 83],
-  root34: [SHEET.ROOTS, 323, 737, 142, 144],
-  root35: [SHEET.ROOTS, 488, 738, 99, 158],
-  root36: [SHEET.ROOTS, 616, 736, 128, 180],
-  root37: [SHEET.ROOTS, 773, 739, 96, 139],
-  root38: [SHEET.ROOTS, 903, 738, 65, 155],
-  root39: [SHEET.ROOTS, 994, 739, 182, 141],
-  root40: [SHEET.ROOTS, 1183, 740, 67, 88],
-  root41: [SHEET.ROOTS, 1279, 739, 104, 158],
-  root42: [SHEET.ROOTS, 1413, 737, 72, 110],
-  root43: [SHEET.ROOTS, 1505, 739, 137, 123],
+  root0: [SHEET.ROOTS, 14, 24, 162, 338],
+  root1: [SHEET.ROOTS, 205, 31, 149, 302],
+  root2: [SHEET.ROOTS, 361, 25, 208, 312],
+  root3: [SHEET.ROOTS, 572, 27, 92, 296],
+  root4: [SHEET.ROOTS, 687, 31, 148, 333],
+  root5: [SHEET.ROOTS, 846, 32, 153, 251],
+  root6: [SHEET.ROOTS, 987, 31, 169, 310],
+  root7: [SHEET.ROOTS, 1180, 31, 80, 311],
+  root8: [SHEET.ROOTS, 1277, 25, 166, 342],
+  root9: [SHEET.ROOTS, 12, 364, 111, 144],
+  root10: [SHEET.ROOTS, 145, 364, 75, 168],
+  root11: [SHEET.ROOTS, 243, 364, 135, 184],
+  root12: [SHEET.ROOTS, 394, 366, 82, 142],
+  root13: [SHEET.ROOTS, 492, 364, 136, 193],
+  root14: [SHEET.ROOTS, 664, 363, 72, 143],
+  root15: [SHEET.ROOTS, 756, 362, 147, 204],
+  root16: [SHEET.ROOTS, 932, 365, 101, 168],
+  root17: [SHEET.ROOTS, 1051, 364, 146, 187],
+  root18: [SHEET.ROOTS, 1223, 368, 76, 153],
+  root19: [SHEET.ROOTS, 1315, 373, 126, 193],
+  root20: [SHEET.ROOTS, 11, 563, 109, 279],
+  root21: [SHEET.ROOTS, 131, 570, 77, 174],
+  root22: [SHEET.ROOTS, 217, 569, 113, 275],
+  root23: [SHEET.ROOTS, 343, 570, 90, 184],
+  root24: [SHEET.ROOTS, 440, 571, 137, 280],
+  root25: [SHEET.ROOTS, 597, 569, 103, 222],
+  root26: [SHEET.ROOTS, 709, 572, 159, 225],
+  root27: [SHEET.ROOTS, 888, 569, 116, 275],
+  root28: [SHEET.ROOTS, 1027, 571, 76, 158],
+  root29: [SHEET.ROOTS, 1124, 570, 128, 274],
+  root30: [SHEET.ROOTS, 1264, 573, 178, 285],
+  root31: [SHEET.ROOTS, 12, 861, 68, 138],
+  root32: [SHEET.ROOTS, 106, 859, 71, 168],
+  root33: [SHEET.ROOTS, 196, 863, 70, 130],
+  root34: [SHEET.ROOTS, 282, 860, 120, 177],
+  root35: [SHEET.ROOTS, 414, 862, 94, 179],
+  root36: [SHEET.ROOTS, 531, 861, 109, 204],
+  root37: [SHEET.ROOTS, 656, 860, 93, 155],
+  root38: [SHEET.ROOTS, 773, 862, 70, 181],
+  root39: [SHEET.ROOTS, 860, 863, 130, 188],
+  root40: [SHEET.ROOTS, 1011, 861, 85, 140],
+  root41: [SHEET.ROOTS, 1123, 862, 101, 193],
+  root42: [SHEET.ROOTS, 1245, 863, 79, 159],
+  root43: [SHEET.ROOTS, 1346, 865, 92, 151],
   grow0: [SHEET.PLANTS, 9, 60, 128, 76],
   grow1: [SHEET.PLANTS, 139, 38, 105, 95],
   grow2: [SHEET.PLANTS, 242, 21, 177, 114],
@@ -780,7 +787,10 @@ const PIECES = {
   striderHead: [SHEET.STRIDER, 812, 160, 200, 166],
   striderFeeler: [SHEET.STRIDER, 1266, 178, 168, 118],
   striderFemur: [SHEET.STRIDER, 572, 408, 136, 210],
-  striderTibia: [SHEET.STRIDER, 562, 642, 52, 296]
+  striderTibia: [SHEET.STRIDER, 562, 642, 52, 296],
+  giantBody: [SHEET.CREATURE, 92, 4, 2063, 419],
+  giantFinFront: [SHEET.CREATURE, 642, 424, 408, 293],
+  giantFinHind: [SHEET.CREATURE, 1259, 414, 275, 251]
 }
 const sheets = new Map()
 const pieces = new Map()
@@ -1016,7 +1026,8 @@ export function widthAt(name, h) {
  * @param {Object} [opts]
  * @param {boolean} [opts.flip=false] - Mirror horizontally
  * @param {boolean} [opts.hang=false] - Anchor at the top centre instead
- * @param {number} [opts.angle=0] - Turn round the piece's centre (radians)
+ * @param {number} [opts.angle=0] - Turn (radians) round a point on its centre line
+ * @param {number} [opts.pivot=0.5] - That point's share of the height down from the top
  * @param {number} [opts.alpha=1] - Opacity
  * @param {string} [opts.shade] - Colour to shade toward ('#rrggbb')
  * @param {number} [opts.shadeAmount=0] - 0 = untouched, 1 = flat colour
@@ -1032,9 +1043,10 @@ export function drawPiece(ctx, name, x, y, h, opts = {}) {
   ctx.imageSmoothingQuality = 'high'
   ctx.translate(x, opts.hang ? y : y - h)
   if (opts.angle) {
-    ctx.translate(0, h / 2)
+    const pivot = h * (opts.pivot ?? HALF_SHARE)
+    ctx.translate(0, pivot)
     ctx.rotate(opts.angle)
-    ctx.translate(0, -h / 2)
+    ctx.translate(0, -pivot)
   }
   opts.flip && ctx.scale(-1, 1)
   ctx.drawImage(img, -w / 2, 0, w, h)

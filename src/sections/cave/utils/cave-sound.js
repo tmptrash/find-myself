@@ -189,6 +189,31 @@ const SPARK_FREQ_RANGE = 700
 const SPARK_DROP = 0.6
 const SPARK_DECAY = 0.12
 const SPARK_GAIN = 0.05
+//
+// The giant's breath through its nostrils. Blowing out: a wide gust of
+// noise (band-passed, EXHALE_Q) falling in pitch from EXHALE_FROM to
+// EXHALE_TO Hz over EXHALE_TIME s after an EXHALE_ATTACK s rise, a low
+// rumble of brown noise under it (lowpass BREATH_RUMBLE_HZ, sinking by
+// BREATH_RUMBLE_DROP); drawing in: quieter, rising from INHALE_FROM to
+// INHALE_TO Hz, a slow INHALE_ATTACK s swell over INHALE_TIME s. Both
+// partly into the cave's echo (BREATH_ECHO).
+//
+const EXHALE_FROM = 650
+const EXHALE_TO = 200
+const EXHALE_Q = 0.4
+const EXHALE_ATTACK = 0.18
+const EXHALE_TIME = 1.1
+const EXHALE_GAIN = 0.6
+const BREATH_RUMBLE_HZ = 220
+const BREATH_RUMBLE_DROP = 0.6
+const BREATH_RUMBLE_GAIN = 0.45
+const INHALE_FROM = 260
+const INHALE_TO = 560
+const INHALE_Q = 0.6
+const INHALE_ATTACK = 0.45
+const INHALE_TIME = 0.8
+const INHALE_GAIN = 0.3
+const BREATH_ECHO = 0.5
 const SILENT = 0.0001
 const HALF = 0.5
 
@@ -339,6 +364,23 @@ export function playStoneStep(inst, land) {
   softBurst(inst, inst.brown, at, 'lowpass', STONE_THUD_LP * pitch, 1, time, gain)
   softBurst(inst, inst.white, at, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT_SHARE)
   softBurst(inst, inst.white, later, 'bandpass', STONE_GRIT_BAND * pitch, STONE_GRIT_Q, grit, gain * STONE_GRIT2_SHARE)
+}
+
+/**
+ * The lake giant breathing through its nostrils: a blow out or a draw in.
+ * @param {Object} inst - Cave sound instance
+ * @param {boolean} exhale - Blowing out (else drawing in)
+ * @param {number} near - Loudness by how near the hero is, 0..1
+ */
+export function playGiantBreath(inst, exhale, near) {
+  if (!ready(inst) || near <= 0) return
+  const at = inst.ctx.currentTime
+  if (!exhale) {
+    sweep(inst, inst.white, at, 'bandpass', INHALE_FROM, INHALE_TO, INHALE_Q, INHALE_ATTACK, INHALE_TIME, INHALE_GAIN * near)
+    return
+  }
+  sweep(inst, inst.white, at, 'bandpass', EXHALE_FROM, EXHALE_TO, EXHALE_Q, EXHALE_ATTACK, EXHALE_TIME, EXHALE_GAIN * near)
+  sweep(inst, inst.brown, at, 'lowpass', BREATH_RUMBLE_HZ, BREATH_RUMBLE_HZ * BREATH_RUMBLE_DROP, 1, EXHALE_ATTACK, EXHALE_TIME, BREATH_RUMBLE_GAIN * near)
 }
 
 /**
@@ -540,6 +582,32 @@ function softBurst(inst, buffer, at, type, freq, q, time, gain) {
   src.connect(filter)
   filter.connect(g)
   g.connect(inst.out)
+  src.start(at, Math.random() * NOISE_SECONDS / 2, time * 2)
+}
+//
+// Filtered noise swelling in over `attack` s and dying out by `time` s,
+// its filter gliding from f0 to f1 Hz; to the bus and partly the echo.
+//
+function sweep(inst, buffer, at, type, f0, f1, q, attack, time, gain) {
+  const { ctx } = inst
+  const src = ctx.createBufferSource()
+  src.buffer = buffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = type
+  filter.frequency.setValueAtTime(f0, at)
+  filter.frequency.exponentialRampToValueAtTime(f1, at + time)
+  filter.Q.value = q
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(SILENT, at)
+  g.gain.linearRampToValueAtTime(gain, at + attack)
+  g.gain.exponentialRampToValueAtTime(SILENT, at + time)
+  const echo = ctx.createGain()
+  echo.gain.value = BREATH_ECHO
+  src.connect(filter)
+  filter.connect(g)
+  g.connect(inst.out)
+  g.connect(echo)
+  echo.connect(inst.send)
   src.start(at, Math.random() * NOISE_SECONDS / 2, time * 2)
 }
 function ready(inst) {

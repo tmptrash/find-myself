@@ -103,8 +103,12 @@ const FLEE_EVERY = 0.2
 //
 // Fear (world px): anything within FEAR_R along the lake, from FEAR_ABOVE
 // over the surface (a bank, the air over the water) to FEAR_BELOW under it
-// (something sinking). A way with less than CORNER_ROOM px of water left
-// is shut: it rows the other way, past what it fears. Another strider
+// (something sinking). It rows away from the middle of all it fears there
+// (a long thing — the giant — is feared all along, not by its nearest
+// point) and keeps that way FLEE_HOLD s, so it never dithers. A way with
+// less than CORNER_ROOM px of water left is shut: it rows the other way,
+// right past what it fears, and holds that way CROSS_HOLD s — on across
+// to the lake's other side — once it has set out. Another strider
 // within PEER_R makes it row off at wander speed. It keeps EDGE_PAD px off
 // the banks and bounces off them, keeping BOUNCE of its speed.
 //
@@ -113,6 +117,8 @@ const FEAR_R = 170
 const FEAR_ABOVE = 160
 const FEAR_BELOW = 400
 const CORNER_ROOM = 90
+const FLEE_HOLD = 0.8
+const CROSS_HOLD = 3
 const PEER_R = 70
 const EDGE_PAD = 30
 const BOUNCE = 0.25
@@ -182,6 +188,9 @@ export function create(cfg) {
     dir: cfg.dir,
     stroke: null,
     startle: null,
+    fleeDir: 0,
+    fleeHold: 0,
+    middle: { x: 0 },
     restIn: WANDER_EVERY * rng(),
     phase: rng() * Math.PI * 2,
     legs: createLegs(),
@@ -222,6 +231,7 @@ export function createAll(k, lake) {
 export function onUpdate(inst, threats, peers) {
   const dt = inst.k.dt()
   inst.restIn -= dt
+  inst.fleeHold -= dt
   inst.startle && (inst.startle.t -= dt) <= 0 && (inst.startle = null)
   updateStroke(inst, dt)
   decide(inst, threats, peers)
@@ -309,14 +319,12 @@ function boneLength(bone) {
 //
 function decide(inst, threats, peers) {
   if (inst.stroke) return
-  const threat = inst.startle ?? nearestThreat(inst, threats)
+  const threat = inst.startle ?? threatsMiddle(inst, threats)
   if (threat) {
-    const away = Math.sign(inst.x - threat.x) || inst.dir
-    const shut = roomTo(inst, away) < CORNER_ROOM
-    if (shut && inst.startle) return
-    row(inst, shut ? -away : away, FLEE_SPEED + inst.rng() * FLEE_SPEED_RANGE, FLEE_EVERY)
+    flee(inst, threat)
     return
   }
+  inst.fleeDir = 0
   const peer = peers.find(p => p !== inst && Math.abs(p.x - inst.x) < PEER_R)
   if (peer) {
     const away = Math.sign(inst.x - peer.x) || inst.dir
@@ -327,16 +335,42 @@ function decide(inst, threats, peers) {
   const turn = inst.rng() < WANDER_TURN ? -inst.dir : inst.dir
   row(inst, roomTo(inst, turn) < CORNER_ROOM ? -turn : turn, wanderSpeed(inst), wanderWait(inst))
 }
-function nearestThreat(inst, threats) {
-  let best = null
-  let bestDx = FEAR_R
-  for (const t of threats) {
-    const dx = Math.abs(t.x - inst.x)
-    if (dx >= bestDx || t.y < inst.y - FEAR_ABOVE || t.y > inst.y + FEAR_BELOW) continue
-    best = t
-    bestDx = dx
+//
+// Away from what it fears: the way it set out on while that holds (turned
+// only by a bank: then right past it), else away from it — or, that way
+// shut, past it, held long enough to cross to the other side.
+//
+function flee(inst, threat) {
+  const speed = FLEE_SPEED + inst.rng() * FLEE_SPEED_RANGE
+  if (inst.fleeDir !== 0 && inst.fleeHold > 0) {
+    if (roomTo(inst, inst.fleeDir) < CORNER_ROOM) {
+      inst.fleeDir = -inst.fleeDir
+      inst.fleeHold = CROSS_HOLD
+    }
+    row(inst, inst.fleeDir, speed, FLEE_EVERY)
+    return
   }
-  return best
+  const away = Math.sign(inst.x - threat.x) || inst.dir
+  const shut = roomTo(inst, away) < CORNER_ROOM
+  if (shut && inst.startle) return
+  inst.fleeDir = shut ? -away : away
+  inst.fleeHold = shut ? CROSS_HOLD : FLEE_HOLD
+  row(inst, inst.fleeDir, speed, FLEE_EVERY)
+}
+//
+// The middle (along the lake) of everything it fears near it, or null.
+//
+function threatsMiddle(inst, threats) {
+  let x1 = Infinity
+  let x2 = -Infinity
+  for (const t of threats) {
+    if (Math.abs(t.x - inst.x) >= FEAR_R || t.y < inst.y - FEAR_ABOVE || t.y > inst.y + FEAR_BELOW) continue
+    x1 = Math.min(x1, t.x)
+    x2 = Math.max(x2, t.x)
+  }
+  if (x1 > x2) return null
+  inst.middle.x = (x1 + x2) * HALF
+  return inst.middle
 }
 function roomTo(inst, dir) {
   return dir > 0 ? inst.maxX - inst.x : inst.x - inst.minX

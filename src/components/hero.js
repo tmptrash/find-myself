@@ -83,16 +83,19 @@ const MIN_AIR_TIME_FOR_JUMP = 0.06
 //
 // Caught with his legs still tucked up (landing near the top of a jump,
 // onto a higher platform) he would stand up from the tucked ball to full
-// height in one frame. Instead he unfolds over LAND_UNFOLD_SEC: his tuck
-// runs back to none through the descent frames (UNFOLD_FRAMES, the frame
-// for each tuck share), drawn where that tuck's feet stand on the ground.
-// A tuck that lifts the feet less than LAND_UNFOLD_MIN_RISE px just snaps.
+// height in one frame. Instead he unfolds over LAND_UNFOLD_SEC — however
+// little he was tucked: a short unfold over a slight tuck still read as a
+// jerk up — his tuck running back to none through the descent frames
+// (UNFOLD_FRAMES, the frame for each tuck share), each drawn with its own
+// feet right on the ground (HeroPicture.jumpFeetLift): the feet never leave
+// the platform, only the body straightens. A tuck that lifts the feet less
+// than LAND_UNFOLD_MIN_RISE px just snaps.
 //
 const JUMP_FRAME_COUNT = HeroPicture.JUMP_FRAME_COUNT
 export const HERO_JUMP_FRAME_COUNT = JUMP_FRAME_COUNT
 
 const LAND_SNAP_FRAMES = 2
-const LAND_UNFOLD_SEC = 0.12
+const LAND_UNFOLD_SEC = 0.22
 const LAND_UNFOLD_MIN_RISE = 6
 const UNFOLD_FRAMES = [
   { minTuck: 0.8, frame: 3 },
@@ -363,7 +366,6 @@ export function create(config) {
     landSnapFrames: 0, // Frames left after touchdown in which the body stands on the ground at once
     landUnfold: 0,    // Tuck share (1 at a jump's top) a hero caught tucked still unfolds from
     landUnfoldFrom: 1, // Tuck share the unfold started at
-    landUnfoldRise: 0, // How far that tuck had lifted the feet edge (px)
     crouchTimer: 0,   // Remaining time the hero is forced into the squat pose
     isCrouching: false, // True while crouchTimer > 0 and hero is grounded
     eyeOffsetX: 0,
@@ -1385,7 +1387,6 @@ function keepFeetEdge(inst, prevBox, prevTuck) {
   if (share <= inst.landUnfold) return
   inst.landUnfold = share
   inst.landUnfoldFrom = share
-  inst.landUnfoldRise = sink
 }
 
 /**
@@ -1817,13 +1818,13 @@ function holdBody(inst) {
   inst.standDy = inst.bodyY - inst.character.pos.y
 }
 //
-// An unfolding frame stands where its tuck lifted the hitbox's feet: that
-// far under the full-height hitbox, its feet on the ground.
+// An unfolding frame is drawn as far down as its feet are lifted in it,
+// so they stand on the ground under the full-height hitbox.
 //
 function poseUnfold(inst) {
   inst.standLegsOn = false
   inst.runPoseOn = false
-  inst.standDy = inst.landUnfoldRise * inst.landUnfold / inst.landUnfoldFrom
+  inst.standDy = HeroPicture.jumpFeetLift(inst.jumpFrame)
 }
 //
 // Runs a tucked landing's unfold on; true while it still shows (its
@@ -1831,7 +1832,7 @@ function poseUnfold(inst) {
 // run takes over, the body set on the ground at once.
 //
 function unfoldLanding(inst) {
-  inst.landUnfold = Math.max(0, inst.landUnfold - inst.k.dt() / LAND_UNFOLD_SEC)
+  inst.landUnfold = Math.max(0, inst.landUnfold - inst.k.dt() / LAND_UNFOLD_SEC * inst.landUnfoldFrom)
   if (inst.landUnfold <= 0) {
     inst.landSnapFrames = LAND_SNAP_FRAMES
     return false

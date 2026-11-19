@@ -6,6 +6,7 @@ import { sceneMenu } from "../scenes/menu.js"
 import { sceneForestLevel0 } from "../sections/forest/scenes/level0.js"
 import { sceneForestComplete } from "../sections/forest/scenes/forest-complete.js"
 import { sceneCaveLevel0 } from "../sections/cave/scenes/level0.js"
+import { sceneCaveGiantDev } from "../sections/cave/scenes/giant-dev.js"
 import { loadHeroSprites, loadHeroPicture } from "../components/hero.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
@@ -507,7 +508,8 @@ function buildSetupTasks(k) {
     () => sceneMenu(k),
     () => sceneForestLevel0(k),
     () => sceneForestComplete(k),
-    () => sceneCaveLevel0(k)
+    () => sceneCaveLevel0(k),
+    () => sceneCaveGiantDev(k)
   ]
 }
 /**

@@ -11,13 +11,15 @@ import { CAVE_CFG } from '../cfg.js'
 // gold-ringed eye, gold speckles and a soft sheen along the back, a gill
 // arc, a small lipped mouth and a dark contour; the dorsal fin (a fan
 // swept back) and the anal fin painted on, see-through blue with pale
-// gold rays. Apart from it: the rounded tail fan, a pectoral and a pelvic
-// fin, and the body again with its mouth wide open (the head's slice is
-// swapped for it while the fish snaps).
+// gold rays, and the rounded tail fan behind it (its root tucked TAIL_TUCK
+// px under the body) — one whole picture, so the fish bends as one piece.
+// Apart from it: a pectoral and a pelvic fin, and the whole picture again
+// with its mouth wide open (drawn instead while the fish snaps).
 //
-// FISH_ART tells cave-fish.js where everything is: the spine line (MID)
-// in the body picture, the fins' roots on the body (u, px off the spine)
-// and each fin picture's root point.
+// FISH_ART tells cave-fish.js where everything is: the whole picture's
+// size, where the body's length starts on it (the tail's root) and how
+// long it is, the spine line (MID), the side fins' roots on the body (u,
+// px off the spine) and on their own pictures.
 //
 const C = CAVE_CFG.fish
 const TEX_L = 200
@@ -123,6 +125,9 @@ const CURVE_STEPS = 10
 const DORSAL = { u0: 0.4, u1: 0.7, peakU: 0.6, peak: 42, rear: 16, rearBack: 12, rays: 9 }
 const ANAL = { u0: 0.2, u1: 0.42, drop: 26, back: 14, rays: 7 }
 const TAIL = { w: 92, h: 150, root: 24, spread: 66, notch: 5, rays: 15 }
+const TAIL_TUCK = 8
+const TAIL_X = TAIL.w - TAIL_TUCK
+const WHOLE_W = TAIL_X + BODY_W
 const PECT = { w: 58, h: 34, root: 10, rays: 7 }
 const PELV = { w: 42, h: 26, root: 8, rays: 6 }
 const GAP = 4
@@ -130,11 +135,10 @@ const FULL_TURN = Math.PI * 2
 const HALF = 0.5
 
 export const FISH_ART = {
+  picture: { w: WHOLE_W, h: BODY_H },
+  bodyX: TAIL_X + PAD,
   texL: TEX_L,
-  pad: PAD,
-  bodyW: BODY_W,
   mid: MID,
-  tailRoot: { x: TAIL.w - 2, y: TAIL.h * HALF },
   pectRoot: { x: PECT.w - 3, y: PECT.h * HALF },
   pelvRoot: { x: PELV.w - 3, y: PELV.h * HALF },
   pectAt: { u: 0.7, dy: 12 },
@@ -147,9 +151,8 @@ export const FISH_ART = {
  */
 export function paintFishAtlas() {
   const parts = {
-    body: { w: BODY_W, h: BODY_H },
-    bodyOpen: { w: BODY_W, h: BODY_H },
-    tail: { w: TAIL.w, h: TAIL.h },
+    body: { w: WHOLE_W, h: BODY_H },
+    bodyOpen: { w: WHOLE_W, h: BODY_H },
     pectoral: { w: PECT.w, h: PECT.h },
     pelvic: { w: PELV.w, h: PELV.h }
   }
@@ -160,15 +163,27 @@ export function paintFishAtlas() {
     y += p.h + GAP
   })
   const canvas = document.createElement('canvas')
-  canvas.width = BODY_W + GAP * 2
+  canvas.width = WHOLE_W + GAP * 2
   canvas.height = y
   const ctx = canvas.getContext('2d')
-  paintPart(ctx, parts.body, paintBody, false)
-  paintPart(ctx, parts.bodyOpen, paintBody, true)
-  paintPart(ctx, parts.tail, paintTail)
+  paintPart(ctx, parts.body, paintWhole, false)
+  paintPart(ctx, parts.bodyOpen, paintWhole, true)
   paintPart(ctx, parts.pectoral, paintSideFin, PECT)
   paintPart(ctx, parts.pelvic, paintSideFin, PELV)
   return { canvas, parts }
+}
+//
+// The tail fan, then the body over its root.
+//
+function paintWhole(ctx, open) {
+  ctx.save()
+  ctx.translate(0, MID - TAIL.h * HALF)
+  paintTail(ctx)
+  ctx.restore()
+  ctx.save()
+  ctx.translate(TAIL_X, 0)
+  paintBody(ctx, open)
+  ctx.restore()
 }
 function paintPart(ctx, part, paint, arg) {
   ctx.save()

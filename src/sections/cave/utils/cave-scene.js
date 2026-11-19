@@ -2,6 +2,7 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Earth from './cave-earth.js'
 import * as Platform from './cave-platform.js'
 import * as Plants from './cave-plants.js'
+import * as LakeBed from './cave-lake-bed.js'
 import * as Layout from './cave-layout.js'
 import * as Ground from './cave-ground.js'
 //
@@ -34,13 +35,14 @@ const WALL_TOP_Y = 0
 // Nothing of the ceiling (its lowest part with what hangs from it) reaches
 // below this.
 //
-const CEILING_REACH_Y = 310
+const CEILING_REACH_Y = 720
 let submersionBottom = null
 
 /**
  * Paints every solid part of the cave that reaches into a world rect,
- * with its plants. The context must already be translated so world
- * coordinates land on the canvas (its clip does the rest).
+ * with its plants (and, over the lake's tinted bed, its own stones and
+ * plants). The context must already be translated so world coordinates land
+ * on the canvas (its clip does the rest).
  * @param {CanvasRenderingContext2D} ctx - World-translated context
  * @param {{x1: number, y1: number, x2: number, y2: number}} rect - World rect to cover
  * @param {boolean} [withLake=false] - Tint what lies under the lake's surface
@@ -53,6 +55,7 @@ export function paintTerrain(ctx, rect, withLake = false) {
   Layout.PLATFORMS.forEach(p => Platform.paint(ctx, rect, p))
   Plants.paint(ctx, rect)
   inLake && paintSubmersion(ctx)
+  inLake && LakeBed.paint(ctx, rect)
 }
 
 /**

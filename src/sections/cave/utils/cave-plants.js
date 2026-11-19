@@ -9,7 +9,8 @@ import * as Platform from './cave-platform.js'
 // - up from a walkable top (grow, shroom, bush, sprout, tiny) — rooted
 //   on the art's own top;
 // - hanging from a ledge's underside or from the ceiling (hang), with
-//   roots (roots.png) hanging there too, behind every plant;
+//   roots (roots.png, each with its soil clod at its top, some leaning)
+//   hanging there too, behind every plant;
 // - out of a wall or a ledge's free end sideways (side; a side plant's
 //   root is on its left, so it is mirrored on a face that looks left);
 // - small ones (FLOAT_KINDS) on the small platforms over the lake and in
@@ -45,7 +46,11 @@ const UP_KINDS = [
 ]
 const HANG_LEDGE = { prefixes: ['hang', 'hangB'], hMin: 55, hRange: 35, weight: 1, sink: HANG_SINK }
 const HANG_CEILING = { prefixes: ['hang', 'hangB'], hMin: 45, hRange: 25, weight: 1, sink: HANG_SINK }
-const ROOTS = { prefixes: ['root'], hMin: 45, hRange: 60, weight: 1, sink: ROOT_SINK }
+const ROOT_PREFIX = 'root'
+const ROOT_H = 45
+const ROOT_H_RANGE = 60
+const BYTE_ALPHA = 3
+const RGBA = 4
 const SIDE = { prefixes: ['side', 'sideB'], hMin: 45, hRange: 20, weight: 1 }
 const FLOAT_KINDS = [
   { prefixes: ['sprout', 'sproutB'], hMin: 16, hRange: 8, weight: 1 },
@@ -64,10 +69,18 @@ const UP_SINK = 3
 const STONE_CLEAR = 6
 //
 // Roots hang about every ROOT_GAP..+ROOT_GAP_RANGE px under the ledges and
-// the ceiling.
+// the ceiling, never over one another (ROOT_CLEAR px between them at
+// least), each hung by its base (the soil clod painted at its top: the
+// middle of the art's top ROOT_BASE_ROWS rows) from the soil over it.
+// ROOT_TILT_CHANCE of them lean up to ROOT_TILT rad about their base.
 //
 const ROOT_GAP = 70
 const ROOT_GAP_RANGE = 90
+const ROOT_TILT_CHANCE = 0.5
+const ROOT_TILT = 0.3
+const ROOT_CLEAR = 6
+const ROOT_BASE_ROWS = 0.06
+const ROOT_BASE_ALPHA = 128
 //
 // Gaps between plants are uneven: most come short — a clump, CLUMP_SHARE
 // ..+CLUMP_RANGE of the usual gap — the rest leave an open stretch,
@@ -116,10 +129,10 @@ const WALL_PLATFORM_CLEAR = 40
 const CLEAR = [
   { x: Layout.STALK_EYE.x, r: 110 },
   { x: Layout.LANTERN.x, r: 70 },
-  { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + 50 },
-  { x: (Layout.EXIT.x1 + Layout.EXIT.x2) / 2, r: (Layout.EXIT.x2 - Layout.EXIT.x1) / 2 + 40 }
+  { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + 50 }
 ]
 let plants = null
+const rootBases = new Map()
 
 /**
  * Paints the plants that reach into a world rect (placed once per page).
@@ -132,7 +145,7 @@ export function paint(ctx, rect) {
 }
 function paintPlant(ctx, rect, pl) {
   pl.box.x2 >= rect.x1 && pl.box.x1 <= rect.x2 && pl.box.y2 >= rect.y1 && pl.box.y1 <= rect.y2 &&
-    Atlas.drawPiece(ctx, pl.name, pl.x, pl.y, pl.h, { flip: pl.flip, hang: pl.hang, shade: SHADE, shadeAmount: SHADE_AMOUNT })
+    Atlas.drawPiece(ctx, pl.name, pl.x, pl.y, pl.h, { flip: pl.flip, hang: pl.hang, angle: pl.angle, pivot: 0, shade: SHADE, shadeAmount: SHADE_AMOUNT })
 }
 //
 // Every plant: up on the tops, hanging under the ledges and the ceiling,
@@ -190,9 +203,65 @@ function ledgeMid(p, x) {
 // in front of them).
 //
 function placeRoots(rng, out, run, ceilingAt) {
+  const names = Atlas.pieceNames(ROOT_PREFIX)
+  let right = -Infinity
   for (let x = run.from + rng() * ROOT_GAP; x < run.to; x += nextGap(rng, ROOT_GAP, ROOT_GAP_RANGE)) {
-    isClear(x) && out.push(hanging(rng, ROOTS, x, ceilingAt))
+    const name = names[Math.floor(rng() * names.length)]
+    const h = ROOT_H + rng() * ROOT_H_RANGE
+    const flip = rng() < HALF
+    const angle = rng() < ROOT_TILT_CHANCE ? (rng() * 2 - 1) * ROOT_TILT : 0
+    const reach = Atlas.widthAt(name, h) / 2 + h * Math.sin(Math.abs(angle))
+    x = Math.max(x, right + ROOT_CLEAR + reach)
+    if (x >= run.to || !isClear(x)) continue
+    const root = rootAt(name, x, h, flip, angle, ceilingAt)
+    right = root.box.x2
+    out.push(root)
   }
+}
+//
+// A root hanging with its base at x, from the soil over its base (the
+// highest of it, so no part of the base shows a gap), ROOT_SINK px into
+// it; its box holding its lean.
+//
+function rootAt(name, x, h, flip, angle, ceilingAt) {
+  const w = Atlas.widthAt(name, h)
+  const base = rootBase(name)
+  const off = (base.cx - HALF) * w * (flip ? -1 : 1)
+  const half = base.w * w * HALF
+  let y = Infinity
+  for (let dx = -half; dx <= half; dx += ROOT_STEP) y = Math.min(y, ceilingAt(x + dx))
+  y -= ROOT_SINK
+  const reach = h * Math.sin(Math.abs(angle))
+  const cx = x - off
+  return { name, x: cx, y, h, flip, angle, hang: true, base: { x, w: base.w * w }, box: { x1: cx - w / 2 - reach, y1: y, x2: cx + w / 2 + reach, y2: y + h } }
+}
+//
+// A root piece's base: its top rows' opaque width and middle (shares of
+// the piece's width), read once.
+//
+function rootBase(name) {
+  if (rootBases.has(name)) return rootBases.get(name)
+  const src = Atlas.piece(name)
+  const rows = Math.max(1, Math.round(src.height * ROOT_BASE_ROWS))
+  const data = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, src.width, src.height).data
+  let top = 0
+  while (top < src.height - 1 && !rowHas(data, src.width, top)) top++
+  let x1 = src.width
+  let x2 = 0
+  for (let y = top; y < Math.min(src.height, top + rows); y++) {
+    for (let x = 0; x < src.width; x++) {
+      if (data[(y * src.width + x) * RGBA + BYTE_ALPHA] < ROOT_BASE_ALPHA) continue
+      x1 = Math.min(x1, x)
+      x2 = Math.max(x2, x)
+    }
+  }
+  const base = x2 >= x1 ? { w: (x2 - x1 + 1) / src.width, cx: (x1 + x2 + 1) * HALF / src.width } : { w: 1, cx: HALF }
+  rootBases.set(name, base)
+  return base
+}
+function rowHas(data, w, y) {
+  for (let x = 0; x < w; x++) if (data[(y * w + x) * RGBA + BYTE_ALPHA] >= ROOT_BASE_ALPHA) return true
+  return false
 }
 function placeUnderCeiling(rng, out) {
   for (let x = Layout.WALL_COLLIDE_W + WALL_CLEAR + rng() * HANG_GAP; x < Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR; x += nextGap(rng, HANG_GAP, GAP_RANGE)) {

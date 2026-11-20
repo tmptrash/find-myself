@@ -315,12 +315,13 @@ const MIST_SEED = 9560
 const DIVE_DEPTH = 0.6
 const DIVE_AHEAD = 180
 //
-// Visits: the first after FIRST_VISIT s, the next AWAY..+RANGE s after it
-// left; behind a wall to come back the other way it waits BACK_IN..+RANGE
-// s — but gone behind the right wall it stays away long, AWAY_RIGHT..
-// +RANGE s (that visit is over). Away anywhere, the moment a school
-// gathers leaping for the blue fireflies it comes in (within
-// LURE_COME_IN s) out of the wall it is behind, toward them. Its head comes in from HEAD_HIDE px behind the water's end at
+// Visits: the first after FIRST_VISIT s; gone behind a wall, left or
+// right, it stays hidden there long, AWAY..+RANGE s (that visit is over:
+// only the giant's dev scene, holding it in the lake, has it come back the
+// other way within BACK_IN..+RANGE s). Away anywhere, the moment a school
+// gathers leaping for the blue fireflies the hero has driven over the
+// lake it comes in (within LURE_COME_IN s) out of the wall it is behind,
+// toward them. Its head comes in from HEAD_HIDE px behind the water's end at
 // ENTER_DEPTH of the deep water and swims ENTER_IN px in before roaming;
 // it is gone once its tail is EXIT_OUT px past the end. It stays
 // STAY..+RANGE s or until MEALS fish are eaten. Roaming, it heads
@@ -369,11 +370,9 @@ const DELIVER_SHARE = 2 / 3
 const RIDE_GAP = 0.6
 const LURE_AHEAD = 420
 const LURE_BEHIND = 120
-const FIRST_VISIT = 8
-const AWAY = 20
-const AWAY_RANGE = 25
-const AWAY_RIGHT = 70
-const AWAY_RIGHT_RANGE = 40
+const FIRST_VISIT = 50
+const AWAY = 70
+const AWAY_RANGE = 40
 const BACK_IN = 2
 const BACK_IN_RANGE = 3
 const HEAD_HIDE = 15
@@ -1277,12 +1276,11 @@ function exitOn(inst) {
   const tail = inst.joints[inst.joints.length - 1]
   const gone = inst.side < 0 ? tail.x < inst.span.x1 - EXIT_OUT : tail.x > inst.span.x2 + EXIT_OUT
   if (!gone) return
-  const right = inst.side > 0 && !inst.stay && !inst.locked
-  right && (inst.returnSide = null)
+  inst.stay || inst.locked || (inst.returnSide = null)
   const comeBack = inst.returnSide !== null
   setMode(inst, MODE.AWAY)
   inst.visiting = comeBack
-  inst.awayFor = comeBack ? BACK_IN + inst.rng() * BACK_IN_RANGE : right ? AWAY_RIGHT + inst.rng() * AWAY_RIGHT_RANGE : AWAY + inst.rng() * AWAY_RANGE
+  inst.awayFor = comeBack ? BACK_IN + inst.rng() * BACK_IN_RANGE : AWAY + inst.rng() * AWAY_RANGE
 }
 //
 // The head moving: its pitch turned toward its target along an arc (no

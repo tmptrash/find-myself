@@ -11,6 +11,7 @@ import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerNativeTeardown } from '../../../utils/engine-switch.js'
 import { bindBackToMenuKeys, releaseGamePhysicalKeys, getRGB } from '../../../utils/helper.js'
 import { applyForestHudSharpBake } from '../../forest/utils/forest-focus-depth.js'
+import * as DreamBubble from '../../forest/components/dream-bubble.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Lantern from '../components/cave-lantern.js'
 import * as Fireflies from '../components/cave-fireflies.js'
@@ -81,7 +82,7 @@ const BREATH_HEAR = 2000
 //
 const LURE_FISH = 4
 const LURE_GATHER = 180
-const NOSE_SCARE_R = 260
+const NOSE_SCARE_R = 300
 //
 // A firefly a fish ate lights up again over the lake, from LAKE_SKY_TOP
 // down to LAKE_SKY_LOW px over the surface (where the fish can reach it).
@@ -90,6 +91,7 @@ const LAKE_SKY_TOP = 140
 const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
+const Z_DREAM = Z_FRONT + 0.5
 const Z_FRAME = CFG.visual.zIndex.ui - 1
 const Z_GIANT_DEBUG = Z_FRAME - 1
 //
@@ -168,6 +170,12 @@ const FPS_LEFT_X = 24
 const FPS_TOP_Y = 44
 const FPS_FONT_SCALE = 0.7
 //
+// The hero's dream at the level's start (as in the forest: dozing off, his
+// eyes shut, a thought bubble swells up over him): its picture, bake and
+// saved keys; it shows only while he stands on the start floor.
+//
+const DREAM = { url: 'cave0/level_start.png', spritePrefix: 'cave0-dream-bubble', grainSeed: 9570, showsKey: 'cave.dreamShows', awakeKey: 'cave.dreamAwakeSec' }
+//
 // The touch buttons are a little see-through.
 //
 const CONTROLS_OPACITY = 0.6
@@ -183,7 +191,8 @@ export function create(k, opts = {}) {
   set(KEY_LAST_LESSON, SCENE_NAME)
   get(KEY_REACHED, false) || set(KEY_REACHED, true)
   CanvasBackdrop.applyCanvasBackdrop(k, CAVE_CFG.colors.frame)
-  Atlas.isLoaded() ? build(k, opts) : Atlas.load().then(() => build(k, opts))
+  const ready = Atlas.isLoaded() && DreamBubble.isLoaded(DREAM.url)
+  ready ? build(k, opts) : Promise.all([Atlas.load(), DreamBubble.load(DREAM.url)]).then(() => build(k, opts))
 }
 //
 // Every part of the level, then its update and draw passes.
@@ -229,6 +238,7 @@ function build(k, opts) {
     lakeDeath: false,
     airFor: 0,
     drownLegs: null,
+    dream: null,
     fps: null
   }
   const lakeSpan = CaveLake.span(lake)
@@ -251,6 +261,7 @@ function build(k, opts) {
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
   createBodies(inst)
   spawnHero(inst, startPose(inst))
+  inst.dream = DreamBubble.create({ k, heroInst: inst.heroInst, z: Z_DREAM, ...DREAM })
   createHud(inst)
   initTouchInput(k)
   TouchControls.create(k, { opacity: CONTROLS_OPACITY })
@@ -269,6 +280,7 @@ function onUpdate(inst) {
   if (inst.drown) updateDrown(inst)
   else if (inst.dead) updateRespawn(inst)
   else char?.exists?.() && updateHero(inst, char)
+  updateDream(inst, char)
   Fireflies.onUpdate(inst.fireflies)
   updateRunners(inst)
   driveSwarm(inst)
@@ -504,7 +516,17 @@ function spawnHero(inst, pose) {
   inst.stepPlatform = null
   inst.step.pos = k.vec2(0, PARK_Y)
   inst.airFor = 0
+  inst.dream && (inst.dream.heroInst = hero)
   !prev && View.snapTo(inst.view, pose.x, pose.y)
+}
+//
+// The dream bubble: he dozes off anywhere he stands alive; it dreams only
+// on the start floor, kept inside the view.
+//
+function updateDream(inst, char) {
+  const alive = !inst.dead && !inst.drown && Boolean(char?.exists?.())
+  const atStart = alive && inst.platformByBody.get(char.curPlatform?.())?.id === Layout.START_PLATFORM
+  DreamBubble.onUpdate(inst.dream, inst.k.dt(), alive, true, atStart, View.worldRect(inst.view))
 }
 //
 // Footsteps: a soft scuff on the mossy earth.
@@ -690,11 +712,12 @@ function updateLakeLife(inst) {
   inst.striders.forEach(strider => Strider.onUpdate(strider, fears, inst.striders))
 }
 //
-// A fish ate a firefly: one of the swarm's, or an ambient one (which
-// lights up again over the lake later).
+// A fish reached a firefly: one of the swarm's dodges it (they are never
+// eaten); an ambient one is eaten (and lights up again over the lake
+// later).
 //
 function onFishCatch(inst, prey) {
-  inst.swarm.flies.includes(prey) ? Swarm.eat(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
+  inst.swarm.flies.includes(prey) ? Swarm.dodge(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
 }
 //
 // Where the fish gather under the blue fireflies over the water (if enough

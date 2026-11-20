@@ -240,15 +240,18 @@ const HEAD_TILT = 0.6
 // px under the surface when submerged (never pushed down to it: a head
 // above that line may only sink) and BED_CLEAR over the bed. Breathing,
 // the top of the back stands BACK_ABOVE px out of the water (the head
-// reaching its height within SURFACE_NEAR px and held there at HOLD_RATE),
-// the body floating level at LEVEL_RATE per s; the back is ground once it
-// is DRY px out.
+// reaching its height within SURFACE_NEAR px and held there at HOLD_RATE;
+// within SURFACE_UP px it counts as up and swims along the surface — the
+// waves move that height a little, so a tighter bound would flicker), the
+// body floating level at LEVEL_RATE per s; the back is ground once it is
+// DRY px out.
 //
 const HEAD_EDGE = 50
 const SUB_TOP = 24
 const BED_CLEAR = 34
 const BACK_ABOVE = 22
 const SURFACE_NEAR = 2
+const SURFACE_UP = 6
 const LEVEL_RATE = 0.8
 const HOLD_RATE = 3
 const DRY = 2
@@ -316,26 +319,37 @@ const DIVE_AHEAD = 180
 //
 //
 // Lured (only while the fish feed within LURE_LEFT px of the water's left
-// end): away, it comes in within LURE_COME_IN s; coming out of the left
-// wall it rises at once to breathe with its back's near end LURE_BOARD_GAP
-// px off the water's left end (for the hero to get on); swimming right no
+// end): away, it comes in within LURE_COME_IN s; out of the left wall it
+// comes already up at its breathing height, its back out of the water (so
+// it is ground the moment it shows), and swims in along the surface to
+// breathe with its back's near end LURE_BOARD_GAP px off the water's left
+// end (for the hero to get on); swimming right no
 // farther than LURE_NEAR px past them, it rises there (no nearer the bank
 // than that, LURE_RISE_AHEAD px ahead of where it is); anywhere else it
 // hurries (LURE_RUSH) the way it heads, round through the wall, to come
-// back out of the left one. Breathing, it swims on at LURE_SPEED while
+// back out of the left one. Along the surface it swims at LURE_SPEED, its
+// mouth SURFACE_GAPE open while it moves faster than SURFACE_GAPE_SPEED.
+// Breathing, it swims on while
 // the gathering is ahead of its snout within LURE_AHEAD px (breathing
 // turned the wrong way, unridden, it dives at once to go round); with the
 // hero on its back it stays up only while the gathering is ahead:
-// LURE_GRACE s without it, it dives.
+// LURE_GRACE s without it, it dives — but once it has carried him
+// DELIVER_SHARE of the lake's length it takes him on to its far end
+// itself (lure or none) and stays up there till he is off (off its back
+// RIDE_GAP s, not just a hop on it).
 //
 const LURE_COME_IN = 1.5
 const LURE_BOARD_GAP = 40
 const LURE_RISE_AHEAD = 40
-const LURE_SPEED = 26
+const LURE_SPEED = 50
+const SURFACE_GAPE = 0.7
+const SURFACE_GAPE_SPEED = 12
 const LURE_RUSH = 60
 const LURE_LEFT = 520
 const LURE_NEAR = 120
 const LURE_GRACE = 3
+const DELIVER_SHARE = 2 / 3
+const RIDE_GAP = 0.6
 const LURE_AHEAD = 420
 const FIRST_VISIT = 8
 const AWAY = 20
@@ -474,6 +488,9 @@ export function create(cfg) {
     puffIn: 0,
     inhaled: true,
     graceFor: LURE_GRACE,
+    rideFrom: null,
+    offFor: 0,
+    delivering: false,
     puffs: [],
     open: 0,
     held: null,
@@ -538,7 +555,7 @@ export function onUpdate(inst, ctx) {
   if (inst.mode === MODE.AWAY) {
     ctx.lure && (inst.awayFor = Math.min(inst.awayFor, LURE_COME_IN))
     inst.awayFor -= dt
-    inst.awayFor <= 0 && comeIn(inst, inst.returnSide)
+    inst.awayFor <= 0 && comeIn(inst, inst.returnSide, lureAtLeft(inst, ctx))
     Back.place(inst.back, null)
     return
   }
@@ -699,13 +716,13 @@ export function onDrawDebug(inst) {
 // depth of the deep water there, head first into the lake, the body
 // straight behind it.
 //
-function comeIn(inst, side) {
+function comeIn(inst, side, lured = false) {
   inst.side = side ?? (Math.random() < HALF ? -1 : 1)
   inst.facing = -inst.side
   inst.returnSide = null
   const inX = inst.side < 0 ? inst.minX : inst.maxX
   inst.pos.x = inst.side < 0 ? inst.span.x1 - HEAD_HIDE : inst.span.x2 + HEAD_HIDE
-  inst.pos.y = depthAt(inst, inX, ENTER_DEPTH)
+  inst.pos.y = lured && inst.side < 0 ? breatheY(inst, inX) : depthAt(inst, inX, ENTER_DEPTH)
   inst.speed = CRUISE
   inst.pitch = 0
   resetTrail(inst)
@@ -1084,15 +1101,24 @@ function updateBlood(inst, dt) {
 }
 //
 // The jaw: dropping open as it nears its prey (and all through a lunge),
-// snapping shut on a fish, then chewing it.
+// snapping shut on a fish, then chewing it; half open as it swims along
+// the surface.
 //
 function openJaw(inst, ctx, dt) {
   const p = !inst.held && inst.prey && ctx.headOf(inst.prey)
   const near = p && Math.hypot(p.x - inst.snout.x, p.y - inst.snout.y) < GAPE_R
   const chewing = inst.held && chewPhase(inst) >= 0 && chewPhase(inst) < CHEWS && chewPhase(inst) % 1 < CHEW_OPEN_SHARE
-  const want = chewing ? CHEW_OPEN : !inst.held && (inst.lunging || near) ? 1 : 0
+  const want = chewing ? CHEW_OPEN : !inst.held && (inst.lunging || near) ? 1 : surfaceSwim(inst) ? SURFACE_GAPE : 0
   const step = (inst.held ? SHUT_RATE : inst.lunging ? LUNGE_OPEN_RATE : OPEN_RATE) * dt
   inst.open = Math.max(0, Math.min(1, inst.open + Math.max(-step, Math.min(step, want - inst.open))))
+}
+//
+// Swimming along the surface (breathing, or up and on its way to its
+// breathing spot): it goes with its mouth open.
+//
+function surfaceSwim(inst) {
+  const up = inst.mode === MODE.BREATHE || (inst.mode === MODE.SURFACE && inst.pos.y <= breatheY(inst, inst.pos.x) + SURFACE_UP)
+  return up && inst.speed > SURFACE_GAPE_SPEED
 }
 //
 // Up to breathe: its head heads for the breathing height at x, in an arc.
@@ -1104,7 +1130,8 @@ function startSurface(inst, x) {
   setMode(inst, MODE.SURFACE)
 }
 //
-// Rising until the head is at its breathing height, then breathing —
+// Rising until the head is at its breathing height (and swimming on along
+// the surface to its spot if it is not there yet), then breathing —
 // level, puffing, still, or swimming on along the surface while the lure
 // is ahead — as long as it wants and the hero is off its back and the lure
 // not ahead; then the dive. Held by a dev command it breathes on.
@@ -1112,23 +1139,44 @@ function startSurface(inst, x) {
 function breathe(inst, ctx, dt) {
   const y = breatheY(inst, inst.pos.x)
   if (inst.mode === MODE.SURFACE) {
-    setTarget(inst, inst.surfaceX, y, RISE_SPEED)
-    if (inst.pos.y > y + SURFACE_NEAR) return
+    const up = inst.pos.y <= y + SURFACE_UP
+    const short = (inst.surfaceX - inst.pos.x) * inst.facing > ROAM_ARRIVE
+    setTarget(inst, inst.surfaceX, y, up ? LURE_SPEED : RISE_SPEED)
+    if (!up || short) return
     setMode(inst, MODE.BREATHE)
     inst.breathFor = BREATH_TIME + inst.rng() * BREATH_TIME_RANGE
     inst.puffIn = 0
     return
   }
   const lureAhead = ctx.lure && (ctx.lure.x - inst.snout.x) * inst.facing > 0 && (ctx.lure.x - inst.snout.x) * inst.facing < LURE_AHEAD
-  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, lureAhead && roomAhead(inst) > ROAM_ARRIVE ? LURE_SPEED : 0)
+  trackRide(inst, dt)
+  const onward = lureAhead || inst.delivering
+  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, onward && roomAhead(inst) > ROAM_ARRIVE ? LURE_SPEED : 0)
   inst.carrying ? holdBreath(inst) : breath(inst, ctx, dt)
   if (inst.locked) return
   inst.breathFor -= dt
   inst.graceFor = inst.carrying && !lureAhead ? inst.graceFor - dt : LURE_GRACE
   const done = inst.breathFor <= 0 || (ctx.lure && inst.facing < 0)
-  const stays = lureAhead || (inst.carrying && inst.graceFor > 0)
-  const unlured = inst.carrying && !lureAhead && inst.graceFor <= 0
+  const stays = onward || (inst.carrying && inst.graceFor > 0)
+  const unlured = inst.carrying && !onward && inst.graceFor <= 0
   if ((done && !stays) || unlured) startDive(inst)
+}
+//
+// How far it has carried the hero this ride (from where he got on, the
+// way it swims); past DELIVER_SHARE of the lake it takes him to the end.
+// The ride ends once he has been off its back RIDE_GAP s.
+//
+function trackRide(inst, dt) {
+  inst.offFor = inst.carrying ? 0 : inst.offFor + dt
+  if (inst.offFor >= RIDE_GAP) {
+    inst.rideFrom = null
+    inst.delivering = false
+    return
+  }
+  inst.rideFrom ??= inst.carrying ? inst.pos.x : null
+  if (inst.rideFrom === null) return
+  const carried = (inst.pos.x - inst.rideFrom) * inst.facing
+  carried >= (inst.span.x2 - inst.span.x1) * DELIVER_SHARE && (inst.delivering = true)
 }
 //
 // One breath's rhythm: drawing in INHALE_LEAD s before the puff, then the
@@ -1159,6 +1207,8 @@ function holdBreath(inst) {
 //
 function startDive(inst) {
   setMode(inst, MODE.DIVE)
+  inst.rideFrom = null
+  inst.delivering = false
   inst.breathIn = BREATH_EVERY + inst.rng() * BREATH_EVERY_RANGE
   const x = inst.pos.x + inst.facing * Math.min(roomAhead(inst), DIVE_AHEAD)
   setTarget(inst, x, depthAt(inst, x, DIVE_DEPTH), CRUISE)

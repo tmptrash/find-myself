@@ -99,6 +99,15 @@ export async function load(url) {
 }
 
 /**
+ * Whether a bubble picture is loaded and keyed.
+ * @param {string} url - Picture URL
+ * @returns {boolean}
+ */
+export function isLoaded(url) {
+  return Boolean(pictures.get(url))
+}
+
+/**
  * Creates a thought bubble over a hero (its sprite baked once per live k;
  * nothing shows until load() has resolved for its picture).
  * @param {Object} cfg - Bubble configuration

@@ -28,10 +28,12 @@ const SHADE_AMOUNT = 0.35
 const SEED = 7300
 //
 // How far a hanging plant's top and a root's top sink into what they hang
-// from.
+// from (a root ROOT_SINK px and ROOT_SINK_SHARE of its height more: its
+// soil clod and the top of its strands go in).
 //
 const HANG_SINK = 10
 const ROOT_SINK = 12
+const ROOT_SINK_SHARE = 0.2
 //
 // Kinds by how they grow: piece prefixes (a piece is picked from all of
 // them), drawn height (world px) and how often a kind is picked.
@@ -220,8 +222,8 @@ function placeRoots(rng, out, run, ceilingAt) {
 }
 //
 // A root hanging with its base at x, from the soil over its base (the
-// highest of it, so no part of the base shows a gap), ROOT_SINK px into
-// it; its box holding its lean.
+// highest of it, so no part of the base shows a gap), sunk into it
+// (ROOT_SINK, ROOT_SINK_SHARE); its box holding its lean.
 //
 function rootAt(name, x, h, flip, angle, ceilingAt) {
   const w = Atlas.widthAt(name, h)
@@ -230,7 +232,7 @@ function rootAt(name, x, h, flip, angle, ceilingAt) {
   const half = base.w * w * HALF
   let y = Infinity
   for (let dx = -half; dx <= half; dx += ROOT_STEP) y = Math.min(y, ceilingAt(x + dx))
-  y -= ROOT_SINK
+  y -= ROOT_SINK + h * ROOT_SINK_SHARE
   const reach = h * Math.sin(Math.abs(angle))
   const cx = x - off
   return { name, x: cx, y, h, flip, angle, hang: true, base: { x, w: base.w * w }, box: { x1: cx - w / 2 - reach, y1: y, x2: cx + w / 2 + reach, y2: y + h } }

@@ -146,7 +146,9 @@ const MIN_DEPTH = 60
 // LEAP_VX px/s along. It gives up after HUNT_GIVE_UP s or once the
 // firefly has been gone LOSE_TIME s; between hunts it rests
 // COOLDOWN..+RANGE s. The mouth gapes within GAPE_R px of the prey and
-// eats it within CATCH_R px.
+// eats it within CATCH_R px — but never a blue firefly of the swarm: one
+// of those dodges the leap once the mouth is within DODGE_R px of it (so
+// the snap goes into thin air).
 //
 //
 // Feeding frenzy: while the swarm's middle is within FRENZY_REACH px of the
@@ -186,6 +188,7 @@ const COOLDOWN = 3
 const COOLDOWN_RANGE = 6
 const GAPE_R = 70
 const CATCH_R = 10
+const DODGE_R = 34
 const MOUTH_EASE = 14
 //
 // Back in the water it keeps ENTRY_KEEP of its speed and dives for
@@ -915,7 +918,7 @@ function leap(inst, p) {
 }
 //
 // In the air: falling under gravity, its head along its flight; whatever
-// its mouth reaches it eats.
+// its mouth reaches it eats (a blue firefly dodges it first: onCatch).
 //
 function fly(inst, ctx, dt) {
   const head = inst.joints[0]
@@ -925,7 +928,9 @@ function fly(inst, ctx, dt) {
   head.y += inst.vel.y * dt
   Swim.setDir(inst.h, inst.vel.x, inst.vel.y, 0)
   inst.beat += BEAT_HZ * FULL_TURN * dt
-  if (!inst.prey || !nearPrey(inst, CATCH_R * inst.size) || !ctx.prey.includes(inst.prey)) return
+  if (!inst.prey || !ctx.prey.includes(inst.prey)) return
+  const reach = ctx.swarmPrey.includes(inst.prey) ? DODGE_R : CATCH_R * inst.size
+  if (!nearPrey(inst, reach)) return
   ctx.onCatch(inst.prey)
   inst.prey = null
 }

@@ -9,7 +9,10 @@ import * as ThoughtBubble from './thought-bubble.js'
 //
 // It dreams up only SHOWS_MAX times (counted in the saved progress under
 // SHOWS_KEY, so a page reload does not give them back), and never while the
-// caller says no (the hero on the left tree's branch). Once it has dreamt
+// caller says no (the hero on the left tree's branch). Another level may
+// dream its own picture under its own keys (create's url / showsKey /
+// awakeKey), only where it lets him dream (onUpdate's mayDream), kept
+// inside its view. Once it has dreamt
 // them all, the hero no longer dozes off at all. Both dreams come back on
 // the very first start of the game (nothing saved yet), when the level is
 // started over from the menu (that wipes the forest's progress) and after
@@ -32,10 +35,20 @@ const SHOW_DELAY_SEC = 0.3
 
 /**
  * Waits for the bubble picture (once per page).
+ * @param {string} [url=URL] - Picture URL (the forest's dream by default)
  * @returns {Promise<void>}
  */
-export function load() {
-  return ThoughtBubble.load(URL)
+export function load(url = URL) {
+  return ThoughtBubble.load(url)
+}
+
+/**
+ * Whether the bubble picture is loaded.
+ * @param {string} [url=URL] - Picture URL (the forest's dream by default)
+ * @returns {boolean}
+ */
+export function isLoaded(url = URL) {
+  return ThoughtBubble.isLoaded(url)
 }
 
 /**
@@ -45,15 +58,24 @@ export function load() {
  * @param {Object} cfg.k - Kaplay instance
  * @param {Object} cfg.heroInst - Hero instance it dreams over (swap it on respawn)
  * @param {number} [cfg.z] - Draw z (the level puts it over the big trees); default just over the hero
+ * @param {string} [cfg.url=URL] - Picture URL (loaded with load(url))
+ * @param {string} [cfg.spritePrefix=SPRITE_PREFIX] - Sprite name prefix of its bake
+ * @param {number} [cfg.grainSeed=GRAIN_SEED] - Film grain seed of its bake
+ * @param {string} [cfg.showsKey=SHOWS_KEY] - Saved progress key of how many dreams it has shown
+ * @param {string} [cfg.awakeKey=AWAKE_KEY] - Saved progress key of the time since the last one
  * @returns {Object} Bubble inst
  */
 export function create(cfg) {
   const { k, heroInst, z } = cfg
+  const showsKey = cfg.showsKey ?? SHOWS_KEY
+  const awakeKey = cfg.awakeKey ?? AWAKE_KEY
   return {
     heroInst,
-    bubble: ThoughtBubble.create({ k, url: URL, spritePrefix: SPRITE_PREFIX, grainSeed: GRAIN_SEED, width: BUBBLE_W, z }),
-    shows: get(SHOWS_KEY, 0),
-    awakeSec: get(AWAKE_KEY, 0),
+    bubble: ThoughtBubble.create({ k, url: cfg.url ?? URL, spritePrefix: cfg.spritePrefix ?? SPRITE_PREFIX, grainSeed: cfg.grainSeed ?? GRAIN_SEED, width: BUBBLE_W, z }),
+    showsKey,
+    awakeKey,
+    shows: get(showsKey, 0),
+    awakeSec: get(awakeKey, 0),
     awakeSavedSec: 0,
     dreamedThisDoze: false,
     shutT: 0
@@ -67,8 +89,10 @@ export function create(cfg) {
  * @param {number} dt - Seconds since the last frame
  * @param {boolean} allowed - False keeps a new bubble from showing, bursts one that shows and keeps the hero awake (his eyes stay open)
  * @param {boolean} [mayDoze=true] - False keeps the hero awake (his doze timer does not run)
+ * @param {boolean} [mayDream=true] - False: he may doze off here, but no new dream shows
+ * @param {{left: number, top: number, right: number}|null} [view=null] - Visible world rect the bubble is kept inside
  */
-export function onUpdate(inst, dt, allowed, mayDoze = true) {
+export function onUpdate(inst, dt, allowed, mayDoze = true, mayDream = true, view = null) {
   const shown = ThoughtBubble.isShown(inst.bubble)
   inst.shows >= SHOWS_MAX && !shown && tickAwake(inst, dt)
   Hero.setDozes(inst.heroInst, allowed && (shown || (mayDoze && inst.shows < SHOWS_MAX)))
@@ -77,10 +101,10 @@ export function onUpdate(inst, dt, allowed, mayDoze = true) {
   inst.shutT = doze >= 1 ? inst.shutT + dt : 0
   if (shown) {
     (doze < 1 || !allowed) && ThoughtBubble.burst(inst.bubble)
-  } else if (allowed && inst.shutT >= SHOW_DELAY_SEC && !inst.dreamedThisDoze && inst.shows < SHOWS_MAX) {
+  } else if (allowed && mayDream && inst.shutT >= SHOW_DELAY_SEC && !inst.dreamedThisDoze && inst.shows < SHOWS_MAX) {
     startDream(inst)
   }
-  ThoughtBubble.onUpdate(inst.bubble, dt, inst.heroInst?.character?.pos ?? null)
+  ThoughtBubble.onUpdate(inst.bubble, dt, inst.heroInst?.character?.pos ?? null, view)
 }
 //
 // A new dream: counted for this run of the app.
@@ -89,7 +113,7 @@ function startDream(inst) {
   if (!ThoughtBubble.show(inst.bubble)) return
   inst.dreamedThisDoze = true
   inst.shows++
-  set(SHOWS_KEY, inst.shows)
+  set(inst.showsKey, inst.shows)
 }
 //
 // Time in the level since the last dream: saved now and then; once it
@@ -101,13 +125,13 @@ function tickAwake(inst, dt) {
     inst.shows = 0
     inst.awakeSec = 0
     inst.awakeSavedSec = 0
-    set(SHOWS_KEY, 0)
-    set(AWAKE_KEY, 0)
+    set(inst.showsKey, 0)
+    set(inst.awakeKey, 0)
     return
   }
   inst.awakeSec - inst.awakeSavedSec >= AWAKE_SAVE_SEC && saveAwake(inst)
 }
 function saveAwake(inst) {
   inst.awakeSavedSec = inst.awakeSec
-  set(AWAKE_KEY, inst.awakeSec)
+  set(inst.awakeKey, inst.awakeSec)
 }

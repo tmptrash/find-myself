@@ -155,8 +155,14 @@ const KNEE_SLACK = 1
 // Driven into the end of its run (a corner) it bolts back the other way,
 // right past him, and keeps going until he is behind it (its way on leads
 // FLEE_DEADBAND px farther from him) — then it flees on from there (speeds at size 1, scaled with the
-// runner). In a pause a leg shifts now and then (IDLE_STEP..+RANGE s
-// apart, up to IDLE_JITTER sheet px off its spot).
+// runner). Each flight goes at FLEE_SPEED times FLEE_PACE..+RANGE; driven
+// into a corner it bolts back past him only CORNER_BOLT_CHANCE of the
+// times, else cowers there COWER_TIME..+RANGE s, frozen. It gets used to
+// a hero standing still (moving under HERO_STILL px/s): after
+// CALM_AFTER..+RANGE s of that it runs about as it likes again, minding
+// him only within CALM_FEAR_R px; once he moves it fears him afresh. In a
+// pause a leg shifts now and then (IDLE_STEP..+RANGE s apart, up to
+// IDLE_JITTER sheet px off its spot).
 //
 const DASH_SPEED = 110
 const DASH_SPEED_RANGE = 120
@@ -175,6 +181,15 @@ const FLEE_TIME = 0.5
 const FLEE_DEADBAND = 6
 const FLEE_LOOK = 120
 const FLEE_HOLD = 0.35
+const FLEE_PACE = 0.7
+const FLEE_PACE_RANGE = 0.45
+const CORNER_BOLT_CHANCE = 0.5
+const COWER_TIME = 0.6
+const COWER_TIME_RANGE = 2.2
+const HERO_STILL = 15
+const CALM_AFTER = 1.5
+const CALM_AFTER_RANGE = 3
+const CALM_FEAR_R = 70
 const IDLE_STEP = 0.25
 const IDLE_STEP_RANGE = 0.6
 const IDLE_JITTER = 40
@@ -330,6 +345,12 @@ export function create(cfg) {
     headAt: { x: 0, y: 0 },
     arcAt: { x: 0, y: 0 },
     fleeHold: 0,
+    fleePace: 1,
+    cowerFor: 0,
+    heroLast: { x: 0, y: 0 },
+    heroSeen: false,
+    stillFor: 0,
+    calmAfter: CALM_AFTER + rng() * CALM_AFTER_RANGE,
     lookOn: {},
     lookBack: {},
     idleIn: IDLE_STEP,
@@ -397,7 +418,9 @@ export function onUpdate(inst, heroPos, food = null) {
     aimNeck(inst, target, NECK_REACH, dt)
     return
   }
-  heroPos && flee(inst, heroPos)
+  inst.cowerFor = Math.max(0, inst.cowerFor - dt)
+  watchHero(inst, heroPos, dt)
+  heroPos && inst.cowerFor <= 0 && flee(inst, heroPos)
   move(inst, dt)
   spring(inst, dt)
   placeBody(inst)
@@ -722,11 +745,13 @@ function move(inst, dt) {
   inst.s = end
   inst.speed = 0
   inst.dir = -inst.dir
-  if (inst.fleeing) {
+  if (inst.fleeing && inst.rng() < CORNER_BOLT_CHANCE) {
     inst.bolting = true
     return
   }
+  inst.fleeing && (inst.cowerFor = COWER_TIME + inst.rng() * COWER_TIME_RANGE)
   pause(inst)
+  inst.timer = Math.max(inst.timer, inst.cowerFor)
 }
 //
 // How hard it runs: 0 standing … 1 at TAIL_RUN_SPEED or faster.
@@ -759,7 +784,9 @@ function pause(inst) {
 function flee(inst, heroPos) {
   const dx = heroPos.x - inst.pos.x
   const dy = heroPos.y - inst.pos.y
-  if (dx * dx + dy * dy > FEAR_R * FEAR_R) return
+  const r = inst.stillFor >= inst.calmAfter ? CALM_FEAR_R : FEAR_R
+  if (dx * dx + dy * dy > r * r) return
+  inst.fleeing || (inst.fleePace = FLEE_PACE + inst.rng() * FLEE_PACE_RANGE)
   const look = FLEE_LOOK * inst.dir
   const on = Surface.sample(inst.run, inst.s + look, inst.lookOn)
   const back = Surface.sample(inst.run, inst.s - look, inst.lookBack)
@@ -772,7 +799,29 @@ function flee(inst, heroPos) {
   inst.fleeing = true
   inst.mode = MODE.DASH
   inst.timer = FLEE_TIME
-  inst.dashSpeed = FLEE_SPEED * inst.unit / SCALE
+  inst.dashSpeed = FLEE_SPEED * inst.fleePace * inst.unit / SCALE
+}
+//
+// How long the hero has stood still (he moved under HERO_STILL px/s);
+// moving, he is feared afresh, a little later or sooner each time.
+//
+function watchHero(inst, heroPos, dt) {
+  const last = inst.heroLast
+  if (!heroPos || dt <= 0) {
+    inst.heroSeen = false
+    inst.stillFor = 0
+    return
+  }
+  const still = inst.heroSeen && Math.hypot(heroPos.x - last.x, heroPos.y - last.y) < HERO_STILL * dt
+  inst.heroSeen = true
+  last.x = heroPos.x
+  last.y = heroPos.y
+  if (still) {
+    inst.stillFor += dt
+    return
+  }
+  inst.stillFor > 0 && (inst.calmAfter = CALM_AFTER + inst.rng() * CALM_AFTER_RANGE)
+  inst.stillFor = 0
 }
 //
 // In a pause one leg shifts a little now and then (while all stand).

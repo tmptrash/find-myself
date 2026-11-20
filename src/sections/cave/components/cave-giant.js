@@ -338,8 +338,9 @@ const DIVE_AHEAD = 180
 // farther than LURE_NEAR px past them, it rises there (no nearer the bank
 // than that, LURE_RISE_AHEAD px ahead of where it is); anywhere else it
 // hurries (LURE_RUSH) the way it heads, round through the wall, to come
-// back out of the left one. Along the surface it swims at LURE_SPEED, its
-// mouth SURFACE_GAPE open while it moves faster than SURFACE_GAPE_SPEED.
+// back out of the left one. Along the surface it swims at LURE_SPEED
+// (CARRY_SPEED with the hero on its back), its mouth SURFACE_GAPE open
+// while it moves faster than SURFACE_GAPE_SPEED.
 // Breathing, it swims on while
 // the gathering is ahead of its snout within LURE_AHEAD px; it stays up
 // (never diving, ridden or not, nor turned the wrong way) while the
@@ -357,6 +358,7 @@ const LURE_COME_IN = 1.5
 const LURE_BOARD_GAP = 40
 const LURE_RISE_AHEAD = 40
 const LURE_SPEED = 50
+const CARRY_SPEED = 80
 const SURFACE_GAPE = 0.7
 const SURFACE_GAPE_SPEED = 12
 const LURE_RUSH = 60
@@ -1197,7 +1199,7 @@ function breathe(inst, ctx, dt) {
   inst.graceFor = inst.carrying ? inst.graceFor - dt : LURE_GRACE
   trackRide(inst, dt)
   const onward = lureAhead || inst.delivering
-  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, onward && roomAhead(inst) > ROAM_ARRIVE ? LURE_SPEED : 0)
+  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, onward && roomAhead(inst) > ROAM_ARRIVE ? (inst.carrying ? CARRY_SPEED : LURE_SPEED) : 0)
   inst.carrying ? holdBreath(inst) : breath(inst, ctx, dt)
   if (inst.locked) return
   inst.breathFor -= dt

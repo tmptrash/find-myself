@@ -10,9 +10,10 @@ import * as ThoughtBubble from './thought-bubble.js'
 // It dreams up only SHOWS_MAX times (counted in the saved progress under
 // SHOWS_KEY, so a page reload does not give them back), and never while the
 // caller says no (the hero on the left tree's branch). Another level may
-// dream its own picture under its own keys (create's url / showsKey /
-// awakeKey), only where it lets him dream (onUpdate's mayDream), kept
-// inside its view. Once it has dreamt
+// dream its own picture (create's url), counted only while the level runs
+// (create's saved: false — the dreams come back when it is started again:
+// the page reloaded, or back from the menu), only where it lets him dream
+// (onUpdate's mayDream), kept inside its view. Once it has dreamt
 // them all, the hero no longer dozes off at all. Both dreams come back on
 // the very first start of the game (nothing saved yet), when the level is
 // started over from the menu (that wipes the forest's progress) and after
@@ -61,21 +62,18 @@ export function isLoaded(url = URL) {
  * @param {string} [cfg.url=URL] - Picture URL (loaded with load(url))
  * @param {string} [cfg.spritePrefix=SPRITE_PREFIX] - Sprite name prefix of its bake
  * @param {number} [cfg.grainSeed=GRAIN_SEED] - Film grain seed of its bake
- * @param {string} [cfg.showsKey=SHOWS_KEY] - Saved progress key of how many dreams it has shown
- * @param {string} [cfg.awakeKey=AWAKE_KEY] - Saved progress key of the time since the last one
+ * @param {boolean} [cfg.saved=true] - Count the dreams in the saved progress (false: only while this level runs)
  * @returns {Object} Bubble inst
  */
 export function create(cfg) {
   const { k, heroInst, z } = cfg
-  const showsKey = cfg.showsKey ?? SHOWS_KEY
-  const awakeKey = cfg.awakeKey ?? AWAKE_KEY
+  const saved = cfg.saved ?? true
   return {
     heroInst,
     bubble: ThoughtBubble.create({ k, url: cfg.url ?? URL, spritePrefix: cfg.spritePrefix ?? SPRITE_PREFIX, grainSeed: cfg.grainSeed ?? GRAIN_SEED, width: BUBBLE_W, z }),
-    showsKey,
-    awakeKey,
-    shows: get(showsKey, 0),
-    awakeSec: get(awakeKey, 0),
+    saved,
+    shows: saved ? get(SHOWS_KEY, 0) : 0,
+    awakeSec: saved ? get(AWAKE_KEY, 0) : 0,
     awakeSavedSec: 0,
     dreamedThisDoze: false,
     shutT: 0
@@ -94,7 +92,7 @@ export function create(cfg) {
  */
 export function onUpdate(inst, dt, allowed, mayDoze = true, mayDream = true, view = null) {
   const shown = ThoughtBubble.isShown(inst.bubble)
-  inst.shows >= SHOWS_MAX && !shown && tickAwake(inst, dt)
+  inst.saved && inst.shows >= SHOWS_MAX && !shown && tickAwake(inst, dt)
   Hero.setDozes(inst.heroInst, allowed && (shown || (mayDoze && inst.shows < SHOWS_MAX)))
   const doze = Hero.dozeShare(inst.heroInst)
   doze <= 0 && (inst.dreamedThisDoze = false)
@@ -113,7 +111,7 @@ function startDream(inst) {
   if (!ThoughtBubble.show(inst.bubble)) return
   inst.dreamedThisDoze = true
   inst.shows++
-  set(inst.showsKey, inst.shows)
+  inst.saved && set(SHOWS_KEY, inst.shows)
 }
 //
 // Time in the level since the last dream: saved now and then; once it
@@ -125,13 +123,13 @@ function tickAwake(inst, dt) {
     inst.shows = 0
     inst.awakeSec = 0
     inst.awakeSavedSec = 0
-    set(inst.showsKey, 0)
-    set(inst.awakeKey, 0)
+    set(SHOWS_KEY, 0)
+    set(AWAKE_KEY, 0)
     return
   }
   inst.awakeSec - inst.awakeSavedSec >= AWAKE_SAVE_SEC && saveAwake(inst)
 }
 function saveAwake(inst) {
   inst.awakeSavedSec = inst.awakeSec
-  set(inst.awakeKey, inst.awakeSec)
+  set(AWAKE_KEY, inst.awakeSec)
 }

@@ -172,10 +172,12 @@ const FPS_TOP_Y = 44
 const FPS_FONT_SCALE = 0.7
 //
 // The hero's dream at the level's start (as in the forest: dozing off, his
-// eyes shut, a thought bubble swells up over him): its picture, bake and
-// saved keys; it shows only while he stands on the start floor.
+// eyes shut, a thought bubble swells up over him): its picture and bake;
+// it shows only while he stands on the start floor and has not yet been
+// across the lake, twice per run of the level (not saved: a reload or a
+// way back in from the menu brings it back).
 //
-const DREAM = { url: 'cave0/level_start.png', spritePrefix: 'cave0-dream-bubble', grainSeed: 9570, showsKey: 'cave.dreamShows', awakeKey: 'cave.dreamAwakeSec' }
+const DREAM = { url: 'cave0/level_start.png', spritePrefix: 'cave0-dream-bubble', grainSeed: 9570, saved: false }
 //
 // The touch buttons are a little see-through.
 //
@@ -240,6 +242,7 @@ function build(k, opts) {
     airFor: 0,
     drownLegs: null,
     dream: null,
+    crossedLake: false,
     fps: null
   }
   const lakeSpan = CaveLake.span(lake)
@@ -524,12 +527,14 @@ function spawnHero(inst, pose) {
 }
 //
 // The dream bubble: he dozes off anywhere he stands alive; it dreams only
-// on the start floor, kept inside the view.
+// on the start floor, and never again once he has been across the lake
+// (past its right end), kept inside the view.
 //
 function updateDream(inst, char) {
   const alive = !inst.dead && !inst.drown && Boolean(char?.exists?.())
+  inst.crossedLake ||= alive && char.pos.x > Layout.LAKE_X2
   const atStart = alive && inst.platformByBody.get(char.curPlatform?.())?.id === Layout.START_PLATFORM
-  DreamBubble.onUpdate(inst.dream, inst.k.dt(), alive, true, atStart, View.worldRect(inst.view))
+  DreamBubble.onUpdate(inst.dream, inst.k.dt(), alive, true, atStart && !inst.crossedLake, View.worldRect(inst.view))
 }
 //
 // Footsteps: a soft scuff on the mossy earth.

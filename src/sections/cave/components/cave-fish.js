@@ -448,16 +448,24 @@ export function bolt(inst, dir) {
 /**
  * The fish is seized (in the giant's jaws): it stops swimming and is held
  * until eaten; the giant draws it in its mouth. Its shape as caught (each
- * joint off its middle) is kept, for the jaws to hold it by.
+ * joint off its middle) is kept, turned so its head points `out` (out of
+ * the mouth, its tail in it), its side shown the way it now faces.
  * @param {Object} inst - Fish instance
+ * @param {{x: number, y: number}} out - Unit way out of the mouth
  */
-export function seize(inst) {
+export function seize(inst, out) {
   inst.mode = MODE.HELD
   inst.prey = null
   inst.heldFade = 1
   const m = inst.joints[SEGMENTS >> 1]
-  inst.heldShape = inst.joints.map(j => ({ x: j.x - m.x, y: j.y - m.y }))
+  const head = inst.joints[0]
+  const turn = Math.atan2(out.y, out.x) - Math.atan2(head.y - m.y, head.x - m.x)
+  const c = Math.cos(turn)
+  const s = Math.sin(turn)
+  inst.heldShape = inst.joints.map(j => ({ x: (j.x - m.x) * c - (j.y - m.y) * s, y: (j.x - m.x) * s + (j.y - m.y) * c }))
   inst.heldReach = Math.max(...inst.heldShape.map(o => Math.hypot(o.x, o.y)))
+  inst.facing = Math.sign(out.x) || inst.facing
+  inst.roll = inst.facing
 }
 
 /**
@@ -486,15 +494,16 @@ export function hold(inst, at, angle, dir, share) {
 }
 
 /**
- * Whether it is feeding under the blue fireflies (in the frenzy, not
- * fleeing) within `reach` px of x along the lake.
+ * Whether it is feeding under the blue fireflies (in the frenzy — darting
+ * off from the giant for a moment counts too: it is back at once) within
+ * `reach` px of x along the lake.
  * @param {Object} inst - Fish instance
  * @param {number} x - World X
  * @param {number} reach - Px
  * @returns {boolean}
  */
 export function feedsAt(inst, x, reach) {
-  const busy = inst.mode === MODE.FLEE || inst.mode === MODE.GONE || inst.mode === MODE.HELD || inst.mode === MODE.BOLT
+  const busy = inst.mode === MODE.GONE || inst.mode === MODE.HELD
   return inst.frenzy && !busy && Math.abs(inst.joints[0].x - x) < reach
 }
 

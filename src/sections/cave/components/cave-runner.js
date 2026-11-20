@@ -1,3 +1,4 @@
+import { CFG } from '../../../cfg.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
@@ -211,42 +212,54 @@ const TAIL_RUN_SPEED = 150
 // Hunting fireflies (world px, s). It runs about (patrol) until, on a top
 // (its down within TOP_DOWN of straight down), unafraid and rested
 // (HUNT_REST..+RANGE s since its last hunt), it looks up every WATCH_LOOK
-// s and with WATCH_CHANCE takes to watching a firefly within WATCH_R px
-// along and WATCH_HIGH over it: it tracks it — dashes and pauses as when
+// s and with WATCH_CHANCE takes to watching the lowest firefly within
+// WATCH_R px along and WATCH_HIGH over it: it tracks it — dashes and pauses as when
 // it runs about, each dash toward the firefly (turning about first if the
 // firefly has got behind it, a dash cut short when it does), still once
 // within STALK_NEAR px of under it — its head turned up to it on its
 // neck, for HUNT_TIME..+RANGE s or until it loses it (LOSE_R px off), is
-// scared or leaves the top. Once the firefly sinks low enough —
+// scared or leaves the top. Given up on (it never came down), it runs off
+// to look for another: a dash at SEARCH_SPEED for SEARCH_TIME..+RANGE s,
+// then it looks up again at once. Once the firefly sinks low enough —
 // JUMP_LOW..JUMP_HIGH px over its hips and within JUMP_REACH px along, for
-// AIM_TIME s — it leaps, and the hunt is over: an arc (gravity JUMP_G)
+// AIM_TIME s — it leaps, and the hunt is over: an arc (gravity JUMP_G,
+// the world's own, as for the hero)
 // whose top takes its head
 // to the firefly — MISS_CHANCE of the leaps aimed MISS_OFF..+RANGE px off,
 // so it misses — landing as far again on along its run (never a leap
 // whose landing falls past the run's end, nor one whose arc, checked at
 // ARC_CHECKS points, runs into the soil). Its legs: it crouches first
-// (its hips CROUCH_DIP sheet px lower over CROUCH_TIME s), then its feet
-// stay planted as it springs off — the legs straightening — for the first
-// PUSH_U of the flight, are drawn up to the body (TUCK of their rest
-// spread and drop) by TUCK_U, and from REACH_U reach out and down for the
-// ground again; landed, it gives at the hips like a spring (kicked down at
-// LAND_KICK sheet px/s, stiffness SPRING_K, damping SPRING_DAMP, at rest
-// within SPRING_REST) on its planted feet. In the air its body turns
-// PITCH_SHARE of the way to its flight (at most PITCH_MAX rad) and bends —
-// its front BODY_BEND degrees up, its tail TAIL_BEND down, eased at
-// BEND_EASE per s — and its neck stretches up to NECK_REACH sheet px
-// toward the firefly; its head within CATCH_R px of a firefly eats it.
+// (its hips CROUCH_DIP sheet px lower over CROUCH_TIME s, up to twice as
+// long for a leap as high as JUMP_HIGH: a higher leap takes more winding
+// up), its neck drawn in; then each foot stays planted as it springs off
+// — the leg straightening — until that leg is stretched to its full
+// length (PUSH_STRETCH of it; at the latest by PUSH_U_MAX of the flight:
+// the rear legs, trailing, push longest), is drawn up to the body (TUCK
+// of their rest spread and drop) over TUCK_SPAN of the flight, and from
+// REACH_U reaches out and down for the ground again; landed, it gives at
+// the hips like a spring (kicked down at LAND_KICK sheet px/s for a fall
+// from JUMP_HIGH, less from lower, stiffness SPRING_K, damping
+// SPRING_DAMP, at rest within SPRING_REST) on its planted feet. In the air
+// its body turns PITCH_SHARE of the way to its flight (at most PITCH_MAX
+// rad) and bends — its front BODY_BEND degrees up, its tail TAIL_BEND
+// down, eased at BEND_EASE per s — and its neck shoots out toward the
+// firefly as it rises, NECK_REACH sheet px at the top of the arc
+// (NECK_APEX of the flight), drawn back to NECK_LAND of that as it comes
+// down; its head within CATCH_R px of a firefly eats it.
 // Watching, its neck only turns toward the firefly (NECK_UP..NECK_DOWN
 // rad off its rest line), easing at NECK_EASE per s.
 //
 const TOP_DOWN = 0.9
 const WATCH_LOOK = 0.5
-const WATCH_CHANCE = 0.6
+const WATCH_CHANCE = 0.8
 const WATCH_R = 240
 const WATCH_HIGH = 320
 const STALK_NEAR = 18
-const HUNT_TIME = 6
-const HUNT_TIME_RANGE = 8
+const HUNT_TIME = 4
+const HUNT_TIME_RANGE = 4
+const SEARCH_TIME = 0.8
+const SEARCH_TIME_RANGE = 1.2
+const SEARCH_SPEED = 300
 const HUNT_REST = 2
 const HUNT_REST_RANGE = 4
 const LOSE_R = 340
@@ -259,9 +272,9 @@ const NECK_UP = -1.4
 const NECK_DOWN = 0.3
 const NECK_EASE = 10
 const JUMP_LOW = 25
-const JUMP_HIGH = 130
+const JUMP_HIGH = 170
 const JUMP_REACH = 90
-const JUMP_G = 900
+const JUMP_G = CFG.game.gravity
 const MISS_CHANCE = 0.35
 const MISS_OFF = 12
 const MISS_OFF_RANGE = 14
@@ -269,15 +282,18 @@ const ARC_CHECKS = 8
 const TUCK = 0.45
 const CROUCH_TIME = 0.12
 const CROUCH_DIP = 110
-const PUSH_U = 0.12
-const TUCK_U = 0.35
+const PUSH_STRETCH = 1
+const PUSH_U_MAX = 0.22
+const TUCK_SPAN = 0.22
+const NECK_APEX = 0.5
+const NECK_LAND = 0.25
 const REACH_U = 0.7
 const LAND_KICK = 2600
 const SPRING_K = 380
 const SPRING_DAMP = 16
 const SPRING_REST = 0.5
 const PITCH_SHARE = 0.5
-const PITCH_MAX = 0.6
+const PITCH_MAX = 0.45
 const CATCH_R = 9
 //
 // Off-view margin (world px) past which a runner is not drawn.
@@ -372,7 +388,8 @@ export function create(cfg) {
     v: k.vec2(0, 0),
     anchors: new Map(),
     tmp: { x: 0, y: 0 },
-    hip: { x: 0, y: 0 }
+    hip: { x: 0, y: 0 },
+    hipAt: { x: 0, y: 0 }
   }
   placeBody(inst)
   inst.legs.forEach(leg => plantAt(inst, leg))
@@ -414,8 +431,9 @@ export function onUpdate(inst, heroPos, food = null) {
   inst.bend += ((inst.jump && inst.jump.t >= 0 ? 1 : 0) - inst.bend) * Math.min(1, BEND_EASE * dt)
   if (inst.jump) {
     const target = inst.jump.f
+    const reach = neckReach(inst.jump)
     leap(inst, dt, food)
-    aimNeck(inst, target, NECK_REACH, dt)
+    aimNeck(inst, target, reach, dt)
     return
   }
   inst.cowerFor = Math.max(0, inst.cowerFor - dt)
@@ -461,7 +479,7 @@ function watch(inst, dt, food) {
   if (inst.huntRest > 0 || inst.lookIn > 0 || inst.fleeing || inst.d.y < TOP_DOWN) return
   inst.lookIn = WATCH_LOOK
   if (inst.rng() > WATCH_CHANCE) return
-  const f = food.prey.find(p => Math.abs(p.x - inst.pos.x) < WATCH_R && inst.pos.y - p.y > 0 && inst.pos.y - p.y < WATCH_HIGH)
+  const f = lowestOver(inst, food.prey)
   if (!f) return
   inst.hunt = { f, t: HUNT_TIME + inst.rng() * HUNT_TIME_RANGE, aim: 0 }
   inst.timer = 0
@@ -478,7 +496,11 @@ function stalk(inst, dt) {
   hunt.t -= dt
   const dx = f.x - inst.pos.x
   const dy = inst.pos.y - f.y
-  if (hunt.t <= 0 || inst.fleeing || inst.d.y < TOP_DOWN || Math.hypot(dx, dy) > LOSE_R) {
+  if (hunt.t <= 0) {
+    search(inst)
+    return
+  }
+  if (inst.fleeing || inst.d.y < TOP_DOWN || Math.hypot(dx, dy) > LOSE_R) {
     endHunt(inst)
     return
   }
@@ -517,6 +539,32 @@ function towardOf(inst, dx) {
 function endHunt(inst) {
   inst.hunt = null
   inst.huntRest = HUNT_REST + inst.rng() * HUNT_REST_RANGE
+}
+//
+// The lowest firefly over it within its watch (the likeliest to come
+// down within a leap), else null.
+//
+function lowestOver(inst, prey) {
+  let best = null
+  prey.forEach(p => {
+    const up = inst.pos.y - p.y
+    const fits = Math.abs(p.x - inst.pos.x) < WATCH_R && up > 0 && up < WATCH_HIGH
+    fits && (!best || p.y > best.y) && (best = p)
+  })
+  return best
+}
+//
+// Tired of a firefly that never came down: off at a run, either way, to
+// look for another the moment it stops.
+//
+function search(inst) {
+  inst.hunt = null
+  inst.mode = MODE.DASH
+  inst.timer = SEARCH_TIME + inst.rng() * SEARCH_TIME_RANGE
+  inst.dashSpeed = SEARCH_SPEED * inst.unit / SCALE
+  inst.dir = inst.rng() < HALF ? -1 : 1
+  inst.huntRest = inst.timer
+  inst.lookIn = inst.timer
 }
 //
 // Its head on its neck: at rest as painted; watching a firefly, turned up
@@ -560,10 +608,12 @@ function leapAt(inst, f) {
   if (!inst.run.closed && (s1 < END_PAD || s1 > inst.run.len - END_PAD)) return
   const land = Surface.sample(inst.run, s1, inst.landAt)
   const crouch = CROUCH_DIP * inst.unit
-  const jump = { t: -CROUCH_TIME, T: 0, x0: inst.pos.x + inst.d.x * crouch, y0: inst.pos.y + inst.d.y * crouch, x1: land.x, y1: land.y - HIP_LIFT * inst.unit, h: 0, s1, fx: inst.f.x, fy: inst.f.y, dx: inst.d.x, dy: inst.d.y }
+  const jump = { t: 0, crouch: 0, T: 0, x0: inst.pos.x + inst.d.x * crouch, y0: inst.pos.y + inst.d.y * crouch, x1: land.x, y1: land.y - HIP_LIFT * inst.unit, h: 0, s1, fx: inst.f.x, fy: inst.f.y, dx: inst.d.x, dy: inst.d.y }
   jump.h = (jump.y0 + jump.y1) * HALF - ay
   if (jump.h <= 0 || hitsSoil(inst, jump)) return
   jump.T = 2 * Math.sqrt(2 * jump.h / JUMP_G)
+  jump.crouch = CROUCH_TIME * (1 + Math.min(1, jump.h / JUMP_HIGH))
+  jump.t = -jump.crouch
   jump.f = f
   inst.jump = jump
   inst.speed = 0
@@ -622,11 +672,22 @@ function leap(inst, dt, food) {
   f && food.onEat(f)
   u >= 1 && land(inst)
 }
+//
+// How far the neck stretches out through a leap: drawn in on the crouch,
+// shooting out as it rises to the top of the arc, drawn back as it comes
+// down.
+//
+function neckReach(jump) {
+  if (jump.t < 0) return 0
+  const u = jump.t / jump.T
+  if (u <= NECK_APEX) return NECK_REACH * smooth(u / NECK_APEX)
+  return NECK_REACH * (1 - (1 - NECK_LAND) * smooth((u - NECK_APEX) / (1 - NECK_APEX)))
+}
 function land(inst) {
   inst.s = inst.jump.s1
+  inst.dipV = LAND_KICK * Math.sqrt(Math.min(1, inst.jump.h / JUMP_HIGH))
   inst.jump = null
   inst.dip = 0
-  inst.dipV = LAND_KICK
   placeBody(inst)
   inst.legs.forEach(leg => plantAt(inst, leg))
   pause(inst)
@@ -637,29 +698,35 @@ function land(inst) {
 //
 function crouch(inst, jump, dt) {
   jump.t = Math.min(0, jump.t + dt)
-  inst.dip = CROUCH_DIP * smooth(1 + jump.t / CROUCH_TIME)
+  inst.dip = CROUCH_DIP * smooth(1 + jump.t / jump.crouch)
   placeBody(inst)
   if (jump.t < 0) return
   inst.dip = 0
   inst.legs.forEach(leg => {
     leg.from.x = leg.foot.x
     leg.from.y = leg.foot.y
+    leg.liftU = null
   })
 }
 //
-// A foot in the air at u of the flight: still on the ground while it
-// pushes off, drawn up to the body, held there, reaching out and down
-// for the landing.
+// A foot in the air at u of the flight: still on the ground while its leg
+// pushes off (until it is stretched straight), drawn up to the body, held
+// there, reaching out and down for the landing.
 //
 function flyLeg(inst, leg, u) {
   const tuck = toWorld(inst, leg.restX * TUCK, HIP_LIFT * TUCK, leg.tuck)
-  if (u < PUSH_U) {
-    leg.foot.x = leg.from.x
-    leg.foot.y = leg.from.y
-    return
+  if (leg.liftU === null) {
+    const hip = toWorld(inst, leg.hipX, leg.hipY, inst.hipAt)
+    const straight = Math.hypot(hip.x - leg.from.x, hip.y - leg.from.y) >= leg.reach * inst.unit * PUSH_STRETCH
+    if (!straight && u < PUSH_U_MAX) {
+      leg.foot.x = leg.from.x
+      leg.foot.y = leg.from.y
+      return
+    }
+    leg.liftU = u
   }
   if (u < REACH_U) {
-    const e = smooth(Math.min(1, (u - PUSH_U) / (TUCK_U - PUSH_U)))
+    const e = smooth(Math.min(1, (u - leg.liftU) / TUCK_SPAN))
     leg.foot.x = leg.from.x + (tuck.x - leg.from.x) * e
     leg.foot.y = leg.from.y + (tuck.y - leg.from.y) * e
     return
@@ -717,6 +784,7 @@ function createLegs() {
         foot: { x: 0, y: 0 },
         from: { x: 0, y: 0 },
         tuck: { x: 0, y: 0 },
+        liftU: null,
         step: null
       })
     }

@@ -76,12 +76,13 @@ const SPLASH_HEAR = 900
 const BREATH_HEAR = 2000
 //
 // The giant is lured once LURE_FISH fish or more feed under the blue
-// fireflies over the water (unafraid, within LURE_GATHER px of them along
-// the lake). The hero on its nose drives them from NOSE_SCARE_R px, on
+// fireflies over the water (within LURE_GATHER px of them along the lake:
+// wide, for the school swirls about them and scatters ahead of the giant
+// as it comes, and still counts). The hero on its nose drives them from NOSE_SCARE_R px, on
 // even while he stands there.
 //
 const LURE_FISH = 4
-const LURE_GATHER = 180
+const LURE_GATHER = 450
 const NOSE_SCARE_R = 300
 //
 // A firefly a fish ate lights up again over the lake, from LAKE_SKY_TOP
@@ -281,7 +282,7 @@ function onUpdate(inst) {
   else if (inst.dead) updateRespawn(inst)
   else char?.exists?.() && updateHero(inst, char)
   updateDream(inst, char)
-  Fireflies.onUpdate(inst.fireflies)
+  Fireflies.onUpdate(inst.fireflies, heroPos(inst))
   updateRunners(inst)
   driveSwarm(inst)
   updateLakeLife(inst)
@@ -295,8 +296,11 @@ function updateHero(inst, char) {
   //
   // Pixel snap only on the ground: Kaplay steps physics at a fixed rate and
   // smooths the body between steps only while nothing else moves it, so
-  // snapping in the air made jumps and falls stutter.
+  // snapping in the air made jumps and falls stutter. Not while he rides
+  // the giant: Kaplay carries him by the back's slow fractions of a pixel,
+  // which rounding would lose (or add), letting him creep along its back.
   //
+  inst.heroInst.freePos = Giant.isRidden(inst.giant)
   char.isGrounded() && Hero.snapPosToPixels(inst.heroInst)
   rideGround(inst, char)
   trackLanding(inst, char)
@@ -350,15 +354,14 @@ function isHeroAirborne(inst) {
   return Boolean(char?.exists?.() && char.isGrounded?.() === false)
 }
 //
-// The blue fireflies and the hero: riding the giant, only from its nose
-// does he drive them (farther: NOSE_SCARE_R), anywhere else on its back he
-// leaves them be.
+// The blue fireflies and the hero: wherever he is (on the giant's back
+// too) any move of his at them drives them off; from the giant's nose he
+// drives them even standing (and from farther: NOSE_SCARE_R).
 //
 function driveSwarm(inst) {
   const pos = heroPos(inst)
-  const riding = pos && Giant.isRidden(inst.giant)
-  const atNose = riding && Giant.riderAtNose(inst.giant, pos.x)
-  Swarm.onUpdate(inst.swarm, riding && !atNose ? null : pos, isHeroAirborne(inst), atNose ? NOSE_SCARE_R : undefined, atNose)
+  const atNose = Boolean(pos) && Giant.isRidden(inst.giant) && Giant.riderAtNose(inst.giant, pos.x)
+  Swarm.onUpdate(inst.swarm, pos, isHeroAirborne(inst), atNose ? NOSE_SCARE_R : undefined, atNose)
 }
 //
 // Remembers the last solid platform the hero stood on (respawn point);

@@ -151,8 +151,8 @@ const CULL_MARGIN = 60
 // of its span, sizes SET_SIZE..+RANGE, seeded.
 //
 const SET_AT = [0.22, 0.5, 0.78]
-const SET_SIZE = 0.9
-const SET_SIZE_RANGE = 0.25
+const SET_SIZE = 0.62
+const SET_SIZE_RANGE = 0.16
 const SET_SEED = 5310
 const atlasFor = new WeakMap()
 let atlas = null

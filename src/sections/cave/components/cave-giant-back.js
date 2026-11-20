@@ -8,13 +8,14 @@ import { CFG } from '../../../cfg.js'
 // (low enough for the hero to walk up and down them). They are kept apart
 // from the mesh's bending: only their ends and heights follow the back.
 //
-// A hero riding it is carried along by the main stretch's moves; he
-// stands on whole pixels, so the slow back's fractions are gathered and
-// he is moved a whole pixel at a time. A stretch going under with the
-// hero still on it is not parked at once (Kaplay moves whoever stands on
-// a body by that body's move, so he would be thrown far below the lake):
-// it goes down with the back, no longer ground for riding, and takes him
-// into the water with it.
+// A hero standing on it is carried along by Kaplay itself (it moves
+// whoever stands on a body by that body's move; nothing here moves him
+// too, or he would run ahead of the back; the level keeps his position
+// unrounded while he rides, so the slow back's fractions are not lost). A
+// stretch going under with the hero still on it is not parked at once
+// (that move would throw him far below the lake): it goes down with the
+// back, no longer ground for riding, and takes him into the water with
+// it.
 //
 const THICK = 12
 const PARK_Y = 1e5
@@ -29,27 +30,20 @@ const HOLD_SLACK = 6
  */
 export function create(k, count) {
   const parts = Array.from({ length: count }, () => createPart(k))
-  return { k, parts, rect: parts[0].rect, active: false, rider: null, carryX: 0 }
+  return { k, parts, rect: parts[0].rect, active: false }
 }
 
 /**
  * Lays each body along its stretch of the back — level, at the mean
  * height of its two ends — while it is out of the water (or the hero is
  * still on it), else parks it. The back is ground while its main stretch
- * is out; the hero riding it moves with the main stretch.
+ * is out.
  * @param {Object} inst - Back instance
  * @param {Array<{a: Object, b: Object, dry: boolean}>|null} spans - Per stretch its two ends (world) and whether it is out of the water; null: all parked
  * @param {Object|null} [char] - The hero's character
- * @param {boolean} [riding=false] - He rides it
  */
-export function place(inst, spans, char = null, riding = false) {
+export function place(inst, spans, char = null) {
   inst.active = Boolean(spans?.[0].dry)
-  const rider = inst.active && riding ? char : null
-  if (inst.rider !== rider) {
-    inst.rider = rider
-    inst.carryX = 0
-  }
-  rider && inst.rect.y !== PARK_Y && carry(inst, Math.min(spans[0].a.x, spans[0].b.x) - inst.rect.x)
   inst.parts.forEach((part, i) => placePart(inst.k, part, spans?.[i], char))
 }
 
@@ -130,14 +124,4 @@ function holdsOn(r, x, feetY) {
 }
 function drawPartDebug(k, r, color) {
   k.drawRect({ pos: k.vec2(r.x, r.y), width: r.w, height: THICK, fill: false, outline: { width: 1, color } })
-}
-//
-// The rider moved along with the back, whole pixels at a time.
-//
-function carry(inst, dx) {
-  inst.carryX += dx
-  const step = Math.trunc(inst.carryX)
-  if (step === 0) return
-  inst.carryX -= step
-  inst.rider.moveBy(step, 0)
 }

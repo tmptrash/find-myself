@@ -351,6 +351,7 @@ export function create(config) {
     poseGrounded: false, // On the ground when the body was last posed
     blinkLeft: 0,     // Seconds of blinking left (startBlink)
     dozes,            // Dozes off standing still (see DOZE_DELAY_SEC)
+    freePos: false,   // Set by a level while he rides something moving slowly: his position is not rounded to whole pixels
     dozeT: 0,         // Seconds he has stood still on the ground
     legs: HeroLegs.create(k, runBodyTonesFor.get(k) ?? null),
     standLegs: HeroLegs.create(k, idleBodyTonesFor.get(k) ?? null, { standing: true }),
@@ -1713,12 +1714,14 @@ export function syncPlatformLanding(inst) {
 }
 
 /**
- * Rounds hero world position to whole pixels for crisp 1:1 rendering before integer zoom.
+ * Rounds hero world position to whole pixels for crisp 1:1 rendering before integer zoom
+ * (not while the level has set `freePos`: carried by something moving a fraction of a pixel
+ * a frame, rounding would lose or add those fractions and he would creep along it).
  * @param {Object} inst - Hero instance
  */
 export function snapPosToPixels(inst) {
   const ch = inst?.character
-  if (!ch?.pos) return
+  if (!ch?.pos || inst.freePos) return
   ch.pos.x = Math.round(ch.pos.x)
   if (!inst?.isSubmerging) {
     ch.pos.y = Math.round(ch.pos.y)

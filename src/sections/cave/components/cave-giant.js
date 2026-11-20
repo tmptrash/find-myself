@@ -126,15 +126,20 @@ const GAPE_R = 110
 // Eating (s, share of open, rad): the jaws snap shut on the fish and hold
 // it SNAP_HOLD s, then chew CHEWS times, each CHEW_PERIOD s long, opening
 // to CHEW_OPEN for its first CHEW_OPEN_SHARE and biting down after, then
-// swallow over SWALLOW_TIME s; the fish is drawn into the mouth over the
-// whole gulp (GULP_TIME s, eased),
-// thrashing up to THRASH rad at THRASH_HZ, weaker as it goes in; it
-// slows to EAT_SPEED px/s to eat (as fast as it speeds up in a rush).
+// swallow over SWALLOW_TIME s. Caught, the fish is held by its middle
+// between the lips' front ends, turned head out of the mouth (along the
+// head's line, tilted OUT_TILT of the jaw's drop down toward the gap): its
+// tail half is in the mouth (hidden), its front sticks out and jerks — up
+// to THRASH rad at THRASH_HZ, each jerk sharpened by THRASH_SNAP, weaker
+// as it goes in. It stays out so for HOLD_OUT of the gulp (the bites and
+// their blood come meanwhile), then it is drawn on into the mouth (eased)
+// until it is gone at the gulp's end (GULP_TIME s). It slows to EAT_SPEED
+// px/s to eat (as fast as it speeds up in a rush).
 // Blood clouds out of the mouth: BLOOD_BITE puffs as it bites, BLOOD_CHEW
 // at each chew's bite, BLOOD_GONE as it swallows.
 //
 const SNAP_HOLD = 0.2
-const CHEWS = 2
+const CHEWS = 3
 const CHEW_PERIOD = 0.4
 const CHEW_OPEN = 0.25
 const CHEW_OPEN_SHARE = 0.45
@@ -142,7 +147,10 @@ const SWALLOW_TIME = 0.3
 const GULP_TIME = SNAP_HOLD + CHEWS * CHEW_PERIOD + SWALLOW_TIME
 const THRASH = 0.35
 const EAT_SPEED = 10
-const THRASH_HZ = 6
+const THRASH_HZ = 7
+const THRASH_SNAP = 0.4
+const OUT_TILT = 0.5
+const HOLD_OUT = 0.55
 const BLOOD_BITE = 4
 const BLOOD_CHEW = 4
 const BLOOD_GONE = 6
@@ -309,7 +317,10 @@ const DIVE_AHEAD = 180
 //
 // Visits: the first after FIRST_VISIT s, the next AWAY..+RANGE s after it
 // left; behind a wall to come back the other way it waits BACK_IN..+RANGE
-// s. Its head comes in from HEAD_HIDE px behind the water's end at
+// s — but gone behind the right wall it stays away long, AWAY_RIGHT..
+// +RANGE s (that visit is over). Away anywhere, the moment a school
+// gathers leaping for the blue fireflies it comes in (within
+// LURE_COME_IN s) out of the wall it is behind, toward them. Its head comes in from HEAD_HIDE px behind the water's end at
 // ENTER_DEPTH of the deep water and swims ENTER_IN px in before roaming;
 // it is gone once its tail is EXIT_OUT px past the end. It stays
 // STAY..+RANGE s or until MEALS fish are eaten. Roaming, it heads
@@ -330,10 +341,14 @@ const DIVE_AHEAD = 180
 // back out of the left one. Along the surface it swims at LURE_SPEED, its
 // mouth SURFACE_GAPE open while it moves faster than SURFACE_GAPE_SPEED.
 // Breathing, it swims on while
-// the gathering is ahead of its snout within LURE_AHEAD px (breathing
-// turned the wrong way, unridden, it dives at once to go round); with the
-// hero on its back it stays up only while the gathering is ahead:
-// LURE_GRACE s without it, it dives — but once it has carried him
+// the gathering is ahead of its snout within LURE_AHEAD px; it stays up
+// (never diving, ridden or not, nor turned the wrong way) while the
+// gathering is before it — ahead, or over its head up to LURE_BEHIND px
+// back of its snout — and LURE_GRACE s after it was last there (the fish
+// come and go as they leap). Turned the wrong way with the gathering
+// elsewhere, unridden, it dives at once to go round; with the hero on its
+// back (from LURE_GRACE s after he got on) and no gathering before it for
+// LURE_GRACE s it dives — but once it has carried him
 // DELIVER_SHARE of the lake's length it takes him on to its far end
 // itself (lure or none) and stays up there till he is off (off its back
 // RIDE_GAP s, not just a hop on it).
@@ -351,9 +366,12 @@ const LURE_GRACE = 3
 const DELIVER_SHARE = 2 / 3
 const RIDE_GAP = 0.6
 const LURE_AHEAD = 420
+const LURE_BEHIND = 120
 const FIRST_VISIT = 8
 const AWAY = 20
 const AWAY_RANGE = 25
+const AWAY_RIGHT = 70
+const AWAY_RIGHT_RANGE = 40
 const BACK_IN = 2
 const BACK_IN_RANGE = 3
 const HEAD_HIDE = 15
@@ -487,6 +505,7 @@ export function create(cfg) {
     pitch: 0,
     puffIn: 0,
     inhaled: true,
+    lureFor: 0,
     graceFor: LURE_GRACE,
     rideFrom: null,
     offFor: 0,
@@ -503,7 +522,9 @@ export function create(cfg) {
     bloodRgb: getRGB(k, G.blood),
     gullet: { x: 0, y: 0 },
     gape: { x: 0, y: 0 },
+    lips: { x: 0, y: 0 },
     cut: { x: 0, y: 0, nx: 1, ny: 0 },
+    out: { x: 1, y: 0 },
     upper: MOUTH.map(() => k.vec2(0, 0)),
     lower: MOUTH.map(() => k.vec2(0, 0)),
     gapePts: Array.from({ length: GAPE_POINTS + 1 }, () => k.vec2(0, 0)),
@@ -539,7 +560,7 @@ export function create(cfg) {
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.headOf - A fish's head while it can be caught
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.middleOf - Its body's middle (half of it in a mouth that reaches there)
  * @param {(fish: Object, dir: number) => void} ctx.onChase - A fish is chased: it bolts straight on that way
- * @param {(fish: Object) => void} ctx.onSeize - A fish is caught in the jaws
+ * @param {(fish: Object, out: Object) => void} ctx.onSeize - A fish is caught in the jaws (to be held head out along `out`)
  * @param {(fish: Object, at: Object, angle: number, dir: Object, share: number) => void} ctx.onHold - Holds a fish in the jaws (Fish.hold)
  * @param {(fish: Object) => void} ctx.onEat - A fish is swallowed (gone)
  * @param {Object|null} ctx.hero - The hero's character (to know if he rides the back, or stands on it as it goes under)
@@ -555,7 +576,7 @@ export function onUpdate(inst, ctx) {
   if (inst.mode === MODE.AWAY) {
     ctx.lure && (inst.awayFor = Math.min(inst.awayFor, LURE_COME_IN))
     inst.awayFor -= dt
-    inst.awayFor <= 0 && comeIn(inst, inst.returnSide, lureAtLeft(inst, ctx))
+    inst.awayFor <= 0 && comeIn(inst, ctx.lure ? inst.side : inst.returnSide, lureAtLeft(inst, ctx))
     Back.place(inst.back, null)
     return
   }
@@ -972,14 +993,15 @@ function bite(inst, ctx) {
   inst.gulpT = 0
   inst.bites = 0
   inst.heldTurn = headTurn(inst)
-  ctx.onSeize(inst.held)
+  ctx.onSeize(inst.held, outWay(inst))
   bleed(inst, BLOOD_BITE)
   endHunt(inst)
 }
 //
 // The middle of its gape: halfway between the gullet on the upper lip and
 // the same point of the dropped jaw (turned about the hinge by how open
-// the mouth is; the other way when it faces right, mirrored).
+// the mouth is; the other way when it faces right, mirrored); and so
+// between the lips' front ends (the snout and the jaw's tip).
 //
 function placeGape(inst) {
   SkinMesh.pointAt(inst.mesh, HINGE, inst.hinge)
@@ -990,21 +1012,39 @@ function placeGape(inst) {
   const dy = inst.gullet.y - inst.hinge.y
   inst.gape.x = (inst.gullet.x + inst.hinge.x + dx * c - dy * s) * HALF
   inst.gape.y = (inst.gullet.y + inst.hinge.y + dx * s + dy * c) * HALF
+  const sx = inst.snout.x - inst.hinge.x
+  const sy = inst.snout.y - inst.hinge.y
+  inst.lips.x = (inst.snout.x + inst.hinge.x + sx * c - sy * s) * HALF
+  inst.lips.y = (inst.snout.y + inst.hinge.y + sx * s + sy * c) * HALF
 }
 //
-// The line a held fish shows past: across the head's line at the mouth's
-// corner (where it goes down the gullet), the side toward the snout kept.
+// The line a held fish shows past: across its way out of the mouth
+// between the lips' front ends, the outer side kept (its front sticking
+// out; its tail half, and all of it in the end, in the mouth).
 //
 function mouthCut(inst) {
+  const out = outWay(inst)
+  const cut = inst.cut
+  cut.x = inst.lips.x
+  cut.y = inst.lips.y
+  cut.nx = out.x
+  cut.ny = out.y
+  return cut
+}
+//
+// The way out of the mouth: along the head's line toward the snout,
+// tilted down toward the open gap by OUT_TILT of the jaw's drop.
+//
+function outWay(inst) {
   const fx = inst.snout.x - inst.hinge.x
   const fy = inst.snout.y - inst.hinge.y
   const fl = Math.hypot(fx, fy) || 1
-  const cut = inst.cut
-  cut.x = inst.hinge.x
-  cut.y = inst.hinge.y
-  cut.nx = fx / fl
-  cut.ny = fy / fl
-  return cut
+  const a = inst.facing * inst.open * JAW_OPEN * OUT_TILT
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  inst.out.x = (fx * c - fy * s) / fl
+  inst.out.y = (fx * s + fy * c) / fl
+  return inst.out
 }
 //
 // A point as seen from its mouth: off the gape's middle (x, y), how far
@@ -1022,21 +1062,23 @@ function toMouth(inst, p) {
   return r
 }
 //
-// A fish in its jaws: held by the gullet, turned with the head, thrashing
-// ever weaker, drawn on into the mouth; at each chew's bite blood clouds
-// out; at the end it is swallowed (gone).
+// A fish in its jaws: held between the lips' front ends, its front out,
+// turned with the head, jerking ever weaker; at each chew's bite blood
+// clouds out; after HOLD_OUT of the gulp it is drawn on into the mouth;
+// at the end it is swallowed (gone).
 //
 function gulp(inst, ctx, dt) {
   inst.gulpT += dt
-  const share = Math.min(1, inst.gulpT / GULP_TIME)
-  const thrash = THRASH * (1 - share) * Math.sin(inst.gulpT * THRASH_HZ * Math.PI * 2)
+  const share = Math.max(0, Math.min(1, (inst.gulpT / GULP_TIME - HOLD_OUT) / (1 - HOLD_OUT)))
+  const wave = Math.sin(inst.gulpT * THRASH_HZ * Math.PI * 2)
+  const thrash = THRASH * (1 - share) * Math.sign(wave) * Math.pow(Math.abs(wave), THRASH_SNAP)
   SkinMesh.pointAt(inst.mesh, HINGE, inst.hinge)
   const ix = inst.hinge.x - inst.snout.x
   const iy = inst.hinge.y - inst.snout.y
   const il = Math.hypot(ix, iy) || 1
   inst.inward.x = ix / il
   inst.inward.y = iy / il
-  ctx.onHold(inst.held, inst.gullet, headTurn(inst) - inst.heldTurn + thrash, inst.inward, share * share * (3 - 2 * share))
+  ctx.onHold(inst.held, inst.lips, headTurn(inst) - inst.heldTurn + thrash, inst.inward, share * share * (3 - 2 * share))
   const chew = Math.floor(chewPhase(inst))
   if (chew < CHEWS && chew >= inst.bites && chewPhase(inst) - chew >= CHEW_OPEN_SHARE) {
     inst.bites++
@@ -1148,17 +1190,20 @@ function breathe(inst, ctx, dt) {
     inst.puffIn = 0
     return
   }
-  const lureAhead = ctx.lure && (ctx.lure.x - inst.snout.x) * inst.facing > 0 && (ctx.lure.x - inst.snout.x) * inst.facing < LURE_AHEAD
+  const lureAt = ctx.lure ? (ctx.lure.x - inst.snout.x) * inst.facing : null
+  const lureAhead = lureAt !== null && lureAt > 0 && lureAt < LURE_AHEAD
+  const lureNear = lureAt !== null && lureAt > -LURE_BEHIND && lureAt < LURE_AHEAD
+  inst.lureFor = lureNear ? LURE_GRACE : inst.lureFor - dt
+  inst.graceFor = inst.carrying ? inst.graceFor - dt : LURE_GRACE
   trackRide(inst, dt)
   const onward = lureAhead || inst.delivering
   setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, onward && roomAhead(inst) > ROAM_ARRIVE ? LURE_SPEED : 0)
   inst.carrying ? holdBreath(inst) : breath(inst, ctx, dt)
   if (inst.locked) return
   inst.breathFor -= dt
-  inst.graceFor = inst.carrying && !lureAhead ? inst.graceFor - dt : LURE_GRACE
   const done = inst.breathFor <= 0 || (ctx.lure && inst.facing < 0)
-  const stays = onward || (inst.carrying && inst.graceFor > 0)
-  const unlured = inst.carrying && !onward && inst.graceFor <= 0
+  const stays = onward || inst.lureFor > 0
+  const unlured = inst.carrying && !stays && inst.graceFor <= 0
   if ((done && !stays) || unlured) startDive(inst)
 }
 //
@@ -1230,10 +1275,12 @@ function exitOn(inst) {
   const tail = inst.joints[inst.joints.length - 1]
   const gone = inst.side < 0 ? tail.x < inst.span.x1 - EXIT_OUT : tail.x > inst.span.x2 + EXIT_OUT
   if (!gone) return
+  const right = inst.side > 0 && !inst.stay && !inst.locked
+  right && (inst.returnSide = null)
   const comeBack = inst.returnSide !== null
   setMode(inst, MODE.AWAY)
   inst.visiting = comeBack
-  inst.awayFor = comeBack ? BACK_IN + inst.rng() * BACK_IN_RANGE : AWAY + inst.rng() * AWAY_RANGE
+  inst.awayFor = comeBack ? BACK_IN + inst.rng() * BACK_IN_RANGE : right ? AWAY_RIGHT + inst.rng() * AWAY_RIGHT_RANGE : AWAY + inst.rng() * AWAY_RANGE
 }
 //
 // The head moving: its pitch turned toward its target along an arc (no
@@ -1376,7 +1423,7 @@ function placeBack(inst, hero) {
     SkinMesh.pointAt(inst.mesh, ends[1], span.b)
     span.dry = isDry(inst, span)
   })
-  Back.place(inst.back, inst.backSpans, hero, inst.carrying)
+  Back.place(inst.back, inst.backSpans, hero)
 }
 function isDry(inst, span) {
   const surface = CaveLake.surfaceAt(inst.lake, (span.a.x + span.b.x) * HALF)

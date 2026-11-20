@@ -4,6 +4,7 @@ import { CAVE_CFG } from '../cfg.js'
 //
 // Cave fireflies: slow wandering sparks across the shaft, plus bursts the
 // hero shatters into on a spike hit (they drift apart, flicker and fade).
+// The wandering ones shy away from the hero when he comes near (SHY_*).
 // Everything draws in one additive pass with the shared glow sprite.
 //
 const AMBIENT_SPEED = 22
@@ -56,6 +57,14 @@ const RELIGHT_FADE = 1.5
 // next step would take it into the soil.
 //
 const OPEN_TRIES = 40
+//
+// They shy away from the hero: within SHY_R px of him (standing, running
+// or in a jump) each is shoved off him at up to SHY_ACC px/s² (more the
+// nearer), the shove dying away at SHY_DRAG per s, and heads on away.
+//
+const SHY_R = 70
+const SHY_ACC = 900
+const SHY_DRAG = 2.5
 
 /**
  * Creates the ambient firefly swarm.
@@ -89,7 +98,9 @@ export function create(cfg) {
       phase: Math.random() * FULL_TURN,
       spin: (CORE_SPIN + Math.random() * CORE_SPIN_RANGE) * (Math.random() < HALF ? -1 : 1),
       orbit: Math.random() * FULL_TURN,
-      fade: 1
+      fade: 1,
+      vx: 0,
+      vy: 0
     })
   }
   return inst
@@ -146,19 +157,27 @@ export function eat(inst, f, box = null) {
 }
 
 /**
- * Moves ambient fireflies and ages burst sparks.
+ * Moves ambient fireflies (shying away from the hero) and ages burst
+ * sparks.
  * @param {Object} inst - Fireflies instance
+ * @param {{x: number, y: number}|null} [heroPos=null] - The hero's centre (null: none)
  */
-export function onUpdate(inst) {
+export function onUpdate(inst, heroPos = null) {
   const dt = inst.k.dt()
   const { bounds } = inst
+  const drag = Math.exp(-SHY_DRAG * dt)
   inst.ambient.forEach(f => {
     f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
     f.heading += (Math.random() - 0.5) * AMBIENT_TURN_RATE * FULL_TURN * dt
-    const nx = f.x + Math.cos(f.heading) * AMBIENT_SPEED * dt
-    const ny = f.y + Math.sin(f.heading) * AMBIENT_SPEED * dt
+    heroPos && shy(f, heroPos, dt)
+    f.vx *= drag
+    f.vy *= drag
+    const nx = f.x + (Math.cos(f.heading) * AMBIENT_SPEED + f.vx) * dt
+    const ny = f.y + (Math.sin(f.heading) * AMBIENT_SPEED + f.vy) * dt
     if (inst.isOpen && !inst.isOpen(nx, ny)) {
       f.heading += Math.PI
+      f.vx = 0
+      f.vy = 0
       return
     }
     f.x = nx
@@ -170,10 +189,10 @@ export function onUpdate(inst) {
     f.x = Math.max(bounds.x1, Math.min(bounds.x2, f.x))
     f.y = Math.max(bounds.y1, Math.min(bounds.y2, f.y))
   })
-  const drag = Math.exp(-BURST_DRAG * dt)
+  const sparkDrag = Math.exp(-BURST_DRAG * dt)
   inst.sparks.forEach(s => {
-    s.vx *= drag
-    s.vy = s.vy * drag - BURST_FLOAT * dt
+    s.vx *= sparkDrag
+    s.vy = s.vy * sparkDrag - BURST_FLOAT * dt
     s.x += s.vx * dt
     s.y += s.vy * dt
     s.life -= dt
@@ -205,6 +224,19 @@ export function onDraw(inst, top, bottom, opacity = 1) {
     Glow.drawGlow(k, s.x, s.y, s.r, s.color, fade * flicker)
     Glow.drawGlow(k, s.x, s.y, s.r * CORE_GLOW_SCALE, inst.coreRgb, fade)
   })
+}
+//
+// Near the hero: shoved off him (the nearer the harder), heading away.
+//
+function shy(f, heroPos, dt) {
+  const dx = f.x - heroPos.x
+  const dy = f.y - heroPos.y
+  const d = Math.hypot(dx, dy)
+  if (d >= SHY_R || d <= 0) return
+  const acc = SHY_ACC * (1 - d / SHY_R) * dt
+  f.vx += dx / d * acc
+  f.vy += dy / d * acc
+  f.heading = Math.atan2(dy, dx)
 }
 //
 // A spot in a box, in the open air when that is known (the last pick if

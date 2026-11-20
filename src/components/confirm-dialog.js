@@ -1083,7 +1083,7 @@ function bakeTag(label, s, selected, cave, pal) {
   const rim = cave ? padRim(pad + w / 2, pad + h / 2, w / 2, h / 2, TAG_PAD_LOBES, TAG_PAD_LOBE_AMP, rng) : null
   const outline = cave ? closedPath(rim) : raggedRectPath(pad, pad, w, h, BOARD_CHAMFER * s * TAG_CHAMFER_SCALE, BOARD_EDGE_STEP * s * TAG_EDGE_STEP_SCALE, TAG_JITTER * s, rng)
   if (cave) {
-    ctx.fillStyle = pal.contour
+    ctx.fillStyle = pal.tagContour
     ctx.fill(closedPath(rim.map(p => ({ x: p.x, y: p.y + TAG_PAD_THICK * s }))))
   }
   ctx.fillStyle = selected ? pal.tagSelected : pal.tag
@@ -1094,7 +1094,7 @@ function bakeTag(label, s, selected, cave, pal) {
   ctx.fillStyle = pal.woodLight
   ctx.fillRect(pad, pad, w, BOARD_LIT_H * s * TAG_LIT_SCALE)
   ctx.restore()
-  ctx.strokeStyle = pal.contour
+  ctx.strokeStyle = pal.tagContour
   ctx.lineWidth = TAG_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)
@@ -1135,7 +1135,7 @@ function bakePlateTag(label, s, selected, pal, plate) {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
   ctx.restore()
-  ctx.strokeStyle = pal.contour
+  ctx.strokeStyle = pal.tagContour
   ctx.lineWidth = TAG_CONTOUR * s
   ctx.lineJoin = 'round'
   ctx.stroke(outline)

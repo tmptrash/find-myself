@@ -638,6 +638,7 @@ export const CFG = {
           woodDark: PALETTE.rose0,
           woodLight: PALETTE.rose2,
           contour: PALETTE.gray0,
+          tagContour: PALETTE.gray0,
           text: PALETTE.gray7,
           textShadow: PALETTE.gray0,
           tag: PALETTE.rose0,
@@ -662,6 +663,7 @@ export const CFG = {
           woodDark: PALETTE.green0,
           woodLight: PALETTE.green3,
           contour: PALETTE.gray0,
+          tagContour: PALETTE.rose0,        // Dark brown rim of the Yes / No plates
           text: PALETTE.gray7,
           textShadow: PALETTE.gray0,
           tag: PALETTE.teal0,

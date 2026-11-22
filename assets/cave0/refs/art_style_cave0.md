@@ -1,6 +1,6 @@
 # Find Myself — Cave0 Art Style
 
-Version: 2.2 (general rules extended with the level-independent guidance of the Forest style)
+Version: 2.3 (Part B: the shared style of all organic life — creatures and plants — after the new giant)
 Source of truth: approved Cave0 gameplay screenshots (01–03).
 
 This file has two parts:
@@ -146,6 +146,66 @@ The style is analog, like everything in nature: made by hand and grown, never st
 - Poses and expressions are relaxed, absorbed, or at most mildly curious. Avoid bared teeth, charging poses, spikes aimed outward and eyes glaring at the viewer.
 - Hazards must still read clearly as hazards (see Part A, Composition). They come from the place itself (sharp rock, a creature guarding its food, a falling drop), not from hostility.
 
+## Organic life — creatures and plants
+Every living thing of Cave0, animal or plant (creatures, fish, insects, fungi, mosses, leaves, roots), is drawn in one style: **moderately stylized digital painting (stylized painterly fantasy art)** — natural organic forms, soft volumetric light and moderate detail, neither photorealistic nor over-simplified like a cartoon.
+
+**Style reference for organic objects:** the new giant (`assets/cave0/creature.png`): olive-teal scaly skin with large ochre patches, matte, softly lit. Every new creature or plant of Cave0 must look painted in the same style as it.
+
+For creatures and plants this section overrides Part A where they differ: in particular Part A's "substantial small organic detail" becomes the **medium** detail below.
+
+### Detail
+- Medium level of detail. Large and medium forms dominate over small ones.
+- Micro-detail is used selectively where it explains the form, never spread evenly over the whole surface.
+- Large areas keep enough calm, quiet zones.
+- No overly complex textures or visual noise — and no simplification down to completely smooth, plastic forms.
+
+### Textures and materials
+- Textures look painted by hand: soft, slightly uneven brush strokes.
+- Show the natural unevenness of surfaces: scales, bark, skin, fungal tissue and leaves have a recognizable texture without excessive detail.
+- Small textures never compete with the main forms.
+- Matte and semi-matte materials. No metallic shine, artificially glossy surfaces or excessive sharpness.
+
+### Colour
+- Mostly natural, muted colours. Base families: olive, grey-green, turquoise/teal, ochre, brown, sand.
+- Keep colour variation within one surface (patches, gradual shifts), yet large colour patches stay easy to tell apart.
+- No excessive saturation and no harsh colour transitions.
+- Bright colours only locally: bioluminescence, eyes, single distinctive biological features (see Glow budget).
+
+### Light and volume
+- Soft, mostly diffuse light; smooth transitions between lit and shaded areas; moderate contrast.
+- Volume is built from large areas of light and shadow, not from many small highlights.
+- Local light accents are allowed but must not make a surface look metallic or wet without a reason.
+- Keep the sense of depth and three-dimensionality of each object.
+
+### Forms and silhouettes
+- Organic, mostly rounded forms with smooth transitions between parts (body and limbs, stem and cap, root and trunk).
+- Natural asymmetry and slightly uneven contours are welcome.
+- The outer silhouette reads well even when scaled down; small features never break the reading of the overall form.
+- No overly geometric or mechanical shapes unless the organism's biology calls for them.
+
+### Biological plausibility
+- Every organism looks like a natural inhabitant of the underground ecosystem.
+- Every visible structure has a function and fits how the organism lives (how it moves or grows, feeds, holds on, reaches water and light).
+- Skin, scales, folds, bark, growths and veins emphasize the organism's build; decorative details never look like artificial ornaments.
+- Fantastic adaptations are allowed when they look organic and biologically believable.
+
+### At game scale
+- Each organism is clearly distinguishable at its in-game size; its main forms and large colour patches stay readable.
+- No decorative elements that were not requested.
+- Pieces of one organism that is assembled or animated in code (body, limbs, fins, jaw, cap and stem) share one style, scale and lighting.
+
+### Avoid (organic objects)
+- Photorealistic micro-textures.
+- Excessive scales, wrinkles, veins and cracks.
+- Strong golden or metallic sheen.
+- Overly contrasting lighting.
+- Completely smooth surfaces without texture; flat cartoon fills.
+- Overly sharp borders between colours.
+- Overly complicated anatomy; artificial-looking ornaments.
+
+### Key principle
+**Keep the richness of natural forms, but simplify the visual information.** An expressive silhouette, believable anatomy, large colour patches and soft volume matter more than a high density of small details.
+
 ## Water
 - Water is everywhere in Cave0 and is one of its main motifs:
   - **Lakes:** calm and blue-green, with a clean thin surface highlight and partly visible submerged roots and rocks.
@@ -166,17 +226,17 @@ The style is analog, like everything in nature: made by hand and grown, never st
 
 ## Cave0 biome — references 01–03
 ### Color
-- Cave uses cool deep blue/teal shadows with warm orange-gold wood and vivid yellow-green leaves.
+- Cave uses cool deep blue/teal shadows with warm ochre-orange wood and olive to yellow-green leaves (muted, matte; see Organic life).
 ### Visual construction
 - Deep cavern with dark navy, petroleum-blue and green-blue negative space, softly mottled rock atmosphere, and dim distant ledges.
 - Strong rocky frame and platforms: irregular polygonal grey stones of many sizes, visible dark cracks, small black gaps, selective light grey faces, patches of teal-dark rock and tiny moss/grass clusters.
 - Platforms have clear horizontal or gently sloped playable upper surfaces, substantial rock bodies, and visually broken undersides. Hanging vines/roots may fall below, but are not themselves implied as walkable surfaces.
 - Distant platforms use darker, less contrasty green stone clusters and soft detail, not the same bright foreground-rock texture.
-- Central landmark is a giant twisting golden-orange organic trunk, with intertwined branches, warm directional highlights, dark seams, attached smaller leaves, and broad bright yellow-green leaf platforms with visible veins, torn/holed edges and darker undersides.
+- Central landmark is a giant twisting ochre-orange organic trunk, with intertwined branches, soft warm light on its upper sides (matte, no golden sheen), dark seams, attached smaller leaves, and broad yellow-green leaf platforms — the warmest, lightest plant colour of the level, still not oversaturated — with a few visible veins, torn/holed edges and darker undersides.
 - Secondary plants include salmon/peach funnel mushrooms along cliff walls, pale mint/teal parasol-like stalk plants, tiny cyan bioluminescent fungi, thin hanging vines and small floating light specks.
 - Water, where present, is calm and blue-green with a clean thin surface highlight and partially visible submerged roots/rocks.
 ### Cave-specific rules
-- Maintain a clear contrast between cool cavern atmosphere and selected luminous warm vegetation.
+- Maintain a clear contrast between cool cavern atmosphere and selected warm-coloured vegetation (warm by hue and soft light, not by glow or sheen).
 - The bright tree is a focal point, not a requirement that every asset must glow or be golden.
 - Foreground stone texture can be densely articulated; avoid equally dense treatment of the distant background.
 - Preserve believable structural layering: rock mass, moss, hanging growth, atmosphere, then distant structures.
@@ -487,7 +547,8 @@ The assembled platform must satisfy the following requirements:
 **Platform geometry defines the shape. Soil materials fill the shape. Edge elements define the exposed boundaries. Rocks and decorative assets provide visual complexity. Masks, occlusion, and blending make everything appear as one continuous natural formation.**
 
 ## Cave0 reference usage
-- Use the Cave0 screenshots (01–03) as the primary reference for this environment.
+- Use the Cave0 screenshots (01–03) as the primary reference for this environment (cavern, rock, platforms, water, atmosphere).
+- For creatures and plants the primary reference is the new giant (`assets/cave0/creature.png`) with the Organic life section; where the screenshots show organic objects in a different manner (golden sheen, vivid saturation, dense micro-detail), follow the giant and Organic life.
 
 ## Suggested prompt attachment text
-"Use art_style_cave0.md and the attached Cave0 gameplay references as art-direction guides. Create an original Cave0 asset matching the established silhouettes, materials, colors, depth and detail density. Cave0 is the first and gentlest of three cave depths: calm and alive, with a closed ecosystem whose creatures are busy with themselves, water (lakes, thin waterfalls, drips), rare light shafts from the surface and only a few glowing accents. The look is analog and organic like nature, never mechanical: nothing exactly repeated, symmetric or evenly spaced. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"
+"Use art_style_cave0.md and the attached Cave0 gameplay references as art-direction guides. Create an original Cave0 asset matching the established silhouettes, materials, colors, depth and detail density. Cave0 is the first and gentlest of three cave depths: calm and alive, with a closed ecosystem whose creatures are busy with themselves, water (lakes, thin waterfalls, drips), rare light shafts from the surface and only a few glowing accents. The look is analog and organic like nature, never mechanical: nothing exactly repeated, symmetric or evenly spaced. Creatures and plants are stylized painterly like the giant (creature.png): medium detail, hand-painted matte textures, muted natural colours (olive, grey-green, teal, ochre, brown, sand), soft diffuse volume, rounded readable silhouettes, believable biology. Exclude UI, debug overlays and unrequested objects. [Describe subject, dimensions, composition. Transparent RGBA PNG background is mandatory. If multiple variants are requested, each must fit into an independent axis-aligned rectangular crop area without touching neighboring areas.]"

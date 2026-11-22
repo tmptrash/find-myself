@@ -55,43 +55,46 @@ const MIST_SPRITE = 'cave0-giant-mist-v1'
 const GRAIN_SEED = 9540
 const G = CAVE_CFG.giant
 //
-// The body (giantBody piece px): its size, the rest spine head to tail
-// (the anchor joint the mesh is placed by), the riding ground's ends (a
-// level line at the head's top from just behind the nose back past the
-// hump to where the tail starts, so the hero can run its whole length —
-// over the hump he stands a little behind its ridge), then on along the
-// tail's top in level steps (x1..x2 at y each, one under the other by
-// about 20 px: 2.5 world px, a step the hero walks up and down; each is
-// ground only while it is out of the water, so it reaches as far back as
-// the giant shows over the surface), how far from its front end the hero
-// counts as on its nose (NOSE_ZONE px), the snout and the nostrils.
+// The body (giantBody piece px — creature.png faces right; its pieces are
+// mirrored as they are cut, so here it faces left, its snout at x 0 like
+// all the giant's own art): its size, the rest spine head to tail (the
+// anchor joint the mesh is placed by), the riding ground's ends (a level
+// line along the top of its head, the highest of it, from behind the nose
+// back to where its back falls away), then on along its back and tail
+// down in level steps (x1..x2 at y each, one under the other by 20 px:
+// about 3 world px, a step the hero walks up and down; each is ground only
+// while it is out of the water, so it reaches as far back as the giant
+// shows over the surface), how far from its front end the hero counts as
+// on its nose (NOSE_ZONE px), the snout and its three nostrils (the mist
+// comes out of each).
 //
-const PICTURE = { w: 2053, h: 421 }
+const PICTURE = { w: 1693, h: 396 }
 const JOINTS = [
-  { x: 8, y: 230 },
-  { x: 350, y: 252 },
-  { x: 698, y: 214 },
-  { x: 1070, y: 200 },
-  { x: 1384, y: 255 },
-  { x: 1679, y: 272 },
-  { x: 1914, y: 276 },
-  { x: 2047, y: 280 }
+  { x: 8, y: 110 },
+  { x: 292, y: 156 },
+  { x: 578, y: 214 },
+  { x: 876, y: 250 },
+  { x: 1131, y: 256 },
+  { x: 1378, y: 212 },
+  { x: 1574, y: 216 },
+  { x: 1680, y: 213 }
 ]
 const ANCHOR = 2
-const BACK = [{ x: 70, y: 102 }, { x: 1307, y: 102 }]
+const BACK = [{ x: 124, y: 15 }, { x: 357, y: 15 }]
 const TAIL_STEPS = [
-  { x1: 1307, x2: 1359, y: 122 },
-  { x1: 1359, x2: 1398, y: 142 },
-  { x1: 1398, x2: 1430, y: 162 },
-  { x1: 1430, x2: 1519, y: 180 },
-  { x1: 1519, x2: 1655, y: 198 },
-  { x1: 1655, x2: 1839, y: 215 },
-  { x1: 1839, x2: 1964, y: 233 }
+  { x1: 357, x2: 416, y: 35 },
+  { x1: 416, x2: 572, y: 55 },
+  { x1: 572, x2: 769, y: 75 },
+  { x1: 769, x2: 845, y: 95 },
+  { x1: 845, x2: 906, y: 115 },
+  { x1: 906, x2: 969, y: 135 },
+  { x1: 969, x2: 1057, y: 155 },
+  { x1: 1057, x2: 1313, y: 175 }
 ]
 const BACK_SPANS = [BACK].concat(TAIL_STEPS.map(t => [{ x: t.x1, y: t.y }, { x: t.x2, y: t.y }]))
 const NOSE_ZONE = 40
-const SNOUT = { x: 8, y: 234 }
-const NOSTRILS = [{ x: 105, y: 127 }, { x: 168, y: 138 }]
+const SNOUT = { x: 6, y: 118 }
+const NOSTRILS = [{ x: 43, y: 60 }, { x: 81, y: 64 }, { x: 132, y: 71 }]
 //
 // The jaw (giantBody px): the mouth line, snout to corner (where the lips
 // meet, the jaw's hinge); the lower jaw's outline (the mouth line, then
@@ -111,10 +114,10 @@ const NOSTRILS = [{ x: 105, y: 127 }, { x: 168, y: 138 }]
 // the corner by GAPE_BOW of the gap there, drawn through GAPE_STEPS
 // steps. It opens at OPEN_RATE, at LUNGE_OPEN_RATE in a rush.
 //
-const MOUTH = [{ x: 10, y: 237 }, { x: 30, y: 236 }, { x: 60, y: 229 }, { x: 100, y: 235 }, { x: 150, y: 252 }, { x: 200, y: 274 }, { x: 250, y: 297 }, { x: 300, y: 318 }, { x: 350, y: 329 }, { x: 385, y: 331 }]
+const MOUTH = [{ x: 12, y: 121 }, { x: 20, y: 127 }, { x: 40, y: 127 }, { x: 60, y: 130 }, { x: 90, y: 137 }, { x: 120, y: 144 }, { x: 150, y: 154 }, { x: 170, y: 160 }, { x: 190, y: 165 }, { x: 207, y: 167 }]
 const HINGE = MOUTH[MOUTH.length - 1]
-const GULLET = { x: 75, y: 231 }
-const JAW = MOUTH.concat([{ x: 387, y: 359 }, { x: 380, y: 416 }, { x: 325, y: 415 }, { x: 270, y: 412 }, { x: 200, y: 400 }, { x: 150, y: 384 }, { x: 100, y: 360 }, { x: 60, y: 332 }, { x: 30, y: 286 }, { x: 15, y: 269 }, { x: 6, y: 247 }])
+const GULLET = { x: 40, y: 128 }
+const JAW = MOUTH.concat([{ x: 210, y: 185 }, { x: 208, y: 270 }, { x: 180, y: 262 }, { x: 150, y: 249 }, { x: 120, y: 235 }, { x: 100, y: 225 }, { x: 80, y: 213 }, { x: 60, y: 199 }, { x: 40, y: 182 }, { x: 25, y: 162 }, { x: 15, y: 140 }, { x: 8, y: 128 }])
 const JAW_EDGE = 3
 const JAW_PAD = 4
 const JAW_OPEN = 0.5
@@ -197,13 +200,27 @@ const GAPE_INDICES = Array.from({ length: GAPE_POINTS - 1 }, (_, i) => [GAPE_POI
 // rides on.
 //
 //
-// The hind paddle's top reaches up into the body's cut (giantBody px):
-// cleared from it.
+// The paddles' tops reach up into the body's cut under its belly
+// (giantBody px, x1..x2 each): there everything under the body's own
+// lower edge (from its middle row down, the first pixel under SPILL_ALPHA)
+// is cleared from it.
 //
-const FIN_SPILL = { x: 1159, y: 395, w: 298, h: 26 }
+//
+// How far its outline reaches over (GIRTH_UP) and under (GIRTH_DOWN: its
+// paddles hanging under the middle of it too) each joint's spine point
+// (giantBody px), and how much further down its dropped jaw reaches at
+// the snout fully open (the joint behind half that).
+//
+const GIRTH_UP = [54, 152, 151, 141, 86, 77, 117, 63]
+const GIRTH_DOWN = [54, 152, 452, 400, 300, 77, 117, 63]
+const JAW_REACH = 100
+const FIN_SPILLS = [{ x1: 443, x2: 808 }, { x1: 955, x2: 1262 }]
+const SPILL_ALPHA = 40
+const RGBA = 4
+const ALPHA_BYTE = 3
 const FINS = [
-  { piece: 'giantFinFront', root: { x: 60, y: 45 }, socket: { x: 645, y: 347 }, bone: 2 },
-  { piece: 'giantFinHind', root: { x: 50, y: 45 }, socket: { x: 1212, y: 309 }, bone: 3 }
+  { piece: 'giantFinFront', root: { x: 48, y: 54 }, socket: { x: 528, y: 306 }, bone: 2 },
+  { piece: 'giantFinHind', root: { x: 38, y: 43 }, socket: { x: 1002, y: 330 }, bone: 3 }
 ]
 const SCALE = G.length / PICTURE.w
 const TEX_OVER = 3
@@ -503,6 +520,9 @@ export function create(cfg) {
     trail: [],
     swum: 0,
     joints: JOINTS.map(() => ({ x: 0, y: 0 })),
+    girthUp: GIRTH_UP.map(g => g * SCALE),
+    girthDown: GIRTH_DOWN.map(() => 0),
+    body: null,
     target: { x: 0, y: 0 },
     want: 0,
     speed: 0,
@@ -552,6 +572,7 @@ export function create(cfg) {
     boneRgbs: G.debugBones.map(hex => getRGB(k, hex))
   }
   inst.fearPts = [inst.snout, inst.joints[ANCHOR], inst.joints[inst.joints.length - 1]]
+  inst.body = { pts: inst.joints, up: inst.girthUp, down: inst.girthDown }
   resetTrail(inst)
   return inst
 }
@@ -659,6 +680,23 @@ export function isRidden(inst) {
  */
 export function fearPoints(inst) {
   return inst.mode === MODE.AWAY ? NOTHING : inst.fearPts
+}
+
+/**
+ * Its body for the fish to keep clear of while it is in the lake: its
+ * spine head to tail (world) and how far its outline reaches over and
+ * under each joint (world px; under, its paddles too, and more at the head
+ * while its jaw is dropped), else null.
+ * @param {Object} inst - Giant instance
+ * @returns {{pts: Array<{x: number, y: number}>, up: Array<number>, down: Array<number>}|null}
+ */
+export function bodyLine(inst) {
+  if (inst.mode === MODE.AWAY) return null
+  inst.girthDown.forEach((_, i) => {
+    const jaw = i === 0 ? 1 : i === 1 ? HALF : 0
+    inst.girthDown[i] = (GIRTH_DOWN[i] + inst.open * JAW_REACH * jaw) * SCALE
+  })
+  return inst.body
 }
 
 /**
@@ -1668,9 +1706,9 @@ function withAnchor(k, part, at) {
 }
 function buildAtlas() {
   const names = ['giantBody', 'giantJaw'].concat(FINS.map(fin => fin.piece))
-  const body = Atlas.piece('giantBody')
-  const fins = FINS.map(fin => Atlas.piece(fin.piece))
-  if (!body || fins.some(src => !src)) return null
+  const pieces = ['giantBody'].concat(FINS.map(fin => fin.piece)).map(name => Atlas.piece(name))
+  if (pieces.some(src => !src)) return null
+  const [body, ...fins] = pieces.map(mirrored)
   const jaw = cutJaw(body)
   const srcs = [bodyWithoutJaw(body), jaw.canvas].concat(fins)
   const sizes = srcs.map(src => ({ w: Math.round(src.width * SCALE * TEX_OVER), h: Math.round(src.height * SCALE * TEX_OVER) }))
@@ -1713,22 +1751,49 @@ function cutJaw(src) {
   ctx.drawImage(src, 0, 0)
   return { canvas, box }
 }
+//
+// Under the body's lower edge, column by column over each spill's x span.
+//
+function clearSpills(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h)
+  const data = img.data
+  FIN_SPILLS.forEach(span => {
+    for (let x = span.x1; x <= span.x2; x++) {
+      let y = h >> 1
+      while (y < h && data[(y * w + x) * RGBA + ALPHA_BYTE] >= SPILL_ALPHA) y++
+      for (; y < h; y++) data[(y * w + x) * RGBA + ALPHA_BYTE] = 0
+    }
+  })
+  ctx.putImageData(img, 0, 0)
+}
 function jawPath(ctx) {
   ctx.beginPath()
   JAW.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
   ctx.closePath()
 }
 //
-// The body's cut with the lower jaw (drawn apart) and the hind paddle's
-// top cleared.
+// A piece flipped left to right (creature.png faces the other way).
+//
+function mirrored(src) {
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width
+  canvas.height = src.height
+  const ctx = canvas.getContext('2d')
+  ctx.scale(-1, 1)
+  ctx.drawImage(src, -src.width, 0)
+  return canvas
+}
+//
+// The body's cut with the lower jaw (drawn apart) and the paddles' tops
+// under its belly cleared.
 //
 function bodyWithoutJaw(src) {
   const canvas = document.createElement('canvas')
   canvas.width = src.width
   canvas.height = src.height
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(src, 0, 0)
-  ctx.clearRect(FIN_SPILL.x, FIN_SPILL.y, FIN_SPILL.w, FIN_SPILL.h)
+  clearSpills(ctx, canvas.width, canvas.height)
   ctx.globalCompositeOperation = 'destination-out'
   jawPath(ctx)
   ctx.fill()

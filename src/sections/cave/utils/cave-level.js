@@ -250,6 +250,7 @@ function build(k, opts) {
     swarmPrey: [],
     swarm: null,
     threats: [],
+    giant: null,
     school: inst.fish,
     onCatch: prey => onFishCatch(inst, prey),
     onSplash: (x, strength) => onFishSplash(inst, x, strength)
@@ -699,7 +700,7 @@ function updateLakeLife(inst) {
   Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x), lure: lureOf(inst), hero: inst.dead ? null : char })
   ctx.threats.length = 0
   inst.drown && hero && ctx.threats.push(hero)
-  Giant.fearPoints(inst.giant).forEach(p => ctx.threats.push(p))
+  ctx.giant = Giant.bodyLine(inst.giant)
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
   const fears = inst.striderFears
   fears.length = 0

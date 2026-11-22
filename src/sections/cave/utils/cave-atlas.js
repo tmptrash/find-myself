@@ -959,9 +959,9 @@ kitMoss0: [SHEET.SMALL, 33, 16, 245, 95],
   striderFeeler: [SHEET.STRIDER, 1255, 176, 175, 120],
   striderFemur: [SHEET.STRIDER, 584, 305, 254, 323],
   striderTibia: [SHEET.STRIDER, 587, 634, 44, 371],
-  giantBody: [SHEET.CREATURE, 78, 5, 2053, 421],
-  giantFinFront: [SHEET.CREATURE, 627, 426, 406, 293],
-  giantFinHind: [SHEET.CREATURE, 1244, 415, 283, 252]
+  giantBody: [SHEET.CREATURE, 40, 158, 1693, 396],
+  giantFinFront: [SHEET.CREATURE, 925, 532, 365, 292],
+  giantFinHind: [SHEET.CREATURE, 471, 536, 307, 174]
 }
 const sheets = new Map()
 const pieces = new Map()

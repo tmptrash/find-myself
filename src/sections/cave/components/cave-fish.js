@@ -214,11 +214,23 @@ const MOUTH_EASE = 14
 // picks a new way. Chased by the giant it bolts straight on, away from
 // it, at its depth and side-on (z 0), BOLT_REACH px at BOLT_SPEED (slower
 // than the giant's chase) for at most BOLT_TIME s, heeding nothing else.
+// The giant's body it never swims across (its picture never over the
+// giant's): within GIANT_LOOK px of the giant's outline it flees over or
+// under it (the side it is on, or the other if there is no water that
+// way), aiming GIANT_PASS px clear of the outline, FLEE_REACH px on the
+// way it heads; and no point of its spine comes nearer the outline than
+// its own half height (BODY_HALF of its length) and GIANT_PAD px — pushed
+// out square from the giant's spine (only the fish the giant is chasing
+// or holds is let in).
 //
 const ENTRY_KEEP = 0.45
 const DIVE_TIME = 0.8
 const DIVE_DOWN = 70
 const FLEE_R = 160
+const GIANT_LOOK = 50
+const GIANT_PASS = 16
+const GIANT_PAD = 4
+const BODY_HALF = 0.23
 const STARTLE_R = 420
 const FLEE_TIME = 1.6
 const FLEE_REACH = 260
@@ -419,6 +431,7 @@ export function createAll(k, lake) {
  * @param {Array<{x: number, y: number}>} ctx.swarmPrey - The swarm's fireflies among them
  * @param {{x: number, y: number}|null} ctx.swarm - The swarm's middle (null: home)
  * @param {Array<{x: number, y: number}>} ctx.threats - Things in the water it flees
+ * @param {{pts: Array<{x: number, y: number}>, up: Array<number>, down: Array<number>}|null} [ctx.giant] - The giant's spine and outline over and under it (Giant.bodyLine), kept clear of
  * @param {Array<Object>} ctx.school - Every fish of the lake
  * @param {(prey: Object) => void} ctx.onCatch - A firefly was eaten
  * @param {(x: number, strength: number) => void} ctx.onSplash - It broke the surface
@@ -437,6 +450,7 @@ export function onUpdate(inst, ctx) {
   if (inst.mode === MODE.HELD) return
   decide(inst, ctx, dt)
   inst.mode === MODE.FORAGE && inst.posed ? straighten(inst, dt) : move(inst, ctx, dt)
+  ctx.giant && inst.mode !== MODE.BOLT && inst.mode !== MODE.JUMP && keepOffGiant(inst, ctx.giant)
   inst.facing = Swim.facingOf(inst.joints, inst.facing, BODY_LEN * inst.size * FLIP_EDGE)
   inst.roll += Math.max(-ROLL_RATE * dt, Math.min(ROLL_RATE * dt, inst.facing - inst.roll))
   crossSurface(inst, ctx)
@@ -680,6 +694,8 @@ function decide(inst, ctx, dt) {
   }
   inst.frenzy = isFeeding(inst, ctx.swarm)
   const head = inst.joints[0]
+  const near = ctx.giant && inst.mode !== MODE.FLEE && nearGiant(ctx.giant, head, GIANT_LOOK)
+  near && dodgeGiant(inst, near)
   const threat = ctx.threats.find(t => Math.abs(t.x - head.x) < FLEE_R && Math.abs(t.y - head.y) < FLEE_R)
   if (threat && inst.mode !== MODE.FLEE) flee(inst, threat.x)
   if (inst.mode === MODE.FLEE) {
@@ -934,6 +950,74 @@ function gather(inst, swarm) {
   inst.target.z = inst.gatherDz
   inst.want = FRENZY_SPEED
   inst.hoverIn = 0
+}
+//
+// The giant's outline near a point: the nearest spot of its spine, the
+// way out from it (unit), how far its outline reaches over and under that
+// spot, how far the point is past it there (negative: inside it; over or
+// under the spine as the point is) — null if farther than `look` px past
+// it.
+//
+function nearGiant(giant, p, look) {
+  const pts = giant.pts
+  let best = null
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const l2 = dx * dx + dy * dy || 1
+    const t = Swim.clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1)
+    const qx = a.x + dx * t
+    const qy = a.y + dy * t
+    const d = Math.hypot(p.x - qx, p.y - qy)
+    const up = giant.up[i - 1] + (giant.up[i] - giant.up[i - 1]) * t
+    const down = giant.down[i - 1] + (giant.down[i] - giant.down[i - 1]) * t
+    const past = d - (p.y < qy ? up : down)
+    if (best && past >= best.past) continue
+    const nx = d > 0 ? (p.x - qx) / d : 0
+    const ny = d > 0 ? (p.y - qy) / d : (p.y < qy ? -1 : 1)
+    best = { x: qx, y: qy, nx, ny, up, down, past }
+  }
+  return best && best.past <= look ? best : null
+}
+//
+// Over or under the giant (the side it is on, else the other where the
+// water runs out that way), on the way it heads, clear of its outline.
+//
+function dodgeGiant(inst, near) {
+  const head = inst.joints[0]
+  const top = topFor(inst, head.x, TOP_PAD)
+  const bottom = bottomFor(inst, head.x)
+  const over = near.y - near.up - GIANT_PASS - fishHalf(inst)
+  const under = near.y + near.down + GIANT_PASS + fishHalf(inst)
+  const up = head.y < near.y ? over >= top || under > bottom : over >= top && under > bottom
+  const way = Math.sign(inst.h.x) || inst.facing
+  inst.mode = MODE.FLEE
+  inst.modeT = 0
+  inst.prey = null
+  inst.want = FLEE_SPEED
+  inst.target.x = Swim.clamp(head.x + way * FLEE_REACH, inst.minX, inst.maxX)
+  inst.target.y = Swim.clamp(up ? over : under, top, bottom)
+  inst.target.z = head.z
+}
+//
+// No point of its spine inside the giant's outline (with its own half
+// height and GIANT_PAD to spare): pushed out square from the giant's
+// spine.
+//
+function keepOffGiant(inst, giant) {
+  const clear = fishHalf(inst) + GIANT_PAD
+  inst.joints.forEach(j => {
+    const near = nearGiant(giant, j, clear)
+    if (!near || near.past >= clear) return
+    const push = clear - near.past
+    j.x += near.nx * push
+    j.y += near.ny * push
+  })
+}
+function fishHalf(inst) {
+  return BODY_HALF * BODY_LEN * inst.size
 }
 function flee(inst, fromX) {
   const head = inst.joints[0]

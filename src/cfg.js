@@ -614,13 +614,13 @@ export const CFG = {
         //
         menuProhibited: PALETTE.red1,
         //
-        // Menu level panel: a deep forest-teal card (laid over the backdrop
-        // at part opacity) with a dark green-black contour and a soft lit
-        // top band.
+        // Menu level panel, in the selected level's own colour (laid over the
+        // backdrop at part opacity): the forest's green with a dark
+        // green-black contour and a soft lit top band, or the cave's soil
+        // brown with a brown-black contour and a warm lit band.
         //
-        menuPanel: PALETTE.teal0,
-        menuPanelContour: PALETTE.gray0,
-        menuPanelLight: PALETTE.cyan3,
+        menuPanelForest: { fill: PALETTE.green0, contour: PALETTE.gray0, light: PALETTE.green4 },
+        menuPanelCave: { fill: PALETTE.brown0, contour: PALETTE.rose0, light: PALETTE.sand4 },
         //
         // Menu key hint: the key names in a warm gold, their meaning in the
         // cream text tone.

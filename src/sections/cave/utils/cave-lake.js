@@ -20,7 +20,7 @@ const COLORS = CAVE_CFG.water
 const PAINT = COLORS.paint
 const SPRITE_PREFIX = 'cave0-lake-v3-'
 const BODY_SPRITE = `${SPRITE_PREFIX}body`
-const FRAME_SPRITE = `${SPRITE_PREFIX}frame-`
+const SHEET_SPRITE = `${SPRITE_PREFIX}sheet-`
 //
 // Where the bowl is sought (past the lake's ends); the water reaches this
 // far under the bowl's top so no gap shows under the soil's lumps.
@@ -30,11 +30,20 @@ const BED_OVERLAP = 6
 //
 // The baked band: from BAND_ABOVE px over the surface to BAND_BELOW under
 // it; FRAME_COUNT frames over one wave cycle (all wave speeds are whole
-// multiples of WAVE_SPEED, so the cycle loops).
+// multiples of WAVE_SPEED, so the cycle loops). The frames are stacked on
+// sheets of FRAMES_PER_SHEET, each its own texture of exact size (a sheet
+// stays under the 2048 px a phone's GPU takes; thin frames one by one would
+// leave most of the shared texture pages empty). Each frame carries FRAME_PAD
+// rows over and under it, copies of its own edge rows: at a fractional
+// screen scale (DPR 1.1, 1.25…) a frame's edge row was sampled from the
+// next frame's clear top row, and the dark cave showed through a 1 px gap
+// between the band and the body.
 //
 const BAND_ABOVE = 6
 const BAND_BELOW = 22
 const FRAME_COUNT = 90
+const FRAMES_PER_SHEET = 45
+const FRAME_PAD = 1
 const FRAME_SEED = 8900
 //
 // Waves (as the forest lake's): the top line's two waves (speed, height,
@@ -130,7 +139,8 @@ export function onDrawAlgae(inst) {
 export function onDraw(inst, view) {
   if (inst.x2 < view.left || inst.x1 > view.right) return
   const k = inst.k
-  k.drawSprite({ sprite: FRAME_SPRITE + frameNow(k), pos: inst.framePos })
+  const f = frameNow(k)
+  k.drawSprite({ sprite: SHEET_SPRITE + Math.floor(f / FRAMES_PER_SHEET), frame: f % FRAMES_PER_SHEET, pos: inst.framePos })
   k.drawSprite({ sprite: BODY_SPRITE, pos: inst.bodyPos })
 }
 
@@ -156,6 +166,17 @@ export function surfaceAt(inst, x) {
  */
 export function bottomAt(inst, x) {
   return bedAt(inst, x)
+}
+
+/**
+ * The bed's visible top under a world X (the soil's own top, where the
+ * water reaches BED_OVERLAP px under it).
+ * @param {Object} inst - Lake instance
+ * @param {number} x - World X
+ * @returns {number} World Y of the soil's top
+ */
+export function bedTopAt(inst, x) {
+  return Math.max(Layout.LAKE_SURFACE_Y, bedAt(inst, x) - BED_OVERLAP)
 }
 
 /**
@@ -189,18 +210,43 @@ function bedAt(inst, x) {
   return inst.bed[Math.min(inst.bed.length - 1, Math.max(0, Math.round(x - inst.x1)))].y
 }
 //
-// Every frame of the band and the still body, once per live k.
+// Every frame of the band (on its sheets) and the still body, once per
+// live k.
 //
 function bake(k, inst) {
-  for (let f = 0; f < FRAME_COUNT; f++) {
-    const canvas = document.createElement('canvas')
-    canvas.width = inst.x2 - inst.x1
-    canvas.height = BAND_ABOVE + BAND_BELOW
-    paintFrame(canvas.getContext('2d'), inst, f / FRAME_COUNT * CYCLE)
-    applyForestGameplaySharpBake(canvas, FRAME_SEED + f)
-    k.loadSprite(FRAME_SPRITE + f, canvas)
-  }
+  for (let first = 0; first < FRAME_COUNT; first += FRAMES_PER_SHEET) bakeSheet(k, inst, first, Math.min(FRAMES_PER_SHEET, FRAME_COUNT - first))
   bakeBody(k, inst)
+}
+//
+// One sheet: `count` frames from `first`, stacked top to bottom with their
+// edge rows repeated into the pads (each grained on its own canvas first,
+// so the grain matches a lone frame's).
+//
+function bakeSheet(k, inst, first, count) {
+  const h = BAND_ABOVE + BAND_BELOW
+  const stride = h + FRAME_PAD * 2
+  const sheet = document.createElement('canvas')
+  sheet.width = inst.x2 - inst.x1
+  sheet.height = stride * count
+  const sheetCtx = sheet.getContext('2d')
+  const canvas = document.createElement('canvas')
+  canvas.width = sheet.width
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  const frames = []
+  for (let i = 0; i < count; i++) {
+    const f = first + i
+    const y = stride * i + FRAME_PAD
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, h)
+    paintFrame(ctx, inst, f / FRAME_COUNT * CYCLE)
+    applyForestGameplaySharpBake(canvas, FRAME_SEED + f)
+    sheetCtx.drawImage(canvas, 0, y)
+    sheetCtx.drawImage(canvas, 0, 0, canvas.width, 1, 0, y - FRAME_PAD, canvas.width, FRAME_PAD)
+    sheetCtx.drawImage(canvas, 0, h - 1, canvas.width, 1, 0, y + h, canvas.width, FRAME_PAD)
+    frames.push({ x: 0, y, w: canvas.width, h })
+  }
+  k.loadSprite(SHEET_SPRITE + first / FRAMES_PER_SHEET, sheet, { frames, singular: true })
 }
 //
 // One moment of the band (canvas Y 0 is BAND_ABOVE over the surface): the

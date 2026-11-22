@@ -44,7 +44,7 @@ const COLOR = CAVE_CFG.runner
 // times finer than that, its parts ATLAS_GAP px apart on shelves
 // ATLAS_W px wide.
 //
-const SCALE = 0.045
+const SCALE = 0.0308
 const BAKE_OVER = 3
 const ATLAS_W = 512
 const ATLAS_GAP = 3
@@ -56,11 +56,11 @@ const DEG = 180 / Math.PI
 // its hips' line), the tail by a pivot set at a point of the body, each
 // feeler by its base set at a point of the head (the far one darker).
 //
-const ORIGIN = { x: 390, y: 305 }
-const TAIL = { piece: 'runnerTail', pivot: { x: 174, y: 53 }, at: { x: 20, y: 250 } }
+const ORIGIN = { x: 398.5, y: 318.3 }
+const TAIL = { piece: 'runnerTail', pivot: { x: 178.8, y: 57.7 }, at: { x: 20.4, y: 261.1 } }
 const FEELERS = [
-  { piece: 'runnerFeeler0', pivot: { x: 16, y: 182 }, at: { x: 62, y: 16 }, far: true, phase: 0 },
-  { piece: 'runnerFeeler1', pivot: { x: 8, y: 155 }, at: { x: 118, y: 12 }, far: false, phase: 1.7 }
+  { piece: 'runnerFeeler0', pivot: { x: 20.5, y: 192.6 }, at: { x: 65.3, y: 17.1 }, far: true, phase: 0 },
+  { piece: 'runnerFeeler1', pivot: { x: 8.5, y: 167.4 }, at: { x: 124.4, y: 12.8 }, far: false, phase: 1.7 }
 ]
 //
 // The head (its pivot its middle, HEAD_R px its radius) on a neck: the neck
@@ -70,10 +70,10 @@ const FEELERS = [
 // NECK.thick times as thick, from NECK.sink px inside the body to the
 // head's middle (both ends hidden).
 //
-const HEAD = { piece: 'runnerHead', pivot: { x: 92, y: 84 } }
-const HEAD_R = 86
+const HEAD = { piece: 'runnerHead', pivot: { x: 97, y: 90.5 } }
+const HEAD_R = 90.8
 const NECK_SHARE = 1.2
-const NECK = { piece: 'runnerNeck', p: { x: 40.2, y: 22.5 }, q: { x: 17.7, y: 159.6 }, at: { x: 636, y: 262 }, angle: -12, thick: 1.4, sink: 40 }
+const NECK = { piece: 'runnerNeck', p: { x: 48.6, y: 25 }, q: { x: 21.2, y: 178.8 }, at: { x: 649.9, y: 273.6 }, angle: -12, thick: 1.4, sink: 40 }
 const NECK_DIR = { x: Math.cos(NECK.angle / DEG), y: Math.sin(NECK.angle / DEG) }
 const NECK_FROM = { x: NECK.at.x - ORIGIN.x - NECK_DIR.x * NECK.sink, y: NECK.at.y - ORIGIN.y - NECK_DIR.y * NECK.sink }
 const HEAD_AT = {
@@ -90,26 +90,26 @@ const HEAD_AT = {
 // drawn LEG_SCALE times their size on the sheet (and the hip balls
 // HIP_BALL_SCALE): at the runner's size the painted ones read too short.
 //
-const HIPS = [{ x: 190, y: 306 }, { x: 330, y: 318 }, { x: 470, y: 305 }, { x: 590, y: 272 }]
+const HIPS = [{ x: 194.1, y: 319.3 }, { x: 337.2, y: 331.8 }, { x: 480.3, y: 318.3 }, { x: 602.9, y: 284 }]
 const THIGHS = [
-  { p: { x: 117.1, y: 18.8 }, q: { x: 16.8, y: 135.1 } },
-  { p: { x: 143.4, y: 21.3 }, q: { x: 16.5, y: 146.5 } },
-  { p: { x: 110.9, y: 19.5 }, q: { x: 15.7, y: 154.8 } },
-  { p: { x: 30.8, y: 25.9 }, q: { x: 70.0, y: 142.8 } }
+  { p: { x: 128.2, y: 20.4 }, q: { x: 18.2, y: 148 } },
+  { p: { x: 152.2, y: 23 }, q: { x: 17.4, y: 159.4 } },
+  { p: { x: 126.5, y: 20.3 }, q: { x: 17.7, y: 161.7 } },
+  { p: { x: 35.6, y: 27.9 }, q: { x: 81.3, y: 154.8 } }
 ]
 const SHINS = [
-  { p: { x: 45.0, y: 20.7 }, q: { x: 16.3, y: 157.2 } },
-  { p: { x: 40.2, y: 22.5 }, q: { x: 17.7, y: 159.6 } },
-  { p: { x: 29.2, y: 25.8 }, q: { x: 47.9, y: 154.6 } },
-  { p: { x: 29.5, y: 23.7 }, q: { x: 49.6, y: 155.7 } }
+  { p: { x: 54.1, y: 23.7 }, q: { x: 20.1, y: 174 } },
+  { p: { x: 48.6, y: 25 }, q: { x: 21.2, y: 178.8 } },
+  { p: { x: 36.6, y: 28.1 }, q: { x: 59.6, y: 169.3 } },
+  { p: { x: 37.1, y: 26.4 }, q: { x: 62.7, y: 174.8 } }
 ]
 const FEET = [
-  { ankle: { x: 76.6, y: 19.0 }, toe: { x: 4, y: 128 } },
-  { ankle: { x: 85.1, y: 21.1 }, toe: { x: 5, y: 131 } },
-  { ankle: { x: 18.8, y: 21.3 }, toe: { x: 74, y: 128 } },
-  { ankle: { x: 18.9, y: 21.2 }, toe: { x: 92, y: 127 } }
+  { ankle: { x: 84.2, y: 20.2 }, toe: { x: 5.3, y: 136.8 } },
+  { ankle: { x: 90.1, y: 23.2 }, toe: { x: 5.2, y: 138.9 } },
+  { ankle: { x: 23.7, y: 22.8 }, toe: { x: 90.9, y: 137.8 } },
+  { ankle: { x: 20.3, y: 22.7 }, toe: { x: 99.4, y: 136.8 } }
 ]
-const HIP_BALL = { x: 41.5, y: 41.5 }
+const HIP_BALL = { x: 45.5, y: 45.5 }
 const REST_DX = [-250, -100, 90, 240]
 const FAR_HIP = { x: -26, y: -16 }
 const FAR_REST_DX = 30
@@ -122,7 +122,7 @@ const HIP_BALL_SCALE = 1.1
 // rest height a foot's ray reaches, and where a foot hangs when it finds
 // nothing (share of HIP_LIFT under the hips).
 //
-const HIP_LIFT = 330
+const HIP_LIFT = 363
 const RAY_PAST = 180
 const DANGLE = 0.85
 const BODY_SPAN = 320

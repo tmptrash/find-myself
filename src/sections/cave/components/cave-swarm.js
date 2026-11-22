@@ -5,7 +5,7 @@ import * as Glow from '../utils/cave-glow.js'
 import * as Surface from '../utils/cave-surface.js'
 import * as Layout from '../utils/cave-layout.js'
 //
-// The lantern mushroom's blue fireflies. They live in its holes: when the
+// The lantern mushroom's fireflies. They live in its holes: when the
 // hero lands on its cap they fly out of them one after another — each
 // starts as a spark deep in its hole (the hole lighting up round it) and
 // comes out of it to the right (a little up), growing to full size — and
@@ -52,13 +52,13 @@ const SEED = 6100
 // head's height over the mushroom's foot. The ground under the swarm is
 // looked for GROUND_LOOK px down.
 //
-const EMERGE_GAP = 0.07
-const EMERGE_JITTER = 0.08
-const EMERGE_SPEED = 70
-const EMERGE_SPEED_RANGE = 60
+const EMERGE_GAP = 0.22
+const EMERGE_JITTER = 0.15
+const EMERGE_SPEED = 30
+const EMERGE_SPEED_RANGE = 25
 const EMERGE_UP = 0.35
 const EMERGE_SPREAD = 0.35
-const EMERGE_TIME = 0.4
+const EMERGE_TIME = 0.9
 const EMERGE_DRAG = 3
 const HOLE_FLASH_R = 9
 const HOLE_FLASH_OPACITY = 0.9
@@ -198,11 +198,12 @@ const ARRIVE_PX = 2
 // HOME_STAGGER s after the swarm arrives, flying with it till then) and
 // its own pace — pulled to its hole on its own spring (HOME_SPRING times
 // HOME_PACE..+RANGE, damped HOME_DAMP times HOME_DAMP_MIN..+RANGE) — and,
-// within ENTER_R px of it, fades into it over VANISH_TIME..+RANGE s.
+// within ENTER_R px of it, settles right in it (no spring left to swing
+// it out again) and fades there over VANISH_TIME..+RANGE s.
 //
 const REST_TIME = 10
 const HOME_ARRIVE = 24
-const ENTER_R = 5
+const ENTER_R = 3
 const HOME_STAGGER = 3
 const VANISH_TIME = 0.2
 const VANISH_TIME_RANGE = 0.4
@@ -763,13 +764,20 @@ function headCeiling(p) {
   return ground === undefined ? -Infinity : ground - HEAD_HEIGHT
 }
 //
-// Back into its hole on a stiff spring, fading out once it is in.
+// Back into its hole on a stiff spring; once there it sits right in it
+// and fades out.
 //
 function homeIn(fly, dt) {
-  fly.vx += ((fly.hole.x - fly.x) * fly.homeSpring - fly.vx * fly.homeDamp) * dt
-  fly.vy += ((fly.hole.y - fly.y) * fly.homeSpring - fly.vy * fly.homeDamp) * dt
-  move(fly, dt)
-  if (!near(fly, fly.hole, ENTER_R) && fly.show >= 1) return
+  if (fly.show >= 1 && !near(fly, fly.hole, ENTER_R)) {
+    fly.vx += ((fly.hole.x - fly.x) * fly.homeSpring - fly.vx * fly.homeDamp) * dt
+    fly.vy += ((fly.hole.y - fly.y) * fly.homeSpring - fly.vy * fly.homeDamp) * dt
+    move(fly, dt)
+    return
+  }
+  fly.x = fly.hole.x
+  fly.y = fly.hole.y
+  fly.vx = 0
+  fly.vy = 0
   fly.show = Math.max(0, fly.show - dt / fly.vanishTime)
   fly.show <= 0 && (fly.phase = PHASE.GONE)
 }

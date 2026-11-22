@@ -380,8 +380,9 @@ function massLayer(body, opts) {
   return layer
 }
 //
-// The core: the soil block, then (unless bare) the stones, loose patches
-// and elements laid into it (kept inside it).
+// The core: the soil block, then (unless bare) the loose patches, the
+// forest's elements and the stones laid into it (kept inside it; the
+// stones over the elements).
 //
 function paintCore(ctx, rng, core, bare) {
   const box = bounds(core)
@@ -396,8 +397,9 @@ function paintCore(ctx, rng, core, bare) {
   }
   const inside = (sx, sy, r) => fitsInside(core, sx, sy, r * STONE_INSET)
   paintPatches(ctx, rng, box, core)
-  scatter(rng, box, soilRocks(), SOIL_STONES, STONE_CLOSEST, inside).forEach(stone => embedStone(ctx, rng, stone))
+  const stones = scatter(rng, box, soilRocks(), SOIL_STONES, STONE_CLOSEST, inside)
   paintElements(ctx, rng, box, core)
+  stones.forEach(stone => embedStone(ctx, rng, stone))
   ctx.restore()
 }
 //

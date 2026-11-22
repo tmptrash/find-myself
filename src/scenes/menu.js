@@ -51,6 +51,7 @@ const BACKDROP_FOREST = 'forest'
 const BACKDROP_CAVE = 'cave'
 const BACKDROP_NIGHT = 'night'
 const BACKDROP_MYSTERY = 'mystery'
+const CAVE_SECTION = 'cave'
 const LEVEL_ICON_EYE_STALK = 'eyeStalk'
 const LEVEL_ICON_CAVE_STALK = 'caveStalk'
 const FOREST_LESSON_PREFIX = 'lesson-forest.'
@@ -67,7 +68,7 @@ const LEVELS = [
     firstLesson: FOREST_FIRST_LESSON
   },
   {
-    section: 'cave',
+    section: CAVE_SECTION,
     icon: LEVEL_ICON_CAVE_STALK,
     hiddenUntilReached: true,
     backdrop: BACKDROP_CAVE,
@@ -100,15 +101,19 @@ const MENU_HINT_BOTTOM = 26
 // Level panel: a vertical rounded card behind the hero and the four level
 // icons (design px): it reaches PANEL_LEFT_PAD left of the hero, PANEL_RIGHT_PAD
 // right of the icons and PANEL_END_SHARE of a row step past the first and
-// last rows. The card is the forest-teal fill at PANEL_FILL_ALPHA, a lit top
-// band fading out over PANEL_LIGHT_SHARE of its height and a dark contour;
-// baked once per live k and window size, film grain included.
+// last rows. The card is in the selected level's colour (the forest's
+// green, the cave's soil) at PANEL_FILL_ALPHA — see-through, the level's
+// picture shows through it —, a lit top band fading out over
+// PANEL_LIGHT_SHARE of its height and a dark contour; one per look, baked
+// once per live k and window size, film grain included. A new selection
+// cross-fades the cards at MENU_PANEL_FADE_RATE per second.
 //
 const MENU_PANEL_LEFT_PAD = 68
 const MENU_PANEL_RIGHT_PAD = 78
 const MENU_PANEL_END_SHARE = 0.62
 const MENU_PANEL_RADIUS = 34
-const MENU_PANEL_FILL_ALPHA = 0.84
+const MENU_PANEL_FILL_ALPHA = 0.55
+const MENU_PANEL_FADE_RATE = 6
 const MENU_PANEL_LIGHT_ALPHA = 0.16
 const MENU_PANEL_LIGHT_SHARE = 0.32
 const MENU_PANEL_CONTOUR_W = 3
@@ -383,7 +388,8 @@ export function sceneMenu(k) {
       isLeavingScene: false,
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0, [BACKDROP_MYSTERY]: 0 },
-      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height() }),
+      panelCave: 0,
+      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near) }),
       mysteryBg: QuestionDrift.create({
         k,
         width: k.width(),
@@ -421,6 +427,7 @@ export function sceneMenu(k) {
     createMenuEyeStalks(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
     inst.panel = loadMenuPanel(k, layout)
+    inst.panelCave = levels[selected].section === CAVE_SECTION ? 1 : 0
     k.add([k.z(MENU_PANEL_Z), { draw: () => drawMenuPanel(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
     k.add([k.z(MENU_TEXT_Z), { draw: () => drawLevelTexts(inst) }])
@@ -764,6 +771,7 @@ function onUpdate(inst) {
   updateHeroGlance(inst, dt)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
+  updatePanelLook(inst, level, dt)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg)
   inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud), true, inst.crawler)
@@ -772,6 +780,13 @@ function onUpdate(inst) {
   updateMenuCrawler(inst, dt)
   updateMenuForestLife(inst, dt)
   updateMenuMusic(inst, dt)
+}
+//
+// The panel's colour eases to the selected level's (0 forest … 1 cave).
+//
+function updatePanelLook(inst, level, dt) {
+  const want = level.section === CAVE_SECTION ? 1 : 0
+  inst.panelCave += (want - inst.panelCave) * Math.min(1, dt * MENU_PANEL_FADE_RATE)
 }
 //
 // Switching backdrops one after the other: every other picture fades out
@@ -976,7 +991,9 @@ function drawForestPieces(k, pieces, opacity) {
 function drawMenuPanel(inst) {
   if (inst.isLeavingScene) return
   const { k, panel } = inst
-  k.drawSprite({ sprite: panel.sprite, pos: k.vec2(panel.x, panel.y) })
+  const pos = k.vec2(panel.x, panel.y)
+  inst.panelCave < 1 && k.drawSprite({ sprite: panel.forest, pos, opacity: 1 - inst.panelCave })
+  inst.panelCave > 0 && k.drawSprite({ sprite: panel.cave, pos, opacity: inst.panelCave })
 }
 //
 // Bakes the level panel for the current layout (once per live k and window
@@ -989,15 +1006,19 @@ function loadMenuPanel(k, layout) {
   const x2 = layout.columnX + MENU_PANEL_RIGHT_PAD * s
   const y1 = layout.firstY - layout.step * MENU_PANEL_END_SHARE
   const y2 = layout.firstY + layout.step * (LEVELS.length - 1 + MENU_PANEL_END_SHARE)
-  const sprite = `${MENU_PANEL_SPRITE}-v2-${k.width()}x${k.height()}`
-  k.getSprite(sprite) || k.loadSprite(sprite, bakeMenuPanel(x2 - x1, y2 - y1, s))
-  return { sprite, x: Math.round(x1 - pad), y: Math.round(y1 - pad), w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 }
+  const key = `${MENU_PANEL_SPRITE}-v3-${k.width()}x${k.height()}`
+  const forest = `${key}-forest`
+  const cave = `${key}-cave`
+  k.getSprite(forest) || k.loadSprite(forest, bakeMenuPanel(x2 - x1, y2 - y1, s, FOREST_PAL.menuPanelForest))
+  k.getSprite(cave) || k.loadSprite(cave, bakeMenuPanel(x2 - x1, y2 - y1, s, FOREST_PAL.menuPanelCave))
+  return { forest, cave, x: Math.round(x1 - pad), y: Math.round(y1 - pad), w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 }
 }
 //
-// The panel card: translucent forest-teal fill, a lit band fading down from
-// the top and the dark contour, then film grain.
+// The panel card in a look's colours ({fill, light, contour}): translucent
+// fill, a lit band fading down from the top and the dark contour, then
+// film grain.
 //
-function bakeMenuPanel(w, h, s) {
+function bakeMenuPanel(w, h, s, look) {
   const pad = MENU_PANEL_PAD * s
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(w + pad * 2)
@@ -1007,16 +1028,16 @@ function bakeMenuPanel(w, h, s) {
   const card = new Path2D()
   card.roundRect(pad, pad, w, h, radius)
   ctx.globalAlpha = MENU_PANEL_FILL_ALPHA
-  ctx.fillStyle = FOREST_PAL.menuPanel
+  ctx.fillStyle = look.fill
   ctx.fill(card)
   const light = ctx.createLinearGradient(0, pad, 0, pad + h * MENU_PANEL_LIGHT_SHARE)
-  light.addColorStop(0, FOREST_PAL.menuPanelLight)
-  light.addColorStop(1, `${FOREST_PAL.menuPanelLight}00`)
+  light.addColorStop(0, look.light)
+  light.addColorStop(1, `${look.light}00`)
   ctx.globalAlpha = MENU_PANEL_LIGHT_ALPHA
   ctx.fillStyle = light
   ctx.fill(card)
   ctx.globalAlpha = 1
-  ctx.strokeStyle = FOREST_PAL.menuPanelContour
+  ctx.strokeStyle = look.contour
   ctx.lineWidth = MENU_PANEL_CONTOUR_W * s
   ctx.stroke(card)
   applyForestFilmGrainToCanvas(canvas, MENU_PANEL_GRAIN_SEED)

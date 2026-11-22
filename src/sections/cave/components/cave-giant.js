@@ -38,16 +38,16 @@ import * as Back from './cave-giant-back.js'
 //   hero can stand on and ride (cave-giant-back.js), and it does not DIVE
 //   again while he stands there; the dive starts with the head going
 //   down, the body following it under;
-// - lured by the fish gathering under the blue fireflies over the water
+// - lured by the fish gathering under the swarm's fireflies over the water
 //   (ctx.lure): it comes in soon; heading for the lake's left end it swims
 //   on behind that wall and comes back out of it, and coming out of it (or
 //   heading right) it rises to breathe at once by the left bank, where the
 //   hero can get on its back. Breathing, it swims on along the surface
 //   only while the gathering is ahead of it — and the gathering moves on
-//   only as the blue fireflies do, driven ahead by the hero riding it —
+//   only as the swarm's fireflies do, driven ahead by the hero riding it —
 //   up to the lake's right end; it hunts nothing while lured;
-// - after a while or a few meals it leaves for good, through the wall
-//   ahead, until its next visit (never while lured).
+// - after a while or a few meals it leaves through the wall ahead, and
+//   comes out again a little later from either side (never while lured).
 // The body is heavy: speed and pitch change slowly.
 //
 const SPRITE = 'cave0-giant-v6'
@@ -66,32 +66,32 @@ const G = CAVE_CFG.giant
 // the giant shows over the surface), how far from its front end the hero
 // counts as on its nose (NOSE_ZONE px), the snout and the nostrils.
 //
-const PICTURE = { w: 2063, h: 419 }
+const PICTURE = { w: 2053, h: 421 }
 const JOINTS = [
-  { x: 8, y: 217 },
-  { x: 340, y: 237 },
-  { x: 680, y: 209 },
-  { x: 1060, y: 205 },
-  { x: 1380, y: 250 },
-  { x: 1680, y: 262 },
-  { x: 1920, y: 270 },
-  { x: 2055, y: 278 }
+  { x: 8, y: 230 },
+  { x: 350, y: 252 },
+  { x: 698, y: 214 },
+  { x: 1070, y: 200 },
+  { x: 1384, y: 255 },
+  { x: 1679, y: 272 },
+  { x: 1914, y: 276 },
+  { x: 2047, y: 280 }
 ]
 const ANCHOR = 2
-const BACK = [{ x: 70, y: 97 }, { x: 1260, y: 97 }]
+const BACK = [{ x: 70, y: 102 }, { x: 1307, y: 102 }]
 const TAIL_STEPS = [
-  { x1: 1260, x2: 1310, y: 117 },
-  { x1: 1310, x2: 1370, y: 137 },
-  { x1: 1370, x2: 1440, y: 157 },
-  { x1: 1440, x2: 1620, y: 175 },
-  { x1: 1620, x2: 1780, y: 193 },
-  { x1: 1780, x2: 1900, y: 210 },
-  { x1: 1900, x2: 1980, y: 228 }
+  { x1: 1307, x2: 1359, y: 122 },
+  { x1: 1359, x2: 1398, y: 142 },
+  { x1: 1398, x2: 1430, y: 162 },
+  { x1: 1430, x2: 1519, y: 180 },
+  { x1: 1519, x2: 1655, y: 198 },
+  { x1: 1655, x2: 1839, y: 215 },
+  { x1: 1839, x2: 1964, y: 233 }
 ]
 const BACK_SPANS = [BACK].concat(TAIL_STEPS.map(t => [{ x: t.x1, y: t.y }, { x: t.x2, y: t.y }]))
 const NOSE_ZONE = 40
-const SNOUT = { x: 8, y: 220 }
-const NOSTRILS = [{ x: 100, y: 112 }, { x: 160, y: 124 }]
+const SNOUT = { x: 8, y: 234 }
+const NOSTRILS = [{ x: 105, y: 127 }, { x: 168, y: 138 }]
 //
 // The jaw (giantBody px): the mouth line, snout to corner (where the lips
 // meet, the jaw's hinge); the lower jaw's outline (the mouth line, then
@@ -111,10 +111,10 @@ const NOSTRILS = [{ x: 100, y: 112 }, { x: 160, y: 124 }]
 // the corner by GAPE_BOW of the gap there, drawn through GAPE_STEPS
 // steps. It opens at OPEN_RATE, at LUNGE_OPEN_RATE in a rush.
 //
-const MOUTH = [{ x: 10, y: 223 }, { x: 30, y: 217 }, { x: 60, y: 216 }, { x: 100, y: 227 }, { x: 150, y: 243 }, { x: 200, y: 262 }, { x: 250, y: 280 }, { x: 300, y: 297 }, { x: 350, y: 312 }]
+const MOUTH = [{ x: 10, y: 237 }, { x: 30, y: 236 }, { x: 60, y: 229 }, { x: 100, y: 235 }, { x: 150, y: 252 }, { x: 200, y: 274 }, { x: 250, y: 297 }, { x: 300, y: 318 }, { x: 350, y: 329 }, { x: 385, y: 331 }]
 const HINGE = MOUTH[MOUTH.length - 1]
-const GULLET = { x: 75, y: 220 }
-const JAW = MOUTH.concat([{ x: 352, y: 340 }, { x: 345, y: 400 }, { x: 270, y: 392 }, { x: 200, y: 383 }, { x: 150, y: 370 }, { x: 100, y: 347 }, { x: 60, y: 318 }, { x: 30, y: 285 }, { x: 15, y: 260 }, { x: 6, y: 235 }])
+const GULLET = { x: 75, y: 231 }
+const JAW = MOUTH.concat([{ x: 387, y: 359 }, { x: 380, y: 416 }, { x: 325, y: 415 }, { x: 270, y: 412 }, { x: 200, y: 400 }, { x: 150, y: 384 }, { x: 100, y: 360 }, { x: 60, y: 332 }, { x: 30, y: 286 }, { x: 15, y: 269 }, { x: 6, y: 247 }])
 const JAW_EDGE = 3
 const JAW_PAD = 4
 const JAW_OPEN = 0.5
@@ -200,10 +200,10 @@ const GAPE_INDICES = Array.from({ length: GAPE_POINTS - 1 }, (_, i) => [GAPE_POI
 // The hind paddle's top reaches up into the body's cut (giantBody px):
 // cleared from it.
 //
-const FIN_SPILL = { x: 1160, y: 395, w: 290, h: 24 }
+const FIN_SPILL = { x: 1159, y: 395, w: 298, h: 26 }
 const FINS = [
-  { piece: 'giantFinFront', root: { x: 60, y: 45 }, socket: { x: 627, y: 340 }, bone: 2 },
-  { piece: 'giantFinHind', root: { x: 50, y: 45 }, socket: { x: 1205, y: 305 }, bone: 3 }
+  { piece: 'giantFinFront', root: { x: 60, y: 45 }, socket: { x: 645, y: 347 }, bone: 2 },
+  { piece: 'giantFinHind', root: { x: 50, y: 45 }, socket: { x: 1212, y: 309 }, bone: 3 }
 ]
 const SCALE = G.length / PICTURE.w
 const TEX_OVER = 3
@@ -316,10 +316,11 @@ const DIVE_DEPTH = 0.6
 const DIVE_AHEAD = 180
 //
 // Visits: the first after FIRST_VISIT s; gone behind a wall, left or
-// right, it stays hidden there long, AWAY..+RANGE s (that visit is over:
-// only the giant's dev scene, holding it in the lake, has it come back the
-// other way within BACK_IN..+RANGE s). Away anywhere, the moment a school
-// gathers leaping for the blue fireflies the hero has driven over the
+// right, it comes back out of either (at random) after AWAY..+RANGE s to
+// hunt again — so it shows now and then whatever the hero does (the
+// giant's dev scene, holding it in the lake, has it come back the other
+// way within BACK_IN..+RANGE s). Away anywhere, the moment a school
+// gathers leaping for the swarm's fireflies the hero has driven over the
 // lake it comes in (within LURE_COME_IN s) out of the wall it is behind,
 // toward them. Its head comes in from HEAD_HIDE px behind the water's end at
 // ENTER_DEPTH of the deep water and swims ENTER_IN px in before roaming;
@@ -370,9 +371,9 @@ const DELIVER_SHARE = 2 / 3
 const RIDE_GAP = 0.6
 const LURE_AHEAD = 420
 const LURE_BEHIND = 120
-const FIRST_VISIT = 50
-const AWAY = 70
-const AWAY_RANGE = 40
+const FIRST_VISIT = 10
+const AWAY = 15
+const AWAY_RANGE = 15
 const BACK_IN = 2
 const BACK_IN_RANGE = 3
 const HEAD_HIDE = 15
@@ -389,7 +390,7 @@ const IDLE_TIME = 3
 const IDLE_TIME_RANGE = 3
 const ROAM_ARRIVE = 30
 //
-// Hunting: a fish ahead of its snout within SEE px, with CHASE_ROOM px
+// Hunting: a small fish (ctx.canEat) ahead of its snout within SEE px, with CHASE_ROOM px
 // of lake ahead of it; stalked, then chased from within LUNGE_R px for at
 // most LUNGE_TIME s: the fish bolts straight on ahead of it, and it swims
 // after it, faster, steering (only by its pitch, along arcs, never thrown
@@ -432,6 +433,8 @@ const SEED = 7731
 const HALF = 0.5
 const GAPE_DY = ((GULLET.y + HINGE.y + (GULLET.x - HINGE.x) * Math.sin(-JAW_OPEN) + (GULLET.y - HINGE.y) * Math.cos(-JAW_OPEN)) * HALF - JOINTS[0].y) * SCALE
 const TINY = 1e-3
+const OPENING_MIN = 4
+const HELD_OVERLAP = 5
 export const MODE = { AWAY: 'away', ENTER: 'enter', SWIM: 'swim', IDLE: 'idle', SURFACE: 'surface', BREATHE: 'breathe', DIVE: 'dive', EXIT: 'exit' }
 const ANIM_STATE = {
   [MODE.ENTER]: Anim.STATE.SWIM,
@@ -524,7 +527,8 @@ export function create(cfg) {
     gullet: { x: 0, y: 0 },
     gape: { x: 0, y: 0 },
     lips: { x: 0, y: 0 },
-    cut: { x: 0, y: 0, nx: 1, ny: 0 },
+    opening: { x: 0, y: 0, nx: 1, ny: 0 },
+    heldShows: null,
     out: { x: 1, y: 0 },
     upper: MOUTH.map(() => k.vec2(0, 0)),
     lower: MOUTH.map(() => k.vec2(0, 0)),
@@ -559,6 +563,7 @@ export function create(cfg) {
  * @param {Object} ctx
  * @param {Array<Object>} ctx.school - The lake's fish (cave-fish.js instances)
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.headOf - A fish's head while it can be caught
+ * @param {(fish: Object) => boolean} ctx.canEat - Whether it hunts that fish (only the small ones)
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.middleOf - Its body's middle (half of it in a mouth that reaches there)
  * @param {(fish: Object, dir: number) => void} ctx.onChase - A fish is chased: it bolts straight on that way
  * @param {(fish: Object, out: Object) => void} ctx.onSeize - A fish is caught in the jaws (to be held head out along `out`)
@@ -566,7 +571,7 @@ export function create(cfg) {
  * @param {(fish: Object) => void} ctx.onEat - A fish is swallowed (gone)
  * @param {Object|null} ctx.hero - The hero's character (to know if he rides the back, or stands on it as it goes under)
  * @param {(exhale: boolean, x: number) => void} ctx.onBreath - It breathes out (true) or in at world X
- * @param {{x: number, y: number}|null} ctx.lure - Where many fish gather under the blue fireflies over the water, else null
+ * @param {{x: number, y: number}|null} ctx.lure - Where many fish gather under the swarm's fireflies over the water, else null
  */
 export function onUpdate(inst, ctx) {
   const dt = inst.k.dt()
@@ -625,7 +630,7 @@ export function command(inst, cmd, x) {
 
 /**
  * Whether the hero riding its back stands on its nose (the platform's
- * front end) — from there he drives the blue fireflies ahead of it.
+ * front end) — from there he drives the swarm's fireflies ahead of it.
  * @param {Object} inst - Giant instance
  * @param {number} x - The hero's world X
  * @returns {boolean}
@@ -673,10 +678,11 @@ export function holdsUp(inst, x, feetY) {
  * Draws the giant (behind the soil): its body bent as one mesh, the open
  * mouth's inside and its upper teeth, the lower jaw and its teeth, its
  * paddles in their sockets, a fish held in its mouth (in front of all of
- * it); the blood it leaves in the water.
+ * it, only what sticks out past the mouth's line); the blood it leaves in
+ * the water.
  * @param {Object} inst - Giant instance
  * @param {{left: number, right: number, top: number, bottom: number}} view - World rect in view
- * @param {(fish: Object, view: Object, cut: Object) => void} drawHeld - Draws what of a fish held in its mouth sticks out of it (past the cut line)
+ * @param {(fish: Object, view: Object, cut: Function) => void} drawHeld - Draws a fish held in its mouth where `cut(x, y)` says it shows
  */
 export function onDraw(inst, view, drawHeld) {
   const p = inst.joints[ANCHOR]
@@ -685,9 +691,10 @@ export function onDraw(inst, view, drawHeld) {
   drawBlood(inst)
 }
 //
-// The giant itself: the body, the open mouth, the jaw and its teeth, the
-// paddles, then a fish held in its mouth in front of all of it (only what
-// has gone past the mouth's corner is hidden).
+// The giant itself: the body, the open mouth's pink back, the upper teeth,
+// the jaw and its teeth, the paddles, then a fish held in its mouth in
+// front of all of it — only what sticks out past the mouth's line (the
+// rest, in the mouth, hidden).
 //
 function drawBody(inst, view, drawHeld) {
   const parts = partsFor.get(inst.k)
@@ -696,7 +703,9 @@ function drawBody(inst, view, drawHeld) {
   SkinMesh.onDraw(inst.mesh, frame.tex, parts.giantBody.quad)
   SkinMesh.pointAt(inst.mesh, HINGE, inst.hinge)
   const gaping = inst.open > 0
-  gaping && drawMouth(inst)
+  ;(gaping || inst.held) && lipPoints(inst)
+  gaping && drawGape(inst)
+  gaping && drawTeeth(inst, inst.upper, inst.lower)
   drawPart(inst, parts.giantJaw, inst.hinge, jawTurn(inst))
   gaping && drawTeeth(inst, inst.lower, inst.upper)
   FINS.forEach((fin, i) => drawFin(inst, parts[fin.piece], fin, inst.anim.fins[i]))
@@ -915,13 +924,13 @@ function boardingX(inst) {
   return inst.span.x1 + LURE_BOARD_GAP + (BACK[1].x - JOINTS[0].x) * SCALE
 }
 //
-// A fish in front of its mouth: it rushes at it at once (out of hanging
-// still, too); true if so.
+// A small fish in front of its mouth: it rushes at it at once (out of
+// hanging still, too); true if so.
 //
 function snap(inst, ctx) {
   if (inst.lunging || inst.held) return false
   const fish = ctx.school.find(f => {
-    const m = ctx.middleOf(f)
+    const m = ctx.canEat(f) && ctx.middleOf(f)
     const r = m && toMouth(inst, m)
     return r && r.along > 0 && r.along < SNAP_R && Math.abs(r.across) < SNAP_W
   })
@@ -944,7 +953,7 @@ function pickPrey(inst, ctx) {
   let bestD = SEE
   const end = inst.facing > 0 ? inst.maxX : inst.minX
   ctx.school.forEach(fish => {
-    const p = ctx.headOf(fish)
+    const p = ctx.canEat(fish) && ctx.headOf(fish)
     if (!p || (p.x - inst.snout.x) * inst.facing <= 0 || (end - p.x) * inst.facing < CHASE_ROOM) return
     const d = Math.hypot(p.x - inst.snout.x, p.y - inst.snout.y)
     if (d >= bestD) return
@@ -1019,18 +1028,54 @@ function placeGape(inst) {
   inst.lips.y = (inst.snout.y + inst.hinge.y + sx * s + sy * c) * HALF
 }
 //
-// The line a held fish shows past: across its way out of the mouth
-// between the lips' front ends, the outer side kept (its front sticking
-// out; its tail half, and all of it in the end, in the mouth).
+// Where a held fish shows (heldShows): past the mouth's line, from the
+// upper lip's front end to the lower one's (all but shut — the ends under
+// OPENING_MIN px apart, where their line could lie along the head — the
+// line across its way out at the lips).
 //
 function mouthCut(inst) {
-  const out = outWay(inst)
-  const cut = inst.cut
-  cut.x = inst.lips.x
-  cut.y = inst.lips.y
-  cut.nx = out.x
-  cut.ny = out.y
-  return cut
+  const up = inst.upper
+  const low = inst.lower
+  const o = inst.opening
+  if (Math.hypot(low[0].x - up[0].x, low[0].y - up[0].y) < OPENING_MIN) {
+    const out = outWay(inst)
+    o.x = inst.lips.x
+    o.y = inst.lips.y
+    o.nx = out.x
+    o.ny = out.y
+  } else {
+    lineThrough(o, up[0], low[0], inst.hinge)
+    o.nx = -o.nx
+    o.ny = -o.ny
+  }
+  inst.heldShows ??= (x, y) => heldShows(inst, x, y)
+  return inst.heldShows
+}
+//
+// A held fish shows out of the mouth and a little over it, back to
+// HELD_OVERLAP px behind the mouth's line (so it lies over the lips, not
+// cut off right at them); deeper in the mouth it is hidden.
+//
+function heldShows(inst, x, y) {
+  return side(inst.opening, x, y) > -HELD_OVERLAP
+}
+//
+// A line through a and b, its normal toward `toward`.
+//
+function lineThrough(line, a, b, toward) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  line.x = a.x
+  line.y = a.y
+  line.nx = -dy / len
+  line.ny = dx / len
+  if (side(line, toward.x, toward.y) >= 0) return
+  line.nx = -line.nx
+  line.ny = -line.ny
+}
+function side(line, x, y) {
+  return (x - line.x) * line.nx + (y - line.y) * line.ny
 }
 //
 // The way out of the mouth: along the head's line toward the snout,
@@ -1516,11 +1561,11 @@ function jawTurn(inst) {
   return inst.mesh.pose.turns[0] - inst.open * JAW_OPEN
 }
 //
-// The open mouth between the upper lip (skinned with the body) and the
-// dropped jaw's edge (turned about the hinge as the jaw's sprite is): its
-// pink back, the upper teeth hanging into it.
+// The lips in the world: the upper one along the mouth line (skinned with
+// the body), the lower one the dropped jaw's edge (turned about the hinge
+// as the jaw's sprite is).
 //
-function drawMouth(inst) {
+function lipPoints(inst) {
   const turn = jawTurn(inst)
   const c = Math.cos(turn)
   const s = Math.sin(turn)
@@ -1532,8 +1577,6 @@ function drawMouth(inst) {
     inst.lower[i].x = inst.hinge.x + m * (dx * c - dy * s)
     inst.lower[i].y = inst.hinge.y + dx * s + dy * c
   })
-  drawGape(inst)
-  drawTeeth(inst, inst.upper, inst.lower)
 }
 //
 // Teeth along one lip, pointing across the mouth at the other lip, each a

@@ -40,6 +40,11 @@ const TANGENT_SPAN = 4
 const NORMAL_PROBE = 5
 const WALL_MARGIN = 6
 const WATER_MARGIN = 8
+//
+// The lake's water reaches LAKE_BELOW px under its surface at most (no
+// open air there: isOpenAir).
+//
+const LAKE_BELOW = 300
 const CLEAR = 30
 const CLEAR_STEP = 6
 const TIGHT_BRIDGE = 24
@@ -105,6 +110,22 @@ export function raycast(x, y, dx, dy, maxDist) {
  */
 export function isSoil(x, y) {
   return isSolidIn(solidMask(), x, y)
+}
+
+/**
+ * Whether a world point is in the open air of the cave: neither in the
+ * soil nor within `pad` px of it, nor over the lake's water within `pad`
+ * px of its surface (a light there would show in front of the soil or the
+ * water, not in the room between them).
+ * @param {number} x - World X
+ * @param {number} y - World Y
+ * @param {number} pad - Clearance (px)
+ * @returns {boolean}
+ */
+export function isOpenAir(x, y, pad) {
+  if (x > Layout.LAKE_X1 - pad && x < Layout.LAKE_X2 + pad && y > Layout.LAKE_SURFACE_Y - pad && y < Layout.LAKE_SURFACE_Y + LAKE_BELOW) return false
+  const m = solidMask()
+  return !isSolidIn(m, x, y) && !isSolidIn(m, x - pad, y) && !isSolidIn(m, x + pad, y) && !isSolidIn(m, x, y - pad) && !isSolidIn(m, x, y + pad)
 }
 
 /**

@@ -56,13 +56,14 @@ const BASE_ALPHA = 128
 // How far a plant sinks into what it grows from: standing UP_SINK px, a
 // hanging plant HANG_SINK, a root ROOT_SINK px and ROOT_SINK_SHARE of its
 // height more (the thin tip its strands come together at goes in), a side
-// plant SIDE_SINK.
+// plant SIDE_SINK, a top's plant turned on a wall WALL_UP_SINK.
 //
 const UP_SINK = 3
 const HANG_SINK = 10
 const ROOT_SINK = 12
 const ROOT_SINK_SHARE = 0.06
 const SIDE_SINK = 10
+const WALL_UP_SINK = 6
 //
 // Kinds by how they grow: piece prefixes (a piece is picked from all of
 // them), drawn height (world px) and how often a kind is picked.
@@ -134,12 +135,18 @@ const VINE_SCALE = 0.45
 const BYTE_ALPHA = 3
 const RGBA = 4
 //
-// Spacing along a top / an underside / a wall: the least gap and its
-// spread; how far from a free end or a wall it keeps.
+// Spacing along a top / an underside / a wall (HANG_LEDGE_GAP: under a
+// ledge, denser than under the ceiling; WALL_UP_GAP: the tops' plants
+// turned on a wall): the least gap and its spread; how far from a free end
+// or a wall it keeps. Under a ledge a kit's vine hangs LEDGE_VINE_CHANCE
+// of the times (else one of the sheets' hanging plants, their 4th row).
 //
 const UP_GAP = 32
 const HANG_GAP = 100
+const HANG_LEDGE_GAP = 40
+const LEDGE_VINE_CHANCE = 0.15
 const SIDE_GAP = 110
+const WALL_UP_GAP = 55
 const GAP_RANGE = 60
 const STONE_CLEAR = 6
 const END_CLEAR = 30
@@ -171,9 +178,21 @@ const HALF = 0.5
 //
 const STEP = 2
 //
-// A free end gets a side plant at its middle this often.
+// A free end gets a side plant at its middle this often; an end face at
+// least TALL_FACE px tall is grown over like a wall, END_FACE_CLEAR px
+// clear of its top and bottom. The roots' hole (ENTRY_*) and the right
+// bank's drop to the water (BANK_*) are grown over too (placeInEntry,
+// placeOnBank).
 //
 const END_SIDE_CHANCE = 0.7
+const TALL_FACE = 160
+const END_FACE_CLEAR = 30
+const ENTRY_TOP = 30
+const ENTRY_SHRINK = 0.7
+const BANK_REACH = 70
+const BANK_FACE_CLEAR = 12
+const BANK_SHRINK = 0.75
+const BANK_FIND_STEPS = 12
 //
 // Plants keep this far from the lake's ends (and its surface's height);
 // its bowl reaches LAKE_DEPTH px under its surface. A small platform at
@@ -274,6 +293,8 @@ function place() {
   hangs.forEach(pl => out.push(pl))
   placeOnWall(rng, out, -1)
   placeOnWall(rng, out, 1)
+  placeInEntry(rng, out)
+  placeOnBank(rng, out)
   Layout.PLATFORMS.filter(p => p.kind === Layout.PLATFORM_KIND.FLOAT && p.w >= FLOAT_PLANT_MIN_W).forEach(p => placeOnFloat(rng, out, p))
   return out
 }
@@ -387,12 +408,27 @@ function onStone(plant, stones) {
 function placeUnder(rng, out, p) {
   const { from, to } = runOf(p)
   const under = x => Platform.undersideAt(p, x)
-  for (let x = from + rng() * HANG_GAP; x < to; x += nextGap(rng, HANG_GAP, GAP_RANGE)) {
-    const plant = hangingPlant(rng, HANG_LEDGE, x, under)
+  for (let x = from + rng() * HANG_LEDGE_GAP; x < to; x += nextGap(rng, HANG_LEDGE_GAP, GAP_RANGE)) {
+    const plant = hangingPlant(rng, HANG_LEDGE, x, under, LEDGE_VINE_CHANCE)
     isClear(x, p.id) && plant.fits && out.push(plant)
   }
-  p.x1 > 0 && rng() < END_SIDE_CHANCE && out.push(sideways(rng, p.x1, ledgeMid(p, p.x1), -1, () => p.x1))
-  p.x2 < Layout.WORLD_W && !p.joinR && rng() < END_SIDE_CHANCE && out.push(sideways(rng, p.x2, ledgeMid(p, p.x2), 1, () => p.x2))
+  placeOnEnd(rng, out, p, -1)
+  placeOnEnd(rng, out, p, 1)
+}
+//
+// A ledge's free end (side -1: the left one): a short face gets a side
+// plant at its middle now and then; a face at least TALL_FACE px tall is
+// grown over like a wall, END_FACE_CLEAR px clear of its top and bottom.
+//
+function placeOnEnd(rng, out, p, side) {
+  const face = Platform.endFace(p, side)
+  if (!face) return
+  if (face.y2 - face.y1 < TALL_FACE) {
+    const mid = (face.y1 + face.y2) * HALF
+    rng() < END_SIDE_CHANCE && out.push(sideways(rng, face.at(mid), mid, side, face.at))
+    return
+  }
+  placeAlong(rng, out, { at: face.at, out: side, y1: face.y1 + END_FACE_CLEAR, y2: face.y2 - END_FACE_CLEAR })
 }
 function placeUnderCeiling(rng, out) {
   for (let x = Layout.WALL_COLLIDE_W + WALL_CLEAR + rng() * HANG_GAP; x < Layout.WORLD_W - Layout.WALL_COLLIDE_W - WALL_CLEAR; x += nextGap(rng, HANG_GAP, GAP_RANGE)) {
@@ -404,17 +440,14 @@ function placeUnderCeiling(rng, out) {
 // A plant hanging from what is over x: one of the kind's (its height
 // picked), or now and then one of the kit's vines (at its own size).
 //
-function hangingPlant(rng, kind, x, ceilingAt) {
+function hangingPlant(rng, kind, x, ceilingAt, vineChance = VINE_CHANCE) {
   const flip = rng() < HALF
-  if (rng() < VINE_CHANCE) {
+  if (rng() < vineChance) {
     const names = Atlas.pieceNames(KIT_VINE)
     const name = names[Math.floor(rng() * names.length)]
     return hanging(name, x, kitHeight(rng, name, VINE_SCALE), flip, ceilingAt, HANG_SINK)
   }
   return hanging(pickName(rng, kind), x, kind.hMin + rng() * kind.hRange, flip, ceilingAt, HANG_SINK)
-}
-function ledgeMid(p, x) {
-  return (Layout.topAt(p, x) + Platform.undersideAt(p, x)) / 2
 }
 //
 // Roots along a run ({from, to, on}) under what they hang from: none over
@@ -547,14 +580,57 @@ function rowHas(data, w, y) {
   return false
 }
 //
-// Side plants up an open stretch of a wall's face (dir -1: the left wall,
-// its face looking right).
+// Plants up an open stretch of a wall's face (dir -1: the left wall, its
+// face looking right): the side plants, and between them the tops' own
+// plants turned to grow out of the face.
 //
 function placeOnWall(rng, out, dir) {
-  const faceAt = y => dir < 0 ? Layout.leftWallX(y) : Layout.rightWallX(y)
-  wallOpenings(dir).forEach(open => {
-    for (let y = open.y1 + rng() * SIDE_GAP; y < open.y2; y += nextGap(rng, SIDE_GAP, GAP_RANGE)) out.push(sideways(rng, faceAt(y), y, -dir, faceAt))
+  const at = y => dir < 0 ? Layout.leftWallX(y) : Layout.rightWallX(y)
+  wallOpenings(dir).forEach(open => placeAlong(rng, out, { at, out: -dir, y1: open.y1, y2: open.y2 }))
+}
+//
+// Both sides of the roots' hole the hero drops in through, from ENTRY_TOP
+// down to END_FACE_CLEAR px over where the ceiling's underside meets them;
+// smaller (ENTRY_SHRINK) so the hole stays open.
+//
+function placeInEntry(rng, out) {
+  ;[-1, 1].forEach(side => {
+    const at = y => Layout.entrySideX(y, side)
+    const lip = Layout.ceilingBottomAt(Layout.ENTRY_X + side * Layout.ENTRY_HALF_W)
+    placeAlong(rng, out, { at, out: -side, y1: ENTRY_TOP, y2: lip - END_FACE_CLEAR, shrink: ENTRY_SHRINK })
   })
+}
+//
+// The right bank's steep drop to the water: from BANK_FACE_CLEAR px under
+// the bank's top down to LAKE_CLEAR px over the water; smaller
+// (BANK_SHRINK). Its face is found on the bank's soil (BANK_FIND_STEPS
+// halvings between the water's end and BANK_REACH px past it).
+//
+function placeOnBank(rng, out) {
+  const p = Layout.lakeFloor()
+  const x1 = Layout.LAKE_X2 - BANK_REACH
+  const x2 = Layout.LAKE_X2 + BANK_REACH
+  const at = y => bankFaceAt(p, x1, x2, y)
+  placeAlong(rng, out, { at, out: -1, y1: Platform.surfaceAt(p, x2) + BANK_FACE_CLEAR, y2: Layout.LAKE_SURFACE_Y - LAKE_CLEAR, shrink: BANK_SHRINK })
+}
+function bankFaceAt(p, x1, x2, y) {
+  let a = x1
+  let b = x2
+  for (let i = 0; i < BANK_FIND_STEPS; i++) {
+    const m = (a + b) * HALF
+    Platform.surfaceAt(p, m) > y ? (a = m) : (b = m)
+  }
+  return (a + b) * HALF
+}
+//
+// Plants up a stretch of a face ({at: its X at a Y, out: the way it looks,
+// y1..y2, shrink}): the side plants, and between them the tops' own
+// plants turned to grow out of the face.
+//
+function placeAlong(rng, out, face) {
+  const shrink = face.shrink ?? 1
+  for (let y = face.y1 + rng() * SIDE_GAP; y < face.y2; y += nextGap(rng, SIDE_GAP, GAP_RANGE)) out.push(sideways(rng, face.at(y), y, face.out, face.at, shrink))
+  for (let y = face.y1 + rng() * WALL_UP_GAP; y < face.y2; y += nextGap(rng, WALL_UP_GAP, GAP_RANGE)) out.push(turnedUp(rng, face.at(y), y, face.out, face.at, shrink))
 }
 //
 // Where a wall's face is bare: from under the ceiling down, less the
@@ -584,9 +660,9 @@ function wallOpenings(dir) {
 // mirrored), turned square to the face there (about its middle, set off
 // the root), SIDE_SINK px into it and cut off along it.
 //
-function sideways(rng, x, y, out, faceAt) {
+function sideways(rng, x, y, out, faceAt, shrink = 1) {
   const name = pickName(rng, SIDE)
-  const h = SIDE.hMin + rng() * SIDE.hRange
+  const h = (SIDE.hMin + rng() * SIDE.hRange) * shrink
   const w = Atlas.widthAt(name, h)
   const lean = (faceAt(y + SLOPE_SPAN) - faceAt(y - SLOPE_SPAN)) / (2 * SLOPE_SPAN)
   const angle = Math.max(-TILT_MAX, Math.min(TILT_MAX, Math.atan(-lean)))
@@ -594,11 +670,39 @@ function sideways(rng, x, y, out, faceAt) {
   const cx = x + reach * Math.cos(angle)
   const cy = y + reach * Math.sin(angle)
   const box = turnedBox(cx, cy, w, h, h * HALF, angle)
+  return { name, x: cx, y: cy + h * HALF, h, flip: out < 0, hang: false, angle, pivot: HALF, box, clip: faceClip(box, out, faceAt) }
+}
+//
+// A plant of the tops (UP_KINDS) rooted in a wall's face at (x, y), turned
+// a quarter round to grow out toward `out` (1: right) square to the face
+// there, its foot WALL_UP_SINK px into it, cut off along it.
+//
+function turnedUp(rng, x, y, out, faceAt, shrink = 1) {
+  const kind = pickKind(rng, UP_KINDS)
+  const name = pickName(rng, kind)
+  const h = (kind.hMin + rng() * kind.hRange) * shrink
+  const flip = rng() < HALF
+  const w = Atlas.widthAt(name, h)
+  const foot = footOf(name, true)
+  const lean = (faceAt(y + SLOPE_SPAN) - faceAt(y - SLOPE_SPAN)) / (2 * SLOPE_SPAN)
+  const angle = out * Math.PI * HALF + Math.max(-TILT_MAX, Math.min(TILT_MAX, Math.atan(-lean)))
+  const pivot = (foot.at * h - WALL_UP_SINK) / h
+  const off = (foot.cx - HALF) * w * (flip ? -1 : 1)
+  const px = x - off * Math.cos(angle)
+  const py = y - off * Math.sin(angle)
+  const box = turnedBox(px, py, w, h, pivot * h, angle)
+  return { name, x: px, y: py - pivot * h + h, h, flip, hang: false, angle, pivot, box, clip: faceClip(box, out, faceAt) }
+}
+//
+// The outline a plant growing out of a face is cut off along: the face
+// over the plant's box (CLIP_DROP px out of it), round the box's far side.
+//
+function faceClip(box, out, faceAt) {
   const far = out > 0 ? box.x2 : box.x1
   const clip = [{ x: far, y: box.y1 }]
   for (let ey = box.y1; ey < box.y2 + STEP; ey += STEP) clip.push({ x: faceAt(ey) + CLIP_DROP * out, y: ey })
   clip.push({ x: far, y: box.y2 + STEP })
-  return { name, x: cx, y: cy + h * HALF, h, flip: out < 0, hang: false, angle, pivot: HALF, box, clip }
+  return clip
 }
 //
 // The soil's top edge of a platform at an X (read off its painted soil).

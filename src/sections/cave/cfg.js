@@ -13,10 +13,10 @@ export const CAVE_CFG = {
     glowCore: '#fff6dc',        // Core of every additive glow (tinted per use)
     firefly: '#f0d470',         // Ambient fireflies, warm gold
     fireflyCore: '#fff3c0',
-    heroSpark: ['#a6e6d0', '#ffe9a8', '#7fd6c2'],
-    lanternGlow: '#62d6f0',     // Halo of the blue lantern mushroom, cold blue
-    swarm: '#5fd8ff',           // The lantern mushroom's fireflies, cold blue
-    swarmCore: '#e6fbff',
+    heroSpark: ['#ffe9a8', '#f0d470', '#ffd98a'],
+    mushroomDust: '#957663',    // Dust off the dry mushroom: its own colour (tinted like it)
+    swarm: '#ffd860',           // The lantern mushroom's fireflies, warm yellow
+    swarmCore: '#fff3c0',
     rootLight: '#d8b06a',       // Daylight spilling in through the roots' hole
     fps: '#ffffff'              // FPS readout
   },
@@ -83,36 +83,31 @@ export const CAVE_CFG = {
     farShade: 0.45
   },
   //
-  // The lake's fish (cave-fish-paint.js), after the reference: a blue-teal
-  // back with darker blotches and pale blue spots, golden flanks fading to
-  // a cream-orange belly, a warm orange face, a big gold-ringed eye, gold
-  // speckles, see-through blue fins with pale gold rays, a dark contour.
+  // The lake's fish (cave-fish-paint.js), after cave0/fish.png: soft mauve
+  // bodies (darker at the back, warmer at the belly, a peach glow low on
+  // the flank and a warm rim of light along the back), peach spots with a
+  // deeper edge, mauve fins warming to peach at their tips with faint
+  // veins, a big black eye with white glints, a dark plum contour (and a
+  // gaping mouth's dark inside).
   // The far side's fin and a fish deep in the water are pulled toward the
   // cave's dark (farShade, depthShade); `sand` the grains it spills
   // picking at the lake's bed.
   //
   fish: {
-    back: '#24425a',
-    flank: '#4b7d8e',
-    gold: '#b8884b',
-    belly: '#e4b97c',
-    face: '#d6914f',
-    blotch: '#1f364a',
-    spot: '#a6d6e4',
-    speckle: '#f1cf74',
-    sheen: '#dff3f6',
-    gill: '#1b2b33',
-    eyeRing: '#e2b04a',
-    eyeRingDark: '#9a6a22',
-    iris: '#123234',
-    pupil: '#05090a',
+    back: '#86607f',
+    body: '#9c6f8e',
+    belly: '#9c6a68',
+    glow: '#f0b07a',
+    rim: '#f0c99a',
+    spot: '#efbd86',
+    spotEdge: '#d29a6c',
+    fin: '#a0729a',
+    finTip: '#e0a684',
+    vein: '#5e4558',
+    contour: '#3a2a33',
+    eye: '#1d1a17',
     glint: '#ffffff',
-    mouth: '#2a1712',
-    lip: '#d98b4f',
-    fin: '#6f9fae',
-    finEdge: '#2b4652',
-    finRay: '#ead6a0',
-    contour: '#16242b',
+    gape: '#4a2230',
     splash: '#b9eadc',
     sand: '#a98e66',
     farShade: 0.35,

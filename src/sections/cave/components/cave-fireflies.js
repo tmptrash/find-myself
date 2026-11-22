@@ -5,7 +5,12 @@ import { CAVE_CFG } from '../cfg.js'
 // Cave fireflies: slow wandering sparks across the shaft, plus bursts the
 // hero shatters into on a spike hit (they drift apart, flicker and fade).
 // The wandering ones shy away from the hero when he comes near (SHY_*).
-// Everything draws in one additive pass with the shared glow sprite.
+// Given a nest (the dry mushroom's big holes, setNest), a few of them are
+// always at it: one flies to a hole and goes in, stays a while, comes out
+// of a hole and flies off; as soon as one is off (or eaten on its way),
+// the free one nearest the nest heads for it — so as many as ever wander
+// the cave. Everything draws in one additive pass with the shared glow
+// sprite.
 //
 const AMBIENT_SPEED = 22
 const AMBIENT_TURN_RATE = 0.9
@@ -54,7 +59,8 @@ const RELIGHT_FADE = 1.5
 //
 // Given where the air is open (isOpen), they keep to it: each is placed
 // at an open spot (OPEN_TRIES picks at most) and turns about where its
-// next step would take it into the soil.
+// next step would take it out of the open (one that is not in the open —
+// just out of the nest — flies on freely till it is).
 //
 const OPEN_TRIES = 40
 //
@@ -65,6 +71,32 @@ const OPEN_TRIES = 40
 const SHY_R = 70
 const SHY_ACC = 900
 const SHY_DRAG = 2.5
+//
+// The nest: how many are at it, flying at NEST_SPEED px/s, turning toward
+// their hole at up to NEST_TURN rad/s (within ARRIVE_R px of it straight
+// at it, slowing to ARRIVE_SPEED), going in within ENTER_R px of it — they
+// dim only over the last ENTER_FADE_R px, so each is seen to fly into its
+// very hole; inside STAY..+RANGE s (the
+// first ones a share of that, so they do not all come out at once); out
+// of a hole headed away from the nest's middle (give or take LEAVE_SPREAD
+// rad, LEAVE_UP rad up), lighting up over LEAVE_FADE s, free after
+// LEAVE_TIME s. The one sent home is the nearest of PICK_SAMPLES free ones.
+//
+const NEST_COUNT = 4
+const NEST_SPEED = 34
+const NEST_TURN = 3
+const ENTER_R = 1
+const ENTER_FADE_R = 5
+const ARRIVE_R = 20
+const ARRIVE_SPEED = 12
+const STAY = 6
+const STAY_RANGE = 10
+const LEAVE_SPREAD = 0.7
+const LEAVE_UP = 0.5
+const LEAVE_FADE = 0.6
+const LEAVE_TIME = 2.2
+const PICK_SAMPLES = 6
+const STATE = { FREE: 'free', HOMING: 'homing', INSIDE: 'inside', LEAVING: 'leaving' }
 
 /**
  * Creates the ambient firefly swarm.
@@ -82,6 +114,7 @@ export function create(cfg) {
     k,
     bounds,
     isOpen: cfg.isOpen ?? null,
+    nest: null,
     ambient: [],
     sparks: [],
     glowRgb: getRGB(k, CAVE_CFG.colors.firefly),
@@ -99,11 +132,27 @@ export function create(cfg) {
       spin: (CORE_SPIN + Math.random() * CORE_SPIN_RANGE) * (Math.random() < HALF ? -1 : 1),
       orbit: Math.random() * FULL_TURN,
       fade: 1,
+      vis: 1,
       vx: 0,
-      vy: 0
+      vy: 0,
+      state: STATE.FREE,
+      hole: null,
+      stay: 0,
+      leaveT: 0
     })
   }
   return inst
+}
+
+/**
+ * Gives the fireflies a nest to go in and out of (from then on NEST_COUNT
+ * of them are always at it; they start inside).
+ * @param {Object} inst - Fireflies instance
+ * @param {{holes: Array<{x: number, y: number}>, x: number, top: number, foot: number}} nest - The holes (and the nest's middle line, top and foot)
+ */
+export function setNest(inst, nest) {
+  inst.nest = { holes: nest.holes, x: nest.x, y: (nest.top + nest.foot) * HALF }
+  inst.ambient.slice(0, NEST_COUNT).forEach((f, i) => goInside(f, STAY * i / NEST_COUNT + Math.random() * STAY_RANGE * HALF))
 }
 
 /**
@@ -139,7 +188,7 @@ export function burst(inst, x, y, count) {
  * @param {(f: {x: number, y: number}) => void} fn - Called per firefly
  */
 export function forEachLit(inst, fn) {
-  inst.ambient.forEach(fn)
+  inst.ambient.forEach(f => f.state !== STATE.INSIDE && fn(f))
 }
 
 /**
@@ -154,6 +203,8 @@ export function eat(inst, f, box = null) {
   f.x = spot.x
   f.y = spot.y
   f.fade = 0
+  f.vis = 1
+  f.state = STATE.FREE
 }
 
 /**
@@ -167,6 +218,10 @@ export function onUpdate(inst, heroPos = null) {
   const { bounds } = inst
   const drag = Math.exp(-SHY_DRAG * dt)
   inst.ambient.forEach(f => {
+    if (f.state !== STATE.FREE) {
+      stepNest(inst, f, dt)
+      return
+    }
     f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
     f.heading += (Math.random() - 0.5) * AMBIENT_TURN_RATE * FULL_TURN * dt
     heroPos && shy(f, heroPos, dt)
@@ -174,7 +229,7 @@ export function onUpdate(inst, heroPos = null) {
     f.vy *= drag
     const nx = f.x + (Math.cos(f.heading) * AMBIENT_SPEED + f.vx) * dt
     const ny = f.y + (Math.sin(f.heading) * AMBIENT_SPEED + f.vy) * dt
-    if (inst.isOpen && !inst.isOpen(nx, ny)) {
+    if (inst.isOpen && !inst.isOpen(nx, ny) && inst.isOpen(f.x, f.y)) {
       f.heading += Math.PI
       f.vx = 0
       f.vy = 0
@@ -189,6 +244,7 @@ export function onUpdate(inst, heroPos = null) {
     f.x = Math.max(bounds.x1, Math.min(bounds.x2, f.x))
     f.y = Math.max(bounds.y1, Math.min(bounds.y2, f.y))
   })
+  inst.nest && sendHome(inst)
   const sparkDrag = Math.exp(-BURST_DRAG * dt)
   inst.sparks.forEach(s => {
     s.vx *= sparkDrag
@@ -210,20 +266,111 @@ export function onUpdate(inst, heroPos = null) {
 export function onDraw(inst, top, bottom, opacity = 1) {
   const k = inst.k
   const t = k.time()
-  inst.ambient.forEach(f => {
-    if (f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
-    const flicker = flickerAt(t, f) * opacity * f.fade
-    const a = f.orbit + t * f.spin
-    const r = AMBIENT_GLOW_R * CORE_ORBIT * (1 + CORE_ORBIT_BREATHE * Math.sin(t * CORE_BREATHE_HZ * FULL_TURN + f.phase))
-    Glow.drawGlow(k, f.x, f.y, AMBIENT_GLOW_R, inst.glowRgb, AMBIENT_OPACITY * flicker)
-    Glow.drawGlow(k, f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, AMBIENT_CORE_R / CORE_GLOW_SCALE, inst.coreRgb, flicker)
-  })
+  inst.ambient.forEach(f => f.state === STATE.FREE && drawAmbient(inst, f, t, top, bottom, opacity))
   inst.sparks.forEach(s => {
     const fade = s.life / s.maxLife
     const flicker = flickerAt(t, s)
     Glow.drawGlow(k, s.x, s.y, s.r, s.color, fade * flicker)
     Glow.drawGlow(k, s.x, s.y, s.r * CORE_GLOW_SCALE, inst.coreRgb, fade)
   })
+}
+/**
+ * Additive draw of the ones flying to the nest or away from it, in front
+ * of the nest (so each is seen going into a hole and coming out of one).
+ * @param {Object} inst - Fireflies instance
+ * @param {number} top - View top world Y
+ * @param {number} bottom - View bottom world Y
+ */
+export function onDrawNest(inst, top, bottom) {
+  const t = inst.k.time()
+  inst.ambient.forEach(f => (f.state === STATE.HOMING || f.state === STATE.LEAVING) && drawAmbient(inst, f, t, top, bottom, 1))
+}
+//
+// An ambient firefly: its glow and its bright core drifting round in it.
+//
+function drawAmbient(inst, f, t, top, bottom, opacity) {
+  if (f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
+  const k = inst.k
+  const flicker = flickerAt(t, f) * opacity * f.fade * f.vis
+  const a = f.orbit + t * f.spin
+  const r = AMBIENT_GLOW_R * CORE_ORBIT * (1 + CORE_ORBIT_BREATHE * Math.sin(t * CORE_BREATHE_HZ * FULL_TURN + f.phase))
+  Glow.drawGlow(k, f.x, f.y, AMBIENT_GLOW_R, inst.glowRgb, AMBIENT_OPACITY * flicker)
+  Glow.drawGlow(k, f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, AMBIENT_CORE_R / CORE_GLOW_SCALE, inst.coreRgb, flicker)
+}
+//
+// One at the nest: flying to its hole (dimming as it gets there), inside
+// till its stay is over, then out of a hole and away until it is free.
+//
+function stepNest(inst, f, dt) {
+  if (f.state === STATE.INSIDE) {
+    f.stay -= dt
+    f.stay <= 0 && comeOut(inst, f)
+    return
+  }
+  if (f.state === STATE.LEAVING) {
+    f.fade = Math.min(1, f.fade + dt / LEAVE_FADE)
+    f.leaveT -= dt
+    f.leaveT <= 0 && (f.state = STATE.FREE)
+    fly(f, NEST_SPEED, dt)
+    return
+  }
+  f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
+  const dx = f.hole.x - f.x
+  const dy = f.hole.y - f.y
+  const d = Math.hypot(dx, dy)
+  if (d <= ENTER_R) {
+    goInside(f, STAY + Math.random() * STAY_RANGE)
+    return
+  }
+  f.vis = Math.min(1, d / ENTER_FADE_R)
+  const want = Math.atan2(dy, dx)
+  const turn = Math.atan2(Math.sin(want - f.heading), Math.cos(want - f.heading))
+  f.heading = d < ARRIVE_R ? want : f.heading + Math.max(-NEST_TURN * dt, Math.min(NEST_TURN * dt, turn))
+  const speed = d < ARRIVE_R ? ARRIVE_SPEED + (NEST_SPEED - ARRIVE_SPEED) * d / ARRIVE_R : NEST_SPEED
+  fly(f, Math.min(speed, d / Math.max(dt, Number.EPSILON)), dt)
+}
+function fly(f, speed, dt) {
+  f.x += Math.cos(f.heading) * speed * dt
+  f.y += Math.sin(f.heading) * speed * dt
+}
+function goInside(f, stay) {
+  f.state = STATE.INSIDE
+  f.stay = stay
+  f.vx = 0
+  f.vy = 0
+}
+//
+// Out of a hole, headed away from the nest's middle (and a little up),
+// lighting up.
+//
+function comeOut(inst, f) {
+  const hole = inst.nest.holes[Math.floor(Math.random() * inst.nest.holes.length)]
+  f.x = hole.x
+  f.y = hole.y
+  f.heading = Math.atan2(hole.y - inst.nest.y, hole.x - inst.nest.x) + (Math.random() * 2 - 1) * LEAVE_SPREAD
+  f.heading -= Math.cos(f.heading) > 0 ? LEAVE_UP : -LEAVE_UP
+  f.fade = 0
+  f.vis = 1
+  f.leaveT = LEAVE_TIME
+  f.state = STATE.LEAVING
+}
+//
+// Keeps NEST_COUNT at the nest: the free one nearest it (of a few picked)
+// heads for a hole.
+//
+function sendHome(inst) {
+  const atNest = inst.ambient.filter(f => f.state !== STATE.FREE).length
+  if (atNest >= NEST_COUNT) return
+  const free = inst.ambient.filter(f => f.state === STATE.FREE)
+  if (!free.length) return
+  let best = null
+  for (let i = 0; i < PICK_SAMPLES; i++) {
+    const f = free[Math.floor(Math.random() * free.length)]
+    const d = Math.hypot(f.x - inst.nest.x, f.y - inst.nest.y)
+    if (!best || d < best.d) best = { f, d }
+  }
+  best.f.hole = inst.nest.holes[Math.floor(Math.random() * inst.nest.holes.length)]
+  best.f.state = STATE.HOMING
 }
 //
 // Near the hero: shoved off him (the nearer the harder), heading away.

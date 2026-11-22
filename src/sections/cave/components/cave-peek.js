@@ -34,15 +34,14 @@ const SHADOW_W = 14
 const SHADOW_ALPHA = 0.5
 const CONTOUR_W = 3
 //
-// The lantern mushroom stands dim in it (it lights only when bounced on).
+// The dry mushroom stands dim in it.
 //
 const LANTERN_SHADE = 0.4
 //
-// Glows inside the hollow: the lantern's faint halo and daylight from the
-// roots' hole (cave x, y, radius, opacity, colour key).
+// Glows inside the hollow: daylight from the roots' hole (cave x, y,
+// radius, opacity, colour key).
 //
 const GLOWS = [
-  { x: Layout.LANTERN.x, y: Layout.LANTERN.y - 56, r: 46, opacity: 0.25, color: 'lanternGlow' },
   { x: Layout.ENTRY_X, y: Layout.ENTRY_Y + 30, r: 110, opacity: 0.35, color: 'rootLight' }
 ]
 const bakedFor = new WeakSet()

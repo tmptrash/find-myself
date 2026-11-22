@@ -613,6 +613,8 @@ A 120 Hz display has an 8.3 ms budget. Settled Forest frames spend about 1–2 m
 
 Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (postinstall). The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Forest it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
 
+The same patch gives every whole image bigger than 1/16 of a 2048² texture page its own exact-size texture (Kaplay's packer otherwise leaves most of a page empty around big bakes: on a phone cave0 took 152 MB of GPU memory, now 89 MB; forest 256 → 171 MB). Many thin frames of one animation go on a sheet (`sliceY`, `singular: true`), as the cave lake's wave frames do, not one sprite per frame.
+
 ### Fill, pixel reads, and per-frame queries
 
 - **Do not call `getImageData` on a canvas the GPU has drawn, every frame or every second.** The read waits until the GPU queue drains (measured ~25 ms once a second on the FPS counter). Film grain and contrast run once per live `k`, on a static bake or a glyph atlas. Compose a changing label from that atlas with `drawImage` (see `fps-counter.js`). If a pixel read cannot be avoided, create the 2D context with `{ willReadFrequently: true }` before any drawing.

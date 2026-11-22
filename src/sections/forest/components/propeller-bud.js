@@ -56,10 +56,11 @@ const FACE_HERO_DEAD = 12
 //
 // The propeller's whirr is heard while it spins, fading out over
 // HUM_HEAR_REACH px from the hero (squared falloff); it whirrs faster by
-// HUM_RATE_PER_V per px/s of the hub's speed.
+// HUM_RATE_PER_V per px/s of the hub's speed over its HUM_REST_RATE.
 //
 const HUM_HEAR_REACH = 750
 const HUM_RATE_PER_V = 0.0009
+const HUM_REST_RATE = 1
 //
 // The stick is a short rope: STICK_SHARE of the head's radius, from the
 // crown up to the propeller's hub. Its middle lags the swing (ROPE_FROM_W
@@ -394,7 +395,15 @@ export async function load(k) {
 // faces, whether it sleeps and where its pupils dart.
 //
 function onUpdate(inst) {
-  if (inst.state === STATES.GONE || !inst.isVisible()) return
+  if (inst.state === STATES.GONE) return
+  //
+  // Hidden (the menu's backdrop turned to another level): it stands still,
+  // but its whirr still fades out — else it would hang at its last loudness.
+  //
+  if (!inst.isVisible()) {
+    hush(inst)
+    return
+  }
   const dt = Math.min(inst.k.dt(), MAX_FRAME_DT)
   if (dt <= 0) return
   const hero = inst.getHeroPos()
@@ -758,7 +767,10 @@ function updateHum(inst, ear) {
   const spinning = inst.spin || inst.frame !== 0
   const near = Math.max(inst.humFloor, ear ? 1 - heroDistance(inst, ear) / HUM_HEAR_REACH : 0)
   const speed = airborne(inst) ? Math.hypot(inst.prop.vx, inst.prop.vy) : 0
-  Sound.setPropellerHum(inst.sound, spinning && inst.isVisible() ? near * near : 0, 1 + speed * HUM_RATE_PER_V)
+  Sound.setPropellerHum(inst.sound, spinning && inst.isVisible() ? near * near : 0, HUM_REST_RATE + speed * HUM_RATE_PER_V)
+}
+function hush(inst) {
+  inst.sound && Sound.setPropellerHum(inst.sound, 0, HUM_REST_RATE)
 }
 //
 // Awake in the air and while the hero is within wakeReach; on a perch it

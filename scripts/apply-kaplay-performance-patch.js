@@ -147,6 +147,18 @@ const SKIP_CLEAR_RECT_OLD =
 const SKIP_CLEAR_RECT_NEW =
   'function ue(t){if(t.width===void 0||t.height===void 0)throw new Error(\'drawRect() requires property "width" and "height".\');if(t.width<=0||t.height<=0||(t.opacity??1)<=0)return;'
 //
+// Texture packer: a whole image (not a frame cut out of a sheet) bigger than
+// 1/16 of a 2048² page gets a texture of its own, of its exact size (as
+// Kaplay already does for images over a page). The packer only tries the
+// spots right of and below the images already on a page, so big bakes (the
+// levels' terrain and parallax tiles, screen-sized menu layers) left most of
+// every page empty: on a phone ~150–250 MB of GPU memory for ~60–130 MB of
+// pictures, enough for the system to drop the game's WebGL context.
+//
+const PACK_BIG_OLD = 'h=new _(new w,c,m),y=h.pos;if(c>g||m>x)return this._single(e);'
+const PACK_BIG_NEW =
+  'h=new _(new w,c,m),y=h.pos;if(c>g||m>x||n*o*16>g*x&&(!r||r.x===0&&r.y===0&&r.w===1&&r.h===1))return this._single(e);'
+//
 // The typed queues rewrite the push-limit patch's line, so their marker
 // stands for both.
 //
@@ -173,7 +185,8 @@ const PATCHES = [
   {
     markers: ['??Math.round(o.drawingBufferWidth/n/e.scale)'],
     pairs: [[WORLD_SIZE_BOOT_OLD, WORLD_SIZE_BOOT_NEW], [WORLD_SIZE_RESIZE_OLD, WORLD_SIZE_RESIZE_NEW]]
-  }
+  },
+  { markers: ['n*o*16>g*x'], pairs: [[PACK_BIG_OLD, PACK_BIG_NEW]] }
 ]
 
 for (const name of DIST_FILES) {

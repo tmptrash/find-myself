@@ -11,9 +11,9 @@ import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { registerNativeTeardown } from '../../../utils/engine-switch.js'
 import { bindBackToMenuKeys, releaseGamePhysicalKeys, getRGB } from '../../../utils/helper.js'
 import { applyForestHudSharpBake } from '../../forest/utils/forest-focus-depth.js'
-import * as DreamBubble from '../../forest/components/dream-bubble.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Lantern from '../components/cave-lantern.js'
+import * as Platform from './cave-platform.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
@@ -23,6 +23,7 @@ import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
 import * as Atlas from './cave-atlas.js'
 import * as Layout from './cave-layout.js'
+import * as Surface from './cave-surface.js'
 import * as Terrain from './cave-terrain.js'
 import * as Backdrop from './cave-backdrop.js'
 import * as Front from './cave-front.js'
@@ -34,8 +35,8 @@ import * as View from './cave-view.js'
 //
 // Cave lesson 0 — the hero drops in from the forest down the tunnel the
 // forest eye-flower's roots tore through the ceiling, onto the lake's left
-// bank, a dormant lantern mushroom left of him (bounced on, it lights up
-// and its blue fireflies fly out of its holes, shy of the hero). A deep
+// bank, a dry mushroom left of him (bounced on, crumbs and dust fall off
+// it and its fireflies fly out of its holes, shy of the hero). A deep
 // lake fills the hall; across it — on the giant's back as it breathes — is
 // the right bank, past it a shaft of stone steps drops into the passage
 // under the hall, where the stalk-eye stands (cave-layout.js).
@@ -52,8 +53,8 @@ const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once 
 // its back in sight), the runner insects (behind the soil
 // and its plants: they run behind the leaves), terrain, the lake water,
 // what is on its surface (the fish's splashes, the water striders), the
-// lantern's halo, the hero and creatures (player z), the stones in front
-// of him, the frame.
+// mushroom's fireflies, the hero and creatures (player z), the stones in
+// front of him, the frame.
 //
 const Z_WORLD = 0
 const Z_FIREFLIES = Z_WORLD + 0.2
@@ -75,7 +76,7 @@ const SPLASH_HEAR = 900
 //
 const BREATH_HEAR = 2000
 //
-// The giant is lured once LURE_FISH fish or more feed under the blue
+// The giant is lured once LURE_FISH fish or more feed under the swarm's
 // fireflies over the water (within LURE_GATHER px of them along the lake:
 // wide, for the school swirls about them and scatters ahead of the giant
 // as it comes, and still counts). The hero on its nose drives them from NOSE_SCARE_R px, on
@@ -92,7 +93,6 @@ const LAKE_SKY_TOP = 140
 const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
-const Z_DREAM = Z_FRONT + 0.5
 const Z_FRAME = CFG.visual.zIndex.ui - 1
 const Z_GIANT_DEBUG = Z_FRAME - 1
 //
@@ -131,7 +131,7 @@ const RIDE_SLACK = 16
 const PARK_Y = -10000
 //
 // Death and respawn. A death at the lake (drowned, or fallen out of the
-// world over it) always brings him back by the blue lantern mushroom,
+// world over it) always brings him back by the lantern mushroom,
 // LANTERN_RESPAWN_DX px on from it toward the lake (clear of its cap).
 //
 const LANTERN_RESPAWN_DX = 90
@@ -160,9 +160,11 @@ const DROWN_MAX_TIME = 4
 const DROWN_RESPAWN_DELAY = 0.8
 const HALF = 0.5
 //
-// Ambient fireflies.
+// Ambient fireflies: how many; they fly only in the open air of the room,
+// FIREFLY_PAD px clear of the soil and the water.
 //
 const FIREFLY_COUNT = 44
+const FIREFLY_PAD = 10
 //
 // FPS readout over the top-left of the screen (like the forest's; on touch
 // devices lined up with the fullscreen / back buttons).
@@ -171,13 +173,10 @@ const FPS_LEFT_X = 24
 const FPS_TOP_Y = 44
 const FPS_FONT_SCALE = 0.7
 //
-// The hero's dream at the level's start (as in the forest: dozing off, his
-// eyes shut, a thought bubble swells up over him): its picture and bake;
-// it shows only while he stands on the start floor and has not yet been
-// across the lake, twice per run of the level (not saved: a reload or a
-// way back in from the menu brings it back).
+// The hero bounced off the dry mushroom: its crumbs and dust first, its
+// fireflies coming out of its holes SWARM_DELAY s later.
 //
-const DREAM = { url: 'cave0/level_start.png', spritePrefix: 'cave0-dream-bubble', grainSeed: 9570, saved: false }
+const SWARM_DELAY = 1.5
 //
 // The touch buttons are a little see-through.
 //
@@ -194,8 +193,7 @@ export function create(k, opts = {}) {
   set(KEY_LAST_LESSON, SCENE_NAME)
   get(KEY_REACHED, false) || set(KEY_REACHED, true)
   CanvasBackdrop.applyCanvasBackdrop(k, CAVE_CFG.colors.frame)
-  const ready = Atlas.isLoaded() && DreamBubble.isLoaded(DREAM.url)
-  ready ? build(k, opts) : Promise.all([Atlas.load(), DreamBubble.load(DREAM.url)]).then(() => build(k, opts))
+  Atlas.isLoaded() ? build(k, opts) : Atlas.load().then(() => build(k, opts))
 }
 //
 // Every part of the level, then its update and draw passes.
@@ -218,7 +216,7 @@ function build(k, opts) {
     backdrop: Backdrop.create(k, View.windowSize(view)),
     terrain: Terrain.create({ k }),
     front: Front.create(k),
-    fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT }),
+    fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
     striders: Strider.createAll(k, lake),
     striderFears: [],
@@ -229,7 +227,8 @@ function build(k, opts) {
     runnerFood: null,
     lakeSky: null,
     swarm: Swarm.create({ k }),
-    lantern: Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on), Layout.LANTERN.x) }),
+    lantern: createLantern(k),
+    swarmIn: 0,
     platformByBody: new Map(),
     heroInst: null,
     safe: get(KEY_SAFE_SPOT, null),
@@ -241,10 +240,9 @@ function build(k, opts) {
     lakeDeath: false,
     airFor: 0,
     drownLegs: null,
-    dream: null,
-    crossedLake: false,
     fps: null
   }
+  Fireflies.setNest(inst.fireflies, Lantern.holes(inst.lantern))
   const lakeSpan = CaveLake.span(lake)
   inst.lakeSky = { x1: lakeSpan.x1, x2: lakeSpan.x2, y1: Layout.LAKE_SURFACE_Y - LAKE_SKY_TOP, y2: Layout.LAKE_SURFACE_Y - LAKE_SKY_LOW }
   inst.fishCtx = {
@@ -265,7 +263,6 @@ function build(k, opts) {
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
   createBodies(inst)
   spawnHero(inst, startPose(inst))
-  inst.dream = DreamBubble.create({ k, heroInst: inst.heroInst, z: Z_DREAM, ...DREAM })
   createHud(inst)
   initTouchInput(k)
   TouchControls.create(k, { opacity: CONTROLS_OPACITY })
@@ -284,9 +281,9 @@ function onUpdate(inst) {
   if (inst.drown) updateDrown(inst)
   else if (inst.dead) updateRespawn(inst)
   else char?.exists?.() && updateHero(inst, char)
-  updateDream(inst, char)
   Fireflies.onUpdate(inst.fireflies, heroPos(inst))
   updateRunners(inst)
+  releaseSwarm(inst)
   driveSwarm(inst)
   updateLakeLife(inst)
   StalkEye.onUpdate(inst.stalkEye)
@@ -328,12 +325,21 @@ function trackLanding(inst, char) {
   inst.airFor = 0
 }
 //
-// The hero bounced off the lantern mushroom: its sound, its fireflies
-// coming out of its holes.
+// The hero bounced off the dry mushroom: its sound now, its fireflies a
+// while later (releaseSwarm).
 //
 function lanternBounce(inst) {
   CaveSound.playLanternBounce(inst.caveSound)
-  Swarm.release(inst.swarm, Lantern.holes(inst.lantern))
+  inst.swarmIn = SWARM_DELAY
+}
+//
+// Once the wait after a bounce is over the mushroom's fireflies come out
+// of its holes.
+//
+function releaseSwarm(inst) {
+  if (inst.swarmIn <= 0) return
+  inst.swarmIn -= inst.k.dt()
+  inst.swarmIn <= 0 && Swarm.release(inst.swarm, Lantern.holes(inst.lantern))
 }
 function heroFocus(inst) {
   const char = inst.heroInst?.character
@@ -357,7 +363,7 @@ function isHeroAirborne(inst) {
   return Boolean(char?.exists?.() && char.isGrounded?.() === false)
 }
 //
-// The blue fireflies and the hero: wherever he is (on the giant's back
+// The swarm's fireflies and the hero: wherever he is (on the giant's back
 // too) any move of his at them drives them off; from the giant's nose he
 // drives them even standing (and from farther: NOSE_SCARE_R).
 //
@@ -482,7 +488,7 @@ function startPose(inst) {
   return pose && !Layout.isInLake(pose.x, pose.y) ? pose : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
 }
 //
-// By the blue lantern mushroom, on the lake's side of it.
+// By the lantern mushroom, on the lake's side of it.
 //
 function lanternPose() {
   const floor = Layout.PLATFORMS.find(p => p.id === Layout.LANTERN.on)
@@ -504,8 +510,7 @@ function spawnHero(inst, pose) {
     suppressFootprints: true,
     airAnimDuringFlicker: true,
     runDuringFlicker: true,
-    idleVocalization: null,
-    dozes: true
+    idleVocalization: null
   })
   hero.onPlayStepSound = h => playHeroStep(inst, h, false)
   //
@@ -522,19 +527,7 @@ function spawnHero(inst, pose) {
   inst.stepPlatform = null
   inst.step.pos = k.vec2(0, PARK_Y)
   inst.airFor = 0
-  inst.dream && (inst.dream.heroInst = hero)
   !prev && View.snapTo(inst.view, pose.x, pose.y)
-}
-//
-// The dream bubble: he dozes off anywhere he stands alive; it dreams only
-// on the start floor, and never again once he has been across the lake
-// (past its right end), kept inside the view.
-//
-function updateDream(inst, char) {
-  const alive = !inst.dead && !inst.drown && Boolean(char?.exists?.())
-  inst.crossedLake ||= alive && char.pos.x > Layout.LAKE_X2
-  const atStart = alive && inst.platformByBody.get(char.curPlatform?.())?.id === Layout.START_PLATFORM
-  DreamBubble.onUpdate(inst.dream, inst.k.dt(), alive, true, atStart && !inst.crossedLake, View.worldRect(inst.view))
 }
 //
 // Footsteps: a soft scuff on the mossy earth.
@@ -632,8 +625,8 @@ function createHud(inst) {
 // Draw passes: the back world (parallax), the fireflies, the giant and
 // the fish, the drowning hero (behind the soil), the terrain (the lake's
 // bowl in it) with the lake's algae and the lantern, the see-through water,
-// the fish's splashes and the striders on it, the lantern's halo, the
-// stones in front of the hero and the screen frame.
+// the fish's splashes and the striders on it, the mushroom's fireflies,
+// the stones in front of the hero and the screen frame.
 //
 function addDrawLayers(inst) {
   const k = inst.k
@@ -662,10 +655,12 @@ function drawTerrain(inst) {
   Lantern.onDraw(inst.lantern)
 }
 //
-// The additive glow over the world: the lantern's halo, its fireflies.
+// The additive glow over the world: the cave's fireflies going in and out
+// of the mushroom, and its own.
 //
 function drawLights(inst) {
-  Lantern.onDrawHalo(inst.lantern)
+  const view = View.worldRect(inst.view)
+  Fireflies.onDrawNest(inst.fireflies, view.top, view.bottom)
   Swarm.onDraw(inst.swarm)
 }
 //
@@ -684,11 +679,11 @@ function drawRunners(inst) {
 }
 //
 // The lake's life: the giant comes in now and then to eat fish; the fish
-// hunt every lit firefly (gold or blue), all of them going for the blue
-// swarm while it hangs over the water, and flee the hero in the water and
+// hunt every lit firefly (the hall's or the swarm's), all of them going
+// for the swarm while it hangs over the water, and flee the hero in the water and
 // the giant (its snout, middle and tail); the striders fear everything
 // near the lake that moves — the hero (on the bank, over the water or
-// sinking in it), the runners, the blue swarm, a fish near the surface,
+// sinking in it), the runners, the swarm, a fish near the surface,
 // the giant.
 //
 function updateLakeLife(inst) {
@@ -701,7 +696,7 @@ function updateLakeLife(inst) {
   Swarm.forEachFlying(inst.swarm, fly => ctx.swarmPrey.push(fly))
   ctx.swarmPrey.forEach(fly => ctx.prey.push(fly))
   ctx.swarm = Swarm.center(inst.swarm)
-  Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x), lure: lureOf(inst), hero: inst.dead ? null : char })
+  Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x), lure: lureOf(inst), hero: inst.dead ? null : char })
   ctx.threats.length = 0
   inst.drown && hero && ctx.threats.push(hero)
   Giant.fearPoints(inst.giant).forEach(p => ctx.threats.push(p))
@@ -728,7 +723,7 @@ function onFishCatch(inst, prey) {
   inst.swarm.flies.includes(prey) ? Swarm.dodge(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
 }
 //
-// Where the fish gather under the blue fireflies over the water (if enough
+// Where the fish gather under the swarm's fireflies over the water (if enough
 // of them do), luring the giant.
 //
 function lureOf(inst) {
@@ -798,4 +793,12 @@ function bindLeave(inst) {
     stopAudio()
     CanvasBackdrop.clearCanvasBackdrop(k)
   })
+}
+//
+// The lantern mushroom on its platform (its crumbs and dust come to rest
+// on that platform's soil).
+//
+function createLantern(k) {
+  const p = Layout.PLATFORMS.find(q => q.id === Layout.LANTERN.on)
+  return Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(p, Layout.LANTERN.x), groundAt: x => Platform.surfaceAt(p, x) })
 }

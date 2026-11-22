@@ -161,12 +161,13 @@ export function pointAt(inst, picturePx, out) {
 
 /**
  * Draws the mesh with a texture (its quad maps the UVs into it); with a
- * `cut`, only its triangles wholly on the cut's side (a line through
- * (x, y), its normal (nx, ny) pointing to the side kept).
+ * `cut`, only its triangles wholly kept: on the cut's side (a line through
+ * (x, y), its normal (nx, ny) pointing to the side kept), or, the cut a
+ * function, where it says (x, y) shows.
  * @param {Object} inst - Mesh instance
  * @param {Object} tex - Kaplay texture
  * @param {{x: number, y: number, w: number, h: number}} quad - The picture's place in the texture (0..1)
- * @param {Object} [opts] - color, opacity, cut {x, y, nx, ny}
+ * @param {Object} [opts] - color, opacity, cut {x, y, nx, ny} or (x, y) => boolean
  */
 export function onDraw(inst, tex, quad, opts = {}) {
   inst.quadUv ??= inst.uv.map(() => inst.k.vec2(0, 0))
@@ -281,7 +282,8 @@ function bindOf(inst, p) {
   return { b0, b1, w0: 1 - w1, w1, soft }
 }
 //
-// The triangles wholly on a cut's kept side.
+// The triangles wholly on a cut's kept side (or wholly where a cut
+// function keeps them).
 //
 function cutIndices(inst, cut) {
   const out = inst.cutIdx
@@ -295,7 +297,8 @@ function cutIndices(inst, cut) {
   return out
 }
 function kept(inst, i, cut) {
-  return (inst.pts[i].x - cut.x) * cut.nx + (inst.pts[i].y - cut.y) * cut.ny >= 0
+  const p = inst.pts[i]
+  return typeof cut === 'function' ? cut(p.x, p.y) : (p.x - cut.x) * cut.nx + (p.y - cut.y) * cut.ny >= 0
 }
 function ease(u) {
   return u * u * (3 - 2 * u)

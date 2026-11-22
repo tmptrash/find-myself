@@ -57,10 +57,13 @@ const ENTRY_FINE_SEED = 7.9
 //
 // The lake in the hall's floor: between its banks, its surface a little
 // under the banks' top; the floor dips into a deep bowl under it (about
-// 255 px under the surface), deep enough to drown in. Its left bank is
-// just wide enough to catch a hero dropping straight through the gap above.
+// 255 px under the surface, the soil under it thick), deep enough to
+// drown in.
+// Its left bank is just wide enough to catch a hero dropping straight
+// through the gap above, then slopes gently down into the water (meeting
+// the surface at LAKE_X1).
 //
-export const LAKE_X1 = 505
+export const LAKE_X1 = 530
 export const LAKE_X2 = 2120
 export const LAKE_SURFACE_Y = 860
 //
@@ -94,8 +97,8 @@ const K = PLATFORM_KIND
 // the right one ends at the shaft (SHAFT_X1).
 //
 const BANK_Y = 780
-const PASSAGE_TOP_Y = 1260
-const PASSAGE_FLOOR_Y = 1620
+const PASSAGE_TOP_Y = 1310
+const PASSAGE_FLOOR_Y = 1655
 const SHAFT_X1 = 2500
 //
 // The shaft by the right wall, between the right bank's mass and the wall:
@@ -111,7 +114,7 @@ export const PLATFORMS = [
     x1: 0,
     x2: SHAFT_X1,
     y: BANK_Y,
-    top: [[0, BANK_Y], [LAKE_X1 - 45, BANK_Y], [LAKE_X1 + 10, 880], [LAKE_X1 + 40, 960], [580, 1030], [650, 1088], [800, 1112], [1000, 1120], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 35, 985], [LAKE_X2 - 5, 880], [LAKE_X2 + 45, BANK_Y], [SHAFT_X1, BANK_Y]],
+    top: [[0, BANK_Y], [LAKE_X1 - 135, BANK_Y], [LAKE_X1 - 65, 812], [LAKE_X1 + 5, 862], [LAKE_X1 + 75, 918], [680, 975], [770, 1035], [880, 1085], [1000, 1117], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 35, 985], [LAKE_X2 - 5, 880], [LAKE_X2 + 45, BANK_Y], [SHAFT_X1, BANK_Y]],
     bottom: PASSAGE_TOP_Y,
     kind: K.LEDGE,
     seed: 31
@@ -126,7 +129,8 @@ export const PLATFORMS = [
   { id: 'shaft11', x: shaftR(2), y: 1275, w: 60, piece: 'float3', kind: K.FLOAT, seed: 71 },
   { id: 'shaft12', x: shaftL(15), y: 1360, w: 60, piece: 'float9', kind: K.FLOAT, seed: 72 },
   { id: 'shaft13', x: shaftR(9), y: 1440, w: 60, piece: 'float6', kind: K.FLOAT, seed: 73 },
-  { id: 'shaft14', x: shaftL(8), y: 1525, w: 55, piece: 'float13', kind: K.FLOAT, seed: 74 }
+  { id: 'shaft14', x: shaftL(8), y: 1525, w: 55, piece: 'float13', kind: K.FLOAT, seed: 74 },
+  { id: 'shaft15', x: shaftR(6), y: 1595, w: 60, piece: 'float2', kind: K.FLOAT, seed: 75 }
 ].map(p => (p.kind === K.FLOAT ? { ...p, x1: p.x - p.w / 2, x2: p.x + p.w / 2 } : p))
 //
 // The stalk-eye in the passage, short of the foot of the shaft; the
@@ -147,9 +151,9 @@ export const FIREFLY_BOUNDS = { x1: 70, y1: 360, x2: WORLD_W - 70, y2: LAKE_SURF
 //
 const WALL_ART_INSET = 22
 const WALL_LOBE_STRETCH = 1.2
-const WALL_LOBE_AMP = 14
+const WALL_LOBE_AMP = 8
 const WALL_FINE_STRETCH = 0.6
-const WALL_FINE_AMP = 5
+const WALL_FINE_AMP = 2
 const WALL_FINE_SEED = 2.2
 const LEFT_WALL_SEED = 1.7
 const RIGHT_WALL_SEED = 3.1
@@ -160,16 +164,16 @@ const RIGHT_WALL_SEED = 3.1
 //
 const CEILING_SEED = 2.6
 const CEILING_LOBE_STRETCH = 1.2
-const CEILING_LOBE_AMP = 20
+const CEILING_LOBE_AMP = 9
 const CEILING_FINE_STRETCH = 0.6
-const CEILING_FINE_AMP = 6
+const CEILING_FINE_AMP = 2
 const CEILING_FINE_SEED = 5.3
 const CEILING_BULGE_GAP = 110
 const CEILING_BULGE_GAP_RANGE = 150
-const CEILING_BULGE_DEPTH = 8
-const CEILING_BULGE_DEPTH_RANGE = 18
-const CEILING_BULGE_HALF = 55
-const CEILING_BULGE_HALF_RANGE = 55
+const CEILING_BULGE_DEPTH = 3
+const CEILING_BULGE_DEPTH_RANGE = 7
+const CEILING_BULGE_HALF = 80
+const CEILING_BULGE_HALF_RANGE = 60
 const CEILING_BULGE_SEED = 6161
 //
 // A base line's knots are no sharp bends: each is rounded off by a curve

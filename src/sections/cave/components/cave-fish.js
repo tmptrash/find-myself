@@ -5,7 +5,7 @@ import { CAVE_CFG } from '../cfg.js'
 import * as CaveLake from '../utils/cave-lake.js'
 import * as Swim from '../utils/cave-swim.js'
 import * as SkinMesh from '../../../utils/skin-mesh.js'
-import { paintFishAtlas, FISH_ART } from '../utils/cave-fish-paint.js'
+import { paintFishAtlas, bellyAt, FISH_ART, FISH_TYPES } from '../utils/cave-fish-paint.js'
 //
 // The lake's fish (painted in code, cave-fish-paint.js). Each swims on a
 // spine of SEGMENTS bones in 3D — x and y as on the screen, z into it —
@@ -22,13 +22,13 @@ import { paintFishAtlas, FISH_ART } from '../utils/cave-fish-paint.js'
 // edge-on), side fins flapping on theirs; a fish deeper in z is darker.
 //
 // It roams the lake under the surface, now and then hanging still on its
-// fins. When a firefly (the cave's gold ones or the lantern's blue ones)
+// fins. When a firefly (the hall's or the lantern's swarm)
 // comes down over the water within HUNT_HIGH px of it, the nearest free
 // fish swims up under it, just under the surface, and leaps: thrown out
 // of the water at it (its rise and run worked out so it meets the
 // firefly), its mouth gaping; whatever its mouth reaches it eats. It
 // falls back in with a splash (rings and drops; one on leaving the water
-// too) and dives. While the lantern's blue swarm hangs low over the water
+// too) and dives. While the lantern's swarm hangs low over the water
 // the whole school goes into a frenzy: every fish swims to it, they
 // gather under it and leap at its fireflies one after another, hardly
 // resting between leaps. Something falling into the water near it, or
@@ -48,7 +48,7 @@ const A = FISH_ART
 // (evenly along the body's length on the spine line, head first), placed
 // by joint MESH_ANCHOR, blended across a joint over MESH_BLEND of a bone.
 //
-const BODY_LEN = 30
+const BODY_LEN = 47
 const SEGMENTS = 10
 const TEX_PER_PX = A.texL / BODY_LEN
 const MAX_BEND = 0.3
@@ -97,38 +97,51 @@ const HOVER_TIME_RANGE = 2.5
 // Picking at the bed: rested, about as often as it goes for a firefly
 // (FORAGE_SHARE of the times it is ready to feed, never in a frenzy) — and
 // on FORAGE_CHANCE of its new spots besides — it goes down to a spot on
-// the bed within FORAGE_REACH px and swims nose first into it, its snout
-// FORAGE_DIG px down in the soil (the soil, drawn over the fish, hides
-// what of it pokes in); there it picks at it, mouth open, for PECK_TIME s, backs
-// off tail first (not turning) at BACK_SPEED px/s for BACK_TIME s, lets
-// SAND_COUNT..+RANGE single grains drop out of its mouth one by one
-// (SAND_GAP s apart) and hangs there over the bed, still drifting back at
-// LINGER_BACK px/s, not turning, LINGER..+RANGE s before it swims off.
-// Each grain: thrown back
-// (from its heading) at up to SAND_BACK px/s and up at up to SAND_UP,
-// slowed by SAND_DRAG per s, sinking at SAND_SINK px/s, SAND_PX px square,
-// gone once on the bed (or after SAND_LIFE s).
+// the bed within FORAGE_REACH px and swims to it (every bone keeping its
+// belly over the soil); within NOSE_DOWN_R px of the spot it turns nose
+// down square to the soil there (its slope read NORMAL_SPAN px either
+// side; turning at TURN_DOWN per s) and noses in at DIP_SPEED px/s till
+// its mouth just touches the soil's top (MOUTH_TOUCH px over it, within
+// DIP_ARRIVE px, its heading within ALIGN_MIN of square). From then on its
+// body is held straight (eased to its line at STRAIGHTEN per s), no
+// swimming and no bending: it picks at the soil, mouth open, for
+// PECK_TIME s, backs off tail first straight away from the soil at
+// BACK_SPEED px/s for BACK_TIME s, lets
+// SAND_COUNT..+RANGE grains drop out of its mouth one by one (SAND_GAP s
+// apart) and hangs there over the bed, still drifting back away from it
+// ever so slowly at LINGER_BACK px/s, not turning, till every grain has sunk
+// back into the bed (LINGER s at least) before it swims off. Each grain:
+// thrown back (from its heading) at up to SAND_BACK px/s and up at up to
+// SAND_UP, slowed by SAND_DRAG per s, sinking slowly at SAND_SINK px/s,
+// SAND_PX px square, gone once it has sunk past the soil's top (or after
+// SAND_LIFE s).
 //
 const FORAGE_CHANCE = 0.05
 const FORAGE_SHARE = 0.5
 const FORAGE_REACH = 160
-const FORAGE_DIG = 3
+const MOUTH_TOUCH = 1
+const NOSE_DOWN_R = 40
+const NORMAL_SPAN = 6
+const TURN_DOWN = 4
+const DIP_SPEED = 18
+const DIP_ARRIVE = 0.6
+const ALIGN_MIN = 0.985
+const STRAIGHTEN = 8
 const PECK_TIME = 0.5
 const BACK_SPEED = 22
 const BACK_TIME = 0.5
-const LINGER = 3
-const LINGER_RANGE = 5
+const LINGER = 1.5
 const LINGER_LOOK = 20
-const LINGER_BACK = 4
-const SAND_COUNT = 2
-const SAND_COUNT_RANGE = 2
+const LINGER_BACK = 3
+const SAND_COUNT = 3
+const SAND_COUNT_RANGE = 3
 const SAND_GAP = 0.18
 const SAND_BACK = 22
-const SAND_UP = 10
+const SAND_UP = 8
 const SAND_DRAG = 2.5
-const SAND_SINK = 9
-const SAND_PX = 1
-const SAND_LIFE = 4
+const SAND_SINK = 6
+const SAND_PX = 2
+const SAND_LIFE = 10
 //
 // Water: it keeps TOP_PAD px under the surface (APPROACH_DEPTH while it
 // readies a leap), BED_PAD over the lake's bed, and only where the lake is
@@ -146,7 +159,7 @@ const MIN_DEPTH = 60
 // LEAP_VX px/s along. It gives up after HUNT_GIVE_UP s or once the
 // firefly has been gone LOSE_TIME s; between hunts it rests
 // COOLDOWN..+RANGE s. The mouth gapes within GAPE_R px of the prey and
-// eats it within CATCH_R px — but never a blue firefly of the swarm: one
+// eats it within CATCH_R px — but never a firefly of the swarm: one
 // of those dodges the leap once the mouth is within DODGE_R px of it (so
 // the snap goes into thin air).
 //
@@ -273,12 +286,18 @@ const ENTER_OUT = 60
 const ENTER_IN = 60
 const CULL_MARGIN = 60
 //
-// The school (createAll): count, sizes, seed.
+// The school (createAll): how many of each kind (cave-fish-paint.js) and
+// their sizes (size..+range), seed; SMALL_KIND is the small one, the
+// giant's prey (an eaten one swims back in later, see comeBack).
 //
-const COUNT = 8
-const SET_SIZE = 0.9
-const SET_SIZE_RANGE = 0.4
+const SCHOOL = [
+  { type: 'round', count: 2, size: 1.15, range: 0.2 },
+  { type: 'slim', count: 2, size: 0.95, range: 0.15 },
+  { type: 'curl', count: 2, size: 0.95, range: 0.15 },
+  { type: 'frill', count: 3, size: 0.6, range: 0.15 }
+]
 const SET_SEED = 7420
+const SMALL_KIND = 'frill'
 const MODE = { CRUISE: 'cruise', HUNT: 'hunt', JUMP: 'jump', DIVE: 'dive', FLEE: 'flee', GONE: 'gone', ENTER: 'enter', HELD: 'held', BOLT: 'bolt', FORAGE: 'forage' }
 const HALF = 0.5
 const DEG = 180 / Math.PI
@@ -294,6 +313,7 @@ let atlas = null
  * @param {{minX: number, maxX: number}} cfg.water - Where the lake is deep enough
  * @param {number} cfg.x - Start X
  * @param {number} cfg.size - Size multiplier
+ * @param {string} cfg.type - Its kind (one of FISH_TYPES)
  * @param {number} cfg.seed - Random seed
  * @returns {Object} Fish instance
  */
@@ -310,6 +330,7 @@ export function create(cfg) {
     k,
     lake,
     rng,
+    type: cfg.type,
     size: cfg.size,
     seg,
     minX: water.minX,
@@ -354,6 +375,10 @@ export function create(cfg) {
     peckFor: 0,
     backFor: 0,
     lingerFor: 0,
+    lingering: false,
+    posed: false,
+    normal: { x: 0, y: 1 },
+    aim: { x: 0, y: 0 },
     v: k.vec2(0, 0),
     mesh: SkinMesh.create({ k, picture: A.picture, scale: cfg.size / TEX_PER_PX, cols: MESH_COLS, rows: MESH_ROWS, joints: MESH_JOINTS, anchor: MESH_ANCHOR, blend: MESH_BLEND }),
     flat: MESH_JOINTS.map(() => ({ x: 0, y: 0 })),
@@ -372,12 +397,15 @@ export function create(cfg) {
 export function createAll(k, lake) {
   const rng = createSeededRandom(SET_SEED)
   const water = deepWater(lake)
-  return Array.from({ length: COUNT }, (_, i) => create({
+  const kinds = SCHOOL.flatMap(kind => Array.from({ length: kind.count }, () => kind))
+  shuffle(kinds, rng)
+  return kinds.map((kind, i) => create({
     k,
     lake,
     water,
-    x: water.minX + (water.maxX - water.minX) * (i + HALF) / COUNT,
-    size: SET_SIZE + rng() * SET_SIZE_RANGE,
+    x: water.minX + (water.maxX - water.minX) * (i + HALF) / kinds.length,
+    size: kind.size + rng() * kind.range,
+    type: kind.type,
     seed: Math.floor(rng() * SET_SEED)
   }))
 }
@@ -388,8 +416,8 @@ export function createAll(k, lake) {
  * @param {Object} inst - Fish instance
  * @param {Object} ctx
  * @param {Array<{x: number, y: number}>} ctx.prey - Fireflies it may hunt
- * @param {Array<{x: number, y: number}>} ctx.swarmPrey - The blue swarm's fireflies among them
- * @param {{x: number, y: number}|null} ctx.swarm - The blue swarm's middle (null: home)
+ * @param {Array<{x: number, y: number}>} ctx.swarmPrey - The swarm's fireflies among them
+ * @param {{x: number, y: number}|null} ctx.swarm - The swarm's middle (null: home)
  * @param {Array<{x: number, y: number}>} ctx.threats - Things in the water it flees
  * @param {Array<Object>} ctx.school - Every fish of the lake
  * @param {(prey: Object) => void} ctx.onCatch - A firefly was eaten
@@ -408,8 +436,7 @@ export function onUpdate(inst, ctx) {
   }
   if (inst.mode === MODE.HELD) return
   decide(inst, ctx, dt)
-  inst.mode === MODE.JUMP ? fly(inst, ctx, dt) : swim(inst, dt)
-  Swim.followSpine(inst.joints, inst.h, inst.seg, MAX_BEND)
+  inst.mode === MODE.FORAGE && inst.posed ? straighten(inst, dt) : move(inst, ctx, dt)
   inst.facing = Swim.facingOf(inst.joints, inst.facing, BODY_LEN * inst.size * FLIP_EDGE)
   inst.roll += Math.max(-ROLL_RATE * dt, Math.min(ROLL_RATE * dt, inst.facing - inst.roll))
   crossSurface(inst, ctx)
@@ -494,7 +521,7 @@ export function hold(inst, at, angle, dir, share) {
 }
 
 /**
- * Whether it is feeding under the blue fireflies (in the frenzy — darting
+ * Whether it is feeding under the swarm's fireflies (in the frenzy — darting
  * off from the giant for a moment counts too: it is back at once) within
  * `reach` px of x along the lake.
  * @param {Object} inst - Fish instance
@@ -505,6 +532,16 @@ export function hold(inst, at, angle, dir, share) {
 export function feedsAt(inst, x, reach) {
   const busy = inst.mode === MODE.GONE || inst.mode === MODE.HELD
   return inst.frenzy && !busy && Math.abs(inst.joints[0].x - x) < reach
+}
+
+/**
+ * Whether it is one of the lake's small fish (SMALL_KIND), the only ones
+ * the giant hunts.
+ * @param {Object} inst - Fish instance
+ * @returns {boolean}
+ */
+export function isSmall(inst) {
+  return inst.type === SMALL_KIND
 }
 
 /**
@@ -566,12 +603,12 @@ export function depth(inst) {
  * @param {Object} inst - Fish instance
  * @param {{left: number, right: number, top: number, bottom: number}} view - World rect in view
  * @param {boolean} [held=false] - Drawing it in the giant's mouth
- * @param {Object} [cut] - Held: only what is on this line's kept side shows (what sticks out of the mouth: {x, y, nx, ny}); no side fins
+ * @param {Function} [cut] - Held: (x, y) => whether a point of it shows (out of the mouth); no side fins
  */
 export function onDraw(inst, view, held = false, cut = null) {
   const head = inst.joints[0]
   if (inst.mode === MODE.GONE || (inst.mode === MODE.HELD) !== held || head.x < view.left - CULL_MARGIN || head.x > view.right + CULL_MARGIN || head.y < view.top - CULL_MARGIN || head.y > view.bottom + CULL_MARGIN) return
-  const parts = atlasFor.get(inst.k)
+  const parts = atlasFor.get(inst.k)?.[inst.type]
   const frame = inst.k.getSprite(SPRITE)?.data?.frames?.[0]
   if (!parts || !frame) return
   const width = ROLL_MIN_WIDTH + (1 - ROLL_MIN_WIDTH) * Math.abs(inst.roll)
@@ -666,8 +703,8 @@ function decide(inst, ctx, dt) {
   inst.frenzy ? gather(inst, ctx.swarm) : roam(inst, dt)
 }
 //
-// Off to pick at the bed: a spot on it near by, its snout a little into
-// the soil.
+// Off to pick at the bed: a spot on it near by, its mouth on the soil's
+// top.
 //
 function toForage(inst) {
   const head = inst.joints[0]
@@ -677,8 +714,10 @@ function toForage(inst) {
   inst.peckFor = 0
   inst.backFor = 0
   inst.lingerFor = 0
+  inst.lingering = false
+  inst.posed = false
   inst.target.x = x
-  inst.target.y = CaveLake.bottomAt(inst.lake, x) + FORAGE_DIG
+  inst.target.y = mouthOnBed(inst, x)
   inst.target.z = (inst.rng() * 2 - 1) * Z_MAX
   inst.want = CRUISE_SPEED + inst.rng() * CRUISE_SPEED_RANGE
   inst.roamIn = ROAM_TIME + inst.rng() * ROAM_TIME_RANGE
@@ -691,7 +730,7 @@ function toForage(inst) {
 function forage(inst, dt) {
   const head = inst.joints[0]
   inst.roamIn -= dt
-  if (inst.lingerFor > 0) {
+  if (inst.lingering) {
     linger(inst, dt)
     return
   }
@@ -700,16 +739,79 @@ function forage(inst, dt) {
     return
   }
   if (inst.peckFor > 0) {
-    inst.want = HOVER_SPEED
     inst.peckFor -= dt
     inst.peckFor <= 0 && (inst.backFor = BACK_TIME)
     return
   }
-  if (head.y >= CaveLake.bottomAt(inst.lake, head.x) + FORAGE_DIG - 1) {
-    inst.peckFor = PECK_TIME
+  inst.posed ||= Math.hypot(head.x - inst.target.x, head.y - CaveLake.bedTopAt(inst.lake, inst.target.x)) < NOSE_DOWN_R
+  if (inst.posed) {
+    dip(inst, dt)
     return
   }
   inst.roamIn <= 0 && toCruise(inst)
+}
+//
+// Nosing in: turning square to the soil at its spot and moving its head
+// to just over it; there it starts picking.
+//
+function dip(inst, dt) {
+  const head = inst.joints[0]
+  const n = bedNormal(inst, inst.target.x)
+  const h = inst.h
+  const k = Math.min(1, TURN_DOWN * dt)
+  h.x += (n.x - h.x) * k
+  h.y += (n.y - h.y) * k
+  h.z -= h.z * k
+  const hl = Math.hypot(h.x, h.y, h.z) || 1
+  h.x /= hl
+  h.y /= hl
+  h.z /= hl
+  const aim = inst.aim
+  aim.x = inst.target.x - n.x * MOUTH_TOUCH
+  aim.y = CaveLake.bedTopAt(inst.lake, inst.target.x) - n.y * MOUTH_TOUCH
+  const dx = aim.x - head.x
+  const dy = aim.y - head.y
+  const d = Math.hypot(dx, dy)
+  const step = Math.min(d, DIP_SPEED * dt)
+  d > 0 && (head.x += dx / d * step)
+  d > 0 && (head.y += dy / d * step)
+  inst.want = 0
+  inst.speed = 0
+  d - step <= DIP_ARRIVE && h.x * n.x + h.y * n.y >= ALIGN_MIN && (inst.peckFor = PECK_TIME)
+}
+//
+// The way into the soil square to its top at x (its slope read
+// NORMAL_SPAN px either side).
+//
+function bedNormal(inst, x) {
+  const s = (CaveLake.bedTopAt(inst.lake, x + NORMAL_SPAN) - CaveLake.bedTopAt(inst.lake, x - NORMAL_SPAN)) / (2 * NORMAL_SPAN)
+  const l = Math.hypot(s, 1)
+  inst.normal.x = -s / l
+  inst.normal.y = 1 / l
+  return inst.normal
+}
+//
+// Swimming (or flying out of the water): the head on, the spine after it
+// (bending), the belly over the bed while it goes down to pick at it.
+//
+function move(inst, ctx, dt) {
+  inst.mode === MODE.JUMP ? fly(inst, ctx, dt) : swim(inst, dt)
+  Swim.followSpine(inst.joints, inst.h, inst.seg, MAX_BEND)
+  inst.mode === MODE.FORAGE && keepOffBed(inst)
+}
+//
+// Held straight from the head back along its heading (eased there).
+//
+function straighten(inst, dt) {
+  const k = Math.min(1, STRAIGHTEN * dt)
+  const head = inst.joints[0]
+  const h = inst.h
+  for (let i = 1; i <= SEGMENTS; i++) {
+    const j = inst.joints[i]
+    j.x += (head.x - h.x * inst.seg * i - j.x) * k
+    j.y += (head.y - h.y * inst.seg * i - j.y) * k
+    j.z += (head.z - h.z * inst.seg * i - j.z) * k
+  }
 }
 //
 // Backing off the bed: the whole fish moved back along its heading (it
@@ -719,35 +821,29 @@ function forage(inst, dt) {
 function backOff(inst, dt) {
   inst.want = 0
   inst.speed = 0
-  const step = BACK_SPEED * dt
-  inst.joints.forEach(j => {
-    j.x -= inst.h.x * step
-    j.y -= inst.h.y * step
-    j.z -= inst.h.z * step
-  })
+  moveBack(inst, BACK_SPEED * dt)
   inst.backFor -= dt
   if (inst.backFor > 0) return
   spillSand(inst)
-  inst.lingerFor = LINGER + inst.rng() * LINGER_RANGE
+  inst.lingerFor = LINGER
+  inst.lingering = true
 }
 //
 // Hanging over the bed after picking at it, facing on the way it faced,
-// drifting back ever so slowly; then off again.
+// drifting back (and up) ever so slowly till its grains have sunk; then
+// off again.
 //
 function linger(inst, dt) {
   const head = inst.joints[0]
-  const step = LINGER_BACK * dt
-  inst.joints.forEach(j => {
-    j.x -= inst.h.x * step
-    j.y -= inst.h.y * step
-    j.z -= inst.h.z * step
-  })
+  moveBack(inst, LINGER_BACK * dt)
   inst.want = 0
   inst.target.x = head.x + inst.h.x * LINGER_LOOK
   inst.target.y = head.y + inst.h.y * LINGER_LOOK
   inst.target.z = head.z + inst.h.z * LINGER_LOOK
   inst.lingerFor -= dt
-  inst.lingerFor <= 0 && toCruise(inst)
+  if (inst.lingerFor > 0 || inst.sand.length) return
+  inst.lingering = false
+  toCruise(inst)
 }
 //
 // Sand out of its mouth, thrown back and a little up.
@@ -780,7 +876,34 @@ function updateSand(inst, dt) {
     g.x += g.vx * dt
     g.y += g.vy * dt
   })
-  inst.sand = inst.sand.filter(g => g.t < SAND_LIFE && g.y < CaveLake.bottomAt(inst.lake, g.x))
+  inst.sand = inst.sand.filter(g => g.t < SAND_LIFE && g.y < CaveLake.bedTopAt(inst.lake, g.x) + SAND_PX)
+}
+//
+// The whole fish moved `step` px back along its heading (square to the
+// soil: straight away from it), not turning.
+//
+function moveBack(inst, step) {
+  inst.joints.forEach(j => {
+    j.x -= inst.h.x * step
+    j.y -= inst.h.y * step
+    j.z -= inst.h.z * step
+  })
+}
+//
+// Where its snout's line is when its mouth touches the soil's top at x.
+//
+function mouthOnBed(inst, x) {
+  return CaveLake.bedTopAt(inst.lake, x) - MOUTH_TOUCH - bellyAt(inst.type, 1) * inst.size / TEX_PER_PX
+}
+//
+// Every bone behind the snout keeps its belly over the soil's top.
+//
+function keepOffBed(inst) {
+  const scale = inst.size / TEX_PER_PX
+  for (let i = 1; i <= SEGMENTS; i++) {
+    const j = inst.joints[i]
+    j.y = Math.min(j.y, CaveLake.bedTopAt(inst.lake, j.x) - bellyAt(inst.type, 1 - i / SEGMENTS) * scale)
+  }
 }
 function toCruise(inst) {
   inst.mode = MODE.CRUISE
@@ -793,7 +916,7 @@ function restTime(inst) {
   return inst.frenzy ? FRENZY_COOLDOWN + inst.rng() * FRENZY_COOLDOWN_RANGE : COOLDOWN + inst.rng() * COOLDOWN_RANGE
 }
 //
-// Whether the blue swarm hangs low over the water within reach.
+// Whether the swarm hangs low over the water within reach.
 //
 function isFeeding(inst, swarm) {
   if (!swarm || swarm.x < inst.minX - FRENZY_REACH || swarm.x > inst.maxX + FRENZY_REACH) return false
@@ -927,7 +1050,7 @@ function leap(inst, p) {
 }
 //
 // In the air: falling under gravity, its head along its flight; whatever
-// its mouth reaches it eats (a blue firefly dodges it first: onCatch).
+// its mouth reaches it eats (a swarm's firefly dodges it first: onCatch).
 //
 function fly(inst, ctx, dt) {
   const head = inst.joints[0]
@@ -979,7 +1102,7 @@ function keepInWater(inst) {
   head.x = Swim.clamp(head.x, dive ? inst.waterX1 : inst.minX, dive ? inst.waterX2 : inst.maxX)
   const pad = inst.frenzy || inst.mode === MODE.HUNT ? APPROACH_DEPTH - LAUNCH_Y : TOP_PAD
   const top = dive ? -Infinity : topFor(inst, head.x, pad)
-  const bottom = inst.mode === MODE.FORAGE ? CaveLake.bottomAt(inst.lake, head.x) + FORAGE_DIG : bottomFor(inst, head.x)
+  const bottom = inst.mode === MODE.FORAGE ? mouthOnBed(inst, head.x) : bottomFor(inst, head.x)
   if (head.y > bottom) {
     head.y = bottom
     inst.h.y = Math.min(0, inst.h.y)
@@ -1137,20 +1260,33 @@ function shadeRgb(k, amount) {
 }
 //
 // The atlas: painted once per page, grained, loaded once per live k as
-// its own texture; the whole fish (shut and gaping) and the side fins
-// with their quads (and a fin's anchors at its root, as painted and
+// its own texture; per kind the whole fish (shut and gaping) and the side
+// fins with their quads (and a fin's anchors at its root, as painted and
 // mirrored).
 //
 function bake(k) {
   if (atlasFor.has(k)) return
   atlas ??= buildAtlas()
   k.loadSprite(SPRITE, atlas.canvas, { singular: true, filter: 'linear' })
-  atlasFor.set(k, {
-    body: atlas.parts.body,
-    bodyOpen: atlas.parts.bodyOpen,
-    pectoral: finOf(k, atlas.parts.pectoral, A.pectRoot),
-    pelvic: finOf(k, atlas.parts.pelvic, A.pelvRoot)
-  })
+  const pectoral = finOf(k, atlas.parts.pectoral, A.pectRoot)
+  const pelvic = finOf(k, atlas.parts.pelvic, A.pelvRoot)
+  atlasFor.set(k, Object.fromEntries(FISH_TYPES.map(type => [type, {
+    body: atlas.parts[`${type}.body`],
+    bodyOpen: atlas.parts[`${type}.bodyOpen`],
+    pectoral,
+    pelvic
+  }])))
+}
+//
+// Shuffles a list in place (seeded).
+//
+function shuffle(list, rng) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const swap = list[i]
+    list[i] = list[j]
+    list[j] = swap
+  }
 }
 function buildAtlas() {
   const { canvas, parts } = paintFishAtlas()

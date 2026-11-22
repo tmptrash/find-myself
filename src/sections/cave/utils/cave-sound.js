@@ -1,9 +1,8 @@
 import { CFG } from '../../../cfg.js'
 //
 // Procedural cave ambience on the shared AudioContext (Sound.create()):
-// independent drip sources with their own rhythm, pitch and pan; a draught
-// blowing through the cave in irregular gusts (low rush, airy whoosh and a
-// thin whistle in the cracks); a faint rumble; rare distant pebble falls.
+// independent drip sources with their own rhythm, pitch and pan; a faint
+// rumble; rare distant pebble falls.
 // Everything that should sound far away goes through a cave reverb built
 // from a procedural impulse response. Plus the hero's steps on the mossy
 // earth, the lantern mushroom's spring and chime and the sparkle of his
@@ -31,53 +30,16 @@ const REVERB_RETURN = 0.7
 const REVERB_SEND = 0.6
 const STEREO = 2
 //
-// Rumble bed: very low brown noise, its level wandering slowly at random.
+// Rumble bed: very low brown noise, its level wandering slowly at random
+// (a new level every RUMBLE_HOLD..+RANGE s, RUMBLE_WANDER either way),
+// eased there over PARAM_SMOOTH s.
 //
 const RUMBLE_LOWPASS = 120
 const RUMBLE_GAIN = 0.08
 const RUMBLE_WANDER = 0.35
-//
-// Draught: a gust controller picks a new target strength now and then —
-// mostly lulls, sometimes a gust — and eases toward it; fast turbulence
-// flutters on top. Layers follow the strength: a low rush (lowpass opens
-// with the gust), an airy whoosh (band moves up) and a narrow whistle that
-// only sings in stronger gusts, wandering in pitch and side.
-//
-const GUST_LULL_CHANCE = 0.55
-const GUST_LULL_MIN = 0.04
-const GUST_LULL_RANGE = 0.16
-const GUST_MIN = 0.35
-const GUST_RANGE = 0.65
-const GUST_POW = 1.6
-const GUST_HOLD_MIN = 1.5
-const GUST_HOLD_RANGE = 6
-const GUST_EASE_MIN = 0.6
-const GUST_EASE_RANGE = 2.2
-const FLUTTER_EVERY_MIN = 0.07
-const FLUTTER_EVERY_RANGE = 0.2
-const FLUTTER_DEPTH = 0.45
+const RUMBLE_HOLD = 1.5
+const RUMBLE_HOLD_RANGE = 6
 const PARAM_SMOOTH = 0.08
-const RUSH_GAIN = 0.05
-const RUSH_BED = 0.25
-const RUSH_LP_MIN = 220
-const RUSH_LP_RANGE = 520
-const WHOOSH_GAIN = 0.035
-const WHOOSH_POW = 1.5
-const WHOOSH_BP_MIN = 380
-const WHOOSH_BP_RANGE = 800
-const WHOOSH_Q = 0.8
-const WHOOSH_FLUTTER_HZ = 120
-const WHISTLE_GAIN = 0.012
-const WHISTLE_FROM = 0.45
-const WHISTLE_Q = 22
-const WHISTLE_HZ_MIN = 650
-const WHISTLE_HZ_RANGE = 650
-const WHISTLE_WANDER = 0.4
-const WHISTLE_GUST_RISE = 0.25
-const WHISTLE_FLUTTER = 2
-const WHISTLE_PAN_WANDER = 0.15
-const WHISTLE_PAN_MAX = 0.6
-const WHISTLE_SEND = 0.4
 //
 // Drip sources: world Y, pan, base period and pitch; lake sources plop.
 //
@@ -242,7 +204,7 @@ export function create(sfx, volume = 1) {
     out,
     send,
     loops: [],
-    wind: null,
+    rumble: null,
     drips: DRIP_SOURCES.map(src => ({ ...src, wait: Math.random() * src.period * DRIP_PERIOD_SCALE })),
     pebbleWait: PEBBLE_EVERY_MIN + Math.random() * PEBBLE_EVERY_RANGE,
     brown: noiseBuffer(ctx, true),
@@ -252,41 +214,24 @@ export function create(sfx, volume = 1) {
 }
 
 /**
- * Starts the rumble bed and the draught layers.
+ * Starts the rumble bed.
  * @param {Object} inst - Cave sound instance
  */
 export function startAmbience(inst) {
-  const rumble = noiseLayer(inst, inst.brown, 'lowpass', RUMBLE_LOWPASS, 1, RUMBLE_GAIN)
-  const rush = noiseLayer(inst, inst.brown, 'lowpass', RUSH_LP_MIN, 1, 0)
-  const whoosh = noiseLayer(inst, inst.white, 'bandpass', WHOOSH_BP_MIN, WHOOSH_Q, 0)
-  const whistle = noiseLayer(inst, inst.white, 'bandpass', WHISTLE_HZ_MIN, WHISTLE_Q, 0, WHISTLE_SEND)
-  inst.loops.push(rumble.nodes, rush.nodes, whoosh.nodes, whistle.nodes)
-  inst.wind = {
-    rumble,
-    rush,
-    whoosh,
-    whistle,
-    level: GUST_LULL_MIN,
-    target: GUST_LULL_MIN,
-    ease: GUST_EASE_MIN,
-    hold: 0,
-    flutter: 0,
-    flutterWait: 0,
-    rumbleLevel: 1,
-    whistleHz: WHISTLE_HZ_MIN + Math.random() * WHISTLE_HZ_RANGE,
-    pan: 0
-  }
+  const layer = noiseLayer(inst, inst.brown, 'lowpass', RUMBLE_LOWPASS, 1, RUMBLE_GAIN)
+  inst.loops.push(layer.nodes)
+  inst.rumble = { layer, hold: 0 }
 }
 
 /**
- * Ticks the draught, drip and pebble timers; drips are louder near the hero.
+ * Ticks the rumble, drip and pebble timers; drips are louder near the hero.
  * @param {Object} inst - Cave sound instance
  * @param {number} dt - Delta time
  * @param {number} listenerY - Hero world Y
  */
 export function onUpdate(inst, dt, listenerY) {
   if (inst.stopped || inst.ctx.state !== 'running') return
-  inst.wind && updateWind(inst, dt)
+  inst.rumble && updateRumble(inst, dt)
   inst.drips.forEach(d => {
     d.wait -= dt
     if (d.wait > 0) return
@@ -384,7 +329,8 @@ export function playGiantBreath(inst, exhale, near) {
 }
 
 /**
- * Soft spring plus a rising chime when the lantern mushroom lights up.
+ * Soft spring plus a rising chime when the hero bounces off the dry
+ * mushroom.
  * @param {Object} inst - Cave sound instance
  */
 export function playLanternBounce(inst) {
@@ -420,53 +366,17 @@ export function stop(inst) {
   inst.out.disconnect()
 }
 //
-// Gust controller: a new target strength after each hold (mostly lulls,
-// sometimes a gust), eased toward at its own pace; turbulence flutters on
-// top; the whistle drifts in pitch and side; the rumble drifts slowly.
+// The rumble's level: a new one now and then, eased there.
 //
-function updateWind(inst, dt) {
-  const w = inst.wind
-  w.hold -= dt
-  if (w.hold <= 0) {
-    const lull = Math.random() < GUST_LULL_CHANCE
-    w.target = lull ? GUST_LULL_MIN + Math.random() * GUST_LULL_RANGE : GUST_MIN + Math.pow(Math.random(), GUST_POW) * GUST_RANGE
-    w.hold = GUST_HOLD_MIN + Math.random() * GUST_HOLD_RANGE
-    w.ease = GUST_EASE_MIN + Math.random() * GUST_EASE_RANGE
-    w.rumbleLevel = 1 + (Math.random() * 2 - 1) * RUMBLE_WANDER
-  }
-  w.level += (w.target - w.level) * (1 - Math.exp(-dt / w.ease))
-  w.flutterWait -= dt
-  if (w.flutterWait <= 0) {
-    w.flutterWait = FLUTTER_EVERY_MIN + Math.random() * FLUTTER_EVERY_RANGE
-    w.flutter = (Math.random() * 2 - 1) * FLUTTER_DEPTH
-  }
-  w.whistleHz = clamp(w.whistleHz * (1 + (Math.random() * 2 - 1) * WHISTLE_WANDER * dt), WHISTLE_HZ_MIN, WHISTLE_HZ_MIN + WHISTLE_HZ_RANGE)
-  w.pan = clamp(w.pan + (Math.random() * 2 - 1) * WHISTLE_PAN_WANDER * dt, -WHISTLE_PAN_MAX, WHISTLE_PAN_MAX)
-  applyWind(inst)
-}
-//
-// Pushes the current draught state to the layer filters and gains.
-//
-function applyWind(inst) {
-  const w = inst.wind
-  const now = inst.ctx.currentTime
-  const level = w.level
-  const shake = 1 + w.flutter * level
-  const sing = Math.max(0, level - WHISTLE_FROM) / (1 - WHISTLE_FROM)
-  setSmooth(w.rumble.gain.gain, RUMBLE_GAIN * w.rumbleLevel, now)
-  setSmooth(w.rush.gain.gain, RUSH_GAIN * (RUSH_BED + level) * shake, now)
-  setSmooth(w.rush.filter.frequency, RUSH_LP_MIN + RUSH_LP_RANGE * level, now)
-  setSmooth(w.whoosh.gain.gain, WHOOSH_GAIN * Math.pow(level, WHOOSH_POW) * shake, now)
-  setSmooth(w.whoosh.filter.frequency, WHOOSH_BP_MIN + WHOOSH_BP_RANGE * level + w.flutter * WHOOSH_FLUTTER_HZ, now)
-  setSmooth(w.whistle.gain.gain, WHISTLE_GAIN * sing * Math.max(0, 1 + w.flutter * WHISTLE_FLUTTER), now)
-  setSmooth(w.whistle.filter.frequency, w.whistleHz * (1 + WHISTLE_GUST_RISE * level), now)
-  setSmooth(w.whistle.pan.pan, w.pan, now)
+function updateRumble(inst, dt) {
+  const r = inst.rumble
+  r.hold -= dt
+  if (r.hold > 0) return
+  r.hold = RUMBLE_HOLD + Math.random() * RUMBLE_HOLD_RANGE
+  setSmooth(r.layer.gain.gain, RUMBLE_GAIN * (1 + (Math.random() * 2 - 1) * RUMBLE_WANDER), inst.ctx.currentTime)
 }
 function setSmooth(param, value, now) {
   param.setTargetAtTime(value, now, PARAM_SMOOTH)
-}
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v))
 }
 //
 // One drop: a short impact (click on stone, soft thud on water), then the

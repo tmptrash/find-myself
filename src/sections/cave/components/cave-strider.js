@@ -53,9 +53,9 @@ const DEG = 180 / Math.PI
 // degrees up).
 //
 const BODY = 'striderBody'
-const ORIGIN = { x: 479, y: 273 }
-const HEAD = { piece: 'striderHead', pivot: { x: 21, y: 90 }, at: { x: 638, y: 208 } }
-const FEELER = { piece: 'striderFeeler', pivot: { x: 16, y: 98 }, at: { x: 163, y: 30 } }
+const ORIGIN = { x: 484.9, y: 286.9 }
+const HEAD = { piece: 'striderHead', pivot: { x: 21.1, y: 90.6 }, at: { x: 645.9, y: 218.6 } }
+const FEELER = { piece: 'striderFeeler', pivot: { x: 16.6, y: 99.7 }, at: { x: 163.8, y: 30.1 } }
 const FEELERS = [{ far: true, turn: -14, phase: 0 }, { far: false, turn: 0, phase: 1.9 }]
 const HEAD_AT = { x: HEAD.at.x - ORIGIN.x, y: HEAD.at.y - ORIGIN.y }
 const FEELER_AT = { x: HEAD_AT.x + FEELER.at.x - HEAD.pivot.x, y: HEAD_AT.y + FEELER.at.y - HEAD.pivot.y }
@@ -68,17 +68,17 @@ const FEELER_AT = { x: HEAD_AT.x + FEELER.at.x - HEAD.pivot.x, y: HEAD_AT.y + FE
 // foot FAR_SPREAD times as far out and FAR_LIFT px higher (further back on
 // the water). The hips ride HIP_LIFT px over the surface.
 //
-const FEMUR = { piece: 'striderFemur', p: { x: 108, y: 22 }, q: { x: 16, y: 197 } }
-const TIBIA = { piece: 'striderTibia', p: { x: 30, y: 20 }, q: { x: 18, y: 276 } }
+const FEMUR = { piece: 'striderFemur', p: { x: 203.1, y: 33.5 }, q: { x: 30.1, y: 304.5 } }
+const TIBIA = { piece: 'striderTibia', p: { x: 25.2, y: 25.1 }, q: { x: 15.1, y: 346.2 } }
 const PAIRS = [
-  { hip: { x: 396, y: 270 }, rest: -640, scale: 1.4, oar: false },
-  { hip: { x: 479, y: 273 }, rest: 420, scale: 1.4, oar: true },
-  { hip: { x: 569, y: 258 }, rest: 300, scale: 0.75, oar: false }
+  { hip: { x: 400.9, y: 283.8 }, rest: -907, scale: 1.4, oar: false },
+  { hip: { x: 484.9, y: 286.9 }, rest: 594, scale: 1.4, oar: true },
+  { hip: { x: 576.1, y: 271.1 }, rest: 425, scale: 0.75, oar: false }
 ]
 const FAR_HIP = { x: -18, y: -14 }
 const FAR_SPREAD = 1.12
-const FAR_LIFT = 40
-const HIP_LIFT = 110
+const FAR_LIFT = 56
+const HIP_LIFT = 156
 const KNEE_SLACK = 1
 //
 // Rowing: a stroke sweeps the oars' feet back to STROKE_BACK (body x) over
@@ -88,7 +88,7 @@ const KNEE_SLACK = 1
 // rows at FLEE_SPEED..+RANGE every FLEE_EVERY s; a stroke never starts
 // before the last one is over.
 //
-const STROKE_BACK = -60
+const STROKE_BACK = -85
 const STROKE_TIME = 0.16
 const RECOVER_TIME = 0.22
 const WANDER_EVERY = 1.2

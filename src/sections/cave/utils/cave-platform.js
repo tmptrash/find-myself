@@ -46,18 +46,18 @@ const THICK_AMP = 65
 const THICK_STRETCH = 1.5
 const THICK_SEED_MUL = 5.3
 const JOIN_PAD = 40
-const LOBE_AMP = 20
+const LOBE_AMP = 9
 const LOBE_STRETCH = 1.2
 const LOBE_SEED_MUL = 1.7
-const LOBE_FINE_AMP = 6
+const LOBE_FINE_AMP = 2
 const LOBE_FINE_STRETCH = 0.6
 const LOBE_FINE_SEED_MUL = 3.3
 const BULGE_GAP = 110
 const BULGE_GAP_RANGE = 150
-const BULGE_DEPTH = 8
-const BULGE_DEPTH_RANGE = 18
-const BULGE_HALF = 55
-const BULGE_HALF_RANGE = 55
+const BULGE_DEPTH = 3
+const BULGE_DEPTH_RANGE = 7
+const BULGE_HALF = 80
+const BULGE_HALF_RANGE = 60
 const BULGE_SEED = 9
 //
 // A free end is no square cut, and no two ends alike (each end's shape is
@@ -96,10 +96,10 @@ const TAPER_MAX_THICK = 220
 //
 const FACE_STEP = 6
 const FACE_STRETCH = 1.2
-const FACE_AMP = 12
+const FACE_AMP = 6
 const FACE_SEED_MUL = 4.1
 const FACE_FINE_STRETCH = 0.6
-const FACE_FINE_AMP = 4
+const FACE_FINE_AMP = 1.5
 const FACE_FINE_SEED_MUL = 6.7
 const FACE_CALM = 24
 //
@@ -116,7 +116,7 @@ const END_CORE_INSET = 6
 // sticking farther out is cut.
 //
 const UNDER_CORE_INSET = 4
-const ENVELOPE = 10
+const ENVELOPE = 5
 const ENVELOPE_TOP = 14
 //
 // A ledge running on under the mass beside it fades out over this many px.
@@ -253,6 +253,24 @@ export function undersideAt(p, x) {
     Layout.profileNoise(x / LOBE_FINE_STRETCH, shape.seed * LOBE_FINE_SEED_MUL) * LOBE_FINE_AMP +
     bulgeAt(shape, x)
   return top + (y - top) * endShare(p, x, base - top) - endRound(p, x, END_UNDER_ROUND) + Layout.wallFillet(x, y, wallScale(p))
+}
+
+/**
+ * A ledge's free end face as painted (side -1: its left end, 1: its
+ * right one): the Y span from its top corner to its bottom and its X at
+ * a Y on that span. Null where that end runs into a wall or a mass.
+ * @param {Object} p - PLATFORMS entry (a ledge)
+ * @param {number} side - -1 left end, 1 right end
+ * @returns {{y1: number, y2: number, at: Function}|null}
+ */
+export function endFace(p, side) {
+  const span = artSpan(p)
+  const free = side < 0 ? span.freeL && p.faceTo === undefined : span.freeR
+  if (!free) return null
+  const x0 = side < 0 ? span.x1 : span.x2
+  const x1 = x0 - side * endShape(p, side).lean
+  const pts = facePoints(p, -side, x0, baseAt(p, x0), x1, undersideAt(p, x1))
+  return { y1: pts[0].y, y2: pts[pts.length - 1].y, at: y => faceXAt(pts, y) }
 }
 
 /**
@@ -567,4 +585,14 @@ function scanSurface(layer) {
     }
   }
   return tops
+}
+//
+// A face's X at a Y (between its points, held at its ends).
+//
+function faceXAt(pts, y) {
+  const i = Math.min(pts.length - 1, Math.max(1, pts.findIndex(pt => pt.y >= y)))
+  const a = pts[i - 1]
+  const b = pts[i]
+  const u = b.y === a.y ? 0 : Math.max(0, Math.min(1, (y - a.y) / (b.y - a.y)))
+  return a.x + (b.x - a.x) * u
 }

@@ -2,13 +2,22 @@ import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax
 import { CAVE_CFG } from '../cfg.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as Fish from '../components/cave-fish.js'
+import * as Giant from '../components/cave-giant.js'
+import * as Lantern from '../components/cave-lantern.js'
+import * as Lurker from '../components/cave-lurker.js'
+import * as Pads from '../components/cave-pads.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Strider from '../components/cave-strider.js'
+import * as StriderBridge from '../components/cave-strider-bridge.js'
+import * as Trumpet from '../components/cave-trumpet.js'
 import * as Front from './cave-front.js'
 import * as Atlas from './cave-atlas.js'
 import * as Backdrop from './cave-backdrop.js'
 import * as CaveLake from './cave-lake.js'
+import * as Ground from './cave-ground.js'
+import * as LakeBed from './cave-lake-bed.js'
 import * as Layout from './cave-layout.js'
+import * as Platform from './cave-platform.js'
 import * as Scene from './cave-scene.js'
 import * as Surface from './cave-surface.js'
 //
@@ -17,9 +26,13 @@ import * as Surface from './cave-surface.js'
 // with the roots' hole), painted by the level's own painters at the
 // level's own size (one world px to one screen unit, as in the level) and
 // baked once per live k and screen size (the lake's bed tinted under its
-// water as in the level), with the lake's life — its fish, leaping for the
-// yellow fireflies over the water, its algae, water and striders running
-// about on it (no giant) —, the level's runners scurrying over it,
+// water as in the level), with the level's life as in the level, only no
+// hero: the dry mushroom on the hall's floor; the lake's fish leaping for
+// the yellow fireflies over the water, its giant coming in to hunt them,
+// the trumpeter on the bed catching them as they leap, the lurker by the
+// left bank pouncing on the runners sent out to its edge now and then, the
+// pad plant's leaves and the striders on the water (lining up now and
+// then), its algae and water; the level's runners scurrying over it,
 // fireflies drifting in the open air between its platforms (never over
 // the soil) and its big stones in front (all drawn live in its world).
 // The bottom sinks into shade so the menu's key hints stay readable. The
@@ -66,6 +79,24 @@ const LAKE_SKY_LOW = 30
 // off it (as from the hero in the level).
 //
 const SPLASH_HEAR = 900
+//
+// Softer sounds off the same splash: a drop from the lurker's mouth
+// (DRIP_SPLASH of a fish's), the trumpeter's gulp (GULP_SPLASH), the
+// lurker's head breaking the surface (LURKER_SPLASH).
+//
+const DRIP_SPLASH = 0.3
+const GULP_SPLASH = 0.6
+const LURKER_SPLASH = 1
+//
+// Every VISIT_EVERY..+RANGE s a runner is sent out onto the lake's left
+// bank, VISIT_IN..+RANGE px short of its edge (one on the bank's run, else
+// one in from the way in, ENTRY_SPOT) — for the lurker to pounce on.
+//
+const VISIT_EVERY = 10
+const VISIT_EVERY_RANGE = 10
+const VISIT_IN = 20
+const VISIT_IN_RANGE = 70
+const ENTRY_SPOT = { x: Layout.ENTRY_X, y: Layout.lakeFloor().y }
 const bakedFor = new WeakMap()
 
 /**
@@ -84,6 +115,7 @@ export function create(cfg) {
   const place = placement(w, h)
   const ready = Atlas.isLoaded()
   const lake = ready ? CaveLake.create(k) : null
+  const pads = lake ? Pads.create({ k, lake }) : null
   const inst = {
     k,
     place,
@@ -92,9 +124,20 @@ export function create(cfg) {
     front: ready ? Front.create(k) : null,
     lake,
     fish: lake ? Fish.createAll(k, lake) : [],
-    striders: lake ? Strider.createAll(k, lake) : [],
+    striders: lake ? Strider.createAll(k, lake, [Pads.crownSpan(pads)]) : [],
     strideFears: [],
+    pads,
+    giant: lake ? Giant.create({ k, lake }) : null,
+    lurker: lake ? Lurker.create({ k, lake }) : null,
+    trumpet: lake ? Trumpet.create({ k, lake }) : null,
+    lantern: ready ? createLantern(k) : null,
+    bridge: null,
+    visitIn: VISIT_EVERY,
     fishCtx: null,
+    giantCtx: null,
+    lurkerCtx: null,
+    trumpetCtx: null,
+    trumpetDraw: null,
     lakeSky: { x1: Math.max(Layout.LAKE_X1, place.x1), x2: Math.min(Layout.LAKE_X2, place.x2), y1: Layout.LAKE_SURFACE_Y - LAKE_SKY_TOP, y2: Layout.LAKE_SURFACE_Y - LAKE_SKY_LOW },
     runners: ready ? Runner.createAll(k) : [],
     fireflies: Fireflies.create({
@@ -104,7 +147,8 @@ export function create(cfg) {
       isOpen: ready ? isOpenAir : undefined
     })
   }
-  inst.fishCtx = { prey: [], swarmPrey: [], swarm: null, threats: [], school: inst.fish, onCatch: prey => Fireflies.eat(inst.fireflies, prey, inst.lakeSky), onSplash: (x, strength) => splash(inst, cfg.onSplash, x, strength) }
+  inst.fishCtx = { prey: [], swarmPrey: [], swarm: null, threats: [], giant: null, school: inst.fish, onCatch: prey => Fireflies.eat(inst.fireflies, prey, inst.lakeSky), onSplash: (x, strength) => splash(inst, cfg.onSplash, x, strength) }
+  lake && createLakeLife(inst, cfg.onSplash)
   return inst
 }
 
@@ -120,20 +164,23 @@ export function prewarm(k, width, height) {
 }
 
 /**
- * Moves the living parts: the runners scurry, fireflies wander, the fish
- * hunt them, the striders run about the water.
+ * Moves the living parts: the runners scurry (one sent to the lake's edge
+ * now and then), fireflies wander, the dry mushroom settles, the lake's
+ * life goes on (updateLakeLife).
  * @param {Object} inst - Backdrop instance
  */
 export function onUpdate(inst) {
+  inst.lake && sendVisitor(inst)
   inst.runners.forEach(runner => Runner.onUpdate(runner, null))
   Fireflies.onUpdate(inst.fireflies)
+  inst.lantern && Lantern.onUpdate(inst.lantern, null)
   inst.lake && updateLakeLife(inst)
 }
 
 /**
- * Draws the picture's back, the fish, its soil, then the lake's algae and
- * water and what is on it, the runners, the fireflies and the stones in
- * front (only the picture while it cross-fades).
+ * Draws the picture's back, what lives behind its soil (drawUnderSoil), its
+ * soil, then what lives over it (drawWorldLife) — only the picture while
+ * it cross-fades.
  * @param {Object} inst - Backdrop instance
  * @param {number} opacity - Cross-fade 0 … 1
  */
@@ -144,7 +191,7 @@ export function onDraw(inst, opacity) {
     return
   }
   drawTiles(inst, BACK, 1)
-  inWorld(inst, drawFish)
+  inWorld(inst, drawUnderSoil)
   drawTiles(inst, SOIL, 1)
   inWorld(inst, drawWorldLife)
 }
@@ -165,33 +212,61 @@ function inWorld(inst, draw) {
   k.popTransform()
 }
 //
-// The fish (far to near) and the sand they spill: behind the soil, so the
-// lake's bowl hides what of them goes into its bed.
+// Behind the soil, as in the level: the far row of the left hollow's
+// paving, the giant, the fish (far to near) and the sand they spill, the
+// pad plant's stems, the trumpeter, the lurker (all of it while its head
+// is under the water or among the bank's plants).
 //
-function drawFish(inst) {
+function drawUnderSoil(inst) {
+  const view = inst.world
+  inst.lake && LakeBed.onDrawBack(inst.k)
+  inst.giant && Giant.onDraw(inst.giant, view, drawHeldFish)
   inst.fish.sort((a, b) => Fish.depth(b) - Fish.depth(a))
-  inst.fish.forEach(fish => Fish.onDraw(fish, inst.world))
+  inst.fish.forEach(fish => Fish.onDraw(fish, view))
   inst.fish.forEach(fish => Fish.onDrawSand(fish))
+  if (!inst.lake) return
+  Pads.onDraw(inst.pads, view)
+  Trumpet.onDraw(inst.trumpet, view, inst.trumpetDraw)
+  Lurker.onDrawRosette(inst.lurker, view)
+  Lurker.onDraw(inst.lurker, view, drawHeldRunner, false)
+  Lurker.isOut(inst.lurker) && Lurker.amongPlants(inst.lurker) && Lurker.onDraw(inst.lurker, view, drawHeldRunner, true)
 }
 //
-// Over the soil: the lake's algae, water and what is on it, the runners,
-// the fireflies, then the big stones in front of them.
+// A fish in the giant's jaws (only what sticks out of its mouth), a runner
+// in the lurker's.
+//
+function drawHeldFish(fish, view, cut) {
+  Fish.onDraw(fish, view, true, cut)
+}
+function drawHeldRunner(prey, at, angle, size) {
+  prey.runner && Runner.drawHeld(prey.runner, at, angle, size)
+}
+//
+// Over the soil: the dry mushroom, the lake's algae, water and what is on
+// it, the lurker's head out of the water, the runners, the fireflies, then
+// the big stones in front of them.
 //
 function drawWorldLife(inst) {
+  inst.lantern && Lantern.onDraw(inst.lantern)
   inst.lake && drawLake(inst)
+  inst.lake && Lurker.isOut(inst.lurker) && !Lurker.amongPlants(inst.lurker) && Lurker.onDraw(inst.lurker, inst.world, drawHeldRunner, true)
   inst.runners.forEach(runner => Runner.onDraw(runner, inst.world))
   Fireflies.onDraw(inst.fireflies, inst.world.top, inst.world.bottom)
   inst.front && Front.onDraw(inst.front, inst.world)
 }
 //
 // The lake as in the level (its fish are under the soil): the algae, the
-// see-through water, the fish's splashes and the striders on it.
+// see-through water, the fish's splashes, the pad plant's leaves, the
+// lurker's splashes, the giant's breath and the striders on it.
 //
 function drawLake(inst) {
   const view = inst.world
   CaveLake.onDrawAlgae(inst.lake)
   CaveLake.onDraw(inst.lake, view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  Pads.onDrawCrown(inst.pads, view)
+  Lurker.onDrawSplash(inst.lurker)
+  Giant.onDrawMist(inst.giant)
   inst.striders.forEach(strider => Strider.onDrawWater(strider, view))
   inst.striders.forEach(strider => Strider.onDraw(strider, view))
 }
@@ -203,14 +278,23 @@ function splash(inst, onSplash, x, strength) {
   onSplash?.(strength, 1 - Math.abs(x - (inst.place.x1 + inst.place.x2) / 2) / SPLASH_HEAR)
 }
 //
-// The fish hunt the yellow fireflies (nothing hunts them); the striders
-// shy from the runners and the fish breaking the surface.
+// The lake's life as in the level: the giant comes in to hunt the fish,
+// the fish hunt the yellow fireflies and keep off the giant, the
+// trumpeter catches them leaping, the lurker hunts the runners at the
+// bank's edge (watching the giant over it), the striders shy from all
+// that moves near the water and line up now and then.
 //
 function updateLakeLife(inst) {
   const ctx = inst.fishCtx
   ctx.prey.length = 0
   Fireflies.forEachLit(inst.fireflies, f => ctx.prey.push(f))
+  Giant.onUpdate(inst.giant, inst.giantCtx)
+  ctx.giant = Giant.bodyLine(inst.giant)
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
+  Trumpet.onUpdate(inst.trumpet, inst.trumpetCtx)
+  inst.lurkerCtx.giant = ctx.giant
+  Lurker.onUpdate(inst.lurker, inst.lurkerCtx)
+  Pads.onUpdate(inst.pads)
   const fears = inst.strideFears
   fears.length = 0
   inst.runners.forEach(runner => fears.push(runner.pos))
@@ -218,7 +302,73 @@ function updateLakeLife(inst) {
     const head = Fish.surfacePoint(fish)
     head && fears.push(head)
   })
+  Giant.fearPoints(inst.giant).forEach(p => fears.push(p))
+  const lurker = Lurker.surfacePoint(inst.lurker)
+  lurker && fears.push(lurker)
+  StriderBridge.onUpdate(inst.bridge, null)
   inst.striders.forEach(strider => Strider.onUpdate(strider, fears, inst.striders))
+}
+//
+// The lake's creatures' contexts (no hero: nothing for them to do with
+// him), its striders' row.
+//
+function createLakeLife(inst, onSplash) {
+  inst.bridge = StriderBridge.create({ k: inst.k, striders: inst.striders, from: Pads.crownLine(inst.pads).span().x2, to: Layout.BANK_TIP_X2 })
+  inst.giantCtx = { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: () => {} }
+  inst.lurkerCtx = {
+    hero: null,
+    sinking: null,
+    runners: inst.runners,
+    runnerAbout: Runner.isAbout,
+    onSeize: prey => prey.runner && Runner.snatch(prey.runner, ENTRY_SPOT, () => null),
+    onSwallow: () => {},
+    onSplash: x => splash(inst, onSplash, x, LURKER_SPLASH),
+    onDrip: x => splash(inst, onSplash, x, DRIP_SPLASH),
+    school: inst.fish,
+    fishHead: Fish.swimmingHead,
+    giant: null
+  }
+  inst.trumpetCtx = {
+    school: inst.fish,
+    headOf: Fish.swimmingHead,
+    leapOf: Fish.leapingHead,
+    tailOf: Fish.leapingTail,
+    landingOf: Fish.leapLandingX,
+    seizeFish: Fish.seize,
+    holdFish: Fish.hold,
+    onCatch: fish => eatFish(inst, onSplash, fish),
+    onSpit: () => {}
+  }
+  inst.trumpetDraw = { hero: () => {}, fish: fish => Fish.onDraw(fish, inst.world, true) }
+}
+//
+// The trumpeter has eaten a fish: it is gone (to swim back in later), with
+// a soft gulp.
+//
+function eatFish(inst, onSplash, fish) {
+  Fish.eat(fish)
+  splash(inst, onSplash, inst.trumpet.x, GULP_SPLASH)
+}
+//
+// Now and then a runner runs out onto the lake's left bank, near its edge.
+//
+function sendVisitor(inst) {
+  inst.visitIn -= inst.k.dt()
+  if (inst.visitIn > 0) return
+  inst.visitIn = VISIT_EVERY + Math.random() * VISIT_EVERY_RANGE
+  const x = Layout.BANK_TIP_X - VISIT_IN - Math.random() * VISIT_IN_RANGE
+  const spot = { x, y: Ground.topAt(Layout.lakeFloor(), x) }
+  const about = inst.runners.filter(Runner.isAbout)
+  if (about.some(runner => Runner.sendTo(runner, spot))) return
+  about.length && Runner.comeFrom(about[Math.floor(Math.random() * about.length)], ENTRY_SPOT, spot)
+}
+//
+// The dry mushroom on its platform (its crumbs and dust come to rest on
+// that platform's soil).
+//
+function createLantern(k) {
+  const p = Layout.PLATFORMS.find(q => q.id === Layout.LANTERN.on)
+  return Lantern.create({ k, x: Layout.LANTERN.x, y: Lantern.footYOn(p, Layout.LANTERN.x), groundAt: x => Platform.surfaceAt(p, x) })
 }
 //
 // Open air for the fireflies: clear of the soil and the water by

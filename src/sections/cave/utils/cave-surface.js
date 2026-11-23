@@ -41,6 +41,11 @@ const NORMAL_PROBE = 5
 const WALL_MARGIN = 6
 const WATER_MARGIN = 8
 //
+// Nothing crawls into the banks' hollows under the water: they count as
+// the lake's, HOLLOW_MARGIN px round them.
+//
+const HOLLOW_MARGIN = 12
+//
 // The lake's water reaches LAKE_BELOW px under its surface at most (no
 // open air there: isOpenAir).
 //
@@ -403,8 +408,13 @@ function bridgeTight(tight, pts) {
   }
 }
 function isUnderWater(p) {
-  if (p.x < Layout.LAKE_X1 - WATER_MARGIN || p.x > Layout.LAKE_X2 + WATER_MARGIN) return false
-  return p.y > Layout.LAKE_SURFACE_Y - WATER_MARGIN && p.y < Ground.topAt(Layout.lakeFloor(), p.x) + WATER_MARGIN
+  if (Layout.inHollow(p.x, p.y, HOLLOW_MARGIN)) return true
+  const { x0, tops, beds } = Ground.waterColumns()
+  for (let c = Math.round(p.x) - WATER_MARGIN; c <= Math.round(p.x) + WATER_MARGIN; c++) {
+    const i = c - x0
+    if (!Number.isNaN(tops[i] ?? NaN) && p.y > Math.min(tops[i], Layout.LAKE_SURFACE_Y) - WATER_MARGIN && p.y < beds[i] + WATER_MARGIN) return true
+  }
+  return false
 }
 //
 // A run over a stretch of points: arc length to each point, the whole

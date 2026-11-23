@@ -8,7 +8,10 @@ import * as Ground from './cave-ground.js'
 // (components/lake.js): its water fills the floor's bowl from the surface
 // down to the bowl's own soil, so its edges run along both banks to the
 // very bottom, and its surface ends exactly at the columns where the
-// banks' soil drops under it (found pixel by pixel). The band round the
+// banks' soil drops under it (found pixel by pixel, Ground.waterColumns);
+// under each bank it runs on into the hollow there, under the hollow's
+// soil (no water is painted over that soil). Its waves die out at the
+// banks' faces. The band round the
 // surface is baked as a wave cycle of FRAME_COUNT frames, as the forest's:
 // the water opaque across the waves and fading to see-through under them,
 // a light skin, the band between a bright top line and a fainter inner
@@ -22,10 +25,9 @@ const SPRITE_PREFIX = 'cave0-lake-v3-'
 const BODY_SPRITE = `${SPRITE_PREFIX}body`
 const SHEET_SPRITE = `${SPRITE_PREFIX}sheet-`
 //
-// Where the bowl is sought (past the lake's ends); the water reaches this
-// far under the bowl's top so no gap shows under the soil's lumps.
+// The water reaches this far under the bowl's top so no gap shows under
+// the soil's lumps.
 //
-const BANK_REACH = 40
 const BED_OVERLAP = 6
 //
 // The baked band: from BAND_ABOVE px over the surface to BAND_BELOW under
@@ -113,11 +115,13 @@ export function create(k) {
     bed,
     x1,
     x2,
+    waveX1: Math.max(x1, Layout.BANK_TIP_X),
+    waveX2: Math.min(x2, Layout.BANK_TIP_X2),
     framePos: k.vec2(x1, Layout.LAKE_SURFACE_Y - BAND_ABOVE),
     bodyPos: k.vec2(x1, Layout.LAKE_SURFACE_Y + BAND_BELOW),
     algae: null
   }
-  inst.algae = Lake.createAlgaeField(k, { paint: PAINT, x1, x2, surfaceY: Layout.LAKE_SURFACE_Y, bedAt: x => bedAt(inst, x) - BED_OVERLAP })
+  inst.algae = Lake.createAlgaeField(k, { paint: PAINT, x1: Math.max(x1, Layout.LAKE_X1), x2, surfaceY: Layout.LAKE_SURFACE_Y, bedAt: x => bedAt(inst, x) - BED_OVERLAP })
   bakedFor.has(k) || bake(k, inst)
   bakedFor.add(k)
   return inst
@@ -153,9 +157,21 @@ export function onDraw(inst, view) {
  */
 export function surfaceAt(inst, x) {
   const span = inst.x2 - inst.x1
-  const fade = Math.max(0, Math.min(1, (x - inst.x1) / SHORE_FADE, (inst.x2 - x) / SHORE_FADE))
+  const fade = waveFade(inst, x)
   const t = frameNow(inst.k) / FRAME_COUNT * CYCLE
   return Layout.LAKE_SURFACE_Y + topWave((x - inst.x1) / span, t) * fade
+}
+
+/**
+ * The water's top at a world X this moment: its surface, or in a bank's
+ * hollow the soil ceiling over the water there.
+ * @param {Object} inst - Lake instance
+ * @param {number} x - World X
+ * @returns {number} World Y
+ */
+export function waterTopAt(inst, x) {
+  const col = colAt(inst, x)
+  return col.top > Layout.LAKE_SURFACE_Y ? col.top : surfaceAt(inst, x)
 }
 
 /**
@@ -180,12 +196,23 @@ export function bedTopAt(inst, x) {
 }
 
 /**
- * The water's span (its ends where the banks' soil drops under it).
+ * The water's span (its ends where the banks' soil drops under it; on the
+ * left, the back of the hollow under the bank).
  * @param {Object} inst - Lake instance
  * @returns {{x1: number, x2: number}}
  */
 export function span(inst) {
   return { x1: inst.x1, x2: inst.x2 }
+}
+
+/**
+ * The span of the water open to the hall (out from under the left bank's
+ * lip): what lives on the surface or over it keeps to it.
+ * @param {Object} inst - Lake instance
+ * @returns {{x1: number, x2: number}}
+ */
+export function openSpan(inst) {
+  return { x1: inst.waveX1, x2: inst.waveX2 }
 }
 //
 // The band's frame on screen now.
@@ -194,20 +221,34 @@ function frameNow(k) {
   return Math.floor((k.time() % CYCLE) / CYCLE * FRAME_COUNT) % FRAME_COUNT
 }
 //
-// The bowl under the water: the floor's art top, column by column, from
-// the first to the last column where it lies under the surface (the
-// banks' soil meets the surface right at its ends).
+// The water column by column (Ground.waterColumns), from the first to the
+// last column that has any: its top (the surface, or the soil ceiling of
+// the hollow under the bank) and its bed (reached BED_OVERLAP px into).
 //
 function bowlLine() {
-  const floor = Layout.lakeFloor()
+  const { x0, tops, beds } = Ground.waterColumns()
+  const first = tops.findIndex(y => !Number.isNaN(y))
+  const last = tops.findLastIndex(y => !Number.isNaN(y))
   const cols = []
-  for (let x = Layout.LAKE_X1 - BANK_REACH; x <= Layout.LAKE_X2 + BANK_REACH; x++) cols.push({ x, y: Ground.topAt(floor, x) })
-  const first = cols.findIndex(c => c.y > Layout.LAKE_SURFACE_Y)
-  const last = cols.findLastIndex(c => c.y > Layout.LAKE_SURFACE_Y)
-  return cols.slice(first, last + 1).map(c => ({ x: c.x, y: Math.max(Layout.LAKE_SURFACE_Y, c.y + BED_OVERLAP) }))
+  for (let i = first; i <= last; i++) {
+    const top = Number.isNaN(tops[i]) ? Layout.LAKE_SURFACE_Y : tops[i]
+    cols.push({ x: x0 + i, top, y: Number.isNaN(beds[i]) ? top : beds[i] + BED_OVERLAP })
+  }
+  return cols
+}
+function colAt(inst, x) {
+  return inst.bed[Math.min(inst.bed.length - 1, Math.max(0, Math.round(x - inst.x1)))]
 }
 function bedAt(inst, x) {
-  return inst.bed[Math.min(inst.bed.length - 1, Math.max(0, Math.round(x - inst.x1)))].y
+  return colAt(inst, x).y
+}
+//
+// How much of the waves a column of the surface carries: none under the
+// left bank's lip, rising over SHORE_FADE px from its tip, dying out over
+// as much at the right bank.
+//
+function waveFade(inst, x) {
+  return Math.max(0, Math.min(1, (x - inst.waveX1) / SHORE_FADE, (inst.waveX2 - x) / SHORE_FADE))
 }
 //
 // Every frame of the band (on its sheets) and the still body, once per
@@ -280,6 +321,14 @@ function paintFrame(ctx, inst, t) {
   ctx.restore()
   strokeLine(ctx, top, PAINT.surfaceLine, LINE_W)
   strokeLine(ctx, inner, hexAlpha(PAINT.surfaceLine, INNER_ALPHA), INNER_W)
+  clearCeiling(ctx, inst, surface)
+}
+//
+// Nothing of the band over the soil ceiling of the hollow under the bank
+// where it comes down below the surface.
+//
+function clearCeiling(ctx, inst, surface) {
+  inst.bed.forEach(col => col.top > Layout.LAKE_SURFACE_Y && ctx.clearRect(col.x, 0, 1, col.top - Layout.LAKE_SURFACE_Y + surface))
 }
 //
 // The light skin under the surface.
@@ -299,7 +348,7 @@ function paintSkin(ctx, inst, surface) {
 function paintRipples(ctx, inst, t, surface) {
   ctx.fillStyle = PAINT.surfaceLine
   RIPPLE_BANKS.forEach(dir => {
-    const from = dir > 0 ? inst.x1 : inst.x2
+    const from = dir > 0 ? inst.waveX1 : inst.waveX2
     for (let i = 0; i < RIPPLES; i++) {
       const u = (t / CYCLE + i / RIPPLES) % 1
       const cx = from + dir * (RIPPLE_START + u * RIPPLE_SPACING * RIPPLES)
@@ -337,7 +386,7 @@ function waveLine(inst, t, wave, rest) {
   const span = inst.x2 - inst.x1
   const pts = []
   for (let x = inst.x1; ; x = Math.min(inst.x2, x + POINT_STEP)) {
-    const fade = Math.max(0, Math.min(1, (x - inst.x1) / SHORE_FADE, (inst.x2 - x) / SHORE_FADE))
+    const fade = waveFade(inst, x)
     pts.push({ x, y: rest + wave((x - inst.x1) / span, t) * fade })
     if (x >= inst.x2) break
   }
@@ -350,8 +399,9 @@ function innerWave(u, t) {
   return Math.sin(t * WAVE_SPEED + u * INNER_PHASE) * INNER_AMP + Math.sin(t * WAVE_SECOND_SPEED + u * INNER_SECOND_PHASE + INNER_SECOND_SHIFT) * INNER_SECOND_AMP
 }
 //
-// The still body under the band: column by column down to the bowl, the
-// see-through water deepening toward the bed.
+// The still body under the band: column by column (from the hollow's
+// ceiling where that is lower) down to the bowl, the see-through water
+// deepening toward the bed.
 //
 function bakeBody(k, inst) {
   const top = Layout.LAKE_SURFACE_Y + BAND_BELOW
@@ -365,11 +415,12 @@ function bakeBody(k, inst) {
   tint.addColorStop(0, hexAlpha(PAINT.deep, 0))
   tint.addColorStop(1, hexAlpha(PAINT.deep, DEEP_ALPHA))
   inst.bed.forEach(pt => {
-    if (pt.y <= top) return
+    const from = Math.max(top, pt.top)
+    if (pt.y <= from) return
     ctx.fillStyle = hexAlpha(COLORS.water, BODY_ALPHA)
-    ctx.fillRect(pt.x, top, 1, pt.y - top)
+    ctx.fillRect(pt.x, from, 1, pt.y - from)
     ctx.fillStyle = tint
-    ctx.fillRect(pt.x, top, 1, pt.y - top)
+    ctx.fillRect(pt.x, from, 1, pt.y - from)
   })
   k.loadSprite(BODY_SPRITE, canvas)
 }

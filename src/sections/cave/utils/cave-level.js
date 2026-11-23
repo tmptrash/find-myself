@@ -19,9 +19,14 @@ import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Swarm from '../components/cave-swarm.js'
 import * as Strider from '../components/cave-strider.js'
+import * as StriderBridge from '../components/cave-strider-bridge.js'
 import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
+import * as Lurker from '../components/cave-lurker.js'
+import * as Pads from '../components/cave-pads.js'
+import * as Trumpet from '../components/cave-trumpet.js'
 import * as Atlas from './cave-atlas.js'
+import * as LakeBed from './cave-lake-bed.js'
 import * as Layout from './cave-layout.js'
 import * as Surface from './cave-surface.js'
 import * as Terrain from './cave-terrain.js'
@@ -37,9 +42,16 @@ import * as View from './cave-view.js'
 // forest eye-flower's roots tore through the ceiling, onto the lake's left
 // bank, a dry mushroom left of him (bounced on, crumbs and dust fall off
 // it and its fireflies fly out of its holes, shy of the hero). A deep
-// lake fills the hall; across it — on the giant's back as it breathes — is
-// the right bank, past it a shaft of stone steps drops into the passage
-// under the hall, where the stalk-eye stands (cave-layout.js).
+// lake fills the hall, its giant living its own life under the water;
+// across it is the right bank, past it a shaft of stone steps drops into the passage
+// under the hall, where the stalk-eye stands (cave-layout.js). Under the
+// left bank's lip lurks a snake of a plant: whoever comes to the bank's
+// edge it snatches and chews (cave-lurker.js); a jump from its head while
+// it chews lands on a plant whose crown of leaves lies on the water
+// (cave-pads.js). Now and then the water striders line up from there
+// toward the right bank, a way across on their sinking backs
+// (cave-strider-bridge.js). Near the right bank a trumpeter waits on the
+// bed for the fish leaping out of the water (cave-trumpet.js).
 //
 export const SCENE_NAME = 'lesson-cave.0'
 const KEY_LAST_LESSON = 'lastLesson'
@@ -47,10 +59,14 @@ const KEY_SAFE_SPOT = 'cave.safeSpot'
 const KEY_REACHED = 'cave.reached'           // Menu shows the cave's icon once the hero got here
 //
 // Draw order: back (parallax), the fireflies (behind the soil: they fly
-// only in the open between the platforms), the lake's giant and its fish
-// (behind the soil: the bed's walls hide them as they swim in and out),
-// the drowning hero (behind the soil, in front of the giant: he sinks off
-// its back in sight), the runner insects (behind the soil
+// only in the open between the platforms), the far row of stones paving
+// the left hollow's mouth, the lake's giant and its fish (behind the soil:
+// the bed's walls — and the near row of those stones — hide them as they
+// swim in and out),
+// the drowning hero (behind the soil, in front of the giant), the lurker
+// plant (behind the soil while its head is
+// under the water, in front of it once out),
+// the runner insects (behind the soil
 // and its plants: they run behind the leaves), terrain, the lake water,
 // what is on its surface (the fish's splashes, the water striders), the
 // mushroom's fireflies, the hero and creatures (player z), the stones in
@@ -63,7 +79,11 @@ const Z_TERRAIN = Z_WORLD + 0.4
 const Z_RUNNERS = Z_WORLD + 0.38
 const Z_WATER = Z_WORLD + 0.6
 const Z_GIANT = Z_WORLD + 0.36
+const Z_PAVE_BACK = Z_WORLD + 0.355
 const Z_FISH = Z_WORLD + 0.37
+const Z_LURKER = Z_WORLD + 0.39
+const Z_LURKER_OUT = Z_WORLD + 0.45
+const Z_LURKER_PLANTS = Z_WORLD + 0.395
 const Z_LAKE_SURFACE = Z_WORLD + 0.7
 //
 // A fish's splash sounds full within the hero's reach and fades out over
@@ -76,16 +96,6 @@ const SPLASH_HEAR = 900
 //
 const BREATH_HEAR = 2000
 //
-// The giant is lured once LURE_FISH fish or more feed under the swarm's
-// fireflies over the water (within LURE_GATHER px of them along the lake:
-// wide, for the school swirls about them and scatters ahead of the giant
-// as it comes, and still counts). The hero on its nose drives them from NOSE_SCARE_R px, on
-// even while he stands there.
-//
-const LURE_FISH = 4
-const LURE_GATHER = 450
-const NOSE_SCARE_R = 300
-//
 // A firefly a fish ate lights up again over the lake, from LAKE_SKY_TOP
 // down to LAKE_SKY_LOW px over the surface (where the fish can reach it).
 //
@@ -93,6 +103,7 @@ const LAKE_SKY_TOP = 140
 const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
+const Z_LURKER_TOP = Z_FRONT + 0.5
 const Z_FRAME = CFG.visual.zIndex.ui - 1
 const Z_GIANT_DEBUG = Z_FRAME - 1
 //
@@ -178,6 +189,42 @@ const FPS_FONT_SCALE = 0.7
 //
 const SWARM_DELAY = 1.5
 //
+// The hero snatched by the lurker: he is stuck in its jaws while it chews
+// (it draws him there), then gone (his fireflies burst out of its jaws)
+// and back on the bank by the lantern EATEN_RESPAWN s after that.
+//
+const EATEN_RESPAWN = 1
+const LURKER_DRIP = 0.3
+//
+// The trumpeter's gulp of a fish sounds TRUMPET_GULP of a fish's splash.
+//
+const TRUMPET_GULP = 0.6
+//
+// The hero the trumpeter spat out flies up over onto the right bank: to
+// SPIT_LAND_DX px past its tip (its ground found within SPIT_SEARCH px up
+// or down), his arc's top SPIT_ARC px over the higher of its ends; the
+// spit is a wet slosh, SPIT_LOUD (it is by the hero).
+//
+const SPIT_LAND_DX = 70
+const SPIT_SEARCH = 400
+const SPIT_ARC = 70
+const SPIT_LOUD = 1
+//
+// Runners: one the lurker ate is back a little later, coming in at
+// ENTRY_SPOT (on the floor under the roots' hole the hero came in by) and
+// running off to where the hero is; every VISIT_EVERY..+RANGE s the hero
+// spends on the lake's left bank (VISIT_AWAY_RATE as often while he is not
+// on it) one runs out onto it, VISIT_IN..+RANGE px short of its edge —
+// one already on the bank's run, else one out of sight, coming in at the
+// way in.
+//
+const ENTRY_SPOT = { x: Layout.ENTRY_X, y: Layout.lakeFloor().y }
+const VISIT_EVERY = 20
+const VISIT_EVERY_RANGE = 20
+const VISIT_IN = 20
+const VISIT_IN_RANGE = 70
+const VISIT_AWAY_RATE = 0.25
+//
 // The touch buttons are a little see-through.
 //
 const CONTROLS_OPACITY = 0.6
@@ -206,6 +253,7 @@ function build(k, opts) {
   const caveSound = CaveSound.create(sfx)
   CaveSound.startAmbience(caveSound)
   const lake = CaveLake.create(k)
+  const pads = Pads.create({ k, lake })
   Glow.create(k)
   const inst = {
     k,
@@ -218,10 +266,18 @@ function build(k, opts) {
     front: Front.create(k),
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
-    striders: Strider.createAll(k, lake),
+    striders: Strider.createAll(k, lake, [Pads.crownSpan(pads)]),
     striderFears: [],
+    bridge: null,
     fish: Fish.createAll(k, lake),
     giant: Giant.create({ k, lake, stay: Boolean(opts.giantDev) }),
+    lurker: Lurker.create({ k, lake }),
+    pads,
+    trumpet: Trumpet.create({ k, lake }),
+    trumpetCtx: null,
+    trumpetDraw: null,
+    lurkerCtx: null,
+    visitIn: VISIT_EVERY,
     giantDebug: false,
     fishCtx: null,
     runnerFood: null,
@@ -234,16 +290,20 @@ function build(k, opts) {
     safe: get(KEY_SAFE_SPOT, null),
     dead: false,
     drown: null,
+    inTrumpet: false,
+    spat: false,
+    lastFeet: null,
     respawnAt: 0,
     deathX: 0,
     deathY: 0,
     lakeDeath: false,
     airFor: 0,
     drownLegs: null,
+    eatenLegs: null,
     fps: null
   }
   Fireflies.setNest(inst.fireflies, Lantern.holes(inst.lantern))
-  const lakeSpan = CaveLake.span(lake)
+  const lakeSpan = CaveLake.openSpan(lake)
   inst.lakeSky = { x1: lakeSpan.x1, x2: lakeSpan.x2, y1: Layout.LAKE_SURFACE_Y - LAKE_SKY_TOP, y2: Layout.LAKE_SURFACE_Y - LAKE_SKY_LOW }
   inst.fishCtx = {
     prey: [],
@@ -255,6 +315,34 @@ function build(k, opts) {
     onCatch: prey => onFishCatch(inst, prey),
     onSplash: (x, strength) => onFishSplash(inst, x, strength)
   }
+  inst.lurkerCtx = {
+    hero: null,
+    sinking: null,
+    runners: inst.runners,
+    runnerAbout: Runner.isAbout,
+    onSeize: prey => onLurkerSeize(inst, prey),
+    onSwallow: (prey, at) => onLurkerSwallow(inst, prey, at),
+    onSplash: x => onLurkerSplash(inst, x),
+    onDrip: x => onLurkerDrip(inst, x),
+    school: inst.fish,
+    fishHead: Fish.swimmingHead,
+    giant: null
+  }
+  inst.trumpetCtx = {
+    school: inst.fish,
+    headOf: Fish.swimmingHead,
+    leapOf: Fish.leapingHead,
+    tailOf: Fish.leapingTail,
+    landingOf: Fish.leapLandingX,
+    seizeFish: Fish.seize,
+    holdFish: Fish.hold,
+    onCatch: fish => onTrumpetCatch(inst, fish),
+    onSpit: at => spitHero(inst, at)
+  }
+  inst.trumpetDraw = {
+    hero: at => drawEatenHero(inst, at, at.angle),
+    fish: fish => Fish.onDraw(fish, View.worldRect(inst.view), true)
+  }
   inst.runnerFood = {
     prey: [],
     onEat: f => Fireflies.eat(inst.fireflies, f)
@@ -262,7 +350,9 @@ function build(k, opts) {
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
+  inst.bridge = StriderBridge.create({ k, striders: inst.striders, from: Pads.crownLine(pads).span().x2, to: Layout.BANK_TIP_X2 })
   createBodies(inst)
+  Ground.setMovingLines([Lurker.topLine(inst.lurker), Pads.crownLine(inst.pads), ...inst.striders.map(Strider.line)])
   spawnHero(inst, startPose(inst))
   createHud(inst)
   initTouchInput(k)
@@ -281,9 +371,11 @@ function onUpdate(inst) {
   const char = inst.heroInst?.character
   if (inst.drown) updateDrown(inst)
   else if (inst.dead) updateRespawn(inst)
+  else if (inst.inTrumpet) holdInTrumpet(inst)
   else char?.exists?.() && updateHero(inst, char)
   Fireflies.onUpdate(inst.fireflies, heroPos(inst))
   updateRunners(inst)
+  updateLurker(inst)
   releaseSwarm(inst)
   driveSwarm(inst)
   updateLakeLife(inst)
@@ -298,17 +390,23 @@ function updateHero(inst, char) {
   // Pixel snap only on the ground: Kaplay steps physics at a fixed rate and
   // smooths the body between steps only while nothing else moves it, so
   // snapping in the air made jumps and falls stutter. Not while he rides
-  // the giant: Kaplay carries him by the back's slow fractions of a pixel,
-  // which rounding would lose (or add), letting him creep along its back.
+  // the lurker's head, the pad plant's leaves or a strider: Kaplay carries
+  // him by their slow fractions of a pixel, which rounding would lose (or
+  // add), letting him creep along them.
   //
-  inst.heroInst.freePos = Giant.isRidden(inst.giant)
+  inst.heroInst.freePos = ridesLurker(inst) || ridesPads(inst) || Boolean(ridesStrider(inst))
+  inst.spat && settleSpit(inst, char)
   char.isGrounded() && Hero.snapPosToPixels(inst.heroInst)
   rideGround(inst, char)
   trackLanding(inst, char)
   Lantern.onUpdate(inst.lantern, inst.heroInst) && lanternBounce(inst)
   trackSafeSpot(inst, char)
   const { x, y } = char.pos
-  const held = Giant.holdsUp(inst.giant, x, y + Layout.HERO_FEET_DY)
+  const feet = y + Layout.HERO_FEET_DY
+  const prevFeet = inst.lastFeet ?? feet
+  inst.lastFeet = feet
+  if (Trumpet.takes(inst.trumpet, x, feet, prevFeet)) return grabByTrumpet(inst, char)
+  const held = Pads.holds(inst.pads, x, feet) || inst.striders.some(strider => Strider.holds(strider, x, feet))
   if (Layout.isInLake(x, y) && !held) return startDrown(inst, char)
   y > FALL_OUT_Y && killHero(inst)
 }
@@ -364,14 +462,11 @@ function isHeroAirborne(inst) {
   return Boolean(char?.exists?.() && char.isGrounded?.() === false)
 }
 //
-// The swarm's fireflies and the hero: wherever he is (on the giant's back
-// too) any move of his at them drives them off; from the giant's nose he
-// drives them even standing (and from farther: NOSE_SCARE_R).
+// The swarm's fireflies and the hero: wherever he is any move of his at
+// them drives them off.
 //
 function driveSwarm(inst) {
-  const pos = heroPos(inst)
-  const atNose = Boolean(pos) && Giant.isRidden(inst.giant) && Giant.riderAtNose(inst.giant, pos.x)
-  Swarm.onUpdate(inst.swarm, pos, isHeroAirborne(inst), atNose ? NOSE_SCARE_R : undefined, atNose)
+  Swarm.onUpdate(inst.swarm, heroPos(inst), isHeroAirborne(inst))
 }
 //
 // Remembers the last solid platform the hero stood on (respawn point);
@@ -380,7 +475,7 @@ function driveSwarm(inst) {
 function trackSafeSpot(inst, char) {
   if (!char.isGrounded?.()) return
   const platform = inst.platformByBody.get(char.curPlatform?.())
-  if (!platform || inst.safe?.id === platform.id) return
+  if (!platform || platform.moving || inst.safe?.id === platform.id) return
   inst.safe = { id: platform.id, x: Math.round(char.pos.x) }
   set(KEY_SAFE_SPOT, inst.safe)
 }
@@ -434,6 +529,7 @@ function startDrown(inst, char) {
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
   Sound.playWaterStepsOnce(inst.sfx, WATER_STEPS_VOLUME)
+  StriderBridge.breakUp(inst.bridge)
   inst.striders.forEach(strider => Strider.startle(strider, char.pos.x))
   inst.fish.forEach(fish => Fish.startle(fish, char.pos.x))
 }
@@ -524,6 +620,9 @@ function spawnHero(inst, pose) {
   Hero.spawn(hero, { instant: true })
   inst.heroInst = hero
   inst.prevBottom = pose.y + Layout.HERO_FEET_DY
+  inst.lastFeet = null
+  inst.inTrumpet = false
+  inst.spat = false
   inst.rodeStep = false
   inst.stepPlatform = null
   inst.step.pos = k.vec2(0, PARK_Y)
@@ -581,9 +680,24 @@ function rideGround(inst, char) {
   inst.rodeStep = onStep && !rising && lineY !== null
   if (onStep) {
     if (rising) return
+    const span = inst.stepPlatform.moving ? inst.stepPlatform.span() : null
+    //
+    // A moving line gone from under him (a strider sunk, the lurker's head
+    // under the water): with his feet in the lake the step stays put this
+    // frame and he drowns (updateHero) — parked now, Kaplay would carry
+    // him off with it.
+    //
+    if (inst.stepPlatform.moving && !span && Layout.isInLake(char.pos.x, char.pos.y)) return
+    if (inst.stepPlatform.moving && !span) {
+      step.pos = inst.k.vec2(0, PARK_Y)
+      inst.stepPlatform = null
+      inst.rodeStep = false
+      return
+    }
     const gap = step.pos.y - bottom
     gap > 0 && gap <= RIDE_SLACK && (char.pos.y += gap)
-    lineY === null || (step.pos = inst.k.vec2(step.pos.x, lineY))
+    span && (step.width = span.x2 - span.x1)
+    lineY === null || (step.pos = inst.k.vec2(span ? span.x1 : step.pos.x, lineY))
     return
   }
   if (char.curPlatform?.() === step) return
@@ -636,8 +750,16 @@ function addDrawLayers(inst) {
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
+  k.add([k.z(Z_PAVE_BACK), { draw: () => LakeBed.onDrawBack(k) }])
   k.add([k.z(Z_GIANT), { draw: () => Giant.onDraw(inst.giant, View.worldRect(inst.view), drawHeldFish) }])
   k.add([k.z(Z_FISH), { draw: () => drawFish(inst) }])
+  k.add([k.z(Z_LURKER), { draw: () => Pads.onDraw(inst.pads, View.worldRect(inst.view)) }])
+  k.add([k.z(Z_LURKER), { draw: () => Trumpet.onDraw(inst.trumpet, View.worldRect(inst.view), inst.trumpetDraw) }])
+  k.add([k.z(Z_LURKER), { draw: () => Lurker.onDrawRosette(inst.lurker, View.worldRect(inst.view)) }])
+  k.add([k.z(Z_LURKER), { draw: () => drawLurker(inst, false) }])
+  k.add([k.z(Z_LURKER_PLANTS), { draw: () => lurkerLayer(inst) === Z_LURKER_PLANTS && drawLurker(inst, true) }])
+  k.add([k.z(Z_LURKER_OUT), { draw: () => lurkerLayer(inst) === Z_LURKER_OUT && drawLurker(inst, true) }])
+  k.add([k.z(Z_LURKER_TOP), { draw: () => lurkerLayer(inst) === Z_LURKER_TOP && drawLurker(inst, true) }])
   k.add([k.z(Z_WATER), { draw: () => CaveLake.onDraw(inst.lake, View.worldRect(inst.view)) }])
   k.add([k.z(Z_LAKE_SURFACE), { draw: () => drawLakeSurface(inst) }])
   k.add([k.z(Z_LIGHTS), { draw: () => drawLights(inst) }])
@@ -668,11 +790,235 @@ function drawLights(inst) {
 // The runners: afraid of the hero, now and then leaping for a firefly.
 //
 function updateRunners(inst) {
+  sendVisitor(inst)
   const hero = heroPos(inst)
   const food = inst.runnerFood
   food.prey.length = 0
   Fireflies.forEachLit(inst.fireflies, f => food.prey.push(f))
   inst.runners.forEach(runner => Runner.onUpdate(runner, hero, food))
+}
+//
+// The lurker by the left bank: it hunts the hero on the bank (or sinking
+// in the lake near it) and the runners about.
+//
+function updateLurker(inst) {
+  const ctx = inst.lurkerCtx
+  const char = inst.heroInst?.character
+  ctx.hero = heroPos(inst)
+  ctx.sinking = inst.drown && char?.exists?.() ? char.pos : null
+  ctx.giant = Giant.bodyLine(inst.giant)
+  Lurker.bear(inst.lurker, ridesLurker(inst))
+  Pads.bear(inst.pads, ridesPads(inst))
+  Pads.onUpdate(inst.pads)
+  Lurker.onUpdate(inst.lurker, ctx)
+}
+//
+// The lurker caught something: a runner is gone (for a while); the hero
+// is eaten — gone at once, a lake death (he comes back by the lantern
+// once it has swallowed him).
+//
+function onLurkerSeize(inst, prey) {
+  if (prey.runner) {
+    Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+    return
+  }
+  const hero = inst.heroInst
+  const char = hero.character
+  inst.drown = null
+  inst.dead = true
+  inst.deathX = char.pos.x
+  inst.deathY = char.pos.y
+  inst.lakeDeath = true
+  inst.respawnAt = Infinity
+  hero.controllable = false
+  hero.isDying = true
+  char.exists() && inst.k.destroy(char)
+  hero.character = null
+  releaseGamePhysicalKeys()
+  inst.k.shake(DEATH_SHAKE)
+}
+//
+// It has eaten what it caught: the hero's fireflies burst out of its jaws
+// and he comes back soon after.
+//
+function onLurkerSwallow(inst, prey, at) {
+  if (prey.runner) return
+  CaveSound.playSparkBurst(inst.caveSound)
+  Fireflies.burst(inst.fireflies, at.x, at.y, DEATH_BURST_COUNT)
+  inst.deathX = at.x
+  inst.deathY = at.y
+  inst.respawnAt = inst.k.time() + EATEN_RESPAWN
+}
+//
+// Whether the hero stands on the lurker's jaws (on the step laid along
+// their top).
+//
+function ridesLurker(inst) {
+  const char = inst.heroInst?.character
+  return Boolean(char?.exists?.()) && inst.stepPlatform === Lurker.topLine(inst.lurker) && char.curPlatform?.() === inst.step
+}
+//
+// Whether the hero stands on the pad plant's leaves.
+//
+function ridesPads(inst) {
+  const char = inst.heroInst?.character
+  return Boolean(char?.exists?.()) && inst.stepPlatform === Pads.crownLine(inst.pads) && char.curPlatform?.() === inst.step
+}
+//
+// The strider the hero stands on (on the step laid along its back), or
+// null.
+//
+function ridesStrider(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.exists?.() || char.curPlatform?.() !== inst.step) return null
+  return inst.striders.find(strider => inst.stepPlatform === Strider.line(strider)) ?? null
+}
+//
+// The lurker: all of it behind the soil and under the water's paint
+// (its head too while that is under the water); once its head is out, its
+// head and what of its neck is out of the water again in front of
+// everything on the bank (it never goes behind the bank, its plants or its
+// stones; the water's line stays over its neck) — but behind the bank's
+// plants while it pounces on a runner among them (as the runner is), and
+// under the hero standing on its head.
+//
+function lurkerLayer(inst) {
+  if (!Lurker.isOut(inst.lurker)) return Z_LURKER
+  if (Lurker.amongPlants(inst.lurker)) return Z_LURKER_PLANTS
+  return ridesLurker(inst) ? Z_LURKER_OUT : Z_LURKER_TOP
+}
+function drawLurker(inst, over) {
+  Lurker.onDraw(inst.lurker, View.worldRect(inst.view), (prey, at, angle, size) => (prey.runner ? Runner.drawHeld(prey.runner, at, angle, size) : drawEatenHero(inst, at, angle)), over)
+}
+//
+// The hero stuck in the lurker's jaws: his calm closed-eyes picture on his
+// dangling legs, turned with its head.
+//
+function drawEatenHero(inst, at, angle) {
+  const k = inst.k
+  const hero = inst.heroInst
+  const sprite = hero && `${hero.spritePrefix}_closed`
+  if (!sprite || !k.getSprite(sprite)) return
+  inst.eatenLegs ??= Hero.createStandLegs(k)
+  k.pushTransform()
+  k.pushTranslate(k.vec2(at.x, at.y))
+  k.pushRotate(angle)
+  Hero.drawStandingHero(k, inst.eatenLegs, { x: 0, y: 0, sprite, groundY: null })
+  k.popTransform()
+}
+//
+// Its head broke the surface (bursting out, or dragging the hero under):
+// a slosh, and everything in the water and on it near there startles.
+//
+function onLurkerSplash(inst, x) {
+  const focus = heroFocus(inst)
+  CaveSound.playSlosh(inst.caveSound, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  inst.striders.forEach(strider => Strider.startle(strider, x))
+  inst.fish.forEach(fish => Fish.startle(fish, x))
+}
+//
+// Now and then a runner runs out onto the lake's left bank.
+//
+function sendVisitor(inst) {
+  const hero = heroPos(inst)
+  const onBank = Boolean(hero) && hero.x < Layout.BANK_TIP_X && hero.y < Layout.LAKE_SURFACE_Y
+  inst.visitIn -= inst.k.dt() * (onBank ? 1 : VISIT_AWAY_RATE)
+  if (inst.visitIn > 0) return
+  inst.visitIn = VISIT_EVERY + Math.random() * VISIT_EVERY_RANGE
+  const x = Layout.BANK_TIP_X - VISIT_IN - Math.random() * VISIT_IN_RANGE
+  const spot = { x, y: Ground.topAt(Layout.lakeFloor(), x) }
+  const about = inst.runners.filter(Runner.isAbout)
+  if (about.some(runner => Runner.sendTo(runner, spot))) return
+  const view = View.worldRect(inst.view)
+  const away = about.find(r => r.pos.x < view.left || r.pos.x > view.right || r.pos.y < view.top || r.pos.y > view.bottom)
+  away && Runner.comeFrom(away, ENTRY_SPOT, spot)
+}
+//
+// A drop from the lurker's mouth falling into the water: a soft plop,
+// quieter than a fish's (LURKER_DRIP of its splash).
+//
+function onLurkerDrip(inst, x) {
+  const focus = heroFocus(inst)
+  CaveSound.playFishSplash(inst.caveSound, LURKER_DRIP, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+}
+//
+// The trumpeter caught a leaping fish: it is gone (to swim back in later),
+// with a soft gulp of water.
+//
+function onTrumpetCatch(inst, fish) {
+  Fish.eat(fish)
+  onFishSplash(inst, inst.trumpet.x, TRUMPET_GULP)
+}
+//
+// The hero dropped into the trumpeter's open funnel: controls off, no
+// gravity, his own picture hidden (it draws him in its funnel, his lower
+// half in it); he goes where it holds him.
+//
+function grabByTrumpet(inst, char) {
+  const hero = inst.heroInst
+  const fall = char.vel.y
+  hero.controlsDisabled = true
+  hero.isSubmerging = true
+  char.gravityScale = 0
+  char.vel.x = 0
+  char.vel.y = 0
+  inst.inTrumpet = true
+  releaseGamePhysicalKeys()
+  Trumpet.grab(inst.trumpet, char.pos.y, fall)
+  holdInTrumpet(inst)
+  onFishSplash(inst, inst.trumpet.x, TRUMPET_GULP)
+}
+function holdInTrumpet(inst) {
+  const at = Trumpet.heldPoint(inst.trumpet)
+  inst.heroInst.drownSinkX = at.x
+  inst.heroInst.drownSinkY = at.y
+}
+//
+// Spat out (with a slosh): his own picture back, thrown in an arc onto
+// the right bank, no control till he lands there.
+//
+function spitHero(inst, at) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.exists?.()) return
+  CaveSound.playSlosh(inst.caveSound, SPIT_LOUD)
+  inst.inTrumpet = false
+  inst.spat = true
+  hero.isSubmerging = false
+  hero.drownSinkX = null
+  hero.drownSinkY = null
+  hero.direction = 1
+  char.hidden = false
+  char.moveTo(at.x, at.y)
+  char.gravityScale = 1
+  const v = spitThrow(at)
+  char.vel.x = v.x
+  char.vel.y = v.y
+  inst.prevBottom = at.y + Layout.HERO_FEET_DY
+  inst.lastFeet = null
+}
+//
+// The throw from `at` that lands his feet SPIT_LAND_DX px past the right
+// bank's tip, over an arc SPIT_ARC px high.
+//
+function spitThrow(at) {
+  const x = Layout.BANK_TIP_X2 + SPIT_LAND_DX
+  const hit = Ground.walkUnder(x, at.y - SPIT_SEARCH, at.y + SPIT_SEARCH)
+  const y = (hit ? hit.y : at.y) - Layout.HERO_FEET_DY
+  const g = CFG.game.gravity
+  const apex = Math.min(at.y, y) - SPIT_ARC
+  const up = Math.sqrt(2 * g * (at.y - apex))
+  const time = up / g + Math.sqrt(2 * (y - apex) / g)
+  return { x: (x - at.x) / time, y: -up }
+}
+//
+// Landed after a spit: his slide stopped, his controls back.
+//
+function settleSpit(inst, char) {
+  if (!char.isGrounded()) return
+  char.vel.x = 0
+  inst.heroInst.controlsDisabled = false
+  inst.spat = false
 }
 function drawRunners(inst) {
   const view = View.worldRect(inst.view)
@@ -697,11 +1043,12 @@ function updateLakeLife(inst) {
   Swarm.forEachFlying(inst.swarm, fly => ctx.swarmPrey.push(fly))
   ctx.swarmPrey.forEach(fly => ctx.prey.push(fly))
   ctx.swarm = Swarm.center(inst.swarm)
-  Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x), lure: lureOf(inst), hero: inst.dead ? null : char })
+  Giant.onUpdate(inst.giant, { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: (exhale, x) => onGiantBreath(inst, exhale, x) })
   ctx.threats.length = 0
   inst.drown && hero && ctx.threats.push(hero)
   ctx.giant = Giant.bodyLine(inst.giant)
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
+  Trumpet.onUpdate(inst.trumpet, inst.trumpetCtx)
   const fears = inst.striderFears
   fears.length = 0
   hero && fears.push(hero)
@@ -713,6 +1060,11 @@ function updateLakeLife(inst) {
     head && fears.push(head)
   })
   Giant.fearPoints(inst.giant).forEach(p => fears.push(p))
+  const lurker = Lurker.surfacePoint(inst.lurker)
+  lurker && fears.push(lurker)
+  const ridden = ridesStrider(inst)
+  inst.striders.forEach(strider => Strider.bear(strider, strider === ridden ? inst.heroInst.direction || 1 : 0))
+  StriderBridge.onUpdate(inst.bridge, ridden)
   inst.striders.forEach(strider => Strider.onUpdate(strider, fears, inst.striders))
 }
 //
@@ -722,14 +1074,6 @@ function updateLakeLife(inst) {
 //
 function onFishCatch(inst, prey) {
   inst.swarm.flies.includes(prey) ? Swarm.dodge(inst.swarm, prey) : Fireflies.eat(inst.fireflies, prey, inst.lakeSky)
-}
-//
-// Where the fish gather under the swarm's fireflies over the water (if enough
-// of them do), luring the giant.
-//
-function lureOf(inst) {
-  const swarm = inst.fishCtx.swarm
-  return swarm && inst.fish.filter(fish => Fish.feedsAt(fish, swarm.x, LURE_GATHER)).length >= LURE_FISH ? swarm : null
 }
 function onGiantBreath(inst, exhale, x) {
   const focus = heroFocus(inst)
@@ -761,6 +1105,8 @@ function drawFish(inst) {
 function drawLakeSurface(inst) {
   const view = View.worldRect(inst.view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  Pads.onDrawCrown(inst.pads, view)
+  Lurker.onDrawSplash(inst.lurker)
   Giant.onDrawMist(inst.giant)
   inst.striders.forEach(strider => Strider.onDrawWater(strider, view))
   inst.striders.forEach(strider => Strider.onDraw(strider, view))

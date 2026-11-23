@@ -4,8 +4,7 @@ import { createSeededRandom } from '../../../utils/seeded-random.js'
 // tunnel the forest eye-flower's roots tore through the thick ceiling by
 // the left wall, onto the lake's left bank — a lantern mushroom left of
 // where he lands. The lake hall: a wide, deep lake between two low banks
-// (BANK_Y, a little over the water: the way across is on the giant's back
-// as it breathes); past the right bank a shaft drops by the right wall,
+// (BANK_Y, a little over the water); past the right bank a shaft drops by the right wall,
 // stone steps zigzagging down it into a passage that runs under the lake
 // hall to the left wall, where the stalk-eye stands.
 //
@@ -59,13 +58,28 @@ const ENTRY_FINE_SEED = 7.9
 // under the banks' top; the floor dips into a deep bowl under it (about
 // 255 px under the surface, the soil under it thick), deep enough to
 // drown in.
-// Its left bank is just wide enough to catch a hero dropping straight
-// through the gap above, then slopes gently down into the water (meeting
-// the surface at LAKE_X1).
+// Its left bank runs on far out into the lake past where the hero drops
+// in, sloping gently down to a wide flat edge (its tip at BANK_TIP_X),
+// its face dropping into the water; the right bank
+// (its tip at BANK_TIP_X2) the same the other way round. Under the water
+// each bank is hollowed out in a concave arc (BANK_HOLLOW_L / _R: an
+// ellipse's half on the bank's side — its middle, half width and half
+// height, `side` -1 for the left bank's —; its top HOLLOW_UNDER px under
+// the surface, so the surface meets the bank's face over the bend, at
+// LAKE_X1 and LAKE_X2), the lake's bed running on from its bottom (the
+// bank's top drops from its `tip` straight to `floor`, the bed's first
+// knot: that drop lies inside the hollow, cut away with it; where the
+// bank's face comes down to the hollow's top the corner is rounded off).
 //
-export const LAKE_X1 = 530
-export const LAKE_X2 = 2120
 export const LAKE_SURFACE_Y = 860
+const HOLLOW_UNDER = 12
+export const LAKE_X1 = 904
+export const LAKE_X2 = 2076
+export const BANK_TIP_X = 900
+export const BANK_TIP_X2 = 2080
+const BANK_TIP_Y = 822
+export const BANK_HOLLOW_L = { x: 890, y: LAKE_SURFACE_Y + HOLLOW_UNDER + 96, rx: 170, ry: 96, side: -1, tip: { x: BANK_TIP_X, y: BANK_TIP_Y }, floor: { x: BANK_TIP_X + 16, y: 1068 } }
+export const BANK_HOLLOW_R = { x: 2090, y: LAKE_SURFACE_Y + HOLLOW_UNDER + 60, rx: 110, ry: 60, side: 1, tip: { x: BANK_TIP_X2, y: BANK_TIP_Y }, floor: { x: BANK_TIP_X2 - 16, y: 996 } }
 //
 // Hero feet sit this far below the character anchor.
 //
@@ -88,8 +102,9 @@ const K = PLATFORM_KIND
 // ledge may give `bottom` (its underside's line, else a fixed thickness),
 // `joinR` (its right end runs on into the mass next to it), `faceTo` (its
 // free left end shows a face only down to that Y; below it the ledge runs
-// on into the mass next to it) and `under` (its underside continues that
-// platform's). A float is `w` px wide, centred on `x`, its flat top at
+// on into the mass next to it), `under` (its underside continues that
+// platform's) and `hollows` (hollows cut into it under its top, see
+// BANK_HOLLOW_L). A float is `w` px wide, centred on `x`, its flat top at
 // `y`, cut from piece `piece` of platforms.png.
 // Floats step within a run-jump of each other (reach ≈ 147 px, rise
 // ≈ 100 px) down the shaft, zigzagging between two columns of floats.
@@ -107,6 +122,13 @@ const SHAFT_X1 = 2500
 // wall's ragged face), each float nudged a little off its column.
 //
 const SHAFT_L_IN = 40
+//
+// A small platform hangs just right of the dry mushroom, low enough for the
+// hero to jump onto from the bank and high enough for a runner to run
+// under it.
+//
+const PERCH_X = 410
+const PERCH_Y = 688
 const SHAFT_R_IN = 132
 export const PLATFORMS = [
   {
@@ -114,12 +136,14 @@ export const PLATFORMS = [
     x1: 0,
     x2: SHAFT_X1,
     y: BANK_Y,
-    top: [[0, BANK_Y], [LAKE_X1 - 135, BANK_Y], [LAKE_X1 - 65, 812], [LAKE_X1 + 5, 862], [LAKE_X1 + 75, 918], [680, 975], [770, 1035], [880, 1085], [1000, 1117], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [LAKE_X2 - 70, 1072], [LAKE_X2 - 35, 985], [LAKE_X2 - 5, 880], [LAKE_X2 + 45, BANK_Y], [SHAFT_X1, BANK_Y]],
+    top: [[0, BANK_Y], [395, BANK_Y], [470, 800], [520, 814], [700, 818], [820, 820], [BANK_TIP_X, BANK_TIP_Y], [BANK_HOLLOW_L.floor.x, BANK_HOLLOW_L.floor.y], [1010, 1100], [1100, 1117], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [2025, 1060], [BANK_HOLLOW_R.floor.x, BANK_HOLLOW_R.floor.y], [BANK_TIP_X2, BANK_TIP_Y], [2140, 802], [2185, BANK_Y], [SHAFT_X1, BANK_Y]],
     bottom: PASSAGE_TOP_Y,
+    hollows: [BANK_HOLLOW_L, BANK_HOLLOW_R],
     kind: K.LEDGE,
     seed: 31
   },
   { id: 'passage', x1: 0, x2: WORLD_W, y: PASSAGE_FLOOR_Y, top: [[0, PASSAGE_FLOOR_Y], [420, PASSAGE_FLOOR_Y - 8], [820, PASSAGE_FLOOR_Y + 4], [1240, PASSAGE_FLOOR_Y - 6], [1640, PASSAGE_FLOOR_Y + 2], [WORLD_W, PASSAGE_FLOOR_Y - 4]], kind: K.GROUND, seed: 59 },
+  { id: 'perch', x: PERCH_X, y: PERCH_Y, w: 56, piece: 'float4', kind: K.FLOAT, seed: 64 },
   { id: 'shaft5', x: shaftR(0), y: 805, w: 60, piece: 'float8', kind: K.FLOAT, seed: 65 },
   { id: 'shaft6', x: shaftL(5), y: 880, w: 60, piece: 'float15', kind: K.FLOAT, seed: 66 },
   { id: 'shaft7', x: shaftR(12), y: 960, w: 55, piece: 'float1', kind: K.FLOAT, seed: 67 },
@@ -202,6 +226,17 @@ const NOISE_OCTAVES = [
   { len: 41, weight: 0.3, seedMul: 2.3 },
   { len: 13, weight: 0.15, seedMul: 5.1 }
 ]
+//
+// A hollow's arc is traced in HOLLOW_STEPS points; its outline closes
+// HOLLOW_OPEN px out past its floor's knot (into the open water); the
+// face's corner over it is rounded HOLLOW_CORNER px round (CORNER_STEPS
+// points).
+//
+const HOLLOW_STEPS = 32
+const HOLLOW_OPEN = 40
+const HOLLOW_CORNER = 14
+const CORNER_STEPS = 8
+const HALF = 0.5
 let ceilingBulges = null
 
 /**
@@ -273,6 +308,88 @@ export function topAt(p, x) {
   const [bx, by] = knots[Math.min(i, knots.length - 1)]
   const u = bx === ax ? 0 : Math.max(0, Math.min(1, (x - ax) / (bx - ax)))
   return ay + (by - ay) * u
+}
+
+/**
+ * The outline of a platform's hollow (see BANK_HOLLOW_L): the ellipse's
+ * half on its bank's side, `shrink` px inside it, then out past its open
+ * edge and down to its floor on the bed (closing round the soil the hollow
+ * opens through).
+ * @param {Object} hollow - BANK_HOLLOW_L or BANK_HOLLOW_R
+ * @param {number} [shrink=0] - Px in from the outline
+ * @returns {Array<{x: number, y: number}>} Closed outline
+ */
+export function hollowOutline(hollow, shrink = 0) {
+  const pts = hollowArc(hollow, shrink)
+  const corner = roundCorner(hollow)
+  const open = { x: hollow.floor.x - hollow.side * HOLLOW_OPEN, y: corner[corner.length - 1].y }
+  const floor = { x: hollow.floor.x, y: hollow.floor.y - shrink }
+  return hollow.side < 0 ? [...pts, ...corner, open, floor] : [...corner.reverse(), ...pts, floor, open]
+}
+
+/**
+ * The hollow's arc round its back between its top and its bottom, run so
+ * the soil lies on its left (as a ragged edge's chain runs: the left
+ * bank's from the bottom up, the right bank's from the top down), `shrink`
+ * px inside.
+ * @param {Object} hollow - BANK_HOLLOW_L or BANK_HOLLOW_R
+ * @param {number} [shrink=0] - Px in from the outline
+ * @returns {Array<{x: number, y: number}>}
+ */
+export function hollowArc(hollow, shrink = 0) {
+  const pts = []
+  const from = hollow.side < 0 ? Math.PI * HALF : -Math.PI * HALF
+  for (let i = 0; i <= HOLLOW_STEPS; i++) {
+    const t = from + Math.PI * i / HOLLOW_STEPS
+    pts.push({ x: hollow.x + Math.cos(t) * (hollow.rx - shrink), y: hollow.y + Math.sin(t) * (hollow.ry - shrink) })
+  }
+  return pts
+}
+
+//
+// The bank's face meets the hollow's top in a corner: rounded off by a
+// quarter circle HOLLOW_CORNER px round (its points from the hollow's top
+// round to the face, the soil inside it kept).
+//
+function roundCorner(hollow) {
+  const top = hollow.y - hollow.ry
+  const faceX = hollowCorner(hollow).x
+  const cx = faceX + hollow.side * HOLLOW_CORNER
+  const cy = top - HOLLOW_CORNER
+  const pts = []
+  for (let i = 0; i <= CORNER_STEPS; i++) {
+    const a = Math.PI * HALF * (1 - i / CORNER_STEPS)
+    pts.push({ x: cx - hollow.side * Math.cos(a) * HOLLOW_CORNER, y: cy + Math.sin(a) * HOLLOW_CORNER })
+  }
+  return pts
+}
+
+/**
+ * Where a bank's face comes down to its hollow's top (the corner over the
+ * hollow's mouth, before it is rounded off).
+ * @param {Object} hollow - BANK_HOLLOW_L or BANK_HOLLOW_R
+ * @returns {{x: number, y: number}}
+ */
+export function hollowCorner(hollow) {
+  const top = hollow.y - hollow.ry
+  const t = (top - hollow.tip.y) / (hollow.floor.y - hollow.tip.y)
+  return { x: hollow.tip.x + (hollow.floor.x - hollow.tip.x) * t, y: top }
+}
+
+/**
+ * Whether a point lies in one of the banks' hollows (or within `margin` px
+ * round it).
+ * @param {number} x - World X
+ * @param {number} y - World Y
+ * @param {number} [margin=0] - Px round it
+ * @returns {boolean}
+ */
+export function inHollow(x, y, margin = 0) {
+  return [BANK_HOLLOW_L, BANK_HOLLOW_R].some(h => {
+    const hx = (x - h.x) / (h.rx + margin)
+    const hy = (y - h.y) / (h.ry + margin)
+    return hx * hx + hy * hy < 1
+  })
 }
 
 /**

@@ -31,9 +31,8 @@ import * as Layout from '../utils/cave-layout.js'
 // fireflies start out from its middle a little (STARTLE_SPEED), each its
 // own way, and gather again on their springs — the swarm keeps its loose,
 // round, every-which-way shape all the while; it never flattens. A hero
-// standing still they let be (they may fly through him) — but for
-// one driving them (from the giant's nose), who moves them on even when
-// he stands. A hero jumping onto it — in the air over its middle and no
+// standing still they let be (they may fly through him). A hero jumping
+// onto it — in the air over its middle and no
 // longer rising, however fast he runs — does not send it diving: it
 // scatters and sinks slowly to the lake's left edge (see SCATTER_*).
 // There it stays; once the hero has let it be for REST_TIME s (counted
@@ -259,7 +258,6 @@ export function create(cfg) {
     avoidIn: 0,
     fleeing: false,
     fleeSpeed: HOVER_SPEED,
-    driven: false,
     sinking: false,
     path: [],
     scatterT: null,
@@ -305,21 +303,18 @@ export function release(inst, nest) {
  * @param {Object} inst - Swarm instance
  * @param {{x: number, y: number}|null} heroPos - The hero's centre (null: none)
  * @param {boolean} [airborne=false] - The hero is in the air (jumping or falling)
- * @param {number} [scareR=SCARE_R] - How near him it shies away (farther when he drives it from the giant's nose)
- * @param {boolean} [driven=false] - He drives it (from the giant's nose): it moves on even while he stands
  */
-export function onUpdate(inst, heroPos, airborne = false, scareR = SCARE_R, driven = false) {
+export function onUpdate(inst, heroPos, airborne = false) {
   if (inst.state === STATE.IDLE) return
   const dt = inst.k.dt()
   inst.t += dt
   trackHero(inst, heroPos, dt)
-  inst.driven = driven
   inst.fearIn -= dt
   inst.avoidIn -= dt
   inst.scatterT !== null && (inst.scatterT += dt) >= SCATTER_TIME + REGROUP_TIME && (inst.scatterT = null)
   const ready = Boolean(heroPos) && inst.fearIn <= 0
   ready && !inst.sinking && airborne && jumpedOn(inst, heroPos) && scatterDown(inst)
-  ready && !inst.sinking && inst.avoidIn <= 0 && near(inst.center, heroPos, scareR) && shyAway(inst, heroPos)
+  ready && !inst.sinking && inst.avoidIn <= 0 && near(inst.center, heroPos, SCARE_R) && shyAway(inst, heroPos)
   updateState(inst, dt)
   updateCeiling(inst)
   const cx = inst.center.x
@@ -451,7 +446,7 @@ function jumpedOn(inst, heroPos) {
   return near(inst.center, heroPos, JUMP_R) && heroPos.y < inst.center.y - JUMP_ABOVE && inst.heroVel.y > -HERO_MOVING
 }
 //
-// The hero close and closing in (or driving it): the middle aims on away
+// The hero close and closing in: the middle aims on away
 // from him — along his way and off him — as far as the air is open that
 // way or the nearest open way round it, as fast as it must to keep ahead.
 //
@@ -460,7 +455,7 @@ function shyAway(inst, heroPos) {
   const dx = inst.center.x - heroPos.x
   const off = unit(dx, inst.center.y - heroPos.y)
   const closing = Math.max(v.x * off.x + v.y * off.y, Math.abs(dx) < OVERHEAD_DX ? Math.abs(v.x) : v.x * Math.sign(dx))
-  if (closing < HERO_MOVING && !inst.driven) return
+  if (closing < HERO_MOVING) return
   inst.avoidIn = AVOID_GAP
   const away = awayWay(v, off, heroPos.y > inst.center.y)
   let best = null

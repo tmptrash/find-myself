@@ -48,7 +48,19 @@ const ALPHA_OFFSET = 3
 // A respawn keeps the hero this far from the ends of the line.
 //
 const STAND_EDGE_PAD = 28
+//
+// The lake's water, column by column (waterColumns): sought WATER_REACH
+// px past the lake's ends and down to WATER_DEEP px under its surface; a
+// column's water is its first open run under the surface at least
+// WATER_MIN_RUN px tall (a speck in a ragged rim, or the sliver under a
+// bank's sloping face over its hollow, is none) down to the soil.
+//
+const WATER_REACH = 220
+const WATER_DEEP = 320
+const WATER_MIN_RUN = 8
 const lines = new Map()
+let water = null
+let moving = []
 
 /**
  * A ray straight down onto the platforms: the highest point of any platform's
@@ -61,15 +73,28 @@ const lines = new Map()
  */
 export function raycast(x, fromY, depth) {
   let best = null
-  Layout.PLATFORMS.forEach(p => {
-    const line = lineOf(p)
-    for (let c = Math.round(x) - FOOT_SUPPORT_HALF; c <= Math.round(x) + FOOT_SUPPORT_HALF; c++) {
-      const y = line.raw[c - line.x0]
-      if (y === undefined || Number.isNaN(y) || y < fromY || y > fromY + depth) continue
-      best = best === null ? y : Math.min(best, y)
-    }
-  })
+  for (let c = Math.round(x) - FOOT_SUPPORT_HALF; c <= Math.round(x) + FOOT_SUPPORT_HALF; c++) {
+    Layout.PLATFORMS.forEach(p => {
+      const line = lineOf(p)
+      best = higher(best, line.raw[c - line.x0], fromY, depth)
+    })
+    moving.forEach(line => { best = higher(best, line.at(c), fromY, depth) })
+  }
   return best
+}
+
+/**
+ * The surfaces that are no platform's art: lines laid along the top of
+ * something that moves or floats (the lurker's jaws, the pad plant's
+ * leaves), each `{ moving: true, id, span(): {x1, x2}|null (null: not
+ * there now), at(x): its top's Y at X (null off it) }` — walked and stood
+ * on like the platforms' lines (the hero's feet rayed onto their own top,
+ * his body on their highest point under his soles). Replaces the last set
+ * (one level's).
+ * @param {Array<Object>} list - The lines
+ */
+export function setMovingLines(list) {
+  moving = list
 }
 
 /**
@@ -90,6 +115,12 @@ export function walkUnder(x, fromY, toY) {
     if (y === undefined || Number.isNaN(y) || y < fromY || y > toY || (best && y >= best.y)) return
     best = { platform: p, y, x1: line.x1, x2: line.x2 }
   })
+  moving.forEach(line => {
+    const span = line.span()
+    const y = span && walkOnMoving(line, x)
+    if (!span || y === null || y < fromY || y > toY || (best && y >= best.y)) return
+    best = { platform: line, y, x1: span.x1, x2: span.x2 }
+  })
   return best
 }
 
@@ -100,6 +131,7 @@ export function walkUnder(x, fromY, toY) {
  * @returns {number|null}
  */
 export function walkOn(p, x) {
+  if (p.moving) return walkOnMoving(p, x)
   const line = lineOf(p)
   const y = line.walk[Math.round(x) - line.walkX0]
   return y === undefined || Number.isNaN(y) ? null : y
@@ -118,6 +150,17 @@ export function topAt(p, x) {
 }
 
 /**
+ * The lake's water column by column, scanned off the lake floor's art once
+ * per page: where it starts (the surface, or a hollow's soil ceiling under
+ * it) and the soil under it (its bed); NaN where a column has none.
+ * @returns {{x0: number, tops: Float32Array, beds: Float32Array}}
+ */
+export function waterColumns() {
+  water ??= scanWater(Platform.layerOf(Layout.lakeFloor()))
+  return water
+}
+
+/**
  * Respawn pose standing on a platform, kept clear of its ends and the
  * walls, his body on its walking line.
  * @param {Object} p - PLATFORMS entry
@@ -131,6 +174,28 @@ export function standPoseOn(p, x) {
   const sx = Math.round(Math.max(minX, Math.min(maxX, x)))
   const y = line.walk[sx - line.walkX0]
   return { x: sx, y: (Number.isNaN(y) ? topAt(p, sx) : y) - Layout.HERO_FEET_DY }
+}
+//
+// The higher of a best point so far and y, y counted only within the ray
+// (fromY .. fromY + depth).
+//
+function higher(best, y, fromY, depth) {
+  if (y === undefined || y === null || Number.isNaN(y) || y < fromY || y > fromY + depth) return best
+  return best === null ? y : Math.min(best, y)
+}
+//
+// A moving line's walking height at X: the highest point of it under the
+// hero's soles (WALK_HALF_W either side); null off it.
+//
+function walkOnMoving(line, x) {
+  const span = line.span()
+  if (!span || x < span.x1 - EDGE_REACH || x > span.x2 + EDGE_REACH) return null
+  let best = null
+  for (let d = -WALK_HALF_W; d <= WALK_HALF_W; d += FOOT_SUPPORT_HALF) {
+    const y = line.at(x + d)
+    y !== null && (best = best === null ? y : Math.min(best, y))
+  }
+  return best
 }
 //
 // A platform's line, scanned once per page: the raw top, then its
@@ -165,6 +230,37 @@ function scanLayer(layer) {
     }
   }
   return { x0: layer.x, tops }
+}
+//
+// Each column's first open run under the surface (WATER_MIN_RUN px or
+// more) and the soil it stands on.
+//
+function scanWater(layer) {
+  const { width: w, height: h } = layer.canvas
+  const x0 = Layout.LAKE_X1 - WATER_REACH
+  const n = Layout.LAKE_X2 - Layout.LAKE_X1 + WATER_REACH * 2
+  const from = Math.max(0, Math.round(Layout.LAKE_SURFACE_Y - layer.y))
+  const to = Math.min(h, from + WATER_DEEP)
+  const data = layer.ctx.getImageData(0, 0, w, h).data
+  const tops = new Float32Array(n).fill(NaN)
+  const beds = new Float32Array(n).fill(NaN)
+  const solid = (c, y) => c < 0 || c >= w || data[(y * w + c) * RGBA + ALPHA_OFFSET] >= SOLID_ALPHA
+  for (let i = 0; i < n; i++) {
+    const c = x0 + i - layer.x
+    for (let y = from; y < to; y++) {
+      if (solid(c, y)) continue
+      let end = y
+      while (end < h && !solid(c, end)) end++
+      if (end - y < WATER_MIN_RUN && end < to) {
+        y = end
+        continue
+      }
+      tops[i] = layer.y + y
+      beds[i] = layer.y + end
+      break
+    }
+  }
+  return { x0, tops, beds }
 }
 //
 // Only the platform's own span is walked: art past its ends (a ledge's

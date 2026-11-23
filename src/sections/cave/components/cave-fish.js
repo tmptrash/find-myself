@@ -63,7 +63,12 @@ const MESH_JOINTS = Array.from({ length: SEGMENTS + 1 }, (_, i) => ({ x: A.bodyX
 // fleeing; how fast it speeds up or slows; how fast it turns (faster
 // hunting or fleeing); the most it climbs or dives while swimming (sine
 // of the pitch); the side beat (amplitude rad, beats per s at rest and per
-// px/s) and the small up-and-down beat beside it.
+// px/s) and the small up-and-down beat beside it. It never turns on the
+// spot: its turn is an arc at least TURN_R of its body's length round (so
+// the slower it swims the slower it turns, and hanging still it hardly
+// turns at all), and a target inside the circle it would turn on (too near
+// at its side or behind) it swims on past till it can come round to it —
+// it never circles a spot it cannot reach.
 //
 const CRUISE_SPEED = 26
 const CRUISE_SPEED_RANGE = 18
@@ -79,6 +84,8 @@ const BEAT_HZ = 1.2
 const BEAT_HZ_PER_SPEED = 0.035
 const BEAT_VERT = 0.05
 const HOVER_BEAT = 0.25
+const TURN_R = 0.5
+const TINY = 1e-3
 //
 // Roaming: a new spot within ROAM_REACH px (and anywhere in z, ROAM_BED px
 // or more over the bed) on getting within ROAM_ARRIVE px or after
@@ -148,13 +155,16 @@ const SAND_LIFE = 10
 // MIN_DEPTH px deep or more.
 //
 const TOP_PAD = 26
+const BOUND_EASE = 80
 const BED_PAD = 14
 const MIN_DEPTH = 60
 //
 // Hunting: a firefly over the water from HUNT_LOW to HUNT_HIGH px over the
 // surface, within HUNT_SEE px along the lake; the fish comes up
-// LAUNCH_BACK px short of under it, APPROACH_DEPTH px under the surface,
-// and leaps from within LAUNCH_X px of that spot (LAUNCH_Z in z). The
+// LAUNCH_BACK px short of under it, APPROACH_DEPTH px under the surface
+// (never over HUNT_TOP px under it), and leaps once within LAUNCH_X px of
+// the firefly along the lake, LAUNCH_Y px of that depth and LAUNCH_Z in z
+// (a narrower window kept it circling the spot at the surface). The
 // leap: gravity GRAVITY, aimed OVERSHOOT px over the firefly, at most
 // LEAP_VX px/s along. It gives up after HUNT_GIVE_UP s or once the
 // firefly has been gone LOSE_TIME s; between hunts it rests
@@ -176,7 +186,33 @@ const MIN_DEPTH = 60
 const FRENZY_REACH = 80
 const FRENZY_HIGH = 160
 const FRENZY_SPREAD = 50
-const FRENZY_SPEED = 240
+const FRENZY_SPEED = 150
+//
+// Coming up to its spot under the prey (or under the swarm) it slows down
+// within SLOW_R px of it, to NEAR_SHARE of its pace there (at full pace it
+// circled round the spot at the surface, its turn too wide to reach it;
+// much slower and it crept and jerked). It keeps the side of the prey it
+// came up on (huntSide) for the whole hunt. Under the swarm, at its spot
+// (within GATHER_ARRIVE px along the lake — not in depth too: it circled
+// it, never quite there), it swims on to the next one GATHER_STEP..+RANGE px
+// ahead the way it swims (turning back at the end of its FRENZY_SPREAD).
+//
+const SLOW_R = 170
+const NEAR_SHARE = 0.45
+const GATHER_STEP = 35
+const GATHER_ARRIVE = 20
+//
+// Its spot under a firefly or the swarm follows them eased (TRACK_RATE per
+// s), never jumping when they dart about: its way stays an arc.
+//
+const TRACK_RATE = 3
+const GATHER_STEP_RANGE = 30
+//
+// It leaps only where the water's line shows (the lake's open surface,
+// OPEN_PAD px in from its ends), at a firefly over it, and never so far
+// along that it would come down past it.
+//
+const OPEN_PAD = 24
 const GATHER_DEPTH = 8
 const GATHER_Z = 10
 const FRENZY_COOLDOWN = 0.3
@@ -189,9 +225,10 @@ const HUNT_HIGH = 120
 const HUNT_SEE = 420
 const LAUNCH_BACK = 18
 const APPROACH_DEPTH = 14
-const LAUNCH_X = 22
-const LAUNCH_Y = 10
-const LAUNCH_Z = 12
+const LAUNCH_X = 70
+const LAUNCH_Y = 20
+const HUNT_TOP = 4
+const LAUNCH_Z = Z_MAX + 1
 const GRAVITY = 1100
 const OVERSHOOT = 14
 const LEAP_VX = 260
@@ -218,10 +255,12 @@ const MOUTH_EASE = 14
 // giant's): within GIANT_LOOK px of the giant's outline it flees over or
 // under it (the side it is on, or the other if there is no water that
 // way), aiming GIANT_PASS px clear of the outline, FLEE_REACH px on the
-// way it heads; and no point of its spine comes nearer the outline than
-// its own half height (BODY_HALF of its length) and GIANT_PAD px — pushed
-// out square from the giant's spine (only the fish the giant is chasing
-// or holds is let in).
+// way it heads (the other way if the lake's end leaves it less than half
+// of that: cornered there it would only push against the giant); and no point of its spine comes nearer the outline than
+// its own half height (BODY_HALF of its length) and GIANT_PAD px — it
+// steers its head off the outline and swims round it head first, on the
+// side it came from; with no room there it passes in front of the giant
+// (only the fish the giant is chasing or holds is let in).
 //
 const ENTRY_KEEP = 0.45
 const DIVE_TIME = 0.8
@@ -230,6 +269,8 @@ const FLEE_R = 160
 const GIANT_LOOK = 50
 const GIANT_PASS = 16
 const GIANT_PAD = 4
+const GIANT_STEER_PAD = 10
+const GIANT_STEER_Z = 0.3
 const BODY_HALF = 0.23
 const STARTLE_R = 420
 const FLEE_TIME = 1.6
@@ -303,7 +344,7 @@ const CULL_MARGIN = 60
 // giant's prey (an eaten one swims back in later, see comeBack).
 //
 const SCHOOL = [
-  { type: 'round', count: 2, size: 1.15, range: 0.2 },
+  { type: 'round', count: 2, size: 1, range: 0.15 },
   { type: 'slim', count: 2, size: 0.95, range: 0.15 },
   { type: 'curl', count: 2, size: 0.95, range: 0.15 },
   { type: 'frill', count: 3, size: 0.6, range: 0.15 }
@@ -349,6 +390,9 @@ export function create(cfg) {
     maxX: water.maxX,
     waterX1: water.x1,
     waterX2: water.x2,
+    openX1: CaveLake.openSpan(lake).x1 + OPEN_PAD,
+    openX2: CaveLake.openSpan(lake).x2 - OPEN_PAD,
+    huntSide: 1,
     frenzy: false,
     gatherDx: (rng() * 2 - 1) * FRENZY_SPREAD,
     gatherDz: (rng() * 2 - 1) * GATHER_Z,
@@ -394,7 +438,8 @@ export function create(cfg) {
     v: k.vec2(0, 0),
     mesh: SkinMesh.create({ k, picture: A.picture, scale: cfg.size / TEX_PER_PX, cols: MESH_COLS, rows: MESH_ROWS, joints: MESH_JOINTS, anchor: MESH_ANCHOR, blend: MESH_BLEND }),
     flat: MESH_JOINTS.map(() => ({ x: 0, y: 0 })),
-    finAt: { x: 0, y: 0 }
+    finAt: { x: 0, y: 0 },
+    giantSide: 0
   }
   pickRoam(inst)
   return inst
@@ -450,7 +495,7 @@ export function onUpdate(inst, ctx) {
   if (inst.mode === MODE.HELD) return
   decide(inst, ctx, dt)
   inst.mode === MODE.FORAGE && inst.posed ? straighten(inst, dt) : move(inst, ctx, dt)
-  ctx.giant && inst.mode !== MODE.BOLT && inst.mode !== MODE.JUMP && keepOffGiant(inst, ctx.giant)
+  ctx.giant && inst.mode !== MODE.BOLT && inst.mode !== MODE.JUMP && keepOffGiant(inst, ctx.giant, dt)
   inst.facing = Swim.facingOf(inst.joints, inst.facing, BODY_LEN * inst.size * FLIP_EDGE)
   inst.roll += Math.max(-ROLL_RATE * dt, Math.min(ROLL_RATE * dt, inst.facing - inst.roll))
   crossSurface(inst, ctx)
@@ -471,7 +516,8 @@ export function eat(inst) {
 }
 
 /**
- * The fish is chased by the giant: it bolts straight on (dir) at its depth.
+ * The fish is chased by the giant: it bolts straight on (dir) at its depth
+ * (within the water where it is headed).
  * @param {Object} inst - Fish instance
  * @param {number} dir - 1 right, -1 left
  */
@@ -481,8 +527,9 @@ export function bolt(inst, dir) {
   inst.modeT = 0
   inst.prey = null
   inst.want = BOLT_SPEED
-  inst.target.x = Swim.clamp(head.x + dir * BOLT_REACH, inst.minX, inst.maxX)
-  inst.target.y = head.y
+  const x = Swim.clamp(head.x + dir * BOLT_REACH, inst.minX, inst.maxX)
+  inst.target.x = x
+  inst.target.y = Swim.clamp(head.y, topFor(inst, x, TOP_PAD), bottomFor(inst, x))
   inst.target.z = 0
 }
 
@@ -513,7 +560,8 @@ export function seize(inst, out) {
  * Holds a seized fish in the jaws: its middle at `at`, its shape as caught
  * turned by `angle` (its thrashing, the head's turn), drawn `share` of its
  * half length on along `dir` (into the mouth, as it is swallowed), fading
- * out from HELD_FADE_FROM of the way in.
+ * out from HELD_FADE_FROM of the way in; it is on the giant's near side
+ * (nearest the eye: drawn in its lightest shade).
  * @param {Object} inst - Fish instance
  * @param {{x: number, y: number}} at - World point (the gullet)
  * @param {number} angle - Turn (rad)
@@ -531,21 +579,8 @@ export function hold(inst, at, angle, dir, share) {
     const o = inst.heldShape[i]
     j.x = ox + o.x * c - o.y * s
     j.y = oy + o.x * s + o.y * c
+    j.z = -Z_MAX
   })
-}
-
-/**
- * Whether it is feeding under the swarm's fireflies (in the frenzy — darting
- * off from the giant for a moment counts too: it is back at once) within
- * `reach` px of x along the lake.
- * @param {Object} inst - Fish instance
- * @param {number} x - World X
- * @param {number} reach - Px
- * @returns {boolean}
- */
-export function feedsAt(inst, x, reach) {
-  const busy = inst.mode === MODE.GONE || inst.mode === MODE.HELD
-  return inst.frenzy && !busy && Math.abs(inst.joints[0].x - x) < reach
 }
 
 /**
@@ -578,6 +613,41 @@ export function swimmingHead(inst) {
   const head = inst.joints[0]
   const out = inst.mode === MODE.GONE || inst.mode === MODE.JUMP || inst.mode === MODE.ENTER || inst.mode === MODE.HELD
   return out || head.x < inst.waterX1 || head.x > inst.waterX2 ? null : head
+}
+
+/**
+ * Its head while it is leaping out of the water, else null — what the
+ * trumpeter catches over the water.
+ * @param {Object} inst - Fish instance
+ * @returns {{x: number, y: number}|null}
+ */
+export function leapingHead(inst) {
+  return inst.mode === MODE.JUMP ? inst.joints[0] : null
+}
+
+/**
+ * Its tail while it is leaping out of the water, else null.
+ * @param {Object} inst - Fish instance
+ * @returns {{x: number, y: number}|null}
+ */
+export function leapingTail(inst) {
+  return inst.mode === MODE.JUMP ? inst.joints[inst.joints.length - 1] : null
+}
+
+/**
+ * Where a leaping fish's head will come down through height y (world X),
+ * else null — what the trumpeter holds its funnel under.
+ * @param {Object} inst - Fish instance
+ * @param {number} y - World Y it falls through
+ * @returns {number|null}
+ */
+export function leapLandingX(inst, y) {
+  if (inst.mode !== MODE.JUMP) return null
+  const head = inst.joints[0]
+  const v = inst.vel
+  const d = v.y * v.y + 2 * GRAVITY * (y - head.y)
+  const t = d < 0 ? Math.max(0, -v.y / GRAVITY) : (-v.y + Math.sqrt(d)) / GRAVITY
+  return head.x + v.x * t
 }
 
 /**
@@ -716,7 +786,7 @@ function decide(inst, ctx, dt) {
   }
   inst.cooldown <= 0 && (inst.frenzy || inst.rng() >= FORAGE_SHARE ? seekPrey(inst, ctx) : toForage(inst))
   if (inst.mode !== MODE.CRUISE) return
-  inst.frenzy ? gather(inst, ctx.swarm) : roam(inst, dt)
+  inst.frenzy ? gather(inst, ctx.swarm, dt) : roam(inst, dt)
 }
 //
 // Off to pick at the bed: a spot on it near by, its mouth on the soil's
@@ -941,15 +1011,31 @@ function isFeeding(inst, swarm) {
 }
 //
 // In the frenzy, waiting for its leap: up under the swarm, each fish at
-// its own spot along it.
+// its own spot along it (a new one once there).
 //
-function gather(inst, swarm) {
-  const x = Swim.clamp(swarm.x + inst.gatherDx, inst.minX, inst.maxX)
-  inst.target.x = x
+function gather(inst, swarm, dt) {
+  track(inst, Swim.clamp(swarm.x + inst.gatherDx, Math.max(inst.minX, inst.openX1), Math.min(inst.maxX, inst.openX2)), dt)
+  const x = inst.target.x
   inst.target.y = CaveLake.surfaceAt(inst.lake, x) + APPROACH_DEPTH + GATHER_DEPTH
   inst.target.z = inst.gatherDz
-  inst.want = FRENZY_SPEED
+  inst.want = approachSpeed(inst, FRENZY_SPEED)
   inst.hoverIn = 0
+  if (Math.abs(inst.joints[0].x - x) >= GATHER_ARRIVE) return
+  const next = inst.gatherDx + inst.facing * (GATHER_STEP + inst.rng() * GATHER_STEP_RANGE)
+  inst.gatherDx = Math.abs(next) > FRENZY_SPREAD ? inst.gatherDx - inst.facing * GATHER_STEP : next
+  inst.gatherDz = (inst.rng() * 2 - 1) * GATHER_Z
+}
+//
+// Its target along the lake eased toward x.
+//
+function track(inst, x, dt) {
+  inst.target.x += (x - inst.target.x) * Math.min(1, TRACK_RATE * dt)
+}
+//
+// Its pace coming up to its target: full, slowing within SLOW_R px of it.
+//
+function approachSpeed(inst, full) {
+  return full * Math.max(NEAR_SHARE, Math.min(1, Swim.dist3(inst.joints[0], inst.target) / SLOW_R))
 }
 //
 // The giant's outline near a point: the nearest spot of its spine, the
@@ -992,7 +1078,9 @@ function dodgeGiant(inst, near) {
   const over = near.y - near.up - GIANT_PASS - fishHalf(inst)
   const under = near.y + near.down + GIANT_PASS + fishHalf(inst)
   const up = head.y < near.y ? over >= top || under > bottom : over >= top && under > bottom
-  const way = Math.sign(inst.h.x) || inst.facing
+  const heading = Math.sign(inst.h.x) || inst.facing
+  const room = heading > 0 ? inst.maxX - head.x : head.x - inst.minX
+  const way = room < FLEE_REACH * HALF ? -heading : heading
   inst.mode = MODE.FLEE
   inst.modeT = 0
   inst.prey = null
@@ -1002,19 +1090,34 @@ function dodgeGiant(inst, near) {
   inst.target.z = head.z
 }
 //
-// No point of its spine inside the giant's outline (with its own half
-// height and GIANT_PAD to spare): pushed out square from the giant's
-// spine.
+// Kept off the giant head first, never pushed sideways: once its head
+// comes within its own half height, GIANT_PAD and GIANT_STEER_PAD px of
+// the giant's outline, it turns (at TURN_RATE_FAST) to swim along the
+// outline the way it heads, turned out from it the more the deeper it is
+// in — its body following its head round. Only on the side of the giant
+// it came at it from: one already past the giant's spine is passing in
+// front of it, and lets be (as it does with no water left that way).
 //
-function keepOffGiant(inst, giant) {
-  const clear = fishHalf(inst) + GIANT_PAD
-  inst.joints.forEach(j => {
-    const near = nearGiant(giant, j, clear)
-    if (!near || near.past >= clear) return
-    const push = clear - near.past
-    j.x += near.nx * push
-    j.y += near.ny * push
-  })
+function keepOffGiant(inst, giant, dt) {
+  const head = inst.joints[0]
+  const clear = fishHalf(inst) + GIANT_PAD + GIANT_STEER_PAD
+  const near = nearGiant(giant, head, clear)
+  if (!near) {
+    inst.giantSide = 0
+    return
+  }
+  const side = head.y < near.y ? -1 : 1
+  inst.giantSide ||= side
+  if (side !== inst.giantSide) return
+  const along = Math.sign(inst.h.x * -near.ny + inst.h.y * near.nx) || 1
+  const deep = Swim.clamp((clear - near.past) / clear, 0, 1)
+  const wx = -near.ny * along * (1 - deep) + near.nx * deep
+  const wy = near.nx * along * (1 - deep) + near.ny * deep
+  const ahead = { x: head.x + wx * clear, y: head.y + wy * clear }
+  if (ahead.y < topFor(inst, ahead.x, 0) || ahead.y > CaveLake.bottomAt(inst.lake, ahead.x)) return
+  const want = { x: 0, y: 0, z: 0 }
+  Swim.setDir(want, wx, wy, inst.h.z * GIANT_STEER_Z)
+  Swim.turnToward(inst.h, want, TURN_RATE_FAST * dt, inst.turnSide)
 }
 function fishHalf(inst) {
   return BODY_HALF * BODY_LEN * inst.size
@@ -1087,12 +1190,13 @@ function seekPrey(inst, ctx) {
   }
   if (!best) return
   inst.prey = best
+  inst.huntSide = Math.sign(best.x - head.x) || inst.facing
   inst.mode = MODE.HUNT
   inst.modeT = 0
   inst.lostFor = 0
 }
 function isOverWater(inst, p) {
-  if (p.x < inst.minX - LEAP_OUT || p.x > inst.maxX + LEAP_OUT) return false
+  if (p.x < Math.max(inst.minX - LEAP_OUT, inst.openX1) || p.x > Math.min(inst.maxX + LEAP_OUT, inst.openX2)) return false
   const surface = CaveLake.surfaceAt(inst.lake, p.x)
   return p.y <= surface - HUNT_LOW && p.y >= surface - HUNT_HIGH
 }
@@ -1108,13 +1212,13 @@ function hunt(inst, ctx, dt) {
     return
   }
   const head = inst.joints[0]
-  const side = Math.sign(p.x - head.x) || inst.facing
   const surface = CaveLake.surfaceAt(inst.lake, p.x)
-  inst.target.x = Swim.clamp(p.x - side * LAUNCH_BACK * inst.size, inst.minX, inst.maxX)
+  track(inst, Swim.clamp(p.x - inst.huntSide * LAUNCH_BACK * inst.size, Math.max(inst.minX, inst.openX1), Math.min(inst.maxX, inst.openX2)), dt)
   inst.target.y = surface + APPROACH_DEPTH
   inst.target.z = 0
-  inst.want = inst.frenzy ? FRENZY_SPEED : HUNT_SPEED
-  const ready = alive && Math.abs(head.x - inst.target.x) < LAUNCH_X && head.y < inst.target.y + LAUNCH_Y && Math.abs(head.z) < LAUNCH_Z
+  inst.want = approachSpeed(inst, inst.frenzy ? FRENZY_SPEED : HUNT_SPEED)
+  const open = head.x >= inst.openX1 && head.x <= inst.openX2
+  const ready = alive && open && Math.abs(head.x - p.x) < LAUNCH_X && head.y < inst.target.y + LAUNCH_Y && Math.abs(head.z) < LAUNCH_Z
   ready && leap(inst, p)
 }
 //
@@ -1126,7 +1230,9 @@ function leap(inst, p) {
   const rise = Math.max(OVERSHOOT, head.y - p.y + OVERSHOOT)
   const up = Math.sqrt(2 * GRAVITY * rise)
   const time = up / GRAVITY
-  inst.vel.x = Swim.clamp((p.x - head.x) / time, -LEAP_VX, LEAP_VX)
+  const flight = time * 2
+  const vx = Swim.clamp((p.x - head.x) / time, -LEAP_VX, LEAP_VX)
+  inst.vel.x = Swim.clamp(vx, (inst.openX1 - head.x) / flight, (inst.openX2 - head.x) / flight)
   inst.vel.y = -up
   inst.vel.z = 0
   inst.mode = MODE.JUMP
@@ -1164,11 +1270,12 @@ function swim(inst, dt) {
   inst.lastHeadY = head.y
   const t = inst.target
   const want = { x: t.x - head.x, y: t.y - head.y, z: t.z - head.z }
-  if (Math.hypot(want.x, want.y, want.z) > 1) {
+  const fast = inst.frenzy || inst.mode === MODE.HUNT || inst.mode === MODE.FLEE || inst.mode === MODE.BOLT
+  const rate = Math.min(fast ? TURN_RATE_FAST : TURN_RATE, inst.speed / (TURN_R * BODY_LEN * inst.size))
+  if (Math.hypot(want.x, want.y, want.z) > 1 && rate > 0 && !inTurn(head, inst.h, t, inst.speed / rate)) {
     Swim.setDir(want, want.x, want.y, want.z)
     Swim.setDir(want, want.x, Swim.clamp(want.y, -MAX_PITCH, MAX_PITCH), want.z)
-    const fast = inst.frenzy || inst.mode === MODE.HUNT || inst.mode === MODE.FLEE || inst.mode === MODE.BOLT
-    Swim.turnToward(inst.h, want, (fast ? TURN_RATE_FAST : TURN_RATE) * dt, inst.turnSide)
+    Swim.turnToward(inst.h, want, rate * dt, inst.turnSide)
   }
   inst.speed += Swim.clamp(inst.want - inst.speed, -ACCEL * dt, ACCEL * dt)
   inst.beat += (BEAT_HZ + BEAT_HZ_PER_SPEED * inst.speed) * FULL_TURN * dt
@@ -1176,28 +1283,50 @@ function swim(inst, dt) {
   inst.stroke.phase = inst.beat
   inst.stroke.amp = BEAT_AMP * Math.min(1, HOVER_BEAT + inst.speed / CRUISE_SPEED)
   Swim.swimHead(head, inst.h, inst.stroke, dt)
-  keepInWater(inst)
+  keepInWater(inst, dt)
 }
-function keepInWater(inst) {
+//
+// Whether a target lies inside the circle (radius r) the head would turn
+// on toward it: it cannot be reached by turning now.
+//
+function inTurn(head, h, t, r) {
+  const wx = t.x - head.x
+  const wy = t.y - head.y
+  const wz = t.z - head.z
+  const along = wx * h.x + wy * h.y + wz * h.z
+  const across = Math.hypot(wx - along * h.x, wy - along * h.y, wz - along * h.z)
+  return across > TINY && along * along + (across - r) * (across - r) < r * r
+}
+//
+// The head held in the water: within its ends, under its top, over its
+// bed — eased back there at BOUND_EASE px/s at most (where the bed rises
+// steeply a hard hold jumped it), its heading turned off the bound at once.
+//
+function keepInWater(inst, dt) {
   const head = inst.joints[0]
   head.z = Swim.clamp(head.z, -Z_MAX, Z_MAX)
   if (inst.mode === MODE.ENTER) return
   const dive = inst.mode === MODE.DIVE
   head.x = Swim.clamp(head.x, dive ? inst.waterX1 : inst.minX, dive ? inst.waterX2 : inst.maxX)
-  const pad = inst.frenzy || inst.mode === MODE.HUNT ? APPROACH_DEPTH - LAUNCH_Y : TOP_PAD
+  const pad = inst.frenzy || inst.mode === MODE.HUNT ? HUNT_TOP : TOP_PAD
   const top = dive ? -Infinity : topFor(inst, head.x, pad)
   const bottom = inst.mode === MODE.FORAGE ? mouthOnBed(inst, head.x) : bottomFor(inst, head.x)
+  const ease = BOUND_EASE * dt
   if (head.y > bottom) {
-    head.y = bottom
+    head.y -= Math.min(ease, head.y - bottom)
     inst.h.y = Math.min(0, inst.h.y)
   }
   if (head.y < top) {
-    head.y = top
+    head.y += Math.min(ease, top - head.y)
     inst.h.y = Math.max(0, inst.h.y)
   }
 }
+//
+// The highest its head may swim at x: pad px under the water's top (the
+// surface, or a bank hollow's ceiling).
+//
 function topFor(inst, x, pad) {
-  return CaveLake.surfaceAt(inst.lake, x) + pad
+  return CaveLake.waterTopAt(inst.lake, x) + pad
 }
 function bottomFor(inst, x) {
   return Math.max(topFor(inst, x, TOP_PAD), CaveLake.bottomAt(inst.lake, x) - BED_PAD)

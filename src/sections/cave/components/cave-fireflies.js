@@ -72,6 +72,19 @@ const SHY_R = 70
 const SHY_ACC = 900
 const SHY_DRAG = 2.5
 //
+// The hero moving through the air sways them off his way: within WAKE_R
+// px of him each is pushed away from him at WAKE_ACC px/s² per px/s of his
+// speed (more the nearer, and the more he moves toward it: from
+// WAKE_SIDE of that when he passes it by to all of it when he comes
+// straight at it). His speed is read off his moves, eased at WAKE_EASE per
+// s, and never taken past WAKE_MAX px/s (a respawn is no move).
+//
+const WAKE_R = 150
+const WAKE_ACC = 2.5
+const WAKE_SIDE = 0.35
+const WAKE_EASE = 10
+const WAKE_MAX = 900
+//
 // The nest: how many are at it, flying at NEST_SPEED px/s, turning toward
 // their hole at up to NEST_TURN rad/s (within ARRIVE_R px of it straight
 // at it, slowing to ARRIVE_SPEED), going in within ENTER_R px of it — they
@@ -119,7 +132,8 @@ export function create(cfg) {
     sparks: [],
     glowRgb: getRGB(k, CAVE_CFG.colors.firefly),
     coreRgb: getRGB(k, CAVE_CFG.colors.fireflyCore),
-    sparkRgbs: CAVE_CFG.colors.heroSpark.map(hex => getRGB(k, hex))
+    sparkRgbs: CAVE_CFG.colors.heroSpark.map(hex => getRGB(k, hex)),
+    hero: { x: 0, y: 0, vx: 0, vy: 0, known: false }
   }
   for (let i = 0; i < count; i++) {
     const spot = openSpot(inst, bounds)
@@ -217,6 +231,7 @@ export function onUpdate(inst, heroPos = null) {
   const dt = inst.k.dt()
   const { bounds } = inst
   const drag = Math.exp(-SHY_DRAG * dt)
+  trackHero(inst, heroPos, dt)
   inst.ambient.forEach(f => {
     if (f.state !== STATE.FREE) {
       stepNest(inst, f, dt)
@@ -225,6 +240,7 @@ export function onUpdate(inst, heroPos = null) {
     f.fade = Math.min(1, f.fade + dt / RELIGHT_FADE)
     f.heading += (Math.random() - 0.5) * AMBIENT_TURN_RATE * FULL_TURN * dt
     heroPos && shy(f, heroPos, dt)
+    heroPos && sway(f, inst.hero, dt)
     f.vx *= drag
     f.vy *= drag
     const nx = f.x + (Math.cos(f.heading) * AMBIENT_SPEED + f.vx) * dt
@@ -371,6 +387,41 @@ function sendHome(inst) {
   }
   best.f.hole = inst.nest.holes[Math.floor(Math.random() * inst.nest.holes.length)]
   best.f.state = STATE.HOMING
+}
+//
+// The hero's place and speed (read off how far he moved since the last
+// frame, eased; none while he is gone).
+//
+function trackHero(inst, heroPos, dt) {
+  const h = inst.hero
+  if (!heroPos || dt <= 0) {
+    h.known = false
+    return
+  }
+  const vx = h.known ? (heroPos.x - h.x) / dt : 0
+  const vy = h.known ? (heroPos.y - h.y) / dt : 0
+  const real = Math.hypot(vx, vy) < WAKE_MAX
+  const k = Math.min(1, WAKE_EASE * dt)
+  h.vx += ((real ? vx : 0) - h.vx) * k
+  h.vy += ((real ? vy : 0) - h.vy) * k
+  h.x = heroPos.x
+  h.y = heroPos.y
+  h.known = true
+}
+//
+// Swayed off the moving hero's way: pushed away from him, the harder the
+// faster and nearer he is and the more he comes at it.
+//
+function sway(f, hero, dt) {
+  const dx = f.x - hero.x
+  const dy = f.y - hero.y
+  const d = Math.hypot(dx, dy)
+  const speed = Math.hypot(hero.vx, hero.vy)
+  if (d >= WAKE_R || d <= 0 || speed <= 0) return
+  const toward = Math.max(0, (hero.vx * dx + hero.vy * dy) / (speed * d))
+  const acc = WAKE_ACC * speed * (1 - d / WAKE_R) * (WAKE_SIDE + (1 - WAKE_SIDE) * toward) * dt
+  f.vx += dx / d * acc
+  f.vy += dy / d * acc
 }
 //
 // Near the hero: shoved off him (the nearer the harder), heading away.

@@ -24,7 +24,15 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // its head with one big eye, a feeler — the sheet's right one, the left
 // one is its mirror —, a bent femur and a straight tibia), creature.png
 // (the lake's giant taken apart: its body — bent as a mesh — with the
-// sockets of its paddles, and the front and the hind paddle); plus the
+// sockets of its paddles, and the front and the hind paddle),
+// plant_left.png (the lurker plant under the left bank taken apart: its
+// upper and lower jaw, an eye on its stalk, its long scaled neck with the
+// collar at its top, the rosette of leaves it grows out of and one leaf
+// of it on its own),
+// plant_mid.png (the pad plant in the lake: stems up from the bed to a
+// flat crown of round leaves lying on the water), plant_right.png (the
+// trumpeter: a body in a ring of leaves with two eyes, a stalk and a
+// funnel on it); plus the
 // forest's buried elements
 // (bones, fossils, shells: elements_ground.png, cut by the forest).
 //
@@ -52,7 +60,10 @@ const SHEET = {
   RUNNER: 'runner',
   MUSHROOM: 'mushroom',
   STRIDER: 'strider',
-  CREATURE: 'creature'
+  CREATURE: 'creature',
+  LURKER: 'lurker',
+  PADS: 'pads',
+  TRUMPET: 'trumpet'
 }
 //
 // Per sheet: its file, its alpha remap [lo, hi], whether its colour is
@@ -80,7 +91,10 @@ const SHEETS = {
   [SHEET.RUNNER]: { url: 'cave0/runner.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.MUSHROOM]: { url: 'cave0/mushroom.png', alpha: [40, 200] },
   [SHEET.STRIDER]: { url: 'cave0/strider.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
-  [SHEET.CREATURE]: { url: 'cave0/creature.png', alpha: [8, 240] }
+  [SHEET.CREATURE]: { url: 'cave0/creature.png', alpha: [8, 240], isolate: { alpha: 40, keep: 3 } },
+  [SHEET.LURKER]: { url: 'cave0/plant_left.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.PADS]: { url: 'cave0/plant_mid.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.TRUMPET]: { url: 'cave0/plant_right.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } }
 }
 const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
@@ -954,14 +968,22 @@ kitMoss0: [SHEET.SMALL, 33, 16, 245, 95],
   runnerFoot2: [SHEET.RUNNER, 832, 903, 99, 143],
   runnerFoot3: [SHEET.RUNNER, 1259, 899, 109, 142],
   lantern: [SHEET.MUSHROOM, 46, 94, 1167, 1128],
-  striderBody: [SHEET.STRIDER, 97, 34, 656, 311],
-  striderHead: [SHEET.STRIDER, 811, 159, 201, 167],
-  striderFeeler: [SHEET.STRIDER, 1255, 176, 175, 120],
-  striderFemur: [SHEET.STRIDER, 584, 305, 254, 323],
-  striderTibia: [SHEET.STRIDER, 587, 634, 44, 371],
-  giantBody: [SHEET.CREATURE, 40, 158, 1693, 396],
-  giantFinFront: [SHEET.CREATURE, 925, 532, 365, 292],
-  giantFinHind: [SHEET.CREATURE, 471, 536, 307, 174]
+  striderBody: [SHEET.STRIDER, 95, 30, 653, 316],
+  striderHead: [SHEET.STRIDER, 811, 159, 198, 169],
+  striderFeeler: [SHEET.STRIDER, 1260, 179, 179, 122],
+  striderFemur: [SHEET.STRIDER, 559, 353, 174, 263],
+  striderTibia: [SHEET.STRIDER, 559, 632, 49, 365],
+  giantBody: [SHEET.CREATURE, 37, 154, 1699, 401],
+  lurkerJawTop: [SHEET.LURKER, 18, 18, 548, 258],
+  lurkerJawLow: [SHEET.LURKER, 17, 372, 549, 252],
+  lurkerEye: [SHEET.LURKER, 272, 669, 118, 355],
+  lurkerNeck: [SHEET.LURKER, 596, 80, 156, 872],
+  lurkerBase: [SHEET.LURKER, 286, 940, 731, 550],
+  lurkerLeaf: [SHEET.LURKER, 742, 940, 110, 125],
+  padPlant: [SHEET.PADS, 150, 150, 1030, 922],
+  trumpet: [SHEET.TRUMPET, 0, 0, 1774, 887],
+  giantFinFront: [SHEET.CREATURE, 920, 530, 372, 297],
+  giantFinHind: [SHEET.CREATURE, 468, 538, 309, 174]
 }
 const sheets = new Map()
 const pieces = new Map()

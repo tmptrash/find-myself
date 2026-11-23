@@ -57,6 +57,30 @@ const DRIP_SOURCES = [
 //
 const FISH_SPLASH = { pan: 0, pitch: 420, plop: true }
 const FISH_SPLASH_GAIN = 2.2
+//
+// The lurker's head bursting out of the water or dragging the hero under
+// it: a slosh — noise through a band swept up from SLOSH_F0 to SLOSH_F1
+// over SLOSH_RISE s and down to SLOSH_F2 by SLOSH_TIME, swelling in over
+// SLOSH_ATTACK — and SLOSH_GULPS low gurgling bubbles (SLOSH_GULP_PITCH..
+// twice it, rising by SLOSH_GULP_GLIDE) from SLOSH_GULP_FROM s on, within
+// SLOSH_GULP_SPREAD s; loud SLOSH_GAIN near the hero, never under
+// DRIP_FAR_FLOOR of it.
+//
+const SLOSH_F0 = 260
+const SLOSH_F1 = 1100
+const SLOSH_F2 = 320
+const SLOSH_RISE = 0.12
+const SLOSH_TIME = 0.6
+const SLOSH_ATTACK = 0.03
+const SLOSH_Q = 1.4
+const SLOSH_GAIN = 0.5
+const SLOSH_GULPS = 4
+const SLOSH_GULP_PITCH = 180
+const SLOSH_GULP_GLIDE = 2.4
+const SLOSH_GULP_TAU = 0.035
+const SLOSH_GULP_FROM = 0.08
+const SLOSH_GULP_SPREAD = 0.35
+const SLOSH_GULP_GAIN = 0.8
 const DRIP_PERIOD_JITTER = 0.55
 const DRIP_PERIOD_SCALE = 2.5
 const DRIP_VOLUME = 0.12
@@ -131,16 +155,12 @@ const STONE_JITTER = 0.2
 const STONE_LAND_GAIN = 1.25
 const STONE_LAND_TIME = 1.2
 //
-// Lantern mushroom: soft spring, rising chime, dim ticks.
+// Lantern mushroom: a soft spring (no ringing chime over it).
 //
 const SPRING_FROM = 170
 const SPRING_TO = 420
 const SPRING_TIME = 0.22
 const SPRING_GAIN = 0.16
-const CHIME_FREQS = [880, 1320, 1760, 2217]
-const CHIME_STAGGER = 0.06
-const CHIME_GAIN = 0.05
-const CHIME_DECAY = 1.4
 //
 // Hero bursting into fireflies: chirp count, time spread, pitch and decay.
 //
@@ -268,6 +288,39 @@ export function playFishSplash(inst, strength, near) {
 }
 
 /**
+ * The lurker plant breaking the water: a slosh with low gurgles.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playSlosh(inst, near) {
+  if (!ready(inst)) return
+  const { ctx } = inst
+  const at = ctx.currentTime
+  const volume = Math.max(DRIP_FAR_FLOOR, near) * SLOSH_GAIN
+  const src = ctx.createBufferSource()
+  src.buffer = inst.white
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.Q.value = SLOSH_Q
+  band.frequency.setValueAtTime(SLOSH_F0, at)
+  band.frequency.exponentialRampToValueAtTime(SLOSH_F1, at + SLOSH_RISE)
+  band.frequency.exponentialRampToValueAtTime(SLOSH_F2, at + SLOSH_TIME)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(SILENT, at)
+  g.gain.exponentialRampToValueAtTime(volume, at + SLOSH_ATTACK)
+  g.gain.exponentialRampToValueAtTime(SILENT, at + SLOSH_TIME)
+  src.connect(band)
+  band.connect(g)
+  g.connect(inst.out)
+  g.connect(inst.send)
+  src.start(at, Math.random() * NOISE_SECONDS / 2, SLOSH_TIME * 2)
+  for (let i = 0; i < SLOSH_GULPS; i++) {
+    const pitch = SLOSH_GULP_PITCH * (1 + Math.random())
+    dropRing(inst, at + SLOSH_GULP_FROM + Math.random() * SLOSH_GULP_SPREAD, pitch, SLOSH_GULP_GLIDE, SLOSH_GULP_TAU, volume * SLOSH_GULP_GAIN, inst.out)
+  }
+}
+
+/**
  * Short sparkle when the hero shatters into fireflies: a few quick high
  * chirps packed into a fraction of a second.
  * @param {Object} inst - Cave sound instance
@@ -329,8 +382,7 @@ export function playGiantBreath(inst, exhale, near) {
 }
 
 /**
- * Soft spring plus a rising chime when the hero bounces off the dry
- * mushroom.
+ * A soft spring when the hero bounces off the dry mushroom.
  * @param {Object} inst - Cave sound instance
  */
 export function playLanternBounce(inst) {
@@ -348,7 +400,6 @@ export function playLanternBounce(inst) {
   g.connect(inst.out)
   osc.start(now)
   osc.stop(now + SPRING_TIME * 2)
-  CHIME_FREQS.forEach((freq, i) => tone(inst, freq, now + i * CHIME_STAGGER, CHIME_GAIN, CHIME_DECAY, true))
 }
 
 /**
@@ -522,21 +573,6 @@ function sweep(inst, buffer, at, type, f0, f1, q, attack, time, gain) {
 }
 function ready(inst) {
   return !inst.stopped && inst.ctx.state === 'running'
-}
-function tone(inst, freq, at, gain, decay, echo, drop = 1) {
-  const { ctx } = inst
-  const osc = ctx.createOscillator()
-  const g = ctx.createGain()
-  osc.type = 'sine'
-  osc.frequency.setValueAtTime(freq, at)
-  drop !== 1 && osc.frequency.exponentialRampToValueAtTime(freq * drop, at + decay)
-  g.gain.setValueAtTime(gain, at)
-  g.gain.exponentialRampToValueAtTime(SILENT, at + decay)
-  osc.connect(g)
-  g.connect(inst.out)
-  echo && g.connect(inst.send)
-  osc.start(at)
-  osc.stop(at + decay)
 }
 //
 // Looping filtered noise (started at a random offset so layers sharing a

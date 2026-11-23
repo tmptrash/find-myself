@@ -185,6 +185,7 @@ const slopesFaded = new Map()
  * @param {Array<{x1: number, x2: number, y1: number, y2: number}>} [body.feathers] - Rects where the body fades out, gone at x1, whole at x2
  * @param {boolean} [body.bare=false] - Nothing laid in the core (no stones, patches or elements)
  * @param {Array<{x: number, y: number}>} [body.envelope] - Outline nothing of the body may reach past
+ * @param {Array<{first: Array<{x: number, y: number}>, last: Array<{x: number, y: number}>}>} [body.holes] - Hollows cut out of it: `first` out of its core before its edges are laid, `last` out of everything once its top is on
  * @param {number} seed - Body seed
  * @returns {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}}
  */
@@ -199,10 +200,12 @@ export function soilLayer(body, seed) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.translate(-x, -y)
   paintCore(ctx, rng, body.core, body.bare)
+  body.holes?.forEach(hole => cutOut(ctx, hole.first))
   body.edges?.forEach(edge => paintEdgeChain(ctx, rng, edge))
   body.corners?.forEach(corner => paintCorner(ctx, corner))
   body.top && paintTopBand(ctx, rng, body.top)
   body.top && body.slopes?.forEach(run => paintSlope(ctx, body.top, run))
+  body.holes?.forEach(hole => cutOut(ctx, hole.last))
   body.envelope && clipTo(ctx, body.envelope)
   hardenEdges(ctx, canvas.width, canvas.height)
   body.feathers?.forEach(f => featherOut(ctx, f))
@@ -770,6 +773,17 @@ function topNear(top, col) {
 function clipTo(ctx, poly) {
   ctx.save()
   ctx.globalCompositeOperation = 'destination-in'
+  tracePoly(ctx, poly)
+  ctx.fillStyle = COLORS.shade
+  ctx.fill()
+  ctx.restore()
+}
+//
+// Everything painted inside an outline cleared.
+//
+function cutOut(ctx, poly) {
+  ctx.save()
+  ctx.globalCompositeOperation = 'destination-out'
   tracePoly(ctx, poly)
   ctx.fillStyle = COLORS.shade
   ctx.fill()

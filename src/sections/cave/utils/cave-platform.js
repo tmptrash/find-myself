@@ -128,9 +128,19 @@ const FEATHER_ABOVE_UNDER = 40
 //
 const CORNER_REACH = 110
 //
-// A top run steeper than this (px over the run) gets a slope piece.
+// A top run steeper than this (px over the run) gets a slope piece — not
+// one steeper than SLOPE_MAX (px per px): a drop that sheer (into a bank's
+// hollow) is no slope a piece could lie on.
 //
 const SLOPE_MIN_RISE = 10
+const SLOPE_MAX = 5
+//
+// A hollow (Layout.BANK_HOLLOW_L / _R) is cut out of the soil, its arc edged
+// with the underside's ragged pieces; once the top strips are on, it is
+// cut again HOLLOW_SPILL px inside its arc (so the edge pieces' ragged rim
+// stays, and nothing else of the top reaches into it).
+//
+const HOLLOW_SPILL = 4
 //
 // Stone clusters on the top, CLUSTER_GAP px apart (with its spread): one
 // big stone and SMALL_MIN..+SMALL_RANGE small ones (heights in world px,
@@ -311,7 +321,7 @@ function topOf(p, span) {
   return { x1: span.x1, x2: span.x2, at: x => baseAt(p, x), fadeL: span.freeL, fadeR: span.freeR }
 }
 function slopesOf(p) {
-  return Layout.baseSegments(p).filter(s => Math.abs(s.y2 - s.y1) > SLOPE_MIN_RISE).map(s => ({ x1: s.x1, x2: s.x2 }))
+  return Layout.baseSegments(p).filter(s => Math.abs(s.y2 - s.y1) > SLOPE_MIN_RISE && Math.abs(s.y2 - s.y1) <= SLOPE_MAX * (s.x2 - s.x1)).map(s => ({ x1: s.x1, x2: s.x2 }))
 }
 //
 // A ledge: its core between the top and the lobed underside, the
@@ -353,7 +363,10 @@ function ledgeBody(p) {
     ...(joinedBelow ? [{ x: underL - ENVELOPE, y: p.faceTo }] : []),
     ...faceL.map(pt => ({ x: pt.x - ENVELOPE, y: pt.y })).reverse()
   ]
-  return { core, edges, corners, top: topOf(p, span), slopes: slopesOf(p), envelope, feathers: joinedBelow ? [joinFeather(p, underL)] : [] }
+  const hollows = p.hollows ?? []
+  hollows.forEach(h => edges.push({ name: 'edgeB', pts: Layout.hollowArc(h) }))
+  const holes = hollows.map(h => ({ first: Layout.hollowOutline(h), last: Layout.hollowOutline(h, HOLLOW_SPILL) }))
+  return { core, edges, corners, top: topOf(p, span), slopes: slopesOf(p), envelope, holes, feathers: joinedBelow ? [joinFeather(p, underL)] : [] }
 }
 //
 // A free end's face from its top corner (x0, y0) down to its bottom

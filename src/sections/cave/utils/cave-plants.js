@@ -17,6 +17,13 @@ import * as Platform from './cave-platform.js'
 //   root is on its left, so it is mirrored on a face that looks left);
 // - small ones (FLOAT_KINDS) on the small platforms over the lake and in
 //   the shaft.
+// The low ground (the passage's floor under the hall) is no even lawn: it
+// is laid out in beds (BEDS), each its own small community of a few
+// species — a mushroom glade, a fern bed, tall stems, a sprout meadow,
+// leaves with mushrooms among them — each bed growing only a couple of
+// pieces of each of its kinds over its own share of the kit's moss,
+// leaves and sprouts, no two beds side by side alike; the shaft's small
+// platforms take one plant each from a bed's kinds.
 // Every one grows out of the soil's very edge: its foot (where its art
 // meets what it grows from: the middle of its last rows, or of its first
 // for one hanging) set on the painted edge (a platform's top is read off
@@ -83,6 +90,29 @@ const FLOAT_KINDS = [
   { prefixes: ['sprout', 'sproutB'], hMin: 16, hRange: 8, weight: 1 },
   { prefixes: ['tiny', 'tinyB'], hMin: 12, hRange: 6, weight: 1 }
 ]
+//
+// The low ground's beds: per community its kinds (as UP_KINDS), the gap
+// between its plants and its share of the kit (moss: a patch's chance of a
+// cushion; leaves: leafy plants a patch, up to; sprouts: sprouts a patch,
+// up to). A bed is BED_LEN..+RANGE px long, BED_GAP..+RANGE px of bare
+// soil after it; it grows BED_NAMES pieces of each of its kinds (and of
+// each of the kit's), so it reads as one community. A plant on a shaft's
+// small platform is FLOAT_SHRINK of its bed size. LOW_SEED seeds the beds.
+//
+const BEDS = [
+  { kinds: [{ prefixes: ['shroom'], hMin: 26, hRange: 16, weight: 3 }, { prefixes: ['tiny', 'tinyB'], hMin: 12, hRange: 8, weight: 2 }], gap: 22, kit: { moss: 0.5, leaves: 1, sprouts: 4 } },
+  { kinds: [{ prefixes: ['bush'], hMin: 32, hRange: 18, weight: 3 }, { prefixes: ['sprout'], hMin: 20, hRange: 10, weight: 1 }], gap: 28, kit: { moss: 0.9, leaves: 2, sprouts: 3 } },
+  { kinds: [{ prefixes: ['grow'], hMin: 40, hRange: 22, weight: 2 }, { prefixes: ['upB'], hMin: 34, hRange: 20, weight: 2 }], gap: 26, kit: { moss: 0.7, leaves: 3, sprouts: 2 } },
+  { kinds: [{ prefixes: ['sprout', 'sproutB'], hMin: 20, hRange: 12, weight: 3 }, { prefixes: ['tinyB'], hMin: 12, hRange: 8, weight: 2 }], gap: 18, kit: { moss: 1, leaves: 2, sprouts: 5 } },
+  { kinds: [{ prefixes: ['upB'], hMin: 30, hRange: 22, weight: 3 }, { prefixes: ['shroom'], hMin: 22, hRange: 12, weight: 1 }], gap: 26, kit: { moss: 0.8, leaves: 3, sprouts: 3 } }
+]
+const BED_LEN = 120
+const BED_LEN_RANGE = 160
+const BED_GAP = 0
+const BED_GAP_RANGE = 24
+const BED_NAMES = 2
+const FLOAT_SHRINK = 0.6
+const LOW_SEED = 7350
 const ROOT_PREFIX = 'root'
 const ROOT_H = 45
 const ROOT_H_RANGE = 60
@@ -145,8 +175,8 @@ const UP_GAP = 32
 const HANG_GAP = 100
 const HANG_LEDGE_GAP = 40
 const LEDGE_VINE_CHANCE = 0.15
-const SIDE_GAP = 110
-const WALL_UP_GAP = 55
+const SIDE_GAP = 65
+const WALL_UP_GAP = 36
 const GAP_RANGE = 60
 const STONE_CLEAR = 6
 const END_CLEAR = 30
@@ -180,15 +210,17 @@ const STEP = 2
 //
 // A free end gets a side plant at its middle this often; an end face at
 // least TALL_FACE px tall is grown over like a wall, END_FACE_CLEAR px
-// clear of its top and bottom. The roots' hole (ENTRY_*) and the right
-// bank's drop to the water (BANK_*) are grown over too (placeInEntry,
-// placeOnBank).
+// clear of its top and bottom. The roots' hole (ENTRY_*: ENTRY_DENSE of a
+// wall's gaps, thick with green as the way in) and the right bank's drop
+// to the water (BANK_*) are grown over too (placeInEntry, placeOnBank).
 //
-const END_SIDE_CHANCE = 0.7
-const TALL_FACE = 160
+const END_SIDE_CHANCE = 1
+const TALL_FACE = 90
 const END_FACE_CLEAR = 30
 const ENTRY_TOP = 30
 const ENTRY_SHRINK = 0.7
+const ENTRY_DENSE = 0.55
+const ENTRY_RIM = 8
 const BANK_REACH = 70
 const BANK_FACE_CLEAR = 12
 const BANK_SHRINK = 0.75
@@ -215,8 +247,9 @@ const WALL_PLATFORM_CLEAR = 40
 //
 // Spots kept clear, each on what it is on (a platform's id, or CEILING):
 // x and half width round it — the stalk-eye on the passage's floor, the
-// lantern on the hall's, the roots' hole (the ceiling over it and the
-// ledge the hero lands on) — and the narrower half width the greenery
+// lantern on the hall's, the roots' hole (the ledge the hero lands on; on
+// the ceiling only the hole itself and ENTRY_RIM px round it, so plants
+// hang round its mouth) — and the narrower half width the greenery
 // kit's small plants keep (kitR: they may grow round the lantern's foot
 // and where the hero lands).
 //
@@ -224,10 +257,12 @@ const CEILING = 'ceiling'
 const CLEAR = [
   { x: Layout.STALK_EYE.x, r: 110, kitR: 40, on: [Layout.STALK_EYE.on] },
   { x: Layout.LANTERN.x, r: 70, kitR: 45, on: [Layout.LANTERN.on] },
-  { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + 50, kitR: 0, on: [CEILING, Layout.START_PLATFORM] }
+  { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + 50, kitR: 0, on: [Layout.START_PLATFORM] },
+  { x: Layout.ENTRY_X, r: Layout.ENTRY_HALF_W + ENTRY_RIM, kitR: 0, on: [CEILING] }
 ]
 let plants = null
 const feet = new Map()
+const beds = new Map()
 
 /**
  * Paints the plants behind the hero that reach into a world rect (placed
@@ -298,14 +333,23 @@ function place() {
   Layout.PLATFORMS.filter(p => p.kind === Layout.PLATFORM_KIND.FLOAT && p.w >= FLOAT_PLANT_MIN_W).forEach(p => placeOnFloat(rng, out, p))
   return out
 }
+//
+// A small platform's one plant: over the lake one of FLOAT_KINDS; in the
+// shaft (low, under the hall's floor) one of a bed's kinds, smaller.
+//
 function placeOnFloat(rng, out, p) {
   if (rng() > FLOAT_PLANT_CHANCE) return
   const x = p.x + (rng() * 2 - 1) * p.w * FLOAT_PLANT_SPREAD
-  const kind = pickKind(rng, FLOAT_KINDS)
-  const plant = standing(pickName(rng, kind), x, kind.hMin + rng() * kind.hRange, rng() < HALF, topOf(p))
+  const low = isLow(p)
+  const kind = pickKind(rng, low ? BEDS[Math.floor(rng() * BEDS.length)].kinds : FLOAT_KINDS)
+  const plant = standing(pickName(rng, kind), x, (kind.hMin + rng() * kind.hRange) * (low ? FLOAT_SHRINK : 1), rng() < HALF, topOf(p))
   plant.fits && out.push(plant)
 }
 function placeOnTop(rng, out, p) {
+  if (isLow(p)) {
+    bedsOf(p).forEach(bed => placeBed(rng, out, p, bed))
+    return
+  }
   const { from, to } = runOf(p)
   const stones = Platform.stoneSpansOn(p)
   const ground = topOf(p)
@@ -323,6 +367,68 @@ function placeOnTop(rng, out, p) {
   }
 }
 //
+// Whether a platform lies low, under the hall's floor (the passage, the
+// shaft's lower platforms): its greenery grows in beds.
+//
+function isLow(p) {
+  return p.kind === Layout.PLATFORM_KIND.GROUND || (p.kind === Layout.PLATFORM_KIND.FLOAT && p.y > Layout.lakeFloor().y + LAKE_DEPTH)
+}
+//
+// A low platform's beds along its top (laid out once): each a stretch with
+// its community (never the one before it) and the few pieces of each of
+// its kinds (and of the kit's) it grows.
+//
+function bedsOf(p) {
+  if (beds.has(p.id)) return beds.get(p.id)
+  const rng = createSeededRandom(LOW_SEED + p.seed)
+  const { from, to } = runOf(p)
+  const out = []
+  let last = -1
+  for (let x = from; x < to;) {
+    const pick = Math.floor(rng() * (BEDS.length - 1))
+    const at = last >= 0 && pick >= last ? pick + 1 : pick
+    const len = BED_LEN + rng() * BED_LEN_RANGE
+    const bed = BEDS[at]
+    out.push({
+      x1: x,
+      x2: Math.min(to, x + len),
+      bed,
+      names: bed.kinds.map(kind => pickSome(rng, kind.prefixes.flatMap(prefix => Atlas.pieceNames(prefix)))),
+      kitNames: Object.fromEntries([KIT_MOSS, KIT_LEAF, KIT_SPROUT].map(prefix => [prefix, pickSome(rng, Atlas.pieceNames(prefix))]))
+    })
+    last = at
+    x += len + BED_GAP + rng() * BED_GAP_RANGE
+  }
+  beds.set(p.id, out)
+  return out
+}
+//
+// BED_NAMES of a list, picked at random.
+//
+function pickSome(rng, names) {
+  return Array.from({ length: BED_NAMES }, () => names[Math.floor(rng() * names.length)])
+}
+//
+// A bed's own plants: its kinds, every one of them one of its few pieces.
+//
+function placeBed(rng, out, p, bed) {
+  const stones = Platform.stoneSpansOn(p)
+  const ground = topOf(p)
+  for (let x = bed.x1 + rng() * bed.bed.gap; x < bed.x2; x += nextGap(rng, bed.bed.gap, GAP_RANGE * HALF)) {
+    const i = bed.bed.kinds.indexOf(pickKind(rng, bed.bed.kinds))
+    const kind = bed.bed.kinds[i]
+    const name = bed.names[i][Math.floor(rng() * BED_NAMES)]
+    const h = kind.hMin + rng() * kind.hRange
+    const flip = rng() < HALF
+    let plant = standing(name, x, h, flip, ground)
+    for (let stone = onStone(plant, stones); stone; stone = onStone(plant, stones)) {
+      x = stone.x2 + STONE_CLEAR + (x - plant.box.x1) + STEP
+      plant = standing(name, x, h, flip, ground)
+    }
+    x < bed.x2 && plant.fits && isClear(x, p.id) && out.push(plant)
+  }
+}
+//
 // The kit's patches along a platform's top: a moss cushion, leafy plants
 // over it, sprouts round them; sprouts strewn between them, small sparse
 // islands and lone plants
@@ -337,16 +443,27 @@ function placeKit(rng, out, p) {
   const to = float ? p.x2 - FLOAT_KIT_CLEAR : run.to
   const top = { from, to, on: p.id, stones: bigStonesOn(p), ground: topOf(p) }
   const d = float ? KIT_FLOAT : KIT_GROUND
+  const low = !float && isLow(p) ? bedsOf(p) : null
   for (let x = from + rng() * d.gap; x < to; x += nextGap(rng, d.gap, d.gapRange)) {
-    rng() < d.moss && growKit(rng, out, KIT_MOSS, x + (rng() * 2 - 1) * KIT_SPREAD * MOSS_SPREAD, top)
-    const leaves = d.leavesMin + Math.floor(rng() * (d.leavesRange + 1))
-    for (let i = 0; i < leaves; i++) growKit(rng, out, KIT_LEAF, x + (rng() * 2 - 1) * KIT_SPREAD, top)
-    const sprouts = Math.floor(rng() * (d.sprouts + 1))
-    for (let i = 0; i < sprouts; i++) growKit(rng, out, KIT_SPROUT, x + (rng() * 2 - 1) * SPROUT_SPREAD, top)
+    const bed = low?.find(b => x >= b.x1 && x < b.x2)
+    if (low && !bed) continue
+    const kit = bed ? bedKit(bed) : d
+    rng() < kit.moss && growKit(rng, out, KIT_MOSS, x + (rng() * 2 - 1) * KIT_SPREAD * MOSS_SPREAD, top, bed)
+    const leaves = kit.leavesMin + Math.floor(rng() * (kit.leavesRange + 1))
+    for (let i = 0; i < leaves; i++) growKit(rng, out, KIT_LEAF, x + (rng() * 2 - 1) * KIT_SPREAD, top, bed)
+    const sprouts = Math.floor(rng() * (kit.sprouts + 1))
+    for (let i = 0; i < sprouts; i++) growKit(rng, out, KIT_SPROUT, x + (rng() * 2 - 1) * SPROUT_SPREAD, top, bed)
   }
+  if (low) return
   d.sproutGap && strewSprouts(rng, out, top, d)
   d.isles && strewIsles(rng, out, top)
   for (let x = from + rng() * d.loneGap; x < to; x += d.loneGap + rng() * d.loneGapRange) growKit(rng, out, strayKind(rng), x, top)
+}
+//
+// A bed's share of the kit, as a top's density.
+//
+function bedKit(bed) {
+  return { moss: bed.bed.kit.moss, leavesMin: 0, leavesRange: bed.bed.kit.leaves, sprouts: bed.bed.kit.sprouts }
 }
 //
 // The tiniest sprouts strewn on their own along a top.
@@ -371,12 +488,12 @@ function strayKind(rng) {
 }
 //
 // One of the kit's pieces of a kind at x on a top ({from, to, on, stones,
-// ground}) — moved on past a stone it would stand on, by up to KIT_SPREAD
-// px more (so the ones that met the same stone do not pile up past it) —
-// if it can grow there.
+// ground}) — one of a bed's few, in a bed — moved on past a stone it would
+// stand on, by up to KIT_SPREAD px more (so the ones that met the same
+// stone do not pile up past it) — if it can grow there.
 //
-function growKit(rng, out, prefix, x, top) {
-  const names = Atlas.pieceNames(prefix)
+function growKit(rng, out, prefix, x, top, bed = null) {
+  const names = bed?.kitNames[prefix] ?? Atlas.pieceNames(prefix)
   const name = names[Math.floor(rng() * names.length)]
   const h = kitHeight(rng, name, KIT_SCALES[prefix] ?? KIT_SCALE)
   const flip = rng() < HALF
@@ -597,7 +714,7 @@ function placeInEntry(rng, out) {
   ;[-1, 1].forEach(side => {
     const at = y => Layout.entrySideX(y, side)
     const lip = Layout.ceilingBottomAt(Layout.ENTRY_X + side * Layout.ENTRY_HALF_W)
-    placeAlong(rng, out, { at, out: -side, y1: ENTRY_TOP, y2: lip - END_FACE_CLEAR, shrink: ENTRY_SHRINK })
+    placeAlong(rng, out, { at, out: -side, y1: ENTRY_TOP, y2: lip - END_FACE_CLEAR, shrink: ENTRY_SHRINK, dense: ENTRY_DENSE })
   })
 }
 //
@@ -624,13 +741,14 @@ function bankFaceAt(p, x1, x2, y) {
 }
 //
 // Plants up a stretch of a face ({at: its X at a Y, out: the way it looks,
-// y1..y2, shrink}): the side plants, and between them the tops' own
-// plants turned to grow out of the face.
+// y1..y2, shrink, dense: its gaps' share}): the side plants, and between
+// them the tops' own plants turned to grow out of the face.
 //
 function placeAlong(rng, out, face) {
   const shrink = face.shrink ?? 1
-  for (let y = face.y1 + rng() * SIDE_GAP; y < face.y2; y += nextGap(rng, SIDE_GAP, GAP_RANGE)) out.push(sideways(rng, face.at(y), y, face.out, face.at, shrink))
-  for (let y = face.y1 + rng() * WALL_UP_GAP; y < face.y2; y += nextGap(rng, WALL_UP_GAP, GAP_RANGE)) out.push(turnedUp(rng, face.at(y), y, face.out, face.at, shrink))
+  const dense = face.dense ?? 1
+  for (let y = face.y1 + rng() * SIDE_GAP * dense; y < face.y2; y += nextGap(rng, SIDE_GAP * dense, GAP_RANGE * dense)) out.push(sideways(rng, face.at(y), y, face.out, face.at, shrink))
+  for (let y = face.y1 + rng() * WALL_UP_GAP * dense; y < face.y2; y += nextGap(rng, WALL_UP_GAP * dense, GAP_RANGE * dense)) out.push(turnedUp(rng, face.at(y), y, face.out, face.at, shrink))
 }
 //
 // Where a wall's face is bare: from under the ceiling down, less the

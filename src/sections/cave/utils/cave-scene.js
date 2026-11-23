@@ -11,12 +11,14 @@ import * as Ground from './cave-ground.js'
 const ART_PAD = 40
 const OUTLINE_STEP = 8
 //
-// Under the lake: everything painted below its surface down to
+// Under the lake: everything painted under its water down to
 // SUBMERSION_INTO_BED px into the bowl's soil sinks into the water tint
 // (the bed, its stones), more so the deeper — only in the columns where
-// the soil lies under the surface (never the banks' soil beside it). The
-// tint reaches down to the deepest point of that (measured off the bed),
-// so it never stops short of the bed anywhere.
+// there is water (Ground.waterColumns), from its top (the surface, or the
+// soil ceiling of the hollow under the bank) down (never the banks' soil
+// beside it or over the hollow). The tint reaches down to the deepest
+// point of that (measured off the bed), so it never stops short of the
+// bed anywhere.
 //
 const WATER = CAVE_CFG.water
 const SUBMERSION_INTO_BED = 30
@@ -48,7 +50,8 @@ let submersionBottom = null
  * @param {boolean} [withLake=false] - Tint what lies under the lake's surface
  */
 export function paintTerrain(ctx, rect, withLake = false) {
-  const inLake = withLake && overlaps(rect, Layout.LAKE_X1, Layout.LAKE_SURFACE_Y, Layout.LAKE_X2, deepestSubmersion())
+  const water = Ground.waterColumns()
+  const inLake = withLake && overlaps(rect, water.x0, Layout.LAKE_SURFACE_Y, water.x0 + water.tops.length, deepestSubmersion())
   overlaps(rect, -ART_PAD, WALL_TOP_Y, Layout.WALL_COLLIDE_W * 3, Layout.WORLD_H + ART_PAD) && paintWall(ctx, -1)
   overlaps(rect, Layout.WORLD_W - Layout.WALL_COLLIDE_W * 3, WALL_TOP_Y, Layout.WORLD_W + ART_PAD, Layout.WORLD_H + ART_PAD) && paintWall(ctx, 1)
   paintCeiling(ctx, rect)
@@ -74,23 +77,17 @@ export function roomLayers() {
 function paintSubmersion(ctx) {
   const top = Layout.LAKE_SURFACE_Y
   const bottom = deepestSubmersion()
-  const floor = Layout.lakeFloor()
+  const { x0, tops, beds } = Ground.waterColumns()
   const g = ctx.createLinearGradient(0, top, 0, bottom)
   g.addColorStop(0, hexAlpha(WATER.water, SUBMERSION_TOP_ALPHA))
   g.addColorStop(1, hexAlpha(WATER.paint.deep, SUBMERSION_DEEP_ALPHA))
   ctx.save()
   ctx.beginPath()
-  ctx.moveTo(Layout.LAKE_X1, top)
-  for (let x = Layout.LAKE_X1; x <= Layout.LAKE_X2; x++) {
-    const bed = Ground.topAt(floor, x)
-    ctx.lineTo(x, bed > top ? bed + SUBMERSION_INTO_BED : top)
-  }
-  ctx.lineTo(Layout.LAKE_X2, top)
-  ctx.closePath()
+  tops.forEach((y, i) => Number.isNaN(y) || ctx.rect(x0 + i, y, 1, beds[i] + SUBMERSION_INTO_BED - y))
   ctx.clip()
   ctx.globalCompositeOperation = 'source-atop'
   ctx.fillStyle = g
-  ctx.fillRect(Layout.LAKE_X1, top, Layout.LAKE_X2 - Layout.LAKE_X1, bottom - top)
+  ctx.fillRect(x0, top, tops.length, bottom - top)
   ctx.restore()
 }
 //
@@ -99,9 +96,8 @@ function paintSubmersion(ctx) {
 //
 function deepestSubmersion() {
   if (submersionBottom !== null) return submersionBottom
-  const floor = Layout.lakeFloor()
   let bed = Layout.LAKE_SURFACE_Y
-  for (let x = Layout.LAKE_X1; x <= Layout.LAKE_X2; x++) bed = Math.max(bed, Ground.topAt(floor, x))
+  Ground.waterColumns().beds.forEach(y => Number.isNaN(y) || (bed = Math.max(bed, y)))
   submersionBottom = bed + SUBMERSION_INTO_BED
   return submersionBottom
 }

@@ -317,6 +317,23 @@ const SET_SIZE_RANGE = 0.3
 const SET_SEED = 5150
 const SET_HUNTERS = 3
 const HUNT_BAND = 120
+//
+// A runner something caught (snatch) is gone for GONE_TIME..+RANGE s,
+// then comes back: it turns up where it is told (the way into the cave)
+// and runs off toward a spot (where the hero stands then). A runner sent
+// somewhere (sendTo, comeFrom) dashes along its run toward the spot (no
+// turning back on its own, pausing as runners do, still fleeing the hero)
+// till it is within GOAL_NEAR px of it or GOAL_TIME s have passed; a spot
+// more than GOAL_FIND px off its run is out of its reach. A held runner is
+// drawn with the middle of its body (HELD_UP sheet px over its hips) at
+// the point it is held by.
+//
+const GONE_TIME = 3
+const GONE_TIME_RANGE = 3
+const GOAL_NEAR = 12
+const GOAL_TIME = 25
+const GOAL_FIND = 40
+const HELD_UP = 150
 const atlasFor = new WeakMap()
 let atlas = null
 
@@ -389,7 +406,12 @@ export function create(cfg) {
     anchors: new Map(),
     tmp: { x: 0, y: 0 },
     hip: { x: 0, y: 0 },
-    hipAt: { x: 0, y: 0 }
+    hipAt: { x: 0, y: 0 },
+    goneFor: 0,
+    comeFrom: null,
+    toward: null,
+    goal: null,
+    goalFor: 0
   }
   placeBody(inst)
   inst.legs.forEach(leg => plantAt(inst, leg))
@@ -426,6 +448,11 @@ export function createAll(k) {
  */
 export function onUpdate(inst, heroPos, food = null) {
   const dt = inst.k.dt()
+  if (inst.goneFor > 0) {
+    inst.goneFor -= dt
+    inst.goneFor <= 0 && turnUp(inst)
+    return
+  }
   inst.fleeHold = Math.max(0, inst.fleeHold - dt)
   inst.tailPhase += dt * (TAIL_HZ + TAIL_RUN_HZ * runShare(inst))
   inst.bend += ((inst.jump && inst.jump.t >= 0 ? 1 : 0) - inst.bend) * Math.min(1, BEND_EASE * dt)
@@ -448,13 +475,96 @@ export function onUpdate(inst, heroPos, food = null) {
 }
 
 /**
+ * Something caught the runner (the lurker plant): it is gone for a while,
+ * then turns up at `from` and runs toward where `toward` says then.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} from - Where it comes back (world)
+ * @param {() => ({x: number, y: number}|null)} toward - Where it runs once back (null: anywhere)
+ */
+export function snatch(inst, from, toward) {
+  inst.goneFor = GONE_TIME + inst.rng() * GONE_TIME_RANGE
+  inst.jump = null
+  inst.hunt = null
+  inst.goal = null
+  inst.comeFrom = from
+  inst.toward = toward
+}
+
+/**
+ * Sends the runner toward a spot along the run it is on.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} to - World spot
+ * @returns {boolean} False if the spot is off its run (or it is busy: caught, leaping, already sent)
+ */
+export function sendTo(inst, to) {
+  if (inst.goneFor > 0 || inst.jump || inst.goal !== null) return false
+  const at = nearestOn([inst.run], to)
+  if (!at || at.d > GOAL_FIND) return false
+  setGoal(inst, at.s)
+  return true
+}
+
+/**
+ * Moves the runner to `from` (on the nearest run there) and sends it
+ * toward `to` from there.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} from - World spot it turns up at
+ * @param {{x: number, y: number}|null} to - World spot it runs to
+ */
+export function comeFrom(inst, from, to) {
+  const at = nearestOn(Surface.crawlRuns(), from)
+  if (!at) return
+  inst.run = at.run
+  inst.s = at.s
+  inst.speed = 0
+  inst.jump = null
+  inst.hunt = null
+  inst.mode = MODE.PAUSE
+  inst.timer = PAUSE_TIME * inst.rng()
+  placeBody(inst)
+  inst.legs.forEach(leg => plantAt(inst, leg))
+  inst.goal = null
+  to && sendTo(inst, to)
+}
+
+/**
+ * Draws the runner held by something (the lurker's jaws): the middle of its
+ * body at `at`, turned `angle` degrees, at `size` of its own size.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} at - World point
+ * @param {number} angle - Turn (degrees)
+ * @param {number} [size=1] - Share of its size (it shrinks as it is eaten)
+ */
+export function drawHeld(inst, at, angle, size = 1) {
+  const k = inst.k
+  const parts = atlasFor.get(k)
+  if (!parts || size <= 0) return
+  k.pushTransform()
+  k.pushTranslate(inst.v.set(at.x, at.y))
+  k.pushRotate(angle)
+  k.pushScale(inst.v.set(inst.unit * size, inst.unit * size))
+  k.pushTranslate(inst.v.set(0, HELD_UP))
+  drawRunner(inst, parts)
+  k.popTransform()
+}
+
+/**
+ * Whether the runner is about (not caught and gone).
+ * @param {Object} inst - Runner instance
+ * @returns {boolean}
+ */
+export function isAbout(inst) {
+  return inst.goneFor <= 0
+}
+
+/**
  * Draws the runner (skipped off the view).
  * @param {Object} inst - Runner instance
  * @param {{left: number, right: number, top: number, bottom: number}} view - World rect in view
  */
 export function onDraw(inst, view) {
   const { pos } = inst
-  if (pos.x < view.left - CULL_MARGIN || pos.x > view.right + CULL_MARGIN || pos.y < view.top - CULL_MARGIN || pos.y > view.bottom + CULL_MARGIN) return
+  if (inst.goneFor > 0 || pos.x < view.left - CULL_MARGIN || pos.x > view.right + CULL_MARGIN || pos.y < view.top - CULL_MARGIN || pos.y > view.bottom + CULL_MARGIN) return
   const k = inst.k
   const parts = atlasFor.get(k)
   if (!parts) return
@@ -464,6 +574,41 @@ export function onDraw(inst, view) {
   k.pushScale(inst.v.set(inst.unit, inst.mirror ? -inst.unit : inst.unit))
   drawRunner(inst, parts)
   k.popTransform()
+}
+//
+// Back after being caught: where it was told to come back, running off
+// toward where it was told to go.
+//
+function turnUp(inst) {
+  comeFrom(inst, inst.comeFrom, inst.toward?.() ?? null)
+}
+//
+// The point of any of the runs nearest a world spot: its run, arc length
+// and distance (null with no runs).
+//
+function nearestOn(runs, p) {
+  let best = null
+  runs.forEach(run => run.pts.forEach((q, i) => {
+    const d = Math.hypot(q.x - p.x, q.y - p.y)
+    if (!best || d < best.d) best = { run, s: run.s[i], d }
+  }))
+  return best
+}
+function setGoal(inst, s) {
+  inst.goal = s
+  inst.goalFor = GOAL_TIME
+  inst.mode = MODE.PAUSE
+  inst.timer = 0
+}
+//
+// How far along its run (signed, the short way round a closed run) its
+// goal lies.
+//
+function goalGap(inst) {
+  const d = inst.goal - inst.s
+  if (!inst.run.closed) return d
+  const len = inst.run.len
+  return ((d % len) + len * 1.5) % len - len * HALF
 }
 //
 // Now and then, standing on a top, rested and unafraid: a leap at a
@@ -800,6 +945,8 @@ function boneLength(bone) {
 // open end stops the dash and turns it back.
 //
 function move(inst, dt) {
+  inst.goalFor -= dt
+  inst.goal !== null && (Math.abs(goalGap(inst)) < GOAL_NEAR || inst.goalFor <= 0) && (inst.goal = null)
   inst.timer -= dt
   inst.timer <= 0 && (inst.hunt ? huntStep(inst) : nextMode(inst))
   const want = inst.mode === MODE.DASH ? inst.dashSpeed : 0
@@ -836,6 +983,10 @@ function nextMode(inst) {
   inst.mode = MODE.DASH
   inst.timer = DASH_TIME + rng() * DASH_TIME_RANGE
   inst.dashSpeed = (DASH_SPEED + rng() * DASH_SPEED_RANGE) * inst.unit / SCALE
+  if (inst.goal !== null) {
+    inst.dir = Math.sign(goalGap(inst)) || inst.dir
+    return
+  }
   rng() < REVERSE_CHANCE && (inst.dir = -inst.dir)
 }
 function pause(inst) {

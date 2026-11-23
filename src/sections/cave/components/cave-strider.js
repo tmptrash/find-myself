@@ -26,6 +26,12 @@ import * as CaveLake from '../utils/cave-lake.js'
 // strider too close makes it row off gently. Left alone it drifts and
 // rows now and then, this way or that.
 //
+// Its back is ground the hero can land on (a moving line, see line): under
+// his weight it sinks, rowing on the way he came on to get out from under
+// him; sunk, it lets him into the water and floats up again. Given a spot
+// (setSlot: the striders' bridge, cave-strider-bridge.js) it rows there and
+// keeps to and fro about it, afraid of nothing.
+//
 // Everything is worked out in sheet px of strider.png in the body's own
 // frame (x to the head, y down, origin on the middle hips) and drawn under
 // one transform (mirrored when it faces left); one atlas texture for all
@@ -53,9 +59,9 @@ const DEG = 180 / Math.PI
 // degrees up).
 //
 const BODY = 'striderBody'
-const ORIGIN = { x: 484.9, y: 286.9 }
-const HEAD = { piece: 'striderHead', pivot: { x: 21.1, y: 90.6 }, at: { x: 645.9, y: 218.6 } }
-const FEELER = { piece: 'striderFeeler', pivot: { x: 16.6, y: 99.7 }, at: { x: 163.8, y: 30.1 } }
+const ORIGIN = { x: 482.7, y: 291.5 }
+const HEAD = { piece: 'striderHead', pivot: { x: 20.8, y: 91.7 }, at: { x: 642.9, y: 222.1 } }
+const FEELER = { piece: 'striderFeeler', pivot: { x: 17, y: 101.4 }, at: { x: 161.3, y: 30.4 } }
 const FEELERS = [{ far: true, turn: -14, phase: 0 }, { far: false, turn: 0, phase: 1.9 }]
 const HEAD_AT = { x: HEAD.at.x - ORIGIN.x, y: HEAD.at.y - ORIGIN.y }
 const FEELER_AT = { x: HEAD_AT.x + FEELER.at.x - HEAD.pivot.x, y: HEAD_AT.y + FEELER.at.y - HEAD.pivot.y }
@@ -68,17 +74,17 @@ const FEELER_AT = { x: HEAD_AT.x + FEELER.at.x - HEAD.pivot.x, y: HEAD_AT.y + FE
 // foot FAR_SPREAD times as far out and FAR_LIFT px higher (further back on
 // the water). The hips ride HIP_LIFT px over the surface.
 //
-const FEMUR = { piece: 'striderFemur', p: { x: 203.1, y: 33.5 }, q: { x: 30.1, y: 304.5 } }
-const TIBIA = { piece: 'striderTibia', p: { x: 25.2, y: 25.1 }, q: { x: 15.1, y: 346.2 } }
+const FEMUR = { piece: 'striderFemur', p: { x: 138.6, y: 27.4 }, q: { x: 20.5, y: 247.4 } }
+const TIBIA = { piece: 'striderTibia', p: { x: 28.2, y: 24.7 }, q: { x: 16.9, y: 340.6 } }
 const PAIRS = [
-  { hip: { x: 400.9, y: 283.8 }, rest: -907, scale: 1.4, oar: false },
-  { hip: { x: 484.9, y: 286.9 }, rest: 594, scale: 1.4, oar: true },
-  { hip: { x: 576.1, y: 271.1 }, rest: 425, scale: 0.75, oar: false }
+  { hip: { x: 399.1, y: 288.4 }, rest: -798, scale: 1.4, oar: false },
+  { hip: { x: 482.7, y: 291.5 }, rest: 523, scale: 1.4, oar: true },
+  { hip: { x: 573.5, y: 275.5 }, rest: 374, scale: 0.75, oar: false }
 ]
 const FAR_HIP = { x: -18, y: -14 }
 const FAR_SPREAD = 1.12
-const FAR_LIFT = 56
-const HIP_LIFT = 156
+const FAR_LIFT = 49
+const HIP_LIFT = 137
 const KNEE_SLACK = 1
 //
 // Rowing: a stroke sweeps the oars' feet back to STROKE_BACK (body x) over
@@ -88,7 +94,7 @@ const KNEE_SLACK = 1
 // rows at FLEE_SPEED..+RANGE every FLEE_EVERY s; a stroke never starts
 // before the last one is over.
 //
-const STROKE_BACK = -85
+const STROKE_BACK = -75
 const STROKE_TIME = 0.16
 const RECOVER_TIME = 0.22
 const WANDER_EVERY = 1.2
@@ -122,6 +128,50 @@ const CROSS_HOLD = 3
 const PEER_R = 70
 const EDGE_PAD = 30
 const BOUNCE = 0.25
+//
+// Ground for the hero (Ground's moving lines): its back, STAND_UP sheet px
+// over the water, STAND_HALF sheet px either side of its middle (feet
+// within HOLD_REACH world px of that and HOLD_SLACK px into it are on it).
+// Under him it sinks SINK_MAX world px over SINK_TIME s (its body going
+// down BODY_SINK of that, a ring off it every SINK_RING_EVERY s) — sunk, it
+// holds him no more till it is up again. For its first CARRY_TIME s under
+// him it rows on the way he came on (at once, then every CARRY_EVERY s) at
+// CARRY_SPEED; all the while it strains under his weight: every
+// STRAIN_EVERY..+RANGE s it jerks STRAIN_UP px back up (him with it), its
+// feet pushed STRAIN_SPREAD sheet px out, easing back at STRAIN_RATE per s.
+// Let go, it floats up at RISE_RATE px/s.
+//
+const STAND_UP = 220
+const STAND_HALF = 420
+const HOLD_REACH = 15
+const HOLD_SLACK = 6
+const SINK_MAX = 15
+const SINK_TIME = 3.2
+const BODY_SINK = 0.4
+const SINK_RING_EVERY = 0.4
+const CARRY_SPEED = 150
+const CARRY_EVERY = 0.35
+const CARRY_TIME = 0.8
+const STRAIN_EVERY = 0.18
+const STRAIN_EVERY_RANGE = 0.3
+const STRAIN_UP = 3
+const STRAIN_SPREAD = 90
+const STRAIN_RATE = 9
+const RISE_RATE = 12
+const LINE_ID = 'strider'
+//
+// Holding a spot (setSlot): it rows to it (at up to GATHER_SPEED, every
+// GATHER_EVERY s while it is farther than SLOT_FAR px off it), then to and
+// fro about it, SLOT_SWAY px either side, every SLOT_EVERY..+RANGE s;
+// afraid of nothing, startled only by a splash within SLOT_STARTLE_R px.
+//
+const GATHER_SPEED = 140
+const GATHER_EVERY = 0.4
+const SLOT_FAR = 30
+const SLOT_SWAY = 10
+const SLOT_EVERY = 0.9
+const SLOT_EVERY_RANGE = 0.8
+const SLOT_STARTLE_R = 250
 //
 // Feelers swing FEELER_SWING degrees at FEELER_HZ.
 //
@@ -166,15 +216,17 @@ let atlas = null
  * @param {number} cfg.dir - Facing: 1 right, -1 left
  * @param {number} cfg.size - Size multiplier
  * @param {number} cfg.seed - Random seed
+ * @param {string} cfg.id - Its line's id (Ground's moving lines)
+ * @param {Array<{x1: number, x2: number}>} [cfg.blocks] - Stretches of the surface it never crosses (a plant's leaves lying on the water)
  * @returns {Object} Strider instance
  */
 export function create(cfg) {
   const { k, lake } = cfg
   bake(k)
   const rng = createSeededRandom(cfg.seed)
-  const span = CaveLake.span(lake)
+  const span = freeStretch(CaveLake.openSpan(lake), cfg.blocks ?? [], cfg.x)
   const far = Math.round(BYTE_MAX * (1 - COLOR.farShade))
-  return {
+  const inst = {
     k,
     lake,
     rng,
@@ -182,7 +234,7 @@ export function create(cfg) {
     size: cfg.size,
     minX: span.x1 + EDGE_PAD,
     maxX: span.x2 - EDGE_PAD,
-    x: cfg.x,
+    x: Math.max(span.x1 + EDGE_PAD, Math.min(span.x2 - EDGE_PAD, cfg.x)),
     y: CaveLake.surfaceAt(lake, cfg.x),
     vx: 0,
     dir: cfg.dir,
@@ -195,26 +247,42 @@ export function create(cfg) {
     phase: rng() * Math.PI * 2,
     legs: createLegs(),
     rings: [],
+    slot: null,
+    swayTo: 1,
+    load: 0,
+    sink: 0,
+    sunk: false,
+    sinkRingIn: 0,
+    loadT: 0,
+    strain: 0,
+    strainIn: 0,
+    span: { x1: 0, x2: 0 },
+    line: null,
     nearColor: k.rgb(BYTE_MAX, BYTE_MAX, BYTE_MAX),
     farColor: k.rgb(far, far, far),
     markRgb: getRGB(k, CAVE_CFG.water.paint.surfaceLine),
     v: k.vec2(0, 0),
     anchors: new Map()
   }
+  inst.line = { moving: true, id: cfg.id, span: () => standSpan(inst), at: x => standAt(inst, x) }
+  return inst
 }
 
 /**
  * Creates the level's striders, spread over the lake.
  * @param {Object} k - Kaplay instance
  * @param {Object} lake - Lake instance (cave-lake.js)
+ * @param {Array<{x1: number, x2: number}>} [blocks] - Stretches of the surface none of them crosses
  * @returns {Array<Object>} Strider instances
  */
-export function createAll(k, lake) {
+export function createAll(k, lake, blocks = []) {
   const rng = createSeededRandom(SET_SEED)
-  const span = CaveLake.span(lake)
-  return SET_AT.map(share => create({
+  const span = CaveLake.openSpan(lake)
+  return SET_AT.map((share, i) => create({
     k,
     lake,
+    blocks,
+    id: LINE_ID + i,
     x: span.x1 + (span.x2 - span.x1) * share,
     dir: rng() < HALF ? -1 : 1,
     size: SET_SIZE + rng() * SET_SIZE_RANGE,
@@ -233,6 +301,7 @@ export function onUpdate(inst, threats, peers) {
   inst.restIn -= dt
   inst.fleeHold -= dt
   inst.startle && (inst.startle.t -= dt) <= 0 && (inst.startle = null)
+  updateSink(inst, dt)
   updateStroke(inst, dt)
   decide(inst, threats, peers)
   glide(inst, dt)
@@ -248,8 +317,63 @@ export function onUpdate(inst, threats, peers) {
  * @param {number} x - World X of the splash
  */
 export function startle(inst, x) {
+  if (inst.slot !== null && Math.abs(x - inst.x) > SLOT_STARTLE_R) return
   inst.startle = { x, y: inst.y, t: STARTLE_TIME }
   inst.stroke = null
+}
+
+/**
+ * Its back as a line the hero can stand on (Ground's moving lines).
+ * @param {Object} inst - Strider instance
+ * @returns {Object} Ground moving line
+ */
+export function line(inst) {
+  return inst.line
+}
+
+/**
+ * Whether its back holds up feet at (x, feetY): on it, at most HOLD_SLACK
+ * px into it (a hero on it sinking with it is not in the water yet).
+ * @param {Object} inst - Strider instance
+ * @param {number} x - World X
+ * @param {number} feetY - World Y of the feet
+ * @returns {boolean}
+ */
+export function holds(inst, x, feetY) {
+  const span = standSpan(inst)
+  if (!span || x < span.x1 - HOLD_REACH || x > span.x2 + HOLD_REACH) return false
+  return feetY <= backY(inst) + HOLD_SLACK
+}
+
+/**
+ * Whether the hero stands on it now (0: no; else the way he came on, 1
+ * right or -1 left — the way it rows on with him, sinking).
+ * @param {Object} inst - Strider instance
+ * @param {number} dir - 0, 1 or -1
+ */
+export function bear(inst, dir) {
+  if (!dir) {
+    inst.load = 0
+    return
+  }
+  if (inst.load) return
+  inst.load = dir
+  inst.loadT = 0
+  inst.strainIn = 0
+  inst.vx = 0
+  inst.stroke = null
+  inst.restIn = 0
+  inst.sinkRingIn = 0
+}
+
+/**
+ * Gives it a spot on the water to keep to (null: none, it lives on its
+ * own again).
+ * @param {Object} inst - Strider instance
+ * @param {number|null} x - World X
+ */
+export function setSlot(inst, x) {
+  inst.slot = x
 }
 
 /**
@@ -282,7 +406,7 @@ export function onDraw(inst, view) {
   const parts = atlasFor.get(k)
   if (!parts) return
   k.pushTransform()
-  k.pushTranslate(inst.v.set(inst.x, inst.y - HIP_LIFT * inst.unit))
+  k.pushTranslate(inst.v.set(inst.x, bodyY(inst) - HIP_LIFT * inst.unit))
   k.pushScale(inst.v.set(inst.dir * inst.unit, inst.unit))
   drawStrider(inst, parts)
   k.popTransform()
@@ -319,6 +443,14 @@ function boneLength(bone) {
 //
 function decide(inst, threats, peers) {
   if (inst.stroke) return
+  if (inst.load) {
+    inst.restIn <= 0 && inst.loadT < CARRY_TIME && row(inst, inst.load, CARRY_SPEED, CARRY_EVERY)
+    return
+  }
+  if (inst.slot !== null && !inst.startle) {
+    keepSlot(inst)
+    return
+  }
   const threat = inst.startle ?? threatsMiddle(inst, threats)
   if (threat) {
     flee(inst, threat)
@@ -356,6 +488,64 @@ function flee(inst, threat) {
   inst.fleeDir = shut ? -away : away
   inst.fleeHold = shut ? CROSS_HOLD : FLEE_HOLD
   row(inst, inst.fleeDir, speed, FLEE_EVERY)
+}
+//
+// At its spot: rowing to it, then to and fro about it (each stroke just
+// as hard as takes it there: the water's drag stops it on the mark).
+//
+function keepSlot(inst) {
+  if (inst.restIn > 0) return
+  const d = inst.slot + inst.swayTo * SLOT_SWAY - inst.x
+  const far = Math.abs(d) > SLOT_FAR
+  far || (inst.swayTo = -inst.swayTo)
+  const wait = far ? GATHER_EVERY : SLOT_EVERY + inst.rng() * SLOT_EVERY_RANGE
+  row(inst, Math.sign(d) || inst.dir, Math.min(GATHER_SPEED, Math.abs(d) * DRAG), wait)
+}
+//
+// Under the hero it sinks, straining in jerks (rings going out off it);
+// sunk, it holds him no more till it has floated all the way up again.
+//
+function updateSink(inst, dt) {
+  inst.sink = inst.load ? Math.min(SINK_MAX, inst.sink + SINK_MAX / SINK_TIME * dt) : Math.max(0, inst.sink - RISE_RATE * dt)
+  inst.sink >= SINK_MAX && (inst.sunk = true)
+  inst.sink <= 0 && (inst.sunk = false)
+  inst.strain *= Math.exp(-STRAIN_RATE * dt)
+  inst.sunk && (inst.strain = 0)
+  if (!inst.load) return
+  inst.loadT += dt
+  inst.strainIn -= dt
+  if (inst.strainIn <= 0) {
+    inst.strainIn = STRAIN_EVERY + inst.rng() * STRAIN_EVERY_RANGE
+    inst.strain = 1
+  }
+  inst.sinkRingIn -= dt
+  if (inst.sinkRingIn > 0) return
+  inst.sinkRingIn = SINK_RING_EVERY
+  inst.rings.push({ x: inst.x, y: inst.y, t: 0 })
+}
+//
+// Its back's stretch (null while it is sunk) and height.
+//
+function standSpan(inst) {
+  if (inst.sunk) return null
+  const half = STAND_HALF * inst.unit
+  inst.span.x1 = inst.x - half
+  inst.span.x2 = inst.x + half
+  return inst.span
+}
+function standAt(inst, x) {
+  const span = standSpan(inst)
+  return span && x >= span.x1 && x <= span.x2 ? backY(inst) : null
+}
+function backY(inst) {
+  return inst.y - STAND_UP * inst.unit + inst.sink - inst.strain * STRAIN_UP
+}
+//
+// Its body's water line: the surface, pressed down as it sinks (pushed
+// back up a little as it strains).
+//
+function bodyY(inst) {
+  return inst.y + inst.sink * BODY_SINK - inst.strain * STRAIN_UP
 }
 //
 // The middle (along the lake) of everything it fears near it, or null.
@@ -418,10 +608,11 @@ function glide(inst, dt) {
 }
 //
 // Where a leg's foot rests now: body-frame x (an oar sweeps back through
-// a stroke and swings forward again) and world x.
+// a stroke and swings forward again; straining, every foot pushes out)
+// and world x.
 //
 function footOf(inst, leg) {
-  const lx = leg.oar ? oarX(inst, leg.rest) : leg.rest
+  const lx = (leg.oar ? oarX(inst, leg.rest) : leg.rest) + Math.sign(leg.rest) * inst.strain * STRAIN_SPREAD
   return { lx, wx: inst.x + inst.dir * lx * inst.unit }
 }
 //
@@ -484,7 +675,7 @@ function drawLeg(inst, parts, leg) {
   const foot = footOf(inst, leg)
   const surface = CaveLake.surfaceAt(inst.lake, foot.wx)
   const fx = foot.lx
-  const fy = (surface - inst.y) / inst.unit + HIP_LIFT - (leg.far ? FAR_LIFT : 0)
+  const fy = (surface - bodyY(inst)) / inst.unit + HIP_LIFT - (leg.far ? FAR_LIFT : 0)
   let ax = fx - leg.hipX
   let ay = fy - leg.hipY
   const dist = Math.max(Math.abs(leg.l1 - leg.l2) + KNEE_SLACK, Math.min(leg.l1 + leg.l2 - KNEE_SLACK, Math.hypot(ax, ay)))
@@ -577,4 +768,18 @@ function buildAtlas() {
     h: p.src.height
   }))
   return { canvas, parts }
+}
+//
+// The stretch of the open surface between the blocks that holds x (or the
+// widest one, if x is on a block).
+//
+function freeStretch(span, blocks, x) {
+  const free = []
+  let from = span.x1
+  blocks.slice().sort((a, b) => a.x1 - b.x1).forEach(b => {
+    b.x1 > from && free.push({ x1: from, x2: b.x1 })
+    from = Math.max(from, b.x2)
+  })
+  from < span.x2 && free.push({ x1: from, x2: span.x2 })
+  return free.find(f => x >= f.x1 && x <= f.x2) ?? free.reduce((a, b) => (b.x2 - b.x1 > a.x2 - a.x1 ? b : a), free[0] ?? span)
 }

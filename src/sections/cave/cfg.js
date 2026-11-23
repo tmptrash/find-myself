@@ -114,6 +114,36 @@ export const CAVE_CFG = {
     depthShade: 0.3
   },
   //
+  // The lurker plant by the left bank (cave-lurker.js, plant_left.png):
+  // its pieces drawn toned down toward the cave's light (tint), its
+  // eye's pupil, the splash its head throws up.
+  //
+  lurker: {
+    tint: '#c9c7b4',
+    pupil: '#1d1a17',
+    splash: '#b9eadc'
+  },
+  //
+  // The pad plant in the lake (cave-pads.js, plant_mid.png): drawn toned
+  // down toward the cave's light.
+  //
+  pads: {
+    tint: '#c9c7b4'
+  },
+  //
+  // The trumpeter (cave-trumpet.js, plant_right.png): drawn toned down
+  // toward the cave's light (tint); its eyelids (and their edge), its
+  // pupils, the teeth in its funnel (and their edge).
+  //
+  trumpet: {
+    tint: '#c9c7b4',
+    lid: '#5f5a23',
+    lidEdge: '#33300f',
+    pupil: '#1d1a17',
+    tooth: '#eadfba',
+    toothEdge: '#5a3a20'
+  },
+  //
   // The lake's giant (cave-giant.js): its body (assets/cave0/creature.png)
   // bent as one skinned mesh, its paddles drawn apart. `length` is its drawn length (world px, the
   // picture's width); `mesh` the grid (columns, rows) and how wide the

@@ -6,7 +6,6 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
 import * as CaveLake from '../utils/cave-lake.js'
 import * as Anim from '../utils/cave-giant-anim.js'
-import * as Back from './cave-giant-back.js'
 //
 // The lake's giant (creature.png): its body drawn whole as one skinned
 // mesh (skin-mesh.js) bent by a spine of bones (head, neck, front torso,
@@ -34,20 +33,11 @@ import * as Back from './cave-giant-back.js'
 //   back in from that same wall, head first the other way;
 // - every so often its head rises in an arc to the surface (SURFACE), the
 //   body following, and it BREATHEs: the body floating level, nearly
-//   still, mist puffing from its nostrils — its back is then ground the
-//   hero can stand on and ride (cave-giant-back.js), and it does not DIVE
-//   again while he stands there; the dive starts with the head going
+//   still, mist puffing from its nostrils; then it DIVEs, the head going
 //   down, the body following it under;
-// - lured by the fish gathering under the swarm's fireflies over the water
-//   (ctx.lure): it comes in soon; heading for the lake's left end it swims
-//   on behind that wall and comes back out of it, and coming out of it (or
-//   heading right) it rises to breathe at once by the left bank, where the
-//   hero can get on its back. Breathing, it swims on along the surface
-//   only while the gathering is ahead of it — and the gathering moves on
-//   only as the swarm's fireflies do, driven ahead by the hero riding it —
-//   up to the lake's right end; it hunts nothing while lured;
 // - after a while or a few meals it leaves through the wall ahead, and
-//   comes out again a little later from either side (never while lured).
+//   comes out again a little later from either side.
+// It lives its own life under the water: nothing stands or rides on it.
 // The body is heavy: speed and pitch change slowly.
 //
 const SPRITE = 'cave0-giant-v6'
@@ -58,43 +48,26 @@ const G = CAVE_CFG.giant
 // The body (giantBody piece px — creature.png faces right; its pieces are
 // mirrored as they are cut, so here it faces left, its snout at x 0 like
 // all the giant's own art): its size, the rest spine head to tail (the
-// anchor joint the mesh is placed by), the riding ground's ends (a level
-// line along the top of its head, the highest of it, from behind the nose
-// back to where its back falls away), then on along its back and tail
-// down in level steps (x1..x2 at y each, one under the other by 20 px:
-// about 3 world px, a step the hero walks up and down; each is ground only
-// while it is out of the water, so it reaches as far back as the giant
-// shows over the surface), how far from its front end the hero counts as
-// on its nose (NOSE_ZONE px), the snout and its three nostrils (the mist
-// comes out of each).
+// anchor joint the mesh is placed by), the top of its back (a level line
+// along the top of its head, the highest of it: breathing, it stands out
+// of the water), the snout and its three nostrils (the mist comes out of
+// each).
 //
-const PICTURE = { w: 1693, h: 396 }
+const PICTURE = { w: 1699, h: 401 }
 const JOINTS = [
-  { x: 8, y: 110 },
-  { x: 292, y: 156 },
-  { x: 578, y: 214 },
-  { x: 876, y: 250 },
-  { x: 1131, y: 256 },
-  { x: 1378, y: 212 },
-  { x: 1574, y: 216 },
-  { x: 1680, y: 213 }
+  { x: 8, y: 113 },
+  { x: 292, y: 158 },
+  { x: 578, y: 219 },
+  { x: 878, y: 256 },
+  { x: 1135, y: 264 },
+  { x: 1383, y: 218 },
+  { x: 1580, y: 218 },
+  { x: 1686, y: 215 }
 ]
 const ANCHOR = 2
-const BACK = [{ x: 124, y: 15 }, { x: 357, y: 15 }]
-const TAIL_STEPS = [
-  { x1: 357, x2: 416, y: 35 },
-  { x1: 416, x2: 572, y: 55 },
-  { x1: 572, x2: 769, y: 75 },
-  { x1: 769, x2: 845, y: 95 },
-  { x1: 845, x2: 906, y: 115 },
-  { x1: 906, x2: 969, y: 135 },
-  { x1: 969, x2: 1057, y: 155 },
-  { x1: 1057, x2: 1313, y: 175 }
-]
-const BACK_SPANS = [BACK].concat(TAIL_STEPS.map(t => [{ x: t.x1, y: t.y }, { x: t.x2, y: t.y }]))
-const NOSE_ZONE = 40
-const SNOUT = { x: 6, y: 118 }
-const NOSTRILS = [{ x: 43, y: 60 }, { x: 81, y: 64 }, { x: 132, y: 71 }]
+const BACK = [{ x: 130, y: 15 }, { x: 357, y: 15 }]
+const SNOUT = { x: 6, y: 121 }
+const NOSTRILS = [{ x: 44, y: 63 }, { x: 83, y: 67 }, { x: 133, y: 74 }]
 //
 // The jaw (giantBody px): the mouth line, snout to corner (where the lips
 // meet, the jaw's hinge); the lower jaw's outline (the mouth line, then
@@ -114,10 +87,10 @@ const NOSTRILS = [{ x: 43, y: 60 }, { x: 81, y: 64 }, { x: 132, y: 71 }]
 // the corner by GAPE_BOW of the gap there, drawn through GAPE_STEPS
 // steps. It opens at OPEN_RATE, at LUNGE_OPEN_RATE in a rush.
 //
-const MOUTH = [{ x: 12, y: 121 }, { x: 20, y: 127 }, { x: 40, y: 127 }, { x: 60, y: 130 }, { x: 90, y: 137 }, { x: 120, y: 144 }, { x: 150, y: 154 }, { x: 170, y: 160 }, { x: 190, y: 165 }, { x: 207, y: 167 }]
+const MOUTH = [{ x: 12, y: 124 }, { x: 20, y: 131 }, { x: 40, y: 131 }, { x: 60, y: 133 }, { x: 90, y: 140 }, { x: 120, y: 148 }, { x: 150, y: 158 }, { x: 170, y: 163 }, { x: 190, y: 167 }, { x: 212, y: 171 }]
 const HINGE = MOUTH[MOUTH.length - 1]
-const GULLET = { x: 40, y: 128 }
-const JAW = MOUTH.concat([{ x: 210, y: 185 }, { x: 208, y: 270 }, { x: 180, y: 262 }, { x: 150, y: 249 }, { x: 120, y: 235 }, { x: 100, y: 225 }, { x: 80, y: 213 }, { x: 60, y: 199 }, { x: 40, y: 182 }, { x: 25, y: 162 }, { x: 15, y: 140 }, { x: 8, y: 128 }])
+const GULLET = { x: 40, y: 131 }
+const JAW = MOUTH.concat([{ x: 215, y: 190 }, { x: 213, y: 281 }, { x: 180, y: 269 }, { x: 150, y: 256 }, { x: 120, y: 242 }, { x: 100, y: 232 }, { x: 80, y: 220 }, { x: 60, y: 205 }, { x: 40, y: 187 }, { x: 25, y: 168 }, { x: 15, y: 154 }, { x: 8, y: 130 }])
 const JAW_EDGE = 3
 const JAW_PAD = 4
 const JAW_OPEN = 0.5
@@ -195,32 +168,29 @@ const GAPE_STEPS = 8
 const GAPE_POINTS = (MOUTH.length - 2 - GAPE_AT) * 2 + GAPE_STEPS + 1
 const GAPE_INDICES = Array.from({ length: GAPE_POINTS - 1 }, (_, i) => [GAPE_POINTS, i, i + 1]).flat()
 //
-// Paddles: the piece, its root on its piece (px: the ring that sits in the
-// socket), the socket on the body (giantBody px) and the bone the socket
-// rides on.
-//
-//
-// The paddles' tops reach up into the body's cut under its belly
-// (giantBody px, x1..x2 each): there everything under the body's own
-// lower edge (from its middle row down, the first pixel under SPILL_ALPHA)
-// is cleared from it.
-//
-//
 // How far its outline reaches over (GIRTH_UP) and under (GIRTH_DOWN: its
 // paddles hanging under the middle of it too) each joint's spine point
 // (giantBody px), and how much further down its dropped jaw reaches at
 // the snout fully open (the joint behind half that).
 //
-const GIRTH_UP = [54, 152, 151, 141, 86, 77, 117, 63]
-const GIRTH_DOWN = [54, 152, 452, 400, 300, 77, 117, 63]
+const GIRTH_UP = [49, 151, 152, 141, 87, 80, 119, 63]
+const GIRTH_DOWN = [56, 156, 454, 400, 294, 76, 119, 63]
 const JAW_REACH = 100
-const FIN_SPILLS = [{ x1: 443, x2: 808 }, { x1: 955, x2: 1262 }]
-const SPILL_ALPHA = 40
-const RGBA = 4
-const ALPHA_BYTE = 3
+const SOCKET_R = 76
+const SOCKET_SOFT = 0.35
+const SOCKET_FROM = 105
+const TRANSPARENT = '00'
+//
+// Paddles: the piece, its root on its piece (px: the end that sits in the
+// socket), the socket on the body (giantBody px) and the bone the socket
+// rides on. A paddle covers its socket: the socket painted on the body
+// (its light rim and its hole) is covered over with the body's own skin
+// from SOCKET_FROM px over it (a disc SOCKET_R px round, soft over its
+// outer SOCKET_SOFT share), so nothing of it shows round the paddle's root.
+//
 const FINS = [
-  { piece: 'giantFinFront', root: { x: 48, y: 54 }, socket: { x: 528, y: 306 }, bone: 2 },
-  { piece: 'giantFinHind', root: { x: 38, y: 43 }, socket: { x: 1002, y: 330 }, bone: 3 }
+  { piece: 'giantFinFront', root: { x: 48, y: 59 }, socket: { x: 528, y: 311 }, bone: 2 },
+  { piece: 'giantFinHind', root: { x: 38, y: 44 }, socket: { x: 1005, y: 335 }, bone: 3 }
 ]
 const SCALE = G.length / PICTURE.w
 const TEX_OVER = 3
@@ -261,15 +231,22 @@ const JOINT_BEND = 0.35
 const BODY_BEND = Math.PI / 4
 const HEAD_TILT = 0.6
 //
-// The lake (for the head): HEAD_EDGE px inside the water's ends, SUB_TOP
-// px under the surface when submerged (never pushed down to it: a head
+// The lake (for the head): HEAD_EDGE px inside the open water's ends
+// (out of the banks' hollows), SUB_TOP px under the surface when
+// submerged (never pushed down to it: a head
 // above that line may only sink) and BED_CLEAR over the bed. Breathing,
 // the top of the back stands BACK_ABOVE px out of the water (the head
 // reaching its height within SURFACE_NEAR px and held there at HOLD_RATE;
 // within SURFACE_UP px it counts as up and swims along the surface — the
 // waves move that height a little, so a tighter bound would flicker), the
-// body floating level at LEVEL_RATE per s; the back is ground once it is
-// DRY px out.
+// body floating level at LEVEL_RATE per s. Surfacing, it swims on along
+// the surface (room ahead) at SURFACE_SPEED, its mouth SURFACE_GAPE open
+// while it moves faster than SURFACE_GAPE_SPEED, till its tail has come up within LEVEL_TOL px of its
+// head's height along its own path, so its body is level when it stops.
+// The head looks HEAD_LOOK px ahead: its pitch never aims it into the bed
+// nor (under water) up past the submerged line there, so it levels off in
+// an arc before it meets either; one still pushed along a bound swims
+// on the bound's own slope.
 //
 const HEAD_EDGE = 50
 const SUB_TOP = 24
@@ -279,14 +256,16 @@ const SURFACE_NEAR = 2
 const SURFACE_UP = 6
 const LEVEL_RATE = 0.8
 const HOLD_RATE = 3
-const DRY = 2
+const SURFACE_SPEED = 50
+const SURFACE_GAPE = 0.7
+const SURFACE_GAPE_SPEED = 12
+const LEVEL_TOL = 8
+const HEAD_LOOK = [60, 120, 180]
 //
 // Rhythm: it breathes every BREATH_EVERY..+RANGE s of swimming for
-// BREATH_TIME..+RANGE s (on while the hero rides or the lure is ahead).
-// A breath blows a jet of mist from each nostril every PUFF_EVERY s (it
-// draws in INHALE_LEAD s before each, both heard: ctx.onBreath; while
-// the hero rides it holds its breath, no puffs and no sound, until he is
-// off its back, carried over or drowned):
+// BREATH_TIME..+RANGE s. A breath blows a jet of mist from each nostril
+// every PUFF_EVERY s (it draws in INHALE_LEAD s before each, both heard:
+// ctx.onBreath):
 // PUFF_COUNT wisps one after another (PUFF_GAP s apart), each a baked
 // cloud of soft blobs and streaks (MIST_VARIANTS of them, MIST_PX square,
 // MIST_BLOBS blobs and MIST_STREAKS streaks), thrown up at PUFF_UP..+RANGE
@@ -336,58 +315,13 @@ const DIVE_AHEAD = 180
 // right, it comes back out of either (at random) after AWAY..+RANGE s to
 // hunt again — so it shows now and then whatever the hero does (the
 // giant's dev scene, holding it in the lake, has it come back the other
-// way within BACK_IN..+RANGE s). Away anywhere, the moment a school
-// gathers leaping for the swarm's fireflies the hero has driven over the
-// lake it comes in (within LURE_COME_IN s) out of the wall it is behind,
-// toward them. Its head comes in from HEAD_HIDE px behind the water's end at
+// way within BACK_IN..+RANGE s). Its head comes in from HEAD_HIDE px behind the water's end at
 // ENTER_DEPTH of the deep water and swims ENTER_IN px in before roaming;
 // it is gone once its tail is EXIT_OUT px past the end. It stays
 // STAY..+RANGE s or until MEALS fish are eaten. Roaming, it heads
 // AHEAD..+RANGE px on; with less than AHEAD left ahead it goes through the
 // wall. Now and then it hangs still (IDLE_CHANCE on reaching a spot) for
 // IDLE_TIME..+RANGE s.
-//
-//
-// Lured (only while the fish feed within LURE_LEFT px of the water's left
-// end): away, it comes in within LURE_COME_IN s; out of the left wall it
-// comes already up at its breathing height, its back out of the water (so
-// it is ground the moment it shows), and swims in along the surface to
-// breathe with its back's near end LURE_BOARD_GAP px off the water's left
-// end (for the hero to get on); swimming right no
-// farther than LURE_NEAR px past them, it rises there (no nearer the bank
-// than that, LURE_RISE_AHEAD px ahead of where it is); anywhere else it
-// hurries (LURE_RUSH) the way it heads, round through the wall, to come
-// back out of the left one. Along the surface it swims at LURE_SPEED
-// (CARRY_SPEED with the hero on its back), its mouth SURFACE_GAPE open
-// while it moves faster than SURFACE_GAPE_SPEED.
-// Breathing, it swims on while
-// the gathering is ahead of its snout within LURE_AHEAD px; it stays up
-// (never diving, ridden or not, nor turned the wrong way) while the
-// gathering is before it — ahead, or over its head up to LURE_BEHIND px
-// back of its snout — and LURE_GRACE s after it was last there (the fish
-// come and go as they leap). Turned the wrong way with the gathering
-// elsewhere, unridden, it dives at once to go round; with the hero on its
-// back (from LURE_GRACE s after he got on) and no gathering before it for
-// LURE_GRACE s it dives — but once it has carried him
-// DELIVER_SHARE of the lake's length it takes him on to its far end
-// itself (lure or none) and stays up there till he is off (off its back
-// RIDE_GAP s, not just a hop on it).
-//
-const LURE_COME_IN = 1.5
-const LURE_BOARD_GAP = 40
-const LURE_RISE_AHEAD = 40
-const LURE_SPEED = 50
-const CARRY_SPEED = 80
-const SURFACE_GAPE = 0.7
-const SURFACE_GAPE_SPEED = 12
-const LURE_RUSH = 60
-const LURE_LEFT = 520
-const LURE_NEAR = 120
-const LURE_GRACE = 3
-const DELIVER_SHARE = 2 / 3
-const RIDE_GAP = 0.6
-const LURE_AHEAD = 420
-const LURE_BEHIND = 120
 const FIRST_VISIT = 10
 const AWAY = 15
 const AWAY_RANGE = 15
@@ -451,7 +385,7 @@ const HALF = 0.5
 const GAPE_DY = ((GULLET.y + HINGE.y + (GULLET.x - HINGE.x) * Math.sin(-JAW_OPEN) + (GULLET.y - HINGE.y) * Math.cos(-JAW_OPEN)) * HALF - JOINTS[0].y) * SCALE
 const TINY = 1e-3
 const OPENING_MIN = 4
-const HELD_OVERLAP = 5
+const HELD_OVERLAP = 14
 export const MODE = { AWAY: 'away', ENTER: 'enter', SWIM: 'swim', IDLE: 'idle', SURFACE: 'surface', BREATHE: 'breathe', DIVE: 'dive', EXIT: 'exit' }
 const ANIM_STATE = {
   [MODE.ENTER]: Anim.STATE.SWIM,
@@ -490,13 +424,12 @@ export function create(cfg) {
     lake,
     rng: createSeededRandom(SEED),
     span,
-    minX: span.x1 + HEAD_EDGE,
-    maxX: span.x2 - HEAD_EDGE,
+    minX: CaveLake.openSpan(lake).x1 + HEAD_EDGE,
+    maxX: CaveLake.openSpan(lake).x2 - HEAD_EDGE,
     mesh,
     reach,
     keep: reach[reach.length - 1] + TRAIL_SPARE,
     anim: Anim.create(mesh.bones.length),
-    back: Back.create(k, BACK_SPANS.length),
     stay: Boolean(cfg.stay),
     locked: false,
     cmdSpeed: null,
@@ -529,11 +462,6 @@ export function create(cfg) {
     pitch: 0,
     puffIn: 0,
     inhaled: true,
-    lureFor: 0,
-    graceFor: LURE_GRACE,
-    rideFrom: null,
-    offFor: 0,
-    delivering: false,
     puffs: [],
     open: 0,
     held: null,
@@ -558,10 +486,8 @@ export function create(cfg) {
     tooth: [k.vec2(0, 0), k.vec2(0, 0), k.vec2(0, 0)],
     toothRgb: getRGB(k, G.tooth),
     toothEdgeRgb: getRGB(k, G.toothEdge),
-    carrying: false,
     snout: { x: 0, y: 0 },
     snoutV: { x: 0, y: 0 },
-    backSpans: BACK_SPANS.map(() => ({ a: { x: 0, y: 0 }, b: { x: 0, y: 0 }, dry: false })),
     nostril: { x: 0, y: 0 },
     socket: { x: 0, y: 0 },
     a: { x: 0, y: 0 },
@@ -590,9 +516,7 @@ export function create(cfg) {
  * @param {(fish: Object, out: Object) => void} ctx.onSeize - A fish is caught in the jaws (to be held head out along `out`)
  * @param {(fish: Object, at: Object, angle: number, dir: Object, share: number) => void} ctx.onHold - Holds a fish in the jaws (Fish.hold)
  * @param {(fish: Object) => void} ctx.onEat - A fish is swallowed (gone)
- * @param {Object|null} ctx.hero - The hero's character (to know if he rides the back, or stands on it as it goes under)
  * @param {(exhale: boolean, x: number) => void} ctx.onBreath - It breathes out (true) or in at world X
- * @param {{x: number, y: number}|null} ctx.lure - Where many fish gather under the swarm's fireflies over the water, else null
  */
 export function onUpdate(inst, ctx) {
   const dt = inst.k.dt()
@@ -601,13 +525,10 @@ export function onUpdate(inst, ctx) {
   updatePuffs(inst, dt)
   updateBlood(inst, dt)
   if (inst.mode === MODE.AWAY) {
-    ctx.lure && (inst.awayFor = Math.min(inst.awayFor, LURE_COME_IN))
     inst.awayFor -= dt
-    inst.awayFor <= 0 && comeIn(inst, ctx.lure ? inst.side : inst.returnSide, lureAtLeft(inst, ctx))
-    Back.place(inst.back, null)
+    inst.awayFor <= 0 && comeIn(inst, inst.returnSide)
     return
   }
-  inst.carrying = Back.isCarrying(inst.back, ctx.hero)
   decide(inst, ctx, dt)
   if (inst.mode === MODE.AWAY) return
   move(inst, dt)
@@ -623,7 +544,6 @@ export function onUpdate(inst, ctx) {
   inst.snoutV.y = (inst.snout.y - sy) / dt
   inst.held ? gulp(inst, ctx, dt) : inst.lunging && bite(inst, ctx)
   openJaw(inst, ctx, dt)
-  placeBack(inst, ctx.hero)
 }
 
 /**
@@ -647,28 +567,6 @@ export function command(inst, cmd, x) {
   cmd === COMMAND.SURFACE && startSurface(inst, x ?? inst.pos.x)
   cmd === COMMAND.DIVE && startDive(inst)
   cmd === COMMAND.TURN && exit(inst, true)
-}
-
-/**
- * Whether the hero riding its back stands on its nose (the platform's
- * front end) — from there he drives the swarm's fireflies ahead of it.
- * @param {Object} inst - Giant instance
- * @param {number} x - The hero's world X
- * @returns {boolean}
- */
-export function riderAtNose(inst, x) {
-  const r = inst.back.rect
-  const nose = inst.facing > 0 ? r.x + r.w : r.x
-  return inst.carrying && Math.abs(x - nose) < NOSE_ZONE
-}
-
-/**
- * Whether the hero rides its back.
- * @param {Object} inst - Giant instance
- * @returns {boolean}
- */
-export function isRidden(inst) {
-  return inst.carrying
 }
 
 /**
@@ -697,19 +595,6 @@ export function bodyLine(inst) {
     inst.girthDown[i] = (GIRTH_DOWN[i] + inst.open * JAW_REACH * jaw) * SCALE
   })
   return inst.body
-}
-
-/**
- * Whether its back, out of the water, holds up whatever has its feet at
- * (x, feetY) — a hero landing on it sinks into it for a frame before the
- * physics sets him on top, and must not count as fallen in the lake.
- * @param {Object} inst - Giant instance
- * @param {number} x - World X
- * @param {number} feetY - World Y of the feet
- * @returns {boolean}
- */
-export function holdsUp(inst, x, feetY) {
-  return Back.holds(inst.back, x, feetY)
 }
 
 /**
@@ -775,8 +660,7 @@ export function onDrawMist(inst) {
 export function onDrawDebug(inst) {
   if (inst.mode === MODE.AWAY) return
   SkinMesh.onDrawDebug(inst.mesh, inst.boneRgbs, inst.debugRgb)
-  Back.onDrawDebug(inst.back, inst.debugRgb)
-  const text = `${inst.mode} speed ${Math.round(inst.speed)} pitch ${inst.pitch.toFixed(2)}${inst.locked ? ' (held)' : ''}${inst.carrying ? ' (ridden)' : ''}`
+  const text = `${inst.mode} speed ${Math.round(inst.speed)} pitch ${inst.pitch.toFixed(2)}${inst.locked ? ' (held)' : ''}`
   inst.k.drawText({ text, pos: inst.k.vec2(inst.pos.x - DEBUG_TEXT_UP, inst.pos.y - DEBUG_TEXT_UP), size: DEBUG_TEXT, color: inst.debugRgb })
 }
 //
@@ -785,13 +669,13 @@ export function onDrawDebug(inst) {
 // depth of the deep water there, head first into the lake, the body
 // straight behind it.
 //
-function comeIn(inst, side, lured = false) {
+function comeIn(inst, side) {
   inst.side = side ?? (Math.random() < HALF ? -1 : 1)
   inst.facing = -inst.side
   inst.returnSide = null
   const inX = inst.side < 0 ? inst.minX : inst.maxX
   inst.pos.x = inst.side < 0 ? inst.span.x1 - HEAD_HIDE : inst.span.x2 + HEAD_HIDE
-  inst.pos.y = lured && inst.side < 0 ? breatheY(inst, inX) : depthAt(inst, inX, ENTER_DEPTH)
+  inst.pos.y = depthAt(inst, inX, ENTER_DEPTH)
   inst.speed = CRUISE
   inst.pitch = 0
   resetTrail(inst)
@@ -850,10 +734,6 @@ function roomAhead(inst) {
 function decide(inst, ctx, dt) {
   const { mode } = inst
   if (mode === MODE.ENTER) {
-    if (lureAtLeft(inst, ctx) && !inst.locked && inst.facing > 0) {
-      startSurface(inst, boardingX(inst))
-      return
-    }
     roomAhead(inst) < inst.maxX - inst.minX - ENTER_IN && setMode(inst, MODE.SWIM)
     return
   }
@@ -873,7 +753,6 @@ function decide(inst, ctx, dt) {
     inst.pos.y >= inst.target.y - SURFACE_NEAR && setMode(inst, MODE.SWIM)
     return
   }
-  if (!inst.locked && lureAtLeft(inst, ctx) && lured(inst, ctx)) return
   if (inst.locked) {
     mode === MODE.SWIM && roam(inst)
     inst.want = mode === MODE.IDLE ? 0 : inst.want
@@ -882,7 +761,7 @@ function decide(inst, ctx, dt) {
   inst.stayFor -= dt
   inst.breathIn -= dt
   inst.restFor -= dt
-  if (!inst.stay && !ctx.lure && (inst.stayFor <= 0 || inst.meals >= MEALS) && !inst.lunging) {
+  if (!inst.stay && (inst.stayFor <= 0 || inst.meals >= MEALS) && !inst.lunging) {
     exit(inst, false)
     return
   }
@@ -930,36 +809,6 @@ function inSchool(ctx, p) {
     h && Math.hypot(h.x - p.x, h.y - p.y) < SCHOOL_R && n++
   })
   return n >= SCHOOL_MIN
-}
-//
-// Lured while swimming (the fish feeding by the left bank): there already,
-// heading right (out of the left wall), up to breathe by the bank at
-// once; else off in a hurry the way it heads, round through that wall,
-// to come back out of the left wall. True if it acted.
-//
-function lured(inst, ctx) {
-  if (inst.held) return false
-  inst.prey && endHunt(inst)
-  if (inst.facing > 0 && inst.pos.x < ctx.lure.x + LURE_NEAR) {
-    startSurface(inst, Math.max(boardingX(inst), inst.pos.x + LURE_RISE_AHEAD))
-    return true
-  }
-  exit(inst, true, LURE_RUSH)
-  return true
-}
-//
-// Whether the lure is by the lake's left bank (within LURE_LEFT px of the
-// water's left end).
-//
-function lureAtLeft(inst, ctx) {
-  return Boolean(ctx.lure) && ctx.lure.x < inst.span.x1 + LURE_LEFT
-}
-//
-// Where its head breathes for the hero to get on from the left bank: its
-// back's near end LURE_BOARD_GAP px off the water's left end.
-//
-function boardingX(inst) {
-  return inst.span.x1 + LURE_BOARD_GAP + (BACK[1].x - JOINTS[0].x) * SCALE
 }
 //
 // A small fish in front of its mouth: it rushes at it at once (out of
@@ -1090,9 +939,10 @@ function mouthCut(inst) {
   return inst.heldShows
 }
 //
-// A held fish shows out of the mouth and a little over it, back to
-// HELD_OVERLAP px behind the mouth's line (so it lies over the lips, not
-// cut off right at them); deeper in the mouth it is hidden.
+// A held fish shows out of the mouth and over its edge, back to
+// HELD_OVERLAP px behind the mouth's line (it is nearer the eye than the
+// giant's lips and lies over them, not cut off right at them); deeper in
+// the mouth it is hidden.
 //
 function heldShows(inst, x, y) {
   return side(inst.opening, x, y) > -HELD_OVERLAP
@@ -1257,55 +1107,28 @@ function startSurface(inst, x) {
 }
 //
 // Rising until the head is at its breathing height (and swimming on along
-// the surface to its spot if it is not there yet), then breathing —
-// level, puffing, still, or swimming on along the surface while the lure
-// is ahead — as long as it wants and the hero is off its back and the lure
-// not ahead; then the dive. Held by a dev command it breathes on.
+// the surface to its spot if it is not there yet, and on till its body
+// lies level behind it), then breathing — level, puffing, still — as long
+// as it wants; then the dive. Held by a dev command it breathes on.
 //
 function breathe(inst, ctx, dt) {
   const y = breatheY(inst, inst.pos.x)
   if (inst.mode === MODE.SURFACE) {
     const up = inst.pos.y <= y + SURFACE_UP
     const short = (inst.surfaceX - inst.pos.x) * inst.facing > ROAM_ARRIVE
-    setTarget(inst, inst.surfaceX, y, up ? LURE_SPEED : RISE_SPEED)
-    if (!up || short) return
+    const sloped = roomAhead(inst) > ROAM_ARRIVE && !bodyLevel(inst)
+    setTarget(inst, inst.surfaceX, y, up ? SURFACE_SPEED : RISE_SPEED)
+    if (!up || short || sloped) return
     setMode(inst, MODE.BREATHE)
     inst.breathFor = BREATH_TIME + inst.rng() * BREATH_TIME_RANGE
     inst.puffIn = 0
     return
   }
-  const lureAt = ctx.lure ? (ctx.lure.x - inst.snout.x) * inst.facing : null
-  const lureAhead = lureAt !== null && lureAt > 0 && lureAt < LURE_AHEAD
-  const lureNear = lureAt !== null && lureAt > -LURE_BEHIND && lureAt < LURE_AHEAD
-  inst.lureFor = lureNear ? LURE_GRACE : inst.lureFor - dt
-  inst.graceFor = inst.carrying ? inst.graceFor - dt : LURE_GRACE
-  trackRide(inst, dt)
-  const onward = lureAhead || inst.delivering
-  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, onward && roomAhead(inst) > ROAM_ARRIVE ? (inst.carrying ? CARRY_SPEED : LURE_SPEED) : 0)
-  inst.carrying ? holdBreath(inst) : breath(inst, ctx, dt)
+  setTarget(inst, inst.pos.x + inst.facing * ROAM_ARRIVE, y, 0)
+  breath(inst, ctx, dt)
   if (inst.locked) return
   inst.breathFor -= dt
-  const done = inst.breathFor <= 0 || (ctx.lure && inst.facing < 0)
-  const stays = onward || inst.lureFor > 0
-  const unlured = inst.carrying && !stays && inst.graceFor <= 0
-  if ((done && !stays) || unlured) startDive(inst)
-}
-//
-// How far it has carried the hero this ride (from where he got on, the
-// way it swims); past DELIVER_SHARE of the lake it takes him to the end.
-// The ride ends once he has been off its back RIDE_GAP s.
-//
-function trackRide(inst, dt) {
-  inst.offFor = inst.carrying ? 0 : inst.offFor + dt
-  if (inst.offFor >= RIDE_GAP) {
-    inst.rideFrom = null
-    inst.delivering = false
-    return
-  }
-  inst.rideFrom ??= inst.carrying ? inst.pos.x : null
-  if (inst.rideFrom === null) return
-  const carried = (inst.pos.x - inst.rideFrom) * inst.facing
-  carried >= (inst.span.x2 - inst.span.x1) * DELIVER_SHARE && (inst.delivering = true)
+  inst.breathFor <= 0 && startDive(inst)
 }
 //
 // One breath's rhythm: drawing in INHALE_LEAD s before the puff, then the
@@ -1323,21 +1146,11 @@ function breath(inst, ctx, dt) {
   ctx.onBreath(true, inst.pos.x)
 }
 //
-// Held breath while the hero rides: once he is off, a whole breath's
-// wait before the next one.
-//
-function holdBreath(inst) {
-  inst.puffIn = PUFF_EVERY
-  inst.inhaled = false
-}
-//
 // Down again, head first: a spot on ahead in the deep water; the head's
 // pitch turns down in an arc and the body follows it under.
 //
 function startDive(inst) {
   setMode(inst, MODE.DIVE)
-  inst.rideFrom = null
-  inst.delivering = false
   inst.breathIn = BREATH_EVERY + inst.rng() * BREATH_EVERY_RANGE
   const x = inst.pos.x + inst.facing * Math.min(roomAhead(inst), DIVE_AHEAD)
   setTarget(inst, x, depthAt(inst, x, DIVE_DEPTH), CRUISE)
@@ -1346,14 +1159,14 @@ function startDive(inst) {
 // Through the wall ahead at its depth, until its tail is gone behind it;
 // then away — briefly to come back the other way, or until its next visit.
 //
-function exit(inst, comeBack, speed = null) {
+function exit(inst, comeBack) {
   inst.side = inst.facing
   inst.returnSide = comeBack ? inst.side : null
   inst.prey = null
   inst.lunging = false
   setMode(inst, MODE.EXIT)
   const x = inst.side < 0 ? inst.span.x1 - G.length * 2 : inst.span.x2 + G.length * 2
-  setTarget(inst, x, inst.pos.y, inst.cmdSpeed ?? speed ?? (comeBack ? CRUISE : LEAVE_SPEED))
+  setTarget(inst, x, inst.pos.y, inst.cmdSpeed ?? (comeBack ? CRUISE : LEAVE_SPEED))
 }
 function exitOn(inst) {
   const tail = inst.joints[inst.joints.length - 1]
@@ -1378,6 +1191,7 @@ function move(inst, dt) {
   const accel = (inst.lunging || inst.held ? LUNGE_ACCEL : ACCEL) * dt
   const want = inst.held ? Math.min(inst.want, EAT_SPEED) : inst.want
   inst.speed += Math.max(-accel, Math.min(accel, want - inst.speed))
+  const x0 = inst.pos.x
   const y0 = inst.pos.y
   inst.pos.x += inst.facing * Math.cos(inst.pitch) * inst.speed * dt
   inst.pos.y -= Math.sin(inst.pitch) * inst.speed * dt
@@ -1385,13 +1199,57 @@ function move(inst, dt) {
     inst.pos.y += (inst.target.y - inst.pos.y) * (1 - Math.exp(-HOLD_RATE * dt))
     levelTrail(inst, dt)
   }
-  inst.mode !== MODE.ENTER && inst.mode !== MODE.EXIT && keepInWater(inst, y0)
+  inWater(inst) && keepInWater(inst, y0) && alongBound(inst, x0, y0)
   layTrail(inst)
+}
+function inWater(inst) {
+  return inst.mode !== MODE.ENTER && inst.mode !== MODE.EXIT
 }
 function pitchWanted(inst) {
   if (inst.mode === MODE.BREATHE) return 0
   const dx = Math.max(PITCH_DX_MIN, (inst.target.x - inst.pos.x) * inst.facing)
-  return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, Math.atan2(inst.pos.y - inst.target.y, dx)))
+  const toTarget = Math.atan2(inst.pos.y - inst.target.y, dx)
+  return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, inWater(inst) ? clearAhead(inst, toTarget) : toTarget))
+}
+//
+// A pitch kept from aiming the head into the bed or, under water, up past
+// the submerged line at any of the HEAD_LOOK distances ahead (surfacing,
+// its aim at its breathing height already levels it off there).
+//
+function clearAhead(inst, pitch) {
+  const rising = inst.mode === MODE.SURFACE
+  let p = pitch
+  HEAD_LOOK.forEach(d => {
+    const b = headBounds(inst, inst.pos.x + inst.facing * d, rising)
+    p = Math.max(p, Math.atan2(inst.pos.y - b.bottom, d))
+    rising || (p = Math.min(p, Math.atan2(inst.pos.y - b.top, d)))
+  })
+  return p
+}
+//
+// A head pushed along a bound swims on its slope: its pitch set to the way
+// it really moved this frame.
+//
+function alongBound(inst, x0, y0) {
+  const run = Math.abs(inst.pos.x - x0)
+  if (run < TINY) return
+  inst.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, Math.atan2(y0 - inst.pos.y, run)))
+}
+//
+// The head's top and bottom in the water at x (rising: up to its breathing
+// height).
+//
+function headBounds(inst, x, rising) {
+  const top = rising ? breatheY(inst, x) : CaveLake.surfaceAt(inst.lake, x) + SUB_TOP
+  return { top, bottom: Math.max(top, CaveLake.bottomAt(inst.lake, x) - BED_CLEAR) }
+}
+//
+// Whether its body lies level behind its head: its tail's place on the
+// trail within LEVEL_TOL px of the head's height.
+//
+function bodyLevel(inst) {
+  trailAt(inst, inst.reach[inst.reach.length - 1], inst.a)
+  return Math.abs(inst.a.y - inst.pos.y) < LEVEL_TOL
 }
 //
 // The head held in the water: over the bed, and under the submerged line
@@ -1405,11 +1263,11 @@ function pitchWanted(inst) {
 function keepInWater(inst, y0) {
   const p = inst.pos
   inst.mode === MODE.BREATHE && (p.x = Math.max(inst.minX, Math.min(inst.maxX, p.x)))
-  const rising = inst.mode === MODE.SURFACE || inst.mode === MODE.BREATHE
-  const top = rising ? breatheY(inst, p.x) : CaveLake.surfaceAt(inst.lake, p.x) + SUB_TOP
-  const bottom = Math.max(top, CaveLake.bottomAt(inst.lake, p.x) - BED_CLEAR)
+  const { top, bottom } = headBounds(inst, p.x, inst.mode === MODE.SURFACE || inst.mode === MODE.BREATHE)
+  const y = p.y
   p.y < top && p.y < y0 && (p.y = Math.min(y0, top))
   p.y = Math.min(bottom, p.y)
+  return p.y !== y && inst.mode !== MODE.BREATHE
 }
 //
 // The head's path: a point every TRAIL_STEP px swum, as long as the body;
@@ -1496,23 +1354,6 @@ function trailAt(inst, back, out) {
   return out
 }
 //
-// The back as ground: each stretch of it while it is out of the water
-// (cave-giant-back.js).
-//
-function placeBack(inst, hero) {
-  BACK_SPANS.forEach((ends, i) => {
-    const span = inst.backSpans[i]
-    SkinMesh.pointAt(inst.mesh, ends[0], span.a)
-    SkinMesh.pointAt(inst.mesh, ends[1], span.b)
-    span.dry = isDry(inst, span)
-  })
-  Back.place(inst.back, inst.backSpans, hero)
-}
-function isDry(inst, span) {
-  const surface = CaveLake.surfaceAt(inst.lake, (span.a.x + span.b.x) * HALF)
-  return Math.max(span.a.y, span.b.y) < surface - DRY
-}
-//
 // A breath: a few mist puffs from each nostril, rising and spreading.
 //
 function puff(inst) {
@@ -1573,6 +1414,29 @@ function drawBlood(inst) {
 function drawFin(inst, part, fin, stroke) {
   SkinMesh.pointAt(inst.mesh, fin.socket, inst.socket)
   drawPart(inst, part, inst.socket, inst.mesh.pose.turns[fin.bone] + stroke)
+}
+//
+// The body's paddle sockets covered with its skin from over each.
+//
+function healSockets(body) {
+  const ctx = body.getContext('2d')
+  FINS.forEach(fin => {
+    const { x, y } = fin.socket
+    const size = SOCKET_R * 2
+    const patch = document.createElement('canvas')
+    patch.width = size
+    patch.height = size
+    const pctx = patch.getContext('2d')
+    pctx.drawImage(body, x - SOCKET_R, y - SOCKET_FROM - SOCKET_R, size, size, 0, 0, size, size)
+    const g = pctx.createRadialGradient(SOCKET_R, SOCKET_R, SOCKET_R * (1 - SOCKET_SOFT), SOCKET_R, SOCKET_R, SOCKET_R)
+    g.addColorStop(0, G.mist)
+    g.addColorStop(1, G.mist + TRANSPARENT)
+    pctx.globalCompositeOperation = 'destination-in'
+    pctx.fillStyle = g
+    pctx.fillRect(0, 0, size, size)
+    ctx.drawImage(patch, x - SOCKET_R, y - SOCKET_R)
+  })
+  return body
 }
 //
 // A part drawn apart from the body (a paddle, the jaw): set by its anchor
@@ -1710,7 +1574,7 @@ function buildAtlas() {
   if (pieces.some(src => !src)) return null
   const [body, ...fins] = pieces.map(mirrored)
   const jaw = cutJaw(body)
-  const srcs = [bodyWithoutJaw(body), jaw.canvas].concat(fins)
+  const srcs = [healSockets(bodyWithoutJaw(body)), jaw.canvas].concat(fins)
   const sizes = srcs.map(src => ({ w: Math.round(src.width * SCALE * TEX_OVER), h: Math.round(src.height * SCALE * TEX_OVER) }))
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(...sizes.map(z => z.w)) + ATLAS_GAP * 2
@@ -1751,21 +1615,6 @@ function cutJaw(src) {
   ctx.drawImage(src, 0, 0)
   return { canvas, box }
 }
-//
-// Under the body's lower edge, column by column over each spill's x span.
-//
-function clearSpills(ctx, w, h) {
-  const img = ctx.getImageData(0, 0, w, h)
-  const data = img.data
-  FIN_SPILLS.forEach(span => {
-    for (let x = span.x1; x <= span.x2; x++) {
-      let y = h >> 1
-      while (y < h && data[(y * w + x) * RGBA + ALPHA_BYTE] >= SPILL_ALPHA) y++
-      for (; y < h; y++) data[(y * w + x) * RGBA + ALPHA_BYTE] = 0
-    }
-  })
-  ctx.putImageData(img, 0, 0)
-}
 function jawPath(ctx) {
   ctx.beginPath()
   JAW.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
@@ -1784,16 +1633,16 @@ function mirrored(src) {
   return canvas
 }
 //
-// The body's cut with the lower jaw (drawn apart) and the paddles' tops
-// under its belly cleared.
+// The body's cut with the lower jaw (drawn apart) cleared. (Each piece of
+// the sheet keeps only its own island — cave-atlas.js isolates them — so
+// no paddle reaches into the body's cut nor the belly into a paddle's.)
 //
 function bodyWithoutJaw(src) {
   const canvas = document.createElement('canvas')
   canvas.width = src.width
   canvas.height = src.height
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   ctx.drawImage(src, 0, 0)
-  clearSpills(ctx, canvas.width, canvas.height)
   ctx.globalCompositeOperation = 'destination-out'
   jawPath(ctx)
   ctx.fill()

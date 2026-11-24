@@ -1,15 +1,20 @@
 import { CFG } from '../cfg.js'
 import { applyForestGameplaySharpBake } from '../sections/forest/utils/forest-focus-depth.js'
 import * as SoilSeam from '../sections/forest/utils/forest-soil-seam.js'
+import { FOREST_CFG } from '../sections/forest/cfg.js'
 import { getRGB } from '../utils/helper.js'
 import * as PolyBatch from '../utils/poly-batch.js'
+import * as Water from './water.js'
 //
-// Lake shared by the forest level, the menu backdrop and the cave's
-// underground lake (each with its own palette): a see-through water body baked as an animated wave cycle, over a static bed
-// layer (murk, earthy terraces, sand with gravel, pebbles, a sunken snag,
-// boulders) and live swaying algae rooted on the floor face. The water runs
-// from `waterStartX` (the level's island shore, or the lake's left end) to
-// past the core right end, where the shallows fade out.
+// The forest lake (the forest level and the menu backdrop; the cave's lake
+// borrows its algae): the shared water (water.js) over a static bed layer
+// (murk, earthy terraces, sand with gravel, pebbles, a sunken snag,
+// boulders) and live swaying algae rooted on the floor face. The water
+// runs from `waterStartX` (the level's island shore, or the lake's left
+// end) to past the core right end, where the shallows fade out; its
+// surface's springs run over all of it, the shallows too (the hero falling
+// in at the open water's right end still sends waves off). The far-bank
+// trees' reflections are baked into it under the surface.
 //
 // Full drown sink of the forest level: the hero's feet end 88 px under the
 // floor, the water surface sits 8 px above it.
@@ -36,62 +41,17 @@ const LAKE_ALGAE_MIDRIB_PX = 1
 // rocks instead of ending in a vertical sprite edge.
 //
 export const LAKE_SHORE_EXTEND_PX = 64
-const LAKE_SEGMENTS = 16
-const LAKE_WAVE_FREQ = 0.85
-const LAKE_WAVE_AMP = 3
-const LAKE_WAVE_PHASE_SCALE = 4
-const LAKE_WAVE_SECOND_AMP = 1.2
-const LAKE_WAVE_SECOND_FREQ = 1.7
 //
-// Baked lake surface frames (painted water + grain), drawn untinted.
+// The bake's room over the water line and the opaque skin under it, as
+// the bed's bake has always measured them (from the old baked waves).
+//
+const LAKE_TOP_MARGIN_PX = 6.2
+const LAKE_OPAQUE_SKIN_PX = 5.2
+//
+// Bed bake version (its sprite name).
 //
 const LAKE_BAKE_GEOMETRY_VERSION = 16
-//
-// Only the band under the surface moves (waves, ripples, reflections), so each
-// frame bakes just that band and the many frames stay cheap; the water below
-// it is one still sprite. The band is deeper than the longest reflection.
-// All wave frequencies are whole multiples of LAKE_WAVE_FREQ, so the cycle
-// loops without a jump.
-//
-const LAKE_BAKE_FRAME_COUNT = 120
-const LAKE_DYNAMIC_BAND_PX = 56
-const LAKE_STILL_SPRITE_SUFFIX = 'still'
-const LAKE_STILL_SEED = 5000
-const LAKE_FRAME_SEED = 5001
-export const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
-//
-// Lake paint: every layer is a low-opacity palette swatch over the base
-// fill, so the water reads painted while the surface stays calm next to
-// the centipede ride.
-//
-const LAKE_SKIN_ALPHA = 0.28
-const LAKE_SKIN_DEPTH_PX = 16
-const LAKE_DEEP_ALPHA = 0.2
-//
-// See-through water: opaque only across the wave band at the surface, then
-// fading to a light tint so the bed, algae and island slope show through.
-//
-const LAKE_OPAQUE_SKIN_PX = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 1
-const LAKE_BODY_FADE_PX = 10
-const LAKE_BODY_ALPHA = 0.42
-//
-// Double surface: a bright top line, a light band and a second fainter line
-// under it, both riding the wave.
-//
-const LAKE_SURFACE_LINE_PX = 1.5
-const LAKE_SURFACE_BAND_ALPHA = 0.32
-const LAKE_SURFACE_SECOND_LINE_PX = 1
-const LAKE_SURFACE_SECOND_LINE_ALPHA = 0.55
-//
-// Inner surface line uses its own wave frequencies and a time lag so the two
-// bright lines and the band between them do not stay parallel.
-//
-const LAKE_SURFACE_INNER_WAVE_FREQ = 0.85
-const LAKE_SURFACE_INNER_WAVE_AMP = 2.6
-const LAKE_SURFACE_INNER_WAVE_PHASE_SCALE = 3.4
-const LAKE_SURFACE_INNER_SECOND_FREQ = 1.7
-const LAKE_SURFACE_INNER_SECOND_AMP = 1.35
-const LAKE_SURFACE_INNER_TIME_LAG = 0.48
+const LAKE_TUNE = FOREST_CFG.lakeWater
 const LAKE_BED_SEGMENTS = 160
 const LAKE_BED_BACK_RISE_PX = 11
 const LAKE_BED_BACK_FULL_DEPTH_PX = 40
@@ -214,6 +174,7 @@ const LAKE_REFLECTION_PASS_ALPHA = 0.5
 const LAKE_REFLECTION_ROW_PX = 2
 const LAKE_REFLECTION_WOBBLE_PX = 1.5
 const LAKE_REFLECTION_WOBBLE_ROW_PHASE = 0.7
+const HALF = 0.5
 const LAKE_REFLECTION_TAPER = 0.35
 //
 // Reflection columns: lake span fraction, width and length (px). They sit
@@ -225,15 +186,6 @@ const LAKE_REFLECTIONS = [
   { t: 0.68, w: 24, len: 34 },
   { t: 0.88, w: 16, len: 20 }
 ]
-const LAKE_RIPPLE_COUNT = 3
-const LAKE_RIPPLE_SPACING_PX = 12
-const LAKE_RIPPLE_START_PX = 6
-const LAKE_RIPPLE_LEN_PX = 12
-const LAKE_RIPPLE_LEN_SHRINK = 0.5
-const LAKE_RIPPLE_DROP_PX = 3
-const LAKE_RIPPLE_DROP_STEP_PX = 1.5
-const LAKE_RIPPLE_ALPHA = 0.6
-const LAKE_RIPPLE_PX = 1
 //
 // Lake bed profile from the island's shore (where its slope meets the water
 // line) to the far end of the shore bake, deep enough for the full drown
@@ -273,8 +225,8 @@ const LAKE_BANK_JAG_SEED = 41.7
 const LAKE_BANK_JAG_STEP_INDEX = 23
 
 /**
- * Bakes the lake (water frames and bed layer, once per k and sprite key)
- * and grows its algae.
+ * Makes the lake (its water, its bed layer baked once per k and sprite
+ * key) and grows its algae.
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay inst
  * @param {number} cfg.x1 - Left end of the lake (world X)
@@ -292,13 +244,53 @@ const LAKE_BANK_JAG_STEP_INDEX = 23
  */
 export function create(cfg) {
   const { k } = cfg
-  const lake = bakeLakeWaterSprites(k, cfg)
+  const lake = lakeGeometry(cfg)
   lake.bedStones = cfg.bedStones ?? null
   lake.drawPos = k.vec2(lake.x1, lake.originY)
-  lake.stillPos = k.vec2(lake.x1, lake.originY + LAKE_DYNAMIC_BAND_PX)
+  lake.view = { left: 0, right: 0 }
+  lake.water = Water.create({
+    k,
+    key: cfg.spriteKey,
+    columns: waterColumns(lake),
+    surfaceY: lake.surfaceY,
+    waveX1: lake.x1 + lake.islandShoreLocalX,
+    waveX2: lake.x1 + lake.bakeSpan,
+    palette: lake.pal,
+    tune: LAKE_TUNE,
+    paintUnder: ctx => paintReflections(ctx, lake)
+  })
   bakeLakeBedSprite(k, lake)
   lake.algae = buildLakeAlgae(k, lake)
   return lake
+}
+
+/**
+ * Runs the water's surface on by this frame's time.
+ * @param {Object} lake - Lake inst
+ */
+export function onUpdate(lake) {
+  Water.onUpdate(lake.water)
+}
+
+/**
+ * Something broke the lake's surface at a world X (the hero fell in):
+ * waves run off from it.
+ * @param {Object} lake - Lake inst
+ * @param {number} x - World X
+ * @param {number} strength - How hard (1: a full splash)
+ */
+export function disturb(lake, x, strength) {
+  Water.disturb(lake.water, x, strength)
+}
+
+/**
+ * The lake's surface at a world X this moment (its waves).
+ * @param {Object} lake - Lake inst
+ * @param {number} x - World X
+ * @returns {number} World Y of the surface
+ */
+export function surfaceAt(lake, x) {
+  return Water.surfaceAt(lake.water, x)
 }
 
 /**
@@ -385,38 +377,15 @@ export function drawAlgaeField(k, field, opacity = 1) {
 }
 
 /**
- * Sprite name of the water frame showing now in the baked wave cycle.
- * @param {Object} k - Kaplay inst
- * @param {Object} lake - Lake inst
- * @returns {string}
- */
-function fillFrameSprite(k, lake) {
-  const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
-  return lake.waterSpritePrefix + frame
-}
-
-/**
- * Draws the current water frame of the baked wave cycle.
+ * Draws the water (over the bed and algae): its band, body and the
+ * surface's highlights.
  * @param {Object} k - Kaplay inst
  * @param {Object} lake - Lake inst
  * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
 export function drawFill(k, lake, opacity = 1) {
   if (!isLakeInView(k, lake)) return
-  k.drawSprite({
-    sprite: fillFrameSprite(k, lake),
-    pos: lake.drawPos,
-    width: lake.canvasW,
-    height: LAKE_DYNAMIC_BAND_PX,
-    opacity
-  })
-  k.drawSprite({
-    sprite: lake.waterSpritePrefix + LAKE_STILL_SPRITE_SUFFIX,
-    pos: lake.stillPos,
-    width: lake.canvasW,
-    height: lake.canvasH - LAKE_DYNAMIC_BAND_PX,
-    opacity
-  })
+  Water.onDraw(lake.water, cameraView(k, lake.view), opacity) && Water.onDrawHighlights(lake.water)
 }
 
 /**
@@ -429,17 +398,6 @@ export function lakeBottomLocalY(lake, localX) {
   return bottomLocalY(lake, localX)
 }
 
-
-
-/**
- * Surface wave offset at fraction t of the core span, at a time.
- * @param {number} t - 0..1 along the core span
- * @param {number} time - Seconds
- * @returns {number}
- */
-export function lakeWaveOffsetAt(t, time) {
-  return waveOffsetAt(t, time)
-}
 
 /**
  * Canvas-local Y of the bed's front line (sand / earth seam) under a lake —
@@ -517,142 +475,32 @@ function hexWithAlpha(hex, alpha) {
 }
 
 //
-// Water — value 5 fill bounded by wave polygon.
+// The lake's frame (canvas-local at x1 / originY, as the bed's bake and
+// the shore rocks measure it): its spans, the island's shore, sprite
+// names and colours.
 //
-function lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan) {
-  if (localX <= coreSpan) return 1
-  if (bakeSpan <= coreSpan) return 0
-  const u = (localX - coreSpan) / (bakeSpan - coreSpan)
-  return Math.max(0, 1 - u)
-}
-//
-function bakeLakeWaterSprites(k, cfg) {
+function lakeGeometry(cfg) {
   const { x1, x2Core, surfaceY, floorY, spriteKey } = cfg
   const coreSpan = x2Core - x1
   const bakeSpan = coreSpan + LAKE_SHORE_EXTEND_PX
   const canvasW = Math.ceil(bakeSpan)
-  const topMargin = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 2
+  const topMargin = LAKE_TOP_MARGIN_PX
   const canvasH = Math.ceil(LAKE_BED_MAX_DEPTH + topMargin) + 2
   const originY = surfaceY - topMargin
   const islandShoreLocalX = (cfg.waterStartX ?? x1) - x1
-  const waterSpritePrefix = `${spriteKey}-lake-bake-v${LAKE_BAKE_GEOMETRY_VERSION}-`
   const bedSprite = `${spriteKey}-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-  const geom = { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, waterSpritePrefix, bedSprite, bankJag: cfg.bankJag ?? 0, pal: cfg.palette ?? DEFAULT_PALETTE }
-  //
-  // Frames already loaded on this k (menu revisit) are reused as they are.
-  //
-  if (k.getSprite(waterSpritePrefix + 0)) return geom
-  bakeLakeStillSprite(k, geom)
-  for (let f = 0; f < LAKE_BAKE_FRAME_COUNT; f++) {
-    const canvas = document.createElement('canvas')
-    canvas.width = canvasW
-    canvas.height = LAKE_DYNAMIC_BAND_PX
-    paintLakeWaterFrame(canvas, geom, (f / LAKE_BAKE_FRAME_COUNT) * LAKE_BAKE_CYCLE, LAKE_FRAME_SEED + f)
-    k.loadSprite(waterSpritePrefix + f, canvas)
-    canvas.width = 0
-    canvas.height = 0
+  return { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, bedSprite, bankJag: cfg.bankJag ?? 0, pal: cfg.palette ?? DEFAULT_PALETTE }
+}
+//
+// The water's columns for water.js: every world px from the island's shore
+// to the end of the shore bake, from the surface down to the bed.
+//
+function waterColumns(lake) {
+  const cols = []
+  for (let localX = Math.ceil(lake.islandShoreLocalX); localX < lake.bakeSpan; localX++) {
+    cols.push({ x: lake.x1 + localX, top: lake.surfaceY, y: lake.originY + bottomLocalY(lake, localX) })
   }
-  return geom
-}
-//
-// The still water under the moving band: a full frame at time 0, cut below
-// the band (nothing moves down there).
-//
-function bakeLakeStillSprite(k, geom) {
-  const { canvasW, canvasH, waterSpritePrefix } = geom
-  const full = document.createElement('canvas')
-  full.width = canvasW
-  full.height = canvasH
-  paintLakeWaterFrame(full, geom, 0, LAKE_STILL_SEED)
-  const still = document.createElement('canvas')
-  still.width = canvasW
-  still.height = canvasH - LAKE_DYNAMIC_BAND_PX
-  still.getContext('2d').drawImage(full, 0, LAKE_DYNAMIC_BAND_PX, canvasW, still.height, 0, 0, canvasW, still.height)
-  k.loadSprite(waterSpritePrefix + LAKE_STILL_SPRITE_SUFFIX, still)
-  full.width = 0
-  full.height = 0
-  still.width = 0
-  still.height = 0
-}
-//
-// Paints the water at one moment into the canvas (whose top rows are the
-// lake's top rows; a shorter canvas just clips the lower water).
-//
-function paintLakeWaterFrame(canvas, geom, time, seed) {
-  const { coreSpan, bakeSpan, topMargin, canvasW, islandShoreLocalX } = geom
-  const canvasH = canvas.height
-  const ctx = canvas.getContext('2d')
-  //
-  // The water starts at the island's shore: further left the island's rocks
-  // hold the water line, so no surface strip runs across them.
-  //
-  const waterSpan = bakeSpan - islandShoreLocalX
-  const surfaceTop = buildLakeSurfaceLinePts(geom, time, waveOffsetAt)
-  const surfaceInner = buildLakeSurfaceLinePts(geom, time + LAKE_SURFACE_INNER_TIME_LAG, lakeSurfaceInnerWaveOffsetAt)
-  const pts = [...surfaceTop]
-  for (let i = LAKE_SEGMENTS; i >= 0; i--) {
-    const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-    pts.push([localX, bottomLocalY(geom, localX)])
-  }
-  const bodyY = topMargin + LAKE_OPAQUE_SKIN_PX
-  const pal = geom.pal
-  const body = ctx.createLinearGradient(0, bodyY, 0, bodyY + LAKE_BODY_FADE_PX)
-  body.addColorStop(0, pal.water)
-  body.addColorStop(1, hexWithAlpha(pal.water, LAKE_BODY_ALPHA))
-  ctx.fillStyle = body
-  ctx.beginPath()
-  ctx.moveTo(pts[0][0], pts[0][1])
-  for (let p = 1; p < pts.length; p++) {
-    ctx.lineTo(pts[p][0], pts[p][1])
-  }
-  ctx.closePath()
-  ctx.fill()
-  ctx.save()
-  ctx.clip()
-  const paint = { ctx, coreSpan, bakeSpan, topMargin, canvasW, canvasH, time, colors: pal.paint }
-  paintLakeGradient(paint)
-  paintLakeReflections(paint)
-  paintLakeShoreRipples(paint, islandShoreLocalX, 1)
-  paintLakeShoreRipples(paint, coreSpan, -1)
-  paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner, pal.paint)
-  ctx.restore()
-  strokeLakeSurfaceLine(ctx, surfaceTop, 0, pal.paint.surfaceLine, LAKE_SURFACE_LINE_PX)
-  strokeLakeSurfaceLine(ctx, surfaceInner, 0, hexWithAlpha(pal.paint.surfaceLine, LAKE_SURFACE_SECOND_LINE_ALPHA), LAKE_SURFACE_SECOND_LINE_PX)
-  applyForestGameplaySharpBake(canvas, seed)
-}
-//
-// Light band between the top surface line and the inner line (each has its
-// own wave phase so the band breathes).
-//
-function buildLakeSurfaceLinePts(geom, time, waveOffsetAt) {
-  const { islandShoreLocalX, bakeSpan, coreSpan, topMargin } = geom
-  const waterSpan = bakeSpan - islandShoreLocalX
-  const line = []
-  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-    const localX = islandShoreLocalX + (i / LAKE_SEGMENTS) * waterSpan
-    const coreT = Math.min(1, localX / coreSpan)
-    const shoreFade = lakeShoreFadeAtLocalX(localX, coreSpan, bakeSpan)
-    line.push([localX, topMargin + waveOffsetAt(coreT, time) * shoreFade])
-  }
-  return line
-}
-function paintLakeSurfaceBand(ctx, surfaceTop, surfaceInner, colors) {
-  ctx.beginPath()
-  ctx.moveTo(surfaceTop[0][0], surfaceTop[0][1])
-  for (let i = 1; i < surfaceTop.length; i++) ctx.lineTo(surfaceTop[i][0], surfaceTop[i][1])
-  for (let i = surfaceInner.length - 1; i >= 0; i--) ctx.lineTo(surfaceInner[i][0], surfaceInner[i][1])
-  ctx.closePath()
-  ctx.fillStyle = hexWithAlpha(colors.surfaceBand, LAKE_SURFACE_BAND_ALPHA)
-  ctx.fill()
-}
-function strokeLakeSurfaceLine(ctx, surface, offsetY, color, width) {
-  ctx.beginPath()
-  ctx.moveTo(surface[0][0], surface[0][1] + offsetY)
-  for (let i = 1; i < surface.length; i++) ctx.lineTo(surface[i][0], surface[i][1] + offsetY)
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.lineJoin = 'round'
-  ctx.stroke()
+  return cols
 }
 //
 // Lake bottom (canvas-local Y) at canvas-local X: zero depth at the island
@@ -1046,11 +894,20 @@ function buildAlgae(k, paint, cxAt, rootAt) {
   return { blades: fronds, indices: lakeAlgaeStripIndices(), batch: PolyBatch.create(), visible: [], x1: 0, x2: 0 }
 }
 function isLakeInView(k, lake) {
+  const view = cameraView(k, lake.view)
+  return lake.x1 + lake.canvasW >= view.left && lake.x1 <= view.right
+}
+//
+// The camera's world X span now, into `out`.
+//
+function cameraView(k, out) {
   const camX = k.camPos().x
   const scale = k.camScale?.()
   const zoom = (typeof scale === 'object' ? scale.x : scale) || 1
   const half = k.width() / (2 * zoom)
-  return lake.x1 + lake.canvasW >= camX - half && lake.x1 <= camX + half
+  out.left = camX - half
+  out.right = camX + half
+  return out
 }
 //
 // Triangle strip between the left and right edges of a leaf polygon (left
@@ -1085,78 +942,24 @@ function updateLakeAlgaeBlade(blade, time) {
   }
 }
 //
-// Calm depth read: a light skin just under the surface, darkening with depth.
+// Soft dark columns under the far-bank trunks (world coordinates, baked
+// into the water under its surface), sliced into rows shifted a little
+// each, so they read as reflections, not stripes.
 //
-function paintLakeGradient(paint) {
-  const { ctx, topMargin, canvasW, canvasH, colors } = paint
-  ctx.globalAlpha = LAKE_SKIN_ALPHA
-  const skin = ctx.createLinearGradient(0, topMargin, 0, topMargin + LAKE_SKIN_DEPTH_PX)
-  skin.addColorStop(0, colors.light)
-  skin.addColorStop(1, `${colors.light}00`)
-  ctx.fillStyle = skin
-  ctx.fillRect(0, 0, canvasW, topMargin + LAKE_SKIN_DEPTH_PX)
-  ctx.globalAlpha = LAKE_DEEP_ALPHA
-  const deep = ctx.createLinearGradient(0, topMargin + LAKE_SKIN_DEPTH_PX, 0, topMargin + LAKE_BED_MAX_DEPTH)
-  deep.addColorStop(0, `${colors.deep}00`)
-  deep.addColorStop(1, colors.deep)
-  ctx.fillStyle = deep
-  ctx.fillRect(0, topMargin, canvasW, canvasH - topMargin)
-  ctx.globalAlpha = 1
-}
-//
-// Soft dark columns under the far-bank trunks, sliced into rows that sway
-// with the frame time so they read as reflections, not stripes.
-//
-function paintLakeReflections(paint) {
-  const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
-  ctx.fillStyle = paint.colors.reflection
+function paintReflections(ctx, lake) {
+  ctx.fillStyle = lake.pal.paint.reflection
   for (const spot of LAKE_REFLECTIONS) {
-    const cx = spot.t * coreSpan
-    const surfaceY = topMargin + waveOffsetAt(spot.t, time) * lakeShoreFadeAtLocalX(cx, coreSpan, bakeSpan)
+    const cx = lake.x1 + spot.t * lake.coreSpan
     for (let row = 0; row < spot.len; row += LAKE_REFLECTION_ROW_PX) {
       const u = row / spot.len
-      const sway = Math.sin(time * LAKE_WAVE_FREQ + row * LAKE_REFLECTION_WOBBLE_ROW_PHASE) * LAKE_REFLECTION_WOBBLE_PX
+      const sway = Math.sin(row * LAKE_REFLECTION_WOBBLE_ROW_PHASE) * LAKE_REFLECTION_WOBBLE_PX
       const w = spot.w * (1 - LAKE_REFLECTION_TAPER * u)
-      const y = surfaceY + row
+      const y = lake.surfaceY + row
       ctx.globalAlpha = LAKE_REFLECTION_ALPHA * (1 - u) * LAKE_REFLECTION_PASS_ALPHA
-      ctx.fillRect(cx + sway - w * 0.5, y, w, LAKE_REFLECTION_ROW_PX)
+      ctx.fillRect(cx + sway - w * HALF, y, w, LAKE_REFLECTION_ROW_PX)
       const coreW = w * LAKE_REFLECTION_CORE_FRAC
-      ctx.fillRect(cx + sway - coreW * 0.5, y, coreW, LAKE_REFLECTION_ROW_PX)
+      ctx.fillRect(cx + sway - coreW * HALF, y, coreW, LAKE_REFLECTION_ROW_PX)
     }
   }
   ctx.globalAlpha = 1
-}
-//
-// Thin light dashes drifting away from a shore line toward open water
-// (`dir` = +1 east, -1 west); one full drift per bake cycle keeps the loop
-// seamless.
-//
-function paintLakeShoreRipples(paint, shoreLocalX, dir) {
-  const { ctx, coreSpan, bakeSpan, topMargin, time } = paint
-  const cycleU = time / LAKE_BAKE_CYCLE
-  ctx.fillStyle = paint.colors.ripple
-  for (let i = 0; i < LAKE_RIPPLE_COUNT; i++) {
-    const u = (cycleU + i / LAKE_RIPPLE_COUNT) % 1
-    const dist = LAKE_RIPPLE_START_PX + u * LAKE_RIPPLE_SPACING_PX * LAKE_RIPPLE_COUNT
-    const cx = shoreLocalX + dir * dist
-    const coreT = Math.max(0, Math.min(1, cx / coreSpan))
-    const surfaceY = topMargin + waveOffsetAt(coreT, time) * lakeShoreFadeAtLocalX(cx, coreSpan, bakeSpan)
-    const len = LAKE_RIPPLE_LEN_PX * (1 - LAKE_RIPPLE_LEN_SHRINK * u)
-    ctx.globalAlpha = LAKE_RIPPLE_ALPHA * Math.sin(u * Math.PI)
-    ctx.fillRect(cx - len * 0.5, surfaceY + LAKE_RIPPLE_DROP_PX + u * LAKE_RIPPLE_DROP_STEP_PX * LAKE_RIPPLE_COUNT, len, LAKE_RIPPLE_PX)
-  }
-  ctx.globalAlpha = 1
-}
-//
-// Animated lake surface height at normalized shore span (0 = left).
-//
-function waveOffsetAt(t, time) {
-  const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
-  const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
-  return wavePrimary + waveSecondary
-}
-function lakeSurfaceInnerWaveOffsetAt(t, time) {
-  const wavePrimary = Math.sin(time * LAKE_SURFACE_INNER_WAVE_FREQ + t * LAKE_SURFACE_INNER_WAVE_PHASE_SCALE) * LAKE_SURFACE_INNER_WAVE_AMP
-  const waveSecondary = Math.sin(time * LAKE_SURFACE_INNER_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 1.85 + 0.9) * LAKE_SURFACE_INNER_SECOND_AMP
-  return wavePrimary + waveSecondary
 }

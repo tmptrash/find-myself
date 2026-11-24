@@ -84,14 +84,15 @@ export function onUpdate(inst, dt) {
 
 /**
  * Pushes the surface down at a world X (something fell in or broke it):
- * the point there and half as much its two neighbours.
+ * the point there and half as much its two neighbours — by a pinned end,
+ * the nearest point that moves.
  * @param {Object} inst - Wave instance
  * @param {number} x - World X
  * @param {number} strength - How hard (1: `kick` px/s)
  */
 export function disturb(inst, x, strength) {
-  const i = Math.round((x - inst.x1) / inst.dx)
-  if (i < 1 || i > inst.count - 2) return
+  if (x < inst.x1 || x > inst.x2) return
+  const i = Math.max(1, Math.min(inst.count - 2, Math.round((x - inst.x1) / inst.dx)))
   const v = inst.kick * strength
   inst.v[i] += v
   inst.v[i - 1] += v * HALF

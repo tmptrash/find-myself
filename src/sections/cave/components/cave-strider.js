@@ -400,7 +400,7 @@ export function onDrawWater(inst, view) {
   inst.rings.forEach(ring => {
     const share = ring.t / RING_TIME
     const r = (RING_R0 + (RING_R1 - RING_R0) * share) * inst.size
-    drawMark(inst, ring.x, ring.y, r, RING_FLAT, RING_ALPHA * (1 - share))
+    drawMark(inst, ring.x, CaveLake.surfaceAt(inst.lake, ring.x) + ring.lift, r, RING_FLAT, RING_ALPHA * (1 - share))
   })
   inst.legs.forEach(leg => {
     const foot = footOf(inst, leg)
@@ -534,7 +534,7 @@ function updateSink(inst, dt) {
   inst.sinkRingIn -= dt
   if (inst.sinkRingIn > 0) return
   inst.sinkRingIn = SINK_RING_EVERY
-  inst.rings.push({ x: inst.x, y: inst.y, t: 0 })
+  pushRing(inst, inst.x, inst.y)
 }
 //
 // Its back's stretch (null while it is sunk) and height.
@@ -596,7 +596,7 @@ function row(inst, dir, speed, wait) {
   inst.legs.forEach(leg => {
     if (!leg.oar) return
     const foot = footOf(inst, leg)
-    inst.rings.push({ x: foot.wx, y: waterUnder(inst, leg, foot.wx), t: 0 })
+    pushRing(inst, foot.wx, waterUnder(inst, leg, foot.wx))
   })
 }
 function updateStroke(inst, dt) {
@@ -638,6 +638,13 @@ function footOf(inst, leg) {
 // The water's top under a foot (a far foot's a little further back on it,
 // so higher on the screen).
 //
+//
+// A ring going out at (x, y): kept that far off the surface (`lift`), so
+// it rides the waves with the water and never hangs in the air.
+//
+function pushRing(inst, x, y) {
+  inst.rings.push({ x, lift: y - CaveLake.surfaceAt(inst.lake, x), t: 0 })
+}
 function waterUnder(inst, leg, wx) {
   return CaveLake.surfaceAt(inst.lake, wx) - (leg.far ? FAR_LIFT * inst.unit : 0)
 }

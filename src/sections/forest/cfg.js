@@ -198,7 +198,19 @@ const DROP_HINT = {
   bites: 3
 }
 
+//
+// The forest lake's water (components/lake.js over components/water.js):
+// overrides of CFG.visual.water for a lake far shallower than the cave's —
+// lower waves, and a lighter dark at its bottom so its sandy bed and
+// pebbles still show.
+//
+const LAKE_WATER = {
+  wave: { amplitude: 8, kick: 150, idleKick: 18 },
+  gradient: { deepAlpha: 0.4 }
+}
+
 export const FOREST_CFG = {
+  lakeWater: LAKE_WATER,
   waterFlower: WATER_FLOWER,
   appleBug: APPLE_BUG,
   propellerBud: PROPELLER_BUD,

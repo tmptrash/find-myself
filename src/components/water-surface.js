@@ -1,35 +1,34 @@
-import { createSeededRandom } from '../../../utils/seeded-random.js'
-import { getRGB } from '../../../utils/helper.js'
-import { CAVE_CFG } from '../cfg.js'
-import * as Layout from './cave-layout.js'
+import { createSeededRandom } from '../utils/seeded-random.js'
+import { getRGB } from '../utils/helper.js'
 //
-// How the lake's surface looks (its springs: utils/water-wave.js), after
+// How a water's surface looks (its springs: utils/water-wave.js), after
 // Rain World's pools: no glowing outline but a thin layer of water — the
 // baked band (a faint contour over a softly lit strip, the water fading
-// to see-through under it, cave-lake.js bakes it) bent to the springs —
-// with broken moving highlights on it. The band's top rows down to
-// BAND_RIGID px under the surface ride the wave whole, the rest
-// stretches down to the still body's top, so no gap opens between them.
+// to see-through under it, water.js bakes it) bent to the springs — with
+// broken moving highlights on it. The band's top rows down to BAND_RIGID
+// px under the surface ride the wave whole, the rest stretches down to
+// the still body's top, so no gap opens between them.
 //
-// The highlights: where one shows is a slow value noise sliding along the
-// surface (HL.drift px/s), two octaves mixed by HL.lengthVariation, cut at
-// HL.density with soft ends — short and long pieces, never in step; how
-// bright, by the water there: HL.calm on still water, more on a sharp
+// The highlights (tuned by `hl`, CFG.visual.water.highlight's shape):
+// where one shows is a slow value noise sliding along the surface
+// (hl.drift px/s), two octaves mixed by hl.lengthVariation, cut at
+// hl.density with soft ends — short and long pieces, never in step; how
+// bright, by the water there: hl.calm on still water, more on a sharp
 // crest, a steep slope or moving water (which also wakes more of them).
 // The main ones lie on the contour, thicker where brighter, each with a
-// darker strip of HL.shade under it; two fainter, thinner ones run under
-// the surface at depths of their own wandering with another noise
-// (FAINT_DEPTH ± FAINT_DEPTH_VAR), shorter, sliding their own ways — never
-// a copy of the surface line.
+// darker strip (the palette's highlightShade) under it; two fainter,
+// thinner ones run under the surface at depths of their own wandering
+// with another noise (FAINT_DEPTH ± FAINT_DEPTH_VAR), shorter, sliding
+// their own ways — never a copy of the surface line.
 //
-// Drawing: the lake's columns (its ends and every spring) are cut into
+// Drawing: the water's columns (its ends and every spring) are cut into
 // chunks of CHUNK_COLS, each with its vectors, colours, opacities and
 // indices made once and reused; only chunks in view are worked out and
-// drawn: the band's textured strip, then (once the body and lining are
-// drawn over the band) the highlights, untextured with an opacity per
-// vertex — Kaplay's fast path, nothing allocated.
+// drawn: the band's textured strip, then (once what lies over the band is
+// drawn) the highlights, untextured with an opacity per vertex — Kaplay's
+// fast path, nothing allocated. All of it can be faded (`opacity`, the
+// menu's cross-fade).
 //
-const HL = CAVE_CFG.water.highlight
 export const BAND_ABOVE = 6
 export const BAND_BELOW = 36
 export const BAND_PAD = 1
@@ -85,13 +84,16 @@ const SHORE_TAPER = 5
 const HALF = 0.5
 
 /**
- * Creates the surface's look over the lake's span.
+ * Creates a water's surface look over its span.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
- * @param {number} cfg.x1 - World X of the lake's left end
- * @param {number} cfg.x2 - World X of the lake's right end
+ * @param {number} cfg.x1 - World X of the water's left end
+ * @param {number} cfg.x2 - World X of the water's right end
+ * @param {number} cfg.restY - World Y of the surface at rest
  * @param {Object} cfg.wave - The surface's springs (water-wave.js)
  * @param {string} cfg.sprite - The baked band's sprite
+ * @param {Object} cfg.highlight - Highlight tuning (CFG.visual.water.highlight's shape)
+ * @param {{highlight: string, highlightShade: string}} cfg.paint - Highlight colours
  * @returns {Object} Surface instance
  */
 export function create(cfg) {
@@ -102,8 +104,11 @@ export function create(cfg) {
     k,
     x1,
     x2,
+    restY: cfg.restY,
     wave,
     sprite,
+    hl: cfg.highlight,
+    opacity: 1,
     xs: cols.xs,
     springs: cols.springs,
     y: new Float32Array(n),
@@ -111,8 +116,8 @@ export function create(cfg) {
     faint: [new Float32Array(n), new Float32Array(n)],
     depth: [new Float32Array(n), new Float32Array(n)],
     noise: noiseTable(),
-    color: getRGB(k, HL.color),
-    shade: getRGB(k, HL.shade),
+    color: getRGB(k, cfg.paint.highlight),
+    shade: getRGB(k, cfg.paint.highlightShade),
     chunks: [],
     from: 0,
     to: -1
@@ -125,8 +130,10 @@ export function create(cfg) {
  * Works out the surface in view this frame and draws its band.
  * @param {Object} inst - Surface instance
  * @param {{left: number, right: number}} view - Visible world rect
+ * @param {number} [opacity=1] - Fade (menu backdrop cross-fade)
  */
-export function onDrawBand(inst, view) {
+export function onDrawBand(inst, view, opacity = 1) {
+  inst.opacity = opacity
   inView(inst, view)
   if (inst.to < inst.from) return
   surfaceY(inst)
@@ -144,7 +151,7 @@ export function onDrawHighlights(inst) {
   for (const chunk of inst.chunks) chunk.seen && drawHighlightChunk(inst, chunk)
 }
 //
-// The lake's columns: its ends (where they lie off the springs) and every
+// The water's columns: its ends (where they lie off the springs) and every
 // spring between them.
 //
 function columns(x1, x2, wave) {
@@ -176,7 +183,7 @@ function createChunk(inst, a, b) {
   const pts = []
   const colors = []
   const opacities = []
-  for (let c = a; c <= b; c++) bandPts.push(k.vec2(inst.xs[c], 0), k.vec2(inst.xs[c], 0), k.vec2(inst.xs[c], Layout.LAKE_SURFACE_Y + BAND_BELOW))
+  for (let c = a; c <= b; c++) bandPts.push(k.vec2(inst.xs[c], 0), k.vec2(inst.xs[c], 0), k.vec2(inst.xs[c], inst.restY + BAND_BELOW))
   const indices = []
   for (let layer = 0; layer < LAYERS; layer++) {
     gridIndices(indices, layer * cols * LAYER_ROWS, cols, LAYER_ROWS)
@@ -194,7 +201,7 @@ function createChunk(inst, a, b) {
     left: inst.xs[a],
     right: inst.xs[b],
     seen: false,
-    band: { pts: bandPts, uv: null, tex: null, indices: gridIndices([], 0, cols, BAND_ROWS) },
+    band: { pts: bandPts, uv: null, tex: null, opacity: 1, indices: gridIndices([], 0, cols, BAND_ROWS) },
     lights: { pts, colors, opacities, indices }
   }
 }
@@ -231,14 +238,14 @@ function inView(inst, view) {
 //
 function surfaceY(inst) {
   const { springs, y, wave } = inst
-  for (let c = inst.from; c <= inst.to; c++) y[c] = Layout.LAKE_SURFACE_Y + (springs[c] < 0 ? 0 : wave.y[springs[c]])
+  for (let c = inst.from; c <= inst.to; c++) y[c] = inst.restY + (springs[c] < 0 ? 0 : wave.y[springs[c]])
 }
 //
-// How bright the highlights are at every column in view (see HL), and
+// How bright the highlights are at every column in view (see `hl`), and
 // where the faint ones lie.
 //
 function lightUp(inst) {
-  const { xs, springs, y, wave } = inst
+  const { xs, springs, y, wave, hl } = inst
   const t = inst.k.time()
   for (let c = inst.from; c <= inst.to; c++) {
     const s = springs[c]
@@ -254,12 +261,12 @@ function lightUp(inst) {
     const crest = Math.max(0, l + r - 2 * y[c])
     const energy = Math.min(1, Math.abs(wave.v[s]) / ENERGY_V)
     const shore = Math.min(1, s / SHORE_TAPER, (wave.count - 1 - s) / SHORE_TAPER)
-    const lit = shore * Math.min(1, HL.calm + HL.crestGain * crest + HL.slopeGain * slope + HL.motionGain * energy)
-    const excite = HL.exciteGain * energy
-    inst.main[c] = lit * pieces(inst, xs[c], t, 0, HL.length, HL.drift, HL.density + excite)
+    const lit = shore * Math.min(1, hl.calm + hl.crestGain * crest + hl.slopeGain * slope + hl.motionGain * energy)
+    const excite = hl.exciteGain * energy
+    inst.main[c] = lit * pieces(inst, xs[c], t, 0, hl.length, hl.drift, hl.density + excite)
     for (let f = 0; f < FAINT_COUNT; f++) {
-      inst.faint[f][c] = lit * pieces(inst, xs[c], t, f + 1, HL.length * FAINT_LEN[f], HL.drift * FAINT_DRIFT[f], HL.secondaryDensity + excite)
-      const wander = sample(inst.noise, xs[c] / (HL.length * DEPTH_LEN) + DEPTH_OFFSET * (f + 1) + t * DEPTH_DRIFT)
+      inst.faint[f][c] = lit * pieces(inst, xs[c], t, f + 1, hl.length * FAINT_LEN[f], hl.drift * FAINT_DRIFT[f], hl.secondaryDensity + excite)
+      const wander = sample(inst.noise, xs[c] / (hl.length * DEPTH_LEN) + DEPTH_OFFSET * (f + 1) + t * DEPTH_DRIFT)
       inst.depth[f][c] = FAINT_DEPTH[f] + FAINT_DEPTH_VAR[f] * (2 * wander - 1)
     }
   }
@@ -271,7 +278,7 @@ function lightUp(inst) {
 //
 function pieces(inst, x, t, layer, length, drift, density) {
   const u = (x - drift * t) / length + layer * LAYER_OFFSET
-  const lv = HL.lengthVariation
+  const lv = inst.hl.lengthVariation
   const n = (1 - lv) * sample(inst.noise, u) + lv * sample(inst.noise, u * OCTAVE + OCTAVE_OFFSET)
   return Math.max(0, Math.min(1, (n - 1 + density) / FADE_SOFT))
 }
@@ -305,6 +312,7 @@ function drawBandChunk(inst, chunk, frame) {
     band.pts[v].y = inst.y[c] - BAND_ABOVE
     band.pts[v + 1].y = inst.y[c] + BAND_RIGID
   }
+  band.opacity = inst.opacity
   inst.k.drawPolygon(band)
 }
 //
@@ -325,20 +333,21 @@ function bandUv(inst, chunk, q) {
 // where brighter) with its shade under it, the faint ones at their depths.
 //
 function drawHighlightChunk(inst, chunk) {
+  const { hl, opacity } = inst
   const lights = chunk.lights
   for (let c = chunk.a; c <= chunk.b; c++) {
     const i = c - chunk.a
     const y = inst.y[c]
     const main = inst.main[c]
     const top = y - CONTOUR_UP
-    const thick = HL.thickness * Math.max(0, 1 + HL.thicknessVariation * (main - HALF))
-    setPair(lights, chunk.cols, MAIN, i, top, top + thick, HL.brightness * main)
-    setPair(lights, chunk.cols, SHADE, i, top + thick, top + thick + SHADE_W, HL.shadeAlpha * main)
+    const thick = hl.thickness * Math.max(0, 1 + hl.thicknessVariation * (main - HALF))
+    setPair(lights, chunk.cols, MAIN, i, top, top + thick, hl.brightness * main * opacity)
+    setPair(lights, chunk.cols, SHADE, i, top + thick, top + thick + SHADE_W, hl.shadeAlpha * main * opacity)
     for (let f = 0; f < FAINT_COUNT; f++) {
       const faint = inst.faint[f][c]
       const mid = y + inst.depth[f][c]
-      const half = HL.thickness * FAINT_THICK * Math.max(0, 1 + HL.thicknessVariation * (faint - HALF)) * HALF
-      setPair(lights, chunk.cols, FAINT + f, i, mid - half, mid + half, HL.brightness * HL.secondaryBrightness * faint)
+      const half = hl.thickness * FAINT_THICK * Math.max(0, 1 + hl.thicknessVariation * (faint - HALF)) * HALF
+      setPair(lights, chunk.cols, FAINT + f, i, mid - half, mid + half, hl.brightness * hl.secondaryBrightness * faint * opacity)
     }
   }
   inst.k.drawPolygon(lights)

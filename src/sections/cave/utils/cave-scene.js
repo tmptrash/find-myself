@@ -18,12 +18,14 @@ const OUTLINE_STEP = 8
 // soil ceiling of the hollow under the bank) down (never the banks' soil
 // beside it or over the hollow). The tint reaches down to the deepest
 // point of that (measured off the bed), so it never stops short of the
-// bed anywhere.
+// bed anywhere; it darkens toward the water's own depth colour
+// (depthDark), so the bed lies in the dark the deep water does, not in a
+// lighter band under it.
 //
 const WATER = CAVE_CFG.water
 const SUBMERSION_INTO_BED = 30
 const SUBMERSION_TOP_ALPHA = 0.25
-const SUBMERSION_DEEP_ALPHA = 0.6
+const SUBMERSION_DEEP_ALPHA = 0.75
 const BYTE_MAX = 255
 const HEX_RADIX = 16
 //
@@ -80,7 +82,7 @@ function paintSubmersion(ctx) {
   const { x0, tops, beds } = Ground.waterColumns()
   const g = ctx.createLinearGradient(0, top, 0, bottom)
   g.addColorStop(0, hexAlpha(WATER.water, SUBMERSION_TOP_ALPHA))
-  g.addColorStop(1, hexAlpha(WATER.paint.deep, SUBMERSION_DEEP_ALPHA))
+  g.addColorStop(1, hexAlpha(WATER.paint.depthDark, SUBMERSION_DEEP_ALPHA))
   ctx.save()
   ctx.beginPath()
   tops.forEach((y, i) => Number.isNaN(y) || ctx.rect(x0 + i, y, 1, beds[i] + SUBMERSION_INTO_BED - y))

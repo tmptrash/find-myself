@@ -757,7 +757,7 @@ export function onDrawSplash(inst) {
   inst.rings.forEach(ring => {
     const share = ring.t / RING_TIME
     const r = (RING_R0 + (RING_R1 - RING_R0) * share) * ring.strength * inst.size
-    k.drawEllipse({ pos: inst.v.set(ring.x, ring.y), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
+    k.drawEllipse({ pos: inst.v.set(ring.x, CaveLake.surfaceAt(inst.lake, ring.x)), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
   })
   inst.drops.forEach(drop => k.drawCircle({ pos: inst.v.set(drop.x, drop.y), radius: DROP_R, color: inst.splashRgb, opacity: DROP_ALPHA }))
 }
@@ -1416,7 +1416,7 @@ function crossSurface(inst, ctx) {
   inst.cooldown = restTime(inst)
 }
 function splash(inst, ctx, x, y, strength, drops) {
-  inst.rings.push({ x, y, t: 0, strength })
+  inst.rings.push({ x, t: 0, strength })
   for (let i = 0; i < drops; i++) {
     const a = -Math.PI * HALF + (inst.rng() * 2 - 1) * DROP_SPREAD
     const s = (DROP_SPEED + inst.rng() * DROP_SPEED_RANGE) * strength

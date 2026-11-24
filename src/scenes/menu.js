@@ -829,10 +829,12 @@ function updateMenuCrawler(inst, dt) {
   Predator.update(crawler, dt)
 }
 //
-// The tree's apples, the bug, the flower and the midges live all the while;
-// they show with the forest only (the midges fade with it).
+// The lake's water, the tree's apples, the bug, the flower and the midges
+// live all the while; they show with the forest only (the midges fade with
+// it).
 //
 function updateMenuForestLife(inst, dt) {
+  inst.lake && Lake.onUpdate(inst.lake)
   const life = inst.forestLife
   if (!life) return
   const forest = inst.bgOpacity[BACKDROP_FOREST]

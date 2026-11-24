@@ -647,7 +647,7 @@ export function onDrawSplash(inst) {
   inst.rings.forEach(ring => {
     const share = ring.t / RING_TIME
     const r = (RING_R0 + (RING_R1 - RING_R0) * share) * ring.strength
-    k.drawEllipse({ pos: inst.v.set(ring.x, ring.y), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
+    k.drawEllipse({ pos: inst.v.set(ring.x, CaveLake.surfaceAt(inst.lake, ring.x)), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
   })
   inst.drops.forEach(drop => k.drawCircle({ pos: inst.v.set(drop.x, drop.y), radius: DROP_R, color: inst.splashRgb, opacity: DROP_ALPHA }))
   inst.drips.forEach(d => drawDrip(inst, d))
@@ -1138,7 +1138,7 @@ function crossSurface(inst, ctx) {
 }
 function splash(inst, ctx, x, strength, drops) {
   const y = CaveLake.surfaceAt(inst.lake, x)
-  inst.rings.push({ x, y, t: 0, strength })
+  inst.rings.push({ x, t: 0, strength })
   for (let i = 0; i < drops; i++) {
     const a = -Math.PI * HALF + (Math.random() * 2 - 1) * DROP_SPREAD
     const s = (DROP_SPEED + Math.random() * DROP_SPEED_RANGE) * strength
@@ -1175,7 +1175,7 @@ function updateDrips(inst, ctx, dt) {
     const surface = CaveLake.surfaceAt(inst.lake, d.x)
     if (d.y < surface) return
     d.gone = true
-    inst.rings.push({ x: d.x, y: surface, t: 0, strength: DRIP_RING })
+    inst.rings.push({ x: d.x, t: 0, strength: DRIP_RING })
     ctx.onDrip(d.x)
   })
   inst.drips = inst.drips.filter(d => !d.gone)

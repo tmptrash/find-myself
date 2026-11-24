@@ -818,6 +818,11 @@ const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
 const DROWN_RESTART_DELAY = 1.1
 const WATER_STEPS_VOLUME = 0.42
 //
+// The hero falling into the lake breaks its surface this hard
+// (Lake.disturb, 1: a full splash).
+//
+const HERO_FALL_WAVE = 1.6
+//
 // Life HUD flash on drowning death.
 //
 const LIFE_FLASH_COUNT = 20
@@ -4270,17 +4275,12 @@ function forestCameraViewXRange(k, sc, margin) {
   return { x1: camX - halfW, x2: camX + halfW }
 }
 //
-// Lake surface world Y at hero X (same wave as the baked lake animation).
+// Lake surface world Y at a world X (the water's waves), the still water
+// line before the lake exists.
 //
 function lakeSurfaceWorldYAt(inst, worldX) {
-  const x1 = inst.lakeX1 ?? inst.zones?._lakeX1
-  const x2Core = inst.lakeX2 ?? inst.zones?._lakeX2
-  if (x1 == null || x2Core == null || worldX < x1 || worldX > x2Core) {
-    return WATER_SURFACE_Y
-  }
-  const t = (worldX - x1) / (x2Core - x1)
-  const time = inst.k.time() % Lake.LAKE_BAKE_CYCLE
-  return WATER_SURFACE_Y + Lake.lakeWaveOffsetAt(t, time)
+  const lake = inst.zones?._lake
+  return lake ? Lake.surfaceAt(lake, worldX) : WATER_SURFACE_Y
 }
 //
 // Full hero blit while the default sprite stays hidden in the pit (high-z draw pass).
@@ -5584,6 +5584,7 @@ function startDrowning(inst) {
   inst.sound && Sound.resumeAudioContext(inst.sound)
   Sound.stopWaterStepsLoop(inst.sound)
   Sound.playWaterStepsOnce(inst.sound, WATER_STEPS_VOLUME)
+  inst.zones._lake && Lake.disturb(inst.zones._lake, inst.heroInst.character.pos.x, HERO_FALL_WAVE)
   revealWaterZone(inst)
   inst.footParticles && ForestFootParticles.clear(inst.footParticles)
   const char = inst.heroInst.character
@@ -6192,6 +6193,7 @@ function onUpdate(inst) {
   const k = inst.k
   inst.fps && FpsCounter.onUpdate(inst.fps)
   inst.zones._sceneRef = inst
+  inst.zones._lake && Lake.onUpdate(inst.zones._lake)
   EyeFlower.syncVisible(inst.eyeFlower)
   if (inst._forestBirdsBootstrapKick) {
     inst._forestBirdsBootstrapKick = false

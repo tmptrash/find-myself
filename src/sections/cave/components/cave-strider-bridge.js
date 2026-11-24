@@ -9,9 +9,11 @@ import * as Strider from './cave-strider.js'
 // scatter and live on their own again, and gather again GATHER_EVERY..
 // +RANGE s later (the first time FIRST_GATHER s after the level starts).
 // The hero falling into the lake breaks the row up. It never takes him all
-// the way over: while he stands on a strider the last one backs off
-// LAST_RETREAT px from its spot by the bank (too far to jump to the bank
-// from), and goes back once he is off them.
+// the way over: while he stands on a strider the whole row closes up
+// between the leaves and STOP_GAP px short of the trumpeter (its
+// funnel's middle, `stop`), none of them — not even the one rowing him on —
+// going past that (too far to jump to the bank from), and spreads out
+// again once he is off them.
 //
 // The spots: the first FIRST_GAP px out from the leaves' edge (a jump
 // from them), the last LAST_GAP px short of the bank's tip (seen from the
@@ -23,7 +25,7 @@ const GATHER_EVERY_RANGE = 10
 const HOLD_TIME = 16
 const FIRST_GAP = 140
 const LAST_GAP = 200
-const LAST_RETREAT = 130
+const STOP_GAP = 60
 
 /**
  * Creates the striders' bridge over the lake.
@@ -32,17 +34,19 @@ const LAST_RETREAT = 130
  * @param {Array<Object>} cfg.striders - The lake's striders (cave-strider.js)
  * @param {number} cfg.from - World X of the pad plant leaves' right edge
  * @param {number} cfg.to - World X of the right bank's tip
+ * @param {number} cfg.stop - World X of the trumpeter (the row never takes the hero past it)
  * @returns {Object} Bridge instance
  */
 export function create(cfg) {
-  const { k, striders, from, to } = cfg
+  const { k, striders, from, to, stop } = cfg
   const first = from + FIRST_GAP
-  const last = to - LAST_GAP
-  const steps = Math.max(1, striders.length - 1)
+  const fence = stop - STOP_GAP
   return {
     k,
     striders,
-    slots: striders.map((_, i) => first + (last - first) * i / steps),
+    fence,
+    slots: spread(striders.length, first, to - LAST_GAP),
+    closeSlots: spread(striders.length, first, fence),
     holdLeft: 0,
     gatherIn: FIRST_GATHER,
     order: [],
@@ -86,17 +90,29 @@ function gather(inst) {
   inst.order.forEach((strider, i) => Strider.setSlot(strider, inst.slots[i]))
 }
 //
-// The last strider backed off from the bank while the hero is on the row,
-// back at its spot once he is off it.
+// The row closed up short of the trumpeter (and fenced there) while the
+// hero is on it, spread out again once he is off it.
 //
 function retreat(inst, ridden) {
   if (ridden === inst.retreated || !inst.order.length) return
   inst.retreated = ridden
-  const last = inst.order.length - 1
-  Strider.setSlot(inst.order[last], inst.slots[last] - (ridden ? LAST_RETREAT : 0))
+  const slots = ridden ? inst.closeSlots : inst.slots
+  inst.order.forEach((strider, i) => {
+    Strider.setSlot(strider, slots[i])
+    Strider.setFence(strider, ridden ? inst.fence : null)
+  })
+}
+//
+// `count` spots evenly from `first` to `last`.
+//
+function spread(count, first, last) {
+  const steps = Math.max(1, count - 1)
+  return Array.from({ length: count }, (_, i) => first + (last - first) * i / steps)
 }
 function scatter(inst) {
   inst.holdLeft = 0
+  inst.retreated = false
+  inst.striders.forEach(strider => Strider.setFence(strider, null))
   inst.gatherIn = GATHER_EVERY + Math.random() * GATHER_EVERY_RANGE
   inst.striders.forEach(strider => Strider.setSlot(strider, null))
 }

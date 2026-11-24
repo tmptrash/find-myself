@@ -314,7 +314,7 @@ function updateLakeLife(inst) {
 // him), its striders' row.
 //
 function createLakeLife(inst, onSplash, onSnap) {
-  inst.bridge = StriderBridge.create({ k: inst.k, striders: inst.striders, from: Pads.crownLine(inst.pads).span().x2, to: Layout.BANK_TIP_X2 })
+  inst.bridge = StriderBridge.create({ k: inst.k, striders: inst.striders, from: Pads.crownLine(inst.pads).span().x2, to: Layout.BANK_TIP_X2, stop: inst.trumpet.x })
   inst.giantCtx = { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: () => {} }
   inst.lurkerCtx = {
     hero: null,

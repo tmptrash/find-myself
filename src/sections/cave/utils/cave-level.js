@@ -350,7 +350,7 @@ function build(k, opts) {
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
-  inst.bridge = StriderBridge.create({ k, striders: inst.striders, from: Pads.crownLine(pads).span().x2, to: Layout.BANK_TIP_X2 })
+  inst.bridge = StriderBridge.create({ k, striders: inst.striders, from: Pads.crownLine(pads).span().x2, to: Layout.BANK_TIP_X2, stop: inst.trumpet.x })
   createBodies(inst)
   Ground.setMovingLines([Lurker.topLine(inst.lurker), Pads.crownLine(inst.pads), ...inst.striders.map(Strider.line)])
   spawnHero(inst, startPose(inst))

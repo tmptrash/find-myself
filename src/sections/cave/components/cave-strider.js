@@ -249,6 +249,7 @@ export function create(cfg) {
     legs: createLegs(),
     rings: [],
     slot: null,
+    fence: null,
     swayTo: 1,
     load: 0,
     sink: 0,
@@ -376,6 +377,16 @@ export function bear(inst, dir) {
  */
 export function setSlot(inst, x) {
   inst.slot = x
+}
+
+/**
+ * Keeps it from going on right past a world X (null: free again): one
+ * already past it only goes back.
+ * @param {Object} inst - Strider instance
+ * @param {number|null} x - World X
+ */
+export function setFence(inst, x) {
+  inst.fence = x
 }
 
 /**
@@ -594,11 +605,17 @@ function updateStroke(inst, dt) {
   inst.stroke.t >= STROKE_TIME + RECOVER_TIME && (inst.stroke = null)
 }
 //
-// Gliding on, slowed by the water, bouncing off the banks.
+// Gliding on, slowed by the water, bouncing off the banks, never on right
+// past its fence.
 //
 function glide(inst, dt) {
   inst.vx *= Math.exp(-DRAG * dt)
+  const was = inst.x
   inst.x += inst.vx * dt
+  if (inst.fence !== null && inst.x > inst.fence && inst.x > was) {
+    inst.x = Math.max(was, inst.fence)
+    inst.vx = Math.min(0, inst.vx)
+  }
   if (inst.x < inst.minX) {
     inst.x = inst.minX
     inst.vx = Math.abs(inst.vx) * BOUNCE

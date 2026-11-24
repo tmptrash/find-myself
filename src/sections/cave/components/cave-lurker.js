@@ -203,11 +203,16 @@ const SAG_HOLD = 3
 const SAG_TILT = 0.015
 //
 // The giant swimming over it (any of its body within GIANT_R px of its
-// resting head along the lake, over it): it hides down on the bed — out
-// of a strike or a watch at once (a runner it chews swallowed), its neck
-// drawn back — and hunts nothing, its eye on the giant's head.
+// resting head along the lake, no lower than GIANT_BELOW px under it): it
+// hides down on the bed — out of a strike or a watch at once (a runner it
+// chews swallowed), its neck drawn back at SINK_SPEED — and hunts nothing,
+// its eye on the giant's head; it stays hidden HIDE_HOLD s after the giant
+// is gone from over it (so it never bobs up and down as the giant passes
+// the edge of that).
 //
-const GIANT_R = 280
+const GIANT_R = 320
+const GIANT_BELOW = 60
+const HIDE_HOLD = 3
 //
 // Pouncing on a runner (and chewing it till its head is PLANTS_CLEAR px out
 // past the bank's tip) its head is among the bank's plants: drawn behind
@@ -470,6 +475,8 @@ export function create(cfg) {
     sagV: 0,
     watchT: 0,
     calmFor: 0,
+    hideFor: 0,
+    giantHead: null,
     ridden: false,
     leafAt: { x: 0, y: 0 },
     neck: [],
@@ -661,7 +668,7 @@ function decide(inst, ctx, near, dt) {
     return
   }
   const sinking = sinkingHero(ctx)
-  const giant = giantOver(inst, ctx)
+  const giant = giantOver(inst, ctx, dt)
   if (giant && hide(inst, ctx)) return
   if (inst.state === STATE.CHEW && sinking && !holdsHero(inst) && !giant) {
     ctx.onSwallow(inst.prey, eyeAt(inst))
@@ -700,13 +707,15 @@ function decide(inst, ctx, near, dt) {
   inst.jaw += (SHUT + REST_OPEN - inst.jaw) * Math.min(1, OPEN_RATE * dt)
 }
 //
-// The giant's head while any of its body swims over it within GIANT_R px
-// along the lake, else null.
+// The giant's head (as last seen over it) while any of its body swims over
+// it within GIANT_R px along the lake, and HIDE_HOLD s after; else null.
 //
-function giantOver(inst, ctx) {
+function giantOver(inst, ctx, dt) {
   const pts = ctx.giant?.pts
-  if (!pts?.length) return null
-  return pts.some(p => Math.abs(p.x - inst.rest.x) < GIANT_R && p.y < inst.rest.y) ? pts[0] : null
+  const over = Boolean(pts?.length) && pts.some(p => Math.abs(p.x - inst.rest.x) < GIANT_R && p.y < inst.rest.y + GIANT_BELOW)
+  over && (inst.giantHead = pts[0])
+  inst.hideFor = over ? HIDE_HOLD : Math.max(0, inst.hideFor - dt)
+  return inst.hideFor > 0 ? inst.giantHead : null
 }
 //
 // Watching the giant swim over it: resting, its head turned up at the
@@ -715,7 +724,8 @@ function giantOver(inst, ctx) {
 function watchGiant(inst, giant, dt) {
   inst.state = STATE.REST
   inst.look = giant
-  ease(inst, inst.rest, REST_DIR, dt)
+  moveTo(inst, inst.rest, SINK_SPEED, dt)
+  turnTo(inst, REST_DIR.x, REST_DIR.y, dt)
   inst.jaw += (SHUT + REST_OPEN - inst.jaw) * Math.min(1, OPEN_RATE * dt)
 }
 //

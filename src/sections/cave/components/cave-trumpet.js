@@ -48,12 +48,19 @@ const TRUMPET_DX = 230
 const FOOT_SINK = 18
 //
 // The picture (trumpet piece px), its middle at MID_X: the funnel (rows
-// 0..CUP_ROWS, columns CUP_X1..CUP_X2), the throat under it (to
-// THROAT_ROWS, drawn in THROAT_SLICES strips so a lump can swell it), the
-// stalk's middle (BAND_ROWS, columns BAND_X1..BAND_X2: whole rings, laid
-// on repeat to make the stalk longer, its last BAND_BLEND rows faded into
-// the rows over it so the repeats meet without a seam), the body and its
-// leaves under it (BODY_ROW down). The rim's top row (RIM_ROW); the mouth
+// 0..CUP_ROWS, columns CUP_X1..CUP_X2; drawn in CUP_SLICES strips, its
+// widening growing from none at its foot to all of it at its rim, so its
+// foot always meets the throat), the throat under it (to THROAT_ROWS, its
+// stalk STALK_TOP_W wide there; drawn in THROAT_SLICES strips so a lump
+// can swell it), the body with its eyes and leaves under it (BODY_ROW
+// down: the stalk meets it at its narrowest, BAND_X1..BAND_X2). The stalk
+// between the throat and the body (STALK_REST long as painted, longer as
+// it grows) narrows all the way down from the throat to the body: the
+// stalk's rows BAND_ROWS (just over the body), each drawn out across to
+// that narrowest width, laid on repeat in BAND_SUBS strips a tile, each
+// strip as wide as the stalk is there; the rows just under them faded in
+// over their top BAND_BLEND rows so the repeats meet without a seam (a
+// row's stalk: its opaque run, SOLID_ALPHA or more, through MID_X). The rim's top row (RIM_ROW); the mouth
 // inside the rim (an ellipse: MOUTH); the eyes (EYES: middles, the ball's
 // radius EYE_R, the lid's LID_R).
 //
@@ -62,13 +69,20 @@ const CUP_ROWS = 300
 const CUP_X1 = 640
 const CUP_X2 = 1135
 const THROAT_ROWS = 470
+const STALK_TOP_W = 129
+const BAND_SUBS = 3
+const CUP_SLICES = 12
 const THROAT_SLICES = 10
-const BAND_ROWS = [470, 530]
-const BAND_X1 = 790
-const BAND_X2 = 985
-const BAND_BLEND = 12
-const BODY_ROW = 530
-const RIM_ROW = 8
+const BAND_ROWS = [550, 580]
+const BAND_X1 = 840
+const BAND_X2 = 924
+const BAND_BLEND = 10
+const BODY_ROW = 580
+const RIM_ROW = 6
+const STALK_REST = (BODY_ROW - THROAT_ROWS) * SCALE
+const SOLID_ALPHA = 128
+const RGBA = 4
+const ALPHA_OFFSET = 3
 const MOUTH = { x: 886, y: 135, rx: 168, ry: 100 }
 const EYES = [{ x: 740, y: 630 }, { x: 1032, y: 631 }]
 const EYE_R = 24
@@ -229,9 +243,9 @@ export function create(cfg) {
   const x = Layout.BANK_TIP_X2 - TRUMPET_DX
   const foot = CaveLake.bedTopAt(lake, x) + FOOT_SINK
   const bodyTop = foot - (atlas ? atlas.h - BODY_ROW : 0) * SCALE
-  const restRim = bodyTop - (THROAT_ROWS - RIM_ROW) * SCALE
+  const restRim = bodyTop - STALK_REST - (THROAT_ROWS - RIM_ROW) * SCALE
   const reach = Math.max(0, restRim - (Layout.LAKE_SURFACE_Y - RIM_UP))
-  const sleepRim = bodyTop - (THROAT_ROWS - CUP_ROWS) * SCALE - (CUP_ROWS - RIM_ROW) * SCALE * NARROW
+  const sleepRim = bodyTop - STALK_REST - (THROAT_ROWS - CUP_ROWS) * SCALE - (CUP_ROWS - RIM_ROW) * SCALE * NARROW
   const sleepLift = reach > 0 ? Math.max(0, Math.min(1, (sleepRim - (Layout.LAKE_SURFACE_Y + SLEEP_UNDER)) / reach)) : 0
   const inst = {
     k,
@@ -393,12 +407,12 @@ export function onDraw(inst, view, draw) {
   const parts = bakedFor.get(inst.k)
   const halfW = atlas ? atlas.w * SCALE * HALF : 0
   if (!parts || inst.x + halfW < view.left || inst.x - halfW > view.right) return
-  const ext = inst.lift * inst.reach + inst.pop + inst.thrust
+  const ext = STALK_REST + inst.lift * inst.reach + inst.pop + inst.thrust
   const throatBottom = inst.bodyTop - ext
   const throatTop = throatBottom - (THROAT_ROWS - CUP_ROWS) * SCALE
   const lump = lumpY(inst, throatTop)
   const lean = { h: inst.bodyTop - throatTop, at: SWAY * inst.sway * Math.sin(inst.swayT * SWAY_HZ * FULL_TURN) + inst.follow }
-  drawBand(inst, parts.band, throatBottom, ext, lump, lean)
+  drawStalk(inst, parts.band, ext, lump, lean)
   drawRows(inst, parts.body, BODY_ROW, inst.bodyTop, 1, 1, 0)
   for (let i = 0; i < THROAT_SLICES; i++) {
     const rows = (THROAT_ROWS - CUP_ROWS) / THROAT_SLICES
@@ -417,7 +431,7 @@ export function onDraw(inst, view, draw) {
   k.pushTranslate(k.vec2(inst.x + lean.at, throatTop))
   k.pushRotate(inst.tilt * DEG)
   k.pushTranslate(k.vec2(-inst.x - lean.at, -throatTop))
-  drawRows(inst, parts.cup, 0, inst.cupNow.top, sx, sy, lean.at)
+  drawCup(inst, parts.cup, inst.cupNow)
   drawTeeth(inst, inst.cupNow)
   inst.state === STATE.HOLD && k.drawMasked(inst.heroFn, inst.maskFn)
   inst.swallow && k.drawMasked(inst.fishFn, inst.maskFn)
@@ -599,7 +613,7 @@ function slideIn(inst, ctx, dt) {
 // The rim's top: its stalk grown by its lift, its funnel at its width.
 //
 function rimY(inst) {
-  return inst.bodyTop - inst.lift * inst.reach - inst.pop - inst.thrust - (THROAT_ROWS - CUP_ROWS) * SCALE - (CUP_ROWS - RIM_ROW) * SCALE * inst.cup
+  return inst.bodyTop - STALK_REST - inst.lift * inst.reach - inst.pop - inst.thrust - (THROAT_ROWS - CUP_ROWS) * SCALE - (CUP_ROWS - RIM_ROW) * SCALE * inst.cup
 }
 //
 // How far the funnel is squeezed in now (chewing, or gulping at the hero).
@@ -634,24 +648,56 @@ function swell(y, lump) {
   return 1 + BULGE * Math.exp(-d * d)
 }
 //
-// The stalk's middle laid on repeat from the body up to the throat (ext px
-// of it; the topmost repeat cut short).
+// The stalk from the body up to the throat (len px of it): its tile laid
+// on repeat in thin strips, each as wide as the stalk is there — narrow at
+// the body, as wide as the throat's foot at the top (the topmost strip cut
+// short).
 //
-function drawBand(inst, part, throatBottom, ext, lump, lean) {
+function drawStalk(inst, part, len, lump, lean) {
   const tile = (BAND_ROWS[1] - BAND_ROWS[0]) * SCALE
-  for (let y = throatBottom; y < throatBottom + ext; y += tile) {
-    const h = Math.min(tile, throatBottom + ext - y)
-    const share = h / tile
-    const w = part.w * swell(y + h * HALF, lump)
+  const step = tile / BAND_SUBS
+  const widen = STALK_TOP_W / (BAND_X2 - BAND_X1) - 1
+  const mid = ((BAND_X1 + BAND_X2) * HALF - MID_X) * SCALE
+  for (let i = 0; i * step < len; i++) {
+    const d = i * step
+    const h = Math.min(step, len - d)
+    const y = inst.bodyTop - d - h
+    const sub = i % BAND_SUBS
+    const w = part.w * (1 + widen * (d + h * HALF) / len) * swell(y + h * HALF, lump)
     inst.k.drawSprite({
       sprite: SPRITE,
-      quad: { x: part.quad.x, y: part.quad.y + part.quad.h * (1 - share), w: part.quad.w, h: part.quad.h * share },
+      quad: { x: part.quad.x, y: part.quad.y + part.quad.h * (1 - sub / BAND_SUBS - h / tile), w: part.quad.w, h: part.quad.h * h / tile },
       width: w,
       height: h,
-      pos: inst.v.set(inst.x + leanAt(inst, lean, y + h * HALF) + (BAND_X1 - MID_X) * SCALE * (w / part.w), y),
+      pos: inst.v.set(inst.x + leanAt(inst, lean, y + h * HALF) + mid - w * HALF, y),
       color: inst.color
     })
   }
+}
+//
+// The funnel in strips, each as much wider as it is near the rim (its foot
+// as painted, meeting the throat), sy times as tall.
+//
+function drawCup(inst, part, cup) {
+  const rows = CUP_ROWS / CUP_SLICES
+  for (let i = 0; i < CUP_SLICES; i++) {
+    const s = rowScale(cup, (i + HALF) * rows)
+    inst.k.drawSprite({
+      sprite: SPRITE,
+      quad: { x: part.quad.x, y: part.quad.y + part.quad.h * i / CUP_SLICES, w: part.quad.w, h: part.quad.h / CUP_SLICES },
+      width: part.w * s,
+      height: rows * SCALE * cup.sy,
+      pos: inst.v.set(inst.x + cup.dx + (part.x1 - MID_X) * SCALE * s, cup.top + i * rows * SCALE * cup.sy),
+      color: inst.color
+    })
+  }
+}
+//
+// How much wider the funnel is drawn at a row of it: all of its widening
+// at the rim, none at its foot.
+//
+function rowScale(cup, row) {
+  return 1 + (cup.sx - 1) * (1 - row / CUP_ROWS)
 }
 //
 // A part's rows drawn from a world top, its middle on the trumpeter's
@@ -727,7 +773,7 @@ function drawTooth(inst, cup, t, ring, grow, size, color) {
 // its place and size now.
 //
 function cupPoint(inst, cup, px, py) {
-  return { x: inst.x + cup.dx + (px - MID_X) * SCALE * cup.sx, y: cup.top + py * SCALE * cup.sy }
+  return { x: inst.x + cup.dx + (px - MID_X) * SCALE * rowScale(cup, py), y: cup.top + py * SCALE * cup.sy }
 }
 //
 // Its eyes: open, a pupil on each looking at the nearest fish; shutting,
@@ -799,22 +845,24 @@ function buildAtlas() {
   return { canvas, parts, w: src.width, h: src.height }
 }
 //
-// The stalk's middle (BAND_ROWS) as a tile that repeats up without a seam:
-// its top BAND_BLEND rows faded into the rows just under the band.
+// The stalk's rows (BAND_ROWS) as a tile that repeats up without a seam,
+// each row's stalk drawn out to the tile's width: its top BAND_BLEND rows
+// faded into the rows just under the band.
 //
 function bandTile(src) {
   const w = BAND_X2 - BAND_X1
   const rows = BAND_ROWS[1] - BAND_ROWS[0]
+  const alpha = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, src.width, src.height).data
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = rows
   const ctx = canvas.getContext('2d')
-  ctx.drawImage(src, BAND_X1, BAND_ROWS[0], w, rows, 0, 0, w, rows)
+  for (let r = 0; r < rows; r++) stalkRow(ctx, src, alpha, BAND_ROWS[0] + r, r, w)
   const over = document.createElement('canvas')
   over.width = w
   over.height = BAND_BLEND
   const octx = over.getContext('2d')
-  octx.drawImage(src, BAND_X1, BAND_ROWS[1], w, BAND_BLEND, 0, 0, w, BAND_BLEND)
+  for (let r = 0; r < BAND_BLEND; r++) stalkRow(octx, src, alpha, BAND_ROWS[1] + r, r, w)
   const fade = octx.createLinearGradient(0, 0, 0, BAND_BLEND)
   fade.addColorStop(0, C.pupil)
   fade.addColorStop(1, C.pupil + TRANSPARENT)
@@ -823,4 +871,18 @@ function bandTile(src) {
   octx.fillRect(0, 0, w, BAND_BLEND)
   ctx.drawImage(over, 0, 0)
   return canvas
+}
+//
+// One row of the stalk (its opaque run through MID_X) drawn out to w px at
+// row `to` of a tile.
+//
+function stalkRow(ctx, src, alpha, row, to, w) {
+  let l = MID_X
+  let r = MID_X
+  while (l > 0 && isSolid(alpha, src.width, l - 1, row)) l--
+  while (r < src.width - 1 && isSolid(alpha, src.width, r + 1, row)) r++
+  ctx.drawImage(src, l, row, r - l + 1, 1, 0, to, w, 1)
+}
+function isSolid(alpha, width, x, row) {
+  return alpha[(row * width + x) * RGBA + ALPHA_OFFSET] >= SOLID_ALPHA
 }

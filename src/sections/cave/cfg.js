@@ -52,6 +52,83 @@ export const CAVE_CFG = {
   water: {
     water: '#1d5a5c',
     bedShade: '#0a2428',
+    //
+    // The surface's spring waves (utils/water-wave.js): px between points,
+    // speed (px/s), damping (1/s), pull to rest (1/s²), max height (px),
+    // how much sharper high crests are drawn, a splash of strength 1
+    // (px/s), and the idle kicks keeping the still water barely alive
+    // (px/s: the idle waves' size, every idleEvery..+idleRange s).
+    //
+    wave: {
+      spacing: 8,
+      speed: 160,
+      damping: 0.7,
+      tension: 1.2,
+      amplitude: 14,
+      crestSharp: 0.35,
+      kick: 220,
+      idleKick: 24,
+      idleEvery: 0.2,
+      idleRange: 0.4
+    },
+    //
+    // The surface as a thin layer (cave-water-surface.js): a faint main
+    // contour (`contourAlpha`, `contourWidth` px) over a softly lit band
+    // (`bandAlpha` fading out over `bandDepth` px).
+    //
+    surface: {
+      contourAlpha: 0.38,
+      contourWidth: 1,
+      bandAlpha: 0.34,
+      bandDepth: 8
+    },
+    //
+    // The moving highlights on the surface (cave-water-surface.js), in
+    // `color` with the darker `shade` under the main ones: `brightness`,
+    // `shadeAlpha`; `density` how much of still water carries one (0 … 1),
+    // `secondaryDensity` the same for the fainter ones under the surface
+    // (at `secondaryBrightness`); `length` the mean px one runs and
+    // `lengthVariation` how uneven (0 … 1); `thickness` px and
+    // `thicknessVariation`; `drift` px/s they slide along; `calm` how bright
+    // they are on still water, raised by a crest's sharpness (`crestGain`
+    // per px), a slope (`slopeGain`) and the water's motion (`motionGain`),
+    // which also wakes more of them (`exciteGain`).
+    //
+    highlight: {
+      color: '#d4f2e6',
+      shade: '#0f3a3e',
+      brightness: 0.9,
+      shadeAlpha: 0.5,
+      density: 0.42,
+      secondaryDensity: 0.22,
+      secondaryBrightness: 0.45,
+      length: 56,
+      lengthVariation: 0.55,
+      thickness: 1.4,
+      thicknessVariation: 0.9,
+      drift: 7,
+      calm: 0.3,
+      crestGain: 0.35,
+      slopeGain: 1.6,
+      motionGain: 0.5,
+      exciteGain: 0.35
+    },
+    //
+    // The water's depth gradient: `surface` light at the top (`lightAlpha`,
+    // gone `lightEnd` of the way down), `deep` dark toward the bed (from
+    // `deepFrom` of the way down to `deepAlpha` at the bottom, `deepMid` of
+    // it half way), `intensity` scales both (0: none).
+    //
+    gradient: {
+      surface: '#4f9a92',
+      deep: '#05161b',
+      intensity: 1,
+      lightAlpha: 0.2,
+      lightEnd: 0.5,
+      deepFrom: 0.1,
+      deepAlpha: 0.85,
+      deepMid: 0.3
+    },
     paint: {
       light: '#4f9a92',
       deep: '#0d2e33',

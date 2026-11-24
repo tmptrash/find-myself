@@ -12,7 +12,9 @@ import * as CaveLake from '../utils/cave-lake.js'
 // moving lines, crownLine), his feet rayed onto it. Its crown
 // stays still on the water (drawn over the surface, with the things on
 // it) — but for the hero landing on it: it gives a little under him and
-// springs back (sag); under the water its stems and broad leaves sway a little — drawn
+// springs back (sag), and waves run off both its ends; and for the waves
+// coming in from either side: it rocks on them (rock); under the water
+// its stems and broad leaves sway a little — drawn
 // in SLICES horizontal strips, each shifted across by a slow wave, none at
 // the crown nor at the foot. The stems reach down to the bed wherever it
 // lies: only they are drawn longer or shorter (the crown keeps its size).
@@ -62,6 +64,23 @@ const SAG_K = 140
 const SAG_DAMP = 11
 const SAG_HOLD = 1.5
 //
+// The crown rocks on the waves: it rises and falls with the surface under
+// its two ends (EDGE_IN px in from them), ROCK_SHARE of it, and tilts by
+// their difference (TILT_SHARE of it, never past TILT_MAX degrees) about
+// its middle, following on a soft spring (ROCK_K, damped ROCK_DAMP): it
+// lags a little behind the water and sways a little past. The hero
+// landing on it sends waves off both its ends (LAND_WAVE of a splash).
+//
+const EDGE_IN = 12
+const ROCK_SHARE = 0.6
+const TILT_SHARE = 1.2
+const TILT_MAX = 3
+const ROCK_K = 30
+const ROCK_DAMP = 5
+const LAND_WAVE = 0.7
+const DEG = 180 / Math.PI
+const HALF = 0.5
+//
 // The sway under the water: SLICES strips, shifted up to SWAY px across by
 // a wave running down at SWAY_HZ (WAVE_TURNS of it along the stems).
 //
@@ -94,7 +113,9 @@ export function create(cfg) {
   const span = { x1: edge[0].x, x2: edge[edge.length - 1].x }
   const inst = {
     k,
+    lake,
     x,
+    span,
     edge,
     line: null,
     left,
@@ -105,8 +126,13 @@ export function create(cfg) {
     color: getRGB(k, C.tint),
     sag: 0,
     sagV: 0,
+    heave: 0,
+    heaveV: 0,
+    tilt: 0,
+    tiltV: 0,
     ridden: false,
-    v: k.vec2(0, 0)
+    v: k.vec2(0, 0),
+    pivot: k.vec2(0, 0)
   }
   inst.line = { moving: true, id: 'padCrown', span: () => span, at: px => walkAt(inst, px) }
   return inst
@@ -114,17 +140,17 @@ export function create(cfg) {
 
 /**
  * Whether the hero stands on its leaves now (he presses them down as he
- * lands).
+ * lands, and waves run off both their ends).
  * @param {Object} inst - Pads instance
  * @param {boolean} riding - He stands on them
  */
 export function bear(inst, riding) {
-  riding && !inst.ridden && (inst.sagV += SAG_KICK)
+  riding && !inst.ridden && land(inst)
   inst.ridden = riding
 }
 
 /**
- * Runs its leaves' give under the hero on.
+ * Runs its leaves' give under the hero and their rocking on the waves on.
  * @param {Object} inst - Pads instance
  */
 export function onUpdate(inst) {
@@ -132,6 +158,7 @@ export function onUpdate(inst) {
   const to = inst.ridden ? SAG_HOLD : 0
   inst.sagV += (SAG_K * (to - inst.sag) - SAG_DAMP * inst.sagV) * dt
   inst.sag += inst.sagV * dt
+  rock(inst, dt)
 }
 
 /**
@@ -140,7 +167,7 @@ export function onUpdate(inst) {
  * @returns {{x1: number, x2: number}}
  */
 export function crownSpan(inst) {
-  return { x1: inst.edge[0].x, x2: inst.edge[inst.edge.length - 1].x }
+  return { x1: inst.span.x1, x2: inst.span.x2 }
 }
 
 /**
@@ -183,26 +210,58 @@ export function onDraw(inst, view) {
     const u = (i + SLICE_OVERLAP) / SLICES
     const shift = SWAY * Math.sin(Math.PI * u) * Math.sin(phase - u * WAVE_TURNS * FULL_TURN)
     const from = CROWN_H + i * sliceRows
-    const give = inst.sag * (1 - i / SLICES)
+    const give = (inst.sag + inst.heave) * (1 - i / SLICES)
     drawRows(inst, from, sliceRows + SLICE_OVERLAP, inst.left + shift, inst.crownBottom + give + i * sliceRows * SCALE * inst.stemScale, inst.stemScale)
   }
 }
 
 /**
- * Draws its crown of leaves lying on the water (over the surface).
+ * Draws its crown of leaves lying on the water (over the surface), pressed
+ * down and rocking about its middle on the surface.
  * @param {Object} inst - Pads instance
  * @param {{left: number, right: number}} view - World rect in view
  */
 export function onDrawCrown(inst, view) {
-  visible(inst, view) && drawRows(inst, 0, CROWN_H, inst.left, inst.top + inst.sag, 1)
+  if (!visible(inst, view)) return
+  const k = inst.k
+  const surface = Layout.LAKE_SURFACE_Y
+  k.pushTransform()
+  k.pushTranslate(inst.pivot.set(inst.x, surface + inst.sag + inst.heave))
+  k.pushRotate(inst.tilt)
+  drawRows(inst, 0, CROWN_H, inst.left - inst.x, inst.top - surface, 1)
+  k.popTransform()
 }
 //
 // Where the hero walks on the leaves at a world X (null off them): a little
-// in under their top edge, pressed down with them.
+// in under their top edge, pressed down and rocking with them.
 //
 function walkAt(inst, x) {
   const y = edgeAt(inst.edge, x)
-  return y === null ? null : y + LINE_DROP + inst.sag
+  return y === null ? null : y + LINE_DROP + inst.sag + inst.heave + (x - inst.x) * Math.tan(inst.tilt / DEG)
+}
+//
+// The hero landed on the leaves: they give under him, and waves run off
+// both their ends.
+//
+function land(inst) {
+  inst.sagV += SAG_KICK
+  CaveLake.disturb(inst.lake, inst.span.x1, LAND_WAVE)
+  CaveLake.disturb(inst.lake, inst.span.x2, LAND_WAVE)
+}
+//
+// The crown following the surface under its ends on its spring (see
+// ROCK_SHARE): up and down by their mean, tilted by their difference.
+//
+function rock(inst, dt) {
+  const { span } = inst
+  const left = CaveLake.surfaceAt(inst.lake, span.x1 + EDGE_IN) - Layout.LAKE_SURFACE_Y
+  const right = CaveLake.surfaceAt(inst.lake, span.x2 - EDGE_IN) - Layout.LAKE_SURFACE_Y
+  const heave = ROCK_SHARE * (left + right) * HALF
+  const tilt = Math.max(-TILT_MAX, Math.min(TILT_MAX, Math.atan2((right - left) * TILT_SHARE, span.x2 - span.x1) * DEG))
+  inst.heaveV += (ROCK_K * (heave - inst.heave) - ROCK_DAMP * inst.heaveV) * dt
+  inst.heave += inst.heaveV * dt
+  inst.tiltV += (ROCK_K * (tilt - inst.tilt) - ROCK_DAMP * inst.tiltV) * dt
+  inst.tilt += inst.tiltV * dt
 }
 //
 // The crown's top edge at a world X (null off it).

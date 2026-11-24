@@ -162,6 +162,14 @@ const LAND_MIN_AIR = 0.12
 //
 const WATER_STEPS_VOLUME = 0.42
 //
+// How hard things break the lake's surface (CaveLake.disturb, 1: a full
+// fish splash): the hero falling in, the lurker's head, a bubble popping
+// (BUBBLE_WAVE per px of its radius).
+//
+const HERO_FALL_WAVE = 1.6
+const LURKER_WAVE = 1.2
+const BUBBLE_WAVE = 0.04
+//
 // Drowning (like the forest lake): the hero shuts his eyes in his calm
 // pose and sinks slowly, drawn whole as one picture behind the soil and
 // under the water (seen through it); once he is all down in the lake bed's
@@ -533,6 +541,7 @@ function startDrown(inst, char) {
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
   Sound.playWaterStepsOnce(inst.sfx, WATER_STEPS_VOLUME)
+  CaveLake.disturb(inst.lake, char.pos.x, HERO_FALL_WAVE)
   StriderBridge.breakUp(inst.bridge)
   inst.striders.forEach(strider => Strider.startle(strider, char.pos.x))
   inst.fish.forEach(fish => Fish.startle(fish, char.pos.x))
@@ -920,6 +929,7 @@ function drawEatenHero(inst, at, angle) {
 function onLurkerSplash(inst, x) {
   const focus = heroFocus(inst)
   CaveSound.playSlosh(inst.caveSound, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  CaveLake.disturb(inst.lake, x, LURKER_WAVE)
   inst.striders.forEach(strider => Strider.startle(strider, x))
   inst.fish.forEach(fish => Fish.startle(fish, x))
 }
@@ -947,6 +957,7 @@ function sendVisitor(inst) {
 function onLurkerDrip(inst, x) {
   const focus = heroFocus(inst)
   CaveSound.playFishSplash(inst.caveSound, LURKER_DRIP, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  CaveLake.disturb(inst.lake, x, LURKER_DRIP)
 }
 //
 // The trumpeter caught a leaping fish: it is gone (to swim back in later),
@@ -1042,6 +1053,7 @@ function drawRunners(inst) {
 // and then.
 //
 function updateLakeLife(inst) {
+  CaveLake.onUpdate(inst.lake)
   const ctx = inst.fishCtx
   const char = inst.heroInst?.character
   const hero = !inst.dead && char?.exists?.() ? char.pos : null
@@ -1095,10 +1107,12 @@ function onGiantBreath(inst, exhale, x) {
 function onBubblePop(inst, x, r) {
   const focus = heroFocus(inst)
   CaveSound.playBubble(inst.caveSound, r, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  CaveLake.disturb(inst.lake, x, r * BUBBLE_WAVE)
 }
 function onFishSplash(inst, x, strength) {
   const focus = heroFocus(inst)
   CaveSound.playFishSplash(inst.caveSound, strength, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  CaveLake.disturb(inst.lake, x, strength)
 }
 //
 // A fish in the giant's jaws: only what sticks out of its mouth.

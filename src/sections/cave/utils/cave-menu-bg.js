@@ -89,6 +89,11 @@ const DRIP_SPLASH = 0.3
 const GULP_SPLASH = 0.6
 const LURKER_SPLASH = 1
 //
+// A popping bubble breaks the lake's surface BUBBLE_WAVE per px of its
+// radius (CaveLake.disturb, 1: a full fish splash).
+//
+const BUBBLE_WAVE = 0.04
+//
 // Every VISIT_EVERY..+RANGE s a runner is sent out onto the lake's left
 // bank, VISIT_IN..+RANGE px short of its edge (one on the bank's run, else
 // one in from the way in, ENTRY_SPOT) — for the lurker to pounce on.
@@ -130,7 +135,7 @@ export function create(cfg) {
     striders: lake ? Strider.createAll(k, lake, [Pads.crownSpan(pads)]) : [],
     strideFears: [],
     pads,
-    bubbles: lake ? Bubbles.create({ k, lake, onPop: (x, r) => cfg.onBubble?.(r, nearMiddle(place, x)) }) : null,
+    bubbles: lake ? Bubbles.create({ k, lake, onPop: (x, r) => bubblePop(lake, cfg.onBubble, place, x, r) }) : null,
     fishMouths: [],
     giant: lake ? Giant.create({ k, lake }) : null,
     lurker: lake ? Lurker.create({ k, lake }) : null,
@@ -277,11 +282,21 @@ function drawLake(inst) {
   inst.striders.forEach(strider => Strider.onDraw(strider, view))
 }
 //
-// A fish broke the surface: heard as in the level, fading over SPLASH_HEAR
-// px from the view's middle (nothing to hear while baking ahead).
+// Something broke the surface: waves run off from it, and it is heard as
+// in the level, fading over SPLASH_HEAR px from the view's middle
+// (nothing to hear while baking ahead).
 //
 function splash(inst, onSplash, x, strength) {
+  CaveLake.disturb(inst.lake, x, strength)
   onSplash?.(strength, nearMiddle(inst.place, x))
+}
+//
+// A bubble popped on the surface: a tiny ripple there, heard as in the
+// level.
+//
+function bubblePop(lake, onBubble, place, x, r) {
+  CaveLake.disturb(lake, x, r * BUBBLE_WAVE)
+  onBubble?.(r, nearMiddle(place, x))
 }
 //
 // How near the view's middle a world X is: 1 there, 0 SPLASH_HEAR px off.
@@ -297,6 +312,7 @@ function nearMiddle(place, x) {
 // that moves near the water and line up now and then.
 //
 function updateLakeLife(inst) {
+  CaveLake.onUpdate(inst.lake)
   const ctx = inst.fishCtx
   ctx.prey.length = 0
   Fireflies.forEachLit(inst.fireflies, f => ctx.prey.push(f))

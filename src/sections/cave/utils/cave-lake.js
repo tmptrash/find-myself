@@ -1,9 +1,11 @@
 import { applyForestGameplaySharpBake } from '../../forest/utils/forest-focus-depth.js'
 import * as Lake from '../../../components/lake.js'
+import * as Wave from '../../../utils/water-wave.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Layout from './cave-layout.js'
 import * as Ground from './cave-ground.js'
 import * as LakeBed from './cave-lake-bed.js'
+import * as Surface from './cave-water-surface.js'
 //
 // The lake in the hall's floor, painted like the forest lake
 // (components/lake.js): its water fills the floor's bowl from the surface
@@ -11,105 +13,56 @@ import * as LakeBed from './cave-lake-bed.js'
 // very bottom, and its surface ends exactly at the columns where the
 // banks' soil drops under it (found pixel by pixel, Ground.waterColumns);
 // under each bank it runs on into the hollow there, under the hollow's
-// soil (no water is painted over that soil). Its waves die out at the
-// banks' faces. The band round the
-// surface is baked as a wave cycle of FRAME_COUNT frames, as the forest's:
-// the water opaque across the waves and fading to see-through under them,
-// a light skin, the band between a bright top line and a fainter inner
-// line (each riding its own wave, dying out toward the banks), ripples
-// running off both banks. Under the band the body is one still bake, and
-// over it the stones lining the hollows, drawn again under only a light
-// haze of water (LINING_TINT): they stay light, and the water's edge runs
-// along the stones, not along the soil's smooth arc (none of it over the
-// surface). The
-// forest lake's swaying algae stand on the bed, drawn under the water.
+// soil (no water is painted over that soil).
+//
+// Its surface is a row of springs (utils/water-wave.js) across the open
+// water between the banks' tips: splashes push it down and the waves run
+// off, come back off the banks and settle; the still water barely moves.
+// How the surface looks (cave-water-surface.js): the band round it (a
+// faint contour over a softly lit strip and the light skin, the water
+// fading to see-through under it: ONE still bake, here) bent to the
+// springs, and broken moving highlights over it.
+// Under the band the body is one still bake, and over it the stones
+// lining the hollows, drawn again under only a light haze of water
+// (LINING_TINT): they stay light, and the water's edge runs along the
+// stones, not along the soil's smooth arc (none of it over the surface).
+// All three carry the same depth gradient (lighter under the surface,
+// darker toward the lake's deepest point), baked once. The forest lake's
+// swaying algae stand on the bed, drawn under the water.
 //
 const COLORS = CAVE_CFG.water
 const PAINT = COLORS.paint
-const SPRITE_PREFIX = 'cave0-lake-v3-'
+const GRADIENT = COLORS.gradient
+const SPRITE_PREFIX = 'cave0-lake-v5-'
+const BAND_SPRITE = `${SPRITE_PREFIX}band`
 const BODY_SPRITE = `${SPRITE_PREFIX}body`
 const LINING_SPRITE = `${SPRITE_PREFIX}lining`
-const SHEET_SPRITE = `${SPRITE_PREFIX}sheet-`
 //
 // The water reaches this far under the bowl's top so no gap shows under
 // the soil's lumps.
 //
 const BED_OVERLAP = 6
+const BAND_SEED = 8900
 //
-// The baked band: from BAND_ABOVE px over the surface to BAND_BELOW under
-// it; FRAME_COUNT frames over one wave cycle (all wave speeds are whole
-// multiples of WAVE_SPEED, so the cycle loops). The frames are stacked on
-// sheets of FRAMES_PER_SHEET, each its own texture of exact size (a sheet
-// stays under the 2048 px a phone's GPU takes; thin frames one by one would
-// leave most of the shared texture pages empty). Each frame carries FRAME_PAD
-// rows over and under it, copies of its own edge rows: at a fractional
-// screen scale (DPR 1.1, 1.25…) a frame's edge row was sampled from the
-// next frame's clear top row, and the dark cave showed through a 1 px gap
-// between the band and the body.
-//
-const BAND_ABOVE = 6
-const BAND_BELOW = 22
-const FRAME_COUNT = 90
-const FRAMES_PER_SHEET = 45
-const FRAME_PAD = 1
-const FRAME_SEED = 8900
-//
-// Waves (as the forest lake's): the top line's two waves (speed, height,
-// phase across the lake), the inner line's two and its lag; they die out
-// over SHORE_FADE px at the banks.
-//
-const WAVE_SPEED = 0.85
-const WAVE_AMP = 3
-const WAVE_PHASE = 4
-const WAVE_SECOND_SPEED = 1.7
-const WAVE_SECOND_AMP = 1.2
-const WAVE_SECOND_PHASE = 9.2
-const INNER_AMP = 2.6
-const INNER_PHASE = 3.4
-const INNER_SECOND_AMP = 1.35
-const INNER_SECOND_PHASE = 7.4
-const INNER_SECOND_SHIFT = 0.9
-const INNER_LAG = 0.48
-const SHORE_FADE = 60
-const CYCLE = Math.PI * 2 / WAVE_SPEED
-//
-// Water paint (as the forest lake's): opaque OPAQUE_PX under the waves,
+// Water paint (as the forest lake's): opaque OPAQUE_PX under the surface,
 // then fading to BODY_ALPHA over BODY_FADE px; a light skin (SKIN_ALPHA
-// over SKIN_DEPTH px); the deep tint toward the bed (DEEP_ALPHA); the
-// band between the lines; the lines' widths and the inner one's opacity.
+// over SKIN_DEPTH px); the contour and the lit band under it (SURFACE).
 //
-const OPAQUE_PX = WAVE_AMP + WAVE_SECOND_AMP + 1
+const SURFACE = COLORS.surface
+const OPAQUE_PX = 3
 const BODY_FADE = 10
 const BODY_ALPHA = 0.42
 const LINING_TINT = 0.18
 const SKIN_ALPHA = 0.28
 const SKIN_DEPTH = 16
-const DEEP_ALPHA = 0.2
-const BAND_ALPHA = 0.32
-const LINE_W = 1.5
-const INNER_W = 1
-const INNER_ALPHA = 0.55
-const POINT_STEP = 4
-//
-// Ripples running off each bank: count, start, spacing, length, height,
-// drop, how they shrink, opacity.
-//
-const RIPPLES = 3
-const RIPPLE_START = 10
-const RIPPLE_SPACING = 18
-const RIPPLE_LEN = 16
-const RIPPLE_H = 1
-const RIPPLE_DROP = 3
-const RIPPLE_DROP_STEP = 1.5
-const RIPPLE_SHRINK = 0.5
-const RIPPLE_ALPHA = 0.5
-const RIPPLE_BANKS = [1, -1]
+const HALF = 0.5
 const BYTE_MAX = 255
 const HEX_RADIX = 16
 const bakedFor = new WeakSet()
 
 /**
- * The lake on this k: its bowl, its baked water and its algae.
+ * The lake on this k: its bowl, its baked water, its surface's springs
+ * and its algae.
  * @param {Object} k - Kaplay instance
  * @returns {Object} Lake instance
  */
@@ -117,24 +70,49 @@ export function create(k) {
   const bed = bowlLine()
   const x1 = bed[0].x
   const x2 = bed[bed.length - 1].x + 1
+  const waveX1 = Math.max(x1, Layout.BANK_TIP_X)
+  const waveX2 = Math.min(x2, Layout.BANK_TIP_X2)
   const inst = {
     k,
     bed,
     x1,
     x2,
-    waveX1: Math.max(x1, Layout.BANK_TIP_X),
-    waveX2: Math.min(x2, Layout.BANK_TIP_X2),
-    framePos: k.vec2(x1, Layout.LAKE_SURFACE_Y - BAND_ABOVE),
-    bodyPos: k.vec2(x1, Layout.LAKE_SURFACE_Y + BAND_BELOW),
+    waveX1,
+    waveX2,
+    deep: 0,
+    wave: Wave.create({ ...COLORS.wave, x1: waveX1, x2: waveX2 }),
+    surface: null,
+    bodyPos: k.vec2(x1, Layout.LAKE_SURFACE_Y + Surface.BAND_BELOW),
     liningPos: null,
     algae: null
   }
+  inst.deep = bodyDeep(inst)
+  inst.surface = Surface.create({ k, x1, x2, wave: inst.wave, sprite: BAND_SPRITE })
   inst.algae = Lake.createAlgaeField(k, { paint: PAINT, x1: Math.max(x1, Layout.LAKE_X1), x2, surfaceY: Layout.LAKE_SURFACE_Y, bedAt: x => bedAt(inst, x) - BED_OVERLAP })
   const box = LakeBed.liningBox()
   inst.liningPos = k.vec2(box.x1, box.y1)
   bakedFor.has(k) || bake(k, inst, box)
   bakedFor.add(k)
   return inst
+}
+
+/**
+ * Runs the surface's springs on by this frame's time.
+ * @param {Object} inst - Lake instance
+ */
+export function onUpdate(inst) {
+  Wave.onUpdate(inst.wave, inst.k.dt())
+}
+
+/**
+ * Something broke the surface at a world X: the water there is pushed
+ * down and the waves run off from it.
+ * @param {Object} inst - Lake instance
+ * @param {number} x - World X
+ * @param {number} strength - How hard (1: a full splash)
+ */
+export function disturb(inst, x, strength) {
+  Wave.disturb(inst.wave, x, strength)
 }
 
 /**
@@ -146,31 +124,29 @@ export function onDrawAlgae(inst) {
 }
 
 /**
- * Draws the water: the band's frame of the moment, then the still body.
+ * Draws the water: the band bent to the surface, the still body, the
+ * lining stones, then the surface's highlights.
  * @param {Object} inst - Lake instance
  * @param {{left: number, right: number}} view - Visible world rect
  */
 export function onDraw(inst, view) {
   if (inst.x2 < view.left || inst.x1 > view.right) return
   const k = inst.k
-  const f = frameNow(k)
-  k.drawSprite({ sprite: SHEET_SPRITE + Math.floor(f / FRAMES_PER_SHEET), frame: f % FRAMES_PER_SHEET, pos: inst.framePos })
+  Surface.onDrawBand(inst.surface, view)
   k.drawSprite({ sprite: BODY_SPRITE, pos: inst.bodyPos })
   k.drawSprite({ sprite: LINING_SPRITE, pos: inst.liningPos })
+  Surface.onDrawHighlights(inst.surface)
 }
 
 /**
- * The water's top line at a world X this moment (the wave of the frame
- * on screen), for what rides on it.
+ * The water's top line at a world X this moment (its springs), for what
+ * rides on it.
  * @param {Object} inst - Lake instance
  * @param {number} x - World X
  * @returns {number} World Y of the surface
  */
 export function surfaceAt(inst, x) {
-  const span = inst.x2 - inst.x1
-  const fade = waveFade(inst, x)
-  const t = frameNow(inst.k) / FRAME_COUNT * CYCLE
-  return Layout.LAKE_SURFACE_Y + topWave((x - inst.x1) / span, t) * fade
+  return Layout.LAKE_SURFACE_Y + Wave.heightAt(inst.wave, x)
 }
 
 /**
@@ -226,12 +202,6 @@ export function openSpan(inst) {
   return { x1: inst.waveX1, x2: inst.waveX2 }
 }
 //
-// The band's frame on screen now.
-//
-function frameNow(k) {
-  return Math.floor((k.time() % CYCLE) / CYCLE * FRAME_COUNT) % FRAME_COUNT
-}
-//
 // The water column by column (Ground.waterColumns), from the first to the
 // last column that has any: its top (the surface, or the soil ceiling of
 // the hollow under the bank) and its bed (reached BED_OVERLAP px into).
@@ -254,189 +224,129 @@ function bedAt(inst, x) {
   return colAt(inst, x).y
 }
 //
-// How much of the waves a column of the surface carries: none under the
-// left bank's lip, rising over SHORE_FADE px from its tip, dying out over
-// as much at the right bank.
-//
-function waveFade(inst, x) {
-  return Math.max(0, Math.min(1, (x - inst.waveX1) / SHORE_FADE, (inst.waveX2 - x) / SHORE_FADE))
-}
-//
-// Every frame of the band (on its sheets) and the still body, once per
-// live k.
+// The band, the still body and the lining, once per live k.
 //
 function bake(k, inst, liningBox) {
-  for (let first = 0; first < FRAME_COUNT; first += FRAMES_PER_SHEET) bakeSheet(k, inst, first, Math.min(FRAMES_PER_SHEET, FRAME_COUNT - first))
+  bakeBand(k, inst)
   bakeBody(k, inst)
   bakeLining(k, inst, liningBox)
 }
 //
-// One sheet: `count` frames from `first`, stacked top to bottom with their
-// edge rows repeated into the pads (each grained on its own canvas first,
-// so the grain matches a lone frame's).
+// The band at rest (painted in world coordinates; its layout is
+// cave-water-surface.js'), grained, its edge rows repeated into its pads.
 //
-function bakeSheet(k, inst, first, count) {
-  const h = BAND_ABOVE + BAND_BELOW
-  const stride = h + FRAME_PAD * 2
-  const sheet = document.createElement('canvas')
-  sheet.width = inst.x2 - inst.x1
-  sheet.height = stride * count
-  const sheetCtx = sheet.getContext('2d')
+function bakeBand(k, inst) {
+  const pad = Surface.BAND_PAD
+  const h = Surface.BAND_ABOVE + Surface.BAND_BELOW
   const canvas = document.createElement('canvas')
-  canvas.width = sheet.width
-  canvas.height = h
+  canvas.width = inst.x2 - inst.x1
+  canvas.height = Surface.BAND_TEX_H
   const ctx = canvas.getContext('2d')
-  const frames = []
-  for (let i = 0; i < count; i++) {
-    const f = first + i
-    const y = stride * i + FRAME_PAD
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.clearRect(0, 0, canvas.width, h)
-    paintFrame(ctx, inst, f / FRAME_COUNT * CYCLE)
-    applyForestGameplaySharpBake(canvas, FRAME_SEED + f)
-    sheetCtx.drawImage(canvas, 0, y)
-    sheetCtx.drawImage(canvas, 0, 0, canvas.width, 1, 0, y - FRAME_PAD, canvas.width, FRAME_PAD)
-    sheetCtx.drawImage(canvas, 0, h - 1, canvas.width, 1, 0, y + h, canvas.width, FRAME_PAD)
-    frames.push({ x: 0, y, w: canvas.width, h })
-  }
-  k.loadSprite(SHEET_SPRITE + first / FRAMES_PER_SHEET, sheet, { frames, singular: true })
+  ctx.translate(-inst.x1, pad + Surface.BAND_ABOVE - Layout.LAKE_SURFACE_Y)
+  paintBand(ctx, inst)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  applyForestGameplaySharpBake(canvas, BAND_SEED)
+  ctx.drawImage(canvas, 0, pad, canvas.width, 1, 0, 0, canvas.width, pad)
+  ctx.drawImage(canvas, 0, pad + h - 1, canvas.width, 1, 0, pad + h, canvas.width, pad)
+  k.loadSprite(BAND_SPRITE, canvas)
 }
 //
-// One moment of the band (canvas Y 0 is BAND_ABOVE over the surface): the
-// water under the waving top line down to the bowl, its paint clipped to
-// it, then the two lines.
+// The water under the flat surface down to the bowl, its paint clipped
+// to it, then the faint contour; nothing over the soil ceiling of the
+// hollows.
 //
-function paintFrame(ctx, inst, t) {
-  const surface = BAND_ABOVE
-  const bottom = BAND_ABOVE + BAND_BELOW
-  const bandY = x => Math.min(bottom, bedAt(inst, x) - Layout.LAKE_SURFACE_Y + surface)
-  ctx.translate(-inst.x1, 0)
-  const top = waveLine(inst, t, topWave, surface)
-  const inner = waveLine(inst, t + INNER_LAG, innerWave, surface)
+function paintBand(ctx, inst) {
+  const top = Layout.LAKE_SURFACE_Y
+  const bottom = top + Surface.BAND_BELOW
+  const w = inst.x2 - inst.x1
   ctx.beginPath()
-  top.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)))
+  ctx.moveTo(inst.x1, top)
+  ctx.lineTo(inst.x2, top)
   for (let x = inst.x2 - 1; x >= inst.x1; x--) {
-    ctx.lineTo(x + 1, bandY(x))
-    ctx.lineTo(x, bandY(x))
+    const y = Math.min(bottom, bedAt(inst, x))
+    ctx.lineTo(x + 1, y)
+    ctx.lineTo(x, y)
   }
   ctx.closePath()
-  const body = ctx.createLinearGradient(0, surface + OPAQUE_PX, 0, surface + OPAQUE_PX + BODY_FADE)
+  const body = ctx.createLinearGradient(0, top + OPAQUE_PX, 0, top + OPAQUE_PX + BODY_FADE)
   body.addColorStop(0, COLORS.water)
   body.addColorStop(1, hexAlpha(COLORS.water, BODY_ALPHA))
   ctx.fillStyle = body
   ctx.fill()
   ctx.save()
   ctx.clip()
-  paintSkin(ctx, inst, surface)
-  paintRipples(ctx, inst, t, surface)
-  paintBand(ctx, top, inner)
+  paintDepth(ctx, inst, inst.x1, top, w, Surface.BAND_BELOW)
+  paintSkin(ctx, inst, top)
+  const lit = ctx.createLinearGradient(0, top, 0, top + SURFACE.bandDepth)
+  lit.addColorStop(0, hexAlpha(PAINT.surfaceBand, SURFACE.bandAlpha))
+  lit.addColorStop(1, hexAlpha(PAINT.surfaceBand, 0))
+  ctx.fillStyle = lit
+  ctx.fillRect(inst.x1, top, w, SURFACE.bandDepth)
   ctx.restore()
-  strokeLine(ctx, top, PAINT.surfaceLine, LINE_W)
-  strokeLine(ctx, inner, hexAlpha(PAINT.surfaceLine, INNER_ALPHA), INNER_W)
-  clearCeiling(ctx, inst, surface)
-}
-//
-// Nothing of the band over the soil ceiling of the hollow under the bank
-// where it comes down below the surface.
-//
-function clearCeiling(ctx, inst, surface) {
-  inst.bed.forEach(col => col.top > Layout.LAKE_SURFACE_Y && ctx.clearRect(col.x, 0, 1, col.top - Layout.LAKE_SURFACE_Y + surface))
+  ctx.fillStyle = hexAlpha(PAINT.surfaceLine, SURFACE.contourAlpha)
+  ctx.fillRect(inst.x1, top - SURFACE.contourWidth * HALF, w, SURFACE.contourWidth)
+  inst.bed.forEach(col => col.top > top && ctx.clearRect(col.x, top - Surface.BAND_ABOVE, 1, col.top - top + Surface.BAND_ABOVE))
 }
 //
 // The light skin under the surface.
 //
-function paintSkin(ctx, inst, surface) {
-  const skin = ctx.createLinearGradient(0, surface, 0, surface + SKIN_DEPTH)
+function paintSkin(ctx, inst, top) {
+  const skin = ctx.createLinearGradient(0, top, 0, top + SKIN_DEPTH)
   skin.addColorStop(0, PAINT.light)
   skin.addColorStop(1, hexAlpha(PAINT.light, 0))
   ctx.globalAlpha = SKIN_ALPHA
   ctx.fillStyle = skin
-  ctx.fillRect(inst.x1, 0, inst.x2 - inst.x1, surface + SKIN_DEPTH)
+  ctx.fillRect(inst.x1, top, inst.x2 - inst.x1, SKIN_DEPTH)
   ctx.globalAlpha = 1
 }
 //
-// Short bright dashes drifting off both banks as the cycle runs.
+// The depth gradient over a world rect, by the lake's depth (0 at the
+// surface, 1 at its deepest point; see CAVE_CFG.water.gradient): the
+// light ramp, then the deep one over it — they overlap, so the water
+// darkens smoothly all the way down, the dark gathering at the bottom.
 //
-function paintRipples(ctx, inst, t, surface) {
-  ctx.fillStyle = PAINT.surfaceLine
-  RIPPLE_BANKS.forEach(dir => {
-    const from = dir > 0 ? inst.waveX1 : inst.waveX2
-    for (let i = 0; i < RIPPLES; i++) {
-      const u = (t / CYCLE + i / RIPPLES) % 1
-      const cx = from + dir * (RIPPLE_START + u * RIPPLE_SPACING * RIPPLES)
-      const len = RIPPLE_LEN * (1 - RIPPLE_SHRINK * u)
-      ctx.globalAlpha = RIPPLE_ALPHA * Math.sin(u * Math.PI)
-      ctx.fillRect(cx - len / 2, surface + RIPPLE_DROP + u * RIPPLE_DROP_STEP * RIPPLES, len, RIPPLE_H)
-    }
-  })
-  ctx.globalAlpha = 1
-}
-//
-// The light band between the top line and the inner one.
-//
-function paintBand(ctx, top, inner) {
-  ctx.beginPath()
-  top.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)))
-  for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i].x, inner[i].y)
-  ctx.closePath()
-  ctx.fillStyle = hexAlpha(PAINT.surfaceBand, BAND_ALPHA)
-  ctx.fill()
-}
-function strokeLine(ctx, pts, color, width) {
-  ctx.beginPath()
-  pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)))
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.lineJoin = 'round'
-  ctx.stroke()
-}
-//
-// A surface line at time t along the lake (its wave dying out at the
-// banks), at rest on Y `rest`.
-//
-function waveLine(inst, t, wave, rest) {
-  const span = inst.x2 - inst.x1
-  const pts = []
-  for (let x = inst.x1; ; x = Math.min(inst.x2, x + POINT_STEP)) {
-    const fade = waveFade(inst, x)
-    pts.push({ x, y: rest + wave((x - inst.x1) / span, t) * fade })
-    if (x >= inst.x2) break
-  }
-  return pts
-}
-function topWave(u, t) {
-  return Math.sin(t * WAVE_SPEED + u * WAVE_PHASE) * WAVE_AMP + Math.sin(t * WAVE_SECOND_SPEED + u * WAVE_SECOND_PHASE) * WAVE_SECOND_AMP
-}
-function innerWave(u, t) {
-  return Math.sin(t * WAVE_SPEED + u * INNER_PHASE) * INNER_AMP + Math.sin(t * WAVE_SECOND_SPEED + u * INNER_SECOND_PHASE + INNER_SECOND_SHIFT) * INNER_SECOND_AMP
+function paintDepth(ctx, inst, x, y, w, h) {
+  const top = Layout.LAKE_SURFACE_Y
+  const depth = inst.deep - top
+  const light = ctx.createLinearGradient(0, top, 0, top + depth * GRADIENT.lightEnd)
+  light.addColorStop(0, hexAlpha(GRADIENT.surface, GRADIENT.lightAlpha * GRADIENT.intensity))
+  light.addColorStop(1, hexAlpha(GRADIENT.surface, 0))
+  ctx.fillStyle = light
+  ctx.fillRect(x, y, w, h)
+  const deep = ctx.createLinearGradient(0, top + depth * GRADIENT.deepFrom, 0, inst.deep)
+  deep.addColorStop(0, hexAlpha(GRADIENT.deep, 0))
+  deep.addColorStop(HALF, hexAlpha(GRADIENT.deep, GRADIENT.deepAlpha * GRADIENT.deepMid * GRADIENT.intensity))
+  deep.addColorStop(1, hexAlpha(GRADIENT.deep, GRADIENT.deepAlpha * GRADIENT.intensity))
+  ctx.fillStyle = deep
+  ctx.fillRect(x, y, w, h)
 }
 //
 // The still body under the band: column by column (from the hollow's
 // ceiling where that is lower) down to the bowl, the see-through water
-// deepening toward the bed.
+// under the depth gradient.
 //
 function bakeBody(k, inst) {
-  const top = Layout.LAKE_SURFACE_Y + BAND_BELOW
-  const deep = bodyDeep(inst)
+  const top = Layout.LAKE_SURFACE_Y + Surface.BAND_BELOW
   const canvas = document.createElement('canvas')
   canvas.width = inst.x2 - inst.x1
-  canvas.height = Math.ceil(deep - top) + 1
+  canvas.height = Math.ceil(inst.deep - top) + 1
   const ctx = canvas.getContext('2d')
   ctx.translate(-inst.x1, -top)
-  const tint = deepTint(ctx, inst)
+  ctx.beginPath()
   inst.bed.forEach(pt => {
     const from = Math.max(top, pt.top)
-    if (pt.y <= from) return
-    ctx.fillStyle = hexAlpha(COLORS.water, BODY_ALPHA)
-    ctx.fillRect(pt.x, from, 1, pt.y - from)
-    ctx.fillStyle = tint
-    ctx.fillRect(pt.x, from, 1, pt.y - from)
+    pt.y > from && ctx.rect(pt.x, from, 1, pt.y - from)
   })
+  ctx.fillStyle = hexAlpha(COLORS.water, BODY_ALPHA)
+  ctx.fill()
+  ctx.clip()
+  paintDepth(ctx, inst, inst.x1, top, inst.x2 - inst.x1, inst.deep - top)
   k.loadSprite(BODY_SPRITE, canvas)
 }
 //
 // The hollows' lining stones over the water: as they look, under a light
-// haze of the water (LINING_TINT), none of them over the surface.
+// haze of the water (LINING_TINT) and the depth gradient, none of them
+// over the surface.
 //
 function bakeLining(k, inst, box) {
   const canvas = document.createElement('canvas')
@@ -448,24 +358,18 @@ function bakeLining(k, inst, box) {
   ctx.globalCompositeOperation = 'source-atop'
   ctx.fillStyle = hexAlpha(COLORS.water, LINING_TINT)
   ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1)
+  paintDepth(ctx, inst, box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1)
   ctx.globalCompositeOperation = 'destination-out'
   ctx.fillStyle = COLORS.water
   ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, Layout.LAKE_SURFACE_Y - box.y1)
   k.loadSprite(LINING_SPRITE, canvas)
 }
 //
-// The body's deepest row (the bowl's bottom), and its deepening tint
-// toward it from under the band.
+// The body's deepest row (the bowl's bottom).
 //
 function bodyDeep(inst) {
-  return Math.max(Layout.LAKE_SURFACE_Y + BAND_BELOW + 1, ...inst.bed.map(pt => pt.y))
-}
-function deepTint(ctx, inst) {
-  const tint = ctx.createLinearGradient(0, Layout.LAKE_SURFACE_Y + BAND_BELOW, 0, bodyDeep(inst))
-  tint.addColorStop(0, hexAlpha(PAINT.deep, 0))
-  tint.addColorStop(1, hexAlpha(PAINT.deep, DEEP_ALPHA))
-  return tint
+  return Math.max(Layout.LAKE_SURFACE_Y + Surface.BAND_BELOW + 1, ...inst.bed.map(pt => pt.y))
 }
 function hexAlpha(hex, alpha) {
-  return hex + Math.round(alpha * BYTE_MAX).toString(HEX_RADIX).padStart(2, '0')
+  return hex + Math.round(Math.max(0, Math.min(1, alpha)) * BYTE_MAX).toString(HEX_RADIX).padStart(2, '0')
 }

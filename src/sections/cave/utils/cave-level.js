@@ -539,7 +539,7 @@ function updateDrown(inst) {
   d.t += inst.k.dt()
   hero.drownSinkY = d.y + DROWN_SINK_SPEED * d.t
   const top = hero.drownSinkY - Hero.HERO_BAKE_SPRITE_SIZE * HALF
-  const bed = Ground.topAt(Layout.lakeFloor(), d.x)
+  const bed = CaveLake.bedTopAt(inst.lake, d.x)
   if (top < bed && d.t < DROWN_MAX_TIME) return
   const char = hero.character
   inst.deathX = d.x

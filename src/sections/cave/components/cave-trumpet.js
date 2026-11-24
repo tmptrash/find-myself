@@ -29,7 +29,8 @@ import * as CaveLake from '../utils/cave-lake.js'
 // its throat to its body. Once the fish have gone from round it a while
 // it sinks back, narrows its funnel and shuts its eyes.
 //
-// The hero dropping into its open funnel it grabs (drawn in front of it,
+// The hero dropping into its open funnel (even while it is busy with a
+// fish: that one goes down at once) it grabs (drawn in front of it,
 // his lower half gone in it past the mouth's near lip), shakes him to and fro and spits him out up and to the right, over
 // onto the right bank (the level throws him: ctx.onSpit).
 //
@@ -332,6 +333,7 @@ export function onUpdate(inst, ctx) {
   inst.lid += Math.max(-LID_RATE * dt, Math.min(LID_RATE * dt, (asleep ? 1 : 0) - inst.lid))
   const eating = inst.state === STATE.CHEW || inst.state === STATE.SWALLOW || inst.state === STATE.HOLD
   inst.pop += ((eating ? EAT_UP : (inst.target || inst.swallow ? LEAP_UP : 0)) - inst.pop) * Math.min(1, EAT_RATE * dt)
+  inst.state === STATE.HOLD && inst.swallow && gulpDown(inst, ctx)
   inst.state === STATE.HOLD ? holdHero(inst, ctx, dt) : follow(inst, ctx, dt)
   inst.state === STATE.HOLD || (inst.thrust -= inst.thrust * Math.min(1, THRUST_RATE * dt))
   inst.state === STATE.HOLD || (inst.tilt -= inst.tilt * Math.min(1, THRUST_RATE * dt))
@@ -344,8 +346,9 @@ export function onUpdate(inst, ctx) {
 }
 
 /**
- * Whether it takes the hero now: awake, its rim out of the water, his feet
- * falling through it over its mouth.
+ * Whether it takes the hero now: awake (or busy with a fish: catching,
+ * chewing or swallowing it), its rim out of the water, his feet falling
+ * through it over its mouth.
  * @param {Object} inst - Trumpeter instance
  * @param {number} x - Hero X
  * @param {number} feetY - His feet's Y now
@@ -354,7 +357,7 @@ export function onUpdate(inst, ctx) {
  */
 export function takes(inst, x, feetY, prevFeetY) {
   const rim = rimY(inst)
-  if (inst.state !== STATE.AWAKE || inst.swallow || rim > Layout.LAKE_SURFACE_Y) return false
+  if (inst.state === STATE.SLEEP || inst.state === STATE.HOLD || rim > Layout.LAKE_SURFACE_Y) return false
   return Math.abs(x - (inst.x + inst.follow)) < MOUTH.rx * SCALE * inst.cup * TAKE_SHARE && prevFeetY <= rim && feetY >= rim
 }
 
@@ -593,6 +596,14 @@ function catchTarget(inst, ctx, dt) {
   inst.target = null
   inst.gulp = GULP_TIME
   slideIn(inst, ctx, 0)
+}
+//
+// The hero dropped in while a fish was still sliding into its mouth: that
+// fish is gone down at once.
+//
+function gulpDown(inst, ctx) {
+  ctx.onCatch(inst.swallow.fish)
+  inst.swallow = null
 }
 //
 // The fish it has sliding on down into its mouth, drawn to its middle;

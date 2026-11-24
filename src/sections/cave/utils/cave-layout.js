@@ -79,7 +79,7 @@ export const BANK_TIP_X = 900
 export const BANK_TIP_X2 = 2080
 const BANK_TIP_Y = 822
 export const BANK_HOLLOW_L = { x: 890, y: LAKE_SURFACE_Y + HOLLOW_UNDER + 96, rx: 170, ry: 96, side: -1, tip: { x: BANK_TIP_X, y: BANK_TIP_Y }, floor: { x: BANK_TIP_X + 16, y: 1068 } }
-export const BANK_HOLLOW_R = { x: 2090, y: LAKE_SURFACE_Y + HOLLOW_UNDER + 60, rx: 110, ry: 60, side: 1, tip: { x: BANK_TIP_X2, y: BANK_TIP_Y }, floor: { x: BANK_TIP_X2 - 16, y: 996 } }
+export const BANK_HOLLOW_R = { x: 2090, y: LAKE_SURFACE_Y + HOLLOW_UNDER + 96, rx: 170, ry: 96, side: 1, tip: { x: BANK_TIP_X2, y: BANK_TIP_Y }, floor: { x: BANK_TIP_X2 - 16, y: 1068 } }
 //
 // Hero feet sit this far below the character anchor.
 //
@@ -136,7 +136,7 @@ export const PLATFORMS = [
     x1: 0,
     x2: SHAFT_X1,
     y: BANK_Y,
-    top: [[0, BANK_Y], [395, BANK_Y], [470, 800], [520, 814], [700, 818], [820, 820], [BANK_TIP_X, BANK_TIP_Y], [BANK_HOLLOW_L.floor.x, BANK_HOLLOW_L.floor.y], [1010, 1100], [1100, 1117], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1970, 1117], [2025, 1060], [BANK_HOLLOW_R.floor.x, BANK_HOLLOW_R.floor.y], [BANK_TIP_X2, BANK_TIP_Y], [2140, 802], [2185, BANK_Y], [SHAFT_X1, BANK_Y]],
+    top: [[0, BANK_Y], [395, BANK_Y], [470, 800], [520, 814], [700, 818], [820, 820], [BANK_TIP_X, BANK_TIP_Y], [BANK_HOLLOW_L.floor.x, BANK_HOLLOW_L.floor.y], [1010, 1100], [1100, 1117], [1200, 1110], [1400, 1122], [1550, 1112], [1700, 1120], [1850, 1110], [1880, 1117], [1970, 1100], [BANK_HOLLOW_R.floor.x, BANK_HOLLOW_R.floor.y], [BANK_TIP_X2, BANK_TIP_Y], [2140, 802], [2185, BANK_Y], [SHAFT_X1, BANK_Y]],
     bottom: PASSAGE_TOP_Y,
     hollows: [BANK_HOLLOW_L, BANK_HOLLOW_R],
     kind: K.LEDGE,

@@ -99,7 +99,13 @@ const MOUTH_SEED = 7470
 // giant and the fish), the far one PAVE_BACK_DX px on to the right and
 // PAVE_BACK_UP px up, much darker (PAVE_BACK_SHADE), reaching on along the
 // floor PAVE_BACK_MORE px further right than the near one (it starts right
-// of it and runs left round to the stones at the back), baked on its own (once per
+// of it and runs left round to the stones at the back) — and with it a
+// thick band of stones all along the floor (BACK_FLOOR_ROWS rows, BACK_UP
+// px apart, one every BACK_GAP..+RANGE px), from that far right end left
+// into the hollow to BACK_IN px off its back wall. The near row's back
+// wall (the arc's part EMBED_LEFT of its half width or more left of its
+// middle) has more stones sunk into the soil: one every EMBED_GAP..+RANGE
+// px, EMBED_FROM..+RANGE px into it. The far stones are baked on their own (once per
 // live k, grained) and drawn behind them (onDrawBack), PAD px round it.
 //
 const PAVE_FROM = -110
@@ -114,8 +120,20 @@ const PAVE_DEEP_CHANCE = 0.3
 const PAVE_BACK_DX = 22
 const PAVE_BACK_UP = 2
 const PAVE_SHADE = 0.05
-const PAVE_BACK_SHADE = 0.65
-const PAVE_BACK_MORE = 70
+const PAVE_BACK_SHADE = 0.8
+const PAVE_BACK_MORE = 160
+const BACK_FLOOR_ROWS = 2
+const BACK_UP = 7
+const BACK_GAP = 6
+const BACK_GAP_RANGE = 5
+const BACK_IN = 14
+const BACK_FLOOR_SEED = 7550
+const EMBED_LEFT = 0.25
+const EMBED_GAP = 9
+const EMBED_GAP_RANGE = 6
+const EMBED_FROM = 8
+const EMBED_RANGE = 16
+const EMBED_SEED = 7570
 const PAVE_SEED = 7490
 const PAVE_BACK_SEED = 7510
 const BACK_SPRITE = 'cave0-pave-back'
@@ -167,7 +185,7 @@ function place() {
     x += hollow ? HOLLOW_GAP + rng() * HOLLOW_GAP_RANGE : nextGap(rng)
   }
   mouthStones(out)
-  return [...out.sort((a, b) => Number(b.stone) - Number(a.stone)), ...pave(PAVE_SEED, 0, 0, PAVE_SHADE)]
+  return [...out.sort((a, b) => Number(b.stone) - Number(a.stone)), ...embed(), ...pave(PAVE_SEED, 0, 0, PAVE_SHADE)]
 }
 //
 // Whether a piece would stand on the paved stretch (kept clear for it).
@@ -185,7 +203,7 @@ function pave(seed, dx, dy, shade, more = 0) {
   const rng = createSeededRandom(seed)
   const hollow = Layout.BANK_HOLLOW_L
   const out = []
-  alongArc(Layout.hollowArc(hollow), rng, p => {
+  alongArc(Layout.hollowArc(hollow), rng, PAVE_GAP, PAVE_GAP_RANGE, p => {
     const n = arcNormal(hollow, p)
     const into = offLine(rng)
     out.push(paveStone(rng, p.x + n.x * into + dx, p.y + n.y * into + dy, true, shade))
@@ -195,6 +213,38 @@ function pave(seed, dx, dy, shade, more = 0) {
     const bed = columnOf(water, x).bed
     Number.isNaN(bed) || out.push(paveStone(rng, x, bed + dy + Math.max(0, offLine(rng)), false, shade))
   }
+  return out
+}
+//
+// The far band along the hollow's floor: rows of dark stones on the bed
+// from its far right end left to its back wall.
+//
+function floorBand() {
+  const rng = createSeededRandom(BACK_FLOOR_SEED)
+  const hollow = Layout.BANK_HOLLOW_L
+  const water = Ground.waterColumns()
+  const out = []
+  for (let row = 0; row < BACK_FLOOR_ROWS; row++) {
+    for (let x = hollow.x - hollow.rx + BACK_IN + row * BACK_GAP * HALF; x < hollow.floor.x + PAVE_TO + PAVE_BACK_MORE; x += BACK_GAP + rng() * BACK_GAP_RANGE) {
+      const bed = columnOf(water, x).bed
+      Number.isNaN(bed) || out.push(paveStone(rng, x, bed - row * BACK_UP - PAVE_BACK_UP, false, PAVE_BACK_SHADE))
+    }
+  }
+  return out
+}
+//
+// Stones sunk deep into the soil of the hollow's back wall (the near row).
+//
+function embed() {
+  const rng = createSeededRandom(EMBED_SEED)
+  const hollow = Layout.BANK_HOLLOW_L
+  const out = []
+  const backWall = Layout.hollowArc(hollow).filter(p => p.x < hollow.x - hollow.rx * EMBED_LEFT)
+  alongArc(backWall, rng, EMBED_GAP, EMBED_GAP_RANGE, p => {
+    const n = arcNormal(hollow, p)
+    const into = EMBED_FROM + rng() * EMBED_RANGE
+    out.push(paveStone(rng, p.x + n.x * into, p.y + n.y * into, true, PAVE_SHADE))
+  })
   return out
 }
 //
@@ -214,9 +264,9 @@ function arcNormal(hollow, p) {
   return { x: nx / l, y: ny / l }
 }
 //
-// Points every PAVE_GAP..+RANGE px along a line (its first one first).
+// Points every gap..+range px along a line (its first one first).
 //
-function alongArc(line, rng, fn) {
+function alongArc(line, rng, gap, range, fn) {
   let next = 0
   let walked = 0
   for (let i = 1; i < line.length; i++) {
@@ -226,7 +276,7 @@ function alongArc(line, rng, fn) {
     while (next <= walked + seg) {
       const u = seg > 0 ? (next - walked) / seg : 0
       fn({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u })
-      next += PAVE_GAP + rng() * PAVE_GAP_RANGE
+      next += gap + rng() * range
     }
     walked += seg
   }
@@ -246,7 +296,7 @@ function paveStone(rng, x, y, set, shade) {
 // The far row baked on its own canvas (its box, PAD px round), grained.
 //
 function bakeBack(k) {
-  backPieces ??= pave(PAVE_BACK_SEED, PAVE_BACK_DX, -PAVE_BACK_UP, PAVE_BACK_SHADE, PAVE_BACK_MORE)
+  backPieces ??= [...floorBand(), ...pave(PAVE_BACK_SEED, PAVE_BACK_DX, -PAVE_BACK_UP, PAVE_BACK_SHADE, PAVE_BACK_MORE)]
   if (!backPieces.length) return null
   const x1 = Math.floor(Math.min(...backPieces.map(pc => pc.box.x1))) - PAD
   const y1 = Math.floor(Math.min(...backPieces.map(pc => pc.box.y1))) - PAD

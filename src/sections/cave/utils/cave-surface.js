@@ -120,8 +120,9 @@ export function isSoil(x, y) {
 /**
  * Whether a world point is in the open air of the cave: neither in the
  * soil nor within `pad` px of it, nor over the lake's water within `pad`
- * px of its surface (a light there would show in front of the soil or the
- * water, not in the room between them).
+ * px of its surface, nor in the water of a bank's hollow (which reaches in
+ * under the bank past the lake's ends: a light there would show in front
+ * of the soil or the water, not in the room between them).
  * @param {number} x - World X
  * @param {number} y - World Y
  * @param {number} pad - Clearance (px)
@@ -129,6 +130,7 @@ export function isSoil(x, y) {
  */
 export function isOpenAir(x, y, pad) {
   if (x > Layout.LAKE_X1 - pad && x < Layout.LAKE_X2 + pad && y > Layout.LAKE_SURFACE_Y - pad && y < Layout.LAKE_SURFACE_Y + LAKE_BELOW) return false
+  if (Layout.inHollow(x, y, pad)) return false
   const m = solidMask()
   return !isSolidIn(m, x, y) && !isSolidIn(m, x - pad, y) && !isSolidIn(m, x + pad, y) && !isSolidIn(m, x, y - pad) && !isSolidIn(m, x, y + pad)
 }

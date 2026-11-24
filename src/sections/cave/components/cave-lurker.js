@@ -264,6 +264,12 @@ const RISE_TIME = 0.45
 const HOVER_TIME = 0.3
 const DART_SPEED = 1000
 //
+// The dart always gets the runner: one it has not reached DART_MAX s into
+// the dart (it ran off along the bank, out of the neck's reach) it seizes
+// all the same.
+//
+const DART_MAX = 0.6
+//
 // The dart stops with its open jaws on the ground under the runner, none
 // of them in it: the head as low as it may go with every point of the
 // jaws' outline (their top and bottom edges, every EDGE_STEP'th column of
@@ -302,6 +308,11 @@ const CHEW_TIME_HERO = 1.6
 const CHEW_SPEED = 220
 const SINK_SPEED = 160
 const SINK_DOWN = 40
+//
+// A sink that has not brought the head home within SINK_MAX_TIME s (held
+// off it by the soil) ends anyway: it rests, its head easing home.
+//
+const SINK_MAX_TIME = 3
 const HOME_R = 6
 const WATCH_RATE = 3
 const WATCH_SPEED = 90
@@ -357,7 +368,7 @@ const VIA_BLEND = 30
 const UP = { x: 0, y: -1 }
 const SOIL_PUSH = 2
 const SOIL_DIRS = Array.from({ length: 8 }, (_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) }))
-const REACH = 380
+const REACH = 480
 //
 // Splash where the head breaks the surface (as the fish's): rings growing
 // from RING_R0 to RING_R1 over RING_TIME, RING_FLAT as high as wide; drops
@@ -884,7 +895,8 @@ function pounce(inst, ctx, prey, dt) {
   const bite = { x: prey.x, y: biteY(inst, prey) }
   moveTo(inst, bite, DART_SPEED, dt)
   setDir(inst, prey.x - head.x, prey.y - head.y)
-  Math.hypot(bite.x - head.x, bite.y - head.y) <= BITE_R && seize(inst, ctx, prey)
+  const late = t > RISE_TIME + HOVER_TIME + DART_MAX
+  ;(late || Math.hypot(bite.x - head.x, bite.y - head.y) <= BITE_R) && seize(inst, ctx, prey)
 }
 //
 // The lowest its head may come down over the runner, its jaws as they are
@@ -1020,7 +1032,7 @@ function sink(inst, dt) {
   inst.jaw += (SHUT - inst.jaw) * Math.min(1, SHUT_RATE * dt)
   moveTo(inst, sinkTarget(inst), SINK_SPEED, dt)
   turnTo(inst, REST_DIR.x, REST_DIR.y, dt)
-  if (Math.hypot(inst.head.x - inst.rest.x, inst.head.y - inst.rest.y) > HOME_R) return
+  if (Math.hypot(inst.head.x - inst.rest.x, inst.head.y - inst.rest.y) > HOME_R && inst.stateT < SINK_MAX_TIME) return
   inst.state = STATE.REST
   inst.stateT = 0
 }

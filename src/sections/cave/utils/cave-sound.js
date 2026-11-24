@@ -133,27 +133,40 @@ const PEBBLE_FADE = 0.8
 //
 // Attack of a soft muffled pat of filtered noise (the rock footfall).
 //
-const PAT_ATTACK = 0.012
+const PAT_ATTACK = 0.02
 //
 // Steps on cave rock: a soft padded footfall, no ringing tone and no
 // reverb (those made it sound like a drum) — a muffled low thump of noise
 // with a gentle attack and two faint grains of grit crunching under the
-// foot, the second a moment later. A landing is the same footfall, only a
-// little louder and longer.
+// foot, the second a moment later — kept soft: a low, quiet pad, the grit
+// barely there. A landing is the same footfall, only a little louder and
+// longer.
 //
-const STONE_THUD_LP = 260
-const STONE_THUD_GAIN = 0.55
-const STONE_STEP_TIME = 0.06
-const STONE_GRIT_BAND = 1800
+const STONE_THUD_LP = 170
+const STONE_THUD_GAIN = 0.36
+const STONE_STEP_TIME = 0.075
+const STONE_GRIT_BAND = 1200
 const STONE_GRIT_Q = 0.8
-const STONE_GRIT_SHARE = 0.1
-const STONE_GRIT2_SHARE = 0.06
+const STONE_GRIT_SHARE = 0.04
+const STONE_GRIT2_SHARE = 0.025
 const STONE_GRIT2_DELAY_MIN = 0.01
 const STONE_GRIT2_DELAY_RANGE = 0.015
 const STONE_GRIT_TIME = 0.6         // Grit length, share of the step's
 const STONE_JITTER = 0.2
 const STONE_LAND_GAIN = 1.25
 const STONE_LAND_TIME = 1.2
+//
+// The lurker's jaws snapping shut on a runner: a crisp crack of noise
+// (SNAP_BAND, Q SNAP_Q, SNAP_TIME s) over a short wet thump (SNAP_THUD_LP,
+// SNAP_THUD_TIME s), SNAP_GAIN loud by the hero, faded with distance.
+//
+const SNAP_BAND = 2600
+const SNAP_Q = 1.4
+const SNAP_TIME = 0.05
+const SNAP_THUD_LP = 320
+const SNAP_THUD_TIME = 0.09
+const SNAP_GAIN = 0.4
+const SNAP_THUD_SHARE = 0.8
 //
 // Lantern mushroom: a soft spring (no ringing chime over it).
 //
@@ -379,6 +392,19 @@ export function playGiantBreath(inst, exhale, near) {
   }
   sweep(inst, inst.white, at, 'bandpass', EXHALE_FROM, EXHALE_TO, EXHALE_Q, EXHALE_ATTACK, EXHALE_TIME, EXHALE_GAIN * near)
   sweep(inst, inst.brown, at, 'lowpass', BREATH_RUMBLE_HZ, BREATH_RUMBLE_HZ * BREATH_RUMBLE_DROP, 1, EXHALE_ATTACK, EXHALE_TIME, BREATH_RUMBLE_GAIN * near)
+}
+
+/**
+ * The lurker's jaws snapping shut on a runner: a crack over a wet thump.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playSnap(inst, near) {
+  if (!ready(inst) || near <= 0) return
+  const at = inst.ctx.currentTime
+  const gain = SNAP_GAIN * near
+  softBurst(inst, inst.white, at, 'bandpass', SNAP_BAND, SNAP_Q, SNAP_TIME, gain)
+  softBurst(inst, inst.brown, at, 'lowpass', SNAP_THUD_LP, 1, SNAP_THUD_TIME, gain * SNAP_THUD_SHARE)
 }
 
 /**

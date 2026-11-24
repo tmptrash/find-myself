@@ -154,7 +154,7 @@ const PUPIL_SHIFT = 0.4
 // surface) while the head is over the bank; chewing, the head held at
 // CHEW_AT off the tip and the surface, facing left.
 //
-const BASE_DX = 140
+const BASE_DX = 200
 const BASE_SINK = 4
 const REST_NECK = 14
 const REST_DIR = { x: -0.55, y: -0.83 }
@@ -171,10 +171,16 @@ const FISH_R = 260
 const FISH_NEAR = 90
 const FISH_ABOVE = 40
 const FISH_LEAN = 22
+//
+// Resting or watching, its head turns only within the upper sector: its
+// way never lower than UP_MOST_Y (a fish swimming round it below would
+// spin it about).
+//
+const UP_MOST_Y = -0.25
 const WATCH = { dx: 40, dy: 18 }
 const WATCH_DIR = { x: -0.35, y: -0.94 }
 const VIA = { dx: 18, dy: -62 }
-const CHEW_AT = { dx: 90, dy: -60 }
+const CHEW_AT = { dx: 150, dy: -60 }
 const CHEW_DIR = { x: -1, y: 0.05 }
 //
 // The hero it drags down under the water (back round the bank's corner
@@ -197,8 +203,9 @@ const SAG_HOLD = 3
 const SAG_TILT = 0.015
 //
 // The giant swimming over it (any of its body within GIANT_R px of its
-// resting head along the lake, over it): it hunts nothing then, it watches
-// the giant's head.
+// resting head along the lake, over it): it hides down on the bed — out
+// of a strike or a watch at once (a runner it chews swallowed), its neck
+// drawn back — and hunts nothing, its eye on the giant's head.
 //
 const GIANT_R = 280
 //
@@ -394,11 +401,6 @@ const DRIP_FALL_STRETCH = 0.004
 const DRIP_FALL_MAX = 1.8
 const DRIP_RING = 0.25
 const OVER_PAD = 3
-//
-// The head flips to face the other way only once it turns FLIP_X past
-// straight up or down (the jaws keep their sides through a turn).
-//
-const FLIP_X = 0.25
 const STATE = { REST: 'rest', WATCH: 'watch', STRIKE: 'strike', CHEW: 'chew', SINK: 'sink' }
 const PREY = { HERO: 'hero', RUNNER: 'runner' }
 const HALF = 0.5
@@ -444,7 +446,6 @@ export function create(cfg) {
     dragAt: { x: tip + DRAG_AT.dx, y: surface + DRAG_AT.dy },
     head: { x: rest.x, y: rest.y },
     dir: { x: REST_DIR.x, y: REST_DIR.y },
-    faceLeft: true,
     state: STATE.REST,
     stateT: 0,
     out: false,
@@ -514,6 +515,7 @@ export function onUpdate(inst, ctx) {
   decide(inst, ctx, near, dt)
   inst.swayAmp += (SWAY[inst.state] - inst.swayAmp) * Math.min(1, dt * 2)
   keepOutOfSoil(inst, dt)
+  ;(inst.state === STATE.REST || inst.state === STATE.WATCH) && keepUp(inst.dir)
   limitHeadBend(inst)
   crossSurface(inst, ctx)
   updateCrest(inst, dt)
@@ -660,6 +662,7 @@ function decide(inst, ctx, near, dt) {
   }
   const sinking = sinkingHero(ctx)
   const giant = giantOver(inst, ctx)
+  if (giant && hide(inst, ctx)) return
   if (inst.state === STATE.CHEW && sinking && !holdsHero(inst) && !giant) {
     ctx.onSwallow(inst.prey, eyeAt(inst))
     startStrike(inst, sinking)
@@ -712,8 +715,32 @@ function giantOver(inst, ctx) {
 function watchGiant(inst, giant, dt) {
   inst.state = STATE.REST
   inst.look = giant
-  watchFish(inst, giant, dt)
+  ease(inst, inst.rest, REST_DIR, dt)
   inst.jaw += (SHUT + REST_OPEN - inst.jaw) * Math.min(1, OPEN_RATE * dt)
+}
+//
+// The giant over it: out of a strike (or a runner's chewing: swallowed) it
+// sinks back down at once (true: done for this frame). The hero it chews it
+// keeps on with, down under the water.
+//
+function hide(inst, ctx) {
+  if (inst.state === STATE.STRIKE) {
+    startSink(inst)
+    return true
+  }
+  if (inst.state !== STATE.CHEW || holdsHero(inst)) return false
+  ctx.onSwallow(inst.prey, eyeAt(inst))
+  startSink(inst)
+  return true
+}
+//
+// A way turned up into the upper sector if it points lower (its side
+// kept).
+//
+function keepUp(dir) {
+  if (dir.y <= UP_MOST_Y) return
+  dir.y = UP_MOST_Y
+  dir.x = (Math.sign(dir.x) || -1) * Math.sqrt(1 - UP_MOST_Y * UP_MOST_Y)
 }
 //
 // The fish swimming nearest its resting head within FISH_R px, or null.
@@ -740,7 +767,12 @@ function watchFish(inst, fish, dt) {
   const dy = fish.y - inst.rest.y
   const d = Math.hypot(dx, dy) || 1
   const at = { x: inst.rest.x + dx / d * FISH_LEAN, y: inst.rest.y + dy / d * FISH_LEAN }
-  ease(inst, at, { x: fish.x - inst.head.x, y: fish.y - inst.head.y }, dt)
+  const way = { x: fish.x - inst.head.x, y: fish.y - inst.head.y }
+  const l = Math.hypot(way.x, way.y) || 1
+  way.x /= l
+  way.y /= l
+  keepUp(way)
+  ease(inst, at, way, dt)
 }
 //
 // The prey on the bank nearest the lip's tip within reach (with how near:
@@ -878,8 +910,6 @@ function setDir(inst, x, y) {
   if (l < TINY) return
   inst.dir.x = x / l
   inst.dir.y = y / l
-  inst.dir.x < -FLIP_X && (inst.faceLeft = true)
-  inst.dir.x > FLIP_X && (inst.faceLeft = false)
 }
 //
 // The hero sinking in the lake within its reach out from the bank's edge
@@ -1062,8 +1092,6 @@ function turnTo(inst, x, y, dt) {
   const dl = Math.hypot(d.x, d.y) || 1
   d.x /= dl
   d.y /= dl
-  d.x < -FLIP_X && (inst.faceLeft = true)
-  d.x > FLIP_X && (inst.faceLeft = false)
 }
 function lerpPoint(a, b, u) {
   const e = u * u * (3 - 2 * u)
@@ -1227,8 +1255,6 @@ function limitHeadBend(inst) {
   const at = way + Math.sign(off) * HEAD_BEND_MAX
   inst.dir.x = Math.cos(at)
   inst.dir.y = Math.sin(at)
-  inst.dir.x < -FLIP_X && (inst.faceLeft = true)
-  inst.dir.x > FLIP_X && (inst.faceLeft = false)
 }
 //
 // The neck's NECK_N points eased toward the new line's: in the middle at
@@ -1526,27 +1552,25 @@ function jawUnderProfile() {
   return jawUnder
 }
 //
-// The angle (rad) a head piece painted facing left is drawn at, and
-// whether it is mirrored (facing right).
+// The angle (rad) a head piece painted facing left is drawn at: the head
+// turns round as one, never mirrored (its jaws keep their own sides of it
+// whichever way it faces).
 //
 function headAngle(inst) {
-  const a = Math.atan2(inst.dir.y, inst.dir.x)
-  return inst.faceLeft ? a - Math.PI : a
+  return Math.atan2(inst.dir.y, inst.dir.x) - Math.PI
 }
 //
-// A jaw's turn: away from the other one by its opening (mirrored the
-// other way round).
+// A jaw's turn: away from the other one by its opening.
 //
 function jawTurn(inst, upper) {
-  const open = upper ? inst.jaw : -inst.jaw
-  return headAngle(inst) + (inst.faceLeft ? open : -open)
+  return headAngle(inst) + (upper ? inst.jaw : -inst.jaw)
 }
 //
 // A point of a jaw piece (piece px) in the world, as drawn now.
 //
 function jawPoint(inst, jaw, p, upper, out) {
   const a = jawTurn(inst, upper)
-  const lx = (p.x - jaw.hinge.x) * SCALE * (inst.faceLeft ? 1 : -1)
+  const lx = (p.x - jaw.hinge.x) * SCALE
   const ly = (p.y - jaw.hinge.y) * SCALE
   out.x = inst.head.x + lx * Math.cos(a) - ly * Math.sin(a)
   out.y = inst.head.y + lx * Math.sin(a) + ly * Math.cos(a)
@@ -1670,7 +1694,7 @@ function drawHead(inst, parts, drawHeld) {
   drawPart(inst, parts.collar, inst.head, up, false)
   const held = inst.state === STATE.CHEW && inst.prey
   held && !holdsHero(inst) && drawHeldRunner(inst, drawHeld)
-  drawPart(inst, parts.jawLow, inst.head, jawTurn(inst, false), !inst.faceLeft)
+  drawPart(inst, parts.jawLow, inst.head, jawTurn(inst, false), false)
   if (held && holdsHero(inst)) {
     const grip = GRIP * SCALE
     const shake = HOLD_SHAKE * Math.sin(inst.stateT * HERO_CHEW_HZ * FULL_TURN)
@@ -1679,7 +1703,7 @@ function drawHead(inst, parts, drawHeld) {
     drawPart(inst, parts.eye, inst.head, eyeAngle(inst), false)
     drawPupil(inst)
   }
-  drawPart(inst, parts.jawTop, inst.head, jawTurn(inst, true), !inst.faceLeft)
+  drawPart(inst, parts.jawTop, inst.head, jawTurn(inst, true), false)
 }
 //
 // A runner in its mouth, behind its jaws: shrinking as it is chewed and
@@ -1689,7 +1713,7 @@ function drawHeldRunner(inst, drawHeld) {
   const grip = GRIP * SCALE
   const eaten = Math.min(1, inst.stateT / CHEW_TIME)
   const d = inst.dir
-  const low = inst.faceLeft ? { x: d.y, y: -d.x } : { x: -d.y, y: d.x }
+  const low = { x: d.y, y: -d.x }
   const sink = RUNNER_SINK * eaten
   const shake = HOLD_SHAKE * Math.sin(inst.stateT * CHEW_HZ * FULL_TURN)
   drawHeld(inst.prey, { x: inst.head.x + d.x * grip + low.x * sink, y: inst.head.y + d.y * grip + low.y * sink }, (headAngle(inst) + shake) * DEG, 1 - eaten)

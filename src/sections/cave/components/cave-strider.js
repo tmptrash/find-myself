@@ -197,8 +197,9 @@ const LINE_W = 1
 //
 const CULL_MARGIN = 60
 //
-// The level's striders (createAll): spread over the lake at these shares
-// of its span, sizes SET_SIZE..+RANGE, seeded.
+// The level's striders (createAll): spread at these shares over the widest
+// stretch of the open water between the blocks (all on one stretch, so
+// they can line up together), sizes SET_SIZE..+RANGE, seeded.
 //
 const SET_AT = [0.22, 0.5, 0.78]
 const SET_SIZE = 0.62
@@ -269,7 +270,8 @@ export function create(cfg) {
 }
 
 /**
- * Creates the level's striders, spread over the lake.
+ * Creates the level's striders, spread over the widest open stretch of the
+ * lake (between the blocks).
  * @param {Object} k - Kaplay instance
  * @param {Object} lake - Lake instance (cave-lake.js)
  * @param {Array<{x1: number, x2: number}>} [blocks] - Stretches of the surface none of them crosses
@@ -277,7 +279,7 @@ export function create(cfg) {
  */
 export function createAll(k, lake, blocks = []) {
   const rng = createSeededRandom(SET_SEED)
-  const span = CaveLake.openSpan(lake)
+  const span = freeStretch(CaveLake.openSpan(lake), blocks, NaN)
   return SET_AT.map((share, i) => create({
     k,
     lake,

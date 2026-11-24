@@ -82,6 +82,15 @@ const MAX_PITCH = 0.55
 const BEAT_AMP = 0.38
 const BEAT_HZ = 1.2
 const BEAT_HZ_PER_SPEED = 0.035
+//
+// No two fish alike: each swims at its own pace (PACE_MIN..+RANGE of every
+// speed) and beats its tail and fins at its own tempo — the smaller the
+// faster (size to the -TEMPO_EXP), give or take TEMPO_JITTER.
+//
+const PACE_MIN = 0.75
+const PACE_RANGE = 0.55
+const TEMPO_EXP = 0.8
+const TEMPO_JITTER = 0.12
 const BEAT_VERT = 0.05
 const HOVER_BEAT = 0.25
 const TURN_R = 0.5
@@ -175,7 +184,9 @@ const MIN_DEPTH = 60
 //
 //
 // Feeding frenzy: while the swarm's middle is within FRENZY_REACH px of the
-// deep water along the lake and at most FRENZY_HIGH px over the surface,
+// deep water along the lake, over its open surface (not over a bank's edge:
+// they milled round under it there, unable to leap) and at most
+// FRENZY_HIGH px over the surface,
 // every fish darts for it at FRENZY_SPEED, gathering FRENZY_SPREAD px
 // either side under it (GATHER_DEPTH px under the leaping depth,
 // GATHER_Z px either way in z), resting only FRENZY_COOLDOWN..+RANGE s
@@ -393,6 +404,9 @@ export function create(cfg) {
     openX1: CaveLake.openSpan(lake).x1 + OPEN_PAD,
     openX2: CaveLake.openSpan(lake).x2 - OPEN_PAD,
     huntSide: 1,
+    atSwarm: false,
+    pace: PACE_MIN + rng() * PACE_RANGE,
+    tempo: Math.pow(cfg.size, -TEMPO_EXP) * (1 + (rng() * 2 - 1) * TEMPO_JITTER),
     frenzy: false,
     gatherDx: (rng() * 2 - 1) * FRENZY_SPREAD,
     gatherDz: (rng() * 2 - 1) * GATHER_Z,
@@ -502,7 +516,7 @@ export function onUpdate(inst, ctx) {
   const picking = inst.mode === MODE.FORAGE && (inst.peckFor > 0 || inst.backFor > 0)
   const gape = picking || (inst.prey && inst.mode === MODE.JUMP && nearPrey(inst, GAPE_R))
   inst.mouth += ((gape ? 1 : 0) - inst.mouth) * Math.min(1, MOUTH_EASE * dt)
-  inst.fin += FIN_HZ * FULL_TURN * dt
+  inst.fin += FIN_HZ * inst.tempo * FULL_TURN * dt
 }
 
 /**
@@ -616,13 +630,13 @@ export function swimmingHead(inst) {
 }
 
 /**
- * Its head while it is leaping out of the water, else null — what the
- * trumpeter catches over the water.
+ * Its head while it is leaping out of the water at one of the swarm's
+ * fireflies, else null — the only leaps the trumpeter catches.
  * @param {Object} inst - Fish instance
  * @returns {{x: number, y: number}|null}
  */
-export function leapingHead(inst) {
-  return inst.mode === MODE.JUMP ? inst.joints[0] : null
+export function swarmLeapingHead(inst) {
+  return inst.mode === MODE.JUMP && inst.atSwarm ? inst.joints[0] : null
 }
 
 /**
@@ -1006,6 +1020,7 @@ function restTime(inst) {
 //
 function isFeeding(inst, swarm) {
   if (!swarm || swarm.x < inst.minX - FRENZY_REACH || swarm.x > inst.maxX + FRENZY_REACH) return false
+  if (swarm.x < inst.openX1 || swarm.x > inst.openX2) return false
   const surface = CaveLake.surfaceAt(inst.lake, Swim.clamp(swarm.x, inst.minX, inst.maxX))
   return swarm.y < surface && swarm.y > surface - FRENZY_HIGH
 }
@@ -1219,13 +1234,14 @@ function hunt(inst, ctx, dt) {
   inst.want = approachSpeed(inst, inst.frenzy ? FRENZY_SPEED : HUNT_SPEED)
   const open = head.x >= inst.openX1 && head.x <= inst.openX2
   const ready = alive && open && Math.abs(head.x - p.x) < LAUNCH_X && head.y < inst.target.y + LAUNCH_Y && Math.abs(head.z) < LAUNCH_Z
-  ready && leap(inst, p)
+  ready && leap(inst, p, ctx.swarmPrey.includes(p))
 }
 //
 // Thrown out at the firefly: rising OVERSHOOT px past it, along at the
-// pace that meets it at the top (capped).
+// pace that meets it at the top (capped); whether it is one of the swarm's
+// is kept for the leap (the trumpeter catches only those leaps).
 //
-function leap(inst, p) {
+function leap(inst, p, atSwarm) {
   const head = inst.joints[0]
   const rise = Math.max(OVERSHOOT, head.y - p.y + OVERSHOOT)
   const up = Math.sqrt(2 * GRAVITY * rise)
@@ -1237,6 +1253,7 @@ function leap(inst, p) {
   inst.vel.z = 0
   inst.mode = MODE.JUMP
   inst.modeT = 0
+  inst.atSwarm = atSwarm
 }
 //
 // In the air: falling under gravity, its head along its flight; whatever
@@ -1249,7 +1266,7 @@ function fly(inst, ctx, dt) {
   head.x += inst.vel.x * dt
   head.y += inst.vel.y * dt
   Swim.setDir(inst.h, inst.vel.x, inst.vel.y, 0)
-  inst.beat += BEAT_HZ * FULL_TURN * dt
+  inst.beat += BEAT_HZ * inst.tempo * FULL_TURN * dt
   if (!inst.prey || !ctx.prey.includes(inst.prey)) return
   const reach = ctx.swarmPrey.includes(inst.prey) ? DODGE_R : CATCH_R * inst.size
   if (!nearPrey(inst, reach)) return
@@ -1277,8 +1294,8 @@ function swim(inst, dt) {
     Swim.setDir(want, want.x, Swim.clamp(want.y, -MAX_PITCH, MAX_PITCH), want.z)
     Swim.turnToward(inst.h, want, rate * dt, inst.turnSide)
   }
-  inst.speed += Swim.clamp(inst.want - inst.speed, -ACCEL * dt, ACCEL * dt)
-  inst.beat += (BEAT_HZ + BEAT_HZ_PER_SPEED * inst.speed) * FULL_TURN * dt
+  inst.speed += Swim.clamp(inst.want * inst.pace - inst.speed, -ACCEL * dt, ACCEL * dt)
+  inst.beat += (BEAT_HZ + BEAT_HZ_PER_SPEED * inst.speed) * inst.tempo * FULL_TURN * dt
   inst.stroke.speed = inst.speed
   inst.stroke.phase = inst.beat
   inst.stroke.amp = BEAT_AMP * Math.min(1, HOVER_BEAT + inst.speed / CRUISE_SPEED)

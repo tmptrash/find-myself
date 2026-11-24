@@ -35,10 +35,16 @@ const BYTE_MAX = 255
 //
 // The cap a falling hero bounces off: its share of the width, and its top
 // along it — the picture's top edge (x: share of the width from the left,
-// y: share of the height up from the foot), CAP_SINK px lower.
+// y: share of the height up from the foot), CAP_SINK px lower. A falling
+// hero over it (any of his hitbox over its width, not just his middle)
+// bounces as his hitbox's bottom crosses that top — or is
+// found up to CAP_CATCH px into the cap (a crossing missed between two
+// frames: his hitbox growing back out of a jump's tuck, or his coming in
+// over its side already falling) — so he never falls through it.
 //
 const CAP_W_SHARE = 0.8
 const CAP_SINK = 4
+const CAP_CATCH = 26
 const CAP_TOP = [
   { x: 0.1, y: 0.72 },
   { x: 0.2, y: 0.79 },
@@ -257,9 +263,11 @@ export function onUpdate(inst, heroInst) {
   }
   const box = char.worldArea().bbox()
   const bottom = box.pos.y + box.height
-  const capTop = capTopAt(inst, char.pos.x)
+  const capTop = capTopAt(inst, Math.max(inst.x - inst.capHalfW, Math.min(inst.x + inst.capHalfW, char.pos.x)))
   const crossed = inst.prevBottom !== null && inst.prevBottom <= capTop && bottom >= capTop
-  const landed = crossed && (char.vel?.y ?? 0) > 0 && Math.abs(char.pos.x - inst.x) <= inst.capHalfW
+  const inCap = bottom >= capTop && bottom <= capTop + CAP_CATCH
+  const over = box.pos.x < inst.x + inst.capHalfW && box.pos.x + box.width > inst.x - inst.capHalfW
+  const landed = (crossed || inCap) && (char.vel?.y ?? 0) > 0 && over
   inst.prevBottom = bottom
   landed && bounce(inst, char)
   return landed

@@ -141,6 +141,7 @@ export const CAVE_CFG = {
     lidEdge: '#33300f',
     pupil: '#1d1a17',
     tooth: '#eadfba',
+    toothDeep: '#b7a47c',
     toothEdge: '#5a3a20'
   },
   //

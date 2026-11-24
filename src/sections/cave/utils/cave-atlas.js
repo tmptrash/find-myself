@@ -980,7 +980,7 @@ kitMoss0: [SHEET.SMALL, 33, 16, 245, 95],
   lurkerNeck: [SHEET.LURKER, 596, 80, 156, 872],
   lurkerBase: [SHEET.LURKER, 286, 940, 731, 550],
   lurkerLeaf: [SHEET.LURKER, 742, 940, 110, 125],
-  padPlant: [SHEET.PADS, 150, 150, 1030, 922],
+  padPlant: [SHEET.PADS, 150, 150, 1175, 922],
   trumpet: [SHEET.TRUMPET, 0, 0, 1774, 887],
   giantFinFront: [SHEET.CREATURE, 920, 530, 372, 297],
   giantFinHind: [SHEET.CREATURE, 468, 538, 309, 174]

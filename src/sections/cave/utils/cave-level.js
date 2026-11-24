@@ -331,7 +331,7 @@ function build(k, opts) {
   inst.trumpetCtx = {
     school: inst.fish,
     headOf: Fish.swimmingHead,
-    leapOf: Fish.leapingHead,
+    leapOf: Fish.swarmLeapingHead,
     tailOf: Fish.leapingTail,
     landingOf: Fish.leapLandingX,
     seizeFish: Fish.seize,
@@ -813,12 +813,15 @@ function updateLurker(inst) {
   Lurker.onUpdate(inst.lurker, ctx)
 }
 //
-// The lurker caught something: a runner is gone (for a while); the hero
+// The lurker caught something (its jaws snap shut): a runner is gone (for
+// a while, the snap heard as far as a fish's splash); the hero
 // is eaten — gone at once, a lake death (he comes back by the lantern
 // once it has swallowed him).
 //
 function onLurkerSeize(inst, prey) {
   if (prey.runner) {
+    const focus = heroFocus(inst)
+    CaveSound.playSnap(inst.caveSound, 1 - Math.abs(prey.runner.pos.x - focus.x) / SPLASH_HEAR)
     Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
     return
   }

@@ -389,7 +389,7 @@ export function sceneMenu(k) {
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0, [BACKDROP_MYSTERY]: 0 },
       panelCave: 0,
-      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near) }),
+      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near), onSnap: near => CaveSound.playSnap(caveSound, near) }),
       mysteryBg: QuestionDrift.create({
         k,
         width: k.width(),

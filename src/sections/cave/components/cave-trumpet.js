@@ -12,10 +12,12 @@ import * as CaveLake from '../utils/cave-lake.js'
 // Asleep it is a plant: its eyes shut (lids drawn over them), the funnel
 // narrowed, its rim held just under the water's line, its stalk swaying it
 // slowly to and fro. A school of fish gathering over it (or a fish
-// leaping near it) wakes it: its eyes open (pupils drawn, on the nearest
-// fish), its stalk grows up (more of its ringed middle shows) till the
-// funnel's rim stands just out of the water, and whenever a fish leaps
-// near it, it picks that one fish and follows its flight with its funnel
+// leaping near it at the swarm's fireflies) wakes it: its eyes open
+// (pupils drawn, on the nearest fish), its stalk grows up (more of its
+// ringed middle shows) till the funnel's rim stands just out of the water,
+// and whenever a fish leaps near it at the swarm's fireflies (it heeds no
+// other leap: a fish snapping at a lone firefly it lets be), it picks that
+// one fish and follows its flight with its funnel
 // till it has it: the funnel rising out of the water, opening wider and
 // going to and fro under where the fish will come down, the stalk leaning
 // under it. The fish drops into the funnel like a ball into a basket: once
@@ -126,8 +128,9 @@ const WAKE_R = 120
 const WAKE_DEPTH = 140
 const SLEEP_AFTER = 2.5
 //
-// Chewing, its mouth closes a little with each bite: the funnel squeezed
-// CHEW_SQUEEZE across and CHEW_CLOSE times that down.
+// Chewing, its round mouth goes flat into an oval and back with each
+// bite: the funnel CHEW_WIDE times CHEW_SQUEEZE wider, CHEW_CLOSE times it
+// lower.
 //
 // Catching: the fish it follows coming down within CATCH_R px of the
 // funnel's middle (times its width), its head through the rim: it is
@@ -151,22 +154,27 @@ const MASK_W = 200
 const DOWN = { x: 0, y: 1 }
 const CHEW_TIME = 1.3
 const TEETH_IN = 0.08
-const CHEW_SQUEEZE = 0.12
-const CHEW_CLOSE = 1.6
+const CHEW_SQUEEZE = 0.2
+const CHEW_WIDE = 0.6
+const CHEW_CLOSE = 2.2
 const CHEW_HZ = 2.5
 const SWALLOW_TIME = 1.4
 const BULGE = 0.55
 const BULGE_LEN = 9
 //
-// Teeth: TEETH of them round the far half of the mouth (from TEETH_FROM
-// rad past its sides), TOOTH_LEN sheet px long, TOOTH_W wide at the root,
-// pointing in.
+// Teeth, as a shark's: TEETH of them round the far half of the mouth's
+// rim (from TEETH_FROM rad past its sides), TOOTH_LEN sheet px long,
+// TOOTH_W wide at the root, pointing in — and deeper in, rows all round
+// the mouth (TOOTH_ROWS: on a ring `ring` of the mouth's size, `count` of
+// them, `size` of a rim tooth's, each row turned half a tooth on from the
+// last), darker (toothDeep), drawn deepest first.
 //
 const TEETH = 9
 const TEETH_FROM = 0.35
 const TOOTH_LEN = 34
 const TOOTH_W = 26
 const TOOTH_EDGE = 1
+const TOOTH_ROWS = [{ ring: 0.45, count: 10, size: 0.75 }, { ring: 0.72, count: 13, size: 0.9 }]
 //
 // The hero: taken while awake as his feet fall through its rim within
 // TAKE_SHARE of the mouth's half width of its middle. He falls on into the
@@ -178,8 +186,10 @@ const TOOTH_EDGE = 1
 // down. Then it winds up: over WIND_TIME s its stalk draws in WIND_DOWN px
 // (him with it); then over SPIT_TIME s it shoots out THRUST_UP px longer,
 // pushing him up to SPIT_DEPTH px over the rim (his feet out), the funnel
-// leaning SPIT_LEAN px right, and spits him out (a splash: the level's);
-// its stalk eases back to its length at THRUST_RATE per s.
+// leaning SPIT_LEAN px right and turned SPIT_TILT rad over to the right
+// (its mouth up and to the right, after a WIND_TILT turn back to the left
+// as it winds up), and spits him out (a splash: the level's); its stalk
+// eases back to its length and upright at THRUST_RATE per s.
 //
 const TAKE_SHARE = 0.85
 const HELD_DEPTH = 22
@@ -194,8 +204,10 @@ const WIND_TIME = 0.35
 const WIND_DOWN = 14
 const THRUST_UP = 16
 const THRUST_RATE = 6
+const SPIT_TILT = 0.9
+const WIND_TILT = 0.15
 const SPIT_DEPTH = -46
-const SPIT_LEAN = 18
+const SPIT_LEAN = 30
 const DEG = 180 / Math.PI
 const STATE = { SLEEP: 'sleep', AWAKE: 'awake', CHEW: 'chew', SWALLOW: 'swallow', HOLD: 'hold' }
 const HALF = 0.5
@@ -248,6 +260,7 @@ export function create(cfg) {
     fishFn: null,
     heldDepth: 0,
     thrust: 0,
+    tilt: 0,
     heldV: 0,
     stuckT: -1,
     pop: 0,
@@ -260,12 +273,13 @@ export function create(cfg) {
     lidEdgeRgb: getRGB(k, C.lidEdge),
     pupilRgb: getRGB(k, C.pupil),
     toothRgb: getRGB(k, C.tooth),
+    toothDeepRgb: getRGB(k, C.toothDeep),
     toothEdgeRgb: getRGB(k, C.toothEdge),
     v: k.vec2(0, 0),
     tri: [k.vec2(0, 0), k.vec2(0, 0), k.vec2(0, 0)]
   }
   inst.maskFn = () => drawLipMask(inst)
-  inst.heroFn = () => inst.drawWith.hero(heldPoint(inst))
+  inst.heroFn = () => inst.drawWith.hero(heldInCup(inst))
   inst.fishFn = () => inst.drawWith.fish(inst.swallow.fish)
   return inst
 }
@@ -277,7 +291,7 @@ export function create(cfg) {
  * @param {Object} ctx
  * @param {Array<Object>} ctx.school - The lake's fish
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.headOf - A fish's head while it swims in the water
- * @param {(fish: Object) => {x: number, y: number}|null} ctx.leapOf - A fish's head while it leaps out of the water
+ * @param {(fish: Object) => {x: number, y: number}|null} ctx.leapOf - A fish's head while it leaps out of the water at the swarm's fireflies (the only leaps it heeds)
  * @param {(fish: Object) => {x: number, y: number}|null} ctx.tailOf - A fish's tail while it leaps out of the water
  * @param {(fish: Object, y: number) => number|null} ctx.landingOf - Where a leaping fish comes down through height y
  * @param {(fish: Object, out: {x: number, y: number}) => void} ctx.seizeFish - It has that fish (Fish.seize: head along `out`)
@@ -306,6 +320,7 @@ export function onUpdate(inst, ctx) {
   inst.pop += ((eating ? EAT_UP : (inst.target || inst.swallow ? LEAP_UP : 0)) - inst.pop) * Math.min(1, EAT_RATE * dt)
   inst.state === STATE.HOLD ? holdHero(inst, ctx, dt) : follow(inst, ctx, dt)
   inst.state === STATE.HOLD || (inst.thrust -= inst.thrust * Math.min(1, THRUST_RATE * dt))
+  inst.state === STATE.HOLD || (inst.tilt -= inst.tilt * Math.min(1, THRUST_RATE * dt))
   inst.gulp = Math.max(0, inst.gulp - dt)
   const gulping = inst.gulp > 0
   const cup = asleep ? NARROW : (gulping ? GULP_WIDE : (inst.target ? WIDE : 1))
@@ -353,8 +368,15 @@ export function grab(inst, heroY, heroVy) {
  * @returns {{x: number, y: number, angle: number}}
  */
 export function heldPoint(inst) {
-  const rim = rimY(inst)
-  return { x: inst.x + inst.follow, y: rim + inst.heldDepth, angle: Math.atan2(inst.follow, inst.bodyTop - rim) * DEG }
+  const at = heldInCup(inst)
+  const pivot = cupPivot(inst, rimY(inst))
+  const c = Math.cos(inst.tilt)
+  const sn = Math.sin(inst.tilt)
+  return {
+    x: pivot.x + (at.x - pivot.x) * c - (at.y - pivot.y) * sn,
+    y: pivot.y + (at.x - pivot.x) * sn + (at.y - pivot.y) * c,
+    angle: at.angle + inst.tilt * DEG
+  }
 }
 
 /**
@@ -384,15 +406,37 @@ export function onDraw(inst, view, draw) {
     drawSlice(inst, parts.throat, i * rows, rows, y, swell(y + rows * SCALE * HALF, lump), leanAt(inst, lean, y + rows * SCALE * HALF))
   }
   const sq = squeeze(inst)
-  const sx = inst.cup * (1 - sq)
-  const sy = inst.cup * (1 - (inst.state === STATE.CHEW ? sq * CHEW_CLOSE : 0))
+  const chewing = inst.state === STATE.CHEW
+  const sx = inst.cup * (chewing ? 1 + sq * CHEW_WIDE : 1 - sq)
+  const sy = inst.cup * (1 - (chewing ? sq * CHEW_CLOSE : 0))
   inst.cupNow = { top: throatTop - CUP_ROWS * SCALE * sy, sx, sy, dx: lean.at }
-  drawRows(inst, parts.cup, 0, inst.cupNow.top, sx, sy, lean.at)
-  drawTeeth(inst, inst.cupNow)
   drawEyes(inst)
   inst.drawWith = draw
-  inst.state === STATE.HOLD && inst.k.drawMasked(inst.heroFn, inst.maskFn)
-  inst.swallow && inst.k.drawMasked(inst.fishFn, inst.maskFn)
+  const k = inst.k
+  k.pushTransform()
+  k.pushTranslate(k.vec2(inst.x + lean.at, throatTop))
+  k.pushRotate(inst.tilt * DEG)
+  k.pushTranslate(k.vec2(-inst.x - lean.at, -throatTop))
+  drawRows(inst, parts.cup, 0, inst.cupNow.top, sx, sy, lean.at)
+  drawTeeth(inst, inst.cupNow)
+  inst.state === STATE.HOLD && k.drawMasked(inst.heroFn, inst.maskFn)
+  inst.swallow && k.drawMasked(inst.fishFn, inst.maskFn)
+  k.popTransform()
+}
+//
+// The hero it holds as in its funnel before the funnel's tilt (drawn under
+// the funnel's own turn): his centre and his lean (degrees).
+//
+function heldInCup(inst) {
+  const rim = rimY(inst)
+  return { x: inst.x + inst.follow, y: rim + inst.heldDepth, angle: Math.atan2(inst.follow, inst.bodyTop - rim) * DEG }
+}
+//
+// Where the funnel turns (tilting to spit): the middle of its foot on the
+// throat.
+//
+function cupPivot(inst, rim) {
+  return { x: inst.x + inst.follow, y: rim + (CUP_ROWS - RIM_ROW) * SCALE * inst.cup }
 }
 //
 // The mask over the mouth's near lip: all over the mouth's middle row, and
@@ -466,10 +510,12 @@ function holdHero(inst, ctx, dt) {
   inst.follow = 0
   if (wind < 1) {
     inst.thrust = -WIND_DOWN * wind * (2 - wind)
+    inst.tilt = -WIND_TILT * wind * (2 - wind)
     return
   }
   const u = Math.min(1, (t - SHAKE_TIME - WIND_TIME) / SPIT_TIME)
   inst.thrust = -WIND_DOWN + (WIND_DOWN + THRUST_UP) * u
+  inst.tilt = -WIND_TILT + (WIND_TILT + SPIT_TILT) * u
   inst.heldDepth = HELD_DEPTH + (SPIT_DEPTH - HELD_DEPTH) * u
   inst.follow = SPIT_LEAN * u
   if (u < 1) return
@@ -641,28 +687,40 @@ function drawSlice(inst, part, from, count, top, widen, dx) {
 function drawTeeth(inst, cup) {
   const out = inst.swallow ? 1 : inst.state === STATE.CHEW || inst.state === STATE.HOLD ? Math.min(1, inst.stateT / TEETH_IN) : (inst.state === STATE.SWALLOW ? Math.max(0, 1 - inst.stateT / TEETH_IN) : 0)
   if (out <= 0) return
+  TOOTH_ROWS.forEach((row, r) => {
+    for (let i = 0; i < row.count; i++) {
+      const t = FULL_TURN * (i + HALF * (r + 1)) / row.count
+      drawTooth(inst, cup, t, row.ring, row.size * out, row.size, inst.toothDeepRgb)
+    }
+  })
   const span = Math.PI - TEETH_FROM * 2
-  for (let i = 0; i < TEETH; i++) {
-    const t = Math.PI + TEETH_FROM + span * (i + HALF) / TEETH
-    const bx = MOUTH.x + Math.cos(t) * MOUTH.rx
-    const by = MOUTH.y + Math.sin(t) * MOUTH.ry
-    const ix = MOUTH.x - bx
-    const iy = MOUTH.y - by
-    const il = Math.hypot(ix, iy) || 1
-    const ux = ix / il
-    const uy = iy / il
-    const len = TOOTH_LEN * out
-    const p1 = cupPoint(inst, cup, bx - uy * TOOTH_W * HALF, by + ux * TOOTH_W * HALF)
-    const p2 = cupPoint(inst, cup, bx + uy * TOOTH_W * HALF, by - ux * TOOTH_W * HALF)
-    const p3 = cupPoint(inst, cup, bx + ux * len, by + uy * len)
-    inst.k.drawTriangle({
-      p1: inst.tri[0].set(p1.x, p1.y),
-      p2: inst.tri[1].set(p2.x, p2.y),
-      p3: inst.tri[2].set(p3.x, p3.y),
-      color: inst.toothRgb,
-      outline: { width: TOOTH_EDGE, color: inst.toothEdgeRgb }
-    })
-  }
+  for (let i = 0; i < TEETH; i++) drawTooth(inst, cup, Math.PI + TEETH_FROM + span * (i + HALF) / TEETH, 1, out, 1, inst.toothRgb)
+}
+//
+// One tooth on a ring of the mouth (`ring` of its size) at angle t,
+// pointing in to its middle: `grow` of a rim tooth's length, `size` of its
+// width.
+//
+function drawTooth(inst, cup, t, ring, grow, size, color) {
+  const bx = MOUTH.x + Math.cos(t) * MOUTH.rx * ring
+  const by = MOUTH.y + Math.sin(t) * MOUTH.ry * ring
+  const ix = MOUTH.x - bx
+  const iy = MOUTH.y - by
+  const il = Math.hypot(ix, iy) || 1
+  const ux = ix / il
+  const uy = iy / il
+  const len = TOOTH_LEN * grow
+  const half = TOOTH_W * size * HALF
+  const p1 = cupPoint(inst, cup, bx - uy * half, by + ux * half)
+  const p2 = cupPoint(inst, cup, bx + uy * half, by - ux * half)
+  const p3 = cupPoint(inst, cup, bx + ux * len, by + uy * len)
+  inst.k.drawTriangle({
+    p1: inst.tri[0].set(p1.x, p1.y),
+    p2: inst.tri[1].set(p2.x, p2.y),
+    p3: inst.tri[2].set(p3.x, p3.y),
+    color,
+    outline: { width: TOOTH_EDGE, color: inst.toothEdgeRgb }
+  })
 }
 //
 // A point of the funnel's picture (sheet px) in the world, the funnel at

@@ -106,6 +106,7 @@ const bakedFor = new WeakMap()
  * @param {number} cfg.width - Screen width
  * @param {number} cfg.height - Screen height
  * @param {(strength: number, near: number) => void} [cfg.onSplash] - A fish broke the lake's surface (its strength, how near the view's middle: 0 … 1), to be heard as in the level
+ * @param {(near: number) => void} [cfg.onSnap] - The lurker's jaws snapped shut on a runner (how near the view's middle: 0 … 1), to be heard as in the level
  * @returns {Object} Backdrop instance
  */
 export function create(cfg) {
@@ -148,7 +149,7 @@ export function create(cfg) {
     })
   }
   inst.fishCtx = { prey: [], swarmPrey: [], swarm: null, threats: [], giant: null, school: inst.fish, onCatch: prey => Fireflies.eat(inst.fireflies, prey, inst.lakeSky), onSplash: (x, strength) => splash(inst, cfg.onSplash, x, strength) }
-  lake && createLakeLife(inst, cfg.onSplash)
+  lake && createLakeLife(inst, cfg.onSplash, cfg.onSnap)
   return inst
 }
 
@@ -312,7 +313,7 @@ function updateLakeLife(inst) {
 // The lake's creatures' contexts (no hero: nothing for them to do with
 // him), its striders' row.
 //
-function createLakeLife(inst, onSplash) {
+function createLakeLife(inst, onSplash, onSnap) {
   inst.bridge = StriderBridge.create({ k: inst.k, striders: inst.striders, from: Pads.crownLine(inst.pads).span().x2, to: Layout.BANK_TIP_X2 })
   inst.giantCtx = { school: inst.fish, headOf: Fish.swimmingHead, canEat: Fish.isSmall, middleOf: Fish.middle, onChase: Fish.bolt, onSeize: Fish.seize, onHold: Fish.hold, onEat: Fish.eat, onBreath: () => {} }
   inst.lurkerCtx = {
@@ -320,7 +321,7 @@ function createLakeLife(inst, onSplash) {
     sinking: null,
     runners: inst.runners,
     runnerAbout: Runner.isAbout,
-    onSeize: prey => prey.runner && Runner.snatch(prey.runner, ENTRY_SPOT, () => null),
+    onSeize: prey => seizeRunner(inst, onSnap, prey),
     onSwallow: () => {},
     onSplash: x => splash(inst, onSplash, x, LURKER_SPLASH),
     onDrip: x => splash(inst, onSplash, x, DRIP_SPLASH),
@@ -331,7 +332,7 @@ function createLakeLife(inst, onSplash) {
   inst.trumpetCtx = {
     school: inst.fish,
     headOf: Fish.swimmingHead,
-    leapOf: Fish.leapingHead,
+    leapOf: Fish.swarmLeapingHead,
     tailOf: Fish.leapingTail,
     landingOf: Fish.leapLandingX,
     seizeFish: Fish.seize,
@@ -340,6 +341,15 @@ function createLakeLife(inst, onSplash) {
     onSpit: () => {}
   }
   inst.trumpetDraw = { hero: () => {}, fish: fish => Fish.onDraw(fish, inst.world, true) }
+}
+//
+// The lurker's jaws snapped shut on a runner: heard as in the level (as far
+// as a splash), the runner gone for a while.
+//
+function seizeRunner(inst, onSnap, prey) {
+  if (!prey.runner) return
+  onSnap?.(1 - Math.abs(prey.runner.pos.x - (inst.place.x1 + inst.place.x2) / 2) / SPLASH_HEAR)
+  Runner.snatch(prey.runner, ENTRY_SPOT, () => null)
 }
 //
 // The trumpeter has eaten a fish: it is gone (to swim back in later), with

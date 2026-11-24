@@ -22,31 +22,32 @@ const GRAIN_SEED = 9660
 const C = CAVE_CFG.pads
 //
 // Size: world px per sheet px; the picture is baked BAKE_OVER times finer.
-// It stands PAD_DX px right of the left bank's tip.
+// Its crown lies PAD_DX px right of the left bank's tip (its stems sweep
+// down to the right from it, to their foot on the bed).
 //
 const SCALE = 0.22
 const BAKE_OVER = 2.5
-const PAD_DX = 300
+const PAD_DX = 400
 //
 // The picture (padPlant piece px): the crown's rows (0..CROWN_H), the row
-// lying on the surface (AFLOAT), its middle (MID_X); the leaves' top edge
-// the hero walks on (the first opaque row down every WALK_STEP'th column
-// from WALK_X1 to WALK_X2, holding up feet HOLD_SLACK px into it); the
-// foot (FOOT_X,
-// FOOT_Y) sunk FOOT_SINK px into the bed (the bed's soil, drawn over it,
+// lying on the surface (AFLOAT), the crown's middle (MID_X); the leaves'
+// top edge the hero walks on (the first opaque row down every
+// WALK_STEP'th column from WALK_X1 to WALK_X2, holding up feet HOLD_SLACK
+// px into it); the stems' foot, off to the right of the crown (FOOT_X,
+// FOOT_Y), sunk FOOT_SINK px into the bed (the bed's soil, drawn over it,
 // hides where its stems were cut off).
 //
 const CROWN_H = 130
-const AFLOAT = 65
-const MID_X = 515
-const WALK_X1 = 90
-const WALK_X2 = 950
+const AFLOAT = 66
+const MID_X = 467
+const WALK_X1 = 42
+const WALK_X2 = 902
 const WALK_STEP = 4
 const SOLID_ALPHA = 128
 const RGBA = 4
 const ALPHA_OFFSET = 3
-const FOOT_X = 458
-const FOOT_Y = 914
+const FOOT_X = 927
+const FOOT_Y = 910
 const FOOT_SINK = 22
 const HOLD_SLACK = 12
 //
@@ -139,7 +140,7 @@ export function onUpdate(inst) {
  * @returns {{x1: number, x2: number}}
  */
 export function crownSpan(inst) {
-  return { x1: inst.left, x2: inst.left + inst.width }
+  return { x1: inst.edge[0].x, x2: inst.edge[inst.edge.length - 1].x }
 }
 
 /**

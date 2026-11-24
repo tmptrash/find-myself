@@ -168,6 +168,19 @@ const SNAP_THUD_TIME = 0.09
 const SNAP_GAIN = 0.4
 const SNAP_THUD_SHARE = 0.8
 //
+// A bubble popping on the lake's surface: a tiny wet "plip" — a sine
+// sliding up BUBBLE_RISE times over BUBBLE_TIME s from BUBBLE_FREQ (for a
+// bubble BUBBLE_REF_R px round; a smaller one higher, a bigger one lower,
+// kept within BUBBLE_FREQ_MIN..MAX), BUBBLE_GAIN loud by the hero.
+//
+const BUBBLE_FREQ = 900
+const BUBBLE_REF_R = 2
+const BUBBLE_FREQ_MIN = 500
+const BUBBLE_FREQ_MAX = 1800
+const BUBBLE_RISE = 1.8
+const BUBBLE_TIME = 0.05
+const BUBBLE_GAIN = 0.05
+//
 // Lantern mushroom: a soft spring (no ringing chime over it).
 //
 const SPRING_FROM = 170
@@ -405,6 +418,31 @@ export function playSnap(inst, near) {
   const gain = SNAP_GAIN * near
   softBurst(inst, inst.white, at, 'bandpass', SNAP_BAND, SNAP_Q, SNAP_TIME, gain)
   softBurst(inst, inst.brown, at, 'lowpass', SNAP_THUD_LP, 1, SNAP_THUD_TIME, gain * SNAP_THUD_SHARE)
+}
+
+/**
+ * A bubble popping on the lake's surface: a tiny plip, higher the smaller
+ * the bubble.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} r - The bubble's radius (px)
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playBubble(inst, r, near) {
+  if (!ready(inst) || near <= 0) return
+  const { ctx } = inst
+  const now = ctx.currentTime
+  const freq = Math.max(BUBBLE_FREQ_MIN, Math.min(BUBBLE_FREQ_MAX, BUBBLE_FREQ * BUBBLE_REF_R / r))
+  const osc = ctx.createOscillator()
+  const g = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, now)
+  osc.frequency.exponentialRampToValueAtTime(freq * BUBBLE_RISE, now + BUBBLE_TIME)
+  g.gain.setValueAtTime(BUBBLE_GAIN * near, now)
+  g.gain.exponentialRampToValueAtTime(SILENT, now + BUBBLE_TIME * 2)
+  osc.connect(g)
+  g.connect(inst.out)
+  osc.start(now)
+  osc.stop(now + BUBBLE_TIME * 2)
 }
 
 /**

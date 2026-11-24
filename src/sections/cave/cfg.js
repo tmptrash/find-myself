@@ -131,6 +131,13 @@ export const CAVE_CFG = {
     tint: '#c9c7b4'
   },
   //
+  // Bubbles rising from the lake's bed: their body, their bright rim.
+  //
+  bubbles: {
+    body: '#9fd3cc',
+    rim: '#dff5f1'
+  },
+  //
   // The trumpeter (cave-trumpet.js, plant_right.png): drawn toned down
   // toward the cave's light (tint); its eyelids (and their edge), its
   // pupils, the teeth in its funnel (and their edge).

@@ -404,6 +404,7 @@ export function create(cfg) {
     openX1: CaveLake.openSpan(lake).x1 + OPEN_PAD,
     openX2: CaveLake.openSpan(lake).x2 - OPEN_PAD,
     huntSide: 1,
+    mouthAt: null,
     atSwarm: false,
     pace: PACE_MIN + rng() * PACE_RANGE,
     tempo: Math.pow(cfg.size, -TEMPO_EXP) * (1 + (rng() * 2 - 1) * TEMPO_JITTER),
@@ -455,6 +456,7 @@ export function create(cfg) {
     finAt: { x: 0, y: 0 },
     giantSide: 0
   }
+  inst.mouthAt = { at: inst.joints[0], size: cfg.size }
   pickRoam(inst)
   return inst
 }
@@ -627,6 +629,20 @@ export function swimmingHead(inst) {
   const head = inst.joints[0]
   const out = inst.mode === MODE.GONE || inst.mode === MODE.JUMP || inst.mode === MODE.ENTER || inst.mode === MODE.HELD
   return out || head.x < inst.waterX1 || head.x > inst.waterX2 ? null : head
+}
+
+/**
+ * The mouths of a school's fish that swim in the water now (swimmingHead):
+ * each fish's own `{at: its head, size}` (the same object all along),
+ * gathered into `out` (cleared first).
+ * @param {Array<Object>} school - Fish instances
+ * @param {Array<{at: {x: number, y: number}, size: number}>} out - Array to fill
+ * @returns {Array<{at: {x: number, y: number}, size: number}>} out
+ */
+export function swimmingMouths(school, out) {
+  out.length = 0
+  school.forEach(fish => swimmingHead(fish) && out.push(fish.mouthAt))
+  return out
 }
 
 /**
@@ -1364,6 +1380,7 @@ function comeBack(inst, dt) {
   const bottom = Math.max(top, bottomFor(inst, inX) - ROAM_BED)
   const head = { x, y: top + (bottom - top) * inst.rng(), z: (inst.rng() * 2 - 1) * Z_MAX }
   inst.joints = Swim.createSpine(SEGMENTS, head, dir, inst.seg)
+  inst.mouthAt.at = inst.joints[0]
   Swim.setDir(inst.h, dir, 0, 0)
   inst.facing = dir
   inst.roll = dir

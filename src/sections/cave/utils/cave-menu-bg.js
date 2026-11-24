@@ -1,5 +1,6 @@
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
+import * as Bubbles from '../components/cave-bubbles.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
@@ -106,6 +107,7 @@ const bakedFor = new WeakMap()
  * @param {number} cfg.width - Screen width
  * @param {number} cfg.height - Screen height
  * @param {(strength: number, near: number) => void} [cfg.onSplash] - A fish broke the lake's surface (its strength, how near the view's middle: 0 … 1), to be heard as in the level
+ * @param {(r: number, near: number) => void} [cfg.onBubble] - A bubble popped on the surface (its radius, how near the view's middle: 0 … 1), to be heard as in the level
  * @param {(near: number) => void} [cfg.onSnap] - The lurker's jaws snapped shut on a runner (how near the view's middle: 0 … 1), to be heard as in the level
  * @returns {Object} Backdrop instance
  */
@@ -128,6 +130,8 @@ export function create(cfg) {
     striders: lake ? Strider.createAll(k, lake, [Pads.crownSpan(pads)]) : [],
     strideFears: [],
     pads,
+    bubbles: lake ? Bubbles.create({ k, lake, onPop: (x, r) => cfg.onBubble?.(r, nearMiddle(place, x)) }) : null,
+    fishMouths: [],
     giant: lake ? Giant.create({ k, lake }) : null,
     lurker: lake ? Lurker.create({ k, lake }) : null,
     trumpet: lake ? Trumpet.create({ k, lake }) : null,
@@ -257,14 +261,15 @@ function drawWorldLife(inst) {
 }
 //
 // The lake as in the level (its fish are under the soil): the algae, the
-// see-through water, the fish's splashes, the pad plant's leaves, the
-// lurker's splashes, the giant's breath and the striders on it.
+// see-through water, the fish's splashes, the bubbles, the pad plant's
+// leaves, the lurker's splashes, the giant's breath and the striders on it.
 //
 function drawLake(inst) {
   const view = inst.world
   CaveLake.onDrawAlgae(inst.lake)
   CaveLake.onDraw(inst.lake, view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  Bubbles.onDraw(inst.bubbles, view)
   Pads.onDrawCrown(inst.pads, view)
   Lurker.onDrawSplash(inst.lurker)
   Giant.onDrawMist(inst.giant)
@@ -276,7 +281,13 @@ function drawLake(inst) {
 // px from the view's middle (nothing to hear while baking ahead).
 //
 function splash(inst, onSplash, x, strength) {
-  onSplash?.(strength, 1 - Math.abs(x - (inst.place.x1 + inst.place.x2) / 2) / SPLASH_HEAR)
+  onSplash?.(strength, nearMiddle(inst.place, x))
+}
+//
+// How near the view's middle a world X is: 1 there, 0 SPLASH_HEAR px off.
+//
+function nearMiddle(place, x) {
+  return 1 - Math.abs(x - (place.x1 + place.x2) / 2) / SPLASH_HEAR
 }
 //
 // The lake's life as in the level: the giant comes in to hunt the fish,
@@ -293,6 +304,7 @@ function updateLakeLife(inst) {
   ctx.giant = Giant.bodyLine(inst.giant)
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
   Trumpet.onUpdate(inst.trumpet, inst.trumpetCtx)
+  Bubbles.onUpdate(inst.bubbles, Fish.swimmingMouths(inst.fish, inst.fishMouths))
   inst.lurkerCtx.giant = ctx.giant
   Lurker.onUpdate(inst.lurker, inst.lurkerCtx)
   Pads.onUpdate(inst.pads)
@@ -348,7 +360,7 @@ function createLakeLife(inst, onSplash, onSnap) {
 //
 function seizeRunner(inst, onSnap, prey) {
   if (!prey.runner) return
-  onSnap?.(1 - Math.abs(prey.runner.pos.x - (inst.place.x1 + inst.place.x2) / 2) / SPLASH_HEAR)
+  onSnap?.(nearMiddle(inst.place, prey.runner.pos.x))
   Runner.snatch(prey.runner, ENTRY_SPOT, () => null)
 }
 //

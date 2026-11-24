@@ -3,6 +3,7 @@ import * as Lake from '../../../components/lake.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Layout from './cave-layout.js'
 import * as Ground from './cave-ground.js'
+import * as LakeBed from './cave-lake-bed.js'
 //
 // The lake in the hall's floor, painted like the forest lake
 // (components/lake.js): its water fills the floor's bowl from the surface
@@ -16,13 +17,18 @@ import * as Ground from './cave-ground.js'
 // the water opaque across the waves and fading to see-through under them,
 // a light skin, the band between a bright top line and a fainter inner
 // line (each riding its own wave, dying out toward the banks), ripples
-// running off both banks. Under the band the body is one still bake. The
+// running off both banks. Under the band the body is one still bake, and
+// over it the stones lining the hollows, drawn again under only a light
+// haze of water (LINING_TINT): they stay light, and the water's edge runs
+// along the stones, not along the soil's smooth arc (none of it over the
+// surface). The
 // forest lake's swaying algae stand on the bed, drawn under the water.
 //
 const COLORS = CAVE_CFG.water
 const PAINT = COLORS.paint
 const SPRITE_PREFIX = 'cave0-lake-v3-'
 const BODY_SPRITE = `${SPRITE_PREFIX}body`
+const LINING_SPRITE = `${SPRITE_PREFIX}lining`
 const SHEET_SPRITE = `${SPRITE_PREFIX}sheet-`
 //
 // The water reaches this far under the bowl's top so no gap shows under
@@ -75,6 +81,7 @@ const CYCLE = Math.PI * 2 / WAVE_SPEED
 const OPAQUE_PX = WAVE_AMP + WAVE_SECOND_AMP + 1
 const BODY_FADE = 10
 const BODY_ALPHA = 0.42
+const LINING_TINT = 0.18
 const SKIN_ALPHA = 0.28
 const SKIN_DEPTH = 16
 const DEEP_ALPHA = 0.2
@@ -119,10 +126,13 @@ export function create(k) {
     waveX2: Math.min(x2, Layout.BANK_TIP_X2),
     framePos: k.vec2(x1, Layout.LAKE_SURFACE_Y - BAND_ABOVE),
     bodyPos: k.vec2(x1, Layout.LAKE_SURFACE_Y + BAND_BELOW),
+    liningPos: null,
     algae: null
   }
   inst.algae = Lake.createAlgaeField(k, { paint: PAINT, x1: Math.max(x1, Layout.LAKE_X1), x2, surfaceY: Layout.LAKE_SURFACE_Y, bedAt: x => bedAt(inst, x) - BED_OVERLAP })
-  bakedFor.has(k) || bake(k, inst)
+  const box = LakeBed.liningBox()
+  inst.liningPos = k.vec2(box.x1, box.y1)
+  bakedFor.has(k) || bake(k, inst, box)
   bakedFor.add(k)
   return inst
 }
@@ -146,6 +156,7 @@ export function onDraw(inst, view) {
   const f = frameNow(k)
   k.drawSprite({ sprite: SHEET_SPRITE + Math.floor(f / FRAMES_PER_SHEET), frame: f % FRAMES_PER_SHEET, pos: inst.framePos })
   k.drawSprite({ sprite: BODY_SPRITE, pos: inst.bodyPos })
+  k.drawSprite({ sprite: LINING_SPRITE, pos: inst.liningPos })
 }
 
 /**
@@ -254,9 +265,10 @@ function waveFade(inst, x) {
 // Every frame of the band (on its sheets) and the still body, once per
 // live k.
 //
-function bake(k, inst) {
+function bake(k, inst, liningBox) {
   for (let first = 0; first < FRAME_COUNT; first += FRAMES_PER_SHEET) bakeSheet(k, inst, first, Math.min(FRAMES_PER_SHEET, FRAME_COUNT - first))
   bakeBody(k, inst)
+  bakeLining(k, inst, liningBox)
 }
 //
 // One sheet: `count` frames from `first`, stacked top to bottom with their
@@ -405,15 +417,13 @@ function innerWave(u, t) {
 //
 function bakeBody(k, inst) {
   const top = Layout.LAKE_SURFACE_Y + BAND_BELOW
-  const deep = Math.max(top + 1, ...inst.bed.map(pt => pt.y))
+  const deep = bodyDeep(inst)
   const canvas = document.createElement('canvas')
   canvas.width = inst.x2 - inst.x1
   canvas.height = Math.ceil(deep - top) + 1
   const ctx = canvas.getContext('2d')
   ctx.translate(-inst.x1, -top)
-  const tint = ctx.createLinearGradient(0, top, 0, deep)
-  tint.addColorStop(0, hexAlpha(PAINT.deep, 0))
-  tint.addColorStop(1, hexAlpha(PAINT.deep, DEEP_ALPHA))
+  const tint = deepTint(ctx, inst)
   inst.bed.forEach(pt => {
     const from = Math.max(top, pt.top)
     if (pt.y <= from) return
@@ -423,6 +433,38 @@ function bakeBody(k, inst) {
     ctx.fillRect(pt.x, from, 1, pt.y - from)
   })
   k.loadSprite(BODY_SPRITE, canvas)
+}
+//
+// The hollows' lining stones over the water: as they look, under a light
+// haze of the water (LINING_TINT), none of them over the surface.
+//
+function bakeLining(k, inst, box) {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, box.x2 - box.x1)
+  canvas.height = Math.max(1, box.y2 - box.y1)
+  const ctx = canvas.getContext('2d')
+  ctx.translate(-box.x1, -box.y1)
+  LakeBed.paintLining(ctx)
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.fillStyle = hexAlpha(COLORS.water, LINING_TINT)
+  ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1)
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.fillStyle = COLORS.water
+  ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, Layout.LAKE_SURFACE_Y - box.y1)
+  k.loadSprite(LINING_SPRITE, canvas)
+}
+//
+// The body's deepest row (the bowl's bottom), and its deepening tint
+// toward it from under the band.
+//
+function bodyDeep(inst) {
+  return Math.max(Layout.LAKE_SURFACE_Y + BAND_BELOW + 1, ...inst.bed.map(pt => pt.y))
+}
+function deepTint(ctx, inst) {
+  const tint = ctx.createLinearGradient(0, Layout.LAKE_SURFACE_Y + BAND_BELOW, 0, bodyDeep(inst))
+  tint.addColorStop(0, hexAlpha(PAINT.deep, 0))
+  tint.addColorStop(1, hexAlpha(PAINT.deep, DEEP_ALPHA))
+  return tint
 }
 function hexAlpha(hex, alpha) {
   return hex + Math.round(alpha * BYTE_MAX).toString(HEX_RADIX).padStart(2, '0')

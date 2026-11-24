@@ -20,6 +20,7 @@ import * as Runner from '../components/cave-runner.js'
 import * as Swarm from '../components/cave-swarm.js'
 import * as Strider from '../components/cave-strider.js'
 import * as StriderBridge from '../components/cave-strider-bridge.js'
+import * as Bubbles from '../components/cave-bubbles.js'
 import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
 import * as Lurker from '../components/cave-lurker.js'
@@ -268,6 +269,8 @@ function build(k, opts) {
     runners: Runner.createAll(k),
     striders: Strider.createAll(k, lake, [Pads.crownSpan(pads)]),
     striderFears: [],
+    bubbles: null,
+    fishMouths: [],
     bridge: null,
     fish: Fish.createAll(k, lake),
     giant: Giant.create({ k, lake, stay: Boolean(opts.giantDev) }),
@@ -350,6 +353,7 @@ function build(k, opts) {
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
+  inst.bubbles = Bubbles.create({ k, lake, onPop: (x, r) => onBubblePop(inst, x, r) })
   inst.bridge = StriderBridge.create({ k, striders: inst.striders, from: Pads.crownLine(pads).span().x2, to: Layout.BANK_TIP_X2, stop: inst.trumpet.x })
   createBodies(inst)
   Ground.setMovingLines([Lurker.topLine(inst.lurker), Pads.crownLine(inst.pads), ...inst.striders.map(Strider.line)])
@@ -1034,7 +1038,8 @@ function drawRunners(inst) {
 // the giant (its snout, middle and tail); the striders fear everything
 // near the lake that moves — the hero (on the bank, over the water or
 // sinking in it), the runners, the swarm, a fish near the surface,
-// the giant.
+// the giant; bubbles rise from the bed (and out of the fish's mouths) now
+// and then.
 //
 function updateLakeLife(inst) {
   const ctx = inst.fishCtx
@@ -1052,6 +1057,7 @@ function updateLakeLife(inst) {
   ctx.giant = Giant.bodyLine(inst.giant)
   inst.fish.forEach(fish => Fish.onUpdate(fish, ctx))
   Trumpet.onUpdate(inst.trumpet, inst.trumpetCtx)
+  Bubbles.onUpdate(inst.bubbles, Fish.swimmingMouths(inst.fish, inst.fishMouths))
   const fears = inst.striderFears
   fears.length = 0
   hero && fears.push(hero)
@@ -1082,6 +1088,14 @@ function onGiantBreath(inst, exhale, x) {
   const focus = heroFocus(inst)
   CaveSound.playGiantBreath(inst.caveSound, exhale, 1 - Math.abs(x - focus.x) / BREATH_HEAR)
 }
+//
+// A bubble popped on the surface: a plip, faded over SPLASH_HEAR px from
+// the hero as a splash is.
+//
+function onBubblePop(inst, x, r) {
+  const focus = heroFocus(inst)
+  CaveSound.playBubble(inst.caveSound, r, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+}
 function onFishSplash(inst, x, strength) {
   const focus = heroFocus(inst)
   CaveSound.playFishSplash(inst.caveSound, strength, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
@@ -1102,12 +1116,14 @@ function drawFish(inst) {
   inst.fish.forEach(fish => Fish.onDrawSand(fish))
 }
 //
-// On the surface: the fish's splashes, the giant's breath, the striders'
-// water marks, then the striders (each kind in one batch).
+// On the surface: the fish's splashes, the bubbles rising from the bed,
+// the giant's breath, the striders' water marks, then the striders (each
+// kind in one batch).
 //
 function drawLakeSurface(inst) {
   const view = View.worldRect(inst.view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
+  Bubbles.onDraw(inst.bubbles, view)
   Pads.onDrawCrown(inst.pads, view)
   Lurker.onDrawSplash(inst.lurker)
   Giant.onDrawMist(inst.giant)

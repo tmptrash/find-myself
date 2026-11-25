@@ -1,4 +1,5 @@
 import { CFG } from '../../../cfg.js'
+import { getRGB } from '../../../utils/helper.js'
 import { predatorBackCatchPoint } from '../components/predator.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import { beginIslandShoreRetreat } from '../components/predator-move.js'
@@ -49,7 +50,17 @@ const TWIG_BACK_REST = TWIG_MAIN_W * 0.5 + 0.5
 //
 const TWIG_TOP_ABOVE_AXIS = TWIG_MAIN_W * 0.5
 //
-// A turn squeezes the stick through zero width instead of tilting it. A
+// A turn swings the stick round a vertical line through its pinned end
+// instead of tilting it, at TWIG_TURN_RATE (its face from one side to the
+// other in 2 / TWIG_TURN_RATE s): its side foreshortens with the face, and
+// its far end's cut — a round of TWIG_MAIN_W across — turns into view as an
+// ellipse TWIG_MAIN_W × sqrt(1 - face²) wide (bark round it, the wood
+// inside it TWIG_CUT_WOOD of it, a ring TWIG_CUT_RING of it), so seen
+// end-on the stick is a round log end, never a flat line. Turned off its
+// side (|face| under TWIG_SIDE_ON) it is drawn as a round log: its picture
+// cut into TWIG_SLICE_PX wide upright slices, each set where the turn
+// takes that point of the stick and widened to the stick's thickness as
+// seen from there, so in every in-between pose it keeps its body. A
 // turn with the hero on it is a quick wave down the centipede's body
 // (predator-body.js) over TWIG_RIDE_TURN_DURATION s (at the island,
 // letting him off, TWIG_ISLAND_DISBARK_TURN_DURATION); the stick turns
@@ -58,7 +69,12 @@ const TWIG_TOP_ABOVE_AXIS = TWIG_MAIN_W * 0.5
 // mirrored through none), so he keeps his place on the centipede instead of
 // ending up at the stick's other end.
 //
-const TWIG_TURN_SPEED = 1.15
+const TWIG_TURN_RATE = 5
+const TWIG_SIDE_ON = 0.97
+const TWIG_SLICE_PX = 2
+const TWIG_CUT_WOOD = 0.72
+const TWIG_CUT_RING = 0.38
+const TWIG_CUT_COLORS = CFG.visual.colors.palette.predatorTwigCut
 const FACE_EPS = 0.01
 const TWIG_RIDE_TURN_DURATION = 0.5
 const TWIG_ISLAND_DISBARK_TURN_DURATION = 0.8
@@ -285,7 +301,7 @@ export function onUpdate(inst, dt, floorY, predator, heroChar) {
 
 /**
  * Draws the broken branch from its picture (the stick on the centipede
- * squeezes through zero width as it turns).
+ * swings round with its cut end turning into view as it turns).
  * @param {Object} inst - Twig inst
  * @param {number} opacity - Scene fade multiplier
  * @param {{x1: number, x2: number}|null} view - Camera cull span
@@ -300,7 +316,13 @@ export function onDraw(inst, opacity, view, mounted = false) {
     if (view && (twig.x < view.x1 - 80 || twig.x > view.x2 + 80)) return
     const op = opacity * twig.alpha
     if (op <= 0.001) return
-    const sx = twig.phase === 'predatorMount' ? twig.face : 1
+    const mountedStick = twig.phase === 'predatorMount'
+    if (mountedStick && Math.abs(twig.face) < TWIG_SIDE_ON) {
+      drawTurningStick(k, look, twig, op)
+      drawStickCut(k, twig, op)
+      return
+    }
+    const sx = mountedStick ? twig.face : 1
     const shake = twig.phase === 'idle' ? inst.shake.angle : 0
     k.drawSprite({
       sprite: look.sprite,
@@ -310,6 +332,7 @@ export function onDraw(inst, opacity, view, mounted = false) {
       scale: k.vec2(sx, 1),
       opacity: op
     })
+    mountedStick && drawStickCut(k, twig, op)
   })
 }
 
@@ -892,9 +915,49 @@ function tryMountTwig(twig, predator) {
   return true
 }
 //
-// face: +1 = stick runs to +X from its pinned end, -1 = to -X. It eases
-// toward the tail side, so a turn squeezes the horizontal stick thin and
-// widens it again on the other side.
+// A stick turning on the back as a round log: its picture slice by slice
+// from the cut stump out, each slice where the turn puts that point of the
+// stick (its offset from the stump times the face) and as wide as the
+// stick's thickness shows from there.
+//
+function drawTurningStick(k, look, twig, opacity) {
+  const data = k.getSprite(look.sprite)?.data
+  if (!data) return
+  const w = data.width
+  const h = data.height
+  const stumpX = (look.anchorX + 1) * HALF * w
+  const top = twig.y - (look.anchorY + 1) * HALF * h
+  const thick = TWIG_MAIN_W * Math.sqrt(Math.max(0, 1 - twig.face * twig.face))
+  const sliceW = Math.abs(twig.face) * TWIG_SLICE_PX + thick
+  for (let sx = 0; sx < w; sx += TWIG_SLICE_PX) {
+    k.drawSprite({
+      sprite: look.sprite,
+      pos: k.vec2(twig.x + (sx - stumpX) * twig.face - sliceW * HALF, top),
+      width: sliceW,
+      height: h,
+      quad: { x: sx / w, y: 0, w: TWIG_SLICE_PX / w, h: 1 },
+      opacity
+    })
+  }
+}
+//
+// The far end's cut of a stick turning on the back: an ellipse as wide as
+// the turn shows it (none with the stick side-on), bark round the wood and
+// its ring.
+//
+function drawStickCut(k, twig, opacity) {
+  const across = TWIG_MAIN_W * Math.sqrt(Math.max(0, 1 - twig.face * twig.face))
+  if (across < 1) return
+  const pos = k.vec2(twig.x + twig.face * TWIG_MAIN_LEN, twig.y)
+  const ry = TWIG_MAIN_W * HALF
+  k.drawEllipse({ pos, radiusX: across * HALF, radiusY: ry, color: getRGB(k, TWIG_CUT_COLORS.bark), opacity })
+  k.drawEllipse({ pos, radiusX: across * HALF * TWIG_CUT_WOOD, radiusY: ry * TWIG_CUT_WOOD, color: getRGB(k, TWIG_CUT_COLORS.wood), opacity })
+  k.drawEllipse({ pos, radiusX: across * HALF * TWIG_CUT_RING, radiusY: ry * TWIG_CUT_RING, color: getRGB(k, TWIG_CUT_COLORS.ring), opacity })
+}
+//
+// face: +1 = stick runs to +X from its pinned end, -1 = to -X. It swings
+// toward the tail side at TWIG_TURN_RATE, so a turn squeezes the
+// horizontal stick short and widens it again on the other side.
 //
 function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir, twigInst) {
   const head = predator?.segments?.[0]
@@ -915,7 +978,7 @@ function placeTwigOnBack(twig, predator, dt, riderLocked, rideDir, twigInst) {
     twig.face = tailDir
   } else {
     twig.face == null && (twig.face = tailDir)
-    twig.face += (tailDir - twig.face) * Math.min(1, dt * TWIG_TURN_SPEED)
+    twig.face += Math.max(-TWIG_TURN_RATE * dt, Math.min(TWIG_TURN_RATE * dt, tailDir - twig.face))
   }
   twig.rot = 0
   twig.x = head.x + twig.face * (head.radius + TWIG_BEHIND_HEAD)

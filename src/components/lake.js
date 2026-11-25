@@ -16,22 +16,15 @@ import * as Water from './water.js'
 // in at the open water's right end still sends waves off). The far-bank
 // trees' reflections are baked into it under the surface.
 //
-// Full drown sink of the forest level: the hero's feet end 88 px under the
-// floor, the water surface sits 8 px above it.
+// The forest lake's greatest depth: deep enough for the drowning hero to
+// go under whole; the water surface sits 2 px under the floor.
 //
-const LAKE_FULL_SINK_DEPTH = 96
+const LAKE_FULL_SINK_DEPTH = 86
 //
 // Default water colours (the forest lake); a caller may pass its own.
 //
 const PAL = CFG.visual.colors.palette
 const DEFAULT_PALETTE = { water: PAL.water, paint: PAL.waterPaint }
-//
-// Shore rocks sunk into the lake: bed clip sampling step and the water tint
-// on their submerged part (top of the water / near the bed).
-//
-const LAKE_SHORE_ROCK_CLIP_STEP_PX = 2
-const LAKE_SHORE_ROCK_TINT_TOP_ALPHA = 0.18
-const LAKE_SHORE_ROCK_TINT_DEEP_ALPHA = 0.34
 //
 // Leaf midrib width of the algae fronds.
 //
@@ -46,29 +39,51 @@ export const LAKE_SHORE_EXTEND_PX = 64
 // the bed's bake has always measured them (from the old baked waves).
 //
 const LAKE_TOP_MARGIN_PX = 6.2
-const LAKE_OPAQUE_SKIN_PX = 5.2
+export const LAKE_OPAQUE_SKIN_PX = 5.2
 //
 // Bed bake version (its sprite name).
 //
-const LAKE_BAKE_GEOMETRY_VERSION = 16
+const LAKE_BAKE_GEOMETRY_VERSION = 22
 const LAKE_TUNE = FOREST_CFG.lakeWater
 const LAKE_BED_SEGMENTS = 160
-const LAKE_BED_BACK_RISE_PX = 11
+const LAKE_BED_BACK_RISE_PX = 32
 const LAKE_BED_BACK_FULL_DEPTH_PX = 40
 const LAKE_BED_BACK_WOBBLE_PX = 3
 const LAKE_BED_BACK_WOBBLE_WAVELENGTH = 47
 const LAKE_BED_BACK_WOBBLE_SEED = 12.9
-const LAKE_BED_RIM_PX = 2
 const LAKE_BED_EDGE_PX = 2
-const LAKE_BED_SEAM_INDEX = 5
 const LAKE_BED_FLOOR_OVERLAP_PX = 2
 const LAKE_BED_SLOPE_PROBE_PX = 3
 const LAKE_BED_SAND_MAX_SLOPE = 0.55
-const LAKE_BED_GRAVEL_COUNT = 140
-const LAKE_BED_GRAVEL_R_MIN = 0.8
-const LAKE_BED_GRAVEL_R_RANGE = 1.2
-const LAKE_BED_GRAVEL_STRETCH = 1.4
-const LAKE_BED_GRAVEL_ALPHA = 0.85
+//
+// The floor face is sand: soft patches of lighter and darker sand
+// (LAKE_SAND_BLOTCHES, LAKE_SAND_BLOTCH_R..+RANGE px across, flattened
+// LAKE_SAND_BLOTCH_FLAT as it lies, at LAKE_SAND_BLOTCH_ALPHA), then
+// LAKE_SAND_GRAINS grains of 1..LAKE_SAND_GRAIN_MAX px, every other one
+// light, the rest dark, at LAKE_SAND_GRAIN_ALPHA. On the right bank's wall
+// (from LAKE_SAND_WALL_FROM_U along the bed, ramping in over
+// LAKE_SAND_WALL_RAMP_U) it lies LAKE_SAND_WALL_PX thick, thinning to
+// nothing over its top LAKE_SAND_WALL_FADE_PX under the surface.
+//
+const LAKE_SAND_BLOTCHES = 70
+const LAKE_SAND_BLOTCH_R = 5
+const LAKE_SAND_BLOTCH_R_RANGE = 12
+const LAKE_SAND_BLOTCH_FLAT = 0.35
+const LAKE_SAND_BLOTCH_ALPHA = 0.14
+const LAKE_SAND_GRAINS = 1400
+const LAKE_SAND_GRAIN_MAX = 2
+const LAKE_SAND_WALL_FROM_U = 0.8
+const LAKE_SAND_WALL_RAMP_U = 0.06
+const LAKE_SAND_WALL_PX = 7
+const LAKE_SAND_WALL_FADE_PX = 14
+//
+// The sand's far rim follows its rise averaged over LAKE_SAND_RISE_SAMPLES
+// columns either side, LAKE_SAND_RISE_STEP_PX apart, so it slopes off at
+// the steps of the bed instead of ending in an upright wall.
+//
+const LAKE_SAND_RISE_SAMPLES = 4
+const LAKE_SAND_RISE_STEP_PX = 4
+const LAKE_SAND_GRAIN_ALPHA = 0.45
 const LAKE_BED_PEBBLE_COUNT = 22
 const LAKE_BED_PEBBLE_R_MIN = 1.8
 const LAKE_BED_PEBBLE_R_RANGE = 2.6
@@ -76,6 +91,38 @@ const LAKE_BED_PEBBLE_SQUASH = 0.7
 const LAKE_BED_PEBBLE_LIGHT_FRAC = 0.45
 const LAKE_BED_PEBBLE_GLINT_SHIFT = 0.3
 const LAKE_BED_GRAIN_SEED = 5900
+//
+// The bed's volume: its floor face, seen from a little above, darkens and
+// cools toward its far rim (LAKE_FACE_FAR_ALPHA of bedShadow, gone by
+// LAKE_FACE_MID of the way down) and catches light at its near edge
+// (LAKE_FACE_NEAR_ALPHA of bedLight); the bowl's back wall is in shadow at
+// its foot (LAKE_WALL_FOOT_ALPHA, fading LAKE_WALL_FOOT_PX up), and every
+// pebble and stone casts a soft shadow onto the floor (LAKE_CAST_ALPHA,
+// LAKE_CAST_DROP of its size down, LAKE_CAST_FLAT tall for its width).
+//
+const LAKE_FACE_FAR_ALPHA = 0.65
+const LAKE_FACE_MID = 0.55
+const LAKE_FACE_NEAR_ALPHA = 0.5
+const LAKE_WALL_FOOT_ALPHA = 0.6
+const LAKE_WALL_FOOT_PX = 22
+const LAKE_CAST_ALPHA = 0.45
+const LAKE_CAST_DROP = 0.35
+const LAKE_CAST_FLAT = 0.3
+//
+// Depth into the screen on the floor face: LAKE_FACE_LINES sand ripples
+// across it (their crests LAKE_FACE_LINE_ALPHA of sandLight with a trough
+// of sandDark under each, waving
+// LAKE_RIPPLE_AMP px over LAKE_RIPPLE_WAVE px, less toward the far rim),
+// closer together toward its far rim (spaced by the square of their
+// share), and what lies on it
+// drawn LAKE_FAR_SCALE of its size at the far rim, growing to full size at
+// the near edge.
+//
+const LAKE_FACE_LINES = 5
+const LAKE_FACE_LINE_ALPHA = 0.4
+const LAKE_RIPPLE_AMP = 1.5
+const LAKE_RIPPLE_WAVE = 9
+const LAKE_FAR_SCALE = 0.55
 //
 // Faceted boulders on the floor: one large rock and a dark rubble cluster in
 // the deep part, a few loose stones on the ledges. Each is a lumpy polygon
@@ -190,7 +237,7 @@ const LAKE_REFLECTIONS = [
 // Lake bed profile from the island's shore (where its slope meets the water
 // line) to the far end of the shore bake, deep enough for the full drown
 // sink. The island side steps down in earthy terraces, the middle is a broad
-// floor, and the tree side rises as a steep bank under the shore rocks.
+// floor, and the tree side rises as a steep bank.
 // Keypoints are (u along the water, depth fraction); smoothstep between them
 // flattens every keypoint into a ledge. Small humps break the regularity.
 //
@@ -207,22 +254,28 @@ const LAKE_BED_PROFILE = [
   { u: 0.85, d: 0.95 },
   { u: 1, d: 0 }
 ]
-const LAKE_BED_HUMP_PX = 4
-const LAKE_BED_HUMP_WAVELENGTH = 58
+const LAKE_BED_HUMP_PX = 12
+const LAKE_BED_HUMP_WAVELENGTH = 42
 const LAKE_BED_HUMP_SEED = 77.3
 //
-// Optional ragged right bank (cfg.bankJag px): from LAKE_BANK_JAG_FROM_U
-// along the bed the bottom line gets a short-wave noise plus sharp
-// sample-and-hold steps (LAKE_BANK_JAG_STEP_SHARE of it), ramping in over
-// LAKE_BANK_JAG_RAMP_U, so the steep bank reads as a cut, broken edge
-// instead of one smooth slope.
+// Finer lumps on top of the humps, so the bottom line reads ragged and
+// organic, not a drawn curve (smooth noise: no steps or cuts).
 //
-const LAKE_BANK_JAG_FROM_U = 0.86
-const LAKE_BANK_JAG_RAMP_U = 0.03
-const LAKE_BANK_JAG_WAVE = 9
-const LAKE_BANK_JAG_STEP_SHARE = 0.6
-const LAKE_BANK_JAG_SEED = 41.7
-const LAKE_BANK_JAG_STEP_INDEX = 23
+const LAKE_BED_RAG_PX = 2
+const LAKE_BED_RAG_WAVELENGTH = 11
+const LAKE_BED_RAG_SEED = 23.9
+//
+// Optional undercut right bank (cfg.bankHollow px): from LAKE_HOLLOW_FROM_U
+// along the bed the right wall is a curve that leans under the bank — at
+// depth d it stands where the plain wall would plus bankHollow ×
+// sin(π d / its full depth) — so the water runs on under an overhang of
+// soil (its ceiling the wall's upper part, its bed the lower part), as by
+// the cave lake's banks. Sampled every LAKE_HOLLOW_STEP px of depth; the
+// ceiling gets a dark soil edge LAKE_HOLLOW_EDGE_PX wide.
+//
+const LAKE_HOLLOW_FROM_U = 0.84
+const LAKE_HOLLOW_STEP = 0.25
+const LAKE_HOLLOW_EDGE_PX = 2
 
 /**
  * Makes the lake (its water, its bed layer baked once per k and sprite
@@ -238,8 +291,8 @@ const LAKE_BANK_JAG_STEP_INDEX = 23
  * @param {Array<{t: number, depth: number, canvas: HTMLCanvasElement, w: number, h: number}>} [cfg.bedStones] -
  *   Pictured stones lying on the bed instead of the drawn boulders: where along the open water
  *   (0..1), how far down the bed face (0 = far rim, 1 = front edge), picture and world size
- * @param {number} [cfg.bankJag=0] - How ragged the right bank's edge is (px)
  * @param {{water: string, paint: Object}} [cfg.palette] - Water colours (fill and CFG waterPaint-shaped paint); default the forest lake's
+ * @param {number} [cfg.bankHollow=0] - How far the water runs on under the right bank (px; 0: a plain sloped bank)
  * @returns {Object} Lake inst: geometry (canvas-local frame at x1 / originY) plus algae
  */
 export function create(cfg) {
@@ -389,6 +442,16 @@ export function drawFill(k, lake, opacity = 1) {
 }
 
 /**
+ * World X where a lake made with cfg would end its open water at the right
+ * bank, before it is made (what stands on the ground keeps right of it).
+ * @param {Object} cfg - As for create (x1, x2Core, surfaceY, floorY, spriteKey, waterStartX)
+ * @returns {number}
+ */
+export function openWaterEndXFor(cfg) {
+  return openWaterEndX(lakeGeometry(cfg))
+}
+
+/**
  * Lake bottom (canvas-local Y) at canvas-local X.
  * @param {Object} lake - Lake inst
  * @param {number} localX - Canvas-local X
@@ -398,70 +461,16 @@ export function lakeBottomLocalY(lake, localX) {
   return bottomLocalY(lake, localX)
 }
 
-
 /**
- * Canvas-local Y of the bed's front line (sand / earth seam) under a lake —
- * the floor reference the bed bake and shore rocks sit on.
+ * The far rim of the lake's floor (canvas-local Y) at canvas-local X: the
+ * top line of its sand, behind which what sinks into the bed goes out of
+ * sight.
  * @param {Object} lake - Lake inst
+ * @param {number} localX - Canvas-local X
  * @returns {number}
  */
-function bedFloorLocalY(lake) {
-  return lake.topMargin + lake.floorY - lake.surfaceY + LAKE_BED_FLOOR_OVERLAP_PX
-}
-
-/**
- * World Y of the bed front line at a world X, or just under the ground line
- * outside the lake's bake span.
- * @param {Object} lake - Lake inst
- * @param {number} worldX - World X
- * @returns {number}
- */
-export function bedWorldY(lake, worldX) {
-  const localX = worldX - lake.x1
-  if (localX < 0 || localX > lake.bakeSpan) return lake.floorY + LAKE_BED_FLOOR_OVERLAP_PX
-  return lake.originY + bedSeamLocalY(lake, localX, bedFloorLocalY(lake))
-}
-
-/**
- * Clips a canvas (placed at world x0 / y0) to everything above the lake bed,
- * so shore rocks sunk into the lake stop at the bed.
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {Object} lake - Lake inst
- * @param {number} x0 - World X of the canvas
- * @param {number} y0 - World Y of the canvas
- * @param {number} width - Canvas width
- * @param {number} height - Canvas height
- */
-export function clipToBed(ctx, lake, x0, y0, width, height) {
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(width, 0)
-  for (let x = width; x >= 0; x -= LAKE_SHORE_ROCK_CLIP_STEP_PX) {
-    ctx.lineTo(x, Math.min(height, bedWorldY(lake, x0 + x) - y0))
-  }
-  ctx.lineTo(0, Math.min(height, bedWorldY(lake, x0) - y0))
-  ctx.closePath()
-  ctx.clip()
-}
-
-/**
- * Water colour over the drawn pixels below the water line, deepening toward
- * the bed (source-atop keeps the silhouette and stays opaque).
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {number} width - Canvas width
- * @param {number} height - Canvas height
- * @param {number} waterY - Canvas Y of the water line
- * @param {{water: string, paint: Object}} [palette] - Water colours (default: the forest lake's)
- */
-export function tintUnderwater(ctx, width, height, waterY, palette = DEFAULT_PALETTE) {
-  if (waterY >= height) return
-  const tint = ctx.createLinearGradient(0, waterY, 0, height)
-  tint.addColorStop(0, hexWithAlpha(palette.water, LAKE_SHORE_ROCK_TINT_TOP_ALPHA))
-  tint.addColorStop(1, hexWithAlpha(palette.paint.deep, LAKE_SHORE_ROCK_TINT_DEEP_ALPHA))
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.fillStyle = tint
-  ctx.fillRect(0, waterY, width, height - waterY)
-  ctx.globalCompositeOperation = 'source-over'
+export function lakeBedRimLocalY(lake, localX) {
+  return lakeBedTopLocalY(lake, localX)
 }
 
 /**
@@ -475,56 +484,102 @@ function hexWithAlpha(hex, alpha) {
 }
 
 //
-// The lake's frame (canvas-local at x1 / originY, as the bed's bake and
-// the shore rocks measure it): its spans, the island's shore, sprite
+// The lake's frame (canvas-local at x1 / originY, as the bed's bake
+// measures it): its spans, the island's shore, sprite
 // names and colours.
 //
 function lakeGeometry(cfg) {
   const { x1, x2Core, surfaceY, floorY, spriteKey } = cfg
   const coreSpan = x2Core - x1
   const bakeSpan = coreSpan + LAKE_SHORE_EXTEND_PX
-  const canvasW = Math.ceil(bakeSpan)
   const topMargin = LAKE_TOP_MARGIN_PX
   const canvasH = Math.ceil(LAKE_BED_MAX_DEPTH + topMargin) + 2
   const originY = surfaceY - topMargin
   const islandShoreLocalX = (cfg.waterStartX ?? x1) - x1
   const bedSprite = `${spriteKey}-lake-bed-v${LAKE_BAKE_GEOMETRY_VERSION}`
-  return { x1, x2Core, surfaceY, floorY, originY, canvasW, canvasH, bakeSpan, coreSpan, topMargin, islandShoreLocalX, bedSprite, bankJag: cfg.bankJag ?? 0, pal: cfg.palette ?? DEFAULT_PALETTE }
+  const lake = { x1, x2Core, surfaceY, floorY, originY, canvasW: 0, canvasH, bakeSpan, spanX: bakeSpan, coreSpan, topMargin, islandShoreLocalX, bedSprite, hollow: null, pal: cfg.palette ?? DEFAULT_PALETTE }
+  cfg.bankHollow && (lake.hollow = buildHollow(lake, cfg.bankHollow))
+  lake.spanX = lake.hollow ? lake.hollow.x2 : bakeSpan
+  lake.canvasW = Math.ceil(lake.spanX) + 1
+  return lake
+}
+//
+// The undercut right bank: per column from where the wall starts (x0) to
+// the back of the hollow (x2), the water's ceiling and bed depths, found by
+// walking down the leaning wall.
+//
+function buildHollow(lake, reach) {
+  const x0 = lake.islandShoreLocalX + LAKE_HOLLOW_FROM_U * (lake.bakeSpan - lake.islandShoreLocalX)
+  const depth = bottomLocalY(lake, x0, false) - lake.topMargin
+  const wall = { x0, x1: lake.bakeSpan, depth, reach }
+  const first = Math.floor(x0)
+  let last = first
+  for (let d = 0; d <= depth; d += LAKE_HOLLOW_STEP) last = Math.max(last, Math.floor(hollowWallX(wall, d)))
+  const ceil = new Float32Array(last - first + 1).fill(Infinity)
+  const bed = new Float32Array(last - first + 1).fill(-Infinity)
+  for (let d = 0; d <= depth; d += LAKE_HOLLOW_STEP) {
+    const reachX = Math.floor(hollowWallX(wall, d))
+    for (let x = first; x <= reachX; x++) {
+      ceil[x - first] = Math.min(ceil[x - first], d)
+      bed[x - first] = Math.max(bed[x - first], d)
+    }
+  }
+  return { x0, first, x2: last + 1, ceil, bed }
+}
+//
+// Where the undercut bank's wall stands at a depth: the plain wall from its
+// foot (x0, full depth) up to the surface's end (x1), leaned out under the
+// bank by reach at mid-depth.
+//
+function hollowWallX(wall, d) {
+  return wall.x0 + (1 - d / wall.depth) * (wall.x1 - wall.x0) + wall.reach * Math.sin(Math.PI * d / wall.depth)
+}
+//
+// The water's top at a canvas-local X: the surface, or under the undercut
+// bank its soil ceiling.
+//
+function ceilLocalY(lake, localX) {
+  const h = lake.hollow
+  if (!h || localX <= lake.bakeSpan || localX >= h.x2) return lake.topMargin
+  return lake.topMargin + h.ceil[Math.floor(localX) - h.first]
 }
 //
 // The water's columns for water.js: every world px from the island's shore
-// to the end of the shore bake, from the surface down to the bed.
+// to the end of the shore bake (and on under the undercut bank), from the
+// surface (or the bank's soil ceiling) down to the bed.
 //
 function waterColumns(lake) {
   const cols = []
-  for (let localX = Math.ceil(lake.islandShoreLocalX); localX < lake.bakeSpan; localX++) {
-    cols.push({ x: lake.x1 + localX, top: lake.surfaceY, y: lake.originY + bottomLocalY(lake, localX) })
+  for (let localX = Math.ceil(lake.islandShoreLocalX); localX < lake.spanX; localX++) {
+    cols.push({ x: lake.x1 + localX, top: lake.originY + ceilLocalY(lake, localX), y: lake.originY + bottomLocalY(lake, localX) })
   }
   return cols
 }
 //
+// World X where the open water ends at the right bank (its last column
+// deeper than the surface).
+//
+function openWaterEndX(lake) {
+  let localX = Math.floor(lake.bakeSpan) - 1
+  while (localX > 0 && bottomLocalY(lake, localX) <= lake.topMargin) localX--
+  return lake.x1 + localX + 1
+}
+//
 // Lake bottom (canvas-local Y) at canvas-local X: zero depth at the island
 // shore and at the end of the shore bake, the skewed, uneven parabola in
-// between (never deeper than LAKE_BED_MAX_DEPTH).
+// between (never deeper than LAKE_BED_MAX_DEPTH); its fine lumps left out
+// when not ragged (what the floor face's far rim follows).
 //
-function bottomLocalY(lake, localX) {
+function bottomLocalY(lake, localX, ragged = true) {
+  const h = lake.hollow
+  if (h && localX >= h.x0) return localX >= h.x2 ? lake.topMargin : lake.topMargin + h.bed[Math.floor(localX) - h.first]
   const u = (localX - lake.islandShoreLocalX) / (lake.bakeSpan - lake.islandShoreLocalX)
   if (u <= 0 || u >= 1) return lake.topMargin
   const shape = lakeBedProfileAt(u)
   const hump = SoilSeam.seamValueNoise(localX / LAKE_BED_HUMP_WAVELENGTH, LAKE_BED_HUMP_SEED) * LAKE_BED_HUMP_PX
-  const depth = (LAKE_BED_MAX_DEPTH + hump) * shape + bankJagAt(lake, localX, u)
+  const rag = ragged ? SoilSeam.seamValueNoise(localX / LAKE_BED_RAG_WAVELENGTH, LAKE_BED_RAG_SEED) * LAKE_BED_RAG_PX : 0
+  const depth = (LAKE_BED_MAX_DEPTH + hump + rag) * shape
   return lake.topMargin + Math.min(LAKE_BED_MAX_DEPTH, Math.max(0, depth))
-}
-//
-// Ragged offset of the right bank's bottom line at canvas-local X (0 off
-// the bank or without cfg.bankJag).
-//
-function bankJagAt(lake, localX, u) {
-  if (!lake.bankJag || u <= LAKE_BANK_JAG_FROM_U) return 0
-  const ramp = Math.min(1, (u - LAKE_BANK_JAG_FROM_U) / LAKE_BANK_JAG_RAMP_U)
-  const wave = SoilSeam.seamValueNoise(localX / LAKE_BANK_JAG_WAVE, LAKE_BANK_JAG_SEED)
-  const step = SoilSeam.seamJag(lake.x1 + localX, LAKE_BANK_JAG_STEP_INDEX)
-  return (wave * (1 - LAKE_BANK_JAG_STEP_SHARE) + step * LAKE_BANK_JAG_STEP_SHARE) * lake.bankJag * ramp
 }
 //
 // Depth fraction at u: smoothstep between neighbouring profile keypoints.
@@ -541,21 +596,37 @@ function lakeBedProfileAt(u) {
 // Top of the sand that settled on the bed (canvas-local Y). Sand only builds
 // up where the bed is flat and deep enough — ledges and the floor — and
 // thins to nothing on the terrace steps and the steep banks, so those read
-// as bare earth.
+// as bare earth. It follows the bottom without its fine lumps: they would
+// read as steep slopes and spike the rim.
 //
 function lakeBedTopLocalY(lake, localX) {
-  const bottom = bottomLocalY(lake, localX)
-  const slope = Math.abs(bottomLocalY(lake, localX + LAKE_BED_SLOPE_PROBE_PX) - bottomLocalY(lake, localX - LAKE_BED_SLOPE_PROBE_PX)) / (LAKE_BED_SLOPE_PROBE_PX * 2)
+  const bottom = bottomLocalY(lake, localX, false)
+  let rise = 0
+  for (let i = -LAKE_SAND_RISE_SAMPLES; i <= LAKE_SAND_RISE_SAMPLES; i++) rise += sandRiseAt(lake, localX + i * LAKE_SAND_RISE_STEP_PX)
+  rise /= LAKE_SAND_RISE_SAMPLES * 2 + 1
+  return Math.max(lake.topMargin + LAKE_OPAQUE_SKIN_PX, ceilLocalY(lake, localX) + 1, bottom - rise)
+}
+//
+// How high the sand rises over the bottom at one column (none on steep
+// ground or in the shallows).
+//
+function sandRiseAt(lake, localX) {
+  const bottom = bottomLocalY(lake, localX, false)
+  const slope = Math.abs(bottomLocalY(lake, localX + LAKE_BED_SLOPE_PROBE_PX, false) - bottomLocalY(lake, localX - LAKE_BED_SLOPE_PROBE_PX, false)) / (LAKE_BED_SLOPE_PROBE_PX * 2)
   const flat01 = Math.max(0, 1 - slope / LAKE_BED_SAND_MAX_SLOPE)
   const depth01 = Math.min(1, (bottom - lake.topMargin) / LAKE_BED_BACK_FULL_DEPTH_PX)
   const wobble = SoilSeam.seamValueNoise(localX / LAKE_BED_BACK_WOBBLE_WAVELENGTH, LAKE_BED_BACK_WOBBLE_SEED) * LAKE_BED_BACK_WOBBLE_PX
-  const rise = (LAKE_BED_BACK_RISE_PX + wobble) * depth01 * flat01 * flat01
-  return Math.max(lake.topMargin + LAKE_OPAQUE_SKIN_PX, bottom - rise)
+  const u = (localX - lake.islandShoreLocalX) / (lake.bakeSpan - lake.islandShoreLocalX)
+  const wallRamp = Math.min(1, Math.max(0, (u - LAKE_SAND_WALL_FROM_U) / LAKE_SAND_WALL_RAMP_U))
+  const wallFade = Math.min(1, (bottom - lake.topMargin) / LAKE_SAND_WALL_FADE_PX)
+  return Math.max((LAKE_BED_BACK_RISE_PX + wobble) * depth01 * flat01 * flat01, LAKE_SAND_WALL_PX * wallRamp * wallFade)
 }
 //
 // Static layer seen through the water: darkening murk, the earthy floor face
-// with a lit far rim, then pebbles, the sunken snag and faceted boulders
-// (clipped to the bottom line), and a dark front cut along the bottom.
+// with a lit far rim, its volume (shaded from far to near, the back wall's
+// foot in shadow), then pebbles, the sunken snag and faceted boulders with
+// their shadows (clipped to the bottom line), and a dark front cut along
+// the bottom.
 //
 function bakeLakeBedSprite(k, lake) {
   if (k.getSprite(lake.bedSprite)) return
@@ -565,34 +636,28 @@ function bakeLakeBedSprite(k, lake) {
   canvas.height = lake.canvasH
   const ctx = canvas.getContext('2d')
   const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const step = lake.bakeSpan / LAKE_BED_SEGMENTS
+  const step = lake.spanX / LAKE_BED_SEGMENTS
   const floorY = lake.topMargin + lake.floorY - lake.surfaceY + LAKE_BED_FLOOR_OVERLAP_PX
-  ctx.beginPath()
-  ctx.moveTo(0, murkTop)
-  ctx.lineTo(lake.bakeSpan, murkTop)
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) {
-    const x = i * step
-    ctx.lineTo(x, Math.max(murkTop, bottomLocalY(lake, x)))
-  }
-  ctx.closePath()
+  const murkPath = new Path2D()
+  murkPath.moveTo(0, murkTop)
+  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) murkPath.lineTo(i * step, Math.max(murkTop, ceilLocalY(lake, i * step)))
+  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) murkPath.lineTo(i * step, Math.max(murkTop, bottomLocalY(lake, i * step)))
+  murkPath.closePath()
   const murk = ctx.createLinearGradient(0, murkTop, 0, lake.canvasH)
   murk.addColorStop(0, colors.murkTop)
   murk.addColorStop(1, colors.murkDeep)
   ctx.fillStyle = murk
-  ctx.fill()
-  const murkPath = new Path2D()
-  murkPath.moveTo(0, murkTop)
-  murkPath.lineTo(lake.bakeSpan, murkTop)
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) murkPath.lineTo(i * step, Math.max(murkTop, bottomLocalY(lake, i * step)))
-  murkPath.closePath()
+  ctx.fill(murkPath)
   paintLakeBedFace(ctx, lake, step, floorY, colors)
   ctx.save()
   ctx.clip(murkPath)
+  paintLakeBedVolume(ctx, lake, colors)
   paintLakeBedPebbles(ctx, lake, colors)
   paintLakeBedSnag(ctx, lake, colors)
   lake.bedStones ? paintLakeBedStones(ctx, lake) : paintLakeBedBoulders(ctx, lake, colors)
   ctx.restore()
   paintLakeBedFrontEdge(ctx, lake, step, floorY, colors)
+  lake.hollow && paintHollowCeiling(ctx, lake, colors)
   applyForestGameplaySharpBake(canvas, LAKE_BED_GRAIN_SEED)
   k.loadSprite(lake.bedSprite, canvas)
   canvas.width = 0
@@ -601,7 +666,7 @@ function bakeLakeBedSprite(k, lake) {
 //
 // Earth fill from the bottom down to just under the ground line, so the
 // shallow shore ends never leave a gap above the earth band; then the sand
-// layer with dark gravel specks and a lit top edge.
+// layer with its light and dark grains.
 //
 function paintLakeBedFace(ctx, lake, step, floorY, colors) {
   ctx.beginPath()
@@ -618,24 +683,107 @@ function paintLakeBedFace(ctx, lake, step, floorY, colors) {
   ctx.closePath()
   ctx.fillStyle = colors.bed
   ctx.fill()
-  const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
+  ctx.save()
+  ctx.clip()
+  paintSandBlotches(ctx, lake, colors)
+  ctx.restore()
   const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 5)
-  ctx.fillStyle = hexWithAlpha(colors.bedGravel, LAKE_BED_GRAVEL_ALPHA)
-  for (let i = 0; i < LAKE_BED_GRAVEL_COUNT; i++) {
-    const x = x1 + rng() * (lake.bakeSpan - x1)
+  const light = hexWithAlpha(colors.sandLight, LAKE_SAND_GRAIN_ALPHA)
+  const dark = hexWithAlpha(colors.sandDark, LAKE_SAND_GRAIN_ALPHA)
+  for (let i = 0; i < LAKE_SAND_GRAINS; i++) {
+    const x = Math.floor(rng() * lake.spanX)
     const top = lakeBedTopLocalY(lake, x)
     const bottom = bottomLocalY(lake, x)
-    const r = LAKE_BED_GRAVEL_R_MIN + rng() * LAKE_BED_GRAVEL_R_RANGE
-    if (bottom - top < r * 2) continue
+    const y = Math.floor(top + (bottom - top) * rng())
+    if (bottom - top < 1) continue
+    ctx.fillStyle = i % 2 ? light : dark
+    ctx.fillRect(x, y, 1 + Math.floor(rng() * LAKE_SAND_GRAIN_MAX), 1)
+  }
+}
+//
+// Soft patches of lighter and darker sand over the floor face.
+//
+function paintSandBlotches(ctx, lake, colors) {
+  const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 9)
+  const light = hexWithAlpha(colors.sandLight, LAKE_SAND_BLOTCH_ALPHA)
+  const dark = hexWithAlpha(colors.sandDark, LAKE_SAND_BLOTCH_ALPHA)
+  for (let i = 0; i < LAKE_SAND_BLOTCHES; i++) {
+    const x = rng() * lake.spanX
+    const top = lakeBedTopLocalY(lake, x)
+    const y = top + (bottomLocalY(lake, x) - top) * rng()
+    const r = LAKE_SAND_BLOTCH_R + rng() * LAKE_SAND_BLOTCH_R_RANGE
+    ctx.fillStyle = i % 2 ? light : dark
     ctx.beginPath()
-    ctx.ellipse(x, top + r + (bottom - top - r * 2) * rng(), r * LAKE_BED_GRAVEL_STRETCH, r, 0, 0, Math.PI * 2)
+    ctx.ellipse(x, y, r, r * LAKE_SAND_BLOTCH_FLAT, 0, 0, Math.PI * 2)
     ctx.fill()
   }
+}
+//
+// The floor face shaded column by column from its far rim (dark, cool) to
+// its near edge (lit), with sand ripples across it crowding toward the far
+// rim (it recedes into the screen), and the back wall's foot in shadow
+// above the rim.
+//
+function paintLakeBedVolume(ctx, lake, colors) {
+  const far = hexWithAlpha(colors.bedShadow, LAKE_FACE_FAR_ALPHA)
+  const clearShadow = hexWithAlpha(colors.bedShadow, 0)
+  const near = hexWithAlpha(colors.bedLight, LAKE_FACE_NEAR_ALPHA)
+  const foot = hexWithAlpha(colors.bedShadow, LAKE_WALL_FOOT_ALPHA)
+  const line = hexWithAlpha(colors.sandLight, LAKE_FACE_LINE_ALPHA)
+  const trough = hexWithAlpha(colors.sandDark, LAKE_FACE_LINE_ALPHA)
+  for (let x = 0; x < lake.spanX; x++) {
+    const top = lakeBedTopLocalY(lake, x)
+    const bottom = bottomLocalY(lake, x)
+    if (bottom - top < 1) continue
+    const face = ctx.createLinearGradient(0, top, 0, bottom)
+    face.addColorStop(0, far)
+    face.addColorStop(LAKE_FACE_MID, clearShadow)
+    face.addColorStop(1, near)
+    ctx.fillStyle = face
+    ctx.fillRect(x, top, 1, bottom - top)
+    const wall = ctx.createLinearGradient(0, top, 0, top - LAKE_WALL_FOOT_PX)
+    wall.addColorStop(0, foot)
+    wall.addColorStop(1, clearShadow)
+    ctx.fillStyle = wall
+    ctx.fillRect(x, top - LAKE_WALL_FOOT_PX, 1, LAKE_WALL_FOOT_PX)
+    for (let i = 1; i < LAKE_FACE_LINES; i++) {
+      const share = i / LAKE_FACE_LINES
+      const wave = Math.sin(x / LAKE_RIPPLE_WAVE + i) * LAKE_RIPPLE_AMP * share
+      const y = Math.round(top + (bottom - top) * share * share + wave)
+      ctx.fillStyle = line
+      ctx.fillRect(x, y, 1, 1)
+      ctx.fillStyle = trough
+      ctx.fillRect(x, y + 1, 1, 1)
+    }
+  }
+}
+//
+// A soft shadow on the floor under something of half-width r resting at
+// (x, y).
+//
+function paintCastShadow(ctx, x, y, r, colors) {
+  ctx.fillStyle = hexWithAlpha(colors.bedShadow, LAKE_CAST_ALPHA)
   ctx.beginPath()
-  ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  ctx.strokeStyle = colors.bedRim
-  ctx.lineWidth = LAKE_BED_RIM_PX
+  ctx.ellipse(x, y + r * LAKE_CAST_DROP * LAKE_CAST_FLAT, r, r * LAKE_CAST_FLAT, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+//
+// Size share of something on the floor face at a share of the way from its
+// far rim (0) to its near edge (1).
+//
+function perspectiveScale(near) {
+  return LAKE_FAR_SCALE + (1 - LAKE_FAR_SCALE) * near
+}
+//
+// The undercut bank's soil ceiling over the water: a dark soil edge.
+//
+function paintHollowCeiling(ctx, lake, colors) {
+  ctx.beginPath()
+  ctx.moveTo(lake.bakeSpan, lake.topMargin)
+  for (let x = Math.ceil(lake.bakeSpan); x < lake.hollow.x2; x++) ctx.lineTo(x, ceilLocalY(lake, x))
+  ctx.strokeStyle = colors.bedEdge
+  ctx.lineWidth = LAKE_HOLLOW_EDGE_PX
+  ctx.lineJoin = 'round'
   ctx.stroke()
 }
 //
@@ -651,26 +799,26 @@ function paintLakeBedFrontEdge(ctx, lake, step, floorY, colors) {
   ctx.stroke()
 }
 //
-// Sand / earth contact on the bed: same soft tongues and pixel grit as the
-// topsoil/subsoil seam in the ground band.
+// Sand / earth contact on the bed: the bottom line itself, smooth (never
+// above the ground line).
 //
 function bedSeamLocalY(lake, localX, floorY) {
-  const worldX = lake.x1 + localX
-  const base = bottomLocalY(lake, localX)
-  const jag = SoilSeam.seamFringeOffset(worldX, LAKE_BED_SEAM_INDEX)
-  return Math.max(floorY, base + jag)
+  return Math.max(floorY, bottomLocalY(lake, localX))
 }
 //
-// Pebbles scattered across the floor face, east of the island.
+// Pebbles scattered across the floor face, east of the island (smaller
+// toward its far rim).
 //
 function paintLakeBedPebbles(ctx, lake, colors) {
   const x1 = lake.islandShoreLocalX + LAKE_ALGAE_SHORE_CLEAR_PX
   const rng = lakeBedBakeRng(LAKE_BED_GRAIN_SEED + 17)
   for (let i = 0; i < LAKE_BED_PEBBLE_COUNT; i++) {
     const x = x1 + rng() * (lake.coreSpan - x1)
-    const r = LAKE_BED_PEBBLE_R_MIN + rng() * LAKE_BED_PEBBLE_R_RANGE
     const top = lakeBedTopLocalY(lake, x)
-    const y = top + (bottomLocalY(lake, x) - top) * rng()
+    const near = rng()
+    const y = top + (bottomLocalY(lake, x) - top) * near
+    const r = (LAKE_BED_PEBBLE_R_MIN + rng() * LAKE_BED_PEBBLE_R_RANGE) * perspectiveScale(near)
+    paintCastShadow(ctx, x, y + r * LAKE_BED_PEBBLE_SQUASH, r, colors)
     ctx.fillStyle = colors.pebble
     ctx.beginPath()
     ctx.ellipse(x, y, r, r * LAKE_BED_PEBBLE_SQUASH, 0, 0, Math.PI * 2)
@@ -761,7 +909,11 @@ function paintLakeBedStones(ctx, lake) {
     const cx = lakeWaterLocalX(lake, stone.t)
     const top = lakeBedTopLocalY(lake, cx)
     const baseY = top + (bottomLocalY(lake, cx) - top) * stone.depth
-    ctx.drawImage(stone.canvas, cx - stone.w / 2, baseY - stone.h * (1 - LAKE_BED_STONE_SINK), stone.w, stone.h)
+    const scale = perspectiveScale(stone.depth)
+    const w = stone.w * scale
+    const h = stone.h * scale
+    paintCastShadow(ctx, cx, baseY, w / 2, lake.pal.paint)
+    ctx.drawImage(stone.canvas, cx - w / 2, baseY - h * (1 - LAKE_BED_STONE_SINK), w, h)
   }
 }
 //

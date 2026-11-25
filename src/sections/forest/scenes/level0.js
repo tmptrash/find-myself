@@ -86,7 +86,7 @@ import { loadForestPlants } from '../utils/forest-plants.js'
 import { loadForestMushrooms, drawForestMushroom, forestMushroomBounds } from '../utils/forest-mushrooms.js'
 import * as Clouds from '../utils/forest-clouds.js'
 import { BUSH_SHEET, loadForestPictureBushes, drawForestPictureBushes } from '../utils/forest-picture-bushes.js'
-import { loadForestStones, forestBuriedStones, forestGroundStones, forestBareStones, forestGroundStoneScale, bakeForestGroundStone, forestLakeBedStones, bakeForestLakeStonePile } from '../utils/forest-stones.js'
+import { loadForestStones, forestBuriedStones, forestGroundStones, forestBareStones, forestGroundStoneScale, bakeForestGroundStone, forestLakeBedStones } from '../utils/forest-stones.js'
 import * as ForestFootParticles from '../utils/forest-foot-particles.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as ChainBuoy from '../utils/forest-chain-buoy.js'
@@ -96,6 +96,7 @@ import * as BombTree from '../utils/forest-bomb-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import * as Lake from '../../../components/lake.js'
+import * as DeathFireflies from '../../../components/death-fireflies.js'
 import * as CaveScene from '../../cave/utils/cave-scene.js'
 import * as Underground from '../utils/forest-underground.js'
 import * as BushStrip from '../utils/forest-bush-strip.js'
@@ -257,7 +258,7 @@ const WATER_FLOWER_SPILT_Z = CFG.visual.zIndex.platforms - LEFT_TREE_PLANTS_Z_BE
 //
 // The apple bug's burrow sits on the ground line between the lake and the
 // left tree's trunk; its picture draws over the tree, just under the water
-// flower (the bug itself at BUG_Z, by the shore's stone pile). Its tunnel
+// flower (the bug itself at BUG_Z, by the shore). Its tunnel
 // lies under a layer of soil below the burrow and draws over the tree's
 // roots and under the burrow's picture. Its ground stays free of plants
 // and stones.
@@ -362,8 +363,13 @@ const HERO_TRAMPOLINE_SPAWN_CLEARANCE = 20
 //
 // Touching the predator or falling on the spikes is fatal — same
 // disintegration flow as any other level's death, then in-level respawn.
+// Killed on land the hero breaks into DEATH_FIREFLY_COUNT white fireflies
+// where he was (components/death-fireflies.js, drawn at DEATH_FIREFLY_Z
+// over the world), lining up along his outline first; drowned, he just
+// sinks out of sight.
 //
-const FOREST_TOUCH_DEATH_PARTICLE_COUNT = 34
+const DEATH_FIREFLY_COUNT = 34
+const DEATH_FIREFLY_Z = CFG.visual.zIndex.platforms + 3
 const HERO_TOUCH_DEATH_RESPAWN_SIDE_OFFSET = 80
 const FOREST_TOUCH_DEATH_RESPAWN_DELAY = 2.48
 //
@@ -754,7 +760,6 @@ const KEY_REVEALED_GROUND_DECOR = 'forest.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'forest.revealedGroundDecorRight'
 const KEY_REVEALED_GROUND_DECOR_LEFT = 'forest.revealedGroundDecorLeft'
 const KEY_GROUND_RIGHT_STRIP_MAX = 'forest.groundRightStripMax'
-const KEY_LEFT_SHORE_ROCK = 'forest.leftShoreRock'
 const KEY_LIFE_SHOWN = 'forest.lifeShown'
 const KEY_FLOWER_SEEN = 'forest.flowerSeen'
 const KEY_INTRO_SHOWN = 'forest.introShown'
@@ -802,9 +807,11 @@ const CAMERA_INTRO_BUBBLE_DELAY = 1
 const FOREST_PROXIMITY_SOUND_RADIUS = 120
 const FOREST_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 //
-// Drowning — land on the lake floor, then sink under the fill.
+// Drowning — land on the lake floor, then sink under the fill. The water
+// line sits a little under the ground line, so the water never stands
+// above the banks.
 //
-const WATER_SURFACE_Y = FLOOR_Y - 8
+const WATER_SURFACE_Y = FLOOR_Y + 2
 const PREDATOR_GROUND_CLEARANCE = 0
 const PREDATOR_STICK_EXTRA_LIFT = 4
 //
@@ -815,8 +822,23 @@ const DROWN_DESCEND_SPEED = 340
 // Slow sink — the hero stays behind the lake fill and moves down until hidden.
 //
 const DROWN_UNIFIED_SINK_SPEED = 48
-const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
 const DROWN_RESTART_DELAY = 1.1
+//
+// Where the hero goes under: he sinks behind the lake floor's far rim
+// until his middle is DROWN_UNDER_RIM px under it (all of him out of sight
+// behind the sand; he shows only over that rim, see
+// drawForestDrownHeroUnderwater, in strips DROWN_MASK_STEP px wide), and
+// falling in where the water is shallow (under DROWN_DEEP_ENOUGH px down
+// to the bed) he drifts while sinking, within DROWN_MAX_DRIFT px, to the
+// nearest spot that deep (else the deepest one in reach), looked for
+// every DROWN_DRIFT_STEP px.
+//
+const DROWN_DEEP_ENOUGH = 78
+const DROWN_MAX_DRIFT = 110
+const DROWN_DRIFT_STEP = 2
+const DROWN_UNDER_RIM = 26
+const DROWN_MASK_STEP = 2
+const HALF = 0.5
 const WATER_STEPS_VOLUME = 0.42
 //
 // The cave art's bake inputs (cave-scene.js releaseBakeInputs) are let go
@@ -1061,13 +1083,14 @@ const WATER_RIGHT_TRIM = 10
 //
 const LAKE_SHORE_ANCHOR_FROM_TRUNK = 384
 //
-// The lake's right bank edge is ragged by this much (components/lake.js).
-//
-const LAKE_BANK_JAG_PX = 22
-//
 // The open water reaches this far right of that anchor (before the trim).
 //
 const LAKE_WATER_PAST_ANCHOR = 110
+//
+// The lake's right bank is undercut like the cave lake's: its water runs on
+// this far under an overhang of soil (components/lake.js bankHollow).
+//
+const LAKE_BANK_HOLLOW_PX = 56
 const LAKE_Z = 12
 //
 // Lake layers (see components/lake.js): the bed and the algae under the water
@@ -1101,15 +1124,10 @@ const FOREST_DROWN_HERO_UNDERWATER_Z = LAKE_Z - 0.1
 //
 const FOREST_BOOTSTRAP_CURTAIN_Z = CFG.visual.zIndex.ui + 50
 //
-// The stone pile on the lake's tree-side bank draws above the front floor
-// decor and the water fill.
+// The apple bug draws over the front floor decor and the water fill (it
+// hunts by the lake).
 //
-const SHORE_END_ROCK_Z = GROUND_FRONT_Z + 1
-//
-// The apple bug draws in front of that pile (it hunts by the lake right in
-// front of it).
-//
-const BUG_Z = SHORE_END_ROCK_Z + 0.5
+const BUG_Z = GROUND_FRONT_Z + 1.5
 const GRASS_Z = BUG_Z + 0.2
 //
 // The hero counts as moving (drop hint's move time, gaze glance) once he
@@ -1543,8 +1561,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     branchPlatBundle.plats.forEach(plat => tagWoodPlatform(plat, sound, heroInst))
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
-    const lakeShoreAnchorX = LEFT_TREE_FOOT.x - LAKE_SHORE_ANCHOR_FROM_TRUNK
-    const waterX2 = lakeShoreAnchorX + LAKE_WATER_PAST_ANCHOR - WATER_RIGHT_TRIM
+    const waterX2 = forestLakeWaterX2()
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1,
       mushroom: TrampMushroom.TRAMP_MUSHROOM.RIGHT
@@ -1556,7 +1573,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     if (await forestBootstrapPause(bootstrap, 44, session)) return
     const lakeX1 = LEFT_MARGIN
-    const lakeX2 = waterX2
+    const lakeX2 = forestLakeOpenEndX()
     //
     // Rocks and mushrooms bake one or two canvases per instance (dozens of
     // decor pieces total). Registering them all into one shared atlas (built
@@ -1572,7 +1589,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     //
     const groundLine = ForestGroundLine.create(HERO_FLOOR_Y)
     const rockObjs = createForestRocks(k, decorAtlas, computeForestPredatorPatrolBounds(lakeX2), forestAnchorFruitGroundClearSpan(treeFruitAnchorCfg), groundLine)
-    const mushObjs = createForestMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas, groundLine)
+    const mushObjs = createForestMushrooms(k, lakeX1, lakeX2, trampX, branchTrampX, zones, decorAtlas, groundLine)
     decorAtlas.build(k)
     if (await forestBootstrapPause(bootstrap, 54, session)) return
     const predatorPatrolBounds = computeForestPredatorPatrolBounds(lakeX2)
@@ -1613,7 +1630,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     }
     if (await forestBootstrapPause(bootstrap, 62, session)) return
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
-    createLakeShoreRockLayer(k, zones)
     if (await forestBootstrapPause(bootstrap, 72, session)) return
     if (await forestBootstrapPause(bootstrap, 74, session)) return
     initTouchInput(k)
@@ -1709,6 +1725,10 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       deathHandled: false,
       wasOnStartBranch: false,
       drownFromStartBranch: false,
+      drownFromX: null,
+      drownToX: null,
+      drownSinkFromY: null,
+      drownSinkEndY: null,
       levelIndicator,
       goldRgb,
       //
@@ -1818,6 +1838,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     applyForestCaveSpawnResume(inst, heroSpawnX, heroSpawnY, wasInCaveSpawn)
     setupForestPitCaveTrampoline(inst)
     inst.footParticles = ForestFootParticles.create({ k })
+    inst.deathFlies = DeathFireflies.create({ k, z: DEATH_FIREFLY_Z })
     inst.fps = FpsCounter.create({
       k,
       topY: FPS_HUD_TOP_Y,
@@ -1829,7 +1850,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     FpsCounter.pinScreenFixed(inst.fps)
     FpsCounter.layoutAtScreenLeftX(inst.fps, isTouchDevice() ? hudLeftWorldX(k) : FPS_HUD_LEFT_X)
-    ForestFootParticles.prewarmLeafBurst(inst.footParticles, forestTouchDeathLeafPalette())
     inst.flowerGrab = FlowerGrab.create({
       k,
       flower: inst.eyeFlower,
@@ -1976,7 +1996,6 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     })
     if (await forestBootstrapPause(bootstrap, 95, session)) return
     if (forestInitStale(session)) return
-    destroyForestBootstrapCurtain(bootstrapCurtain)
     ensureForestPitDrawLayer(inst)
     if (await forestBootstrapPause(bootstrap, 96, session)) return
     k.onDraw(() => onDraw(inst))
@@ -2031,6 +2050,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       }
     ])
     if (await forestBootstrapPause(bootstrap, 100, session)) return
+    //
+    // The whole level shows at once: the curtain goes only now that every
+    // layer, the level's draw and its update (the lake's water moves with
+    // it) have run under it.
+    //
+    destroyForestBootstrapCurtain(bootstrapCurtain)
     //
     // The run / jump buttons show once the whole level is built.
     //
@@ -2149,7 +2174,6 @@ function loadForestZones() {
     groundDecorRight: true,
     groundDecorLeft: true,
     groundRightStripMax: GROUND_RIGHT_STRIP_COUNT - 1,
-    leftShoreRock: true,
     branchTrampBounceLive: true,
     rightTrampRevealed: true,
     rightTrampBounceLive: true,
@@ -2851,6 +2875,7 @@ async function buildParallaxSprites(k, undergroundSpec, onStep) {
   const staticColorCtx = staticColor.getContext('2d')
   staticColorCtx.translate(0, -PAR_STATIC_WORLD_Y)
   renderCombinedGroundBand(staticColorCtx, groundEarthLayersColor(), undergroundSpec, Underground.undergroundStaticEarthTones())
+  cutEarthOverLake(staticColorCtx)
   applyForestLayerGradeToCanvas(staticColor, {
     ...FOREST_LAYER_GRADE.material,
     grain: EARTH_STATIC_BAKE_GRAIN,
@@ -3042,6 +3067,38 @@ function renderCombinedGroundBand(ctx, layers, undergroundSpec, ugEntry) {
   Underground.renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
   paintUndergroundDepthVignette(ctx, LEFT_MARGIN, FLOOR_Y, GAME_W, CAVE_BAND_H)
   topRgb && paintFlatEarthGroundSeal(ctx, topRgb, LEFT_MARGIN, FLOOR_Y, GAME_W)
+}
+//
+// Over the lake's open water (from the island's shore to where it ends at
+// the right bank) the earth band starts under the water's opaque skin,
+// not on the ground line: no strip of soil shows between the water and
+// what stands behind the lake, nor over a wave's trough.
+//
+function cutEarthOverLake(ctx) {
+  const x1 = EyeFlower.islandShoreWorldX(LEFT_MARGIN, WATER_SURFACE_Y)
+  ctx.clearRect(x1, FLOOR_Y, forestLakeOpenEndX() - x1, WATER_SURFACE_Y + Lake.LAKE_OPAQUE_SKIN_PX - FLOOR_Y)
+}
+//
+// Where the lake's open water ends at its right bank: the lake's right end
+// for everything on the level (the drowning band, what stands on the
+// ground, the crawler's strip) — the ground starts there.
+//
+function forestLakeOpenEndX() {
+  return Lake.openWaterEndXFor({
+    x1: LEFT_MARGIN,
+    x2Core: forestLakeWaterX2(),
+    surfaceY: WATER_SURFACE_Y,
+    floorY: FLOOR_Y,
+    spriteKey: LAKE_SPRITE_KEY,
+    waterStartX: EyeFlower.islandShoreWorldX(LEFT_MARGIN, WATER_SURFACE_Y)
+  })
+}
+//
+// The lake's water core ends this far right in the world (its shore bake
+// runs on past it).
+//
+function forestLakeWaterX2() {
+  return LEFT_TREE_FOOT.x - LAKE_SHORE_ANCHOR_FROM_TRUNK + LAKE_WATER_PAST_ANCHOR - WATER_RIGHT_TRIM
 }
 //
 // Flat strip flush with the walkable ground line (covers sub-pixel gaps).
@@ -4213,9 +4270,8 @@ function createWater(k, x1, x2Core, zones) {
     spriteKey: LAKE_SPRITE_KEY,
     waterStartX: EyeFlower.islandShoreWorldX(x1, WATER_SURFACE_Y),
     bedStones: forestLakeBedStones(),
-    bankJag: LAKE_BANK_JAG_PX
+    bankHollow: LAKE_BANK_HOLLOW_PX
   })
-  lake.stonePile = bakeForestLakeStonePile(k, lake, WATER_SURFACE_Y)
   lake.x2Bake = x1 + lake.bakeSpan
   zones._lake = lake
   k.add([
@@ -4255,20 +4311,6 @@ function isLakeLayerVisible(k, zones, lake) {
   return !!zones.water && isLakeFillInCameraView(k, zones._sceneRef, lake.x1, lake.x2Bake)
 }
 //
-// Draws lake cap rocks above the front floor decor and the water fill (sprites stay off-screen).
-//
-function createLakeShoreRockLayer(k, zones) {
-  return k.add([
-    k.z(SHORE_END_ROCK_Z),
-    {
-      draw() {
-        const sc = zones._sceneRef
-        sc && drawLakeShoreRocksWorld(sc)
-      }
-    }
-  ])
-}
-//
 // Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
 //
 function isLakeFillInCameraView(k, sc, x1, x2) {
@@ -4305,10 +4347,11 @@ function drawForestPitCaveHeroForeground(inst) {
   Hero.drawHero(hero)
 }
 //
-// Draws only the hero pixels above the lake surface (default sprite stays hidden).
+// Draws only the hero pixels above the lake surface (default sprite stays
+// hidden); once he has drowned he is gone (broken into fireflies).
 //
 function drawForestDrownHeroClipped(inst) {
-  if (!inst.forestDrownHeroClipLock) return
+  if (!inst.forestDrownHeroClipLock || inst.deathHandled) return
   const hero = inst.heroInst
   const char = hero.character
   if (!char?.pos) return
@@ -4359,29 +4402,36 @@ function drawForestDrownHeroClipped(inst) {
 //
 // Part of the drowning hero below the wave, under the water fill so it reads
 // through the tint (the part above is drawn by drawForestDrownHeroClipped),
-// and his legs whole, standing as in idle (they are lowest, so they go
-// under first).
+// with his legs standing as in idle. He sinks behind the lake's floor:
+// all of him is drawn only between the water line and the floor's far rim
+// (a stencil mask along that rim), so legs first he goes out of sight
+// behind the sand, never in front of it.
 //
 function drawForestDrownHeroUnderwater(inst) {
-  if (!inst.forestDrownHeroClipLock) return
+  if (!inst.forestDrownHeroClipLock || inst.deathHandled) return
   const char = inst.heroInst?.character
-  if (!char?.pos) return
+  if (!char?.pos || !inst.zones._lake) return
+  if (!inst.k.getSprite(`${inst.heroInst.spritePrefix || inst.heroInst.type}_closed`)) return
+  inst.drownDraws ??= { hero: () => drawDrownHeroUnderWave(inst), mask: () => drawDrownHeroMask(inst) }
+  inst.k.drawMasked(inst.drownDraws.hero, inst.drownDraws.mask)
+}
+//
+// The sinking hero from the water line down, whole: his legs behind and in
+// front of his body's part under the wave.
+//
+function drawDrownHeroUnderWave(inst) {
   const k = inst.k
-  const sprite = `${inst.heroInst.spritePrefix || inst.heroInst.type}_closed`
-  if (!k.getSprite(sprite)) return
-  const lake = inst.zones._lake
-  if (!lake) return
+  const char = inst.heroInst.character
   const fullH = Hero.HERO_BAKE_SPRITE_SIZE * (char.scale?.x ?? 1)
-  const topY = char.pos.y - fullH * 0.5
+  const topY = char.pos.y - fullH * HALF
   const surfaceY = Math.max(topY, lakeSurfaceWorldYAt(inst, char.pos.x))
-  const bottomY = Math.min(topY + fullH, lake.originY + Lake.lakeBottomLocalY(lake, char.pos.x - lake.x1))
-  const visibleH = bottomY - surfaceY
+  const visibleH = topY + fullH - surfaceY
   const legs = { x: char.pos.x, y: char.pos.y, groundY: char.pos.y + Hero.HERO_FEET_OFFSET_Y, opacity: char.opacity ?? 1 }
   inst.drownHeroLegs ??= Hero.createStandLegs(k)
   Hero.drawStandingHeroLegs(inst.drownHeroLegs, legs, false)
   visibleH > 0 && k.drawSprite({
-    sprite,
-    pos: k.vec2(char.pos.x, surfaceY + visibleH * 0.5),
+    sprite: `${inst.heroInst.spritePrefix || inst.heroInst.type}_closed`,
+    pos: k.vec2(char.pos.x, surfaceY + visibleH * HALF),
     anchor: 'center',
     width: fullH,
     height: visibleH,
@@ -4390,6 +4440,21 @@ function drawForestDrownHeroUnderwater(inst) {
     quad: { x: 0, y: (surfaceY - topY) / fullH, w: 1, h: visibleH / fullH }
   })
   Hero.drawStandingHeroLegs(inst.drownHeroLegs, legs, true)
+}
+//
+// Where the sinking hero shows: across his width, from over his head down
+// to the lake floor's far rim (in strips DROWN_MASK_STEP px wide, each down
+// to the rim there).
+//
+function drawDrownHeroMask(inst) {
+  const k = inst.k
+  const char = inst.heroInst.character
+  const half = Hero.HERO_BAKE_SPRITE_SIZE * HALF
+  const top = char.pos.y - half
+  for (let x = char.pos.x - half; x < char.pos.x + half; x += DROWN_MASK_STEP) {
+    const rim = forestLakeRimY(inst, x + DROWN_MASK_STEP * HALF)
+    rim > top && k.drawRect({ pos: k.vec2(x, top), width: DROWN_MASK_STEP, height: rim - top })
+  }
 }
 //
 // Detects which surface the hero stands on.
@@ -4969,21 +5034,6 @@ function drawForestPitMouthEarthGapFill(inst, k) {
   }
 }
 //
-// Paints the stone pile on the lake's tree-side bank when the water zone is
-// open (above the front floor decor and the water fill; it reaches down to the bed).
-//
-function drawLakeShoreRocksWorld(inst) {
-  const k = inst?.k
-  const pile = inst?.zones?._lake?.stonePile
-  if (!k || !inst.zones.water || !pile) return
-  const { left, right } = visibleWorldXRange(inst)
-  if (pile.x + pile.width < left || pile.x > right) return
-  const pos = pile._posScratch ?? (pile._posScratch = k.vec2(pile.x, pile.y))
-  pos.x = pile.x
-  pos.y = pile.y
-  k.drawSprite({ sprite: pile.name, pos, width: pile.width, height: pile.height })
-}
-//
 // Above the playfield (only on a screen taller than it): the void round a
 // playfield shown as a rounded window (otherwise the sky underlay shows
 // there) — sits below the HUD (z = ui - 1).
@@ -5458,6 +5508,7 @@ function applyDrownSinkPose(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos || inst.drownSinkY == null) return
+  inst.drownToX != null && (inst.drownSinkX = drownDriftX(inst))
   const sinkX = Math.round(inst.drownSinkX ?? char.pos.x)
   hero.drownSinkX = sinkX
   hero.drownSinkY = inst.drownSinkY
@@ -5472,6 +5523,49 @@ function applyDrownSinkPose(inst) {
   updateDrownHeroDrawLayer(inst, char)
   char.hidden = true
   char.opacity = 1
+}
+//
+// Where along the lake the sinking hero is: drifted from where he fell in
+// toward his sink spot as far as he has sunk.
+//
+function drownDriftX(inst) {
+  if (inst.drownSinkEndY == null) return inst.drownFromX
+  const span = inst.drownSinkEndY - inst.drownSinkFromY
+  const share = span > 0 ? Math.min(1, Math.max(0, (inst.drownSinkY - inst.drownSinkFromY) / span)) : 1
+  return inst.drownFromX + (inst.drownToX - inst.drownFromX) * share
+}
+//
+// The spot the hero sinks at: where he fell in if the water there takes
+// all of him, else the nearest spot within DROWN_MAX_DRIFT that does (or
+// the deepest one in reach).
+//
+function forestDrownSinkX(inst, x) {
+  const surfaceY = lakeSurfaceWorldYAt(inst, x)
+  let best = x
+  let bestDepth = forestLakeBedY(inst, x) - surfaceY
+  for (let d = 0; d <= DROWN_MAX_DRIFT && bestDepth < DROWN_DEEP_ENOUGH; d += DROWN_DRIFT_STEP) {
+    [x - d, x + d].forEach(cx => {
+      if (cx < inst.lakeX1 || cx > inst.lakeX2) return
+      const depth = forestLakeBedY(inst, cx) - surfaceY
+      depth > bestDepth && (best = cx, bestDepth = depth)
+    })
+  }
+  return best
+}
+//
+// World Y of the lake floor's far rim under a world X (the top of its
+// sand: what sinks goes out of sight behind it).
+//
+function forestLakeRimY(inst, x) {
+  const lake = inst.zones._lake
+  return lake ? lake.originY + Lake.lakeBedRimLocalY(lake, x - lake.x1) : FLOOR_Y
+}
+//
+// World Y of the lake's bed under a world X (the ground line off the lake).
+//
+function forestLakeBedY(inst, x) {
+  const lake = inst.zones._lake
+  return lake ? lake.originY + Lake.lakeBottomLocalY(lake, x - lake.x1) : FLOOR_Y
 }
 //
 // World Y where the hero's feet rest on the main floor in the lake band.
@@ -5613,6 +5707,8 @@ function startDrowning(inst) {
   //
   const drownX = Math.round(char.pos.x)
   const startY = char.pos.y
+  inst.drownFromX = drownX
+  inst.drownToX = forestDrownSinkX(inst, drownX)
   inst.drownSinkX = drownX
   inst.drownSinkY = startY
   inst.heroInst.drownSinkX = drownX
@@ -5739,24 +5835,8 @@ function triggerForestTouchDeath(inst, cause) {
   Hero.destroy(hero)
   forestLevel0LiveHeroChar = null
   triggerForestCameraShake(inst)
-  spawnForestTouchDeathBurst(inst, deathX, deathY)
+  DeathFireflies.burst(inst.deathFlies, deathX, deathY, DEATH_FIREFLY_COUNT)
   finishForestTouchDeath(inst, cause, deathX, deathY)
-}
-//
-// Leaf-shaped radial burst at the death spot — white leaves instead of the
-// hero's generic body-square explosion.
-//
-function spawnForestTouchDeathBurst(inst, x, y) {
-  if (!inst.footParticles) return
-  const palette = forestTouchDeathLeafPalette()
-  ForestFootParticles.spawnLeafBurst(inst.footParticles, x, y, palette, FOREST_TOUCH_DEATH_PARTICLE_COUNT, FLOOR_Y)
-}
-//
-// The main tree's own green foliage tones, so the burst reads as real leaves
-// rather than generic dust.
-//
-function forestTouchDeathLeafPalette() {
-  return FOREST_PAL.heroDeathLeaves.map(hex => forestRgb(hex))
 }
 //
 // Life-HUD bump, then in-level respawn beside the kill.
@@ -5968,7 +6048,7 @@ function nudgeForestHeroSpawnAwayFromTrampolines(cfg) {
 }
 //
 // Reveals the lake after the hero drowns in it (or when reloading a save that
-// already discovered water), with its shore rocks.
+// already discovered water).
 //
 function revealWaterZone(inst) {
   if (inst.zones.water) {
@@ -5979,7 +6059,6 @@ function revealWaterZone(inst) {
   inst.zones.waterDiscovered = true
   set(KEY_REVEALED_WATER, true)
   revealGroundDecorLeft(inst, true)
-  revealLeftShoreRock(inst)
   syncForestAtmosphereZones(inst)
   applyZoneVisibility(inst)
 }
@@ -6917,15 +6996,6 @@ function updateGroundRightStripReveal(inst, heroX) {
   syncForestAtmosphereZones(inst)
 }
 //
-// Shows the tree-side lake cap rock when the hero runs left of the trunk.
-//
-function revealLeftShoreRock(inst) {
-  if (inst.zones.leftShoreRock) return
-  inst.zones.leftShoreRock = true
-  set(KEY_LEFT_SHORE_ROCK, true)
-  applyZoneVisibility(inst)
-}
-//
 // Right trampoline collider — visible mushroom with a live bounce.
 //
 function isRightTrampolineColliderActive(z) {
@@ -7471,8 +7541,10 @@ function settleHeroOnLog(inst, char, platTop, skipPostLandLock = false) {
 function beginDrownSinkTween(inst) {
   const k = inst.k
   const floorY = drownFloorStandY()
-  const sinkTargetY = DROWN_FULL_SINK_FEET_Y - SURFACE_DETECT_Y
+  const sinkTargetY = forestLakeRimY(inst, inst.drownToX ?? inst.drownSinkX) + DROWN_UNDER_RIM
   const fromY = inst.drownSinkY
+  inst.drownSinkFromY = fromY
+  inst.drownSinkEndY = sinkTargetY
   inst.drownSinkTween?.cancel?.()
   const runSinkPhase = (startY, endY, speed, onComplete) => {
     const distance = endY - startY

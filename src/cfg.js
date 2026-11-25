@@ -430,10 +430,12 @@ export const CFG = {
           murkTop: PALETTE.cyan1,
           murkDeep: PALETTE.teal0,
           bank: PALETTE.brown1,        // Earth fill under the shallow shore ends (topsoil tone)
-          bed: PALETTE.rose3,          // Sand settled on the ledges and the floor
-          bedRim: PALETTE.sand4,       // Lit top edge of the sand layer
+          bed: PALETTE.sand5,          // Sand settled on the ledges and the floor
+          sandLight: PALETTE.gray7,    // Light sand grains and the crests of its ripples
+          sandDark: PALETTE.sand3,     // Darker sand grains
           bedEdge: PALETTE.rose0,      // Dark cut where the bed meets the earth band
-          bedGravel: PALETTE.slate0,   // Gravel specks in the sand
+          bedShadow: PALETTE.teal0,    // Cool shade: the bed's far rim, the back wall's foot, cast shadows
+          bedLight: PALETTE.sand4,     // Light caught by the bed's near edge
           pebble: PALETTE.slate1,
           pebbleLight: PALETTE.slate3,
           stone: PALETTE.sand1,        // Faceted boulders on the floor
@@ -697,22 +699,31 @@ export const CFG = {
           leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2]
         },
         //
-        // White leaves the hero bursts into on a touch death (mostly white,
-        // a few in the shade tone so the burst keeps some depth).
+        // The white fireflies the hero breaks into when he dies: a faintly
+        // cool white glow round a pure white core.
         //
-        heroDeathLeaves: [PALETTE.gray7, PALETTE.gray7, PALETTE.gray6],
+        heroDeathFirefly: { glow: '#e4f1ec', core: '#ffffff' },
+        //
+        // The cut end of the stick on the centipede's back, seen as it
+        // turns: dark bark round light wood with a darker growth ring.
+        //
+        predatorTwigCut: { bark: PALETTE.brown0, wood: PALETTE.sand4, ring: PALETTE.sand2 },
         //
         // Red prohibition sign over the locked levels of the menu.
         //
         menuProhibited: PALETTE.red1,
         //
         // Menu level panel, in the selected level's own colour (laid over the
-        // backdrop at part opacity): the forest's green with a dark
-        // green-black contour and a soft lit top band, or the cave's soil
-        // brown with a brown-black contour and a warm lit band.
+        // backdrop at part opacity, its ground painted over it): the
+        // forest's sky blue with a dark contour and a soft lit top band, or
+        // for the cave (whose card shows its own wall and soil) a light
+        // contour (it stands out against the dark cave) and a warm lit band.
+        // The forest card's cloud inside: its cream and the puffs in it,
+        // cooler and darker toward its bottom (the sheet clouds' tones).
         //
-        menuPanelForest: { fill: PALETTE.green0, contour: PALETTE.gray0, light: PALETTE.green4 },
-        menuPanelCave: { fill: PALETTE.brown0, contour: PALETTE.rose0, light: PALETTE.sand4 },
+        menuPanelForest: { fill: PALETTE.blue4, contour: PALETTE.gray0, light: PALETTE.blue5 },
+        menuPanelCave: { contour: PALETTE.sand2, light: PALETTE.sand4 },
+        menuPanelCloud: { light: '#e8decd', mid: '#d9d4c6', shade: '#c3c8bf', deep: '#afb9b4' },
         //
         // Menu key hint: the key names in a warm gold, their meaning in the
         // cream text tone.

@@ -45,6 +45,15 @@ const EYE_CONTOUR = 1.8
 const BLINK_MIN = 2.5
 const BLINK_MAX = 6
 const BLINK_SEC = 0.18
+//
+// An eye told to close (cfg.isOpen) shuts its lid and opens it again at
+// LID_RATE per second, eased.
+//
+const LID_RATE = 8
+//
+// Its lid slides across it from the side, not down from the top.
+//
+const LID_FROM_SIDE = true
 
 /**
  * Creates the menu forest stalk-eye icon.
@@ -54,6 +63,7 @@ const BLINK_SEC = 0.18
  * @param {function(): {x: number, y: number, scale: number}} cfg.getPose - Icon centre and scale
  * @param {function(): ({x: number, y: number}|null)} cfg.getLookAt - Point the pupil follows (null: straight ahead)
  * @param {function(): boolean} cfg.isVisible - False hides the icon (scene leave)
+ * @param {function(): boolean} [cfg.isOpen] - False shuts its eye (open when left out)
  * @returns {Object} Stalk-eye icon inst
  */
 export function create(cfg) {
@@ -63,11 +73,13 @@ export function create(cfg) {
     getPose: cfg.getPose,
     getLookAt: cfg.getLookAt,
     isVisible: cfg.isVisible,
+    isOpen: cfg.isOpen ?? (() => true),
     batch: PolyBatch.create(),
     points: Array.from({ length: STALK_SEGMENTS + 1 }, () => ({ x: 0, y: 0 })),
     time: 0,
     blinkWait: randomIn(BLINK_MIN, BLINK_MAX),
     blinkT: 0,
+    shut: 0,
     lidClose: 0
   }
   k.add([
@@ -84,21 +96,26 @@ export function create(cfg) {
   return inst
 }
 //
-// Sway time and the blink: wait, then shut and open over BLINK_SEC.
+// Sway time, the lid shut or opened as told, and while open the blink:
+// wait, then shut and open over BLINK_SEC.
 //
 function onUpdate(inst) {
   const dt = inst.k.dt()
+  const open = inst.isOpen()
   inst.time += dt
+  inst.shut += ((open ? 0 : 1) - inst.shut) * Math.min(1, dt * LID_RATE)
+  inst.lidClose = Math.max(inst.shut, open ? blink(inst, dt) : 0)
+}
+function blink(inst, dt) {
   if (inst.blinkT > 0) {
     inst.blinkT = Math.max(0, inst.blinkT - dt)
-    inst.lidClose = Math.sin(Math.PI * (1 - inst.blinkT / BLINK_SEC))
-    return
+    return Math.sin(Math.PI * (1 - inst.blinkT / BLINK_SEC))
   }
-  inst.lidClose = 0
   inst.blinkWait -= dt
-  if (inst.blinkWait > 0) return
+  if (inst.blinkWait > 0) return 0
   inst.blinkWait = randomIn(BLINK_MIN, BLINK_MAX)
   inst.blinkT = BLINK_SEC
+  return 0
 }
 //
 // Contours under every fill (stalk and buds), the stalk, its lit line,
@@ -116,7 +133,7 @@ function onDraw(inst) {
   addTaperedPass(batch, pts, STALK_W * s * STALK_LIGHT_FRAC, STALK_W * s * STALK_LIGHT_FRAC * STALK_TIP_FRAC, colors.stemLight)
   const eye = pts[pts.length - 1]
   const pupil = pupilAt(eye, inst.getLookAt(), EYE_R * s, PUPIL_R * s)
-  addLiddedEyeBerry(batch, eye.x, eye.y, EYE_R * s, pupil.x, pupil.y, PUPIL_R * s, colors, EYE_CONTOUR * s, inst.lidClose)
+  addLiddedEyeBerry(batch, eye.x, eye.y, EYE_R * s, pupil.x, pupil.y, PUPIL_R * s, colors, EYE_CONTOUR * s, inst.lidClose, LID_FROM_SIDE)
   PolyBatch.flush(batch, inst.k)
 }
 //

@@ -1,14 +1,11 @@
 import { FOREST_LAYER_GRADE, applyForestLayerGradeToCanvas } from './forest-parallax-grain.js'
 import { forestFilmGrainBlockPxForTier } from './forest-pixel-density.js'
-import * as Lake from '../../../components/lake.js'
-import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { loadPictureImage, pictureFringeAlpha } from './forest-picture.js'
 import { loadForestGroundElements } from './forest-ground-element.js'
 //
 // Stones of forest level 0, cut from assets/forest/stones.png (its stray
-// backdrop fringe wiped). Bare stones lie in the lake (a pile on the
-// tree-side bank, a few on the bed); mossy ones and the ones with plants
-// stand on the ground. The sheet's row of rectangular dry-stone wall pieces
+// backdrop fringe wiped). Bare stones lie on the lake's bed; mossy ones and
+// the ones with plants stand on the ground. The sheet's row of rectangular dry-stone wall pieces
 // is not used. The stones buried in the
 // earth band come from assets/forest/stones_ground.png. The sheets start
 // loading with this module (game boot) and are cut once per page; sprites
@@ -75,65 +72,6 @@ const STONES = [
 const GROUND_SCALE = 0.34
 const GROUND_SCALE_JITTER = 0.15
 const LAKE_SCALE = 0.3
-//
-// The pile on the tree-side bank of the lake (stones: index in STONES,
-// biggest first). It runs from PILE_FROM_X to PILE_TO_X off the bank's foot
-// (where the bed meets the ground line, world px; the right end stays clear
-// of the big tree) and slopes evenly from its top at the left end
-// (PILE_TOP_LEFT_DOWN under the ground line, in the water) up to its top at
-// the right end (PILE_TOP_RIGHT_DOWN: above the ground). Stones are dropped
-// one by one and come to rest on the bed, the ground or the stones under
-// them, settled PILE_SINK px into them: each where it fills the most room
-// under the slope while leaving the least empty space under itself
-// (PILE_GAP_WEIGHT), as if it slid down until it sat snug, and sticking out
-// over the slope the least (PILE_OVER_WEIGHT), so the pile's top follows it.
-// The bare stones lie in the water and reach PILE_SHORE_X onto the bank:
-// after the listed ones the smaller half of them is dropped again at
-// PILE_REUSE_SCALES (one per round). Then mossy stones and ones with plants
-// (PILE_LAND) fill the part on land from PILE_LAND_FROM_X. Extra stones only
-// go in while the pile has room under the slope (PILE_FULL_ROOM px or more),
-// only where they leave at most PILE_MAX_GAP px of empty space under
-// themselves, and while fewer than PILE_MAX_STONES lie in it. Behind the
-// pile a bed of small bare stones (PILE_FILL: stones, rows PILE_FILL_STEP of
-// their size apart, PILE_FILL_INSET px under the pile's top) fills its whole
-// body down to the bed, so no hole between the stones ever shows through;
-// the lower stones are drawn over the ones resting on them. Everything under the bed
-// is clipped away, everything under the water line is tinted with the water.
-//
-const LAKE_PILE = [36, 35, 9, 37, 34, 29, 30, 27, 25, 26, 31]
-const PILE_REUSE_SCALES = [0.85, 0.7, 1, 0.6]
-const PILE_GAP_WEIGHT = 1.6
-const PILE_OVER_WEIGHT = 1.2
-const PILE_FULL_ROOM = 3
-const PILE_MAX_GAP = 5
-const PILE_MAX_STONES = 46
-const PILE_SEED = 7311
-const PILE_LAND = [18, 17, 12, 11, 10, 19]
-const PILE_FROM_X = -160
-const PILE_TO_X = 55
-const PILE_SHORE_X = 0
-const PILE_LAND_FROM_X = -6
-const PILE_TOP_LEFT_DOWN = 74
-const PILE_TOP_RIGHT_DOWN = -24
-//
-// The pile's water-side flank: a stone there rests no further left than a
-// slope rising PILE_FLANK_SLOPE px per px from the bed at PILE_FLANK_OUT px
-// left of the pile's start, so the end stones settle in steps instead of a
-// stack with one straight side (where the bed is flat under the pile's end
-// — the menu's lake — they all took the same leftmost spot).
-//
-const PILE_FLANK_OUT = 25
-const PILE_FLANK_SLOPE = 3
-const PILE_SINK = 3
-const PILE_SOLID_ALPHA = 128
-const PILE_FILL = [20, 21, 22, 32, 33, 23, 24, 28]
-const PILE_FILL_SCALE = 0.32
-const PILE_FILL_STEP = 0.55
-const PILE_FILL_JITTER = 0.3
-const PILE_FILL_INSET = 4
-const PILE_FILL_SEED = 7312
-const LAKE_PILE_PAD = 2
-const LAKE_PILE_GRAIN_SEED = 7310
 //
 // Stones lying on the lake bed (seen through the water): stone, where along
 // the open water (0 = island shore, 1 = tree side) and how far down the bed
@@ -240,11 +178,6 @@ const GROUND_STONES = [
 const sheet = loadPictureImage(URL)
 const groundSheet = loadPictureImage(GROUND_URL)
 let cuts = null
-//
-// The lake's stone pile, baked once per live k and place (a scene restart
-// reuses it).
-//
-const pileByK = new WeakMap()
 let groundCuts = null
 
 /**
@@ -337,189 +270,6 @@ export function forestLakeBedStones() {
   })
 }
 
-/**
- * Bakes the stone pile on the lake's tree-side bank into one sprite: its
- * stones rest down the bank into the bed (clipped at the bed), tinted with
- * the water below the water line.
- * @param {Object} k - Kaplay instance
- * @param {Object} lake - Lake inst
- * @param {number} waterY - World Y of the water line
- * @returns {{name: string, x: number, y: number, width: number, height: number}|null}
- *   Sprite and world rect (null until loadForestStones() has resolved)
- */
-export function bakeForestLakeStonePile(k, lake, waterY) {
-  if (!cuts) return null
-  const key = `${lake.x1}|${lake.bakeSpan}|${waterY}`
-  const cached = pileByK.get(k)
-  if (cached?.key === key && k.getSprite(cached.pile.name)) return cached.pile
-  const pile = bakeLakeStonePile(k, lake, waterY)
-  pileByK.set(k, { key, pile })
-  return pile
-}
-function bakeLakeStonePile(k, lake, waterY) {
-  const footX = lake.x1 + lake.bakeSpan
-  const xa = Math.round(footX + PILE_FROM_X)
-  const xb = Math.round(footX + PILE_TO_X)
-  const target = x => lake.floorY + PILE_TOP_LEFT_DOWN + (PILE_TOP_RIGHT_DOWN - PILE_TOP_LEFT_DOWN) * (x - xa) / (xb - xa)
-  const surface = new Map()
-  const surfaceAt = x => surface.get(x) ?? Lake.bedWorldY(lake, x)
-  const stones = []
-  const flankX = xa - PILE_FLANK_OUT
-  const flank = { x: flankX, bed: Lake.bedWorldY(lake, flankX) }
-  const phases = [
-    { shapes: pileStoneShapes(), x1: xa, x2: Math.round(footX + PILE_SHORE_X), forced: LAKE_PILE.length, flank },
-    { shapes: PILE_LAND.map(id => pileStoneShape(cuts[id].canvas, LAKE_SCALE)), x1: Math.round(footX + PILE_LAND_FROM_X), x2: xb, forced: 0, flank: null }
-  ]
-  phases.forEach(phase => phase.shapes.forEach((shape, i) => {
-    if (stones.length >= PILE_MAX_STONES) return
-    const forced = i < phase.forced
-    const drop = bestPileDrop(shape, phase.x1, phase.x2, target, surfaceAt, forced ? Infinity : PILE_MAX_GAP, phase.flank)
-    if (!drop || (!forced && drop.room < PILE_FULL_ROOM)) return
-    stones.push(settlePileStone(shape, drop, surfaceAt, surface))
-  }))
-  const x0 = Math.floor(Math.min(...stones.map(s => s.x)) - LAKE_PILE_PAD)
-  const y0 = Math.floor(Math.min(...stones.map(s => s.y)) - LAKE_PILE_PAD)
-  const width = Math.ceil(Math.max(...stones.map(s => s.x + s.w)) + LAKE_PILE_PAD) - x0
-  const height = Math.ceil(Math.max(...stones.map(s => s.gapBottom)) + LAKE_PILE_PAD) - y0
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingQuality = 'high'
-  ctx.save()
-  Lake.clipToBed(ctx, lake, x0, y0, width, height)
-  paintPileFill(ctx, surface, x0, y0, width, height)
-  stones.slice().reverse().forEach(s => ctx.drawImage(s.canvas, s.x - x0, s.y - y0))
-  ctx.restore()
-  Lake.tintUnderwater(ctx, width, height, waterY - y0)
-  applyForestLayerGradeToCanvas(canvas, {
-    ...FOREST_LAYER_GRADE.material,
-    grainBlockSize: forestFilmGrainBlockPxForTier('gameplay')
-  }, LAKE_PILE_GRAIN_SEED)
-  const name = `forest0-lake-stone-pile-${Math.round(footX)}`
-  k.loadSprite(name, canvas)
-  return { name, x: x0, y: y0, width, height }
-}
-//
-// The bed of small stones behind the pile, clipped to its body: from just
-// under its top down to the canvas bottom (the bed clip trims the rest).
-//
-function paintPileFill(ctx, surface, x0, y0, width, height) {
-  const xs = [...surface.keys()].sort((a, b) => a - b)
-  if (!xs.length) return
-  ctx.save()
-  ctx.beginPath()
-  ctx.moveTo(xs[0] - x0, height)
-  xs.forEach(x => ctx.lineTo(x - x0, surface.get(x) + PILE_FILL_INSET - y0))
-  ctx.lineTo(xs[xs.length - 1] - x0, height)
-  ctx.closePath()
-  ctx.clip()
-  const rng = createSeededRandom(PILE_FILL_SEED)
-  const fills = PILE_FILL.map(id => cuts[id].canvas)
-  const cell = Math.max(...fills.map(c => c.height)) * PILE_FILL_SCALE * PILE_FILL_STEP
-  for (let y = height + cell; y > -cell; y -= cell) {
-    for (let x = -cell; x < width + cell; x += cell) {
-      const c = fills[Math.floor(rng() * fills.length)]
-      const w = c.width * PILE_FILL_SCALE
-      const h = c.height * PILE_FILL_SCALE
-      ctx.drawImage(c, x + (rng() - 0.5) * cell * PILE_FILL_JITTER - w / 2, y + (rng() - 0.5) * cell * PILE_FILL_JITTER - h / 2, w, h)
-    }
-  }
-  ctx.restore()
-}
-//
-// The pile's stones in drop order: the listed ones, then rounds of the
-// smaller half of them (shuffled, a new size each round).
-//
-function pileStoneShapes() {
-  const rng = createSeededRandom(PILE_SEED)
-  const shapes = LAKE_PILE.map(id => pileStoneShape(cuts[id].canvas, LAKE_SCALE))
-  const small = LAKE_PILE.slice(Math.floor(LAKE_PILE.length / 2))
-  PILE_REUSE_SCALES.forEach(scale => {
-    small
-      .map(id => ({ id, order: rng() }))
-      .sort((a, b) => a.order - b.order)
-      .forEach(({ id }) => shapes.push(pileStoneShape(cuts[id].canvas, LAKE_SCALE * scale)))
-  })
-  return shapes
-}
-//
-// A pile stone at a scale and, per column, the rows of its top and bottom
-// solid pixels (null where the column is empty).
-//
-function pileStoneShape(src, scale) {
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(src.width * scale))
-  canvas.height = Math.max(1, Math.round(src.height * scale))
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(src, 0, 0, canvas.width, canvas.height)
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-  const cols = []
-  for (let x = 0; x < canvas.width; x++) {
-    let top = null
-    let bottom = null
-    for (let y = 0; y < canvas.height; y++) {
-      if (data[(y * canvas.width + x) * 4 + 3] < PILE_SOLID_ALPHA) continue
-      top ??= y
-      bottom = y
-    }
-    cols.push(top == null ? null : { top, bottom })
-  }
-  return { canvas, w: canvas.width, h: canvas.height, cols }
-}
-//
-// Where a stone dropped with its left edge at each spot along its stretch
-// (its right edge never past that stretch's end, at most maxGap px of empty
-// space under it on average; with a flank, never left of the flank's slope at
-// the stone's bottom height; null if no spot qualifies)
-// would come to rest (y: its top), how much room under the slope it covers
-// there, how much empty space it leaves under itself and how far it sticks
-// out over the slope (all per column); the spot that fills most and leaves
-// and sticks out least wins.
-//
-function bestPileDrop(shape, xa, xb, target, surfaceAt, maxGap, flank) {
-  let best = null
-  for (let left = xa - Math.round(shape.w / 2); left <= xb - shape.w; left++) {
-    let y = Infinity
-    shape.cols.forEach((col, c) => { col && (y = Math.min(y, surfaceAt(left + c) - col.bottom)) })
-    y += PILE_SINK
-    if (flank && left < flank.x + Math.max(0, flank.bed - (y + shape.h)) / PILE_FLANK_SLOPE) continue
-    let room = 0
-    let gap = 0
-    let over = 0
-    let n = 0
-    shape.cols.forEach((col, c) => {
-      if (!col) return
-      const under = surfaceAt(left + c)
-      room += under - target(left + c)
-      gap += Math.max(0, under - y - col.bottom)
-      over += Math.max(0, target(left + c) - y - col.top)
-      n++
-    })
-    if (gap / Math.max(1, n) > maxGap) continue
-    const drop = { left, y, room: room / Math.max(1, n) }
-    drop.score = drop.room - (PILE_GAP_WEIGHT * gap + PILE_OVER_WEIGHT * over) / Math.max(1, n)
-    if (!best || drop.score > best.score) best = drop
-  }
-  return best
-}
-//
-// Lays a stone where it was dropped and raises the pile's surface to its
-// top. Returns where it lies and the room left under it (gaps per column).
-//
-function settlePileStone(shape, drop, surfaceAt, surface) {
-  const { left: x, y } = drop
-  const gaps = []
-  shape.cols.forEach((col, c) => {
-    if (!col) return
-    const under = surfaceAt(x + c)
-    under > y + col.bottom && gaps.push({ x: x + c, y1: y + col.bottom, y2: under })
-    surface.set(x + c, Math.min(under, y + col.top))
-  })
-  const gapBottom = Math.max(y + shape.h, ...gaps.map(g => g.y2))
-  return { canvas: shape.canvas, x, y, w: shape.w, h: shape.h, gaps, gapBottom }
-}
 //
 // Every stone of a sheet cut out onto its own canvas, its backdrop fringe
 // wiped (one pixel read of the loaded image, never of a drawn GPU canvas).

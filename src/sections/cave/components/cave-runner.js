@@ -346,6 +346,7 @@ let atlas = null
  * @param {number} cfg.dir - 1 along the run, -1 back
  * @param {number} cfg.size - Size multiplier
  * @param {number} cfg.seed - Random seed of its moves
+ * @param {Object} [cfg.mask] - Solids it runs on (Surface.maskFromCanvas; the level's soil when left out)
  * @returns {Object} Runner instance
  */
 export function create(cfg) {
@@ -357,6 +358,7 @@ export function create(cfg) {
     k,
     run,
     rng,
+    mask: cfg.mask ?? null,
     s: cfg.s,
     dir: cfg.dir,
     unit: SCALE * cfg.size,
@@ -512,7 +514,7 @@ export function sendTo(inst, to) {
  * @param {{x: number, y: number}|null} to - World spot it runs to
  */
 export function comeFrom(inst, from, to) {
-  const at = nearestOn(Surface.crawlRuns(), from)
+  const at = nearestOn(inst.mask ? Surface.crawlRunsOf(inst.mask) : Surface.crawlRuns(), from)
   if (!at) return
   inst.run = at.run
   inst.s = at.s
@@ -773,7 +775,7 @@ function leapAt(inst, f) {
 function hitsSoil(inst, jump) {
   for (let i = 1; i < ARC_CHECKS; i++) {
     const p = arcAt(jump, i / ARC_CHECKS, inst.arcAt)
-    if (Surface.isSoil(p.x, p.y)) return true
+    if (isSoilAt(inst, p.x, p.y)) return true
   }
   return false
 }
@@ -891,6 +893,15 @@ function spring(inst, dt) {
   if (Math.abs(inst.dip) > SPRING_REST || Math.abs(inst.dipV) > SPRING_REST * SPRING_DAMP) return
   inst.dip = 0
   inst.dipV = 0
+}
+//
+// What the runner runs on: its own mask's solids, else the level's soil.
+//
+function isSoilAt(inst, x, y) {
+  return inst.mask ? Surface.isSoilIn(inst.mask, x, y) : Surface.isSoil(x, y)
+}
+function rayOn(inst, x, y, dx, dy, maxDist) {
+  return inst.mask ? Surface.raycastIn(inst.mask, x, y, dx, dy, maxDist) : Surface.raycast(x, y, dx, dy, maxDist)
 }
 //
 // Smoothstep of t (0..1).
@@ -1097,7 +1108,7 @@ function toWorld(inst, lx, ly, out) {
 //
 function spotOf(inst, leg, ahead, out) {
   const start = toWorld(inst, leg.restX + ahead, leg.hipY, inst.tmp)
-  const hit = Surface.raycast(start.x, start.y, inst.d.x, inst.d.y, (HIP_LIFT - leg.hipY + RAY_PAST) * inst.unit)
+  const hit = rayOn(inst, start.x, start.y, inst.d.x, inst.d.y, (HIP_LIFT - leg.hipY + RAY_PAST) * inst.unit)
   if (!hit) return toWorld(inst, leg.restX + ahead, HIP_LIFT * DANGLE, out)
   const lift = leg.far ? FAR_LIFT * inst.unit : 0
   out.x = hit.x - inst.d.x * lift

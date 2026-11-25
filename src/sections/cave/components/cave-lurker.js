@@ -202,16 +202,15 @@ const SAG_DAMP = 10
 const SAG_HOLD = 3
 const SAG_TILT = 0.015
 //
-// The giant swimming over it (any of its body within GIANT_R px of its
-// resting head along the lake, no lower than GIANT_BELOW px under it): it
+// The giant swimming close by (any of its body within GIANT_NEAR px of its
+// resting head; one passing farther off it does not mind): it
 // hides down on the bed — out of a strike or a watch at once (a runner it
 // chews swallowed), its neck drawn back at SINK_SPEED — and hunts nothing,
 // its eye on the giant's head; it stays hidden HIDE_HOLD s after the giant
 // is gone from over it (so it never bobs up and down as the giant passes
 // the edge of that).
 //
-const GIANT_R = 320
-const GIANT_BELOW = 60
+const GIANT_NEAR = 150
 const HIDE_HOLD = 3
 //
 // Pouncing on a runner (and chewing it till its head is PLANTS_CLEAR px out
@@ -718,12 +717,13 @@ function decide(inst, ctx, near, dt) {
   inst.jaw += (SHUT + REST_OPEN - inst.jaw) * Math.min(1, OPEN_RATE * dt)
 }
 //
-// The giant's head (as last seen over it) while any of its body swims over
-// it within GIANT_R px along the lake, and HIDE_HOLD s after; else null.
+// The giant's head (as last seen near it) while any of its body swims
+// within GIANT_NEAR px of its resting head, and HIDE_HOLD s after; else
+// null.
 //
 function giantOver(inst, ctx, dt) {
   const pts = ctx.giant?.pts
-  const over = Boolean(pts?.length) && pts.some(p => Math.abs(p.x - inst.rest.x) < GIANT_R && p.y < inst.rest.y + GIANT_BELOW)
+  const over = Boolean(pts?.length) && pts.some(p => Math.hypot(p.x - inst.rest.x, p.y - inst.rest.y) < GIANT_NEAR)
   over && (inst.giantHead = pts[0])
   inst.hideFor = over ? HIDE_HOLD : Math.max(0, inst.hideFor - dt)
   return inst.hideFor > 0 ? inst.giantHead : null

@@ -201,24 +201,18 @@ export function onUpdate(inst) {
 
 /**
  * Draws the picture's back, what lives behind its soil (drawUnderSoil), its
- * soil, then what lives over it (drawWorldLife) — only the picture while
- * it cross-fades.
+ * soil, then what lives over it (drawWorldLife) — always all of it, opaque:
+ * the menu fades it in and out whole under a veil.
  * @param {Object} inst - Backdrop instance
- * @param {number} opacity - Cross-fade 0 … 1
  */
-export function onDraw(inst, opacity) {
-  if (opacity < 1) {
-    drawTiles(inst, BACK, opacity)
-    drawTiles(inst, SOIL, opacity)
-    return
-  }
-  drawTiles(inst, BACK, 1)
+export function onDraw(inst) {
+  drawTiles(inst, BACK)
   inWorld(inst, drawUnderSoil)
-  drawTiles(inst, SOIL, 1)
+  drawTiles(inst, SOIL)
   inWorld(inst, drawWorldLife)
 }
-function drawTiles(inst, layer, opacity) {
-  inst.tiles.forEach(tile => inst.k.drawSprite({ sprite: tile.name + layer, pos: inst.k.vec2(tile.x, 0), opacity }))
+function drawTiles(inst, layer) {
+  inst.tiles.forEach(tile => inst.k.drawSprite({ sprite: tile.name + layer, pos: inst.k.vec2(tile.x, 0) }))
 }
 //
 // Runs a draw pass in the level's world placed on the screen the way the

@@ -15,6 +15,7 @@ import { CAVE_CFG } from '../cfg.js'
 import * as Lantern from '../components/cave-lantern.js'
 import * as Platform from './cave-platform.js'
 import * as Fireflies from '../components/cave-fireflies.js'
+import * as DeathFireflies from '../../../components/death-fireflies.js'
 import * as StalkEye from '../components/cave-stalk-eye.js'
 import * as Runner from '../components/cave-runner.js'
 import * as Swarm from '../components/cave-swarm.js'
@@ -24,6 +25,7 @@ import * as Bubbles from '../components/cave-bubbles.js'
 import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
 import * as Lurker from '../components/cave-lurker.js'
+import * as Haggy from '../components/cave-haggy.js'
 import * as Pads from '../components/cave-pads.js'
 import * as Trumpet from '../components/cave-trumpet.js'
 import * as Atlas from './cave-atlas.js'
@@ -88,6 +90,14 @@ const Z_LURKER_OUT = Z_WORLD + 0.45
 const Z_LURKER_PLANTS = Z_WORLD + 0.395
 const Z_LAKE_SURFACE = Z_WORLD + 0.7
 //
+// The climber (cave-haggy.js) draws twice: behind the soil (while it is
+// behind a platform) and in front of the soil and the water, behind the
+// hero (while it is in front; its hands round an edge always).
+//
+const Z_HAGGY_BACK = Z_WORLD + 0.3
+const Z_HAGGY_FRONT = Z_WORLD + 0.8
+const HAGGY_SEED = 4711
+//
 // A fish's splash sounds full within the hero's reach and fades out over
 // SPLASH_HEAR px from him.
 //
@@ -106,6 +116,7 @@ const LAKE_SKY_LOW = 30
 const Z_LIGHTS = 9
 const Z_FRONT = CFG.visual.zIndex.player + 1
 const Z_LURKER_TOP = Z_FRONT + 0.5
+const Z_DEATH_FLIES = Z_FRONT + 0.25
 const Z_FRAME = CFG.visual.zIndex.ui - 1
 const Z_GIANT_DEBUG = Z_FRAME - 1
 //
@@ -144,10 +155,20 @@ const RIDE_SLACK = 16
 const PARK_Y = -10000
 //
 // Death and respawn. A death at the lake (drowned, or fallen out of the
-// world over it) always brings him back by the lantern mushroom,
-// LANTERN_RESPAWN_DX px on from it toward the lake (clear of its cap).
+// world over it) brings him back to the bank he last stood on: on the left
+// by the lantern mushroom, LANTERN_RESPAWN_DX px on from it toward the lake
+// (clear of its cap); once he has crossed it, on the right bank
+// RIGHT_BANK_RESPAWN_DX px in from its tip.
 //
 const LANTERN_RESPAWN_DX = 90
+const RIGHT_BANK_RESPAWN_DX = 90
+//
+// Killed out of the water, he breaks into DEATH_BURST_COUNT white fireflies
+// where he was (components/death-fireflies.js, drawn at Z_DEATH_FLIES in
+// front of the world), lining up along his outline first; dying in the
+// water (drowned, or swallowed under it) he is just gone. Coming back, the
+// cave's own sparks gather.
+//
 const DEATH_BURST_COUNT = 48
 const RESPAWN_BURST_COUNT = 14
 const RESPAWN_DELAY = 2.3
@@ -208,7 +229,7 @@ const FPS_FONT_SCALE = 0.7
 // The hero bounced off the dry mushroom: its crumbs and dust first, its
 // fireflies coming out of its holes SWARM_DELAY s later.
 //
-const SWARM_DELAY = 1.5
+const SWARM_DELAY = 0.35
 //
 // The hero snatched by the lurker: he is stuck in its jaws while it chews
 // (it draws him there), then gone (his fireflies burst out of its jaws)
@@ -285,6 +306,9 @@ function build(k, opts) {
     backdrop: Backdrop.create(k, View.windowSize(view)),
     terrain: Terrain.create({ k }),
     front: Front.create(k),
+    deathFlies: DeathFireflies.create({ k, z: Z_DEATH_FLIES }),
+    haggy: Haggy.create({ k, seed: HAGGY_SEED }),
+    haggyCtx: { hero: null, prey: [], onEat: null },
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
     striders: Strider.createAll(k, lake, [Pads.crownSpan(pads)]),
@@ -318,6 +342,7 @@ function build(k, opts) {
     lastFeet: null,
     respawnAt: 0,
     graceUntil: 0,
+    rightBank: false,
     deathX: 0,
     deathY: 0,
     lakeDeath: false,
@@ -499,19 +524,22 @@ function driveSwarm(inst) {
   Swarm.onUpdate(inst.swarm, heroPos(inst), isHeroAirborne(inst))
 }
 //
-// Remembers the last solid platform the hero stood on (respawn point);
-// written to storage only when the platform changes.
+// Remembers the last solid platform the hero stood on (respawn point;
+// written to storage only when the platform changes) and the lake's bank
+// he stands on.
 //
 function trackSafeSpot(inst, char) {
   if (!char.isGrounded?.()) return
   const platform = inst.platformByBody.get(char.curPlatform?.())
-  if (!platform || platform.moving || inst.safe?.id === platform.id) return
+  if (!platform || platform.moving) return
+  trackBank(inst, char.pos.x)
+  if (inst.safe?.id === platform.id) return
   inst.safe = { id: platform.id, x: Math.round(char.pos.x) }
   set(KEY_SAFE_SPOT, inst.safe)
 }
 //
-// Fell out of the world: the hero shatters into fireflies and comes back
-// on the last safe platform.
+// Fell out of the world: the hero breaks into white fireflies and comes
+// back on the last safe platform.
 //
 function killHero(inst) {
   const k = inst.k
@@ -529,7 +557,7 @@ function killHero(inst) {
   releaseGamePhysicalKeys()
   k.shake(DEATH_SHAKE)
   CaveSound.playSparkBurst(inst.caveSound)
-  Fireflies.burst(inst.fireflies, inst.deathX, inst.deathY, DEATH_BURST_COUNT)
+  DeathFireflies.burst(inst.deathFlies, inst.deathX, inst.deathY, DEATH_BURST_COUNT)
 }
 //
 // Falling into the lake: controls off, no gravity, a splash, the calm
@@ -598,7 +626,7 @@ function drawDrowningHero(inst) {
 }
 function updateRespawn(inst) {
   if (inst.k.time() < inst.respawnAt) return
-  const pose = inst.lakeDeath ? lanternPose() : startPose(inst)
+  const pose = inst.lakeDeath ? lakeBankPose(inst) : startPose(inst)
   inst.lakeDeath = false
   spawnHero(inst, pose)
   startRespawnGrace(inst)
@@ -625,6 +653,20 @@ function startPose(inst) {
   const saved = inst.safe && Layout.PLATFORMS.find(p => p.id === inst.safe.id)
   const pose = saved && inst.safe.x >= saved.x1 && inst.safe.x <= saved.x2 ? Ground.standPoseOn(saved, inst.safe.x) : null
   return pose && !Layout.isInLake(pose.x, pose.y) ? pose : Ground.standPoseOn(Layout.PLATFORMS.find(p => p.id === Layout.START_PLATFORM), Layout.ENTRY_X)
+}
+//
+// Which bank of the lake the hero stood on last (on solid ground; the
+// floor's one platform runs on under both).
+//
+function trackBank(inst, x) {
+  x > Layout.LAKE_X2 && (inst.rightBank = true)
+  x < Layout.LAKE_X1 && (inst.rightBank = false)
+}
+//
+// Back from a lake death on the bank he came from.
+//
+function lakeBankPose(inst) {
+  return inst.rightBank ? Ground.standPoseOn(Layout.lakeFloor(), Layout.BANK_TIP_X2 + RIGHT_BANK_RESPAWN_DX) : lanternPose()
 }
 //
 // By the lantern mushroom, on the lake's side of it.
@@ -789,6 +831,8 @@ function addDrawLayers(inst) {
   const k = inst.k
   k.add([k.z(Z_WORLD), { draw: () => drawWorld(inst) }])
   k.add([k.z(Z_FIREFLIES), { draw: () => drawFireflies(inst) }])
+  k.add([k.z(Z_HAGGY_BACK), { draw: () => Haggy.onDraw(inst.haggy, View.worldRect(inst.view), false) }])
+  k.add([k.z(Z_HAGGY_FRONT), { draw: () => Haggy.onDraw(inst.haggy, View.worldRect(inst.view), true) }])
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
@@ -838,6 +882,18 @@ function updateRunners(inst) {
   food.prey.length = 0
   Fireflies.forEachLit(inst.fireflies, f => food.prey.push(f))
   inst.runners.forEach(runner => Runner.onUpdate(runner, hero, food))
+  updateHaggy(inst, hero, food)
+}
+//
+// The climber: about where the hero is, its free hand after the same
+// fireflies the runners leap for.
+//
+function updateHaggy(inst, hero, food) {
+  const ctx = inst.haggyCtx
+  ctx.hero = hero
+  ctx.prey = food.prey
+  ctx.onEat = food.onEat
+  Haggy.onUpdate(inst.haggy, ctx)
 }
 //
 // The lurker by the left bank: it hunts the hero on the bank (or sinking
@@ -885,12 +941,15 @@ function onLurkerSeize(inst, prey) {
 }
 //
 // It has eaten what it caught: the hero's fireflies burst out of its jaws
-// and he comes back soon after.
+// (out of the water only; under it he is just gone) and he comes back soon
+// after.
 //
 function onLurkerSwallow(inst, prey, at) {
   if (prey.runner) return
-  CaveSound.playSparkBurst(inst.caveSound)
-  Fireflies.burst(inst.fireflies, at.x, at.y, DEATH_BURST_COUNT)
+  const surfaceY = CaveLake.surfaceAt(inst.lake, at.x)
+  const inWater = at.y > surfaceY
+  inWater || CaveSound.playSparkBurst(inst.caveSound)
+  inWater || DeathFireflies.burst(inst.deathFlies, at.x, at.y, DEATH_BURST_COUNT, surfaceY)
   inst.deathX = at.x
   inst.deathY = at.y
   inst.respawnAt = inst.k.time() + EATEN_RESPAWN

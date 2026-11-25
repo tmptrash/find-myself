@@ -800,7 +800,7 @@ function addBuoyEye(inst, batch, buoy, points, colors, heroX, heroY) {
   const scleraR = buoy.eyeRadius ?? BUOY_EYE_RADIUS
   const pupilR = buoy.pupilRadius ?? BUOY_PUPIL_RADIUS
   const pupil = buoyPupilPos(eye.x, eye.y, heroX, heroY, scleraR, pupilR, inst.pupilScratch)
-  addLiddedEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA, buoy.lidClose)
+  addLiddedEyeBerry(batch, eye.x, eye.y, scleraR, pupil.x, pupil.y, pupilR, colors, BUOY_EYE_CONTOUR_EXTRA, buoy.lidClose, true)
 }
 //
 // Clamps the pupil inside the sclera so it points at what the eye watches.

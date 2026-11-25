@@ -13,7 +13,6 @@ import { unloadSprite } from '../utils/sprite-unload.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
 import { generateForestMenuBackdrop, forestMenuLayout, loadForestMenuBackdropArt } from '../sections/forest/utils/forest-menu-bg.js'
-import { bakeForestLakeStonePile } from '../sections/forest/utils/forest-stones.js'
 import * as Clouds from '../sections/forest/utils/forest-clouds.js'
 import * as ChainBuoy from '../sections/forest/utils/forest-chain-buoy.js'
 import { forestEyeBerryColors } from '../sections/forest/utils/forest-eye-berry.js'
@@ -32,7 +31,9 @@ import { createForestMidges, updateForestMidges } from '../sections/forest/utils
 import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
 import * as CaveMenuStalkEye from '../sections/cave/components/cave-menu-stalk-eye.js'
 import * as CaveAtlas from '../sections/cave/utils/cave-atlas.js'
+import { createSeededRandom } from '../utils/seeded-random.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
+import * as CaveMenuPanel from '../sections/cave/utils/cave-menu-panel.js'
 import * as CaveScene from '../sections/cave/utils/cave-scene.js'
 import * as CaveSound from '../sections/cave/utils/cave-sound.js'
 import { paintPlate } from '../sections/cave/utils/cave-plate.js'
@@ -97,28 +98,50 @@ const MENU_COMPACT_MAX_S = 700 / MENU_REF_HEIGHT
 const MENU_COLUMN_X_FRAC = 0.2
 const MENU_COLUMN_Y_FRAC = 0.5
 const MENU_ITEM_STEP = 112
-const MENU_HERO_GAP = 118
+const MENU_HERO_GAP = 80
 const MENU_HINT_BOTTOM = 26
 //
 // Level panel: a vertical rounded card behind the hero and the four level
 // icons (design px): it reaches PANEL_LEFT_PAD left of the hero, PANEL_RIGHT_PAD
 // right of the icons and PANEL_END_SHARE of a row step past the first and
-// last rows. The card is in the selected level's colour (the forest's
-// green, the cave's soil) at PANEL_FILL_ALPHA — see-through, the level's
-// picture shows through it —, a lit top band fading out over
-// PANEL_LIGHT_SHARE of its height and a dark contour; one per look, baked
-// once per live k and window size, film grain included. A new selection
-// cross-fades the cards at MENU_PANEL_FADE_RATE per second.
+// last rows. The card shows the selected level's own ground at
+// PANEL_ART_ALPHA over its colour at PANEL_FILL_ALPHA, alive: for the
+// forest the inside of a cloud, its puffs drifting; for the cave its far
+// wall over its soil, a runner hunting fireflies there. It is drawn inside
+// the card's rounded
+// shape (a stencil mask); over it a lit top band fading out over
+// PANEL_LIGHT_SHARE of its height and a thin dark contour. Its pictures are
+// baked once per live k and window size, film grain included. A new
+// selection cross-fades the cards at MENU_PANEL_FADE_RATE per second.
 //
 const MENU_PANEL_LEFT_PAD = 68
 const MENU_PANEL_RIGHT_PAD = 78
 const MENU_PANEL_END_SHARE = 0.62
 const MENU_PANEL_RADIUS = 34
 const MENU_PANEL_FILL_ALPHA = 0.55
+const MENU_PANEL_ART_ALPHA = 0.85
+//
+// The forest card is the inside of a cloud: its cream over rows of lumpy
+// puffs (row: middle as a share of the card's height, puff radius as a
+// share of its width, colour, drift in design px/s), cooler and darker
+// toward the bottom; puffs MENU_PUFF_STEP of their radius apart, each
+// radius and height off by up to MENU_PUFF_JITTER of it (seeded
+// MENU_PUFF_SEED). Each row is baked as a seamless strip MENU_PUFF_TILE
+// card widths wide and drifts sideways at its own pace.
+//
+const MENU_PANEL_PUFF_ROWS = [
+  { y: 0.32, r: 0.3, color: 'mid', drift: 4 },
+  { y: 0.6, r: 0.26, color: 'shade', drift: 6.5 },
+  { y: 0.84, r: 0.22, color: 'deep', drift: 9 }
+]
+const MENU_PUFF_STEP = 1.25
+const MENU_PUFF_JITTER = 0.3
+const MENU_PUFF_SEED = 4437
+const MENU_PUFF_TILE = 2
 const MENU_PANEL_FADE_RATE = 6
 const MENU_PANEL_LIGHT_ALPHA = 0.16
 const MENU_PANEL_LIGHT_SHARE = 0.32
-const MENU_PANEL_CONTOUR_W = 3
+const MENU_PANEL_CONTOUR_W = 1.5
 const MENU_PANEL_PAD = 4
 const MENU_PANEL_SPRITE = 'menu-level-panel'
 const MENU_PANEL_GRAIN_SEED = 4423
@@ -162,17 +185,10 @@ const MENU_NIGHT_ALPHA = 0.35
 //
 const MENU_BG_EDGE_OVERSCAN = 1
 const MENU_FOREST_LAYER_SPRITE = 'menu-forest-layer'
-//
-// Live decor of the forest backdrop without its own fade (stalk eyes, the
-// crawler) shows once the forest backdrop is mostly in.
-//
-const MENU_FOREST_LIVE_MIN_OPACITY = 0.5
 const MENU_LAKE_SPRITE_KEY = 'menu'
 //
-// The lake's right bank edge is ragged like the level's (px), and the
-// level's clouds drift this far under the screen top.
+// The level's clouds drift this far under the screen top.
 //
-const MENU_LAKE_BANK_JAG = 22
 const MENU_CLOUD_TOP = 24
 //
 // The crawler roams the ground east of the lake, heading for a new random
@@ -227,7 +243,14 @@ const MENU_BUD_HUM_LEVEL = 0.7
 // Draw layers.
 //
 const MENU_BG_Z = 0
-const MENU_PANEL_Z = 5
+//
+// A backdrop comes in and goes out whole — its picture and everything
+// living in it at once — under a veil of the screen's base colour, drawn
+// over all of it (the crawler included, MENU_VEIL_Z) and under the panel.
+//
+const MENU_VEIL_Z = 9.5
+const MENU_PANEL_Z = 9.7
+const OPAQUE = 1
 const MENU_ICON_Z = 10
 const MENU_TEXT_Z = 20
 const MENU_FILM_GRAIN_Z = CFG.visual.zIndex.ui + 20
@@ -296,13 +319,11 @@ const MENU_KEY_BACK = 'escape'
 //
 const MENU_KEY_REPEAT_GUARD = 0.25
 //
-// The hero's eyes dart around while it waits: a new glance every
-// MENU_GLANCE_MIN..+RANGE seconds at a random spot this far around the hero.
+// The hero looks at the selected level's eye: it sits MENU_ICON_EYE_Y icon
+// px over its row (the stalk-eye icons' own eye height); a "?" row he looks
+// at the glyph itself.
 //
-const MENU_GLANCE_MIN = 0.25
-const MENU_GLANCE_RANGE = 0.9
-const MENU_GLANCE_REACH_X = 220
-const MENU_GLANCE_REACH_Y = 160
+const MENU_ICON_EYE_Y = -20
 //
 // Menu sound follows the selected level: the forest level's birds.mp3
 // fades in (over MENU_BIRDS_FADE_SEC) while the forest row is selected and
@@ -326,6 +347,16 @@ const MENU_BAKE_INPUTS_HOLD = 2
 const MENU_PREWARM_YIELD_FRAMES = 2
 const menuPrewarmedSize = new WeakMap()
 const MENU_LEAVE_BG_HEX = '#1A1A1A'
+//
+// The menu shows all at once: a solid cover (the leave cover's colour)
+// stays over it until its living parts are made and every asset has
+// loaded, then MENU_REVEAL_FRAMES more frames drawn under it (never longer
+// than MENU_REVEAL_MAX s in all, should an asset never come); it then
+// fades out over MENU_REVEAL_FADE s.
+//
+const MENU_REVEAL_FRAMES = 2
+const MENU_REVEAL_FADE = 0.2
+const MENU_REVEAL_MAX = 3
 const MENU_HUSH_INTERVAL_MS = 200
 const MENU_HUSH_DURATION_MS = 8000
 
@@ -384,7 +415,7 @@ export function sceneMenu(k) {
       heroInst,
       heroY: levels[selected].y,
       lastMouse: { x: k.mousePos().x, y: k.mousePos().y },
-      glanceT: 0,
+      gaze: { x: 0, y: 0 },
       lastKey: null,
       lastKeyAt: 0,
       continueOnNo: false,
@@ -392,6 +423,8 @@ export function sceneMenu(k) {
       sceneReady: false,
       bgOpacity: { [BACKDROP_FOREST]: 0, [BACKDROP_CAVE]: 0, [BACKDROP_NIGHT]: 0, [BACKDROP_MYSTERY]: 0 },
       panelCave: 0,
+      panelFade: 0,
+      cavePanel: null,
       caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near), onSnap: near => CaveSound.playSnap(caveSound, near), onBubble: (r, near) => CaveSound.playBubble(caveSound, r, near) }),
       mysteryBg: QuestionDrift.create({
         k,
@@ -413,9 +446,12 @@ export function sceneMenu(k) {
       clouds: Clouds.create({ k, x1: 0, x2: k.width(), topY: MENU_CLOUD_TOP }),
       crawlerT: 0,
       forestLife: null,
-      closed: false
+      closed: false,
+      lifeReady: false,
+      revealIn: MENU_REVEAL_FRAMES,
+      revealWait: 0,
+      cover: 1
     }
-    inst.shorePile = loadMenuShorePile(k, inst.lake)
     inst.tomatoes = SpikyTomato.create({
       k,
       earTrees: inst.earTrees,
@@ -429,7 +465,10 @@ export function sceneMenu(k) {
     inst.bgOpacity[levels[selected].backdrop] = 1
     createMenuEyeStalks(inst)
     k.add([k.z(MENU_BG_Z), { draw: () => drawBackdrops(inst) }])
+    k.add([k.z(MENU_VEIL_Z), { draw: () => drawBackdropVeil(inst) }])
     inst.panel = loadMenuPanel(k, layout)
+    inst.panelDraws = createPanelDraws(inst)
+    inst.cavePanel = CaveMenuPanel.create({ k, panel: inst.panel, ground: caveGround(layout) })
     inst.panelCave = levels[selected].section === CAVE_SECTION ? 1 : 0
     k.add([k.z(MENU_PANEL_Z), { draw: () => drawMenuPanel(inst) }])
     k.add([k.z(MENU_ICON_Z), { draw: () => drawLevelIcons(inst) }])
@@ -437,6 +476,7 @@ export function sceneMenu(k) {
     inst.dialogs = Object.fromEntries(Object.values(ConfirmDialog.LOOKS).map(look => [look, createRestartDialog(inst, look)]))
     inst.dialog = inst.dialogs[ConfirmDialog.LOOKS.FOREST]
     k.add([k.z(MENU_LEAVE_COVER_Z), { draw: () => drawLeaveCover(inst) }])
+    k.add([k.z(MENU_LEAVE_COVER_Z), { draw: () => drawRevealCover(inst) }])
     addForestFilmGrainOverlayLayer(k, MENU_FILM_GRAIN_Z)
     k.onUpdate(() => onUpdate(inst))
     bindMenuInput(inst)
@@ -492,6 +532,7 @@ export function releaseMenuAssets(k) {
   menuForestBackdropCache.forEach(layers => layers.forEach(layer => freeCanvas(layer.canvas)))
   menuForestBackdropCache.clear()
   CaveMenuBg.release(k)
+  CaveMenuPanel.release(k)
   menuPrewarmedSize.delete(k)
 }
 
@@ -563,7 +604,8 @@ function computeMenuLayout(k) {
 }
 //
 // The forest icon is one of the level's stalk-eyes cut short, the cave's
-// one of its thorny stalk-eyes; their pupils follow the hero.
+// one of its thorny stalk-eyes; their pupils follow the hero. Only the
+// selected level's eye is open, the others shut theirs.
 //
 function createMenuEyeStalks(inst) {
   inst.levels.filter(level => level.icon === LEVEL_ICON_EYE_STALK).forEach(level => MenuEyeStalk.create(stalkIconCfg(inst, level)))
@@ -579,7 +621,8 @@ function stalkIconCfg(inst, level) {
       return pose
     },
     getLookAt: () => inst.heroInst.character.pos,
-    isVisible: () => !inst.isLeavingScene
+    isVisible: () => !inst.isLeavingScene,
+    isOpen: () => level.index === inst.selected
   }
 }
 //
@@ -806,10 +849,11 @@ function onUpdate(inst) {
   //
   const hero = inst.heroInst.character
   hero.pos = k.vec2(inst.layout.heroX, inst.heroY)
-  updateHeroGlance(inst, dt)
+  updateHeroGaze(inst)
   inst.levels.forEach(row => updateLevelRow(inst, row, dt))
   updateBackdropFade(inst, level.backdrop, dt)
   updatePanelLook(inst, level, dt)
+  inst.panelCave > MENU_FADE_EPS && CaveMenuPanel.onUpdate(inst.cavePanel)
   inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onUpdate(inst.caveBg)
   inst.bgOpacity[BACKDROP_MYSTERY] > MENU_FADE_EPS && QuestionDrift.onUpdate(inst.mysteryBg, dt)
   ChainBuoy.onUpdate(inst.forestEyes, hero.pos.x, hero.pos.y, dt, ChainBuoy.collectSights(inst.forestEyes, inst.crawler, inst.forestLife?.bud), true, inst.crawler)
@@ -818,6 +862,21 @@ function onUpdate(inst) {
   updateMenuCrawler(inst, dt)
   updateMenuForestLife(inst, dt)
   updateMenuMusic(inst, dt)
+  updateReveal(inst, dt)
+}
+//
+// The cover over a menu still coming up: held until its living parts are
+// made and every asset has loaded (and a few frames drawn under it), then
+// faded away — everything appears together.
+//
+function updateReveal(inst, dt) {
+  if (inst.cover <= 0) return
+  inst.revealWait += dt
+  if (inst.revealIn > 0 && inst.revealWait < MENU_REVEAL_MAX) {
+    inst.lifeReady && inst.k.loadProgress() >= 1 && inst.revealIn--
+    return
+  }
+  inst.cover = Math.max(0, inst.cover - dt / MENU_REVEAL_FADE)
 }
 //
 // The panel's colour eases to the selected level's (0 forest … 1 cave).
@@ -839,18 +898,13 @@ function updateBackdropFade(inst, shown, dt) {
   inst.bgOpacity[shown] = Math.min(1, inst.bgOpacity[shown] + dt / BG_FADE_IN_TIME)
 }
 //
-// Darting eyes: every so often the hero glances at a new random spot around
-// itself.
+// The hero keeps his eyes on the selected level's eye (as it breathes).
 //
-function updateHeroGlance(inst, dt) {
-  inst.glanceT -= dt
-  if (inst.glanceT > 0) return
-  inst.glanceT = MENU_GLANCE_MIN + Math.random() * MENU_GLANCE_RANGE
-  const pos = inst.heroInst.character.pos
-  Hero.setLookAtPos(inst.heroInst, {
-    x: pos.x + (Math.random() * 2 - 1) * MENU_GLANCE_REACH_X,
-    y: pos.y + (Math.random() * 2 - 1) * MENU_GLANCE_REACH_Y
-  })
+function updateHeroGaze(inst) {
+  const level = inst.levels[inst.selected]
+  inst.gaze.x = inst.layout.columnX
+  inst.gaze.y = level.y + (showsQuestionMark(level) ? 0 : MENU_ICON_EYE_Y * inst.layout.s * level.selectScale)
+  Hero.setLookAtPos(inst.heroInst, inst.gaze)
 }
 //
 // The crawler is shown with the forest only; while shown it heads for a new
@@ -858,7 +912,7 @@ function updateHeroGlance(inst, dt) {
 //
 function updateMenuCrawler(inst, dt) {
   const crawler = inst.crawler
-  crawler.obj.hidden = inst.bgOpacity[BACKDROP_FOREST] < MENU_FOREST_LIVE_MIN_OPACITY
+  crawler.obj.hidden = inst.bgOpacity[BACKDROP_FOREST] <= MENU_FADE_EPS
   inst.crawlerT -= dt
   if (inst.crawlerT <= 0) {
     inst.crawlerT = MENU_CRAWLER_RETARGET_MIN + Math.random() * MENU_CRAWLER_RETARGET_RANGE
@@ -868,20 +922,20 @@ function updateMenuCrawler(inst, dt) {
 }
 //
 // The lake's water, the tree's apples, the bug, the flower and the midges
-// live all the while; they show with the forest only (the midges fade with
-// it).
+// live all the while; they show with the forest only (the veil fades them
+// with it).
 //
 function updateMenuForestLife(inst, dt) {
   inst.lake && Lake.onUpdate(inst.lake)
   const life = inst.forestLife
   if (!life) return
   const forest = inst.bgOpacity[BACKDROP_FOREST]
-  const hidden = forest < MENU_FOREST_LIVE_MIN_OPACITY
+  const hidden = forest <= MENU_FADE_EPS
   inst.menuTramps.forEach(t => updateMenuTramp(inst, t, dt, hidden))
   AppleBug.setHidden(life.bug, hidden)
   WaterFlower.setHidden(life.flower, hidden)
   life.fruitLayer.hidden = hidden
-  updateForestMidges(life.midges, dt, forest)
+  updateForestMidges(life.midges, dt, hidden ? 0 : OPAQUE)
   TreeFruit.tickForestTreeFruits(life.orchard, dt, inst.forestLayout.groundY)
   updateMenuWaterCycle(life, dt)
 }
@@ -974,8 +1028,10 @@ function updateMenuCaveSound(inst, shown, dt) {
   inst.caveVolume > 0 && CaveSound.onUpdate(inst.caveSound, dt, MENU_CAVE_LISTENER_Y)
 }
 //
-// Night picture under the forest, cave and "?" ones; each is drawn with its own
-// opacity (a switch fades the old one out, then the new one in).
+// Night picture under the forest, cave and "?" ones (a switch fades the old
+// one out, then the new one in): the night and "?" ones with their own
+// opacity, the forest and the cave whole — every part at once — under the
+// veil (drawBackdropVeil).
 //
 function drawBackdrops(inst) {
   if (inst.isLeavingScene) return
@@ -989,34 +1045,56 @@ function drawBackdrops(inst) {
     opacity: night
   })
   const forest = inst.bgOpacity[BACKDROP_FOREST]
-  forest > MENU_FADE_EPS && drawForestBackdrop(inst, forest)
-  const cave = inst.bgOpacity[BACKDROP_CAVE]
-  cave > MENU_FADE_EPS && CaveMenuBg.onDraw(inst.caveBg, cave)
+  forest > MENU_FADE_EPS && drawForestBackdrop(inst)
+  inst.bgOpacity[BACKDROP_CAVE] > MENU_FADE_EPS && CaveMenuBg.onDraw(inst.caveBg)
   const mystery = inst.bgOpacity[BACKDROP_MYSTERY]
   mystery > MENU_FADE_EPS && QuestionDrift.onDraw(inst.mysteryBg, mystery)
 }
 //
+// The veil over a forest or cave backdrop still coming in or going out:
+// the screen's base colour, as thick as the backdrop is still missing.
+//
+function drawBackdropVeil(inst) {
+  if (inst.isLeavingScene) return
+  const shown = Math.max(inst.bgOpacity[BACKDROP_FOREST], inst.bgOpacity[BACKDROP_CAVE])
+  if (shown <= MENU_FADE_EPS || shown >= OPAQUE) return
+  const { k } = inst
+  k.drawRect({
+    pos: k.vec2(-MENU_BG_EDGE_OVERSCAN, -MENU_BG_EDGE_OVERSCAN),
+    width: k.width() + MENU_BG_EDGE_OVERSCAN * 2,
+    height: k.height() + MENU_BG_EDGE_OVERSCAN * 2,
+    color: getRGB(k, CFG.visual.colors.ready.background),
+    opacity: OPAQUE - shown
+  })
+}
+//
+// The cave card's soil line: through the foot of the cave level's eye on
+// the panel.
+//
+function caveGround(layout) {
+  const row = LEVELS.findIndex(level => level.section === CAVE_SECTION)
+  return { y: layout.firstY + row * layout.step + CaveMenuStalkEye.ICON_FOOT_Y * layout.s, eyeX: layout.columnX }
+}
+//
 // The forest goes back to front like the level: baked sky and parallax
 // rows, the drifting clouds, the baked front scene, the lake (bed, algae,
-// water), the stone pile over its shallows, the bomb trees' roots
-// and trees with their bombs, then the stalk eyes once the forest is mostly
-// in.
+// water), the bomb trees' roots and trees with their bombs, then the stalk
+// eyes — all of it opaque (the veil fades it).
 //
-function drawForestBackdrop(inst, forest) {
+function drawForestBackdrop(inst) {
   const { k } = inst
   const pieces = inst.forestPieces
-  drawForestPieces(k, pieces.slice(0, -1), forest)
-  Clouds.onDraw(inst.clouds, forest)
-  drawForestPieces(k, pieces.slice(-1), forest)
-  inst.menuTramps.forEach(t => drawMenuTramp(k, t, forest))
-  Lake.drawBed(k, inst.lake, forest)
-  Lake.drawAlgae(k, inst.lake, forest)
-  Lake.drawFill(k, inst.lake, forest)
-  inst.shorePile.sprite && k.drawSprite({ sprite: inst.shorePile.sprite, pos: k.vec2(inst.shorePile.x, inst.shorePile.y), opacity: forest })
-  BombTree.onDrawRoots(inst.earTrees, forest)
-  BombTree.onDrawTrees(inst.earTrees, forest)
-  SpikyTomato.onDraw(inst.tomatoes, forest)
-  forest > MENU_FOREST_LIVE_MIN_OPACITY && ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(k))
+  drawForestPieces(k, pieces.slice(0, -1), OPAQUE)
+  Clouds.onDraw(inst.clouds, OPAQUE)
+  drawForestPieces(k, pieces.slice(-1), OPAQUE)
+  inst.menuTramps.forEach(t => drawMenuTramp(k, t, OPAQUE))
+  Lake.drawBed(k, inst.lake, OPAQUE)
+  Lake.drawAlgae(k, inst.lake, OPAQUE)
+  Lake.drawFill(k, inst.lake, OPAQUE)
+  BombTree.onDrawRoots(inst.earTrees, OPAQUE)
+  BombTree.onDrawTrees(inst.earTrees, OPAQUE)
+  SpikyTomato.onDraw(inst.tomatoes, OPAQUE)
+  ChainBuoy.onDraw(inst.forestEyes, forestEyeBerryColors(k))
 }
 function drawForestPieces(k, pieces, opacity) {
   pieces.forEach(piece => k.drawSprite({
@@ -1026,18 +1104,68 @@ function drawForestPieces(k, pieces, opacity) {
   }))
 }
 //
-// The level panel behind the hero and the icons.
+// The level panel behind the hero and the icons: each look shown (the two
+// cross-fading) as its live ground inside the card's shape, then its frame.
 //
 function drawMenuPanel(inst) {
   if (inst.isLeavingScene) return
   const { k, panel } = inst
-  const pos = k.vec2(panel.x, panel.y)
-  inst.panelCave < 1 && k.drawSprite({ sprite: panel.forest, pos, opacity: 1 - inst.panelCave })
-  inst.panelCave > 0 && k.drawSprite({ sprite: panel.cave, pos, opacity: inst.panelCave })
+  const pos = k.vec2(panel.x1 - panel.pad, panel.y1 - panel.pad)
+  const cave = inst.panelCave
+  //
+  // The cave look whole and opaque underneath (its runner and fireflies
+  // with it), the forest look over it fading: every part of a look comes
+  // in at once.
+  //
+  inst.panelFade = OPAQUE - cave
+  cave > MENU_FADE_EPS && k.drawMasked(inst.panelDraws.cave, inst.panelDraws.mask)
+  inst.panelFade > MENU_FADE_EPS && k.drawMasked(inst.panelDraws.forest, inst.panelDraws.mask)
+  inst.panelFade > 0 && k.drawSprite({ sprite: panel.forestFrame, pos, opacity: inst.panelFade })
+  cave > 0 && k.drawSprite({ sprite: panel.caveFrame, pos, opacity: cave })
 }
 //
-// Bakes the level panel for the current layout (once per live k and window
-// size) and returns its sprite and screen top-left.
+// The drawing passes the stencil mask takes (made once: no new functions
+// every frame).
+//
+function createPanelDraws(inst) {
+  return {
+    mask: () => drawPanelMask(inst),
+    forest: () => drawPanelCloud(inst),
+    cave: () => drawPanelCave(inst)
+  }
+}
+//
+// The card's rounded shape, the mask its ground is drawn in.
+//
+function drawPanelMask(inst) {
+  const { k, panel } = inst
+  k.drawRect({ pos: k.vec2(panel.x1, panel.y1), width: panel.w, height: panel.h, radius: panel.radius })
+}
+//
+// The forest card's ground: the cloud's cream, then its rows of puffs,
+// each strip drifting at its own pace (drawn twice so it wraps round).
+//
+function drawPanelCloud(inst) {
+  const { k, panel } = inst
+  const t = k.time()
+  k.drawSprite({ sprite: panel.cloudBase, pos: k.vec2(panel.x1, panel.y1), opacity: inst.panelFade })
+  panel.cloudRows.forEach((sprite, i) => {
+    const off = (t * MENU_PANEL_PUFF_ROWS[i].drift * panel.s) % panel.tileW
+    k.drawSprite({ sprite, pos: k.vec2(panel.x1 - off, panel.y1), opacity: inst.panelFade * MENU_PANEL_ART_ALPHA })
+    k.drawSprite({ sprite, pos: k.vec2(panel.x1 - off + panel.tileW, panel.y1), opacity: inst.panelFade * MENU_PANEL_ART_ALPHA })
+  })
+}
+//
+// The cave card's ground: the cave's far wall, its soil (the cave eye grows
+// out of it) and the runner hunting fireflies over it (cave-menu-panel.js).
+//
+function drawPanelCave(inst) {
+  CaveMenuPanel.onDraw(inst.cavePanel)
+}
+//
+// Bakes the level panel's pictures for the current layout (once per live k
+// and window size): each look's frame, the cloud's cream and its drifting
+// rows; returns them with the card's screen box.
 //
 function loadMenuPanel(k, layout) {
   const s = layout.s
@@ -1046,30 +1174,43 @@ function loadMenuPanel(k, layout) {
   const x2 = layout.columnX + MENU_PANEL_RIGHT_PAD * s
   const y1 = layout.firstY - layout.step * MENU_PANEL_END_SHARE
   const y2 = layout.firstY + layout.step * (LEVELS.length - 1 + MENU_PANEL_END_SHARE)
-  const key = `${MENU_PANEL_SPRITE}-v3-${k.width()}x${k.height()}`
-  const forest = `${key}-forest`
-  const cave = `${key}-cave`
-  k.getSprite(forest) || k.loadSprite(forest, bakeMenuPanel(x2 - x1, y2 - y1, s, FOREST_PAL.menuPanelForest))
-  k.getSprite(cave) || k.loadSprite(cave, bakeMenuPanel(x2 - x1, y2 - y1, s, FOREST_PAL.menuPanelCave))
-  return { forest, cave, x: Math.round(x1 - pad), y: Math.round(y1 - pad), w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 }
+  const w = Math.round(x2 - x1)
+  const h = Math.round(y2 - y1)
+  const tileW = w * MENU_PUFF_TILE
+  const key = `${MENU_PANEL_SPRITE}-v5-${k.width()}x${k.height()}`
+  const panel = {
+    s,
+    pad,
+    x1: Math.round(x1),
+    y1: Math.round(y1),
+    w,
+    h,
+    radius: MENU_PANEL_RADIUS * s,
+    tileW,
+    forestFrame: `${key}-forest`,
+    caveFrame: `${key}-cave`,
+    cloudBase: `${key}-cloud`,
+    cloudRows: MENU_PANEL_PUFF_ROWS.map((_, i) => `${key}-cloud-row${i}`)
+  }
+  k.getSprite(panel.forestFrame) || k.loadSprite(panel.forestFrame, bakePanelFrame(w, h, s, FOREST_PAL.menuPanelForest))
+  k.getSprite(panel.caveFrame) || k.loadSprite(panel.caveFrame, bakePanelFrame(w, h, s, FOREST_PAL.menuPanelCave))
+  k.getSprite(panel.cloudBase) || k.loadSprite(panel.cloudBase, bakePanelGround(w, h, FOREST_PAL.menuPanelForest, paintPanelCloudBase))
+  const rng = createSeededRandom(MENU_PUFF_SEED)
+  panel.cloudRows.forEach((name, i) => { k.getSprite(name) || k.loadSprite(name, bakePanelPuffRow(tileW, h, w, MENU_PANEL_PUFF_ROWS[i], rng)) })
+  return panel
 }
 //
-// The panel card in a look's colours ({fill, light, contour}): translucent
-// fill, a lit band fading down from the top and the dark contour, then
-// film grain.
+// A look's frame over its card: the lit band fading down from the top and
+// the thin dark contour, then film grain.
 //
-function bakeMenuPanel(w, h, s, look) {
+function bakePanelFrame(w, h, s, look) {
   const pad = MENU_PANEL_PAD * s
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(w + pad * 2)
   canvas.height = Math.ceil(h + pad * 2)
   const ctx = canvas.getContext('2d')
-  const radius = MENU_PANEL_RADIUS * s
   const card = new Path2D()
-  card.roundRect(pad, pad, w, h, radius)
-  ctx.globalAlpha = MENU_PANEL_FILL_ALPHA
-  ctx.fillStyle = look.fill
-  ctx.fill(card)
+  card.roundRect(pad, pad, w, h, MENU_PANEL_RADIUS * s)
   const light = ctx.createLinearGradient(0, pad, 0, pad + h * MENU_PANEL_LIGHT_SHARE)
   light.addColorStop(0, look.light)
   light.addColorStop(1, `${look.light}00`)
@@ -1081,6 +1222,61 @@ function bakeMenuPanel(w, h, s, look) {
   ctx.lineWidth = MENU_PANEL_CONTOUR_W * s
   ctx.stroke(card)
   applyForestFilmGrainToCanvas(canvas, MENU_PANEL_GRAIN_SEED)
+  return canvas
+}
+//
+// A card's still ground (its whole box; the mask rounds it): the look's
+// translucent colour with the level's ground over it, film grain.
+//
+function bakePanelGround(w, h, look, paintArt) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.globalAlpha = MENU_PANEL_FILL_ALPHA
+  ctx.fillStyle = look.fill
+  ctx.fillRect(0, 0, w, h)
+  ctx.globalAlpha = MENU_PANEL_ART_ALPHA
+  paintArt(ctx, w, h)
+  applyForestFilmGrainToCanvas(canvas, MENU_PANEL_GRAIN_SEED)
+  return canvas
+}
+//
+// The cloud's cream.
+//
+function paintPanelCloudBase(ctx, w, h) {
+  ctx.fillStyle = FOREST_PAL.menuPanelCloud.light
+  ctx.fillRect(0, 0, w, h)
+}
+//
+// One row of the cloud's puffs as a seamless strip tileW wide (each puff
+// also drawn a strip's width on either side, so its ends meet), filled on
+// down to the card's bottom; its sizes are shares of the card's width.
+//
+function bakePanelPuffRow(tileW, h, cardW, row, rng) {
+  const canvas = document.createElement('canvas')
+  canvas.width = tileW
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  const r = row.r * cardW
+  const y = row.y * h
+  ctx.fillStyle = FOREST_PAL.menuPanelCloud[row.color]
+  ctx.beginPath()
+  const count = Math.max(1, Math.round(tileW / (r * MENU_PUFF_STEP)))
+  const step = tileW / count
+  for (let i = 0; i < count; i++) {
+    const pr = r * (1 + (rng() * 2 - 1) * MENU_PUFF_JITTER)
+    const py = y + (rng() * 2 - 1) * r * MENU_PUFF_JITTER
+    const px = (i + (rng() * 2 - 1) * MENU_PUFF_JITTER) * step
+    for (let wrap = -1; wrap <= 1; wrap++) {
+      const x = px + wrap * tileW
+      ctx.moveTo(x + pr, py)
+      ctx.arc(x, py, pr, 0, Math.PI * 2)
+    }
+  }
+  ctx.rect(0, y, tileW, h - y)
+  ctx.fill()
+  applyForestFilmGrainToCanvas(canvas, MENU_PANEL_GRAIN_SEED + 1)
   return canvas
 }
 //
@@ -1144,6 +1340,14 @@ function drawLeaveCover(inst) {
   if (!inst.isLeavingScene) return
   const { k } = inst
   k.drawRect({ pos: k.vec2(0, 0), width: k.width(), height: k.height(), color: getRGB(k, MENU_LEAVE_BG_HEX) })
+}
+//
+// The same cover while the menu comes up (fading away once it is all there).
+//
+function drawRevealCover(inst) {
+  if (inst.cover <= 0 || inst.isLeavingScene) return
+  const { k } = inst
+  k.drawRect({ pos: k.vec2(0, 0), width: k.width(), height: k.height(), color: getRGB(k, MENU_LEAVE_BG_HEX), opacity: inst.cover })
 }
 function beginMenuSceneLeave(inst) {
   if (inst.isLeavingScene) return
@@ -1363,20 +1567,6 @@ function loadMenuForestLayerSprites(k) {
   return pieces
 }
 //
-// The lake's tree-side stone pile, the level's own (shaped by the live
-// lake's bed), drawn over the water; baked once per k and window size.
-//
-const menuShorePileByK = new WeakMap()
-function loadMenuShorePile(k, lake) {
-  const key = `${k.width()}x${k.height()}`
-  const cached = menuShorePileByK.get(k)
-  if (cached?.key === key) return cached
-  const pile = bakeForestLakeStonePile(k, lake, lake.surfaceY)
-  const placed = { key, sprite: pile?.name, x: pile?.x ?? 0, y: pile?.y ?? 0 }
-  menuShorePileByK.set(k, placed)
-  return placed
-}
-//
 // The level's lake for the menu layout (sprites keyed by window size, since
 // the layout follows it).
 //
@@ -1388,8 +1578,7 @@ function createMenuLake(k, forestLayout) {
     x2Core: lake.x2Core,
     surfaceY: lake.surfaceY,
     floorY: groundY,
-    spriteKey: `${MENU_LAKE_SPRITE_KEY}-${k.width()}x${k.height()}`,
-    bankJag: MENU_LAKE_BANK_JAG
+    spriteKey: `${MENU_LAKE_SPRITE_KEY}-${k.width()}x${k.height()}`
   })
 }
 //
@@ -1434,7 +1623,15 @@ function drawMenuTramp(k, tramp, opacity) {
 // the menu is gone by then.
 //
 function startMenuForestLife(inst) {
-  loadMenuForestLife(inst.k).then(ready => ready && !inst.closed && createMenuForestLife(inst))
+  loadMenuForestLife(inst.k).then(ready => onMenuForestLifeLoaded(inst, ready))
+}
+//
+// The forest life's art is in: it is made (unless the menu is gone), and
+// the menu may show.
+//
+function onMenuForestLifeLoaded(inst, ready) {
+  ready && !inst.closed && createMenuForestLife(inst)
+  inst.lifeReady = true
 }
 function loadMenuForestLife(k) {
   return Promise.all([AppleBug.load(k), WaterFlower.load(k), bakeLeftTreeApple(k), PropellerBud.load(k)]).then(baked => baked.every(Boolean))
@@ -1514,7 +1711,7 @@ function createMenuPropellerBud(inst) {
     rest: MENU_BUD_REST,
     scale,
     getHeroPos: () => menuHeroInBudSpace(inst),
-    isVisible: () => !inst.isLeavingScene && inst.bgOpacity[BACKDROP_FOREST] >= MENU_FOREST_LIVE_MIN_OPACITY,
+    isVisible: () => !inst.isLeavingScene && inst.bgOpacity[BACKDROP_FOREST] > MENU_FADE_EPS,
     sound: inst.sound,
     humFloor: MENU_BUD_HUM_LEVEL,
     z: MENU_BUD_Z,

@@ -341,6 +341,11 @@ const IDLE_TIME = 3
 const IDLE_TIME_RANGE = 3
 const ROAM_ARRIVE = 30
 //
+// Leaving, it aims at the middle of the hollow under the bank this far in
+// from the water's end.
+//
+const HOLLOW_AIM = 60
+//
 // Hunting: a small fish (ctx.canEat) ahead of its snout within SEE px, with CHASE_ROOM px
 // of lake ahead of it; stalked, then chased from within LUNGE_R px for at
 // most LUNGE_TIME s: the fish bolts straight on ahead of it, and it swims
@@ -1156,8 +1161,10 @@ function startDive(inst) {
   setTarget(inst, x, depthAt(inst, x, DIVE_DEPTH), CRUISE)
 }
 //
-// Through the wall ahead at its depth, until its tail is gone behind it;
-// then away — briefly to come back the other way, or until its next visit.
+// Through the wall ahead, by the hollow under the bank there (aiming at
+// its middle HOLLOW_AIM px in from the water's end), until its tail is
+// gone behind it; then away — briefly to come back the other way, or
+// until its next visit.
 //
 function exit(inst, comeBack) {
   inst.side = inst.facing
@@ -1166,7 +1173,8 @@ function exit(inst, comeBack) {
   inst.lunging = false
   setMode(inst, MODE.EXIT)
   const x = inst.side < 0 ? inst.span.x1 - G.length * 2 : inst.span.x2 + G.length * 2
-  setTarget(inst, x, inst.pos.y, inst.cmdSpeed ?? (comeBack ? CRUISE : LEAVE_SPEED))
+  const hollow = headBounds(inst, inst.side < 0 ? inst.span.x1 + HOLLOW_AIM : inst.span.x2 - HOLLOW_AIM, false)
+  setTarget(inst, x, (hollow.top + hollow.bottom) * HALF, inst.cmdSpeed ?? (comeBack ? CRUISE : LEAVE_SPEED))
 }
 function exitOn(inst) {
   const tail = inst.joints[inst.joints.length - 1]
@@ -1199,7 +1207,8 @@ function move(inst, dt) {
     inst.pos.y += (inst.target.y - inst.pos.y) * (1 - Math.exp(-HOLD_RATE * dt))
     levelTrail(inst, dt)
   }
-  inWater(inst) && keepInWater(inst, y0) && alongBound(inst, x0, y0)
+  const bound = inWater(inst) ? keepInWater(inst, y0) : keepInHollow(inst)
+  bound && alongBound(inst, x0, y0)
   layTrail(inst)
 }
 function inWater(inst) {
@@ -1209,7 +1218,7 @@ function pitchWanted(inst) {
   if (inst.mode === MODE.BREATHE) return 0
   const dx = Math.max(PITCH_DX_MIN, (inst.target.x - inst.pos.x) * inst.facing)
   const toTarget = Math.atan2(inst.pos.y - inst.target.y, dx)
-  return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, inWater(inst) ? clearAhead(inst, toTarget) : toTarget))
+  return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, clearAhead(inst, toTarget)))
 }
 //
 // A pitch kept from aiming the head into the bed or, under water, up past
@@ -1236,11 +1245,12 @@ function alongBound(inst, x0, y0) {
   inst.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, Math.atan2(y0 - inst.pos.y, run)))
 }
 //
-// The head's top and bottom in the water at x (rising: up to its breathing
-// height).
+// The head's top and bottom in the water at x: SUB_TOP px under the water's
+// top there (the surface, or in a bank's hollow its soil ceiling; rising:
+// up to its breathing height) and BED_CLEAR px over the bed.
 //
 function headBounds(inst, x, rising) {
-  const top = rising ? breatheY(inst, x) : CaveLake.surfaceAt(inst.lake, x) + SUB_TOP
+  const top = rising ? breatheY(inst, x) : CaveLake.waterTopAt(inst.lake, x) + SUB_TOP
   return { top, bottom: Math.max(top, CaveLake.bottomAt(inst.lake, x) - BED_CLEAR) }
 }
 //
@@ -1268,6 +1278,20 @@ function keepInWater(inst, y0) {
   p.y < top && p.y < y0 && (p.y = Math.min(y0, top))
   p.y = Math.min(bottom, p.y)
   return p.y !== y && inst.mode !== MODE.BREATHE
+}
+//
+// Coming in or going out through a wall the head keeps to the hollow under
+// the bank (between its soil ceiling and its bed; behind the wall, the
+// hollow's last column), pushed down under the ceiling where it must:
+// never through the soil over the hollow along the water's line.
+//
+function keepInHollow(inst) {
+  const p = inst.pos
+  const { top, bottom } = headBounds(inst, p.x, false)
+  const y = Math.max(top, Math.min(bottom, p.y))
+  if (y === p.y) return false
+  p.y = y
+  return true
 }
 //
 // The head's path: a point every TRAIL_STEP px swum, as long as the body;

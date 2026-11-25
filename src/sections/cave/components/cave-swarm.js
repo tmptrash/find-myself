@@ -51,13 +51,13 @@ const SEED = 6100
 // head's height over the mushroom's foot. The ground under the swarm is
 // looked for GROUND_LOOK px down.
 //
-const EMERGE_GAP = 0.22
-const EMERGE_JITTER = 0.15
-const EMERGE_SPEED = 30
-const EMERGE_SPEED_RANGE = 25
+const EMERGE_GAP = 0.09
+const EMERGE_JITTER = 0.07
+const EMERGE_SPEED = 60
+const EMERGE_SPEED_RANGE = 40
 const EMERGE_UP = 0.35
 const EMERGE_SPREAD = 0.35
-const EMERGE_TIME = 0.9
+const EMERGE_TIME = 0.55
 const EMERGE_DRAG = 3
 const HOLE_FLASH_R = 9
 const HOLE_FLASH_OPACITY = 0.9
@@ -66,9 +66,12 @@ const HEAD_HEIGHT = 62
 const GROUND_LOOK = 900
 //
 // Keeping together: each one's loop round the middle (SPREAD_X / SPREAD_Y
-// px at most, its two pairs of sines at LOOP_W..+RANGE rad/s; squeezed,
-// never cut off, where the head's height or the water leaves less room
-// over or under the middle, so they never line up along that edge), its
+// px at most, its two pairs of sines at LOOP_W..+RANGE rad/s). The loops
+// keep their round shape whatever room there is between the head's height
+// and the ground or the water: where the swarm's middle sits too near one
+// of them the loops' own middle moves in between the two, and only a band
+// narrower than the loops squeezes them — evenly over and under, never
+// below ROUND_MIN of their height (they never line up along an edge); its
 // spring (stiffness and damping, each with its spread), its shoves
 // (JITTER_ACC px/s² every JITTER_EVERY..+RANGE s) and its top speed. One
 // that strays over the head's height or down to the water is eased back
@@ -79,6 +82,7 @@ const GROUND_LOOK = 900
 //
 const SPREAD_X = 28
 const SPREAD_Y = 26
+const ROUND_MIN = 0.7
 const LOOP_W = 0.6
 const LOOP_W_RANGE = 1.3
 const SPRING = 12
@@ -682,7 +686,7 @@ function updateFly(inst, fly, dt) {
 function steer(inst, fly, dt, pull) {
   const t = inst.t
   const tx = inst.center.x + fly.ax * Math.sin(fly.w[0] * t + fly.p[0]) + fly.bx * Math.sin(fly.w[1] * t + fly.p[1])
-  const ty = inst.center.y + squeezed(inst, fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3]))
+  const ty = loopY(inst, fly.ay * Math.cos(fly.w[2] * t + fly.p[2]) + fly.by * Math.sin(fly.w[3] * t + fly.p[3]))
   fly.jitterIn -= dt
   if (fly.jitterIn <= 0) {
     const a = fly.rng() * FULL_TURN
@@ -706,12 +710,18 @@ function updateCeiling(inst) {
   if (want === -Infinity || inst.ceilY === -Infinity || want < inst.ceilY) inst.ceilY = want
 }
 //
-// A loop's height off the middle squeezed into the room there is: over it
-// up to the head's height, under it down to the water.
+// Where a loop's point `oy` px off its middle lies: the loops' middle is
+// the swarm's, moved in between the head's height and the ground (or the
+// water) where it sits too near one of them; the loops are squeezed, evenly
+// over and under, only where the band between the two is narrower than
+// they are.
 //
-function squeezed(inst, oy) {
-  const room = oy < 0 ? inst.center.y - inst.ceilY : floorY(inst) - inst.center.y
-  return oy * Math.min(1, Math.max(0, room) / SPREAD_Y)
+function loopY(inst, oy) {
+  const bottom = floorY(inst)
+  if (inst.ceilY === -Infinity) return Math.min(inst.center.y, bottom - SPREAD_Y) + oy
+  const scale = Math.min(1, Math.max(ROUND_MIN, (bottom - inst.ceilY) / (SPREAD_Y * 2)))
+  const reach = SPREAD_Y * scale
+  return Math.max(inst.ceilY + reach, Math.min(bottom - reach, inst.center.y)) + oy * scale
 }
 //
 // Which way the swarm shies from a hero: along his way and off him (off

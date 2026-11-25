@@ -1,6 +1,6 @@
 import * as PolyBatch from '../../../utils/poly-batch.js'
 import { getRGB } from '../../../utils/helper.js'
-import { addLiddedEyeBerry, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y, FOREST_SUN_LIT_FRAC } from '../../forest/utils/forest-eye-berry.js'
+import { addLiddedEyeBerry, FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y, FOREST_EYE_LIT_FRAC } from '../../forest/utils/forest-eye-berry.js'
 import { CAVE_CFG } from '../cfg.js'
 //
 // Shared live look of the cave's hostile stalk-eye (in the level and in
@@ -89,7 +89,7 @@ export function eyeVeins(rng, count, inner = VEIN_TO_MIN) {
 /**
  * Queues one bloodshot eye.
  * @param {Object} batch - PolyBatch inst
- * @param {Object} eye - {x, y, r: centre and radius, lookX, lookY: pupil offset, pupilR, close: 0 open … 1 shut, veins: from eyeVeins()}
+ * @param {Object} eye - {x, y, r: centre and radius, lookX, lookY: pupil offset, pupilR, close: 0 open … 1 shut, lidFromSide: the lid slides across from the side, veins: from eyeVeins()}
  * @param {Object} colors - From creatureColors()
  * @param {number} contourW - Contour ring width
  */
@@ -98,12 +98,12 @@ export function addVeinedEye(batch, eye, colors, contourW) {
   const px = x + eye.lookX
   const py = y + eye.lookY
   if (eye.close > 0) {
-    addLiddedEyeBerry(batch, x, y, r, px, py, pupilR, lidColors.get(colors), contourW, eye.close)
+    addLiddedEyeBerry(batch, x, y, r, px, py, pupilR, lidColors.get(colors), contourW, eye.close, Boolean(eye.lidFromSide))
     return
   }
   PolyBatch.addDisc(batch, x, y, r + contourW, colors.contour)
   PolyBatch.addDisc(batch, x, y, r, colors.scleraShade)
-  PolyBatch.addDisc(batch, x + r * FOREST_SUN_LIT_OFFSET_X, y + r * FOREST_SUN_LIT_OFFSET_Y, r * FOREST_SUN_LIT_FRAC, colors.sclera)
+  PolyBatch.addDisc(batch, x + r * FOREST_SUN_LIT_OFFSET_X, y + r * FOREST_SUN_LIT_OFFSET_Y, r * FOREST_EYE_LIT_FRAC, colors.sclera)
   eye.veins.forEach(v => addVein(batch, x, y, r, v, colors.vein))
   PolyBatch.addDisc(batch, px, py, pupilR * IRIS_FRAC, colors.iris)
   PolyBatch.addDisc(batch, px, py, pupilR, colors.pupil)

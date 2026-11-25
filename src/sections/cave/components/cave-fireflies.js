@@ -2,8 +2,8 @@ import { getRGB } from '../../../utils/helper.js'
 import * as Glow from '../utils/cave-glow.js'
 import { CAVE_CFG } from '../cfg.js'
 //
-// Cave fireflies: slow wandering sparks across the shaft, plus bursts the
-// hero shatters into on a spike hit (they drift apart, flicker and fade).
+// Cave fireflies: slow wandering sparks across the shaft, plus bursts of
+// sparks where the hero comes back (they drift apart, flicker and fade).
 // The wandering ones shy away from the hero when he comes near (SHY_*).
 // Given a nest (the dry mushroom's big holes, setNest), a few of them are
 // always at it: one flies to a hole and goes in, stays a while, comes out
@@ -277,12 +277,11 @@ export function onUpdate(inst, heroPos = null) {
  * @param {Object} inst - Fireflies instance
  * @param {number} top - View top world Y
  * @param {number} bottom - View bottom world Y
- * @param {number} [opacity=1] - Fade (the menu picture cross-fading)
  */
-export function onDraw(inst, top, bottom, opacity = 1) {
+export function onDraw(inst, top, bottom) {
   const k = inst.k
   const t = k.time()
-  inst.ambient.forEach(f => f.state === STATE.FREE && drawAmbient(inst, f, t, top, bottom, opacity))
+  inst.ambient.forEach(f => f.state === STATE.FREE && drawAmbient(inst, f, t, top, bottom))
   inst.sparks.forEach(s => {
     const fade = s.life / s.maxLife
     const flicker = flickerAt(t, s)
@@ -304,10 +303,10 @@ export function onDrawNest(inst, top, bottom) {
 //
 // An ambient firefly: its glow and its bright core drifting round in it.
 //
-function drawAmbient(inst, f, t, top, bottom, opacity) {
+function drawAmbient(inst, f, t, top, bottom) {
   if (f.y < top - CULL_PAD || f.y > bottom + CULL_PAD) return
   const k = inst.k
-  const flicker = flickerAt(t, f) * opacity * f.fade * f.vis
+  const flicker = flickerAt(t, f) * f.fade * f.vis
   const a = f.orbit + t * f.spin
   const r = AMBIENT_GLOW_R * CORE_ORBIT * (1 + CORE_ORBIT_BREATHE * Math.sin(t * CORE_BREATHE_HZ * FULL_TURN + f.phase))
   Glow.drawGlow(k, f.x, f.y, AMBIENT_GLOW_R, inst.glowRgb, AMBIENT_OPACITY * flicker)

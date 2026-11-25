@@ -85,7 +85,6 @@ const CORNER_BR = 2
 const CORNER_BL = 1
 const HALF = 0.5
 let mask = null
-let runs = null
 
 /**
  * A ray across the platforms' solid mask: the first solid point from
@@ -98,13 +97,7 @@ let runs = null
  * @returns {{x: number, y: number, dist: number}|null}
  */
 export function raycast(x, y, dx, dy, maxDist) {
-  const m = solidMask()
-  for (let t = 0; t <= maxDist; t++) {
-    const px = x + dx * t
-    const py = y + dy * t
-    if (isSolidIn(m, px, py)) return { x: px, y: py, dist: t }
-  }
-  return null
+  return raycastIn(solidMask(), x, y, dx, dy, maxDist)
 }
 
 /**
@@ -140,8 +133,64 @@ export function isOpenAir(x, y, pad) {
  * @returns {Array<{pts: Array<{x: number, y: number, nx: number, ny: number, tx: number, ty: number}>, s: Float32Array, len: number, closed: boolean}>}
  */
 export function crawlRuns() {
-  runs ??= traceRuns(solidMask())
-  return runs
+  return crawlRunsOf(solidMask())
+}
+
+/**
+ * A solid mask of anything else's own (the menu's level panel): the
+ * canvas's opaque pixels, its room the canvas (no lake in it), the
+ * canvas's top-left at ox / oy in the world.
+ * @param {HTMLCanvasElement} canvas - What is solid, painted opaque
+ * @param {number} [ox=0] - World X of the canvas's left
+ * @param {number} [oy=0] - World Y of its top
+ * @returns {Object} Mask for crawlRunsOf / raycastIn / isSoilIn
+ */
+export function maskFromCanvas(canvas, ox = 0, oy = 0) {
+  const w = canvas.width + PAD * 2
+  const h = canvas.height + PAD * 2
+  const data = new Uint8Array(w * h)
+  stampLayer(data, w, h, { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true }), x: 0, y: 0 })
+  return { data, w, h, ox, oy, roomW: canvas.width, roomH: canvas.height, lake: false, runs: null }
+}
+
+/**
+ * The crawl runs round a mask's solids (traced once per mask).
+ * @param {Object} m - Mask (maskFromCanvas, or the level's)
+ * @returns {Array<Object>} Crawl runs, as crawlRuns()
+ */
+export function crawlRunsOf(m) {
+  m.runs ??= traceRuns(m)
+  return m.runs
+}
+
+/**
+ * As raycast, across a mask's solids.
+ * @param {Object} m - Mask
+ * @param {number} x - Start X
+ * @param {number} y - Start Y
+ * @param {number} dx - Direction X
+ * @param {number} dy - Direction Y
+ * @param {number} maxDist - Ray length (px)
+ * @returns {{x: number, y: number, dist: number}|null}
+ */
+export function raycastIn(m, x, y, dx, dy, maxDist) {
+  for (let t = 0; t <= maxDist; t++) {
+    const px = x + dx * t
+    const py = y + dy * t
+    if (isSolidIn(m, px, py)) return { x: px, y: py, dist: t }
+  }
+  return null
+}
+
+/**
+ * Whether a point lies in a mask's solids.
+ * @param {Object} m - Mask
+ * @param {number} x - X
+ * @param {number} y - Y
+ * @returns {boolean}
+ */
+export function isSoilIn(m, x, y) {
+  return isSolidIn(m, x, y)
 }
 
 /**
@@ -182,7 +231,7 @@ function solidMask() {
   const data = new Uint8Array(w * h)
   Layout.PLATFORMS.forEach(p => stampLayer(data, w, h, Platform.layerOf(p)))
   Scene.roomLayers().forEach(layer => stampLayer(data, w, h, layer))
-  mask = { data, w, h }
+  mask = { data, w, h, ox: 0, oy: 0, roomW: Layout.WORLD_W, roomH: Layout.WORLD_H, lake: true, runs: null }
   return mask
 }
 //
@@ -204,8 +253,8 @@ function stampLayer(data, w, h, layer) {
   }
 }
 function isSolidIn(m, x, y) {
-  const mx = Math.round(x) + PAD
-  const my = Math.round(y) + PAD
+  const mx = Math.round(x - m.ox) + PAD
+  const my = Math.round(y - m.oy) + PAD
   return mx >= 0 && my >= 0 && mx < m.w && my < m.h && m.data[my * m.w + mx] === 1
 }
 //
@@ -244,7 +293,7 @@ function outlineLoops(m) {
       CASES[kind].forEach(([a, b]) => link(links, edgeKey(gw, i, j, a), edgeKey(gw, i, j, b)))
     }
   }
-  return walkLoops(links).map(keys => keys.map(key => edgePoint(gw, key)))
+  return walkLoops(links).map(keys => keys.map(key => edgePoint(m, gw, key)))
 }
 //
 // A cell edge's key: horizontal edges even, vertical ones odd.
@@ -258,12 +307,12 @@ function edgeKey(gw, i, j, edge) {
 //
 // The world point at an edge's midpoint.
 //
-function edgePoint(gw, key) {
+function edgePoint(m, gw, key) {
   const idx = key >> 1
   const i = idx % gw
   const j = Math.floor(idx / gw)
   const vertical = key & 1
-  return { x: (i + (vertical ? 0 : HALF) - 1) * CELL - PAD, y: (j + (vertical ? HALF : 0) - 1) * CELL - PAD }
+  return { x: (i + (vertical ? 0 : HALF) - 1) * CELL - PAD + m.ox, y: (j + (vertical ? HALF : 0) - 1) * CELL - PAD + m.oy }
 }
 function link(links, a, b) {
   links.has(a) ? links.get(a).push(b) : links.set(a, [b])
@@ -356,7 +405,7 @@ function splitLoop(m, pts, coarse) {
   const n = pts.length
   const tight = pts.map((p, i) => isTight(m, p.x, p.y, coarse[i].nx, coarse[i].ny))
   bridgeTight(tight, pts)
-  const ok = pts.map((p, i) => !tight[i] && isInRoom(p))
+  const ok = pts.map((p, i) => !tight[i] && isInRoom(m, p))
   const firstBad = ok.indexOf(false)
   if (firstBad < 0) return [runOf(pts, true)]
   const out = []
@@ -373,13 +422,13 @@ function splitLoop(m, pts, coarse) {
   return out
 }
 //
-// Whether a point lies inside the world (WALL_MARGIN px in from its edges)
-// and not in the lake's water.
+// Whether a point lies inside the mask's room (WALL_MARGIN px in from its
+// edges) and not in the lake's water (where it has one).
 //
-function isInRoom(p) {
-  if (p.x < WALL_MARGIN || p.x > Layout.WORLD_W - WALL_MARGIN) return false
-  if (p.y < WALL_MARGIN || p.y > Layout.WORLD_H - WALL_MARGIN) return false
-  return !isUnderWater(p)
+function isInRoom(m, p) {
+  if (p.x - m.ox < WALL_MARGIN || p.x - m.ox > m.roomW - WALL_MARGIN) return false
+  if (p.y - m.oy < WALL_MARGIN || p.y - m.oy > m.roomH - WALL_MARGIN) return false
+  return !m.lake || !isUnderWater(p)
 }
 //
 // No room off the surface here: solid again along the normal.

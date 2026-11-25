@@ -45,7 +45,7 @@ const THORNS = { step: 16, len: 15, tipLen: 9, from: 0.08, to: 0.9 }
 //
 const EYE_R = 22
 const EYE_CONTOUR = 1.8
-const EYE_VEINS = 8
+const EYE_VEINS = 4
 const VEIN_INNER = 0.3
 const PUPIL_RELAXED = 0.34
 const PUPIL_TENSE = 0.2
@@ -95,7 +95,7 @@ export function create(cfg) {
     time: rng() * Math.PI * 2,
     pts: makePoints(SEGMENTS),
     blades: BLADES.map(def => ({ ...def, pts: makePoints(BLADE_SEGMENTS) })),
-    eye: { x: 0, y: 0, r: EYE_R, lookX: 0, lookY: 0, pupilR: 0, close: 0, veins: eyeVeins(rng, EYE_VEINS, VEIN_INNER) },
+    eye: { x: 0, y: 0, r: EYE_R, lookX: 0, lookY: 0, pupilR: 0, close: 0, lidFromSide: true, veins: eyeVeins(rng, EYE_VEINS, VEIN_INNER) },
     wanderAt: 0,
     wanderX: 0,
     wanderY: 0,

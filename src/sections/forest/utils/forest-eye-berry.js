@@ -14,6 +14,11 @@ export const FOREST_SUN_LIT_OFFSET_X = -0.14
 export const FOREST_SUN_LIT_OFFSET_Y = -0.22
 export const FOREST_SUN_LIT_FRAC = 0.86
 //
+// An eye's lit face stays inside its white (its offset plus its radius
+// never past the rim), so no light spills onto the dark contour.
+//
+export const FOREST_EYE_LIT_FRAC = Math.min(FOREST_SUN_LIT_FRAC, 1 - Math.hypot(FOREST_SUN_LIT_OFFSET_X, FOREST_SUN_LIT_OFFSET_Y))
+//
 // Blink lid (same shape as the boot loader eye): arc bulge as a fraction of
 // the berry radius, overhang past the ring, strip column count.
 //
@@ -63,7 +68,8 @@ export function addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, cont
 /**
  * Queues an eye-berry with a stem-coloured lid sliding down over it, like the
  * boot loader eye: the lid's lower edge is an arc bulging downward that sweeps
- * from above the berry to past its bottom; the contour ring stays on top.
+ * from above the berry to past its bottom (or, from the side, the same lid
+ * turned to slide across it from the left); the contour ring stays on top.
  * @param {Object} batch - PolyBatch inst
  * @param {number} x - Berry centre X
  * @param {number} y - Berry centre Y
@@ -74,8 +80,9 @@ export function addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, cont
  * @param {Object} colors - From forestEyeBerryColors()
  * @param {number} contourW - Contour ring width
  * @param {number} close - 0 open … 1 fully shut
+ * @param {boolean} [fromSide=false] - The lid slides across from the left instead of down from the top
  */
-export function addLiddedEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW, close) {
+export function addLiddedEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW, close, fromSide = false) {
   addEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors, contourW)
   if (close <= 0) return
   const lidR = r + contourW * 0.5
@@ -89,8 +96,9 @@ export function addLiddedEyeBerry(batch, x, y, r, pupilX, pupilY, pupilR, colors
     const lx = -lidR + (2 * lidR * i) / BERRY_LID_COLUMNS
     const half = Math.sqrt(Math.max(0, lidR * lidR - lx * lx))
     const curve = edgeY + bulge * 0.5 * (1 - (lx / side) * (lx / side))
-    shape.push([lx, -half], [lx, Math.max(-half, Math.min(half, curve))])
-    edge.push(curve > -half && curve < half ? { x: x + lx, y: y + curve } : null)
+    shape.push(lidPoint(fromSide, lx, -half), lidPoint(fromSide, lx, Math.max(-half, Math.min(half, curve))))
+    const at = lidPoint(fromSide, lx, curve)
+    edge.push(curve > -half && curve < half ? { x: x + at[0], y: y + at[1] } : null)
     const a = i * 2
     i > 0 && indices.push(a - 2, a - 1, a, a - 1, a + 1, a)
   }
@@ -117,6 +125,13 @@ export function addTaperedPass(batch, pts, wBase, wTip, color) {
 }
 
 //
+// A point of the lid (along / across its slide): as is for a lid from the
+// top, its axes swapped for one from the left.
+//
+function lidPoint(fromSide, along, across) {
+  return fromSide ? [across, along] : [along, across]
+}
+//
 // Contour ring re-drawn over the lid so the lid edge never eats into it.
 //
 function addContourRing(batch, x, y, ringR, w, color) {
@@ -133,7 +148,7 @@ function addBerryBall(batch, x, y, r, colors, contourW) {
     batch,
     x + r * FOREST_SUN_LIT_OFFSET_X,
     y + r * FOREST_SUN_LIT_OFFSET_Y,
-    r * FOREST_SUN_LIT_FRAC,
+    r * FOREST_EYE_LIT_FRAC,
     colors.berry
   )
 }

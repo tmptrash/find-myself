@@ -13,7 +13,7 @@ import { creatureColors, eyeVeins, addVeinedEye, addStalk, addThorns, makePoints
 // the eye ICON_EYE_Y above it, bowed STALK_BOW px; it sways SWAY_PX at the
 // eye (SWAY_SPEED rad/s), less toward the foot.
 //
-const ICON_FOOT_Y = 40
+export const ICON_FOOT_Y = 40
 const ICON_EYE_Y = -20
 const SEGMENTS = 5
 const STALK_BOW = 4
@@ -29,13 +29,14 @@ const SWAY_SPEED = 1.4
 const THORNS = { step: 10, len: 8, tipLen: 5, from: 0.12, to: 0.85 }
 //
 // The eye: radius, pupil share of it, the pupil kept PUPIL_MARGIN inside
-// the white, its contour, its veins.
+// the white, its contour, its veins; its lid slides across it from the
+// side, not down from the top.
 //
 const EYE_R = 16
 const PUPIL_SHARE = 0.36
 const PUPIL_MARGIN = 1
 const EYE_CONTOUR = 1.8
-const EYE_VEINS = 7
+const EYE_VEINS = 4
 const VEIN_INNER = 0.35
 const SEED = 4252
 //
@@ -45,6 +46,11 @@ const SEED = 4252
 const BLINK_MIN = 2.5
 const BLINK_MAX = 6
 const BLINK_SEC = 0.2
+//
+// An eye told to close (cfg.isOpen) shuts its lid and opens it again at
+// LID_RATE per second, eased.
+//
+const LID_RATE = 8
 
 /**
  * Creates the menu cave stalk-eye icon.
@@ -54,6 +60,7 @@ const BLINK_SEC = 0.2
  * @param {function(): {x: number, y: number, scale: number}} cfg.getPose - Icon centre and scale
  * @param {function(): ({x: number, y: number}|null)} cfg.getLookAt - Point the pupil follows (null: straight ahead)
  * @param {function(): boolean} cfg.isVisible - False hides the icon (scene leave)
+ * @param {function(): boolean} [cfg.isOpen] - False shuts its eye (open when left out)
  * @returns {Object} Stalk-eye icon inst
  */
 export function create(cfg) {
@@ -63,13 +70,15 @@ export function create(cfg) {
     getPose: cfg.getPose,
     getLookAt: cfg.getLookAt,
     isVisible: cfg.isVisible,
+    isOpen: cfg.isOpen ?? (() => true),
     batch: PolyBatch.create(),
     colors: creatureColors(k),
     points: makePoints(SEGMENTS),
-    eye: { x: 0, y: 0, r: 0, lookX: 0, lookY: 0, pupilR: 0, close: 0, veins: eyeVeins(createSeededRandom(SEED), EYE_VEINS, VEIN_INNER) },
+    eye: { x: 0, y: 0, r: 0, lookX: 0, lookY: 0, pupilR: 0, close: 0, lidFromSide: true, veins: eyeVeins(createSeededRandom(SEED), EYE_VEINS, VEIN_INNER) },
     time: 0,
     blinkWait: randomIn(BLINK_MIN, BLINK_MAX),
-    blinkT: 0
+    blinkT: 0,
+    shut: 0
   }
   k.add([
     k.z(cfg.z),
@@ -85,21 +94,26 @@ export function create(cfg) {
   return inst
 }
 //
-// Sway time and the blink: wait, then shut and open over BLINK_SEC.
+// Sway time, the lid shut or opened as told, and while open the blink:
+// wait, then shut and open over BLINK_SEC.
 //
 function onUpdate(inst) {
   const dt = inst.k.dt()
+  const open = inst.isOpen()
   inst.time += dt
+  inst.shut += ((open ? 0 : 1) - inst.shut) * Math.min(1, dt * LID_RATE)
+  inst.eye.close = Math.max(inst.shut, open ? blink(inst, dt) : 0)
+}
+function blink(inst, dt) {
   if (inst.blinkT > 0) {
     inst.blinkT = Math.max(0, inst.blinkT - dt)
-    inst.eye.close = Math.sin(Math.PI * (1 - inst.blinkT / BLINK_SEC))
-    return
+    return Math.sin(Math.PI * (1 - inst.blinkT / BLINK_SEC))
   }
-  inst.eye.close = 0
   inst.blinkWait -= dt
-  if (inst.blinkWait > 0) return
+  if (inst.blinkWait > 0) return 0
   inst.blinkWait = randomIn(BLINK_MIN, BLINK_MAX)
   inst.blinkT = BLINK_SEC
+  return 0
 }
 //
 // The stalk with its lit line, its thorns, then the eye on top.

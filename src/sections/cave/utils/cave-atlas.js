@@ -25,6 +25,8 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // one is its mirror —, a bent femur and a straight tibia), creature.png
 // (the lake's giant taken apart: its body — bent as a mesh — with the
 // sockets of its paddles, and the front and the hind paddle),
+// haggy_waggy.png (the climber taken apart: its head and one long arm with
+// a three-clawed hand; the sheet's button is not used),
 // plant_left.png (the lurker plant under the left bank taken apart: its
 // upper and lower jaw, an eye on its stalk, its long scaled neck with the
 // collar at its top, the rosette of leaves it grows out of and one leaf
@@ -63,7 +65,8 @@ const SHEET = {
   CREATURE: 'creature',
   LURKER: 'lurker',
   PADS: 'pads',
-  TRUMPET: 'trumpet'
+  TRUMPET: 'trumpet',
+  HAGGY: 'haggy'
 }
 //
 // Per sheet: its file, its alpha remap [lo, hi], whether its colour is
@@ -94,7 +97,8 @@ const SHEETS = {
   [SHEET.CREATURE]: { url: 'cave0/creature.png', alpha: [8, 240], isolate: { alpha: 40, keep: 3 } },
   [SHEET.LURKER]: { url: 'cave0/plant_left.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
   [SHEET.PADS]: { url: 'cave0/plant_mid.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
-  [SHEET.TRUMPET]: { url: 'cave0/plant_right.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } }
+  [SHEET.TRUMPET]: { url: 'cave0/plant_right.png', alpha: [40, 200], isolate: { alpha: 128, keep: 2 } },
+  [SHEET.HAGGY]: { url: 'cave0/haggy_waggy.png', alpha: [40, 200], isolate: { alpha: 128, keep: 3 } }
 }
 const BLOCK_URL = 'cave0/ground_block.png'
 const BYTE_MAX = 255
@@ -983,7 +987,9 @@ kitMoss0: [SHEET.SMALL, 33, 16, 245, 95],
   padPlant: [SHEET.PADS, 150, 150, 1175, 922],
   trumpet: [SHEET.TRUMPET, 0, 0, 1774, 887],
   giantFinFront: [SHEET.CREATURE, 920, 530, 372, 297],
-  giantFinHind: [SHEET.CREATURE, 468, 538, 309, 174]
+  giantFinHind: [SHEET.CREATURE, 468, 538, 309, 174],
+  haggyHead: [SHEET.HAGGY, 0, 60, 600, 440],
+  haggyArm: [SHEET.HAGGY, 236, 410, 1410, 420]
 }
 const sheets = new Map()
 const pieces = new Map()

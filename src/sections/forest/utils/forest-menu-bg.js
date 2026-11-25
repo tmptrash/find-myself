@@ -162,10 +162,10 @@ const PARALLAX_GRAIN_SEED = 7907
 const PARALLAX_BOTTOM_PAD = 24
 const RGBA_STRIDE = 4
 //
-// The level's lake: its water line sits LAKE_SURFACE_LIFT px above the
+// The level's lake: its water line sits LAKE_SURFACE_DROP px under the
 // ground line, as in the level; the shallows run on past the core right end.
 //
-const LAKE_SURFACE_LIFT = 8
+const LAKE_SURFACE_DROP = 2
 //
 // Ground stones as the level scatters them along the centipede's strip
 // (from the lake's bank to the cave): the level's ground stones (mossy,
@@ -269,7 +269,7 @@ export function forestMenuLayout(width, height) {
     appleTreeX: toX(LEVEL_LEFT_TREE_X),
     bugHoleX: toX(LEVEL_BUG_HOLE_X),
     branchTrampX: toX(LEVEL_BRANCH_TRAMP_X),
-    lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY - LAKE_SURFACE_LIFT },
+    lake: { x1, x2Core, x2: x2Core + Lake.LAKE_SHORE_EXTEND_PX, surfaceY: groundY + LAKE_SURFACE_DROP },
     eyeSpots: LEVEL_EYES.map(eye => ({ ...eye, x: toX(eye.x), groundY })),
     earTreeSpots: LEVEL_BOMB_TREE_XS.map(x => ({ x: toX(x) })),
     tramps: menuTrampSpots(toX, groundY, scale),

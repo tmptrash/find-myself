@@ -139,6 +139,13 @@ export const CAVE_CFG = {
     splash: '#b9eadc'
   },
   //
+  // The climber (cave-haggy.js, haggy_waggy.png): its pieces toned a
+  // little toward the cave's light (tint).
+  //
+  haggy: {
+    tint: '#d9d2c4'
+  },
+  //
   // The pad plant in the lake (cave-pads.js, plant_mid.png): drawn toned
   // down toward the cave's light.
   //

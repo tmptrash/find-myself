@@ -180,6 +180,7 @@ const ALPHA_OFFSET = 3
 //
 const FLOAT_PAD = 8
 const layers = new Map()
+const surfaces = new Map()
 const bulges = new Map()
 const bigStones = new Map()
 const stoneSpans = new Map()
@@ -209,9 +210,24 @@ export function layerOf(p) {
   const float = p.kind === Layout.PLATFORM_KIND.FLOAT
   const layer = float ? floatLayer(p) : Earth.soilLayer(bodyOf(p), p.seed)
   layer.surface = scanSurface(layer)
+  surfaces.set(p.id, { x0: layer.x, tops: layer.surface })
+  //
+  // Built again after releaseLayers(): its stones are laid anew, not twice.
+  //
+  bigStones.delete(p.id)
+  stoneSpans.delete(p.id)
   float || surfaceStones(layer, p)
   layers.set(p.id, layer)
   return layer
+}
+
+/**
+ * Lets go of every platform's layer picture (bake inputs: once the scene's
+ * pictures are baked nothing reads them); what was read off them (their
+ * surfaces, stones, spans) stays, and a later bake builds them again.
+ */
+export function releaseLayers() {
+  layers.clear()
 }
 
 /**
@@ -223,7 +239,10 @@ export function layerOf(p) {
  * @returns {number}
  */
 export function surfaceAt(p, x) {
-  return layerSurfaceAt(layerOf(p), p, x)
+  surfaces.has(p.id) || layerOf(p)
+  const surface = surfaces.get(p.id)
+  const y = surface.tops[Math.round(x - surface.x0)]
+  return y === undefined || Number.isNaN(y) ? baseAt(p, x) : y
 }
 
 /**

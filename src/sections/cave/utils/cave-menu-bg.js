@@ -1,4 +1,5 @@
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
+import { unloadSprite } from '../../../utils/sprite-unload.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Bubbles from '../components/cave-bubbles.js'
 import * as Fireflies from '../components/cave-fireflies.js'
@@ -160,6 +161,17 @@ export function create(cfg) {
   inst.fishCtx = { prey: [], swarmPrey: [], swarm: null, threats: [], giant: null, school: inst.fish, onCatch: prey => Fireflies.eat(inst.fireflies, prey, inst.lakeSky), onSplash: (x, strength) => splash(inst, cfg.onSplash, x, strength) }
   lake && createLakeLife(inst, cfg.onSplash, cfg.onSnap)
   return inst
+}
+
+/**
+ * Frees the backdrop's baked tiles on this engine (the menu is left for a
+ * level: screen-sized textures the level never draws); the next create()
+ * or prewarm() bakes them again.
+ * @param {Object} k - Kaplay instance
+ */
+export function release(k) {
+  bakedFor.get(k)?.forEach(names => names.forEach(name => unloadSprite(k, name)))
+  bakedFor.delete(k)
 }
 
 /**
@@ -431,7 +443,8 @@ function keptIn(from, size, worldSize) {
 }
 //
 // Screen-wide columns, each under the texture limit, painted at screen
-// resolution; once per live k and size.
+// resolution; once per live k and size (their sprite names kept per size,
+// for release()).
 //
 function bake(k, w, h, place) {
   const key = `${w}x${h}`
@@ -452,8 +465,8 @@ function bake(k, w, h, place) {
     applyForestFilmGrainToCanvas(soil.canvas, GRAIN_SEED + i)
     k.loadSprite(tile.name + SOIL, soil.canvas)
   })
-  bakedFor.has(k) || bakedFor.set(k, new Set())
-  bakedFor.get(k).add(key)
+  bakedFor.has(k) || bakedFor.set(k, new Map())
+  bakedFor.get(k).set(key, tiles.flatMap(tile => [tile.name + BACK, tile.name + SOIL]))
   return tiles
 }
 //

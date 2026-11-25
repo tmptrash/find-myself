@@ -121,7 +121,14 @@ export const CFG = {
     jumpForce: 640,
     gravity: 2000,
     platformName: "platform",
-    noCeilingTag: "noJumpCeiling" // Ground-only platforms that never block a jump from below or beside
+    noCeilingTag: "noJumpCeiling", // Ground-only platforms that never block a jump from below or beside
+    //
+    // After a death the hero comes back safe for respawnGraceSec seconds
+    // (no creature hunts or grabs him), blinking for the first
+    // respawnBlinkSec of them.
+    //
+    respawnGraceSec: 3,
+    respawnBlinkSec: 2
   },
   controls: {
     moveLeft: ['left', 'a', 'KeyA'],       // Move left (KeyA = physical key for any layout)

@@ -1,4 +1,5 @@
 import { CAVE_CFG } from '../cfg.js'
+import * as Atlas from './cave-atlas.js'
 import * as Earth from './cave-earth.js'
 import * as Platform from './cave-platform.js'
 import * as Plants from './cave-plants.js'
@@ -61,6 +62,19 @@ export function paintTerrain(ctx, rect, withLake = false) {
   Plants.paint(ctx, rect)
   inLake && paintSubmersion(ctx)
   inLake && LakeBed.paint(ctx, rect)
+}
+
+/**
+ * Lets go of what the cave's pictures are baked from — the soil masses'
+ * and platforms' layers, the atlas' prepared pieces: tens of MB of 2D
+ * canvases nothing reads once a scene's bakes are on the GPU. A later
+ * bake (the menu's picture, a fresh engine's terrain) builds what it needs
+ * again.
+ */
+export function releaseBakeInputs() {
+  Earth.releaseLayers()
+  Platform.releaseLayers()
+  Atlas.release()
 }
 
 /**

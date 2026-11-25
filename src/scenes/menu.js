@@ -9,6 +9,7 @@ import * as BootLoader from "../utils/boot-loader.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { bindPointerActivate } from '../utils/pointer-activate.js'
 import * as NoMouse from '../utils/no-mouse.js'
+import { unloadSprite } from '../utils/sprite-unload.js'
 import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import { generateMenuBackgroundCanvas, recomputeMenuBgLayout } from '../utils/menu-bg-generator.js'
 import { generateForestMenuBackdrop, forestMenuLayout, loadForestMenuBackdropArt } from '../sections/forest/utils/forest-menu-bg.js'
@@ -32,6 +33,7 @@ import * as MenuEyeStalk from '../sections/forest/components/menu-eye-stalk.js'
 import * as CaveMenuStalkEye from '../sections/cave/components/cave-menu-stalk-eye.js'
 import * as CaveAtlas from '../sections/cave/utils/cave-atlas.js'
 import * as CaveMenuBg from '../sections/cave/utils/cave-menu-bg.js'
+import * as CaveScene from '../sections/cave/utils/cave-scene.js'
 import * as CaveSound from '../sections/cave/utils/cave-sound.js'
 import { paintPlate } from '../sections/cave/utils/cave-plate.js'
 import * as ConfirmDialog from '../components/confirm-dialog.js'
@@ -320,6 +322,7 @@ const MENU_COMPLETE_NEXT_LESSON = {
   'forest-complete': CAVE_FIRST_LESSON
 }
 const MENU_SCENE_GUARD_DELAY = 0.2
+const MENU_BAKE_INPUTS_HOLD = 2
 const MENU_PREWARM_YIELD_FRAMES = 2
 const menuPrewarmedSize = new WeakMap()
 const MENU_LEAVE_BG_HEX = '#1A1A1A'
@@ -438,6 +441,11 @@ export function sceneMenu(k) {
     k.onUpdate(() => onUpdate(inst))
     bindMenuInput(inst)
     k.wait(MENU_SCENE_GUARD_DELAY, () => { inst.sceneReady = true })
+    //
+    // The cave picture is baked and its first frames are through: what it
+    // was baked from goes (the cave level builds what it needs again).
+    //
+    k.wait(MENU_BAKE_INPUTS_HOLD, CaveScene.releaseBakeInputs)
     k.onSceneLeave(() => onMenuLeave(inst))
   })
 }
@@ -466,6 +474,28 @@ export async function prewarmMenuAssets(k) {
 }
 
 /**
+ * Frees the menu's screen-sized backdrops once a level is running (the
+ * night picture, the forest layers, the cave picture: the level never
+ * draws them, yet their textures stayed on the GPU and their canvases in
+ * memory all through it). The menu is no longer prewarmed after this:
+ * going back to it paints and loads them again under the loader
+ * (goToMenuAfterAssets).
+ * @param {Object} k - Kaplay inst
+ */
+export function releaseMenuAssets(k) {
+  unloadSprite(k, MENU_NIGHT_SPRITE)
+  menuNightBakedFor.delete(k)
+  menuNightCanvasCache.forEach(freeCanvas)
+  menuNightCanvasCache.clear()
+  menuForestPiecesByK.get(k)?.forEach(piece => unloadSprite(k, piece.sprite))
+  menuForestPiecesByK.delete(k)
+  menuForestBackdropCache.forEach(layers => layers.forEach(layer => freeCanvas(layer.canvas)))
+  menuForestBackdropCache.clear()
+  CaveMenuBg.release(k)
+  menuPrewarmedSize.delete(k)
+}
+
+/**
  * Whether the menu's bakes are ready for this live k at its current screen
  * size (the window may have changed since — a tablet's browser bar, the
  * fullscreen button — and then the menu would bake everything again while
@@ -475,6 +505,14 @@ export async function prewarmMenuAssets(k) {
  */
 export function isMenuPrewarmed(k) {
   return menuPrewarmedSize.get(k) === menuBakeSize(k)
+}
+//
+// Gives a canvas's pixels back at once (not when it is collected: a left
+// menu scene may still hold the layer it was painted for).
+//
+function freeCanvas(canvas) {
+  canvas.width = 0
+  canvas.height = 0
 }
 function menuBakeSize(k) {
   return `${Math.round(k.width())}x${Math.round(k.height())}`

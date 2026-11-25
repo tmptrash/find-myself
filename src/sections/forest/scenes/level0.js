@@ -96,6 +96,7 @@ import * as BombTree from '../utils/forest-bomb-tree.js'
 import * as EyeFlower from '../components/eye-flower.js'
 import * as SoilSeam from '../utils/forest-soil-seam.js'
 import * as Lake from '../../../components/lake.js'
+import * as CaveScene from '../../cave/utils/cave-scene.js'
 import * as Underground from '../utils/forest-underground.js'
 import * as BushStrip from '../utils/forest-bush-strip.js'
 import { GROUND_LAYER_FRACS, groundEarthLayersColor, paintLayeredEarthBand } from '../utils/forest-earth-band.js'
@@ -349,8 +350,8 @@ const HERO_TOUCH_DEATH_RESPAWN_CLEARANCE = 32
 // centipede does not hunt, the water flower does not grab, landings do not
 // jolt the bomb trees). He blinks only for the first RESPAWN_BLINK_SEC of it.
 //
-const RESPAWN_GRACE_SEC = 3
-const RESPAWN_BLINK_SEC = 2
+const RESPAWN_GRACE_SEC = CFG.game.respawnGraceSec
+const RESPAWN_BLINK_SEC = CFG.game.respawnBlinkSec
 //
 // Extra margin kept past the mushroom's bounce-trigger band (see
 // isHeroAtTrampolineCap's TRAMP_RADIUS + TRAMP_ADJACENT_X) when nudging a
@@ -817,6 +818,11 @@ const DROWN_UNIFIED_SINK_SPEED = 48
 const DROWN_FULL_SINK_FEET_Y = FLOOR_Y + 88
 const DROWN_RESTART_DELAY = 1.1
 const WATER_STEPS_VOLUME = 0.42
+//
+// The cave art's bake inputs (cave-scene.js releaseBakeInputs) are let go
+// this long after the level is built.
+//
+const CAVE_BAKE_INPUTS_HOLD = 2
 //
 // The hero falling into the lake breaks its surface this hard
 // (Lake.disturb, 1: a full splash).
@@ -2029,6 +2035,12 @@ async function initForestLevel0Scene(k, bootstrap, session) {
     // The run / jump buttons show once the whole level is built.
     //
     TouchControls.setVisible(true)
+    //
+    // The level bakes one picture from the cave's art (its glimpse of the
+    // cave under the pit); once its first frames are through, what that
+    // art is baked from goes.
+    //
+    k.wait(CAVE_BAKE_INPUTS_HOLD, CaveScene.releaseBakeInputs)
 }
 //
 // Fixed overlay drawn on top of every world layer so nothing bleeds into the
@@ -5764,7 +5776,11 @@ function finishForestTouchDeath(inst, cause, deathX, deathY) {
 }
 //
 // Respawn beside the death spot (offset away from the hog, or clear of the
-// spike zone), with bootstrap nudges.
+// spike zone), with bootstrap nudges. The trampoline nudge comes last: a
+// second placing by the crawler after it undid the nudge and could set him
+// back on a mushroom's cap, which then bounced him for ever (each bounce
+// lands him on it again). The respawn grace keeps the crawler off him
+// should the nudge leave him close to it.
 //
 function computeForestTouchDeathRespawnPose(inst, deathX, deathY, cause) {
   if (cause === 'predator') {
@@ -5784,7 +5800,6 @@ function computeForestTouchDeathRespawnPose(inst, deathX, deathY, cause) {
       branchTrampVisible: isBranchTrampolineVisible(inst.zones),
       trampVisible: isRightTrampolineVisible(inst.zones)
     })
-    spawnX = resolveForestPredatorRespawnX(spawnX, spawnY, pred)
     return { x: spawnX, y: spawnY }
   }
   return { x: deathX, y: deathY }

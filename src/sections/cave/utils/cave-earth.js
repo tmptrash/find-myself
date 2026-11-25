@@ -228,6 +228,14 @@ export function paintMass(ctx, body, opts) {
 }
 
 /**
+ * Lets go of every soil mass's layer (bake inputs: once the scene's
+ * pictures are baked nothing reads them); a later bake builds them again.
+ */
+export function releaseLayers() {
+  layers.clear()
+}
+
+/**
  * A soil mass's layer (built once per page under opts.key): its canvas
  * (its 2D context reads back fast) and the world point of its top-left.
  * @param {Object} body - As for paintMass

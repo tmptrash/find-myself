@@ -1034,6 +1034,20 @@ export function load() {
 }
 
 /**
+ * Lets go of every prepared piece (cut, resized, shaded): once a scene's
+ * pictures are baked they are only bake inputs, tens of MB of small
+ * canvases. Whatever bakes later cuts what it needs again from the sheets.
+ * The shaded copies never leave this module, so their memory is given back
+ * at once; cut and resized pieces may still be held by who asked for them.
+ */
+export function release() {
+  shadedPieces.forEach(freeCanvas)
+  shadedPieces.clear()
+  scaledPieces.clear()
+  pieces.clear()
+}
+
+/**
  * True once every sheet is loaded.
  * @returns {boolean}
  */
@@ -1402,6 +1416,13 @@ function dilate(mask, w, h, r, step, line) {
     }
   }
   return out
+}
+//
+// Gives a canvas's pixels back at once (not when it is collected).
+//
+function freeCanvas(canvas) {
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Copy of a piece pulled toward a colour (its silhouette kept), cached.

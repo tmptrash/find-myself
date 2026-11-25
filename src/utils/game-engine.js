@@ -16,6 +16,7 @@ import { setFocusCanvas, focusGameCanvas } from "./canvas-focus.js"
 import { resetPhysicalInputLayer } from "./helper.js"
 import { unlockWaterStepsAudio, unlockEarTreeWhisperAudio } from "./sound.js"
 import { fitPageSize, pageHeight, pageWidth } from "./page-size.js"
+import { unloadSprite } from "./sprite-unload.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -199,6 +200,7 @@ export async function bootEngine(resolutionMode) {
     BootLoader.showFatalLoaderError(WEBGL_UNAVAILABLE_HINT, { onTap: reloadPage })
     throw err
   }
+  guardSpriteReload(k)
   TouchInput.initTouchInput(k)
   Fullscreen.createFullscreenButton(k)
   initBlurKeyReset()
@@ -267,6 +269,30 @@ export async function bootEngine(resolutionMode) {
   return k
 }
 /**
+ * Reloads the page for a lost WebGL context: after a pause (the GPU is
+ * still giving memory back), and never in a loop — past
+ * WEBGL_LOST_MAX_RELOADS automatic reloads within WEBGL_LOST_WINDOW_MS the
+ * page waits for a tap. The one way anything reloads the page over a lost
+ * context (the in-place recovery falls back to it too).
+ */
+export function reloadForLostContext() {
+  //
+  // Integrated GPUs can lose the context under load; reloading too soon leaves
+  // VRAM pinned → initKaplayWithRetry fails → misleading "WebGL not available".
+  //
+  const delayMs = kaplayBootReachedOnLoad ? WEBGL_LOST_RELOAD_MS_INGAME : WEBGL_LOST_RELOAD_MS_AFTER_BOOT
+  if (!noteContextLossReload()) {
+    BootLoader.showFatalLoaderError(WEBGL_LOST_TAP_HINT, { onTap: reloadPage })
+    return
+  }
+  const hint = kaplayBootReachedOnLoad
+    ? 'Graphics context lost. Reloading…'
+    : 'GPU was overloaded while loading assets. Waiting before reload…'
+  BootLoader.showFatalLoaderError(hint)
+  setTimeout(reloadPage, delayMs)
+}
+
+/**
  * Sets who recovers the game from a WebGL context lost after the first load
  * (null: the page reloads, see onWebGLContextLost).
  * @param {Function|null} handler - () => boolean, true when it took the loss over
@@ -306,6 +332,22 @@ function unlockKaplayAudioOnFirstGesture(k) {
   window.addEventListener('keydown', unlock, { once: true })
   window.addEventListener('pointerdown', unlock, { once: true })
   window.addEventListener('touchstart', unlock, { once: true })
+}
+
+//
+// Kaplay keeps the old texture when a sprite is loaded again under a name
+// already in use: the name points at the new picture and the old one stays
+// on the GPU until the engine is torn down. A scene that bakes its
+// pictures on every entry (ready: three screen-sized ones) thus leaked
+// tens of MB of GPU memory per visit, until the browser dropped the
+// game's WebGL context. Every load now frees what its name held first.
+//
+function guardSpriteReload(k) {
+  const loadSprite = k.loadSprite
+  k.loadSprite = (name, src, opts) => {
+    name && unloadSprite(k, name)
+    return loadSprite(name, src, opts)
+  }
 }
 
 /**
@@ -451,20 +493,7 @@ function onWebGLContextLost(e) {
   if (webglLostReloadScheduled) return
   webglLostReloadScheduled = true
   if (kaplayBootReachedOnLoad && contextLossHandler?.()) return
-  //
-  // Integrated GPUs can lose the context under load; reloading too soon leaves
-  // VRAM pinned → initKaplayWithRetry fails → misleading "WebGL not available".
-  //
-  const delayMs = kaplayBootReachedOnLoad ? WEBGL_LOST_RELOAD_MS_INGAME : WEBGL_LOST_RELOAD_MS_AFTER_BOOT
-  if (!noteContextLossReload()) {
-    BootLoader.showFatalLoaderError(WEBGL_LOST_TAP_HINT, { onTap: reloadPage })
-    return
-  }
-  const hint = kaplayBootReachedOnLoad
-    ? 'Graphics context lost. Reloading…'
-    : 'GPU was overloaded while loading assets. Waiting before reload…'
-  BootLoader.showFatalLoaderError(hint)
-  setTimeout(reloadPage, delayMs)
+  reloadForLostContext()
 }
 //
 // Records one automatic reload for a lost context; false when the recent

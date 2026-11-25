@@ -3,10 +3,11 @@ import { normalizeSceneName } from './progress.js'
 import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { waitForForestLevel0Bootstrap } from '../sections/forest/scenes/level0.js'
 import { RESOLUTION_MODE } from './game-engine.js'
-import { isMenuPrewarmed, prewarmMenuAssets } from '../scenes/menu.js'
+import { isMenuPrewarmed, prewarmMenuAssets, releaseMenuAssets } from '../scenes/menu.js'
 
 const FOREST_LEVEL0_SCENE = 'lesson-forest.0'
 const FOREST_SCENE_PREFIX = 'lesson-forest'
+const LEVEL_SCENE_PREFIX = 'lesson-'
 //
 // Asset packs: the forest level bakes its own heavy art; every other scene
 // (ready, menu, cave, forest-complete) builds its sprites inside the scene.
@@ -127,6 +128,7 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   switched && onEngineResolutionSwapped()
   switched && await prepareSceneAssets(liveK, sceneName, { deferLoaderReveal: true })
   setActiveSceneName(sceneName)
+  sceneName.startsWith(LEVEL_SCENE_PREFIX) && releaseMenuOnLeave(liveK)
   liveK.go(sceneName)
   sceneName === FOREST_LEVEL0_SCENE && await waitForForestLevel0Bootstrap()
   afterGo?.(liveK)
@@ -181,6 +183,18 @@ export async function goToMenuAfterAssets(k) {
   rebake && await rebakeMenu(k)
   return prepareSceneAssetsThenEnterScene(k, 'menu', rebake ? hideLoaderOnceShown : undefined, {
     retainLoader: modeChanging
+  })
+}
+//
+// A level is about to run: the menu's backdrops go off the GPU (they are
+// baked again under the loader on the way back to the menu) — at the scene
+// change itself (k.go switches at the frame's end), once the scene that may
+// still draw them is gone, and only that once.
+//
+function releaseMenuOnLeave(k) {
+  const ev = k.onSceneLeave(() => {
+    ev.cancel()
+    releaseMenuAssets(k)
   })
 }
 //

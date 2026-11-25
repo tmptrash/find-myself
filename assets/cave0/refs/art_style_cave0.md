@@ -1,10 +1,10 @@
-# Find Myself — Cave0 Art Style
+# Rootward — Cave0 Art Style
 
 Version: 2.3 (Part B: the shared style of all organic life — creatures and plants — after the new giant)
 Source of truth: approved Cave0 gameplay screenshots (01–03).
 
 This file has two parts:
-- **Part A — General rules.** Shared by every level of Find Myself; the same text lives in every level's style file (e.g. `art_style_forest.md`). Change it in all files at once.
+- **Part A — General rules.** Shared by every level of Rootward; the same text lives in every level's style file (e.g. `art_style_forest.md`). Change it in all files at once.
 - **Part B — Cave0-specific rules.** Apply only to the Cave0 level.
 
 When Part B conflicts with Part A, Part B wins for this level.
@@ -14,7 +14,7 @@ When Part B conflicts with Part A, Part B wins for this level.
 # Part A — General rules (all levels)
 
 ## Purpose and priority
-Create images belonging to one level (environment) of Find Myself. Match the visual language of that level's supplied gameplay references, not their exact layout. Never copy screenshot UI, FPS text, borders, or object arrangements.
+Create images belonging to one level (environment) of Rootward. Match the visual language of that level's supplied gameplay references, not their exact layout. Never copy screenshot UI, FPS text, borders, or object arrangements.
 
 ## Mandatory asset export rules
 - **Transparent background is required for every generated standalone game asset.** Export as a PNG with a real alpha channel (RGBA); all pixels outside the actual artwork must have alpha = 0.

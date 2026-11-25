@@ -6,7 +6,6 @@ import { prop, setProp } from './helper.js'
  * Global properties: lastLesson, heroScore, lifeScore, sounds
  */
 const STORAGE_KEY = 'rootward'
-const LEGACY_STORAGE_KEY = 'find-yourself'
 const SECTIONS = ['forest', 'cave']
 //
 // The forest section used to be called "glow": saves written before the
@@ -68,12 +67,7 @@ function migrate(data) {
  */
 export function getProgress() {
   try {
-    let raw = localStorage[STORAGE_KEY]
-    if (raw == null && localStorage[LEGACY_STORAGE_KEY] != null) {
-      raw = localStorage[LEGACY_STORAGE_KEY]
-      localStorage.setItem(STORAGE_KEY, raw)
-      localStorage.removeItem(LEGACY_STORAGE_KEY)
-    }
+    const raw = localStorage[STORAGE_KEY]
     if (raw != null) {
       const data = JSON.parse(raw)
       return migrate(data)

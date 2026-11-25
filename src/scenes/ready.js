@@ -5,6 +5,7 @@ import * as Sound from '../utils/sound.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import * as NoMouse from '../utils/no-mouse.js'
 import * as Fullscreen from '../utils/fullscreen.js'
+import { unloadSprite } from '../utils/sprite-unload.js'
 import { loadHeroSprites, HERO_SPRITE_PREFIX, HERO_FEET_OFFSET_Y, heroLookSpriteName, heroWinkSpriteName, createRunLegs, drawRunningHero, createStandLegs, drawStandingHero } from '../components/hero.js'
 import { renderHintWithEnter, renderHintLine } from '../utils/touch-tap-button.js'
 import { isTouchDevice } from '../utils/touch-input.js'
@@ -125,6 +126,7 @@ const Z_SCENERY = CFG.visual.zIndex.background + 4
 const READY_STATIC_SPRITE = 'ready-static-bg'
 const READY_MOON_SPRITE = 'ready-moon'
 const READY_DESC_SPRITE = 'ready-description'
+const READY_SCREEN_SPRITES = [READY_STATIC_SPRITE, READY_MOON_SPRITE, READY_DESC_SPRITE]
 const READY_BG_DARKEN_ALPHA = 0.5
 const READY_TEXT_SHADOW_OFFSET = 1
 //
@@ -624,6 +626,11 @@ export function sceneReady(k) {
     k.onSceneLeave(() => {
       startGameInputCancel.cancel()
       stopMouse()
+      //
+      // Its screen-sized pictures are baked on every entry: they go off
+      // the GPU with the scene, not stay there under the menu and levels.
+      //
+      READY_SCREEN_SPRITES.forEach(name => unloadSprite(k, name))
     })
   })
 }
@@ -794,10 +801,12 @@ function readyLetterSpriteName(char) {
 //
 // Bakes a single glyph's 2px hollow moon-tone contour, centred in a small
 // square canvas — no shadow, since a detached letter is "only a contour"
-// from then on. Reloading the same sprite name is harmless when a repeated
-// glyph (e.g. the two 'f's) bakes it twice.
+// from then on. Once per live k and glyph (a repeated glyph, e.g. the two
+// 'f's, or the scene entered again reuses it: loading it again each time
+// used up the texture pages' room until a new 16 MB page was needed).
 //
 function bakeReadyLetterSprite(k, char) {
+  if (k.getSprite(readyLetterSpriteName(char))) return
   const ring = bakeReadyTitleHollowRing(
     READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE, char,
     READY_LETTER_CANVAS_CENTER, READY_LETTER_CANVAS_CENTER, TITLE_OUTLINE_COLOR
@@ -819,6 +828,7 @@ function readyLetterGlowSpriteName(char) {
   return `ready-letter-glow-${char.charCodeAt(0)}`
 }
 function bakeReadyLetterGlowSprite(k, char) {
+  if (k.getSprite(readyLetterGlowSpriteName(char))) return
   const { canvas, ctx } = newBakeCanvas(READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE)
   ctx.font = `${TITLE_FONT_SIZE}px ${TITLE_FONT_FAMILY}`
   ctx.textAlign = 'center'
@@ -833,6 +843,7 @@ function bakeReadyLetterGlowSprite(k, char) {
   canvas.height = 0
 }
 function bakeReadyLetterShadowSprite(k, char) {
+  if (k.getSprite(readyLetterShadowSpriteName(char))) return
   const ring = bakeReadyTitleHollowRing(
     READY_LETTER_CANVAS_SIZE, READY_LETTER_CANVAS_SIZE, char,
     READY_LETTER_CANVAS_CENTER, READY_LETTER_CANVAS_CENTER, '#000000'

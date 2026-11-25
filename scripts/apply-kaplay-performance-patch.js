@@ -159,6 +159,36 @@ const PACK_BIG_OLD = 'h=new _(new w,c,m),y=h.pos;if(c>g||m>x)return this._single
 const PACK_BIG_NEW =
   'h=new _(new w,c,m),y=h.pos;if(c>g||m>x||n*o*16>g*x&&(!r||r.x===0&&r.y===0&&r.w===1&&r.h===1))return this._single(e);'
 //
+// A texture of its own (a big bake) no longer keeps its source: Kaplay
+// stored the image on every texture (`src`, read only by its sprite-outline
+// helper, which the game never calls), so each baked canvas stayed in
+// memory for as long as its texture lived — tens of MB of 2D canvases per
+// level on top of the same pixels on the GPU. On a phone that memory is
+// what gets the tab's WebGL context dropped.
+//
+const SINGLE_SRC_OLD = 'new Y(0,0,1,1));return this._big.push(r),r}'
+const SINGLE_SRC_NEW = 'new Y(0,0,1,1));return r.tex.src=null,this._big.push(r),r}'
+//
+// Texture packer pages without a 2D canvas each. Kaplay drew every small
+// picture into a page-sized canvas (2048², 16 MB) kept for the page's whole
+// life and uploaded that whole canvas again after each change. A picture
+// now goes through one small scratch canvas straight into its place on the
+// page's texture (texSubImage2D), a removed one's place is cleared the same
+// way, and the page is a bare texture: 16 MB of memory less per page, and
+// no page-sized upload per loaded sprite or text glyph.
+//
+const PAGE_NEW_OLD =
+  '_newTexture(){this._sync();let e=document.createElement("canvas");e.width=this._w,e.height=this._h;let r=Ne.fromImage(this._gfx,e,{filter:this._f});this._textures.push(r);let n=e.getContext("2d");if(!n)throw new Error("Failed to get 2d context");return this._tex2Map.set(r,this._curMap={tex:r,el:e,ctx:n}),this._curMap}'
+const PAGE_NEW_NEW =
+  '_newTexture(){let r=new Ne(this._gfx,this._w,this._h,{filter:this._f});this._textures.push(r);return this._tex2Map.set(r,this._curMap={tex:r,el:{width:this._w,height:this._h},ctx:null}),this._curMap}'
+const PAGE_SYNC_OLD = '_sync(){this._hasPendingRefresh&&(this._curMap.tex.update(this._curMap.el),this._hasPendingRefresh=!1)}'
+const PAGE_SYNC_NEW =
+  '_sync(){}_scratch(e,r){let n=this._sc||(this._sc=document.createElement("canvas"));return n.width=Math.max(1,Math.ceil(e)),n.height=Math.max(1,Math.ceil(r)),n}_put(e,r,n,o,s,i,a){if(i<=0||a<=0)return;let c=this._scratch(i,a),m=this._sx||(this._sx=c.getContext("2d"));e instanceof ImageData?m.putImageData(e,-o,-s,o,s,i,a):m.drawImage(e,o,s,i,a,0,0,i,a),this._curMap.tex.update(c,r,n)}'
+const PAGE_BLIT_OLD = '_blit(e,r,n,o,s,i,a){let c=this._curMap.ctx;'
+const PAGE_BLIT_NEW = '_blit(e,r,n,o,s,i,a){return this._put(e,r,n,o,s,i,a);let c=this._curMap.ctx;'
+const PAGE_REMOVE_OLD = 'this._tex2Map.get(a).ctx.clearRect(n,o,s,i),this._used.delete(e),this._hasPendingRefresh=!0}'
+const PAGE_REMOVE_NEW = 'a.update(this._scratch(s,i),n,o),this._used.delete(e)}'
+//
 // The typed queues rewrite the push-limit patch's line, so their marker
 // stands for both.
 //
@@ -186,7 +216,12 @@ const PATCHES = [
     markers: ['??Math.round(o.drawingBufferWidth/n/e.scale)'],
     pairs: [[WORLD_SIZE_BOOT_OLD, WORLD_SIZE_BOOT_NEW], [WORLD_SIZE_RESIZE_OLD, WORLD_SIZE_RESIZE_NEW]]
   },
-  { markers: ['n*o*16>g*x'], pairs: [[PACK_BIG_OLD, PACK_BIG_NEW]] }
+  { markers: ['n*o*16>g*x'], pairs: [[PACK_BIG_OLD, PACK_BIG_NEW]] },
+  { markers: ['r.tex.src=null'], pairs: [[SINGLE_SRC_OLD, SINGLE_SRC_NEW]] },
+  {
+    markers: ['_put(e,r,n,o,s,i,a)'],
+    pairs: [[PAGE_NEW_OLD, PAGE_NEW_NEW], [PAGE_SYNC_OLD, PAGE_SYNC_NEW], [PAGE_BLIT_OLD, PAGE_BLIT_NEW], [PAGE_REMOVE_OLD, PAGE_REMOVE_NEW]]
+  }
 ]
 
 for (const name of DIST_FILES) {

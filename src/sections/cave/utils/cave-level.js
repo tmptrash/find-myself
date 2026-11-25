@@ -27,6 +27,7 @@ import * as Lurker from '../components/cave-lurker.js'
 import * as Pads from '../components/cave-pads.js'
 import * as Trumpet from '../components/cave-trumpet.js'
 import * as Atlas from './cave-atlas.js'
+import * as Scene from './cave-scene.js'
 import * as LakeBed from './cave-lake-bed.js'
 import * as Layout from './cave-layout.js'
 import * as Surface from './cave-surface.js'
@@ -150,6 +151,12 @@ const LANTERN_RESPAWN_DX = 90
 const DEATH_BURST_COUNT = 48
 const RESPAWN_BURST_COUNT = 14
 const RESPAWN_DELAY = 2.3
+//
+// Back from a death the hero blinks and is safe for a while, as in the
+// forest (CFG.game.respawnGraceSec): the lurker does not hunt him.
+//
+const RESPAWN_GRACE_SEC = CFG.game.respawnGraceSec
+const RESPAWN_BLINK_SEC = CFG.game.respawnBlinkSec
 const DEATH_SHAKE = 5
 const FALL_OUT_Y = Layout.WORLD_H + 120
 //
@@ -161,6 +168,11 @@ const LAND_MIN_AIR = 0.12
 // The fall into the lake sounds as in the forest: one water-steps take.
 //
 const WATER_STEPS_VOLUME = 0.42
+//
+// The level's bake inputs (cave-scene.js releaseBakeInputs) are let go this
+// long after it is built: its first frames have baked what bakes lazily.
+//
+const BAKE_INPUTS_HOLD = 2
 //
 // How hard things break the lake's surface (CaveLake.disturb, 1: a full
 // fish splash): the hero falling in, the lurker's head, a bubble popping
@@ -305,6 +317,7 @@ function build(k, opts) {
     spat: false,
     lastFeet: null,
     respawnAt: 0,
+    graceUntil: 0,
     deathX: 0,
     deathY: 0,
     lakeDeath: false,
@@ -374,6 +387,11 @@ function build(k, opts) {
   k.onUpdate(() => onUpdate(inst))
   bindLeave(inst)
   opts.giantDev && bindGiantDev(inst)
+  //
+  // Once every picture of the level is baked (some only on their first
+  // draw), what they were baked from goes.
+  //
+  k.wait(BAKE_INPUTS_HOLD, Scene.releaseBakeInputs)
 }
 //
 // Per-frame gameplay: hazards, lantern, creatures, ambience and camera.
@@ -583,8 +601,19 @@ function updateRespawn(inst) {
   const pose = inst.lakeDeath ? lanternPose() : startPose(inst)
   inst.lakeDeath = false
   spawnHero(inst, pose)
+  startRespawnGrace(inst)
   Fireflies.burst(inst.fireflies, pose.x, pose.y, RESPAWN_BURST_COUNT)
   inst.dead = false
+}
+//
+// The hero's safe blinking moment after he comes back from a death.
+//
+function startRespawnGrace(inst) {
+  inst.graceUntil = inst.k.time() + RESPAWN_GRACE_SEC
+  Hero.startBlink(inst.heroInst, RESPAWN_BLINK_SEC)
+}
+function isRespawnGrace(inst) {
+  return inst.k.time() < inst.graceUntil
 }
 //
 // Saved safe platform if any (and still a dry spot on it: a save from
@@ -812,12 +841,13 @@ function updateRunners(inst) {
 }
 //
 // The lurker by the left bank: it hunts the hero on the bank (or sinking
-// in the lake near it) and the runners about.
+// in the lake near it; not while he is safe after a respawn) and the
+// runners about.
 //
 function updateLurker(inst) {
   const ctx = inst.lurkerCtx
   const char = inst.heroInst?.character
-  ctx.hero = heroPos(inst)
+  ctx.hero = isRespawnGrace(inst) ? null : heroPos(inst)
   ctx.sinking = inst.drown && char?.exists?.() ? char.pos : null
   ctx.giant = Giant.bodyLine(inst.giant)
   Lurker.bear(inst.lurker, ridesLurker(inst))

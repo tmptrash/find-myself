@@ -94,12 +94,15 @@ export function follow(inst, x, y, vy) {
 /**
  * Visible world rectangle for culling and the darkness pass.
  * @param {Object} inst - View instance
+ * @param {Object} [out] - Rectangle to fill (reused by per-frame callers); a new one if left out
  * @returns {{left: number, top: number, right: number, bottom: number}}
  */
-export function worldRect(inst) {
-  const left = Math.round(inst.camX - inst.winW / 2)
-  const top = Math.round(inst.camY - inst.winH / 2)
-  return { left, top, right: left + inst.winW, bottom: top + inst.winH }
+export function worldRect(inst, out = {}) {
+  out.left = Math.round(inst.camX - inst.winW / 2)
+  out.top = Math.round(inst.camY - inst.winH / 2)
+  out.right = out.left + inst.winW
+  out.bottom = out.top + inst.winH
+  return out
 }
 
 /**

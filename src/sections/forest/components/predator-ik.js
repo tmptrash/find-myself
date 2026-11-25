@@ -5,10 +5,16 @@
 // corrective plant.
 //
 import * as Sound from '../../../utils/sound.js'
+import { solveTwoBone } from '../../../utils/two-bone-ik.js'
 
 const STEP_LIFT = 4
 const FOOT_SOUND_GAP = 0.055
 const REACH = 11
+//
+// A foot stays this far (px) short of a leg's full stretch and of its
+// tightest fold.
+//
+const LIMIT_MARGIN = 0.4
 //
 // A step gets quicker with the body's speed (SWING_SPEED_GAIN per px/s), so a
 // running leg is back on the ground in time; above RUN_NO_WAIT_SPEED legs
@@ -51,27 +57,8 @@ const DRAG_PX = 5
  * @returns {{ kneeX: number, kneeY: number }}
  */
 export function solveLeg(hipX, hipY, footX, footY, len1, len2, bendSign) {
-  let dx = footX - hipX
-  let dy = footY - hipY
-  let dist = Math.hypot(dx, dy) || 0.001
-  const max = len1 + len2 - 0.4
-  const min = Math.abs(len1 - len2) + 0.4
-  if (dist > max) {
-    dx *= max / dist
-    dy *= max / dist
-    dist = max
-  } else if (dist < min) {
-    dx *= min / dist
-    dy *= min / dist
-    dist = min
-  }
-  const ang = Math.atan2(dy, dx)
-  const cos = clamp((len1 * len1 + dist * dist - len2 * len2) / (2 * len1 * dist), -1, 1)
-  const kneeAng = ang + bendSign * Math.acos(cos)
-  return {
-    kneeX: hipX + Math.cos(kneeAng) * len1,
-    kneeY: hipY + Math.sin(kneeAng) * len1
-  }
+  const knee = solveTwoBone(hipX, hipY, footX, footY, len1, len2, bendSign, LIMIT_MARGIN, { x: 0, y: 0 })
+  return { kneeX: knee.x, kneeY: knee.y }
 }
 
 /**
@@ -213,6 +200,3 @@ function onFootPlant(inst) {
   Sound.playForestPredatorFootstep(sfx)
 }
 
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v))
-}

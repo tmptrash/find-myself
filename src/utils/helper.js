@@ -403,4 +403,15 @@ export function setProp(path, val, obj = {}) {
 }
 
 
+/**
+ * Length of a 2D vector. Hot paths use it instead of Math.hypot: V8's
+ * Math.hypot builtin allocates (it boxes its arguments) on every call.
+ * @param {number} x - X component
+ * @param {number} y - Y component
+ * @returns {number}
+ */
+export function vecLen(x, y) {
+  return Math.sqrt(x * x + y * y)
+}
+
 

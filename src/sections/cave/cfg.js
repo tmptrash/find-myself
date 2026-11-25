@@ -139,11 +139,187 @@ export const CAVE_CFG = {
     splash: '#b9eadc'
   },
   //
-  // The climber (cave-haggy.js, haggy_waggy.png): its pieces toned a
-  // little toward the cave's light (tint).
+  // The climber (cave-haggy.js, haggy_waggy.png), a blind predator on five
+  // clawed limbs: its pieces toned a little toward the cave's light (tint),
+  // the throat seen when it opens its mouth (mouth). showHolds draws, in
+  // the holds colour, every stretch of the platforms' outline its claws
+  // may hold.
   //
   haggy: {
-    tint: '#d9d2c4'
+    tint: '#d9d2c4',
+    mouth: '#2a1512',
+    holds: '#ff2a2a',
+    showHolds: true,
+    //
+    // Anatomy (world px). A limb has no joints: it is one flexible body
+    // `length` long (it never stretches past that), a chain of `segments`
+    // pieces drawn as one smooth curve `subdivide` times finer, `thickness`
+    // times the art's width, tapering from taper[0] at the body to
+    // taper[1] at the wrist. A hold may need at most reachShare of the
+    // length (the rest is slack: the limb curves). The limbs leave the
+    // body at `shoulders` ([x, y] from its middle, facing left; mirrored
+    // with it). The body keeps off the edge it climbs by hangH under a
+    // ceiling, walkH over a top, sideH on a side. How deep the claws go
+    // into the soil is not set here: it is the fingers' own length, taken
+    // from the art (cave-haggy-draw.js).
+    //
+    anatomy: {
+      length: 232,
+      segments: 10,
+      subdivide: 2,
+      thickness: 1,
+      taper: [1.12, 0.92],
+      reachShare: 0.93,
+      shoulders: [[-13, 9], [-7, 12], [0, 13], [7, 12], [13, 9]],
+      hangH: 108,
+      walkH: 124,
+      sideH: 86
+    },
+    //
+    // A limb's flesh, per step of its chain: how much of its motion it
+    // keeps (damping: lower is calmer), how strongly it straightens its
+    // bends (stiffness 0 … 0.5: the higher, the broader its curves), how
+    // hard its muscle bows it out of the surface it holds (bow, px/s²),
+    // how much a free one droops (droop, px/s²), how fast its bow turns
+    // to a new side (bowRate, 1/s), and how firmly it comes into its
+    // wrist along the hand (wristGuide 0 … 1). No two pieces in a row bend
+    // more than maxBend rad (its sharpest curve). It contracts: it is
+    // `slack` times as long as the way from shoulder to wrist (so it
+    // curves gently instead of hanging in loops), down to minLength of
+    // its full length, changing at lengthRate per s and swelling up to
+    // `swell` times as thick when short. It keeps `radius` px clear of the
+    // soil.
+    //
+    limb: {
+      damping: 0.86,
+      stiffness: 0.22,
+      maxBend: 0.5,
+      slack: 1.13,
+      minLength: 0.35,
+      lengthRate: 4,
+      swell: 1.25,
+      bow: 520,
+      droop: 380,
+      bowRate: 2.5,
+      wristGuide: 0.5,
+      radius: 7
+    },
+    //
+    // The body's turning: its tilt follows the way it goes (tilt rad on a
+    // steep way) as a damped turn of at most angularVel rad/s and
+    // angularAccel rad/s². It faces the way it goes; it turns round only
+    // when the way has led the other way (past faceDx of its length
+    // sideways) for faceHold s, slowing to a stop and turning over
+    // turnTime s before it goes on.
+    //
+    turning: {
+      tilt: 0.3,
+      angularVel: 1.6,
+      angularAccel: 9,
+      faceDx: 0.35,
+      faceHold: 0.45,
+      turnTime: 0.5
+    },
+    //
+    // Locomotion in its two moods (px, s): body speed along its way and
+    // how fast it gets there (accel, 1/s), how many hands hold on while
+    // the others are free (holds), how stiffly the holding limbs pull the
+    // body to its place (pull, 1/s²) and how firmly that settles (damping
+    // share of critical: 1 never swings past), the most hands in the air
+    // at once, the gap after a hand takes hold before the next one lets
+    // go, a reach's time (min, max) at reachSpeed px/s, the tug a hand
+    // gives the body as it takes hold (kick), how far ahead of the hands
+    // the body may get (lead), how far on along the way a new hold is
+    // sought (holdLead), how far a hold may lag behind before the hand
+    // steps on (stride). Exploring it stops now and then (pauseEvery,
+    // pause: [min, max] s) and feels about with a free limb (probeChance
+    // per try, a probe lasting probeTime: [min, max] s).
+    //
+    explore: {
+      speed: 24,
+      accel: 2.5,
+      holds: 4,
+      pull: 9,
+      damping: 1,
+      reaches: 1,
+      stepGap: 0.35,
+      reachTime: [0.6, 1],
+      reachSpeed: 200,
+      kick: 8,
+      lead: 46,
+      holdLead: 40,
+      stride: 90,
+      pauseEvery: [2.5, 6],
+      pause: [1.2, 3.2],
+      probeChance: 0.6,
+      probeTime: [1.8, 2.8]
+    },
+    pursuit: {
+      speed: 150,
+      accel: 8,
+      holds: 3,
+      pull: 26,
+      damping: 0.9,
+      reaches: 2,
+      stepGap: 0.05,
+      reachTime: [0.2, 0.34],
+      reachSpeed: 700,
+      kick: 26,
+      lead: 80,
+      holdLead: 90,
+      stride: 70
+    },
+    //
+    // Holds: at least minSupport hands hold on (a hand lets go only while
+    // that many others do, and only after holding minHold s), sought
+    // within search px of where a hand wants to hold; a hold within gap px
+    // of another hand's is taken. ways: how often a stretch of its way is
+    // climbed out in the air off the edge, behind the platform, or on the
+    // soil's face in front of it (shares; on the face its limbs lie over
+    // the soil, so it is off).
+    //
+    grip: {
+      minSupport: 3,
+      minHold: 0.5,
+      search: 80,
+      gap: 30,
+      ways: { out: 0.6, behind: 0.4, face: 0 }
+    },
+    //
+    // Hearing: sounds fade out over range px (soil in between muffles
+    // them by occlusion); one heard at threshold or louder sets it after
+    // its source. At the last place heard — or once silent for memory s
+    // on the way — it searches about for investigate s, then roams again.
+    // It plans a new way to a sound at most every replanGap s (or when the
+    // sound moved replanDist px).
+    //
+    hearing: {
+      range: 900,
+      threshold: 0.22,
+      occlusion: 0.5,
+      memory: 6,
+      investigate: 4,
+      replanGap: 0.6,
+      replanDist: 120
+    },
+    //
+    // Work per second: its body and limbs step simHz times a second (farHz
+    // while it is farMargin px or more out of sight), its hands' next holds
+    // are planned planHz times; a plan looks at maxCandidates holds at most,
+    // a way search expands maxExpansions nodes at most, a limb's chain is
+    // settled in limbPasses passes a step. debug draws its workings and
+    // timings (also ?haggyDebug in the address).
+    //
+    perf: {
+      simHz: 60,
+      farHz: 15,
+      farMargin: 400,
+      planHz: 15,
+      maxCandidates: 40,
+      maxExpansions: 2000,
+      limbPasses: 4,
+      debug: false
+    }
   },
   //
   // The pad plant in the lake (cave-pads.js, plant_mid.png): drawn toned

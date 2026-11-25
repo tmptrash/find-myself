@@ -98,6 +98,18 @@ const Z_HAGGY_BACK = Z_WORLD + 0.3
 const Z_HAGGY_FRONT = Z_WORLD + 0.8
 const HAGGY_SEED = 4711
 //
+// What the blind climber hears (cave-haggy.js), as loud as at their
+// source (1: a heavy landing): the hero's steps, landings and jumps, his
+// fall into the lake, a fish's splash (times its strength), the lurker
+// bursting out of the water.
+//
+const NOISE_STEP = 0.45
+const NOISE_LAND = 0.9
+const NOISE_JUMP = 0.5
+const NOISE_FALL_IN = 1
+const NOISE_FISH = 0.25
+const NOISE_SLOSH = 0.8
+//
 // A fish's splash sounds full within the hero's reach and fades out over
 // SPLASH_HEAR px from him.
 //
@@ -308,7 +320,7 @@ function build(k, opts) {
     front: Front.create(k),
     deathFlies: DeathFireflies.create({ k, z: Z_DEATH_FLIES }),
     haggy: Haggy.create({ k, seed: HAGGY_SEED }),
-    haggyCtx: { hero: null, prey: [], onEat: null },
+    haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null },
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
     striders: Strider.createAll(k, lake, [Pads.crownSpan(pads)]),
@@ -472,6 +484,7 @@ function updateHero(inst, char) {
 //
 function trackLanding(inst, char) {
   if (!char.isGrounded()) {
+    inst.airFor === 0 && char.vel.y < 0 && makeNoise(inst, char.pos.x, char.pos.y, NOISE_JUMP)
     inst.airFor += inst.k.dt()
     return
   }
@@ -587,6 +600,7 @@ function startDrown(inst, char) {
   hero.drownSinkY = inst.drown.y
   releaseGamePhysicalKeys()
   Sound.playWaterStepsOnce(inst.sfx, WATER_STEPS_VOLUME)
+  makeNoise(inst, char.pos.x, char.pos.y, NOISE_FALL_IN)
   CaveLake.disturb(inst.lake, char.pos.x, HERO_FALL_WAVE)
   StriderBridge.breakUp(inst.bridge)
   inst.striders.forEach(strider => Strider.startle(strider, char.pos.x))
@@ -718,6 +732,8 @@ function spawnHero(inst, pose) {
 //
 function playHeroStep(inst, hero, land) {
   hero.sfx && CaveSound.playStoneStep(inst.caveSound, land)
+  const pos = hero.character?.pos
+  pos && makeNoise(inst, pos.x, pos.y, land ? NOISE_LAND : NOISE_STEP)
 }
 //
 // Both walls, and the step that carries the hero along the platforms' top.
@@ -831,8 +847,8 @@ function addDrawLayers(inst) {
   const k = inst.k
   k.add([k.z(Z_WORLD), { draw: () => drawWorld(inst) }])
   k.add([k.z(Z_FIREFLIES), { draw: () => drawFireflies(inst) }])
-  k.add([k.z(Z_HAGGY_BACK), { draw: () => Haggy.onDraw(inst.haggy, View.worldRect(inst.view), false) }])
-  k.add([k.z(Z_HAGGY_FRONT), { draw: () => Haggy.onDraw(inst.haggy, View.worldRect(inst.view), true) }])
+  k.add([k.z(Z_HAGGY_BACK), { draw: () => Haggy.onDraw(inst.haggy, false) }])
+  k.add([k.z(Z_HAGGY_FRONT), { draw: () => Haggy.onDraw(inst.haggy, true) }])
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
@@ -882,15 +898,15 @@ function updateRunners(inst) {
   food.prey.length = 0
   Fireflies.forEachLit(inst.fireflies, f => food.prey.push(f))
   inst.runners.forEach(runner => Runner.onUpdate(runner, hero, food))
-  updateHaggy(inst, hero, food)
+  updateHaggy(inst, food)
 }
 //
-// The climber: about where the hero is, its free hand after the same
-// fireflies the runners leap for.
+// The climber: blind, it goes by what it hears (makeNoise); its free
+// hands snatch the fireflies they touch, the ones the runners leap for.
 //
-function updateHaggy(inst, hero, food) {
+function updateHaggy(inst, food) {
   const ctx = inst.haggyCtx
-  ctx.hero = hero
+  View.worldRect(inst.view, ctx.view)
   ctx.prey = food.prey
   ctx.onEat = food.onEat
   Haggy.onUpdate(inst.haggy, ctx)
@@ -1018,6 +1034,7 @@ function drawEatenHero(inst, at, angle) {
 function onLurkerSplash(inst, x) {
   const focus = heroFocus(inst)
   CaveSound.playSlosh(inst.caveSound, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  makeNoise(inst, x, Layout.LAKE_SURFACE_Y, NOISE_SLOSH)
   CaveLake.disturb(inst.lake, x, LURKER_WAVE)
   inst.striders.forEach(strider => Strider.startle(strider, x))
   inst.fish.forEach(fish => Fish.startle(fish, x))
@@ -1201,7 +1218,15 @@ function onBubblePop(inst, x, r) {
 function onFishSplash(inst, x, strength) {
   const focus = heroFocus(inst)
   CaveSound.playFishSplash(inst.caveSound, strength, 1 - Math.abs(x - focus.x) / SPLASH_HEAR)
+  makeNoise(inst, x, Layout.LAKE_SURFACE_Y, NOISE_FISH * strength)
   CaveLake.disturb(inst.lake, x, strength)
+}
+//
+// A sound the blind climber may hear (where it is, as loud as at its
+// source).
+//
+function makeNoise(inst, x, y, loudness) {
+  Haggy.hear(inst.haggy, x, y, loudness)
 }
 //
 // A fish in the giant's jaws: only what sticks out of its mouth.

@@ -1,5 +1,6 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Ring from '../../../utils/ring-draw.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as CaveLake from '../utils/cave-lake.js'
@@ -757,9 +758,9 @@ export function onDrawSplash(inst) {
   inst.rings.forEach(ring => {
     const share = ring.t / RING_TIME
     const r = (RING_R0 + (RING_R1 - RING_R0) * share) * ring.strength * inst.size
-    k.drawEllipse({ pos: inst.v.set(ring.x, CaveLake.surfaceAt(inst.lake, ring.x)), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
+    Ring.ring(k, ring.x, CaveLake.surfaceAt(inst.lake, ring.x), r, r * RING_FLAT, LINE_W, inst.splashRgb, RING_ALPHA * (1 - share))
   })
-  inst.drops.forEach(drop => k.drawCircle({ pos: inst.v.set(drop.x, drop.y), radius: DROP_R, color: inst.splashRgb, opacity: DROP_ALPHA }))
+  inst.drops.forEach(drop => Ring.disc(k, drop.x, drop.y, DROP_R, DROP_R, inst.splashRgb, DROP_ALPHA))
 }
 //
 // Where the lake is deep enough for a fish: its first and last columns

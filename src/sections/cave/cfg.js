@@ -142,15 +142,12 @@ export const CAVE_CFG = {
   // The climber (cave-haggy.js, haggy_waggy.png), a blind predator on five
   // clawed limbs: its pieces toned a little toward the cave's light (tint),
   // the throat seen when it opens its mouth (mouth), its ultrasound's
-  // waves (wave). showHolds draws, in the holds colour, every stretch of
-  // outline its claws may hold.
+  // waves (wave).
   //
   haggy: {
     tint: '#d9d2c4',
     mouth: '#2a1512',
     wave: '#cfe6f2',
-    holds: '#ff2a2a',
-    showHolds: true,
     //
     // Anatomy (world px). A limb has no joints: it is one flexible body
     // `length` long, a chain of `segments` pieces drawn as one smooth
@@ -162,8 +159,9 @@ export const CAVE_CFG = {
     // ceiling, walkH over a top, sideH on a side. It is an ellipse
     // head.rx px across either side of its middle and head.ry up and down
     // (its dome; only the tips of the scales round it reach farther):
-    // nothing solid, no water, ever comes inside it; it is soft and
-    // squeezes in a tight place, to head.squeeze of its size at most.
+    // nothing solid, no water, ever comes inside it, and it never shrinks
+    // — in a tight place (a shaft, a gap between ledges) it turns along
+    // its way instead.
     // Each limb carries buttons[0] … buttons[1] buttons, set at random
     // along buttonSpan (shares of its length): they ride its skin, moving
     // apart as it stretches.
@@ -179,7 +177,7 @@ export const CAVE_CFG = {
       hangH: 108,
       walkH: 124,
       sideH: 86,
-      head: { rx: 31, ry: 25, squeeze: 0.72 },
+      head: { rx: 31, ry: 25 },
       buttons: [3, 5],
       buttonSpan: [0.12, 0.86]
     },
@@ -188,9 +186,12 @@ export const CAVE_CFG = {
     // shoulder to wrist (it curves) and droops `droop` px/s; holding, it
     // runs straight from its hold to the head, its points settling onto
     // that line at tautRate per s. It contracts down to minLength of its
-    // full length, changing at lengthRate per s and swelling up to
-    // `swell` times as thick when short. It keeps `radius` px clear of
-    // anything hard.
+    // full length, changing at lengthRate per s. Its flesh keeps its
+    // volume: at girth.rest of its full length it is as thick as its art,
+    // longer it gets thinner (down to girth.thin of that), shorter thicker
+    // (up to girth.thick) — less so toward the wrist, which keeps to the
+    // hand (only girth.wrist of the change there). It keeps `radius` px
+    // clear of anything hard.
     //
     limb: {
       slack: 1.13,
@@ -198,21 +199,21 @@ export const CAVE_CFG = {
       tautRate: 14,
       minLength: 0.2,
       lengthRate: 4,
-      swell: 1.25,
+      girth: { rest: 0.55, thin: 0.72, thick: 1.5, wrist: 0.4 },
       radius: 9
     },
     //
-    // Turning: the head leans up to `tilt` rad with the way it goes. It
+    // Turning: the head leans up to `tilt` rad with the way it goes (where
+    // its way is too tight for it upright, it turns right along it). It
     // faces the side its way runs to once that way's X share passes
     // faceDx for faceHold s, and turns round in turnTime s (through its
-    // face-on picture), never narrower than minWide of its width.
+    // face-on picture).
     //
     turning: {
       tilt: 0.3,
       faceDx: 0.35,
       faceHold: 0.3,
-      turnTime: 0.2,
-      minWide: 0.8
+      turnTime: 0.2
     },
     //
     // Walking on a top the head never comes lower over the ground than
@@ -264,8 +265,8 @@ export const CAVE_CFG = {
       holds: 4,
       reaches: 2,
       stepGap: 0.05,
-      reachTime: [0.22, 0.36],
-      reachSpeed: 650,
+      reachTime: [0.26, 0.42],
+      reachSpeed: 520,
       lead: 80,
       stride: 70,
       pulseEvery: 0.9

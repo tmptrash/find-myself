@@ -1,4 +1,5 @@
 import { getRGB } from '../../../utils/helper.js'
+import * as Ring from '../../../utils/ring-draw.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
@@ -646,9 +647,9 @@ export function onDrawSplash(inst) {
   inst.rings.forEach(ring => {
     const share = ring.t / RING_TIME
     const r = (RING_R0 + (RING_R1 - RING_R0) * share) * ring.strength
-    k.drawEllipse({ pos: inst.v.set(ring.x, CaveLake.surfaceAt(inst.lake, ring.x)), radiusX: r, radiusY: r * RING_FLAT, fill: false, outline: { width: LINE_W, color: inst.splashRgb }, opacity: RING_ALPHA * (1 - share) })
+    Ring.ring(k, ring.x, CaveLake.surfaceAt(inst.lake, ring.x), r, r * RING_FLAT, LINE_W, inst.splashRgb, RING_ALPHA * (1 - share))
   })
-  inst.drops.forEach(drop => k.drawCircle({ pos: inst.v.set(drop.x, drop.y), radius: DROP_R, color: inst.splashRgb, opacity: DROP_ALPHA }))
+  inst.drops.forEach(drop => Ring.disc(k, drop.x, drop.y, DROP_R, DROP_R, inst.splashRgb, DROP_ALPHA))
   inst.drips.forEach(d => drawDrip(inst, d))
 }
 //
@@ -660,7 +661,7 @@ function drawDrip(inst, d) {
   const rx = DRIP_R * (d.hang ? DRIP_THIN + (1 - DRIP_THIN) * hang : 1)
   const ry = d.hang ? DRIP_R + d.len * HALF : DRIP_R * Math.min(DRIP_FALL_MAX, 1 + d.vy * DRIP_FALL_STRETCH)
   const y = d.hang ? d.y + d.len * HALF : d.y
-  inst.k.drawEllipse({ pos: inst.v.set(d.x, y), radiusX: rx, radiusY: ry, color: inst.splashRgb, opacity: DROP_ALPHA })
+  Ring.disc(inst.k, d.x, y, rx, ry, inst.splashRgb, DROP_ALPHA)
 }
 //
 // The state machine: resting (or watching the bank's edge), striking,
@@ -1756,7 +1757,7 @@ function drawPupil(inst) {
   const lx = inst.look ? inst.look.x - eye.x : inst.dir.x
   const ly = inst.look ? inst.look.y - eye.y : inst.dir.y
   const l = Math.hypot(lx, ly) || 1
-  inst.k.drawCircle({ pos: inst.v.set(eye.x + lx / l * r * PUPIL_SHIFT, eye.y + ly / l * r * PUPIL_SHIFT), radius: r * PUPIL_R, color: inst.pupilRgb })
+  Ring.disc(inst.k, eye.x + lx / l * r * PUPIL_SHIFT, eye.y + ly / l * r * PUPIL_SHIFT, r * PUPIL_R, r * PUPIL_R, inst.pupilRgb, 1)
 }
 //
 // One piece of the atlas at a world point (its pivot there), turned (rad),

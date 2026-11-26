@@ -1,4 +1,5 @@
 import { getRGB } from '../../../utils/helper.js'
+import * as Ring from '../../../utils/ring-draw.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as CaveLake from '../utils/cave-lake.js'
 import * as Ground from '../utils/cave-ground.js'
@@ -84,8 +85,7 @@ export function create(cfg) {
     pops: [],
     mouths: new WeakMap(),
     bodyRgb: getRGB(k, C.body),
-    rimRgb: getRGB(k, C.rim),
-    v: k.vec2(0, 0)
+    rimRgb: getRGB(k, C.rim)
   }
 }
 
@@ -120,11 +120,13 @@ export function onDraw(inst, view) {
   const k = inst.k
   inst.bubbles.forEach(b => {
     if (b.x < view.left || b.x > view.right || b.y < view.top || b.y > view.bottom) return
-    k.drawCircle({ pos: inst.v.set(b.x + Math.sin(b.phase) * b.wobble, b.y), radius: b.r, color: inst.bodyRgb, opacity: BODY_ALPHA, outline: { width: RIM_W, color: inst.rimRgb, opacity: RIM_ALPHA } })
+    const x = b.x + Math.sin(b.phase) * b.wobble
+    Ring.disc(k, x, b.y, b.r, b.r, inst.bodyRgb, BODY_ALPHA)
+    Ring.ring(k, x, b.y, b.r, b.r, RIM_W, inst.rimRgb, RIM_ALPHA)
   })
   inst.pops.forEach(p => {
     const u = p.t / POP_TIME
-    k.drawEllipse({ pos: inst.v.set(p.x, p.y), radiusX: POP_R * u + p.r, radiusY: (POP_R * u + p.r) * POP_FLAT, fill: false, outline: { width: RIM_W, color: inst.rimRgb }, opacity: RIM_ALPHA * (1 - u) })
+    Ring.ring(k, p.x, p.y, POP_R * u + p.r, (POP_R * u + p.r) * POP_FLAT, RIM_W, inst.rimRgb, RIM_ALPHA * (1 - u))
   })
 }
 //

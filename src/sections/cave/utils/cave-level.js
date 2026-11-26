@@ -420,7 +420,6 @@ function build(k, opts) {
   addDrawLayers(inst)
   k.onUpdate(() => onUpdate(inst))
   bindLeave(inst)
-  window.__cave = inst // TEMP-HOOK
   opts.giantDev && bindGiantDev(inst)
   //
   // Once every picture of the level is baked (some only on their first
@@ -506,7 +505,6 @@ function releaseSwarm(inst) {
   inst.swarmIn <= 0 && Swarm.release(inst.swarm, Lantern.holes(inst.lantern))
 }
 function heroFocus(inst) {
-  if (inst.__camAt) return inst.__camAt // TEMP-HOOK
   const char = inst.heroInst?.character
   if (inst.dead || !char?.exists?.()) return { x: inst.deathX, y: inst.deathY, vy: 0 }
   return { x: char.pos.x, y: char.pos.y, vy: char.vel?.y ?? 0 }
@@ -1252,18 +1250,20 @@ function drawFish(inst) {
   inst.fish.forEach(fish => Fish.onDrawSand(fish))
 }
 //
-// On the surface: the fish's splashes, the bubbles rising from the bed,
-// the giant's breath, the striders' water marks, then the striders (each
-// kind in one batch).
+// On the surface: first everything drawn as plain shapes — the fish's
+// and the lurker's splashes, the bubbles rising from the bed, the
+// striders' water marks — then the sprites: the pad plant's crown, the
+// giant's breath, the striders. Shapes and sprites are not mixed: every
+// switch between them is one more batch for the GPU.
 //
 function drawLakeSurface(inst) {
   const view = View.worldRect(inst.view)
   inst.fish.forEach(fish => Fish.onDrawSplash(fish))
   Bubbles.onDraw(inst.bubbles, view)
-  Pads.onDrawCrown(inst.pads, view)
   Lurker.onDrawSplash(inst.lurker)
-  Giant.onDrawMist(inst.giant)
   inst.striders.forEach(strider => Strider.onDrawWater(strider, view))
+  Pads.onDrawCrown(inst.pads, view)
+  Giant.onDrawMist(inst.giant)
   inst.striders.forEach(strider => Strider.onDraw(strider, view))
 }
 function drawFireflies(inst) {

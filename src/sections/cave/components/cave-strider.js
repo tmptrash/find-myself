@@ -1,5 +1,6 @@
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Ring from '../../../utils/ring-draw.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
@@ -666,14 +667,7 @@ function isCulled(inst, view) {
 // high as wide.
 //
 function drawMark(inst, x, y, r, flat, opacity) {
-  inst.k.drawEllipse({
-    pos: inst.v.set(x, y),
-    radiusX: r,
-    radiusY: r * flat,
-    fill: false,
-    outline: { width: LINE_W, color: inst.markRgb },
-    opacity
-  })
+  Ring.ring(inst.k, x, y, r, r * flat, LINE_W, inst.markRgb, opacity)
 }
 //
 // Back to front: the far legs and the far feeler (darker), the body, the

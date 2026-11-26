@@ -893,5 +893,6 @@ The game must work on phones and tablets in **landscape and portrait**, not only
 
 - **All responses and reports to the user must be written in Russian**
 - **All intermediate model reasoning (thinking, planning steps, internal analysis) must also be written in Russian**
+- **Everything the AI shows while it works must be in Russian too**: the short description line of every tool call (the text next to `Bash`, `Read`, `Edit` and the like), progress notes between tool calls, plans, todo items, questions to the user and subagent task titles. Only the literal content stays as it is: commands, file paths, code, identifiers and quoted program output
 - Code comments and JSDoc remain in English (as required by section 8)
 - Keep it simple: don't over-engineer solutions

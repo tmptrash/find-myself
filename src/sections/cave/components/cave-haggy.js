@@ -14,8 +14,9 @@ import * as Look from './cave-haggy-draw.js'
 //   the mood's speed while a hold lies ahead of it — it never passes its
 //   foremost hold, so it always stands or hangs among its hands — and the
 //   head follows the carrot as a critically damped spring: no jerks.
-//   Walking it keeps half a limb over the ground; its soft head keeps out
-//   of everything hard and squeezes in tight places.
+//   Walking it keeps half a limb over the ground; its head keeps out of
+//   everything hard and never shrinks: where its way is too tight for it
+//   upright (a shaft, a gap between ledges), it turns along the way.
 // - The limbs step: the hand left farthest behind lets go and reaches for
 //   a hold on ahead (a curve clear of everything hard, eased with minimum
 //   jerk), a holding hand keeps on the line from its shoulder to its hold
@@ -74,8 +75,7 @@ const DEEP_FAR = 36
 //
 // The head: kept out of anything hard by HEAD_POINTS points round its
 // ellipse (HEAD_PAD px wider: it bobs that much as drawn), a px at a
-// time, BODY_PUSH times a step; it squeezes by SQUEEZE_STEP shares and
-// swells back at SWELL_RATE per s. Walking, the ground under it is looked
+// time, BODY_PUSH times a step. Walking, the ground under it is looked
 // for every GROUND_STEP px.
 //
 const HEAD_POINTS = 24
@@ -83,8 +83,6 @@ const HEAD_PAD = 2
 const HEAD_COS = Float64Array.from({ length: HEAD_POINTS }, (_, i) => Math.cos(i / HEAD_POINTS * Math.PI * 2))
 const HEAD_SIN = Float64Array.from({ length: HEAD_POINTS }, (_, i) => Math.sin(i / HEAD_POINTS * Math.PI * 2))
 const BODY_PUSH = 10
-const SQUEEZE_STEP = 0.02
-const SWELL_RATE = 2
 const GROUND_STEP = 6
 //
 // Travel: it rests REST..+REST_RANGE s at a way's end; its place on the
@@ -120,7 +118,7 @@ const TURNED = 0.3
 // (over LEAD_SPEED px/s) or along its limb's end, eased at AXIS_EASE per
 // s. A straight way is checked every LINE_STEP px, its sides every
 // LINE_WIDE-th check. A hand that found no hold tries again after RETRY
-// s.
+// s. A holding hand turns about its claws HOLD_TURN rad/s at most.
 //
 const CURL_RATE = 5
 const CURL_GRIP = 1
@@ -148,6 +146,7 @@ const LEAD_SPEED = 30
 const LINE_STEP = 8
 const LINE_WIDE = 2
 const RETRY = 0.4
+const HOLD_TURN = 5
 //
 // Holds are tried at LEAD_SHARES of the mood's lead on along the way,
 // then round the edges of the way's next NODES_AHEAD nodes (a ceiling it
@@ -214,17 +213,22 @@ const TOUCH_PULSE = 0.15
 const FACING = 0.9
 //
 // It is drawn while within CULL_PAD px of the view; at most MAX_STEPS
-// steps run per frame. The drawn curve keeps CURVE_CLEAR px out of
-// anything hard (moved CURVE_TRIES px at most), but for its last
-// CURVE_HAND points at the hand.
+// steps run per frame. A limb's inner points settle onto the chain's as
+// drawn as a spring of DRAW_W rad/s (one SNAP_FAR px off is put right
+// there). The drawn curve keeps CURVE_CLEAR px out of anything hard
+// (moved CURVE_TRIES px at most), but for its last CURVE_HAND points at
+// the hand.
 //
 const CULL_PAD = REACH_MAX + 80
 const MAX_STEPS = 4
+const DRAW_W = 60
+const SNAP_FAR = 200
 const CURVE_CLEAR = 5
 const CURVE_TRIES = 28
 const CURVE_HAND = 2
 const HALF = 0.5
 const FULL_TURN = Math.PI * 2
+const QUARTER = Math.PI / 2
 //
 // A point's test against everything hard (see wayOut), kept in one
 // numeric buffer: the point, its radius, the point to fall back toward
@@ -308,12 +312,11 @@ export function create(cfg) {
     mouth: 0,
     mouthWant: 0,
     mouthIn: MOUTH_GAP,
-    squeeze: 1,
     arms: Array.from({ length: ANAT.shoulders.length }, (_, i) => createArm(i, rng)),
     cand: [],
     ideal: { x: 0, y: 0 },
     aim: { x: 0, y: 0, ax: 0, ay: 1 },
-    pose: { x: 0, y: 0, tilt: 0, face: -1, want: -1, jaw: 0, wide: 1, tall: 1 },
+    pose: { x: 0, y: 0, tilt: 0, face: -1, want: -1, jaw: 0 },
     visible: false,
     strip: { arm: null, q: null, band: null },
     v: k.vec2(0, 0),
@@ -351,16 +354,15 @@ export function onUpdate(inst, ctx) {
     planTick(inst, ctx)
   }
   inst.visible = isInView(inst, ctx.view)
-  inst.visible && pose(inst, inst.simAcc / step)
+  inst.visible && pose(inst, inst.simAcc / step, dt)
 }
 
 /**
- * Draws the climber: the holds (if shown), its ultrasound, its limbs with
- * their buttons, its hands, its head.
+ * Draws the climber: its ultrasound, its limbs with their buttons, its
+ * hands, its head.
  * @param {Object} inst - Climber instance
  */
 export function onDraw(inst) {
-  C.showHolds && inst.view && Look.drawHolds(inst, inst.view)
   Look.drawWaves(inst)
   if (!inst.visible) return
   for (let i = 0; i < inst.arms.length; i++) Look.drawArm(inst, inst.arms[i])
@@ -373,7 +375,8 @@ export function onDraw(inst) {
 // A limb: its state and the time in it, when it took its hold; its
 // shoulder and wrist, the way its hand points and how fast it goes; its
 // chain's points (x, y), at the last step's end (rx, ry: for drawing
-// between steps) and as drawn (nx, ny); whether it is caught behind
+// between steps) and as drawn (nx, ny; gx, gy with their speeds: the
+// spring they settle by); whether it is caught behind
 // something (drag); its hold and the hold it reaches for, its reach's
 // curve, its feeling arc, its fingers' curl; the buttons along it (each
 // `u` of its length from the shoulder, `side` of its half width off its
@@ -401,6 +404,10 @@ function createArm(i, rng) {
     ry: new Float32Array(SEGS + 1),
     nx: new Float32Array(SEGS + 1),
     ny: new Float32Array(SEGS + 1),
+    gx: new Float32Array(SEGS + 1),
+    gy: new Float32Array(SEGS + 1),
+    gvx: new Float32Array(SEGS + 1),
+    gvy: new Float32Array(SEGS + 1),
     drag: false,
     seg: REACH_MAX / SEGS,
     swell: 1,
@@ -711,8 +718,7 @@ function wanderNode(inst, group) {
 // The head: it follows its place on the way as a critically damped spring
 // (the mood's `follow`, rad/s, solved exactly: it never jerks, whatever
 // its place does) — walking from top to top, never lower over the ground
-// than body.minWalk of a limb — then squeezes where it is tight and keeps
-// out of anything hard.
+// than body.minWalk of a limb — then keeps out of anything hard.
 //
 function moveBody(inst, dt) {
   const b = inst.body
@@ -727,7 +733,6 @@ function moveBody(inst, dt) {
   b.y += (dy + ky * dt) * e - dy
   v.x = (v.x - w * kx * dt) * e
   v.y = (v.y - w * ky * dt) * e
-  fitHead(inst, dt)
   keepBodyOut(inst)
 }
 //
@@ -746,31 +751,15 @@ function standY(inst) {
   return y
 }
 //
-// The soft head in a tight place: it squeezes as far as it must for no
-// two opposite sides of it to touch anything hard at once — and, where
-// its way runs through an opening (a narrow node: a shaft, a gap between
-// ledges), for none of it to touch anything; else one side touching, it
-// is moved off it instead (keepBodyOut). At once, to head.squeeze of its
-// size at most; it swells back at SWELL_RATE per s.
+// Whether the head touches anything hard; the way off what it touches is
+// written into SPOT.
 //
-function fitHead(inst, dt) {
-  const tight = inst.path[inst.seg]?.narrow || inst.path[inst.seg + 1]?.narrow
-  let fit = 1
-  while (fit > HEAD.squeeze && headTouch(inst, fit, !tight, false)) fit -= SQUEEZE_STEP
-  fit = Math.max(HEAD.squeeze, fit)
-  inst.squeeze = fit < inst.squeeze ? fit : inst.squeeze + (fit - inst.squeeze) * Math.min(1, SWELL_RATE * dt)
-}
-//
-// Whether the head squeezed to `fit` touches anything hard (`pinched`:
-// on two opposite sides at once). With `out`, the way off what it touches
-// is written into SPOT.
-//
-function headTouch(inst, fit, pinched, out) {
+function headTouch(inst) {
   const b = inst.body
   const c = Math.cos(inst.tilt)
   const s = Math.sin(inst.tilt)
-  const rx = HEAD.rx * fit + HEAD_PAD
-  const ry = HEAD.ry * fit + HEAD_PAD
+  const rx = HEAD.rx + HEAD_PAD
+  const ry = HEAD.ry + HEAD_PAD
   let gx = 0
   let gy = 0
   let hit = false
@@ -778,16 +767,13 @@ function headTouch(inst, fit, pinched, out) {
     const px = HEAD_COS[i] * rx * c - HEAD_SIN[i] * ry * s
     const py = HEAD_COS[i] * rx * s + HEAD_SIN[i] * ry * c
     if (!isHard(Math.round(b.x + px) | 0, Math.round(b.y + py) | 0)) continue
-    if (pinched && !isHard(Math.round(b.x - px) | 0, Math.round(b.y - py) | 0)) continue
     hit = true
     gx -= px
     gy -= py
   }
-  if (out) {
-    const g = vecLen(gx, gy) || 1
-    SPOT[OUT_X] = gx / g
-    SPOT[OUT_Y] = gy / g
-  }
+  const g = vecLen(gx, gy) || 1
+  SPOT[OUT_X] = gx / g
+  SPOT[OUT_Y] = gy / g
   return hit
 }
 //
@@ -807,7 +793,7 @@ function keepBodyOut(inst) {
       SPOT[BACK_X] = inst.carrot.x
       SPOT[BACK_Y] = inst.carrot.y
       wayOut()
-    } else if (!headTouch(inst, inst.squeeze, false, true)) return
+    } else if (!headTouch(inst)) return
     b.x += SPOT[OUT_X] * PUSH
     b.y += SPOT[OUT_Y] * PUSH
     const into = v.x * SPOT[OUT_X] + v.y * SPOT[OUT_Y]
@@ -829,7 +815,7 @@ function moveArm(inst, arm, dt) {
   arm.snap = Math.max(0, arm.snap - dt)
   shoulderOf(inst, arm)
   arm.drag = arm.state === STATE.FREE && !isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, 0)
-  if (arm.state === STATE.HOLD) holdOn(inst, arm)
+  if (arm.state === STATE.HOLD) holdOn(inst, arm, dt)
   else if (arm.state === STATE.REACH) swing(inst, arm, dt)
   else arm.drag || freeHand(inst, arm, px, py, dt)
   flex(arm, dt)
@@ -856,17 +842,23 @@ function shoulderOf(inst, arm) {
 }
 //
 // A holding hand: its claws stay on their spot; the hand turns about them
-// with the head — it keeps on the line from its shoulder to the hold, the
-// limb's own line — while its wrist stays out of anything hard that way.
+// with the head — toward the line from its shoulder to the hold, the
+// limb's own line, HOLD_TURN rad/s at most (it never flips as the
+// shoulder passes close by) — while its wrist stays out of anything hard
+// that way.
 //
-function holdOn(inst, arm) {
+function holdOn(inst, arm, dt) {
   const h = arm.hold
   aimHand(arm, h.gx, h.gy, inst.hand.palm, inst.aim)
-  if (isWristClear(inst.aim.x, inst.aim.y)) {
-    h.ax = inst.aim.ax
-    h.ay = inst.aim.ay
-    h.x = inst.aim.x
-    h.y = inst.aim.y
+  const most = HOLD_TURN * dt
+  const turn = Math.max(-most, Math.min(most, Math.atan2(h.ax * inst.aim.ay - h.ay * inst.aim.ax, h.ax * inst.aim.ax + h.ay * inst.aim.ay)))
+  const ax = h.ax * Math.cos(turn) - h.ay * Math.sin(turn)
+  const ay = h.ax * Math.sin(turn) + h.ay * Math.cos(turn)
+  if (isWristClear(h.gx - ax * inst.hand.palm, h.gy - ay * inst.hand.palm)) {
+    h.ax = ax
+    h.ay = ay
+    h.x = h.gx - ax * inst.hand.palm
+    h.y = h.gy - ay * inst.hand.palm
   }
   arm.wx = h.x
   arm.wy = h.y
@@ -889,9 +881,9 @@ function aimHand(arm, gx, gy, palm, h) {
 }
 //
 // A reaching hand on its curve (eased with minimum jerk, the speed it set
-// off with dying away over the reach), its way turning to the hold's
-// (aimed from where the shoulder is now); there, it takes hold — or, out
-// of reach now, it missed.
+// off with dying away over the reach), turning the shorter way round to
+// the hold's way (aimed from where the shoulder is now); there, it takes
+// hold — or, out of reach now, it missed.
 //
 function swing(inst, arm, dt) {
   const r = arm.reach
@@ -902,7 +894,9 @@ function swing(inst, arm, dt) {
   aimHand(arm, to.gx, to.gy, inst.hand.palm, to)
   arm.wx = cubic(r.fx, r.c1x, r.c2x, to.x, e) + r.vx * carry
   arm.wy = cubic(r.fy, r.c1y, r.c2y, to.y, e) + r.vy * carry
-  setAxis(arm, r.fax + (to.ax - r.fax) * e, r.fay + (to.ay - r.fay) * e)
+  const turn = Math.atan2(r.fax * to.ay - r.fay * to.ax, r.fax * to.ax + r.fay * to.ay) * e
+  arm.ax = r.fax * Math.cos(turn) - r.fay * Math.sin(turn)
+  arm.ay = r.fax * Math.sin(turn) + r.fay * Math.cos(turn)
   if (r.t < 1) return
   if (vecLen(to.x - arm.sx, to.y - arm.sy) > REACH_MAX * ANCHOR_SLACK) return release(arm)
   anchorAt(inst, arm, to)
@@ -1212,13 +1206,20 @@ function wayOut() {
   return true
 }
 //
-// The head's tilt: it leans with the way it goes only while it moves; a
+// The head's tilt: it leans with the way it goes only while it moves —
+// or, where its way is too tight for it upright (a turned node on its
+// stretch, off a top), it turns right along the way, its face ahead (as
+// far as straight up or down: it never turns over its back); a
 // critically damped spring.
 //
 function updateTilt(inst, dt) {
+  const f = inst.frame
   const moving = inst.speed > FACE_SPEED ? 1 : 0
   inst.moveShare += (moving - inst.moveShare) * Math.min(1, MOVE_RATE * dt)
-  const want = inst.frame.dy * TURN.tilt * inst.face * inst.moveShare
+  const tight = !f.walk && (inst.path[inst.seg]?.turned || inst.path[inst.seg + 1]?.turned)
+  const side = inst.face < 0 ? -1 : 1
+  const along = Math.atan2(side * f.dy, side * f.dx)
+  const want = tight ? Math.max(-QUARTER, Math.min(QUARTER, along)) : f.dy * TURN.tilt * inst.face * inst.moveShare
   inst.tiltVel += ((want - inst.tilt) * TILT_W * TILT_W - inst.tiltVel * 2 * TILT_W) * dt
   inst.tilt += inst.tiltVel * dt
 }
@@ -1609,10 +1610,11 @@ function isInView(inst, view) {
 }
 //
 // Its pose this frame, `alpha` of the way from its last step to the
-// current one: the head (bobbing, the side it faces, its jaw, how it is
-// squeezed), each limb's chain, wrist and hand, its curve laid.
+// current one: the head (bobbing, the side it faces, its jaw), each
+// limb's chain (its inner points drawn as they settle:
+// smoothDrawn), wrist and hand, its curve laid. (dt: the frame's time.)
 //
-function pose(inst, alpha) {
+function pose(inst, alpha, dt) {
   const p = inst.pose
   p.x = lerp(inst.prev.x, inst.body.x, alpha)
   p.y = lerp(inst.prev.y, inst.body.y, alpha) + Math.sin(inst.time * BOB_HZ * FULL_TURN) * BOB_PX
@@ -1620,8 +1622,6 @@ function pose(inst, alpha) {
   p.face = lerp(inst.prev.face, inst.face, alpha)
   p.want = inst.faceWant
   p.jaw = inst.mouth * JAW_OPEN
-  p.wide = inst.squeeze
-  p.tall = inst.squeeze
   for (let i = 0; i < inst.arms.length; i++) {
     const arm = inst.arms[i]
     for (let j = 0; j <= SEGS; j++) {
@@ -1633,9 +1633,40 @@ function pose(inst, alpha) {
     d.wy = arm.ny[SEGS]
     d.ax = lerp(arm.p.ax, arm.ax, alpha)
     d.ay = lerp(arm.p.ay, arm.ay, alpha)
-    arm.swell = Math.min(LIMB.swell, Math.sqrt(REACH_MAX / (arm.seg * SEGS)))
+    arm.swell = Math.max(LIMB.girth.thin, Math.min(LIMB.girth.thick, Math.sqrt(REACH_MAX * LIMB.girth.rest / (arm.seg * SEGS))))
+    smoothDrawn(arm, dt)
     Look.layArm(arm)
     clearCurve(arm) && Look.measureArm(arm)
+  }
+}
+//
+// The limb's inner points as drawn follow where the chain has them as a
+// critically damped spring of DRAW_W rad/s (solved exactly: steady at any
+// frame time), so no flicker of the chain's from one step to the next
+// shows; its ends — shoulder and wrist — are drawn where they are. One
+// more than SNAP_FAR px off (a new start) is put right there.
+//
+function smoothDrawn(arm, dt) {
+  const { nx, ny, gx, gy, gvx, gvy } = arm
+  const e = Math.exp(-DRAW_W * dt)
+  for (let j = 1; j < SEGS; j++) {
+    const dx = gx[j] - nx[j]
+    const dy = gy[j] - ny[j]
+    if (Math.abs(dx) > SNAP_FAR || Math.abs(dy) > SNAP_FAR) {
+      gx[j] = nx[j]
+      gy[j] = ny[j]
+      gvx[j] = 0
+      gvy[j] = 0
+      continue
+    }
+    const kx = gvx[j] + DRAW_W * dx
+    const ky = gvy[j] + DRAW_W * dy
+    gx[j] = nx[j] + (dx + kx * dt) * e
+    gy[j] = ny[j] + (dy + ky * dt) * e
+    gvx[j] = (gvx[j] - DRAW_W * kx * dt) * e
+    gvy[j] = (gvy[j] - DRAW_W * ky * dt) * e
+    nx[j] = gx[j]
+    ny[j] = gy[j]
   }
 }
 //

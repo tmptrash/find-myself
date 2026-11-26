@@ -16,9 +16,7 @@ import * as Surface from './cave-surface.js'
 //   Nodes in an opening (soil across from their edge: a shaft such as the
 //   cave's entrance, a niche, a gap by a ledge) are kept by group too.
 // - Holds: an outline point every GRIP_STEP px (with its outward normal),
-//   where a hand may hold; looked up in GRID px cells. The stretches of
-//   outline they make up are kept as short polylines (`lines`, each with
-//   its box) for showing them.
+//   where a hand may hold; looked up in GRID px cells.
 // Lookups only visit the cells round a point and stop after a set number
 // of holds; a way search stops after a set number of expansions.
 //
@@ -32,20 +30,27 @@ const P = CAVE_CFG.haggy.perf
 // TIGHT_MIN (tried every TIGHT_STEP), so it gets through narrow places —
 // in a shaft, right in its middle (over a top only all of it: it never
 // walks crouched low — where there is no room to stand it hangs or goes
-// by a side). The body needs room for its head squeezed as far as it goes
-// (anatomy.head, HEAD_PAD px wider as the climber keeps it: nothing
-// solid at its middle nor round the ellipse, ROOM_POINTS points about it)
-// and stays EDGE px inside the world.
+// by a side). The body needs room for its head, never smaller than it
+// is (anatomy.head, HEAD_PAD_Y px taller: it bobs that much; nothing
+// solid at its middle nor round the ellipse, ROOM_POINTS points about
+// it): upright, or — off a top, where it climbs — turned along its way
+// (it looks where it climbs: up a shaft, or slanting between two ledges,
+// its head is no wider across the way than it is tall). A node is tried
+// with its head turned every TURN_STEP rad; a link, with its head along
+// the link. A node with no room upright, or at either end of a link
+// without, is `turned`. It stays EDGE px inside the world.
 //
 const CEIL_NY = 0.5
 const TOP_NY = 0.4
 const TIGHT_MIN = 0.3
-const TIGHT_STEP = 0.05
+const TIGHT_STEP = 0.02
 const HALF = 0.5
 const HEAD = A.head
 const ROOM_POINTS = 12
-const HEAD_PAD = 2
-const ROOM = Array.from({ length: ROOM_POINTS }, (_, i) => [Math.cos(i / ROOM_POINTS * Math.PI * 2) * (HEAD.rx * HEAD.squeeze + HEAD_PAD), Math.sin(i / ROOM_POINTS * Math.PI * 2) * (HEAD.ry * HEAD.squeeze + HEAD_PAD)])
+const HEAD_PAD_Y = 2
+const ROOM = Array.from({ length: ROOM_POINTS }, (_, i) => [Math.cos(i / ROOM_POINTS * Math.PI * 2) * HEAD.rx, Math.sin(i / ROOM_POINTS * Math.PI * 2) * (HEAD.ry + HEAD_PAD_Y)])
+const TURN_STEP = Math.PI / 8
+const TURNS = Array.from({ length: Math.round(Math.PI / TURN_STEP) - 1 }, (_, i) => turnedRoom((i + 1) * TURN_STEP))
 const EDGE = 24
 //
 // The lake it keeps out of: its water's span LAKE_PAD px wider, from
@@ -82,10 +87,6 @@ const NARROW_FROM = 30
 const NARROW_SPAN = 170
 const NARROW_STEP = 6
 //
-// A shown stretch of holds is cut into polylines of LINE_POINTS points.
-//
-const LINE_POINTS = 24
-//
 // A way search's queue holds at most this many entries per node.
 //
 const QUEUE_PER_NODE = 16
@@ -94,7 +95,7 @@ let search = null
 
 /**
  * The ways (built on first use, once per page).
- * @returns {Object} Nav: nodes, groups, the openings' nodes by group, the lookup cells, the holds' polylines (lines)
+ * @returns {Object} Nav: nodes, groups, the openings' nodes by group, the lookup cells
  */
 export function get() {
   nav ??= build()
@@ -292,21 +293,12 @@ export function inWater(x, y) {
 function build() {
   const nodes = []
   const grips = new Map()
-  const lines = []
   const p = {}
   Solid.runs().forEach(run => {
-    let stretch = []
     for (let s = 0; s < run.len; s += GRIP_STEP) {
       Surface.sample(run, s, p)
-      if (inLakeZone(p.x, p.y)) {
-        addLines(lines, stretch)
-        stretch = []
-        continue
-      }
-      addTo(grips, p.x, p.y, { x: p.x, y: p.y, nx: p.nx, ny: p.ny })
-      stretch.push({ x: p.x, y: p.y })
+      inLakeZone(p.x, p.y) || addTo(grips, p.x, p.y, { x: p.x, y: p.y, nx: p.nx, ny: p.ny })
     }
-    addLines(lines, stretch)
     const count = Math.max(1, Math.floor(run.len / NODE_STEP))
     const own = []
     for (let i = 0; i < count + (run.closed ? 0 : 1); i++) {
@@ -334,19 +326,7 @@ function build() {
   nodes.forEach(node => addTo(cells, node.ox, node.oy, node))
   let biggest = -1
   groups.forEach((members, id) => { (biggest < 0 || members.length > groups.get(biggest).length) && (biggest = id) })
-  return { nodes, groups, openings, grips, cells, biggest, lines }
-}
-//
-// A stretch of holds as polylines of LINE_POINTS points (each starting on
-// the last point of the one before), each with its box.
-//
-function addLines(lines, stretch) {
-  for (let i = 0; i + 1 < stretch.length; i += LINE_POINTS - 1) {
-    const pts = stretch.slice(i, i + LINE_POINTS)
-    const xs = pts.map(pt => pt.x)
-    const ys = pts.map(pt => pt.y)
-    lines.push({ pts, x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) })
-  }
+  return { nodes, groups, openings, grips, cells, biggest }
 }
 //
 // A node at an outline point: where the body hangs out in the air off it
@@ -357,8 +337,10 @@ function nodeAt(p) {
   const full = top ? A.walkH : p.ny > CEIL_NY ? A.hangH : A.sideH
   const ux = top ? 0 : p.nx
   const uy = top ? -1 : p.ny
-  const h = roomOff(p, ux, uy, full, top ? 1 : TIGHT_MIN)
+  const h = roomOff(p, ux, uy, full, top ? 1 : TIGHT_MIN, top)
   if (!h) return null
+  const ox = p.x + ux * h
+  const oy = p.y + uy * h
   return {
     id: -1,
     x: p.x,
@@ -367,9 +349,10 @@ function nodeAt(p) {
     ny: p.ny,
     h,
     top,
-    ox: p.x + ux * h,
-    oy: p.y + uy * h,
+    ox,
+    oy,
     narrow: isNarrow(p),
+    turned: !hasRoom(ox, oy, true),
     links: [],
     group: -1
   }
@@ -380,17 +363,18 @@ function nodeAt(p) {
 // tilts its normals, never the way it stands): all of `full` where it
 // has room there; else, in a narrow place, in the middle of the shares
 // (between `least` and 1) that have room — clear of both sides, so the
-// ways between such places keep clear too (0: none).
+// ways between such places keep clear too (0: none). Over a top only
+// room for the head upright counts (`upright`: it walks there).
 //
-function roomOff(p, ux, uy, full, least) {
+function roomOff(p, ux, uy, full, least, upright) {
   let far = 0
   for (let share = 1; share >= least - TIGHT_STEP * HALF && !far; share -= TIGHT_STEP) {
-    hasRoom(p.x + ux * full * share, p.y + uy * full * share) && (far = share)
+    hasRoom(p.x + ux * full * share, p.y + uy * full * share, upright) && (far = share)
   }
   if (far >= 1 - TIGHT_STEP * HALF || !far) return far * full
   let near = far
   for (let share = least; share < far; share += TIGHT_STEP) {
-    if (hasRoom(p.x + ux * full * share, p.y + uy * full * share)) {
+    if (hasRoom(p.x + ux * full * share, p.y + uy * full * share, upright)) {
       near = share
       break
     }
@@ -409,17 +393,35 @@ function isNarrow(p) {
 function pick(nodes, rng) {
   return nodes?.length ? nodes[Math.floor(rng() * nodes.length)] : null
 }
-function hasRoom(x, y) {
+//
+// Whether the head has room at a point: upright, or (unless `upright`
+// only) turned any of its turns — or, given one (`room`), just that way.
+//
+function hasRoom(x, y, upright = false, room = null) {
   if (x < EDGE || y < EDGE || x > Layout.WORLD_W - EDGE || y > Layout.WORLD_H - EDGE) return false
   if (inLakeZone(x, y) || Solid.isSolid(Math.round(x), Math.round(y))) return false
-  return ROOM.every(([dx, dy]) => !Solid.isSolid(Math.round(x + dx), Math.round(y + dy)) && !inWater(x + dx, y + dy))
+  if (isRoomy(x, y, ROOM) || (room && isRoomy(x, y, room))) return true
+  return !upright && !room && TURNS.some(turn => isRoomy(x, y, turn))
+}
+//
+// The head's room turned by `angle` rad.
+//
+function turnedRoom(angle) {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return ROOM.map(([dx, dy]) => [dx * c - dy * s, dx * s + dy * c])
+}
+function isRoomy(x, y, room) {
+  return room.every(([dx, dy]) => !Solid.isSolid(Math.round(x + dx), Math.round(y + dy)) && !inWater(x + dx, y + dy))
 }
 function link(a, b) {
   a.links.push(b)
   b.links.push(a)
 }
 //
-// Whether the body can go straight from one node's place to another's:
+// Whether the body can go straight from one node's place to another's
+// (its head upright, or turned along the way where it must be: both ends
+// are then `turned`):
 // room for it every LINK_CHECK px, and no soil on the line itself every
 // LINK_LINE px (so no ledge thinner than the room checks' spacing lies
 // across the way unseen).
@@ -427,15 +429,22 @@ function link(a, b) {
 function isAirBetween(a, b) {
   const d = vecLen(b.ox - a.ox, b.oy - a.oy)
   const steps = Math.ceil(d / LINK_CHECK)
+  const along = turnedRoom(Math.atan2(b.oy - a.oy, b.ox - a.ox))
+  let turned = false
   for (let i = 1; i < steps; i++) {
     const u = i / steps
-    if (!hasRoom(a.ox + (b.ox - a.ox) * u, a.oy + (b.oy - a.oy) * u)) return false
+    const x = a.ox + (b.ox - a.ox) * u
+    const y = a.oy + (b.oy - a.oy) * u
+    if (hasRoom(x, y, true)) continue
+    if (!hasRoom(x, y, false, along)) return false
+    turned = true
   }
   const fine = Math.ceil(d / LINK_LINE)
   for (let i = 1; i < fine; i++) {
     const u = i / fine
     if (Solid.isSolid(Math.round(a.ox + (b.ox - a.ox) * u), Math.round(a.oy + (b.oy - a.oy) * u))) return false
   }
+  turned && (a.turned = b.turned = true)
   return true
 }
 //

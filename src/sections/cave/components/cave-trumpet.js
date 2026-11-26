@@ -1,4 +1,5 @@
 import { getRGB } from '../../../utils/helper.js'
+import * as Ring from '../../../utils/ring-draw.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
@@ -800,17 +801,14 @@ function drawEyes(inst) {
       const lx = inst.look ? inst.look.x - x : 0
       const ly = inst.look ? inst.look.y - y : 0
       const l = Math.hypot(lx, ly) || 1
-      k.drawCircle({ pos: inst.v.set(x + lx / l * r * PUPIL_SHIFT, y + ly / l * r * PUPIL_SHIFT), radius: r * PUPIL_R, color: inst.pupilRgb })
+      Ring.disc(k, x + lx / l * r * PUPIL_SHIFT, y + ly / l * r * PUPIL_SHIFT, r * PUPIL_R, r * PUPIL_R, inst.pupilRgb, 1)
     }
     if (inst.lid <= 0) return
     const lr = LID_R * SCALE
-    k.drawEllipse({
-      pos: inst.v.set(x, y - lr + lr * inst.lid),
-      radiusX: lr,
-      radiusY: Math.max(TOOTH_EDGE, lr * inst.lid),
-      color: inst.lidRgb,
-      outline: { width: TOOTH_EDGE, color: inst.lidEdgeRgb }
-    })
+    const lidY = y - lr + lr * inst.lid
+    const lidH = Math.max(TOOTH_EDGE, lr * inst.lid)
+    Ring.disc(k, x, lidY, lr, lidH, inst.lidRgb, 1)
+    Ring.ring(k, x, lidY, lr, lidH, TOOTH_EDGE, inst.lidEdgeRgb, 1)
   })
 }
 //

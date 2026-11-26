@@ -24,6 +24,7 @@ const GRAIN_SEED = 9710
 const C = CAVE_CFG.haggy
 const A = C.anatomy
 const SONAR = C.sense.ultrasound
+const GIRTH = C.limb.girth
 //
 // Sizes: world px per sheet px of the head and of the arm (with its hand);
 // the atlas is baked BAKE_OVER times finer, its pieces ATLAS_GAP px apart.
@@ -126,23 +127,18 @@ const JOINT_BEND = 39
 //
 // A limb's curve: a Catmull-Rom spline through its chain's points,
 // `subdivide` pieces per chain piece; its strip is HALF_W px wide each
-// side at the art's width (times the anatomy's thickness and taper). The
-// holds are shown as strips HOLDS_W px wide through every HOLDS_SKIP-th
-// of their points.
+// side at the art's width (times the anatomy's thickness and taper).
 //
 const SPINE_POINTS = A.segments * A.subdivide + 1
 const HALF_W = TILE.h * ARM_SCALE * 0.5 * A.thickness
-const HOLDS_W = 2
-const HOLDS_SKIP = 2
 //
 // The head turning round (0: the side it had, 1: the side it turns to):
 // its face-on picture comes in over the old side from FRONT_IN[0] to
 // FRONT_IN[1] of the turn, the new side over the face from FRONT_OUT[0]
 // to FRONT_OUT[1] (what is under stays whole till then: never
-// see-through, never a flat line). A side is narrowest (turning.minWide
-// of its width) face on, the face narrowest at a side.
+// see-through, never a flat line). Each is drawn at its full size: the
+// head never shrinks.
 //
-const MIN_WIDE = C.turning.minWide
 const FRONT_IN = [0.26, 0.42]
 const FRONT_OUT = [0.58, 0.74]
 //
@@ -160,7 +156,6 @@ const DEG = 180 / Math.PI
 const BYTE_MAX = 255
 const HEX_RADIX = 16
 const atlasFor = new WeakMap()
-const holdMeshFor = new WeakMap()
 const indicesFor = new Map()
 let atlas = null
 let rigs = null
@@ -278,7 +273,7 @@ export function drawArm(inst, arm) {
     const a = spine[Math.max(0, i - 1)]
     const b = spine[Math.min(end, i + 1)]
     const tl = vecLen(b.x - a.x, b.y - a.y) || 1
-    const half = HALF_W * arm.swell * (A.taper[0] + (A.taper[1] - A.taper[0]) * (p.s / (arm.len || 1)))
+    const half = halfWidth(arm, p.s / (arm.len || 1))
     const nx = (b.y - a.y) / tl * half
     const ny = -(b.x - a.x) / tl * half
     const back = arm.len - p.s
@@ -320,13 +315,11 @@ export function drawHead(inst) {
   if (!parts) return
   const p = inst.pose
   const turn = (p.face * p.want + 1) * HALF
-  const side = Math.abs(p.face)
   const front = phase(turn, FRONT_IN)
   const back = phase(turn, FRONT_OUT)
-  const wide = (MIN_WIDE + (1 - MIN_WIDE) * side) * p.wide
-  front < 1 && drawHeadSide(inst, parts, p.want < 0, wide, 1)
-  front > 0 && back < 1 && drawHeadFront(inst, parts, (MIN_WIDE + (1 - MIN_WIDE) * (1 - side)) * p.wide, front)
-  back > 0 && drawHeadSide(inst, parts, p.want > 0, wide, back)
+  front < 1 && drawHeadSide(inst, parts, p.want < 0, 1)
+  front > 0 && back < 1 && drawHeadFront(inst, parts, front)
+  back > 0 && drawHeadSide(inst, parts, p.want > 0, back)
 }
 
 /**
@@ -343,24 +336,6 @@ export function drawWaves(inst) {
   const color = getRGB(k, C.wave)
   for (let i = 0; i < sonar.pulses.length; i++) sonar.pulses[i].live && drawWave(inst, sonar.pulses[i], color)
   for (let i = 0; i < sonar.echoes.length; i++) sonar.echoes[i].live && drawEcho(inst, sonar.echoes[i], color)
-}
-
-/**
- * Draws, in the holds colour, the stretches of outline its claws may hold
- * that are in view: each of the nav's polylines as a ready strip of
- * triangles (made once per live k), no line built at draw time.
- * @param {Object} inst - Climber instance
- * @param {{left: number, right: number, top: number, bottom: number}} view - Visible world rect
- */
-export function drawHolds(inst, view) {
-  const k = inst.k
-  holdMeshFor.has(k) || holdMeshFor.set(k, inst.nav.lines.map(line => holdMesh(k, line)))
-  const meshes = holdMeshFor.get(k)
-  for (let i = 0; i < meshes.length; i++) {
-    const m = meshes[i]
-    if (m.x2 < view.left || m.x1 > view.right || m.y2 < view.top || m.y1 > view.bottom) continue
-    k.drawPolygon(m)
-  }
 }
 
 /**
@@ -386,33 +361,41 @@ export function drawButtons(inst, arm) {
     const t = (at - p.s) / span
     const tx = (q.x - p.x) / span
     const ty = (q.y - p.y) / span
-    const off = b.side * BUTTON_SIDE * HALF_W * arm.swell * (A.taper[0] + (A.taper[1] - A.taper[0]) * b.u)
+    const off = b.side * BUTTON_SIDE * halfWidth(arm, b.u)
     drawPart(inst, part, p.x + (q.x - p.x) * t - ty * off, p.y + (q.y - p.y) * t + tx * off, Math.atan2(ty, tx), false, long, 1, arm.swell)
   }
 }
 
 //
-// One side's picture of the head (mirrored or not), `wide` of its width
-// and squeezed up and down as the head is (pose.tall), with its jaw.
+// A limb's half width `u` of the way along it (0 the shoulder, 1 the
+// wrist): the art's, tapered, times how thick its flesh is now
+// (arm.swell: thinner drawn out, thicker drawn in) — toward the wrist
+// only girth.wrist of that change, so it always fits the hand.
 //
-function drawHeadSide(inst, parts, mirrored, wide, opacity) {
-  const p = inst.pose
-  drawPart(inst, parts.head, p.x, p.y, p.tilt, mirrored, wide, opacity, p.tall)
-  const hx = (HINGE.x - HEAD.pivot.x) * HEAD_SCALE * wide * (mirrored ? -1 : 1)
-  const hy = (HINGE.y - HEAD.pivot.y) * HEAD_SCALE * p.tall
-  const c = Math.cos(p.tilt)
-  const s = Math.sin(p.tilt)
-  drawPart(inst, parts.jaw, p.x + hx * c - hy * s, p.y + hx * s + hy * c, p.tilt + p.jaw * (mirrored ? 1 : -1), mirrored, wide, opacity, p.tall)
+function halfWidth(arm, u) {
+  const girth = 1 + (arm.swell - 1) * (1 - (1 - GIRTH.wrist) * u)
+  return HALF_W * girth * (A.taper[0] + (A.taper[1] - A.taper[0]) * u)
 }
 //
-// The face-on head, `wide` of its width: its jaw let down by the side's
-// jaw angle.
+// One side's picture of the head (mirrored or not), with its jaw.
 //
-function drawHeadFront(inst, parts, wide, opacity) {
+function drawHeadSide(inst, parts, mirrored, opacity) {
   const p = inst.pose
-  const drop = p.jaw * JAW_REACH * HEAD_SCALE * p.tall
-  drawPart(inst, parts.front, p.x, p.y, p.tilt, false, wide, opacity, p.tall)
-  drawPart(inst, parts.frontJaw, p.x - Math.sin(p.tilt) * drop, p.y + Math.cos(p.tilt) * drop, p.tilt, false, wide, opacity, p.tall)
+  drawPart(inst, parts.head, p.x, p.y, p.tilt, mirrored, 1, opacity)
+  const hx = (HINGE.x - HEAD.pivot.x) * HEAD_SCALE * (mirrored ? -1 : 1)
+  const hy = (HINGE.y - HEAD.pivot.y) * HEAD_SCALE
+  const c = Math.cos(p.tilt)
+  const s = Math.sin(p.tilt)
+  drawPart(inst, parts.jaw, p.x + hx * c - hy * s, p.y + hx * s + hy * c, p.tilt + p.jaw * (mirrored ? 1 : -1), mirrored, 1, opacity)
+}
+//
+// The face-on head: its jaw let down by the side's jaw angle.
+//
+function drawHeadFront(inst, parts, opacity) {
+  const p = inst.pose
+  const drop = p.jaw * JAW_REACH * HEAD_SCALE
+  drawPart(inst, parts.front, p.x, p.y, p.tilt, false, 1, opacity)
+  drawPart(inst, parts.frontJaw, p.x - Math.sin(p.tilt) * drop, p.y + Math.cos(p.tilt) * drop, p.tilt, false, 1, opacity)
 }
 //
 // How far on (0 … 1) a turn is through one of its stretches [from, to].
@@ -461,26 +444,6 @@ function drawEcho(inst, echo, color) {
     inst.v2.set(cx + Math.cos(a + step) * r, cy + Math.sin(a + step) * r)
     k.drawLine({ p1: inst.v, p2: inst.v2, width: SONAR.waveWidth, color, opacity })
   }
-}
-//
-// A polyline of holds as a strip of triangles HOLDS_W px wide through
-// every HOLDS_SKIP-th of its points (and its last), in the holds colour,
-// with its box: what drawPolygon takes as it is (vertices with their
-// colours and indices: Kaplay's quick path, nothing built per frame).
-//
-function holdMesh(k, line) {
-  const src = line.pts.filter((_, i) => i % HOLDS_SKIP === 0 || i === line.pts.length - 1)
-  const color = getRGB(k, C.holds)
-  const pts = []
-  src.forEach((p, i) => {
-    const a = src[Math.max(0, i - 1)]
-    const b = src[Math.min(src.length - 1, i + 1)]
-    const l = vecLen(b.x - a.x, b.y - a.y) || 1
-    const nx = -(b.y - a.y) / l * HOLDS_W * HALF
-    const ny = (b.x - a.x) / l * HOLDS_W * HALF
-    pts.push(k.vec2(p.x + nx, p.y + ny), k.vec2(p.x - nx, p.y - ny))
-  })
-  return { pts, colors: pts.map(() => color), indices: stripIndices(pts.length), x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 }
 }
 //
 // A pair of the strip's vertices across the limb at a point, (nx, ny)

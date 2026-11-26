@@ -385,11 +385,7 @@ export function hollowCorner(hollow) {
  * @returns {boolean}
  */
 export function inHollow(x, y, margin = 0) {
-  return [BANK_HOLLOW_L, BANK_HOLLOW_R].some(h => {
-    const hx = (x - h.x) / (h.rx + margin)
-    const hy = (y - h.y) / (h.ry + margin)
-    return hx * hx + hy * hy < 1
-  })
+  return isInOval(BANK_HOLLOW_L, x, y, margin) || isInOval(BANK_HOLLOW_R, x, y, margin)
 }
 
 /**
@@ -519,4 +515,13 @@ function curveY(c, x) {
 }
 function segmentsOf(knots) {
   return knots.slice(1).map((k, i) => ({ x1: knots[i][0], y1: knots[i][1], x2: k[0], y2: k[1] }))
+}
+//
+// Whether a point lies in a hollow's oval grown by a margin (asked many
+// times a frame: nothing is allocated).
+//
+function isInOval(h, x, y, margin) {
+  const hx = (x - h.x) / (h.rx + margin)
+  const hy = (y - h.y) / (h.ry + margin)
+  return hx * hx + hy * hy < 1
 }

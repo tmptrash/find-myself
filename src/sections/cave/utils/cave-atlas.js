@@ -25,8 +25,9 @@ import { loadForestGroundElements, forestBuriedElements } from '../../forest/uti
 // one is its mirror —, a bent femur and a straight tibia), creature.png
 // (the lake's giant taken apart: its body — bent as a mesh — with the
 // sockets of its paddles, and the front and the hind paddle),
-// haggy_waggy.png (the climber taken apart: its head and one long arm with
-// a three-clawed hand; the sheet's button is not used),
+// haggy_waggy.png (the climber taken apart: its head side on and face on
+// and one long arm with a three-clawed hand, and a button that rides the
+// arms' skin),
 // plant_left.png (the lurker plant under the left bank taken apart: its
 // upper and lower jaw, an eye on its stalk, its long scaled neck with the
 // collar at its top, the rosette of leaves it grows out of and one leaf
@@ -988,8 +989,10 @@ kitMoss0: [SHEET.SMALL, 33, 16, 245, 95],
   trumpet: [SHEET.TRUMPET, 0, 0, 1774, 887],
   giantFinFront: [SHEET.CREATURE, 920, 530, 372, 297],
   giantFinHind: [SHEET.CREATURE, 468, 538, 309, 174],
-  haggyHead: [SHEET.HAGGY, 0, 60, 600, 440],
-  haggyArm: [SHEET.HAGGY, 236, 410, 1410, 420]
+  haggyHead: [SHEET.HAGGY, 17, 43, 572, 419],
+  haggyFront: [SHEET.HAGGY, 985, 45, 505, 420],
+  haggyButton: [SHEET.HAGGY, 669, 184, 144, 109],
+  haggyArm: [SHEET.HAGGY, 229, 418, 1516, 452]
 }
 const sheets = new Map()
 const pieces = new Map()

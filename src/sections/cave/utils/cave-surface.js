@@ -26,7 +26,9 @@ import * as Scene from './cave-scene.js'
 // into their sides, and a tight stretch of fewer than TIGHT_BRIDGE points
 // does not cut it — nor one whose ends lie within TIGHT_BRIDGE_PX of each
 // other (the outline round a small lump or ledge: a runner climbs over
-// it). A run shorter than MIN_RUN px is dropped.
+// it). A run shorter than MIN_RUN px is dropped — for the climber's own
+// runs (climbRunsOf: it climbs round every floating ledge, the smallest
+// too) one shorter than CLIMB_MIN_RUN px.
 //
 const SOLID_ALPHA = 128
 const RGBA = 4
@@ -55,6 +57,7 @@ const CLEAR_STEP = 6
 const TIGHT_BRIDGE = 24
 const TIGHT_BRIDGE_PX = 40
 const MIN_RUN = 120
+const CLIMB_MIN_RUN = 40
 //
 // Marching squares: the outline's segments per cell case (corner bits:
 // top-left 8, top-right 4, bottom-right 2, bottom-left 1), as pairs of the
@@ -137,6 +140,31 @@ export function crawlRuns() {
 }
 
 /**
+ * The platforms' solid mask with more solid things on it (the climber's:
+ * the stones and the mushroom standing on the platforms): the layers'
+ * opaque pixels added to a copy of the soil's. Built when called: keep it.
+ * @param {Array<{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}>} layers - What else is solid, at its world top-left
+ * @returns {Object} Mask for climbRunsOf / isSoilIn
+ */
+export function maskWith(layers) {
+  const soil = solidMask()
+  const data = soil.data.slice()
+  layers.forEach(layer => stampLayer(data, soil.w, soil.h, layer))
+  return { ...soil, data, runs: null, climb: null }
+}
+
+/**
+ * The runs a climber climbs round a mask's solids, the small floating
+ * ledges too (traced once per mask).
+ * @param {Object} m - Mask (maskWith)
+ * @returns {Array<Object>} Runs, as crawlRuns()
+ */
+export function climbRunsOf(m) {
+  m.climb ??= traceRuns(m, CLIMB_MIN_RUN)
+  return m.climb
+}
+
+/**
  * A solid mask of anything else's own (the menu's level panel): the
  * canvas's opaque pixels, its room the canvas (no lake in it), the
  * canvas's top-left at ox / oy in the world.
@@ -159,7 +187,7 @@ export function maskFromCanvas(canvas, ox = 0, oy = 0) {
  * @returns {Array<Object>} Crawl runs, as crawlRuns()
  */
 export function crawlRunsOf(m) {
-  m.runs ??= traceRuns(m)
+  m.runs ??= traceRuns(m, MIN_RUN)
   return m.runs
 }
 
@@ -259,16 +287,16 @@ function isSolidIn(m, x, y) {
 }
 //
 // The mask's outline as crawl runs: traced loops, smoothed, given their
-// normals, cut where a creature may not go.
+// normals, cut where a creature may not go; none shorter than minRun px.
 //
-function traceRuns(m) {
+function traceRuns(m, minRun) {
   const out = []
-  outlineLoops(m).forEach(loop => {
+  outlineLoops(m, minRun).forEach(loop => {
     const pts = smoothLoop(loop, SMOOTH)
     const coarse = smoothLoop(loop, COARSE_SMOOTH)
     const flip = orientLoop(m, pts)
     setNormals(coarse, flip)
-    splitLoop(m, pts, coarse).forEach(run => run.len >= MIN_RUN && out.push(run))
+    splitLoop(m, pts, coarse).forEach(run => run.len >= minRun && out.push(run))
   })
   return out
 }
@@ -278,7 +306,7 @@ function traceRuns(m) {
 // midpoints of its edges; linked edge to edge they make closed loops of
 // world points.
 //
-function outlineLoops(m) {
+function outlineLoops(m, minRun) {
   const gw = Math.ceil(m.w / CELL) + 2
   const gh = Math.ceil(m.h / CELL) + 2
   const grid = new Uint8Array(gw * gh)
@@ -293,7 +321,7 @@ function outlineLoops(m) {
       CASES[kind].forEach(([a, b]) => link(links, edgeKey(gw, i, j, a), edgeKey(gw, i, j, b)))
     }
   }
-  return walkLoops(links).map(keys => keys.map(key => edgePoint(m, gw, key)))
+  return walkLoops(links, minRun).map(keys => keys.map(key => edgePoint(m, gw, key)))
 }
 //
 // A cell edge's key: horizontal edges even, vertical ones odd.
@@ -320,9 +348,9 @@ function link(links, a, b) {
 }
 //
 // Follows the links from every edge not yet walked round to where it
-// started.
+// started; a loop shorter than minRun px is left out.
 //
-function walkLoops(links) {
+function walkLoops(links, minRun) {
   const seen = new Set()
   const loops = []
   links.forEach((_, start) => {
@@ -337,7 +365,7 @@ function walkLoops(links) {
       prev = cur
       cur = next
     }
-    keys.length * CELL >= MIN_RUN && loops.push(keys)
+    keys.length * CELL >= minRun && loops.push(keys)
   })
   return loops
 }

@@ -1,14 +1,20 @@
 import { vecLen } from '../../../utils/helper.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Layout from './cave-layout.js'
+import * as Solid from './cave-haggy-solid.js'
 import * as Surface from './cave-surface.js'
 //
 // The climber's ways through the cave (cave-haggy.js), built once per page
-// from the platforms' outline (cave-surface.js's crawl runs) and shared by
-// every climber: never rebuilt, never scanned whole at run time.
+// from the outline of everything solid to it (cave-haggy-solid.js: the
+// cave's walls, floor and ceiling and every floating ledge, all round —
+// top, underside, sides, corners — and the stones, plants and mushroom on
+// them, the pad plant's crown on the lake) and shared by every climber: never
+// rebuilt, never scanned whole at run time.
 // - Nodes: a body place every NODE_STEP px of the outline, out in the air
 //   off it, linked along the outline and through the open air to nodes
 //   within LINK_MAX px; each in a group of nodes that reach one another.
+//   Nodes in an opening (soil across from their edge: a shaft such as the
+//   cave's entrance, a niche, a gap by a ledge) are kept by group too.
 // - Holds: an outline point every GRIP_STEP px (with its outward normal),
 //   where a hand may hold; looked up in GRID px cells. The stretches of
 //   outline they make up are kept as short polylines (`lines`, each with
@@ -22,21 +28,25 @@ const P = CAVE_CFG.haggy.perf
 // How far off the edge the body sits (see the anatomy in cave cfg): under
 // a ceiling whose normal points down past CEIL_NY, over a top whose normal
 // points up past TOP_NY, else on a side; where there is no room that far
-// out, TIGHT_SHARES of it, so it gets through narrow places closer in.
-// Behind the soil the body sits BEHIND_OUT px out from the edge (only
-// where the soil is BEHIND_PROBE px deep, and never on a top: there it
-// would sink into the ground); on the face, FACE_IN px inside
-// the outline (only where soil lies FACE_ROOM px all round there). Out in
-// the air the body needs BODY_R px of room and stays EDGE px inside the
-// world.
+// out, in the middle of the shares of it that have room, down to
+// TIGHT_MIN (tried every TIGHT_STEP), so it gets through narrow places —
+// in a shaft, right in its middle (over a top only all of it: it never
+// walks crouched low — where there is no room to stand it hangs or goes
+// by a side). The body needs room for its head squeezed as far as it goes
+// (anatomy.head, HEAD_PAD px wider as the climber keeps it: nothing
+// solid at its middle nor round the ellipse, ROOM_POINTS points about it)
+// and stays EDGE px inside the world.
 //
 const CEIL_NY = 0.5
-const TOP_NY = 0.75
-const TIGHT_SHARES = [1, 0.75, 0.55, 0.4]
-const BODY_R = 26
+const TOP_NY = 0.4
+const TIGHT_MIN = 0.3
+const TIGHT_STEP = 0.05
+const HALF = 0.5
+const HEAD = A.head
+const ROOM_POINTS = 12
+const HEAD_PAD = 2
+const ROOM = Array.from({ length: ROOM_POINTS }, (_, i) => [Math.cos(i / ROOM_POINTS * Math.PI * 2) * (HEAD.rx * HEAD.squeeze + HEAD_PAD), Math.sin(i / ROOM_POINTS * Math.PI * 2) * (HEAD.ry * HEAD.squeeze + HEAD_PAD)])
 const EDGE = 24
-const BEHIND_PROBE = 14
-const FACE_ROOM = 30
 //
 // The lake it keeps out of: its water's span LAKE_PAD px wider, from
 // LAKE_OVER px over its surface down to LAKE_DEEP px under it, and the
@@ -47,7 +57,8 @@ const LAKE_OVER = 80
 const LAKE_DEEP = 320
 const HOLLOW_PAD = 40
 //
-// Spacing: nodes, holds, the link test's steps and room, the lookup cells,
+// Spacing: nodes, holds, the link test's steps (room for the head at
+// each) and the step its line is checked for soil at, the lookup cells,
 // and how many rings of cells a nearest-node lookup tries before it looks
 // at every node. Two nodes are linked through the air only if their edge
 // points lie within LINK_SPAN px (one and a half limbs: its hands can hold
@@ -57,10 +68,19 @@ const NODE_STEP = 28
 const GRIP_STEP = 8
 const LINK_MAX = 200
 const LINK_SPAN = A.length * 1.5
-const LINK_CHECK = 20
-const LINK_ROOM = 18
+const LINK_CHECK = 8
+const LINK_LINE = 4
 const GRID = 64
 const NEAREST_RINGS = 6
+//
+// An opening (a shaft, a niche, a gap between a ledge and a wall): a node
+// whose edge has soil across from it, straight out along its normal,
+// between NARROW_FROM px (past the edge's own bumps) and NARROW_SPAN px,
+// looked for every NARROW_STEP px.
+//
+const NARROW_FROM = 30
+const NARROW_SPAN = 170
+const NARROW_STEP = 6
 //
 // A shown stretch of holds is cut into polylines of LINE_POINTS points.
 //
@@ -69,23 +89,12 @@ const LINE_POINTS = 24
 // A way search's queue holds at most this many entries per node.
 //
 const QUEUE_PER_NODE = 16
-
-/**
- * Behind the soil, the body's distance out from the edge (px).
- */
-export const BEHIND_OUT = 8
-
-/**
- * On the soil's face, the body's distance in from the outline (px).
- */
-export const FACE_IN = 55
-
 let nav = null
 let search = null
 
 /**
  * The ways (built on first use, once per page).
- * @returns {Object} Nav: nodes, groups, the lookup cells, the holds' polylines (lines)
+ * @returns {Object} Nav: nodes, groups, the openings' nodes by group, the lookup cells, the holds' polylines (lines)
  */
 export function get() {
   nav ??= build()
@@ -153,22 +162,71 @@ export function nearestNode(n, x, y, group) {
  * @returns {Object|null} Node
  */
 export function randomNode(n, group, rng) {
-  const nodes = n.groups.get(group)
-  return nodes?.length ? nodes[Math.floor(rng() * nodes.length)] : null
+  return pick(n.groups.get(group), rng)
 }
 
 /**
- * The shortest way along the links from one node to another (Dijkstra on
- * a binary heap, the nodes' places' distance), written into `out`
- * (reused). Past maxExpansions expansions it gives up and goes as far as
+ * A node of a group in an opening (a shaft, a niche, a narrow gap: soil
+ * across from its edge) picked at random; with no such node in the group,
+ * any node of it.
+ * @param {Object} n - Nav
+ * @param {number} group - Group id
+ * @param {() => number} rng - Random 0 … 1
+ * @returns {Object|null} Node
+ */
+export function openingNode(n, group, rng) {
+  return pick(n.openings.get(group), rng) ?? pick(n.groups.get(group), rng)
+}
+
+/**
+ * The node of a group to make for to get at a spot (prey found there):
+ * the nearest one within `reach` px of the spot whose place has a clear
+ * line to it (so it is not the far side of a wall); with none, just the
+ * nearest. Only the cells round the spot are visited.
+ * @param {Object} n - Nav
+ * @param {number} x - World X of the spot
+ * @param {number} y - World Y of the spot
+ * @param {number} group - Group id
+ * @param {number} reach - How far from the spot a node may lie (px)
+ * @returns {Object|null} Node
+ */
+export function goalNode(n, x, y, group, reach) {
+  let best = null
+  let bestD = reach
+  const cx2 = Math.floor((x + reach) / GRID)
+  const cy2 = Math.floor((y + reach) / GRID)
+  for (let cy = Math.floor((y - reach) / GRID); cy <= cy2; cy++) {
+    for (let cx = Math.floor((x - reach) / GRID); cx <= cx2; cx++) {
+      const cell = n.cells.get(cellKey(cx, cy))
+      if (!cell) continue
+      for (let i = 0; i < cell.length; i++) {
+        const node = cell[i]
+        const d = node.group === group ? vecLen(node.ox - x, node.oy - y) : Infinity
+        if (d >= bestD || !isLineClear(node.ox, node.oy, x, y)) continue
+        best = node
+        bestD = d
+      }
+    }
+  }
+  return best ?? nearestNode(n, x, y, group)
+}
+
+/**
+ * The shortest way along the links from one node to another (A* on a
+ * binary heap: the nodes' places' distance, the straight way left as its
+ * guess), written into `out` (reused). It goes round whatever lies
+ * between — away from the goal first, if that is the way. A node within
+ * `avoidR` px of the avoided spot counts avoidCost px farther (0: none
+ * avoided). Past maxExpansions expansions it gives up and goes as far as
  * the node it reached nearest the goal.
  * @param {Object} n - Nav
  * @param {Object} from - Start node
  * @param {Object} to - Goal node
  * @param {Array<Object>} out - Receives the way's nodes, start first
+ * @param {{x: number, y: number, r: number, cost: number}} avoid - A spot to keep clear of (r 0: none)
  * @returns {number} The way's node count (1: just the start)
  */
-export function findWay(n, from, to, out) {
+export function findWay(n, from, to, out, avoid) {
   const s = scratchFor(n)
   s.dist.fill(Infinity)
   s.prev.fill(-1)
@@ -191,7 +249,7 @@ export function findWay(n, from, to, out) {
       bestD = left
     }
     if (id === to.id) break
-    relax(n, s, node)
+    relax(s, node, to, avoid)
   }
   let count = 0
   for (let id = best; id >= 0; id = s.prev[id]) count++
@@ -202,25 +260,41 @@ export function findWay(n, from, to, out) {
 
 /**
  * Whether a point lies where the lake's water is (or close over it), or in
- * a bank's hollow: no way and no hold there.
+ * a bank's hollow: no way and no hold there — but over the pad plant's
+ * crown of leaves (solid ground on the water).
  * @param {number} x - World X
  * @param {number} y - World Y
  * @returns {boolean}
  */
 export function inLakeZone(x, y) {
   if (Layout.inHollow(x, y, HOLLOW_PAD)) return true
+  if (Solid.isOverPads(x, y)) return false
   return x > Layout.LAKE_X1 - LAKE_PAD && x < Layout.LAKE_X2 + LAKE_PAD && y > Layout.LAKE_SURFACE_Y - LAKE_OVER && y < Layout.LAKE_SURFACE_Y + LAKE_DEEP
 }
+
+/**
+ * Whether a point is in the water: the lake under its surface, or a
+ * bank's hollow.
+ * @param {number} x - World X
+ * @param {number} y - World Y
+ * @returns {boolean}
+ */
+export function inWater(x, y) {
+  if (Layout.inHollow(x, y, 0)) return true
+  return x > Layout.LAKE_X1 && x < Layout.LAKE_X2 && y > Layout.LAKE_SURFACE_Y && y < Layout.LAKE_SURFACE_Y + LAKE_DEEP
+}
 //
-// Builds the ways: holds and nodes along every crawl run, the links
-// through the air, the groups, the lookup cells.
+// Builds the ways: holds and nodes along every crawl run, each node
+// linked to the next along its run (where the body can go straight
+// between them: past a node with no room, nothing links across the gap)
+// and through the air, the groups, the lookup cells.
 //
 function build() {
   const nodes = []
   const grips = new Map()
   const lines = []
   const p = {}
-  Surface.crawlRuns().forEach(run => {
+  Solid.runs().forEach(run => {
     let stretch = []
     for (let s = 0; s < run.len; s += GRIP_STEP) {
       Surface.sample(run, s, p)
@@ -240,9 +314,9 @@ function build() {
       own.push(nodeAt(p))
     }
     own.forEach((node, i) => {
-      const next = own[i + 1] ?? (run.closed ? own[0] : null)
+      const next = i + 1 < own.length ? own[i + 1] : run.closed ? own[0] : null
       node && nodes.push(node)
-      node && next && next !== node && link(node, next)
+      node && next && next !== node && isAirBetween(node, next) && link(node, next)
     })
   })
   nodes.forEach((node, i) => { node.id = i })
@@ -254,11 +328,13 @@ function build() {
     }
   })
   const groups = markGroups(nodes)
+  const openings = new Map()
+  groups.forEach((members, id) => openings.set(id, members.filter(node => node.narrow)))
   const cells = new Map()
   nodes.forEach(node => addTo(cells, node.ox, node.oy, node))
   let biggest = -1
   groups.forEach((members, id) => { (biggest < 0 || members.length > groups.get(biggest).length) && (biggest = id) })
-  return { nodes, groups, grips, cells, biggest, lines }
+  return { nodes, groups, openings, grips, cells, biggest, lines }
 }
 //
 // A stretch of holds as polylines of LINE_POINTS points (each starting on
@@ -274,16 +350,15 @@ function addLines(lines, stretch) {
 }
 //
 // A node at an outline point: where the body hangs out in the air off it
-// (null without room there), and whether it may also go behind the edge
-// or onto the face there.
+// (null without room there).
 //
 function nodeAt(p) {
   const top = p.ny < -TOP_NY
   const full = top ? A.walkH : p.ny > CEIL_NY ? A.hangH : A.sideH
-  const h = TIGHT_SHARES.map(share => full * share).find(off => hasRoom(p.x + p.nx * off, p.y + p.ny * off, BODY_R))
+  const ux = top ? 0 : p.nx
+  const uy = top ? -1 : p.ny
+  const h = roomOff(p, ux, uy, full, top ? 1 : TIGHT_MIN)
   if (!h) return null
-  const bx = p.x + p.nx * BEHIND_OUT
-  const by = p.y + p.ny * BEHIND_OUT
   return {
     id: -1,
     x: p.x,
@@ -292,35 +367,74 @@ function nodeAt(p) {
     ny: p.ny,
     h,
     top,
-    ox: p.x + p.nx * h,
-    oy: p.y + p.ny * h,
-    behind: !top && Surface.isSoil(p.x - p.nx * BEHIND_PROBE, p.y - p.ny * BEHIND_PROBE) && !inLakeZone(bx, by),
-    face: isOnFace(p.x - p.nx * FACE_IN, p.y - p.ny * FACE_IN),
+    ox: p.x + ux * h,
+    oy: p.y + uy * h,
+    narrow: isNarrow(p),
     links: [],
     group: -1
   }
 }
 //
-// Whether the body has a face of soil to lie on at a point: soil there
-// and FACE_ROOM px round it, inside the world, away from the lake.
+// How far out from an outline point the body sits (along ux, uy: its
+// normal, or straight up over a top — a bumpy top of plants and stones
+// tilts its normals, never the way it stands): all of `full` where it
+// has room there; else, in a narrow place, in the middle of the shares
+// (between `least` and 1) that have room — clear of both sides, so the
+// ways between such places keep clear too (0: none).
 //
-function isOnFace(x, y) {
-  if (x < FACE_ROOM || y < FACE_ROOM || x > Layout.WORLD_W - FACE_ROOM || y > Layout.WORLD_H - FACE_ROOM * 2 || inLakeZone(x, y)) return false
-  return Surface.isSoil(x, y) && Surface.isSoil(x - FACE_ROOM, y) && Surface.isSoil(x + FACE_ROOM, y) && Surface.isSoil(x, y - FACE_ROOM) && Surface.isSoil(x, y + FACE_ROOM)
+function roomOff(p, ux, uy, full, least) {
+  let far = 0
+  for (let share = 1; share >= least - TIGHT_STEP * HALF && !far; share -= TIGHT_STEP) {
+    hasRoom(p.x + ux * full * share, p.y + uy * full * share) && (far = share)
+  }
+  if (far >= 1 - TIGHT_STEP * HALF || !far) return far * full
+  let near = far
+  for (let share = least; share < far; share += TIGHT_STEP) {
+    if (hasRoom(p.x + ux * full * share, p.y + uy * full * share)) {
+      near = share
+      break
+    }
+  }
+  return (far + near) * HALF * full
 }
-function hasRoom(x, y, r) {
+//
+// Whether an outline point lies in an opening: soil across from it.
+//
+function isNarrow(p) {
+  for (let d = NARROW_FROM; d <= NARROW_SPAN; d += NARROW_STEP) {
+    if (Solid.isSolid(Math.round(p.x + p.nx * d), Math.round(p.y + p.ny * d))) return true
+  }
+  return false
+}
+function pick(nodes, rng) {
+  return nodes?.length ? nodes[Math.floor(rng() * nodes.length)] : null
+}
+function hasRoom(x, y) {
   if (x < EDGE || y < EDGE || x > Layout.WORLD_W - EDGE || y > Layout.WORLD_H - EDGE) return false
-  return !inLakeZone(x, y) && Surface.isOpenAir(x, y, r)
+  if (inLakeZone(x, y) || Solid.isSolid(Math.round(x), Math.round(y))) return false
+  return ROOM.every(([dx, dy]) => !Solid.isSolid(Math.round(x + dx), Math.round(y + dy)) && !inWater(x + dx, y + dy))
 }
 function link(a, b) {
   a.links.push(b)
   b.links.push(a)
 }
+//
+// Whether the body can go straight from one node's place to another's:
+// room for it every LINK_CHECK px, and no soil on the line itself every
+// LINK_LINE px (so no ledge thinner than the room checks' spacing lies
+// across the way unseen).
+//
 function isAirBetween(a, b) {
-  const steps = Math.ceil(vecLen(b.ox - a.ox, b.oy - a.oy) / LINK_CHECK)
+  const d = vecLen(b.ox - a.ox, b.oy - a.oy)
+  const steps = Math.ceil(d / LINK_CHECK)
   for (let i = 1; i < steps; i++) {
     const u = i / steps
-    if (!hasRoom(a.ox + (b.ox - a.ox) * u, a.oy + (b.oy - a.oy) * u, LINK_ROOM)) return false
+    if (!hasRoom(a.ox + (b.ox - a.ox) * u, a.oy + (b.oy - a.oy) * u)) return false
+  }
+  const fine = Math.ceil(d / LINK_LINE)
+  for (let i = 1; i < fine; i++) {
+    const u = i / fine
+    if (Solid.isSolid(Math.round(a.ox + (b.ox - a.ox) * u), Math.round(a.oy + (b.oy - a.oy) * u))) return false
   }
   return true
 }
@@ -402,16 +516,37 @@ function scratchFor(n) {
   }
   return search
 }
-function relax(n, s, node) {
+//
+// A node's links tried: each linked node reached by a shorter way than it
+// had is queued by that way's length plus the straight way left to the
+// goal; a node by the avoided spot counts farther.
+//
+function relax(s, node, to, avoid) {
   const base = s.dist[node.id]
   for (let i = 0; i < node.links.length; i++) {
     const next = node.links[i]
-    const d = base + vecLen(next.ox - node.ox, next.oy - node.oy)
+    const shun = avoid.r > 0 && vecLen(next.ox - avoid.x, next.oy - avoid.y) < avoid.r ? avoid.cost : 0
+    const d = base + vecLen(next.ox - node.ox, next.oy - node.oy) + shun
     if (d >= s.dist[next.id]) continue
     s.dist[next.id] = d
     s.prev[next.id] = node.id
-    push(s, next.id, d)
+    push(s, next.id, d + vecLen(next.ox - to.ox, next.oy - to.oy))
   }
+}
+//
+// Whether the straight line between two points is clear of soil and
+// water (checked every LINK_CHECK px; its last stretch, at the far point,
+// is not: prey may stand right on the soil).
+//
+function isLineClear(ax, ay, bx, by) {
+  const steps = Math.ceil(vecLen(bx - ax, by - ay) / LINK_CHECK)
+  for (let i = 1; i < steps; i++) {
+    const u = i / steps
+    const x = ax + (bx - ax) * u
+    const y = ay + (by - ay) * u
+    if (Solid.isSolid(x, y) || inWater(x, y)) return false
+  }
+  return true
 }
 function push(s, id, d) {
   if (s.size >= s.heapId.length) return

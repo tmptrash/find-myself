@@ -5,44 +5,63 @@ import * as Atlas from '../utils/cave-atlas.js'
 //
 // How the climber (cave-haggy.js) looks: one baked atlas (per page, loaded
 // once per live k) of its head (the lower jaw cut off to open and shut),
-// the scales of its limbs as a tile, its palm and its three fingers (each
+// the scales of its limbs as a tile, a button, its palm and its three fingers (each
 // finger with its claw one strip that bends). Every frame: each limb is
 // one textured strip along a smooth curve through its chain's points (no
-// joints: it bends all along), tapering to the wrist; each hand a palm
-// over three bent finger strips; the head over the limbs' roots, turning
-// round by narrowing and widening again, its jaw turned about the mouth's
-// corner. No game objects, no masks, no textures made at run time; the
-// vectors are the creature's own, reused.
+// joints: it bends all along), thick at the head and tapering to the
+// wrist, with its buttons riding its skin; each hand a palm over three
+// bent finger strips; the head over
+// the limbs' roots — turning round, its face-on picture comes in over the
+// side it had, then the other side's over that, each narrowing a little
+// toward the turn's middle — its jaw turned about the mouth's corner
+// (face on: let down); its ultrasound's waves and echoes as faint thin
+// arcs.
+// No game objects, no masks, no textures made at run time; the vectors
+// are the creature's own, reused.
 //
-const SPRITE = 'cave0-haggy-v4'
+const SPRITE = 'cave0-haggy-v6'
 const GRAIN_SEED = 9710
 const C = CAVE_CFG.haggy
 const A = C.anatomy
+const SONAR = C.sense.ultrasound
 //
 // Sizes: world px per sheet px of the head and of the arm (with its hand);
 // the atlas is baked BAKE_OVER times finer, its pieces ATLAS_GAP px apart.
 //
-const HEAD_SCALE = 0.14
-const ARM_SCALE = 0.1
+const HEAD_SCALE = 0.147
+const ARM_SCALE = 0.093
 const BAKE_OVER = 2.5
 const ATLAS_GAP = 4
 //
-// The pieces (Atlas): the head by its middle; its lower jaw (head piece
-// px) turning about the mouth's back corner (HINGE), the throat seen
+// The pieces (Atlas): the head by its middle and the tip of its upper jaw
+// (head piece px); its lower jaw turning about the mouth's back corner
+// (HINGE), the throat seen
 // when it opens (CAVITY, painted in the mouth colour on the head under
 // the jaw); the arm piece's place on the sheet (the hand's cuts below
 // are in sheet px); the arm's scales: a stretch of its tube (TILE, in the
 // arm piece) made into a tile that repeats along the arm, its last
 // TILE_BLEND columns faded into the columns before its first.
 //
-const HEAD = { piece: 'haggyHead', pivot: { x: 287, y: 231 } }
-const JAW = [[44, 325], [150, 318], [240, 314], [292, 306], [300, 332], [282, 364], [250, 392], [205, 416], [130, 420], [70, 410], [46, 386], [38, 352]]
-const HINGE = { x: 292, y: 308 }
-const CAVITY = [[50, 326], [150, 318], [240, 314], [292, 306], [298, 330], [240, 350], [150, 362], [58, 372]]
+const HEAD = { piece: 'haggyHead', pivot: { x: 274, y: 220 } }
+//
+// The head face on (its own piece, its px): by its middle (level with the
+// side's, as far down from the top of its dome), its lower jaw — the lip
+// with its teeth — let down JAW_REACH px per rad the side's jaw turns
+// (the side's jaw is about that long from its hinge), the throat seen as
+// it opens (FRONT_JAW, painted in the mouth colour under it).
+//
+const FRONT = { piece: 'haggyFront', pivot: { x: 247, y: 206 } }
+const FRONT_JAW = [[129, 261], [155, 277], [163, 298], [195, 304], [245, 307], [295, 306], [335, 302], [360, 293], [371, 275], [389, 261], [395, 285], [385, 317], [363, 348], [335, 367], [295, 380], [245, 385], [193, 377], [161, 360], [137, 337], [125, 300]]
+const JAW_REACH = 240
+const UPPER_JAW_TIP = { x: 12, y: 279 }
+const JAW = [[42, 310], [143, 303], [229, 299], [278, 292], [286, 317], [269, 347], [238, 374], [196, 397], [124, 400], [67, 391], [44, 368], [36, 336]]
+const HINGE = { x: 278, y: 294 }
+const CAVITY = [[48, 311], [143, 303], [229, 299], [278, 292], [284, 315], [229, 334], [143, 345], [56, 355]]
 const ARM_PIECE = 'haggyArm'
-const ARM_AT = { x: 236, y: 410 }
-const TILE = { x: 94, y: 152, w: 880, h: 122 }
-const TILE_BLEND = 60
+const BUTTON_PIECE = 'haggyButton'
+const ARM_AT = { x: 229, y: 418 }
+const TILE = { x: 101, y: 164, w: 946, h: 131 }
+const TILE_BLEND = 64
 const TILE_INSET = 0.01
 //
 // The hand (sheet px): the palm cut out (drawn over the fingers' roots,
@@ -54,78 +73,103 @@ const TILE_INSET = 0.01
 // where it leaves the palm, its claw `hook` rad more over JOINT_BEND px
 // round its joint; open wide they bend the other way (curl below 0).
 //
-const WRIST = { x: 1270, y: 623 }
-const PALM = { poly: [[1240, 560], [1330, 558], [1392, 532], [1432, 562], [1424, 596], [1432, 640], [1420, 664], [1436, 702], [1392, 724], [1330, 708], [1240, 710]], pivot: WRIST }
+const WRIST = { x: 1341, y: 647 }
+const PALM = { poly: [[1308, 580], [1405, 577], [1472, 549], [1515, 582], [1506, 618], [1515, 666], [1502, 691], [1519, 732], [1472, 756], [1405, 739], [1308, 741]], pivot: WRIST }
 const FINGERS = [
   {
     cuts: [
-      [[1362, 596], [1384, 540], [1440, 466], [1478, 438], [1502, 450], [1508, 482], [1490, 502], [1442, 588], [1408, 616]],
-      [[1462, 446], [1480, 428], [1540, 416], [1572, 440], [1570, 454], [1530, 457], [1512, 484], [1486, 488], [1466, 470]]
+      [[1439, 618], [1463, 558], [1523, 478], [1564, 448], [1590, 461], [1596, 496], [1577, 517], [1525, 610], [1489, 640]],
+      [[1547, 457], [1566, 438], [1631, 425], [1665, 450], [1663, 466], [1620, 469], [1601, 498], [1573, 502], [1551, 483]]
     ],
-    spine: [[1360, 620], [1405, 575], [1450, 500], [1490, 456], [1530, 438], [1578, 452]],
-    widths: [48, 48, 46, 40, 34, 30],
-    joint: { x: 1488, y: 462 },
+    spine: [[1437, 644], [1486, 596], [1534, 515], [1577, 468], [1620, 448], [1672, 463]],
+    widths: [52, 52, 49, 43, 37, 32],
+    joint: { x: 1575, y: 474 },
     turn: 0.55,
     hook: 0.75
   },
   {
     cuts: [
-      [[1385, 598], [1420, 590], [1540, 578], [1562, 588], [1566, 640], [1546, 652], [1420, 658], [1385, 652]],
-      [[1546, 594], [1566, 584], [1602, 594], [1634, 630], [1638, 654], [1622, 652], [1590, 642], [1562, 648], [1546, 634]]
+      [[1464, 620], [1502, 612], [1631, 599], [1654, 610], [1659, 666], [1637, 678], [1502, 685], [1464, 678]],
+      [[1637, 616], [1659, 605], [1697, 616], [1732, 655], [1736, 681], [1719, 678], [1685, 668], [1654, 674], [1637, 659]]
     ],
-    spine: [[1370, 624], [1420, 623], [1500, 622], [1558, 620], [1600, 626], [1642, 662]],
-    widths: [48, 48, 46, 44, 40, 30],
-    joint: { x: 1558, y: 616 },
+    spine: [[1448, 648], [1502, 647], [1588, 646], [1650, 644], [1695, 650], [1740, 689]],
+    widths: [52, 52, 49, 47, 43, 32],
+    joint: { x: 1650, y: 640 },
     turn: 0,
     hook: 0.55
   },
   {
     cuts: [
-      [[1368, 664], [1412, 638], [1442, 680], [1488, 744], [1494, 772], [1472, 798], [1450, 792], [1398, 722], [1364, 702]],
-      [[1446, 772], [1470, 754], [1494, 764], [1532, 790], [1552, 806], [1546, 816], [1500, 824], [1464, 812], [1446, 794]]
+      [[1446, 691], [1493, 663], [1525, 708], [1575, 777], [1581, 807], [1558, 835], [1534, 829], [1478, 754], [1442, 732]],
+      [[1530, 807], [1556, 788], [1581, 799], [1622, 827], [1644, 844], [1637, 855], [1588, 863], [1549, 850], [1530, 831]]
     ],
-    spine: [[1370, 660], [1400, 700], [1440, 745], [1470, 778], [1505, 800], [1556, 816]],
-    widths: [48, 48, 44, 40, 36, 30],
-    joint: { x: 1470, y: 784 },
+    spine: [[1448, 687], [1480, 730], [1523, 778], [1556, 814], [1593, 838], [1648, 855]],
+    widths: [52, 52, 47, 43, 39, 32],
+    joint: { x: 1556, y: 820 },
     turn: -0.55,
     hook: -0.75
   }
 ]
 const FINGER_SUBS = 4
-const KNUCKLE_BEND = 40
-const JOINT_BEND = 36
+//
+// The buttons on the limbs' skin: world px per sheet px; each sits up to
+// BUTTON_SIDE of the limb's half width off its middle and is drawn out
+// with the limb — its length times the limb's own over BUTTON_REST of a
+// full one, within BUTTON_LONG.
+//
+const BUTTON_SCALE = 0.07
+const BUTTON_SIDE = 0.45
+const BUTTON_REST = 0.6
+const BUTTON_LONG = [0.75, 1.3]
+const KNUCKLE_BEND = 43
+const JOINT_BEND = 39
 //
 // A limb's curve: a Catmull-Rom spline through its chain's points,
 // `subdivide` pieces per chain piece; its strip is HALF_W px wide each
 // side at the art's width (times the anatomy's thickness and taper). The
-// head never gets narrower than MIN_FACE of its width as it turns round.
-// The holds are shown as lines HOLDS_W px wide.
+// holds are shown as strips HOLDS_W px wide through every HOLDS_SKIP-th
+// of their points.
 //
 const SPINE_POINTS = A.segments * A.subdivide + 1
 const HALF_W = TILE.h * ARM_SCALE * 0.5 * A.thickness
-const MIN_FACE = 0.14
 const HOLDS_W = 2
+const HOLDS_SKIP = 2
 //
-// Debug drawing: marks' sizes, the line width, the label's size and
-// offsets, its colours.
+// The head turning round (0: the side it had, 1: the side it turns to):
+// its face-on picture comes in over the old side from FRONT_IN[0] to
+// FRONT_IN[1] of the turn, the new side over the face from FRONT_OUT[0]
+// to FRONT_OUT[1] (what is under stays whole till then: never
+// see-through, never a flat line). A side is narrowest (turning.minWide
+// of its width) face on, the face narrowest at a side.
 //
-const DEBUG_DOT = 3
-const DEBUG_LINE = 1
-const DEBUG_NORMAL = 14
-const DEBUG_TEXT = 10
-const DEBUG_TEXT_DY = -70
-const DEBUG_LINE_H = 12
-const DEBUG_COLORS = { body: '#ffffff', want: '#ffd060', anchor: '#5fe07a', reach: '#f0c040', probe: '#60c0ff', free: '#c08080', normal: '#ff7050', depth: '#ff40ff', candidate: '#a070ff', path: '#7090ff', sound: '#ff4040' }
-const DEBUG_STATE_COLOR = { anchor: 'anchor', reach: 'reach', probe: 'probe' }
+const MIN_WIDE = C.turning.minWide
+const FRONT_IN = [0.26, 0.42]
+const FRONT_OUT = [0.58, 0.74]
+//
+// Ultrasound's look: a wave is drawn as WAVE_ARCS short chords per ray
+// gap across its cone wherever both rays about it are still out, fading
+// toward its full distance; an echo as a short arc ECHO_SPAN rad wide (ECHO_ARCS chords),
+// ECHO_R px round its point at the start and shrinking as it flies home.
+//
+const WAVE_ARCS = 3
+const ECHO_SPAN = 0.5
+const ECHO_ARCS = 3
+const ECHO_R = 26
 const HALF = 0.5
 const DEG = 180 / Math.PI
 const BYTE_MAX = 255
 const HEX_RADIX = 16
 const atlasFor = new WeakMap()
-const holdLinesFor = new WeakMap()
+const holdMeshFor = new WeakMap()
 const indicesFor = new Map()
 let atlas = null
 let rigs = null
+
+/**
+ * The tip of its upper jaw from the head's middle (world px): `x` ahead
+ * the way it faces, `y` down. Where its ultrasound leaves.
+ */
+export const JAW_TIP = { x: (HEAD.pivot.x - UPPER_JAW_TIP.x) * HEAD_SCALE, y: (UPPER_JAW_TIP.y - HEAD.pivot.y) * HEAD_SCALE }
 
 /**
  * Bakes the atlas (once per page) and loads it on this live k (once).
@@ -183,6 +227,20 @@ export function layArm(arm) {
       len += Math.sqrt(dx * dx + dy * dy)
     }
     p.s = len
+  }
+  arm.len = len
+}
+
+/**
+ * Measures a limb's curve again after its points were moved: their length
+ * from the shoulder.
+ * @param {Object} arm - Limb (its spine)
+ */
+export function measureArm(arm) {
+  let len = 0
+  for (let i = 1; i < SPINE_POINTS; i++) {
+    len += vecLen(arm.spine[i].x - arm.spine[i - 1].x, arm.spine[i].y - arm.spine[i - 1].y)
+    arm.spine[i].s = len
   }
   arm.len = len
 }
@@ -246,92 +304,183 @@ export function drawHand(inst, arm) {
   const frame = inst.k.getSprite(SPRITE)?.data?.frames?.[0]
   if (!parts || !frame) return
   for (let i = 0; i < FINGERS.length; i++) drawFinger(inst, arm, i, parts[`finger${i}`], frame)
-  drawPart(inst, parts.palm, arm.d.wx, arm.d.wy, Math.atan2(arm.d.ay, arm.d.ax), false, 1)
+  drawPart(inst, parts.palm, arm.d.wx, arm.d.wy, Math.atan2(arm.d.ay, arm.d.ax), false, 1, 1)
 }
 
 /**
- * Draws the head over the limbs' roots (its drawn pose: inst.pose): as
- * wide as it faces sideways (pose.face -1 left … 1 right, narrowing as it
- * turns round), its jaw opened by the mouth's share.
+ * Draws the head over the limbs' roots (its drawn pose: inst.pose), its
+ * jaw opened by the mouth's share. Facing a side (pose.face -1 left … 1
+ * right) it is drawn whole; turning round (to pose.want) its face-on
+ * picture comes in over the side it had, then the new side over the face,
+ * each narrowing a little toward the turn's middle.
  * @param {Object} inst - Climber instance
  */
 export function drawHead(inst) {
   const parts = atlasFor.get(inst.k)
   if (!parts) return
   const p = inst.pose
-  const mirrored = p.face > 0
-  const wide = Math.max(MIN_FACE, Math.abs(p.face))
-  drawPart(inst, parts.head, p.x, p.y, p.tilt, mirrored, wide)
-  const hx = (HINGE.x - HEAD.pivot.x) * HEAD_SCALE * wide * (mirrored ? -1 : 1)
-  const hy = (HINGE.y - HEAD.pivot.y) * HEAD_SCALE
-  const c = Math.cos(p.tilt)
-  const s = Math.sin(p.tilt)
-  drawPart(inst, parts.jaw, p.x + hx * c - hy * s, p.y + hx * s + hy * c, p.tilt + p.jaw * (mirrored ? 1 : -1), mirrored, wide)
+  const turn = (p.face * p.want + 1) * HALF
+  const side = Math.abs(p.face)
+  const front = phase(turn, FRONT_IN)
+  const back = phase(turn, FRONT_OUT)
+  const wide = (MIN_WIDE + (1 - MIN_WIDE) * side) * p.wide
+  front < 1 && drawHeadSide(inst, parts, p.want < 0, wide, 1)
+  front > 0 && back < 1 && drawHeadFront(inst, parts, (MIN_WIDE + (1 - MIN_WIDE) * (1 - side)) * p.wide, front)
+  back > 0 && drawHeadSide(inst, parts, p.want > 0, wide, back)
 }
 
 /**
- * Draws, in the holds colour, the stretches of the platforms' outline its
- * claws may hold that are in view (the nav's polylines; their vectors
- * made once per live k).
+ * Draws its ultrasound: each wave in the air as a faint thin arc across
+ * the cone it was sent in (the way the head faced then), cut where soil
+ * or water ended its rays, fading out toward its full distance (where it
+ * is gone); each echo as a small arc flying home from the point that sent
+ * it.
+ * @param {Object} inst - Climber instance
+ */
+export function drawWaves(inst) {
+  const k = inst.k
+  const sonar = inst.sonar
+  const color = getRGB(k, C.wave)
+  for (let i = 0; i < sonar.pulses.length; i++) sonar.pulses[i].live && drawWave(inst, sonar.pulses[i], color)
+  for (let i = 0; i < sonar.echoes.length; i++) sonar.echoes[i].live && drawEcho(inst, sonar.echoes[i], color)
+}
+
+/**
+ * Draws, in the holds colour, the stretches of outline its claws may hold
+ * that are in view: each of the nav's polylines as a ready strip of
+ * triangles (made once per live k), no line built at draw time.
  * @param {Object} inst - Climber instance
  * @param {{left: number, right: number, top: number, bottom: number}} view - Visible world rect
  */
 export function drawHolds(inst, view) {
   const k = inst.k
-  const lines = inst.nav.lines
-  holdLinesFor.has(k) || holdLinesFor.set(k, lines.map(line => line.pts.map(pt => k.vec2(pt.x, pt.y))))
-  const vecs = holdLinesFor.get(k)
-  const color = getRGB(k, C.holds)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.x2 < view.left || line.x1 > view.right || line.y2 < view.top || line.y1 > view.bottom) continue
-    k.drawLines({ pts: vecs[i], width: HOLDS_W, color })
+  holdMeshFor.has(k) || holdMeshFor.set(k, inst.nav.lines.map(line => holdMesh(k, line)))
+  const meshes = holdMeshFor.get(k)
+  for (let i = 0; i < meshes.length; i++) {
+    const m = meshes[i]
+    if (m.x2 < view.left || m.x1 > view.right || m.y2 < view.top || m.y1 > view.bottom) continue
+    k.drawPolygon(m)
   }
 }
 
 /**
- * Draws its workings (debug only): the planned way, the body with its
- * tilt and the tilt it turns to, each limb's chain (its points coloured
- * by its state) and shoulder, the holds with their normals and how deep
- * the claws sit, the hold a hand reaches for, the last plan's candidate
- * holds, the last sound heard, its mood, support and timings.
+ * Draws a limb's buttons on its skin: each at its share of the limb's
+ * length (so they move apart as it stretches), off its middle to its
+ * side, turned along it, drawn out with it and thicker as it swells.
  * @param {Object} inst - Climber instance
+ * @param {Object} arm - Limb (its curve laid and measured, its buttons)
  */
-export function drawDebug(inst) {
-  const k = inst.k
-  for (let i = 1; i < inst.path.length; i++) {
-    k.drawLine({ p1: k.vec2(inst.path[i - 1].ox, inst.path[i - 1].oy), p2: k.vec2(inst.path[i].ox, inst.path[i].oy), width: DEBUG_LINE, color: debugColor(k, 'path') })
+export function drawButtons(inst, arm) {
+  const part = atlasFor.get(inst.k)?.button
+  if (!part) return
+  const spine = arm.spine
+  const long = Math.max(BUTTON_LONG[0], Math.min(BUTTON_LONG[1], arm.len / (A.length * BUTTON_REST)))
+  for (let n = 0; n < arm.buttons.length; n++) {
+    const b = arm.buttons[n]
+    const at = b.u * arm.len
+    let i = 1
+    while (i < SPINE_POINTS - 1 && spine[i].s < at) i++
+    const p = spine[i - 1]
+    const q = spine[i]
+    const span = q.s - p.s || 1
+    const t = (at - p.s) / span
+    const tx = (q.x - p.x) / span
+    const ty = (q.y - p.y) / span
+    const off = b.side * BUTTON_SIDE * HALF_W * arm.swell * (A.taper[0] + (A.taper[1] - A.taper[0]) * b.u)
+    drawPart(inst, part, p.x + (q.x - p.x) * t - ty * off, p.y + (q.y - p.y) * t + tx * off, Math.atan2(ty, tx), false, long, 1, arm.swell)
   }
-  for (let i = 0; i < inst.candCount; i++) k.drawCircle({ pos: k.vec2(inst.cand[i].x, inst.cand[i].y), radius: DEBUG_DOT * HALF, color: debugColor(k, 'candidate') })
-  inst.arms.forEach(arm => drawDebugArm(inst, arm))
-  const b = inst.pose
-  k.drawCircle({ pos: k.vec2(b.x, b.y), radius: DEBUG_DOT, color: debugColor(k, 'body') })
-  drawDebugRay(k, b.x, b.y, b.tilt, 'body')
-  drawDebugRay(k, b.x, b.y, inst.tiltWant, 'want')
-  inst.heard.at > 0 && k.drawCircle({ pos: k.vec2(inst.heard.x, inst.heard.y), radius: DEBUG_DOT * 2, color: debugColor(k, 'sound') })
-  const st = inst.stats
-  const lines = [
-    `${inst.mood} ${inst.frame.mode}${inst.frame.walk ? ' walk' : ''} ${inst.layer} holds ${inst.anchored} face ${inst.face.toFixed(2)}`,
-    `update ${st.update.toFixed(3)} ms  limbs ${st.limbs.toFixed(3)} ms  plan ${st.plan.toFixed(3)} ms  draw ${st.draw.toFixed(3)} ms`,
-    `way ${st.way.toFixed(3)} ms  queries ${st.queries}  candidates ${st.candidates}  heard ${st.heard}`
-  ]
-  lines.forEach((text, i) => k.drawText({ text, pos: k.vec2(b.x, b.y + DEBUG_TEXT_DY + i * DEBUG_LINE_H), size: DEBUG_TEXT, anchor: 'center', color: debugColor(k, 'body') }))
 }
-function drawDebugArm(inst, arm) {
+
+//
+// One side's picture of the head (mirrored or not), `wide` of its width
+// and squeezed up and down as the head is (pose.tall), with its jaw.
+//
+function drawHeadSide(inst, parts, mirrored, wide, opacity) {
+  const p = inst.pose
+  drawPart(inst, parts.head, p.x, p.y, p.tilt, mirrored, wide, opacity, p.tall)
+  const hx = (HINGE.x - HEAD.pivot.x) * HEAD_SCALE * wide * (mirrored ? -1 : 1)
+  const hy = (HINGE.y - HEAD.pivot.y) * HEAD_SCALE * p.tall
+  const c = Math.cos(p.tilt)
+  const s = Math.sin(p.tilt)
+  drawPart(inst, parts.jaw, p.x + hx * c - hy * s, p.y + hx * s + hy * c, p.tilt + p.jaw * (mirrored ? 1 : -1), mirrored, wide, opacity, p.tall)
+}
+//
+// The face-on head, `wide` of its width: its jaw let down by the side's
+// jaw angle.
+//
+function drawHeadFront(inst, parts, wide, opacity) {
+  const p = inst.pose
+  const drop = p.jaw * JAW_REACH * HEAD_SCALE * p.tall
+  drawPart(inst, parts.front, p.x, p.y, p.tilt, false, wide, opacity, p.tall)
+  drawPart(inst, parts.frontJaw, p.x - Math.sin(p.tilt) * drop, p.y + Math.cos(p.tilt) * drop, p.tilt, false, wide, opacity, p.tall)
+}
+//
+// How far on (0 … 1) a turn is through one of its stretches [from, to].
+//
+function phase(turn, span) {
+  return Math.max(0, Math.min(1, (turn - span[0]) / (span[1] - span[0])))
+}
+//
+// A wave: chords along its arc — only across the cone it was sent in —
+// between every two neighbouring rays that are both still out.
+//
+function drawWave(inst, p, color) {
   const k = inst.k
-  const tint = debugColor(k, DEBUG_STATE_COLOR[arm.state] ?? 'free')
-  for (let j = 0; j < arm.nx.length; j++) k.drawCircle({ pos: k.vec2(arm.nx[j], arm.ny[j]), radius: j ? DEBUG_DOT * HALF : DEBUG_DOT, color: tint })
-  const h = arm.state === 'anchor' ? arm.hold : arm.state === 'reach' ? arm.to : null
-  if (!h) return
-  k.drawCircle({ pos: k.vec2(h.gx, h.gy), radius: DEBUG_DOT, color: tint })
-  k.drawLine({ p1: k.vec2(h.gx, h.gy), p2: k.vec2(h.gx + h.nx * DEBUG_NORMAL, h.gy + h.ny * DEBUG_NORMAL), width: DEBUG_LINE, color: debugColor(k, 'normal') })
-  k.drawLine({ p1: k.vec2(h.gx, h.gy), p2: k.vec2(h.gx + h.ax * inst.hand.depth, h.gy + h.ay * inst.hand.depth), width: DEBUG_LINE * 2, color: debugColor(k, 'depth') })
+  const opacity = SONAR.waveOpacity * (1 - p.r / SONAR.maxDistance)
+  const gap = SONAR.coneAngle / (SONAR.rays - 1)
+  const step = gap / WAVE_ARCS
+  for (let i = 0; i + 1 < SONAR.rays; i++) {
+    if (p.ends[i] > 0 || p.ends[i + 1] > 0) continue
+    const from = p.dir - SONAR.coneAngle * HALF + i * gap
+    for (let n = 0; n < WAVE_ARCS; n++) {
+      const a = from + n * step
+      inst.v.set(p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r)
+      inst.v2.set(p.x + Math.cos(a + step) * p.r, p.y + Math.sin(a + step) * p.r)
+      k.drawLine({ p1: inst.v, p2: inst.v2, width: SONAR.waveWidth, color, opacity })
+    }
+  }
 }
-function drawDebugRay(k, x, y, angle, name) {
-  k.drawLine({ p1: k.vec2(x, y), p2: k.vec2(x + Math.cos(angle) * DEBUG_NORMAL, y + Math.sin(angle) * DEBUG_NORMAL), width: DEBUG_LINE, color: debugColor(k, name) })
+//
+// An echo: a small arc facing the head, between the point that sent it
+// and the head as far as it has flown, fainter the farther it came.
+//
+function drawEcho(inst, echo, color) {
+  const k = inst.k
+  const u = echo.t / echo.dur
+  const x = echo.x + (inst.pose.x - echo.x) * u
+  const y = echo.y + (inst.pose.y - echo.y) * u
+  const home = Math.atan2(inst.pose.y - echo.y, inst.pose.x - echo.x)
+  const r = ECHO_R * (1 - u * HALF)
+  const cx = x - Math.cos(home) * r
+  const cy = y - Math.sin(home) * r
+  const opacity = SONAR.waveOpacity * (HALF + echo.confidence * HALF)
+  const step = ECHO_SPAN / ECHO_ARCS
+  for (let n = 0; n < ECHO_ARCS; n++) {
+    const a = home - ECHO_SPAN * HALF + n * step
+    inst.v.set(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+    inst.v2.set(cx + Math.cos(a + step) * r, cy + Math.sin(a + step) * r)
+    k.drawLine({ p1: inst.v, p2: inst.v2, width: SONAR.waveWidth, color, opacity })
+  }
 }
-function debugColor(k, name) {
-  return getRGB(k, DEBUG_COLORS[name])
+//
+// A polyline of holds as a strip of triangles HOLDS_W px wide through
+// every HOLDS_SKIP-th of its points (and its last), in the holds colour,
+// with its box: what drawPolygon takes as it is (vertices with their
+// colours and indices: Kaplay's quick path, nothing built per frame).
+//
+function holdMesh(k, line) {
+  const src = line.pts.filter((_, i) => i % HOLDS_SKIP === 0 || i === line.pts.length - 1)
+  const color = getRGB(k, C.holds)
+  const pts = []
+  src.forEach((p, i) => {
+    const a = src[Math.max(0, i - 1)]
+    const b = src[Math.min(src.length - 1, i + 1)]
+    const l = vecLen(b.x - a.x, b.y - a.y) || 1
+    const nx = -(b.y - a.y) / l * HOLDS_W * HALF
+    const ny = (b.x - a.x) / l * HOLDS_W * HALF
+    pts.push(k.vec2(p.x + nx, p.y + ny), k.vec2(p.x - nx, p.y - ny))
+  })
+  return { pts, colors: pts.map(() => color), indices: stripIndices(pts.length), x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 }
 }
 //
 // A pair of the strip's vertices across the limb at a point, (nx, ny)
@@ -419,14 +568,16 @@ function toWorld(arm, lx, ly, v) {
 }
 //
 // One piece of the atlas at a world point (its pivot there), turned (rad),
-// maybe mirrored, `wide` of its width.
+// maybe mirrored, `wide` of its width and `tall` of its height, as
+// see-through as `opacity`.
 //
-function drawPart(inst, part, x, y, angle, mirrored, wide) {
+function drawPart(inst, part, x, y, angle, mirrored, wide, opacity, tall = 1) {
   inst.k.drawSprite({
     sprite: SPRITE,
     quad: part.quad,
+    opacity,
     width: part.w * wide,
-    height: part.h,
+    height: part.h * tall,
     pos: inst.v.set(x, y),
     anchor: mirrored ? part.anchorMirrored : part.anchor,
     angle: angle * DEG,
@@ -441,20 +592,25 @@ function withAnchor(k, part) {
 }
 //
 // The atlas: the pieces baked at BAKE_OVER times their drawn size (the
-// head without its jaw and the jaw, the arm's scales as one seamless
+// head side on and face on, each without its jaw, and the jaws; the arm's scales as one seamless
 // tile, the hand cut apart), grained; per piece its quad, drawn size and
 // pivot.
 //
 function buildAtlas() {
   const head = Atlas.piece(HEAD.piece)
+  const front = Atlas.piece(FRONT.piece)
   const arm = Atlas.piece(ARM_PIECE)
-  if (!head || !arm) return null
+  const button = Atlas.piece(BUTTON_PIECE)
+  if (!head || !front || !arm || !button) return null
   const origin = { x: 0, y: 0 }
   const items = [
-    { name: 'head', src: headWithoutJaw(head), pivot: HEAD.pivot, scale: HEAD_SCALE },
+    { name: 'head', src: withoutJaw(head, JAW, CAVITY), pivot: HEAD.pivot, scale: HEAD_SCALE },
     cutOut('jaw', head, origin, [JAW], boxOf(JAW), HINGE, HEAD_SCALE),
+    { name: 'front', src: withoutJaw(front, FRONT_JAW, FRONT_JAW), pivot: FRONT.pivot, scale: HEAD_SCALE },
+    cutOut('frontJaw', front, origin, [FRONT_JAW], boxOf(FRONT_JAW), FRONT.pivot, HEAD_SCALE),
     { name: 'band', src: armTile(arm), pivot: origin, scale: ARM_SCALE },
-    cutOut('palm', arm, ARM_AT, [PALM.poly], boxOf(PALM.poly), PALM.pivot, ARM_SCALE)
+    cutOut('palm', arm, ARM_AT, [PALM.poly], boxOf(PALM.poly), PALM.pivot, ARM_SCALE),
+    { name: 'button', src: button, pivot: { x: button.width * HALF, y: button.height * HALF }, scale: BUTTON_SCALE }
   ]
   rigs ??= FINGERS.map(fingerRig)
   FINGERS.forEach((spec, i) => items.push(cutOut(`finger${i}`, arm, ARM_AT, spec.cuts, rigs[i].box, WRIST, ARM_SCALE)))
@@ -478,20 +634,20 @@ function buildAtlas() {
   return { canvas, parts }
 }
 //
-// The head with its lower jaw taken out and the throat painted where the
-// mouth opens (the jaw is drawn over it, turned).
+// A head picture with its lower jaw taken out and the throat painted where
+// the mouth opens (the jaw is drawn over it, turned or let down).
 //
-function headWithoutJaw(head) {
+function withoutJaw(head, jaw, cavity) {
   const canvas = document.createElement('canvas')
   canvas.width = head.width
   canvas.height = head.height
   const ctx = canvas.getContext('2d')
   ctx.drawImage(head, 0, 0)
   ctx.globalCompositeOperation = 'destination-out'
-  fillPoly(ctx, JAW, 0, 0)
+  fillPoly(ctx, jaw, 0, 0)
   ctx.globalCompositeOperation = 'source-over'
   ctx.fillStyle = C.mouth
-  fillPoly(ctx, CAVITY, 0, 0)
+  fillPoly(ctx, cavity, 0, 0)
   return canvas
 }
 //

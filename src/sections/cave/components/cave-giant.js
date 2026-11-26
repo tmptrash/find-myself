@@ -342,9 +342,11 @@ const IDLE_TIME_RANGE = 3
 const ROAM_ARRIVE = 30
 //
 // Leaving, it aims at the middle of the hollow under the bank this far in
-// from the water's end.
+// from the water's end; in a hollow its head is brought within the water
+// no steeper than HOLLOW_SLOPE of the way it swims.
 //
 const HOLLOW_AIM = 60
+const HOLLOW_SLOPE = 0.3
 //
 // Hunting: a small fish (ctx.canEat) ahead of its snout within SEE px, with CHASE_ROOM px
 // of lake ahead of it; stalked, then chased from within LUNGE_R px for at
@@ -670,9 +672,11 @@ export function onDrawDebug(inst) {
 }
 //
 // In from behind a wall (the given side, else either — truly at random,
-// not by its seeded moves, so no one knows where it will come from), at a
-// depth of the deep water there, head first into the lake, the body
-// straight behind it.
+// not by its seeded moves, so no one knows where it will come from), at
+// the height of the hollow under the bank there (its body straight behind
+// it, in the hollow's own water — not at the lake's depth, under the
+// hollow's bed, from where its head was thrown up at the wall), head
+// first into the lake, swimming down to the deep water's depth.
 //
 function comeIn(inst, side) {
   inst.side = side ?? (Math.random() < HALF ? -1 : 1)
@@ -680,7 +684,8 @@ function comeIn(inst, side) {
   inst.returnSide = null
   const inX = inst.side < 0 ? inst.minX : inst.maxX
   inst.pos.x = inst.side < 0 ? inst.span.x1 - HEAD_HIDE : inst.span.x2 + HEAD_HIDE
-  inst.pos.y = depthAt(inst, inX, ENTER_DEPTH)
+  const hollow = headBounds(inst, inst.pos.x, false)
+  inst.pos.y = (hollow.top + hollow.bottom) * HALF
   inst.speed = CRUISE
   inst.pitch = 0
   resetTrail(inst)
@@ -691,7 +696,7 @@ function comeIn(inst, side) {
     inst.breathIn = BREATH_EVERY + inst.rng() * BREATH_EVERY_RANGE
   }
   setMode(inst, MODE.ENTER)
-  setTarget(inst, inX + inst.facing * ENTER_IN, inst.pos.y, inst.cmdSpeed ?? CRUISE)
+  setTarget(inst, inX + inst.facing * ENTER_IN, depthAt(inst, inX, ENTER_DEPTH), inst.cmdSpeed ?? CRUISE)
 }
 //
 // A straight trail behind the head (as long as the body and some).
@@ -1207,7 +1212,7 @@ function move(inst, dt) {
     inst.pos.y += (inst.target.y - inst.pos.y) * (1 - Math.exp(-HOLD_RATE * dt))
     levelTrail(inst, dt)
   }
-  const bound = inWater(inst) ? keepInWater(inst, y0) : keepInHollow(inst)
+  const bound = inWater(inst) ? keepInWater(inst, y0) : keepInHollow(inst, x0)
   bound && alongBound(inst, x0, y0)
   layTrail(inst)
 }
@@ -1247,11 +1252,19 @@ function alongBound(inst, x0, y0) {
 //
 // The head's top and bottom in the water at x: SUB_TOP px under the water's
 // top there (the surface, or in a bank's hollow its soil ceiling; rising:
-// up to its breathing height) and BED_CLEAR px over the bed.
+// up to its breathing height) and BED_CLEAR px over the bed. Where the
+// water is too shallow for both (a hollow's narrow end by the wall), both
+// clearances shrink alike, down to one height between ceiling and bed —
+// changing smoothly along the hollow, never the ceiling's bound under the
+// bed's, which threw the head up and down there and broke the body that
+// follows its path.
 //
 function headBounds(inst, x, rising) {
-  const top = rising ? breatheY(inst, x) : CaveLake.waterTopAt(inst.lake, x) + SUB_TOP
-  return { top, bottom: Math.max(top, CaveLake.bottomAt(inst.lake, x) - BED_CLEAR) }
+  const water = CaveLake.waterTopAt(inst.lake, x)
+  const bed = CaveLake.bottomAt(inst.lake, x)
+  const fit = Math.min(1, Math.max(0, bed - water) / (SUB_TOP + BED_CLEAR))
+  const top = rising ? breatheY(inst, x) : water + SUB_TOP * fit
+  return { top, bottom: Math.max(top, bed - BED_CLEAR * fit) }
 }
 //
 // Whether its body lies level behind its head: its tail's place on the
@@ -1282,16 +1295,19 @@ function keepInWater(inst, y0) {
 //
 // Coming in or going out through a wall the head keeps to the hollow under
 // the bank (between its soil ceiling and its bed; behind the wall, the
-// hollow's last column), pushed down under the ceiling where it must:
-// never through the soil over the hollow along the water's line.
+// hollow's last column), brought under the ceiling and over the bed where
+// it must — no steeper than HOLLOW_SLOPE of the way it swims, so its path
+// stays smooth for the body behind it (it is drawn behind the soil: a
+// head a few px into the hollow's rim for a moment does not show). Its
+// heading is left alone: such small corrections would only make it nod.
 //
-function keepInHollow(inst) {
+function keepInHollow(inst, x0) {
   const p = inst.pos
   const { top, bottom } = headBounds(inst, p.x, false)
   const y = Math.max(top, Math.min(bottom, p.y))
-  if (y === p.y) return false
-  p.y = y
-  return true
+  const step = Math.abs(p.x - x0) * HOLLOW_SLOPE
+  p.y += Math.max(-step, Math.min(step, y - p.y))
+  return false
 }
 //
 // The head's path: a point every TRAIL_STEP px swum, as long as the body;

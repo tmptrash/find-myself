@@ -54,9 +54,31 @@ export function create(k) {
 export function onDraw(inst, view) {
   inst.cells.forEach(cell => drawCell(inst, cell, view))
 }
+
+/**
+ * The front stones (with their joints) as layers, each its cell of the
+ * atlas at its world top-left: solid things on the platforms for what
+ * climbs (cave-haggy-solid.js). Made when called.
+ * @returns {Array<{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}>}
+ */
+export function stoneLayers() {
+  atlas ??= bakeAtlas()
+  return atlas.cells.filter(cell => cell.stone).map(cellLayer)
+}
 function drawCell(inst, cell, view) {
   if (cell.x >= view.right || cell.x + cell.w <= view.left || cell.y >= view.bottom || cell.y + cell.h <= view.top) return
   inst.k.drawSprite({ sprite: SPRITE, quad: cell.quad, width: cell.w, height: cell.h, pos: inst.pos.set(cell.x, cell.y) })
+}
+//
+// One cell of the atlas on a canvas of its own, at its world place.
+//
+function cellLayer(cell) {
+  const canvas = document.createElement('canvas')
+  canvas.width = cell.w
+  canvas.height = cell.h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(atlas.canvas, cell.ax, cell.ay, cell.w, cell.h, 0, 0, cell.w, cell.h)
+  return { canvas, ctx, x: cell.x, y: cell.y }
 }
 //
 // Every front stone in its own cell of one canvas (world px), shaded

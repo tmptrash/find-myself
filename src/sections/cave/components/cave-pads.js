@@ -20,6 +20,7 @@ import * as CaveLake from '../utils/cave-lake.js'
 // lies: only they are drawn longer or shorter (the crown keeps its size).
 //
 const SPRITE = 'cave0-pads'
+const PIECE = 'padPlant'
 const GRAIN_SEED = 9660
 const C = CAVE_CFG.pads
 //
@@ -195,6 +196,24 @@ export function crownLine(inst) {
 }
 
 /**
+ * Its crown of leaves at rest as a layer (world px, its top-left at x / y):
+ * a solid thing on the water for what climbs (cave-haggy-solid.js). Made
+ * when called.
+ * @returns {{canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, x: number, y: number}|null}
+ */
+export function crownLayer() {
+  const src = Atlas.piece(PIECE)
+  if (!src) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(src.width * SCALE)
+  canvas.height = Math.ceil(CROWN_H * SCALE)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(src, 0, 0, src.width, CROWN_H, 0, 0, canvas.width, canvas.height)
+  const x = Layout.BANK_TIP_X + PAD_DX
+  return { canvas, ctx, x: x - MID_X * SCALE, y: Layout.LAKE_SURFACE_Y - AFLOAT * SCALE }
+}
+
+/**
  * Draws its stems and leaves under the water, swaying (before the water's
  * see-through paint).
  * @param {Object} inst - Pads instance
@@ -279,7 +298,7 @@ function edgeAt(edge, x) {
 // down every WALK_STEP'th column of the crown.
 //
 function crownEdge() {
-  const src = Atlas.piece('padPlant')
+  const src = Atlas.piece(PIECE)
   const w = src.width
   const data = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, CROWN_H).data
   const out = []
@@ -322,7 +341,7 @@ function bake(k) {
   bakedFor.add(k)
 }
 function paint() {
-  const src = Atlas.piece('padPlant')
+  const src = Atlas.piece(PIECE)
   if (!src) return null
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(src.width * SCALE * BAKE_OVER)

@@ -581,13 +581,7 @@ function clampHeroInCave(pit, char) {
  */
 export function drawForestPit(k, pit) {
   if (!pit) return
-  const sc = pit.sceneRef
-  if (sc?.k && pit.zone && sc.camera?.viewW) {
-    const camX = sc.k.camPos().x
-    const zoom = sc.camera.zoom || 1
-    const half = sc.camera.viewW / (2 * zoom) + PIT_DRAW_CULL_MARGIN
-    if (pit.zone.x2 < camX - half || pit.zone.x1 > camX + half) return
-  }
+  if (!isPitInCameraView(pit)) return
   drawCaveInteriorRockStyle(k, pit)
 }
 /**
@@ -682,13 +676,33 @@ export function forestPitEarthSpan(k, pit) {
   })
   return span
 }
+//
+// Whether any of the cave is on screen: all it draws — its cutout and the
+// rocks round its mouth, which reach well left of its zone — within
+// PIT_DRAW_CULL_MARGIN px of the view (so a camera shake at the view's
+// edge never blinks it, and its rocks are there as soon as its left edge
+// comes into the frame).
+//
 function isPitInCameraView(pit) {
   const sc = pit?.sceneRef
   if (!sc?.k || !pit.zone || !sc.camera?.viewW) return true
+  const span = pitDrawSpan(sc.k, pit)
   const camX = sc.k.camPos().x
   const zoom = sc.camera.zoom || 1
   const half = sc.camera.viewW / (2 * zoom) + PIT_DRAW_CULL_MARGIN
-  return pit.zone.x2 >= camX - half && pit.zone.x1 <= camX + half
+  return span.x2 >= camX - half && span.x1 <= camX + half
+}
+//
+// World X span of everything the cave draws (its zone, its cutout of the
+// earth, its baked rocks), found once per live k.
+//
+function pitDrawSpan(k, pit) {
+  if (pit._drawSpanK === k) return pit._drawSpan
+  ensureCaveLayout(pit)
+  const span = forestPitEarthSpan(k, pit)
+  pit._drawSpanK = k
+  pit._drawSpan = { x1: Math.min(span.x1, pit.zone.x1), x2: Math.max(span.x2, pit.zone.x2) }
+  return pit._drawSpan
 }
 function ensurePitRockBakes(k, pit) {
   if (pit._rockBakeK === k && pit._rockBakes) return pit._rockBakes

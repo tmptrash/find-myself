@@ -166,7 +166,13 @@ const KNEE_SLACK = 1
 // it does not run to and fro between them: PINCH_BOLT_CHANCE of the
 // times it bolts from the nearer one right past the other, and keeps
 // going until that one is behind it; else it cowers where it is, and
-// picks again after that. It gets used to
+// picks again after that. A jump of the hero near it — he leaves the
+// ground or lands within STARTLE_R px — frightens it more than his
+// walking does: whatever it was doing (standing, cowering, used to him,
+// stalking a firefly) it bolts and keeps running for
+// STARTLE_TIME..+RANGE s — away from him STARTLE_AWAY of the times, else
+// whichever way (it need not flee: it must run) — turning back at its
+// run's ends, never cowering meanwhile. It gets used to
 // a hero standing still (moving under HERO_STILL px/s): after
 // CALM_AFTER..+RANGE s of that it runs about as it likes again, minding
 // him only within CALM_FEAR_R px; once he moves it fears him afresh. In a
@@ -195,6 +201,10 @@ const FLEE_PACE_RANGE = 0.45
 const CORNER_BOLT_CHANCE = 0.5
 const PINCH_BOLT_CHANCE = 0.6
 const PINCH_SIDE = 40
+const STARTLE_R = 300
+const STARTLE_TIME = 1.2
+const STARTLE_TIME_RANGE = 1.4
+const STARTLE_AWAY = 0.7
 const COWER_TIME = 0.6
 const COWER_TIME_RANGE = 2.2
 const HERO_STILL = 15
@@ -334,7 +344,12 @@ const HUNT_BAND = 120
 // somewhere (sendTo, comeFrom) dashes along its run toward the spot (no
 // turning back on its own, pausing as runners do, still fleeing the hero)
 // till it is within GOAL_NEAR px of it or GOAL_TIME s have passed; a spot
-// more than GOAL_FIND px off its run is out of its reach. A held runner is
+// more than GOAL_FIND px off its run is out of its reach. One that was
+// caught does not turn up out of nowhere: it comes back in by the cave's
+// way in — at the top of the roots' shaft (the world's top edge, out of
+// sight), on one of its two walls (ENTRY_WALL px either side of its
+// middle: entrySpot) — and runs down into the cave: toward where it is
+// sent, or, sent nowhere it can get to, COME_IN px on along its run. A held runner is
 // drawn with the middle of its body (HELD_UP sheet px over its hips) at
 // the point it is held by — or, gripped farther back, with a point so
 // many sheet px behind that at it; kicking, its toes swing KICK_PX sheet
@@ -357,6 +372,8 @@ const GONE_TIME_RANGE = 3
 const GOAL_NEAR = 12
 const GOAL_TIME = 25
 const GOAL_FIND = 40
+const ENTRY_WALL = 60
+const COME_IN = 760
 const HELD_UP = 150
 const KICK_PX = 70
 const KICK_UP = 0.5
@@ -416,6 +433,7 @@ export function create(cfg) {
     fleeHold: 0,
     fleePace: 1,
     cowerFor: 0,
+    startledFor: 0,
     heroLast: { x: 0, y: 0 },
     heroSeen: false,
     stillFor: 0,
@@ -508,14 +526,34 @@ export function onUpdate(inst, heroPos, food = null, beast = null) {
     return
   }
   inst.cowerFor = Math.max(0, inst.cowerFor - dt)
+  inst.startledFor = Math.max(0, inst.startledFor - dt)
   watchHero(inst, heroPos, dt)
   fear(inst, heroPos, beast)
+  inst.startledFor > 0 && dash(inst)
   move(inst, dt)
   spring(inst, dt)
   placeBody(inst)
   updateLegs(inst, dt)
   food && watch(inst, dt, food)
   aimNeck(inst, inst.hunt?.f, 0, dt)
+}
+
+/**
+ * The hero jumped (took off or landed) at a spot: a runner within
+ * STARTLE_R px of it bolts and keeps running for a while — mostly away,
+ * sometimes whichever way — whatever it was doing.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} from - Where he jumped (world)
+ */
+export function startle(inst, from) {
+  if (inst.goneFor > 0 || inst.jump || !isNear(inst, from, STARTLE_R)) return
+  const away = gainFrom(inst, from) >= 0 ? inst.dir : -inst.dir
+  inst.hunt && endHunt(inst)
+  inst.startledFor = STARTLE_TIME + inst.rng() * STARTLE_TIME_RANGE
+  inst.cowerFor = 0
+  inst.stillFor = 0
+  inst.dir = inst.rng() < STARTLE_AWAY ? away : inst.rng() < HALF ? 1 : -1
+  dash(inst)
 }
 
 /**
@@ -549,8 +587,18 @@ export function sendTo(inst, to) {
 }
 
 /**
+ * Where a runner comes back into the cave: the top of the way in (the
+ * roots' shaft, at the world's top edge), by one of its two walls.
+ * @returns {{x: number, y: number}} World spot (for snatch, comeFrom)
+ */
+export function entrySpot() {
+  return { x: Layout.ENTRY_X + (Math.random() < HALF ? -ENTRY_WALL : ENTRY_WALL), y: 0 }
+}
+
+/**
  * Moves the runner to `from` (on the nearest run there) and sends it
- * toward `to` from there.
+ * toward `to` from there — or, with nowhere to go that it can get to,
+ * COME_IN px on along its run (in from the run's nearer end).
  * @param {Object} inst - Runner instance
  * @param {{x: number, y: number}} from - World spot it turns up at
  * @param {{x: number, y: number}|null} to - World spot it runs to
@@ -568,7 +616,8 @@ export function comeFrom(inst, from, to) {
   placeBody(inst)
   inst.legs.forEach(leg => plantAt(inst, leg))
   inst.goal = null
-  to && sendTo(inst, to)
+  if ((to && sendTo(inst, to)) || at.run.closed) return
+  setGoal(inst, inst.s < at.run.len * HALF ? Math.min(at.run.len, inst.s + COME_IN) : Math.max(0, inst.s - COME_IN))
 }
 
 /**
@@ -1028,7 +1077,7 @@ function move(inst, dt) {
   inst.s = end
   inst.speed = 0
   inst.dir = -inst.dir
-  if (inst.fleeing && (inst.fromBeast || inst.rng() < CORNER_BOLT_CHANCE)) {
+  if (inst.fleeing && (inst.fromBeast || inst.startledFor > 0 || inst.rng() < CORNER_BOLT_CHANCE)) {
     inst.bolting = true
     inst.pastBeast = inst.fromBeast
     return
@@ -1086,7 +1135,13 @@ function fear(inst, heroPos, beast) {
   const ahead = inst.pastBeast ? brute : hero
   inst.bolting && !(ahead && gainFrom(inst, ahead) <= FLEE_DEADBAND) && (inst.bolting = false)
   inst.bolting || turnFrom(inst, threat, inst.fromBeast ? hero : brute)
-  if (inst.cowerFor > 0) return
+  inst.cowerFor > 0 || dash(inst)
+}
+//
+// Running flat out the way it faces (its pace picked as the flight
+// starts), for FLEE_TIME s from now.
+//
+function dash(inst) {
   inst.fleeing || (inst.fleePace = FLEE_PACE + inst.rng() * FLEE_PACE_RANGE)
   inst.fleeing = true
   inst.mode = MODE.DASH
@@ -1103,7 +1158,7 @@ function turnFrom(inst, threat, other) {
   const gain = gainFrom(inst, threat)
   const beyond = other ? gainFrom(inst, other) : 0
   if (Math.min(gain, beyond) < -PINCH_SIDE && Math.max(gain, beyond) > PINCH_SIDE) {
-    if (inst.rng() >= PINCH_BOLT_CHANCE) {
+    if (inst.startledFor <= 0 && inst.rng() >= PINCH_BOLT_CHANCE) {
       cower(inst)
       return
     }

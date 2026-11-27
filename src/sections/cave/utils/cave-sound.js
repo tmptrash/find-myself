@@ -193,14 +193,14 @@ const TICK_FADE = 0.35
 // GRIP_GRIT_BAND Hz, Q GRIP_GRIT_Q, GRIP_GRIT_TIME s, GRIP_GRIT_SHARE as
 // loud), GRIP_GAIN loud right by the hero.
 //
-const GRIP_GAIN = 0.15
-const GRIP_LP = 360
-const GRIP_TIME = 0.11
+const GRIP_GAIN = 0.42
+const GRIP_LP = 520
+const GRIP_TIME = 0.12
 const GRIP_JITTER = 0.3
 const GRIP_GRIT_BAND = 1100
 const GRIP_GRIT_Q = 1
 const GRIP_GRIT_TIME = 0.05
-const GRIP_GRIT_SHARE = 0.06
+const GRIP_GRIT_SHARE = 0.12
 //
 // The climber's bite into flesh: its jaws' dull clamp (brown noise under
 // BITE_THUD_LP Hz, BITE_THUD_TIME s), the wet tear of the meat (a band of
@@ -233,14 +233,22 @@ const BITE_RIP_SHARE = 0.7
 // CRUNCH_CRACKS small dry ticks (never fewer than CRUNCH_MIN_CRACKS: a
 // chew) at uneven moments within the bite's time, about CRUNCH_BAND …
 // CRUNCH_BAND_RANGE more Hz, CRUNCH_TIME s each, CRUNCH_TICK_SHARE as
-// loud at most.
+// loud at most. No two crunches are alike — a row of chews is not one
+// sound repeated: each has its own shade, its pitch (the squash's and the
+// ticks' alike) off by up to CRUNCH_TINT either way, its loudness by
+// CRUNCH_LOUD_VARY, the count of its ticks by CRUNCH_COUNT_VARY, their
+// length by CRUNCH_TIME_VARY.
 //
 const CRUNCH_GAIN = 0.3
 const CRUNCH_SQUASH_LP = 480
 const CRUNCH_SQUASH_MIN = 0.1
 const CRUNCH_SQUASH_SHARE = 0.9
 const CRUNCH_CRACKS = 7
-const CRUNCH_MIN_CRACKS = 2
+const CRUNCH_MIN_CRACKS = 1
+const CRUNCH_TINT = 0.38
+const CRUNCH_LOUD_VARY = 0.3
+const CRUNCH_COUNT_VARY = 0.6
+const CRUNCH_TIME_VARY = 0.5
 const CRUNCH_BAND = 1500
 const CRUNCH_BAND_RANGE = 1200
 const CRUNCH_TIME = 0.024
@@ -545,10 +553,11 @@ export function playBite(inst, near) {
 export function playCrunch(inst, near, strength, time) {
   if (!ready(inst) || near <= 0) return
   const at = inst.ctx.currentTime
-  const gain = CRUNCH_GAIN * near * strength
-  const cracks = Math.max(CRUNCH_MIN_CRACKS, Math.round(CRUNCH_CRACKS * strength))
-  softBurst(inst, inst.brown, at, 'lowpass', CRUNCH_SQUASH_LP, 1, Math.max(CRUNCH_SQUASH_MIN, time), gain * CRUNCH_SQUASH_SHARE)
-  crackle(inst, at, cracks, time, CRUNCH_BAND, CRUNCH_BAND_RANGE, CRUNCH_TIME, gain * CRUNCH_TICK_SHARE)
+  const tint = vary(CRUNCH_TINT)
+  const gain = CRUNCH_GAIN * near * strength * vary(CRUNCH_LOUD_VARY)
+  const cracks = Math.max(CRUNCH_MIN_CRACKS, Math.round(CRUNCH_CRACKS * strength * vary(CRUNCH_COUNT_VARY)))
+  softBurst(inst, inst.brown, at, 'lowpass', CRUNCH_SQUASH_LP * tint, 1, Math.max(CRUNCH_SQUASH_MIN, time), gain * CRUNCH_SQUASH_SHARE)
+  crackle(inst, at, cracks, time, CRUNCH_BAND * tint, CRUNCH_BAND_RANGE * tint, CRUNCH_TIME * vary(CRUNCH_TIME_VARY), gain * CRUNCH_TICK_SHARE)
 }
 
 /**
@@ -719,6 +728,12 @@ function playPebbleFall(inst) {
     g.connect(pan)
     src.start(at, Math.random() * NOISE_SECONDS / 2, PEBBLE_DECAY * 2)
   }
+}
+//
+// 1, off by up to `share` either way at random.
+//
+function vary(share) {
+  return 1 + (Math.random() * 2 - 1) * share
 }
 //
 // A crackle: `count` ticks at uneven moments within `spread` s, each a

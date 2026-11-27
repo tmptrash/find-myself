@@ -103,9 +103,15 @@ const HAGGY_SEED = 4711
 // In its hand the hero hangs upright, leaning HELD_HERO_LEAN degrees
 // with the hand, pressed in only where the fingers lie on him
 // (cave-held-hero.js). The climber's jaws are heard HAGGY_BITE_LOUD as
-// far as a fish's splash.
+// far as a fish's splash. The hero's running it feels as a tremor too
+// (as a runner's) — not at once: only after HERO_TREMOR_STEPS footfalls
+// in a row, each within HERO_STEP_ROW s of the one before; a hero who
+// stands, or takes a step or two, gives nothing away until it touches
+// him.
 //
 const BEING_HERO_R = 20
+const HERO_TREMOR_STEPS = 6
+const HERO_STEP_ROW = 0.6
 const PREY_HERO = 'hero'
 const HELD_HERO_LEAN = 25
 const HAGGY_BITE_LOUD = 1
@@ -265,15 +271,14 @@ const SPIT_SEARCH = 400
 const SPIT_ARC = 70
 const SPIT_LOUD = 1
 //
-// Runners: one the lurker ate is back a little later, coming in at
-// ENTRY_SPOT (on the floor under the roots' hole the hero came in by) and
-// running off to where the hero is; every VISIT_EVERY..+RANGE s the hero
+// Runners: one that was eaten is back a little later, coming in by the
+// cave's way in (Runner.entrySpot: down the roots' shaft the hero came in
+// by) and running off to where the hero is; every VISIT_EVERY..+RANGE s the hero
 // spends on the lake's left bank (VISIT_AWAY_RATE as often while he is not
 // on it) one runs out onto it, VISIT_IN..+RANGE px short of its edge —
 // one already on the bank's run, else one out of sight, coming in at the
 // way in.
 //
-const ENTRY_SPOT = { x: Layout.ENTRY_X, y: Layout.lakeFloor().y }
 const VISIT_EVERY = 20
 const VISIT_EVERY_RANGE = 20
 const VISIT_IN = 20
@@ -324,7 +329,9 @@ function build(k, opts) {
     haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null, beings: [], onSeize: null, onJaws: null, onBite: null, onDrop: null, onGrip: null },
     beastAt: { x: 0, y: 0 },
     haggyHeld: null,
-    heroPrey: { kind: PREY_HERO, ahead: 0, mouthful: false },
+    heroPrey: { kind: PREY_HERO, ahead: 0, mouthful: false, tremor: false },
+    stepsInRow: 0,
+    stepAt: -Infinity,
     runnerPrey: null,
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
@@ -493,15 +500,24 @@ function updateHero(inst, char) {
 //
 // Landings are heard by the level, not by the hero's own landing hook (it
 // misses landings after the jump key was let go in the air): after a real
-// time in the air, the first grounded frame plays the landing.
+// time in the air, the first grounded frame plays the landing. A jump —
+// its take-off (he leaves the ground going up) and its landing —
+// startles the runners near.
 //
 function trackLanding(inst, char) {
   if (!char.isGrounded()) {
+    inst.airFor === 0 && (char.vel?.y ?? 0) < 0 && startleRunners(inst, char.pos)
     inst.airFor += inst.k.dt()
     return
   }
-  inst.airFor >= LAND_MIN_AIR && playHeroStep(inst, inst.heroInst, true)
+  if (inst.airFor >= LAND_MIN_AIR) {
+    playHeroStep(inst, inst.heroInst, true)
+    startleRunners(inst, char.pos)
+  }
   inst.airFor = 0
+}
+function startleRunners(inst, at) {
+  for (let i = 0; i < inst.runners.length; i++) Runner.startle(inst.runners[i], at)
 }
 //
 // The hero bounced off the dry mushroom: its sound now, its fireflies a
@@ -739,10 +755,14 @@ function spawnHero(inst, pose) {
   !prev && View.snapTo(inst.view, pose.x, pose.y)
 }
 //
-// Footsteps: a soft scuff on the mossy earth.
+// Footsteps: a soft scuff on the mossy earth; how many have come in a
+// row is kept (what the climber may feel as a tremor).
 //
 function playHeroStep(inst, hero, land) {
+  const now = inst.k.time()
   hero.sfx && CaveSound.playStoneStep(inst.caveSound, land)
+  inst.stepsInRow = now - inst.stepAt <= HERO_STEP_ROW ? inst.stepsInRow + 1 : 1
+  inst.stepAt = now
 }
 //
 // Both walls, and the step that carries the hero along the platforms' top.
@@ -909,9 +929,10 @@ function updateRunners(inst) {
   updateHaggy(inst, food)
 }
 //
-// The climber: blind, it finds its prey only by touching it (the bodies
-// it may touch are told to it here, in one list kept from frame to
-// frame: the hero — not while he is safe after a respawn — and the
+// The climber: blind, it finds its prey by touching it or by the tremor
+// of its running (the bodies it may touch are told to it here, in one
+// list kept from frame to frame: the hero — not while he is safe after a
+// respawn; his tremor only once he has run a few steps — and the
 // runners); its free hands snatch the fireflies they touch, the ones the
 // runners leap for.
 //
@@ -920,6 +941,7 @@ function updateHaggy(inst, food) {
   View.worldRect(inst.view, ctx.view)
   ctx.prey = food.prey
   ctx.onEat = food.onEat
+  inst.heroPrey.tremor = inst.stepsInRow >= HERO_TREMOR_STEPS && inst.k.time() - inst.stepAt <= HERO_STEP_ROW
   HaggyPrey.setBeing(ctx.beings, 0, isRespawnGrace(inst) ? null : heroPos(inst), BEING_HERO_R, inst.heroPrey)
   for (let i = 0; i < inst.runners.length; i++) HaggyPrey.setBeing(ctx.beings, i + 1, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, HaggyPrey.RUNNER_R, inst.runnerPrey[i])
   Haggy.onUpdate(inst.haggy, ctx)
@@ -930,7 +952,7 @@ function updateHaggy(inst, food) {
 // of the world, his eyes shut, drawn in its hand till it bites.
 //
 function onHaggySeize(inst, prey) {
-  if (prey.kind === HaggyPrey.KIND_RUNNER) return Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+  if (prey.kind === HaggyPrey.KIND_RUNNER) return Runner.snatch(prey.runner, Runner.entrySpot(), () => heroPos(inst))
   takeHero(inst, false)
 }
 //
@@ -958,7 +980,7 @@ function onHaggyJaws(inst, prey, strength, x) {
 //
 function onHaggyBite(inst, prey, bites, x, y) {
   if (prey.kind === HaggyPrey.KIND_RUNNER) {
-    Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+    Runner.snatch(prey.runner, Runner.entrySpot(), () => heroPos(inst))
     return true
   }
   burstEatenHero(inst, x, y)
@@ -1020,7 +1042,7 @@ function onLurkerSeize(inst, prey) {
   if (prey.runner) {
     const focus = heroFocus(inst)
     CaveSound.playSnap(inst.caveSound, 1 - Math.abs(prey.runner.pos.x - focus.x) / SPLASH_HEAR)
-    Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+    Runner.snatch(prey.runner, Runner.entrySpot(), () => heroPos(inst))
     return
   }
   takeHero(inst, true)
@@ -1146,7 +1168,7 @@ function sendVisitor(inst) {
   if (about.some(runner => Runner.sendTo(runner, spot))) return
   const view = View.worldRect(inst.view)
   const away = about.find(r => r.pos.x < view.left || r.pos.x > view.right || r.pos.y < view.top || r.pos.y > view.bottom)
-  away && Runner.comeFrom(away, ENTRY_SPOT, spot)
+  away && Runner.comeFrom(away, Runner.entrySpot(), spot)
 }
 //
 // A drop from the lurker's mouth falling into the water: a soft plop,

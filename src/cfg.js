@@ -450,6 +450,8 @@ export const CFG = {
           highlightShade: PALETTE.teal0, // Darker water under the main highlights
           depthLight: PALETTE.cyan3,   // Depth gradient: lighter under the surface
           depthDark: PALETTE.cyan0,    // Depth gradient: darker toward the bed
+          bubble: PALETTE.cyan4,       // A bubble rising from the bed: its faint body
+          bubbleRim: PALETTE.cyan5,    // Its bright rim
           algae: PALETTE.green1,
           algaeLight: PALETTE.green3,
           algaeDark: PALETTE.green0
@@ -865,18 +867,18 @@ export const CFG = {
     //
     sfx: {
       //
-      // Menu level switch: a dry tick — a very short high-passed noise
-      // snap over a quick falling blip.
+      // Menu level switch: a soft low tap — a quick falling blip that
+      // swells in gently, a faint breath of noise under it.
       //
       menuClick: {
-        volume: MASTER_VOLUME * 0.035,  // Faint breath of noise under the tap
-        duration: 0.09,
-        attack: 0.008,                  // Soft onset — no click at the start
-        noiseHighpass: 700,
-        lowpass: 900,                   // Rounds the tap off (no ring)
-        blipFreqStart: 340,
-        blipFreqEnd: 210,
-        blipVolume: MASTER_VOLUME * 0.2
+        volume: MASTER_VOLUME * 0.016,  // Faint breath of noise under the tap
+        duration: 0.14,
+        attack: 0.022,                  // Slow onset — a soft touch, no click at the start
+        noiseHighpass: 500,
+        lowpass: 560,                   // Rounds the tap off (no ring)
+        blipFreqStart: 250,
+        blipFreqEnd: 175,
+        blipVolume: MASTER_VOLUME * 0.12
       },
       jump: MASTER_VOLUME * 0.62,
       land: MASTER_VOLUME * 0.613,

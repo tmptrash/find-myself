@@ -353,6 +353,19 @@ export function surfaceAt(lake, x) {
 }
 
 /**
+ * The water's depth gradient at a world Y (Water.depthTintAt): how much
+ * of its light and then of its dark colour (the palette's depthLight,
+ * depthDark) lies over what is in the water there.
+ * @param {Object} lake - Lake inst
+ * @param {number} y - World Y
+ * @param {{light: number, dark: number}} out - Written: the two colours' opacity there
+ * @returns {{light: number, dark: number}} out
+ */
+export function depthTintAt(lake, y, out) {
+  return Water.depthTintAt(lake.water, y, out)
+}
+
+/**
  * Draws the static bed layer (seen through the water).
  * @param {Object} k - Kaplay inst
  * @param {Object} lake - Lake inst

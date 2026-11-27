@@ -106,6 +106,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as ShoreTree from '../utils/forest-shore-tree.js'
 import * as EarthMerge from '../utils/forest-earth-merge.js'
 import * as HorizFallTwig from '../utils/forest-horiz-fall-twig.js'
+import * as LakeBubbles from '../utils/forest-lake-bubbles.js'
 import * as SpikyTomato from '../components/spiky-tomato.js'
 import * as PropellerBud from '../components/propeller-bud.js'
 import * as BudCine from '../utils/forest-bud-cine.js'
@@ -3666,6 +3667,7 @@ function maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded) {
   if (!onBranch && nearGround && !isInWaterZone(inst, char.pos.x, footY)) {
     inst._forestEarlyLandSfxDone = true
     hero.landFxCooldown = 0.2
+    inst.sound._forestSurface = 'ground'
     Sound.playStepSound(inst.sound, 'lesson-forest.0')
   }
 }
@@ -3706,11 +3708,13 @@ function tickForestWoodPerchLanding(inst, char) {
 //
 // The hero's own landing sound (his feet met a collider after a jump): a
 // step on the ground; a wooden perch has its own knock
-// (tickForestWoodPerchLanding).
+// (tickForestWoodPerchLanding). What he stood on before the jump is
+// forgotten here — down from a branch he lands on earth, not on wood.
 //
 function onForestHeroLandSound(inst, hero) {
   if (!hero.sfx || inst.sound._forestSfxMuted) return
   if (hero.character?.pos && isHeroOnForestWoodPerch(inst, hero.character)) return
+  inst.sound._forestSurface = 'ground'
   Sound.playStepSound(hero.sfx, hero.stepSoundScene)
 }
 //
@@ -4332,6 +4336,7 @@ function createWater(k, x1, x2Core, zones) {
   })
   lake.x2Bake = x1 + lake.bakeSpan
   zones._lake = lake
+  zones._lakeBubbles = LakeBubbles.create({ k, lake })
   k.add([
     k.z(LAKE_BED_Z),
     {
@@ -4352,7 +4357,7 @@ function createWater(k, x1, x2Core, zones) {
     k.z(LAKE_Z),
     {
       draw() {
-        isLakeLayerVisible(k, zones, lake) && Lake.drawFill(k, lake)
+        drawForestLakeFill(k, zones, lake)
       }
     }
   ])
@@ -4361,6 +4366,14 @@ function createWater(k, x1, x2Core, zones) {
   //
   layer.hidden = !zones.water
   return layer
+}
+//
+// The lake's see-through water, then the bubbles rising in it.
+//
+function drawForestLakeFill(k, zones, lake) {
+  if (!isLakeLayerVisible(k, zones, lake)) return
+  Lake.drawFill(k, lake)
+  LakeBubbles.onDraw(zones._lakeBubbles)
 }
 //
 // True while the lake is open and any part of it is on screen.
@@ -6350,6 +6363,7 @@ function onUpdate(inst) {
   inst.fps && FpsCounter.onUpdate(inst.fps)
   inst.zones._sceneRef = inst
   inst.zones._lake && Lake.onUpdate(inst.zones._lake)
+  inst.zones.water && inst.zones._lakeBubbles && LakeBubbles.onUpdate(inst.zones._lakeBubbles)
   EyeFlower.syncVisible(inst.eyeFlower)
   if (inst._forestBirdsBootstrapKick) {
     inst._forestBirdsBootstrapKick = false

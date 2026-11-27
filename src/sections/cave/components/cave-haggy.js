@@ -111,7 +111,10 @@ const GROUND_STEP = 6
 // is within LAG_FULL of the lead of it; under MOVE_EPS px/s it stands.
 // Free to go but under STUCK_SHARE of its speed for STUCK s, it gives
 // that way up. It goes on only once turned within TURNED of the way it
-// faces.
+// faces. It never stays in one place: its head not STILL_R px from where
+// it was for STILL_TIME s (not eating), it wanders off — some way picked
+// at random, keeping clear of what it was making for, deaf to tremors
+// for a while (tremor.lost s).
 //
 const START_SPOT = { x: 620, y: 470 }
 const REST = 2
@@ -121,6 +124,11 @@ const LAG_FULL = 0.5
 const MOVE_EPS = 2
 const STUCK = 3
 const STUCK_SHARE = 0.1
+const STILL_R = 30
+const STILL_TIME = 9
+const GLANCE_TIME = 1.1
+const GLANCE_EVERY = 3.5
+const GLANCE_MIN_DX = 24
 const TURNED = 0.3
 //
 // Hands. Its fingers curl to CURL_GRIP on a hold, open to CURL_OPEN on a
@@ -273,7 +281,17 @@ const MOUTH_WIDE_HOLD = 0.6
 // noted as touched prey is, and it stalks to where that one last ran
 // (felt anew at every plan while it keeps running). Prey it has touched
 // counts for more: a stalk after a touch is not led away by a tremor.
-// Fed, it minds no tremor for tremor.sated s after its meal.
+// The one it stalks by its tremor it keeps to while that one runs within
+// reach (it does not turn to and fro between two). Fed, it minds no
+// tremor for tremor.sated s after its meal (nor a runner that touches
+// it) — but it still knows where the running is: whatever it does
+// (short of eating), it turns its head to the side a tremor comes from
+// (one GLANCE_MIN_DX px or more to that side) for GLANCE_TIME s — going
+// on its way meanwhile, looking back over its shoulder if need be — then
+// faces its way again; the next such turn GLANCE_EVERY s later at the
+// soonest; having lost one — its way
+// there cut off, or nothing found where it ran — none for tremor.lost s,
+// and it wanders off some other way.
 // A meal: the prey sits HOLD_AT of the fingers' length out from the
 // palm. The hand brings it to the mouth, its fingers turned toward the
 // mouth (CARRY_TURN rad/s): the prey's far end — its `ahead` px on
@@ -305,7 +323,7 @@ const PHASE = { GAPE: 0, BITE: 1, CHEW: 2, PAUSE: 3 }
 const MOUTH_GAPE = 1.5
 const CHEW_OPEN = 0.6
 const CHEW_SHUT = 0.08
-const CHEW_HZ = 1.7
+const CHEW_HZ = 1.2
 const CHEW_LOUD = 0.45
 const STILL_RATE = 4
 const CARRY_TURN = 7
@@ -374,16 +392,23 @@ export function create(cfg) {
     beingVx: new Float32Array(MAX_BEINGS),
     beingVy: new Float32Array(MAX_BEINGS),
     beingSeen: new Uint8Array(MAX_BEINGS),
-    target: { x: 0, y: 0, at: -Infinity, touched: false },
+    target: { x: 0, y: 0, at: -Infinity, touched: false, being: -1 },
     meal: { arm: null, prey: null, t: 0, bites: 0, phase: PHASE.GAPE, left: 0, chews: 0, biting: false, done: false, kick: 0, way: 0, turned: false },
     heldDraw: null,
     strikeAt: 0,
     still: 0,
     crouch: 0,
     lookIn: TURN.lookEvery[1],
+    glanceFor: 0,
+    glanceIn: 0,
+    glanceSide: 1,
     avoid: { x: 0, y: 0, r: 0, cost: AVOID.cost, until: 0 },
     waterAt: -Infinity,
-    fedAt: -Infinity,
+    deafUntil: 0,
+    fedUntil: 0,
+    standAt: null,
+    stillAt: { x: 0, y: 0 },
+    stillFor: 0,
     plannedAt: -Infinity,
     plannedTo: { x: 0, y: 0 },
     wantWay: false,
@@ -653,30 +678,71 @@ function keepPrev(arm) {
 }
 //
 // Its mood: a stalk whose prey was not felt again for `memory` s ends
-// where it is (it feels about there); having felt about it roams again.
-// Stalking it crouches, else it rises again.
+// where it is (it feels about there); having felt about and found
+// nothing it wanders off. Stalking it crouches, else it rises again. And
+// it never stays put (see STILL_TIME).
 //
 function updateMood(inst, dt) {
   inst.crouch += ((inst.mood === MOOD.STALK ? 1 : 0) - inst.crouch) * Math.min(1, CROUCH_RATE * dt)
+  watchStill(inst, dt)
   if (inst.mood === MOOD.STALK && inst.time - inst.target.at > SENSE.memory) return arrive(inst)
-  if (inst.mood !== MOOD.INVESTIGATE || inst.restFor > 0) return
+  inst.mood === MOOD.INVESTIGATE && inst.restFor <= 0 && wanderOff(inst)
+}
+//
+// How long its head has kept within STILL_R px of one spot (not while it
+// eats); STILL_TIME s of that and it wanders off.
+//
+function watchStill(inst, dt) {
+  const at = inst.stillAt
+  const moved = vecLen(inst.body.x - at.x, inst.body.y - at.y) > STILL_R
+  if (moved || inst.meal.arm) {
+    at.x = inst.body.x
+    at.y = inst.body.y
+    inst.stillFor = 0
+    return
+  }
+  inst.stillFor += dt
+  inst.stillFor > STILL_TIME && wanderOff(inst)
+}
+//
+// It leaves where it is, whatever it was after: roaming again, some way
+// picked at random — clear of what lay ahead of it — at once (no rest, no
+// pause), minding no tremor for tremor.lost s.
+//
+function wanderOff(inst) {
+  const lead = C.explore.lead
   inst.mood = MOOD.EXPLORE
-  inst.restFor = dt
+  inst.deafUntil = Math.max(inst.deafUntil, inst.time + SENSE.tremor.lost)
+  inst.target.being = -1
+  shun(inst, inst.body.x + inst.frame.dx * lead, inst.body.y + inst.frame.dy * lead)
+  inst.restFor = 0
+  inst.pauseFor = 0
+  inst.stuckFor = 0
+  inst.stillFor = 0
+  inst.wantWay = true
 }
 //
 // The way it faces: the side its way runs to (once it has run that way
 // for faceHold s); resting or paused it looks about, to one side and the
 // other, every turning.lookEvery s — but not with prey in its hand: it
-// eats facing the way it did. It turns round in turnTime s.
+// eats facing the way it did; and for a while after it felt something
+// run, the side that came from (see GLANCE_TIME). It turns round in
+// turnTime s.
 //
 function updateFacing(inst, dt) {
   const f = inst.frame
   inst.faceSide = f.dx > TURN.faceDx ? 1 : f.dx < -TURN.faceDx ? -1 : inst.faceSide
   if (inst.meal.arm) inst.faceFor = 0
+  else if (inst.glanceFor > 0) glance(inst, dt)
   else if (inst.restFor > 0 || inst.pauseFor > 0) lookAbout(inst, dt)
   else leadFace(inst, dt)
   const step = 2 * dt / TURN.turnTime
   inst.face += Math.max(-step, Math.min(step, inst.faceWant - inst.face))
+}
+function glance(inst, dt) {
+  inst.glanceFor -= dt
+  inst.faceFor = 0
+  inst.faceWant = inst.glanceFor > 0 ? inst.glanceSide : inst.faceSide
 }
 function leadFace(inst, dt) {
   inst.faceFor = inst.faceSide !== inst.faceWant ? inst.faceFor + dt : 0
@@ -696,7 +762,7 @@ function lookAbout(inst, dt) {
 // it pauses now and then; else it goes on at the mood's speed times its
 // support (see supportShare), eased — so it slows down and starts again
 // smoothly, never at a jump. Free to go but not going for STUCK s, it
-// gives the way up.
+// gives the way up. (It goes on while it only glances aside at a tremor.)
 //
 function updateTravel(inst, dt) {
   const m = MOOD_CFG[inst.mood]
@@ -705,7 +771,7 @@ function updateTravel(inst, dt) {
     inst.restFor <= 0 && (inst.wantWay = true)
   }
   updatePause(inst, dt)
-  const turned = inst.faceSide === inst.faceWant && Math.abs(inst.faceWant - inst.face) < TURNED
+  const turned = inst.glanceFor > 0 || (inst.faceSide === inst.faceWant && Math.abs(inst.faceWant - inst.face) < TURNED)
   const free = inst.restFor <= 0 && inst.pauseFor <= 0 && turned && !inst.meal.arm
   const share = free ? supportShare(inst, m) : 0
   inst.stuckFor = free && share < STUCK_SHARE ? inst.stuckFor + dt : 0
@@ -721,7 +787,9 @@ function updateTravel(inst, dt) {
 // its hands are — it never walks out past them, over water or off an
 // edge) — or, hanging, by how much reach its two nearest holds have left
 // (it lets itself down on its limbs) — and by how near the head has kept
-// to its place on the way.
+// to where it makes for: its place on the way, at the height it stands
+// at there (walking over a rise the head is held up off the way's line —
+// that is not lagging behind).
 //
 function supportShare(inst, m) {
   const f = inst.frame
@@ -738,17 +806,18 @@ function supportShare(inst, m) {
     near = Math.min(near, span)
   }
   const spare = f.walk ? ahead : Math.max(ahead, REACH_MAX * STRETCH - next)
-  const lag = 1 - vecLen(inst.carrot.x - b.x, inst.carrot.y - b.y) / m.lead
+  const lag = 1 - vecLen(inst.carrot.x - b.x, (inst.standAt ?? inst.carrot.y) - b.y) / m.lead
   return Math.max(0, Math.min(1, spare / (m.lead * AHEAD_FULL), lag / LAG_FULL))
 }
 //
-// A way it cannot go on along: hunting, it gives the chase up there;
+// A way it cannot go on along: after prey it has touched, it gives the
+// chase up there (and feels about); after a tremor, it wanders off;
 // roaming, it keeps clear of what lies ahead for a while and takes
 // another way.
 //
 function giveUp(inst) {
   inst.stuckFor = 0
-  if (inst.mood === MOOD.STALK) return arrive(inst)
+  if (inst.mood === MOOD.STALK) return inst.target.touched ? arrive(inst) : wanderOff(inst)
   const m = MOOD_CFG[inst.mood]
   shun(inst, inst.body.x + inst.frame.dx * m.lead, inst.body.y + inst.frame.dy * m.lead)
   inst.wantWay = true
@@ -799,6 +868,7 @@ function arrive(inst) {
   const hunted = inst.mood === MOOD.STALK
   inst.mood = hunted ? MOOD.INVESTIGATE : MOOD.EXPLORE
   inst.restFor = hunted ? SENSE.investigate : REST + inst.rng() * REST_RANGE
+  hunted && (inst.deafUntil = Math.max(inst.deafUntil, inst.time + SENSE.investigate))
 }
 function segLength(inst, seg) {
   const a = inst.path[seg]
@@ -880,8 +950,9 @@ function moveBody(inst, dt) {
   const v = inst.vel
   const w = MOOD_CFG[inst.mood].follow
   const e = Math.exp(-w * dt)
+  inst.standAt = standY(inst)
   const dx = b.x - inst.carrot.x
-  const dy = b.y - standY(inst)
+  const dy = b.y - inst.standAt
   const kx = v.x + w * dx
   const ky = v.y + w * dy
   b.x += (dx + kx * dt) * e - dx
@@ -1545,10 +1616,13 @@ function dropLostHolds(inst) {
 // one hangs free (the due hand then lets go: the pair takes turns), else
 // it reaches on from its hold itself — to a hold on along the way from
 // the limb's own place, or round one of the way's next nodes. A hand
-// that finds no hold tries again after RETRY s.
+// that finds no hold tries again after RETRY s. Kept from going on (for
+// LOOSE_AFTER s: no hold ahead of it), the hand farthest behind is due
+// however little it lags — else, every hand under a stride behind, none
+// would ever step and it would stand there for good.
 //
 function stepOn(inst, m) {
-  const due = inst.anchored < m.holds ? null : laggingArm(inst, m)
+  const due = inst.anchored < m.holds ? null : laggingArm(inst, m, inst.stuckFor >= LOOSE_AFTER)
   const arm = due ? freeArm(inst, due.side) ?? due : inst.anchored < m.holds ? freeArm(inst, null) : null
   if (!arm) return
   if (!reachOn(inst, arm, m)) {
@@ -1605,9 +1679,9 @@ function busyOf(inst, side) {
 // place along the way, if it lags a stride (or lags at all, stretched;
 // or is crumpled up against its shoulder, ahead or behind; or its limb
 // has come to lie behind the head), has held minHold s and enough
-// others hold.
+// others hold; `loose`: the one farthest behind, whatever its lag.
 //
-function laggingArm(inst, m) {
+function laggingArm(inst, m, loose) {
   if (inst.anchored - 1 < GRIP.minSupport) return null
   const f = inst.frame
   let pick = null
@@ -1620,7 +1694,7 @@ function laggingArm(inst, m) {
     const lag = arm.keep * f.dx - along
     const behind = runBehind(inst, arm, arm.hold.x, arm.hold.y) - BEHIND_MOST
     const need = span < CRAMPED ? m.stride + Math.abs(lag) : behind > 0 ? m.stride + behind : span > REACH_MAX * STRETCH ? m.stride + lag : lag
-    if (need < m.stride || need <= worst) continue
+    if ((!loose && need < m.stride) || need <= worst) continue
     worst = need
     pick = arm
   }
@@ -2048,9 +2122,11 @@ function trackBeings(inst, dt) {
 }
 //
 // What it touches, every step — nothing while it eats: it minds only its
-// meal then. Prey a hand is on is caught, by a hand that may let go of
-// what it holds (enough others holding); else, as prey a limb or the
-// head is on, it is felt — and struck at with a free hand.
+// meal then; and, fed (tremor.sated s after a meal), no prey small enough
+// for a mouthful (a runner): that may run over it unharmed. Prey a hand
+// is on is caught, by a hand that may let go of what it holds (enough
+// others holding); else, as prey a limb or the head is on, it is felt —
+// and struck at with a free hand.
 //
 function senseTouch(inst) {
   const beings = inst.beings
@@ -2058,7 +2134,7 @@ function senseTouch(inst) {
   const count = Math.min(beings.length, MAX_BEINGS)
   for (let j = 0; j < count; j++) {
     const b = beings[j]
-    if (!b.live || !b.prey) continue
+    if (!b.live || !b.prey || (b.prey.mouthful && inst.time < inst.fedUntil)) continue
     const arm = handOn(inst, b)
     if (arm && (arm.state !== STATE.HOLD || inst.anchored - 1 >= GRIP.minSupport)) return seize(inst, arm, b)
     if (!arm && !limbOn(inst, b) && !headOn(inst, b)) continue
@@ -2099,27 +2175,53 @@ function headOn(inst, b) {
   return vecLen(b.x - inst.body.x, b.y - inst.body.y) <= HEAD.rx + b.r
 }
 //
-// What it feels running near, at every plan — nothing while it eats, for
-// tremor.sated s after a meal, or while it stalks prey it has touched:
-// of the prey whose running shakes
-// the rock, the nearest one within tremor.reach px of its head that
-// moves tremor.speed px/s or faster is noted, and it stalks there.
+// What it feels running near, at every plan — nothing while it eats: of
+// the prey whose running shakes the rock, the one it stalks already —
+// else the nearest one — within tremor.reach px of its head that moves
+// tremor.speed px/s or faster. It turns its head that way; and, unless
+// it is deaf to tremors (fed, or having just lost one) or stalks prey it
+// has touched, that one is noted and it stalks there.
 //
 function senseTremor(inst) {
   const beings = inst.beings
-  if (!beings || inst.meal.arm || inst.time - inst.fedAt < SENSE.tremor.sated || (inst.mood === MOOD.STALK && inst.target.touched)) return
+  if (!beings || inst.meal.arm) return
   const count = Math.min(beings.length, MAX_BEINGS)
-  let felt = null
+  const kept = inst.mood === MOOD.STALK ? inst.target.being : -1
+  let felt = -1
   let best = SENSE.tremor.reach
   for (let j = 0; j < count; j++) {
-    const b = beings[j]
-    if (!b.live || !b.prey?.tremor || vecLen(inst.beingVx[j], inst.beingVy[j]) < SENSE.tremor.speed) continue
-    const d = vecLen(b.x - inst.body.x, b.y - inst.body.y)
-    if (d >= best) continue
-    best = d
-    felt = b
+    const d = tremorOf(inst, beings[j], j)
+    const rank = j === kept && d < SENSE.tremor.reach ? -1 : d
+    if (rank >= best) continue
+    best = rank
+    felt = j
   }
-  felt && notice(inst, felt, false)
+  if (felt < 0) return
+  turnToward(inst, beings[felt])
+  if (inst.time < inst.deafUntil || (inst.mood === MOOD.STALK && inst.target.touched)) return
+  notice(inst, beings[felt], false)
+  inst.target.being = felt
+}
+//
+// Its head turns to the side something runs on (GLANCE_MIN_DX px or more
+// to that side of it), for GLANCE_TIME s — when such a turn is due
+// (GLANCE_EVERY s after the last).
+//
+function turnToward(inst, b) {
+  const dx = b.x - inst.body.x
+  if (inst.time < inst.glanceIn || Math.abs(dx) < GLANCE_MIN_DX) return
+  inst.glanceSide = dx < 0 ? -1 : 1
+  inst.glanceFor = GLANCE_TIME
+  inst.glanceIn = inst.time + GLANCE_EVERY
+}
+//
+// How far off (px from its head) a living thing's tremor comes from —
+// Infinity for one that gives none: not about, not one whose running
+// shakes the rock right now, or moving under tremor.speed px/s.
+//
+function tremorOf(inst, b, j) {
+  if (!b.live || !b.prey?.tremor || vecLen(inst.beingVx[j], inst.beingVy[j]) < SENSE.tremor.speed) return Infinity
+  return vecLen(b.x - inst.body.x, b.y - inst.body.y)
 }
 //
 // Prey felt — touched, or only its tremor: where it is is noted and it
@@ -2130,6 +2232,7 @@ function notice(inst, b, touched = true) {
   inst.target.y = b.y
   inst.target.at = inst.time
   inst.target.touched = touched
+  inst.target.being = -1
   inst.mood = MOOD.STALK
   inst.restFor = 0
   inst.pauseFor = 0
@@ -2364,7 +2467,10 @@ function pause(inst) {
 }
 //
 // The meal is over: the hand lets go and hangs free, the mouth shuts, and
-// it rests eat.rest s before it goes on.
+// it rests eat.rest s before it goes on — away from where it ate (its
+// next ways keep clear of the place: what comes back there is not found
+// again at once), minding no tremor for tremor.sated s — and no small
+// prey either (see senseTouch).
 //
 function endMeal(inst) {
   const meal = inst.meal
@@ -2375,7 +2481,9 @@ function endMeal(inst) {
   inst.mouthWant = 0
   inst.mouthIn = MOUTH_GAP
   inst.restFor = EAT.rest
-  inst.fedAt = inst.time
+  inst.deafUntil = inst.time + SENSE.tremor.sated
+  inst.fedUntil = inst.deafUntil
+  shun(inst, inst.body.x, inst.body.y)
 }
 //
 // The meal as the level draws it (inst.heldDraw): the piece the last bite

@@ -306,7 +306,9 @@ export const CAVE_CFG = {
     // was felt replanDist px off). The tremor of prey that runs on the
     // rock (a runner) it feels from tremor.reach px off its head while
     // that prey moves tremor.speed px/s or faster, and stalks toward it
-    // — not for tremor.sated s after a meal.
+    // — not for tremor.sated s after a meal (fed, it lets a runner that
+    // touches it be, too), nor for tremor.lost s after it lost one (no
+    // way there, or nothing found where it ran).
     // A hand that touches water draws back
     // and it looks for another way (at most once every waterGap s), its
     // ways keeping avoid.radius px clear of that spot for avoid.time s (a
@@ -324,14 +326,14 @@ export const CAVE_CFG = {
       touch: {
         reach: 6
       },
-      tremor: { reach: 360, speed: 60, sated: 14 },
+      tremor: { reach: 360, speed: 60, sated: 40, lost: 10 },
       memory: 6,
       investigate: 4,
       replanGap: 0.6,
       replanDist: 120,
       waterGap: 2,
       avoid: { radius: 170, time: 25, cost: 900 },
-      eat: { near: 10, carryMost: 6, bites: 3, gape: 0.35, bite: 0.45, chew: 1.75, pause: 0.45, deep: 14, back: 8, inside: 9, rest: 1.5 }
+      eat: { near: 10, carryMost: 6, bites: 3, gape: 0.35, bite: 0.45, chew: 2.5, pause: 0.45, deep: 14, back: 8, inside: 9, rest: 1.5 }
     },
     //
     // Work per second: its body and limbs step simHz times a second (farHz

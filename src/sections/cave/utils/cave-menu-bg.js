@@ -102,13 +102,13 @@ const BUBBLE_WAVE = 0.04
 //
 // Every VISIT_EVERY..+RANGE s a runner is sent out onto the lake's left
 // bank, VISIT_IN..+RANGE px short of its edge (one on the bank's run, else
-// one in from the way in, ENTRY_SPOT) — for the lurker to pounce on.
+// one out of sight, coming in by the way in: Runner.entrySpot) — for the
+// lurker to pounce on.
 //
 const VISIT_EVERY = 10
 const VISIT_EVERY_RANGE = 10
 const VISIT_IN = 20
 const VISIT_IN_RANGE = 70
-const ENTRY_SPOT = { x: Layout.ENTRY_X, y: Layout.lakeFloor().y }
 const HAGGY_SEED = 4711
 const HAGGY_AT = { x: 0.6, y: 0.3 }
 const bakedFor = new WeakMap()
@@ -407,7 +407,7 @@ function createHaggyLife(inst, onCrunch, onGrip) {
     prey: [],
     onEat: () => {},
     beings: [],
-    onSeize: prey => Runner.snatch(prey.runner, ENTRY_SPOT, () => null),
+    onSeize: prey => Runner.snatch(prey.runner, Runner.entrySpot(), () => null),
     onJaws: (prey, strength, x) => onCrunch?.(nearMiddle(inst.place, x), strength, HaggyPrey.crunchTime(strength)),
     onBite: prey => eatRunner(prey),
     onDrop: () => {},
@@ -415,7 +415,7 @@ function createHaggyLife(inst, onCrunch, onGrip) {
   }
 }
 function eatRunner(prey) {
-  Runner.snatch(prey.runner, ENTRY_SPOT, () => null)
+  Runner.snatch(prey.runner, Runner.entrySpot(), () => null)
   return true
 }
 //
@@ -434,7 +434,7 @@ function updateHaggy(inst) {
 function seizeRunner(inst, onSnap, prey) {
   if (!prey.runner) return
   onSnap?.(nearMiddle(inst.place, prey.runner.pos.x))
-  Runner.snatch(prey.runner, ENTRY_SPOT, () => null)
+  Runner.snatch(prey.runner, Runner.entrySpot(), () => null)
 }
 //
 // The trumpeter has eaten a fish: it is gone (to swim back in later), with
@@ -455,7 +455,9 @@ function sendVisitor(inst) {
   const spot = { x, y: Ground.topAt(Layout.lakeFloor(), x) }
   const about = inst.runners.filter(Runner.isAbout)
   if (about.some(runner => Runner.sendTo(runner, spot))) return
-  about.length && Runner.comeFrom(about[Math.floor(Math.random() * about.length)], ENTRY_SPOT, spot)
+  const view = inst.world
+  const away = about.find(r => r.pos.x < view.left || r.pos.x > view.right || r.pos.y < view.top || r.pos.y > view.bottom)
+  away && Runner.comeFrom(away, Runner.entrySpot(), spot)
 }
 //
 // The dry mushroom on its platform (its crumbs and dust come to rest on

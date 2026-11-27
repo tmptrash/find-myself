@@ -31,24 +31,31 @@ const APPLE_THUD_SILENT = 0.001
 //
 const MENU_CLICK_SILENCE = 0.001
 //
-// Forest wood impacts: a muffled puff of noise (low-passed, its cutoff
+// The ear-tree's shake: a muffled puff of noise (low-passed, its cutoff
 // sliding from cutoffStart to cutoffEnd Hz, swelling in over noiseAttack
 // s, noiseMix of the peak) over a short sine body dropping from toneStart
 // (+ up to toneJitter) to toneEnd Hz (toneAttack s, toneMix of the peak).
-// WOOD_KNOCK is a step on a branch or the tree's shake; WOOD_LAND_SOFT a
-// landing on a branch or on the centipede's stick — lower, duller and
-// slower to swell, so it is a soft thud and not a rap: WOOD_LAND_PEAK of
-// the land volume, WOOD_LAND_SEC long.
 //
 const WOOD_KNOCK = { cutoffStart: 520, cutoffEnd: 280, noiseAttack: 0.006, noiseMix: 0.65, toneStart: 340, toneJitter: 40, toneEnd: 180, toneAttack: 0.008, toneMix: 0.35 }
-const WOOD_LAND_SOFT = { cutoffStart: 340, cutoffEnd: 180, noiseAttack: 0.016, noiseMix: 0.6, toneStart: 215, toneJitter: 25, toneEnd: 120, toneAttack: 0.018, toneMix: 0.3 }
-const WOOD_LAND_PEAK = 0.95
-const WOOD_LAND_SEC = 0.15
-const WOOD_STEP_PEAK = 1.2
-const WOOD_STEP_SEC = 0.07
 const WOOD_IMPACT_Q = 0.4
 const WOOD_IMPACT_SILENT = 0.001
 const WOOD_IMPACT_TAIL = 0.02
+//
+// A foot on wood — a branch, the stick on the centipede's back; a step
+// along it and a landing on it are the same sound. A soft dull tap, wood
+// and not a drum: no tone that slides or rings, only noise through the
+// wood's own two resonances, both low and wide (a narrow band rings) —
+// its body (about WOOD_TAP.body Hz, Q bodyQ, bodySec s) and a shorter,
+// fainter knock over it (knock Hz, Q knockQ, knockSec s, knockMix as
+// loud) — each tap's pitch off by up to `jitter` either way, swelling in
+// over `attack` s (no click), muffled by a low-pass (`lowpass` Hz);
+// WOOD_TAP_PEAK of the step volume. The noise is
+// made once per audio context (WOOD_TAP_NOISE_SEC s of it).
+//
+const WOOD_TAP = { body: 290, bodyQ: 1.3, bodySec: 0.075, knock: 610, knockQ: 1.6, knockSec: 0.032, knockMix: 0.28, jitter: 0.1, attack: 0.008, lowpass: 900 }
+const WOOD_TAP_PEAK = 1.15
+const WOOD_TAP_NOISE_SEC = 0.25
+const woodNoiseFor = new WeakMap()
 //
 // The gentle sound of the hero's death: a soft sine sighing down from
 // LIFE_SIGH_F0 to LIFE_SIGH_F1 Hz over LIFE_SIGH_FALL s under a low-pass
@@ -494,7 +501,7 @@ export function playLandSound(instance, currentLevel = null) {
     // Dedicated land hits (same family as steps, louder, via landGain)
     //
     instance._forestSurface === 'wood'
-      ? playForestWoodKnockLand(instance)
+      ? playForestWoodTap(instance)
       : playForestGroundLand(instance)
   } else {
     //
@@ -553,7 +560,7 @@ export function playStepSound(instance, currentLevel = null) {
   if (isForestSection) {
     if (instance._forestSurface === 'water') return
     instance._forestSurface === 'wood'
-      ? playForestWoodKnockStep(instance)
+      ? playForestWoodTap(instance)
       : playForestGroundStep(instance)
   } else {
     //
@@ -764,14 +771,51 @@ export function playForestTomatoExplosion(instance) {
 
 
 //
-// Forest section: deep wooden knock on branches and log platforms.
+// Forest section: a foot on a branch or on the centipede's stick — a soft
+// dry tap of wood (see WOOD_TAP), the same for a step and a landing.
 //
-function playForestWoodKnockLand(instance) {
-  playForestSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * WOOD_LAND_PEAK, WOOD_LAND_SEC, WOOD_LAND_SOFT)
+function playForestWoodTap(instance) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const pitch = 1 + (Math.random() * 2 - 1) * WOOD_TAP.jitter
+  const peak = CFG.audio.sfx.step * WOOD_TAP_PEAK
+  const out = ctx.createBiquadFilter()
+  out.type = 'lowpass'
+  out.frequency.setValueAtTime(WOOD_TAP.lowpass, now)
+  out.connect(instance.stepGain)
+  playWoodTapMode(ctx, out, now, WOOD_TAP.body * pitch, WOOD_TAP.bodyQ, WOOD_TAP.bodySec, peak)
+  playWoodTapMode(ctx, out, now, WOOD_TAP.knock * pitch, WOOD_TAP.knockQ, WOOD_TAP.knockSec, peak * WOOD_TAP.knockMix)
 }
-
-function playForestWoodKnockStep(instance) {
-  playForestSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * WOOD_STEP_PEAK, WOOD_STEP_SEC)
+//
+// One resonance of the tapped wood: noise through a narrow band, swelling
+// in at once and dying within `sec` s.
+//
+function playWoodTapMode(ctx, out, at, freq, q, sec, peak) {
+  const noise = ctx.createBufferSource()
+  noise.buffer = woodNoise(ctx)
+  const band = ctx.createBiquadFilter()
+  band.type = 'bandpass'
+  band.frequency.setValueAtTime(freq, at)
+  band.Q.value = q
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(WOOD_IMPACT_SILENT, at)
+  gain.gain.linearRampToValueAtTime(peak, at + WOOD_TAP.attack)
+  gain.gain.exponentialRampToValueAtTime(WOOD_IMPACT_SILENT, at + sec)
+  noise.connect(band)
+  band.connect(gain)
+  gain.connect(out)
+  noise.start(at, Math.random() * (WOOD_TAP_NOISE_SEC - sec), sec + WOOD_IMPACT_TAIL)
+}
+//
+// The tap's white noise, made once per audio context.
+//
+function woodNoise(ctx) {
+  if (woodNoiseFor.has(ctx)) return woodNoiseFor.get(ctx)
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * WOOD_TAP_NOISE_SEC), ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+  woodNoiseFor.set(ctx, buffer)
+  return buffer
 }
 
 //
@@ -817,10 +861,11 @@ function playForestAppleSoftImpact(instance, destinationGain, peakAmp) {
 }
 
 //
-// Soft padded wood step — muffled thump similar to mushroom-trampoline bounce.
+// The ear-tree's shake — a soft padded thump (see WOOD_KNOCK).
 //
 
-function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration, shape = WOOD_KNOCK) {
+function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
+  const shape = WOOD_KNOCK
   const ctx = instance.audioContext
   const now = ctx.currentTime
   const bufferSize = Math.floor(ctx.sampleRate * duration)
@@ -949,8 +994,8 @@ export function playCrunchSound(instance) {
 }
 
 /**
- * Plays the short dry "click" of switching the selected level in the menu:
- * a high-passed noise snap plus a quick falling sine blip.
+ * Plays the soft tap of switching the selected level in the menu: a low
+ * falling sine blip swelling in gently, with a faint breath of noise.
  * @param {Object} instance - Sound instance from create()
  */
 export function playMenuClickSound(instance) {

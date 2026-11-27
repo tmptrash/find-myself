@@ -12,7 +12,8 @@ import * as Runner from '../components/cave-runner.js'
 // grows shorter; the piece a bite took, in the mouth, shrinks by
 // CHEWED_SHRINK as it is chewed. Its running shakes the rock (tremor):
 // the climber feels it from afar. A chew's crunch lasts CHEW_CRUNCH_TIME
-// s, a bite's as long as the jaws take to close. A hand taking hold is
+// … CHEW_CRUNCH_TIME_RANGE more s (each chew its own length), a bite's
+// as long as the jaws take to close. A hand taking hold is
 // heard only close by, gone GRIP_HEAR px from the listener.
 //
 export const KIND_RUNNER = 'runner'
@@ -20,7 +21,8 @@ export const RUNNER_R = 9
 const HELD_BACK = 190
 const HELD_AHEAD = 22
 const CHEWED_SHRINK = 0.45
-const CHEW_CRUNCH_TIME = 0.08
+const CHEW_CRUNCH_TIME = 0.06
+const CHEW_CRUNCH_TIME_RANGE = 0.2
 const GRIP_HEAR = 650
 
 /**
@@ -74,7 +76,7 @@ export function onDraw(prey, at, angle, bites, kick, chew) {
  * @returns {number} Seconds
  */
 export function crunchTime(strength) {
-  return strength < 1 ? CHEW_CRUNCH_TIME : CAVE_CFG.haggy.sense.eat.bite
+  return strength < 1 ? CHEW_CRUNCH_TIME + Math.random() * CHEW_CRUNCH_TIME_RANGE : CAVE_CFG.haggy.sense.eat.bite
 }
 
 /**

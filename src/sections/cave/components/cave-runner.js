@@ -1,6 +1,5 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import * as RingDraw from '../../../utils/ring-draw.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
@@ -160,7 +159,14 @@ const KNEE_SLACK = 1
 // FLEE_DEADBAND px farther from him) — then it flees on from there (speeds at size 1, scaled with the
 // runner). Each flight goes at FLEE_SPEED times FLEE_PACE..+RANGE; driven
 // into a corner it bolts back past him only CORNER_BOLT_CHANCE of the
-// times, else cowers there COWER_TIME..+RANGE s, frozen. It gets used to
+// times (past the beast — the climber, feared just so — always: it tries
+// to run through it), else cowers there COWER_TIME..+RANGE s, frozen.
+// Pinched — the hero and the beast both near, one each way along its run
+// (each way's point FLEE_LOOK px on PINCH_SIDE px nearer one of them) —
+// it does not run to and fro between them: PINCH_BOLT_CHANCE of the
+// times it bolts from the nearer one right past the other, and keeps
+// going until that one is behind it; else it cowers where it is, and
+// picks again after that. It gets used to
 // a hero standing still (moving under HERO_STILL px/s): after
 // CALM_AFTER..+RANGE s of that it runs about as it likes again, minding
 // him only within CALM_FEAR_R px; once he moves it fears him afresh. In a
@@ -187,6 +193,8 @@ const FLEE_HOLD = 0.35
 const FLEE_PACE = 0.7
 const FLEE_PACE_RANGE = 0.45
 const CORNER_BOLT_CHANCE = 0.5
+const PINCH_BOLT_CHANCE = 0.6
+const PINCH_SIDE = 40
 const COWER_TIME = 0.6
 const COWER_TIME_RANGE = 2.2
 const HERO_STILL = 15
@@ -335,8 +343,14 @@ const HUNT_BAND = 120
 // bite takes its front off: what is left of it ends BITTEN_CUTS sheet px
 // on from its body's origin toward the head after so many bites (its
 // head, neck and feelers go with the first, every leg rooted past the
-// cut goes too), the cut end closed with a patch of flesh FLESH_RX by
-// FLESH_RY sheet px, FLESH_UP of HELD_UP over the hips.
+// cut goes too; the last takes all). A cut is torn, not sliced: its line
+// runs ragged down the body — BITTEN_TEARS sheet px toward the head off
+// the cut at each of TEAR_ROWS + 1 evenly spaced heights, the same line
+// for the piece either side of it, so the two fit — and flesh shows
+// along it, FLESH_W sheet px wide at the body's middle, none from its
+// first and last row out (where the body's picture is partly empty). A
+// bitten-off piece is drawn by its own middle (its body's
+// ends taken as PIECE_ENDS sheet px from the origin).
 //
 const GONE_TIME = 3
 const GONE_TIME_RANGE = 3
@@ -348,10 +362,12 @@ const KICK_PX = 70
 const KICK_UP = 0.5
 const KICK_HZ = 7
 const KICK_PHASE = 1.9
-const BITTEN_CUTS = [Infinity, 130, -80]
-const FLESH_RX = 20
-const FLESH_RY = 56
-const FLESH_UP = 0.8
+const BITTEN_CUTS = [Infinity, 130, -80, -Infinity]
+const BITTEN_TEARS = [null, [36, -54, 20, -42, 56, -24, 40], [-46, 30, -56, 22, -34, 52, -20], null]
+const TEAR_ROWS = 6
+const PIECE_ENDS = [-380, 360]
+const PIECE_KEY = 4096
+const FLESH_W = 44
 const atlasFor = new WeakMap()
 let atlas = null
 
@@ -424,14 +440,17 @@ export function create(cfg) {
     farColor: k.rgb(far, far, far),
     v: k.vec2(0, 0),
     anchors: new Map(),
-    rests: new Map(),
+    pieces: new Map(),
     flesh: null,
     tmp: { x: 0, y: 0 },
     hip: { x: 0, y: 0 },
     hipAt: { x: 0, y: 0 },
     goneFor: 0,
     kick: 0,
-    bitten: 0,
+    pieceLo: -Infinity,
+    pieceHi: Infinity,
+    fromBeast: false,
+    pastBeast: false,
     comeFrom: null,
     toward: null,
     goal: null,
@@ -469,8 +488,9 @@ export function createAll(k) {
  * @param {Object} [food] - Fireflies it may leap for
  * @param {Array<{x: number, y: number}>} food.prey - The fireflies
  * @param {(f: Object) => void} food.onEat - A firefly is eaten
+ * @param {{x: number, y: number}|null} [beast] - A predator's nearest part (the climber): fled as the hero is, never got used to, and — cornered — always run past
  */
-export function onUpdate(inst, heroPos, food = null) {
+export function onUpdate(inst, heroPos, food = null, beast = null) {
   const dt = inst.k.dt()
   if (inst.goneFor > 0) {
     inst.goneFor -= dt
@@ -489,7 +509,7 @@ export function onUpdate(inst, heroPos, food = null) {
   }
   inst.cowerFor = Math.max(0, inst.cowerFor - dt)
   watchHero(inst, heroPos, dt)
-  heroPos && inst.cowerFor <= 0 && flee(inst, heroPos)
+  fear(inst, heroPos, beast)
   move(inst, dt)
   spring(inst, dt)
   placeBody(inst)
@@ -565,20 +585,26 @@ export function comeFrom(inst, from, to) {
  * @param {number} [back=0] - How far behind its middle it is gripped (sheet px toward the tail): that point is put at `at`
  */
 export function drawHeld(inst, at, angle, size = 1, kick = 0, bitten = 0, back = 0) {
-  const k = inst.k
-  const parts = atlasFor.get(k)
-  if (!parts || size <= 0) return
   inst.kick = kick
-  inst.bitten = bitten
-  k.pushTransform()
-  k.pushTranslate(inst.v.set(at.x, at.y))
-  k.pushRotate(angle)
-  k.pushScale(inst.v.set(inst.unit * size, inst.unit * size))
-  k.pushTranslate(inst.v.set(back, HELD_UP))
-  drawRunner(inst, parts)
-  k.popTransform()
-  inst.kick = 0
-  inst.bitten = 0
+  inst.pieceHi = BITTEN_CUTS[Math.min(bitten, BITTEN_CUTS.length - 1)]
+  drawPiece(inst, at, angle, size, back)
+}
+
+/**
+ * Draws the piece a bite took off a held runner (what is being chewed):
+ * the piece's middle at `at`, turned `angle` degrees, at `size` of its
+ * own size.
+ * @param {Object} inst - Runner instance
+ * @param {{x: number, y: number}} at - World point
+ * @param {number} angle - Turn (degrees)
+ * @param {number} bite - Which bite took it (1: the first)
+ * @param {number} [size=1] - Share of its size (it shrinks as it is chewed)
+ */
+export function drawBitten(inst, at, angle, bite, size = 1) {
+  const n = Math.max(1, Math.min(bite, BITTEN_CUTS.length - 1))
+  inst.pieceHi = BITTEN_CUTS[n - 1]
+  inst.pieceLo = BITTEN_CUTS[n]
+  drawPiece(inst, at, angle, size, -(Math.max(PIECE_ENDS[0], inst.pieceLo) + Math.min(PIECE_ENDS[1], inst.pieceHi)) / 2)
 }
 
 /**
@@ -1002,13 +1028,12 @@ function move(inst, dt) {
   inst.s = end
   inst.speed = 0
   inst.dir = -inst.dir
-  if (inst.fleeing && inst.rng() < CORNER_BOLT_CHANCE) {
+  if (inst.fleeing && (inst.fromBeast || inst.rng() < CORNER_BOLT_CHANCE)) {
     inst.bolting = true
+    inst.pastBeast = inst.fromBeast
     return
   }
-  inst.fleeing && (inst.cowerFor = COWER_TIME + inst.rng() * COWER_TIME_RANGE)
-  pause(inst)
-  inst.timer = Math.max(inst.timer, inst.cowerFor)
+  inst.fleeing ? cower(inst) : pause(inst)
 }
 //
 // How hard it runs: 0 standing … 1 at TAIL_RUN_SPEED or faster.
@@ -1038,29 +1063,78 @@ function pause(inst) {
   inst.timer = PAUSE_TIME + inst.rng() * PAUSE_TIME_RANGE
 }
 //
-// The hero close by: a dash away from him along the run, kept up while
-// he stays near; a cornered one bolting past him holds its way until he
-// is behind it.
+// Frozen where it is for a while, fearing nothing meanwhile.
 //
-function flee(inst, heroPos) {
-  const dx = heroPos.x - inst.pos.x
-  const dy = heroPos.y - inst.pos.y
-  const r = inst.stillFor >= inst.calmAfter ? CALM_FEAR_R : FEAR_R
-  if (dx * dx + dy * dy > r * r) return
+function cower(inst) {
+  inst.cowerFor = COWER_TIME + inst.rng() * COWER_TIME_RANGE
+  pause(inst)
+  inst.timer = Math.max(inst.timer, inst.cowerFor)
+}
+//
+// What it fears close by — the hero (a standing one it gets used to: he
+// counts only within CALM_FEAR_R then) and the beast (never got used
+// to): a dash away from the nearer along the run, kept up while that one
+// stays near. Bolting past one of them it holds its way until that one is
+// behind it (or gone).
+//
+function fear(inst, heroPos, beast) {
+  const hero = isNear(inst, heroPos, inst.stillFor >= inst.calmAfter ? CALM_FEAR_R : FEAR_R) ? heroPos : null
+  const brute = isNear(inst, beast, FEAR_R) ? beast : null
+  const threat = nearer(inst, hero, brute)
+  inst.fromBeast = Boolean(brute) && threat === brute
+  if (!threat || inst.cowerFor > 0) return
+  const ahead = inst.pastBeast ? brute : hero
+  inst.bolting && !(ahead && gainFrom(inst, ahead) <= FLEE_DEADBAND) && (inst.bolting = false)
+  inst.bolting || turnFrom(inst, threat, inst.fromBeast ? hero : brute)
+  if (inst.cowerFor > 0) return
   inst.fleeing || (inst.fleePace = FLEE_PACE + inst.rng() * FLEE_PACE_RANGE)
-  const look = FLEE_LOOK * inst.dir
-  const on = Surface.sample(inst.run, inst.s + look, inst.lookOn)
-  const back = Surface.sample(inst.run, inst.s - look, inst.lookBack)
-  const gain = Math.hypot(on.x - heroPos.x, on.y - heroPos.y) - Math.hypot(back.x - heroPos.x, back.y - heroPos.y)
-  inst.bolting && gain > FLEE_DEADBAND && (inst.bolting = false)
-  if (!inst.bolting && inst.fleeHold <= 0 && gain < (inst.fleeing ? -FLEE_DEADBAND : 0)) {
-    inst.dir = -inst.dir
-    inst.fleeHold = FLEE_HOLD
-  }
   inst.fleeing = true
   inst.mode = MODE.DASH
   inst.timer = FLEE_TIME
   inst.dashSpeed = FLEE_SPEED * inst.fleePace * inst.unit / SCALE
+}
+//
+// Which way to run from what it fears: pinched between the two (the
+// other one clearly the other way along the run) it bolts from the nearer
+// past the other, or cowers; else it turns from the one there is once
+// the other way leads farther from it.
+//
+function turnFrom(inst, threat, other) {
+  const gain = gainFrom(inst, threat)
+  const beyond = other ? gainFrom(inst, other) : 0
+  if (Math.min(gain, beyond) < -PINCH_SIDE && Math.max(gain, beyond) > PINCH_SIDE) {
+    if (inst.rng() >= PINCH_BOLT_CHANCE) {
+      cower(inst)
+      return
+    }
+    gain < 0 && (inst.dir = -inst.dir)
+    inst.bolting = true
+    inst.pastBeast = !inst.fromBeast
+    return
+  }
+  if (inst.fleeHold > 0 || gain >= (inst.fleeing ? -FLEE_DEADBAND : 0)) return
+  inst.dir = -inst.dir
+  inst.fleeHold = FLEE_HOLD
+}
+//
+// How much farther from a point its way on leads than its way back (px:
+// the run's points FLEE_LOOK px each way — round a corner too).
+//
+function gainFrom(inst, p) {
+  const look = FLEE_LOOK * inst.dir
+  const on = Surface.sample(inst.run, inst.s + look, inst.lookOn)
+  const back = Surface.sample(inst.run, inst.s - look, inst.lookBack)
+  return Math.hypot(on.x - p.x, on.y - p.y) - Math.hypot(back.x - p.x, back.y - p.y)
+}
+function isNear(inst, p, r) {
+  return Boolean(p) && Math.hypot(p.x - inst.pos.x, p.y - inst.pos.y) <= r
+}
+//
+// Which of the two it fears is nearer (either may be none).
+//
+function nearer(inst, heroPos, beast) {
+  if (!heroPos || !beast) return heroPos ?? beast
+  return Math.hypot(beast.x - inst.pos.x, beast.y - inst.pos.y) < Math.hypot(heroPos.x - inst.pos.x, heroPos.y - inst.pos.y) ? beast : heroPos
 }
 //
 // How long the hero has stood still (he moved under HERO_STILL px/s);
@@ -1197,38 +1271,101 @@ function stepOn(inst, leg, dt) {
 //
 // Back to front: the far feeler and the far legs (darker), the tail
 // (wagging the harder the faster it runs), the neck, the body, the head,
-// the near feeler, the near legs — a bitten one (held) only as far as it
-// is left: its head, neck and feelers gone, its body cut short, the legs
-// rooted past the cut gone, the cut end closed with flesh.
+// the near feeler, the near legs — of a bitten one (held) only the piece
+// between pieceLo and pieceHi (sheet px from its origin toward the
+// head): its head, neck and feelers only with its front end, its tail
+// only with its hind end, its body cut to the piece, only the legs
+// rooted in it.
 //
 function drawRunner(inst, parts) {
   const t = inst.k.time() + inst.phase
   const hz = inst.speed > 1 ? FEELER_RUN_HZ : FEELER_HZ
-  const whole = inst.bitten < 1
-  const cut = BITTEN_CUTS[Math.min(inst.bitten, BITTEN_CUTS.length - 1)]
-  whole && drawFeeler(inst, parts, FEELERS[0], t * hz)
-  inst.legs.forEach(leg => leg.far && leg.hipX < cut && drawLeg(inst, parts, leg))
+  const lo = inst.pieceLo
+  const hi = inst.pieceHi
+  const headed = hi === Infinity
+  const tailed = lo === -Infinity
+  headed && drawFeeler(inst, parts, FEELERS[0], t * hz)
+  inst.legs.forEach(leg => leg.far && leg.hipX >= lo && leg.hipX < hi && drawLeg(inst, parts, leg))
   const wag = Math.sin(inst.tailPhase * Math.PI * 2) * (TAIL_SWAY + TAIL_RUN_SWAY * runShare(inst)) + TAIL_BEND * inst.bend
-  drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, wag, inst.nearColor)
-  whole && drawNeck(inst, parts.get(NECK.piece))
-  whole ? drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, -BODY_BEND * inst.bend, inst.nearColor) : drawBodyRest(inst, parts.get('runnerBody'), cut)
-  whole && drawPart(inst, parts.get(HEAD.piece), inst.head.x, inst.head.y, HEAD.pivot, 0, inst.nearColor)
-  whole && drawFeeler(inst, parts, FEELERS[1], t * hz)
-  inst.legs.forEach(leg => leg.far || leg.hipX >= cut || drawLeg(inst, parts, leg))
+  tailed && drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, wag, inst.nearColor)
+  headed && drawNeck(inst, parts.get(NECK.piece))
+  headed && tailed ? drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, -BODY_BEND * inst.bend, inst.nearColor) : drawBodyPiece(inst, parts.get('runnerBody'), lo, hi)
+  headed && drawPart(inst, parts.get(HEAD.piece), inst.head.x, inst.head.y, HEAD.pivot, 0, inst.nearColor)
+  headed && drawFeeler(inst, parts, FEELERS[1], t * hz)
+  inst.legs.forEach(leg => leg.far || leg.hipX < lo || leg.hipX >= hi || drawLeg(inst, parts, leg))
 }
 //
-// What is left of a bitten body: its picture from the tail end to the cut
-// (the piece of its atlas cell and where the origin lies in that piece,
-// made once per cut), then the flesh that shows at the cut.
+// A held runner's piece (pieceLo … pieceHi; a whole one's are endless):
+// turned and sized about `at`, the point `back` sheet px behind its
+// body's middle put there; whole again afterwards.
 //
-function drawBodyRest(inst, part, cut) {
+function drawPiece(inst, at, angle, size, back) {
   const k = inst.k
-  const w = ORIGIN.x + cut
-  let rest = inst.rests.get(cut)
-  rest || inst.rests.set(cut, (rest = { quad: { x: part.quad.x, y: part.quad.y, w: part.quad.w * w / part.w, h: part.quad.h }, anchor: k.vec2(ORIGIN.x / w * 2 - 1, ORIGIN.y / part.h * 2 - 1) }))
-  k.drawSprite({ sprite: SPRITE, quad: rest.quad, width: w, height: part.h, pos: inst.v.set(0, 0), anchor: rest.anchor, color: inst.nearColor })
+  const parts = atlasFor.get(k)
+  if (parts && size > 0) {
+    k.pushTransform()
+    k.pushTranslate(inst.v.set(at.x, at.y))
+    k.pushRotate(angle)
+    k.pushScale(inst.v.set(inst.unit * size, inst.unit * size))
+    k.pushTranslate(inst.v.set(back, HELD_UP))
+    drawRunner(inst, parts)
+    k.popTransform()
+  }
+  inst.kick = 0
+  inst.pieceLo = -Infinity
+  inst.pieceHi = Infinity
+}
+//
+// A piece of a bitten body: its picture between the cuts as a strip of
+// rows whose ends follow the cuts' torn lines (made once per piece), then
+// the flesh that shows along each torn end.
+//
+function drawBodyPiece(inst, part, lo, hi) {
+  const k = inst.k
+  const frame = k.getSprite(SPRITE)?.data?.frames?.[0]
+  const x0 = Math.max(-ORIGIN.x, lo)
+  const x1 = Math.min(part.w - ORIGIN.x, hi)
+  if (!frame || x1 <= x0) return
+  const key = x0 * PIECE_KEY + x1
+  let piece = inst.pieces.get(key)
+  piece || inst.pieces.set(key, (piece = buildPiece(k, part, frame.q, x0, x1, tearAt(lo), tearAt(hi))))
+  k.drawPolygon({ pts: piece.pts, uv: piece.uv, indices: piece.indices, tex: frame.tex, color: inst.nearColor })
   inst.flesh ??= getRGB(k, COLOR.flesh)
-  RingDraw.disc(k, cut, -HELD_UP * FLESH_UP, FLESH_RX, FLESH_RY, inst.flesh, 1)
+  piece.fleshLo && k.drawPolygon({ pts: piece.fleshLo, indices: piece.fleshIndices, color: inst.flesh })
+  piece.fleshHi && k.drawPolygon({ pts: piece.fleshHi, indices: piece.fleshIndices, color: inst.flesh })
+}
+//
+// A cut's torn line (null where the body simply ends).
+//
+function tearAt(cut) {
+  return BITTEN_TEARS[BITTEN_CUTS.indexOf(cut)] ?? null
+}
+//
+// A body piece's strip (body-frame px and where each point lies in the
+// atlas page): a pair of points per row, its hind and its front end,
+// each moved by its cut's tear there; the flesh along a torn end is a
+// strip of its own over the rows between the first and the last, from
+// the torn line into the piece.
+//
+function buildPiece(k, part, q, x0, x1, hind, front) {
+  const piece = { pts: [], uv: [], indices: [], fleshLo: hind && [], fleshHi: front && [], fleshIndices: [] }
+  for (let row = 0; row <= TEAR_ROWS; row++) {
+    const y = part.h * row / TEAR_ROWS
+    const v = q.y + q.h * (part.quad.y + part.quad.h * row / TEAR_ROWS)
+    const inner = row > 0 && row < TEAR_ROWS
+    const flesh = FLESH_W * Math.sin(Math.PI * (row - 1) / (TEAR_ROWS - 2))
+    const xa = x0 + (hind?.[row] ?? 0)
+    const xb = x1 + (front?.[row] ?? 0)
+    for (const x of [xa, xb]) {
+      piece.pts.push(k.vec2(x, y - ORIGIN.y))
+      piece.uv.push(k.vec2(q.x + q.w * (part.quad.x + part.quad.w * (ORIGIN.x + x) / part.w), v))
+    }
+    hind && inner && piece.fleshLo.push(k.vec2(xa, y - ORIGIN.y), k.vec2(xa + flesh, y - ORIGIN.y))
+    front && inner && piece.fleshHi.push(k.vec2(xb - flesh, y - ORIGIN.y), k.vec2(xb, y - ORIGIN.y))
+    row && piece.indices.push(row * 2 - 2, row * 2 - 1, row * 2, row * 2 - 1, row * 2 + 1, row * 2)
+  }
+  piece.fleshIndices = piece.indices.slice(0, (TEAR_ROWS - 2) * piece.indices.length / TEAR_ROWS)
+  return piece
 }
 //
 // The neck: its piece NECK.thick times as thick and stretched along its

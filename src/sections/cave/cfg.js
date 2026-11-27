@@ -309,9 +309,12 @@ export const CAVE_CFG = {
     // way through there counts avoid.cost px longer).
     // A meal (eat): the hand brings its prey before the mouth (within
     // `near` px of its place there; not there in carryMost s, it lets the
-    // prey drop), then bites: first firstBite s after it came, then every
-    // biteEvery s, `bites` times in all, chewing on `swallow` s after the
-    // last; it rests `rest` s after the meal.
+    // prey drop), then it eats, `bites` times over: its mouth gapes for
+    // `gape` s while the prey's end is pushed `deep` px into it, its jaws
+    // take `bite` s to close on it, what they took off is chewed for
+    // `chew` s (`inside` px in from the mouth's front, the hand drawn
+    // `back` px back with the rest), then a `pause` s; it rests `rest` s
+    // after the meal.
     //
     sense: {
       touch: {
@@ -323,7 +326,7 @@ export const CAVE_CFG = {
       replanDist: 120,
       waterGap: 2,
       avoid: { radius: 170, time: 25, cost: 900 },
-      eat: { near: 10, carryMost: 6, bites: 3, firstBite: 0.55, biteEvery: 1.1, swallow: 0.6, rest: 1.5 }
+      eat: { near: 10, carryMost: 6, bites: 3, gape: 0.35, bite: 0.45, chew: 1, pause: 0.45, deep: 14, back: 8, inside: 9, rest: 1.5 }
     },
     //
     // Work per second: its body and limbs step simHz times a second (farHz

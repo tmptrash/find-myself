@@ -286,8 +286,28 @@ export function drawHand(inst, arm) {
   const parts = atlasFor.get(inst.k)
   const frame = inst.k.getSprite(SPRITE)?.data?.frames?.[0]
   if (!parts || !frame) return
-  for (let i = 0; i < FINGERS.length; i++) drawFinger(inst, arm, i, parts[`finger${i}`], frame)
+  for (let i = 0; i < FINGERS.length; i++) {
+    const strip = poseFinger(inst, arm, i, parts[`finger${i}`], frame.q)
+    inst.k.drawPolygon({ pts: strip.pts, uv: strip.uv, indices: stripIndices(strip.pts.length), tex: frame.tex, color: inst.color })
+  }
   drawPart(inst, parts.palm, arm.d.wx, arm.d.wy, Math.atan2(arm.d.ay, arm.d.ax), false, 1, 1)
+}
+
+/**
+ * Where a hand's fingers lie as it is drawn now: each finger's middle
+ * line from its root in the palm to its claw's tip (what they close on
+ * is pressed in along these).
+ * @param {Object} inst - Climber instance
+ * @param {Object} arm - Arm
+ * @returns {Array<Array<number>>|null} A line per finger: its points' world x, y in turn (null before the art is loaded)
+ */
+export function clawLines(inst, arm) {
+  const parts = atlasFor.get(inst.k)
+  const frame = inst.k.getSprite(SPRITE)?.data?.frames?.[0]
+  if (!parts || !frame) return null
+  arm.claws ??= []
+  for (let i = 0; i < FINGERS.length; i++) arm.claws[i] = poseFinger(inst, arm, i, parts[`finger${i}`], frame.q).line
+  return arm.claws
 }
 
 /**
@@ -295,19 +315,23 @@ export function drawHand(inst, arm) {
  * jaw opened by the mouth's share. Facing a side (pose.face -1 left … 1
  * right) it is drawn whole; turning round (to pose.want) its face-on
  * picture comes in over the side it had, then the new side over the face,
- * each narrowing a little toward the turn's middle.
+ * each narrowing a little toward the turn's middle. What it has in its
+ * mouth is drawn by `inMouth` over the head and under the lower jaw (so
+ * the jaw shuts over it); while it turns round, over the whole head.
  * @param {Object} inst - Climber instance
+ * @param {((inst: Object) => void)|null} [inMouth] - Draws what is in its mouth
  */
-export function drawHead(inst) {
+export function drawHead(inst, inMouth = null) {
   const parts = atlasFor.get(inst.k)
   if (!parts) return
   const p = inst.pose
   const turn = (p.face * p.want + 1) * HALF
   const front = phase(turn, FRONT_IN)
   const back = phase(turn, FRONT_OUT)
-  front < 1 && drawHeadSide(inst, parts, p.want < 0, 1)
+  front < 1 && drawHeadSide(inst, parts, p.want < 0, 1, front > 0 ? null : inMouth)
   front > 0 && back < 1 && drawHeadFront(inst, parts, front)
-  back > 0 && drawHeadSide(inst, parts, p.want > 0, back)
+  back > 0 && drawHeadSide(inst, parts, p.want > 0, back, null)
+  front > 0 && inMouth?.(inst)
 }
 
 /**
@@ -349,11 +373,13 @@ function halfWidth(arm, u) {
   return HALF_W * girth * (A.taper[0] + (A.taper[1] - A.taper[0]) * u)
 }
 //
-// One side's picture of the head (mirrored or not), with its jaw.
+// One side's picture of the head (mirrored or not), what is in its mouth
+// (inMouth), then its jaw over that.
 //
-function drawHeadSide(inst, parts, mirrored, opacity) {
+function drawHeadSide(inst, parts, mirrored, opacity, inMouth) {
   const p = inst.pose
   drawPart(inst, parts.head, p.x, p.y, p.tilt, mirrored, 1, opacity)
+  inMouth?.(inst)
   const hx = (HINGE.x - HEAD.pivot.x) * HEAD_SCALE * (mirrored ? -1 : 1)
   const hy = (HINGE.y - HEAD.pivot.y) * HEAD_SCALE
   const c = Math.cos(p.tilt)
@@ -419,14 +445,14 @@ function stripIndices(count) {
 // A finger with its claw: its spine laid out again from its root, each
 // piece turned by the bend there (the mean of its ends' bends), the strip
 // across it turned with it; then from the hand's frame (sheet px from the
-// wrist) into the world.
+// wrist) into the world — the strip's points, where they lie in the
+// atlas page (its quad `q`), and the finger's middle line between them.
 //
-function drawFinger(inst, arm, i, part, frame) {
+function poseFinger(inst, arm, i, part, q) {
   const k = inst.k
   const spec = FINGERS[i]
   const rig = rigs[i]
-  const q = frame.q
-  arm.fingers[i] ??= { pts: [], uv: [] }
+  arm.fingers[i] ??= { pts: [], uv: [], line: [] }
   const out = arm.fingers[i]
   let x = rig.points[0].x - WRIST.x
   let y = rig.points[0].y - WRIST.y
@@ -449,8 +475,10 @@ function drawFinger(inst, arm, i, part, frame) {
     out.pts[at + 1] = toWorld(arm, x - nx, y - ny, out.pts[at + 1] ?? k.vec2(0, 0))
     out.uv[at] = (out.uv[at] ?? k.vec2(0, 0)).set(q.x + (part.quad.x + p.u1 * part.quad.w) * q.w, q.y + (part.quad.y + p.v1 * part.quad.h) * q.h)
     out.uv[at + 1] = (out.uv[at + 1] ?? k.vec2(0, 0)).set(q.x + (part.quad.x + p.u2 * part.quad.w) * q.w, q.y + (part.quad.y + p.v2 * part.quad.h) * q.h)
+    out.line[at] = (out.pts[at].x + out.pts[at + 1].x) * HALF
+    out.line[at + 1] = (out.pts[at].y + out.pts[at + 1].y) * HALF
   }
-  k.drawPolygon({ pts: out.pts, uv: out.uv, indices: stripIndices(out.pts.length), tex: frame.tex, color: inst.color })
+  return out
 }
 //
 // A point of the hand's frame (sheet px from the wrist) in the world.

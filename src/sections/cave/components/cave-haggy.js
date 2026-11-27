@@ -41,9 +41,11 @@ import * as Look from './cave-haggy-draw.js'
 //   wall or a ceiling alike — and it stalks to where that was, creeping
 //   there low and slow, its mouth a little open.
 // - A meal: the hand brings the prey before its mouth (round whatever lies
-//   between, drawn in along its own limb), presses it there and holds
-//   still; only then it bites, a few times over, chewing in between. While
-//   it eats it minds nothing else, whatever touches it.
+//   between, drawn in along its own limb) and holds it there; only then
+//   it eats — pushes it into its gaping mouth, bites slowly through,
+//   chews what it took off, swallows, pauses, and again, a few times
+//   over (the level hears its jaws: ctx.onJaws). While it eats it minds
+//   nothing else, whatever touches it.
 // The simulation runs in fixed steps (perf.simHz; farHz off screen), the
 // drawing eases between the last two steps; plans are made at perf.planHz.
 // Nothing is allocated per frame.
@@ -248,7 +250,9 @@ const MOUTH_WIDE = 1
 const MOUTH_WIDE_HOLD = 0.6
 //
 // Touch. Up to MAX_BEINGS living things are told to it (how fast each
-// moves is followed from frame to frame, eased at SPEED_EASE per s).
+// moves is followed from frame to frame, eased at SPEED_EASE per s); its
+// part nearest a thing is looked for at every NEAR_EVERY-th point of its
+// limbs.
 // Prey within touch.reach px of a hand — its palm and fingers, from the
 // wrist to HAND_SPAN of the way to the claws' tips — is caught; within
 // the limb's radius of a limb's chain, or touching the head (or a hand
@@ -268,22 +272,31 @@ const MOUTH_WIDE_HOLD = 0.6
 // in along its own limb first while something hard lies between (as a
 // caught limb is). There the hand is pressed to the mouth and keeps
 // still (the head's bob stills too, at STILL_RATE per s). Only there it
-// eats: the mouth gapes GAPE s before a bite and snaps shut BITE_SNAP s
-// before it; between bites it chews (CHEW_OPEN of its gape, CHEW_HZ). A
-// runner kicks until its first bite, then goes still over KICK_FADE s.
+// eats, one PHASE after another, eat.bites times over: its mouth gapes
+// (to MOUTH_GAPE) while the hand pushes the prey's end eat.deep px into
+// it (eat.gape s); its jaws close on it slowly (eat.bite s — the bite is
+// heard all that while); what they took off stays in the mouth and is
+// chewed (eat.chew s: the jaw working between CHEW_SHUT and CHEW_OPEN at
+// CHEW_HZ, each chew heard CHEW_LOUD as loud), the hand drawn eat.back
+// px back with what is left; swallowed, a pause (eat.pause s), mouth
+// shut. A runner kicks until its first bite, then goes still over
+// KICK_FADE s.
 //
 const MAX_BEINGS = 48
 const SPEED_EASE = 12
+const NEAR_EVERY = 2
 const HAND_SPAN = 0.8
 const STRIKE_REACH = 0.9
 const STRIKE_TIME = 0.2
 const STRIKE_PAST = 8
 const STRIKE_GAP = 0.6
 const HOLD_AT = 0.45
-const GAPE = 0.3
-const BITE_SNAP = 0.12
-const CHEW_OPEN = 0.3
-const CHEW_HZ = 3.5
+const PHASE = { GAPE: 0, BITE: 1, CHEW: 2, PAUSE: 3 }
+const MOUTH_GAPE = 1.5
+const CHEW_OPEN = 0.6
+const CHEW_SHUT = 0.08
+const CHEW_HZ = 3
+const CHEW_LOUD = 0.45
 const STILL_RATE = 4
 const CARRY_TURN = 7
 const APPROACH = [[1, 0], [Math.SQRT1_2, Math.SQRT1_2], [0, 1]]
@@ -350,7 +363,8 @@ export function create(cfg) {
     beingVy: new Float32Array(MAX_BEINGS),
     beingSeen: new Uint8Array(MAX_BEINGS),
     target: { x: 0, y: 0, at: -Infinity },
-    meal: { arm: null, prey: null, t: 0, bites: 0, biteIn: 0, biting: false, done: false, kick: 0, way: 0, turned: false },
+    meal: { arm: null, prey: null, t: 0, bites: 0, phase: PHASE.GAPE, left: 0, chews: 0, biting: false, done: false, kick: 0, way: 0, turned: false },
+    heldDraw: null,
     strikeAt: 0,
     still: 0,
     crouch: 0,
@@ -414,9 +428,10 @@ export function create(cfg) {
  * @param {{left: number, top: number, right: number, bottom: number}} ctx.view - Visible world rect
  * @param {Array<{x: number, y: number}>} ctx.prey - Small prey its claws may snatch (the fireflies)
  * @param {Function} ctx.onEat - Called with a small prey it snatched
- * @param {Array<{x: number, y: number, r: number, live: boolean, prey: Object|null}>} ctx.beings - The living things about (their bodies' middles and radii; live: about right now; prey: what the level knows it by — its `ahead`: how far it reaches on from where it is gripped, px — null for what it cannot eat): what it may touch
+ * @param {Array<{x: number, y: number, r: number, live: boolean, prey: Object|null}>} ctx.beings - The living things about (their bodies' middles and radii; live: about right now; prey: what the level knows it by — its `ahead`: how far it reaches on from where it is gripped, px; `mouthful`: small enough to be pushed into the mouth — null for what it cannot eat): what it may touch
  * @param {(prey: Object) => void} ctx.onSeize - A hand has caught this prey: it is the climber's now (gone from the world, drawn in the hand)
- * @param {(prey: Object, bites: number, x: number, y: number) => boolean} ctx.onBite - It has bitten its prey (for the bites-th time, at that world point); false once nothing is left of it
+ * @param {(prey: Object, strength: number, x: number, y: number) => void} ctx.onJaws - Its jaws work on its prey there: 1 as they start to close for a bite (the bite takes eat.bite s), less for a chew
+ * @param {(prey: Object, bites: number, x: number, y: number) => boolean} ctx.onBite - Its jaws have closed: it has bitten its prey through (for the bites-th time, at that world point); false once nothing is left of it
  * @param {(prey: Object, x: number, y: number) => void} ctx.onDrop - It could not bring its prey to its mouth and let it drop there
  */
 export function onUpdate(inst, ctx) {
@@ -442,21 +457,51 @@ export function onUpdate(inst, ctx) {
 }
 
 /**
- * Draws the climber: its limbs with their buttons, its hands, its head —
- * and over the head the prey a hand holds, with that hand over it (its
- * fingers round the prey): what it eats is seen in front of its face.
+ * Draws the climber: its limbs with their buttons, its hands, its head,
+ * the prey a hand holds and that hand over it (its fingers round the
+ * prey). A mouthful (prey.mouthful: a runner) is drawn inside the mouth —
+ * over the head, under the lower jaw: what the jaws took off it, being
+ * chewed, and what the hand holds of it; other prey (the hero) in front
+ * of the whole head.
  * @param {Object} inst - Climber instance
- * @param {(prey: Object, at: {x: number, y: number}, angle: number, bites: number, kick: number) => void} drawHeld - Draws the prey in its hand: at that world point, the hand turned `angle` degrees, after so many bites, kicking that hard (0 … 1)
+ * @param {(prey: Object, at: {x: number, y: number}, angle: number, bites: number, kick: number, chew: number, claws: Array<Array<number>>|null) => void} drawHeld - Draws the prey: at that world point, turned `angle` degrees (the hand's turn), after so many bites, kicking that hard (0 … 1); chew below 0: what is left of it in the hand, `claws` the fingers closed on it (a line each: its points' world x, y in turn); 0 … 1: the piece the last bite took, so far chewed
  */
 export function onDraw(inst, drawHeld) {
   if (!inst.visible) return
+  const meal = inst.meal
+  inst.heldDraw = drawHeld
   for (let i = 0; i < inst.arms.length; i++) Look.drawArm(inst, inst.arms[i])
   for (let i = 0; i < inst.arms.length; i++) Look.drawButtons(inst, inst.arms[i])
-  for (let i = 0; i < inst.arms.length; i++) inst.arms[i] === inst.meal.arm || Look.drawHand(inst, inst.arms[i])
-  Look.drawHead(inst)
-  if (!inst.meal.arm) return
-  drawMeal(inst, drawHeld)
-  Look.drawHand(inst, inst.meal.arm)
+  for (let i = 0; i < inst.arms.length; i++) inst.arms[i] === meal.arm || Look.drawHand(inst, inst.arms[i])
+  Look.drawHead(inst, meal.arm && meal.prey.mouthful ? drawMeal : null)
+  if (!meal.arm) return
+  meal.prey.mouthful || drawMeal(inst)
+  Look.drawHand(inst, meal.arm)
+}
+
+/**
+ * The climber's part nearest a point — its head or a point along one of
+ * its limbs (what a small thing about fears, as it fears the hero).
+ * @param {Object} inst - Climber instance
+ * @param {{x: number, y: number}} to - World point
+ * @param {{x: number, y: number}} out - Written: that part's place
+ * @returns {{x: number, y: number}} out
+ */
+export function nearestTo(inst, to, out) {
+  out.x = inst.body.x
+  out.y = inst.body.y
+  let best = vecLen(to.x - out.x, to.y - out.y)
+  for (let i = 0; i < inst.arms.length; i++) {
+    const arm = inst.arms[i]
+    for (let j = NEAR_EVERY; j <= SEGS; j += NEAR_EVERY) {
+      const d = vecLen(to.x - arm.x[j], to.y - arm.y[j])
+      if (d >= best) continue
+      best = d
+      out.x = arm.x[j]
+      out.y = arm.y[j]
+    }
+  }
+  return out
 }
 //
 // A limb: its state and the time in it, when it took its hold; the side
@@ -2064,7 +2109,8 @@ function seize(inst, arm, b) {
   meal.prey = b.prey
   meal.t = 0
   meal.bites = 0
-  meal.biteIn = EAT.firstBite
+  meal.phase = PHASE.GAPE
+  meal.left = EAT.gape
   meal.biting = false
   meal.done = false
   meal.kick = 1
@@ -2140,7 +2186,9 @@ function carryPrey(inst, arm, px, py, dt) {
   meal.kick = meal.bites ? Math.max(0, meal.kick - dt / KICK_FADE) : 1
   if (arm.drag) return
   const left = Math.max(0, 1 - meal.bites / EAT.bites)
-  const off = inst.hand.palm + inst.hand.finger * HOLD_AT + (meal.prey.ahead ?? 0) * left
+  const reach = inst.hand.palm + inst.hand.finger * HOLD_AT + (meal.prey.ahead ?? 0) * left
+  const pushed = meal.biting && meal.phase <= PHASE.BITE
+  const off = reach + (pushed ? (meal.prey.mouthful ? -EAT.deep : 0) : EAT.back)
   meal.biting || approach(inst, off)
   const spot = handSpot(inst, off, inst.ideal)
   turnAxis(arm, -inst.aim.ax, -inst.aim.ay, CARRY_TURN * dt)
@@ -2203,24 +2251,75 @@ function handSpot(inst, off, out) {
   return out
 }
 //
-// Eating, the hand at the mouth: the mouth gapes GAPE s before a bite,
-// snaps shut BITE_SNAP s before it, and chews in between; a bite every
-// eat.biteEvery s (the first eat.firstBite s after the hand came). After
-// the last bite — or with nothing left of the prey — it chews on for
-// eat.swallow s, and the meal is over.
+// Eating, the hand at the mouth: the meal's phase runs on, and at its
+// end the next one starts (see PHASE and the phases below).
 //
 function eat(inst, arm, dt) {
   const meal = inst.meal
-  meal.biteIn -= dt
-  const chew = meal.bites ? CHEW_OPEN * (HALF + HALF * Math.sin(inst.time * CHEW_HZ * FULL_TURN)) : MOUTH_WIDE
-  inst.mouthWant = meal.done ? chew : meal.biteIn <= BITE_SNAP ? 0 : meal.biteIn <= GAPE ? MOUTH_WIDE : chew
-  if (meal.biteIn > 0) return
-  if (meal.done) return endMeal(inst)
-  meal.bites++
+  meal.left -= dt
+  if (meal.phase === PHASE.GAPE) gape(inst, arm)
+  else if (meal.phase === PHASE.BITE) chomp(inst, arm)
+  else if (meal.phase === PHASE.CHEW) chew(inst, arm)
+  else pause(inst)
+}
+//
+// The mouth gapes while the hand pushes the prey in; then the jaws start
+// to close on it (heard from now on, the whole bite long).
+//
+function gape(inst, arm) {
+  const meal = inst.meal
+  inst.mouthWant = MOUTH_GAPE
+  if (meal.left > 0) return
+  meal.phase = PHASE.BITE
+  meal.left = EAT.bite
+  inst.ctx.onJaws(meal.prey, 1, arm.wx, arm.wy)
+}
+//
+// The jaws close slowly; shut, they have bitten the prey through: only
+// now is less of it left in the hand (the level is told), and what they
+// took off is in the mouth to be chewed — or, with nothing left of the
+// prey at all (the hero), there is nothing to chew.
+//
+function chomp(inst, arm) {
+  const meal = inst.meal
+  inst.mouthWant = MOUTH_GAPE * Math.max(0, meal.left / EAT.bite)
+  if (meal.left > 0) return
   const hold = inst.hand.palm + inst.hand.finger * HOLD_AT
+  meal.bites++
   const more = inst.ctx.onBite(meal.prey, meal.bites, arm.wx + arm.ax * hold, arm.wy + arm.ay * hold)
   meal.done = !more || meal.bites >= EAT.bites
-  meal.biteIn = meal.done ? EAT.swallow : EAT.biteEvery
+  meal.phase = more ? PHASE.CHEW : PHASE.PAUSE
+  meal.left = more ? EAT.chew : EAT.pause
+  meal.chews = 0
+}
+//
+// Chewing what is in the mouth: the jaw works open and shut, each chew
+// heard; then it is swallowed.
+//
+function chew(inst, arm) {
+  const meal = inst.meal
+  const t = EAT.chew - meal.left
+  const chews = Math.floor(t * CHEW_HZ)
+  inst.mouthWant = CHEW_SHUT + (CHEW_OPEN - CHEW_SHUT) * (HALF - HALF * Math.cos(t * CHEW_HZ * FULL_TURN))
+  if (chews > meal.chews) {
+    meal.chews = chews
+    inst.ctx.onJaws(meal.prey, CHEW_LOUD, arm.wx, arm.wy)
+  }
+  if (meal.left > 0) return
+  meal.phase = PHASE.PAUSE
+  meal.left = EAT.pause
+}
+//
+// A pause, its mouth shut; then the next bite — or, the prey eaten, the
+// meal is over.
+//
+function pause(inst) {
+  const meal = inst.meal
+  inst.mouthWant = 0
+  if (meal.left > 0) return
+  if (meal.done) return endMeal(inst)
+  meal.phase = PHASE.GAPE
+  meal.left = EAT.gape
 }
 //
 // The meal is over: the hand lets go and hangs free, the mouth shuts, and
@@ -2237,16 +2336,27 @@ function endMeal(inst) {
   inst.restFor = EAT.rest
 }
 //
-// The prey in the meal's hand, as the level draws it: HOLD_AT along the
-// drawn hand's fingers, with the hand's turn (degrees); gone once the
-// last bite has taken it.
+// The meal as the level draws it (inst.heldDraw): the piece the last bite
+// took off, in the mouth while it is chewed — eat.inside px in from the
+// mouth's front as the head is drawn — and what the hand still holds,
+// HOLD_AT along the drawn hand's fingers, with where those fingers lie
+// on it; both with the hand's turn (degrees).
 //
-function drawMeal(inst, drawHeld) {
+function drawMeal(inst) {
   const meal = inst.meal
-  if (meal.done) return
   const d = meal.arm.d
+  const p = inst.pose
+  const turn = Math.atan2(d.ay, d.ax) * DEG
+  const side = p.face < 0 ? -1 : 1
   const hold = inst.hand.palm + inst.hand.finger * HOLD_AT
+  if (meal.biting && meal.phase === PHASE.CHEW) {
+    const fx = (Look.MOUTH_AT.x - EAT.inside) * side
+    inst.ideal.x = p.x + fx * Math.cos(p.tilt) - Look.MOUTH_AT.y * Math.sin(p.tilt)
+    inst.ideal.y = p.y + fx * Math.sin(p.tilt) + Look.MOUTH_AT.y * Math.cos(p.tilt)
+    inst.heldDraw(meal.prey, inst.ideal, turn, meal.bites, 0, 1 - meal.left / EAT.chew, null)
+  }
+  if (meal.done || meal.bites >= EAT.bites) return
   inst.ideal.x = d.wx + d.ax * hold
   inst.ideal.y = d.wy + d.ay * hold
-  drawHeld(meal.prey, inst.ideal, Math.atan2(d.ay, d.ax) * DEG, meal.bites, meal.kick)
+  inst.heldDraw(meal.prey, inst.ideal, turn, meal.bites, meal.kick, -1, Look.clawLines(inst, meal.arm))
 }

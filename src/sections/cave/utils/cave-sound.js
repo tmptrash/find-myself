@@ -191,33 +191,30 @@ const BITE_RIP_LP = 700
 const BITE_RIP_TIME = 0.018
 const BITE_RIP_SHARE = 0.7
 //
-// The climber's bite into a runner — slimy: a wet squelch (a band of
-// noise, SLIME_Q narrow, sliding up from SLIME_F0 to SLIME_F1 Hz as it
-// swells in over SLIME_ATTACK s, gone by SLIME_TIME s), the slime drawn
-// out after it (SLIME_LAG s later, sliding back down to SLIME_F2 Hz over
-// SLIME_PULL s, SLIME_PULL_SHARE as loud) and SLIME_POPS sticky bubbles
-// bursting within SLIME_POP_SPREAD s (rings of SLIME_POP_PITCH … twice
-// that Hz gliding up SLIME_POP_GLIDE times, SLIME_POP_TAU s, SLIME_POP_SHARE
-// as loud), over a soft thud of the jaws (SLIME_THUD_SHARE of a flesh
-// bite's).
+// The climber's jaws on a runner — a soft crunch, a shell giving way in
+// a mouth, not a row of dry ticks: the body squashed (brown noise under
+// CRUNCH_SQUASH_LP Hz, swelling in with no click, as long as the jaws
+// take and never under CRUNCH_SQUASH_MIN s, CRUNCH_SQUASH_SHARE as loud)
+// and a few dull cracks in it — CRUNCH_CRACKS of them (never fewer than
+// CRUNCH_MIN_CRACKS: a chew) at uneven moments, crowded toward the bite's
+// start, each a band of noise about CRUNCH_BAND … CRUNCH_BAND_RANGE more
+// of it Hz sliding down to CRUNCH_FALL of that (CRUNCH_Q wide), swelling
+// in over CRUNCH_ATTACK s and gone by CRUNCH_TIME s, CRUNCH_FADE … 1 as
+// loud, at random.
 //
-const SLIME_GAIN = 0.55
-const SLIME_Q = 2.4
-const SLIME_F0 = 380
-const SLIME_F1 = 1250
-const SLIME_ATTACK = 0.035
-const SLIME_TIME = 0.17
-const SLIME_LAG = 0.07
-const SLIME_F2 = 300
-const SLIME_PULL = 0.3
-const SLIME_PULL_SHARE = 0.8
-const SLIME_POPS = 4
-const SLIME_POP_SPREAD = 0.26
-const SLIME_POP_PITCH = 210
-const SLIME_POP_GLIDE = 2.2
-const SLIME_POP_TAU = 0.03
-const SLIME_POP_SHARE = 0.7
-const SLIME_THUD_SHARE = 0.5
+const CRUNCH_GAIN = 0.5
+const CRUNCH_SQUASH_LP = 650
+const CRUNCH_SQUASH_MIN = 0.12
+const CRUNCH_SQUASH_SHARE = 1.3
+const CRUNCH_CRACKS = 4
+const CRUNCH_MIN_CRACKS = 2
+const CRUNCH_BAND = 800
+const CRUNCH_BAND_RANGE = 0.9
+const CRUNCH_FALL = 0.5
+const CRUNCH_Q = 0.9
+const CRUNCH_ATTACK = 0.006
+const CRUNCH_TIME = 0.075
+const CRUNCH_FADE = 0.45
 //
 // A bubble popping on the lake's surface: a tiny wet "plip" — a sine
 // sliding up BUBBLE_RISE times over BUBBLE_TIME s from BUBBLE_FREQ (for a
@@ -487,19 +484,25 @@ export function playBite(inst, near) {
 }
 
 /**
- * The climber biting into a runner: a wet squelch, the slime drawn out
- * after it and a few sticky bubbles bursting.
+ * The climber's jaws crunching a runner: its body squashed and a few
+ * dull cracks of its shell within `time` s — a whole bite, or (strength
+ * under 1) a chew: fewer cracks, quieter.
  * @param {Object} inst - Cave sound instance
  * @param {number} near - 1 by the hero, falling off with distance
+ * @param {number} strength - 1: a bite; less: a chew
+ * @param {number} time - How long the jaws take (s)
  */
-export function playSlimeBite(inst, near) {
+export function playCrunch(inst, near, strength, time) {
   if (!ready(inst) || near <= 0) return
-  const at = inst.ctx.currentTime
-  const gain = SLIME_GAIN * near
-  softBurst(inst, inst.brown, at, 'lowpass', BITE_THUD_LP, 1, BITE_THUD_TIME, gain * SLIME_THUD_SHARE)
-  sweep(inst, inst.white, at, 'bandpass', SLIME_F0, SLIME_F1, SLIME_Q, SLIME_ATTACK, SLIME_TIME, gain)
-  sweep(inst, inst.white, at + SLIME_LAG, 'bandpass', SLIME_F1, SLIME_F2, SLIME_Q, SLIME_ATTACK, SLIME_PULL, gain * SLIME_PULL_SHARE)
-  for (let i = 0; i < SLIME_POPS; i++) dropRing(inst, at + Math.random() * SLIME_POP_SPREAD, SLIME_POP_PITCH * (1 + Math.random()), SLIME_POP_GLIDE, SLIME_POP_TAU, gain * SLIME_POP_SHARE, inst.out)
+  const now = inst.ctx.currentTime
+  const gain = CRUNCH_GAIN * near * strength
+  const cracks = Math.max(CRUNCH_MIN_CRACKS, Math.round(CRUNCH_CRACKS * strength))
+  softBurst(inst, inst.brown, now, 'lowpass', CRUNCH_SQUASH_LP, 1, Math.max(CRUNCH_SQUASH_MIN, time), gain * CRUNCH_SQUASH_SHARE)
+  for (let i = 0; i < cracks; i++) {
+    const band = CRUNCH_BAND * (1 + Math.random() * CRUNCH_BAND_RANGE)
+    const loud = CRUNCH_FADE + Math.random() * (1 - CRUNCH_FADE)
+    sweep(inst, inst.white, now + Math.random() * Math.random() * time, 'bandpass', band, band * CRUNCH_FALL, CRUNCH_Q, CRUNCH_ATTACK, CRUNCH_TIME, gain * loud)
+  }
 }
 
 /**

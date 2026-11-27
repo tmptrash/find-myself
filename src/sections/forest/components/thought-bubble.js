@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as RingDraw from '../../../utils/ring-draw.js'
 import { loadPictureImage } from '../utils/forest-picture.js'
 import { applyForestFilmGrainToCanvas } from '../utils/forest-parallax-grain.js'
 import { FOREST_PAL } from '../utils/forest-palette.js'
@@ -43,7 +44,8 @@ const BOB_SEC = 2.4
 // and rising FIREFLY_RISE px/s. It shines full for the first FIREFLY_FADE_AT
 // of its life (FIREFLY_LIFE_MIN..+RANGE seconds), then fades out gradually.
 // Each is FIREFLY_R_MIN..+RANGE px, with a glow FIREFLY_GLOW times as wide
-// and FIREFLY_GLOW_ALPHA as strong, twinkling at FIREFLY_TWINKLE_HZ.
+// and FIREFLY_GLOW_ALPHA as strong, twinkling at FIREFLY_TWINKLE_HZ
+// (FIREFLY_TWINKLE_SWING either way of FIREFLY_TWINKLE_BASE of its light).
 //
 const BLAST_SEC = 0.2
 const BLAST_SCALE = 1.35
@@ -65,6 +67,8 @@ const FIREFLY_GLOW_ALPHA = 0.25
 const FIREFLY_DRIFT = 12
 const FIREFLY_RISE = 4
 const FIREFLY_TWINKLE_HZ = 2.2
+const FIREFLY_TWINKLE_BASE = 0.6
+const FIREFLY_TWINKLE_SWING = 0.4
 const FIREFLY_LIFE_MIN = 2.4
 const FIREFLY_LIFE_RANGE = 1.8
 const BODY_MID_X = (BODY_X1 + BODY_X2) / 2
@@ -310,16 +314,20 @@ function drawBubble(inst) {
 }
 //
 // Each firefly: a soft glow round a bright core, twinkling as it fades.
+// Drawn as ready discs (utils/ring-draw.js): Kaplay's drawCircle builds a
+// new polygon per call, and two hundred of them a frame cost close to a
+// megabyte of garbage every frame the fireflies were out.
 //
 function drawFireflies(inst) {
   const { k, color } = inst
-  inst.fireflies.forEach(fly => {
-    const twinkle = 0.6 + 0.4 * Math.sin(fly.phase + fly.age * FIREFLY_TWINKLE_HZ * Math.PI * 2)
+  for (let i = 0; i < inst.fireflies.length; i++) {
+    const fly = inst.fireflies[i]
+    const twinkle = FIREFLY_TWINKLE_BASE + FIREFLY_TWINKLE_SWING * Math.sin(fly.phase + fly.age * FIREFLY_TWINKLE_HZ * Math.PI * 2)
     const fade = Math.max(0, (fly.age / fly.life - FIREFLY_FADE_AT) / (1 - FIREFLY_FADE_AT))
     const opacity = (1 - fade * fade) * twinkle
-    k.drawCircle({ pos: fly.pos, radius: fly.r * FIREFLY_GLOW, color, opacity: opacity * FIREFLY_GLOW_ALPHA })
-    k.drawCircle({ pos: fly.pos, radius: fly.r, color, opacity })
-  })
+    RingDraw.disc(k, fly.pos.x, fly.pos.y, fly.r * FIREFLY_GLOW, fly.r * FIREFLY_GLOW, color, opacity * FIREFLY_GLOW_ALPHA)
+    RingDraw.disc(k, fly.pos.x, fly.pos.y, fly.r, fly.r, color, opacity)
+  }
 }
 //
 // The picture scaled down to width × BAKE_RES and grained, once per live k

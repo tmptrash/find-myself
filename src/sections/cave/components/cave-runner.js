@@ -1,4 +1,6 @@
 import { CFG } from '../../../cfg.js'
+import { getRGB } from '../../../utils/helper.js'
+import * as RingDraw from '../../../utils/ring-draw.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
@@ -326,7 +328,15 @@ const HUNT_BAND = 120
 // till it is within GOAL_NEAR px of it or GOAL_TIME s have passed; a spot
 // more than GOAL_FIND px off its run is out of its reach. A held runner is
 // drawn with the middle of its body (HELD_UP sheet px over its hips) at
-// the point it is held by.
+// the point it is held by — or, gripped farther back, with a point so
+// many sheet px behind that at it; kicking, its toes swing KICK_PX sheet
+// px to and fro at KICK_HZ (KICK_UP of that up and down), each leg
+// KICK_PHASE rad on from the one before, the far legs the other way. A
+// bite takes its front off: what is left of it ends BITTEN_CUTS sheet px
+// on from its body's origin toward the head after so many bites (its
+// head, neck and feelers go with the first, every leg rooted past the
+// cut goes too), the cut end closed with a patch of flesh FLESH_RX by
+// FLESH_RY sheet px, FLESH_UP of HELD_UP over the hips.
 //
 const GONE_TIME = 3
 const GONE_TIME_RANGE = 3
@@ -334,6 +344,14 @@ const GOAL_NEAR = 12
 const GOAL_TIME = 25
 const GOAL_FIND = 40
 const HELD_UP = 150
+const KICK_PX = 70
+const KICK_UP = 0.5
+const KICK_HZ = 7
+const KICK_PHASE = 1.9
+const BITTEN_CUTS = [Infinity, 130, -80]
+const FLESH_RX = 20
+const FLESH_RY = 56
+const FLESH_UP = 0.8
 const atlasFor = new WeakMap()
 let atlas = null
 
@@ -406,10 +424,14 @@ export function create(cfg) {
     farColor: k.rgb(far, far, far),
     v: k.vec2(0, 0),
     anchors: new Map(),
+    rests: new Map(),
+    flesh: null,
     tmp: { x: 0, y: 0 },
     hip: { x: 0, y: 0 },
     hipAt: { x: 0, y: 0 },
     goneFor: 0,
+    kick: 0,
+    bitten: 0,
     comeFrom: null,
     toward: null,
     goal: null,
@@ -530,24 +552,33 @@ export function comeFrom(inst, from, to) {
 }
 
 /**
- * Draws the runner held by something (the lurker's jaws): the middle of its
- * body at `at`, turned `angle` degrees, at `size` of its own size.
+ * Draws the runner held by something (the lurker's jaws, the climber's
+ * hand): the middle of its body at `at`, turned `angle` degrees, at `size`
+ * of its own size — kicking its legs, and with what has been bitten off
+ * it gone.
  * @param {Object} inst - Runner instance
  * @param {{x: number, y: number}} at - World point
  * @param {number} angle - Turn (degrees)
  * @param {number} [size=1] - Share of its size (it shrinks as it is eaten)
+ * @param {number} [kick=0] - How hard it kicks its legs (0 … 1)
+ * @param {number} [bitten=0] - Bites taken off its front (each leaves a shorter piece)
+ * @param {number} [back=0] - How far behind its middle it is gripped (sheet px toward the tail): that point is put at `at`
  */
-export function drawHeld(inst, at, angle, size = 1) {
+export function drawHeld(inst, at, angle, size = 1, kick = 0, bitten = 0, back = 0) {
   const k = inst.k
   const parts = atlasFor.get(k)
   if (!parts || size <= 0) return
+  inst.kick = kick
+  inst.bitten = bitten
   k.pushTransform()
   k.pushTranslate(inst.v.set(at.x, at.y))
   k.pushRotate(angle)
   k.pushScale(inst.v.set(inst.unit * size, inst.unit * size))
-  k.pushTranslate(inst.v.set(0, HELD_UP))
+  k.pushTranslate(inst.v.set(back, HELD_UP))
   drawRunner(inst, parts)
   k.popTransform()
+  inst.kick = 0
+  inst.bitten = 0
 }
 
 /**
@@ -1166,20 +1197,38 @@ function stepOn(inst, leg, dt) {
 //
 // Back to front: the far feeler and the far legs (darker), the tail
 // (wagging the harder the faster it runs), the neck, the body, the head,
-// the near feeler, the near legs.
+// the near feeler, the near legs — a bitten one (held) only as far as it
+// is left: its head, neck and feelers gone, its body cut short, the legs
+// rooted past the cut gone, the cut end closed with flesh.
 //
 function drawRunner(inst, parts) {
   const t = inst.k.time() + inst.phase
   const hz = inst.speed > 1 ? FEELER_RUN_HZ : FEELER_HZ
-  drawFeeler(inst, parts, FEELERS[0], t * hz)
-  inst.legs.forEach(leg => leg.far && drawLeg(inst, parts, leg))
+  const whole = inst.bitten < 1
+  const cut = BITTEN_CUTS[Math.min(inst.bitten, BITTEN_CUTS.length - 1)]
+  whole && drawFeeler(inst, parts, FEELERS[0], t * hz)
+  inst.legs.forEach(leg => leg.far && leg.hipX < cut && drawLeg(inst, parts, leg))
   const wag = Math.sin(inst.tailPhase * Math.PI * 2) * (TAIL_SWAY + TAIL_RUN_SWAY * runShare(inst)) + TAIL_BEND * inst.bend
   drawPart(inst, parts.get(TAIL.piece), TAIL.at.x - ORIGIN.x, TAIL.at.y - ORIGIN.y, TAIL.pivot, wag, inst.nearColor)
-  drawNeck(inst, parts.get(NECK.piece))
-  drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, -BODY_BEND * inst.bend, inst.nearColor)
-  drawPart(inst, parts.get(HEAD.piece), inst.head.x, inst.head.y, HEAD.pivot, 0, inst.nearColor)
-  drawFeeler(inst, parts, FEELERS[1], t * hz)
-  inst.legs.forEach(leg => leg.far || drawLeg(inst, parts, leg))
+  whole && drawNeck(inst, parts.get(NECK.piece))
+  whole ? drawPart(inst, parts.get('runnerBody'), 0, 0, ORIGIN, -BODY_BEND * inst.bend, inst.nearColor) : drawBodyRest(inst, parts.get('runnerBody'), cut)
+  whole && drawPart(inst, parts.get(HEAD.piece), inst.head.x, inst.head.y, HEAD.pivot, 0, inst.nearColor)
+  whole && drawFeeler(inst, parts, FEELERS[1], t * hz)
+  inst.legs.forEach(leg => leg.far || leg.hipX >= cut || drawLeg(inst, parts, leg))
+}
+//
+// What is left of a bitten body: its picture from the tail end to the cut
+// (the piece of its atlas cell and where the origin lies in that piece,
+// made once per cut), then the flesh that shows at the cut.
+//
+function drawBodyRest(inst, part, cut) {
+  const k = inst.k
+  const w = ORIGIN.x + cut
+  let rest = inst.rests.get(cut)
+  rest || inst.rests.set(cut, (rest = { quad: { x: part.quad.x, y: part.quad.y, w: part.quad.w * w / part.w, h: part.quad.h }, anchor: k.vec2(ORIGIN.x / w * 2 - 1, ORIGIN.y / part.h * 2 - 1) }))
+  k.drawSprite({ sprite: SPRITE, quad: rest.quad, width: w, height: part.h, pos: inst.v.set(0, 0), anchor: rest.anchor, color: inst.nearColor })
+  inst.flesh ??= getRGB(k, COLOR.flesh)
+  RingDraw.disc(k, cut, -HELD_UP * FLESH_UP, FLESH_RX, FLESH_RY, inst.flesh, 1)
 }
 //
 // The neck: its piece NECK.thick times as thick and stretched along its
@@ -1205,16 +1254,18 @@ function drawFeeler(inst, parts, feeler, cycles) {
   drawPart(inst, parts.get(feeler.piece), x, y, feeler.pivot, angle, feeler.far ? inst.farColor : inst.nearColor)
 }
 //
-// A leg in the body's frame: its toe from its planted foot, its ankle as
-// the foot is painted over it, the knee by IK from the hip; then the foot,
-// the shin, the thigh and the hip ball.
+// A leg in the body's frame: its toe from its planted foot (swung round
+// while it kicks, held), its ankle as the foot is painted over it, the
+// knee by IK from the hip; then the foot, the shin, the thigh and the hip
+// ball.
 //
 function drawLeg(inst, parts, leg) {
   const u = inst.unit
   const rx = leg.foot.x - inst.pos.x
   const ry = leg.foot.y - inst.pos.y
-  const toeX = (rx * inst.f.x + ry * inst.f.y) / u
-  const toeY = (rx * inst.d.x + ry * inst.d.y) / u
+  const kick = inst.kick > 0 ? inst.k.time() * KICK_HZ * Math.PI * 2 + leg.pair * KICK_PHASE + (leg.far ? Math.PI : 0) : 0
+  const toeX = (rx * inst.f.x + ry * inst.f.y) / u + Math.sin(kick) * KICK_PX * inst.kick
+  const toeY = (rx * inst.d.x + ry * inst.d.y) / u + Math.cos(kick) * KICK_PX * KICK_UP * inst.kick
   const foot = FEET[leg.pair]
   const thigh = THIGHS[leg.pair]
   const shin = SHINS[leg.pair]

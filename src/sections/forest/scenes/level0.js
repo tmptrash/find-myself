@@ -833,7 +833,7 @@ const DROWN_RESTART_DELAY = 1.1
 // nearest spot that deep (else the deepest one in reach), looked for
 // every DROWN_DRIFT_STEP px.
 //
-const DROWN_DEEP_ENOUGH = 78
+const DROWN_DEEP_ENOUGH = 60
 const DROWN_MAX_DRIFT = 110
 const DROWN_DRIFT_STEP = 2
 const DROWN_UNDER_RIM = 26
@@ -1091,6 +1091,12 @@ const LAKE_WATER_PAST_ANCHOR = 110
 // this far under an overhang of soil (components/lake.js bankHollow).
 //
 const LAKE_BANK_HOLLOW_PX = 56
+//
+// The right bank's footing reaches this far out over the water past the
+// bank's lip (the hero's half width and a little: he stands on the lip
+// till all of him is past it).
+//
+const LAKE_BANK_STAND_OVER = 20
 const LAKE_Z = 12
 //
 // Lake layers (see components/lake.js): the bed and the algae under the water
@@ -4487,11 +4493,14 @@ function isOverForestWoodSurface(inst, footX, footY) {
 }
 //
 // True when hero feet are inside the lake band at floor level — the whole
-// lake is deep now, drowning applies from the left margin to the shore rocks.
+// lake is deep now, drowning applies from the left margin to the right
+// bank's footing: the bank bears him till his middle is
+// LAKE_BANK_STAND_OVER px out past its lip, so he goes under clear of the
+// lip, all of him left of it (the bank is drawn in front of what sinks).
 //
 function isInWaterZone(inst, x, footY) {
   if (isOnForestLakeDryFooting(inst, x, footY)) return false
-  return x >= inst.lakeX1 && x <= inst.lakeX2 && footY >= FLOOR_Y - 40
+  return x >= inst.lakeX1 && x <= inst.lakeX2 - LAKE_BANK_STAND_OVER && footY >= FLOOR_Y - 40
 }
 //
 // The eye-flower island is the only dry footing inside the lake band.

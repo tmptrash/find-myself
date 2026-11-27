@@ -1,7 +1,6 @@
 import { getRGB, vecLen } from '../../../utils/helper.js'
 import { createSeededRandom } from '../../../utils/seeded-random.js'
 import { CAVE_CFG } from '../cfg.js'
-import * as Layout from '../utils/cave-layout.js'
 import * as Nav from '../utils/cave-haggy-nav.js'
 import * as Solid from '../utils/cave-haggy-solid.js'
 import * as Look from './cave-haggy-draw.js'
@@ -34,8 +33,17 @@ import * as Look from './cave-haggy-draw.js'
 //   one toward the hand (the hand leads as a head does); caught behind
 //   something, it is drawn in from the shoulder and the hand comes after.
 //   No point of it goes into anything hard.
-// - It senses by ultrasound (pulses in a cone from its upper jaw, echoes
-//   off moving things) and by touch (its claws), and hunts what it finds.
+// - It is blind and senses by touch alone. What it can eat — the hero, a
+//   runner — it catches with a hand: whatever its claws touch it seizes
+//   (the level makes the prey gone and draws it in the hand: ctx.onSeize,
+//   ctx.onBite, onDraw's drawHeld). Touched by a limb or by the head, the
+//   prey is only felt: a free hand strikes at it at once — on a floor, a
+//   wall or a ceiling alike — and it stalks to where that was, creeping
+//   there low and slow, its mouth a little open.
+// - A meal: the hand brings the prey before its mouth (round whatever lies
+//   between, drawn in along its own limb), presses it there and holds
+//   still; only then it bites, a few times over, chewing in between. While
+//   it eats it minds nothing else, whatever touches it.
 // The simulation runs in fixed steps (perf.simHz; farHz off screen), the
 // drawing eases between the last two steps; plans are made at perf.planHz.
 // Nothing is allocated per frame.
@@ -46,14 +54,13 @@ const LIMB = C.limb
 const TURN = C.turning
 const GRIP = C.grip
 const SENSE = C.sense
-const SONAR = SENSE.ultrasound
 const PERF = C.perf
 const HEAD = ANAT.head
 const AVOID = SENSE.avoid
-const MOOD = { EXPLORE: 'explore', PURSUE: 'pursue', INVESTIGATE: 'investigate' }
-const MOOD_CFG = { [MOOD.EXPLORE]: C.explore, [MOOD.PURSUE]: C.pursuit, [MOOD.INVESTIGATE]: C.explore }
-const STATE = { HOLD: 'hold', REACH: 'reach', FREE: 'free' }
-const SOURCE = { ULTRASOUND: 'ultrasound', TOUCH: 'touch' }
+const EAT = SENSE.eat
+const MOOD = { EXPLORE: 'explore', STALK: 'stalk', INVESTIGATE: 'investigate' }
+const MOOD_CFG = { [MOOD.EXPLORE]: C.explore, [MOOD.STALK]: C.stalk, [MOOD.INVESTIGATE]: C.explore }
+const STATE = { HOLD: 'hold', REACH: 'reach', FREE: 'free', CARRY: 'carry' }
 //
 // A limb: SEGS pieces; a hold may be HOLD_REACH px from the shoulder when
 // taken and ANCHOR_SLACK of the limb's length before it is let go, never
@@ -217,40 +224,70 @@ const SNAP = 0.5
 //
 // The head's look: it bobs BOB_PX px at BOB_HZ; leans with the way only
 // while it moves (FACE_SPEED px/s or more, eased at MOVE_RATE per s), its
-// tilt a spring of TILT_W rad/s; hunting it turns round PURSUIT_TURN
-// times as long. Its mouth opens to a random share of JAW_OPEN rad every
-// MOUTH_GAP..+RANGE s (PURSUIT_MOUTH times as often, wider, when it
-// hunts), wide when it finds something or snatches; eased at MOUTH_RATE.
+// tilt a spring of TILT_W rad/s. Its mouth opens to a random share of
+// JAW_OPEN rad every MOUTH_GAP..+RANGE s, wide when it snatches a
+// firefly (eased at MOUTH_RATE); stalking it is held STALK_MOUTH open;
+// eating it gapes and snaps shut at BITE_RATE. Stalking, the head comes
+// down toward the surface it creeps on (stalk.crouch px), eased at
+// CROUCH_RATE per s.
 //
 const BOB_PX = 2
 const BOB_HZ = 0.5
 const FACE_SPEED = 6
 const MOVE_RATE = 3
 const TILT_W = 6
-const PURSUIT_TURN = 0.5
 const JAW_OPEN = 0.17
 const MOUTH_GAP = 0.8
 const MOUTH_RANGE = 2.4
 const MOUTH_REST = 0.45
-const PURSUIT_MOUTH = 0.4
+const STALK_MOUTH = 0.3
+const BITE_RATE = 18
+const CROUCH_RATE = 2
 const MOUTH_RATE = 5
 const MOUTH_WIDE = 1
 const MOUTH_WIDE_HOLD = 0.6
 //
-// Senses: a wave's rays are checked for something hard every RAY_STEP px
-// of their way; an echo's way back at ECHO_CHECKS points. Up to
-// MAX_BEINGS living things are followed (how fast each moves, from one
-// plan to the next). A hand that touched a living thing does not report
-// it again for TOUCH_GAP s. After a touch it sends a pulse within
-// TOUCH_PULSE s. A pulse leaves only while the head faces a side squarely
-// (FACING of the way round) and it is not eating.
+// Touch. Up to MAX_BEINGS living things are told to it (how fast each
+// moves is followed from frame to frame, eased at SPEED_EASE per s).
+// Prey within touch.reach px of a hand — its palm and fingers, from the
+// wrist to HAND_SPAN of the way to the claws' tips — is caught; within
+// the limb's radius of a limb's chain, or touching the head (or a hand
+// that cannot let go of its hold), it is only felt. Felt prey is struck
+// at with a free hand at once, wherever it is — on a floor, a wall, a
+// ceiling — if it is within STRIKE_REACH of a limb from that hand's
+// shoulder and a straight way to it is clear: a reach STRIKE_TIME s long
+// for where the prey will be by then, its claws going STRIKE_PAST px
+// past it; then the hand hangs free again, and the next strike comes
+// STRIKE_GAP s later at the soonest. Stalking, it strikes so at the
+// place it last felt its prey.
+// A meal: the prey sits HOLD_AT of the fingers' length out from the
+// palm. The hand brings it to the mouth, its fingers turned toward the
+// mouth (CARRY_TURN rad/s): the prey's far end — its `ahead` px on
+// from the grip, less with every bite — to the mouth's front, from one
+// of the ways in APPROACH ([ahead, down] in the head's own frame); drawn
+// in along its own limb first while something hard lies between (as a
+// caught limb is). There the hand is pressed to the mouth and keeps
+// still (the head's bob stills too, at STILL_RATE per s). Only there it
+// eats: the mouth gapes GAPE s before a bite and snaps shut BITE_SNAP s
+// before it; between bites it chews (CHEW_OPEN of its gape, CHEW_HZ). A
+// runner kicks until its first bite, then goes still over KICK_FADE s.
 //
-const RAY_STEP = 8
-const ECHO_CHECKS = 6
 const MAX_BEINGS = 48
-const TOUCH_GAP = 0.8
-const TOUCH_PULSE = 0.15
-const FACING = 0.9
+const SPEED_EASE = 12
+const HAND_SPAN = 0.8
+const STRIKE_REACH = 0.9
+const STRIKE_TIME = 0.2
+const STRIKE_PAST = 8
+const STRIKE_GAP = 0.6
+const HOLD_AT = 0.45
+const GAPE = 0.3
+const BITE_SNAP = 0.12
+const CHEW_OPEN = 0.3
+const CHEW_HZ = 3.5
+const STILL_RATE = 4
+const CARRY_TURN = 7
+const APPROACH = [[1, 0], [Math.SQRT1_2, Math.SQRT1_2], [0, 1]]
+const KICK_FADE = 0.5
 //
 // It is drawn while within CULL_PAD px of the view; at most MAX_STEPS
 // steps run per frame. A limb's inner points settle onto the chain's as
@@ -267,6 +304,7 @@ const CURVE_CLEAR = 5
 const CURVE_TRIES = 28
 const CURVE_HAND = 2
 const HALF = 0.5
+const DEG = 180 / Math.PI
 const FULL_TURN = Math.PI * 2
 const QUARTER = Math.PI / 2
 //
@@ -304,18 +342,19 @@ export function create(cfg) {
     hand: Look.handMeasures(CURL_GRIP),
     view: null,
     beings: null,
+    mood: MOOD.EXPLORE,
+    ctx: null,
     beingX: new Float32Array(MAX_BEINGS),
     beingY: new Float32Array(MAX_BEINGS),
-    beingSpeed: new Float32Array(MAX_BEINGS).fill(-1),
-    trackedAt: 0,
-    sonar: {
-      pulseIn: C.explore.pulseEvery,
-      pulses: Array.from({ length: SONAR.maxPulses }, () => ({ live: false, x: 0, y: 0, r: 0, dir: 0, cos: new Float32Array(SONAR.rays), sin: new Float32Array(SONAR.rays), ends: new Float32Array(SONAR.rays), seen: new Uint8Array(MAX_BEINGS) })),
-      echoes: Array.from({ length: SONAR.maxEchoes }, () => ({ live: false, x: 0, y: 0, t: 0, dur: 1, being: -1, moving: false, confidence: 0 }))
-    },
-    mood: MOOD.EXPLORE,
-    target: { x: 0, y: 0, at: 0, source: SOURCE.ULTRASOUND, confidence: 0, id: -1, moving: false },
-    scanIn: SONAR.scanEvery[1],
+    beingVx: new Float32Array(MAX_BEINGS),
+    beingVy: new Float32Array(MAX_BEINGS),
+    beingSeen: new Uint8Array(MAX_BEINGS),
+    target: { x: 0, y: 0, at: -Infinity },
+    meal: { arm: null, prey: null, t: 0, bites: 0, biteIn: 0, biting: false, done: false, kick: 0, way: 0, turned: false },
+    strikeAt: 0,
+    still: 0,
+    crouch: 0,
+    lookIn: TURN.lookEvery[1],
     avoid: { x: 0, y: 0, r: 0, cost: AVOID.cost, until: 0 },
     waterAt: -Infinity,
     plannedAt: -Infinity,
@@ -361,7 +400,6 @@ export function create(cfg) {
     visible: false,
     strip: { arm: null, q: null, band: null },
     v: k.vec2(0, 0),
-    v2: k.vec2(0, 0),
     color: getRGB(k, C.tint)
   }
   start && settle(inst, start)
@@ -374,15 +412,20 @@ export function create(cfg) {
  * @param {Object} inst - Climber instance
  * @param {Object} ctx
  * @param {{left: number, top: number, right: number, bottom: number}} ctx.view - Visible world rect
- * @param {Array<{x: number, y: number}>} ctx.prey - Small prey its claws may snatch
- * @param {Function} ctx.onEat - Called with a prey it snatched
- * @param {Array<{x: number, y: number, r: number, live: boolean}>} ctx.beings - The living things about, the hero among them (their bodies' middles and radii; live: about right now): what its ultrasound echoes off and its hands may touch
+ * @param {Array<{x: number, y: number}>} ctx.prey - Small prey its claws may snatch (the fireflies)
+ * @param {Function} ctx.onEat - Called with a small prey it snatched
+ * @param {Array<{x: number, y: number, r: number, live: boolean, prey: Object|null}>} ctx.beings - The living things about (their bodies' middles and radii; live: about right now; prey: what the level knows it by — its `ahead`: how far it reaches on from where it is gripped, px — null for what it cannot eat): what it may touch
+ * @param {(prey: Object) => void} ctx.onSeize - A hand has caught this prey: it is the climber's now (gone from the world, drawn in the hand)
+ * @param {(prey: Object, bites: number, x: number, y: number) => boolean} ctx.onBite - It has bitten its prey (for the bites-th time, at that world point); false once nothing is left of it
+ * @param {(prey: Object, x: number, y: number) => void} ctx.onDrop - It could not bring its prey to its mouth and let it drop there
  */
 export function onUpdate(inst, ctx) {
   if (!inst.path[0]) return
   const dt = inst.k.dt()
   inst.view = ctx.view
   inst.beings = ctx.beings
+  inst.ctx = ctx
+  trackBeings(inst, dt)
   const step = 1 / (isFar(inst, ctx.view) ? PERF.farHz : PERF.simHz)
   inst.simAcc = Math.min(inst.simAcc + dt, step * MAX_STEPS)
   while (inst.simAcc >= step) {
@@ -399,17 +442,21 @@ export function onUpdate(inst, ctx) {
 }
 
 /**
- * Draws the climber: its ultrasound, its limbs with their buttons, its
- * hands, its head.
+ * Draws the climber: its limbs with their buttons, its hands, its head —
+ * and over the head the prey a hand holds, with that hand over it (its
+ * fingers round the prey): what it eats is seen in front of its face.
  * @param {Object} inst - Climber instance
+ * @param {(prey: Object, at: {x: number, y: number}, angle: number, bites: number, kick: number) => void} drawHeld - Draws the prey in its hand: at that world point, the hand turned `angle` degrees, after so many bites, kicking that hard (0 … 1)
  */
-export function onDraw(inst) {
-  Look.drawWaves(inst)
+export function onDraw(inst, drawHeld) {
   if (!inst.visible) return
   for (let i = 0; i < inst.arms.length; i++) Look.drawArm(inst, inst.arms[i])
   for (let i = 0; i < inst.arms.length; i++) Look.drawButtons(inst, inst.arms[i])
-  for (let i = 0; i < inst.arms.length; i++) Look.drawHand(inst, inst.arms[i])
+  for (let i = 0; i < inst.arms.length; i++) inst.arms[i] === inst.meal.arm || Look.drawHand(inst, inst.arms[i])
   Look.drawHead(inst)
+  if (!inst.meal.arm) return
+  drawMeal(inst, drawHeld)
+  Look.drawHand(inst, inst.meal.arm)
 }
 //
 // A limb: its state and the time in it, when it took its hold; the side
@@ -453,6 +500,7 @@ function createArm(i, rng) {
     gvy: new Float32Array(SEGS + 1),
     drag: false,
     dragFor: 0,
+    strike: false,
     seg: REACH_MAX / SEGS,
     swell: 1,
     p: { wx: 0, wy: 0, ax: 0, ay: 1 },
@@ -462,7 +510,6 @@ function createArm(i, rng) {
     reach: { fx: 0, fy: 0, fax: 0, fay: 1, vx: 0, vy: 0, c1x: 0, c1y: 0, c2x: 0, c2y: 0, turn: 0, t: 0, dur: 1 },
     probe: { on: false, a0: 0, a1: 0, t: 0, dur: 1 },
     probeAt: 0,
-    touchAt: 0,
     retryAt: 0,
     snap: 0,
     curl: CURL_FREE,
@@ -517,7 +564,7 @@ function settle(inst, node) {
 //
 // One step: where everything was is kept (for drawing between steps);
 // then its mood, the way it faces, its place on the way, its head, its
-// limbs, its tilt and mouth, its ultrasound.
+// limbs, its tilt and mouth, what it touches.
 //
 function simStep(inst, dt) {
   inst.time += dt
@@ -535,7 +582,7 @@ function simStep(inst, dt) {
   inst.reaching = countState(inst, STATE.REACH)
   updateTilt(inst, dt)
   updateMouth(inst, dt)
-  updateSonar(inst, dt)
+  senseTouch(inst)
 }
 function keepPrev(arm) {
   arm.rx.set(arm.x)
@@ -546,11 +593,13 @@ function keepPrev(arm) {
   arm.p.ay = arm.ay
 }
 //
-// Its mood: a hunt whose prey was not found again for `memory` s ends
+// Its mood: a stalk whose prey was not felt again for `memory` s ends
 // where it is (it feels about there); having felt about it roams again.
+// Stalking it crouches, else it rises again.
 //
 function updateMood(inst, dt) {
-  if (inst.mood === MOOD.PURSUE && inst.time - inst.target.at > SENSE.memory) return arrive(inst)
+  inst.crouch += ((inst.mood === MOOD.STALK ? 1 : 0) - inst.crouch) * Math.min(1, CROUCH_RATE * dt)
+  if (inst.mood === MOOD.STALK && inst.time - inst.target.at > SENSE.memory) return arrive(inst)
   if (inst.mood !== MOOD.INVESTIGATE || inst.restFor > 0) return
   inst.mood = MOOD.EXPLORE
   inst.restFor = dt
@@ -558,29 +607,29 @@ function updateMood(inst, dt) {
 //
 // The way it faces: the side its way runs to (once it has run that way
 // for faceHold s); resting or paused it looks about, to one side and the
-// other (its ultrasound only goes out ahead). It turns round in turnTime
-// s (hunting, quicker).
+// other, every turning.lookEvery s — but not with prey in its hand: it
+// eats facing the way it did. It turns round in turnTime s.
 //
 function updateFacing(inst, dt) {
   const f = inst.frame
-  const quick = inst.mood === MOOD.PURSUE ? PURSUIT_TURN : 1
   inst.faceSide = f.dx > TURN.faceDx ? 1 : f.dx < -TURN.faceDx ? -1 : inst.faceSide
-  if (inst.restFor > 0 || inst.pauseFor > 0) lookAbout(inst, dt)
-  else leadFace(inst, dt, quick)
-  const step = 2 * dt / (TURN.turnTime * quick)
+  if (inst.meal.arm) inst.faceFor = 0
+  else if (inst.restFor > 0 || inst.pauseFor > 0) lookAbout(inst, dt)
+  else leadFace(inst, dt)
+  const step = 2 * dt / TURN.turnTime
   inst.face += Math.max(-step, Math.min(step, inst.faceWant - inst.face))
 }
-function leadFace(inst, dt, quick) {
+function leadFace(inst, dt) {
   inst.faceFor = inst.faceSide !== inst.faceWant ? inst.faceFor + dt : 0
-  if (inst.faceFor < TURN.faceHold * quick) return
+  if (inst.faceFor < TURN.faceHold) return
   inst.faceWant = inst.faceSide
   inst.faceFor = 0
 }
 function lookAbout(inst, dt) {
   inst.faceFor = 0
-  inst.scanIn -= dt
-  if (inst.scanIn > 0) return
-  inst.scanIn = between(inst.rng, SONAR.scanEvery)
+  inst.lookIn -= dt
+  if (inst.lookIn > 0) return
+  inst.lookIn = between(inst.rng, TURN.lookEvery)
   inst.faceWant = -inst.faceWant
 }
 //
@@ -598,7 +647,7 @@ function updateTravel(inst, dt) {
   }
   updatePause(inst, dt)
   const turned = inst.faceSide === inst.faceWant && Math.abs(inst.faceWant - inst.face) < TURNED
-  const free = inst.restFor <= 0 && inst.pauseFor <= 0 && turned
+  const free = inst.restFor <= 0 && inst.pauseFor <= 0 && turned && !inst.meal.arm
   const share = free ? supportShare(inst, m) : 0
   inst.stuckFor = free && share < STUCK_SHARE ? inst.stuckFor + dt : 0
   inst.stuckFor > STUCK && giveUp(inst)
@@ -640,7 +689,7 @@ function supportShare(inst, m) {
 //
 function giveUp(inst) {
   inst.stuckFor = 0
-  if (inst.mood === MOOD.PURSUE) return arrive(inst)
+  if (inst.mood === MOOD.STALK) return arrive(inst)
   const m = MOOD_CFG[inst.mood]
   shun(inst, inst.body.x + inst.frame.dx * m.lead, inst.body.y + inst.frame.dy * m.lead)
   inst.wantWay = true
@@ -688,7 +737,7 @@ function advance(inst, dist) {
   arrive(inst)
 }
 function arrive(inst) {
-  const hunted = inst.mood === MOOD.PURSUE
+  const hunted = inst.mood === MOOD.STALK
   inst.mood = hunted ? MOOD.INVESTIGATE : MOOD.EXPLORE
   inst.restFor = hunted ? SENSE.investigate : REST + inst.rng() * REST_RANGE
 }
@@ -714,6 +763,8 @@ function placeFrame(inst) {
   const nl = vecLen(nx, ny) || 1
   f.nx = nx / nl
   f.ny = ny / nl
+  inst.carrot.x -= f.nx * C.stalk.crouch * inst.crouch
+  inst.carrot.y -= f.ny * C.stalk.crouch * inst.crouch
   f.walk = (u < HALF ? a : b).top
   const dl = vecLen(b.ox - a.ox, b.oy - a.oy)
   if (dl > 1) {
@@ -731,7 +782,7 @@ function placeFrame(inst) {
 // moved replanDist px.
 //
 function planWay(inst) {
-  const hunting = inst.mood === MOOD.PURSUE
+  const hunting = inst.mood === MOOD.STALK
   const moved = vecLen(inst.target.x - inst.plannedTo.x, inst.target.y - inst.plannedTo.y)
   if (hunting && inst.time - inst.plannedAt < SENSE.replanGap && moved < SENSE.replanDist && inst.seg < inst.path.length - 1) return
   inst.wantWay = false
@@ -788,7 +839,7 @@ function moveBody(inst, dt) {
 function standY(inst) {
   const y = inst.carrot.y
   if (!inst.path[inst.seg]?.top || !inst.path[inst.seg + 1]?.top) return y
-  const least = REACH_MAX * C.body.minWalk
+  const least = REACH_MAX * C.body.minWalk - C.stalk.crouch * inst.crouch
   const x = Math.round(inst.body.x) | 0
   for (let d = HEAD.ry; d < least; d += GROUND_STEP) {
     if (isHard(x, Math.round(y + d) | 0)) return y + d - least
@@ -849,9 +900,11 @@ function keepBodyOut(inst) {
 }
 //
 // A limb for one step: its shoulder on the head; its hand where its state
-// takes it — held, swung on its reach, or free (caught behind something:
-// dragged after its limb); its chain between them; how fast the hand
-// went; a free hand turned to lie along its limb; its fingers.
+// takes it — held, swung on its reach, carrying its prey to the mouth, or
+// free (caught behind something: dragged after its limb); its chain
+// between them; how fast the hand went; a free hand — or a caught one —
+// turned to lie along its limb; its fingers (shut on a hold, on prey, on
+// a snatch).
 //
 function moveArm(inst, arm, dt) {
   const px = arm.wx
@@ -862,6 +915,7 @@ function moveArm(inst, arm, dt) {
   markDrag(arm, dt)
   if (arm.state === STATE.HOLD) holdOn(inst, arm, dt)
   else if (arm.state === STATE.REACH) swing(inst, arm, dt)
+  else if (arm.state === STATE.CARRY) carryPrey(inst, arm, px, py, dt)
   else arm.drag || freeHand(inst, arm, px, py, dt)
   flex(arm, dt)
   arm.drag && dragHand(arm)
@@ -869,13 +923,13 @@ function moveArm(inst, arm, dt) {
   const k = v > HAND_SPEED_MAX ? HAND_SPEED_MAX / v : 1
   arm.vx = (arm.wx - px) / dt * k
   arm.vy = (arm.wy - py) / dt * k
-  arm.state === STATE.FREE && pointHand(arm, dt)
-  const curl = arm.state === STATE.HOLD || arm.snap > 0 ? CURL_GRIP : arm.state === STATE.REACH ? CURL_OPEN : CURL_FREE
+  arm.state === STATE.FREE || arm.drag ? pointHand(arm, dt) : null
+  const curl = arm.state === STATE.HOLD || arm.state === STATE.CARRY || arm.snap > 0 ? CURL_GRIP : arm.state === STATE.REACH ? CURL_OPEN : CURL_FREE
   arm.curl += (curl - arm.curl) * Math.min(1, CURL_RATE * dt)
 }
 //
-// Whether a free limb is caught behind something: something hard on the
-// straight line from its shoulder to its hand. Caught, it stays so for
+// Whether a free limb (or one carrying prey) is caught behind something:
+// something hard on the straight line from its shoulder to its hand. Caught, it stays so for
 // DRAG_HOLD s at least and until that way is clear by the limb's whole
 // thickness (so it does not flicker between dragged and free at a
 // ledge's edge). As it is caught its pieces take the length the chain
@@ -883,7 +937,7 @@ function moveArm(inst, arm, dt) {
 // measured by: drawn in to that at once, its hand would jump).
 //
 function markDrag(arm, dt) {
-  if (arm.state !== STATE.FREE) {
+  if (arm.state !== STATE.FREE && arm.state !== STATE.CARRY) {
     arm.drag = false
     return
   }
@@ -953,7 +1007,8 @@ function aimHand(arm, gx, gy, palm, h) {
 // from where the shoulder is now) the way round it set off — the shorter
 // one then; kept to, so the hand never swaps sides half-way as the
 // shoulder moves (r.turn: the whole turn, carried from step to step);
-// there, it takes hold — or, out of reach now, it missed.
+// there, it takes hold — or, out of reach now, it missed; a strike takes
+// no hold: the hand hangs free again.
 //
 function swing(inst, arm, dt) {
   const r = arm.reach
@@ -969,7 +1024,7 @@ function swing(inst, arm, dt) {
   arm.ax = r.fax * Math.cos(r.turn * e) - r.fay * Math.sin(r.turn * e)
   arm.ay = r.fax * Math.sin(r.turn * e) + r.fay * Math.cos(r.turn * e)
   if (r.t < 1) return
-  if (vecLen(to.x - arm.sx, to.y - arm.sy) > REACH_MAX * ANCHOR_SLACK) return release(arm)
+  if (arm.strike || vecLen(to.x - arm.sx, to.y - arm.sy) > REACH_MAX * ANCHOR_SLACK) return release(arm)
   anchorAt(inst, arm, to)
   inst.lastLand = inst.time
   trimHolds(inst, arm)
@@ -1015,6 +1070,9 @@ function freeHand(inst, arm, px, py, dt) {
   const spot = inst.ideal
   arm.probe.on ? probeSpot(arm, dt, spot) : hangPose(inst, arm, spot)
   freeSpot(arm, spot)
+  followSpot(arm, spot, px, py, dt)
+}
+function followSpot(arm, spot, px, py, dt) {
   const pull = FOLLOW_W * FOLLOW_W
   const ax = pull * (spot.x - px) - 2 * FOLLOW_W * arm.vx
   const ay = pull * (spot.y - py) - 2 * FOLLOW_W * arm.vy
@@ -1363,16 +1421,20 @@ function updateTilt(inst, dt) {
   inst.tilt += inst.tiltVel * dt
 }
 //
-// The mouth: a little open, a little shut again, now and then (more often
-// and wider while it hunts).
+// The mouth: a little open, a little shut again, now and then; stalking,
+// held a little open; eating, as the meal has it (gaping, then snapped
+// shut, fast).
 //
 function updateMouth(inst, dt) {
+  if (inst.meal.arm) {
+    inst.mouth += (inst.mouthWant - inst.mouth) * Math.min(1, BITE_RATE * dt)
+    return
+  }
   inst.mouthIn -= dt
-  if (inst.mouthIn <= 0) {
-    const hunting = inst.mood === MOOD.PURSUE
-    const gap = MOUTH_GAP + inst.rng() * MOUTH_RANGE
-    inst.mouthIn = hunting ? gap * PURSUIT_MOUTH : gap
-    inst.mouthWant = inst.mouthWant > 0 ? 0 : inst.rng() * (hunting ? 1 : MOUTH_REST * 2)
+  if (inst.mood === MOOD.STALK && inst.mouthIn <= 0) inst.mouthWant = STALK_MOUTH
+  else if (inst.mouthIn <= 0) {
+    inst.mouthIn = MOUTH_GAP + inst.rng() * MOUTH_RANGE
+    inst.mouthWant = inst.mouthWant > 0 ? 0 : inst.rng() * MOUTH_REST * 2
   }
   inst.mouth += (inst.mouthWant - inst.mouth) * Math.min(1, MOUTH_RATE * dt)
 }
@@ -1381,18 +1443,18 @@ function openWide(inst) {
   inst.mouthIn = MOUTH_WIDE_HOLD
 }
 //
-// The plan, planHz times a second: how fast the living things about move;
-// a new way when one is due; no hold kept that is cut off or out of
-// reach; a step when one is due; the free limbs feeling about; what a
-// free hand's claws touch.
+// The plan, planHz times a second: a new way when one is due; no hold
+// kept that is cut off or out of reach; a step when one is due; the free
+// limbs feeling about, or — stalking — one of them striking at its prey's
+// place (neither with prey in a hand); the water, the holds and the
+// fireflies a free hand's claws touch.
 //
 function planTick(inst, ctx) {
-  trackBeings(inst)
   inst.wantWay && planWay(inst)
   const m = MOOD_CFG[inst.mood]
   dropLostHolds(inst)
   inst.reaching < m.reaches && inst.time - inst.lastLand >= m.stepGap && stepOn(inst, m)
-  maybeProbe(inst)
+  inst.meal.arm || (inst.mood === MOOD.STALK ? strikeAt(inst, inst.target.x, inst.target.y) : maybeProbe(inst))
   for (let i = 0; i < inst.arms.length; i++) feel(inst, inst.arms[i], ctx)
 }
 //
@@ -1631,6 +1693,7 @@ function release(arm) {
 function setState(arm, state) {
   arm.state = state
   arm.stateT = 0
+  arm.strike = false
 }
 function countState(inst, state) {
   let n = 0
@@ -1692,7 +1755,6 @@ function layPath(arm, lift) {
 // then the other.
 //
 function maybeProbe(inst) {
-  if (inst.mood === MOOD.PURSUE) return
   let spare = inst.speed > MOVE_EPS ? 1 : 0
   for (let i = 0; i < inst.arms.length; i++) {
     const arm = inst.arms[i]
@@ -1716,18 +1778,18 @@ function startProbe(inst, arm) {
 }
 //
 // A free or reaching hand's claws (their tips): water they touch makes
-// the hand draw back at once (and it keeps clear of there); a living
-// thing they touch is found; a hold they touch while feeling about is
-// taken; small prey they close on is snatched and eaten.
+// the hand draw back at once (and it keeps clear of there); a hold they
+// touch while feeling about is taken; a firefly they close on is
+// snatched and eaten — neither while it eats: it minds nothing else
+// then. (The living things it touches: senseTouch.)
 //
 function feel(inst, arm, ctx) {
-  if (arm.state === STATE.HOLD) return
+  if (arm.state === STATE.HOLD || arm.state === STATE.CARRY) return
   const tip = inst.hand.palm + inst.hand.finger
   const tx = arm.wx + arm.ax * tip
   const ty = arm.wy + arm.ay * tip
   if (Nav.inWater(Math.round(tx) | 0, Math.round(ty) | 0)) return touchWater(inst, arm)
-  touchBeing(inst, arm, tx, ty)
-  if (arm.state === STATE.REACH) return
+  if (arm.state === STATE.REACH || inst.meal.arm) return
   arm.probe.on && touchHold(inst, arm, tx, ty) && startReach(inst, arm, MOOD_CFG[inst.mood])
   for (let i = 0; i < ctx.prey.length; i++) {
     const prey = ctx.prey[i]
@@ -1741,7 +1803,7 @@ function feel(inst, arm, ctx) {
 // Water under a hand's claws: the hand draws back at once (a reach is
 // given up), and — at most every waterGap s — it stops going that way:
 // the spot is kept clear of by its ways for a while; roaming it takes
-// another way, hunting it gives the chase up there.
+// another way, stalking it gives the stalk up there.
 //
 function touchWater(inst, arm) {
   release(arm)
@@ -1749,27 +1811,7 @@ function touchWater(inst, arm) {
   inst.waterAt = inst.time
   shun(inst, arm.wx, arm.wy)
   if (inst.restFor > 0) return
-  inst.mood === MOOD.PURSUE ? arrive(inst) : (inst.wantWay = true)
-}
-//
-// A living thing's body under a hand's claws (within touch.reach px of
-// it — real contact, no wider sense): it is found right there, moving or
-// still; the hand does not report it again for TOUCH_GAP s, and a pulse
-// goes out at once.
-//
-function touchBeing(inst, arm, x, y) {
-  const beings = inst.beings
-  if (!beings || inst.time < arm.touchAt) return
-  const count = Math.min(beings.length, MAX_BEINGS)
-  for (let j = 0; j < count; j++) {
-    const b = beings[j]
-    const near = b.r + SENSE.touch.reach
-    if (!b.live || Math.abs(b.x - x) > near || Math.abs(b.y - y) > near || vecLen(b.x - x, b.y - y) > near) continue
-    arm.touchAt = inst.time + TOUCH_GAP
-    inst.sonar.pulseIn = Math.min(inst.sonar.pulseIn, TOUCH_PULSE)
-    detect(inst, SOURCE.TOUCH, x, y, 1, j, inst.beingSpeed[j] >= SONAR.moveMin)
-    return
-  }
+  inst.mood === MOOD.STALK ? arrive(inst) : (inst.wantWay = true)
 }
 //
 // A hold right at a feeling hand's claws (within PROBE_FEEL px) that it
@@ -1840,7 +1882,8 @@ function isInView(inst, view) {
 function pose(inst, alpha, dt) {
   const p = inst.pose
   p.x = lerp(inst.prev.x, inst.body.x, alpha)
-  p.y = lerp(inst.prev.y, inst.body.y, alpha) + Math.sin(inst.time * BOB_HZ * FULL_TURN) * BOB_PX
+  inst.still += ((inst.meal.biting ? 1 : 0) - inst.still) * Math.min(1, STILL_RATE * dt)
+  p.y = lerp(inst.prev.y, inst.body.y, alpha) + Math.sin(inst.time * BOB_HZ * FULL_TURN) * BOB_PX * (1 - inst.still)
   p.tilt = lerp(inst.prev.tilt, inst.tilt, alpha)
   p.face = lerp(inst.prev.face, inst.face, alpha)
   p.want = inst.faceWant
@@ -1923,211 +1966,287 @@ function lerp(a, b, t) {
   return a + (b - a) * t
 }
 //
-// Its ultrasound, one step: a new pulse when one is due (from the tip of
-// its upper jaw); every wave in the air spread on; every echo flown on,
-// the ones that are back heard.
+// How fast each living thing about moves (px/s, eased): from where it
+// was a frame ago; one that has just turned up counts as still.
 //
-function updateSonar(inst, dt) {
-  const sonar = inst.sonar
-  sonar.pulseIn -= dt
-  if (sonar.pulseIn <= 0) {
-    sonar.pulseIn = MOOD_CFG[inst.mood].pulseEvery
-    emitPulse(inst)
-  }
-  for (let i = 0; i < sonar.pulses.length; i++) sonar.pulses[i].live && spread(inst, sonar.pulses[i], dt)
-  for (let i = 0; i < sonar.echoes.length; i++) {
-    const echo = sonar.echoes[i]
-    if (!echo.live) continue
-    echo.t += dt
-    if (echo.t < echo.dur) continue
-    echo.live = false
-    hearEcho(inst, echo)
-  }
-}
-//
-// The tip of its upper jaw: where a pulse leaves and an echo is heard.
-//
-function jawTip(inst, out) {
-  const c = Math.cos(inst.tilt)
-  const s = Math.sin(inst.tilt)
-  const fx = Look.JAW_TIP.x * inst.face
-  out.x = inst.body.x + fx * c - Look.JAW_TIP.y * s
-  out.y = inst.body.y + fx * s + Look.JAW_TIP.y * c
-  return out
-}
-//
-// A new pulse (if fewer than maxPulses are in the air) — only while the
-// head faces a side squarely and it is not eating: its rays fan out
-// across the cone the head faces, nothing behind it; all out, nothing met
-// yet. It keeps the way it was sent: turning the head later only aims the
-// next ones.
-//
-function emitPulse(inst) {
-  if (Math.abs(inst.face) < FACING || isEating(inst)) return
-  const pulses = inst.sonar.pulses
-  for (let i = 0; i < pulses.length; i++) {
-    const p = pulses[i]
-    if (p.live) continue
-    jawTip(inst, inst.ideal)
-    p.x = inst.ideal.x
-    p.y = inst.ideal.y
-    p.r = 0
-    p.dir = inst.face > 0 ? inst.tilt : inst.tilt + Math.PI
-    for (let j = 0; j < SONAR.rays; j++) {
-      const a = p.dir + (j / (SONAR.rays - 1) - HALF) * SONAR.coneAngle
-      p.cos[j] = Math.cos(a)
-      p.sin[j] = Math.sin(a)
-    }
-    p.ends.fill(0)
-    p.seen.fill(0)
-    p.live = true
-    return
-  }
-}
-function isEating(inst) {
-  for (let i = 0; i < inst.arms.length; i++) {
-    if (inst.arms[i].snap > 0) return true
-  }
-  return false
-}
-//
-// A wave spread on for one step: each ray still out goes on to the new
-// radius unless soil or water ends it (some of those show their echo);
-// the living things the wave has just crossed, in the open, send echoes.
-// At its full distance — or with every ray ended — the wave is gone for
-// good: it never turns back, and a wave that met nothing leaves no echo.
-//
-function spread(inst, p, dt) {
-  const from = p.r
-  p.r = Math.min(SONAR.maxDistance, from + SONAR.speed * dt)
-  let out = 0
-  for (let i = 0; i < SONAR.rays; i++) {
-    if (p.ends[i] > 0) continue
-    for (let d = Math.min(p.r, from + RAY_STEP); ; d = Math.min(p.r, d + RAY_STEP)) {
-      const x = p.x + p.cos[i] * d
-      const y = p.y + p.sin[i] * d
-      if (isBlocked(Math.round(x) | 0, Math.round(y) | 0)) {
-        p.ends[i] = d
-        i % SONAR.echoEvery === 0 && addEcho(inst, x, y, d, -1, false)
-        break
-      }
-      if (d >= p.r) break
-    }
-    p.ends[i] === 0 && out++
-  }
-  meetBeings(inst, p, from)
-  p.live = out > 0 && p.r < SONAR.maxDistance
-}
-//
-// Soil, water or the world's edge: where a ray ends and an echo cannot
-// pass.
-//
-function isBlocked(x, y) {
-  if (x < 0 || y < 0 || x > Layout.WORLD_W || y > Layout.WORLD_H) return true
-  return isHard(Math.round(x) | 0, Math.round(y) | 0)
-}
-//
-// The living things a wave has just reached (each once per wave): one
-// inside the wave's cone, on a ray still out — not in the shadow of soil
-// or water — sends an echo from the near side of its body, marked with
-// whether it was moving then (prey: the hero as any other).
-//
-function meetBeings(inst, p, from) {
+function trackBeings(inst, dt) {
   const beings = inst.beings
-  if (!beings) return
+  if (!beings || dt <= 0) return
+  const count = Math.min(beings.length, MAX_BEINGS)
+  const e = Math.min(1, SPEED_EASE * dt)
+  for (let j = 0; j < count; j++) {
+    const b = beings[j]
+    const known = b.live && inst.beingSeen[j]
+    inst.beingVx[j] = known ? inst.beingVx[j] + ((b.x - inst.beingX[j]) / dt - inst.beingVx[j]) * e : 0
+    inst.beingVy[j] = known ? inst.beingVy[j] + ((b.y - inst.beingY[j]) / dt - inst.beingVy[j]) * e : 0
+    inst.beingX[j] = b.x
+    inst.beingY[j] = b.y
+    inst.beingSeen[j] = b.live ? 1 : 0
+  }
+}
+//
+// What it touches, every step — nothing while it eats: it minds only its
+// meal then. Prey a hand is on is caught, by a hand that may let go of
+// what it holds (enough others holding); else, as prey a limb or the
+// head is on, it is felt — and struck at with a free hand.
+//
+function senseTouch(inst) {
+  const beings = inst.beings
+  if (!beings || inst.meal.arm) return
   const count = Math.min(beings.length, MAX_BEINGS)
   for (let j = 0; j < count; j++) {
     const b = beings[j]
-    if (!b.live || p.seen[j]) continue
-    const dx = b.x - p.x
-    const dy = b.y - p.y
-    if (Math.abs(dx) > p.r + b.r || Math.abs(dy) > p.r + b.r) continue
-    const d = vecLen(dx, dy) || 1
-    if (d - b.r > p.r) continue
-    p.seen[j] = 1
-    if (d + b.r < from) continue
-    const off = Math.atan2(dy, dx) - p.dir
-    const turn = off - Math.round(off / FULL_TURN) * FULL_TURN
-    if (Math.abs(turn) > SONAR.coneAngle * HALF) continue
-    const ray = Math.round((turn / SONAR.coneAngle + HALF) * (SONAR.rays - 1))
-    if (p.ends[ray] > 0 && p.ends[ray] < d - b.r) continue
-    addEcho(inst, b.x - dx / d * b.r, b.y - dy / d * b.r, d, j, inst.beingSpeed[j] >= SONAR.moveMin)
+    if (!b.live || !b.prey) continue
+    const arm = handOn(inst, b)
+    if (arm && (arm.state !== STATE.HOLD || inst.anchored - 1 >= GRIP.minSupport)) return seize(inst, arm, b)
+    if (!arm && !limbOn(inst, b) && !headOn(inst, b)) continue
+    notice(inst, b)
+    strikeAt(inst, b.x + inst.beingVx[j] * STRIKE_TIME, b.y + inst.beingVy[j] * STRIKE_TIME)
   }
 }
 //
-// An echo from a point `dist` px out: it flies back at the wave's speed,
-// fainter the farther it comes from. With no room left for it, an echo
-// off a living thing takes the place of one off soil.
+// The hand that is on a living thing: one whose palm and fingers (from
+// its wrist HAND_SPAN of the way to its claws' tips) pass within
+// touch.reach px of the thing's body.
 //
-function addEcho(inst, x, y, dist, being, moving) {
-  const echoes = inst.sonar.echoes
-  let slot = null
-  for (let i = 0; i < echoes.length && !slot; i++) echoes[i].live || (slot = echoes[i])
-  for (let i = 0; i < echoes.length && !slot && being >= 0; i++) echoes[i].being < 0 && (slot = echoes[i])
-  if (!slot) return
-  slot.live = true
-  slot.x = x
-  slot.y = y
-  slot.t = 0
-  slot.dur = dist / SONAR.speed
-  slot.being = being
-  slot.moving = moving
-  slot.confidence = 1 - dist / SONAR.maxDistance
-}
-//
-// An echo is back — if soil or water has not come between it and the jaw
-// (it moved meanwhile). One off soil only shows the cave's shape; one off
-// a living thing that stood still is an obstacle, no prey; one off a
-// thing that moved is prey, at the place the wave met it.
-//
-function hearEcho(inst, echo) {
-  if (echo.being < 0) return
-  jawTip(inst, inst.ideal)
-  for (let i = 1; i < ECHO_CHECKS; i++) {
-    const u = i / ECHO_CHECKS
-    if (isBlocked(Math.round(echo.x + (inst.ideal.x - echo.x) * u) | 0, Math.round(echo.y + (inst.ideal.y - echo.y) * u) | 0)) return
+function handOn(inst, b) {
+  const span = (inst.hand.palm + inst.hand.finger) * HAND_SPAN
+  const near = b.r + SENSE.touch.reach
+  for (let i = 0; i < inst.arms.length; i++) {
+    const arm = inst.arms[i]
+    const along = Math.max(0, Math.min(span, (b.x - arm.wx) * arm.ax + (b.y - arm.wy) * arm.ay))
+    if (vecLen(b.x - arm.wx - arm.ax * along, b.y - arm.wy - arm.ay * along) <= near) return arm
   }
-  echo.moving && detect(inst, SOURCE.ULTRASOUND, echo.x, echo.y, echo.confidence, echo.being, true)
+  return null
 }
 //
-// It has found a living thing — by an echo or by touch, never otherwise:
-// what it knows of its prey is set anew (where, when, how, how surely),
-// its mouth opens, and it rushes toward that place at once — whatever it
-// was doing, by whatever way leads there. Only while it holds to fresher
-// prey is an echo off another thing passed over.
+// Whether a limb lies on a living thing: a point of its chain within the
+// limb's radius of the thing's body.
 //
-function detect(inst, source, x, y, confidence, id, moving) {
-  const t = inst.target
-  const hunting = inst.mood === MOOD.PURSUE
-  if (source === SOURCE.ULTRASOUND && hunting && id !== t.id && inst.time - t.at < SENSE.lock) return
-  t.x = x
-  t.y = y
-  t.at = inst.time
-  t.source = source
-  t.confidence = confidence
-  t.id = id
-  t.moving = moving
-  inst.mood !== MOOD.PURSUE && openWide(inst)
-  inst.mood = MOOD.PURSUE
+function limbOn(inst, b) {
+  const near = b.r + LIMB.radius
+  for (let i = 0; i < inst.arms.length; i++) {
+    const arm = inst.arms[i]
+    for (let j = 1; j < SEGS; j++) {
+      if (Math.abs(arm.x[j] - b.x) <= near && Math.abs(arm.y[j] - b.y) <= near && vecLen(arm.x[j] - b.x, arm.y[j] - b.y) <= near) return true
+    }
+  }
+  return false
+}
+function headOn(inst, b) {
+  return vecLen(b.x - inst.body.x, b.y - inst.body.y) <= HEAD.rx + b.r
+}
+//
+// Prey felt: where it is is noted and it stalks there, whatever it was
+// doing.
+//
+function notice(inst, b) {
+  inst.target.x = b.x
+  inst.target.y = b.y
+  inst.target.at = inst.time
+  inst.mood = MOOD.STALK
   inst.restFor = 0
   inst.pauseFor = 0
   inst.wantWay = true
 }
 //
-// How fast each living thing about moves: from where it was at the last
-// plan to where it is now (one that was not about then counts as still).
+// A hand takes prey: it lets go of what it held, shuts on the prey and
+// is the meal's hand from now on; the level is told (the prey is the
+// climber's: gone from the world, drawn in its hand). It stops to eat.
 //
-function trackBeings(inst) {
-  const beings = inst.beings
-  const span = inst.time - inst.trackedAt
-  inst.trackedAt = inst.time
-  if (!beings || span <= 0) return
-  const count = Math.min(beings.length, MAX_BEINGS)
-  for (let j = 0; j < count; j++) {
-    const b = beings[j]
-    const known = b.live && inst.beingSpeed[j] >= 0
-    inst.beingSpeed[j] = !b.live ? -1 : known ? vecLen(b.x - inst.beingX[j], b.y - inst.beingY[j]) / span : 0
-    inst.beingX[j] = b.x
-    inst.beingY[j] = b.y
+function seize(inst, arm, b) {
+  const meal = inst.meal
+  arm.probe.on = false
+  setState(arm, STATE.CARRY)
+  inst.anchored = countState(inst, STATE.HOLD)
+  inst.reaching = countState(inst, STATE.REACH)
+  meal.arm = arm
+  meal.prey = b.prey
+  meal.t = 0
+  meal.bites = 0
+  meal.biteIn = EAT.firstBite
+  meal.biting = false
+  meal.done = false
+  meal.kick = 1
+  meal.way = 0
+  meal.turned = false
+  inst.mood = MOOD.EXPLORE
+  inst.ctx.onSeize(b.prey)
+}
+//
+// A strike at a point with a hand hanging free — the one whose shoulder
+// is nearest it, within STRIKE_REACH of a limb, a straight way there
+// clear; none within STRIKE_GAP s of the last one.
+//
+function strikeAt(inst, x, y) {
+  if (inst.time < inst.strikeAt) return
+  let pick = null
+  let best = REACH_MAX * STRIKE_REACH
+  for (let i = 0; i < inst.arms.length; i++) {
+    const arm = inst.arms[i]
+    const d = vecLen(x - arm.sx, y - arm.sy)
+    if (arm.state !== STATE.FREE || arm.drag || d >= best || !isWayClear(arm.sx, arm.sy, x, y, 0)) continue
+    best = d
+    pick = arm
   }
+  if (!pick || !startStrike(inst, pick, x, y)) return
+  inst.strikeAt = inst.time + STRIKE_GAP
+}
+//
+// A strike: a reach for a point in the air, straight from the shoulder —
+// the claws' tips go STRIKE_PAST px past it — STRIKE_TIME s long; whether
+// it could start (a clear curve there).
+//
+function startStrike(inst, arm, x, y) {
+  const to = arm.to
+  const dx = x - arm.sx
+  const dy = y - arm.sy
+  const d = vecLen(dx, dy) || 1
+  to.gx = x + dx / d * (STRIKE_PAST - inst.hand.finger)
+  to.gy = y + dy / d * (STRIKE_PAST - inst.hand.finger)
+  to.nx = -dx / d
+  to.ny = -dy / d
+  aimHand(arm, to.gx, to.gy, inst.hand.palm, to)
+  if (!startReach(inst, arm, MOOD_CFG[inst.mood])) return false
+  arm.strike = true
+  arm.reach.dur = STRIKE_TIME
+  return true
+}
+//
+// Where prey is brought to: the mouth's front, between the jaws.
+//
+function mouthSpot(inst, out) {
+  const c = Math.cos(inst.tilt)
+  const s = Math.sin(inst.tilt)
+  const fx = Look.MOUTH_AT.x * (inst.face < 0 ? -1 : 1)
+  out.x = inst.body.x + fx * c - Look.MOUTH_AT.y * s
+  out.y = inst.body.y + fx * s + Look.MOUTH_AT.y * c
+  return out
+}
+//
+// The hand with the prey (not while its limb is caught behind something:
+// it is drawn in along the limb then, see markDrag). It comes before the
+// mouth, its fingers turned toward the mouth, the prey's far end at the
+// mouth's front — nearer with every bite, as less of the prey is left —
+// from the first of the ways in APPROACH that has room for the hand
+// (from ahead; from ahead and below; from below); with no room any way,
+// it turns its head round once to eat facing the other side. Once there
+// the hand is pressed to the mouth and held still, and only then it eats
+// (see eat); not there within eat.carryMost s, it lets its prey drop.
+//
+function carryPrey(inst, arm, px, py, dt) {
+  const meal = inst.meal
+  meal.t += dt
+  meal.kick = meal.bites ? Math.max(0, meal.kick - dt / KICK_FADE) : 1
+  if (arm.drag) return
+  const left = Math.max(0, 1 - meal.bites / EAT.bites)
+  const off = inst.hand.palm + inst.hand.finger * HOLD_AT + (meal.prey.ahead ?? 0) * left
+  meal.biting || approach(inst, off)
+  const spot = handSpot(inst, off, inst.ideal)
+  turnAxis(arm, -inst.aim.ax, -inst.aim.ay, CARRY_TURN * dt)
+  if (meal.biting) {
+    arm.wx += (spot.x - arm.wx) * Math.min(1, AXIS_EASE * dt)
+    arm.wy += (spot.y - arm.wy) * Math.min(1, AXIS_EASE * dt)
+    return eat(inst, arm, dt)
+  }
+  followSpot(arm, spot, px, py, dt)
+  meal.biting = vecLen(arm.wx - spot.x, arm.wy - spot.y) <= EAT.near && arm.ax * -inst.aim.ax + arm.ay * -inst.aim.ay > HALF
+  if (meal.biting || meal.t < EAT.carryMost) return
+  inst.ctx.onDrop(meal.prey, arm.wx, arm.wy)
+  endMeal(inst)
+}
+//
+// Turns a hand toward a way (a unit vector), the shorter way round,
+// `most` rad at most.
+//
+function turnAxis(arm, tx, ty, most) {
+  const turn = Math.max(-most, Math.min(most, Math.atan2(arm.ax * ty - arm.ay * tx, arm.ax * tx + arm.ay * ty)))
+  const c = Math.cos(turn)
+  const s = Math.sin(turn)
+  const ax = arm.ax * c - arm.ay * s
+  arm.ay = arm.ax * s + arm.ay * c
+  arm.ax = ax
+}
+//
+// The way the meal's hand comes to the mouth (meal.way: its place in
+// APPROACH): kept while the hand has room there, else the first that has
+// it; none has — the head turns round, once a meal.
+//
+function approach(inst, off) {
+  const meal = inst.meal
+  for (let n = 0; n < APPROACH.length; n++) {
+    const way = (meal.way + n) % APPROACH.length
+    meal.way = way
+    const spot = handSpot(inst, off, inst.ideal)
+    if (isWristClear(spot.x, spot.y)) return
+  }
+  meal.way = 0
+  if (meal.turned) return
+  meal.turned = true
+  inst.faceWant = -inst.faceWant
+}
+//
+// Where the meal's hand goes (its wrist): `off` px out from the mouth's
+// front the way it comes (meal.way) — that way, in the world, is written
+// into inst.aim (ax, ay): the hand's fingers point back along it.
+//
+function handSpot(inst, off, out) {
+  const way = APPROACH[inst.meal.way]
+  const side = inst.face < 0 ? -1 : 1
+  const c = Math.cos(inst.tilt)
+  const s = Math.sin(inst.tilt)
+  inst.aim.ax = side * way[0] * c - way[1] * s
+  inst.aim.ay = side * way[0] * s + way[1] * c
+  mouthSpot(inst, out)
+  out.x += inst.aim.ax * off
+  out.y += inst.aim.ay * off
+  return out
+}
+//
+// Eating, the hand at the mouth: the mouth gapes GAPE s before a bite,
+// snaps shut BITE_SNAP s before it, and chews in between; a bite every
+// eat.biteEvery s (the first eat.firstBite s after the hand came). After
+// the last bite — or with nothing left of the prey — it chews on for
+// eat.swallow s, and the meal is over.
+//
+function eat(inst, arm, dt) {
+  const meal = inst.meal
+  meal.biteIn -= dt
+  const chew = meal.bites ? CHEW_OPEN * (HALF + HALF * Math.sin(inst.time * CHEW_HZ * FULL_TURN)) : MOUTH_WIDE
+  inst.mouthWant = meal.done ? chew : meal.biteIn <= BITE_SNAP ? 0 : meal.biteIn <= GAPE ? MOUTH_WIDE : chew
+  if (meal.biteIn > 0) return
+  if (meal.done) return endMeal(inst)
+  meal.bites++
+  const hold = inst.hand.palm + inst.hand.finger * HOLD_AT
+  const more = inst.ctx.onBite(meal.prey, meal.bites, arm.wx + arm.ax * hold, arm.wy + arm.ay * hold)
+  meal.done = !more || meal.bites >= EAT.bites
+  meal.biteIn = meal.done ? EAT.swallow : EAT.biteEvery
+}
+//
+// The meal is over: the hand lets go and hangs free, the mouth shuts, and
+// it rests eat.rest s before it goes on.
+//
+function endMeal(inst) {
+  const meal = inst.meal
+  release(meal.arm)
+  meal.arm = null
+  meal.prey = null
+  meal.biting = false
+  inst.mouthWant = 0
+  inst.mouthIn = MOUTH_GAP
+  inst.restFor = EAT.rest
+}
+//
+// The prey in the meal's hand, as the level draws it: HOLD_AT along the
+// drawn hand's fingers, with the hand's turn (degrees); gone once the
+// last bite has taken it.
+//
+function drawMeal(inst, drawHeld) {
+  const meal = inst.meal
+  if (meal.done) return
+  const d = meal.arm.d
+  const hold = inst.hand.palm + inst.hand.finger * HOLD_AT
+  inst.ideal.x = d.wx + d.ax * hold
+  inst.ideal.y = d.wy + d.ay * hold
+  drawHeld(meal.prey, inst.ideal, Math.atan2(d.ay, d.ax) * DEG, meal.bites, meal.kick)
 }

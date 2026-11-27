@@ -168,6 +168,57 @@ const SNAP_THUD_TIME = 0.09
 const SNAP_GAIN = 0.4
 const SNAP_THUD_SHARE = 0.8
 //
+// The climber's bite into flesh: its jaws' dull clamp (brown noise under
+// BITE_THUD_LP Hz, BITE_THUD_TIME s), the wet tear of the meat (a band of
+// noise sliding down from BITE_TEAR_F0 to BITE_TEAR_F1 Hz, BITE_TEAR_Q
+// narrow, swelling in over BITE_TEAR_ATTACK s and gone by BITE_TEAR_TIME
+// s, BITE_TEAR_SHARE as loud) and BITE_RIPS fibres giving way one by one
+// within BITE_RIP_SPREAD s (tiny dull ticks under BITE_RIP_LP … twice
+// that Hz, BITE_RIP_TIME s each, BITE_RIP_SHARE as loud).
+//
+const BITE_GAIN = 0.5
+const BITE_THUD_LP = 240
+const BITE_THUD_TIME = 0.1
+const BITE_TEAR_F0 = 1500
+const BITE_TEAR_F1 = 420
+const BITE_TEAR_Q = 1.6
+const BITE_TEAR_ATTACK = 0.012
+const BITE_TEAR_TIME = 0.2
+const BITE_TEAR_SHARE = 0.9
+const BITE_RIPS = 5
+const BITE_RIP_SPREAD = 0.13
+const BITE_RIP_LP = 700
+const BITE_RIP_TIME = 0.018
+const BITE_RIP_SHARE = 0.7
+//
+// The climber's bite into a runner — slimy: a wet squelch (a band of
+// noise, SLIME_Q narrow, sliding up from SLIME_F0 to SLIME_F1 Hz as it
+// swells in over SLIME_ATTACK s, gone by SLIME_TIME s), the slime drawn
+// out after it (SLIME_LAG s later, sliding back down to SLIME_F2 Hz over
+// SLIME_PULL s, SLIME_PULL_SHARE as loud) and SLIME_POPS sticky bubbles
+// bursting within SLIME_POP_SPREAD s (rings of SLIME_POP_PITCH … twice
+// that Hz gliding up SLIME_POP_GLIDE times, SLIME_POP_TAU s, SLIME_POP_SHARE
+// as loud), over a soft thud of the jaws (SLIME_THUD_SHARE of a flesh
+// bite's).
+//
+const SLIME_GAIN = 0.55
+const SLIME_Q = 2.4
+const SLIME_F0 = 380
+const SLIME_F1 = 1250
+const SLIME_ATTACK = 0.035
+const SLIME_TIME = 0.17
+const SLIME_LAG = 0.07
+const SLIME_F2 = 300
+const SLIME_PULL = 0.3
+const SLIME_PULL_SHARE = 0.8
+const SLIME_POPS = 4
+const SLIME_POP_SPREAD = 0.26
+const SLIME_POP_PITCH = 210
+const SLIME_POP_GLIDE = 2.2
+const SLIME_POP_TAU = 0.03
+const SLIME_POP_SHARE = 0.7
+const SLIME_THUD_SHARE = 0.5
+//
 // A bubble popping on the lake's surface: a tiny wet "plip" — a sine
 // sliding up BUBBLE_RISE times over BUBBLE_TIME s from BUBBLE_FREQ (for a
 // bubble BUBBLE_REF_R px round; a smaller one higher, a bigger one lower,
@@ -418,6 +469,37 @@ export function playSnap(inst, near) {
   const gain = SNAP_GAIN * near
   softBurst(inst, inst.white, at, 'bandpass', SNAP_BAND, SNAP_Q, SNAP_TIME, gain)
   softBurst(inst, inst.brown, at, 'lowpass', SNAP_THUD_LP, 1, SNAP_THUD_TIME, gain * SNAP_THUD_SHARE)
+}
+
+/**
+ * The climber biting into what it holds: a dull clamp of jaws, the wet
+ * tear of flesh and a few fibres ripping.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playBite(inst, near) {
+  if (!ready(inst) || near <= 0) return
+  const at = inst.ctx.currentTime
+  const gain = BITE_GAIN * near
+  softBurst(inst, inst.brown, at, 'lowpass', BITE_THUD_LP, 1, BITE_THUD_TIME, gain)
+  sweep(inst, inst.white, at, 'bandpass', BITE_TEAR_F0, BITE_TEAR_F1, BITE_TEAR_Q, BITE_TEAR_ATTACK, BITE_TEAR_TIME, gain * BITE_TEAR_SHARE)
+  for (let i = 0; i < BITE_RIPS; i++) burst(inst, at + Math.random() * BITE_RIP_SPREAD, 'lowpass', BITE_RIP_LP * (1 + Math.random()), BITE_RIP_TIME, gain * BITE_RIP_SHARE, inst.out)
+}
+
+/**
+ * The climber biting into a runner: a wet squelch, the slime drawn out
+ * after it and a few sticky bubbles bursting.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playSlimeBite(inst, near) {
+  if (!ready(inst) || near <= 0) return
+  const at = inst.ctx.currentTime
+  const gain = SLIME_GAIN * near
+  softBurst(inst, inst.brown, at, 'lowpass', BITE_THUD_LP, 1, BITE_THUD_TIME, gain * SLIME_THUD_SHARE)
+  sweep(inst, inst.white, at, 'bandpass', SLIME_F0, SLIME_F1, SLIME_Q, SLIME_ATTACK, SLIME_TIME, gain)
+  sweep(inst, inst.white, at + SLIME_LAG, 'bandpass', SLIME_F1, SLIME_F2, SLIME_Q, SLIME_ATTACK, SLIME_PULL, gain * SLIME_PULL_SHARE)
+  for (let i = 0; i < SLIME_POPS; i++) dropRing(inst, at + Math.random() * SLIME_POP_SPREAD, SLIME_POP_PITCH * (1 + Math.random()), SLIME_POP_GLIDE, SLIME_POP_TAU, gain * SLIME_POP_SHARE, inst.out)
 }
 
 /**

@@ -400,6 +400,7 @@ export function create(config) {
     jumpCollisionLift: 0,       // Upward hitbox shift at jump peak (px)
     jumpCollisionTuck: 0,       // 0..1 how far the feet edge has risen this jump
     jumpTakeoffSpeed: 0,        // |vel.y| at leave-ground — scales peak tuck
+    airRose: false,             // He has gone up since he left the ground (only then the box tucks)
     landFxCooldown: 0,          // Seconds left before another land FX may fire
     airTime: 0,                 // Seconds continuously airborne (filters platform flicker)
     spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
@@ -1334,7 +1335,12 @@ function getJumpPeakFactor(inst) {
 }
 //
 // Raises and shortens the collision box with jump height. ONLY while
-// airborne — resizing on the ground ejected the hero into a jump loop.
+// airborne — resizing on the ground ejected the hero into a jump loop —
+// and only once he has gone up since he left the ground (a jump, a
+// bounce): a hero who merely drops (off a step, or put a little over the
+// floor as a saved place may be) falls at his full height. Tucked at
+// once for such a short drop, he came down a tuck too deep, was lifted
+// out a tuck too high and dropped again — hopping on the spot for good.
 // On restore the character is nudged so the feet edge does not expand
 // down into the platform.
 //
@@ -1343,10 +1349,11 @@ function syncJumpCollision(inst) {
   if (!area) return
   const ch = inst.character
   const grounded = isHeroGrounded(inst)
+  inst.airRose = !grounded && (inst.airRose || (ch.vel?.y ?? 0) < 0)
   //
   // After a head-bonk keep the full standing hitbox while falling
   //
-  const compressed = !grounded && inst.jumpPhase === 'jumping' && !inst.jumpCeilingBonk
+  const compressed = !grounded && inst.airRose && inst.jumpPhase === 'jumping' && !inst.jumpCeilingBonk
   const peak = compressed ? getJumpPeakFactor(inst) : 0
   const tuck = peak * JUMP_COLLISION_MAX_TUCK
   const lift = peak * JUMP_COLLISION_MAX_LIFT

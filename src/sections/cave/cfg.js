@@ -80,12 +80,14 @@ export const CAVE_CFG = {
   //
   // The runner insects (cave-runner.js): their painted parts pulled a
   // little toward the cave's dark (shadeAmount), the far legs and the far
-  // feeler darker still (farShade: how much of their light is taken).
+  // feeler darker still (farShade: how much of their light is taken);
+  // the flesh that shows where one has been bitten through.
   //
   runner: {
     shade: '#0b1216',
     shadeAmount: 0.18,
-    farShade: 0.45
+    farShade: 0.45,
+    flesh: '#7a3b2e'
   },
   //
   // The water striders on the lake (cave-strider.js): as the runners,
@@ -141,13 +143,11 @@ export const CAVE_CFG = {
   //
   // The climber (cave-haggy.js, haggy_waggy.png), a blind predator on five
   // clawed limbs: its pieces toned a little toward the cave's light (tint),
-  // the throat seen when it opens its mouth (mouth), its ultrasound's
-  // waves (wave).
+  // the throat seen when it opens its mouth (mouth).
   //
   haggy: {
     tint: '#d9d2c4',
     mouth: '#2a1512',
-    wave: '#cfe6f2',
     //
     // Anatomy (world px). A limb has no joints: it is one flexible body
     // `length` long, a chain of `segments` pieces drawn as one smooth
@@ -214,13 +214,15 @@ export const CAVE_CFG = {
     // its way is too tight for it upright, it turns right along it). It
     // faces the side its way runs to once that way's X share passes
     // faceDx for faceHold s, and turns round in turnTime s (through its
-    // face-on picture).
+    // face-on picture). Resting, it looks about: to the other side every
+    // lookEvery: [min, max] s.
     //
     turning: {
       tilt: 0.3,
       faceDx: 0.35,
       faceHold: 0.3,
-      turnTime: 0.2
+      turnTime: 0.2,
+      lookEvery: [2.5, 5]
     },
     //
     // Walking on a top the head never comes lower over the ground than
@@ -238,8 +240,10 @@ export const CAVE_CFG = {
     // reaches (stepGap), a reach's time (reachTime: [min, max], set by
     // reachSpeed px/s), how far ahead along the way a hand takes its hold
     // (lead), how far a hold may lag behind before the hand steps on
-    // (stride), how often it sends out an ultrasound pulse (pulseEvery,
-    // s). Roaming it stops now and then (pauseEvery, pause: [min, max] s)
+    // (stride). Stalking — creeping up on prey it has felt — it goes slow
+    // and soft, every hand it can spare holding on, one reaching at a
+    // time and unhurried, its head `crouch` px nearer the surface it
+    // creeps on. Roaming it stops now and then (pauseEvery, pause: [min, max] s)
     // and feels about with its free limbs (each on its own: probeChance
     // per try, probeGap s apart at least, a feeling lasting probeTime:
     // [min, max] s). Of its wanders, a share `openings` goes into an
@@ -257,7 +261,6 @@ export const CAVE_CFG = {
       reachSpeed: 200,
       lead: 46,
       stride: 90,
-      pulseEvery: 2.6,
       pauseEvery: [2.5, 6],
       pause: [1.2, 3.2],
       probeChance: 0.6,
@@ -265,18 +268,18 @@ export const CAVE_CFG = {
       probeTime: [1.8, 2.8],
       openings: 0.5
     },
-    pursuit: {
-      speed: 150,
-      accel: 6,
-      follow: 9,
+    stalk: {
+      speed: 46,
+      accel: 2.5,
+      follow: 4,
       holds: 4,
-      reaches: 2,
-      stepGap: 0.05,
-      reachTime: [0.26, 0.42],
-      reachSpeed: 520,
-      lead: 80,
+      reaches: 1,
+      stepGap: 0.25,
+      reachTime: [0.5, 0.85],
+      reachSpeed: 260,
+      lead: 50,
       stride: 70,
-      pulseEvery: 0.9
+      crouch: 34
     },
     //
     // Holds: at least minSupport hands hold on while another steps (and a
@@ -293,57 +296,34 @@ export const CAVE_CFG = {
       gap: 30
     },
     //
-    // Its senses. It is blind and knows of a living thing only by an
-    // ultrasound echo off it or by touching it — never by its being near.
-    // Ultrasound: a pulse leaves the tip of its upper jaw only the way its
-    // head faces — `rays` rays across a cone coneAngle rad wide, nothing
-    // behind it — and spreads at `speed` px/s up to maxDistance px: there
-    // it is gone for good, with no echo. To hear another way it must turn
-    // its head (resting, it turns it every scanEvery: [min, max] s). A ray ends on soil or water; a living thing
-    // the wave crosses, in the open, sends an echo back at the same speed
-    // from where it was met — heard only if the way back is clear, as
-    // sure as it was near (it fades with distance); only one that moved
-    // moveMin px/s or more is taken for prey. At most maxPulses waves and
-    // maxEchoes echoes are in the air; every echoEvery-th ray ending on
-    // soil shows its echo. The waves are drawn waveWidth px wide, as
-    // faint as waveOpacity. Touch: a free or feeling hand's claws within
-    // touch.reach px of a living thing's body find it, moving or still.
-    // What it knows grows stale: after memory s with nothing new it gives
-    // up the chase and searches about for investigate s, then roams. An
-    // echo off a moving living thing — the hero as any other — sets it
-    // rushing there at once; only while what it knows of its prey is
-    // fresher than `lock` s does an echo off another living thing not turn
-    // it from it (a touch does). It plans a new way to prey at most every
-    // replanGap s (or when the prey was found replanDist px off). A hand
-    // that touches water draws back and it looks for another way (at most
-    // once every waterGap s), its ways keeping avoid.radius px clear of
-    // that spot for avoid.time s (a way through there counts avoid.cost px
-    // longer).
+    // Its senses. It is blind and knows of a living thing only by touch —
+    // never by its being near. Prey (what the level says it can eat: the
+    // hero, a runner) within touch.reach px of a hand is caught; touching
+    // a limb or the head it is felt, and it stalks to that place. What it
+    // knows grows stale: after memory s with nothing new it gives the
+    // stalk up and searches about for investigate s, then roams. It plans
+    // a new way to its prey at most every replanGap s (or when the prey
+    // was felt replanDist px off). A hand that touches water draws back
+    // and it looks for another way (at most once every waterGap s), its
+    // ways keeping avoid.radius px clear of that spot for avoid.time s (a
+    // way through there counts avoid.cost px longer).
+    // A meal (eat): the hand brings its prey before the mouth (within
+    // `near` px of its place there; not there in carryMost s, it lets the
+    // prey drop), then bites: first firstBite s after it came, then every
+    // biteEvery s, `bites` times in all, chewing on `swallow` s after the
+    // last; it rests `rest` s after the meal.
     //
     sense: {
-      ultrasound: {
-        maxDistance: 520,
-        speed: 430,
-        coneAngle: 1.75,
-        rays: 15,
-        scanEvery: [2.5, 5],
-        maxPulses: 3,
-        maxEchoes: 10,
-        echoEvery: 6,
-        moveMin: 12,
-        waveWidth: 1.5,
-        waveOpacity: 0.1
-      },
       touch: {
         reach: 6
       },
       memory: 6,
       investigate: 4,
-      lock: 2.5,
       replanGap: 0.6,
       replanDist: 120,
       waterGap: 2,
-      avoid: { radius: 170, time: 25, cost: 900 }
+      avoid: { radius: 170, time: 25, cost: 900 },
+      eat: { near: 10, carryMost: 6, bites: 3, firstBite: 0.55, biteEvery: 1.1, swallow: 0.6, rest: 1.5 }
     },
     //
     // Work per second: its body and limbs step simHz times a second (farHz

@@ -43,7 +43,7 @@ export const LAKE_OPAQUE_SKIN_PX = 5.2
 //
 // Bed bake version (its sprite name).
 //
-const LAKE_BAKE_GEOMETRY_VERSION = 22
+const LAKE_BAKE_GEOMETRY_VERSION = 23
 const LAKE_TUNE = FOREST_CFG.lakeWater
 const LAKE_BED_SEGMENTS = 160
 const LAKE_BED_BACK_RISE_PX = 32
@@ -266,16 +266,22 @@ const LAKE_BED_RAG_WAVELENGTH = 11
 const LAKE_BED_RAG_SEED = 23.9
 //
 // Optional undercut right bank (cfg.bankHollow px): from LAKE_HOLLOW_FROM_U
-// along the bed the right wall is a curve that leans under the bank — at
-// depth d it stands where the plain wall would plus bankHollow ×
-// sin(π d / its full depth) — so the water runs on under an overhang of
-// soil (its ceiling the wall's upper part, its bed the lower part), as by
-// the cave lake's banks. Sampled every LAKE_HOLLOW_STEP px of depth; the
-// ceiling gets a dark soil edge LAKE_HOLLOW_EDGE_PX wide.
+// along the bed the right wall is one arc — from the bank's lip at the
+// water line round under the bank and down into the bed at the wall's
+// foot. A cubic curve: it leaves the lip downward (its first handle
+// LAKE_HOLLOW_LIP of the wall's depth under the lip), is drawn out under
+// the bank by a handle bankHollow × LAKE_HOLLOW_PULL to the right at
+// LAKE_HOLLOW_MID of the depth, and ends at the foot. So the water runs
+// on under an overhang of soil (its ceiling the arc's upper part, its bed
+// the lower part), as by the cave lake's banks, with no straight edge and
+// no corner anywhere. Sampled in LAKE_HOLLOW_SAMPLES steps; the bed's
+// dark edge runs on along the whole arc up to the lip, one line.
 //
 const LAKE_HOLLOW_FROM_U = 0.84
-const LAKE_HOLLOW_STEP = 0.25
-const LAKE_HOLLOW_EDGE_PX = 2
+const LAKE_HOLLOW_LIP = 0.3
+const LAKE_HOLLOW_PULL = 1.8
+const LAKE_HOLLOW_MID = 0.66
+const LAKE_HOLLOW_SAMPLES = 800
 
 /**
  * Makes the lake (its water, its bed layer baked once per k and sprite
@@ -504,35 +510,41 @@ function lakeGeometry(cfg) {
   return lake
 }
 //
-// The undercut right bank: per column from where the wall starts (x0) to
-// the back of the hollow (x2), the water's ceiling and bed depths, found by
-// walking down the leaning wall.
+// The undercut right bank: the wall's arc (line: canvas-local x and depth
+// under the water line, from the lip to the foot) and, per column from
+// where the wall starts (x0) to the back of the hollow (x2), the water's
+// ceiling and bed depths under it.
 //
 function buildHollow(lake, reach) {
   const x0 = lake.islandShoreLocalX + LAKE_HOLLOW_FROM_U * (lake.bakeSpan - lake.islandShoreLocalX)
   const depth = bottomLocalY(lake, x0, false) - lake.topMargin
   const wall = { x0, x1: lake.bakeSpan, depth, reach }
+  const line = Array.from({ length: LAKE_HOLLOW_SAMPLES + 1 }, (_, i) => hollowWallAt(wall, i / LAKE_HOLLOW_SAMPLES))
   const first = Math.floor(x0)
-  let last = first
-  for (let d = 0; d <= depth; d += LAKE_HOLLOW_STEP) last = Math.max(last, Math.floor(hollowWallX(wall, d)))
+  const last = line.reduce((far, p) => Math.max(far, Math.floor(p.x)), first)
   const ceil = new Float32Array(last - first + 1).fill(Infinity)
   const bed = new Float32Array(last - first + 1).fill(-Infinity)
-  for (let d = 0; d <= depth; d += LAKE_HOLLOW_STEP) {
-    const reachX = Math.floor(hollowWallX(wall, d))
-    for (let x = first; x <= reachX; x++) {
-      ceil[x - first] = Math.min(ceil[x - first], d)
-      bed[x - first] = Math.max(bed[x - first], d)
+  line.forEach(p => {
+    for (let x = first; x <= Math.floor(p.x); x++) {
+      ceil[x - first] = Math.min(ceil[x - first], p.d)
+      bed[x - first] = Math.max(bed[x - first], p.d)
     }
-  }
-  return { x0, first, x2: last + 1, ceil, bed }
+  })
+  return { x0, first, x2: last + 1, ceil, bed, line }
 }
 //
-// Where the undercut bank's wall stands at a depth: the plain wall from its
-// foot (x0, full depth) up to the surface's end (x1), leaned out under the
-// bank by reach at mid-depth.
+// A point of the undercut bank's wall, s of the way along its arc from
+// the lip (x1, the water line) to the foot (x0, the full depth).
 //
-function hollowWallX(wall, d) {
-  return wall.x0 + (1 - d / wall.depth) * (wall.x1 - wall.x0) + wall.reach * Math.sin(Math.PI * d / wall.depth)
+function hollowWallAt(wall, s) {
+  const u = 1 - s
+  const lip = u * u * u + 3 * u * u * s
+  const out = 3 * u * s * s
+  const foot = s * s * s
+  return {
+    x: lip * wall.x1 + out * (wall.x1 + wall.reach * LAKE_HOLLOW_PULL) + foot * wall.x0,
+    d: (3 * u * u * s * LAKE_HOLLOW_LIP + out * LAKE_HOLLOW_MID + foot) * wall.depth
+  }
 }
 //
 // The water's top at a canvas-local X: the surface, or under the undercut
@@ -636,11 +648,12 @@ function bakeLakeBedSprite(k, lake) {
   canvas.height = lake.canvasH
   const ctx = canvas.getContext('2d')
   const murkTop = lake.topMargin + LAKE_OPAQUE_SKIN_PX
-  const step = lake.spanX / LAKE_BED_SEGMENTS
+  const step = bedEndX(lake) / LAKE_BED_SEGMENTS
   const floorY = lake.topMargin + lake.floorY - lake.surfaceY + LAKE_BED_FLOOR_OVERLAP_PX
   const murkPath = new Path2D()
   murkPath.moveTo(0, murkTop)
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) murkPath.lineTo(i * step, Math.max(murkTop, ceilLocalY(lake, i * step)))
+  murkPath.lineTo(bedEndX(lake), murkTop)
+  lake.hollow?.line.forEach(p => murkPath.lineTo(p.x, Math.max(murkTop, lake.topMargin + p.d)))
   for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) murkPath.lineTo(i * step, Math.max(murkTop, bottomLocalY(lake, i * step)))
   murkPath.closePath()
   const murk = ctx.createLinearGradient(0, murkTop, 0, lake.canvasH)
@@ -648,7 +661,10 @@ function bakeLakeBedSprite(k, lake) {
   murk.addColorStop(1, colors.murkDeep)
   ctx.fillStyle = murk
   ctx.fill(murkPath)
+  ctx.save()
+  ctx.clip(murkPath)
   paintLakeBedFace(ctx, lake, step, floorY, colors)
+  ctx.restore()
   ctx.save()
   ctx.clip(murkPath)
   paintLakeBedVolume(ctx, lake, colors)
@@ -657,7 +673,6 @@ function bakeLakeBedSprite(k, lake) {
   lake.bedStones ? paintLakeBedStones(ctx, lake) : paintLakeBedBoulders(ctx, lake, colors)
   ctx.restore()
   paintLakeBedFrontEdge(ctx, lake, step, floorY, colors)
-  lake.hollow && paintHollowCeiling(ctx, lake, colors)
   applyForestGameplaySharpBake(canvas, LAKE_BED_GRAIN_SEED)
   k.loadSprite(lake.bedSprite, canvas)
   canvas.width = 0
@@ -669,17 +684,18 @@ function bakeLakeBedSprite(k, lake) {
 // layer with its light and dark grains.
 //
 function paintLakeBedFace(ctx, lake, step, floorY, colors) {
+  const xs = bedFaceXs(lake, step)
   ctx.beginPath()
   ctx.moveTo(0, bedSeamLocalY(lake, 0, floorY))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, Math.max(floorY, bottomLocalY(lake, i * step)))
+  for (let i = 1; i < xs.length; i++) ctx.lineTo(xs[i], bedSeamLocalY(lake, xs[i], floorY))
+  for (let i = xs.length - 1; i >= 0; i--) ctx.lineTo(xs[i], Math.max(floorY, bottomLocalY(lake, xs[i])))
   ctx.closePath()
   ctx.fillStyle = colors.bank
   ctx.fill()
   ctx.beginPath()
   ctx.moveTo(0, lakeBedTopLocalY(lake, 0))
-  for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, lakeBedTopLocalY(lake, i * step))
-  for (let i = LAKE_BED_SEGMENTS; i >= 0; i--) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
+  for (let i = 1; i < xs.length; i++) ctx.lineTo(xs[i], lakeBedTopLocalY(lake, xs[i]))
+  for (let i = xs.length - 1; i >= 0; i--) ctx.lineTo(xs[i], bedSeamLocalY(lake, xs[i], floorY))
   ctx.closePath()
   ctx.fillStyle = colors.bed
   ctx.fill()
@@ -775,24 +791,34 @@ function perspectiveScale(near) {
   return LAKE_FAR_SCALE + (1 - LAKE_FAR_SCALE) * near
 }
 //
-// The undercut bank's soil ceiling over the water: a dark soil edge.
+// The columns the floor face is drawn through: its samples, then — under
+// an undercut bank — every px of the hollow's bed (its sand runs on along
+// the wall; drawn inside the water's own outline, it never leaves it).
 //
-function paintHollowCeiling(ctx, lake, colors) {
-  ctx.beginPath()
-  ctx.moveTo(lake.bakeSpan, lake.topMargin)
-  for (let x = Math.ceil(lake.bakeSpan); x < lake.hollow.x2; x++) ctx.lineTo(x, ceilLocalY(lake, x))
-  ctx.strokeStyle = colors.bedEdge
-  ctx.lineWidth = LAKE_HOLLOW_EDGE_PX
-  ctx.lineJoin = 'round'
-  ctx.stroke()
+function bedFaceXs(lake, step) {
+  const xs = Array.from({ length: LAKE_BED_SEGMENTS + 1 }, (_, i) => i * step)
+  for (let x = lake.hollow ? Math.ceil(lake.hollow.x0) : Infinity; x < lake.spanX; x++) xs.push(x)
+  return xs
 }
 //
-// Dark cut where the floor face meets the earth band below the lake.
+// Where the bed's sampled lines end: the end of the shore bake, or — with
+// an undercut bank — the wall's foot (the wall's own arc carries on from
+// there: the sampled bed would cut its corners and, past the hollow's
+// back, leap up to the ground line).
+//
+function bedEndX(lake) {
+  return lake.hollow ? lake.hollow.x0 : lake.spanX
+}
+//
+// Dark cut where the floor face meets the earth band below the lake; with
+// an undercut bank it runs on up the wall's arc, round under the bank, to
+// its lip: the soil's contour, one line.
 //
 function paintLakeBedFrontEdge(ctx, lake, step, floorY, colors) {
   ctx.beginPath()
   ctx.moveTo(0, bedSeamLocalY(lake, 0, floorY))
   for (let i = 1; i <= LAKE_BED_SEGMENTS; i++) ctx.lineTo(i * step, bedSeamLocalY(lake, i * step, floorY))
+  for (let i = lake.hollow ? lake.hollow.line.length - 1 : -1; i >= 0; i--) ctx.lineTo(lake.hollow.line[i].x, lake.topMargin + lake.hollow.line[i].d)
   ctx.strokeStyle = colors.bedEdge
   ctx.lineWidth = LAKE_BED_EDGE_PX
   ctx.lineJoin = 'round'

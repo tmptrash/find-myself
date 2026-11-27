@@ -96,16 +96,24 @@ const Z_LAKE_SURFACE = Z_WORLD + 0.7
 const Z_HAGGY = Z_WORLD + 0.8
 const HAGGY_SEED = 4711
 //
-// The living things the blind climber (cave-haggy.js) may find — by an
-// ultrasound echo off them or by touching them: the hero, the runners,
-// the lurker's head, the fish out of the water, the giant's head; their
-// bodies' radii (px).
+// What the blind climber (cave-haggy.js) may touch and eat: the hero and
+// the runners; their bodies' radii (px). In its hand the hero hangs
+// upright, leaning HELD_HERO_LEAN degrees with the hand; a runner lies
+// along the hand, its head on toward the mouth, gripped by its hind end
+// (HELD_RUNNER_BACK of its own sheet px behind its middle) and reaching
+// HELD_RUNNER_AHEAD px on from the grip — what the bites take off, so the
+// piece left in the hand grows shorter. The climber's bite is heard
+// HAGGY_BITE_LOUD as far as a fish's splash.
 //
 const BEING_HERO_R = 20
 const BEING_RUNNER_R = 9
-const BEING_LURKER_R = 22
-const BEING_FISH_R = 9
-const BEING_GIANT_R = 40
+const PREY_HERO = 'hero'
+const PREY_RUNNER = 'runner'
+const HELD_HERO_LEAN = 25
+const HELD_RUNNER_BACK = 190
+const HELD_RUNNER_AHEAD = 22
+const HAGGY_BITE_LOUD = 1
+const DEG = 180 / Math.PI
 //
 // A fish's splash sounds full within the hero's reach and fades out over
 // SPLASH_HEAR px from him.
@@ -317,7 +325,10 @@ function build(k, opts) {
     front: Front.create(k),
     deathFlies: DeathFireflies.create({ k, z: Z_DEATH_FLIES }),
     haggy: Haggy.create({ k, seed: HAGGY_SEED }),
-    haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null, beings: [] },
+    haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null, beings: [], onSeize: null, onBite: null, onDrop: null },
+    haggyHeld: null,
+    heroPrey: { kind: PREY_HERO, ahead: 0 },
+    runnerPrey: null,
     fireflies: Fireflies.create({ k, bounds: Layout.FIREFLY_BOUNDS, count: FIREFLY_COUNT, isOpen: (x, y) => Surface.isOpenAir(x, y, FIREFLY_PAD) }),
     runners: Runner.createAll(k),
     striders: Strider.createAll(k, lake, [Pads.crownSpan(pads)]),
@@ -405,6 +416,11 @@ function build(k, opts) {
     prey: [],
     onEat: f => Fireflies.eat(inst.fireflies, f)
   }
+  inst.runnerPrey = inst.runners.map(runner => ({ kind: PREY_RUNNER, runner, ahead: HELD_RUNNER_AHEAD }))
+  inst.haggyCtx.onSeize = prey => onHaggySeize(inst, prey)
+  inst.haggyCtx.onBite = (prey, bites, x, y) => onHaggyBite(inst, prey, bites, x, y)
+  inst.haggyCtx.onDrop = (prey, x, y) => onHaggyDrop(inst, prey, x, y)
+  inst.haggyHeld = (prey, at, angle, bites, kick) => drawHaggyHeld(inst, prey, at, angle, bites, kick)
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
   inst.stalkEye = StalkEye.create({ k, ...rootedOn(Layout.STALK_EYE), getHeroPos, getView })
@@ -840,7 +856,7 @@ function addDrawLayers(inst) {
   const k = inst.k
   k.add([k.z(Z_WORLD), { draw: () => drawWorld(inst) }])
   k.add([k.z(Z_FIREFLIES), { draw: () => drawFireflies(inst) }])
-  k.add([k.z(Z_HAGGY), { draw: () => Haggy.onDraw(inst.haggy) }])
+  k.add([k.z(Z_HAGGY), { draw: () => Haggy.onDraw(inst.haggy, inst.haggyHeld) }])
   k.add([k.z(Z_DROWN_HERO), { draw: () => drawDrowningHero(inst) }])
   k.add([k.z(Z_TERRAIN), { draw: () => drawTerrain(inst) }])
   k.add([k.z(Z_RUNNERS), { draw: () => drawRunners(inst) }])
@@ -893,11 +909,10 @@ function updateRunners(inst) {
   updateHaggy(inst, food)
 }
 //
-// The climber: blind, it finds the living things about only by its
-// ultrasound's echoes off them and by touching them (their bodies are
-// told to it here, in one list kept from frame to frame: the hero, the
-// runners, the lurker's head, the fish out of the water, the giant's
-// head); its free hands snatch the fireflies they touch, the ones the
+// The climber: blind, it finds its prey only by touching it (the bodies
+// it may touch are told to it here, in one list kept from frame to
+// frame: the hero — not while he is safe after a respawn — and the
+// runners); its free hands snatch the fireflies they touch, the ones the
 // runners leap for.
 //
 function updateHaggy(inst, food) {
@@ -905,26 +920,73 @@ function updateHaggy(inst, food) {
   View.worldRect(inst.view, ctx.view)
   ctx.prey = food.prey
   ctx.onEat = food.onEat
-  let n = 0
-  n = setBeing(ctx.beings, n, heroPos(inst), BEING_HERO_R)
-  for (let i = 0; i < inst.runners.length; i++) n = setBeing(ctx.beings, n, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, BEING_RUNNER_R)
-  n = setBeing(ctx.beings, n, inst.lurker.head, BEING_LURKER_R)
-  for (let i = 0; i < inst.fish.length; i++) n = setBeing(ctx.beings, n, Fish.leapingTail(inst.fish[i]), BEING_FISH_R)
-  setBeing(ctx.beings, n, Giant.bodyLine(inst.giant)?.pts[0] ?? null, BEING_GIANT_R)
+  setBeing(ctx.beings, 0, isRespawnGrace(inst) ? null : heroPos(inst), BEING_HERO_R, inst.heroPrey)
+  for (let i = 0; i < inst.runners.length; i++) setBeing(ctx.beings, i + 1, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, BEING_RUNNER_R, inst.runnerPrey[i])
   Haggy.onUpdate(inst.haggy, ctx)
 }
 //
-// The n-th living thing's body in the climber's list (its record made
-// once, then only updated): its middle and radius; not about (live:
-// false) while it has no place.
+// The n-th body in the climber's list (its record made once, then only
+// updated): its middle and radius and what it is to the level (prey); not
+// about (live: false) while it has no place.
 //
-function setBeing(beings, n, pos, r) {
-  beings[n] ??= { x: 0, y: 0, r, live: false }
+function setBeing(beings, n, pos, r, prey) {
+  beings[n] ??= { x: 0, y: 0, r, live: false, prey }
   const b = beings[n]
   b.live = Boolean(pos)
   b.x = pos ? pos.x : b.x
   b.y = pos ? pos.y : b.y
-  return n + 1
+}
+//
+// A hand of the climber has caught something: a runner is gone from its
+// run (it turns up again after a while); the hero is the climber's — out
+// of the world, his eyes shut, drawn in its hand till it bites.
+//
+function onHaggySeize(inst, prey) {
+  if (prey.kind === PREY_RUNNER) return Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+  takeHero(inst, false)
+}
+//
+// The climber has bitten what it holds; false once nothing is left: the
+// hero (the bite into his flesh is heard) breaks into white fireflies at
+// the first bite and comes back soon after; a runner (a slimy bite) lasts
+// the meal out — its time away starts anew with every bite, so it never
+// turns up while it is still being eaten.
+//
+function onHaggyBite(inst, prey, bites, x, y) {
+  const near = HAGGY_BITE_LOUD - Math.abs(x - heroFocus(inst).x) / SPLASH_HEAR
+  if (prey.kind === PREY_RUNNER) {
+    CaveSound.playSlimeBite(inst.caveSound, near)
+    Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+    return true
+  }
+  CaveSound.playBite(inst.caveSound, near)
+  burstEatenHero(inst, x, y)
+  return false
+}
+//
+// The climber could not bring its prey to its mouth and let it drop: a
+// runner is simply gone for its while; the hero breaks into his fireflies
+// there and comes back as after a bite.
+//
+function onHaggyDrop(inst, prey, x, y) {
+  prey.kind === PREY_HERO && burstEatenHero(inst, x, y)
+}
+function burstEatenHero(inst, x, y) {
+  CaveSound.playSparkBurst(inst.caveSound)
+  DeathFireflies.burst(inst.deathFlies, x, y, DEATH_BURST_COUNT)
+  inst.deathX = x
+  inst.deathY = y
+  inst.respawnAt = inst.k.time() + EATEN_RESPAWN
+}
+//
+// What the climber holds, drawn in its hand (over its head, under that
+// hand's fingers): a runner along the hand, its head on toward the
+// fingers' tips, kicking, as much of it as the bites have left; the hero
+// upright with his eyes shut, leaning with the hand.
+//
+function drawHaggyHeld(inst, prey, at, angle, bites, kick) {
+  if (prey.kind === PREY_RUNNER) return Runner.drawHeld(prey.runner, at, angle, 1, kick, bites, HELD_RUNNER_BACK)
+  inst.dead && inst.respawnAt === Infinity && drawEatenHero(inst, at, Math.cos(angle / DEG) * HELD_HERO_LEAN)
 }
 //
 // The lurker by the left bank: it hunts the hero on the bank (or sinking
@@ -955,13 +1017,23 @@ function onLurkerSeize(inst, prey) {
     Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
     return
   }
+  takeHero(inst, true)
+}
+//
+// Something has the hero in its grip (the lurker's jaws, the climber's
+// hand): he is out of the world at once — what holds him draws him, his
+// eyes shut — and comes back only once it is done with him (respawnAt is
+// set then); `lake`: back on the lake's bank, else where he last stood
+// safe.
+//
+function takeHero(inst, lake) {
   const hero = inst.heroInst
   const char = hero.character
   inst.drown = null
   inst.dead = true
   inst.deathX = char.pos.x
   inst.deathY = char.pos.y
-  inst.lakeDeath = true
+  inst.lakeDeath = lake
   inst.respawnAt = Infinity
   hero.controllable = false
   hero.isDying = true

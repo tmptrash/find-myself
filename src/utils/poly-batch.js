@@ -16,10 +16,12 @@ const discUnitCache = new Map()
 /**
  * Creates an empty polygon batch (reuse one per draw layer across frames —
  * vertex objects are recycled to keep the per-frame allocation near zero).
+ * Its indices are written in place too (indexCount of them count): an
+ * array emptied and pushed full again every frame is built anew each time.
  * @returns {Object} Batch inst
  */
 export function create() {
-  return { pts: [], colors: [], opacities: [], fades: false, indices: [], count: 0 }
+  return { pts: [], colors: [], opacities: [], fades: false, indices: [], indexCount: 0, count: 0 }
 }
 
 /**
@@ -45,8 +47,29 @@ export function clampBelow(inst, maxY, x1, x2) {
  */
 export function reset(inst) {
   inst.count = 0
-  inst.indices.length = 0
+  inst.indexCount = 0
   inst.fades = false
+}
+
+/**
+ * Adds the two triangles of a quad of vertices already in the batch
+ * (a, b, c and a, c, d).
+ * @param {Object} inst - Batch inst
+ * @param {number} a - First vertex's index
+ * @param {number} b - Second vertex's index
+ * @param {number} c - Third vertex's index
+ * @param {number} d - Fourth vertex's index
+ */
+export function addQuadIndices(inst, a, b, c, d) {
+  const out = inst.indices
+  const n = inst.indexCount
+  out[n] = a
+  out[n + 1] = b
+  out[n + 2] = c
+  out[n + 3] = a
+  out[n + 4] = c
+  out[n + 5] = d
+  inst.indexCount = n + 6
 }
 
 /**
@@ -72,7 +95,7 @@ export function addLine(inst, x1, y1, x2, y2, width, color) {
   setVertex(inst, base + 1, x2 + nx, y2 + ny, color)
   setVertex(inst, base + 2, x2 - nx, y2 - ny, color)
   setVertex(inst, base + 3, x1 - nx, y1 - ny, color)
-  inst.indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
+  addQuadIndices(inst, base, base + 1, base + 2, base + 3)
   inst.count = base + 4
 }
 
@@ -92,7 +115,7 @@ export function addTriangle(inst, x1, y1, x2, y2, x3, y3, color) {
   setVertex(inst, base, x1, y1, color)
   setVertex(inst, base + 1, x2, y2, color)
   setVertex(inst, base + 2, x3, y3, color)
-  inst.indices.push(base, base + 1, base + 2)
+  addTriIndices(inst, base, base + 1, base + 2)
   inst.count = base + 3
 }
 
@@ -115,7 +138,7 @@ export function addQuad(inst, x1, y1, x2, y2, x3, y3, x4, y4, color) {
   setVertex(inst, base + 1, x2, y2, color)
   setVertex(inst, base + 2, x3, y3, color)
   setVertex(inst, base + 3, x4, y4, color)
-  inst.indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
+  addQuadIndices(inst, base, base + 1, base + 2, base + 3)
   inst.count = base + 4
 }
 
@@ -136,10 +159,7 @@ export function addDisc(inst, x, y, radius, color) {
     const u = unit[i]
     setVertex(inst, base + i, x + u.x * radius, y + u.y * radius, color)
   }
-  const indices = inst.indices
-  for (let i = 1; i < len - 1; i++) {
-    indices.push(base, base + i, base + i + 1)
-  }
+  for (let i = 1; i < len - 1; i++) addTriIndices(inst, base, base + i, base + i + 1)
   inst.count = base + len
 }
 
@@ -168,9 +188,9 @@ export function addShape(inst, shape, indices, ox, oy, sx, sy, cos, sin, color) 
   }
   const out = inst.indices
   const iLen = indices.length
-  for (let i = 0; i < iLen; i++) {
-    out.push(base + indices[i])
-  }
+  const n = inst.indexCount
+  for (let i = 0; i < iLen; i++) out[n + i] = base + indices[i]
+  inst.indexCount = n + iLen
   inst.count = base + sLen
 }
 
@@ -190,9 +210,9 @@ export function addPolygon(inst, pts, indices, color) {
   }
   const out = inst.indices
   const iLen = indices.length
-  for (let i = 0; i < iLen; i++) {
-    out.push(base + indices[i])
-  }
+  const n = inst.indexCount
+  for (let i = 0; i < iLen; i++) out[n + i] = base + indices[i]
+  inst.indexCount = n + iLen
   inst.count = base + pLen
 }
 
@@ -265,11 +285,7 @@ export function addTaperedRibbon(inst, pts, wBase, wTip, color, capTip = true) {
     setVertex(inst, v, cur.x + nx * half, cur.y + ny * half, color)
     setVertex(inst, v + 1, cur.x - nx * half, cur.y - ny * half, color)
   }
-  const indices = inst.indices
-  for (let i = 0; i < last; i++) {
-    const a = base + i * 2
-    indices.push(a, a + 2, a + 3, a, a + 3, a + 1)
-  }
+  for (let i = 0; i < last; i++) addQuadIndices(inst, base + i * 2, base + i * 2 + 2, base + i * 2 + 3, base + i * 2 + 1)
   inst.count = base + n * 2
   const tip = pts[last]
   capTip && wTip >= TIP_CAP_MIN_W && addDisc(inst, tip.x, tip.y, wTip * 0.5, color)
@@ -309,9 +325,10 @@ export function fadeBand(inst, from, y0, y1, y2, y1End = y1) {
  * @param {number} [minY=-Infinity] - Vertices above this line (after the shift) are flattened onto it
  */
 export function flush(inst, k, opacity = 1, shiftY = 0, maxY = Infinity, minY = -Infinity) {
-  if (inst.count >= 3 && inst.indices.length) {
+  if (inst.count >= 3 && inst.indexCount) {
     inst.pts.length = inst.count
     inst.colors.length = inst.count
+    inst.indices.length !== inst.indexCount && (inst.indices.length = inst.indexCount)
     if (shiftY !== 0 || maxY < Infinity || minY > -Infinity) shiftVertices(inst.pts, shiftY, maxY, minY)
     k.drawPolygon({
       pts: inst.pts,
@@ -335,6 +352,14 @@ function polygonOpacity(inst, opacity) {
     for (let i = 0; i < count; i++) ops[i] *= opacity
   }
   return { opacities: ops }
+}
+function addTriIndices(inst, a, b, c) {
+  const out = inst.indices
+  const n = inst.indexCount
+  out[n] = a
+  out[n + 1] = b
+  out[n + 2] = c
+  inst.indexCount = n + 3
 }
 function clamp01(v) {
   return Math.max(0, Math.min(1, v))

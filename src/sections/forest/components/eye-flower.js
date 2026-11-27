@@ -1379,11 +1379,7 @@ function addSmoothBladeRibbon(batch, pts, wMax, color) {
     bOps[v0] = 1
     bOps[v1] = 1
   }
-  const indices = batch.indices
-  for (let i = 0; i < last; i++) {
-    const a = base + i * 2
-    indices.push(a, a + 2, a + 3, a, a + 3, a + 1)
-  }
+  for (let i = 0; i < last; i++) PolyBatch.addQuadIndices(batch, base + i * 2, base + i * 2 + 2, base + i * 2 + 3, base + i * 2 + 1)
   batch.count = base + n * 2
 }
 

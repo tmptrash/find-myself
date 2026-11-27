@@ -1,4 +1,4 @@
-import { getRGB, vecLen } from '../../../utils/helper.js'
+import { vecLen } from '../../../utils/helper.js'
 import { applyForestFilmGrainToCanvas } from '../../forest/utils/forest-parallax-grain.js'
 import { CAVE_CFG } from '../cfg.js'
 import * as Atlas from '../utils/cave-atlas.js'
@@ -14,8 +14,7 @@ import * as Atlas from '../utils/cave-atlas.js'
 // the limbs' roots — turning round, its face-on picture comes in over the
 // side it had, then the other side's over that, each narrowing a little
 // toward the turn's middle — its jaw turned about the mouth's corner
-// (face on: let down); its ultrasound's waves and echoes as faint thin
-// arcs.
+// (face on: let down).
 // No game objects, no masks, no textures made at run time; the vectors
 // are the creature's own, reused.
 //
@@ -23,7 +22,6 @@ const SPRITE = 'cave0-haggy-v6'
 const GRAIN_SEED = 9710
 const C = CAVE_CFG.haggy
 const A = C.anatomy
-const SONAR = C.sense.ultrasound
 const GIRTH = C.limb.girth
 //
 // Sizes: world px per sheet px of the head and of the arm (with its hand);
@@ -34,8 +32,8 @@ const ARM_SCALE = 0.093
 const BAKE_OVER = 2.5
 const ATLAS_GAP = 4
 //
-// The pieces (Atlas): the head by its middle and the tip of its upper jaw
-// (head piece px); its lower jaw turning about the mouth's back corner
+// The pieces (Atlas): the head by its middle and the front of its mouth,
+// between the jaws (head piece px); its lower jaw turning about the mouth's back corner
 // (HINGE), the throat seen
 // when it opens (CAVITY, painted in the mouth colour on the head under
 // the jaw); the arm piece's place on the sheet (the hand's cuts below
@@ -54,7 +52,7 @@ const HEAD = { piece: 'haggyHead', pivot: { x: 274, y: 220 } }
 const FRONT = { piece: 'haggyFront', pivot: { x: 247, y: 206 } }
 const FRONT_JAW = [[129, 261], [155, 277], [163, 298], [195, 304], [245, 307], [295, 306], [335, 302], [360, 293], [371, 275], [389, 261], [395, 285], [385, 317], [363, 348], [335, 367], [295, 380], [245, 385], [193, 377], [161, 360], [137, 337], [125, 300]]
 const JAW_REACH = 240
-const UPPER_JAW_TIP = { x: 12, y: 279 }
+const MOUTH_FRONT = { x: 60, y: 325 }
 const JAW = [[42, 310], [143, 303], [229, 299], [278, 292], [286, 317], [269, 347], [238, 374], [196, 397], [124, 400], [67, 391], [44, 368], [36, 336]]
 const HINGE = { x: 278, y: 294 }
 const CAVITY = [[48, 311], [143, 303], [229, 299], [278, 292], [284, 315], [229, 334], [143, 345], [56, 355]]
@@ -141,16 +139,6 @@ const HALF_W = TILE.h * ARM_SCALE * 0.5 * A.thickness
 //
 const FRONT_IN = [0.26, 0.42]
 const FRONT_OUT = [0.58, 0.74]
-//
-// Ultrasound's look: a wave is drawn as WAVE_ARCS short chords per ray
-// gap across its cone wherever both rays about it are still out, fading
-// toward its full distance; an echo as a short arc ECHO_SPAN rad wide (ECHO_ARCS chords),
-// ECHO_R px round its point at the start and shrinking as it flies home.
-//
-const WAVE_ARCS = 3
-const ECHO_SPAN = 0.5
-const ECHO_ARCS = 3
-const ECHO_R = 26
 const HALF = 0.5
 const DEG = 180 / Math.PI
 const BYTE_MAX = 255
@@ -161,10 +149,10 @@ let atlas = null
 let rigs = null
 
 /**
- * The tip of its upper jaw from the head's middle (world px): `x` ahead
- * the way it faces, `y` down. Where its ultrasound leaves.
+ * The front of its mouth, between the jaws, from the head's middle (world
+ * px): `x` ahead the way it faces, `y` down. Where a hand brings prey.
  */
-export const JAW_TIP = { x: (HEAD.pivot.x - UPPER_JAW_TIP.x) * HEAD_SCALE, y: (UPPER_JAW_TIP.y - HEAD.pivot.y) * HEAD_SCALE }
+export const MOUTH_AT = { x: (HEAD.pivot.x - MOUTH_FRONT.x) * HEAD_SCALE, y: (MOUTH_FRONT.y - HEAD.pivot.y) * HEAD_SCALE }
 
 /**
  * Bakes the atlas (once per page) and loads it on this live k (once).
@@ -323,22 +311,6 @@ export function drawHead(inst) {
 }
 
 /**
- * Draws its ultrasound: each wave in the air as a faint thin arc across
- * the cone it was sent in (the way the head faced then), cut where soil
- * or water ended its rays, fading out toward its full distance (where it
- * is gone); each echo as a small arc flying home from the point that sent
- * it.
- * @param {Object} inst - Climber instance
- */
-export function drawWaves(inst) {
-  const k = inst.k
-  const sonar = inst.sonar
-  const color = getRGB(k, C.wave)
-  for (let i = 0; i < sonar.pulses.length; i++) sonar.pulses[i].live && drawWave(inst, sonar.pulses[i], color)
-  for (let i = 0; i < sonar.echoes.length; i++) sonar.echoes[i].live && drawEcho(inst, sonar.echoes[i], color)
-}
-
-/**
  * Draws a limb's buttons on its skin: each at its share of the limb's
  * length (so they move apart as it stretches), off its middle to its
  * side, turned along it, drawn out with it and thicker as it swells.
@@ -402,48 +374,6 @@ function drawHeadFront(inst, parts, opacity) {
 //
 function phase(turn, span) {
   return Math.max(0, Math.min(1, (turn - span[0]) / (span[1] - span[0])))
-}
-//
-// A wave: chords along its arc — only across the cone it was sent in —
-// between every two neighbouring rays that are both still out.
-//
-function drawWave(inst, p, color) {
-  const k = inst.k
-  const opacity = SONAR.waveOpacity * (1 - p.r / SONAR.maxDistance)
-  const gap = SONAR.coneAngle / (SONAR.rays - 1)
-  const step = gap / WAVE_ARCS
-  for (let i = 0; i + 1 < SONAR.rays; i++) {
-    if (p.ends[i] > 0 || p.ends[i + 1] > 0) continue
-    const from = p.dir - SONAR.coneAngle * HALF + i * gap
-    for (let n = 0; n < WAVE_ARCS; n++) {
-      const a = from + n * step
-      inst.v.set(p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r)
-      inst.v2.set(p.x + Math.cos(a + step) * p.r, p.y + Math.sin(a + step) * p.r)
-      k.drawLine({ p1: inst.v, p2: inst.v2, width: SONAR.waveWidth, color, opacity })
-    }
-  }
-}
-//
-// An echo: a small arc facing the head, between the point that sent it
-// and the head as far as it has flown, fainter the farther it came.
-//
-function drawEcho(inst, echo, color) {
-  const k = inst.k
-  const u = echo.t / echo.dur
-  const x = echo.x + (inst.pose.x - echo.x) * u
-  const y = echo.y + (inst.pose.y - echo.y) * u
-  const home = Math.atan2(inst.pose.y - echo.y, inst.pose.x - echo.x)
-  const r = ECHO_R * (1 - u * HALF)
-  const cx = x - Math.cos(home) * r
-  const cy = y - Math.sin(home) * r
-  const opacity = SONAR.waveOpacity * (HALF + echo.confidence * HALF)
-  const step = ECHO_SPAN / ECHO_ARCS
-  for (let n = 0; n < ECHO_ARCS; n++) {
-    const a = home - ECHO_SPAN * HALF + n * step
-    inst.v.set(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
-    inst.v2.set(cx + Math.cos(a + step) * r, cy + Math.sin(a + step) * r)
-    k.drawLine({ p1: inst.v, p2: inst.v2, width: SONAR.waveWidth, color, opacity })
-  }
 }
 //
 // A pair of the strip's vertices across the limb at a point, (nx, ny)

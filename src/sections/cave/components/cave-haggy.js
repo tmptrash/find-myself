@@ -17,10 +17,18 @@ import * as Look from './cave-haggy-draw.js'
 //   Walking it keeps half a limb over the ground; its head keeps out of
 //   everything hard and never shrinks: where its way is too tight for it
 //   upright (a shaft, a gap between ledges), it turns along the way.
-// - The limbs step: the hand left farthest behind lets go and reaches for
-//   a hold on ahead (a curve clear of everything hard, eased with minimum
-//   jerk), a holding hand keeps on the line from its shoulder to its hold
-//   and lets go once that line is cut; free hands hang, or feel about.
+// - Its limbs are rooted at five places on the head: a pair at either
+//   side — two at its front, two at its back, whichever way it faces —
+//   and one in the middle of its underside, its tail. Each keeps to its
+//   own side (the holds of the pair on the side it goes to lie ahead of
+//   the head, the other pair's behind it, the tail's under it), so a
+//   limb runs out from where it is rooted, not across behind the head.
+// - The limbs step: the hand left farthest behind its own place lets go
+//   and reaches for a hold on ahead (a curve clear of everything hard,
+//   eased with minimum jerk) — or, while its pair's other hand hangs
+//   free, that one reaches on and it lets go: a pair's hands take turns.
+//   A holding hand keeps on the line from its shoulder to its hold and
+//   lets go once that line is cut; free hands hang, or feel about.
 // - A limb is a chain of points, no physics of its own: holding, it runs
 //   straight from the hold to the head; free, each point follows the next
 //   one toward the hand (the hand leads as a head does); caught behind
@@ -106,19 +114,32 @@ const TURNED = 0.3
 // Hands. Its fingers curl to CURL_GRIP on a hold, open to CURL_OPEN on a
 // reach, hang at CURL_FREE (eased at CURL_RATE per s). A reach's curve
 // draws back RETRACT of the way to the shoulder and LIFT px off the
-// surfaces at both ends (HIGH_LIFT times higher where that is not clear,
+// surface it leaves (HIGH_LIFT times higher where that is not clear,
 // checked at PATH_CHECKS); it is eased with minimum jerk (MIN_JERK_A, _B,
 // _C: 10t³ − 15t⁴ + 6t⁵), its time varying by REACH_JITTER; a free hand's
 // speed (CARRY_MAX px/s at most; it is kept up to HAND_SPEED_MAX) carries
 // on into it. A free hand follows its place as a spring of FOLLOW_W
-// rad/s, hanging HANG_SHARE of a limb under its shoulder (HANG_APART px
-// to its side) or, walking, held FREE_R px ahead (FREE_UP of that up);
-// its place is drawn back to the shoulder TARGET_STEP px at a time
-// (TARGET_TRIES times) out of anything hard. It points the way it moves
-// (over LEAD_SPEED px/s) or along its limb's end, eased at AXIS_EASE per
-// s. A straight way is checked every LINE_STEP px, its sides every
-// LINE_WIDE-th check. A hand that found no hold tries again after RETRY
-// s. A holding hand turns about its claws HOLD_TURN rad/s at most.
+// rad/s that never speeds it up or slows it down by more than HAND_ACCEL
+// px/s² nor takes it faster than FREE_SPEED px/s (its place may jump —
+// the hand never does, and a hand let go far off drifts to where it
+// hangs, it does not whip there through its own shoulder), hanging HANG_SHARE
+// of a limb under its shoulder (HANG_OUT of its root's way off the
+// head's middle farther out) or, walking, held FREE_R px out to its own
+// side — the tail's hangs on — (FREE_UP of that up); it goes over from one to
+// the other at WALK_RATE per s; its place is the last clear one on the
+// way from its shoulder (looked for every TARGET_STEP px, then halved
+// TARGET_HALVINGS times). A free limb caught behind something stays so
+// for DRAG_HOLD s at least. A free hand lies the way its limb runs up to
+// it (read over HAND_BASE pieces), eased at AXIS_EASE per s. A straight
+// way is checked every LINE_STEP px, its sides every LINE_WIDE-th check.
+// A hand that found no hold tries again after RETRY s. A holding hand
+// turns about its claws HOLD_TURN rad/s at most. No hand is ever turned
+// more than HAND_BEND either way from the way its limb's end runs (it
+// never folds back in on its limb): the limb gives, the hand turns
+// smoothly — a moving hand's limb comes out of its wrist straight along
+// the hand, a holding or dragged one's end bends to within HAND_BEND of
+// it. A reach comes in on its hold along the hand's own way, LAND_OFF
+// of its lift off the surface.
 //
 const CURL_RATE = 5
 const CURL_GRIP = 1
@@ -134,31 +155,50 @@ const MIN_JERK_C = 6
 const REACH_JITTER = 0.3
 const CARRY_MAX = 300
 const HAND_SPEED_MAX = 900
-const FOLLOW_W = 18
+const FOLLOW_W = 10
+const HAND_ACCEL = 3000
+const FREE_SPEED = 400
+const WALK_RATE = 4
 const HANG_SHARE = 0.55
-const HANG_APART = 14
+const HANG_OUT = 0.6
 const FREE_R = 84
 const FREE_UP = 0.8
-const TARGET_STEP = 8
-const TARGET_TRIES = 14
+const TARGET_STEP = 6
+const TARGET_HALVINGS = 3
+const DRAG_HOLD = 0.3
 const AXIS_EASE = 8
-const LEAD_SPEED = 30
+const HAND_BASE = 2
 const LINE_STEP = 8
 const LINE_WIDE = 2
 const RETRY = 0.4
 const HOLD_TURN = 5
+const HAND_BEND = Math.PI / 4
+const LAND_OFF = 0.5
 //
-// Holds are tried at LEAD_SHARES of the mood's lead on along the way,
-// then round the edges of the way's next NODES_AHEAD nodes (a ceiling it
-// is about to climb onto, a floor it lets itself down to). A
-// hold is stepped on from once it lags the stride behind — or is
-// stretched past STRETCH of the limb or lies within CRAMPED px of its
-// shoulder and lags at all.
+// Holds are tried at LEAD_SHARES of the mood's lead on along the way
+// from the limb's own place (anatomy.keep px to its side of the head,
+// as far as the way runs level: ahead for the pair on the side it goes
+// to, behind for the other), then
+// round the edges of the way's next NODES_AHEAD nodes (a ceiling it is
+// about to climb onto, a floor it lets itself down to). A hold is
+// stepped on from once it lags the stride behind that place — or is
+// stretched past STRETCH of the limb and lags at all, or lies within
+// CRAMPED px of its shoulder, wherever (a limb crumpled up against the
+// head, its hand folded on it); one within TOO_NEAR px is let go at
+// once. A limb runs out from its root: it takes no hold whose straight
+// way from the root lies more than BEHIND_TAKE px behind the head (in
+// its ellipse), and steps on from one once BEHIND_MOST px of it do (the
+// head has come over the hold) — but stuck for LOOSE_AFTER s it takes
+// any hold it can: it never stands still for its looks.
 //
 const LEAD_SHARES = [1, 0.6, 1.4, 0.2]
+const BEHIND_TAKE = 20
+const BEHIND_MOST = 28
+const LOOSE_AFTER = 0.6
 const NODES_AHEAD = 3
 const STRETCH = 0.9
 const CRAMPED = 34
+const TOO_NEAR = 20
 //
 // Feeling about: a free hand sweeps PROBE_ARC rad either side of the way
 // on (turned PROBE_TILT toward the surface), from PROBE_NEAR to PROBE_FAR
@@ -309,6 +349,7 @@ export function create(cfg) {
     tilt: 0,
     tiltVel: 0,
     moveShare: 0,
+    walkShare: 0,
     mouth: 0,
     mouthWant: 0,
     mouthIn: MOUTH_GAP,
@@ -370,9 +411,10 @@ export function onDraw(inst) {
   for (let i = 0; i < inst.arms.length; i++) Look.drawHand(inst, inst.arms[i])
   Look.drawHead(inst)
 }
-
 //
-// A limb: its state and the time in it, when it took its hold; its
+// A limb: its state and the time in it, when it took its hold; the side
+// of the head it is rooted on (-1 left, 1 right, the tail 0) and its own
+// place there (keep: px to that side of the head); its
 // shoulder and wrist, the way its hand points and how fast it goes; its
 // chain's points (x, y), at the last step's end (rx, ry: for drawing
 // between steps) and as drawn (nx, ny; gx, gy with their speeds: the
@@ -389,7 +431,8 @@ function createArm(i, rng) {
     state: STATE.FREE,
     stateT: 0,
     heldAt: 0,
-    side: i % 2 ? -1 : 1,
+    keep: ANAT.keep[i],
+    side: Math.sign(ANAT.keep[i]),
     sx: 0,
     sy: 0,
     wx: 0,
@@ -409,13 +452,14 @@ function createArm(i, rng) {
     gvx: new Float32Array(SEGS + 1),
     gvy: new Float32Array(SEGS + 1),
     drag: false,
+    dragFor: 0,
     seg: REACH_MAX / SEGS,
     swell: 1,
     p: { wx: 0, wy: 0, ax: 0, ay: 1 },
     d: { wx: 0, wy: 0, ax: 0, ay: 1 },
     hold: newHold(),
     to: newHold(),
-    reach: { fx: 0, fy: 0, fax: 0, fay: 1, vx: 0, vy: 0, c1x: 0, c1y: 0, c2x: 0, c2y: 0, t: 0, dur: 1 },
+    reach: { fx: 0, fy: 0, fax: 0, fay: 1, vx: 0, vy: 0, c1x: 0, c1y: 0, c2x: 0, c2y: 0, turn: 0, t: 0, dur: 1 },
     probe: { on: false, a0: 0, a1: 0, t: 0, dur: 1 },
     probeAt: 0,
     touchAt: 0,
@@ -561,6 +605,7 @@ function updateTravel(inst, dt) {
   inst.speed += (m.speed * share - inst.speed) * Math.min(1, m.accel * dt)
   inst.speed > MOVE_EPS && advance(inst, inst.speed * dt)
   placeFrame(inst)
+  inst.walkShare += ((inst.frame.walk ? 1 : 0) - inst.walkShare) * Math.min(1, WALK_RATE * dt)
 }
 //
 // How freely it may go on (0 … 1): by how far ahead of the head, the way
@@ -806,7 +851,7 @@ function keepBodyOut(inst) {
 // A limb for one step: its shoulder on the head; its hand where its state
 // takes it — held, swung on its reach, or free (caught behind something:
 // dragged after its limb); its chain between them; how fast the hand
-// went; a free hand turned the way it goes; its fingers.
+// went; a free hand turned to lie along its limb; its fingers.
 //
 function moveArm(inst, arm, dt) {
   const px = arm.wx
@@ -814,7 +859,7 @@ function moveArm(inst, arm, dt) {
   arm.stateT += dt
   arm.snap = Math.max(0, arm.snap - dt)
   shoulderOf(inst, arm)
-  arm.drag = arm.state === STATE.FREE && !isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, 0)
+  markDrag(arm, dt)
   if (arm.state === STATE.HOLD) holdOn(inst, arm, dt)
   else if (arm.state === STATE.REACH) swing(inst, arm, dt)
   else arm.drag || freeHand(inst, arm, px, py, dt)
@@ -824,21 +869,44 @@ function moveArm(inst, arm, dt) {
   const k = v > HAND_SPEED_MAX ? HAND_SPEED_MAX / v : 1
   arm.vx = (arm.wx - px) / dt * k
   arm.vy = (arm.wy - py) / dt * k
-  arm.state === STATE.FREE && pointHand(arm, v, dt)
+  arm.state === STATE.FREE && pointHand(arm, dt)
   const curl = arm.state === STATE.HOLD || arm.snap > 0 ? CURL_GRIP : arm.state === STATE.REACH ? CURL_OPEN : CURL_FREE
   arm.curl += (curl - arm.curl) * Math.min(1, CURL_RATE * dt)
 }
 //
-// Where its shoulder is: under the head, on the side it faces (crossing
-// over smoothly as it turns round), tilted with it.
+// Whether a free limb is caught behind something: something hard on the
+// straight line from its shoulder to its hand. Caught, it stays so for
+// DRAG_HOLD s at least and until that way is clear by the limb's whole
+// thickness (so it does not flicker between dragged and free at a
+// ledge's edge). As it is caught its pieces take the length the chain
+// lies at (round a corner it lies longer than the straight way it was
+// measured by: drawn in to that at once, its hand would jump).
+//
+function markDrag(arm, dt) {
+  if (arm.state !== STATE.FREE) {
+    arm.drag = false
+    return
+  }
+  if (!isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, 0)) {
+    arm.drag || (arm.seg = lengthOf(arm) / SEGS)
+    arm.drag = true
+    arm.dragFor = 0
+    return
+  }
+  arm.dragFor += dt
+  arm.drag = arm.drag && (arm.dragFor < DRAG_HOLD || !isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, LIMB.radius))
+}
+//
+// Where its shoulder is: its root on the head, tilted with it (the roots
+// lie alike either side, so they stay where they are as the head turns
+// round: the pair on the side it faces is its front one).
 //
 function shoulderOf(inst, arm) {
   const at = ANAT.shoulders[arm.i]
-  const ox = -at[0] * inst.face
   const c = Math.cos(inst.tilt)
   const s = Math.sin(inst.tilt)
-  arm.sx = inst.body.x + ox * c - at[1] * s
-  arm.sy = inst.body.y + ox * s + at[1] * c
+  arm.sx = inst.body.x + at[0] * c - at[1] * s
+  arm.sy = inst.body.y + at[0] * s + at[1] * c
 }
 //
 // A holding hand: its claws stay on their spot; the hand turns about them
@@ -881,9 +949,11 @@ function aimHand(arm, gx, gy, palm, h) {
 }
 //
 // A reaching hand on its curve (eased with minimum jerk, the speed it set
-// off with dying away over the reach), turning the shorter way round to
-// the hold's way (aimed from where the shoulder is now); there, it takes
-// hold — or, out of reach now, it missed.
+// off with dying away over the reach), turning to the hold's way (aimed
+// from where the shoulder is now) the way round it set off — the shorter
+// one then; kept to, so the hand never swaps sides half-way as the
+// shoulder moves (r.turn: the whole turn, carried from step to step);
+// there, it takes hold — or, out of reach now, it missed.
 //
 function swing(inst, arm, dt) {
   const r = arm.reach
@@ -894,9 +964,10 @@ function swing(inst, arm, dt) {
   aimHand(arm, to.gx, to.gy, inst.hand.palm, to)
   arm.wx = cubic(r.fx, r.c1x, r.c2x, to.x, e) + r.vx * carry
   arm.wy = cubic(r.fy, r.c1y, r.c2y, to.y, e) + r.vy * carry
-  const turn = Math.atan2(r.fax * to.ay - r.fay * to.ax, r.fax * to.ax + r.fay * to.ay) * e
-  arm.ax = r.fax * Math.cos(turn) - r.fay * Math.sin(turn)
-  arm.ay = r.fax * Math.sin(turn) + r.fay * Math.cos(turn)
+  const shorter = Math.atan2(r.fax * to.ay - r.fay * to.ax, r.fax * to.ax + r.fay * to.ay)
+  r.turn = shorter + Math.round((r.turn - shorter) / FULL_TURN) * FULL_TURN
+  arm.ax = r.fax * Math.cos(r.turn * e) - r.fay * Math.sin(r.turn * e)
+  arm.ay = r.fax * Math.sin(r.turn * e) + r.fay * Math.cos(r.turn * e)
   if (r.t < 1) return
   if (vecLen(to.x - arm.sx, to.y - arm.sy) > REACH_MAX * ANCHOR_SLACK) return release(arm)
   anchorAt(inst, arm, to)
@@ -935,16 +1006,27 @@ function setAxis(arm, x, y) {
 //
 // A free hand: where it hangs (or, feeling about, along its arc), drawn
 // back out of anything hard; it goes there from where it was (px, py) as a
-// critically damped spring (it never changes speed at a jump), never past
-// its limb's length nor into anything hard.
+// critically damped spring whose pull is kept under HAND_ACCEL and its
+// speed under FREE_SPEED (it never changes speed at a jump, however far
+// its place has just moved), never past its limb's length nor into
+// anything hard.
 //
 function freeHand(inst, arm, px, py, dt) {
   const spot = inst.ideal
   arm.probe.on ? probeSpot(arm, dt, spot) : hangPose(inst, arm, spot)
   freeSpot(arm, spot)
   const pull = FOLLOW_W * FOLLOW_W
-  arm.vx += (pull * (spot.x - px) - 2 * FOLLOW_W * arm.vx) * dt
-  arm.vy += (pull * (spot.y - py) - 2 * FOLLOW_W * arm.vy) * dt
+  const ax = pull * (spot.x - px) - 2 * FOLLOW_W * arm.vx
+  const ay = pull * (spot.y - py) - 2 * FOLLOW_W * arm.vy
+  const a = vecLen(ax, ay)
+  const k = a > HAND_ACCEL ? HAND_ACCEL / a : 1
+  arm.vx += ax * k * dt
+  arm.vy += ay * k * dt
+  const v = vecLen(arm.vx, arm.vy)
+  if (v > FREE_SPEED) {
+    arm.vx *= FREE_SPEED / v
+    arm.vy *= FREE_SPEED / v
+  }
   arm.wx = px + arm.vx * dt
   arm.wy = py + arm.vy * dt
   const d = vecLen(arm.wx - arm.sx, arm.wy - arm.sy)
@@ -955,13 +1037,16 @@ function freeHand(inst, arm, px, py, dt) {
   keepWristOut(arm)
 }
 //
-// Where a free hand hangs: loose under its shoulder, or — the walker's —
-// held up ahead.
+// Where a free hand hangs: loose under its shoulder (a little farther
+// out from the head's middle), or — the walker's — held up out to its
+// own side (the tail's hangs on); between the two by how long it has
+// walked (walkShare: the way's tops and sides change fast round a small
+// ledge, the hands' place does not).
 //
 function hangPose(inst, arm, out) {
-  const f = inst.frame
-  out.x = f.walk ? arm.sx + f.dx * FREE_R : arm.sx + arm.side * HANG_APART
-  out.y = f.walk ? arm.sy - FREE_UP * FREE_R : arm.sy + REACH_MAX * HANG_SHARE
+  const w = inst.walkShare * Math.abs(arm.side)
+  out.x = arm.sx + lerp((arm.sx - inst.body.x) * HANG_OUT, arm.side * FREE_R, w)
+  out.y = arm.sy + lerp(REACH_MAX * HANG_SHARE, -FREE_UP * FREE_R, w)
 }
 //
 // A feeling hand's place along its arc: out from near to far and back,
@@ -978,17 +1063,29 @@ function probeSpot(arm, dt, out) {
 }
 //
 // A spot for a free hand out of anything hard (nor within the limb's
-// radius of it): drawn back toward the shoulder until it is clear.
+// radius of it): the last clear point on the straight way from its
+// shoulder toward the spot (looked for every TARGET_STEP px, then halved
+// TARGET_HALVINGS times) — it stops before the first thing in its way,
+// so the spot slides along what the hand cannot pass as the head moves
+// and never hops to the far side of a small ledge and back.
 //
 function freeSpot(arm, spot) {
-  const dx = arm.sx - spot.x
-  const dy = arm.sy - spot.y
-  const d = vecLen(dx, dy) || 1
-  for (let n = 0; n < TARGET_TRIES && n * TARGET_STEP < d; n++) {
-    if (isOpen(Math.round(spot.x) | 0, Math.round(spot.y) | 0, LIMB.radius)) return
-    spot.x += dx / d * TARGET_STEP
-    spot.y += dy / d * TARGET_STEP
+  const dx = spot.x - arm.sx
+  const dy = spot.y - arm.sy
+  const steps = Math.ceil((vecLen(dx, dy) || 1) / TARGET_STEP)
+  let clear = 0
+  let blocked = 1
+  for (let i = 1; i <= steps && blocked === 1; i++) {
+    if (isOpen(Math.round(arm.sx + dx * i / steps) | 0, Math.round(arm.sy + dy * i / steps) | 0, LIMB.radius)) clear = i / steps
+    else blocked = i / steps
   }
+  for (let n = 0; n < TARGET_HALVINGS && clear < 1 && blocked > clear; n++) {
+    const mid = (clear + blocked) * HALF
+    if (isOpen(Math.round(arm.sx + dx * mid) | 0, Math.round(arm.sy + dy * mid) | 0, LIMB.radius)) clear = mid
+    else blocked = mid
+  }
+  spot.x = arm.sx + dx * clear
+  spot.y = arm.sy + dy * clear
 }
 //
 // A free hand's wrist out of anything hard, its limb's thickness counted:
@@ -1018,14 +1115,17 @@ function dragHand(arm) {
   arm.y[SEGS] = arm.wy
 }
 //
-// A free hand points the way it moves — it leads its limb as a head leads
-// a snake's body — and, hardly moving (under LEAD_SPEED px/s) or dragged,
-// the way its limb's end lies; eased.
+// A free hand lies along its limb: it turns (eased) to the way the limb
+// runs up to its last piece — that piece lies along the hand itself
+// (stiffEnd), so it is read from the HAND_BASE pieces before it; a
+// dragged hand's, to the way the chain's end lies. Never to the way it
+// moves: a hand drawn back toward its shoulder would turn in on its limb.
 //
-function pointHand(arm, speed, dt) {
-  const moving = !arm.drag && speed > LEAD_SPEED
-  const dx = moving ? arm.vx : arm.x[SEGS] - arm.x[SEGS - 1]
-  const dy = moving ? arm.vy : arm.y[SEGS] - arm.y[SEGS - 1]
+function pointHand(arm, dt) {
+  const to = arm.drag ? SEGS : SEGS - 1
+  const from = arm.drag ? SEGS - 1 : SEGS - 1 - HAND_BASE
+  const dx = arm.x[to] - arm.x[from]
+  const dy = arm.y[to] - arm.y[from]
   const d = vecLen(dx, dy) || 1
   const e = Math.min(1, AXIS_EASE * dt)
   setAxis(arm, arm.ax + (dx / d - arm.ax) * e, arm.ay + (dy / d - arm.ay) * e)
@@ -1038,7 +1138,11 @@ function pointHand(arm, speed, dt) {
 // Holding, its points settle onto the straight line from the hold to the
 // head; free, each follows the next one toward the hand, drooping a
 // little; caught, each is drawn after the one before from the shoulder
-// on. Then every point is kept out of anything hard.
+// on. Its end gives to the hand, never the hand to it: a moving hand's
+// last piece lies straight along the hand (stiffEnd), a holding or
+// dragged one's bends to within HAND_BEND of it (bendEnd: a holding
+// hand's claws stay on their spot). Then every point is kept out of
+// anything hard.
 //
 function flex(arm, dt) {
   const { x, y } = arm
@@ -1057,6 +1161,8 @@ function flex(arm, dt) {
   if (held) straighten(arm, Math.min(1, LIMB.tautRate * dt))
   else if (arm.drag) followEnd(arm, 0, 1)
   else followHand(arm, LIMB.droop * dt)
+  if (held || arm.drag) bendEnd(arm, x, y)
+  else stiffEnd(arm)
   keepOutOfHard(arm)
 }
 function lengthOf(arm) {
@@ -1072,11 +1178,43 @@ function straighten(arm, e) {
   }
 }
 //
+// A limb's end bent to its hand: where the hand is turned more than
+// HAND_BEND either way from the way the chain's last piece runs, that
+// piece is turned about the wrist until it is not. (`hand`: its ax, ay —
+// the limb, or its drawn hand; xs, ys: the chain's points, or as drawn.)
+//
+function bendEnd(hand, xs, ys) {
+  const dx = xs[SEGS] - xs[SEGS - 1]
+  const dy = ys[SEGS] - ys[SEGS - 1]
+  const turn = Math.atan2(dx * hand.ay - dy * hand.ax, dx * hand.ax + dy * hand.ay)
+  if (Math.abs(turn) <= HAND_BEND) return
+  const over = turn - Math.sign(turn) * HAND_BEND
+  const c = Math.cos(over)
+  const s = Math.sin(over)
+  xs[SEGS - 1] = xs[SEGS] - (dx * c - dy * s)
+  ys[SEGS - 1] = ys[SEGS] - (dx * s + dy * c)
+}
+//
+// A moving hand's limb comes out of its wrist straight along the hand:
+// the chain's last piece laid on the hand's own line, its length kept.
+// (Left to follow the hand like the rest, that piece flips over within a
+// step when the hand is drawn back faster than the piece is long — and a
+// piece bent only as far as HAND_BEND jumps from one side to the other
+// there.)
+//
+function stiffEnd(arm) {
+  const { x, y } = arm
+  const len = vecLen(x[SEGS] - x[SEGS - 1], y[SEGS] - y[SEGS - 1])
+  x[SEGS - 1] = x[SEGS] - arm.ax * len
+  y[SEGS - 1] = y[SEGS] - arm.ay * len
+}
+//
 // A free limb, led by its hand: its points droop a little, are smoothed,
-// then follow one another toward the hand (the hand leads like a head and
-// the limb comes after it along the way it went); none of its pieces ends
-// up stretched (from the shoulder on, the far end of a long one is drawn
-// in: a long piece would lie right through a ledge).
+// its end is laid along the hand (stiffEnd), then they follow one another
+// toward the hand (the hand leads like a head and the limb comes after it
+// along the way it went); none of its pieces ends up stretched (from the
+// shoulder on, the far end of a long one is drawn in: a long piece would
+// lie right through a ledge).
 //
 function followHand(arm, droop) {
   const { x, y } = arm
@@ -1086,6 +1224,7 @@ function followHand(arm, droop) {
       x[i] += ((x[i - 1] + x[i + 1]) * HALF - x[i]) * SMOOTH
       y[i] += ((y[i - 1] + y[i + 1]) * HALF - y[i]) * SMOOTH + (pass ? 0 : droop)
     }
+    stiffEnd(arm)
     followEnd(arm, SEGS, -1)
     for (let i = 0; i + 1 < SEGS; i++) {
       const dx = x[i + 1] - x[i]
@@ -1259,50 +1398,90 @@ function planTick(inst, ctx) {
 //
 // A hold its limb has no straight way to any more (something hard between
 // the shoulder and the hand: the head has gone round a corner) or that is
-// out of the limb's reach is let go — but its last one.
+// out of the limb's reach is let go — but its last one. So is one the
+// head has come right up to (within TOO_NEAR px of the shoulder: the limb
+// would lie crumpled on the head), while enough others hold.
 //
 function dropLostHolds(inst) {
   for (let i = 0; i < inst.arms.length; i++) {
     const arm = inst.arms[i]
     if (arm.state !== STATE.HOLD || inst.anchored < 2) continue
-    const far = vecLen(arm.hold.x - arm.sx, arm.hold.y - arm.sy) > REACH_MAX * ANCHOR_SLACK
-    if (!far && isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, 0)) continue
+    const span = vecLen(arm.hold.x - arm.sx, arm.hold.y - arm.sy)
+    const lost = span > REACH_MAX * ANCHOR_SLACK || !isWayClear(arm.sx, arm.sy, arm.wx, arm.wy, 0)
+    const crumpled = span < TOO_NEAR && inst.anchored > GRIP.minSupport
+    if (!lost && !crumpled) continue
     release(arm)
     inst.anchored--
   }
 }
 //
 // A step: with fewer hands holding than the mood keeps, a free hand
-// reaches for a hold; else the holding hand farthest behind the way it
-// goes (see laggingArm) reaches on from its hold — to a hold on along
-// the way, or round one of the way's next nodes. A hand that finds no
-// hold tries again after RETRY s.
+// reaches for a hold; else the holding hand farthest behind its place
+// (see laggingArm) is due — its pair's other hand reaches on while that
+// one hangs free (the due hand then lets go: the pair takes turns), else
+// it reaches on from its hold itself — to a hold on along the way from
+// the limb's own place, or round one of the way's next nodes. A hand
+// that finds no hold tries again after RETRY s.
 //
 function stepOn(inst, m) {
-  const arm = inst.anchored < m.holds ? freeArm(inst) : laggingArm(inst, m)
+  const due = inst.anchored < m.holds ? null : laggingArm(inst, m)
+  const arm = due ? freeArm(inst, due.side) ?? due : inst.anchored < m.holds ? freeArm(inst, null) : null
   if (!arm) return
+  if (!reachOn(inst, arm, m)) {
+    arm.retryAt = inst.time + RETRY
+    return
+  }
+  if (!due || arm === due) return
+  release(due)
+  inst.anchored--
+}
+//
+// Starts a hand's reach for a hold on along the way from its limb's own
+// place (the mood's lead at LEAD_SHARES), or round one of the way's next
+// nodes; whether it found one.
+//
+function reachOn(inst, arm, m) {
   const lead = inst.restFor > 0 ? 0 : m.lead
   for (let i = 0; i < LEAD_SHARES.length; i++) {
-    edgeAhead(inst, lead * LEAD_SHARES[i], inst.ideal)
-    if (findHold(inst, arm, inst.ideal.x, inst.ideal.y) && startReach(inst, arm, m)) return
+    edgeAhead(inst, lead * LEAD_SHARES[i] + arm.keep * inst.frame.dx, inst.ideal)
+    if (findHold(inst, arm, inst.ideal.x, inst.ideal.y) && startReach(inst, arm, m)) return true
   }
   for (let n = 1; n <= NODES_AHEAD && lead > 0; n++) {
     const node = inst.path[Math.min(inst.seg + n, inst.path.length - 1)]
-    if (findHold(inst, arm, node.x, node.y) && startReach(inst, arm, m)) return
+    if (findHold(inst, arm, node.x, node.y) && startReach(inst, arm, m)) return true
   }
-  arm.retryAt = inst.time + RETRY
-}
-function freeArm(inst) {
-  for (let i = 0; i < inst.arms.length; i++) {
-    const arm = inst.arms[i]
-    if (arm.state === STATE.FREE && !arm.drag && inst.time >= arm.retryAt) return arm
-  }
-  return null
+  return false
 }
 //
-// The holding hand to step on with: the one farthest behind the way it
-// goes, if it lags a stride (or lags at all, stretched or crumpled), has
-// held minHold s and enough others hold.
+// A hand free to reach: of the pair on one side (-1, 1; the tail, 0, has
+// no pair), or — any (null) — of the side with the fewest hands holding
+// or reaching.
+//
+function freeArm(inst, side) {
+  if (side === 0) return null
+  let pick = null
+  let least = Infinity
+  for (let i = 0; i < inst.arms.length; i++) {
+    const arm = inst.arms[i]
+    if (arm.state !== STATE.FREE || arm.drag || inst.time < arm.retryAt || (side !== null && arm.side !== side)) continue
+    const busy = busyOf(inst, arm.side)
+    if (busy >= least) continue
+    least = busy
+    pick = arm
+  }
+  return pick
+}
+function busyOf(inst, side) {
+  let n = 0
+  for (let i = 0; i < inst.arms.length; i++) inst.arms[i].side === side && inst.arms[i].state !== STATE.FREE && n++
+  return n
+}
+//
+// The holding hand due to step on: the one farthest behind its own
+// place along the way, if it lags a stride (or lags at all, stretched;
+// or is crumpled up against its shoulder, ahead or behind; or its limb
+// has come to lie behind the head), has held minHold s and enough
+// others hold.
 //
 function laggingArm(inst, m) {
   if (inst.anchored - 1 < GRIP.minSupport) return null
@@ -1313,8 +1492,10 @@ function laggingArm(inst, m) {
     const arm = inst.arms[i]
     if (arm.state !== STATE.HOLD || inst.time - arm.heldAt < GRIP.minHold || inst.time < arm.retryAt) continue
     const span = vecLen(arm.hold.x - arm.sx, arm.hold.y - arm.sy)
-    const lag = -((arm.hold.gx - inst.body.x) * f.dx + (arm.hold.gy - inst.body.y) * f.dy)
-    const need = span > REACH_MAX * STRETCH || span < CRAMPED ? m.stride + lag : lag
+    const along = (arm.hold.gx - inst.body.x) * f.dx + (arm.hold.gy - inst.body.y) * f.dy
+    const lag = arm.keep * f.dx - along
+    const behind = runBehind(inst, arm, arm.hold.x, arm.hold.y) - BEHIND_MOST
+    const need = span < CRAMPED ? m.stride + Math.abs(lag) : behind > 0 ? m.stride + behind : span > REACH_MAX * STRETCH ? m.stride + lag : lag
     if (need < m.stride || need <= worst) continue
     worst = need
     pick = arm
@@ -1340,8 +1521,8 @@ function findHold(inst, arm, ex, ey) {
   return Boolean(best)
 }
 //
-// The surface's edge `lead` px on along the way from its place: the
-// path's nodes' edge points, eased between them.
+// The surface's edge `lead` px on along the way from its place (back
+// along it, below 0): the path's nodes' edge points, eased between them.
 //
 function edgeAhead(inst, lead, out) {
   let seg = Math.min(inst.seg, inst.path.length - 2)
@@ -1358,6 +1539,17 @@ function edgeAhead(inst, lead, out) {
     seg++
     u = 0
   }
+  while (left < 0) {
+    const len = segLength(inst, seg)
+    const room = u * len
+    if (-left < room || seg === 0) {
+      u = Math.max(0, u + left / len)
+      break
+    }
+    left += room
+    seg--
+    u = 1
+  }
   const a = inst.path[seg]
   const b = inst.path[seg + 1]
   out.x = a.x + (b.x - a.x) * u
@@ -1365,16 +1557,40 @@ function edgeAhead(inst, lead, out) {
 }
 //
 // Whether a hand can take a hold: within reach and not too near, not
-// another hand's (within grip.gap px), something solid under the claws,
-// its wrist clear of anything hard and a straight clear way to it from
-// the shoulder.
+// another hand's (within grip.gap px), its limb's way there not behind
+// the head (unless it is stuck), something solid under the claws, its
+// wrist clear of anything hard and a straight clear way to it from the
+// shoulder.
 //
 function canHold(inst, arm, g) {
   const d = vecLen(g.x - arm.sx, g.y - arm.sy)
   if (d > HOLD_REACH || d < ARM_MIN || isTaken(inst, arm, g.x, g.y)) return false
+  if (inst.stuckFor < LOOSE_AFTER && runBehind(inst, arm, g.x, g.y) > BEHIND_TAKE) return false
   if (!Solid.isSolid(Math.round(g.x - g.nx * inst.hand.depth) | 0, Math.round(g.y - g.ny * inst.hand.depth) | 0)) return false
   aimHand(arm, g.x, g.y, inst.hand.palm, inst.aim)
   return isWristClear(inst.aim.x, inst.aim.y) && isWayClear(arm.sx, arm.sy, inst.aim.x, inst.aim.y, LIMB.radius)
+}
+//
+// How much of a limb's straight way from its root to a point lies behind
+// the head (px): the stretch of it inside the head's ellipse — little
+// where the limb runs out from its root, long where it would run across
+// under the head.
+//
+function runBehind(inst, arm, x, y) {
+  const c = Math.cos(inst.tilt)
+  const s = Math.sin(inst.tilt)
+  const wx = x - arm.sx
+  const wy = y - arm.sy
+  const d = vecLen(wx, wy) || 1
+  const rx = arm.sx - inst.body.x
+  const ry = arm.sy - inst.body.y
+  const px = (rx * c + ry * s) / HEAD.rx
+  const py = (ry * c - rx * s) / HEAD.ry
+  const ex = (wx * c + wy * s) / d / HEAD.rx
+  const ey = (wy * c - wx * s) / d / HEAD.ry
+  const a = ex * ex + ey * ey
+  const b = px * ex + py * ey
+  return Math.min(d, (Math.sqrt(Math.max(0, b * b - a * (px * px + py * py - 1))) - b) / a)
 }
 function isTaken(inst, arm, x, y) {
   for (let i = 0; i < inst.arms.length; i++) {
@@ -1438,6 +1654,7 @@ function startReach(inst, arm, m) {
   r.fay = arm.ay
   r.vx = arm.vx * carried
   r.vy = arm.vy * carried
+  r.turn = Math.atan2(r.fax * to.ay - r.fay * to.ax, r.fax * to.ax + r.fay * to.ay)
   r.t = 0
   r.dur = Math.max(m.reachTime[0], Math.min(m.reachTime[1], vecLen(to.x - r.fx, to.y - r.fy) / m.reachSpeed)) * (1 + inst.rng() * REACH_JITTER)
   arm.probe.on = false
@@ -1447,8 +1664,10 @@ function startReach(inst, arm, m) {
   return true
 }
 //
-// The reach's curve from where the hand is, with a lift off the surfaces
-// at both ends; whether it is clear of anything hard.
+// The reach's curve from where the hand is, with a lift off the surface
+// it leaves; it comes in on the hold along the hand's own way there (so
+// the limb's end and the hand lie one way as it lands), LAND_OFF of the
+// lift off that surface; whether it is clear of anything hard.
 //
 function layPath(arm, lift) {
   const r = arm.reach
@@ -1458,8 +1677,8 @@ function layPath(arm, lift) {
   const fny = held ? arm.hold.ny : -arm.ay
   r.c1x = arm.wx + (arm.sx - arm.wx) * RETRACT + fnx * lift
   r.c1y = arm.wy + (arm.sy - arm.wy) * RETRACT + fny * lift
-  r.c2x = to.x + to.nx * lift
-  r.c2y = to.y + to.ny * lift
+  r.c2x = to.x + (to.nx * LAND_OFF - to.ax) * lift
+  r.c2y = to.y + (to.ny * LAND_OFF - to.ay) * lift
   for (let i = 0; i < PATH_CHECKS.length; i++) {
     const t = PATH_CHECKS[i]
     if (isHard(Math.round(cubic(arm.wx, r.c1x, r.c2x, to.x, t)) | 0, Math.round(cubic(arm.wy, r.c1y, r.c2y, to.y, t)) | 0)) return false
@@ -1468,15 +1687,16 @@ function layPath(arm, lift) {
 }
 //
 // Roaming, a hand hanging free feels about now and then (while it moves,
-// one hand is kept back for the next step): it sweeps an arc ahead, to
-// one side then the other.
+// one hand is kept back for the next step; the tail never does): it
+// sweeps an arc along the way out to its own side, to one side of that
+// then the other.
 //
 function maybeProbe(inst) {
   if (inst.mood === MOOD.PURSUE) return
   let spare = inst.speed > MOVE_EPS ? 1 : 0
   for (let i = 0; i < inst.arms.length; i++) {
     const arm = inst.arms[i]
-    if (arm.state !== STATE.FREE || arm.probe.on || arm.drag) continue
+    if (arm.state !== STATE.FREE || arm.probe.on || arm.drag || !arm.side) continue
     if (spare-- > 0 || inst.time < arm.probeAt) continue
     arm.probeAt = inst.time + C.explore.probeGap * (1 + inst.rng() * PROBE_VARY)
     inst.rng() < C.explore.probeChance && startProbe(inst, arm)
@@ -1484,7 +1704,8 @@ function maybeProbe(inst) {
 }
 function startProbe(inst, arm) {
   const f = inst.frame
-  const center = Math.atan2(f.dy - f.ny * PROBE_TILT, f.dx - f.nx * PROBE_TILT)
+  const out = f.dx * arm.side < 0 ? -1 : 1
+  const center = Math.atan2(f.dy * out - f.ny * PROBE_TILT, f.dx * out - f.nx * PROBE_TILT)
   const p = arm.probe
   inst.probeSide = -inst.probeSide
   p.a0 = center - PROBE_ARC * inst.probeSide
@@ -1612,7 +1833,9 @@ function isInView(inst, view) {
 // Its pose this frame, `alpha` of the way from its last step to the
 // current one: the head (bobbing, the side it faces, its jaw), each
 // limb's chain (its inner points drawn as they settle:
-// smoothDrawn), wrist and hand, its curve laid. (dt: the frame's time.)
+// smoothDrawn), wrist and hand (never more than HAND_BEND from the
+// chain's end as drawn: the end is bent to the hand), its curve laid.
+// (dt: the frame's time.)
 //
 function pose(inst, alpha, dt) {
   const p = inst.pose
@@ -1635,6 +1858,7 @@ function pose(inst, alpha, dt) {
     d.ay = lerp(arm.p.ay, arm.ay, alpha)
     arm.swell = Math.max(LIMB.girth.thin, Math.min(LIMB.girth.thick, Math.sqrt(REACH_MAX * LIMB.girth.rest / (arm.seg * SEGS))))
     smoothDrawn(arm, dt)
+    bendEnd(d, arm.nx, arm.ny)
     Look.layArm(arm)
     clearCurve(arm) && Look.measureArm(arm)
   }

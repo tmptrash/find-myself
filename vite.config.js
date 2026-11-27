@@ -17,8 +17,19 @@ export default defineConfig({
     // index.html out file will start with a relative path for script
     base: "./",
     publicDir: "assets",
+    //
+    // Dev server: Kaplay is patched in node_modules
+    // (scripts/apply-kaplay-performance-patch.js), and Vite does not watch
+    // node_modules — a server left running kept serving the Kaplay it read
+    // at its start, without the patches made since (the game then ran its
+    // new code on an old engine). Kaplay's own folder is watched, so a
+    // re-patched Kaplay reloads the page.
+    //
     server: {
         port: 3001,
+        watch: {
+            ignored: ["!**/node_modules/kaplay/**"],
+        },
     },
     //
     // Dev server: keep deps debuggable.

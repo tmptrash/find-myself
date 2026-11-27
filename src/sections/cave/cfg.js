@@ -153,9 +153,15 @@ export const CAVE_CFG = {
     // `length` long, a chain of `segments` pieces drawn as one smooth
     // curve `subdivide` times finer, `thickness` times the art's width,
     // tapering from taper[0] at the head to taper[1] at the wrist; a hold
-    // may need at most reachShare of the length. The limbs leave the head
-    // at `shoulders` ([x, y] from its middle, facing left; mirrored with
-    // it). The head keeps off the edge it climbs by hangH under a
+    // may need at most reachShare of the length. The limbs are rooted on
+    // the head at `shoulders` ([x, y] from its middle), just inside its
+    // rim: a pair at either side (two at its front, two at its back,
+    // whichever way it faces) and one in the middle of its underside,
+    // its tail. Each keeps its holds round its own place, `keep` px to
+    // its side of the head along a level way (the pair on the side it
+    // goes to holds ahead, the other pair behind, the tail under the
+    // head) — so a limb runs out from where it is rooted.
+    // The head keeps off the edge it climbs by hangH under a
     // ceiling, walkH over a top, sideH on a side. It is an ellipse
     // head.rx px across either side of its middle and head.ry up and down
     // (its dome; only the tips of the scales round it reach farther):
@@ -173,7 +179,8 @@ export const CAVE_CFG = {
       thickness: 1,
       taper: [1.55, 0.9],
       reachShare: 0.93,
-      shoulders: [[-13, 9], [-7, 12], [0, 13], [7, 12], [13, 9]],
+      shoulders: [[-27, -1], [-25, 9], [0, 20], [25, 9], [27, -1]],
+      keep: [-44, -26, 0, 26, 44],
       hangH: 108,
       walkH: 124,
       sideH: 86,

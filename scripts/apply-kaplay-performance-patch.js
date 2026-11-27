@@ -193,6 +193,34 @@ const PAGE_REMOVE_NEW = 'a.update(this._scratch(s,i),n,o),this._used.delete(e)}'
 // stands for both.
 //
 const TYPED_QUEUE_MARKER = 'this._vqLen'
+//
+// drawPolygon() with a texture: a textured polygon in one colour with its
+// own indices (a limb's strip, a skinned mesh) built four throwaway arrays
+// per call (pos, uv, colour, opacity) that ze() then re-read. Its vertices
+// and uvs now go straight into ze()'s one buffer, as the untextured fast
+// path's do. ze()'s view of that buffer is kept per length instead of
+// being a new subarray on every draw call.
+//
+const TEX_POLY_SE_OLD = ';else if(t.fill!==!1){let r=t.color??F.WHITE,n={pos:'
+const TEX_POLY_SE_NEW =
+  ';else if(t.fill!==!1&&t.uv&&t.indices&&!t.colors&&!t.opacities&&!t.triangulate&&t.uv.length>=t.pts.length)ze({tfast:1,pts:t.pts,uv:t.uv,c:t.color??F.WHITE,op:t.opacity??1},t.indices,t.fixed,t.tex,t.shader,t.uniform??void 0,t.blend??0);else if(t.fill!==!1){let r=t.color??F.WHITE,n={pos:'
+const TEX_POLY_COUNT_OLD = 'f=t.qfast?4:t.fast?t.pts.length:t.pos.length/2,'
+const TEX_POLY_COUNT_NEW = 'f=t.qfast?4:t.fast||t.tfast?t.pts.length:t.pos.length/2,'
+const TEX_POLY_ZE_OLD = '}else if(t.fast){let A=u.a,B=u.b,C=u.c,D=u.d,E=u.e,H=u.f,O=t.op,Os=t.ops;'
+const TEX_POLY_ZE_NEW =
+  '}else if(t.tfast){let A=u.a,B=u.b,C=u.c,D=u.d,E=u.e,H=u.f,O=t.op,K=t.c,cr=K.r/255,cg=K.g/255,cb=K.b/255,U=t.uv;for(let x=0;x<f;x++){let P=t.pts[x],Q=U[x],X=P.x,V=P.y;p[g++]=A*X+C*V+E,p[g++]=B*X+D*V+H,p[g++]=Q.x,p[g++]=Q.y,p[g++]=cr,p[g++]=cg,p[g++]=cb,p[g++]=O}}else if(t.fast){let A=u.a,B=u.b,C=u.c,D=u.d,E=u.e,H=u.f,O=t.op,Os=t.ops;'
+const ZE_VIEW_OLD = 'p=_zB.subarray(0,_zN),g=0;'
+const ZE_VIEW_NEW = 'p=(_zB._v||(_zB._v=new Map)).get(_zN)||(_zB._v.set(_zN,_zB.subarray(0,_zN)),_zB._v.get(_zN)),g=0;'
+//
+// go(): the scene's own event handlers (every k.onUpdate, k.onKeyPress,
+// k.onSceneLeave … made at scene level) were cancelled on leaving it but
+// never taken off game.sceneEvents — the list only grew, and through the
+// cancelled handlers' closures every scene ever entered stayed in memory
+// (a whole level: its sounds' buffers, masks, typed arrays; ~5 MB a visit).
+// The list is emptied once its handlers are cancelled.
+//
+const SCENE_EVENTS_OLD = 'l.game.sceneEvents.forEach(r=>r?.cancel()),'
+const SCENE_EVENTS_NEW = 'l.game.sceneEvents.forEach(r=>r?.cancel()),l.game.sceneEvents.length=0,'
 
 const PATCHES = [
   { markers: ['_vScratch'], pairs: [[FLUSH_OLD, FLUSH_NEW], [UNIFORM_OLD, UNIFORM_NEW]] },
@@ -221,7 +249,12 @@ const PATCHES = [
   {
     markers: ['_put(e,r,n,o,s,i,a)'],
     pairs: [[PAGE_NEW_OLD, PAGE_NEW_NEW], [PAGE_SYNC_OLD, PAGE_SYNC_NEW], [PAGE_BLIT_OLD, PAGE_BLIT_NEW], [PAGE_REMOVE_OLD, PAGE_REMOVE_NEW]]
-  }
+  },
+  {
+    markers: ['ze({tfast:1,'],
+    pairs: [[TEX_POLY_SE_OLD, TEX_POLY_SE_NEW], [TEX_POLY_COUNT_OLD, TEX_POLY_COUNT_NEW], [TEX_POLY_ZE_OLD, TEX_POLY_ZE_NEW], [ZE_VIEW_OLD, ZE_VIEW_NEW]]
+  },
+  { markers: ['l.game.sceneEvents.length=0'], pairs: [[SCENE_EVENTS_OLD, SCENE_EVENTS_NEW]] }
 ]
 
 for (const name of DIST_FILES) {

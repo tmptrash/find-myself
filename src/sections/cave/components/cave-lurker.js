@@ -334,7 +334,9 @@ const CLEAR_TURNS = [0.2, -0.2, 0.4, -0.4, 0.6, -0.6, 0.9, -0.9, 1.2, -1.2, 1.6,
 // first and the last END_KEEP points kept so it leaves the rosette
 // straight up and meets the collar along the head), and every point with
 // soil within SOIL_R px is pushed SOIL_PUSH px away from it each pass (but
-// the SOIL_FREE points at either end, which follow the root and the head).
+// the SOIL_FREE points at either end, which follow the root and the head;
+// only points that set out with soil within SOIL_FAR px are looked at
+// again each pass: most of the neck lies in open water).
 // Its bend is drawn round the bank's corner (to VIA) by a share eased in
 // over VIA_BLEND px, never all at once. The head never turns more than
 // HEAD_BEND_MAX rad off the way the neck comes up to it (read over its
@@ -361,12 +363,14 @@ const NECK_EASE = 9
 const SMOOTH_PULL = 0.5
 const END_KEEP = 2
 const SOIL_R = 10
+const SOIL_FAR = 22
 const SOIL_FREE = 6
 const HEAD_BEND_MAX = 0.9
 const HEAD_BEND_READ = 8
 const VIA_BLEND = 30
 const UP = { x: 0, y: -1 }
 const SOIL_PUSH = 2
+const LINE_ROOM = 128
 const SOIL_DIRS = Array.from({ length: 8 }, (_, i) => ({ x: Math.cos(i * Math.PI / 4), y: Math.sin(i * Math.PI / 4) }))
 const REACH = 480
 //
@@ -430,6 +434,9 @@ let atlas = null
 let jawTop = null
 let jawUnder = null
 let jawEdges = null
+let lineX = new Float64Array(LINE_ROOM)
+let lineY = new Float64Array(LINE_ROOM)
+let lineNear = new Uint8Array(LINE_ROOM)
 
 /**
  * Creates the lurker by the lake's left bank.
@@ -1054,7 +1061,7 @@ function sinkTarget(inst) {
 //
 function keepOutOfSoil(inst, dt) {
   if (inst.head.y < Layout.LAKE_SURFACE_Y) return
-  outOfSoil(inst.head)
+  pointOutOfSoil(inst.head)
   if (!jawsInSoil(inst, inst.dir.x, inst.dir.y)) return
   for (const turn of CLEAR_TURNS) {
     const c = Math.cos(turn)
@@ -1338,36 +1345,77 @@ function uniform(line) {
 }
 //
 // The neck's line evened into arcs `passes` times and kept out of the soil (its ends
-// stay: straight out of the rosette, along the head at the collar).
+// stay: straight out of the rosette, along the head at the collar). It is
+// worked on in two numeric buffers (lineX, lineY) and written back once:
+// every write of a fraction into a point's own field is boxed by V8, and
+// the passes make thousands of them a frame. Which points have soil near
+// enough to be pushed off it is found once (lineNear), not every pass:
+// the passes move a point a few px, and asking the soil's mask round
+// every point every pass was the dearest thing the level did each frame.
 //
 function even(pts, passes) {
   const n = pts.length
+  if (n > lineX.length) {
+    lineX = new Float64Array(n * 2)
+    lineY = new Float64Array(n * 2)
+    lineNear = new Uint8Array(n * 2)
+  }
+  for (let i = 0; i < n; i++) {
+    lineX[i] = pts[i].x
+    lineY[i] = pts[i].y
+  }
+  for (let i = 0; i < n; i++) lineNear[i] = i > SOIL_FREE && i < n - 1 - SOIL_FREE && isNearSoil(i) ? 1 : 0
   for (let pass = 0; pass < passes; pass++) {
     for (let i = END_KEEP; i < n - END_KEEP; i++) {
-      const a = pts[i - 1]
-      const b = pts[i + 1]
-      const p = pts[i]
-      p.x += ((a.x + b.x) * HALF - p.x) * SMOOTH_PULL
-      p.y += ((a.y + b.y) * HALF - p.y) * SMOOTH_PULL
-      i > SOIL_FREE && i < n - 1 - SOIL_FREE && outOfSoil(p)
+      lineX[i] += ((lineX[i - 1] + lineX[i + 1]) * HALF - lineX[i]) * SMOOTH_PULL
+      lineY[i] += ((lineY[i - 1] + lineY[i + 1]) * HALF - lineY[i]) * SMOOTH_PULL
+      lineNear[i] && outOfSoil(i)
     }
+  }
+  for (let i = END_KEEP; i < n - END_KEEP; i++) {
+    pts[i].x = lineX[i]
+    pts[i].y = lineY[i]
   }
 }
 //
-// A point with soil within SOIL_R px pushed SOIL_PUSH px away from it.
+// A point of its own (the head) kept out of the soil the same way.
 //
-function outOfSoil(p) {
+function pointOutOfSoil(p) {
+  lineX[0] = p.x
+  lineY[0] = p.y
+  outOfSoil(0)
+  p.x = lineX[0]
+  p.y = lineY[0]
+}
+//
+// Whether a point of the line being evened has soil near enough for the
+// passes to bring it within SOIL_R px: any within SOIL_R or SOIL_FAR px,
+// looked for the eight ways round it.
+//
+function isNearSoil(i) {
+  for (let d = 0; d < SOIL_DIRS.length; d++) {
+    const dir = SOIL_DIRS[d]
+    if (Surface.isSoil(Math.round(lineX[i] + dir.x * SOIL_R), Math.round(lineY[i] + dir.y * SOIL_R))) return true
+    if (Surface.isSoil(Math.round(lineX[i] + dir.x * SOIL_FAR), Math.round(lineY[i] + dir.y * SOIL_FAR))) return true
+  }
+  return false
+}
+//
+// A point of the line being evened (lineX, lineY) with soil within SOIL_R
+// px pushed SOIL_PUSH px away from it.
+//
+function outOfSoil(i) {
   let px = 0
   let py = 0
-  SOIL_DIRS.forEach(d => {
-    if (!Surface.isSoil(p.x + d.x * SOIL_R, p.y + d.y * SOIL_R)) return
-    px -= d.x
-    py -= d.y
-  })
-  const l = Math.hypot(px, py)
+  for (let d = 0; d < SOIL_DIRS.length; d++) {
+    if (!Surface.isSoil(Math.round(lineX[i] + SOIL_DIRS[d].x * SOIL_R), Math.round(lineY[i] + SOIL_DIRS[d].y * SOIL_R))) continue
+    px -= SOIL_DIRS[d].x
+    py -= SOIL_DIRS[d].y
+  }
+  const l = Math.sqrt(px * px + py * py)
   if (l < TINY) return
-  p.x += px / l * SOIL_PUSH
-  p.y += py / l * SOIL_PUSH
+  lineX[i] += px / l * SOIL_PUSH
+  lineY[i] += py / l * SOIL_PUSH
 }
 //
 // How far the neck's bend is drawn round the bank's corner (to VIA): none

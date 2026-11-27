@@ -33,6 +33,17 @@ const HALF = 0.5
 const STRETCH_MIN = 0.05
 const STRETCH_MAX = 1.6
 const TRI = 3
+//
+// A point being skinned, kept in one numeric buffer (its X and Y as swung
+// by the attachments, the bones' blend of it): fractions kept in an
+// object's fields or handed to a closure are boxed by V8 on every write,
+// and this runs for every vertex of every mesh each frame.
+//
+const AT_X = 0
+const AT_Y = 1
+const SUM_X = 2
+const SUM_Y = 3
+const SKIN = new Float64Array(4)
 
 /**
  * Builds a skinned mesh over a picture.
@@ -81,7 +92,6 @@ export function create(cfg) {
       mirrored: false,
       roll: 1
     },
-    acc: { x: 0, y: 0 },
     cutIdx: [],
     quadUv: null,
     quadKey: null
@@ -310,39 +320,45 @@ function ease(u) {
 // placed in the world.
 //
 function skinInto(inst, rest, bind, out) {
-  let x = rest.x
-  let y = rest.y
-  inst.attachments.forEach((a, i) => {
+  const attachments = inst.attachments
+  const p = inst.pose
+  SKIN[AT_X] = rest.x
+  SKIN[AT_Y] = rest.y
+  for (let i = 0; i < attachments.length; i++) {
     const w = bind.soft[i]
-    if (w <= 0) return
-    const ang = inst.pose.swing[i] * w
+    if (w <= 0) continue
+    const anchor = attachments[i].anchor
+    const ang = p.swing[i] * w
     const c = Math.cos(ang)
     const s = Math.sin(ang)
-    const dx = x - a.anchor.x
-    const dy = y - a.anchor.y
-    x = a.anchor.x + dx * c - dy * s
-    y = a.anchor.y + dx * s + dy * c
-  })
-  const local = inst.acc
-  local.x = 0
-  local.y = 0
-  addBone(inst, bind.b0, bind.w0, x, y, local)
-  bind.w1 > 0 && addBone(inst, bind.b1, bind.w1, x, y, local)
-  return toWorld(inst, local, out)
+    const dx = SKIN[AT_X] - anchor.x
+    const dy = SKIN[AT_Y] - anchor.y
+    SKIN[AT_X] = anchor.x + dx * c - dy * s
+    SKIN[AT_Y] = anchor.y + dx * s + dy * c
+  }
+  SKIN[SUM_X] = 0
+  SKIN[SUM_Y] = 0
+  addBone(inst, bind, false)
+  bind.w1 > 0 && addBone(inst, bind, true)
+  out.x = p.x + (p.mirrored ? -SKIN[SUM_X] : SKIN[SUM_X])
+  out.y = p.y + SKIN[SUM_Y]
+  return out
 }
 //
 // A point carried by one bone: into the bone's rest frame (along, across),
 // stretched along it, out along the bone as it stands now.
 //
-function addBone(inst, i, w, x, y, acc) {
+function addBone(inst, bind, second) {
+  const i = second ? bind.b1 : bind.b0
+  const w = second ? bind.w1 : bind.w0
   const bone = inst.bones[i]
   const p = inst.pose
   const rest = inst.joints[i]
   const now = p.joints[i]
-  const dx = x - rest.x
-  const dy = y - rest.y
+  const dx = SKIN[AT_X] - rest.x
+  const dy = SKIN[AT_Y] - rest.y
   const along = (dx * bone.cos + dy * bone.sin) * p.stretch[i]
   const across = (-dx * bone.sin + dy * bone.cos) * p.roll
-  acc.x += w * (now.x + along * p.cos[i] - across * p.sin[i])
-  acc.y += w * (now.y + along * p.sin[i] + across * p.cos[i])
+  SKIN[SUM_X] += w * (now.x + along * p.cos[i] - across * p.sin[i])
+  SKIN[SUM_Y] += w * (now.y + along * p.sin[i] + across * p.cos[i])
 }

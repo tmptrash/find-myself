@@ -16,6 +16,7 @@ This is a Kaplay.js-based 2D platformer game with procedural graphics and audio,
 - **Language**: plain JavaScript (ES modules), no TypeScript. `@types/node` is a devDependency only for editor tooling — do not add `.ts` files or type annotations.
 - **Kaplay.js version is pinned to an alpha** (`kaplay@4000.0.0-alpha.27.1` in `package.json`). Its API can differ from released-version docs/examples found online or in training data — always check actual usage in this codebase before trusting outside Kaplay examples.
 - **Kaplay postinstall patch**: `scripts/apply-kaplay-performance-patch.js` patches Kaplay after install. Never `npm install` in a way that skips `postinstall`, and never hand-edit `node_modules` directly — change that script instead so the fix survives a clean install.
+- **A running dev server and the patch**: Vite does not watch `node_modules`, so a dev server left running kept serving the Kaplay it read at its start (for days the game ran new code on an engine without the newer patches, and measured slower than a fresh server). `vite.config.js` now watches `node_modules/kaplay` (`server.watch.ignored`), so a re-patched Kaplay reloads the page. After changing the patch script, re-run it (`node scripts/apply-kaplay-performance-patch.js`) and check that the dev server serves the new file.
 
 ---
 
@@ -611,7 +612,11 @@ for (const particle of particles) {
 
 A 120 Hz display has an 8.3 ms budget. Settled Forest frames spend about 1–2 ms in JS and still missed the budget, because the main thread was waiting on the GPU. When a level drops below the refresh rate, measure `requestAnimationFrame` deltas (p50 / p95), not only the FPS HUD average. If skipping draws restores full refresh rate and adding a few milliseconds of JS does not, the cliff is a GPU sync — do not chase draw-call micro-optimisations until that sync is gone.
 
+The FPS HUD shows the mean of `1 / dt` over a second, so one missed refresh in ten reads as 114. A headless browser cannot show a 120 Hz miss (it is capped at 60, or runs uncapped): the place to look is the player's own browser, with `?perf=1` (`src/utils/perf-readout.js`). It shows frames a second and how many missed a refresh, the page's own time per frame (`js`), how late its frame callbacks began (`late`), the heap's growth and collections, and the window / canvas / GPU. Few `js` and `late` ms with frames still missed means the wait is on the GPU's or the browser's side, not in the game's code.
+
 Kaplay's `flush()` is patched in `scripts/apply-kaplay-performance-patch.js` (postinstall). The upload uses `bufferData` (the previous buffer is orphaned) instead of `bufferSubData` at offset 0, and `getUniformLocation` is cached. `bufferSubData` into a buffer that earlier draws of the same frame still reference stalls the macOS WebGL→Metal path by about 0.17 ms **per batch**, no matter how few vertices that batch holds. Do not revert this patch. On Forest it was the difference between ~104 FPS and a steady 120 at 1600×1000 and at 2400×1350.
+
+The patch also empties `game.sceneEvents` when a scene is left: Kaplay cancelled a scene's own handlers (`k.onUpdate`, `k.onKeyPress`, `k.onSceneLeave` … made at scene level) but kept them in that list for good, and through their closures every scene ever entered stayed in memory (about 5 MB a visit: a level's sound buffers, masks, typed arrays). For the same reason a listener on `window` or `document` that holds `k` or a level's `inst` is removed when its engine or scene goes (see `dropAudioUnlock` in `game-engine.js`).
 
 The same patch gives every whole image bigger than 1/16 of a 2048² texture page its own exact-size texture (Kaplay's packer otherwise leaves most of a page empty around big bakes: on a phone cave0 took 152 MB of GPU memory, now 89 MB; forest 256 → 171 MB). Many thin frames of one animation go on a sheet (`sliceY`, `singular: true`), as the cave lake's wave frames do, not one sprite per frame.
 

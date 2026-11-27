@@ -180,6 +180,15 @@ let blurKeyResetInstalled = false
 // tracked so teardownEngine() can unregister them before removing the canvas.
 //
 let activeCanvas = null
+//
+// The live engine's wait for the page's first gesture (see
+// unlockKaplayAudioOnFirstGesture): its listeners hold the engine, so an
+// engine torn down before any gesture came (a window resized a few times,
+// a lost context) stayed in memory with all it had loaded until one did.
+// teardownEngine() drops them.
+//
+const AUDIO_UNLOCK_EVENTS = ['keydown', 'pointerdown', 'touchstart']
+let audioUnlock = null
 
 /**
  * Boots a fresh Kaplay engine in the given resolution mode: creates the
@@ -313,25 +322,28 @@ export function setContextLossHandler(handler) {
 // before any real sound needs it.
 //
 function unlockKaplayAudioOnFirstGesture(k) {
-  const unlock = () => {
-    window.removeEventListener('keydown', unlock)
-    window.removeEventListener('pointerdown', unlock)
-    window.removeEventListener('touchstart', unlock)
-    try {
-      const handle = k.play('water-steps', { volume: 0.0001, paused: false })
-      handle?.stop?.()
-    } catch (error) {
-      //
-      // Asset not loaded yet on this engine — harmless, later real playback
-      // still triggers Kaplay's own internal resume on its own.
-      //
-    }
-    unlockWaterStepsAudio()
-    unlockEarTreeWhisperAudio()
+  dropAudioUnlock()
+  audioUnlock = () => unlockKaplayAudio(k)
+  AUDIO_UNLOCK_EVENTS.forEach(name => window.addEventListener(name, audioUnlock, { once: true }))
+}
+function unlockKaplayAudio(k) {
+  dropAudioUnlock()
+  try {
+    const handle = k.play('water-steps', { volume: 0.0001, paused: false })
+    handle?.stop?.()
+  } catch (error) {
+    //
+    // Asset not loaded yet on this engine — harmless, later real playback
+    // still triggers Kaplay's own internal resume on its own.
+    //
   }
-  window.addEventListener('keydown', unlock, { once: true })
-  window.addEventListener('pointerdown', unlock, { once: true })
-  window.addEventListener('touchstart', unlock, { once: true })
+  unlockWaterStepsAudio()
+  unlockEarTreeWhisperAudio()
+}
+function dropAudioUnlock() {
+  if (!audioUnlock) return
+  AUDIO_UNLOCK_EVENTS.forEach(name => window.removeEventListener(name, audioUnlock))
+  audioUnlock = null
 }
 
 //
@@ -358,6 +370,7 @@ function guardSpriteReload(k) {
  */
 export function teardownEngine(k) {
   if (!k) return
+  dropAudioUnlock()
   resetPhysicalInputLayer()
   const canvas = k.canvas
   canvas && detachContextListeners(canvas)

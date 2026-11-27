@@ -26,6 +26,7 @@ import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
 import * as Lurker from '../components/cave-lurker.js'
 import * as Haggy from '../components/cave-haggy.js'
+import * as HaggyPrey from './cave-haggy-prey.js'
 import * as HeldHero from '../components/cave-held-hero.js'
 import * as Pads from '../components/cave-pads.js'
 import * as Trumpet from '../components/cave-trumpet.js'
@@ -97,27 +98,17 @@ const Z_LAKE_SURFACE = Z_WORLD + 0.7
 const Z_HAGGY = Z_WORLD + 0.8
 const HAGGY_SEED = 4711
 //
-// What the blind climber (cave-haggy.js) may touch and eat: the hero and
-// the runners; their bodies' radii (px). In its hand the hero hangs
-// upright, leaning HELD_HERO_LEAN degrees with the hand; a runner lies
-// along the hand, its head on toward the mouth, gripped by its hind end
-// (HELD_RUNNER_BACK of its own sheet px behind its middle) and reaching
-// HELD_RUNNER_AHEAD px on from the grip — what the bites take off, so the
-// piece left in the hand grows shorter; the piece a bite took, in the
-// mouth, shrinks by CHEWED_SHRINK as it is chewed. The hero is pressed
-// in only where the fingers lie on him (cave-held-hero.js). The
-// climber's jaws are heard HAGGY_BITE_LOUD as far as a fish's splash.
+// What the blind climber (cave-haggy.js) may touch and eat: the hero
+// (his body BEING_HERO_R px round) and the runners (cave-haggy-prey.js).
+// In its hand the hero hangs upright, leaning HELD_HERO_LEAN degrees
+// with the hand, pressed in only where the fingers lie on him
+// (cave-held-hero.js). The climber's jaws are heard HAGGY_BITE_LOUD as
+// far as a fish's splash.
 //
 const BEING_HERO_R = 20
-const BEING_RUNNER_R = 9
 const PREY_HERO = 'hero'
-const PREY_RUNNER = 'runner'
 const HELD_HERO_LEAN = 25
-const HELD_RUNNER_BACK = 190
-const HELD_RUNNER_AHEAD = 22
-const CHEWED_SHRINK = 0.45
 const HAGGY_BITE_LOUD = 1
-const CHEW_CRUNCH_TIME = 0.08
 const DEG = 180 / Math.PI
 //
 // A fish's splash sounds full within the hero's reach and fades out over
@@ -330,7 +321,7 @@ function build(k, opts) {
     front: Front.create(k),
     deathFlies: DeathFireflies.create({ k, z: Z_DEATH_FLIES }),
     haggy: Haggy.create({ k, seed: HAGGY_SEED }),
-    haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null, beings: [], onSeize: null, onJaws: null, onBite: null, onDrop: null },
+    haggyCtx: { view: { left: 0, top: 0, right: 0, bottom: 0 }, prey: [], onEat: null, beings: [], onSeize: null, onJaws: null, onBite: null, onDrop: null, onGrip: null },
     beastAt: { x: 0, y: 0 },
     haggyHeld: null,
     heroPrey: { kind: PREY_HERO, ahead: 0, mouthful: false },
@@ -423,11 +414,12 @@ function build(k, opts) {
     prey: [],
     onEat: f => Fireflies.eat(inst.fireflies, f)
   }
-  inst.runnerPrey = inst.runners.map(runner => ({ kind: PREY_RUNNER, runner, ahead: HELD_RUNNER_AHEAD, mouthful: true }))
+  inst.runnerPrey = inst.runners.map(HaggyPrey.create)
   inst.haggyCtx.onSeize = prey => onHaggySeize(inst, prey)
   inst.haggyCtx.onJaws = (prey, strength, x) => onHaggyJaws(inst, prey, strength, x)
   inst.haggyCtx.onBite = (prey, bites, x, y) => onHaggyBite(inst, prey, bites, x, y)
   inst.haggyCtx.onDrop = (prey, x, y) => onHaggyDrop(inst, prey, x, y)
+  inst.haggyCtx.onGrip = (x, y) => onHaggyGrip(inst, x, y)
   inst.haggyHeld = (prey, at, angle, bites, kick, chew, claws) => drawHaggyHeld(inst, prey, at, angle, bites, kick, chew, claws)
   const getHeroPos = () => heroPos(inst)
   const getView = () => View.worldRect(inst.view)
@@ -928,21 +920,9 @@ function updateHaggy(inst, food) {
   View.worldRect(inst.view, ctx.view)
   ctx.prey = food.prey
   ctx.onEat = food.onEat
-  setBeing(ctx.beings, 0, isRespawnGrace(inst) ? null : heroPos(inst), BEING_HERO_R, inst.heroPrey)
-  for (let i = 0; i < inst.runners.length; i++) setBeing(ctx.beings, i + 1, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, BEING_RUNNER_R, inst.runnerPrey[i])
+  HaggyPrey.setBeing(ctx.beings, 0, isRespawnGrace(inst) ? null : heroPos(inst), BEING_HERO_R, inst.heroPrey)
+  for (let i = 0; i < inst.runners.length; i++) HaggyPrey.setBeing(ctx.beings, i + 1, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, HaggyPrey.RUNNER_R, inst.runnerPrey[i])
   Haggy.onUpdate(inst.haggy, ctx)
-}
-//
-// The n-th body in the climber's list (its record made once, then only
-// updated): its middle and radius and what it is to the level (prey); not
-// about (live: false) while it has no place.
-//
-function setBeing(beings, n, pos, r, prey) {
-  beings[n] ??= { x: 0, y: 0, r, live: false, prey }
-  const b = beings[n]
-  b.live = Boolean(pos)
-  b.x = pos ? pos.x : b.x
-  b.y = pos ? pos.y : b.y
 }
 //
 // A hand of the climber has caught something: a runner is gone from its
@@ -950,8 +930,14 @@ function setBeing(beings, n, pos, r, prey) {
 // of the world, his eyes shut, drawn in its hand till it bites.
 //
 function onHaggySeize(inst, prey) {
-  if (prey.kind === PREY_RUNNER) return Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
+  if (prey.kind === HaggyPrey.KIND_RUNNER) return Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
   takeHero(inst, false)
+}
+//
+// A hand of the climber has taken a hold: a soft pat, heard only near.
+//
+function onHaggyGrip(inst, x, y) {
+  CaveSound.playGrip(inst.caveSound, HaggyPrey.gripNear(x, y, heroFocus(inst)))
 }
 //
 // The climber's jaws at work on what it holds: on a runner a crunch — the
@@ -961,7 +947,7 @@ function onHaggySeize(inst, prey) {
 function onHaggyJaws(inst, prey, strength, x) {
   const near = HAGGY_BITE_LOUD - Math.abs(x - heroFocus(inst).x) / SPLASH_HEAR
   if (prey.kind === PREY_HERO) return CaveSound.playBite(inst.caveSound, near)
-  CaveSound.playCrunch(inst.caveSound, near, strength, strength < 1 ? CHEW_CRUNCH_TIME : CAVE_CFG.haggy.sense.eat.bite)
+  CaveSound.playCrunch(inst.caveSound, near, strength, HaggyPrey.crunchTime(strength))
 }
 //
 // The climber's jaws have closed: it has bitten what it holds through;
@@ -971,7 +957,7 @@ function onHaggyJaws(inst, prey, strength, x) {
 // while it is still being eaten.
 //
 function onHaggyBite(inst, prey, bites, x, y) {
-  if (prey.kind === PREY_RUNNER) {
+  if (prey.kind === HaggyPrey.KIND_RUNNER) {
     Runner.snatch(prey.runner, ENTRY_SPOT, () => heroPos(inst))
     return true
   }
@@ -1002,8 +988,7 @@ function burstEatenHero(inst, x, y) {
 // (`claws`) lie on him.
 //
 function drawHaggyHeld(inst, prey, at, angle, bites, kick, chew, claws) {
-  if (prey.kind === PREY_RUNNER && chew >= 0) return Runner.drawBitten(prey.runner, at, angle, bites, 1 - CHEWED_SHRINK * chew)
-  if (prey.kind === PREY_RUNNER) return Runner.drawHeld(prey.runner, at, angle, 1, kick, bites, HELD_RUNNER_BACK)
+  if (prey.kind === HaggyPrey.KIND_RUNNER) return HaggyPrey.onDraw(prey, at, angle, bites, kick, chew)
   const sprite = inst.heroInst && `${inst.heroInst.spritePrefix}_closed`
   if (!sprite || !claws || !inst.dead || inst.respawnAt !== Infinity) return
   inst.heldHero ??= HeldHero.create(inst.k)

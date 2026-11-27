@@ -134,6 +134,19 @@ export function waterTopAt(inst, x) {
 }
 
 /**
+ * The water's depth gradient at a world Y (Water.depthTintAt): how much
+ * of its light and then of its dark colour (COLORS.paint.depthLight,
+ * depthDark) lies over what is in the water there.
+ * @param {Object} inst - Lake instance
+ * @param {number} y - World Y
+ * @param {{light: number, dark: number}} out - Written: the two colours' opacity there
+ * @returns {{light: number, dark: number}} out
+ */
+export function depthTintAt(inst, y, out) {
+  return Water.depthTintAt(inst.water, y, out)
+}
+
+/**
  * The lake's bed under a world X (the bowl's soil top).
  * @param {Object} inst - Lake instance
  * @param {number} x - World X

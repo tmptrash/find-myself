@@ -33,7 +33,10 @@ import * as Look from './cave-haggy-draw.js'
 //   one toward the hand (the hand leads as a head does); caught behind
 //   something, it is drawn in from the shoulder and the hand comes after.
 //   No point of it goes into anything hard.
-// - It is blind and senses by touch alone. What it can eat — the hero, a
+// - It is blind and senses by touch — and by the tremor of what runs
+//   near it on the rock (a runner: prey told as `tremor`): that it feels
+//   from afar and creeps toward, to where it last felt it run. What it
+//   can eat — the hero, a
 //   runner — it catches with a hand: whatever its claws touch it seizes
 //   (the level makes the prey gone and draws it in the hand: ctx.onSeize,
 //   ctx.onBite, onDraw's drawHeld). Touched by a limb or by the head, the
@@ -264,6 +267,13 @@ const MOUTH_WIDE_HOLD = 0.6
 // past it; then the hand hangs free again, and the next strike comes
 // STRIKE_GAP s later at the soonest. Stalking, it strikes so at the
 // place it last felt its prey.
+// Tremor. Prey that shakes the rock as it runs (a runner) is felt from
+// tremor.reach px off the head while it moves tremor.speed px/s or
+// faster — standing still it gives nothing away: the nearest such one is
+// noted as touched prey is, and it stalks to where that one last ran
+// (felt anew at every plan while it keeps running). Prey it has touched
+// counts for more: a stalk after a touch is not led away by a tremor.
+// Fed, it minds no tremor for tremor.sated s after its meal.
 // A meal: the prey sits HOLD_AT of the fingers' length out from the
 // palm. The hand brings it to the mouth, its fingers turned toward the
 // mouth (CARRY_TURN rad/s): the prey's far end — its `ahead` px on
@@ -295,7 +305,7 @@ const PHASE = { GAPE: 0, BITE: 1, CHEW: 2, PAUSE: 3 }
 const MOUTH_GAPE = 1.5
 const CHEW_OPEN = 0.6
 const CHEW_SHUT = 0.08
-const CHEW_HZ = 3
+const CHEW_HZ = 1.7
 const CHEW_LOUD = 0.45
 const STILL_RATE = 4
 const CARRY_TURN = 7
@@ -340,6 +350,7 @@ const SPOT = new Float64Array(7)
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.seed - Seed of its moves
+ * @param {{x: number, y: number}} [cfg.at] - Where it starts (the hold nearest that point; its usual start spot when left out)
  * @returns {Object} Climber instance
  */
 export function create(cfg) {
@@ -347,7 +358,8 @@ export function create(cfg) {
   Look.bake(k)
   const nav = Nav.get()
   const rng = createSeededRandom(cfg.seed)
-  const start = Nav.nearestNode(nav, START_SPOT.x, START_SPOT.y, -1)
+  const at = cfg.at ?? START_SPOT
+  const start = Nav.nearestNode(nav, at.x, at.y, -1)
   const inst = {
     k,
     rng,
@@ -362,7 +374,7 @@ export function create(cfg) {
     beingVx: new Float32Array(MAX_BEINGS),
     beingVy: new Float32Array(MAX_BEINGS),
     beingSeen: new Uint8Array(MAX_BEINGS),
-    target: { x: 0, y: 0, at: -Infinity },
+    target: { x: 0, y: 0, at: -Infinity, touched: false },
     meal: { arm: null, prey: null, t: 0, bites: 0, phase: PHASE.GAPE, left: 0, chews: 0, biting: false, done: false, kick: 0, way: 0, turned: false },
     heldDraw: null,
     strikeAt: 0,
@@ -371,6 +383,7 @@ export function create(cfg) {
     lookIn: TURN.lookEvery[1],
     avoid: { x: 0, y: 0, r: 0, cost: AVOID.cost, until: 0 },
     waterAt: -Infinity,
+    fedAt: -Infinity,
     plannedAt: -Infinity,
     plannedTo: { x: 0, y: 0 },
     wantWay: false,
@@ -428,7 +441,8 @@ export function create(cfg) {
  * @param {{left: number, top: number, right: number, bottom: number}} ctx.view - Visible world rect
  * @param {Array<{x: number, y: number}>} ctx.prey - Small prey its claws may snatch (the fireflies)
  * @param {Function} ctx.onEat - Called with a small prey it snatched
- * @param {Array<{x: number, y: number, r: number, live: boolean, prey: Object|null}>} ctx.beings - The living things about (their bodies' middles and radii; live: about right now; prey: what the level knows it by — its `ahead`: how far it reaches on from where it is gripped, px; `mouthful`: small enough to be pushed into the mouth — null for what it cannot eat): what it may touch
+ * @param {Array<{x: number, y: number, r: number, live: boolean, prey: Object|null}>} ctx.beings - The living things about (their bodies' middles and radii; live: about right now; prey: what the level knows it by — its `ahead`: how far it reaches on from where it is gripped, px; `mouthful`: small enough to be pushed into the mouth; `tremor`: its running shakes the rock, felt from afar — null for what it cannot eat): what it may touch
+ * @param {(x: number, y: number) => void} [ctx.onGrip] - A hand has taken a hold there (to be heard)
  * @param {(prey: Object) => void} ctx.onSeize - A hand has caught this prey: it is the climber's now (gone from the world, drawn in the hand)
  * @param {(prey: Object, strength: number, x: number, y: number) => void} ctx.onJaws - Its jaws work on its prey there: 1 as they start to close for a bite (the bite takes eat.bite s), less for a chew
  * @param {(prey: Object, bites: number, x: number, y: number) => boolean} ctx.onBite - Its jaws have closed: it has bitten its prey through (for the bites-th time, at that world point); false once nothing is left of it
@@ -1072,6 +1086,7 @@ function swing(inst, arm, dt) {
   if (arm.strike || vecLen(to.x - arm.sx, to.y - arm.sy) > REACH_MAX * ANCHOR_SLACK) return release(arm)
   anchorAt(inst, arm, to)
   inst.lastLand = inst.time
+  inst.ctx?.onGrip?.(to.x, to.y)
   trimHolds(inst, arm)
 }
 //
@@ -1492,9 +1507,11 @@ function openWide(inst) {
 // kept that is cut off or out of reach; a step when one is due; the free
 // limbs feeling about, or — stalking — one of them striking at its prey's
 // place (neither with prey in a hand); the water, the holds and the
-// fireflies a free hand's claws touch.
+// fireflies a free hand's claws touch. Before all that, what it feels
+// running near.
 //
 function planTick(inst, ctx) {
+  senseTremor(inst)
   inst.wantWay && planWay(inst)
   const m = MOOD_CFG[inst.mood]
   dropLostHolds(inst)
@@ -2082,13 +2099,37 @@ function headOn(inst, b) {
   return vecLen(b.x - inst.body.x, b.y - inst.body.y) <= HEAD.rx + b.r
 }
 //
-// Prey felt: where it is is noted and it stalks there, whatever it was
-// doing.
+// What it feels running near, at every plan — nothing while it eats, for
+// tremor.sated s after a meal, or while it stalks prey it has touched:
+// of the prey whose running shakes
+// the rock, the nearest one within tremor.reach px of its head that
+// moves tremor.speed px/s or faster is noted, and it stalks there.
 //
-function notice(inst, b) {
+function senseTremor(inst) {
+  const beings = inst.beings
+  if (!beings || inst.meal.arm || inst.time - inst.fedAt < SENSE.tremor.sated || (inst.mood === MOOD.STALK && inst.target.touched)) return
+  const count = Math.min(beings.length, MAX_BEINGS)
+  let felt = null
+  let best = SENSE.tremor.reach
+  for (let j = 0; j < count; j++) {
+    const b = beings[j]
+    if (!b.live || !b.prey?.tremor || vecLen(inst.beingVx[j], inst.beingVy[j]) < SENSE.tremor.speed) continue
+    const d = vecLen(b.x - inst.body.x, b.y - inst.body.y)
+    if (d >= best) continue
+    best = d
+    felt = b
+  }
+  felt && notice(inst, felt, false)
+}
+//
+// Prey felt — touched, or only its tremor: where it is is noted and it
+// stalks there, whatever it was doing.
+//
+function notice(inst, b, touched = true) {
   inst.target.x = b.x
   inst.target.y = b.y
   inst.target.at = inst.time
+  inst.target.touched = touched
   inst.mood = MOOD.STALK
   inst.restFor = 0
   inst.pauseFor = 0
@@ -2334,6 +2375,7 @@ function endMeal(inst) {
   inst.mouthWant = 0
   inst.mouthIn = MOUTH_GAP
   inst.restFor = EAT.rest
+  inst.fedAt = inst.time
 }
 //
 // The meal as the level draws it (inst.heldDraw): the piece the last bite

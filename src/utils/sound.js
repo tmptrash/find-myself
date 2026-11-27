@@ -31,6 +31,39 @@ const APPLE_THUD_SILENT = 0.001
 //
 const MENU_CLICK_SILENCE = 0.001
 //
+// Forest wood impacts: a muffled puff of noise (low-passed, its cutoff
+// sliding from cutoffStart to cutoffEnd Hz, swelling in over noiseAttack
+// s, noiseMix of the peak) over a short sine body dropping from toneStart
+// (+ up to toneJitter) to toneEnd Hz (toneAttack s, toneMix of the peak).
+// WOOD_KNOCK is a step on a branch or the tree's shake; WOOD_LAND_SOFT a
+// landing on a branch or on the centipede's stick — lower, duller and
+// slower to swell, so it is a soft thud and not a rap: WOOD_LAND_PEAK of
+// the land volume, WOOD_LAND_SEC long.
+//
+const WOOD_KNOCK = { cutoffStart: 520, cutoffEnd: 280, noiseAttack: 0.006, noiseMix: 0.65, toneStart: 340, toneJitter: 40, toneEnd: 180, toneAttack: 0.008, toneMix: 0.35 }
+const WOOD_LAND_SOFT = { cutoffStart: 340, cutoffEnd: 180, noiseAttack: 0.016, noiseMix: 0.6, toneStart: 215, toneJitter: 25, toneEnd: 120, toneAttack: 0.018, toneMix: 0.3 }
+const WOOD_LAND_PEAK = 0.95
+const WOOD_LAND_SEC = 0.15
+const WOOD_STEP_PEAK = 1.2
+const WOOD_STEP_SEC = 0.07
+const WOOD_IMPACT_Q = 0.4
+const WOOD_IMPACT_SILENT = 0.001
+const WOOD_IMPACT_TAIL = 0.02
+//
+// The gentle sound of the hero's death: a soft sine sighing down from
+// LIFE_SIGH_F0 to LIFE_SIGH_F1 Hz over LIFE_SIGH_FALL s under a low-pass
+// (LIFE_SIGH_LP Hz), swelling in over LIFE_SIGH_ATTACK s to LIFE_SIGH_GAIN
+// and gone by LIFE_SIGH_SEC s.
+//
+const LIFE_SIGH_F0 = 420
+const LIFE_SIGH_F1 = 210
+const LIFE_SIGH_FALL = 0.9
+const LIFE_SIGH_LP = 700
+const LIFE_SIGH_ATTACK = 0.14
+const LIFE_SIGH_GAIN = 0.085
+const LIFE_SIGH_SEC = 1.1
+const LIFE_SIGH_SILENT = 0.001
+//
 // Forest spiky tomato burst: noise blast, sub thump and a short shard rattle.
 //
 const TOMATO_BLAST_DURATION = 0.7
@@ -734,11 +767,11 @@ export function playForestTomatoExplosion(instance) {
 // Forest section: deep wooden knock on branches and log platforms.
 //
 function playForestWoodKnockLand(instance) {
-  playForestSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 1.4, 0.1)
+  playForestSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * WOOD_LAND_PEAK, WOOD_LAND_SEC, WOOD_LAND_SOFT)
 }
 
 function playForestWoodKnockStep(instance) {
-  playForestSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * 1.2, 0.07)
+  playForestSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * WOOD_STEP_PEAK, WOOD_STEP_SEC)
 }
 
 //
@@ -787,7 +820,7 @@ function playForestAppleSoftImpact(instance, destinationGain, peakAmp) {
 // Soft padded wood step — muffled thump similar to mushroom-trampoline bounce.
 //
 
-function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
+function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration, shape = WOOD_KNOCK) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
   const bufferSize = Math.floor(ctx.sampleRate * duration)
@@ -800,30 +833,30 @@ function playForestSoftWoodImpact(instance, destinationGain, peakAmp, duration) 
   noise.buffer = noiseBuffer
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(520, now)
-  filter.frequency.linearRampToValueAtTime(280, now + duration)
-  filter.Q.value = 0.4
+  filter.frequency.setValueAtTime(shape.cutoffStart, now)
+  filter.frequency.linearRampToValueAtTime(shape.cutoffEnd, now + duration)
+  filter.Q.value = WOOD_IMPACT_Q
   const noiseGain = ctx.createGain()
-  noiseGain.gain.setValueAtTime(0.001, now)
-  noiseGain.gain.linearRampToValueAtTime(peakAmp * 0.65, now + 0.006)
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseGain.gain.setValueAtTime(WOOD_IMPACT_SILENT, now)
+  noiseGain.gain.linearRampToValueAtTime(peakAmp * shape.noiseMix, now + shape.noiseAttack)
+  noiseGain.gain.exponentialRampToValueAtTime(WOOD_IMPACT_SILENT, now + duration)
   noise.connect(filter)
   filter.connect(noiseGain)
   noiseGain.connect(destinationGain)
   noise.start(now)
-  noise.stop(now + duration + 0.02)
+  noise.stop(now + duration + WOOD_IMPACT_TAIL)
   const osc = ctx.createOscillator()
   osc.type = 'sine'
-  osc.frequency.setValueAtTime(340 + Math.random() * 40, now)
-  osc.frequency.exponentialRampToValueAtTime(180, now + duration)
+  osc.frequency.setValueAtTime(shape.toneStart + Math.random() * shape.toneJitter, now)
+  osc.frequency.exponentialRampToValueAtTime(shape.toneEnd, now + duration)
   const oscGain = ctx.createGain()
-  oscGain.gain.setValueAtTime(0.001, now)
-  oscGain.gain.linearRampToValueAtTime(peakAmp * 0.35, now + 0.008)
-  oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  oscGain.gain.setValueAtTime(WOOD_IMPACT_SILENT, now)
+  oscGain.gain.linearRampToValueAtTime(peakAmp * shape.toneMix, now + shape.toneAttack)
+  oscGain.gain.exponentialRampToValueAtTime(WOOD_IMPACT_SILENT, now + duration)
   osc.connect(oscGain)
   oscGain.connect(destinationGain)
   osc.start(now)
-  osc.stop(now + duration + 0.02)
+  osc.stop(now + duration + WOOD_IMPACT_TAIL)
 }
 
 
@@ -983,18 +1016,18 @@ export function playGentleLifeSound(instance) {
   const gain = audioContext.createGain()
   const filter = audioContext.createBiquadFilter()
   osc.type = 'sine'
-  osc.frequency.setValueAtTime(520, now)
-  osc.frequency.exponentialRampToValueAtTime(260, now + 0.9)
+  osc.frequency.setValueAtTime(LIFE_SIGH_F0, now)
+  osc.frequency.exponentialRampToValueAtTime(LIFE_SIGH_F1, now + LIFE_SIGH_FALL)
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(1200, now)
+  filter.frequency.setValueAtTime(LIFE_SIGH_LP, now)
   gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(0.14, now + 0.06)
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0)
+  gain.gain.linearRampToValueAtTime(LIFE_SIGH_GAIN, now + LIFE_SIGH_ATTACK)
+  gain.gain.exponentialRampToValueAtTime(LIFE_SIGH_SILENT, now + LIFE_SIGH_SEC)
   osc.connect(filter)
   filter.connect(gain)
   gain.connect(audioContext.destination)
   osc.start(now)
-  osc.stop(now + 1.1)
+  osc.stop(now + LIFE_SIGH_SEC)
 }
 /**
  * Play a soft, gentle letter pickup chime

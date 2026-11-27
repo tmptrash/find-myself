@@ -10,9 +10,14 @@ import * as Ground from '../utils/cave-ground.js'
 // faster as they go, to the top of the water — popping on the surface
 // with a tiny ring and a plip (onPop), or gone under a hollow's soil
 // ceiling. Drawn over the
-// water's paint (they catch the light), faint.
+// water's paint, faint — and shaded as the water round them is: a bubble
+// takes the lake's own depth gradient (its light colour near the top, its
+// dark one growing toward the bed, DEPTH_SHADE of it: they catch a little
+// light), so it is dark down by the bed and bright under the surface.
 //
 const C = CAVE_CFG.bubbles
+const LAKE_PAINT = CAVE_CFG.water.paint
+const DEPTH_SHADE = 0.9
 //
 // A burst every BURST_EVERY..+RANGE s: BURST_MIN..+RANGE bubbles out of
 // one spot on the bed (where the water is DEEP_MIN px deep or more, read
@@ -85,7 +90,12 @@ export function create(cfg) {
     pops: [],
     mouths: new WeakMap(),
     bodyRgb: getRGB(k, C.body),
-    rimRgb: getRGB(k, C.rim)
+    rimRgb: getRGB(k, C.rim),
+    lightRgb: getRGB(k, LAKE_PAINT.depthLight),
+    darkRgb: getRGB(k, LAKE_PAINT.depthDark),
+    bodyShade: getRGB(k, C.body),
+    rimShade: getRGB(k, C.rim),
+    tint: { light: 0, dark: 0 }
   }
 }
 
@@ -112,7 +122,8 @@ export function onUpdate(inst, mouths = []) {
 
 /**
  * Draws them (over the water's paint): each bubble faint with a bright
- * rim, each pop a fading ring on the surface.
+ * rim, both shaded by the water's depth there; each pop a fading ring on
+ * the surface.
  * @param {Object} inst - Bubbles instance
  * @param {{left: number, right: number, top: number, bottom: number}} view - World rect in view
  */
@@ -121,13 +132,27 @@ export function onDraw(inst, view) {
   inst.bubbles.forEach(b => {
     if (b.x < view.left || b.x > view.right || b.y < view.top || b.y > view.bottom) return
     const x = b.x + Math.sin(b.phase) * b.wobble
-    Ring.disc(k, x, b.y, b.r, b.r, inst.bodyRgb, BODY_ALPHA)
-    Ring.ring(k, x, b.y, b.r, b.r, RIM_W, inst.rimRgb, RIM_ALPHA)
+    const tint = CaveLake.depthTintAt(inst.lake, b.y, inst.tint)
+    Ring.disc(k, x, b.y, b.r, b.r, shade(inst, inst.bodyRgb, tint, inst.bodyShade), BODY_ALPHA)
+    Ring.ring(k, x, b.y, b.r, b.r, RIM_W, shade(inst, inst.rimRgb, tint, inst.rimShade), RIM_ALPHA)
   })
   inst.pops.forEach(p => {
     const u = p.t / POP_TIME
     Ring.ring(k, p.x, p.y, POP_R * u + p.r, (POP_R * u + p.r) * POP_FLAT, RIM_W, inst.rimRgb, RIM_ALPHA * (1 - u))
   })
+}
+//
+// A colour as the water's depth gradient leaves it (written to `out`):
+// the lake's light colour laid over it, then its dark one, DEPTH_SHADE of
+// each.
+//
+function shade(inst, base, tint, out) {
+  const light = tint.light * DEPTH_SHADE
+  const dark = tint.dark * DEPTH_SHADE
+  out.r = (base.r + (inst.lightRgb.r - base.r) * light) * (1 - dark) + inst.darkRgb.r * dark
+  out.g = (base.g + (inst.lightRgb.g - base.g) * light) * (1 - dark) + inst.darkRgb.g * dark
+  out.b = (base.b + (inst.lightRgb.b - base.b) * light) * (1 - dark) + inst.darkRgb.b * dark
+  return out
 }
 //
 // A burst: a few bubbles queued to leave one spot on the bed one after

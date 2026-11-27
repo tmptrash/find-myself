@@ -158,7 +158,11 @@ const STONE_LAND_TIME = 1.2
 //
 // The lurker's jaws snapping shut on a runner: a crisp crack of noise
 // (SNAP_BAND, Q SNAP_Q, SNAP_TIME s) over a short wet thump (SNAP_THUD_LP,
-// SNAP_THUD_TIME s), SNAP_GAIN loud by the hero, faded with distance.
+// SNAP_THUD_TIME s), SNAP_GAIN loud by the hero, faded with distance —
+// and the shell giving way in them: SNAP_CRACKLES small dry ticks within
+// SNAP_CRACKLE_SPREAD s (see TICK_ATTACK), about SNAP_CRACKLE_BAND …
+// SNAP_CRACKLE_RANGE more Hz, SNAP_CRACKLE_TIME s each, SNAP_CRACKLE_SHARE
+// as loud at most.
 //
 const SNAP_BAND = 2600
 const SNAP_Q = 1.4
@@ -167,6 +171,36 @@ const SNAP_THUD_LP = 320
 const SNAP_THUD_TIME = 0.09
 const SNAP_GAIN = 0.4
 const SNAP_THUD_SHARE = 0.8
+const SNAP_CRACKLES = 4
+const SNAP_CRACKLE_SPREAD = 0.08
+const SNAP_CRACKLE_BAND = 1900
+const SNAP_CRACKLE_RANGE = 1500
+const SNAP_CRACKLE_TIME = 0.022
+const SNAP_CRACKLE_SHARE = 0.5
+//
+// A tick — one small dry crack of a shell: a narrow band of noise (Q
+// TICK_Q) swelling in over TICK_ATTACK s (no click) and gone at once; a
+// crackle is a few of them at uneven moments, each TICK_FADE … 1 as loud,
+// at random.
+//
+const TICK_ATTACK = 0.002
+const TICK_Q = 2.2
+const TICK_FADE = 0.35
+//
+// A hand of the climber taking hold of the rock: a soft pat — a muffled
+// low thump of noise (under GRIP_LP Hz, GRIP_TIME s, its pitch varied by
+// GRIP_JITTER) with a faint grain of grit under the claws (a band about
+// GRIP_GRIT_BAND Hz, Q GRIP_GRIT_Q, GRIP_GRIT_TIME s, GRIP_GRIT_SHARE as
+// loud), GRIP_GAIN loud right by the hero.
+//
+const GRIP_GAIN = 0.15
+const GRIP_LP = 360
+const GRIP_TIME = 0.11
+const GRIP_JITTER = 0.3
+const GRIP_GRIT_BAND = 1100
+const GRIP_GRIT_Q = 1
+const GRIP_GRIT_TIME = 0.05
+const GRIP_GRIT_SHARE = 0.06
 //
 // The climber's bite into flesh: its jaws' dull clamp (brown noise under
 // BITE_THUD_LP Hz, BITE_THUD_TIME s), the wet tear of the meat (a band of
@@ -191,30 +225,26 @@ const BITE_RIP_LP = 700
 const BITE_RIP_TIME = 0.018
 const BITE_RIP_SHARE = 0.7
 //
-// The climber's jaws on a runner — a soft crunch, a shell giving way in
-// a mouth, not a row of dry ticks: the body squashed (brown noise under
-// CRUNCH_SQUASH_LP Hz, swelling in with no click, as long as the jaws
-// take and never under CRUNCH_SQUASH_MIN s, CRUNCH_SQUASH_SHARE as loud)
-// and a few dull cracks in it — CRUNCH_CRACKS of them (never fewer than
-// CRUNCH_MIN_CRACKS: a chew) at uneven moments, crowded toward the bite's
-// start, each a band of noise about CRUNCH_BAND … CRUNCH_BAND_RANGE more
-// of it Hz sliding down to CRUNCH_FALL of that (CRUNCH_Q wide), swelling
-// in over CRUNCH_ATTACK s and gone by CRUNCH_TIME s, CRUNCH_FADE … 1 as
-// loud, at random.
+// The climber's jaws on a runner — a crunch that is held back: soft and
+// low underneath, lightly crisp on top, never a hard brittle break. The
+// body squashed (brown noise under CRUNCH_SQUASH_LP Hz, swelling in with
+// no click, as long as the jaws take and never under CRUNCH_SQUASH_MIN s,
+// CRUNCH_SQUASH_SHARE as loud) and its shell crackling in the mouth:
+// CRUNCH_CRACKS small dry ticks (never fewer than CRUNCH_MIN_CRACKS: a
+// chew) at uneven moments within the bite's time, about CRUNCH_BAND …
+// CRUNCH_BAND_RANGE more Hz, CRUNCH_TIME s each, CRUNCH_TICK_SHARE as
+// loud at most.
 //
-const CRUNCH_GAIN = 0.5
-const CRUNCH_SQUASH_LP = 650
-const CRUNCH_SQUASH_MIN = 0.12
-const CRUNCH_SQUASH_SHARE = 1.3
-const CRUNCH_CRACKS = 4
+const CRUNCH_GAIN = 0.3
+const CRUNCH_SQUASH_LP = 480
+const CRUNCH_SQUASH_MIN = 0.1
+const CRUNCH_SQUASH_SHARE = 0.9
+const CRUNCH_CRACKS = 7
 const CRUNCH_MIN_CRACKS = 2
-const CRUNCH_BAND = 800
-const CRUNCH_BAND_RANGE = 0.9
-const CRUNCH_FALL = 0.5
-const CRUNCH_Q = 0.9
-const CRUNCH_ATTACK = 0.006
-const CRUNCH_TIME = 0.075
-const CRUNCH_FADE = 0.45
+const CRUNCH_BAND = 1500
+const CRUNCH_BAND_RANGE = 1200
+const CRUNCH_TIME = 0.024
+const CRUNCH_TICK_SHARE = 0.6
 //
 // A bubble popping on the lake's surface: a tiny wet "plip" — a sine
 // sliding up BUBBLE_RISE times over BUBBLE_TIME s from BUBBLE_FREQ (for a
@@ -236,15 +266,18 @@ const SPRING_TO = 420
 const SPRING_TIME = 0.22
 const SPRING_GAIN = 0.16
 //
-// Hero bursting into fireflies: chirp count, time spread, pitch and decay.
+// Hero bursting into fireflies — soft: a few low mellow chirps, each
+// swelling in over SPARK_ATTACK s (no click) and fading slowly: chirp
+// count, time spread, pitch and decay.
 //
-const SPARK_CHIRPS = 6
-const SPARK_SPREAD = 0.16
-const SPARK_FREQ_MIN = 1100
-const SPARK_FREQ_RANGE = 700
+const SPARK_CHIRPS = 5
+const SPARK_SPREAD = 0.22
+const SPARK_FREQ_MIN = 660
+const SPARK_FREQ_RANGE = 420
 const SPARK_DROP = 0.6
-const SPARK_DECAY = 0.12
-const SPARK_GAIN = 0.05
+const SPARK_ATTACK = 0.018
+const SPARK_DECAY = 0.22
+const SPARK_GAIN = 0.034
 //
 // The giant's breath through its nostrils. Blowing out: a wide gust of
 // noise (band-passed, EXHALE_Q) falling in pitch from EXHALE_FROM to
@@ -395,7 +428,7 @@ export function playSlosh(inst, near) {
 }
 
 /**
- * Short sparkle when the hero shatters into fireflies: a few quick high
+ * Soft sparkle when the hero shatters into fireflies: a few low mellow
  * chirps packed into a fraction of a second.
  * @param {Object} inst - Cave sound instance
  */
@@ -410,7 +443,8 @@ export function playSparkBurst(inst) {
     osc.type = 'sine'
     osc.frequency.setValueAtTime(freq, at)
     osc.frequency.exponentialRampToValueAtTime(freq * SPARK_DROP, at + SPARK_DECAY)
-    g.gain.setValueAtTime(SPARK_GAIN, at)
+    g.gain.setValueAtTime(SILENT, at)
+    g.gain.linearRampToValueAtTime(SPARK_GAIN, at + SPARK_ATTACK)
     g.gain.exponentialRampToValueAtTime(SILENT, at + SPARK_DECAY)
     osc.connect(g)
     g.connect(inst.out)
@@ -456,7 +490,8 @@ export function playGiantBreath(inst, exhale, near) {
 }
 
 /**
- * The lurker's jaws snapping shut on a runner: a crack over a wet thump.
+ * The lurker's jaws snapping shut on a runner: a crack over a wet thump,
+ * the shell crackling in them.
  * @param {Object} inst - Cave sound instance
  * @param {number} near - 1 by the hero, falling off with distance
  */
@@ -466,6 +501,21 @@ export function playSnap(inst, near) {
   const gain = SNAP_GAIN * near
   softBurst(inst, inst.white, at, 'bandpass', SNAP_BAND, SNAP_Q, SNAP_TIME, gain)
   softBurst(inst, inst.brown, at, 'lowpass', SNAP_THUD_LP, 1, SNAP_THUD_TIME, gain * SNAP_THUD_SHARE)
+  crackle(inst, at, SNAP_CRACKLES, SNAP_CRACKLE_SPREAD, SNAP_CRACKLE_BAND, SNAP_CRACKLE_RANGE, SNAP_CRACKLE_TIME, gain * SNAP_CRACKLE_SHARE)
+}
+
+/**
+ * A hand of the climber taking hold of the rock: a soft muffled pat.
+ * @param {Object} inst - Cave sound instance
+ * @param {number} near - 1 by the hero, falling off with distance
+ */
+export function playGrip(inst, near) {
+  if (!ready(inst) || near <= 0) return
+  const at = inst.ctx.currentTime
+  const pitch = 1 + (Math.random() - HALF) * GRIP_JITTER
+  const gain = GRIP_GAIN * near
+  softBurst(inst, inst.brown, at, 'lowpass', GRIP_LP * pitch, 1, GRIP_TIME, gain)
+  softBurst(inst, inst.white, at, 'bandpass', GRIP_GRIT_BAND * pitch, GRIP_GRIT_Q, GRIP_GRIT_TIME, gain * GRIP_GRIT_SHARE)
 }
 
 /**
@@ -484,9 +534,9 @@ export function playBite(inst, near) {
 }
 
 /**
- * The climber's jaws crunching a runner: its body squashed and a few
- * dull cracks of its shell within `time` s — a whole bite, or (strength
- * under 1) a chew: fewer cracks, quieter.
+ * The climber's jaws crunching a runner: its body squashed, its shell
+ * crackling lightly within `time` s — a whole bite, or (strength under 1)
+ * a chew: fewer ticks, quieter.
  * @param {Object} inst - Cave sound instance
  * @param {number} near - 1 by the hero, falling off with distance
  * @param {number} strength - 1: a bite; less: a chew
@@ -494,15 +544,11 @@ export function playBite(inst, near) {
  */
 export function playCrunch(inst, near, strength, time) {
   if (!ready(inst) || near <= 0) return
-  const now = inst.ctx.currentTime
+  const at = inst.ctx.currentTime
   const gain = CRUNCH_GAIN * near * strength
   const cracks = Math.max(CRUNCH_MIN_CRACKS, Math.round(CRUNCH_CRACKS * strength))
-  softBurst(inst, inst.brown, now, 'lowpass', CRUNCH_SQUASH_LP, 1, Math.max(CRUNCH_SQUASH_MIN, time), gain * CRUNCH_SQUASH_SHARE)
-  for (let i = 0; i < cracks; i++) {
-    const band = CRUNCH_BAND * (1 + Math.random() * CRUNCH_BAND_RANGE)
-    const loud = CRUNCH_FADE + Math.random() * (1 - CRUNCH_FADE)
-    sweep(inst, inst.white, now + Math.random() * Math.random() * time, 'bandpass', band, band * CRUNCH_FALL, CRUNCH_Q, CRUNCH_ATTACK, CRUNCH_TIME, gain * loud)
-  }
+  softBurst(inst, inst.brown, at, 'lowpass', CRUNCH_SQUASH_LP, 1, Math.max(CRUNCH_SQUASH_MIN, time), gain * CRUNCH_SQUASH_SHARE)
+  crackle(inst, at, cracks, time, CRUNCH_BAND, CRUNCH_BAND_RANGE, CRUNCH_TIME, gain * CRUNCH_TICK_SHARE)
 }
 
 /**
@@ -673,6 +719,30 @@ function playPebbleFall(inst) {
     g.connect(pan)
     src.start(at, Math.random() * NOISE_SECONDS / 2, PEBBLE_DECAY * 2)
   }
+}
+//
+// A crackle: `count` ticks at uneven moments within `spread` s, each a
+// band of noise about `band` … `range` more Hz, `time` s long.
+//
+function crackle(inst, at, count, spread, band, range, time, gain) {
+  for (let i = 0; i < count; i++) tick(inst, at + Math.random() * spread, band + Math.random() * range, time, gain * (TICK_FADE + Math.random() * (1 - TICK_FADE)))
+}
+function tick(inst, at, freq, time, gain) {
+  const { ctx } = inst
+  const src = ctx.createBufferSource()
+  src.buffer = inst.white
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.value = freq
+  filter.Q.value = TICK_Q
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(SILENT, at)
+  g.gain.linearRampToValueAtTime(gain, at + TICK_ATTACK)
+  g.gain.exponentialRampToValueAtTime(SILENT, at + time)
+  src.connect(filter)
+  filter.connect(g)
+  g.connect(inst.out)
+  src.start(at, Math.random() * NOISE_SECONDS / 2, time * 2)
 }
 //
 // A noise burst with a gentle attack (no click), filtered, to the bus.

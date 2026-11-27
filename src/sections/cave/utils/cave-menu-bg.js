@@ -5,6 +5,7 @@ import * as Bubbles from '../components/cave-bubbles.js'
 import * as Fireflies from '../components/cave-fireflies.js'
 import * as Fish from '../components/cave-fish.js'
 import * as Giant from '../components/cave-giant.js'
+import * as Haggy from '../components/cave-haggy.js'
 import * as Lantern from '../components/cave-lantern.js'
 import * as Lurker from '../components/cave-lurker.js'
 import * as Pads from '../components/cave-pads.js'
@@ -17,6 +18,7 @@ import * as Atlas from './cave-atlas.js'
 import * as Backdrop from './cave-backdrop.js'
 import * as CaveLake from './cave-lake.js'
 import * as Ground from './cave-ground.js'
+import * as HaggyPrey from './cave-haggy-prey.js'
 import * as LakeBed from './cave-lake-bed.js'
 import * as Layout from './cave-layout.js'
 import * as Platform from './cave-platform.js'
@@ -34,7 +36,10 @@ import * as Surface from './cave-surface.js'
 // the trumpeter on the bed catching them as they leap, the lurker by the
 // left bank pouncing on the runners sent out to its edge now and then, the
 // pad plant's leaves and the striders on the water (lining up now and
-// then), its algae and water; the level's runners scurrying over it,
+// then), its algae and water; the level's runners scurrying over it, the
+// blind climber roaming the rock on its long limbs, feeling for them
+// (it starts in view, at HAGGY_AT of the screen, and hunts the runners as
+// in the level: they flee it, the one it catches it eats),
 // fireflies drifting in the open air between its platforms (never over
 // the soil) and its big stones in front (all drawn live in its world).
 // The bottom sinks into shade so the menu's key hints stay readable. The
@@ -104,6 +109,8 @@ const VISIT_EVERY_RANGE = 10
 const VISIT_IN = 20
 const VISIT_IN_RANGE = 70
 const ENTRY_SPOT = { x: Layout.ENTRY_X, y: Layout.lakeFloor().y }
+const HAGGY_SEED = 4711
+const HAGGY_AT = { x: 0.6, y: 0.3 }
 const bakedFor = new WeakMap()
 
 /**
@@ -115,6 +122,8 @@ const bakedFor = new WeakMap()
  * @param {(strength: number, near: number) => void} [cfg.onSplash] - A fish broke the lake's surface (its strength, how near the view's middle: 0 … 1), to be heard as in the level
  * @param {(r: number, near: number) => void} [cfg.onBubble] - A bubble popped on the surface (its radius, how near the view's middle: 0 … 1), to be heard as in the level
  * @param {(near: number) => void} [cfg.onSnap] - The lurker's jaws snapped shut on a runner (how near the view's middle: 0 … 1), to be heard as in the level
+ * @param {(near: number, strength: number, time: number) => void} [cfg.onCrunch] - The climber's jaws work on a runner (how near the view's middle, 1: a bite or less: a chew, how long they take), to be heard as in the level
+ * @param {(near: number) => void} [cfg.onGrip] - A hand of the climber took a hold (how near the view's middle), to be heard as in the level
  * @returns {Object} Backdrop instance
  */
 export function create(cfg) {
@@ -151,6 +160,11 @@ export function create(cfg) {
     trumpetDraw: null,
     lakeSky: { x1: Math.max(Layout.LAKE_X1, place.x1), x2: Math.min(Layout.LAKE_X2, place.x2), y1: Layout.LAKE_SURFACE_Y - LAKE_SKY_TOP, y2: Layout.LAKE_SURFACE_Y - LAKE_SKY_LOW },
     runners: ready ? Runner.createAll(k) : [],
+    haggy: ready ? Haggy.create({ k, seed: HAGGY_SEED, at: { x: place.x1 + (place.x2 - place.x1) * HAGGY_AT.x, y: place.y1 + (place.y2 - place.y1) * HAGGY_AT.y } }) : null,
+    haggyCtx: null,
+    runnerPrey: [],
+    beastAt: { x: 0, y: 0 },
+    ear: { x: (place.x1 + place.x2) / 2, y: (place.y1 + place.y2) / 2 },
     fireflies: Fireflies.create({
       k,
       bounds: { x1: place.x1, y1: place.y1, x2: place.x2, y2: Math.min(place.y1 + (place.y2 - place.y1) * SHADE_FROM, Layout.LAKE_SURFACE_Y - WATER_CLEAR) },
@@ -160,6 +174,7 @@ export function create(cfg) {
   }
   inst.fishCtx = { prey: [], swarmPrey: [], swarm: null, threats: [], giant: null, school: inst.fish, onCatch: prey => Fireflies.eat(inst.fireflies, prey, inst.lakeSky), onSplash: (x, strength) => splash(inst, cfg.onSplash, x, strength) }
   lake && createLakeLife(inst, cfg.onSplash, cfg.onSnap)
+  inst.haggy && createHaggyLife(inst, cfg.onCrunch, cfg.onGrip)
   return inst
 }
 
@@ -187,13 +202,15 @@ export function prewarm(k, width, height) {
 
 /**
  * Moves the living parts: the runners scurry (one sent to the lake's edge
- * now and then), fireflies wander, the dry mushroom settles, the lake's
+ * now and then; they flee the climber), the climber roams and hunts them,
+ * fireflies wander, the dry mushroom settles, the lake's
  * life goes on (updateLakeLife).
  * @param {Object} inst - Backdrop instance
  */
 export function onUpdate(inst) {
   inst.lake && sendVisitor(inst)
-  inst.runners.forEach(runner => Runner.onUpdate(runner, null))
+  inst.runners.forEach(runner => Runner.onUpdate(runner, null, null, inst.haggy && Haggy.nearestTo(inst.haggy, runner.pos, inst.beastAt)))
+  inst.haggy && updateHaggy(inst)
   Fireflies.onUpdate(inst.fireflies)
   inst.lantern && Lantern.onUpdate(inst.lantern, null)
   inst.lake && updateLakeLife(inst)
@@ -259,8 +276,8 @@ function drawHeldRunner(prey, at, angle, size) {
 }
 //
 // Over the soil: the dry mushroom, the lake's algae, water and what is on
-// it, the lurker's head out of the water, the runners, the fireflies, then
-// the big stones in front of them.
+// it, the lurker's head out of the water, the runners, the fireflies, the
+// climber, then the big stones in front of them.
 //
 function drawWorldLife(inst) {
   inst.lantern && Lantern.onDraw(inst.lantern)
@@ -268,6 +285,7 @@ function drawWorldLife(inst) {
   inst.lake && Lurker.isOut(inst.lurker) && !Lurker.amongPlants(inst.lurker) && Lurker.onDraw(inst.lurker, inst.world, drawHeldRunner, true)
   inst.runners.forEach(runner => Runner.onDraw(runner, inst.world))
   Fireflies.onDraw(inst.fireflies, inst.world.top, inst.world.bottom)
+  inst.haggy && Haggy.onDraw(inst.haggy, HaggyPrey.onDraw)
   inst.front && Front.onDraw(inst.front, inst.world)
 }
 //
@@ -375,6 +393,39 @@ function createLakeLife(inst, onSplash, onSnap) {
     onSpit: () => {}
   }
   inst.trumpetDraw = { hero: () => {}, fish: fish => Fish.onDraw(fish, inst.world, true) }
+}
+//
+// The climber's life as in the level, with only the runners to feel for:
+// one it catches is gone from its run (and stays gone while it is eaten:
+// its time away starts anew with every bite); its jaws and its hands are
+// heard as in the level, from the view's middle.
+//
+function createHaggyLife(inst, onCrunch, onGrip) {
+  inst.runnerPrey = inst.runners.map(HaggyPrey.create)
+  inst.haggyCtx = {
+    view: inst.world,
+    prey: [],
+    onEat: () => {},
+    beings: [],
+    onSeize: prey => Runner.snatch(prey.runner, ENTRY_SPOT, () => null),
+    onJaws: (prey, strength, x) => onCrunch?.(nearMiddle(inst.place, x), strength, HaggyPrey.crunchTime(strength)),
+    onBite: prey => eatRunner(prey),
+    onDrop: () => {},
+    onGrip: (x, y) => onGrip?.(HaggyPrey.gripNear(x, y, inst.ear))
+  }
+}
+function eatRunner(prey) {
+  Runner.snatch(prey.runner, ENTRY_SPOT, () => null)
+  return true
+}
+//
+// The climber: the runners about are told to it (what it may touch and
+// feel running), then it goes on.
+//
+function updateHaggy(inst) {
+  const ctx = inst.haggyCtx
+  for (let i = 0; i < inst.runners.length; i++) HaggyPrey.setBeing(ctx.beings, i, Runner.isAbout(inst.runners[i]) ? inst.runners[i].pos : null, HaggyPrey.RUNNER_R, inst.runnerPrey[i])
+  Haggy.onUpdate(inst.haggy, ctx)
 }
 //
 // The lurker's jaws snapped shut on a runner: heard as in the level (as far

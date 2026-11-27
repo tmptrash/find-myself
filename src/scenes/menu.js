@@ -425,7 +425,7 @@ export function sceneMenu(k) {
       panelCave: 0,
       panelFade: 0,
       cavePanel: null,
-      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near), onSnap: near => CaveSound.playSnap(caveSound, near), onBubble: (r, near) => CaveSound.playBubble(caveSound, r, near) }),
+      caveBg: CaveMenuBg.create({ k, width: k.width(), height: k.height(), onSplash: (strength, near) => CaveSound.playFishSplash(caveSound, strength, near), onSnap: near => CaveSound.playSnap(caveSound, near), onBubble: (r, near) => CaveSound.playBubble(caveSound, r, near), onCrunch: (near, strength, time) => CaveSound.playCrunch(caveSound, near, strength, time), onGrip: near => CaveSound.playGrip(caveSound, near) }),
       mysteryBg: QuestionDrift.create({
         k,
         width: k.width(),

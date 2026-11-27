@@ -297,13 +297,17 @@ export const CAVE_CFG = {
     },
     //
     // Its senses. It is blind and knows of a living thing only by touch —
-    // never by its being near. Prey (what the level says it can eat: the
+    // or, a runner, by the tremor of its running. Prey (what the level says it can eat: the
     // hero, a runner) within touch.reach px of a hand is caught; touching
     // a limb or the head it is felt, and it stalks to that place. What it
     // knows grows stale: after memory s with nothing new it gives the
     // stalk up and searches about for investigate s, then roams. It plans
     // a new way to its prey at most every replanGap s (or when the prey
-    // was felt replanDist px off). A hand that touches water draws back
+    // was felt replanDist px off). The tremor of prey that runs on the
+    // rock (a runner) it feels from tremor.reach px off its head while
+    // that prey moves tremor.speed px/s or faster, and stalks toward it
+    // — not for tremor.sated s after a meal.
+    // A hand that touches water draws back
     // and it looks for another way (at most once every waterGap s), its
     // ways keeping avoid.radius px clear of that spot for avoid.time s (a
     // way through there counts avoid.cost px longer).
@@ -320,13 +324,14 @@ export const CAVE_CFG = {
       touch: {
         reach: 6
       },
+      tremor: { reach: 360, speed: 60, sated: 14 },
       memory: 6,
       investigate: 4,
       replanGap: 0.6,
       replanDist: 120,
       waterGap: 2,
       avoid: { radius: 170, time: 25, cost: 900 },
-      eat: { near: 10, carryMost: 6, bites: 3, gape: 0.35, bite: 0.45, chew: 1, pause: 0.45, deep: 14, back: 8, inside: 9, rest: 1.5 }
+      eat: { near: 10, carryMost: 6, bites: 3, gape: 0.35, bite: 0.45, chew: 1.75, pause: 0.45, deep: 14, back: 8, inside: 9, rest: 1.5 }
     },
     //
     // Work per second: its body and limbs step simHz times a second (farHz

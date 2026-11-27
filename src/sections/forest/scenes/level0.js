@@ -1176,6 +1176,15 @@ const WOOD_FOOT_X_PAD = 14
 const WOOD_FOOT_Y_PAD_ABOVE = 26
 const WOOD_FOOT_Y_PAD_BELOW = 34
 //
+// A landing on a wooden perch (a tree's branch, the stick on the
+// centipede's back) is heard once: no second knock within
+// WOOD_LAND_MIN_GAP s of one (the early sound just before the feet touch
+// and the one as they do are the same landing), and the hero's own land
+// FX stays quiet for WOOD_LAND_FX_COOLDOWN s after it.
+//
+const WOOD_LAND_MIN_GAP = 0.25
+const WOOD_LAND_FX_COOLDOWN = 0.2
+//
 // Log platform snap: anti-tunnel correction ONLY. Landing and standing are
 // pure Kaplay physics — identical to the start branch, which never hovers.
 // The snap merely lifts a hero whose feet sank INTO the log body back to
@@ -1723,7 +1732,8 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       forestFirstStartGroundSpawnX,
       logHoverFrames: 0,
       wasGrounded: false,
-      wasGroundedOnBranch: false,
+      leftWoodPerchByAir: true,
+      woodLandAt: -Infinity,
       expectBranchWoodLandSound: false,
       wasHeroRunning: false,
       drowning: false,
@@ -1763,6 +1773,7 @@ async function initForestLevel0Scene(k, bootstrap, session) {
       heroSettledAfterSpawn: false
     }
     predator.levelInst = inst
+    heroInst.onPlayLandSound = h => onForestHeroLandSound(inst, h)
     predator.landAt = (x) => forestPredatorGroundAt(inst, x)
     predator.canHuntHero = () => forestPredatorCanHuntHero(inst)
     predator.surfaceRay = (x, fromY, depth) => ForestGroundLine.raycast(groundLine, x, fromY, depth)
@@ -3648,10 +3659,7 @@ function maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded) {
   const overWood = isOverForestWoodSurface(inst, char.pos.x, footY)
   if (onBranch && overWood) {
     inst._forestEarlyLandSfxDone = true
-    hero.landFxCooldown = 0.2
-    inst.sound._forestSurface = 'wood'
-    Sound.playLandSound(inst.sound, 'lesson-forest.0')
-    inst.expectBranchWoodLandSound = false
+    playForestWoodLand(inst)
     return
   }
   const nearGround = footY >= FLOOR_Y - FOREST_EARLY_LAND_FOOT_ABOVE && footY <= FLOOR_Y + 8
@@ -3660,6 +3668,50 @@ function maybePlayForestEarlyLandSfx(inst, char, hero, footY, grounded) {
     hero.landFxCooldown = 0.2
     Sound.playStepSound(inst.sound, 'lesson-forest.0')
   }
+}
+//
+// The knock of a landing on a wooden perch, once per landing (see
+// WOOD_LAND_MIN_GAP); the hero's own land FX is held off after it.
+//
+function playForestWoodLand(inst) {
+  const now = inst.k.time()
+  inst.expectBranchWoodLandSound = false
+  if (inst.sound._forestSfxMuted || now - inst.woodLandAt < WOOD_LAND_MIN_GAP) return
+  inst.woodLandAt = now
+  inst.heroInst && (inst.heroInst.landFxCooldown = WOOD_LAND_FX_COOLDOWN)
+  inst.sound._forestSurface = 'wood'
+  Sound.playLandSound(inst.sound, 'lesson-forest.0')
+}
+//
+// True when the hero is on a wooden perch: a tree's horizontal branch (the
+// start tree's, the shore tree's) or the stick on the centipede's back.
+//
+function isHeroOnForestWoodPerch(inst, char) {
+  const twigs = inst.shoreFallTwigs
+  if (HorizFallTwig.isHeroRidingPredator(twigs, char)) return true
+  if (!(char.isGrounded?.() ?? false)) return false
+  return isHeroOnStartBranch(inst, char) || isHeroOnShoreBranch(inst, char) ||
+    Boolean(twigs) && char.curPlatform?.() === twigs.ridePlat
+}
+//
+// A landing on a wooden perch is heard as wood: when he comes down onto
+// one out of the air (or a branch-trampoline bounce has armed it), never
+// while he only walks along it.
+//
+function tickForestWoodPerchLanding(inst, char) {
+  const onPerch = isHeroOnForestWoodPerch(inst, char)
+  onPerch && (inst.leftWoodPerchByAir || inst.expectBranchWoodLandSound) && playForestWoodLand(inst)
+  inst.leftWoodPerchByAir = !onPerch && (inst.leftWoodPerchByAir || !(char.isGrounded?.() ?? false))
+}
+//
+// The hero's own landing sound (his feet met a collider after a jump): a
+// step on the ground; a wooden perch has its own knock
+// (tickForestWoodPerchLanding).
+//
+function onForestHeroLandSound(inst, hero) {
+  if (!hero.sfx || inst.sound._forestSfxMuted) return
+  if (hero.character?.pos && isHeroOnForestWoodPerch(inst, hero.character)) return
+  Sound.playStepSound(hero.sfx, hero.stepSoundScene)
 }
 //
 // X where the east ground starts (past the branch trampoline's decor
@@ -4477,6 +4529,7 @@ function detectForestSurface(inst) {
       return 'wood'
     }
   }
+  if (isHeroOnForestWoodPerch(inst, hero)) return 'wood'
   if (EyeFlower.isOnIsland(inst.eyeFlower, x, footY)) return 'ground'
   if (footY >= FLOOR_Y - 30) return 'ground'
   return 'air'
@@ -6425,7 +6478,7 @@ function onUpdate(inst) {
   //
   if (justLanded && !inst._forestEarlyLandSfxDone && (surface === 'wood' || surface === 'ground') &&
     !inst.sound._forestSfxMuted &&
-    !inst.expectBranchWoodLandSound && !isHeroOnStartBranch(inst, char)) {
+    !inst.expectBranchWoodLandSound && !isHeroOnForestWoodPerch(inst, char)) {
     if ((hero.landFxCooldown || 0) <= 0) {
       hero.landFxCooldown = 0.2
       surface === 'ground'
@@ -6464,19 +6517,7 @@ function onUpdate(inst) {
   snapHeroToMainGround(inst, char, grounded, heroX, footY)
   refreshForestBranchJumpState(inst, char)
   refreshForestMainGroundJumpState(inst, char, grounded, footY)
-  const groundedOnBranch = (char.isGrounded?.() ?? false) && isHeroOnStartBranch(inst, char)
-  const wantBranchWoodLand = groundedOnBranch &&
-    (!inst.wasGroundedOnBranch || inst.expectBranchWoodLandSound)
-  if (wantBranchWoodLand && !inst.sound._forestSfxMuted && !inst._forestEarlyLandSfxDone) {
-    const branchHero = inst.heroInst
-    if (branchHero) {
-      branchHero.landFxCooldown = 0.2
-      inst.sound._forestSurface = 'wood'
-      Sound.playLandSound(inst.sound, 'lesson-forest.0')
-    }
-    inst.expectBranchWoodLandSound = false
-  }
-  inst.wasGroundedOnBranch = groundedOnBranch
+  tickForestWoodPerchLanding(inst, char)
   //
   // Foot bursts run after wood snaps so feet position and surface match the
   // solid collider — spawning earlier misread branch/log landings as ground.

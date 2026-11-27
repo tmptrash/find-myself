@@ -164,6 +164,26 @@ export function paintDepth(ctx, inst, x, y, w, h) {
 }
 
 /**
+ * The depth gradient at a world Y, as paintDepth() lays it: how much of
+ * the palette's `depthLight` and then of its `depthDark` lies over what
+ * is in the water at that depth — for what a level draws live in the
+ * water and wants shaded as the water around it is.
+ * @param {Object} inst - Water instance
+ * @param {number} y - World Y
+ * @param {{light: number, dark: number}} out - Written: the two colours' opacity there (0 … 1)
+ * @returns {{light: number, dark: number}} out
+ */
+export function depthTintAt(inst, y, out) {
+  const g = inst.tune.gradient
+  const t = Math.max(0, Math.min(1, (y - inst.surfaceY) / (inst.deep - inst.surfaceY)))
+  const u = Math.max(0, Math.min(1, (t - g.deepFrom) / (g.deepTo - g.deepFrom)))
+  const mid = g.deepAlpha * g.deepMid
+  out.light = g.lightAlpha * g.intensity * Math.max(0, 1 - t / g.lightEnd)
+  out.dark = g.intensity * (u < HALF ? mid * u / HALF : mid + (g.deepAlpha - mid) * (u - HALF) / HALF)
+  return out
+}
+
+/**
  * '#rrggbb' plus an alpha byte (0 … 1, clamped), for canvas fills.
  * @param {string} hex - '#rrggbb'
  * @param {number} alpha - Opacity
